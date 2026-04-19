@@ -107,7 +107,34 @@
             <code class="text-caption bg-surface pa-1 rounded">{{ channel.baseUrl }}</code>
           </div>
         </div>
-        
+
+        <div v-if="channel.serviceType === 'claude'" class="d-flex flex-wrap ga-2 mt-1">
+          <v-chip
+            size="small"
+            :color="channel.streamPassthroughEnabled !== false ? 'success' : 'grey'"
+            variant="tonal"
+            density="comfortable"
+            rounded="pill"
+          >
+            <v-icon start size="14">
+              {{ channel.streamPassthroughEnabled !== false ? 'mdi-transit-connection-variant' : 'mdi-transit-connection-horizontal' }}
+            </v-icon>
+            透传 {{ channel.streamPassthroughEnabled !== false ? '开启' : '关闭' }}
+          </v-chip>
+
+          <v-chip
+            size="small"
+            :color="channel.keyAffinityEnabled !== false ? 'info' : 'grey'"
+            variant="tonal"
+            density="comfortable"
+            rounded="pill"
+          >
+            <v-icon start size="14">
+              {{ channel.keyAffinityEnabled !== false ? 'mdi-account-key' : 'mdi-account-off' }}
+            </v-icon>
+            Key 亲和 {{ channel.keyAffinityEnabled !== false ? '开启' : '关闭' }}
+          </v-chip>
+        </div>
       </div>
 
       <!-- 状态和延迟（右对齐、间距更紧凑） -->

@@ -70,7 +70,7 @@ func Handler(
 		if isMultiChannel {
 			handleMultiChannel(c, envCfg, cfgManager, channelScheduler, sessionManager, bodyBytes, responsesReq, userID, startTime)
 		} else {
-			handleSingleChannel(c, envCfg, cfgManager, channelScheduler, sessionManager, bodyBytes, responsesReq, startTime)
+			handleSingleChannel(c, envCfg, cfgManager, channelScheduler, sessionManager, bodyBytes, responsesReq, userID, startTime)
 		}
 	})
 }
@@ -122,7 +122,7 @@ func handleMultiChannel(
 				bodyBytes,
 				responsesReq.Stream,
 				func(upstream *config.UpstreamConfig, failedKeys map[string]bool) (string, error) {
-					return cfgManager.GetNextResponsesAPIKey(upstream, failedKeys)
+					return cfgManager.GetNextAPIKeyForUser(upstream, failedKeys, "Responses", userID)
 				},
 				func(c *gin.Context, upstreamCopy *config.UpstreamConfig, apiKey string) (*http.Request, error) {
 					req, _, err := provider.ConvertToProviderRequest(c, upstreamCopy, apiKey)
@@ -171,6 +171,7 @@ func handleSingleChannel(
 	sessionManager *session.SessionManager,
 	bodyBytes []byte,
 	responsesReq types.ResponsesRequest,
+	userID string,
 	startTime time.Time,
 ) {
 	upstream, channelIndex, err := cfgManager.GetCurrentResponsesUpstreamWithIndex()
@@ -210,7 +211,7 @@ func handleSingleChannel(
 		bodyBytes,
 		responsesReq.Stream,
 		func(upstream *config.UpstreamConfig, failedKeys map[string]bool) (string, error) {
-			return cfgManager.GetNextResponsesAPIKey(upstream, failedKeys)
+			return cfgManager.GetNextAPIKeyForUser(upstream, failedKeys, "Responses", userID)
 		},
 		func(c *gin.Context, upstreamCopy *config.UpstreamConfig, apiKey string) (*http.Request, error) {
 			req, _, err := provider.ConvertToProviderRequest(c, upstreamCopy, apiKey)

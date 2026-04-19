@@ -147,6 +147,7 @@ import {
   mdiPaperclip,
   mdiEyedropper,
   mdiShieldRefresh,
+  mdiShieldOutline,
   mdiShieldOffOutline,
   mdiAlertCircleOutline,
   mdiChartLineVariant,
@@ -175,6 +176,10 @@ import {
   mdiKeyRemove,
   mdiKeyAlert,
   mdiCashRemove,
+  mdiTransitConnectionVariant,
+  mdiTransitConnectionHorizontal,
+  mdiAccountKey,
+  mdiAccountOff,
 } from '@mdi/js'
 
 // 图标名称到 SVG path 的映射 (使用 kebab-case)
@@ -261,6 +266,7 @@ const iconMap: Record<string, string> = {
 
   // 防护盾牌图标
   'shield-refresh': mdiShieldRefresh,
+  'shield-outline': mdiShieldOutline,
   'shield-off-outline': mdiShieldOffOutline,
   'shield-lock-outline': mdiShieldLockOutline,
 
@@ -360,6 +366,10 @@ const iconMap: Record<string, string> = {
   'key-remove': mdiKeyRemove,
   'key-alert': mdiKeyAlert,
   'cash-remove': mdiCashRemove,
+  'transit-connection-variant': mdiTransitConnectionVariant,
+  'transit-connection-horizontal': mdiTransitConnectionHorizontal,
+  'account-key': mdiAccountKey,
+  'account-off': mdiAccountOff,
 }
 
 // 自定义 SVG iconset - 处理 mdi-xxx 字符串格式
