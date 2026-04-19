@@ -137,6 +137,8 @@ export interface Channel {
   streamPassthroughEnabled?: boolean
   sub2apiPassthroughEnabled?: boolean
   strictRequestPassthroughEnabled?: boolean
+  modelsHealthCheckEnabled?: boolean
+  modelsHealthCheckIntervalMinutes?: number
   failoverRules?: FailoverRule[]
   latency?: number
   status?: ChannelStatus | 'healthy' | 'error' | 'unknown' | ''

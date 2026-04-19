@@ -637,7 +637,7 @@
 
                   <div v-if="isEditing && visibleCooldownKeys.length" class="mt-4">
                     <div class="d-flex align-center ga-2 mb-2">
-                      <v-icon size="small" color="warning">mdi-timer-sand</v-icon>
+                      <v-icon size="small" color="warning" icon="mdi-timer-sand" />
                       <span class="text-body-2 font-weight-medium text-warning">冷却 Keys</span>
                       <v-chip size="x-small" color="warning" variant="tonal">{{ visibleCooldownKeys.length }}</v-chip>
                     </div>
@@ -649,7 +649,7 @@
                         style="background: rgba(var(--v-theme-warning), 0.04);"
                       >
                         <template #prepend>
-                          <v-icon size="small" color="warning" class="mr-2">mdi-timer-outline</v-icon>
+                          <v-icon size="small" color="warning" class="mr-2" icon="mdi-clock-outline" />
                         </template>
                         <v-list-item-title class="text-caption font-weight-mono">
                           {{ ck.key.length > 20 ? ck.key.slice(0, 8) + '***' + ck.key.slice(-5) : ck.key }}
@@ -742,7 +742,7 @@
               <v-card variant="outlined" rounded="lg">
                 <v-card-title class="section-card-title d-flex align-center justify-space-between ga-2">
                   <div class="d-flex align-center ga-2">
-                    <v-icon size="small" color="primary">mdi-waveform</v-icon>
+                    <v-icon size="small" color="primary" icon="mdi-waveform" />
                     Claude 流式与故障拦截
                   </div>
                   <div class="d-flex align-center ga-2">
@@ -800,6 +800,33 @@
                       <v-switch v-model="form.strictRequestPassthroughEnabled" inset color="primary" hide-details />
                     </div>
                   </div>
+
+                  <div class="claude-toggle-row mb-2">
+                    <div class="claude-toggle-content">
+                      <div class="section-title section-title--soft">v1 模型列表巡检拉黑</div>
+                      <div class="text-caption text-medium-emphasis">
+                        仅建议用于兼容 <code>/v1/models</code> 的上游。开启后按周期巡检 key，返回非 200 自动拉黑。
+                      </div>
+                    </div>
+                    <div class="claude-toggle-switch">
+                      <v-switch v-model="form.modelsHealthCheckEnabled" inset color="warning" hide-details />
+                    </div>
+                  </div>
+
+                  <v-text-field
+                    v-model.number="form.modelsHealthCheckIntervalMinutes"
+                    class="mb-4"
+                    type="number"
+                    min="1"
+                    step="1"
+                    label="巡检间隔（分钟）"
+                    hint="默认 60 分钟；仅在开启“v1 模型列表巡检拉黑”时生效。"
+                    persistent-hint
+                    variant="outlined"
+                    density="compact"
+                    :disabled="!form.modelsHealthCheckEnabled"
+                    @blur="normalizeModelsHealthCheckInterval"
+                  />
 
                   <div v-if="form.failoverRules.length === 0" class="text-caption text-medium-emphasis mb-2">
                     暂无规则。可新增规则按状态码 / 错误码 / 关键词进行冷却或拉黑。
@@ -1728,6 +1755,8 @@ const form = reactive({
   streamPassthroughEnabled: false,
   sub2apiPassthroughEnabled: true,
   strictRequestPassthroughEnabled: true,
+  modelsHealthCheckEnabled: false,
+  modelsHealthCheckIntervalMinutes: 60,
   failoverRules: createDefaultClaudeFailoverRules() as FailoverRule[],
   rpm: 10
 })
@@ -1839,6 +1868,15 @@ const handleSub2apiPassthroughChange = (enabled: boolean | null) => {
   if (normalizedEnabled) {
     form.streamPassthroughEnabled = false
   }
+}
+
+const normalizeModelsHealthCheckInterval = () => {
+  const value = Number(form.modelsHealthCheckIntervalMinutes)
+  if (!Number.isFinite(value) || value <= 0) {
+    form.modelsHealthCheckIntervalMinutes = 60
+    return
+  }
+  form.modelsHealthCheckIntervalMinutes = Math.floor(value)
 }
 
 const updateRuleStatusCodes = (index: number, value: string) => {
@@ -2048,6 +2086,8 @@ const resetForm = () => {
   form.streamPassthroughEnabled = false
   form.sub2apiPassthroughEnabled = true
   form.strictRequestPassthroughEnabled = true
+  form.modelsHealthCheckEnabled = false
+  form.modelsHealthCheckIntervalMinutes = 60
   form.failoverRules = createDefaultClaudeFailoverRules()
   form.rpm = 10
   newApiKey.value = ''
@@ -2125,7 +2165,10 @@ const loadChannelData = (channel: Channel) => {
   form.streamPassthroughEnabled = channel.streamPassthroughEnabled ?? true
   form.sub2apiPassthroughEnabled = channel.sub2apiPassthroughEnabled ?? (channel.serviceType === 'claude')
   form.strictRequestPassthroughEnabled = channel.strictRequestPassthroughEnabled ?? true
+  form.modelsHealthCheckEnabled = channel.modelsHealthCheckEnabled ?? false
+  form.modelsHealthCheckIntervalMinutes = channel.modelsHealthCheckIntervalMinutes ?? 60
   normalizeClaudePassthroughMode()
+  normalizeModelsHealthCheckInterval()
   const rawFailoverRules = channel.failoverRules && channel.failoverRules.length > 0
     ? channel.failoverRules
     : channel.serviceType === 'claude'
@@ -2497,6 +2540,7 @@ const handleSubmit = async () => {
   }
 
   normalizeClaudePassthroughMode()
+  normalizeModelsHealthCheckInterval()
   const channelData = buildChannelPayload(form)
 
   emit('save', channelData)

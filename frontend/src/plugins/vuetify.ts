@@ -382,7 +382,15 @@ const iconMap: Record<string, string> = {
 const customSvgIconSet: IconSet = {
   component: (props: IconProps) => {
     // 获取图标名称，去掉 mdi- 前缀
-    let iconName = props.icon as string
+    const rawIcon = props.icon
+    let iconName = ''
+    if (typeof rawIcon === 'string') {
+      iconName = rawIcon.trim()
+    } else if (Array.isArray(rawIcon) && typeof rawIcon[0] === 'string') {
+      iconName = rawIcon[0].trim()
+    } else {
+      return h('span')
+    }
     if (iconName.startsWith('mdi-')) {
       iconName = iconName.substring(4)
     }

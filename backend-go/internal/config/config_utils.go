@@ -203,6 +203,14 @@ func (u *UpstreamConfig) Clone() *UpstreamConfig {
 		v := *u.StrictRequestPassthroughEnabled
 		cloned.StrictRequestPassthroughEnabled = &v
 	}
+	if u.ModelsHealthCheckEnabled != nil {
+		v := *u.ModelsHealthCheckEnabled
+		cloned.ModelsHealthCheckEnabled = &v
+	}
+	if u.ModelsHealthCheckIntervalMinutes != nil {
+		v := *u.ModelsHealthCheckIntervalMinutes
+		cloned.ModelsHealthCheckIntervalMinutes = &v
+	}
 	if len(u.FailoverRules) > 0 {
 		cloned.FailoverRules = CloneFailoverRules(u.FailoverRules)
 	}

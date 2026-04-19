@@ -58,6 +58,9 @@ type UpstreamConfig struct {
 	Sub2APIPassthroughEnabled *bool `json:"sub2apiPassthroughEnabled,omitempty"`
 	// Claude 严格请求透传：true=请求体原样转发；false=继续执行本地兼容预处理
 	StrictRequestPassthroughEnabled *bool `json:"strictRequestPassthroughEnabled,omitempty"`
+	// Key 健康巡检（可选）：周期请求 /v1/models（Gemini 为 /v1beta/models），非 200 自动拉黑
+	ModelsHealthCheckEnabled         *bool `json:"modelsHealthCheckEnabled,omitempty"`
+	ModelsHealthCheckIntervalMinutes *int  `json:"modelsHealthCheckIntervalMinutes,omitempty"`
 	// 渠道级故障规则：按状态码/错误码/关键词命中后执行冷却或拉黑
 	FailoverRules []FailoverRule `json:"failoverRules,omitempty"`
 }
@@ -108,6 +111,30 @@ func (u *UpstreamConfig) IsSub2APIPassthroughEnabled() bool {
 		return false
 	}
 	return *u.Sub2APIPassthroughEnabled
+}
+
+func (u *UpstreamConfig) IsModelsHealthCheckEnabled() bool {
+	if u.ModelsHealthCheckEnabled == nil {
+		return false
+	}
+	return *u.ModelsHealthCheckEnabled
+}
+
+func (u *UpstreamConfig) GetModelsHealthCheckIntervalMinutes() int {
+	if u.ModelsHealthCheckIntervalMinutes == nil || *u.ModelsHealthCheckIntervalMinutes <= 0 {
+		return 60
+	}
+	return *u.ModelsHealthCheckIntervalMinutes
+}
+
+func (u *UpstreamConfig) NormalizeModelsHealthCheckOptions() {
+	if u == nil {
+		return
+	}
+	if u.ModelsHealthCheckIntervalMinutes != nil && *u.ModelsHealthCheckIntervalMinutes <= 0 {
+		defaultInterval := 60
+		u.ModelsHealthCheckIntervalMinutes = &defaultInterval
+	}
 }
 
 func (u *UpstreamConfig) NormalizeClaudePassthroughMode() {
@@ -272,17 +299,19 @@ type UpstreamUpdate struct {
 	TextVerbosity      *string           `json:"textVerbosity"`
 	FastMode           *bool             `json:"fastMode"`
 	// 多渠道调度相关字段
-	Priority                        *int           `json:"priority"`
-	Status                          *string        `json:"status"`
-	PromotionUntil                  *time.Time     `json:"promotionUntil"`
-	LowQuality                      *bool          `json:"lowQuality"`
-	RPM                             *int           `json:"rpm"`
-	AutoBlacklistBalance            *bool          `json:"autoBlacklistBalance"`
-	NormalizeMetadataUserID         *bool          `json:"normalizeMetadataUserId"`
-	StreamPassthroughEnabled        *bool          `json:"streamPassthroughEnabled"`
-	Sub2APIPassthroughEnabled       *bool          `json:"sub2apiPassthroughEnabled"`
-	StrictRequestPassthroughEnabled *bool          `json:"strictRequestPassthroughEnabled"`
-	FailoverRules                   []FailoverRule `json:"failoverRules"`
+	Priority                         *int           `json:"priority"`
+	Status                           *string        `json:"status"`
+	PromotionUntil                   *time.Time     `json:"promotionUntil"`
+	LowQuality                       *bool          `json:"lowQuality"`
+	RPM                              *int           `json:"rpm"`
+	AutoBlacklistBalance             *bool          `json:"autoBlacklistBalance"`
+	NormalizeMetadataUserID          *bool          `json:"normalizeMetadataUserId"`
+	StreamPassthroughEnabled         *bool          `json:"streamPassthroughEnabled"`
+	Sub2APIPassthroughEnabled        *bool          `json:"sub2apiPassthroughEnabled"`
+	StrictRequestPassthroughEnabled  *bool          `json:"strictRequestPassthroughEnabled"`
+	ModelsHealthCheckEnabled         *bool          `json:"modelsHealthCheckEnabled"`
+	ModelsHealthCheckIntervalMinutes *int           `json:"modelsHealthCheckIntervalMinutes"`
+	FailoverRules                    []FailoverRule `json:"failoverRules"`
 	// Gemini 特定配置
 	InjectDummyThoughtSignature *bool `json:"injectDummyThoughtSignature"`
 	StripThoughtSignature       *bool `json:"stripThoughtSignature"`

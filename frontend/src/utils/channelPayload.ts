@@ -26,6 +26,8 @@ export interface ChannelFormLike {
   streamPassthroughEnabled: boolean
   sub2apiPassthroughEnabled: boolean
   strictRequestPassthroughEnabled: boolean
+  modelsHealthCheckEnabled?: boolean
+  modelsHealthCheckIntervalMinutes?: number
   failoverRules: NonNullable<Channel['failoverRules']>
   rpm?: number
 
@@ -50,6 +52,10 @@ export function buildChannelPayload(form: ChannelFormLike): Omit<Channel, 'index
   const isClaude = form.serviceType === 'claude'
   const sub2apiPassthroughEnabled = isClaude ? !!form.sub2apiPassthroughEnabled : false
   const streamPassthroughEnabled = isClaude ? (!!form.streamPassthroughEnabled && !sub2apiPassthroughEnabled) : true
+  const modelsHealthCheckEnabled = !!form.modelsHealthCheckEnabled
+  const modelsHealthCheckIntervalMinutes = form.modelsHealthCheckIntervalMinutes && form.modelsHealthCheckIntervalMinutes > 0
+    ? Math.floor(form.modelsHealthCheckIntervalMinutes)
+    : 60
 
   const processedApiKeys = form.apiKeys.filter(key => key.trim())
   const normalizedFailoverRules = (form.serviceType === 'claude' ? (form.failoverRules || []) : [])
@@ -107,6 +113,8 @@ export function buildChannelPayload(form: ChannelFormLike): Omit<Channel, 'index
     streamPassthroughEnabled,
     sub2apiPassthroughEnabled,
     strictRequestPassthroughEnabled: form.serviceType === 'claude' ? form.strictRequestPassthroughEnabled : true,
+    modelsHealthCheckEnabled,
+    modelsHealthCheckIntervalMinutes,
     failoverRules: normalizedFailoverRules,
     rpm: form.rpm && form.rpm > 0 ? form.rpm : 10
   }

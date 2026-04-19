@@ -29,11 +29,11 @@ var keyBackoffDurations = []time.Duration{
 // NewConfigManager 创建配置管理器
 func NewConfigManager(configFile string) (*ConfigManager, error) {
 	cm := &ConfigManager{
-		configFile:         configFile,
-		failedKeysCache:    make(map[string]*FailedKey),
+		configFile:          configFile,
+		failedKeysCache:     make(map[string]*FailedKey),
 		keyBackoffDurations: keyBackoffDurations,
-		roundRobinCounters: make(map[string]*uint64),
-		stopChan:           make(chan struct{}),
+		roundRobinCounters:  make(map[string]*uint64),
+		stopChan:            make(chan struct{}),
 	}
 
 	// 加载配置
@@ -48,6 +48,7 @@ func NewConfigManager(configFile string) (*ConfigManager, error) {
 
 	// 启动定期清理
 	go cm.cleanupExpiredFailures()
+	go cm.modelsHealthCheckLoop()
 
 	return cm, nil
 }

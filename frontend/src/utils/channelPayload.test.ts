@@ -341,4 +341,39 @@ describe('buildChannelPayload', () => {
       }
     ])
   })
+
+  it('keeps models health check options and falls back to default interval', () => {
+    const result = buildChannelPayload({
+      name: 'models-health',
+      serviceType: 'claude',
+      baseUrl: 'https://api.anthropic.com/v1',
+      baseUrls: [],
+      website: '',
+      insecureSkipVerify: false,
+      lowQuality: false,
+      injectDummyThoughtSignature: false,
+      stripThoughtSignature: false,
+      description: '',
+      apiKeys: ['sk-ant'],
+      modelMapping: {},
+      reasoningMapping: {},
+      textVerbosity: '',
+      fastMode: false,
+      customHeaders: {},
+      proxyUrl: '',
+      routePrefix: '',
+      supportedModels: [],
+      autoBlacklistBalance: true,
+      normalizeMetadataUserId: true,
+      streamPassthroughEnabled: true,
+      sub2apiPassthroughEnabled: false,
+      strictRequestPassthroughEnabled: true,
+      modelsHealthCheckEnabled: true,
+      modelsHealthCheckIntervalMinutes: 0,
+      failoverRules: []
+    })
+
+    expect(result.modelsHealthCheckEnabled).toBe(true)
+    expect(result.modelsHealthCheckIntervalMinutes).toBe(60)
+  })
 })

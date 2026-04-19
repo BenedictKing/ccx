@@ -314,13 +314,42 @@ func TryUpstreamWithAllKeys(
 					continue
 				}
 
-				shouldFailover, isQuotaRelated := ShouldRetryWithNextKey(resp.StatusCode, respBodyBytes, cfgManager.GetFuzzyModeEnabled(), apiType)
+				ruleDecision := matchChannelFailoverRule(upstream, resp.StatusCode, respBodyBytes, "", "", "")
+				var shouldFailover bool
+				var isQuotaRelated bool
+				blResult := BlacklistResult{}
+				forceBlacklistByRule := false
+				skipDefaultCooldownForRuleDrivenClaude := false
 
-				// 检查是否应永久拉黑该 Key（认证/权限/余额错误）
-				blResult := ShouldBlacklistKey(resp.StatusCode, respBodyBytes)
+				if ruleDecision.Matched {
+					shouldFailover = true
+					isQuotaRelated = ruleDecision.IsQuotaRelated
+					if ruleDecision.Action == failoverActionBlacklist {
+						forceBlacklistByRule = true
+						blResult = BlacklistResult{
+							ShouldBlacklist: true,
+							Reason:          ruleDecision.Reason,
+							Message:         ruleDecision.Message,
+						}
+					}
+					log.Printf("[%s-Failover-Rule] 命中渠道规则: channel=[%d] %s, action=%s, status=%d, key=%s, desc=%s",
+						apiType, channelIndex, upstream.Name, ruleDecision.Action, resp.StatusCode, utils.MaskAPIKey(apiKey), ruleDecision.Description)
+				} else {
+					shouldFailover, isQuotaRelated = ShouldRetryWithNextKey(resp.StatusCode, respBodyBytes, cfgManager.GetFuzzyModeEnabled(), apiType)
+					// 检查是否应永久拉黑该 Key（认证/权限/余额错误）
+					blResult = ShouldBlacklistKey(resp.StatusCode, respBodyBytes)
+					if strings.EqualFold(upstream.ServiceType, "claude") {
+						skipDefaultCooldownForRuleDrivenClaude = true
+					}
+				}
+
 				if blResult.ShouldBlacklist {
+					shouldApplyBlacklist := true
 					isBalanceError := blResult.Reason == "insufficient_balance"
-					if !isBalanceError || upstream.IsAutoBlacklistBalanceEnabled() {
+					if !forceBlacklistByRule && isBalanceError && !upstream.IsAutoBlacklistBalanceEnabled() {
+						shouldApplyBlacklist = false
+					}
+					if shouldApplyBlacklist {
 						if err := cfgManager.BlacklistKey(apiType, channelIndex, apiKey, blResult.Reason, blResult.Message); err != nil {
 							log.Printf("[%s-Blacklist] 拉黑 Key 失败: %v", apiType, err)
 						}
@@ -332,7 +361,16 @@ func TryUpstreamWithAllKeys(
 					failedKeys[apiKey] = true
 					// 已拉黑的 key 不需要再冷却
 					if !blResult.ShouldBlacklist {
-						cfgManager.MarkKeyAsFailed(apiKey, apiType)
+						if ruleDecision.Matched && ruleDecision.Action == failoverActionCooldown {
+							cfgManager.MarkKeyAsFailedWithDuration(apiKey, apiType, ruleDecision.Duration)
+							log.Printf("[%s-Failover-Rule] 规则冷却生效: channel=[%d] %s, key=%s, duration=%s",
+								apiType, channelIndex, upstream.Name, utils.MaskAPIKey(apiKey), ruleDecision.Duration)
+						} else if skipDefaultCooldownForRuleDrivenClaude {
+							log.Printf("[%s-Failover-Rule] Claude 未命中规则，仅本次跳过该 key，不写入默认冷却: channel=[%d] %s, key=%s, status=%d",
+								apiType, channelIndex, upstream.Name, utils.MaskAPIKey(apiKey), resp.StatusCode)
+						} else {
+							cfgManager.MarkKeyAsFailed(apiKey, apiType)
+						}
 					}
 					failureClass := metrics.FailureClassRetryable
 					if isQuotaRelated || blResult.Reason == "insufficient_balance" {

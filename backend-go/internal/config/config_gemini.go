@@ -73,6 +73,7 @@ func (cm *ConfigManager) AddGeminiUpstream(upstream UpstreamConfig) error {
 	upstream.APIKeys = deduplicateStrings(upstream.APIKeys)
 	upstream.BaseURLs = deduplicateBaseURLs(upstream.BaseURLs)
 	upstream.NormalizeClaudePassthroughMode()
+	upstream.NormalizeModelsHealthCheckOptions()
 
 	cm.config.GeminiUpstream = append(cm.config.GeminiUpstream, upstream)
 
@@ -216,6 +217,17 @@ func (cm *ConfigManager) UpdateGeminiUpstream(index int, updates UpstreamUpdate)
 		v := *updates.StrictRequestPassthroughEnabled
 		upstream.StrictRequestPassthroughEnabled = &v
 	}
+	if updates.ModelsHealthCheckEnabled != nil {
+		v := *updates.ModelsHealthCheckEnabled
+		upstream.ModelsHealthCheckEnabled = &v
+	}
+	if updates.ModelsHealthCheckIntervalMinutes != nil {
+		v := *updates.ModelsHealthCheckIntervalMinutes
+		if v <= 0 {
+			v = 60
+		}
+		upstream.ModelsHealthCheckIntervalMinutes = &v
+	}
 	if updates.FailoverRules != nil {
 		upstream.FailoverRules = CloneFailoverRules(updates.FailoverRules)
 	}
@@ -238,6 +250,7 @@ func (cm *ConfigManager) UpdateGeminiUpstream(index int, updates UpstreamUpdate)
 		upstream.RoutePrefix = *updates.RoutePrefix
 	}
 	upstream.NormalizeClaudePassthroughMode()
+	upstream.NormalizeModelsHealthCheckOptions()
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
 		return false, err
