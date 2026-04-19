@@ -453,6 +453,8 @@ func (cm *ConfigManager) MarkKeyAsFailed(apiKey string, apiType string) {
 	if failure, exists := cm.failedKeysCache[cacheKey]; exists {
 		failure.FailureCount++
 		failure.Timestamp = time.Now()
+		// 普通失败回退为指数退避语义，清除暂停规则写入的固定冷却时长。
+		failure.FixedDuration = 0
 	} else {
 		cm.failedKeysCache[cacheKey] = &FailedKey{
 			Timestamp:    time.Now(),
@@ -642,7 +644,10 @@ func (cm *ConfigManager) cleanupExpiredFailures() {
 			cm.mu.Lock()
 			now := time.Now()
 			for key, failure := range cm.failedKeysCache {
-				recoveryTime := cm.backoffDuration(failure.FailureCount)
+				recoveryTime := failure.FixedDuration
+				if recoveryTime <= 0 {
+					recoveryTime = cm.backoffDuration(failure.FailureCount)
+				}
 
 				if now.Sub(failure.Timestamp) > recoveryTime {
 					delete(cm.failedKeysCache, key)
