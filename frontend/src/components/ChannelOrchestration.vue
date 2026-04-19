@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <v-card elevation="0" rounded="lg" class="channel-orchestration" variant="flat">
     <!-- Scheduler statistics -->
     <v-card-title class="d-flex align-center justify-space-between py-3 px-0">
@@ -267,6 +267,13 @@
                   </v-chip>
                 </template>
               </v-tooltip>
+              <v-tooltip v-if="element.cooldownApiKeys?.length" :text="`${element.cooldownApiKeys.length} 个密钥冷却中`" location="top" color="info" content-class="ccx-tooltip">
+                <template #activator="{ props: tip }">
+                  <v-chip v-bind="tip" size="x-small" color="info" variant="tonal" @click="$emit('edit', element)">
+                    {{ element.cooldownApiKeys.length }}
+                  </v-chip>
+                </template>
+              </v-tooltip>
             </div>
 
             <!-- Action buttons -->
@@ -462,6 +469,13 @@
               <template #activator="{ props: tip }">
                 <v-chip v-bind="tip" size="x-small" color="warning" variant="tonal" @click="$emit('edit', channel)">
                   {{ channel.disabledApiKeys.length }}
+                </v-chip>
+              </template>
+            </v-tooltip>
+            <v-tooltip v-if="channel.cooldownApiKeys?.length" :text="`${channel.cooldownApiKeys.length} 个密钥冷却中`" location="top" color="info" content-class="ccx-tooltip">
+              <template #activator="{ props: tip }">
+                <v-chip v-bind="tip" size="x-small" color="info" variant="tonal" @click="$emit('edit', channel)">
+                  {{ channel.cooldownApiKeys.length }}
                 </v-chip>
               </template>
             </v-tooltip>
@@ -701,9 +715,9 @@ const filteredInactiveChannels = computed(() => {
 
 // Computed: whether multi-channel mode is enabled
 // Multi-channel mode detection logic:
-// 1. Only one enabled channel → single-channel mode
-// 2. One active channel + several suspended channels → single-channel mode
-// 3. Multiple active channels → multi-channel mode
+// 1. Only one enabled channel 鈫?single-channel mode
+// 2. One active channel + several suspended channels 鈫?single-channel mode
+// 3. Multiple active channels 鈫?multi-channel mode
 const isMultiChannelMode = computed(() => {
   const activeCount = props.channels.filter(
     ch => ch.status === 'active' || ch.status === undefined || ch.status === ''
@@ -865,7 +879,7 @@ const formatCacheStats = (stats?: TimeWindowStats): string => {
   if (denom <= 0) return '--'
 
   const hitRate = stats.cacheHitRate ?? (cacheReadTokens / denom * 100)
-  return `${t('orchestration.hitRate')} ${hitRate.toFixed(0)}% · ${t('orchestration.read')} ${formatTokens(cacheReadTokens)} · ${t('orchestration.write')} ${formatTokens(cacheCreationTokens)}`
+  return `${t('orchestration.hitRate')} ${hitRate.toFixed(0)}% 路 ${t('orchestration.read')} ${formatTokens(cacheReadTokens)} 路 ${t('orchestration.write')} ${formatTokens(cacheCreationTokens)}`
 }
 
 // Get the official website URL (prefer website; otherwise extract the domain from baseUrl)
@@ -1083,7 +1097,7 @@ const getActivityPath = (channelIndex: number): string => {
   return catmullRomToPath(points)
 }
 
-// Convert a Catmull-Rom spline to an SVG Bézier path
+// Convert a Catmull-Rom spline to an SVG B茅zier path
 function catmullRomToPath(points: { x: number; y: number }[]): string {
   if (points.length < 2) return ''
 
@@ -2003,3 +2017,4 @@ defineExpose({
   color: rgb(var(--v-theme-on-surface));
 }
 </style>
+

@@ -53,6 +53,10 @@ type UpstreamConfig struct {
 	SupportedModels []string `json:"supportedModels,omitempty"` // 支持的模型白名单（空=全部），支持通配符如 gpt-4*
 	// 路由前缀
 	RoutePrefix string `json:"routePrefix,omitempty"` // 路由前缀（如 "kimi"），客户端可通过 /:routePrefix/v1/messages 访问
+	// Claude 流式转发模式：true=直接透传，false=走本地流事件处理链
+	StreamPassthroughEnabled *bool `json:"streamPassthroughEnabled,omitempty"`
+	// 渠道级故障规则：按状态码/错误码/关键词命中后执行冷却或拉黑
+	FailoverRules []FailoverRule `json:"failoverRules,omitempty"`
 }
 
 // DisabledKeyInfo 被拉黑的 API Key 信息
@@ -61,6 +65,15 @@ type DisabledKeyInfo struct {
 	Reason     string `json:"reason"`     // "authentication_error" / "permission_error" / "insufficient_balance"
 	Message    string `json:"message"`    // 原始错误信息
 	DisabledAt string `json:"disabledAt"` // ISO8601 时间戳
+}
+
+// CooldownKeyInfo 处于冷却期的 API Key 信息（运行时）
+type CooldownKeyInfo struct {
+	Key                  string `json:"key"`
+	FailureCount         int    `json:"failureCount"`
+	CooldownUntil        string `json:"cooldownUntil"`
+	RemainingSeconds     int64  `json:"remainingSeconds"`
+	FixedDurationSeconds int64  `json:"fixedDurationSeconds,omitempty"`
 }
 
 // IsAutoBlacklistBalanceEnabled 检查余额不足自动拉黑是否启用（默认 true）
@@ -79,6 +92,75 @@ func (u *UpstreamConfig) IsNormalizeMetadataUserIDEnabled() bool {
 	return *u.NormalizeMetadataUserID
 }
 
+// IsStreamPassthroughEnabled 检查流式是否直接透传（默认 true）
+func (u *UpstreamConfig) IsStreamPassthroughEnabled() bool {
+	if u.StreamPassthroughEnabled == nil {
+		return true
+	}
+	return *u.StreamPassthroughEnabled
+}
+
+// GetEffectiveFailoverRules 获取渠道级故障规则（Claude 默认规则可覆盖）
+func (u *UpstreamConfig) GetEffectiveFailoverRules() []FailoverRule {
+	if len(u.FailoverRules) > 0 {
+		return CloneFailoverRules(u.FailoverRules)
+	}
+
+	if strings.EqualFold(u.ServiceType, "claude") {
+		return DefaultClaudeFailoverRules()
+	}
+
+	return nil
+}
+
+// FailoverRule 渠道级故障规则
+type FailoverRule struct {
+	Description     string   `json:"description,omitempty"`
+	Action          string   `json:"action"` // "cooldown" | "blacklist"
+	StatusCodes     []int    `json:"statusCodes,omitempty"`
+	ErrorCodes      []string `json:"errorCodes,omitempty"`
+	Keywords        []string `json:"keywords,omitempty"`
+	DurationMinutes int      `json:"durationMinutes,omitempty"` // action=cooldown 时生效
+}
+
+// DefaultClaudeFailoverRules Claude 默认故障规则
+func DefaultClaudeFailoverRules() []FailoverRule {
+	return []FailoverRule{
+		{
+			Description:     "429 冷却 60 分钟",
+			Action:          "cooldown",
+			StatusCodes:     []int{429},
+			DurationMinutes: 60,
+		},
+		{
+			Description: "400/401 拉黑",
+			Action:      "blacklist",
+			StatusCodes: []int{400, 401},
+		},
+	}
+}
+
+// CloneFailoverRules 深拷贝规则切片
+func CloneFailoverRules(rules []FailoverRule) []FailoverRule {
+	if len(rules) == 0 {
+		return nil
+	}
+	cloned := make([]FailoverRule, len(rules))
+	for i := range rules {
+		cloned[i] = rules[i]
+		if len(rules[i].StatusCodes) > 0 {
+			cloned[i].StatusCodes = append([]int(nil), rules[i].StatusCodes...)
+		}
+		if len(rules[i].ErrorCodes) > 0 {
+			cloned[i].ErrorCodes = append([]string(nil), rules[i].ErrorCodes...)
+		}
+		if len(rules[i].Keywords) > 0 {
+			cloned[i].Keywords = append([]string(nil), rules[i].Keywords...)
+		}
+	}
+	return cloned
+}
+
 // UpstreamUpdate 用于部分更新 UpstreamConfig
 type UpstreamUpdate struct {
 	Name               *string           `json:"name"`
@@ -94,13 +176,15 @@ type UpstreamUpdate struct {
 	TextVerbosity      *string           `json:"textVerbosity"`
 	FastMode           *bool             `json:"fastMode"`
 	// 多渠道调度相关字段
-	Priority                *int       `json:"priority"`
-	Status                  *string    `json:"status"`
-	PromotionUntil          *time.Time `json:"promotionUntil"`
-	LowQuality              *bool      `json:"lowQuality"`
-	RPM                     *int       `json:"rpm"`
-	AutoBlacklistBalance    *bool      `json:"autoBlacklistBalance"`
-	NormalizeMetadataUserID *bool      `json:"normalizeMetadataUserId"`
+	Priority                 *int           `json:"priority"`
+	Status                   *string        `json:"status"`
+	PromotionUntil           *time.Time     `json:"promotionUntil"`
+	LowQuality               *bool          `json:"lowQuality"`
+	RPM                      *int           `json:"rpm"`
+	AutoBlacklistBalance     *bool          `json:"autoBlacklistBalance"`
+	NormalizeMetadataUserID  *bool          `json:"normalizeMetadataUserId"`
+	StreamPassthroughEnabled *bool          `json:"streamPassthroughEnabled"`
+	FailoverRules            []FailoverRule `json:"failoverRules"`
 	// Gemini 特定配置
 	InjectDummyThoughtSignature *bool `json:"injectDummyThoughtSignature"`
 	StripThoughtSignature       *bool `json:"stripThoughtSignature"`
@@ -161,9 +245,9 @@ type ConfigManager struct {
 	configFile          string
 	watcher             *fsnotify.Watcher
 	failedKeysCache     map[string]*FailedKey
-	keyBackoffDurations []time.Duration   // 各档冷却时间
+	keyBackoffDurations []time.Duration    // 各档冷却时间
 	roundRobinCounters  map[string]*uint64 // upstream.Name → 轮询计数器
-	stopChan            chan struct{}       // 用于通知 goroutine 停止
+	stopChan            chan struct{}      // 用于通知 goroutine 停止
 	closeOnce           sync.Once          // 确保 Close 只执行一次
 }
 
@@ -373,6 +457,78 @@ func (cm *ConfigManager) isKeyFailed(apiKey, apiType string) bool {
 // IsKeyFailed 检查 Key 是否在冷却期（公开方法）
 func (cm *ConfigManager) IsKeyFailed(apiKey, apiType string) bool {
 	return cm.isKeyFailed(apiKey, apiType)
+}
+
+// GetCooldownKeys 获取指定渠道当前处于冷却期的 Key 列表
+// 仅返回当前 active APIKeys 中仍在冷却窗口内的 key
+func (cm *ConfigManager) GetCooldownKeys(apiType string, channelIndex int) []CooldownKeyInfo {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+
+	upstreams := cm.getUpstreamSliceLocked(apiType)
+	if upstreams == nil || channelIndex < 0 || channelIndex >= len(*upstreams) {
+		return nil
+	}
+
+	upstream := &(*upstreams)[channelIndex]
+	if len(upstream.APIKeys) == 0 || len(cm.failedKeysCache) == 0 {
+		return nil
+	}
+
+	now := time.Now()
+	result := make([]CooldownKeyInfo, 0, len(upstream.APIKeys))
+	for _, apiKey := range upstream.APIKeys {
+		cacheKey := failedKeyCacheKey(apiType, apiKey)
+		failure, exists := cm.failedKeysCache[cacheKey]
+		if !exists || failure == nil {
+			continue
+		}
+
+		cooldownDuration := failure.FixedDuration
+		if cooldownDuration <= 0 {
+			cooldownDuration = cm.backoffDuration(failure.FailureCount)
+		}
+		if cooldownDuration <= 0 {
+			continue
+		}
+
+		cooldownUntil := failure.Timestamp.Add(cooldownDuration)
+		remaining := cooldownUntil.Sub(now)
+		if remaining <= 0 {
+			continue
+		}
+
+		remainingSeconds := int64(remaining / time.Second)
+		if remaining%time.Second != 0 {
+			remainingSeconds++
+		}
+		if remainingSeconds <= 0 {
+			continue
+		}
+
+		item := CooldownKeyInfo{
+			Key:              apiKey,
+			FailureCount:     failure.FailureCount,
+			CooldownUntil:    cooldownUntil.Format(time.RFC3339),
+			RemainingSeconds: remainingSeconds,
+		}
+		if failure.FixedDuration > 0 {
+			item.FixedDurationSeconds = int64(failure.FixedDuration / time.Second)
+		}
+		result = append(result, item)
+	}
+
+	slices.SortFunc(result, func(a, b CooldownKeyInfo) int {
+		if a.RemainingSeconds == b.RemainingSeconds {
+			return strings.Compare(a.Key, b.Key)
+		}
+		if a.RemainingSeconds > b.RemainingSeconds {
+			return -1
+		}
+		return 1
+	})
+
+	return result
 }
 
 // MarkKeyAsFailedWithDuration 标记密钥失败，使用固定冷却时间（暂停规则触发）

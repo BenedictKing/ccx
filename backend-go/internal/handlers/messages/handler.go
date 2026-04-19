@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
@@ -146,7 +147,7 @@ func handleMultiChannel(
 				},
 				func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string, actualRequestBody []byte) (*types.Usage, error) {
 					if claudeReq.Stream {
-						return common.HandleStreamResponse(c, resp, provider)
+						return common.HandleStreamResponse(c, resp, provider, envCfg, actualRequestBody, upstreamCopy)
 					}
 					return handleNormalResponse(c, resp, provider, envCfg, startTime, actualRequestBody, upstreamCopy, apiKey)
 				},
@@ -238,7 +239,7 @@ func handleSingleChannel(
 		nil,
 		func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string, actualRequestBody []byte) (*types.Usage, error) {
 			if claudeReq.Stream {
-				return common.HandleStreamResponse(c, resp, provider)
+				return common.HandleStreamResponse(c, resp, provider, envCfg, actualRequestBody, upstreamCopy)
 			}
 			return handleNormalResponse(c, resp, provider, envCfg, startTime, actualRequestBody, upstreamCopy, apiKey)
 		},
@@ -266,6 +267,13 @@ func handleNormalResponse(
 	apiKey string,
 ) (*types.Usage, error) {
 	defer resp.Body.Close()
+
+	if shouldDirectClaudePassthrough(upstream) {
+		if err := common.PassthroughResponse(c, resp); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	}
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -381,6 +389,12 @@ func handleNormalResponse(
 	}
 
 	return claudeResp.Usage, nil
+}
+
+func shouldDirectClaudePassthrough(upstream *config.UpstreamConfig) bool {
+	return upstream != nil &&
+		strings.EqualFold(upstream.ServiceType, "claude") &&
+		upstream.IsStreamPassthroughEnabled()
 }
 
 // CountTokensHandler 处理 /v1/messages/count_tokens 请求

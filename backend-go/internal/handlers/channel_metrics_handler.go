@@ -625,24 +625,29 @@ func GetChannelDashboard(cfgManager *config.ConfigManager, sch *scheduler.Channe
 		var upstreams []config.UpstreamConfig
 		var metricsManager *metrics.MetricsManager
 		var kind scheduler.ChannelKind
+		apiType := "Messages"
 
 		switch channelType {
 		case "responses":
 			upstreams = cfg.ResponsesUpstream
 			metricsManager = sch.GetResponsesMetricsManager()
 			kind = scheduler.ChannelKindResponses
+			apiType = "Responses"
 		case "chat":
 			upstreams = cfg.ChatUpstream
 			metricsManager = sch.GetChatMetricsManager()
 			kind = scheduler.ChannelKindChat
+			apiType = "Chat"
 		case "gemini":
 			upstreams = cfg.GeminiUpstream
 			metricsManager = sch.GetGeminiMetricsManager()
 			kind = scheduler.ChannelKindGemini
+			apiType = "Gemini"
 		default: // messages
 			upstreams = cfg.Upstream
 			metricsManager = sch.GetMessagesMetricsManager()
 			kind = scheduler.ChannelKindMessages
+			apiType = "Messages"
 		}
 
 		// 1. 构建 channels 数据
@@ -670,6 +675,7 @@ func GetChannelDashboard(cfgManager *config.ConfigManager, sch *scheduler.Channe
 				"supportedModels":         up.SupportedModels,
 				"routePrefix":             up.RoutePrefix,
 				"disabledApiKeys":         up.DisabledAPIKeys,
+				"cooldownApiKeys":         cfgManager.GetCooldownKeys(apiType, i),
 				"autoBlacklistBalance":    up.IsAutoBlacklistBalanceEnabled(),
 				"normalizeMetadataUserId": up.IsNormalizeMetadataUserIDEnabled(),
 				"latency":                 nil,

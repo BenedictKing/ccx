@@ -97,6 +97,22 @@ export interface DisabledKeyInfo {
   disabledAt: string  // ISO8601 时间戳
 }
 
+export interface CooldownKeyInfo {
+  key: string
+  failureCount: number
+  cooldownUntil: string
+  remainingSeconds: number
+  fixedDurationSeconds?: number
+}
+
+export interface FailoverRule {
+  description?: string
+  action: 'cooldown' | 'blacklist'
+  statusCodes?: number[]
+  errorCodes?: string[]
+  keywords?: string[]
+  durationMinutes?: number
+}
 export interface Channel {
   name: string
   serviceType: 'openai' | 'gemini' | 'claude' | 'responses'
@@ -104,6 +120,7 @@ export interface Channel {
   baseUrls?: string[]                // 多 BaseURL 支持（failover 模式）
   apiKeys: string[]
   disabledApiKeys?: DisabledKeyInfo[]  // 被拉黑的 API Key
+  cooldownApiKeys?: CooldownKeyInfo[]  // 处于冷却期的 API Key
   historicalApiKeys?: string[]
   description?: string
   website?: string
@@ -115,8 +132,10 @@ export interface Channel {
   customHeaders?: Record<string, string>  // 自定义请求头
   proxyUrl?: string                        // HTTP/HTTPS/SOCKS5 代理 URL
   routePrefix?: string                     // 路由前缀（如 "kimi"，访问 /kimi/v1/messages）
-  autoBlacklistBalance?: boolean           // 余额不足自动拉黑（默认 true）
-  normalizeMetadataUserId?: boolean        // 规范化 metadata.user_id（默认 true）
+  autoBlacklistBalance?: boolean
+  normalizeMetadataUserId?: boolean
+  streamPassthroughEnabled?: boolean
+  failoverRules?: FailoverRule[]
   latency?: number
   status?: ChannelStatus | 'healthy' | 'error' | 'unknown' | ''
   index: number

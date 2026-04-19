@@ -24,7 +24,9 @@ describe('buildChannelPayload', () => {
       routePrefix: '',
       supportedModels: ['gpt-5'],
       autoBlacklistBalance: true,
-      normalizeMetadataUserId: true
+      normalizeMetadataUserId: true,
+      streamPassthroughEnabled: true,
+      failoverRules: []
     })
 
     expect(result.name).toBe('test-channel')
@@ -61,7 +63,9 @@ describe('buildChannelPayload', () => {
       routePrefix: '',
       supportedModels: [],
       autoBlacklistBalance: true,
-      normalizeMetadataUserId: true
+      normalizeMetadataUserId: true,
+      streamPassthroughEnabled: true,
+      failoverRules: []
     })
 
     expect(result.baseUrl).toBe('https://api.example.com/v1#')
@@ -90,7 +94,9 @@ describe('buildChannelPayload', () => {
       routePrefix: '',
       supportedModels: ['opus'],
       autoBlacklistBalance: true,
-      normalizeMetadataUserId: true
+      normalizeMetadataUserId: true,
+      streamPassthroughEnabled: true,
+      failoverRules: []
     })
 
     expect(result.modelMapping).toEqual({ opus: 'claude-3-7-sonnet' })
@@ -121,7 +127,9 @@ describe('buildChannelPayload', () => {
       routePrefix: '',
       supportedModels: [],
       autoBlacklistBalance: false,
-      normalizeMetadataUserId: true
+      normalizeMetadataUserId: true,
+      streamPassthroughEnabled: true,
+      failoverRules: []
     })
 
     expect(result.autoBlacklistBalance).toBe(false)
@@ -149,7 +157,9 @@ describe('buildChannelPayload', () => {
       routePrefix: '',
       supportedModels: [],
       autoBlacklistBalance: true,
-      normalizeMetadataUserId: false
+      normalizeMetadataUserId: false,
+      streamPassthroughEnabled: true,
+      failoverRules: []
     })
 
     expect(result.normalizeMetadataUserId).toBe(false)

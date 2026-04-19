@@ -634,6 +634,37 @@
                       </v-list-item>
                     </v-list>
                   </div>
+
+                  <div v-if="isEditing && visibleCooldownKeys.length" class="mt-4">
+                    <div class="d-flex align-center ga-2 mb-2">
+                      <v-icon size="small" color="warning">mdi-timer-sand</v-icon>
+                      <span class="text-body-2 font-weight-medium text-warning">冷却 Keys</span>
+                      <v-chip size="x-small" color="warning" variant="tonal">{{ visibleCooldownKeys.length }}</v-chip>
+                    </div>
+                    <v-list density="compact" class="rounded-lg" style="max-height: 150px; overflow-y: auto;">
+                      <v-list-item
+                        v-for="(ck, ckIdx) in visibleCooldownKeys"
+                        :key="'cooldown-' + ckIdx"
+                        class="px-3"
+                        style="background: rgba(var(--v-theme-warning), 0.04);"
+                      >
+                        <template #prepend>
+                          <v-icon size="small" color="warning" class="mr-2">mdi-timer-outline</v-icon>
+                        </template>
+                        <v-list-item-title class="text-caption font-weight-mono">
+                          {{ ck.key.length > 20 ? ck.key.slice(0, 8) + '***' + ck.key.slice(-5) : ck.key }}
+                        </v-list-item-title>
+                        <v-list-item-subtitle class="d-flex align-center ga-1">
+                          <v-chip size="x-small" color="warning" variant="tonal">
+                            剩余 {{ formatCooldownRemaining(ck.remainingSeconds) }}
+                          </v-chip>
+                          <span class="text-caption">
+                            失败 {{ ck.failureCount }} 次 · {{ formatCooldownUntil(ck.cooldownUntil) }} 恢复
+                          </span>
+                        </v-list-item-subtitle>
+                      </v-list-item>
+                    </v-list>
+                  </div>
                 </v-card-text>
               </v-card>
             </v-col>
@@ -705,6 +736,123 @@
                 </div>
                 <v-switch v-model="form.normalizeMetadataUserId" inset color="primary" hide-details />
               </div>
+            </v-col>
+
+            <v-col v-if="form.serviceType === 'claude'" cols="12">
+              <v-card variant="outlined" rounded="lg">
+                <v-card-title class="section-card-title d-flex align-center justify-space-between ga-2">
+                  <div class="d-flex align-center ga-2">
+                    <v-icon size="small" color="primary">mdi-waveform</v-icon>
+                    Claude 流式与故障拦截
+                  </div>
+                  <div class="d-flex align-center ga-2">
+                    <v-btn size="small" variant="tonal" color="primary" @click="resetClaudeFailoverRules">
+                      恢复默认
+                    </v-btn>
+                    <v-btn size="small" variant="tonal" color="secondary" prepend-icon="mdi-plus" @click="addFailoverRule">
+                      新增规则
+                    </v-btn>
+                  </div>
+                </v-card-title>
+                <v-card-text>
+                  <div class="d-flex align-center justify-space-between mb-4">
+                    <div>
+                      <div class="section-title section-title--soft">流式透传</div>
+                      <div class="text-caption text-medium-emphasis">开启后直接透传上游响应（SSE 与非 SSE）；关闭后走本地处理链。</div>
+                    </div>
+                    <v-switch v-model="form.streamPassthroughEnabled" inset color="primary" hide-details />
+                  </div>
+
+                  <div v-if="form.failoverRules.length === 0" class="text-caption text-medium-emphasis mb-2">
+                    暂无规则。可新增规则按状态码 / 错误码 / 关键词进行冷却或拉黑。
+                  </div>
+
+                  <v-card
+                    v-for="(rule, ruleIndex) in form.failoverRules"
+                    :key="`failover-rule-${ruleIndex}`"
+                    variant="tonal"
+                    class="mb-3"
+                  >
+                    <v-card-text class="pb-2">
+                      <div class="d-flex align-center justify-space-between mb-2">
+                        <div class="text-body-2 font-weight-medium">规则 {{ ruleIndex + 1 }}</div>
+                        <v-btn
+                          icon="mdi-delete"
+                          size="x-small"
+                          variant="text"
+                          color="error"
+                          @click="removeFailoverRule(ruleIndex)"
+                        />
+                      </div>
+
+                      <v-row>
+                        <v-col cols="12" md="6">
+                          <v-select
+                            v-model="rule.action"
+                            :items="[
+                              { title: '冷却 (cooldown)', value: 'cooldown' },
+                              { title: '拉黑 (blacklist)', value: 'blacklist' }
+                            ]"
+                            label="动作"
+                            variant="outlined"
+                            density="compact"
+                          />
+                        </v-col>
+                        <v-col v-if="rule.action === 'cooldown'" cols="12" md="6">
+                          <v-text-field
+                            v-model.number="rule.durationMinutes"
+                            type="number"
+                            min="1"
+                            step="1"
+                            label="冷却分钟"
+                            variant="outlined"
+                            density="compact"
+                          />
+                        </v-col>
+                        <v-col cols="12">
+                          <v-text-field
+                            v-model="rule.description"
+                            label="描述（可选）"
+                            placeholder="例如：429 冷却 60 分钟"
+                            variant="outlined"
+                            density="compact"
+                          />
+                        </v-col>
+                        <v-col cols="12" md="4">
+                          <v-text-field
+                            :model-value="(rule.statusCodes || []).join(',')"
+                            label="状态码"
+                            placeholder="例如：429,400,401"
+                            variant="outlined"
+                            density="compact"
+                            @update:model-value="updateRuleStatusCodes(ruleIndex, String($event ?? ''))"
+                          />
+                        </v-col>
+                        <v-col cols="12" md="4">
+                          <v-text-field
+                            :model-value="(rule.errorCodes || []).join(',')"
+                            label="错误码"
+                            placeholder="例如：rate_limit,1113"
+                            variant="outlined"
+                            density="compact"
+                            @update:model-value="updateRuleErrorCodes(ruleIndex, String($event ?? ''))"
+                          />
+                        </v-col>
+                        <v-col cols="12" md="4">
+                          <v-text-field
+                            :model-value="(rule.keywords || []).join(',')"
+                            label="关键词"
+                            placeholder="例如：rate limit,quota exceeded"
+                            variant="outlined"
+                            density="compact"
+                            @update:model-value="updateRuleKeywords(ruleIndex, String($event ?? ''))"
+                          />
+                        </v-col>
+                      </v-row>
+                    </v-card-text>
+                  </v-card>
+                </v-card-text>
+              </v-card>
             </v-col>
 
             <!-- 能力测试 RPM -->
@@ -887,7 +1035,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useTheme } from 'vuetify'
-import type { Channel } from '../services/api'
+import type { Channel, FailoverRule } from '../services/api'
 import { ApiService, ApiError } from '../services/api'
 import {
   isValidApiKey as _isValidApiKey,
@@ -1413,6 +1561,46 @@ const sortModelNamesDesc = (models: string[]): string[] => {
   })
 }
 
+const createDefaultClaudeFailoverRules = (): FailoverRule[] => [
+  {
+    description: '429 冷却 60 分钟',
+    action: 'cooldown',
+    statusCodes: [429],
+    durationMinutes: 60
+  },
+  {
+    description: '400/401 拉黑',
+    action: 'blacklist',
+    statusCodes: [400, 401]
+  }
+]
+
+const cloneFailoverRules = (rules?: FailoverRule[]): FailoverRule[] => {
+  if (!rules || rules.length === 0) return []
+  return rules.map(rule => ({
+    description: rule.description || '',
+    action: rule.action,
+    statusCodes: [...(rule.statusCodes || [])],
+    errorCodes: [...(rule.errorCodes || [])],
+    keywords: [...(rule.keywords || [])],
+    durationMinutes: rule.durationMinutes
+  }))
+}
+
+const parseCodeList = (value: string): number[] => {
+  return value
+    .split(',')
+    .map(part => Number(part.trim()))
+    .filter(num => Number.isInteger(num) && num >= 100 && num <= 599)
+}
+
+const parseStringList = (value: string): string[] => {
+  return value
+    .split(',')
+    .map(part => part.trim())
+    .filter(Boolean)
+}
+
 // 表单数据
 const form = reactive({
   name: '',
@@ -1436,6 +1624,8 @@ const form = reactive({
   supportedModels: [] as string[],
   autoBlacklistBalance: true,
   normalizeMetadataUserId: true,
+  streamPassthroughEnabled: true,
+  failoverRules: createDefaultClaudeFailoverRules() as FailoverRule[],
   rpm: 10
 })
 
@@ -1504,6 +1694,37 @@ const addCustomHeader = () => {
 // 删除自定义请求头
 const removeCustomHeader = (key: string) => {
   delete form.customHeaders[key]
+}
+
+const addFailoverRule = () => {
+  form.failoverRules.push({
+    description: '',
+    action: 'cooldown',
+    statusCodes: [],
+    errorCodes: [],
+    keywords: [],
+    durationMinutes: 60
+  })
+}
+
+const removeFailoverRule = (index: number) => {
+  form.failoverRules.splice(index, 1)
+}
+
+const resetClaudeFailoverRules = () => {
+  form.failoverRules = createDefaultClaudeFailoverRules()
+}
+
+const updateRuleStatusCodes = (index: number, value: string) => {
+  form.failoverRules[index].statusCodes = parseCodeList(value)
+}
+
+const updateRuleErrorCodes = (index: number, value: string) => {
+  form.failoverRules[index].errorCodes = parseStringList(value)
+}
+
+const updateRuleKeywords = (index: number, value: string) => {
+  form.failoverRules[index].keywords = parseStringList(value)
 }
 
 // 安全地获取字符串值（处理 v-select/v-combobox 可能返回对象的情况）
@@ -1650,6 +1871,15 @@ const isFormValid = computed(() => {
   )
 })
 
+watch(
+  () => form.serviceType,
+  serviceType => {
+    if (serviceType === 'claude' && form.failoverRules.length === 0) {
+      form.failoverRules = createDefaultClaudeFailoverRules()
+    }
+  }
+)
+
 // 工具函数
 const isValidUrl = (url: string): boolean => {
   try {
@@ -1688,6 +1918,8 @@ const resetForm = () => {
   form.supportedModels = []
   form.autoBlacklistBalance = true
   form.normalizeMetadataUserId = true
+  form.streamPassthroughEnabled = true
+  form.failoverRules = createDefaultClaudeFailoverRules()
   form.rpm = 10
   newApiKey.value = ''
   newMapping.source = ''
@@ -1761,6 +1993,14 @@ const loadChannelData = (channel: Channel) => {
   form.supportedModels = channel.supportedModels || []
   form.autoBlacklistBalance = channel.autoBlacklistBalance ?? true
   form.normalizeMetadataUserId = channel.normalizeMetadataUserId ?? true
+  form.streamPassthroughEnabled = channel.streamPassthroughEnabled ?? true
+  form.failoverRules = cloneFailoverRules(
+    channel.failoverRules && channel.failoverRules.length > 0
+      ? channel.failoverRules
+      : channel.serviceType === 'claude'
+        ? createDefaultClaudeFailoverRules()
+        : []
+  )
   form.rpm = channel.rpm ?? 10
 
   // 立即同步 baseUrl 到预览变量，避免等待 debounce
@@ -1845,6 +2085,26 @@ const localRestoredKeys = ref(new Set<string>())
 const visibleDisabledKeys = computed(() =>
   (props.channel?.disabledApiKeys || []).filter(dk => !localRestoredKeys.value.has(dk.key))
 )
+const visibleCooldownKeys = computed(() => props.channel?.cooldownApiKeys || [])
+
+const formatCooldownRemaining = (seconds: number): string => {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '即将恢复'
+  const total = Math.floor(seconds)
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  if (hours > 0) return `${hours}h ${minutes}m`
+  if (minutes > 0) return `${minutes}m`
+  return `${total}s`
+}
+
+const formatCooldownUntil = (iso: string): string => {
+  try {
+    const d = new Date(iso)
+    return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  } catch {
+    return iso
+  }
+}
 
 const restoreDisabledKey = async (apiKey: string) => {
   if (!props.channel) return
