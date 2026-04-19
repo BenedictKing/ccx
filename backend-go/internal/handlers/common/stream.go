@@ -39,21 +39,34 @@ func (e *ErrBlacklistKey) Error() string {
 	return fmt.Sprintf("upstream stream error requires key blacklist: %s", e.Reason)
 }
 
-// StreamPreflightResult 流式预检测结果
-type StreamPreflightResult struct {
-	BufferedEvents   []string // 缓冲的事件（需要回放）
-	IsEmpty          bool     // 是否为空响应
-	HasError         bool     // 是否有流错误
-	Error            error    // 流错误
-	BlacklistReason  string   // 拉黑原因（非空时应拉黑 Key）
-	BlacklistMessage string   // 拉黑错误信息
-	Diagnostic       string   // 空响应诊断摘要
-	UnknownEventType string   // 首个未知 SSE data.type
+// ErrCooldownKey 上游在 SSE 流中返回了应冷却 Key 的错误（限流/临时故障）
+// Header 未发送，可安全 failover 到下一个 Key/BaseURL/渠道
+type ErrCooldownKey struct {
+	Reason   string
+	Message  string
+	Duration time.Duration
 }
 
-// PreflightStreamEvents 在发送 HTTP Header 之前预检测流式响应是否为空
-// 缓冲事件并检查实际输出内容，避免发送 200 后无法撤销
-func PreflightStreamEvents(eventChan <-chan string, errChan <-chan error) *StreamPreflightResult {
+func (e *ErrCooldownKey) Error() string {
+	return fmt.Sprintf("upstream stream error requires key cooldown: %s", e.Reason)
+}
+
+// StreamPreflightResult 流式预检结果
+type StreamPreflightResult struct {
+	BufferedEvents    []string
+	IsEmpty           bool
+	HasError          bool
+	Error             error
+	InterceptAction   string
+	InterceptReason   string
+	InterceptMessage  string
+	InterceptDuration time.Duration
+	Diagnostic        string
+	UnknownEventType  string
+}
+
+// PreflightStreamEvents 在发送 HTTP Header 之前预检流响应是否可继续
+func PreflightStreamEvents(eventChan <-chan string, errChan <-chan error, upstream *config.UpstreamConfig) *StreamPreflightResult {
 	result := &StreamPreflightResult{}
 	var textBuf bytes.Buffer
 	hasNonTextContent := false // tool_use / thinking 等非文本 content block
@@ -82,10 +95,12 @@ func PreflightStreamEvents(eventChan <-chan string, errChan <-chan error) *Strea
 			result.BufferedEvents = append(result.BufferedEvents, event)
 
 			// 检测 SSE error 事件中的拉黑条件（认证/余额错误）
-			if result.BlacklistReason == "" {
-				if reason, msg := DetectStreamBlacklistError(event); reason != "" {
-					result.BlacklistReason = reason
-					result.BlacklistMessage = msg
+			if result.InterceptAction == "" {
+				if action, reason, duration, msg := DetectStreamFailoverAction(event, upstream); action != "" {
+					result.InterceptAction = action
+					result.InterceptReason = reason
+					result.InterceptDuration = duration
+					result.InterceptMessage = msg
 				}
 			}
 
@@ -860,48 +875,101 @@ func HandleStreamResponse(
 	c *gin.Context,
 	resp *http.Response,
 	provider providers.Provider,
+	envCfg *config.EnvConfig,
+	requestBody []byte,
+	upstream *config.UpstreamConfig,
 ) (*types.Usage, error) {
 	defer resp.Body.Close()
 
-	// 所有 serviceType 统一透传：provider 层完成格式转换，这里只做 preflight 检测 + 直接转发
+	// 所有 serviceType 先做 preflight 检测，再按渠道配置决定是否直接透传
 	eventChan, errChan, err := provider.HandleStreamResponse(resp.Body)
 	if err != nil {
 		c.JSON(500, gin.H{"error": "Failed to handle stream response"})
 		return nil, err
 	}
-	preflight := PreflightStreamEvents(eventChan, errChan)
+	preflight := PreflightStreamEvents(eventChan, errChan, upstream)
 	if preflight.HasError {
 		drainChannels(eventChan, errChan)
 		return nil, preflight.Error
 	}
-	if preflight.IsEmpty {
-		log.Printf("[Messages-EmptyResponse] 上游返回空响应 (缓冲事件数: %d, 诊断: %s)，触发重试", len(preflight.BufferedEvents), preflight.Diagnostic)
+
+	if preflight.InterceptAction != "" {
 		drainChannels(eventChan, errChan)
-		if preflight.BlacklistReason != "" {
-			return nil, &ErrBlacklistKey{Reason: preflight.BlacklistReason, Message: preflight.BlacklistMessage}
+		switch preflight.InterceptAction {
+		case failoverActionCooldown:
+			duration := preflight.InterceptDuration
+			if duration <= 0 {
+				duration = 60 * time.Minute
+			}
+			return nil, &ErrCooldownKey{
+				Reason:   preflight.InterceptReason,
+				Message:  preflight.InterceptMessage,
+				Duration: duration,
+			}
+		case failoverActionBlacklist:
+			return nil, &ErrBlacklistKey{Reason: preflight.InterceptReason, Message: preflight.InterceptMessage}
 		}
+	}
+
+	if preflight.IsEmpty {
+		log.Printf("[Messages-EmptyResponse] upstream returned empty stream response (buffered events: %d, diagnostic: %s)", len(preflight.BufferedEvents), preflight.Diagnostic)
+		drainChannels(eventChan, errChan)
 		return nil, ErrEmptyStreamResponse
 	}
-	if preflight.BlacklistReason != "" {
-		drainChannels(eventChan, errChan)
-		return nil, &ErrBlacklistKey{Reason: preflight.BlacklistReason, Message: preflight.BlacklistMessage}
-	}
+
 	SetupStreamHeaders(c, resp)
 	flusher, ok := c.Writer.(http.Flusher)
 	if !ok {
 		drainChannels(eventChan, errChan)
-		return nil, fmt.Errorf("ResponseWriter不支持Flush接口")
+		return nil, fmt.Errorf("response writer does not support flush")
 	}
 	flusher.Flush()
+
+	// 渠道级开关：true=直接透传；false=走本地流事件处理链
+	if upstream == nil || upstream.IsStreamPassthroughEnabled() {
+		for _, buffered := range preflight.BufferedEvents {
+			fmt.Fprint(c.Writer, buffered) //nolint:errcheck
+			flusher.Flush()
+		}
+		for event := range eventChan {
+			fmt.Fprint(c.Writer, event) //nolint:errcheck
+			flusher.Flush()
+		}
+		return nil, nil
+	}
+
+	if envCfg == nil {
+		envCfg = &config.EnvConfig{}
+	}
+
+	streamCtx := NewStreamContext(envCfg)
+	streamCtx.RequestModel = extractRequestModelFromRequestBody(requestBody)
+	streamCtx.LowQuality = upstream.LowQuality
+	startTime := time.Now()
+
 	for _, buffered := range preflight.BufferedEvents {
-		fmt.Fprint(c.Writer, buffered) //nolint:errcheck
-		flusher.Flush()
+		ProcessStreamEvent(c, c.Writer, flusher, buffered, streamCtx, envCfg, requestBody)
+		if streamCtx.ClientGone {
+			drainChannels(eventChan, errChan)
+			return nil, context.Canceled
+		}
 	}
-	for event := range eventChan {
-		fmt.Fprint(c.Writer, event) //nolint:errcheck
-		flusher.Flush()
+
+	return ProcessStreamEvents(c, c.Writer, flusher, eventChan, errChan, streamCtx, envCfg, startTime, requestBody)
+}
+
+func extractRequestModelFromRequestBody(requestBody []byte) string {
+	if len(requestBody) == 0 {
+		return ""
 	}
-	return nil, nil
+
+	var req map[string]interface{}
+	if err := json.Unmarshal(requestBody, &req); err != nil {
+		return ""
+	}
+
+	model, _ := req["model"].(string)
+	return strings.TrimSpace(model)
 }
 
 // ========== Token 检测和修补相关函数 ==========
@@ -1518,6 +1586,44 @@ func ExtractTextFromEvent(event string, buf *bytes.Buffer) {
 
 // DetectStreamBlacklistError 检测 SSE error 事件中是否包含应拉黑 Key 的错误
 // 返回 (reason, message)，reason 非空表示应拉黑
+
+// DetectStreamFailoverAction 检测 SSE 事件是否触发渠道级 failover 动作
+// 返回 (action, reason, duration, message)
+func DetectStreamFailoverAction(event string, upstream *config.UpstreamConfig) (string, string, time.Duration, string) {
+	if upstream != nil {
+		for _, line := range strings.Split(event, "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+
+			payload := ""
+			if jsonStr, ok := extractSSEJSONLine(line); ok {
+				payload = jsonStr
+			} else if strings.HasPrefix(line, "{") {
+				payload = line
+			}
+			if payload == "" {
+				continue
+			}
+
+			if decision := matchChannelFailoverRule(upstream, http.StatusOK, []byte(payload), "", "", ""); decision.Matched {
+				return decision.Action, decision.Reason, decision.Duration, decision.Message
+			}
+		}
+	}
+
+	// 兼容旧逻辑：从 SSE error 事件中提取标准错误并映射到动作
+	reason, message := DetectStreamBlacklistError(event)
+	switch reason {
+	case "":
+		return "", "", 0, ""
+	case "rate_limit":
+		return failoverActionCooldown, reason, 60 * time.Minute, message
+	default:
+		return failoverActionBlacklist, reason, 0, message
+	}
+}
 func DetectStreamBlacklistError(event string) (reason string, message string) {
 	// 检查是否为 error 事件
 	isErrorEvent := false

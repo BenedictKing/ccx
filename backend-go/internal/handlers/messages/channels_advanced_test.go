@@ -90,4 +90,7 @@ func TestGetUpstreams_IncludesNormalizeMetadataUserIdField(t *testing.T) {
 	if got := resp.Channels[0]["normalizeMetadataUserId"]; got != true {
 		t.Fatalf("normalizeMetadataUserId = %v, want true", got)
 	}
+	if got := resp.Channels[0]["strictRequestPassthroughEnabled"]; got != true {
+		t.Fatalf("strictRequestPassthroughEnabled = %v, want true", got)
+	}
 }

@@ -200,3 +200,51 @@ func TestNormalizeMetadataUserIDDefaultsAndUpdate(t *testing.T) {
 		t.Fatal("NormalizeMetadataUserID pointer should be deep-copied")
 	}
 }
+
+func TestStrictRequestPassthroughDefaultsAndUpdate(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "config.json")
+	initialConfig := `{
+		"upstream": [{
+			"name": "test-channel",
+			"baseUrl": "https://example.com",
+			"apiKeys": ["sk-active"],
+			"serviceType": "claude"
+		}]
+	}`
+	if err := os.WriteFile(configPath, []byte(initialConfig), 0644); err != nil {
+		t.Fatalf("写入初始配置失败: %v", err)
+	}
+
+	cm, err := NewConfigManager(configPath)
+	if err != nil {
+		t.Fatalf("NewConfigManager() error = %v", err)
+	}
+	defer cm.Close()
+
+	cfg := cm.GetConfig()
+	if got := cfg.Upstream[0].IsStrictRequestPassthroughEnabled(); got != true {
+		t.Fatalf("default IsStrictRequestPassthroughEnabled() = %v, want true", got)
+	}
+
+	disabled := false
+	if _, err := cm.UpdateUpstream(0, UpstreamUpdate{StrictRequestPassthroughEnabled: &disabled}); err != nil {
+		t.Fatalf("UpdateUpstream() error = %v", err)
+	}
+
+	cfg = cm.GetConfig()
+	if cfg.Upstream[0].StrictRequestPassthroughEnabled == nil || *cfg.Upstream[0].StrictRequestPassthroughEnabled != false {
+		t.Fatalf("StrictRequestPassthroughEnabled = %v, want false", cfg.Upstream[0].StrictRequestPassthroughEnabled)
+	}
+	if got := cfg.Upstream[0].IsStrictRequestPassthroughEnabled(); got != false {
+		t.Fatalf("IsStrictRequestPassthroughEnabled() = %v, want false", got)
+	}
+
+	cloned := cfg.Upstream[0].Clone()
+	if cloned.StrictRequestPassthroughEnabled == nil || *cloned.StrictRequestPassthroughEnabled != false {
+		t.Fatalf("cloned StrictRequestPassthroughEnabled = %v, want false", cloned.StrictRequestPassthroughEnabled)
+	}
+	if cloned.StrictRequestPassthroughEnabled == cfg.Upstream[0].StrictRequestPassthroughEnabled {
+		t.Fatal("StrictRequestPassthroughEnabled pointer should be deep-copied")
+	}
+}

@@ -1237,7 +1237,7 @@ func sendAndCheckStream(ctx context.Context, client *http.Client, req *http.Requ
 	doneCh := make(chan streamResult, 1)
 
 	go func() {
-		preflight := common.PreflightStreamEvents(eventChan, errChan)
+		preflight := common.PreflightStreamEvents(eventChan, errChan, nil)
 		if preflight.HasError {
 			doneCh <- streamResult{err: preflight.Error}
 			return

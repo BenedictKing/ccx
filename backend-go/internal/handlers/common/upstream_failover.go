@@ -48,10 +48,53 @@ func shouldNormalizeMetadataUserID(kind scheduler.ChannelKind, upstream *config.
 	if upstream == nil {
 		return false
 	}
+	if isStrictClaudePassthrough(upstream) {
+		return false
+	}
 	if kind != scheduler.ChannelKindMessages && kind != scheduler.ChannelKindResponses {
 		return false
 	}
 	return upstream.IsNormalizeMetadataUserIDEnabled()
+}
+
+func isStrictClaudePassthrough(upstream *config.UpstreamConfig) bool {
+	return upstream != nil &&
+		strings.EqualFold(upstream.ServiceType, "claude") &&
+		upstream.IsStreamPassthroughEnabled() &&
+		upstream.IsStrictRequestPassthroughEnabled()
+}
+
+func prepareRequestBodyForUpstream(
+	requestBody []byte,
+	kind scheduler.ChannelKind,
+	apiType string,
+	upstream *config.UpstreamConfig,
+	cfgManager *config.ConfigManager,
+	envCfg *config.EnvConfig,
+) []byte {
+	attemptBody := requestBody
+	enableRequestLogs := envCfg != nil && envCfg.EnableRequestLogs
+
+	if kind == scheduler.ChannelKindMessages && isStrictClaudePassthrough(upstream) {
+		return attemptBody
+	}
+
+	if kind == scheduler.ChannelKindMessages {
+		var modified bool
+		attemptBody, modified = RemoveEmptySignatures(attemptBody, enableRequestLogs, apiType)
+		_ = modified
+		attemptBody, modified = SanitizeMalformedThinkingBlocks(attemptBody, enableRequestLogs, apiType)
+		_ = modified
+		if cfgManager != nil && cfgManager.GetStripBillingHeader() {
+			attemptBody, _ = RemoveBillingHeaders(attemptBody, enableRequestLogs, apiType)
+		}
+	}
+
+	if shouldNormalizeMetadataUserID(kind, upstream) {
+		attemptBody = NormalizeMetadataUserID(attemptBody)
+	}
+
+	return attemptBody
 }
 
 // TryUpstreamWithAllKeys 尝试一个 upstream 的所有 BaseURL + Key（纯 failover）
@@ -115,6 +158,8 @@ func TryUpstreamWithAllKeys(
 		originalModel = model // 仅当发生重定向时记录原始模型
 	}
 
+	preparedRequestBody := prepareRequestBodyForUpstream(requestBody, kind, apiType, upstream, cfgManager, envCfg)
+
 	for urlIdx, urlResult := range urlResults {
 		currentBaseURL := urlResult.URL
 		originalIdx := urlResult.OriginalIdx // 原始索引用于指标记录
@@ -122,10 +167,7 @@ func TryUpstreamWithAllKeys(
 		maxRetries := len(upstream.APIKeys)
 
 		for attempt := 0; attempt < maxRetries; attempt++ {
-			attemptBody := requestBody
-			if shouldNormalizeMetadataUserID(kind, upstream) {
-				attemptBody = NormalizeMetadataUserID(requestBody)
-			}
+			attemptBody := preparedRequestBody
 			RestoreRequestBody(c, attemptBody)
 			c.Set("requestBodyBytes", attemptBody)
 

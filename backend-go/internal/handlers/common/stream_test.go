@@ -355,7 +355,7 @@ func TestPreflightStreamEvents_ToolUseNotEmpty(t *testing.T) {
 	close(eventChan)
 	close(errChan)
 
-	result := PreflightStreamEvents(eventChan, errChan)
+	result := PreflightStreamEvents(eventChan, errChan, nil)
 	if result.IsEmpty {
 		t.Errorf("tool_use response should NOT be detected as empty, got IsEmpty=true (buffered %d events)", len(result.BufferedEvents))
 	}
@@ -376,7 +376,7 @@ func TestPreflightStreamEvents_ThinkingNotEmpty(t *testing.T) {
 	close(eventChan)
 	close(errChan)
 
-	result := PreflightStreamEvents(eventChan, errChan)
+	result := PreflightStreamEvents(eventChan, errChan, nil)
 	if result.IsEmpty {
 		t.Errorf("thinking response should NOT be detected as empty, got IsEmpty=true")
 	}
@@ -397,7 +397,7 @@ func TestPreflightStreamEvents_TrueEmptyStillDetected(t *testing.T) {
 	close(eventChan)
 	close(errChan)
 
-	result := PreflightStreamEvents(eventChan, errChan)
+	result := PreflightStreamEvents(eventChan, errChan, nil)
 	if !result.IsEmpty {
 		t.Errorf("truly empty response should be detected as empty, got IsEmpty=false")
 	}
@@ -414,7 +414,7 @@ func TestPreflightStreamEvents_UnknownEventTypeRecordedInDiagnostic(t *testing.T
 	close(eventChan)
 	close(errChan)
 
-	result := PreflightStreamEvents(eventChan, errChan)
+	result := PreflightStreamEvents(eventChan, errChan, nil)
 	if !result.IsEmpty {
 		t.Fatal("expected stream with only unknown event and no semantic content to be empty")
 	}
@@ -441,7 +441,7 @@ func TestPreflightStreamEvents_ToolUseStopReasonWithoutContentBlockStillNotEmpty
 	close(eventChan)
 	close(errChan)
 
-	result := PreflightStreamEvents(eventChan, errChan)
+	result := PreflightStreamEvents(eventChan, errChan, nil)
 	if result.IsEmpty {
 		t.Fatalf("tool_use stop_reason should NOT be detected as empty")
 	}

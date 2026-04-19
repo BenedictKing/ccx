@@ -763,6 +763,14 @@
                     <v-switch v-model="form.streamPassthroughEnabled" inset color="primary" hide-details />
                   </div>
 
+                  <div class="d-flex align-center justify-space-between mb-4">
+                    <div>
+                      <div class="section-title section-title--soft">严格请求透传</div>
+                      <div class="text-caption text-medium-emphasis">仅在透传开启时生效。开启后请求体原样转发；关闭后执行兼容预处理（signature/thinking/cch/metadata.user_id）。</div>
+                    </div>
+                    <v-switch v-model="form.strictRequestPassthroughEnabled" inset color="primary" hide-details />
+                  </div>
+
                   <div v-if="form.failoverRules.length === 0" class="text-caption text-medium-emphasis mb-2">
                     暂无规则。可新增规则按状态码 / 错误码 / 关键词进行冷却或拉黑。
                   </div>
@@ -1625,6 +1633,7 @@ const form = reactive({
   autoBlacklistBalance: true,
   normalizeMetadataUserId: true,
   streamPassthroughEnabled: true,
+  strictRequestPassthroughEnabled: true,
   failoverRules: createDefaultClaudeFailoverRules() as FailoverRule[],
   rpm: 10
 })
@@ -1919,6 +1928,7 @@ const resetForm = () => {
   form.autoBlacklistBalance = true
   form.normalizeMetadataUserId = true
   form.streamPassthroughEnabled = true
+  form.strictRequestPassthroughEnabled = true
   form.failoverRules = createDefaultClaudeFailoverRules()
   form.rpm = 10
   newApiKey.value = ''
@@ -1994,6 +2004,7 @@ const loadChannelData = (channel: Channel) => {
   form.autoBlacklistBalance = channel.autoBlacklistBalance ?? true
   form.normalizeMetadataUserId = channel.normalizeMetadataUserId ?? true
   form.streamPassthroughEnabled = channel.streamPassthroughEnabled ?? true
+  form.strictRequestPassthroughEnabled = channel.strictRequestPassthroughEnabled ?? true
   form.failoverRules = cloneFailoverRules(
     channel.failoverRules && channel.failoverRules.length > 0
       ? channel.failoverRules

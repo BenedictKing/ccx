@@ -23,6 +23,9 @@ export interface ChannelFormLike {
   supportedModels: string[]
   autoBlacklistBalance: boolean
   normalizeMetadataUserId: boolean
+  streamPassthroughEnabled: boolean
+  strictRequestPassthroughEnabled: boolean
+  failoverRules: NonNullable<Channel['failoverRules']>
   rpm?: number
 
 }
@@ -44,6 +47,17 @@ function getBaseUrlDeduplicationKey(url: string): string {
 
 export function buildChannelPayload(form: ChannelFormLike): Omit<Channel, 'index' | 'latency' | 'status'> {
   const processedApiKeys = form.apiKeys.filter(key => key.trim())
+  const normalizedFailoverRules = (form.serviceType === 'claude' ? (form.failoverRules || []) : [])
+    .map(rule => ({
+      description: (rule.description || '').trim(),
+      action: rule.action,
+      statusCodes: (rule.statusCodes || []).filter(code => Number.isInteger(code) && code >= 100 && code <= 599),
+      errorCodes: (rule.errorCodes || []).map(code => code.trim()).filter(Boolean),
+      keywords: (rule.keywords || []).map(keyword => keyword.trim()).filter(Boolean),
+      durationMinutes: rule.durationMinutes && rule.durationMinutes > 0 ? Math.floor(rule.durationMinutes) : undefined
+    }))
+    .filter(rule => rule.action && (rule.statusCodes.length > 0 || rule.errorCodes.length > 0 || rule.keywords.length > 0))
+
   const advancedOptions = normalizeAdvancedChannelOptions(form.serviceType, {
     reasoningMapping: form.reasoningMapping,
     textVerbosity: form.textVerbosity,
@@ -85,6 +99,9 @@ export function buildChannelPayload(form: ChannelFormLike): Omit<Channel, 'index
     supportedModels: form.supportedModels,
     autoBlacklistBalance: form.autoBlacklistBalance,
     normalizeMetadataUserId: form.normalizeMetadataUserId,
+    streamPassthroughEnabled: form.serviceType === 'claude' ? form.streamPassthroughEnabled : true,
+    strictRequestPassthroughEnabled: form.serviceType === 'claude' ? form.strictRequestPassthroughEnabled : true,
+    failoverRules: normalizedFailoverRules,
     rpm: form.rpm && form.rpm > 0 ? form.rpm : 10
   }
 

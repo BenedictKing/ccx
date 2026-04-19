@@ -203,6 +203,17 @@ func (cm *ConfigManager) UpdateResponsesUpstream(index int, updates UpstreamUpda
 		v := *updates.NormalizeMetadataUserID
 		upstream.NormalizeMetadataUserID = &v
 	}
+	if updates.StreamPassthroughEnabled != nil {
+		v := *updates.StreamPassthroughEnabled
+		upstream.StreamPassthroughEnabled = &v
+	}
+	if updates.StrictRequestPassthroughEnabled != nil {
+		v := *updates.StrictRequestPassthroughEnabled
+		upstream.StrictRequestPassthroughEnabled = &v
+	}
+	if updates.FailoverRules != nil {
+		upstream.FailoverRules = CloneFailoverRules(updates.FailoverRules)
+	}
 	if updates.CustomHeaders != nil {
 		upstream.CustomHeaders = updates.CustomHeaders
 	}

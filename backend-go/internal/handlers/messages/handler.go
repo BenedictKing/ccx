@@ -37,6 +37,7 @@ func Handler(envCfg *config.EnvConfig, cfgManager *config.ConfigManager, channel
 		if err != nil {
 			return
 		}
+		rawBodyBytes := bodyBytes
 
 		// 预处理：移除空 signature 字段，预防 400 错误
 		// modified 表示请求体是否被修改，详细日志由 RemoveEmptySignatures 内部记录
@@ -72,9 +73,9 @@ func Handler(envCfg *config.EnvConfig, cfgManager *config.ConfigManager, channel
 		isMultiChannel := channelScheduler.IsMultiChannelMode(scheduler.ChannelKindMessages)
 
 		if isMultiChannel {
-			handleMultiChannel(c, envCfg, cfgManager, channelScheduler, bodyBytes, claudeReq, userID, startTime)
+			handleMultiChannel(c, envCfg, cfgManager, channelScheduler, rawBodyBytes, claudeReq, userID, startTime)
 		} else {
-			handleSingleChannel(c, envCfg, cfgManager, channelScheduler, bodyBytes, claudeReq, startTime)
+			handleSingleChannel(c, envCfg, cfgManager, channelScheduler, rawBodyBytes, claudeReq, startTime)
 		}
 	})
 }

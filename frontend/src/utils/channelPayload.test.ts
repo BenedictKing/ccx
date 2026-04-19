@@ -26,6 +26,7 @@ describe('buildChannelPayload', () => {
       autoBlacklistBalance: true,
       normalizeMetadataUserId: true,
       streamPassthroughEnabled: true,
+      strictRequestPassthroughEnabled: true,
       failoverRules: []
     })
 
@@ -65,6 +66,7 @@ describe('buildChannelPayload', () => {
       autoBlacklistBalance: true,
       normalizeMetadataUserId: true,
       streamPassthroughEnabled: true,
+      strictRequestPassthroughEnabled: true,
       failoverRules: []
     })
 
@@ -96,6 +98,7 @@ describe('buildChannelPayload', () => {
       autoBlacklistBalance: true,
       normalizeMetadataUserId: true,
       streamPassthroughEnabled: true,
+      strictRequestPassthroughEnabled: true,
       failoverRules: []
     })
 
@@ -129,6 +132,7 @@ describe('buildChannelPayload', () => {
       autoBlacklistBalance: false,
       normalizeMetadataUserId: true,
       streamPassthroughEnabled: true,
+      strictRequestPassthroughEnabled: true,
       failoverRules: []
     })
 
@@ -159,9 +163,41 @@ describe('buildChannelPayload', () => {
       autoBlacklistBalance: true,
       normalizeMetadataUserId: false,
       streamPassthroughEnabled: true,
+      strictRequestPassthroughEnabled: true,
       failoverRules: []
     })
 
     expect(result.normalizeMetadataUserId).toBe(false)
+  })
+
+  it('应携带 strictRequestPassthroughEnabled 开关', () => {
+    const result = buildChannelPayload({
+      name: 'claude-strict',
+      serviceType: 'claude',
+      baseUrl: 'https://api.anthropic.com/v1',
+      baseUrls: [],
+      website: '',
+      insecureSkipVerify: false,
+      lowQuality: false,
+      injectDummyThoughtSignature: false,
+      stripThoughtSignature: false,
+      description: '',
+      apiKeys: ['sk-ant'],
+      modelMapping: {},
+      reasoningMapping: {},
+      textVerbosity: '',
+      fastMode: false,
+      customHeaders: {},
+      proxyUrl: '',
+      routePrefix: '',
+      supportedModels: [],
+      autoBlacklistBalance: true,
+      normalizeMetadataUserId: true,
+      streamPassthroughEnabled: true,
+      strictRequestPassthroughEnabled: false,
+      failoverRules: []
+    })
+
+    expect(result.strictRequestPassthroughEnabled).toBe(false)
   })
 })

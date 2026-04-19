@@ -55,6 +55,8 @@ type UpstreamConfig struct {
 	RoutePrefix string `json:"routePrefix,omitempty"` // 路由前缀（如 "kimi"），客户端可通过 /:routePrefix/v1/messages 访问
 	// Claude 流式转发模式：true=直接透传，false=走本地流事件处理链
 	StreamPassthroughEnabled *bool `json:"streamPassthroughEnabled,omitempty"`
+	// Claude 严格请求透传：true=请求体原样转发；false=继续执行本地兼容预处理
+	StrictRequestPassthroughEnabled *bool `json:"strictRequestPassthroughEnabled,omitempty"`
 	// 渠道级故障规则：按状态码/错误码/关键词命中后执行冷却或拉黑
 	FailoverRules []FailoverRule `json:"failoverRules,omitempty"`
 }
@@ -98,6 +100,14 @@ func (u *UpstreamConfig) IsStreamPassthroughEnabled() bool {
 		return true
 	}
 	return *u.StreamPassthroughEnabled
+}
+
+// IsStrictRequestPassthroughEnabled 检查是否启用严格请求透传（默认 true）
+func (u *UpstreamConfig) IsStrictRequestPassthroughEnabled() bool {
+	if u.StrictRequestPassthroughEnabled == nil {
+		return true
+	}
+	return *u.StrictRequestPassthroughEnabled
 }
 
 // GetEffectiveFailoverRules 获取渠道级故障规则（Claude 默认规则可覆盖）
@@ -176,15 +186,16 @@ type UpstreamUpdate struct {
 	TextVerbosity      *string           `json:"textVerbosity"`
 	FastMode           *bool             `json:"fastMode"`
 	// 多渠道调度相关字段
-	Priority                 *int           `json:"priority"`
-	Status                   *string        `json:"status"`
-	PromotionUntil           *time.Time     `json:"promotionUntil"`
-	LowQuality               *bool          `json:"lowQuality"`
-	RPM                      *int           `json:"rpm"`
-	AutoBlacklistBalance     *bool          `json:"autoBlacklistBalance"`
-	NormalizeMetadataUserID  *bool          `json:"normalizeMetadataUserId"`
-	StreamPassthroughEnabled *bool          `json:"streamPassthroughEnabled"`
-	FailoverRules            []FailoverRule `json:"failoverRules"`
+	Priority                        *int           `json:"priority"`
+	Status                          *string        `json:"status"`
+	PromotionUntil                  *time.Time     `json:"promotionUntil"`
+	LowQuality                      *bool          `json:"lowQuality"`
+	RPM                             *int           `json:"rpm"`
+	AutoBlacklistBalance            *bool          `json:"autoBlacklistBalance"`
+	NormalizeMetadataUserID         *bool          `json:"normalizeMetadataUserId"`
+	StreamPassthroughEnabled        *bool          `json:"streamPassthroughEnabled"`
+	StrictRequestPassthroughEnabled *bool          `json:"strictRequestPassthroughEnabled"`
+	FailoverRules                   []FailoverRule `json:"failoverRules"`
 	// Gemini 特定配置
 	InjectDummyThoughtSignature *bool `json:"injectDummyThoughtSignature"`
 	StripThoughtSignature       *bool `json:"stripThoughtSignature"`
