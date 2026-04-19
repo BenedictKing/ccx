@@ -269,7 +269,7 @@ func handleNormalResponse(
 ) (*types.Usage, error) {
 	defer resp.Body.Close()
 
-	if shouldDirectClaudePassthrough(upstream) {
+	if shouldDirectClaudePassthrough(upstream, apiKey) {
 		if err := common.PassthroughResponse(c, resp); err != nil {
 			return nil, err
 		}
@@ -392,10 +392,212 @@ func handleNormalResponse(
 	return claudeResp.Usage, nil
 }
 
-func shouldDirectClaudePassthrough(upstream *config.UpstreamConfig) bool {
+func shouldDirectClaudePassthrough(upstream *config.UpstreamConfig, apiKey string) bool {
+	return common.ShouldDirectClaudePassthroughForKey(upstream, apiKey)
+}
+
+func shouldUseSub2APIPassthrough(upstream *config.UpstreamConfig) bool {
 	return upstream != nil &&
 		strings.EqualFold(upstream.ServiceType, "claude") &&
-		upstream.IsStreamPassthroughEnabled()
+		upstream.IsSub2APIPassthroughEnabled()
+}
+
+func hasAnthropicAPIKey(keys []string) bool {
+	for _, key := range keys {
+		if utils.IsAnthropicAPIKey(key) {
+			return true
+		}
+	}
+	return false
+}
+
+func getNextAnthropicAPIKey(cfgManager *config.ConfigManager, upstream *config.UpstreamConfig, failedKeys map[string]bool, apiType string) (string, error) {
+	filteredFailed := make(map[string]bool, len(failedKeys)+len(upstream.APIKeys))
+	for k, v := range failedKeys {
+		filteredFailed[k] = v
+	}
+
+	hasAnthropic := false
+	for _, key := range upstream.APIKeys {
+		if utils.IsAnthropicAPIKey(key) {
+			hasAnthropic = true
+			continue
+		}
+		filteredFailed[key] = true
+	}
+	if !hasAnthropic {
+		return "", fmt.Errorf("no anthropic api key available")
+	}
+
+	return cfgManager.GetNextAPIKey(upstream, filteredFailed, apiType)
+}
+
+func countTokensPassthroughHandleSuccess(c *gin.Context, resp *http.Response) (*types.Usage, error) {
+	defer resp.Body.Close()
+	return nil, common.PassthroughResponse(c, resp)
+}
+
+func tryCountTokensSub2APIPassthroughSingleChannel(
+	c *gin.Context,
+	envCfg *config.EnvConfig,
+	cfgManager *config.ConfigManager,
+	channelScheduler *scheduler.ChannelScheduler,
+	bodyBytes []byte,
+	model string,
+) bool {
+	upstream, channelIndex, err := cfgManager.GetCurrentUpstreamWithIndex()
+	if err != nil || !shouldUseSub2APIPassthrough(upstream) || !hasAnthropicAPIKey(upstream.APIKeys) {
+		return false
+	}
+
+	provider := providers.GetProvider(upstream.ServiceType)
+	if provider == nil {
+		return false
+	}
+
+	metricsManager := channelScheduler.GetMessagesMetricsManager()
+	baseURLs := upstream.GetAllBaseURLs()
+	urlResults := common.BuildDefaultURLResults(baseURLs)
+
+	handled, _, _, lastFailoverError, _, lastError := common.TryUpstreamWithAllKeys(
+		c,
+		envCfg,
+		cfgManager,
+		channelScheduler,
+		scheduler.ChannelKindMessages,
+		"Messages",
+		metricsManager,
+		upstream,
+		urlResults,
+		bodyBytes,
+		false,
+		func(upstream *config.UpstreamConfig, failedKeys map[string]bool) (string, error) {
+			return getNextAnthropicAPIKey(cfgManager, upstream, failedKeys, "Messages")
+		},
+		func(c *gin.Context, upstreamCopy *config.UpstreamConfig, apiKey string) (*http.Request, error) {
+			req, _, err := provider.ConvertToProviderRequest(c, upstreamCopy, apiKey)
+			return req, err
+		},
+		func(apiKey string) {
+			if err := cfgManager.DeprioritizeAPIKey(apiKey); err != nil {
+				log.Printf("[Messages-Key] 警告: 密钥降级失败: %v", err)
+			}
+		},
+		nil,
+		nil,
+		func(c *gin.Context, resp *http.Response, _ *config.UpstreamConfig, _ string, _ []byte) (*types.Usage, error) {
+			return countTokensPassthroughHandleSuccess(c, resp)
+		},
+		model,
+		channelIndex,
+		channelScheduler.GetChannelLogStore(scheduler.ChannelKindMessages),
+	)
+	if handled {
+		return true
+	}
+
+	common.HandleAllKeysFailed(c, cfgManager.GetFuzzyModeEnabled(), lastFailoverError, lastError, "Messages")
+	return true
+}
+
+func tryCountTokensSub2APIPassthroughMultiChannel(
+	c *gin.Context,
+	envCfg *config.EnvConfig,
+	cfgManager *config.ConfigManager,
+	channelScheduler *scheduler.ChannelScheduler,
+	bodyBytes []byte,
+	userID string,
+	model string,
+) bool {
+	attemptedAny := false
+	handledByPassthrough := false
+
+	common.HandleMultiChannelFailover(
+		c,
+		envCfg,
+		channelScheduler,
+		scheduler.ChannelKindMessages,
+		"Messages",
+		userID,
+		model,
+		func(selection *scheduler.SelectionResult) common.MultiChannelAttemptResult {
+			upstream := selection.Upstream
+			channelIndex := selection.ChannelIndex
+			if upstream == nil || !shouldUseSub2APIPassthrough(upstream) || !hasAnthropicAPIKey(upstream.APIKeys) {
+				return common.MultiChannelAttemptResult{}
+			}
+
+			provider := providers.GetProvider(upstream.ServiceType)
+			if provider == nil {
+				return common.MultiChannelAttemptResult{}
+			}
+
+			attemptedAny = true
+			metricsManager := channelScheduler.GetMessagesMetricsManager()
+			baseURLs := upstream.GetAllBaseURLs()
+			sortedURLResults := channelScheduler.GetSortedURLsForChannel(scheduler.ChannelKindMessages, channelIndex, baseURLs)
+
+			handled, successKey, successBaseURLIdx, failoverErr, usage, lastErr := common.TryUpstreamWithAllKeys(
+				c,
+				envCfg,
+				cfgManager,
+				channelScheduler,
+				scheduler.ChannelKindMessages,
+				"Messages",
+				metricsManager,
+				upstream,
+				sortedURLResults,
+				bodyBytes,
+				false,
+				func(upstream *config.UpstreamConfig, failedKeys map[string]bool) (string, error) {
+					return getNextAnthropicAPIKey(cfgManager, upstream, failedKeys, "Messages")
+				},
+				func(c *gin.Context, upstreamCopy *config.UpstreamConfig, apiKey string) (*http.Request, error) {
+					req, _, err := provider.ConvertToProviderRequest(c, upstreamCopy, apiKey)
+					return req, err
+				},
+				func(apiKey string) {
+					if err := cfgManager.DeprioritizeAPIKey(apiKey); err != nil {
+						log.Printf("[Messages-Key] 警告: 密钥降级失败: %v", err)
+					}
+				},
+				func(url string) {
+					channelScheduler.MarkURLFailure(scheduler.ChannelKindMessages, channelIndex, url)
+				},
+				func(url string) {
+					channelScheduler.MarkURLSuccess(scheduler.ChannelKindMessages, channelIndex, url)
+				},
+				func(c *gin.Context, resp *http.Response, _ *config.UpstreamConfig, _ string, _ []byte) (*types.Usage, error) {
+					return countTokensPassthroughHandleSuccess(c, resp)
+				},
+				model,
+				channelIndex,
+				channelScheduler.GetChannelLogStore(scheduler.ChannelKindMessages),
+			)
+
+			return common.MultiChannelAttemptResult{
+				Handled:           handled,
+				Attempted:         true,
+				SuccessKey:        successKey,
+				SuccessBaseURLIdx: successBaseURLIdx,
+				FailoverError:     failoverErr,
+				Usage:             usage,
+				LastError:         lastErr,
+			}
+		},
+		func(_ *scheduler.SelectionResult, _ common.MultiChannelAttemptResult) {
+			handledByPassthrough = true
+		},
+		func(ctx *gin.Context, failoverErr *common.FailoverError, lastError error) {
+			if !attemptedAny {
+				return
+			}
+			handledByPassthrough = true
+			common.HandleAllChannelsFailed(ctx, cfgManager.GetFuzzyModeEnabled(), failoverErr, lastError, "Messages")
+		},
+	)
+
+	return handledByPassthrough
 }
 
 // CountTokensHandler 处理 /v1/messages/count_tokens 请求
@@ -422,6 +624,15 @@ func CountTokensHandler(envCfg *config.EnvConfig, cfgManager *config.ConfigManag
 		}
 		if err := json.Unmarshal(bodyBytes, &req); err != nil {
 			c.JSON(400, gin.H{"error": "Invalid JSON"})
+			return
+		}
+
+		userID := common.ExtractUserID(bodyBytes)
+		if channelScheduler.IsMultiChannelMode(scheduler.ChannelKindMessages) {
+			if tryCountTokensSub2APIPassthroughMultiChannel(c, envCfg, cfgManager, channelScheduler, bodyBytes, userID, req.Model) {
+				return
+			}
+		} else if tryCountTokensSub2APIPassthroughSingleChannel(c, envCfg, cfgManager, channelScheduler, bodyBytes, req.Model) {
 			return
 		}
 

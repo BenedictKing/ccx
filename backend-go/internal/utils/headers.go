@@ -98,6 +98,11 @@ func flattenMetadataUserID(raw interface{}) string {
 	return strings.Join(parts, "_")
 }
 
+// IsAnthropicAPIKey 判断是否为 Anthropic 官方 API Key（sk-ant- 前缀）。
+func IsAnthropicAPIKey(apiKey string) bool {
+	return strings.HasPrefix(strings.TrimSpace(apiKey), "sk-ant-")
+}
+
 func PrepareUpstreamHeaders(c *gin.Context, targetHost string) http.Header {
 	headers := c.Request.Header.Clone()
 
@@ -146,7 +151,7 @@ func SetAuthenticationHeader(headers http.Header, apiKey string) {
 
 	// Claude 官方密钥格式（sk-ant-api03-xxx）使用 x-api-key
 	// 符合 Claude API 官方推荐的认证方式
-	if strings.HasPrefix(apiKey, "sk-ant-") {
+	if IsAnthropicAPIKey(apiKey) {
 		headers.Set("x-api-key", apiKey)
 	} else {
 		// 其他格式密钥使用 Authorization: Bearer

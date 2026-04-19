@@ -195,6 +195,10 @@ func (u *UpstreamConfig) Clone() *UpstreamConfig {
 		v := *u.StreamPassthroughEnabled
 		cloned.StreamPassthroughEnabled = &v
 	}
+	if u.Sub2APIPassthroughEnabled != nil {
+		v := *u.Sub2APIPassthroughEnabled
+		cloned.Sub2APIPassthroughEnabled = &v
+	}
 	if u.StrictRequestPassthroughEnabled != nil {
 		v := *u.StrictRequestPassthroughEnabled
 		cloned.StrictRequestPassthroughEnabled = &v

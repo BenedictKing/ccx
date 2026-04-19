@@ -207,6 +207,10 @@ func (cm *ConfigManager) UpdateResponsesUpstream(index int, updates UpstreamUpda
 		v := *updates.StreamPassthroughEnabled
 		upstream.StreamPassthroughEnabled = &v
 	}
+	if updates.Sub2APIPassthroughEnabled != nil {
+		v := *updates.Sub2APIPassthroughEnabled
+		upstream.Sub2APIPassthroughEnabled = &v
+	}
 	if updates.StrictRequestPassthroughEnabled != nil {
 		v := *updates.StrictRequestPassthroughEnabled
 		upstream.StrictRequestPassthroughEnabled = &v

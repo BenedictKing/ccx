@@ -24,6 +24,7 @@ export interface ChannelFormLike {
   autoBlacklistBalance: boolean
   normalizeMetadataUserId: boolean
   streamPassthroughEnabled: boolean
+  sub2apiPassthroughEnabled: boolean
   strictRequestPassthroughEnabled: boolean
   failoverRules: NonNullable<Channel['failoverRules']>
   rpm?: number
@@ -100,6 +101,7 @@ export function buildChannelPayload(form: ChannelFormLike): Omit<Channel, 'index
     autoBlacklistBalance: form.autoBlacklistBalance,
     normalizeMetadataUserId: form.normalizeMetadataUserId,
     streamPassthroughEnabled: form.serviceType === 'claude' ? form.streamPassthroughEnabled : true,
+    sub2apiPassthroughEnabled: form.serviceType === 'claude' ? form.sub2apiPassthroughEnabled : false,
     strictRequestPassthroughEnabled: form.serviceType === 'claude' ? form.strictRequestPassthroughEnabled : true,
     failoverRules: normalizedFailoverRules,
     rpm: form.rpm && form.rpm > 0 ? form.rpm : 10

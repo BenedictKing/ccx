@@ -926,7 +926,7 @@ func HandleStreamResponse(
 	flusher.Flush()
 
 	// 渠道级开关：true=直接透传；false=走本地流事件处理链
-	if upstream == nil || upstream.IsStreamPassthroughEnabled() {
+	if upstream == nil || ShouldDirectClaudePassthroughForKey(upstream, SelectedAPIKeyFromContext(c)) {
 		for _, buffered := range preflight.BufferedEvents {
 			fmt.Fprint(c.Writer, buffered) //nolint:errcheck
 			flusher.Flush()

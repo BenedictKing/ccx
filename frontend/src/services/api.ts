@@ -135,6 +135,7 @@ export interface Channel {
   autoBlacklistBalance?: boolean
   normalizeMetadataUserId?: boolean
   streamPassthroughEnabled?: boolean
+  sub2apiPassthroughEnabled?: boolean
   strictRequestPassthroughEnabled?: boolean
   failoverRules?: FailoverRule[]
   latency?: number

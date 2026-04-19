@@ -26,6 +26,7 @@ describe('buildChannelPayload', () => {
       autoBlacklistBalance: true,
       normalizeMetadataUserId: true,
       streamPassthroughEnabled: true,
+      sub2apiPassthroughEnabled: false,
       strictRequestPassthroughEnabled: true,
       failoverRules: []
     })
@@ -66,6 +67,7 @@ describe('buildChannelPayload', () => {
       autoBlacklistBalance: true,
       normalizeMetadataUserId: true,
       streamPassthroughEnabled: true,
+      sub2apiPassthroughEnabled: false,
       strictRequestPassthroughEnabled: true,
       failoverRules: []
     })
@@ -98,6 +100,7 @@ describe('buildChannelPayload', () => {
       autoBlacklistBalance: true,
       normalizeMetadataUserId: true,
       streamPassthroughEnabled: true,
+      sub2apiPassthroughEnabled: false,
       strictRequestPassthroughEnabled: true,
       failoverRules: []
     })
@@ -132,6 +135,7 @@ describe('buildChannelPayload', () => {
       autoBlacklistBalance: false,
       normalizeMetadataUserId: true,
       streamPassthroughEnabled: true,
+      sub2apiPassthroughEnabled: false,
       strictRequestPassthroughEnabled: true,
       failoverRules: []
     })
@@ -163,6 +167,7 @@ describe('buildChannelPayload', () => {
       autoBlacklistBalance: true,
       normalizeMetadataUserId: false,
       streamPassthroughEnabled: true,
+      sub2apiPassthroughEnabled: false,
       strictRequestPassthroughEnabled: true,
       failoverRules: []
     })
@@ -194,6 +199,7 @@ describe('buildChannelPayload', () => {
       autoBlacklistBalance: true,
       normalizeMetadataUserId: true,
       streamPassthroughEnabled: true,
+      sub2apiPassthroughEnabled: false,
       strictRequestPassthroughEnabled: false,
       failoverRules: []
     })

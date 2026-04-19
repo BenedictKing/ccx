@@ -54,7 +54,8 @@ type UpstreamConfig struct {
 	// 路由前缀
 	RoutePrefix string `json:"routePrefix,omitempty"` // 路由前缀（如 "kimi"），客户端可通过 /:routePrefix/v1/messages 访问
 	// Claude 流式转发模式：true=直接透传，false=走本地流事件处理链
-	StreamPassthroughEnabled *bool `json:"streamPassthroughEnabled,omitempty"`
+	StreamPassthroughEnabled  *bool `json:"streamPassthroughEnabled,omitempty"`
+	Sub2APIPassthroughEnabled *bool `json:"sub2apiPassthroughEnabled,omitempty"`
 	// Claude 严格请求透传：true=请求体原样转发；false=继续执行本地兼容预处理
 	StrictRequestPassthroughEnabled *bool `json:"strictRequestPassthroughEnabled,omitempty"`
 	// 渠道级故障规则：按状态码/错误码/关键词命中后执行冷却或拉黑
@@ -100,6 +101,13 @@ func (u *UpstreamConfig) IsStreamPassthroughEnabled() bool {
 		return true
 	}
 	return *u.StreamPassthroughEnabled
+}
+
+func (u *UpstreamConfig) IsSub2APIPassthroughEnabled() bool {
+	if u.Sub2APIPassthroughEnabled == nil {
+		return false
+	}
+	return *u.Sub2APIPassthroughEnabled
 }
 
 // IsStrictRequestPassthroughEnabled 检查是否启用严格请求透传（默认 true）
@@ -194,6 +202,7 @@ type UpstreamUpdate struct {
 	AutoBlacklistBalance            *bool          `json:"autoBlacklistBalance"`
 	NormalizeMetadataUserID         *bool          `json:"normalizeMetadataUserId"`
 	StreamPassthroughEnabled        *bool          `json:"streamPassthroughEnabled"`
+	Sub2APIPassthroughEnabled       *bool          `json:"sub2apiPassthroughEnabled"`
 	StrictRequestPassthroughEnabled *bool          `json:"strictRequestPassthroughEnabled"`
 	FailoverRules                   []FailoverRule `json:"failoverRules"`
 	// Gemini 特定配置
@@ -397,6 +406,11 @@ func (cm *ConfigManager) GetNextAPIKey(upstream *UpstreamConfig, failedKeys map[
 	}
 	log.Printf("[%s-Key] 轮询选择密钥 %s (%d/%d)", apiType, utils.MaskAPIKey(selectedKey), keyIndex, len(upstream.APIKeys))
 	return selectedKey, nil
+}
+
+func (cm *ConfigManager) GetNextAPIKeyForUser(upstream *UpstreamConfig, failedKeys map[string]bool, apiType string, userID string) (string, error) {
+	_ = userID
+	return cm.GetNextAPIKey(upstream, failedKeys, apiType)
 }
 
 // GetAdminAPIKey 获取管理/探测场景下的 API 密钥。

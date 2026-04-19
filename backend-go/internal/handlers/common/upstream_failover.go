@@ -44,11 +44,36 @@ type DeprioritizeKeyFunc func(apiKey string)
 // actualRequestBody 为本次实际转发给上游的请求体，可用于 usage 估算等后处理。
 type HandleSuccessFunc func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string, actualRequestBody []byte) (*types.Usage, error)
 
-func shouldNormalizeMetadataUserID(kind scheduler.ChannelKind, upstream *config.UpstreamConfig) bool {
+const selectedAPIKeyContextKey = "selectedAPIKey"
+
+func SelectedAPIKeyFromContext(c *gin.Context) string {
+	if c == nil {
+		return ""
+	}
+	return strings.TrimSpace(c.GetString(selectedAPIKeyContextKey))
+}
+
+// IsClaudeSub2APIPassthroughForKey 判断是否启用 sub2api 风格透传（仅替换认证）。
+// 仅在 Claude 渠道、开关开启且当前 key 为 Anthropic 官方 key 时生效。
+func IsClaudeSub2APIPassthroughForKey(upstream *config.UpstreamConfig, apiKey string) bool {
+	return upstream != nil &&
+		strings.EqualFold(upstream.ServiceType, "claude") &&
+		upstream.IsSub2APIPassthroughEnabled() &&
+		utils.IsAnthropicAPIKey(apiKey)
+}
+
+// ShouldDirectClaudePassthroughForKey 判断当前请求是否应直接透传响应（SSE 与非 SSE 均适用）。
+func ShouldDirectClaudePassthroughForKey(upstream *config.UpstreamConfig, apiKey string) bool {
+	return upstream != nil &&
+		strings.EqualFold(upstream.ServiceType, "claude") &&
+		(upstream.IsStreamPassthroughEnabled() || IsClaudeSub2APIPassthroughForKey(upstream, apiKey))
+}
+
+func shouldNormalizeMetadataUserID(kind scheduler.ChannelKind, upstream *config.UpstreamConfig, apiKey string) bool {
 	if upstream == nil {
 		return false
 	}
-	if isStrictClaudePassthrough(upstream) {
+	if shouldSkipRequestBodyPreprocessing(kind, upstream, apiKey) {
 		return false
 	}
 	if kind != scheduler.ChannelKindMessages && kind != scheduler.ChannelKindResponses {
@@ -64,6 +89,13 @@ func isStrictClaudePassthrough(upstream *config.UpstreamConfig) bool {
 		upstream.IsStrictRequestPassthroughEnabled()
 }
 
+func shouldSkipRequestBodyPreprocessing(kind scheduler.ChannelKind, upstream *config.UpstreamConfig, apiKey string) bool {
+	if kind != scheduler.ChannelKindMessages {
+		return false
+	}
+	return isStrictClaudePassthrough(upstream) || IsClaudeSub2APIPassthroughForKey(upstream, apiKey)
+}
+
 func prepareRequestBodyForUpstream(
 	requestBody []byte,
 	kind scheduler.ChannelKind,
@@ -71,11 +103,12 @@ func prepareRequestBodyForUpstream(
 	upstream *config.UpstreamConfig,
 	cfgManager *config.ConfigManager,
 	envCfg *config.EnvConfig,
+	apiKey string,
 ) []byte {
 	attemptBody := requestBody
 	enableRequestLogs := envCfg != nil && envCfg.EnableRequestLogs
 
-	if kind == scheduler.ChannelKindMessages && isStrictClaudePassthrough(upstream) {
+	if shouldSkipRequestBodyPreprocessing(kind, upstream, apiKey) {
 		return attemptBody
 	}
 
@@ -90,7 +123,7 @@ func prepareRequestBodyForUpstream(
 		}
 	}
 
-	if shouldNormalizeMetadataUserID(kind, upstream) {
+	if shouldNormalizeMetadataUserID(kind, upstream, apiKey) {
 		attemptBody = NormalizeMetadataUserID(attemptBody)
 	}
 
@@ -158,8 +191,6 @@ func TryUpstreamWithAllKeys(
 		originalModel = model // 仅当发生重定向时记录原始模型
 	}
 
-	preparedRequestBody := prepareRequestBodyForUpstream(requestBody, kind, apiType, upstream, cfgManager, envCfg)
-
 	for urlIdx, urlResult := range urlResults {
 		currentBaseURL := urlResult.URL
 		originalIdx := urlResult.OriginalIdx // 原始索引用于指标记录
@@ -167,10 +198,6 @@ func TryUpstreamWithAllKeys(
 		maxRetries := len(upstream.APIKeys)
 
 		for attempt := 0; attempt < maxRetries; attempt++ {
-			attemptBody := preparedRequestBody
-			RestoreRequestBody(c, attemptBody)
-			c.Set("requestBodyBytes", attemptBody)
-
 			apiKey, err := nextAPIKey(upstream, failedKeys)
 			if err != nil {
 				lastError = err
@@ -201,6 +228,10 @@ func TryUpstreamWithAllKeys(
 			}
 
 			// 使用深拷贝避免并发修改问题
+			attemptBody := prepareRequestBodyForUpstream(requestBody, kind, apiType, upstream, cfgManager, envCfg, apiKey)
+			RestoreRequestBody(c, attemptBody)
+			c.Set("requestBodyBytes", attemptBody)
+			c.Set(selectedAPIKeyContextKey, apiKey)
 			upstreamCopy := upstream.Clone()
 			upstreamCopy.BaseURL = currentBaseURL
 

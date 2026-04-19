@@ -679,6 +679,7 @@ func GetChannelDashboard(cfgManager *config.ConfigManager, sch *scheduler.Channe
 				"autoBlacklistBalance":            up.IsAutoBlacklistBalanceEnabled(),
 				"normalizeMetadataUserId":         up.IsNormalizeMetadataUserIDEnabled(),
 				"streamPassthroughEnabled":        up.IsStreamPassthroughEnabled(),
+				"sub2apiPassthroughEnabled":       up.IsSub2APIPassthroughEnabled(),
 				"strictRequestPassthroughEnabled": up.IsStrictRequestPassthroughEnabled(),
 				"failoverRules":                   up.GetEffectiveFailoverRules(),
 				"latency":                         nil,

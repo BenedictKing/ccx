@@ -765,6 +765,14 @@
 
                   <div class="d-flex align-center justify-space-between mb-4">
                     <div>
+                      <div class="section-title section-title--soft">sub2api 认证透传</div>
+                      <div class="text-caption text-medium-emphasis">仅对 Anthropic API Key 生效。开启后 messages/count_tokens 仅替换认证并上游透传；关闭后回滚兼容链路。</div>
+                    </div>
+                    <v-switch v-model="form.sub2apiPassthroughEnabled" inset color="primary" hide-details />
+                  </div>
+
+                  <div class="d-flex align-center justify-space-between mb-4">
+                    <div>
                       <div class="section-title section-title--soft">严格请求透传</div>
                       <div class="text-caption text-medium-emphasis">仅在透传开启时生效。开启后请求体原样转发；关闭后执行兼容预处理（signature/thinking/cch/metadata.user_id）。</div>
                     </div>
@@ -1633,6 +1641,7 @@ const form = reactive({
   autoBlacklistBalance: true,
   normalizeMetadataUserId: true,
   streamPassthroughEnabled: true,
+  sub2apiPassthroughEnabled: false,
   strictRequestPassthroughEnabled: true,
   failoverRules: createDefaultClaudeFailoverRules() as FailoverRule[],
   rpm: 10
@@ -1928,6 +1937,7 @@ const resetForm = () => {
   form.autoBlacklistBalance = true
   form.normalizeMetadataUserId = true
   form.streamPassthroughEnabled = true
+  form.sub2apiPassthroughEnabled = false
   form.strictRequestPassthroughEnabled = true
   form.failoverRules = createDefaultClaudeFailoverRules()
   form.rpm = 10
@@ -2004,6 +2014,7 @@ const loadChannelData = (channel: Channel) => {
   form.autoBlacklistBalance = channel.autoBlacklistBalance ?? true
   form.normalizeMetadataUserId = channel.normalizeMetadataUserId ?? true
   form.streamPassthroughEnabled = channel.streamPassthroughEnabled ?? true
+  form.sub2apiPassthroughEnabled = channel.sub2apiPassthroughEnabled ?? false
   form.strictRequestPassthroughEnabled = channel.strictRequestPassthroughEnabled ?? true
   form.failoverRules = cloneFailoverRules(
     channel.failoverRules && channel.failoverRules.length > 0

@@ -50,6 +50,25 @@ func redirectModelInBody(bodyBytes []byte, upstream *config.UpstreamConfig) []by
 }
 
 // ConvertToProviderRequest 转换为 Claude 请求（实现真正的透传）
+func isClaudeMessagesFamilyPath(c *gin.Context) bool {
+	if c == nil || c.Request == nil || c.Request.URL == nil {
+		return false
+	}
+	path := c.Request.URL.Path
+	if routePrefix := c.Param("routePrefix"); routePrefix != "" {
+		path = strings.TrimPrefix(path, "/"+routePrefix)
+	}
+	return strings.HasSuffix(path, "/v1/messages") || strings.HasSuffix(path, "/v1/messages/count_tokens")
+}
+
+func shouldSkipClaudeModelRewriteForAuthOnlyPassthrough(c *gin.Context, upstream *config.UpstreamConfig, apiKey string) bool {
+	return upstream != nil &&
+		strings.EqualFold(upstream.ServiceType, "claude") &&
+		upstream.IsSub2APIPassthroughEnabled() &&
+		utils.IsAnthropicAPIKey(apiKey) &&
+		isClaudeMessagesFamilyPath(c)
+}
+
 func (p *ClaudeProvider) ConvertToProviderRequest(c *gin.Context, upstream *config.UpstreamConfig, apiKey string) (*http.Request, []byte, error) {
 	// 读取原始请求体
 	bodyBytes, err := getRequestBodyBytes(c)
@@ -57,8 +76,10 @@ func (p *ClaudeProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 		return nil, nil, err
 	}
 
+	authOnlyPassthrough := shouldSkipClaudeModelRewriteForAuthOnlyPassthrough(c, upstream, apiKey)
+
 	// 模型重定向：仅修改 model 字段，保持其他内容不变
-	if upstream.ModelMapping != nil && len(upstream.ModelMapping) > 0 {
+	if upstream.ModelMapping != nil && len(upstream.ModelMapping) > 0 && !authOnlyPassthrough {
 		bodyBytes = redirectModelInBody(bodyBytes, upstream)
 	}
 
@@ -113,6 +134,11 @@ func (p *ClaudeProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 	utils.ApplyCustomHeaders(req.Header, upstream.CustomHeaders) // 先应用自定义头，后覆盖认证（不可被自定义头覆盖）
 	utils.SetAuthenticationHeader(req.Header, apiKey)
 	utils.EnsureCompatibleUserAgent(req.Header, "claude")
+	if authOnlyPassthrough {
+		// sub2api 风格：仅替换认证，同时移除敏感客户端凭据，避免上游泄漏。
+		req.Header.Del("Cookie")
+		req.Header.Del("Proxy-Authorization")
+	}
 
 	return req, bodyBytes, nil
 }
