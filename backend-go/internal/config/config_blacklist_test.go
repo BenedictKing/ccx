@@ -248,3 +248,41 @@ func TestStrictRequestPassthroughDefaultsAndUpdate(t *testing.T) {
 		t.Fatal("StrictRequestPassthroughEnabled pointer should be deep-copied")
 	}
 }
+
+func TestClaudePassthroughModeMutualExclusion(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "config.json")
+	initialConfig := `{
+		"upstream": [{
+			"name": "test-channel",
+			"baseUrl": "https://example.com",
+			"apiKeys": ["sk-active"],
+			"serviceType": "claude"
+		}]
+	}`
+	if err := os.WriteFile(configPath, []byte(initialConfig), 0644); err != nil {
+		t.Fatalf("写入初始配置失败: %v", err)
+	}
+
+	cm, err := NewConfigManager(configPath)
+	if err != nil {
+		t.Fatalf("NewConfigManager() error = %v", err)
+	}
+	defer cm.Close()
+
+	enabled := true
+	if _, err := cm.UpdateUpstream(0, UpstreamUpdate{
+		StreamPassthroughEnabled:  &enabled,
+		Sub2APIPassthroughEnabled: &enabled,
+	}); err != nil {
+		t.Fatalf("UpdateUpstream() error = %v", err)
+	}
+
+	cfg := cm.GetConfig()
+	if got := cfg.Upstream[0].IsSub2APIPassthroughEnabled(); got != true {
+		t.Fatalf("IsSub2APIPassthroughEnabled() = %v, want true", got)
+	}
+	if got := cfg.Upstream[0].IsStreamPassthroughEnabled(); got != false {
+		t.Fatalf("IsStreamPassthroughEnabled() = %v, want false", got)
+	}
+}

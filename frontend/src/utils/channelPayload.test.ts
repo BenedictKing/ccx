@@ -206,4 +206,37 @@ describe('buildChannelPayload', () => {
 
     expect(result.strictRequestPassthroughEnabled).toBe(false)
   })
+
+  it('应保证 sub2api 透传与全部透传互斥（sub2api 优先）', () => {
+    const result = buildChannelPayload({
+      name: 'claude-exclusive',
+      serviceType: 'claude',
+      baseUrl: 'https://api.anthropic.com/v1',
+      baseUrls: [],
+      website: '',
+      insecureSkipVerify: false,
+      lowQuality: false,
+      injectDummyThoughtSignature: false,
+      stripThoughtSignature: false,
+      description: '',
+      apiKeys: ['sk-ant'],
+      modelMapping: {},
+      reasoningMapping: {},
+      textVerbosity: '',
+      fastMode: false,
+      customHeaders: {},
+      proxyUrl: '',
+      routePrefix: '',
+      supportedModels: [],
+      autoBlacklistBalance: true,
+      normalizeMetadataUserId: true,
+      streamPassthroughEnabled: true,
+      sub2apiPassthroughEnabled: true,
+      strictRequestPassthroughEnabled: true,
+      failoverRules: []
+    })
+
+    expect(result.sub2apiPassthroughEnabled).toBe(true)
+    expect(result.streamPassthroughEnabled).toBe(false)
+  })
 })

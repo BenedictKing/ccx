@@ -72,6 +72,7 @@ func (cm *ConfigManager) AddChatUpstream(upstream UpstreamConfig) error {
 	// 去重 API Keys 和 Base URLs
 	upstream.APIKeys = deduplicateStrings(upstream.APIKeys)
 	upstream.BaseURLs = deduplicateBaseURLs(upstream.BaseURLs)
+	upstream.NormalizeClaudePassthroughMode()
 
 	cm.config.ChatUpstream = append(cm.config.ChatUpstream, upstream)
 
@@ -223,6 +224,7 @@ func (cm *ConfigManager) UpdateChatUpstream(index int, updates UpstreamUpdate) (
 	if updates.RoutePrefix != nil {
 		upstream.RoutePrefix = *updates.RoutePrefix
 	}
+	upstream.NormalizeClaudePassthroughMode()
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
 		return false, err

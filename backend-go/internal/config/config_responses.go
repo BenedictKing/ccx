@@ -72,6 +72,7 @@ func (cm *ConfigManager) AddResponsesUpstream(upstream UpstreamConfig) error {
 	// 去重 API Keys 和 Base URLs
 	upstream.APIKeys = deduplicateStrings(upstream.APIKeys)
 	upstream.BaseURLs = deduplicateBaseURLs(upstream.BaseURLs)
+	upstream.NormalizeClaudePassthroughMode()
 
 	cm.config.ResponsesUpstream = append(cm.config.ResponsesUpstream, upstream)
 
@@ -230,6 +231,7 @@ func (cm *ConfigManager) UpdateResponsesUpstream(index int, updates UpstreamUpda
 	if updates.RoutePrefix != nil {
 		upstream.RoutePrefix = *updates.RoutePrefix
 	}
+	upstream.NormalizeClaudePassthroughMode()
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
 		return false, err

@@ -47,6 +47,10 @@ function getBaseUrlDeduplicationKey(url: string): string {
 }
 
 export function buildChannelPayload(form: ChannelFormLike): Omit<Channel, 'index' | 'latency' | 'status'> {
+  const isClaude = form.serviceType === 'claude'
+  const sub2apiPassthroughEnabled = isClaude ? !!form.sub2apiPassthroughEnabled : false
+  const streamPassthroughEnabled = isClaude ? (!!form.streamPassthroughEnabled && !sub2apiPassthroughEnabled) : true
+
   const processedApiKeys = form.apiKeys.filter(key => key.trim())
   const normalizedFailoverRules = (form.serviceType === 'claude' ? (form.failoverRules || []) : [])
     .map(rule => ({
@@ -100,8 +104,8 @@ export function buildChannelPayload(form: ChannelFormLike): Omit<Channel, 'index
     supportedModels: form.supportedModels,
     autoBlacklistBalance: form.autoBlacklistBalance,
     normalizeMetadataUserId: form.normalizeMetadataUserId,
-    streamPassthroughEnabled: form.serviceType === 'claude' ? form.streamPassthroughEnabled : true,
-    sub2apiPassthroughEnabled: form.serviceType === 'claude' ? form.sub2apiPassthroughEnabled : false,
+    streamPassthroughEnabled,
+    sub2apiPassthroughEnabled,
     strictRequestPassthroughEnabled: form.serviceType === 'claude' ? form.strictRequestPassthroughEnabled : true,
     failoverRules: normalizedFailoverRules,
     rpm: form.rpm && form.rpm > 0 ? form.rpm : 10

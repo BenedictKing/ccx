@@ -760,7 +760,13 @@
                       <div class="section-title section-title--soft">流式透传</div>
                       <div class="text-caption text-medium-emphasis">开启后直接透传上游响应（SSE 与非 SSE）；关闭后走本地处理链。</div>
                     </div>
-                    <v-switch v-model="form.streamPassthroughEnabled" inset color="primary" hide-details />
+                    <v-switch
+                      v-model="form.streamPassthroughEnabled"
+                      inset
+                      color="primary"
+                      hide-details
+                      @update:model-value="handleStreamPassthroughChange"
+                    />
                   </div>
 
                   <div class="d-flex align-center justify-space-between mb-4">
@@ -768,7 +774,17 @@
                       <div class="section-title section-title--soft">sub2api 认证透传</div>
                       <div class="text-caption text-medium-emphasis">仅对 Anthropic API Key 生效。开启后 messages/count_tokens 仅替换认证并上游透传；关闭后回滚兼容链路。</div>
                     </div>
-                    <v-switch v-model="form.sub2apiPassthroughEnabled" inset color="primary" hide-details />
+                    <v-switch
+                      v-model="form.sub2apiPassthroughEnabled"
+                      inset
+                      color="primary"
+                      hide-details
+                      @update:model-value="handleSub2apiPassthroughChange"
+                    />
+                  </div>
+
+                  <div class="text-caption text-medium-emphasis mb-4">
+                    sub2api 认证透传与流式透传互斥，开启其中一个会自动关闭另一个。
                   </div>
 
                   <div class="d-flex align-center justify-space-between mb-4">
@@ -1640,8 +1656,8 @@ const form = reactive({
   supportedModels: [] as string[],
   autoBlacklistBalance: true,
   normalizeMetadataUserId: true,
-  streamPassthroughEnabled: true,
-  sub2apiPassthroughEnabled: false,
+  streamPassthroughEnabled: false,
+  sub2apiPassthroughEnabled: true,
   strictRequestPassthroughEnabled: true,
   failoverRules: createDefaultClaudeFailoverRules() as FailoverRule[],
   rpm: 10
@@ -1731,6 +1747,27 @@ const removeFailoverRule = (index: number) => {
 
 const resetClaudeFailoverRules = () => {
   form.failoverRules = createDefaultClaudeFailoverRules()
+}
+
+const normalizeClaudePassthroughMode = () => {
+  if (form.serviceType !== 'claude') return
+  if (form.sub2apiPassthroughEnabled && form.streamPassthroughEnabled) {
+    form.streamPassthroughEnabled = false
+  }
+}
+
+const handleStreamPassthroughChange = (enabled: boolean) => {
+  form.streamPassthroughEnabled = enabled
+  if (enabled) {
+    form.sub2apiPassthroughEnabled = false
+  }
+}
+
+const handleSub2apiPassthroughChange = (enabled: boolean) => {
+  form.sub2apiPassthroughEnabled = enabled
+  if (enabled) {
+    form.streamPassthroughEnabled = false
+  }
 }
 
 const updateRuleStatusCodes = (index: number, value: string) => {
@@ -1895,6 +1932,7 @@ watch(
     if (serviceType === 'claude' && form.failoverRules.length === 0) {
       form.failoverRules = createDefaultClaudeFailoverRules()
     }
+    normalizeClaudePassthroughMode()
   }
 )
 
@@ -1936,8 +1974,8 @@ const resetForm = () => {
   form.supportedModels = []
   form.autoBlacklistBalance = true
   form.normalizeMetadataUserId = true
-  form.streamPassthroughEnabled = true
-  form.sub2apiPassthroughEnabled = false
+  form.streamPassthroughEnabled = false
+  form.sub2apiPassthroughEnabled = true
   form.strictRequestPassthroughEnabled = true
   form.failoverRules = createDefaultClaudeFailoverRules()
   form.rpm = 10
@@ -2016,6 +2054,7 @@ const loadChannelData = (channel: Channel) => {
   form.streamPassthroughEnabled = channel.streamPassthroughEnabled ?? true
   form.sub2apiPassthroughEnabled = channel.sub2apiPassthroughEnabled ?? false
   form.strictRequestPassthroughEnabled = channel.strictRequestPassthroughEnabled ?? true
+  normalizeClaudePassthroughMode()
   form.failoverRules = cloneFailoverRules(
     channel.failoverRules && channel.failoverRules.length > 0
       ? channel.failoverRules
@@ -2383,6 +2422,7 @@ const handleSubmit = async () => {
       })
   }
 
+  normalizeClaudePassthroughMode()
   const channelData = buildChannelPayload(form)
 
   emit('save', channelData)

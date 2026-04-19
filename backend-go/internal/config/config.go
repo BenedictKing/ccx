@@ -110,6 +110,16 @@ func (u *UpstreamConfig) IsSub2APIPassthroughEnabled() bool {
 	return *u.Sub2APIPassthroughEnabled
 }
 
+func (u *UpstreamConfig) NormalizeClaudePassthroughMode() {
+	if u == nil || !strings.EqualFold(u.ServiceType, "claude") {
+		return
+	}
+	if u.Sub2APIPassthroughEnabled != nil && *u.Sub2APIPassthroughEnabled {
+		disabled := false
+		u.StreamPassthroughEnabled = &disabled
+	}
+}
+
 // IsStrictRequestPassthroughEnabled 检查是否启用严格请求透传（默认 true）
 func (u *UpstreamConfig) IsStrictRequestPassthroughEnabled() bool {
 	if u.StrictRequestPassthroughEnabled == nil {
