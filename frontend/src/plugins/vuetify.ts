@@ -148,6 +148,7 @@ import {
   mdiPaperclip,
   mdiEyedropper,
   mdiShieldRefresh,
+  mdiShieldCheck,
   mdiShieldOutline,
   mdiShieldOffOutline,
   mdiAlertCircleOutline,
@@ -179,6 +180,7 @@ import {
   mdiCashRemove,
   mdiTransitConnectionVariant,
   mdiTransitConnectionHorizontal,
+  mdiWaveform,
   mdiAccountKey,
   mdiAccountOff,
 } from '@mdi/js'
@@ -268,6 +270,7 @@ const iconMap: Record<string, string> = {
 
   // 防护盾牌图标
   'shield-refresh': mdiShieldRefresh,
+  'shield-check': mdiShieldCheck,
   'shield-outline': mdiShieldOutline,
   'shield-off-outline': mdiShieldOffOutline,
   'shield-lock-outline': mdiShieldLockOutline,
@@ -370,6 +373,7 @@ const iconMap: Record<string, string> = {
   'cash-remove': mdiCashRemove,
   'transit-connection-variant': mdiTransitConnectionVariant,
   'transit-connection-horizontal': mdiTransitConnectionHorizontal,
+  'waveform': mdiWaveform,
   'account-key': mdiAccountKey,
   'account-off': mdiAccountOff,
 }

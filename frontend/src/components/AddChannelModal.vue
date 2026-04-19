@@ -755,44 +755,50 @@
                   </div>
                 </v-card-title>
                 <v-card-text>
-                  <div class="d-flex align-center justify-space-between mb-4">
-                    <div>
+                  <div class="claude-toggle-row mb-4">
+                    <div class="claude-toggle-content">
                       <div class="section-title section-title--soft">流式透传</div>
                       <div class="text-caption text-medium-emphasis">开启后直接透传上游响应（SSE 与非 SSE）；关闭后走本地处理链。</div>
                     </div>
-                    <v-switch
-                      v-model="form.streamPassthroughEnabled"
-                      inset
-                      color="primary"
-                      hide-details
-                      @update:model-value="handleStreamPassthroughChange"
-                    />
+                    <div class="claude-toggle-switch">
+                      <v-switch
+                        v-model="form.streamPassthroughEnabled"
+                        inset
+                        color="primary"
+                        hide-details
+                        @update:model-value="handleStreamPassthroughChange"
+                      />
+                    </div>
                   </div>
 
-                  <div class="d-flex align-center justify-space-between mb-4">
-                    <div>
+                  <div class="claude-toggle-row mb-4">
+                    <div class="claude-toggle-content">
                       <div class="section-title section-title--soft">sub2api 认证透传</div>
                       <div class="text-caption text-medium-emphasis">仅对 Anthropic API Key 生效。开启后 messages/count_tokens 仅替换认证并上游透传；关闭后回滚兼容链路。</div>
                     </div>
-                    <v-switch
-                      v-model="form.sub2apiPassthroughEnabled"
-                      inset
-                      color="primary"
-                      hide-details
-                      @update:model-value="handleSub2apiPassthroughChange"
-                    />
+                    <div class="claude-toggle-switch">
+                      <v-switch
+                        v-model="form.sub2apiPassthroughEnabled"
+                        inset
+                        color="primary"
+                        hide-details
+                        @update:model-value="handleSub2apiPassthroughChange"
+                      />
+                    </div>
                   </div>
 
                   <div class="text-caption text-medium-emphasis mb-4">
                     sub2api 认证透传与流式透传互斥，开启其中一个会自动关闭另一个。
                   </div>
 
-                  <div class="d-flex align-center justify-space-between mb-4">
-                    <div>
+                  <div class="claude-toggle-row mb-4">
+                    <div class="claude-toggle-content">
                       <div class="section-title section-title--soft">严格请求透传</div>
                       <div class="text-caption text-medium-emphasis">仅在透传开启时生效。开启后请求体原样转发；关闭后执行兼容预处理（signature/thinking/cch/metadata.user_id）。</div>
                     </div>
-                    <v-switch v-model="form.strictRequestPassthroughEnabled" inset color="primary" hide-details />
+                    <div class="claude-toggle-switch">
+                      <v-switch v-model="form.strictRequestPassthroughEnabled" inset color="primary" hide-details />
+                    </div>
                   </div>
 
                   <div v-if="form.failoverRules.length === 0" class="text-caption text-medium-emphasis mb-2">
@@ -2723,6 +2729,28 @@ onUnmounted(() => {
 .advanced-switch-row :deep(.v-selection-control) {
   justify-content: flex-end;
   margin-inline-start: 16px;
+}
+
+.claude-toggle-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: 12px;
+}
+
+.claude-toggle-content {
+  min-width: 0;
+}
+
+.claude-toggle-switch {
+  width: 72px;
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 2px;
+}
+
+.claude-toggle-switch :deep(.v-selection-control) {
+  margin: 0;
 }
 
 </style>
