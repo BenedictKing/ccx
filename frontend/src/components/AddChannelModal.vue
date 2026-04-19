@@ -1756,16 +1756,18 @@ const normalizeClaudePassthroughMode = () => {
   }
 }
 
-const handleStreamPassthroughChange = (enabled: boolean) => {
-  form.streamPassthroughEnabled = enabled
-  if (enabled) {
+const handleStreamPassthroughChange = (enabled: boolean | null) => {
+  const normalizedEnabled = enabled === true
+  form.streamPassthroughEnabled = normalizedEnabled
+  if (normalizedEnabled) {
     form.sub2apiPassthroughEnabled = false
   }
 }
 
-const handleSub2apiPassthroughChange = (enabled: boolean) => {
-  form.sub2apiPassthroughEnabled = enabled
-  if (enabled) {
+const handleSub2apiPassthroughChange = (enabled: boolean | null) => {
+  const normalizedEnabled = enabled === true
+  form.sub2apiPassthroughEnabled = normalizedEnabled
+  if (normalizedEnabled) {
     form.streamPassthroughEnabled = false
   }
 }
