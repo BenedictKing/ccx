@@ -798,6 +798,9 @@
                   <div v-if="form.failoverRules.length === 0" class="text-caption text-medium-emphasis mb-2">
                     暂无规则。可新增规则按状态码 / 错误码 / 关键词进行冷却或拉黑。
                   </div>
+                  <div class="text-caption text-medium-emphasis mb-2">
+                    匹配逻辑：单条规则内“状态码/错误码/关键词”是并且关系；同一字段内多个值是或关系（逗号分隔）。
+                  </div>
 
                   <v-card
                     v-for="(rule, ruleIndex) in form.failoverRules"
@@ -1638,6 +1641,35 @@ const createDefaultClaudeFailoverRules = (): FailoverRule[] => [
   }
 ]
 
+const isLegacyClaudeDefaultFailoverRules = (rules?: FailoverRule[]): boolean => {
+  if (!rules || rules.length !== 2) return false
+
+  const hasLegacy429Cooldown = rules.some(rule => {
+    const statusCodes = rule.statusCodes || []
+    const errorCodes = rule.errorCodes || []
+    const keywords = rule.keywords || []
+    return (
+      rule.action === 'cooldown' &&
+      statusCodes.length === 1 &&
+      statusCodes[0] === 429 &&
+      (rule.durationMinutes ?? 0) === 60 &&
+      errorCodes.length === 0 &&
+      keywords.length === 0
+    )
+  })
+
+  const hasLegacy400401Blacklist = rules.some(rule => {
+    const statusCodes = rule.statusCodes || []
+    if (rule.action !== 'blacklist') return false
+    if ((rule.errorCodes || []).length > 0 || (rule.keywords || []).length > 0) return false
+    if (statusCodes.length !== 2) return false
+    const sorted = [...statusCodes].sort((a, b) => a - b)
+    return sorted[0] === 400 && sorted[1] === 401
+  })
+
+  return hasLegacy429Cooldown && hasLegacy400401Blacklist
+}
+
 const cloneFailoverRules = (rules?: FailoverRule[]): FailoverRule[] => {
   if (!rules || rules.length === 0) return []
   return rules.map(rule => ({
@@ -2085,15 +2117,18 @@ const loadChannelData = (channel: Channel) => {
   form.autoBlacklistBalance = channel.autoBlacklistBalance ?? true
   form.normalizeMetadataUserId = channel.normalizeMetadataUserId ?? true
   form.streamPassthroughEnabled = channel.streamPassthroughEnabled ?? true
-  form.sub2apiPassthroughEnabled = channel.sub2apiPassthroughEnabled ?? false
+  form.sub2apiPassthroughEnabled = channel.sub2apiPassthroughEnabled ?? (channel.serviceType === 'claude')
   form.strictRequestPassthroughEnabled = channel.strictRequestPassthroughEnabled ?? true
   normalizeClaudePassthroughMode()
+  const rawFailoverRules = channel.failoverRules && channel.failoverRules.length > 0
+    ? channel.failoverRules
+    : channel.serviceType === 'claude'
+      ? createDefaultClaudeFailoverRules()
+      : []
   form.failoverRules = cloneFailoverRules(
-    channel.failoverRules && channel.failoverRules.length > 0
-      ? channel.failoverRules
-      : channel.serviceType === 'claude'
-        ? createDefaultClaudeFailoverRules()
-        : []
+    channel.serviceType === 'claude' && isLegacyClaudeDefaultFailoverRules(rawFailoverRules)
+      ? createDefaultClaudeFailoverRules()
+      : rawFailoverRules
   )
   form.rpm = channel.rpm ?? 10
 

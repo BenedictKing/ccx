@@ -134,7 +134,6 @@ export interface Channel {
   routePrefix?: string                     // 路由前缀（如 "kimi"，访问 /kimi/v1/messages）
   autoBlacklistBalance?: boolean
   normalizeMetadataUserId?: boolean
-  keyAffinityEnabled?: boolean
   streamPassthroughEnabled?: boolean
   sub2apiPassthroughEnabled?: boolean
   strictRequestPassthroughEnabled?: boolean

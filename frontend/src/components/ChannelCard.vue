@@ -124,15 +124,15 @@
 
           <v-chip
             size="small"
-            :color="channel.keyAffinityEnabled !== false ? 'info' : 'grey'"
+            :color="channel.sub2apiPassthroughEnabled ? 'info' : 'grey'"
             variant="tonal"
             density="comfortable"
             rounded="pill"
           >
             <v-icon start size="14">
-              {{ channel.keyAffinityEnabled !== false ? 'mdi-account-key' : 'mdi-account-off' }}
+              {{ channel.sub2apiPassthroughEnabled ? 'mdi-shield-check' : 'mdi-shield-off-outline' }}
             </v-icon>
-            Key 亲和 {{ channel.keyAffinityEnabled !== false ? '开启' : '关闭' }}
+            sub2api {{ channel.sub2apiPassthroughEnabled ? '开启' : '关闭' }}
           </v-chip>
         </div>
       </div>

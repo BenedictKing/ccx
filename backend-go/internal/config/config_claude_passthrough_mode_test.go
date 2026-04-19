@@ -233,3 +233,61 @@ func assertClaudePassthroughMutualExclusion(t *testing.T, upstream UpstreamConfi
 		t.Fatalf("IsStreamPassthroughEnabled() = %v, want false", upstream.IsStreamPassthroughEnabled())
 	}
 }
+
+func TestIsLegacyClaudeDefaultFailoverRules(t *testing.T) {
+	t.Run("legacy rules should match", func(t *testing.T) {
+		legacy := []FailoverRule{
+			{
+				Action:          "cooldown",
+				StatusCodes:     []int{429},
+				DurationMinutes: 60,
+			},
+			{
+				Action:      "blacklist",
+				StatusCodes: []int{400, 401},
+			},
+		}
+		if !IsLegacyClaudeDefaultFailoverRules(legacy) {
+			t.Fatal("legacy failover rules should be recognized")
+		}
+	})
+
+	t.Run("new default rules should not match legacy", func(t *testing.T) {
+		if IsLegacyClaudeDefaultFailoverRules(DefaultClaudeFailoverRules()) {
+			t.Fatal("new default rules should not be recognized as legacy")
+		}
+	})
+}
+
+func TestGetEffectiveFailoverRulesAutoUpgradeLegacyDefaults(t *testing.T) {
+	upstream := &UpstreamConfig{
+		ServiceType: "claude",
+		FailoverRules: []FailoverRule{
+			{
+				Action:          "cooldown",
+				StatusCodes:     []int{429},
+				DurationMinutes: 60,
+			},
+			{
+				Action:      "blacklist",
+				StatusCodes: []int{400, 401},
+			},
+		},
+	}
+
+	got := upstream.GetEffectiveFailoverRules()
+	if len(got) != 6 {
+		t.Fatalf("len(GetEffectiveFailoverRules()) = %d, want 6", len(got))
+	}
+
+	found402 := false
+	for _, rule := range got {
+		if rule.Action == "blacklist" && len(rule.StatusCodes) == 1 && rule.StatusCodes[0] == 402 {
+			found402 = true
+			break
+		}
+	}
+	if !found402 {
+		t.Fatal("upgraded defaults should include 402 blacklist rule")
+	}
+}

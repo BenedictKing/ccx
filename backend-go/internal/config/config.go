@@ -131,6 +131,9 @@ func (u *UpstreamConfig) IsStrictRequestPassthroughEnabled() bool {
 // GetEffectiveFailoverRules 获取渠道级故障规则（Claude 默认规则可覆盖）
 func (u *UpstreamConfig) GetEffectiveFailoverRules() []FailoverRule {
 	if len(u.FailoverRules) > 0 {
+		if strings.EqualFold(u.ServiceType, "claude") && IsLegacyClaudeDefaultFailoverRules(u.FailoverRules) {
+			return DefaultClaudeFailoverRules()
+		}
 		return CloneFailoverRules(u.FailoverRules)
 	}
 
@@ -139,6 +142,40 @@ func (u *UpstreamConfig) GetEffectiveFailoverRules() []FailoverRule {
 	}
 
 	return nil
+}
+
+func IsLegacyClaudeDefaultFailoverRules(rules []FailoverRule) bool {
+	if len(rules) != 2 {
+		return false
+	}
+
+	has429Cooldown := false
+	has400401Blacklist := false
+
+	for _, rule := range rules {
+		action := strings.ToLower(strings.TrimSpace(rule.Action))
+		hasErrorCodes := len(rule.ErrorCodes) > 0
+		hasKeywords := len(rule.Keywords) > 0
+
+		if action == "cooldown" && !hasErrorCodes && !hasKeywords &&
+			len(rule.StatusCodes) == 1 && rule.StatusCodes[0] == 429 &&
+			rule.DurationMinutes == 60 {
+			has429Cooldown = true
+			continue
+		}
+
+		if action == "blacklist" && !hasErrorCodes && !hasKeywords &&
+			len(rule.StatusCodes) == 2 &&
+			((rule.StatusCodes[0] == 400 && rule.StatusCodes[1] == 401) ||
+				(rule.StatusCodes[0] == 401 && rule.StatusCodes[1] == 400)) {
+			has400401Blacklist = true
+			continue
+		}
+
+		return false
+	}
+
+	return has429Cooldown && has400401Blacklist
 }
 
 // FailoverRule 渠道级故障规则
