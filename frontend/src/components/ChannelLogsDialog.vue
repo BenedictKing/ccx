@@ -4,7 +4,16 @@
       <v-card-title class="d-flex align-center justify-space-between">
         <span class="dialog-title">{{ t('channelLogs.title', { channel: channelName }) }}</span>
         <div class="d-flex align-center ga-2">
-          <v-btn class="auto-refresh-btn" size="x-small" :variant="autoRefresh ? 'flat' : 'outlined'" :color="autoRefresh ? 'primary' : ''" @click="autoRefresh = !autoRefresh">
+          <v-btn
+            class="auto-refresh-btn"
+            size="small"
+            density="comfortable"
+            rounded="pill"
+            :variant="autoRefresh ? 'flat' : 'outlined'"
+            color="primary"
+            :prepend-icon="autoRefresh ? 'mdi-autorenew' : 'mdi-refresh'"
+            @click="autoRefresh = !autoRefresh"
+          >
             {{ autoRefresh ? t('channelLogs.autoRefreshing') : t('channelLogs.autoRefresh') }}
           </v-btn>
           <v-btn icon size="small" variant="text" @click="$emit('update:modelValue', false)">
@@ -163,6 +172,10 @@ onUnmounted(() => stopPolling())
   font-size: 0.8125rem;
   letter-spacing: 0;
   line-height: 1.5;
+}
+
+.auto-refresh-btn {
+  text-transform: none;
 }
 
 .channel-logs-scroll {

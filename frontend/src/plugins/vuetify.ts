@@ -70,6 +70,7 @@ import {
   mdiOpenInNew,
   mdiKey,
   mdiRefresh,
+  mdiAutorenew,
   mdiDotsVertical,
   mdiPencil,
   mdiSpeedometer,
@@ -242,6 +243,7 @@ const iconMap: Record<string, string> = {
   // 操作按钮
   'pencil': mdiPencil,
   'refresh': mdiRefresh,
+  'autorenew': mdiAutorenew,
   'check': mdiCheck,
   'check-bold': mdiCheckBold,
   'content-copy': mdiContentCopy,
