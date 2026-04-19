@@ -625,24 +625,29 @@ func GetChannelDashboard(cfgManager *config.ConfigManager, sch *scheduler.Channe
 		var upstreams []config.UpstreamConfig
 		var metricsManager *metrics.MetricsManager
 		var kind scheduler.ChannelKind
+		apiType := "Messages"
 
 		switch channelType {
 		case "responses":
 			upstreams = cfg.ResponsesUpstream
 			metricsManager = sch.GetResponsesMetricsManager()
 			kind = scheduler.ChannelKindResponses
+			apiType = "Responses"
 		case "chat":
 			upstreams = cfg.ChatUpstream
 			metricsManager = sch.GetChatMetricsManager()
 			kind = scheduler.ChannelKindChat
+			apiType = "Chat"
 		case "gemini":
 			upstreams = cfg.GeminiUpstream
 			metricsManager = sch.GetGeminiMetricsManager()
 			kind = scheduler.ChannelKindGemini
+			apiType = "Gemini"
 		default: // messages
 			upstreams = cfg.Upstream
 			metricsManager = sch.GetMessagesMetricsManager()
 			kind = scheduler.ChannelKindMessages
+			apiType = "Messages"
 		}
 
 		// 1. 构建 channels 数据
@@ -652,34 +657,33 @@ func GetChannelDashboard(cfgManager *config.ConfigManager, sch *scheduler.Channe
 			priority := config.GetChannelPriority(&up, i)
 
 			channel := gin.H{
-				"index":                    i,
-				"name":                     up.Name,
-				"serviceType":              up.ServiceType,
-				"baseUrl":                  up.BaseURL,
-				"baseUrls":                 up.BaseURLs,
-				"apiKeys":                  up.APIKeys,
-				"description":              up.Description,
-				"website":                  up.Website,
-				"insecureSkipVerify":       up.InsecureSkipVerify,
-				"modelMapping":             up.ModelMapping,
-				"reasoningMapping":         up.ReasoningMapping,
-				"textVerbosity":            up.TextVerbosity,
-				"fastMode":                 up.FastMode,
-				"customHeaders":            up.CustomHeaders,
-				"proxyUrl":                 up.ProxyURL,
-				"supportedModels":          up.SupportedModels,
-				"routePrefix":              up.RoutePrefix,
-				"disabledApiKeys":          up.DisabledAPIKeys,
-				"autoBlacklistBalance":     up.IsAutoBlacklistBalanceEnabled(),
-				"normalizeMetadataUserId":  up.IsNormalizeMetadataUserIDEnabled(),
-				"streamPassthroughEnabled": up.IsStreamPassthroughEnabled(),
-				"keyAffinityEnabled":       up.IsKeyAffinityEnabled(),
-				"latency":                  nil,
-				"status":                   status,
-				"priority":                 priority,
-				"promotionUntil":           up.PromotionUntil,
-				"lowQuality":               up.LowQuality,
-				"rpm":                      up.RPM,
+				"index":                   i,
+				"name":                    up.Name,
+				"serviceType":             up.ServiceType,
+				"baseUrl":                 up.BaseURL,
+				"baseUrls":                up.BaseURLs,
+				"apiKeys":                 up.APIKeys,
+				"description":             up.Description,
+				"website":                 up.Website,
+				"insecureSkipVerify":      up.InsecureSkipVerify,
+				"modelMapping":            up.ModelMapping,
+				"reasoningMapping":        up.ReasoningMapping,
+				"textVerbosity":           up.TextVerbosity,
+				"fastMode":                up.FastMode,
+				"customHeaders":           up.CustomHeaders,
+				"proxyUrl":                up.ProxyURL,
+				"supportedModels":         up.SupportedModels,
+				"routePrefix":             up.RoutePrefix,
+				"disabledApiKeys":         up.DisabledAPIKeys,
+				"cooldownApiKeys":         cfgManager.GetCooldownKeys(apiType, i),
+				"autoBlacklistBalance":    up.IsAutoBlacklistBalanceEnabled(),
+				"normalizeMetadataUserId": up.IsNormalizeMetadataUserIDEnabled(),
+				"latency":                 nil,
+				"status":                  status,
+				"priority":                priority,
+				"promotionUntil":          up.PromotionUntil,
+				"lowQuality":              up.LowQuality,
+				"rpm":                     up.RPM,
 			}
 
 			// Gemini 特有字段

@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	"hash/fnv"
 	"log"
 	"slices"
 	"strings"
@@ -56,8 +55,6 @@ type UpstreamConfig struct {
 	RoutePrefix string `json:"routePrefix,omitempty"` // 路由前缀（如 "kimi"），客户端可通过 /:routePrefix/v1/messages 访问
 	// Claude 流式转发模式：true=直接透传，false=走本地流事件处理链
 	StreamPassthroughEnabled *bool `json:"streamPassthroughEnabled,omitempty"`
-	// Key 亲和开关：按 user_id 稳定选择同一个 Key（失败时自动切换）
-	KeyAffinityEnabled *bool `json:"keyAffinityEnabled,omitempty"`
 	// 渠道级故障规则：按状态码/错误码/关键词命中后执行冷却或拉黑
 	FailoverRules []FailoverRule `json:"failoverRules,omitempty"`
 }
@@ -68,6 +65,15 @@ type DisabledKeyInfo struct {
 	Reason     string `json:"reason"`     // "authentication_error" / "permission_error" / "insufficient_balance"
 	Message    string `json:"message"`    // 原始错误信息
 	DisabledAt string `json:"disabledAt"` // ISO8601 时间戳
+}
+
+// CooldownKeyInfo 处于冷却期的 API Key 信息（运行时）
+type CooldownKeyInfo struct {
+	Key                  string `json:"key"`
+	FailureCount         int    `json:"failureCount"`
+	CooldownUntil        string `json:"cooldownUntil"`
+	RemainingSeconds     int64  `json:"remainingSeconds"`
+	FixedDurationSeconds int64  `json:"fixedDurationSeconds,omitempty"`
 }
 
 // IsAutoBlacklistBalanceEnabled 检查余额不足自动拉黑是否启用（默认 true）
@@ -92,14 +98,6 @@ func (u *UpstreamConfig) IsStreamPassthroughEnabled() bool {
 		return true
 	}
 	return *u.StreamPassthroughEnabled
-}
-
-// IsKeyAffinityEnabled 检查 Key 亲和是否启用（Claude 默认 true，其它默认 false）
-func (u *UpstreamConfig) IsKeyAffinityEnabled() bool {
-	if u.KeyAffinityEnabled != nil {
-		return *u.KeyAffinityEnabled
-	}
-	return strings.EqualFold(u.ServiceType, "claude")
 }
 
 // GetEffectiveFailoverRules 获取渠道级故障规则（Claude 默认规则可覆盖）
@@ -186,7 +184,6 @@ type UpstreamUpdate struct {
 	AutoBlacklistBalance     *bool          `json:"autoBlacklistBalance"`
 	NormalizeMetadataUserID  *bool          `json:"normalizeMetadataUserId"`
 	StreamPassthroughEnabled *bool          `json:"streamPassthroughEnabled"`
-	KeyAffinityEnabled       *bool          `json:"keyAffinityEnabled"`
 	FailoverRules            []FailoverRule `json:"failoverRules"`
 	// Gemini 特定配置
 	InjectDummyThoughtSignature *bool `json:"injectDummyThoughtSignature"`
@@ -248,12 +245,10 @@ type ConfigManager struct {
 	configFile          string
 	watcher             *fsnotify.Watcher
 	failedKeysCache     map[string]*FailedKey
-	keyRecoveryTime     time.Duration
-	maxFailureCount     int
-	keyBackoffDurations []time.Duration
-	roundRobinCounters  map[string]*uint64
-	stopChan            chan struct{}
-	closeOnce           sync.Once
+	keyBackoffDurations []time.Duration    // 各档冷却时间
+	roundRobinCounters  map[string]*uint64 // upstream.Name → 轮询计数器
+	stopChan            chan struct{}      // 用于通知 goroutine 停止
+	closeOnce           sync.Once          // 确保 Close 只执行一次
 }
 
 // failedKeyCacheKey 构造 FailedKeysCache 的复合键（apiType:apiKey）
@@ -333,15 +328,6 @@ func (cm *ConfigManager) GetConfig() Config {
 // GetNextAPIKey 获取下一个 API 密钥（纯 failover 模式）
 // apiType: 接口类型（Messages/Responses/Gemini），用于日志标签前缀
 func (cm *ConfigManager) GetNextAPIKey(upstream *UpstreamConfig, failedKeys map[string]bool, apiType string) (string, error) {
-	return cm.getNextAPIKeyWithUserAffinity(upstream, failedKeys, apiType, "")
-}
-
-// GetNextAPIKeyForUser 获取下一个 API 密钥（支持按 user_id 的 Key 亲和）
-func (cm *ConfigManager) GetNextAPIKeyForUser(upstream *UpstreamConfig, failedKeys map[string]bool, apiType, userID string) (string, error) {
-	return cm.getNextAPIKeyWithUserAffinity(upstream, failedKeys, apiType, userID)
-}
-
-func (cm *ConfigManager) getNextAPIKeyWithUserAffinity(upstream *UpstreamConfig, failedKeys map[string]bool, apiType, userID string) (string, error) {
 	if len(upstream.APIKeys) == 0 {
 		return "", fmt.Errorf("上游 %s 没有可用的API密钥", upstream.Name)
 	}
@@ -386,52 +372,20 @@ func (cm *ConfigManager) getNextAPIKeyWithUserAffinity(upstream *UpstreamConfig,
 		return "", fmt.Errorf("上游 %s 的所有API密钥都暂时不可用", upstream.Name)
 	}
 
-	// 亲和优先：同一 user_id 稳定命中同一可用 key
-	if userID != "" && upstream.IsKeyAffinityEnabled() {
-		affinityKey := fmt.Sprintf("%s|%s|%s", apiType, upstream.Name, userID)
-		idx := stableHashIndex(affinityKey, len(availableKeys))
-		selectedKey := availableKeys[idx]
-		keyIndex := findKeyIndex(upstream.APIKeys, selectedKey)
-		log.Printf("[%s-Key] 亲和选择密钥 %s (%d/%d, user=%s)",
-			apiType, utils.MaskAPIKey(selectedKey), keyIndex, len(upstream.APIKeys), maskUserIDForLog(userID))
-		return selectedKey, nil
-	}
-
 	// 轮询：按计数器均匀分配，每次取下一个可用 key
 	counter := cm.getOrCreateCounter(upstream.Name)
 	idx := int(atomic.AddUint64(counter, 1)-1) % len(availableKeys)
 	selectedKey := availableKeys[idx]
-	keyIndex := findKeyIndex(upstream.APIKeys, selectedKey)
-	log.Printf("[%s-Key] 轮询选择密钥 %s (%d/%d)", apiType, utils.MaskAPIKey(selectedKey), keyIndex, len(upstream.APIKeys))
-	return selectedKey, nil
-}
-
-func stableHashIndex(value string, mod int) int {
-	if mod <= 0 {
-		return 0
-	}
-	h := fnv.New32a()
-	_, _ = h.Write([]byte(value))
-	return int(h.Sum32() % uint32(mod))
-}
-
-func findKeyIndex(allKeys []string, key string) int {
-	for i, k := range allKeys {
-		if k == key {
-			return i + 1
+	// 获取该密钥在原始列表中的索引
+	keyIndex := 0
+	for i, key := range upstream.APIKeys {
+		if key == selectedKey {
+			keyIndex = i + 1
+			break
 		}
 	}
-	return 0
-}
-
-func maskUserIDForLog(userID string) string {
-	if userID == "" {
-		return ""
-	}
-	if len(userID) <= 4 {
-		return "***"
-	}
-	return userID[:2] + "***" + userID[len(userID)-2:]
+	log.Printf("[%s-Key] 轮询选择密钥 %s (%d/%d)", apiType, utils.MaskAPIKey(selectedKey), keyIndex, len(upstream.APIKeys))
+	return selectedKey, nil
 }
 
 // GetAdminAPIKey 获取管理/探测场景下的 API 密钥。
@@ -503,6 +457,78 @@ func (cm *ConfigManager) isKeyFailed(apiKey, apiType string) bool {
 // IsKeyFailed 检查 Key 是否在冷却期（公开方法）
 func (cm *ConfigManager) IsKeyFailed(apiKey, apiType string) bool {
 	return cm.isKeyFailed(apiKey, apiType)
+}
+
+// GetCooldownKeys 获取指定渠道当前处于冷却期的 Key 列表
+// 仅返回当前 active APIKeys 中仍在冷却窗口内的 key
+func (cm *ConfigManager) GetCooldownKeys(apiType string, channelIndex int) []CooldownKeyInfo {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+
+	upstreams := cm.getUpstreamSliceLocked(apiType)
+	if upstreams == nil || channelIndex < 0 || channelIndex >= len(*upstreams) {
+		return nil
+	}
+
+	upstream := &(*upstreams)[channelIndex]
+	if len(upstream.APIKeys) == 0 || len(cm.failedKeysCache) == 0 {
+		return nil
+	}
+
+	now := time.Now()
+	result := make([]CooldownKeyInfo, 0, len(upstream.APIKeys))
+	for _, apiKey := range upstream.APIKeys {
+		cacheKey := failedKeyCacheKey(apiType, apiKey)
+		failure, exists := cm.failedKeysCache[cacheKey]
+		if !exists || failure == nil {
+			continue
+		}
+
+		cooldownDuration := failure.FixedDuration
+		if cooldownDuration <= 0 {
+			cooldownDuration = cm.backoffDuration(failure.FailureCount)
+		}
+		if cooldownDuration <= 0 {
+			continue
+		}
+
+		cooldownUntil := failure.Timestamp.Add(cooldownDuration)
+		remaining := cooldownUntil.Sub(now)
+		if remaining <= 0 {
+			continue
+		}
+
+		remainingSeconds := int64(remaining / time.Second)
+		if remaining%time.Second != 0 {
+			remainingSeconds++
+		}
+		if remainingSeconds <= 0 {
+			continue
+		}
+
+		item := CooldownKeyInfo{
+			Key:              apiKey,
+			FailureCount:     failure.FailureCount,
+			CooldownUntil:    cooldownUntil.Format(time.RFC3339),
+			RemainingSeconds: remainingSeconds,
+		}
+		if failure.FixedDuration > 0 {
+			item.FixedDurationSeconds = int64(failure.FixedDuration / time.Second)
+		}
+		result = append(result, item)
+	}
+
+	slices.SortFunc(result, func(a, b CooldownKeyInfo) int {
+		if a.RemainingSeconds == b.RemainingSeconds {
+			return strings.Compare(a.Key, b.Key)
+		}
+		if a.RemainingSeconds > b.RemainingSeconds {
+			return -1
+		}
+		return 1
+	})
+
+	return result
 }
 
 // MarkKeyAsFailedWithDuration 标记密钥失败，使用固定冷却时间（暂停规则触发）

@@ -299,6 +299,34 @@
                 </div>
               </div>
             </div>
+
+            <div v-if="channel.cooldownApiKeys?.length" class="mt-3">
+              <div class="d-flex align-center ga-2 mb-2">
+                <v-icon size="small" color="warning">mdi-timer-sand</v-icon>
+                <span class="text-body-2 font-weight-medium text-warning">冷却 Keys</span>
+                <v-chip size="x-small" color="warning" variant="tonal">{{ channel.cooldownApiKeys.length }}</v-chip>
+              </div>
+              <div class="d-flex flex-column ga-2" style="max-height: 120px; overflow-y: auto;">
+                <div
+                  v-for="(ck, ckIndex) in channel.cooldownApiKeys"
+                  :key="'cooldown-' + ckIndex"
+                  class="d-flex align-center justify-space-between pa-2 rounded"
+                  style="background: rgba(var(--v-theme-warning), 0.06);"
+                >
+                  <div class="d-flex flex-column flex-1-1 mr-2" style="min-width: 0;">
+                    <code class="text-caption text-truncate">{{ maskApiKey(ck.key) }}</code>
+                    <div class="d-flex align-center ga-1 mt-1">
+                      <v-chip size="x-small" color="warning" variant="tonal">
+                        剩余 {{ formatCooldownRemaining(ck.remainingSeconds) }}
+                      </v-chip>
+                      <span class="text-caption text-medium-emphasis">
+                        失败 {{ ck.failureCount }} 次 · {{ formatDisabledTime(ck.cooldownUntil) }} 恢复
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </v-expansion-panel-text>
         </v-expansion-panel>
       </v-expansion-panels>
@@ -463,6 +491,20 @@ const formatDisabledTime = (isoStr: string): string => {
   } catch {
     return isoStr
   }
+}
+
+const formatCooldownRemaining = (seconds: number): string => {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '即将恢复'
+  const total = Math.floor(seconds)
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`
+  }
+  if (minutes > 0) {
+    return `${minutes}m`
+  }
+  return `${total}s`
 }
 
 // 复制API密钥到剪贴板

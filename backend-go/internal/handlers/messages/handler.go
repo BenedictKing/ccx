@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
@@ -268,6 +269,13 @@ func handleNormalResponse(
 ) (*types.Usage, error) {
 	defer resp.Body.Close()
 
+	if shouldDirectClaudePassthrough(upstream) {
+		if err := common.PassthroughResponse(c, resp); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	}
+
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		c.JSON(500, gin.H{"error": "Failed to read response"})
@@ -382,6 +390,12 @@ func handleNormalResponse(
 	}
 
 	return claudeResp.Usage, nil
+}
+
+func shouldDirectClaudePassthrough(upstream *config.UpstreamConfig) bool {
+	return upstream != nil &&
+		strings.EqualFold(upstream.ServiceType, "claude") &&
+		upstream.IsStreamPassthroughEnabled()
 }
 
 // CountTokensHandler 处理 /v1/messages/count_tokens 请求

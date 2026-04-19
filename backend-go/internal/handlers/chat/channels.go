@@ -53,10 +53,10 @@ func GetUpstreams(cfgManager *config.ConfigManager) gin.HandlerFunc {
 				"supportedModels":          up.SupportedModels,
 				"routePrefix":              up.RoutePrefix,
 				"disabledApiKeys":          up.DisabledAPIKeys,
+				"cooldownApiKeys":          cfgManager.GetCooldownKeys("Chat", i),
 				"autoBlacklistBalance":     up.IsAutoBlacklistBalanceEnabled(),
 				"normalizeMetadataUserId":  up.IsNormalizeMetadataUserIDEnabled(),
 				"streamPassthroughEnabled": up.IsStreamPassthroughEnabled(),
-				"keyAffinityEnabled":       up.IsKeyAffinityEnabled(),
 				"failoverRules":            up.GetEffectiveFailoverRules(),
 			}
 		}

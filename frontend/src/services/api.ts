@@ -97,6 +97,14 @@ export interface DisabledKeyInfo {
   disabledAt: string  // ISO8601 时间戳
 }
 
+export interface CooldownKeyInfo {
+  key: string
+  failureCount: number
+  cooldownUntil: string
+  remainingSeconds: number
+  fixedDurationSeconds?: number
+}
+
 export interface FailoverRule {
   description?: string
   action: 'cooldown' | 'blacklist'
@@ -112,6 +120,7 @@ export interface Channel {
   baseUrls?: string[]                // 多 BaseURL 支持（failover 模式）
   apiKeys: string[]
   disabledApiKeys?: DisabledKeyInfo[]  // 被拉黑的 API Key
+  cooldownApiKeys?: CooldownKeyInfo[]  // 处于冷却期的 API Key
   historicalApiKeys?: string[]
   description?: string
   website?: string
@@ -126,7 +135,6 @@ export interface Channel {
   autoBlacklistBalance?: boolean
   normalizeMetadataUserId?: boolean
   streamPassthroughEnabled?: boolean
-  keyAffinityEnabled?: boolean
   failoverRules?: FailoverRule[]
   latency?: number
   status?: ChannelStatus | 'healthy' | 'error' | 'unknown' | ''

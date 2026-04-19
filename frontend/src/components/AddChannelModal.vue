@@ -634,6 +634,37 @@
                       </v-list-item>
                     </v-list>
                   </div>
+
+                  <div v-if="isEditing && visibleCooldownKeys.length" class="mt-4">
+                    <div class="d-flex align-center ga-2 mb-2">
+                      <v-icon size="small" color="warning">mdi-timer-sand</v-icon>
+                      <span class="text-body-2 font-weight-medium text-warning">冷却 Keys</span>
+                      <v-chip size="x-small" color="warning" variant="tonal">{{ visibleCooldownKeys.length }}</v-chip>
+                    </div>
+                    <v-list density="compact" class="rounded-lg" style="max-height: 150px; overflow-y: auto;">
+                      <v-list-item
+                        v-for="(ck, ckIdx) in visibleCooldownKeys"
+                        :key="'cooldown-' + ckIdx"
+                        class="px-3"
+                        style="background: rgba(var(--v-theme-warning), 0.04);"
+                      >
+                        <template #prepend>
+                          <v-icon size="small" color="warning" class="mr-2">mdi-timer-outline</v-icon>
+                        </template>
+                        <v-list-item-title class="text-caption font-weight-mono">
+                          {{ ck.key.length > 20 ? ck.key.slice(0, 8) + '***' + ck.key.slice(-5) : ck.key }}
+                        </v-list-item-title>
+                        <v-list-item-subtitle class="d-flex align-center ga-1">
+                          <v-chip size="x-small" color="warning" variant="tonal">
+                            剩余 {{ formatCooldownRemaining(ck.remainingSeconds) }}
+                          </v-chip>
+                          <span class="text-caption">
+                            失败 {{ ck.failureCount }} 次 · {{ formatCooldownUntil(ck.cooldownUntil) }} 恢复
+                          </span>
+                        </v-list-item-subtitle>
+                      </v-list-item>
+                    </v-list>
+                  </div>
                 </v-card-text>
               </v-card>
             </v-col>
@@ -711,7 +742,7 @@
               <v-card variant="outlined" rounded="lg">
                 <v-card-title class="section-card-title d-flex align-center justify-space-between ga-2">
                   <div class="d-flex align-center ga-2">
-                    <v-icon size="small" color="primary">mdi-shield-outline</v-icon>
+                    <v-icon size="small" color="primary">mdi-waveform</v-icon>
                     Claude 流式与故障拦截
                   </div>
                   <div class="d-flex align-center ga-2">
@@ -727,17 +758,9 @@
                   <div class="d-flex align-center justify-space-between mb-4">
                     <div>
                       <div class="section-title section-title--soft">流式透传</div>
-                      <div class="text-caption text-medium-emphasis">开启后直接透传 SSE；关闭后走本地流事件处理链。</div>
+                      <div class="text-caption text-medium-emphasis">开启后直接透传上游响应（SSE 与非 SSE）；关闭后走本地处理链。</div>
                     </div>
                     <v-switch v-model="form.streamPassthroughEnabled" inset color="primary" hide-details />
-                  </div>
-
-                  <div class="d-flex align-center justify-space-between mb-4">
-                    <div>
-                      <div class="section-title section-title--soft">Key 亲和</div>
-                      <div class="text-caption text-medium-emphasis">开启后同一 user_id 优先命中同一可用 Key；关闭后按轮询选 Key。</div>
-                    </div>
-                    <v-switch v-model="form.keyAffinityEnabled" inset color="primary" hide-details />
                   </div>
 
                   <div v-if="form.failoverRules.length === 0" class="text-caption text-medium-emphasis mb-2">
@@ -1602,7 +1625,6 @@ const form = reactive({
   autoBlacklistBalance: true,
   normalizeMetadataUserId: true,
   streamPassthroughEnabled: true,
-  keyAffinityEnabled: true,
   failoverRules: createDefaultClaudeFailoverRules() as FailoverRule[],
   rpm: 10
 })
@@ -1897,7 +1919,6 @@ const resetForm = () => {
   form.autoBlacklistBalance = true
   form.normalizeMetadataUserId = true
   form.streamPassthroughEnabled = true
-  form.keyAffinityEnabled = true
   form.failoverRules = createDefaultClaudeFailoverRules()
   form.rpm = 10
   newApiKey.value = ''
@@ -1973,7 +1994,6 @@ const loadChannelData = (channel: Channel) => {
   form.autoBlacklistBalance = channel.autoBlacklistBalance ?? true
   form.normalizeMetadataUserId = channel.normalizeMetadataUserId ?? true
   form.streamPassthroughEnabled = channel.streamPassthroughEnabled ?? true
-  form.keyAffinityEnabled = channel.keyAffinityEnabled ?? (channel.serviceType === 'claude')
   form.failoverRules = cloneFailoverRules(
     channel.failoverRules && channel.failoverRules.length > 0
       ? channel.failoverRules
@@ -2065,6 +2085,26 @@ const localRestoredKeys = ref(new Set<string>())
 const visibleDisabledKeys = computed(() =>
   (props.channel?.disabledApiKeys || []).filter(dk => !localRestoredKeys.value.has(dk.key))
 )
+const visibleCooldownKeys = computed(() => props.channel?.cooldownApiKeys || [])
+
+const formatCooldownRemaining = (seconds: number): string => {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '即将恢复'
+  const total = Math.floor(seconds)
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  if (hours > 0) return `${hours}h ${minutes}m`
+  if (minutes > 0) return `${minutes}m`
+  return `${total}s`
+}
+
+const formatCooldownUntil = (iso: string): string => {
+  try {
+    const d = new Date(iso)
+    return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  } catch {
+    return iso
+  }
+}
 
 const restoreDisabledKey = async (apiKey: string) => {
   if (!props.channel) return
