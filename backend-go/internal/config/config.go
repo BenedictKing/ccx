@@ -155,15 +155,46 @@ type FailoverRule struct {
 func DefaultClaudeFailoverRules() []FailoverRule {
 	return []FailoverRule{
 		{
+			Description: "401 无效 key 拉黑",
+			Action:      "blacklist",
+			StatusCodes: []int{401},
+			ErrorCodes:  []string{"authentication_error", "1000"},
+			Keywords:    []string{"invalid x-api-key", "身份验证失败"},
+		},
+		{
+			Description:     "400 用量上限冷却",
+			Action:          "cooldown",
+			StatusCodes:     []int{400},
+			ErrorCodes:      []string{"invalid_request_error"},
+			Keywords:        []string{"reached your specified api usage limits", "regain access on"},
+			DurationMinutes: 720,
+		},
+		{
+			Description: "400 余额不足拉黑",
+			Action:      "blacklist",
+			StatusCodes: []int{400},
+			ErrorCodes:  []string{"invalid_request_error"},
+			Keywords:    []string{"credit balance is too low", "plans & billing", "purchase credits"},
+		},
+		{
+			Description: "402 会员权益校验失败拉黑",
+			Action:      "blacklist",
+			StatusCodes: []int{402},
+			ErrorCodes:  []string{"invalid_request_error"},
+			Keywords:    []string{"unable to verify your membership benefits"},
+		},
+		{
+			Description: "400 api_error 请求失败拉黑",
+			Action:      "blacklist",
+			StatusCodes: []int{400},
+			ErrorCodes:  []string{"api_error"},
+			Keywords:    []string{"request failed. please check your input and try again"},
+		},
+		{
 			Description:     "429 冷却 60 分钟",
 			Action:          "cooldown",
 			StatusCodes:     []int{429},
 			DurationMinutes: 60,
-		},
-		{
-			Description: "400/401 拉黑",
-			Action:      "blacklist",
-			StatusCodes: []int{400, 401},
 		},
 	}
 }
