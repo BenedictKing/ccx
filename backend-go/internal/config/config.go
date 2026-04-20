@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"hash/fnv"
 	"log"
 	"slices"
 	"strings"
@@ -56,6 +57,7 @@ type UpstreamConfig struct {
 	// Claude 流式转发模式：true=直接透传，false=走本地流事件处理链
 	StreamPassthroughEnabled  *bool `json:"streamPassthroughEnabled,omitempty"`
 	Sub2APIPassthroughEnabled *bool `json:"sub2apiPassthroughEnabled,omitempty"`
+	KeyAffinityEnabled        *bool `json:"keyAffinityEnabled,omitempty"`
 	// Claude 严格请求透传：true=请求体原样转发；false=继续执行本地兼容预处理
 	StrictRequestPassthroughEnabled *bool `json:"strictRequestPassthroughEnabled,omitempty"`
 	// Key 健康巡检（可选）：周期请求 /v1/models（Gemini 为 /v1beta/models），非 200 自动拉黑
@@ -111,6 +113,13 @@ func (u *UpstreamConfig) IsSub2APIPassthroughEnabled() bool {
 		return false
 	}
 	return *u.Sub2APIPassthroughEnabled
+}
+
+func (u *UpstreamConfig) IsKeyAffinityEnabled() bool {
+	if u.KeyAffinityEnabled == nil {
+		return false
+	}
+	return *u.KeyAffinityEnabled
 }
 
 func (u *UpstreamConfig) IsModelsHealthCheckEnabled() bool {
@@ -308,6 +317,7 @@ type UpstreamUpdate struct {
 	NormalizeMetadataUserID          *bool          `json:"normalizeMetadataUserId"`
 	StreamPassthroughEnabled         *bool          `json:"streamPassthroughEnabled"`
 	Sub2APIPassthroughEnabled        *bool          `json:"sub2apiPassthroughEnabled"`
+	KeyAffinityEnabled               *bool          `json:"keyAffinityEnabled"`
 	StrictRequestPassthroughEnabled  *bool          `json:"strictRequestPassthroughEnabled"`
 	ModelsHealthCheckEnabled         *bool          `json:"modelsHealthCheckEnabled"`
 	ModelsHealthCheckIntervalMinutes *int           `json:"modelsHealthCheckIntervalMinutes"`
@@ -465,32 +475,10 @@ func (cm *ConfigManager) GetNextAPIKey(upstream *UpstreamConfig, failedKeys map[
 	}
 
 	// 筛选可用密钥：排除临时失败密钥和内存中的失败密钥
-	availableKeys := []string{}
-	for _, key := range upstream.APIKeys {
-		if !failedKeys[key] && !cm.isKeyFailed(key, apiType) {
-			availableKeys = append(availableKeys, key)
-		}
-	}
+	availableKeys := cm.getAvailableKeys(upstream, failedKeys, apiType)
 
 	if len(availableKeys) == 0 {
-		// 如果所有密钥都失效，尝试选择失败时间最早的密钥（恢复尝试）
-		var oldestFailedKey string
-		oldestTime := time.Now()
-
-		cm.mu.RLock()
-		for _, key := range upstream.APIKeys {
-			if !failedKeys[key] { // 排除本次请求已经尝试过的密钥
-				cacheKey := failedKeyCacheKey(apiType, key)
-				if failure, exists := cm.failedKeysCache[cacheKey]; exists {
-					if failure.Timestamp.Before(oldestTime) {
-						oldestTime = failure.Timestamp
-						oldestFailedKey = key
-					}
-				}
-			}
-		}
-		cm.mu.RUnlock()
-
+		oldestFailedKey := cm.selectOldestFailedKey(upstream, failedKeys, apiType)
 		if oldestFailedKey != "" {
 			log.Printf("[%s-Key] 警告: 所有密钥都失效，尝试最早失败的密钥: %s", apiType, utils.MaskAPIKey(oldestFailedKey))
 			return oldestFailedKey, nil
@@ -516,8 +504,103 @@ func (cm *ConfigManager) GetNextAPIKey(upstream *UpstreamConfig, failedKeys map[
 }
 
 func (cm *ConfigManager) GetNextAPIKeyForUser(upstream *UpstreamConfig, failedKeys map[string]bool, apiType string, userID string) (string, error) {
-	_ = userID
-	return cm.GetNextAPIKey(upstream, failedKeys, apiType)
+	if upstream == nil {
+		return "", fmt.Errorf("upstream 为空")
+	}
+	normalizedUserID := strings.TrimSpace(userID)
+	if !upstream.IsKeyAffinityEnabled() {
+		return cm.GetNextAPIKey(upstream, failedKeys, apiType)
+	}
+
+	if len(upstream.APIKeys) == 0 {
+		return "", fmt.Errorf("上游 %s 没有可用的API密钥", upstream.Name)
+	}
+	if len(upstream.APIKeys) == 1 {
+		return upstream.APIKeys[0], nil
+	}
+
+	availableKeys := cm.getAvailableKeys(upstream, failedKeys, apiType)
+	if len(availableKeys) == 0 {
+		oldestFailedKey := cm.selectOldestFailedKey(upstream, failedKeys, apiType)
+		if oldestFailedKey != "" {
+			log.Printf("[%s-Key] 警告: 亲和选择无可用密钥，尝试最早失败密钥: %s", apiType, utils.MaskAPIKey(oldestFailedKey))
+			return oldestFailedKey, nil
+		}
+		return "", fmt.Errorf("上游 %s 的所有API密钥都暂时不可用", upstream.Name)
+	}
+
+	if normalizedUserID == "" {
+		selectedKey := availableKeys[0]
+		keyIndex := 0
+		for i, key := range upstream.APIKeys {
+			if key == selectedKey {
+				keyIndex = i + 1
+				break
+			}
+		}
+		log.Printf("[%s-Key] 亲和选择密钥 %s (%d/%d, user=empty)", apiType, utils.MaskAPIKey(selectedKey), keyIndex, len(upstream.APIKeys))
+		return selectedKey, nil
+	}
+
+	hash := fnv.New32a()
+	_, _ = hash.Write([]byte(normalizedUserID))
+	idx := int(hash.Sum32() % uint32(len(availableKeys)))
+	selectedKey := availableKeys[idx]
+
+	keyIndex := 0
+	for i, key := range upstream.APIKeys {
+		if key == selectedKey {
+			keyIndex = i + 1
+			break
+		}
+	}
+	log.Printf("[%s-Key] 亲和选择密钥 %s (%d/%d, user=%s)", apiType, utils.MaskAPIKey(selectedKey), keyIndex, len(upstream.APIKeys), maskUserIDForLog(normalizedUserID))
+	return selectedKey, nil
+}
+
+func (cm *ConfigManager) getAvailableKeys(upstream *UpstreamConfig, failedKeys map[string]bool, apiType string) []string {
+	availableKeys := make([]string, 0, len(upstream.APIKeys))
+	for _, key := range upstream.APIKeys {
+		if failedKeys[key] {
+			continue
+		}
+		if cm.isKeyFailed(key, apiType) {
+			continue
+		}
+		availableKeys = append(availableKeys, key)
+	}
+	return availableKeys
+}
+
+func (cm *ConfigManager) selectOldestFailedKey(upstream *UpstreamConfig, failedKeys map[string]bool, apiType string) string {
+	var oldestFailedKey string
+	oldestTime := time.Now()
+
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+	for _, key := range upstream.APIKeys {
+		if failedKeys[key] { // 排除本次请求已经尝试过的密钥
+			continue
+		}
+		cacheKey := failedKeyCacheKey(apiType, key)
+		if failure, exists := cm.failedKeysCache[cacheKey]; exists {
+			if failure.Timestamp.Before(oldestTime) {
+				oldestTime = failure.Timestamp
+				oldestFailedKey = key
+			}
+		}
+	}
+	return oldestFailedKey
+}
+
+func maskUserIDForLog(userID string) string {
+	if userID == "" {
+		return ""
+	}
+	if len(userID) <= 8 {
+		return userID
+	}
+	return userID[:4] + "***" + userID[len(userID)-2:]
 }
 
 // GetAdminAPIKey 获取管理/探测场景下的 API 密钥。

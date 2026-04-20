@@ -787,6 +787,16 @@
                     </div>
                   </div>
 
+                  <div class="claude-toggle-row mb-4">
+                    <div class="claude-toggle-content">
+                      <div class="section-title section-title--soft">Key 亲和</div>
+                      <div class="text-caption text-medium-emphasis">开启后同一 user_id 优先命中同一可用 Key；关闭后按轮询选 Key。</div>
+                    </div>
+                    <div class="claude-toggle-switch">
+                      <v-switch v-model="form.keyAffinityEnabled" inset color="primary" hide-details />
+                    </div>
+                  </div>
+
                   <div class="text-caption text-medium-emphasis mb-4">
                     sub2api 认证透传与流式透传互斥，开启其中一个会自动关闭另一个。
                   </div>
@@ -1752,6 +1762,7 @@ const form = reactive({
   supportedModels: [] as string[],
   autoBlacklistBalance: true,
   normalizeMetadataUserId: true,
+  keyAffinityEnabled: true,
   streamPassthroughEnabled: false,
   sub2apiPassthroughEnabled: true,
   strictRequestPassthroughEnabled: true,
@@ -2083,6 +2094,7 @@ const resetForm = () => {
   form.supportedModels = []
   form.autoBlacklistBalance = true
   form.normalizeMetadataUserId = true
+  form.keyAffinityEnabled = true
   form.streamPassthroughEnabled = false
   form.sub2apiPassthroughEnabled = true
   form.strictRequestPassthroughEnabled = true
@@ -2162,6 +2174,7 @@ const loadChannelData = (channel: Channel) => {
   form.supportedModels = channel.supportedModels || []
   form.autoBlacklistBalance = channel.autoBlacklistBalance ?? true
   form.normalizeMetadataUserId = channel.normalizeMetadataUserId ?? true
+  form.keyAffinityEnabled = channel.keyAffinityEnabled ?? (channel.serviceType === 'claude')
   form.streamPassthroughEnabled = channel.streamPassthroughEnabled ?? true
   form.sub2apiPassthroughEnabled = channel.sub2apiPassthroughEnabled ?? (channel.serviceType === 'claude')
   form.strictRequestPassthroughEnabled = channel.strictRequestPassthroughEnabled ?? true

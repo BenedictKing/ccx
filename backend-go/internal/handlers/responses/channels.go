@@ -59,6 +59,7 @@ func GetUpstreams(cfgManager *config.ConfigManager) gin.HandlerFunc {
 				"normalizeMetadataUserId":          up.IsNormalizeMetadataUserIDEnabled(),
 				"streamPassthroughEnabled":         up.IsStreamPassthroughEnabled(),
 				"sub2apiPassthroughEnabled":        up.IsSub2APIPassthroughEnabled(),
+				"keyAffinityEnabled":               up.IsKeyAffinityEnabled(),
 				"strictRequestPassthroughEnabled":  up.IsStrictRequestPassthroughEnabled(),
 				"modelsHealthCheckEnabled":         up.IsModelsHealthCheckEnabled(),
 				"modelsHealthCheckIntervalMinutes": up.GetModelsHealthCheckIntervalMinutes(),

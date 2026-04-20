@@ -75,7 +75,7 @@ func Handler(envCfg *config.EnvConfig, cfgManager *config.ConfigManager, channel
 		if isMultiChannel {
 			handleMultiChannel(c, envCfg, cfgManager, channelScheduler, rawBodyBytes, claudeReq, userID, startTime)
 		} else {
-			handleSingleChannel(c, envCfg, cfgManager, channelScheduler, rawBodyBytes, claudeReq, startTime)
+			handleSingleChannel(c, envCfg, cfgManager, channelScheduler, rawBodyBytes, claudeReq, userID, startTime)
 		}
 	})
 }
@@ -129,7 +129,7 @@ func handleMultiChannel(
 				bodyBytes,
 				claudeReq.Stream,
 				func(upstream *config.UpstreamConfig, failedKeys map[string]bool) (string, error) {
-					return cfgManager.GetNextAPIKey(upstream, failedKeys, "Messages")
+					return cfgManager.GetNextAPIKeyForUser(upstream, failedKeys, "Messages", userID)
 				},
 				func(c *gin.Context, upstreamCopy *config.UpstreamConfig, apiKey string) (*http.Request, error) {
 					req, _, err := provider.ConvertToProviderRequest(c, upstreamCopy, apiKey)
@@ -182,6 +182,7 @@ func handleSingleChannel(
 	channelScheduler *scheduler.ChannelScheduler,
 	bodyBytes []byte,
 	claudeReq types.ClaudeRequest,
+	userID string,
 	startTime time.Time,
 ) {
 	upstream, channelIndex, err := cfgManager.GetCurrentUpstreamWithIndex()
@@ -225,7 +226,7 @@ func handleSingleChannel(
 		bodyBytes,
 		claudeReq.Stream,
 		func(upstream *config.UpstreamConfig, failedKeys map[string]bool) (string, error) {
-			return cfgManager.GetNextAPIKey(upstream, failedKeys, "Messages")
+			return cfgManager.GetNextAPIKeyForUser(upstream, failedKeys, "Messages", userID)
 		},
 		func(c *gin.Context, upstreamCopy *config.UpstreamConfig, apiKey string) (*http.Request, error) {
 			req, _, err := provider.ConvertToProviderRequest(c, upstreamCopy, apiKey)
@@ -411,7 +412,7 @@ func hasAnthropicAPIKey(keys []string) bool {
 	return false
 }
 
-func getNextAnthropicAPIKey(cfgManager *config.ConfigManager, upstream *config.UpstreamConfig, failedKeys map[string]bool, apiType string) (string, error) {
+func getNextAnthropicAPIKey(cfgManager *config.ConfigManager, upstream *config.UpstreamConfig, failedKeys map[string]bool, apiType string, userID string) (string, error) {
 	filteredFailed := make(map[string]bool, len(failedKeys)+len(upstream.APIKeys))
 	for k, v := range failedKeys {
 		filteredFailed[k] = v
@@ -429,7 +430,7 @@ func getNextAnthropicAPIKey(cfgManager *config.ConfigManager, upstream *config.U
 		return "", fmt.Errorf("no anthropic api key available")
 	}
 
-	return cfgManager.GetNextAPIKey(upstream, filteredFailed, apiType)
+	return cfgManager.GetNextAPIKeyForUser(upstream, filteredFailed, apiType, userID)
 }
 
 func countTokensPassthroughHandleSuccess(c *gin.Context, resp *http.Response) (*types.Usage, error) {
@@ -443,6 +444,7 @@ func tryCountTokensSub2APIPassthroughSingleChannel(
 	cfgManager *config.ConfigManager,
 	channelScheduler *scheduler.ChannelScheduler,
 	bodyBytes []byte,
+	userID string,
 	model string,
 ) bool {
 	upstream, channelIndex, err := cfgManager.GetCurrentUpstreamWithIndex()
@@ -472,7 +474,7 @@ func tryCountTokensSub2APIPassthroughSingleChannel(
 		bodyBytes,
 		false,
 		func(upstream *config.UpstreamConfig, failedKeys map[string]bool) (string, error) {
-			return getNextAnthropicAPIKey(cfgManager, upstream, failedKeys, "Messages")
+			return getNextAnthropicAPIKey(cfgManager, upstream, failedKeys, "Messages", userID)
 		},
 		func(c *gin.Context, upstreamCopy *config.UpstreamConfig, apiKey string) (*http.Request, error) {
 			req, _, err := provider.ConvertToProviderRequest(c, upstreamCopy, apiKey)
@@ -550,7 +552,7 @@ func tryCountTokensSub2APIPassthroughMultiChannel(
 				bodyBytes,
 				false,
 				func(upstream *config.UpstreamConfig, failedKeys map[string]bool) (string, error) {
-					return getNextAnthropicAPIKey(cfgManager, upstream, failedKeys, "Messages")
+					return getNextAnthropicAPIKey(cfgManager, upstream, failedKeys, "Messages", userID)
 				},
 				func(c *gin.Context, upstreamCopy *config.UpstreamConfig, apiKey string) (*http.Request, error) {
 					req, _, err := provider.ConvertToProviderRequest(c, upstreamCopy, apiKey)
@@ -632,7 +634,7 @@ func CountTokensHandler(envCfg *config.EnvConfig, cfgManager *config.ConfigManag
 			if tryCountTokensSub2APIPassthroughMultiChannel(c, envCfg, cfgManager, channelScheduler, bodyBytes, userID, req.Model) {
 				return
 			}
-		} else if tryCountTokensSub2APIPassthroughSingleChannel(c, envCfg, cfgManager, channelScheduler, bodyBytes, req.Model) {
+		} else if tryCountTokensSub2APIPassthroughSingleChannel(c, envCfg, cfgManager, channelScheduler, bodyBytes, userID, req.Model) {
 			return
 		}
 

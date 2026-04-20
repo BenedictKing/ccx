@@ -199,6 +199,10 @@ func (u *UpstreamConfig) Clone() *UpstreamConfig {
 		v := *u.Sub2APIPassthroughEnabled
 		cloned.Sub2APIPassthroughEnabled = &v
 	}
+	if u.KeyAffinityEnabled != nil {
+		v := *u.KeyAffinityEnabled
+		cloned.KeyAffinityEnabled = &v
+	}
 	if u.StrictRequestPassthroughEnabled != nil {
 		v := *u.StrictRequestPassthroughEnabled
 		cloned.StrictRequestPassthroughEnabled = &v

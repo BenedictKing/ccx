@@ -206,6 +206,10 @@ func (cm *ConfigManager) UpdateChatUpstream(index int, updates UpstreamUpdate) (
 		v := *updates.Sub2APIPassthroughEnabled
 		upstream.Sub2APIPassthroughEnabled = &v
 	}
+	if updates.KeyAffinityEnabled != nil {
+		v := *updates.KeyAffinityEnabled
+		upstream.KeyAffinityEnabled = &v
+	}
 	if updates.StrictRequestPassthroughEnabled != nil {
 		v := *updates.StrictRequestPassthroughEnabled
 		upstream.StrictRequestPassthroughEnabled = &v

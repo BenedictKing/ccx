@@ -136,6 +136,7 @@ export interface Channel {
   normalizeMetadataUserId?: boolean
   streamPassthroughEnabled?: boolean
   sub2apiPassthroughEnabled?: boolean
+  keyAffinityEnabled?: boolean
   strictRequestPassthroughEnabled?: boolean
   modelsHealthCheckEnabled?: boolean
   modelsHealthCheckIntervalMinutes?: number

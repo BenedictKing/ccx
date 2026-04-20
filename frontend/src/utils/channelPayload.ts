@@ -25,6 +25,7 @@ export interface ChannelFormLike {
   normalizeMetadataUserId: boolean
   streamPassthroughEnabled: boolean
   sub2apiPassthroughEnabled: boolean
+  keyAffinityEnabled?: boolean
   strictRequestPassthroughEnabled: boolean
   modelsHealthCheckEnabled?: boolean
   modelsHealthCheckIntervalMinutes?: number
@@ -112,6 +113,7 @@ export function buildChannelPayload(form: ChannelFormLike): Omit<Channel, 'index
     normalizeMetadataUserId: form.normalizeMetadataUserId,
     streamPassthroughEnabled,
     sub2apiPassthroughEnabled,
+    keyAffinityEnabled: form.serviceType === 'claude' ? (form.keyAffinityEnabled ?? true) : !!form.keyAffinityEnabled,
     strictRequestPassthroughEnabled: form.serviceType === 'claude' ? form.strictRequestPassthroughEnabled : true,
     modelsHealthCheckEnabled,
     modelsHealthCheckIntervalMinutes,
