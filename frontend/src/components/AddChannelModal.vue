@@ -611,7 +611,7 @@
                       v-model="batchApiKeysInput"
                       label="批量添加 API 密钥"
                       placeholder="每行一个 key，或使用英文/中文逗号分隔"
-                      prepend-inner-icon="mdi-playlist-plus"
+                      prepend-inner-icon="mdi-key-plus"
                       variant="outlined"
                       density="comfortable"
                       rows="4"
