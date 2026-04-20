@@ -571,7 +571,14 @@
                   </div>
 
                   <!-- 添加新密钥 -->
-                  <div class="d-flex align-start ga-3">
+                  <div class="d-flex align-center justify-space-between mb-2">
+                    <div class="text-caption text-medium-emphasis">支持单条添加或批量粘贴</div>
+                    <v-btn size="small" variant="text" color="primary" @click="toggleBatchApiKeyMode">
+                      {{ batchApiKeyMode ? '单条添加' : '批量添加' }}
+                    </v-btn>
+                  </div>
+
+                  <div v-if="!batchApiKeyMode" class="d-flex align-start ga-3">
                     <v-text-field
                       v-model="newApiKey"
                       :label="t('addChannel.addNewApiKey')"
@@ -597,6 +604,37 @@
                     >
                       {{ t('app.actions.add') }}
                     </v-btn>
+                  </div>
+
+                  <div v-else class="d-flex flex-column ga-2">
+                    <v-textarea
+                      v-model="batchApiKeysInput"
+                      label="批量添加 API 密钥"
+                      placeholder="每行一个 key，或使用英文/中文逗号分隔"
+                      prepend-inner-icon="mdi-playlist-plus"
+                      variant="outlined"
+                      density="comfortable"
+                      rows="4"
+                      no-resize
+                      :error="!!apiKeyError"
+                      :error-messages="apiKeyError"
+                      @input="handleBatchApiKeyInput"
+                    />
+                    <div class="d-flex align-center justify-space-between ga-3">
+                      <div class="text-caption text-medium-emphasis">自动去重，空行会忽略。</div>
+                      <v-btn
+                        color="primary"
+                        variant="elevated"
+                        size="small"
+                        :disabled="!batchApiKeysInput.trim()"
+                        @click="addBatchApiKeys"
+                      >
+                        批量添加
+                      </v-btn>
+                    </div>
+                    <div v-if="batchApiKeyResultText" class="text-caption" :class="batchApiKeyResultClass">
+                      {{ batchApiKeyResultText }}
+                    </div>
                   </div>
 
                   <!-- 被拉黑的密钥（仅编辑模式） -->
@@ -1798,6 +1836,10 @@ const originalKeyMap = ref<Map<string, string>>(new Map())
 
 // 新API密钥输入
 const newApiKey = ref('')
+const batchApiKeysInput = ref('')
+const batchApiKeyMode = ref(false)
+const batchApiKeyResultText = ref('')
+const batchApiKeyResultType = ref<'success' | 'warning' | ''>('')
 
 // 密钥重复检测状态
 const apiKeyError = ref('')
@@ -1807,6 +1849,15 @@ const duplicateKeyIndex = ref(-1)
 const handleApiKeyInput = () => {
   apiKeyError.value = ''
   duplicateKeyIndex.value = -1
+  batchApiKeyResultText.value = ''
+  batchApiKeyResultType.value = ''
+}
+
+const handleBatchApiKeyInput = () => {
+  apiKeyError.value = ''
+  duplicateKeyIndex.value = -1
+  batchApiKeyResultText.value = ''
+  batchApiKeyResultType.value = ''
 }
 
 // 复制功能相关状态
@@ -2015,6 +2066,9 @@ const dialogMode = ref<'create' | 'edit'>('create')
 const isEditing = computed(() => dialogMode.value === 'edit')
 const hasDisabledKeysAvailable = computed(() => visibleDisabledKeys.value.length > 0)
 const hasConfigurableKeys = computed(() => form.apiKeys.length > 0 || (isEditing.value && hasDisabledKeysAvailable.value))
+const batchApiKeyResultClass = computed(() =>
+  batchApiKeyResultType.value === 'warning' ? 'text-warning' : 'text-success'
+)
 
 const commonSupportedModelFilters = ['claude-*', 'gpt-5*', 'grok-4*', 'gemini-3*']
 
@@ -2103,6 +2157,10 @@ const resetForm = () => {
   form.failoverRules = createDefaultClaudeFailoverRules()
   form.rpm = 10
   newApiKey.value = ''
+  batchApiKeysInput.value = ''
+  batchApiKeyMode.value = false
+  batchApiKeyResultText.value = ''
+  batchApiKeyResultType.value = ''
   newMapping.source = ''
   newMapping.target = ''
   sourceMappingError.value = ''
@@ -2207,6 +2265,10 @@ const loadChannelData = (channel: Channel) => {
   fetchModelsError.value = ''
   keyModelsStatus.value.clear()
   hasTriedFetchModels.value = false
+  batchApiKeysInput.value = ''
+  batchApiKeyMode.value = false
+  batchApiKeyResultText.value = ''
+  batchApiKeyResultType.value = ''
 }
 
 const addApiKey = () => {
@@ -2218,6 +2280,9 @@ const addApiKey = () => {
   duplicateKeyIndex.value = -1
 
   // 检查是否与现有密钥重复
+  apiKeyError.value = ''
+  batchApiKeyResultText.value = ''
+  batchApiKeyResultType.value = ''
   const duplicateIndex = findDuplicateKeyIndex(key)
   if (duplicateIndex !== -1) {
     apiKeyError.value = t('addChannel.duplicateKeyExists')
@@ -2237,12 +2302,75 @@ const findDuplicateKeyIndex = (newKey: string): number => {
   return form.apiKeys.findIndex(existingKey => existingKey === newKey)
 }
 
+const parseBatchApiKeys = (raw: string): string[] => {
+  return raw
+    .split(/\r?\n|,|，/)
+    .map(item => item.trim())
+    .filter(Boolean)
+}
+
+const toggleBatchApiKeyMode = () => {
+  batchApiKeyMode.value = !batchApiKeyMode.value
+  apiKeyError.value = ''
+  duplicateKeyIndex.value = -1
+  batchApiKeyResultText.value = ''
+  batchApiKeyResultType.value = ''
+}
+
+const addBatchApiKeys = () => {
+  const candidates = parseBatchApiKeys(batchApiKeysInput.value)
+  if (candidates.length === 0) {
+    return
+  }
+
+  apiKeyError.value = ''
+  duplicateKeyIndex.value = -1
+  batchApiKeyResultText.value = ''
+  batchApiKeyResultType.value = ''
+
+  let addedCount = 0
+  let skippedCount = 0
+
+  for (const key of candidates) {
+    const duplicateIndex = findDuplicateKeyIndex(key)
+    if (duplicateIndex !== -1) {
+      skippedCount++
+      if (duplicateKeyIndex.value === -1) {
+        duplicateKeyIndex.value = duplicateIndex
+      }
+      continue
+    }
+    form.apiKeys.push(key)
+    addedCount++
+  }
+
+  if (addedCount === 0) {
+    apiKeyError.value = t('addChannel.duplicateKeyExists')
+    batchApiKeyResultText.value = `未添加新密钥，已跳过 ${skippedCount} 个重复项。`
+    batchApiKeyResultType.value = 'warning'
+    return
+  }
+
+  batchApiKeysInput.value = ''
+
+  if (skippedCount > 0) {
+    batchApiKeyResultText.value = `已添加 ${addedCount} 个密钥，跳过 ${skippedCount} 个重复项。`
+    batchApiKeyResultType.value = 'warning'
+    return
+  }
+
+  batchApiKeyResultText.value = `已成功添加 ${addedCount} 个密钥。`
+  batchApiKeyResultType.value = 'success'
+}
+
 const removeApiKey = (index: number) => {
   form.apiKeys.splice(index, 1)
 
   // 如果删除的是当前高亮的重复密钥，清除高亮状态
   if (duplicateKeyIndex.value === index) {
     duplicateKeyIndex.value = -1
+    batchApiKeyResultText.value = ''
+    batchApiKeyResultType.value = ''
     apiKeyError.value = ''
   } else if (duplicateKeyIndex.value > index) {
     // 如果删除的密钥在高亮密钥之前，调整高亮索引
