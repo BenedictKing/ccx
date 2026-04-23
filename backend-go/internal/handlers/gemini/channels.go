@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
+	"github.com/BenedictKing/ccx/internal/handlers/common"
 	"github.com/BenedictKing/ccx/internal/httpclient"
 	"github.com/BenedictKing/ccx/internal/scheduler"
 	"github.com/BenedictKing/ccx/internal/utils"
@@ -54,6 +55,8 @@ func GetUpstreams(cfgManager *config.ConfigManager) gin.HandlerFunc {
 				"customHeaders":                    up.CustomHeaders,
 				"proxyUrl":                         up.ProxyURL,
 				"supportedModels":                  up.SupportedModels,
+				"modelsResponseMode":               up.GetModelsResponseMode(),
+				"manualModels":                     up.ManualModels,
 				"routePrefix":                      up.RoutePrefix,
 				"disabledApiKeys":                  up.DisabledAPIKeys,
 				"cooldownApiKeys":                  cfgManager.GetCooldownKeys("Gemini", i),
@@ -509,6 +512,8 @@ func GetChannelModels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 		var channelName string
 		var insecureSkipVerify bool
 		var proxyURL string
+		var manualModels []string
+		var useManualModels bool
 
 		if req.BaseURL != "" {
 			// 新增模式：使用临时 baseUrl
@@ -536,6 +541,19 @@ func GetChannelModels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 			channelName = channel.Name
 			insecureSkipVerify = channel.InsecureSkipVerify
 			proxyURL = channel.ProxyURL
+			useManualModels = channel.UsesManualModels()
+			manualModels = append([]string(nil), channel.ManualModels...)
+		}
+
+		if useManualModels {
+			body, err := common.MarshalManualModelsResponse(manualModels)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to build manual models response: %v", err)})
+				return
+			}
+			log.Printf("[Gemini-Models] 返回手工模型列表: channel=%s, count=%d", channelName, len(manualModels))
+			c.Data(http.StatusOK, "application/json", body)
+			return
 		}
 
 		// 4. 验证 API Key

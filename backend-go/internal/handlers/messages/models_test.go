@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/BenedictKing/ccx/internal/config"
@@ -61,6 +62,8 @@ func newModelsRouterForAggregate(envCfg *config.EnvConfig, cfgManager *config.Co
 	r := gin.New()
 	r.GET("/v1/models", ModelsHandler(envCfg, cfgManager, sch))
 	r.GET("/:routePrefix/v1/models", ModelsHandler(envCfg, cfgManager, sch))
+	r.GET("/v1/models/:model", ModelsDetailHandler(envCfg, cfgManager, sch))
+	r.GET("/:routePrefix/v1/models/:model", ModelsDetailHandler(envCfg, cfgManager, sch))
 	return r
 }
 
@@ -270,4 +273,65 @@ func TestModelsHandler_NoKeysStillFails(t *testing.T) {
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, body=%s", w.Code, w.Body.String())
 	}
+}
+
+func TestModelsHandler_ManualModelsWithoutAPIKey(t *testing.T) {
+	cfgManager := setupModelsConfigManager(t, config.Config{
+		Upstream: []config.UpstreamConfig{{
+			Name:               "messages-manual",
+			BaseURL:            "https://example.com",
+			ServiceType:        "claude",
+			ModelsResponseMode: "manual",
+			ManualModels:       []string{"glm-4.5", "glm-4.5", "glm-4-air"},
+		}},
+	})
+	sch := newModelsTestScheduler(cfgManager)
+	router := newModelsRouterForAggregate(&config.EnvConfig{ProxyAccessKey: "test-key"}, cfgManager, sch)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	req.Header.Set("Authorization", "Bearer test-key")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", w.Code, w.Body.String())
+	}
+	if body := w.Body.String(); !json.Valid([]byte(body)) || !containsAll(body, []string{"glm-4.5", "glm-4-air"}) {
+		t.Fatalf("unexpected body: %s", body)
+	}
+}
+
+func TestModelsDetailHandler_ManualModels(t *testing.T) {
+	cfgManager := setupModelsConfigManager(t, config.Config{
+		Upstream: []config.UpstreamConfig{{
+			Name:               "messages-manual-detail",
+			BaseURL:            "https://example.com",
+			ServiceType:        "claude",
+			ModelsResponseMode: "manual",
+			ManualModels:       []string{"glm-4.5"},
+		}},
+	})
+	sch := newModelsTestScheduler(cfgManager)
+	router := newModelsRouterForAggregate(&config.EnvConfig{ProxyAccessKey: "test-key"}, cfgManager, sch)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/models/glm-4.5", nil)
+	req.Header.Set("Authorization", "Bearer test-key")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", w.Code, w.Body.String())
+	}
+	if body := w.Body.String(); !containsAll(body, []string{`"id":"glm-4.5"`, `"object":"model"`}) {
+		t.Fatalf("unexpected body: %s", body)
+	}
+}
+
+func containsAll(body string, parts []string) bool {
+	for _, part := range parts {
+		if !strings.Contains(body, part) {
+			return false
+		}
+	}
+	return true
 }

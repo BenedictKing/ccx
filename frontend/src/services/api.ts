@@ -132,6 +132,8 @@ export interface Channel {
   customHeaders?: Record<string, string>  // 自定义请求头
   proxyUrl?: string                        // HTTP/HTTPS/SOCKS5 代理 URL
   routePrefix?: string                     // 路由前缀（如 "kimi"，访问 /kimi/v1/messages）
+  modelsResponseMode?: 'upstream' | 'manual'
+  manualModels?: string[]
   autoBlacklistBalance?: boolean
   normalizeMetadataUserId?: boolean
   streamPassthroughEnabled?: boolean

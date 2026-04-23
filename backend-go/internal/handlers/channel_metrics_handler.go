@@ -673,6 +673,8 @@ func GetChannelDashboard(cfgManager *config.ConfigManager, sch *scheduler.Channe
 				"customHeaders":                    up.CustomHeaders,
 				"proxyUrl":                         up.ProxyURL,
 				"supportedModels":                  up.SupportedModels,
+				"modelsResponseMode":               up.GetModelsResponseMode(),
+				"manualModels":                     up.ManualModels,
 				"routePrefix":                      up.RoutePrefix,
 				"disabledApiKeys":                  up.DisabledAPIKeys,
 				"cooldownApiKeys":                  cfgManager.GetCooldownKeys(apiType, i),

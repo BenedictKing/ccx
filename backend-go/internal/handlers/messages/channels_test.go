@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/BenedictKing/ccx/internal/config"
@@ -178,5 +179,23 @@ func TestGetChannelModels_InvalidBody(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("期望 400，实际 %d", w.Code)
+	}
+}
+
+func TestGetChannelModels_ManualModels(t *testing.T) {
+	cm := setupTestConfigManager(t, []config.UpstreamConfig{{
+		Name:               "manual-models",
+		BaseURL:            "https://example.com",
+		ModelsResponseMode: "manual",
+		ManualModels:       []string{"glm-4.5", "glm-4-air"},
+	}})
+	r := newModelsRouter(cm)
+
+	w := postModels(t, r, "0", GetModelsRequest{})
+	if w.Code != http.StatusOK {
+		t.Fatalf("期望 200，实际 %d, body=%s", w.Code, w.Body.String())
+	}
+	if body := w.Body.String(); !strings.Contains(body, "glm-4.5") || !strings.Contains(body, "glm-4-air") {
+		t.Fatalf("unexpected body: %s", body)
 	}
 }

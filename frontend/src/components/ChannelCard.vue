@@ -135,6 +135,21 @@
             sub2api {{ channel.sub2apiPassthroughEnabled ? '开启' : '关闭' }}
           </v-chip>
         </div>
+
+        <div class="d-flex flex-wrap ga-2 mt-2">
+          <v-chip
+            size="small"
+            :color="channel.modelsResponseMode === 'manual' ? 'warning' : 'default'"
+            variant="tonal"
+            density="comfortable"
+            rounded="pill"
+          >
+            <v-icon start size="14">
+              {{ channel.modelsResponseMode === 'manual' ? 'mdi-playlist-edit' : 'mdi-cloud-sync-outline' }}
+            </v-icon>
+            模型列表 {{ channel.modelsResponseMode === 'manual' ? '手工返回' : '上游拉取' }}
+          </v-chip>
+        </div>
       </div>
 
       <!-- 状态和延迟（右对齐、间距更紧凑） -->

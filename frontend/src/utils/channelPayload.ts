@@ -21,6 +21,8 @@ export interface ChannelFormLike {
   proxyUrl: string
   routePrefix: string
   supportedModels: string[]
+  modelsResponseMode?: 'upstream' | 'manual'
+  manualModels?: string[]
   autoBlacklistBalance: boolean
   normalizeMetadataUserId: boolean
   streamPassthroughEnabled: boolean
@@ -57,6 +59,8 @@ export function buildChannelPayload(form: ChannelFormLike): Omit<Channel, 'index
   const modelsHealthCheckIntervalMinutes = form.modelsHealthCheckIntervalMinutes && form.modelsHealthCheckIntervalMinutes > 0
     ? Math.floor(form.modelsHealthCheckIntervalMinutes)
     : 60
+  const modelsResponseMode = form.modelsResponseMode === 'manual' ? 'manual' : 'upstream'
+  const manualModels = (form.manualModels || []).map(model => model.trim()).filter(Boolean)
 
   const processedApiKeys = form.apiKeys.filter(key => key.trim())
   const normalizedFailoverRules = (form.serviceType === 'claude' ? (form.failoverRules || []) : [])
@@ -109,6 +113,8 @@ export function buildChannelPayload(form: ChannelFormLike): Omit<Channel, 'index
     proxyUrl: form.proxyUrl.trim(),
     routePrefix: form.routePrefix.trim(),
     supportedModels: form.supportedModels,
+    modelsResponseMode,
+    manualModels,
     autoBlacklistBalance: form.autoBlacklistBalance,
     normalizeMetadataUserId: form.normalizeMetadataUserId,
     streamPassthroughEnabled,

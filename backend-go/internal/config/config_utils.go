@@ -179,6 +179,10 @@ func (u *UpstreamConfig) Clone() *UpstreamConfig {
 		cloned.SupportedModels = make([]string, len(u.SupportedModels))
 		copy(cloned.SupportedModels, u.SupportedModels)
 	}
+	if u.ManualModels != nil {
+		cloned.ManualModels = make([]string, len(u.ManualModels))
+		copy(cloned.ManualModels, u.ManualModels)
+	}
 	if u.DisabledAPIKeys != nil {
 		cloned.DisabledAPIKeys = make([]DisabledKeyInfo, len(u.DisabledAPIKeys))
 		copy(cloned.DisabledAPIKeys, u.DisabledAPIKeys)

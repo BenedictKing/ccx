@@ -403,6 +403,39 @@
               </div>
             </v-col>
 
+            <v-col cols="12">
+              <v-card variant="outlined" rounded="lg">
+                <v-card-title class="section-card-title d-flex align-center ga-2">
+                  <v-icon size="small" color="primary" icon="mdi-format-list-bulleted" />
+                  模型列表返回
+                </v-card-title>
+                <v-card-text>
+                  <div class="text-caption text-medium-emphasis mb-3">
+                    仅控制 <code>/v1/models</code> 与管理页模型列表查询，不影响 Claude 的消息透传开关。
+                  </div>
+                  <v-radio-group v-model="form.modelsResponseMode" inline hide-details class="mb-4">
+                    <v-radio label="上游拉取" value="upstream" />
+                    <v-radio label="手工返回" value="manual" />
+                  </v-radio-group>
+                  <v-combobox
+                    v-model="form.manualModels"
+                    label="手工模型列表"
+                    placeholder="输入模型名称后按回车添加，如 glm-4.5、claude-sonnet-4-6"
+                    prepend-inner-icon="mdi-playlist-edit"
+                    hint="仅在“手工返回”模式下生效；会直接作为该渠道的 /v1/models 返回值。"
+                    persistent-hint
+                    clearable
+                    multiple
+                    chips
+                    closable-chips
+                    variant="outlined"
+                    density="comfortable"
+                    :disabled="form.modelsResponseMode !== 'manual'"
+                  />
+                </v-card-text>
+              </v-card>
+            </v-col>
+
             <!-- API密钥管理 -->
             <v-col cols="12">
               <v-card variant="outlined" rounded="lg" :color="hasConfigurableKeys ? undefined : 'error'">
@@ -1798,6 +1831,8 @@ const form = reactive({
   proxyUrl: '',
   routePrefix: '',
   supportedModels: [] as string[],
+  modelsResponseMode: 'upstream' as 'upstream' | 'manual',
+  manualModels: [] as string[],
   autoBlacklistBalance: true,
   normalizeMetadataUserId: true,
   keyAffinityEnabled: true,
@@ -2146,6 +2181,8 @@ const resetForm = () => {
   form.proxyUrl = ''
   form.routePrefix = ''
   form.supportedModels = []
+  form.modelsResponseMode = 'upstream'
+  form.manualModels = []
   form.autoBlacklistBalance = true
   form.normalizeMetadataUserId = true
   form.keyAffinityEnabled = true
@@ -2230,6 +2267,8 @@ const loadChannelData = (channel: Channel) => {
   form.proxyUrl = channel.proxyUrl || ''
   form.routePrefix = channel.routePrefix || ''
   form.supportedModels = channel.supportedModels || []
+  form.modelsResponseMode = channel.modelsResponseMode === 'manual' ? 'manual' : 'upstream'
+  form.manualModels = channel.manualModels || []
   form.autoBlacklistBalance = channel.autoBlacklistBalance ?? true
   form.normalizeMetadataUserId = channel.normalizeMetadataUserId ?? true
   form.keyAffinityEnabled = channel.keyAffinityEnabled ?? (channel.serviceType === 'claude')

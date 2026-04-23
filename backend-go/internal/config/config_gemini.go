@@ -74,6 +74,7 @@ func (cm *ConfigManager) AddGeminiUpstream(upstream UpstreamConfig) error {
 	upstream.BaseURLs = deduplicateBaseURLs(upstream.BaseURLs)
 	upstream.NormalizeClaudePassthroughMode()
 	upstream.NormalizeModelsHealthCheckOptions()
+	upstream.NormalizeModelsResponseMode()
 
 	cm.config.GeminiUpstream = append(cm.config.GeminiUpstream, upstream)
 
@@ -250,11 +251,18 @@ func (cm *ConfigManager) UpdateGeminiUpstream(index int, updates UpstreamUpdate)
 	if updates.SupportedModels != nil {
 		upstream.SupportedModels = updates.SupportedModels
 	}
+	if updates.ModelsResponseMode != nil {
+		upstream.ModelsResponseMode = *updates.ModelsResponseMode
+	}
+	if updates.ManualModels != nil {
+		upstream.ManualModels = updates.ManualModels
+	}
 	if updates.RoutePrefix != nil {
 		upstream.RoutePrefix = *updates.RoutePrefix
 	}
 	upstream.NormalizeClaudePassthroughMode()
 	upstream.NormalizeModelsHealthCheckOptions()
+	upstream.NormalizeModelsResponseMode()
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
 		return false, err

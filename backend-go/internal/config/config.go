@@ -52,6 +52,9 @@ type UpstreamConfig struct {
 	ProxyURL string `json:"proxyUrl,omitempty"` // HTTP/HTTPS/SOCKS5 代理地址
 	// 模型白名单
 	SupportedModels []string `json:"supportedModels,omitempty"` // 支持的模型白名单（空=全部），支持通配符如 gpt-4*
+	// /v1/models 返回模式
+	ModelsResponseMode string   `json:"modelsResponseMode,omitempty"` // upstream=请求上游；manual=返回手工模型列表
+	ManualModels       []string `json:"manualModels,omitempty"`       // 手工维护的模型列表，仅在 modelsResponseMode=manual 时生效
 	// 路由前缀
 	RoutePrefix string `json:"routePrefix,omitempty"` // 路由前缀（如 "kimi"），客户端可通过 /:routePrefix/v1/messages 访问
 	// Claude 流式转发模式：true=直接透传，false=走本地流事件处理链
@@ -154,6 +157,43 @@ func (u *UpstreamConfig) NormalizeClaudePassthroughMode() {
 		disabled := false
 		u.StreamPassthroughEnabled = &disabled
 	}
+}
+
+func (u *UpstreamConfig) GetModelsResponseMode() string {
+	if u == nil {
+		return "upstream"
+	}
+	if strings.EqualFold(strings.TrimSpace(u.ModelsResponseMode), "manual") {
+		return "manual"
+	}
+	return "upstream"
+}
+
+func (u *UpstreamConfig) UsesManualModels() bool {
+	return u.GetModelsResponseMode() == "manual"
+}
+
+func (u *UpstreamConfig) NormalizeModelsResponseMode() {
+	if u == nil {
+		return
+	}
+
+	u.ModelsResponseMode = u.GetModelsResponseMode()
+
+	normalized := make([]string, 0, len(u.ManualModels))
+	seen := make(map[string]struct{}, len(u.ManualModels))
+	for _, model := range u.ManualModels {
+		modelID := strings.TrimSpace(model)
+		if modelID == "" {
+			continue
+		}
+		if _, ok := seen[modelID]; ok {
+			continue
+		}
+		seen[modelID] = struct{}{}
+		normalized = append(normalized, modelID)
+	}
+	u.ManualModels = normalized
 }
 
 // IsStrictRequestPassthroughEnabled 检查是否启用严格请求透传（默认 true）
@@ -331,6 +371,9 @@ type UpstreamUpdate struct {
 	ProxyURL *string `json:"proxyUrl"`
 	// 模型白名单
 	SupportedModels []string `json:"supportedModels"` // 支持的模型白名单（空=全部），支持通配符如 gpt-4*
+	// /v1/models 返回模式
+	ModelsResponseMode *string  `json:"modelsResponseMode"`
+	ManualModels       []string `json:"manualModels"`
 	// 路由前缀
 	RoutePrefix *string `json:"routePrefix"` // 路由前缀（如 "kimi"）
 }

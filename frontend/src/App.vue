@@ -959,6 +959,8 @@ const handleCopyToTab = async (targetProtocol: string) => {
     injectDummyThoughtSignature: sourceChannel.injectDummyThoughtSignature,
     stripThoughtSignature: sourceChannel.stripThoughtSignature,
     supportedModels: sourceChannel.supportedModels,
+    modelsResponseMode: sourceChannel.modelsResponseMode,
+    manualModels: sourceChannel.manualModels,
     rpm: sourceChannel.rpm ?? 10,
   }
 
