@@ -413,16 +413,26 @@
                   <div class="text-caption text-medium-emphasis mb-3">
                     仅控制 <code>/v1/models</code> 与管理页模型列表查询，不影响 Claude 的消息透传开关。
                   </div>
-                  <v-radio-group v-model="form.modelsResponseMode" inline hide-details class="mb-4">
-                    <v-radio label="上游拉取" value="upstream" />
-                    <v-radio label="手工返回" value="manual" />
-                  </v-radio-group>
+                  <v-select
+                    v-model="form.modelsResponseMode"
+                    class="mb-4"
+                    label="返回方式"
+                    :items="[
+                      { title: '上游拉取', value: 'upstream' },
+                      { title: '手工返回', value: 'manual' }
+                    ]"
+                    variant="outlined"
+                    density="comfortable"
+                    hide-details
+                  />
                   <v-combobox
                     v-model="form.manualModels"
                     label="手工模型列表"
                     placeholder="输入模型名称后按回车添加，如 glm-4.5、claude-sonnet-4-6"
-                    prepend-inner-icon="mdi-playlist-edit"
-                    hint="仅在“手工返回”模式下生效；会直接作为该渠道的 /v1/models 返回值。"
+                    prepend-inner-icon="mdi-format-list-bulleted"
+                    :hint="form.modelsResponseMode === 'manual'
+                      ? '当前为手工返回模式；这里的列表会直接作为该渠道的 /v1/models 返回值。'
+                      : '当前为上游拉取模式；你也可以先维护列表，切换到手工返回后立即生效。'"
                     persistent-hint
                     clearable
                     multiple
@@ -430,7 +440,6 @@
                     closable-chips
                     variant="outlined"
                     density="comfortable"
-                    :disabled="form.modelsResponseMode !== 'manual'"
                   />
                 </v-card-text>
               </v-card>

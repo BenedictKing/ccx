@@ -145,7 +145,7 @@
             rounded="pill"
           >
             <v-icon start size="14">
-              {{ channel.modelsResponseMode === 'manual' ? 'mdi-playlist-edit' : 'mdi-cloud-sync-outline' }}
+              {{ channel.modelsResponseMode === 'manual' ? 'mdi-format-list-bulleted' : 'mdi-cloud-sync-outline' }}
             </v-icon>
             模型列表 {{ channel.modelsResponseMode === 'manual' ? '手工返回' : '上游拉取' }}
           </v-chip>
