@@ -2044,6 +2044,16 @@ interface KeyModelsStatus {
   modelCount?: number
 }
 const keyModelsStatus = ref<Map<string, KeyModelsStatus>>(new Map())
+let activeTargetModelFetchRequestId = 0
+
+const resetTargetModelFetchState = () => {
+  activeTargetModelFetchRequestId += 1
+  targetModelOptions.value = []
+  fetchingModels.value = false
+  fetchModelsError.value = ''
+  keyModelsStatus.value.clear()
+  hasTriedFetchModels.value = false
+}
 
 const restoreDisabledKeyLabelMap = {
   insufficient_balance: 'channelCard.blacklistReason.insufficient_balance',
@@ -2224,11 +2234,7 @@ const resetForm = () => {
   duplicateKeyIndex.value = -1
 
   // 清空模型缓存和状态
-  targetModelOptions.value = []
-  fetchingModels.value = false
-  fetchModelsError.value = ''
-  keyModelsStatus.value.clear()
-  hasTriedFetchModels.value = false
+  resetTargetModelFetchState()
 
   // 清除错误信息
   errors.name = ''
@@ -2308,11 +2314,7 @@ const loadChannelData = (channel: Channel) => {
   newMapping.target = ''
 
   // 清空模型缓存和状态（切换渠道时重置）
-  targetModelOptions.value = []
-  fetchingModels.value = false
-  fetchModelsError.value = ''
-  keyModelsStatus.value.clear()
-  hasTriedFetchModels.value = false
+  resetTargetModelFetchState()
   batchApiKeysInput.value = ''
   batchApiKeyMode.value = false
   batchApiKeyResultText.value = ''
@@ -2616,6 +2618,8 @@ const fetchTargetModels = async () => {
     return
   }
 
+  const requestId = activeTargetModelFetchRequestId + 1
+  activeTargetModelFetchRequestId = requestId
   fetchingModels.value = true
   fetchModelsError.value = ''
 
@@ -2660,6 +2664,10 @@ const fetchTargetModels = async () => {
           break
       }
 
+      if (activeTargetModelFetchRequestId !== requestId) {
+        return [] as { id: string }[]
+      }
+
       keyModelsStatus.value.set(apiKey, {
         loading: false,
         success: true,
@@ -2676,6 +2684,11 @@ const fetchTargetModels = async () => {
       } else if (error instanceof Error) {
         errorMsg = error.message
       }
+
+      if (activeTargetModelFetchRequestId !== requestId) {
+        return [] as { id: string }[]
+      }
+
       keyModelsStatus.value.set(apiKey, {
         loading: false,
         success: false,
@@ -2688,6 +2701,10 @@ const fetchTargetModels = async () => {
 
   try {
     const results = await Promise.all(keyPromises)
+
+    if (activeTargetModelFetchRequestId !== requestId) {
+      return
+    }
 
     // 合并所有成功 key 的模型列表（去重）
     const allModels = new Set<string>(targetModelOptions.value.map(opt => opt.value))
@@ -2704,7 +2721,9 @@ const fetchTargetModels = async () => {
       fetchModelsError.value = t('addChannel.allApiKeysModelsFailed')
     }
   } finally {
-    fetchingModels.value = false
+    if (activeTargetModelFetchRequestId === requestId) {
+      fetchingModels.value = false
+    }
   }
 }
 
@@ -2792,6 +2811,19 @@ watch(
       isQuickMode.value = true
       resetForm()
     }
+  }
+)
+
+watch(
+  () => [form.serviceType, form.baseUrl] as const,
+  (next, prev) => {
+    if (!prev) {
+      return
+    }
+    if (next[0] === prev[0] && next[1] === prev[1]) {
+      return
+    }
+    resetTargetModelFetchState()
   }
 )
 

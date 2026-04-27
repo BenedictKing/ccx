@@ -85,3 +85,34 @@ func TestGetUpstreams_IncludesAdvancedOptionFields(t *testing.T) {
 		t.Fatalf("reasoningMapping = %#v, want gpt-5=xhigh", ch["reasoningMapping"])
 	}
 }
+
+func TestMoveApiKeyRoutes_RejectInvalidID(t *testing.T) {
+	cm := setupChatConfigManager(t, []config.UpstreamConfig{{
+		Name:    "chat-ch",
+		BaseURL: "https://api.example.com",
+		APIKeys: []string{"sk-1", "sk-2"},
+	}})
+
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.POST("/chat/channels/:id/api-keys/:apiKey/move-top", MoveApiKeyToTop(cm))
+	r.POST("/chat/channels/:id/api-keys/:apiKey/move-bottom", MoveApiKeyToBottom(cm))
+
+	for _, tc := range []struct {
+		name string
+		path string
+	}{
+		{name: "move_top", path: "/chat/channels/not-a-number/api-keys/sk-2/move-top"},
+		{name: "move_bottom", path: "/chat/channels/not-a-number/api-keys/sk-1/move-bottom"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, tc.path, nil)
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+			}
+		})
+	}
+}

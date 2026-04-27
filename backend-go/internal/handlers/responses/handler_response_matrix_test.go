@@ -70,6 +70,24 @@ func performResponsesHandlerRequest(t *testing.T, router *gin.Engine, body strin
 	return w
 }
 
+func TestResponsesHandler_InvalidJSONReturns400(t *testing.T) {
+	sessionManager := session.NewSessionManager(time.Hour, 100, 100000)
+	router := newResponsesTestRouter(t, config.UpstreamConfig{
+		Name:        "responses-upstream",
+		ServiceType: "responses",
+		BaseURL:     "https://api.example.com",
+		APIKeys:     []string{"sk-test"},
+	}, sessionManager)
+
+	w := performResponsesHandlerRequest(t, router, `{"model":"gpt-5","input":[`)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+	if got := w.Body.String(); !bytes.Contains([]byte(got), []byte("Invalid request body")) {
+		t.Fatalf("body = %s, want invalid request body error", got)
+	}
+}
+
 func TestResponsesHandler_NonStreamMatrix_AllFourUpstreams(t *testing.T) {
 	sessionManager := session.NewSessionManager(time.Hour, 100, 100000)
 

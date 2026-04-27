@@ -54,7 +54,10 @@ func Handler(
 		// 解析 Responses 请求
 		var responsesReq types.ResponsesRequest
 		if len(bodyBytes) > 0 {
-			_ = json.Unmarshal(bodyBytes, &responsesReq)
+			if err := json.Unmarshal(bodyBytes, &responsesReq); err != nil {
+				c.JSON(400, gin.H{"error": fmt.Sprintf("Invalid request body: %v", err)})
+				return
+			}
 		}
 
 		// 提取统一会话标识用于 Trace 亲和性（保持 metadata.user_id 默认规范化后的既有路由语义）

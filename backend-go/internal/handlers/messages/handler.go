@@ -60,7 +60,10 @@ func Handler(envCfg *config.EnvConfig, cfgManager *config.ConfigManager, channel
 		// 解析请求
 		var claudeReq types.ClaudeRequest
 		if len(bodyBytes) > 0 {
-			_ = json.Unmarshal(bodyBytes, &claudeReq)
+			if err := json.Unmarshal(bodyBytes, &claudeReq); err != nil {
+				c.JSON(400, gin.H{"error": fmt.Sprintf("Invalid request body: %v", err)})
+				return
+			}
 		}
 
 		// 提取 user_id 用于 Trace 亲和性

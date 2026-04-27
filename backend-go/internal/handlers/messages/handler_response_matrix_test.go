@@ -68,6 +68,23 @@ func performMessagesHandlerRequest(t *testing.T, router *gin.Engine, body string
 	return w
 }
 
+func TestMessagesHandler_InvalidJSONReturns400(t *testing.T) {
+	router := newMessagesTestRouter(t, config.UpstreamConfig{
+		Name:        "messages-upstream",
+		ServiceType: "claude",
+		BaseURL:     "https://api.example.com",
+		APIKeys:     []string{"sk-test"},
+	})
+
+	w := performMessagesHandlerRequest(t, router, `{"model":"claude-3-7-sonnet","messages":[`)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+	if got := w.Body.String(); !bytes.Contains([]byte(got), []byte("Invalid request body")) {
+		t.Fatalf("body = %s, want invalid request body error", got)
+	}
+}
+
 func TestMessagesHandler_NonStreamMatrix_AllFourUpstreams(t *testing.T) {
 	tests := []struct {
 		name              string
