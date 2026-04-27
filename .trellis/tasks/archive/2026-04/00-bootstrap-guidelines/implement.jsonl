@@ -1,0 +1,6 @@
+{"file": "CLAUDE.md", "reason": "repo coding conventions and architecture summary"}
+e": ".trellis/spec/backend/index.md", "reason": "Backend development guide"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend development guide"}
+{"file": "frontend/CLAUDE.md", "reason": "frontend module conventions and Vuetify/icon rules"}
+{"file": "backend-go/CLAUDE.md", "reason": "backend module conventions and logging rules"}
+{"file": "AGENTS.md", "reason": "project-level agent constraints and response language"}
