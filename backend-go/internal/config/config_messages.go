@@ -9,10 +9,34 @@ import (
 	"github.com/BenedictKing/ccx/internal/utils"
 )
 
+func firstActiveUpstreamIndex(upstreams []UpstreamConfig) int {
+	for i := range upstreams {
+		status := upstreams[i].Status
+		if status == "" || status == "active" {
+			return i
+		}
+	}
+
+	return -1
+}
+
+func validateUniqueUpstreamName(upstreams []UpstreamConfig, excludeIndex int, name string) error {
+	for i := range upstreams {
+		if i == excludeIndex {
+			continue
+		}
+		if upstreams[i].Name == name {
+			return fmt.Errorf("渠道名称 '%s' 已存在", name)
+		}
+	}
+
+	return nil
+}
+
 // ============== Messages 渠道方法 ==============
 
 // GetCurrentUpstream 获取当前上游配置
-// 优先选择第一个 active 状态的渠道，若无则回退到第一个渠道
+// 优先选择第一个 active 状态的渠道，若无则返回显式错误
 func (cm *ConfigManager) GetCurrentUpstream() (*UpstreamConfig, error) {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
@@ -21,16 +45,12 @@ func (cm *ConfigManager) GetCurrentUpstream() (*UpstreamConfig, error) {
 		return nil, fmt.Errorf("未配置任何上游渠道")
 	}
 
-	// 优先选择第一个 active 状态的渠道
-	for i := range cm.config.Upstream {
-		status := cm.config.Upstream[i].Status
-		if status == "" || status == "active" {
-			return &cm.config.Upstream[i], nil
-		}
+	activeIndex := firstActiveUpstreamIndex(cm.config.Upstream)
+	if activeIndex < 0 {
+		return nil, fmt.Errorf("没有可用的 active 上游渠道")
 	}
 
-	// 没有 active 渠道，回退到第一个渠道
-	return &cm.config.Upstream[0], nil
+	return &cm.config.Upstream[activeIndex], nil
 }
 
 // GetCurrentUpstreamWithIndex 获取当前上游配置及其索引
@@ -42,14 +62,12 @@ func (cm *ConfigManager) GetCurrentUpstreamWithIndex() (*UpstreamConfig, int, er
 		return nil, 0, fmt.Errorf("未配置任何上游渠道")
 	}
 
-	for i := range cm.config.Upstream {
-		status := cm.config.Upstream[i].Status
-		if status == "" || status == "active" {
-			return &cm.config.Upstream[i], i, nil
-		}
+	activeIndex := firstActiveUpstreamIndex(cm.config.Upstream)
+	if activeIndex < 0 {
+		return nil, -1, fmt.Errorf("没有可用的 active 上游渠道")
 	}
 
-	return &cm.config.Upstream[0], 0, nil
+	return &cm.config.Upstream[activeIndex], activeIndex, nil
 }
 
 // AddUpstream 添加上游
@@ -99,6 +117,9 @@ func (cm *ConfigManager) UpdateUpstream(index int, updates UpstreamUpdate) (shou
 	upstream := &cm.config.Upstream[index]
 
 	if updates.Name != nil {
+		if err := validateUniqueUpstreamName(cm.config.Upstream, index, *updates.Name); err != nil {
+			return false, err
+		}
 		upstream.Name = *updates.Name
 	}
 	if updates.BaseURL != nil {

@@ -7,6 +7,7 @@ const CACHE_KEY = 'ccx-version-info'
 const CACHE_DURATION = 30 * 60 * 1000 // 30分钟缓存
 const ERROR_CACHE_DURATION = 5 * 60 * 1000 // 错误状态缓存5分钟，避免频繁请求
 const GITHUB_API_TIMEOUT = 10000 // 10秒超时
+const SEMVER_PATTERN = /^v?(?<major>0|[1-9]\d*)(?:\.(?<minor>0|[1-9]\d*))?(?:\.(?<patch>0|[1-9]\d*))?(?:-(?<prerelease>[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+(?<build>[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/
 
 export interface GitHubRelease {
   tag_name: string
@@ -28,6 +29,115 @@ export interface VersionInfo {
 
 // 预发布版本标识正则（如 -rc1, -beta, -alpha 等）
 const PRERELEASE_PATTERN = /-(alpha|beta|rc|dev|pre|canary|nightly)/i
+
+interface ParsedSemver {
+  major: number
+  minor: number
+  patch: number
+  prerelease: string[]
+}
+
+function createTimeoutError(timeoutMs: number): Error {
+  const error = new Error(`Request timed out after ${timeoutMs}ms`)
+  error.name = 'TimeoutError'
+  return error
+}
+
+function createTimeoutSignal(timeoutMs: number): AbortSignal {
+  if (typeof AbortSignal.timeout === 'function') {
+    return AbortSignal.timeout(timeoutMs)
+  }
+
+  const controller = new AbortController()
+  setTimeout(() => controller.abort(createTimeoutError(timeoutMs)), timeoutMs)
+  return controller.signal
+}
+
+function parseSemver(version: string): ParsedSemver | null {
+  const match = version.trim().match(SEMVER_PATTERN)
+  if (!match?.groups) {
+    return null
+  }
+
+  return {
+    major: Number(match.groups.major),
+    minor: Number(match.groups.minor ?? '0'),
+    patch: Number(match.groups.patch ?? '0'),
+    prerelease: match.groups.prerelease?.split('.') ?? []
+  }
+}
+
+function comparePrereleaseIdentifiers(current: string, latest: string): number {
+  const currentIsNumeric = /^\d+$/.test(current)
+  const latestIsNumeric = /^\d+$/.test(latest)
+
+  if (currentIsNumeric && latestIsNumeric) {
+    const currentNumber = Number(current)
+    const latestNumber = Number(latest)
+    if (currentNumber < latestNumber) return -1
+    if (currentNumber > latestNumber) return 1
+    return 0
+  }
+
+  if (currentIsNumeric) return -1
+  if (latestIsNumeric) return 1
+
+  if (current < latest) return -1
+  if (current > latest) return 1
+  return 0
+}
+
+export function compareSemverVersions(current: string, latest: string): number {
+  const currentVersion = parseSemver(current)
+  const latestVersion = parseSemver(latest)
+
+  if (!currentVersion || !latestVersion) {
+    const normalizedCurrent = current.trim()
+    const normalizedLatest = latest.trim()
+    if (normalizedCurrent < normalizedLatest) return -1
+    if (normalizedCurrent > normalizedLatest) return 1
+    return 0
+  }
+
+  if (currentVersion.major !== latestVersion.major) {
+    return currentVersion.major < latestVersion.major ? -1 : 1
+  }
+  if (currentVersion.minor !== latestVersion.minor) {
+    return currentVersion.minor < latestVersion.minor ? -1 : 1
+  }
+  if (currentVersion.patch !== latestVersion.patch) {
+    return currentVersion.patch < latestVersion.patch ? -1 : 1
+  }
+
+  const currentPrerelease = currentVersion.prerelease
+  const latestPrerelease = latestVersion.prerelease
+
+  if (currentPrerelease.length === 0 && latestPrerelease.length === 0) {
+    return 0
+  }
+  if (currentPrerelease.length === 0) {
+    return 1
+  }
+  if (latestPrerelease.length === 0) {
+    return -1
+  }
+
+  const maxLength = Math.max(currentPrerelease.length, latestPrerelease.length)
+  for (let index = 0; index < maxLength; index++) {
+    const currentIdentifier = currentPrerelease[index]
+    const latestIdentifier = latestPrerelease[index]
+
+    if (currentIdentifier === undefined) return -1
+    if (latestIdentifier === undefined) return 1
+
+    const comparison = comparePrereleaseIdentifiers(currentIdentifier, latestIdentifier)
+    if (comparison !== 0) {
+      return comparison
+    }
+  }
+
+  return 0
+}
 
 class VersionService {
   private currentVersion: string = ''
@@ -113,23 +223,7 @@ class VersionService {
    * @returns -1: current < latest (有更新), 0: 相等, 1: current > latest
    */
   private compareVersions(current: string, latest: string): number {
-    // 移除 'v' 前缀，按 '.' 分割成数组
-    const currentParts = current.replace(/^v/, '').split('.').map(Number)
-    const latestParts = latest.replace(/^v/, '').split('.').map(Number)
-
-    // 遍历每一位版本号
-    for (let i = 0; i < Math.max(currentParts.length, latestParts.length); i++) {
-      const currentPart = currentParts[i] || 0
-      const latestPart = latestParts[i] || 0
-
-      if (currentPart < latestPart) {
-        return -1 // 当前版本更低
-      }
-      if (currentPart > latestPart) {
-        return 1 // 当前版本更高
-      }
-    }
-    return 0 // 版本相同
+    return compareSemverVersions(current, latest)
   }
 
   /**
@@ -137,9 +231,6 @@ class VersionService {
    */
   private async fetchLatestVersion(): Promise<GitHubRelease | null> {
     try {
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), GITHUB_API_TIMEOUT)
-
       // 使用 /releases 端点获取最近的发布列表，然后过滤出第一个正式版本
       const response = await fetch(
         'https://api.github.com/repos/BenedictKing/ccx/releases?per_page=10',
@@ -147,11 +238,9 @@ class VersionService {
           headers: {
             Accept: 'application/vnd.github.v3+json',
           },
-          signal: controller.signal,
+          signal: createTimeoutSignal(GITHUB_API_TIMEOUT),
         }
       )
-
-      clearTimeout(timeoutId)
 
       if (response.status === 200) {
         const releases: GitHubRelease[] = await response.json()

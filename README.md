@@ -158,8 +158,8 @@ Frontend only:
 
 ```bash
 cd frontend
-npm install
-npm run dev
+bun install
+bun run dev
 ```
 
 Backend only:

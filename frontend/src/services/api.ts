@@ -35,6 +35,57 @@ const getApiBase = () => {
 }
 
 const API_BASE = getApiBase()
+export const API_REQUEST_TIMEOUT_MS = 10000
+
+function createTimeoutError(timeoutMs: number): Error {
+  const error = new Error(`Request timed out after ${timeoutMs}ms`)
+  error.name = 'TimeoutError'
+  return error
+}
+
+function createTimeoutSignal(timeoutMs: number): AbortSignal {
+  if (typeof AbortSignal.timeout === 'function') {
+    return AbortSignal.timeout(timeoutMs)
+  }
+
+  const controller = new AbortController()
+  setTimeout(() => controller.abort(createTimeoutError(timeoutMs)), timeoutMs)
+  return controller.signal
+}
+
+function mergeRequestSignals(signal?: AbortSignal | null, timeoutMs: number = API_REQUEST_TIMEOUT_MS): AbortSignal {
+  const timeoutSignal = createTimeoutSignal(timeoutMs)
+  if (!signal) {
+    return timeoutSignal
+  }
+
+  if (typeof AbortSignal.any === 'function') {
+    return AbortSignal.any([signal, timeoutSignal])
+  }
+
+  const controller = new AbortController()
+  const abort = (source: AbortSignal) => {
+    controller.abort(source.reason)
+    signal.removeEventListener('abort', abortFromSignal)
+    timeoutSignal.removeEventListener('abort', abortFromTimeout)
+  }
+  const abortFromSignal = () => abort(signal)
+  const abortFromTimeout = () => abort(timeoutSignal)
+
+  if (signal.aborted) {
+    abort(signal)
+    return controller.signal
+  }
+
+  if (timeoutSignal.aborted) {
+    abort(timeoutSignal)
+    return controller.signal
+  }
+
+  signal.addEventListener('abort', abortFromSignal, { once: true })
+  timeoutSignal.addEventListener('abort', abortFromTimeout, { once: true })
+  return controller.signal
+}
 
 // 打印当前API配置（仅开发环境）
 if (import.meta.env.DEV) {
@@ -535,7 +586,7 @@ export async function fetchUpstreamModels(
     headers: {
       'Authorization': `Bearer ${apiKey}`
     },
-    signal: AbortSignal.timeout(10000) // 10秒超时
+    signal: createTimeoutSignal(API_REQUEST_TIMEOUT_MS)
   })
 
   if (!response.ok) {
@@ -602,7 +653,8 @@ export class ApiService {
 
     const response = await fetch(`${API_BASE}${url}`, {
       ...options,
-      headers
+      headers,
+      signal: mergeRequestSignals(options.signal)
     })
 
     if (!response.ok) {

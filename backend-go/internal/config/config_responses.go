@@ -12,7 +12,7 @@ import (
 // ============== Responses 渠道方法 ==============
 
 // GetCurrentResponsesUpstream 获取当前 Responses 上游配置
-// 优先选择第一个 active 状态的渠道，若无则回退到第一个渠道
+// 优先选择第一个 active 状态的渠道，若无则返回显式错误
 func (cm *ConfigManager) GetCurrentResponsesUpstream() (*UpstreamConfig, error) {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
@@ -21,16 +21,12 @@ func (cm *ConfigManager) GetCurrentResponsesUpstream() (*UpstreamConfig, error) 
 		return nil, fmt.Errorf("未配置任何 Responses 渠道")
 	}
 
-	// 优先选择第一个 active 状态的渠道
-	for i := range cm.config.ResponsesUpstream {
-		status := cm.config.ResponsesUpstream[i].Status
-		if status == "" || status == "active" {
-			return &cm.config.ResponsesUpstream[i], nil
-		}
+	activeIndex := firstActiveUpstreamIndex(cm.config.ResponsesUpstream)
+	if activeIndex < 0 {
+		return nil, fmt.Errorf("没有可用的 active Responses 渠道")
 	}
 
-	// 没有 active 渠道，回退到第一个渠道
-	return &cm.config.ResponsesUpstream[0], nil
+	return &cm.config.ResponsesUpstream[activeIndex], nil
 }
 
 // GetCurrentResponsesUpstreamWithIndex 获取当前 Responses 上游配置及其索引
@@ -42,14 +38,12 @@ func (cm *ConfigManager) GetCurrentResponsesUpstreamWithIndex() (*UpstreamConfig
 		return nil, 0, fmt.Errorf("未配置任何 Responses 渠道")
 	}
 
-	for i := range cm.config.ResponsesUpstream {
-		status := cm.config.ResponsesUpstream[i].Status
-		if status == "" || status == "active" {
-			return &cm.config.ResponsesUpstream[i], i, nil
-		}
+	activeIndex := firstActiveUpstreamIndex(cm.config.ResponsesUpstream)
+	if activeIndex < 0 {
+		return nil, -1, fmt.Errorf("没有可用的 active Responses 渠道")
 	}
 
-	return &cm.config.ResponsesUpstream[0], 0, nil
+	return &cm.config.ResponsesUpstream[activeIndex], activeIndex, nil
 }
 
 // AddResponsesUpstream 添加 Responses 上游
@@ -99,6 +93,9 @@ func (cm *ConfigManager) UpdateResponsesUpstream(index int, updates UpstreamUpda
 	upstream := &cm.config.ResponsesUpstream[index]
 
 	if updates.Name != nil {
+		if err := validateUniqueUpstreamName(cm.config.ResponsesUpstream, index, *updates.Name); err != nil {
+			return false, err
+		}
 		upstream.Name = *updates.Name
 	}
 	if updates.BaseURL != nil {

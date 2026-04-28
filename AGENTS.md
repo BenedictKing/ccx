@@ -19,7 +19,7 @@
   - 根目录 `make run` / `make build`（先构建前端再编译后端）。
   - 后端本地构建：`cd backend-go && make build-local`。
 - 测试：`cd backend-go && make test`（或 `make test-cover` 生成覆盖率）。
-- 前端：`cd frontend && bun install` 后 `bun run dev|build|type-check`。
+- 前端：统一使用 `bun`，执行 `cd frontend && bun install` 后再运行 `bun run dev|build|type-check`。
 - Docker：`docker-compose up -d` 默认拉取镜像；本地构建请按 `docker-compose.yml` 注释说明启用 `build`（可选 `Dockerfile_China`）。
 
 ## 代码风格

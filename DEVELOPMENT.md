@@ -134,14 +134,11 @@ go fmt ./...
 ```powershell
 cd frontend
 
-# 使用 bun 安装依赖 (推荐)
+# 统一使用 bun 安装依赖
 bun install
 
-# 或使用 npm
-npm install
-
 # 安装完成后运行开发服务器
-bun run dev    # 或 npm run dev
+bun run dev
 ```
 
 ### Windows 完整开发环境配置
@@ -187,7 +184,7 @@ cd ccx
 
 # 2. 安装前端依赖
 cd frontend
-bun install    # 或 npm install
+bun install
 
 # 3. 配置环境变量
 cd ../backend-go
@@ -254,7 +251,7 @@ docker-compose down
 
 ## 前端独立开发
 
-前端使用 Vue 3 + Vuetify + Vite，可独立开发：
+前端使用 Vue 3 + Vuetify + Vite，统一使用 bun，可独立开发：
 
 ```bash
 cd frontend

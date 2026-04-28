@@ -12,7 +12,7 @@ import (
 // ============== Gemini 渠道方法 ==============
 
 // GetCurrentGeminiUpstream 获取当前 Gemini 上游配置
-// 优先选择第一个 active 状态的渠道，若无则回退到第一个渠道
+// 优先选择第一个 active 状态的渠道，若无则返回显式错误
 func (cm *ConfigManager) GetCurrentGeminiUpstream() (*UpstreamConfig, error) {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
@@ -29,8 +29,7 @@ func (cm *ConfigManager) GetCurrentGeminiUpstream() (*UpstreamConfig, error) {
 		}
 	}
 
-	// 没有 active 渠道，回退到第一个渠道
-	return &cm.config.GeminiUpstream[0], nil
+	return nil, fmt.Errorf("没有可用的 Gemini 渠道：未找到 active 渠道")
 }
 
 // GetCurrentGeminiUpstreamWithIndex 获取当前 Gemini 上游配置及其索引
@@ -49,7 +48,7 @@ func (cm *ConfigManager) GetCurrentGeminiUpstreamWithIndex() (*UpstreamConfig, i
 		}
 	}
 
-	return &cm.config.GeminiUpstream[0], 0, nil
+	return nil, -1, fmt.Errorf("没有可用的 Gemini 渠道：未找到 active 渠道")
 }
 
 // AddGeminiUpstream 添加 Gemini 上游
@@ -99,6 +98,9 @@ func (cm *ConfigManager) UpdateGeminiUpstream(index int, updates UpstreamUpdate)
 	upstream := &cm.config.GeminiUpstream[index]
 
 	if updates.Name != nil {
+		if err := validateGeminiUpstreamNameLocked(cm.config.GeminiUpstream, index, *updates.Name); err != nil {
+			return false, err
+		}
 		upstream.Name = *updates.Name
 	}
 	if updates.BaseURL != nil {
@@ -270,6 +272,18 @@ func (cm *ConfigManager) UpdateGeminiUpstream(index int, updates UpstreamUpdate)
 
 	log.Printf("[Config-Upstream] 已更新 Gemini 上游: [%d] %s", index, cm.config.GeminiUpstream[index].Name)
 	return shouldResetMetrics, nil
+}
+
+func validateGeminiUpstreamNameLocked(upstreams []UpstreamConfig, currentIndex int, candidate string) error {
+	for i, existing := range upstreams {
+		if i == currentIndex {
+			continue
+		}
+		if existing.Name == candidate {
+			return fmt.Errorf("渠道名称 '%s' 已存在", candidate)
+		}
+	}
+	return nil
 }
 
 // RemoveGeminiUpstream 删除 Gemini 上游

@@ -383,7 +383,7 @@ const customSvgIconSet: IconSet = {
   component: (props: IconProps) => {
     // 获取图标名称，去掉 mdi- 前缀
     const rawIcon = props.icon
-    let iconName = ''
+    let iconName: string
     if (typeof rawIcon === 'string') {
       iconName = rawIcon.trim()
     } else if (Array.isArray(rawIcon) && typeof rawIcon[0] === 'string') {

@@ -12,7 +12,7 @@ import (
 // ============== Chat 渠道方法 ==============
 
 // GetCurrentChatUpstream 获取当前 Chat 上游配置
-// 优先选择第一个 active 状态的渠道，若无则回退到第一个渠道
+// 优先选择第一个 active 状态的渠道，若无则返回显式错误
 func (cm *ConfigManager) GetCurrentChatUpstream() (*UpstreamConfig, error) {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
@@ -29,8 +29,7 @@ func (cm *ConfigManager) GetCurrentChatUpstream() (*UpstreamConfig, error) {
 		}
 	}
 
-	// 没有 active 渠道，回退到第一个渠道
-	return &cm.config.ChatUpstream[0], nil
+	return nil, fmt.Errorf("没有可用的 Chat 渠道：未找到 active 渠道")
 }
 
 // GetCurrentChatUpstreamWithIndex 获取当前 Chat 上游配置及其索引
@@ -49,7 +48,7 @@ func (cm *ConfigManager) GetCurrentChatUpstreamWithIndex() (*UpstreamConfig, int
 		}
 	}
 
-	return &cm.config.ChatUpstream[0], 0, nil
+	return nil, -1, fmt.Errorf("没有可用的 Chat 渠道：未找到 active 渠道")
 }
 
 // AddChatUpstream 添加 Chat 上游
@@ -99,6 +98,9 @@ func (cm *ConfigManager) UpdateChatUpstream(index int, updates UpstreamUpdate) (
 	upstream := &cm.config.ChatUpstream[index]
 
 	if updates.Name != nil {
+		if err := validateChatUpstreamNameLocked(cm.config.ChatUpstream, index, *updates.Name); err != nil {
+			return false, err
+		}
 		upstream.Name = *updates.Name
 	}
 	if updates.BaseURL != nil {
@@ -257,6 +259,18 @@ func (cm *ConfigManager) UpdateChatUpstream(index int, updates UpstreamUpdate) (
 
 	log.Printf("[Config-Upstream] 已更新 Chat 上游: [%d] %s", index, cm.config.ChatUpstream[index].Name)
 	return shouldResetMetrics, nil
+}
+
+func validateChatUpstreamNameLocked(upstreams []UpstreamConfig, currentIndex int, candidate string) error {
+	for i, existing := range upstreams {
+		if i == currentIndex {
+			continue
+		}
+		if existing.Name == candidate {
+			return fmt.Errorf("渠道名称 '%s' 已存在", candidate)
+		}
+	}
+	return nil
 }
 
 // RemoveChatUpstream 删除 Chat 上游
