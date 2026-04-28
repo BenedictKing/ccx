@@ -1,8 +1,8 @@
-<template>
+﻿<template>
   <v-dialog
     :model-value="modelValue"
     max-width="960"
-    :scrim="false"
+    :scrim="true"
     scrollable
     @update:model-value="$emit('update:modelValue', $event)"
   >
@@ -23,7 +23,6 @@
         <div v-if="state === 'initializing'" class="d-flex flex-column align-center py-8">
           <v-progress-circular indeterminate size="48" color="primary" />
           <p class="text-body-1 mt-4 text-medium-emphasis">{{ t('capability.loadingTitle') }}</p>
-          <p class="text-caption text-medium-emphasis">{{ t('capability.loadingBody') }}</p>
         </div>
 
         <div v-else-if="state === 'error'" class="py-4">
@@ -34,7 +33,7 @@
 
         <div v-else-if="job">
           <div class="capability-status-bar mb-4">
-            <div class="d-flex align-center flex-wrap ga-2">
+            <div class="d-flex align-center flex-wrap ga-2 capability-status-summary">
               <v-chip v-if="runMode !== 'fresh'" color="info" size="small" variant="tonal">
                 {{ getRunModeLabel(runMode) }}
               </v-chip>
@@ -57,13 +56,29 @@
               <v-chip v-if="hasNoCompatibleProtocolsYet && (state === 'completed' || state === 'cancelled')" color="grey" size="small" variant="tonal">
                 {{ t('capability.noCompatibleProtocols') }}
               </v-chip>
-              <v-chip v-else-if="hasNoCompatibleProtocolsYet" color="grey" size="small" variant="tonal" class="d-flex align-center ga-2">
-                <v-progress-circular indeterminate size="12" width="2" color="primary" />
+              <v-chip v-else-if="hasNoCompatibleProtocolsYet && state !== 'idle'" color="grey" size="small" variant="tonal" class="d-flex align-center ga-2">
+                <v-progress-circular v-if="state === 'pending' || state === 'running'" indeterminate size="12" width="2" color="primary" />
                 <span>{{ state === 'pending' ? t('capability.modelQueued') : t('capability.protocolRunning') }}</span>
               </v-chip>
+              <label class="capability-rpm-inline" :aria-label="t('capability.rpmLabel')">
+                <v-icon size="small">mdi-speedometer</v-icon>
+                <span class="capability-rpm-label">{{ t('capability.rpmLabel') }}</span>
+                <input
+                  v-model.number="rpmValue"
+                  class="capability-rpm-input"
+                  type="number"
+                  min="1"
+                  max="60"
+                  step="1"
+                  @blur="handleRpmBlur"
+                >
+              </label>
 
               <span v-if="job?.progress?.totalModels && isJobActiveLike" class="text-caption text-medium-emphasis">
                 {{ t('capability.progressSummary', { done: job.progress.completedModels, total: job.progress.totalModels }) }}
+              </span>
+              <span v-if="snapshotUpdatedText" class="text-caption text-medium-emphasis">
+                {{ snapshotUpdatedText }}
               </span>
             </div>
 
@@ -88,27 +103,40 @@
                 <v-chip :color="getProtocolColor(test.protocol)" size="small" variant="tonal">
                   {{ getProtocolDisplayName(test.protocol) }}
                 </v-chip>
-                <template v-if="!isProtocolFailed(test)">
-                  <div class="d-flex align-center ga-1">
-                    <v-icon :color="getProtocolStatusIconColor(test)" size="small">{{ getProtocolStatusIcon(test) }}</v-icon>
-                    <span :class="['text-body-2', getProtocolStatusTextClass(test)]">{{ getProtocolStatusText(test) }}</span>
-                  </div>
-                </template>
-                <v-tooltip v-else :text="getProtocolErrorText(test)" location="top" content-class="error-tooltip">
-                  <template #activator="{ props: activatorProps }">
-                    <div v-bind="activatorProps" class="d-flex align-center ga-1">
+                <div class="d-flex align-center ga-2 flex-wrap justify-end">
+                  <v-btn
+                    v-if="shouldShowTestProtocolButton(test)"
+                    size="x-small"
+                    color="secondary"
+                    variant="tonal"
+                    rounded="lg"
+                    :disabled="isTestProtocolButtonDisabled(test)"
+                    @click="handleTestProtocol(test.protocol)"
+                  >
+                    {{ t('capability.startTest') }}
+                  </v-btn>
+                  <template v-if="!isProtocolFailed(test)">
+                    <div class="d-flex align-center ga-1">
                       <v-icon :color="getProtocolStatusIconColor(test)" size="small">{{ getProtocolStatusIcon(test) }}</v-icon>
                       <span :class="['text-body-2', getProtocolStatusTextClass(test)]">{{ getProtocolStatusText(test) }}</span>
                     </div>
                   </template>
-                </v-tooltip>
+                  <v-tooltip v-else :text="getProtocolErrorText(test)" location="top" content-class="error-tooltip">
+                    <template #activator="{ props: activatorProps }">
+                      <div v-bind="activatorProps" class="d-flex align-center ga-1">
+                        <v-icon :color="getProtocolStatusIconColor(test)" size="small">{{ getProtocolStatusIcon(test) }}</v-icon>
+                        <span :class="['text-body-2', getProtocolStatusTextClass(test)]">{{ getProtocolStatusText(test) }}</span>
+                      </div>
+                    </template>
+                  </v-tooltip>
+                </div>
               </div>
 
               <CapabilityModelResults
                 :test="test"
                 :pending-text="getProtocolPendingText(test)"
                 :show-label="false"
-                :retry-enabled="!isJobActiveLike"
+                :retry-enabled="!isProtocolBusy(test) && Boolean(job?.protocolJobIds?.[test.protocol])"
                 @retry-model="handleRetryModel"
               />
             </div>
@@ -174,33 +202,46 @@
                     <span v-else class="text-body-2 text-medium-emphasis">-</span>
                   </td>
                   <td>
-                    <v-btn
-                      v-if="test.success && test.protocol !== currentTab"
-                      size="x-small"
-                      color="primary"
-                      variant="tonal"
-                      rounded="lg"
-                      class="copy-tab-btn"
-                      @click="$emit('copyToTab', test.protocol)"
-                    >
-                      {{ t('capability.copyToTab') }}
-                    </v-btn>
-                    <v-chip v-else-if="test.protocol === currentTab" size="x-small" color="grey" variant="tonal">
-                      {{ t('capability.currentTab') }}
-                    </v-chip>
-                    <div v-else-if="!test.success && test.protocol !== currentTab" class="d-flex flex-wrap ga-1">
+                    <div class="d-flex flex-wrap ga-1 align-center justify-end">
                       <v-btn
-                        v-for="successProto in getSuccessfulProtocols()"
-                        :key="successProto"
+                        v-if="shouldShowTestProtocolButton(test)"
                         size="x-small"
-                        :color="getProtocolColor(successProto)"
+                        color="secondary"
                         variant="tonal"
                         rounded="lg"
-                        class="convert-btn"
+                        :disabled="isTestProtocolButtonDisabled(test)"
+                        @click="handleTestProtocol(test.protocol)"
+                      >
+                        {{ t('capability.startTest') }}
+                      </v-btn>
+                      <v-btn
+                        v-if="test.success && test.protocol !== currentTab"
+                        size="x-small"
+                        color="primary"
+                        variant="tonal"
+                        rounded="lg"
+                        class="copy-tab-btn"
                         @click="$emit('copyToTab', test.protocol)"
                       >
-                        {{ t('capability.convert', { protocol: getProtocolDisplayName(successProto) }) }}
+                        {{ t('capability.copyToTab') }}
                       </v-btn>
+                      <v-chip v-else-if="test.protocol === currentTab" size="x-small" color="grey" variant="tonal">
+                        {{ t('capability.currentTab') }}
+                      </v-chip>
+                      <div v-else-if="!test.success && test.protocol !== currentTab" class="d-flex flex-wrap ga-1">
+                        <v-btn
+                          v-for="successProto in getSuccessfulProtocols()"
+                          :key="successProto"
+                          size="x-small"
+                          :color="getProtocolColor(successProto)"
+                          variant="tonal"
+                          rounded="lg"
+                          class="convert-btn"
+                          @click="$emit('copyToTab', test.protocol)"
+                        >
+                          {{ t('capability.convert', { protocol: getProtocolDisplayName(successProto) }) }}
+                        </v-btn>
+                      </div>
                     </div>
                   </td>
                 </tr>
@@ -211,7 +252,7 @@
                         :test="test"
                         :pending-text="getProtocolPendingText(test)"
                         :show-label="false"
-                        :retry-enabled="!isJobActiveLike"
+                        :retry-enabled="!isProtocolBusy(test) && Boolean(job?.protocolJobIds?.[test.protocol])"
                         @retry-model="handleRetryModel"
                       />
                     </div>
@@ -244,20 +285,28 @@ interface Props {
   channelName: string
   currentTab: string
   capabilityJob: CapabilityTestJob | null
+  capabilityRpm: number
 }
 
 const props = defineProps<Props>()
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
+  'update:capabilityRpm': [value: number]
   'copyToTab': [protocol: string]
   'cancel': []
   'retryModel': [protocol: string, model: string]
+  'testProtocol': [protocol: string]
 }>()
 
 const { t } = useI18n()
 
 const errorMessage = ref('')
 const cancelling = ref(false)
+const rpmValue = ref(10)
+
+watch(() => props.capabilityRpm, (value) => {
+  rpmValue.value = value >= 1 && value <= 60 ? Math.floor(value) : 10
+}, { immediate: true })
 
 watch(() => props.modelValue, (open) => {
   if (open) {
@@ -284,6 +333,7 @@ watch(() => props.capabilityJob?.error, (error) => {
 const state = computed(() => {
   if (errorMessage.value) return 'error'
   if (!props.capabilityJob) return 'initializing'
+  if ((props.capabilityJob.status as any) === 'idle') return 'idle'
   if (props.capabilityJob.lifecycle === 'cancelled') return 'cancelled'
   if (props.capabilityJob.lifecycle === 'done') return 'completed'
   if (props.capabilityJob.lifecycle === 'pending') return 'pending'
@@ -355,7 +405,7 @@ const getSuccessfulProtocols = () => {
     .map(t => t.protocol)
 }
 
-const protocolOrder = ['messages', 'chat', 'responses', 'gemini']
+const protocolOrder = ['messages', 'responses', 'chat', 'gemini']
 
 const sortedTests = computed(() => {
   if (!job.value) return []
@@ -368,7 +418,8 @@ const sortedTests = computed(() => {
     })
 })
 
-const getProtocolDisplayState = (test: CapabilityProtocolJobResult): 'pending' | 'running' | 'success' | 'partial' | 'cancelled' | 'failed' => {
+const getProtocolDisplayState = (test: CapabilityProtocolJobResult): 'idle' | 'pending' | 'running' | 'success' | 'partial' | 'cancelled' | 'failed' => {
+  if ((test.status as any) === 'idle') return 'idle'
   if (test.lifecycle === 'active') return 'running'
   if (test.lifecycle === 'pending') return 'pending'
   if (test.outcome === 'partial') return 'partial'
@@ -381,8 +432,14 @@ const isProtocolFailed = (test: CapabilityProtocolJobResult): boolean => {
   return getProtocolDisplayState(test) === 'failed'
 }
 
+const isProtocolBusy = (test: CapabilityProtocolJobResult): boolean => {
+  const displayState = getProtocolDisplayState(test)
+  return displayState === 'pending' || displayState === 'running'
+}
+
 const getProtocolStatusIcon = (test: CapabilityProtocolJobResult): string => {
   switch (getProtocolDisplayState(test)) {
+    case 'idle': return 'mdi-clock-outline'
     case 'pending': return 'mdi-timer-sand'
     case 'running': return 'mdi-progress-clock'
     case 'success': return 'mdi-check-circle'
@@ -404,6 +461,7 @@ const getProtocolStatusIconColor = (test: CapabilityProtocolJobResult): string =
 
 const getProtocolStatusText = (test: CapabilityProtocolJobResult): string => {
   switch (getProtocolDisplayState(test)) {
+    case 'idle': return t('capability.notStarted')
     case 'pending': return t('capability.modelQueued')
     case 'running': return t('capability.protocolRunning')
     case 'success': return t('capability.success')
@@ -431,6 +489,7 @@ const getProtocolErrorText = (test: CapabilityProtocolJobResult): string => {
 
 const getProtocolPendingText = (test: CapabilityProtocolJobResult): string => {
   const displayState = getProtocolDisplayState(test)
+  if (displayState === 'idle') return t('capability.notStarted')
   if (displayState === 'pending') return t('capability.modelQueued')
   if (displayState === 'running') return t('capability.protocolRunning')
   return t('capability.modelDetailsUnavailable')
@@ -463,6 +522,33 @@ const hasProtocolLatency = (test: CapabilityProtocolJobResult): boolean => {
   return getAverageLatency(test) >= 0
 }
 
+const snapshotUpdatedText = computed(() => {
+  const updatedAt = props.capabilityJob?.snapshotUpdatedAt
+  if (!updatedAt) return ''
+  return t('capability.snapshotUpdated', { time: updatedAt })
+})
+
+const shouldShowTestProtocolButton = (test: CapabilityProtocolJobResult): boolean => {
+  const displayState = getProtocolDisplayState(test)
+  return displayState !== 'pending' && displayState !== 'running'
+}
+
+const isTestProtocolButtonDisabled = (test: CapabilityProtocolJobResult): boolean => {
+  const displayState = getProtocolDisplayState(test)
+  return displayState === 'pending' || displayState === 'running'
+}
+
+const handleTestProtocol = (protocol: string) => {
+  emit('testProtocol', protocol)
+}
+
+const handleRpmBlur = () => {
+  const parsedValue = Number.isFinite(rpmValue.value) ? Math.floor(rpmValue.value) : 10
+  const nextValue = Math.min(60, Math.max(1, parsedValue || 10))
+  rpmValue.value = nextValue
+  emit('update:capabilityRpm', nextValue)
+}
+
 const setError = (error: string) => {
   errorMessage.value = error
 }
@@ -491,6 +577,60 @@ defineExpose({ setError })
   justify-content: space-between;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.capability-status-summary {
+  flex: 1;
+  min-width: 0;
+}
+
+.capability-rpm-inline {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 6px;
+  min-height: 26px;
+  padding: 0 8px;
+  border: 1px solid rgba(var(--v-theme-outline), 0.38);
+  border-radius: 6px;
+  color: rgba(var(--v-theme-on-surface), 0.78);
+  background: rgb(var(--v-theme-surface));
+  font-size: 0.75rem;
+  line-height: 1;
+}
+
+.capability-rpm-inline:focus-within {
+  border-color: rgb(var(--v-theme-primary));
+  box-shadow: 0 0 0 1px rgb(var(--v-theme-primary));
+}
+
+.capability-rpm-label {
+  white-space: nowrap;
+}
+
+.capability-rpm-input {
+  box-sizing: border-box;
+  width: 24px;
+  min-width: 24px;
+  border: 0;
+  outline: 0;
+  padding: 0;
+  -moz-appearance: textfield;
+  -webkit-appearance: none;
+  appearance: textfield;
+  background: transparent;
+  color: rgb(var(--v-theme-on-surface));
+  font: inherit;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: right;
+}
+
+.capability-rpm-input::-webkit-outer-spin-button,
+.capability-rpm-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
 }
 
 .capability-table :deep(th) {

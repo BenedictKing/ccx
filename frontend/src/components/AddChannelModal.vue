@@ -1209,7 +1209,7 @@ import { useI18n } from '../i18n'
 interface Props {
   show: boolean
   channel?: Channel | null
-  channelType?: 'messages' | 'chat' | 'responses' | 'gemini'
+  channelType?: 'messages' | 'chat' | 'responses' | 'gemini' | 'images'
 }
 
 const props = withDefaults(defineProps<Props>(), {

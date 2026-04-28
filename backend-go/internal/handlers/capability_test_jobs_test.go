@@ -27,7 +27,7 @@ func TestCapabilityJobStore_GetOrCreateByLookupKey_Concurrent(t *testing.T) {
 			defer wg.Done()
 			job, reused := store.getOrCreateByLookupKey(lookupKey, func() *CapabilityTestJob {
 				atomic.AddInt32(&buildCount, 1)
-				return newCapabilityTestJob(1, "channel", "messages", "claude", []string{"messages"}, 10*time.Second)
+				return newCapabilityTestJob(1, "channel", "messages", "claude", []string{"messages"}, 10*time.Second, 10)
 			})
 			if reused {
 				atomic.AddInt32(&reusedCount, 1)
@@ -59,7 +59,7 @@ func TestCapabilityJobStore_GetOrCreateByLookupKey_Concurrent(t *testing.T) {
 }
 
 func TestRecomputeCapabilityJob_PartialSuccess(t *testing.T) {
-	job := newCapabilityTestJob(1, "channel", "messages", "claude", []string{"messages"}, 10*time.Second)
+	job := newCapabilityTestJob(1, "channel", "messages", "claude", []string{"messages"}, 10*time.Second, 10)
 	job.Tests[0].ModelResults = []CapabilityModelJobResult{
 		{Model: "a", Status: CapabilityModelStatusSuccess, Lifecycle: CapabilityLifecycleDone, Outcome: CapabilityOutcomeSuccess, Success: true},
 		{Model: "b", Status: CapabilityModelStatusFailed, Lifecycle: CapabilityLifecycleDone, Outcome: CapabilityOutcomeFailed, Success: false},
@@ -80,7 +80,7 @@ func TestRecomputeCapabilityJob_PartialSuccess(t *testing.T) {
 }
 
 func TestUpdateCapabilityJobModelResult_SetsCancelledReason(t *testing.T) {
-	job := newCapabilityTestJob(1, "channel", "messages", "claude", []string{"messages"}, 10*time.Second)
+	job := newCapabilityTestJob(1, "channel", "messages", "claude", []string{"messages"}, 10*time.Second, 10)
 	job.Tests[0].ModelResults = []CapabilityModelJobResult{{Model: "a", Status: CapabilityModelStatusRunning, Lifecycle: CapabilityLifecycleActive, Outcome: CapabilityOutcomeUnknown}}
 
 	reason := "cancelled"
@@ -95,8 +95,17 @@ func TestUpdateCapabilityJobModelResult_SetsCancelledReason(t *testing.T) {
 	}
 }
 
+func TestBuildCapabilityExecutionLookupKey_NormalizesProtocolsAndModels(t *testing.T) {
+	keyA := buildCapabilityExecutionLookupKey("identity-a", "messages", []string{"responses", "messages"}, []string{"model-b", "model-a"})
+	keyB := buildCapabilityExecutionLookupKey("identity-a", "messages", []string{"messages", "responses"}, []string{"model-a", "model-b", "model-a"})
+
+	if keyA != keyB {
+		t.Fatalf("execution lookup key mismatch: got %q want %q", keyA, keyB)
+	}
+}
+
 func TestCancelCapabilityStateShape(t *testing.T) {
-	job := newCapabilityTestJob(1, "channel", "messages", "claude", []string{"messages"}, 10*time.Second)
+	job := newCapabilityTestJob(1, "channel", "messages", "claude", []string{"messages"}, 10*time.Second, 10)
 	job.Status = CapabilityJobStatusCancelled
 	job.Lifecycle = CapabilityLifecycleCancelled
 	job.Outcome = CapabilityOutcomeCancelled

@@ -177,9 +177,9 @@ func TryUpstreamWithAllKeys(
 	probeAcquired := make(map[string]bool)
 	defer func() {
 		for key := range probeAcquired {
-			parts := strings.SplitN(key, "|", 2)
-			if len(parts) == 2 {
-				metricsManager.ReleaseProbe(parts[0], parts[1])
+			parts := strings.SplitN(key, "|", 3)
+			if len(parts) == 3 {
+				metricsManager.ReleaseProbe(parts[0], parts[1], parts[2])
 			}
 		}
 	}()
@@ -193,6 +193,7 @@ func TryUpstreamWithAllKeys(
 
 	for urlIdx, urlResult := range urlResults {
 		currentBaseURL := urlResult.URL
+		metricsServiceType := scheduler.NormalizedMetricsServiceType(kind, upstream.ServiceType)
 		originalIdx := urlResult.OriginalIdx // 原始索引用于指标记录
 		failedKeys := make(map[string]bool)  // 每个 BaseURL 重置失败 Key 列表
 		maxRetries := len(upstream.APIKeys)
@@ -205,15 +206,15 @@ func TryUpstreamWithAllKeys(
 			}
 
 			// 检查熔断状态
-			circuitState := metricsManager.GetKeyCircuitState(currentBaseURL, apiKey)
+			circuitState := metricsManager.GetKeyCircuitState(currentBaseURL, apiKey, metricsServiceType)
 			if circuitState == metrics.CircuitStateOpen {
 				failedKeys[apiKey] = true
 				log.Printf("[%s-Circuit] 跳过 open 状态中的 Key: %s", apiType, utils.MaskAPIKey(apiKey))
 				continue
 			}
 			if circuitState == metrics.CircuitStateHalfOpen {
-				probeKey := currentBaseURL + "|" + apiKey
-				if !metricsManager.TryAcquireProbe(currentBaseURL, apiKey) {
+				probeKey := currentBaseURL + "|" + apiKey + "|" + metricsServiceType
+				if !metricsManager.TryAcquireProbe(currentBaseURL, apiKey, metricsServiceType) {
 					failedKeys[apiKey] = true
 					log.Printf("[%s-Circuit] 跳过 half-open 探针已占用的 Key: %s", apiType, utils.MaskAPIKey(apiKey))
 					continue
@@ -244,11 +245,11 @@ func TryUpstreamWithAllKeys(
 			}
 
 			// 记录请求开始
-			channelScheduler.RecordRequestStart(currentBaseURL, apiKey, kind)
+			channelScheduler.RecordRequestStart(currentBaseURL, apiKey, metricsServiceType, kind)
 
 			// TCP 建连开始即计数：将活跃度统计提前到发起上游请求之前
 			logRequestID := CreatePendingLog(channelLogStore, channelIndex, redirectedModel, originalModel, apiKey, currentBaseURL, apiType, metrics.RequestSourceProxy)
-			requestID := metricsManager.RecordRequestConnected(currentBaseURL, apiKey, redirectedModel)
+			requestID := metricsManager.RecordRequestConnected(currentBaseURL, apiKey, metricsServiceType, redirectedModel)
 
 			resp, err := SendRequest(req, upstream, envCfg, isStream, apiType)
 			if err != nil {
@@ -256,8 +257,8 @@ func TryUpstreamWithAllKeys(
 				// 区分客户端取消和真实渠道故障（统一口径）
 				if isClientSideError(err) {
 					// 客户端取消：不计入失败，不触发 failover
-					metricsManager.RecordRequestFinalizeClientCancel(currentBaseURL, apiKey, requestID)
-					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, kind)
+					metricsManager.RecordRequestFinalizeClientCancel(currentBaseURL, apiKey, metricsServiceType, requestID)
+					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
 					CompleteLog(channelLogStore, channelIndex, logRequestID, 0, false, "client canceled", attempt > 0 || urlIdx > 0)
 					log.Printf("[%s-Cancel] 请求已取消（SendRequest 阶段）", apiType)
 					return true, "", 0, nil, nil, err
@@ -265,8 +266,8 @@ func TryUpstreamWithAllKeys(
 				// 真实渠道故障：计入失败，继续 failover
 				failedKeys[apiKey] = true
 				cfgManager.MarkKeyAsFailed(apiKey, apiType)
-				metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, requestID, metrics.FailureClassRetryable)
-				channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, kind)
+				metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, metrics.FailureClassRetryable)
+				channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
 				if markURLFailure != nil {
 					markURLFailure(currentBaseURL)
 				}
@@ -289,8 +290,8 @@ func TryUpstreamWithAllKeys(
 					duration := time.Duration(pauseRule.DurationMinutes) * time.Minute
 					failedKeys[apiKey] = true
 					cfgManager.MarkKeyAsFailedWithDuration(apiKey, apiType, duration)
-					metricsManager.RecordRequestFinalizeFailure(currentBaseURL, apiKey, requestID)
-					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, kind)
+					metricsManager.RecordRequestFinalizeFailure(currentBaseURL, apiKey, metricsServiceType, requestID)
+					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
 					if markURLFailure != nil {
 						markURLFailure(currentBaseURL)
 					}
@@ -373,8 +374,8 @@ func TryUpstreamWithAllKeys(
 					} else if isQuotaRelated || blResult.Reason == "insufficient_balance" {
 						failureClass = metrics.FailureClassQuota
 					}
-					metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, requestID, failureClass)
-					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, kind)
+					metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, failureClass)
+					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
 					if markURLFailure != nil {
 						markURLFailure(currentBaseURL)
 					}
@@ -399,8 +400,8 @@ func TryUpstreamWithAllKeys(
 				}
 
 				// 非 failover 错误，记录失败指标后返回（请求已处理）
-				metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, requestID, metrics.FailureClassNonRetryable)
-				channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, kind)
+				metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, metrics.FailureClassNonRetryable)
+				channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
 				// 记录渠道日志
 				CompleteLog(channelLogStore, channelIndex, logRequestID, resp.StatusCode, false, string(respBodyBytes), attempt > 0 || urlIdx > 0)
 				c.Data(resp.StatusCode, "application/json", respBodyBytes)
@@ -427,16 +428,16 @@ func TryUpstreamWithAllKeys(
 				// 区分客户端错误和渠道故障
 				if isClientSideError(err) {
 					// 客户端取消/断开：计入总请求数但不计入失败
-					metricsManager.RecordRequestFinalizeClientCancel(currentBaseURL, apiKey, requestID)
-					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, kind)
+					metricsManager.RecordRequestFinalizeClientCancel(currentBaseURL, apiKey, metricsServiceType, requestID)
+					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
 					log.Printf("[%s-Cancel] 请求已取消，停止渠道 failover", apiType)
 					CompleteLog(channelLogStore, channelIndex, logRequestID, http.StatusOK, false, "client canceled", attempt > 0 || urlIdx > 0)
 				} else if errors.Is(err, ErrEmptyStreamResponse) || errors.Is(err, ErrInvalidResponseBody) {
 					// 空响应或无效响应体（如 HTML）：Header 未发送，可安全 failover
 					failedKeys[apiKey] = true
 					cfgManager.MarkKeyAsFailed(apiKey, apiType)
-					metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, requestID, metrics.FailureClassRetryable)
-					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, kind)
+					metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, metrics.FailureClassRetryable)
+					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
 					if markURLFailure != nil {
 						markURLFailure(currentBaseURL)
 					}
@@ -463,8 +464,8 @@ func TryUpstreamWithAllKeys(
 					if isBalanceError {
 						failureClass = metrics.FailureClassQuota
 					}
-					metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, requestID, failureClass)
-					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, kind)
+					metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, failureClass)
+					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
 					if markURLFailure != nil {
 						markURLFailure(currentBaseURL)
 					}
@@ -478,8 +479,8 @@ func TryUpstreamWithAllKeys(
 				} else {
 					// 真实渠道故障：计入失败指标
 					cfgManager.MarkKeyAsFailed(apiKey, apiType)
-					metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, requestID, metrics.FailureClassRetryable)
-					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, kind)
+					metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, metrics.FailureClassRetryable)
+					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
 					// 记录渠道日志
 					CompleteLog(channelLogStore, channelIndex, logRequestID, http.StatusOK, false, err.Error(), attempt > 0 || urlIdx > 0)
 					log.Printf("[%s-Key] 警告: 响应处理失败: %v", apiType, err)
@@ -487,10 +488,10 @@ func TryUpstreamWithAllKeys(
 				return true, "", 0, nil, usage, err
 			}
 
-			metricsManager.RecordRequestFinalizeSuccess(currentBaseURL, apiKey, requestID, usage)
-			channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, kind)
-			if probeKey := currentBaseURL + "|" + apiKey; probeAcquired[probeKey] {
-				metricsManager.ReleaseProbe(currentBaseURL, apiKey)
+			metricsManager.RecordRequestFinalizeSuccess(currentBaseURL, apiKey, metricsServiceType, requestID, usage)
+			channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
+			if probeKey := currentBaseURL + "|" + apiKey + "|" + metricsServiceType; probeAcquired[probeKey] {
+				metricsManager.ReleaseProbe(currentBaseURL, apiKey, metricsServiceType)
 				delete(probeAcquired, probeKey)
 			}
 			// 记录渠道日志

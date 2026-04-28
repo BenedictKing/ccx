@@ -24,6 +24,7 @@ func newCompactTestRouter(t *testing.T, upstreams []config.UpstreamConfig) (*gin
 	responsesMetrics := metrics.NewMetricsManager()
 	geminiMetrics := metrics.NewMetricsManager()
 	chatMetrics := metrics.NewMetricsManager()
+	imagesMetrics := metrics.NewMetricsManager()
 	traceAffinity := session.NewTraceAffinityManager()
 
 	t.Cleanup(func() {
@@ -31,6 +32,7 @@ func newCompactTestRouter(t *testing.T, upstreams []config.UpstreamConfig) (*gin
 		responsesMetrics.Stop()
 		geminiMetrics.Stop()
 		chatMetrics.Stop()
+		imagesMetrics.Stop()
 		traceAffinity.Stop()
 	})
 
@@ -40,6 +42,7 @@ func newCompactTestRouter(t *testing.T, upstreams []config.UpstreamConfig) (*gin
 		responsesMetrics,
 		geminiMetrics,
 		chatMetrics,
+		imagesMetrics,
 		traceAffinity,
 		nil,
 	)
@@ -105,7 +108,7 @@ func TestCompactHandler_SingleChannelFailureRecordsMetricsAndLogs(t *testing.T) 
 		t.Fatalf("log errorInfo = %q, want contains unauthorized", logs[0].ErrorInfo)
 	}
 
-	metricsResp := sch.GetResponsesMetricsManager().ToResponseMultiURL(0, []string{upstream.URL}, []string{"sk-test"}, 0)
+	metricsResp := sch.GetResponsesMetricsManager().ToResponseMultiURL(0, []string{upstream.URL}, []string{"sk-test"}, "responses", 0)
 	if metricsResp.RequestCount != 1 {
 		t.Fatalf("requestCount = %d, want 1", metricsResp.RequestCount)
 	}
@@ -114,6 +117,91 @@ func TestCompactHandler_SingleChannelFailureRecordsMetricsAndLogs(t *testing.T) 
 	}
 	if metricsResp.SuccessCount != 0 {
 		t.Fatalf("successCount = %d, want 0", metricsResp.SuccessCount)
+	}
+}
+
+func TestCompactHandler_MultiChannelRespectsSupportedModels(t *testing.T) {
+	skippedUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, `{"id":"resp_skipped","status":"completed","output":[],"usage":{"input_tokens":0,"output_tokens":0,"total_tokens":0}}`)
+	}))
+	defer skippedUpstream.Close()
+
+	selectedUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, `{"id":"resp_selected","status":"completed","output":[],"usage":{"input_tokens":0,"output_tokens":0,"total_tokens":0}}`)
+	}))
+	defer selectedUpstream.Close()
+
+	router, sch := newCompactTestRouter(t, []config.UpstreamConfig{
+		{
+			Name:            "skip-image-models",
+			BaseURL:         skippedUpstream.URL,
+			APIKeys:         []string{"sk-skip"},
+			ServiceType:     "responses",
+			Status:          "active",
+			SupportedModels: []string{"gpt-4*", "!*image*"},
+		},
+		{
+			Name:            "allow-image-models",
+			BaseURL:         selectedUpstream.URL,
+			APIKeys:         []string{"sk-allow"},
+			ServiceType:     "responses",
+			Status:          "active",
+			SupportedModels: []string{"gpt-4*"},
+		},
+	})
+
+	w := performCompactRequest(t, router, `{"model":"gpt-4-image-preview","input":"hello"}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	skippedLogs := sch.GetChannelLogStore(scheduler.ChannelKindResponses).Get(0)
+	if len(skippedLogs) != 0 {
+		t.Fatalf("skipped channel logs count = %d, want 0", len(skippedLogs))
+	}
+
+	selectedLogs := sch.GetChannelLogStore(scheduler.ChannelKindResponses).Get(1)
+	if len(selectedLogs) != 1 {
+		t.Fatalf("selected channel logs count = %d, want 1", len(selectedLogs))
+	}
+	if !selectedLogs[0].Success {
+		t.Fatal("selected channel success = false, want true")
+	}
+	if selectedLogs[0].Model != "gpt-4-image-preview" {
+		t.Fatalf("selected channel model = %q, want gpt-4-image-preview", selectedLogs[0].Model)
+	}
+}
+
+func TestCompactHandler_ReturnsSelectionErrorWhenNoChannelSupportsModel(t *testing.T) {
+	router, _ := newCompactTestRouter(t, []config.UpstreamConfig{
+		{
+			Name:            "exclude-image-a",
+			BaseURL:         "https://example.com/v1",
+			APIKeys:         []string{"sk-test-a"},
+			ServiceType:     "responses",
+			Status:          "active",
+			SupportedModels: []string{"gpt-4*", "!*image*"},
+		},
+		{
+			Name:            "exclude-image-b",
+			BaseURL:         "https://example.net/v1",
+			APIKeys:         []string{"sk-test-b"},
+			ServiceType:     "responses",
+			Status:          "active",
+			SupportedModels: []string{"gpt-4*", "!*image*"},
+		},
+	})
+
+	w := performCompactRequest(t, router, `{"model":"gpt-4-image-preview","input":"hello"}`)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusServiceUnavailable, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "没有 Responses 渠道支持模型") {
+		t.Fatalf("body = %s, want contains selection error", w.Body.String())
 	}
 }
 
@@ -176,12 +264,12 @@ func TestCompactHandler_MultiChannelFailoverRecordsFailedChannelLogs(t *testing.
 		t.Fatalf("success channel status = %d, want %d", successLogs[0].StatusCode, http.StatusOK)
 	}
 
-	failedMetrics := sch.GetResponsesMetricsManager().ToResponseMultiURL(0, []string{failedUpstream.URL}, []string{"sk-fail"}, 0)
+	failedMetrics := sch.GetResponsesMetricsManager().ToResponseMultiURL(0, []string{failedUpstream.URL}, []string{"sk-fail"}, "responses", 0)
 	if failedMetrics.RequestCount != 1 || failedMetrics.FailureCount != 1 {
 		t.Fatalf("failed channel metrics = %+v, want requestCount=1 failureCount=1", failedMetrics)
 	}
 
-	successMetrics := sch.GetResponsesMetricsManager().ToResponseMultiURL(1, []string{successUpstream.URL}, []string{"sk-ok"}, 0)
+	successMetrics := sch.GetResponsesMetricsManager().ToResponseMultiURL(1, []string{successUpstream.URL}, []string{"sk-ok"}, "responses", 0)
 	if successMetrics.RequestCount != 1 || successMetrics.SuccessCount != 1 {
 		t.Fatalf("success channel metrics = %+v, want requestCount=1 successCount=1", successMetrics)
 	}

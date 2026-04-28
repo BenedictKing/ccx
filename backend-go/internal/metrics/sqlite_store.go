@@ -11,6 +11,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/BenedictKing/ccx/internal/config"
+	"github.com/BenedictKing/ccx/internal/utils"
+
 	_ "modernc.org/sqlite"
 )
 
@@ -195,6 +198,362 @@ func initSchema(db *sql.DB) error {
 	}
 
 	return nil
+}
+
+func (s *SQLiteStore) schemaVersion() (int, error) {
+	var version int
+	if err := s.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
+		return 0, err
+	}
+	return version, nil
+}
+
+type metricsKeyMigrationTarget struct {
+	MetricsKey string
+	BaseURL    string
+}
+
+type metricsKeyMigrationCandidates struct {
+	Primary   metricsKeyMigrationTarget
+	Conflicts []metricsKeyMigrationTarget
+}
+
+type persistedCircuitStateRow struct {
+	PersistentCircuitState
+	UpdatedAt int64
+}
+
+func (s *SQLiteStore) MigrateMetricsKeysToIdentity(cfg config.Config) error {
+	version, err := s.schemaVersion()
+	if err != nil {
+		return fmt.Errorf("读取 schema 版本失败: %w", err)
+	}
+	if version >= 3 {
+		return nil
+	}
+
+	mapping := buildMetricsKeyMigrationMap(cfg)
+
+	s.flushMu.Lock()
+	defer s.flushMu.Unlock()
+	s.flushBufferLocked()
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("开始 metrics key 迁移事务失败: %w", err)
+	}
+	defer tx.Rollback()
+
+	updatedRecords, err := migrateRequestRecordsTx(tx, mapping)
+	if err != nil {
+		return err
+	}
+	migratedStates, mergedStates, err := migrateCircuitStatesTx(tx, mapping)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.Exec("PRAGMA user_version = 3"); err != nil {
+		return fmt.Errorf("写入 schema 版本失败: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("提交 metrics key 迁移失败: %w", err)
+	}
+
+	log.Printf("[SQLite-Migration] schema/data 升级: v2 -> v3 (迁移 request_records=%d, circuit_states=%d, merged_states=%d)", updatedRecords, migratedStates, mergedStates)
+	return nil
+}
+
+func buildMetricsKeyMigrationMap(cfg config.Config) map[string]map[string]metricsKeyMigrationCandidates {
+	mapping := map[string]map[string]metricsKeyMigrationCandidates{
+		"messages":  {},
+		"responses": {},
+		"gemini":    {},
+		"chat":      {},
+	}
+
+	addUpstreamMetricsKeyMappings(mapping["messages"], cfg.Upstream, "claude")
+	addUpstreamMetricsKeyMappings(mapping["responses"], cfg.ResponsesUpstream, "responses")
+	addUpstreamMetricsKeyMappings(mapping["gemini"], cfg.GeminiUpstream, "gemini")
+	addUpstreamMetricsKeyMappings(mapping["chat"], cfg.ChatUpstream, "openai")
+
+	return mapping
+}
+
+func legacyMetricsKeysForMigration(baseURL, apiKey, serviceType string) []string {
+	seen := make(map[string]struct{})
+	keys := make([]string, 0, 6)
+	add := func(rawBaseURL string) {
+		if rawBaseURL == "" {
+			return
+		}
+		metricsKey := GenerateMetricsKey(rawBaseURL, apiKey)
+		if _, exists := seen[metricsKey]; exists {
+			return
+		}
+		seen[metricsKey] = struct{}{}
+		keys = append(keys, metricsKey)
+	}
+
+	for _, variant := range utils.EquivalentBaseURLVariants(baseURL, serviceType) {
+		add(variant)
+	}
+	add(utils.MetricsIdentityBaseURL(baseURL, serviceType))
+	return keys
+}
+
+func addUpstreamMetricsKeyMappings(targets map[string]metricsKeyMigrationCandidates, upstreams []config.UpstreamConfig, defaultServiceType string) {
+	for _, upstream := range upstreams {
+		serviceType := upstream.ServiceType
+		if serviceType == "" {
+			serviceType = defaultServiceType
+		}
+		baseURLs := upstream.GetAllBaseURLs()
+		if len(baseURLs) == 0 {
+			continue
+		}
+		keys := deduplicateMetricMigrationKeys(upstream.APIKeys, upstream.HistoricalAPIKeys)
+		for _, baseURL := range baseURLs {
+			identityBaseURL := utils.MetricsIdentityBaseURL(baseURL, serviceType)
+			for _, apiKey := range keys {
+				if apiKey == "" {
+					continue
+				}
+				migrationTarget := metricsKeyMigrationTarget{
+					MetricsKey: GenerateMetricsIdentityKey(baseURL, apiKey, serviceType),
+					BaseURL:    identityBaseURL,
+				}
+				for _, legacyKey := range legacyMetricsKeysForMigration(baseURL, apiKey, serviceType) {
+					candidate, exists := targets[legacyKey]
+					if !exists {
+						targets[legacyKey] = metricsKeyMigrationCandidates{Primary: migrationTarget}
+						continue
+					}
+					if candidate.Primary == migrationTarget || containsMigrationConflict(candidate.Conflicts, migrationTarget) {
+						continue
+					}
+					candidate.Conflicts = append(candidate.Conflicts, migrationTarget)
+					targets[legacyKey] = candidate
+				}
+			}
+		}
+	}
+}
+
+func containsMigrationConflict(conflicts []metricsKeyMigrationTarget, target metricsKeyMigrationTarget) bool {
+	for _, conflict := range conflicts {
+		if conflict == target {
+			return true
+		}
+	}
+	return false
+}
+
+func deduplicateMetricMigrationKeys(groups ...[]string) []string {
+	seen := make(map[string]struct{})
+	result := make([]string, 0)
+	for _, group := range groups {
+		for _, key := range group {
+			if key == "" {
+				continue
+			}
+			if _, exists := seen[key]; exists {
+				continue
+			}
+			seen[key] = struct{}{}
+			result = append(result, key)
+		}
+	}
+	return result
+}
+
+func migrateRequestRecordsTx(tx *sql.Tx, mapping map[string]map[string]metricsKeyMigrationCandidates) (int64, error) {
+	var totalUpdated int64
+	for apiType, targets := range mapping {
+		for legacyKey, candidate := range targets {
+			if len(candidate.Conflicts) > 0 {
+				var count int
+				if err := tx.QueryRow(`SELECT COUNT(*) FROM request_records WHERE api_type = ? AND metrics_key = ?`, apiType, legacyKey).Scan(&count); err != nil {
+					return totalUpdated, fmt.Errorf("检查 request_records 迁移冲突失败(apiType=%s, metricsKey=%s): %w", apiType, legacyKey, err)
+				}
+				if count > 0 {
+					return totalUpdated, fmt.Errorf("legacy metrics key %s 在 apiType=%s 的 request_records 中存在 %d 条待迁移记录，但映射到多个 identity target: primary=%+v conflicts=%+v", legacyKey, apiType, count, candidate.Primary, candidate.Conflicts)
+				}
+			}
+			result, err := tx.Exec(`
+				UPDATE request_records
+				SET metrics_key = ?, base_url = ?
+				WHERE api_type = ? AND metrics_key = ? AND (metrics_key != ? OR base_url != ?)
+			`, candidate.Primary.MetricsKey, candidate.Primary.BaseURL, apiType, legacyKey, candidate.Primary.MetricsKey, candidate.Primary.BaseURL)
+			if err != nil {
+				return totalUpdated, fmt.Errorf("迁移 request_records 失败(apiType=%s, metricsKey=%s): %w", apiType, legacyKey, err)
+			}
+			affected, _ := result.RowsAffected()
+			totalUpdated += affected
+		}
+	}
+	return totalUpdated, nil
+}
+
+func migrateCircuitStatesTx(tx *sql.Tx, mapping map[string]map[string]metricsKeyMigrationCandidates) (int, int, error) {
+	rows, err := tx.Query(`
+		SELECT metrics_key, api_type, base_url, key_mask, circuit_state,
+		       circuit_opened_at, half_open_at, next_retry_at,
+		       backoff_level, half_open_successes, consecutive_failures, updated_at
+		FROM circuit_states
+	`)
+	if err != nil {
+		return 0, 0, fmt.Errorf("查询 circuit_states 失败: %w", err)
+	}
+	defer rows.Close()
+
+	merged := make(map[string]*persistedCircuitStateRow)
+	migratedCount := 0
+	mergedCount := 0
+	for rows.Next() {
+		var row persistedCircuitStateRow
+		var openedAt, halfOpenAt, nextRetryAt sql.NullInt64
+		if err := rows.Scan(
+			&row.MetricsKey,
+			&row.APIType,
+			&row.BaseURL,
+			&row.KeyMask,
+			&row.CircuitState,
+			&openedAt,
+			&halfOpenAt,
+			&nextRetryAt,
+			&row.BackoffLevel,
+			&row.HalfOpenSuccesses,
+			&row.ConsecutiveFailures,
+			&row.UpdatedAt,
+		); err != nil {
+			return migratedCount, mergedCount, fmt.Errorf("扫描 circuit_states 失败: %w", err)
+		}
+		if openedAt.Valid {
+			t := time.Unix(openedAt.Int64, 0)
+			row.CircuitOpenedAt = &t
+		}
+		if halfOpenAt.Valid {
+			t := time.Unix(halfOpenAt.Int64, 0)
+			row.HalfOpenAt = &t
+		}
+		if nextRetryAt.Valid {
+			t := time.Unix(nextRetryAt.Int64, 0)
+			row.NextRetryAt = &t
+		}
+
+		if candidate, ok := mapping[row.APIType][row.MetricsKey]; ok {
+			if len(candidate.Conflicts) > 0 {
+				return migratedCount, mergedCount, fmt.Errorf("legacy metrics key %s 在 apiType=%s 的 circuit_states 中存在待迁移记录，但映射到多个 identity target: primary=%+v conflicts=%+v", row.MetricsKey, row.APIType, candidate.Primary, candidate.Conflicts)
+			}
+			if row.MetricsKey != candidate.Primary.MetricsKey || row.BaseURL != candidate.Primary.BaseURL {
+				migratedCount++
+			}
+			row.MetricsKey = candidate.Primary.MetricsKey
+			row.BaseURL = candidate.Primary.BaseURL
+		}
+
+		mergedKey := row.APIType + "|" + row.MetricsKey
+		if existing, exists := merged[mergedKey]; exists {
+			mergePersistedCircuitState(existing, &row)
+			mergedCount++
+			continue
+		}
+		copy := row
+		merged[mergedKey] = &copy
+	}
+	if err := rows.Err(); err != nil {
+		return migratedCount, mergedCount, fmt.Errorf("遍历 circuit_states 失败: %w", err)
+	}
+
+	if _, err := tx.Exec("DELETE FROM circuit_states"); err != nil {
+		return migratedCount, mergedCount, fmt.Errorf("清空 circuit_states 失败: %w", err)
+	}
+
+	stmt, err := tx.Prepare(`
+		INSERT INTO circuit_states (
+			metrics_key, api_type, base_url, key_mask, circuit_state,
+			circuit_opened_at, half_open_at, next_retry_at,
+			backoff_level, half_open_successes, consecutive_failures, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`)
+	if err != nil {
+		return migratedCount, mergedCount, fmt.Errorf("准备写入 circuit_states 失败: %w", err)
+	}
+	defer stmt.Close()
+
+	for _, row := range merged {
+		var openedAt any
+		if row.CircuitOpenedAt != nil {
+			openedAt = row.CircuitOpenedAt.Unix()
+		}
+		var halfOpenAt any
+		if row.HalfOpenAt != nil {
+			halfOpenAt = row.HalfOpenAt.Unix()
+		}
+		var nextRetryAt any
+		if row.NextRetryAt != nil {
+			nextRetryAt = row.NextRetryAt.Unix()
+		}
+		if _, err := stmt.Exec(
+			row.MetricsKey,
+			row.APIType,
+			row.BaseURL,
+			row.KeyMask,
+			row.CircuitState,
+			openedAt,
+			halfOpenAt,
+			nextRetryAt,
+			row.BackoffLevel,
+			row.HalfOpenSuccesses,
+			row.ConsecutiveFailures,
+			time.Now().Unix(),
+		); err != nil {
+			return migratedCount, mergedCount, fmt.Errorf("重建 circuit_states 失败(metricsKey=%s, apiType=%s): %w", row.MetricsKey, row.APIType, err)
+		}
+	}
+
+	return migratedCount, mergedCount, nil
+}
+
+func mergePersistedCircuitState(dst, src *persistedCircuitStateRow) {
+	if dst == nil || src == nil {
+		return
+	}
+	if circuitStateSeverity(src.CircuitState) > circuitStateSeverity(dst.CircuitState) {
+		dst.CircuitState = src.CircuitState
+	}
+	if src.BackoffLevel > dst.BackoffLevel {
+		dst.BackoffLevel = src.BackoffLevel
+	}
+	if src.HalfOpenSuccesses > dst.HalfOpenSuccesses {
+		dst.HalfOpenSuccesses = src.HalfOpenSuccesses
+	}
+	if src.ConsecutiveFailures > dst.ConsecutiveFailures {
+		dst.ConsecutiveFailures = src.ConsecutiveFailures
+	}
+	if src.UpdatedAt > dst.UpdatedAt {
+		dst.UpdatedAt = src.UpdatedAt
+		if src.CircuitOpenedAt != nil {
+			dst.CircuitOpenedAt = src.CircuitOpenedAt
+		}
+		if src.HalfOpenAt != nil {
+			dst.HalfOpenAt = src.HalfOpenAt
+		}
+		if src.NextRetryAt != nil {
+			dst.NextRetryAt = src.NextRetryAt
+		}
+	}
+}
+
+func circuitStateSeverity(state string) int {
+	switch state {
+	case "open":
+		return 3
+	case "half_open":
+		return 2
+	default:
+		return 1
+	}
 }
 
 // AddRecord 添加记录到写入缓冲区（非阻塞）

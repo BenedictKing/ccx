@@ -103,6 +103,7 @@ func handleSingleChannelCompact(
 
 	requestModel := extractCompactRequestModel(bodyBytes)
 	channelLogStore := channelScheduler.GetChannelLogStore(scheduler.ChannelKindResponses)
+	metricsServiceType := scheduler.NormalizedMetricsServiceType(scheduler.ChannelKindResponses, upstream.ServiceType)
 
 	// Key 轮转：尝试所有可用 key
 	failedKeys := make(map[string]bool)
@@ -118,7 +119,7 @@ func handleSingleChannelCompact(
 		success, compactErr := tryCompactWithKey(c, upstream, apiKey, bodyBytes, envCfg, cfgManager)
 		if success {
 			common.RecordChannelLog(channelLogStore, channelIndex, requestModel, "", http.StatusOK, time.Since(attemptStart).Milliseconds(), true, apiKey, upstream.BaseURL, "", "Responses", attempt > 0)
-			channelScheduler.RecordSuccessWithUsage(upstream.BaseURL, apiKey, nil, scheduler.ChannelKindResponses)
+			channelScheduler.RecordSuccessWithUsage(upstream.BaseURL, apiKey, metricsServiceType, nil, scheduler.ChannelKindResponses)
 			return
 		}
 
@@ -127,7 +128,7 @@ func handleSingleChannelCompact(
 			if compactErr.shouldFailover {
 				failedKeys[apiKey] = true
 				cfgManager.MarkKeyAsFailed(apiKey, "Responses")
-				channelScheduler.RecordFailure(upstream.BaseURL, apiKey, scheduler.ChannelKindResponses)
+				channelScheduler.RecordFailure(upstream.BaseURL, apiKey, metricsServiceType, scheduler.ChannelKindResponses)
 				common.RecordChannelLog(channelLogStore, channelIndex, requestModel, "", compactErr.status, time.Since(attemptStart).Milliseconds(), false, apiKey, upstream.BaseURL, compactErr.errorInfo(), "Responses", attempt > 0)
 				continue
 			}
@@ -169,12 +170,14 @@ func handleMultiChannelCompact(
 	failedChannels := make(map[int]bool)
 	maxAttempts := channelScheduler.GetActiveChannelCount(scheduler.ChannelKindResponses)
 	var lastErr *compactError
+	var selectionErr error
 	requestModel := extractCompactRequestModel(bodyBytes)
 	channelLogStore := channelScheduler.GetChannelLogStore(scheduler.ChannelKindResponses)
 
 	for attempt := 0; attempt < maxAttempts; attempt++ {
-		selection, err := channelScheduler.SelectChannel(c.Request.Context(), userID, failedChannels, scheduler.ChannelKindResponses, "", c.Param("routePrefix"))
+		selection, err := channelScheduler.SelectChannel(c.Request.Context(), userID, failedChannels, scheduler.ChannelKindResponses, requestModel, c.Param("routePrefix"))
 		if err != nil {
+			selectionErr = err
 			break
 		}
 
@@ -211,6 +214,8 @@ func handleMultiChannelCompact(
 
 	if lastErr != nil {
 		c.Data(lastErr.status, "application/json", lastErr.body)
+	} else if selectionErr != nil {
+		c.JSON(503, gin.H{"error": selectionErr.Error()})
 	} else {
 		c.JSON(503, gin.H{"error": "所有 Responses 渠道都不可用"})
 	}
@@ -232,6 +237,7 @@ func tryCompactChannelWithAllKeys(
 		return false, "", nil
 	}
 
+	metricsServiceType := scheduler.NormalizedMetricsServiceType(scheduler.ChannelKindResponses, upstream.ServiceType)
 	metricsManager := channelScheduler.GetResponsesMetricsManager()
 
 	failedKeys := make(map[string]bool)
@@ -245,7 +251,7 @@ func tryCompactChannelWithAllKeys(
 		}
 
 		// 检查熔断状态
-		circuitState := metricsManager.GetKeyCircuitState(upstream.BaseURL, apiKey)
+		circuitState := metricsManager.GetKeyCircuitState(upstream.BaseURL, apiKey, metricsServiceType)
 		if circuitState == metrics.CircuitStateOpen {
 			failedKeys[apiKey] = true
 			log.Printf("[Compact-Circuit] 跳过 open 状态中的 Key: %s", utils.MaskAPIKey(apiKey))
@@ -253,7 +259,7 @@ func tryCompactChannelWithAllKeys(
 		}
 		if circuitState == metrics.CircuitStateHalfOpen {
 			probeKey := upstream.BaseURL + "|" + apiKey
-			if !metricsManager.TryAcquireProbe(upstream.BaseURL, apiKey) {
+			if !metricsManager.TryAcquireProbe(upstream.BaseURL, apiKey, metricsServiceType) {
 				failedKeys[apiKey] = true
 				log.Printf("[Compact-Circuit] 跳过 half-open 探针已占用的 Key: %s", utils.MaskAPIKey(apiKey))
 				continue
@@ -267,11 +273,11 @@ func tryCompactChannelWithAllKeys(
 
 		if success {
 			common.RecordChannelLog(channelLogStore, channelIndex, requestModel, "", http.StatusOK, time.Since(attemptStart).Milliseconds(), true, apiKey, upstream.BaseURL, "", "Responses", attempt > 0)
-			channelScheduler.RecordSuccessWithUsage(upstream.BaseURL, apiKey, nil, scheduler.ChannelKindResponses)
+			channelScheduler.RecordSuccessWithUsage(upstream.BaseURL, apiKey, metricsServiceType, nil, scheduler.ChannelKindResponses)
 			// 释放探针
 			probeKey := upstream.BaseURL + "|" + apiKey
 			if probeAcquired[probeKey] {
-				metricsManager.ReleaseProbe(upstream.BaseURL, apiKey)
+				metricsManager.ReleaseProbe(upstream.BaseURL, apiKey, metricsServiceType)
 				delete(probeAcquired, probeKey)
 			}
 			return true, apiKey, nil
@@ -282,12 +288,12 @@ func tryCompactChannelWithAllKeys(
 			if compactErr.shouldFailover {
 				failedKeys[apiKey] = true
 				cfgManager.MarkKeyAsFailed(apiKey, "Responses")
-				channelScheduler.RecordFailure(upstream.BaseURL, apiKey, scheduler.ChannelKindResponses)
+				channelScheduler.RecordFailure(upstream.BaseURL, apiKey, metricsServiceType, scheduler.ChannelKindResponses)
 				common.RecordChannelLog(channelLogStore, channelIndex, requestModel, "", compactErr.status, time.Since(attemptStart).Milliseconds(), false, apiKey, upstream.BaseURL, compactErr.errorInfo(), "Responses", attempt > 0)
 				// 释放探针
 				probeKey := upstream.BaseURL + "|" + apiKey
 				if probeAcquired[probeKey] {
-					metricsManager.ReleaseProbe(upstream.BaseURL, apiKey)
+					metricsManager.ReleaseProbe(upstream.BaseURL, apiKey, metricsServiceType)
 					delete(probeAcquired, probeKey)
 				}
 				continue
@@ -297,7 +303,7 @@ func tryCompactChannelWithAllKeys(
 			// 释放探针
 			probeKey := upstream.BaseURL + "|" + apiKey
 			if probeAcquired[probeKey] {
-				metricsManager.ReleaseProbe(upstream.BaseURL, apiKey)
+				metricsManager.ReleaseProbe(upstream.BaseURL, apiKey, metricsServiceType)
 				delete(probeAcquired, probeKey)
 			}
 			c.Data(compactErr.status, "application/json", compactErr.body)

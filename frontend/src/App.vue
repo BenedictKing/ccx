@@ -378,9 +378,12 @@
       :channel-name="capabilityTestChannelName"
       :current-tab="channelStore.activeTab"
       :capability-job="capabilityTestJob"
+      :capability-rpm="capabilityTestRpm"
+      @update:capability-rpm="capabilityTestRpm = $event"
       @copy-to-tab="handleCopyToTab"
       @cancel="handleCancelCapabilityTest"
       @retry-model="handleRetryCapabilityModel"
+      @test-protocol="handleTestCapabilityProtocol"
     />
 
     <!-- 添加API密钥对话框 -->
@@ -693,6 +696,7 @@ const capabilityTestDialogRef = ref<InstanceType<typeof CapabilityTestDialog> | 
 const capabilityTestJobId = ref('')
 const capabilityTestPolling = ref<ReturnType<typeof setInterval> | null>(null)
 const capabilityTestJob = ref<CapabilityTestJob | null>(null)
+const capabilityTestRpm = ref(10)
 const capabilityTestPreviousJobId = ref('') // 记录上一次的 jobId，用于复用成功结果
 const capabilityRetryPendingUntil = ref<Record<string, number>>({})
 
@@ -876,7 +880,10 @@ const testChannelCapability = async (channelId: number) => {
     const startResp: CapabilityTestJobStartResponse = await api.startChannelCapabilityTest(
       channelStore.activeTab,
       channelId,
-      capabilityTestPreviousJobId.value || undefined
+      {
+        previousJobId: capabilityTestPreviousJobId.value || undefined,
+        rpm: capabilityTestRpm.value
+      }
     )
     capabilityTestJobId.value = startResp.jobId
 
@@ -930,6 +937,25 @@ const handleRetryCapabilityModel = async (protocol: string, model: string) => {
 }
 
 // 复制渠道到目标协议 Tab
+const handleTestCapabilityProtocol = async (protocol: string) => {
+  if (!capabilityTestChannelId.value) return
+  try {
+    const startResp = await api.startChannelCapabilityTest(channelStore.activeTab, capabilityTestChannelId.value, {
+      targetProtocols: [protocol],
+      previousJobId: capabilityTestJobId.value || undefined,
+      rpm: capabilityTestRpm.value
+    })
+    capabilityTestJobId.value = startResp.jobId
+    if (startResp.job) {
+      updateCapabilityJob(startResp.job)
+    }
+    startCapabilityPolling(capabilityTestChannelId.value, startResp.jobId)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : t('system.unknown')
+    capabilityTestDialogRef.value?.setError(t('toast.capabilityFailed', { message }))
+  }
+}
+
 const handleCopyToTab = async (targetProtocol: string) => {
   const sourceChannel = channelStore.currentChannelsData.channels?.find(ch => ch.index === capabilityTestChannelId.value)
   if (!sourceChannel) {
