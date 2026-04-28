@@ -149,3 +149,50 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 4: Record sub2api passthrough usage release
+
+**Date**: 2026-04-28
+**Task**: Record sub2api passthrough usage release
+**Branch**: `codex/claude-channel-rules-passthrough`
+
+### Summary
+
+Collected usage for Claude sub2api passthrough, pushed tag release workflow, and recorded validation results.
+
+### Main Changes
+
+﻿| Item | Result |
+|------|--------|
+| Sub2API passthrough usage | Added server-side best-effort usage collection for Claude passthrough without changing client response bodies. |
+| Non-stream responses | Forward JSON unchanged while decoding usage for metrics; malformed JSON still passes through without turning success into failure. |
+| Streaming responses | Collect usage from SSE events during direct passthrough and return it to metrics. |
+| Tests | Added focused common handler tests for JSON passthrough usage and SSE passthrough usage collection. |
+| Release | Pushed branch `codex/claude-channel-rules-passthrough` and tag `v0.0.0-codex-claude-rules-20260428-0002` to `myfork`; release workflows triggered. |
+| Release status | Linux and Mac release builds succeeded; Windows was still in progress when recorded; Docker workflow failed because Aliyun registry username/password secrets were missing. |
+
+**Validation**:
+- `go test ./internal/handlers/common ./internal/handlers/messages`
+- `go test ./...`
+- `go vet ./...`
+- `git diff --check`
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e2cd627` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
