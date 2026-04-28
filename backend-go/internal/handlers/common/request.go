@@ -16,6 +16,7 @@ import (
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/httpclient"
 	"github.com/BenedictKing/ccx/internal/metrics"
+	"github.com/BenedictKing/ccx/internal/types"
 	"github.com/BenedictKing/ccx/internal/utils"
 	"github.com/gin-gonic/gin"
 )
@@ -54,6 +55,25 @@ func PassthroughResponse(c *gin.Context, resp *http.Response) error {
 	c.Status(resp.StatusCode)
 	_, err := io.Copy(c.Writer, resp.Body)
 	return err
+}
+
+// PassthroughJSONResponseWithUsage forwards a JSON response unchanged while
+// best-effort decoding usage for internal metrics.
+func PassthroughJSONResponseWithUsage(c *gin.Context, resp *http.Response) (*types.Usage, error) {
+	utils.ForwardResponseHeaders(resp.Header, c.Writer)
+	c.Status(resp.StatusCode)
+
+	var payload map[string]interface{}
+	tee := io.TeeReader(resp.Body, c.Writer)
+	decodeErr := json.NewDecoder(tee).Decode(&payload)
+	if _, copyErr := io.Copy(c.Writer, resp.Body); copyErr != nil {
+		return nil, copyErr
+	}
+	if decodeErr != nil {
+		return nil, nil
+	}
+
+	return extractUsageFromJSONPayload(payload), nil
 }
 
 // PassthroughJSONResponse 在透传响应给客户端的同时，用流式 Decoder 尝试解析 JSON。

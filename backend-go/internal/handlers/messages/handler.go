@@ -274,10 +274,11 @@ func handleNormalResponse(
 	defer resp.Body.Close()
 
 	if shouldDirectClaudePassthrough(upstream, apiKey) {
-		if err := common.PassthroughResponse(c, resp); err != nil {
+		usage, err := common.PassthroughJSONResponseWithUsage(c, resp)
+		if err != nil {
 			return nil, err
 		}
-		return nil, nil
+		return usage, nil
 	}
 
 	bodyBytes, err := io.ReadAll(resp.Body)

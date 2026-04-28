@@ -306,6 +306,60 @@ func TestPassthroughJSONResponse(t *testing.T) {
 	})
 }
 
+func TestPassthroughJSONResponseWithUsage(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	t.Run("forwards unchanged and returns usage", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		resp := &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"X-Test": []string{"ok"}},
+			Body:       io.NopCloser(bytes.NewBufferString(`{"id":"msg_1","usage":{"input_tokens":12,"output_tokens":34,"cache_creation_5m_input_tokens":5,"cache_read_input_tokens":7}}`)),
+		}
+
+		usage, err := PassthroughJSONResponseWithUsage(c, resp)
+		if err != nil {
+			t.Fatalf("PassthroughJSONResponseWithUsage() err = %v", err)
+		}
+		if got := w.Body.String(); got != `{"id":"msg_1","usage":{"input_tokens":12,"output_tokens":34,"cache_creation_5m_input_tokens":5,"cache_read_input_tokens":7}}` {
+			t.Fatalf("body changed: %q", got)
+		}
+		if w.Header().Get("X-Test") != "ok" {
+			t.Fatalf("header X-Test = %q, want ok", w.Header().Get("X-Test"))
+		}
+		if usage == nil {
+			t.Fatal("usage is nil")
+		}
+		if usage.InputTokens != 12 || usage.OutputTokens != 34 || usage.CacheCreation5mInputTokens != 5 || usage.CacheReadInputTokens != 7 {
+			t.Fatalf("usage = %+v", usage)
+		}
+		if usage.CacheTTL != "5m" {
+			t.Fatalf("CacheTTL = %q, want 5m", usage.CacheTTL)
+		}
+	})
+
+	t.Run("decode failure still forwards and does not fail", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		resp := &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewBufferString(`{"usage": invalid-json}`)),
+		}
+
+		usage, err := PassthroughJSONResponseWithUsage(c, resp)
+		if err != nil {
+			t.Fatalf("PassthroughJSONResponseWithUsage() err = %v", err)
+		}
+		if usage != nil {
+			t.Fatalf("usage = %+v, want nil", usage)
+		}
+		if got := w.Body.String(); got != `{"usage": invalid-json}` {
+			t.Fatalf("unexpected body: %q", got)
+		}
+	})
+}
+
 func TestSanitizeMalformedThinkingBlocks(t *testing.T) {
 	input := `{
 		"messages": [

@@ -168,6 +168,54 @@ func TestPatchMessageStartInputTokensIfNeeded(t *testing.T) {
 	})
 }
 
+func TestCollectPassthroughStreamUsage(t *testing.T) {
+	events := []string{
+		"event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":100,\"output_tokens\":1}}}\n\n",
+		"event: message_delta\ndata: {\"type\":\"message_delta\",\"usage\":{\"input_tokens\":80,\"output_tokens\":12,\"cache_read_input_tokens\":20}}\n\n",
+	}
+
+	var collected CollectedUsageData
+	messageStartInputTokens := 0
+	for _, event := range events {
+		collectPassthroughStreamUsage(event, &collected, &messageStartInputTokens)
+	}
+
+	usage := usageFromCollectedUsage(collected)
+	if usage == nil {
+		t.Fatal("usage is nil")
+	}
+	if usage.InputTokens != 80 || usage.OutputTokens != 12 || usage.CacheReadInputTokens != 20 {
+		t.Fatalf("usage = %+v", usage)
+	}
+	if messageStartInputTokens != 100 {
+		t.Fatalf("messageStartInputTokens = %d, want 100", messageStartInputTokens)
+	}
+}
+
+func TestCollectPassthroughStreamUsage_FallsBackToMessageStartInput(t *testing.T) {
+	events := []string{
+		"event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":100,\"output_tokens\":1}}}\n\n",
+		"event: message_delta\ndata: {\"type\":\"message_delta\",\"usage\":{\"output_tokens\":12}}\n\n",
+	}
+
+	var collected CollectedUsageData
+	messageStartInputTokens := 0
+	for _, event := range events {
+		collectPassthroughStreamUsage(event, &collected, &messageStartInputTokens)
+	}
+	if collected.InputTokens == 0 && messageStartInputTokens > 0 {
+		collected.InputTokens = messageStartInputTokens
+	}
+
+	usage := usageFromCollectedUsage(collected)
+	if usage == nil {
+		t.Fatal("usage is nil")
+	}
+	if usage.InputTokens != 100 || usage.OutputTokens != 12 {
+		t.Fatalf("usage = %+v", usage)
+	}
+}
+
 // TestInferImplicitCacheRead 测试隐式缓存推断逻辑
 func TestInferImplicitCacheRead(t *testing.T) {
 	tests := []struct {

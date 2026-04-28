@@ -805,25 +805,7 @@ func logStreamCompletion(ctx *StreamContext, envCfg *config.EnvConfig, startTime
 	inferImplicitCacheRead(ctx, envCfg.EnableResponseLogs && envCfg.ShouldLog("debug"))
 
 	// 将累积的 usage 数据转换为 *types.Usage
-	var usage *types.Usage
-	hasUsageData := ctx.CollectedUsage.InputTokens > 0 ||
-		ctx.CollectedUsage.OutputTokens > 0 ||
-		ctx.CollectedUsage.CacheCreationInputTokens > 0 ||
-		ctx.CollectedUsage.CacheReadInputTokens > 0 ||
-		ctx.CollectedUsage.CacheCreation5mInputTokens > 0 ||
-		ctx.CollectedUsage.CacheCreation1hInputTokens > 0
-	if hasUsageData {
-		usage = &types.Usage{
-			InputTokens:                ctx.CollectedUsage.InputTokens,
-			OutputTokens:               ctx.CollectedUsage.OutputTokens,
-			CacheCreationInputTokens:   ctx.CollectedUsage.CacheCreationInputTokens,
-			CacheReadInputTokens:       ctx.CollectedUsage.CacheReadInputTokens,
-			CacheCreation5mInputTokens: ctx.CollectedUsage.CacheCreation5mInputTokens,
-			CacheCreation1hInputTokens: ctx.CollectedUsage.CacheCreation1hInputTokens,
-			CacheTTL:                   ctx.CollectedUsage.CacheTTL,
-		}
-	}
-	return usage
+	return usageFromCollectedUsage(ctx.CollectedUsage)
 }
 
 // logPartialResponse 记录部分响应日志
@@ -927,15 +909,22 @@ func HandleStreamResponse(
 
 	// 渠道级开关：true=直接透传；false=走本地流事件处理链
 	if upstream == nil || ShouldDirectClaudePassthroughForKey(upstream, SelectedAPIKeyFromContext(c)) {
+		var collectedUsage CollectedUsageData
+		messageStartInputTokens := 0
 		for _, buffered := range preflight.BufferedEvents {
+			collectPassthroughStreamUsage(buffered, &collectedUsage, &messageStartInputTokens)
 			fmt.Fprint(c.Writer, buffered) //nolint:errcheck
 			flusher.Flush()
 		}
 		for event := range eventChan {
+			collectPassthroughStreamUsage(event, &collectedUsage, &messageStartInputTokens)
 			fmt.Fprint(c.Writer, event) //nolint:errcheck
 			flusher.Flush()
 		}
-		return nil, nil
+		if collectedUsage.InputTokens == 0 && messageStartInputTokens > 0 {
+			collectedUsage.InputTokens = messageStartInputTokens
+		}
+		return usageFromCollectedUsage(collectedUsage), nil
 	}
 
 	if envCfg == nil {
@@ -1054,8 +1043,12 @@ func extractUsageFromMap(usage map[string]interface{}) CollectedUsageData {
 
 	if v, ok := usage["input_tokens"].(float64); ok {
 		data.InputTokens = int(v)
+	} else if v, ok := usage["prompt_tokens"].(float64); ok {
+		data.InputTokens = int(v)
 	}
 	if v, ok := usage["output_tokens"].(float64); ok {
+		data.OutputTokens = int(v)
+	} else if v, ok := usage["completion_tokens"].(float64); ok {
 		data.OutputTokens = int(v)
 	}
 	if v, ok := usage["cache_creation_input_tokens"].(float64); ok {
@@ -1084,6 +1077,54 @@ func extractUsageFromMap(usage map[string]interface{}) CollectedUsageData {
 	}
 
 	return data
+}
+
+func extractUsageFromJSONPayload(payload map[string]interface{}) *types.Usage {
+	if usage, ok := payload["usage"].(map[string]interface{}); ok {
+		return usageFromCollectedUsage(extractUsageFromMap(usage))
+	}
+	if message, ok := payload["message"].(map[string]interface{}); ok {
+		if usage, ok := message["usage"].(map[string]interface{}); ok {
+			return usageFromCollectedUsage(extractUsageFromMap(usage))
+		}
+	}
+	return nil
+}
+
+func collectPassthroughStreamUsage(event string, collected *CollectedUsageData, messageStartInputTokens *int) {
+	hasUsage, _, _, usageData := CheckEventUsageStatus(event, false)
+	if !hasUsage {
+		return
+	}
+	if IsMessageStartEvent(event) && usageData.InputTokens > 0 {
+		if messageStartInputTokens != nil && *messageStartInputTokens == 0 {
+			*messageStartInputTokens = usageData.InputTokens
+		}
+		usageData.InputTokens = 0
+	}
+	updateCollectedUsage(collected, usageData)
+}
+
+func usageFromCollectedUsage(data CollectedUsageData) *types.Usage {
+	hasUsageData := data.InputTokens > 0 ||
+		data.OutputTokens > 0 ||
+		data.CacheCreationInputTokens > 0 ||
+		data.CacheReadInputTokens > 0 ||
+		data.CacheCreation5mInputTokens > 0 ||
+		data.CacheCreation1hInputTokens > 0
+	if !hasUsageData {
+		return nil
+	}
+
+	return &types.Usage{
+		InputTokens:                data.InputTokens,
+		OutputTokens:               data.OutputTokens,
+		CacheCreationInputTokens:   data.CacheCreationInputTokens,
+		CacheReadInputTokens:       data.CacheReadInputTokens,
+		CacheCreation5mInputTokens: data.CacheCreation5mInputTokens,
+		CacheCreation1hInputTokens: data.CacheCreation1hInputTokens,
+		CacheTTL:                   data.CacheTTL,
+	}
 }
 
 // logUsageDetection 统一格式输出 usage 检测日志
