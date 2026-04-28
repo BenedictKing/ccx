@@ -240,3 +240,10 @@ docs/claude-code-investigation-*.md
 !backend-go/frontend/dist/.keep
 
 .planning/
+
+# Local-only investigation artifacts
+/nohup.out
+/kimi2.txt
+
+# Nested external repository, not tracked by this repo
+/sub2api/

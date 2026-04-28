@@ -34,3 +34,31 @@
 ## 安全与配置提示
 - 部署前必须设置强 `PROXY_ACCESS_KEY`；生产环境建议关闭详细请求/响应日志。
 - 代理端点统一鉴权（Header `x-api-key` / `Authorization: Bearer`）；生产环境不建议使用 query `key`。
+<!-- TRELLIS:START -->
+# Trellis Instructions
+
+These instructions are for AI assistants working in this project.
+
+Use the `/trellis:start` command when starting a new session to:
+- Initialize your developer identity
+- Understand current project context
+- Read relevant guidelines
+
+Use `@/.trellis/` to learn:
+- Development workflow (`workflow.md`)
+- Project structure guidelines (`spec/`)
+- Developer workspace (`workspace/`)
+
+If you're using Codex, project-scoped helpers may also live in:
+- `.agents/skills/` for reusable Trellis skills
+- `.codex/agents/` for optional custom subagents
+
+Keep this managed block so 'trellis update' can refresh the instructions.
+
+<!-- TRELLIS:END -->
+
+
+
+# Note
+
+**No backward compatibility** - Break old formatsfreely
