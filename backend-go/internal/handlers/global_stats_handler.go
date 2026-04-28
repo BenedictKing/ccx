@@ -9,7 +9,7 @@ import (
 )
 
 // GetGlobalStatsHistory 获取全局统计历史数据
-// GET /api/{messages|responses}/global/stats/history?duration={1h|6h|24h|today|7d|30d}
+// GET /api/{messages|responses|gemini|chat|images}/global/stats/history?duration={1h|6h|24h|today|7d|30d}
 func GetGlobalStatsHistory(metricsManager *metrics.MetricsManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		durationStr := c.DefaultQuery("duration", "24h")

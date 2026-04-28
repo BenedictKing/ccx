@@ -113,7 +113,7 @@ func main() {
 	urlManager := warmup.NewURLManager(30*time.Second, 3) // 30秒冷却期，连续3次失败后移到末尾
 	log.Printf("[URLManager-Init] URL管理器已初始化 (冷却期: 30秒, 最大连续失败: 3)")
 
-	channelScheduler := scheduler.NewChannelScheduler(cfgManager, messagesMetricsManager, responsesMetricsManager, geminiMetricsManager, chatMetricsManager, traceAffinityManager, urlManager, imagesMetricsManager)
+	channelScheduler := scheduler.NewChannelScheduler(cfgManager, messagesMetricsManager, responsesMetricsManager, geminiMetricsManager, chatMetricsManager, imagesMetricsManager, traceAffinityManager, urlManager)
 	log.Printf("[Scheduler-Init] 多渠道调度器已初始化 (失败率阈值: %.0f%%, 滑动窗口: %d)",
 		messagesMetricsManager.GetFailureThreshold()*100, messagesMetricsManager.GetWindowSize())
 
@@ -279,24 +279,7 @@ func main() {
 		apiGroup.POST("/chat/channels/:id/capability-test/:jobId/retry", handlers.RetryCapabilityTestModel(cfgManager, channelScheduler.GetChannelLogStore(scheduler.ChannelKindChat), "chat"))
 		apiGroup.GET("/chat/channels/scheduler/stats", handlers.GetSchedulerStats(channelScheduler))
 
-		apiGroup.GET("/images/channels", images.GetUpstreams(cfgManager))
-		apiGroup.POST("/images/channels", images.AddUpstream(cfgManager))
-		apiGroup.PUT("/images/channels/:id", images.UpdateUpstream(cfgManager, channelScheduler))
-		apiGroup.DELETE("/images/channels/:id", images.DeleteUpstream(cfgManager, channelScheduler))
-		apiGroup.POST("/images/channels/:id/keys", images.AddApiKey(cfgManager))
-		apiGroup.DELETE("/images/channels/:id/keys/:apiKey", images.DeleteApiKey(cfgManager))
-		apiGroup.POST("/images/channels/:id/keys/:apiKey/top", images.MoveApiKeyToTop(cfgManager))
-		apiGroup.POST("/images/channels/:id/keys/:apiKey/bottom", images.MoveApiKeyToBottom(cfgManager))
-		apiGroup.POST("/images/channels/:id/keys/restore", handlers.RestoreBlacklistedKey(cfgManager, "Images"))
-		apiGroup.POST("/images/channels/reorder", images.ReorderChannels(cfgManager))
-		apiGroup.PATCH("/images/channels/:id/status", images.SetChannelStatus(cfgManager))
-		apiGroup.POST("/images/channels/:id/resume", handlers.ResumeChannelWithKind(channelScheduler, cfgManager, scheduler.ChannelKindImages))
-		apiGroup.POST("/images/channels/:id/promotion", images.SetChannelPromotion(cfgManager))
-		apiGroup.GET("/images/ping/:id", images.PingChannel(cfgManager))
-		apiGroup.GET("/images/ping", images.PingAllChannels(cfgManager))
-		apiGroup.POST("/images/channels/:id/models", images.GetChannelModels(cfgManager))
-		apiGroup.GET("/images/models/stats/history", handlers.GetModelStatsHistory(imagesMetricsManager))
-		apiGroup.GET("/images/channels/:id/logs", handlers.GetChannelLogs(channelScheduler.GetChannelLogStore(scheduler.ChannelKindImages)))
+		registerImagesAdminRoutes(apiGroup, cfgManager, channelScheduler, imagesMetricsManager)
 
 		// Fuzzy 模式设置
 		apiGroup.GET("/settings/fuzzy-mode", handlers.GetFuzzyMode(cfgManager))
@@ -465,4 +448,29 @@ func main() {
 	case <-time.After(15 * time.Second):
 		log.Println("[Server-Shutdown] 警告: 等待关闭超时")
 	}
+}
+
+func registerImagesAdminRoutes(apiGroup *gin.RouterGroup, cfgManager *config.ConfigManager, channelScheduler *scheduler.ChannelScheduler, imagesMetricsManager *metrics.MetricsManager) {
+	apiGroup.GET("/images/channels", images.GetUpstreams(cfgManager))
+	apiGroup.POST("/images/channels", images.AddUpstream(cfgManager))
+	apiGroup.PUT("/images/channels/:id", images.UpdateUpstream(cfgManager, channelScheduler))
+	apiGroup.DELETE("/images/channels/:id", images.DeleteUpstream(cfgManager, channelScheduler))
+	apiGroup.POST("/images/channels/:id/keys", images.AddApiKey(cfgManager))
+	apiGroup.DELETE("/images/channels/:id/keys/:apiKey", images.DeleteApiKey(cfgManager))
+	apiGroup.POST("/images/channels/:id/keys/:apiKey/top", images.MoveApiKeyToTop(cfgManager))
+	apiGroup.POST("/images/channels/:id/keys/:apiKey/bottom", images.MoveApiKeyToBottom(cfgManager))
+	apiGroup.POST("/images/channels/:id/keys/restore", handlers.RestoreBlacklistedKey(cfgManager, "Images"))
+	apiGroup.POST("/images/channels/reorder", images.ReorderChannels(cfgManager))
+	apiGroup.PATCH("/images/channels/:id/status", images.SetChannelStatus(cfgManager))
+	apiGroup.POST("/images/channels/:id/resume", handlers.ResumeChannelWithKind(channelScheduler, cfgManager, scheduler.ChannelKindImages))
+	apiGroup.POST("/images/channels/:id/promotion", images.SetChannelPromotion(cfgManager))
+	apiGroup.GET("/images/channels/metrics", handlers.GetImagesChannelMetrics(imagesMetricsManager, cfgManager))
+	apiGroup.GET("/images/channels/metrics/history", handlers.GetImagesChannelMetricsHistory(imagesMetricsManager, cfgManager))
+	apiGroup.GET("/images/channels/:id/keys/metrics/history", handlers.GetImagesChannelKeyMetricsHistory(imagesMetricsManager, cfgManager))
+	apiGroup.GET("/images/global/stats/history", handlers.GetGlobalStatsHistory(imagesMetricsManager))
+	apiGroup.GET("/images/ping/:id", images.PingChannel(cfgManager))
+	apiGroup.GET("/images/ping", images.PingAllChannels(cfgManager))
+	apiGroup.POST("/images/channels/:id/models", images.GetChannelModels(cfgManager))
+	apiGroup.GET("/images/models/stats/history", handlers.GetModelStatsHistory(imagesMetricsManager))
+	apiGroup.GET("/images/channels/:id/logs", handlers.GetChannelLogs(channelScheduler.GetChannelLogStore(scheduler.ChannelKindImages)))
 }
