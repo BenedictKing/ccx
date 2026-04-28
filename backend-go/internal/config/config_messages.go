@@ -89,7 +89,8 @@ func (cm *ConfigManager) AddUpstream(upstream UpstreamConfig) error {
 
 	// 去重 API Keys 和 Base URLs
 	upstream.APIKeys = deduplicateStrings(upstream.APIKeys)
-	upstream.BaseURLs = deduplicateBaseURLs(upstream.BaseURLs)
+	upstream.BaseURL = utils.CanonicalBaseURL(upstream.BaseURL, upstream.ServiceType)
+	upstream.BaseURLs = deduplicateBaseURLs(upstream.BaseURLs, upstream.ServiceType)
 	upstream.NormalizeClaudePassthroughMode()
 	upstream.NormalizeModelsHealthCheckOptions()
 	upstream.NormalizeModelsResponseMode()
@@ -115,6 +116,10 @@ func (cm *ConfigManager) UpdateUpstream(index int, updates UpstreamUpdate) (shou
 	}
 
 	upstream := &cm.config.Upstream[index]
+	serviceType := upstream.ServiceType
+	if updates.ServiceType != nil {
+		serviceType = *updates.ServiceType
+	}
 
 	if updates.Name != nil {
 		if err := validateUniqueUpstreamName(cm.config.Upstream, index, *updates.Name); err != nil {
@@ -123,7 +128,7 @@ func (cm *ConfigManager) UpdateUpstream(index int, updates UpstreamUpdate) (shou
 		upstream.Name = *updates.Name
 	}
 	if updates.BaseURL != nil {
-		upstream.BaseURL = *updates.BaseURL
+		upstream.BaseURL = utils.CanonicalBaseURL(*updates.BaseURL, serviceType)
 		// 当 BaseURL 被更新且 BaseURLs 未被显式设置时，清空 BaseURLs 保持一致性
 		// 避免出现 baseUrl 和 baseUrls[0] 不一致的情况
 		if updates.BaseURLs == nil {
@@ -131,10 +136,10 @@ func (cm *ConfigManager) UpdateUpstream(index int, updates UpstreamUpdate) (shou
 		}
 	}
 	if updates.BaseURLs != nil {
-		upstream.BaseURLs = deduplicateBaseURLs(updates.BaseURLs)
+		upstream.BaseURLs = deduplicateBaseURLs(updates.BaseURLs, serviceType)
 	}
 	if updates.ServiceType != nil {
-		upstream.ServiceType = *updates.ServiceType
+		upstream.ServiceType = serviceType
 	}
 	if updates.Description != nil {
 		upstream.Description = *updates.Description
@@ -215,9 +220,6 @@ func (cm *ConfigManager) UpdateUpstream(index int, updates UpstreamUpdate) (shou
 	}
 	if updates.LowQuality != nil {
 		upstream.LowQuality = *updates.LowQuality
-	}
-	if updates.RPM != nil {
-		upstream.RPM = *updates.RPM
 	}
 	if updates.AutoBlacklistBalance != nil {
 		v := *updates.AutoBlacklistBalance
@@ -627,6 +629,24 @@ func (cm *ConfigManager) DeprioritizeAPIKey(apiKey string) error {
 			upstream.APIKeys = append(upstream.APIKeys[:index], upstream.APIKeys[index+1:]...)
 			upstream.APIKeys = append(upstream.APIKeys, apiKey)
 			log.Printf("[Chat-Key] 已将API密钥移动到末尾以降低优先级: %s (Chat渠道: %s)", utils.MaskAPIKey(apiKey), upstream.Name)
+			return cm.saveConfigLocked(cm.config)
+		}
+	}
+
+	for upstreamIdx := range cm.config.ImagesUpstream {
+		upstream := &cm.config.ImagesUpstream[upstreamIdx]
+		index := -1
+		for i, key := range upstream.APIKeys {
+			if key == apiKey {
+				index = i
+				break
+			}
+		}
+
+		if index != -1 && index != len(upstream.APIKeys)-1 {
+			upstream.APIKeys = append(upstream.APIKeys[:index], upstream.APIKeys[index+1:]...)
+			upstream.APIKeys = append(upstream.APIKeys, apiKey)
+			log.Printf("[Images-Key] 已将API密钥移动到末尾以降低优先级: %s (Images渠道: %s)", utils.MaskAPIKey(apiKey), upstream.Name)
 			return cm.saveConfigLocked(cm.config)
 		}
 	}

@@ -70,7 +70,8 @@ func (cm *ConfigManager) AddChatUpstream(upstream UpstreamConfig) error {
 
 	// 去重 API Keys 和 Base URLs
 	upstream.APIKeys = deduplicateStrings(upstream.APIKeys)
-	upstream.BaseURLs = deduplicateBaseURLs(upstream.BaseURLs)
+	upstream.BaseURL = utils.CanonicalBaseURL(upstream.BaseURL, upstream.ServiceType)
+	upstream.BaseURLs = deduplicateBaseURLs(upstream.BaseURLs, upstream.ServiceType)
 	upstream.NormalizeClaudePassthroughMode()
 	upstream.NormalizeModelsHealthCheckOptions()
 	upstream.NormalizeModelsResponseMode()
@@ -96,6 +97,10 @@ func (cm *ConfigManager) UpdateChatUpstream(index int, updates UpstreamUpdate) (
 	}
 
 	upstream := &cm.config.ChatUpstream[index]
+	serviceType := upstream.ServiceType
+	if updates.ServiceType != nil {
+		serviceType = *updates.ServiceType
+	}
 
 	if updates.Name != nil {
 		if err := validateChatUpstreamNameLocked(cm.config.ChatUpstream, index, *updates.Name); err != nil {
@@ -104,16 +109,16 @@ func (cm *ConfigManager) UpdateChatUpstream(index int, updates UpstreamUpdate) (
 		upstream.Name = *updates.Name
 	}
 	if updates.BaseURL != nil {
-		upstream.BaseURL = *updates.BaseURL
+		upstream.BaseURL = utils.CanonicalBaseURL(*updates.BaseURL, serviceType)
 		if updates.BaseURLs == nil {
 			upstream.BaseURLs = nil
 		}
 	}
 	if updates.BaseURLs != nil {
-		upstream.BaseURLs = deduplicateBaseURLs(updates.BaseURLs)
+		upstream.BaseURLs = deduplicateBaseURLs(updates.BaseURLs, serviceType)
 	}
 	if updates.ServiceType != nil {
-		upstream.ServiceType = *updates.ServiceType
+		upstream.ServiceType = serviceType
 	}
 	if updates.Description != nil {
 		upstream.Description = *updates.Description
@@ -189,9 +194,6 @@ func (cm *ConfigManager) UpdateChatUpstream(index int, updates UpstreamUpdate) (
 	}
 	if updates.LowQuality != nil {
 		upstream.LowQuality = *updates.LowQuality
-	}
-	if updates.RPM != nil {
-		upstream.RPM = *updates.RPM
 	}
 	if updates.AutoBlacklistBalance != nil {
 		v := *updates.AutoBlacklistBalance

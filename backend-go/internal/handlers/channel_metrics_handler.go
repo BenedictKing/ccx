@@ -692,7 +692,6 @@ func GetChannelDashboard(cfgManager *config.ConfigManager, sch *scheduler.Channe
 				"priority":                         priority,
 				"promotionUntil":                   up.PromotionUntil,
 				"lowQuality":                       up.LowQuality,
-				"rpm":                              up.RPM,
 			}
 
 			// Gemini 特有字段

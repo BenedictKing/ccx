@@ -65,7 +65,8 @@ func (cm *ConfigManager) AddResponsesUpstream(upstream UpstreamConfig) error {
 
 	// 去重 API Keys 和 Base URLs
 	upstream.APIKeys = deduplicateStrings(upstream.APIKeys)
-	upstream.BaseURLs = deduplicateBaseURLs(upstream.BaseURLs)
+	upstream.BaseURL = utils.CanonicalBaseURL(upstream.BaseURL, upstream.ServiceType)
+	upstream.BaseURLs = deduplicateBaseURLs(upstream.BaseURLs, upstream.ServiceType)
 	upstream.NormalizeClaudePassthroughMode()
 	upstream.NormalizeModelsHealthCheckOptions()
 	upstream.NormalizeModelsResponseMode()
@@ -91,6 +92,10 @@ func (cm *ConfigManager) UpdateResponsesUpstream(index int, updates UpstreamUpda
 	}
 
 	upstream := &cm.config.ResponsesUpstream[index]
+	serviceType := upstream.ServiceType
+	if updates.ServiceType != nil {
+		serviceType = *updates.ServiceType
+	}
 
 	if updates.Name != nil {
 		if err := validateUniqueUpstreamName(cm.config.ResponsesUpstream, index, *updates.Name); err != nil {
@@ -99,7 +104,7 @@ func (cm *ConfigManager) UpdateResponsesUpstream(index int, updates UpstreamUpda
 		upstream.Name = *updates.Name
 	}
 	if updates.BaseURL != nil {
-		upstream.BaseURL = *updates.BaseURL
+		upstream.BaseURL = utils.CanonicalBaseURL(*updates.BaseURL, serviceType)
 		// 当 BaseURL 被更新且 BaseURLs 未被显式设置时，清空 BaseURLs 保持一致性
 		// 避免出现 baseUrl 和 baseUrls[0] 不一致的情况
 		if updates.BaseURLs == nil {
@@ -107,10 +112,10 @@ func (cm *ConfigManager) UpdateResponsesUpstream(index int, updates UpstreamUpda
 		}
 	}
 	if updates.BaseURLs != nil {
-		upstream.BaseURLs = deduplicateBaseURLs(updates.BaseURLs)
+		upstream.BaseURLs = deduplicateBaseURLs(updates.BaseURLs, serviceType)
 	}
 	if updates.ServiceType != nil {
-		upstream.ServiceType = *updates.ServiceType
+		upstream.ServiceType = serviceType
 	}
 	if updates.Description != nil {
 		upstream.Description = *updates.Description
@@ -191,9 +196,6 @@ func (cm *ConfigManager) UpdateResponsesUpstream(index int, updates UpstreamUpda
 	}
 	if updates.LowQuality != nil {
 		upstream.LowQuality = *updates.LowQuality
-	}
-	if updates.RPM != nil {
-		upstream.RPM = *updates.RPM
 	}
 	if updates.AutoBlacklistBalance != nil {
 		v := *updates.AutoBlacklistBalance
