@@ -58,6 +58,47 @@ Examples:
 - Scheduler coverage: `backend-go/internal/scheduler/channel_scheduler_test.go`
 - Converter coverage: `backend-go/internal/converters/responses_converter_test.go`
 
+## Proxy Handler Contracts
+
+### Scope / Trigger
+
+Use this contract when adding or changing a protocol proxy family under `backend-go/internal/handlers/<protocol>/`.
+
+### Signatures
+
+- Public proxy endpoint handlers should expose `Handler(envCfg, cfgManager, channelScheduler) gin.HandlerFunc`.
+- Channel admin files should live beside the handler as `channels.go`.
+- Shared retry paths should use `common.TryUpstreamWithAllKeys(...)` instead of protocol-local key loops.
+
+### Contracts
+
+- Register both default and `/:routePrefix/...` proxy routes when the protocol supports route prefixes.
+- Add a distinct `scheduler.ChannelKind*`, metrics manager, and channel log store for independent routing families.
+- Channel logs for proxy attempts must move through `pending -> connecting -> first_byte -> streaming -> completed|failed|cancelled`.
+- `context.Canceled` is `cancelled`: it must finalize metrics as client cancel and must not blacklist or cooldown keys.
+- Multipart proxy paths must preserve file parts and content type boundaries; never log raw binary multipart bodies.
+
+### Validation & Error Matrix
+
+| Case | Expected behavior |
+|------|-------------------|
+| Non-2xx retryable upstream error | classify with failover rules/default classifier, finalize failed attempt, try next key/channel |
+| SSE preflight auth/quota/rate-limit error | apply blacklist/cooldown decision before headers are sent |
+| `context.Canceled` during send or stream | finalize as `cancelled`, stop failover, do not mark key failed |
+| Multipart image request with files | forward file parts intact and only rewrite safe form fields such as `model` |
+
+### Good/Base/Bad Cases
+
+- Good: `/v1/images/generations` and `/:routePrefix/v1/images/generations` use the same Images handler and `ChannelKindImages`.
+- Base: JSON proxy requests may rewrite `model` through `config.RedirectModel`.
+- Bad: reusing Chat metrics/log stores for Images, because failures and route health would contaminate another protocol family.
+
+### Tests Required
+
+- Handler package tests for route parsing, JSON validation, multipart preservation, and upstream header/auth forwarding.
+- Common failover tests for client cancellation, stream preflight classification, and channel log terminal states.
+- At minimum run `go test ./internal/handlers/...` after handler changes.
+
 ---
 
 ## Code Review Checklist

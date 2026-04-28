@@ -15,6 +15,7 @@ import (
 	"github.com/BenedictKing/ccx/internal/handlers"
 	"github.com/BenedictKing/ccx/internal/handlers/chat"
 	"github.com/BenedictKing/ccx/internal/handlers/gemini"
+	"github.com/BenedictKing/ccx/internal/handlers/images"
 	"github.com/BenedictKing/ccx/internal/handlers/messages"
 	"github.com/BenedictKing/ccx/internal/handlers/responses"
 	"github.com/BenedictKing/ccx/internal/logger"
@@ -87,7 +88,7 @@ func main() {
 	}
 
 	// 初始化多渠道调度器（Messages、Responses、Gemini 和 Chat 使用独立的指标管理器）
-	var messagesMetricsManager, responsesMetricsManager, geminiMetricsManager, chatMetricsManager *metrics.MetricsManager
+	var messagesMetricsManager, responsesMetricsManager, geminiMetricsManager, chatMetricsManager, imagesMetricsManager *metrics.MetricsManager
 	if metricsStore != nil {
 		messagesMetricsManager = metrics.NewMetricsManagerWithPersistence(
 			envCfg.MetricsWindowSize, envCfg.MetricsFailureThreshold, metricsStore, "messages")
@@ -97,11 +98,14 @@ func main() {
 			envCfg.MetricsWindowSize, envCfg.MetricsFailureThreshold, metricsStore, "gemini")
 		chatMetricsManager = metrics.NewMetricsManagerWithPersistence(
 			envCfg.MetricsWindowSize, envCfg.MetricsFailureThreshold, metricsStore, "chat")
+		imagesMetricsManager = metrics.NewMetricsManagerWithPersistence(
+			envCfg.MetricsWindowSize, envCfg.MetricsFailureThreshold, metricsStore, "images")
 	} else {
 		messagesMetricsManager = metrics.NewMetricsManagerWithConfig(envCfg.MetricsWindowSize, envCfg.MetricsFailureThreshold)
 		responsesMetricsManager = metrics.NewMetricsManagerWithConfig(envCfg.MetricsWindowSize, envCfg.MetricsFailureThreshold)
 		geminiMetricsManager = metrics.NewMetricsManagerWithConfig(envCfg.MetricsWindowSize, envCfg.MetricsFailureThreshold)
 		chatMetricsManager = metrics.NewMetricsManagerWithConfig(envCfg.MetricsWindowSize, envCfg.MetricsFailureThreshold)
+		imagesMetricsManager = metrics.NewMetricsManagerWithConfig(envCfg.MetricsWindowSize, envCfg.MetricsFailureThreshold)
 	}
 	traceAffinityManager := session.NewTraceAffinityManager()
 
@@ -109,7 +113,7 @@ func main() {
 	urlManager := warmup.NewURLManager(30*time.Second, 3) // 30秒冷却期，连续3次失败后移到末尾
 	log.Printf("[URLManager-Init] URL管理器已初始化 (冷却期: 30秒, 最大连续失败: 3)")
 
-	channelScheduler := scheduler.NewChannelScheduler(cfgManager, messagesMetricsManager, responsesMetricsManager, geminiMetricsManager, chatMetricsManager, traceAffinityManager, urlManager)
+	channelScheduler := scheduler.NewChannelScheduler(cfgManager, messagesMetricsManager, responsesMetricsManager, geminiMetricsManager, chatMetricsManager, traceAffinityManager, urlManager, imagesMetricsManager)
 	log.Printf("[Scheduler-Init] 多渠道调度器已初始化 (失败率阈值: %.0f%%, 滑动窗口: %d)",
 		messagesMetricsManager.GetFailureThreshold()*100, messagesMetricsManager.GetWindowSize())
 
@@ -271,6 +275,25 @@ func main() {
 		apiGroup.POST("/chat/channels/:id/capability-test/:jobId/retry", handlers.RetryCapabilityTestModel(cfgManager, channelScheduler.GetChannelLogStore(scheduler.ChannelKindChat), "chat"))
 		apiGroup.GET("/chat/channels/scheduler/stats", handlers.GetSchedulerStats(channelScheduler))
 
+		apiGroup.GET("/images/channels", images.GetUpstreams(cfgManager))
+		apiGroup.POST("/images/channels", images.AddUpstream(cfgManager))
+		apiGroup.PUT("/images/channels/:id", images.UpdateUpstream(cfgManager, channelScheduler))
+		apiGroup.DELETE("/images/channels/:id", images.DeleteUpstream(cfgManager, channelScheduler))
+		apiGroup.POST("/images/channels/:id/keys", images.AddApiKey(cfgManager))
+		apiGroup.DELETE("/images/channels/:id/keys/:apiKey", images.DeleteApiKey(cfgManager))
+		apiGroup.POST("/images/channels/:id/keys/:apiKey/top", images.MoveApiKeyToTop(cfgManager))
+		apiGroup.POST("/images/channels/:id/keys/:apiKey/bottom", images.MoveApiKeyToBottom(cfgManager))
+		apiGroup.POST("/images/channels/:id/keys/restore", handlers.RestoreBlacklistedKey(cfgManager, "Images"))
+		apiGroup.POST("/images/channels/reorder", images.ReorderChannels(cfgManager))
+		apiGroup.PATCH("/images/channels/:id/status", images.SetChannelStatus(cfgManager))
+		apiGroup.POST("/images/channels/:id/resume", handlers.ResumeChannelWithKind(channelScheduler, cfgManager, scheduler.ChannelKindImages))
+		apiGroup.POST("/images/channels/:id/promotion", images.SetChannelPromotion(cfgManager))
+		apiGroup.GET("/images/ping/:id", images.PingChannel(cfgManager))
+		apiGroup.GET("/images/ping", images.PingAllChannels(cfgManager))
+		apiGroup.POST("/images/channels/:id/models", images.GetChannelModels(cfgManager))
+		apiGroup.GET("/images/models/stats/history", handlers.GetModelStatsHistory(imagesMetricsManager))
+		apiGroup.GET("/images/channels/:id/logs", handlers.GetChannelLogs(channelScheduler.GetChannelLogStore(scheduler.ChannelKindImages)))
+
 		// Fuzzy 模式设置
 		apiGroup.GET("/settings/fuzzy-mode", handlers.GetFuzzyMode(cfgManager))
 		apiGroup.PUT("/settings/fuzzy-mode", handlers.SetFuzzyMode(cfgManager))
@@ -319,6 +342,14 @@ func main() {
 	r.POST("/v1/chat/completions", chatHandler)
 	r.POST("/:routePrefix/v1/chat/completions", chatHandler)
 
+	imagesHandler := images.Handler(envCfg, cfgManager, channelScheduler)
+	r.POST("/v1/images/generations", imagesHandler)
+	r.POST("/:routePrefix/v1/images/generations", imagesHandler)
+	r.POST("/v1/images/edits", imagesHandler)
+	r.POST("/:routePrefix/v1/images/edits", imagesHandler)
+	r.POST("/v1/images/variations", imagesHandler)
+	r.POST("/:routePrefix/v1/images/variations", imagesHandler)
+
 	// 静态文件服务 (嵌入的前端)
 	if envCfg.EnableWebUI {
 		handlers.ServeFrontend(r, frontendFS, envCfg)
@@ -356,6 +387,9 @@ func main() {
 	fmt.Printf("[Server-Info] Gemini API: POST /v1beta/models/{model}:generateContent\n")
 	fmt.Printf("[Server-Info] Gemini API: POST /v1beta/models/{model}:streamGenerateContent\n")
 	fmt.Printf("[Server-Info] Chat Completions: POST /v1/chat/completions\n")
+	fmt.Printf("[Server-Info] Images Generations: POST /v1/images/generations\n")
+	fmt.Printf("[Server-Info] Images Edits: POST /v1/images/edits\n")
+	fmt.Printf("[Server-Info] Images Variations: POST /v1/images/variations\n")
 	fmt.Printf("[Server-Info] 健康检查: GET /health\n")
 	fmt.Printf("[Server-Info] 环境: %s\n", envCfg.Env)
 	// 生产环境检查：必须设置有效的访问密钥

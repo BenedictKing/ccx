@@ -393,6 +393,8 @@ type Config struct {
 	ImagesUpstream []UpstreamConfig `json:"imagesUpstream,omitempty"`
 
 	// Fuzzy 模式：启用时模糊处理错误，所有非 2xx 错误都尝试 failover
+	ImagesUpstream []UpstreamConfig `json:"imagesUpstream,omitempty"`
+
 	FuzzyModeEnabled bool `json:"fuzzyModeEnabled"`
 
 	// 移除计费头中的 cch= 参数：启用时自动从 system 数组中移除 cch=xxx; 部分
