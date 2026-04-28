@@ -539,6 +539,50 @@ func isNonRetryableError(bodyBytes []byte) bool {
 	return false
 }
 
+// isModelRouteUnavailableError 判断错误是否表示“当前上游路由组没有该模型”。
+// 这类错误应该继续 failover，但不应计入 breaker 或 key cooldown。
+func isModelRouteUnavailableError(bodyBytes []byte) bool {
+	var errResp map[string]interface{}
+	if err := json.Unmarshal(bodyBytes, &errResp); err != nil {
+		return false
+	}
+
+	if matchesModelRouteUnavailable(errResp) {
+		return true
+	}
+
+	errObj, ok := errResp["error"].(map[string]interface{})
+	if !ok {
+		return false
+	}
+	return matchesModelRouteUnavailable(errObj)
+}
+
+func matchesModelRouteUnavailable(m map[string]interface{}) bool {
+	if len(m) == 0 {
+		return false
+	}
+
+	code, _ := m["code"].(string)
+	if !strings.EqualFold(strings.TrimSpace(code), "model_not_found") {
+		return false
+	}
+
+	for _, field := range []string{"message", "detail", "error_description", "msg"} {
+		msg, ok := m[field].(string)
+		if !ok {
+			continue
+		}
+		msgLower := strings.ToLower(strings.TrimSpace(msg))
+		if strings.Contains(msgLower, "no available channel for model") &&
+			strings.Contains(msgLower, "under group") {
+			return true
+		}
+	}
+
+	return false
+}
+
 // BlacklistResult 拉黑判定结果
 type BlacklistResult struct {
 	ShouldBlacklist bool

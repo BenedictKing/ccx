@@ -319,6 +319,7 @@ func TryUpstreamWithAllKeys(
 				var isQuotaRelated bool
 				blResult := BlacklistResult{}
 				forceBlacklistByRule := false
+				skipCooldownAndBreaker := false
 				skipDefaultCooldownForRuleDrivenClaude := false
 
 				if ruleDecision.Matched {
@@ -334,6 +335,11 @@ func TryUpstreamWithAllKeys(
 					}
 					log.Printf("[%s-Failover-Rule] 命中渠道规则: channel=[%d] %s, action=%s, status=%d, key=%s, desc=%s",
 						apiType, channelIndex, upstream.Name, ruleDecision.Action, resp.StatusCode, utils.MaskAPIKey(apiKey), ruleDecision.Description)
+				} else if isModelRouteUnavailableError(respBodyBytes) {
+					shouldFailover = true
+					skipCooldownAndBreaker = true
+					log.Printf("[%s-Failover-Model] route group has no matching model, skip current attempt: channel=[%d] %s, key=%s, status=%d",
+						apiType, channelIndex, upstream.Name, utils.MaskAPIKey(apiKey), resp.StatusCode)
 				} else {
 					shouldFailover, isQuotaRelated = ShouldRetryWithNextKey(resp.StatusCode, respBodyBytes, cfgManager.GetFuzzyModeEnabled(), apiType)
 					// 检查是否应永久拉黑该 Key（认证/权限/余额错误）
@@ -361,7 +367,10 @@ func TryUpstreamWithAllKeys(
 					failedKeys[apiKey] = true
 					// 已拉黑的 key 不需要再冷却
 					if !blResult.ShouldBlacklist {
-						if ruleDecision.Matched && ruleDecision.Action == failoverActionCooldown {
+						if skipCooldownAndBreaker {
+							log.Printf("[%s-Failover-Model] skip cooldown and breaker for model routing miss: channel=[%d] %s, key=%s",
+								apiType, channelIndex, upstream.Name, utils.MaskAPIKey(apiKey))
+						} else if ruleDecision.Matched && ruleDecision.Action == failoverActionCooldown {
 							cfgManager.MarkKeyAsFailedWithDuration(apiKey, apiType, ruleDecision.Duration)
 							log.Printf("[%s-Failover-Rule] 规则冷却生效: channel=[%d] %s, key=%s, duration=%s",
 								apiType, channelIndex, upstream.Name, utils.MaskAPIKey(apiKey), ruleDecision.Duration)
@@ -373,7 +382,9 @@ func TryUpstreamWithAllKeys(
 						}
 					}
 					failureClass := metrics.FailureClassRetryable
-					if isQuotaRelated || blResult.Reason == "insufficient_balance" {
+					if skipCooldownAndBreaker {
+						failureClass = metrics.FailureClassNonRetryable
+					} else if isQuotaRelated || blResult.Reason == "insufficient_balance" {
 						failureClass = metrics.FailureClassQuota
 					}
 					metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, requestID, failureClass)

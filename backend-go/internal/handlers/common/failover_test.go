@@ -980,6 +980,44 @@ func TestIsNonRetryableErrorCode(t *testing.T) {
 
 // TestShouldRetryWithNextKey_SensitiveWordsDetected 测试敏感词检测错误不应重试
 // 这是修复的核心场景：500 + sensitive_words_detected 不应触发无限重试
+func TestIsModelRouteUnavailableError(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want bool
+	}{
+		{
+			name: "nested distributor route unavailable",
+			body: `{"error":{"code":"model_not_found","message":"No available channel for model gpt-5.5 under group codex (distributor)","type":"new_api_error"}}`,
+			want: true,
+		},
+		{
+			name: "top level route unavailable",
+			body: `{"code":"model_not_found","message":"No available channel for model gpt-5.5 under group codex (distributor)"}`,
+			want: true,
+		},
+		{
+			name: "generic model not found should not match",
+			body: `{"error":{"code":"model_not_found","message":"Model gpt-5.5 not found"}}`,
+			want: false,
+		},
+		{
+			name: "invalid request should not match",
+			body: `{"error":{"code":"invalid_request_error","message":"Invalid value"}}`,
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isModelRouteUnavailableError([]byte(tt.body))
+			if got != tt.want {
+				t.Fatalf("isModelRouteUnavailableError(%s) = %v, want %v", tt.body, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestShouldRetryWithNextKey_SensitiveWordsDetected(t *testing.T) {
 	// 模拟生产环境的敏感词检测错误
 	body := []byte(`{"error":{"message":"sensitive words detected","type":"new_api_error","param":"","code":"sensitive_words_detected"}}`)
