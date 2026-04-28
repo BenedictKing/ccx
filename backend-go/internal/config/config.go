@@ -394,6 +394,8 @@ type Config struct {
 	ChatUpstream []UpstreamConfig `json:"chatUpstream,omitempty"`
 
 	// Fuzzy 模式：启用时模糊处理错误，所有非 2xx 错误都尝试 failover
+	ImagesUpstream []UpstreamConfig `json:"imagesUpstream,omitempty"`
+
 	FuzzyModeEnabled bool `json:"fuzzyModeEnabled"`
 
 	// 移除计费头中的 cch= 参数：启用时自动从 system 数组中移除 cch=xxx; 部分
@@ -499,6 +501,13 @@ func (cm *ConfigManager) GetConfig() Config {
 		cloned.ChatUpstream = make([]UpstreamConfig, len(cm.config.ChatUpstream))
 		for i := range cm.config.ChatUpstream {
 			cloned.ChatUpstream[i] = *cm.config.ChatUpstream[i].Clone()
+		}
+	}
+
+	if len(cm.config.ImagesUpstream) > 0 {
+		cloned.ImagesUpstream = make([]UpstreamConfig, len(cm.config.ImagesUpstream))
+		for i := range cm.config.ImagesUpstream {
+			cloned.ImagesUpstream[i] = *cm.config.ImagesUpstream[i].Clone()
 		}
 	}
 
@@ -1083,6 +1092,8 @@ func (cm *ConfigManager) getUpstreamSliceLocked(apiType string) *[]UpstreamConfi
 		return &cm.config.GeminiUpstream
 	case "Chat":
 		return &cm.config.ChatUpstream
+	case "Images":
+		return &cm.config.ImagesUpstream
 	default:
 		return nil
 	}
