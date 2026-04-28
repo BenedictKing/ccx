@@ -318,9 +318,9 @@ func TestDeduplicateBaseURLs(t *testing.T) {
 			want:  []string{"https://a.com"},
 		},
 		{
-			name:  "末尾井号差异应视为相同",
+			name:  "末尾井号保留显式版本语义",
 			input: []string{"https://a.com", "https://a.com#"},
-			want:  []string{"https://a.com"},
+			want:  []string{"https://a.com", "https://a.com#"},
 		},
 		{
 			name:  "保持原始顺序",
@@ -346,7 +346,7 @@ func TestDeduplicateBaseURLs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := deduplicateBaseURLs(tt.input)
+			got := deduplicateBaseURLs(tt.input, "claude")
 
 			if len(got) != len(tt.want) {
 				t.Errorf("deduplicateBaseURLs() length = %d, want %d", len(got), len(tt.want))
