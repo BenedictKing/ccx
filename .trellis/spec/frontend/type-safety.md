@@ -56,6 +56,45 @@ Example:
 Example:
   parameter typing in `useI18n()` from `src/i18n/index.ts`.
 
+### Channel Workflow Contracts
+
+When adding a managed channel kind, update the full frontend contract set together:
+
+- `ManagedChannelType` in `src/utils/channelTypeApi.ts`
+- route-derived channel type unions in route/views/components that receive `channelType` or `apiType`
+- `ApiService` methods for dashboard, metrics, reorder, status, resume, promotion, ping, key, and model-list operations
+- Pinia channel store data bucket, dashboard cache bucket, save/delete/ping routing, and clear-state routing
+- tab labels in `src/i18n/messages.ts`
+
+Payload creation stays in `src/utils/channelPayload.ts`. Persistent channel payloads must not include capability-test-only controls such as transient RPM. Capability test RPM belongs in `StartCapabilityTestOptions` and is sent only to capability-test endpoints.
+
+Model-list preview requests use `ChannelModelsRequest`:
+
+```typescript
+export interface ChannelModelsRequest {
+  key: string
+  baseUrl?: string
+  proxyUrl?: string
+  insecureSkipVerify?: boolean
+  customHeaders?: Record<string, string>
+  baseUrls?: string[]
+  routePrefix?: string
+  supportedModels?: string[]
+}
+```
+
+Good cases:
+
+- Images channels use `serviceType: 'openai'` and `/images/*` management endpoints.
+- Temporary model-query settings include proxy, TLS, headers, route prefix, base URLs, and supported model filters.
+- Claude-only passthrough/failover fields are normalized to safe defaults for non-Claude services.
+
+Bad cases:
+
+- Adding a tab only to `App.vue` without store/API/type/test coverage.
+- Sending `rpm` in channel create/update payloads.
+- Re-declaring channel-kind unions locally without updating shared service/store contracts.
+
 ---
 
 ## Forbidden Patterns

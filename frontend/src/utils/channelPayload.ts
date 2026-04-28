@@ -1,5 +1,6 @@
 import type { Channel } from '../services/api'
 import { normalizeAdvancedChannelOptions } from './channelAdvancedOptions'
+import { deduplicateEquivalentBaseUrls } from './baseUrlSemantics'
 
 export interface ChannelFormLike {
   name: string
@@ -32,23 +33,6 @@ export interface ChannelFormLike {
   modelsHealthCheckEnabled?: boolean
   modelsHealthCheckIntervalMinutes?: number
   failoverRules: NonNullable<Channel['failoverRules']>
-  rpm?: number
-
-}
-
-function normalizeBaseUrlPreservingHash(url: string): string {
-  const trimmed = url.trim()
-  if (!trimmed) return ''
-
-  const hasHashSuffix = trimmed.endsWith('#')
-  const withoutHash = hasHashSuffix ? trimmed.slice(0, -1) : trimmed
-  const normalized = withoutHash.replace(/\/+$/, '')
-
-  return hasHashSuffix ? normalized + '#' : normalized
-}
-
-function getBaseUrlDeduplicationKey(url: string): string {
-  return normalizeBaseUrlPreservingHash(url).replace(/#$/, '')
 }
 
 export function buildChannelPayload(form: ChannelFormLike): Omit<Channel, 'index' | 'latency' | 'status'> {
@@ -80,19 +64,8 @@ export function buildChannelPayload(form: ChannelFormLike): Omit<Channel, 'index
     fastMode: form.fastMode
   })
 
-  const sourceUrls = (form.baseUrls.length > 0 ? form.baseUrls : [form.baseUrl])
-    .map(normalizeBaseUrlPreservingHash)
-    .filter(Boolean)
-
-  const urlMap = new Map<string, string>()
-  sourceUrls.forEach(url => {
-    const key = getBaseUrlDeduplicationKey(url)
-    const existing = urlMap.get(key)
-    if (!existing || (!existing.endsWith('#') && url.endsWith('#'))) {
-      urlMap.set(key, url)
-    }
-  })
-  const deduplicatedUrls = Array.from(urlMap.values())
+  const sourceUrls = form.baseUrls.length > 0 ? form.baseUrls : [form.baseUrl]
+  const deduplicatedUrls = deduplicateEquivalentBaseUrls(sourceUrls, form.serviceType)
 
   const channelData: Omit<Channel, 'index' | 'latency' | 'status'> = {
     name: form.name.trim(),
@@ -123,8 +96,7 @@ export function buildChannelPayload(form: ChannelFormLike): Omit<Channel, 'index
     strictRequestPassthroughEnabled: form.serviceType === 'claude' ? form.strictRequestPassthroughEnabled : true,
     modelsHealthCheckEnabled,
     modelsHealthCheckIntervalMinutes,
-    failoverRules: normalizedFailoverRules,
-    rpm: form.rpm && form.rpm > 0 ? form.rpm : 10
+    failoverRules: normalizedFailoverRules
   }
 
   if (deduplicatedUrls.length > 1) {

@@ -1,6 +1,6 @@
 import type { ApiService, ChannelMetrics, ChannelStatus, ResumeChannelResponse, SchedulerStatsResponse } from '../services/api'
 
-export type ManagedChannelType = 'messages' | 'chat' | 'responses' | 'gemini'
+export type ManagedChannelType = 'messages' | 'chat' | 'responses' | 'gemini' | 'images'
 
 type ChannelTypeApi = {
   getMetrics: () => Promise<ChannelMetrics[]>
@@ -16,23 +16,28 @@ type ChannelApiSubset = Pick<ApiService,
   | 'getResponsesChannelMetrics'
   | 'getChatChannelMetrics'
   | 'getGeminiChannelMetrics'
+  | 'getImagesChannelMetrics'
   | 'getSchedulerStats'
   | 'reorderChannels'
   | 'reorderResponsesChannels'
   | 'reorderChatChannels'
   | 'reorderGeminiChannels'
+  | 'reorderImagesChannels'
   | 'setChannelStatus'
   | 'setResponsesChannelStatus'
   | 'setChatChannelStatus'
   | 'setGeminiChannelStatus'
+  | 'setImagesChannelStatus'
   | 'resumeChannel'
   | 'resumeResponsesChannel'
   | 'resumeChatChannel'
   | 'resumeGeminiChannel'
+  | 'resumeImagesChannel'
   | 'setChannelPromotion'
   | 'setResponsesChannelPromotion'
   | 'setChatChannelPromotion'
   | 'setGeminiChannelPromotion'
+  | 'setImagesChannelPromotion'
 >
 
 export const getChannelTypeApi = (api: ChannelApiSubset, channelType: ManagedChannelType): ChannelTypeApi => {
@@ -54,6 +59,15 @@ export const getChannelTypeApi = (api: ChannelApiSubset, channelType: ManagedCha
         setStatus: (channelId, status) => api.setGeminiChannelStatus(channelId, status),
         resume: (channelId) => api.resumeGeminiChannel(channelId),
         promote: (channelId, durationSeconds) => api.setGeminiChannelPromotion(channelId, durationSeconds)
+      }
+    case 'images':
+      return {
+        getMetrics: () => api.getImagesChannelMetrics(),
+        getSchedulerStats: () => api.getSchedulerStats('images'),
+        reorder: (order) => api.reorderImagesChannels(order),
+        setStatus: (channelId, status) => api.setImagesChannelStatus(channelId, status),
+        resume: (channelId) => api.resumeImagesChannel(channelId),
+        promote: (channelId, durationSeconds) => api.setImagesChannelPromotion(channelId, durationSeconds)
       }
     case 'responses':
       return {

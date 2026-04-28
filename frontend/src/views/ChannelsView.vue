@@ -39,7 +39,7 @@ const props = defineProps<{ type: string }>()
 
 // 转换为类型安全的 channelType
 const channelType = computed(() =>
-  props.type as 'messages' | 'chat' | 'responses' | 'gemini'
+  props.type as 'messages' | 'chat' | 'responses' | 'gemini' | 'images'
 )
 
 const channelStore = useChannelStore()

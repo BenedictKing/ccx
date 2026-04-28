@@ -80,7 +80,7 @@ const apexchart = VueApexCharts
 // Props
 const props = defineProps<{
   channelId: number
-  channelType: 'messages' | 'chat' | 'responses' | 'gemini'
+  channelType: 'messages' | 'chat' | 'responses' | 'gemini' | 'images'
 }>()
 const { t } = useI18n()
 

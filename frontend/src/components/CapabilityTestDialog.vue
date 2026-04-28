@@ -65,6 +65,19 @@
               <span v-if="job?.progress?.totalModels && isJobActiveLike" class="text-caption text-medium-emphasis">
                 {{ t('capability.progressSummary', { done: job.progress.completedModels, total: job.progress.totalModels }) }}
               </span>
+              <label class="capability-rpm-inline" :aria-label="t('capability.rpmLabel')">
+                <v-icon size="small">mdi-speedometer</v-icon>
+                <span class="capability-rpm-label">{{ t('capability.rpmLabel') }}</span>
+                <input
+                  v-model.number="rpmValue"
+                  class="capability-rpm-input"
+                  type="number"
+                  min="1"
+                  max="60"
+                  step="1"
+                  @blur="handleRpmBlur"
+                >
+              </label>
             </div>
 
             <v-btn
@@ -108,7 +121,7 @@
                 :test="test"
                 :pending-text="getProtocolPendingText(test)"
                 :show-label="false"
-                :retry-enabled="!isJobActiveLike"
+                :retry-enabled="!isProtocolBusy(test) && Boolean(job?.protocolJobIds?.[test.protocol] || job?.jobId)"
                 @retry-model="handleRetryModel"
               />
             </div>
@@ -175,6 +188,17 @@
                   </td>
                   <td>
                     <v-btn
+                      size="x-small"
+                      color="secondary"
+                      variant="tonal"
+                      rounded="lg"
+                      class="mr-1"
+                      :disabled="isProtocolBusy(test)"
+                      @click="handleTestProtocol(test.protocol)"
+                    >
+                      {{ t('capability.startTest') }}
+                    </v-btn>
+                    <v-btn
                       v-if="test.success && test.protocol !== currentTab"
                       size="x-small"
                       color="primary"
@@ -211,7 +235,7 @@
                         :test="test"
                         :pending-text="getProtocolPendingText(test)"
                         :show-label="false"
-                        :retry-enabled="!isJobActiveLike"
+                        :retry-enabled="!isProtocolBusy(test) && Boolean(job?.protocolJobIds?.[test.protocol] || job?.jobId)"
                         @retry-model="handleRetryModel"
                       />
                     </div>
@@ -244,6 +268,7 @@ interface Props {
   channelName: string
   currentTab: string
   capabilityJob: CapabilityTestJob | null
+  capabilityRpm: number
 }
 
 const props = defineProps<Props>()
@@ -252,12 +277,19 @@ const emit = defineEmits<{
   'copyToTab': [protocol: string]
   'cancel': []
   'retryModel': [protocol: string, model: string]
+  'testProtocol': [protocol: string]
+  'update:capabilityRpm': [value: number]
 }>()
 
 const { t } = useI18n()
 
 const errorMessage = ref('')
 const cancelling = ref(false)
+const rpmValue = ref(10)
+
+watch(() => props.capabilityRpm, (value) => {
+  rpmValue.value = value >= 1 && value <= 60 ? Math.floor(value) : 10
+}, { immediate: true })
 
 watch(() => props.modelValue, (open) => {
   if (open) {
@@ -284,6 +316,7 @@ watch(() => props.capabilityJob?.error, (error) => {
 const state = computed(() => {
   if (errorMessage.value) return 'error'
   if (!props.capabilityJob) return 'initializing'
+  if (props.capabilityJob.status === 'idle') return 'idle'
   if (props.capabilityJob.lifecycle === 'cancelled') return 'cancelled'
   if (props.capabilityJob.lifecycle === 'done') return 'completed'
   if (props.capabilityJob.lifecycle === 'pending') return 'pending'
@@ -368,7 +401,8 @@ const sortedTests = computed(() => {
     })
 })
 
-const getProtocolDisplayState = (test: CapabilityProtocolJobResult): 'pending' | 'running' | 'success' | 'partial' | 'cancelled' | 'failed' => {
+const getProtocolDisplayState = (test: CapabilityProtocolJobResult): 'idle' | 'pending' | 'running' | 'success' | 'partial' | 'cancelled' | 'failed' => {
+  if (test.status === 'idle') return 'idle'
   if (test.lifecycle === 'active') return 'running'
   if (test.lifecycle === 'pending') return 'pending'
   if (test.outcome === 'partial') return 'partial'
@@ -383,6 +417,7 @@ const isProtocolFailed = (test: CapabilityProtocolJobResult): boolean => {
 
 const getProtocolStatusIcon = (test: CapabilityProtocolJobResult): string => {
   switch (getProtocolDisplayState(test)) {
+    case 'idle': return 'mdi-clock-outline'
     case 'pending': return 'mdi-timer-sand'
     case 'running': return 'mdi-progress-clock'
     case 'success': return 'mdi-check-circle'
@@ -394,6 +429,7 @@ const getProtocolStatusIcon = (test: CapabilityProtocolJobResult): string => {
 
 const getProtocolStatusIconColor = (test: CapabilityProtocolJobResult): string => {
   switch (getProtocolDisplayState(test)) {
+    case 'idle': return t('capability.notStarted')
     case 'success': return 'success'
     case 'partial': return 'warning'
     case 'failed': return 'error'
@@ -431,6 +467,7 @@ const getProtocolErrorText = (test: CapabilityProtocolJobResult): string => {
 
 const getProtocolPendingText = (test: CapabilityProtocolJobResult): string => {
   const displayState = getProtocolDisplayState(test)
+  if (displayState === 'idle') return t('capability.notStarted')
   if (displayState === 'pending') return t('capability.modelQueued')
   if (displayState === 'running') return t('capability.protocolRunning')
   return t('capability.modelDetailsUnavailable')
@@ -476,6 +513,22 @@ const handleRetryModel = (protocol: string, model: string) => {
   emit('retryModel', protocol, model)
 }
 
+const isProtocolBusy = (test: CapabilityProtocolJobResult): boolean => {
+  const displayState = getProtocolDisplayState(test)
+  return displayState === 'pending' || displayState === 'running'
+}
+
+const handleTestProtocol = (protocol: string) => {
+  emit('testProtocol', protocol)
+}
+
+const handleRpmBlur = () => {
+  const parsedValue = Number.isFinite(rpmValue.value) ? Math.floor(rpmValue.value) : 10
+  const nextValue = Math.min(60, Math.max(1, parsedValue || 10))
+  rpmValue.value = nextValue
+  emit('update:capabilityRpm', nextValue)
+}
+
 defineExpose({ setError })
 </script>
 
@@ -491,6 +544,30 @@ defineExpose({ setError })
   justify-content: space-between;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.capability-rpm-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 2px 8px;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border-radius: 6px;
+}
+
+.capability-rpm-label {
+  font-size: 0.75rem;
+  color: rgba(var(--v-theme-on-surface), 0.7);
+}
+
+.capability-rpm-input {
+  width: 48px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 0.8rem;
 }
 
 .capability-table :deep(th) {

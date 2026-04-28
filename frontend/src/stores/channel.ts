@@ -22,7 +22,7 @@ export const useChannelStore = defineStore('channel', () => {
   // ===== 状态 =====
 
   // 当前选中的 API 类型
-  type ApiTab = 'messages' | 'chat' | 'responses' | 'gemini'
+  type ApiTab = 'messages' | 'chat' | 'responses' | 'gemini' | 'images'
   const activeTab = ref<ApiTab>('messages')
 
   // 路由同步：从路由读取当前类型
@@ -30,7 +30,7 @@ export const useChannelStore = defineStore('channel', () => {
   const currentChannelType = computed(() => {
     const route = router.currentRoute.value
     const type = route.params.type as ApiTab
-    return (type === 'messages' || type === 'chat' || type === 'responses' || type === 'gemini') ? type : 'messages'
+    return (type === 'messages' || type === 'chat' || type === 'responses' || type === 'gemini' || type === 'images') ? type : 'messages'
   })
 
   // 监听路由变化，同步 activeTab（确保兼容性）
@@ -55,6 +55,11 @@ export const useChannelStore = defineStore('channel', () => {
   })
 
   const chatChannelsData = ref<ChannelsResponse>({
+    channels: [],
+    current: -1
+  })
+
+  const imagesChannelsData = ref<ChannelsResponse>({
     channels: [],
     current: -1
   })
@@ -86,6 +91,11 @@ export const useChannelStore = defineStore('channel', () => {
       metrics: [],
       stats: undefined,
       recentActivity: undefined
+    },
+    images: {
+      metrics: [],
+      stats: undefined,
+      recentActivity: undefined
     }
   })
 
@@ -113,6 +123,7 @@ export const useChannelStore = defineStore('channel', () => {
       case 'chat': return chatChannelsData.value
       case 'responses': return responsesChannelsData.value
       case 'gemini': return geminiChannelsData.value
+      case 'images': return imagesChannelsData.value
       default: return channelsData.value
     }
   })
@@ -199,6 +210,18 @@ export const useChannelStore = defineStore('channel', () => {
             }
             break
 
+          case 'images':
+            imagesChannelsData.value = {
+              channels: mergeChannelsWithLocalData(dashboard.channels, imagesChannelsData.value.channels),
+              current: imagesChannelsData.value.current
+            }
+            dashboardCache.value.images = {
+              metrics: dashboard.metrics,
+              stats: dashboard.stats,
+              recentActivity: dashboard.recentActivity
+            }
+            break
+
           case 'messages':
             channelsData.value = {
               channels: mergeChannelsWithLocalData(dashboard.channels, channelsData.value.channels),
@@ -257,11 +280,14 @@ export const useChannelStore = defineStore('channel', () => {
     const isResponses = activeTab.value === 'responses'
     const isGemini = activeTab.value === 'gemini'
     const isChat = activeTab.value === 'chat'
+    const isImages = activeTab.value === 'images'
 
     if (editingChannelIndex !== null) {
       // 更新现有渠道
       if (isChat) {
         await api.updateChatChannel(editingChannelIndex, channel)
+      } else if (isImages) {
+        await api.updateImagesChannel(editingChannelIndex, channel)
       } else if (isGemini) {
         await api.updateGeminiChannel(editingChannelIndex, channel)
       } else if (isResponses) {
@@ -274,6 +300,8 @@ export const useChannelStore = defineStore('channel', () => {
       // 添加新渠道
       if (isChat) {
         await api.addChatChannel(channel)
+      } else if (isImages) {
+        await api.addImagesChannel(channel)
       } else if (isGemini) {
         await api.addGeminiChannel(channel)
       } else if (isResponses) {
@@ -285,7 +313,13 @@ export const useChannelStore = defineStore('channel', () => {
       // 快速添加模式：将新渠道设为第一优先级并设置5分钟促销期
       if (options?.isQuickAdd) {
         await refreshChannels() // 先刷新获取新渠道的 index
-        const data = isChat ? chatChannelsData.value : isGemini ? geminiChannelsData.value : (isResponses ? responsesChannelsData.value : channelsData.value)
+        const data = isChat
+          ? chatChannelsData.value
+          : isImages
+            ? imagesChannelsData.value
+            : isGemini
+              ? geminiChannelsData.value
+              : (isResponses ? responsesChannelsData.value : channelsData.value)
 
         // 找到新添加的渠道（应该是列表中 index 最大的 active 状态渠道）
         const activeChannels = data.channels?.filter(ch => ch.status !== 'disabled') || []
@@ -303,6 +337,8 @@ export const useChannelStore = defineStore('channel', () => {
 
             if (isChat) {
               await api.reorderChatChannels(newOrder)
+            } else if (isImages) {
+              await api.reorderImagesChannels(newOrder)
             } else if (isGemini) {
               await api.reorderGeminiChannels(newOrder)
             } else if (isResponses) {
@@ -314,6 +350,8 @@ export const useChannelStore = defineStore('channel', () => {
             // 2. 设置5分钟促销期（300秒）
             if (isChat) {
               await api.setChatChannelPromotion(newChannel.index, 300)
+            } else if (isImages) {
+              await api.setImagesChannelPromotion(newChannel.index, 300)
             } else if (isGemini) {
               await api.setGeminiChannelPromotion(newChannel.index, 300)
             } else if (isResponses) {
@@ -344,6 +382,8 @@ export const useChannelStore = defineStore('channel', () => {
   async function deleteChannel(channelId: number) {
     if (activeTab.value === 'chat') {
       await api.deleteChatChannel(channelId)
+    } else if (activeTab.value === 'images') {
+      await api.deleteImagesChannel(channelId)
     } else if (activeTab.value === 'gemini') {
       await api.deleteGeminiChannel(channelId)
     } else if (activeTab.value === 'responses') {
@@ -361,6 +401,8 @@ export const useChannelStore = defineStore('channel', () => {
   async function pingChannel(channelId: number) {
     const result = activeTab.value === 'chat'
       ? await api.pingChatChannel(channelId)
+      : activeTab.value === 'images'
+        ? await api.pingImagesChannel(channelId)
       : activeTab.value === 'gemini'
         ? await api.pingGeminiChannel(channelId)
         : activeTab.value === 'responses'
@@ -369,6 +411,8 @@ export const useChannelStore = defineStore('channel', () => {
 
     const data = activeTab.value === 'chat'
       ? chatChannelsData.value
+      : activeTab.value === 'images'
+        ? imagesChannelsData.value
       : activeTab.value === 'gemini'
         ? geminiChannelsData.value
         : (activeTab.value === 'messages' ? channelsData.value : responsesChannelsData.value)
@@ -392,6 +436,8 @@ export const useChannelStore = defineStore('channel', () => {
     try {
       const results = activeTab.value === 'chat'
         ? await api.pingAllChatChannels()
+        : activeTab.value === 'images'
+          ? await api.pingAllImagesChannels()
         : activeTab.value === 'gemini'
           ? await api.pingAllGeminiChannels()
           : activeTab.value === 'responses'
@@ -400,6 +446,8 @@ export const useChannelStore = defineStore('channel', () => {
 
       const data = activeTab.value === 'chat'
         ? chatChannelsData.value
+        : activeTab.value === 'images'
+          ? imagesChannelsData.value
         : activeTab.value === 'gemini'
           ? geminiChannelsData.value
           : (activeTab.value === 'messages' ? channelsData.value : responsesChannelsData.value)
@@ -468,6 +516,10 @@ export const useChannelStore = defineStore('channel', () => {
       channels: [],
       current: -1
     }
+    imagesChannelsData.value = {
+      channels: [],
+      current: -1
+    }
     responsesChannelsData.value = {
       channels: [],
       current: -1
@@ -498,6 +550,11 @@ export const useChannelStore = defineStore('channel', () => {
         metrics: [],
         stats: undefined,
         recentActivity: undefined
+      },
+      images: {
+        metrics: [],
+        stats: undefined,
+        recentActivity: undefined
       }
     }
 
@@ -512,6 +569,7 @@ export const useChannelStore = defineStore('channel', () => {
     activeTab,
     channelsData,
     chatChannelsData,
+    imagesChannelsData,
     responsesChannelsData,
     geminiChannelsData,
     isPingingAll,

@@ -43,7 +43,7 @@ describe('buildChannelPayload', () => {
     expect(result.proxyUrl).toBe('http://127.0.0.1:7890')
   })
 
-  it('deduplicates baseUrls and keeps hash variant as canonical', () => {
+  it('deduplicates default version baseUrls and keeps hash variants separate', () => {
     const result = buildChannelPayload({
       name: 'multi',
       serviceType: 'responses',
@@ -72,8 +72,52 @@ describe('buildChannelPayload', () => {
       failoverRules: []
     })
 
-    expect(result.baseUrl).toBe('https://api.example.com/v1#')
-    expect(result.baseUrls).toEqual(['https://api.example.com/v1#', 'https://backup.example.com/v1'])
+    expect(result.baseUrl).toBe('https://api.example.com')
+    expect(result.baseUrls).toEqual([
+      'https://api.example.com',
+      'https://api.example.com/v1#',
+      'https://backup.example.com'
+    ])
+  })
+
+  it('keeps images-compatible fields without claude-only payload leakage', () => {
+    const result = buildChannelPayload({
+      name: 'images-channel',
+      serviceType: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      baseUrls: [],
+      website: '',
+      insecureSkipVerify: true,
+      lowQuality: false,
+      injectDummyThoughtSignature: false,
+      stripThoughtSignature: false,
+      description: '',
+      apiKeys: ['sk-image'],
+      modelMapping: { 'gpt-image-1': 'gpt-image-1' },
+      reasoningMapping: {},
+      textVerbosity: '',
+      fastMode: false,
+      customHeaders: { 'x-image': '1' },
+      proxyUrl: 'http://127.0.0.1:7890',
+      routePrefix: 'images',
+      supportedModels: ['gpt-image-1', 'dall-e-*'],
+      autoBlacklistBalance: true,
+      normalizeMetadataUserId: true,
+      streamPassthroughEnabled: false,
+      sub2apiPassthroughEnabled: true,
+      strictRequestPassthroughEnabled: false,
+      failoverRules: []
+    })
+
+    expect(result.serviceType).toBe('openai')
+    expect(result.baseUrl).toBe('https://api.openai.com')
+    expect(result.supportedModels).toEqual(['gpt-image-1', 'dall-e-*'])
+    expect(result.customHeaders).toEqual({ 'x-image': '1' })
+    expect(result.proxyUrl).toBe('http://127.0.0.1:7890')
+    expect(result.routePrefix).toBe('images')
+    expect(result.sub2apiPassthroughEnabled).toBe(false)
+    expect(result.failoverRules).toEqual([])
+    expect(result).not.toHaveProperty('rpm')
   })
 
   it('removes unsupported advanced options for claude channel', () => {
@@ -274,15 +318,14 @@ describe('buildChannelPayload', () => {
           errorCodes: [],
           keywords: []
         }
-      ],
-      rpm: 0
+      ]
     })
 
     expect(result.streamPassthroughEnabled).toBe(true)
     expect(result.sub2apiPassthroughEnabled).toBe(false)
     expect(result.strictRequestPassthroughEnabled).toBe(true)
     expect(result.failoverRules).toEqual([])
-    expect(result.rpm).toBe(10)
+    expect(result).not.toHaveProperty('rpm')
   })
 
   it('normalizes claude failover rules and removes invalid rules', () => {

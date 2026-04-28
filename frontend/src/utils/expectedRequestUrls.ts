@@ -1,6 +1,7 @@
 import { isValidUrl } from './quickInputParser'
+import { buildExpectedRequestUrl } from './baseUrlSemantics'
 
-export type ChannelType = 'messages' | 'chat' | 'responses' | 'gemini'
+export type ChannelType = 'messages' | 'chat' | 'responses' | 'gemini' | 'images'
 export type ServiceType = 'openai' | 'claude' | 'gemini' | 'responses' | ''
 
 export interface ExpectedRequestUrlItem {
@@ -26,7 +27,9 @@ export function buildExpectedRequestUrls(
   if (urls.length === 0) return []
 
   let endpoint = ''
-  if (channelType === 'responses') {
+  if (channelType === 'images') {
+    endpoint = '/images/generations'
+  } else if (channelType === 'responses') {
     if (serviceType === 'responses') {
       endpoint = '/responses'
     } else if (serviceType === 'claude') {
@@ -51,16 +54,7 @@ export function buildExpectedRequestUrls(
   return urls
     .filter(url => url && isValidUrl(url.replace(/#$/, '')))
     .map(rawUrl => {
-      let normalizedBaseUrl = rawUrl.trim()
-      const skipVersion = normalizedBaseUrl.endsWith('#')
-      if (skipVersion) {
-        normalizedBaseUrl = normalizedBaseUrl.slice(0, -1)
-      }
-      normalizedBaseUrl = normalizedBaseUrl.replace(/\/$/, '')
-
-      const hasVersion = /\/v\d+[a-z]*$/.test(normalizedBaseUrl)
-      const versionPrefix = serviceType === 'gemini' ? '/v1beta' : '/v1'
-      const expectedUrl = hasVersion || skipVersion ? normalizedBaseUrl + endpoint : normalizedBaseUrl + versionPrefix + endpoint
+      const expectedUrl = buildExpectedRequestUrl(serviceType, endpoint, rawUrl)
 
       return { baseUrl: rawUrl, expectedUrl }
     })

@@ -16,6 +16,7 @@ export type MessageKey =
   | 'app.tabs.chat'
   | 'app.tabs.responses'
   | 'app.tabs.gemini'
+  | 'app.tabs.images'
   | 'app.header.logout'
   | 'app.stats.trafficTitle'
   | 'app.stats.totalChannels'
@@ -48,6 +49,8 @@ export type MessageKey =
   | 'capability.startTest'
   | 'capability.loadingTitle'
   | 'capability.loadingBody'
+  | 'capability.notStarted'
+  | 'capability.rpmLabel'
   | 'capability.compatibleProtocols'
   | 'capability.noCompatibleProtocols'
   | 'capability.table.protocol'
@@ -94,6 +97,7 @@ export type MessageKey =
   | 'capability.reasonCancelled'
   | 'capability.reasonTimeout'
   | 'capability.retryModel'
+  | 'capability.snapshotUpdated'
   | 'capability.noApiKeyError'
   | 'capability.genericJobError'
   | 'orchestration.title'
@@ -182,6 +186,7 @@ export type MessageKey =
   | 'addChannel.supportedModelsLabel'
   | 'addChannel.supportedModelsPlaceholder'
   | 'addChannel.supportedModelsHint'
+  | 'addChannel.supportedModelsInvalidPattern'
   | 'addChannel.commonFilters'
   | 'addChannel.apiKeyRequired'
   | 'addChannel.apiKeyLoadBalance'
@@ -378,6 +383,7 @@ export const messages: Record<SupportedLocale, Record<MessageKey, string>> = {
     'app.tabs.chat': 'OpenAI Chat',
     'app.tabs.responses': 'Codex',
     'app.tabs.gemini': 'Gemini',
+    'app.tabs.images': 'Images',
     'app.header.logout': 'Logout',
     'app.stats.trafficTitle': '{tab} traffic',
     'app.stats.totalChannels': 'Total channels',
@@ -410,6 +416,8 @@ export const messages: Record<SupportedLocale, Record<MessageKey, string>> = {
     'capability.startTest': 'Start test',
     'capability.loadingTitle': 'Testing protocol compatibility...',
     'capability.loadingBody': 'This may take a few seconds',
+    'capability.notStarted': 'Not started',
+    'capability.rpmLabel': 'Test RPM',
     'capability.compatibleProtocols': 'Compatible protocols',
     'capability.noCompatibleProtocols': 'No compatible protocols',
     'capability.table.protocol': 'Protocol',
@@ -456,6 +464,7 @@ export const messages: Record<SupportedLocale, Record<MessageKey, string>> = {
     'capability.reasonCancelled': 'Cancelled before completion',
     'capability.reasonTimeout': 'Timed out',
     'capability.retryModel': 'Retry this model',
+    'capability.snapshotUpdated': 'Updated: {time}',
     'capability.noApiKeyError': 'This channel has no API key configured and cannot run capability tests.',
     'capability.genericJobError': 'Capability test failed: {message}',
     'orchestration.title': 'Channel orchestration',
@@ -544,6 +553,7 @@ export const messages: Record<SupportedLocale, Record<MessageKey, string>> = {
     'addChannel.supportedModelsLabel': 'Supported models (optional)',
     'addChannel.supportedModelsPlaceholder': 'Press Enter after each model name, for example gpt-4o or claude-*',
     'addChannel.supportedModelsHint': 'Matches the original model requested by the client before model redirect is applied. Leave empty to allow all models. Wildcards such as gpt-4* are supported.',
+    'addChannel.supportedModelsInvalidPattern': 'Invalid rule ignored. Only exact, prefix*, *suffix, *contains*, and ! exclusion are allowed.',
     'addChannel.commonFilters': 'Common filters',
     'addChannel.apiKeyRequired': 'At least one key is required',
     'addChannel.apiKeyLoadBalance': 'Multiple keys can be added for load balancing',
@@ -739,6 +749,7 @@ export const messages: Record<SupportedLocale, Record<MessageKey, string>> = {
     'app.tabs.chat': 'OpenAI Chat',
     'app.tabs.responses': 'Codex',
     'app.tabs.gemini': 'Gemini',
+    'app.tabs.images': 'Images',
     'app.header.logout': 'Keluar',
     'app.stats.trafficTitle': 'Traffic {tab}',
     'app.stats.totalChannels': 'Total channel',
@@ -771,6 +782,8 @@ export const messages: Record<SupportedLocale, Record<MessageKey, string>> = {
     'capability.startTest': 'Mulai tes',
     'capability.loadingTitle': 'Menguji kompatibilitas protokol...',
     'capability.loadingBody': 'Ini mungkin butuh beberapa detik',
+    'capability.notStarted': 'Belum dimulai',
+    'capability.rpmLabel': 'RPM tes',
     'capability.compatibleProtocols': 'Protokol kompatibel',
     'capability.noCompatibleProtocols': 'Tidak ada protokol kompatibel',
     'capability.table.protocol': 'Protokol',
@@ -817,6 +830,7 @@ export const messages: Record<SupportedLocale, Record<MessageKey, string>> = {
     'capability.reasonCancelled': 'Dibatalkan sebelum selesai',
     'capability.reasonTimeout': 'Waktu habis',
     'capability.retryModel': 'Coba ulang model ini',
+    'capability.snapshotUpdated': 'Diperbarui: {time}',
     'capability.noApiKeyError': 'Channel ini tidak memiliki API key dan tidak dapat menjalankan tes kemampuan.',
     'capability.genericJobError': 'Tes kemampuan gagal: {message}',
     'orchestration.title': 'Orkestrasi channel',
@@ -905,6 +919,7 @@ export const messages: Record<SupportedLocale, Record<MessageKey, string>> = {
     'addChannel.supportedModelsLabel': 'Model yang didukung (opsional)',
     'addChannel.supportedModelsPlaceholder': 'Masukkan nama model lalu tekan Enter, misalnya gpt-4o atau claude-*',
     'addChannel.supportedModelsHint': 'Mencocokkan nama model asli yang diminta client sebelum model redirect diterapkan. Kosong berarti semua model didukung. Wildcard seperti gpt-4* didukung.',
+    'addChannel.supportedModelsInvalidPattern': 'Rule tidak valid dan diabaikan. Hanya exact, prefix*, *suffix, *contains*, serta exclusion ! yang didukung.',
     'addChannel.commonFilters': 'Filter umum',
     'addChannel.apiKeyRequired': 'Minimal satu key diperlukan',
     'addChannel.apiKeyLoadBalance': 'Beberapa key bisa ditambahkan untuk load balancing',
@@ -1100,6 +1115,7 @@ export const messages: Record<SupportedLocale, Record<MessageKey, string>> = {
     'app.tabs.chat': 'OpenAI Chat',
     'app.tabs.responses': 'Codex',
     'app.tabs.gemini': 'Gemini',
+    'app.tabs.images': 'Images',
     'app.header.logout': '注销',
     'app.stats.trafficTitle': '{tab} 流量统计',
     'app.stats.totalChannels': '总渠道数',
@@ -1132,6 +1148,8 @@ export const messages: Record<SupportedLocale, Record<MessageKey, string>> = {
     'capability.startTest': '开始测试',
     'capability.loadingTitle': '正在测试协议兼容性...',
     'capability.loadingBody': '这可能需要几秒钟',
+    'capability.notStarted': '待测试',
+    'capability.rpmLabel': '测试 RPM',
     'capability.compatibleProtocols': '兼容协议',
     'capability.noCompatibleProtocols': '无兼容协议',
     'capability.table.protocol': '协议',
@@ -1178,6 +1196,7 @@ export const messages: Record<SupportedLocale, Record<MessageKey, string>> = {
     'capability.reasonCancelled': '完成前已取消',
     'capability.reasonTimeout': '请求超时',
     'capability.retryModel': '重测此模型',
+    'capability.snapshotUpdated': '更新时间：{time}',
     'capability.noApiKeyError': '该渠道未配置 API Key，无法执行能力测试。',
     'capability.genericJobError': '能力测试失败：{message}',
     'orchestration.title': '渠道编排',
@@ -1266,6 +1285,7 @@ export const messages: Record<SupportedLocale, Record<MessageKey, string>> = {
     'addChannel.supportedModelsLabel': '支持的模型 (可选)',
     'addChannel.supportedModelsPlaceholder': '输入模型名称后按回车添加，如 gpt-4o、claude-*',
     'addChannel.supportedModelsHint': '匹配客户端请求的原始模型名（模型重定向发生在渠道选中之后）。留空表示支持所有模型。支持通配符，如 gpt-4* 匹配 gpt-4o、gpt-4-turbo 等',
+    'addChannel.supportedModelsInvalidPattern': '已忽略非法规则。仅支持精确匹配、prefix*、*suffix、*contains* 和 ! 排除规则。',
     'addChannel.commonFilters': '常用过滤器',
     'addChannel.apiKeyRequired': '至少需要一个密钥',
     'addChannel.apiKeyLoadBalance': '可添加多个密钥用于负载均衡',
