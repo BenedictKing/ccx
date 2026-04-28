@@ -109,3 +109,43 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 3: Fix channel selection, frontend checks, and codex branch release tag
+
+**Date**: 2026-04-28
+**Task**: Fix channel selection, frontend checks, and codex branch release tag
+**Branch**: `codex/claude-channel-rules-passthrough`
+
+### Summary
+
+修复 review-summary 中已完成的后端/前端问题，补齐回归测试，并在当前分支推送 codex release tag 触发 Draft Release。
+
+### Main Changes
+
+﻿| Area | Description |
+|------|-------------|
+| Backend config | ?? messages / responses / chat / gemini ?????? active ?????? suspended/disabled ??????????????????????? 2 ?????? |
+| Frontend services | ?? prerelease ???????? `ApiService.request()` ???? 10 ?????? `api.test.ts` ? `version.test.ts`? |
+| Frontend quality | ?? lint ????? `frontend/package-lock.json`?????? bun ???? |
+| Verification | ?? `go test ./...`?`bun run lint`?`bun run type-check`?`bun run build`?`bun x vitest run src/services/version.test.ts src/services/api.test.ts`????? |
+| Release trigger | ? `codex/claude-channel-rules-passthrough` ????? tag `v0.0.0-codex-claude-rules-20260428-0001` ? `BugMasterLab/ccx`???? draft release workflows? |
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `32069eb` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

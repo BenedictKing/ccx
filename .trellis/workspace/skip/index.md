@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 2
+- **Total Sessions**: 3
 - **Last Active**: 2026-04-28
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~110 | Active |
+| `journal-1.md` | ~151 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 3 | 2026-04-28 | Fix channel selection, frontend checks, and codex branch release tag | `32069eb` | `codex/claude-channel-rules-passthrough` |
 | 2 | 2026-04-28 | Fix missing routed model breaker classification | `d4a7f59` | `codex/claude-channel-rules-passthrough` |
 | 1 | 2026-04-28 | Fix review-summary issues | - | `codex/claude-channel-rules-passthrough` |
 <!-- @@@/auto:session-history -->
