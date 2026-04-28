@@ -1,0 +1,10 @@
+{"file": ".trellis/workflow.md", "reason": "Project workflow and conventions"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend development guide"}
+{"file": "frontend/src/components/AddChannelModal.vue", "reason": "Primary implementation context for this parallel integration task"}
+{"file": "frontend/src/utils/channelPayload.ts", "reason": "Primary implementation context for this parallel integration task"}
+{"file": "frontend/src/utils/add-channel-modal-state.ts", "reason": "Primary implementation context for this parallel integration task"}
+{"file": "frontend/src/utils/channelTypeApi.ts", "reason": "Primary implementation context for this parallel integration task"}
+{"file": "frontend/src/services/api.ts", "reason": "Primary implementation context for this parallel integration task"}
+{"file": "frontend/src/components/CapabilityTestDialog.vue", "reason": "Primary implementation context for this parallel integration task"}
+{"file": "frontend/src/components/CapabilityModelResults.vue", "reason": "Primary implementation context for this parallel integration task"}
+{"file": "frontend/src/stores/channel.ts", "reason": "Primary implementation context for this parallel integration task"}

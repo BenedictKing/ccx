@@ -1,0 +1,53 @@
+{
+  "id": "integrate-upstream-frontend-channel-workflows",
+  "name": "integrate-upstream-frontend-channel-workflows",
+  "title": "Integrate upstream frontend channel workflows",
+  "description": "Resolve frontend channel modal, payload, capability dialog, and Images tab changes from upstream v2.6.68.",
+  "status": "completed",
+  "dev_type": "frontend",
+  "scope": "frontend/channel-workflows",
+  "package": null,
+  "priority": "P1",
+  "creator": "skip",
+  "assignee": "skip",
+  "createdAt": "2026-04-28",
+  "completedAt": "2026-04-29",
+  "branch": "codex/integrate-upstream-frontend-channel-workflows",
+  "base_branch": "codex/claude-channel-rules-passthrough",
+  "worktree_path": "C:\\Users\\Blue\\Desktop\\learn-ai\\trellis-worktrees\\codex\\integrate-upstream-frontend-channel-workflows",
+  "current_phase": 0,
+  "next_action": [
+    {
+      "phase": 1,
+      "action": "brainstorm"
+    },
+    {
+      "phase": 2,
+      "action": "research"
+    },
+    {
+      "phase": 3,
+      "action": "implement"
+    },
+    {
+      "phase": 4,
+      "action": "check"
+    },
+    {
+      "phase": 5,
+      "action": "update-spec"
+    },
+    {
+      "phase": 6,
+      "action": "record-session"
+    }
+  ],
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

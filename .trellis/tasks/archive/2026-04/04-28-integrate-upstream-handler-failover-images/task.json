@@ -1,0 +1,53 @@
+{
+  "id": "integrate-upstream-handler-failover-images",
+  "name": "integrate-upstream-handler-failover-images",
+  "title": "Integrate upstream handler failover and images routing",
+  "description": "Resolve backend handlers, failover, stream, and Images routing changes from upstream v2.6.68.",
+  "status": "completed",
+  "dev_type": "backend",
+  "scope": "backend-go/handlers-images-failover",
+  "package": null,
+  "priority": "P1",
+  "creator": "skip",
+  "assignee": "skip",
+  "createdAt": "2026-04-28",
+  "completedAt": "2026-04-29",
+  "branch": "codex/integrate-upstream-handler-failover-images",
+  "base_branch": "codex/claude-channel-rules-passthrough",
+  "worktree_path": "C:\\Users\\Blue\\Desktop\\learn-ai\\trellis-worktrees\\codex\\integrate-upstream-handler-failover-images",
+  "current_phase": 0,
+  "next_action": [
+    {
+      "phase": 1,
+      "action": "brainstorm"
+    },
+    {
+      "phase": 2,
+      "action": "research"
+    },
+    {
+      "phase": 3,
+      "action": "implement"
+    },
+    {
+      "phase": 4,
+      "action": "check"
+    },
+    {
+      "phase": 5,
+      "action": "update-spec"
+    },
+    {
+      "phase": 6,
+      "action": "record-session"
+    }
+  ],
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

@@ -1,0 +1,10 @@
+{"file": ".agents/skills/finish-work/SKILL.md", "reason": "Finish work checklist"}
+{"file": ".agents/skills/check/SKILL.md", "reason": "Code quality check spec"}
+{"file": "frontend/src/components/AddChannelModal.vue", "reason": "Check regressions and behavior after implementation"}
+{"file": "frontend/src/utils/channelPayload.ts", "reason": "Check regressions and behavior after implementation"}
+{"file": "frontend/src/utils/add-channel-modal-state.ts", "reason": "Check regressions and behavior after implementation"}
+{"file": "frontend/src/utils/channelTypeApi.ts", "reason": "Check regressions and behavior after implementation"}
+{"file": "frontend/src/services/api.ts", "reason": "Check regressions and behavior after implementation"}
+{"file": "frontend/src/components/CapabilityTestDialog.vue", "reason": "Check regressions and behavior after implementation"}
+{"file": "frontend/src/components/CapabilityModelResults.vue", "reason": "Check regressions and behavior after implementation"}
+{"file": "frontend/src/stores/channel.ts", "reason": "Check regressions and behavior after implementation"}

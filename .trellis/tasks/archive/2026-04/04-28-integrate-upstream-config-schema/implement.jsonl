@@ -1,0 +1,9 @@
+{"file": ".trellis/workflow.md", "reason": "Project workflow and conventions"}
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend development guide"}
+{"file": "backend-go/internal/config/config.go", "reason": "Primary implementation context for this parallel integration task"}
+{"file": "backend-go/internal/config/config_chat.go", "reason": "Primary implementation context for this parallel integration task"}
+{"file": "backend-go/internal/config/config_gemini.go", "reason": "Primary implementation context for this parallel integration task"}
+{"file": "backend-go/internal/config/config_messages.go", "reason": "Primary implementation context for this parallel integration task"}
+{"file": "backend-go/internal/config/config_responses.go", "reason": "Primary implementation context for this parallel integration task"}
+{"file": "backend-go/internal/config/config_loader.go", "reason": "Primary implementation context for this parallel integration task"}
+{"file": "backend-go/internal/config/config_utils.go", "reason": "Primary implementation context for this parallel integration task"}

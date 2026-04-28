@@ -1,0 +1,11 @@
+{"file": ".trellis/workflow.md", "reason": "Project workflow and conventions"}
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend development guide"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend development guide"}
+{"file": "backend-go/internal/handlers/capability_test_handler.go", "reason": "Primary implementation context for this parallel integration task"}
+{"file": "backend-go/internal/handlers/capability_test_dispatcher.go", "reason": "Primary implementation context for this parallel integration task"}
+{"file": "backend-go/internal/handlers/capability_test_jobs.go", "reason": "Primary implementation context for this parallel integration task"}
+{"file": "backend-go/internal/metrics/channel_metrics.go", "reason": "Primary implementation context for this parallel integration task"}
+{"file": "backend-go/internal/metrics/sqlite_store.go", "reason": "Primary implementation context for this parallel integration task"}
+{"file": "backend-go/internal/scheduler/channel_scheduler.go", "reason": "Primary implementation context for this parallel integration task"}
+{"file": "frontend/src/components/CapabilityTestDialog.vue", "reason": "Primary implementation context for this parallel integration task"}
+{"file": "frontend/src/stores/channel.ts", "reason": "Primary implementation context for this parallel integration task"}

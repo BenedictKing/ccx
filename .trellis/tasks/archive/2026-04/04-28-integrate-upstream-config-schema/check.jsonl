@@ -1,0 +1,9 @@
+{"file": ".agents/skills/finish-work/SKILL.md", "reason": "Finish work checklist"}
+{"file": ".agents/skills/check/SKILL.md", "reason": "Code quality check spec"}
+{"file": "backend-go/internal/config/config.go", "reason": "Check regressions and behavior after implementation"}
+{"file": "backend-go/internal/config/config_chat.go", "reason": "Check regressions and behavior after implementation"}
+{"file": "backend-go/internal/config/config_gemini.go", "reason": "Check regressions and behavior after implementation"}
+{"file": "backend-go/internal/config/config_messages.go", "reason": "Check regressions and behavior after implementation"}
+{"file": "backend-go/internal/config/config_responses.go", "reason": "Check regressions and behavior after implementation"}
+{"file": "backend-go/internal/config/config_loader.go", "reason": "Check regressions and behavior after implementation"}
+{"file": "backend-go/internal/config/config_utils.go", "reason": "Check regressions and behavior after implementation"}

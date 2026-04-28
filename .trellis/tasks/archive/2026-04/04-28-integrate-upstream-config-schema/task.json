@@ -1,0 +1,53 @@
+{
+  "id": "integrate-upstream-config-schema",
+  "name": "integrate-upstream-config-schema",
+  "title": "Integrate upstream config and channel schema",
+  "description": "Resolve upstream v2.6.68 config/channel schema changes against local Claude rules from review-summary.",
+  "status": "completed",
+  "dev_type": "backend",
+  "scope": "backend-go/config",
+  "package": null,
+  "priority": "P1",
+  "creator": "skip",
+  "assignee": "skip",
+  "createdAt": "2026-04-28",
+  "completedAt": "2026-04-29",
+  "branch": "codex/integrate-upstream-config-schema",
+  "base_branch": "codex/claude-channel-rules-passthrough",
+  "worktree_path": "C:\\Users\\Blue\\Desktop\\learn-ai\\trellis-worktrees\\codex\\integrate-upstream-config-schema",
+  "current_phase": 0,
+  "next_action": [
+    {
+      "phase": 1,
+      "action": "brainstorm"
+    },
+    {
+      "phase": 2,
+      "action": "research"
+    },
+    {
+      "phase": 3,
+      "action": "implement"
+    },
+    {
+      "phase": 4,
+      "action": "check"
+    },
+    {
+      "phase": 5,
+      "action": "update-spec"
+    },
+    {
+      "phase": 6,
+      "action": "record-session"
+    }
+  ],
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

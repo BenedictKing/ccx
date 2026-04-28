@@ -1,0 +1,10 @@
+{"file": ".agents/skills/finish-work/SKILL.md", "reason": "Finish work checklist"}
+{"file": ".agents/skills/check/SKILL.md", "reason": "Code quality check spec"}
+{"file": "backend-go/internal/handlers/capability_test_handler.go", "reason": "Check regressions and behavior after implementation"}
+{"file": "backend-go/internal/handlers/capability_test_dispatcher.go", "reason": "Check regressions and behavior after implementation"}
+{"file": "backend-go/internal/handlers/capability_test_jobs.go", "reason": "Check regressions and behavior after implementation"}
+{"file": "backend-go/internal/metrics/channel_metrics.go", "reason": "Check regressions and behavior after implementation"}
+{"file": "backend-go/internal/metrics/sqlite_store.go", "reason": "Check regressions and behavior after implementation"}
+{"file": "backend-go/internal/scheduler/channel_scheduler.go", "reason": "Check regressions and behavior after implementation"}
+{"file": "frontend/src/components/CapabilityTestDialog.vue", "reason": "Check regressions and behavior after implementation"}
+{"file": "frontend/src/stores/channel.ts", "reason": "Check regressions and behavior after implementation"}
