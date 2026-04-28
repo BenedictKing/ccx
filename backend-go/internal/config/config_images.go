@@ -26,7 +26,7 @@ func NormalizeImagesServiceTypeForProxy(serviceType string) (string, error) {
 }
 
 // GetCurrentImagesUpstream 获取当前 Images 上游配置
-// 优先选择第一个 active 状态的渠道，若无则回退到第一个渠道
+// 选择第一个 active 状态的渠道；若未找到 active 渠道则返回错误
 func (cm *ConfigManager) GetCurrentImagesUpstream() (*UpstreamConfig, error) {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
