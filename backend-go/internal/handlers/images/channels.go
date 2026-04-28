@@ -46,7 +46,7 @@ func AddUpstream(cfgManager *config.ConfigManager) gin.HandlerFunc {
 		}
 
 		if err := cfgManager.AddImagesUpstream(upstream); err != nil {
-			if strings.Contains(err.Error(), "??? openai serviceType") {
+			if strings.Contains(err.Error(), "openai serviceType") {
 				c.JSON(400, gin.H{"error": err.Error()})
 			} else {
 				c.JSON(500, gin.H{"error": err.Error()})
@@ -76,7 +76,7 @@ func UpdateUpstream(cfgManager *config.ConfigManager, sch *scheduler.ChannelSche
 
 		shouldResetMetrics, err := cfgManager.UpdateImagesUpstream(id, updates)
 		if err != nil {
-			if strings.Contains(err.Error(), "??? openai serviceType") {
+			if strings.Contains(err.Error(), "openai serviceType") {
 				c.JSON(400, gin.H{"error": err.Error()})
 			} else {
 				c.JSON(500, gin.H{"error": err.Error()})

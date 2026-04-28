@@ -136,7 +136,7 @@
                 :test="test"
                 :pending-text="getProtocolPendingText(test)"
                 :show-label="false"
-                :retry-enabled="!isProtocolBusy(test) && Boolean(job?.protocolJobIds?.[test.protocol])"
+                :retry-enabled="!isProtocolBusy(test) && Boolean(job?.protocolJobIds?.[test.protocol] || job?.jobId)"
                 @retry-model="handleRetryModel"
               />
             </div>
@@ -252,7 +252,7 @@
                         :test="test"
                         :pending-text="getProtocolPendingText(test)"
                         :show-label="false"
-                        :retry-enabled="!isProtocolBusy(test) && Boolean(job?.protocolJobIds?.[test.protocol])"
+                        :retry-enabled="!isProtocolBusy(test) && Boolean(job?.protocolJobIds?.[test.protocol] || job?.jobId)"
                         @retry-model="handleRetryModel"
                       />
                     </div>
@@ -333,7 +333,7 @@ watch(() => props.capabilityJob?.error, (error) => {
 const state = computed(() => {
   if (errorMessage.value) return 'error'
   if (!props.capabilityJob) return 'initializing'
-  if ((props.capabilityJob.status as any) === 'idle') return 'idle'
+  if ((props.capabilityJob.status as string) === 'idle') return 'idle'
   if (props.capabilityJob.lifecycle === 'cancelled') return 'cancelled'
   if (props.capabilityJob.lifecycle === 'done') return 'completed'
   if (props.capabilityJob.lifecycle === 'pending') return 'pending'
@@ -419,7 +419,7 @@ const sortedTests = computed(() => {
 })
 
 const getProtocolDisplayState = (test: CapabilityProtocolJobResult): 'idle' | 'pending' | 'running' | 'success' | 'partial' | 'cancelled' | 'failed' => {
-  if ((test.status as any) === 'idle') return 'idle'
+  if ((test.status as string) === 'idle') return 'idle'
   if (test.lifecycle === 'active') return 'running'
   if (test.lifecycle === 'pending') return 'pending'
   if (test.outcome === 'partial') return 'partial'
@@ -451,6 +451,7 @@ const getProtocolStatusIcon = (test: CapabilityProtocolJobResult): string => {
 
 const getProtocolStatusIconColor = (test: CapabilityProtocolJobResult): string => {
   switch (getProtocolDisplayState(test)) {
+    case 'idle': return t('capability.notStarted')
     case 'success': return 'success'
     case 'partial': return 'warning'
     case 'failed': return 'error'

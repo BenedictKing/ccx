@@ -209,7 +209,6 @@ export interface Channel {
   injectDummyThoughtSignature?: boolean  // Gemini 特定：为 functionCall 注入 dummy thought_signature（兼容第三方 API）
   stripThoughtSignature?: boolean        // Gemini 特定：移除 thought_signature 字段（兼容旧版 Gemini API）
   supportedModels?: string[]  // 支持的模型白名单（空=全部），支持通配符如 gpt-4*
-  rpm?: number                // 能力测试发送速率（仅影响能力测试）
 }
 
 export interface ChannelsResponse {
@@ -662,6 +661,8 @@ export interface ChannelModelsRequest {
   insecureSkipVerify?: boolean
   customHeaders?: Record<string, string>
   baseUrls?: string[]
+  routePrefix?: string
+  supportedModels?: string[]
 }
 
 export type ApiChannelType = 'messages' | 'chat' | 'gemini' | 'responses' | 'images'
@@ -810,8 +811,11 @@ export class ApiService {
   async startChannelCapabilityTest(
     type: ApiChannelType,
     id: number,
-    options: StartCapabilityTestOptions = {}
+    optionsOrPreviousJobId: StartCapabilityTestOptions | string = {}
   ): Promise<CapabilityTestJobStartResponse> {
+    const options = typeof optionsOrPreviousJobId === 'string'
+      ? { previousJobId: optionsOrPreviousJobId }
+      : optionsOrPreviousJobId
     const body: { targetProtocols: string[]; timeout: number; previousJobId?: string; rpm?: number } = {
       targetProtocols: options.targetProtocols?.length ? options.targetProtocols : ['messages', 'responses', 'chat', 'gemini'],
       timeout: 10000,

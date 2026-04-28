@@ -93,7 +93,8 @@ const modelResults = computed(() => Array.isArray(props.test.modelResults) ? pro
 const shouldShowPendingPlaceholder = computed(() => modelResults.value.length === 0 && (props.test.lifecycle === 'pending' || props.test.lifecycle === 'active'))
 const shouldShowDetailsUnavailable = computed(() => modelResults.value.length === 0 && !shouldShowPendingPlaceholder.value)
 
-const getModelDisplayState = (modelResult: CapabilityModelJobResult): 'pending' | 'running' | 'success' | 'cancelled' | 'skipped' | 'failed' => {
+const getModelDisplayState = (modelResult: CapabilityModelJobResult): 'idle' | 'pending' | 'running' | 'success' | 'cancelled' | 'skipped' | 'failed' => {
+  if (modelResult.status === 'idle') return 'idle'
   if (modelResult.lifecycle === 'pending') return 'pending'
   if (modelResult.lifecycle === 'active') return 'running'
   if (modelResult.lifecycle === 'cancelled' || modelResult.outcome === 'cancelled') return 'cancelled'
@@ -105,6 +106,7 @@ const getModelDisplayState = (modelResult: CapabilityModelJobResult): 'pending' 
 const getModelBadgeClass = (modelResult: CapabilityModelJobResult): string => {
   switch (getModelDisplayState(modelResult)) {
     case 'running': return 'running-badge'
+    case 'idle':
     case 'pending': return 'queued-badge'
     case 'success': return 'success-badge'
     case 'cancelled':
@@ -116,6 +118,7 @@ const getModelBadgeClass = (modelResult: CapabilityModelJobResult): string => {
 const getModelStatusIcon = (modelResult: CapabilityModelJobResult): string => {
   switch (getModelDisplayState(modelResult)) {
     case 'pending': return 'mdi-timer-sand'
+    case 'idle': return 'mdi-clock-outline'
     case 'running': return 'mdi-progress-clock'
     case 'cancelled': return 'mdi-stop-circle-outline'
     case 'skipped': return 'mdi-skip-next'
@@ -128,6 +131,7 @@ const getModelStatusLabel = (status: string, modelResult?: CapabilityModelJobRes
   if (modelResult?.lifecycle === 'cancelled' || modelResult?.outcome === 'cancelled') return t('capability.cancelled')
   switch (status) {
     case 'queued': return t('capability.modelQueued')
+    case 'idle': return t('capability.notStarted')
     case 'running': return t('capability.modelRunning')
     case 'success': return t('capability.modelSuccess')
     case 'failed': return t('capability.modelFailed')
@@ -143,12 +147,12 @@ const isModelRetryable = (modelResult: CapabilityModelJobResult): boolean => {
 
 const isModelPending = (modelResult: CapabilityModelJobResult): boolean => {
   const displayState = getModelDisplayState(modelResult)
-  return displayState === 'pending' || displayState === 'running'
+  return displayState === 'idle' || displayState === 'pending' || displayState === 'running'
 }
 
 const getTooltipClass = (modelResult: CapabilityModelJobResult): string => {
   if (modelResult.outcome === 'success') return 'success-tooltip'
-  if (modelResult.lifecycle === 'pending' || modelResult.lifecycle === 'active') return 'pending-tooltip'
+  if (isModelPending(modelResult)) return 'pending-tooltip'
   return 'error-tooltip'
 }
 

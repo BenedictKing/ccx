@@ -4,6 +4,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/BenedictKing/ccx/internal/utils"
 )
 
 // ============== 工具函数 ==============
@@ -25,23 +27,31 @@ func deduplicateStrings(items []string) []string {
 }
 
 // deduplicateBaseURLs 去重 BaseURLs，忽略末尾 / 和 # 差异
-func deduplicateBaseURLs(urls []string) []string {
+func deduplicateBaseURLs(urls []string, serviceType string) []string {
 	if len(urls) <= 1 {
 		return urls
 	}
 	seen := make(map[string]struct{}, len(urls))
 	result := make([]string, 0, len(urls))
 	for _, url := range urls {
-		normalized := strings.TrimRight(url, "/#")
+		normalized := utils.CanonicalBaseURL(url, serviceType)
 		if _, exists := seen[normalized]; !exists {
 			seen[normalized] = struct{}{}
-			result = append(result, url)
+			result = append(result, normalized)
 		}
 	}
 	return result
 }
 
 // ConfigError 配置错误
+func normalizeUpstreamServiceType(serviceType, fallback string) string {
+	normalized := strings.ToLower(strings.TrimSpace(serviceType))
+	if normalized == "" {
+		return fallback
+	}
+	return normalized
+}
+
 type ConfigError struct {
 	Message string
 }
@@ -386,12 +396,12 @@ func matchSupportedModelPattern(pattern, model string) bool {
 func (u *UpstreamConfig) GetEffectiveBaseURL() string {
 	// 优先使用 BaseURL（可能被调用方临时设置用于指定本次请求的 URL）
 	if u.BaseURL != "" {
-		return u.BaseURL
+		return utils.CanonicalBaseURL(u.BaseURL, u.ServiceType)
 	}
 
 	// 回退到 BaseURLs 数组
 	if len(u.BaseURLs) > 0 {
-		return u.BaseURLs[0]
+		return utils.CanonicalBaseURL(u.BaseURLs[0], u.ServiceType)
 	}
 
 	return ""

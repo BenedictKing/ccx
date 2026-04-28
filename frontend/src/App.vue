@@ -111,6 +111,10 @@
           <router-link to="/channels/gemini" class="api-type-text" :class="{ active: channelStore.activeTab === 'gemini' }">
             {{ t('app.tabs.gemini') }}
           </router-link>
+          <span class="api-type-text separator">/</span>
+          <router-link to="/channels/images" class="api-type-text" :class="{ active: channelStore.activeTab === 'images' }">
+            {{ t('app.tabs.images') }}
+          </router-link>
           <span class="brand-text d-none d-md-inline">API Proxy - CCX</span>
         </div>
       </div>
@@ -378,8 +382,7 @@
       :channel-name="capabilityTestChannelName"
       :current-tab="channelStore.activeTab"
       :capability-job="capabilityTestJob"
-      :capability-rpm="capabilityTestRpm"
-      @update:capability-rpm="capabilityTestRpm = $event"
+      v-model:capability-rpm="capabilityRpm"
       @copy-to-tab="handleCopyToTab"
       @cancel="handleCancelCapabilityTest"
       @retry-model="handleRetryCapabilityModel"
@@ -487,6 +490,7 @@ const apiTabOptions = [
   { value: 'chat', labelKey: 'app.tabs.chat', route: '/channels/chat' },
   { value: 'responses', labelKey: 'app.tabs.responses', route: '/channels/responses' },
   { value: 'gemini', labelKey: 'app.tabs.gemini', route: '/channels/gemini' },
+  { value: 'images', labelKey: 'app.tabs.images', route: '/channels/images' },
 ] as const
 
 const translatedApiTabOptions = computed(() => {
@@ -643,6 +647,8 @@ const addApiKey = async () => {
   try {
     if (channelStore.activeTab === 'chat') {
       await api.addChatApiKey(dialogStore.selectedChannelForKey, dialogStore.newApiKey.trim())
+    } else if (channelStore.activeTab === 'images') {
+      await api.addImagesApiKey(dialogStore.selectedChannelForKey, dialogStore.newApiKey.trim())
     } else if (channelStore.activeTab === 'gemini') {
       await api.addGeminiApiKey(dialogStore.selectedChannelForKey, dialogStore.newApiKey.trim())
     } else if (channelStore.activeTab === 'responses') {
@@ -664,6 +670,8 @@ const _removeApiKey = async (channelId: number, apiKey: string) => {
   try {
     if (channelStore.activeTab === 'chat') {
       await api.removeChatApiKey(channelId, apiKey)
+    } else if (channelStore.activeTab === 'images') {
+      await api.removeImagesApiKey(channelId, apiKey)
     } else if (channelStore.activeTab === 'gemini') {
       await api.removeGeminiApiKey(channelId, apiKey)
     } else if (channelStore.activeTab === 'responses') {
@@ -696,9 +704,15 @@ const capabilityTestDialogRef = ref<InstanceType<typeof CapabilityTestDialog> | 
 const capabilityTestJobId = ref('')
 const capabilityTestPolling = ref<ReturnType<typeof setInterval> | null>(null)
 const capabilityTestJob = ref<CapabilityTestJob | null>(null)
-const capabilityTestRpm = ref(10)
 const capabilityTestPreviousJobId = ref('') // 记录上一次的 jobId，用于复用成功结果
 const capabilityRetryPendingUntil = ref<Record<string, number>>({})
+type CapabilityChannelKind = 'messages' | 'chat' | 'gemini' | 'responses'
+const capabilityTestChannelKind = ref<CapabilityChannelKind>('messages')
+const capabilityRpm = ref(10)
+
+const isCapabilityChannelKind = (value: string): value is CapabilityChannelKind => {
+  return value === 'messages' || value === 'chat' || value === 'gemini' || value === 'responses'
+}
 
 const capabilityPlaceholderModels: Record<string, string[]> = {
   // 需与后端 capability_probe_models.go 保持一致，用于开始接口返回前的首屏占位
@@ -797,7 +811,7 @@ const buildCapabilityPlaceholderJob = (channelId: number, channelName: string): 
     jobId: '',
     channelId,
     channelName,
-    channelKind: channelStore.activeTab,
+    channelKind: capabilityTestChannelKind.value,
     sourceType: '',
     status: 'queued',
     lifecycle: 'pending',
@@ -843,7 +857,7 @@ const startCapabilityPolling = (channelId: number, jobId: string) => {
   capabilityTestPolling.value = setInterval(async () => {
     if (!jobId) return
     try {
-      const latest = await api.getChannelCapabilityTestStatus(channelStore.activeTab, channelId, jobId)
+      const latest = await api.getChannelCapabilityTestStatus(capabilityTestChannelKind.value, channelId, jobId)
       updateCapabilityJob(latest)
     } catch (error) {
       console.error('Failed to poll capability test job:', error)
@@ -862,9 +876,15 @@ const updateCapabilityJob = (job: CapabilityTestJob) => {
 }
 
 const testChannelCapability = async (channelId: number) => {
+  if (!isCapabilityChannelKind(channelStore.activeTab)) {
+    showErrorToast(t('toast.capabilityFailed', { message: 'Images channels do not support capability tests' }))
+    return
+  }
   const channel = channelStore.currentChannelsData.channels?.find(ch => ch.index === channelId)
   capabilityTestChannelName.value = channel?.name || t('capability.channelFallback', { id: channelId })
   capabilityTestChannelId.value = channelId
+  capabilityTestChannelKind.value = channelStore.activeTab
+  capabilityRpm.value = 10
 
   if (dialogStore.showAddChannelModal) {
     dialogStore.closeAddChannelModal()
@@ -878,11 +898,11 @@ const testChannelCapability = async (channelId: number) => {
 
   try {
     const startResp: CapabilityTestJobStartResponse = await api.startChannelCapabilityTest(
-      channelStore.activeTab,
+      capabilityTestChannelKind.value,
       channelId,
       {
         previousJobId: capabilityTestPreviousJobId.value || undefined,
-        rpm: capabilityTestRpm.value
+        rpm: capabilityRpm.value
       }
     )
     capabilityTestJobId.value = startResp.jobId
@@ -905,9 +925,23 @@ const testChannelCapability = async (channelId: number) => {
 const handleCancelCapabilityTest = async () => {
   if (!capabilityTestJobId.value) return
   try {
-    await api.cancelCapabilityTest(channelStore.activeTab, capabilityTestChannelId.value, capabilityTestJobId.value)
+    const protocolJobRefs = capabilityTestJob.value?.protocolJobRefs
+    const cancelTargets = protocolJobRefs
+      ? Object.values(protocolJobRefs).filter(ref => ref.jobId)
+      : [null]
+    const dedupedTargets = Array.from(new Map(cancelTargets.map(ref => {
+      const target = ref ?? {
+        jobId: capabilityTestJobId.value,
+        channelKind: capabilityTestChannelKind.value,
+        channelId: capabilityTestChannelId.value
+      }
+      return [`${target.channelKind}:${target.channelId}:${target.jobId}`, target]
+    })).values())
+    await Promise.all(dedupedTargets.map(target =>
+      api.cancelCapabilityTest(target.channelKind, target.channelId, target.jobId)
+    ))
     stopCapabilityTestPolling()
-    const latest = await api.getChannelCapabilityTestStatus(channelStore.activeTab, capabilityTestChannelId.value, capabilityTestJobId.value)
+    const latest = await api.getChannelCapabilityTestStatus(capabilityTestChannelKind.value, capabilityTestChannelId.value, capabilityTestJobId.value)
     updateCapabilityJob(latest)
   } catch (error) {
     console.error('Failed to cancel capability test:', error)
@@ -929,7 +963,7 @@ const handleRetryCapabilityModel = async (protocol: string, model: string) => {
       capabilityTestJob.value = markCapabilityModelRetrying(capabilityTestJob.value, protocol, model)
     }
 
-    await api.retryCapabilityTestModel(channelStore.activeTab, capabilityTestChannelId.value, capabilityTestJobId.value, protocol, model)
+    await api.retryCapabilityTestModel(capabilityTestChannelKind.value, capabilityTestChannelId.value, capabilityTestJobId.value, protocol, model)
     startCapabilityPolling(capabilityTestChannelId.value, capabilityTestJobId.value)
   } catch (error) {
     console.error('Failed to retry capability test model:', error)
@@ -940,10 +974,10 @@ const handleRetryCapabilityModel = async (protocol: string, model: string) => {
 const handleTestCapabilityProtocol = async (protocol: string) => {
   if (!capabilityTestChannelId.value) return
   try {
-    const startResp = await api.startChannelCapabilityTest(channelStore.activeTab, capabilityTestChannelId.value, {
+    const startResp = await api.startChannelCapabilityTest(capabilityTestChannelKind.value, capabilityTestChannelId.value, {
       targetProtocols: [protocol],
-      previousJobId: capabilityTestJobId.value || undefined,
-      rpm: capabilityTestRpm.value
+      previousJobId: capabilityTestJobId.value || capabilityTestPreviousJobId.value || undefined,
+      rpm: capabilityRpm.value
     })
     capabilityTestJobId.value = startResp.jobId
     if (startResp.job) {
@@ -987,7 +1021,6 @@ const handleCopyToTab = async (targetProtocol: string) => {
     supportedModels: sourceChannel.supportedModels,
     modelsResponseMode: sourceChannel.modelsResponseMode,
     manualModels: sourceChannel.manualModels,
-    rpm: sourceChannel.rpm ?? 10,
   }
 
   try {

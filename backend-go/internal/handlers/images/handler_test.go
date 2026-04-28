@@ -75,7 +75,7 @@ func TestBuildProviderRequest_RejectsUnsupportedServiceType(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for unsupported serviceType")
 	}
-	if !strings.Contains(err.Error(), "??? openai serviceType") {
+	if !strings.Contains(err.Error(), "openai serviceType") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -104,7 +104,7 @@ func TestAddUpstream_RejectsUnsupportedServiceType(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d, body=%s", w.Code, w.Body.String())
 	}
-	if !strings.Contains(w.Body.String(), "Images ????? openai serviceType") {
+	if !strings.Contains(w.Body.String(), "openai serviceType") {
 		t.Fatalf("unexpected body: %s", w.Body.String())
 	}
 }

@@ -69,7 +69,7 @@ import { useI18n } from '../i18n'
 const apexchart = VueApexCharts
 
 const props = defineProps<{
-  apiType: 'messages' | 'chat' | 'responses' | 'gemini'
+  apiType: 'messages' | 'chat' | 'responses' | 'gemini' | 'images'
 }>()
 
 type Duration = '1h' | '6h' | '24h' | 'today'
