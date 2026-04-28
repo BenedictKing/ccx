@@ -1,0 +1,7 @@
+{"file": ".trellis/workflow.md", "reason": "Project workflow and conventions"}
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend development guide"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend development guide"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Backend handlers must validate malformed path/body input at HTTP boundary and return stable 400s."}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Frontend fix is local to AddChannelModal and should preserve utility/component ownership boundaries."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Backend changes span parallel protocol handlers and should stay aligned with existing patterns and tests."}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Local modal cache/state should remain component-owned and invalidate correctly on upstream context changes."}

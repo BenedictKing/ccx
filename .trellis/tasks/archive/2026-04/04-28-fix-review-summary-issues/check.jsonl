@@ -1,0 +1,4 @@
+{"file": ".claude/commands/trellis/finish-work.md", "reason": "Finish work checklist"}
+{"file": ".claude/commands/trellis/check.md", "reason": "Code quality check spec"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Review build/type safety after scoped frontend cache fix."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Review malformed input handling and HTTP status mapping."}
