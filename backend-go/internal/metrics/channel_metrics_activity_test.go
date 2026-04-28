@@ -16,7 +16,7 @@ func TestGetRecentActivityMultiURL_EmptyInputs(t *testing.T) {
 	defer m.Stop()
 
 	// 空 baseURLs
-	result := m.GetRecentActivityMultiURL(0, []string{}, []string{"key1"})
+	result := m.GetRecentActivityMultiURL(0, []string{}, []string{"key1"}, "openai")
 	if result.ChannelIndex != 0 {
 		t.Errorf("expected channelIndex 0, got %d", result.ChannelIndex)
 	}
@@ -31,7 +31,7 @@ func TestGetRecentActivityMultiURL_EmptyInputs(t *testing.T) {
 	}
 
 	// 空 activeKeys
-	result = m.GetRecentActivityMultiURL(0, []string{"http://example.com"}, []string{})
+	result = m.GetRecentActivityMultiURL(0, []string{"http://example.com"}, []string{}, "openai")
 	if result.TotalSegs != 150 {
 		t.Errorf("expected TotalSegs 150, got %d", result.TotalSegs)
 	}
@@ -47,7 +47,7 @@ func TestGetRecentActivityMultiURL_SegmentBoundaries(t *testing.T) {
 	// 模拟在不同时间点的请求
 	now := time.Now()
 	m.mu.Lock()
-	metrics := m.getOrCreateKey(baseURL, apiKey)
+	metrics := m.getOrCreateKey(baseURL, apiKey, "openai")
 
 	// 添加当前 6 秒段的请求（应该在最后一个 segment）
 	metrics.requestHistory = append(metrics.requestHistory, RequestRecord{
@@ -82,7 +82,7 @@ func TestGetRecentActivityMultiURL_SegmentBoundaries(t *testing.T) {
 	})
 	m.mu.Unlock()
 
-	result := m.GetRecentActivityMultiURL(1, []string{baseURL}, []string{apiKey})
+	result := m.GetRecentActivityMultiURL(1, []string{baseURL}, []string{apiKey}, "openai")
 
 	// 验证 channelIndex
 	if result.ChannelIndex != 1 {
@@ -125,7 +125,7 @@ func TestGetRecentActivityMultiURL_FailureCount(t *testing.T) {
 
 	now := time.Now()
 	m.mu.Lock()
-	metrics := m.getOrCreateKey(baseURL, apiKey)
+	metrics := m.getOrCreateKey(baseURL, apiKey, "openai")
 
 	// 添加 2 个成功和 1 个失败
 	metrics.requestHistory = append(metrics.requestHistory,
@@ -135,7 +135,7 @@ func TestGetRecentActivityMultiURL_FailureCount(t *testing.T) {
 	)
 	m.mu.Unlock()
 
-	result := m.GetRecentActivityMultiURL(0, []string{baseURL}, []string{apiKey})
+	result := m.GetRecentActivityMultiURL(0, []string{baseURL}, []string{apiKey}, "openai")
 
 	// 稀疏 Map 格式：只有有数据的段才会存在
 	if len(result.Segments) == 0 {
@@ -166,6 +166,34 @@ func TestGetRecentActivityMultiURL_FailureCount(t *testing.T) {
 	}
 }
 
+func TestGetRecentActivityMultiURL_DeduplicatesEquivalentURLs(t *testing.T) {
+	m := NewMetricsManager()
+	defer m.Stop()
+
+	baseURL := "https://gemini.example.com"
+	apiKey := "test-key"
+	now := time.Now()
+
+	m.mu.Lock()
+	metrics := m.getOrCreateKey(baseURL, apiKey, "")
+	metrics.requestHistory = append(metrics.requestHistory, RequestRecord{
+		Timestamp:    now,
+		Success:      true,
+		OutputTokens: 123,
+	})
+	m.mu.Unlock()
+
+	result := m.GetRecentActivityMultiURL(0, []string{baseURL, baseURL + "/v1"}, []string{apiKey}, "")
+
+	var totalRequests int64
+	for _, seg := range result.Segments {
+		totalRequests += seg.RequestCount
+	}
+	if totalRequests != 1 {
+		t.Fatalf("expected 1 request after deduplicating equivalent URLs, got %d", totalRequests)
+	}
+}
+
 func TestGetRecentActivityMultiURL_MultipleURLs(t *testing.T) {
 	m := NewMetricsManager()
 	defer m.Stop()
@@ -176,14 +204,14 @@ func TestGetRecentActivityMultiURL_MultipleURLs(t *testing.T) {
 
 	now := time.Now()
 	m.mu.Lock()
-	metrics1 := m.getOrCreateKey(baseURL1, apiKey)
+	metrics1 := m.getOrCreateKey(baseURL1, apiKey, "openai")
 	metrics1.requestHistory = append(metrics1.requestHistory, RequestRecord{
 		Timestamp:    now,
 		Success:      true,
 		OutputTokens: 100,
 	})
 
-	metrics2 := m.getOrCreateKey(baseURL2, apiKey)
+	metrics2 := m.getOrCreateKey(baseURL2, apiKey, "openai")
 	metrics2.requestHistory = append(metrics2.requestHistory, RequestRecord{
 		Timestamp:    now,
 		Success:      true,
@@ -191,9 +219,8 @@ func TestGetRecentActivityMultiURL_MultipleURLs(t *testing.T) {
 	})
 	m.mu.Unlock()
 
-	result := m.GetRecentActivityMultiURL(0, []string{baseURL1, baseURL2}, []string{apiKey})
+	result := m.GetRecentActivityMultiURL(0, []string{baseURL1, baseURL2}, []string{apiKey}, "openai")
 
-	// 验证聚合了两个 URL 的数据
 	var totalRequests int64
 	for _, seg := range result.Segments {
 		totalRequests += seg.RequestCount
@@ -202,7 +229,6 @@ func TestGetRecentActivityMultiURL_MultipleURLs(t *testing.T) {
 		t.Errorf("expected 2 total requests from 2 URLs, got %d", totalRequests)
 	}
 
-	// TPM 应该是 (100 + 200) / 15
 	expectedTPM := 300.0 / 15.0
 	if !floatEquals(result.TPM, expectedTPM, 0.0001) {
 		t.Errorf("expected TPM %.4f, got %.4f", expectedTPM, result.TPM)
@@ -219,14 +245,14 @@ func TestGetRecentActivityMultiURL_MultipleKeys(t *testing.T) {
 
 	now := time.Now()
 	m.mu.Lock()
-	metrics1 := m.getOrCreateKey(baseURL, apiKey1)
+	metrics1 := m.getOrCreateKey(baseURL, apiKey1, "openai")
 	metrics1.requestHistory = append(metrics1.requestHistory, RequestRecord{
 		Timestamp:    now,
 		Success:      true,
 		OutputTokens: 150,
 	})
 
-	metrics2 := m.getOrCreateKey(baseURL, apiKey2)
+	metrics2 := m.getOrCreateKey(baseURL, apiKey2, "openai")
 	metrics2.requestHistory = append(metrics2.requestHistory, RequestRecord{
 		Timestamp:    now,
 		Success:      true,
@@ -234,7 +260,7 @@ func TestGetRecentActivityMultiURL_MultipleKeys(t *testing.T) {
 	})
 	m.mu.Unlock()
 
-	result := m.GetRecentActivityMultiURL(0, []string{baseURL}, []string{apiKey1, apiKey2})
+	result := m.GetRecentActivityMultiURL(0, []string{baseURL}, []string{apiKey1, apiKey2}, "openai")
 
 	// 验证聚合了两个 Key 的数据
 	var totalRequests int64
@@ -264,7 +290,7 @@ func TestGetRecentActivityMultiURL_MultipleURLsAndKeys(t *testing.T) {
 	now := time.Now()
 	m.mu.Lock()
 	// URL1 + Key1
-	metrics11 := m.getOrCreateKey(baseURL1, apiKey1)
+	metrics11 := m.getOrCreateKey(baseURL1, apiKey1, "openai")
 	metrics11.requestHistory = append(metrics11.requestHistory, RequestRecord{
 		Timestamp:    now,
 		Success:      true,
@@ -272,7 +298,7 @@ func TestGetRecentActivityMultiURL_MultipleURLsAndKeys(t *testing.T) {
 	})
 
 	// URL1 + Key2
-	metrics12 := m.getOrCreateKey(baseURL1, apiKey2)
+	metrics12 := m.getOrCreateKey(baseURL1, apiKey2, "openai")
 	metrics12.requestHistory = append(metrics12.requestHistory, RequestRecord{
 		Timestamp:    now,
 		Success:      true,
@@ -280,7 +306,7 @@ func TestGetRecentActivityMultiURL_MultipleURLsAndKeys(t *testing.T) {
 	})
 
 	// URL2 + Key1
-	metrics21 := m.getOrCreateKey(baseURL2, apiKey1)
+	metrics21 := m.getOrCreateKey(baseURL2, apiKey1, "openai")
 	metrics21.requestHistory = append(metrics21.requestHistory, RequestRecord{
 		Timestamp:    now,
 		Success:      false,
@@ -288,7 +314,7 @@ func TestGetRecentActivityMultiURL_MultipleURLsAndKeys(t *testing.T) {
 	})
 
 	// URL2 + Key2
-	metrics22 := m.getOrCreateKey(baseURL2, apiKey2)
+	metrics22 := m.getOrCreateKey(baseURL2, apiKey2, "openai")
 	metrics22.requestHistory = append(metrics22.requestHistory, RequestRecord{
 		Timestamp:    now,
 		Success:      true,
@@ -296,7 +322,7 @@ func TestGetRecentActivityMultiURL_MultipleURLsAndKeys(t *testing.T) {
 	})
 	m.mu.Unlock()
 
-	result := m.GetRecentActivityMultiURL(0, []string{baseURL1, baseURL2}, []string{apiKey1, apiKey2})
+	result := m.GetRecentActivityMultiURL(0, []string{baseURL1, baseURL2}, []string{apiKey1, apiKey2}, "openai")
 
 	// 验证聚合了所有 URL × Key 组合的数据（2×2=4 个请求）
 	var totalRequests int64

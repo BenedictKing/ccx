@@ -6,11 +6,14 @@ import (
 	"log"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/metrics"
 	"github.com/BenedictKing/ccx/internal/session"
+	"github.com/BenedictKing/ccx/internal/transitions"
 	"github.com/BenedictKing/ccx/internal/types"
+	"github.com/BenedictKing/ccx/internal/utils"
 	"github.com/BenedictKing/ccx/internal/warmup"
 )
 
@@ -22,12 +25,14 @@ type ChannelScheduler struct {
 	responsesMetricsManager  *metrics.MetricsManager // Responses 渠道指标
 	geminiMetricsManager     *metrics.MetricsManager // Gemini 渠道指标
 	chatMetricsManager       *metrics.MetricsManager // Chat 渠道指标
+	imagesMetricsManager     *metrics.MetricsManager // Images 渠道指标
 	traceAffinity            *session.TraceAffinityManager
 	urlManager               *warmup.URLManager       // URL 管理器（非阻塞，动态排序）
 	messagesChannelLogStore  *metrics.ChannelLogStore // Messages 渠道请求日志
 	responsesChannelLogStore *metrics.ChannelLogStore // Responses 渠道请求日志
 	geminiChannelLogStore    *metrics.ChannelLogStore // Gemini 渠道请求日志
 	chatChannelLogStore      *metrics.ChannelLogStore // Chat 渠道请求日志
+	imagesChannelLogStore    *metrics.ChannelLogStore // Images 渠道请求日志
 }
 
 // ChannelKind 标识调度器所处理的渠道类型
@@ -40,6 +45,7 @@ const (
 	ChannelKindResponses ChannelKind = "responses"
 	ChannelKindGemini    ChannelKind = "gemini"
 	ChannelKindChat      ChannelKind = "chat"
+	ChannelKindImages    ChannelKind = "images"
 )
 
 // NewChannelScheduler 创建多渠道调度器
@@ -49,21 +55,42 @@ func NewChannelScheduler(
 	responsesMetrics *metrics.MetricsManager,
 	geminiMetrics *metrics.MetricsManager,
 	chatMetrics *metrics.MetricsManager,
-	traceAffinity *session.TraceAffinityManager,
-	urlMgr *warmup.URLManager,
+	optional ...interface{},
 ) *ChannelScheduler {
+	var imagesMetrics *metrics.MetricsManager
+	var traceAffinity *session.TraceAffinityManager
+	var urlMgr *warmup.URLManager
+
+	if len(optional) > 0 {
+		if m, ok := optional[0].(*metrics.MetricsManager); ok {
+			imagesMetrics = m
+			optional = optional[1:]
+		}
+	}
+	if len(optional) > 0 {
+		traceAffinity, _ = optional[0].(*session.TraceAffinityManager)
+	}
+	if len(optional) > 1 {
+		urlMgr, _ = optional[1].(*warmup.URLManager)
+	}
+	if imagesMetrics == nil {
+		imagesMetrics = metrics.NewMetricsManager()
+	}
+
 	return &ChannelScheduler{
 		configManager:            cfgManager,
 		messagesMetricsManager:   messagesMetrics,
 		responsesMetricsManager:  responsesMetrics,
 		geminiMetricsManager:     geminiMetrics,
 		chatMetricsManager:       chatMetrics,
+		imagesMetricsManager:     imagesMetrics,
 		traceAffinity:            traceAffinity,
 		urlManager:               urlMgr,
 		messagesChannelLogStore:  metrics.NewChannelLogStore(),
 		responsesChannelLogStore: metrics.NewChannelLogStore(),
 		geminiChannelLogStore:    metrics.NewChannelLogStore(),
 		chatChannelLogStore:      metrics.NewChannelLogStore(),
+		imagesChannelLogStore:    metrics.NewChannelLogStore(),
 	}
 }
 
@@ -76,9 +103,73 @@ func (s *ChannelScheduler) getMetricsManager(kind ChannelKind) *metrics.MetricsM
 		return s.geminiMetricsManager
 	case ChannelKindChat:
 		return s.chatMetricsManager
+	case ChannelKindImages:
+		return s.imagesMetricsManager
 	default:
 		return s.messagesMetricsManager
 	}
+}
+
+func metricsLookupKeys(baseURL, apiKey, serviceType string) []string {
+	seen := make(map[string]struct{}, 4)
+	keys := make([]string, 0, 4)
+	add := func(metricsKey string) {
+		if metricsKey == "" {
+			return
+		}
+		if _, exists := seen[metricsKey]; exists {
+			return
+		}
+		seen[metricsKey] = struct{}{}
+		keys = append(keys, metricsKey)
+	}
+
+	add(metrics.GenerateMetricsIdentityKey(baseURL, apiKey, serviceType))
+	for _, variant := range utils.EquivalentBaseURLVariants(baseURL, serviceType) {
+		add(metrics.GenerateMetricsKey(variant, apiKey))
+	}
+	return keys
+}
+
+func NormalizedMetricsServiceType(kind ChannelKind, configured string) string {
+	if configured != "" {
+		return configured
+	}
+	switch kind {
+	case ChannelKindGemini:
+		return "gemini"
+	case ChannelKindResponses:
+		return "responses"
+	case ChannelKindChat:
+		return "openai"
+	case ChannelKindImages:
+		return "openai"
+	default:
+		return "claude"
+	}
+}
+
+func (s *ChannelScheduler) setChannelStatusByKind(index int, kind ChannelKind, status string) error {
+	switch kind {
+	case ChannelKindResponses:
+		return s.configManager.SetResponsesChannelStatus(index, status)
+	case ChannelKindGemini:
+		return s.configManager.SetGeminiChannelStatus(index, status)
+	case ChannelKindChat:
+		return s.configManager.SetChatChannelStatus(index, status)
+	case ChannelKindImages:
+		return s.configManager.SetImagesChannelStatus(index, status)
+	default:
+		return s.configManager.SetChannelStatus(index, status)
+	}
+}
+
+type ScheduledRecoveryResult struct {
+	Kind             ChannelKind
+	ChannelIndex     int
+	ChannelName      string
+	RestoredKeys     []string
+	ActivatedChannel bool
 }
 
 // SelectionResult 渠道选择结果
@@ -88,7 +179,177 @@ type SelectionResult struct {
 	Reason       string // 选择原因（用于日志）
 }
 
-// SelectChannel 选择最佳渠道
+// NextScheduledRecoveryTimeUTC 返回下一个 UTC 0/8/16 点后 1 秒的恢复时刻。
+func NextScheduledRecoveryTimeUTC(now time.Time) time.Time {
+	now = now.UTC()
+	base := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 1, 0, time.UTC)
+	for _, hour := range []int{0, 8, 16} {
+		candidate := time.Date(base.Year(), base.Month(), base.Day(), hour, 0, 1, 0, time.UTC)
+		if now.Before(candidate) {
+			return candidate
+		}
+	}
+	return base.Add(24 * time.Hour)
+}
+
+// LastScheduledRecoveryTimeUTC 返回当前时刻之前最近一个 UTC 0/8/16 点后 1 秒的恢复时刻。
+func LastScheduledRecoveryTimeUTC(now time.Time) time.Time {
+	now = now.UTC()
+	base := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 1, 0, time.UTC)
+	for i := len([]int{0, 8, 16}) - 1; i >= 0; i-- {
+		hour := []int{0, 8, 16}[i]
+		candidate := time.Date(base.Year(), base.Month(), base.Day(), hour, 0, 1, 0, time.UTC)
+		if !now.Before(candidate) {
+			return candidate
+		}
+	}
+	return base.Add(-8 * time.Hour)
+}
+
+// MissedScheduledRecoveryTimeUTC 返回 (lastChecked, now] 区间内最近错过的恢复槽位。
+func MissedScheduledRecoveryTimeUTC(lastChecked, now time.Time) (time.Time, bool) {
+	lastChecked = lastChecked.UTC()
+	now = now.UTC()
+	if !now.After(lastChecked) {
+		return time.Time{}, false
+	}
+	candidate := LastScheduledRecoveryTimeUTC(now)
+	if candidate.After(lastChecked) {
+		return candidate, true
+	}
+	return time.Time{}, false
+}
+
+func shouldSkipScheduledRecovery(disabledAt, recoverAt string, now time.Time) bool {
+	if recoverAt != "" {
+		parsed, err := time.Parse(time.RFC3339, recoverAt)
+		if err == nil {
+			return now.Before(parsed.UTC())
+		}
+	}
+	if disabledAt == "" {
+		return false
+	}
+	parsed, err := time.Parse(time.RFC3339, disabledAt)
+	if err != nil {
+		return false
+	}
+	return now.Sub(parsed.UTC()) < time.Hour
+}
+
+func kindAPIType(kind ChannelKind) string {
+	switch kind {
+	case ChannelKindResponses:
+		return "Responses"
+	case ChannelKindGemini:
+		return "Gemini"
+	case ChannelKindChat:
+		return "Chat"
+	case ChannelKindImages:
+		return "Images"
+	default:
+		return "Messages"
+	}
+}
+
+func (s *ChannelScheduler) scheduledRecoveryKinds() []ChannelKind {
+	return []ChannelKind{ChannelKindMessages, ChannelKindResponses, ChannelKindGemini, ChannelKindChat, ChannelKindImages}
+}
+
+func (s *ChannelScheduler) restoreScheduledKeysForKind(kind ChannelKind, now time.Time) ([]ScheduledRecoveryResult, error) {
+	cfg := s.configManager.GetConfig()
+	var upstreams []config.UpstreamConfig
+	switch kind {
+	case ChannelKindResponses:
+		upstreams = cfg.ResponsesUpstream
+	case ChannelKindGemini:
+		upstreams = cfg.GeminiUpstream
+	case ChannelKindChat:
+		upstreams = cfg.ChatUpstream
+	case ChannelKindImages:
+		upstreams = cfg.ImagesUpstream
+	default:
+		upstreams = cfg.Upstream
+	}
+
+	metricsManager := s.getMetricsManager(kind)
+	apiType := kindAPIType(kind)
+	results := make([]ScheduledRecoveryResult, 0)
+
+	for idx, upstream := range upstreams {
+		if upstream.Status == "disabled" || len(upstream.DisabledAPIKeys) == 0 {
+			continue
+		}
+
+		keysToRestore := make([]string, 0)
+		for _, dk := range upstream.DisabledAPIKeys {
+			if !config.IsAutoRecoverableDisabledReason(dk.Reason) {
+				continue
+			}
+			if shouldSkipScheduledRecovery(dk.DisabledAt, dk.RecoverAt, now) {
+				continue
+			}
+			keysToRestore = append(keysToRestore, dk.Key)
+		}
+		if len(keysToRestore) == 0 {
+			continue
+		}
+
+		restoreResult, err := transitions.RestoreDisabledKeysAndActivate(
+			func(keys []string) ([]string, error) {
+				return s.configManager.RestoreDisabledKeys(apiType, idx, keys)
+			},
+			func(_ string, apiKey string) {
+				for _, baseURL := range upstream.GetAllBaseURLs() {
+					metricsManager.MoveKeyToHalfOpen(baseURL, apiKey, NormalizedMetricsServiceType(kind, upstream.ServiceType))
+				}
+			},
+			func(status string) error {
+				return s.setChannelStatusByKind(idx, kind, status)
+			},
+			func() bool {
+				latest := s.getUpstreamByIndex(idx, kind)
+				return latest != nil && upstream.Status == "suspended" && len(upstream.APIKeys) == 0 && latest.Status == "suspended"
+			},
+			keysToRestore,
+		)
+		if err != nil {
+			return nil, err
+		}
+		if len(restoreResult.RestoredKeys) == 0 {
+			continue
+		}
+
+		updatedUpstream := s.getUpstreamByIndex(idx, kind)
+		if updatedUpstream == nil {
+			continue
+		}
+
+		results = append(results, ScheduledRecoveryResult{
+			Kind:             kind,
+			ChannelIndex:     idx,
+			ChannelName:      updatedUpstream.Name,
+			RestoredKeys:     restoreResult.RestoredKeys,
+			ActivatedChannel: restoreResult.ActivatedChannel,
+		})
+	}
+
+	return results, nil
+}
+
+// RunScheduledRecoveries 执行一次自动恢复扫描。
+func (s *ChannelScheduler) RunScheduledRecoveries(now time.Time) ([]ScheduledRecoveryResult, error) {
+	results := make([]ScheduledRecoveryResult, 0)
+	for _, kind := range s.scheduledRecoveryKinds() {
+		kindResults, err := s.restoreScheduledKeysForKind(kind, now.UTC())
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, kindResults...)
+	}
+	return results, nil
+}
+
 // 优先级: 促销期渠道 > Trace亲和（促销渠道失败时回退） > 渠道优先级顺序
 func (s *ChannelScheduler) SelectChannel(
 	ctx context.Context,
@@ -113,6 +374,8 @@ func (s *ChannelScheduler) SelectChannel(
 			kindName = "Responses"
 		case ChannelKindChat:
 			kindName = "Chat"
+		case ChannelKindImages:
+			kindName = "Images"
 		}
 		if model != "" && len(s.getActiveChannels(kind, "")) > 0 {
 			return nil, fmt.Errorf("没有 %s 渠道支持模型 %q，请检查渠道的 supportedModels 配置", kindName, model)
@@ -152,6 +415,8 @@ func (s *ChannelScheduler) SelectChannel(
 				kindName = "Responses"
 			case ChannelKindChat:
 				kindName = "Chat"
+			case ChannelKindImages:
+				kindName = "Images"
 			}
 			return nil, fmt.Errorf("没有可用于默认路由的 %s 渠道，请使用带前缀路由访问", kindName)
 		}
@@ -265,21 +530,21 @@ func (s *ChannelScheduler) channelCircuitState(upstream *config.UpstreamConfig, 
 	if upstream == nil {
 		return metrics.CircuitStateClosed
 	}
-	return s.getMetricsManager(kind).GetChannelCircuitStateMultiURL(upstream.GetAllBaseURLs(), upstream.APIKeys)
+	return s.getMetricsManager(kind).GetChannelCircuitStateMultiURL(upstream.GetAllBaseURLs(), upstream.APIKeys, NormalizedMetricsServiceType(kind, upstream.ServiceType))
 }
 
 func (s *ChannelScheduler) channelFailureRate(upstream *config.UpstreamConfig, kind ChannelKind) float64 {
 	if upstream == nil {
 		return 0
 	}
-	return s.getMetricsManager(kind).CalculateChannelFailureRateMultiURL(upstream.GetAllBaseURLs(), upstream.APIKeys)
+	return s.getMetricsManager(kind).CalculateChannelFailureRateMultiURL(upstream.GetAllBaseURLs(), upstream.APIKeys, NormalizedMetricsServiceType(kind, upstream.ServiceType))
 }
 
 func (s *ChannelScheduler) channelIsHealthy(upstream *config.UpstreamConfig, kind ChannelKind) bool {
 	if upstream == nil {
 		return false
 	}
-	return s.getMetricsManager(kind).IsChannelHealthyMultiURL(upstream.GetAllBaseURLs(), upstream.APIKeys)
+	return s.getMetricsManager(kind).IsChannelHealthyMultiURL(upstream.GetAllBaseURLs(), upstream.APIKeys, NormalizedMetricsServiceType(kind, upstream.ServiceType))
 }
 
 // findPromotedChannel 查找处于促销期的渠道
@@ -374,6 +639,8 @@ func (s *ChannelScheduler) getActiveChannels(kind ChannelKind, model string) []C
 		upstreams = cfg.GeminiUpstream
 	case ChannelKindChat:
 		upstreams = cfg.ChatUpstream
+	case ChannelKindImages:
+		upstreams = cfg.ImagesUpstream
 	default:
 		upstreams = cfg.Upstream
 	}
@@ -389,8 +656,13 @@ func (s *ChannelScheduler) getActiveChannels(kind ChannelKind, model string) []C
 		// 只选择 active 状态的渠道（suspended 也算在活跃序列中，但会被健康检查过滤）
 		if status != "disabled" {
 			// 过滤不支持当前模型的渠道
-			if model != "" && !upstream.SupportsModel(model) {
-				continue
+			if model != "" {
+				supported, reason := upstream.ExplainModelSupport(model)
+				if !supported {
+					prefix := kindSchedulerLogPrefix(kind)
+					log.Printf("[%s-ModelFilter] 跳过渠道 [%d] %s: 模型 %q 不被 supportedModels 支持 (%s)", prefix, i, upstream.Name, model, reason)
+					continue
+				}
 			}
 
 			priority := upstream.Priority
@@ -458,6 +730,8 @@ func (s *ChannelScheduler) getUpstreamByIndex(index int, kind ChannelKind) *conf
 		upstreams = cfg.GeminiUpstream
 	case ChannelKindChat:
 		upstreams = cfg.ChatUpstream
+	case ChannelKindImages:
+		upstreams = cfg.ImagesUpstream
 	default:
 		upstreams = cfg.Upstream
 	}
@@ -471,28 +745,28 @@ func (s *ChannelScheduler) getUpstreamByIndex(index int, kind ChannelKind) *conf
 }
 
 // RecordSuccess 记录渠道成功（使用 baseURL + apiKey）
-func (s *ChannelScheduler) RecordSuccess(baseURL, apiKey string, kind ChannelKind) {
-	s.getMetricsManager(kind).RecordSuccess(baseURL, apiKey)
+func (s *ChannelScheduler) RecordSuccess(baseURL, apiKey, serviceType string, kind ChannelKind) {
+	s.getMetricsManager(kind).RecordSuccess(baseURL, apiKey, serviceType)
 }
 
 // RecordSuccessWithUsage 记录渠道成功（带 Usage 数据）
-func (s *ChannelScheduler) RecordSuccessWithUsage(baseURL, apiKey string, usage *types.Usage, kind ChannelKind) {
-	s.getMetricsManager(kind).RecordSuccessWithUsage(baseURL, apiKey, usage)
+func (s *ChannelScheduler) RecordSuccessWithUsage(baseURL, apiKey, serviceType string, usage *types.Usage, kind ChannelKind) {
+	s.getMetricsManager(kind).RecordSuccessWithUsage(baseURL, apiKey, serviceType, usage)
 }
 
 // RecordFailure 记录渠道失败（使用 baseURL + apiKey）
-func (s *ChannelScheduler) RecordFailure(baseURL, apiKey string, kind ChannelKind) {
-	s.getMetricsManager(kind).RecordFailure(baseURL, apiKey)
+func (s *ChannelScheduler) RecordFailure(baseURL, apiKey, serviceType string, kind ChannelKind) {
+	s.getMetricsManager(kind).RecordFailure(baseURL, apiKey, serviceType)
 }
 
 // RecordRequestStart 记录请求开始
-func (s *ChannelScheduler) RecordRequestStart(baseURL, apiKey string, kind ChannelKind) {
-	s.getMetricsManager(kind).RecordRequestStart(baseURL, apiKey)
+func (s *ChannelScheduler) RecordRequestStart(baseURL, apiKey, serviceType string, kind ChannelKind) {
+	s.getMetricsManager(kind).RecordRequestStart(baseURL, apiKey, serviceType)
 }
 
 // RecordRequestEnd 记录请求结束
-func (s *ChannelScheduler) RecordRequestEnd(baseURL, apiKey string, kind ChannelKind) {
-	s.getMetricsManager(kind).RecordRequestEnd(baseURL, apiKey)
+func (s *ChannelScheduler) RecordRequestEnd(baseURL, apiKey, serviceType string, kind ChannelKind) {
+	s.getMetricsManager(kind).RecordRequestEnd(baseURL, apiKey, serviceType)
 }
 
 // SetTraceAffinity 设置 Trace 亲和（按 kind 隔离）
@@ -531,6 +805,11 @@ func (s *ChannelScheduler) GetChatMetricsManager() *metrics.MetricsManager {
 	return s.chatMetricsManager
 }
 
+// GetImagesMetricsManager 获取 Images 指标管理器
+func (s *ChannelScheduler) GetImagesMetricsManager() *metrics.MetricsManager {
+	return s.imagesMetricsManager
+}
+
 // GetTraceAffinityManager 获取 Trace 亲和性管理器
 func (s *ChannelScheduler) GetTraceAffinityManager() *session.TraceAffinityManager {
 	return s.traceAffinity
@@ -545,6 +824,8 @@ func (s *ChannelScheduler) GetChannelLogStore(kind ChannelKind) *metrics.Channel
 		return s.geminiChannelLogStore
 	case ChannelKindChat:
 		return s.chatChannelLogStore
+	case ChannelKindImages:
+		return s.imagesChannelLogStore
 	default:
 		return s.messagesChannelLogStore
 	}
@@ -560,7 +841,7 @@ func (s *ChannelScheduler) ResetChannelMetrics(channelIndex int, kind ChannelKin
 	metricsManager := s.getMetricsManager(kind)
 	for _, baseURL := range upstream.GetAllBaseURLs() {
 		for _, apiKey := range upstream.APIKeys {
-			metricsManager.ResetKeyFailureState(baseURL, apiKey)
+			metricsManager.ResetKeyFailureState(baseURL, apiKey, NormalizedMetricsServiceType(kind, upstream.ServiceType))
 		}
 	}
 	prefix := kindSchedulerLogPrefix(kind)
@@ -568,8 +849,8 @@ func (s *ChannelScheduler) ResetChannelMetrics(channelIndex int, kind ChannelKin
 }
 
 // ResetKeyMetrics 重置单个 Key 的指标
-func (s *ChannelScheduler) ResetKeyMetrics(baseURL, apiKey string, kind ChannelKind) {
-	s.getMetricsManager(kind).ResetKey(baseURL, apiKey)
+func (s *ChannelScheduler) ResetKeyMetrics(baseURL, apiKey, serviceType string, kind ChannelKind) {
+	s.getMetricsManager(kind).ResetKey(baseURL, apiKey, serviceType)
 }
 
 // DeleteChannelMetrics 删除渠道的所有指标数据（内存 + 持久化）
@@ -596,18 +877,18 @@ func (s *ChannelScheduler) DeleteChannelMetrics(upstream *config.UpstreamConfig,
 
 	// 收集当前配置中所有渠道使用的 (BaseURL, APIKey) 组合
 	// 注意：此时被删除渠道应已从 config 中移除
-	usedCombinations := s.collectUsedCombinations(kind)
+	usedMetricsKeys := s.collectUsedMetricsKeys(kind)
 
 	// 收集只被删除渠道独占的 metricsKey 列表（使用 map 去重）
 	exclusiveKeysSet := make(map[string]struct{})
+	serviceType := NormalizedMetricsServiceType(kind, upstream.ServiceType)
 
 	for _, baseURL := range deletedBaseURLs {
 		for _, apiKey := range deletedKeys {
-			combinationKey := baseURL + "|" + apiKey
-			if !usedCombinations[combinationKey] {
-				// 这个组合没有被其他渠道使用，可以删除
-				metricsKey := metrics.GenerateMetricsKey(baseURL, apiKey)
-				exclusiveKeysSet[metricsKey] = struct{}{}
+			for _, metricsKey := range metricsLookupKeys(baseURL, apiKey, serviceType) {
+				if !usedMetricsKeys[metricsKey] {
+					exclusiveKeysSet[metricsKey] = struct{}{}
+				}
 			}
 		}
 	}
@@ -629,10 +910,9 @@ func (s *ChannelScheduler) DeleteChannelMetrics(upstream *config.UpstreamConfig,
 	}
 }
 
-// collectUsedCombinations 收集当前配置中所有渠道使用的 (BaseURL, APIKey) 组合
-// 返回 map[string]bool，key 格式为 "baseURL|apiKey"
-// 注意：调用此方法前，被删除的渠道应已从 config 中移除
-func (s *ChannelScheduler) collectUsedCombinations(kind ChannelKind) map[string]bool {
+// collectUsedMetricsKeys 收集当前配置中所有渠道仍在使用的 identity metricsKey。
+// 注意：调用此方法前，被删除的渠道应已从 config 中移除。
+func (s *ChannelScheduler) collectUsedMetricsKeys(kind ChannelKind) map[string]bool {
 	cfg := s.configManager.GetConfig()
 
 	var upstreams []config.UpstreamConfig
@@ -643,26 +923,29 @@ func (s *ChannelScheduler) collectUsedCombinations(kind ChannelKind) map[string]
 		upstreams = cfg.GeminiUpstream
 	case ChannelKindChat:
 		upstreams = cfg.ChatUpstream
+	case ChannelKindImages:
+		upstreams = cfg.ImagesUpstream
 	default:
 		upstreams = cfg.Upstream
 	}
 
-	// 收集所有渠道的 (BaseURL, APIKey) 组合
-	usedCombinations := make(map[string]bool)
+	usedMetricsKeys := make(map[string]bool)
 	for _, upstream := range upstreams {
 		baseURLs := upstream.GetAllBaseURLs()
 		allKeys := append([]string{}, upstream.APIKeys...)
 		allKeys = append(allKeys, upstream.HistoricalAPIKeys...)
+		serviceType := NormalizedMetricsServiceType(kind, upstream.ServiceType)
 
 		for _, baseURL := range baseURLs {
 			for _, apiKey := range allKeys {
-				combinationKey := baseURL + "|" + apiKey
-				usedCombinations[combinationKey] = true
+				for _, metricsKey := range metricsLookupKeys(baseURL, apiKey, serviceType) {
+					usedMetricsKeys[metricsKey] = true
+				}
 			}
 		}
 	}
 
-	return usedCombinations
+	return usedMetricsKeys
 }
 
 // isUpstreamInConfig 检查指定的 upstream 是否仍在当前配置中
@@ -678,6 +961,8 @@ func (s *ChannelScheduler) isUpstreamInConfig(upstream *config.UpstreamConfig, k
 		upstreams = cfg.GeminiUpstream
 	case ChannelKindChat:
 		upstreams = cfg.ChatUpstream
+	case ChannelKindImages:
+		upstreams = cfg.ImagesUpstream
 	default:
 		upstreams = cfg.Upstream
 	}
@@ -767,6 +1052,8 @@ func kindSchedulerLogPrefix(kind ChannelKind) string {
 		return "Scheduler-Gemini"
 	case ChannelKindChat:
 		return "Scheduler-Chat"
+	case ChannelKindImages:
+		return "Scheduler-Images"
 	default:
 		return "Scheduler"
 	}
@@ -785,6 +1072,8 @@ func urlManagerChannelKeyOrdinal(kind ChannelKind) int {
 		return 2
 	case ChannelKindChat:
 		return 3
+	case ChannelKindImages:
+		return 4
 	default:
 		return 0
 	}

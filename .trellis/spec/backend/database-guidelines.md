@@ -42,6 +42,19 @@ Examples:
   `migrateOldFormat()` and `applyConfigDefaults()` in `backend-go/internal/config/config_loader.go`.
 - There is no backward-compatibility-first policy here. When formats change, update the code paths and migration/defaulting logic directly.
 
+### Metrics Identity Migration Contract
+
+When metrics keys or BaseURL identity changes, update these contracts together:
+
+- Signatures: `metrics.GenerateMetricsIdentityKey(baseURL, apiKey, serviceType)`, `utils.MetricsIdentityBaseURL(rawURL, serviceType)`, and SQLite migration helpers in `internal/metrics/sqlite_store.go`.
+- Stored fields: persisted metrics rows must use the canonical metrics identity BaseURL, while migration candidates must include equivalent legacy variants from `utils.EquivalentBaseURLVariants(...)`.
+- Config inputs: migration maps may only read channel kinds that exist in `config.Config`. If a parallel lane has not landed a new channel config yet, omit that kind or add a clearly scoped compile adapter instead of assuming the full config contract exists.
+- Validation matrix:
+  - Base case: raw BaseURL without version prefix migrates to the service default identity URL.
+  - Good case: old rows for `baseUrl`, `baseUrl/`, and `baseUrl + default version` collapse into one identity history.
+  - Bad case: a channel kind with no config storage must not be included in migration maps, or startup fails at compile time.
+- Tests required: SQLite migration tests must assert idempotency and preservation of equivalent BaseURL history; metrics cache/history tests must assert serviceType-aware lookup.
+
 ---
 
 ## Naming Conventions

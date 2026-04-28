@@ -6,18 +6,21 @@ func TestBuildCapabilityCacheKeyIncludesModelsDimension(t *testing.T) {
 	keyA := buildCapabilityCacheKey(
 		"https://example.com",
 		"sk-test",
+		"responses",
 		[]string{"responses", "messages"},
 		[]string{"gpt-4o", "claude-3-7-sonnet"},
 	)
 	keyB := buildCapabilityCacheKey(
 		"https://example.com",
 		"sk-test",
+		"responses",
 		[]string{"messages", "responses"},
 		[]string{"claude-3-7-sonnet", "gpt-4o"},
 	)
 	keyC := buildCapabilityCacheKey(
 		"https://example.com",
 		"sk-test",
+		"responses",
 		[]string{"messages", "responses"},
 		[]string{"gpt-4o-mini"},
 	)

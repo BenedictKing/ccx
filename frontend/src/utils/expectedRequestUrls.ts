@@ -1,6 +1,6 @@
 import { isValidUrl } from './quickInputParser'
 
-export type ChannelType = 'messages' | 'chat' | 'responses' | 'gemini'
+export type ChannelType = 'messages' | 'chat' | 'responses' | 'gemini' | 'images'
 export type ServiceType = 'openai' | 'claude' | 'gemini' | 'responses' | ''
 
 export interface ExpectedRequestUrlItem {

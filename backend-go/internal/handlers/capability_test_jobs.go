@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -117,6 +118,8 @@ type CapabilityProtocolJobResult struct {
 
 type CapabilityTestJob struct {
 	JobID               string                        `json:"jobId"`
+	IdentityKey         string                        `json:"identityKey,omitempty"`
+	ExecutionKey        string                        `json:"executionKey,omitempty"`
 	ChannelID           int                           `json:"channelId"`
 	ChannelName         string                        `json:"channelName"`
 	ChannelKind         string                        `json:"channelKind"`
@@ -141,6 +144,7 @@ type CapabilityTestJob struct {
 	CacheHit            bool                          `json:"cacheHit,omitempty"`
 	TargetProtocols     []string                      `json:"targetProtocols,omitempty"`
 	TimeoutMilliseconds int                           `json:"timeoutMilliseconds,omitempty"`
+	EffectiveRPM        int                           `json:"effectiveRPM,omitempty"`
 	CancelFunc          context.CancelFunc            `json:"-"`
 }
 
@@ -195,10 +199,12 @@ func newCapabilityJobID() string {
 	return "cap-" + hex.EncodeToString(b)
 }
 
-func newCapabilityTestJob(channelID int, channelName, channelKind, sourceType string, protocols []string, timeout time.Duration) *CapabilityTestJob {
+func newCapabilityTestJob(channelID int, channelName, channelKind, sourceType string, protocols []string, timeout time.Duration, effectiveRPM int) *CapabilityTestJob {
 	now := time.Now().Format(time.RFC3339Nano)
 	job := &CapabilityTestJob{
 		JobID:               newCapabilityJobID(),
+		IdentityKey:         "",
+		ExecutionKey:        "",
 		ChannelID:           channelID,
 		ChannelName:         channelName,
 		ChannelKind:         channelKind,
@@ -212,6 +218,7 @@ func newCapabilityTestJob(channelID int, channelName, channelKind, sourceType st
 		UpdatedAt:           now,
 		TargetProtocols:     append([]string(nil), protocols...),
 		TimeoutMilliseconds: int(timeout / time.Millisecond),
+		EffectiveRPM:        effectiveRPM,
 	}
 
 	for _, protocol := range protocols {
@@ -245,6 +252,13 @@ func buildCapabilityJobLookupKey(cacheKey, channelKind string, channelID int) st
 	return fmt.Sprintf("%s:%s:%d", cacheKey, channelKind, channelID)
 }
 
+func buildCapabilityExecutionLookupKey(identityKey, channelKind string, protocols []string, models []string) string {
+	sortedProtocols := append([]string(nil), protocols...)
+	sort.Strings(sortedProtocols)
+	normalizedModels := normalizeCapabilityModels(models)
+	return fmt.Sprintf("%s:%s:%s:%s", identityKey, channelKind, strings.Join(sortedProtocols, ","), strings.Join(normalizedModels, ","))
+}
+
 func (s *capabilityTestJobStore) bindLookupKey(lookupKey, jobID string) {
 	s.Lock()
 	defer s.Unlock()
@@ -270,7 +284,11 @@ func (s *capabilityTestJobStore) getByLookupKey(lookupKey string) (*CapabilityTe
 func (s *capabilityTestJobStore) create(job *CapabilityTestJob) {
 	s.Lock()
 	defer s.Unlock()
-	s.jobs[job.JobID] = cloneCapabilityTestJob(job)
+	cloned := cloneCapabilityTestJob(job)
+	s.jobs[job.JobID] = cloned
+	if cloned.IdentityKey != "" {
+		capabilitySnapshots.replaceFromJob(cloned.IdentityKey, cloned)
+	}
 }
 
 func (s *capabilityTestJobStore) get(jobID string) (*CapabilityTestJob, bool) {
@@ -316,7 +334,11 @@ func (s *capabilityTestJobStore) update(jobID string, updater func(job *Capabili
 	updater(job)
 	job.UpdatedAt = time.Now().Format(time.RFC3339Nano)
 	recomputeCapabilityJob(job)
-	return cloneCapabilityTestJob(job), true
+	cloned := cloneCapabilityTestJob(job)
+	if cloned.IdentityKey != "" {
+		capabilitySnapshots.replaceFromJob(cloned.IdentityKey, cloned)
+	}
+	return cloned, true
 }
 
 // setCancelFunc 直接设置内部 job 的 CancelFunc（不走 clone，因为 CancelFunc 不可复制）
@@ -598,10 +620,12 @@ func capabilityProtocolResultsFromResponse(resp CapabilityTestResponse) []Capabi
 	return results
 }
 
-func createCapabilityJobFromResponse(channelID int, channelName, channelKind, sourceType string, protocols []string, timeout time.Duration, resp CapabilityTestResponse, cacheHit bool) *CapabilityTestJob {
+func createCapabilityJobFromResponse(channelID int, channelName, channelKind, sourceType string, protocols []string, timeout time.Duration, effectiveRPM int, resp CapabilityTestResponse, cacheHit bool) *CapabilityTestJob {
 	now := time.Now().Format(time.RFC3339Nano)
 	job := &CapabilityTestJob{
 		JobID:               newCapabilityJobID(),
+		IdentityKey:         "",
+		ExecutionKey:        "",
 		ChannelID:           channelID,
 		ChannelName:         channelName,
 		ChannelKind:         channelKind,
@@ -619,6 +643,7 @@ func createCapabilityJobFromResponse(channelID int, channelName, channelKind, so
 		RunMode:             CapabilityRunModeCacheHit,
 		TargetProtocols:     append([]string(nil), protocols...),
 		TimeoutMilliseconds: int(timeout / time.Millisecond),
+		EffectiveRPM:        effectiveRPM,
 	}
 	recomputeCapabilityJob(job)
 	return job
@@ -636,6 +661,8 @@ func getCapabilityTestChannel(cfgManager *config.ConfigManager, channelKind stri
 		channels = cfg.GeminiUpstream
 	case "chat":
 		channels = cfg.ChatUpstream
+	case "images":
+		channels = cfg.ImagesUpstream
 	default:
 		return nil, fmt.Errorf("invalid channel kind")
 	}
@@ -663,16 +690,24 @@ func GetCapabilityTestJobStatus(cfgManager *config.ConfigManager, channelKind st
 			return
 		}
 
-		if job.ChannelID != id || job.ChannelKind != channelKind {
+		channel, getErr := getCapabilityTestChannel(cfgManager, channelKind, id)
+		if getErr != nil {
+			if !capabilityJobMatchesChannel(job, nil, channelKind, id) {
+				c.JSON(http.StatusNotFound, gin.H{"error": "Capability test job not found"})
+				return
+			}
+			c.JSON(http.StatusOK, job)
+			return
+		}
+
+		if !capabilityJobMatchesChannel(job, channel, channelKind, id) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Capability test job not found"})
 			return
 		}
 
-		channel, getErr := getCapabilityTestChannel(cfgManager, channelKind, id)
-		if getErr == nil {
-			job.ChannelName = channel.Name
-			job.SourceType = channel.ServiceType
-		}
+		job.ChannelID = id
+		job.ChannelName = channel.Name
+		job.SourceType = channel.ServiceType
 
 		c.JSON(http.StatusOK, job)
 	}

@@ -9,62 +9,85 @@ import (
 	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
+	"github.com/BenedictKing/ccx/internal/handlers/common"
 	"github.com/BenedictKing/ccx/internal/metrics"
 	"github.com/BenedictKing/ccx/internal/scheduler"
+	"github.com/BenedictKing/ccx/internal/transitions"
+	"github.com/BenedictKing/ccx/internal/utils"
 	"github.com/gin-gonic/gin"
 )
 
+func channelUpstreamsByKind(cfg config.Config, kind scheduler.ChannelKind) []config.UpstreamConfig {
+	switch kind {
+	case scheduler.ChannelKindResponses:
+		return cfg.ResponsesUpstream
+	case scheduler.ChannelKindGemini:
+		return cfg.GeminiUpstream
+	case scheduler.ChannelKindChat:
+		return cfg.ChatUpstream
+	case scheduler.ChannelKindImages:
+		return cfg.ImagesUpstream
+	default:
+		return cfg.Upstream
+	}
+}
+
+func buildChannelMetricsResult(metricsManager *metrics.MetricsManager, upstreams []config.UpstreamConfig, kind scheduler.ChannelKind, includeRuntimeState bool) []gin.H {
+	result := make([]gin.H, 0, len(upstreams))
+	for i, upstream := range upstreams {
+		resp := metricsManager.ToResponseMultiURL(i, upstream.GetAllBaseURLs(), upstream.APIKeys, scheduler.NormalizedMetricsServiceType(kind, upstream.ServiceType), 0, upstream.HistoricalAPIKeys)
+
+		item := gin.H{
+			"channelIndex":        i,
+			"channelName":         upstream.Name,
+			"requestCount":        resp.RequestCount,
+			"successCount":        resp.SuccessCount,
+			"failureCount":        resp.FailureCount,
+			"successRate":         resp.SuccessRate,
+			"errorRate":           resp.ErrorRate,
+			"consecutiveFailures": resp.ConsecutiveFailures,
+			"latency":             resp.Latency,
+			"circuitState":        resp.CircuitState,
+			"halfOpenSuccesses":   resp.HalfOpenSuccesses,
+			"breakerFailureRate":  resp.BreakerFailureRate,
+			"keyMetrics":          resp.KeyMetrics,
+			"timeWindows":         resp.TimeWindows,
+		}
+		if includeRuntimeState {
+			item["runtimeState"] = resp.CircuitState
+		}
+		if resp.LastSuccessAt != nil {
+			item["lastSuccessAt"] = *resp.LastSuccessAt
+		}
+		if resp.LastFailureAt != nil {
+			item["lastFailureAt"] = *resp.LastFailureAt
+		}
+		if resp.CircuitBrokenAt != nil {
+			item["circuitBrokenAt"] = *resp.CircuitBrokenAt
+		}
+		if resp.NextRetryAt != nil {
+			item["nextRetryAt"] = *resp.NextRetryAt
+		}
+
+		result = append(result, item)
+	}
+	return result
+}
+
+func getChannelMetricsWithKind(metricsManager *metrics.MetricsManager, cfgManager *config.ConfigManager, kind scheduler.ChannelKind, includeRuntimeState bool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		upstreams := channelUpstreamsByKind(cfgManager.GetConfig(), kind)
+		c.JSON(200, buildChannelMetricsResult(metricsManager, upstreams, kind, includeRuntimeState))
+	}
+}
+
 // GetChannelMetricsWithConfig 获取渠道指标（需要配置管理器来获取 baseURL 和 keys）
 func GetChannelMetricsWithConfig(metricsManager *metrics.MetricsManager, cfgManager *config.ConfigManager, isResponses bool) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		cfg := cfgManager.GetConfig()
-		var upstreams []config.UpstreamConfig
-		if isResponses {
-			upstreams = cfg.ResponsesUpstream
-		} else {
-			upstreams = cfg.Upstream
-		}
-
-		result := make([]gin.H, 0, len(upstreams))
-		for i, upstream := range upstreams {
-			// 使用多 URL 聚合方法获取渠道指标（支持 failover 多端点场景）
-			resp := metricsManager.ToResponseMultiURL(i, upstream.GetAllBaseURLs(), upstream.APIKeys, 0, upstream.HistoricalAPIKeys)
-
-			item := gin.H{
-				"channelIndex":        i,
-				"channelName":         upstream.Name,
-				"requestCount":        resp.RequestCount,
-				"successCount":        resp.SuccessCount,
-				"failureCount":        resp.FailureCount,
-				"successRate":         resp.SuccessRate,
-				"errorRate":           resp.ErrorRate,
-				"consecutiveFailures": resp.ConsecutiveFailures,
-				"latency":             resp.Latency,
-				"circuitState":        resp.CircuitState,
-				"halfOpenSuccesses":   resp.HalfOpenSuccesses,
-				"breakerFailureRate":  resp.BreakerFailureRate,
-				"keyMetrics":          resp.KeyMetrics,  // 各 Key 的详细指标
-				"timeWindows":         resp.TimeWindows, // 分时段统计 (15m, 1h, 6h, 24h)
-			}
-
-			if resp.LastSuccessAt != nil {
-				item["lastSuccessAt"] = *resp.LastSuccessAt
-			}
-			if resp.LastFailureAt != nil {
-				item["lastFailureAt"] = *resp.LastFailureAt
-			}
-			if resp.CircuitBrokenAt != nil {
-				item["circuitBrokenAt"] = *resp.CircuitBrokenAt
-			}
-			if resp.NextRetryAt != nil {
-				item["nextRetryAt"] = *resp.NextRetryAt
-			}
-
-			result = append(result, item)
-		}
-
-		c.JSON(200, result)
+	kind := scheduler.ChannelKindMessages
+	if isResponses {
+		kind = scheduler.ChannelKindResponses
 	}
+	return getChannelMetricsWithKind(metricsManager, cfgManager, kind, false)
 }
 
 // GetAllKeyMetrics 获取所有 Key 的原始指标
@@ -176,40 +199,11 @@ func GetResponsesChannelMetrics(metricsManager *metrics.MetricsManager) gin.Hand
 // ResumeChannel 恢复熔断渠道（重置熔断状态、恢复拉黑 Key，保留历史统计）
 // isResponses 参数指定是 Messages 渠道还是 Responses 渠道
 func ResumeChannel(sch *scheduler.ChannelScheduler, cfgManager *config.ConfigManager, isResponses bool) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		idStr := c.Param("id")
-		id, err := strconv.Atoi(idStr)
-		if err != nil {
-			c.JSON(400, gin.H{"error": "Invalid channel ID"})
-			return
-		}
-
-		apiType := "Messages"
-		kind := scheduler.ChannelKindMessages
-		if isResponses {
-			apiType = "Responses"
-			kind = scheduler.ChannelKindResponses
-		}
-
-		// 先恢复被拉黑的 Key，再重置渠道所有 Key 的熔断状态，确保恢复出来的 Key 也被重置
-		restoredCount, err := cfgManager.RestoreAllKeys(apiType, id)
-		if err != nil {
-			c.JSON(400, gin.H{"error": err.Error()})
-			return
-		}
-		sch.ResetChannelMetrics(id, kind)
-
-		message := "渠道已恢复，熔断状态已重置（历史统计保留）"
-		if restoredCount > 0 {
-			message = fmt.Sprintf("渠道已恢复，熔断状态已重置，同时恢复了 %d 个被拉黑的 Key", restoredCount)
-		}
-
-		c.JSON(200, gin.H{
-			"success":      true,
-			"message":      message,
-			"restoredKeys": restoredCount,
-		})
+	kind := scheduler.ChannelKindMessages
+	if isResponses {
+		kind = scheduler.ChannelKindResponses
 	}
+	return ResumeChannelWithKind(sch, cfgManager, kind)
 }
 
 // GetSchedulerStats 获取调度器统计信息
@@ -227,6 +221,9 @@ func GetSchedulerStats(sch *scheduler.ChannelScheduler) gin.HandlerFunc {
 		case "chat":
 			kind = scheduler.ChannelKindChat
 			metricsManager = sch.GetChatMetricsManager()
+		case "images":
+			kind = scheduler.ChannelKindImages
+			metricsManager = sch.GetImagesMetricsManager()
 		default:
 			kind = scheduler.ChannelKindMessages
 			metricsManager = sch.GetMessagesMetricsManager()
@@ -250,26 +247,79 @@ func GetSchedulerStats(sch *scheduler.ChannelScheduler) gin.HandlerFunc {
 	}
 }
 
-// SetChannelPromotion 设置渠道促销期
-// 促销期内的渠道会被优先选择，忽略 trace 亲和性
-func SetChannelPromotion(cfgManager ConfigManager) gin.HandlerFunc {
+// ChannelStatusConfigManager 渠道状态配置管理接口。
+type ChannelStatusConfigManager interface {
+	SetChannelStatus(index int, status string) error
+}
+
+type ChannelStatusConfigManagerFunc func(index int, status string) error
+
+func (f ChannelStatusConfigManagerFunc) SetChannelStatus(index int, status string) error {
+	return f(index, status)
+}
+
+// NamedChannelStatusHandler 返回带固定文案的渠道状态更新 handler。
+func NamedChannelStatusHandler(cfgManager ChannelStatusConfigManager, successMessage string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		idStr := c.Param("id")
-		id, err := strconv.Atoi(idStr)
+		id, err := strconv.Atoi(c.Param("id"))
 		if err != nil {
-			c.JSON(400, gin.H{"error": "无效的渠道 ID"})
+			c.JSON(400, gin.H{"error": "Invalid channel ID"})
 			return
 		}
 
 		var req struct {
-			Duration int `json:"duration"` // 促销期时长（秒），0 表示清除
+			Status string `json:"status"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(400, gin.H{"error": "无效的请求参数"})
+			c.JSON(400, gin.H{"error": "Invalid request body"})
 			return
 		}
 
-		// 调用配置管理器设置促销期
+		if err := cfgManager.SetChannelStatus(id, req.Status); err != nil {
+			if strings.Contains(err.Error(), "无效的上游索引") {
+				c.JSON(404, gin.H{"error": "Channel not found"})
+			} else {
+				c.JSON(400, gin.H{"error": err.Error()})
+			}
+			return
+		}
+
+		c.JSON(200, gin.H{
+			"success": true,
+			"message": successMessage,
+			"status":  req.Status,
+		})
+	}
+}
+
+// PromotionConfigManager 渠道促销期配置管理接口。
+type PromotionConfigManager interface {
+	SetChannelPromotion(index int, duration time.Duration) error
+}
+
+type PromotionConfigManagerFunc func(index int, duration time.Duration) error
+
+func (f PromotionConfigManagerFunc) SetChannelPromotion(index int, duration time.Duration) error {
+	return f(index, duration)
+}
+
+// NamedChannelPromotionHandler 返回带固定文案的渠道促销期 handler。
+func NamedChannelPromotionHandler(cfgManager PromotionConfigManager, invalidIDMsg, invalidReqMsg, clearedMsg, setMsg string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			c.JSON(400, gin.H{"error": invalidIDMsg})
+			return
+		}
+
+		var req struct {
+			Duration int `json:"duration"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(400, gin.H{"error": invalidReqMsg})
+			return
+		}
+
 		duration := time.Duration(req.Duration) * time.Second
 		if err := cfgManager.SetChannelPromotion(id, duration); err != nil {
 			c.JSON(400, gin.H{"error": err.Error()})
@@ -279,55 +329,31 @@ func SetChannelPromotion(cfgManager ConfigManager) gin.HandlerFunc {
 		if req.Duration <= 0 {
 			c.JSON(200, gin.H{
 				"success": true,
-				"message": "渠道促销期已清除",
+				"message": clearedMsg,
 			})
-		} else {
-			c.JSON(200, gin.H{
-				"success":  true,
-				"message":  "渠道促销期已设置",
-				"duration": req.Duration,
-			})
+			return
 		}
+
+		c.JSON(200, gin.H{
+			"success":  true,
+			"message":  setMsg,
+			"duration": req.Duration,
+		})
 	}
+}
+
+// SetChannelPromotion 设置渠道促销期
+// 促销期内的渠道会被优先选择，忽略 trace 亲和性
+func SetChannelPromotion(cfgManager ConfigManager) gin.HandlerFunc {
+	return NamedChannelPromotionHandler(cfgManager, "无效的渠道 ID", "无效的请求参数", "渠道促销期已清除", "渠道促销期已设置")
 }
 
 // SetResponsesChannelPromotion 设置 Responses 渠道促销期
 func SetResponsesChannelPromotion(cfgManager ResponsesConfigManager) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		idStr := c.Param("id")
-		id, err := strconv.Atoi(idStr)
-		if err != nil {
-			c.JSON(400, gin.H{"error": "无效的渠道 ID"})
-			return
-		}
-
-		var req struct {
-			Duration int `json:"duration"` // 促销期时长（秒），0 表示清除
-		}
-		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(400, gin.H{"error": "无效的请求参数"})
-			return
-		}
-
-		duration := time.Duration(req.Duration) * time.Second
-		if err := cfgManager.SetResponsesChannelPromotion(id, duration); err != nil {
-			c.JSON(400, gin.H{"error": err.Error()})
-			return
-		}
-
-		if req.Duration <= 0 {
-			c.JSON(200, gin.H{
-				"success": true,
-				"message": "Responses 渠道促销期已清除",
-			})
-		} else {
-			c.JSON(200, gin.H{
-				"success":  true,
-				"message":  "Responses 渠道促销期已设置",
-				"duration": req.Duration,
-			})
-		}
-	}
+	adapter := promotionConfigAdapter(func(index int, duration time.Duration) error {
+		return cfgManager.SetResponsesChannelPromotion(index, duration)
+	})
+	return NamedChannelPromotionHandler(adapter, "无效的渠道 ID", "无效的请求参数", "Responses 渠道促销期已清除", "Responses 渠道促销期已设置")
 }
 
 // ConfigManager 促销期配置管理接口
@@ -340,6 +366,12 @@ type ResponsesConfigManager interface {
 	SetResponsesChannelPromotion(index int, duration time.Duration) error
 }
 
+type promotionConfigAdapter func(index int, duration time.Duration) error
+
+func (a promotionConfigAdapter) SetChannelPromotion(index int, duration time.Duration) error {
+	return a(index, duration)
+}
+
 // MetricsHistoryResponse 历史指标响应
 type MetricsHistoryResponse struct {
 	ChannelIndex int                        `json:"channelIndex"`
@@ -347,38 +379,29 @@ type MetricsHistoryResponse struct {
 	DataPoints   []metrics.HistoryDataPoint `json:"dataPoints"`
 }
 
-// GetChannelMetricsHistory 获取渠道指标历史数据（用于时间序列图表）
-// Query params:
-//   - duration: 时间范围 (1h, 6h, 24h)，默认 24h
-//   - interval: 时间间隔 (5m, 15m, 1h)，默认根据 duration 自动选择
-func GetChannelMetricsHistory(metricsManager *metrics.MetricsManager, cfgManager *config.ConfigManager, isResponses bool) gin.HandlerFunc {
+func getChannelMetricsHistoryWithKind(metricsManager *metrics.MetricsManager, cfgManager *config.ConfigManager, kind scheduler.ChannelKind, strictValidation bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 解析 duration 参数（支持 1h, 6h, 24h, 7d, 30d）
-		durationStr := c.DefaultQuery("duration", "24h")
-		duration, err := parseExtendedDuration(durationStr)
-		if err != nil || duration <= 0 {
-			c.JSON(400, gin.H{"error": "Invalid duration parameter"})
-			return
-		}
+		var duration time.Duration
+		var interval time.Duration
+		var err error
 
-		// 限制最大查询范围
-		maxDuration := 30 * 24 * time.Hour
-		if duration > maxDuration {
-			duration = maxDuration
-		}
-
-		// 解析或自动选择 interval
-		interval := selectIntervalForDuration(c.Query("interval"), duration)
-
-		cfg := cfgManager.GetConfig()
-		var upstreams []config.UpstreamConfig
-		if isResponses {
-			upstreams = cfg.ResponsesUpstream
+		if strictValidation {
+			durationStr := c.DefaultQuery("duration", "24h")
+			duration, err = parseExtendedDuration(durationStr)
+			if err != nil || duration <= 0 {
+				c.JSON(400, gin.H{"error": "Invalid duration parameter"})
+				return
+			}
+			if duration > 30*24*time.Hour {
+				duration = 30 * 24 * time.Hour
+			}
+			interval = selectIntervalForDuration(c.Query("interval"), duration)
 		} else {
-			upstreams = cfg.Upstream
+			duration, interval = parseHistoryDuration(c)
 		}
 
-		// >24h 走 SQLite 聚合查询
+		upstreams := channelUpstreamsByKind(cfgManager.GetConfig(), kind)
+
 		if duration > 24*time.Hour {
 			store := metricsManager.GetPersistenceStore()
 			if store == nil {
@@ -391,26 +414,20 @@ func GetChannelMetricsHistory(metricsManager *metrics.MetricsManager, cfgManager
 
 			result := make([]MetricsHistoryResponse, 0, len(upstreams))
 			for i, upstream := range upstreams {
-				// 过滤属于此渠道的数据（按 baseURL 匹配）
-				allURLs := upstream.GetAllBaseURLs()
-				channelBuckets := filterBucketsByURLs(store, apiType, since, intervalSec, allURLs, upstream.APIKeys)
-
-				dataPoints := convertBucketsToDataPoints(channelBuckets)
+				channelBuckets := filterBucketsByURLs(store, apiType, since, intervalSec, upstream.GetAllBaseURLs(), upstream.APIKeys, scheduler.NormalizedMetricsServiceType(kind, upstream.ServiceType))
 				result = append(result, MetricsHistoryResponse{
 					ChannelIndex: i,
 					ChannelName:  upstream.Name,
-					DataPoints:   dataPoints,
+					DataPoints:   convertBucketsToDataPoints(channelBuckets),
 				})
 			}
 			c.JSON(200, result)
 			return
 		}
 
-		// <=24h 走内存
 		result := make([]MetricsHistoryResponse, 0, len(upstreams))
 		for i, upstream := range upstreams {
-			dataPoints := metricsManager.GetHistoricalStatsMultiURL(upstream.GetAllBaseURLs(), upstream.APIKeys, duration, interval)
-
+			dataPoints := metricsManager.GetHistoricalStatsMultiURL(upstream.GetAllBaseURLs(), upstream.APIKeys, scheduler.NormalizedMetricsServiceType(kind, upstream.ServiceType), duration, interval)
 			result = append(result, MetricsHistoryResponse{
 				ChannelIndex: i,
 				ChannelName:  upstream.Name,
@@ -420,6 +437,18 @@ func GetChannelMetricsHistory(metricsManager *metrics.MetricsManager, cfgManager
 
 		c.JSON(200, result)
 	}
+}
+
+// GetChannelMetricsHistory 获取渠道指标历史数据（用于时间序列图表）
+// Query params:
+//   - duration: 时间范围 (1h, 6h, 24h)，默认 24h
+//   - interval: 时间间隔 (5m, 15m, 1h)，默认根据 duration 自动选择
+func GetChannelMetricsHistory(metricsManager *metrics.MetricsManager, cfgManager *config.ConfigManager, isResponses bool) gin.HandlerFunc {
+	kind := scheduler.ChannelKindMessages
+	if isResponses {
+		kind = scheduler.ChannelKindResponses
+	}
+	return getChannelMetricsHistoryWithKind(metricsManager, cfgManager, kind, true)
 }
 
 // ChannelKeyMetricsHistoryResponse Key 级别历史指标响应
@@ -446,160 +475,135 @@ var keyColors = []string{
 	"#ec4899", // Pink - Canary
 }
 
-// GetChannelKeyMetricsHistory 获取渠道下各 Key 的历史数据（用于 Key 趋势图表）
-// GET /api/channels/:id/keys/metrics/history?duration=6h
-func GetChannelKeyMetricsHistory(metricsManager *metrics.MetricsManager, cfgManager *config.ConfigManager, isResponses bool) gin.HandlerFunc {
+func getChannelKeyMetricsHistoryWithKind(metricsManager *metrics.MetricsManager, cfgManager *config.ConfigManager, kind scheduler.ChannelKind, strictValidation bool, maxDuration time.Duration) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 解析 duration 参数
-		durationStr := c.DefaultQuery("duration", "6h")
-
 		var duration time.Duration
+		var interval time.Duration
 		var err error
 
-		// 特殊处理 "today" 参数
-		if durationStr == "today" {
-			duration = metrics.CalculateTodayDuration()
-			// 如果刚过零点，duration 可能非常小，设置最小值
-			if duration < time.Minute {
-				duration = time.Minute
+		if strictValidation {
+			durationStr := c.DefaultQuery("duration", "6h")
+			if durationStr == "today" {
+				duration = metrics.CalculateTodayDuration()
+				if duration < time.Minute {
+					duration = time.Minute
+				}
+			} else {
+				duration, err = parseExtendedDuration(durationStr)
+				if err != nil {
+					c.JSON(400, gin.H{"error": "Invalid duration parameter. Use: 1h, 6h, 24h, today, 7d, or 30d"})
+					return
+				}
+			}
+			intervalStr := c.Query("interval")
+			if intervalStr != "" {
+				interval, err = time.ParseDuration(intervalStr)
+				if err != nil {
+					c.JSON(400, gin.H{"error": "Invalid interval parameter"})
+					return
+				}
+				if interval < time.Minute {
+					interval = time.Minute
+				}
+			} else {
+				switch {
+				case duration <= time.Hour:
+					interval = time.Minute
+				case duration <= 6*time.Hour:
+					interval = 5 * time.Minute
+				default:
+					interval = 15 * time.Minute
+				}
 			}
 		} else {
-			duration, err = parseExtendedDuration(durationStr)
-			if err != nil {
-				c.JSON(400, gin.H{"error": "Invalid duration parameter. Use: 1h, 6h, 24h, today, 7d, or 30d"})
-				return
-			}
+			duration, interval = parseKeyHistoryDuration(c)
 		}
 
-		// 限制最大查询范围为 24 小时（Key 级历史数据仅保留在内存中）
-		// 注意：全局统计支持 30 天是因为使用 SQLite 持久化，但 Key 级数据未持久化
-		if duration > 24*time.Hour {
-			duration = 24 * time.Hour
+		if maxDuration > 0 && duration > maxDuration {
+			duration = maxDuration
 		}
 
-		// 解析或自动选择 interval
-		intervalStr := c.Query("interval")
-		var interval time.Duration
-		if intervalStr != "" {
-			interval, err = time.ParseDuration(intervalStr)
-			if err != nil {
-				c.JSON(400, gin.H{"error": "Invalid interval parameter"})
-				return
-			}
-			// 限制 interval 最小值为 1 分钟，防止生成过多 bucket
-			if interval < time.Minute {
-				interval = time.Minute
-			}
-		} else {
-			// 根据 duration 自动选择合适的聚合粒度
-			// 目标：每个时间段约 60-100 个数据点，保持图表清晰
-			// 1h = 60 points (1m interval)
-			// 6h = 72 points (5m interval)
-			// 24h = 96 points (15m interval)
-			// 注意：Key 级历史数据最大支持 24h（内存限制）
-			switch {
-			case duration <= time.Hour:
-				interval = time.Minute
-			case duration <= 6*time.Hour:
-				interval = 5 * time.Minute
-			default:
-				interval = 15 * time.Minute
-			}
-		}
-
-		// 解析 channel ID
-		channelIDStr := c.Param("id")
-		channelID, err := strconv.Atoi(channelIDStr)
+		channelID, err := strconv.Atoi(c.Param("id"))
 		if err != nil {
 			c.JSON(400, gin.H{"error": "Invalid channel ID"})
 			return
 		}
 
-		cfg := cfgManager.GetConfig()
-		var upstreams []config.UpstreamConfig
-		if isResponses {
-			upstreams = cfg.ResponsesUpstream
-		} else {
-			upstreams = cfg.Upstream
-		}
-
-		// 检查 channel ID 是否有效
+		upstreams := channelUpstreamsByKind(cfgManager.GetConfig(), kind)
 		if channelID < 0 || channelID >= len(upstreams) {
 			c.JSON(400, gin.H{"error": "Channel not found"})
 			return
 		}
 
 		upstream := upstreams[channelID]
+		allKeyInfos := metricsManager.GetChannelKeyUsageInfoMultiURL(upstream.GetAllBaseURLs(), upstream.APIKeys, scheduler.NormalizedMetricsServiceType(kind, upstream.ServiceType))
+		displayKeys := metrics.SelectTopKeys(allKeyInfos, 10)
 
-		// 获取所有 Key 的使用信息并筛选（最多显示 10 个）
-		const maxDisplayKeys = 10
-		// 使用多 URL 聚合方法获取 Key 使用信息（支持 failover 多端点场景）
-		allKeyInfos := metricsManager.GetChannelKeyUsageInfoMultiURL(upstream.GetAllBaseURLs(), upstream.APIKeys)
-		displayKeys := metrics.SelectTopKeys(allKeyInfos, maxDisplayKeys)
-
-		// 构建响应
 		result := ChannelKeyMetricsHistoryResponse{
 			ChannelIndex: channelID,
 			ChannelName:  upstream.Name,
 			Keys:         make([]KeyMetricsHistoryResult, 0),
 		}
 
-		// 为筛选后的 Key 获取历史数据
-		// 同时返回按 Key 聚合的完整数据（含 token）和按模型拆分的流量数据
 		colorIndex := 0
 		for _, keyInfo := range displayKeys {
 			keyMask := truncateKeyMask(keyInfo.KeyMask, 8)
-			// 获取完整的 Key 级别数据（含 token/cache，用于 tokens/cache 视图）
-			fullDataPoints := metricsManager.GetKeyHistoricalStatsMultiURL(upstream.GetAllBaseURLs(), keyInfo.APIKey, duration, interval)
-
-			// 获取按模型拆分的流量数据
-			modelData := metricsManager.GetKeyModelHistoricalStatsMultiURL(upstream.GetAllBaseURLs(), keyInfo.APIKey, duration, interval)
+			fullDataPoints := metricsManager.GetKeyHistoricalStatsMultiURL(upstream.GetAllBaseURLs(), keyInfo.APIKey, scheduler.NormalizedMetricsServiceType(kind, upstream.ServiceType), duration, interval)
+			modelData := metricsManager.GetKeyModelHistoricalStatsMultiURL(upstream.GetAllBaseURLs(), keyInfo.APIKey, scheduler.NormalizedMetricsServiceType(kind, upstream.ServiceType), duration, interval)
 
 			if len(modelData) <= 1 {
-				// 只有一个或没有模型时，直接返回聚合数据
 				result.Keys = append(result.Keys, KeyMetricsHistoryResult{
 					KeyMask:    keyMask,
 					Color:      keyColors[colorIndex%len(keyColors)],
 					DataPoints: fullDataPoints,
 				})
 				colorIndex++
-			} else {
-				// 多个模型时，按模型拆分返回（仅流量数据，token 数据从聚合数据获取）
-				// 对模型名排序以保证颜色稳定
-				models := make([]string, 0, len(modelData))
-				for model := range modelData {
-					models = append(models, model)
-				}
-				sort.Strings(models)
+				continue
+			}
 
-				for _, model := range models {
-					points := modelData[model]
-					dataPoints := make([]metrics.KeyHistoryDataPoint, len(points))
-					for i, p := range points {
-						dataPoints[i] = metrics.KeyHistoryDataPoint{
-							Timestamp:                p.Timestamp,
-							RequestCount:             p.RequestCount,
-							SuccessCount:             p.SuccessCount,
-							FailureCount:             p.FailureCount,
-							InputTokens:              p.InputTokens,
-							OutputTokens:             p.OutputTokens,
-							CacheCreationInputTokens: p.CacheCreationInputTokens,
-							CacheReadInputTokens:     p.CacheReadInputTokens,
-						}
+			models := make([]string, 0, len(modelData))
+			for model := range modelData {
+				models = append(models, model)
+			}
+			sort.Strings(models)
+
+			for _, model := range models {
+				points := modelData[model]
+				dataPoints := make([]metrics.KeyHistoryDataPoint, len(points))
+				for i, p := range points {
+					dataPoints[i] = metrics.KeyHistoryDataPoint{
+						Timestamp:                p.Timestamp,
+						RequestCount:             p.RequestCount,
+						SuccessCount:             p.SuccessCount,
+						FailureCount:             p.FailureCount,
+						InputTokens:              p.InputTokens,
+						OutputTokens:             p.OutputTokens,
+						CacheCreationInputTokens: p.CacheCreationInputTokens,
+						CacheReadInputTokens:     p.CacheReadInputTokens,
 					}
-					result.Keys = append(result.Keys, KeyMetricsHistoryResult{
-						KeyMask:    keyMask,
-						Model:      model,
-						Color:      keyColors[colorIndex%len(keyColors)],
-						DataPoints: dataPoints,
-					})
-					colorIndex++
 				}
+				result.Keys = append(result.Keys, KeyMetricsHistoryResult{
+					KeyMask:    keyMask,
+					Model:      model,
+					Color:      keyColors[colorIndex%len(keyColors)],
+					DataPoints: dataPoints,
+				})
+				colorIndex++
 			}
 		}
 
 		c.JSON(200, result)
 	}
+}
+
+// GetChannelKeyMetricsHistory 获取渠道下各 Key 的历史数据（用于 Key 趋势图表）
+// GET /api/channels/:id/keys/metrics/history?duration=6h
+func GetChannelKeyMetricsHistory(metricsManager *metrics.MetricsManager, cfgManager *config.ConfigManager, isResponses bool) gin.HandlerFunc {
+	kind := scheduler.ChannelKindMessages
+	if isResponses {
+		kind = scheduler.ChannelKindResponses
+	}
+	return getChannelKeyMetricsHistoryWithKind(metricsManager, cfgManager, kind, true, 24*time.Hour)
 }
 
 // truncateKeyMask 截取 keyMask 的前 N 个字符
@@ -625,77 +629,35 @@ func GetChannelDashboard(cfgManager *config.ConfigManager, sch *scheduler.Channe
 		var upstreams []config.UpstreamConfig
 		var metricsManager *metrics.MetricsManager
 		var kind scheduler.ChannelKind
-		apiType := "Messages"
 
 		switch channelType {
 		case "responses":
 			upstreams = cfg.ResponsesUpstream
 			metricsManager = sch.GetResponsesMetricsManager()
 			kind = scheduler.ChannelKindResponses
-			apiType = "Responses"
 		case "chat":
 			upstreams = cfg.ChatUpstream
 			metricsManager = sch.GetChatMetricsManager()
 			kind = scheduler.ChannelKindChat
-			apiType = "Chat"
+		case "images":
+			upstreams = cfg.ImagesUpstream
+			metricsManager = sch.GetImagesMetricsManager()
+			kind = scheduler.ChannelKindImages
 		case "gemini":
 			upstreams = cfg.GeminiUpstream
 			metricsManager = sch.GetGeminiMetricsManager()
 			kind = scheduler.ChannelKindGemini
-			apiType = "Gemini"
 		default: // messages
 			upstreams = cfg.Upstream
 			metricsManager = sch.GetMessagesMetricsManager()
 			kind = scheduler.ChannelKindMessages
-			apiType = "Messages"
 		}
 
 		// 1. 构建 channels 数据
 		channels := make([]gin.H, len(upstreams))
 		for i, up := range upstreams {
-			status := config.GetChannelStatus(&up)
-			priority := config.GetChannelPriority(&up, i)
+			channel := common.BuildChannelView(up, i)
 
-			channel := gin.H{
-				"index":                            i,
-				"name":                             up.Name,
-				"serviceType":                      up.ServiceType,
-				"baseUrl":                          up.BaseURL,
-				"baseUrls":                         up.BaseURLs,
-				"apiKeys":                          up.APIKeys,
-				"description":                      up.Description,
-				"website":                          up.Website,
-				"insecureSkipVerify":               up.InsecureSkipVerify,
-				"modelMapping":                     up.ModelMapping,
-				"reasoningMapping":                 up.ReasoningMapping,
-				"textVerbosity":                    up.TextVerbosity,
-				"fastMode":                         up.FastMode,
-				"customHeaders":                    up.CustomHeaders,
-				"proxyUrl":                         up.ProxyURL,
-				"supportedModels":                  up.SupportedModels,
-				"modelsResponseMode":               up.GetModelsResponseMode(),
-				"manualModels":                     up.ManualModels,
-				"routePrefix":                      up.RoutePrefix,
-				"disabledApiKeys":                  up.DisabledAPIKeys,
-				"cooldownApiKeys":                  cfgManager.GetCooldownKeys(apiType, i),
-				"autoBlacklistBalance":             up.IsAutoBlacklistBalanceEnabled(),
-				"normalizeMetadataUserId":          up.IsNormalizeMetadataUserIDEnabled(),
-				"streamPassthroughEnabled":         up.IsStreamPassthroughEnabled(),
-				"sub2apiPassthroughEnabled":        up.IsSub2APIPassthroughEnabled(),
-				"keyAffinityEnabled":               up.IsKeyAffinityEnabled(),
-				"strictRequestPassthroughEnabled":  up.IsStrictRequestPassthroughEnabled(),
-				"modelsHealthCheckEnabled":         up.IsModelsHealthCheckEnabled(),
-				"modelsHealthCheckIntervalMinutes": up.GetModelsHealthCheckIntervalMinutes(),
-				"failoverRules":                    up.GetEffectiveFailoverRules(),
-				"latency":                          nil,
-				"status":                           status,
-				"priority":                         priority,
-				"promotionUntil":                   up.PromotionUntil,
-				"lowQuality":                       up.LowQuality,
-				"rpm":                              up.RPM,
-			}
-
-			// Gemini 特有字段
 			if channelType == "gemini" {
 				channel["injectDummyThoughtSignature"] = up.InjectDummyThoughtSignature
 				channel["stripThoughtSignature"] = up.StripThoughtSignature
@@ -705,42 +667,7 @@ func GetChannelDashboard(cfgManager *config.ConfigManager, sch *scheduler.Channe
 		}
 
 		// 2. 构建 metrics 数据
-		metricsResult := make([]gin.H, 0, len(upstreams))
-		for i, upstream := range upstreams {
-			resp := metricsManager.ToResponseMultiURL(i, upstream.GetAllBaseURLs(), upstream.APIKeys, 0, upstream.HistoricalAPIKeys)
-
-			item := gin.H{
-				"channelIndex":        i,
-				"channelName":         upstream.Name,
-				"requestCount":        resp.RequestCount,
-				"successCount":        resp.SuccessCount,
-				"failureCount":        resp.FailureCount,
-				"successRate":         resp.SuccessRate,
-				"errorRate":           resp.ErrorRate,
-				"consecutiveFailures": resp.ConsecutiveFailures,
-				"latency":             resp.Latency,
-				"circuitState":        resp.CircuitState,
-				"halfOpenSuccesses":   resp.HalfOpenSuccesses,
-				"breakerFailureRate":  resp.BreakerFailureRate,
-				"keyMetrics":          resp.KeyMetrics,
-				"timeWindows":         resp.TimeWindows,
-			}
-
-			if resp.LastSuccessAt != nil {
-				item["lastSuccessAt"] = *resp.LastSuccessAt
-			}
-			if resp.LastFailureAt != nil {
-				item["lastFailureAt"] = *resp.LastFailureAt
-			}
-			if resp.CircuitBrokenAt != nil {
-				item["circuitBrokenAt"] = *resp.CircuitBrokenAt
-			}
-			if resp.NextRetryAt != nil {
-				item["nextRetryAt"] = *resp.NextRetryAt
-			}
-
-			metricsResult = append(metricsResult, item)
-		}
+		metricsResult := buildChannelMetricsResult(metricsManager, upstreams, kind, true)
 
 		// 3. 构建 stats 数据
 		stats := gin.H{
@@ -760,7 +687,7 @@ func GetChannelDashboard(cfgManager *config.ConfigManager, sch *scheduler.Channe
 		// 4. 构建 recentActivity 数据（最近 15 分钟分段活跃度）
 		recentActivity := make([]*metrics.ChannelRecentActivity, len(upstreams))
 		for i, upstream := range upstreams {
-			recentActivity[i] = metricsManager.GetRecentActivityMultiURL(i, upstream.GetAllBaseURLs(), upstream.APIKeys)
+			recentActivity[i] = metricsManager.GetRecentActivityMultiURL(i, upstream.GetAllBaseURLs(), upstream.APIKeys, scheduler.NormalizedMetricsServiceType(kind, upstream.ServiceType))
 		}
 
 		// 返回合并数据
@@ -778,314 +705,48 @@ func GetChannelDashboard(cfgManager *config.ConfigManager, sch *scheduler.Channe
 //   - duration: 时间范围 (1h, 6h, 24h)，默认 24h
 //   - interval: 时间间隔 (5m, 15m, 1h)，默认根据 duration 自动选择
 func GetGeminiChannelMetricsHistory(metricsManager *metrics.MetricsManager, cfgManager *config.ConfigManager) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		durationStr := c.DefaultQuery("duration", "24h")
-		duration, err := parseExtendedDuration(durationStr)
-		if err != nil || duration <= 0 {
-			c.JSON(400, gin.H{"error": "Invalid duration parameter"})
-			return
-		}
-		maxDuration := 30 * 24 * time.Hour
-		if duration > maxDuration {
-			duration = maxDuration
-		}
-		interval := selectIntervalForDuration(c.Query("interval"), duration)
-
-		cfg := cfgManager.GetConfig()
-		upstreams := cfg.GeminiUpstream
-
-		if duration > 24*time.Hour {
-			store := metricsManager.GetPersistenceStore()
-			if store == nil {
-				c.JSON(400, gin.H{"error": "长时间范围查询需要启用 SQLite 持久化存储"})
-				return
-			}
-			apiType := metricsManager.GetAPIType()
-			since := time.Now().Add(-duration)
-			intervalSec := int64(interval.Seconds())
-			result := make([]MetricsHistoryResponse, 0, len(upstreams))
-			for i, upstream := range upstreams {
-				channelBuckets := filterBucketsByURLs(store, apiType, since, intervalSec, upstream.GetAllBaseURLs(), upstream.APIKeys)
-				result = append(result, MetricsHistoryResponse{
-					ChannelIndex: i,
-					ChannelName:  upstream.Name,
-					DataPoints:   convertBucketsToDataPoints(channelBuckets),
-				})
-			}
-			c.JSON(200, result)
-			return
-		}
-
-		result := make([]MetricsHistoryResponse, 0, len(upstreams))
-		for i, upstream := range upstreams {
-			dataPoints := metricsManager.GetHistoricalStatsMultiURL(upstream.GetAllBaseURLs(), upstream.APIKeys, duration, interval)
-			result = append(result, MetricsHistoryResponse{
-				ChannelIndex: i,
-				ChannelName:  upstream.Name,
-				DataPoints:   dataPoints,
-			})
-		}
-
-		c.JSON(200, result)
-	}
+	return getChannelMetricsHistoryWithKind(metricsManager, cfgManager, scheduler.ChannelKindGemini, true)
 }
 
 // GetGeminiChannelKeyMetricsHistory 获取 Gemini 渠道下各 Key 的历史数据（用于 Key 趋势图表）
 // GET /api/gemini/channels/:id/keys/metrics/history?duration=6h
 func GetGeminiChannelKeyMetricsHistory(metricsManager *metrics.MetricsManager, cfgManager *config.ConfigManager) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		// 解析 duration 参数
-		durationStr := c.DefaultQuery("duration", "6h")
-
-		var duration time.Duration
-		var err error
-
-		// 特殊处理 "today" 参数
-		if durationStr == "today" {
-			duration = metrics.CalculateTodayDuration()
-			// 如果刚过零点，duration 可能非常小，设置最小值
-			if duration < time.Minute {
-				duration = time.Minute
-			}
-		} else {
-			duration, err = parseExtendedDuration(durationStr)
-			if err != nil {
-				c.JSON(400, gin.H{"error": "Invalid duration parameter. Use: 1h, 6h, 24h, today, 7d, or 30d"})
-				return
-			}
-		}
-
-		// 限制最大查询范围为 24 小时（Key 级历史数据仅保留在内存中）
-		// 注意：全局统计支持 30 天是因为使用 SQLite 持久化，但 Key 级数据未持久化
-		if duration > 24*time.Hour {
-			duration = 24 * time.Hour
-		}
-
-		// 解析或自动选择 interval
-		intervalStr := c.Query("interval")
-		var interval time.Duration
-		if intervalStr != "" {
-			interval, err = time.ParseDuration(intervalStr)
-			if err != nil {
-				c.JSON(400, gin.H{"error": "Invalid interval parameter"})
-				return
-			}
-			// 限制 interval 最小值为 1 分钟，防止生成过多 bucket
-			if interval < time.Minute {
-				interval = time.Minute
-			}
-		} else {
-			// 根据 duration 自动选择合适的聚合粒度
-			switch {
-			case duration <= time.Hour:
-				interval = time.Minute
-			case duration <= 6*time.Hour:
-				interval = 5 * time.Minute
-			default:
-				interval = 15 * time.Minute
-			}
-		}
-
-		// 解析 channel ID
-		channelIDStr := c.Param("id")
-		channelID, err := strconv.Atoi(channelIDStr)
-		if err != nil {
-			c.JSON(400, gin.H{"error": "Invalid channel ID"})
-			return
-		}
-
-		cfg := cfgManager.GetConfig()
-		upstreams := cfg.GeminiUpstream
-
-		// 检查 channel ID 是否有效
-		if channelID < 0 || channelID >= len(upstreams) {
-			c.JSON(400, gin.H{"error": "Channel not found"})
-			return
-		}
-
-		upstream := upstreams[channelID]
-
-		// 获取所有 Key 的使用信息并筛选（最多显示 10 个）
-		const maxDisplayKeys = 10
-		// 使用多 URL 聚合方法获取 Key 使用信息（支持 failover 多端点场景）
-		allKeyInfos := metricsManager.GetChannelKeyUsageInfoMultiURL(upstream.GetAllBaseURLs(), upstream.APIKeys)
-		displayKeys := metrics.SelectTopKeys(allKeyInfos, maxDisplayKeys)
-
-		// 构建响应
-		result := ChannelKeyMetricsHistoryResponse{
-			ChannelIndex: channelID,
-			ChannelName:  upstream.Name,
-			Keys:         make([]KeyMetricsHistoryResult, 0, len(displayKeys)),
-		}
-
-		// 为筛选后的 Key 获取历史数据
-		for i, keyInfo := range displayKeys {
-			// 使用多 URL 聚合方法获取单个 Key 的历史数据（支持 failover 多端点场景）
-			dataPoints := metricsManager.GetKeyHistoricalStatsMultiURL(upstream.GetAllBaseURLs(), keyInfo.APIKey, duration, interval)
-
-			// 获取 Key 的颜色
-			color := keyColors[i%len(keyColors)]
-
-			// 获取 Key 的脱敏显示（只取前 8 个字符）
-			keyMask := truncateKeyMask(keyInfo.KeyMask, 8)
-
-			result.Keys = append(result.Keys, KeyMetricsHistoryResult{
-				KeyMask:    keyMask,
-				Color:      color,
-				DataPoints: dataPoints,
-			})
-		}
-
-		c.JSON(200, result)
-	}
+	return getChannelKeyMetricsHistoryWithKind(metricsManager, cfgManager, scheduler.ChannelKindGemini, true, 24*time.Hour)
 }
 
 // GetGeminiChannelMetrics 获取 Gemini 渠道指标
 func GetGeminiChannelMetrics(metricsManager *metrics.MetricsManager, cfgManager *config.ConfigManager) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		cfg := cfgManager.GetConfig()
-		upstreams := cfg.GeminiUpstream
+	return getChannelMetricsWithKind(metricsManager, cfgManager, scheduler.ChannelKindGemini, false)
+}
 
-		result := make([]gin.H, 0, len(upstreams))
-		for i, upstream := range upstreams {
-			// 使用多 URL 聚合方法获取渠道指标（支持 failover 多端点场景）
-			resp := metricsManager.ToResponseMultiURL(i, upstream.GetAllBaseURLs(), upstream.APIKeys, 0, upstream.HistoricalAPIKeys)
+// GetImagesChannelMetrics 获取 Images 渠道指标
+func GetImagesChannelMetrics(metricsManager *metrics.MetricsManager, cfgManager *config.ConfigManager) gin.HandlerFunc {
+	return getChannelMetricsWithKind(metricsManager, cfgManager, scheduler.ChannelKindImages, true)
+}
 
-			item := gin.H{
-				"channelIndex":        i,
-				"channelName":         upstream.Name,
-				"requestCount":        resp.RequestCount,
-				"successCount":        resp.SuccessCount,
-				"failureCount":        resp.FailureCount,
-				"successRate":         resp.SuccessRate,
-				"errorRate":           resp.ErrorRate,
-				"consecutiveFailures": resp.ConsecutiveFailures,
-				"latency":             resp.Latency,
-				"circuitState":        resp.CircuitState,
-				"halfOpenSuccesses":   resp.HalfOpenSuccesses,
-				"breakerFailureRate":  resp.BreakerFailureRate,
-				"keyMetrics":          resp.KeyMetrics,  // 各 Key 的详细指标
-				"timeWindows":         resp.TimeWindows, // 分时段统计 (15m, 1h, 6h, 24h)
-			}
+// GetImagesChannelMetricsHistory 获取 Images 渠道指标历史数据
+func GetImagesChannelMetricsHistory(metricsManager *metrics.MetricsManager, cfgManager *config.ConfigManager) gin.HandlerFunc {
+	return getChannelMetricsHistoryWithKind(metricsManager, cfgManager, scheduler.ChannelKindImages, false)
+}
 
-			if resp.LastSuccessAt != nil {
-				item["lastSuccessAt"] = *resp.LastSuccessAt
-			}
-			if resp.LastFailureAt != nil {
-				item["lastFailureAt"] = *resp.LastFailureAt
-			}
-			if resp.CircuitBrokenAt != nil {
-				item["circuitBrokenAt"] = *resp.CircuitBrokenAt
-			}
-			if resp.NextRetryAt != nil {
-				item["nextRetryAt"] = *resp.NextRetryAt
-			}
-
-			result = append(result, item)
-		}
-
-		c.JSON(200, result)
-	}
+// GetImagesChannelKeyMetricsHistory 获取 Images 渠道下各 Key 的历史数据
+func GetImagesChannelKeyMetricsHistory(metricsManager *metrics.MetricsManager, cfgManager *config.ConfigManager) gin.HandlerFunc {
+	return getChannelKeyMetricsHistoryWithKind(metricsManager, cfgManager, scheduler.ChannelKindImages, false, 24*time.Hour)
 }
 
 // GetChatChannelMetrics 获取 Chat 渠道指标
 func GetChatChannelMetrics(metricsManager *metrics.MetricsManager, cfgManager *config.ConfigManager) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		cfg := cfgManager.GetConfig()
-		result := make([]gin.H, 0, len(cfg.ChatUpstream))
-		for i, upstream := range cfg.ChatUpstream {
-			resp := metricsManager.ToResponseMultiURL(i, upstream.GetAllBaseURLs(), upstream.APIKeys, 0, upstream.HistoricalAPIKeys)
-			item := gin.H{
-				"channelIndex":        i,
-				"channelName":         upstream.Name,
-				"requestCount":        resp.RequestCount,
-				"successCount":        resp.SuccessCount,
-				"failureCount":        resp.FailureCount,
-				"successRate":         resp.SuccessRate,
-				"errorRate":           resp.ErrorRate,
-				"consecutiveFailures": resp.ConsecutiveFailures,
-				"latency":             resp.Latency,
-				"circuitState":        resp.CircuitState,
-				"halfOpenSuccesses":   resp.HalfOpenSuccesses,
-				"breakerFailureRate":  resp.BreakerFailureRate,
-				"keyMetrics":          resp.KeyMetrics,
-				"timeWindows":         resp.TimeWindows,
-			}
-			if resp.LastSuccessAt != nil {
-				item["lastSuccessAt"] = *resp.LastSuccessAt
-			}
-			if resp.LastFailureAt != nil {
-				item["lastFailureAt"] = *resp.LastFailureAt
-			}
-			if resp.CircuitBrokenAt != nil {
-				item["circuitBrokenAt"] = *resp.CircuitBrokenAt
-			}
-			if resp.NextRetryAt != nil {
-				item["nextRetryAt"] = *resp.NextRetryAt
-			}
-			result = append(result, item)
-		}
-		c.JSON(200, result)
-	}
+	return getChannelMetricsWithKind(metricsManager, cfgManager, scheduler.ChannelKindChat, true)
 }
 
 // GetChatChannelMetricsHistory 获取 Chat 渠道指标历史数据
 func GetChatChannelMetricsHistory(metricsManager *metrics.MetricsManager, cfgManager *config.ConfigManager) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		duration, interval := parseHistoryDuration(c)
-		cfg := cfgManager.GetConfig()
-
-		if duration > 24*time.Hour {
-			store := metricsManager.GetPersistenceStore()
-			if store == nil {
-				c.JSON(400, gin.H{"error": "长时间范围查询需要启用 SQLite 持久化存储"})
-				return
-			}
-			apiType := metricsManager.GetAPIType()
-			since := time.Now().Add(-duration)
-			intervalSec := int64(interval.Seconds())
-			result := make([]MetricsHistoryResponse, 0, len(cfg.ChatUpstream))
-			for i, upstream := range cfg.ChatUpstream {
-				channelBuckets := filterBucketsByURLs(store, apiType, since, intervalSec, upstream.GetAllBaseURLs(), upstream.APIKeys)
-				result = append(result, MetricsHistoryResponse{ChannelIndex: i, ChannelName: upstream.Name, DataPoints: convertBucketsToDataPoints(channelBuckets)})
-			}
-			c.JSON(200, result)
-			return
-		}
-
-		result := make([]MetricsHistoryResponse, 0, len(cfg.ChatUpstream))
-		for i, upstream := range cfg.ChatUpstream {
-			dataPoints := metricsManager.GetHistoricalStatsMultiURL(upstream.GetAllBaseURLs(), upstream.APIKeys, duration, interval)
-			result = append(result, MetricsHistoryResponse{ChannelIndex: i, ChannelName: upstream.Name, DataPoints: dataPoints})
-		}
-		c.JSON(200, result)
-	}
+	return getChannelMetricsHistoryWithKind(metricsManager, cfgManager, scheduler.ChannelKindChat, false)
 }
 
 // GetChatChannelKeyMetricsHistory 获取 Chat 渠道下各 Key 的历史数据
 func GetChatChannelKeyMetricsHistory(metricsManager *metrics.MetricsManager, cfgManager *config.ConfigManager) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		duration, interval := parseKeyHistoryDuration(c)
-		channelID, err := strconv.Atoi(c.Param("id"))
-		if err != nil {
-			c.JSON(400, gin.H{"error": "Invalid channel ID"})
-			return
-		}
-		cfg := cfgManager.GetConfig()
-		if channelID < 0 || channelID >= len(cfg.ChatUpstream) {
-			c.JSON(400, gin.H{"error": "Channel not found"})
-			return
-		}
-		upstream := cfg.ChatUpstream[channelID]
-		allKeyInfos := metricsManager.GetChannelKeyUsageInfoMultiURL(upstream.GetAllBaseURLs(), upstream.APIKeys)
-		displayKeys := metrics.SelectTopKeys(allKeyInfos, 10)
-		result := ChannelKeyMetricsHistoryResponse{ChannelIndex: channelID, ChannelName: upstream.Name, Keys: make([]KeyMetricsHistoryResult, 0, len(displayKeys))}
-		for i, keyInfo := range displayKeys {
-			dataPoints := metricsManager.GetKeyHistoricalStatsMultiURL(upstream.GetAllBaseURLs(), keyInfo.APIKey, duration, interval)
-			result.Keys = append(result.Keys, KeyMetricsHistoryResult{KeyMask: truncateKeyMask(keyInfo.KeyMask, 8), Color: keyColors[i%len(keyColors)], DataPoints: dataPoints})
-		}
-		c.JSON(200, result)
-	}
+	return getChannelKeyMetricsHistoryWithKind(metricsManager, cfgManager, scheduler.ChannelKindChat, false, 24*time.Hour)
 }
 
 // ResumeChannelWithKind 恢复指定类型的熔断渠道（重置熔断状态、恢复拉黑 Key，保留历史统计）
@@ -1105,15 +766,19 @@ func ResumeChannelWithKind(sch *scheduler.ChannelScheduler, cfgManager *config.C
 			apiType = "Gemini"
 		case scheduler.ChannelKindChat:
 			apiType = "Chat"
+		case scheduler.ChannelKindImages:
+			apiType = "Images"
 		}
 
-		// 先恢复被拉黑的 Key，再重置渠道所有 Key 的熔断状态，确保恢复出来的 Key 也被重置
-		restoredCount, err := cfgManager.RestoreAllKeys(apiType, id)
+		result, err := transitions.RestoreAllAndReset(
+			func() (int, error) { return cfgManager.RestoreAllKeys(apiType, id) },
+			func() { sch.ResetChannelMetrics(id, kind) },
+		)
 		if err != nil {
 			c.JSON(400, gin.H{"error": err.Error()})
 			return
 		}
-		sch.ResetChannelMetrics(id, kind)
+		restoredCount := result.RestoredCount
 
 		message := "渠道已恢复，熔断状态已重置（历史统计保留）"
 		if restoredCount > 0 {
@@ -1201,38 +866,54 @@ func parseExtendedDuration(s string) (time.Duration, error) {
 }
 
 // filterBucketsByURLs 按渠道的 URL 和 Key 过滤 SQLite 聚合数据
-func filterBucketsByURLs(store metrics.PersistenceStore, apiType string, since time.Time, intervalSec int64, baseURLs []string, apiKeys []string) []metrics.AggregatedBucket {
+func filterBucketsByURLs(store metrics.PersistenceStore, apiType string, since time.Time, intervalSec int64, baseURLs []string, apiKeys []string, serviceType string) []metrics.AggregatedBucket {
 	// SQLite 里的聚合记录是按 metrics_key(baseURL + apiKey) 归属的。
 	// 因此这里必须按当前渠道的 URL+Key 组合逐个查询并汇总，
 	// 不能只按 baseURL 过滤，否则多个共用 baseURL 的渠道会串数据。
 	bucketMap := make(map[int64]*metrics.AggregatedBucket)
 
+	queriedMetricsKeys := make(map[string]struct{})
 	for _, baseURL := range baseURLs {
 		for _, apiKey := range apiKeys {
-			metricsKey := metrics.GenerateMetricsKey(baseURL, apiKey)
-			buckets, err := store.QueryAggregatedHistory(apiType, since, intervalSec, metricsKey, "")
-			if err != nil {
-				log.Printf("[Metrics-History] 查询 metricsKey %s 失败(baseURL=%s): %v", metricsKey, baseURL, err)
-				continue
+			lookupKeys := []string{metrics.GenerateMetricsIdentityKey(baseURL, apiKey, serviceType)}
+			for _, variant := range utils.EquivalentBaseURLVariants(baseURL, serviceType) {
+				lookupKey := metrics.GenerateMetricsKey(variant, apiKey)
+				if lookupKey == lookupKeys[0] {
+					continue
+				}
+				lookupKeys = append(lookupKeys, lookupKey)
 			}
-			for _, b := range buckets {
-				ts := b.Timestamp.Unix()
-				if existing, ok := bucketMap[ts]; ok {
-					existing.TotalRequests += b.TotalRequests
-					existing.SuccessCount += b.SuccessCount
-					existing.InputTokens += b.InputTokens
-					existing.OutputTokens += b.OutputTokens
-					existing.CacheCreationTokens += b.CacheCreationTokens
-					existing.CacheReadTokens += b.CacheReadTokens
-				} else {
-					copy := b
-					bucketMap[ts] = &copy
+
+			for _, metricsKey := range lookupKeys {
+				if _, exists := queriedMetricsKeys[metricsKey]; exists {
+					continue
+				}
+				queriedMetricsKeys[metricsKey] = struct{}{}
+
+				buckets, err := store.QueryAggregatedHistory(apiType, since, intervalSec, metricsKey, "")
+				if err != nil {
+					log.Printf("[Metrics-History] 查询 metricsKey %s 失败(baseURL=%s): %v", metricsKey, baseURL, err)
+					continue
+				}
+
+				for _, b := range buckets {
+					ts := b.Timestamp.Unix()
+					if existing, ok := bucketMap[ts]; ok {
+						existing.TotalRequests += b.TotalRequests
+						existing.SuccessCount += b.SuccessCount
+						existing.InputTokens += b.InputTokens
+						existing.OutputTokens += b.OutputTokens
+						existing.CacheCreationTokens += b.CacheCreationTokens
+						existing.CacheReadTokens += b.CacheReadTokens
+					} else {
+						copy := b
+						bucketMap[ts] = &copy
+					}
 				}
 			}
 		}
 	}
 
-	// 转为有序 slice
 	result := make([]metrics.AggregatedBucket, 0, len(bucketMap))
 	for _, b := range bucketMap {
 		result = append(result, *b)

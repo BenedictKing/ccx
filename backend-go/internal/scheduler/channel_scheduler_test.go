@@ -1,10 +1,13 @@
 package scheduler
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -61,16 +64,18 @@ func createTestScheduler(t *testing.T, cfg config.Config) (*ChannelScheduler, fu
 	responsesMetrics := metrics.NewMetricsManager()
 	geminiMetrics := metrics.NewMetricsManager()
 	chatMetrics := metrics.NewMetricsManager()
+	imagesMetrics := metrics.NewMetricsManager()
 	traceAffinity := session.NewTraceAffinityManager()
 	urlManager := warmup.NewURLManager(30*time.Second, 3)
 
-	scheduler := NewChannelScheduler(cfgManager, messagesMetrics, responsesMetrics, geminiMetrics, chatMetrics, traceAffinity, urlManager)
+	scheduler := NewChannelScheduler(cfgManager, messagesMetrics, responsesMetrics, geminiMetrics, chatMetrics, imagesMetrics, traceAffinity, urlManager)
 
 	return scheduler, func() {
 		messagesMetrics.Stop()
 		responsesMetrics.Stop()
 		chatMetrics.Stop()
 		geminiMetrics.Stop()
+		imagesMetrics.Stop()
 		cleanup()
 	}
 }
@@ -106,11 +111,11 @@ func TestPromotedChannelBypassesHealthCheck(t *testing.T) {
 	// 模拟促销渠道之前有高失败率（使其不健康）
 	metricsManager := scheduler.messagesMetricsManager
 	for i := 0; i < 10; i++ {
-		metricsManager.RecordFailure("https://promoted.example.com", "sk-promoted-key")
+		metricsManager.RecordFailure("https://promoted.example.com", "sk-promoted-key", "claude")
 	}
 
 	// 验证促销渠道确实不健康
-	isHealthy := metricsManager.IsChannelHealthyWithKeys("https://promoted.example.com", []string{"sk-promoted-key"})
+	isHealthy := metricsManager.IsChannelHealthyWithKeys("https://promoted.example.com", []string{"sk-promoted-key"}, "claude")
 	if isHealthy {
 		t.Fatal("促销渠道应该被标记为不健康")
 	}
@@ -208,7 +213,7 @@ func TestNonPromotedChannelStillChecksHealth(t *testing.T) {
 	// 模拟第一个渠道不健康
 	metricsManager := scheduler.messagesMetricsManager
 	for i := 0; i < 10; i++ {
-		metricsManager.RecordFailure("https://unhealthy.example.com", "sk-unhealthy-key")
+		metricsManager.RecordFailure("https://unhealthy.example.com", "sk-unhealthy-key", "claude")
 	}
 
 	// 选择渠道 - 应该跳过不健康的渠道，选择健康的渠道
@@ -257,7 +262,7 @@ func TestExpiredPromotionNotBypassHealthCheck(t *testing.T) {
 	// 模拟过期促销渠道不健康
 	metricsManager := scheduler.messagesMetricsManager
 	for i := 0; i < 10; i++ {
-		metricsManager.RecordFailure("https://expired.example.com", "sk-expired-key")
+		metricsManager.RecordFailure("https://expired.example.com", "sk-expired-key", "claude")
 	}
 
 	// 选择渠道 - 过期促销渠道不应该被优先选择，应该选择健康的渠道
@@ -402,12 +407,12 @@ func TestDeleteChannelMetrics_SharedMetricsKeyPreserved(t *testing.T) {
 			}
 
 			// 为所有 key 记录一些指标
-			metricsManager.RecordSuccess(sharedBaseURL, sharedAPIKey)
-			metricsManager.RecordSuccess(sharedBaseURL, "sk-exclusive-A")
+			metricsManager.RecordSuccess(sharedBaseURL, sharedAPIKey, tcServiceType(tc.kind))
+			metricsManager.RecordSuccess(sharedBaseURL, "sk-exclusive-A", tcServiceType(tc.kind))
 
 			// 验证指标存在
-			sharedMetricsKey := metrics.GenerateMetricsKey(sharedBaseURL, sharedAPIKey)
-			exclusiveMetricsKey := metrics.GenerateMetricsKey(sharedBaseURL, "sk-exclusive-A")
+			sharedMetricsKey := metrics.GenerateMetricsIdentityKey(sharedBaseURL, sharedAPIKey, tcServiceType(tc.kind))
+			exclusiveMetricsKey := metrics.GenerateMetricsIdentityKey(sharedBaseURL, "sk-exclusive-A", tcServiceType(tc.kind))
 
 			if !hasMetricsKey(metricsManager.GetAllKeyMetrics(), sharedMetricsKey) {
 				t.Fatal("共享 metricsKey 应该存在")
@@ -479,9 +484,9 @@ func TestDeleteChannelMetrics_AllExclusiveKeysDeleted(t *testing.T) {
 	metricsManager := scheduler.messagesMetricsManager
 
 	// 为所有 key 记录指标
-	metricsManager.RecordSuccess("https://exclusive.example.com", "sk-key-1")
-	metricsManager.RecordSuccess("https://exclusive.example.com", "sk-key-2")
-	metricsManager.RecordSuccess("https://other.example.com", "sk-other-key")
+	metricsManager.RecordSuccess("https://exclusive.example.com", "sk-key-1", "claude")
+	metricsManager.RecordSuccess("https://exclusive.example.com", "sk-key-2", "claude")
+	metricsManager.RecordSuccess("https://other.example.com", "sk-other-key", "claude")
 
 	// 从配置中移除要删除的渠道
 	channelToDelete := cfg.Upstream[0]
@@ -494,9 +499,9 @@ func TestDeleteChannelMetrics_AllExclusiveKeysDeleted(t *testing.T) {
 	scheduler.DeleteChannelMetrics(&channelToDelete, ChannelKindMessages)
 
 	// 验证结果
-	key1 := metrics.GenerateMetricsKey("https://exclusive.example.com", "sk-key-1")
-	key2 := metrics.GenerateMetricsKey("https://exclusive.example.com", "sk-key-2")
-	otherKey := metrics.GenerateMetricsKey("https://other.example.com", "sk-other-key")
+	key1 := metrics.GenerateMetricsIdentityKey("https://exclusive.example.com", "sk-key-1", "claude")
+	key2 := metrics.GenerateMetricsIdentityKey("https://exclusive.example.com", "sk-key-2", "claude")
+	otherKey := metrics.GenerateMetricsIdentityKey("https://other.example.com", "sk-other-key", "claude")
 
 	// 被删除渠道的所有 metricsKey 都应该被删除
 	if hasMetricsKey(metricsManager.GetAllKeyMetrics(), key1) {
@@ -531,7 +536,7 @@ func TestDeleteChannelMetrics_SkipsWhenUpstreamStillInConfig(t *testing.T) {
 	defer cleanup()
 
 	metricsManager := scheduler.messagesMetricsManager
-	metricsManager.RecordSuccess("https://example.com", "sk-key")
+	metricsManager.RecordSuccess("https://example.com", "sk-key", "claude")
 
 	// 不从配置中移除渠道，直接调用 DeleteChannelMetrics
 	// 这违反了前置条件，但方法应该仍然执行（只是结果可能不正确）
@@ -540,11 +545,98 @@ func TestDeleteChannelMetrics_SkipsWhenUpstreamStillInConfig(t *testing.T) {
 
 	// 由于渠道仍在配置中，collectUsedCombinations 会返回该组合
 	// 因此 metricsKey 不会被删除
-	metricsKey := metrics.GenerateMetricsKey("https://example.com", "sk-key")
+	metricsKey := metrics.GenerateMetricsIdentityKey("https://example.com", "sk-key", "claude")
 
 	if !hasMetricsKey(metricsManager.GetAllKeyMetrics(), metricsKey) {
 		t.Error("由于渠道仍在配置中，metricsKey 应该被保留（前置条件违反时的预期行为）")
 	}
+}
+
+func TestDeleteChannelMetrics_DeletesOnlyRealServiceTypeIdentity(t *testing.T) {
+	cfg := config.Config{
+		Upstream: []config.UpstreamConfig{
+			{
+				Name:        "channel-to-delete",
+				BaseURL:     "https://shared.example.com",
+				APIKeys:     []string{"sk-key"},
+				ServiceType: "gemini",
+				Status:      "active",
+				Priority:    1,
+			},
+		},
+	}
+
+	scheduler, cleanup := createTestScheduler(t, cfg)
+	defer cleanup()
+
+	metricsManager := scheduler.messagesMetricsManager
+	metricsManager.RecordSuccess("https://shared.example.com", "sk-key", "openai")
+	metricsManager.RecordSuccess("https://shared.example.com", "sk-key", "gemini")
+	legacyKey := metrics.GenerateMetricsIdentityKey("https://shared.example.com", "sk-key", "openai")
+	currentKey := metrics.GenerateMetricsIdentityKey("https://shared.example.com", "sk-key", "gemini")
+
+	if !hasMetricsKey(metricsManager.GetAllKeyMetrics(), legacyKey) {
+		t.Fatal("非真实 serviceType 的 metricsKey 应该存在")
+	}
+	if !hasMetricsKey(metricsManager.GetAllKeyMetrics(), currentKey) {
+		t.Fatal("真实 serviceType 的 metricsKey 应该存在")
+	}
+
+	channelToDelete := cfg.Upstream[0]
+	_, err := scheduler.configManager.RemoveUpstream(0)
+	if err != nil {
+		t.Fatalf("移除渠道失败: %v", err)
+	}
+
+	scheduler.DeleteChannelMetrics(&channelToDelete, ChannelKindMessages)
+
+	if hasMetricsKey(metricsManager.GetAllKeyMetrics(), currentKey) {
+		t.Error("真实 serviceType 的 metricsKey 应该被删除")
+	}
+	if !hasMetricsKey(metricsManager.GetAllKeyMetrics(), legacyKey) {
+		t.Error("非真实 serviceType 的 metricsKey 不应被本次删除清理")
+	}
+}
+
+func TestDeleteChannelMetrics_RemovesEquivalentLegacyMetricsKeys(t *testing.T) {
+	serviceType := "claude"
+	baseURLs := []string{"https://shared.example.com"}
+	apiKeys := []string{"sk-key"}
+
+	cfg := config.Config{
+		Upstream: []config.UpstreamConfig{{
+			Name:        "channel-to-delete",
+			BaseURL:     baseURLs[0],
+			APIKeys:     apiKeys,
+			ServiceType: serviceType,
+			Status:      "active",
+			Priority:    1,
+		}},
+	}
+
+	scheduler, cleanup := createTestScheduler(t, cfg)
+	defer cleanup()
+
+	metricsManager := scheduler.messagesMetricsManager
+	deletedKeys := metricsManager.DeleteKeysForChannel(baseURLs, apiKeys, serviceType)
+	identityKey := metrics.GenerateMetricsIdentityKey(baseURLs[0], apiKeys[0], serviceType)
+	legacyKey := metrics.GenerateMetricsKey(baseURLs[0], apiKeys[0])
+
+	if !containsString(deletedKeys, identityKey) {
+		t.Fatalf("deletedKeys should contain identity key %s", identityKey)
+	}
+	if !containsString(deletedKeys, legacyKey) {
+		t.Fatalf("deletedKeys should contain equivalent legacy key %s", legacyKey)
+	}
+}
+
+func containsString(items []string, target string) bool {
+	for _, item := range items {
+		if item == target {
+			return true
+		}
+	}
+	return false
 }
 
 // hasMetricsKey 辅助函数：检查 metricsKey 是否存在于指标列表中
@@ -630,5 +722,128 @@ func TestAffinityStillWorksWithoutHigherPriorityAlternative(t *testing.T) {
 	}
 	if result.Reason != "trace_affinity" {
 		t.Fatalf("期望选择原因为 trace_affinity，实际为 %s", result.Reason)
+	}
+}
+
+func TestSelectChannelFiltersSupportedModels(t *testing.T) {
+	cfg := config.Config{
+		Upstream: []config.UpstreamConfig{
+			{
+				Name:            "image-excluded",
+				BaseURL:         "https://excluded.example.com",
+				APIKeys:         []string{"sk-excluded"},
+				Status:          "active",
+				Priority:        1,
+				SupportedModels: []string{"gpt-4*", "!*image*"},
+			},
+			{
+				Name:            "image-allowed",
+				BaseURL:         "https://allowed.example.com",
+				APIKeys:         []string{"sk-allowed"},
+				Status:          "active",
+				Priority:        2,
+				SupportedModels: []string{"gpt-4*"},
+			},
+			{
+				Name:            "invalid-pattern-fallback",
+				BaseURL:         "https://invalid.example.com",
+				APIKeys:         []string{"sk-invalid"},
+				Status:          "active",
+				Priority:        3,
+				SupportedModels: []string{"foo*bar", "claude-*"},
+			},
+		},
+	}
+
+	scheduler, cleanup := createTestScheduler(t, cfg)
+	defer cleanup()
+
+	t.Run("命中排除规则时跳过高优先级渠道", func(t *testing.T) {
+		result, err := scheduler.SelectChannel(context.Background(), "test-user", make(map[int]bool), ChannelKindMessages, "gpt-4-image-preview", "")
+		if err != nil {
+			t.Fatalf("选择渠道失败: %v", err)
+		}
+		if result.ChannelIndex != 1 {
+			t.Fatalf("期望选择 index=1，实际为 %d", result.ChannelIndex)
+		}
+	})
+
+	t.Run("模型过滤跳过渠道时记录命中排除规则", func(t *testing.T) {
+		var buf bytes.Buffer
+		oldOutput := log.Writer()
+		log.SetOutput(&buf)
+		defer log.SetOutput(oldOutput)
+
+		result, err := scheduler.SelectChannel(context.Background(), "test-user", make(map[int]bool), ChannelKindMessages, "gpt-4-image-preview", "")
+		if err != nil {
+			t.Fatalf("选择渠道失败: %v", err)
+		}
+		if result.ChannelIndex != 1 {
+			t.Fatalf("期望选择 index=1，实际为 %d", result.ChannelIndex)
+		}
+
+		logOutput := buf.String()
+		if !strings.Contains(logOutput, "[Scheduler-ModelFilter] 跳过渠道 [0] image-excluded") {
+			t.Fatalf("期望记录模型过滤跳过日志，实际日志: %s", logOutput)
+		}
+		if !strings.Contains(logOutput, "模型 \"gpt-4-image-preview\" 不被 supportedModels 支持 (命中排除规则 !*image*)") {
+			t.Fatalf("期望记录命中的排除规则，实际日志: %s", logOutput)
+		}
+	})
+
+	t.Run("非法规则被跳过且不影响合法规则", func(t *testing.T) {
+		result, err := scheduler.SelectChannel(context.Background(), "test-user", make(map[int]bool), ChannelKindMessages, "claude-3-7-sonnet", "")
+		if err != nil {
+			t.Fatalf("选择渠道失败: %v", err)
+		}
+		if result.ChannelIndex != 2 {
+			t.Fatalf("期望选择 index=2，实际为 %d", result.ChannelIndex)
+		}
+	})
+
+	t.Run("所有活跃渠道都不支持模型时返回明确错误", func(t *testing.T) {
+		_, err := scheduler.SelectChannel(context.Background(), "test-user", make(map[int]bool), ChannelKindMessages, "gemini-2.5-pro", "")
+		if err == nil {
+			t.Fatal("期望返回错误，实际为 nil")
+		}
+		if err.Error() != "没有 Messages 渠道支持模型 \"gemini-2.5-pro\"，请检查渠道的 supportedModels 配置" {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}
+
+func tcServiceType(kind ChannelKind) string {
+	switch kind {
+	case ChannelKindGemini:
+		return "gemini"
+	case ChannelKindResponses:
+		return "responses"
+	case ChannelKindChat:
+		return "openai"
+	default:
+		return "claude"
+	}
+}
+
+func TestNormalizedMetricsServiceType(t *testing.T) {
+	tests := []struct {
+		name       string
+		kind       ChannelKind
+		configured string
+		want       string
+	}{
+		{name: "messages default", kind: ChannelKindMessages, want: "claude"},
+		{name: "responses default", kind: ChannelKindResponses, want: "responses"},
+		{name: "gemini default", kind: ChannelKindGemini, want: "gemini"},
+		{name: "chat default", kind: ChannelKindChat, want: "openai"},
+		{name: "configured wins", kind: ChannelKindChat, configured: "responses", want: "responses"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := NormalizedMetricsServiceType(tt.kind, tt.configured); got != tt.want {
+				t.Fatalf("NormalizedMetricsServiceType(%q, %q)=%q, want=%q", tt.kind, tt.configured, got, tt.want)
+			}
+		})
 	}
 }

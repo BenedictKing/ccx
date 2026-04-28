@@ -108,7 +108,7 @@ const apexchart = VueApexCharts
 
 // Props
 const props = withDefaults(defineProps<{
-  apiType: 'messages' | 'chat' | 'responses' | 'gemini'
+  apiType: 'messages' | 'chat' | 'responses' | 'gemini' | 'images'
   compact?: boolean
 }>(), {
   compact: false

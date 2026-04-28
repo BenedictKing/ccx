@@ -209,7 +209,7 @@ func AreAllKeysSuspended(metricsManager *metrics.MetricsManager, baseURL string,
 	}
 
 	for _, apiKey := range apiKeys {
-		if !metricsManager.ShouldSuspendKey(baseURL, apiKey) {
+		if !metricsManager.ShouldSuspendKey(baseURL, apiKey, "claude") {
 			return false
 		}
 	}

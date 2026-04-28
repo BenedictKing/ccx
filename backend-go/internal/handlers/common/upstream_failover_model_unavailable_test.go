@@ -109,7 +109,7 @@ func TestTryUpstreamWithAllKeys_ModelRouteUnavailableSkipsBreakerAndCooldown(t *
 				t.Fatalf("GetCooldownKeys() = %v, want no cooldown keys", cooldownKeys)
 			}
 
-			if state := messagesMetrics.GetKeyCircuitState(server.URL, "sk-test"); state != metrics.CircuitStateClosed {
+			if state := messagesMetrics.GetKeyCircuitState(server.URL, "sk-test", "claude"); state != metrics.CircuitStateClosed {
 				t.Fatalf("GetKeyCircuitState() = %s, want closed", state.String())
 			}
 		})

@@ -56,13 +56,13 @@ var (
 )
 
 // buildCapabilityCacheKey 构建缓存 key（基于 baseURL + apiKey、协议列表、模型列表）
-func buildCapabilityCacheKey(baseURL string, apiKey string, protocols []string, models []string) string {
+func buildCapabilityCacheKey(baseURL string, apiKey string, serviceType string, protocols []string, models []string) string {
 	sorted := make([]string, len(protocols))
 	copy(sorted, protocols)
 	sort.Strings(sorted)
 
 	normalizedModels := normalizeCapabilityModels(models)
-	metricsKey := metrics.GenerateMetricsKey(baseURL, apiKey)
+	metricsKey := metrics.GenerateMetricsIdentityKey(baseURL, apiKey, serviceType)
 	return fmt.Sprintf("%s:%s:%s", metricsKey, strings.Join(sorted, ","), strings.Join(normalizedModels, ","))
 }
 
@@ -153,6 +153,7 @@ type CapabilityTestRequest struct {
 	Models          []string `json:"models"`        // 可选：用户指定要测试的模型列表，为空时使用预定义列表
 	Timeout         int      `json:"timeout"`       // 毫秒
 	PreviousJobID   string   `json:"previousJobId"` // 可选：上次测试的 jobId，用于复用成功结果
+	RPM             int      `json:"rpm"`
 }
 
 type ModelTestResult struct {
@@ -225,14 +226,16 @@ func TestChannelCapability(cfgManager *config.ConfigManager, channelLogStore *me
 
 		protocols := req.TargetProtocols
 		if len(protocols) == 0 {
-			protocols = []string{"messages", "chat", "gemini", "responses"}
+			protocols = []string{"messages", "responses", "chat", "gemini"}
 		}
 
-		effectiveRPM := channel.RPM
+		effectiveRPM := req.RPM
 		if effectiveRPM <= 0 {
 			effectiveRPM = 10
 		}
-		channel.RPM = effectiveRPM
+		if effectiveRPM > 60 {
+			effectiveRPM = 60
+		}
 
 		if len(channel.APIKeys) == 0 && len(channel.DisabledAPIKeys) == 0 {
 			errMsg := "no_api_key"
@@ -244,7 +247,7 @@ func TestChannelCapability(cfgManager *config.ConfigManager, channelLogStore *me
 				CompatibleProtocols: []string{},
 				TotalDuration:       0,
 			}
-			job := createCapabilityJobFromResponse(id, channel.Name, channelKind, channel.ServiceType, protocols, timeout, resp, false)
+			job := createCapabilityJobFromResponse(id, channel.Name, channelKind, channel.ServiceType, protocols, timeout, effectiveRPM, resp, false)
 			job.Lifecycle = CapabilityLifecycleDone
 			job.Outcome = CapabilityOutcomeFailed
 			job.Status = deriveCapabilityJobStatus(job.Lifecycle, job.Outcome)
@@ -267,7 +270,9 @@ func TestChannelCapability(cfgManager *config.ConfigManager, channelLogStore *me
 		}
 
 		normalizedModels := normalizeCapabilityModels(req.Models)
-		cacheKey := buildCapabilityCacheKey(baseURL, apiKey, protocols, normalizedModels)
+		identityKey := metrics.GenerateMetricsIdentityKey(baseURL, apiKey, channel.ServiceType)
+		cacheKey := buildCapabilityCacheKey(baseURL, apiKey, channel.ServiceType, protocols, normalizedModels)
+		executionLookupKey := buildCapabilityExecutionLookupKey(identityKey, channelKind, protocols, normalizedModels)
 		lookupKey := buildCapabilityJobLookupKey(cacheKey, channelKind, id)
 
 		if cached, ok := getCapabilityCache(cacheKey); ok {
@@ -275,21 +280,31 @@ func TestChannelCapability(cfgManager *config.ConfigManager, channelLogStore *me
 			cached.ChannelID = id
 			cached.ChannelName = channel.Name
 			cached.SourceType = channel.ServiceType
-			job, reused := capabilityJobs.getOrCreateByLookupKey(lookupKey, func() *CapabilityTestJob {
-				return createCapabilityJobFromResponse(id, channel.Name, channelKind, channel.ServiceType, protocols, timeout, *cached, true)
-			})
+			job := createCapabilityJobFromResponse(id, channel.Name, channelKind, channel.ServiceType, protocols, timeout, effectiveRPM, *cached, true)
 			job.RunMode = CapabilityRunModeCacheHit
 			job.CacheHit = true
+			job.IdentityKey = identityKey
+			job.ExecutionKey = ""
 			job.SummaryReason = "cache_hit"
-			job.IsResumed = reused
-			c.JSON(http.StatusOK, gin.H{"jobId": job.JobID, "resumed": reused, "job": job})
+			job.IsResumed = false
+			capabilityJobs.create(job)
+			c.JSON(http.StatusOK, gin.H{"jobId": job.JobID, "resumed": false, "job": job})
 			return
 		}
 
-		job, reused := capabilityJobs.getOrCreateByLookupKey(lookupKey, func() *CapabilityTestJob {
-			return newCapabilityTestJob(id, channel.Name, channelKind, channel.ServiceType, protocols, timeout)
+		job, reused := capabilityJobs.getOrCreateByLookupKey(executionLookupKey, func() *CapabilityTestJob {
+			created := newCapabilityTestJob(id, channel.Name, channelKind, channel.ServiceType, protocols, timeout, effectiveRPM)
+			created.IdentityKey = identityKey
+			created.ExecutionKey = executionLookupKey
+			return created
 		})
+		capabilityJobs.bindLookupKey(lookupKey, job.JobID)
+		job.ChannelID = id
+		job.ChannelName = channel.Name
+		job.SourceType = channel.ServiceType
 		job.IsResumed = reused
+		job.IdentityKey = identityKey
+		job.ExecutionKey = executionLookupKey
 
 		// 检测到 cancelled job，恢复进度
 		if reused && job.Lifecycle == CapabilityLifecycleCancelled {
@@ -318,7 +333,7 @@ func TestChannelCapability(cfgManager *config.ConfigManager, channelLogStore *me
 			}
 
 			// 重置 failed/skipped 模型为 queued，准备重测
-			capabilityJobs.update(job.JobID, func(j *CapabilityTestJob) {
+			updatedJob, ok := capabilityJobs.update(job.JobID, func(j *CapabilityTestJob) {
 				j.Lifecycle = CapabilityLifecyclePending
 				j.Outcome = CapabilityOutcomeUnknown
 				j.Status = deriveCapabilityJobStatus(j.Lifecycle, j.Outcome)
@@ -326,6 +341,7 @@ func TestChannelCapability(cfgManager *config.ConfigManager, channelLogStore *me
 				j.SummaryReason = "resumed_cancelled"
 				j.IsResumed = true
 				j.HasReusedResults = len(previousResults) > 0
+				j.EffectiveRPM = effectiveRPM
 				j.FinishedAt = ""
 				for i := range j.Tests {
 					if j.Tests[i].Lifecycle == CapabilityLifecycleCancelled || j.Tests[i].Outcome == CapabilityOutcomeFailed {
@@ -344,10 +360,14 @@ func TestChannelCapability(cfgManager *config.ConfigManager, channelLogStore *me
 					}
 				}
 			})
+			if !ok {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to resume cancelled job"})
+				return
+			}
 
-			go runCapabilityTestJob(job.JobID, channelKind, id, *channel, protocols, timeout, cacheKey, lookupKey, previousResults, normalizedModels, cfgManager, channelLogStore)
+			go runCapabilityTestJob(job.JobID, channelKind, id, *channel, protocols, timeout, effectiveRPM, cacheKey, lookupKey, identityKey, previousResults, normalizedModels, cfgManager, channelLogStore)
 
-			c.JSON(http.StatusOK, gin.H{"jobId": job.JobID, "resumed": true, "job": job})
+			c.JSON(http.StatusOK, gin.H{"jobId": updatedJob.JobID, "resumed": true, "job": updatedJob})
 			return
 		}
 
@@ -367,7 +387,7 @@ func TestChannelCapability(cfgManager *config.ConfigManager, channelLogStore *me
 		// 提取上次成功的结果用于复用（从 previousJobID）
 		var previousResults map[string]map[string]ModelTestResult
 		if req.PreviousJobID != "" {
-			if prevJob, ok := capabilityJobs.get(req.PreviousJobID); ok && prevJob.ChannelID == id && prevJob.ChannelKind == channelKind {
+			if prevJob, ok := capabilityJobs.get(req.PreviousJobID); ok && prevJob.ChannelKind == channelKind && prevJob.IdentityKey == identityKey {
 				previousResults = make(map[string]map[string]ModelTestResult)
 				for _, test := range prevJob.Tests {
 					modelMap := make(map[string]ModelTestResult)
@@ -398,7 +418,7 @@ func TestChannelCapability(cfgManager *config.ConfigManager, channelLogStore *me
 			}
 		}
 
-		go runCapabilityTestJob(job.JobID, channelKind, id, *channel, protocols, timeout, cacheKey, lookupKey, previousResults, normalizedModels, cfgManager, channelLogStore)
+		go runCapabilityTestJob(job.JobID, channelKind, id, *channel, protocols, timeout, effectiveRPM, cacheKey, lookupKey, identityKey, previousResults, normalizedModels, cfgManager, channelLogStore)
 
 		c.JSON(http.StatusOK, gin.H{"jobId": job.JobID, "resumed": false, "job": job})
 		return
@@ -440,7 +460,8 @@ func buildRoundRobinQueue(protocolModels map[string][]string, protocols []string
 	return queue
 }
 
-func runCapabilityTestJob(jobID, channelKind string, channelID int, channel config.UpstreamConfig, protocols []string, timeout time.Duration, cacheKey, lookupKey string, previousResults map[string]map[string]ModelTestResult, userModels []string, cfgManager *config.ConfigManager, channelLogStore *metrics.ChannelLogStore) {
+func runCapabilityTestJob(jobID, channelKind string, channelID int, channel config.UpstreamConfig, protocols []string, timeout time.Duration, effectiveRPM int, cacheKey, lookupKey, dispatcherKey string, previousResults map[string]map[string]ModelTestResult, userModels []string, cfgManager *config.ConfigManager, channelLogStore *metrics.ChannelLogStore) {
+	executionKey := buildCapabilityExecutionLookupKey(dispatcherKey, channelKind, protocols, userModels)
 	// 创建可取消的 context，用于支持前端取消操作
 	ctx, cancel := context.WithCancel(context.Background())
 	capabilityJobs.setCancelFunc(jobID, cancel)
@@ -450,6 +471,7 @@ func runCapabilityTestJob(jobID, channelKind string, channelID int, channel conf
 		if lookupKey != "" {
 			capabilityJobs.clearLookupKey(lookupKey)
 		}
+		capabilityJobs.clearLookupKey(executionKey)
 		return
 	}
 
@@ -471,6 +493,7 @@ func runCapabilityTestJob(jobID, channelKind string, channelID int, channel conf
 		if lookupKey != "" {
 			capabilityJobs.clearLookupKey(lookupKey)
 		}
+		capabilityJobs.clearLookupKey(executionKey)
 		return
 	}
 
@@ -483,7 +506,7 @@ func runCapabilityTestJob(jobID, channelKind string, channelID int, channel conf
 	} else if len(channel.DisabledAPIKeys) > 0 {
 		apiKey = channel.DisabledAPIKeys[0].Key
 	}
-	results := runRoundRobinTests(ctx, &channel, protocols, timeout, jobID, previousResults, userModels, cfgManager, channelID, channelKind, apiKey, channelLogStore)
+	results := runRoundRobinTests(ctx, &channel, protocols, timeout, effectiveRPM, jobID, previousResults, userModels, cfgManager, channelID, channelKind, apiKey, dispatcherKey, channelLogStore)
 	totalDuration := time.Since(totalStart).Milliseconds()
 
 	compatible := make([]string, 0)
@@ -511,6 +534,8 @@ func runCapabilityTestJob(jobID, channelKind string, channelID int, channel conf
 		}
 		job.ChannelName = channel.Name
 		job.SourceType = channel.ServiceType
+		job.IdentityKey = dispatcherKey
+		job.ExecutionKey = buildCapabilityExecutionLookupKey(dispatcherKey, channelKind, protocols, userModels)
 		job.CompatibleProtocols = append([]string(nil), compatible...)
 		job.TotalDuration = totalDuration
 		job.FinishedAt = time.Now().Format(time.RFC3339Nano)
@@ -526,6 +551,9 @@ func runCapabilityTestJob(jobID, channelKind string, channelID int, channel conf
 	if lookupKey != "" && ctx.Err() == nil {
 		capabilityJobs.clearLookupKey(lookupKey)
 	}
+	if ctx.Err() == nil {
+		capabilityJobs.clearLookupKey(executionKey)
+	}
 
 	log.Printf("[CapabilityTest-Job] 能力测试任务 %s 完成，渠道 %s，兼容协议: %v，总耗时: %dms", jobID, channel.Name, compatible, totalDuration)
 }
@@ -533,7 +561,7 @@ func runCapabilityTestJob(jobID, channelKind string, channelID int, channel conf
 // runRoundRobinTests 核心编排器，串行按 round-robin 顺序逐个调度
 // 所有模型都会被测试，不会在首次成功后跳过后续模型
 // previousResults 可选：上次测试中成功的结果，跳过这些模型
-func runRoundRobinTests(ctx context.Context, channel *config.UpstreamConfig, protocols []string, perModelTimeout time.Duration, jobID string, previousResults map[string]map[string]ModelTestResult, userModels []string, cfgManager *config.ConfigManager, channelID int, channelKind, apiKey string, channelLogStore *metrics.ChannelLogStore) []ProtocolTestResult {
+func runRoundRobinTests(ctx context.Context, channel *config.UpstreamConfig, protocols []string, perModelTimeout time.Duration, effectiveRPM int, jobID string, previousResults map[string]map[string]ModelTestResult, userModels []string, cfgManager *config.ConfigManager, channelID int, channelKind, apiKey, dispatcherKey string, channelLogStore *metrics.ChannelLogStore) []ProtocolTestResult {
 	// 1. 收集各协议模型列表，初始化 job 状态
 	protocolModels := make(map[string][]string)
 	protocolTimedOut := make(map[string]bool) // true = 全局超时强制终止
@@ -585,8 +613,8 @@ func runRoundRobinTests(ctx context.Context, channel *config.UpstreamConfig, pro
 		capabilityJobs.update(jobID, func(job *CapabilityTestJob) {
 			for i := range job.Tests {
 				if job.Tests[i].Protocol == protocol {
-					job.Tests[i].Status = CapabilityProtocolStatusRunning
-					job.Tests[i].Lifecycle = CapabilityLifecycleActive
+					job.Tests[i].Status = CapabilityProtocolStatusQueued
+					job.Tests[i].Lifecycle = CapabilityLifecyclePending
 					job.Tests[i].Outcome = CapabilityOutcomeUnknown
 					job.Tests[i].Reason = nil
 					job.Tests[i].AttemptedModels = len(models)
@@ -667,7 +695,7 @@ func runRoundRobinTests(ctx context.Context, channel *config.UpstreamConfig, pro
 	// 3. 计算全局超时
 	// 串行执行中每个模型最多耗时 max(interval, perModelTimeout)，累加所有模型 + 缓冲
 	totalModels := len(queue)
-	interval := time.Minute / time.Duration(channel.RPM)
+	interval := time.Minute / time.Duration(effectiveRPM)
 	if interval <= 0 {
 		interval = time.Minute / 10
 	}
@@ -696,7 +724,7 @@ func runRoundRobinTests(ctx context.Context, channel *config.UpstreamConfig, pro
 		}
 
 		// AcquireSendSlot（限流）
-		if err := GetCapabilityTestDispatcher().AcquireSendSlot(globalCtx, interval); err != nil {
+		if err := GetCapabilityTestDispatcher(dispatcherKey).AcquireSendSlot(globalCtx, interval); err != nil {
 			log.Printf("[CapabilityTest-RoundRobin] 获取发送槽位失败: %v", err)
 			break
 		}
@@ -945,13 +973,13 @@ func truncateCapabilityError(msg string) string {
 // testProtocolCompatibility 并发测试多个协议的兼容性（已废弃，保留用于兼容）
 func testProtocolCompatibility(ctx context.Context, channel *config.UpstreamConfig, protocols []string, timeout time.Duration, jobID string) []ProtocolTestResult {
 	// 已废弃，直接调用新实现
-	return runRoundRobinTests(ctx, channel, protocols, timeout, jobID, nil, nil, nil, 0, "", "", nil)
+	return runRoundRobinTests(ctx, channel, protocols, timeout, 10, jobID, nil, nil, nil, 0, "", "", "", nil)
 }
 
 // testSingleProtocol 已废弃，保留用于兼容
 func testSingleProtocol(ctx context.Context, channel *config.UpstreamConfig, protocol string, timeout time.Duration, jobID string) ProtocolTestResult {
 	// 已废弃，直接调用新实现
-	results := runRoundRobinTests(ctx, channel, []string{protocol}, timeout, jobID, nil, nil, nil, 0, "", "", nil)
+	results := runRoundRobinTests(ctx, channel, []string{protocol}, timeout, 10, jobID, nil, nil, nil, 0, "", "", "", nil)
 	if len(results) > 0 {
 		return results[0]
 	}
@@ -1024,6 +1052,8 @@ func channelKindToApiType(channelKind string) string {
 		return "Gemini"
 	case "responses":
 		return "Responses"
+	case "images":
+		return "Images"
 	default:
 		return "Messages"
 	}
@@ -1307,7 +1337,13 @@ func CancelCapabilityTestJob(cfgManager *config.ConfigManager, channelKind strin
 			return
 		}
 
-		if job.ChannelID != id || job.ChannelKind != channelKind {
+		channel, chErr := getCapabilityTestChannel(cfgManager, channelKind, id)
+		if chErr != nil {
+			if !capabilityJobMatchesChannel(job, nil, channelKind, id) {
+				c.JSON(http.StatusNotFound, gin.H{"error": "Capability test job not found"})
+				return
+			}
+		} else if !capabilityJobMatchesChannel(job, channel, channelKind, id) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Capability test job not found"})
 			return
 		}
@@ -1375,7 +1411,13 @@ func RetryCapabilityTestModel(cfgManager *config.ConfigManager, channelLogStore 
 			return
 		}
 
-		if job.ChannelID != id || job.ChannelKind != channelKind {
+		channel, chErr := getCapabilityTestChannel(cfgManager, channelKind, id)
+		if chErr != nil {
+			if !capabilityJobMatchesChannel(job, nil, channelKind, id) {
+				c.JSON(http.StatusNotFound, gin.H{"error": "Capability test job not found"})
+				return
+			}
+		} else if !capabilityJobMatchesChannel(job, channel, channelKind, id) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Capability test job not found"})
 			return
 		}
@@ -1426,7 +1468,7 @@ func RetryCapabilityTestModel(cfgManager *config.ConfigManager, channelLogStore 
 		}
 
 		// 获取渠道配置
-		channel, chErr := getCapabilityTestChannel(cfgManager, channelKind, id)
+		channel, chErr = getCapabilityTestChannel(cfgManager, channelKind, id)
 		if chErr != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": chErr.Error()})
 			return
@@ -1473,6 +1515,35 @@ func RetryCapabilityTestModel(cfgManager *config.ConfigManager, channelLogStore 
 			} else if len(channel.DisabledAPIKeys) > 0 {
 				apiKey = channel.DisabledAPIKeys[0].Key
 			}
+
+			baseURL := ""
+			if len(channel.GetAllBaseURLs()) > 0 {
+				baseURL = channel.GetAllBaseURLs()[0]
+			}
+			identityKey := metrics.GenerateMetricsIdentityKey(baseURL, apiKey, channel.ServiceType)
+			retryRPM := job.EffectiveRPM
+			if retryRPM <= 0 {
+				retryRPM = 10
+			}
+			if retryRPM > 60 {
+				retryRPM = 60
+			}
+			interval := time.Minute / time.Duration(retryRPM)
+
+			if err := GetCapabilityTestDispatcher(identityKey).AcquirePrioritySendSlot(retryCtx, interval); err != nil {
+				log.Printf("[CapabilityTest-Retry] 获取优先发送槽位失败: job=%s, protocol=%s, model=%s, err=%v",
+					jobID, req.Protocol, req.Model, err)
+				capabilityJobs.update(jobID, func(j *CapabilityTestJob) {
+					errMsg := fmt.Sprintf("retry_queue_cancelled: %v", err)
+					updateCapabilityJobModelResult(j, req.Protocol, req.Model, CapabilityModelStatusFailed, ModelTestResult{
+						Model:    req.Model,
+						Error:    &errMsg,
+						TestedAt: time.Now().Format(time.RFC3339Nano),
+					})
+				})
+				return
+			}
+
 			modelResult := executeModelTest(retryCtx, channel, req.Protocol, req.Model, timeout, jobID, cfgManager, id, channelKind, apiKey, channelLogStore)
 
 			// 更新协议测试时间戳；协议/任务整体状态由统一重算逻辑维护

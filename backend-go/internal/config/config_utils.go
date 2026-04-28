@@ -122,6 +122,37 @@ func GetChannelStatus(upstream *UpstreamConfig) string {
 	return upstream.Status
 }
 
+func GetChannelAdminState(upstream *UpstreamConfig) string {
+	return GetChannelStatus(upstream)
+}
+
+func GetChannelRuntimeState(upstream *UpstreamConfig) string {
+	if upstream == nil {
+		return "unknown"
+	}
+	if len(upstream.DisabledAPIKeys) > 0 {
+		return "disabled_keys_present"
+	}
+	if len(upstream.APIKeys) == 0 {
+		return "no_active_keys"
+	}
+	return "ready"
+}
+
+func GetChannelEffectiveState(upstream *UpstreamConfig) string {
+	if upstream == nil {
+		return "unknown"
+	}
+	adminState := GetChannelAdminState(upstream)
+	if adminState != "active" {
+		return adminState
+	}
+	if len(upstream.APIKeys) == 0 {
+		return "degraded"
+	}
+	return "active"
+}
+
 // GetChannelPriority 获取渠道优先级（带默认值处理）
 func GetChannelPriority(upstream *UpstreamConfig, index int) int {
 	if upstream.Priority == 0 {
@@ -229,17 +260,110 @@ func (u *UpstreamConfig) Clone() *UpstreamConfig {
 // SupportsModel 检查渠道是否支持指定模型
 // 空列表表示支持所有模型，支持通配符前缀匹配（如 gpt-4* 匹配 gpt-4o）
 func (u *UpstreamConfig) SupportsModel(model string) bool {
+	supported, _ := u.ExplainModelSupport(model)
+	return supported
+}
+
+func (u *UpstreamConfig) ExplainModelSupport(model string) (bool, string) {
 	if len(u.SupportedModels) == 0 {
+		return true, ""
+	}
+
+	includes, excludes := splitSupportedModelRules(u.SupportedModels)
+	for _, pattern := range excludes {
+		if matchSupportedModelPattern(pattern, model) {
+			return false, "命中排除规则 !" + pattern
+		}
+	}
+	if len(includes) == 0 {
+		return true, ""
+	}
+	for _, pattern := range includes {
+		if matchSupportedModelPattern(pattern, model) {
+			return true, ""
+		}
+	}
+	return false, "未命中包含规则"
+}
+
+func splitSupportedModelRules(rules []string) (includes []string, excludes []string) {
+	includes = make([]string, 0, len(rules))
+	excludes = make([]string, 0, len(rules))
+	for _, rawRule := range rules {
+		rule := strings.TrimSpace(rawRule)
+		if rule == "" {
+			continue
+		}
+		if strings.HasPrefix(rule, "!") {
+			pattern := strings.TrimSpace(strings.TrimPrefix(rule, "!"))
+			if strings.HasPrefix(pattern, "!") {
+				continue
+			}
+			if isValidSupportedModelPattern(pattern) {
+				excludes = append(excludes, pattern)
+			}
+			continue
+		}
+		if isValidSupportedModelPattern(rule) {
+			includes = append(includes, rule)
+		}
+	}
+	return includes, excludes
+}
+
+func isValidSupportedModelPattern(pattern string) bool {
+	trimmed := strings.TrimSpace(pattern)
+	if trimmed == "" {
+		return false
+	}
+	if strings.Count(trimmed, "!") > 1 {
+		return false
+	}
+	normalized := trimmed
+	if strings.HasPrefix(normalized, "!") {
+		normalized = strings.TrimSpace(strings.TrimPrefix(normalized, "!"))
+	}
+	if normalized == "" || strings.HasPrefix(normalized, "!") {
+		return false
+	}
+	starCount := strings.Count(normalized, "*")
+	if starCount == 0 {
 		return true
 	}
-	for _, pattern := range u.SupportedModels {
-		if strings.HasSuffix(pattern, "*") {
-			if strings.HasPrefix(model, strings.TrimSuffix(pattern, "*")) {
-				return true
-			}
-		} else if pattern == model {
-			return true
-		}
+	if normalized == "*" {
+		return true
+	}
+	if starCount == 1 {
+		return strings.HasPrefix(normalized, "*") || strings.HasSuffix(normalized, "*")
+	}
+	if starCount == 2 {
+		return strings.HasPrefix(normalized, "*") && strings.HasSuffix(normalized, "*") && strings.Trim(normalized, "*") != ""
+	}
+	return false
+}
+
+func matchSupportedModelPattern(pattern, model string) bool {
+	if !isValidSupportedModelPattern(pattern) {
+		return false
+	}
+	if strings.HasPrefix(pattern, "!") {
+		pattern = strings.TrimSpace(strings.TrimPrefix(pattern, "!"))
+	}
+	if pattern == "*" {
+		return true
+	}
+	starCount := strings.Count(pattern, "*")
+	if starCount == 0 {
+		return pattern == model
+	}
+	if strings.HasPrefix(pattern, "*") && strings.HasSuffix(pattern, "*") {
+		return strings.Contains(model, strings.Trim(pattern, "*"))
+	}
+	if strings.HasPrefix(pattern, "*") {
+		return strings.HasSuffix(model, strings.TrimPrefix(pattern, "*"))
+	}
+	if strings.HasSuffix(pattern, "*") {
+		return strings.HasPrefix(model, strings.TrimSuffix(pattern, "*"))
 	}
 	return false
 }
