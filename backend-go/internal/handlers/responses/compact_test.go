@@ -16,6 +16,11 @@ import (
 )
 
 func newCompactTestRouter(t *testing.T, upstreams []config.UpstreamConfig) (*gin.Engine, *scheduler.ChannelScheduler) {
+	router, sch, _ := newCompactTestRouterWithConfig(t, upstreams)
+	return router, sch
+}
+
+func newCompactTestRouterWithConfig(t *testing.T, upstreams []config.UpstreamConfig) (*gin.Engine, *scheduler.ChannelScheduler, *config.ConfigManager) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
@@ -54,7 +59,7 @@ func newCompactTestRouter(t *testing.T, upstreams []config.UpstreamConfig) (*gin
 
 	r := gin.New()
 	r.POST("/v1/responses/compact", CompactHandler(envCfg, cfgManager, nil, sch))
-	return r, sch
+	return r, sch, cfgManager
 }
 
 func performCompactRequest(t *testing.T, router *gin.Engine, body string) *httptest.ResponseRecorder {
@@ -272,5 +277,125 @@ func TestCompactHandler_MultiChannelFailoverRecordsFailedChannelLogs(t *testing.
 	successMetrics := sch.GetResponsesMetricsManager().ToResponseMultiURL(1, []string{successUpstream.URL}, []string{"sk-ok"}, "responses", 0)
 	if successMetrics.RequestCount != 1 || successMetrics.SuccessCount != 1 {
 		t.Fatalf("success channel metrics = %+v, want requestCount=1 successCount=1", successMetrics)
+	}
+}
+
+func TestCompactHandler_ModelRouteUnavailableSkipsCooldownAndBreaker(t *testing.T) {
+	var attempts int
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		w.Header().Set("Content-Type", "application/json")
+		if attempts == 1 {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = io.WriteString(w, `{"error":{"code":"model_not_found","message":"No available channel for model gpt-5 under group default"}}`)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, `{"id":"resp_compact_ok","status":"completed","output":[],"usage":{"input_tokens":0,"output_tokens":0,"total_tokens":0}}`)
+	}))
+	defer upstream.Close()
+
+	router, sch, cfgManager := newCompactTestRouterWithConfig(t, []config.UpstreamConfig{{
+		Name:        "route-miss-then-ok",
+		BaseURL:     upstream.URL,
+		APIKeys:     []string{"sk-route-miss", "sk-ok"},
+		ServiceType: "responses",
+		Status:      "active",
+	}})
+
+	w := performCompactRequest(t, router, `{"model":"gpt-5","input":"hello"}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if attempts != 2 {
+		t.Fatalf("attempts = %d, want 2", attempts)
+	}
+	if cfgManager.IsKeyFailed("sk-route-miss", "Responses") {
+		t.Fatal("route-miss key was marked failed, want no cooldown")
+	}
+
+	metricsResp := sch.GetResponsesMetricsManager().ToResponseMultiURL(0, []string{upstream.URL}, []string{"sk-route-miss", "sk-ok"}, "responses", 0)
+	if metricsResp.FailureCount != 0 {
+		t.Fatalf("failureCount = %d, want 0", metricsResp.FailureCount)
+	}
+	if metricsResp.SuccessCount != 1 {
+		t.Fatalf("successCount = %d, want 1", metricsResp.SuccessCount)
+	}
+
+	logs := sch.GetChannelLogStore(scheduler.ChannelKindResponses).Get(0)
+	if len(logs) != 2 {
+		t.Fatalf("logs count = %d, want 2", len(logs))
+	}
+	var foundRouteMiss, foundSuccess bool
+	for _, entry := range logs {
+		if !entry.Success && entry.StatusCode == http.StatusNotFound {
+			foundRouteMiss = true
+		}
+		if entry.Success && entry.StatusCode == http.StatusOK {
+			foundSuccess = true
+		}
+	}
+	if !foundRouteMiss {
+		t.Fatalf("logs = %+v, want failed 404 route miss log", logs)
+	}
+	if !foundSuccess {
+		t.Fatalf("logs = %+v, want success 200 log", logs)
+	}
+}
+
+func TestCompactHandler_MultiChannelModelRouteUnavailableSkipsCooldownAndBreaker(t *testing.T) {
+	var attempts int
+	firstChannel := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		w.Header().Set("Content-Type", "application/json")
+		if attempts == 1 {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = io.WriteString(w, `{"error":{"code":"model_not_found","message":"No available channel for model gpt-5 under group default"}}`)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, `{"id":"resp_compact_ok","status":"completed","output":[],"usage":{"input_tokens":0,"output_tokens":0,"total_tokens":0}}`)
+	}))
+	defer firstChannel.Close()
+
+	secondChannel := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatalf("unexpected request to second channel")
+	}))
+	defer secondChannel.Close()
+
+	router, sch, cfgManager := newCompactTestRouterWithConfig(t, []config.UpstreamConfig{
+		{
+			Name:        "route-miss-then-ok",
+			BaseURL:     firstChannel.URL,
+			APIKeys:     []string{"sk-route-miss", "sk-ok"},
+			ServiceType: "responses",
+			Status:      "active",
+		},
+		{
+			Name:        "unused-channel",
+			BaseURL:     secondChannel.URL,
+			APIKeys:     []string{"sk-unused"},
+			ServiceType: "responses",
+			Status:      "active",
+		},
+	})
+
+	w := performCompactRequest(t, router, `{"model":"gpt-5","input":"hello"}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if attempts != 2 {
+		t.Fatalf("attempts = %d, want 2", attempts)
+	}
+	if cfgManager.IsKeyFailed("sk-route-miss", "Responses") {
+		t.Fatal("route-miss key was marked failed, want no cooldown")
+	}
+
+	metricsResp := sch.GetResponsesMetricsManager().ToResponseMultiURL(0, []string{firstChannel.URL}, []string{"sk-route-miss", "sk-ok"}, "responses", 0)
+	if metricsResp.FailureCount != 0 {
+		t.Fatalf("failureCount = %d, want 0", metricsResp.FailureCount)
+	}
+	if metricsResp.SuccessCount != 1 {
+		t.Fatalf("successCount = %d, want 1", metricsResp.SuccessCount)
 	}
 }

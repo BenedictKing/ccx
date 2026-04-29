@@ -99,6 +99,54 @@ Use this contract when adding or changing a protocol proxy family under `backend
 - Common failover tests for client cancellation, stream preflight classification, and channel log terminal states.
 - At minimum run `go test ./internal/handlers/...` after handler changes.
 
+## Local Retry Loop Contracts
+
+### Scope / Trigger
+
+Use this contract when a protocol handler keeps a local key retry loop instead of delegating the whole attempt to `common.TryUpstreamWithAllKeys(...)`.
+Current example: `backend-go/internal/handlers/responses/compact.go`.
+
+### Signatures
+
+- Shared classifier: `common.IsModelRouteUnavailableError(bodyBytes []byte) bool`.
+- Local retry record helper should decide both cooldown and metrics failure behavior before calling:
+  - `ConfigManager.MarkKeyAsFailed(apiKey, apiType)`
+  - `ChannelScheduler.RecordFailure(baseURL, apiKey, serviceType, kind)`
+
+### Contracts
+
+- A routed-model-missing upstream response is identified by:
+  - `error.code == "model_not_found"`
+  - one of `message`, `detail`, `error_description`, or `msg` contains both `No available channel for model` and `under group`
+- This case must continue failover to the next key/channel.
+- This case must not write key cooldown state through `MarkKeyAsFailed`.
+- This case must not count as a breaker/metrics failure through `RecordFailure`.
+- It should still write a failed channel log entry for observability.
+
+### Validation & Error Matrix
+
+| Case | Expected behavior |
+|------|-------------------|
+| Routed model miss | Try next key/channel, no cooldown, no breaker failure, log failed attempt |
+| Auth/quota/rate-limit failure | Apply normal classifier, mark failed or blacklist as configured, record metrics failure |
+| Non-retryable client error | Return upstream response without retrying |
+| Successful retry after routed model miss | Return success and count only the successful metrics request |
+
+### Good/Base/Bad Cases
+
+- Good: `responses/compact.go` calls `common.IsModelRouteUnavailableError(...)` before recording compact failover side effects.
+- Base: Shared `common.TryUpstreamWithAllKeys(...)` already handles routed model misses internally.
+- Bad: A local loop calls `ShouldRetryWithNextKey(...)`, then unconditionally calls `MarkKeyAsFailed(...)` and `RecordFailure(...)` for all retryable responses.
+
+### Tests Required
+
+- Add handler-level regression tests when changing a local retry loop.
+- Assert all of these for routed model misses:
+  - the next key/channel is attempted,
+  - `ConfigManager.IsKeyFailed(key, apiType)` remains false,
+  - metrics `FailureCount` remains unchanged for that key/channel,
+  - channel logs still include the failed routed-model attempt.
+
 ---
 
 ## Code Review Checklist

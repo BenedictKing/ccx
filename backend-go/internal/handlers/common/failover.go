@@ -539,9 +539,9 @@ func isNonRetryableError(bodyBytes []byte) bool {
 	return false
 }
 
-// isModelRouteUnavailableError 判断错误是否表示“当前上游路由组没有该模型”。
+// IsModelRouteUnavailableError 判断错误是否表示“当前上游路由组没有该模型”。
 // 这类错误应该继续 failover，但不应计入 breaker 或 key cooldown。
-func isModelRouteUnavailableError(bodyBytes []byte) bool {
+func IsModelRouteUnavailableError(bodyBytes []byte) bool {
 	var errResp map[string]interface{}
 	if err := json.Unmarshal(bodyBytes, &errResp); err != nil {
 		return false
@@ -556,6 +556,10 @@ func isModelRouteUnavailableError(bodyBytes []byte) bool {
 		return false
 	}
 	return matchesModelRouteUnavailable(errObj)
+}
+
+func isModelRouteUnavailableError(bodyBytes []byte) bool {
+	return IsModelRouteUnavailableError(bodyBytes)
 }
 
 func matchesModelRouteUnavailable(m map[string]interface{}) bool {

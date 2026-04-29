@@ -24,10 +24,11 @@ import (
 
 // compactError 封装 compact 请求错误
 type compactError struct {
-	status         int
-	body           []byte
-	shouldFailover bool
-	err            error
+	status                 int
+	body                   []byte
+	shouldFailover         bool
+	skipCooldownAndBreaker bool
+	err                    error
 }
 
 func (e *compactError) errorInfo() string {
@@ -127,8 +128,7 @@ func handleSingleChannelCompact(
 			lastErr = compactErr
 			if compactErr.shouldFailover {
 				failedKeys[apiKey] = true
-				cfgManager.MarkKeyAsFailed(apiKey, "Responses")
-				channelScheduler.RecordFailure(upstream.BaseURL, apiKey, metricsServiceType, scheduler.ChannelKindResponses)
+				recordCompactFailover(cfgManager, channelScheduler, upstream, apiKey, metricsServiceType, compactErr)
 				common.RecordChannelLog(channelLogStore, channelIndex, requestModel, "", compactErr.status, time.Since(attemptStart).Milliseconds(), false, apiKey, upstream.BaseURL, compactErr.errorInfo(), "Responses", attempt > 0)
 				continue
 			}
@@ -287,8 +287,7 @@ func tryCompactChannelWithAllKeys(
 			lastErr = compactErr
 			if compactErr.shouldFailover {
 				failedKeys[apiKey] = true
-				cfgManager.MarkKeyAsFailed(apiKey, "Responses")
-				channelScheduler.RecordFailure(upstream.BaseURL, apiKey, metricsServiceType, scheduler.ChannelKindResponses)
+				recordCompactFailover(cfgManager, channelScheduler, upstream, apiKey, metricsServiceType, compactErr)
 				common.RecordChannelLog(channelLogStore, channelIndex, requestModel, "", compactErr.status, time.Since(attemptStart).Milliseconds(), false, apiKey, upstream.BaseURL, compactErr.errorInfo(), "Responses", attempt > 0)
 				// 释放探针
 				probeKey := upstream.BaseURL + "|" + apiKey
@@ -348,13 +347,42 @@ func tryCompactWithKey(
 	// 判断是否需要故障转移
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		shouldFailover, _ := common.ShouldRetryWithNextKey(resp.StatusCode, respBody, cfgManager.GetFuzzyModeEnabled(), "Responses")
-		return false, &compactError{status: resp.StatusCode, body: respBody, shouldFailover: shouldFailover}
+		skipCooldownAndBreaker := false
+		if common.IsModelRouteUnavailableError(respBody) {
+			shouldFailover = true
+			skipCooldownAndBreaker = true
+			log.Printf("[Compact-Failover-Model] route group has no matching model, skip current attempt: baseURL=%s, key=%s, status=%d",
+				utils.RedactURLCredentials(upstream.BaseURL), utils.MaskAPIKey(apiKey), resp.StatusCode)
+		}
+		return false, &compactError{
+			status:                 resp.StatusCode,
+			body:                   respBody,
+			shouldFailover:         shouldFailover,
+			skipCooldownAndBreaker: skipCooldownAndBreaker,
+		}
 	}
 
 	// 成功
 	utils.ForwardResponseHeaders(resp.Header, c.Writer)
 	c.Data(resp.StatusCode, "application/json", respBody)
 	return true, nil
+}
+
+func recordCompactFailover(
+	cfgManager *config.ConfigManager,
+	channelScheduler *scheduler.ChannelScheduler,
+	upstream *config.UpstreamConfig,
+	apiKey string,
+	metricsServiceType string,
+	compactErr *compactError,
+) {
+	if compactErr != nil && compactErr.skipCooldownAndBreaker {
+		log.Printf("[Compact-Failover-Model] skip cooldown and breaker for model routing miss: channel=%s, key=%s",
+			upstream.Name, utils.MaskAPIKey(apiKey))
+		return
+	}
+	cfgManager.MarkKeyAsFailed(apiKey, "Responses")
+	channelScheduler.RecordFailure(upstream.BaseURL, apiKey, metricsServiceType, scheduler.ChannelKindResponses)
 }
 
 func extractCompactRequestModel(bodyBytes []byte) string {
