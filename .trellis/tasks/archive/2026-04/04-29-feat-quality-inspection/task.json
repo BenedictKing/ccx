@@ -1,0 +1,53 @@
+{
+  "id": "feat-quality-inspection",
+  "name": "feat-quality-inspection",
+  "title": "Quality inspection follow-up",
+  "description": "",
+  "status": "completed",
+  "dev_type": "backend",
+  "scope": null,
+  "package": null,
+  "priority": "P1",
+  "creator": "skip",
+  "assignee": "skip",
+  "createdAt": "2026-04-29",
+  "completedAt": "2026-04-29",
+  "branch": "codex/claude-channel-rules-passthrough",
+  "base_branch": "codex/claude-channel-rules-passthrough",
+  "worktree_path": null,
+  "current_phase": 5,
+  "next_action": [
+    {
+      "phase": 1,
+      "action": "brainstorm"
+    },
+    {
+      "phase": 2,
+      "action": "research"
+    },
+    {
+      "phase": 3,
+      "action": "implement"
+    },
+    {
+      "phase": 4,
+      "action": "check"
+    },
+    {
+      "phase": 5,
+      "action": "update-spec"
+    },
+    {
+      "phase": 6,
+      "action": "record-session"
+    }
+  ],
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "Implemented compact routed-model-miss failover fix; validated Trellis multi-agent status scripts on Windows; updated backend quality spec with local retry loop contract. Verification passed: python -m py_compile for Trellis scripts; status.py, status.py --list, status.py --registry; git diff --check; cd backend-go && go test ./internal/handlers/responses ./internal/handlers/common; cd backend-go && go test ./internal/handlers/...; cd backend-go && go test ./....",
+  "meta": {}
+}
