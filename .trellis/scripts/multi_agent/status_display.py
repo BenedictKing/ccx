@@ -47,7 +47,7 @@ def is_running(pid: int | str | None) -> bool:
         pid_int = int(pid)
         os.kill(pid_int, 0)
         return True
-    except (ProcessLookupError, ValueError, PermissionError, TypeError):
+    except (ProcessLookupError, ValueError, PermissionError, TypeError, OSError):
         return False
 
 
@@ -212,7 +212,7 @@ def cmd_list(repo_root: Path) -> int:
 def cmd_summary(repo_root: Path, filter_assignee: str | None = None) -> int:
     """Show summary of all tasks."""
     # Import lazily to avoid circular import at module level
-    from .status_monitor import get_last_tool, get_last_message
+    from status_monitor import get_last_tool, get_last_message
 
     ensure_developer(repo_root)
 

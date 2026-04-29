@@ -32,6 +32,7 @@ Usage:
 
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar, Literal
@@ -336,7 +337,8 @@ class CLIAdapter:
             cmd = ["iflow", "-y", "-p"]
             cmd.append(f"${mapped_agent} {prompt}")
         elif self.platform == "codex":
-            cmd = ["codex", "exec"]
+            codex_bin = "codex.cmd" if sys.platform == "win32" else "codex"
+            cmd = [codex_bin, "exec"]
             cmd.append(prompt)
         elif self.platform == "kiro":
             cmd = ["kiro", "run", prompt]
@@ -402,7 +404,8 @@ class CLIAdapter:
             # session_id is ignored as iFlow doesn't support session IDs
             return ["iflow", "-c"]
         elif self.platform == "codex":
-            return ["codex", "resume", session_id]
+            codex_bin = "codex.cmd" if sys.platform == "win32" else "codex"
+            return [codex_bin, "resume", session_id]
         elif self.platform == "kiro":
             return ["kiro", "resume", session_id]
         elif self.platform == "gemini":

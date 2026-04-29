@@ -18,7 +18,7 @@ from pathlib import Path
 
 from common.log import Colors
 
-from .status_display import find_agent
+from status_display import find_agent
 
 
 # =============================================================================
