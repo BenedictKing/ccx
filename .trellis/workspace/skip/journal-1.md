@@ -196,3 +196,56 @@ Collected usage for Claude sub2api passthrough, pushed tag release workflow, and
 ### Next Steps
 
 - None - task complete
+
+
+## Session 5: Quality inspection follow-up
+
+**Date**: 2026-04-29
+**Task**: Quality inspection follow-up
+**Branch**: `codex/claude-channel-rules-passthrough`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+﻿| Area | Result |
+|------|--------|
+| Trellis task | Created and archived `04-29-feat-quality-inspection` after completing quality follow-up. |
+| Trellis scripts | Fixed Windows Codex command resolution, direct multi-agent status imports, and Windows PID probing for stale registered agents. |
+| Responses compact | Reused shared routed-model-miss classification so compact failover continues to the next key/channel without writing cooldown or breaker failures. |
+| Tests | Added compact single-channel and multi-channel regressions for `model_not_found` / `No available channel for model ... under group ...`. |
+| Specs | Documented local retry-loop contracts in backend quality guidelines. |
+| Cleanup | Removed untracked `.agent-log`, task copies, Bun cache, and temp directories from parallel worktrees. |
+
+**Validation**:
+- `python -m py_compile .trellis/scripts/common/cli_adapter.py .trellis/scripts/multi_agent/status.py .trellis/scripts/multi_agent/status_display.py .trellis/scripts/multi_agent/status_monitor.py`
+- `python ./.trellis/scripts/multi_agent/status.py`
+- `python ./.trellis/scripts/multi_agent/status.py --list`
+- `python ./.trellis/scripts/multi_agent/status.py --registry`
+- `git diff --check`
+- `cd backend-go && go test ./...`
+- `cd frontend && bun run type-check`
+- `cd frontend && bun run build`
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f29a437` | (see git log) |
+| `aaf1cef` | (see git log) |
+| `16018c3` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
