@@ -247,3 +247,5 @@ docs/claude-code-investigation-*.md
 
 # Nested external repository, not tracked by this repo
 /sub2api/
+/ccLoad/
+/ccLoad.md
