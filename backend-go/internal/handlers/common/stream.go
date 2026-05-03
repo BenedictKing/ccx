@@ -910,21 +910,21 @@ func HandleStreamResponse(
 	// 渠道级开关：true=直接透传；false=走本地流事件处理链
 	if upstream == nil || ShouldDirectClaudePassthroughForKey(upstream, SelectedAPIKeyFromContext(c)) {
 		var collectedUsage CollectedUsageData
+		var outputText bytes.Buffer
 		messageStartInputTokens := 0
 		for _, buffered := range preflight.BufferedEvents {
 			collectPassthroughStreamUsage(buffered, &collectedUsage, &messageStartInputTokens)
+			ExtractTextFromEvent(buffered, &outputText)
 			fmt.Fprint(c.Writer, buffered) //nolint:errcheck
 			flusher.Flush()
 		}
 		for event := range eventChan {
 			collectPassthroughStreamUsage(event, &collectedUsage, &messageStartInputTokens)
+			ExtractTextFromEvent(event, &outputText)
 			fmt.Fprint(c.Writer, event) //nolint:errcheck
 			flusher.Flush()
 		}
-		if collectedUsage.InputTokens == 0 && messageStartInputTokens > 0 {
-			collectedUsage.InputTokens = messageStartInputTokens
-		}
-		return usageFromCollectedUsage(collectedUsage), nil
+		return finalizePassthroughStreamUsage(collectedUsage, messageStartInputTokens, requestBody, outputText.String(), upstream, envCfg), nil
 	}
 
 	if envCfg == nil {
@@ -962,6 +962,89 @@ func extractRequestModelFromRequestBody(requestBody []byte) string {
 }
 
 // ========== Token 检测和修补相关函数 ==========
+
+// finalizePassthroughStreamUsage converts directly forwarded SSE usage into
+// the metrics shape without changing events sent to the client.
+func finalizePassthroughStreamUsage(
+	collectedUsage CollectedUsageData,
+	messageStartInputTokens int,
+	requestBody []byte,
+	outputText string,
+	upstream *config.UpstreamConfig,
+	envCfg *config.EnvConfig,
+) *types.Usage {
+	if collectedUsage.InputTokens == 0 && messageStartInputTokens > 0 {
+		collectedUsage.InputTokens = messageStartInputTokens
+	}
+
+	streamCtx := &StreamContext{
+		CollectedUsage:          collectedUsage,
+		MessageStartInputTokens: messageStartInputTokens,
+	}
+	enableLog := envCfg != nil && envCfg.EnableResponseLogs && envCfg.ShouldLog("debug")
+	inferImplicitCacheRead(streamCtx, enableLog)
+
+	lowQuality := upstream != nil && upstream.LowQuality
+	return normalizeUsageForMetrics(usageFromCollectedUsage(streamCtx.CollectedUsage), requestBody, outputText, lowQuality, enableLog)
+}
+
+func normalizeUsageForMetrics(usage *types.Usage, requestBody []byte, outputText string, lowQuality bool, enableLog bool) *types.Usage {
+	if !lowQuality {
+		return usage
+	}
+
+	estimatedInput := utils.EstimateRequestTokens(requestBody)
+	estimatedOutput := utils.EstimateTokens(outputText)
+	if usage == nil {
+		if estimatedInput <= 0 && estimatedOutput <= 0 {
+			return nil
+		}
+		return &types.Usage{
+			InputTokens:  max(estimatedInput, 0),
+			OutputTokens: max(estimatedOutput, 0),
+		}
+	}
+
+	normalized := *usage
+	hasCacheTokens := normalized.CacheCreationInputTokens > 0 ||
+		normalized.CacheReadInputTokens > 0 ||
+		normalized.CacheCreation5mInputTokens > 0 ||
+		normalized.CacheCreation1hInputTokens > 0
+
+	if estimatedInput > 0 {
+		switch {
+		case normalized.InputTokens > 0 && !hasCacheTokens:
+			deviation := float64(abs(normalized.InputTokens-estimatedInput)) / float64(estimatedInput)
+			if deviation > 0.05 {
+				if enableLog {
+					log.Printf("[Messages-Usage-LowQuality] metrics input_tokens %d -> %d (deviation %.1f%% > 5%%)",
+						normalized.InputTokens, estimatedInput, deviation*100)
+				}
+				normalized.InputTokens = estimatedInput
+			}
+		case normalized.InputTokens <= 1 && !hasCacheTokens:
+			normalized.InputTokens = estimatedInput
+		}
+	}
+
+	if estimatedOutput > 0 {
+		switch {
+		case normalized.OutputTokens > 0:
+			deviation := float64(abs(normalized.OutputTokens-estimatedOutput)) / float64(estimatedOutput)
+			if deviation > 0.05 {
+				if enableLog {
+					log.Printf("[Messages-Usage-LowQuality] metrics output_tokens %d -> %d (deviation %.1f%% > 5%%)",
+						normalized.OutputTokens, estimatedOutput, deviation*100)
+				}
+				normalized.OutputTokens = estimatedOutput
+			}
+		case normalized.OutputTokens <= 1:
+			normalized.OutputTokens = estimatedOutput
+		}
+	}
+
+	return &normalized
+}
 
 // CheckEventUsageStatus 检测事件是否包含 usage 字段
 func CheckEventUsageStatus(event string, enableLog bool) (bool, bool, bool, CollectedUsageData) {
@@ -1089,6 +1172,47 @@ func extractUsageFromJSONPayload(payload map[string]interface{}) *types.Usage {
 		}
 	}
 	return nil
+}
+
+func extractOutputTextFromJSONPayload(payload map[string]interface{}) string {
+	var buf strings.Builder
+
+	appendContentText := func(items interface{}) {
+		content, ok := items.([]interface{})
+		if !ok {
+			return
+		}
+		for _, item := range content {
+			switch v := item.(type) {
+			case string:
+				buf.WriteString(v)
+			case map[string]interface{}:
+				if text, ok := v["text"].(string); ok {
+					buf.WriteString(text)
+				}
+			}
+		}
+	}
+
+	appendContentText(payload["content"])
+	if choices, ok := payload["choices"].([]interface{}); ok {
+		for _, choice := range choices {
+			choiceMap, ok := choice.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			if message, ok := choiceMap["message"].(map[string]interface{}); ok {
+				switch content := message["content"].(type) {
+				case string:
+					buf.WriteString(content)
+				default:
+					appendContentText(content)
+				}
+			}
+		}
+	}
+
+	return buf.String()
 }
 
 func collectPassthroughStreamUsage(event string, collected *CollectedUsageData, messageStartInputTokens *int) {
@@ -1324,7 +1448,12 @@ func patchUsageFieldsWithLog(usage map[string]interface{}, estimatedInput, estim
 
 	// 低质量渠道模式：偏差 > 5% 时使用本地估算值
 	if lowQuality {
-		if v, ok := usage["input_tokens"].(float64); ok && estimatedInput > 0 {
+		if hasCacheTokens {
+			if enableLog {
+				log.Printf("[Messages-Stream-Token-LowQuality] %s: cache tokens present, keep upstream input_tokens=%v",
+					location, usage["input_tokens"])
+			}
+		} else if v, ok := usage["input_tokens"].(float64); ok && estimatedInput > 0 {
 			currentInput := int(v)
 			if currentInput > 0 {
 				deviation := float64(abs(currentInput-estimatedInput)) / float64(estimatedInput)

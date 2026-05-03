@@ -57,9 +57,17 @@ func PassthroughResponse(c *gin.Context, resp *http.Response) error {
 	return err
 }
 
+// PassthroughUsageOptions controls metrics-only usage normalization for
+// passthrough responses. The client response is still forwarded unchanged.
+type PassthroughUsageOptions struct {
+	RequestBody []byte
+	LowQuality  bool
+	EnableLog   bool
+}
+
 // PassthroughJSONResponseWithUsage forwards a JSON response unchanged while
 // best-effort decoding usage for internal metrics.
-func PassthroughJSONResponseWithUsage(c *gin.Context, resp *http.Response) (*types.Usage, error) {
+func PassthroughJSONResponseWithUsage(c *gin.Context, resp *http.Response, opts ...PassthroughUsageOptions) (*types.Usage, error) {
 	utils.ForwardResponseHeaders(resp.Header, c.Writer)
 	c.Status(resp.StatusCode)
 
@@ -73,7 +81,18 @@ func PassthroughJSONResponseWithUsage(c *gin.Context, resp *http.Response) (*typ
 		return nil, nil
 	}
 
-	return extractUsageFromJSONPayload(payload), nil
+	usage := extractUsageFromJSONPayload(payload)
+	if len(opts) == 0 {
+		return usage, nil
+	}
+
+	return normalizeUsageForMetrics(
+		usage,
+		opts[0].RequestBody,
+		extractOutputTextFromJSONPayload(payload),
+		opts[0].LowQuality,
+		opts[0].EnableLog,
+	), nil
 }
 
 // PassthroughJSONResponse 在透传响应给客户端的同时，用流式 Decoder 尝试解析 JSON。

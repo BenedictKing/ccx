@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/BenedictKing/ccx/internal/config"
+	"github.com/BenedictKing/ccx/internal/types"
 	"github.com/BenedictKing/ccx/internal/utils"
 	"github.com/gin-gonic/gin"
 )
@@ -217,6 +218,46 @@ func TestCollectPassthroughStreamUsage_FallsBackToMessageStartInput(t *testing.T
 }
 
 // TestInferImplicitCacheRead 测试隐式缓存推断逻辑
+func TestFinalizePassthroughStreamUsage_InferImplicitCacheRead(t *testing.T) {
+	usage := finalizePassthroughStreamUsage(
+		CollectedUsageData{InputTokens: 20000, OutputTokens: 100},
+		100000,
+		[]byte(`{"messages":[{"role":"user","content":"cached prompt"}]}`),
+		"stream output",
+		&config.UpstreamConfig{},
+		&config.EnvConfig{},
+	)
+	if usage == nil {
+		t.Fatal("usage is nil")
+	}
+	if usage.InputTokens != 20000 || usage.CacheReadInputTokens != 80000 || usage.OutputTokens != 100 {
+		t.Fatalf("usage = %+v, want input=20000 cache_read=80000 output=100", usage)
+	}
+}
+
+func TestNormalizeUsageForMetrics_LowQualityKeepsCacheInput(t *testing.T) {
+	requestBody := []byte(`{"messages":[{"role":"user","content":"this request body is intentionally long enough to estimate more than one token for low quality metrics"}]}`)
+	outputText := "this output text is also long enough to estimate more than one token"
+
+	usage := normalizeUsageForMetrics(&types.Usage{
+		InputTokens:          20000,
+		OutputTokens:         1,
+		CacheReadInputTokens: 80000,
+	}, requestBody, outputText, true, false)
+	if usage == nil {
+		t.Fatal("usage is nil")
+	}
+	if usage.InputTokens != 20000 {
+		t.Fatalf("input_tokens = %d, want cached billing input to be preserved", usage.InputTokens)
+	}
+	if usage.CacheReadInputTokens != 80000 {
+		t.Fatalf("cache_read_input_tokens = %d, want 80000", usage.CacheReadInputTokens)
+	}
+	if usage.OutputTokens <= 1 {
+		t.Fatalf("output_tokens = %d, want lowQuality output estimate", usage.OutputTokens)
+	}
+}
+
 func TestInferImplicitCacheRead(t *testing.T) {
 	tests := []struct {
 		name                    string

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/metrics"
@@ -37,11 +38,18 @@ func setupMessagesTestConfigManager(t *testing.T, upstream []config.UpstreamConf
 
 func newMessagesTestRouter(t *testing.T, upstream config.UpstreamConfig) *gin.Engine {
 	t.Helper()
+	r, _ := newMessagesTestRouterWithMetrics(t, upstream)
+	return r
+}
+
+func newMessagesTestRouterWithMetrics(t *testing.T, upstream config.UpstreamConfig) (*gin.Engine, *metrics.MetricsManager) {
+	t.Helper()
 	gin.SetMode(gin.TestMode)
 	cfgManager := setupMessagesTestConfigManager(t, []config.UpstreamConfig{upstream})
+	messagesMetrics := metrics.NewMetricsManager()
 	channelScheduler := scheduler.NewChannelScheduler(
 		cfgManager,
-		metrics.NewMetricsManager(),
+		messagesMetrics,
 		metrics.NewMetricsManager(),
 		metrics.NewMetricsManager(),
 		metrics.NewMetricsManager(),
@@ -55,7 +63,7 @@ func newMessagesTestRouter(t *testing.T, upstream config.UpstreamConfig) *gin.En
 
 	r := gin.New()
 	r.POST("/v1/messages", Handler(envCfg, cfgManager, channelScheduler))
-	return r
+	return r, messagesMetrics
 }
 
 func performMessagesHandlerRequest(t *testing.T, router *gin.Engine, body string) *httptest.ResponseRecorder {
@@ -82,6 +90,52 @@ func TestMessagesHandler_InvalidJSONReturns400(t *testing.T) {
 	}
 	if got := w.Body.String(); !bytes.Contains([]byte(got), []byte("Invalid request body")) {
 		t.Fatalf("body = %s, want invalid request body error", got)
+	}
+}
+
+func TestMessagesHandler_Sub2APIPassthroughLowQualityRecordsNormalizedMetrics(t *testing.T) {
+	enabled := true
+	disabled := false
+	upstreamServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"id":"msg_1","type":"message","role":"assistant","content":[{"type":"text","text":"this response is long enough to estimate more than one output token"}],"stop_reason":"end_turn","usage":{"input_tokens":1,"output_tokens":1}}`))
+	}))
+	defer upstreamServer.Close()
+
+	router, messagesMetrics := newMessagesTestRouterWithMetrics(t, config.UpstreamConfig{
+		Name:                            "sub2api-low-quality",
+		BaseURL:                         upstreamServer.URL,
+		APIKeys:                         []string{"sk-ant-test"},
+		ServiceType:                     "claude",
+		Status:                          "active",
+		LowQuality:                      true,
+		Sub2APIPassthroughEnabled:       &enabled,
+		StreamPassthroughEnabled:        &disabled,
+		StrictRequestPassthroughEnabled: &enabled,
+	})
+
+	body := `{"model":"claude-3-5-sonnet","messages":[{"role":"user","content":[{"type":"text","text":"this request body is intentionally long enough to estimate more than one input token for low quality usage metrics"}]}]}`
+	w := performMessagesHandlerRequest(t, router, body)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if !bytes.Contains(w.Body.Bytes(), []byte(`"input_tokens":1`)) || !bytes.Contains(w.Body.Bytes(), []byte(`"output_tokens":1`)) {
+		t.Fatalf("passthrough response should remain unchanged, body=%s", w.Body.String())
+	}
+
+	points := messagesMetrics.GetKeyHistoricalStats(upstreamServer.URL, "sk-ant-test", "claude", time.Hour, time.Minute)
+	var successCount, inputTokens, outputTokens int64
+	for _, point := range points {
+		successCount += point.SuccessCount
+		inputTokens += point.InputTokens
+		outputTokens += point.OutputTokens
+	}
+	if successCount != 1 {
+		t.Fatalf("successCount = %d, want 1", successCount)
+	}
+	if inputTokens <= 1 || outputTokens <= 1 {
+		t.Fatalf("metrics tokens = input:%d output:%d, want lowQuality-normalized values > 1", inputTokens, outputTokens)
 	}
 }
 

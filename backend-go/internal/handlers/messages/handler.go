@@ -274,7 +274,11 @@ func handleNormalResponse(
 	defer resp.Body.Close()
 
 	if shouldDirectClaudePassthrough(upstream, apiKey) {
-		usage, err := common.PassthroughJSONResponseWithUsage(c, resp)
+		usage, err := common.PassthroughJSONResponseWithUsage(c, resp, common.PassthroughUsageOptions{
+			RequestBody: requestBody,
+			LowQuality:  upstream != nil && upstream.LowQuality,
+			EnableLog:   envCfg != nil && envCfg.EnableResponseLogs,
+		})
 		if err != nil {
 			return nil, err
 		}

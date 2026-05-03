@@ -171,6 +171,31 @@ func TestPrepareRequestBodyForUpstream_PassthroughAndPreprocess(t *testing.T) {
 		}
 	})
 
+	t.Run("sub2api passthrough should still honor strip billing header", func(t *testing.T) {
+		cfgManager := newConfigManagerForCommonTest(t, `{"stripBillingHeader":true}`)
+		upstream := &config.UpstreamConfig{
+			ServiceType:               "claude",
+			StreamPassthroughEnabled:  &disabled,
+			Sub2APIPassthroughEnabled: &enabled,
+		}
+
+		got := prepareRequestBodyForUpstream(
+			requestBody,
+			scheduler.ChannelKindMessages,
+			"Messages",
+			upstream,
+			cfgManager,
+			&config.EnvConfig{},
+			"sk-ant-example",
+		)
+		if strings.Contains(string(got), "cch=") {
+			t.Fatalf("billing header marker should be removed for sub2api passthrough when stripBillingHeader is enabled, got=%s", string(got))
+		}
+		if userID := gjson.GetBytes(got, "metadata.user_id").String(); userID != `{"device_id":"dev","account_uuid":"acc","session_id":"sid"}` {
+			t.Fatalf("sub2api passthrough should not normalize metadata.user_id, got %q", userID)
+		}
+	})
+
 	t.Run("non-passthrough should keep preprocessing chain active", func(t *testing.T) {
 		cfgManager := newConfigManagerForCommonTest(t, `{"stripBillingHeader":true}`)
 		upstream := &config.UpstreamConfig{

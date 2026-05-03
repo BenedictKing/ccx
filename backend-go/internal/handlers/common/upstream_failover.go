@@ -109,6 +109,9 @@ func prepareRequestBodyForUpstream(
 	enableRequestLogs := envCfg != nil && envCfg.EnableRequestLogs
 
 	if shouldSkipRequestBodyPreprocessing(kind, upstream, apiKey) {
+		if kind == scheduler.ChannelKindMessages && cfgManager != nil && cfgManager.GetStripBillingHeader() {
+			attemptBody, _ = RemoveBillingHeaders(attemptBody, enableRequestLogs, apiType)
+		}
 		return attemptBody
 	}
 
