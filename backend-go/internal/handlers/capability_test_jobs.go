@@ -692,7 +692,7 @@ func GetCapabilityTestJobStatus(cfgManager *config.ConfigManager, channelKind st
 
 		channel, getErr := getCapabilityTestChannel(cfgManager, channelKind, id)
 		if getErr != nil {
-			if !capabilityJobMatchesChannel(job, nil, channelKind, id) {
+			if !capabilityJobMatchesChannel(cfgManager, job, nil, channelKind, id) {
 				c.JSON(http.StatusNotFound, gin.H{"error": "Capability test job not found"})
 				return
 			}
@@ -700,7 +700,7 @@ func GetCapabilityTestJobStatus(cfgManager *config.ConfigManager, channelKind st
 			return
 		}
 
-		if !capabilityJobMatchesChannel(job, channel, channelKind, id) {
+		if !capabilityJobMatchesChannel(cfgManager, job, channel, channelKind, id) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Capability test job not found"})
 			return
 		}

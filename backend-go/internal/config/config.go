@@ -464,6 +464,9 @@ func (cm *ConfigManager) backoffDuration(failureCount int) time.Duration {
 func (cm *ConfigManager) getOrCreateCounter(upstreamName string) *uint64 {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
+	if cm.roundRobinCounters == nil {
+		cm.roundRobinCounters = make(map[string]*uint64)
+	}
 	if c, ok := cm.roundRobinCounters[upstreamName]; ok {
 		return c
 	}
@@ -531,21 +534,10 @@ func (cm *ConfigManager) GetNextAPIKey(upstream *UpstreamConfig, failedKeys map[
 		return "", fmt.Errorf("上游 %s 没有可用的API密钥", upstream.Name)
 	}
 
-	// 单 Key 直接返回
-	if len(upstream.APIKeys) == 1 {
-		return upstream.APIKeys[0], nil
-	}
-
-	// 筛选可用密钥：排除临时失败密钥和内存中的失败密钥
+	// 筛选可用密钥：排除本次已失败密钥和冷却中的失败密钥
 	availableKeys := cm.getAvailableKeys(upstream, failedKeys, apiType)
 
 	if len(availableKeys) == 0 {
-		oldestFailedKey := cm.selectOldestFailedKey(upstream, failedKeys, apiType)
-		if oldestFailedKey != "" {
-			log.Printf("[%s-Key] 警告: 所有密钥都失效，尝试最早失败的密钥: %s", apiType, utils.MaskAPIKey(oldestFailedKey))
-			return oldestFailedKey, nil
-		}
-
 		return "", fmt.Errorf("上游 %s 的所有API密钥都暂时不可用", upstream.Name)
 	}
 
@@ -577,17 +569,8 @@ func (cm *ConfigManager) GetNextAPIKeyForUser(upstream *UpstreamConfig, failedKe
 	if len(upstream.APIKeys) == 0 {
 		return "", fmt.Errorf("上游 %s 没有可用的API密钥", upstream.Name)
 	}
-	if len(upstream.APIKeys) == 1 {
-		return upstream.APIKeys[0], nil
-	}
-
 	availableKeys := cm.getAvailableKeys(upstream, failedKeys, apiType)
 	if len(availableKeys) == 0 {
-		oldestFailedKey := cm.selectOldestFailedKey(upstream, failedKeys, apiType)
-		if oldestFailedKey != "" {
-			log.Printf("[%s-Key] 警告: 亲和选择无可用密钥，尝试最早失败密钥: %s", apiType, utils.MaskAPIKey(oldestFailedKey))
-			return oldestFailedKey, nil
-		}
 		return "", fmt.Errorf("上游 %s 的所有API密钥都暂时不可用", upstream.Name)
 	}
 
@@ -622,8 +605,12 @@ func (cm *ConfigManager) GetNextAPIKeyForUser(upstream *UpstreamConfig, failedKe
 
 func (cm *ConfigManager) getAvailableKeys(upstream *UpstreamConfig, failedKeys map[string]bool, apiType string) []string {
 	availableKeys := make([]string, 0, len(upstream.APIKeys))
+	disabledKeys := disabledAPIKeySet(upstream.DisabledAPIKeys)
 	for _, key := range upstream.APIKeys {
 		if failedKeys[key] {
+			continue
+		}
+		if _, disabled := disabledKeys[key]; disabled {
 			continue
 		}
 		if cm.isKeyFailed(key, apiType) {
@@ -634,25 +621,15 @@ func (cm *ConfigManager) getAvailableKeys(upstream *UpstreamConfig, failedKeys m
 	return availableKeys
 }
 
-func (cm *ConfigManager) selectOldestFailedKey(upstream *UpstreamConfig, failedKeys map[string]bool, apiType string) string {
-	var oldestFailedKey string
-	oldestTime := time.Now()
-
-	cm.mu.RLock()
-	defer cm.mu.RUnlock()
-	for _, key := range upstream.APIKeys {
-		if failedKeys[key] { // 排除本次请求已经尝试过的密钥
+func disabledAPIKeySet(disabledKeys []DisabledKeyInfo) map[string]struct{} {
+	result := make(map[string]struct{}, len(disabledKeys))
+	for _, disabledKey := range disabledKeys {
+		if disabledKey.Key == "" {
 			continue
 		}
-		cacheKey := failedKeyCacheKey(apiType, key)
-		if failure, exists := cm.failedKeysCache[cacheKey]; exists {
-			if failure.Timestamp.Before(oldestTime) {
-				oldestTime = failure.Timestamp
-				oldestFailedKey = key
-			}
-		}
+		result[disabledKey.Key] = struct{}{}
 	}
-	return oldestFailedKey
+	return result
 }
 
 func maskUserIDForLog(userID string) string {
@@ -666,22 +643,12 @@ func maskUserIDForLog(userID string) string {
 }
 
 // GetAdminAPIKey 获取管理/探测场景下的 API 密钥。
-// 优先使用活跃 APIKeys；若活跃密钥不可用，则临时借用 DisabledAPIKeys 中的密钥。
-// 返回值 fallback=true 表示本次借用了已拉黑密钥。
+// 仅使用活跃且未冷却的 APIKeys；已拉黑密钥必须先恢复后才能被调用。
 func (cm *ConfigManager) GetAdminAPIKey(upstream *UpstreamConfig, failedKeys map[string]bool, apiType string) (apiKey string, fallback bool, err error) {
 	apiKey, err = cm.GetNextAPIKey(upstream, failedKeys, apiType)
 	if err == nil {
 		return apiKey, false, nil
 	}
-
-	for _, disabledKey := range upstream.DisabledAPIKeys {
-		if failedKeys[disabledKey.Key] {
-			continue
-		}
-		log.Printf("[%s-Key] 警告: 活跃密钥不可用，临时借用已拉黑密钥用于管理操作: %s", apiType, utils.MaskAPIKey(disabledKey.Key))
-		return disabledKey.Key, true, nil
-	}
-
 	return "", false, err
 }
 
@@ -716,6 +683,10 @@ func (cm *ConfigManager) isKeyFailed(apiKey, apiType string) bool {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
 
+	return cm.isKeyFailedLocked(apiKey, apiType, time.Now())
+}
+
+func (cm *ConfigManager) isKeyFailedLocked(apiKey, apiType string, now time.Time) bool {
 	cacheKey := failedKeyCacheKey(apiType, apiKey)
 	failure, exists := cm.failedKeysCache[cacheKey]
 	if !exists {
@@ -730,12 +701,73 @@ func (cm *ConfigManager) isKeyFailed(apiKey, apiType string) bool {
 		recoveryTime = cm.backoffDuration(failure.FailureCount)
 	}
 
-	return time.Since(failure.Timestamp) < recoveryTime
+	return now.Sub(failure.Timestamp) < recoveryTime
 }
 
 // IsKeyFailed 检查 Key 是否在冷却期（公开方法）
 func (cm *ConfigManager) IsKeyFailed(apiKey, apiType string) bool {
 	return cm.isKeyFailed(apiKey, apiType)
+}
+
+// ValidateAdminProbeKey rejects keys that are already disabled or cooling down
+// for the target channel. Unknown keys are allowed so the admin UI can test a
+// brand-new key before adding it to the channel.
+func (cm *ConfigManager) ValidateAdminProbeKey(apiType string, channelIndex int, apiKey string) error {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+
+	if strings.TrimSpace(apiKey) == "" {
+		return fmt.Errorf("API key is required")
+	}
+
+	upstreams := cm.getUpstreamSliceLocked(apiType)
+	if upstreams == nil || channelIndex < 0 || channelIndex >= len(*upstreams) {
+		return fmt.Errorf("无效的渠道索引: %s[%d]", apiType, channelIndex)
+	}
+
+	return cm.validateAdminProbeKeyLocked(apiType, &(*upstreams)[channelIndex], apiKey)
+}
+
+func (cm *ConfigManager) ValidateAdminProbeKeyIfKnownChannel(apiType string, channelIndex int, apiKey string) error {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+
+	if strings.TrimSpace(apiKey) == "" {
+		return fmt.Errorf("API key is required")
+	}
+
+	upstreams := cm.getUpstreamSliceLocked(apiType)
+	if upstreams == nil || channelIndex < 0 || channelIndex >= len(*upstreams) {
+		return nil
+	}
+
+	return cm.validateAdminProbeKeyLocked(apiType, &(*upstreams)[channelIndex], apiKey)
+}
+
+func (cm *ConfigManager) validateAdminProbeKeyLocked(apiType string, upstream *UpstreamConfig, apiKey string) error {
+	disabledKeys := disabledAPIKeySet(upstream.DisabledAPIKeys)
+	if _, disabled := disabledKeys[apiKey]; disabled {
+		return fmt.Errorf("API key is disabled")
+	}
+
+	if slices.Contains(upstream.APIKeys, apiKey) && cm.isKeyFailedLocked(apiKey, apiType, time.Now()) {
+		return fmt.Errorf("API key is cooling down")
+	}
+
+	return nil
+}
+
+func (cm *ConfigManager) GetUsableAPIKeyForChannel(apiType string, channelIndex int) (string, error) {
+	cm.mu.RLock()
+	upstreams := cm.getUpstreamSliceLocked(apiType)
+	if upstreams == nil || channelIndex < 0 || channelIndex >= len(*upstreams) {
+		cm.mu.RUnlock()
+		return "", fmt.Errorf("无效的渠道索引: %s[%d]", apiType, channelIndex)
+	}
+	upstream := (*upstreams)[channelIndex].Clone()
+	cm.mu.RUnlock()
+
+	return cm.GetNextAPIKey(upstream, nil, apiType)
 }
 
 // GetCooldownKeys 获取指定渠道当前处于冷却期的 Key 列表

@@ -101,13 +101,9 @@ func TestModelsHandler_UsesActiveKey(t *testing.T) {
 	}
 }
 
-func TestModelsHandler_FallbackToDisabledKey(t *testing.T) {
+func TestModelsHandler_DoesNotFallbackToDisabledKey(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if got := r.Header.Get("Authorization"); got != "Bearer sk-disabled" {
-			t.Fatalf("Authorization = %q, want disabled fallback key", got)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"object":"list","data":[{"id":"model-disabled","object":"model"}]}`))
+		t.Fatalf("disabled key upstream should not be called")
 	}))
 	defer upstream.Close()
 
@@ -133,21 +129,14 @@ func TestModelsHandler_FallbackToDisabledKey(t *testing.T) {
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
-	if w.Code != http.StatusOK {
+	if w.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, body=%s", w.Code, w.Body.String())
-	}
-	if body := w.Body.String(); body == "" || body == "{}" {
-		t.Fatalf("unexpected body: %s", body)
 	}
 }
 
-func TestModelsHandler_FallbackToDisabledKeyRespectsRoutePrefix(t *testing.T) {
+func TestModelsHandler_DisabledKeyFallbackDoesNotUseRoutePrefix(t *testing.T) {
 	matchedUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if got := r.Header.Get("Authorization"); got != "Bearer sk-prefix" {
-			t.Fatalf("Authorization = %q, want prefixed disabled fallback key", got)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"object":"list","data":[{"id":"model-prefix","object":"model"}]}`))
+		t.Fatalf("prefixed disabled key upstream should not be called")
 	}))
 	defer matchedUpstream.Close()
 
@@ -193,23 +182,19 @@ func TestModelsHandler_FallbackToDisabledKeyRespectsRoutePrefix(t *testing.T) {
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
-	if w.Code != http.StatusOK {
+	if w.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, body=%s", w.Code, w.Body.String())
 	}
 }
 
-func TestModelsHandler_FallbackToDisabledKeySkipsDisabledChannels(t *testing.T) {
+func TestModelsHandler_DisabledKeysAreNotUsedFromActiveOrDisabledChannels(t *testing.T) {
 	disabledUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Fatalf("disabled channel should not be used for fallback")
+		t.Fatalf("disabled channel upstream should not be called")
 	}))
 	defer disabledUpstream.Close()
 
 	activeFallbackUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if got := r.Header.Get("Authorization"); got != "Bearer sk-active-disabled" {
-			t.Fatalf("Authorization = %q, want active-channel disabled fallback key", got)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"object":"list","data":[{"id":"model-active-disabled","object":"model"}]}`))
+		t.Fatalf("active channel disabled key upstream should not be called")
 	}))
 	defer activeFallbackUpstream.Close()
 
@@ -249,7 +234,7 @@ func TestModelsHandler_FallbackToDisabledKeySkipsDisabledChannels(t *testing.T) 
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
-	if w.Code != http.StatusOK {
+	if w.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, body=%s", w.Code, w.Body.String())
 	}
 }

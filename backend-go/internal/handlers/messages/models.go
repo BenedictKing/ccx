@@ -23,7 +23,7 @@ import (
 
 const modelsRequestTimeout = 30 * time.Second
 
-var errNoChannelWithDisabledKeys = errors.New("no channel with disabled keys")
+var errNoManualModelsChannel = errors.New("no manual models channel")
 
 type ModelsResponse = common.ModelsResponse
 type ModelEntry = common.ModelEntry
@@ -172,13 +172,8 @@ func tryModelsRequest(c *gin.Context, cfgManager *config.ConfigManager, channelS
 				selection = manualSelection
 				log.Printf("[%s-Models] 回退到手工模型列表渠道: channel=%s, reason=%s", channelType, selection.Upstream.Name, selection.Reason)
 			} else {
-				fallbackSelection, fallbackErr := selectChannelWithDisabledKeys(cfgManager, failedChannels, kind, c.Param("routePrefix"))
-				if fallbackErr != nil {
-					log.Printf("[%s-Models] 渠道无可用: %v", channelType, err)
-					break
-				}
-				selection = fallbackSelection
-				log.Printf("[%s-Models] 活跃渠道不可用，回退到挂起渠道查询模型: channel=%s, reason=%s", channelType, selection.Upstream.Name, selection.Reason)
+				log.Printf("[%s-Models] 渠道无可用: %v", channelType, err)
+				break
 			}
 		}
 
@@ -216,14 +211,11 @@ func tryModelsRequest(c *gin.Context, cfgManager *config.ConfigManager, channelS
 		url := buildModelsURL(upstream.BaseURL) + suffix
 		client := httpclient.GetManager().GetStandardClient(modelsRequestTimeout, upstream.InsecureSkipVerify)
 
-		apiKey, usedDisabledFallback, err := cfgManager.GetAdminAPIKey(upstream, nil, channelType)
+		apiKey, _, err := cfgManager.GetAdminAPIKey(upstream, nil, channelType)
 		if err != nil {
 			log.Printf("[%s-Models] 获取 API Key 失败: channel=%s, error=%v", channelType, upstream.Name, err)
 			failedChannels[selection.ChannelIndex] = true
 			continue
-		}
-		if usedDisabledFallback {
-			log.Printf("[%s-Models] 使用已拉黑密钥查询模型列表: channel=%s, key=%s", channelType, upstream.Name, utils.MaskAPIKey(apiKey))
 		}
 
 		req, err := http.NewRequestWithContext(c.Request.Context(), method, url, nil)
@@ -310,7 +302,7 @@ func selectManualModelsChannel(cfgManager *config.ConfigManager, failedChannels 
 	}
 
 	if len(candidates) == 0 {
-		return nil, errNoChannelWithDisabledKeys
+		return nil, errNoManualModelsChannel
 	}
 
 	sort.Slice(candidates, func(i, j int) bool {
@@ -323,69 +315,6 @@ func selectManualModelsChannel(cfgManager *config.ConfigManager, failedChannels 
 		Upstream:     &upstreamCopy,
 		ChannelIndex: selected.index,
 		Reason:       "manual_models_fallback",
-	}, nil
-}
-
-func selectChannelWithDisabledKeys(cfgManager *config.ConfigManager, failedChannels map[int]bool, kind scheduler.ChannelKind, routePrefix string) (*scheduler.SelectionResult, error) {
-	cfg := cfgManager.GetConfig()
-
-	var upstreams []config.UpstreamConfig
-	switch kind {
-	case scheduler.ChannelKindResponses:
-		upstreams = cfg.ResponsesUpstream
-	case scheduler.ChannelKindGemini:
-		upstreams = cfg.GeminiUpstream
-	case scheduler.ChannelKindChat:
-		upstreams = cfg.ChatUpstream
-	default:
-		upstreams = cfg.Upstream
-	}
-
-	type candidate struct {
-		index    int
-		upstream config.UpstreamConfig
-		priority int
-	}
-
-	candidates := make([]candidate, 0)
-	for i, upstream := range upstreams {
-		if failedChannels[i] {
-			continue
-		}
-		if config.GetChannelStatus(&upstream) == "disabled" {
-			continue
-		}
-		if len(upstream.APIKeys) > 0 || len(upstream.DisabledAPIKeys) == 0 {
-			continue
-		}
-		if routePrefix != "" {
-			if upstream.RoutePrefix != routePrefix {
-				continue
-			}
-		} else if upstream.RoutePrefix != "" {
-			continue
-		}
-		candidates = append(candidates, candidate{
-			index:    i,
-			upstream: upstream,
-			priority: config.GetChannelPriority(&upstream, i),
-		})
-	}
-
-	if len(candidates) == 0 {
-		return nil, errNoChannelWithDisabledKeys
-	}
-
-	sort.Slice(candidates, func(i, j int) bool {
-		return candidates[i].priority < candidates[j].priority
-	})
-
-	selected := candidates[0]
-	upstreamCopy := selected.upstream
-	return &scheduler.SelectionResult{
-		Upstream:     &upstreamCopy,
-		ChannelIndex: selected.index,
-		Reason:       "disabled_key_fallback",
 	}, nil
 }
 

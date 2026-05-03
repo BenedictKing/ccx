@@ -86,10 +86,6 @@ func (cm *ConfigManager) collectModelsHealthCheckTargets(now time.Time, lastRunA
 			if !upstream.IsModelsHealthCheckEnabled() {
 				continue
 			}
-			if len(upstream.APIKeys) == 0 {
-				continue
-			}
-
 			status := strings.ToLower(strings.TrimSpace(upstream.Status))
 			if status != "" && status != "active" {
 				continue
@@ -110,6 +106,22 @@ func (cm *ConfigManager) collectModelsHealthCheckTargets(now time.Time, lastRunA
 			if last, exists := lastRunAt[scheduleKey]; exists && now.Sub(last) < interval {
 				continue
 			}
+
+			apiKeys := make([]string, 0, len(upstream.APIKeys))
+			disabledKeys := disabledAPIKeySet(upstream.DisabledAPIKeys)
+			for _, apiKey := range upstream.APIKeys {
+				if _, disabled := disabledKeys[apiKey]; disabled {
+					continue
+				}
+				if cm.isKeyFailedLocked(apiKey, group.apiType, now) {
+					continue
+				}
+				apiKeys = append(apiKeys, apiKey)
+			}
+			if len(apiKeys) == 0 {
+				continue
+			}
+
 			lastRunAt[scheduleKey] = now
 
 			target := modelsHealthCheckTarget{
@@ -118,7 +130,7 @@ func (cm *ConfigManager) collectModelsHealthCheckTargets(now time.Time, lastRunA
 				channelName:        upstream.Name,
 				serviceType:        upstream.ServiceType,
 				baseURLs:           append([]string(nil), allBaseURLs...),
-				apiKeys:            append([]string(nil), upstream.APIKeys...),
+				apiKeys:            apiKeys,
 				insecureSkipVerify: upstream.InsecureSkipVerify,
 				proxyURL:           upstream.ProxyURL,
 				interval:           interval,

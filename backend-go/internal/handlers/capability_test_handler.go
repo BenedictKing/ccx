@@ -237,7 +237,8 @@ func TestChannelCapability(cfgManager *config.ConfigManager, channelLogStore *me
 			effectiveRPM = 60
 		}
 
-		if len(channel.APIKeys) == 0 && len(channel.DisabledAPIKeys) == 0 {
+		apiKey, keyErr := resolveCapabilityUsableAPIKey(cfgManager, channelKind, id, channel)
+		if keyErr != nil {
 			errMsg := "no_api_key"
 			resp := CapabilityTestResponse{
 				ChannelID:           id,
@@ -261,12 +262,6 @@ func TestChannelCapability(cfgManager *config.ConfigManager, channelLogStore *me
 		baseURL := ""
 		if len(channel.GetAllBaseURLs()) > 0 {
 			baseURL = channel.GetAllBaseURLs()[0]
-		}
-		apiKey := ""
-		if len(channel.APIKeys) > 0 {
-			apiKey = channel.APIKeys[0]
-		} else if len(channel.DisabledAPIKeys) > 0 {
-			apiKey = channel.DisabledAPIKeys[0].Key
 		}
 
 		normalizedModels := normalizeCapabilityModels(req.Models)
@@ -500,11 +495,21 @@ func runCapabilityTestJob(jobID, channelKind string, channelID int, channel conf
 	log.Printf("[CapabilityTest-Job] 开始执行能力测试任务 %s，渠道 %s (ID:%d, 类型:%s)，协议: %v", jobID, channel.Name, channelID, channel.ServiceType, protocols)
 
 	totalStart := time.Now()
-	apiKey := ""
-	if len(channel.APIKeys) > 0 {
-		apiKey = channel.APIKeys[0]
-	} else if len(channel.DisabledAPIKeys) > 0 {
-		apiKey = channel.DisabledAPIKeys[0].Key
+	apiKey, keyErr := resolveCapabilityUsableAPIKey(cfgManager, channelKind, channelID, &channel)
+	if keyErr != nil {
+		errMsg := "no_api_key"
+		capabilityJobs.update(jobID, func(job *CapabilityTestJob) {
+			job.Lifecycle = CapabilityLifecycleDone
+			job.Outcome = CapabilityOutcomeFailed
+			job.Status = deriveCapabilityJobStatus(job.Lifecycle, job.Outcome)
+			job.Error = &errMsg
+			job.FinishedAt = time.Now().Format(time.RFC3339Nano)
+		})
+		if lookupKey != "" {
+			capabilityJobs.clearLookupKey(lookupKey)
+		}
+		capabilityJobs.clearLookupKey(executionKey)
+		return
 	}
 	results := runRoundRobinTests(ctx, &channel, protocols, timeout, effectiveRPM, jobID, previousResults, userModels, cfgManager, channelID, channelKind, apiKey, dispatcherKey, channelLogStore)
 	totalDuration := time.Since(totalStart).Milliseconds()
@@ -873,7 +878,20 @@ func executeModelTest(ctx context.Context, channel *config.UpstreamConfig, proto
 		StartedAt: startedAt.Format(time.RFC3339Nano),
 	}
 
-	req, err := buildTestRequestWithModel(protocol, channel, model)
+	resolvedKey, keyErr := resolveCapabilityUsableAPIKey(cfgManager, channelKind, channelID, channel)
+	if keyErr != nil {
+		errMsg := "no_api_key"
+		modelResult.Error = &errMsg
+		modelResult.TestedAt = time.Now().Format(time.RFC3339Nano)
+		capabilityJobs.update(jobID, func(job *CapabilityTestJob) {
+			updateCapabilityJobModelResult(job, protocol, model, CapabilityModelStatusFailed, modelResult)
+		})
+		log.Printf("[CapabilityTest-Model] 渠道 %s 没有可用 API Key，跳过 %s 模型测试 (模型: %s): %v", channel.Name, protocol, model, keyErr)
+		return modelResult
+	}
+	apiKey = resolvedKey
+
+	req, err := buildTestRequestWithModelAndKey(protocol, channel, model, apiKey)
 	if err != nil {
 		errMsg := fmt.Sprintf("build_request_failed: %v", err)
 		modelResult.Error = &errMsg
@@ -1059,10 +1077,30 @@ func channelKindToApiType(channelKind string) string {
 	}
 }
 
+func resolveCapabilityUsableAPIKey(cfgManager *config.ConfigManager, channelKind string, channelID int, channel *config.UpstreamConfig) (string, error) {
+	if cfgManager != nil {
+		return cfgManager.GetUsableAPIKeyForChannel(channelKindToApiType(channelKind), channelID)
+	}
+	if channel != nil && len(channel.APIKeys) > 0 {
+		return channel.APIKeys[0], nil
+	}
+	return "", fmt.Errorf("no_api_key")
+}
+
 // ============== 请求构建 ==============
 
 // buildTestRequestWithModel 构建最小化测试请求（指定模型）
 func buildTestRequestWithModel(protocol string, channel *config.UpstreamConfig, model string) (*http.Request, error) {
+	apiKey := ""
+	if len(channel.APIKeys) > 0 {
+		apiKey = channel.APIKeys[0]
+	} else {
+		return nil, fmt.Errorf("no_api_key")
+	}
+	return buildTestRequestWithModelAndKey(protocol, channel, model, apiKey)
+}
+
+func buildTestRequestWithModelAndKey(protocol string, channel *config.UpstreamConfig, model string, apiKey string) (*http.Request, error) {
 	// 获取 BaseURL
 	urls := channel.GetAllBaseURLs()
 	if len(urls) == 0 {
@@ -1070,13 +1108,7 @@ func buildTestRequestWithModel(protocol string, channel *config.UpstreamConfig, 
 	}
 	baseURL := urls[0]
 
-	apiKey := ""
-	if len(channel.APIKeys) > 0 {
-		apiKey = channel.APIKeys[0]
-	} else if len(channel.DisabledAPIKeys) > 0 {
-		// 活跃 key 已被拉黑清空，临时借用被拉黑的 key 完成能力测试（不恢复到活跃列表）
-		apiKey = channel.DisabledAPIKeys[0].Key
-	} else {
+	if apiKey == "" {
 		return nil, fmt.Errorf("no_api_key")
 	}
 
@@ -1339,11 +1371,11 @@ func CancelCapabilityTestJob(cfgManager *config.ConfigManager, channelKind strin
 
 		channel, chErr := getCapabilityTestChannel(cfgManager, channelKind, id)
 		if chErr != nil {
-			if !capabilityJobMatchesChannel(job, nil, channelKind, id) {
+			if !capabilityJobMatchesChannel(cfgManager, job, nil, channelKind, id) {
 				c.JSON(http.StatusNotFound, gin.H{"error": "Capability test job not found"})
 				return
 			}
-		} else if !capabilityJobMatchesChannel(job, channel, channelKind, id) {
+		} else if !capabilityJobMatchesChannel(cfgManager, job, channel, channelKind, id) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Capability test job not found"})
 			return
 		}
@@ -1413,11 +1445,11 @@ func RetryCapabilityTestModel(cfgManager *config.ConfigManager, channelLogStore 
 
 		channel, chErr := getCapabilityTestChannel(cfgManager, channelKind, id)
 		if chErr != nil {
-			if !capabilityJobMatchesChannel(job, nil, channelKind, id) {
+			if !capabilityJobMatchesChannel(cfgManager, job, nil, channelKind, id) {
 				c.JSON(http.StatusNotFound, gin.H{"error": "Capability test job not found"})
 				return
 			}
-		} else if !capabilityJobMatchesChannel(job, channel, channelKind, id) {
+		} else if !capabilityJobMatchesChannel(cfgManager, job, channel, channelKind, id) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Capability test job not found"})
 			return
 		}
@@ -1509,11 +1541,17 @@ func RetryCapabilityTestModel(cfgManager *config.ConfigManager, channelLogStore 
 
 		go func() {
 			defer retryCancel()
-			apiKey := ""
-			if len(channel.APIKeys) > 0 {
-				apiKey = channel.APIKeys[0]
-			} else if len(channel.DisabledAPIKeys) > 0 {
-				apiKey = channel.DisabledAPIKeys[0].Key
+			apiKey, keyErr := resolveCapabilityUsableAPIKey(cfgManager, channelKind, id, channel)
+			if keyErr != nil {
+				capabilityJobs.update(jobID, func(j *CapabilityTestJob) {
+					errMsg := "no_api_key"
+					updateCapabilityJobModelResult(j, req.Protocol, req.Model, CapabilityModelStatusFailed, ModelTestResult{
+						Model:    req.Model,
+						Error:    &errMsg,
+						TestedAt: time.Now().Format(time.RFC3339Nano),
+					})
+				})
+				return
 			}
 
 			baseURL := ""

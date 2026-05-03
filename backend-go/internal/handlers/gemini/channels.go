@@ -391,11 +391,14 @@ func PingChannel(cfgManager *config.ConfigManager) gin.HandlerFunc {
 		// 简单的连通性测试
 		client := httpclient.GetManager().GetStandardClient(10*time.Second, upstream.InsecureSkipVerify, upstream.ProxyURL)
 		testURL := buildModelsURL(baseURL)
+		apiKey, err := cfgManager.GetUsableAPIKeyForChannel("Gemini", id)
+		if err != nil {
+			c.JSON(400, gin.H{"error": err.Error()})
+			return
+		}
 
 		req, _ := http.NewRequest("GET", testURL, nil)
-		if len(upstream.APIKeys) > 0 {
-			req.Header.Set("x-goog-api-key", upstream.APIKeys[0])
-		}
+		req.Header.Set("x-goog-api-key", apiKey)
 
 		start := time.Now()
 		resp, err := client.Do(req)
@@ -439,12 +442,20 @@ func PingAllChannels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 
 			// 每个渠道使用各自的代理配置
 			client := httpclient.GetManager().GetStandardClient(10*time.Second, upstream.InsecureSkipVerify, upstream.ProxyURL)
+			apiKey, err := cfgManager.GetUsableAPIKeyForChannel("Gemini", i)
+			if err != nil {
+				results[i] = gin.H{
+					"index":   i,
+					"name":    upstream.Name,
+					"success": false,
+					"error":   err.Error(),
+				}
+				continue
+			}
 
 			testURL := buildModelsURL(baseURL)
 			req, _ := http.NewRequest("GET", testURL, nil)
-			if len(upstream.APIKeys) > 0 {
-				req.Header.Set("x-goog-api-key", upstream.APIKeys[0])
-			}
+			req.Header.Set("x-goog-api-key", apiKey)
 
 			start := time.Now()
 			resp, err := client.Do(req)
@@ -578,6 +589,17 @@ func GetChannelModels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 		if apiKey == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "No API key provided"})
 			return
+		}
+		if req.BaseURL == "" {
+			if err := cfgManager.ValidateAdminProbeKey("Gemini", id, apiKey); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+		} else {
+			if err := cfgManager.ValidateAdminProbeKeyIfKnownChannel("Gemini", id, apiKey); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
 		}
 
 		log.Printf("[Gemini-Models] 请求模型列表: channel=%s, key=%s", channelName, utils.MaskAPIKey(apiKey))

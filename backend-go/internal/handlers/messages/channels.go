@@ -588,6 +588,17 @@ func GetChannelModels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "No API key provided"})
 			return
 		}
+		if req.BaseURL == "" {
+			if err := cfgManager.ValidateAdminProbeKey("Messages", id, apiKey); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+		} else {
+			if err := cfgManager.ValidateAdminProbeKeyIfKnownChannel("Messages", id, apiKey); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+		}
 
 		log.Printf("[Messages-Models] 请求模型列表: channel=%s, key=%s", channelName, utils.MaskAPIKey(apiKey))
 

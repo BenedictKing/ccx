@@ -337,7 +337,7 @@ func (s *capabilitySnapshotStore) gc() {
 	}
 }
 
-func resolveCapabilityIdentityKey(channel *config.UpstreamConfig) string {
+func resolveCapabilityIdentityKey(cfgManager *config.ConfigManager, channelKind string, channelID int, channel *config.UpstreamConfig) string {
 	if channel == nil {
 		return ""
 	}
@@ -345,16 +345,14 @@ func resolveCapabilityIdentityKey(channel *config.UpstreamConfig) string {
 	if len(channel.GetAllBaseURLs()) > 0 {
 		baseURL = channel.GetAllBaseURLs()[0]
 	}
-	apiKey := ""
-	if len(channel.APIKeys) > 0 {
-		apiKey = channel.APIKeys[0]
-	} else if len(channel.DisabledAPIKeys) > 0 {
-		apiKey = channel.DisabledAPIKeys[0].Key
+	apiKey, err := resolveCapabilityUsableAPIKey(cfgManager, channelKind, channelID, channel)
+	if err != nil {
+		return ""
 	}
 	return metrics.GenerateMetricsIdentityKey(baseURL, apiKey, channel.ServiceType)
 }
 
-func capabilityJobMatchesChannel(job *CapabilityTestJob, channel *config.UpstreamConfig, channelKind string, channelID int) bool {
+func capabilityJobMatchesChannel(cfgManager *config.ConfigManager, job *CapabilityTestJob, channel *config.UpstreamConfig, channelKind string, channelID int) bool {
 	if job == nil {
 		return false
 	}
@@ -367,7 +365,7 @@ func capabilityJobMatchesChannel(job *CapabilityTestJob, channel *config.Upstrea
 	if channel == nil {
 		return false
 	}
-	identityKey := resolveCapabilityIdentityKey(channel)
+	identityKey := resolveCapabilityIdentityKey(cfgManager, channelKind, channelID, channel)
 	return identityKey != "" && job.IdentityKey == identityKey
 }
 
@@ -385,7 +383,11 @@ func GetCapabilitySnapshot(cfgManager *config.ConfigManager, channelKind string)
 			return
 		}
 
-		identityKey := resolveCapabilityIdentityKey(channel)
+		identityKey := resolveCapabilityIdentityKey(cfgManager, channelKind, id, channel)
+		if identityKey == "" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Capability snapshot not found"})
+			return
+		}
 		snapshot, ok := capabilitySnapshots.get(identityKey)
 		if !ok {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Capability snapshot not found"})

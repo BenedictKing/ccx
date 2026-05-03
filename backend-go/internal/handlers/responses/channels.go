@@ -305,7 +305,7 @@ func PingChannel(cfgManager *config.ConfigManager) gin.HandlerFunc {
 		}
 
 		upstream := cfg.ResponsesUpstream[id]
-		result := pingResponsesUpstream(&upstream)
+		result := pingResponsesUpstream(cfgManager, id, &upstream)
 		c.JSON(http.StatusOK, result)
 	}
 }
@@ -321,7 +321,7 @@ func PingAllChannels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 			wg.Add(1)
 			go func(index int, up config.UpstreamConfig) {
 				defer wg.Done()
-				result := pingResponsesUpstream(&up)
+				result := pingResponsesUpstream(cfgManager, index, &up)
 				result["id"] = index
 				result["name"] = up.Name
 				results[index] = result
@@ -333,7 +333,7 @@ func PingAllChannels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 	}
 }
 
-func pingResponsesUpstream(upstream *config.UpstreamConfig) gin.H {
+func pingResponsesUpstream(cfgManager *config.ConfigManager, channelIndex int, upstream *config.UpstreamConfig) gin.H {
 	baseURL := upstream.GetEffectiveBaseURL()
 	if baseURL == "" {
 		return gin.H{
@@ -345,6 +345,15 @@ func pingResponsesUpstream(upstream *config.UpstreamConfig) gin.H {
 	}
 
 	client := httpclient.GetManager().GetStandardClient(10*time.Second, upstream.InsecureSkipVerify, upstream.ProxyURL)
+	apiKey, keyErr := cfgManager.GetUsableAPIKeyForChannel("Responses", channelIndex)
+	if keyErr != nil {
+		return gin.H{
+			"success": false,
+			"error":   keyErr.Error(),
+			"latency": 0,
+			"status":  "error",
+		}
+	}
 
 	var (
 		testURL string
@@ -356,24 +365,18 @@ func pingResponsesUpstream(upstream *config.UpstreamConfig) gin.H {
 		method = http.MethodOptions
 		testURL = buildMessagesURL(baseURL)
 		req, _ = http.NewRequest(method, testURL, nil)
-		if len(upstream.APIKeys) > 0 {
-			utils.SetAuthenticationHeader(req.Header, upstream.APIKeys[0])
-			req.Header.Set("anthropic-version", "2023-06-01")
-		}
+		utils.SetAuthenticationHeader(req.Header, apiKey)
+		req.Header.Set("anthropic-version", "2023-06-01")
 	case "gemini":
 		method = http.MethodGet
 		testURL = buildGeminiModelsURL(baseURL)
 		req, _ = http.NewRequest(method, testURL, nil)
-		if len(upstream.APIKeys) > 0 {
-			req.Header.Set("x-goog-api-key", upstream.APIKeys[0])
-		}
+		req.Header.Set("x-goog-api-key", apiKey)
 	default:
 		method = http.MethodGet
 		testURL = buildModelsURL(baseURL)
 		req, _ = http.NewRequest(method, testURL, nil)
-		if len(upstream.APIKeys) > 0 {
-			utils.SetAuthenticationHeader(req.Header, upstream.APIKeys[0])
-		}
+		utils.SetAuthenticationHeader(req.Header, apiKey)
 	}
 
 	start := time.Now()
@@ -541,6 +544,17 @@ func GetChannelModels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 		if apiKey == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "No API key provided"})
 			return
+		}
+		if req.BaseURL == "" {
+			if err := cfgManager.ValidateAdminProbeKey("Responses", id, apiKey); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+		} else {
+			if err := cfgManager.ValidateAdminProbeKeyIfKnownChannel("Responses", id, apiKey); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
 		}
 
 		log.Printf("[Responses-Models] 请求模型列表: channel=%s, key=%s", channelName, utils.MaskAPIKey(apiKey))

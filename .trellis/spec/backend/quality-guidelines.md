@@ -147,6 +147,56 @@ Current example: `backend-go/internal/handlers/responses/compact.go`.
   - metrics `FailureCount` remains unchanged for that key/channel,
   - channel logs still include the failed routed-model attempt.
 
+## Admin, Automation, and Probe Key Contracts
+
+### Scope / Trigger
+
+Use this contract when adding or changing any non-user proxy path that sends an upstream request with a channel key, including admin model listing, ping endpoints, capability tests, background model health checks, warmups, and scheduler-driven probes.
+
+### Signatures
+
+- Runtime key selection: `ConfigManager.GetNextAPIKey(upstream, failedKeys, apiType)` and `ConfigManager.GetNextAPIKeyForUser(upstream, failedKeys, apiType, userID)`.
+- Admin/probe channel key selection: `ConfigManager.GetUsableAPIKeyForChannel(apiType, channelIndex)`.
+- Explicit admin request validation: `ConfigManager.ValidateAdminProbeKey(apiType, channelIndex, apiKey)`.
+- Background health target collection: `ConfigManager.collectModelsHealthCheckTargets(now, lastRunAt)`.
+
+### Contracts
+
+- These paths must only use keys from active `APIKeys` after filtering out:
+  - keys present in `DisabledAPIKeys`,
+  - keys in `failedKeys`,
+  - keys still inside `failedKeysCache` cooldown.
+- Do not fall back to `DisabledAPIKeys` for admin convenience, model listing, capability tests, ping, or automatic health checks.
+- Do not use the "oldest failed key" when all active keys are cooling down; return an explicit no-key/unavailable error instead.
+- If an admin request supplies a temporary `baseUrl`, unknown keys are allowed for first-time testing, but known disabled or cooling keys on an existing channel remain rejected.
+- If a helper must build a request from `APIKeys[0]`, callers must first replace the channel copy with a single key returned by `GetUsableAPIKeyForChannel`.
+
+### Validation & Error Matrix
+
+| Case | Expected behavior |
+|------|-------------------|
+| Active key is available | Use that key normally |
+| Only disabled keys exist | Do not send upstream request; return no available key/no_api_key |
+| Only cooldown keys exist | Do not send upstream request; return no available key/no_api_key |
+| Disabled key still appears in `APIKeys` due to config drift | Treat it as disabled and skip it |
+| Explicit admin model-list key is disabled | Return `400`, do not call upstream |
+| Explicit admin model-list key is cooling down | Return `400`, do not call upstream |
+| Temporary baseUrl with unknown key | Allow the probe because the key is not yet part of the saved channel |
+
+### Good/Base/Bad Cases
+
+- Good: capability tests call `GetUsableAPIKeyForChannel` before creating or running a job, and re-resolve the key before each model request.
+- Base: Images ping may pass a copied upstream with `APIKeys = []string{usableKey}` into a request builder that reads `APIKeys[0]`.
+- Bad: a model-list, ping, or background check handler reads `upstream.APIKeys[0]` directly from persisted config.
+- Bad: an admin helper uses `DisabledAPIKeys[0]` when `APIKeys` is empty.
+
+### Tests Required
+
+- Config tests must assert disabled and cooldown keys are skipped by `GetNextAPIKey`, `GetAdminAPIKey`, and `GetUsableAPIKeyForChannel`.
+- Handler tests must assert explicit disabled/cooldown admin keys return before upstream is called.
+- Capability-test tests must assert disabled-only and cooldown-only channels create failed jobs without sending upstream requests.
+- Background health-check tests must assert disabled/cooldown keys are omitted from target `apiKeys` and cooldown-only channels are not probed.
+
 ---
 
 ## Code Review Checklist

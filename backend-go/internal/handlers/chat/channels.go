@@ -386,6 +386,11 @@ func PingChannel(cfgManager *config.ConfigManager) gin.HandlerFunc {
 		}
 
 		client := httpclient.GetManager().GetStandardClient(10*time.Second, upstream.InsecureSkipVerify, upstream.ProxyURL)
+		apiKey, err := cfgManager.GetUsableAPIKeyForChannel("Chat", id)
+		if err != nil {
+			c.JSON(400, gin.H{"error": err.Error()})
+			return
+		}
 
 		// 根据 serviceType 选择不同的健康检查端点
 		var testURL string
@@ -395,17 +400,13 @@ func PingChannel(cfgManager *config.ConfigManager) gin.HandlerFunc {
 			// Claude API 没有 /v1/models，使用 /v1/messages 的 OPTIONS 请求
 			testURL = buildMessagesURL(baseURL)
 			req, _ = http.NewRequest(http.MethodOptions, testURL, nil)
-			if len(upstream.APIKeys) > 0 {
-				utils.SetAuthenticationHeader(req.Header, upstream.APIKeys[0])
-				req.Header.Set("anthropic-version", "2023-06-01")
-			}
+			utils.SetAuthenticationHeader(req.Header, apiKey)
+			req.Header.Set("anthropic-version", "2023-06-01")
 		default:
 			// OpenAI / Gemini / Responses 等使用 /v1/models
 			testURL = buildModelsURL(baseURL)
 			req, _ = http.NewRequest(http.MethodGet, testURL, nil)
-			if len(upstream.APIKeys) > 0 {
-				utils.SetAuthenticationHeader(req.Header, upstream.APIKeys[0])
-			}
+			utils.SetAuthenticationHeader(req.Header, apiKey)
 		}
 
 		start := time.Now()
@@ -449,6 +450,16 @@ func PingAllChannels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 			}
 
 			client := httpclient.GetManager().GetStandardClient(10*time.Second, upstream.InsecureSkipVerify, upstream.ProxyURL)
+			apiKey, err := cfgManager.GetUsableAPIKeyForChannel("Chat", i)
+			if err != nil {
+				results[i] = gin.H{
+					"index":   i,
+					"name":    upstream.Name,
+					"success": false,
+					"error":   err.Error(),
+				}
+				continue
+			}
 
 			// 根据 serviceType 选择不同的健康检查端点
 			var testURL string
@@ -457,16 +468,12 @@ func PingAllChannels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 			case "claude":
 				testURL = buildMessagesURL(baseURL)
 				req, _ = http.NewRequest(http.MethodOptions, testURL, nil)
-				if len(upstream.APIKeys) > 0 {
-					utils.SetAuthenticationHeader(req.Header, upstream.APIKeys[0])
-					req.Header.Set("anthropic-version", "2023-06-01")
-				}
+				utils.SetAuthenticationHeader(req.Header, apiKey)
+				req.Header.Set("anthropic-version", "2023-06-01")
 			default:
 				testURL = buildModelsURL(baseURL)
 				req, _ = http.NewRequest(http.MethodGet, testURL, nil)
-				if len(upstream.APIKeys) > 0 {
-					utils.SetAuthenticationHeader(req.Header, upstream.APIKeys[0])
-				}
+				utils.SetAuthenticationHeader(req.Header, apiKey)
 			}
 
 			start := time.Now()
@@ -605,6 +612,17 @@ func GetChannelModels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 		if apiKey == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "No API key provided"})
 			return
+		}
+		if req.BaseURL == "" {
+			if err := cfgManager.ValidateAdminProbeKey("Chat", id, apiKey); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+		} else {
+			if err := cfgManager.ValidateAdminProbeKeyIfKnownChannel("Chat", id, apiKey); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
 		}
 
 		log.Printf("[Chat-Models] 请求模型列表: channel=%s, key=%s", channelName, utils.MaskAPIKey(apiKey))

@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -128,6 +129,59 @@ func TestRunModelsHealthCheckOnceBlacklistsNon200(t *testing.T) {
 	}
 	if upstream.DisabledAPIKeys[0].Reason != modelsHealthCheckReason {
 		t.Fatalf("disabled reason = %q, want %q", upstream.DisabledAPIKeys[0].Reason, modelsHealthCheckReason)
+	}
+}
+
+func TestCollectModelsHealthCheckTargetsSkipsDisabledAndCooldownKeys(t *testing.T) {
+	cm := newConfigManagerForTestJSON(t, `{
+		"upstream": [
+			{
+				"name": "models-health",
+				"baseUrl": "https://example.com",
+				"apiKeys": ["disabled-key", "cooldown-key", "active-key"],
+				"disabledApiKeys": [{"key": "disabled-key"}],
+				"serviceType": "responses",
+				"modelsHealthCheckEnabled": true,
+				"modelsHealthCheckIntervalMinutes": 1
+			}
+		]
+	}`)
+	cm.MarkKeyAsFailedWithDuration("cooldown-key", "Messages", time.Hour)
+
+	targets := cm.collectModelsHealthCheckTargets(time.Now(), make(map[string]time.Time))
+	if len(targets) != 1 {
+		t.Fatalf("len(targets) = %d, want 1", len(targets))
+	}
+	if got := targets[0].apiKeys; len(got) != 1 || got[0] != "active-key" {
+		t.Fatalf("target apiKeys = %#v, want only active-key", got)
+	}
+}
+
+func TestRunModelsHealthCheckOnceDoesNotProbeCoolingOnlyChannel(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	cm := newConfigManagerForTestJSON(t, `{
+		"upstream": [
+			{
+				"name": "models-health",
+				"baseUrl": "`+server.URL+`",
+				"apiKeys": ["cooldown-key"],
+				"serviceType": "responses",
+				"modelsHealthCheckEnabled": true,
+				"modelsHealthCheckIntervalMinutes": 1
+			}
+		]
+	}`)
+	cm.MarkKeyAsFailedWithDuration("cooldown-key", "Messages", time.Hour)
+
+	cm.runModelsHealthCheckOnce(make(map[string]time.Time), time.Now())
+	if got := calls.Load(); got != 0 {
+		t.Fatalf("probe calls = %d, want 0", got)
 	}
 }
 

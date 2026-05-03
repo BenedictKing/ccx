@@ -8,7 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/gin-gonic/gin"
@@ -134,6 +136,60 @@ func TestGetChannelModels_UpstreamReturns401(t *testing.T) {
 	}
 }
 
+func TestGetChannelModels_RejectsDisabledKeyBeforeUpstream(t *testing.T) {
+	var calls atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	cfgUpstream := []config.UpstreamConfig{{
+		Name:    "test-ch",
+		BaseURL: upstream.URL,
+		APIKeys: []string{"sk-active"},
+		DisabledAPIKeys: []config.DisabledKeyInfo{{
+			Key: "sk-disabled",
+		}},
+	}}
+	cm := setupTestConfigManager(t, cfgUpstream)
+	r := newModelsRouter(cm)
+
+	w := postModels(t, r, "0", GetModelsRequest{Key: "sk-disabled"})
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400, body=%s", w.Code, w.Body.String())
+	}
+	if got := calls.Load(); got != 0 {
+		t.Fatalf("upstream calls = %d, want 0", got)
+	}
+}
+
+func TestGetChannelModels_RejectsCooldownKeyBeforeUpstream(t *testing.T) {
+	var calls atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	cfgUpstream := []config.UpstreamConfig{{
+		Name:    "test-ch",
+		BaseURL: upstream.URL,
+		APIKeys: []string{"sk-cooldown"},
+	}}
+	cm := setupTestConfigManager(t, cfgUpstream)
+	cm.MarkKeyAsFailedWithDuration("sk-cooldown", "Messages", time.Hour)
+	r := newModelsRouter(cm)
+
+	w := postModels(t, r, "0", GetModelsRequest{Key: "sk-cooldown"})
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400, body=%s", w.Code, w.Body.String())
+	}
+	if got := calls.Load(); got != 0 {
+		t.Fatalf("upstream calls = %d, want 0", got)
+	}
+}
+
 // TestGetChannelModels_TempBaseURL 新增模式：使用请求体中的临时 baseUrl
 func TestGetChannelModels_TempBaseURL(t *testing.T) {
 	mockResp := `{"object":"list","data":[{"id":"claude-3","object":"model"}]}`
@@ -161,6 +217,63 @@ func TestGetChannelModels_TempBaseURL(t *testing.T) {
 	}
 	if w.Body.String() != mockResp {
 		t.Errorf("响应体不匹配，实际: %s", w.Body.String())
+	}
+}
+
+func TestGetChannelModels_TempBaseURLRejectsKnownDisabledKey(t *testing.T) {
+	var calls atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	cm := setupTestConfigManager(t, []config.UpstreamConfig{{
+		Name:    "test-ch",
+		BaseURL: "https://saved.example.com",
+		DisabledAPIKeys: []config.DisabledKeyInfo{{
+			Key: "sk-disabled",
+		}},
+	}})
+	r := newModelsRouter(cm)
+
+	w := postModels(t, r, "0", GetModelsRequest{
+		Key:     "sk-disabled",
+		BaseURL: upstream.URL,
+	})
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400, body=%s", w.Code, w.Body.String())
+	}
+	if got := calls.Load(); got != 0 {
+		t.Fatalf("upstream calls = %d, want 0", got)
+	}
+}
+
+func TestGetChannelModels_TempBaseURLRejectsKnownCooldownKey(t *testing.T) {
+	var calls atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	cm := setupTestConfigManager(t, []config.UpstreamConfig{{
+		Name:    "test-ch",
+		BaseURL: "https://saved.example.com",
+		APIKeys: []string{"sk-cooldown"},
+	}})
+	cm.MarkKeyAsFailedWithDuration("sk-cooldown", "Messages", time.Hour)
+	r := newModelsRouter(cm)
+
+	w := postModels(t, r, "0", GetModelsRequest{
+		Key:     "sk-cooldown",
+		BaseURL: upstream.URL,
+	})
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400, body=%s", w.Code, w.Body.String())
+	}
+	if got := calls.Load(); got != 0 {
+		t.Fatalf("upstream calls = %d, want 0", got)
 	}
 }
 

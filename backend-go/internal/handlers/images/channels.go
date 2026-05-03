@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
@@ -280,7 +281,14 @@ func PingChannel(cfgManager *config.ConfigManager) gin.HandlerFunc {
 			return
 		}
 
-		c.JSON(200, common.PingSingleBaseURLUpstream(cfg.ImagesUpstream[id], buildPingRequest))
+		upstream := cfg.ImagesUpstream[id]
+		apiKey, err := cfgManager.GetUsableAPIKeyForChannel("Images", id)
+		if err != nil {
+			c.JSON(400, gin.H{"error": err.Error()})
+			return
+		}
+		upstream.APIKeys = []string{apiKey}
+		c.JSON(200, common.PingSingleBaseURLUpstream(upstream, buildPingRequest))
 	}
 }
 
@@ -288,7 +296,33 @@ func PingChannel(cfgManager *config.ConfigManager) gin.HandlerFunc {
 func PingAllChannels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		cfg := cfgManager.GetConfig()
-		c.JSON(200, gin.H{"channels": common.PingAllSingleBaseURLUpstreams(cfg.ImagesUpstream, buildPingRequest, true)["channels"]})
+		results := make([]gin.H, len(cfg.ImagesUpstream))
+		var wg sync.WaitGroup
+		for i, upstream := range cfg.ImagesUpstream {
+			wg.Add(1)
+			go func(index int, up config.UpstreamConfig) {
+				defer wg.Done()
+				apiKey, err := cfgManager.GetUsableAPIKeyForChannel("Images", index)
+				if err != nil {
+					results[index] = gin.H{
+						"id":      index,
+						"index":   index,
+						"name":    up.Name,
+						"success": false,
+						"error":   err.Error(),
+					}
+					return
+				}
+				up.APIKeys = []string{apiKey}
+				result := common.PingSingleBaseURLUpstream(up, buildPingRequest)
+				result["id"] = index
+				result["index"] = index
+				result["name"] = up.Name
+				results[index] = result
+			}(i, upstream)
+		}
+		wg.Wait()
+		c.JSON(200, gin.H{"channels": results})
 	}
 }
 
@@ -424,6 +458,17 @@ func GetChannelModels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 		if apiKey == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "No API key provided"})
 			return
+		}
+		if req.BaseURL == "" {
+			if err := cfgManager.ValidateAdminProbeKey("Images", id, apiKey); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+		} else {
+			if err := cfgManager.ValidateAdminProbeKeyIfKnownChannel("Images", id, apiKey); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
 		}
 
 		log.Printf("[Images-Models] ??????: channel=%s, key=%s", channelName, utils.MaskAPIKey(apiKey))
