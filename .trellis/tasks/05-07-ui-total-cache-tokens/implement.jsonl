@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend checklist and conventions for Vue/Vuetify UI changes."}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Component structure and UI pattern guidance for summary card changes."}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "TypeScript conventions for derived summary values and i18n keys."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Frontend quality gate and verification commands."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared code reuse and cross-layer thinking guide."}

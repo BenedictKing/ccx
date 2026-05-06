@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend checklist for final review."}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Review summary card UI consistency and tooltip usage."}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Review i18n key and computed value type safety."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Frontend quality gate and verification commands."}
