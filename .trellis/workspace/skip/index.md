@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 5
-- **Last Active**: 2026-04-29
+- **Total Sessions**: 6
+- **Last Active**: 2026-05-06
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~251 | Active |
+| `journal-1.md` | ~426 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 6 | 2026-05-06 | Unify AxonHub forwarding data plane | `023e4a9`, `e210b02`, `2ec5237` | `axonhub` |
 | 5 | 2026-04-29 | Quality inspection follow-up | `f29a437`, `aaf1cef`, `16018c3` | `codex/claude-channel-rules-passthrough` |
 | 4 | 2026-04-28 | Record sub2api passthrough usage release | `e2cd627` | `codex/claude-channel-rules-passthrough` |
 | 3 | 2026-04-28 | Fix channel selection, frontend checks, and codex branch release tag | `32069eb` | `codex/claude-channel-rules-passthrough` |
