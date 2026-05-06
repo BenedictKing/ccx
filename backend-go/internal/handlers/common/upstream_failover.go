@@ -13,6 +13,7 @@ import (
 
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/metrics"
+	"github.com/BenedictKing/ccx/internal/passthrough"
 	"github.com/BenedictKing/ccx/internal/scheduler"
 	"github.com/BenedictKing/ccx/internal/types"
 	"github.com/BenedictKing/ccx/internal/utils"
@@ -53,20 +54,13 @@ func SelectedAPIKeyFromContext(c *gin.Context) string {
 	return strings.TrimSpace(c.GetString(selectedAPIKeyContextKey))
 }
 
-// IsClaudeSub2APIPassthroughForKey 判断是否启用 sub2api 风格透传（仅替换认证）。
-// 仅在 Claude 渠道、开关开启且当前 key 为 Anthropic 官方 key 时生效。
-func IsClaudeSub2APIPassthroughForKey(upstream *config.UpstreamConfig, apiKey string) bool {
-	return upstream != nil &&
-		strings.EqualFold(upstream.ServiceType, "claude") &&
-		upstream.IsSub2APIPassthroughEnabled() &&
-		utils.IsAnthropicAPIKey(apiKey)
-}
-
 // ShouldDirectClaudePassthroughForKey 判断当前请求是否应直接透传响应（SSE 与非 SSE 均适用）。
 func ShouldDirectClaudePassthroughForKey(upstream *config.UpstreamConfig, apiKey string) bool {
-	return upstream != nil &&
-		strings.EqualFold(upstream.ServiceType, "claude") &&
-		(upstream.IsStreamPassthroughEnabled() || IsClaudeSub2APIPassthroughForKey(upstream, apiKey))
+	return ShouldDirectPassthroughForRequest("/v1/messages", upstream, apiKey)
+}
+
+func ShouldDirectPassthroughForRequest(path string, upstream *config.UpstreamConfig, apiKey string) bool {
+	return passthrough.Decide(path, passthroughChannelKindForPath(path), upstream, apiKey).RawResponse
 }
 
 func shouldNormalizeMetadataUserID(kind scheduler.ChannelKind, upstream *config.UpstreamConfig, apiKey string) bool {
@@ -79,21 +73,42 @@ func shouldNormalizeMetadataUserID(kind scheduler.ChannelKind, upstream *config.
 	if kind != scheduler.ChannelKindMessages && kind != scheduler.ChannelKindResponses {
 		return false
 	}
-	return upstream.IsNormalizeMetadataUserIDEnabled()
-}
-
-func isStrictClaudePassthrough(upstream *config.UpstreamConfig) bool {
-	return upstream != nil &&
-		strings.EqualFold(upstream.ServiceType, "claude") &&
-		upstream.IsStreamPassthroughEnabled() &&
-		upstream.IsStrictRequestPassthroughEnabled()
+	return true
 }
 
 func shouldSkipRequestBodyPreprocessing(kind scheduler.ChannelKind, upstream *config.UpstreamConfig, apiKey string) bool {
-	if kind != scheduler.ChannelKindMessages {
-		return false
+	decision := passthrough.Decide(passthroughPathForChannelKind(kind), kind, upstream, apiKey)
+	return decision.SkipPreprocess && decision.RawResponse
+}
+
+func passthroughPathForChannelKind(kind scheduler.ChannelKind) string {
+	switch kind {
+	case scheduler.ChannelKindMessages:
+		return "/v1/messages"
+	case scheduler.ChannelKindResponses:
+		return "/v1/responses"
+	case scheduler.ChannelKindChat:
+		return "/v1/chat/completions"
+	case scheduler.ChannelKindGemini:
+		return "/v1beta/models/model:streamGenerateContent"
+	default:
+		return ""
 	}
-	return isStrictClaudePassthrough(upstream) || IsClaudeSub2APIPassthroughForKey(upstream, apiKey)
+}
+
+func passthroughChannelKindForPath(path string) scheduler.ChannelKind {
+	switch passthrough.InboundFormatFromPath(path) {
+	case passthrough.APIFormatClaudeMessages:
+		return scheduler.ChannelKindMessages
+	case passthrough.APIFormatOpenAIResponses:
+		return scheduler.ChannelKindResponses
+	case passthrough.APIFormatOpenAIChat:
+		return scheduler.ChannelKindChat
+	case passthrough.APIFormatGeminiContents:
+		return scheduler.ChannelKindGemini
+	default:
+		return scheduler.ChannelKind("")
+	}
 }
 
 func prepareRequestBodyForUpstream(
@@ -448,7 +463,23 @@ func TryUpstreamWithAllKeys(
 					CompleteLog(channelLogStore, channelIndex, logRequestID, http.StatusOK, false, err.Error(), attempt > 0 || urlIdx > 0)
 					log.Printf("[%s-InvalidResponse] 上游返回无效响应 (Key: %s): %v，尝试下一个密钥", apiType, utils.MaskAPIKey(apiKey), err)
 					continue
-				} else if blErr, ok := err.(*ErrBlacklistKey); ok {
+				} else if cooldownErr := new(ErrCooldownKey); errors.As(err, &cooldownErr) {
+					// SSE 预检阶段命中冷却规则：Header 未发送，可安全 failover + 冷却当前 Key
+					failedKeys[apiKey] = true
+					duration := cooldownErr.Duration
+					if duration <= 0 {
+						duration = 60 * time.Minute
+					}
+					cfgManager.MarkKeyAsFailedWithDuration(apiKey, apiType, duration)
+					metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, metrics.FailureClassRetryable)
+					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
+					if markURLFailure != nil {
+						markURLFailure(currentBaseURL)
+					}
+					CompleteLog(channelLogStore, channelIndex, logRequestID, http.StatusOK, false, fmt.Sprintf("key cooldown: %s - %s", cooldownErr.Reason, cooldownErr.Message), attempt > 0 || urlIdx > 0)
+					log.Printf("[%s-Cooldown] SSE 流内错误触发冷却 (Key: %s, 原因: %s, 时长: %s)，尝试下一个密钥", apiType, utils.MaskAPIKey(apiKey), cooldownErr.Reason, duration)
+					continue
+				} else if blErr := new(ErrBlacklistKey); errors.As(err, &blErr) {
 					// SSE 流内检测到拉黑条件：Header 未发送，可安全 failover + 拉黑 Key
 					failedKeys[apiKey] = true
 					isBalanceError := blErr.Reason == "insufficient_balance"

@@ -889,3 +889,77 @@ func TestBuildTestRequestWithModel_DoesNotFallbackToDisabledKey(t *testing.T) {
 		t.Fatalf("error=%q, want contains 'no_api_key'", err.Error())
 	}
 }
+
+func TestBuildTestRequestWithModel_CustomAuthHeadersCannotOverrideSelectedKey(t *testing.T) {
+	tests := []struct {
+		name       string
+		protocol   string
+		apiKey     string
+		wantAuth   string
+		wantGoog   string
+		custom     map[string]string
+		wantUserUA string
+	}{
+		{
+			name:     "messages bearer wins",
+			protocol: "messages",
+			apiKey:   "sk-selected",
+			wantAuth: "Bearer sk-selected",
+			custom: map[string]string{
+				"Authorization":  "Bearer sk-custom",
+				"x-api-key":      "custom-api-key",
+				"x-goog-api-key": "custom-goog-key",
+				"User-Agent":     "CapabilityCustomUA/1.0",
+			},
+			wantUserUA: "CapabilityCustomUA/1.0",
+		},
+		{
+			name:     "gemini key wins",
+			protocol: "gemini",
+			apiKey:   "gemini-selected",
+			wantGoog: "gemini-selected",
+			custom: map[string]string{
+				"Authorization":  "Bearer sk-custom",
+				"x-api-key":      "custom-api-key",
+				"x-goog-api-key": "custom-goog-key",
+			},
+		},
+		{
+			name:     "responses bearer wins",
+			protocol: "responses",
+			apiKey:   "sk-selected",
+			wantAuth: "Bearer sk-selected",
+			custom: map[string]string{
+				"Authorization": "Bearer sk-custom",
+				"User-Agent":    "CapabilityResponsesUA/1.0",
+			},
+			wantUserUA: "CapabilityResponsesUA/1.0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			channel := &config.UpstreamConfig{
+				BaseURL:       "https://example.com",
+				APIKeys:       []string{tt.apiKey},
+				CustomHeaders: tt.custom,
+			}
+
+			req, err := buildTestRequestWithModel(tt.protocol, channel, "test-model")
+			if err != nil {
+				t.Fatalf("buildTestRequestWithModel() err = %v", err)
+			}
+			if got := req.Header.Get("Authorization"); got != tt.wantAuth {
+				t.Fatalf("Authorization = %q, want %q", got, tt.wantAuth)
+			}
+			if got := req.Header.Get("x-goog-api-key"); got != tt.wantGoog {
+				t.Fatalf("x-goog-api-key = %q, want %q", got, tt.wantGoog)
+			}
+			if tt.wantUserUA != "" {
+				if got := req.Header.Get("User-Agent"); got != tt.wantUserUA {
+					t.Fatalf("User-Agent = %q, want %q", got, tt.wantUserUA)
+				}
+			}
+		})
+	}
+}

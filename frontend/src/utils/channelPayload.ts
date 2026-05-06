@@ -25,20 +25,13 @@ export interface ChannelFormLike {
   modelsResponseMode?: 'upstream' | 'manual'
   manualModels?: string[]
   autoBlacklistBalance: boolean
-  normalizeMetadataUserId: boolean
-  streamPassthroughEnabled: boolean
-  sub2apiPassthroughEnabled: boolean
   keyAffinityEnabled?: boolean
-  strictRequestPassthroughEnabled: boolean
   modelsHealthCheckEnabled?: boolean
   modelsHealthCheckIntervalMinutes?: number
   failoverRules: NonNullable<Channel['failoverRules']>
 }
 
 export function buildChannelPayload(form: ChannelFormLike): Omit<Channel, 'index' | 'latency' | 'status'> {
-  const isClaude = form.serviceType === 'claude'
-  const sub2apiPassthroughEnabled = isClaude ? !!form.sub2apiPassthroughEnabled : false
-  const streamPassthroughEnabled = isClaude ? (!!form.streamPassthroughEnabled && !sub2apiPassthroughEnabled) : true
   const modelsHealthCheckEnabled = !!form.modelsHealthCheckEnabled
   const modelsHealthCheckIntervalMinutes = form.modelsHealthCheckIntervalMinutes && form.modelsHealthCheckIntervalMinutes > 0
     ? Math.floor(form.modelsHealthCheckIntervalMinutes)
@@ -89,11 +82,7 @@ export function buildChannelPayload(form: ChannelFormLike): Omit<Channel, 'index
     modelsResponseMode,
     manualModels,
     autoBlacklistBalance: form.autoBlacklistBalance,
-    normalizeMetadataUserId: form.normalizeMetadataUserId,
-    streamPassthroughEnabled,
-    sub2apiPassthroughEnabled,
     keyAffinityEnabled: form.serviceType === 'claude' ? (form.keyAffinityEnabled ?? true) : !!form.keyAffinityEnabled,
-    strictRequestPassthroughEnabled: form.serviceType === 'claude' ? form.strictRequestPassthroughEnabled : true,
     modelsHealthCheckEnabled,
     modelsHealthCheckIntervalMinutes,
     failoverRules: normalizedFailoverRules

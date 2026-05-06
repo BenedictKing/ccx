@@ -41,7 +41,6 @@ type UpstreamConfig struct {
 	// 自动拉黑开关
 	AutoBlacklistBalance *bool `json:"autoBlacklistBalance,omitempty"` // 余额不足时自动拉黑 Key（默认 true）
 	// metadata.user_id 规范化开关
-	NormalizeMetadataUserID *bool `json:"normalizeMetadataUserId,omitempty"` // 规范化 metadata.user_id（默认 true）
 	// Gemini 特定配置
 	InjectDummyThoughtSignature bool `json:"injectDummyThoughtSignature,omitempty"` // 给空 thought_signature 注入 dummy 值（兼容 x666.me 等要求必须有该字段的 API）
 	StripThoughtSignature       bool `json:"stripThoughtSignature,omitempty"`       // 移除 thought_signature 字段（兼容旧版 Gemini API）
@@ -57,11 +56,8 @@ type UpstreamConfig struct {
 	// 路由前缀
 	RoutePrefix string `json:"routePrefix,omitempty"` // 路由前缀（如 "kimi"），客户端可通过 /:routePrefix/v1/messages 访问
 	// Claude 流式转发模式：true=直接透传，false=走本地流事件处理链
-	StreamPassthroughEnabled  *bool `json:"streamPassthroughEnabled,omitempty"`
-	Sub2APIPassthroughEnabled *bool `json:"sub2apiPassthroughEnabled,omitempty"`
-	KeyAffinityEnabled        *bool `json:"keyAffinityEnabled,omitempty"`
+	KeyAffinityEnabled *bool `json:"keyAffinityEnabled,omitempty"`
 	// Claude 严格请求透传：true=请求体原样转发；false=继续执行本地兼容预处理
-	StrictRequestPassthroughEnabled *bool `json:"strictRequestPassthroughEnabled,omitempty"`
 	// Key 健康巡检（可选）：周期请求 /v1/models（Gemini 为 /v1beta/models），非 200 自动拉黑
 	ModelsHealthCheckEnabled         *bool `json:"modelsHealthCheckEnabled,omitempty"`
 	ModelsHealthCheckIntervalMinutes *int  `json:"modelsHealthCheckIntervalMinutes,omitempty"`
@@ -105,29 +101,6 @@ func (u *UpstreamConfig) IsAutoBlacklistBalanceEnabled() bool {
 	return *u.AutoBlacklistBalance
 }
 
-// IsNormalizeMetadataUserIDEnabled 检查 metadata.user_id 规范化是否启用（默认 true）
-func (u *UpstreamConfig) IsNormalizeMetadataUserIDEnabled() bool {
-	if u.NormalizeMetadataUserID == nil {
-		return true
-	}
-	return *u.NormalizeMetadataUserID
-}
-
-// IsStreamPassthroughEnabled 检查流式是否直接透传（默认 true）
-func (u *UpstreamConfig) IsStreamPassthroughEnabled() bool {
-	if u.StreamPassthroughEnabled == nil {
-		return true
-	}
-	return *u.StreamPassthroughEnabled
-}
-
-func (u *UpstreamConfig) IsSub2APIPassthroughEnabled() bool {
-	if u.Sub2APIPassthroughEnabled == nil {
-		return false
-	}
-	return *u.Sub2APIPassthroughEnabled
-}
-
 func (u *UpstreamConfig) IsKeyAffinityEnabled() bool {
 	if u.KeyAffinityEnabled == nil {
 		return false
@@ -156,16 +129,6 @@ func (u *UpstreamConfig) NormalizeModelsHealthCheckOptions() {
 	if u.ModelsHealthCheckIntervalMinutes != nil && *u.ModelsHealthCheckIntervalMinutes <= 0 {
 		defaultInterval := 60
 		u.ModelsHealthCheckIntervalMinutes = &defaultInterval
-	}
-}
-
-func (u *UpstreamConfig) NormalizeClaudePassthroughMode() {
-	if u == nil || !strings.EqualFold(u.ServiceType, "claude") {
-		return
-	}
-	if u.Sub2APIPassthroughEnabled != nil && *u.Sub2APIPassthroughEnabled {
-		disabled := false
-		u.StreamPassthroughEnabled = &disabled
 	}
 }
 
@@ -204,14 +167,6 @@ func (u *UpstreamConfig) NormalizeModelsResponseMode() {
 		normalized = append(normalized, modelID)
 	}
 	u.ManualModels = normalized
-}
-
-// IsStrictRequestPassthroughEnabled 检查是否启用严格请求透传（默认 true）
-func (u *UpstreamConfig) IsStrictRequestPassthroughEnabled() bool {
-	if u.StrictRequestPassthroughEnabled == nil {
-		return true
-	}
-	return *u.StrictRequestPassthroughEnabled
 }
 
 // GetEffectiveFailoverRules 获取渠道级故障规则（Claude 默认规则可覆盖）
@@ -363,11 +318,7 @@ type UpstreamUpdate struct {
 	PromotionUntil                   *time.Time     `json:"promotionUntil"`
 	LowQuality                       *bool          `json:"lowQuality"`
 	AutoBlacklistBalance             *bool          `json:"autoBlacklistBalance"`
-	NormalizeMetadataUserID          *bool          `json:"normalizeMetadataUserId"`
-	StreamPassthroughEnabled         *bool          `json:"streamPassthroughEnabled"`
-	Sub2APIPassthroughEnabled        *bool          `json:"sub2apiPassthroughEnabled"`
 	KeyAffinityEnabled               *bool          `json:"keyAffinityEnabled"`
-	StrictRequestPassthroughEnabled  *bool          `json:"strictRequestPassthroughEnabled"`
 	ModelsHealthCheckEnabled         *bool          `json:"modelsHealthCheckEnabled"`
 	ModelsHealthCheckIntervalMinutes *int           `json:"modelsHealthCheckIntervalMinutes"`
 	FailoverRules                    []FailoverRule `json:"failoverRules"`

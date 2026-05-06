@@ -765,16 +765,10 @@ func FormatJSONBytesForLog(jsonData []byte, maxTextLength int) string {
 
 // MaskSensitiveHeaders 脱敏敏感请求头
 func MaskSensitiveHeaders(headers map[string]string) map[string]string {
-	sensitiveKeys := map[string]bool{
-		"authorization":  true,
-		"x-api-key":      true,
-		"x-goog-api-key": true,
-	}
-
 	masked := make(map[string]string, len(headers))
 	for key, value := range headers {
 		lowerKey := strings.ToLower(key)
-		if sensitiveKeys[lowerKey] {
+		if IsSensitiveHeaderName(lowerKey) {
 			if lowerKey == "authorization" && strings.HasPrefix(value, "Bearer ") {
 				token := value[7:]
 				masked[key] = "Bearer " + MaskAPIKey(token)

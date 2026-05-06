@@ -1,18 +1,37 @@
 import { describe, expect, it } from 'vitest'
 import { buildChannelPayload } from './channelPayload'
 
+const baseForm = {
+  name: 'test-channel',
+  serviceType: 'openai' as const,
+  baseUrl: 'https://api.example.com/v1',
+  baseUrls: [] as string[],
+  website: '',
+  insecureSkipVerify: false,
+  lowQuality: false,
+  injectDummyThoughtSignature: false,
+  stripThoughtSignature: false,
+  description: '',
+  apiKeys: ['sk-1'],
+  modelMapping: {},
+  reasoningMapping: {},
+  textVerbosity: '' as const,
+  fastMode: false,
+  customHeaders: {},
+  proxyUrl: '',
+  routePrefix: '',
+  supportedModels: [] as string[],
+  autoBlacklistBalance: true,
+  failoverRules: []
+}
+
 describe('buildChannelPayload', () => {
   it('serializes reasoning mapping and channel advanced options', () => {
     const result = buildChannelPayload({
+      ...baseForm,
       name: '  test-channel  ',
-      serviceType: 'openai',
       baseUrl: 'https://api.example.com/v1#',
-      baseUrls: [],
       website: ' https://platform.openai.com ',
-      insecureSkipVerify: false,
-      lowQuality: false,
-      injectDummyThoughtSignature: false,
-      stripThoughtSignature: false,
       description: '  desc  ',
       apiKeys: ['sk-1', '  ', 'sk-2'],
       modelMapping: { 'gpt-5': 'gpt-5.2' },
@@ -21,14 +40,7 @@ describe('buildChannelPayload', () => {
       fastMode: true,
       customHeaders: { 'x-test': '1' },
       proxyUrl: ' http://127.0.0.1:7890 ',
-      routePrefix: '',
-      supportedModels: ['gpt-5'],
-      autoBlacklistBalance: true,
-      normalizeMetadataUserId: true,
-      streamPassthroughEnabled: true,
-      sub2apiPassthroughEnabled: false,
-      strictRequestPassthroughEnabled: true,
-      failoverRules: []
+      supportedModels: ['gpt-5']
     })
 
     expect(result.name).toBe('test-channel')
@@ -41,35 +53,18 @@ describe('buildChannelPayload', () => {
     expect(result.textVerbosity).toBe('medium')
     expect(result.fastMode).toBe(true)
     expect(result.proxyUrl).toBe('http://127.0.0.1:7890')
+    expect(result).not.toHaveProperty('normalizeMetadataUserId')
+    expect(result).not.toHaveProperty('streamPassthroughEnabled')
+    expect(result).not.toHaveProperty('sub2apiPassthroughEnabled')
+    expect(result).not.toHaveProperty('strictRequestPassthroughEnabled')
   })
 
   it('deduplicates default version baseUrls and keeps hash variants separate', () => {
     const result = buildChannelPayload({
-      name: 'multi',
+      ...baseForm,
       serviceType: 'responses',
       baseUrl: '',
-      baseUrls: ['https://api.example.com/v1/', 'https://api.example.com/v1#', 'https://backup.example.com/v1'],
-      website: '',
-      insecureSkipVerify: false,
-      lowQuality: false,
-      injectDummyThoughtSignature: false,
-      stripThoughtSignature: false,
-      description: '',
-      apiKeys: ['sk-1'],
-      modelMapping: {},
-      reasoningMapping: {},
-      textVerbosity: '',
-      fastMode: false,
-      customHeaders: {},
-      proxyUrl: '',
-      routePrefix: '',
-      supportedModels: [],
-      autoBlacklistBalance: true,
-      normalizeMetadataUserId: true,
-      streamPassthroughEnabled: true,
-      sub2apiPassthroughEnabled: false,
-      strictRequestPassthroughEnabled: true,
-      failoverRules: []
+      baseUrls: ['https://api.example.com/v1/', 'https://api.example.com/v1#', 'https://backup.example.com/v1']
     })
 
     expect(result.baseUrl).toBe('https://api.example.com')
@@ -80,33 +75,19 @@ describe('buildChannelPayload', () => {
     ])
   })
 
-  it('keeps images-compatible fields without claude-only payload leakage', () => {
+  it('keeps images-compatible fields without capability-test payload leakage', () => {
     const result = buildChannelPayload({
+      ...baseForm,
       name: 'images-channel',
       serviceType: 'openai',
       baseUrl: 'https://api.openai.com/v1',
-      baseUrls: [],
-      website: '',
       insecureSkipVerify: true,
-      lowQuality: false,
-      injectDummyThoughtSignature: false,
-      stripThoughtSignature: false,
-      description: '',
       apiKeys: ['sk-image'],
       modelMapping: { 'gpt-image-1': 'gpt-image-1' },
-      reasoningMapping: {},
-      textVerbosity: '',
-      fastMode: false,
       customHeaders: { 'x-image': '1' },
       proxyUrl: 'http://127.0.0.1:7890',
       routePrefix: 'images',
-      supportedModels: ['gpt-image-1', 'dall-e-*'],
-      autoBlacklistBalance: true,
-      normalizeMetadataUserId: true,
-      streamPassthroughEnabled: false,
-      sub2apiPassthroughEnabled: true,
-      strictRequestPassthroughEnabled: false,
-      failoverRules: []
+      supportedModels: ['gpt-image-1', 'dall-e-*']
     })
 
     expect(result.serviceType).toBe('openai')
@@ -115,38 +96,22 @@ describe('buildChannelPayload', () => {
     expect(result.customHeaders).toEqual({ 'x-image': '1' })
     expect(result.proxyUrl).toBe('http://127.0.0.1:7890')
     expect(result.routePrefix).toBe('images')
-    expect(result.sub2apiPassthroughEnabled).toBe(false)
     expect(result.failoverRules).toEqual([])
     expect(result).not.toHaveProperty('rpm')
   })
 
   it('removes unsupported advanced options for claude channel', () => {
     const result = buildChannelPayload({
+      ...baseForm,
       name: 'claude-channel',
       serviceType: 'claude',
       baseUrl: 'https://api.anthropic.com/v1',
-      baseUrls: [],
-      website: '',
-      insecureSkipVerify: false,
-      lowQuality: false,
-      injectDummyThoughtSignature: false,
-      stripThoughtSignature: false,
-      description: '',
       apiKeys: ['sk-ant'],
       modelMapping: { opus: 'claude-3-7-sonnet' },
       reasoningMapping: { opus: 'high' },
       textVerbosity: 'high',
       fastMode: true,
-      customHeaders: {},
-      proxyUrl: '',
-      routePrefix: '',
-      supportedModels: ['opus'],
-      autoBlacklistBalance: true,
-      normalizeMetadataUserId: true,
-      streamPassthroughEnabled: true,
-      sub2apiPassthroughEnabled: false,
-      strictRequestPassthroughEnabled: true,
-      failoverRules: []
+      supportedModels: ['opus']
     })
 
     expect(result.modelMapping).toEqual({ opus: 'claude-3-7-sonnet' })
@@ -157,203 +122,21 @@ describe('buildChannelPayload', () => {
 
   it('keeps autoBlacklistBalance switch', () => {
     const result = buildChannelPayload({
-      name: 'balance-guard',
+      ...baseForm,
       serviceType: 'responses',
-      baseUrl: 'https://api.example.com/v1',
-      baseUrls: [],
-      website: '',
-      insecureSkipVerify: false,
-      lowQuality: false,
-      injectDummyThoughtSignature: false,
-      stripThoughtSignature: false,
-      description: '',
-      apiKeys: ['sk-1'],
-      modelMapping: {},
-      reasoningMapping: {},
-      textVerbosity: '',
-      fastMode: false,
-      customHeaders: {},
-      proxyUrl: '',
-      routePrefix: '',
-      supportedModels: [],
-      autoBlacklistBalance: false,
-      normalizeMetadataUserId: true,
-      streamPassthroughEnabled: true,
-      sub2apiPassthroughEnabled: false,
-      strictRequestPassthroughEnabled: true,
-      failoverRules: []
+      autoBlacklistBalance: false
     })
 
     expect(result.autoBlacklistBalance).toBe(false)
   })
 
-  it('keeps normalizeMetadataUserId switch', () => {
-    const result = buildChannelPayload({
-      name: 'metadata-guard',
-      serviceType: 'responses',
-      baseUrl: 'https://api.example.com/v1',
-      baseUrls: [],
-      website: '',
-      insecureSkipVerify: false,
-      lowQuality: false,
-      injectDummyThoughtSignature: false,
-      stripThoughtSignature: false,
-      description: '',
-      apiKeys: ['sk-1'],
-      modelMapping: {},
-      reasoningMapping: {},
-      textVerbosity: '',
-      fastMode: false,
-      customHeaders: {},
-      proxyUrl: '',
-      routePrefix: '',
-      supportedModels: [],
-      autoBlacklistBalance: true,
-      normalizeMetadataUserId: false,
-      streamPassthroughEnabled: true,
-      sub2apiPassthroughEnabled: false,
-      strictRequestPassthroughEnabled: true,
-      failoverRules: []
-    })
-
-    expect(result.normalizeMetadataUserId).toBe(false)
-  })
-
-  it('keeps strictRequestPassthroughEnabled for claude only', () => {
-    const result = buildChannelPayload({
-      name: 'claude-strict',
-      serviceType: 'claude',
-      baseUrl: 'https://api.anthropic.com/v1',
-      baseUrls: [],
-      website: '',
-      insecureSkipVerify: false,
-      lowQuality: false,
-      injectDummyThoughtSignature: false,
-      stripThoughtSignature: false,
-      description: '',
-      apiKeys: ['sk-ant'],
-      modelMapping: {},
-      reasoningMapping: {},
-      textVerbosity: '',
-      fastMode: false,
-      customHeaders: {},
-      proxyUrl: '',
-      routePrefix: '',
-      supportedModels: [],
-      autoBlacklistBalance: true,
-      normalizeMetadataUserId: true,
-      streamPassthroughEnabled: true,
-      sub2apiPassthroughEnabled: false,
-      strictRequestPassthroughEnabled: false,
-      failoverRules: []
-    })
-
-    expect(result.strictRequestPassthroughEnabled).toBe(false)
-  })
-
-  it('enforces mutual exclusion: sub2api passthrough wins', () => {
-    const result = buildChannelPayload({
-      name: 'claude-exclusive',
-      serviceType: 'claude',
-      baseUrl: 'https://api.anthropic.com/v1',
-      baseUrls: [],
-      website: '',
-      insecureSkipVerify: false,
-      lowQuality: false,
-      injectDummyThoughtSignature: false,
-      stripThoughtSignature: false,
-      description: '',
-      apiKeys: ['sk-ant'],
-      modelMapping: {},
-      reasoningMapping: {},
-      textVerbosity: '',
-      fastMode: false,
-      customHeaders: {},
-      proxyUrl: '',
-      routePrefix: '',
-      supportedModels: [],
-      autoBlacklistBalance: true,
-      normalizeMetadataUserId: true,
-      streamPassthroughEnabled: true,
-      sub2apiPassthroughEnabled: true,
-      strictRequestPassthroughEnabled: true,
-      failoverRules: []
-    })
-
-    expect(result.sub2apiPassthroughEnabled).toBe(true)
-    expect(result.streamPassthroughEnabled).toBe(false)
-  })
-
-  it('forces non-claude passthrough options to safe defaults', () => {
-    const result = buildChannelPayload({
-      name: 'responses-channel',
-      serviceType: 'responses',
-      baseUrl: 'https://api.example.com/v1',
-      baseUrls: [],
-      website: '',
-      insecureSkipVerify: false,
-      lowQuality: false,
-      injectDummyThoughtSignature: false,
-      stripThoughtSignature: false,
-      description: '',
-      apiKeys: ['sk-1'],
-      modelMapping: {},
-      reasoningMapping: {},
-      textVerbosity: '',
-      fastMode: false,
-      customHeaders: {},
-      proxyUrl: '',
-      routePrefix: '',
-      supportedModels: [],
-      autoBlacklistBalance: true,
-      normalizeMetadataUserId: true,
-      streamPassthroughEnabled: false,
-      sub2apiPassthroughEnabled: true,
-      strictRequestPassthroughEnabled: false,
-      failoverRules: [
-        {
-          action: 'blacklist',
-          description: 'ignored',
-          statusCodes: [401],
-          errorCodes: [],
-          keywords: []
-        }
-      ]
-    })
-
-    expect(result.streamPassthroughEnabled).toBe(true)
-    expect(result.sub2apiPassthroughEnabled).toBe(false)
-    expect(result.strictRequestPassthroughEnabled).toBe(true)
-    expect(result.failoverRules).toEqual([])
-    expect(result).not.toHaveProperty('rpm')
-  })
-
   it('normalizes claude failover rules and removes invalid rules', () => {
     const result = buildChannelPayload({
+      ...baseForm,
       name: 'claude-rules',
       serviceType: 'claude',
       baseUrl: 'https://api.anthropic.com/v1',
-      baseUrls: [],
-      website: '',
-      insecureSkipVerify: false,
-      lowQuality: false,
-      injectDummyThoughtSignature: false,
-      stripThoughtSignature: false,
-      description: '',
       apiKeys: ['sk-ant'],
-      modelMapping: {},
-      reasoningMapping: {},
-      textVerbosity: '',
-      fastMode: false,
-      customHeaders: {},
-      proxyUrl: '',
-      routePrefix: '',
-      supportedModels: [],
-      autoBlacklistBalance: true,
-      normalizeMetadataUserId: true,
-      streamPassthroughEnabled: true,
-      sub2apiPassthroughEnabled: false,
-      strictRequestPassthroughEnabled: true,
       failoverRules: [
         {
           action: 'cooldown',
@@ -387,33 +170,13 @@ describe('buildChannelPayload', () => {
 
   it('keeps models health check options and falls back to default interval', () => {
     const result = buildChannelPayload({
+      ...baseForm,
       name: 'models-health',
       serviceType: 'claude',
       baseUrl: 'https://api.anthropic.com/v1',
-      baseUrls: [],
-      website: '',
-      insecureSkipVerify: false,
-      lowQuality: false,
-      injectDummyThoughtSignature: false,
-      stripThoughtSignature: false,
-      description: '',
       apiKeys: ['sk-ant'],
-      modelMapping: {},
-      reasoningMapping: {},
-      textVerbosity: '',
-      fastMode: false,
-      customHeaders: {},
-      proxyUrl: '',
-      routePrefix: '',
-      supportedModels: [],
-      autoBlacklistBalance: true,
-      normalizeMetadataUserId: true,
-      streamPassthroughEnabled: true,
-      sub2apiPassthroughEnabled: false,
-      strictRequestPassthroughEnabled: true,
       modelsHealthCheckEnabled: true,
-      modelsHealthCheckIntervalMinutes: 0,
-      failoverRules: []
+      modelsHealthCheckIntervalMinutes: 0
     })
 
     expect(result.modelsHealthCheckEnabled).toBe(true)

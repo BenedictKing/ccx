@@ -3,6 +3,7 @@ package providers
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/BenedictKing/ccx/internal/config"
+	"github.com/BenedictKing/ccx/internal/passthrough"
 	"github.com/BenedictKing/ccx/internal/types"
 	"github.com/BenedictKing/ccx/internal/utils"
 	"github.com/gin-gonic/gin"
@@ -18,55 +20,16 @@ import (
 // ClaudeProvider Claude 提供商（直接透传）
 type ClaudeProvider struct{}
 
-// redirectModelInBody 仅修改请求体中的 model 字段，保持其他内容不变
-// 使用 map[string]interface{} 避免结构体字段丢失问题
-func redirectModelInBody(bodyBytes []byte, upstream *config.UpstreamConfig) []byte {
-	decoder := json.NewDecoder(bytes.NewReader(bodyBytes))
-	decoder.UseNumber() // 保留数字精度
-
-	var data map[string]interface{}
-	if err := decoder.Decode(&data); err != nil {
-		return bodyBytes // 解析失败，返回原始数据
-	}
-
-	model, ok := data["model"].(string)
-	if !ok {
-		return bodyBytes // 没有 model 字段或类型不对
-	}
-
-	newModel := config.RedirectModel(model, upstream)
-	if newModel == model {
-		return bodyBytes // 模型未变，无需重编码
-	}
-
-	data["model"] = newModel
-
-	// 使用 Encoder 并禁用 HTML 转义，保持原始格式
-	newBytes, err := utils.MarshalJSONNoEscape(data)
-	if err != nil {
-		return bodyBytes // 编码失败，返回原始数据
-	}
-	return newBytes
-}
-
 // ConvertToProviderRequest 转换为 Claude 请求（实现真正的透传）
-func isClaudeMessagesFamilyPath(c *gin.Context) bool {
+func claudeRequestPath(c *gin.Context) string {
 	if c == nil || c.Request == nil || c.Request.URL == nil {
-		return false
+		return ""
 	}
 	path := c.Request.URL.Path
 	if routePrefix := c.Param("routePrefix"); routePrefix != "" {
 		path = strings.TrimPrefix(path, "/"+routePrefix)
 	}
-	return strings.HasSuffix(path, "/v1/messages") || strings.HasSuffix(path, "/v1/messages/count_tokens")
-}
-
-func shouldSkipClaudeModelRewriteForAuthOnlyPassthrough(c *gin.Context, upstream *config.UpstreamConfig, apiKey string) bool {
-	return upstream != nil &&
-		strings.EqualFold(upstream.ServiceType, "claude") &&
-		upstream.IsSub2APIPassthroughEnabled() &&
-		utils.IsAnthropicAPIKey(apiKey) &&
-		isClaudeMessagesFamilyPath(c)
+	return path
 }
 
 func (p *ClaudeProvider) ConvertToProviderRequest(c *gin.Context, upstream *config.UpstreamConfig, apiKey string) (*http.Request, []byte, error) {
@@ -76,11 +39,11 @@ func (p *ClaudeProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 		return nil, nil, err
 	}
 
-	authOnlyPassthrough := shouldSkipClaudeModelRewriteForAuthOnlyPassthrough(c, upstream, apiKey)
+	path := claudeRequestPath(c)
 
 	// 模型重定向：仅修改 model 字段，保持其他内容不变
-	if upstream.ModelMapping != nil && len(upstream.ModelMapping) > 0 && !authOnlyPassthrough {
-		bodyBytes = redirectModelInBody(bodyBytes, upstream)
+	if upstream.ModelMapping != nil && len(upstream.ModelMapping) > 0 {
+		bodyBytes = passthrough.PatchTopLevelModel(bodyBytes, upstream)
 	}
 
 	// 构建目标URL
@@ -89,10 +52,6 @@ func (p *ClaudeProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 	// 2. 如果 baseURL 已包含版本号后缀（如 /v1, /v2, /v3），直接拼接端点路径
 	// 3. 如果 baseURL 不包含版本号后缀，自动添加 /v1 再拼接端点路径
 	// 先剥离 routePrefix（如 /glm），再剥离 /v1，得到纯端点路径（如 /messages）
-	path := c.Request.URL.Path
-	if routePrefix := c.Param("routePrefix"); routePrefix != "" {
-		path = strings.TrimPrefix(path, "/"+routePrefix)
-	}
 	endpoint := strings.TrimPrefix(path, "/v1")
 	baseURL := upstream.GetEffectiveBaseURL()
 	skipVersionPrefix := strings.HasSuffix(baseURL, "#")
@@ -132,13 +91,8 @@ func (p *ClaudeProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 	// 使用统一的头部处理逻辑
 	req.Header = utils.PrepareUpstreamHeaders(c, req.URL.Host)
 	utils.ApplyCustomHeaders(req.Header, upstream.CustomHeaders) // 先应用自定义头，后覆盖认证（不可被自定义头覆盖）
-	utils.SetAuthenticationHeader(req.Header, apiKey)
 	utils.EnsureCompatibleUserAgent(req.Header, "claude")
-	if authOnlyPassthrough {
-		// sub2api 风格：仅替换认证，同时移除敏感客户端凭据，避免上游泄漏。
-		req.Header.Del("Cookie")
-		req.Header.Del("Proxy-Authorization")
-	}
+	utils.SetAuthenticationHeader(req.Header, apiKey)
 
 	return req, bodyBytes, nil
 }
@@ -153,13 +107,15 @@ func (p *ClaudeProvider) ConvertToClaudeResponse(providerResp *types.ProviderRes
 }
 
 // HandleStreamResponse 处理流式响应（直接透传）
-func (p *ClaudeProvider) HandleStreamResponse(body io.ReadCloser) (<-chan string, <-chan error, error) {
+func (p *ClaudeProvider) HandleStreamResponse(ctx context.Context, body io.ReadCloser) (<-chan string, <-chan error, error) {
+	ctx = normalizeStreamContext(ctx)
 	eventChan := make(chan string, 100)
 	errChan := make(chan error, 1)
 
 	go func() {
 		defer close(eventChan)
 		defer close(errChan)
+		defer closeStreamBodyOnCancel(ctx, body)()
 		defer body.Close()
 
 		scanner := bufio.NewScanner(body)
@@ -177,11 +133,16 @@ func (p *ClaudeProvider) HandleStreamResponse(body io.ReadCloser) (<-chan string
 			if eventBuf.Len() == 0 {
 				return
 			}
-			eventChan <- eventBuf.String()
+			if !sendStreamEvent(ctx, eventChan, eventBuf.String()) {
+				return
+			}
 			eventBuf.Reset()
 		}
 
 		for scanner.Scan() {
+			if isStreamContextCanceled(ctx) {
+				return
+			}
 			line := normalizeSSEFieldLine(scanner.Text())
 
 			// 检测是否发送了 tool_use 相关的 stop_reason（通常在 data 行中）
@@ -204,6 +165,9 @@ func (p *ClaudeProvider) HandleStreamResponse(body io.ReadCloser) (<-chan string
 		flushEvent()
 
 		if err := scanner.Err(); err != nil {
+			if isStreamContextCanceled(ctx) {
+				return
+			}
 			// 在 tool_use 场景下，客户端主动断开是正常行为
 			// 如果已经发送了 tool_use stop 事件，并且错误是连接断开相关的，则忽略该错误
 			errMsg := err.Error()
@@ -213,7 +177,7 @@ func (p *ClaudeProvider) HandleStreamResponse(body io.ReadCloser) (<-chan string
 				// 这是预期的客户端行为，不报告错误
 				return
 			}
-			errChan <- err
+			sendStreamError(ctx, errChan, err)
 		}
 	}()
 

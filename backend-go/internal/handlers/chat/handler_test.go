@@ -58,3 +58,77 @@ func TestBuildProviderRequest_InjectsReasoningBeforeModelRedirect(t *testing.T) 
 		t.Fatalf("service_tier = %v, want priority", got["service_tier"])
 	}
 }
+
+func TestBuildProviderRequest_CustomAuthorizationCannotOverrideSelectedKey(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil).WithContext(context.Background())
+
+	bodyBytes := []byte(`{"model":"gpt-5","messages":[{"role":"user","content":"hi"}]}`)
+	upstream := &config.UpstreamConfig{
+		ServiceType: "openai",
+		CustomHeaders: map[string]string{
+			"Authorization": "Bearer sk-custom",
+			"X-Trace-ID":    "trace-1",
+		},
+	}
+
+	req, err := buildProviderRequest(c, upstream, "https://api.example.com", "sk-selected", bodyBytes, "gpt-5", false)
+	if err != nil {
+		t.Fatalf("buildProviderRequest() err = %v", err)
+	}
+
+	if got := req.Header.Get("Authorization"); got != "Bearer sk-selected" {
+		t.Fatalf("Authorization = %q, want selected key", got)
+	}
+	if got := req.Header.Get("X-Trace-ID"); got != "trace-1" {
+		t.Fatalf("X-Trace-ID = %q, want custom metadata header", got)
+	}
+}
+
+func TestBuildProviderRequest_ClaudeTargetUserAgentFallbackAndCustomOverride(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	bodyBytes := []byte(`{"model":"gpt-5","messages":[{"role":"user","content":"hi"}]}`)
+
+	t.Run("missing user agent gets fallback", func(t *testing.T) {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil).WithContext(context.Background())
+
+		req, err := buildProviderRequest(c, &config.UpstreamConfig{ServiceType: "claude"}, "https://api.example.com", "sk-selected", bodyBytes, "gpt-5", false)
+		if err != nil {
+			t.Fatalf("buildProviderRequest() err = %v", err)
+		}
+		if got := req.Header.Get("User-Agent"); got != "claude-cli/2.0.34 (external, cli)" {
+			t.Fatalf("User-Agent = %q, want Claude fallback", got)
+		}
+		if got := req.Header.Get("Authorization"); got != "Bearer sk-selected" {
+			t.Fatalf("Authorization = %q, want selected key", got)
+		}
+	})
+
+	t.Run("custom user agent wins", func(t *testing.T) {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil).WithContext(context.Background())
+		c.Request.Header.Set("User-Agent", "InboundUA/1.0")
+
+		upstream := &config.UpstreamConfig{
+			ServiceType: "claude",
+			CustomHeaders: map[string]string{
+				"User-Agent":    "ChatCustomUA/1.0",
+				"Authorization": "Bearer custom",
+			},
+		}
+		req, err := buildProviderRequest(c, upstream, "https://api.example.com", "sk-selected", bodyBytes, "gpt-5", false)
+		if err != nil {
+			t.Fatalf("buildProviderRequest() err = %v", err)
+		}
+		if got := req.Header.Get("User-Agent"); got != "ChatCustomUA/1.0" {
+			t.Fatalf("User-Agent = %q, want custom UA", got)
+		}
+		if got := req.Header.Get("Authorization"); got != "Bearer sk-selected" {
+			t.Fatalf("Authorization = %q, want selected key", got)
+		}
+	})
+}

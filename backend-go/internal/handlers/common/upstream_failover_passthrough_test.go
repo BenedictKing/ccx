@@ -12,8 +12,7 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-func TestIsClaudeSub2APIPassthroughForKey(t *testing.T) {
-	enabled := true
+func TestShouldDirectClaudePassthroughForKey(t *testing.T) {
 	tests := []struct {
 		name     string
 		upstream *config.UpstreamConfig
@@ -21,96 +20,22 @@ func TestIsClaudeSub2APIPassthroughForKey(t *testing.T) {
 		want     bool
 	}{
 		{
-			name: "claude + sub2api + anthropic key",
-			upstream: &config.UpstreamConfig{
-				ServiceType:               "claude",
-				Sub2APIPassthroughEnabled: &enabled,
-			},
-			apiKey: "sk-ant-example",
-			want:   true,
+			name:     "messages to claude",
+			upstream: &config.UpstreamConfig{ServiceType: "claude"},
+			apiKey:   "any-key",
+			want:     true,
 		},
 		{
-			name: "claude + sub2api + non-anthropic key",
-			upstream: &config.UpstreamConfig{
-				ServiceType:               "claude",
-				Sub2APIPassthroughEnabled: &enabled,
-			},
-			apiKey: "sk-not-ant",
-			want:   false,
-		},
-		{
-			name: "non-claude channel",
-			upstream: &config.UpstreamConfig{
-				ServiceType:               "responses",
-				Sub2APIPassthroughEnabled: &enabled,
-			},
-			apiKey: "sk-ant-example",
-			want:   false,
+			name:     "non-claude channel",
+			upstream: &config.UpstreamConfig{ServiceType: "responses"},
+			apiKey:   "sk-ant-example",
+			want:     false,
 		},
 		{
 			name:     "nil upstream",
 			upstream: nil,
 			apiKey:   "sk-ant-example",
 			want:     false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := IsClaudeSub2APIPassthroughForKey(tt.upstream, tt.apiKey)
-			if got != tt.want {
-				t.Fatalf("IsClaudeSub2APIPassthroughForKey() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestShouldDirectClaudePassthroughForKey(t *testing.T) {
-	on := true
-	off := false
-	tests := []struct {
-		name     string
-		upstream *config.UpstreamConfig
-		apiKey   string
-		want     bool
-	}{
-		{
-			name: "full passthrough on",
-			upstream: &config.UpstreamConfig{
-				ServiceType:              "claude",
-				StreamPassthroughEnabled: &on,
-			},
-			apiKey: "any-key",
-			want:   true,
-		},
-		{
-			name: "sub2api passthrough on with anthropic key",
-			upstream: &config.UpstreamConfig{
-				ServiceType:               "claude",
-				StreamPassthroughEnabled:  &off,
-				Sub2APIPassthroughEnabled: &on,
-			},
-			apiKey: "sk-ant-example",
-			want:   true,
-		},
-		{
-			name: "sub2api passthrough on but non-anthropic key",
-			upstream: &config.UpstreamConfig{
-				ServiceType:               "claude",
-				StreamPassthroughEnabled:  &off,
-				Sub2APIPassthroughEnabled: &on,
-			},
-			apiKey: "sk-not-ant",
-			want:   false,
-		},
-		{
-			name: "non-claude channel",
-			upstream: &config.UpstreamConfig{
-				ServiceType:              "responses",
-				StreamPassthroughEnabled: &on,
-			},
-			apiKey: "sk-ant-example",
-			want:   false,
 		},
 	}
 
@@ -124,17 +49,87 @@ func TestShouldDirectClaudePassthroughForKey(t *testing.T) {
 	}
 }
 
+func TestShouldDirectPassthroughForRequestRequiresProtocolConsistency(t *testing.T) {
+	tests := []struct {
+		name     string
+		path     string
+		upstream *config.UpstreamConfig
+		apiKey   string
+		want     bool
+	}{
+		{
+			name:     "messages to claude",
+			path:     "/v1/messages",
+			upstream: &config.UpstreamConfig{ServiceType: "claude"},
+			apiKey:   "sk-any",
+			want:     true,
+		},
+		{
+			name:     "responses to responses",
+			path:     "/v1/responses",
+			upstream: &config.UpstreamConfig{ServiceType: "responses"},
+			apiKey:   "sk-any",
+			want:     true,
+		},
+		{
+			name:     "chat to openai",
+			path:     "/v1/chat/completions",
+			upstream: &config.UpstreamConfig{ServiceType: "openai"},
+			apiKey:   "sk-any",
+			want:     true,
+		},
+		{
+			name:     "gemini native to gemini",
+			path:     "/v1beta/models/gemini-2.0-flash:streamGenerateContent",
+			upstream: &config.UpstreamConfig{ServiceType: "gemini"},
+			apiKey:   "sk-any",
+			want:     true,
+		},
+		{
+			name:     "responses to claude is cross protocol",
+			path:     "/v1/responses",
+			upstream: &config.UpstreamConfig{ServiceType: "claude"},
+			apiKey:   "sk-any",
+			want:     false,
+		},
+		{
+			name:     "chat to gemini is cross protocol",
+			path:     "/v1/chat/completions",
+			upstream: &config.UpstreamConfig{ServiceType: "gemini"},
+			apiKey:   "sk-any",
+			want:     false,
+		},
+		{
+			name:     "gemini native to openai is cross protocol",
+			path:     "/v1beta/models/gemini-2.0-flash:streamGenerateContent",
+			upstream: &config.UpstreamConfig{ServiceType: "openai"},
+			apiKey:   "sk-any",
+			want:     false,
+		},
+		{
+			name:     "messages to openai is cross protocol",
+			path:     "/v1/messages",
+			upstream: &config.UpstreamConfig{ServiceType: "openai"},
+			apiKey:   "sk-any",
+			want:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ShouldDirectPassthroughForRequest(tt.path, tt.upstream, tt.apiKey)
+			if got != tt.want {
+				t.Fatalf("ShouldDirectPassthroughForRequest() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestPrepareRequestBodyForUpstream_PassthroughAndPreprocess(t *testing.T) {
 	requestBody := []byte(`{"metadata":{"user_id":"{\"device_id\":\"dev\",\"account_uuid\":\"acc\",\"session_id\":\"sid\"}"},"system":[{"type":"text","text":"cc_version=1;cch=user_xxx;cc_entrypoint=chat"}],"messages":[]}`)
-	enabled := true
-	disabled := false
 
-	t.Run("strict passthrough should keep request body untouched", func(t *testing.T) {
-		upstream := &config.UpstreamConfig{
-			ServiceType:                     "claude",
-			StreamPassthroughEnabled:        &enabled,
-			StrictRequestPassthroughEnabled: &enabled,
-		}
+	t.Run("same format messages passthrough should keep request body untouched", func(t *testing.T) {
+		upstream := &config.UpstreamConfig{ServiceType: "claude"}
 
 		got := prepareRequestBodyForUpstream(
 			requestBody,
@@ -146,38 +141,13 @@ func TestPrepareRequestBodyForUpstream_PassthroughAndPreprocess(t *testing.T) {
 			"sk-any",
 		)
 		if !bytes.Equal(got, requestBody) {
-			t.Fatalf("strict passthrough should keep body unchanged, got=%s", string(got))
+			t.Fatalf("same-format passthrough should keep body unchanged, got=%s", string(got))
 		}
 	})
 
-	t.Run("sub2api passthrough should keep request body untouched", func(t *testing.T) {
-		upstream := &config.UpstreamConfig{
-			ServiceType:               "claude",
-			StreamPassthroughEnabled:  &disabled,
-			Sub2APIPassthroughEnabled: &enabled,
-		}
-
-		got := prepareRequestBodyForUpstream(
-			requestBody,
-			scheduler.ChannelKindMessages,
-			"Messages",
-			upstream,
-			nil,
-			&config.EnvConfig{},
-			"sk-ant-example",
-		)
-		if !bytes.Equal(got, requestBody) {
-			t.Fatalf("sub2api passthrough should keep body unchanged, got=%s", string(got))
-		}
-	})
-
-	t.Run("sub2api passthrough should still honor strip billing header", func(t *testing.T) {
+	t.Run("same format messages passthrough still honors strip billing header", func(t *testing.T) {
 		cfgManager := newConfigManagerForCommonTest(t, `{"stripBillingHeader":true}`)
-		upstream := &config.UpstreamConfig{
-			ServiceType:               "claude",
-			StreamPassthroughEnabled:  &disabled,
-			Sub2APIPassthroughEnabled: &enabled,
-		}
+		upstream := &config.UpstreamConfig{ServiceType: "claude"}
 
 		got := prepareRequestBodyForUpstream(
 			requestBody,
@@ -186,23 +156,19 @@ func TestPrepareRequestBodyForUpstream_PassthroughAndPreprocess(t *testing.T) {
 			upstream,
 			cfgManager,
 			&config.EnvConfig{},
-			"sk-ant-example",
+			"sk-any",
 		)
 		if strings.Contains(string(got), "cch=") {
-			t.Fatalf("billing header marker should be removed for sub2api passthrough when stripBillingHeader is enabled, got=%s", string(got))
+			t.Fatalf("billing header marker should be removed when stripBillingHeader is enabled, got=%s", string(got))
 		}
 		if userID := gjson.GetBytes(got, "metadata.user_id").String(); userID != `{"device_id":"dev","account_uuid":"acc","session_id":"sid"}` {
-			t.Fatalf("sub2api passthrough should not normalize metadata.user_id, got %q", userID)
+			t.Fatalf("same-format passthrough should not normalize metadata.user_id, got %q", userID)
 		}
 	})
 
-	t.Run("non-passthrough should keep preprocessing chain active", func(t *testing.T) {
+	t.Run("cross protocol messages request keeps preprocessing active", func(t *testing.T) {
 		cfgManager := newConfigManagerForCommonTest(t, `{"stripBillingHeader":true}`)
-		upstream := &config.UpstreamConfig{
-			ServiceType:               "claude",
-			StreamPassthroughEnabled:  &disabled,
-			Sub2APIPassthroughEnabled: &disabled,
-		}
+		upstream := &config.UpstreamConfig{ServiceType: "responses"}
 
 		got := prepareRequestBodyForUpstream(
 			requestBody,
@@ -214,22 +180,18 @@ func TestPrepareRequestBodyForUpstream_PassthroughAndPreprocess(t *testing.T) {
 			"sk-any",
 		)
 		if bytes.Equal(got, requestBody) {
-			t.Fatal("expected body to be normalized when passthrough is disabled")
+			t.Fatal("expected messages-to-responses mismatch to run preprocessing")
 		}
 		if userID := gjson.GetBytes(got, "metadata.user_id").String(); userID != "user_dev_account_acc_session_sid" {
 			t.Fatalf("metadata.user_id = %q, want %q", userID, "user_dev_account_acc_session_sid")
 		}
 		if strings.Contains(string(got), "cch=") {
-			t.Fatalf("billing header marker should be removed when stripBillingHeader is enabled, got=%s", string(got))
+			t.Fatalf("billing header marker should be removed when preprocessing runs, got=%s", string(got))
 		}
 	})
 
-	t.Run("responses path should still normalize metadata", func(t *testing.T) {
-		upstream := &config.UpstreamConfig{
-			ServiceType:               "claude",
-			StreamPassthroughEnabled:  &disabled,
-			Sub2APIPassthroughEnabled: &disabled,
-		}
+	t.Run("responses path still normalizes metadata on cross protocol", func(t *testing.T) {
+		upstream := &config.UpstreamConfig{ServiceType: "claude"}
 
 		got := prepareRequestBodyForUpstream(
 			requestBody,

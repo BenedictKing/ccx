@@ -7,7 +7,10 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/metrics"
@@ -37,14 +40,21 @@ func setupChatTestConfigManager(t *testing.T, upstream []config.UpstreamConfig) 
 
 func newChatTestRouter(t *testing.T, upstream config.UpstreamConfig) *gin.Engine {
 	t.Helper()
+	r, _ := newChatTestRouterWithMetrics(t, upstream)
+	return r
+}
+
+func newChatTestRouterWithMetrics(t *testing.T, upstream config.UpstreamConfig) (*gin.Engine, *metrics.MetricsManager) {
+	t.Helper()
 	gin.SetMode(gin.TestMode)
 	cfgManager := setupChatTestConfigManager(t, []config.UpstreamConfig{upstream})
+	chatMetrics := metrics.NewMetricsManager()
 	channelScheduler := scheduler.NewChannelScheduler(
 		cfgManager,
 		metrics.NewMetricsManager(),
 		metrics.NewMetricsManager(),
 		metrics.NewMetricsManager(),
-		metrics.NewMetricsManager(),
+		chatMetrics,
 		session.NewTraceAffinityManager(),
 		nil,
 	)
@@ -55,7 +65,7 @@ func newChatTestRouter(t *testing.T, upstream config.UpstreamConfig) *gin.Engine
 
 	r := gin.New()
 	r.POST("/v1/chat/completions", Handler(envCfg, cfgManager, channelScheduler))
-	return r
+	return r, chatMetrics
 }
 
 func performChatHandlerRequest(t *testing.T, router *gin.Engine, body string) *httptest.ResponseRecorder {
@@ -66,6 +76,145 @@ func performChatHandlerRequest(t *testing.T, router *gin.Engine, body string) *h
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	return w
+}
+
+func TestChatHandler_StreamRawPassthroughPreservesOpenAIUpstreamSSEBytesAndMetrics(t *testing.T) {
+	rawStream := "" +
+		":keep-alive\n\n" +
+		"id:chat-1\n" +
+		"event:chunk\n" +
+		"data:{\"id\":\"chatcmpl_1\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"hi\"}}]}\n\n" +
+		"retry:1500\n" +
+		"data:{\"id\":\"chatcmpl_1\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":5,\"completion_tokens\":2,\"total_tokens\":7}}\n\n" +
+		"data:[DONE]\n\n"
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(rawStream))
+	}))
+	defer upstream.Close()
+
+	router, chatMetrics := newChatTestRouterWithMetrics(t, config.UpstreamConfig{
+		Name:        "chat-openai-raw-stream",
+		BaseURL:     upstream.URL,
+		APIKeys:     []string{"sk-chat-stream"},
+		ServiceType: "openai",
+		Status:      "active",
+	})
+
+	w := performChatHandlerRequest(t, router, `{"model":"gpt-4o","stream":true,"messages":[{"role":"user","content":"hello"}]}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if got := w.Body.String(); got != rawStream {
+		t.Fatalf("raw stream body mismatch\n got: %q\nwant: %q", got, rawStream)
+	}
+
+	points := chatMetrics.GetKeyHistoricalStats(upstream.URL, "sk-chat-stream", "openai", time.Hour, time.Minute)
+	var successCount, inputTokens, outputTokens int64
+	for _, point := range points {
+		successCount += point.SuccessCount
+		inputTokens += point.InputTokens
+		outputTokens += point.OutputTokens
+	}
+	if successCount != 1 {
+		t.Fatalf("successCount = %d, want 1", successCount)
+	}
+	if inputTokens != 5 || outputTokens != 2 {
+		t.Fatalf("metrics tokens = input:%d output:%d, want input:5 output:2", inputTokens, outputTokens)
+	}
+}
+
+func TestChatHandler_StreamRawPassthroughCancelsFirstAttemptBeforeFailover(t *testing.T) {
+	firstClosed := make(chan struct{})
+	var secondSawFirstClosed atomic.Bool
+	successStream := "" +
+		"data:{\"id\":\"chatcmpl_2\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok\"}}]}\n\n" +
+		"data:{\"id\":\"chatcmpl_2\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":4,\"completion_tokens\":2,\"total_tokens\":6}}\n\n" +
+		"data:[DONE]\n\n"
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		auth := r.Header.Get("Authorization")
+		switch {
+		case strings.Contains(auth, "sk-first"):
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("event: error\ndata:{\"error\":{\"type\":\"rate_limit_error\",\"message\":\"slow down\"}}\n\n"))
+			if flusher, ok := w.(http.Flusher); ok {
+				flusher.Flush()
+			}
+			<-r.Context().Done()
+			close(firstClosed)
+		case strings.Contains(auth, "sk-second"):
+			select {
+			case <-firstClosed:
+				secondSawFirstClosed.Store(true)
+			case <-time.After(2 * time.Second):
+			}
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(successStream))
+		default:
+			http.Error(w, "unexpected key", http.StatusInternalServerError)
+		}
+	}))
+	defer upstream.Close()
+
+	router := newChatTestRouter(t, config.UpstreamConfig{
+		Name:        "chat-openai-raw-failover",
+		BaseURL:     upstream.URL,
+		APIKeys:     []string{"sk-first", "sk-second"},
+		ServiceType: "openai",
+		Status:      "active",
+	})
+
+	w := performChatHandlerRequest(t, router, `{"model":"gpt-4o","stream":true,"messages":[{"role":"user","content":"hello"}]}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if got := w.Body.String(); got != successStream {
+		t.Fatalf("body = %q, want successful second attempt stream %q", got, successStream)
+	}
+	if !secondSawFirstClosed.Load() {
+		t.Fatalf("second attempt started before first attempt body/fan-out was released")
+	}
+}
+
+func TestChatHandler_CrossFormatStreamDoesNotUseRawPassthrough(t *testing.T) {
+	upstreamRaw := "" +
+		"event:raw_should_not_pass\n" +
+		"data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"hi\"}}\n\n" +
+		"event:message_delta\n" +
+		"data: {\"type\":\"message_delta\",\"usage\":{\"input_tokens\":3,\"output_tokens\":2}}\n\n"
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(upstreamRaw))
+	}))
+	defer upstream.Close()
+
+	router := newChatTestRouter(t, config.UpstreamConfig{
+		Name:        "chat-claude-stream-conversion",
+		BaseURL:     upstream.URL,
+		APIKeys:     []string{"sk-claude-stream"},
+		ServiceType: "claude",
+		Status:      "active",
+	})
+
+	w := performChatHandlerRequest(t, router, `{"model":"gpt-4o","stream":true,"messages":[{"role":"user","content":"hello"}]}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if got := w.Body.String(); got == upstreamRaw {
+		t.Fatalf("cross-format stream was raw-passthroughed unexpectedly")
+	}
+	if bytes.Contains(w.Body.Bytes(), []byte("event:raw_should_not_pass")) {
+		t.Fatalf("cross-format response leaked raw upstream event: %s", w.Body.String())
+	}
+	if !bytes.Contains(w.Body.Bytes(), []byte("chat.completion.chunk")) {
+		t.Fatalf("cross-format response did not include converted Chat chunks: %s", w.Body.String())
+	}
 }
 
 // TestChatHandler_NonStreamMatrix_OpenAIFormat 验证 Chat 入口在 openai/claude 上游下

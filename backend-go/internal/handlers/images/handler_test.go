@@ -201,3 +201,52 @@ func TestLogImagesOriginalRequestOmitsMultipartBody(t *testing.T) {
 		t.Fatalf("missing omission marker in logs: %s", logs.String())
 	}
 }
+
+func TestGetChannelModels_CustomAuthorizationCannotOverrideSelectedKey(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	var gotAuthorization string
+	var gotTraceID string
+	var gotUserAgent string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuthorization = r.Header.Get("Authorization")
+		gotTraceID = r.Header.Get("X-Trace-ID")
+		gotUserAgent = r.Header.Get("User-Agent")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"data":[{"id":"gpt-image-1"}]}`))
+	}))
+	defer upstream.Close()
+
+	cfgFile := t.TempDir() + "/config.json"
+	cfgJSON := `{"imagesUpstream":[{"name":"images-admin","serviceType":"openai","baseUrl":"` + upstream.URL + `","apiKeys":["sk-selected"],"status":"active"}]}`
+	if err := os.WriteFile(cfgFile, []byte(cfgJSON), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	cfgManager, err := config.NewConfigManager(cfgFile)
+	if err != nil {
+		t.Fatalf("config manager: %v", err)
+	}
+	defer cfgManager.Close()
+
+	router := gin.New()
+	router.POST("/api/images/channels/:id/models", GetChannelModels(cfgManager))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/images/channels/0/models", strings.NewReader(`{"key":"sk-selected","customHeaders":{"Authorization":"Bearer sk-custom","X-Trace-ID":"trace-1","User-Agent":"AdminUA/1.0"}}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if gotAuthorization != "Bearer sk-selected" {
+		t.Fatalf("Authorization = %q, want selected key", gotAuthorization)
+	}
+	if gotTraceID != "trace-1" {
+		t.Fatalf("X-Trace-ID = %q, want custom metadata header", gotTraceID)
+	}
+	if gotUserAgent != "AdminUA/1.0" {
+		t.Fatalf("User-Agent = %q, want custom UA", gotUserAgent)
+	}
+}

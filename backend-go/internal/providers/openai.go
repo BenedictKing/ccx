@@ -3,6 +3,7 @@ package providers
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -110,8 +111,8 @@ func (p *OpenAIProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 	// 使用统一的头部处理逻辑（透明代理）
 	// 保留客户端的大部分 headers，只移除/替换必要的认证和代理相关 headers
 	req.Header = utils.PrepareUpstreamHeaders(c, req.URL.Host)
-	utils.SetAuthenticationHeader(req.Header, apiKey)
 	utils.ApplyCustomHeaders(req.Header, upstream.CustomHeaders)
+	utils.SetAuthenticationHeader(req.Header, apiKey)
 
 	return req, originalBodyBytes, nil
 }
@@ -375,13 +376,15 @@ func (p *OpenAIProvider) ConvertToClaudeResponse(providerResp *types.ProviderRes
 }
 
 // HandleStreamResponse 处理流式响应
-func (p *OpenAIProvider) HandleStreamResponse(body io.ReadCloser) (<-chan string, <-chan error, error) {
+func (p *OpenAIProvider) HandleStreamResponse(ctx context.Context, body io.ReadCloser) (<-chan string, <-chan error, error) {
+	ctx = normalizeStreamContext(ctx)
 	eventChan := make(chan string, 100)
 	errChan := make(chan error, 1)
 
 	go func() {
 		defer close(eventChan)
-		// defer close(errChan) // 移除此行，避免竞态条件
+		defer close(errChan)
+		defer closeStreamBodyOnCancel(ctx, body)()
 		defer body.Close()
 
 		scanner := bufio.NewScanner(body)
@@ -398,8 +401,14 @@ func (p *OpenAIProvider) HandleStreamResponse(body io.ReadCloser) (<-chan string
 		// 文本块状态跟踪
 		textBlockStarted := false
 		textBlockIndex := 0
+		emit := func(event string) bool {
+			return sendStreamEvent(ctx, eventChan, event)
+		}
 
 		for scanner.Scan() {
+			if isStreamContextCanceled(ctx) {
+				return
+			}
 			line := normalizeSSEFieldLine(scanner.Text())
 			line = strings.TrimSpace(line)
 
@@ -420,7 +429,7 @@ func (p *OpenAIProvider) HandleStreamResponse(body io.ReadCloser) (<-chan string
 
 			// 检查是否有错误
 			if errObj, ok := chunk["error"]; ok {
-				errChan <- fmt.Errorf("upstream error: %v", errObj)
+				sendStreamError(ctx, errChan, fmt.Errorf("upstream error: %v", errObj))
 				return
 			}
 
@@ -449,7 +458,9 @@ func (p *OpenAIProvider) HandleStreamResponse(body io.ReadCloser) (<-chan string
 			if content, ok := delta["content"].(string); ok && content != "" {
 				// 在第一个 content_block 之前发送 message_start
 				if !messageStartSent {
-					eventChan <- buildMessageStartEvent(model)
+					if !emit(buildMessageStartEvent(model)) {
+						return
+					}
 					messageStartSent = true
 				}
 				// 如果是第一个文本块,发送 content_block_start
@@ -463,7 +474,9 @@ func (p *OpenAIProvider) HandleStreamResponse(body io.ReadCloser) (<-chan string
 						},
 					}
 					startJSON, _ := json.Marshal(startEvent)
-					eventChan <- fmt.Sprintf("event: content_block_start\ndata: %s\n\n", startJSON)
+					if !emit(fmt.Sprintf("event: content_block_start\ndata: %s\n\n", startJSON)) {
+						return
+					}
 					textBlockStarted = true
 				}
 
@@ -477,14 +490,18 @@ func (p *OpenAIProvider) HandleStreamResponse(body io.ReadCloser) (<-chan string
 					},
 				}
 				deltaJSON, _ := json.Marshal(deltaEvent)
-				eventChan <- fmt.Sprintf("event: content_block_delta\ndata: %s\n\n", deltaJSON)
+				if !emit(fmt.Sprintf("event: content_block_delta\ndata: %s\n\n", deltaJSON)) {
+					return
+				}
 			}
 
 			// 处理工具调用
 			if toolCalls, ok := delta["tool_calls"].([]interface{}); ok {
 				// 在第一个 content_block 之前发送 message_start
 				if !messageStartSent {
-					eventChan <- buildMessageStartEvent(model)
+					if !emit(buildMessageStartEvent(model)) {
+						return
+					}
 					messageStartSent = true
 				}
 				// 如果有文本块正在进行,先关闭它
@@ -494,7 +511,9 @@ func (p *OpenAIProvider) HandleStreamResponse(body io.ReadCloser) (<-chan string
 						"index": textBlockIndex,
 					}
 					stopJSON, _ := json.Marshal(stopEvent)
-					eventChan <- fmt.Sprintf("event: content_block_stop\ndata: %s\n\n", stopJSON)
+					if !emit(fmt.Sprintf("event: content_block_stop\ndata: %s\n\n", stopJSON)) {
+						return
+					}
 					textBlockStarted = false
 					textBlockIndex++
 				}
@@ -537,7 +556,9 @@ func (p *OpenAIProvider) HandleStreamResponse(body io.ReadCloser) (<-chan string
 							args = sanitizeClaudeToolInput(acc.Name, args)
 							events := processToolUsePart(acc.ID, acc.Name, args, toolUseBlockIndex)
 							for _, event := range events {
-								eventChan <- event
+								if !emit(event) {
+									return
+								}
 							}
 							toolUseBlockIndex++
 							delete(toolCallAccumulator, index)
@@ -555,7 +576,9 @@ func (p *OpenAIProvider) HandleStreamResponse(body io.ReadCloser) (<-chan string
 						"index": textBlockIndex,
 					}
 					stopJSON, _ := json.Marshal(stopEvent)
-					eventChan <- fmt.Sprintf("event: content_block_stop\ndata: %s\n\n", stopJSON)
+					if !emit(fmt.Sprintf("event: content_block_stop\ndata: %s\n\n", stopJSON)) {
+						return
+					}
 					textBlockStarted = false
 				}
 
@@ -577,12 +600,17 @@ func (p *OpenAIProvider) HandleStreamResponse(body io.ReadCloser) (<-chan string
 				"index": textBlockIndex,
 			}
 			stopJSON, _ := json.Marshal(stopEvent)
-			eventChan <- fmt.Sprintf("event: content_block_stop\ndata: %s\n\n", stopJSON)
+			if !emit(fmt.Sprintf("event: content_block_stop\ndata: %s\n\n", stopJSON)) {
+				return
+			}
 		}
 
 		// 发送 message_delta（含 stop_reason）和 message_stop
 		// 注意：必须先检查 scanner 错误，避免流读取异常时发送矛盾的正常结束事件
 		if err := scanner.Err(); err != nil {
+			if isStreamContextCanceled(ctx) {
+				return
+			}
 			// 在 tool_use 场景下，客户端主动断开是正常行为
 			// 如果已经发送了 tool_use stop 事件，并且错误是连接断开相关的，则忽略该错误
 			errMsg := err.Error()
@@ -592,7 +620,7 @@ func (p *OpenAIProvider) HandleStreamResponse(body io.ReadCloser) (<-chan string
 				// 这是预期的客户端行为，不报告错误
 				return
 			}
-			errChan <- err
+			sendStreamError(ctx, errChan, err)
 			return
 		}
 
@@ -607,13 +635,15 @@ func (p *OpenAIProvider) HandleStreamResponse(body io.ReadCloser) (<-chan string
 				},
 			}
 			deltaJSON, _ := json.Marshal(deltaEvent)
-			eventChan <- fmt.Sprintf("event: message_delta\ndata: %s\n\n", deltaJSON)
+			if !emit(fmt.Sprintf("event: message_delta\ndata: %s\n\n", deltaJSON)) {
+				return
+			}
 
 			stopEvent := map[string]interface{}{
 				"type": "message_stop",
 			}
 			stopJSON, _ := json.Marshal(stopEvent)
-			eventChan <- fmt.Sprintf("event: message_stop\ndata: %s\n\n", stopJSON)
+			emit(fmt.Sprintf("event: message_stop\ndata: %s\n\n", stopJSON))
 		}
 	}()
 

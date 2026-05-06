@@ -108,34 +108,6 @@
           </div>
         </div>
 
-        <div v-if="channel.serviceType === 'claude'" class="d-flex flex-wrap ga-2 mt-1">
-          <v-chip
-            size="small"
-            :color="channel.streamPassthroughEnabled !== false ? 'success' : 'grey'"
-            variant="tonal"
-            density="comfortable"
-            rounded="pill"
-          >
-            <v-icon start size="14">
-              {{ channel.streamPassthroughEnabled !== false ? 'mdi-transit-connection-variant' : 'mdi-transit-connection-horizontal' }}
-            </v-icon>
-            透传 {{ channel.streamPassthroughEnabled !== false ? '开启' : '关闭' }}
-          </v-chip>
-
-          <v-chip
-            size="small"
-            :color="channel.sub2apiPassthroughEnabled ? 'info' : 'grey'"
-            variant="tonal"
-            density="comfortable"
-            rounded="pill"
-          >
-            <v-icon start size="14">
-              {{ channel.sub2apiPassthroughEnabled ? 'mdi-shield-check' : 'mdi-shield-off-outline' }}
-            </v-icon>
-            sub2api {{ channel.sub2apiPassthroughEnabled ? '开启' : '关闭' }}
-          </v-chip>
-        </div>
-
         <div class="d-flex flex-wrap ga-2 mt-2">
           <v-chip
             size="small"

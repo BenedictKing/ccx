@@ -807,19 +807,6 @@
               </div>
             </v-col>
 
-            <v-col v-if="props.channelType === 'messages' || props.channelType === 'responses'" cols="12">
-              <div class="d-flex align-center justify-space-between">
-                <div class="d-flex align-center ga-2">
-                  <v-icon color="primary">mdi-identifier</v-icon>
-                  <div>
-                    <div class="section-title section-title--soft">{{ t('addChannel.normalizeMetadataUserIdLabel') }}</div>
-                    <div class="text-caption text-medium-emphasis">{{ t('addChannel.normalizeMetadataUserIdHint') }}</div>
-                  </div>
-                </div>
-                <v-switch v-model="form.normalizeMetadataUserId" inset color="primary" hide-details />
-              </div>
-            </v-col>
-
             <v-col v-if="form.serviceType === 'claude'" cols="12">
               <v-card variant="outlined" rounded="lg">
                 <v-card-title class="section-card-title d-flex align-center justify-space-between ga-2">
@@ -839,57 +826,11 @@
                 <v-card-text>
                   <div class="claude-toggle-row mb-4">
                     <div class="claude-toggle-content">
-                      <div class="section-title section-title--soft">流式透传</div>
-                      <div class="text-caption text-medium-emphasis">开启后直接透传上游响应（SSE 与非 SSE）；关闭后走本地处理链。</div>
-                    </div>
-                    <div class="claude-toggle-switch">
-                      <v-switch
-                        v-model="form.streamPassthroughEnabled"
-                        inset
-                        color="primary"
-                        hide-details
-                        @update:model-value="handleStreamPassthroughChange"
-                      />
-                    </div>
-                  </div>
-
-                  <div class="claude-toggle-row mb-4">
-                    <div class="claude-toggle-content">
-                      <div class="section-title section-title--soft">sub2api 认证透传</div>
-                      <div class="text-caption text-medium-emphasis">仅对 Anthropic API Key 生效。开启后 messages/count_tokens 仅替换认证并上游透传；关闭后回滚兼容链路。</div>
-                    </div>
-                    <div class="claude-toggle-switch">
-                      <v-switch
-                        v-model="form.sub2apiPassthroughEnabled"
-                        inset
-                        color="primary"
-                        hide-details
-                        @update:model-value="handleSub2apiPassthroughChange"
-                      />
-                    </div>
-                  </div>
-
-                  <div class="claude-toggle-row mb-4">
-                    <div class="claude-toggle-content">
                       <div class="section-title section-title--soft">Key 亲和</div>
                       <div class="text-caption text-medium-emphasis">开启后同一 user_id 优先命中同一可用 Key；关闭后按轮询选 Key。</div>
                     </div>
                     <div class="claude-toggle-switch">
                       <v-switch v-model="form.keyAffinityEnabled" inset color="primary" hide-details />
-                    </div>
-                  </div>
-
-                  <div class="text-caption text-medium-emphasis mb-4">
-                    sub2api 认证透传与流式透传互斥，开启其中一个会自动关闭另一个。
-                  </div>
-
-                  <div class="claude-toggle-row mb-4">
-                    <div class="claude-toggle-content">
-                      <div class="section-title section-title--soft">严格请求透传</div>
-                      <div class="text-caption text-medium-emphasis">仅在透传开启时生效。开启后请求体原样转发；关闭后执行兼容预处理（signature/thinking/cch/metadata.user_id）。</div>
-                    </div>
-                    <div class="claude-toggle-switch">
-                      <v-switch v-model="form.strictRequestPassthroughEnabled" inset color="primary" hide-details />
                     </div>
                   </div>
 
@@ -1861,11 +1802,7 @@ const form = reactive({
   modelsResponseMode: 'upstream' as 'upstream' | 'manual',
   manualModels: [] as string[],
   autoBlacklistBalance: true,
-  normalizeMetadataUserId: true,
   keyAffinityEnabled: true,
-  streamPassthroughEnabled: false,
-  sub2apiPassthroughEnabled: true,
-  strictRequestPassthroughEnabled: true,
   modelsHealthCheckEnabled: false,
   modelsHealthCheckIntervalMinutes: 60,
   failoverRules: createDefaultClaudeFailoverRules() as FailoverRule[]
@@ -1963,29 +1900,6 @@ const removeFailoverRule = (index: number) => {
 
 const resetClaudeFailoverRules = () => {
   form.failoverRules = createDefaultClaudeFailoverRules()
-}
-
-const normalizeClaudePassthroughMode = () => {
-  if (form.serviceType !== 'claude') return
-  if (form.sub2apiPassthroughEnabled && form.streamPassthroughEnabled) {
-    form.streamPassthroughEnabled = false
-  }
-}
-
-const handleStreamPassthroughChange = (enabled: boolean | null) => {
-  const normalizedEnabled = enabled === true
-  form.streamPassthroughEnabled = normalizedEnabled
-  if (normalizedEnabled) {
-    form.sub2apiPassthroughEnabled = false
-  }
-}
-
-const handleSub2apiPassthroughChange = (enabled: boolean | null) => {
-  const normalizedEnabled = enabled === true
-  form.sub2apiPassthroughEnabled = normalizedEnabled
-  if (normalizedEnabled) {
-    form.streamPassthroughEnabled = false
-  }
 }
 
 const normalizeModelsHealthCheckInterval = () => {
@@ -2179,7 +2093,6 @@ watch(
     if (serviceType === 'claude' && form.failoverRules.length === 0) {
       form.failoverRules = createDefaultClaudeFailoverRules()
     }
-    normalizeClaudePassthroughMode()
   }
 )
 
@@ -2223,11 +2136,7 @@ const resetForm = () => {
   form.modelsResponseMode = 'upstream'
   form.manualModels = []
   form.autoBlacklistBalance = true
-  form.normalizeMetadataUserId = true
   form.keyAffinityEnabled = true
-  form.streamPassthroughEnabled = false
-  form.sub2apiPassthroughEnabled = true
-  form.strictRequestPassthroughEnabled = true
   form.modelsHealthCheckEnabled = false
   form.modelsHealthCheckIntervalMinutes = 60
   form.failoverRules = createDefaultClaudeFailoverRules()
@@ -2306,14 +2215,9 @@ const loadChannelData = (channel: Channel) => {
   form.modelsResponseMode = channel.modelsResponseMode === 'manual' ? 'manual' : 'upstream'
   form.manualModels = channel.manualModels || []
   form.autoBlacklistBalance = channel.autoBlacklistBalance ?? true
-  form.normalizeMetadataUserId = channel.normalizeMetadataUserId ?? true
   form.keyAffinityEnabled = channel.keyAffinityEnabled ?? (channel.serviceType === 'claude')
-  form.streamPassthroughEnabled = channel.streamPassthroughEnabled ?? true
-  form.sub2apiPassthroughEnabled = channel.sub2apiPassthroughEnabled ?? (channel.serviceType === 'claude')
-  form.strictRequestPassthroughEnabled = channel.strictRequestPassthroughEnabled ?? true
   form.modelsHealthCheckEnabled = channel.modelsHealthCheckEnabled ?? false
   form.modelsHealthCheckIntervalMinutes = channel.modelsHealthCheckIntervalMinutes ?? 60
-  normalizeClaudePassthroughMode()
   normalizeModelsHealthCheckInterval()
   const rawFailoverRules = channel.failoverRules && channel.failoverRules.length > 0
     ? channel.failoverRules
@@ -2785,7 +2689,6 @@ const handleSubmit = async () => {
       })
   }
 
-  normalizeClaudePassthroughMode()
   normalizeModelsHealthCheckInterval()
   const channelData = buildChannelPayload(form)
 

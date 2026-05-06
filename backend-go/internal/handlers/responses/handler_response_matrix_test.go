@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -39,12 +40,19 @@ func setupResponsesTestConfigManager(t *testing.T, upstream []config.UpstreamCon
 
 func newResponsesTestRouter(t *testing.T, upstream config.UpstreamConfig, sessionManager *session.SessionManager) *gin.Engine {
 	t.Helper()
+	r, _ := newResponsesTestRouterWithMetrics(t, upstream, sessionManager)
+	return r
+}
+
+func newResponsesTestRouterWithMetrics(t *testing.T, upstream config.UpstreamConfig, sessionManager *session.SessionManager) (*gin.Engine, *metrics.MetricsManager) {
+	t.Helper()
 	gin.SetMode(gin.TestMode)
 	cfgManager := setupResponsesTestConfigManager(t, []config.UpstreamConfig{upstream})
+	responsesMetrics := metrics.NewMetricsManager()
 	channelScheduler := scheduler.NewChannelScheduler(
 		cfgManager,
 		metrics.NewMetricsManager(),
-		metrics.NewMetricsManager(),
+		responsesMetrics,
 		metrics.NewMetricsManager(),
 		metrics.NewMetricsManager(),
 		session.NewTraceAffinityManager(),
@@ -57,7 +65,7 @@ func newResponsesTestRouter(t *testing.T, upstream config.UpstreamConfig, sessio
 
 	r := gin.New()
 	r.POST("/v1/responses", Handler(envCfg, cfgManager, sessionManager, channelScheduler))
-	return r
+	return r, responsesMetrics
 }
 
 func performResponsesHandlerRequest(t *testing.T, router *gin.Engine, body string) *httptest.ResponseRecorder {
@@ -85,6 +93,155 @@ func TestResponsesHandler_InvalidJSONReturns400(t *testing.T) {
 	}
 	if got := w.Body.String(); !bytes.Contains([]byte(got), []byte("Invalid request body")) {
 		t.Fatalf("body = %s, want invalid request body error", got)
+	}
+}
+
+func TestResponsesHandler_NonStreamRawPassthroughPreservesUnknownFieldsAndRecordsMetrics(t *testing.T) {
+	sessionManager := session.NewSessionManager(time.Hour, 100, 100000)
+	rawBody := `{"id":"resp_raw","model":"gpt-5","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"raw hi"}]}],"usage":{"input_tokens":23,"output_tokens":11,"total_tokens":34},"vendor_trace":{"id":"trace_1","nested":{"kept":true}},"unknown_top":"keep me"}`
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(rawBody))
+	}))
+	defer upstream.Close()
+
+	router, responsesMetrics := newResponsesTestRouterWithMetrics(t, config.UpstreamConfig{
+		Name:        "responses-raw-passthrough",
+		BaseURL:     upstream.URL,
+		APIKeys:     []string{"sk-test"},
+		ServiceType: "responses",
+		Status:      "active",
+	}, sessionManager)
+
+	w := performResponsesHandlerRequest(t, router, `{"model":"gpt-5","input":"hello"}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if got := w.Body.String(); got != rawBody {
+		t.Fatalf("raw passthrough body changed:\ngot  %s\nwant %s", got, rawBody)
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal raw response: %v", err)
+	}
+	if resp["unknown_top"] != "keep me" {
+		t.Fatalf("unknown_top = %#v, want keep me", resp["unknown_top"])
+	}
+	vendorTrace, ok := resp["vendor_trace"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("vendor_trace missing or wrong type: %#v", resp["vendor_trace"])
+	}
+	nested, ok := vendorTrace["nested"].(map[string]interface{})
+	if !ok || nested["kept"] != true {
+		t.Fatalf("vendor_trace.nested.kept not preserved: %#v", vendorTrace["nested"])
+	}
+
+	points := responsesMetrics.GetKeyHistoricalStats(upstream.URL, "sk-test", "responses", time.Hour, time.Minute)
+	var successCount, inputTokens, outputTokens int64
+	for _, point := range points {
+		successCount += point.SuccessCount
+		inputTokens += point.InputTokens
+		outputTokens += point.OutputTokens
+	}
+	if successCount != 1 {
+		t.Fatalf("successCount = %d, want 1", successCount)
+	}
+	if inputTokens != 23 || outputTokens != 11 {
+		t.Fatalf("metrics tokens = input:%d output:%d, want input:23 output:11", inputTokens, outputTokens)
+	}
+}
+
+func TestResponsesHandler_StreamRawPassthroughPreservesSSEBytes(t *testing.T) {
+	sessionManager := session.NewSessionManager(time.Hour, 100, 100000)
+	rawBody := strings.Join([]string{
+		":keepalive",
+		"id:evt-1",
+		"event:response.output_text.delta",
+		"retry:1500",
+		`data:{"type":"response.output_text.delta","delta":"hi"}`,
+		"",
+		`data:{"type":"response.completed","response":{"usage":{"input_tokens":2,"output_tokens":1,"total_tokens":3}}}`,
+		"",
+	}, "\n")
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(rawBody))
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+	}))
+	defer upstream.Close()
+
+	router, responsesMetrics := newResponsesTestRouterWithMetrics(t, config.UpstreamConfig{
+		Name:        "responses-stream-raw-passthrough",
+		BaseURL:     upstream.URL,
+		APIKeys:     []string{"sk-test"},
+		ServiceType: "responses",
+		Status:      "active",
+	}, sessionManager)
+
+	w := performResponsesHandlerRequest(t, router, `{"model":"gpt-5","input":"hello","stream":true}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if got := w.Body.String(); got != rawBody {
+		t.Fatalf("raw stream passthrough body changed:\ngot  %q\nwant %q", got, rawBody)
+	}
+
+	points := responsesMetrics.GetKeyHistoricalStats(upstream.URL, "sk-test", "responses", time.Hour, time.Minute)
+	var inputTokens, outputTokens int64
+	for _, point := range points {
+		inputTokens += point.InputTokens
+		outputTokens += point.OutputTokens
+	}
+	if inputTokens != 2 || outputTokens != 1 {
+		t.Fatalf("metrics tokens = input:%d output:%d, want input:2 output:1", inputTokens, outputTokens)
+	}
+}
+
+func TestResponsesHandler_StreamSameFormatAlwaysUsesRawPassthrough(t *testing.T) {
+	sessionManager := session.NewSessionManager(time.Hour, 100, 100000)
+	rawBody := strings.Join([]string{
+		":keepalive",
+		"id:evt-1",
+		"event:response.output_text.delta",
+		"retry:1500",
+		`data:{"type":"response.output_text.delta","delta":"hi"}`,
+		"",
+		`data:{"type":"response.completed","response":{"usage":{"input_tokens":2,"output_tokens":1,"total_tokens":3}}}`,
+		"",
+	}, "\n")
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(rawBody))
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+	}))
+	defer upstream.Close()
+
+	router := newResponsesTestRouter(t, config.UpstreamConfig{
+		Name:        "responses-stream-processing",
+		BaseURL:     upstream.URL,
+		APIKeys:     []string{"sk-test"},
+		ServiceType: "responses",
+		Status:      "active",
+	}, sessionManager)
+
+	w := performResponsesHandlerRequest(t, router, `{"model":"gpt-5","input":"hello","stream":true}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+	got := w.Body.String()
+	if got != rawBody {
+		t.Fatalf("same-format responses stream should stay raw:\ngot  %q\nwant %q", got, rawBody)
 	}
 }
 

@@ -56,14 +56,12 @@ func TestGetUpstreams_IncludesAdvancedOptionFields(t *testing.T) {
 	}
 }
 
-func TestGetUpstreams_IncludesNormalizeMetadataUserIdField(t *testing.T) {
-	enabled := true
+func TestGetUpstreams_OmitsRemovedPassthroughFields(t *testing.T) {
 	cm := setupTestConfigManager(t, []config.UpstreamConfig{{
-		Name:                    "msg-ch",
-		ServiceType:             "claude",
-		BaseURL:                 "https://api.example.com",
-		APIKeys:                 []string{"sk-1"},
-		NormalizeMetadataUserID: &enabled,
+		Name:        "msg-ch",
+		ServiceType: "claude",
+		BaseURL:     "https://api.example.com",
+		APIKeys:     []string{"sk-1"},
 	}})
 
 	gin.SetMode(gin.TestMode)
@@ -87,10 +85,14 @@ func TestGetUpstreams_IncludesNormalizeMetadataUserIdField(t *testing.T) {
 	if len(resp.Channels) != 1 {
 		t.Fatalf("len(channels) = %d, want 1", len(resp.Channels))
 	}
-	if got := resp.Channels[0]["normalizeMetadataUserId"]; got != true {
-		t.Fatalf("normalizeMetadataUserId = %v, want true", got)
-	}
-	if got := resp.Channels[0]["strictRequestPassthroughEnabled"]; got != true {
-		t.Fatalf("strictRequestPassthroughEnabled = %v, want true", got)
+	for _, removed := range []string{
+		"normalizeMetadataUserId",
+		"streamPassthroughEnabled",
+		"sub2apiPassthroughEnabled",
+		"strictRequestPassthroughEnabled",
+	} {
+		if _, ok := resp.Channels[0][removed]; ok {
+			t.Fatalf("removed field %q should not be present: %#v", removed, resp.Channels[0])
+		}
 	}
 }

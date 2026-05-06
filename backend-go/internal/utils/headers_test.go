@@ -275,3 +275,131 @@ func TestApplyCustomHeaders(t *testing.T) {
 		})
 	}
 }
+
+func TestPrepareUpstreamHeadersStripsSensitiveInboundHeaders(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	req := httptest.NewRequest("POST", "/test", nil)
+	req.Header.Set("Authorization", "Bearer inbound")
+	req.Header.Set("x-api-key", "inbound-api")
+	req.Header.Set("x-goog-api-key", "inbound-goog")
+	req.Header.Set("Cookie", "sid=secret")
+	req.Header.Set("Set-Cookie", "sid=secret")
+	req.Header.Set("Proxy-Authorization", "Basic secret")
+	req.Header.Set("Connection", "Keep-Alive, X-Connection-Scoped")
+	req.Header.Set("X-Connection-Scoped", "strip-me")
+	req.Header.Set("Keep-Alive", "timeout=5")
+	req.Header.Set("Proxy-Connection", "keep-alive")
+	req.Header.Set("TE", "trailers")
+	req.Header.Set("Trailer", "Expires")
+	req.Header.Set("Transfer-Encoding", "chunked")
+	req.Header.Set("Upgrade", "websocket")
+	req.Header.Set("Expect", "100-continue")
+	req.Header.Set("Accept-Encoding", "gzip")
+	req.Header.Set("X-Forwarded-For", "127.0.0.1")
+	req.Header.Set("X-Forwarded-Host", "client.example")
+	req.Header.Set("X-Forwarded-Proto", "https")
+	req.Header.Set("X-Real-IP", "127.0.0.2")
+	req.Header.Set("Forwarded", "for=127.0.0.3")
+	req.Header.Set("Via", "1.1 proxy")
+	req.Header.Set("CF-Connecting-IP", "127.0.0.4")
+	req.Header.Set("True-Client-IP", "127.0.0.5")
+	req.Header.Set("X-Client-IP", "127.0.0.6")
+	req.Header.Set("X-Cluster-Client-IP", "127.0.0.7")
+	req.Header.Set("User-Agent", "Client/1.0")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("X-Custom-Metadata", "keep")
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = req
+
+	got := PrepareUpstreamHeaders(c, "upstream.example")
+
+	stripped := []string{
+		"Authorization",
+		"x-api-key",
+		"x-goog-api-key",
+		"Cookie",
+		"Set-Cookie",
+		"Proxy-Authorization",
+		"Connection",
+		"X-Connection-Scoped",
+		"Keep-Alive",
+		"Proxy-Connection",
+		"TE",
+		"Trailer",
+		"Transfer-Encoding",
+		"Upgrade",
+		"Expect",
+		"Accept-Encoding",
+		"X-Forwarded-For",
+		"X-Forwarded-Host",
+		"X-Forwarded-Proto",
+		"X-Real-IP",
+		"Forwarded",
+		"Via",
+		"CF-Connecting-IP",
+		"True-Client-IP",
+		"X-Client-IP",
+		"X-Cluster-Client-IP",
+	}
+	for _, header := range stripped {
+		if value := got.Get(header); value != "" {
+			t.Fatalf("%s = %q, want stripped", header, value)
+		}
+	}
+	if got.Get("User-Agent") != "Client/1.0" {
+		t.Fatalf("User-Agent = %q, want inbound passthrough", got.Get("User-Agent"))
+	}
+	if got.Get("Accept") != "application/json" {
+		t.Fatalf("Accept = %q, want preserved", got.Get("Accept"))
+	}
+	if got.Get("X-Custom-Metadata") != "keep" {
+		t.Fatalf("X-Custom-Metadata = %q, want preserved", got.Get("X-Custom-Metadata"))
+	}
+	if got.Get("Content-Type") != "application/json" {
+		t.Fatalf("Content-Type = %q, want application/json", got.Get("Content-Type"))
+	}
+}
+
+func TestPrepareUpstreamHeadersWithContentType(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	req := httptest.NewRequest("POST", "/test", nil)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = req
+
+	got := PrepareUpstreamHeadersWithContentType(c, "upstream.example", "multipart/form-data; boundary=test")
+	if got.Get("Content-Type") != "multipart/form-data; boundary=test" {
+		t.Fatalf("Content-Type = %q, want multipart content type", got.Get("Content-Type"))
+	}
+
+	got = PrepareUpstreamHeadersWithContentType(c, "upstream.example", "")
+	if got.Get("Content-Type") != "" {
+		t.Fatalf("Content-Type = %q, want stripped when empty", got.Get("Content-Type"))
+	}
+}
+
+func TestMaskSensitiveHeadersMasksCredentialsAndCookies(t *testing.T) {
+	got := MaskSensitiveHeaders(map[string]string{
+		"Authorization":       "Bearer sk-secret-token",
+		"x-api-key":           "sk-secret-token",
+		"x-goog-api-key":      "goog-secret-token",
+		"Cookie":              "sid=secret-cookie-value",
+		"Set-Cookie":          "sid=secret-cookie-value",
+		"Proxy-Authorization": "Basic secret-proxy-token",
+		"User-Agent":          "Client/1.0",
+	})
+
+	for _, header := range []string{"Authorization", "x-api-key", "x-goog-api-key", "Cookie", "Set-Cookie", "Proxy-Authorization"} {
+		if got[header] == "" || got[header] == "Bearer sk-secret-token" || got[header] == "sk-secret-token" || got[header] == "sid=secret-cookie-value" || got[header] == "Basic secret-proxy-token" {
+			t.Fatalf("%s was not masked: %q", header, got[header])
+		}
+	}
+	if got["User-Agent"] != "Client/1.0" {
+		t.Fatalf("User-Agent = %q, want unchanged", got["User-Agent"])
+	}
+}

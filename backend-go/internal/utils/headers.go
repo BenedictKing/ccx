@@ -104,28 +104,81 @@ func IsAnthropicAPIKey(apiKey string) bool {
 }
 
 func PrepareUpstreamHeaders(c *gin.Context, targetHost string) http.Header {
+	return PrepareUpstreamHeadersWithContentType(c, targetHost, "application/json")
+}
+
+func PrepareUpstreamHeadersWithContentType(c *gin.Context, targetHost string, contentType string) http.Header {
 	headers := c.Request.Header.Clone()
 
 	// 设置正确的Host头部
 	headers.Set("Host", targetHost)
-
-	// 移除代理相关头部，降低被识别为中转层的风险
-	headers.Del("x-proxy-key")
-	headers.Del("X-Forwarded-For")
-	headers.Del("X-Forwarded-Host")
-	headers.Del("X-Forwarded-Proto")
-	headers.Del("X-Real-IP")
-	headers.Del("Via")
-	headers.Del("Forwarded")
-
-	// 移除 Accept-Encoding，让 Go 的 http.Client 自动处理 gzip 压缩/解压缩
-	// 这样可以避免在原始请求包含 Accept-Encoding 时 Go 不自动解压缩的问题
-	headers.Del("Accept-Encoding")
+	StripInboundProxyHeaders(headers)
 
 	// 强制去重 Content-Type（部分客户端可能发送重复的 Content-Type 头）
-	headers.Set("Content-Type", "application/json")
+	if strings.TrimSpace(contentType) == "" {
+		headers.Del("Content-Type")
+	} else {
+		headers.Set("Content-Type", contentType)
+	}
 
 	return headers
+}
+
+var inboundHeadersToStrip = map[string]struct{}{
+	"authorization":       {},
+	"x-api-key":           {},
+	"x-goog-api-key":      {},
+	"cookie":              {},
+	"set-cookie":          {},
+	"proxy-authorization": {},
+	"x-proxy-key":         {},
+	"x-forwarded-for":     {},
+	"x-forwarded-host":    {},
+	"x-forwarded-proto":   {},
+	"x-real-ip":           {},
+	"forwarded":           {},
+	"via":                 {},
+	"cf-connecting-ip":    {},
+	"true-client-ip":      {},
+	"x-client-ip":         {},
+	"x-cluster-client-ip": {},
+	"connection":          {},
+	"keep-alive":          {},
+	"proxy-connection":    {},
+	"te":                  {},
+	"trailer":             {},
+	"transfer-encoding":   {},
+	"upgrade":             {},
+	"expect":              {},
+	"accept-encoding":     {},
+}
+
+var sensitiveHeadersToMask = map[string]struct{}{
+	"authorization":       {},
+	"x-api-key":           {},
+	"x-goog-api-key":      {},
+	"cookie":              {},
+	"set-cookie":          {},
+	"proxy-authorization": {},
+}
+
+func StripInboundProxyHeaders(headers http.Header) {
+	for _, value := range headers.Values("Connection") {
+		for _, token := range strings.Split(value, ",") {
+			if name := strings.TrimSpace(token); name != "" {
+				headers.Del(name)
+			}
+		}
+	}
+
+	for name := range inboundHeadersToStrip {
+		headers.Del(name)
+	}
+}
+
+func IsSensitiveHeaderName(name string) bool {
+	_, ok := sensitiveHeadersToMask[strings.ToLower(strings.TrimSpace(name))]
+	return ok
 }
 
 // PrepareMinimalHeaders 准备最小化请求头（适用于非Claude渠道如OpenAI、Gemini等）

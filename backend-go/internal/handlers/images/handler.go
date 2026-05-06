@@ -346,9 +346,9 @@ func buildOperationRequest(
 	if c.Request.URL != nil {
 		req.URL.RawQuery = c.Request.URL.RawQuery
 	}
-	req.Header = prepareImagesUpstreamHeaders(c, req.URL.Host, requestContentType)
-	utils.SetAuthenticationHeader(req.Header, apiKey)
+	req.Header = utils.PrepareUpstreamHeadersWithContentType(c, req.URL.Host, requestContentType)
 	utils.ApplyCustomHeaders(req.Header, upstream.CustomHeaders)
+	utils.SetAuthenticationHeader(req.Header, apiKey)
 	return req, nil
 }
 
@@ -381,25 +381,6 @@ func buildJSONRequestBody(bodyBytes []byte, model string, redirectedModel string
 		return nil, "", err
 	}
 	return requestBody, "application/json", nil
-}
-
-func prepareImagesUpstreamHeaders(c *gin.Context, targetHost string, contentType string) http.Header {
-	headers := c.Request.Header.Clone()
-	headers.Set("Host", targetHost)
-	headers.Del("x-proxy-key")
-	headers.Del("X-Forwarded-For")
-	headers.Del("X-Forwarded-Host")
-	headers.Del("X-Forwarded-Proto")
-	headers.Del("X-Real-IP")
-	headers.Del("Via")
-	headers.Del("Forwarded")
-	headers.Del("Accept-Encoding")
-	if strings.TrimSpace(contentType) == "" {
-		headers.Del("Content-Type")
-	} else {
-		headers.Set("Content-Type", contentType)
-	}
-	return headers
 }
 
 func handleSuccess(c *gin.Context, resp *http.Response, startTime time.Time, isStream bool) (*types.Usage, error) {

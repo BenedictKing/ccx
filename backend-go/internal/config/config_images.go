@@ -224,10 +224,6 @@ func (cm *ConfigManager) UpdateImagesUpstream(index int, updates UpstreamUpdate)
 		v := *updates.AutoBlacklistBalance
 		upstream.AutoBlacklistBalance = &v
 	}
-	if updates.NormalizeMetadataUserID != nil {
-		v := *updates.NormalizeMetadataUserID
-		upstream.NormalizeMetadataUserID = &v
-	}
 	if updates.CustomHeaders != nil {
 		upstream.CustomHeaders = updates.CustomHeaders
 	}

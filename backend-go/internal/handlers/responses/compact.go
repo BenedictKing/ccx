@@ -331,9 +331,10 @@ func tryCompactWithKey(
 	req.Header = utils.PrepareUpstreamHeaders(c, req.URL.Host)
 	req.Header.Del("authorization")
 	req.Header.Del("x-api-key")
-	utils.SetAuthenticationHeader(req.Header, apiKey)
 	req.Header.Set("Content-Type", "application/json")
 	utils.ApplyCustomHeaders(req.Header, upstream.CustomHeaders)
+	utils.EnsureCompatibleUserAgent(req.Header, upstream.ServiceType)
+	utils.SetAuthenticationHeader(req.Header, apiKey)
 
 	resp, err := common.SendRequest(req, upstream, envCfg, false, "Responses")
 	if err != nil {

@@ -133,6 +133,48 @@ func TestResponsesEntry_RequestMatrix_PreservesKeyParams(t *testing.T) {
 		}
 	})
 
+	t.Run("responses_passthrough_preserves_unknown_fields_and_patches_model", func(t *testing.T) {
+		c := newGinContext(http.MethodPost, "/v1/responses", []byte(`{"model":"gpt-5","input":"hi","unknown":{"nested":1},"stream":true}`), context.Background())
+		upstream := &config.UpstreamConfig{
+			BaseURL:          "https://api.example.com",
+			ServiceType:      "responses",
+			ModelMapping:     map[string]string{"gpt-5": "gpt-5.2"},
+			TextVerbosity:    "medium",
+			FastMode:         true,
+			ReasoningMapping: map[string]string{"gpt-5": "high"},
+		}
+
+		provider := &ResponsesProvider{}
+		req, _, err := provider.ConvertToProviderRequest(c, upstream, "sk-test")
+		if err != nil {
+			t.Fatalf("ConvertToProviderRequest() err = %v", err)
+		}
+
+		var body map[string]interface{}
+		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+
+		if body["model"] != "gpt-5.2" {
+			t.Fatalf("model = %v, want gpt-5.2", body["model"])
+		}
+		unknown, ok := body["unknown"].(map[string]interface{})
+		if !ok || unknown["nested"] != float64(1) {
+			t.Fatalf("unknown = %#v, want nested=1", body["unknown"])
+		}
+		reasoning, ok := body["reasoning"].(map[string]interface{})
+		if !ok || reasoning["effort"] != "high" {
+			t.Fatalf("reasoning = %#v, want effort=high", body["reasoning"])
+		}
+		text, ok := body["text"].(map[string]interface{})
+		if !ok || text["verbosity"] != "medium" {
+			t.Fatalf("text = %#v, want verbosity=medium", body["text"])
+		}
+		if body["service_tier"] != "priority" {
+			t.Fatalf("service_tier = %v, want priority", body["service_tier"])
+		}
+	})
+
 	t.Run("responses_to_claude_preserves_instructions_as_system", func(t *testing.T) {
 		c := newGinContext(http.MethodPost, "/v1/responses", []byte(`{"model":"claude","input":"hi","instructions":"be helpful","stream":false}`), context.Background())
 		upstream := &config.UpstreamConfig{

@@ -173,19 +173,17 @@ func TestGetChannelDashboard_GeminiFallbackServiceTypeReadsMetrics(t *testing.T)
 
 func TestGetChannelDashboard_Gemini_IncludesAdvancedOptionFields(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	enabled := true
 	cfg := config.Config{
 		GeminiUpstream: []config.UpstreamConfig{
 			{
-				Name:                    "gemini-test",
-				ServiceType:             "gemini",
-				BaseURL:                 "https://example.com",
-				APIKeys:                 []string{"test-key"},
-				ReasoningMapping:        map[string]string{"gemini-2.5-pro": "high"},
-				TextVerbosity:           "medium",
-				FastMode:                true,
-				StripThoughtSignature:   true,
-				NormalizeMetadataUserID: &enabled,
+				Name:                  "gemini-test",
+				ServiceType:           "gemini",
+				BaseURL:               "https://example.com",
+				APIKeys:               []string{"test-key"},
+				ReasoningMapping:      map[string]string{"gemini-2.5-pro": "high"},
+				TextVerbosity:         "medium",
+				FastMode:              true,
+				StripThoughtSignature: true,
 			},
 		},
 	}
@@ -269,9 +267,6 @@ func TestGetChannelDashboard_Gemini_IncludesAdvancedOptionFields(t *testing.T) {
 	}
 	if got := reasoning["gemini-2.5-pro"]; got != "high" {
 		t.Fatalf("reasoningMapping[gemini-2.5-pro]=%v, want=high", got)
-	}
-	if got := resp.Channels[0]["normalizeMetadataUserId"]; got != true {
-		t.Fatalf("normalizeMetadataUserId=%v, want=true", got)
 	}
 }
 

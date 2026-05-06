@@ -1,7 +1,10 @@
 package common
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,6 +15,24 @@ import (
 	"github.com/BenedictKing/ccx/internal/utils"
 	"github.com/gin-gonic/gin"
 )
+
+type testStreamProvider struct {
+	eventChan <-chan string
+	errChan   <-chan error
+	err       error
+}
+
+func (p *testStreamProvider) ConvertToProviderRequest(c *gin.Context, upstream *config.UpstreamConfig, apiKey string) (*http.Request, []byte, error) {
+	return nil, nil, nil
+}
+
+func (p *testStreamProvider) ConvertToClaudeResponse(providerResp *types.ProviderResponse) (*types.ClaudeResponse, error) {
+	return nil, nil
+}
+
+func (p *testStreamProvider) HandleStreamResponse(ctx context.Context, body io.ReadCloser) (<-chan string, <-chan error, error) {
+	return p.eventChan, p.errChan, p.err
+}
 
 func TestPatchUsageFieldsWithLog_NilInputTokens(t *testing.T) {
 	tests := []struct {
@@ -664,6 +685,147 @@ func TestProcessStreamEvent_MessageStopInjectsUsageWhenMessageDeltaMissing(t *te
 	}
 	if !strings.Contains(body, "event: message_stop") {
 		t.Fatalf("expected message_stop event to be forwarded, body=%s", body)
+	}
+}
+
+func TestHandleStreamResponse_DirectPassthroughPreservesRawSSEFields(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader(`{}`))
+
+	rawEvent := ": upstream comment\n" +
+		"id:abc-123\n" +
+		"retry:1500\n" +
+		"event:content_block_delta\n" +
+		"data:{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"hello\"}}\n\n"
+
+	eventChan := make(chan string, 1)
+	errChan := make(chan error, 1)
+	eventChan <- rawEvent
+	close(eventChan)
+	close(errChan)
+
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     make(http.Header),
+		Body:       io.NopCloser(strings.NewReader("")),
+	}
+
+	_, err := HandleStreamResponse(c, resp, &testStreamProvider{eventChan: eventChan, errChan: errChan}, &config.EnvConfig{}, []byte(`{}`), nil)
+	if err != nil {
+		t.Fatalf("HandleStreamResponse() error = %v", err)
+	}
+	if got := w.Body.String(); got != rawEvent {
+		t.Fatalf("passthrough body changed:\ngot  %q\nwant %q", got, rawEvent)
+	}
+}
+
+func TestHandleStreamResponse_DirectPassthroughErrChanWritesErrorEvent(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader(`{}`))
+
+	firstEvent := "event: content_block_delta\ndata:{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"hello\"}}\n\n"
+	wantErr := errors.New("upstream stream broke")
+	eventChan := make(chan string)
+	errChan := make(chan error)
+	go func() {
+		eventChan <- firstEvent
+		errChan <- wantErr
+	}()
+
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     make(http.Header),
+		Body:       io.NopCloser(strings.NewReader("")),
+	}
+
+	usage, err := HandleStreamResponse(c, resp, &testStreamProvider{eventChan: eventChan, errChan: errChan}, &config.EnvConfig{}, []byte(`{}`), nil)
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("HandleStreamResponse() error = %v, want %v", err, wantErr)
+	}
+	if usage != nil {
+		t.Fatalf("usage = %+v, want nil on passthrough stream error", usage)
+	}
+
+	body := w.Body.String()
+	if !strings.HasPrefix(body, firstEvent) {
+		t.Fatalf("expected first event to be forwarded before error, body=%q", body)
+	}
+	if !strings.Contains(body, "event: error") || !strings.Contains(body, "Stream processing error: upstream stream broke") {
+		t.Fatalf("expected SSE error event in body, got %q", body)
+	}
+}
+
+func TestHandleStreamResponse_DirectPassthroughContextCanceledReturnsWithoutErrorEvent(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	reqCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader(`{}`)).WithContext(reqCtx)
+
+	firstEvent := "event: content_block_delta\ndata:{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"hello\"}}\n\n"
+	eventChan := make(chan string, 1)
+	errChan := make(chan error)
+	eventChan <- firstEvent
+
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     make(http.Header),
+		Body:       io.NopCloser(strings.NewReader("")),
+	}
+
+	usage, err := HandleStreamResponse(c, resp, &testStreamProvider{eventChan: eventChan, errChan: errChan}, &config.EnvConfig{}, []byte(`{}`), nil)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("HandleStreamResponse() error = %v, want context.Canceled", err)
+	}
+	if usage != nil {
+		t.Fatalf("usage = %+v, want nil on context cancellation", usage)
+	}
+
+	body := w.Body.String()
+	if body != firstEvent {
+		t.Fatalf("expected only buffered event to be forwarded, got %q", body)
+	}
+	if strings.Contains(body, "event: error") {
+		t.Fatalf("context cancellation should not write SSE error event, body=%q", body)
+	}
+}
+
+func TestHandleStreamResponse_PreflightRateLimitReturnsCooldown(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader(`{}`))
+
+	eventChan := make(chan string, 1)
+	errChan := make(chan error, 1)
+	eventChan <- "event: error\ndata: {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"too many requests\"}}\n\n"
+	close(eventChan)
+	close(errChan)
+
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     make(http.Header),
+		Body:       io.NopCloser(strings.NewReader("")),
+	}
+
+	usage, err := HandleStreamResponse(c, resp, &testStreamProvider{eventChan: eventChan, errChan: errChan}, &config.EnvConfig{}, []byte(`{}`), &config.UpstreamConfig{})
+	if usage != nil {
+		t.Fatalf("usage = %+v, want nil", usage)
+	}
+	var cooldownErr *ErrCooldownKey
+	if !errors.As(err, &cooldownErr) {
+		t.Fatalf("HandleStreamResponse() error = %v, want ErrCooldownKey", err)
+	}
+	if cooldownErr.Reason != "rate_limit" {
+		t.Fatalf("cooldown reason = %q, want rate_limit", cooldownErr.Reason)
+	}
+	if w.Code != http.StatusOK || w.Body.Len() != 0 {
+		t.Fatalf("preflight cooldown should not write response, status=%d body=%q", w.Code, w.Body.String())
 	}
 }
 

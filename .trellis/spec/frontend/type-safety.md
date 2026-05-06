@@ -95,6 +95,28 @@ Bad cases:
 - Sending `rpm` in channel create/update payloads.
 - Re-declaring channel-kind unions locally without updating shared service/store contracts.
 
+### Passthrough Field Removal
+
+Frontend channel contracts must not expose passthrough compatibility switches. Backend passthrough is decided internally from API format consistency.
+
+Removed channel fields:
+
+```typescript
+normalizeMetadataUserId
+streamPassthroughEnabled
+sub2apiPassthroughEnabled
+strictRequestPassthroughEnabled
+```
+
+Contracts:
+
+- `Channel` in `src/services/api.ts` must not include these fields.
+- `buildChannelPayload()` must not send these fields for any channel type.
+- Channel forms and cards must not display controls or status chips for these removed fields.
+- Tests should assert these fields are absent when payload omission is relevant.
+- Raw body/response passthrough, stream passthrough, and User-Agent passthrough must not be exposed as frontend toggles. Backend decides raw passthrough from API format consistency, while `customHeaders` remains the only frontend-managed upstream metadata escape hatch.
+- Model-list preview `customHeaders` may include metadata such as `User-Agent`, but auth-like custom headers are not authoritative; backend must apply the selected preview key after custom headers.
+
 ---
 
 ## Forbidden Patterns

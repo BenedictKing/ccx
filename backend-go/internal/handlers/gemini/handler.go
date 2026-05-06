@@ -173,7 +173,7 @@ func handleMultiChannel(
 					channelScheduler.MarkURLSuccess(scheduler.ChannelKindGemini, channelIndex, url)
 				},
 				func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string, actualRequestBody []byte) (*types.Usage, error) {
-					return handleSuccess(c, resp, upstreamCopy.ServiceType, envCfg, startTime, geminiReq, model, isStream)
+					return handleSuccess(c, resp, upstreamCopy, apiKey, envCfg, startTime, geminiReq, model, isStream)
 				},
 				model,
 				selection.ChannelIndex,
@@ -260,7 +260,7 @@ func handleSingleChannel(
 		nil,
 		nil,
 		func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string, actualRequestBody []byte) (*types.Usage, error) {
-			return handleSuccess(c, resp, upstreamCopy.ServiceType, envCfg, startTime, geminiReq, model, isStream)
+			return handleSuccess(c, resp, upstreamCopy, apiKey, envCfg, startTime, geminiReq, model, isStream)
 		},
 		model,
 		channelIndex,
@@ -450,13 +450,17 @@ func buildProviderRequest(
 	// 设置 Content-Type（覆盖可能来自客户端的值）
 	req.Header.Set("Content-Type", "application/json")
 
+	// 应用自定义请求头（认证头随后设置，避免被覆盖）
+	utils.ApplyCustomHeaders(req.Header, upstream.CustomHeaders)
+
 	// 设置认证头
 	switch upstream.ServiceType {
 	case "gemini":
 		utils.SetGeminiAuthenticationHeader(req.Header, apiKey)
 	case "claude":
-		utils.SetAuthenticationHeader(req.Header, apiKey)
 		req.Header.Set("anthropic-version", "2023-06-01")
+		utils.EnsureCompatibleUserAgent(req.Header, "claude")
+		utils.SetAuthenticationHeader(req.Header, apiKey)
 	case "openai":
 		utils.SetAuthenticationHeader(req.Header, apiKey)
 	case "responses":
@@ -465,9 +469,6 @@ func buildProviderRequest(
 		utils.SetGeminiAuthenticationHeader(req.Header, apiKey)
 	}
 
-	// 应用自定义请求头
-	utils.ApplyCustomHeaders(req.Header, upstream.CustomHeaders)
-
 	return req, nil
 }
 
@@ -475,7 +476,8 @@ func buildProviderRequest(
 func handleSuccess(
 	c *gin.Context,
 	resp *http.Response,
-	upstreamType string,
+	upstream *config.UpstreamConfig,
+	apiKey string,
 	envCfg *config.EnvConfig,
 	startTime time.Time,
 	geminiReq *types.GeminiRequest,
@@ -483,9 +485,10 @@ func handleSuccess(
 	isStream bool,
 ) (*types.Usage, error) {
 	defer resp.Body.Close()
+	upstreamType := upstream.ServiceType
 
 	if isStream {
-		return handleStreamSuccess(c, resp, upstreamType, envCfg, startTime, model), nil
+		return handleStreamSuccess(c, resp, upstream, apiKey, envCfg, startTime, model)
 	}
 
 	// 非流式响应处理

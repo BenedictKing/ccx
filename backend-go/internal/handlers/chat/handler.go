@@ -152,7 +152,7 @@ func handleMultiChannel(
 					channelScheduler.MarkURLSuccess(scheduler.ChannelKindChat, channelIndex, url)
 				},
 				func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string, actualRequestBody []byte) (*types.Usage, error) {
-					return handleSuccess(c, resp, upstreamCopy.ServiceType, envCfg, startTime, model, isStream)
+					return handleSuccess(c, resp, upstreamCopy, apiKey, envCfg, startTime, model, isStream)
 				},
 				model,
 				selection.ChannelIndex,
@@ -226,7 +226,7 @@ func handleSingleChannel(
 		nil,
 		nil,
 		func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string, actualRequestBody []byte) (*types.Usage, error) {
-			return handleSuccess(c, resp, upstreamCopy.ServiceType, envCfg, startTime, model, isStream)
+			return handleSuccess(c, resp, upstreamCopy, apiKey, envCfg, startTime, model, isStream)
 		},
 		model,
 		channelIndex,
@@ -358,18 +358,19 @@ func buildProviderRequest(
 	// 设置 Content-Type
 	req.Header.Set("Content-Type", "application/json")
 
+	// 应用自定义请求头（认证头随后设置，避免被覆盖）
+	utils.ApplyCustomHeaders(req.Header, upstream.CustomHeaders)
+
 	// 设置认证头
 	switch upstream.ServiceType {
 	case "claude":
-		utils.SetAuthenticationHeader(req.Header, apiKey)
 		req.Header.Set("anthropic-version", "2023-06-01")
+		utils.EnsureCompatibleUserAgent(req.Header, "claude")
+		utils.SetAuthenticationHeader(req.Header, apiKey)
 	default:
 		// OpenAI / Gemini / Responses 等都使用 Bearer token
 		utils.SetAuthenticationHeader(req.Header, apiKey)
 	}
-
-	// 应用自定义请求头
-	utils.ApplyCustomHeaders(req.Header, upstream.CustomHeaders)
 
 	return req, nil
 }
@@ -541,16 +542,18 @@ func convertChatToClaudeRequest(bodyBytes []byte, model string, isStream bool) (
 func handleSuccess(
 	c *gin.Context,
 	resp *http.Response,
-	upstreamType string,
+	upstream *config.UpstreamConfig,
+	apiKey string,
 	envCfg *config.EnvConfig,
 	startTime time.Time,
 	model string,
 	isStream bool,
 ) (*types.Usage, error) {
 	defer resp.Body.Close()
+	upstreamType := upstream.ServiceType
 
 	if isStream {
-		return handleStreamSuccess(c, resp, upstreamType, envCfg, startTime, model), nil
+		return handleStreamSuccess(c, resp, upstream, apiKey, envCfg, startTime, model)
 	}
 
 	// 非流式响应处理
@@ -713,11 +716,22 @@ func convertClaudeResponseToChat(claudeResp map[string]interface{}, model string
 func handleStreamSuccess(
 	c *gin.Context,
 	resp *http.Response,
-	upstreamType string,
+	upstream *config.UpstreamConfig,
+	apiKey string,
 	envCfg *config.EnvConfig,
 	startTime time.Time,
 	model string,
-) *types.Usage {
+) (*types.Usage, error) {
+	upstreamType := upstream.ServiceType
+	if common.ShouldDirectPassthroughForRequest(c.Request.URL.Path, upstream, apiKey) {
+		totalUsage, err := common.HandleRawOpenAIChatStreamPassthrough(c, resp, upstream)
+		if envCfg.EnableResponseLogs {
+			responseTime := time.Since(startTime).Milliseconds()
+			log.Printf("[Chat-Stream-Timing] 流式响应完成: %dms", responseTime)
+		}
+		return totalUsage, err
+	}
+
 	// 设置 SSE 响应头
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
@@ -744,7 +758,7 @@ func handleStreamSuccess(
 		log.Printf("[Chat-Stream-Timing] 流式响应完成: %dms", responseTime)
 	}
 
-	return totalUsage
+	return totalUsage, nil
 }
 
 // streamPassthrough 直接透传 SSE 流（用于 OpenAI 兼容上游）

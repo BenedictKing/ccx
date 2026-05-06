@@ -245,25 +245,9 @@ func (u *UpstreamConfig) Clone() *UpstreamConfig {
 		v := *u.AutoBlacklistBalance
 		cloned.AutoBlacklistBalance = &v
 	}
-	if u.NormalizeMetadataUserID != nil {
-		v := *u.NormalizeMetadataUserID
-		cloned.NormalizeMetadataUserID = &v
-	}
-	if u.StreamPassthroughEnabled != nil {
-		v := *u.StreamPassthroughEnabled
-		cloned.StreamPassthroughEnabled = &v
-	}
-	if u.Sub2APIPassthroughEnabled != nil {
-		v := *u.Sub2APIPassthroughEnabled
-		cloned.Sub2APIPassthroughEnabled = &v
-	}
 	if u.KeyAffinityEnabled != nil {
 		v := *u.KeyAffinityEnabled
 		cloned.KeyAffinityEnabled = &v
-	}
-	if u.StrictRequestPassthroughEnabled != nil {
-		v := *u.StrictRequestPassthroughEnabled
-		cloned.StrictRequestPassthroughEnabled = &v
 	}
 	if u.ModelsHealthCheckEnabled != nil {
 		v := *u.ModelsHealthCheckEnabled

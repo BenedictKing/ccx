@@ -99,6 +99,133 @@ Use this contract when adding or changing a protocol proxy family under `backend
 - Common failover tests for client cancellation, stream preflight classification, and channel log terminal states.
 - At minimum run `go test ./internal/handlers/...` after handler changes.
 
+## Upstream Header Override Contract
+
+### Scope / Trigger
+
+Use this contract when building upstream proxy requests that combine inbound client headers, platform-controlled headers, channel `customHeaders`, and the selected channel API key.
+
+### Contracts
+
+- Build the base upstream header set first, including safe inbound header passthrough and removal of proxy-only or hop-by-hop headers.
+- Apply platform-controlled headers such as `Content-Type`, `Host`, and protocol version headers where the handler owns them.
+- Apply channel `customHeaders` before authentication so channels can add non-auth metadata headers but cannot replace the selected key.
+- Preserve inbound `User-Agent` by default for upstream proxy requests. Channel `customHeaders["User-Agent"]` may override the inbound value because it is admin-configured upstream metadata.
+- For Claude-targeted upstream requests, set the Claude CLI fallback `User-Agent` only when no inbound or custom `User-Agent` is present.
+- Strip sensitive inbound headers before custom headers and final authentication are applied. At minimum this includes `Authorization`, `x-api-key`, `x-goog-api-key`, `Cookie`, `Set-Cookie`, and `Proxy-Authorization`.
+- Set the final selected authentication header last. For OpenAI-compatible paths this normally means `Authorization: Bearer <selected key>`; for Gemini paths it means `x-goog-api-key: <selected key>`.
+- Final authentication setters must remove conflicting auth-like headers used by other protocol families when appropriate, such as `Authorization`, `x-api-key`, and `x-goog-api-key`.
+
+### Validation & Error Matrix
+
+| Case | Expected behavior |
+|------|-------------------|
+| Chat custom `Authorization` | Final upstream request uses the selected channel key |
+| Gemini custom `x-goog-api-key` | Final upstream request uses the selected Gemini key |
+| Images custom `Authorization` | Final upstream request uses the selected channel key |
+| Responses compact custom `Authorization` | Final upstream request uses the selected channel key |
+| Inbound `Cookie` or `Proxy-Authorization` | Header is stripped before the upstream request is sent |
+| Missing Claude-target `User-Agent` | Claude CLI fallback is set |
+| Custom `User-Agent` | Custom value wins over inbound and fallback values |
+
+### Tests Required
+
+- Handler-level regression tests must cover auth-like `customHeaders` for Chat, Gemini, Images, and Responses compact.
+- Tests should assert the selected key wins on the actual upstream request header, not only on helper return values.
+
+## Passthrough Decision Contracts
+
+### Scope / Trigger
+
+Use this contract when changing request body passthrough, raw response passthrough, or proxy preprocessing skip behavior.
+
+### Signatures
+
+- Central decision entrypoint:
+
+```go
+passthrough.Decide(path string, kind scheduler.ChannelKind, upstream *config.UpstreamConfig, apiKey string) passthrough.Decision
+```
+
+- Response/body helpers:
+
+```go
+passthrough.AllowsStrictBodyPassthrough(path string, upstream *config.UpstreamConfig) bool
+passthrough.AllowsRawResponsePassthrough(path string, upstream *config.UpstreamConfig) bool
+passthrough.PatchTopLevelModel(body []byte, upstream *config.UpstreamConfig) []byte
+passthrough.PatchPlatformFields(body []byte, upstream *config.UpstreamConfig) []byte
+```
+
+### Contracts
+
+- Raw body/response passthrough is allowed only when inbound and outbound API formats match.
+- Same-format request body passthrough keeps unknown client fields but must patch platform-controlled fields such as mapped `model`.
+- Responses same-format passthrough must patch `model`, `reasoning`, `text`, and `service_tier` without dropping unknown request fields.
+- Raw Responses non-stream responses must return the upstream JSON body unchanged while parsing usage for metrics and session state.
+- Raw Responses streams may return upstream SSE bytes unchanged, but metrics parsing must be side-channel only and must not rewrite SSE events.
+- Raw Messages streams may bypass provider SSE normalization only for same-format `/v1/messages` -> Claude passthrough. The raw client branch must read from upstream `resp.Body` before provider stream parsing, while internal usage/preflight parsing stays side-channel only.
+- Raw Chat streams may bypass SSE normalization only for same-format `/v1/chat/completions` -> OpenAI-compatible passthrough. The client branch must preserve upstream OpenAI SSE bytes unchanged while usage is parsed side-channel.
+- Raw Gemini native streams may bypass SSE normalization only for same-format Gemini contents passthrough. The client branch must preserve upstream Gemini SSE bytes unchanged while `usageMetadata` is parsed side-channel.
+- Raw stream preflight must finish before response headers or body are written. Any empty stream, invalid raw event, cooldown, or blacklist decision must return to failover with the client response still uncommitted.
+- Raw stream fan-out is attempt-scoped. Retry/failover/client-cancel cleanup must cancel the attempt, close the provider response body, drain branches, and wait for the fan-out goroutine to exit before the next key/channel attempt starts.
+- Raw stream side-channel buffers must be bounded; oversized raw events or preflight buffers are invalid stream responses rather than unbounded memory growth.
+- Channel config no longer exposes `streamPassthroughEnabled`, `sub2apiPassthroughEnabled`, `strictRequestPassthroughEnabled`, or `normalizeMetadataUserId`.
+- Request preprocessing may be skipped only for Messages-family passthrough decisions that also produce direct raw response behavior.
+
+### Validation & Error Matrix
+
+| Case | Expected behavior |
+|------|-------------------|
+| `/v1/responses` -> `responses` | Return raw JSON/SSE and collect usage for metrics where available |
+| `/v1/responses` -> `claude` | Do not raw passthrough; use conversion path |
+| `/v1/messages` -> `claude` | Preserve unknown request fields and patch mapped `model` |
+| `/v1/messages` stream -> `claude` | Preserve upstream raw SSE bytes and collect usage side-channel data |
+| `/v1/chat/completions` stream -> `openai` | Preserve upstream raw SSE bytes and collect OpenAI usage side-channel data |
+| Gemini native stream -> `gemini` | Preserve upstream raw SSE bytes and collect Gemini usage side-channel data |
+| Cross-protocol request | Do not skip preprocessing and do not raw passthrough |
+| Raw stream preflight cooldown/blacklist | Do not write headers; close the current attempt and fail over according to the sentinel error |
+| Provider stream error during direct passthrough | Write SSE error unless the error is `context.Canceled` |
+
+### Good/Base/Bad Cases
+
+- Good: common handler code calls `passthrough.Decide(...)` instead of reimplementing format checks.
+- Good: raw passthrough tests assert unknown top-level JSON fields and SSE `event:`, `id:`, `retry:`, comment, and `data:` formatting survive unchanged.
+- Good: Messages, Chat, and Gemini raw stream tests use real upstream bodies with compact SSE fields such as `event:name` and `data:{...}` so provider normalization cannot hide a regression.
+- Base: non-raw protocol conversion may still normalize SSE field spacing and patch missing usage.
+- Bad: adding channel-level passthrough mode switches that override API format consistency.
+- Bad: parsing raw SSE by modifying completed events and then calling it passthrough.
+- Bad: starting the next key/channel attempt before the previous raw fan-out goroutine has exited and closed its response body.
+
+### Tests Required
+
+- `go test ./internal/passthrough`
+- `go test ./internal/handlers/common`
+- `go test ./internal/handlers/responses`
+- `go test ./internal/handlers/messages`
+- `go test ./internal/handlers/chat`
+- `go test ./internal/handlers/gemini`
+- `go test ./internal/providers`
+- Include assertions for protocol mismatch, unknown field preservation, SSE byte preservation, stream error/cancel behavior, failover cleanup before retry, and metrics usage collection.
+
+### Wrong vs Correct
+
+#### Wrong
+
+```go
+if upstream.ServiceType == "claude" {
+    return rawResponse
+}
+```
+
+#### Correct
+
+```go
+decision := passthrough.Decide(path, kind, upstream, apiKey)
+if decision.RawResponse {
+    return rawResponse
+}
+```
+
 ## Local Retry Loop Contracts
 
 ### Scope / Trigger

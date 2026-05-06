@@ -482,9 +482,9 @@ func GetChannelModels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to create request: %v", err)})
 			return
 		}
-		httpReq.Header.Set("Authorization", "Bearer "+apiKey)
 		httpReq.Header.Set("Content-Type", "application/json")
 		utils.ApplyCustomHeaders(httpReq.Header, req.CustomHeaders)
+		utils.SetAuthenticationHeader(httpReq.Header, apiKey)
 
 		resp, err := client.Do(httpReq)
 		if err != nil {

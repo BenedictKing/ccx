@@ -11,6 +11,7 @@ import (
 
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/converters"
+	"github.com/BenedictKing/ccx/internal/handlers/common"
 	"github.com/BenedictKing/ccx/internal/types"
 	"github.com/gin-gonic/gin"
 )
@@ -19,11 +20,22 @@ import (
 func handleStreamSuccess(
 	c *gin.Context,
 	resp *http.Response,
-	upstreamType string,
+	upstream *config.UpstreamConfig,
+	apiKey string,
 	envCfg *config.EnvConfig,
 	startTime time.Time,
 	model string,
-) *types.Usage {
+) (*types.Usage, error) {
+	upstreamType := upstream.ServiceType
+	if common.ShouldDirectPassthroughForRequest(c.Request.URL.Path, upstream, apiKey) {
+		totalUsage, err := common.HandleRawGeminiStreamPassthrough(c, resp, upstream)
+		if envCfg.EnableResponseLogs {
+			responseTime := time.Since(startTime).Milliseconds()
+			log.Printf("[Gemini-Stream-Timing] 流式响应完成: %dms", responseTime)
+		}
+		return totalUsage, err
+	}
+
 	// 设置 SSE 响应头
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
@@ -56,7 +68,7 @@ func handleStreamSuccess(
 		log.Printf("[Gemini-Stream-Timing] 流式响应完成: %dms", responseTime)
 	}
 
-	return totalUsage
+	return totalUsage, nil
 }
 
 // streamGeminiToGemini Gemini 上游直接透传

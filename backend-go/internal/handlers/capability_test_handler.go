@@ -1234,6 +1234,12 @@ func buildTestRequestWithModelAndKey(protocol string, channel *config.UpstreamCo
 		}
 	}
 
+	if isGemini {
+		utils.SetGeminiAuthenticationHeader(req.Header, apiKey)
+	} else {
+		utils.SetAuthenticationHeader(req.Header, apiKey)
+	}
+
 	return req, nil
 }
 
@@ -1287,7 +1293,7 @@ func sendAndCheckStream(ctx context.Context, client *http.Client, req *http.Requ
 
 	// 通过 provider 将上游原始 SSE 规范化为代理侧使用的事件格式，
 	// 再复用 common.PreflightStreamEvents 做统一的空响应判定。
-	eventChan, errChan, err := provider.HandleStreamResponse(resp.Body)
+	eventChan, errChan, err := provider.HandleStreamResponse(ctx, resp.Body)
 	if err != nil {
 		return false, false, resp.StatusCode, nil, err
 	}

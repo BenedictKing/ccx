@@ -3,6 +3,7 @@ package providers
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/converters"
+	"github.com/BenedictKing/ccx/internal/passthrough"
 	"github.com/BenedictKing/ccx/internal/session"
 	"github.com/BenedictKing/ccx/internal/types"
 	"github.com/BenedictKing/ccx/internal/utils"
@@ -62,16 +64,16 @@ func (p *ResponsesProvider) ConvertToProviderRequest(
 	req.Header.Del("authorization")
 	req.Header.Del("x-api-key")
 	req.Header.Del("x-goog-api-key")
+	req.Header.Set("Content-Type", "application/json")
+	utils.ApplyCustomHeaders(req.Header, upstream.CustomHeaders)
 
 	switch upstream.ServiceType {
 	case "gemini":
 		utils.SetGeminiAuthenticationHeader(req.Header, apiKey)
 	default:
+		utils.EnsureCompatibleUserAgent(req.Header, upstream.ServiceType)
 		utils.SetAuthenticationHeader(req.Header, apiKey)
 	}
-
-	req.Header.Set("Content-Type", "application/json")
-	utils.ApplyCustomHeaders(req.Header, upstream.CustomHeaders)
 
 	return req, bodyBytes, nil
 }
@@ -89,23 +91,12 @@ func (p *ResponsesProvider) buildProviderRequestBody(c *gin.Context, requestPath
 	converter := converters.NewConverter(upstream.ServiceType)
 
 	if _, ok := converter.(*converters.ResponsesPassthroughConverter); ok {
+		patchedBody := passthrough.PatchPlatformFields(bodyBytes, upstream)
 		var reqMap map[string]interface{}
-		if err := json.Unmarshal(bodyBytes, &reqMap); err != nil {
+		if err := json.Unmarshal(patchedBody, &reqMap); err != nil {
 			return nil, nil, fmt.Errorf("透传模式下解析请求失败: %w", err)
 		}
 		normalizeResponsesInputForPassthrough(reqMap)
-		if model, ok := reqMap["model"].(string); ok {
-			reqMap["model"] = config.RedirectModel(model, upstream)
-			if effort := config.ResolveReasoningEffort(model, upstream); effort != "" {
-				reqMap["reasoning"] = map[string]interface{}{"effort": effort}
-			}
-		}
-		if upstream.TextVerbosity != "" {
-			reqMap["text"] = map[string]interface{}{"verbosity": upstream.TextVerbosity}
-		}
-		if upstream.FastMode {
-			reqMap["service_tier"] = "priority"
-		}
 		providerReq = reqMap
 	} else {
 		var responsesReq types.ResponsesRequest
@@ -476,12 +467,15 @@ func (p *ResponsesProvider) ConvertToResponsesResponse(
 }
 
 // HandleStreamResponse 处理流式响应
-func (p *ResponsesProvider) HandleStreamResponse(body io.ReadCloser) (<-chan string, <-chan error, error) {
+func (p *ResponsesProvider) HandleStreamResponse(ctx context.Context, body io.ReadCloser) (<-chan string, <-chan error, error) {
+	ctx = normalizeStreamContext(ctx)
 	eventChan := make(chan string, 100)
 	errChan := make(chan error, 1)
 
 	go func() {
 		defer close(eventChan)
+		defer close(errChan)
+		defer closeStreamBodyOnCancel(ctx, body)()
 		defer body.Close()
 
 		scanner := bufio.NewScanner(body)
@@ -503,13 +497,19 @@ func (p *ResponsesProvider) HandleStreamResponse(body io.ReadCloser) (<-chan str
 		latestCacheTTL := ""
 		stopReason := "end_turn"
 
-		emitJSON := func(eventName string, payload map[string]interface{}) {
+		emit := func(event string) bool {
+			return sendStreamEvent(ctx, eventChan, event)
+		}
+		emitJSON := func(eventName string, payload map[string]interface{}) bool {
 			payload["type"] = eventName
 			b, _ := json.Marshal(payload)
-			eventChan <- fmt.Sprintf("event: %s\ndata: %s\n\n", eventName, string(b))
+			return emit(fmt.Sprintf("event: %s\ndata: %s\n\n", eventName, string(b)))
 		}
 
 		for scanner.Scan() {
+			if isStreamContextCanceled(ctx) {
+				return
+			}
 			line := strings.TrimSpace(normalizeSSEFieldLine(scanner.Text()))
 			if line == "" {
 				continue
@@ -536,22 +536,28 @@ func (p *ResponsesProvider) HandleStreamResponse(body io.ReadCloser) (<-chan str
 			switch eventType {
 			case "response.output_text.delta":
 				if !messageStartSent {
-					eventChan <- buildMessageStartEvent("responses")
+					if !emit(buildMessageStartEvent("responses")) {
+						return
+					}
 					messageStartSent = true
 				}
 				if !textBlockStarted {
-					emitJSON("content_block_start", map[string]interface{}{
+					if !emitJSON("content_block_start", map[string]interface{}{
 						"index":         textBlockIndex,
 						"content_block": map[string]interface{}{"type": "text", "text": ""},
-					})
+					}) {
+						return
+					}
 					textBlockStarted = true
 				}
 				delta := toString(data["delta"])
 				if delta != "" {
-					emitJSON("content_block_delta", map[string]interface{}{
+					if !emitJSON("content_block_delta", map[string]interface{}{
 						"index": textBlockIndex,
 						"delta": map[string]interface{}{"type": "text_delta", "text": delta},
-					})
+					}) {
+						return
+					}
 				}
 			case "response.output_item.added":
 				item, _ := data["item"].(map[string]interface{})
@@ -559,11 +565,15 @@ func (p *ResponsesProvider) HandleStreamResponse(body io.ReadCloser) (<-chan str
 					continue
 				}
 				if !messageStartSent {
-					eventChan <- buildMessageStartEvent("responses")
+					if !emit(buildMessageStartEvent("responses")) {
+						return
+					}
 					messageStartSent = true
 				}
 				if textBlockStarted {
-					emitJSON("content_block_stop", map[string]interface{}{"index": textBlockIndex})
+					if !emitJSON("content_block_stop", map[string]interface{}{"index": textBlockIndex}) {
+						return
+					}
 					textBlockStarted = false
 				}
 				currentTool = map[string]string{
@@ -574,14 +584,16 @@ func (p *ResponsesProvider) HandleStreamResponse(body io.ReadCloser) (<-chan str
 				if currentTool["id"] == "" {
 					currentTool["id"] = currentTool["name"]
 				}
-				emitJSON("content_block_start", map[string]interface{}{
+				if !emitJSON("content_block_start", map[string]interface{}{
 					"index": toolBlockIndex,
 					"content_block": map[string]interface{}{
 						"type": "tool_use",
 						"id":   currentTool["id"],
 						"name": currentTool["name"],
 					},
-				})
+				}) {
+					return
+				}
 			case "response.function_call_arguments.delta":
 				if currentTool["id"] == "" {
 					continue
@@ -600,11 +612,15 @@ func (p *ResponsesProvider) HandleStreamResponse(body io.ReadCloser) (<-chan str
 					}
 					argsJSON = sanitizeClaudeToolArgsJSON(currentTool["name"], argsJSON)
 
-					emitJSON("content_block_delta", map[string]interface{}{
+					if !emitJSON("content_block_delta", map[string]interface{}{
 						"index": toolBlockIndex,
 						"delta": map[string]interface{}{"type": "input_json_delta", "partial_json": argsJSON},
-					})
-					emitJSON("content_block_stop", map[string]interface{}{"index": toolBlockIndex})
+					}) {
+						return
+					}
+					if !emitJSON("content_block_stop", map[string]interface{}{"index": toolBlockIndex}) {
+						return
+					}
 					toolBlockIndex++
 					stopReason = "tool_use"
 					currentTool = map[string]string{}
@@ -641,11 +657,15 @@ func (p *ResponsesProvider) HandleStreamResponse(body io.ReadCloser) (<-chan str
 					stopReason = "max_tokens"
 				}
 				if textBlockStarted {
-					emitJSON("content_block_stop", map[string]interface{}{"index": textBlockIndex})
+					if !emitJSON("content_block_stop", map[string]interface{}{"index": textBlockIndex}) {
+						return
+					}
 					textBlockStarted = false
 				}
 				if !messageStartSent {
-					eventChan <- buildMessageStartEvent("responses")
+					if !emit(buildMessageStartEvent("responses")) {
+						return
+					}
 					messageStartSent = true
 				}
 				usagePayload := map[string]interface{}{
@@ -667,16 +687,21 @@ func (p *ResponsesProvider) HandleStreamResponse(body io.ReadCloser) (<-chan str
 				if latestCacheTTL != "" {
 					usagePayload["cache_ttl"] = latestCacheTTL
 				}
-				emitJSON("message_delta", map[string]interface{}{
+				if !emitJSON("message_delta", map[string]interface{}{
 					"delta": map[string]interface{}{"stop_reason": stopReason, "stop_sequence": nil},
 					"usage": usagePayload,
-				})
+				}) {
+					return
+				}
 				emitJSON("message_stop", map[string]interface{}{})
 			}
 		}
 
 		if err := scanner.Err(); err != nil {
-			errChan <- err
+			if isStreamContextCanceled(ctx) {
+				return
+			}
+			sendStreamError(ctx, errChan, err)
 		}
 	}()
 

@@ -2,6 +2,7 @@ package providers
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"net/http"
 	"strings"
@@ -24,7 +25,51 @@ type Provider interface {
 	ConvertToClaudeResponse(providerResp *types.ProviderResponse) (*types.ClaudeResponse, error)
 
 	// HandleStreamResponse 处理流式响应
-	HandleStreamResponse(body io.ReadCloser) (<-chan string, <-chan error, error)
+	HandleStreamResponse(ctx context.Context, body io.ReadCloser) (<-chan string, <-chan error, error)
+}
+
+func normalizeStreamContext(ctx context.Context) context.Context {
+	if ctx == nil {
+		return context.Background()
+	}
+	return ctx
+}
+
+func closeStreamBodyOnCancel(ctx context.Context, body io.Closer) func() {
+	ctx = normalizeStreamContext(ctx)
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = body.Close()
+		case <-done:
+		}
+	}()
+	return func() {
+		close(done)
+	}
+}
+
+func sendStreamEvent(ctx context.Context, eventChan chan<- string, event string) bool {
+	select {
+	case <-normalizeStreamContext(ctx).Done():
+		return false
+	case eventChan <- event:
+		return true
+	}
+}
+
+func sendStreamError(ctx context.Context, errChan chan<- error, err error) bool {
+	select {
+	case <-normalizeStreamContext(ctx).Done():
+		return false
+	case errChan <- err:
+		return true
+	}
+}
+
+func isStreamContextCanceled(ctx context.Context) bool {
+	return normalizeStreamContext(ctx).Err() != nil
 }
 
 // normalizeSSEFieldLine 标准化 SSE 字段行的格式

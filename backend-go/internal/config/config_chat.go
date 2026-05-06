@@ -72,7 +72,6 @@ func (cm *ConfigManager) AddChatUpstream(upstream UpstreamConfig) error {
 	upstream.APIKeys = deduplicateStrings(upstream.APIKeys)
 	upstream.BaseURL = utils.CanonicalBaseURL(upstream.BaseURL, upstream.ServiceType)
 	upstream.BaseURLs = deduplicateBaseURLs(upstream.BaseURLs, upstream.ServiceType)
-	upstream.NormalizeClaudePassthroughMode()
 	upstream.NormalizeModelsHealthCheckOptions()
 	upstream.NormalizeModelsResponseMode()
 
@@ -199,25 +198,9 @@ func (cm *ConfigManager) UpdateChatUpstream(index int, updates UpstreamUpdate) (
 		v := *updates.AutoBlacklistBalance
 		upstream.AutoBlacklistBalance = &v
 	}
-	if updates.NormalizeMetadataUserID != nil {
-		v := *updates.NormalizeMetadataUserID
-		upstream.NormalizeMetadataUserID = &v
-	}
-	if updates.StreamPassthroughEnabled != nil {
-		v := *updates.StreamPassthroughEnabled
-		upstream.StreamPassthroughEnabled = &v
-	}
-	if updates.Sub2APIPassthroughEnabled != nil {
-		v := *updates.Sub2APIPassthroughEnabled
-		upstream.Sub2APIPassthroughEnabled = &v
-	}
 	if updates.KeyAffinityEnabled != nil {
 		v := *updates.KeyAffinityEnabled
 		upstream.KeyAffinityEnabled = &v
-	}
-	if updates.StrictRequestPassthroughEnabled != nil {
-		v := *updates.StrictRequestPassthroughEnabled
-		upstream.StrictRequestPassthroughEnabled = &v
 	}
 	if updates.ModelsHealthCheckEnabled != nil {
 		v := *updates.ModelsHealthCheckEnabled
@@ -251,7 +234,6 @@ func (cm *ConfigManager) UpdateChatUpstream(index int, updates UpstreamUpdate) (
 	if updates.RoutePrefix != nil {
 		upstream.RoutePrefix = *updates.RoutePrefix
 	}
-	upstream.NormalizeClaudePassthroughMode()
 	upstream.NormalizeModelsHealthCheckOptions()
 	upstream.NormalizeModelsResponseMode()
 

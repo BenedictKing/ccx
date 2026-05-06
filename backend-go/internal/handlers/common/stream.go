@@ -2,11 +2,13 @@
 package common
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -63,6 +65,23 @@ type StreamPreflightResult struct {
 	InterceptDuration time.Duration
 	Diagnostic        string
 	UnknownEventType  string
+}
+
+const (
+	rawStreamEventChannelSize        = 100
+	maxRawStreamEventBytes           = 1024 * 1024
+	maxRawStreamPreflightBufferBytes = 1024 * 1024
+	rawStreamReaderBufferSize        = 32 * 1024
+)
+
+type rawStreamEvent struct {
+	Bytes []byte
+	Text  string
+}
+
+type rawStreamPreflightResult struct {
+	StreamPreflightResult
+	BufferedRawEvents [][]byte
 }
 
 // PreflightStreamEvents 在发送 HTTP Header 之前预检流响应是否可继续
@@ -155,6 +174,100 @@ func PreflightStreamEvents(eventChan <-chan string, errChan <-chan error, upstre
 
 		case <-timeout.C:
 			// 超时：保守放行
+			return result
+		}
+	}
+}
+
+func preflightRawStreamEvents(eventChan <-chan rawStreamEvent, errChan <-chan error, upstream *config.UpstreamConfig) *rawStreamPreflightResult {
+	result := &rawStreamPreflightResult{}
+	var textBuf bytes.Buffer
+	hasNonTextContent := false
+	seenEvent := false
+	seenMessageStop := false
+	seenUsageOnlyEvent := false
+	seenUnknownDataType := false
+	unknownEventType := ""
+	bufferedBytes := 0
+	timeout := time.NewTimer(30 * time.Second)
+	defer timeout.Stop()
+
+	for {
+		select {
+		case event, ok := <-eventChan:
+			if !ok {
+				if hasNonTextContent {
+					return result
+				}
+				result.IsEmpty = isEmptyContent(textBuf.String())
+				result.UnknownEventType = unknownEventType
+				result.Diagnostic = buildClaudePreflightDiagnostic(seenEvent, seenMessageStop, seenUsageOnlyEvent, seenUnknownDataType, unknownEventType, textBuf.String(), result.BufferedEvents)
+				return result
+			}
+
+			seenEvent = true
+			result.BufferedEvents = append(result.BufferedEvents, event.Text)
+			result.BufferedRawEvents = append(result.BufferedRawEvents, append([]byte(nil), event.Bytes...))
+			bufferedBytes += len(event.Bytes)
+			if bufferedBytes > maxRawStreamPreflightBufferBytes {
+				result.HasError = true
+				result.Error = fmt.Errorf("%w: raw stream preflight exceeded %d bytes", ErrInvalidResponseBody, maxRawStreamPreflightBufferBytes)
+				return result
+			}
+
+			if result.InterceptAction == "" {
+				if action, reason, duration, msg := DetectStreamFailoverAction(event.Text, upstream); action != "" {
+					result.InterceptAction = action
+					result.InterceptReason = reason
+					result.InterceptDuration = duration
+					result.InterceptMessage = msg
+					return result
+				}
+			}
+
+			if !hasNonTextContent && hasNonTextContentBlock(event.Text) {
+				hasNonTextContent = true
+				return result
+			}
+
+			seenMessageStop = seenMessageStop || IsMessageStopEvent(event.Text)
+			if isUsageOnlySSEEvent(event.Text) {
+				seenUsageOnlyEvent = true
+			}
+			if t, ok := firstUnknownSSEDataType(event.Text); ok {
+				seenUnknownDataType = true
+				if unknownEventType == "" {
+					unknownEventType = t
+				}
+			}
+
+			ExtractTextFromEvent(event.Text, &textBuf)
+			if !isEmptyContent(textBuf.String()) {
+				return result
+			}
+
+			if IsMessageStopEvent(event.Text) {
+				if hasNonTextContent {
+					return result
+				}
+				result.IsEmpty = isEmptyContent(textBuf.String())
+				result.UnknownEventType = unknownEventType
+				result.Diagnostic = buildClaudePreflightDiagnostic(seenEvent, true, seenUsageOnlyEvent, seenUnknownDataType, unknownEventType, textBuf.String(), result.BufferedEvents)
+				return result
+			}
+
+		case err, ok := <-errChan:
+			if !ok {
+				errChan = nil
+				continue
+			}
+			if err != nil {
+				result.HasError = true
+				result.Error = err
+				return result
+			}
+
+		case <-timeout.C:
 			return result
 		}
 	}
@@ -356,6 +469,136 @@ func drainChannels(eventChan <-chan string, errChan <-chan error) {
 			}
 		}
 	}()
+}
+
+func drainRawStreamChannels(eventChan <-chan rawStreamEvent, errChan <-chan error) {
+	go func() {
+		timeout := time.After(60 * time.Second)
+		for {
+			select {
+			case _, ok := <-eventChan:
+				if !ok {
+					return
+				}
+			case <-timeout:
+				return
+			}
+		}
+	}()
+	go func() {
+		timeout := time.After(60 * time.Second)
+		for {
+			select {
+			case _, ok := <-errChan:
+				if !ok {
+					return
+				}
+			case <-timeout:
+				return
+			}
+		}
+	}()
+}
+
+func closeReadCloserOnCancel(ctx context.Context, body io.Closer) func() {
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = body.Close()
+		case <-done:
+		}
+	}()
+	return func() {
+		close(done)
+	}
+}
+
+func startRawStreamFanout(ctx context.Context, body io.ReadCloser) (<-chan rawStreamEvent, <-chan error, <-chan struct{}) {
+	eventChan := make(chan rawStreamEvent, rawStreamEventChannelSize)
+	errChan := make(chan error, 1)
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+		defer close(eventChan)
+		defer close(errChan)
+		defer closeReadCloserOnCancel(ctx, body)()
+		defer body.Close()
+
+		reader := bufio.NewReaderSize(body, rawStreamReaderBufferSize)
+		var eventBytes []byte
+
+		sendEvent := func() bool {
+			if len(eventBytes) == 0 {
+				return true
+			}
+			event := rawStreamEvent{
+				Bytes: append([]byte(nil), eventBytes...),
+				Text:  string(eventBytes),
+			}
+			eventBytes = eventBytes[:0]
+			select {
+			case <-ctx.Done():
+				return false
+			case eventChan <- event:
+				return true
+			}
+		}
+
+		sendError := func(err error) {
+			select {
+			case <-ctx.Done():
+			case errChan <- err:
+			}
+		}
+
+		for {
+			line, err := reader.ReadBytes('\n')
+			if len(line) > 0 {
+				eventBytes = append(eventBytes, line...)
+				if len(eventBytes) > maxRawStreamEventBytes {
+					sendError(fmt.Errorf("%w: raw stream event exceeded %d bytes", ErrInvalidResponseBody, maxRawStreamEventBytes))
+					return
+				}
+				if isRawSSEBlankLine(line) && !sendEvent() {
+					return
+				}
+			}
+
+			if err != nil {
+				if errors.Is(err, io.EOF) {
+					_ = sendEvent()
+					return
+				}
+				if ctx.Err() != nil {
+					return
+				}
+				sendError(err)
+				return
+			}
+
+			if ctx.Err() != nil {
+				return
+			}
+		}
+	}()
+
+	return eventChan, errChan, done
+}
+
+func isRawSSEBlankLine(line []byte) bool {
+	return bytes.Equal(line, []byte("\n")) || bytes.Equal(line, []byte("\r\n"))
+}
+
+func cleanupRawStreamFanout(cancel context.CancelFunc, eventChan <-chan rawStreamEvent, errChan <-chan error, done <-chan struct{}) {
+	cancel()
+	drainRawStreamChannels(eventChan, errChan)
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		log.Printf("[Messages-Stream] raw passthrough fan-out cleanup timed out")
+	}
 }
 
 // StreamContext 流处理上下文
@@ -863,19 +1106,27 @@ func HandleStreamResponse(
 ) (*types.Usage, error) {
 	defer resp.Body.Close()
 
+	if shouldUseRawMessagesStreamPassthrough(c, upstream) {
+		return handleRawMessagesStreamPassthrough(c, resp, envCfg, requestBody, upstream)
+	}
+
 	// 所有 serviceType 先做 preflight 检测，再按渠道配置决定是否直接透传
-	eventChan, errChan, err := provider.HandleStreamResponse(resp.Body)
+	attemptCtx, cancelAttempt := context.WithCancel(c.Request.Context())
+	defer cancelAttempt()
+	eventChan, errChan, err := provider.HandleStreamResponse(attemptCtx, resp.Body)
 	if err != nil {
 		c.JSON(500, gin.H{"error": "Failed to handle stream response"})
 		return nil, err
 	}
 	preflight := PreflightStreamEvents(eventChan, errChan, upstream)
 	if preflight.HasError {
+		cancelAttempt()
 		drainChannels(eventChan, errChan)
 		return nil, preflight.Error
 	}
 
 	if preflight.InterceptAction != "" {
+		cancelAttempt()
 		drainChannels(eventChan, errChan)
 		switch preflight.InterceptAction {
 		case failoverActionCooldown:
@@ -895,6 +1146,7 @@ func HandleStreamResponse(
 
 	if preflight.IsEmpty {
 		log.Printf("[Messages-EmptyResponse] upstream returned empty stream response (buffered events: %d, diagnostic: %s)", len(preflight.BufferedEvents), preflight.Diagnostic)
+		cancelAttempt()
 		drainChannels(eventChan, errChan)
 		return nil, ErrEmptyStreamResponse
 	}
@@ -902,13 +1154,14 @@ func HandleStreamResponse(
 	SetupStreamHeaders(c, resp)
 	flusher, ok := c.Writer.(http.Flusher)
 	if !ok {
+		cancelAttempt()
 		drainChannels(eventChan, errChan)
 		return nil, fmt.Errorf("response writer does not support flush")
 	}
 	flusher.Flush()
 
 	// 渠道级开关：true=直接透传；false=走本地流事件处理链
-	if upstream == nil || ShouldDirectClaudePassthroughForKey(upstream, SelectedAPIKeyFromContext(c)) {
+	if upstream == nil || ShouldDirectPassthroughForRequest(c.Request.URL.Path, upstream, SelectedAPIKeyFromContext(c)) {
 		var collectedUsage CollectedUsageData
 		var outputText bytes.Buffer
 		messageStartInputTokens := 0
@@ -918,13 +1171,36 @@ func HandleStreamResponse(
 			fmt.Fprint(c.Writer, buffered) //nolint:errcheck
 			flusher.Flush()
 		}
-		for event := range eventChan {
-			collectPassthroughStreamUsage(event, &collectedUsage, &messageStartInputTokens)
-			ExtractTextFromEvent(event, &outputText)
-			fmt.Fprint(c.Writer, event) //nolint:errcheck
-			flusher.Flush()
+		for {
+			select {
+			case event, ok := <-eventChan:
+				if !ok {
+					return finalizePassthroughStreamUsage(collectedUsage, messageStartInputTokens, requestBody, outputText.String(), upstream, envCfg), nil
+				}
+				collectPassthroughStreamUsage(event, &collectedUsage, &messageStartInputTokens)
+				ExtractTextFromEvent(event, &outputText)
+				fmt.Fprint(c.Writer, event) //nolint:errcheck
+				flusher.Flush()
+			case err, ok := <-errChan:
+				if !ok {
+					errChan = nil
+					continue
+				}
+				if err != nil {
+					log.Printf("[Messages-Stream] passthrough stream error: %v", err)
+					if !errors.Is(err, context.Canceled) {
+						fmt.Fprint(c.Writer, BuildStreamErrorEvent(err)) //nolint:errcheck
+						flusher.Flush()
+					}
+					return nil, err
+				}
+			case <-c.Request.Context().Done():
+				log.Printf("[Messages-Stream] client disconnected during passthrough stream")
+				cancelAttempt()
+				drainChannels(eventChan, errChan)
+				return nil, context.Canceled
+			}
 		}
-		return finalizePassthroughStreamUsage(collectedUsage, messageStartInputTokens, requestBody, outputText.String(), upstream, envCfg), nil
 	}
 
 	if envCfg == nil {
@@ -939,12 +1215,472 @@ func HandleStreamResponse(
 	for _, buffered := range preflight.BufferedEvents {
 		ProcessStreamEvent(c, c.Writer, flusher, buffered, streamCtx, envCfg, requestBody)
 		if streamCtx.ClientGone {
+			cancelAttempt()
 			drainChannels(eventChan, errChan)
 			return nil, context.Canceled
 		}
 	}
 
 	return ProcessStreamEvents(c, c.Writer, flusher, eventChan, errChan, streamCtx, envCfg, startTime, requestBody)
+}
+
+func shouldUseRawMessagesStreamPassthrough(c *gin.Context, upstream *config.UpstreamConfig) bool {
+	if c == nil || c.Request == nil || upstream == nil {
+		return false
+	}
+	return ShouldDirectPassthroughForRequest(c.Request.URL.Path, upstream, SelectedAPIKeyFromContext(c))
+}
+
+func handleRawMessagesStreamPassthrough(
+	c *gin.Context,
+	resp *http.Response,
+	envCfg *config.EnvConfig,
+	requestBody []byte,
+	upstream *config.UpstreamConfig,
+) (*types.Usage, error) {
+	attemptCtx, cancelAttempt := context.WithCancel(c.Request.Context())
+	defer cancelAttempt()
+
+	eventChan, errChan, fanoutDone := startRawStreamFanout(attemptCtx, resp.Body)
+	preflight := preflightRawStreamEvents(eventChan, errChan, upstream)
+	if preflight.HasError {
+		cleanupRawStreamFanout(cancelAttempt, eventChan, errChan, fanoutDone)
+		return nil, preflight.Error
+	}
+
+	if preflight.InterceptAction != "" {
+		cleanupRawStreamFanout(cancelAttempt, eventChan, errChan, fanoutDone)
+		switch preflight.InterceptAction {
+		case failoverActionCooldown:
+			duration := preflight.InterceptDuration
+			if duration <= 0 {
+				duration = 60 * time.Minute
+			}
+			return nil, &ErrCooldownKey{
+				Reason:   preflight.InterceptReason,
+				Message:  preflight.InterceptMessage,
+				Duration: duration,
+			}
+		case failoverActionBlacklist:
+			return nil, &ErrBlacklistKey{Reason: preflight.InterceptReason, Message: preflight.InterceptMessage}
+		}
+	}
+
+	if preflight.IsEmpty {
+		log.Printf("[Messages-EmptyResponse] upstream returned empty raw stream response (buffered events: %d, diagnostic: %s)", len(preflight.BufferedEvents), preflight.Diagnostic)
+		cleanupRawStreamFanout(cancelAttempt, eventChan, errChan, fanoutDone)
+		return nil, ErrEmptyStreamResponse
+	}
+
+	flusher, ok := c.Writer.(http.Flusher)
+	if !ok {
+		cleanupRawStreamFanout(cancelAttempt, eventChan, errChan, fanoutDone)
+		return nil, fmt.Errorf("response writer does not support flush")
+	}
+
+	SetupStreamHeaders(c, resp)
+	flusher.Flush()
+
+	var collectedUsage CollectedUsageData
+	var outputText bytes.Buffer
+	messageStartInputTokens := 0
+	for i, buffered := range preflight.BufferedEvents {
+		collectPassthroughStreamUsage(buffered, &collectedUsage, &messageStartInputTokens)
+		ExtractTextFromEvent(buffered, &outputText)
+		if _, err := c.Writer.Write(preflight.BufferedRawEvents[i]); err != nil {
+			cleanupRawStreamFanout(cancelAttempt, eventChan, errChan, fanoutDone)
+			return nil, err
+		}
+		flusher.Flush()
+	}
+
+	for {
+		select {
+		case event, ok := <-eventChan:
+			if !ok {
+				return finalizePassthroughStreamUsage(collectedUsage, messageStartInputTokens, requestBody, outputText.String(), upstream, envCfg), nil
+			}
+			collectPassthroughStreamUsage(event.Text, &collectedUsage, &messageStartInputTokens)
+			ExtractTextFromEvent(event.Text, &outputText)
+			if _, err := c.Writer.Write(event.Bytes); err != nil {
+				cleanupRawStreamFanout(cancelAttempt, eventChan, errChan, fanoutDone)
+				return nil, err
+			}
+			flusher.Flush()
+		case err, ok := <-errChan:
+			if !ok {
+				errChan = nil
+				continue
+			}
+			if err != nil {
+				log.Printf("[Messages-Stream] raw passthrough stream error: %v", err)
+				if !errors.Is(err, context.Canceled) {
+					fmt.Fprint(c.Writer, BuildStreamErrorEvent(err)) //nolint:errcheck
+					flusher.Flush()
+				}
+				return nil, err
+			}
+		case <-attemptCtx.Done():
+			log.Printf("[Messages-Stream] client disconnected during raw passthrough stream")
+			cleanupRawStreamFanout(cancelAttempt, eventChan, errChan, fanoutDone)
+			return nil, context.Canceled
+		}
+	}
+}
+
+type rawStreamPassthroughCallbacks struct {
+	logPrefix    string
+	preflight    func(<-chan rawStreamEvent, <-chan error, *config.UpstreamConfig) *rawStreamPreflightResult
+	collect      func(string)
+	finalize     func() *types.Usage
+	emptyMessage string
+}
+
+func handleRawStreamPassthrough(
+	c *gin.Context,
+	resp *http.Response,
+	upstream *config.UpstreamConfig,
+	callbacks rawStreamPassthroughCallbacks,
+) (*types.Usage, error) {
+	attemptCtx, cancelAttempt := context.WithCancel(c.Request.Context())
+	defer cancelAttempt()
+
+	eventChan, errChan, fanoutDone := startRawStreamFanout(attemptCtx, resp.Body)
+	preflight := callbacks.preflight(eventChan, errChan, upstream)
+	if preflight.HasError {
+		cleanupRawStreamFanout(cancelAttempt, eventChan, errChan, fanoutDone)
+		return nil, preflight.Error
+	}
+
+	if preflight.InterceptAction != "" {
+		cleanupRawStreamFanout(cancelAttempt, eventChan, errChan, fanoutDone)
+		switch preflight.InterceptAction {
+		case failoverActionCooldown:
+			duration := preflight.InterceptDuration
+			if duration <= 0 {
+				duration = 60 * time.Minute
+			}
+			return nil, &ErrCooldownKey{
+				Reason:   preflight.InterceptReason,
+				Message:  preflight.InterceptMessage,
+				Duration: duration,
+			}
+		case failoverActionBlacklist:
+			return nil, &ErrBlacklistKey{Reason: preflight.InterceptReason, Message: preflight.InterceptMessage}
+		}
+	}
+
+	if preflight.IsEmpty {
+		log.Printf("[%s-EmptyResponse] %s (buffered events: %d, diagnostic: %s)", callbacks.logPrefix, callbacks.emptyMessage, len(preflight.BufferedEvents), preflight.Diagnostic)
+		cleanupRawStreamFanout(cancelAttempt, eventChan, errChan, fanoutDone)
+		return nil, ErrEmptyStreamResponse
+	}
+
+	flusher, ok := c.Writer.(http.Flusher)
+	if !ok {
+		cleanupRawStreamFanout(cancelAttempt, eventChan, errChan, fanoutDone)
+		return nil, fmt.Errorf("response writer does not support flush")
+	}
+
+	SetupStreamHeaders(c, resp)
+	c.Header("X-Accel-Buffering", "no")
+	flusher.Flush()
+
+	for i, buffered := range preflight.BufferedEvents {
+		callbacks.collect(buffered)
+		if _, err := c.Writer.Write(preflight.BufferedRawEvents[i]); err != nil {
+			cleanupRawStreamFanout(cancelAttempt, eventChan, errChan, fanoutDone)
+			return nil, err
+		}
+		flusher.Flush()
+	}
+
+	for {
+		select {
+		case event, ok := <-eventChan:
+			if !ok {
+				return callbacks.finalize(), nil
+			}
+			callbacks.collect(event.Text)
+			if _, err := c.Writer.Write(event.Bytes); err != nil {
+				cleanupRawStreamFanout(cancelAttempt, eventChan, errChan, fanoutDone)
+				return nil, err
+			}
+			flusher.Flush()
+		case err, ok := <-errChan:
+			if !ok {
+				errChan = nil
+				continue
+			}
+			if err != nil {
+				log.Printf("[%s-Stream] raw passthrough stream error: %v", callbacks.logPrefix, err)
+				if !errors.Is(err, context.Canceled) {
+					fmt.Fprint(c.Writer, BuildStreamErrorEvent(err)) //nolint:errcheck
+					flusher.Flush()
+				}
+				return nil, err
+			}
+		case <-attemptCtx.Done():
+			log.Printf("[%s-Stream] client disconnected during raw passthrough stream", callbacks.logPrefix)
+			cleanupRawStreamFanout(cancelAttempt, eventChan, errChan, fanoutDone)
+			return nil, context.Canceled
+		}
+	}
+}
+
+// HandleRawOpenAIChatStreamPassthrough forwards same-format OpenAI Chat SSE
+// bytes unchanged while collecting usage from the side channel.
+func HandleRawOpenAIChatStreamPassthrough(c *gin.Context, resp *http.Response, upstream *config.UpstreamConfig) (*types.Usage, error) {
+	var usage *types.Usage
+	return handleRawStreamPassthrough(c, resp, upstream, rawStreamPassthroughCallbacks{
+		logPrefix:    "Chat",
+		preflight:    preflightRawOpenAIChatStreamEvents,
+		emptyMessage: "upstream returned empty raw OpenAI Chat stream response",
+		collect: func(event string) {
+			if eventUsage := extractOpenAIChatStreamUsage(event); eventUsage != nil {
+				usage = eventUsage
+			}
+		},
+		finalize: func() *types.Usage {
+			return usage
+		},
+	})
+}
+
+// HandleRawGeminiStreamPassthrough forwards same-format Gemini native SSE
+// bytes unchanged while collecting usageMetadata for metrics.
+func HandleRawGeminiStreamPassthrough(c *gin.Context, resp *http.Response, upstream *config.UpstreamConfig) (*types.Usage, error) {
+	var usage *types.Usage
+	return handleRawStreamPassthrough(c, resp, upstream, rawStreamPassthroughCallbacks{
+		logPrefix:    "Gemini",
+		preflight:    preflightRawGeminiStreamEvents,
+		emptyMessage: "upstream returned empty raw Gemini stream response",
+		collect: func(event string) {
+			if eventUsage := extractGeminiNativeStreamUsage(event); eventUsage != nil {
+				usage = eventUsage
+			}
+		},
+		finalize: func() *types.Usage {
+			return usage
+		},
+	})
+}
+
+func preflightRawOpenAIChatStreamEvents(eventChan <-chan rawStreamEvent, errChan <-chan error, upstream *config.UpstreamConfig) *rawStreamPreflightResult {
+	return preflightRawStreamEventsWithSemanticCheck(eventChan, errChan, upstream, hasOpenAIChatSemanticContent, "OpenAI Chat")
+}
+
+func preflightRawGeminiStreamEvents(eventChan <-chan rawStreamEvent, errChan <-chan error, upstream *config.UpstreamConfig) *rawStreamPreflightResult {
+	return preflightRawStreamEventsWithSemanticCheck(eventChan, errChan, upstream, hasGeminiNativeSemanticContent, "Gemini")
+}
+
+func preflightRawStreamEventsWithSemanticCheck(
+	eventChan <-chan rawStreamEvent,
+	errChan <-chan error,
+	upstream *config.UpstreamConfig,
+	hasSemanticContent func(string) bool,
+	protocol string,
+) *rawStreamPreflightResult {
+	result := &rawStreamPreflightResult{}
+	seenEvent := false
+	bufferedBytes := 0
+	timeout := time.NewTimer(30 * time.Second)
+	defer timeout.Stop()
+
+	for {
+		select {
+		case event, ok := <-eventChan:
+			if !ok {
+				result.IsEmpty = true
+				if !seenEvent {
+					result.Diagnostic = "no SSE events received"
+				} else {
+					result.Diagnostic = protocol + " stream ended without semantic content"
+				}
+				return result
+			}
+
+			seenEvent = true
+			result.BufferedEvents = append(result.BufferedEvents, event.Text)
+			result.BufferedRawEvents = append(result.BufferedRawEvents, append([]byte(nil), event.Bytes...))
+			bufferedBytes += len(event.Bytes)
+			if bufferedBytes > maxRawStreamPreflightBufferBytes {
+				result.HasError = true
+				result.Error = fmt.Errorf("%w: raw stream preflight exceeded %d bytes", ErrInvalidResponseBody, maxRawStreamPreflightBufferBytes)
+				return result
+			}
+
+			if action, reason, duration, msg := DetectStreamFailoverAction(event.Text, upstream); action != "" {
+				result.InterceptAction = action
+				result.InterceptReason = reason
+				result.InterceptDuration = duration
+				result.InterceptMessage = msg
+				return result
+			}
+
+			if hasSemanticContent(event.Text) {
+				return result
+			}
+
+		case err, ok := <-errChan:
+			if !ok {
+				errChan = nil
+				continue
+			}
+			if err != nil {
+				result.HasError = true
+				result.Error = err
+				return result
+			}
+
+		case <-timeout.C:
+			return result
+		}
+	}
+}
+
+func hasOpenAIChatSemanticContent(event string) bool {
+	found := false
+	forEachSSEJSONPayload(event, func(payload map[string]interface{}) {
+		if _, ok := payload["usage"].(map[string]interface{}); ok {
+			found = true
+			return
+		}
+		choices, _ := payload["choices"].([]interface{})
+		for _, item := range choices {
+			choice, ok := item.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			if finishReason, ok := choice["finish_reason"].(string); ok && finishReason != "" {
+				found = true
+				return
+			}
+			delta, _ := choice["delta"].(map[string]interface{})
+			if content, ok := delta["content"].(string); ok && content != "" {
+				found = true
+				return
+			}
+			if toolCalls, ok := delta["tool_calls"].([]interface{}); ok && len(toolCalls) > 0 {
+				found = true
+				return
+			}
+			if functionCall, ok := delta["function_call"].(map[string]interface{}); ok && len(functionCall) > 0 {
+				found = true
+				return
+			}
+		}
+	})
+	return found
+}
+
+func hasGeminiNativeSemanticContent(event string) bool {
+	found := false
+	forEachSSEJSONPayload(event, func(payload map[string]interface{}) {
+		if _, ok := payload["usageMetadata"].(map[string]interface{}); ok {
+			found = true
+			return
+		}
+		candidates, _ := payload["candidates"].([]interface{})
+		for _, item := range candidates {
+			candidate, ok := item.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			if finishReason, ok := candidate["finishReason"].(string); ok && finishReason != "" {
+				found = true
+				return
+			}
+			content, _ := candidate["content"].(map[string]interface{})
+			parts, _ := content["parts"].([]interface{})
+			for _, partItem := range parts {
+				part, ok := partItem.(map[string]interface{})
+				if !ok {
+					continue
+				}
+				if text, ok := part["text"].(string); ok && text != "" {
+					found = true
+					return
+				}
+				if functionCall, ok := part["functionCall"].(map[string]interface{}); ok && len(functionCall) > 0 {
+					found = true
+					return
+				}
+				if inlineData, ok := part["inlineData"].(map[string]interface{}); ok && len(inlineData) > 0 {
+					found = true
+					return
+				}
+			}
+		}
+	})
+	return found
+}
+
+func extractGeminiNativeStreamUsage(event string) *types.Usage {
+	var usage *types.Usage
+	forEachSSEJSONPayload(event, func(payload map[string]interface{}) {
+		usageMetadata, ok := payload["usageMetadata"].(map[string]interface{})
+		if !ok {
+			return
+		}
+		promptTokens := intFromJSONNumber(usageMetadata["promptTokenCount"])
+		cachedTokens := intFromJSONNumber(usageMetadata["cachedContentTokenCount"])
+		outputTokens := intFromJSONNumber(usageMetadata["candidatesTokenCount"])
+		inputTokens := promptTokens - cachedTokens
+		if inputTokens < 0 {
+			inputTokens = 0
+		}
+		usage = &types.Usage{
+			InputTokens:  inputTokens,
+			OutputTokens: outputTokens,
+		}
+	})
+	return usage
+}
+
+func extractOpenAIChatStreamUsage(event string) *types.Usage {
+	var usage *types.Usage
+	forEachSSEJSONPayload(event, func(payload map[string]interface{}) {
+		usageMap, ok := payload["usage"].(map[string]interface{})
+		if !ok {
+			return
+		}
+		usage = &types.Usage{
+			InputTokens:  intFromJSONNumber(usageMap["prompt_tokens"]),
+			OutputTokens: intFromJSONNumber(usageMap["completion_tokens"]),
+		}
+	})
+	return usage
+}
+
+func forEachSSEJSONPayload(event string, visit func(map[string]interface{})) {
+	for _, line := range strings.Split(event, "\n") {
+		line = strings.TrimSpace(line)
+		jsonStr, ok := extractSSEJSONLine(line)
+		if !ok {
+			continue
+		}
+		jsonStr = strings.TrimSpace(jsonStr)
+		if jsonStr == "" || jsonStr == "[DONE]" {
+			continue
+		}
+		var payload map[string]interface{}
+		if err := json.Unmarshal([]byte(jsonStr), &payload); err != nil {
+			continue
+		}
+		visit(payload)
+	}
+}
+
+func intFromJSONNumber(value interface{}) int {
+	switch v := value.(type) {
+	case float64:
+		return int(v)
+	case int:
+		return v
+	default:
+		return 0
+	}
 }
 
 func extractRequestModelFromRequestBody(requestBody []byte) string {

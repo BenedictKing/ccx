@@ -16,6 +16,7 @@ import (
 	"github.com/BenedictKing/ccx/internal/converters"
 	"github.com/BenedictKing/ccx/internal/handlers/common"
 	"github.com/BenedictKing/ccx/internal/middleware"
+	"github.com/BenedictKing/ccx/internal/passthrough"
 	"github.com/BenedictKing/ccx/internal/providers"
 	"github.com/BenedictKing/ccx/internal/scheduler"
 	"github.com/BenedictKing/ccx/internal/session"
@@ -23,6 +24,8 @@ import (
 	"github.com/BenedictKing/ccx/internal/utils"
 	"github.com/gin-gonic/gin"
 )
+
+const responsesRawPassthroughContextKey = "responsesRawPassthrough"
 
 // Handler Responses API 代理处理器
 // 支持多渠道调度：当配置多个渠道时自动启用
@@ -141,7 +144,8 @@ func handleMultiChannel(
 					channelScheduler.MarkURLSuccess(scheduler.ChannelKindResponses, channelIndex, url)
 				},
 				func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string, actualRequestBody []byte) (*types.Usage, error) {
-					return handleSuccess(c, resp, provider, upstream.ServiceType, envCfg, sessionManager, startTime, &responsesReq, actualRequestBody)
+					c.Set(responsesRawPassthroughContextKey, passthrough.AllowsRawResponsePassthrough("/v1/responses", upstreamCopy))
+					return handleSuccess(c, resp, provider, upstreamCopy.ServiceType, envCfg, sessionManager, startTime, &responsesReq, actualRequestBody)
 				},
 				responsesReq.Model,
 				selection.ChannelIndex,
@@ -228,7 +232,8 @@ func handleSingleChannel(
 		nil,
 		nil,
 		func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string, actualRequestBody []byte) (*types.Usage, error) {
-			return handleSuccess(c, resp, provider, upstream.ServiceType, envCfg, sessionManager, startTime, &responsesReq, actualRequestBody)
+			c.Set(responsesRawPassthroughContextKey, passthrough.AllowsRawResponsePassthrough("/v1/responses", upstreamCopy))
+			return handleSuccess(c, resp, provider, upstreamCopy.ServiceType, envCfg, sessionManager, startTime, &responsesReq, actualRequestBody)
 		},
 		responsesReq.Model,
 		channelIndex,
@@ -297,6 +302,36 @@ func handleSuccess(
 		}
 	}
 
+	if c.GetBool(responsesRawPassthroughContextKey) {
+		responsesResp := &types.ResponsesResponse{}
+		if err := json.Unmarshal(bodyBytes, responsesResp); err != nil {
+			preview := bodyBytes
+			if len(preview) > 100 {
+				preview = preview[:100]
+			}
+			log.Printf("[Responses-InvalidBody] raw passthrough response body parse failed: %v, body first 100 bytes: %s", err, preview)
+			return nil, fmt.Errorf("%w: %v", common.ErrInvalidResponseBody, err)
+		}
+
+		originalUsage := responsesResp.Usage
+		patchResponsesUsage(responsesResp, originalRequestJSON, envCfg)
+		recordResponsesSession(sessionManager, originalReq, responsesResp)
+
+		utils.ForwardResponseHeaders(resp.Header, c.Writer)
+		contentType := resp.Header.Get("Content-Type")
+		if contentType == "" {
+			contentType = "application/json"
+		}
+		c.Data(resp.StatusCode, contentType, bodyBytes)
+
+		promptTokensTotal := promptTokensTotalFromResponsesInput(
+			originalUsage.InputTokens,
+			upstreamType,
+			responsesUsageHasClaudeCache(originalUsage),
+		)
+		return metricsUsageFromResponsesUsage(responsesResp.Usage, promptTokensTotal), nil
+	}
+
 	providerResp := &types.ProviderResponse{
 		StatusCode: resp.StatusCode,
 		Headers:    resp.Header,
@@ -321,27 +356,7 @@ func handleSuccess(
 	patchResponsesUsage(responsesResp, originalRequestJSON, envCfg)
 
 	// 更新会话
-	if originalReq.Store == nil || *originalReq.Store {
-		sess, err := sessionManager.GetOrCreateSession(originalReq.PreviousResponseID)
-		if err == nil {
-			inputItems, _ := parseInputToItems(originalReq.Input)
-			for _, item := range inputItems {
-				sessionManager.AppendMessage(sess.ID, item, 0)
-			}
-
-			for _, item := range responsesResp.Output {
-				sessionManager.AppendMessage(sess.ID, item, responsesResp.Usage.TotalTokens)
-			}
-
-			previousResponseID := sess.LastResponseID
-			sessionManager.UpdateLastResponseID(sess.ID, responsesResp.ID)
-			sessionManager.RecordResponseMapping(responsesResp.ID, sess.ID)
-
-			if previousResponseID != "" {
-				responsesResp.PreviousID = previousResponseID
-			}
-		}
-	}
+	recordResponsesSession(sessionManager, originalReq, responsesResp)
 
 	utils.ForwardResponseHeaders(resp.Header, c.Writer)
 	c.JSON(200, responsesResp)
@@ -353,6 +368,37 @@ func handleSuccess(
 		responsesUsageHasClaudeCache(originalUsage),
 	)
 	return metricsUsageFromResponsesUsage(responsesResp.Usage, promptTokensTotal), nil
+}
+
+func recordResponsesSession(sessionManager *session.SessionManager, originalReq *types.ResponsesRequest, responsesResp *types.ResponsesResponse) {
+	if sessionManager == nil || originalReq == nil || responsesResp == nil {
+		return
+	}
+	if originalReq.Store != nil && !*originalReq.Store {
+		return
+	}
+
+	sess, err := sessionManager.GetOrCreateSession(originalReq.PreviousResponseID)
+	if err != nil {
+		return
+	}
+
+	inputItems, _ := parseInputToItems(originalReq.Input)
+	for _, item := range inputItems {
+		sessionManager.AppendMessage(sess.ID, item, 0)
+	}
+
+	for _, item := range responsesResp.Output {
+		sessionManager.AppendMessage(sess.ID, item, responsesResp.Usage.TotalTokens)
+	}
+
+	previousResponseID := sess.LastResponseID
+	sessionManager.UpdateLastResponseID(sess.ID, responsesResp.ID)
+	sessionManager.RecordResponseMapping(responsesResp.ID, sess.ID)
+
+	if previousResponseID != "" {
+		responsesResp.PreviousID = previousResponseID
+	}
 }
 
 func responsesUsageHasClaudeCache(usage types.ResponsesUsage) bool {
@@ -539,6 +585,10 @@ func handleStreamSuccess(
 	if envCfg.EnableResponseLogs {
 		responseTime := time.Since(startTime).Milliseconds()
 		log.Printf("[Responses-Stream] Responses 流式响应开始: %dms, 状态: %d", responseTime, resp.StatusCode)
+	}
+
+	if c.GetBool(responsesRawPassthroughContextKey) {
+		return handleRawResponsesStreamPassthrough(c, resp)
 	}
 
 	var synthesizer *utils.StreamSynthesizer
@@ -902,6 +952,88 @@ func handleStreamSuccess(
 		CacheCreation1hInputTokens: collectedUsage.CacheCreation1hInputTokens,
 		CacheTTL:                   collectedUsage.CacheTTL,
 	}, promptTokensTotal), nil
+}
+
+func handleRawResponsesStreamPassthrough(c *gin.Context, resp *http.Response) (*types.Usage, error) {
+	utils.ForwardResponseHeaders(resp.Header, c.Writer)
+	if resp.Header.Get("Content-Type") == "" {
+		c.Header("Content-Type", "text/event-stream")
+	}
+	c.Status(resp.StatusCode)
+
+	flusher, _ := c.Writer.(http.Flusher)
+	buf := make([]byte, 32*1024)
+	var metricsBuffer bytes.Buffer
+	const maxMetricsBufferSize = 1024 * 1024
+	for {
+		n, readErr := resp.Body.Read(buf)
+		if n > 0 {
+			chunk := buf[:n]
+			if metricsBuffer.Len() < maxMetricsBufferSize {
+				remaining := maxMetricsBufferSize - metricsBuffer.Len()
+				if len(chunk) > remaining {
+					metricsBuffer.Write(chunk[:remaining])
+				} else {
+					metricsBuffer.Write(chunk)
+				}
+			}
+			if _, err := c.Writer.Write(chunk); err != nil {
+				return nil, err
+			}
+			if flusher != nil {
+				flusher.Flush()
+			}
+		}
+		if readErr != nil {
+			if readErr == io.EOF {
+				break
+			}
+			return nil, readErr
+		}
+	}
+
+	usage, _ := collectRawResponsesStreamUsage(metricsBuffer.String())
+	return metricsUsageFromResponsesUsage(usage, promptTokensTotalFromResponsesInput(
+		usage.InputTokens,
+		"responses",
+		responsesUsageHasClaudeCache(usage),
+	)), nil
+}
+
+func collectRawResponsesStreamUsage(streamBody string) (types.ResponsesUsage, string) {
+	var collected responsesStreamUsage
+	var outputText bytes.Buffer
+	events := splitRawResponsesSSEEvents(streamBody)
+	for _, event := range events {
+		extractResponsesTextFromEvent(event, &outputText)
+		detected, _, usageData := checkResponsesEventUsage(event, false)
+		if detected {
+			updateResponsesStreamUsage(&collected, usageData)
+		}
+	}
+	return types.ResponsesUsage{
+		InputTokens:                collected.InputTokens,
+		OutputTokens:               collected.OutputTokens,
+		TotalTokens:                collected.TotalTokens,
+		CacheCreationInputTokens:   collected.CacheCreationInputTokens,
+		CacheReadInputTokens:       collected.CacheReadInputTokens,
+		CacheCreation5mInputTokens: collected.CacheCreation5mInputTokens,
+		CacheCreation1hInputTokens: collected.CacheCreation1hInputTokens,
+		CacheTTL:                   collected.CacheTTL,
+	}, outputText.String()
+}
+
+func splitRawResponsesSSEEvents(streamBody string) []string {
+	normalized := strings.ReplaceAll(streamBody, "\r\n", "\n")
+	parts := strings.Split(normalized, "\n\n")
+	events := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if strings.TrimSpace(part) == "" {
+			continue
+		}
+		events = append(events, part+"\n")
+	}
+	return events
 }
 
 // responsesStreamUsage 流式响应 usage 收集结构

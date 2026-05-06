@@ -187,11 +187,7 @@ export interface Channel {
   modelsResponseMode?: 'upstream' | 'manual'
   manualModels?: string[]
   autoBlacklistBalance?: boolean
-  normalizeMetadataUserId?: boolean
-  streamPassthroughEnabled?: boolean
-  sub2apiPassthroughEnabled?: boolean
   keyAffinityEnabled?: boolean
-  strictRequestPassthroughEnabled?: boolean
   modelsHealthCheckEnabled?: boolean
   modelsHealthCheckIntervalMinutes?: number
   failoverRules?: FailoverRule[]

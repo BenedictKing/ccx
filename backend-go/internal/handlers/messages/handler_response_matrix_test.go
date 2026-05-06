@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -93,9 +95,7 @@ func TestMessagesHandler_InvalidJSONReturns400(t *testing.T) {
 	}
 }
 
-func TestMessagesHandler_Sub2APIPassthroughLowQualityRecordsNormalizedMetrics(t *testing.T) {
-	enabled := true
-	disabled := false
+func TestMessagesHandler_RawPassthroughLowQualityRecordsNormalizedMetrics(t *testing.T) {
 	upstreamServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -104,15 +104,12 @@ func TestMessagesHandler_Sub2APIPassthroughLowQualityRecordsNormalizedMetrics(t 
 	defer upstreamServer.Close()
 
 	router, messagesMetrics := newMessagesTestRouterWithMetrics(t, config.UpstreamConfig{
-		Name:                            "sub2api-low-quality",
-		BaseURL:                         upstreamServer.URL,
-		APIKeys:                         []string{"sk-ant-test"},
-		ServiceType:                     "claude",
-		Status:                          "active",
-		LowQuality:                      true,
-		Sub2APIPassthroughEnabled:       &enabled,
-		StreamPassthroughEnabled:        &disabled,
-		StrictRequestPassthroughEnabled: &enabled,
+		Name:        "raw-passthrough-low-quality",
+		BaseURL:     upstreamServer.URL,
+		APIKeys:     []string{"sk-ant-test"},
+		ServiceType: "claude",
+		Status:      "active",
+		LowQuality:  true,
 	})
 
 	body := `{"model":"claude-3-5-sonnet","messages":[{"role":"user","content":[{"type":"text","text":"this request body is intentionally long enough to estimate more than one input token for low quality usage metrics"}]}]}`
@@ -136,6 +133,151 @@ func TestMessagesHandler_Sub2APIPassthroughLowQualityRecordsNormalizedMetrics(t 
 	}
 	if inputTokens <= 1 || outputTokens <= 1 {
 		t.Fatalf("metrics tokens = input:%d output:%d, want lowQuality-normalized values > 1", inputTokens, outputTokens)
+	}
+}
+
+func TestMessagesHandler_StreamRawPassthroughPreservesUpstreamSSEBytesAndMetrics(t *testing.T) {
+	rawStream := "" +
+		":keep-alive\n\n" +
+		"id:abc\n" +
+		"event:message_start\n" +
+		"data:{\"type\":\"message_start\",\"message\":{\"id\":\"msg_1\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"usage\":{\"input_tokens\":3,\"output_tokens\":0}}}\n\n" +
+		"retry:1500\n" +
+		"event:content_block_delta\n" +
+		"data:{\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"hi\"}}\n\n" +
+		"event:message_delta\n" +
+		"data:{\"type\":\"message_delta\",\"usage\":{\"input_tokens\":3,\"output_tokens\":2}}\n\n" +
+		"event:message_stop\n" +
+		"data:{\"type\":\"message_stop\"}\n\n"
+
+	upstreamServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(rawStream))
+	}))
+	defer upstreamServer.Close()
+
+	router, messagesMetrics := newMessagesTestRouterWithMetrics(t, config.UpstreamConfig{
+		Name:        "raw-stream-passthrough",
+		BaseURL:     upstreamServer.URL,
+		APIKeys:     []string{"sk-ant-stream"},
+		ServiceType: "claude",
+		Status:      "active",
+	})
+
+	w := performMessagesHandlerRequest(t, router, `{"model":"claude-3-5-sonnet","stream":true,"messages":[{"role":"user","content":[{"type":"text","text":"hello"}]}]}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if got := w.Body.String(); got != rawStream {
+		t.Fatalf("raw stream body mismatch\n got: %q\nwant: %q", got, rawStream)
+	}
+
+	points := messagesMetrics.GetKeyHistoricalStats(upstreamServer.URL, "sk-ant-stream", "claude", time.Hour, time.Minute)
+	var successCount, inputTokens, outputTokens int64
+	for _, point := range points {
+		successCount += point.SuccessCount
+		inputTokens += point.InputTokens
+		outputTokens += point.OutputTokens
+	}
+	if successCount != 1 {
+		t.Fatalf("successCount = %d, want 1", successCount)
+	}
+	if inputTokens != 3 || outputTokens != 2 {
+		t.Fatalf("metrics tokens = input:%d output:%d, want input:3 output:2", inputTokens, outputTokens)
+	}
+}
+
+func TestMessagesHandler_StreamRawPassthroughCancelsFirstAttemptBeforeFailover(t *testing.T) {
+	firstClosed := make(chan struct{})
+	var secondSawFirstClosed atomic.Bool
+	successStream := "" +
+		"event:content_block_delta\n" +
+		"data:{\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"ok\"}}\n\n" +
+		"event:message_delta\n" +
+		"data:{\"type\":\"message_delta\",\"usage\":{\"input_tokens\":4,\"output_tokens\":2}}\n\n" +
+		"event:message_stop\n" +
+		"data:{\"type\":\"message_stop\"}\n\n"
+
+	upstreamServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		auth := r.Header.Get("Authorization")
+		switch {
+		case strings.Contains(auth, "sk-first"):
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("event:error\ndata:{\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"slow down\"}}\n\n"))
+			if flusher, ok := w.(http.Flusher); ok {
+				flusher.Flush()
+			}
+			<-r.Context().Done()
+			close(firstClosed)
+		case strings.Contains(auth, "sk-second"):
+			select {
+			case <-firstClosed:
+				secondSawFirstClosed.Store(true)
+			case <-time.After(2 * time.Second):
+			}
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(successStream))
+		default:
+			http.Error(w, "unexpected key", http.StatusInternalServerError)
+		}
+	}))
+	defer upstreamServer.Close()
+
+	router, _ := newMessagesTestRouterWithMetrics(t, config.UpstreamConfig{
+		Name:        "raw-stream-failover-cleanup",
+		BaseURL:     upstreamServer.URL,
+		APIKeys:     []string{"sk-first", "sk-second"},
+		ServiceType: "claude",
+		Status:      "active",
+	})
+
+	w := performMessagesHandlerRequest(t, router, `{"model":"claude-3-5-sonnet","stream":true,"messages":[{"role":"user","content":[{"type":"text","text":"hello"}]}]}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if got := w.Body.String(); got != successStream {
+		t.Fatalf("body = %q, want successful second attempt stream %q", got, successStream)
+	}
+	if !secondSawFirstClosed.Load() {
+		t.Fatalf("second attempt started before first attempt body/fan-out was released")
+	}
+}
+
+func TestMessagesHandler_CrossFormatStreamDoesNotUseRawPassthrough(t *testing.T) {
+	upstreamRaw := "" +
+		"event:raw_should_not_pass\n" +
+		"data:{\"id\":\"chatcmpl_1\",\"object\":\"chat.completion.chunk\",\"model\":\"gpt-test\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"hi\"}}]}\n\n" +
+		"data:[DONE]\n\n"
+
+	upstreamServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(upstreamRaw))
+	}))
+	defer upstreamServer.Close()
+
+	router := newMessagesTestRouter(t, config.UpstreamConfig{
+		Name:        "cross-format-openai-stream",
+		BaseURL:     upstreamServer.URL,
+		APIKeys:     []string{"sk-openai-stream"},
+		ServiceType: "openai",
+		Status:      "active",
+	})
+
+	w := performMessagesHandlerRequest(t, router, `{"model":"claude-3-5-sonnet","stream":true,"messages":[{"role":"user","content":[{"type":"text","text":"hello"}]}]}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if got := w.Body.String(); got == upstreamRaw {
+		t.Fatalf("cross-format stream was raw-passthroughed unexpectedly")
+	}
+	if bytes.Contains(w.Body.Bytes(), []byte("event:raw_should_not_pass")) {
+		t.Fatalf("cross-format response leaked raw upstream event: %s", w.Body.String())
+	}
+	if !bytes.Contains(w.Body.Bytes(), []byte("hi")) {
+		t.Fatalf("cross-format response did not include converted content: %s", w.Body.String())
 	}
 }
 
