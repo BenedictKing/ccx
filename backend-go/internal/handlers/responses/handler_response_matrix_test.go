@@ -206,9 +206,13 @@ func TestResponsesHandler_StreamRawPassthroughPreservesSSEBytes(t *testing.T) {
 
 func TestResponsesHandler_StreamRawPassthroughRecordsUsageAfterLargePrefix(t *testing.T) {
 	sessionManager := session.NewSessionManager(time.Hour, 100, 100000)
+	firstEvent := strings.Join([]string{
+		`data:{"type":"response.output_text.delta","delta":"hi"}`,
+		"",
+	}, "\n")
 	padding := strings.Repeat(": padding\n\n", 120000)
 	usageEvent := `data:{"type":"response.completed","response":{"usage":{"input_tokens":13,"output_tokens":5,"total_tokens":18}}}` + "\n\n"
-	rawBody := padding + usageEvent
+	rawBody := firstEvent + padding + usageEvent
 
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -244,6 +248,162 @@ func TestResponsesHandler_StreamRawPassthroughRecordsUsageAfterLargePrefix(t *te
 	}
 	if inputTokens != 13 || outputTokens != 5 {
 		t.Fatalf("metrics tokens = input:%d output:%d, want input:13 output:5", inputTokens, outputTokens)
+	}
+}
+
+func TestResponsesHandler_StreamRawPassthroughEmptyStreamFailsOverBeforeHeaders(t *testing.T) {
+	sessionManager := session.NewSessionManager(time.Hour, 100, 100000)
+	validBody := strings.Join([]string{
+		`data:{"type":"response.output_text.delta","delta":"fallback"}`,
+		"",
+		`data:{"type":"response.completed","response":{"usage":{"input_tokens":7,"output_tokens":3,"total_tokens":10}}}`,
+		"",
+	}, "\n")
+	attempts := 0
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if strings.Contains(r.Header.Get("Authorization"), "sk-empty") {
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.Header().Set("X-First-Attempt", "must-not-reach-client")
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(validBody))
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+	}))
+	defer upstream.Close()
+
+	router := newResponsesTestRouter(t, config.UpstreamConfig{
+		Name:        "responses-stream-empty-failover",
+		BaseURL:     upstream.URL,
+		APIKeys:     []string{"sk-empty", "sk-ok"},
+		ServiceType: "responses",
+		Status:      "active",
+	}, sessionManager)
+
+	w := performResponsesHandlerRequest(t, router, `{"model":"gpt-5","input":"hello","stream":true}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if attempts != 2 {
+		t.Fatalf("attempts = %d, want 2", attempts)
+	}
+	if got := w.Header().Get("X-First-Attempt"); got != "" {
+		t.Fatalf("first attempt header reached client: %q", got)
+	}
+	if got := w.Body.String(); got != validBody {
+		t.Fatalf("raw fallback stream changed:\ngot  %q\nwant %q", got, validBody)
+	}
+}
+
+func TestResponsesHandler_StreamRawPassthroughInvalidBodyFailsOverBeforeHeaders(t *testing.T) {
+	sessionManager := session.NewSessionManager(time.Hour, 100, 100000)
+	validBody := strings.Join([]string{
+		`data:{"type":"response.output_text.delta","delta":"fallback"}`,
+		"",
+		`data:{"type":"response.completed","response":{"usage":{"input_tokens":9,"output_tokens":4,"total_tokens":13}}}`,
+		"",
+	}, "\n")
+	attempts := 0
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if strings.Contains(r.Header.Get("Authorization"), "sk-invalid") {
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.Header().Set("X-First-Attempt", "must-not-reach-client")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("<html>upstream error</html>"))
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(validBody))
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+	}))
+	defer upstream.Close()
+
+	router := newResponsesTestRouter(t, config.UpstreamConfig{
+		Name:        "responses-stream-invalid-failover",
+		BaseURL:     upstream.URL,
+		APIKeys:     []string{"sk-invalid", "sk-ok"},
+		ServiceType: "responses",
+		Status:      "active",
+	}, sessionManager)
+
+	w := performResponsesHandlerRequest(t, router, `{"model":"gpt-5","input":"hello","stream":true}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if attempts != 2 {
+		t.Fatalf("attempts = %d, want 2", attempts)
+	}
+	if got := w.Header().Get("X-First-Attempt"); got != "" {
+		t.Fatalf("first attempt header reached client: %q", got)
+	}
+	if got := w.Body.String(); got != validBody {
+		t.Fatalf("raw fallback stream changed:\ngot  %q\nwant %q", got, validBody)
+	}
+}
+
+func TestResponsesHandler_StreamRawPassthroughBlacklistPreflightFailsOverBeforeHeaders(t *testing.T) {
+	sessionManager := session.NewSessionManager(time.Hour, 100, 100000)
+	errorBody := strings.Join([]string{
+		"event:error",
+		`data:{"type":"error","error":{"type":"authentication_error","message":"bad key"}}`,
+		"",
+	}, "\n")
+	validBody := strings.Join([]string{
+		`data:{"type":"response.output_text.delta","delta":"ok"}`,
+		"",
+		`data:{"type":"response.completed","response":{"usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7}}}`,
+		"",
+	}, "\n")
+	attempts := 0
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		w.Header().Set("Content-Type", "text/event-stream")
+		if strings.Contains(r.Header.Get("Authorization"), "sk-bad") {
+			w.Header().Set("X-First-Attempt", "must-not-reach-client")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(errorBody))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(validBody))
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+	}))
+	defer upstream.Close()
+
+	router := newResponsesTestRouter(t, config.UpstreamConfig{
+		Name:        "responses-stream-blacklist-failover",
+		BaseURL:     upstream.URL,
+		APIKeys:     []string{"sk-bad", "sk-ok"},
+		ServiceType: "responses",
+		Status:      "active",
+	}, sessionManager)
+
+	w := performResponsesHandlerRequest(t, router, `{"model":"gpt-5","input":"hello","stream":true}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if attempts != 2 {
+		t.Fatalf("attempts = %d, want 2", attempts)
+	}
+	if got := w.Header().Get("X-First-Attempt"); got != "" {
+		t.Fatalf("first attempt header reached client: %q", got)
+	}
+	if got := w.Body.String(); got != validBody {
+		t.Fatalf("raw fallback stream changed:\ngot  %q\nwant %q", got, validBody)
 	}
 }
 

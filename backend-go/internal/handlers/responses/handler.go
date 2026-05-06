@@ -145,7 +145,7 @@ func handleMultiChannel(
 				},
 				func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string, actualRequestBody []byte) (*types.Usage, error) {
 					c.Set(responsesRawPassthroughContextKey, passthrough.AllowsRawResponsePassthrough("/v1/responses", upstreamCopy))
-					return handleSuccess(c, resp, provider, upstreamCopy.ServiceType, envCfg, sessionManager, startTime, &responsesReq, actualRequestBody)
+					return handleSuccess(c, resp, provider, upstreamCopy, upstreamCopy.ServiceType, envCfg, sessionManager, startTime, &responsesReq, actualRequestBody)
 				},
 				responsesReq.Model,
 				selection.ChannelIndex,
@@ -233,7 +233,7 @@ func handleSingleChannel(
 		nil,
 		func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string, actualRequestBody []byte) (*types.Usage, error) {
 			c.Set(responsesRawPassthroughContextKey, passthrough.AllowsRawResponsePassthrough("/v1/responses", upstreamCopy))
-			return handleSuccess(c, resp, provider, upstreamCopy.ServiceType, envCfg, sessionManager, startTime, &responsesReq, actualRequestBody)
+			return handleSuccess(c, resp, provider, upstreamCopy, upstreamCopy.ServiceType, envCfg, sessionManager, startTime, &responsesReq, actualRequestBody)
 		},
 		responsesReq.Model,
 		channelIndex,
@@ -252,6 +252,7 @@ func handleSuccess(
 	c *gin.Context,
 	resp *http.Response,
 	provider *providers.ResponsesProvider,
+	upstream *config.UpstreamConfig,
 	upstreamType string,
 	envCfg *config.EnvConfig,
 	sessionManager *session.SessionManager,
@@ -264,7 +265,7 @@ func handleSuccess(
 	isStream := originalReq != nil && originalReq.Stream
 
 	if isStream {
-		return handleStreamSuccess(c, resp, upstreamType, envCfg, startTime, originalReq, originalRequestJSON)
+		return handleStreamSuccess(c, resp, upstream, upstreamType, envCfg, startTime, originalReq, originalRequestJSON)
 	}
 
 	// 非流式响应处理
@@ -576,6 +577,7 @@ func estimateResponsesOutputFromItems(output []types.ResponsesItem) int {
 func handleStreamSuccess(
 	c *gin.Context,
 	resp *http.Response,
+	upstream *config.UpstreamConfig,
 	upstreamType string,
 	envCfg *config.EnvConfig,
 	startTime time.Time,
@@ -588,7 +590,7 @@ func handleStreamSuccess(
 	}
 
 	if c.GetBool(responsesRawPassthroughContextKey) {
-		return handleRawResponsesStreamPassthrough(c, resp)
+		return handleRawResponsesStreamPassthrough(c, resp, upstream, upstreamType)
 	}
 
 	var synthesizer *utils.StreamSynthesizer
@@ -954,42 +956,24 @@ func handleStreamSuccess(
 	}, promptTokensTotal), nil
 }
 
-func handleRawResponsesStreamPassthrough(c *gin.Context, resp *http.Response) (*types.Usage, error) {
-	utils.ForwardResponseHeaders(resp.Header, c.Writer)
-	if resp.Header.Get("Content-Type") == "" {
-		c.Header("Content-Type", "text/event-stream")
-	}
-	c.Status(resp.StatusCode)
-
-	flusher, _ := c.Writer.(http.Flusher)
-	buf := make([]byte, 32*1024)
+func handleRawResponsesStreamPassthrough(c *gin.Context, resp *http.Response, upstream *config.UpstreamConfig, upstreamType string) (*types.Usage, error) {
 	var usageCollector rawResponsesStreamUsageCollector
-	for {
-		n, readErr := resp.Body.Read(buf)
-		if n > 0 {
-			chunk := buf[:n]
-			usageCollector.Feed(chunk)
-			if _, err := c.Writer.Write(chunk); err != nil {
-				return nil, err
-			}
-			if flusher != nil {
-				flusher.Flush()
-			}
-		}
-		if readErr != nil {
-			if readErr == io.EOF {
-				break
-			}
-			return nil, readErr
-		}
-	}
-
-	usage := usageCollector.Finish()
-	return metricsUsageFromResponsesUsage(usage, promptTokensTotalFromResponsesInput(
-		usage.InputTokens,
-		"responses",
-		responsesUsageHasClaudeCache(usage),
-	)), nil
+	return common.HandleRawResponsesStreamPassthrough(
+		c,
+		resp,
+		upstream,
+		func(event string) {
+			usageCollector.Feed([]byte(event))
+		},
+		func() *types.Usage {
+			usage := usageCollector.Finish()
+			return metricsUsageFromResponsesUsage(usage, promptTokensTotalFromResponsesInput(
+				usage.InputTokens,
+				"responses",
+				responsesUsageHasClaudeCache(usage),
+			))
+		},
+	)
 }
 
 const maxRawResponsesStreamSideEventBytes = 1024 * 1024

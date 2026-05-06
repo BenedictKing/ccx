@@ -50,7 +50,8 @@ func TestHandleSuccess_PreservesPreviousResponseID(t *testing.T) {
 		Input:              "hello",
 	}
 
-	if _, err := handleSuccess(c, resp, provider, "responses", envCfg, sessionManager, time.Now(), originalReq, []byte(`{"model":"gpt-5","input":"hello"}`)); err != nil {
+	upstream := &config.UpstreamConfig{ServiceType: "responses"}
+	if _, err := handleSuccess(c, resp, provider, upstream, "responses", envCfg, sessionManager, time.Now(), originalReq, []byte(`{"model":"gpt-5","input":"hello"}`)); err != nil {
 		t.Fatalf("handleSuccess() err = %v", err)
 	}
 

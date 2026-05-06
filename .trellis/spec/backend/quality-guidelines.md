@@ -139,6 +139,13 @@ Use this contract when building upstream proxy requests that combine inbound cli
 
 Use this contract when changing request body passthrough, raw response passthrough, or proxy preprocessing skip behavior.
 
+### Forwarding Builder Boundary
+
+- The forwarding builder is a data-plane helper: it may prepare upstream URL, method, body, safe headers, custom headers, final authentication, and raw response strategy.
+- The forwarding builder must not own scheduler choice, key/BaseURL retry, failover classification, key blacklist/cooldown, circuit breaker state, channel log terminal status, trace affinity, or metrics finalization.
+- Same-format raw stream handlers must route through shared attempt-scoped cleanup helpers before the client response is committed. Protocol-specific code may provide side-channel usage collectors, but it must not read `resp.Body` directly for raw stream passthrough.
+- Raw stream preflight failures are control-plane inputs to `TryUpstreamWithAllKeys`; empty stream, invalid raw body, cooldown, and blacklist decisions must be returned while the client response headers are still uncommitted.
+
 ### Signatures
 
 - Central decision entrypoint:

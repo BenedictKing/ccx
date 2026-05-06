@@ -1462,12 +1462,104 @@ func HandleRawGeminiStreamPassthrough(c *gin.Context, resp *http.Response, upstr
 	})
 }
 
+// HandleRawResponsesStreamPassthrough forwards same-format Responses SSE bytes
+// unchanged while protocol-specific usage collection runs as a side channel.
+func HandleRawResponsesStreamPassthrough(
+	c *gin.Context,
+	resp *http.Response,
+	upstream *config.UpstreamConfig,
+	collect func(string),
+	finalize func() *types.Usage,
+) (*types.Usage, error) {
+	return handleRawStreamPassthrough(c, resp, upstream, rawStreamPassthroughCallbacks{
+		logPrefix:    "Responses",
+		preflight:    preflightRawResponsesStreamEvents,
+		emptyMessage: "upstream returned empty raw Responses stream response",
+		collect: func(event string) {
+			if collect != nil {
+				collect(event)
+			}
+		},
+		finalize: func() *types.Usage {
+			if finalize == nil {
+				return nil
+			}
+			return finalize()
+		},
+	})
+}
+
 func preflightRawOpenAIChatStreamEvents(eventChan <-chan rawStreamEvent, errChan <-chan error, upstream *config.UpstreamConfig) *rawStreamPreflightResult {
 	return preflightRawStreamEventsWithSemanticCheck(eventChan, errChan, upstream, hasOpenAIChatSemanticContent, "OpenAI Chat")
 }
 
 func preflightRawGeminiStreamEvents(eventChan <-chan rawStreamEvent, errChan <-chan error, upstream *config.UpstreamConfig) *rawStreamPreflightResult {
 	return preflightRawStreamEventsWithSemanticCheck(eventChan, errChan, upstream, hasGeminiNativeSemanticContent, "Gemini")
+}
+
+func preflightRawResponsesStreamEvents(eventChan <-chan rawStreamEvent, errChan <-chan error, upstream *config.UpstreamConfig) *rawStreamPreflightResult {
+	result := &rawStreamPreflightResult{}
+	seenEvent := false
+	bufferedBytes := 0
+	timeout := time.NewTimer(30 * time.Second)
+	defer timeout.Stop()
+
+	for {
+		select {
+		case event, ok := <-eventChan:
+			if !ok {
+				result.IsEmpty = true
+				if !seenEvent {
+					result.Diagnostic = "no SSE events received"
+				} else {
+					result.Diagnostic = "Responses stream ended without semantic content"
+				}
+				return result
+			}
+
+			seenEvent = true
+			result.BufferedEvents = append(result.BufferedEvents, event.Text)
+			result.BufferedRawEvents = append(result.BufferedRawEvents, append([]byte(nil), event.Bytes...))
+			bufferedBytes += len(event.Bytes)
+			if bufferedBytes > maxRawStreamPreflightBufferBytes {
+				result.HasError = true
+				result.Error = fmt.Errorf("%w: raw stream preflight exceeded %d bytes", ErrInvalidResponseBody, maxRawStreamPreflightBufferBytes)
+				return result
+			}
+
+			if action, reason, duration, msg := DetectStreamFailoverAction(event.Text, upstream); action != "" {
+				result.InterceptAction = action
+				result.InterceptReason = reason
+				result.InterceptDuration = duration
+				result.InterceptMessage = msg
+				return result
+			}
+
+			if !isValidRawSSEEvent(event.Text) {
+				result.HasError = true
+				result.Error = fmt.Errorf("%w: invalid raw Responses SSE event", ErrInvalidResponseBody)
+				return result
+			}
+
+			if hasResponsesRawSemanticContent(event.Text) {
+				return result
+			}
+
+		case err, ok := <-errChan:
+			if !ok {
+				errChan = nil
+				continue
+			}
+			if err != nil {
+				result.HasError = true
+				result.Error = err
+				return result
+			}
+
+		case <-timeout.C:
+			return result
+		}
+	}
 }
 
 func preflightRawStreamEventsWithSemanticCheck(
@@ -1533,6 +1625,26 @@ func preflightRawStreamEventsWithSemanticCheck(
 			return result
 		}
 	}
+}
+
+func isValidRawSSEEvent(event string) bool {
+	seenField := false
+	for _, line := range strings.Split(event, "\n") {
+		line = strings.TrimSuffix(line, "\r")
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		if strings.HasPrefix(line, ":") ||
+			strings.HasPrefix(line, "data:") ||
+			strings.HasPrefix(line, "event:") ||
+			strings.HasPrefix(line, "id:") ||
+			strings.HasPrefix(line, "retry:") {
+			seenField = true
+			continue
+		}
+		return false
+	}
+	return seenField
 }
 
 func hasOpenAIChatSemanticContent(event string) bool {
@@ -1610,6 +1722,77 @@ func hasGeminiNativeSemanticContent(event string) bool {
 		}
 	})
 	return found
+}
+
+func hasResponsesRawSemanticContent(event string) bool {
+	found := false
+	forEachSSEJSONPayload(event, func(payload map[string]interface{}) {
+		if responsesPayloadHasSemanticContent(payload) {
+			found = true
+		}
+	})
+	return found
+}
+
+func responsesPayloadHasSemanticContent(payload map[string]interface{}) bool {
+	switch payload["type"] {
+	case "response.output_text.delta", "response.function_call_arguments.delta",
+		"response.reasoning_summary_text.delta", "response.output_json.delta",
+		"response.content_part.delta", "response.audio.delta", "response.audio_transcript.delta":
+		for _, key := range []string{"delta", "text"} {
+			if value, ok := payload[key].(string); ok && value != "" {
+				return true
+			}
+		}
+	case "response.function_call_arguments.done", "response.reasoning_summary_text.done",
+		"response.reasoning_summary_part.added", "response.reasoning_summary_part.done":
+		return true
+	case "response.output_item.added", "response.output_item.done":
+		item, _ := payload["item"].(map[string]interface{})
+		return responseItemHasSemanticContent(item)
+	case "response.completed":
+		response, _ := payload["response"].(map[string]interface{})
+		output, _ := response["output"].([]interface{})
+		for _, item := range output {
+			itemMap, _ := item.(map[string]interface{})
+			if responseItemHasSemanticContent(itemMap) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func responseItemHasSemanticContent(item map[string]interface{}) bool {
+	if len(item) == 0 {
+		return false
+	}
+	itemType, _ := item["type"].(string)
+	switch itemType {
+	case "function_call", "reasoning":
+		return true
+	}
+	if strings.HasSuffix(itemType, "_call") {
+		return true
+	}
+	if text, ok := item["text"].(string); ok && text != "" {
+		return true
+	}
+	switch content := item["content"].(type) {
+	case string:
+		return content != ""
+	case []interface{}:
+		for _, contentItem := range content {
+			contentMap, _ := contentItem.(map[string]interface{})
+			if text, ok := contentMap["text"].(string); ok && text != "" {
+				return true
+			}
+			if contentType, _ := contentMap["type"].(string); contentType != "" && contentType != "output_text" && contentType != "text" {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 type openAIChatStreamUsageCollector struct {
