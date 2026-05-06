@@ -424,3 +424,36 @@ Unified AxonHub-style forwarding data-plane request construction through a share
 ### Next Steps
 
 - None - task complete
+
+
+## Session 7: Track AxonHub forwarding usage stats
+
+**Date**: 2026-05-06
+**Task**: Track AxonHub forwarding usage stats
+**Branch**: `axonhub`
+
+### Summary
+
+Implemented AxonHub-style forwarding usage observability with request counts and token usage grouped by inbound family and forwarding mode; preserved ccx control-plane behavior and verified backend tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `06e2568` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
