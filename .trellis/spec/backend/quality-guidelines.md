@@ -163,9 +163,11 @@ passthrough.PatchPlatformFields(body []byte, upstream *config.UpstreamConfig) []
 - Responses same-format passthrough must patch `model`, `reasoning`, `text`, and `service_tier` without dropping unknown request fields.
 - Raw Responses non-stream responses must return the upstream JSON body unchanged while parsing usage for metrics and session state.
 - Raw Responses streams may return upstream SSE bytes unchanged, but metrics parsing must be side-channel only and must not rewrite SSE events.
+- Raw Responses stream usage parsing must be incremental by SSE event. Do not depend on a fixed prefix buffer, because `response.completed` can arrive after a large stream body.
 - Raw Messages streams may bypass provider SSE normalization only for same-format `/v1/messages` -> Claude passthrough. The raw client branch must read from upstream `resp.Body` before provider stream parsing, while internal usage/preflight parsing stays side-channel only.
-- Raw Chat streams may bypass SSE normalization only for same-format `/v1/chat/completions` -> OpenAI-compatible passthrough. The client branch must preserve upstream OpenAI SSE bytes unchanged while usage is parsed side-channel.
-- Raw Gemini native streams may bypass SSE normalization only for same-format Gemini contents passthrough. The client branch must preserve upstream Gemini SSE bytes unchanged while `usageMetadata` is parsed side-channel.
+- Raw Chat streams may bypass SSE normalization only for same-format `/v1/chat/completions` -> OpenAI-compatible passthrough. The client branch must preserve upstream OpenAI SSE bytes unchanged while usage is parsed side-channel. OpenAI `prompt_tokens_details.cached_tokens` must become `Usage.CacheReadInputTokens`, with `Usage.PromptTokensTotal` set to the upstream `prompt_tokens`.
+- Raw Gemini native streams may bypass SSE normalization only for same-format Gemini contents passthrough. The client branch must preserve upstream Gemini SSE bytes unchanged while `usageMetadata` is parsed side-channel. Gemini `cachedContentTokenCount` must become `Usage.CacheReadInputTokens`, `Usage.PromptTokensTotal` must be `promptTokenCount`, and `Usage.InputTokens` must be `max(promptTokenCount - cachedContentTokenCount, 0)`.
+- Same-format non-stream Chat/OpenAI and Gemini/Gemini passthrough must use the same metrics usage normalization as their raw stream paths while returning upstream response bytes unchanged.
 - Raw stream preflight must finish before response headers or body are written. Any empty stream, invalid raw event, cooldown, or blacklist decision must return to failover with the client response still uncommitted.
 - Raw stream fan-out is attempt-scoped. Retry/failover/client-cancel cleanup must cancel the attempt, close the provider response body, drain branches, and wait for the fan-out goroutine to exit before the next key/channel attempt starts.
 - Raw stream side-channel buffers must be bounded; oversized raw events or preflight buffers are invalid stream responses rather than unbounded memory growth.
@@ -180,8 +182,9 @@ passthrough.PatchPlatformFields(body []byte, upstream *config.UpstreamConfig) []
 | `/v1/responses` -> `claude` | Do not raw passthrough; use conversion path |
 | `/v1/messages` -> `claude` | Preserve unknown request fields and patch mapped `model` |
 | `/v1/messages` stream -> `claude` | Preserve upstream raw SSE bytes and collect usage side-channel data |
-| `/v1/chat/completions` stream -> `openai` | Preserve upstream raw SSE bytes and collect OpenAI usage side-channel data |
-| Gemini native stream -> `gemini` | Preserve upstream raw SSE bytes and collect Gemini usage side-channel data |
+| `/v1/chat/completions` -> `openai` with cached tokens | Preserve upstream bytes; metrics input is `prompt_tokens - prompt_tokens_details.cached_tokens`, cache read is `cached_tokens` |
+| Gemini native -> `gemini` with cached content | Preserve upstream bytes; metrics input is `promptTokenCount - cachedContentTokenCount`, cache read is `cachedContentTokenCount` |
+| Responses raw stream with usage after a large prefix | Preserve all bytes and still collect `response.completed.response.usage` |
 | Cross-protocol request | Do not skip preprocessing and do not raw passthrough |
 | Raw stream preflight cooldown/blacklist | Do not write headers; close the current attempt and fail over according to the sentinel error |
 | Provider stream error during direct passthrough | Write SSE error unless the error is `context.Canceled` |
@@ -191,7 +194,9 @@ passthrough.PatchPlatformFields(body []byte, upstream *config.UpstreamConfig) []
 - Good: common handler code calls `passthrough.Decide(...)` instead of reimplementing format checks.
 - Good: raw passthrough tests assert unknown top-level JSON fields and SSE `event:`, `id:`, `retry:`, comment, and `data:` formatting survive unchanged.
 - Good: Messages, Chat, and Gemini raw stream tests use real upstream bodies with compact SSE fields such as `event:name` and `data:{...}` so provider normalization cannot hide a regression.
+- Good: metrics tests assert cache read tokens separately from input tokens for OpenAI `prompt_tokens_details.cached_tokens` and Gemini `cachedContentTokenCount`.
 - Base: non-raw protocol conversion may still normalize SSE field spacing and patch missing usage.
+- Bad: buffering only the first N bytes of a raw SSE stream for metrics; long streams can place usage after that prefix.
 - Bad: adding channel-level passthrough mode switches that override API format consistency.
 - Bad: parsing raw SSE by modifying completed events and then calling it passthrough.
 - Bad: starting the next key/channel attempt before the previous raw fan-out goroutine has exited and closed its response body.
@@ -206,6 +211,7 @@ passthrough.PatchPlatformFields(body []byte, upstream *config.UpstreamConfig) []
 - `go test ./internal/handlers/gemini`
 - `go test ./internal/providers`
 - Include assertions for protocol mismatch, unknown field preservation, SSE byte preservation, stream error/cancel behavior, failover cleanup before retry, and metrics usage collection.
+- Include raw passthrough metrics assertions for OpenAI cached tokens, Gemini cached content tokens, and Responses usage events that arrive after more than 1 MiB of earlier SSE bytes.
 
 ### Wrong vs Correct
 
@@ -224,6 +230,21 @@ decision := passthrough.Decide(path, kind, upstream, apiKey)
 if decision.RawResponse {
     return rawResponse
 }
+```
+
+#### Wrong
+
+```go
+metricsBuffer.Write(firstMiBOnly)
+usage := parseUsage(metricsBuffer.String())
+```
+
+#### Correct
+
+```go
+collector.Feed(rawChunk)
+_, _ = c.Writer.Write(rawChunk)
+usage := collector.Finish()
 ```
 
 ## Local Retry Loop Contracts
