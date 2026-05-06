@@ -86,6 +86,7 @@ func TestChatHandler_StreamRawPassthroughPreservesOpenAIUpstreamSSEBytesAndMetri
 		"data:{\"id\":\"chatcmpl_1\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"hi\"}}]}\n\n" +
 		"retry:1500\n" +
 		"data:{\"id\":\"chatcmpl_1\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":5,\"completion_tokens\":2,\"total_tokens\":7}}\n\n" +
+		"data:{\"id\":\"chatcmpl_1\",\"object\":\"chat.completion.chunk\",\"choices\":[],\"usage\":{\"prompt_tokens_details\":{\"cached_tokens\":3}}}\n\n" +
 		"data:[DONE]\n\n"
 
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -112,17 +113,60 @@ func TestChatHandler_StreamRawPassthroughPreservesOpenAIUpstreamSSEBytesAndMetri
 	}
 
 	points := chatMetrics.GetKeyHistoricalStats(upstream.URL, "sk-chat-stream", "openai", time.Hour, time.Minute)
-	var successCount, inputTokens, outputTokens int64
+	var successCount, inputTokens, outputTokens, cacheReadTokens int64
 	for _, point := range points {
 		successCount += point.SuccessCount
 		inputTokens += point.InputTokens
 		outputTokens += point.OutputTokens
+		cacheReadTokens += point.CacheReadInputTokens
 	}
 	if successCount != 1 {
 		t.Fatalf("successCount = %d, want 1", successCount)
 	}
-	if inputTokens != 5 || outputTokens != 2 {
-		t.Fatalf("metrics tokens = input:%d output:%d, want input:5 output:2", inputTokens, outputTokens)
+	if inputTokens != 2 || outputTokens != 2 || cacheReadTokens != 3 {
+		t.Fatalf("metrics tokens = input:%d output:%d cache_read:%d, want input:2 output:2 cache_read:3", inputTokens, outputTokens, cacheReadTokens)
+	}
+}
+
+func TestChatHandler_NonStreamRawPassthroughRecordsCachedTokens(t *testing.T) {
+	rawBody := `{"id":"chatcmpl_1","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":"hi"},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":2,"total_tokens":12,"prompt_tokens_details":{"cached_tokens":7}},"vendor_ext":{"kept":true}}`
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(rawBody))
+	}))
+	defer upstream.Close()
+
+	router, chatMetrics := newChatTestRouterWithMetrics(t, config.UpstreamConfig{
+		Name:        "chat-openai-raw-nonstream",
+		BaseURL:     upstream.URL,
+		APIKeys:     []string{"sk-chat-nonstream"},
+		ServiceType: "openai",
+		Status:      "active",
+	})
+
+	w := performChatHandlerRequest(t, router, `{"model":"gpt-4o","messages":[{"role":"user","content":"hello"}]}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if got := w.Body.String(); got != rawBody {
+		t.Fatalf("raw non-stream body mismatch\n got: %q\nwant: %q", got, rawBody)
+	}
+
+	points := chatMetrics.GetKeyHistoricalStats(upstream.URL, "sk-chat-nonstream", "openai", time.Hour, time.Minute)
+	var successCount, inputTokens, outputTokens, cacheReadTokens int64
+	for _, point := range points {
+		successCount += point.SuccessCount
+		inputTokens += point.InputTokens
+		outputTokens += point.OutputTokens
+		cacheReadTokens += point.CacheReadInputTokens
+	}
+	if successCount != 1 {
+		t.Fatalf("successCount = %d, want 1", successCount)
+	}
+	if inputTokens != 3 || outputTokens != 2 || cacheReadTokens != 7 {
+		t.Fatalf("metrics tokens = input:%d output:%d cache_read:%d, want input:3 output:2 cache_read:7", inputTokens, outputTokens, cacheReadTokens)
 	}
 }
 

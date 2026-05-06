@@ -1431,18 +1431,16 @@ func handleRawStreamPassthrough(
 // HandleRawOpenAIChatStreamPassthrough forwards same-format OpenAI Chat SSE
 // bytes unchanged while collecting usage from the side channel.
 func HandleRawOpenAIChatStreamPassthrough(c *gin.Context, resp *http.Response, upstream *config.UpstreamConfig) (*types.Usage, error) {
-	var usage *types.Usage
+	var usageCollector openAIChatStreamUsageCollector
 	return handleRawStreamPassthrough(c, resp, upstream, rawStreamPassthroughCallbacks{
 		logPrefix:    "Chat",
 		preflight:    preflightRawOpenAIChatStreamEvents,
 		emptyMessage: "upstream returned empty raw OpenAI Chat stream response",
 		collect: func(event string) {
-			if eventUsage := extractOpenAIChatStreamUsage(event); eventUsage != nil {
-				usage = eventUsage
-			}
+			usageCollector.Collect(event)
 		},
 		finalize: func() *types.Usage {
-			return usage
+			return usageCollector.Finish()
 		},
 	})
 }
@@ -1450,18 +1448,16 @@ func HandleRawOpenAIChatStreamPassthrough(c *gin.Context, resp *http.Response, u
 // HandleRawGeminiStreamPassthrough forwards same-format Gemini native SSE
 // bytes unchanged while collecting usageMetadata for metrics.
 func HandleRawGeminiStreamPassthrough(c *gin.Context, resp *http.Response, upstream *config.UpstreamConfig) (*types.Usage, error) {
-	var usage *types.Usage
+	var usageCollector geminiNativeStreamUsageCollector
 	return handleRawStreamPassthrough(c, resp, upstream, rawStreamPassthroughCallbacks{
 		logPrefix:    "Gemini",
 		preflight:    preflightRawGeminiStreamEvents,
 		emptyMessage: "upstream returned empty raw Gemini stream response",
 		collect: func(event string) {
-			if eventUsage := extractGeminiNativeStreamUsage(event); eventUsage != nil {
-				usage = eventUsage
-			}
+			usageCollector.Collect(event)
 		},
 		finalize: func() *types.Usage {
-			return usage
+			return usageCollector.Finish()
 		},
 	})
 }
@@ -1616,41 +1612,115 @@ func hasGeminiNativeSemanticContent(event string) bool {
 	return found
 }
 
-func extractGeminiNativeStreamUsage(event string) *types.Usage {
-	var usage *types.Usage
-	forEachSSEJSONPayload(event, func(payload map[string]interface{}) {
-		usageMetadata, ok := payload["usageMetadata"].(map[string]interface{})
-		if !ok {
-			return
-		}
-		promptTokens := intFromJSONNumber(usageMetadata["promptTokenCount"])
-		cachedTokens := intFromJSONNumber(usageMetadata["cachedContentTokenCount"])
-		outputTokens := intFromJSONNumber(usageMetadata["candidatesTokenCount"])
-		inputTokens := promptTokens - cachedTokens
-		if inputTokens < 0 {
-			inputTokens = 0
-		}
-		usage = &types.Usage{
-			InputTokens:  inputTokens,
-			OutputTokens: outputTokens,
-		}
-	})
-	return usage
+type openAIChatStreamUsageCollector struct {
+	promptTokens     int
+	completionTokens int
+	cacheReadTokens  int
+	hasUsage         bool
 }
 
-func extractOpenAIChatStreamUsage(event string) *types.Usage {
-	var usage *types.Usage
+func (c *openAIChatStreamUsageCollector) Collect(event string) {
 	forEachSSEJSONPayload(event, func(payload map[string]interface{}) {
 		usageMap, ok := payload["usage"].(map[string]interface{})
 		if !ok {
 			return
 		}
-		usage = &types.Usage{
-			InputTokens:  intFromJSONNumber(usageMap["prompt_tokens"]),
-			OutputTokens: intFromJSONNumber(usageMap["completion_tokens"]),
+		c.hasUsage = true
+		if value, ok := intFromJSONNumberOK(usageMap["prompt_tokens"]); ok {
+			c.promptTokens = value
+		}
+		if value, ok := intFromJSONNumberOK(usageMap["completion_tokens"]); ok {
+			c.completionTokens = value
+		}
+		if details, ok := usageMap["prompt_tokens_details"].(map[string]interface{}); ok {
+			if value, ok := intFromJSONNumberOK(details["cached_tokens"]); ok {
+				c.cacheReadTokens = value
+			}
 		}
 	})
-	return usage
+}
+
+func (c *openAIChatStreamUsageCollector) Finish() *types.Usage {
+	if !c.hasUsage {
+		return nil
+	}
+	return OpenAIChatUsageFromCounts(c.promptTokens, c.completionTokens, c.cacheReadTokens)
+}
+
+type geminiNativeStreamUsageCollector struct {
+	promptTokens    int
+	cacheReadTokens int
+	outputTokens    int
+	hasUsage        bool
+}
+
+func (c *geminiNativeStreamUsageCollector) Collect(event string) {
+	forEachSSEJSONPayload(event, func(payload map[string]interface{}) {
+		usageMetadata, ok := payload["usageMetadata"].(map[string]interface{})
+		if !ok {
+			return
+		}
+		c.hasUsage = true
+		if value, ok := intFromJSONNumberOK(usageMetadata["promptTokenCount"]); ok {
+			c.promptTokens = value
+		}
+		if value, ok := intFromJSONNumberOK(usageMetadata["cachedContentTokenCount"]); ok {
+			c.cacheReadTokens = value
+		}
+		if value, ok := intFromJSONNumberOK(usageMetadata["candidatesTokenCount"]); ok && value > c.outputTokens {
+			c.outputTokens = value
+		}
+	})
+}
+
+func (c *geminiNativeStreamUsageCollector) Finish() *types.Usage {
+	if !c.hasUsage {
+		return nil
+	}
+	return GeminiUsageFromCounts(c.promptTokens, c.cacheReadTokens, c.outputTokens)
+}
+
+func OpenAIChatUsageFromMap(usageMap map[string]interface{}) *types.Usage {
+	promptTokens := intFromJSONNumber(usageMap["prompt_tokens"])
+	completionTokens := intFromJSONNumber(usageMap["completion_tokens"])
+	cacheReadTokens := 0
+	if details, ok := usageMap["prompt_tokens_details"].(map[string]interface{}); ok {
+		cacheReadTokens = intFromJSONNumber(details["cached_tokens"])
+	}
+	return OpenAIChatUsageFromCounts(promptTokens, completionTokens, cacheReadTokens)
+}
+
+func OpenAIChatUsageFromCounts(promptTokens, completionTokens, cacheReadTokens int) *types.Usage {
+	return &types.Usage{
+		InputTokens:          promptTokens,
+		OutputTokens:         completionTokens,
+		CacheReadInputTokens: cacheReadTokens,
+		PromptTokensTotal:    promptTokens,
+	}
+}
+
+func GeminiUsageFromMetadata(metadata *types.GeminiUsageMetadata) *types.Usage {
+	if metadata == nil {
+		return nil
+	}
+	return GeminiUsageFromCounts(
+		metadata.PromptTokenCount,
+		metadata.CachedContentTokenCount,
+		metadata.CandidatesTokenCount,
+	)
+}
+
+func GeminiUsageFromCounts(promptTokens, cachedTokens, outputTokens int) *types.Usage {
+	inputTokens := promptTokens - cachedTokens
+	if inputTokens < 0 {
+		inputTokens = 0
+	}
+	return &types.Usage{
+		InputTokens:          inputTokens,
+		OutputTokens:         outputTokens,
+		CacheReadInputTokens: cachedTokens,
+		PromptTokensTotal:    promptTokens,
+	}
 }
 
 func forEachSSEJSONPayload(event string, visit func(map[string]interface{})) {
@@ -1673,13 +1743,18 @@ func forEachSSEJSONPayload(event string, visit func(map[string]interface{})) {
 }
 
 func intFromJSONNumber(value interface{}) int {
+	v, _ := intFromJSONNumberOK(value)
+	return v
+}
+
+func intFromJSONNumberOK(value interface{}) (int, bool) {
 	switch v := value.(type) {
 	case float64:
-		return int(v)
+		return int(v), true
 	case int:
-		return v
+		return v, true
 	default:
-		return 0
+		return 0, false
 	}
 }
 

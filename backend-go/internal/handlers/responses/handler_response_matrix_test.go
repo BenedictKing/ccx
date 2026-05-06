@@ -204,6 +204,49 @@ func TestResponsesHandler_StreamRawPassthroughPreservesSSEBytes(t *testing.T) {
 	}
 }
 
+func TestResponsesHandler_StreamRawPassthroughRecordsUsageAfterLargePrefix(t *testing.T) {
+	sessionManager := session.NewSessionManager(time.Hour, 100, 100000)
+	padding := strings.Repeat(": padding\n\n", 120000)
+	usageEvent := `data:{"type":"response.completed","response":{"usage":{"input_tokens":13,"output_tokens":5,"total_tokens":18}}}` + "\n\n"
+	rawBody := padding + usageEvent
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(rawBody))
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+	}))
+	defer upstream.Close()
+
+	router, responsesMetrics := newResponsesTestRouterWithMetrics(t, config.UpstreamConfig{
+		Name:        "responses-stream-raw-large-prefix",
+		BaseURL:     upstream.URL,
+		APIKeys:     []string{"sk-large-prefix"},
+		ServiceType: "responses",
+		Status:      "active",
+	}, sessionManager)
+
+	w := performResponsesHandlerRequest(t, router, `{"model":"gpt-5","input":"hello","stream":true}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if got := w.Body.String(); got != rawBody {
+		t.Fatalf("raw stream passthrough body changed after large prefix: got len=%d want len=%d", len(got), len(rawBody))
+	}
+
+	points := responsesMetrics.GetKeyHistoricalStats(upstream.URL, "sk-large-prefix", "responses", time.Hour, time.Minute)
+	var inputTokens, outputTokens int64
+	for _, point := range points {
+		inputTokens += point.InputTokens
+		outputTokens += point.OutputTokens
+	}
+	if inputTokens != 13 || outputTokens != 5 {
+		t.Fatalf("metrics tokens = input:%d output:%d, want input:13 output:5", inputTokens, outputTokens)
+	}
+}
+
 func TestResponsesHandler_StreamSameFormatAlwaysUsesRawPassthrough(t *testing.T) {
 	sessionManager := session.NewSessionManager(time.Hour, 100, 100000)
 	rawBody := strings.Join([]string{

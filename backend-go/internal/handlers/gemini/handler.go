@@ -523,6 +523,9 @@ func handleSuccess(
 			log.Printf("[Gemini-InvalidBody] 响应体解析失败: %v, body前100字节: %s", err, preview)
 			return nil, fmt.Errorf("%w: %v", common.ErrInvalidResponseBody, err)
 		}
+		utils.ForwardResponseHeaders(resp.Header, c.Writer)
+		c.Data(resp.StatusCode, "application/json", bodyBytes)
+		return common.GeminiUsageFromMetadata(geminiResp.UsageMetadata), nil
 
 	case "claude":
 		// 转换 Claude 响应为 Gemini 格式
@@ -592,10 +595,7 @@ func handleSuccess(
 	// 提取 usage 统计
 	var usage *types.Usage
 	if geminiResp.UsageMetadata != nil {
-		usage = &types.Usage{
-			InputTokens:  geminiResp.UsageMetadata.PromptTokenCount - geminiResp.UsageMetadata.CachedContentTokenCount,
-			OutputTokens: geminiResp.UsageMetadata.CandidatesTokenCount,
-		}
+		usage = common.GeminiUsageFromMetadata(geminiResp.UsageMetadata)
 	}
 
 	return usage, nil

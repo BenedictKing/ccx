@@ -97,7 +97,8 @@ func TestGeminiHandler_StreamRawPassthroughPreservesNativeSSEBytesAndMetrics(t *
 		"event:model\r\n" +
 		"data:{\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"text\":\"hi\"}]}}]}\r\n\r\n" +
 		"retry:1500\r\n" +
-		"data:{\"candidates\":[{\"finishReason\":\"STOP\"}],\"usageMetadata\":{\"promptTokenCount\":9,\"cachedContentTokenCount\":2,\"candidatesTokenCount\":4,\"totalTokenCount\":13}}\r\n\r\n"
+		"data:{\"candidates\":[{\"finishReason\":\"STOP\"}],\"usageMetadata\":{\"promptTokenCount\":9,\"candidatesTokenCount\":4,\"totalTokenCount\":13}}\r\n\r\n" +
+		"data:{\"usageMetadata\":{\"cachedContentTokenCount\":2}}\r\n\r\n"
 
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -123,17 +124,60 @@ func TestGeminiHandler_StreamRawPassthroughPreservesNativeSSEBytesAndMetrics(t *
 	}
 
 	points := geminiMetrics.GetKeyHistoricalStats(upstream.URL, "gemini-stream-key", "gemini", time.Hour, time.Minute)
-	var successCount, inputTokens, outputTokens int64
+	var successCount, inputTokens, outputTokens, cacheReadTokens int64
 	for _, point := range points {
 		successCount += point.SuccessCount
 		inputTokens += point.InputTokens
 		outputTokens += point.OutputTokens
+		cacheReadTokens += point.CacheReadInputTokens
 	}
 	if successCount != 1 {
 		t.Fatalf("successCount = %d, want 1", successCount)
 	}
-	if inputTokens != 7 || outputTokens != 4 {
-		t.Fatalf("metrics tokens = input:%d output:%d, want input:7 output:4", inputTokens, outputTokens)
+	if inputTokens != 7 || outputTokens != 4 || cacheReadTokens != 2 {
+		t.Fatalf("metrics tokens = input:%d output:%d cache_read:%d, want input:7 output:4 cache_read:2", inputTokens, outputTokens, cacheReadTokens)
+	}
+}
+
+func TestGeminiHandler_NonStreamRawPassthroughRecordsCachedContentTokens(t *testing.T) {
+	rawBody := `{"candidates":[{"content":{"role":"model","parts":[{"text":"hi"}]},"finishReason":"STOP","index":0}],"usageMetadata":{"promptTokenCount":9,"cachedContentTokenCount":12,"candidatesTokenCount":4,"totalTokenCount":13},"vendorExt":{"kept":true}}`
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(rawBody))
+	}))
+	defer upstream.Close()
+
+	router, geminiMetrics := newGeminiTestRouterWithMetrics(t, config.UpstreamConfig{
+		Name:        "gemini-native-raw-nonstream",
+		BaseURL:     upstream.URL,
+		APIKeys:     []string{"gemini-nonstream-key"},
+		ServiceType: "gemini",
+		Status:      "active",
+	})
+
+	w := performGeminiHandlerRequest(t, router, "gemini-2.0-flash", `{"contents":[{"role":"user","parts":[{"text":"hello"}]}]}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if got := w.Body.String(); got != rawBody {
+		t.Fatalf("raw non-stream body mismatch\n got: %q\nwant: %q", got, rawBody)
+	}
+
+	points := geminiMetrics.GetKeyHistoricalStats(upstream.URL, "gemini-nonstream-key", "gemini", time.Hour, time.Minute)
+	var successCount, inputTokens, outputTokens, cacheReadTokens int64
+	for _, point := range points {
+		successCount += point.SuccessCount
+		inputTokens += point.InputTokens
+		outputTokens += point.OutputTokens
+		cacheReadTokens += point.CacheReadInputTokens
+	}
+	if successCount != 1 {
+		t.Fatalf("successCount = %d, want 1", successCount)
+	}
+	if inputTokens != 0 || outputTokens != 4 || cacheReadTokens != 12 {
+		t.Fatalf("metrics tokens = input:%d output:%d cache_read:%d, want input:0 output:4 cache_read:12", inputTokens, outputTokens, cacheReadTokens)
 	}
 }
 

@@ -603,12 +603,7 @@ func handleSuccess(
 			return nil, nil
 		}
 		if u, ok := respMap["usage"].(map[string]interface{}); ok {
-			promptTokens, _ := u["prompt_tokens"].(float64)
-			completionTokens, _ := u["completion_tokens"].(float64)
-			return &types.Usage{
-				InputTokens:  int(promptTokens),
-				OutputTokens: int(completionTokens),
-			}, nil
+			return common.OpenAIChatUsageFromMap(u), nil
 		}
 		return nil, nil
 	}

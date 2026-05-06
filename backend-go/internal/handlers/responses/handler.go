@@ -963,20 +963,12 @@ func handleRawResponsesStreamPassthrough(c *gin.Context, resp *http.Response) (*
 
 	flusher, _ := c.Writer.(http.Flusher)
 	buf := make([]byte, 32*1024)
-	var metricsBuffer bytes.Buffer
-	const maxMetricsBufferSize = 1024 * 1024
+	var usageCollector rawResponsesStreamUsageCollector
 	for {
 		n, readErr := resp.Body.Read(buf)
 		if n > 0 {
 			chunk := buf[:n]
-			if metricsBuffer.Len() < maxMetricsBufferSize {
-				remaining := maxMetricsBufferSize - metricsBuffer.Len()
-				if len(chunk) > remaining {
-					metricsBuffer.Write(chunk[:remaining])
-				} else {
-					metricsBuffer.Write(chunk)
-				}
-			}
+			usageCollector.Feed(chunk)
 			if _, err := c.Writer.Write(chunk); err != nil {
 				return nil, err
 			}
@@ -992,7 +984,7 @@ func handleRawResponsesStreamPassthrough(c *gin.Context, resp *http.Response) (*
 		}
 	}
 
-	usage, _ := collectRawResponsesStreamUsage(metricsBuffer.String())
+	usage := usageCollector.Finish()
 	return metricsUsageFromResponsesUsage(usage, promptTokensTotalFromResponsesInput(
 		usage.InputTokens,
 		"responses",
@@ -1000,40 +992,97 @@ func handleRawResponsesStreamPassthrough(c *gin.Context, resp *http.Response) (*
 	)), nil
 }
 
-func collectRawResponsesStreamUsage(streamBody string) (types.ResponsesUsage, string) {
-	var collected responsesStreamUsage
-	var outputText bytes.Buffer
-	events := splitRawResponsesSSEEvents(streamBody)
-	for _, event := range events {
-		extractResponsesTextFromEvent(event, &outputText)
-		detected, _, usageData := checkResponsesEventUsage(event, false)
-		if detected {
-			updateResponsesStreamUsage(&collected, usageData)
+const maxRawResponsesStreamSideEventBytes = 1024 * 1024
+
+type rawResponsesStreamUsageCollector struct {
+	line       bytes.Buffer
+	event      strings.Builder
+	eventBytes int
+	collected  responsesStreamUsage
+	skipLine   bool
+	skipEvent  bool
+}
+
+func (p *rawResponsesStreamUsageCollector) Feed(chunk []byte) {
+	for len(chunk) > 0 {
+		newline := bytes.IndexByte(chunk, '\n')
+		if newline < 0 {
+			p.appendLinePart(chunk)
+			return
+		}
+		p.appendLinePart(chunk[:newline])
+		p.finishLine()
+		chunk = chunk[newline+1:]
+	}
+}
+
+func (p *rawResponsesStreamUsageCollector) Finish() types.ResponsesUsage {
+	if p.line.Len() > 0 || p.event.Len() > 0 {
+		p.finishLine()
+		if !p.skipEvent && p.event.Len() > 0 {
+			p.processEvent(p.event.String())
 		}
 	}
 	return types.ResponsesUsage{
-		InputTokens:                collected.InputTokens,
-		OutputTokens:               collected.OutputTokens,
-		TotalTokens:                collected.TotalTokens,
-		CacheCreationInputTokens:   collected.CacheCreationInputTokens,
-		CacheReadInputTokens:       collected.CacheReadInputTokens,
-		CacheCreation5mInputTokens: collected.CacheCreation5mInputTokens,
-		CacheCreation1hInputTokens: collected.CacheCreation1hInputTokens,
-		CacheTTL:                   collected.CacheTTL,
-	}, outputText.String()
+		InputTokens:                p.collected.InputTokens,
+		OutputTokens:               p.collected.OutputTokens,
+		TotalTokens:                p.collected.TotalTokens,
+		CacheCreationInputTokens:   p.collected.CacheCreationInputTokens,
+		CacheReadInputTokens:       p.collected.CacheReadInputTokens,
+		CacheCreation5mInputTokens: p.collected.CacheCreation5mInputTokens,
+		CacheCreation1hInputTokens: p.collected.CacheCreation1hInputTokens,
+		CacheTTL:                   p.collected.CacheTTL,
+	}
 }
 
-func splitRawResponsesSSEEvents(streamBody string) []string {
-	normalized := strings.ReplaceAll(streamBody, "\r\n", "\n")
-	parts := strings.Split(normalized, "\n\n")
-	events := make([]string, 0, len(parts))
-	for _, part := range parts {
-		if strings.TrimSpace(part) == "" {
-			continue
-		}
-		events = append(events, part+"\n")
+func (p *rawResponsesStreamUsageCollector) appendLinePart(part []byte) {
+	if p.skipLine {
+		return
 	}
-	return events
+	if p.line.Len()+len(part) > maxRawResponsesStreamSideEventBytes {
+		p.line.Reset()
+		p.event.Reset()
+		p.eventBytes = 0
+		p.skipLine = true
+		p.skipEvent = true
+		return
+	}
+	p.line.Write(part)
+}
+
+func (p *rawResponsesStreamUsageCollector) finishLine() {
+	line := p.line.String()
+	p.line.Reset()
+	p.skipLine = false
+	line = strings.TrimSuffix(line, "\r")
+	if strings.TrimSpace(line) == "" {
+		if !p.skipEvent && p.event.Len() > 0 {
+			p.processEvent(p.event.String())
+		}
+		p.event.Reset()
+		p.eventBytes = 0
+		p.skipEvent = false
+		return
+	}
+	if p.skipEvent {
+		return
+	}
+	eventLine := line + "\n"
+	if p.eventBytes+len(eventLine) > maxRawResponsesStreamSideEventBytes {
+		p.event.Reset()
+		p.eventBytes = 0
+		p.skipEvent = true
+		return
+	}
+	p.event.WriteString(eventLine)
+	p.eventBytes += len(eventLine)
+}
+
+func (p *rawResponsesStreamUsageCollector) processEvent(event string) {
+	detected, _, usageData := checkResponsesEventUsage(event, false)
+	if detected {
+		updateResponsesStreamUsage(&p.collected, usageData)
+	}
 }
 
 // responsesStreamUsage 流式响应 usage 收集结构
