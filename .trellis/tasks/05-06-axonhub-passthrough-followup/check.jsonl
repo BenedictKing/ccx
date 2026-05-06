@@ -1,0 +1,11 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend checklist for final review."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Quality, proxy handler, passthrough, and header override contracts to verify."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Confirm handler/failover behavior remains consistent."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Confirm header/auth test changes do not expose secrets."}
+{"file": ".trellis/tasks/05-06-axonhub-passthrough-followup/research/axonhub-midpoint.md", "reason": "Check scope against handoff requirements and exclusions."}
+{"file": ".trellis/tasks/05-06-axonhub-passthrough-followup/research/messages-stream-lifecycle.md", "reason": "Verify implementation preserves Messages stream lifecycle, preflight, and cancel/failover semantics."}
+{"file": ".trellis/tasks/05-06-axonhub-passthrough-followup/research/responses-raw-stream.md", "reason": "Verify raw stream side-channel metrics follow existing Responses constraints without rewriting client bytes."}
+{"file": ".trellis/tasks/05-06-axonhub-passthrough-followup/research/axonhub-raw-fanout.md", "reason": "Verify fan-out/reset contracts are scoped to the current attempt and do not port full AxonHub architecture."}
+{"file": ".trellis/tasks/05-06-axonhub-passthrough-followup/research/raw-stream-expansion-chat-gemini.md", "reason": "Verify Chat/OpenAI and Gemini native raw stream closeout behavior and tests."}
+{"file": ".trellis/tasks/05-06-axonhub-passthrough-followup/research/user-agent-sensitive-headers.md", "reason": "Verify User-Agent passthrough, sensitive header stripping, and selected-auth precedence."}
+{"file": ".trellis/tasks/05-06-axonhub-passthrough-followup/research/final-cleanup-commit-boundary.md", "reason": "Verify cleanup/commit boundaries do not mix unrelated Trellis migration work."}

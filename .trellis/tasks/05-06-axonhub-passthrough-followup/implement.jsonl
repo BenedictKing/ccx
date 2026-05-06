@@ -1,0 +1,11 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend pre-development checklist and package conventions for handler/spec changes."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Passthrough, proxy handler, testing, and new upstream header override contract location."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Handler tests may touch HTTP error/failover behavior."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Proxy paths must avoid logging secrets when inspecting auth/header behavior."}
+{"file": ".trellis/tasks/05-06-axonhub-passthrough-followup/research/axonhub-midpoint.md", "reason": "Continuation summary from AxonHub-half.md with exact P1 scope and out-of-scope items."}
+{"file": ".trellis/tasks/05-06-axonhub-passthrough-followup/research/messages-stream-lifecycle.md", "reason": "Current Messages -> Claude stream/failover lifecycle and raw SSE preservation seams for the fan-out pilot."}
+{"file": ".trellis/tasks/05-06-axonhub-passthrough-followup/research/responses-raw-stream.md", "reason": "Existing raw Responses stream passthrough and usage/metrics side-channel pattern to reuse carefully."}
+{"file": ".trellis/tasks/05-06-axonhub-passthrough-followup/research/axonhub-raw-fanout.md", "reason": "Minimal AxonHub fan-out/reset contracts to port without copying the full architecture."}
+{"file": ".trellis/tasks/05-06-axonhub-passthrough-followup/research/raw-stream-expansion-chat-gemini.md", "reason": "Final raw stream expansion plan for Chat/OpenAI and Gemini native streams."}
+{"file": ".trellis/tasks/05-06-axonhub-passthrough-followup/research/user-agent-sensitive-headers.md", "reason": "Final User-Agent passthrough and sensitive inbound header stripping contract and affected files."}
+{"file": ".trellis/tasks/05-06-axonhub-passthrough-followup/research/final-cleanup-commit-boundary.md", "reason": "Closeout cleanup and commit boundary to avoid mixing AxonHub work with Trellis migration files."}
