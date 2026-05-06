@@ -29,6 +29,7 @@ from .paths import (
     count_lines,
     get_active_journal_file,
     get_current_task,
+    get_current_task_source,
     get_developer,
     get_repo_root,
     get_tasks_dir,
@@ -279,7 +280,11 @@ def get_context_text(repo_root: Path | None = None) -> str:
     current_task = get_current_task(repo_root)
     if current_task:
         current_task_dir = repo_root / current_task
+        source_type, context_key, _ = get_current_task_source(repo_root)
         lines.append(f"Path: {current_task}")
+        lines.append(
+            f"Source: {source_type}" + (f":{context_key}" if context_key else "")
+        )
 
         ct = load_task(current_task_dir)
         if ct:
@@ -429,12 +434,15 @@ def get_context_record_json(repo_root: Path | None = None) -> dict:
     current_task_info = None
     current_task = get_current_task(repo_root)
     if current_task:
+        source_type, context_key, _ = get_current_task_source(repo_root)
         ct = load_task(repo_root / current_task)
         if ct:
             current_task_info = {
                 "path": current_task,
                 "name": ct.name,
                 "status": ct.status,
+                "source": source_type,
+                "contextKey": context_key,
             }
 
     # Package git repos
@@ -539,7 +547,11 @@ def get_context_text_record(repo_root: Path | None = None) -> str:
     lines.append("## CURRENT TASK")
     current_task = get_current_task(repo_root)
     if current_task:
+        source_type, context_key, _ = get_current_task_source(repo_root)
         lines.append(f"Path: {current_task}")
+        lines.append(
+            f"Source: {source_type}" + (f":{context_key}" if context_key else "")
+        )
         ct = load_task(repo_root / current_task)
         if ct:
             lines.append(f"Name: {ct.name}")

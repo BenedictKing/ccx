@@ -82,3 +82,11 @@ from .paths import (
     has_current_task,
     generate_task_date_prefix,
 )
+
+from .active_task import (
+    ActiveTask,
+    clear_active_task,
+    resolve_active_task,
+    resolve_context_key,
+    set_active_task,
+)

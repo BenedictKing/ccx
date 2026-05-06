@@ -41,8 +41,6 @@ class TaskData(TypedDict, total=False):
     branch: str | None
     base_branch: str | None
     worktree_path: str | None
-    current_phase: int
-    next_action: list[dict]
     commit: str | None
     pr_url: str | None
     subtasks: list[str]

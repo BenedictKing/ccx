@@ -16,6 +16,7 @@ Provides:
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from datetime import datetime
@@ -35,9 +36,7 @@ from .paths import (
     DIR_TASKS,
     DIR_WORKFLOW,
     FILE_TASK_JSON,
-    clear_current_task,
     generate_task_date_prefix,
-    get_current_task,
     get_developer,
     get_repo_root,
     get_tasks_dir,
@@ -76,6 +75,61 @@ def ensure_tasks_dir(repo_root: Path) -> Path:
         archive_dir.mkdir(parents=True)
 
     return tasks_dir
+
+
+# =============================================================================
+# Sub-agent platform detection + JSONL seeding
+# =============================================================================
+
+# Config directories of platforms that consume implement.jsonl / check.jsonl.
+# Keep in sync with src/types/ai-tools.ts AI_TOOLS entries — these are the
+# platforms listed in workflow.md's "agent-capable" Skill Routing block
+# (Class-1 hook-inject + Class-2 pull-based preludes). Kilo / Antigravity /
+# Windsurf are NOT in this list: they do not consume JSONL.
+_SUBAGENT_CONFIG_DIRS: tuple[str, ...] = (
+    ".claude",
+    ".cursor",
+    ".codex",
+    ".kiro",
+    ".gemini",
+    ".opencode",
+    ".qoder",
+    ".codebuddy",
+    ".factory",   # Factory Droid
+    ".github/copilot",
+    ".pi",        # Pi Agent
+)
+
+_SEED_EXAMPLE = (
+    "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. "
+    "Put spec/research files only — no code paths. "
+    "Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. "
+    "Delete this line once real entries are added."
+)
+
+
+def _has_subagent_platform(repo_root: Path) -> bool:
+    """Return True if any sub-agent-capable platform is configured.
+
+    Detected by probing well-known config directories at the repo root. Used
+    only to decide whether ``task.py create`` should seed empty
+    ``implement.jsonl`` / ``check.jsonl`` files.
+    """
+    for config_dir in _SUBAGENT_CONFIG_DIRS:
+        if (repo_root / config_dir).is_dir():
+            return True
+    return False
+
+
+def _write_seed_jsonl(path: Path) -> None:
+    """Write a one-line seed JSONL file with a self-describing ``_example``.
+
+    The seed row has no ``file`` field, so downstream consumers (hooks +
+    preludes) that iterate entries via ``item.get("file")`` naturally skip
+    it. The row exists purely as an in-file prompt for the AI curator.
+    """
+    seed = {"_example": _SEED_EXAMPLE}
+    path.write_text(json.dumps(seed, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
 # =============================================================================
@@ -161,15 +215,6 @@ def cmd_create(args: argparse.Namespace) -> int:
         "branch": None,
         "base_branch": current_branch,
         "worktree_path": None,
-        "current_phase": 0,
-        "next_action": [
-            {"phase": 1, "action": "brainstorm"},
-            {"phase": 2, "action": "research"},
-            {"phase": 3, "action": "implement"},
-            {"phase": 4, "action": "check"},
-            {"phase": 5, "action": "update-spec"},
-            {"phase": 6, "action": "record-session"},
-        ],
         "commit": None,
         "pr_url": None,
         "subtasks": [],
@@ -181,6 +226,18 @@ def cmd_create(args: argparse.Namespace) -> int:
     }
 
     write_json(task_json_path, task_data)
+
+    # Seed implement.jsonl / check.jsonl for sub-agent-capable platforms.
+    # Agent curates real entries in Phase 1.3 (see .trellis/workflow.md).
+    # Agent-less platforms (Kilo / Antigravity / Windsurf) skip this — they
+    # load specs via the trellis-before-dev skill instead of JSONL.
+    seeded_jsonl = False
+    if _has_subagent_platform(repo_root):
+        for jsonl_name in ("implement.jsonl", "check.jsonl"):
+            jsonl_path = task_dir / jsonl_name
+            if not jsonl_path.exists():
+                _write_seed_jsonl(jsonl_path)
+        seeded_jsonl = True
 
     # Handle --parent: establish bidirectional link
     if args.parent:
@@ -208,8 +265,15 @@ def cmd_create(args: argparse.Namespace) -> int:
     print("", file=sys.stderr)
     print(colored("Next steps:", Colors.BLUE), file=sys.stderr)
     print("  1. Create prd.md with requirements", file=sys.stderr)
-    print("  2. Run: python3 task.py init-context <dir> <dev_type>", file=sys.stderr)
-    print("  3. Run: python3 task.py start <dir>", file=sys.stderr)
+    if seeded_jsonl:
+        print(
+            "  2. Curate implement.jsonl / check.jsonl (spec + research files only — "
+            "see .trellis/workflow.md Phase 1.3)",
+            file=sys.stderr,
+        )
+        print("  3. Run: python3 task.py start <dir>", file=sys.stderr)
+    else:
+        print("  2. Run: python3 task.py start <dir>", file=sys.stderr)
     print("", file=sys.stderr)
 
     # Output relative path for script chaining
@@ -234,8 +298,8 @@ def cmd_archive(args: argparse.Namespace) -> int:
 
     tasks_dir = get_tasks_dir(repo_root)
 
-    # Find task directory
-    task_dir = find_task_by_name(task_name, tasks_dir)
+    # Resolve task directory (supports task name, relative path, or absolute path)
+    task_dir = resolve_task_dir(task_name, repo_root)
 
     if not task_dir or not task_dir.is_dir():
         print(colored(f"Error: Task not found: {task_name}", Colors.RED), file=sys.stderr)
@@ -258,23 +322,11 @@ def cmd_archive(args: argparse.Namespace) -> int:
             data["completedAt"] = today
             write_json(task_json_path, data)
 
-            # Handle subtask relationships on archive
-            task_parent = data.get("parent")
+            # Handle subtask relationships on archive.
+            # Keep this task in its parent's children list so progress
+            # counters (children_progress) stay consistent — children
+            # missing from the active set are treated as completed.
             task_children = data.get("children", [])
-
-            # If this is a child, remove from parent's children list
-            if task_parent:
-                parent_dir = find_task_by_name(task_parent, tasks_dir)
-                if parent_dir:
-                    parent_json = parent_dir / FILE_TASK_JSON
-                    if parent_json.is_file():
-                        parent_data = read_json(parent_json)
-                        if parent_data:
-                            parent_children = parent_data.get("children", [])
-                            if dir_name in parent_children:
-                                parent_children.remove(dir_name)
-                                parent_data["children"] = parent_children
-                                write_json(parent_json, parent_data)
 
             # If this is a parent, clear parent field in all children
             if task_children:
@@ -288,10 +340,9 @@ def cmd_archive(args: argparse.Namespace) -> int:
                                 child_data["parent"] = None
                                 write_json(child_json, child_data)
 
-    # Clear if current task
-    current = get_current_task(repo_root)
-    if current and dir_name in current:
-        clear_current_task(repo_root)
+    # Clear any session that still points at this task before the path moves.
+    from .active_task import clear_task_from_sessions
+    clear_task_from_sessions(str(task_dir), repo_root)
 
     # Archive
     result = archive_task_complete(task_dir, repo_root)
@@ -464,9 +515,6 @@ def cmd_set_branch(args: argparse.Namespace) -> int:
     write_json(task_json, data)
 
     print(colored(f"✓ Branch set to: {branch}", Colors.GREEN))
-    print()
-    print(colored("Now you can start the multi-agent pipeline:", Colors.BLUE))
-    print(f"  python3 ./.trellis/scripts/multi_agent/start.py {args.dir}")
     return 0
 
 
