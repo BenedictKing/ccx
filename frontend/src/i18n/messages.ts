@@ -294,6 +294,10 @@ export type MessageKey =
   | 'chart.successRate'
   | 'chart.inputTokens'
   | 'chart.outputTokens'
+  | 'chart.totalTokens'
+  | 'chart.cacheReadTokens'
+  | 'chart.cacheWriteTokens'
+  | 'chart.totalTokensTooltip'
   | 'chart.input'
   | 'chart.output'
   | 'chart.requestUnit'
@@ -659,6 +663,10 @@ export const messages: Record<SupportedLocale, Record<MessageKey, string>> = {
     'chart.successRate': 'Availability',
     'chart.inputTokens': 'Input tokens',
     'chart.outputTokens': 'Output tokens',
+    'chart.totalTokens': 'Total tokens',
+    'chart.cacheReadTokens': 'Read',
+    'chart.cacheWriteTokens': 'Write',
+    'chart.totalTokensTooltip': 'Total tokens are input plus output tokens. This is usage aggregation only and does not include price, balance, deductions, refunds, or a billing ledger.',
     'chart.input': 'input',
     'chart.output': 'output',
     'chart.requestUnit': 'requests',
@@ -1023,6 +1031,10 @@ export const messages: Record<SupportedLocale, Record<MessageKey, string>> = {
     'chart.successRate': 'Ketersediaan',
     'chart.inputTokens': 'Input token',
     'chart.outputTokens': 'Output token',
+    'chart.totalTokens': 'Total token',
+    'chart.cacheReadTokens': 'Baca',
+    'chart.cacheWriteTokens': 'Tulis',
+    'chart.totalTokensTooltip': 'Total token adalah token input ditambah token output. Ini hanya agregasi usage dan tidak mencakup harga, saldo, potongan, refund, atau ledger billing.',
     'chart.input': 'input',
     'chart.output': 'output',
     'chart.requestUnit': 'request',
@@ -1387,6 +1399,10 @@ export const messages: Record<SupportedLocale, Record<MessageKey, string>> = {
     'chart.successRate': '可用率',
     'chart.inputTokens': '输入 Token',
     'chart.outputTokens': '输出 Token',
+    'chart.totalTokens': '总 Token',
+    'chart.cacheReadTokens': '读',
+    'chart.cacheWriteTokens': '写',
+    'chart.totalTokensTooltip': '总 Token = 输入 Token + 输出 Token。这里只是 usage 汇总，不包含价格、余额、扣费、退款或账务流水含义。',
     'chart.input': '输入',
     'chart.output': '输出',
     'chart.requestUnit': '请求',

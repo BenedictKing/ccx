@@ -59,6 +59,24 @@
         <div class="summary-label">{{ t('chart.outputTokens') }}</div>
         <div class="summary-value">{{ formatNumber(summary.totalOutputTokens) }}</div>
       </div>
+      <div class="summary-card">
+        <v-tooltip :text="t('chart.totalTokensTooltip')" location="top" max-width="280">
+          <template #activator="{ props: tooltipProps }">
+            <div class="summary-label summary-label-tooltip" v-bind="tooltipProps">
+              {{ t('chart.totalTokens') }}
+              <v-icon size="x-small" class="ml-1">mdi-information</v-icon>
+            </div>
+          </template>
+        </v-tooltip>
+        <div class="summary-value">{{ formatNumber(summaryTotalTokens) }}</div>
+      </div>
+      <div class="summary-card summary-card-wide">
+        <div class="summary-label">{{ t('chart.cacheRw') }}</div>
+        <div class="summary-cache-values">
+          <span>{{ t('chart.cacheReadTokens') }} {{ formatNumber(summary.totalCacheReadTokens) }}</span>
+          <span>{{ t('chart.cacheWriteTokens') }} {{ formatNumber(summary.totalCacheCreationTokens) }}</span>
+        </div>
+      </div>
     </div>
 
     <!-- Compact summary (single line) -->
@@ -69,6 +87,13 @@
       </span>
       <span><strong>{{ formatNumber(summary.totalInputTokens) }}</strong> {{ t('chart.input') }}</span>
       <span><strong>{{ formatNumber(summary.totalOutputTokens) }}</strong> {{ t('chart.output') }}</span>
+      <v-tooltip :text="t('chart.totalTokensTooltip')" location="top" max-width="280">
+        <template #activator="{ props: tooltipProps }">
+          <span v-bind="tooltipProps" class="compact-token-total">
+            <strong>{{ formatNumber(summaryTotalTokens) }}</strong> {{ t('chart.totalTokens') }}
+          </span>
+        </template>
+      </v-tooltip>
     </div>
 
     <!-- Loading state -->
@@ -182,6 +207,11 @@ const chartHeight = computed(() => props.compact ? 180 : 260)
 
 // Summary data
 const summary = computed<GlobalStatsSummary | null>(() => historyData.value?.summary || null)
+const summaryTotalTokens = computed(() => {
+  const current = summary.value
+  if (!current) return 0
+  return current.totalInputTokens + current.totalOutputTokens
+})
 
 // Check if has data
 const hasData = computed(() => {
@@ -643,16 +673,40 @@ defineExpose({
   font-weight: 500;
 }
 
+.summary-label-tooltip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: help;
+}
+
 .summary-value {
   font-size: 16px;
   font-weight: 600;
   line-height: 1.3;
 }
 
+.summary-card-wide {
+  min-width: 136px;
+}
+
+.summary-cache-values {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
 .compact-summary {
   padding: 4px 8px;
   background: rgba(var(--v-theme-surface-variant), 0.2);
   border-radius: 4px;
+}
+
+.compact-token-total {
+  cursor: help;
 }
 
 .chart-header {
