@@ -280,6 +280,7 @@ Use this contract when recording observability for AxonHub-style forwarding data
 - Forwarding usage stats are side-channel metrics only. They must not read, buffer, rewrite, or replay client-visible response bodies or SSE bytes.
 - Keep ccx-owned scheduler, failover, key retry, blacklist, cooldown, circuit breaker, and normal metrics finalization as the source of control-plane behavior.
 - Record request counts for finalized AxonHub-style forwarding attempts under the existing channel metrics surface.
+- Retry/failover attempts are finalized attempts: failed attempts without usage still increment `requestCount`, while the successful attempt contributes token/cache usage from its returned `types.Usage`.
 - Add token usage only from the usage object already produced by existing response/stream side-channel parsing.
 - Classify stats by inbound protocol family (`messages`, `chat`, `responses`, `gemini`) and forwarding mode (`same_format_raw`, `cross_format_converted`).
 - Do not count non-forwarding families such as Images in AxonHub forwarding usage stats.
@@ -295,6 +296,7 @@ Use this contract when recording observability for AxonHub-style forwarding data
 ### 5. Good/Base/Bad Cases
 
 - Good: same-format `/v1/messages` -> Claude records `messages/same_format_raw` request count and uses the existing usage object for tokens.
+- Good: cross-format `/v1/responses` -> OpenAI-compatible failover records `responses/cross_format_converted`; retryable failed attempts increment request count with zero tokens, and the successful attempt adds input/output/cache tokens.
 - Base: cross-format `/v1/responses` -> Claude records `responses/cross_format_converted` while response conversion and normal metrics finalization remain unchanged.
 - Bad: reading `resp.Body` a second time just to compute AxonHub usage stats; this can corrupt raw response/SSE passthrough.
 
@@ -303,6 +305,7 @@ Use this contract when recording observability for AxonHub-style forwarding data
 - Metrics tests must cover request count and token aggregation by inbound family and forwarding mode.
 - Metrics tests must cover active + historical API key aggregation.
 - Common failover tests must prove stats are appended next to existing finalize calls without replacing failover or metrics finalization.
+- Common failover tests must include at least one cross-format converted path where a retryable upstream error moves to the next key/BaseURL/channel and preserves `axonHubForwarding` request count plus token/cache dimensions.
 - Classification tests must prove non-forwarding families such as Images are not counted.
 
 ### 7. Wrong vs Correct

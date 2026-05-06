@@ -234,3 +234,133 @@ func TestTryUpstreamWithAllKeys_CooldownStreamErrorContinuesFailover(t *testing.
 		t.Fatalf("AxonHubForwarding route = %+v, want messages same_format_raw", got)
 	}
 }
+
+func TestTryUpstreamWithAllKeys_CrossFormatConvertedKeepsFailoverAndUsageStats(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	var requests int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		w.Header().Set("Content-Type", "application/json")
+		if requests == 1 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte(`{"error":{"message":"temporary upstream failure"}}`))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"id":"chatcmpl_1","choices":[{"message":{"role":"assistant","content":"hi"}}]}`))
+	}))
+	defer server.Close()
+
+	rawConfig := fmt.Sprintf(`{
+  "upstream": [],
+  "responsesUpstream": [
+    {
+      "name": "responses-to-openai",
+      "baseUrl": %q,
+      "apiKeys": ["sk-first", "sk-second"],
+      "serviceType": "openai"
+    }
+  ],
+  "geminiUpstream": [],
+  "chatUpstream": []
+}`, server.URL)
+	cfgManager := newConfigManagerForCommonTest(t, rawConfig)
+
+	responsesMetrics := metrics.NewMetricsManager()
+	channelScheduler := scheduler.NewChannelScheduler(
+		cfgManager,
+		metrics.NewMetricsManager(),
+		responsesMetrics,
+		metrics.NewMetricsManager(),
+		metrics.NewMetricsManager(),
+		session.NewTraceAffinityManager(),
+		nil,
+	)
+
+	upstream := &config.UpstreamConfig{
+		Name:        "responses-to-openai",
+		BaseURL:     server.URL,
+		APIKeys:     []string{"sk-first", "sk-second"},
+		ServiceType: "openai",
+	}
+	requestBody := []byte(`{"model":"gpt-4o","input":"hi"}`)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(requestBody))
+
+	handled, successKey, _, failoverErr, _, lastErr := TryUpstreamWithAllKeys(
+		c,
+		&config.EnvConfig{RequestTimeout: 1000, LogLevel: "error"},
+		cfgManager,
+		channelScheduler,
+		scheduler.ChannelKindResponses,
+		"Responses",
+		responsesMetrics,
+		upstream,
+		BuildDefaultURLResults(upstream.GetAllBaseURLs()),
+		requestBody,
+		false,
+		func(up *config.UpstreamConfig, failedKeys map[string]bool) (string, error) {
+			return cfgManager.GetNextAPIKey(up, failedKeys, "Responses")
+		},
+		func(c *gin.Context, upstreamCopy *config.UpstreamConfig, apiKey string) (*http.Request, error) {
+			return http.NewRequest(http.MethodPost, upstreamCopy.BaseURL, bytes.NewReader(requestBody))
+		},
+		nil,
+		nil,
+		nil,
+		func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string, actualRequestBody []byte) (*types.Usage, error) {
+			defer func() { _ = resp.Body.Close() }()
+			return &types.Usage{
+				InputTokens:              3,
+				OutputTokens:             4,
+				CacheCreationInputTokens: 5,
+				CacheReadInputTokens:     2,
+			}, nil
+		},
+		"gpt-4o",
+		0,
+		channelScheduler.GetChannelLogStore(scheduler.ChannelKindResponses),
+	)
+
+	if !handled {
+		t.Fatal("handled = false, want true after second key succeeds")
+	}
+	if successKey != "sk-second" {
+		t.Fatalf("successKey = %q, want sk-second", successKey)
+	}
+	if failoverErr != nil {
+		t.Fatalf("failoverErr = %+v, want nil", failoverErr)
+	}
+	if lastErr != nil {
+		t.Fatalf("lastErr = %v, want nil", lastErr)
+	}
+	if requests != 2 {
+		t.Fatalf("requests = %d, want 2 attempts", requests)
+	}
+	if !cfgManager.IsKeyFailed("sk-first", "Responses") {
+		t.Fatal("sk-first should be cooled down after retryable upstream error")
+	}
+
+	metricsResp := responsesMetrics.ToResponseMultiURL(0, upstream.GetAllBaseURLs(), upstream.APIKeys, "openai", 0)
+	if metricsResp.AxonHubForwarding == nil {
+		t.Fatal("AxonHubForwarding = nil, want cross-format stats")
+	}
+	if metricsResp.AxonHubForwarding.RequestCount != 2 {
+		t.Fatalf("AxonHubForwarding requestCount = %d, want 2", metricsResp.AxonHubForwarding.RequestCount)
+	}
+	if metricsResp.AxonHubForwarding.InputTokens != 3 ||
+		metricsResp.AxonHubForwarding.OutputTokens != 4 ||
+		metricsResp.AxonHubForwarding.CacheCreationTokens != 5 ||
+		metricsResp.AxonHubForwarding.CacheReadTokens != 2 {
+		t.Fatalf("AxonHubForwarding tokens = input:%d output:%d cacheCreate:%d cacheRead:%d, want 3/4/5/2",
+			metricsResp.AxonHubForwarding.InputTokens,
+			metricsResp.AxonHubForwarding.OutputTokens,
+			metricsResp.AxonHubForwarding.CacheCreationTokens,
+			metricsResp.AxonHubForwarding.CacheReadTokens)
+	}
+	if got := metricsResp.AxonHubForwarding.ByRoute[0]; got.InboundFamily != "responses" || got.Mode != metrics.AxonHubForwardingModeCrossFormatConverted {
+		t.Fatalf("AxonHubForwarding route = %+v, want responses cross_format_converted", got)
+	}
+}
