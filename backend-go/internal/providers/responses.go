@@ -2,17 +2,16 @@ package providers
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"regexp"
 	"strings"
 
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/converters"
+	"github.com/BenedictKing/ccx/internal/forwarding"
 	"github.com/BenedictKing/ccx/internal/passthrough"
 	"github.com/BenedictKing/ccx/internal/session"
 	"github.com/BenedictKing/ccx/internal/types"
@@ -55,27 +54,56 @@ func (p *ResponsesProvider) ConvertToProviderRequest(
 		return nil, bodyBytes, err
 	}
 
-	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodPost, targetURL, bytes.NewReader(reqBody))
+	if upstream.ServiceType == "responses" && !strings.HasSuffix(c.Request.URL.Path, "/v1/messages") {
+		prepared, err := forwarding.Build(c, forwarding.ForwardingRequest{
+			Method:        http.MethodPost,
+			URL:           targetURL,
+			Body:          reqBody,
+			ServiceType:   upstream.ServiceType,
+			CustomHeaders: upstream.CustomHeaders,
+			AuthKind:      forwarding.AuthKindStandard,
+			APIKey:        apiKey,
+			RawResponse:   true,
+			RawStream:     isResponsesStreamRequest(reqBody),
+		})
+		if err != nil {
+			return nil, bodyBytes, err
+		}
+		return prepared.Request, bodyBytes, nil
+	}
+
+	authKind := forwarding.AuthKindStandard
+	platformHeaders := map[string]string(nil)
+	switch upstream.ServiceType {
+	case "gemini":
+		authKind = forwarding.AuthKindGemini
+	case "claude":
+		platformHeaders = map[string]string{"anthropic-version": "2023-06-01"}
+	}
+
+	prepared, err := forwarding.Build(c, forwarding.ForwardingRequest{
+		Method:          http.MethodPost,
+		URL:             targetURL,
+		Body:            reqBody,
+		ServiceType:     upstream.ServiceType,
+		PlatformHeaders: platformHeaders,
+		CustomHeaders:   upstream.CustomHeaders,
+		AuthKind:        authKind,
+		APIKey:          apiKey,
+	})
 	if err != nil {
 		return nil, bodyBytes, err
 	}
+	return prepared.Request, bodyBytes, nil
+}
 
-	req.Header = utils.PrepareUpstreamHeaders(c, req.URL.Host)
-	req.Header.Del("authorization")
-	req.Header.Del("x-api-key")
-	req.Header.Del("x-goog-api-key")
-	req.Header.Set("Content-Type", "application/json")
-	utils.ApplyCustomHeaders(req.Header, upstream.CustomHeaders)
-
-	switch upstream.ServiceType {
-	case "gemini":
-		utils.SetGeminiAuthenticationHeader(req.Header, apiKey)
-	default:
-		utils.EnsureCompatibleUserAgent(req.Header, upstream.ServiceType)
-		utils.SetAuthenticationHeader(req.Header, apiKey)
+func isResponsesStreamRequest(bodyBytes []byte) bool {
+	var req map[string]interface{}
+	if err := json.Unmarshal(bodyBytes, &req); err != nil {
+		return false
 	}
-
-	return req, bodyBytes, nil
+	stream, _ := req["stream"].(bool)
+	return stream
 }
 
 func (p *ResponsesProvider) buildProviderRequestBody(c *gin.Context, requestPath string, bodyBytes []byte, upstream *config.UpstreamConfig) (interface{}, []byte, error) {
@@ -309,32 +337,13 @@ func (p *ResponsesProvider) buildRequestURL(upstream *config.UpstreamConfig, bod
 			return "", fmt.Errorf("解析 Responses 请求失败: %w", err)
 		}
 		model := config.RedirectModel(responsesReq.Model, upstream)
-		action := "generateContent"
-		if responsesReq.Stream {
-			action = "streamGenerateContent?alt=sse"
-		}
-		baseURL := strings.TrimSuffix(upstream.GetEffectiveBaseURL(), "/")
-		versionPattern := regexp.MustCompile(`/v\d+[a-z]*$`)
-		if !versionPattern.MatchString(baseURL) && !strings.HasSuffix(upstream.BaseURL, "#") {
-			baseURL += "/v1beta"
-		}
-		return fmt.Sprintf("%s/models/%s:%s", baseURL, model, action), nil
+		return forwarding.BuildGeminiNativeURL(upstream.GetEffectiveBaseURL(), model, responsesReq.Stream), nil
 	}
 	return p.buildTargetURL(upstream), nil
 }
 
 // buildTargetURL 根据上游类型构建目标 URL
 func (p *ResponsesProvider) buildTargetURL(upstream *config.UpstreamConfig) string {
-	baseURL := upstream.BaseURL
-	skipVersionPrefix := strings.HasSuffix(baseURL, "#")
-	if skipVersionPrefix {
-		baseURL = strings.TrimSuffix(baseURL, "#")
-	}
-	baseURL = strings.TrimSuffix(baseURL, "/")
-
-	versionPattern := regexp.MustCompile(`/v\d+[a-z]*$`)
-	hasVersionSuffix := versionPattern.MatchString(baseURL)
-
 	var endpoint string
 	switch upstream.ServiceType {
 	case "responses":
@@ -347,10 +356,7 @@ func (p *ResponsesProvider) buildTargetURL(upstream *config.UpstreamConfig) stri
 		endpoint = "/chat/completions"
 	}
 
-	if hasVersionSuffix || skipVersionPrefix {
-		return baseURL + endpoint
-	}
-	return baseURL + "/v1" + endpoint
+	return forwarding.BuildEndpointURL(upstream.GetEffectiveBaseURL(), "/v1", endpoint)
 }
 
 // ConvertToClaudeResponse 将上游响应转换为 Claude 响应

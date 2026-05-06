@@ -2,7 +2,6 @@
 package gemini
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/converters"
+	"github.com/BenedictKing/ccx/internal/forwarding"
 	"github.com/BenedictKing/ccx/internal/handlers/common"
 	"github.com/BenedictKing/ccx/internal/middleware"
 	"github.com/BenedictKing/ccx/internal/scheduler"
@@ -328,7 +328,6 @@ func buildProviderRequest(
 	model string,
 	isStream bool,
 ) (*http.Request, error) {
-	baseURL = strings.TrimSuffix(strings.TrimRight(baseURL, "/"), "#")
 	// 应用模型映射
 	mappedModel := config.RedirectModel(model, upstream)
 
@@ -338,35 +337,27 @@ func buildProviderRequest(
 
 	switch upstream.ServiceType {
 	case "gemini":
-		// Gemini 上游：根据配置处理 thought_signature 字段
-		reqToUse := geminiReq
-
-		// 优先处理 StripThoughtSignature（移除字段）
-		if upstream.StripThoughtSignature {
-			reqCopy := cloneGeminiRequest(geminiReq)
-			stripThoughtSignature(reqCopy)
-			reqToUse = reqCopy
-		} else if upstream.InjectDummyThoughtSignature {
-			// 给空签名注入 dummy 值（兼容 x666.me 等要求必须有该字段的 API）
-			reqCopy := cloneGeminiRequest(geminiReq)
-			ensureThoughtSignatures(reqCopy)
-			reqToUse = reqCopy
-		}
-		// else: 默认直接透传，不做任何修改
-
-		requestBody, err = json.Marshal(reqToUse)
+		requestBody, err = buildGeminiNativeRequestBody(c, geminiReq, upstream)
 		if err != nil {
 			return nil, err
 		}
 
-		action := "generateContent"
-		if isStream {
-			action = "streamGenerateContent"
+		url = forwarding.BuildGeminiNativeURL(baseURL, mappedModel, isStream)
+		prepared, err := forwarding.Build(c, forwarding.ForwardingRequest{
+			Method:        http.MethodPost,
+			URL:           url,
+			Body:          requestBody,
+			ServiceType:   upstream.ServiceType,
+			CustomHeaders: upstream.CustomHeaders,
+			AuthKind:      forwarding.AuthKindGemini,
+			APIKey:        apiKey,
+			RawResponse:   true,
+			RawStream:     isStream,
+		})
+		if err != nil {
+			return nil, err
 		}
-		url = fmt.Sprintf("%s/v1beta/models/%s:%s", strings.TrimRight(baseURL, "/"), mappedModel, action)
-		if isStream {
-			url += "?alt=sse"
-		}
+		return prepared.Request, nil
 
 	case "claude":
 		// Claude 上游：需要转换
@@ -379,7 +370,7 @@ func buildProviderRequest(
 		if err != nil {
 			return nil, err
 		}
-		url = fmt.Sprintf("%s/v1/messages", strings.TrimRight(baseURL, "/"))
+		url = forwarding.BuildEndpointURL(baseURL, "/v1", "/messages")
 
 	case "openai":
 		// OpenAI 上游：需要转换
@@ -392,7 +383,7 @@ func buildProviderRequest(
 		if err != nil {
 			return nil, err
 		}
-		url = fmt.Sprintf("%s/v1/chat/completions", strings.TrimRight(baseURL, "/"))
+		url = forwarding.BuildEndpointURL(baseURL, "/v1", "/chat/completions")
 
 	case "responses":
 		// Responses 上游：需要转换
@@ -405,7 +396,7 @@ func buildProviderRequest(
 		if err != nil {
 			return nil, err
 		}
-		url = fmt.Sprintf("%s/v1/responses", strings.TrimRight(baseURL, "/"))
+		url = forwarding.BuildEndpointURL(baseURL, "/v1", "/responses")
 
 	default:
 		// 默认当作 Gemini 处理，根据配置处理 thought_signature 字段
@@ -428,48 +419,128 @@ func buildProviderRequest(
 		if err != nil {
 			return nil, err
 		}
-		action := "generateContent"
-		if isStream {
-			action = "streamGenerateContent"
-		}
-		url = fmt.Sprintf("%s/v1beta/models/%s:%s", strings.TrimRight(baseURL, "/"), mappedModel, action)
-		if isStream {
-			url += "?alt=sse"
-		}
+		url = forwarding.BuildGeminiNativeURL(baseURL, mappedModel, isStream)
 	}
 
-	req, err := http.NewRequestWithContext(c.Request.Context(), "POST", url, bytes.NewReader(requestBody))
+	authKind := forwarding.AuthKindStandard
+	platformHeaders := map[string]string(nil)
+	switch upstream.ServiceType {
+	case "gemini":
+		authKind = forwarding.AuthKindGemini
+	case "claude":
+		platformHeaders = map[string]string{"anthropic-version": "2023-06-01"}
+	default:
+		authKind = forwarding.AuthKindGemini
+	}
+
+	prepared, err := forwarding.Build(c, forwarding.ForwardingRequest{
+		Method:          http.MethodPost,
+		URL:             url,
+		Body:            requestBody,
+		ContentType:     "application/json",
+		ServiceType:     upstream.ServiceType,
+		PlatformHeaders: platformHeaders,
+		CustomHeaders:   upstream.CustomHeaders,
+		AuthKind:        authKind,
+		APIKey:          apiKey,
+	})
 	if err != nil {
 		return nil, err
 	}
+	return prepared.Request, nil
+}
 
-	// 使用统一的头部处理逻辑（透明代理）
-	// 保留客户端的大部分 headers，只移除/替换必要的认证和代理相关 headers
-	req.Header = utils.PrepareUpstreamHeaders(c, req.URL.Host)
-
-	// 设置 Content-Type（覆盖可能来自客户端的值）
-	req.Header.Set("Content-Type", "application/json")
-
-	// 应用自定义请求头（认证头随后设置，避免被覆盖）
-	utils.ApplyCustomHeaders(req.Header, upstream.CustomHeaders)
-
-	// 设置认证头
-	switch upstream.ServiceType {
-	case "gemini":
-		utils.SetGeminiAuthenticationHeader(req.Header, apiKey)
-	case "claude":
-		req.Header.Set("anthropic-version", "2023-06-01")
-		utils.EnsureCompatibleUserAgent(req.Header, "claude")
-		utils.SetAuthenticationHeader(req.Header, apiKey)
-	case "openai":
-		utils.SetAuthenticationHeader(req.Header, apiKey)
-	case "responses":
-		utils.SetAuthenticationHeader(req.Header, apiKey)
-	default:
-		utils.SetGeminiAuthenticationHeader(req.Header, apiKey)
+func buildGeminiNativeRequestBody(c *gin.Context, geminiReq *types.GeminiRequest, upstream *config.UpstreamConfig) ([]byte, error) {
+	bodyBytes, ok := geminiRequestBodyFromContext(c)
+	if !ok {
+		var err error
+		bodyBytes, err = json.Marshal(geminiReq)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	return req, nil
+	if !upstream.StripThoughtSignature && !upstream.InjectDummyThoughtSignature {
+		return append([]byte(nil), bodyBytes...), nil
+	}
+
+	var raw map[string]interface{}
+	if err := json.Unmarshal(bodyBytes, &raw); err != nil {
+		return nil, err
+	}
+	patchGeminiThoughtSignatures(raw, upstream)
+	return json.Marshal(raw)
+}
+
+func geminiRequestBodyFromContext(c *gin.Context) ([]byte, bool) {
+	if c == nil {
+		return nil, false
+	}
+	raw, exists := c.Get("requestBodyBytes")
+	if !exists {
+		return nil, false
+	}
+	bodyBytes, ok := raw.([]byte)
+	if !ok || len(bodyBytes) == 0 {
+		return nil, false
+	}
+	return bodyBytes, true
+}
+
+func patchGeminiThoughtSignatures(body map[string]interface{}, upstream *config.UpstreamConfig) {
+	contents, ok := body["contents"].([]interface{})
+	if !ok {
+		return
+	}
+	for _, rawContent := range contents {
+		content, ok := rawContent.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		parts, ok := content["parts"].([]interface{})
+		if !ok {
+			continue
+		}
+		for _, rawPart := range parts {
+			part, ok := rawPart.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			if _, ok := part["functionCall"].(map[string]interface{}); !ok {
+				continue
+			}
+			if upstream.StripThoughtSignature {
+				delete(part, "thoughtSignature")
+				delete(part, "thought_signature")
+				if functionCall, ok := part["functionCall"].(map[string]interface{}); ok {
+					delete(functionCall, "thoughtSignature")
+					delete(functionCall, "thought_signature")
+				}
+				continue
+			}
+			if upstream.InjectDummyThoughtSignature && !geminiPartHasThoughtSignature(part) {
+				part["thoughtSignature"] = types.DummyThoughtSignature
+			}
+		}
+	}
+}
+
+func geminiPartHasThoughtSignature(part map[string]interface{}) bool {
+	for _, key := range []string{"thoughtSignature", "thought_signature"} {
+		if value, ok := part[key].(string); ok && value != "" {
+			return true
+		}
+	}
+	functionCall, ok := part["functionCall"].(map[string]interface{})
+	if !ok {
+		return false
+	}
+	for _, key := range []string{"thoughtSignature", "thought_signature"} {
+		if value, ok := functionCall[key].(string); ok && value != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // handleSuccess 处理成功的响应

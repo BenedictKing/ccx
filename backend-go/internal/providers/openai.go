@@ -2,19 +2,17 @@ package providers
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"regexp"
 	"strings"
 	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
+	"github.com/BenedictKing/ccx/internal/forwarding"
 	"github.com/BenedictKing/ccx/internal/types"
-	"github.com/BenedictKing/ccx/internal/utils"
 	"github.com/gin-gonic/gin"
 )
 
@@ -81,40 +79,21 @@ func (p *OpenAIProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 		return nil, originalBodyBytes, fmt.Errorf("序列化OpenAI请求体失败: %w", err)
 	}
 
-	// 构建URL - baseURL可能已包含版本号(如/v1, /v2, /v1beta, /v2alpha等),需要智能拼接
-	// 如果 baseURL 以 # 结尾，则跳过自动添加 /v1
-	baseURL := upstream.GetEffectiveBaseURL()
-	skipVersionPrefix := strings.HasSuffix(baseURL, "#")
-	if skipVersionPrefix {
-		baseURL = strings.TrimSuffix(baseURL, "#")
-	}
-	baseURL = strings.TrimSuffix(baseURL, "/")
-
-	// 检查baseURL是否以版本号结尾(如/v1, /v2, /v1beta, /v2alpha等)
-	// 使用正则表达式匹配 /v\d+[a-z]* 的模式(v后跟数字,可选字母后缀)
-	versionPattern := regexp.MustCompile(`/v\d+[a-z]*$`)
-	hasVersionSuffix := versionPattern.MatchString(baseURL)
-
-	// 如果baseURL已经包含版本号或以#结尾,直接拼接/chat/completions
-	// 否则拼接/v1/chat/completions
-	endpoint := "/chat/completions"
-	if !hasVersionSuffix && !skipVersionPrefix {
-		endpoint = "/v1" + endpoint
-	}
-	url := baseURL + endpoint
-
-	req, err := http.NewRequestWithContext(c.Request.Context(), "POST", url, bytes.NewReader(reqBodyBytes))
+	url := forwarding.BuildEndpointURL(upstream.GetEffectiveBaseURL(), "/v1", "/chat/completions")
+	prepared, err := forwarding.Build(c, forwarding.ForwardingRequest{
+		Method:        http.MethodPost,
+		URL:           url,
+		Body:          reqBodyBytes,
+		ServiceType:   upstream.ServiceType,
+		CustomHeaders: upstream.CustomHeaders,
+		AuthKind:      forwarding.AuthKindStandard,
+		APIKey:        apiKey,
+	})
 	if err != nil {
 		return nil, originalBodyBytes, fmt.Errorf("创建OpenAI请求失败: %w", err)
 	}
 
-	// 使用统一的头部处理逻辑（透明代理）
-	// 保留客户端的大部分 headers，只移除/替换必要的认证和代理相关 headers
-	req.Header = utils.PrepareUpstreamHeaders(c, req.URL.Host)
-	utils.ApplyCustomHeaders(req.Header, upstream.CustomHeaders)
-	utils.SetAuthenticationHeader(req.Header, apiKey)
-
-	return req, originalBodyBytes, nil
+	return prepared.Request, originalBodyBytes, nil
 }
 
 // convertMessages 转换消息

@@ -12,8 +12,10 @@ import (
 	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
+	"github.com/BenedictKing/ccx/internal/forwarding"
 	"github.com/BenedictKing/ccx/internal/handlers/common"
 	"github.com/BenedictKing/ccx/internal/middleware"
+	"github.com/BenedictKing/ccx/internal/passthrough"
 	"github.com/BenedictKing/ccx/internal/scheduler"
 	"github.com/BenedictKing/ccx/internal/types"
 	"github.com/BenedictKing/ccx/internal/utils"
@@ -250,8 +252,6 @@ func buildProviderRequest(
 	model string,
 	isStream bool,
 ) (*http.Request, error) {
-	skipVersionPrefix := strings.HasSuffix(baseURL, "#")
-	baseURL = strings.TrimSuffix(strings.TrimRight(baseURL, "/"), "#")
 	// 应用模型映射
 	mappedModel := config.RedirectModel(model, upstream)
 
@@ -259,7 +259,43 @@ func buildProviderRequest(
 	var url string
 
 	switch upstream.ServiceType {
-	case "openai", "responses", "":
+	case "openai":
+		// OpenAI 兼容上游：透传请求，仅替换 model 并注入高级参数
+		if !json.Valid(bodyBytes) {
+			return nil, fmt.Errorf("invalid chat request body")
+		}
+		requestBody = passthrough.PatchPlatformFields(bodyBytes, upstream)
+		url = forwarding.BuildEndpointURL(baseURL, "/v1", "/chat/completions")
+		prepared, err := forwarding.Build(c, forwarding.ForwardingRequest{
+			Method:        http.MethodPost,
+			URL:           url,
+			Body:          requestBody,
+			ContentType:   "application/json",
+			ServiceType:   "openai",
+			CustomHeaders: upstream.CustomHeaders,
+			AuthKind:      forwarding.AuthKindStandard,
+			APIKey:        apiKey,
+			RawResponse:   passthrough.AllowsRawResponsePassthrough(c.Request.URL.Path, upstream),
+			RawStream:     passthrough.AllowsRawResponsePassthrough(c.Request.URL.Path, upstream),
+		})
+		if err != nil {
+			return nil, err
+		}
+		return prepared.Request, nil
+
+	case "claude":
+		// Claude 上游：转换 OpenAI Chat 格式为 Claude Messages 格式
+		claudeReq, err := convertChatToClaudeRequest(bodyBytes, mappedModel, isStream)
+		if err != nil {
+			return nil, err
+		}
+		requestBody, err = json.Marshal(claudeReq)
+		if err != nil {
+			return nil, err
+		}
+		url = forwarding.BuildEndpointURL(baseURL, "/v1", "/messages")
+
+	case "responses", "":
 		// OpenAI 兼容上游：透传请求，仅替换 model 并注入高级参数
 		var reqMap map[string]interface{}
 		if err := json.Unmarshal(bodyBytes, &reqMap); err != nil {
@@ -280,27 +316,7 @@ func buildProviderRequest(
 		if err != nil {
 			return nil, err
 		}
-		if skipVersionPrefix {
-			url = fmt.Sprintf("%s/chat/completions", strings.TrimRight(baseURL, "/"))
-		} else {
-			url = fmt.Sprintf("%s/v1/chat/completions", strings.TrimRight(baseURL, "/"))
-		}
-
-	case "claude":
-		// Claude 上游：转换 OpenAI Chat 格式为 Claude Messages 格式
-		claudeReq, err := convertChatToClaudeRequest(bodyBytes, mappedModel, isStream)
-		if err != nil {
-			return nil, err
-		}
-		requestBody, err = json.Marshal(claudeReq)
-		if err != nil {
-			return nil, err
-		}
-		if skipVersionPrefix {
-			url = fmt.Sprintf("%s/messages", strings.TrimRight(baseURL, "/"))
-		} else {
-			url = fmt.Sprintf("%s/v1/messages", strings.TrimRight(baseURL, "/"))
-		}
+		url = forwarding.BuildEndpointURL(baseURL, "/v1", "/chat/completions")
 
 	case "gemini":
 		// Gemini 上游：透传为 OpenAI Chat 格式（大部分 Gemini 兼容端点支持 OpenAI 格式）
@@ -318,11 +334,7 @@ func buildProviderRequest(
 		} else {
 			requestBody = bodyBytes
 		}
-		if skipVersionPrefix {
-			url = fmt.Sprintf("%s/chat/completions", strings.TrimRight(baseURL, "/"))
-		} else {
-			url = fmt.Sprintf("%s/v1/chat/completions", strings.TrimRight(baseURL, "/"))
-		}
+		url = forwarding.BuildEndpointURL(baseURL, "/v1", "/chat/completions")
 
 	default:
 		// 默认当作 OpenAI 兼容处理
@@ -340,39 +352,28 @@ func buildProviderRequest(
 		} else {
 			requestBody = bodyBytes
 		}
-		if skipVersionPrefix {
-			url = fmt.Sprintf("%s/chat/completions", strings.TrimRight(baseURL, "/"))
-		} else {
-			url = fmt.Sprintf("%s/v1/chat/completions", strings.TrimRight(baseURL, "/"))
-		}
+		url = forwarding.BuildEndpointURL(baseURL, "/v1", "/chat/completions")
 	}
 
-	req, err := http.NewRequestWithContext(c.Request.Context(), "POST", url, bytes.NewReader(requestBody))
+	platformHeaders := map[string]string(nil)
+	if upstream.ServiceType == "claude" {
+		platformHeaders = map[string]string{"anthropic-version": "2023-06-01"}
+	}
+	prepared, err := forwarding.Build(c, forwarding.ForwardingRequest{
+		Method:          http.MethodPost,
+		URL:             url,
+		Body:            requestBody,
+		ContentType:     "application/json",
+		ServiceType:     upstream.ServiceType,
+		PlatformHeaders: platformHeaders,
+		CustomHeaders:   upstream.CustomHeaders,
+		AuthKind:        forwarding.AuthKindStandard,
+		APIKey:          apiKey,
+	})
 	if err != nil {
 		return nil, err
 	}
-
-	// 使用统一的头部处理逻辑（透明代理）
-	req.Header = utils.PrepareUpstreamHeaders(c, req.URL.Host)
-
-	// 设置 Content-Type
-	req.Header.Set("Content-Type", "application/json")
-
-	// 应用自定义请求头（认证头随后设置，避免被覆盖）
-	utils.ApplyCustomHeaders(req.Header, upstream.CustomHeaders)
-
-	// 设置认证头
-	switch upstream.ServiceType {
-	case "claude":
-		req.Header.Set("anthropic-version", "2023-06-01")
-		utils.EnsureCompatibleUserAgent(req.Header, "claude")
-		utils.SetAuthenticationHeader(req.Header, apiKey)
-	default:
-		// OpenAI / Gemini / Responses 等都使用 Bearer token
-		utils.SetAuthenticationHeader(req.Header, apiKey)
-	}
-
-	return req, nil
+	return prepared.Request, nil
 }
 
 // convertChatToClaudeRequest 将 OpenAI Chat 请求转换为 Claude Messages 格式

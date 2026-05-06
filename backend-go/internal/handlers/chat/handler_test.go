@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -56,6 +57,31 @@ func TestBuildProviderRequest_InjectsReasoningBeforeModelRedirect(t *testing.T) 
 
 	if got["service_tier"] != "priority" {
 		t.Fatalf("service_tier = %v, want priority", got["service_tier"])
+	}
+}
+
+func TestBuildProviderRequest_OpenAISameFormatPreservesBodyWhenNoPlatformPatch(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil).WithContext(context.Background())
+
+	bodyBytes := []byte(`{"model":"gpt-5","messages":[{"role":"user","content":"hi"}],"unknown":{"nested":1},"metadata":{"trace":"abc"}}`)
+	upstream := &config.UpstreamConfig{
+		ServiceType: "openai",
+	}
+
+	req, err := buildProviderRequest(c, upstream, "https://api.example.com", "sk-test", bodyBytes, "gpt-5", false)
+	if err != nil {
+		t.Fatalf("buildProviderRequest() err = %v", err)
+	}
+
+	got, err := io.ReadAll(req.Body)
+	if err != nil {
+		t.Fatalf("read request body: %v", err)
+	}
+	if string(got) != string(bodyBytes) {
+		t.Fatalf("request body = %s, want exact original body %s", got, bodyBytes)
 	}
 }
 

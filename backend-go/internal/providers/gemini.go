@@ -2,18 +2,16 @@ package providers
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"regexp"
 	"strings"
 
 	"github.com/BenedictKing/ccx/internal/config"
+	"github.com/BenedictKing/ccx/internal/forwarding"
 	"github.com/BenedictKing/ccx/internal/types"
-	"github.com/BenedictKing/ccx/internal/utils"
 	"github.com/gin-gonic/gin"
 )
 
@@ -43,35 +41,22 @@ func (p *GeminiProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 	}
 
 	model := config.RedirectModel(claudeReq.Model, upstream)
-	action := "generateContent"
-	if claudeReq.Stream {
-		action = "streamGenerateContent?alt=sse"
-	}
-
-	baseURL := strings.TrimSuffix(upstream.GetEffectiveBaseURL(), "/")
-	skipVersionPrefix := strings.HasSuffix(baseURL, "#")
-	if skipVersionPrefix {
-		baseURL = strings.TrimSuffix(baseURL, "#")
-	}
-	versionPattern := regexp.MustCompile(`/v\d+[a-z]*$`)
-	if !versionPattern.MatchString(baseURL) && !skipVersionPrefix {
-		baseURL += "/v1beta"
-	}
-
-	url := fmt.Sprintf("%s/models/%s:%s", baseURL, model, action)
-
-	req, err := http.NewRequestWithContext(c.Request.Context(), "POST", url, bytes.NewReader(reqBodyBytes))
+	url := forwarding.BuildGeminiNativeURL(upstream.GetEffectiveBaseURL(), model, claudeReq.Stream)
+	prepared, err := forwarding.Build(c, forwarding.ForwardingRequest{
+		Method:        http.MethodPost,
+		URL:           url,
+		Body:          reqBodyBytes,
+		ServiceType:   upstream.ServiceType,
+		CustomHeaders: upstream.CustomHeaders,
+		AuthKind:      forwarding.AuthKindGemini,
+		APIKey:        apiKey,
+		RawStream:     claudeReq.Stream,
+	})
 	if err != nil {
 		return nil, originalBodyBytes, fmt.Errorf("创建Gemini请求失败: %w", err)
 	}
 
-	// 使用统一的头部处理逻辑（透明代理）
-	// 保留客户端的大部分 headers，只移除/替换必要的认证和代理相关 headers
-	req.Header = utils.PrepareUpstreamHeaders(c, req.URL.Host)
-	utils.ApplyCustomHeaders(req.Header, upstream.CustomHeaders)
-	utils.SetGeminiAuthenticationHeader(req.Header, apiKey)
-
-	return req, originalBodyBytes, nil
+	return prepared.Request, originalBodyBytes, nil
 }
 
 // convertToGeminiRequest 转换为 Gemini 请求体

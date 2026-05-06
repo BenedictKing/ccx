@@ -2,18 +2,16 @@ package providers
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"io"
 	"net/http"
-	"regexp"
 	"strings"
 
 	"github.com/BenedictKing/ccx/internal/config"
+	"github.com/BenedictKing/ccx/internal/forwarding"
 	"github.com/BenedictKing/ccx/internal/passthrough"
 	"github.com/BenedictKing/ccx/internal/types"
-	"github.com/BenedictKing/ccx/internal/utils"
 	"github.com/gin-gonic/gin"
 )
 
@@ -46,55 +44,31 @@ func (p *ClaudeProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 		bodyBytes = passthrough.PatchTopLevelModel(bodyBytes, upstream)
 	}
 
-	// 构建目标URL
-	// 智能拼接逻辑：
-	// 1. 如果 baseURL 以 # 结尾，跳过自动添加 /v1
-	// 2. 如果 baseURL 已包含版本号后缀（如 /v1, /v2, /v3），直接拼接端点路径
-	// 3. 如果 baseURL 不包含版本号后缀，自动添加 /v1 再拼接端点路径
 	// 先剥离 routePrefix（如 /glm），再剥离 /v1，得到纯端点路径（如 /messages）
 	endpoint := strings.TrimPrefix(path, "/v1")
-	baseURL := upstream.GetEffectiveBaseURL()
-	skipVersionPrefix := strings.HasSuffix(baseURL, "#")
-	if skipVersionPrefix {
-		baseURL = strings.TrimSuffix(baseURL, "#")
-	}
-	baseURL = strings.TrimSuffix(baseURL, "/")
-
-	// 使用正则表达式检测 baseURL 是否以版本号结尾（/v1, /v2, /v1beta, /v2alpha等）
-	versionPattern := regexp.MustCompile(`/v\d+[a-z]*$`)
-
-	var targetURL string
-	if versionPattern.MatchString(baseURL) || skipVersionPrefix {
-		// baseURL 已包含版本号或以#结尾，直接拼接
-		targetURL = baseURL + endpoint
-	} else {
-		// baseURL 不包含版本号，添加 /v1
-		targetURL = baseURL + "/v1" + endpoint
-	}
+	targetURL := forwarding.BuildEndpointURL(upstream.GetEffectiveBaseURL(), "/v1", endpoint)
 
 	if c.Request.URL.RawQuery != "" {
 		targetURL += "?" + c.Request.URL.RawQuery
 	}
 
-	// 创建请求
-	var req *http.Request
-	if len(bodyBytes) > 0 {
-		req, err = http.NewRequestWithContext(c.Request.Context(), c.Request.Method, targetURL, bytes.NewReader(bodyBytes))
-	} else {
-		// 如果 bodyBytes 为空（例如 GET 请求或原始请求体为空），则直接使用 nil Body
-		req, err = http.NewRequestWithContext(c.Request.Context(), c.Request.Method, targetURL, nil)
-	}
+	prepared, err := forwarding.Build(c, forwarding.ForwardingRequest{
+		Method:        c.Request.Method,
+		URL:           targetURL,
+		Body:          bodyBytes,
+		ContentType:   "application/json",
+		ServiceType:   "claude",
+		CustomHeaders: upstream.CustomHeaders,
+		AuthKind:      forwarding.AuthKindStandard,
+		APIKey:        apiKey,
+		RawResponse:   passthrough.AllowsRawResponsePassthrough(path, upstream),
+		RawStream:     passthrough.AllowsRawResponsePassthrough(path, upstream),
+	})
 	if err != nil {
 		return nil, nil, err
 	}
 
-	// 使用统一的头部处理逻辑
-	req.Header = utils.PrepareUpstreamHeaders(c, req.URL.Host)
-	utils.ApplyCustomHeaders(req.Header, upstream.CustomHeaders) // 先应用自定义头，后覆盖认证（不可被自定义头覆盖）
-	utils.EnsureCompatibleUserAgent(req.Header, "claude")
-	utils.SetAuthenticationHeader(req.Header, apiKey)
-
-	return req, bodyBytes, nil
+	return prepared.Request, prepared.Body, nil
 }
 
 // ConvertToClaudeResponse 转换为 Claude 响应（直接透传）
