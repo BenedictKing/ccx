@@ -61,6 +61,96 @@
 - None - task complete
 
 
+## Session 8: AxonHub forwarding CCX resilience verification
+
+**Date**: 2026-05-07
+**Task**: AxonHub forwarding with CCX resilience
+**Branch**: `axonhub`
+
+### Summary
+
+Resumed the existing Trellis task, confirmed MVP scope as same-format raw passthrough plus AxonHub-style forwarding usage statistics, preserved CCX control-plane ownership, and completed an independent research/implement/check agent pass.
+
+### Main Changes
+
+- Filled `implement.jsonl` and `check.jsonl` with backend spec context and the local forwarding/usage/failover research artifact.
+- Added research at `.trellis/tasks/05-06-axonhub-forwarding-ccx-resilience/research/forwarding-usage-failover-gaps.md`.
+- Added a cross-format failover test proving Responses -> OpenAI-compatible forwarding keeps failover/cooldown behavior and records `axonHubForwarding` request/token/cache dimensions.
+- Updated backend quality spec to document that AxonHub forwarding `requestCount` counts finalized attempts, including retry/failover attempts without usage.
+
+### Agent Results
+
+- `trellis-research`: completed and wrote forwarding/usage/failover gap analysis.
+- `trellis-implement`: found current backend implementation already covered the MVP and ran backend tests successfully.
+- `trellis-check`: first run disconnected; second run completed, fixed the missing cross-format control-plane coverage test, and reported existing full-lint baseline issues outside this task.
+
+### Testing
+
+- [OK] `cd backend-go && go test ./internal/handlers/common`
+- [OK] `cd backend-go && go test ./internal/passthrough ./internal/forwarding ./internal/metrics ./internal/handlers/common ./internal/handlers/messages ./internal/handlers/responses ./internal/handlers/chat ./internal/handlers/gemini ./internal/providers`
+- [OK] `cd backend-go && go test -count=1 ./...`
+- [OK] `git diff --check` completed with only the pre-existing journal line-ending warning.
+
+### Residual Risks
+
+- Full `golangci-lint run` still has an existing repository baseline of unrelated issues; check agent verified new diff lint with `golangci-lint run --new-from-rev=HEAD`.
+- AxonHub forwarding stats remain runtime channel metrics, not a persisted billing ledger.
+- No balance, price table, deduction ledger, refund, or old-format compatibility layer was added.
+
+### Status
+
+[IN PROGRESS] Verification complete; ready for commit planning or `/finish-work` when the user wants to wrap up.
+
+
+## Session 8: Plan AxonHub forwarding plus CCX resilience
+
+**Date**: 2026-05-07
+**Task**: AxonHub forwarding with CCX resilience
+**Branch**: `axonhub`
+
+### Summary
+
+Started task `05-06-axonhub-forwarding-ccx-resilience` and clarified the desired architecture: use AxonHub-style forwarding plus usage/billing statistics as the data plane, while preserving CCX scheduler, failover, circuit breaker, cooldown, blacklist, channel logs, and resilience metrics as the control plane.
+
+### Decisions
+
+- Billing scope is usage/billing statistics only, not a balance or deduction ledger.
+- Required usage dimensions are request count, input tokens, output tokens, cache creation tokens, and cache read tokens.
+- Forwarding builder/data-plane helpers should not own scheduler choice, key retry, BaseURL retry, failover classification, cooldown, blacklist, circuit breaker state, channel log terminal status, trace affinity, or metrics finalization.
+- Full billing ledger, model price tables, user accounts, balance deduction, refunds, and idempotent billing transactions are out of scope for this task.
+
+### Codebase Findings
+
+- `backend-go/internal/handlers/common/upstream_failover.go` is the main CCX control-plane loop. It owns BaseURL/key attempts, circuit state checks, half-open probe handling, request start/finalize metrics, blacklist/cooldown handling, failover classification, channel logs, and AxonHub forwarding usage stats recording.
+- `backend-go/internal/forwarding/builder.go` is the existing AxonHub-style data-plane request builder for method, URL, body, safe headers, custom headers, auth, and raw response flags.
+- `backend-go/internal/passthrough/passthrough.go` decides same-format raw passthrough by comparing inbound and outbound protocol formats.
+- Chat and Gemini paths already partially use `forwarding.Build`; Messages and Responses still mainly rely on provider `ConvertToProviderRequest`.
+- `backend-go/internal/metrics/channel_metrics_axonhub_test.go` confirms existing `axonHubForwarding` aggregation for request count and token dimensions, but this is usage observability rather than a full billing ledger.
+
+### Files Updated
+
+- `.trellis/tasks/05-06-axonhub-forwarding-ccx-resilience/prd.md`
+- `.trellis/workspace/skip/journal-1.md`
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- Not run; no business code was changed.
+
+### Status
+
+[IN PROGRESS] Planning is captured. The task is ready for the next session to choose MVP scope and then move into Trellis implementation.
+
+### Next Steps
+
+- Decide MVP surface: all protocol families, Messages + Chat first, or same-format raw passthrough first.
+- Curate `implement.jsonl` and `check.jsonl` with relevant backend spec files before implementation.
+- Dispatch `trellis-implement` for code changes, then `trellis-check` for verification.
+
+
 ## Session 2: Fix missing routed model breaker classification
 
 **Date**: 2026-04-28
