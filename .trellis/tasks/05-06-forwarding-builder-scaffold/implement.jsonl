@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend pre-development checklist and guide index."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Choose the correct internal package location for forwarding builder."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Keep scaffold minimal and avoid broad refactors."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Builder must not replace ccx error/failover behavior."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Avoid leaking credentials when handling headers."}
+{"file": ".trellis/tasks/05-06-forwarding-contract-matrix/research/forwarding-contract-matrix.md", "reason": "Forwarding behavior matrix and caveats for builder scaffold."}

@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend pre-development checklist and guide index."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Document backend module boundaries while building the forwarding matrix."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Quality conventions for documenting forwarding contracts without broad refactors."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Error/failover boundary must remain ccx-owned."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Metrics and logging notes must respect redaction conventions."}

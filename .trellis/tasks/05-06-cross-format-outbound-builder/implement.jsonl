@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend pre-development checklist and guide index."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Respect provider/handler/common package boundaries."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Keep cross-format request construction scoped and tested."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Do not change ccx conversion/failover error behavior."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Header/auth handling must preserve redaction expectations."}
+{"file": ".trellis/tasks/05-06-forwarding-contract-matrix/research/forwarding-contract-matrix.md", "reason": "Cross-format current behavior and compatibility caveats."}

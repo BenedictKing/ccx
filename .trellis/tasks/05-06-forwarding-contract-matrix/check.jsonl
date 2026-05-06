@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend checklist for review."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Validate the contract matrix stays scoped and actionable."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Validate control-plane ownership remains ccx."}

@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend checklist for review."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Validate raw forwarding remains scoped and tested."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Validate ccx control plane remains unchanged."}
+{"file": ".trellis/tasks/05-06-forwarding-contract-matrix/research/forwarding-contract-matrix.md", "reason": "Validate Messages/Chat migration against documented forwarding behavior."}

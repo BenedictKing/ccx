@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend checklist for final review."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Validate spec update and final quality gate."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Validate cleanup/failover behavior remains ccx-owned."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Validate no sensitive data is logged."}
+{"file": ".trellis/tasks/05-06-forwarding-contract-matrix/research/forwarding-contract-matrix.md", "reason": "Validate final cleanup against documented raw stream lifecycle."}
+{"file": ".trellis/tasks/05-06-attempt-raw-stream-cleanup-verification/research/attempt-raw-stream-cleanup-audit.md", "reason": "Validate final cleanup resolves or documents audit risks."}

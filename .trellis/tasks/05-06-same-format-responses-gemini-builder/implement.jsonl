@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend pre-development checklist and guide index."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Respect handler/common package boundaries."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Keep Responses/Gemini migration scoped and regression-tested."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Do not replace ccx failover/error classification."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Header/auth handling must preserve redaction expectations."}
+{"file": ".trellis/tasks/05-06-forwarding-contract-matrix/research/forwarding-contract-matrix.md", "reason": "Same-format Responses/Gemini current and target behavior matrix."}
+{"file": ".trellis/tasks/05-06-attempt-raw-stream-cleanup-verification/research/attempt-raw-stream-cleanup-audit.md", "reason": "Responses raw stream cleanup risk context for same-format migration."}

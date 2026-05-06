@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend checklist for review."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Validate package placement."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Validate minimal scaffold and tests."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Validate control plane remains unchanged."}
+{"file": ".trellis/tasks/05-06-forwarding-contract-matrix/research/forwarding-contract-matrix.md", "reason": "Validate builder scaffold matches the documented forwarding contract."}
