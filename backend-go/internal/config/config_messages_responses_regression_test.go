@@ -32,7 +32,7 @@ func TestMessagesCurrentUpstreamRequiresActiveChannel(t *testing.T) {
 			"serviceType": "claude"
 		}]
 	}`)
-	defer cm.Close()
+	defer func() { _ = cm.Close() }()
 
 	upstream, err := cm.GetCurrentUpstream()
 	if err == nil {
@@ -63,7 +63,7 @@ func TestResponsesCurrentUpstreamRequiresActiveChannel(t *testing.T) {
 			"serviceType": "claude"
 		}]
 	}`)
-	defer cm.Close()
+	defer func() { _ = cm.Close() }()
 
 	upstream, err := cm.GetCurrentResponsesUpstream()
 	if err == nil {
@@ -102,7 +102,7 @@ func TestUpdateUpstreamRejectsDuplicateNames(t *testing.T) {
 			}
 		]
 	}`)
-	defer cm.Close()
+	defer func() { _ = cm.Close() }()
 
 	_, err := cm.UpdateUpstream(0, UpstreamUpdate{Name: strPtr("messages-b")})
 	if err == nil {
@@ -132,7 +132,7 @@ func TestUpdateResponsesUpstreamRejectsDuplicateNames(t *testing.T) {
 			}
 		]
 	}`)
-	defer cm.Close()
+	defer func() { _ = cm.Close() }()
 
 	_, err := cm.UpdateResponsesUpstream(0, UpstreamUpdate{Name: strPtr("responses-b")})
 	if err == nil {

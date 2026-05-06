@@ -47,7 +47,7 @@ func TestChannelCapability_DoesNotProbeDisabledOnlyChannel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create config manager failed: %v", err)
 	}
-	defer cfgManager.Close()
+	defer func() { _ = cfgManager.Close() }()
 
 	r := gin.New()
 	r.POST("/messages/channels/:id/capability-test", TestChannelCapability(cfgManager, nil, "messages"))
@@ -99,7 +99,7 @@ func TestChannelCapability_DoesNotProbeCooldownOnlyChannel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create config manager failed: %v", err)
 	}
-	defer cfgManager.Close()
+	defer func() { _ = cfgManager.Close() }()
 	cfgManager.MarkKeyAsFailedWithDuration("sk-cooldown", "Messages", time.Hour)
 
 	r := gin.New()
@@ -154,7 +154,7 @@ func TestCancelCapabilityTestJob_HTTP(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create config manager failed: %v", err)
 	}
-	defer cfgManager.Close()
+	defer func() { _ = cfgManager.Close() }()
 
 	r := gin.New()
 	r.DELETE("/messages/channels/:id/capability-test/:jobId", CancelCapabilityTestJob(cfgManager, "messages"))
@@ -198,7 +198,7 @@ func TestGetCapabilityTestJobStatus_HTTP(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create config manager failed: %v", err)
 	}
-	defer cfgManager.Close()
+	defer func() { _ = cfgManager.Close() }()
 
 	r := gin.New()
 	r.GET("/messages/channels/:id/capability-test/:jobId", GetCapabilityTestJobStatus(cfgManager, "messages"))
@@ -234,7 +234,7 @@ func TestCapabilityCacheHit_DoesNotBindExecutionLookupKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create config manager failed: %v", err)
 	}
-	defer cfgManager.Close()
+	defer func() { _ = cfgManager.Close() }()
 
 	cfg := cfgManager.GetConfig()
 	channel := cfg.Upstream[0]
@@ -305,7 +305,7 @@ func TestRetryCapabilityTestModel_HTTP_RejectsUnknownModel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create config manager failed: %v", err)
 	}
-	defer cfgManager.Close()
+	defer func() { _ = cfgManager.Close() }()
 
 	r := gin.New()
 	r.POST("/messages/channels/:id/capability-test/:jobId/retry", RetryCapabilityTestModel(cfgManager, nil, "messages"))
@@ -341,7 +341,7 @@ func TestRetryCapabilityTestModel_HTTP_RejectsRunningJob(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create config manager failed: %v", err)
 	}
-	defer cfgManager.Close()
+	defer func() { _ = cfgManager.Close() }()
 
 	r := gin.New()
 	r.POST("/messages/channels/:id/capability-test/:jobId/retry", RetryCapabilityTestModel(cfgManager, nil, "messages"))
@@ -378,7 +378,7 @@ func TestRetryCapabilityTestModel_HTTP_RejectsNonRetryableModel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create config manager failed: %v", err)
 	}
-	defer cfgManager.Close()
+	defer func() { _ = cfgManager.Close() }()
 
 	r := gin.New()
 	r.POST("/messages/channels/:id/capability-test/:jobId/retry", RetryCapabilityTestModel(cfgManager, nil, "messages"))
@@ -429,7 +429,7 @@ func TestExecuteModelTest_RecordsCapabilityLogOnSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create config manager failed: %v", err)
 	}
-	defer cfgManager.Close()
+	defer func() { _ = cfgManager.Close() }()
 
 	cfg := cfgManager.GetConfig()
 	result := executeModelTest(context.Background(), &cfg.Upstream[0], "messages", "claude-test", 5*time.Second, job.JobID, cfgManager, 0, "messages", "test-key", store)
@@ -487,7 +487,7 @@ func TestExecuteModelTest_RecordsCapabilityLogOnFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create config manager failed: %v", err)
 	}
-	defer cfgManager.Close()
+	defer func() { _ = cfgManager.Close() }()
 
 	cfg := cfgManager.GetConfig()
 	result := executeModelTest(context.Background(), &cfg.Upstream[0], "messages", "claude-test", 5*time.Second, job.JobID, cfgManager, 0, "messages", "test-key", store)
@@ -549,7 +549,7 @@ func TestExecuteModelTest_TruncatesLargeFailureBody(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create config manager failed: %v", err)
 	}
-	defer cfgManager.Close()
+	defer func() { _ = cfgManager.Close() }()
 
 	cfg := cfgManager.GetConfig()
 	result := executeModelTest(context.Background(), &cfg.Upstream[0], "messages", "claude-test", 5*time.Second, job.JobID, cfgManager, 0, "messages", "test-key", store)
@@ -603,7 +603,7 @@ func TestExecuteModelTest_RespectsAutoBlacklistBalance(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create config manager failed: %v", err)
 	}
-	defer cfgManager.Close()
+	defer func() { _ = cfgManager.Close() }()
 
 	cfg := cfgManager.GetConfig()
 	if len(cfg.Upstream) != 1 {
@@ -653,7 +653,7 @@ func TestResumedCancelledJob_ReturnsUpdatedState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create config manager failed: %v", err)
 	}
-	defer cfgManager.Close()
+	defer func() { _ = cfgManager.Close() }()
 
 	cfg := cfgManager.GetConfig()
 	channel := cfg.Upstream[0]
@@ -730,7 +730,7 @@ func TestCapabilityPreviousJobReuse_ByIdentityAcrossChannels(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create config manager failed: %v", err)
 	}
-	defer cfgManager.Close()
+	defer func() { _ = cfgManager.Close() }()
 
 	cfg := cfgManager.GetConfig()
 	sharedIdentity := resolveCapabilityIdentityKey(nil, "messages", 0, &cfg.Upstream[0])
@@ -806,7 +806,7 @@ func TestCapabilityRunningJobReuse_ByIdentityAcrossChannels(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create config manager failed: %v", err)
 	}
-	defer cfgManager.Close()
+	defer func() { _ = cfgManager.Close() }()
 
 	cfg := cfgManager.GetConfig()
 	channel := cfg.Upstream[0]

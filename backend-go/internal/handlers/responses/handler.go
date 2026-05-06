@@ -260,7 +260,11 @@ func handleSuccess(
 	originalReq *types.ResponsesRequest,
 	originalRequestJSON []byte,
 ) (*types.Usage, error) {
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("[Responses] 关闭响应体失败: %v", err)
+		}
+	}()
 
 	isStream := originalReq != nil && originalReq.Stream
 
@@ -386,15 +390,21 @@ func recordResponsesSession(sessionManager *session.SessionManager, originalReq 
 
 	inputItems, _ := parseInputToItems(originalReq.Input)
 	for _, item := range inputItems {
-		sessionManager.AppendMessage(sess.ID, item, 0)
+		if err := sessionManager.AppendMessage(sess.ID, item, 0); err != nil {
+			log.Printf("[Responses-Session] 追加输入消息失败: %v", err)
+		}
 	}
 
 	for _, item := range responsesResp.Output {
-		sessionManager.AppendMessage(sess.ID, item, responsesResp.Usage.TotalTokens)
+		if err := sessionManager.AppendMessage(sess.ID, item, responsesResp.Usage.TotalTokens); err != nil {
+			log.Printf("[Responses-Session] 追加输出消息失败: %v", err)
+		}
 	}
 
 	previousResponseID := sess.LastResponseID
-	sessionManager.UpdateLastResponseID(sess.ID, responsesResp.ID)
+	if err := sessionManager.UpdateLastResponseID(sess.ID, responsesResp.ID); err != nil {
+		log.Printf("[Responses-Session] 更新响应 ID 失败: %v", err)
+	}
 	sessionManager.RecordResponseMapping(responsesResp.ID, sess.ID)
 
 	if previousResponseID != "" {

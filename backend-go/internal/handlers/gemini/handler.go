@@ -314,7 +314,7 @@ func stripThoughtSignature(geminiReq *types.GeminiRequest) {
 func cloneGeminiRequest(req *types.GeminiRequest) *types.GeminiRequest {
 	clone := &types.GeminiRequest{}
 	data, _ := json.Marshal(req)
-	json.Unmarshal(data, clone)
+	_ = json.Unmarshal(data, clone)
 	return clone
 }
 
@@ -555,7 +555,7 @@ func handleSuccess(
 	model string,
 	isStream bool,
 ) (*types.Usage, error) {
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	upstreamType := upstream.ServiceType
 
 	if isStream {

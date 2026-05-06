@@ -18,7 +18,7 @@ func TestMigrateMetricsKeysToIdentity_MigratesRecordsAndCircuitStates(t *testing
 	if err != nil {
 		t.Fatalf("NewSQLiteStore() error = %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	baseURL := "https://example.com"
 	apiKey := "sk-test"
@@ -105,7 +105,7 @@ func TestMigrateMetricsKeysToIdentity_MergesCircuitStatesBySeverity(t *testing.T
 	if err != nil {
 		t.Fatalf("NewSQLiteStore() error = %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	baseURL := "https://example.com"
 	apiKey := "sk-test"
@@ -148,7 +148,7 @@ func TestMigrateMetricsKeysToIdentity_MergesCircuitStatesBySeverity(t *testing.T
 	if err != nil {
 		t.Fatalf("query circuit_states: %v", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	count := 0
 	for rows.Next() {
@@ -188,7 +188,7 @@ func TestMigrateMetricsKeysToIdentity_MigratesHashSuffixLegacyRows(t *testing.T)
 	if err != nil {
 		t.Fatalf("NewSQLiteStore() error = %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	baseURL := "https://example.com/#"
 	apiKey := "sk-test"
@@ -250,7 +250,7 @@ func TestMigrateMetricsKeysToIdentity_MigratesHistoricalAPIKeyRows(t *testing.T)
 	if err != nil {
 		t.Fatalf("NewSQLiteStore() error = %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	baseURL := "https://example.com"
 	historicalKey := "sk-history"
@@ -310,7 +310,7 @@ func TestMigrateMetricsKeysToIdentity_IdempotentWhenAlreadyMigrated(t *testing.T
 	if err != nil {
 		t.Fatalf("NewSQLiteStore() error = %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	if _, err := store.db.Exec("PRAGMA user_version = 3"); err != nil {
 		t.Fatalf("set user_version: %v", err)
@@ -330,7 +330,7 @@ func TestMigrateMetricsKeysToIdentity_IgnoresConflictingMappingsWithoutLegacyRow
 	if err != nil {
 		t.Fatalf("NewSQLiteStore() error = %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	cfg := config.Config{
 		Upstream: []config.UpstreamConfig{{
@@ -367,7 +367,7 @@ func TestMigrateMetricsKeysToIdentity_FailsWhenConflictingLegacyRowsExist(t *tes
 	if err != nil {
 		t.Fatalf("NewSQLiteStore() error = %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	legacyKey := GenerateMetricsKey("https://shared.example.com", "sk-shared")
 	now := time.Now().Unix()
@@ -396,7 +396,7 @@ func TestMigrateMetricsKeysToIdentity_FailsWhenConflictingLegacyRowsExist(t *tes
 	if err == nil {
 		t.Fatal("MigrateMetricsKeysToIdentity() error = nil, want conflict error")
 	}
-	if !strings.Contains(err.Error(), "映射到多个 identity target") {
+	if !strings.Contains(err.Error(), "identity target") || !strings.Contains(err.Error(), "conflicts=") {
 		t.Fatalf("MigrateMetricsKeysToIdentity() error = %v, want conflict detail", err)
 	}
 }
@@ -409,7 +409,7 @@ func TestMigrateMetricsKeysToIdentity_LeavesUnmappedLegacyRowsUntouched(t *testi
 	if err != nil {
 		t.Fatalf("NewSQLiteStore() error = %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	baseURL := "https://orphan.example.com"
 	apiKey := "sk-orphan"
@@ -445,7 +445,7 @@ func TestSchemaVersion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSQLiteStore() error = %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	version, err := store.schemaVersion()
 	if err != nil {

@@ -1315,20 +1315,6 @@ func (m *MetricsManager) isKeyCircuitBroken(metrics *KeyMetrics) bool {
 	return m.calculateKeyBreakerFailureRateInternal(metrics) >= m.failureThreshold
 }
 
-// calculateKeyFailureRateInternal 计算 Key 综合失败率（内部方法，调用前需持有锁）
-func (m *MetricsManager) calculateKeyFailureRateInternal(metrics *KeyMetrics) float64 {
-	if len(metrics.recentResults) == 0 {
-		return 0
-	}
-	failures := 0
-	for _, success := range metrics.recentResults {
-		if !success {
-			failures++
-		}
-	}
-	return float64(failures) / float64(len(metrics.recentResults))
-}
-
 // appendToWindowKey 向 Key 滑动窗口添加记录
 func (m *MetricsManager) appendToWindowKey(metrics *KeyMetrics, success bool) {
 	metrics.recentResults = append(metrics.recentResults, success)
@@ -1363,7 +1349,7 @@ func (m *MetricsManager) cleanupHistoryLocked(metrics *KeyMetrics) {
 	if newStart > 0 {
 		metrics.requestHistory = metrics.requestHistory[newStart:]
 		// 索引平移：老数据被切走后，pending 索引需要整体减去 newStart
-		if metrics.pendingHistoryIdx != nil && len(metrics.pendingHistoryIdx) > 0 {
+		if len(metrics.pendingHistoryIdx) > 0 {
 			for id, idx := range metrics.pendingHistoryIdx {
 				if idx < newStart {
 					delete(metrics.pendingHistoryIdx, id)
@@ -2491,69 +2477,6 @@ func (m *MetricsManager) ToResponseMultiURL(channelIndex int, baseURLs []string,
 // ToResponse 转换为 API 响应格式（需要提供 baseURL 和 activeKeys）
 func (m *MetricsManager) ToResponse(channelIndex int, baseURL string, activeKeys []string, serviceType string, latency int64) *MetricsResponse {
 	return m.ToResponseMultiURL(channelIndex, []string{baseURL}, activeKeys, serviceType, latency)
-}
-
-// calculateAggregatedTimeWindowsInternal 计算聚合的时间窗口统计（内部方法，调用前需持有锁）
-func (m *MetricsManager) calculateAggregatedTimeWindowsInternal(baseURL string, activeKeys []string, serviceType string) map[string]TimeWindowStats {
-	windows := map[string]time.Duration{
-		"15m": 15 * time.Minute,
-		"1h":  1 * time.Hour,
-		"6h":  6 * time.Hour,
-		"24h": 24 * time.Hour,
-	}
-
-	result := make(map[string]TimeWindowStats)
-	now := time.Now()
-
-	for label, duration := range windows {
-		cutoff := now.Add(-duration)
-		var requestCount, successCount, failureCount int64
-		var inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens int64
-
-		for _, apiKey := range activeKeys {
-			for _, metrics := range m.getMetricsVariantsLocked(baseURL, apiKey, serviceType) {
-				for _, record := range metrics.requestHistory {
-					if record.Timestamp.After(cutoff) {
-						requestCount++
-						if record.Success {
-							successCount++
-						} else {
-							failureCount++
-						}
-						inputTokens += record.InputTokens
-						outputTokens += record.OutputTokens
-						cacheCreationTokens += record.CacheCreationInputTokens
-						cacheReadTokens += record.CacheReadInputTokens
-					}
-				}
-			}
-		}
-
-		successRate := float64(100)
-		if requestCount > 0 {
-			successRate = float64(successCount) / float64(requestCount) * 100
-		}
-
-		cacheHitRate := float64(0)
-		denom := cacheReadTokens + inputTokens
-		if denom > 0 {
-			cacheHitRate = float64(cacheReadTokens) / float64(denom) * 100
-		}
-
-		result[label] = TimeWindowStats{
-			RequestCount:        requestCount,
-			SuccessCount:        successCount,
-			FailureCount:        failureCount,
-			SuccessRate:         successRate,
-			InputTokens:         inputTokens,
-			OutputTokens:        outputTokens,
-			CacheCreationTokens: cacheCreationTokens,
-			CacheReadTokens:     cacheReadTokens,
-			CacheHitRate:        cacheHitRate,
-		}
-	}
-
-	return result
 }
 
 // calculateAggregatedTimeWindowsMultiURL 计算聚合的时间窗口统计（多 URL 版本，内部方法，调用前需持有锁）

@@ -238,7 +238,7 @@ func TestChannelMetricsHandlers_FallbackServiceTypeForLegacyConfig(t *testing.T)
 			if err != nil {
 				t.Fatalf("new config manager: %v", err)
 			}
-			defer cfgManager.Close()
+			defer func() { _ = cfgManager.Close() }()
 
 			metricsManager := metrics.NewMetricsManager()
 			defer metricsManager.Stop()
@@ -468,7 +468,7 @@ func TestResumeChannel_RestoresBlacklistedKeys(t *testing.T) {
 			if err != nil {
 				t.Fatalf("new config manager: %v", err)
 			}
-			defer cfgManager.Close()
+			defer func() { _ = cfgManager.Close() }()
 
 			messagesMetrics := metrics.NewMetricsManager()
 			responsesMetrics := metrics.NewMetricsManager()

@@ -416,7 +416,6 @@ func TestChannelCapability(cfgManager *config.ConfigManager, channelLogStore *me
 		go runCapabilityTestJob(job.JobID, channelKind, id, *channel, protocols, timeout, effectiveRPM, cacheKey, lookupKey, identityKey, previousResults, normalizedModels, cfgManager, channelLogStore)
 
 		c.JSON(http.StatusOK, gin.H{"jobId": job.JobID, "resumed": false, "job": job})
-		return
 	}
 }
 
@@ -988,28 +987,6 @@ func truncateCapabilityError(msg string) string {
 	return msg
 }
 
-// testProtocolCompatibility 并发测试多个协议的兼容性（已废弃，保留用于兼容）
-func testProtocolCompatibility(ctx context.Context, channel *config.UpstreamConfig, protocols []string, timeout time.Duration, jobID string) []ProtocolTestResult {
-	// 已废弃，直接调用新实现
-	return runRoundRobinTests(ctx, channel, protocols, timeout, 10, jobID, nil, nil, nil, 0, "", "", "", nil)
-}
-
-// testSingleProtocol 已废弃，保留用于兼容
-func testSingleProtocol(ctx context.Context, channel *config.UpstreamConfig, protocol string, timeout time.Duration, jobID string) ProtocolTestResult {
-	// 已废弃，直接调用新实现
-	results := runRoundRobinTests(ctx, channel, []string{protocol}, timeout, 10, jobID, nil, nil, nil, 0, "", "", "", nil)
-	if len(results) > 0 {
-		return results[0]
-	}
-	return ProtocolTestResult{Protocol: protocol, TestedAt: time.Now().Format(time.RFC3339)}
-}
-
-// testSingleModel 已废弃，保留用于兼容
-func testSingleModel(ctx context.Context, channel *config.UpstreamConfig, protocol, model string, timeout time.Duration, jobID string) ModelTestResult {
-	// 已废弃，直接调用 executeModelTest
-	return executeModelTest(ctx, channel, protocol, model, timeout, jobID, nil, 0, "", "", nil)
-}
-
 func updateCapabilityJobModelResult(job *CapabilityTestJob, protocol, model string, status CapabilityModelStatus, result ModelTestResult) {
 	for i := range job.Tests {
 		if job.Tests[i].Protocol != protocol {
@@ -1278,7 +1255,7 @@ func sendAndCheckStream(ctx context.Context, client *http.Client, req *http.Requ
 	if err != nil {
 		return false, false, 0, nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// 非 2xx 视为不兼容，读取响应体用于拉黑判定
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {

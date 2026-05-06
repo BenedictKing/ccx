@@ -237,7 +237,7 @@ func tryModelsRequest(c *gin.Context, cfgManager *config.ConfigManager, channelS
 
 		if resp.StatusCode == http.StatusOK {
 			body, err := io.ReadAll(resp.Body)
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			if err != nil {
 				log.Printf("[%s-Models] 读取响应失败: channel=%s, error=%v", channelType, upstream.Name, err)
 				failedChannels[selection.ChannelIndex] = true
@@ -250,7 +250,7 @@ func tryModelsRequest(c *gin.Context, cfgManager *config.ConfigManager, channelS
 
 		log.Printf("[%s-Models] 上游返回非 200: channel=%s, key=%s, status=%d, url=%s",
 			channelType, upstream.Name, utils.MaskAPIKey(apiKey), resp.StatusCode, url)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		failedChannels[selection.ChannelIndex] = true
 	}
 

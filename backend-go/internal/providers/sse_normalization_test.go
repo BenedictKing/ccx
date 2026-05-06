@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"context"
 	"io"
 	"strings"
 	"testing"
@@ -39,7 +40,7 @@ func TestResponsesProvider_HandleStreamResponse_AcceptsNoSpaceSSELines(t *testin
 	}, "\n")
 
 	provider := &ResponsesProvider{}
-	eventChan, errChan, err := provider.HandleStreamResponse(nil, io.NopCloser(strings.NewReader(body)))
+	eventChan, errChan, err := provider.HandleStreamResponse(context.TODO(), io.NopCloser(strings.NewReader(body)))
 	if err != nil {
 		t.Fatalf("HandleStreamResponse returned error: %v", err)
 	}
@@ -74,7 +75,7 @@ func TestOpenAIProvider_HandleStreamResponse_AcceptsNoSpaceDataLines(t *testing.
 	}, "\n")
 
 	provider := &OpenAIProvider{}
-	eventChan, errChan, err := provider.HandleStreamResponse(nil, io.NopCloser(strings.NewReader(body)))
+	eventChan, errChan, err := provider.HandleStreamResponse(context.TODO(), io.NopCloser(strings.NewReader(body)))
 	if err != nil {
 		t.Fatalf("HandleStreamResponse returned error: %v", err)
 	}
@@ -108,7 +109,7 @@ func TestGeminiProvider_HandleStreamResponse_AcceptsNoSpaceDataLines(t *testing.
 	}, "\n")
 
 	provider := &GeminiProvider{}
-	eventChan, errChan, err := provider.HandleStreamResponse(nil, io.NopCloser(strings.NewReader(body)))
+	eventChan, errChan, err := provider.HandleStreamResponse(context.TODO(), io.NopCloser(strings.NewReader(body)))
 	if err != nil {
 		t.Fatalf("HandleStreamResponse returned error: %v", err)
 	}

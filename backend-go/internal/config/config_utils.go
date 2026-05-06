@@ -64,7 +64,7 @@ func (e *ConfigError) Error() string {
 
 // RedirectModel 模型重定向
 func RedirectModel(model string, upstream *UpstreamConfig) string {
-	if upstream.ModelMapping == nil || len(upstream.ModelMapping) == 0 {
+	if len(upstream.ModelMapping) == 0 {
 		return model
 	}
 

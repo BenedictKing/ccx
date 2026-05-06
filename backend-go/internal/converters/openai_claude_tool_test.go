@@ -299,7 +299,7 @@ func convertChatToClaudeRequest(bodyBytes []byte, model string, isStream bool) (
 				continue
 			}
 			role, _ := m["role"].(string)
-			content, _ := m["content"]
+			content := m["content"]
 
 			switch role {
 			case "user":

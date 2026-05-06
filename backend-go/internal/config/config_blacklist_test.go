@@ -208,7 +208,7 @@ func TestAddAPIKeyRemovesDisabledEntryAndRestoreAvoidsDuplicate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewConfigManager() error = %v", err)
 	}
-	defer cm.Close()
+	defer func() { _ = cm.Close() }()
 
 	if err := cm.AddAPIKey(0, "sk-disabled"); err != nil {
 		t.Fatalf("AddAPIKey() error = %v", err)
@@ -263,7 +263,7 @@ func TestUpdateUpstreamCanSetAutoBlacklistBalance(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewConfigManager() error = %v", err)
 	}
-	defer cm.Close()
+	defer func() { _ = cm.Close() }()
 
 	disabled := false
 	if _, err := cm.UpdateUpstream(0, UpstreamUpdate{AutoBlacklistBalance: &disabled}); err != nil {

@@ -40,7 +40,7 @@ func (p *ClaudeProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 	path := claudeRequestPath(c)
 
 	// 模型重定向：仅修改 model 字段，保持其他内容不变
-	if upstream.ModelMapping != nil && len(upstream.ModelMapping) > 0 {
+	if len(upstream.ModelMapping) > 0 {
 		bodyBytes = passthrough.PatchTopLevelModel(bodyBytes, upstream)
 	}
 
@@ -90,7 +90,7 @@ func (p *ClaudeProvider) HandleStreamResponse(ctx context.Context, body io.ReadC
 		defer close(eventChan)
 		defer close(errChan)
 		defer closeStreamBodyOnCancel(ctx, body)()
-		defer body.Close()
+		defer func() { _ = body.Close() }()
 
 		scanner := bufio.NewScanner(body)
 		// 设置更大的 buffer (1MB) 以处理大 JSON chunk，避免默认 64KB 限制

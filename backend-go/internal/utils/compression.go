@@ -23,7 +23,7 @@ func DecompressGzipIfNeeded(resp *http.Response, bodyBytes []byte) []byte {
 		log.Printf("[Gzip] 警告: 创建 gzip reader 失败: %v", err)
 		return bodyBytes
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	decompressed, err := io.ReadAll(reader)
 	if err != nil {

@@ -98,7 +98,9 @@ func TestNormalizeMetadataUserID(t *testing.T) {
 				userID, _ := metadata["user_id"].(string)
 				if userID != "" {
 					var origData map[string]interface{}
-					json.Unmarshal([]byte(tt.input), &origData)
+					if err := json.Unmarshal([]byte(tt.input), &origData); err != nil {
+						t.Fatalf("failed to parse original input: %v", err)
+					}
 					origMeta, _ := origData["metadata"].(map[string]interface{})
 					origUID, _ := origMeta["user_id"].(string)
 					if userID != origUID {
@@ -126,7 +128,9 @@ func TestNormalizeMetadataUserID(t *testing.T) {
 
 			// Verify other fields are preserved
 			var origData map[string]interface{}
-			json.Unmarshal([]byte(tt.input), &origData)
+			if err := json.Unmarshal([]byte(tt.input), &origData); err != nil {
+				t.Fatalf("failed to parse original input: %v", err)
+			}
 			if origModel, ok := origData["model"].(string); ok {
 				if resultModel, ok := data["model"].(string); ok {
 					if origModel != resultModel {

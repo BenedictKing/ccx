@@ -34,7 +34,7 @@ func TestUpdateUpstream_BaseURLConsistency(t *testing.T) {
 	if err != nil {
 		t.Fatalf("初始化配置管理器失败: %v", err)
 	}
-	defer cm.Close()
+	defer func() { _ = cm.Close() }()
 
 	tests := []struct {
 		name            string
@@ -131,7 +131,7 @@ func TestUpdateResponsesUpstream_BaseURLConsistency(t *testing.T) {
 	if err != nil {
 		t.Fatalf("初始化配置管理器失败: %v", err)
 	}
-	defer cm.Close()
+	defer func() { _ = cm.Close() }()
 
 	// 测试：只更新 baseUrl 时 baseUrls 应被清空
 	t.Run("只更新 baseUrl 时 baseUrls 应被清空", func(t *testing.T) {
@@ -176,7 +176,7 @@ func TestUpdateGeminiUpstream_BaseURLConsistency(t *testing.T) {
 	if err != nil {
 		t.Fatalf("初始化配置管理器失败: %v", err)
 	}
-	defer cm.Close()
+	defer func() { _ = cm.Close() }()
 
 	// 测试：只更新 baseUrl 时 baseUrls 应被清空
 	t.Run("只更新 baseUrl 时 baseUrls 应被清空", func(t *testing.T) {
@@ -374,7 +374,7 @@ func TestAddUpstream_BaseURLDeduplication(t *testing.T) {
 	if err != nil {
 		t.Fatalf("初始化配置管理器失败: %v", err)
 	}
-	defer cm.Close()
+	defer func() { _ = cm.Close() }()
 
 	// 添加包含重复 URL 的渠道
 	err = cm.AddUpstream(UpstreamConfig{
@@ -431,7 +431,7 @@ func TestUpdateGeminiUpstream_AdvancedOptions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("初始化配置管理器失败: %v", err)
 	}
-	defer cm.Close()
+	defer func() { _ = cm.Close() }()
 
 	_, err = cm.UpdateGeminiUpstream(0, UpstreamUpdate{
 		ReasoningMapping: map[string]string{"gemini-2.5-pro": "high"},

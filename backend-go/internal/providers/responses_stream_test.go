@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"strings"
@@ -110,7 +111,7 @@ data: {"type":"response.completed","response":{"status":"completed","usage":{"in
 `
 
 	provider := &ResponsesProvider{}
-	eventChan, errChan, err := provider.HandleStreamResponse(nil, io.NopCloser(strings.NewReader(body)))
+	eventChan, errChan, err := provider.HandleStreamResponse(context.TODO(), io.NopCloser(strings.NewReader(body)))
 	if err != nil {
 		t.Fatalf("HandleStreamResponse returned error: %v", err)
 	}
@@ -147,7 +148,7 @@ data: {"type":"response.completed","response":{"status":"completed","usage":{"in
 `
 
 	provider := &ResponsesProvider{}
-	eventChan, errChan, err := provider.HandleStreamResponse(nil, io.NopCloser(strings.NewReader(body)))
+	eventChan, errChan, err := provider.HandleStreamResponse(context.TODO(), io.NopCloser(strings.NewReader(body)))
 	if err != nil {
 		t.Fatalf("HandleStreamResponse returned error: %v", err)
 	}
@@ -186,7 +187,7 @@ data: {"type":"response.completed","response":{"status":"completed","usage":{"in
 `
 
 	provider := &ResponsesProvider{}
-	eventChan, errChan, err := provider.HandleStreamResponse(nil, io.NopCloser(strings.NewReader(body)))
+	eventChan, errChan, err := provider.HandleStreamResponse(context.TODO(), io.NopCloser(strings.NewReader(body)))
 	if err != nil {
 		t.Fatalf("HandleStreamResponse returned error: %v", err)
 	}
@@ -224,7 +225,7 @@ data: {"type":"response.completed","response":{"status":"completed","usage":{"in
 `
 
 	provider := &ResponsesProvider{}
-	eventChan, errChan, err := provider.HandleStreamResponse(nil, io.NopCloser(strings.NewReader(body)))
+	eventChan, errChan, err := provider.HandleStreamResponse(context.TODO(), io.NopCloser(strings.NewReader(body)))
 	if err != nil {
 		t.Fatalf("HandleStreamResponse returned error: %v", err)
 	}

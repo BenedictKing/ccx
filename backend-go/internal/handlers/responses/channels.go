@@ -386,7 +386,7 @@ func pingResponsesUpstream(cfgManager *config.ConfigManager, channelIndex int, u
 			"status":  "error",
 		}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	return gin.H{
 		"success":    resp.StatusCode >= 200 && resp.StatusCode < 400,
@@ -577,7 +577,7 @@ func GetChannelModels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 		}
 
 		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if err != nil {
 			log.Printf("[Responses-Models] 读取响应失败: channel=%s, error=%v", channelName, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to read response: %v", err)})

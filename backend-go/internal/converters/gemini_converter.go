@@ -537,34 +537,6 @@ func openaiFinishReasonToGemini(finishReason string) string {
 	}
 }
 
-// geminiFinishReasonToClaude 将 Gemini 停止原因转换为 Claude 格式
-func geminiFinishReasonToClaude(finishReason string) string {
-	switch finishReason {
-	case "STOP":
-		return "end_turn"
-	case "MAX_TOKENS":
-		return "max_tokens"
-	case "SAFETY", "RECITATION":
-		return "end_turn"
-	default:
-		return "end_turn"
-	}
-}
-
-// geminiFinishReasonToOpenAI 将 Gemini 停止原因转换为 OpenAI 格式
-func geminiFinishReasonToOpenAI(finishReason string) string {
-	switch finishReason {
-	case "STOP":
-		return "stop"
-	case "MAX_TOKENS":
-		return "length"
-	case "SAFETY":
-		return "content_filter"
-	default:
-		return "stop"
-	}
-}
-
 // JSONMarshal JSON 序列化包装函数
 func JSONMarshal(v interface{}) ([]byte, error) {
 	return json.Marshal(v)

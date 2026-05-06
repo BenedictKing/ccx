@@ -34,7 +34,11 @@ func setupResponsesTestConfigManager(t *testing.T, upstream []config.UpstreamCon
 	if err != nil {
 		t.Fatalf("NewConfigManager() err = %v", err)
 	}
-	t.Cleanup(func() { cm.Close() })
+	t.Cleanup(func() {
+		if err := cm.Close(); err != nil {
+			t.Logf("close config manager: %v", err)
+		}
+	})
 	return cm
 }
 

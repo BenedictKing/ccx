@@ -482,7 +482,7 @@ func (p *ResponsesProvider) HandleStreamResponse(ctx context.Context, body io.Re
 		defer close(eventChan)
 		defer close(errChan)
 		defer closeStreamBodyOnCancel(ctx, body)()
-		defer body.Close()
+		defer func() { _ = body.Close() }()
 
 		scanner := bufio.NewScanner(body)
 		scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)

@@ -353,7 +353,7 @@ func TryUpstreamWithAllKeys(
 
 			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 				respBodyBytes, _ := io.ReadAll(resp.Body)
-				resp.Body.Close()
+				_ = resp.Body.Close()
 				respBodyBytes = utils.DecompressGzipIfNeeded(resp, respBodyBytes)
 
 				// 优先检查全局暂停规则（状态码 + 关键词匹配 → 自定义暂停时间）

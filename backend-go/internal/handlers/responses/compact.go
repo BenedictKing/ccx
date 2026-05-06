@@ -70,7 +70,7 @@ func CompactHandler(
 		}
 
 		// 提取对话标识用于 Trace 亲和性
-		userID := common.ExtractConversationID(c, bodyBytes)
+		userID := utils.ExtractUnifiedSessionID(c, bodyBytes)
 
 		// 检查是否为多渠道模式
 		isMultiChannel := channelScheduler.IsMultiChannelMode(scheduler.ChannelKindResponses)
@@ -340,7 +340,7 @@ func tryCompactWithKey(
 	if err != nil {
 		return false, &compactError{status: 502, body: []byte(`{"error":"上游请求失败"}`), shouldFailover: true, err: err}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, _ := io.ReadAll(resp.Body)
 	respBody = utils.DecompressGzipIfNeeded(resp, respBody)

@@ -408,7 +408,7 @@ func PingChannel(cfgManager *config.ConfigManager) gin.HandlerFunc {
 			})
 			return
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		c.JSON(200, gin.H{
 			"success":    resp.StatusCode >= 200 && resp.StatusCode < 400,
@@ -467,7 +467,7 @@ func PingAllChannels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 				}
 				continue
 			}
-			resp.Body.Close()
+			_ = resp.Body.Close()
 
 			results[i] = gin.H{
 				"index":      i,
@@ -622,7 +622,7 @@ func GetChannelModels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 		}
 
 		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if err != nil {
 			log.Printf("[Gemini-Models] 读取响应失败: channel=%s, error=%v", channelName, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to read response: %v", err)})

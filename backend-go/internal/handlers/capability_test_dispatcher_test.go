@@ -203,7 +203,7 @@ func TestCapabilityTestDispatcher_BackpressureLimitPreserved(t *testing.T) {
 	defer cancel()
 
 	for i := 0; i < capabilityDispatcherQueueLimit; i++ {
-		go dispatcher.AcquireSendSlot(ctx, time.Hour)
+		go func() { _ = dispatcher.AcquireSendSlot(ctx, time.Hour) }()
 	}
 	time.Sleep(10 * time.Millisecond)
 	if len(dispatcher.pendingSlots) == 0 {

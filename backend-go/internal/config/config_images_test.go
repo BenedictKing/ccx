@@ -31,7 +31,7 @@ func TestImagesConfigLoadsAndInitializes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewConfigManager: %v", err)
 	}
-	defer cm.Close()
+	defer func() { _ = cm.Close() }()
 
 	upstream, index, err := cm.GetCurrentImagesUpstreamWithIndex()
 	if err != nil {
@@ -96,7 +96,7 @@ func TestConfigSaveDropsLegacyRPMField(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewConfigManager: %v", err)
 	}
-	defer cm.Close()
+	defer func() { _ = cm.Close() }()
 
 	if err := cm.SaveConfig(); err != nil {
 		t.Fatalf("SaveConfig: %v", err)
@@ -140,7 +140,7 @@ func TestImagesCurrentUpstreamRequiresActiveChannel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewConfigManager: %v", err)
 	}
-	defer cm.Close()
+	defer func() { _ = cm.Close() }()
 
 	if upstream, err := cm.GetCurrentImagesUpstream(); err == nil || upstream != nil {
 		t.Fatalf("GetCurrentImagesUpstream returned upstream=%v err=%v, want no active channel error", upstream, err)
@@ -178,7 +178,7 @@ func TestUpdateImagesUpstreamRejectsDuplicateName(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewConfigManager: %v", err)
 	}
-	defer cm.Close()
+	defer func() { _ = cm.Close() }()
 
 	duplicateName := "images-a"
 	if _, err := cm.UpdateImagesUpstream(1, UpstreamUpdate{Name: &duplicateName}); err == nil {

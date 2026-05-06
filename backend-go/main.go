@@ -61,7 +61,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("初始化配置管理器失败: %v", err)
 	}
-	defer cfgManager.Close()
+	defer func() { _ = cfgManager.Close() }()
 
 	// 初始化会话管理器（Responses API 专用）
 	sessionManager := session.NewSessionManager(

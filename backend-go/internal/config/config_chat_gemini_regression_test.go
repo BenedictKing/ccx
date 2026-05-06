@@ -29,7 +29,7 @@ func TestChatAndGeminiCurrentUpstreamRequireActiveChannel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("初始化配置管理器失败: %v", err)
 	}
-	defer cm.Close()
+	defer func() { _ = cm.Close() }()
 
 	t.Run("chat current upstream returns explicit error", func(t *testing.T) {
 		upstream, err := cm.GetCurrentChatUpstream()
@@ -112,7 +112,7 @@ func TestChatAndGeminiRenameRejectDuplicateNames(t *testing.T) {
 	if err != nil {
 		t.Fatalf("初始化配置管理器失败: %v", err)
 	}
-	defer cm.Close()
+	defer func() { _ = cm.Close() }()
 
 	t.Run("chat rename duplicate is rejected", func(t *testing.T) {
 		duplicateName := "chat-primary"

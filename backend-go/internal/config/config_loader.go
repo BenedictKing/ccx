@@ -192,12 +192,9 @@ func (cm *ConfigManager) applyServiceTypeDefaults() bool {
 
 // migrateOldFormat 迁移旧格式配置，返回是否有迁移
 func (cm *ConfigManager) migrateOldFormat() bool {
-	needMigration := false
+	needMigration := cm.migrateUpstreams(cm.config.Upstream, cm.config.CurrentUpstream, "Messages")
 
 	// 迁移 Messages 渠道
-	if cm.migrateUpstreams(cm.config.Upstream, cm.config.CurrentUpstream, "Messages") {
-		needMigration = true
-	}
 
 	// 迁移 Responses 渠道
 	if cm.migrateUpstreams(cm.config.ResponsesUpstream, cm.config.CurrentResponsesUpstream, "Responses") {
@@ -399,7 +396,9 @@ func (cm *ConfigManager) cleanupOldBackups(backupDir string) {
 
 	// 删除最旧的备份
 	for i := 0; i < len(entries)-maxBackups; i++ {
-		os.Remove(filepath.Join(backupDir, entries[i].Name()))
+		if err := os.Remove(filepath.Join(backupDir, entries[i].Name())); err != nil {
+			log.Printf("[Config-Backup] 警告: 删除旧备份失败: %v", err)
+		}
 	}
 }
 

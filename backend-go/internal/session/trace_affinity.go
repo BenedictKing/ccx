@@ -102,9 +102,10 @@ func (m *TraceAffinityManager) SetPreferredChannel(userID string, channelIndex i
 	m.mu.Unlock()
 
 	if affinityDebug {
-		if logType == 2 {
+		switch logType {
+		case 2:
 			log.Printf("[Affinity-Set] 用户亲和变更: %s -> 渠道[%d] (原渠道[%d])", maskUserID(userID), channelIndex, oldChannel)
-		} else if logType == 1 {
+		case 1:
 			log.Printf("[Affinity-Set] 新建用户亲和: %s -> 渠道[%d]", maskUserID(userID), channelIndex)
 		}
 	}

@@ -418,7 +418,7 @@ func convertChatToClaudeRequest(bodyBytes []byte, model string, isStream bool) (
 				continue
 			}
 			role, _ := m["role"].(string)
-			content, _ := m["content"]
+			content := m["content"]
 
 			switch role {
 			case "system":
@@ -550,7 +550,7 @@ func handleSuccess(
 	model string,
 	isStream bool,
 ) (*types.Usage, error) {
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	upstreamType := upstream.ServiceType
 
 	if isStream {
@@ -798,7 +798,9 @@ func streamPassthrough(
 				}
 			}
 
-			c.Writer.Write(buf[:n])
+			if _, writeErr := c.Writer.Write(buf[:n]); writeErr != nil {
+				break
+			}
 			if flusher != nil {
 				flusher.Flush()
 			}
@@ -838,7 +840,7 @@ func streamClaudeToChat(
 				}
 				jsonData := strings.TrimPrefix(line, "data: ")
 				if jsonData == "[DONE]" {
-					fmt.Fprintf(c.Writer, "data: [DONE]\n\n")
+					_, _ = fmt.Fprintf(c.Writer, "data: [DONE]\n\n")
 					if flusher != nil {
 						flusher.Flush()
 					}
@@ -878,7 +880,7 @@ func streamClaudeToChat(
 							},
 						}
 						chunkBytes, _ := json.Marshal(chatChunk)
-						fmt.Fprintf(c.Writer, "data: %s\n\n", string(chunkBytes))
+						_, _ = fmt.Fprintf(c.Writer, "data: %s\n\n", string(chunkBytes))
 						if flusher != nil {
 							flusher.Flush()
 						}
@@ -916,7 +918,7 @@ func streamClaudeToChat(
 					}
 
 					chunkBytes, _ := json.Marshal(stopChunk)
-					fmt.Fprintf(c.Writer, "data: %s\n\n", string(chunkBytes))
+					_, _ = fmt.Fprintf(c.Writer, "data: %s\n\n", string(chunkBytes))
 					if flusher != nil {
 						flusher.Flush()
 					}
@@ -942,7 +944,7 @@ func streamClaudeToChat(
 
 	// 确保发送 [DONE]（仅在未发送过时）
 	if !doneSent {
-		fmt.Fprintf(c.Writer, "data: [DONE]\n\n")
+		_, _ = fmt.Fprintf(c.Writer, "data: [DONE]\n\n")
 		if flusher != nil {
 			flusher.Flush()
 		}

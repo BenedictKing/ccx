@@ -34,7 +34,7 @@ func ReadRequestBody(c *gin.Context, maxBodySize int64) ([]byte, error) {
 
 	if int64(len(bodyBytes)) > maxBodySize {
 		// 排空剩余请求体，避免 keep-alive 连接污染
-		io.Copy(io.Discard, c.Request.Body)
+		_, _ = io.Copy(io.Discard, c.Request.Body)
 		c.JSON(413, gin.H{"error": fmt.Sprintf("Request body too large, maximum size is %d MB", maxBodySize/1024/1024)})
 		return nil, fmt.Errorf("request body too large")
 	}

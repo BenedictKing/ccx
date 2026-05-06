@@ -14,7 +14,7 @@ func TestQueryAggregatedHistoryWaitsForFlushAndFlushesBuffer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSQLiteStore() error = %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	record := PersistentRecord{
 		MetricsKey:  GenerateMetricsKey("https://example.com", "sk-test"),

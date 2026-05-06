@@ -384,7 +384,7 @@ func buildJSONRequestBody(bodyBytes []byte, model string, redirectedModel string
 }
 
 func handleSuccess(c *gin.Context, resp *http.Response, startTime time.Time, isStream bool) (*types.Usage, error) {
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if isStream {
 		return nil, passthroughStreamingResponse(c, resp)
 	}

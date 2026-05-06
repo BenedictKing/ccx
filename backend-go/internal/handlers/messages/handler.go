@@ -66,7 +66,7 @@ func Handler(envCfg *config.EnvConfig, cfgManager *config.ConfigManager, channel
 		}
 
 		// 提取 user_id 用于 Trace 亲和性
-		userID := common.ExtractUserID(bodyBytes)
+		userID := utils.ExtractUnifiedSessionID(c, bodyBytes)
 
 		// 记录原始请求信息（仅在入口处记录一次）
 		common.LogOriginalRequest(c, bodyBytes, envCfg, "Messages")
@@ -270,7 +270,7 @@ func handleNormalResponse(
 	upstream *config.UpstreamConfig,
 	apiKey string,
 ) (*types.Usage, error) {
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if shouldDirectClaudePassthrough(upstream, apiKey) {
 		usage, err := common.PassthroughJSONResponseWithUsage(c, resp, common.PassthroughUsageOptions{

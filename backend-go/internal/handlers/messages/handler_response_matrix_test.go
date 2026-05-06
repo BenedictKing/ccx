@@ -34,7 +34,7 @@ func setupMessagesTestConfigManager(t *testing.T, upstream []config.UpstreamConf
 	if err != nil {
 		t.Fatalf("NewConfigManager() err = %v", err)
 	}
-	t.Cleanup(func() { cm.Close() })
+	t.Cleanup(func() { _ = cm.Close() })
 	return cm
 }
 

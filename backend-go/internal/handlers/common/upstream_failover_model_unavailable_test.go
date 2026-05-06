@@ -88,7 +88,7 @@ func TestTryUpstreamWithAllKeys_ModelRouteUnavailableSkipsBreakerAndCooldown(t *
 				nil,
 				nil,
 				func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string, actualRequestBody []byte) (*types.Usage, error) {
-					resp.Body.Close()
+					_ = resp.Body.Close()
 					return nil, nil
 				},
 				"gpt-5.5",
@@ -189,7 +189,7 @@ func TestTryUpstreamWithAllKeys_CooldownStreamErrorContinuesFailover(t *testing.
 		nil,
 		nil,
 		func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string, actualRequestBody []byte) (*types.Usage, error) {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			handleCalls++
 			if apiKey == "sk-first" {
 				return nil, &ErrCooldownKey{Reason: "rate_limit", Message: "too many requests", Duration: time.Minute}

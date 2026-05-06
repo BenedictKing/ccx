@@ -234,7 +234,7 @@ func (s *StreamSynthesizer) processGemini(data map[string]interface{}) {
 		// 函数调用
 		if functionCall, ok := partMap["functionCall"].(map[string]interface{}); ok {
 			name, _ := functionCall["name"].(string)
-			args, _ := functionCall["args"]
+			args := functionCall["args"]
 			argsJSON, _ := json.Marshal(args)
 			s.synthesizedContent.WriteString("\nTool Call: ")
 			s.synthesizedContent.WriteString(name)

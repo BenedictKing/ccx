@@ -221,7 +221,7 @@ func probeModelsEndpoint(client *http.Client, serviceType, baseURL, apiKey strin
 	if err != nil {
 		return 0, "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, modelsHealthCheckBodyMaxSize))
 	return resp.StatusCode, normalizeBodyPreview(body), nil

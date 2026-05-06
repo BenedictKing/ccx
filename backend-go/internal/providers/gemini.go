@@ -356,7 +356,7 @@ func (p *GeminiProvider) HandleStreamResponse(ctx context.Context, body io.ReadC
 		defer close(eventChan)
 		defer close(errChan)
 		defer closeStreamBodyOnCancel(ctx, body)()
-		defer body.Close()
+		defer func() { _ = body.Close() }()
 
 		scanner := bufio.NewScanner(body)
 		// 设置更大的 buffer (1MB) 以处理大 JSON chunk，避免默认 64KB 限制

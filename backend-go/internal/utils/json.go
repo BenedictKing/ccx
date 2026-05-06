@@ -404,29 +404,6 @@ func extractToolNames(toolsArray []interface{}) []interface{} {
 	return names
 }
 
-// extractToolName 从工具定义中提取名称（保留用于兼容）
-// 支持Claude格式(tool.name)和OpenAI格式(tool.function.name)
-func extractToolName(tool interface{}) interface{} {
-	toolMap, ok := tool.(map[string]interface{})
-	if !ok {
-		return tool
-	}
-
-	// 检查Claude格式: tool.name
-	if name, ok := toolMap["name"].(string); ok {
-		return name
-	}
-
-	// 检查OpenAI格式: tool.function.name
-	if function, ok := toolMap["function"].(map[string]interface{}); ok {
-		if name, ok := function["name"].(string); ok {
-			return name
-		}
-	}
-
-	return tool
-}
-
 // SimplifyToolsInJSON 简化JSON字节数组中的tools字段
 // 这是一个便利函数,直接处理JSON字节
 func SimplifyToolsInJSON(jsonData []byte) []byte {

@@ -75,55 +75,6 @@ func cloneCapabilitySnapshot(snapshot *CapabilitySnapshot) *CapabilitySnapshot {
 	return &cloned
 }
 
-func snapshotFromCapabilityJob(identityKey string, job *CapabilityTestJob) *CapabilitySnapshot {
-	if job == nil {
-		return nil
-	}
-	protocolJobIDs := make(map[string]string, len(job.Tests))
-	protocolJobRefs := make(map[string]CapabilityProtocolJobRef, len(job.Tests))
-	for _, test := range job.Tests {
-		if test.Protocol == "" || job.JobID == "" {
-			continue
-		}
-		protocolJobIDs[test.Protocol] = job.JobID
-		protocolJobRefs[test.Protocol] = CapabilityProtocolJobRef{
-			JobID:       job.JobID,
-			ChannelKind: job.ChannelKind,
-			ChannelID:   job.ChannelID,
-		}
-	}
-	return &CapabilitySnapshot{
-		IdentityKey:         identityKey,
-		SourceType:          job.SourceType,
-		ProtocolJobIDs:      protocolJobIDs,
-		ProtocolJobRefs:     protocolJobRefs,
-		Tests:               append([]CapabilityProtocolJobResult(nil), job.Tests...),
-		CompatibleProtocols: append([]string(nil), job.CompatibleProtocols...),
-		TotalDuration:       job.TotalDuration,
-		Progress:            job.Progress,
-		Lifecycle:           job.Lifecycle,
-		Outcome:             job.Outcome,
-		UpdatedAt:           job.UpdatedAt,
-	}
-}
-
-func (s *capabilitySnapshotStore) update(identityKey string, updater func(snapshot *CapabilitySnapshot)) *CapabilitySnapshot {
-	s.Lock()
-	defer s.Unlock()
-
-	snapshot, ok := s.snapshots[identityKey]
-	if !ok {
-		snapshot = &CapabilitySnapshot{IdentityKey: identityKey}
-		s.snapshots[identityKey] = snapshot
-	}
-
-	updater(snapshot)
-	if snapshot.UpdatedAt == "" {
-		snapshot.UpdatedAt = time.Now().Format(time.RFC3339Nano)
-	}
-	return cloneCapabilitySnapshot(snapshot)
-}
-
 func (s *capabilitySnapshotStore) replaceFromJob(identityKey string, job *CapabilityTestJob) *CapabilitySnapshot {
 	if job == nil {
 		return nil

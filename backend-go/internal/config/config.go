@@ -1021,7 +1021,7 @@ func (cm *ConfigManager) RestoreKey(apiType string, channelIndex int, apiKey str
 		}
 	}
 	if disabledIdx == -1 {
-		return fmt.Errorf("Key %s 不在拉黑列表中", utils.MaskAPIKey(apiKey))
+		return fmt.Errorf("key %s 不在拉黑列表中", utils.MaskAPIKey(apiKey))
 	}
 
 	upstream.DisabledAPIKeys = append(upstream.DisabledAPIKeys[:disabledIdx], upstream.DisabledAPIKeys[disabledIdx+1:]...)

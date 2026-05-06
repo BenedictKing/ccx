@@ -63,7 +63,7 @@ func InboundFormatFromPath(path string) APIFormat {
 }
 
 func isGeminiContentsPath(path string) bool {
-	if !(strings.Contains(path, "/v1beta/models/") || strings.Contains(path, "/v1/models/")) {
+	if !strings.Contains(path, "/v1beta/models/") && !strings.Contains(path, "/v1/models/") {
 		return false
 	}
 	return strings.HasSuffix(path, ":generateContent") || strings.HasSuffix(path, ":streamGenerateContent")

@@ -125,7 +125,6 @@ func PreflightStreamEvents(eventChan <-chan string, errChan <-chan error, upstre
 
 			// 检测非文本 content block（tool_use / thinking）
 			if !hasNonTextContent && hasNonTextContentBlock(event) {
-				hasNonTextContent = true
 				return result // 有效内容，立即放行
 			}
 
@@ -226,7 +225,6 @@ func preflightRawStreamEvents(eventChan <-chan rawStreamEvent, errChan <-chan er
 			}
 
 			if !hasNonTextContent && hasNonTextContentBlock(event.Text) {
-				hasNonTextContent = true
 				return result
 			}
 
@@ -524,7 +522,7 @@ func startRawStreamFanout(ctx context.Context, body io.ReadCloser) (<-chan rawSt
 		defer close(eventChan)
 		defer close(errChan)
 		defer closeReadCloserOnCancel(ctx, body)()
-		defer body.Close()
+		defer func() { _ = body.Close() }()
 
 		reader := bufio.NewReaderSize(body, rawStreamReaderBufferSize)
 		var eventBytes []byte
@@ -693,7 +691,9 @@ func ProcessStreamEvents(
 				// 向客户端发送错误事件（如果连接仍然有效）
 				if !ctx.ClientGone {
 					errorEvent := BuildStreamErrorEvent(err)
-					w.Write([]byte(errorEvent))
+					if _, writeErr := w.Write([]byte(errorEvent)); writeErr != nil {
+						log.Printf("[Messages-Stream] 写入错误事件失败: %v", writeErr)
+					}
 					flusher.Flush()
 				}
 
@@ -785,7 +785,9 @@ func ProcessStreamEvent(
 		if envCfg.EnableResponseLogs && envCfg.ShouldLog("debug") {
 			log.Printf("[Messages-Stream-Token] message_delta 缺少 usage, 在 message_stop 前注入兜底 usage 事件")
 		}
-		w.Write([]byte(usageEvent))
+		if _, writeErr := w.Write([]byte(usageEvent)); writeErr != nil {
+			log.Printf("[Messages-Stream] 写入 usage 事件失败: %v", writeErr)
+		}
 		flusher.Flush()
 		ctx.HasUsage = true
 		ctx.HasMessageDeltaUsage = true
@@ -1104,7 +1106,7 @@ func HandleStreamResponse(
 	requestBody []byte,
 	upstream *config.UpstreamConfig,
 ) (*types.Usage, error) {
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if shouldUseRawMessagesStreamPassthrough(c, upstream) {
 		return handleRawMessagesStreamPassthrough(c, resp, envCfg, requestBody, upstream)

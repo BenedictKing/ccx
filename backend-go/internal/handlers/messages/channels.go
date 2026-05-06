@@ -425,7 +425,7 @@ func pingChannelURLs(ch *config.UpstreamConfig) gin.H {
 				results <- pingResult{url: testURL, latency: latency, success: false, err: err.Error()}
 				return
 			}
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			results <- pingResult{url: testURL, latency: latency, success: true}
 		}(url)
 	}
@@ -469,7 +469,7 @@ func pingURL(testURL string, insecureSkipVerify bool, proxyURL string) gin.H {
 	if err != nil {
 		return gin.H{"success": false, "latency": latency, "status": "error", "error": err.Error()}
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	return gin.H{"success": true, "latency": latency, "status": "healthy"}
 }
 
@@ -620,7 +620,7 @@ func GetChannelModels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 		}
 
 		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if err != nil {
 			log.Printf("[Messages-Models] 读取响应失败: channel=%s, error=%v", channelName, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to read response: %v", err)})

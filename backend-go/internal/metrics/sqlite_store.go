@@ -89,7 +89,7 @@ func NewSQLiteStore(cfg *SQLiteStoreConfig) (*SQLiteStore, error) {
 
 	// 初始化表结构
 	if err := initSchema(db); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("初始化数据库 schema 失败: %w", err)
 	}
 
@@ -242,7 +242,7 @@ func (s *SQLiteStore) MigrateMetricsKeysToIdentity(cfg config.Config) error {
 	if err != nil {
 		return fmt.Errorf("开始 metrics key 迁移事务失败: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	updatedRecords, err := migrateRequestRecordsTx(tx, mapping)
 	if err != nil {
@@ -404,7 +404,7 @@ func migrateCircuitStatesTx(tx *sql.Tx, mapping map[string]map[string]metricsKey
 	if err != nil {
 		return 0, 0, fmt.Errorf("查询 circuit_states 失败: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	merged := make(map[string]*persistedCircuitStateRow)
 	migratedCount := 0
@@ -479,7 +479,7 @@ func migrateCircuitStatesTx(tx *sql.Tx, mapping map[string]map[string]metricsKey
 	if err != nil {
 		return migratedCount, mergedCount, fmt.Errorf("准备写入 circuit_states 失败: %w", err)
 	}
-	defer stmt.Close()
+	defer func() { _ = stmt.Close() }()
 
 	for _, row := range merged {
 		var openedAt any
@@ -612,7 +612,7 @@ func (s *SQLiteStore) batchInsertRecords(records []PersistentRecord) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	stmt, err := tx.Prepare(`
 		INSERT INTO request_records
@@ -623,7 +623,7 @@ func (s *SQLiteStore) batchInsertRecords(records []PersistentRecord) error {
 	if err != nil {
 		return err
 	}
-	defer stmt.Close()
+	defer func() { _ = stmt.Close() }()
 
 	for _, r := range records {
 		success := 0
@@ -654,7 +654,7 @@ func (s *SQLiteStore) LoadRecords(since time.Time, apiType string) ([]Persistent
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var records []PersistentRecord
 	for rows.Next() {
@@ -694,7 +694,7 @@ func (s *SQLiteStore) LoadCircuitStates(apiType string) (map[string]*PersistentC
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	result := make(map[string]*PersistentCircuitState)
 	for rows.Next() {
@@ -784,7 +784,7 @@ func (s *SQLiteStore) LoadLatestTimestamps(apiType string) (map[string]*KeyLates
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	result := make(map[string]*KeyLatestTimestamps)
 	for rows.Next() {
@@ -1042,7 +1042,7 @@ func (s *SQLiteStore) QueryAggregatedHistory(apiType string, since time.Time, in
 	if err != nil {
 		return nil, fmt.Errorf("查询聚合历史失败: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var results []AggregatedBucket
 	for rows.Next() {
@@ -1055,13 +1055,6 @@ func (s *SQLiteStore) QueryAggregatedHistory(apiType string, since time.Time, in
 		results = append(results, b)
 	}
 	return results, rows.Err()
-}
-
-// flushBuffer 手动刷新写入缓冲区（查询前调用，确保数据完整性）
-func (s *SQLiteStore) flushBuffer() {
-	s.flushMu.Lock()
-	defer s.flushMu.Unlock()
-	s.flushBufferLocked()
 }
 
 // flushBufferLocked 在调用方已持有 flushMu 时刷新写入缓冲区

@@ -41,7 +41,7 @@ func TestGetChannelLogs_AfterChannelDeletion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("创建配置管理器失败: %v", err)
 	}
-	t.Cleanup(func() { cfgManager.Close() })
+	t.Cleanup(func() { _ = cfgManager.Close() })
 
 	messagesMetrics := metrics.NewMetricsManager()
 	responsesMetrics := metrics.NewMetricsManager()
@@ -135,7 +135,7 @@ func TestGetChannelDashboard_AfterChannelDeletion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("创建配置管理器失败: %v", err)
 	}
-	t.Cleanup(func() { cfgManager.Close() })
+	t.Cleanup(func() { _ = cfgManager.Close() })
 
 	messagesMetrics := metrics.NewMetricsManager()
 	responsesMetrics := metrics.NewMetricsManager()

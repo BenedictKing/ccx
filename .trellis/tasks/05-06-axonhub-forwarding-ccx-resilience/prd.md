@@ -28,6 +28,7 @@ Use AxonHub-style forwarding, usage accounting, and billing-oriented data-plane 
 * Preserve blacklist/cooldown behavior for HTTP errors and stream preflight errors.
 * Preserve client-cancel behavior: client cancellation must not blacklist or cooldown keys.
 * Do not let billing/usage collection read or mutate client-visible response bytes in a way that breaks raw passthrough.
+* Full backend `golangci-lint run` must pass; clean the existing lint baseline without changing billing scope or introducing balance, pricing, deduction ledger, or refund behavior.
 
 ## Acceptance Criteria
 
@@ -39,6 +40,7 @@ Use AxonHub-style forwarding, usage accounting, and billing-oriented data-plane 
 * [ ] Blacklist-triggering errors still move keys to disabled/blacklisted state according to existing config.
 * [ ] Circuit-open keys are skipped; half-open keys use probe semantics.
 * [ ] Tests cover at least one same-format raw path and one cross-format converted path against control-plane behavior.
+* [ ] `cd backend-go && golangci-lint run` passes for the full backend, not only new diff.
 
 ## Open Questions
 

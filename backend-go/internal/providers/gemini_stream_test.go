@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"strings"
@@ -46,7 +47,7 @@ func TestGeminiHandleStreamResponse_UsageOnlyChunkStillAffectsMessageDeltaUsage(
 	}, "\n")
 
 	provider := &GeminiProvider{}
-	eventChan, errChan, err := provider.HandleStreamResponse(nil, io.NopCloser(strings.NewReader(body)))
+	eventChan, errChan, err := provider.HandleStreamResponse(context.TODO(), io.NopCloser(strings.NewReader(body)))
 	if err != nil {
 		t.Fatalf("HandleStreamResponse returned error: %v", err)
 	}
@@ -80,7 +81,7 @@ func TestGeminiHandleStreamResponse_MessageDeltaAlwaysContainsUsage(t *testing.T
 	}, "\n")
 
 	provider := &GeminiProvider{}
-	eventChan, errChan, err := provider.HandleStreamResponse(nil, io.NopCloser(strings.NewReader(body)))
+	eventChan, errChan, err := provider.HandleStreamResponse(context.TODO(), io.NopCloser(strings.NewReader(body)))
 	if err != nil {
 		t.Fatalf("HandleStreamResponse returned error: %v", err)
 	}
@@ -120,7 +121,7 @@ func TestGeminiHandleStreamResponse_CachedContentTokenCountReducesInputTokens(t 
 	}, "\n")
 
 	provider := &GeminiProvider{}
-	eventChan, errChan, err := provider.HandleStreamResponse(nil, io.NopCloser(strings.NewReader(body)))
+	eventChan, errChan, err := provider.HandleStreamResponse(context.TODO(), io.NopCloser(strings.NewReader(body)))
 	if err != nil {
 		t.Fatalf("HandleStreamResponse returned error: %v", err)
 	}
@@ -159,7 +160,7 @@ func TestGeminiHandleStreamResponse_SafetyFinishReasonMapsToEndTurn(t *testing.T
 	}, "\n")
 
 	provider := &GeminiProvider{}
-	eventChan, errChan, err := provider.HandleStreamResponse(nil, io.NopCloser(strings.NewReader(body)))
+	eventChan, errChan, err := provider.HandleStreamResponse(context.TODO(), io.NopCloser(strings.NewReader(body)))
 	if err != nil {
 		t.Fatalf("HandleStreamResponse returned error: %v", err)
 	}

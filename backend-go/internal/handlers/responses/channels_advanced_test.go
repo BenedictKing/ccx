@@ -27,7 +27,11 @@ func setupResponsesConfigManager(t *testing.T, upstream []config.UpstreamConfig)
 	if err != nil {
 		t.Fatalf("创建配置管理器失败: %v", err)
 	}
-	t.Cleanup(func() { cm.Close() })
+	t.Cleanup(func() {
+		if err := cm.Close(); err != nil {
+			t.Logf("close config manager: %v", err)
+		}
+	})
 	return cm
 }
 

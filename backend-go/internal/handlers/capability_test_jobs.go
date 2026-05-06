@@ -765,22 +765,6 @@ func capabilityProtocolOutcomeFromLegacy(status CapabilityProtocolStatus, succes
 	return CapabilityOutcomeFailed
 }
 
-func getCapabilityDisplayMode(job *CapabilityTestJob) CapabilityRunMode {
-	if job == nil {
-		return CapabilityRunModeFresh
-	}
-	if job.CacheHit {
-		return CapabilityRunModeCacheHit
-	}
-	if job.IsResumed && job.RunMode != "" {
-		return job.RunMode
-	}
-	if job.RunMode != "" {
-		return job.RunMode
-	}
-	return CapabilityRunModeFresh
-}
-
 func deriveCapabilityJobStatus(lifecycle CapabilityLifecycle, outcome CapabilityOutcome) CapabilityJobStatus {
 	switch lifecycle {
 	case CapabilityLifecyclePending:
@@ -819,27 +803,6 @@ func deriveCapabilityProtocolStatus(lifecycle CapabilityLifecycle, outcome Capab
 		}
 	}
 	return CapabilityProtocolStatusFailed
-}
-
-func deriveCapabilityModelStatus(lifecycle CapabilityLifecycle, outcome CapabilityOutcome) CapabilityModelStatus {
-	switch lifecycle {
-	case CapabilityLifecyclePending:
-		return CapabilityModelStatusQueued
-	case CapabilityLifecycleActive:
-		return CapabilityModelStatusRunning
-	case CapabilityLifecycleCancelled:
-		return CapabilityModelStatusSkipped
-	case CapabilityLifecycleDone:
-		switch outcome {
-		case CapabilityOutcomeSuccess:
-			return CapabilityModelStatusSuccess
-		case CapabilityOutcomeFailed:
-			return CapabilityModelStatusFailed
-		default:
-			return CapabilityModelStatusSkipped
-		}
-	}
-	return CapabilityModelStatusFailed
 }
 
 func parseCapabilityChannelID(c *gin.Context) (int, error) {

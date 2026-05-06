@@ -42,7 +42,7 @@ func TestGetChannelDashboard_IncludesBreakerFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("创建配置管理器失败: %v", err)
 	}
-	defer cfgManager.Close()
+	defer func() { _ = cfgManager.Close() }()
 
 	messagesMetrics := metrics.NewMetricsManager()
 	responsesMetrics := metrics.NewMetricsManager()
@@ -124,7 +124,7 @@ func TestGetChannelDashboard_GeminiFallbackServiceTypeReadsMetrics(t *testing.T)
 	if err != nil {
 		t.Fatalf("创建配置管理器失败: %v", err)
 	}
-	defer cfgManager.Close()
+	defer func() { _ = cfgManager.Close() }()
 
 	messagesMetrics := metrics.NewMetricsManager()
 	responsesMetrics := metrics.NewMetricsManager()
@@ -202,7 +202,7 @@ func TestGetChannelDashboard_Gemini_IncludesAdvancedOptionFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("创建配置管理器失败: %v", err)
 	}
-	t.Cleanup(func() { cfgManager.Close() })
+	t.Cleanup(func() { _ = cfgManager.Close() })
 
 	messagesMetrics := metrics.NewMetricsManager()
 	responsesMetrics := metrics.NewMetricsManager()
@@ -295,7 +295,7 @@ func TestGetChannelDashboard_ChatFallbackServiceTypeReadsMetrics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("创建配置管理器失败: %v", err)
 	}
-	defer cfgManager.Close()
+	defer func() { _ = cfgManager.Close() }()
 
 	messagesMetrics := metrics.NewMetricsManager()
 	responsesMetrics := metrics.NewMetricsManager()
