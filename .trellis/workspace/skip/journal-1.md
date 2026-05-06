@@ -579,3 +579,38 @@ Implemented AxonHub-style forwarding usage observability with request counts and
 ### Next Steps
 
 - None - task complete
+
+
+## Session 8: AxonHub forwarding CCX resilience
+
+**Date**: 2026-05-07
+**Task**: AxonHub forwarding CCX resilience
+**Branch**: `axonhub`
+
+### Summary
+
+Verified AxonHub-style forwarding usage stats with CCX control-plane resilience, added cross-format failover coverage, cleared full backend golangci-lint baseline, and kept billing scope limited to runtime usage/channel metrics.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `17675e7` | (see git log) |
+| `da07b2d` | (see git log) |
+| `224e1a3` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

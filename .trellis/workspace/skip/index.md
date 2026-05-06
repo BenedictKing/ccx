@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 7
-- **Last Active**: 2026-05-06
+- **Total Sessions**: 8
+- **Last Active**: 2026-05-07
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~459 | Active |
+| `journal-1.md` | ~616 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 8 | 2026-05-07 | AxonHub forwarding CCX resilience | `17675e7`, `da07b2d`, `224e1a3` | `axonhub` |
 | 7 | 2026-05-06 | Track AxonHub forwarding usage stats | `06e2568` | `axonhub` |
 | 6 | 2026-05-06 | Unify AxonHub forwarding data plane | `023e4a9`, `e210b02`, `2ec5237` | `axonhub` |
 | 5 | 2026-04-29 | Quality inspection follow-up | `f29a437`, `aaf1cef`, `16018c3` | `codex/claude-channel-rules-passthrough` |
