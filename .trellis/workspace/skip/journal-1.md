@@ -61,6 +61,38 @@
 - None - task complete
 
 
+## Session 9: Clear backend golangci-lint baseline
+
+**Date**: 2026-05-07
+**Task**: AxonHub forwarding with CCX resilience
+**Branch**: `axonhub`
+
+### Summary
+
+Expanded the current task to require full backend `golangci-lint run` success and cleared the existing lint baseline without changing billing scope or forwarding behavior.
+
+### Main Changes
+
+- Updated the task PRD acceptance criteria to require full backend `golangci-lint run`.
+- Applied lint cleanup across backend Go code: checked ignored close/write/rollback/remove errors, removed unused helpers/files, and accepted safe staticcheck simplifications.
+- Preserved AxonHub billing scope as runtime usage/channel metrics only; no balances, price tables, deduction ledgers, refunds, idempotent billing transactions, or old-format compatibility were added.
+
+### Agent Results
+
+- `trellis-implement`: failed to start because the upstream returned 503, so the main session handled the lint cleanup.
+- `trellis-check`: completed review, made no changes, and confirmed deleted helpers had no remaining call sites.
+
+### Testing
+
+- [OK] `cd backend-go && golangci-lint run` -> `0 issues`
+- [OK] `cd backend-go && go test -count=1 ./...`
+- [OK] `git diff --check`
+
+### Status
+
+[IN PROGRESS] Full backend lint baseline is clean; ready for commit planning.
+
+
 ## Session 8: AxonHub forwarding CCX resilience verification
 
 **Date**: 2026-05-07
