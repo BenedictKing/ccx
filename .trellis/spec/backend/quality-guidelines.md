@@ -254,6 +254,74 @@ _, _ = c.Writer.Write(rawChunk)
 usage := collector.Finish()
 ```
 
+## AxonHub-Style Forwarding Usage Stats Contract
+
+### 1. Scope / Trigger
+
+Use this contract when recording observability for AxonHub-style forwarding data-plane paths.
+
+### 2. Signatures
+
+- Metrics recorder:
+  - `(*metrics.MetricsManager).RecordAxonHubForwardingUsage(baseURL, apiKey, serviceType, inboundFamily string, mode metrics.AxonHubForwardingMode, usage *types.Usage)`
+- Response field:
+  - `metrics.MetricsResponse.AxonHubForwarding *metrics.AxonHubForwardingUsageStats`
+- JSON field under channel metrics responses:
+  - `axonHubForwarding.requestCount`
+  - `axonHubForwarding.inputTokens`
+  - `axonHubForwarding.outputTokens`
+  - `axonHubForwarding.cacheCreationTokens`
+  - `axonHubForwarding.cacheReadTokens`
+  - `axonHubForwarding.byRoute[].inboundFamily`
+  - `axonHubForwarding.byRoute[].mode`
+
+### 3. Contracts
+
+- Forwarding usage stats are side-channel metrics only. They must not read, buffer, rewrite, or replay client-visible response bodies or SSE bytes.
+- Keep ccx-owned scheduler, failover, key retry, blacklist, cooldown, circuit breaker, and normal metrics finalization as the source of control-plane behavior.
+- Record request counts for finalized AxonHub-style forwarding attempts under the existing channel metrics surface.
+- Add token usage only from the usage object already produced by existing response/stream side-channel parsing.
+- Classify stats by inbound protocol family (`messages`, `chat`, `responses`, `gemini`) and forwarding mode (`same_format_raw`, `cross_format_converted`).
+- Do not count non-forwarding families such as Images in AxonHub forwarding usage stats.
+- Include historical API keys in channel-level `axonHubForwarding` aggregation the same way ordinary request/token metrics include them.
+
+### 4. Validation & Error Matrix
+
+- Empty inbound family or empty mode -> skip AxonHub forwarding stats recording.
+- Missing usage object -> still increment request count, add zero tokens.
+- Unknown/non-forwarding channel kind -> skip AxonHub forwarding stats recording.
+- Historical API key present -> aggregate its AxonHub forwarding stats into the channel response but do not expose it as an active key metric.
+
+### 5. Good/Base/Bad Cases
+
+- Good: same-format `/v1/messages` -> Claude records `messages/same_format_raw` request count and uses the existing usage object for tokens.
+- Base: cross-format `/v1/responses` -> Claude records `responses/cross_format_converted` while response conversion and normal metrics finalization remain unchanged.
+- Bad: reading `resp.Body` a second time just to compute AxonHub usage stats; this can corrupt raw response/SSE passthrough.
+
+### 6. Tests Required
+
+- Metrics tests must cover request count and token aggregation by inbound family and forwarding mode.
+- Metrics tests must cover active + historical API key aggregation.
+- Common failover tests must prove stats are appended next to existing finalize calls without replacing failover or metrics finalization.
+- Classification tests must prove non-forwarding families such as Images are not counted.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```go
+bodyBytes, _ := io.ReadAll(resp.Body) // corrupts the client-visible stream/body path
+metricsManager.RecordAxonHubForwardingUsage(baseURL, key, serviceType, family, mode, parseUsage(bodyBytes))
+```
+
+#### Correct
+
+```go
+usage, err := handleSuccess(c, resp, upstream, apiKey)
+metricsManager.RecordRequestFinalizeSuccess(baseURL, key, serviceType, requestID, usage)
+metricsManager.RecordAxonHubForwardingUsage(baseURL, key, serviceType, family, mode, usage)
+```
+
 ## Local Retry Loop Contracts
 
 ### Scope / Trigger

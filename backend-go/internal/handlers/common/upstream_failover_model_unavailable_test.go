@@ -219,4 +219,18 @@ func TestTryUpstreamWithAllKeys_CooldownStreamErrorContinuesFailover(t *testing.
 	if !cfgManager.IsKeyFailed("sk-first", "Messages") {
 		t.Fatal("sk-first should be cooled down after ErrCooldownKey")
 	}
+	metricsResp := messagesMetrics.ToResponseMultiURL(0, upstream.GetAllBaseURLs(), upstream.APIKeys, "claude", 0)
+	if metricsResp.AxonHubForwarding == nil {
+		t.Fatal("AxonHubForwarding = nil, want same-format raw stats")
+	}
+	if metricsResp.AxonHubForwarding.RequestCount != 2 {
+		t.Fatalf("AxonHubForwarding requestCount = %d, want 2", metricsResp.AxonHubForwarding.RequestCount)
+	}
+	if metricsResp.AxonHubForwarding.InputTokens != 1 || metricsResp.AxonHubForwarding.OutputTokens != 2 {
+		t.Fatalf("AxonHubForwarding tokens = input:%d output:%d, want 1/2",
+			metricsResp.AxonHubForwarding.InputTokens, metricsResp.AxonHubForwarding.OutputTokens)
+	}
+	if got := metricsResp.AxonHubForwarding.ByRoute[0]; got.InboundFamily != "messages" || got.Mode != metrics.AxonHubForwardingModeSameFormatRaw {
+		t.Fatalf("AxonHubForwarding route = %+v, want messages same_format_raw", got)
+	}
 }

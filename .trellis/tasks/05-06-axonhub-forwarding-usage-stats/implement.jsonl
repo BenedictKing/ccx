@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend pre-development checklist and guideline index for metrics/forwarding changes."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Determine correct backend package placement for observability helpers."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Keep forwarding and metrics errors aligned with existing handler contracts."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Ensure new usage statistics do not leak secrets and follow existing log conventions."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Contains forwarding builder and ccx control-plane boundary rules."}
+{"file": ".trellis/tasks/archive/2026-05/05-06-unify-axonhub-forwarding/forwarding-plan.md", "reason": "Parent task plan defining AxonHub-style data-plane scope and ccx control-plane exclusions."}
+{"file": ".trellis/tasks/05-06-forwarding-contract-matrix/research/forwarding-contract-matrix.md", "reason": "Current forwarding matrix needed to define statistics dimensions without changing behavior."}

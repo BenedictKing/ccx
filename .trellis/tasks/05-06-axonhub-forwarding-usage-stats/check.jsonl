@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend guideline index for final verification."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Verify any new errors or fallback paths preserve existing contracts."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Verify observability changes avoid secrets and noisy logs."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Verify forwarding builder boundary, raw response semantics, and ccx control-plane ownership."}
+{"file": ".trellis/tasks/archive/2026-05/05-06-unify-axonhub-forwarding/forwarding-plan.md", "reason": "Check the new statistics against the parent migration boundaries."}
+{"file": ".trellis/tasks/05-06-forwarding-contract-matrix/research/forwarding-contract-matrix.md", "reason": "Check statistics dimensions against the documented route matrix."}

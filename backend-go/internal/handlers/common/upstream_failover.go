@@ -111,6 +111,53 @@ func passthroughChannelKindForPath(path string) scheduler.ChannelKind {
 	}
 }
 
+type axonHubForwardingUsageClass struct {
+	enabled       bool
+	inboundFamily string
+	mode          metrics.AxonHubForwardingMode
+}
+
+func classifyAxonHubForwardingUsage(c *gin.Context, kind scheduler.ChannelKind, upstream *config.UpstreamConfig, apiKey string) axonHubForwardingUsageClass {
+	inboundFamily := ""
+	switch kind {
+	case scheduler.ChannelKindMessages:
+		inboundFamily = "messages"
+	case scheduler.ChannelKindChat:
+		inboundFamily = "chat"
+	case scheduler.ChannelKindResponses:
+		inboundFamily = "responses"
+	case scheduler.ChannelKindGemini:
+		inboundFamily = "gemini"
+	default:
+		return axonHubForwardingUsageClass{}
+	}
+	if c == nil || c.Request == nil || upstream == nil {
+		return axonHubForwardingUsageClass{}
+	}
+
+	decision := passthrough.Decide(c.Request.URL.Path, kind, upstream, apiKey)
+	if decision.InboundFormat == passthrough.APIFormatUnknown {
+		return axonHubForwardingUsageClass{}
+	}
+
+	mode := metrics.AxonHubForwardingModeCrossFormatConverted
+	if decision.RawResponse {
+		mode = metrics.AxonHubForwardingModeSameFormatRaw
+	}
+	return axonHubForwardingUsageClass{
+		enabled:       true,
+		inboundFamily: inboundFamily,
+		mode:          mode,
+	}
+}
+
+func recordAxonHubForwardingUsageAttempt(metricsManager *metrics.MetricsManager, baseURL, apiKey, serviceType string, class axonHubForwardingUsageClass, usage *types.Usage) {
+	if metricsManager == nil || !class.enabled {
+		return
+	}
+	metricsManager.RecordAxonHubForwardingUsage(baseURL, apiKey, serviceType, class.inboundFamily, class.mode, usage)
+}
+
 func prepareRequestBodyForUpstream(
 	requestBody []byte,
 	kind scheduler.ChannelKind,
@@ -268,6 +315,10 @@ func TryUpstreamWithAllKeys(
 			// TCP 建连开始即计数：将活跃度统计提前到发起上游请求之前
 			logRequestID := CreatePendingLog(channelLogStore, channelIndex, redirectedModel, originalModel, apiKey, currentBaseURL, apiType, metrics.RequestSourceProxy)
 			requestID := metricsManager.RecordRequestConnected(currentBaseURL, apiKey, metricsServiceType, redirectedModel)
+			axonHubUsageClass := classifyAxonHubForwardingUsage(c, kind, upstream, apiKey)
+			recordAxonHubUsage := func(usage *types.Usage) {
+				recordAxonHubForwardingUsageAttempt(metricsManager, currentBaseURL, apiKey, metricsServiceType, axonHubUsageClass, usage)
+			}
 
 			resp, err := SendRequest(req, upstream, envCfg, isStream, apiType)
 			if err != nil {
@@ -276,6 +327,7 @@ func TryUpstreamWithAllKeys(
 				if isClientSideError(err) {
 					// 客户端取消：不计入失败，不触发 failover
 					metricsManager.RecordRequestFinalizeClientCancel(currentBaseURL, apiKey, metricsServiceType, requestID)
+					recordAxonHubUsage(nil)
 					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
 					CompleteLog(channelLogStore, channelIndex, logRequestID, 0, false, "client canceled", attempt > 0 || urlIdx > 0)
 					log.Printf("[%s-Cancel] 请求已取消（SendRequest 阶段）", apiType)
@@ -285,6 +337,7 @@ func TryUpstreamWithAllKeys(
 				failedKeys[apiKey] = true
 				cfgManager.MarkKeyAsFailed(apiKey, apiType)
 				metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, metrics.FailureClassRetryable)
+				recordAxonHubUsage(nil)
 				channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
 				if markURLFailure != nil {
 					markURLFailure(currentBaseURL)
@@ -309,6 +362,7 @@ func TryUpstreamWithAllKeys(
 					failedKeys[apiKey] = true
 					cfgManager.MarkKeyAsFailedWithDuration(apiKey, apiType, duration)
 					metricsManager.RecordRequestFinalizeFailure(currentBaseURL, apiKey, metricsServiceType, requestID)
+					recordAxonHubUsage(nil)
 					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
 					if markURLFailure != nil {
 						markURLFailure(currentBaseURL)
@@ -393,6 +447,7 @@ func TryUpstreamWithAllKeys(
 						failureClass = metrics.FailureClassQuota
 					}
 					metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, failureClass)
+					recordAxonHubUsage(nil)
 					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
 					if markURLFailure != nil {
 						markURLFailure(currentBaseURL)
@@ -419,6 +474,7 @@ func TryUpstreamWithAllKeys(
 
 				// 非 failover 错误，记录失败指标后返回（请求已处理）
 				metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, metrics.FailureClassNonRetryable)
+				recordAxonHubUsage(nil)
 				channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
 				// 记录渠道日志
 				CompleteLog(channelLogStore, channelIndex, logRequestID, resp.StatusCode, false, string(respBodyBytes), attempt > 0 || urlIdx > 0)
@@ -447,6 +503,7 @@ func TryUpstreamWithAllKeys(
 				if isClientSideError(err) {
 					// 客户端取消/断开：计入总请求数但不计入失败
 					metricsManager.RecordRequestFinalizeClientCancel(currentBaseURL, apiKey, metricsServiceType, requestID)
+					recordAxonHubUsage(nil)
 					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
 					log.Printf("[%s-Cancel] 请求已取消，停止渠道 failover", apiType)
 					CompleteLog(channelLogStore, channelIndex, logRequestID, http.StatusOK, false, "client canceled", attempt > 0 || urlIdx > 0)
@@ -455,6 +512,7 @@ func TryUpstreamWithAllKeys(
 					failedKeys[apiKey] = true
 					cfgManager.MarkKeyAsFailed(apiKey, apiType)
 					metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, metrics.FailureClassRetryable)
+					recordAxonHubUsage(nil)
 					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
 					if markURLFailure != nil {
 						markURLFailure(currentBaseURL)
@@ -472,6 +530,7 @@ func TryUpstreamWithAllKeys(
 					}
 					cfgManager.MarkKeyAsFailedWithDuration(apiKey, apiType, duration)
 					metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, metrics.FailureClassRetryable)
+					recordAxonHubUsage(nil)
 					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
 					if markURLFailure != nil {
 						markURLFailure(currentBaseURL)
@@ -499,6 +558,7 @@ func TryUpstreamWithAllKeys(
 						failureClass = metrics.FailureClassQuota
 					}
 					metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, failureClass)
+					recordAxonHubUsage(nil)
 					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
 					if markURLFailure != nil {
 						markURLFailure(currentBaseURL)
@@ -514,6 +574,7 @@ func TryUpstreamWithAllKeys(
 					// 真实渠道故障：计入失败指标
 					cfgManager.MarkKeyAsFailed(apiKey, apiType)
 					metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, metrics.FailureClassRetryable)
+					recordAxonHubUsage(nil)
 					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
 					// 记录渠道日志
 					CompleteLog(channelLogStore, channelIndex, logRequestID, http.StatusOK, false, err.Error(), attempt > 0 || urlIdx > 0)
@@ -523,6 +584,7 @@ func TryUpstreamWithAllKeys(
 			}
 
 			metricsManager.RecordRequestFinalizeSuccess(currentBaseURL, apiKey, metricsServiceType, requestID, usage)
+			recordAxonHubUsage(usage)
 			channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
 			if probeKey := currentBaseURL + "|" + apiKey + "|" + metricsServiceType; probeAcquired[probeKey] {
 				metricsManager.ReleaseProbe(currentBaseURL, apiKey, metricsServiceType)

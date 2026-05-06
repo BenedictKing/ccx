@@ -53,6 +53,9 @@ func buildChannelMetricsResult(metricsManager *metrics.MetricsManager, upstreams
 			"keyMetrics":          resp.KeyMetrics,
 			"timeWindows":         resp.TimeWindows,
 		}
+		if resp.AxonHubForwarding != nil {
+			item["axonHubForwarding"] = resp.AxonHubForwarding
+		}
 		if includeRuntimeState {
 			item["runtimeState"] = resp.CircuitState
 		}

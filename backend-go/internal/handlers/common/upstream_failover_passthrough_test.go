@@ -2,13 +2,16 @@ package common
 
 import (
 	"bytes"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/BenedictKing/ccx/internal/config"
+	"github.com/BenedictKing/ccx/internal/metrics"
 	"github.com/BenedictKing/ccx/internal/scheduler"
+	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
 )
 
@@ -120,6 +123,60 @@ func TestShouldDirectPassthroughForRequestRequiresProtocolConsistency(t *testing
 			got := ShouldDirectPassthroughForRequest(tt.path, tt.upstream, tt.apiKey)
 			if got != tt.want {
 				t.Fatalf("ShouldDirectPassthroughForRequest() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestClassifyAxonHubForwardingUsage(t *testing.T) {
+	tests := []struct {
+		name        string
+		path        string
+		kind        scheduler.ChannelKind
+		upstream    *config.UpstreamConfig
+		wantEnabled bool
+		wantFamily  string
+		wantMode    metrics.AxonHubForwardingMode
+	}{
+		{
+			name:        "messages to claude is same-format raw",
+			path:        "/v1/messages",
+			kind:        scheduler.ChannelKindMessages,
+			upstream:    &config.UpstreamConfig{ServiceType: "claude"},
+			wantEnabled: true,
+			wantFamily:  "messages",
+			wantMode:    metrics.AxonHubForwardingModeSameFormatRaw,
+		},
+		{
+			name:        "responses to claude is cross-format converted",
+			path:        "/v1/responses",
+			kind:        scheduler.ChannelKindResponses,
+			upstream:    &config.UpstreamConfig{ServiceType: "claude"},
+			wantEnabled: true,
+			wantFamily:  "responses",
+			wantMode:    metrics.AxonHubForwardingModeCrossFormatConverted,
+		},
+		{
+			name:        "images are outside AxonHub forwarding stats",
+			path:        "/v1/images/generations",
+			kind:        scheduler.ChannelKindImages,
+			upstream:    &config.UpstreamConfig{ServiceType: "openai"},
+			wantEnabled: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &gin.Context{Request: httptest.NewRequest("POST", tt.path, nil)}
+			got := classifyAxonHubForwardingUsage(c, tt.kind, tt.upstream, "sk-test")
+			if got.enabled != tt.wantEnabled {
+				t.Fatalf("enabled = %v, want %v", got.enabled, tt.wantEnabled)
+			}
+			if !tt.wantEnabled {
+				return
+			}
+			if got.inboundFamily != tt.wantFamily || got.mode != tt.wantMode {
+				t.Fatalf("class = family:%q mode:%q, want %q/%q", got.inboundFamily, got.mode, tt.wantFamily, tt.wantMode)
 			}
 		})
 	}

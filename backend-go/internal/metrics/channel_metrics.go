@@ -107,6 +107,8 @@ type KeyMetrics struct {
 	requestHistory []RequestRecord
 	// 进行中请求在 requestHistory 中的索引（用于“连接即计数”，结束后回写成功/失败与 token）
 	pendingHistoryIdx map[uint64]int
+	// AxonHub-style forwarding usage is side-channel observability data keyed by inbound family + forwarding mode.
+	axonHubForwarding map[AxonHubForwardingKey]AxonHubForwardingStats
 }
 
 // ChannelMetrics 渠道聚合指标（用于 API 返回，兼容旧结构）
@@ -145,6 +147,37 @@ type TimeWindowStats struct {
 	// CacheHitRate 缓存命中率（Token口径），范围 0-100
 	// 定义：cacheReadTokens / (cacheReadTokens + inputTokens) * 100
 	CacheHitRate float64 `json:"cacheHitRate,omitempty"`
+}
+
+type AxonHubForwardingMode string
+
+const (
+	AxonHubForwardingModeSameFormatRaw        AxonHubForwardingMode = "same_format_raw"
+	AxonHubForwardingModeCrossFormatConverted AxonHubForwardingMode = "cross_format_converted"
+)
+
+type AxonHubForwardingKey struct {
+	InboundFamily string
+	Mode          AxonHubForwardingMode
+}
+
+type AxonHubForwardingStats struct {
+	InboundFamily       string                `json:"inboundFamily"`
+	Mode                AxonHubForwardingMode `json:"mode"`
+	RequestCount        int64                 `json:"requestCount"`
+	InputTokens         int64                 `json:"inputTokens,omitempty"`
+	OutputTokens        int64                 `json:"outputTokens,omitempty"`
+	CacheCreationTokens int64                 `json:"cacheCreationTokens,omitempty"`
+	CacheReadTokens     int64                 `json:"cacheReadTokens,omitempty"`
+}
+
+type AxonHubForwardingUsageStats struct {
+	RequestCount        int64                    `json:"requestCount"`
+	InputTokens         int64                    `json:"inputTokens,omitempty"`
+	OutputTokens        int64                    `json:"outputTokens,omitempty"`
+	CacheCreationTokens int64                    `json:"cacheCreationTokens,omitempty"`
+	CacheReadTokens     int64                    `json:"cacheReadTokens,omitempty"`
+	ByRoute             []AxonHubForwardingStats `json:"byRoute,omitempty"`
 }
 
 // MetricsManager 指标管理器
@@ -395,6 +428,7 @@ func (m *MetricsManager) getOrCreateKeyLocked(baseURL, metricsKey, keyMask strin
 		recentResults:     make([]bool, 0, m.windowSize),
 		breakerResults:    make([]bool, 0, m.windowSize),
 		pendingHistoryIdx: make(map[uint64]int),
+		axonHubForwarding: make(map[AxonHubForwardingKey]AxonHubForwardingStats),
 	}
 	m.keyMetrics[metricsKey] = metrics
 	return metrics
@@ -522,6 +556,12 @@ func (m *MetricsManager) mergeKeyMetricsLocked(dst, src *KeyMetrics) {
 		for requestID, idx := range src.pendingHistoryIdx {
 			dst.pendingHistoryIdx[requestID] = offset + idx
 		}
+	}
+	if len(src.axonHubForwarding) > 0 {
+		if dst.axonHubForwarding == nil {
+			dst.axonHubForwarding = make(map[AxonHubForwardingKey]AxonHubForwardingStats, len(src.axonHubForwarding))
+		}
+		mergeAxonHubForwardingStats(dst.axonHubForwarding, src.axonHubForwarding)
 	}
 	if src.ProbeInFlight {
 		dst.ProbeInFlight = true
@@ -673,6 +713,7 @@ func (m *MetricsManager) getOrCreateKey(baseURL, apiKey, serviceType string) *Ke
 		recentResults:     make([]bool, 0, m.windowSize),
 		breakerResults:    make([]bool, 0, m.windowSize),
 		pendingHistoryIdx: make(map[uint64]int),
+		axonHubForwarding: make(map[AxonHubForwardingKey]AxonHubForwardingStats),
 	}
 	m.keyMetrics[metricsKey] = metrics
 	return metrics
@@ -714,6 +755,58 @@ func extractUsageTokens(usage *types.Usage) (int64, int64, int64, int64) {
 		cacheCreationTokens = int64(usage.CacheCreation5mInputTokens + usage.CacheCreation1hInputTokens)
 	}
 	return inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens
+}
+
+func mergeAxonHubForwardingStats(dst, src map[AxonHubForwardingKey]AxonHubForwardingStats) {
+	for key, stats := range src {
+		existing := dst[key]
+		if existing.InboundFamily == "" {
+			existing.InboundFamily = stats.InboundFamily
+		}
+		if existing.Mode == "" {
+			existing.Mode = stats.Mode
+		}
+		existing.RequestCount += stats.RequestCount
+		existing.InputTokens += stats.InputTokens
+		existing.OutputTokens += stats.OutputTokens
+		existing.CacheCreationTokens += stats.CacheCreationTokens
+		existing.CacheReadTokens += stats.CacheReadTokens
+		dst[key] = existing
+	}
+}
+
+func summarizeAxonHubForwardingStats(stats map[AxonHubForwardingKey]AxonHubForwardingStats) *AxonHubForwardingUsageStats {
+	if len(stats) == 0 {
+		return nil
+	}
+
+	routes := make([]AxonHubForwardingStats, 0, len(stats))
+	for _, route := range stats {
+		if route.RequestCount == 0 {
+			continue
+		}
+		routes = append(routes, route)
+	}
+	if len(routes) == 0 {
+		return nil
+	}
+
+	sort.Slice(routes, func(i, j int) bool {
+		if routes[i].InboundFamily != routes[j].InboundFamily {
+			return routes[i].InboundFamily < routes[j].InboundFamily
+		}
+		return routes[i].Mode < routes[j].Mode
+	})
+
+	summary := &AxonHubForwardingUsageStats{ByRoute: routes}
+	for _, route := range routes {
+		summary.RequestCount += route.RequestCount
+		summary.InputTokens += route.InputTokens
+		summary.OutputTokens += route.OutputTokens
+		summary.CacheCreationTokens += route.CacheCreationTokens
+		summary.CacheReadTokens += route.CacheReadTokens
+	}
+	return summary
 }
 
 func (m *MetricsManager) appendToBreakerWindowKey(metrics *KeyMetrics, success bool) {
@@ -1174,6 +1267,37 @@ func (m *MetricsManager) RecordRequestEnd(baseURL, apiKey, serviceType string) {
 			metrics.ActiveRequests--
 		}
 	}
+}
+
+func (m *MetricsManager) RecordAxonHubForwardingUsage(baseURL, apiKey, serviceType, inboundFamily string, mode AxonHubForwardingMode, usage *types.Usage) {
+	if inboundFamily == "" || mode == "" {
+		return
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	metrics := m.getWritableMetricsLocked(baseURL, apiKey, serviceType)
+	if metrics.axonHubForwarding == nil {
+		metrics.axonHubForwarding = make(map[AxonHubForwardingKey]AxonHubForwardingStats)
+	}
+
+	key := AxonHubForwardingKey{
+		InboundFamily: inboundFamily,
+		Mode:          mode,
+	}
+	stats := metrics.axonHubForwarding[key]
+	stats.InboundFamily = inboundFamily
+	stats.Mode = mode
+	stats.RequestCount++
+
+	inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens := extractUsageTokens(usage)
+	stats.InputTokens += inputTokens
+	stats.OutputTokens += outputTokens
+	stats.CacheCreationTokens += cacheCreationTokens
+	stats.CacheReadTokens += cacheReadTokens
+
+	metrics.axonHubForwarding[key] = stats
 }
 
 // isKeyCircuitBroken 判断 Key 是否达到熔断条件（内部方法，调用前需持有锁）
@@ -2099,24 +2223,25 @@ func (m *MetricsManager) GetWindowSize() int {
 // 使用 omitempty 减少 JSON 体积，0 值字段不输出
 // 注意：successRate/errorRate 不使用 omitempty，因为 0% 是有意义的值
 type MetricsResponse struct {
-	ChannelIndex        int                        `json:"channelIndex"`
-	RequestCount        int64                      `json:"requestCount,omitempty"`
-	SuccessCount        int64                      `json:"successCount,omitempty"`
-	FailureCount        int64                      `json:"failureCount,omitempty"`
-	SuccessRate         float64                    `json:"successRate"`
-	ErrorRate           float64                    `json:"errorRate"`
-	ConsecutiveFailures int64                      `json:"consecutiveFailures,omitempty"`
-	ActiveRequests      int64                      `json:"activeRequests,omitempty"` // 进行中请求数
-	Latency             int64                      `json:"latency,omitempty"`
-	LastSuccessAt       *string                    `json:"lastSuccessAt,omitempty"`
-	LastFailureAt       *string                    `json:"lastFailureAt,omitempty"`
-	CircuitBrokenAt     *string                    `json:"circuitBrokenAt,omitempty"`
-	CircuitState        string                     `json:"circuitState,omitempty"`
-	NextRetryAt         *string                    `json:"nextRetryAt,omitempty"`
-	HalfOpenSuccesses   int                        `json:"halfOpenSuccesses,omitempty"`
-	BreakerFailureRate  float64                    `json:"breakerFailureRate,omitempty"`
-	TimeWindows         map[string]TimeWindowStats `json:"timeWindows,omitempty"`
-	KeyMetrics          []*KeyMetricsResponse      `json:"keyMetrics,omitempty"` // 各 Key 的详细指标
+	ChannelIndex        int                          `json:"channelIndex"`
+	RequestCount        int64                        `json:"requestCount,omitempty"`
+	SuccessCount        int64                        `json:"successCount,omitempty"`
+	FailureCount        int64                        `json:"failureCount,omitempty"`
+	SuccessRate         float64                      `json:"successRate"`
+	ErrorRate           float64                      `json:"errorRate"`
+	ConsecutiveFailures int64                        `json:"consecutiveFailures,omitempty"`
+	ActiveRequests      int64                        `json:"activeRequests,omitempty"` // 进行中请求数
+	Latency             int64                        `json:"latency,omitempty"`
+	LastSuccessAt       *string                      `json:"lastSuccessAt,omitempty"`
+	LastFailureAt       *string                      `json:"lastFailureAt,omitempty"`
+	CircuitBrokenAt     *string                      `json:"circuitBrokenAt,omitempty"`
+	CircuitState        string                       `json:"circuitState,omitempty"`
+	NextRetryAt         *string                      `json:"nextRetryAt,omitempty"`
+	HalfOpenSuccesses   int                          `json:"halfOpenSuccesses,omitempty"`
+	BreakerFailureRate  float64                      `json:"breakerFailureRate,omitempty"`
+	TimeWindows         map[string]TimeWindowStats   `json:"timeWindows,omitempty"`
+	KeyMetrics          []*KeyMetricsResponse        `json:"keyMetrics,omitempty"` // 各 Key 的详细指标
+	AxonHubForwarding   *AxonHubForwardingUsageStats `json:"axonHubForwarding,omitempty"`
 }
 
 // KeyMetricsResponse 单个 Key 的 API 响应
@@ -2193,6 +2318,7 @@ func (m *MetricsManager) ToResponseMultiURL(channelIndex int, baseURLs []string,
 	var totalResults []bool
 	var maxConsecutiveFailures int64
 	var maxHalfOpenSuccesses int
+	axonHubForwarding := make(map[AxonHubForwardingKey]AxonHubForwardingStats)
 	channelState := m.channelCircuitStateMultiURLLocked(baseURLs, activeKeys, serviceType, now)
 
 	for _, metrics := range seenMetrics {
@@ -2208,6 +2334,7 @@ func (m *MetricsManager) ToResponseMultiURL(channelIndex int, baseURLs []string,
 			maxHalfOpenSuccesses = metrics.HalfOpenSuccesses
 		}
 		totalResults = append(totalResults, metrics.breakerResults...)
+		mergeAxonHubForwardingStats(axonHubForwarding, metrics.axonHubForwarding)
 
 		if metrics.LastSuccessAt != nil && (latestSuccess == nil || metrics.LastSuccessAt.After(*latestSuccess)) {
 			latestSuccess = metrics.LastSuccessAt
@@ -2279,6 +2406,7 @@ func (m *MetricsManager) ToResponseMultiURL(channelIndex int, baseURLs []string,
 				resp.RequestCount += metrics.RequestCount
 				resp.SuccessCount += metrics.SuccessCount
 				resp.FailureCount += metrics.FailureCount
+				mergeAxonHubForwardingStats(axonHubForwarding, metrics.axonHubForwarding)
 			}
 		}
 	}
@@ -2355,6 +2483,7 @@ func (m *MetricsManager) ToResponseMultiURL(channelIndex int, baseURLs []string,
 
 	resp.KeyMetrics = keyResponses
 	resp.TimeWindows = m.calculateAggregatedTimeWindowsMultiURL(baseURLs, activeKeys, serviceType)
+	resp.AxonHubForwarding = summarizeAxonHubForwardingStats(axonHubForwarding)
 
 	return resp
 }
