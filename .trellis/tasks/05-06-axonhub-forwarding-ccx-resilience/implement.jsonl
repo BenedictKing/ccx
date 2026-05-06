@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend spec index and pre-development checklist for forwarding/control-plane changes."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Backend package ownership and placement conventions while extending forwarding/data-plane helpers."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Error classification must preserve retry, failover, cooldown, and blacklist semantics."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Forwarding, channel logs, and metrics changes must follow backend logging/redaction rules."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Implementation quality rules for Go backend changes and tests."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared thinking triggers for cross-layer behavior and code reuse during forwarding unification."}
+{"file": ".trellis/tasks/05-06-axonhub-forwarding-ccx-resilience/research/forwarding-usage-failover-gaps.md", "reason": "Local gap analysis for forwarding, usage accounting, and CCX control-plane preservation."}

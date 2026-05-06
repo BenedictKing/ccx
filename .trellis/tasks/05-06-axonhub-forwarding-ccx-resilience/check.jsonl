@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend spec index and checklist for final compliance review."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Verify retry/failover/cooldown/blacklist behavior remains rooted in existing backend error handling."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Verify channel logs, metrics finalize, and forwarding observability follow logging/redaction rules."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Quality gate for Go backend implementation and tests."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Cross-layer and reuse review prompts for forwarding data-plane/control-plane boundaries."}
+{"file": ".trellis/tasks/05-06-axonhub-forwarding-ccx-resilience/research/forwarding-usage-failover-gaps.md", "reason": "Review checklist of local forwarding/usage/failover gaps and MVP risks."}
