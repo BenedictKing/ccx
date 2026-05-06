@@ -1,3 +1,19 @@
+## [v2.6.79] - 2026-05-07
+
+### Added
+
+- **接入 AxonHub-style 转发数据面** - 同格式 raw passthrough 与跨格式转换路径统一记录转发用量统计，按入口协议和转发模式聚合请求数、输入/输出 token、缓存创建 token、缓存读取 token。
+- **保留 CCX 控制面韧性机制** - 转发数据面继续复用现有 scheduler、failover、熔断、拉黑、冷却、channel logs 和 metrics finalize，不引入余额、价格表、扣费流水或退款逻辑。
+
+### Fixed
+
+- **补齐 raw stream cleanup 与 usage 统计覆盖** - Responses raw stream 复用共享预检、fan-out 和清理路径，避免重试或客户端取消时泄漏上游响应体。
+- **补充跨格式 failover 回归覆盖** - 覆盖 Responses 到 OpenAI-compatible 转发在首个 key 失败后继续 failover，并保持 AxonHub forwarding usage 统计口径一致。
+
+### Changed
+
+- **清理后端 lint baseline** - 全仓后端 `golangci-lint run` 现在返回 `0 issues`，并保留完整 Go 测试通过。
+
 ## [v2.6.70] - 2026-05-03
 
 ### Fixed
