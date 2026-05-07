@@ -4,7 +4,9 @@ package responses
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -14,13 +16,19 @@ import (
 
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/converters"
+	"github.com/BenedictKing/ccx/internal/handlers/adapters"
 	"github.com/BenedictKing/ccx/internal/handlers/common"
+	"github.com/BenedictKing/ccx/internal/handlers/wire"
+	"github.com/BenedictKing/ccx/internal/llm"
 	"github.com/BenedictKing/ccx/internal/middleware"
-	"github.com/BenedictKing/ccx/internal/passthrough"
+	"github.com/BenedictKing/ccx/internal/pipeline"
+	pipelinemw "github.com/BenedictKing/ccx/internal/pipeline/middleware"
+	"github.com/BenedictKing/ccx/internal/pricing"
 	"github.com/BenedictKing/ccx/internal/providers"
 	"github.com/BenedictKing/ccx/internal/scheduler"
 	"github.com/BenedictKing/ccx/internal/session"
 	"github.com/BenedictKing/ccx/internal/types"
+	"github.com/BenedictKing/ccx/internal/usage"
 	"github.com/BenedictKing/ccx/internal/utils"
 	"github.com/gin-gonic/gin"
 )
@@ -82,6 +90,9 @@ func Handler(
 }
 
 // handleMultiChannel 处理多渠道 Responses 请求
+//
+// PR3 T8c：路由到 pipeline.Process（wire.LBOutboundAdapter 内部驱动渠道选择 +
+// failover），不再走 TryUpstreamWithAllKeys。
 func handleMultiChannel(
 	c *gin.Context,
 	envCfg *config.EnvConfig,
@@ -93,83 +104,13 @@ func handleMultiChannel(
 	userID string,
 	startTime time.Time,
 ) {
-	provider := &providers.ResponsesProvider{SessionManager: sessionManager}
-	metricsManager := channelScheduler.GetResponsesMetricsManager()
-
-	common.HandleMultiChannelFailover(
-		c,
-		envCfg,
-		channelScheduler,
-		scheduler.ChannelKindResponses,
-		"Responses",
-		userID,
-		responsesReq.Model,
-		func(selection *scheduler.SelectionResult) common.MultiChannelAttemptResult {
-			upstream := selection.Upstream
-			channelIndex := selection.ChannelIndex
-
-			if upstream == nil {
-				return common.MultiChannelAttemptResult{}
-			}
-
-			baseURLs := upstream.GetAllBaseURLs()
-			sortedURLResults := channelScheduler.GetSortedURLsForChannel(scheduler.ChannelKindResponses, channelIndex, baseURLs)
-
-			handled, successKey, successBaseURLIdx, failoverErr, usage, lastErr := common.TryUpstreamWithAllKeys(
-				c,
-				envCfg,
-				cfgManager,
-				channelScheduler,
-				scheduler.ChannelKindResponses,
-				"Responses",
-				metricsManager,
-				upstream,
-				sortedURLResults,
-				bodyBytes,
-				responsesReq.Stream,
-				func(upstream *config.UpstreamConfig, failedKeys map[string]bool) (string, error) {
-					return cfgManager.GetNextAPIKeyForUser(upstream, failedKeys, "Responses", userID)
-				},
-				func(c *gin.Context, upstreamCopy *config.UpstreamConfig, apiKey string) (*http.Request, error) {
-					req, _, err := provider.ConvertToProviderRequest(c, upstreamCopy, apiKey)
-					return req, err
-				},
-				func(apiKey string) {
-					_ = cfgManager.DeprioritizeAPIKey(apiKey)
-				},
-				func(url string) {
-					channelScheduler.MarkURLFailure(scheduler.ChannelKindResponses, channelIndex, url)
-				},
-				func(url string) {
-					channelScheduler.MarkURLSuccess(scheduler.ChannelKindResponses, channelIndex, url)
-				},
-				func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string, actualRequestBody []byte) (*types.Usage, error) {
-					c.Set(responsesRawPassthroughContextKey, passthrough.AllowsRawResponsePassthrough("/v1/responses", upstreamCopy))
-					return handleSuccess(c, resp, provider, upstreamCopy, upstreamCopy.ServiceType, envCfg, sessionManager, startTime, &responsesReq, actualRequestBody)
-				},
-				responsesReq.Model,
-				selection.ChannelIndex,
-				channelScheduler.GetChannelLogStore(scheduler.ChannelKindResponses),
-			)
-
-			return common.MultiChannelAttemptResult{
-				Handled:           handled,
-				Attempted:         true,
-				SuccessKey:        successKey,
-				SuccessBaseURLIdx: successBaseURLIdx,
-				FailoverError:     failoverErr,
-				Usage:             usage,
-				LastError:         lastErr,
-			}
-		},
-		nil,
-		func(ctx *gin.Context, failoverErr *common.FailoverError, lastError error) {
-			common.HandleAllChannelsFailed(ctx, cfgManager.GetFuzzyModeEnabled(), failoverErr, lastError, "Responses")
-		},
-	)
+	processViaPipeline(c, envCfg, cfgManager, channelScheduler, sessionManager, &responsesReq, bodyBytes, userID, responsesReq.Model, "", startTime)
 }
 
 // handleSingleChannel 处理单渠道 Responses 请求
+//
+// PR3 T8c：路由到 pipeline.Process。空渠道 / 空 key 的早退保留在此处，避免
+// pipeline 主循环再做一次同等校验。
 func handleSingleChannel(
 	c *gin.Context,
 	envCfg *config.EnvConfig,
@@ -181,7 +122,7 @@ func handleSingleChannel(
 	userID string,
 	startTime time.Time,
 ) {
-	upstream, channelIndex, err := cfgManager.GetCurrentResponsesUpstreamWithIndex()
+	upstream, _, err := cfgManager.GetCurrentResponsesUpstreamWithIndex()
 	if err != nil {
 		c.JSON(503, gin.H{
 			"error": "未配置任何 Responses 渠道，请先在管理界面添加渠道",
@@ -197,54 +138,12 @@ func handleSingleChannel(
 		})
 		return
 	}
-
-	provider := &providers.ResponsesProvider{SessionManager: sessionManager}
-
-	metricsManager := channelScheduler.GetResponsesMetricsManager()
-	baseURLs := upstream.GetAllBaseURLs()
-
-	urlResults := common.BuildDefaultURLResults(baseURLs)
-
-	handled, _, _, lastFailoverError, _, lastError := common.TryUpstreamWithAllKeys(
-		c,
-		envCfg,
-		cfgManager,
-		channelScheduler,
-		scheduler.ChannelKindResponses,
-		"Responses",
-		metricsManager,
-		upstream,
-		urlResults,
-		bodyBytes,
-		responsesReq.Stream,
-		func(upstream *config.UpstreamConfig, failedKeys map[string]bool) (string, error) {
-			return cfgManager.GetNextAPIKeyForUser(upstream, failedKeys, "Responses", userID)
-		},
-		func(c *gin.Context, upstreamCopy *config.UpstreamConfig, apiKey string) (*http.Request, error) {
-			req, _, err := provider.ConvertToProviderRequest(c, upstreamCopy, apiKey)
-			return req, err
-		},
-		func(apiKey string) {
-			if err := cfgManager.DeprioritizeAPIKey(apiKey); err != nil {
-				log.Printf("[Responses-Key] 警告: 密钥降级失败: %v", err)
-			}
-		},
-		nil,
-		nil,
-		func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string, actualRequestBody []byte) (*types.Usage, error) {
-			c.Set(responsesRawPassthroughContextKey, passthrough.AllowsRawResponsePassthrough("/v1/responses", upstreamCopy))
-			return handleSuccess(c, resp, provider, upstreamCopy, upstreamCopy.ServiceType, envCfg, sessionManager, startTime, &responsesReq, actualRequestBody)
-		},
-		responsesReq.Model,
-		channelIndex,
-		channelScheduler.GetChannelLogStore(scheduler.ChannelKindResponses),
-	)
-	if handled {
+	if providers.GetProvider(upstream.ServiceType) == nil {
+		c.JSON(400, gin.H{"error": "Unsupported service type"})
 		return
 	}
 
-	log.Printf("[Responses-Error] 所有 Responses API密钥都失败了")
-	common.HandleAllKeysFailed(c, cfgManager.GetFuzzyModeEnabled(), lastFailoverError, lastError, "Responses")
+	processViaPipeline(c, envCfg, cfgManager, channelScheduler, sessionManager, &responsesReq, bodyBytes, userID, responsesReq.Model, "", startTime)
 }
 
 // handleSuccess 处理成功的 Responses 响应
@@ -1714,3 +1613,227 @@ func firstUnknownResponsesEventType(event string) (string, bool) {
 	}
 	return "", false
 }
+
+// ----------------------------------------------------------------------------
+// PR3 T8c: pipeline 路由 helper（与 messages/chat handler 同模板）
+// ----------------------------------------------------------------------------
+
+var (
+	globalUsageStore  usage.UsageStore
+	globalPriceLoader *pricing.Loader
+)
+
+// SetGlobalDependencies 由 main.go 在启动阶段调用，注入 usage/pricing。
+// 测试可通过同一函数注入 noop 实现，避免 nil 依赖。
+func SetGlobalDependencies(store usage.UsageStore, loader *pricing.Loader) {
+	globalUsageStore, globalPriceLoader = store, loader
+}
+
+// ginInjectingInbound 装饰 responses.NewInbound：在 TransformRequest 阶段把
+// gin.Context 写入 llm.Request.Metadata，并立即驱动 LBOutboundAdapter
+// 选定首个 channel/key（pipeline 主循环只在错误后才会调 NextChannel）。
+type ginInjectingInbound struct {
+	Inner pipeline.Inbound
+	Gin   *gin.Context
+	LB    *wire.LBOutboundAdapter
+}
+
+func (g *ginInjectingInbound) Format() llm.Format { return g.Inner.Format() }
+
+func (g *ginInjectingInbound) TransformRequest(ctx context.Context, req *http.Request, body []byte) (*llm.Request, error) {
+	llmReq, err := g.Inner.TransformRequest(ctx, req, body)
+	if err != nil {
+		return nil, err
+	}
+	adapters.SetGinContext(llmReq, g.Gin)
+	g.LB.Request = llmReq
+	if e := g.LB.NextChannel(ctx); e != nil {
+		return nil, e
+	}
+	return llmReq, nil
+}
+
+func (g *ginInjectingInbound) TransformResponse(ctx context.Context, resp *llm.Response) ([]byte, http.Header, error) {
+	return g.Inner.TransformResponse(ctx, resp)
+}
+
+func (g *ginInjectingInbound) TransformStream(ctx context.Context, in llm.Stream[*llm.Response]) llm.Stream[*llm.StreamEvent] {
+	return g.Inner.TransformStream(ctx, in)
+}
+
+// processViaPipeline 是 PR3 T8c 把 responses handler 切流量到 pipeline.Process
+// 的入口；single-channel / multi-channel 共享同一份代码。
+//
+// session 处理：sessionManager 通过 NewOutbound(sessionManager) 注入到
+// outboundAdapter，TransformRequest 中 ResponsesProvider 复用同一管理器；
+// 后续 session 落账由 ResponsesProvider 自己处理（与 PR1 outbound 报告一致）。
+func processViaPipeline(
+	c *gin.Context,
+	envCfg *config.EnvConfig,
+	cfgManager *config.ConfigManager,
+	channelScheduler *scheduler.ChannelScheduler,
+	sessionManager *session.SessionManager,
+	responsesReq *types.ResponsesRequest,
+	bodyBytes []byte,
+	userID, parsedModel, routePrefix string,
+	requestStart time.Time,
+) {
+	mm := channelScheduler.GetResponsesMetricsManager()
+	common.SetLBAPIType(c, "responses")
+	common.SetLBMetricsManager(c, mm)
+
+	if requestStart.IsZero() {
+		requestStart = time.Now()
+	}
+	attemptInfo := &pipelinemw.AttemptInfo{APIType: "Responses"}
+	ctx := pipelinemw.WithAttemptInfo(c.Request.Context(), attemptInfo)
+
+	lb := wire.NewLBOutboundAdapter(NewOutbound(sessionManager), channelScheduler, scheduler.ChannelKindResponses, requestStart)
+	lb.AttemptInfo = attemptInfo
+	lb.LBMetricsMgr = mm
+	lb.UsageStore = globalUsageStore
+	lb.PriceLoader = globalPriceLoader
+	lb.UserID = userID
+	lb.Model = parsedModel
+	lb.RoutePrefix = routePrefix
+	outbound, _ := lb.Inner.(*outboundAdapter)
+
+	inbound := &ginInjectingInbound{Inner: NewInbound(), Gin: c, LB: lb}
+
+	isStream := responsesReq != nil && responsesReq.Stream
+	exec := pipeline.ExecutorFunc(func(_ context.Context, req *http.Request) (*http.Response, error) {
+		var upstream *config.UpstreamConfig
+		if attemptInfo != nil {
+			upstream = attemptInfo.Upstream
+		}
+		return common.SendRequest(req, upstream, envCfg, isStream, "Responses")
+	})
+
+	p := pipeline.NewFactory(exec).Pipeline(inbound, lb, wire.BuildPipelineOpts(cfgManager, lb)...)
+	result, err := p.Process(ctx, c.Request, bodyBytes)
+
+	durationMs := time.Since(requestStart).Milliseconds()
+	var errCode string
+	if err != nil {
+		errCode = pipelineErrCode(err)
+	}
+	// llmUsage 用 defer-closure 捕获指针：stream 路径在事件流消费完成后通过
+	// outbound.TakeStreamUsage 把累计 SSE usage 注入；非 stream 路径走
+	// result.Response.Usage（与 messages/chat 同模板）。
+	var llmUsage llm.Usage
+	if result != nil && result.Response != nil && result.Response.Usage != nil {
+		llmUsage = *result.Response.Usage
+	}
+	defer func() {
+		if outbound != nil {
+			if streamUsage := outbound.TakeStreamUsage(); streamUsage != nil && llmUsage.IsZero() {
+				llmUsage = *streamUsage
+			}
+		}
+		lb.Finalize(ctx, err == nil, errCode, parsedModel, llmUsage, durationMs)
+	}()
+
+	if err != nil {
+		writePipelineError(c, err)
+		return
+	}
+	if result == nil {
+		return
+	}
+
+	if result.Stream && result.EventStream != nil {
+		writePipelineStream(c, result.EventStream)
+		return
+	}
+	if result.Response != nil {
+		writePipelineResponse(c, result.Response)
+	}
+}
+
+// writePipelineResponse 把非流式 *llm.Response 写回客户端。
+func writePipelineResponse(c *gin.Context, resp *llm.Response) {
+	if resp == nil {
+		return
+	}
+	if c.Writer.Written() {
+		return
+	}
+	for k, v := range resp.Header {
+		if len(v) == 0 {
+			continue
+		}
+		c.Writer.Header().Set(k, v[0])
+	}
+	if resp.Header.Get("Content-Type") == "" {
+		c.Writer.Header().Set("Content-Type", "application/json")
+	}
+	status := resp.StatusCode
+	if status == 0 {
+		status = http.StatusOK
+	}
+	c.Writer.WriteHeader(status)
+	_, _ = c.Writer.Write(resp.Body)
+}
+
+// writePipelineStream 把 SSE 事件流逐帧写回客户端。
+func writePipelineStream(c *gin.Context, stream llm.Stream[*llm.StreamEvent]) {
+	defer func() { _ = stream.Close() }()
+	if !c.Writer.Written() {
+		c.Writer.Header().Set("Content-Type", "text/event-stream")
+		c.Writer.Header().Set("Cache-Control", "no-cache")
+		c.Writer.Header().Set("Connection", "keep-alive")
+		c.Writer.WriteHeader(http.StatusOK)
+	}
+	flusher, _ := c.Writer.(http.Flusher)
+	for stream.Next() {
+		ev := stream.Current()
+		if ev == nil || len(ev.Data) == 0 {
+			continue
+		}
+		if _, err := c.Writer.Write(ev.Data); err != nil {
+			return
+		}
+		if flusher != nil {
+			flusher.Flush()
+		}
+	}
+}
+
+// writePipelineError 把 pipeline.Process 返回的错误回写客户端。
+func writePipelineError(c *gin.Context, err error) {
+	if c.Writer.Written() {
+		return
+	}
+	if errors.Is(err, pipeline.ErrChannelExhausted) {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "all channels failed", "detail": err.Error()})
+		return
+	}
+	c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+}
+
+// pipelineErrCode 将 pipeline 错误归类为简短 error code，写入 UsageRecord。
+func pipelineErrCode(err error) string {
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, pipeline.ErrChannelExhausted):
+		return "channel_exhausted"
+	case errors.Is(err, pipeline.ErrEmptyResponse):
+		return "empty_response"
+	case errors.Is(err, common.ErrInvalidResponseBody),
+		errors.Is(err, common.ErrEmptyStreamResponse),
+		errors.Is(err, ErrInvalidResponseBody):
+		return "invalid_response_body"
+	default:
+		return "upstream_error"
+	}
+}
+
+// 编译期保活：旧路径下的 helper 仍保留以便后续被独立单元测试或回滚使用；
+// Go 允许导出/未导出函数未被调用，但若 vet / linter 报 unused，会通过这些 _
+// 引用通过编译。
+var (
+	_ = handleSuccess
+	_ = handleStreamSuccess
+	_ = handleRawResponsesStreamPassthrough
+)
