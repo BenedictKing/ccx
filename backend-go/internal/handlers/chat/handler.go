@@ -2,13 +2,10 @@
 package chat
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -25,7 +22,6 @@ import (
 	pipelinemw "github.com/BenedictKing/ccx/internal/pipeline/middleware"
 	"github.com/BenedictKing/ccx/internal/pricing"
 	"github.com/BenedictKing/ccx/internal/scheduler"
-	"github.com/BenedictKing/ccx/internal/types"
 	"github.com/BenedictKing/ccx/internal/usage"
 	"github.com/BenedictKing/ccx/internal/utils"
 	"github.com/gin-gonic/gin"
@@ -447,77 +443,6 @@ func convertChatToClaudeRequest(bodyBytes []byte, model string, isStream bool) (
 	return claudeReq, nil
 }
 
-// handleSuccess 处理成功的响应
-func handleSuccess(
-	c *gin.Context,
-	resp *http.Response,
-	upstream *config.UpstreamConfig,
-	apiKey string,
-	envCfg *config.EnvConfig,
-	startTime time.Time,
-	model string,
-	isStream bool,
-) (*types.Usage, error) {
-	defer func() { _ = resp.Body.Close() }()
-	upstreamType := upstream.ServiceType
-
-	if isStream {
-		return handleStreamSuccess(c, resp, upstream, apiKey, envCfg, startTime, model)
-	}
-
-	// 非流式响应处理
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		chatErrorResponse(c, 500, "Failed to read response", "server_error")
-		return nil, err
-	}
-
-	if envCfg.EnableResponseLogs {
-		responseTime := time.Since(startTime).Milliseconds()
-		log.Printf("[Chat-Timing] 响应完成: %dms, 状态: %d", responseTime, resp.StatusCode)
-	}
-
-	switch upstreamType {
-	case "claude":
-		// 转换 Claude 响应为 OpenAI Chat 格式
-		var claudeResp map[string]interface{}
-		if err := json.Unmarshal(bodyBytes, &claudeResp); err != nil {
-			return nil, fmt.Errorf("%w: %v", common.ErrInvalidResponseBody, err)
-		}
-		openaiResp := convertClaudeResponseToChat(claudeResp, model)
-		respBytes, err := json.Marshal(openaiResp)
-		if err != nil {
-			c.Data(resp.StatusCode, "application/json", bodyBytes)
-			return nil, nil
-		}
-		c.Data(resp.StatusCode, "application/json", respBytes)
-
-		// 提取 usage
-		var usage *types.Usage
-		if u, ok := claudeResp["usage"].(map[string]interface{}); ok {
-			inputTokens, _ := u["input_tokens"].(float64)
-			outputTokens, _ := u["output_tokens"].(float64)
-			usage = &types.Usage{
-				InputTokens:  int(inputTokens),
-				OutputTokens: int(outputTokens),
-			}
-		}
-		return usage, nil
-
-	default:
-		// body 已被 ReadAll 读入 bodyBytes，需要重置 resp.Body 以便 PassthroughJSONResponse 读取
-		resp.Body = io.NopCloser(bytes.NewReader(bodyBytes))
-		var respMap map[string]interface{}
-		if err := common.PassthroughJSONResponse(c, resp, &respMap); err != nil {
-			return nil, nil
-		}
-		if u, ok := respMap["usage"].(map[string]interface{}); ok {
-			return common.OpenAIChatUsageFromMap(u), nil
-		}
-		return nil, nil
-	}
-}
-
 // convertClaudeResponseToChat 将 Claude 非流式响应转换为 OpenAI Chat 格式
 func convertClaudeResponseToChat(claudeResp map[string]interface{}, model string) map[string]interface{} {
 	// 提取文本内容和 tool_use blocks
@@ -616,251 +541,6 @@ func convertClaudeResponseToChat(claudeResp map[string]interface{}, model string
 	return result
 }
 
-// handleStreamSuccess 处理流式响应
-func handleStreamSuccess(
-	c *gin.Context,
-	resp *http.Response,
-	upstream *config.UpstreamConfig,
-	apiKey string,
-	envCfg *config.EnvConfig,
-	startTime time.Time,
-	model string,
-) (*types.Usage, error) {
-	upstreamType := upstream.ServiceType
-	if common.ShouldDirectPassthroughForRequest(c.Request.URL.Path, upstream, apiKey) {
-		totalUsage, err := common.HandleRawOpenAIChatStreamPassthrough(c, resp, upstream)
-		if envCfg.EnableResponseLogs {
-			responseTime := time.Since(startTime).Milliseconds()
-			log.Printf("[Chat-Stream-Timing] 流式响应完成: %dms", responseTime)
-		}
-		return totalUsage, err
-	}
-
-	// 设置 SSE 响应头
-	c.Header("Content-Type", "text/event-stream")
-	c.Header("Cache-Control", "no-cache")
-	c.Header("Connection", "keep-alive")
-	c.Header("X-Accel-Buffering", "no")
-
-	flusher, ok := c.Writer.(http.Flusher)
-	if !ok {
-		log.Printf("[Chat-Stream] 警告: ResponseWriter 不支持 Flusher")
-	}
-
-	var totalUsage *types.Usage
-
-	switch upstreamType {
-	case "claude":
-		totalUsage = streamClaudeToChat(c, resp, flusher, model)
-	default:
-		// OpenAI / Gemini / Responses 等：直接透传 SSE 流
-		totalUsage = streamPassthrough(c, resp, flusher)
-	}
-
-	if envCfg.EnableResponseLogs {
-		responseTime := time.Since(startTime).Milliseconds()
-		log.Printf("[Chat-Stream-Timing] 流式响应完成: %dms", responseTime)
-	}
-
-	return totalUsage, nil
-}
-
-// streamPassthrough 直接透传 SSE 流（用于 OpenAI 兼容上游）
-func streamPassthrough(
-	c *gin.Context,
-	resp *http.Response,
-	flusher http.Flusher,
-) *types.Usage {
-	var totalUsage *types.Usage
-	buf := make([]byte, 32*1024)
-	var remainder string
-
-	for {
-		n, err := resp.Body.Read(buf)
-		if n > 0 {
-			// 使用行缓冲机制避免跨 chunk 截断
-			data := remainder + string(buf[:n])
-			lines := strings.Split(data, "\n")
-			remainder = lines[len(lines)-1]
-			completeLines := lines[:len(lines)-1]
-
-			// 尝试从完整行中提取 usage
-			for _, line := range completeLines {
-				if !strings.HasPrefix(line, "data: ") {
-					continue
-				}
-				jsonData := strings.TrimPrefix(line, "data: ")
-				if jsonData == "[DONE]" {
-					continue
-				}
-				var parsed map[string]interface{}
-				if json.Unmarshal([]byte(jsonData), &parsed) == nil {
-					if u, ok := parsed["usage"].(map[string]interface{}); ok {
-						promptTokens, _ := u["prompt_tokens"].(float64)
-						completionTokens, _ := u["completion_tokens"].(float64)
-						totalUsage = &types.Usage{
-							InputTokens:  int(promptTokens),
-							OutputTokens: int(completionTokens),
-						}
-					}
-				}
-			}
-
-			if _, writeErr := c.Writer.Write(buf[:n]); writeErr != nil {
-				break
-			}
-			if flusher != nil {
-				flusher.Flush()
-			}
-		}
-		if err != nil {
-			break
-		}
-	}
-
-	return totalUsage
-}
-
-// streamClaudeToChat Claude 流式响应转换为 OpenAI Chat 格式
-func streamClaudeToChat(
-	c *gin.Context,
-	resp *http.Response,
-	flusher http.Flusher,
-	model string,
-) *types.Usage {
-	var totalUsage *types.Usage
-	var doneSent bool
-	buf := make([]byte, 32*1024)
-	var remainder string
-
-	for {
-		n, readErr := resp.Body.Read(buf)
-		if n > 0 {
-			data := remainder + string(buf[:n])
-			lines := strings.Split(data, "\n")
-			// 最后一行可能不完整，保留到下次
-			remainder = lines[len(lines)-1]
-			lines = lines[:len(lines)-1]
-
-			for _, line := range lines {
-				if !strings.HasPrefix(line, "data: ") {
-					continue
-				}
-				jsonData := strings.TrimPrefix(line, "data: ")
-				if jsonData == "[DONE]" {
-					_, _ = fmt.Fprintf(c.Writer, "data: [DONE]\n\n")
-					if flusher != nil {
-						flusher.Flush()
-					}
-					doneSent = true
-					continue
-				}
-
-				var event map[string]interface{}
-				if err := json.Unmarshal([]byte(jsonData), &event); err != nil {
-					continue
-				}
-
-				eventType, _ := event["type"].(string)
-
-				switch eventType {
-				case "content_block_delta":
-					delta, ok := event["delta"].(map[string]interface{})
-					if !ok {
-						continue
-					}
-					deltaType, _ := delta["type"].(string)
-					if deltaType == "text_delta" {
-						text, _ := delta["text"].(string)
-						chatChunk := map[string]interface{}{
-							"id":      "chatcmpl-claude",
-							"object":  "chat.completion.chunk",
-							"created": time.Now().Unix(),
-							"model":   model,
-							"choices": []map[string]interface{}{
-								{
-									"index": 0,
-									"delta": map[string]interface{}{
-										"content": text,
-									},
-									"finish_reason": nil,
-								},
-							},
-						}
-						chunkBytes, _ := json.Marshal(chatChunk)
-						_, _ = fmt.Fprintf(c.Writer, "data: %s\n\n", string(chunkBytes))
-						if flusher != nil {
-							flusher.Flush()
-						}
-					}
-
-				case "message_delta":
-					// 消息完成
-					stopChunk := map[string]interface{}{
-						"id":      "chatcmpl-claude",
-						"object":  "chat.completion.chunk",
-						"created": time.Now().Unix(),
-						"model":   model,
-						"choices": []map[string]interface{}{
-							{
-								"index":         0,
-								"delta":         map[string]interface{}{},
-								"finish_reason": "stop",
-							},
-						},
-					}
-
-					// 提取 usage
-					if usage, ok := event["usage"].(map[string]interface{}); ok {
-						inputTokens, _ := usage["input_tokens"].(float64)
-						outputTokens, _ := usage["output_tokens"].(float64)
-						totalUsage = &types.Usage{
-							InputTokens:  int(inputTokens),
-							OutputTokens: int(outputTokens),
-						}
-						stopChunk["usage"] = map[string]interface{}{
-							"prompt_tokens":     int(inputTokens),
-							"completion_tokens": int(outputTokens),
-							"total_tokens":      int(inputTokens + outputTokens),
-						}
-					}
-
-					chunkBytes, _ := json.Marshal(stopChunk)
-					_, _ = fmt.Fprintf(c.Writer, "data: %s\n\n", string(chunkBytes))
-					if flusher != nil {
-						flusher.Flush()
-					}
-
-				case "message_start":
-					// 提取初始 usage（input_tokens）
-					if msg, ok := event["message"].(map[string]interface{}); ok {
-						if usage, ok := msg["usage"].(map[string]interface{}); ok {
-							inputTokens, _ := usage["input_tokens"].(float64)
-							totalUsage = &types.Usage{
-								InputTokens:  int(inputTokens),
-								OutputTokens: 0,
-							}
-						}
-					}
-				}
-			}
-		}
-		if readErr != nil {
-			break
-		}
-	}
-
-	// 确保发送 [DONE]（仅在未发送过时）
-	if !doneSent {
-		_, _ = fmt.Fprintf(c.Writer, "data: [DONE]\n\n")
-		if flusher != nil {
-			flusher.Flush()
-		}
-	}
-
-	return totalUsage
-}
-
 // chatErrorResponse 返回 OpenAI 格式的错误响应
 func chatErrorResponse(c *gin.Context, statusCode int, message string, code string) {
 	c.JSON(statusCode, gin.H{
@@ -870,36 +550,6 @@ func chatErrorResponse(c *gin.Context, statusCode int, message string, code stri
 			"code":    code,
 		},
 	})
-}
-
-// handleAllChannelsFailed 处理所有渠道失败的情况
-func handleAllChannelsFailed(c *gin.Context, failoverErr *common.FailoverError, lastError error) {
-	if failoverErr != nil {
-		c.Data(failoverErr.Status, "application/json", failoverErr.Body)
-		return
-	}
-
-	errMsg := "All channels failed"
-	if lastError != nil {
-		errMsg = lastError.Error()
-	}
-
-	chatErrorResponse(c, 503, errMsg, "service_unavailable")
-}
-
-// handleAllKeysFailed 处理所有 Key 失败的情况
-func handleAllKeysFailed(c *gin.Context, failoverErr *common.FailoverError, lastError error) {
-	if failoverErr != nil {
-		c.Data(failoverErr.Status, "application/json", failoverErr.Body)
-		return
-	}
-
-	errMsg := "All API keys failed"
-	if lastError != nil {
-		errMsg = lastError.Error()
-	}
-
-	chatErrorResponse(c, 503, errMsg, "service_unavailable")
 }
 
 // ----------------------------------------------------------------------------
@@ -1115,12 +765,6 @@ func pipelineErrCode(err error) string {
 // Go 允许导出/未导出函数未被调用，但若 vet / linter 报 unused，会通过这些 _
 // 引用通过编译。
 var (
-	_ = handleSuccess
-	_ = handleStreamSuccess
-	_ = streamPassthrough
-	_ = streamClaudeToChat
-	_ = handleAllChannelsFailed
-	_ = handleAllKeysFailed
 	_ = convertChatToClaudeRequest
 )
 
