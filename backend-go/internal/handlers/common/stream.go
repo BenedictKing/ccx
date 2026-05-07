@@ -12,9 +12,11 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
+	"github.com/BenedictKing/ccx/internal/metrics"
 	"github.com/BenedictKing/ccx/internal/providers"
 	"github.com/BenedictKing/ccx/internal/types"
 	"github.com/BenedictKing/ccx/internal/utils"
@@ -73,6 +75,136 @@ const (
 	maxRawStreamPreflightBufferBytes = 1024 * 1024
 	rawStreamReaderBufferSize        = 32 * 1024
 )
+
+// lbMetricsManagerContextKey 是 LB 指标管理器在 gin.Context 中的存放键。
+// PR3 T2 引入：调用方（如 upstream_failover）在进入 stream 处理前调用
+// SetLBMetricsManager 注入；stream.go 内部按需读取并触发首 token 延迟记录。
+const lbMetricsManagerContextKey = "lbMetricsManager"
+
+// lbAPITypeContextKey 是 LB 指标 channelKey 所需 kind 在 gin.Context 中的存放键。
+// PR3 T2/T3 对齐：handler 在调用 stream 处理前通过 SetLBAPIType 注入
+// "messages" / "chat" / "responses" / "gemini" / "images" 之一，供 ChannelKeyForLB
+// 与 scheduler.LBMetricsProvider 共用同一个 channelKey 命名空间。未注入时
+// 退化为空串，等价于不带 kind 前缀（T8 wiring 时再补齐）。
+const lbAPITypeContextKey = "lbApiType"
+
+// SetLBMetricsManager 注入 LB 指标管理器到 gin.Context。
+// 不传或传 nil 时，stream 内部首 token 延迟跟踪退化为 no-op，不影响其他流程。
+func SetLBMetricsManager(c *gin.Context, manager *metrics.MetricsManager) {
+	if c == nil || manager == nil {
+		return
+	}
+	c.Set(lbMetricsManagerContextKey, manager)
+}
+
+// lbMetricsManagerFromContext 读取已注入的 LB 指标管理器，未注入时返回 nil。
+func lbMetricsManagerFromContext(c *gin.Context) *metrics.MetricsManager {
+	if c == nil {
+		return nil
+	}
+	v, ok := c.Get(lbMetricsManagerContextKey)
+	if !ok {
+		return nil
+	}
+	m, _ := v.(*metrics.MetricsManager)
+	return m
+}
+
+// SetLBAPIType 在 gin.Context 上注入当前请求所属的 LB kind（"messages" / "chat" /
+// "responses" / "gemini" / "images"），供 stream 入口构造 channelKey 时取用。
+// 空串等价于不注入。
+func SetLBAPIType(c *gin.Context, apiType string) {
+	if c == nil || apiType == "" {
+		return
+	}
+	c.Set(lbAPITypeContextKey, apiType)
+}
+
+// lbAPITypeFromContext 读取已注入的 LB kind，未注入时返回空串。
+func lbAPITypeFromContext(c *gin.Context) string {
+	if c == nil {
+		return ""
+	}
+	v, ok := c.Get(lbAPITypeContextKey)
+	if !ok {
+		return ""
+	}
+	s, _ := v.(string)
+	return s
+}
+
+// ChannelKeyForLB 返回 upstream 在 LB 指标维度的统一 channelKey。
+// PR3 T2 / T3 共用此函数，保证 RecordFirstToken 写入与 scheduler.LBMetricsProvider
+// 读取使用同一键；内部代理到 metrics.BuildLBChannelKey（single source of truth）。
+//
+// 行为：
+//   - upstream == nil → ""（保留 T2 nil-safe 语义）；
+//   - upstream.Name 非空 → metrics.BuildLBChannelKey(kind, upstream.Name)；
+//   - upstream.Name 为空但 BaseURL 非空 → fallback 到
+//     metrics.BuildLBChannelKey(kind, upstream.BaseURL)；
+//   - 全空 → "" （key 无意义，调用方应跳过记录）。
+func ChannelKeyForLB(kind string, upstream *config.UpstreamConfig) string {
+	if upstream == nil {
+		return ""
+	}
+	if upstream.Name != "" {
+		return metrics.BuildLBChannelKey(kind, upstream.Name)
+	}
+	if upstream.BaseURL != "" {
+		return metrics.BuildLBChannelKey(kind, upstream.BaseURL)
+	}
+	return ""
+}
+
+// firstTokenTracker 记录单个 SSE 流的首 token 延迟，确保只触发一次。
+// 字段访问：fired 通过 atomic.Bool 保证多 goroutine 竞争下只会调用一次
+// MetricsManager.RecordFirstToken。
+type firstTokenTracker struct {
+	manager      *metrics.MetricsManager
+	channelKey   string
+	requestStart time.Time
+	fired        atomic.Bool
+}
+
+// newFirstTokenTracker 在 stream 入口构造跟踪器。
+// 缺少 MetricsManager 或 channelKey 时返回 nil；MarkFirstEvent 对 nil 接收者安全。
+// kind 通过 gin.Context（SetLBAPIType 注入）获取；未注入时退化为不带前缀的 channelKey。
+func newFirstTokenTracker(c *gin.Context, upstream *config.UpstreamConfig, requestStart time.Time) *firstTokenTracker {
+	manager := lbMetricsManagerFromContext(c)
+	if manager == nil {
+		return nil
+	}
+	channelKey := ChannelKeyForLB(lbAPITypeFromContext(c), upstream)
+	if channelKey == "" {
+		return nil
+	}
+	if requestStart.IsZero() {
+		requestStart = time.Now()
+	}
+	return &firstTokenTracker{
+		manager:      manager,
+		channelKey:   channelKey,
+		requestStart: requestStart,
+	}
+}
+
+// MarkFirstEvent 在收到 / 写出首个 SSE event 时调用。
+// 通过 atomic CompareAndSwap 保证生命周期内仅触发一次 RecordFirstToken；
+// 后续调用为 no-op。MetricsManager.RecordFirstToken 自身忽略 latencyMs<=0，
+// 但此处也提前剔除以减少无效调用。
+func (t *firstTokenTracker) MarkFirstEvent() {
+	if t == nil || t.manager == nil || t.channelKey == "" {
+		return
+	}
+	if !t.fired.CompareAndSwap(false, true) {
+		return
+	}
+	latencyMs := time.Since(t.requestStart).Milliseconds()
+	if latencyMs <= 0 {
+		return
+	}
+	t.manager.RecordFirstToken(t.channelKey, latencyMs)
+}
 
 type rawStreamEvent struct {
 	Bytes []byte
@@ -1108,6 +1240,11 @@ func HandleStreamResponse(
 ) (*types.Usage, error) {
 	defer func() { _ = resp.Body.Close() }()
 
+	// PR3 T2: 在 stream 处理入口锁定 requestStart 并创建首 token 跟踪器。
+	// 跟踪器在 newFirstTokenTracker 内部按需返回 nil，MarkFirstEvent 对 nil 安全。
+	requestStart := time.Now()
+	firstTokenT := newFirstTokenTracker(c, upstream, requestStart)
+
 	if shouldUseRawMessagesStreamPassthrough(c, upstream) {
 		return handleRawMessagesStreamPassthrough(c, resp, envCfg, requestBody, upstream)
 	}
@@ -1152,6 +1289,9 @@ func HandleStreamResponse(
 		drainChannels(eventChan, errChan)
 		return nil, ErrEmptyStreamResponse
 	}
+
+	// PR3 T2: 预检通过即视为收到首个有效 SSE event；记录首 token 延迟。
+	firstTokenT.MarkFirstEvent()
 
 	SetupStreamHeaders(c, resp)
 	flusher, ok := c.Writer.(http.Flusher)
@@ -1240,6 +1380,10 @@ func handleRawMessagesStreamPassthrough(
 	requestBody []byte,
 	upstream *config.UpstreamConfig,
 ) (*types.Usage, error) {
+	// PR3 T2: 锁定 requestStart 并初始化首 token 跟踪器。
+	requestStart := time.Now()
+	firstTokenT := newFirstTokenTracker(c, upstream, requestStart)
+
 	attemptCtx, cancelAttempt := context.WithCancel(c.Request.Context())
 	defer cancelAttempt()
 
@@ -1273,6 +1417,9 @@ func handleRawMessagesStreamPassthrough(
 		cleanupRawStreamFanout(cancelAttempt, eventChan, errChan, fanoutDone)
 		return nil, ErrEmptyStreamResponse
 	}
+
+	// PR3 T2: 预检通过即视为收到首个有效 SSE event；记录首 token 延迟。
+	firstTokenT.MarkFirstEvent()
 
 	flusher, ok := c.Writer.(http.Flusher)
 	if !ok {
@@ -1344,6 +1491,10 @@ func handleRawStreamPassthrough(
 	upstream *config.UpstreamConfig,
 	callbacks rawStreamPassthroughCallbacks,
 ) (*types.Usage, error) {
+	// PR3 T2: 锁定 requestStart 并初始化首 token 跟踪器。
+	requestStart := time.Now()
+	firstTokenT := newFirstTokenTracker(c, upstream, requestStart)
+
 	attemptCtx, cancelAttempt := context.WithCancel(c.Request.Context())
 	defer cancelAttempt()
 
@@ -1377,6 +1528,9 @@ func handleRawStreamPassthrough(
 		cleanupRawStreamFanout(cancelAttempt, eventChan, errChan, fanoutDone)
 		return nil, ErrEmptyStreamResponse
 	}
+
+	// PR3 T2: 预检通过即视为收到首个有效 SSE event；记录首 token 延迟。
+	firstTokenT.MarkFirstEvent()
 
 	flusher, ok := c.Writer.(http.Flusher)
 	if !ok {
