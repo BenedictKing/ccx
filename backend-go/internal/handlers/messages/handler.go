@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"time"
@@ -143,151 +142,6 @@ func handleSingleChannel(
 	}
 
 	processViaPipeline(c, envCfg, cfgManager, channelScheduler, &claudeReq, bodyBytes, userID, claudeReq.Model, "", startTime)
-}
-
-// handleNormalResponse 处理非流式响应
-func handleNormalResponse(
-	c *gin.Context,
-	resp *http.Response,
-	provider providers.Provider,
-	envCfg *config.EnvConfig,
-	startTime time.Time,
-	requestBody []byte,
-	upstream *config.UpstreamConfig,
-	apiKey string,
-) (*types.Usage, error) {
-	defer func() { _ = resp.Body.Close() }()
-
-	if shouldDirectClaudePassthrough(upstream, apiKey) {
-		usage, err := common.PassthroughJSONResponseWithUsage(c, resp, common.PassthroughUsageOptions{
-			RequestBody: requestBody,
-			LowQuality:  upstream != nil && upstream.LowQuality,
-			EnableLog:   envCfg != nil && envCfg.EnableResponseLogs,
-		})
-		if err != nil {
-			return nil, err
-		}
-		return usage, nil
-	}
-
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		c.JSON(500, gin.H{"error": "Failed to read response"})
-		return nil, err
-	}
-
-	if envCfg.EnableResponseLogs {
-		responseTime := time.Since(startTime).Milliseconds()
-		log.Printf("[Messages-Timing] 响应完成: %dms, 状态: %d", responseTime, resp.StatusCode)
-		if envCfg.IsDevelopment() {
-			respHeaders := make(map[string]string)
-			for key, values := range resp.Header {
-				if len(values) > 0 {
-					respHeaders[key] = values[0]
-				}
-			}
-			var respHeadersJSON []byte
-			if envCfg.RawLogOutput {
-				respHeadersJSON, _ = json.Marshal(respHeaders)
-			} else {
-				respHeadersJSON, _ = json.MarshalIndent(respHeaders, "", "  ")
-			}
-			log.Printf("[Messages-Response] 响应头:\n%s", string(respHeadersJSON))
-
-			var formattedBody string
-			if envCfg.RawLogOutput {
-				formattedBody = utils.FormatJSONBytesRaw(bodyBytes)
-			} else {
-				formattedBody = utils.FormatJSONBytesForLog(bodyBytes, 500)
-			}
-			log.Printf("[Messages-Response] 响应体:\n%s", formattedBody)
-		}
-	}
-
-	providerResp := &types.ProviderResponse{
-		StatusCode: resp.StatusCode,
-		Headers:    resp.Header,
-		Body:       bodyBytes,
-		Stream:     false,
-	}
-
-	claudeResp, err := provider.ConvertToClaudeResponse(providerResp)
-	if err != nil {
-		// JSON 解析失败（如上游返回 HTML 错误页面）：不写 Header，返回可 failover 的错误
-		preview := bodyBytes
-		if len(preview) > 100 {
-			preview = preview[:100]
-		}
-		log.Printf("[Messages-InvalidBody] 响应体解析失败: %v, body前100字节: %s", err, preview)
-		return nil, fmt.Errorf("%w: %v", common.ErrInvalidResponseBody, err)
-	}
-
-	// Token 补全逻辑
-	if claudeResp.Usage == nil {
-		estimatedInput := utils.EstimateRequestTokens(requestBody)
-		estimatedOutput := utils.EstimateResponseTokens(claudeResp.Content)
-		claudeResp.Usage = &types.Usage{
-			InputTokens:  estimatedInput,
-			OutputTokens: estimatedOutput,
-		}
-		if envCfg.EnableResponseLogs {
-			log.Printf("[Messages-Token] 上游无Usage, 本地估算: input=%d, output=%d", estimatedInput, estimatedOutput)
-		}
-	} else {
-		originalInput := claudeResp.Usage.InputTokens
-		originalOutput := claudeResp.Usage.OutputTokens
-		patched := false
-
-		hasCacheTokens := claudeResp.Usage.CacheCreationInputTokens > 0 || claudeResp.Usage.CacheReadInputTokens > 0
-
-		if claudeResp.Usage.InputTokens <= 1 && !hasCacheTokens {
-			claudeResp.Usage.InputTokens = utils.EstimateRequestTokens(requestBody)
-			patched = true
-		}
-		if claudeResp.Usage.OutputTokens <= 1 {
-			claudeResp.Usage.OutputTokens = utils.EstimateResponseTokens(claudeResp.Content)
-			patched = true
-		}
-		if envCfg.EnableResponseLogs {
-			if patched {
-				log.Printf("[Messages-Token] 虚假值补全: InputTokens=%d->%d, OutputTokens=%d->%d",
-					originalInput, claudeResp.Usage.InputTokens, originalOutput, claudeResp.Usage.OutputTokens)
-			}
-			log.Printf("[Messages-Token] InputTokens=%d, OutputTokens=%d, CacheCreationInputTokens=%d, CacheReadInputTokens=%d, CacheCreation5m=%d, CacheCreation1h=%d, CacheTTL=%s",
-				claudeResp.Usage.InputTokens, claudeResp.Usage.OutputTokens,
-				claudeResp.Usage.CacheCreationInputTokens, claudeResp.Usage.CacheReadInputTokens,
-				claudeResp.Usage.CacheCreation5mInputTokens, claudeResp.Usage.CacheCreation1hInputTokens,
-				claudeResp.Usage.CacheTTL)
-		}
-	}
-
-	// 监听客户端断开连接
-	ctx := c.Request.Context()
-	go func() {
-		<-ctx.Done()
-		if !c.Writer.Written() {
-			if envCfg.EnableResponseLogs {
-				responseTime := time.Since(startTime).Milliseconds()
-				log.Printf("[Messages-Timing] 响应中断: %dms, 状态: %d", responseTime, resp.StatusCode)
-			}
-		}
-	}()
-
-	// 转发上游响应头
-	utils.ForwardResponseHeaders(resp.Header, c.Writer)
-
-	c.JSON(200, claudeResp)
-
-	if envCfg.EnableResponseLogs {
-		responseTime := time.Since(startTime).Milliseconds()
-		log.Printf("[Messages-Timing] 响应发送完成: %dms, 状态: %d", responseTime, resp.StatusCode)
-	}
-
-	return claudeResp.Usage, nil
-}
-
-func shouldDirectClaudePassthrough(upstream *config.UpstreamConfig, apiKey string) bool {
-	return common.ShouldDirectClaudePassthroughForKey(upstream, apiKey)
 }
 
 // CountTokensHandler 处理 /v1/messages/count_tokens 请求
@@ -536,10 +390,3 @@ func pipelineErrCode(err error) string {
 		return "upstream_error"
 	}
 }
-
-// 编译期保活：handleNormalResponse / shouldDirectClaudePassthrough 仍保留以便
-// 后续被独立单元测试或回滚使用；Go 允许导出/未导出函数未被调用。
-var (
-	_ = handleNormalResponse
-	_ = shouldDirectClaudePassthrough
-)
