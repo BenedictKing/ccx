@@ -22,4 +22,10 @@ var (
 	// ErrInvalidResponseBody 表示上游响应体格式不合法（如 HTML 错误页）。
 	// pipeline 应触发 failover 并由 Middleware 决定是否冷却 / 拉黑当前 key。
 	ErrInvalidResponseBody = errors.New("pipeline: invalid response body")
+
+	// ErrUpstreamStreamError 表示上游 HTTP 200 响应体内嵌 SSE error 帧
+	// （`event: error` 或 data JSON `"type":"error"`）。pipeline 应在
+	// processStream 阶段就把它当作 attempt 失败，触发 retry / failover；
+	// 与现有 handlers/common/stream.go 的 stream 内 cancel 语义对齐。
+	ErrUpstreamStreamError = errors.New("pipeline: upstream sse error event")
 )

@@ -259,6 +259,14 @@ func (p *pipeline) processAttempt(ctx context.Context, req *llm.Request) (*Resul
 		return nil, err
 	}
 
+	// 把上游 *http.Response 注册到 AttemptState，让 retry 路径上的
+	// cleanupAttemptStreamResources 能关闭 body，避免 raw passthrough
+	// fan-out goroutine 阻塞在 Body.Read 上。outbound TransformStream 有
+	// 自定义 cancel/chan 时仍会再次写入对应字段；body 关闭幂等。
+	if state := AttemptStateFrom(ctx); state != nil {
+		state.RawProviderResponse = resp
+	}
+
 	resp, err = p.applyRawResponseMiddlewares(ctx, resp)
 	if err != nil {
 		return nil, err
@@ -314,5 +322,25 @@ func (p *pipeline) processStream(ctx context.Context, resp *http.Response) (*Res
 	rawStream = p.applyRawStreamMiddlewares(ctx, rawStream)
 	rawStream = p.applyInboundRawStreamMiddlewares(ctx, rawStream)
 
+	// 探测 RawStream middleware 链上的错误信号（如 SSEErrorEventDetector
+	// 检测到上游 HTTP 200 + `event: error` 帧时通过 streamErrorProbe 上抛
+	// pipeline.ErrUpstreamStreamError）。命中即关流并返回错误，让主循环
+	// 走 retry / failover 分支，与 ErrEmptyResponse 路径同构。
+	if probe, ok := rawStream.(streamErrorProbe); ok {
+		if perr := probe.ProbeStreamError(); perr != nil {
+			_ = rawStream.Close()
+			return nil, perr
+		}
+	}
+
 	return &Result{Stream: true, EventStream: rawStream}, nil
+}
+
+// streamErrorProbe 是 RawStream 包装层的可选接口；processStream 通过类型断言
+// 在把 Result 交给 handler 之前探测一次。命中非 nil 错误即触发 retry。
+//
+// 与 pipeline.Middleware 9-hook 接口签名解耦：middleware 仍然只暴露 RawStream
+// 包装语义，错误通道借助接口而非 hook 签名变更。
+type streamErrorProbe interface {
+	ProbeStreamError() error
 }

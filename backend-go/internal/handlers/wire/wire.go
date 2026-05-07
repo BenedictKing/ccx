@@ -395,8 +395,9 @@ func BuildPipelineOpts(cfgManager *config.ConfigManager, lb *LBOutboundAdapter) 
 	}
 	keyMW := pipelinemw.NewCCXKeyFailureMiddleware(cfgManager)
 	pauseMW := pipelinemw.NewCCXPauseRuleMiddleware(cfgManager)
+	sseErrMW := pipelinemw.NewSSEErrorEventDetector()
 	opts := []pipeline.Option{
-		pipeline.WithMiddlewares(pauseMW, keyMW),
+		pipeline.WithMiddlewares(pauseMW, keyMW, sseErrMW),
 		pipeline.WithEmptyResponseDetection(),
 		pipeline.WithRetry(4, 0, 0),
 	}
