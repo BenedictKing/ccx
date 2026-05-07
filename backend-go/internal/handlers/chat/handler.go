@@ -3,7 +3,9 @@ package chat
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -13,11 +15,18 @@ import (
 
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/forwarding"
+	"github.com/BenedictKing/ccx/internal/handlers/adapters"
 	"github.com/BenedictKing/ccx/internal/handlers/common"
+	"github.com/BenedictKing/ccx/internal/handlers/wire"
+	"github.com/BenedictKing/ccx/internal/llm"
 	"github.com/BenedictKing/ccx/internal/middleware"
 	"github.com/BenedictKing/ccx/internal/passthrough"
+	"github.com/BenedictKing/ccx/internal/pipeline"
+	pipelinemw "github.com/BenedictKing/ccx/internal/pipeline/middleware"
+	"github.com/BenedictKing/ccx/internal/pricing"
 	"github.com/BenedictKing/ccx/internal/scheduler"
 	"github.com/BenedictKing/ccx/internal/types"
+	"github.com/BenedictKing/ccx/internal/usage"
 	"github.com/BenedictKing/ccx/internal/utils"
 	"github.com/gin-gonic/gin"
 )
@@ -95,6 +104,9 @@ func Handler(
 }
 
 // handleMultiChannel 处理多渠道 Chat 请求
+//
+// PR3 T8b：路由到 pipeline.Process（wire.LBOutboundAdapter 内部驱动渠道选择 +
+// failover），不再走 TryUpstreamWithAllKeys。
 func handleMultiChannel(
 	c *gin.Context,
 	envCfg *config.EnvConfig,
@@ -106,79 +118,13 @@ func handleMultiChannel(
 	userID string,
 	startTime time.Time,
 ) {
-	metricsManager := channelScheduler.GetChatMetricsManager()
-	common.HandleMultiChannelFailover(
-		c,
-		envCfg,
-		channelScheduler,
-		scheduler.ChannelKindChat,
-		"Chat",
-		userID,
-		model,
-		func(selection *scheduler.SelectionResult) common.MultiChannelAttemptResult {
-			upstream := selection.Upstream
-			channelIndex := selection.ChannelIndex
-
-			if upstream == nil {
-				return common.MultiChannelAttemptResult{}
-			}
-
-			baseURLs := upstream.GetAllBaseURLs()
-			sortedURLResults := channelScheduler.GetSortedURLsForChannel(scheduler.ChannelKindChat, channelIndex, baseURLs)
-
-			handled, successKey, successBaseURLIdx, failoverErr, usage, lastErr := common.TryUpstreamWithAllKeys(
-				c,
-				envCfg,
-				cfgManager,
-				channelScheduler,
-				scheduler.ChannelKindChat,
-				"Chat",
-				metricsManager,
-				upstream,
-				sortedURLResults,
-				bodyBytes,
-				isStream,
-				func(upstream *config.UpstreamConfig, failedKeys map[string]bool) (string, error) {
-					return cfgManager.GetNextChatAPIKey(upstream, failedKeys)
-				},
-				func(c *gin.Context, upstreamCopy *config.UpstreamConfig, apiKey string) (*http.Request, error) {
-					return buildProviderRequest(c, upstreamCopy, upstreamCopy.BaseURL, apiKey, bodyBytes, model, isStream)
-				},
-				func(apiKey string) {
-					_ = cfgManager.DeprioritizeAPIKey(apiKey)
-				},
-				func(url string) {
-					channelScheduler.MarkURLFailure(scheduler.ChannelKindChat, channelIndex, url)
-				},
-				func(url string) {
-					channelScheduler.MarkURLSuccess(scheduler.ChannelKindChat, channelIndex, url)
-				},
-				func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string, actualRequestBody []byte) (*types.Usage, error) {
-					return handleSuccess(c, resp, upstreamCopy, apiKey, envCfg, startTime, model, isStream)
-				},
-				model,
-				selection.ChannelIndex,
-				channelScheduler.GetChannelLogStore(scheduler.ChannelKindChat),
-			)
-
-			return common.MultiChannelAttemptResult{
-				Handled:           handled,
-				Attempted:         true,
-				SuccessKey:        successKey,
-				SuccessBaseURLIdx: successBaseURLIdx,
-				FailoverError:     failoverErr,
-				Usage:             usage,
-				LastError:         lastErr,
-			}
-		},
-		nil,
-		func(ctx *gin.Context, failoverErr *common.FailoverError, lastError error) {
-			handleAllChannelsFailed(ctx, failoverErr, lastError)
-		},
-	)
+	processViaPipeline(c, envCfg, cfgManager, channelScheduler, bodyBytes, model, isStream, userID, "", startTime)
 }
 
 // handleSingleChannel 处理单渠道 Chat 请求
+//
+// PR3 T8b：路由到 pipeline.Process。空渠道 / 空 key 的早退保留在此处，避免
+// pipeline 主循环再做一次同等校验。
 func handleSingleChannel(
 	c *gin.Context,
 	envCfg *config.EnvConfig,
@@ -189,7 +135,7 @@ func handleSingleChannel(
 	isStream bool,
 	startTime time.Time,
 ) {
-	upstream, channelIndex, err := cfgManager.GetCurrentChatUpstreamWithIndex()
+	upstream, _, err := cfgManager.GetCurrentChatUpstreamWithIndex()
 	if err != nil {
 		chatErrorResponse(c, 503, "No Chat upstream configured", "service_unavailable")
 		return
@@ -200,46 +146,8 @@ func handleSingleChannel(
 		return
 	}
 
-	metricsManager := channelScheduler.GetChatMetricsManager()
-	baseURLs := upstream.GetAllBaseURLs()
-	urlResults := common.BuildDefaultURLResults(baseURLs)
-
-	handled, _, _, lastFailoverError, _, lastError := common.TryUpstreamWithAllKeys(
-		c,
-		envCfg,
-		cfgManager,
-		channelScheduler,
-		scheduler.ChannelKindChat,
-		"Chat",
-		metricsManager,
-		upstream,
-		urlResults,
-		bodyBytes,
-		isStream,
-		func(upstream *config.UpstreamConfig, failedKeys map[string]bool) (string, error) {
-			return cfgManager.GetNextChatAPIKey(upstream, failedKeys)
-		},
-		func(c *gin.Context, upstreamCopy *config.UpstreamConfig, apiKey string) (*http.Request, error) {
-			return buildProviderRequest(c, upstreamCopy, upstreamCopy.BaseURL, apiKey, bodyBytes, model, isStream)
-		},
-		func(apiKey string) {
-			_ = cfgManager.DeprioritizeAPIKey(apiKey)
-		},
-		nil,
-		nil,
-		func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string, actualRequestBody []byte) (*types.Usage, error) {
-			return handleSuccess(c, resp, upstreamCopy, apiKey, envCfg, startTime, model, isStream)
-		},
-		model,
-		channelIndex,
-		channelScheduler.GetChannelLogStore(scheduler.ChannelKindChat),
-	)
-	if handled {
-		return
-	}
-
-	log.Printf("[Chat-Error] 所有 API密钥都失败了")
-	handleAllKeysFailed(c, lastFailoverError, lastError)
+	// userID 在单渠道场景下并不参与亲和性，但 Finalize 落账仍需要传一份 ""。
+	processViaPipeline(c, envCfg, cfgManager, channelScheduler, bodyBytes, model, isStream, "", "", startTime)
 }
 
 // buildProviderRequest 构建上游请求
@@ -993,3 +901,226 @@ func handleAllKeysFailed(c *gin.Context, failoverErr *common.FailoverError, last
 
 	chatErrorResponse(c, 503, errMsg, "service_unavailable")
 }
+
+// ----------------------------------------------------------------------------
+// PR3 T8b: pipeline 路由 helper（与 messages handler 同模板）
+// ----------------------------------------------------------------------------
+
+var (
+	globalUsageStore  usage.UsageStore
+	globalPriceLoader *pricing.Loader
+)
+
+// SetGlobalDependencies 由 main.go 在启动阶段调用，注入 usage/pricing。
+// 测试可通过同一函数注入 noop 实现，避免 nil 依赖。
+func SetGlobalDependencies(store usage.UsageStore, loader *pricing.Loader) {
+	globalUsageStore, globalPriceLoader = store, loader
+}
+
+// ginInjectingInbound 装饰 chat.NewInbound：在 TransformRequest 阶段把
+// gin.Context 写入 llm.Request.Metadata，并立即驱动 LBOutboundAdapter
+// 选定首个 channel/key（pipeline 主循环只在错误后才会调 NextChannel）。
+type ginInjectingInbound struct {
+	Inner pipeline.Inbound
+	Gin   *gin.Context
+	LB    *wire.LBOutboundAdapter
+}
+
+func (g *ginInjectingInbound) Format() llm.Format { return g.Inner.Format() }
+
+func (g *ginInjectingInbound) TransformRequest(ctx context.Context, req *http.Request, body []byte) (*llm.Request, error) {
+	llmReq, err := g.Inner.TransformRequest(ctx, req, body)
+	if err != nil {
+		return nil, err
+	}
+	adapters.SetGinContext(llmReq, g.Gin)
+	g.LB.Request = llmReq
+	if e := g.LB.NextChannel(ctx); e != nil {
+		return nil, e
+	}
+	return llmReq, nil
+}
+
+func (g *ginInjectingInbound) TransformResponse(ctx context.Context, resp *llm.Response) ([]byte, http.Header, error) {
+	return g.Inner.TransformResponse(ctx, resp)
+}
+
+func (g *ginInjectingInbound) TransformStream(ctx context.Context, in llm.Stream[*llm.Response]) llm.Stream[*llm.StreamEvent] {
+	return g.Inner.TransformStream(ctx, in)
+}
+
+// processViaPipeline 是 PR3 T8b 把 chat handler 切流量到 pipeline.Process 的入口；
+// single-channel / multi-channel 共享同一份代码。
+func processViaPipeline(
+	c *gin.Context,
+	envCfg *config.EnvConfig,
+	cfgManager *config.ConfigManager,
+	channelScheduler *scheduler.ChannelScheduler,
+	bodyBytes []byte,
+	parsedModel string,
+	isStream bool,
+	userID, routePrefix string,
+	requestStart time.Time,
+) {
+	mm := channelScheduler.GetChatMetricsManager()
+	common.SetLBAPIType(c, "chat")
+	common.SetLBMetricsManager(c, mm)
+
+	if requestStart.IsZero() {
+		requestStart = time.Now()
+	}
+	attemptInfo := &pipelinemw.AttemptInfo{APIType: "Chat"}
+	ctx := pipelinemw.WithAttemptInfo(c.Request.Context(), attemptInfo)
+
+	lb := wire.NewLBOutboundAdapter(NewOutbound(), channelScheduler, scheduler.ChannelKindChat, requestStart)
+	lb.AttemptInfo = attemptInfo
+	lb.LBMetricsMgr = mm
+	lb.UsageStore = globalUsageStore
+	lb.PriceLoader = globalPriceLoader
+	lb.UserID = userID
+	lb.Model = parsedModel
+	lb.RoutePrefix = routePrefix
+	outbound, _ := lb.Inner.(*outboundAdapter)
+
+	inbound := &ginInjectingInbound{Inner: NewInbound(), Gin: c, LB: lb}
+
+	exec := pipeline.ExecutorFunc(func(_ context.Context, req *http.Request) (*http.Response, error) {
+		var upstream *config.UpstreamConfig
+		if attemptInfo != nil {
+			upstream = attemptInfo.Upstream
+		}
+		return common.SendRequest(req, upstream, envCfg, isStream, "Chat")
+	})
+
+	p := pipeline.NewFactory(exec).Pipeline(inbound, lb, wire.BuildPipelineOpts(cfgManager, lb)...)
+	result, err := p.Process(ctx, c.Request, bodyBytes)
+
+	durationMs := time.Since(requestStart).Milliseconds()
+	var errCode string
+	if err != nil {
+		errCode = pipelineErrCode(err)
+	}
+	// llmUsage 用 defer-closure 捕获指针：stream 路径在事件流消费完成后通过
+	// outbound.TakeStreamUsage 把累计 SSE usage 注入；非 stream 路径走
+	// result.Response.Usage。两者择一即可（与 messages 同模板）。
+	var llmUsage llm.Usage
+	if result != nil && result.Response != nil && result.Response.Usage != nil {
+		llmUsage = *result.Response.Usage
+	}
+	defer func() {
+		if outbound != nil {
+			if streamUsage := outbound.TakeStreamUsage(); streamUsage != nil && llmUsage.IsZero() {
+				llmUsage = *streamUsage
+			}
+		}
+		lb.Finalize(ctx, err == nil, errCode, parsedModel, llmUsage, durationMs)
+	}()
+
+	if err != nil {
+		writePipelineError(c, err)
+		return
+	}
+	if result == nil {
+		return
+	}
+
+	if result.Stream && result.EventStream != nil {
+		writePipelineStream(c, result.EventStream)
+		return
+	}
+	if result.Response != nil {
+		writePipelineResponse(c, result.Response)
+	}
+}
+
+// writePipelineResponse 把非流式 *llm.Response 写回客户端。
+func writePipelineResponse(c *gin.Context, resp *llm.Response) {
+	if resp == nil {
+		return
+	}
+	if c.Writer.Written() {
+		return
+	}
+	for k, v := range resp.Header {
+		if len(v) == 0 {
+			continue
+		}
+		c.Writer.Header().Set(k, v[0])
+	}
+	if resp.Header.Get("Content-Type") == "" {
+		c.Writer.Header().Set("Content-Type", "application/json")
+	}
+	status := resp.StatusCode
+	if status == 0 {
+		status = http.StatusOK
+	}
+	c.Writer.WriteHeader(status)
+	_, _ = c.Writer.Write(resp.Body)
+}
+
+// writePipelineStream 把 SSE 事件流逐帧写回客户端。
+func writePipelineStream(c *gin.Context, stream llm.Stream[*llm.StreamEvent]) {
+	defer func() { _ = stream.Close() }()
+	if !c.Writer.Written() {
+		c.Writer.Header().Set("Content-Type", "text/event-stream")
+		c.Writer.Header().Set("Cache-Control", "no-cache")
+		c.Writer.Header().Set("Connection", "keep-alive")
+		c.Writer.WriteHeader(http.StatusOK)
+	}
+	flusher, _ := c.Writer.(http.Flusher)
+	for stream.Next() {
+		ev := stream.Current()
+		if ev == nil || len(ev.Data) == 0 {
+			continue
+		}
+		if _, err := c.Writer.Write(ev.Data); err != nil {
+			return
+		}
+		if flusher != nil {
+			flusher.Flush()
+		}
+	}
+}
+
+// writePipelineError 把 pipeline.Process 返回的错误回写客户端。
+func writePipelineError(c *gin.Context, err error) {
+	if c.Writer.Written() {
+		return
+	}
+	if errors.Is(err, pipeline.ErrChannelExhausted) {
+		chatErrorResponse(c, http.StatusBadGateway, fmt.Sprintf("all channels failed: %v", err), "service_unavailable")
+		return
+	}
+	chatErrorResponse(c, http.StatusBadGateway, err.Error(), "service_unavailable")
+}
+
+// pipelineErrCode 将 pipeline 错误归类为简短 error code，写入 UsageRecord。
+func pipelineErrCode(err error) string {
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, pipeline.ErrChannelExhausted):
+		return "channel_exhausted"
+	case errors.Is(err, pipeline.ErrEmptyResponse):
+		return "empty_response"
+	case errors.Is(err, common.ErrInvalidResponseBody),
+		errors.Is(err, ErrInvalidResponseBody):
+		return "invalid_response_body"
+	default:
+		return "upstream_error"
+	}
+}
+
+// 编译期保活：旧路径下的 helper 仍保留以便后续被独立单元测试或回滚使用；
+// Go 允许导出/未导出函数未被调用，但若 vet / linter 报 unused，会通过这些 _
+// 引用通过编译。
+var (
+	_ = handleSuccess
+	_ = handleStreamSuccess
+	_ = streamPassthrough
+	_ = streamClaudeToChat
+	_ = handleAllChannelsFailed
+	_ = handleAllKeysFailed
+	_ = convertChatToClaudeRequest
+)
+
