@@ -15,6 +15,16 @@
 
 ## Requirements
 
+### 0. PR2 Phase 3 已合并到本 PR（2026-05-07 决议）
+
+PR2 在 Phase 2 完成 6 个 strategy 后收尾，Phase 3 的"scheduler 改造 + metrics 扩展"合并到本 PR：
+
+- `internal/scheduler/lb_metrics_provider.go`（新增）—— 把现有 `MetricsManager` / `traceAffinity` / config promotion 聚合为 `loadbalance.ChannelMetricsProvider` 实现；处理 ccx 的 `(baseURL, apiKey, serviceType)` tuple 模型 ↔ axonhub 的 `int channelID` 模型之间的桥接
+- `internal/scheduler/channel_scheduler.go`（改造）—— 拆解 SelectChannel：候选过滤（model 兼容、stream 策略、circuit Open）+ `loadbalance.LoadBalancer.Sort` 排序；handler 切流量后旧 SelectChannel 路径删除
+- `internal/metrics/channel_metrics.go`（字段扩展）—— 新增 FTTL / TPS / ActiveConnections 聚合字段 + 对应 RecordFirstToken / RecordTPS / RecordActiveConnDelta 方法
+- `internal/handlers/common/stream.go`（首事件计时）—— 在第一个 SSE event 到达时调用 `MetricsManager.RecordFirstToken`，为 LatencyAware strategy 提供 FTTL 数据
+- 现有 scheduler 测试不回归（与本 PR 切流量后的行为重新基线）
+
 ### 1. handler 切流量
 
 ```

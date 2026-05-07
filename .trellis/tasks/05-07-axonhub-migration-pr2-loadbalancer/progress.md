@@ -46,18 +46,31 @@ PR1 hard constraint 仍然保持：4 个 handler.go 与所有 *_test.go 一字�
 
 LatencyAware / RateLimitAware 仅依赖 `ChannelMetricsProvider` 接口（已就位），单测用 `fakeMetricsProvider` 注入数据。具体 metrics 字段（FTTL / TPS / ActiveConnections）的数据来源是 Phase 3 实现 provider 时填充。
 
-### Phase 3：scheduler 改造 + metrics 扩展
+### Phase 3：合并到 PR3 处理（不在 PR2 范围）
 
-- `internal/scheduler/lb_metrics_provider.go` —— 把现有 `metrics.AggregatedMetrics` / `traceAffinity` / config promotion 聚合为 `ChannelMetricsProvider` 实现
+**决定时间**：2026-05-07，本轮收尾时与 skip 对齐。
+
+**理由**：
+- Phase 3 的 scheduler 改造 + metrics 扩展涉及 ccx 现有 `(baseURL, apiKey, serviceType)` tuple 模型与 axonhub `int channelID` 模型之间的桥接，本身就是大改造
+- 若 PR2 内做 Phase 3，则期间 SelectChannel 必须同时维护"旧路径 + 新路径"两条分支（用户已拒绝 feature flag），中间状态价值低
+- PR3 本来就要"删除 TryUpstreamWithAllKeys"（PR3 PRD 第 211 行），与 scheduler 拆解强相关
+- 合并到 PR3 一次性完成"scheduler 改造 + metrics 扩展 + handler 切流量 + key 级 middleware + pricing + UsageStore + dashboard"，verification 路径更清晰
+
+**迁移到 PR3 的项**：
+- `internal/scheduler/lb_metrics_provider.go` —— ChannelMetricsProvider 实现
 - `internal/scheduler/channel_scheduler.go` 拆解：候选过滤 + `LoadBalancer.Sort` 排序
-- `internal/metrics/channel_metrics.go` 字段扩展：FTTL / TPS / ActiveConnections —— 在 `internal/handlers/common/stream.go` 第一个 SSE event 时记录
-- 现有 scheduler 测试不回归
+- `internal/metrics/channel_metrics.go` 字段扩展（FTTL / TPS / ActiveConnections）
+- `internal/handlers/common/stream.go` 首 SSE event 计时 hook
+
+PR3 PRD 已在 Out of Scope 上方追加备注（见 PR3 PRD 末尾）。
 
 ### 不在 PR2 范围内（PR3 处理）
 
-- handler 切流量（PR3）
-- ccx key 级 BlacklistKey/MarkKeyAsFailed/MatchPauseRule middleware（PR3）
-- 价格计算 + UsageStore + dashboard（PR3）
+- handler 切流量
+- ccx key 级 BlacklistKey/MarkKeyAsFailed/MatchPauseRule middleware
+- 价格计算 + UsageStore + dashboard
+- **新增**：scheduler 改造（候选过滤 + LB.Sort 接入）
+- **新增**：metrics 字段扩展（FTTL / TPS / ActiveConnections）+ stream.go 首事件计时
 
 ## 关键设计决策记录
 
