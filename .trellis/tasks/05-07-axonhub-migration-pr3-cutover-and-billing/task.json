@@ -3,7 +3,7 @@
   "name": "axonhub-migration-pr3-cutover-and-billing",
   "title": "PR3: traffic cutover, pricing, NDJSON usage store, channel dashboard",
   "description": "",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,
