@@ -57,3 +57,31 @@ func (s *AttemptState) Reset() {
 	s.RawStreamErrRef = nil
 	s.RawStreamCancel = nil
 }
+
+// attemptStateCtxKey 是把 *AttemptState 挂在 ctx 上的私有键类型。
+type attemptStateCtxKey struct{}
+
+// withAttemptState 把 AttemptState 注入 ctx；下游 transformer / middleware
+// 可以通过 AttemptStateFrom 取出，写入 RawStreamCancel / RawProviderResponse /
+// RawStreamCh 等字段，让 pipeline 主循环在 retry / failover 之前完成清理。
+func withAttemptState(ctx context.Context, state *AttemptState) context.Context {
+	if state == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, attemptStateCtxKey{}, state)
+}
+
+// AttemptStateFrom 从 ctx 中取出当前 attempt 的 AttemptState；不存在则返回 nil。
+//
+// 该函数对外暴露给 ccx 的 handler / middleware（例如 raw passthrough fan-out
+// 桥接代码），以便它们把自己持有的资源 cancel/body/chan 注册到 attempt 级
+// 状态上，便于 pipeline 主循环统一清理。
+func AttemptStateFrom(ctx context.Context) *AttemptState {
+	if ctx == nil {
+		return nil
+	}
+	if v, ok := ctx.Value(attemptStateCtxKey{}).(*AttemptState); ok {
+		return v
+	}
+	return nil
+}

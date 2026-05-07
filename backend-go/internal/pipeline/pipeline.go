@@ -67,6 +67,55 @@ type pipeline struct {
 	emptyResponseDetection bool
 }
 
+// cleanupAttemptStreamResources 在 retry / failover / ctx 取消之前释放
+// 当前 attempt 持有的 stream 资源，对应 AxonHub-half.md 第 138-142 行
+// 锁定的契约：cancel 当前 attempt → close response body → wait fan-out
+// goroutine 退出 → 重置 AttemptState 字段。
+//
+// LIFO 顺序：
+//  1. RawStreamCancel：取消 attempt-scoped ctx，触发 fan-out goroutine 退出。
+//  2. RawProviderResponse.Body：关闭 body，让阻塞在 Read 上的 goroutine 返回。
+//  3. RawStreamCh：drain 并等待 close（最长 5s 超时，避免无限阻塞）。
+//  4. AttemptState.Reset：清空 attempt 级字段，准备下一次 attempt。
+//
+// 该函数幂等：state 为 nil 或字段已清空时直接返回。
+func cleanupAttemptStreamResources(state *AttemptState) {
+	if state == nil {
+		return
+	}
+	if state.RawStreamCancel == nil &&
+		state.RawProviderResponse == nil &&
+		state.RawStreamCh == nil {
+		return
+	}
+
+	slog.Debug("[Pipeline-Cleanup] releasing attempt-scoped stream resources")
+
+	if state.RawStreamCancel != nil {
+		state.RawStreamCancel()
+	}
+	if state.RawProviderResponse != nil && state.RawProviderResponse.Body != nil {
+		_ = state.RawProviderResponse.Body.Close()
+	}
+	if state.RawStreamCh != nil {
+		drainCh := make(chan struct{})
+		ch := state.RawStreamCh
+		go func() {
+			for range ch {
+				// drain 直到上游 fan-out goroutine 关闭 channel
+			}
+			close(drainCh)
+		}()
+		select {
+		case <-drainCh:
+		case <-time.After(5 * time.Second):
+			// 强行返回；优先 goroutine 泄漏而非 deadlock。
+			slog.Warn("[Pipeline-Cleanup] drain raw stream channel timed out after 5s")
+		}
+	}
+	state.Reset()
+}
+
 // Process 是 pipeline 主循环。
 //
 // 执行步骤（与 axonhub/llm/pipeline.pipeline.Process 行为对齐）：
@@ -97,10 +146,24 @@ func (p *pipeline) Process(ctx context.Context, req *http.Request, body []byte) 
 		lastErr            error
 		channelSwitches    int
 		sameChannelRetries int
+		// attemptState 持有当前 attempt 的 stream 资源；retry 之前必须清理。
+		// 由 processAttempt 在每次进入时通过 ctx 注入；处理完成后由本循环
+		// 在 retry / ctx 取消 / break 路径上调用 cleanupAttemptStreamResources。
+		attemptState *AttemptState
 	)
 
+	// 兜底：函数返回前确保任何残留 stream 资源被释放（仅在错误路径生效；
+	// 成功路径返回的 Result.EventStream 由调用方持有）。
+	defer func() {
+		if lastErr != nil {
+			cleanupAttemptStreamResources(attemptState)
+		}
+	}()
+
 	for {
-		result, attemptErr := p.processAttempt(ctx, llmReq)
+		attemptState = &AttemptState{}
+		ctxAttempt := withAttemptState(ctx, attemptState)
+		result, attemptErr := p.processAttempt(ctxAttempt, llmReq)
 		if attemptErr == nil {
 			return result, nil
 		}
@@ -109,8 +172,9 @@ func (p *pipeline) Process(ctx context.Context, req *http.Request, body []byte) 
 		p.applyRawErrorResponseMiddlewares(ctx, attemptErr)
 		lastErr = attemptErr
 
-		// ctx 取消则立即终止 retry
+		// ctx 取消则立即终止 retry；先释放 attempt 资源避免 goroutine 泄漏。
 		if ctx.Err() != nil {
+			cleanupAttemptStreamResources(attemptState)
 			return nil, lastErr
 		}
 
@@ -154,6 +218,10 @@ func (p *pipeline) Process(ctx context.Context, req *http.Request, body []byte) 
 		if !canRetry {
 			break
 		}
+
+		// 进入下一次 attempt 之前，必须释放当前 attempt 持有的 stream 资源
+		// （cancel ctx → close body → wait fan-out 退出）。
+		cleanupAttemptStreamResources(attemptState)
 
 		if p.retryDelay > 0 {
 			select {
