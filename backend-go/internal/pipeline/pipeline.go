@@ -219,8 +219,27 @@ func (p *pipeline) processNonStream(ctx context.Context, resp *http.Response) (*
 //
 // 注意：本函数不消费 stream，仅完成"包装链"构造；调用方（handler）负责从
 // EventStream 拉取事件并写回客户端。
+//
+// 当 emptyResponseDetection=true 时，会在 LlmStream middleware 之前对底层
+// llm.Response 流做一次预读：若底层流尚未发送任何 *llm.Response 即正常
+// 结束，则返回 ErrEmptyResponse 触发外层 retry / failover；否则把预读到的
+// 首个 Response 重放给后续 stream 链路。
 func (p *pipeline) processStream(ctx context.Context, resp *http.Response) (*Result, error) {
 	llmStream := p.Outbound.TransformStream(ctx, resp)
+
+	if p.emptyResponseDetection {
+		ps := newPrefetchLlmStream(ctx, llmStream)
+		if !ps.HasPrefetched() {
+			// 流未产生任何 Response 即结束，关闭底层流释放资源。
+			_ = ps.Close()
+			if err := ps.PrefetchErr(); err != nil {
+				return nil, err
+			}
+			return nil, ErrEmptyResponse
+		}
+		llmStream = ps
+	}
+
 	llmStream = p.applyLlmStreamMiddlewares(ctx, llmStream)
 
 	rawStream := p.Inbound.TransformStream(ctx, llmStream)
