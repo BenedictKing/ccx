@@ -5,6 +5,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/shopspring/decimal"
 )
 
 // TestRecordFirstToken_BasicAndConcurrency 表驱动 + 并发安全验证
@@ -330,5 +332,137 @@ func TestLBMetrics_AtomicReadAfterConcurrentWrites(t *testing.T) {
 	entry := m.getOrCreateLBEntry(ch)
 	if got := atomic.LoadInt64(&entry.activeConn); got != int64(writers*perW) {
 		t.Fatalf("atomic load activeConn = %d, want %d", got, writers*perW)
+	}
+}
+
+// TestRecordCost_BasicAccumulation 验证基础累加 + nil-safe + getter。PR3 T9。
+func TestRecordCost_BasicAccumulation(t *testing.T) {
+	t.Parallel()
+	m := NewMetricsManager()
+	defer m.Stop()
+
+	const ch = "messages:ch-cost"
+
+	if got := m.GetTotalCost(ch); !got.IsZero() {
+		t.Fatalf("initial GetTotalCost = %s, want 0", got.String())
+	}
+	if got := m.GetCacheReadTokensTotal(ch); got != 0 {
+		t.Fatalf("initial GetCacheReadTokensTotal = %d, want 0", got)
+	}
+	if got := m.GetCacheCreationTokensTotal(ch); got != 0 {
+		t.Fatalf("initial GetCacheCreationTokensTotal = %d, want 0", got)
+	}
+	if got := m.GetInputTokensTotal(ch); got != 0 {
+		t.Fatalf("initial GetInputTokensTotal = %d, want 0", got)
+	}
+
+	c1 := decimal.NewFromFloat(0.0492)
+	m.RecordCost(ch, &c1, 100, 200, 50, 30)
+	c2 := decimal.NewFromFloat(0.1)
+	m.RecordCost(ch, &c2, 7, 8, 9, 10)
+
+	want := c1.Add(c2)
+	if got := m.GetTotalCost(ch); !got.Equal(want) {
+		t.Fatalf("GetTotalCost = %s, want %s", got.String(), want.String())
+	}
+	if got := m.GetInputTokensTotal(ch); got != 107 {
+		t.Fatalf("GetInputTokensTotal = %d, want 107", got)
+	}
+	if got := m.GetOutputTokensTotal(ch); got != 208 {
+		t.Fatalf("GetOutputTokensTotal = %d, want 208", got)
+	}
+	if got := m.GetCacheReadTokensTotal(ch); got != 59 {
+		t.Fatalf("GetCacheReadTokensTotal = %d, want 59", got)
+	}
+	if got := m.GetCacheCreationTokensTotal(ch); got != 40 {
+		t.Fatalf("GetCacheCreationTokensTotal = %d, want 40", got)
+	}
+}
+
+// TestRecordCost_NilCostAndEmptyKeyAreNoop 验证 nil/zero/空 key 不影响累加。
+func TestRecordCost_NilCostAndEmptyKeyAreNoop(t *testing.T) {
+	t.Parallel()
+	m := NewMetricsManager()
+	defer m.Stop()
+
+	// 空 channelKey：直接跳过。
+	m.RecordCost("", nil, 1, 1, 1, 1)
+
+	// 全零调用：不创建 entry，全部 getter 返回 0。
+	m.RecordCost("ch-empty", nil, 0, 0, 0, 0)
+	if got := m.GetTotalCost("ch-empty"); !got.IsZero() {
+		t.Fatalf("ch-empty GetTotalCost = %s, want 0", got.String())
+	}
+
+	// nil cost + 非零 cache：cost 应保持 0，cache 应累加。
+	m.RecordCost("ch-cache", nil, 0, 0, 5, 6)
+	if got := m.GetTotalCost("ch-cache"); !got.IsZero() {
+		t.Fatalf("ch-cache GetTotalCost = %s, want 0 (nil cost)", got.String())
+	}
+	if got := m.GetCacheReadTokensTotal("ch-cache"); got != 5 {
+		t.Fatalf("ch-cache GetCacheReadTokensTotal = %d, want 5", got)
+	}
+	if got := m.GetCacheCreationTokensTotal("ch-cache"); got != 6 {
+		t.Fatalf("ch-cache GetCacheCreationTokensTotal = %d, want 6", got)
+	}
+}
+
+// TestRecordCost_PerChannelIsolation 验证不同 channelKey 互不干扰。
+func TestRecordCost_PerChannelIsolation(t *testing.T) {
+	t.Parallel()
+	m := NewMetricsManager()
+	defer m.Stop()
+
+	cA := decimal.NewFromInt(1)
+	cB := decimal.NewFromInt(2)
+	m.RecordCost("ch-A", &cA, 10, 20, 0, 0)
+	m.RecordCost("ch-B", &cB, 100, 200, 0, 0)
+
+	if got := m.GetTotalCost("ch-A"); !got.Equal(cA) {
+		t.Fatalf("ch-A cost = %s, want 1", got.String())
+	}
+	if got := m.GetTotalCost("ch-B"); !got.Equal(cB) {
+		t.Fatalf("ch-B cost = %s, want 2", got.String())
+	}
+	if got := m.GetInputTokensTotal("ch-A"); got != 10 {
+		t.Fatalf("ch-A input = %d, want 10", got)
+	}
+	if got := m.GetInputTokensTotal("ch-B"); got != 100 {
+		t.Fatalf("ch-B input = %d, want 100", got)
+	}
+}
+
+// TestRecordCost_ConcurrentSafe 验证并发累加无数据竞争（go test -race）。
+func TestRecordCost_ConcurrentSafe(t *testing.T) {
+	t.Parallel()
+	m := NewMetricsManager()
+	defer m.Stop()
+
+	const writers = 16
+	const perW = 100
+	const ch = "ch-concurrent"
+	one := decimal.NewFromInt(1)
+
+	var wg sync.WaitGroup
+	wg.Add(writers)
+	for i := 0; i < writers; i++ {
+		go func() {
+			defer wg.Done()
+			for j := 0; j < perW; j++ {
+				m.RecordCost(ch, &one, 1, 2, 3, 4)
+			}
+		}()
+	}
+	wg.Wait()
+
+	wantTotal := decimal.NewFromInt(int64(writers * perW))
+	if got := m.GetTotalCost(ch); !got.Equal(wantTotal) {
+		t.Fatalf("GetTotalCost = %s, want %s", got.String(), wantTotal.String())
+	}
+	if got := m.GetInputTokensTotal(ch); got != int64(writers*perW) {
+		t.Fatalf("GetInputTokensTotal = %d, want %d", got, writers*perW)
+	}
+	if got := m.GetCacheCreationTokensTotal(ch); got != int64(4*writers*perW) {
+		t.Fatalf("GetCacheCreationTokensTotal = %d, want %d", got, 4*writers*perW)
 	}
 }

@@ -37,21 +37,38 @@ func buildChannelMetricsResult(metricsManager *metrics.MetricsManager, upstreams
 	for i, upstream := range upstreams {
 		resp := metricsManager.ToResponseMultiURL(i, upstream.GetAllBaseURLs(), upstream.APIKeys, scheduler.NormalizedMetricsServiceType(kind, upstream.ServiceType), 0, upstream.HistoricalAPIKeys)
 
+		// PR3 T9: cost / token 总量（来自 LB 聚合面，channelKey 维度，自进程启动累积）。
+		channelKey := metrics.BuildLBChannelKey(string(kind), upstream.Name)
+		totalCost := metricsManager.GetTotalCost(channelKey)
+		inputTokens := metricsManager.GetInputTokensTotal(channelKey)
+		outputTokens := metricsManager.GetOutputTokensTotal(channelKey)
+		cacheReadTotal := metricsManager.GetCacheReadTokensTotal(channelKey)
+		cacheCreationTotal := metricsManager.GetCacheCreationTokensTotal(channelKey)
+		// 与 T6/T7 一致：decimal 在 JSON 中以 string 形式输出。
+		totalCostStr := totalCost.String()
+		totalTokens := inputTokens + outputTokens + cacheReadTotal + cacheCreationTotal
+
 		item := gin.H{
-			"channelIndex":        i,
-			"channelName":         upstream.Name,
-			"requestCount":        resp.RequestCount,
-			"successCount":        resp.SuccessCount,
-			"failureCount":        resp.FailureCount,
-			"successRate":         resp.SuccessRate,
-			"errorRate":           resp.ErrorRate,
-			"consecutiveFailures": resp.ConsecutiveFailures,
-			"latency":             resp.Latency,
-			"circuitState":        resp.CircuitState,
-			"halfOpenSuccesses":   resp.HalfOpenSuccesses,
-			"breakerFailureRate":  resp.BreakerFailureRate,
-			"keyMetrics":          resp.KeyMetrics,
-			"timeWindows":         resp.TimeWindows,
+			"channelIndex":             i,
+			"channelName":              upstream.Name,
+			"requestCount":             resp.RequestCount,
+			"successCount":             resp.SuccessCount,
+			"failureCount":             resp.FailureCount,
+			"successRate":              resp.SuccessRate,
+			"errorRate":                resp.ErrorRate,
+			"consecutiveFailures":      resp.ConsecutiveFailures,
+			"latency":                  resp.Latency,
+			"circuitState":             resp.CircuitState,
+			"halfOpenSuccesses":        resp.HalfOpenSuccesses,
+			"breakerFailureRate":       resp.BreakerFailureRate,
+			"keyMetrics":               resp.KeyMetrics,
+			"timeWindows":              resp.TimeWindows,
+			"inputTokens":              inputTokens,
+			"outputTokens":             outputTokens,
+			"totalTokens":              totalTokens,
+			"cacheReadInputTokens":     cacheReadTotal,
+			"cacheCreationInputTokens": cacheCreationTotal,
+			"totalCost":                totalCostStr,
 		}
 		if resp.AxonHubForwarding != nil {
 			item["axonHubForwarding"] = resp.AxonHubForwarding

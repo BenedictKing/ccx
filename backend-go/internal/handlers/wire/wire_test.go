@@ -16,9 +16,11 @@ import (
 	"github.com/BenedictKing/ccx/internal/llm"
 	"github.com/BenedictKing/ccx/internal/pipeline"
 	pipelinemw "github.com/BenedictKing/ccx/internal/pipeline/middleware"
+	"github.com/BenedictKing/ccx/internal/pricing"
 	"github.com/BenedictKing/ccx/internal/scheduler"
 	"github.com/BenedictKing/ccx/internal/types"
 	"github.com/BenedictKing/ccx/internal/usage"
+	"github.com/shopspring/decimal"
 )
 
 // fakeMetrics 实现 MetricsRecorder，记录所有写端调用以供断言。
@@ -31,6 +33,7 @@ type fakeMetrics struct {
 	connCallCount  int
 	successCalls   []recordSuccessCall
 	failureCalls   []recordFailureCall
+	costCalls      []recordCostCall
 }
 
 type recordSuccessCall struct {
@@ -44,6 +47,15 @@ type recordFailureCall struct {
 	baseURL     string
 	apiKey      string
 	serviceType string
+}
+
+type recordCostCall struct {
+	channelKey        string
+	cost              *decimal.Decimal
+	inputTokens       int64
+	outputTokens      int64
+	cacheReadTokens   int64
+	cacheCreateTokens int64
 }
 
 func newFakeMetrics() *fakeMetrics {
@@ -68,6 +80,24 @@ func (f *fakeMetrics) RecordTPS(key string, tokens int64, durMs int64) {
 	f.tpsRecords[key] += tokens
 	f.tpsDurations[key] += durMs
 	f.tpsCallCount[key]++
+}
+
+func (f *fakeMetrics) RecordCost(key string, cost *decimal.Decimal, inputTokens, outputTokens, cacheRead, cacheCreate int64) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var costCopy *decimal.Decimal
+	if cost != nil {
+		c := *cost
+		costCopy = &c
+	}
+	f.costCalls = append(f.costCalls, recordCostCall{
+		channelKey:        key,
+		cost:              costCopy,
+		inputTokens:       inputTokens,
+		outputTokens:      outputTokens,
+		cacheReadTokens:   cacheRead,
+		cacheCreateTokens: cacheCreate,
+	})
 }
 
 func (f *fakeMetrics) RecordSuccessWithUsage(baseURL, apiKey, serviceType string, u *types.Usage) {
@@ -306,6 +336,102 @@ func TestLBOutboundAdapter_Finalize_SuccessRecordsTPSAndAppends(t *testing.T) {
 	}
 	if rec.Format != string(llm.FormatClaudeMessages) {
 		t.Fatalf("Format = %q, want claude_messages", rec.Format)
+	}
+}
+
+func TestLBOutboundAdapter_Finalize_SuccessCallsRecordCost(t *testing.T) {
+	dir := t.TempDir()
+	pricesPath := filepath.Join(dir, "prices.json")
+	priceJSON := `{
+		"models": [
+			{
+				"modelId": "claude-3-5",
+				"items": [
+					{"itemCode": "prompt_tokens", "pricing": {"mode": "usage_per_unit", "usagePerUnit": "2.00"}},
+					{"itemCode": "completion_tokens", "pricing": {"mode": "usage_per_unit", "usagePerUnit": "10.00"}}
+				]
+			}
+		]
+	}`
+	if err := os.WriteFile(pricesPath, []byte(priceJSON), 0o644); err != nil {
+		t.Fatalf("write prices.json: %v", err)
+	}
+	priceLoader, err := pricing.NewLoader(pricesPath)
+	if err != nil {
+		t.Fatalf("NewLoader: %v", err)
+	}
+	defer priceLoader.Close()
+
+	mm := newFakeMetrics()
+	store := &fakeStore{}
+	sched := &fakeScheduler{results: []*scheduler.SelectionResult{newSelection(0, "ch-cost", "sk-c", "https://up.local")}}
+	lb := NewLBOutboundAdapter(fakeOutbound{}, sched, scheduler.ChannelKindMessages, time.Now())
+	lb.AttemptInfo = &pipelinemw.AttemptInfo{APIType: "Messages"}
+	lb.LBMetricsMgr = mm
+	lb.UsageStore = store
+	lb.PriceLoader = priceLoader
+	lb.Request = &llm.Request{}
+	if err := lb.NextChannel(context.Background()); err != nil {
+		t.Fatalf("NextChannel: %v", err)
+	}
+
+	// 1M prompt + 1M completion → expected total = 2.0 + 10.0 = 12.0 USD
+	llmUsage := llm.Usage{
+		Inner: types.Usage{
+			PromptTokens:             1_000_000,
+			CompletionTokens:         1_000_000,
+			InputTokens:              1_000_000,
+			OutputTokens:             1_000_000,
+			CacheReadInputTokens:     50,
+			CacheCreationInputTokens: 70,
+		},
+		Format: llm.FormatClaudeMessages,
+	}
+	lb.Finalize(context.Background(), true, "", "claude-3-5", llmUsage, 1500)
+
+	if len(mm.costCalls) != 1 {
+		t.Fatalf("RecordCost call count = %d, want 1", len(mm.costCalls))
+	}
+	got := mm.costCalls[0]
+	if got.channelKey != "messages:ch-cost" {
+		t.Fatalf("channelKey = %q, want messages:ch-cost", got.channelKey)
+	}
+	if got.cost == nil {
+		t.Fatalf("cost = nil, want non-nil")
+	}
+	if !got.cost.Equal(decimal.NewFromInt(12)) {
+		t.Fatalf("cost = %v, want 12", got.cost.String())
+	}
+	if got.cacheReadTokens != 50 {
+		t.Fatalf("cacheReadTokens = %d, want 50", got.cacheReadTokens)
+	}
+	if got.cacheCreateTokens != 70 {
+		t.Fatalf("cacheCreateTokens = %d, want 70", got.cacheCreateTokens)
+	}
+	if got.inputTokens != 1_000_000 {
+		t.Fatalf("inputTokens = %d, want 1_000_000", got.inputTokens)
+	}
+	if got.outputTokens != 1_000_000 {
+		t.Fatalf("outputTokens = %d, want 1_000_000", got.outputTokens)
+	}
+}
+
+func TestLBOutboundAdapter_Finalize_NoPriceLoaderSkipsRecordCost(t *testing.T) {
+	mm := newFakeMetrics()
+	sched := &fakeScheduler{results: []*scheduler.SelectionResult{newSelection(0, "ch-no-price", "sk", "https://up.local")}}
+	lb := NewLBOutboundAdapter(fakeOutbound{}, sched, scheduler.ChannelKindMessages, time.Now())
+	lb.AttemptInfo = &pipelinemw.AttemptInfo{APIType: "Messages"}
+	lb.LBMetricsMgr = mm
+	lb.Request = &llm.Request{}
+	if err := lb.NextChannel(context.Background()); err != nil {
+		t.Fatalf("NextChannel: %v", err)
+	}
+
+	lb.Finalize(context.Background(), true, "", "claude-3-5",
+		llm.Usage{Inner: types.Usage{InputTokens: 10, OutputTokens: 20}}, 100)
+
+	if len(mm.costCalls) != 0 {
+		t.Fatalf("RecordCost must not be called without PriceLoader, got %d", len(mm.costCalls))
 	}
 }
 

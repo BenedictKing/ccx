@@ -4,6 +4,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/shopspring/decimal"
 )
 
 // PR3 T1: Load-balancing 指标扩展。
@@ -38,12 +40,19 @@ type tpsRecord struct {
 // lbMetricsEntry 单个 channelKey 的负载均衡聚合指标。
 // 字段访问规则：
 //   - activeConn 通过 sync/atomic 直接读写，无需持锁；
-//   - ftRecords / tpsRecords 通过 mu 保护（追加 + 头部裁剪窗口外样本）。
+//   - ftRecords / tpsRecords / cost / token totals 通过 mu 保护
+//     （cost 用 decimal.Decimal 累加，无 atomic 选项；token totals 与 cost 共
+//     用同一锁以保证一次 RecordCost 调用所有字段一起原子推进）。
 type lbMetricsEntry struct {
-	mu         sync.Mutex
-	ftRecords  []ftLatencyRecord
-	tpsRecords []tpsRecord
-	activeConn int64 // atomic
+	mu                       sync.Mutex
+	ftRecords                []ftLatencyRecord
+	tpsRecords               []tpsRecord
+	activeConn               int64           // atomic
+	totalCost                decimal.Decimal // PR3 T9: cumulative since process start
+	inputTokensTotal         int64           // PR3 T9
+	outputTokensTotal        int64           // PR3 T9
+	cacheReadTokensTotal     int64           // PR3 T9
+	cacheCreationTokensTotal int64           // PR3 T9
 }
 
 // pruneFTLocked 裁剪窗口外的 FTTL 样本。调用方需持有 e.mu。
@@ -192,4 +201,108 @@ func (m *MetricsManager) GetActiveConnections(channelKey string) int64 {
 	}
 	entry := v.(*lbMetricsEntry)
 	return atomic.LoadInt64(&entry.activeConn)
+}
+
+// RecordCost 记录一次请求的成本与 token 增量。PR3 T9。
+// 调用时机：handler/wire 在 pricing.Calculate 成功后调用一次（与 UsageStore.Append 同口径）。
+// 参数：
+//   - channelKey:        渠道唯一标识（沿用 BuildLBChannelKey 生成）。
+//   - cost:              本次请求的总成本（decimal）；nil 或 IsZero 时跳过 cost 累加。
+//   - inputTokens:       本次请求的 input tokens（不含 cache）。
+//   - outputTokens:      本次请求的 output tokens。
+//   - cacheReadTokens:   本次请求的 cache read tokens；<0 视为 0。
+//   - cacheCreateTokens: 本次请求的 cache creation tokens；<0 视为 0。
+//
+// 任意数值为 0/nil 时仍允许调用（不会报错，只是无副作用），便于上游统一调用点。
+func (m *MetricsManager) RecordCost(channelKey string, cost *decimal.Decimal, inputTokens, outputTokens, cacheReadTokens, cacheCreateTokens int64) {
+	if channelKey == "" {
+		return
+	}
+	if inputTokens < 0 {
+		inputTokens = 0
+	}
+	if outputTokens < 0 {
+		outputTokens = 0
+	}
+	if cacheReadTokens < 0 {
+		cacheReadTokens = 0
+	}
+	if cacheCreateTokens < 0 {
+		cacheCreateTokens = 0
+	}
+	costZero := cost == nil || cost.IsZero()
+	if costZero && inputTokens == 0 && outputTokens == 0 && cacheReadTokens == 0 && cacheCreateTokens == 0 {
+		return
+	}
+	entry := m.getOrCreateLBEntry(channelKey)
+	entry.mu.Lock()
+	if !costZero {
+		entry.totalCost = entry.totalCost.Add(*cost)
+	}
+	entry.inputTokensTotal += inputTokens
+	entry.outputTokensTotal += outputTokens
+	entry.cacheReadTokensTotal += cacheReadTokens
+	entry.cacheCreationTokensTotal += cacheCreateTokens
+	entry.mu.Unlock()
+}
+
+// GetTotalCost 返回某 channelKey 自进程启动以来累计的总成本（decimal）。
+// 若从未被记录过返回 decimal.Zero。
+func (m *MetricsManager) GetTotalCost(channelKey string) decimal.Decimal {
+	v, ok := m.lbMetrics.Load(channelKey)
+	if !ok {
+		return decimal.Zero
+	}
+	entry := v.(*lbMetricsEntry)
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+	return entry.totalCost
+}
+
+// GetInputTokensTotal 返回某 channelKey 自进程启动以来累计的 input tokens。
+func (m *MetricsManager) GetInputTokensTotal(channelKey string) int64 {
+	v, ok := m.lbMetrics.Load(channelKey)
+	if !ok {
+		return 0
+	}
+	entry := v.(*lbMetricsEntry)
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+	return entry.inputTokensTotal
+}
+
+// GetOutputTokensTotal 返回某 channelKey 自进程启动以来累计的 output tokens。
+func (m *MetricsManager) GetOutputTokensTotal(channelKey string) int64 {
+	v, ok := m.lbMetrics.Load(channelKey)
+	if !ok {
+		return 0
+	}
+	entry := v.(*lbMetricsEntry)
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+	return entry.outputTokensTotal
+}
+
+// GetCacheReadTokensTotal 返回某 channelKey 自进程启动以来累计的 cache read tokens。
+func (m *MetricsManager) GetCacheReadTokensTotal(channelKey string) int64 {
+	v, ok := m.lbMetrics.Load(channelKey)
+	if !ok {
+		return 0
+	}
+	entry := v.(*lbMetricsEntry)
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+	return entry.cacheReadTokensTotal
+}
+
+// GetCacheCreationTokensTotal 返回某 channelKey 自进程启动以来累计的 cache creation tokens。
+func (m *MetricsManager) GetCacheCreationTokensTotal(channelKey string) int64 {
+	v, ok := m.lbMetrics.Load(channelKey)
+	if !ok {
+		return 0
+	}
+	entry := v.(*lbMetricsEntry)
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+	return entry.cacheCreationTokensTotal
 }

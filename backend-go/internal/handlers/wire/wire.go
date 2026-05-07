@@ -51,6 +51,7 @@ import (
 	"github.com/BenedictKing/ccx/internal/scheduler"
 	"github.com/BenedictKing/ccx/internal/types"
 	"github.com/BenedictKing/ccx/internal/usage"
+	"github.com/shopspring/decimal"
 )
 
 // SchedulerView 抽象 ChannelScheduler 在 wire 路径上实际依赖的能力，
@@ -70,13 +71,14 @@ type SchedulerView interface {
 // 便于单测注入 fake；*metrics.MetricsManager 自动满足该接口。
 //
 // 写端分两组：
-//   - LB 层（channelKey 维度）：RecordActiveConnDelta / RecordTPS。
+//   - LB 层（channelKey 维度）：RecordActiveConnDelta / RecordTPS / RecordCost。
 //   - per-key 层（baseURL + apiKey + serviceType 维度）：RecordSuccessWithUsage /
 //     RecordFailure，对应 KeyMetrics 的成功/失败计数；GetKeyHistoricalStats
 //     等查询依赖该路径。
 type MetricsRecorder interface {
 	RecordActiveConnDelta(channelKey string, delta int64)
 	RecordTPS(channelKey string, totalTokens int64, durationMs int64)
+	RecordCost(channelKey string, cost *decimal.Decimal, inputTokens, outputTokens, cacheReadTokens, cacheCreateTokens int64)
 	RecordSuccessWithUsage(baseURL, apiKey, serviceType string, usage *types.Usage)
 	RecordFailure(baseURL, apiKey, serviceType string)
 }
@@ -474,6 +476,18 @@ func (a *LBOutboundAdapter) Finalize(
 				rec.TotalCost = &total
 				rec.CostItems = items
 				rec.PriceVersion = a.PriceLoader.Version()
+				// PR3 T9: 推送 cost / token 增量到 dashboard 聚合面。
+				// nil-safe：LBMetricsMgr 可能为 nil，channelKey 也可能为空。
+				if a.LBMetricsMgr != nil && channelKey != "" {
+					a.LBMetricsMgr.RecordCost(
+						channelKey,
+						&total,
+						int64(llmUsage.Inner.InputTokens),
+						int64(llmUsage.Inner.OutputTokens),
+						int64(llmUsage.Inner.CacheReadInputTokens),
+						int64(llmUsage.Inner.CacheCreationInputTokens),
+					)
+				}
 			} else {
 				log.Printf("[Wire-Finalize] 价格计算失败: model=%s err=%v", model, calcErr)
 			}

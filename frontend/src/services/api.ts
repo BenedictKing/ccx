@@ -132,6 +132,13 @@ export interface ChannelMetrics {
   breakerFailureRate?: number
   lastSuccessAt?: string
   lastFailureAt?: string
+  // PR3 T9: cost / token 总量（自进程启动累积）
+  inputTokens?: number
+  outputTokens?: number
+  totalTokens?: number
+  cacheReadInputTokens?: number
+  cacheCreationInputTokens?: number
+  totalCost?: string  // decimal 序列化为 string，与 T6/T7 usage record 一致
   // 分时段统计 (15m, 1h, 6h, 24h)
   timeWindows?: {
     '15m': TimeWindowStats
