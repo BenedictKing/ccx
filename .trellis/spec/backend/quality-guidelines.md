@@ -68,7 +68,7 @@ Use this contract when adding or changing a protocol proxy family under `backend
 
 - Public proxy endpoint handlers should expose `Handler(envCfg, cfgManager, channelScheduler) gin.HandlerFunc`.
 - Channel admin files should live beside the handler as `channels.go`.
-- Shared retry paths should use `common.TryUpstreamWithAllKeys(...)` instead of protocol-local key loops.
+- Shared retry paths for `messages` / `chat` / `responses` / `gemini` go through `pipeline.Factory(...).Process(ctx, req, body)` (PR3 cutover, commits 5aa3970 / 0d5f005 / f2b1bd3 / 4187939). Use `wire.NewLBOutboundAdapter` + `wire.BuildPipelineOpts` to mount the LB-driven NextChannel and the ccx key/pause middlewares. Direct calls to `common.TryUpstreamWithAllKeys` survive only inside `internal/handlers/images/handler.go`; new protocol families should not introduce them.
 
 ### Contracts
 
@@ -422,6 +422,69 @@ Use this contract when adding or changing any non-user proxy path that sends an 
 - Handler tests must assert explicit disabled/cooldown admin keys return before upstream is called.
 - Capability-test tests must assert disabled-only and cooldown-only channels create failed jobs without sending upstream requests.
 - Background health-check tests must assert disabled/cooldown keys are omitted from target `apiKeys` and cooldown-only channels are not probed.
+
+---
+
+## Pipeline Cutover & Billing NDJSON Contract (PR3)
+
+### Scope / Trigger
+
+Use this contract when changing handler cutover wiring, pipeline retry / cancel cleanup, billing pricing, or NDJSON usage persistence introduced by PR3.
+
+### Signatures
+
+- Wiring helper:
+  - `wire.NewLBOutboundAdapter(inner pipeline.Outbound, sched SchedulerView, kind scheduler.ChannelKind, requestStart time.Time) *LBOutboundAdapter`
+  - `wire.BuildPipelineOpts(cfgManager *config.ConfigManager, lb *LBOutboundAdapter) []pipeline.Option`
+  - `wire.LBOutboundAdapter.Finalize(ctx, success bool, errCode, model string, llmUsage llm.Usage, durationMs int64)`
+- Pipeline cleanup:
+  - `pipeline.AttemptStateFrom(ctx) *AttemptState` — adapters write `RawStreamCancel` / `RawProviderResponse` / `RawStreamCh` here
+  - `pipeline.cleanupAttemptStreamResources(state)` — runs LIFO before each retry / on ctx cancel; not callable directly, but contract is Process always invokes it
+- Billing:
+  - `pricing.Calculate(usage types.Usage, *ModelPrice) (decimal.Decimal, []CostItem, error)`
+  - `pricing.Loader.GetPrice(modelID) (*ModelPrice, bool)` + `Loader.Version() string`
+- Persistence:
+  - `usage.UsageStore.Append(ctx, UsageRecord) error`
+  - `usage.MaskAPIKey(key string) string`
+- Channel key (single source of truth):
+  - `metrics.BuildLBChannelKey(kind, name) string` — both T2 write side (`RecordFirstToken`) and T3 read side (`LBMetricsProvider`) must use this
+
+### Contracts
+
+- Every handler cutover sets `common.SetLBAPIType(c, "<kind>")` + `common.SetLBMetricsManager(c, mm)` before calling `processViaPipeline`. Stream tracker reads the LB API type from gin context and emits `RecordFirstToken` once per request.
+- `processViaPipeline` constructs `*middleware.AttemptInfo` and threads it through `WithAttemptInfo(ctx)`. Outbound `NextChannel` mutates the same struct in place; ccx key / pause middlewares re-read it on each `RawResponse` hook. Do not stash channel/key in fresh ctx values per attempt.
+- `wire.LBOutboundAdapter` satisfies both `pipeline.Retryable` and `pipeline.ChannelRetryable`. SSE `event:error` frames + 5xx + 429 first try `PrepareForRetry` (same channel, next key); only when all keys are exhausted does it fall through to `NextChannel`. `failedKeys` resets on channel switch.
+- `BuildPipelineOpts` registers middlewares in a fixed order: `pauseMW` -> `keyMW` -> `SSEErrorEventDetector`, then `WithEmptyResponseDetection()`, then `WithRetry(4, 8, 0)` (channel budget 4, key budget 8). Do not change ordering or budgets without revisiting the AxonHub-half contracts.
+- `wire.LBOutboundAdapter.Finalize` is `defer`-called from the handler. It writes (in order): `RecordActiveConnDelta(-1)`, `RecordTPS` on success+tokens, `pricing.Calculate`, per-key `MetricsManager.RecordSuccessWithUsage` / `RecordFailure`, channel-level `MetricsManager.RecordCost`, `UsageStore.Append`. Any `nil` dependency is a no-op; failure to append must not block the client response.
+- `UsageRecord` JSON keys are snake_case aligned with axonhub (`prompt_tokens` / `completion_tokens` / `prompt_cached_tokens` / `prompt_write_cached_tokens` + 5m/1h variants / `cost_price_reference_id`). Decimal fields serialize as JSON string via `shopspring/decimal`. NDJSON files split by UTC date (`usage-YYYY-MM-DD.ndjson`); 30-day retention sweep runs on startup.
+- Stream-side `llm.Usage` lands via the side channel: `outbound.LastStreamUsage` is filled while consuming SSE frames and read once via `TakeStreamUsage()` in the handler defer. Do not mutate `result.Response.Usage` from goroutines; use the side channel.
+
+### Validation & Error Matrix
+
+| Case | Expected behavior |
+|------|-------------------|
+| Stream attempt fails mid-flight | `cleanupAttemptStreamResources` cancels ctx, closes body, drains `RawStreamCh` (5s ceiling) before NextChannel/NextKey |
+| HTTP 200 + SSE `event: error` | `SSEErrorEventDetector` returns `ErrUpstreamSSEErrorEvent`; pipeline classifies as retryable |
+| Same-channel 429 / 5xx / failover-rule match | `PrepareForRetry` rotates key; if all keys fail, `NextChannel` resets `failedKeys` |
+| `context.Canceled` | finalize as cancelled, do not record cost or append usage row |
+| `pricing.GetPrice` returns false (unknown model) | Finalize skips cost calculation, NDJSON row records `total_cost: null` |
+| Concurrent `Append` calls | mutex-guarded, `bufio.Writer` flushes every second, no row drops |
+| UTC midnight rollover | next `Append` lands in `usage-YYYY-MM-(D+1).ndjson` |
+
+### Good/Base/Bad Cases
+
+- Good: handler sets `metrics.BuildLBChannelKey(kind, upstream.Name)` (or via `common.ChannelKeyForLB`) so write/read sides agree; LB strategy reads non-zero metrics.
+- Good: outbound TransformResponse routes by `upstream.ServiceType` and falls back to provider conversion helpers without re-implementing protocol translation.
+- Base: stream-side `result.Response` is `nil`; handler defer pulls usage via `outbound.TakeStreamUsage()` before Finalize.
+- Bad: appending JSON via raw `os.File.Write` without mutex - concurrent goroutines fragment lines.
+- Bad: serializing `decimal.Decimal` as float - cross-language reverse parsers lose precision.
+- Bad: registering the SSE error detector before the ccx key middleware - failover decisions race against in-flight RawResponse hooks.
+
+### Tests Required
+
+- `go test ./internal/pipeline/... ./internal/pipeline/middleware/... ./internal/handlers/wire/... ./internal/metrics/... ./internal/pricing/... ./internal/usage/...`
+- Handler-level matrix tests (4 handler families, 4 upstreams each, stream + non-stream) must pass without `t.Skip`.
+- AxonHub-half.md contract #1 stays enforced via `pipeline_cancel_test.go` (cancel + close body + drain) plus the matrix tests asserting failover before next attempt.
 
 ---
 

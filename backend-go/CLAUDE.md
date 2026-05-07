@@ -71,9 +71,18 @@ type Provider interface {
 | 模块 | 职责 |
 |------|------|
 | `handlers/` | HTTP 处理器（proxy.go, responses.go） |
+| `handlers/{messages,chat,responses,gemini}/` | 4 个入站 handler，全部走新 pipeline.Process（PR3） |
+| `handlers/adapters/` | 8 个 inbound/outbound adapter 公共契约（4 共享 metadata 键） |
+| `handlers/wire/` | LBOutboundAdapter（pipeline.Outbound + Retryable + ChannelRetryable）+ Finalize（cost + UsageStore.Append + per-key metrics） |
 | `providers/` | 上游适配器 |
 | `converters/` | 协议转换器（工厂模式） |
-| `scheduler/` | 多渠道调度（优先级、熔断） |
+| `scheduler/` | 多渠道调度。`SelectChannel` 已切到 `LoadBalancer.Sort` + 6 策略（PR3 T4） |
+| `loadbalance/` | LB 容器 + 6 strategy（Promotion/TraceAware/WeightRR/ErrorAware/LatencyAware/RateLimitAware）+ 13 方法 ChannelMetricsProvider 接口 |
+| `pipeline/` | axonhub 风格 9-hook pipeline + Process 主循环 + 空流检测 + cancel-on-retry cleanup |
+| `pipeline/middleware/` | ccx 自家 middleware：CCXKeyFailure（5xx/429/failoverRule）/ CCXPauseRule / SSEErrorEventDetector |
+| `metrics/` | KeyMetrics + ChannelMetrics + lbMetricsEntry（FTTL/TPS/ActiveConn/cost/cache/tokens） |
+| `pricing/` | embed.FS + fsnotify 热重载，12 模型基线，3 计费模式（flat_fee/usage_per_unit/usage_tiered），decimal-as-string |
+| `usage/` | NDJSON UsageStore，按日切分 + 30 天保留期，sync.Mutex + bufio.Writer，snake_case 对齐 axonhub |
 | `session/` | 会话管理（Trace 亲和性） |
 | `config/` | 配置管理（热重载） |
 
@@ -111,6 +120,19 @@ log.Printf("[Component] 警告: 消息内容")
 | Responses | `[Responses-Stream-Token]` | Responses Token 统计 |
 | Responses | `[Responses-Models]` | Responses Models API 操作 |
 | Models | `[Models]` | 跨接口的模型列表合并操作 |
+| Pipeline | `[Pipeline-Cleanup]` | retry/cancel 前 attempt 资源清理 |
+| Pipeline | `[Pipeline-SSEError]` | SSE event:error 帧检测触发 retry |
+| Scheduler-LB | `[Scheduler-LB]` | LoadBalancer.Sort 选择渠道 |
+| Wire | `[Wire-NextChannel]` | LB 切下一 channel |
+| Wire | `[Wire-NextKey]` | 同 channel 内换 key（ChannelRetryable） |
+| Wire | `[Wire-Finalize]` | 请求结束记 cost / metrics / NDJSON |
+| Pricing | `[Pricing-Reload]` | 价格表 fsnotify 热重载 |
+| Usage | `[Usage-NDJSON]` | NDJSON UsageStore 切日 / 保留期清理 |
+| Messages | `[Messages-Pipeline]` | Messages 走新 pipeline.Process 主路径 |
+| Messages | `[Messages-Outbound]` | Messages outbound 跨格式 dispatch / 流 usage 解析 |
+| Chat | `[Chat-Pipeline]` / `[Chat-Outbound]` | 同上，OpenAI Chat 入口 |
+| Responses | `[Responses-Pipeline]` / `[Responses-Outbound]` | 同上，Codex Responses 入口 |
+| Gemini | `[Gemini-Pipeline]` / `[Gemini-Outbound]` | 同上，Gemini 入口 |
 
 ## 扩展指南
 
@@ -119,11 +141,19 @@ log.Printf("[Component] 警告: 消息内容")
 2. 实现 `Provider` 接口
 3. 在 `GetProvider()` 注册
 
-**调度优先级规则**:
-1. 促销期渠道优先
-2. Priority 字段排序
-3. Trace 亲和性绑定
-4. 熔断状态过滤
+**调度优先级规则**（PR3 切到 LoadBalancer 加权打分）:
+
+候选硬过滤（`scheduler.filterCandidates`）：model 兼容 + route prefix + circuit Open + 非 active 状态 + 空 APIKeys。
+
+候选打分（6 strategy 总分降序，OrderingWeight 次级，ID 末级 stable 排序）：
+1. PromotionStrategy（0/800）—— 促销期渠道
+2. TraceAwareStrategy（0/1000）—— Trace 亲和性
+3. WeightRoundRobinStrategy（10-150）—— OrderingWeight + 请求计数衰减
+4. ErrorAwareStrategy（0-200）—— ConsecutiveFailures + 5min 衰减
+5. LatencyAwareStrategy（0-80）—— FTTL + TPS（stream 模式）/ E2E（非流式）
+6. RateLimitAwareStrategy（-10000~100）—— 限流冷却硬负分 + ActiveConnections 衰减
+
+retry：失败后 `ChannelRetryable.NextKey` 在同 channel 内换 key，全部 key 失败再 `Retryable.NextChannel`。stream attempt retry 前 pipeline 自动 cancel + close body + drain fan-out。
 
 ## 工具使用注意事项
 
