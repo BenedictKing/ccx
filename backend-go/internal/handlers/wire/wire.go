@@ -120,13 +120,21 @@ type LBOutboundAdapter struct {
 	currentKey      string
 	currentBaseURL  string
 	currentUpstream *config.UpstreamConfig
-	finalized       bool
+	// failedKeys 记录当前 channel 内已失败/已轮换过的 API key，
+	// 由 PrepareForRetry 在轮换前累加；NextChannel 切到新 channel 时重置。
+	failedKeys map[string]bool
+	finalized  bool
 }
 
-// 编译期断言：LBOutboundAdapter 满足 pipeline.Outbound + Retryable。
+// 编译期断言：LBOutboundAdapter 满足 pipeline.Outbound + Retryable + ChannelRetryable。
+//
+// ChannelRetryable 让 SSE error event / 临时上游错误优先在 *同 channel* 内
+// 轮换下一个 API key 重试；当前 channel 的 key 全部耗尽后，pipeline 主循环
+// 才回退到 Retryable.NextChannel 切到下一个 channel。
 var (
-	_ pipeline.Outbound  = (*LBOutboundAdapter)(nil)
-	_ pipeline.Retryable = (*LBOutboundAdapter)(nil)
+	_ pipeline.Outbound         = (*LBOutboundAdapter)(nil)
+	_ pipeline.Retryable        = (*LBOutboundAdapter)(nil)
+	_ pipeline.ChannelRetryable = (*LBOutboundAdapter)(nil)
 )
 
 // NewLBOutboundAdapter 构造 adapter；inner / scheduler 不可为 nil。
@@ -240,6 +248,9 @@ func (a *LBOutboundAdapter) NextChannel(ctx context.Context) error {
 	a.currentKey = apiKey
 	a.currentBaseURL = baseURL
 	a.currentUpstream = sel.Upstream
+	// 切到新 channel：清空 same-channel key 黑名单，让新 channel 的 key 池
+	// 从空状态开始；保留 failedChannels（channel 维度）。
+	a.failedKeys = nil
 
 	if a.LBMetricsMgr != nil && sel.Upstream.Name != "" {
 		channelKey := metrics.BuildLBChannelKey(string(a.Kind), sel.Upstream.Name)
@@ -248,6 +259,98 @@ func (a *LBOutboundAdapter) NextChannel(ctx context.Context) error {
 	log.Printf("[Wire-NextChannel] kind=%s channel=[%d] %s reason=%s",
 		a.Kind, sel.ChannelIndex, sel.Upstream.Name, sel.Reason)
 	return nil
+}
+
+// CanRetry 实现 pipeline.ChannelRetryable.CanRetry。
+//
+// 返回 true 表示当前 channel 内仍有未尝试的 healthy API key；pipeline 主循环
+// 将调用 PrepareForRetry 完成 key 轮换，然后在同 channel 上发起下一次 attempt。
+//
+// 触发条件（任一）：
+//   - SSE error event 帧（pipeline.ErrUpstreamStreamError）
+//   - 上游 5xx / 429 等可重试 HTTP 错误（保守地接受所有非 nil 错误，
+//     由 PauseRule / KeyFailure middleware 已经在前置层把不可重试错误拦走）
+//
+// pickNextHealthyKey 在 PrepareForRetry 中真正执行；CanRetry 仅做 fast-fail
+// 的预检：upstream 为 nil 或没有可用的下一个 key 时直接返回 false，让
+// pipeline 走 NextChannel 路径。
+func (a *LBOutboundAdapter) CanRetry(err error) bool {
+	if err == nil {
+		return false
+	}
+	if a.AttemptInfo == nil || a.AttemptInfo.Upstream == nil {
+		return false
+	}
+	if a.currentUpstream == nil {
+		return false
+	}
+	return a.pickNextHealthyKey() != ""
+}
+
+// PrepareForRetry 实现 pipeline.ChannelRetryable.PrepareForRetry：
+//
+//  1. 把当前 key 标记到 failedKeys，防止下一轮再选到。
+//  2. 在 currentUpstream.APIKeys 内挑下一个 healthy key（跳过 failedKeys）。
+//  3. 同 channel 不更新 RecordActiveConnDelta（连接计数已在 NextChannel +1）；
+//     仅刷新 AttemptInfo + adapters.SetUpstreamBinding 让下一次
+//     TransformRequest 用新 key。
+//
+// 找不到候选时返回 pipeline.ErrSameChannelExhausted，让 pipeline 主循环回退
+// 到 NextChannel 切 channel。
+func (a *LBOutboundAdapter) PrepareForRetry(ctx context.Context) error {
+	if a.AttemptInfo == nil || a.AttemptInfo.Upstream == nil || a.currentUpstream == nil {
+		return pipeline.ErrSameChannelExhausted
+	}
+
+	if a.failedKeys == nil {
+		a.failedKeys = make(map[string]bool)
+	}
+	if a.currentKey != "" {
+		a.failedKeys[a.currentKey] = true
+	}
+
+	nextKey := a.pickNextHealthyKey()
+	if nextKey == "" {
+		return pipeline.ErrSameChannelExhausted
+	}
+
+	a.currentKey = nextKey
+	a.AttemptInfo.APIKey = nextKey
+	if a.Request != nil {
+		adapters.SetUpstreamBinding(a.Request, a.currentUpstream, nextKey, a.currentBaseURL)
+	}
+
+	log.Printf("[Wire-NextKey] kind=%s channel=[%d] %s rotated to next key (failed=%d)",
+		a.Kind, a.currentChannel, a.currentUpstream.Name, len(a.failedKeys))
+	return nil
+}
+
+// pickNextHealthyKey 在 currentUpstream.APIKeys 中找下一个未被本次 attempt
+// failedKeys 标失败的 key；找不到返回空字符串。
+//
+// 简化策略：仅按 in-memory failedKeys 过滤；不查 ConfigManager 的全局黑名单
+// （那已由 KeyFailure middleware 在 attempt 完成后异步落账，对本次 same-channel
+// 重试不影响 —— 即使选到一个全局黑名单 key，下次请求依然会被 ConfigManager
+// 跳过）。这与 axonhub 的实现一致：retry 路径只关心当次 attempt 已失败的 key。
+func (a *LBOutboundAdapter) pickNextHealthyKey() string {
+	if a.currentUpstream == nil {
+		return ""
+	}
+	for _, k := range a.currentUpstream.APIKeys {
+		if k == "" {
+			continue
+		}
+		if a.failedKeys != nil && a.failedKeys[k] {
+			continue
+		}
+		if k == a.currentKey {
+			// 当前正在用且未被加入 failedKeys：仅在主动 PrepareForRetry 标失败前
+			// 出现，跳过避免重复。
+			continue
+		}
+		return k
+	}
+	return ""
 }
 
 // MarkFailed 显式把指定 channel 标记为本次请求已失败。
@@ -383,10 +486,13 @@ func (a *LBOutboundAdapter) Finalize(
 }
 
 // BuildPipelineOpts 返回 4 个 handler 通用的 pipeline.Option 列表：
-//   - WithMiddlewares(pauseMW, keyMW)：PauseRule 必须先于 KeyFailure（T5 契约）。
+//   - WithMiddlewares(pauseMW, keyMW, sseErrMW)：PauseRule 必须先于 KeyFailure（T5 契约）。
 //   - WithEmptyResponseDetection()：上游空流时触发 retry。
-//   - WithRetry(maxChannelRetries=4, maxSameChannelRetries=0, retryDelay=0)：
-//     默认与 axonhub 对齐；如需调整可直接在 handler 里再追加 WithRetry option。
+//   - WithRetry(maxChannelRetries=4, maxSameChannelRetries=8, retryDelay=0)：
+//     same-channel 上限设为 8，让 LBOutboundAdapter 的 ChannelRetryable
+//     能在当前 channel 内最多轮换 8 个 API key（覆盖典型多 key 配置）；
+//     pipeline.PrepareForRetry 返回 ErrSameChannelExhausted 时仍会自动回退到
+//     NextChannel 切下一个 channel。
 //
 // cfgManager 不可为 nil（CCXKey/Pause middleware 内部 panic on nil）。
 func BuildPipelineOpts(cfgManager *config.ConfigManager, lb *LBOutboundAdapter) []pipeline.Option {
@@ -399,7 +505,7 @@ func BuildPipelineOpts(cfgManager *config.ConfigManager, lb *LBOutboundAdapter) 
 	opts := []pipeline.Option{
 		pipeline.WithMiddlewares(pauseMW, keyMW, sseErrMW),
 		pipeline.WithEmptyResponseDetection(),
-		pipeline.WithRetry(4, 0, 0),
+		pipeline.WithRetry(4, 8, 0),
 	}
 	_ = lb // 保留 lb 参数为未来按 lb 状态调整 retry 上限 / 注入 ChannelRetryable 留出口子
 	return opts

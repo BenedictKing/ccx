@@ -498,3 +498,145 @@ func setupTestCfg(t *testing.T) *config.ConfigManager {
 	t.Cleanup(func() { _ = cm.Close() })
 	return cm
 }
+
+// newSelectionMultiKey 构造一个携带多 API key 的 SelectionResult。
+func newSelectionMultiKey(idx int, name string, keys []string, baseURL string) *scheduler.SelectionResult {
+	return &scheduler.SelectionResult{
+		Upstream: &config.UpstreamConfig{
+			Name:        name,
+			BaseURL:     baseURL,
+			APIKeys:     keys,
+			ServiceType: "claude",
+		},
+		ChannelIndex: idx,
+		Reason:       "priority_order",
+	}
+}
+
+func TestLBOutboundAdapter_PrepareForRetry_RotatesKeyInSameChannel(t *testing.T) {
+	mm := newFakeMetrics()
+	sched := &fakeScheduler{
+		results: []*scheduler.SelectionResult{
+			newSelectionMultiKey(5, "ch-multi", []string{"k1", "k2", "k3"}, "https://m.local"),
+		},
+	}
+	info := &pipelinemw.AttemptInfo{APIType: "Messages"}
+	lb := NewLBOutboundAdapter(fakeOutbound{}, sched, scheduler.ChannelKindMessages, time.Now())
+	lb.AttemptInfo = info
+	lb.LBMetricsMgr = mm
+	lb.Request = &llm.Request{}
+
+	if err := lb.NextChannel(context.Background()); err != nil {
+		t.Fatalf("NextChannel: %v", err)
+	}
+	if info.APIKey != "k1" {
+		t.Fatalf("initial key = %q, want k1", info.APIKey)
+	}
+	if got := mm.connDeltas["messages:ch-multi"]; got != 1 {
+		t.Fatalf("ActiveConnDelta after NextChannel = %d, want 1", got)
+	}
+
+	// 触发可重试错误：CanRetry 返回 true。
+	if !lb.CanRetry(pipeline.ErrUpstreamStreamError) {
+		t.Fatal("CanRetry(ErrUpstreamStreamError) = false, want true")
+	}
+	// PrepareForRetry → 应轮换到 k2，且 upstream/channel 不变。
+	if err := lb.PrepareForRetry(context.Background()); err != nil {
+		t.Fatalf("PrepareForRetry #1: %v", err)
+	}
+	if info.APIKey != "k2" {
+		t.Fatalf("rotated key #1 = %q, want k2", info.APIKey)
+	}
+	if info.Upstream == nil || info.Upstream.Name != "ch-multi" {
+		t.Fatalf("Upstream changed unexpectedly: %+v", info.Upstream)
+	}
+	if lb.CurrentChannelIndex() != 5 {
+		t.Fatalf("currentChannel = %d, want 5", lb.CurrentChannelIndex())
+	}
+	// 同 channel 不应再次 +1 ActiveConn。
+	if got := mm.connDeltas["messages:ch-multi"]; got != 1 {
+		t.Fatalf("ActiveConnDelta after PrepareForRetry #1 = %d, want 1 (no double +1)", got)
+	}
+
+	// 第二次轮换 → k3。
+	if err := lb.PrepareForRetry(context.Background()); err != nil {
+		t.Fatalf("PrepareForRetry #2: %v", err)
+	}
+	if info.APIKey != "k3" {
+		t.Fatalf("rotated key #2 = %q, want k3", info.APIKey)
+	}
+
+	// 第三次：3 个 key 已耗尽 → ErrSameChannelExhausted。
+	err := lb.PrepareForRetry(context.Background())
+	if !errors.Is(err, pipeline.ErrSameChannelExhausted) {
+		t.Fatalf("PrepareForRetry #3 = %v, want ErrSameChannelExhausted", err)
+	}
+	// 同时 CanRetry 在这一轮也应返回 false（pickNextHealthyKey 为空）。
+	// 注意：需要先把 k3 也标失败，模拟主循环失败重入；此处直接断言 PrepareForRetry
+	// 已耗尽即可，CanRetry 在主循环中是 PrepareForRetry 之前调用。
+	upstream, key, _, err := adapters.UpstreamBinding(lb.Request)
+	if err != nil {
+		t.Fatalf("UpstreamBinding: %v", err)
+	}
+	if upstream.Name != "ch-multi" || key != "k3" {
+		t.Fatalf("metadata = %s/%s, want ch-multi/k3", upstream.Name, key)
+	}
+}
+
+func TestLBOutboundAdapter_CanRetry_NilUpstreamReturnsFalse(t *testing.T) {
+	sched := &fakeScheduler{}
+	lb := NewLBOutboundAdapter(fakeOutbound{}, sched, scheduler.ChannelKindMessages, time.Now())
+	// 未调 NextChannel —— AttemptInfo / currentUpstream 均为 nil。
+	if lb.CanRetry(pipeline.ErrUpstreamStreamError) {
+		t.Fatal("CanRetry with nil AttemptInfo = true, want false")
+	}
+	// 仅设 AttemptInfo 但 Upstream 仍为 nil。
+	lb.AttemptInfo = &pipelinemw.AttemptInfo{APIType: "Messages"}
+	if lb.CanRetry(pipeline.ErrUpstreamStreamError) {
+		t.Fatal("CanRetry with nil Upstream = true, want false")
+	}
+}
+
+func TestLBOutboundAdapter_CanRetry_NilErrorReturnsFalse(t *testing.T) {
+	sched := &fakeScheduler{
+		results: []*scheduler.SelectionResult{
+			newSelectionMultiKey(0, "ch", []string{"k1", "k2"}, "u"),
+		},
+	}
+	lb := NewLBOutboundAdapter(fakeOutbound{}, sched, scheduler.ChannelKindMessages, time.Now())
+	lb.AttemptInfo = &pipelinemw.AttemptInfo{APIType: "Messages"}
+	lb.Request = &llm.Request{}
+	_ = lb.NextChannel(context.Background())
+	if lb.CanRetry(nil) {
+		t.Fatal("CanRetry(nil) = true, want false")
+	}
+}
+
+func TestLBOutboundAdapter_NextChannel_ResetsFailedKeys(t *testing.T) {
+	sched := &fakeScheduler{
+		results: []*scheduler.SelectionResult{
+			newSelectionMultiKey(1, "ch-A", []string{"a1", "a2"}, "u1"),
+			newSelectionMultiKey(2, "ch-B", []string{"b1", "b2"}, "u2"),
+		},
+	}
+	lb := NewLBOutboundAdapter(fakeOutbound{}, sched, scheduler.ChannelKindMessages, time.Now())
+	lb.AttemptInfo = &pipelinemw.AttemptInfo{APIType: "Messages"}
+	lb.Request = &llm.Request{}
+
+	_ = lb.NextChannel(context.Background())
+	if err := lb.PrepareForRetry(context.Background()); err != nil {
+		t.Fatalf("PrepareForRetry: %v", err)
+	}
+	// 切到 ch-B：failedKeys 应被重置。
+	_ = lb.NextChannel(context.Background())
+	if lb.AttemptInfo.APIKey != "b1" {
+		t.Fatalf("after switch key = %q, want b1", lb.AttemptInfo.APIKey)
+	}
+	// PrepareForRetry 应能在 ch-B 内继续轮换到 b2（说明 failedKeys 已清空）。
+	if err := lb.PrepareForRetry(context.Background()); err != nil {
+		t.Fatalf("PrepareForRetry on ch-B: %v", err)
+	}
+	if lb.AttemptInfo.APIKey != "b2" {
+		t.Fatalf("rotated key on ch-B = %q, want b2", lb.AttemptInfo.APIKey)
+	}
+}
