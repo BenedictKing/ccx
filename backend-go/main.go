@@ -21,8 +21,10 @@ import (
 	"github.com/BenedictKing/ccx/internal/logger"
 	"github.com/BenedictKing/ccx/internal/metrics"
 	"github.com/BenedictKing/ccx/internal/middleware"
+	"github.com/BenedictKing/ccx/internal/pricing"
 	"github.com/BenedictKing/ccx/internal/scheduler"
 	"github.com/BenedictKing/ccx/internal/session"
+	"github.com/BenedictKing/ccx/internal/usage"
 	"github.com/BenedictKing/ccx/internal/warmup"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -116,6 +118,20 @@ func main() {
 	channelScheduler := scheduler.NewChannelScheduler(cfgManager, messagesMetricsManager, responsesMetricsManager, geminiMetricsManager, chatMetricsManager, imagesMetricsManager, traceAffinityManager, urlManager)
 	log.Printf("[Scheduler-Init] 多渠道调度器已初始化 (失败率阈值: %.0f%%, 滑动窗口: %d)",
 		messagesMetricsManager.GetFailureThreshold()*100, messagesMetricsManager.GetWindowSize())
+
+	// 初始化 pricing / usage（PR3 T8a 起 messages handler 经 pipeline.Process
+	// 路径调用 wire.LBOutboundAdapter.Finalize，需要 pricing.Loader + usage.Store）。
+	priceLoader, err := pricing.NewLoaderFromEnv()
+	if err != nil {
+		log.Fatalf("[Main-Pricing] 初始化价格表失败: %v", err)
+	}
+	usageStore, err := usage.NewNDJSONStore(usage.DefaultConfig())
+	if err != nil {
+		log.Fatalf("[Main-Usage] 初始化 usage store 失败: %v", err)
+	}
+	defer func() { _ = usageStore.Close() }()
+	messages.SetGlobalDependencies(usageStore, priceLoader)
+	log.Printf("[Main-Wiring] messages 模块依赖注入完成 (price_version=%s)", priceLoader.Version())
 
 	// 设置 Gin 模式
 	if envCfg.IsProduction() {
