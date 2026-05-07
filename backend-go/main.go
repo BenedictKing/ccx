@@ -133,6 +133,7 @@ func main() {
 	messages.SetGlobalDependencies(usageStore, priceLoader)
 	chat.SetGlobalDependencies(usageStore, priceLoader)
 	responses.SetGlobalDependencies(usageStore, priceLoader)
+	gemini.SetGlobalDependencies(usageStore, priceLoader)
 	log.Printf("[Main-Wiring] messages 模块依赖注入完成 (price_version=%s)", priceLoader.Version())
 
 	// 设置 Gin 模式

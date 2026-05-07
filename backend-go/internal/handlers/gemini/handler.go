@@ -2,7 +2,9 @@
 package gemini
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -13,10 +15,17 @@ import (
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/converters"
 	"github.com/BenedictKing/ccx/internal/forwarding"
+	"github.com/BenedictKing/ccx/internal/handlers/adapters"
 	"github.com/BenedictKing/ccx/internal/handlers/common"
+	"github.com/BenedictKing/ccx/internal/handlers/wire"
+	"github.com/BenedictKing/ccx/internal/llm"
 	"github.com/BenedictKing/ccx/internal/middleware"
+	"github.com/BenedictKing/ccx/internal/pipeline"
+	pipelinemw "github.com/BenedictKing/ccx/internal/pipeline/middleware"
+	"github.com/BenedictKing/ccx/internal/pricing"
 	"github.com/BenedictKing/ccx/internal/scheduler"
 	"github.com/BenedictKing/ccx/internal/types"
+	"github.com/BenedictKing/ccx/internal/usage"
 	"github.com/BenedictKing/ccx/internal/utils"
 	"github.com/gin-gonic/gin"
 )
@@ -113,6 +122,9 @@ func extractModelName(param string) string {
 }
 
 // handleMultiChannel 处理多渠道 Gemini 请求
+//
+// PR3 T8d：路由到 pipeline.Process（wire.LBOutboundAdapter 内部驱动渠道选择 +
+// failover），不再走 TryUpstreamWithAllKeys。
 func handleMultiChannel(
 	c *gin.Context,
 	envCfg *config.EnvConfig,
@@ -125,79 +137,13 @@ func handleMultiChannel(
 	userID string,
 	startTime time.Time,
 ) {
-	metricsManager := channelScheduler.GetGeminiMetricsManager()
-	common.HandleMultiChannelFailover(
-		c,
-		envCfg,
-		channelScheduler,
-		scheduler.ChannelKindGemini,
-		"Gemini",
-		userID,
-		model,
-		func(selection *scheduler.SelectionResult) common.MultiChannelAttemptResult {
-			upstream := selection.Upstream
-			channelIndex := selection.ChannelIndex
-
-			if upstream == nil {
-				return common.MultiChannelAttemptResult{}
-			}
-
-			baseURLs := upstream.GetAllBaseURLs()
-			sortedURLResults := channelScheduler.GetSortedURLsForChannel(scheduler.ChannelKindGemini, channelIndex, baseURLs)
-
-			handled, successKey, successBaseURLIdx, failoverErr, usage, lastErr := common.TryUpstreamWithAllKeys(
-				c,
-				envCfg,
-				cfgManager,
-				channelScheduler,
-				scheduler.ChannelKindGemini,
-				"Gemini",
-				metricsManager,
-				upstream,
-				sortedURLResults,
-				bodyBytes,
-				isStream,
-				func(upstream *config.UpstreamConfig, failedKeys map[string]bool) (string, error) {
-					return cfgManager.GetNextGeminiAPIKey(upstream, failedKeys)
-				},
-				func(c *gin.Context, upstreamCopy *config.UpstreamConfig, apiKey string) (*http.Request, error) {
-					return buildProviderRequest(c, upstreamCopy, upstreamCopy.BaseURL, apiKey, geminiReq, model, isStream)
-				},
-				func(apiKey string) {
-					_ = cfgManager.DeprioritizeAPIKey(apiKey)
-				},
-				func(url string) {
-					channelScheduler.MarkURLFailure(scheduler.ChannelKindGemini, channelIndex, url)
-				},
-				func(url string) {
-					channelScheduler.MarkURLSuccess(scheduler.ChannelKindGemini, channelIndex, url)
-				},
-				func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string, actualRequestBody []byte) (*types.Usage, error) {
-					return handleSuccess(c, resp, upstreamCopy, apiKey, envCfg, startTime, geminiReq, model, isStream)
-				},
-				model,
-				selection.ChannelIndex,
-				channelScheduler.GetChannelLogStore(scheduler.ChannelKindGemini),
-			)
-
-			return common.MultiChannelAttemptResult{
-				Handled:           handled,
-				Attempted:         true,
-				SuccessKey:        successKey,
-				SuccessBaseURLIdx: successBaseURLIdx,
-				FailoverError:     failoverErr,
-				Usage:             usage,
-				LastError:         lastErr,
-			}
-		},
-		nil,
-		func(ctx *gin.Context, failoverErr *common.FailoverError, lastError error) {
-			handleAllChannelsFailed(ctx, failoverErr, lastError)
-		},
-	)
+	processViaPipeline(c, envCfg, cfgManager, channelScheduler, geminiReq, bodyBytes, userID, model, isStream, "", startTime)
 }
 
 // handleSingleChannel 处理单渠道 Gemini 请求
+//
+// PR3 T8d：路由到 pipeline.Process。空渠道 / 空 key 的早退保留在此处，避免
+// pipeline 主循环再做一次同等校验。
 func handleSingleChannel(
 	c *gin.Context,
 	envCfg *config.EnvConfig,
@@ -209,7 +155,7 @@ func handleSingleChannel(
 	isStream bool,
 	startTime time.Time,
 ) {
-	upstream, channelIndex, err := cfgManager.GetCurrentGeminiUpstreamWithIndex()
+	upstream, _, err := cfgManager.GetCurrentGeminiUpstreamWithIndex()
 	if err != nil {
 		c.JSON(503, types.GeminiError{
 			Error: types.GeminiErrorDetail{
@@ -232,46 +178,7 @@ func handleSingleChannel(
 		return
 	}
 
-	metricsManager := channelScheduler.GetGeminiMetricsManager()
-	baseURLs := upstream.GetAllBaseURLs()
-	urlResults := common.BuildDefaultURLResults(baseURLs)
-
-	handled, _, _, lastFailoverError, _, lastError := common.TryUpstreamWithAllKeys(
-		c,
-		envCfg,
-		cfgManager,
-		channelScheduler,
-		scheduler.ChannelKindGemini,
-		"Gemini",
-		metricsManager,
-		upstream,
-		urlResults,
-		bodyBytes,
-		isStream,
-		func(upstream *config.UpstreamConfig, failedKeys map[string]bool) (string, error) {
-			return cfgManager.GetNextGeminiAPIKey(upstream, failedKeys)
-		},
-		func(c *gin.Context, upstreamCopy *config.UpstreamConfig, apiKey string) (*http.Request, error) {
-			return buildProviderRequest(c, upstreamCopy, upstreamCopy.BaseURL, apiKey, geminiReq, model, isStream)
-		},
-		func(apiKey string) {
-			_ = cfgManager.DeprioritizeAPIKey(apiKey)
-		},
-		nil,
-		nil,
-		func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string, actualRequestBody []byte) (*types.Usage, error) {
-			return handleSuccess(c, resp, upstreamCopy, apiKey, envCfg, startTime, geminiReq, model, isStream)
-		},
-		model,
-		channelIndex,
-		channelScheduler.GetChannelLogStore(scheduler.ChannelKindGemini),
-	)
-	if handled {
-		return
-	}
-
-	log.Printf("[Gemini-Error] 所有 API密钥都失败了")
-	handleAllKeysFailed(c, lastFailoverError, lastError)
+	processViaPipeline(c, envCfg, cfgManager, channelScheduler, geminiReq, bodyBytes, "", model, isStream, "", startTime)
 }
 
 // ensureThoughtSignatures 确保所有 functionCall 都有 thought_signature 字段
@@ -713,3 +620,243 @@ func handleAllKeysFailed(c *gin.Context, failoverErr *common.FailoverError, last
 		},
 	})
 }
+
+// ----------------------------------------------------------------------------
+// PR3 T8d: pipeline 路由 helper（与 messages/chat/responses handler 同模板）
+// ----------------------------------------------------------------------------
+
+var (
+	globalUsageStore  usage.UsageStore
+	globalPriceLoader *pricing.Loader
+)
+
+// SetGlobalDependencies 由 main.go 在启动阶段调用，注入 usage/pricing。
+// 测试可通过同一函数注入 noop 实现，避免 nil 依赖。
+func SetGlobalDependencies(store usage.UsageStore, loader *pricing.Loader) {
+	globalUsageStore, globalPriceLoader = store, loader
+}
+
+// ginInjectingInbound 装饰 gemini.NewInbound：在 TransformRequest 阶段把
+// gin.Context 写入 llm.Request.Metadata，并立即驱动 LBOutboundAdapter
+// 选定首个 channel/key（pipeline 主循环只在错误后才会调 NextChannel）。
+type ginInjectingInbound struct {
+	Inner pipeline.Inbound
+	Gin   *gin.Context
+	LB    *wire.LBOutboundAdapter
+}
+
+func (g *ginInjectingInbound) Format() llm.Format { return g.Inner.Format() }
+
+func (g *ginInjectingInbound) TransformRequest(ctx context.Context, req *http.Request, body []byte) (*llm.Request, error) {
+	llmReq, err := g.Inner.TransformRequest(ctx, req, body)
+	if err != nil {
+		return nil, err
+	}
+	adapters.SetGinContext(llmReq, g.Gin)
+	g.LB.Request = llmReq
+	if e := g.LB.NextChannel(ctx); e != nil {
+		return nil, e
+	}
+	return llmReq, nil
+}
+
+func (g *ginInjectingInbound) TransformResponse(ctx context.Context, resp *llm.Response) ([]byte, http.Header, error) {
+	return g.Inner.TransformResponse(ctx, resp)
+}
+
+func (g *ginInjectingInbound) TransformStream(ctx context.Context, in llm.Stream[*llm.Response]) llm.Stream[*llm.StreamEvent] {
+	return g.Inner.TransformStream(ctx, in)
+}
+
+// processViaPipeline 是 PR3 T8d 把 gemini handler 切流量到 pipeline.Process
+// 的入口；single-channel / multi-channel 共享同一份代码。
+//
+// 与其他 handler 的差异：
+//   - 用 GetGeminiMetricsManager / ChannelKindGemini；
+//   - common.SetLBAPIType(c, "gemini")；
+//   - attemptInfo.APIType = "Gemini"；
+//   - parsedModel 由 URL path 提取（gemini 是 /v1beta/models/{model}:action 形式）；
+//   - isStream 来自 URL path 的 :streamGenerateContent 后缀（已由 handler 入口
+//     提取后传入）。
+func processViaPipeline(
+	c *gin.Context,
+	envCfg *config.EnvConfig,
+	cfgManager *config.ConfigManager,
+	channelScheduler *scheduler.ChannelScheduler,
+	geminiReq *types.GeminiRequest,
+	bodyBytes []byte,
+	userID, parsedModel string,
+	isStream bool,
+	routePrefix string,
+	requestStart time.Time,
+) {
+	mm := channelScheduler.GetGeminiMetricsManager()
+	common.SetLBAPIType(c, "gemini")
+	common.SetLBMetricsManager(c, mm)
+
+	if requestStart.IsZero() {
+		requestStart = time.Now()
+	}
+	attemptInfo := &pipelinemw.AttemptInfo{APIType: "Gemini"}
+	ctx := pipelinemw.WithAttemptInfo(c.Request.Context(), attemptInfo)
+
+	lb := wire.NewLBOutboundAdapter(NewOutbound(), channelScheduler, scheduler.ChannelKindGemini, requestStart)
+	lb.AttemptInfo = attemptInfo
+	lb.LBMetricsMgr = mm
+	lb.UsageStore = globalUsageStore
+	lb.PriceLoader = globalPriceLoader
+	lb.UserID = userID
+	lb.Model = parsedModel
+	lb.RoutePrefix = routePrefix
+	outbound, _ := lb.Inner.(*outboundAdapter)
+
+	inbound := &ginInjectingInbound{Inner: NewInbound(), Gin: c, LB: lb}
+
+	exec := pipeline.ExecutorFunc(func(_ context.Context, req *http.Request) (*http.Response, error) {
+		var upstream *config.UpstreamConfig
+		if attemptInfo != nil {
+			upstream = attemptInfo.Upstream
+		}
+		return common.SendRequest(req, upstream, envCfg, isStream, "Gemini")
+	})
+
+	p := pipeline.NewFactory(exec).Pipeline(inbound, lb, wire.BuildPipelineOpts(cfgManager, lb)...)
+	result, err := p.Process(ctx, c.Request, bodyBytes)
+
+	durationMs := time.Since(requestStart).Milliseconds()
+	var errCode string
+	if err != nil {
+		errCode = pipelineErrCode(err)
+	}
+	// llmUsage 用 defer-closure 捕获指针：stream 路径在事件流消费完成后通过
+	// outbound.TakeStreamUsage 把累计 SSE usage 注入；非 stream 路径走
+	// result.Response.Usage（与其他 handler 同模板）。
+	var llmUsage llm.Usage
+	if result != nil && result.Response != nil && result.Response.Usage != nil {
+		llmUsage = *result.Response.Usage
+	}
+	defer func() {
+		if outbound != nil {
+			if streamUsage := outbound.TakeStreamUsage(); streamUsage != nil && llmUsage.IsZero() {
+				llmUsage = *streamUsage
+			}
+		}
+		lb.Finalize(ctx, err == nil, errCode, parsedModel, llmUsage, durationMs)
+	}()
+
+	if err != nil {
+		writePipelineError(c, err)
+		return
+	}
+	if result == nil {
+		return
+	}
+
+	if result.Stream && result.EventStream != nil {
+		writePipelineStream(c, result.EventStream)
+		return
+	}
+	if result.Response != nil {
+		writePipelineResponse(c, result.Response)
+	}
+	// 静默引用，防止未使用 import 报错（geminiReq 仅作为 inbound 已解析载体的回退）。
+	_ = geminiReq
+}
+
+// writePipelineResponse 把非流式 *llm.Response 写回客户端。
+func writePipelineResponse(c *gin.Context, resp *llm.Response) {
+	if resp == nil {
+		return
+	}
+	if c.Writer.Written() {
+		return
+	}
+	for k, v := range resp.Header {
+		if len(v) == 0 {
+			continue
+		}
+		c.Writer.Header().Set(k, v[0])
+	}
+	if resp.Header.Get("Content-Type") == "" {
+		c.Writer.Header().Set("Content-Type", "application/json")
+	}
+	status := resp.StatusCode
+	if status == 0 {
+		status = http.StatusOK
+	}
+	c.Writer.WriteHeader(status)
+	_, _ = c.Writer.Write(resp.Body)
+}
+
+// writePipelineStream 把 SSE 事件流逐帧写回客户端。
+func writePipelineStream(c *gin.Context, stream llm.Stream[*llm.StreamEvent]) {
+	defer func() { _ = stream.Close() }()
+	if !c.Writer.Written() {
+		c.Writer.Header().Set("Content-Type", "text/event-stream")
+		c.Writer.Header().Set("Cache-Control", "no-cache")
+		c.Writer.Header().Set("Connection", "keep-alive")
+		c.Writer.WriteHeader(http.StatusOK)
+	}
+	flusher, _ := c.Writer.(http.Flusher)
+	for stream.Next() {
+		ev := stream.Current()
+		if ev == nil || len(ev.Data) == 0 {
+			continue
+		}
+		if _, err := c.Writer.Write(ev.Data); err != nil {
+			return
+		}
+		if flusher != nil {
+			flusher.Flush()
+		}
+	}
+}
+
+// writePipelineError 把 pipeline.Process 返回的错误回写客户端。
+func writePipelineError(c *gin.Context, err error) {
+	if c.Writer.Written() {
+		return
+	}
+	status := http.StatusBadGateway
+	gErr := types.GeminiError{
+		Error: types.GeminiErrorDetail{
+			Code:    status,
+			Message: err.Error(),
+			Status:  "UNAVAILABLE",
+		},
+	}
+	if errors.Is(err, pipeline.ErrChannelExhausted) {
+		gErr.Error.Message = "all channels failed: " + err.Error()
+	}
+	c.JSON(status, gErr)
+}
+
+// pipelineErrCode 将 pipeline 错误归类为简短 error code，写入 UsageRecord。
+func pipelineErrCode(err error) string {
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, pipeline.ErrChannelExhausted):
+		return "channel_exhausted"
+	case errors.Is(err, pipeline.ErrEmptyResponse):
+		return "empty_response"
+	case errors.Is(err, common.ErrInvalidResponseBody),
+		errors.Is(err, ErrInvalidResponseBody):
+		return "invalid_response_body"
+	default:
+		return "upstream_error"
+	}
+}
+
+// 编译期保活：旧路径下的 helper 仍保留以便后续被独立单元测试或回滚使用；
+// Go 允许导出/未导出函数未被调用，但若 vet / linter 报 unused，会通过这些 _
+// 引用通过编译。
+var (
+	_ = handleSuccess
+	_ = handleAllChannelsFailed
+	_ = handleAllKeysFailed
+	_ = forwarding.AuthKindStandard
+	_ = io.EOF
+	_ = converters.GeminiToClaudeRequest
+	_ = utils.ExtractUnifiedSessionID
+)
