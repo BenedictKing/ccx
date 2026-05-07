@@ -154,13 +154,20 @@ func (a *LBOutboundAdapter) TransformRequest(ctx context.Context, req *llm.Reque
 	return a.Inner.TransformRequest(ctx, req)
 }
 
-// TransformResponse 透传到 Inner。
+// TransformResponse 透传到 Inner；把 *llm.Request 注入 ctx 以便 inner 的
+// cross-format 路径读取 Metadata 上的 gin.Context / upstream。
 func (a *LBOutboundAdapter) TransformResponse(ctx context.Context, resp *http.Response) (*llm.Response, error) {
+	if a.Request != nil {
+		ctx = adapters.WithRequestContext(ctx, a.Request)
+	}
 	return a.Inner.TransformResponse(ctx, resp)
 }
 
-// TransformStream 透传到 Inner。
+// TransformStream 透传到 Inner；与 TransformResponse 同理，把 *llm.Request 注入 ctx。
 func (a *LBOutboundAdapter) TransformStream(ctx context.Context, resp *http.Response) llm.Stream[*llm.Response] {
+	if a.Request != nil {
+		ctx = adapters.WithRequestContext(ctx, a.Request)
+	}
 	return a.Inner.TransformStream(ctx, resp)
 }
 

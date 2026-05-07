@@ -7,6 +7,7 @@
 package adapters
 
 import (
+	"context"
 	"errors"
 	"net/http"
 
@@ -147,5 +148,33 @@ func CopyResponse(format llm.Format, resp *http.Response, body []byte, usagePars
 	if usageParser != nil {
 		r.Usage = usageParser(body)
 	}
+	return r
+}
+
+// requestCtxKey 是 *llm.Request 在 context.Context 中的存放键。
+//
+// 背景：pipeline.Outbound.TransformResponse / TransformStream 仅接收 (ctx, resp)
+// 两参数，没有直接访问 *llm.Request 的入口。但 cross-format 出站转换需要
+// 读取 Metadata 里的 upstream/gin.Context 等运行时上下文。LBOutboundAdapter
+// 在 TransformRequest 阶段缓存 *llm.Request 后，会在调用 inner Outbound 的
+// TransformResponse / TransformStream 之前用 WithRequestContext 把它注入
+// ctx；inner 通过 RequestFromContext 反向取出。
+type requestCtxKey struct{}
+
+// WithRequestContext 把 *llm.Request 挂到 ctx 上；req 为 nil 时返回原 ctx。
+func WithRequestContext(ctx context.Context, req *llm.Request) context.Context {
+	if req == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, requestCtxKey{}, req)
+}
+
+// RequestFromContext 从 ctx 取出 *llm.Request；不存在或类型不匹配返回 nil。
+func RequestFromContext(ctx context.Context) *llm.Request {
+	if ctx == nil {
+		return nil
+	}
+	v := ctx.Value(requestCtxKey{})
+	r, _ := v.(*llm.Request)
 	return r
 }
