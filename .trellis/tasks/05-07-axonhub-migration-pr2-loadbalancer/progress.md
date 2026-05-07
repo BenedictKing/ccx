@@ -1,4 +1,4 @@
-# PR2 Phase 1 进度
+# PR2 Phase 1 + Phase 2（4/6 strategy）进度
 
 ## 已完成
 
@@ -30,27 +30,29 @@ go test ./... -count=1             # 23 包全过（新增 internal/loadbalance�
 
 PR1 hard constraint 仍然保持：4 个 handler.go 与所有 *_test.go 一字未改。
 
-## 待办（PR2 Phase 2 + Phase 3）
+## 待办（PR2 Phase 2 剩余 + Phase 3）
 
-### Phase 2：6 个 LoadBalanceStrategy 实现
+### Phase 2 已完成（4/6 strategy）
 
-每个策略一对文件 + 单测：
+- ✅ `strategy_promotion.go` —— PromotionStrategy（boost 0/800，ccx 独有）
+- ✅ `strategy_trace.go` —— TraceAwareStrategy（hit 0/1000，从 ctx 取 traceID）
+- ✅ `strategy_weight_rr.go` —— WeightRoundRobinStrategy（10-150，`maxScore × exp(-effective/scaling)`，effective = capped/weightFactor × decayMultiplier）
+- ✅ `strategy_error.go` —— ErrorAwareStrategy（0-200，`maxScore - failures×30×ratio - 40×ratio`，ratio 按 5min 线性衰减）
+- 配套：`strategy_test.go`（10 测试 Promotion+Trace+集成）+ `strategy_wrr_error_test.go`（13 测试 WRR+Error+4-strategy 集成）
 
-1. `strategy_trace.go` —— TraceAware（0 / 1000，命中 LastSuccessfulChannelByTrace 即给满分）
-2. `strategy_promotion.go` —— Promotion（ccx 独有，0 / 800）
-3. `strategy_error.go` —— ErrorAware（0-200，按 ConsecutiveFailures + LastFailureTime 衰减）
-4. `strategy_weight_rr.go` —— WeightRoundRobin（10-150，按 OrderingWeight / RequestCount 比例）
+### Phase 2 剩余（依赖 metrics 扩展）
+
 5. `strategy_latency.go` —— LatencyAware（0-80，FTTLP95 + TPSP50 + E2ELatencyP95 综合）
-6. `strategy_ratelimit.go` —— RateLimitAware（-10000 ~ 100，限流 cooldown 期间硬负分）
+6. `strategy_ratelimit.go` —— RateLimitAware（-10000~100，限流 cooldown 期硬负分 + ActiveConnections 衰减）
 
-每个 strategy 单测覆盖率目标 ≥ 85%；外加 `lb_simulation_test.go` 仿真测试参考 axonhub `lb_simulation_*_test.go`。
+这两个 strategy 依赖 metrics 字段（FTTL / TPS / ActiveConnections）目前 ccx 没有，需先在 Phase 3 扩展 `metrics/channel_metrics.go` 后再实现。
 
 ### Phase 3：scheduler 改造 + metrics 扩展
 
 - `internal/scheduler/lb_metrics_provider.go` —— 把现有 `metrics.AggregatedMetrics` / `traceAffinity` / config promotion 聚合为 `ChannelMetricsProvider` 实现
-- `internal/scheduler/channel_scheduler.go` 拆解：候选过滤（model 兼容、stream 策略、circuit Open）+ `LoadBalancer.Sort` 排序
-- `internal/metrics/channel_metrics.go` 字段扩展：FTTL（首 token 时间）/ TPS（tokens/sec）/ ActiveConnections —— 在 `internal/handlers/common/stream.go` 第一个 SSE event 时记录
-- 现有 scheduler 测试不回归（PR2 Acceptance Criteria 第 6 条）
+- `internal/scheduler/channel_scheduler.go` 拆解：候选过滤 + `LoadBalancer.Sort` 排序
+- `internal/metrics/channel_metrics.go` 字段扩展：FTTL / TPS / ActiveConnections —— 在 `internal/handlers/common/stream.go` 第一个 SSE event 时记录
+- 现有 scheduler 测试不回归
 
 ### 不在 PR2 范围内（PR3 处理）
 
