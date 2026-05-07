@@ -3,7 +3,7 @@
   "name": "axonhub-migration-pr2-loadbalancer",
   "title": "PR2: load balancer with 5 strategies and scheduler integration",
   "description": "",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,

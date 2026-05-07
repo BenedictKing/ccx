@@ -1,0 +1,100 @@
+# PR2 Phase 1 进度
+
+## 已完成
+
+### 新增包：`backend-go/internal/loadbalance/`
+
+`strategy.go` —— `LoadBalanceStrategy` interface（Score / ScoreWithDebug / Name）+ `Channel` 数据载体（ID / Name / Priority / OrderingWeight / Tags）+ `StrategyScore` / `ChannelDecision` / `DecisionLog` 类型
+
+`metrics_provider.go` —— `ChannelMetricsProvider` interface（13 方法对应 6 strategy 数据维度）+ `RateLimitState` 类型 + `NewNoopMetricsProvider` 单测桩
+
+`context.go` —— `ContextWithRequestedModel` / `RequestedModelFromContext` / `ContextWithRequestStream` / `RequestStreamFromContext` / `ContextWithTraceID` / `TraceIDFromContext`（私有 ctx key 类型，避免外部冲突）
+
+`partial_sort.go` —— 自实现 generic `partialSortTopK[T]`（不引入 `viterin/partial`）+ `decisionLess`（TotalScore 降序 → OrderingWeight 降序 → ID 升序保 stable）
+
+`loadbalancer.go` —— `LoadBalancer` 容器 + `New(provider, strategies...)` + `Sort(ctx, candidates, model, stream, topK)` 生产路径 + `SortWithDebug(...)` 决策日志路径 + `Strategies()` / `Provider()` 访问器
+
+`loadbalancer_test.go` —— 12 个测试覆盖：
+- 容器排序（无 strategy / 固定打分求和 / topK 截断 / topK<=0 全返 / 空输入 / 输入不被修改）
+- DecisionLog 完整字段填充 + FinalRank 1-based
+- partial sort 全排序、top-K 子集、空/单元素/k=0/k<0 边界
+- ctx helpers 往返（含空字符串不污染）
+- noop provider 13 方法全零值
+
+### 测试结果
+
+```
+go vet ./...                       # 全过
+go test ./... -count=1             # 23 包全过（新增 internal/loadbalance）
+```
+
+PR1 hard constraint 仍然保持：4 个 handler.go 与所有 *_test.go 一字未改。
+
+## 待办（PR2 Phase 2 + Phase 3）
+
+### Phase 2：6 个 LoadBalanceStrategy 实现
+
+每个策略一对文件 + 单测：
+
+1. `strategy_trace.go` —— TraceAware（0 / 1000，命中 LastSuccessfulChannelByTrace 即给满分）
+2. `strategy_promotion.go` —— Promotion（ccx 独有，0 / 800）
+3. `strategy_error.go` —— ErrorAware（0-200，按 ConsecutiveFailures + LastFailureTime 衰减）
+4. `strategy_weight_rr.go` —— WeightRoundRobin（10-150，按 OrderingWeight / RequestCount 比例）
+5. `strategy_latency.go` —— LatencyAware（0-80，FTTLP95 + TPSP50 + E2ELatencyP95 综合）
+6. `strategy_ratelimit.go` —— RateLimitAware（-10000 ~ 100，限流 cooldown 期间硬负分）
+
+每个 strategy 单测覆盖率目标 ≥ 85%；外加 `lb_simulation_test.go` 仿真测试参考 axonhub `lb_simulation_*_test.go`。
+
+### Phase 3：scheduler 改造 + metrics 扩展
+
+- `internal/scheduler/lb_metrics_provider.go` —— 把现有 `metrics.AggregatedMetrics` / `traceAffinity` / config promotion 聚合为 `ChannelMetricsProvider` 实现
+- `internal/scheduler/channel_scheduler.go` 拆解：候选过滤（model 兼容、stream 策略、circuit Open）+ `LoadBalancer.Sort` 排序
+- `internal/metrics/channel_metrics.go` 字段扩展：FTTL（首 token 时间）/ TPS（tokens/sec）/ ActiveConnections —— 在 `internal/handlers/common/stream.go` 第一个 SSE event 时记录
+- 现有 scheduler 测试不回归（PR2 Acceptance Criteria 第 6 条）
+
+### 不在 PR2 范围内（PR3 处理）
+
+- handler 切流量（PR3）
+- ccx key 级 BlacklistKey/MarkKeyAsFailed/MatchPauseRule middleware（PR3）
+- 价格计算 + UsageStore + dashboard（PR3）
+
+## 关键设计决策记录
+
+### 1. `Channel` 不直接持有 `*config.UpstreamConfig`
+
+理由：
+- config 字段过多，strategy 仅需 ID / Name / Priority / OrderingWeight / Tags 几个维度
+- scheduler 改造（Phase 3）会把 `*config.UpstreamConfig` 投影到 `Channel`，避免 strategy 与配置耦合，便于单测构造
+
+### 2. partial sort 自实现，不引入 `viterin/partial`
+
+按 PRD 风险条目第 145 行的备选方案。算法选择：当 K << N 时（典型 LB 决策场景：N = 数十个，K = 1-3），简单 K 轮 selection sort（O(N·K)）的实现绝对常数低、易于正确性验证。N 增大到 1000+ 时若需要再换 quickselect，接口不变。
+
+### 3. `decisionLess` 用三级排序键保 stable
+
+主键 TotalScore 降序，副键 OrderingWeight 降序，末键 ID 升序。这样：
+- 总分相同时优先选权重大的（与 ccx 现状对齐）
+- 权重也相同时按 ID 给确定性结果，便于单测复现
+- 避免 Go `sort` 不稳定带来的间歇性测试 flake
+
+### 4. `Sort` 不修改输入 candidates 切片
+
+把候选放到内部 `[]ChannelDecision` 临时切片做排序；调用方传入的 `[]*Channel` 顺序保持不变。这是 axonhub 的做法。
+
+### 5. noop metrics provider 是默认填充
+
+`New(nil, ...)` 自动注入 `NewNoopMetricsProvider()`，让骨架测试与 Phase 2 渐进集成都不需要 mock 完整 13 方法。
+
+### 6. `time.Since` 在 Windows 下可能为 0
+
+DecisionLog.TotalDuration 在 16ms 时钟分辨率下对单次微秒级排序可能取到 0；测试只断言 `>= 0`。
+
+## 下一步
+
+进入 PR2 Phase 2：实现 6 个 strategy。建议按依赖度从低到高顺序：
+1. PromotionStrategy（仅依赖 IsPromotionActive，最简单）
+2. TraceAware（仅依赖 LastSuccessfulChannelByTrace + traceID ctx）
+3. WeightRR（依赖 OrderingWeight + RequestCount）
+4. ErrorAware（依赖 ConsecutiveFailures + LastFailureTime + 时间衰减算法）
+5. LatencyAware（依赖 FTTL/TPS/E2E，需要 metrics 扩展）
+6. RateLimitAware（依赖 RateLimitState + ActiveConnections，需要 metrics 扩展）
