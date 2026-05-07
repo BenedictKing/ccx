@@ -1,4 +1,4 @@
-# PR2 Phase 1 + Phase 2（4/6 strategy）进度
+# PR2 Phase 1 + Phase 2（6/6 strategy）进度
 
 ## 已完成
 
@@ -32,20 +32,19 @@ PR1 hard constraint 仍然保持：4 个 handler.go 与所有 *_test.go 一字�
 
 ## 待办（PR2 Phase 2 剩余 + Phase 3）
 
-### Phase 2 已完成（4/6 strategy）
+### Phase 2 已完成（6/6 strategy）
 
 - ✅ `strategy_promotion.go` —— PromotionStrategy（boost 0/800，ccx 独有）
 - ✅ `strategy_trace.go` —— TraceAwareStrategy（hit 0/1000，从 ctx 取 traceID）
 - ✅ `strategy_weight_rr.go` —— WeightRoundRobinStrategy（10-150，`maxScore × exp(-effective/scaling)`，effective = capped/weightFactor × decayMultiplier）
 - ✅ `strategy_error.go` —— ErrorAwareStrategy（0-200，`maxScore - failures×30×ratio - 40×ratio`，ratio 按 5min 线性衰减）
-- 配套：`strategy_test.go`（10 测试 Promotion+Trace+集成）+ `strategy_wrr_error_test.go`（13 测试 WRR+Error+4-strategy 集成）
+- ✅ `strategy_latency.go` —— LatencyAwareStrategy（0-80，stream: 0.7×FTTL + 0.3×TPS；non-stream: E2E）
+- ✅ `strategy_ratelimit.go` —— RateLimitAwareStrategy（-10000~100，限流 cooldown 期硬负分 + ActiveConnections 衰减）
+- 配套：`strategy_test.go`（10 测试 Promotion+Trace+集成）+ `strategy_wrr_error_test.go`（13 测试 WRR+Error+4-strategy 集成）+ `strategy_latency_ratelimit_test.go`（13 测试 Latency+RateLimit+6-strategy 联动）
 
-### Phase 2 剩余（依赖 metrics 扩展）
+### Phase 2 不依赖具体 metrics 数据
 
-5. `strategy_latency.go` —— LatencyAware（0-80，FTTLP95 + TPSP50 + E2ELatencyP95 综合）
-6. `strategy_ratelimit.go` —— RateLimitAware（-10000~100，限流 cooldown 期硬负分 + ActiveConnections 衰减）
-
-这两个 strategy 依赖 metrics 字段（FTTL / TPS / ActiveConnections）目前 ccx 没有，需先在 Phase 3 扩展 `metrics/channel_metrics.go` 后再实现。
+LatencyAware / RateLimitAware 仅依赖 `ChannelMetricsProvider` 接口（已就位），单测用 `fakeMetricsProvider` 注入数据。具体 metrics 字段（FTTL / TPS / ActiveConnections）的数据来源是 Phase 3 实现 provider 时填充。
 
 ### Phase 3：scheduler 改造 + metrics 扩展
 
