@@ -321,3 +321,51 @@
 - `712ab31 docs: record axonhub passthrough closeout`
 
 本轮新增 AxonHub 计费旁路补丁尚未提交。
+
+## 2026-05-07 收尾：完整 axonhub forwarding 迁移完成（PR1+PR2+PR3）
+
+本节标注 axonhub 风格 pipeline + load balancer + 计费 + dashboard 全套契约迁移完成。passthrough/billing/dashboard 三块对照 axonhub 已基本对齐。
+
+### PR1 pipeline skeleton（740fa26 / 809723e / 8cf36ec / 04e4299 / 0733bbd）
+- `internal/llm/`：Stream[T] + Request/Response/Usage/StreamEvent
+- `internal/pipeline/`：Inbound/Outbound/Executor + 9-hook Middleware + AttemptState + Process 主循环 + 空流检测 prefetch + raw fan-out bridge
+- `internal/handlers/{chat,messages,responses,gemini}/{inbound,outbound}_adapter.go`：8 个 adapter 复用现有 buildProviderRequest / providers.ConvertToProviderRequest，不重写协议转换
+- handler.go / *_test.go 一字未改
+
+### PR2 load balancer（6f5254e / 89b8830 / 7bb3b3b / 965d2a0）
+- `internal/loadbalance/`：LoadBalancer + 6 strategy（Promotion / TraceAware / WeightRR / ErrorAware / LatencyAware / RateLimitAware）+ partial sort + 13 方法 ChannelMetricsProvider 接口
+- 自实现 partialSortTopK，未引入 viterin/partial
+
+### PR3 cutover + billing（4b846e1 → eb5c0e6，30 个 commit）
+T1 metrics LB 数据面（FTTL/TPS/ActiveConn）；T2 stream 首事件 hook；T3 LBMetricsProvider 桥接 ccx (baseURL,apiKey,serviceType) tuple；T4 SelectChannel 拆解 + LB.Sort 接通；T5 ccx key/pause middleware（5xx/429/failoverRule/pauseRule → 9-hook）；T6 pricing 包（embed.FS + 12 模型 + decimal-as-string）；T7 NDJSON UsageStore（snake_case 对齐 axonhub + 200×10 并发 100% 落盘）；T8 4 handler 全部切到 pipeline.Process（messages/chat/responses/gemini，含各自 outbound cross-format dispatch + token normalization）；T8e 旧 handler dead helpers 清理；T9 dashboard cost + cache 字段；T10 前端 ChannelDashboardCard.vue。
+
+### 已迁移契约（axonhub 对照）
+- ✅ retry/failover 前 cancel + close body + wait fan-out goroutine（`pipeline.cleanupAttemptStreamResources` LIFO，feebbb6）
+- ✅ User-Agent passthrough 独立
+- ✅ custom headers 在 final selected auth 之前
+- ✅ sensitive inbound header 剥离
+- ✅ raw passthrough fan-out 是 attempt 级状态
+- ✅ same-format raw / cross-format provider conversion 两路分流
+- ✅ HTTP 200 + SSE event:error 帧识别为 retryable failure（pipeline middleware/sse_error_event）
+- ✅ ChannelRetryable.NextKey 在同 channel 内换 key（wire LB 实现）
+- ✅ per-key BlacklistKey / MarkKeyAsFailed / MatchPauseRule（ccx middleware）
+- ✅ 价格计算 + NDJSON usage 落账 + dashboard 可视化
+
+### Out-of-Scope（用户明确拒绝）
+- feature flag 回退路径
+- SQLite 持久化
+- channel × model × key 二维明细 dashboard
+- 配额预扣 / 限流 / model access control
+- 外部价格源同步
+
+### 残留 / 后续 PR 处理
+- `internal/handlers/images/handler.go` 仍用 `TryUpstreamWithAllKeys`（不在 PR3 范围）；待 follow-up PR 切换后即可统删 `upstream_failover.go::TryUpstreamWithAllKeys` 函数本体
+- `responses/handler.go` 的 `handleSuccess / handleStreamSuccess / handleRawResponsesStreamPassthrough` 因 `handler_session_test.go:54` 直接调用而保留，待测试重写后再清理
+- `gemini/stream.go::handleStreamSuccess` lint hint 未处理（不阻塞）
+- ChannelDashboardCard 集成到 Channels.vue / ChannelOrchestration.vue 视图层等下一 PR
+
+### Spec 索引
+- `.trellis/spec/backend/pipeline-architecture.md`（PR1 已落）
+- `.trellis/spec/backend/pricing.md`（PR3 T6 落地）
+- `.trellis/spec/backend/usage-store.md`（PR3 T7 落地）
+- `.trellis/spec/frontend/channel-dashboard.md`（PR3 T9+T10 落地）

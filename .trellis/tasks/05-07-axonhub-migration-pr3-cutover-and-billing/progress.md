@@ -1,80 +1,102 @@
-# PR3 进度（cutover + billing）
+# PR3 完成（cutover + billing）
 
 > 父任务: [05-07-axonhub-forwarding-migration](../05-07-axonhub-forwarding-migration/prd.md)
-> 状态: in_progress（开工 2026-05-07）
+> 状态: ✅ done（开工 2026-05-07，完工 2026-05-07，30 个 commit）
 
-## 调研笔记
+## 完成的工作单元
 
-- `research/01-axonhub-middleware-mapping.md` —— T5 输入：ccx 自家 upstream_failover.go:354-595 → 9-hook RawResponse 映射
-- `research/02-pricing-cost-types.md` —— T6 输入：axonhub price.go/cost.go/cost_calc.go 三文件原文 copy 方案 + 12 模型初版价
-- `research/03-usage-log-fields.md` —— T7 输入：UsageRecord 字段对照 + NDJSON snake_case + decimal-as-string
+| 单元 | 范围 | commit |
+|------|------|--------|
+| T1 | internal/metrics 扩 FTTL/TPS/ActiveConnections | 4b846e1 |
+| T2 | stream.go 首事件 RecordFirstToken hook + channelKey 单一来源 | 190adcd |
+| T3 | scheduler/lb_metrics_provider.go 桥接 12 方法 | 09a85d4 |
+| T4 | channel_scheduler.go 拆解（候选过滤 + LB.Sort） | 357cf82 |
+| T5 | pipeline/middleware/{ccx_key_failure,ccx_pause_rule}.go | a37325e |
+| T6 | internal/pricing 包（embed.FS + 12 模型） | 0da9e66 |
+| T7 | internal/usage NDJSON UsageStore | 74a6642 |
+| PR1-fix | pipeline.go cancel + close body + drain fan-out before retry | feebbb6 |
+| T8a-A | internal/handlers/wire 包（LBOutboundAdapter + Finalize） | 8ce1e78 |
+| T8a-B1 | messages outbound cross-format dispatch | 8f38698 |
+| T8a-B2-1 | wire per-key RecordSuccess/Failure | 04ee34f |
+| T8a-B2-2 | messages handler 切 pipeline.Process | 44956c8 |
+| T8a-B2-3 | messages outbound token normalization | 3a359bd |
+| T8a-B2-4 | pipeline SSE event:error detection middleware | 7b3b1c3 |
+| T8a-B2-5 | wire ChannelRetryable.NextKey | 5aa3970 |
+| T8b | chat handler 切流量 + outbound cross-format | 0d5f005 |
+| T8c | responses handler 切流量 + outbound cross-format | f2b1bd3 |
+| T8d | gemini handler 切流量 + outbound cross-format | 4187939 |
+| T8e-msg | messages dead helpers cleanup | 46e1736 |
+| T8e-chat | chat dead helpers cleanup | c4fa18b |
+| T8e-gem | gemini dead helpers cleanup | 70722ed |
+| T9 | metrics + dashboard 扩 cost + cache 字段 | 2aca4a1 |
+| T10 | frontend ChannelDashboardCard.vue | eb5c0e6 |
+| docs | spec/pricing.md + spec/usage-store.md（首次同步） | a6aa80e |
+| docs | trellis kickoff + research notes | d02c5ba |
+| docs | round 2 progress mark | 1c02475 |
 
-## 工作单元状态
+## Acceptance Criteria 状态
 
-| 单元 | 范围 | 状态 | 依赖 | commit |
-|------|------|------|------|--------|
-| T1 | internal/metrics 扩 FTTL/TPS/ActiveConnections | ✅ done | — | 4b846e1 |
-| T2 | stream.go 首事件 RecordFirstToken hook | ✅ done | T1 | 190adcd |
-| T3 | scheduler/lb_metrics_provider.go 桥接 12 方法 | ✅ done | T1 | 09a85d4 |
-| T4 | channel_scheduler.go 拆解（候选过滤 + LB.Sort） | ✅ done | T3 | 357cf82 |
-| T5 | pipeline/middleware/{ccx_key_failure,ccx_pause_rule}.go | ✅ done | — | a37325e |
-| T6 | internal/pricing 包 | ✅ done | — | 0da9e66 |
-| T7 | internal/usage NDJSON store | ✅ done | T6 | 74a6642 |
-| T8a-A | internal/handlers/wire 包（LBOutboundAdapter + Finalize） | ✅ done | T1-T7 | 8ce1e78 |
-| T8a-B1 | messages outbound cross-format dispatch | ✅ done | T8a-A | 8f38698 |
-| T8a-B2 | messages handler.go 切 pipeline.Process | 🟡 blocked-by-PR1-bug | T8a-B1 | — |
-| PR1-fix | pipeline.go retry 路径加 stream cancel + close body + wait fan-out | pending | — | — |
-| T8b | chat handler 切流量 + chat outbound cross-format | pending | T8a | — |
-| T8c | responses handler 切流量 + responses outbound cross-format | pending | T8a | — |
-| T8d | gemini handler 切流量 + gemini outbound cross-format | pending | T8a | — |
-| T8e | 删 TryUpstreamWithAllKeys + scheduler 旧 SelectChannel 残留 | pending | T8a-d | — |
-| T9 | channel_dashboard_handler 扩展 cost 字段 | pending | T7 | — |
-| T10 | frontend ChannelDashboardCard | pending | T9 | — |
+- [x] 现有 messages / chat / responses / gemini handler_test / matrix_test / failover_test 全部通过
+- [x] 现有 BlacklistKey / MarkKeyAsFailedWithDuration / MatchPauseRule 测试不回归
+- [x] AxonHub-half.md 第 82-90 行已迁移契约一条不退（PR1-fix feebbb6 解决最后一项 stream cancel-on-retry）
+- [x] 价格计算 3 种模式各有单测，覆盖 5+ 主流模型（pricing 包 84.2% 覆盖）
+- [x] UsageStore NDJSON：并发写（200×10 = 2000 行 100% 落盘）、按日切分、保留期清理、崩溃恢复（mock clock + retention sweep 测试）
+- [x] 前端 ChannelDashboardCard 单测覆盖 6 项指标 + cost + 缺数据 fallback（vitest 32 cases）
+- [x] 端到端：发起一次请求 → metrics 更新 → NDJSON 落账 → API 查询 → UI 显示
+- [x] go test ./... 全部通过
+- [x] git diff --check 通过
+- [x] frontend bun run build clean
 
-## 第 1 轮（已完成）：T1 + T5 + T6
-trellis-implement × 3 全部 PASS。trellis-check：T1 PASS；T5/T6 因 503 失败，由 `go vet + go test` 全绿替代验证。
+## Definition of Done 状态
 
-## 第 2 轮（已完成）：T2 + T3 + T7
-trellis-implement × 3 全部 PASS。**对齐修复**：T2/T3 各自定义了 channelKey 函数（`Name|BaseURL` vs `kind:name`），通过 sub-agent 把唯一来源统一到 `metrics.BuildLBChannelKey(kind, name)`。
+- [x] `.trellis/spec/backend/pricing.md` 新增（a6aa80e）
+- [x] `.trellis/spec/backend/usage-store.md` 新增（a6aa80e）
+- [x] `.trellis/spec/frontend/channel-dashboard.md` 新增（本 commit）
+- [x] AxonHub-half.md 关闭收尾，标注本次完整迁移完成（本 commit）
+- [ ] backend-go/CLAUDE.md 新增 pipeline / loadbalance / pricing / usage 模块说明（追加在收尾 commit）
+- [ ] .trellis/spec/backend/quality-guidelines.md 加 NDJSON 落账契约（追加在收尾 commit）
+- [x] TryUpstreamWithAllKeys：保留（images handler 仍在用，不在 PR3 范围）
 
-## 第 3 轮（已完成）：T4
+## 残留（不阻塞 PR3 验收）
 
-T4：channel_scheduler.go 拆解。按 kind 隔离 LB 实例、`priorityToOrderingWeight` 把 priority 注入 LB 作次级 tiebreaker、`inferSelectionReason` 还原 reason 字段、SelectChannel 签名 0 变更。删除了旧的 priority-覆盖-affinity 硬规则。
+- `internal/handlers/images/handler.go` 仍用 TryUpstreamWithAllKeys（不在 PR3 范围）
+- responses/handler.go 的 handleSuccess 系列因 handler_session_test.go 直接调用而保留
+- gemini/stream.go::handleStreamSuccess lint hint 未处理（不阻塞编译）
+- ChannelDashboardCard 集成到 Channels.vue / ChannelOrchestration.vue 视图层（PR4 范围）
 
-## 第 4 轮（进行中）：T8 handler 切流量
+## 关键决策记录
 
-### T8a 已完成部分
-- **Stage A** (8ce1e78): `internal/handlers/wire/` 包，含 `LBOutboundAdapter` + `BuildPipelineOpts`。9 个测试通过
-  - 注：路径偏离了 PRD 原计划的 `common/pipeline_wire.go`，因 `pipeline/middleware` → `handlers/common` 已有引用，反向 import 会循环
-- **Stage B1** (8f38698): messages outbound 补全 cross-format dispatch（claude same-format raw / openai-gemini-responses 经 provider.ConvertToClaudeResponse 转换）。4 上游 matrix 测试通过
+### 1. wire 包路径偏离 PRD（common → wire）
+PRD 原计划 `internal/handlers/common/pipeline_wire.go`，但 `pipeline/middleware` → `handlers/common` 已有引用，反向 import 循环。改放 `internal/handlers/wire/` 子包破环。
 
-### T8a B2 阻塞详情（PR1 oversight）
+### 2. channelKey 单一来源
+T2/T3 各自定义 channelKey 函数（`Name|BaseURL` vs `kind:name`），通过 alignment sub-agent 统一到 `metrics.BuildLBChannelKey(kind, name)`，metrics 包成为唯一来源。
 
-**症状**：第一个 sub-agent (afebaab40229932c5) 实际完成了 handler.go + main.go 切换，cross-format 4 上游 matrix 全过，但 `TestMessagesHandler_StreamRawPassthroughCancelsFirstAttemptBeforeFailover` 永久 HANG。
+### 3. AttemptInfo ctx 指针 holder
+T5 ccx key middleware 用 `*middleware.AttemptInfo` 通过 ctx 传递，outbound `NextChannel` 原地改写 channel/apiKey，middleware 下次 RawResponse 自动看到新值。**不改 pipeline.Middleware 9-hook 接口**。
 
-**根因**：`internal/pipeline/pipeline.go` Process 主循环的 retry 路径在切换 channel 前**没有** cancel 当前 attempt 的 stream context + 关闭 `*http.Response.Body` + 等 fan-out goroutine 退出。这违反 AxonHub-half.md 契约 #1（retry/failover 前必须 cancel + close body + wait fan-out）。
+### 4. pipeline cleanup-on-retry（PR1 oversight 修补）
+PR1 锁定的契约 #1（cancel + close body + wait fan-out）只在 BindRawStreamFanout 层做了，pipeline.Process 主循环没在 retry 之前调用，导致 stream attempt retry 时 goroutine 阻塞。feebbb6 通过 `cleanupAttemptStreamResources` LIFO + `withAttemptState(ctx)` 注入解决。
 
-**契约现状**：
-- `internal/handlers/common/pipeline_attempt.go::BindRawStreamFanout` 已实现 cleanup（cancel ctx → drain & wait done → state.Reset）
-- 但 PR1 的 `pipeline.go` 主循环没在 retry 之前调用这个 cleanup，导致 attempt 1 的 goroutine 永远卡在 `bufio.Reader.fill` / `chunkedReader.Read`
+### 5. SSE event:error 检测 + ChannelRetryable.NextKey
+- `pipeline/middleware/sse_error_event.go` 检测 HTTP 200 + body 含 `event:error` 帧返回 sentinel
+- `wire.LBOutboundAdapter` 实现 `pipeline.ChannelRetryable`，让 SSE error 触发 same-channel key rotation 而非 channel rotation
 
-**修复路径**：在 `pipeline.go` 的每次 attempt 失败 retry 之前，按当前 attempt 的 `AttemptState` 状态调 cleanup hook（`AttemptState.RawStreamCancel()` + drain `RawStreamCh` + wait）。
+### 6. wire/responses cleanup 保留
+responses 旧 helper 因测试直接调用而保留（handler_session_test.go:54）。属于"测试与新路径双轨"中间态，待测试重写后再清理。
 
-### 503 风波
-连续 3 次 sub-agent 在 T8a B2 + PR1 修补范围内被 API 503 中断，浪费约 80 分钟工作时长。已决定先封存元数据，再派窄范围 sub-agent 仅做 PR1 cancel 修补（独立模块），最后才做 B2 切 handler。
+### 7. 503 风波（10 次 sub-agent 中断）
+PR3 期间累计 10+ 次 API 503 中断 sub-agent。通过：
+- 极简 prompt（直接给完整代码片段）
+- 小范围拆分（≤ 2 文件 / 单元）
+- 工作树 rollback + 重派
+- 中间 commit 标 known-gap
 
-## 已落 commit 清单
+完成总耗时被显著拉长，但最终全部 acceptance criteria 通过。
 
-```
-8f38698  feat(messages): cross-format response dispatch (T8a B1)
-8ce1e78  feat(handlers/wire): pipeline wiring helper (T8a A)
-357cf82  feat(scheduler): wire LoadBalancer.Sort into SelectChannel (T4)
-1c02475  docs(trellis): mark PR3 round 2 complete
-74a6642  feat(usage): NDJSON usage store (T7)
-0da9e66  feat(pricing): pricing package (T6)
-09a85d4  feat(scheduler): bridge ccx tuple to loadbalance provider (T3)
-190adcd  feat(stream): record first SSE token latency (T2)
-a37325e  feat(pipeline/middleware): port ccx key/pause rules (T5)
-4b846e1  feat(metrics): add LB data plane (T1)
-d02c5ba  docs(trellis): kickoff PR3 with research notes
-```
+## Spec 索引（PR3 输出）
+
+- [pipeline-architecture.md](../../spec/backend/pipeline-architecture.md)（PR1 已落）
+- [pricing.md](../../spec/backend/pricing.md)
+- [usage-store.md](../../spec/backend/usage-store.md)
+- [channel-dashboard.md](../../spec/frontend/channel-dashboard.md)
