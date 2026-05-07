@@ -650,6 +650,9 @@ func hasMetricsKey(allMetrics []*metrics.KeyMetrics, metricsKey string) bool {
 }
 
 func TestAffinityYieldToHigherPriorityHealthyChannel(t *testing.T) {
+	// PR3 T4：新 LoadBalancer 体系下 TraceAware 加权 1000 分，已不再"硬让位"于
+	// 高优先级健康渠道；trace 亲和渠道命中即胜出（除非 circuit Open / 失败）。
+	// 这里更新断言以反映新行为：affinity 渠道（index=1）应被选中。
 	cfg := config.Config{
 		Upstream: []config.UpstreamConfig{
 			{
@@ -679,11 +682,11 @@ func TestAffinityYieldToHigherPriorityHealthyChannel(t *testing.T) {
 		t.Fatalf("选择渠道失败: %v", err)
 	}
 
-	if result.ChannelIndex != 0 {
-		t.Fatalf("期望选择更高优先级渠道 index=0，实际为 index=%d", result.ChannelIndex)
+	if result.ChannelIndex != 1 {
+		t.Fatalf("期望 LB 选择 affinity 渠道 index=1（TraceAware boost=1000 胜出），实际为 index=%d", result.ChannelIndex)
 	}
-	if result.Reason != "priority_order" {
-		t.Fatalf("期望选择原因为 priority_order，实际为 %s", result.Reason)
+	if result.Reason != "trace_affinity" {
+		t.Fatalf("期望选择原因为 trace_affinity，实际为 %s", result.Reason)
 	}
 }
 

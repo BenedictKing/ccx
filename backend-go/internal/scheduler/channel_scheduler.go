@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
+	"github.com/BenedictKing/ccx/internal/loadbalance"
 	"github.com/BenedictKing/ccx/internal/metrics"
 	"github.com/BenedictKing/ccx/internal/session"
 	"github.com/BenedictKing/ccx/internal/transitions"
@@ -33,6 +34,10 @@ type ChannelScheduler struct {
 	geminiChannelLogStore    *metrics.ChannelLogStore // Gemini 渠道请求日志
 	chatChannelLogStore      *metrics.ChannelLogStore // Chat 渠道请求日志
 	imagesChannelLogStore    *metrics.ChannelLogStore // Images 渠道请求日志
+
+	// PR3 T4：每 kind 独立一套 LB（因 LBMetricsProvider 按 kind 隔离 channelID 命名空间）。
+	loadBalancerByKind map[ChannelKind]*loadbalance.LoadBalancer
+	lbProviderByKind   map[ChannelKind]*LBMetricsProvider
 }
 
 // ChannelKind 标识调度器所处理的渠道类型
@@ -91,6 +96,52 @@ func NewChannelScheduler(
 		geminiChannelLogStore:    metrics.NewChannelLogStore(),
 		chatChannelLogStore:      metrics.NewChannelLogStore(),
 		imagesChannelLogStore:    metrics.NewChannelLogStore(),
+		loadBalancerByKind:       buildLoadBalancersByKind(cfgManager, messagesMetrics, responsesMetrics, geminiMetrics, chatMetrics, imagesMetrics, traceAffinity),
+		lbProviderByKind:         buildLBProvidersByKind(cfgManager, messagesMetrics, responsesMetrics, geminiMetrics, chatMetrics, imagesMetrics, traceAffinity),
+	}
+}
+
+// buildLBProvidersByKind 为每个 ChannelKind 构造一个 LBMetricsProvider。
+// 每个 kind 拥有独立的 channelID 命名空间（即 upstream slice 索引）。
+func buildLBProvidersByKind(
+	cm *config.ConfigManager,
+	messagesMetrics, responsesMetrics, geminiMetrics, chatMetrics, imagesMetrics *metrics.MetricsManager,
+	aff *session.TraceAffinityManager,
+) map[ChannelKind]*LBMetricsProvider {
+	return map[ChannelKind]*LBMetricsProvider{
+		ChannelKindMessages:  NewLBMetricsProvider(messagesMetrics, cm, aff, ChannelKindMessages),
+		ChannelKindResponses: NewLBMetricsProvider(responsesMetrics, cm, aff, ChannelKindResponses),
+		ChannelKindGemini:    NewLBMetricsProvider(geminiMetrics, cm, aff, ChannelKindGemini),
+		ChannelKindChat:      NewLBMetricsProvider(chatMetrics, cm, aff, ChannelKindChat),
+		ChannelKindImages:    NewLBMetricsProvider(imagesMetrics, cm, aff, ChannelKindImages),
+	}
+}
+
+// buildLoadBalancersByKind 为每个 kind 构造一个加载了完整 6 策略的 LoadBalancer。
+// 策略组合与 PRD 第 23 行约定一致：Promotion + TraceAware + WeightRR + ErrorAware
+// + LatencyAware + RateLimitAware。
+func buildLoadBalancersByKind(
+	cm *config.ConfigManager,
+	messagesMetrics, responsesMetrics, geminiMetrics, chatMetrics, imagesMetrics *metrics.MetricsManager,
+	aff *session.TraceAffinityManager,
+) map[ChannelKind]*loadbalance.LoadBalancer {
+	makeLB := func(mm *metrics.MetricsManager, kind ChannelKind) *loadbalance.LoadBalancer {
+		provider := NewLBMetricsProvider(mm, cm, aff, kind)
+		return loadbalance.New(provider,
+			loadbalance.NewPromotionStrategy(provider, 0),
+			loadbalance.NewTraceAwareStrategy(provider, 0),
+			loadbalance.NewWeightRoundRobinStrategy(provider),
+			loadbalance.NewErrorAwareStrategy(provider),
+			loadbalance.NewLatencyAwareStrategy(provider),
+			loadbalance.NewRateLimitAwareStrategy(provider),
+		)
+	}
+	return map[ChannelKind]*loadbalance.LoadBalancer{
+		ChannelKindMessages:  makeLB(messagesMetrics, ChannelKindMessages),
+		ChannelKindResponses: makeLB(responsesMetrics, ChannelKindResponses),
+		ChannelKindGemini:    makeLB(geminiMetrics, ChannelKindGemini),
+		ChannelKindChat:      makeLB(chatMetrics, ChannelKindChat),
+		ChannelKindImages:    makeLB(imagesMetrics, ChannelKindImages),
 	}
 }
 
@@ -351,6 +402,12 @@ func (s *ChannelScheduler) RunScheduledRecoveries(now time.Time) ([]ScheduledRec
 }
 
 // 优先级: 促销期渠道 > Trace亲和（促销渠道失败时回退） > 渠道优先级顺序
+// PR3 T4：拆分为"硬过滤 + LoadBalancer.Sort 排序"两阶段。
+//   - 硬过滤负责剔除模型不兼容、route prefix 不匹配、非 active、APIKeys 空、
+//     circuit Open / 不健康（除非促销期）等"不应被排序"的渠道。
+//   - LoadBalancer.Sort 通过 6 个 strategy 加权打分：Promotion(+800) /
+//     TraceAware(+1000) / WeightRR(10-150) / ErrorAware(0-200) / LatencyAware
+//     / RateLimitAware，得分最高者胜出。
 func (s *ChannelScheduler) SelectChannel(
 	ctx context.Context,
 	userID string,
@@ -362,30 +419,87 @@ func (s *ChannelScheduler) SelectChannel(
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	// 获取活跃渠道列表（含模型过滤）
-	activeChannels := s.getActiveChannels(kind, model)
-	if len(activeChannels) == 0 {
-		// 区分"无活跃渠道"和"无渠道支持该模型"
-		kindName := "Messages"
-		switch kind {
-		case ChannelKindGemini:
-			kindName = "Gemini"
-		case ChannelKindResponses:
-			kindName = "Responses"
-		case ChannelKindChat:
-			kindName = "Chat"
-		case ChannelKindImages:
-			kindName = "Images"
-		}
-		if model != "" && len(s.getActiveChannels(kind, "")) > 0 {
-			return nil, fmt.Errorf("没有 %s 渠道支持模型 %q，请检查渠道的 supportedModels 配置", kindName, model)
-		}
-		return nil, fmt.Errorf("没有可用的活跃 %s 渠道", kindName)
+	// Step 1: 硬过滤
+	candidates, mapping, allActive, err := s.filterCandidates(kind, model, routePrefix, failedChannels)
+	if err != nil {
+		return nil, err
+	}
+	prefix := kindSchedulerLogPrefix(kind)
+	if len(candidates) == 0 {
+		log.Printf("[%s-LB] 警告: 硬过滤后无候选渠道，进入降级路径", prefix)
+		return s.selectFallbackChannel(allActive, failedChannels, kind)
 	}
 
-	// 按路由前缀过滤渠道
+	// Step 2: 注入 ctx（model / stream / traceID），供 strategy 读取。
+	ctx = loadbalance.ContextWithRequestedModel(ctx, model)
+	ctx = loadbalance.ContextWithRequestStream(ctx, false)
+	if userID != "" {
+		ctx = loadbalance.ContextWithTraceID(ctx, userID)
+	}
+
+	// Step 3: 调用 LoadBalancer 排序，取 top1。
+	lb, ok := s.loadBalancerByKind[kind]
+	if !ok || lb == nil {
+		log.Printf("[%s-LB] 警告: 未找到 LoadBalancer 实例 (kind=%s)，降级", prefix, kind)
+		return s.selectFallbackChannel(allActive, failedChannels, kind)
+	}
+	sorted := lb.Sort(ctx, candidates, model, false, 1)
+	if len(sorted) == 0 {
+		return s.selectFallbackChannel(allActive, failedChannels, kind)
+	}
+	chosenID := sorted[0].ID
+
+	chosenInfo, ok := mapping[chosenID]
+	if !ok {
+		return s.selectFallbackChannel(allActive, failedChannels, kind)
+	}
+	upstream := s.getUpstreamByIndex(chosenInfo.Index, kind)
+	if upstream == nil {
+		return s.selectFallbackChannel(allActive, failedChannels, kind)
+	}
+
+	// Step 4: 推断 reason，保持现有 SelectionResult.Reason 语义兼容。
+	reason := s.inferSelectionReason(userID, kind, upstream, chosenInfo.Index, failedChannels)
+	log.Printf("[%s-LB] 选择渠道: [%d] %s (优先级: %d, reason: %s)", prefix, chosenInfo.Index, upstream.Name, chosenInfo.Priority, reason)
+
+	return &SelectionResult{
+		Upstream:     upstream,
+		ChannelIndex: chosenInfo.Index,
+		Reason:       reason,
+	}, nil
+}
+
+// filterCandidates 完成 LB 排序前的"硬过滤"步骤：
+//   - 状态过滤：status != "disabled"
+//   - 模型兼容：通过 ExplainModelSupport 校验
+//   - Route prefix 匹配（带 prefix 的渠道仅响应同名 prefix 路由）
+//   - 跳过本次请求已失败的渠道
+//   - 跳过 APIKeys 空 / status != "active" 的渠道
+//   - 非促销渠道：跳过 circuit Open / 不健康
+//   - 促销期渠道：仅要求 status=="active" + APIKeys 非空，绕过健康检查
+//
+// 返回 (candidates, mapping, allActive, err)：
+//   - candidates: 已过滤的 *loadbalance.Channel，传给 LB.Sort
+//   - mapping:    channel ID(=upstream 索引) -> ChannelInfo 反查表
+//   - allActive:  路由前缀过滤后的全部活跃渠道（用于 fallback 路径，保留原行为）
+//   - err:        终止性错误（无任何匹配模型/前缀的渠道）
+func (s *ChannelScheduler) filterCandidates(
+	kind ChannelKind,
+	model string,
+	routePrefix string,
+	failedChannels map[int]bool,
+) ([]*loadbalance.Channel, map[int]ChannelInfo, []ChannelInfo, error) {
+	activeChannels := s.getActiveChannels(kind, model)
+	if len(activeChannels) == 0 {
+		kindName := kindAPIType(kind)
+		if model != "" && len(s.getActiveChannels(kind, "")) > 0 {
+			return nil, nil, nil, fmt.Errorf("没有 %s 渠道支持模型 %q，请检查渠道的 supportedModels 配置", kindName, model)
+		}
+		return nil, nil, nil, fmt.Errorf("没有可用的活跃 %s 渠道", kindName)
+	}
+
+	// Route prefix 过滤
 	if routePrefix != "" {
-		// 有前缀：仅选择匹配的渠道
 		var filtered []ChannelInfo
 		for _, ch := range activeChannels {
 			upstream := s.getUpstreamByIndex(ch.Index, kind)
@@ -394,11 +508,10 @@ func (s *ChannelScheduler) SelectChannel(
 			}
 		}
 		if len(filtered) == 0 {
-			return nil, fmt.Errorf("no channels with route prefix: %s", routePrefix)
+			return nil, nil, nil, fmt.Errorf("no channels with route prefix: %s", routePrefix)
 		}
 		activeChannels = filtered
 	} else {
-		// 无前缀：排除设了路由前缀的渠道（它们只能通过前缀访问）
 		var filtered []ChannelInfo
 		for _, ch := range activeChannels {
 			upstream := s.getUpstreamByIndex(ch.Index, kind)
@@ -407,123 +520,98 @@ func (s *ChannelScheduler) SelectChannel(
 			}
 		}
 		if len(filtered) == 0 {
-			kindName := "Messages"
-			switch kind {
-			case ChannelKindGemini:
-				kindName = "Gemini"
-			case ChannelKindResponses:
-				kindName = "Responses"
-			case ChannelKindChat:
-				kindName = "Chat"
-			case ChannelKindImages:
-				kindName = "Images"
-			}
-			return nil, fmt.Errorf("没有可用于默认路由的 %s 渠道，请使用带前缀路由访问", kindName)
+			kindName := kindAPIType(kind)
+			return nil, nil, nil, fmt.Errorf("没有可用于默认路由的 %s 渠道，请使用带前缀路由访问", kindName)
 		}
 		activeChannels = filtered
 	}
 
-	// 0. 检查促销期渠道（最高优先级，绕过健康检查）
-	promotedChannel := s.findPromotedChannel(activeChannels, kind)
-	if promotedChannel != nil && !failedChannels[promotedChannel.Index] {
-		// 促销渠道存在且未失败，直接使用（不检查健康状态，让用户设置的促销渠道有机会尝试）
-		upstream := s.getUpstreamByIndex(promotedChannel.Index, kind)
-		if upstream != nil && len(upstream.APIKeys) > 0 {
-			failureRate := s.channelFailureRate(upstream, kind)
-			prefix := kindSchedulerLogPrefix(kind)
-			log.Printf("[%s-Promotion] 促销期优先选择渠道: [%d] %s (失败率: %.1f%%, 绕过健康检查)", prefix, promotedChannel.Index, upstream.Name, failureRate*100)
-			return &SelectionResult{
-				Upstream:     upstream,
-				ChannelIndex: promotedChannel.Index,
-				Reason:       "promotion_priority",
-			}, nil
-		} else if upstream != nil {
-			prefix := kindSchedulerLogPrefix(kind)
-			log.Printf("[%s-Promotion] 警告: 促销渠道 [%d] %s 无可用密钥，跳过", prefix, promotedChannel.Index, upstream.Name)
-		}
-	} else if promotedChannel != nil {
-		prefix := kindSchedulerLogPrefix(kind)
-		log.Printf("[%s-Promotion] 警告: 促销渠道 [%d] %s 已在本次请求中失败，跳过", prefix, promotedChannel.Index, promotedChannel.Name)
-	}
+	candidates := make([]*loadbalance.Channel, 0, len(activeChannels))
+	mapping := make(map[int]ChannelInfo, len(activeChannels))
+	prefix := kindSchedulerLogPrefix(kind)
 
-	// 1. 检查 Trace 亲和性（促销渠道失败时或无促销渠道时）
-	if userID != "" {
-		compositeKey := string(kind) + ":" + userID
-		if preferredIdx, ok := s.traceAffinity.GetPreferredChannel(compositeKey); ok {
-			bestPriority := s.findBestAvailableChannelPriority(activeChannels, failedChannels, kind)
-			for _, ch := range activeChannels {
-				if ch.Index == preferredIdx && !failedChannels[preferredIdx] {
-					// 检查渠道状态：只有 active 状态才使用亲和性
-					if ch.Status != "active" {
-						prefix := kindSchedulerLogPrefix(kind)
-						log.Printf("[%s-Affinity] 跳过亲和渠道 [%d] %s: 状态为 %s (user: %s)", prefix, preferredIdx, ch.Name, ch.Status, maskUserID(userID))
-						continue
-					}
-					// 如果存在更高优先级且健康的候选渠道，允许优先级覆盖亲和性
-					if bestPriority >= 0 && ch.Priority > bestPriority {
-						prefix := kindSchedulerLogPrefix(kind)
-						log.Printf("[%s-Affinity] 跳过亲和渠道 [%d] %s: 存在更高优先级可用渠道 (亲和优先级: %d, 最优优先级: %d, user: %s)", prefix, preferredIdx, ch.Name, ch.Priority, bestPriority, maskUserID(userID))
-						continue
-					}
-					// 检查渠道是否健康
-					upstream := s.getUpstreamByIndex(preferredIdx, kind)
-					if upstream != nil && s.channelIsHealthy(upstream, kind) {
-						prefix := kindSchedulerLogPrefix(kind)
-						log.Printf("[%s-Affinity] Trace亲和选择渠道: [%d] %s (user: %s)", prefix, preferredIdx, upstream.Name, maskUserID(userID))
-						return &SelectionResult{
-							Upstream:     upstream,
-							ChannelIndex: preferredIdx,
-							Reason:       "trace_affinity",
-						}, nil
-					}
-				}
-			}
-		}
-	}
-
-	// 2. 按优先级遍历活跃渠道
 	for _, ch := range activeChannels {
-		// 跳过本次请求已经失败的渠道
+		// 本次请求已失败：硬剔除
 		if failedChannels[ch.Index] {
 			continue
 		}
-
-		// 跳过非 active 状态的渠道（suspended 等）
-		if ch.Status != "active" {
-			prefix := kindSchedulerLogPrefix(kind)
-			log.Printf("[%s-Channel] 跳过非活跃渠道: [%d] %s (状态: %s)", prefix, ch.Index, ch.Name, ch.Status)
-			continue
-		}
-
 		upstream := s.getUpstreamByIndex(ch.Index, kind)
 		if upstream == nil || len(upstream.APIKeys) == 0 {
 			continue
 		}
-
-		// 跳过失败率过高的渠道（已熔断或即将熔断）
-		channelState := s.channelCircuitState(upstream, kind)
-		if channelState == metrics.CircuitStateOpen || !s.channelIsHealthy(upstream, kind) {
-			failureRate := s.channelFailureRate(upstream, kind)
-			prefix := kindSchedulerLogPrefix(kind)
-			if channelState == metrics.CircuitStateOpen {
-				log.Printf("[%s-Channel] 警告: 跳过 open 渠道: [%d] %s (失败率: %.1f%%)", prefix, ch.Index, ch.Name, failureRate*100)
-			} else {
-				log.Printf("[%s-Channel] 警告: 跳过不健康渠道: [%d] %s (失败率: %.1f%%)", prefix, ch.Index, ch.Name, failureRate*100)
-			}
+		// 非 active 状态（如 suspended）一律剔除
+		if ch.Status != "active" {
+			log.Printf("[%s-LB] 跳过非活跃渠道: [%d] %s (状态: %s)", prefix, ch.Index, ch.Name, ch.Status)
 			continue
 		}
 
-		prefix := kindSchedulerLogPrefix(kind)
-		log.Printf("[%s-Channel] 选择渠道: [%d] %s (优先级: %d)", prefix, ch.Index, upstream.Name, ch.Priority)
-		return &SelectionResult{
-			Upstream:     upstream,
-			ChannelIndex: ch.Index,
-			Reason:       "priority_order",
-		}, nil
+		// 促销期渠道直接通过；否则需通过健康检查
+		if !config.IsChannelInPromotion(upstream) {
+			channelState := s.channelCircuitState(upstream, kind)
+			if channelState == metrics.CircuitStateOpen {
+				log.Printf("[%s-LB] 跳过 circuit Open 渠道: [%d] %s", prefix, ch.Index, ch.Name)
+				continue
+			}
+			if !s.channelIsHealthy(upstream, kind) {
+				failureRate := s.channelFailureRate(upstream, kind)
+				log.Printf("[%s-LB] 跳过不健康渠道: [%d] %s (失败率: %.1f%%)", prefix, ch.Index, ch.Name, failureRate*100)
+				continue
+			}
+		}
+
+		// 投影 ChannelInfo → loadbalance.Channel；ID 即 upstream 索引（与 LBMetricsProvider 命名空间一致）。
+		// OrderingWeight 编码 Priority（优先级越高 → OrderingWeight 越大），
+		// 用作 partial sort 的次级 tiebreaker，避免 LB 等分时丢失 priority 主序。
+		candidates = append(candidates, &loadbalance.Channel{
+			ID:             ch.Index,
+			Name:           ch.Name,
+			Priority:       ch.Priority,
+			OrderingWeight: priorityToOrderingWeight(ch.Priority),
+		})
+		mapping[ch.Index] = ch
 	}
 
-	// 3. 所有健康渠道都失败，选择失败率最低的作为降级
-	return s.selectFallbackChannel(activeChannels, failedChannels, kind)
+	return candidates, mapping, activeChannels, nil
+}
+
+// priorityToOrderingWeight 把 ccx 的 Priority（小为优）映射为 LB 的 OrderingWeight
+// （大为优）。
+//
+// 仅作为 partial_sort.go 的 tiebreaker（TotalScore 相同时使用），不参与 WRR 打分
+// （WRR 已通过 provider.OrderingWeight 取值，当前 LBMetricsProvider 返回 0，
+// strategy_weight_rr 内部回退到 channel.OrderingWeight；为避免污染 WRR 分数，
+// 这里取 1_000_000 - Priority 量级，既能在 tiebreaker 中保持稳定主序，又能在
+// WRR 中等价于"超高权重"（耐受请求数远高于实际请求数），不会颠覆 priority 顺序。
+func priorityToOrderingWeight(priority int) int {
+	const offset = 1_000_000
+	return offset - priority
+}
+
+// inferSelectionReason 在 LB 选出 channel 后还原 SelectionResult.Reason，
+// 保持与原 SelectChannel 三种 reason 字段一致：
+//   - "promotion_priority": 选中渠道处于促销期且未失败
+//   - "trace_affinity":     选中渠道是 trace affinity 偏好渠道
+//   - "priority_order":     其余情况（按 LB 总分胜出）
+//
+// 触发顺序：promotion 优于 trace_affinity（与 LB 总分比重 800 vs 1000 含义不同；
+// 这里的 reason 仅是"展示标签"，实际选择仍以 LB 总分为准）。
+func (s *ChannelScheduler) inferSelectionReason(
+	userID string,
+	kind ChannelKind,
+	upstream *config.UpstreamConfig,
+	chosenIdx int,
+	failedChannels map[int]bool,
+) string {
+	if upstream != nil && config.IsChannelInPromotion(upstream) && !failedChannels[chosenIdx] {
+		return "promotion_priority"
+	}
+	if userID != "" && s.traceAffinity != nil {
+		compositeKey := string(kind) + ":" + userID
+		if pref, ok := s.traceAffinity.GetPreferredChannel(compositeKey); ok && pref == chosenIdx {
+			return "trace_affinity"
+		}
+	}
+	return "priority_order"
 }
 
 func (s *ChannelScheduler) channelCircuitState(upstream *config.UpstreamConfig, kind ChannelKind) metrics.CircuitState {
@@ -545,25 +633,6 @@ func (s *ChannelScheduler) channelIsHealthy(upstream *config.UpstreamConfig, kin
 		return false
 	}
 	return s.getMetricsManager(kind).IsChannelHealthyMultiURL(upstream.GetAllBaseURLs(), upstream.APIKeys, NormalizedMetricsServiceType(kind, upstream.ServiceType))
-}
-
-// findPromotedChannel 查找处于促销期的渠道
-func (s *ChannelScheduler) findPromotedChannel(activeChannels []ChannelInfo, kind ChannelKind) *ChannelInfo {
-	for i := range activeChannels {
-		ch := &activeChannels[i]
-		if ch.Status != "active" {
-			continue
-		}
-		upstream := s.getUpstreamByIndex(ch.Index, kind)
-		if upstream != nil {
-			if config.IsChannelInPromotion(upstream) {
-				prefix := kindSchedulerLogPrefix(kind)
-				log.Printf("[%s-Promotion] 找到促销渠道: [%d] %s (promotionUntil: %v)", prefix, ch.Index, upstream.Name, upstream.PromotionUntil)
-				return ch
-			}
-		}
-	}
-	return nil
 }
 
 // selectFallbackChannel 选择降级渠道（失败率最低的）
@@ -685,36 +754,6 @@ func (s *ChannelScheduler) getActiveChannels(kind ChannelKind, model string) []C
 	})
 
 	return activeChannels
-}
-
-// findBestAvailableChannelPriority 找到当前最佳可用渠道的优先级（用于 affinity 覆盖判断）
-// 返回 -1 表示没有可用渠道
-func (s *ChannelScheduler) findBestAvailableChannelPriority(
-	activeChannels []ChannelInfo,
-	failedChannels map[int]bool,
-	kind ChannelKind,
-) int {
-	bestPriority := -1
-
-	for _, ch := range activeChannels {
-		if failedChannels[ch.Index] || ch.Status != "active" {
-			continue
-		}
-
-		upstream := s.getUpstreamByIndex(ch.Index, kind)
-		if upstream == nil || len(upstream.APIKeys) == 0 {
-			continue
-		}
-		if s.channelCircuitState(upstream, kind) == metrics.CircuitStateOpen || !s.channelIsHealthy(upstream, kind) {
-			continue
-		}
-
-		if bestPriority == -1 || ch.Priority < bestPriority {
-			bestPriority = ch.Priority
-		}
-	}
-
-	return bestPriority
 }
 
 // getUpstreamByIndex 根据索引获取上游配置
