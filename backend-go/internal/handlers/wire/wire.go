@@ -49,6 +49,7 @@ import (
 	pipelinemw "github.com/BenedictKing/ccx/internal/pipeline/middleware"
 	"github.com/BenedictKing/ccx/internal/pricing"
 	"github.com/BenedictKing/ccx/internal/scheduler"
+	"github.com/BenedictKing/ccx/internal/types"
 	"github.com/BenedictKing/ccx/internal/usage"
 )
 
@@ -67,9 +68,17 @@ type SchedulerView interface {
 
 // MetricsRecorder 抽象 metrics.MetricsManager 上 LBOutboundAdapter 实际依赖的写端，
 // 便于单测注入 fake；*metrics.MetricsManager 自动满足该接口。
+//
+// 写端分两组：
+//   - LB 层（channelKey 维度）：RecordActiveConnDelta / RecordTPS。
+//   - per-key 层（baseURL + apiKey + serviceType 维度）：RecordSuccessWithUsage /
+//     RecordFailure，对应 KeyMetrics 的成功/失败计数；GetKeyHistoricalStats
+//     等查询依赖该路径。
 type MetricsRecorder interface {
 	RecordActiveConnDelta(channelKey string, delta int64)
 	RecordTPS(channelKey string, totalTokens int64, durationMs int64)
+	RecordSuccessWithUsage(baseURL, apiKey, serviceType string, usage *types.Usage)
+	RecordFailure(baseURL, apiKey, serviceType string)
 }
 
 // LBOutboundAdapter 装饰 PR1 outbound：在每次 NextChannel 时调度 channel/key，
@@ -308,6 +317,24 @@ func (a *LBOutboundAdapter) Finalize(
 
 	if success && totalTokens > 0 && durationMs > 0 && a.LBMetricsMgr != nil && channelKey != "" {
 		a.LBMetricsMgr.RecordTPS(channelKey, totalTokens, durationMs)
+	}
+
+	// per-key KeyMetrics 写入：使用 (baseURL, apiKey, serviceType) 三元组定位，
+	// 对应 metrics.MetricsManager.GetKeyHistoricalStats 等查询路径。任一字段为空
+	// 时跳过（避免落到匿名 bucket）。
+	if a.LBMetricsMgr != nil && a.currentUpstream != nil && a.currentKey != "" {
+		baseURL := a.currentUpstream.BaseURL
+		if a.currentBaseURL != "" {
+			baseURL = a.currentBaseURL
+		}
+		serviceType := a.currentUpstream.ServiceType
+		if baseURL != "" {
+			if success {
+				a.LBMetricsMgr.RecordSuccessWithUsage(baseURL, a.currentKey, serviceType, &llmUsage.Inner)
+			} else {
+				a.LBMetricsMgr.RecordFailure(baseURL, a.currentKey, serviceType)
+			}
+		}
 	}
 
 	if a.UsageStore == nil {

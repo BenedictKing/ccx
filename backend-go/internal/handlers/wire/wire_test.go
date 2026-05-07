@@ -29,6 +29,21 @@ type fakeMetrics struct {
 	tpsDurations   map[string]int64 // 累计 durationMs
 	tpsCallCount   map[string]int   // 调用次数
 	connCallCount  int
+	successCalls   []recordSuccessCall
+	failureCalls   []recordFailureCall
+}
+
+type recordSuccessCall struct {
+	baseURL     string
+	apiKey      string
+	serviceType string
+	usage       *types.Usage
+}
+
+type recordFailureCall struct {
+	baseURL     string
+	apiKey      string
+	serviceType string
 }
 
 func newFakeMetrics() *fakeMetrics {
@@ -53,6 +68,32 @@ func (f *fakeMetrics) RecordTPS(key string, tokens int64, durMs int64) {
 	f.tpsRecords[key] += tokens
 	f.tpsDurations[key] += durMs
 	f.tpsCallCount[key]++
+}
+
+func (f *fakeMetrics) RecordSuccessWithUsage(baseURL, apiKey, serviceType string, u *types.Usage) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var copyUsage *types.Usage
+	if u != nil {
+		c := *u
+		copyUsage = &c
+	}
+	f.successCalls = append(f.successCalls, recordSuccessCall{
+		baseURL:     baseURL,
+		apiKey:      apiKey,
+		serviceType: serviceType,
+		usage:       copyUsage,
+	})
+}
+
+func (f *fakeMetrics) RecordFailure(baseURL, apiKey, serviceType string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.failureCalls = append(f.failureCalls, recordFailureCall{
+		baseURL:     baseURL,
+		apiKey:      apiKey,
+		serviceType: serviceType,
+	})
 }
 
 // fakeStore 实现 usage.UsageStore，记录 Append 调用。
@@ -129,9 +170,10 @@ func (fakeOutbound) TransformStream(_ context.Context, _ *http.Response) llm.Str
 func newSelection(idx int, name, key, baseURL string) *scheduler.SelectionResult {
 	return &scheduler.SelectionResult{
 		Upstream: &config.UpstreamConfig{
-			Name:    name,
-			BaseURL: baseURL,
-			APIKeys: []string{key},
+			Name:        name,
+			BaseURL:     baseURL,
+			APIKeys:     []string{key},
+			ServiceType: "claude",
 		},
 		ChannelIndex: idx,
 		Reason:       "priority_order",
@@ -325,6 +367,83 @@ func TestLBOutboundAdapter_Finalize_Idempotent(t *testing.T) {
 	lb.Finalize(context.Background(), true, "", "claude", llm.Usage{Inner: types.Usage{InputTokens: 1, OutputTokens: 1}}, 10)
 	if len(store.records) != 1 {
 		t.Fatalf("Finalize must be idempotent, records = %d", len(store.records))
+	}
+}
+
+func TestLBOutboundAdapter_Finalize_SuccessRecordsPerKeySuccessWithUsage(t *testing.T) {
+	mm := newFakeMetrics()
+	sched := &fakeScheduler{results: []*scheduler.SelectionResult{newSelection(0, "ch-K", "sk-key", "https://up.local")}}
+	lb := NewLBOutboundAdapter(fakeOutbound{}, sched, scheduler.ChannelKindMessages, time.Now())
+	lb.AttemptInfo = &pipelinemw.AttemptInfo{APIType: "Messages"}
+	lb.LBMetricsMgr = mm
+	lb.Request = &llm.Request{}
+	if err := lb.NextChannel(context.Background()); err != nil {
+		t.Fatalf("NextChannel: %v", err)
+	}
+
+	llmUsage := llm.Usage{Inner: types.Usage{InputTokens: 4, OutputTokens: 9}, Format: llm.FormatClaudeMessages}
+	lb.Finalize(context.Background(), true, "", "claude-3-5", llmUsage, 250)
+
+	if len(mm.successCalls) != 1 {
+		t.Fatalf("RecordSuccessWithUsage call count = %d, want 1", len(mm.successCalls))
+	}
+	if len(mm.failureCalls) != 0 {
+		t.Fatalf("RecordFailure must not be called on success path, got %d", len(mm.failureCalls))
+	}
+	got := mm.successCalls[0]
+	if got.baseURL != "https://up.local" || got.apiKey != "sk-key" || got.serviceType != "claude" {
+		t.Fatalf("RecordSuccessWithUsage args = %+v, want (https://up.local, sk-key, claude)", got)
+	}
+	if got.usage == nil || got.usage.InputTokens != 4 || got.usage.OutputTokens != 9 {
+		t.Fatalf("RecordSuccessWithUsage usage = %+v, want input=4 output=9", got.usage)
+	}
+}
+
+func TestLBOutboundAdapter_Finalize_FailureRecordsPerKeyFailure(t *testing.T) {
+	mm := newFakeMetrics()
+	sched := &fakeScheduler{results: []*scheduler.SelectionResult{newSelection(2, "ch-F", "sk-fail", "https://up2.local")}}
+	lb := NewLBOutboundAdapter(fakeOutbound{}, sched, scheduler.ChannelKindMessages, time.Now())
+	lb.AttemptInfo = &pipelinemw.AttemptInfo{APIType: "Messages"}
+	lb.LBMetricsMgr = mm
+	lb.Request = &llm.Request{}
+	if err := lb.NextChannel(context.Background()); err != nil {
+		t.Fatalf("NextChannel: %v", err)
+	}
+
+	lb.Finalize(context.Background(), false, "upstream_error", "claude-3-5",
+		llm.Usage{Inner: types.Usage{InputTokens: 1}}, 100)
+
+	if len(mm.failureCalls) != 1 {
+		t.Fatalf("RecordFailure call count = %d, want 1", len(mm.failureCalls))
+	}
+	if len(mm.successCalls) != 0 {
+		t.Fatalf("RecordSuccessWithUsage must not be called on failure path, got %d", len(mm.successCalls))
+	}
+	got := mm.failureCalls[0]
+	if got.baseURL != "https://up2.local" || got.apiKey != "sk-fail" || got.serviceType != "claude" {
+		t.Fatalf("RecordFailure args = %+v, want (https://up2.local, sk-fail, claude)", got)
+	}
+}
+
+func TestLBOutboundAdapter_Finalize_NilUpstreamOrKeySkipsPerKeyRecord(t *testing.T) {
+	mm := newFakeMetrics()
+	// 不调用 NextChannel —— currentUpstream / currentKey 均为零值。
+	sched := &fakeScheduler{}
+	lb := NewLBOutboundAdapter(fakeOutbound{}, sched, scheduler.ChannelKindMessages, time.Now())
+	lb.LBMetricsMgr = mm
+	lb.Request = &llm.Request{}
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("Finalize panicked with nil upstream: %v", r)
+		}
+	}()
+	lb.Finalize(context.Background(), true, "", "claude",
+		llm.Usage{Inner: types.Usage{InputTokens: 1, OutputTokens: 1}}, 10)
+
+	if len(mm.successCalls) != 0 || len(mm.failureCalls) != 0 {
+		t.Fatalf("per-key record must be skipped when upstream/key missing, success=%d failure=%d",
+			len(mm.successCalls), len(mm.failureCalls))
 	}
 }
 
