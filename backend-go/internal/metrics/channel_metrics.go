@@ -196,6 +196,11 @@ type MetricsManager struct {
 	// 持久化存储（可选）
 	store   PersistenceStore
 	apiType string // "messages"、"responses"、"gemini" 或 "chat"
+
+	// 负载均衡指标（PR3 T1）：按 channelKey 分桶的滑动窗口，
+	// 提供首 token 延迟、TPS、活跃连接数三项数据出口。
+	// 使用 sync.Map 避免修改现有 NewMetricsManager 构造路径。
+	lbMetrics sync.Map // key: string(channelKey) -> *lbMetricsEntry
 }
 
 // GetPersistenceStore 获取持久化存储（可能为 nil）
