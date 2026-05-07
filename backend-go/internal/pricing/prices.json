@@ -1,0 +1,277 @@
+{
+  "_lastVerified": "2026-05-07",
+  "_source": "openai.com/api/pricing, anthropic.com/pricing, ai.google.dev/pricing (estimates pending Q1-2026 verification)",
+  "_comment": "单价单位 = USD / 1M tokens. PR3 T6 初版，部分价格待 implement 阶段二次校验（_comment 标注）。Calculate 时 token 数会自动 / 1_000_000。",
+  "models": [
+    {
+      "modelId": "gpt-4o",
+      "items": [
+        {
+          "itemCode": "prompt_tokens",
+          "pricing": { "mode": "usage_per_unit", "usagePerUnit": "2.50" }
+        },
+        {
+          "itemCode": "completion_tokens",
+          "pricing": { "mode": "usage_per_unit", "usagePerUnit": "10.00" }
+        },
+        {
+          "itemCode": "prompt_cached_tokens",
+          "pricing": { "mode": "usage_per_unit", "usagePerUnit": "1.25" }
+        }
+      ]
+    },
+    {
+      "modelId": "gpt-4o-mini",
+      "items": [
+        {
+          "itemCode": "prompt_tokens",
+          "pricing": { "mode": "usage_per_unit", "usagePerUnit": "0.15" }
+        },
+        {
+          "itemCode": "completion_tokens",
+          "pricing": { "mode": "usage_per_unit", "usagePerUnit": "0.60" }
+        },
+        {
+          "itemCode": "prompt_cached_tokens",
+          "pricing": { "mode": "usage_per_unit", "usagePerUnit": "0.075" }
+        }
+      ]
+    },
+    {
+      "modelId": "gpt-4-turbo",
+      "items": [
+        {
+          "itemCode": "prompt_tokens",
+          "pricing": { "mode": "usage_per_unit", "usagePerUnit": "10.00" }
+        },
+        {
+          "itemCode": "completion_tokens",
+          "pricing": { "mode": "usage_per_unit", "usagePerUnit": "30.00" }
+        }
+      ]
+    },
+    {
+      "modelId": "claude-3-5-sonnet",
+      "items": [
+        {
+          "itemCode": "prompt_tokens",
+          "pricing": { "mode": "usage_per_unit", "usagePerUnit": "3.00" }
+        },
+        {
+          "itemCode": "completion_tokens",
+          "pricing": { "mode": "usage_per_unit", "usagePerUnit": "15.00" }
+        },
+        {
+          "itemCode": "prompt_cached_tokens",
+          "pricing": { "mode": "usage_per_unit", "usagePerUnit": "0.30" }
+        },
+        {
+          "itemCode": "prompt_write_cached_tokens",
+          "pricing": { "mode": "usage_per_unit", "usagePerUnit": "3.75" },
+          "promptWriteCacheVariants": [
+            {
+              "variantCode": "five_min",
+              "pricing": { "mode": "usage_per_unit", "usagePerUnit": "3.75" }
+            },
+            {
+              "variantCode": "one_hour",
+              "pricing": { "mode": "usage_per_unit", "usagePerUnit": "6.00" }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "modelId": "claude-3-5-haiku",
+      "items": [
+        {
+          "itemCode": "prompt_tokens",
+          "pricing": { "mode": "usage_per_unit", "usagePerUnit": "0.80" }
+        },
+        {
+          "itemCode": "completion_tokens",
+          "pricing": { "mode": "usage_per_unit", "usagePerUnit": "4.00" }
+        },
+        {
+          "itemCode": "prompt_cached_tokens",
+          "pricing": { "mode": "usage_per_unit", "usagePerUnit": "0.08" }
+        },
+        {
+          "itemCode": "prompt_write_cached_tokens",
+          "pricing": { "mode": "usage_per_unit", "usagePerUnit": "1.00" },
+          "promptWriteCacheVariants": [
+            {
+              "variantCode": "five_min",
+              "pricing": { "mode": "usage_per_unit", "usagePerUnit": "1.00" }
+            },
+            {
+              "variantCode": "one_hour",
+              "pricing": { "mode": "usage_per_unit", "usagePerUnit": "1.60" }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "modelId": "claude-3-opus",
+      "items": [
+        {
+          "itemCode": "prompt_tokens",
+          "pricing": { "mode": "usage_per_unit", "usagePerUnit": "15.00" }
+        },
+        {
+          "itemCode": "completion_tokens",
+          "pricing": { "mode": "usage_per_unit", "usagePerUnit": "75.00" }
+        },
+        {
+          "itemCode": "prompt_cached_tokens",
+          "pricing": { "mode": "usage_per_unit", "usagePerUnit": "1.50" }
+        },
+        {
+          "itemCode": "prompt_write_cached_tokens",
+          "pricing": { "mode": "usage_per_unit", "usagePerUnit": "18.75" },
+          "promptWriteCacheVariants": [
+            {
+              "variantCode": "five_min",
+              "pricing": { "mode": "usage_per_unit", "usagePerUnit": "18.75" }
+            },
+            {
+              "variantCode": "one_hour",
+              "pricing": { "mode": "usage_per_unit", "usagePerUnit": "30.00" }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "modelId": "gemini-2.0-flash",
+      "items": [
+        {
+          "itemCode": "prompt_tokens",
+          "pricing": { "mode": "usage_per_unit", "usagePerUnit": "0.10" }
+        },
+        {
+          "itemCode": "completion_tokens",
+          "pricing": { "mode": "usage_per_unit", "usagePerUnit": "0.40" }
+        }
+      ]
+    },
+    {
+      "modelId": "gemini-1.5-pro",
+      "items": [
+        {
+          "itemCode": "prompt_tokens",
+          "pricing": {
+            "mode": "usage_tiered",
+            "usageTiered": {
+              "tiers": [
+                { "upTo": 128000, "pricePerUnit": "1.25" },
+                { "pricePerUnit": "2.50" }
+              ]
+            }
+          }
+        },
+        {
+          "itemCode": "completion_tokens",
+          "pricing": {
+            "mode": "usage_tiered",
+            "usageTiered": {
+              "tiers": [
+                { "upTo": 128000, "pricePerUnit": "5.00" },
+                { "pricePerUnit": "10.00" }
+              ]
+            }
+          }
+        },
+        {
+          "itemCode": "prompt_cached_tokens",
+          "pricing": { "mode": "usage_per_unit", "usagePerUnit": "0.3125" }
+        }
+      ]
+    },
+    {
+      "modelId": "gemini-1.5-flash",
+      "items": [
+        {
+          "itemCode": "prompt_tokens",
+          "pricing": {
+            "mode": "usage_tiered",
+            "usageTiered": {
+              "tiers": [
+                { "upTo": 128000, "pricePerUnit": "0.075" },
+                { "pricePerUnit": "0.15" }
+              ]
+            }
+          }
+        },
+        {
+          "itemCode": "completion_tokens",
+          "pricing": {
+            "mode": "usage_tiered",
+            "usageTiered": {
+              "tiers": [
+                { "upTo": 128000, "pricePerUnit": "0.30" },
+                { "pricePerUnit": "0.60" }
+              ]
+            }
+          }
+        },
+        {
+          "itemCode": "prompt_cached_tokens",
+          "pricing": { "mode": "usage_per_unit", "usagePerUnit": "0.01875" }
+        }
+      ]
+    },
+    {
+      "modelId": "o1",
+      "items": [
+        {
+          "itemCode": "prompt_tokens",
+          "pricing": { "mode": "usage_per_unit", "usagePerUnit": "15.00" }
+        },
+        {
+          "itemCode": "completion_tokens",
+          "pricing": { "mode": "usage_per_unit", "usagePerUnit": "60.00" }
+        },
+        {
+          "itemCode": "prompt_cached_tokens",
+          "pricing": { "mode": "usage_per_unit", "usagePerUnit": "7.50" }
+        }
+      ]
+    },
+    {
+      "modelId": "o1-mini",
+      "items": [
+        {
+          "itemCode": "prompt_tokens",
+          "pricing": { "mode": "usage_per_unit", "usagePerUnit": "3.00" }
+        },
+        {
+          "itemCode": "completion_tokens",
+          "pricing": { "mode": "usage_per_unit", "usagePerUnit": "12.00" }
+        },
+        {
+          "itemCode": "prompt_cached_tokens",
+          "pricing": { "mode": "usage_per_unit", "usagePerUnit": "1.50" }
+        }
+      ]
+    },
+    {
+      "modelId": "o3-mini",
+      "items": [
+        {
+          "itemCode": "prompt_tokens",
+          "pricing": { "mode": "usage_per_unit", "usagePerUnit": "1.10" }
+        },
+        {
+          "itemCode": "completion_tokens",
+          "pricing": { "mode": "usage_per_unit", "usagePerUnit": "4.40" }
+        },
+        {
+          "itemCode": "prompt_cached_tokens",
+          "pricing": { "mode": "usage_per_unit", "usagePerUnit": "0.55" }
+        }
+      ]
+    }
+  ]
+}
