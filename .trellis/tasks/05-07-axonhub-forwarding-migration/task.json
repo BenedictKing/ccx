@@ -1,0 +1,30 @@
+{
+  "id": "axonhub-forwarding-migration",
+  "name": "axonhub-forwarding-migration",
+  "title": "axonhub forwarding migration with billing and channel metrics",
+  "description": "",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "skip",
+  "assignee": "skip",
+  "createdAt": "2026-05-07",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "axonhub",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "05-07-axonhub-migration-pr1-pipeline-skeleton",
+    "05-07-axonhub-migration-pr2-loadbalancer",
+    "05-07-axonhub-migration-pr3-cutover-and-billing"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

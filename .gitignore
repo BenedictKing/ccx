@@ -249,3 +249,7 @@ docs/claude-code-investigation-*.md
 /sub2api/
 /ccLoad/
 /ccLoad.md
+
+# Nested reference repos / scratch docs
+/axonhub/
+/AxonHub-half.md
