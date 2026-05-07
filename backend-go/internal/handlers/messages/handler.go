@@ -406,6 +406,7 @@ func processViaPipeline(
 	lb.UserID = userID
 	lb.Model = parsedModel
 	lb.RoutePrefix = routePrefix
+	outbound, _ := lb.Inner.(*outboundAdapter)
 
 	inbound := &ginInjectingInbound{Inner: NewInbound(), Gin: c, LB: lb}
 
@@ -425,11 +426,22 @@ func processViaPipeline(
 	if err != nil {
 		errCode = pipelineErrCode(err)
 	}
+	// llmUsage 用 defer-closure 捕获指针，使 stream 路径在事件流消费完成后
+	// 通过 outbound.TakeStreamUsage 把累计的 SSE usage 注入。pipeline.Result.Response
+	// 在 stream 路径下为 nil，是 PR3 T8a B2 既有限制——这里以"outbound 侧信道"
+	// 补全，handler 主流程不动。
 	var llmUsage llm.Usage
 	if result != nil && result.Response != nil && result.Response.Usage != nil {
 		llmUsage = *result.Response.Usage
 	}
-	defer lb.Finalize(ctx, err == nil, errCode, parsedModel, llmUsage, durationMs)
+	defer func() {
+		if outbound != nil {
+			if streamUsage := outbound.TakeStreamUsage(); streamUsage != nil && llmUsage.IsZero() {
+				llmUsage = *streamUsage
+			}
+		}
+		lb.Finalize(ctx, err == nil, errCode, parsedModel, llmUsage, durationMs)
+	}()
 
 	if err != nil {
 		writePipelineError(c, err)
