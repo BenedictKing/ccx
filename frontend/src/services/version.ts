@@ -24,6 +24,7 @@ export interface VersionInfo {
   releaseUrl: string | null
   lastCheckTime: number
   status: 'checking' | 'latest' | 'update-available' | 'error'
+  publishedAt?: string | null
 }
 
 // 预发布版本标识正则（如 -rc1, -beta, -alpha 等）
@@ -230,6 +231,106 @@ class VersionService {
     }
 
     return versionInfo
+  }
+
+  /**
+   * 通过后端 API 检查版本更新（替代直接调用 GitHub API）
+   */
+  async checkViaBackend(): Promise<VersionInfo> {
+    if (!this.currentVersion) {
+      return {
+        currentVersion: '',
+        latestVersion: null,
+        isLatest: false,
+        hasUpdate: false,
+        releaseUrl: null,
+        lastCheckTime: Date.now(),
+        status: 'error',
+      }
+    }
+
+    const cached = this.getCachedVersionInfo()
+    if (cached) {
+      return cached
+    }
+
+    const versionInfo: VersionInfo = {
+      currentVersion: this.currentVersion,
+      latestVersion: null,
+      isLatest: false,
+      hasUpdate: false,
+      releaseUrl: null,
+      lastCheckTime: Date.now(),
+      status: 'checking',
+    }
+
+    try {
+      const baseUrl = import.meta.env.PROD ? '' : (import.meta.env.VITE_BACKEND_URL || '')
+      const response = await fetch(`${baseUrl}/api/version/check`)
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`)
+      }
+      const data = await response.json()
+      if (data.error) {
+        throw new Error(data.error)
+      }
+      versionInfo.latestVersion = data.latest?.version || null
+      versionInfo.releaseUrl = data.latest?.url || null
+      versionInfo.publishedAt = data.latest?.publishedAt || null
+      versionInfo.hasUpdate = !!data.hasUpdate
+      versionInfo.isLatest = !data.hasUpdate
+      versionInfo.status = data.hasUpdate ? 'update-available' : 'latest'
+      this.setCachedVersionInfo(versionInfo)
+    } catch (error) {
+      console.warn('Backend version check failed:', error)
+      versionInfo.status = 'error'
+      this.setCachedVersionInfo(versionInfo)
+    }
+
+    return versionInfo
+  }
+
+  /**
+   * 触发更新（POST /api/version/update）
+   * 需要管理权限（x-api-key header）
+   */
+  async triggerUpdate(): Promise<{ status: string; message: string }> {
+    // Get API key from auth store
+    const { useAuthStore } = await import('../stores/auth')
+    const authStore = useAuthStore()
+    const apiKey = authStore.apiKey
+    if (!apiKey) {
+      return { status: 'error', message: '未认证：请先登录管理控制台' }
+    }
+
+    const baseUrl = import.meta.env.PROD ? '' : (import.meta.env.VITE_BACKEND_URL || '')
+    try {
+      const response = await fetch(`${baseUrl}/api/version/update`, {
+        method: 'POST',
+        headers: {
+          'x-api-key': apiKey as string,
+        },
+      })
+      const data = await response.json()
+    return { status: data.status, message: data.message }
+    } catch (error) {
+      return { status: 'error', message: `请求失败: ${error}` }
+    }
+  }
+
+  /**
+   * 查询更新进度状态（GET /api/version/status）
+   */
+  async checkUpdateStatus(): Promise<{ status: string; error: string; progress: number }> {
+    const baseUrl = import.meta.env.PROD ? '' : (import.meta.env.VITE_BACKEND_URL || '')
+    try {
+      const response = await fetch(`${baseUrl}/api/version/status`)
+      if (!response.ok) return { status: 'error', error: `HTTP ${response.status}`, progress: 0 }
+      const data = await response.json()
+      return { status: data.status, error: data.error || '', progress: data.progress || 0 }
+    } catch (e) {
+      return { status: 'error', error: `请求失败: ${e}`, progress: 0 }
+    }
   }
 }
 

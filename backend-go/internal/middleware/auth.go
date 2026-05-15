@@ -20,6 +20,18 @@ func WebAuthMiddleware(envCfg *config.EnvConfig, cfgManager *config.ConfigManage
 			return
 		}
 
+		// 版本检查端点公开访问
+		if path == "/api/version/check" {
+			c.Next()
+			return
+		}
+
+		// 更新状态端点公开访问
+		if path == "/api/version/status" {
+			c.Next()
+			return
+		}
+
 		// 静态资源文件直接放行
 		if isStaticResource(path) {
 			c.Next()

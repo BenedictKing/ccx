@@ -151,9 +151,9 @@ type UpstreamUpdate struct {
 	// 路由前缀
 	RoutePrefix *string `json:"routePrefix"` // 路由前缀（如 "kimi"）
 	// Vision 能力配置
-	NoVision            *bool             `json:"noVision"`
-	NoVisionModels      []string          `json:"noVisionModels"`
-	VisionFallbackModel *string `json:"visionFallbackModel"`
+	NoVision            *bool    `json:"noVision"`
+	NoVisionModels      []string `json:"noVisionModels"`
+	VisionFallbackModel *string  `json:"visionFallbackModel"`
 }
 
 // Config 配置结构

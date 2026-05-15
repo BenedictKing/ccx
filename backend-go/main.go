@@ -44,12 +44,43 @@ func main() {
 				fmt.Printf("git commit: %s\n", GitCommit)
 			}
 			os.Exit(0)
+		case "--health-check":
+			runHealthCheck()
+			return
+		case "--install":
+			exePath, _ := os.Executable()
+			if err := installService("ccx", "CCX API Gateway", exePath); err != nil {
+				log.Fatalf("Service install failed: %v", err)
+			}
+			return
+		case "--uninstall":
+			if err := removeService("ccx"); err != nil {
+				log.Fatalf("Service remove failed: %v", err)
+			}
+			return
+		case "--start":
+			if err := startService("ccx"); err != nil {
+				log.Fatalf("Service start failed: %v", err)
+			}
+			return
+		case "--stop":
+			if err := stopService("ccx"); err != nil {
+				log.Fatalf("Service stop failed: %v", err)
+			}
+			return
 		}
 	}
-
 	// 加载环境变量
 	if err := godotenv.Load(); err != nil {
 		log.Println("没有找到 .env 文件，使用环境变量或默认值")
+	}
+
+	// Windows SCM service mode: run as Windows service
+	if isWindowsService() {
+		if err := runService("ccx"); err != nil {
+			log.Fatalf("Service run failed: %v", err)
+		}
+		return
 	}
 
 	// 设置版本信息到 handlers 包
@@ -260,6 +291,11 @@ func main() {
 	r.Use(middleware.GzipMiddleware())
 
 	// Web UI 访问控制中间件
+
+	// 版本检查端点（公开，无需认证，必须在 WebAuthMiddleware 之前注册）
+	r.GET("/api/version/check", handlers.VersionCheckHandler(envCfg))
+	r.GET("/api/version/status", handlers.VersionStatusHandler(envCfg))
+
 	r.Use(middleware.WebAuthMiddleware(envCfg, cfgManager))
 
 	// 健康检查端点（固定路径 /health，与 Dockerfile HEALTHCHECK 保持一致）
@@ -438,6 +474,9 @@ func main() {
 		// 移除计费头设置
 		apiGroup.GET("/settings/strip-billing-header", handlers.GetStripBillingHeader(cfgManager))
 		apiGroup.PUT("/settings/strip-billing-header", handlers.SetStripBillingHeader(cfgManager))
+
+		// 版本信息与自更新
+		apiGroup.POST("/version/update", handlers.VersionUpdateHandler(envCfg))
 	}
 
 	// 代理端点 - Messages API

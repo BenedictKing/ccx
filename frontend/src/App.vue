@@ -432,6 +432,15 @@
         {{ toast.message }}
       </div>
     </v-snackbar>
+
+    <!-- 版本更新对话框 -->
+    <VersionUpdateDialog
+      v-if="showUpdateDialog"
+      :model-value="showUpdateDialog"
+      :version-info="updateDialogInfo"
+      @update:model-value="showUpdateDialog = $event"
+      @update-success="onUpdateSuccess"
+    />
   </v-app>
 </template>
 
@@ -449,6 +458,8 @@ import { useI18n } from './i18n'
 import type { SupportedLocale } from './i18n'
 import AddChannelModal from './components/AddChannelModal.vue'
 import CapabilityTestDialog from './components/CapabilityTestDialog.vue'
+import VersionUpdateDialog from './components/VersionUpdateDialog.vue'
+import type { VersionInfo } from './services/version'
 // 异步加载图表组件，减少首屏 JS 体积
 const GlobalStatsChart = defineAsyncComponent(() => import('./components/GlobalStatsChart.vue'))
 import { useAppTheme } from './composables/useTheme'
@@ -1648,8 +1659,8 @@ const checkVersion = async () => {
       versionService.setCurrentVersion(currentVersion)
       systemStore.setCurrentVersion(currentVersion)
 
-      // 检查 GitHub 最新版本
-      const result = await versionService.checkForUpdates()
+      // 通过后端 API 检查最新版本
+      const result = await versionService.checkViaBackend()
       systemStore.setVersionInfo(result)
     } else {
       systemStore.setVersionInfo({
@@ -1669,11 +1680,20 @@ const checkVersion = async () => {
 }
 
 // 版本点击处理
+
+// 更新对话框相关状态
+const showUpdateDialog = ref(false)
+const updateDialogInfo = ref<VersionInfo>(systemStore.versionInfo)
+
+const onUpdateSuccess = () => {
+  showUpdateDialog.value = false
+}
+
 const handleVersionClick = () => {
-  if (
-    (systemStore.versionInfo.status === 'update-available' || systemStore.versionInfo.status === 'latest') &&
-    systemStore.versionInfo.releaseUrl
-  ) {
+  if (systemStore.versionInfo.status === 'update-available') {
+    updateDialogInfo.value = { ...systemStore.versionInfo }
+    showUpdateDialog.value = true
+  } else if (systemStore.versionInfo.status === 'latest' && systemStore.versionInfo.releaseUrl) {
     window.open(systemStore.versionInfo.releaseUrl, '_blank', 'noopener,noreferrer')
   }
 }

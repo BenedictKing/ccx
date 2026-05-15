@@ -18,6 +18,19 @@ export type MessageKey =
   | 'app.tabs.gemini'
   | 'app.tabs.images'
   | 'app.header.logout'
+  | 'app.version.updateAvailable'
+  | 'app.version.currentVersion'
+  | 'app.version.latestVersion'
+  | 'app.version.publishedAt'
+  | 'app.version.releaseNotes'
+  | 'app.version.updateNow'
+  | 'app.version.later'
+  | 'app.version.downloading'
+  | 'app.version.verifying'
+  | 'app.version.restarting'
+  | 'app.version.updateSuccess'
+  | 'app.version.updateFailed'
+  | 'app.version.close'
   | 'app.stats.trafficTitle'
   | 'app.stats.totalChannels'
   | 'app.stats.totalChannelsDesc'
@@ -420,6 +433,19 @@ export const messages: Record<SupportedLocale, Record<MessageKey, string>> = {
     'app.tabs.gemini': 'Gemini',
     'app.tabs.images': 'Images',
     'app.header.logout': 'Logout',
+    'app.version.updateAvailable': 'Update Available',
+    'app.version.currentVersion': 'Current Version',
+    'app.version.latestVersion': 'Latest Version',
+    'app.version.publishedAt': 'Published',
+    'app.version.releaseNotes': 'View release notes',
+    'app.version.updateNow': 'Update Now',
+    'app.version.later': 'Later',
+    'app.version.downloading': 'Downloading new version...',
+    'app.version.verifying': 'Verifying new version...',
+    'app.version.restarting': 'Update complete, service will restart...',
+    'app.version.updateSuccess': 'Update Successful',
+    'app.version.updateFailed': 'Update Failed',
+    'app.version.close': 'Close',
     'app.stats.trafficTitle': '{tab} traffic',
     'app.stats.totalChannels': 'Total channels',
     'app.stats.totalChannelsDesc': 'Configured API channels',
@@ -821,6 +847,19 @@ export const messages: Record<SupportedLocale, Record<MessageKey, string>> = {
     'app.tabs.gemini': 'Gemini',
     'app.tabs.images': 'Images',
     'app.header.logout': 'Keluar',
+    'app.version.updateAvailable': 'Pembaruan Tersedia',
+    'app.version.currentVersion': 'Versi Saat Ini',
+    'app.version.latestVersion': 'Versi Terbaru',
+    'app.version.publishedAt': 'Diterbitkan',
+    'app.version.releaseNotes': 'Lihat catatan rilis',
+    'app.version.updateNow': 'Perbarui Sekarang',
+    'app.version.later': 'Nanti',
+    'app.version.downloading': 'Mengunduh versi baru...',
+    'app.version.verifying': 'Memverifikasi versi baru...',
+    'app.version.restarting': 'Pembaruan selesai, layanan akan dimulai ulang...',
+    'app.version.updateSuccess': 'Pembaruan Berhasil',
+    'app.version.updateFailed': 'Pembaruan Gagal',
+    'app.version.close': 'Tutup',
     'app.stats.trafficTitle': 'Traffic {tab}',
     'app.stats.totalChannels': 'Total channel',
     'app.stats.totalChannelsDesc': 'Channel API yang sudah dikonfigurasi',
@@ -1222,6 +1261,19 @@ export const messages: Record<SupportedLocale, Record<MessageKey, string>> = {
     'app.tabs.gemini': 'Gemini',
     'app.tabs.images': 'Images',
     'app.header.logout': '注销',
+    'app.version.updateAvailable': '发现新版本',
+    'app.version.currentVersion': '当前版本',
+    'app.version.latestVersion': '最新版本',
+    'app.version.publishedAt': '发布日期',
+    'app.version.releaseNotes': '查看更新说明',
+    'app.version.updateNow': '立即更新',
+    'app.version.later': '稍后再说',
+    'app.version.downloading': '正在下载新版本...',
+    'app.version.verifying': '正在验证新版本...',
+    'app.version.restarting': '更新完成，服务即将重启...',
+    'app.version.updateSuccess': '更新成功',
+    'app.version.updateFailed': '更新失败',
+    'app.version.close': '关闭',
     'app.stats.trafficTitle': '{tab} 流量统计',
     'app.stats.totalChannels': '总渠道数',
     'app.stats.totalChannelsDesc': '已配置的API渠道',
