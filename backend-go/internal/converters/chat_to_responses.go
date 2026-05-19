@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -96,6 +97,14 @@ func (st *chatToResponsesState) addToolCallItemIfNeeded(idx int, nextSeq func() 
 }
 
 var chatDataTag = []byte("data:")
+
+// thinkTagRE 匹配 <think>...</think> 标签
+var thinkTagRE = regexp.MustCompile(`(?s)<think>.*?</think>\s*`)
+
+// stripThinkTags 从文本中移除 <think> 标签及其内容
+func stripThinkTags(text string) string {
+	return thinkTagRE.ReplaceAllString(text, "")
+}
 
 func emitResponsesEvent(event string, payload string) string {
 	return fmt.Sprintf("event: %s\ndata: %s\n\n", event, payload)
@@ -547,7 +556,7 @@ func (st *chatToResponsesState) closeTextBlock(nextSeq func() int) []string {
 	done, _ = sjson.Set(done, "sequence_number", nextSeq())
 	done, _ = sjson.Set(done, "item_id", st.CurrentMsgID)
 	done, _ = sjson.Set(done, "output_index", outputIndex)
-	done, _ = sjson.Set(done, "text", st.TextBuf.String())
+	done, _ = sjson.Set(done, "text", stripThinkTags(st.TextBuf.String()))
 	out = append(out, emitResponsesEvent("response.output_text.done", done))
 
 	// response.content_part.done
@@ -555,7 +564,7 @@ func (st *chatToResponsesState) closeTextBlock(nextSeq func() int) []string {
 	partDone, _ = sjson.Set(partDone, "sequence_number", nextSeq())
 	partDone, _ = sjson.Set(partDone, "item_id", st.CurrentMsgID)
 	partDone, _ = sjson.Set(partDone, "output_index", outputIndex)
-	partDone, _ = sjson.Set(partDone, "part.text", st.TextBuf.String())
+	partDone, _ = sjson.Set(partDone, "part.text", stripThinkTags(st.TextBuf.String()))
 	out = append(out, emitResponsesEvent("response.content_part.done", partDone))
 
 	// response.output_item.done for message
@@ -563,7 +572,7 @@ func (st *chatToResponsesState) closeTextBlock(nextSeq func() int) []string {
 	final, _ = sjson.Set(final, "sequence_number", nextSeq())
 	final, _ = sjson.Set(final, "output_index", outputIndex)
 	final, _ = sjson.Set(final, "item.id", st.CurrentMsgID)
-	final, _ = sjson.Set(final, "item.content.0.text", st.TextBuf.String())
+	final, _ = sjson.Set(final, "item.content.0.text", stripThinkTags(st.TextBuf.String()))
 	out = append(out, emitResponsesEvent("response.output_item.done", final))
 
 	st.InTextBlock = false
@@ -741,7 +750,7 @@ func (st *chatToResponsesState) generateCompletedEvents(originalRequestRawJSON [
 				"type":        "output_text",
 				"annotations": []interface{}{},
 				"logprobs":    []interface{}{},
-				"text":        st.TextBuf.String(),
+				"text":        stripThinkTags(st.TextBuf.String()),
 			}},
 			"role": "assistant",
 		}

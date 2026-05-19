@@ -800,7 +800,8 @@ func OpenAIChatResponseToResponses(openaiResp map[string]interface{}, sessionID 
 					}},
 				})
 			}
-			content, _ := message["content"].(string)
+			contentRaw, _ := message["content"].(string)
+			content := stripThinkTags(contentRaw)
 			if content != "" {
 				output = append(output, types.ResponsesItem{
 					Type: "message",
