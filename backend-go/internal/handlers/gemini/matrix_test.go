@@ -44,7 +44,11 @@ func TestGeminiEntry_RequestMatrix_AllFourUpstreams(t *testing.T) {
 			if tt.name == "gemini_hash_baseurl_openai" {
 				upstream.BaseURL = "https://core.blink.new/api/v1/ai#"
 			}
-			req, err := buildProviderRequest(c, upstream, upstream.BaseURL, "test-key", geminiReq, "gemini-2.0-flash", false)
+			bodyBytes, err := json.Marshal(geminiReq)
+			if err != nil {
+				t.Fatalf("marshal request body: %v", err)
+			}
+			req, err := buildProviderRequest(c, upstream, upstream.BaseURL, "test-key", bodyBytes, geminiReq, "gemini-2.0-flash", false)
 			if err != nil {
 				t.Fatalf("buildProviderRequest() err = %v", err)
 			}

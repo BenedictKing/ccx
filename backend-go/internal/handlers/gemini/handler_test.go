@@ -321,7 +321,11 @@ func TestBuildProviderRequest_StripThoughtSignature(t *testing.T) {
 			c, _ := gin.CreateTestContext(httptest.NewRecorder())
 			c.Request = httptest.NewRequest(http.MethodPost, "/test", nil)
 
-			req, err := buildProviderRequest(c, upstream, upstream.BaseURL, "test-key", geminiReq, "gemini-2.0-flash", false)
+			bodyBytes, err := json.Marshal(geminiReq)
+			if err != nil {
+				t.Fatalf("marshal request body: %v", err)
+			}
+			req, err := buildProviderRequest(c, upstream, upstream.BaseURL, "test-key", bodyBytes, geminiReq, "gemini-2.0-flash", false)
 			if err != nil {
 				t.Fatalf("buildProviderRequest failed: %v", err)
 			}
@@ -356,6 +360,40 @@ func TestBuildProviderRequest_StripThoughtSignature(t *testing.T) {
 	}
 }
 
+func TestBuildProviderRequest_GeminiPassthroughPreservesEmptyTextPart(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	body := []byte(`{"contents":[{"role":"user","parts":[{"text":""},{"text":"hello"}]}]}`)
+	var geminiReq types.GeminiRequest
+	if err := json.Unmarshal(body, &geminiReq); err != nil {
+		t.Fatalf("Unmarshal 请求失败: %v", err)
+	}
+
+	upstream := &config.UpstreamConfig{
+		BaseURL:     "https://test.example.com",
+		ServiceType: "gemini",
+	}
+
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/test", nil)
+
+	req, err := buildProviderRequest(c, upstream, upstream.BaseURL, "test-key", body, &geminiReq, "gemini-2.0-flash", false)
+	if err != nil {
+		t.Fatalf("buildProviderRequest failed: %v", err)
+	}
+
+	var raw map[string]interface{}
+	if err := json.NewDecoder(req.Body).Decode(&raw); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	contents := raw["contents"].([]interface{})
+	parts := contents[0].(map[string]interface{})["parts"].([]interface{})
+	part0 := parts[0].(map[string]interface{})
+	if text, ok := part0["text"]; !ok || text != "" {
+		t.Fatalf("first part text = %v (exists=%v), want empty string preserved; body=%#v", text, ok, raw)
+	}
+}
+
 func TestBuildProviderRequest_InjectDummyThoughtSignature_PreservesThoughtSignatureAtPartLevel(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -368,7 +406,7 @@ func TestBuildProviderRequest_InjectDummyThoughtSignature_PreservesThoughtSignat
 
 	// 模拟 Gemini CLI：thoughtSignature 出现在 part 层级（而非 functionCall 内部）
 	var geminiReq types.GeminiRequest
-	if err := json.Unmarshal([]byte(`{
+	body := []byte(`{
   "contents": [
     {
       "parts": [
@@ -382,14 +420,15 @@ func TestBuildProviderRequest_InjectDummyThoughtSignature_PreservesThoughtSignat
       ]
     }
   ]
-}`), &geminiReq); err != nil {
+}`)
+	if err := json.Unmarshal(body, &geminiReq); err != nil {
 		t.Fatalf("Unmarshal 请求失败: %v", err)
 	}
 
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodPost, "/test", nil)
 
-	req, err := buildProviderRequest(c, upstream, upstream.BaseURL, "test-key", &geminiReq, "gemini-2.0-flash", false)
+	req, err := buildProviderRequest(c, upstream, upstream.BaseURL, "test-key", body, &geminiReq, "gemini-2.0-flash", false)
 	if err != nil {
 		t.Fatalf("buildProviderRequest failed: %v", err)
 	}
