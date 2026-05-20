@@ -208,27 +208,47 @@ func convertMessageItem(item gjson.Result, out string) string {
 }
 
 func responsesImageContentToChatBlock(contentItem gjson.Result) string {
+	// 优先处理 image_url 字段
 	imageURL := contentItem.Get("image_url")
-	if !imageURL.Exists() {
-		return ""
-	}
-
-	block := `{"type":"image_url","image_url":{}}`
-	if imageURL.Type == gjson.String {
-		if imageURL.String() == "" {
+	if imageURL.Exists() {
+		block := `{"type":"image_url","image_url":{}}`
+		if imageURL.Type == gjson.String {
+			if imageURL.String() == "" {
+				return ""
+			}
+			block, _ = sjson.Set(block, "image_url.url", imageURL.String())
+		} else if imageURL.IsObject() {
+			block, _ = sjson.SetRaw(block, "image_url", imageURL.Raw)
+		} else {
 			return ""
 		}
-		block, _ = sjson.Set(block, "image_url.url", imageURL.String())
-	} else if imageURL.IsObject() {
-		block, _ = sjson.SetRaw(block, "image_url", imageURL.Raw)
-	} else {
-		return ""
+
+		if detail := contentItem.Get("detail"); detail.Exists() && detail.String() != "" {
+			block, _ = sjson.Set(block, "image_url.detail", detail.String())
+		}
+		return block
 	}
 
+	// 处理 source 字段（Responses API 标准格式）
+	// {"type":"input_image","source":{"type":"base64","media_type":"image/png","data":"..."}}
+	source := contentItem.Get("source")
+	if !source.Exists() {
+		return ""
+	}
+	if source.Get("type").String() != "base64" {
+		return ""
+	}
+	mediaType := source.Get("media_type").String()
+	data := source.Get("data").String()
+	if mediaType == "" || data == "" {
+		return ""
+	}
+	dataURL := "data:" + mediaType + ";base64," + data
+	block := `{"type":"image_url","image_url":{}}`
+	block, _ = sjson.Set(block, "image_url.url", dataURL)
 	if detail := contentItem.Get("detail"); detail.Exists() && detail.String() != "" {
 		block, _ = sjson.Set(block, "image_url.detail", detail.String())
 	}
-
 	return block
 }
 

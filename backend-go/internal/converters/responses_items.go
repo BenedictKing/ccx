@@ -169,38 +169,61 @@ func responsesContentBlockToOpenAIChatPart(block map[string]interface{}) map[str
 }
 
 func normalizeResponsesImageURL(block map[string]interface{}) map[string]interface{} {
+	// 优先处理 image_url 字段
 	rawImageURL, ok := block["image_url"]
+	if ok {
+		switch imageURL := rawImageURL.(type) {
+		case string:
+			if imageURL == "" {
+				return nil
+			}
+			result := map[string]interface{}{"url": imageURL}
+			if detail, _ := block["detail"].(string); detail != "" {
+				result["detail"] = detail
+			}
+			return result
+		case map[string]interface{}:
+			if _, ok := imageURL["url"].(string); !ok {
+				return nil
+			}
+			result := make(map[string]interface{}, len(imageURL)+1)
+			for key, value := range imageURL {
+				result[key] = value
+			}
+			if detail, _ := block["detail"].(string); detail != "" {
+				result["detail"] = detail
+			}
+			return result
+		default:
+			return nil
+		}
+	}
+
+	// 处理 source 字段（Responses API 标准格式）
+	rawSource, ok := block["source"]
 	if !ok {
 		return nil
 	}
-
-	switch imageURL := rawImageURL.(type) {
-	case string:
-		if imageURL == "" {
-			return nil
-		}
-		result := map[string]interface{}{"url": imageURL}
-		if detail, _ := block["detail"].(string); detail != "" {
-			result["detail"] = detail
-		}
-		return result
-	case map[string]interface{}:
-		if _, ok := imageURL["url"].(string); !ok {
-			return nil
-		}
-		result := make(map[string]interface{}, len(imageURL)+1)
-		for key, value := range imageURL {
-			result[key] = value
-		}
-		if detail, _ := block["detail"].(string); detail != "" {
-			result["detail"] = detail
-		}
-		return result
-	default:
+	source, ok := rawSource.(map[string]interface{})
+	if !ok {
 		return nil
 	}
-}
+	if source["type"] != "base64" {
+		return nil
+	}
+	mediaType, _ := source["media_type"].(string)
+	data, _ := source["data"].(string)
+	if mediaType == "" || data == "" {
+		return nil
+	}
+	dataURL := "data:" + mediaType + ";base64," + data
+	result := map[string]interface{}{"url": dataURL}
+	if detail, _ := block["detail"].(string); detail != "" {
+		result["detail"] = detail
+	}
+	return result
 
+}
 func extractResponsesReasoningText(item types.ResponsesItem) string {
 	if text := extractReasoningTextFromSummary(item.Summary); text != "" {
 		return text
