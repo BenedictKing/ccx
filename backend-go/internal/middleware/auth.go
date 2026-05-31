@@ -49,6 +49,12 @@ func WebAuthMiddleware(envCfg *config.EnvConfig, cfgManager *config.ConfigManage
 			return
 		}
 
+		// SaaS 公开端点不需要认证
+		if strings.HasPrefix(path, "/api/saas/") {
+			c.Next()
+			return
+		}
+
 		// 检查访问密钥（管理 API + 管理端点）
 		if strings.HasPrefix(path, "/api") || strings.HasPrefix(path, "/admin") {
 			providedKey := getAPIKey(c)
