@@ -194,6 +194,57 @@
         }}</v-icon>
       </v-btn>
 
+      <!-- SaaS 用户菜单 -->
+      <v-menu location="bottom end" min-width="200">
+        <template #activator="{ props: menuProps }">
+          <v-btn
+            v-bind="menuProps"
+            icon
+            variant="text"
+            size="small"
+            class="header-btn"
+            :title="userStore.isLoggedIn() ? userStore.user?.name || userStore.user?.email : 'SaaS 用户'"
+          >
+            <v-icon size="20">mdi-account-circle</v-icon>
+          </v-btn>
+        </template>
+        <v-list density="compact" nav>
+          <!-- 未登录 -->
+          <template v-if="!userStore.isLoggedIn()">
+            <v-list-item to="/login" prepend-icon="mdi-login">
+              <v-list-item-title>登录</v-list-item-title>
+            </v-list-item>
+            <v-list-item to="/register" prepend-icon="mdi-account-plus">
+              <v-list-item-title>注册</v-list-item-title>
+            </v-list-item>
+            <v-divider />
+            <v-list-item to="/pricing" prepend-icon="mdi-currency-usd">
+              <v-list-item-title>定价</v-list-item-title>
+            </v-list-item>
+          </template>
+          <!-- 已登录 -->
+          <template v-else>
+            <v-list-item class="text-body-2 text-medium-emphasis" disabled>
+              <v-list-item-subtitle>{{ userStore.user?.email }}</v-list-item-subtitle>
+            </v-list-item>
+            <v-divider />
+            <v-list-item to="/profile" prepend-icon="mdi-account-details">
+              <v-list-item-title>个人中心</v-list-item-title>
+            </v-list-item>
+            <v-list-item to="/pricing" prepend-icon="mdi-currency-usd">
+              <v-list-item-title>定价与升级</v-list-item-title>
+            </v-list-item>
+            <v-list-item v-if="userStore.isAdmin()" to="/admin/users" prepend-icon="mdi-shield-account">
+              <v-list-item-title>管理后台</v-list-item-title>
+            </v-list-item>
+            <v-divider />
+            <v-list-item @click="handleSaaSLogout" prepend-icon="mdi-logout" color="error">
+              <v-list-item-title>退出登录</v-list-item-title>
+            </v-list-item>
+          </template>
+        </v-list>
+      </v-menu>
+
       <!-- 注销按钮 -->
       <v-btn
         v-if="isAuthenticated"
@@ -465,7 +516,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch, defineAsyncComponent } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useTheme } from 'vuetify'
 import Logo from './components/Logo.vue'
 import { api, fetchHealth, ApiError, type Channel, type CapabilityTestJob, type CapabilityTestJobStartResponse, type CapabilityProtocolJobResult, type CapabilityModelJobResult, type CapabilitySnapshot } from './services/api'
@@ -475,6 +526,7 @@ import { useChannelStore } from './stores/channel'
 import { usePreferencesStore } from './stores/preferences'
 import { useDialogStore } from './stores/dialog'
 import { useSystemStore } from './stores/system'
+import { useUserStore } from './stores/user'
 import { useI18n } from './i18n'
 import type { SupportedLocale } from './i18n'
 import AddChannelModal from './components/AddChannelModal.vue'
@@ -486,6 +538,7 @@ import { useAppTheme } from './composables/useTheme'
 
 // 路由
 const route = useRoute()
+const router = useRouter()
 
 // Vuetify主题
 const theme = useTheme()
@@ -510,6 +563,10 @@ const dialogStore = useDialogStore() as any
 
 // 系统状态 Store
 const systemStore = useSystemStore() as any
+
+// SaaS 用户 Store
+const userStore = useUserStore() as any
+
 const { locale, t, setLocale } = useI18n()
 
 const languageOptions: Array<{ value: SupportedLocale, label: string, shortLabel: string }> = [
@@ -1677,6 +1734,16 @@ const handleLogout = () => {
   channelStore.clearChannels()
   authStore.setAuthError(t('toast.enterAccessKeyContinue'))
   showToast(t('toast.loggedOut'), 'info')
+}
+
+// 处理 SaaS 登出
+const handleSaaSLogout = () => {
+  userStore.logout()
+  if (route.path === '/profile' || route.path === '/admin/users') {
+    router.push('/')
+  } else {
+    window.location.reload()
+  }
 }
 
 // 处理认证失败

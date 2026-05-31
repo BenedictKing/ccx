@@ -132,6 +132,16 @@ func (s *Store) GetUserUsage(userID, yearMonth string) (*UsageStats, error) {
 	return stats, nil
 }
 
+// ResetMonthlyUsage 重置某个月份的所有用量记录（在月初调用）
+// 返回该月受影响的行数
+func (s *Store) ResetMonthlyUsage(yearMonth string) error {
+	_, err := s.db.Exec(
+		`DELETE FROM usage_records WHERE date LIKE ? || '%'`,
+		yearMonth,
+	)
+	return err
+}
+
 // RecordUsage 记录一次 API 调用
 func (s *Store) RecordUsage(userID string, tokensIn, tokensOut int64) error {
 	today := time.Now().Format("2006-01-02")

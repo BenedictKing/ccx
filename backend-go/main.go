@@ -160,6 +160,9 @@ func main() {
 			saas.EnsureAdmin(saasStore, envCfg.SaaSAdminEmail, envCfg.SaaSAdminPass)
 		}
 
+		// 启动每月用量重置定时任务
+		saas.StartUsageResetCron(saasStore)
+
 		log.Printf("[SaaS-Init] SaaS 模式已启用，数据库路径: %s", envCfg.SaaSDBPath)
 	} else {
 		log.Printf("[SaaS-Init] SaaS 模式未启用 (设置 SAAS_ENABLED=true 以启用)")
