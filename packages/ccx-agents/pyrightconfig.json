@@ -1,0 +1,8 @@
+{
+  "venvPath": ".",
+  "venv": ".venv",
+  "include": ["src/ccx_agents"],
+  "exclude": ["tests", "examples", "docs", "dist"],
+  "reportMissingImports": "error",
+  "reportMissingTypeStubs": "warning"
+}

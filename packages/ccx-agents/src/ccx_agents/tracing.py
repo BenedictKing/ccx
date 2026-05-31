@@ -58,8 +58,9 @@ async def run_with_ccx_tracing(
     client = get_ccx_client()
     trace_headers = _make_trace_headers(run_config)
     if client is not None and trace_headers:
-        existing = client.default_headers or {}
-        client.default_headers = {**existing, **trace_headers}
+        # _custom_headers is the mutable backing of the default_headers property
+        existing = client._custom_headers or {}
+        client._custom_headers = {**existing, **trace_headers}
         _log.debug("CCX trace headers injected: %s", trace_headers)
 
     result = await Runner.run(

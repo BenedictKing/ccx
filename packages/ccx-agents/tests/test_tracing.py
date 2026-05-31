@@ -41,7 +41,7 @@ class TestRunWithCcxTracing:
     async def test_injects_trace_headers(self) -> None:
         """Trace headers are injected into the client when workflow_name is set."""
         mock_client = MagicMock()
-        mock_client.default_headers = {}
+        mock_client._custom_headers = {}
 
         mock_run_config = MagicMock()
         mock_run_config.workflow_name = "my-workflow"
@@ -62,13 +62,13 @@ class TestRunWithCcxTracing:
             )
 
         assert result is mock_result
-        assert mock_client.default_headers == {"X-Ccx-Trace-Workflow": "my-workflow"}
+        assert mock_client._custom_headers == {"X-Ccx-Trace-Workflow": "my-workflow"}
 
     @pytest.mark.asyncio
     async def test_no_trace_headers_when_no_run_config(self) -> None:
         """No headers injected when run_config is None."""
         mock_client = MagicMock()
-        mock_client.default_headers = {}
+        mock_client._custom_headers = {}
 
         mock_result = MagicMock()
         mock_result.raw_responses = []
@@ -84,7 +84,7 @@ class TestRunWithCcxTracing:
 
         assert result is mock_result
         # Headers should be unchanged (empty dict, no trace headers added)
-        assert mock_client.default_headers == {}
+        assert mock_client._custom_headers == {}
 
     @pytest.mark.asyncio
     async def test_no_client_does_not_crash(self) -> None:
@@ -112,7 +112,7 @@ class TestRunWithCcxTracing:
     async def test_passes_kwargs(self) -> None:
         """Extra kwargs are forwarded to Runner.run."""
         mock_client = MagicMock()
-        mock_client.default_headers = {}
+        mock_client._custom_headers = {}
         mock_result = MagicMock()
         mock_result.raw_responses = []
 

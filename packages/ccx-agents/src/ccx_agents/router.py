@@ -149,7 +149,7 @@ class CcxRouter:
 
     def run_streamed(
         self, agent: Agent[Any], input_data: str, **kwargs: Any
-    ) -> RunResultStreaming[Any]:
+    ) -> RunResultStreaming:
         """Run an agent with streaming, routing to the correct channel."""
         channel = self._get_channel(agent)
         client = self._build_client(channel)

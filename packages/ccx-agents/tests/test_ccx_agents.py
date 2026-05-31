@@ -620,7 +620,7 @@ class TestClientCoverageGaps:
     @patch("ccx_agents._client.set_default_openai_client")
     def test_setup_with_routing_calls_isinstance_router(self, mock_set: Any) -> None:
         """setup_with_routing() with CcxRouter instance uses the router directly."""
-        from ccx_agents import CcxRouter as CR
+        from ccx_agents import CcxRouter as CR  # noqa: N817
 
         router_instance = CR()
         router_instance.add_map({
