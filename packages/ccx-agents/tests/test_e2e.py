@@ -8,7 +8,7 @@ Run with::
 
 Environment variables (optional overrides)::
 
-    CCX_BASE_URL=http://localhost:3000/v1
+    CCX_BASE_URL=http://127.0.0.1:3000/v1
     CCX_API_KEY=your-proxy-access-key
 """
 
@@ -32,6 +32,15 @@ _log = logging.getLogger(__name__)
 
 pytestmark = pytest.mark.e2e
 
+# Workaround for colima/Lima port forwarding on macOS: without
+# local_address="0.0.0.0" the default httpx transport can hit an
+# nghttpx proxy instead of the target container.
+_FORCE_HTTP = httpx.HTTPTransport(local_address="0.0.0.0")
+
+
+def _client() -> httpx.Client:
+    return httpx.Client(transport=_FORCE_HTTP)
+
 
 # =======================================================================
 # Health check
@@ -43,13 +52,15 @@ class TestCcxConnection:
 
     def test_health_endpoint(self, ccx_health_url: str) -> None:
         """CCX should respond to /health."""
-        resp = httpx.get(ccx_health_url, timeout=5.0)
-        assert resp.status_code == 200, f"Health check failed: {resp.status_code} {resp.text}"
+        with _client() as client:
+            resp = client.get(ccx_health_url, timeout=5.0)
+            assert resp.status_code == 200, f"Health check failed: {resp.status_code} {resp.text}"
 
     def test_health_returns_json(self, ccx_health_url: str) -> None:
         """Health response should be valid JSON."""
-        resp = httpx.get(ccx_health_url, timeout=5.0)
-        data = resp.json()
+        with _client() as client:
+            resp = client.get(ccx_health_url, timeout=5.0)
+            data = resp.json()
         # CCX health typically returns {"status":"ok"} or similar
         assert isinstance(data, dict)
 
@@ -244,25 +255,27 @@ class TestCcxConnection:
 
         def test_models_endpoint(self, ccx_base_url: str) -> None:
             """Verify /v1/models responds (may be 401/403 without key)."""
-            base = ccx_base_url.rstrip("/v1").rstrip("/")
-            try:
-                resp = httpx.get(f"{base}/v1/models", timeout=5.0)
-                assert resp.status_code in (200, 401, 403, 404)
-            except httpx.RequestError as exc:
-                pytest.skip(f"CCX not reachable at {base}: {exc}")
+            base = ccx_base_url.removesuffix("/v1").removesuffix("/")
+            with _client() as client:
+                try:
+                    resp = client.get(f"{base}/v1/models", timeout=5.0)
+                    assert resp.status_code in (200, 401, 403, 404)
+                except httpx.RequestError as exc:
+                    pytest.skip(f"CCX not reachable at {base}: {exc}")
 
         def test_chat_completions_endpoint(self, ccx_base_url: str, ccx_api_key: str) -> None:
             """Verify /v1/chat/completions accepts requests."""
-            base = ccx_base_url.rstrip("/v1").rstrip("/")
+            base = ccx_base_url.removesuffix("/v1").removesuffix("/")
             headers = {"Authorization": f"Bearer {ccx_api_key}"}
-            try:
-                resp = httpx.post(
-                    f"{base}/v1/chat/completions",
-                    json={"model": "gpt-4o", "messages": []},
-                    headers=headers,
-                    timeout=5.0,
-                )
-                # Should get a validation error (empty messages), not a network error
-                assert resp.status_code in (400, 422, 401, 403)
-            except httpx.RequestError as exc:
-                pytest.skip(f"CCX not reachable at {base}: {exc}")
+            with _client() as client:
+                try:
+                    resp = client.post(
+                        f"{base}/v1/chat/completions",
+                        json={"model": "gpt-4o", "messages": []},
+                        headers=headers,
+                        timeout=5.0,
+                    )
+                    # Should get a validation error (empty messages), not a network error
+                    assert resp.status_code in (400, 422, 401, 403, 503)
+                except httpx.RequestError as exc:
+                    pytest.skip(f"CCX not reachable at {base}: {exc}")

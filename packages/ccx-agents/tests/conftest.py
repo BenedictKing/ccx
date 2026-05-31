@@ -48,7 +48,7 @@ class FakeCcxConfig:
     those classes read via ``getattr``:
     """
 
-    base_url: str = "http://localhost:3000/v1"
+    base_url: str = "http://127.0.0.1:3000/v1"
     api_key: str | None = "test-key"
     channel: str | None = None
 
@@ -60,12 +60,18 @@ class FakeCcxConfig:
 
 @pytest.fixture(scope="session")
 def ccx_base_url() -> str:
-    return os.environ.get("CCX_BASE_URL", "http://localhost:3000/v1")
+    return os.environ.get("CCX_BASE_URL", "http://127.0.0.1:3001/v1")
 
 
 @pytest.fixture(scope="session")
 def ccx_api_key() -> str:
-    return os.environ.get("CCX_API_KEY", "your-proxy-access-key")
+    return os.environ.get("CCX_API_KEY", "test-proxy-key-for-e2e")
+
+
+@pytest.fixture(scope="session")
+def ccx_health_url(ccx_base_url: str) -> str:
+    base = ccx_base_url.removesuffix("/v1").removesuffix("/")
+    return f"{base}/health"
 
 
 @pytest.fixture

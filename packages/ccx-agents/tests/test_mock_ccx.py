@@ -91,22 +91,22 @@ def mock_ccx(respx_mock: respx.MockRouter) -> respx.MockRouter:
     }
 
     # --- Models list ---
-    respx_mock.get("http://localhost:3000/v1/models").respond(
+    respx_mock.get("http://127.0.0.1:3000/v1/models").respond(
         200, json=model_list
     )
 
     # --- Chat completions ---
-    respx_mock.post("http://localhost:3000/v1/chat/completions").respond(
+    respx_mock.post("http://127.0.0.1:3000/v1/chat/completions").respond(
         200, json=chat_completion
     )
 
     # --- Responses API (used by openai-agents) ---
-    respx_mock.post("http://localhost:3000/v1/responses").respond(
+    respx_mock.post("http://127.0.0.1:3000/v1/responses").respond(
         200, json=response_obj
     )
 
     # --- Messages API (used for Claude models) ---
-    respx_mock.post("http://localhost:3000/v1/messages").respond(
+    respx_mock.post("http://127.0.0.1:3000/v1/messages").respond(
         200, json=messages_response
     )
 
@@ -123,7 +123,7 @@ class TestMockSetupAndRun:
 
     def test_setup_then_run_sync(self, mock_ccx: respx.MockRouter) -> None:
         """Configure CCX, create an agent, run it synchronously."""
-        CcxConfig(base_url="http://localhost:3000/v1", api_key="test-key").setup()
+        CcxConfig(base_url="http://127.0.0.1:3000/v1", api_key="test-key").setup()
 
         agent = Agent(
             name="test_agent",
@@ -139,7 +139,7 @@ class TestMockSetupAndRun:
     @pytest.mark.asyncio
     async def test_setup_then_run_async(self, mock_ccx: respx.MockRouter) -> None:
         """Configure CCX, create an agent, run it asynchronously."""
-        CcxConfig(base_url="http://localhost:3000/v1", api_key="test-key").setup()
+        CcxConfig(base_url="http://127.0.0.1:3000/v1", api_key="test-key").setup()
 
         agent = Agent(name="test_agent_async", instructions="You are helpful.")
 
@@ -155,7 +155,7 @@ class TestMockCcxSetup:
 
     def test_ccx_setup_run(self, mock_ccx: respx.MockRouter) -> None:
         """ccx_setup() → Runner.run_sync() through mocked CCX."""
-        ccx_setup(base_url="http://localhost:3000/v1", api_key="test-key")
+        ccx_setup(base_url="http://127.0.0.1:3000/v1", api_key="test-key")
 
         agent = Agent(
             name="test_ccx_setup",
@@ -173,9 +173,9 @@ class TestMockConversation:
 
     def test_conversation_two_turns(self, mock_ccx: respx.MockRouter) -> None:
         """Two-turn conversation using previous_response_id (mocked)."""
-        ccx_setup(base_url="http://localhost:3000/v1", api_key="test-key")
+        ccx_setup(base_url="http://127.0.0.1:3000/v1", api_key="test-key")
 
-        fcfg = FakeCcxConfig(base_url="http://localhost:3000/v1", api_key="test-key")
+        fcfg = FakeCcxConfig(base_url="http://127.0.0.1:3000/v1", api_key="test-key")
         conv = CcxConversation(fcfg)
         agent = Agent(name="conversation_test", instructions="You are helpful.")
 
@@ -190,9 +190,9 @@ class TestMockConversation:
 
     def test_conversation_reset(self, mock_ccx: respx.MockRouter) -> None:
         """Conversation.reset() clears the response ID."""
-        ccx_setup(base_url="http://localhost:3000/v1", api_key="test-key")
+        ccx_setup(base_url="http://127.0.0.1:3000/v1", api_key="test-key")
 
-        fcfg = FakeCcxConfig(base_url="http://localhost:3000/v1", api_key="test-key")
+        fcfg = FakeCcxConfig(base_url="http://127.0.0.1:3000/v1", api_key="test-key")
         conv = CcxConversation(fcfg)
         agent = Agent(name="reset_test", instructions="You are helpful.")
 
@@ -208,9 +208,9 @@ class TestMockRouter:
 
     def test_router_routes_by_agent_name(self, mock_ccx: respx.MockRouter) -> None:
         """Router routes by agent name and runs through mocked CCX."""
-        ccx_setup(base_url="http://localhost:3000/v1", api_key="test-key")
+        ccx_setup(base_url="http://127.0.0.1:3000/v1", api_key="test-key")
 
-        router = CcxRouter(FakeCcxConfig(base_url="http://localhost:3000/v1", api_key="test-key"))
+        router = CcxRouter(FakeCcxConfig(base_url="http://127.0.0.1:3000/v1", api_key="test-key"))
         router.route("translator", channel="default")
         router.set_default("default")
 
@@ -220,11 +220,11 @@ class TestMockRouter:
 
     def test_router_model_map(self, mock_ccx: respx.MockRouter) -> None:
         """Router add_map dispatches by model name."""
-        CcxConfig(base_url="http://localhost:3000/v1", api_key="test-key").setup_with_routing(
-            default_url="http://localhost:3000/v1",
+        CcxConfig(base_url="http://127.0.0.1:3000/v1", api_key="test-key").setup_with_routing(
+            default_url="http://127.0.0.1:3000/v1",
             router={
                 "gpt-4o": CcxConfigModel(
-                    base_url="http://localhost:3000/v1",
+                    base_url="http://127.0.0.1:3000/v1",
                     route_prefix="azure",
                 ),
             },
@@ -239,9 +239,9 @@ class TestMockRouter:
     @pytest.mark.asyncio
     async def test_router_run_async(self, mock_ccx: respx.MockRouter) -> None:
         """Router.run_async works through mocked CCX."""
-        ccx_setup(base_url="http://localhost:3000/v1", api_key="test-key")
+        ccx_setup(base_url="http://127.0.0.1:3000/v1", api_key="test-key")
 
-        router = CcxRouter(FakeCcxConfig(base_url="http://localhost:3000/v1", api_key="test-key"))
+        router = CcxRouter(FakeCcxConfig(base_url="http://127.0.0.1:3000/v1", api_key="test-key"))
         router.set_default("default")
 
         agent = Agent(name="async_test", instructions="You are helpful.")
@@ -254,7 +254,7 @@ class TestMockDirectHttp:
 
     def test_models_endpoint(self, mock_ccx: respx.MockRouter) -> None:
         """GET /v1/models returns model list via mocked CCX."""
-        resp = httpx.get("http://localhost:3000/v1/models", timeout=5.0)
+        resp = httpx.get("http://127.0.0.1:3000/v1/models", timeout=5.0)
         assert resp.status_code == 200
         data = resp.json()
         assert isinstance(data, dict)
@@ -264,7 +264,7 @@ class TestMockDirectHttp:
     def test_chat_completions_endpoint(self, mock_ccx: respx.MockRouter) -> None:
         """POST /v1/chat/completions returns mocked response."""
         resp = httpx.post(
-            "http://localhost:3000/v1/chat/completions",
+            "http://127.0.0.1:3000/v1/chat/completions",
             json={"model": "gpt-4o", "messages": [{"role": "user", "content": "Hi"}]},
             headers={"Authorization": "Bearer test-key"},
             timeout=5.0,

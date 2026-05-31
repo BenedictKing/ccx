@@ -13,18 +13,18 @@ from ccx_agents.config import CcxConfigModel
 
 class TestCcxClient:
     def test_ccx_client_creates_openai_client(self) -> None:
-        client = ccx_client("http://localhost:3000/v1", api_key="test-key")
+        client = ccx_client("http://127.0.0.1:3000/v1", api_key="test-key")
         assert isinstance(client, AsyncOpenAI)
-        assert "localhost:3000" in str(client.base_url)
+        assert "127.0.0.1:3000" in str(client.base_url)
 
     def test_ccx_client_default_key_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("CCX_API_KEY", "env-key")
-        client = ccx_client("http://localhost:3000/v1")
+        client = ccx_client("http://127.0.0.1:3000/v1")
         assert client.api_key == "env-key"
 
     def test_ccx_client_route_prefix_header(self) -> None:
         client = ccx_client(
-            "http://localhost:3000/v1",
+            "http://127.0.0.1:3000/v1",
             api_key="k",
             route_prefix="gpt",
         )
@@ -32,7 +32,7 @@ class TestCcxClient:
 
     def test_ccx_client_extra_headers(self) -> None:
         client = ccx_client(
-            "http://localhost:3000/v1",
+            "http://127.0.0.1:3000/v1",
             api_key="k",
             extra_headers={"X-Custom": "value"},
         )
@@ -41,22 +41,22 @@ class TestCcxClient:
 
 class TestCcxGlobal:
     def test_setup_stores_client(self) -> None:
-        CcxConfig(base_url="http://localhost:3000/v1", api_key="test").setup()
+        CcxConfig(base_url="http://127.0.0.1:3000/v1", api_key="test").setup()
         client = get_ccx_client()
         assert client is not None
         assert isinstance(client, AsyncOpenAI)
 
     @patch("ccx_agents._client.set_default_openai_client")
     def test_setup_calls_sdk_registration(self, mock_set: Any) -> None:
-        CcxConfig(base_url="http://localhost:3000/v1", api_key="k").setup()
+        CcxConfig(base_url="http://127.0.0.1:3000/v1", api_key="k").setup()
         mock_set.assert_called_once()
         assert mock_set.call_args[0][0] is get_ccx_client()
 
     def test_setup_with_routing_dict(self) -> None:
         CcxConfig(api_key="k").setup_with_routing(
-            default_url="http://localhost:3000/v1",
+            default_url="http://127.0.0.1:3000/v1",
             router={
-                "gpt-4o": CcxConfigModel(base_url="http://localhost:3000/v1", route_prefix="gpt"),
+                "gpt-4o": CcxConfigModel(base_url="http://127.0.0.1:3000/v1", route_prefix="gpt"),
             },
         )
         client = get_ccx_client()

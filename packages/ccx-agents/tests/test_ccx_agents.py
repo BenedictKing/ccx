@@ -38,49 +38,49 @@ from tests.conftest import FakeCcxConfig
 
 class TestCcxClient:
     def test_ccx_client_creates_openai_client(self) -> None:
-        client = ccx_client("http://localhost:3000/v1", api_key="test-key")
+        client = ccx_client("http://127.0.0.1:3000/v1", api_key="test-key")
         assert isinstance(client, AsyncOpenAI)
-        assert "localhost:3000" in str(client.base_url)
+        assert "127.0.0.1:3000" in str(client.base_url)
 
     def test_ccx_client_default_key_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("CCX_API_KEY", "env-key")
-        client = ccx_client("http://localhost:3000/v1")
+        client = ccx_client("http://127.0.0.1:3000/v1")
         assert client.api_key == "env-key"
 
     def test_ccx_client_proxy_key_fallback(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("PROXY_ACCESS_KEY", "proxy-key")
-        client = ccx_client("http://localhost:3000/v1")
+        client = ccx_client("http://127.0.0.1:3000/v1")
         assert client.api_key == "proxy-key"
 
     def test_ccx_client_route_prefix_header(self) -> None:
-        client = ccx_client("http://localhost:3000/v1", api_key="k", route_prefix="gpt")
+        client = ccx_client("http://127.0.0.1:3000/v1", api_key="k", route_prefix="gpt")
         assert client.default_headers.get("HTTP-Route-Prefix") == "gpt"
 
     def test_ccx_client_extra_headers(self) -> None:
         client = ccx_client(
-            "http://localhost:3000/v1", api_key="k", extra_headers={"X-Custom": "value"}
+            "http://127.0.0.1:3000/v1", api_key="k", extra_headers={"X-Custom": "value"}
         )
         assert client.default_headers.get("X-Custom") == "value"
 
 
 class TestCcxGlobal:
     def test_setup_stores_client(self) -> None:
-        CcxConfig(base_url="http://localhost:3000/v1", api_key="test").setup()
+        CcxConfig(base_url="http://127.0.0.1:3000/v1", api_key="test").setup()
         client = get_ccx_client()
         assert client is not None
         assert isinstance(client, AsyncOpenAI)
 
     @patch("ccx_agents._client.set_default_openai_client")
     def test_setup_calls_sdk_registration(self, mock_set: Any) -> None:
-        CcxConfig(base_url="http://localhost:3000/v1", api_key="k").setup()
+        CcxConfig(base_url="http://127.0.0.1:3000/v1", api_key="k").setup()
         mock_set.assert_called_once()
         assert mock_set.call_args[0][0] is get_ccx_client()
 
     def test_setup_with_routing_dict(self) -> None:
         CcxConfig(api_key="k").setup_with_routing(
-            default_url="http://localhost:3000/v1",
+            default_url="http://127.0.0.1:3000/v1",
             router={
-                "gpt-4o": CcxConfigModel(base_url="http://localhost:3000/v1", route_prefix="gpt"),
+                "gpt-4o": CcxConfigModel(base_url="http://127.0.0.1:3000/v1", route_prefix="gpt"),
             },
         )
         client = get_ccx_client()
@@ -289,7 +289,7 @@ class TestCcxRouter:
     def test_add_map(self) -> None:
         router = CcxRouter()
         router.add_map(
-            {"gpt-4o": CcxConfigModel(base_url="http://localhost:3000/v1", route_prefix="gpt")}
+            {"gpt-4o": CcxConfigModel(base_url="http://127.0.0.1:3000/v1", route_prefix="gpt")}
         )
         resolved = router.resolve(model="gpt-4o", agent_name="coder")
         assert resolved is not None
@@ -334,7 +334,7 @@ class TestRoutingRuleProtocol:
     def test_routing_rule_is_callable(self) -> None:
         def my_rule(*, model: str, agent_name: str | None) -> CcxConfigModel | None:
             if model == "gpt-4o":
-                return CcxConfigModel(base_url="http://localhost:3000/v1", route_prefix="gpt")
+                return CcxConfigModel(base_url="http://127.0.0.1:3000/v1", route_prefix="gpt")
             return None
 
         assert isinstance(my_rule, RoutingRule)
@@ -408,11 +408,11 @@ class TestCcxAgentsIntegration:
 
     def test_setup_with_extra_headers(self) -> None:
         """Test that ccx_setup with extra_headers works."""
-        os.environ["CCX_BASE_URL"] = "http://localhost:3000/v1"
+        os.environ["CCX_BASE_URL"] = "http://127.0.0.1:3000/v1"
         os.environ["CCX_API_KEY"] = "test-key"
 
         client = ccx_client(
-            base_url="http://localhost:3000/v1",
+            base_url="http://127.0.0.1:3000/v1",
             api_key="test-key",
             extra_headers={"X-Test": "value"},
         )
@@ -466,7 +466,7 @@ class TestRouterPropertyBased:
         """When no exact route matches, set_default() overrides config.channel."""
         config = MagicMock()
         config.channel = "config-default"
-        config.base_url = "http://localhost:3000/v1"
+        config.base_url = "http://127.0.0.1:3000/v1"
         config.api_key = "k"
 
         router = CcxRouter(ccx_config=config)
@@ -481,7 +481,7 @@ class TestRouterPropertyBased:
         """With no route and no default, config.channel is the fallback."""
         config = MagicMock()
         config.channel = "config-channel"
-        config.base_url = "http://localhost:3000/v1"
+        config.base_url = "http://127.0.0.1:3000/v1"
         config.api_key = "k"
 
         router = CcxRouter(ccx_config=config)
@@ -494,7 +494,7 @@ class TestRouterPropertyBased:
     def test_no_fallback_returns_none(self, agent_name: str) -> None:
         """With no route, no default, and no config.channel, returns None."""
         config = MagicMock(spec=[])  # no channel attribute
-        config.base_url = "http://localhost:3000/v1"
+        config.base_url = "http://127.0.0.1:3000/v1"
         config.api_key = "k"
 
         router = CcxRouter(ccx_config=config)
@@ -554,7 +554,7 @@ class TestRouterCoverageGaps:
 
         def my_rule(*, model: str, agent_name: str | None) -> CcxConfigModel | None:
             if model == "custom":
-                return CcxConfigModel(base_url="http://localhost:3000/v1", route_prefix="custom")
+                return CcxConfigModel(base_url="http://127.0.0.1:3000/v1", route_prefix="custom")
             return None
 
         router.add_rule(my_rule)
@@ -571,7 +571,7 @@ class TestRouterCoverageGaps:
             return None  # skip
 
         def rule2(*, model: str, agent_name: str | None) -> CcxConfigModel | None:
-            return CcxConfigModel(base_url="http://localhost:3000/v1", route_prefix="matched")
+            return CcxConfigModel(base_url="http://127.0.0.1:3000/v1", route_prefix="matched")
 
         router.add_rule(rule1)
         router.add_rule(rule2)
@@ -583,7 +583,7 @@ class TestRouterCoverageGaps:
     def test_build_client_none_channel_falls_back(self) -> None:
         """_build_client(None) falls back to get_ccx_client()."""
         # Set up a global client first
-        CcxConfig(base_url="http://localhost:3000/v1", api_key="k").setup()
+        CcxConfig(base_url="http://127.0.0.1:3000/v1", api_key="k").setup()
 
         router = CcxRouter()
         client = router._build_client(None)
@@ -597,7 +597,7 @@ class TestRouterCoverageGaps:
         mock_result = MagicMock()
         mock_run_streamed.return_value = mock_result
 
-        router = CcxRouter(FakeCcxConfig(base_url="http://localhost:3000/v1", api_key="k"))
+        router = CcxRouter(FakeCcxConfig(base_url="http://127.0.0.1:3000/v1", api_key="k"))
         router.route("test-agent", channel="default")
 
         agent = MagicMock()
@@ -624,11 +624,11 @@ class TestClientCoverageGaps:
 
         router_instance = CR()
         router_instance.add_map({
-            "gpt-4o": CcxConfigModel(base_url="http://localhost:3000/v1", route_prefix="gpt"),
+            "gpt-4o": CcxConfigModel(base_url="http://127.0.0.1:3000/v1", route_prefix="gpt"),
         })
 
         CcxConfig(api_key="k").setup_with_routing(
-            default_url="http://localhost:3000/v1",
+            default_url="http://127.0.0.1:3000/v1",
             router=router_instance,
         )
 
@@ -640,7 +640,7 @@ class TestClientCoverageGaps:
     def test_setup_with_routing_router_none(self, mock_set: Any) -> None:
         """setup_with_routing() with router=None still works (no routing)."""
         CcxConfig(api_key="k").setup_with_routing(
-            default_url="http://localhost:3000/v1",
+            default_url="http://127.0.0.1:3000/v1",
             router=None,
         )
 
@@ -660,7 +660,7 @@ class TestConversationCoverageGaps:
     def test_build_client_without_config_falls_back(self) -> None:
         """_build_client() with ccx_config=None uses get_ccx_client()."""
         # Set up a global client
-        CcxConfig(base_url="http://localhost:3000/v1", api_key="k").setup()
+        CcxConfig(base_url="http://127.0.0.1:3000/v1", api_key="k").setup()
         from ccx_agents._client import get_ccx_client
         global_client = get_ccx_client()
 

@@ -6,6 +6,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+import httpx
 from agents import set_default_openai_client
 from openai import AsyncOpenAI
 
@@ -25,6 +26,20 @@ _router: CcxRouter | None = None
 # ---------------------------------------------------------------------------
 # client factory
 # ---------------------------------------------------------------------------
+
+
+def _make_http_client() -> httpx.AsyncClient:
+    """Build an httpx client that works with colima/lima port forwarding.
+
+    On macOS with colima (Lima+VZ), the module-level ``httpx.get()`` and
+    the default ``httpx.Client()`` (without an explicit transport) can hit
+    an nghttpx proxy instead of the target due to how colima binds
+    ``localhost`` ports on the host side.  Using an explicit transport
+    with ``local_address="0.0.0.0"`` avoids that.
+    """
+    return httpx.AsyncClient(
+        transport=httpx.AsyncHTTPTransport(local_address="0.0.0.0"),
+    )
 
 
 def ccx_client(
@@ -63,6 +78,7 @@ def ccx_client(
         base_url=base_url.rstrip("/") + "/",
         api_key=resolved_key,
         default_headers=headers,
+        http_client=_make_http_client(),
         **openai_kwargs,
     )
     return client
