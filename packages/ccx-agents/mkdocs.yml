@@ -2,7 +2,7 @@
 
 site_name: ccx-agents
 site_description: Route openai-agents-python through CCX — multi-model AI proxy gateway
-site_url: https://benjamin-norang.github.io/ccx/ccx-agents
+site_url: https://BenedictKing.github.io/ccx/ccx-agents
 repo_url: https://github.com/BenedictKing/ccx
 repo_name: BenedictKing/ccx
 edit_uri: blob/main/packages/ccx-agents/docs/
