@@ -197,5 +197,15 @@ async function regenerateKey() {
   }
 }
 
-onMounted(loadData)
+onMounted(() => {
+  loadData()
+
+  // 检查支付成功回跳
+  const url = new URL(window.location.href)
+  if (url.searchParams.get('checkout') === 'success') {
+    const isMock = url.searchParams.get('mock') === 'true'
+    const mode = isMock ? '（Mock 模式）' : ''
+    alert(`🎉 支付成功${mode}！您的套餐已升级。`)
+  }
+})
 </script>

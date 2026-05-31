@@ -59,6 +59,7 @@
               variant="flat"
               :color="plan.popular ? 'primary' : 'secondary'"
               block
+              :loading="upgrading"
               @click="upgradePlan(plan.id)"
             >
               {{ userStore.isLoggedIn() ? '升级到此套餐' : '注册使用' }}
@@ -71,8 +72,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useUserStore } from '@/stores/user'
+import { useRouter } from 'vue-router'
 
 interface PricingPlan {
   id: string
@@ -87,7 +89,9 @@ interface PricingPlan {
 }
 
 const userStore = useUserStore()
+const router = useRouter()
 const plans = ref<PricingPlan[]>([])
+const upgrading = ref(false)
 
 function getFeatures(plan: PricingPlan): string[] {
   const f = [
@@ -107,7 +111,42 @@ async function upgradePlan(planId: string) {
     window.location.href = '/register'
     return
   }
-  alert(`升级到 ${planId} 功能即将上线，请联系管理员。`)
+
+  // 当前已在该套餐
+  if (userStore.user?.plan === planId) {
+    return
+  }
+
+  // Free 套餐不需要支付
+  if (planId === 'free') {
+    router.push('/profile')
+    return
+  }
+
+  upgrading.value = true
+  try {
+    const res = await fetch('/api/saas/create-checkout-session', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${userStore.token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ plan: planId }),
+    })
+
+    const data = await res.json()
+    if (!res.ok) {
+      throw new Error(data.error || '创建支付会话失败')
+    }
+
+    // 跳转到支付页面（Stripe Checkout 或 Mock 页面）
+    window.location.href = data.url
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : '升级失败'
+    alert(`支付失败: ${msg}`)
+  } finally {
+    upgrading.value = false
+  }
 }
 
 async function loadPricing() {

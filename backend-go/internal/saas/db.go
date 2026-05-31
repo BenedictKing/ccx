@@ -63,7 +63,7 @@ func (s *Store) migrate() error {
 		)`,
 		`CREATE TABLE IF NOT EXISTS subscriptions (
 			id TEXT PRIMARY KEY,
-			user_id TEXT NOT NULL,
+			user_id TEXT NOT NULL UNIQUE,
 			plan TEXT NOT NULL,
 			status TEXT NOT NULL DEFAULT 'active',
 			current_period_start TEXT NOT NULL,

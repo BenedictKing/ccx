@@ -163,6 +163,9 @@ func main() {
 		// 启动每月用量重置定时任务
 		saas.StartUsageResetCron(saasStore)
 
+		// 初始化 Stripe 支付客户端
+		saas.InitStripeClient()
+
 		log.Printf("[SaaS-Init] SaaS 模式已启用，数据库路径: %s", envCfg.SaaSDBPath)
 	} else {
 		log.Printf("[SaaS-Init] SaaS 模式未启用 (设置 SAAS_ENABLED=true 以启用)")
@@ -498,6 +501,11 @@ func main() {
 			saasGroup.POST("/register", saas.Register(saasStore))
 			saasGroup.POST("/login", saas.Login(saasStore))
 			saasGroup.GET("/pricing", saas.GetPricing())
+			// Stripe 支付 Webhook（无认证，使用签名验证）
+			saasGroup.POST("/webhook", saas.StripeWebhookHandler(saasStore))
+			// Mock Checkout 确认页面（无认证，但只能由 Stripe/Mock 重定向访问）
+			saasGroup.Handle("GET", "/mock-checkout", gin.WrapH(saas.MockCheckoutHandler(saasStore)))
+			saasGroup.Handle("POST", "/mock-checkout", gin.WrapH(saas.MockCheckoutHandler(saasStore)))
 			// 需 JWT 认证的端点
 			saasAuth := saasGroup.Group("")
 			saasAuth.Use(saas.AuthMiddleware())
@@ -507,6 +515,8 @@ func main() {
 				saasAuth.POST("/me/api-key/regenerate", saas.RegenerateAPIKey(saasStore))
 				saasAuth.GET("/me/usage", saas.GetMyUsage(saasStore))
 				saasAuth.GET("/me/usage/current-month", saas.GetCurrentMonthUsage(saasStore))
+				// 支付结算（JWT 认证）
+				saasAuth.POST("/create-checkout-session", saas.CreateCheckoutSessionHandler(saasStore))
 			}
 			// 管理员端点
 			saasAdmin := saasGroup.Group("/admin")
