@@ -153,6 +153,13 @@ func main() {
 			log.Fatalf("[SaaS-Fatal] SaaS 数据库初始化失败: %v", err)
 		}
 		defer saasStore.Close()
+		saas.SetGlobalStore(saasStore)
+
+		// 自动创建默认管理员（如果不存在）
+		if envCfg.SaaSAdminEmail != "" && envCfg.SaaSAdminPass != "" {
+			saas.EnsureAdmin(saasStore, envCfg.SaaSAdminEmail, envCfg.SaaSAdminPass)
+		}
+
 		log.Printf("[SaaS-Init] SaaS 模式已启用，数据库路径: %s", envCfg.SaaSDBPath)
 	} else {
 		log.Printf("[SaaS-Init] SaaS 模式未启用 (设置 SAAS_ENABLED=true 以启用)")
@@ -481,11 +488,25 @@ func main() {
 			// 公开端点：注册、登录
 			saasGroup.POST("/register", saas.Register(saasStore))
 			saasGroup.POST("/login", saas.Login(saasStore))
-			// 需认证的端点
+			saasGroup.GET("/pricing", saas.GetPricing())
+			// 需 JWT 认证的端点
 			saasAuth := saasGroup.Group("")
 			saasAuth.Use(saas.AuthMiddleware())
 			{
 				saasAuth.GET("/me", saas.Me(saasStore))
+				saasAuth.GET("/me/api-key", saas.GetAPIKeyInfo(saasStore))
+				saasAuth.POST("/me/api-key/regenerate", saas.RegenerateAPIKey(saasStore))
+				saasAuth.GET("/me/usage", saas.GetMyUsage(saasStore))
+				saasAuth.GET("/me/usage/current-month", saas.GetCurrentMonthUsage(saasStore))
+			}
+			// 管理员端点
+			saasAdmin := saasGroup.Group("/admin")
+			saasAdmin.Use(saas.AuthMiddleware())
+			saasAdmin.Use(saas.AdminMiddleware())
+			{
+				saasAdmin.GET("/users", saas.ListUsersHandler(saasStore))
+				saasAdmin.POST("/users/:id/plan", saas.UpdateUserPlanHandler(saasStore))
+				saasAdmin.DELETE("/users/:id", saas.DeleteUserHandler(saasStore))
 			}
 		}
 	}

@@ -1,7 +1,9 @@
 package saas
 
 import (
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log"
@@ -226,6 +228,60 @@ func getUserByAPIKey(db *sql.DB, apiKey string) (*User, error) {
 	user.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
 	user.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAt)
 	return user, nil
+}
+
+// generateAPIKey 生成 sk- 开头的 API Key
+func generateAPIKey() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("生成 API Key 失败: %w", err)
+	}
+	return "sk-" + hex.EncodeToString(b), nil
+}
+
+// RegenerateAPIKey 重新生成 API Key（需 JWT 认证）
+func RegenerateAPIKey(store *Store) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID := c.GetString("userID")
+		if userID == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
+			return
+		}
+
+		newKey, err := generateAPIKey()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+			return
+		}
+
+		_, err = store.db.Exec("UPDATE users SET api_key = ?, updated_at = ? WHERE id = ?", newKey, time.Now().Format(time.RFC3339), userID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "更新 API Key 失败: " + err.Error()})
+			return
+		}
+
+		log.Printf("[SaaS-APIKey] 用户 %s 重新生成了 API Key", userID)
+		c.JSON(http.StatusOK, gin.H{"api_key": newKey})
+	}
+}
+
+// GetAPIKeyInfo 获取当前 API Key 信息（需 JWT 认证）
+func GetAPIKeyInfo(store *Store) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID := c.GetString("userID")
+		if userID == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
+			return
+		}
+
+		user, err := getUserByID(store.db, userID)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"api_key": user.APIKey})
+	}
 }
 
 func boolToInt(b bool) int {

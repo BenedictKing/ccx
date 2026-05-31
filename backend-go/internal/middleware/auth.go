@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
+	"github.com/BenedictKing/ccx/internal/saas"
 	"github.com/gin-gonic/gin"
 )
 
@@ -141,9 +142,36 @@ func getAPIKey(c *gin.Context) string {
 }
 
 // ProxyAuthMiddleware 代理访问控制中间件
+// SaaS 模式下：校验请求中的 API Key 是否匹配用户的独立 API Key
+// 非 SaaS 模式下：校验请求中的密钥是否匹配全局 PROXY_ACCESS_KEY
 func ProxyAuthMiddleware(envCfg *config.EnvConfig) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		providedKey := getAPIKey(c)
+
+		// SaaS 模式：校验 API Key 对应用户
+		if store := saas.GetGlobalStore(); store != nil {
+			if providedKey == "" {
+				c.JSON(401, gin.H{"error": "缺少 API Key，请在请求头中设置 x-api-key 或 Authorization: Bearer <key>"})
+				c.Abort()
+				return
+			}
+			user, err := store.GetUserByAPIKey(providedKey)
+			if err != nil || user == nil {
+				if envCfg.ShouldLog("warn") {
+					log.Printf("[SaaS-Auth-Failed] API Key 无效 - IP: %s", c.ClientIP())
+				}
+				c.JSON(401, gin.H{"error": "Invalid API key"})
+				c.Abort()
+				return
+			}
+			// SaaS 认证成功，注入用户信息到上下文
+			c.Set("saas_user_id", user.ID)
+			c.Set("saas_user_plan", string(user.Plan))
+			c.Next()
+			return
+		}
+
+		// 非 SaaS 模式：校验全局密钥
 		expectedKey := envCfg.ProxyAccessKey
 
 		if providedKey == "" || providedKey != expectedKey {

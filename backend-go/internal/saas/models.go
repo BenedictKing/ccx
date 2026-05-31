@@ -124,3 +124,32 @@ type Subscription struct {
 	CreatedAt          time.Time `json:"createdAt"`
 	UpdatedAt          time.Time `json:"updatedAt"`
 }
+
+// RegenerateKeyRequest 重新生成 API Key 请求
+type RegenerateKeyRequest struct{}
+
+// MeResponse 用户信息响应（包含 API Key 和用量）
+type MeResponse struct {
+	User       *User       `json:"user"`
+	Usage      *UsageStats `json:"usage"`
+	PlanLimits PlanLimits  `json:"planLimits"`
+}
+
+// UsageStats 用量统计
+type UsageStats struct {
+	APICalls  int64 `json:"apiCalls"`
+	TokensIn  int64 `json:"tokensIn"`
+	TokensOut int64 `json:"tokensOut"`
+}
+
+// UsersListResponse 用户列表响应
+type UsersListResponse struct {
+	Users []*User `json:"users"`
+	Total int     `json:"total"`
+}
+
+// UpdateSubscriptionRequest 更新订阅请求
+type UpdateSubscriptionRequest struct {
+	Plan   string `json:"plan" binding:"required"`
+	UserID string `json:"userId" binding:"required"`
+}
