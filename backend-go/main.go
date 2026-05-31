@@ -292,6 +292,12 @@ func main() {
 	// Web UI 访问控制中间件
 	r.Use(middleware.WebAuthMiddleware(envCfg, cfgManager))
 
+	// SaaS 配额中间件（配额检查 + 自动用量记录）
+	if saasStore != nil {
+		log.Printf("[SaaS-Init] SaaS 配额中间件已启用")
+		r.Use(saas.SaaSQuotaMiddleware(saasStore))
+	}
+
 	// 健康检查端点（固定路径 /health，与 Dockerfile HEALTHCHECK 保持一致）
 	healthHandler := handlers.HealthCheck(envCfg, cfgManager)
 	r.GET("/health", healthHandler)
