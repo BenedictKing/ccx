@@ -12,7 +12,7 @@ services:
     container_name: ccx
     ports:
       # 统一端口：前端界面 + API + 管理接口
-      - '3000:3000'
+      - '3001:3000'
     volumes:
       # 配置目录持久化
       - ./.config:/app/.config
@@ -24,7 +24,7 @@ services:
       # 是否启用Web管理界面 (true=一体化模式, false=纯API模式)
       - ENABLE_WEB_UI=true
       # 代理访问密钥 - 用于验证客户端对代理服务器的访问权限
-      - PROXY_ACCESS_KEY=your-proxy-access-key
+      - PROXY_ACCESS_KEY=test-proxy-key-for-e2e
       # 管理 API 独立密钥（可选，未设置时回退到 PROXY_ACCESS_KEY）
       # 设置后，Web 管理界面和 /api/* 端点将使用此密钥认证，与代理密钥隔离
       # - ADMIN_ACCESS_KEY=your-admin-secret-key

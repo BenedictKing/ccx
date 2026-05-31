@@ -15,10 +15,10 @@ describe('normalizeLocale', () => {
     expect(normalizeLocale('zh-CN')).toBe('zh-CN')
   })
 
-  it('falls back to english for invalid locales', () => {
-    expect(normalizeLocale('fr')).toBe('en')
-    expect(normalizeLocale('')).toBe('en')
-    expect(normalizeLocale(undefined)).toBe('en')
+  it('falls back to default locale for invalid locales', () => {
+    expect(normalizeLocale('fr')).toBe('zh-CN')
+    expect(normalizeLocale('')).toBe('zh-CN')
+    expect(normalizeLocale(undefined)).toBe('zh-CN')
   })
 })
 

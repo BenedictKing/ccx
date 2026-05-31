@@ -41,6 +41,12 @@ type EnvConfig struct {
 	LogMaxAge     int  // 保留的旧日志文件最大天数
 	LogCompress   bool // 是否压缩旧日志文件
 	LogToConsole  bool // 是否同时输出到控制台
+	// SaaS 配置
+	SaaSEnabled    bool   // 是否启用 SaaS 模式
+	SaaSDBPath     string // SaaS 数据库路径
+	SaaSJWTSecret  string // JWT 签名密钥
+	SaaSAdminEmail string // 默认管理员邮箱（首次启动时自动创建）
+	SaaSAdminPass  string // 默认管理员密码
 }
 
 // NewEnvConfig 创建环境配置
@@ -87,6 +93,12 @@ func NewEnvConfig() *EnvConfig {
 		LogMaxAge:     getEnvAsInt("LOG_MAX_AGE", 30),     // 默认保留 30 天
 		LogCompress:   getEnv("LOG_COMPRESS", "true") != "false",
 		LogToConsole:  getEnv("LOG_TO_CONSOLE", "true") != "false",
+		// SaaS 配置
+		SaaSEnabled:    getEnv("SAAS_ENABLED", "false") == "true",
+		SaaSDBPath:     getEnv("SAAS_DB_PATH", ".config/saas.db"),
+		SaaSJWTSecret:  getEnv("SAAS_JWT_SECRET", ""),
+		SaaSAdminEmail: getEnv("SAAS_ADMIN_EMAIL", "admin@ccx.com"),
+		SaaSAdminPass:  getEnv("SAAS_ADMIN_PASS", "admin123456"),
 	}
 }
 

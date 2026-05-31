@@ -23,6 +23,11 @@ help:
 	@echo "  make desktop-build  - 构建前端、Go 后端和桌面外壳"
 	@echo "  make frontend-build - 仅构建前端"
 	@echo "  make clean          - 清理构建文件"
+	@echo ""
+	@echo "$(YELLOW)测试:$(NC)"
+	@echo "  make test-all       - 运行所有测试（前端 + Go 后端）"
+	@echo "  make test-frontend  - 仅运行前端测试"
+	@echo "  make test-backend   - 仅运行 Go 后端测试"
 
 install:
 	@echo "$(GREEN)📦 安装前端依赖...$(NC)"
@@ -84,3 +89,16 @@ frontend-dev:
 
 frontend-build:
 	@cd frontend && bun run build
+
+# ─── 测试 ──────────────────────────────────────────
+
+test-all: test-frontend test-backend
+	@echo "$(GREEN)✅ 全部测试完成$(NC)"
+
+test-frontend:
+	@echo "$(GREEN)🧪 运行前端测试...$(NC)"
+	@cd frontend && npm test
+
+test-backend:
+	@echo "$(GREEN)🧪 运行 Go 后端测试...$(NC)"
+	@cd backend-go && GOPROXY=https://goproxy.cn,direct go test ./... -count=1

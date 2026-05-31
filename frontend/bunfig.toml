@@ -1,2 +1,5 @@
-[install.security]
-scanner = "@socketsecurity/bun-security-scanner"
+[install]
+# 禁用 Socket 安全扫描器（中国网络下 403 问题）
+scanner = false
+# lockfile 使用文本格式方便 git diff
+lockfile = "text"

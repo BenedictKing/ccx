@@ -22,6 +22,7 @@ import (
 	"github.com/BenedictKing/ccx/internal/logger"
 	"github.com/BenedictKing/ccx/internal/metrics"
 	"github.com/BenedictKing/ccx/internal/middleware"
+	"github.com/BenedictKing/ccx/internal/saas"
 	"github.com/BenedictKing/ccx/internal/scheduler"
 	"github.com/BenedictKing/ccx/internal/session"
 	"github.com/BenedictKing/ccx/internal/warmup"
@@ -141,6 +142,21 @@ func main() {
 	overrideManager := conversation.NewOverrideManager(30 * time.Minute)
 	channelScheduler.SetConversationComponents(conversationTracker, overrideManager)
 	log.Printf("[Conversation-Init] 对话追踪器和覆盖管理器已初始化 (idle: 1h, expire: 2h, override TTL: 30m)")
+
+	// 初始化 SaaS 模块（可选）
+	var saasStore *saas.Store
+	if envCfg.SaaSEnabled {
+		saas.SetJWTSecret(envCfg.SaaSJWTSecret)
+		var err error
+		saasStore, err = saas.NewStore(envCfg.SaaSDBPath)
+		if err != nil {
+			log.Fatalf("[SaaS-Fatal] SaaS 数据库初始化失败: %v", err)
+		}
+		defer saasStore.Close()
+		log.Printf("[SaaS-Init] SaaS 模式已启用，数据库路径: %s", envCfg.SaaSDBPath)
+	} else {
+		log.Printf("[SaaS-Init] SaaS 模式未启用 (设置 SAAS_ENABLED=true 以启用)")
+	}
 
 	scheduledRecoveryStop := make(chan struct{})
 	go func() {
@@ -455,6 +471,23 @@ func main() {
 		apiGroup.GET("/conversations", handlers.GetConversations(convDeps))
 		apiGroup.POST("/conversations/:id/override", handlers.SetConversationOverride(convDeps))
 		apiGroup.DELETE("/conversations/:id/override", handlers.RemoveConversationOverride(convDeps))
+	}
+
+	// SaaS 路由（需启用 SAAS_ENABLED=true）
+	if saasStore != nil {
+		saasGroup := r.Group("/api/saas")
+		saasGroup.Use(saas.CORSMiddleware())
+		{
+			// 公开端点：注册、登录
+			saasGroup.POST("/register", saas.Register(saasStore))
+			saasGroup.POST("/login", saas.Login(saasStore))
+			// 需认证的端点
+			saasAuth := saasGroup.Group("")
+			saasAuth.Use(saas.AuthMiddleware())
+			{
+				saasAuth.GET("/me", saas.Me(saasStore))
+			}
+		}
 	}
 
 	// 代理端点 - Messages API
