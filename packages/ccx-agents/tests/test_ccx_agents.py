@@ -538,3 +538,159 @@ class TestModelMappingPropertyBased:
                 # Might match messages branch if prefix contains keywords
                 continue
             assert result == "responses", f"Expected responses for {model}, got {result}"
+
+
+# =========================================================================
+# 9. Coverage gap: router uncovered branches
+# =========================================================================
+
+
+class TestRouterCoverageGaps:
+    """Targeted tests for uncovered lines in router.py."""
+
+    def test_add_rule_appends_rule(self) -> None:
+        """add_rule() appends a custom RoutingRule."""
+        router = CcxRouter()
+
+        def my_rule(*, model: str, agent_name: str | None) -> CcxConfigModel | None:
+            if model == "custom":
+                return CcxConfigModel(base_url="http://localhost:3000/v1", route_prefix="custom")
+            return None
+
+        router.add_rule(my_rule)
+        assert len(router._rules) == 1
+        resolved = router.resolve(model="custom")
+        assert resolved is not None
+        assert resolved.route_prefix == "custom"
+
+    def test_resolve_first_rule_returns_none_second_matches(self) -> None:
+        """resolve() skips rules that return None, falls through to next."""
+        router = CcxRouter()
+
+        def rule1(*, model: str, agent_name: str | None) -> CcxConfigModel | None:
+            return None  # skip
+
+        def rule2(*, model: str, agent_name: str | None) -> CcxConfigModel | None:
+            return CcxConfigModel(base_url="http://localhost:3000/v1", route_prefix="matched")
+
+        router.add_rule(rule1)
+        router.add_rule(rule2)
+
+        resolved = router.resolve(model="anything")
+        assert resolved is not None
+        assert resolved.route_prefix == "matched"
+
+    def test_build_client_none_channel_falls_back(self) -> None:
+        """_build_client(None) falls back to get_ccx_client()."""
+        # Set up a global client first
+        CcxConfig(base_url="http://localhost:3000/v1", api_key="k").setup()
+
+        router = CcxRouter()
+        client = router._build_client(None)
+        from ccx_agents._client import get_ccx_client
+        assert client is get_ccx_client()
+
+    @patch("agents.Runner.run_streamed", autospec=True)
+    @patch("agents.set_default_openai_client")
+    def test_run_streamed(self, mock_set: Any, mock_run_streamed: Any) -> None:
+        """router.run_streamed() delegates to Runner.run_streamed."""
+        mock_result = MagicMock()
+        mock_run_streamed.return_value = mock_result
+
+        router = CcxRouter(FakeCcxConfig(base_url="http://localhost:3000/v1", api_key="k"))
+        router.route("test-agent", channel="default")
+
+        agent = MagicMock()
+        agent.name = "test-agent"
+
+        result = router.run_streamed(agent, "Hello")
+        assert result is mock_result
+        mock_set.assert_called_once()
+        mock_run_streamed.assert_called_once_with(agent, "Hello")
+
+
+# =========================================================================
+# 10. Coverage gap: _client setup_with_routing with CcxRouter instance
+# =========================================================================
+
+
+class TestClientCoverageGaps:
+    """Targeted tests for uncovered lines in _client.py."""
+
+    @patch("ccx_agents._client.set_default_openai_client")
+    def test_setup_with_routing_calls_isinstance_router(self, mock_set: Any) -> None:
+        """setup_with_routing() with CcxRouter instance uses the router directly."""
+        from ccx_agents import CcxRouter as CR
+
+        router_instance = CR()
+        router_instance.add_map({
+            "gpt-4o": CcxConfigModel(base_url="http://localhost:3000/v1", route_prefix="gpt"),
+        })
+
+        CcxConfig(api_key="k").setup_with_routing(
+            default_url="http://localhost:3000/v1",
+            router=router_instance,
+        )
+
+        from ccx_agents._client import _router
+        assert _router is router_instance
+        mock_set.assert_called_once()
+
+    @patch("ccx_agents._client.set_default_openai_client")
+    def test_setup_with_routing_router_none(self, mock_set: Any) -> None:
+        """setup_with_routing() with router=None still works (no routing)."""
+        CcxConfig(api_key="k").setup_with_routing(
+            default_url="http://localhost:3000/v1",
+            router=None,
+        )
+
+        from ccx_agents._client import _router
+        assert _router is None
+        mock_set.assert_called_once()
+
+
+# =========================================================================
+# 11. Coverage gap: conv uncovered branches
+# =========================================================================
+
+
+class TestConversationCoverageGaps:
+    """Targeted tests for uncovered lines in conv.py."""
+
+    def test_build_client_without_config_falls_back(self) -> None:
+        """_build_client() with ccx_config=None uses get_ccx_client()."""
+        # Set up a global client
+        CcxConfig(base_url="http://localhost:3000/v1", api_key="k").setup()
+        from ccx_agents._client import get_ccx_client
+        global_client = get_ccx_client()
+
+        conv = CcxConversation(ccx_config=None)
+        client = conv._build_client()
+        assert client is global_client
+
+    def test_capture_response_id_with_response_id_attr(self) -> None:
+        """_capture_response_id uses raw.response_id when raw.id is None."""
+        conv = CcxConversation()
+
+        mock_raw = MagicMock()
+        del mock_raw.id
+
+        mock_raw.response_id = "resp_via_attr"
+
+        mock_result = MagicMock()
+        mock_result.raw_responses = [mock_raw]
+
+        conv._capture_response_id(mock_result)
+        assert conv.previous_response_id == "resp_via_attr"
+
+    def test_capture_response_id_exception_handling(self) -> None:
+        """_capture_response_id catches exceptions gracefully."""
+        conv = CcxConversation()
+
+        mock_result = MagicMock()
+        mock_result.raw_responses = [MagicMock()]
+        raw_mock = mock_result.raw_responses[0]
+        type(raw_mock).id = property(lambda self: (_ for _ in ()).throw(RuntimeError("boom")))
+
+        conv._capture_response_id(mock_result)
+        assert conv.previous_response_id is None
