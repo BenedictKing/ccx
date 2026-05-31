@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: MIT
+#
+# CCX-Agents — Route openai-agents-python through the CCX multi-model proxy.
+# Copyright (c) 2025 CCX Contributors
+#
+
+Python packaging & build
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+Virtual environments
+.venv/
+venv/
+.env/
+
+Testing
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store

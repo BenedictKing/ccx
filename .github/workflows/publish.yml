@@ -1,0 +1,94 @@
+# .github/workflows/publish.yml — Publish ccx-agents to PyPI on tags
+#
+# Usage:
+#   git tag v0.1.0
+#   git push origin v0.1.0
+
+name: Publish ccx-agents
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+defaults:
+  run:
+    working-directory: packages/ccx-agents
+
+jobs:
+  check:
+    name: Lint & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: packages/ccx-agents/pyproject.toml
+
+      - name: Install dev deps
+        run: pip install -e ".[dev,ci,docs]"
+
+      - name: Lint
+        run: ruff check src/ tests/
+
+      - name: Test
+        run: python -m pytest tests/ --cov=src/ccx_agents --cov-report=term-missing
+
+      - name: Type check
+        run: pyright src/ccx_agents/
+
+  publish:
+    name: Build & Publish to PyPI
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write  # for trusted publishing (PyPI OIDC)
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build deps
+        run: pip install build twine
+
+      - name: Build
+        run: python -m build
+
+      - name: Check dist
+        run: twine check dist/*
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        # Uses trusted publishing — configure PyPI OIDC at
+        # https://pypi.org/manage/project/ccx-agents/settings/
+
+  docs:
+    name: Build & Deploy Docs
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # for gh-pages branch push
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install docs deps
+        run: pip install mkdocs mkdocstrings[python] mkdocs-material
+
+      - name: Build docs
+        working-directory: packages/ccx-agents
+        run: mkdocs build --site-dir ../../site
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site

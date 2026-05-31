@@ -210,11 +210,10 @@ vite.config.ts.timestamp-*
 
 .aider*
 *.log
-# 不要忽略包管理器的 lock 文件（package-lock.json, bun.lock, yarn.lock, pnpm-lock.yaml 等）
-# 这些文件对于确保依赖版本一致性至关重要
-# *.lock
-# *-lock.json
-# *-lock.yaml
+# 包管理器锁文件 — 只保留 bun.lock（统一使用 Bun）
+# pnpm-lock.yaml 和 package-lock.json 属于不再使用的格式，防止误提交
+pnpm-lock.yaml
+package-lock.json
 *.patch
 
 *.tsbuildinfo

@@ -1,0 +1,111 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ccx-agents"
+dynamic = ["version"]
+description = "Route openai-agents-python through CCX — multi-model AI proxy gateway"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+    { name = "CCX Contributors", email = "ccx@atomgit.com" },
+]
+keywords = [
+    "ccx", "openai", "agents", "proxy", "multi-model",
+    "ai-gateway", "llm", "handoff",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
+dependencies = [
+    "openai-agents>=0.0.12",
+    "openai>=2.36.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=5",
+    "httpx>=0.27",
+    "ruff>=0.5",
+    "respx>=0.21",
+    "hypothesis>=6.100",
+]
+ci = [
+    "pyright>=1.1.370",
+]
+docs = [
+    "mkdocs>=1.6",
+    "mkdocstrings[python]>=0.25",
+    "mkdocs-material>=9.5",
+]
+
+[project.urls]
+Repository = "https://github.com/BenedictKing/ccx"
+Documentation = "https://benjamin-norang.github.io/ccx/ccx-agents"
+Changelog = "https://github.com/BenedictKing/ccx/blob/main/packages/ccx-agents/CHANGELOG.md"
+Issues = "https://github.com/BenedictKing/ccx/issues"
+
+[project.scripts]
+ccx-agents = "ccx_agents.cli:entry_point"
+ccx-agents-demo = "ccx_agents._demo:main"
+
+[tool.hatch.version]
+path = "src/ccx_agents/__init__.py"
+
+[tool.hatch.envs.default]
+dependencies = [
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=5",
+    "httpx>=0.27",
+    "ruff>=0.5",
+    "respx>=0.21",
+]
+
+[tool.hatch.envs.default.scripts]
+test = "pytest tests/ -v"
+cover = "pytest tests/ --cov=src/ccx_agents --cov-report=term-missing"
+lint = "ruff check src/ tests/"
+typecheck = "pyright src/ccx_agents/"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-q --tb=short"
+
+[tool.coverage.run]
+source = ["src/ccx_agents"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "PLC", "PLE", "PLW", "RUF"]
+ignore = ["PLC0415"]  # allow late import for optional deps
+
+[tool.ruff.format]
+quote-style = "double"

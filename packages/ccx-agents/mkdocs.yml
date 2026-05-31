@@ -1,0 +1,65 @@
+# mkdocs.yml — API documentation site for ccx-agents
+
+site_name: ccx-agents
+site_description: Route openai-agents-python through CCX — multi-model AI proxy gateway
+site_url: https://benjamin-norang.github.io/ccx/ccx-agents
+repo_url: https://github.com/BenedictKing/ccx
+repo_name: BenedictKing/ccx
+edit_uri: blob/main/packages/ccx-agents/docs/
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - content.code.copy
+    - navigation.tabs
+    - navigation.top
+    - search.suggest
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            show_source: true
+            show_root_heading: true
+            show_category_heading: true
+            members_order: source
+            docstring_style: sphinx
+
+nav:
+  - Home: index.md
+  - API Reference:
+      - CcxConfig: api/ccx_config.md
+      - ccx_setup: api/ccx_setup.md
+      - CcxRouter: api/ccx_router.md
+      - CcxConversation: api/ccx_conversation.md
+      - CcxConfigModel: api/ccx_config_model.md
+      - CcxTracing: api/ccx_tracing.md
+      - Plugin System: api/plugin.md
+      - CLI: api/cli.md
+  - Examples: examples.md
+  - Contributing: contributing.md
+
+markdown_extensions:
+  - admonition
+  - codehilite
+  - pymdownx.superfences
+  - pymdownx.tabbed
+  - pymdownx.details
+  - toc:
+      permalink: true
