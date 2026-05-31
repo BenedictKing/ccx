@@ -118,6 +118,39 @@
           </v-col>
         </v-row>
         <v-skeleton-loader v-else type="card" />
+
+        <v-divider class="my-6" />
+
+        <!-- 账单历史 -->
+        <div class="text-h6 mb-4">
+          <v-icon class="mr-2">mdi-receipt</v-icon>
+          账单历史
+        </div>
+
+        <v-expansion-panels v-if="invoices.length" variant="accordion">
+          <v-expansion-panel v-for="inv in invoices" :key="inv.id">
+            <v-expansion-panel-title>
+              <div class="d-flex align-center w-100">
+                <span class="text-body-1 font-weight-medium">{{ inv.plan_name?.toUpperCase() }}</span>
+                <v-spacer />
+                <span class="text-body-1 font-weight-bold mr-4">¥{{ (inv.amount / 100).toFixed(2) }}</span>
+                <v-chip
+                  :color="inv.status === 'paid' ? 'success' : 'warning'"
+                  size="small"
+                  variant="tonal"
+                >
+                  {{ inv.status === 'paid' ? '已支付' : '待支付' }}
+                </v-chip>
+              </div>
+            </v-expansion-panel-title>
+            <v-expansion-panel-text>
+              <div class="text-caption text-medium-emphasis">
+                日期：{{ new Date(inv.created_at).toLocaleDateString('zh-CN') }}
+              </div>
+            </v-expansion-panel-text>
+          </v-expansion-panel>
+        </v-expansion-panels>
+        <div v-else class="text-body-2 text-medium-emphasis">暂无账单记录</div>
       </v-card-text>
     </v-card>
   </v-container>
@@ -135,6 +168,7 @@ const copied = ref(false)
 const regenerating = ref(false)
 const displayedApiKey = ref('正在加载...')
 const usage = ref<{ apiCalls: number; tokensIn: number; tokensOut: number } | null>(null)
+const invoices = ref<any[]>([])
 const limits = ref<{ maxRequests: number; maxTokens: number; maxChannels: number; maxApiKeys: number } | null>(null)
 
 async function loadData() {
@@ -197,8 +231,22 @@ async function regenerateKey() {
   }
 }
 
+async function loadInvoices() {
+  try {
+    const res = await fetch('/api/saas/me/invoices', {
+      headers: { Authorization: `Bearer ${userStore.token}` }
+    })
+    if (res.ok) {
+      invoices.value = await res.json()
+    }
+  } catch {
+    // 静默
+  }
+}
+
 onMounted(() => {
   loadData()
+  loadInvoices()
 
   // 检查支付成功回跳
   const url = new URL(window.location.href)

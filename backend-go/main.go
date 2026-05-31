@@ -163,6 +163,17 @@ func main() {
 		// 启动每月用量重置定时任务
 		saas.StartUsageResetCron(saasStore)
 
+		// 启动用量预警定时任务（每小时检查）
+		saas.StartUsageAlertCron(saasStore, &saas.AlertConfig{
+			Enabled: false, // 默认不启用邮件发送，仅记录日志
+			// 生产环境配置 SMTP：
+			// EmailFrom: "noreply@ccx.ai",
+			// SMTPHost: os.Getenv("SMTP_HOST"),
+			// SMTPPort: 587,
+			// SMTPUser: os.Getenv("SMTP_USER"),
+			// SMTPPass: os.Getenv("SMTP_PASS"),
+		})
+
 		// 初始化 Stripe 支付客户端
 		saas.InitStripeClient()
 
@@ -515,6 +526,9 @@ func main() {
 				saasAuth.POST("/me/api-key/regenerate", saas.RegenerateAPIKey(saasStore))
 				saasAuth.GET("/me/usage", saas.GetMyUsage(saasStore))
 				saasAuth.GET("/me/usage/current-month", saas.GetCurrentMonthUsage(saasStore))
+				saasAuth.GET("/me/invoices", saas.GetMyInvoicesHandler(saasStore))
+				saasAuth.GET("/me/invoices/:id", saas.GetInvoiceDetailHandler(saasStore))
+				saasAuth.GET("/me/alerts", saas.GetMyAlertsHandler(saasStore))
 				// 支付结算（JWT 认证）
 				saasAuth.POST("/create-checkout-session", saas.CreateCheckoutSessionHandler(saasStore))
 			}
@@ -526,6 +540,9 @@ func main() {
 				saasAdmin.GET("/users", saas.ListUsersHandler(saasStore))
 				saasAdmin.POST("/users/:id/plan", saas.UpdateUserPlanHandler(saasStore))
 				saasAdmin.DELETE("/users/:id", saas.DeleteUserHandler(saasStore))
+				saasAdmin.GET("/dashboard", saas.AdminDashboardHandler(saasStore))
+				saasAdmin.GET("/dashboard/trends", saas.AdminUsageTrendHandler(saasStore))
+				saasAdmin.GET("/dashboard/top-users", saas.AdminTopUsersHandler(saasStore))
 			}
 		}
 	}

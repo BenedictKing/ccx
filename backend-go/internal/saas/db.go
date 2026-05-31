@@ -76,6 +76,30 @@ func (s *Store) migrate() error {
 		`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`,
 		`CREATE INDEX IF NOT EXISTS idx_usage_records_user_date ON usage_records(user_id, date)`,
 		`CREATE INDEX IF NOT EXISTS idx_subscriptions_user ON subscriptions(user_id)`,
+		`CREATE TABLE IF NOT EXISTS alert_logs (
+			id TEXT PRIMARY KEY,
+			user_id TEXT NOT NULL,
+			alert_type TEXT NOT NULL,
+			value INTEGER NOT NULL,
+			max INTEGER NOT NULL,
+			sent_at TEXT NOT NULL,
+			FOREIGN KEY (user_id) REFERENCES users(id)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_alert_logs_user ON alert_logs(user_id)`,
+		`CREATE TABLE IF NOT EXISTS invoices (
+			id TEXT PRIMARY KEY,
+			user_id TEXT NOT NULL,
+			plan TEXT NOT NULL,
+			amount INTEGER NOT NULL,
+			currency TEXT NOT NULL DEFAULT 'cny',
+			status TEXT NOT NULL DEFAULT 'paid',
+			period_start TEXT NOT NULL,
+			period_end TEXT NOT NULL,
+			paid_at TEXT,
+			created_at TEXT NOT NULL,
+			FOREIGN KEY (user_id) REFERENCES users(id)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_invoices_user ON invoices(user_id)`,
 	}
 
 	for _, m := range migrations {

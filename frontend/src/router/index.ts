@@ -30,6 +30,11 @@ const routes = [
     meta: { requiresSaaSAdmin: true }
   },
   {
+    path: '/admin/dashboard',
+    component: () => import('@/views/AdminDashboardView.vue'),
+    meta: { requiresSaaSAdmin: true }
+  },
+  {
     path: '/channels/:type',
     component: () => import('@/views/ChannelsView.vue'),
     props: true,

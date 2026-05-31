@@ -253,8 +253,8 @@ func handleCheckoutCompleted(store *Store, event *StripeEvent) error {
 
 	log.Printf("[Stripe-Webhook] 支付完成: user=%s plan=%s", userID[:8], plan)
 
-	// 升级用户套餐
-	return store.UpdateUserPlan(userID, plan)
+	// 升级用户套餐并创建发票
+	return store.UpdateUserPlanWithInvoice(userID, plan)
 }
 
 // handleInvoicePaid 处理发票支付成功（续费）
@@ -404,7 +404,7 @@ func MockCheckoutHandler(store *Store) http.HandlerFunc {
 			log.Printf("[Stripe-Mock] 支付确认: user=%s plan=%s session=%s", userID[:8], plan, sessionID)
 
 			// 升级用户套餐
-			if err := store.UpdateUserPlan(userID, plan); err != nil {
+			if err := store.UpdateUserPlanWithInvoice(userID, plan); err != nil {
 				http.Error(w, "升级失败", http.StatusInternalServerError)
 				return
 			}

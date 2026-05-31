@@ -90,7 +90,7 @@ func UpdateUserPlanHandler(store *Store) gin.HandlerFunc {
 			return
 		}
 
-		if err := store.UpdateUserPlan(userID, req.Plan); err != nil {
+		if err := store.UpdateUserPlanWithInvoice(userID, req.Plan); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "更新失败"})
 			return
 		}
