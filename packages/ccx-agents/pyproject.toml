@@ -54,7 +54,7 @@ docs = [
 
 [project.urls]
 Repository = "https://github.com/BenedictKing/ccx"
-Documentation = "https://benjamin-norang.github.io/ccx/ccx-agents"
+Documentation = "https://BenedictKing.github.io/ccx/ccx-agents"
 Changelog = "https://github.com/BenedictKing/ccx/blob/main/packages/ccx-agents/CHANGELOG.md"
 Issues = "https://github.com/BenedictKing/ccx/issues"
 
