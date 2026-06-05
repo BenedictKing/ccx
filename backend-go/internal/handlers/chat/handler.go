@@ -1288,6 +1288,8 @@ func streamClaudeToChat(
 ) *types.Usage {
 	var totalUsage *types.Usage
 	var doneSent bool
+	var currentToolCallID string
+	currentToolIndex := 0
 	buf := make([]byte, 32*1024)
 	var remainder string
 	pending := prefetched
@@ -1315,13 +1317,13 @@ func streamClaudeToChat(
 			remainder = lines[len(lines)-1]
 			lines = lines[:len(lines)-1]
 			for _, line := range lines {
-				processClaudeChatStreamLine(c, flusher, model, line, &totalUsage, &doneSent)
+				processClaudeChatStreamLine(c, flusher, model, line, &totalUsage, &doneSent, &currentToolCallID, &currentToolIndex)
 			}
 		}
 
 		if readErr != nil {
 			if remainder != "" {
-				processClaudeChatStreamLine(c, flusher, model, remainder, &totalUsage, &doneSent)
+				processClaudeChatStreamLine(c, flusher, model, remainder, &totalUsage, &doneSent, &currentToolCallID, &currentToolIndex)
 				remainder = ""
 			}
 			break
@@ -1744,7 +1746,7 @@ func writeChatSSEChunk(c *gin.Context, flusher http.Flusher, chunk map[string]in
 	}
 }
 
-func processClaudeChatStreamLine(c *gin.Context, flusher http.Flusher, model string, line string, totalUsage **types.Usage, doneSent *bool) {
+func processClaudeChatStreamLine(c *gin.Context, flusher http.Flusher, model string, line string, totalUsage **types.Usage, doneSent *bool, currentToolCallID *string, currentToolIndex *int) {
 	jsonData, ok := common.ExtractSSEJSONLine(line)
 	if !ok {
 		return
@@ -1765,7 +1767,50 @@ func processClaudeChatStreamLine(c *gin.Context, flusher http.Flusher, model str
 
 	eventType, _ := event["type"].(string)
 	switch eventType {
-	case "content_block_delta":
+	case "content_block_start":
+		cb, _ := event["content_block"].(map[string]interface{})
+		if cb == nil {
+			return
+		}
+		cbType, _ := cb["type"].(string)
+		if cbType == "tool_use" {
+			idx := 0
+			if i, ok := event["index"].(float64); ok {
+				idx = int(i)
+			}
+			name, _ := cb["name"].(string)
+			tid, _ := cb["id"].(string)
+			*currentToolCallID = tid
+			*currentToolIndex = idx
+			// 发送 tool_calls delta 起始块（包含 index/id/name）
+			chatChunk := map[string]interface{}{
+				"id":      "chatcmpl-claude",
+				"object":  "chat.completion.chunk",
+				"created": time.Now().Unix(),
+				"model":   model,
+				"choices": []map[string]interface{}{{
+					"index": 0,
+					"delta": map[string]interface{}{
+						"tool_calls": []map[string]interface{}{{
+							"index": idx,
+							"id":    tid,
+							"type":  "function",
+							"function": map[string]interface{}{
+								"name":      name,
+								"arguments": "",
+							},
+						}},
+					},
+					"finish_reason": nil,
+				}},
+			}
+			chunkBytes, _ := json.Marshal(chatChunk)
+			fmt.Fprintf(c.Writer, "data: %s\n\n", string(chunkBytes))
+			if flusher != nil {
+				flusher.Flush()
+			}
+		}
+		return
 		delta, ok := event["delta"].(map[string]interface{})
 		if !ok {
 			return
@@ -1815,8 +1860,45 @@ func processClaudeChatStreamLine(c *gin.Context, flusher http.Flusher, model str
 			if flusher != nil {
 				flusher.Flush()
 			}
+		case "input_json_delta":
+			partial, _ := delta["partial_json"].(string)
+			if partial == "" {
+				return
+			}
+			chatChunk := map[string]interface{}{
+				"id":      "chatcmpl-claude",
+				"object":  "chat.completion.chunk",
+				"created": time.Now().Unix(),
+				"model":   model,
+				"choices": []map[string]interface{}{{
+					"index": 0,
+					"delta": map[string]interface{}{
+						"tool_calls": []map[string]interface{}{{
+							"index": *currentToolIndex,
+							"function": map[string]interface{}{
+								"arguments": partial,
+							},
+						}},
+					},
+					"finish_reason": nil,
+				}},
+			}
+			chunkBytes, _ := json.Marshal(chatChunk)
+			fmt.Fprintf(c.Writer, "data: %s\n\n", string(chunkBytes))
+			if flusher != nil {
+				flusher.Flush()
+			}
 		}
 	case "message_delta":
+		// 根据 stop_reason 推导 finish_reason
+		finishReason := "stop"
+		if delta, ok := event["delta"].(map[string]interface{}); ok {
+			if sr, _ := delta["stop_reason"].(string); sr == "tool_use" || sr == "server_tool_use" {
+				finishReason = "tool_calls"
+			} else if sr == "max_tokens" {
+				finishReason = "length"
+			}
+		}
 		stopChunk := map[string]interface{}{
 			"id":      "chatcmpl-claude",
 			"object":  "chat.completion.chunk",
@@ -1825,7 +1907,7 @@ func processClaudeChatStreamLine(c *gin.Context, flusher http.Flusher, model str
 			"choices": []map[string]interface{}{{
 				"index":         0,
 				"delta":         map[string]interface{}{},
-				"finish_reason": "stop",
+				"finish_reason": finishReason,
 			}},
 		}
 		if usage, ok := event["usage"].(map[string]interface{}); ok {
