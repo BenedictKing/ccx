@@ -21,6 +21,16 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// stripSSEDataPrefix strips the SSE "data:" field prefix from a line.
+// Both "data:value" and "data: value" formats are accepted per SSE specification.
+func stripSSEDataPrefix(line string) (string, bool) {
+	const prefix = "data:"
+	if !strings.HasPrefix(line, prefix) {
+		return "", false
+	}
+	return strings.TrimPrefix(line[len(prefix):], " "), true
+}
+
 // Handler Chat Completions API 代理处理器
 // 支持多渠道调度：当配置多个渠道时自动启用
 func Handler(
@@ -1014,10 +1024,10 @@ func preflightChatStream(resp *http.Response, upstreamType string) (*chatStreamP
 
 func detectMalformedChatStreamLines(lines []string, upstreamType string, tracker chatToolTracker, chatTracker *openAIChatToolCallTracker) (bool, string) {
 	for _, line := range lines {
-		if !strings.HasPrefix(line, "data: ") {
+		jsonData, ok := stripSSEDataPrefix(line)
+		if !ok {
 			continue
 		}
-		jsonData := strings.TrimPrefix(line, "data: ")
 		if jsonData == "[DONE]" {
 			continue
 		}
@@ -1141,10 +1151,10 @@ func fallbackChatToolName(name string, index int) string {
 
 func chatStreamHasTextContent(lines []string, upstreamType string) bool {
 	for _, line := range lines {
-		if !strings.HasPrefix(line, "data: ") {
+		jsonData, ok := stripSSEDataPrefix(line)
+		if !ok {
 			continue
 		}
-		jsonData := strings.TrimPrefix(line, "data: ")
 		if jsonData == "[DONE]" {
 			continue
 		}
@@ -1224,10 +1234,10 @@ func streamPassthrough(
 
 			// 尝试从完整行中提取 usage
 			for _, line := range completeLines {
-				if !strings.HasPrefix(line, "data: ") {
+				jsonData, ok := stripSSEDataPrefix(line)
+				if !ok {
 					continue
 				}
-				jsonData := strings.TrimPrefix(line, "data: ")
 				if jsonData == "[DONE]" {
 					continue
 				}
@@ -1263,10 +1273,10 @@ func streamPassthrough(
 
 func flushCompletePassthroughRemainder(c *gin.Context, flusher http.Flusher, remainder string) {
 	trimmed := strings.TrimSpace(remainder)
-	if !strings.HasPrefix(trimmed, "data: ") {
+	jsonData, ok := stripSSEDataPrefix(trimmed)
+	if !ok {
 		return
 	}
-	jsonData := strings.TrimPrefix(trimmed, "data: ")
 	if jsonData != "[DONE]" && !json.Valid([]byte(jsonData)) {
 		return
 	}
@@ -1559,10 +1569,10 @@ func streamResponsesToChat(
 					currentEventType = strings.TrimPrefix(line, "event: ")
 					continue
 				}
-				if !strings.HasPrefix(line, "data: ") {
+				jsonData, ok := stripSSEDataPrefix(line)
+				if !ok {
 					continue
 				}
-				jsonData := strings.TrimPrefix(line, "data: ")
 				if jsonData == "[DONE]" {
 					continue
 				}
@@ -1745,10 +1755,10 @@ func writeChatSSEChunk(c *gin.Context, flusher http.Flusher, chunk map[string]in
 }
 
 func processClaudeChatStreamLine(c *gin.Context, flusher http.Flusher, model string, line string, totalUsage **types.Usage, doneSent *bool) {
-	if !strings.HasPrefix(line, "data: ") {
+	jsonData, ok := stripSSEDataPrefix(line)
+	if !ok {
 		return
 	}
-	jsonData := strings.TrimPrefix(line, "data: ")
 	if jsonData == "[DONE]" {
 		fmt.Fprintf(c.Writer, "data: [DONE]\n\n")
 		if flusher != nil {
