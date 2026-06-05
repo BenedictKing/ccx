@@ -194,7 +194,7 @@ func (t *StreamToolCallTracker) HasPendingToolCall() bool {
 
 func (t *StreamToolCallTracker) ProcessClaudeEvent(event string) (bool, string) {
 	for _, line := range strings.Split(event, "\n") {
-		jsonStr, ok := extractSSEJSONLine(line)
+		jsonStr, ok := ExtractSSEJSONLine(line)
 		if !ok {
 			continue
 		}
@@ -257,7 +257,7 @@ func (t *StreamToolCallTracker) ProcessClaudeEvent(event string) (bool, string) 
 
 func (t *StreamToolCallTracker) ProcessResponsesEvent(event string) (bool, string) {
 	for _, line := range strings.Split(event, "\n") {
-		jsonStr, ok := extractSSEJSONLine(line)
+		jsonStr, ok := ExtractSSEJSONLine(line)
 		if !ok {
 			continue
 		}
@@ -410,7 +410,7 @@ func fallbackToolName(name string, index int) string {
 
 func isUsageOnlySSEEvent(event string) bool {
 	for _, line := range strings.Split(event, "\n") {
-		jsonStr, ok := extractSSEJSONLine(line)
+		jsonStr, ok := ExtractSSEJSONLine(line)
 		if !ok {
 			continue
 		}
@@ -432,7 +432,7 @@ func firstUnknownSSEDataType(event string) (string, bool) {
 		"message_start": {}, "message_delta": {}, "message_stop": {}, "content_block_start": {}, "content_block_delta": {}, "content_block_stop": {}, "ping": {}, "error": {},
 	}
 	for _, line := range strings.Split(event, "\n") {
-		jsonStr, ok := extractSSEJSONLine(line)
+		jsonStr, ok := ExtractSSEJSONLine(line)
 		if !ok {
 			continue
 		}
@@ -463,7 +463,7 @@ func IsEffectivelyEmptyStreamText(text string) bool {
 	return text == "" || strings.TrimSpace(text) == "{"
 }
 
-func extractSSEJSONLine(line string) (string, bool) {
+func ExtractSSEJSONLine(line string) (string, bool) {
 	if !strings.HasPrefix(line, "data:") {
 		return "", false
 	}
@@ -480,7 +480,7 @@ func hasNonTextContentBlock(event string) bool {
 // HasClaudeSemanticContent 判断 Claude/Messages 风格 SSE 是否包含有效语义内容
 func HasClaudeSemanticContent(event string) bool {
 	for _, line := range strings.Split(event, "\n") {
-		jsonStr, ok := extractSSEJSONLine(line)
+		jsonStr, ok := ExtractSSEJSONLine(line)
 		if !ok {
 			continue
 		}
@@ -526,7 +526,7 @@ func responseItemCarriesSemanticContent(item map[string]interface{}) bool {
 func HasResponsesSemanticContent(event string) bool {
 	lines := strings.Split(event, "\n")
 	for _, line := range lines {
-		jsonStr, ok := extractSSEJSONLine(line)
+		jsonStr, ok := ExtractSSEJSONLine(line)
 		if !ok {
 			continue
 		}
@@ -1237,7 +1237,7 @@ func annotatePromptTokensTotalForProvider(provider providers.Provider, usage *ty
 // CheckEventUsageStatus 检测事件是否包含 usage 字段
 func CheckEventUsageStatus(event string, enableLog bool) (bool, bool, bool, CollectedUsageData) {
 	for _, line := range strings.Split(event, "\n") {
-		jsonStr, ok := extractSSEJSONLine(line)
+		jsonStr, ok := ExtractSSEJSONLine(line)
 		if !ok {
 			continue
 		}
@@ -1764,7 +1764,7 @@ func IsMessageDeltaEvent(event string) bool {
 		return true
 	}
 	for _, line := range strings.Split(event, "\n") {
-		jsonStr, ok := extractSSEJSONLine(line)
+		jsonStr, ok := ExtractSSEJSONLine(line)
 		if !ok {
 			continue
 		}
@@ -1783,7 +1783,7 @@ func IsMessageDeltaEvent(event string) bool {
 // 支持 message_start 事件的 message.usage.input_tokens 和顶层 usage.input_tokens
 func ExtractInputTokensFromEvent(event string) int {
 	for _, line := range strings.Split(event, "\n") {
-		jsonStr, ok := extractSSEJSONLine(line)
+		jsonStr, ok := ExtractSSEJSONLine(line)
 		if !ok {
 			continue
 		}
@@ -1815,7 +1815,7 @@ func ExtractInputTokensFromEvent(event string) int {
 // ExtractTextFromEvent 从 SSE 事件中提取文本内容
 func ExtractTextFromEvent(event string, buf *bytes.Buffer) {
 	for _, line := range strings.Split(event, "\n") {
-		jsonStr, ok := extractSSEJSONLine(line)
+		jsonStr, ok := ExtractSSEJSONLine(line)
 		if !ok {
 			continue
 		}
@@ -1847,7 +1847,7 @@ func ExtractTextFromEvent(event string, buf *bytes.Buffer) {
 // ExtractThinkingFromEvent 从 SSE 事件中提取 thinking 内容
 func ExtractThinkingFromEvent(event string, buf *bytes.Buffer) {
 	for _, line := range strings.Split(event, "\n") {
-		jsonStr, ok := extractSSEJSONLine(line)
+		jsonStr, ok := ExtractSSEJSONLine(line)
 		if !ok {
 			continue
 		}
@@ -1894,7 +1894,7 @@ func DetectStreamBlacklistError(event string) (reason string, message string) {
 
 	// 即使不是显式的 event: error，也检查 data 中的 type == "error"
 	for _, line := range strings.Split(event, "\n") {
-		jsonStr, ok := extractSSEJSONLine(line)
+		jsonStr, ok := ExtractSSEJSONLine(line)
 		if !ok {
 			continue
 		}
@@ -1992,7 +1992,7 @@ func truncateMsg(msg string) string {
 // extractSSEEventInfo 从 SSE 事件中提取事件类型、block 索引和 block 类型
 func extractSSEEventInfo(event string) (eventType string, blockIndex int, blockType string) {
 	for _, line := range strings.Split(event, "\n") {
-		jsonStr, ok := extractSSEJSONLine(line)
+		jsonStr, ok := ExtractSSEJSONLine(line)
 		if !ok {
 			continue
 		}
