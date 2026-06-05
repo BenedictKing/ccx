@@ -222,7 +222,11 @@ func (t *StreamToolCallTracker) ProcessClaudeEvent(event string) (bool, string) 
 				state.Name = name
 			}
 			if input, exists := contentBlock["input"]; exists && !IsMalformedToolArguments(input) {
-				if b, err := json.Marshal(input); err == nil {
+				// 跳过空对象占位符 {} — 实际参数通过后续 input_json_delta 事件追加
+				// 否则会导致 "{}" + partial_json = 非法 JSON（如 "{}{\"key\":\"val\"}"）
+				if m, ok := input.(map[string]interface{}); ok && len(m) == 0 {
+					// skip empty object
+				} else if b, err := json.Marshal(input); err == nil {
 					state.Arguments.Write(b)
 				}
 			}
