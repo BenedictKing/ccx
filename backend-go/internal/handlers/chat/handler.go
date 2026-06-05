@@ -1811,6 +1811,7 @@ func processClaudeChatStreamLine(c *gin.Context, flusher http.Flusher, model str
 			}
 		}
 		return
+	case "content_block_delta":
 		delta, ok := event["delta"].(map[string]interface{})
 		if !ok {
 			return
