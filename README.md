@@ -29,6 +29,10 @@ CCX is a high-performance AI API proxy and protocol translation gateway for Clau
 <td width="180"><a href="https://runapi.co/register?aff=CqQO"><img src="docs/sponsors/runapi.svg" alt="RunAPI" width="150"></a></td>
 <td>Thanks to <a href="https://runapi.co/register?aff=CqQO">RunAPI</a> for sponsoring this project! RunAPI is an efficient and stable API platform—an alternative to OpenRouter. A single API Key gives you access to 150+ leading models, including OpenAI, Claude, Gemini, DeepSeek, Grok, and more, at prices as low as 10% of the original (up to 90% off), with exceptional stability. It's seamlessly compatible with tools like Claude Code, OpenClaw, and others. RunAPI offers an exclusive perk for CCX users: register and contact an administrator to claim ¥7 in free credit.</td>
 </tr>
+<tr>
+<td width="180"><a href="https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=ccx"><img src="docs/sponsors/atlas-cloud-logo.png" alt="Atlas Cloud" width="150"></a></td>
+<td>Thanks to <a href="https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=ccx">Atlas Cloud</a> for sponsoring CCX! Atlas Cloud is a full-modal, OpenAI-compatible inference gateway — a single API key covers LLM (DeepSeek, Qwen, GLM, Kimi, MiniMax) and image/video generation (Seedance, Kling, Wan), which maps directly to the endpoints CCX proxies. Budget-friendly LLM access: <a href="https://www.atlascloud.ai/console/coding-plan">coding plan</a>. Full model catalog: <a href="https://www.atlascloud.ai/models">atlascloud.ai/models</a>.</td>
+</tr>
 </table>
 
 ## Screenshots
