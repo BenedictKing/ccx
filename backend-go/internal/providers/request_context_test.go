@@ -58,6 +58,42 @@ func TestClaudeProvider_ConvertToProviderRequest_PassbackConvertsRealThinking(t 
 	}
 }
 
+func TestClaudeProvider_ConvertToProviderRequest_ReasoningStyleAutoPassback(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	body := []byte(`{
+		"model": "kimi-k2.6",
+		"thinking": {"type": "enabled"},
+		"messages": [
+			{"role": "user", "content": [{"type": "text", "text": "read"}]},
+			{"role": "assistant", "content": [
+				{"type": "tool_use", "id": "toolu_1", "name": "Read", "input": {"file_path": "/tmp/a"}}
+			]},
+			{"role": "user", "content": [
+				{"type": "tool_result", "tool_use_id": "toolu_1", "content": "ok"}
+			]}
+		]
+	}`)
+	c := newGinContext(http.MethodPost, "/v1/messages", body, context.Background())
+	upstream := &config.UpstreamConfig{
+		BaseURL:             "https://api.kimi.com/coding",
+		ServiceType:         "claude",
+		ReasoningParamStyle: "reasoning",
+	}
+
+	p := &ClaudeProvider{}
+	_, reqBody, err := p.ConvertToProviderRequest(c, upstream, "sk-kimi-test")
+	if err != nil {
+		t.Fatalf("ConvertToProviderRequest() err = %v", err)
+	}
+	if !bytes.Contains(reqBody, []byte(`"reasoning_content":"`)) {
+		t.Fatalf("request body missing auto reasoning_content: %s", string(reqBody))
+	}
+	if !bytes.Contains(reqBody, []byte(`"type":"tool_use"`)) {
+		t.Fatalf("request body should keep tool_use block: %s", string(reqBody))
+	}
+}
+
 func TestConvertToProviderRequest_PropagatesContext(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

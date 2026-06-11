@@ -597,15 +597,16 @@ func (p *ClaudeProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 		bodyBytes = redirectModelInBody(bodyBytes, upstream)
 	}
 
-	if upstream.PassbackReasoningContent {
+	passbackReasoningContent := shouldPassbackReasoningContent(upstream)
+	if passbackReasoningContent {
 		bodyBytes = convertThinkingToReasoningContent(bodyBytes)
 	}
 	if upstream.PassbackThinkingBlocks {
-		bodyBytes = convertReasoningContentToThinkingBlocks(bodyBytes, upstream.PassbackReasoningContent)
+		bodyBytes = convertReasoningContentToThinkingBlocks(bodyBytes, passbackReasoningContent)
 	}
 	if upstream.StripEmptyTextBlocks {
 		bodyBytes = stripEmptyTextBlocksFromBody(bodyBytes)
-		if !upstream.PassbackReasoningContent && !upstream.PassbackThinkingBlocks {
+		if !passbackReasoningContent && !upstream.PassbackThinkingBlocks {
 			bodyBytes = stripThinkingBlocksFromBody(bodyBytes)
 		}
 	}
@@ -666,6 +667,21 @@ func (p *ClaudeProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 	utils.EnsureCompatibleUserAgent(req.Header, "claude")
 
 	return req, bodyBytes, nil
+}
+
+func shouldPassbackReasoningContent(upstream *config.UpstreamConfig) bool {
+	if upstream == nil {
+		return false
+	}
+	if upstream.PassbackReasoningContent {
+		return true
+	}
+	switch strings.TrimSpace(upstream.ReasoningParamStyle) {
+	case "reasoning", "thinking":
+		return true
+	default:
+		return false
+	}
 }
 
 // ConvertToClaudeResponse 转换为 Claude 响应（直接透传）
