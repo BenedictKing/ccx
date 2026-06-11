@@ -62,6 +62,10 @@ const (
 //
 // 注：函数名保留以维持向后兼容。
 func convertThinkingToReasoningContent(bodyBytes []byte) []byte {
+	return convertThinkingToReasoningContentWithOptions(bodyBytes, false)
+}
+
+func convertThinkingToReasoningContentWithOptions(bodyBytes []byte, synthesizeThinkingForToolUse bool) []byte {
 	decoder := json.NewDecoder(bytes.NewReader(bodyBytes))
 	decoder.UseNumber()
 
@@ -102,6 +106,8 @@ func convertThinkingToReasoningContent(bodyBytes []byte) []byte {
 		filteredContent := make([]interface{}, 0, len(content))
 		contentModified := false
 		reasoningParts := make([]string, 0, 1)
+		toolUseBlocks := make([]map[string]interface{}, 0, 1)
+		hasThinkingBlock := false
 		for _, block := range content {
 			blockMap, ok := block.(map[string]interface{})
 			if !ok {
@@ -111,6 +117,9 @@ func convertThinkingToReasoningContent(bodyBytes []byte) []byte {
 
 			blockType, _ := blockMap["type"].(string)
 			blockType = strings.TrimSpace(blockType)
+			if isAssistantToolUseBlock(blockType) {
+				toolUseBlocks = append(toolUseBlocks, blockMap)
+			}
 			thinking, _ := blockMap["thinking"].(string)
 			trimmedThinking := strings.TrimSpace(thinking)
 			if blockType == "thinking" {
@@ -123,6 +132,7 @@ func convertThinkingToReasoningContent(bodyBytes []byte) []byte {
 				// 为兼容上游思考回传校验，保留原始 thinking 文本，不做 trim 改写。
 				reasoningParts = append(reasoningParts, thinking)
 				// 保留真实 thinking block，避免部分上游按历史内容做一致性校验时报错。
+				hasThinkingBlock = true
 				filteredContent = append(filteredContent, blockMap)
 				continue
 			}
@@ -151,6 +161,29 @@ func convertThinkingToReasoningContent(bodyBytes []byte) []byte {
 			modified = true
 			msgMap["reasoning_content"] = legacyThinkingPlaceholder
 		}
+		finalReasoning, _ := msgMap["reasoning_content"].(string)
+		if strings.TrimSpace(finalReasoning) != "" {
+			for _, blockMap := range toolUseBlocks {
+				if blockReasoning, _ := blockMap["reasoning_content"].(string); blockReasoning == finalReasoning {
+					continue
+				}
+				blockMap["reasoning_content"] = finalReasoning
+				modified = true
+				contentModified = true
+			}
+		}
+		if synthesizeThinkingForToolUse && len(toolUseBlocks) > 0 && !hasThinkingBlock {
+			thinking := finalReasoning
+			if strings.TrimSpace(thinking) == "" {
+				thinking = legacyThinkingPlaceholder
+			}
+			filteredContent = append([]interface{}{map[string]interface{}{
+				"type":     "thinking",
+				"thinking": thinking,
+			}}, filteredContent...)
+			modified = true
+			contentModified = true
+		}
 
 		if len(filteredContent) == 0 {
 			modified = true
@@ -176,6 +209,15 @@ func convertThinkingToReasoningContent(bodyBytes []byte) []byte {
 		return bodyBytes
 	}
 	return newBytes
+}
+
+func isAssistantToolUseBlock(blockType string) bool {
+	switch strings.TrimSpace(blockType) {
+	case "tool_use", "server_tool_use":
+		return true
+	default:
+		return false
+	}
 }
 
 // convertReasoningContentToThinkingBlocks 将真实 reasoning_content 投影为 Claude thinking 块。
@@ -599,7 +641,7 @@ func (p *ClaudeProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 
 	passbackReasoningContent := shouldPassbackReasoningContent(upstream)
 	if passbackReasoningContent {
-		bodyBytes = convertThinkingToReasoningContent(bodyBytes)
+		bodyBytes = convertThinkingToReasoningContentWithOptions(bodyBytes, shouldSynthesizeThinkingForToolUse(upstream))
 	}
 	if upstream.PassbackThinkingBlocks {
 		bodyBytes = convertReasoningContentToThinkingBlocks(bodyBytes, passbackReasoningContent)
@@ -667,6 +709,18 @@ func (p *ClaudeProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 	utils.EnsureCompatibleUserAgent(req.Header, "claude")
 
 	return req, bodyBytes, nil
+}
+
+func shouldSynthesizeThinkingForToolUse(upstream *config.UpstreamConfig) bool {
+	if upstream == nil {
+		return false
+	}
+	if upstream.PassbackThinkingBlocks {
+		return true
+	}
+	baseURL := strings.ToLower(strings.TrimSpace(upstream.BaseURL))
+	name := strings.ToLower(strings.TrimSpace(upstream.Name))
+	return strings.Contains(baseURL, "api.kimi.com/coding") || (strings.Contains(name, "kimi") && strings.Contains(baseURL, "/coding"))
 }
 
 func shouldPassbackReasoningContent(upstream *config.UpstreamConfig) bool {

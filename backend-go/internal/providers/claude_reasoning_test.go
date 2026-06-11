@@ -211,7 +211,7 @@ func TestConvertThinkingToReasoningContent(t *testing.T) {
 						"reasoning_content": legacyThinkingPlaceholder,
 						"content": []interface{}{
 							map[string]interface{}{"type": "text", "text": "answer"},
-							map[string]interface{}{"type": "tool_use", "id": "toolu_1", "name": "Bash", "input": map[string]interface{}{"command": "pwd"}},
+							map[string]interface{}{"type": "tool_use", "id": "toolu_1", "name": "Bash", "input": map[string]interface{}{"command": "pwd"}, "reasoning_content": legacyThinkingPlaceholder},
 						},
 					},
 				},
@@ -400,7 +400,7 @@ func TestConvertThinkingToReasoningContent(t *testing.T) {
 						"role":              "assistant",
 						"reasoning_content": legacyThinkingPlaceholder,
 						"content": []interface{}{
-							map[string]interface{}{"type": "tool_use", "id": "call_x", "name": "Edit", "input": map[string]interface{}{"file_path": "a.go"}},
+							map[string]interface{}{"type": "tool_use", "id": "call_x", "name": "Edit", "input": map[string]interface{}{"file_path": "a.go"}, "reasoning_content": legacyThinkingPlaceholder},
 						},
 					},
 				},
@@ -416,7 +416,7 @@ func TestConvertThinkingToReasoningContent(t *testing.T) {
 						"role":              "assistant",
 						"reasoning_content": legacyThinkingPlaceholder,
 						"content": []interface{}{
-							map[string]interface{}{"type": "tool_use", "id": "call_y", "name": "Edit", "input": map[string]interface{}{"file_path": "b.go"}},
+							map[string]interface{}{"type": "tool_use", "id": "call_y", "name": "Edit", "input": map[string]interface{}{"file_path": "b.go"}, "reasoning_content": legacyThinkingPlaceholder},
 						},
 					},
 				},

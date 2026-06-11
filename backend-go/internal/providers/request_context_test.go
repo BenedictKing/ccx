@@ -92,6 +92,22 @@ func TestClaudeProvider_ConvertToProviderRequest_ReasoningStyleAutoPassback(t *t
 	if !bytes.Contains(reqBody, []byte(`"type":"tool_use"`)) {
 		t.Fatalf("request body should keep tool_use block: %s", string(reqBody))
 	}
+
+	var got map[string]interface{}
+	if err := json.Unmarshal(reqBody, &got); err != nil {
+		t.Fatalf("unmarshal request body: %v", err)
+	}
+	messages, _ := got["messages"].([]interface{})
+	assistant, _ := messages[1].(map[string]interface{})
+	content, _ := assistant["content"].([]interface{})
+	thinking, _ := content[0].(map[string]interface{})
+	if thinking["type"] != "thinking" || thinking["thinking"] != assistant["reasoning_content"] {
+		t.Fatalf("synthetic thinking block = %v, want thinking matching assistant reasoning_content %v", thinking, assistant["reasoning_content"])
+	}
+	toolUse, _ := content[1].(map[string]interface{})
+	if toolUse["reasoning_content"] != assistant["reasoning_content"] {
+		t.Fatalf("tool_use reasoning_content = %v, want assistant reasoning_content %v", toolUse["reasoning_content"], assistant["reasoning_content"])
+	}
 }
 
 func TestConvertToProviderRequest_PropagatesContext(t *testing.T) {
