@@ -23,8 +23,8 @@ compute_hash() {
     "$FRONTEND_DIR/bun.lock" \
     -type f 2>/dev/null \
     | sort \
-    | xargs shasum -a 256 2>/dev/null \
-    | shasum -a 256 \
+    | xargs sha256sum 2>/dev/null \
+    | sha256sum \
     | cut -d' ' -f1
 }
 

@@ -10,7 +10,7 @@ ARG TARGETARCH
 
 WORKDIR /src
 
-RUN apk add --no-cache git make libstdc++ libgcc
+RUN apk add --no-cache bash git make libstdc++ libgcc
 
 COPY --from=bun-runtime /usr/local/bin/bun /usr/local/bin/bun
 COPY --from=bun-runtime /usr/local/bin/bunx /usr/local/bin/bunx
@@ -29,6 +29,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 COPY Makefile ./
 COPY frontend/ ./frontend/
 COPY backend-go/ ./backend-go/
+COPY scripts/ ./scripts/
 COPY VERSION ./
 
 # 构建：交叉编译目标平台，利用 Go build cache
