@@ -730,12 +730,23 @@ func shouldPassbackReasoningContent(upstream *config.UpstreamConfig) bool {
 	if upstream.PassbackReasoningContent {
 		return true
 	}
+	if isKimiCodingUpstream(upstream) {
+		return false
+	}
 	switch strings.TrimSpace(upstream.ReasoningParamStyle) {
 	case "reasoning", "thinking":
 		return true
 	default:
 		return false
 	}
+}
+
+func isKimiCodingUpstream(upstream *config.UpstreamConfig) bool {
+	if upstream == nil {
+		return false
+	}
+	baseURL := strings.ToLower(strings.TrimSpace(upstream.BaseURL))
+	return strings.Contains(baseURL, "api.kimi.com/coding")
 }
 
 // ConvertToClaudeResponse 转换为 Claude 响应（直接透传）

@@ -62,6 +62,57 @@ func TestClaudeProvider_ConvertToProviderRequest_ReasoningStyleAutoPassback(t *t
 	gin.SetMode(gin.TestMode)
 
 	body := []byte(`{
+		"model": "mimo-v2.5-pro",
+		"thinking": {"type": "enabled"},
+		"messages": [
+			{"role": "user", "content": [{"type": "text", "text": "read"}]},
+			{"role": "assistant", "content": [
+				{"type": "tool_use", "id": "toolu_1", "name": "Read", "input": {"file_path": "/tmp/a"}}
+			]},
+			{"role": "user", "content": [
+				{"type": "tool_result", "tool_use_id": "toolu_1", "content": "ok"}
+			]}
+		]
+	}`)
+	c := newGinContext(http.MethodPost, "/v1/messages", body, context.Background())
+	upstream := &config.UpstreamConfig{
+		BaseURL:             "https://api.example.com",
+		ServiceType:         "claude",
+		ReasoningParamStyle: "reasoning",
+	}
+
+	p := &ClaudeProvider{}
+	_, reqBody, err := p.ConvertToProviderRequest(c, upstream, "sk-kimi-test")
+	if err != nil {
+		t.Fatalf("ConvertToProviderRequest() err = %v", err)
+	}
+
+	var got map[string]interface{}
+	if err := json.Unmarshal(reqBody, &got); err != nil {
+		t.Fatalf("unmarshal request body: %v", err)
+	}
+	messages, _ := got["messages"].([]interface{})
+	assistant, _ := messages[1].(map[string]interface{})
+	if _, ok := assistant["reasoning_content"]; !ok {
+		t.Fatalf("request body missing assistant.reasoning_content for generic reasoning upstream: %s", string(reqBody))
+	}
+	content, _ := assistant["content"].([]interface{})
+	found := false
+	for _, item := range content {
+		if block, ok := item.(map[string]interface{}); ok && block["type"] == "tool_use" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("request body should keep assistant tool_use block: %v", got["messages"])
+	}
+}
+
+func TestClaudeProvider_ConvertToProviderRequest_KimiCodingWithoutPassbackReasoning(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	body := []byte(`{
 		"model": "kimi-k2.6",
 		"thinking": {"type": "enabled"},
 		"messages": [
@@ -86,11 +137,54 @@ func TestClaudeProvider_ConvertToProviderRequest_ReasoningStyleAutoPassback(t *t
 	if err != nil {
 		t.Fatalf("ConvertToProviderRequest() err = %v", err)
 	}
-	if !bytes.Contains(reqBody, []byte(`"reasoning_content":"`)) {
-		t.Fatalf("request body missing auto reasoning_content: %s", string(reqBody))
+
+	var got map[string]interface{}
+	if err := json.Unmarshal(reqBody, &got); err != nil {
+		t.Fatalf("unmarshal request body: %v", err)
 	}
-	if !bytes.Contains(reqBody, []byte(`"type":"tool_use"`)) {
-		t.Fatalf("request body should keep tool_use block: %s", string(reqBody))
+	if _, ok := got["reasoning_content"]; ok {
+		t.Fatalf("request body should not include reasoning_content for /coding by default: %s", string(reqBody))
+	}
+	messages, _ := got["messages"].([]interface{})
+	assistant, _ := messages[1].(map[string]interface{})
+	if _, ok := assistant["reasoning_content"]; ok {
+		t.Fatalf("assistant message should not include reasoning_content for /coding by default: %s", string(reqBody))
+	}
+	content, _ := assistant["content"].([]interface{})
+	found := false
+	for _, item := range content {
+		if block, ok := item.(map[string]interface{}); ok && block["type"] == "tool_use" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("request body should keep assistant tool_use block: %v", got["messages"])
+	}
+}
+
+func TestClaudeProvider_ConvertToProviderRequest_ExplicitPassbackReasoningContent(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	body := []byte(`{
+		"model": "kimi-k2.6",
+		"messages": [
+			{"role": "assistant", "content": [
+				{"type": "tool_use", "id": "toolu_1", "name": "Edit", "input": {"file_path": "a.go"}}
+			]}
+		]
+	}`)
+	c := newGinContext(http.MethodPost, "/v1/messages", body, context.Background())
+	upstream := &config.UpstreamConfig{
+		BaseURL:                  "https://api.kimi.com/coding",
+		ServiceType:              "claude",
+		PassbackReasoningContent: true,
+	}
+
+	p := &ClaudeProvider{}
+	_, reqBody, err := p.ConvertToProviderRequest(c, upstream, "sk-kimi-test")
+	if err != nil {
+		t.Fatalf("ConvertToProviderRequest() err = %v", err)
 	}
 
 	var got map[string]interface{}
@@ -98,15 +192,23 @@ func TestClaudeProvider_ConvertToProviderRequest_ReasoningStyleAutoPassback(t *t
 		t.Fatalf("unmarshal request body: %v", err)
 	}
 	messages, _ := got["messages"].([]interface{})
-	assistant, _ := messages[1].(map[string]interface{})
-	content, _ := assistant["content"].([]interface{})
-	thinking, _ := content[0].(map[string]interface{})
-	if thinking["type"] != "thinking" || thinking["thinking"] != assistant["reasoning_content"] {
-		t.Fatalf("synthetic thinking block = %v, want thinking matching assistant reasoning_content %v", thinking, assistant["reasoning_content"])
+	if len(messages) == 0 {
+		t.Fatalf("request body messages empty")
 	}
-	toolUse, _ := content[1].(map[string]interface{})
-	if toolUse["reasoning_content"] != assistant["reasoning_content"] {
-		t.Fatalf("tool_use reasoning_content = %v, want assistant reasoning_content %v", toolUse["reasoning_content"], assistant["reasoning_content"])
+	assistant, _ := messages[0].(map[string]interface{})
+	if _, ok := assistant["reasoning_content"]; !ok {
+		t.Fatalf("explicit passback should add assistant.reasoning_content: %s", string(reqBody))
+	}
+	content, _ := assistant["content"].([]interface{})
+	found := false
+	for _, item := range content {
+		if block, ok := item.(map[string]interface{}); ok && block["type"] == "tool_use" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("request body should keep assistant tool_use block: %v", got["messages"])
 	}
 }
 
