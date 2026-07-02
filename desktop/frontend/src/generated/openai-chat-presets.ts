@@ -7,6 +7,8 @@ export interface OpenAIChatPreset {
   modelMapping: Record<string, string>
   reasoningMapping: Partial<Record<string, OpenAIChatReasoningEffort>>
   reasoningParamStyle: OpenAIChatReasoningParamStyle
+  serviceType?: 'openai' | 'gemini' | 'claude' | 'responses' | 'copilot'
+  authHeader: '' | 'auto' | 'bearer' | 'x-api-key'
   passbackReasoningContent: boolean
   passbackThinkingBlocks: boolean
   stripEmptyTextBlocks: boolean
@@ -24,6 +26,7 @@ export const openaiChatPresets: Record<string, OpenAIChatPreset> = {
     "modelMapping": {},
     "reasoningMapping": {},
     "reasoningParamStyle": "reasoning",
+    "authHeader": "",
     "passbackReasoningContent": false,
     "passbackThinkingBlocks": false,
     "stripEmptyTextBlocks": false,
@@ -38,6 +41,7 @@ export const openaiChatPresets: Record<string, OpenAIChatPreset> = {
     "modelMapping": {},
     "reasoningMapping": {},
     "reasoningParamStyle": "thinking",
+    "authHeader": "",
     "passbackReasoningContent": false,
     "passbackThinkingBlocks": false,
     "stripEmptyTextBlocks": false,
@@ -55,6 +59,7 @@ export const openaiChatPresets: Record<string, OpenAIChatPreset> = {
     "modelMapping": {},
     "reasoningMapping": {},
     "reasoningParamStyle": "reasoning",
+    "authHeader": "",
     "passbackReasoningContent": false,
     "passbackThinkingBlocks": false,
     "stripEmptyTextBlocks": false,
@@ -72,6 +77,7 @@ export const openaiChatPresets: Record<string, OpenAIChatPreset> = {
     "modelMapping": {},
     "reasoningMapping": {},
     "reasoningParamStyle": "",
+    "authHeader": "",
     "passbackReasoningContent": false,
     "passbackThinkingBlocks": false,
     "stripEmptyTextBlocks": false,
@@ -86,6 +92,7 @@ export const openaiChatPresets: Record<string, OpenAIChatPreset> = {
     "modelMapping": {},
     "reasoningMapping": {},
     "reasoningParamStyle": "",
+    "authHeader": "",
     "passbackReasoningContent": false,
     "passbackThinkingBlocks": false,
     "stripEmptyTextBlocks": false,
@@ -100,6 +107,7 @@ export const openaiChatPresets: Record<string, OpenAIChatPreset> = {
     "modelMapping": {},
     "reasoningMapping": {},
     "reasoningParamStyle": "",
+    "authHeader": "",
     "passbackReasoningContent": false,
     "passbackThinkingBlocks": false,
     "stripEmptyTextBlocks": false,
@@ -114,6 +122,7 @@ export const openaiChatPresets: Record<string, OpenAIChatPreset> = {
     "modelMapping": {},
     "reasoningMapping": {},
     "reasoningParamStyle": "",
+    "authHeader": "",
     "passbackReasoningContent": false,
     "passbackThinkingBlocks": false,
     "stripEmptyTextBlocks": false,
@@ -131,6 +140,7 @@ export const openaiChatPresets: Record<string, OpenAIChatPreset> = {
     "modelMapping": {},
     "reasoningMapping": {},
     "reasoningParamStyle": "",
+    "authHeader": "",
     "passbackReasoningContent": false,
     "passbackThinkingBlocks": false,
     "stripEmptyTextBlocks": false,
@@ -145,6 +155,7 @@ export const openaiChatPresets: Record<string, OpenAIChatPreset> = {
     "modelMapping": {},
     "reasoningMapping": {},
     "reasoningParamStyle": "",
+    "authHeader": "",
     "passbackReasoningContent": false,
     "passbackThinkingBlocks": false,
     "stripEmptyTextBlocks": false,
@@ -159,6 +170,7 @@ export const openaiChatPresets: Record<string, OpenAIChatPreset> = {
     "modelMapping": {},
     "reasoningMapping": {},
     "reasoningParamStyle": "",
+    "authHeader": "",
     "passbackReasoningContent": false,
     "passbackThinkingBlocks": false,
     "stripEmptyTextBlocks": false,
@@ -170,37 +182,62 @@ export const openaiChatPresets: Record<string, OpenAIChatPreset> = {
     "visionFallbackModel": ""
   },
   "opencode-zen": {
-    "modelMapping": {},
-    "reasoningMapping": {},
-    "reasoningParamStyle": "",
+    "modelMapping": {
+      "codex": "deepseek-v4-flash",
+      "gpt": "glm-5.2",
+      "mini": "deepseek-v4-flash"
+    },
+    "reasoningMapping": {
+      "codex": "high",
+      "gpt": "max",
+      "mini": "high"
+    },
+    "reasoningParamStyle": "reasoning",
+    "authHeader": "bearer",
     "passbackReasoningContent": false,
     "passbackThinkingBlocks": false,
     "stripEmptyTextBlocks": false,
     "normalizeSystemRoleToTopLevel": false,
     "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": false,
+    "normalizeNonstandardChatRoles": true,
     "noVision": false,
-    "noVisionModels": [],
-    "visionFallbackModel": ""
+    "noVisionModels": [
+      "glm-5.2",
+      "deepseek-v4-flash"
+    ],
+    "visionFallbackModel": "minimax-m3"
   },
   "opencode-go": {
-    "modelMapping": {},
-    "reasoningMapping": {},
-    "reasoningParamStyle": "",
+    "modelMapping": {
+      "codex": "deepseek-v4-flash",
+      "gpt": "glm-5.2",
+      "mini": "deepseek-v4-flash"
+    },
+    "reasoningMapping": {
+      "codex": "high",
+      "gpt": "max",
+      "mini": "high"
+    },
+    "reasoningParamStyle": "reasoning",
+    "authHeader": "bearer",
     "passbackReasoningContent": false,
     "passbackThinkingBlocks": false,
     "stripEmptyTextBlocks": false,
     "normalizeSystemRoleToTopLevel": false,
     "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": false,
+    "normalizeNonstandardChatRoles": true,
     "noVision": false,
-    "noVisionModels": [],
-    "visionFallbackModel": ""
+    "noVisionModels": [
+      "glm-5.2",
+      "deepseek-v4-flash"
+    ],
+    "visionFallbackModel": "minimax-m3"
   },
   "volc-ark": {
     "modelMapping": {},
     "reasoningMapping": {},
     "reasoningParamStyle": "",
+    "authHeader": "",
     "passbackReasoningContent": false,
     "passbackThinkingBlocks": false,
     "stripEmptyTextBlocks": false,
@@ -215,6 +252,7 @@ export const openaiChatPresets: Record<string, OpenAIChatPreset> = {
     "modelMapping": {},
     "reasoningMapping": {},
     "reasoningParamStyle": "",
+    "authHeader": "",
     "passbackReasoningContent": false,
     "passbackThinkingBlocks": false,
     "stripEmptyTextBlocks": false,
@@ -233,6 +271,7 @@ export const openaiChatPresets: Record<string, OpenAIChatPreset> = {
     },
     "reasoningMapping": {},
     "reasoningParamStyle": "",
+    "authHeader": "",
     "passbackReasoningContent": false,
     "passbackThinkingBlocks": false,
     "stripEmptyTextBlocks": false,

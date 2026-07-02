@@ -591,6 +591,31 @@ func TestPreflightStreamEvents_ThinkingDeltaOnlyIsEmpty(t *testing.T) {
 	}
 }
 
+func TestPreflightStreamEventsWithOptions_ThinkingDeltaOnlyNotEmpty(t *testing.T) {
+	events := []string{
+		"event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_test\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"deepseek-v4-flash\",\"usage\":{\"input_tokens\":100,\"output_tokens\":1}}}\n\n",
+		"event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"thinking\",\"thinking\":\"\"}}\n\n",
+		"event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"analysis\"}}\n\n",
+		"event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\n",
+		"event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n",
+	}
+
+	eventChan := make(chan string, len(events))
+	errChan := make(chan error)
+	for _, e := range events {
+		eventChan <- e
+	}
+	close(eventChan)
+	close(errChan)
+
+	result := PreflightStreamEventsWithOptions(eventChan, errChan, StreamPreflightTimeouts{}, StreamPreflightOptions{
+		TreatThinkingAsContent: true,
+	})
+	if result.IsEmpty {
+		t.Errorf("thinking-only response should be accepted when enabled, got IsEmpty=true")
+	}
+}
+
 func TestPreflightStreamEvents_ThinkingThenTextNotEmpty(t *testing.T) {
 	events := []string{
 		"event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_test\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"claude-sonnet-4-20250514\",\"usage\":{\"input_tokens\":100,\"output_tokens\":1}}}\n\n",

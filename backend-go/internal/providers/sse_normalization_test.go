@@ -102,6 +102,86 @@ func TestOpenAIProvider_HandleStreamResponse_AcceptsNoSpaceDataLines(t *testing.
 	}
 }
 
+func TestClaudeProvider_HandleStreamResponse_WrapsBareJSONLines(t *testing.T) {
+	body := strings.Join([]string{
+		`{}`,
+		`{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"hello"}}`,
+		`data: [DONE]`,
+		"",
+	}, "\n")
+
+	provider := &ClaudeProvider{}
+	eventChan, errChan, err := provider.HandleStreamResponse(io.NopCloser(strings.NewReader(body)))
+	if err != nil {
+		t.Fatalf("HandleStreamResponse returned error: %v", err)
+	}
+
+	events := collectStreamEvents(eventChan)
+	select {
+	case streamErr := <-errChan:
+		if streamErr != nil {
+			t.Fatalf("unexpected stream error: %v", streamErr)
+		}
+	default:
+	}
+
+	foundTextDelta := false
+	for _, event := range events {
+		if strings.Contains(event, `event: content_block_delta`) && strings.Contains(event, `"text":"hello"`) {
+			foundTextDelta = true
+			break
+		}
+	}
+	if !foundTextDelta {
+		t.Fatalf("expected bare JSON line to be wrapped as SSE data, got %v", events)
+	}
+}
+
+func TestClaudeProvider_HandleStreamResponse_CompletesBareDeltaStream(t *testing.T) {
+	body := strings.Join([]string{
+		`{}`,
+		`{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"hello"}}`,
+		`data: {"service_tier":"default","choices":[],"usage":{"prompt_tokens":5,"completion_tokens":1}}`,
+		`data: [DONE]`,
+		`event: ping`,
+		`data: {"type":"ping","cost":"0"}`,
+		"",
+	}, "\n")
+
+	provider := &ClaudeProvider{}
+	eventChan, errChan, err := provider.HandleStreamResponse(io.NopCloser(strings.NewReader(body)))
+	if err != nil {
+		t.Fatalf("HandleStreamResponse returned error: %v", err)
+	}
+
+	events := collectStreamEvents(eventChan)
+	select {
+	case streamErr := <-errChan:
+		if streamErr != nil {
+			t.Fatalf("unexpected stream error: %v", streamErr)
+		}
+	default:
+	}
+
+	joined := strings.Join(events, "\n")
+	for _, want := range []string{
+		`event: message_start`,
+		`"type":"message_start"`,
+		`event: content_block_start`,
+		`"type":"content_block_start"`,
+		`event: content_block_delta`,
+		`"text":"hello"`,
+		`event: content_block_stop`,
+		`event: message_delta`,
+		`"stop_reason":"end_turn"`,
+		`event: message_stop`,
+	} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("expected completed Claude SSE to contain %q, got %v", want, events)
+		}
+	}
+}
+
 func TestOpenAIProvider_HandleStreamResponse_MapsReasoningContentToThinkingDelta(t *testing.T) {
 	body := strings.Join([]string{
 		`data: {"id":"chatcmpl-1","model":"deepseek-v4-pro","choices":[{"delta":{"reasoning_content":"think"},"finish_reason":null}]}`,
@@ -246,6 +326,36 @@ func TestOpenAIProvider_ConvertToClaudeResponse_MapsVLLMReasoningToThinking(t *t
 	}
 	if claudeResp.Content[1].Type != "text" || claudeResp.Content[1].Text != "final answer" {
 		t.Fatalf("expected text block after thinking, got %#v", claudeResp.Content[1])
+	}
+}
+
+func TestClaudeProvider_ConvertToClaudeResponse_FillsRequiredFields(t *testing.T) {
+	provider := &ClaudeProvider{}
+	claudeResp, err := provider.ConvertToClaudeResponse(&types.ProviderResponse{
+		Body: []byte(`{
+			"role": "assistant",
+			"content": [
+				{"type": "text", "text": "ok"},
+				{"type": "tool_use", "id": "chatcmpl-tool-x", "name": "Agent", "input": {"description": "x", "prompt": "p", "subagent_type": "Explore"}}
+			],
+			"stop_reason": "tool_use",
+			"usage": {"input_tokens": 1, "output_tokens": 2}
+		}`),
+	})
+	if err != nil {
+		t.Fatalf("ConvertToClaudeResponse() error = %v", err)
+	}
+	if claudeResp.ID == "" {
+		t.Fatal("expected generated id")
+	}
+	if claudeResp.Type != "message" {
+		t.Fatalf("Type = %q, want message", claudeResp.Type)
+	}
+	if claudeResp.Role != "assistant" {
+		t.Fatalf("Role = %q, want assistant", claudeResp.Role)
+	}
+	if len(claudeResp.Content) != 2 || claudeResp.Content[1].Type != "tool_use" {
+		t.Fatalf("expected tool_use content to be preserved, got %#v", claudeResp.Content)
 	}
 }
 

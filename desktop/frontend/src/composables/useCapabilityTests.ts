@@ -111,18 +111,97 @@ function toRetryingCapabilityModel(modelResult: CapabilityModelJobResult): Capab
   }
 }
 
+function getCapabilityModelActual(modelResult: CapabilityModelJobResult): string {
+  return modelResult.actualModel || modelResult.model
+}
+
+function findCapabilityRedirectActual(test: CapabilityProtocolJobResult, model: string): string {
+  const modelResult = (test.modelResults ?? []).find(result => result.model === model)
+  return modelResult ? getCapabilityModelActual(modelResult) : model
+}
+
+function getCapabilityRedirectGroupModels(test: CapabilityProtocolJobResult, model: string): string[] {
+  const actualModel = findCapabilityRedirectActual(test, model)
+  const groupModels = (test.modelResults ?? [])
+    .filter(modelResult => getCapabilityModelActual(modelResult) === actualModel)
+    .map(modelResult => modelResult.model)
+  return groupModels.length > 0 ? groupModels : [model]
+}
+
+function getCapabilityModelEventTime(modelResult: CapabilityModelJobResult): number {
+  const timestamps = [modelResult.startedAt, modelResult.testedAt]
+    .map(value => value ? Date.parse(value) : Number.NaN)
+    .filter(Number.isFinite)
+  return timestamps.length > 0 ? Math.max(...timestamps) : 0
+}
+
+function getCapabilityModelStateWeight(modelResult: CapabilityModelJobResult): number {
+  if (modelResult.lifecycle === 'active' || modelResult.status === 'running') return 5
+  if (modelResult.lifecycle === 'pending' || modelResult.status === 'queued') return 4
+  if (modelResult.status === 'success' || modelResult.outcome === 'success') return 3
+  if (modelResult.status === 'failed' || modelResult.outcome === 'failed') return 2
+  if (modelResult.status === 'skipped' || modelResult.lifecycle === 'cancelled') return 1
+  return 0
+}
+
+function pickLatestCapabilityGroupResult(modelResults: CapabilityModelJobResult[]): CapabilityModelJobResult {
+  return modelResults.reduce((latest, candidate) => {
+    const latestTime = getCapabilityModelEventTime(latest)
+    const candidateTime = getCapabilityModelEventTime(candidate)
+    if (candidateTime !== latestTime) {
+      return candidateTime > latestTime ? candidate : latest
+    }
+    return getCapabilityModelStateWeight(candidate) > getCapabilityModelStateWeight(latest) ? candidate : latest
+  })
+}
+
+function applyCapabilityRedirectGroupState(test: CapabilityProtocolJobResult): CapabilityProtocolJobResult {
+  if (!test.protocol.includes('->') || !test.modelResults?.length) return test
+
+  const groupsByActual = new Map<string, CapabilityModelJobResult[]>()
+  for (const modelResult of test.modelResults) {
+    const actualModel = getCapabilityModelActual(modelResult)
+    groupsByActual.set(actualModel, [...(groupsByActual.get(actualModel) ?? []), modelResult])
+  }
+
+  const latestByActual = new Map<string, CapabilityModelJobResult>()
+  for (const [actualModel, groupResults] of groupsByActual.entries()) {
+    if (groupResults.length < 2 && !groupResults.some(result => result.actualModel && result.actualModel !== result.model)) continue
+    latestByActual.set(actualModel, pickLatestCapabilityGroupResult(groupResults))
+  }
+  if (latestByActual.size === 0) return test
+
+  const modelResults = test.modelResults.map(modelResult => {
+    const actualModel = getCapabilityModelActual(modelResult)
+    const latestResult = latestByActual.get(actualModel)
+    if (!latestResult) return modelResult
+    return {
+      ...latestResult,
+      model: modelResult.model,
+      actualModel: modelResult.actualModel || (actualModel !== modelResult.model ? actualModel : latestResult.actualModel),
+    }
+  })
+
+  return {
+    ...test,
+    modelResults,
+    attemptedModels: modelResults.filter(modelResult => (modelResult.status as string) !== 'idle').length,
+    successCount: modelResults.filter(modelResult => modelResult.status === 'success' || modelResult.outcome === 'success').length,
+  }
+}
+
 function markCapabilityModelRetrying(job: CapabilityTestJob, protocol: string, model: string): CapabilityTestJob {
   return {
     ...job,
     tests: job.tests.map(test => {
       if (test.protocol !== protocol) return test
-      let modelFound = false
+      const retryModels = new Set(getCapabilityRedirectGroupModels(test, model))
+      const existingModels = new Set((test.modelResults ?? []).map(modelResult => modelResult.model))
       const modelResults = (test.modelResults ?? []).map(modelResult => {
-        if (modelResult.model !== model) return modelResult
-        modelFound = true
+        if (!retryModels.has(modelResult.model)) return modelResult
         return toRetryingCapabilityModel(modelResult)
       })
-      if (!modelFound) {
+      if (!existingModels.has(model)) {
         modelResults.push(toRetryingCapabilityModel({
           model,
           status: 'idle',
@@ -134,7 +213,7 @@ function markCapabilityModelRetrying(job: CapabilityTestJob, protocol: string, m
           testedAt: new Date().toISOString(),
         }))
       }
-      return {
+      return applyCapabilityRedirectGroupState({
         ...test,
         status: 'running',
         lifecycle: 'active',
@@ -143,7 +222,7 @@ function markCapabilityModelRetrying(job: CapabilityTestJob, protocol: string, m
         error: undefined,
         reason: undefined,
         modelResults,
-      }
+      })
     }),
   }
 }
@@ -174,13 +253,13 @@ function mergeCapabilityProtocolResult(baseTest: CapabilityProtocolJobResult, in
   }
   const modelResults = Array.from(modelResultsByModel.values())
 
-  return {
+  return applyCapabilityRedirectGroupState({
     ...baseTest,
     ...incomingTest,
     modelResults,
     attemptedModels: modelResults.filter(modelResult => (modelResult.status as string) !== 'idle').length,
     successCount: modelResults.filter(modelResult => modelResult.status === 'success' || modelResult.outcome === 'success').length,
-  }
+  })
 }
 
 function normalizeCapabilityTests(tests: CapabilityProtocolJobResult[]): CapabilityProtocolJobResult[] {
@@ -392,6 +471,9 @@ function collectActiveJobIds(job: CapabilityTestJob | null): string[] {
       if (jobId) seen.add(jobId)
     }
   }
+  if (seen.size === 0 && job.jobId && job.tests.some(test => test.lifecycle === 'active' || test.lifecycle === 'pending')) {
+    seen.add(job.jobId)
+  }
   return Array.from(seen)
 }
 
@@ -435,13 +517,9 @@ export function useCapabilityTests() {
       if (resp.jobId) {
         startPolling(channelType, channelId, resp.jobId)
       }
-      // 也为协议子 job 启动轮询
-      const job = resp.job
-      if (job?.protocolJobRefs) {
-        for (const [, ref] of Object.entries(job.protocolJobRefs)) {
-          if (ref.jobId && ref.jobId !== resp.jobId) {
-            startPolling(channelType, channelId, ref.jobId)
-          }
+      if (activeJob.value && !isCapabilityJobTerminal(activeJob.value)) {
+        for (const activeJobId of collectActiveJobIds(activeJob.value)) {
+          startPolling(channelType, channelId, activeJobId)
         }
       }
       return resp
@@ -504,10 +582,15 @@ export function useCapabilityTests() {
     const job = await api.get<CapabilityTestJob>(
       `/api/${channelType}/channels/${channelId}/capability-test/${jobId}`,
     )
-    const baseJob = activeJob.value && activeJob.value.channelId === channelId
+    const baseJob = activeJob.value && activeJob.value.channelId === channelId && activeJob.value.channelKind === job.channelKind
       ? activeJob.value
       : buildCapabilityIdleJob(channelType, channelId, job.channelName || '')
     activeJob.value = mergeCapabilityJob(baseJob, job)
+    if (activeJob.value && !isCapabilityJobTerminal(activeJob.value)) {
+      for (const activeJobId of collectActiveJobIds(activeJob.value)) {
+        startPolling(channelType, channelId, activeJobId)
+      }
+    }
     if (job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled') {
       stopPoller(jobId)
     }
@@ -519,15 +602,22 @@ export function useCapabilityTests() {
   function startPolling(channelType: string, channelId: number, jobId: string) {
     if (pollers.has(jobId)) return
     polling.value = true
-    const timer = setInterval(async () => {
+    let inFlight = false
+    const pollOnce = async () => {
+      if (inFlight || !pollers.has(jobId)) return
+      inFlight = true
       try {
         await fetchJobStatus(channelType, channelId, jobId)
       } catch (e) {
         stopPoller(jobId)
         error.value = e instanceof Error ? e.message : String(e)
+      } finally {
+        inFlight = false
       }
-    }, POLL_INTERVAL)
+    }
+    const timer = setInterval(pollOnce, POLL_INTERVAL)
     pollers.set(jobId, timer)
+    void pollOnce()
   }
 
   function stopPoller(jobId: string) {
@@ -568,15 +658,10 @@ export function useCapabilityTests() {
       // 重取快照
       await fetchSnapshot(channelType, channelId, channelType)
       // 检查是否有其他活跃 job 需要继续轮询
-      if (snapshot.value?.protocolJobRefs) {
-        for (const [, ref] of Object.entries(snapshot.value.protocolJobRefs)) {
-          if (ref.jobId && ref.jobId !== jobId) {
-            const job = await api.get<CapabilityTestJob>(
-              `/api/${channelType}/channels/${channelId}/capability-test/${ref.jobId}`,
-            )
-            if (job.status === 'running' || job.status === 'queued') {
-              startPolling(channelType, channelId, ref.jobId)
-            }
+      if (activeJob.value) {
+        for (const activeJobId of collectActiveJobIds(activeJob.value)) {
+          if (activeJobId !== jobId) {
+            startPolling(channelType, channelId, activeJobId)
           }
         }
       }
@@ -599,11 +684,12 @@ export function useCapabilityTests() {
     protocol: string,
     model: string,
   ) {
+    const modelGroup = getRetryModelGroup(protocol, model)
     const jobId = activeJob.value?.protocolJobRefs?.[protocol]?.jobId ||
       activeJob.value?.protocolJobIds?.[protocol]
     if (!jobId) {
       // 没有 jobId 则启动一个只测该模型的协议测试
-      return startProtocolTest(channelType, channelId, protocol, [model])
+      return startProtocolTest(channelType, channelId, protocol, modelGroup)
     }
     if (activeJob.value) {
       activeJob.value = markCapabilityModelRetrying(activeJob.value, protocol, model)
@@ -615,7 +701,7 @@ export function useCapabilityTests() {
       )
     } catch (e) {
       if (e instanceof AdminApiError && e.status === 404) {
-        return startProtocolTest(channelType, channelId, protocol, [model])
+        return startProtocolTest(channelType, channelId, protocol, modelGroup)
       }
       throw e
     }
@@ -630,6 +716,12 @@ export function useCapabilityTests() {
       const subJobId = activeJob.value.protocolJobRefs[protocol].jobId
       if (subJobId !== jobId) startPolling(channelType, channelId, subJobId)
     }
+  }
+
+  function getRetryModelGroup(protocol: string, model: string): string[] {
+    const test = activeJob.value?.tests.find(test => test.protocol === protocol)
+    if (!test) return [model]
+    return getCapabilityRedirectGroupModels(test, model)
   }
 
   // ── Copy to Tab ──

@@ -361,50 +361,92 @@ func TestBuildPayload(t *testing.T) {
 			},
 		},
 		{
-			name:                "opencode zen messages",
+			name:                "opencode merged defaults to go messages",
 			req:                 CreateChannelRequest{Provider: ProviderOpenCodeZen, Target: TargetMessages, APIKey: "sk-test"},
-			wantBaseURL:         "https://opencode.ai/zen/v1/messages",
-			wantService:         "claude",
+			wantBaseURL:         "https://opencode.ai/zen/go/v1",
+			wantService:         "openai",
 			wantNormalizeSystem: true,
+			wantNoVisionModels:  []string{"glm-5.2", "deepseek-v4-flash"},
+			wantFallback:        "minimax-m3",
 			wantModelMap: map[string]string{
 				"fable":  "glm-5.2",
 				"haiku":  "deepseek-v4-flash",
 				"opus":   "glm-5.2",
-				"sonnet": "glm-5.2",
+				"sonnet": "minimax-m3",
 			},
 			wantReasoning: map[string]string{
-				"fable":  "max",
-				"haiku":  "high",
-				"opus":   "max",
-				"sonnet": "max",
+				"fable":      "max",
+				"haiku":      "high",
+				"minimax-m3": "max",
+				"opus":       "max",
+				"sonnet":     "max",
 			},
+			wantReasoningStyle: "reasoning",
+			wantAuthHeader:     "bearer",
+		},
+		{
+			name:                "opencode zen messages",
+			req:                 CreateChannelRequest{Provider: ProviderOpenCodeZen, Target: TargetMessages, PlanID: "openai-chat", APIKey: "sk-test"},
+			wantBaseURL:         "https://opencode.ai/zen/v1",
+			wantService:         "openai",
+			wantNormalizeSystem: true,
+			wantNoVisionModels:  []string{"glm-5.2", "deepseek-v4-flash"},
+			wantFallback:        "minimax-m3",
+			wantModelMap: map[string]string{
+				"fable":  "glm-5.2",
+				"haiku":  "deepseek-v4-flash",
+				"opus":   "glm-5.2",
+				"sonnet": "minimax-m3",
+			},
+			wantReasoning: map[string]string{
+				"fable":      "max",
+				"haiku":      "high",
+				"minimax-m3": "max",
+				"opus":       "max",
+				"sonnet":     "max",
+			},
+			wantReasoningStyle: "reasoning",
+			wantAuthHeader:     "bearer",
 		},
 		{
 			name:                "opencode go messages",
 			req:                 CreateChannelRequest{Provider: ProviderOpenCodeGo, Target: TargetMessages, APIKey: "sk-test"},
-			wantBaseURL:         "https://opencode.ai/zen/go/v1/messages",
-			wantService:         "claude",
+			wantBaseURL:         "https://opencode.ai/zen/go/v1",
+			wantService:         "openai",
 			wantNormalizeSystem: true,
+			wantNoVisionModels:  []string{"glm-5.2", "deepseek-v4-flash"},
+			wantFallback:        "minimax-m3",
 			wantModelMap: map[string]string{
 				"fable":  "glm-5.2",
 				"haiku":  "deepseek-v4-flash",
 				"opus":   "glm-5.2",
-				"sonnet": "glm-5.2",
+				"sonnet": "minimax-m3",
 			},
 			wantReasoning: map[string]string{
-				"fable":  "max",
-				"haiku":  "high",
-				"opus":   "max",
-				"sonnet": "max",
+				"fable":      "max",
+				"haiku":      "high",
+				"minimax-m3": "max",
+				"opus":       "max",
+				"sonnet":     "max",
 			},
-			wantAuthHeader: "x-api-key",
+			wantReasoningStyle: "reasoning",
+			wantAuthHeader:     "bearer",
 		},
 		{
 			name:          "opencode zen chat",
-			req:           CreateChannelRequest{Provider: ProviderOpenCodeZen, Target: TargetChat, APIKey: "sk-test"},
+			req:           CreateChannelRequest{Provider: ProviderOpenCodeZen, Target: TargetChat, PlanID: "openai-chat", APIKey: "sk-test"},
 			wantBaseURL:   "https://opencode.ai/zen/v1",
 			wantService:   "openai",
 			wantNormalize: true,
+			wantModelMap:  map[string]string{"codex": "deepseek-v4-flash", "gpt": "glm-5.2", "mini": "deepseek-v4-flash"},
+			wantReasoning: map[string]string{"codex": "high", "gpt": "max", "mini": "high"},
+			wantNoVisionModels: []string{
+				"glm-5.2",
+				"deepseek-v4-flash",
+			},
+			wantFallback:       "minimax-m3",
+			wantReasoningStyle: "reasoning",
+			wantAuthHeader:     "bearer",
 		},
 		{
 			name:          "opencode go chat",
@@ -412,16 +454,31 @@ func TestBuildPayload(t *testing.T) {
 			wantBaseURL:   "https://opencode.ai/zen/go/v1",
 			wantService:   "openai",
 			wantNormalize: true,
+			wantModelMap:  map[string]string{"codex": "deepseek-v4-flash", "gpt": "glm-5.2", "mini": "deepseek-v4-flash"},
+			wantReasoning: map[string]string{"codex": "high", "gpt": "max", "mini": "high"},
+			wantNoVisionModels: []string{
+				"glm-5.2",
+				"deepseek-v4-flash",
+			},
+			wantFallback:       "minimax-m3",
+			wantReasoningStyle: "reasoning",
+			wantAuthHeader:     "bearer",
 		},
 		{
 			name:           "opencode zen responses",
-			req:            CreateChannelRequest{Provider: ProviderOpenCodeZen, Target: TargetResponses, APIKey: "sk-test"},
+			req:            CreateChannelRequest{Provider: ProviderOpenCodeZen, Target: TargetResponses, PlanID: "openai-chat", APIKey: "sk-test"},
 			wantBaseURL:    "https://opencode.ai/zen/v1",
 			wantService:    "openai",
 			wantCodex:      true,
 			wantStripCodex: true,
 			wantModelMap:   map[string]string{"codex": "deepseek-v4-flash", "gpt": "glm-5.2", "mini": "deepseek-v4-flash"},
 			wantReasoning:  map[string]string{"codex": "high", "gpt": "max", "mini": "high"},
+			wantNoVisionModels: []string{
+				"glm-5.2",
+				"deepseek-v4-flash",
+			},
+			wantFallback:       "minimax-m3",
+			wantReasoningStyle: "reasoning",
 		},
 		{
 			name:           "opencode go responses",
@@ -432,6 +489,12 @@ func TestBuildPayload(t *testing.T) {
 			wantStripCodex: true,
 			wantModelMap:   map[string]string{"codex": "deepseek-v4-flash", "gpt": "glm-5.2", "mini": "deepseek-v4-flash"},
 			wantReasoning:  map[string]string{"codex": "high", "gpt": "max", "mini": "high"},
+			wantNoVisionModels: []string{
+				"glm-5.2",
+				"deepseek-v4-flash",
+			},
+			wantFallback:       "minimax-m3",
+			wantReasoningStyle: "reasoning",
 		},
 		{
 			name:           "kimi responses auto-review redirect",
@@ -749,6 +812,12 @@ func TestBestPlanForTarget(t *testing.T) {
 		{ProviderRunAPI, TargetMessages, "anthropic"},
 		{ProviderRunAPI, TargetChat, "openai-chat"},
 		{ProviderRunAPI, TargetResponses, "openai-chat"},
+		{ProviderOpenCodeZen, TargetMessages, "go-openai-chat"},
+		{ProviderOpenCodeZen, TargetChat, "go-openai-chat"},
+		{ProviderOpenCodeZen, TargetResponses, "go-openai-chat"},
+		{ProviderOpenCodeGo, TargetMessages, "openai-chat"},
+		{ProviderOpenCodeGo, TargetChat, "openai-chat"},
+		{ProviderOpenCodeGo, TargetResponses, "openai-chat"},
 		{ProviderXFyun, TargetMessages, "anthropic"},
 		{ProviderXFyun, TargetChat, "openai-chat"},
 		{ProviderXFyun, TargetResponses, "responses"},
@@ -834,6 +903,41 @@ func TestFilterPlansForTarget_XFyunCodingPlan(t *testing.T) {
 	responsesPlans := FilterPlansForTarget(preset, TargetResponses)
 	if !hasPlan(responsesPlans, "responses") || !hasPlan(responsesPlans, "openai-chat") || hasPlan(responsesPlans, "anthropic") {
 		t.Fatalf("responses plans should include Responses/OpenAI plans only: %#v", responsesPlans)
+	}
+}
+
+func TestFilterPlansForTarget_OpenCodeMessagesUsesChatUpstream(t *testing.T) {
+	hasPlan := func(plans []ProviderPlan, id string) bool {
+		return slices.ContainsFunc(plans, func(plan ProviderPlan) bool {
+			return plan.ID == id
+		})
+	}
+
+	zenPreset, ok := FindPreset(ProviderOpenCodeZen)
+	if !ok {
+		t.Fatalf("FindPreset(%s) failed", ProviderOpenCodeZen)
+	}
+	zenMessagesPlans := FilterPlansForTarget(zenPreset, TargetMessages)
+	if !hasPlan(zenMessagesPlans, "go-openai-chat") || !hasPlan(zenMessagesPlans, "openai-chat") {
+		t.Fatalf("zen messages plans should include Go and Zen Chat upstream plans: %#v", zenMessagesPlans)
+	}
+	if hasPlan(zenMessagesPlans, "anthropic") {
+		t.Fatalf("zen messages plans should not include Anthropic upstream: %#v", zenMessagesPlans)
+	}
+	if got := bestPlanForTarget(zenPreset, TargetMessages); got != "go-openai-chat" {
+		t.Fatalf("zen bestPlanForTarget(messages) = %q, want go-openai-chat", got)
+	}
+
+	goPreset, ok := FindPreset(ProviderOpenCodeGo)
+	if !ok {
+		t.Fatalf("FindPreset(%s) failed", ProviderOpenCodeGo)
+	}
+	goMessagesPlans := FilterPlansForTarget(goPreset, TargetMessages)
+	if len(goMessagesPlans) != 1 || goMessagesPlans[0].ID != "openai-chat" {
+		t.Fatalf("go messages plans = %#v, want only openai-chat", goMessagesPlans)
+	}
+	if got := bestPlanForTarget(goPreset, TargetMessages); got != "openai-chat" {
+		t.Fatalf("go bestPlanForTarget(messages) = %q, want openai-chat", got)
 	}
 }
 

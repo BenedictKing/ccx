@@ -4,10 +4,12 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/types"
@@ -786,12 +788,14 @@ func (p *ClaudeProvider) ConvertToClaudeResponse(providerResp *types.ProviderRes
 			if hasReasoningContent {
 				convertedBody := convertReasoningContentToThinking(providerResp.Body)
 				if err := json.Unmarshal(convertedBody, &claudeResp); err == nil {
+					normalizeClaudeResponse(&claudeResp)
 					return &claudeResp, nil
 				}
 			}
 		}
 	}
 
+	normalizeClaudeResponse(&claudeResp)
 	return &claudeResp, nil
 }
 
@@ -810,71 +814,21 @@ func (p *ClaudeProvider) HandleStreamResponse(body io.ReadCloser) (<-chan string
 		const maxScannerBufferSize = 1024 * 1024 // 1MB
 		scanner.Buffer(make([]byte, 0, 64*1024), maxScannerBufferSize)
 
-		toolUseStopEmitted := false
-
-		// 注意：为了让下游的 token 注入/修补逻辑保持正确，这里必须按「完整 SSE 事件」转发。
-		// 上游以空行分隔事件：event/data/id/retry/... + "\n"，空行 => 事件结束。
-		var eventBuf strings.Builder
-
-		flushEvent := func() {
-			if eventBuf.Len() == 0 {
-				return
-			}
-			eventChan <- eventBuf.String()
-			eventBuf.Reset()
-		}
+		normalizer := newClaudeStreamNormalizer(eventChan)
 
 		for scanner.Scan() {
 			line := normalizeSSEFieldLine(scanner.Text())
-
-			// 检测是否发送了 tool_use 相关的 stop_reason（通常在 data 行中）
-			if strings.Contains(line, `"stop_reason":"tool_use"`) ||
-				strings.Contains(line, `"stop_reason": "tool_use"`) {
-				toolUseStopEmitted = true
-			}
-
-			// 转换流式响应中的 reasoning_content → thinking（兼容 mimo 等上游）
-			if strings.HasPrefix(line, "data: ") && strings.Contains(line, `"reasoning_content"`) {
-				dataJSON := strings.TrimPrefix(line, "data: ")
-				if dataJSON != "[DONE]" {
-					var eventData map[string]interface{}
-					if err := json.Unmarshal([]byte(dataJSON), &eventData); err == nil {
-						// 检查是否包含 reasoning_content
-						if delta, ok := eventData["delta"].(map[string]interface{}); ok {
-							if reasoningContent, exists := delta["reasoning_content"].(string); exists && reasoningContent != "" {
-								// 将 reasoning_content 转为 thinking_delta
-								delta["type"] = "thinking_delta"
-								delta["thinking"] = reasoningContent
-								delete(delta, "reasoning_content")
-
-								// 重新序列化
-								if newJSON, err := json.Marshal(eventData); err == nil {
-									line = "data: " + string(newJSON)
-								}
-							}
-						}
-					}
-				}
-			}
-
-			// 透传所有 SSE 字段（包括注释、id、retry 等）
-			eventBuf.WriteString(line)
-			eventBuf.WriteString("\n")
-
-			// 空行表示一个 SSE event 结束
-			if line == "" {
-				flushEvent()
-			}
+			normalizer.handleLine(line)
 		}
 
 		// 若上游未以空行结尾，仍尝试把最后的残留事件发出去
-		flushEvent()
+		normalizer.finish()
 
 		if err := scanner.Err(); err != nil {
 			// 在 tool_use 场景下，客户端主动断开是正常行为
 			// 如果已经发送了 tool_use stop 事件，并且错误是连接断开相关的，则忽略该错误
 			errMsg := err.Error()
-			if toolUseStopEmitted && (strings.Contains(errMsg, "broken pipe") ||
+			if normalizer.toolUseStopEmitted && (strings.Contains(errMsg, "broken pipe") ||
 				strings.Contains(errMsg, "connection reset") ||
 				strings.Contains(errMsg, "EOF")) {
 				// 这是预期的客户端行为，不报告错误
@@ -885,4 +839,418 @@ func (p *ClaudeProvider) HandleStreamResponse(body io.ReadCloser) (<-chan string
 	}()
 
 	return eventChan, errChan, nil
+}
+
+func normalizeClaudeResponse(resp *types.ClaudeResponse) {
+	if resp == nil {
+		return
+	}
+	if resp.ID == "" {
+		resp.ID = generateID()
+	}
+	if resp.Type == "" {
+		resp.Type = "message"
+	}
+	if resp.Role == "" {
+		resp.Role = "assistant"
+	}
+	for i := range resp.Content {
+		if resp.Content[i].Type != "tool_use" {
+			continue
+		}
+		resp.Content[i].ID = normalizeClaudeToolUseID(resp.Content[i].ID, i)
+		if resp.Content[i].Input != nil {
+			resp.Content[i].Input = sanitizeClaudeToolInput(resp.Content[i].Name, resp.Content[i].Input)
+		}
+	}
+}
+
+func normalizeClaudeToolUseID(id string, index int) string {
+	if strings.HasPrefix(id, "toolu_") || strings.HasPrefix(id, "srvtoolu_") {
+		return id
+	}
+	return fmt.Sprintf("toolu_%d_%d", time.Now().UnixNano(), index)
+}
+
+type claudeStreamNormalizer struct {
+	eventChan          chan<- string
+	eventName          string
+	eventDataLines     []string
+	seenMessageStart   bool
+	seenMessageDelta   bool
+	seenMessageStop    bool
+	openTextBlock      map[int]bool
+	openToolBlock      map[int]bool
+	hasToolUse         bool
+	toolUseStopEmitted bool
+	finalUsage         map[string]interface{}
+	finalStopReason    string
+}
+
+func newClaudeStreamNormalizer(eventChan chan<- string) *claudeStreamNormalizer {
+	return &claudeStreamNormalizer{
+		eventChan:     eventChan,
+		openTextBlock: make(map[int]bool),
+		openToolBlock: make(map[int]bool),
+	}
+}
+
+func (n *claudeStreamNormalizer) handleLine(line string) {
+	if line == "" {
+		n.flushBufferedEvent()
+		return
+	}
+
+	trimmed := strings.TrimSpace(line)
+	if strings.HasPrefix(trimmed, "{") {
+		n.handleDataJSON(strings.TrimSpace(trimmed))
+		return
+	}
+
+	if strings.HasPrefix(line, "event: ") {
+		n.eventName = strings.TrimSpace(strings.TrimPrefix(line, "event: "))
+		return
+	}
+	if strings.HasPrefix(line, "data: ") {
+		n.eventDataLines = append(n.eventDataLines, strings.TrimSpace(strings.TrimPrefix(line, "data: ")))
+		return
+	}
+}
+
+func (n *claudeStreamNormalizer) finish() {
+	n.flushBufferedEvent()
+	n.emitSyntheticEnd("end_turn")
+}
+
+func (n *claudeStreamNormalizer) flushBufferedEvent() {
+	if len(n.eventDataLines) == 0 {
+		n.eventName = ""
+		return
+	}
+
+	for _, dataJSON := range n.eventDataLines {
+		n.handleDataJSON(dataJSON)
+	}
+	n.eventName = ""
+	n.eventDataLines = nil
+}
+
+func (n *claudeStreamNormalizer) handleDataJSON(dataJSON string) {
+	if dataJSON == "[DONE]" {
+		n.emitSyntheticEnd("end_turn")
+		return
+	}
+	var eventData map[string]interface{}
+	if err := json.Unmarshal([]byte(dataJSON), &eventData); err != nil {
+		n.emitRawData(dataJSON)
+		return
+	}
+
+	normalizedData := normalizeClaudeStreamData(eventData)
+	eventType, _ := eventData["type"].(string)
+	if eventType == "" {
+		n.collectUntypedUsage(eventData)
+		return
+	}
+	if eventType == "ping" {
+		return
+	}
+
+	switch eventType {
+	case "message_start":
+		normalizeClaudeMessageStartEvent(eventData)
+		normalizedData = normalizeClaudeStreamData(eventData)
+		n.seenMessageStart = true
+		n.emitDataEvent(n.eventName, normalizedData, eventType)
+	case "content_block_start":
+		n.ensureMessageStart("")
+		normalizeClaudeContentBlockStart(eventData)
+		normalizedData = normalizeClaudeStreamData(eventData)
+		index := intFromMap(eventData, "index")
+		block, _ := eventData["content_block"].(map[string]interface{})
+		switch blockType, _ := block["type"].(string); blockType {
+		case "text":
+			n.openTextBlock[index] = true
+		case "tool_use", "server_tool_use":
+			n.hasToolUse = true
+			n.openToolBlock[index] = true
+		}
+		n.emitDataEvent(n.eventName, normalizedData, eventType)
+	case "content_block_delta":
+		n.ensureMessageStart("")
+		index := intFromMap(eventData, "index")
+		delta, _ := eventData["delta"].(map[string]interface{})
+		switch deltaType, _ := delta["type"].(string); deltaType {
+		case "text_delta":
+			n.ensureTextBlock(index)
+		case "input_json_delta":
+			n.hasToolUse = true
+			n.ensureToolBlock(index)
+		}
+		n.emitDataEvent(n.eventName, normalizedData, eventType)
+	case "content_block_stop":
+		index := intFromMap(eventData, "index")
+		n.emitDataEvent(n.eventName, normalizedData, eventType)
+		delete(n.openTextBlock, index)
+		delete(n.openToolBlock, index)
+	case "message_delta":
+		n.seenMessageDelta = true
+		if usage, ok := eventData["usage"].(map[string]interface{}); ok {
+			n.finalUsage = usage
+		}
+		if delta, ok := eventData["delta"].(map[string]interface{}); ok {
+			if stopReason, _ := delta["stop_reason"].(string); stopReason != "" {
+				n.finalStopReason = stopReason
+			}
+			if stopReason, _ := delta["stop_reason"].(string); stopReason == "tool_use" || stopReason == "server_tool_use" {
+				n.hasToolUse = true
+				n.toolUseStopEmitted = true
+			}
+		}
+		n.emitDataEvent(n.eventName, normalizedData, eventType)
+	case "message_stop":
+		n.emitDataEvent(n.eventName, normalizedData, eventType)
+		n.seenMessageStop = true
+	default:
+		n.emitDataEvent(n.eventName, normalizedData, eventType)
+	}
+}
+
+func (n *claudeStreamNormalizer) ensureMessageStart(model string) {
+	if n.seenMessageStart {
+		return
+	}
+	n.emit("message_start", map[string]interface{}{
+		"type": "message_start",
+		"message": map[string]interface{}{
+			"id":      generateID(),
+			"type":    "message",
+			"role":    "assistant",
+			"model":   firstNonEmpty(model, "unknown"),
+			"content": []interface{}{},
+			"usage": map[string]int{
+				"input_tokens":  0,
+				"output_tokens": 0,
+			},
+		},
+	})
+	n.seenMessageStart = true
+}
+
+func (n *claudeStreamNormalizer) ensureTextBlock(index int) {
+	if n.openTextBlock[index] {
+		return
+	}
+	n.emit("content_block_start", map[string]interface{}{
+		"type":          "content_block_start",
+		"index":         index,
+		"content_block": map[string]interface{}{"type": "text", "text": ""},
+	})
+	n.openTextBlock[index] = true
+}
+
+func (n *claudeStreamNormalizer) ensureToolBlock(index int) {
+	if n.openToolBlock[index] {
+		return
+	}
+	n.hasToolUse = true
+	n.emit("content_block_start", map[string]interface{}{
+		"type":  "content_block_start",
+		"index": index,
+		"content_block": map[string]interface{}{
+			"type": "tool_use",
+			"id":   fmt.Sprintf("toolu_%d_%d", time.Now().UnixNano(), index),
+			"name": "unknown_function",
+		},
+	})
+	n.openToolBlock[index] = true
+}
+
+func (n *claudeStreamNormalizer) emitSyntheticEnd(stopReason string) {
+	if !n.seenMessageStart || n.seenMessageStop {
+		return
+	}
+
+	for index := range n.openTextBlock {
+		n.emit("content_block_stop", map[string]interface{}{
+			"type":  "content_block_stop",
+			"index": index,
+		})
+		delete(n.openTextBlock, index)
+	}
+	for index := range n.openToolBlock {
+		n.emit("content_block_stop", map[string]interface{}{
+			"type":  "content_block_stop",
+			"index": index,
+		})
+		delete(n.openToolBlock, index)
+	}
+
+	if stopReason == "" {
+		stopReason = n.finalStopReason
+	}
+	if stopReason == "" && n.hasToolUse {
+		stopReason = "tool_use"
+	}
+	if stopReason == "" {
+		stopReason = "end_turn"
+	}
+	if stopReason == "tool_use" || stopReason == "server_tool_use" {
+		n.toolUseStopEmitted = true
+	}
+	usage := n.finalUsage
+	if usage == nil {
+		usage = map[string]interface{}{"input_tokens": 0, "output_tokens": 0}
+	}
+	if !n.seenMessageDelta {
+		n.emit("message_delta", map[string]interface{}{
+			"type": "message_delta",
+			"delta": map[string]interface{}{
+				"stop_reason":   stopReason,
+				"stop_sequence": nil,
+				"stop_details":  nil,
+			},
+			"usage": usage,
+		})
+		n.seenMessageDelta = true
+	}
+	n.emit("message_stop", map[string]interface{}{
+		"type": "message_stop",
+	})
+	n.seenMessageStop = true
+}
+
+func (n *claudeStreamNormalizer) collectUntypedUsage(eventData map[string]interface{}) {
+	usage, _ := eventData["usage"].(map[string]interface{})
+	if usage == nil {
+		return
+	}
+	inputTokens := numericValue(usage["input_tokens"])
+	if inputTokens == 0 {
+		inputTokens = numericValue(usage["prompt_tokens"])
+	}
+	outputTokens := numericValue(usage["output_tokens"])
+	if outputTokens == 0 {
+		outputTokens = numericValue(usage["completion_tokens"])
+	}
+	if inputTokens == 0 && outputTokens == 0 {
+		return
+	}
+	n.finalUsage = map[string]interface{}{
+		"input_tokens":  inputTokens,
+		"output_tokens": outputTokens,
+	}
+}
+
+func (n *claudeStreamNormalizer) emit(event string, data map[string]interface{}) {
+	payload, _ := json.Marshal(data)
+	n.eventChan <- fmt.Sprintf("event: %s\ndata: %s\n\n", event, payload)
+}
+
+func (n *claudeStreamNormalizer) emitDataEvent(eventName, dataLine, fallbackEventName string) {
+	if dataLine == "" {
+		return
+	}
+	if eventName == "" {
+		eventName = fallbackEventName
+	}
+	if eventName == "" {
+		n.eventChan <- dataLine + "\n\n"
+		return
+	}
+	n.eventChan <- fmt.Sprintf("event: %s\n%s\n\n", eventName, dataLine)
+}
+
+func (n *claudeStreamNormalizer) emitRawData(dataJSON string) {
+	if n.eventName == "" {
+		n.eventChan <- "data: " + dataJSON + "\n\n"
+		return
+	}
+	n.eventChan <- fmt.Sprintf("event: %s\ndata: %s\n\n", n.eventName, dataJSON)
+}
+
+func normalizeClaudeStreamData(eventData map[string]interface{}) string {
+	if delta, ok := eventData["delta"].(map[string]interface{}); ok {
+		if reasoningContent, exists := delta["reasoning_content"].(string); exists && reasoningContent != "" {
+			delta["type"] = "thinking_delta"
+			delta["thinking"] = reasoningContent
+			delete(delta, "reasoning_content")
+		}
+	}
+
+	payload, err := json.Marshal(eventData)
+	if err != nil {
+		return ""
+	}
+	return "data: " + string(payload)
+}
+
+func normalizeClaudeMessageStartEvent(eventData map[string]interface{}) {
+	msg, ok := eventData["message"].(map[string]interface{})
+	if !ok {
+		return
+	}
+	if id, _ := msg["id"].(string); id == "" {
+		msg["id"] = generateID()
+	}
+	if msgType, _ := msg["type"].(string); msgType == "" {
+		msg["type"] = "message"
+	}
+	if role, _ := msg["role"].(string); role == "" {
+		msg["role"] = "assistant"
+	}
+	if _, ok := msg["content"]; !ok {
+		msg["content"] = []interface{}{}
+	}
+	if _, ok := msg["usage"]; !ok {
+		msg["usage"] = map[string]int{"input_tokens": 0, "output_tokens": 0}
+	}
+}
+
+func normalizeClaudeContentBlockStart(eventData map[string]interface{}) {
+	index := intFromMap(eventData, "index")
+	block, ok := eventData["content_block"].(map[string]interface{})
+	if !ok {
+		return
+	}
+	blockType, _ := block["type"].(string)
+	if blockType != "tool_use" && blockType != "server_tool_use" {
+		return
+	}
+	id, _ := block["id"].(string)
+	block["id"] = normalizeClaudeToolUseID(id, index)
+}
+
+func intFromMap(data map[string]interface{}, key string) int {
+	switch v := data[key].(type) {
+	case float64:
+		return int(v)
+	case int:
+		return v
+	default:
+		return 0
+	}
+}
+
+func numericValue(value interface{}) int {
+	switch v := value.(type) {
+	case float64:
+		return int(v)
+	case int:
+		return v
+	case json.Number:
+		i, _ := v.Int64()
+		return int(i)
+	default:
+		return 0
+	}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }

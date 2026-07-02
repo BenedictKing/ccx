@@ -126,6 +126,15 @@ if ($useStaticAssets) {
     }
 }
 
+$optionalAssetPatterns = @(
+    "Square44x44Logo.targetsize-*.png"
+)
+
+foreach ($pattern in $optionalAssetPatterns) {
+    Get-ChildItem -Path $staticAssetsDir -Filter $pattern -File -ErrorAction SilentlyContinue |
+        ForEach-Object { Copy-Item $_.FullName (Join-Path $assetsDir $_.Name) }
+}
+
 $manifest = Get-Content $templatePath -Raw
 $values = @{
     "{{PACKAGE_NAME}}" = Escape-Xml $PackageName

@@ -343,15 +343,15 @@ func Presets() []ProviderPreset {
 		{
 			ID:                  ProviderOpenCodeZen,
 			Order:               90,
-			Label:               "OpenCode Zen",
-			Description:         "OpenCode 官方精选 AI 编程模型网关，针对编程 Agent 深度优化，按量付费零加价。",
+			Label:               "OpenCode Zen / Go",
+			Description:         "OpenCode 官方精选 AI 编程模型网关，按量 Zen 与低成本 Go 订阅共用同一套模型预设。",
 			DirectAgent:         true,
 			NativeMessages:      true,
 			ChatCompatible:      true,
 			ResponsesCompatible: true,
 			Plans: []ProviderPlan{
-				{ID: "anthropic", Label: "Anthropic-compatible", BaseURL: "https://opencode.ai/zen/v1/messages", Description: "Claude Messages 原生入口", Recommended: true},
-				{ID: "openai-chat", Label: "OpenAI-compatible", BaseURL: "https://opencode.ai/zen/v1", Description: "Chat / Responses 通用入口"},
+				{ID: "go-openai-chat", Label: "Go (OpenAI-compatible)", BaseURL: "https://opencode.ai/zen/go/v1", Description: "订阅套餐入口，Messages 经 CCX 转 Chat 上游", Recommended: true},
+				{ID: "openai-chat", Label: "Zen (OpenAI-compatible)", BaseURL: "https://opencode.ai/zen/v1", Description: "按量付费入口，Messages 经 CCX 转 Chat 上游"},
 			},
 			Targets:       defaultTargets(),
 			DefaultTarget: TargetMessages,
@@ -366,8 +366,8 @@ func Presets() []ProviderPreset {
 			ChatCompatible:      true,
 			ResponsesCompatible: true,
 			Plans: []ProviderPlan{
-				{ID: "anthropic", Label: "Anthropic-compatible", BaseURL: "https://opencode.ai/zen/go/v1/messages", Description: "Claude Messages 原生入口", Recommended: true},
-				{ID: "openai-chat", Label: "OpenAI-compatible", BaseURL: "https://opencode.ai/zen/go/v1", Description: "Chat / Responses 通用入口"},
+				{ID: "anthropic", Label: "Anthropic-compatible", BaseURL: "https://opencode.ai/zen/go/v1", Description: "Claude Messages 原生入口"},
+				{ID: "openai-chat", Label: "OpenAI-compatible", BaseURL: "https://opencode.ai/zen/go/v1", Description: "Messages 经 CCX 转 Chat 上游，Chat / Responses 直连该入口", Recommended: true},
 			},
 			Targets:       defaultTargets(),
 			DefaultTarget: TargetMessages,
@@ -520,7 +520,7 @@ func BuildPayload(req CreateChannelRequest) (ChannelPayload, error) {
 	}
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
-		name = defaultChannelName(preset.ID, target)
+		name = defaultChannelNameForPlan(preset.ID, target, planID)
 	}
 	payload := ChannelPayload{
 		Name:        name,
@@ -602,6 +602,18 @@ func bestPlanForTarget(preset ProviderPreset, target string) string {
 	if len(preset.Plans) == 1 {
 		return preset.Plans[0].ID
 	}
+	if usesChatUpstreamForMessages(preset.ID) && target == TargetMessages {
+		for _, plan := range preset.Plans {
+			if !plan.Custom && plan.Recommended && isChatUpstreamPlan(plan) {
+				return plan.ID
+			}
+		}
+		for _, plan := range preset.Plans {
+			if isChatUpstreamPlan(plan) {
+				return plan.ID
+			}
+		}
+	}
 	if target == TargetResponses {
 		for _, plan := range preset.Plans {
 			if !plan.Custom && plan.Protocol() == "responses" {
@@ -640,6 +652,17 @@ func FilterPlansForTarget(preset ProviderPreset, target string) []ProviderPlan {
 	if len(plans) <= 1 {
 		return plans
 	}
+	if usesChatUpstreamForMessages(preset.ID) && target == TargetMessages {
+		filtered := make([]ProviderPlan, 0, len(plans))
+		for _, plan := range plans {
+			if plan.Custom || isChatUpstreamPlan(plan) {
+				filtered = append(filtered, plan)
+			}
+		}
+		if len(filtered) > 0 {
+			return filtered
+		}
+	}
 	var filtered []ProviderPlan
 	for _, plan := range plans {
 		if planCompatibleWithTarget(plan, target) {
@@ -650,6 +673,14 @@ func FilterPlansForTarget(preset ProviderPreset, target string) []ProviderPlan {
 		return plans
 	}
 	return filtered
+}
+
+func usesChatUpstreamForMessages(provider string) bool {
+	return provider == ProviderOpenCodeZen || provider == ProviderOpenCodeGo
+}
+
+func isChatUpstreamPlan(plan ProviderPlan) bool {
+	return plan.Protocol() == "openai"
 }
 
 func planCompatibleWithTarget(plan ProviderPlan, target string) bool {
@@ -721,8 +752,16 @@ func defaultChannelName(provider string, target string) string {
 	return fmt.Sprintf("desktop-%s-%s", provider, target)
 }
 
+func defaultChannelNameForPlan(provider string, target string, planID string) string {
+	if provider == ProviderOpenCodeZen && strings.HasPrefix(strings.TrimSpace(planID), "go-") {
+		return defaultChannelName(ProviderOpenCodeGo, target)
+	}
+	return defaultChannelName(provider, target)
+}
+
 type channelTargetConfig struct {
 	ServiceType                   string
+	AuthHeader                    string
 	ModelMapping                  map[string]string
 	ReasoningMapping              map[string]string
 	ReasoningParamStyle           string
@@ -796,6 +835,9 @@ func applyKimiPlanOverrides(config channelTargetConfig, target string, planID st
 func applyChannelTargetConfig(payload *ChannelPayload, config channelTargetConfig) {
 	if config.ServiceType != "" {
 		payload.ServiceType = config.ServiceType
+	}
+	if config.AuthHeader != "" {
+		payload.AuthHeader = config.AuthHeader
 	}
 	payload.ModelMapping = maps.Clone(config.ModelMapping)
 	payload.ReasoningMapping = maps.Clone(config.ReasoningMapping)

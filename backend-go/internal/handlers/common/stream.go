@@ -128,6 +128,10 @@ type StreamPreflightResult struct {
 	MalformedToolCallName string   // 畸形工具调用名称
 }
 
+type StreamPreflightOptions struct {
+	TreatThinkingAsContent bool
+}
+
 type StreamToolCallTracker struct {
 	active map[int]*StreamToolCallState
 }
@@ -146,6 +150,10 @@ type StreamToolCallState struct {
 //
 // timeouts 参数控制超时行为，0 表示禁用对应阶段。
 func PreflightStreamEvents(eventChan <-chan string, errChan <-chan error, timeouts StreamPreflightTimeouts, observers ...*StreamTimeoutObserver) *StreamPreflightResult {
+	return PreflightStreamEventsWithOptions(eventChan, errChan, timeouts, StreamPreflightOptions{}, observers...)
+}
+
+func PreflightStreamEventsWithOptions(eventChan <-chan string, errChan <-chan error, timeouts StreamPreflightTimeouts, options StreamPreflightOptions, observers ...*StreamTimeoutObserver) *StreamPreflightResult {
 	result := &StreamPreflightResult{}
 	var observer *StreamTimeoutObserver
 	if len(observers) > 0 {
@@ -190,7 +198,7 @@ func PreflightStreamEvents(eventChan <-chan string, errChan <-chan error, timeou
 						ErrStreamStalled, estimatePreflightTextTokens(textBuf.String()))
 					return result
 				}
-				result.IsEmpty = isEmptyStreamContent(textBuf.String(), thinkingBuf.String())
+				result.IsEmpty = isEmptyPreflightContent(textBuf.String(), thinkingBuf.String(), options)
 				result.UnknownEventType = unknownEventType
 				result.Diagnostic = buildClaudePreflightDiagnostic(seenEvent, seenMessageStop, seenUsageOnlyEvent, seenUnknownDataType, unknownEventType, textBuf.String(), thinkingBuf.String(), result.BufferedEvents)
 				return result
@@ -280,7 +288,7 @@ func PreflightStreamEvents(eventChan <-chan string, errChan <-chan error, timeou
 
 			outputText := textBuf.String()
 			// 检查是否有有效内容（非空且不是仅 "{"）
-			if !isEmptyStreamContent(outputText, thinkingBuf.String()) {
+			if !isEmptyPreflightContent(outputText, thinkingBuf.String(), options) {
 				if !hasFirstContent {
 					// 阶段A→阶段B：首次检测到有效文本内容
 					if observer != nil {
@@ -334,7 +342,7 @@ func PreflightStreamEvents(eventChan <-chan string, errChan <-chan error, timeou
 				if hasNonTextContent {
 					return result
 				}
-				result.IsEmpty = isEmptyStreamContent(textBuf.String(), thinkingBuf.String())
+				result.IsEmpty = isEmptyPreflightContent(textBuf.String(), thinkingBuf.String(), options)
 				result.UnknownEventType = unknownEventType
 				result.Diagnostic = buildClaudePreflightDiagnostic(seenEvent, true, seenUsageOnlyEvent, seenUnknownDataType, unknownEventType, textBuf.String(), thinkingBuf.String(), result.BufferedEvents)
 				return result
@@ -376,6 +384,13 @@ func PreflightStreamEvents(eventChan <-chan string, errChan <-chan error, timeou
 			return result
 		}
 	}
+}
+
+func isEmptyPreflightContent(text string, thinking string, options StreamPreflightOptions) bool {
+	if !IsEffectivelyEmptyStreamText(text) {
+		return false
+	}
+	return !options.TreatThinkingAsContent || IsEffectivelyEmptyStreamText(thinking)
 }
 
 func buildClaudePreflightDiagnostic(seenEvent, seenMessageStop, seenUsageOnlyEvent, seenUnknownDataType bool, unknownEventType string, text string, thinking string, events []string) string {

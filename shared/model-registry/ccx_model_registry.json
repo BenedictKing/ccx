@@ -199,6 +199,48 @@
       "sources": ["https://platform.sensenova.cn/docs"]
     },
     {
+      "patterns": ["(?:^|[-/])longcat-2\\.0(?=$|@)"],
+      "provider": "longcat",
+      "displayName": "LongCat-2.0",
+      "description": "LongCat API model available through OpenAI-compatible and Anthropic-compatible endpoints. Pricing uses the published limited-time discounted API pay-as-you-go rates.",
+      "pricing": {
+        "unit": "per_1m_tokens_cny",
+        "currency": "CNY",
+        "inputCacheHitPrice": 0.04,
+        "inputCacheMissPrice": 2,
+        "outputPrice": 8
+      },
+      "sources": [
+        "https://longcat.chat/platform/docs/zh/",
+        "https://longcat.chat/platform/docs/zh/api/models.html",
+        "https://longcat.chat/platform/docs/zh/Pricing/LongCat-2.0.html"
+      ]
+    },
+    {
+      "patterns": ["(?:^|[-/])step-3\\.7-flash(?=$|@)"],
+      "provider": "stepfun",
+      "displayName": "Step 3.7 Flash",
+      "description": "StepFun flagship multimodal reasoning model with native image/video input, tool calling, and three reasoning-effort levels.",
+      "contextWindowTokens": 262144,
+      "thinkingMode": "thinking",
+      "reasoningEfforts": ["low", "medium", "high"],
+      "capabilities": {
+        "vision": true,
+        "videoInput": true,
+        "toolCalls": true
+      },
+      "pricing": {
+        "inputCacheHitPrice": 0.04,
+        "inputCacheMissPrice": 0.2,
+        "outputPrice": 1.15
+      },
+      "sources": [
+        "https://platform.stepfun.ai/docs/en/guides/models/step-3.7-flash",
+        "https://platform.stepfun.ai/docs/en/guides/models/step-3.7-flash-quickstart",
+        "https://platform.stepfun.ai/docs/en/api-reference/chat/chat-completion-create"
+      ]
+    },
+    {
       "patterns": ["(?:^|[-/])qwen3\\.7-max(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)"],
       "provider": "dashscope",
       "displayName": "Qwen3.7 Max",

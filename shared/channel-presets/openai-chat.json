@@ -29,8 +29,40 @@
     },
     "minimax": {},
     "dashscope": {},
-    "opencode-zen": {},
-    "opencode-go": {},
+    "opencode-zen": {
+      "modelMapping": {
+        "codex": "deepseek-v4-flash",
+        "gpt": "glm-5.2",
+        "mini": "deepseek-v4-flash"
+      },
+      "reasoningMapping": {
+        "codex": "high",
+        "gpt": "max",
+        "mini": "high"
+      },
+      "reasoningParamStyle": "reasoning",
+      "authHeader": "bearer",
+      "normalizeNonstandardChatRoles": true,
+      "noVisionModels": ["glm-5.2", "deepseek-v4-flash"],
+      "visionFallbackModel": "minimax-m3"
+    },
+    "opencode-go": {
+      "modelMapping": {
+        "codex": "deepseek-v4-flash",
+        "gpt": "glm-5.2",
+        "mini": "deepseek-v4-flash"
+      },
+      "reasoningMapping": {
+        "codex": "high",
+        "gpt": "max",
+        "mini": "high"
+      },
+      "reasoningParamStyle": "reasoning",
+      "authHeader": "bearer",
+      "normalizeNonstandardChatRoles": true,
+      "noVisionModels": ["glm-5.2", "deepseek-v4-flash"],
+      "visionFallbackModel": "minimax-m3"
+    },
     "volc-ark": {
       "normalizeNonstandardChatRoles": true
     },

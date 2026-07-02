@@ -3,6 +3,7 @@
 ## 重要约定
 - **始终使用简体中文回复**。
 - 遵循 SOLID / KISS / DRY / YAGNI；优先修复根因，避免无关重构。
+- **禁止停止或杀掉本项目 3688 端口上的运行进程**；如需让代码生效，只能提示用户手动重启或使用用户明确指定的安全方式。
 - 修改文档时，优先以以下文件为事实源：`VERSION`、`Makefile`、`backend-go/Makefile`、`frontend/package.json`、`backend-go/main.go`。
 
 ## 项目概览

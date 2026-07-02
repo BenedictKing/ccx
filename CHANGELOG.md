@@ -1,3 +1,28 @@
+## [v2.9.27] - 2026-07-02
+
+### 新增
+
+- **渠道预设 maxTokens 支持** - desktop/preset: 渠道预设新增 maxTokens 字段并支持桌面端配置
+- **渠道 preset authHeader 字段** - preset: 渠道 preset 新增 authHeader 字段
+- **thinking-only 响应识别** - stream: preflight 支持 thinking-only 响应识别为有效内容
+- **订阅 Tab 优化与 preset 清理** - desktop: 订阅 Tab 优化与 preset channel_types 清理
+- **LongCat-2.0 与 Step 3.7 Flash 模型注册** - models: 新增 LongCat-2.0 与 Step 3.7 Flash 内置模型注册
+
+### 修复
+
+- **轮询立即触发并统一活跃 job 收集** - capability: 修复轮询调度延迟与活跃 job 收集逻辑
+- **兼容上游裸 JSON 行 SSE 流** - claude: 兼容上游裸 JSON 行 SSE 流
+
+### 重构
+
+- **ENV 字段移至服务器配置组** - desktop: 将 ENV 字段移至服务器配置组 PORT 之后
+- **SSE 流式规范化重构** - claude: 重构 SSE 流式规范化并补齐响应必需字段
+- **openai-code-v2 channel_types 移至测试层** - capability: 将 openai-code-v2 channel_types 移至测试层
+
+### 其他
+
+- **Windows MSIX 打包图标资源** - build: 添加 MSIX 打包所需多尺寸图标资源
+
 ## [v2.9.26] - 2026-07-01
 
 ### 新增

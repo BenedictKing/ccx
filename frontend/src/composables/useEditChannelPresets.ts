@@ -25,6 +25,7 @@ type FormLike = {
   codexToolCompat: boolean
   stripCodexClientTools: boolean
   normalizeNonstandardChatRoles: boolean
+  authHeader: 'auto' | 'bearer' | 'x-api-key' | ''
 }
 
 type EditChannelPresetOptions = {
@@ -83,6 +84,10 @@ export function useEditChannelPresets(options: EditChannelPresetOptions) {
     options.form.modelMapping = { ...presetConfig.modelMapping }
     options.form.reasoningMapping = { ...(presetConfig.reasoningMapping || {}) } as FormLike['reasoningMapping']
     options.form.reasoningParamStyle = presetConfig.reasoningParamStyle as FormLike['reasoningParamStyle']
+    if (presetConfig.serviceType) {
+      options.form.serviceType = presetConfig.serviceType as FormLike['serviceType']
+    }
+    options.form.authHeader = presetConfig.authHeader || 'auto'
     options.syncModelMappingRowsFromForm()
   }
 

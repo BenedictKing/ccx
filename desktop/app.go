@@ -518,10 +518,21 @@ func (s *DesktopService) savedProviderKeyForPlan(provider string, planID string)
 		return ""
 	}
 
+	assets := s.configService.GetProviderKeyAssets()
+	if key := savedProviderKeyForPlanFromAssets(assets, provider, planID); key != "" {
+		return key
+	}
+	if provider == channelpreset.ProviderOpenCodeZen {
+		return savedOpenCodeKeyForPlanFromAssets(assets, planID)
+	}
+	return ""
+}
+
+func savedProviderKeyForPlanFromAssets(assets []configservice.ProviderKeyAsset, provider string, planID string) string {
 	var legacyKey string
 	var firstKey string
 	hasPlanScopedAsset := false
-	for _, asset := range s.configService.GetProviderKeyAssets() {
+	for _, asset := range assets {
 		if asset.Provider != provider || strings.TrimSpace(asset.APIKey) == "" {
 			continue
 		}
@@ -551,6 +562,30 @@ func (s *DesktopService) savedProviderKeyForPlan(provider string, planID string)
 		return legacyKey
 	}
 	return firstKey
+}
+
+func savedOpenCodeKeyForPlanFromAssets(assets []configservice.ProviderKeyAsset, planID string) string {
+	if isOpenCodeGoChannelPlan(planID) {
+		if key := savedProviderKeyForPlanFromAssets(assets, channelpreset.ProviderOpenCodeGo, legacyOpenCodeGoPlanID(planID)); key != "" {
+			return key
+		}
+	}
+	if key := savedProviderKeyForPlanFromAssets(assets, channelpreset.ProviderOpenCodeZen, ""); key != "" {
+		return key
+	}
+	return savedProviderKeyForPlanFromAssets(assets, channelpreset.ProviderOpenCodeGo, "")
+}
+
+func isOpenCodeGoChannelPlan(planID string) bool {
+	return strings.HasPrefix(strings.TrimSpace(planID), "go-")
+}
+
+func legacyOpenCodeGoPlanID(planID string) string {
+	planID = strings.TrimSpace(planID)
+	if strings.HasPrefix(planID, "go-") {
+		return strings.TrimPrefix(planID, "go-")
+	}
+	return planID
 }
 
 func (s *DesktopService) putChannel(ctx context.Context, client *http.Client, baseURL, path string, body []byte, adminKey string) error {

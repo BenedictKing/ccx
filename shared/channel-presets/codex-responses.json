@@ -97,7 +97,10 @@
         "codex": "high",
         "gpt": "max",
         "mini": "high"
-      }
+      },
+      "reasoningParamStyle": "reasoning",
+      "noVisionModels": ["glm-5.2", "deepseek-v4-flash"],
+      "visionFallbackModel": "minimax-m3"
     },
     "opencode-go": {
       "modelMapping": {
@@ -109,7 +112,10 @@
         "codex": "high",
         "gpt": "max",
         "mini": "high"
-      }
+      },
+      "reasoningParamStyle": "reasoning",
+      "noVisionModels": ["glm-5.2", "deepseek-v4-flash"],
+      "visionFallbackModel": "minimax-m3"
     },
     "kimi": {
       "modelMapping": {

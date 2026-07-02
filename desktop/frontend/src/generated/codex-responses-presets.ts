@@ -162,15 +162,18 @@ export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
       "gpt": "max",
       "mini": "high"
     },
-    "reasoningParamStyle": "",
+    "reasoningParamStyle": "reasoning",
     "codexNativeToolPassthrough": false,
     "codexToolCompat": true,
     "stripCodexClientTools": true,
     "stripImageGenerationTool": false,
     "normalizeNonstandardChatRoles": false,
     "noVision": false,
-    "noVisionModels": [],
-    "visionFallbackModel": ""
+    "noVisionModels": [
+      "glm-5.2",
+      "deepseek-v4-flash"
+    ],
+    "visionFallbackModel": "minimax-m3"
   },
   "opencode-go": {
     "modelMapping": {
@@ -183,15 +186,18 @@ export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
       "gpt": "max",
       "mini": "high"
     },
-    "reasoningParamStyle": "",
+    "reasoningParamStyle": "reasoning",
     "codexNativeToolPassthrough": false,
     "codexToolCompat": true,
     "stripCodexClientTools": true,
     "stripImageGenerationTool": false,
     "normalizeNonstandardChatRoles": false,
     "noVision": false,
-    "noVisionModels": [],
-    "visionFallbackModel": ""
+    "noVisionModels": [
+      "glm-5.2",
+      "deepseek-v4-flash"
+    ],
+    "visionFallbackModel": "minimax-m3"
   },
   "kimi": {
     "modelMapping": {

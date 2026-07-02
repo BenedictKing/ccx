@@ -26,8 +26,9 @@ import (
 // ============== 缓存定义 ==============
 
 const (
-	capabilityCacheTTL    = 30 * time.Minute
-	capabilityCacheMaxTTL = 4 * time.Hour
+	capabilityCacheTTL       = 30 * time.Minute
+	capabilityCacheMaxTTL    = 4 * time.Hour
+	capabilityProbeMaxTokens = 1024
 )
 
 type capabilityCacheEntry struct {
@@ -239,7 +240,7 @@ func buildTestRequestWithModel(protocol string, channel *config.UpstreamConfig, 
 					{"role": "system", "content": "You are a helpful assistant."},
 					{"role": "user", "content": "What are you best at: code generation, creative writing, or math problem solving?"},
 				},
-				"max_tokens":       100,
+				"max_tokens":       capabilityProbeMaxTokens,
 				"stream":           true,
 				"reasoning_effort": capabilityProbeReasoningEffort(model, channel, globalCapabilities),
 			})
@@ -259,7 +260,7 @@ func buildTestRequestWithModel(protocol string, channel *config.UpstreamConfig, 
 					"parts": []map[string]string{{"text": "You are Gemini CLI, an interactive CLI agent specializing in software engineering tasks."}},
 				},
 				"generationConfig": map[string]interface{}{
-					"maxOutputTokens": 100,
+					"maxOutputTokens": capabilityProbeMaxTokens,
 					"thinkingConfig": map[string]interface{}{
 						"thinkingLevel": capabilityProbeReasoningEffort(model, channel, globalCapabilities),
 					},
@@ -273,7 +274,7 @@ func buildTestRequestWithModel(protocol string, channel *config.UpstreamConfig, 
 				"model":             model,
 				"input":             "What are you best at: code generation, creative writing, or math problem solving?",
 				"instructions":      "You are Codex, a coding agent based on GPT-5.",
-				"max_output_tokens": 100,
+				"max_output_tokens": capabilityProbeMaxTokens,
 				"stream":            true,
 				"reasoning": map[string]interface{}{
 					"effort": capabilityProbeReasoningEffort(model, channel, globalCapabilities),
@@ -447,7 +448,9 @@ func sendAndCheckStream(ctx context.Context, channel *config.UpstreamConfig, req
 	doneCh := make(chan streamResult, 1)
 
 	go func() {
-		preflight := common.PreflightStreamEvents(eventChan, errChan, common.StreamPreflightTimeouts{})
+		preflight := common.PreflightStreamEventsWithOptions(eventChan, errChan, common.StreamPreflightTimeouts{}, common.StreamPreflightOptions{
+			TreatThinkingAsContent: true,
+		})
 		if preflight.HasError {
 			doneCh <- streamResult{err: preflight.Error}
 			return

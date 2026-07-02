@@ -19,6 +19,50 @@ func TestBuildChatProbeBody_ReasoningEffortUsesProviderCompatibleValue(t *testin
 	}
 }
 
+func TestBuildProbeBodiesUseExpandedTokenBudget(t *testing.T) {
+	tests := []struct {
+		name string
+		body []byte
+		get  func(map[string]interface{}) interface{}
+	}{
+		{
+			name: "messages",
+			body: buildMessagesProbeBody("test-model", nil),
+			get:  func(body map[string]interface{}) interface{} { return body["max_tokens"] },
+		},
+		{
+			name: "chat",
+			body: buildChatProbeBody("test-model", nil),
+			get:  func(body map[string]interface{}) interface{} { return body["max_tokens"] },
+		},
+		{
+			name: "responses",
+			body: buildResponsesProbeBody("test-model", nil),
+			get:  func(body map[string]interface{}) interface{} { return body["max_output_tokens"] },
+		},
+		{
+			name: "gemini",
+			body: buildGeminiProbeBody("test-model", nil),
+			get: func(body map[string]interface{}) interface{} {
+				generationConfig, _ := body["generationConfig"].(map[string]interface{})
+				return generationConfig["maxOutputTokens"]
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var body map[string]interface{}
+			if err := json.Unmarshal(tt.body, &body); err != nil {
+				t.Fatalf("unmarshal body failed: %v", err)
+			}
+			if got := tt.get(body); got != float64(capabilityProbeMaxTokens) {
+				t.Fatalf("max tokens=%v, want %d", got, capabilityProbeMaxTokens)
+			}
+		})
+	}
+}
+
 func TestBuildChatProbeBody_KimiK27CodeUsesRequiredReasoningEffort(t *testing.T) {
 	bodyBytes := buildChatProbeBody("kimi-k2.7-code", nil)
 

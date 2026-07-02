@@ -60,11 +60,11 @@ const envGroups = computed<EnvGroup[]>(() => [
     description: t('env.groupServerDesc'),
     fields: [
       { key: 'PORT', label: t('env.fieldPort'), type: 'number' as const, defaultValue: '3688', min: 1, max: 65535, description: t('env.descPort') },
+      { key: 'ENV', label: t('env.fieldEnv'), type: 'select' as const, defaultValue: 'production', options: [{ label: 'production', value: 'production' }, { label: 'development', value: 'development' }], description: t('env.descEnv') },
       { key: 'ENABLE_HTTPS', label: t('env.fieldEnableHttps'), type: 'select' as const, defaultValue: 'false', options: booleanOptions, description: t('env.descEnableHttps') },
       { key: 'TLS_AUTO_CERT', label: t('env.fieldTlsAutoCert'), type: 'select' as const, defaultValue: 'true', options: booleanOptions, description: t('env.descTlsAutoCert') },
       { key: 'TLS_CERT_FILE', label: t('env.fieldTlsCertFile'), type: 'text' as const, defaultValue: '', placeholder: t('env.placeholderTlsCertFile'), description: t('env.descTlsCertFile') },
       { key: 'TLS_KEY_FILE', label: t('env.fieldTlsKeyFile'), type: 'text' as const, defaultValue: '', placeholder: t('env.placeholderTlsKeyFile'), description: t('env.descTlsKeyFile') },
-      { key: 'ENV', label: t('env.fieldEnv'), type: 'select' as const, defaultValue: 'production', options: [{ label: 'production', value: 'production' }, { label: 'development', value: 'development' }], description: t('env.descEnv') },
     ],
   },
   {

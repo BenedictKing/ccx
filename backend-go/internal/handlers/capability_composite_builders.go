@@ -58,7 +58,7 @@ func buildMessagesProbeBody(probeModel string, global map[string]config.Upstream
 			},
 		},
 		"messages":   []map[string]string{{"role": "user", "content": "What are you best at: code generation, creative writing, or math problem solving?"}},
-		"max_tokens": 100,
+		"max_tokens": capabilityProbeMaxTokens,
 		"stream":     true,
 		"thinking": map[string]interface{}{
 			"type": "disabled",
@@ -98,7 +98,7 @@ func buildChatProbeBody(probeModel string, global map[string]config.UpstreamMode
 			{"role": "system", "content": "You are a helpful assistant."},
 			{"role": "user", "content": "What are you best at: code generation, creative writing, or math problem solving?"},
 		},
-		"max_tokens":       100,
+		"max_tokens":       capabilityProbeMaxTokens,
 		"stream":           true,
 		"reasoning_effort": capabilityProbeReasoningEffort(probeModel, firstCapabilityProbeChannel(channel), global),
 	})
@@ -117,7 +117,7 @@ func buildResponsesProbeBody(probeModel string, global map[string]config.Upstrea
 				},
 			},
 		},
-		"max_output_tokens": 100,
+		"max_output_tokens": capabilityProbeMaxTokens,
 		"stream":            true,
 		"reasoning": map[string]interface{}{
 			"effort": capabilityProbeReasoningEffort(probeModel, firstCapabilityProbeChannel(channel), global),
@@ -138,7 +138,7 @@ func buildGeminiProbeBody(probeModel string, global map[string]config.UpstreamMo
 			},
 		},
 		"generationConfig": map[string]interface{}{
-			"maxOutputTokens": 100,
+			"maxOutputTokens": capabilityProbeMaxTokens,
 			"thinkingConfig": map[string]interface{}{
 				"thinkingLevel": capabilityProbeReasoningEffort(probeModel, firstCapabilityProbeChannel(channel), global),
 			},

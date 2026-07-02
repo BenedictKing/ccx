@@ -168,6 +168,73 @@ func TestResolveUpstreamCapability_Qwen37MaxBuiltin(t *testing.T) {
 	assertFloatPointerValue(t, pricing.OutputPrice, 36, "Pricing.OutputPrice")
 }
 
+func TestResolveUpstreamCapability_LongCat20Builtin(t *testing.T) {
+	upstream := &UpstreamConfig{
+		ModelMapping: map[string]string{
+			"agent": "LongCat-2.0",
+		},
+	}
+
+	resolved := ResolveUpstreamCapability("agent", upstream, nil)
+	if !resolved.Known || resolved.Source != "builtin" {
+		t.Fatalf("source = %q known=%v, want builtin known", resolved.Source, resolved.Known)
+	}
+	if resolved.Capability.Provider != "longcat" {
+		t.Fatalf("Provider = %q, want longcat", resolved.Capability.Provider)
+	}
+	pricing := resolved.Capability.Pricing
+	if pricing == nil {
+		t.Fatal("Pricing = nil, want LongCat-2.0 pricing")
+	}
+	if pricing.Currency != "CNY" {
+		t.Fatalf("Pricing.Currency = %q, want CNY", pricing.Currency)
+	}
+	assertFloatPointerValue(t, pricing.InputCacheHitPrice, 0.04, "Pricing.InputCacheHitPrice")
+	assertFloatPointerValue(t, pricing.InputCacheMissPrice, 2, "Pricing.InputCacheMissPrice")
+	assertFloatPointerValue(t, pricing.OutputPrice, 8, "Pricing.OutputPrice")
+}
+
+func TestResolveUpstreamCapability_Step37FlashBuiltin(t *testing.T) {
+	upstream := &UpstreamConfig{
+		ModelMapping: map[string]string{
+			"agent": "step-3.7-flash",
+		},
+	}
+
+	resolved := ResolveUpstreamCapability("agent", upstream, nil)
+	if !resolved.Known || resolved.Source != "builtin" {
+		t.Fatalf("source = %q known=%v, want builtin known", resolved.Source, resolved.Known)
+	}
+	if resolved.Capability.Provider != "stepfun" {
+		t.Fatalf("Provider = %q, want stepfun", resolved.Capability.Provider)
+	}
+	if resolved.Capability.ContextWindowTokens != 262144 {
+		t.Fatalf("ContextWindowTokens = %d, want 262144", resolved.Capability.ContextWindowTokens)
+	}
+	if resolved.Capability.ThinkingMode != "thinking" {
+		t.Fatalf("ThinkingMode = %q, want thinking", resolved.Capability.ThinkingMode)
+	}
+	if !containsString(resolved.Capability.ReasoningEfforts, "medium") {
+		t.Fatalf("ReasoningEfforts = %v, want medium", resolved.Capability.ReasoningEfforts)
+	}
+	if !resolved.Capability.Capabilities["vision"] {
+		t.Fatal("step-3.7-flash should advertise vision")
+	}
+	if !resolved.Capability.Capabilities["videoInput"] {
+		t.Fatal("step-3.7-flash should advertise videoInput")
+	}
+	if !resolved.Capability.Capabilities["toolCalls"] {
+		t.Fatal("step-3.7-flash should advertise toolCalls")
+	}
+	pricing := resolved.Capability.Pricing
+	if pricing == nil {
+		t.Fatal("Pricing = nil, want step-3.7-flash pricing")
+	}
+	assertFloatPointerValue(t, pricing.InputCacheHitPrice, 0.04, "Pricing.InputCacheHitPrice")
+	assertFloatPointerValue(t, pricing.InputCacheMissPrice, 0.2, "Pricing.InputCacheMissPrice")
+	assertFloatPointerValue(t, pricing.OutputPrice, 1.15, "Pricing.OutputPrice")
+}
+
 func TestResolveUpstreamCapability_GPT56BedrockBuiltin(t *testing.T) {
 	upstream := &UpstreamConfig{
 		ModelMapping: map[string]string{

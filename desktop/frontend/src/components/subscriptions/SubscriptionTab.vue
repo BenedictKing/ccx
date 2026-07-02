@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { Check, CheckCircle2, Copy, Github, Loader2, ShieldCheck, Trash2, X } from 'lucide-vue-next'
+import { Check, CheckCircle2, Copy, Loader2, ShieldCheck, Trash2, X } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -322,51 +322,41 @@ onMounted(() => {
           ]"
           @click="selectedSubscription = 'github-copilot'"
         >
-          <div class="flex items-start gap-3">
-            <div class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-secondary ring-1 ring-border">
-              <Github class="h-4 w-4 text-foreground" />
+          <div class="min-w-0">
+            <div class="flex items-center justify-between gap-2">
+              <span class="font-semibold text-foreground">GitHub Copilot</span>
+              <span
+                v-if="copilotOAuthSuccess || hasSavedCopilotAuthorization || copilotTotalAccountCount > 0"
+                class="rounded border border-emerald-500/20 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-700 dark:text-emerald-400"
+              >
+                {{ t('subscription.authorized') }}
+              </span>
             </div>
-            <div class="min-w-0 flex-1">
-              <div class="flex items-center justify-between gap-2">
-                <span class="font-semibold text-foreground">GitHub Copilot</span>
-                <span
-                  v-if="copilotOAuthSuccess || hasSavedCopilotAuthorization || copilotTotalAccountCount > 0"
-                  class="rounded border border-emerald-500/20 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-700 dark:text-emerald-400"
-                >
-                  {{ t('subscription.authorized') }}
-                </span>
-              </div>
-              <p class="mt-1 truncate text-xs text-muted-foreground">{{ t('subscription.copilotDescription') }}</p>
-              <p v-if="copilotTotalAccountCount > 0" class="mt-1 text-[11px] text-emerald-700 dark:text-emerald-400">
-                {{ t('subscription.accountCountShort', { count: String(copilotTotalAccountCount) }) }}
-              </p>
-            </div>
+            <p class="mt-1 truncate text-xs text-muted-foreground">{{ t('subscription.copilotDescription') }}</p>
+            <p v-if="copilotTotalAccountCount > 0" class="mt-1 text-[11px] text-emerald-700 dark:text-emerald-400">
+              {{ t('subscription.accountCountShort', { count: String(copilotTotalAccountCount) }) }}
+            </p>
           </div>
         </button>
       </div>
 
       <section class="bg-glass dark:bg-glass-dark border border-border rounded-2xl p-5 space-y-5 md:min-h-0 md:overflow-y-auto md:overscroll-contain">
         <div class="space-y-3">
-          <div class="flex items-start gap-3">
-            <div class="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-secondary ring-1 ring-border">
-              <Github class="h-5 w-5 text-foreground" />
+          <div class="min-w-0">
+            <div class="flex flex-wrap items-center gap-2">
+              <h4 class="text-base font-semibold text-foreground">GitHub Copilot</h4>
+              <span class="rounded-full border border-blue-500/20 bg-blue-500/10 px-2 py-0.5 text-[10px] text-blue-700 dark:text-blue-300">
+                {{ selectedCopilotTargetOption.label }}
+              </span>
+              <span
+                v-if="copilotOAuthSuccess || hasSavedCopilotAuthorization || accountCount > 0"
+                class="rounded border border-emerald-500/20 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-700 dark:text-emerald-400"
+              >
+                {{ t('subscription.authorized') }}
+              </span>
             </div>
-            <div class="min-w-0 flex-1">
-              <div class="flex flex-wrap items-center gap-2">
-                <h4 class="text-base font-semibold text-foreground">GitHub Copilot</h4>
-                <span class="rounded-full border border-blue-500/20 bg-blue-500/10 px-2 py-0.5 text-[10px] text-blue-700 dark:text-blue-300">
-                  {{ selectedCopilotTargetOption.label }}
-                </span>
-                <span
-                  v-if="copilotOAuthSuccess || hasSavedCopilotAuthorization || accountCount > 0"
-                  class="rounded border border-emerald-500/20 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-700 dark:text-emerald-400"
-                >
-                  {{ t('subscription.authorized') }}
-                </span>
-              </div>
-              <p class="mt-1 text-sm text-muted-foreground">{{ t('subscription.copilotDescription') }}</p>
-              <p class="mt-1 text-xs text-muted-foreground">{{ selectedCopilotTargetOption.description }}</p>
-            </div>
+            <p class="mt-1 text-sm text-muted-foreground">{{ t('subscription.copilotDescription') }}</p>
+            <p class="mt-1 text-xs text-muted-foreground">{{ selectedCopilotTargetOption.description }}</p>
           </div>
         </div>
 

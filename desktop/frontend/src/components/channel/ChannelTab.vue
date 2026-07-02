@@ -12,7 +12,7 @@ import { maskApiKey } from '@/utils/api-key-mask'
 import compshareIcon from '@/assets/compshare.png'
 import runapiIcon from '@/assets/runapi.svg'
 import unity2Icon from '@/assets/unity2.jpg'
-import type { ProviderPreset, ProviderPlan, ChannelTarget } from '@/types'
+import type { ProviderPreset, ProviderPlan, ChannelTarget, ProviderKeyAsset } from '@/types'
 
 const { t, tf } = useLanguage()
 const { isChannelPageActive } = useDesktopActivity()
@@ -81,7 +81,7 @@ const presetOrder = [
 const presetRank = new Map(presetOrder.map((id, index) => [id, index]))
 
 // 暂不在渠道中心展示的 preset（后端仍提供，作为后备或后续开放）。
-const hiddenPresetIds = new Set(['originrouter'])
+const hiddenPresetIds = new Set(['originrouter', 'opencode-go'])
 
 // 有 Key 的 provider 组整体提前；组内仍保持固定产品顺序，避免 Key 状态改变组内排序。
 const orderedPresets = computed(() =>
@@ -132,17 +132,15 @@ const currentAsset = computed(() => {
   const provider = selectedProvider.value.trim()
   if (!provider) return undefined
 
-  const providerAssets = keyAssets.value.filter((item) => item.provider === provider && item.apiKey)
   const planId = selectedPlan.value.trim()
-  if (planId) {
-    const exact = providerAssets.find((item) => (item.planId || '') === planId)
-    if (exact) return exact
+  const asset = findKeyAsset(provider, planId)
+  if (asset) return asset
 
-    const hasPlanScopedAsset = providerAssets.some((item) => !!item.planId)
-    return hasPlanScopedAsset ? undefined : providerAssets.find((item) => !item.planId)
+  if (provider === 'opencode-zen') {
+    return findOpenCodeFallbackAsset(planId)
   }
 
-  return providerAssets.find((item) => !item.planId) || providerAssets[0]
+  return undefined
 })
 
 const savedApiKeyMask = computed(() => {
@@ -200,12 +198,13 @@ watch(selectedPlan, (planId) => {
   channelName.value = buildChannelName(preset, selectedTarget.value || preset.defaultTarget, planId)
 })
 
-// buildChannelName 生成默认渠道名：仅在选中的 plan 不是当前 target 的默认 plan 时追加 plan suffix。
+// buildChannelName 生成默认渠道名：OpenCode 合并卡片按套餐使用 Zen/Go 前缀，其它 provider 仅在非默认 plan 时追加 plan suffix。
 // 例如 MiMo + messages + 默认 anthropic plan → desktop-mimo-messages
 //      MiMo + messages + token-sgp-anthropic → desktop-mimo-messages-token-sgp-anthropic
 // 这样用户切换非默认套餐时会得到独立渠道名，避免后端同名覆盖。
 function buildChannelName(preset: ProviderPreset, target: string, planId: string): string {
-  const base = `desktop-${preset.id}-${target}`
+  const base = `desktop-${channelProviderIdForPlan(preset, planId)}-${target}`
+  if (preset.id === 'opencode-zen' && (planId === 'openai-chat' || isOpenCodeGoPlan(planId))) return base
   const defaultPlan = bestPlanForTarget(preset, target)
   if (!planId || planId === defaultPlan) return base
   return `${base}-${planId}`
@@ -213,15 +212,65 @@ function buildChannelName(preset: ProviderPreset, target: string, planId: string
 
 function bestPlanForTarget(preset: ProviderPreset, target: string): string {
   if (preset.plans.length <= 1) return preset.plans[0]?.id || ''
-  const wantAnthropic = target === 'messages'
+  const wantOpenCodeChat = target === 'messages' && (preset.id === 'opencode-zen' || preset.id === 'opencode-go')
+  if (wantOpenCodeChat) {
+    const recommended = preset.plans.find((p) => !p.custom && p.recommended && planProtocol(p) === 'openai')
+    if (recommended) return recommended.id
+    const openaiPlan = preset.plans.find((p) => !p.custom && planProtocol(p) === 'openai')
+    if (openaiPlan) return openaiPlan.id
+  }
+  const wantedProtocol = target === 'messages' ? 'anthropic' : target === 'responses' ? 'responses' : 'openai'
   for (const plan of preset.plans) {
     if (plan.custom) continue
-    const isAnthropic = plan.baseUrl?.includes('anthropic')
-    if (wantAnthropic && isAnthropic) return plan.id
-    if (!wantAnthropic && !isAnthropic) return plan.id
+    const protocol = planProtocol(plan)
+    if (protocol === wantedProtocol) return plan.id
+    if (target === 'responses' && protocol === 'openai') return plan.id
   }
   const recommended = preset.plans.find((p) => p.recommended)
   return recommended?.id || preset.plans[0]?.id || ''
+}
+
+function findKeyAsset(provider: string, planId: string): ProviderKeyAsset | undefined {
+  const providerAssets = keyAssets.value.filter((item) => item.provider === provider && item.apiKey)
+  if (planId) {
+    const exact = providerAssets.find((item) => (item.planId || '') === planId)
+    if (exact) return exact
+
+    const hasPlanScopedAsset = providerAssets.some((item) => !!item.planId)
+    return hasPlanScopedAsset ? undefined : providerAssets.find((item) => !item.planId)
+  }
+
+  return providerAssets.find((item) => !item.planId) || providerAssets[0]
+}
+
+function findOpenCodeFallbackAsset(planId: string): ProviderKeyAsset | undefined {
+  if (isOpenCodeGoPlan(planId)) {
+    const legacyGoAsset = findKeyAsset('opencode-go', legacyOpenCodeGoPlanId(planId))
+    if (legacyGoAsset) return legacyGoAsset
+  }
+  return findKeyAsset('opencode-zen', '') || findKeyAsset('opencode-go', '')
+}
+
+function isOpenCodeGoPlan(planId: string): boolean {
+  return planId.startsWith('go-')
+}
+
+function legacyOpenCodeGoPlanId(planId: string): string {
+  return isOpenCodeGoPlan(planId) ? planId.replace(/^go-/, '') : planId
+}
+
+function channelProviderIdForPlan(preset: ProviderPreset, planId: string): string {
+  if (preset.id === 'opencode-zen' && isOpenCodeGoPlan(planId)) return 'opencode-go'
+  return preset.id
+}
+
+function planProtocol(plan: ProviderPlan): 'anthropic' | 'responses' | 'openai' {
+  const id = plan.id.toLowerCase()
+  const label = plan.label.toLowerCase()
+  const baseUrl = (plan.baseUrl || '').toLowerCase().replace(/\/+$/, '')
+  if (id.includes('responses') || label.includes('responses') || baseUrl.endsWith('/responses')) return 'responses'
+  if (id.includes('anthropic') || label.includes('anthropic') || baseUrl.includes('anthropic') || baseUrl.endsWith('/messages')) return 'anthropic'
+  return 'openai'
 }
 
 const capabilityBadges = computed(() => {

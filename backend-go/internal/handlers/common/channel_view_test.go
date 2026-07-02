@@ -12,6 +12,7 @@ func TestBuildChannelView_TuningBenchFields(t *testing.T) {
 	up := config.UpstreamConfig{
 		Name:                        "test-channel",
 		ServiceType:                 "openai",
+		AuthHeader:                  "x-api-key",
 		RateLimitRPM:                120,
 		RateLimitBurst:              20,
 		RateLimitMaxConcurrent:      8,
@@ -32,6 +33,7 @@ func TestBuildChannelView_TuningBenchFields(t *testing.T) {
 		expected interface{}
 	}{
 		{"rateLimitRpm", 120},
+		{"authHeader", "x-api-key"},
 		{"rateLimitBurst", 20},
 		{"rateLimitMaxConcurrent", 8},
 		{"rateLimitAutoFromHeaders", true},

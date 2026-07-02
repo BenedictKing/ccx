@@ -10,6 +10,7 @@ const channelPresetDefaults = {
   modelMapping: {},
   reasoningMapping: {},
   reasoningParamStyle: '',
+  authHeader: '',
   passbackReasoningContent: false,
   passbackThinkingBlocks: false,
   stripEmptyTextBlocks: false,
@@ -188,6 +189,8 @@ export interface ${config.interfaceName} {
   modelMapping: Record<string, string>
   reasoningMapping: Partial<Record<string, ${config.typePrefix}ReasoningEffort>>
   reasoningParamStyle: ${config.typePrefix}ReasoningParamStyle
+  serviceType?: 'openai' | 'gemini' | 'claude' | 'responses' | 'copilot'
+  authHeader: '' | 'auto' | 'bearer' | 'x-api-key'
   passbackReasoningContent: boolean
   passbackThinkingBlocks: boolean
   stripEmptyTextBlocks: boolean
@@ -225,6 +228,7 @@ function formatGoConfig(preset) {
   if (reasoningMapping) fields.push(`ReasoningMapping: ${reasoningMapping}`)
   if (preset.serviceType) fields.push(`ServiceType: ${quote(preset.serviceType)}`)
   if (preset.reasoningParamStyle) fields.push(`ReasoningParamStyle: ${quote(preset.reasoningParamStyle)}`)
+  if (preset.authHeader) fields.push(`AuthHeader: ${quote(preset.authHeader)}`)
   if (preset.passbackReasoningContent) fields.push('PassbackReasoningContent: true')
   if (preset.passbackThinkingBlocks) fields.push('PassbackThinkingBlocks: true')
   if (preset.normalizeSystemRoleToTopLevel) fields.push('NormalizeSystemRoleToTopLevel: true')

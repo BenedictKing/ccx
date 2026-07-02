@@ -234,3 +234,23 @@ func TestBuildTestRequest_UsesExistingVersionSuffix(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildTestRequestWithModel_RespectsXAPIKeyAuthHeader(t *testing.T) {
+	channel := &config.UpstreamConfig{
+		BaseURL:    "https://opencode.ai/zen/go",
+		APIKeys:    []string{"sk-opencode-go"},
+		AuthHeader: "x-api-key",
+	}
+
+	req, err := buildTestRequestWithModel("messages", channel, capabilityProbeModelClaudeFable5)
+	if err != nil {
+		t.Fatalf("buildTestRequestWithModel() error = %v", err)
+	}
+
+	if got := req.Header.Get("x-api-key"); got != "sk-opencode-go" {
+		t.Fatalf("x-api-key = %q, want %q", got, "sk-opencode-go")
+	}
+	if got := req.Header.Get("Authorization"); got != "" {
+		t.Fatalf("Authorization = %q, want empty", got)
+	}
+}

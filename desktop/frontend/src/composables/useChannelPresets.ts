@@ -19,10 +19,14 @@ const error = ref('')
 const result = ref<CreateChannelResult | null>(null)
 
 const keysByProvider = computed(() => {
-  return keyAssets.value.reduce<Record<string, ProviderKeyAsset>>((acc, item) => {
+  const result = keyAssets.value.reduce<Record<string, ProviderKeyAsset>>((acc, item) => {
     if (item.provider && !acc[item.provider]) acc[item.provider] = item
     return acc
   }, {})
+  if (result['opencode-go'] && !result['opencode-zen']) {
+    result['opencode-zen'] = result['opencode-go']
+  }
+  return result
 })
 
 const loadChannelPresets = async (target?: string) => {

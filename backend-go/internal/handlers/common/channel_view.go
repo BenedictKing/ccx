@@ -12,6 +12,7 @@ func BuildChannelView(up config.UpstreamConfig, index int) gin.H {
 		"index":                         index,
 		"name":                          up.Name,
 		"serviceType":                   up.ServiceType,
+		"authHeader":                    up.AuthHeader,
 		"baseUrl":                       up.BaseURL,
 		"baseUrls":                      up.BaseURLs,
 		"apiKeys":                       up.APIKeys,

@@ -965,6 +965,42 @@ func TestBuildTestRequestWithModel_ChatReasoningEffortUsesProviderCompatibleValu
 	if body["reasoning_effort"] != "low" {
 		t.Fatalf("reasoning_effort=%v, want low", body["reasoning_effort"])
 	}
+	if body["max_tokens"] != float64(capabilityProbeMaxTokens) {
+		t.Fatalf("max_tokens=%v, want %d", body["max_tokens"], capabilityProbeMaxTokens)
+	}
+}
+
+func TestSendAndCheckStream_ChatReasoningOnlyCountsAsSuccess(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(`data: {"id":"chatcmpl_reasoning","object":"chat.completion.chunk","created":1,"model":"deepseek-v4-flash","choices":[{"index":0,"finish_reason":null,"delta":{"role":"assistant","content":null,"reasoning_content":"Thinking"}}]}` + "\n\n"))
+		_, _ = w.Write([]byte(`data: {"id":"chatcmpl_reasoning","object":"chat.completion.chunk","created":1,"model":"deepseek-v4-flash","choices":[{"index":0,"finish_reason":"length","delta":{"content":"","reasoning_content":null}}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2,"completion_tokens_details":{"reasoning_tokens":1}}}` + "\n\n"))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer server.Close()
+
+	channel := &config.UpstreamConfig{
+		BaseURL: server.URL,
+		APIKeys: []string{"test-key"},
+	}
+	req, err := buildTestRequestWithModel("chat", channel, "deepseek-v4-flash")
+	if err != nil {
+		t.Fatalf("build request failed: %v", err)
+	}
+
+	success, streamingSupported, statusCode, respBody, err := sendAndCheckStream(context.Background(), channel, req, "chat")
+	if err != nil {
+		t.Fatalf("sendAndCheckStream returned error: %v", err)
+	}
+	if !success {
+		t.Fatalf("success=false, status=%d, body=%s", statusCode, string(respBody))
+	}
+	if !streamingSupported {
+		t.Fatal("streamingSupported=false, want true")
+	}
+	if statusCode != http.StatusOK {
+		t.Fatalf("statusCode=%d, want %d", statusCode, http.StatusOK)
+	}
 }
 
 func TestBuildTestRequestWithModel_KimiK27CodeChatUsesRequiredReasoningEffort(t *testing.T) {
