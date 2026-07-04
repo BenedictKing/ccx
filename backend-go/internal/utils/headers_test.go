@@ -245,6 +245,69 @@ func TestExtractAgentContextClaudeCodeSubagentFromRawMetadata(t *testing.T) {
 	}
 }
 
+func TestExtractAgentContextClaudeCodeSubagentFromAgentHeader(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	body := []byte(`{
+		"model": "claude-fable-5",
+		"metadata": {
+			"user_id": "{\"device_id\":\"dev-123\",\"session_id\":\"sess-456\"}"
+		},
+		"messages": [
+			{"role": "user", "content": "第一轮"},
+			{"role": "assistant", "content": "ok"},
+			{"role": "user", "content": "第二轮"},
+			{"role": "assistant", "content": "ok"},
+			{"role": "user", "content": "第三轮"}
+		],
+		"tools": [{}, {}, {}, {}, {}]
+	}`)
+	req := httptest.NewRequest("POST", "/v1/messages", nil)
+	req.Header.Set("X-Claude-Code-Agent-Id", "agent-abc")
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = req
+
+	ctx := ExtractAgentContext(c, body)
+	if ctx == nil {
+		t.Fatal("expected agent context")
+	}
+	if ctx.AgentRole != "subagent" {
+		t.Fatalf("expected AgentRole=subagent, got %q", ctx.AgentRole)
+	}
+	if ctx.AgentType != "claude_code_subagent" {
+		t.Fatalf("expected AgentType=claude_code_subagent, got %q", ctx.AgentType)
+	}
+	if ctx.Confidence != "exact" {
+		t.Fatalf("expected Confidence=exact, got %q", ctx.Confidence)
+	}
+}
+
+func TestExtractAgentContextClaudeCodeMainWithoutAgentHeader(t *testing.T) {
+	body := []byte(`{
+		"model": "claude-fable-5",
+		"metadata": {
+			"user_id": "{\"device_id\":\"dev-123\",\"session_id\":\"sess-456\"}"
+		},
+		"messages": [
+			{"role": "user", "content": "第一轮"},
+			{"role": "assistant", "content": "ok"},
+			{"role": "user", "content": "第二轮"},
+			{"role": "assistant", "content": "ok"},
+			{"role": "user", "content": "第三轮"}
+		],
+		"tools": [{}, {}, {}, {}, {}]
+	}`)
+
+	ctx := ExtractAgentContext(nil, body)
+	if ctx == nil {
+		t.Fatal("expected agent context")
+	}
+	if ctx.AgentRole != "main" {
+		t.Fatalf("expected AgentRole=main, got %q", ctx.AgentRole)
+	}
+}
+
 func TestEnsureCompatibleUserAgent(t *testing.T) {
 	tests := []struct {
 		name            string

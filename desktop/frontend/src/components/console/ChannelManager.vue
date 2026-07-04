@@ -367,7 +367,7 @@ async function refreshCurrentChannels() {
 
 
 function canDeleteChannel(channel: Channel) {
-  const activeCount = activeChannels.value.filter(ch => ch.status === 'active' || ch.status === undefined || ch.status === '').length
+  const activeCount = orderedActiveChannels.value.filter(ch => ch.status === 'active' || ch.status === undefined || ch.status === '').length
   const isActive = channel.status === 'active' || channel.status === undefined || channel.status === ''
   return !(isActive && activeCount <= 1)
 }

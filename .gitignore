@@ -214,7 +214,10 @@ vite.config.ts.timestamp-*
 !.claude/skills/upstream-check/
 !.claude/skills/model-update/
 !.claude/skills/add-sponsor.md
+!.claude/skills/store-update/
+!.claude/skills/store-update/**
 .claude/skills/upstream-check/scripts/upstream-state.json
+.claude/skills/store-update/scripts/__pycache__/
 
 .aider*
 *.log
@@ -254,4 +257,4 @@ docs/claude-code-investigation-*.md
 __pycache__/
 
 .mcp.json
-.serena/
+store-msix/

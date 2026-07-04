@@ -9,10 +9,12 @@
         "sonnet": "deepseek-v4-pro"
       },
       "reasoningParamStyle": "reasoning",
-      "passbackReasoningContent": true,
-      "passbackThinkingBlocks": true,
+      "passbackReasoningContent": false,
+      "passbackThinkingBlocks": false,
       "stripEmptyTextBlocks": true,
       "normalizeSystemRoleToTopLevel": true,
+      "normalizeMetadataUserId": true,
+      "stripBillingHeader": true,
       "stripImageGenerationTool": true,
       "noVision": true
     },

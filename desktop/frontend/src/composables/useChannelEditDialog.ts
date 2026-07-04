@@ -447,10 +447,6 @@ const { t } = useLanguage()
   }
 
   watch(() => props.channel, (ch) => {
-    console.log('[watch channel] 渠道变化', {
-      hasChannel: !!ch,
-      hasMappings: ch?.modelMapping ? Object.keys(ch.modelMapping).length : 0
-    })
     resetForm()
     if (ch) {
       populateFromChannel(ch)
@@ -458,9 +454,7 @@ const { t } = useLanguage()
       // 如果有模型映射配置，主动触发一次模型列表获取
       // 使用 nextTick 确保表单数据已填充完成
       if (ch.modelMapping && Object.keys(ch.modelMapping).length > 0) {
-        console.log('[watch channel] 检测到模型映射，准备预加载')
         nextTick(() => {
-          console.log('[watch channel] nextTick 后触发预加载')
           void fetchTargetModelsAndShowDropdown()
         })
       }
@@ -473,10 +467,22 @@ const { t } = useLanguage()
     form.baseUrl = baseUrl
   }, { immediate: true })
 
-  // API Key 是否满足必填：现有 + 新增；编辑模式下有可恢复 disabled key 也算
+  // In create mode, textarea quick input is the submit source; paste handling is only an enhancement.
+  const submitBaseUrls = computed(() => {
+    const formBaseUrls = parseLines(form.baseUrlsText)
+    if (isEditMode.value) return formBaseUrls
+    return detectedBaseUrls.value.length > 0 ? detectedBaseUrls.value : formBaseUrls
+  })
+  const submitBaseUrl = computed(() => submitBaseUrls.value[0] || form.baseUrl)
+  const submitApiKeys = computed(() => {
+    const apiKeys = getSubmitApiKeys()
+    if (isEditMode.value) return apiKeys
+    return [...new Set([...apiKeys, ...detectedApiKeys.value])]
+  })
+
+  // API Key is required from existing/new keys; create mode also includes quick input, and edit mode counts restorable disabled keys.
   const hasConfigurableKeys = computed(() => {
-    if (existingApiKeys.value.length > 0) return true
-    if (parseLines(newApiKeysText.value).length > 0) return true
+    if (submitApiKeys.value.length > 0) return true
     if (isEditMode.value && visibleDisabledKeys.value.length > 0) return true
     return false
   })
@@ -486,7 +492,7 @@ const { t } = useLanguage()
     if (isEditMode.value && !form.name.trim()) errs.name = t('channelEditor.basic.name.required')
     if (!isEditMode.value && !generatedChannelName.value.trim()) errs.name = t('channelEditor.basic.name.required')
     if (!form.serviceType) errs.serviceType = t('channelEditor.basic.serviceType.required')
-    if (form.serviceType !== 'copilot' && !form.baseUrlsText.trim()) errs.baseUrl = t('channelEditor.basic.baseUrl.required')
+    if (form.serviceType !== 'copilot' && submitBaseUrls.value.length === 0) errs.baseUrl = t('channelEditor.basic.baseUrl.required')
     // copilot 渠道通过 OAuth 登录，apiKeys 由登录流程填充，此处豁免必填校验
     if (!hasConfigurableKeys.value && form.serviceType !== 'copilot') errs.apiKeys = t('channelEditor.auth.apiKeyRequired')
     if (String(form.requestTimeoutMs).trim()) {
@@ -562,8 +568,8 @@ const { t } = useLanguage()
           name: generatedChannelName.value,
           serviceType: form.serviceType,
           authHeader: form.authHeader,
-          baseUrl: form.baseUrl,
-          baseUrls: parseLines(form.baseUrlsText),
+          baseUrl: submitBaseUrl.value,
+          baseUrls: submitBaseUrls.value,
           website: form.website,
           insecureSkipVerify: form.insecureSkipVerify,
           lowQuality: form.lowQuality,
@@ -572,7 +578,7 @@ const { t } = useLanguage()
           passbackReasoningContent: form.passbackReasoningContent,
           passbackThinkingBlocks: form.passbackThinkingBlocks,
           description: form.description,
-          apiKeys: getSubmitApiKeys(),
+          apiKeys: submitApiKeys.value,
           modelMapping: parseJsonObject<Record<string, string>>(form.modelMappingText, 'Model mapping'),
           modelCapabilityRows: modelCapabilityRows.value,
           reasoningMapping: parseJsonObject<Record<string, 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'>>(form.reasoningMappingText, 'Reasoning mapping'),
@@ -767,6 +773,14 @@ const { t } = useLanguage()
   function syncUpstreamModels() {
     void fetchTargetModelsAndShowDropdown()
   }
+
+  // Refresh dropdown visibility after target models load asynchronously while the input is still focused.
+  // The first focus may see an empty datalist and hide suggestions; flip it back once data arrives.
+  watch(targetModelDatalist, (list) => {
+    if (activeTargetInputId.value && list.length > 0 && !showTargetSuggestions.value) {
+      showTargetSuggestions.value = true
+    }
+  })
 
   // ── 编辑头部动作：noVision toggle + Test Capability ──
 

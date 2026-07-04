@@ -277,6 +277,38 @@ func TestLimiter_ApplyUpstreamHints_RetryAfterHTTPDate(t *testing.T) {
 	}
 }
 
+
+func TestLimiter_ApplyUpstreamHints_5xxRetryAfter(t *testing.T) {
+	base := time.Now()
+	l := NewChannelLimiter(Config{RPM: 60}, base)
+
+	// 503 + Retry-After 应触发 cooldown（上游临时过载的退避指示）
+	headers := http.Header{"Retry-After": {"30"}}
+	l.ApplyUpstreamHints(headers, http.StatusServiceUnavailable, base)
+
+	in, until := l.InCooldown(base)
+	if !in {
+		t.Fatal("expected cooldown on 503 with Retry-After")
+	}
+	if d := until.Sub(base); d != 30*time.Second {
+		t.Fatalf("cooldown = %v, want 30s", d)
+	}
+}
+
+func TestLimiter_ApplyUpstreamHints_5xxNoRetryAfter(t *testing.T) {
+	base := time.Now()
+	l := NewChannelLimiter(Config{RPM: 60}, base)
+
+	// 503 无 Retry-After 不触发 cooldown（由 failover 层 body 识别处理）
+	headers := http.Header{}
+	l.ApplyUpstreamHints(headers, http.StatusServiceUnavailable, base)
+
+	in, _ := l.InCooldown(base)
+	if in {
+		t.Fatal("should not cooldown on 503 without Retry-After")
+	}
+}
+
 func TestLimiter_ApplyUpstreamHints_AnthropicRemainingLow(t *testing.T) {
 	base := time.Now()
 	l := NewChannelLimiter(Config{RPM: 60}, base)

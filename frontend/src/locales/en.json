@@ -538,6 +538,8 @@
   "chart.traffic": "Traffic",
   "chart.tokens": "Tokens",
   "chart.cacheRw": "Cache R/W",
+  "chart.cost": "Cost",
+  "chart.totalCost": "Total cost",
   "chart.totalRequests": "Total requests",
   "chart.successRate": "Availability",
   "chart.inputTokens": "Input tokens",

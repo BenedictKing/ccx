@@ -557,24 +557,53 @@ func openAIToolMessageID(msg map[string]interface{}) string {
 	return id
 }
 
+const opaqueResponsesReasoningPlaceholder = "(no prior reasoning recorded)"
+
 func appendResponsesItemsToOpenAIMessages(messages []map[string]interface{}, items []types.ResponsesItem) []map[string]interface{} {
 	var pendingReasoning []string
+	pendingOpaqueReasoning := false
 	var pendingToolCalls []map[string]interface{}
 
+	pendingReasoningText := func() string {
+		if len(pendingReasoning) > 0 {
+			return strings.Join(pendingReasoning, "\n")
+		}
+		if pendingOpaqueReasoning {
+			return opaqueResponsesReasoningPlaceholder
+		}
+		return ""
+	}
+
+	clearPendingReasoning := func() {
+		pendingReasoning = nil
+		pendingOpaqueReasoning = false
+	}
+
+	attachPendingReasoning := func(msg map[string]interface{}) bool {
+		reasoning := pendingReasoningText()
+		if reasoning == "" {
+			return false
+		}
+		if existing, ok := msg["reasoning_content"].(string); ok && existing != "" {
+			if len(pendingReasoning) > 0 {
+				msg["reasoning_content"] = existing + "\n" + strings.Join(pendingReasoning, "\n")
+			}
+		} else {
+			msg["reasoning_content"] = reasoning
+		}
+		clearPendingReasoning()
+		return true
+	}
+
 	flushReasoning := func() {
-		if len(pendingReasoning) == 0 {
+		reasoning := pendingReasoningText()
+		if reasoning == "" {
 			return
 		}
-		reasoning := strings.Join(pendingReasoning, "\n")
 		if len(messages) > 0 {
 			last := messages[len(messages)-1]
 			if role, _ := last["role"].(string); role == "assistant" {
-				if existing, ok := last["reasoning_content"].(string); ok && existing != "" {
-					last["reasoning_content"] = existing + "\n" + reasoning
-				} else {
-					last["reasoning_content"] = reasoning
-				}
-				pendingReasoning = nil
+				attachPendingReasoning(last)
 				return
 			}
 		}
@@ -583,7 +612,7 @@ func appendResponsesItemsToOpenAIMessages(messages []map[string]interface{}, ite
 			"content":           "",
 			"reasoning_content": reasoning,
 		})
-		pendingReasoning = nil
+		clearPendingReasoning()
 	}
 
 	flushToolCalls := func() {
@@ -601,6 +630,7 @@ func appendResponsesItemsToOpenAIMessages(messages []map[string]interface{}, ite
 				} else {
 					last["tool_calls"] = pendingToolCalls
 				}
+				attachPendingReasoning(last)
 				pendingToolCalls = nil
 				return
 			}
@@ -610,10 +640,10 @@ func appendResponsesItemsToOpenAIMessages(messages []map[string]interface{}, ite
 			"content":    "",
 			"tool_calls": pendingToolCalls,
 		}
-		if len(pendingReasoning) > 0 {
-			msg["reasoning_content"] = strings.Join(pendingReasoning, "\n")
+		if reasoning := pendingReasoningText(); reasoning != "" {
+			msg["reasoning_content"] = reasoning
 			msg["content"] = ""
-			pendingReasoning = nil
+			clearPendingReasoning()
 		}
 		messages = append(messages, msg)
 		pendingToolCalls = nil
@@ -625,6 +655,10 @@ func appendResponsesItemsToOpenAIMessages(messages []map[string]interface{}, ite
 			reasoning := extractResponsesReasoningText(item)
 			if reasoning != "" {
 				pendingReasoning = append(pendingReasoning, reasoning)
+			} else if strings.TrimSpace(item.EncryptedContent) != "" {
+				// GPT Responses 只回传 encrypted_content 时无法解出明文，
+				// 但 DeepSeek thinking mode 仍要求 assistant 历史带非空 reasoning_content。
+				pendingOpaqueReasoning = true
 			}
 			continue
 		}
@@ -643,14 +677,13 @@ func appendResponsesItemsToOpenAIMessages(messages []map[string]interface{}, ite
 		}
 
 		// 非 function_call 消息：先刷出待处理的 reasoning 和 tool_calls
-		if len(pendingReasoning) > 0 {
+		if pendingReasoningText() != "" {
 			role, _ := msg["role"].(string)
 			if role == "assistant" && len(pendingToolCalls) == 0 {
-				msg["reasoning_content"] = strings.Join(pendingReasoning, "\n")
+				attachPendingReasoning(msg)
 				if _, ok := msg["content"]; !ok {
 					msg["content"] = ""
 				}
-				pendingReasoning = nil
 			} else {
 				flushToolCalls()
 				flushReasoning()

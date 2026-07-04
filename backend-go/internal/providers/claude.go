@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
+	"github.com/BenedictKing/ccx/internal/thinkingcache"
 	"github.com/BenedictKing/ccx/internal/types"
 	"github.com/BenedictKing/ccx/internal/utils"
 	"github.com/gin-gonic/gin"
@@ -109,6 +110,97 @@ func stripClaudeOutputConfigEffort(data map[string]interface{}) {
 	delete(outputConfig, "effort")
 	if len(outputConfig) == 0 {
 		delete(data, "output_config")
+	}
+}
+
+// stripUnsupportedDeepSeekContextManagement removes Claude Code context edits that
+// DeepSeek's Claude-compatible endpoint does not implement.
+func stripUnsupportedDeepSeekContextManagement(bodyBytes []byte, upstream *config.UpstreamConfig) []byte {
+	if !thinkingcache.ShouldTrackClaudeThinking(upstream, bodyBytes) {
+		return bodyBytes
+	}
+
+	decoder := json.NewDecoder(bytes.NewReader(bodyBytes))
+	decoder.UseNumber()
+
+	var data map[string]interface{}
+	if err := decoder.Decode(&data); err != nil {
+		return bodyBytes
+	}
+
+	contextManagement, ok := data["context_management"].(map[string]interface{})
+	if !ok {
+		return bodyBytes
+	}
+
+	rawEdits, ok := contextManagement["edits"].([]interface{})
+	if !ok {
+		return bodyBytes
+	}
+
+	filtered := make([]interface{}, 0, len(rawEdits))
+	changed := false
+	for _, rawEdit := range rawEdits {
+		edit, ok := rawEdit.(map[string]interface{})
+		if !ok {
+			filtered = append(filtered, rawEdit)
+			continue
+		}
+		editType, _ := edit["type"].(string)
+		if editType == "clear_thinking_20251015" {
+			changed = true
+			continue
+		}
+		filtered = append(filtered, rawEdit)
+	}
+	if !changed {
+		return bodyBytes
+	}
+
+	if len(filtered) == 0 {
+		delete(contextManagement, "edits")
+	} else {
+		contextManagement["edits"] = filtered
+	}
+	if len(contextManagement) == 0 {
+		delete(data, "context_management")
+	}
+
+	newBytes, err := utils.MarshalJSONNoEscape(data)
+	if err != nil {
+		return bodyBytes
+	}
+	return newBytes
+}
+
+func stripUnsupportedDeepSeekBetaHeaders(headers http.Header, upstream *config.UpstreamConfig, bodyBytes []byte) {
+	if headers == nil || !thinkingcache.ShouldTrackClaudeThinking(upstream, bodyBytes) {
+		return
+	}
+
+	values := headers.Values("Anthropic-Beta")
+	if len(values) == 0 {
+		return
+	}
+
+	filteredValues := make([]string, 0, len(values))
+	for _, value := range values {
+		tokens := make([]string, 0)
+		for _, rawToken := range strings.Split(value, ",") {
+			token := strings.TrimSpace(rawToken)
+			if token == "" || token == "context-management-2025-06-27" {
+				continue
+			}
+			tokens = append(tokens, token)
+		}
+		if len(tokens) > 0 {
+			filteredValues = append(filteredValues, strings.Join(tokens, ","))
+		}
+	}
+
+	headers.Del("Anthropic-Beta")
+	for _, value := range filteredValues {
+		headers.Add("Anthropic-Beta", value)
 	}
 }
 
@@ -690,11 +782,15 @@ func (p *ClaudeProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 	if upstream.PassbackThinkingBlocks {
 		bodyBytes = convertReasoningContentToThinkingBlocks(bodyBytes, upstream.PassbackReasoningContent)
 	}
+	bodyBytes = stripUnsupportedDeepSeekContextManagement(bodyBytes, upstream)
 	if upstream.StripEmptyTextBlocks {
 		bodyBytes = stripEmptyTextBlocksFromBody(bodyBytes)
 		if !upstream.PassbackReasoningContent && !upstream.PassbackThinkingBlocks {
 			bodyBytes = stripThinkingBlocksFromBody(bodyBytes)
 		}
+	}
+	if sessionID := utils.ExtractUnifiedSessionID(c, bodyBytes); sessionID != "" {
+		bodyBytes, _ = thinkingcache.InjectCachedClaudeThinking(bodyBytes, sessionID, upstream)
 	}
 
 	// 注意：NormalizeSystemRoleToTopLevel（抽取 system 角色到顶层）已上移到
@@ -749,6 +845,7 @@ func (p *ClaudeProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 	// 使用统一的头部处理逻辑
 	req.Header = utils.PrepareUpstreamHeaders(c, req.URL.Host)
 	utils.ApplyCustomHeaders(req.Header, upstream.CustomHeaders) // 先应用自定义头，后覆盖认证（不可被自定义头覆盖）
+	stripUnsupportedDeepSeekBetaHeaders(req.Header, upstream, bodyBytes)
 	utils.SetAuthenticationHeaderWithOverride(req.Header, apiKey, upstream.AuthHeader)
 	utils.EnsureCompatibleUserAgent(req.Header, "claude")
 

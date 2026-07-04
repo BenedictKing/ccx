@@ -140,19 +140,11 @@ export function useChannelTargetModels(options: ChannelTargetModelsOptions) {
   }
 
   async function fetchTargetModels() {
-    console.log('[fetchTargetModels] 开始执行', {
-      hasChannel: !!options.channel(),
-      baseUrl: options.form.baseUrl,
-      apiKeysCount: options.getSubmitApiKeys().length,
-    })
-
     const channel = options.channel()
     if (!channel) {
-      console.log('[fetchTargetModels] 中断：无渠道')
       return false
     }
     if (!options.form.baseUrl.trim() || options.getSubmitApiKeys().length === 0) {
-      console.log('[fetchTargetModels] 中断：缺少配置')
       fetchedModelsError.value = options.t('addChannel.fillBaseUrlAndApiKey')
       return false
     }
@@ -164,7 +156,6 @@ export function useChannelTargetModels(options: ChannelTargetModelsOptions) {
     fetchingModels.value = true
     fetchedModelsError.value = ''
     try {
-      console.log('[fetchTargetModels] 开始请求 API')
       const effectiveServiceType = options.channelType() === 'images' || options.channelType() === 'vectors'
         ? 'openai'
         : (options.form.serviceType || options.defaultServiceTypeForChannel())
@@ -240,10 +231,10 @@ export function useChannelTargetModels(options: ChannelTargetModelsOptions) {
       if (allFailed) {
         fetchedModelsError.value = options.t('addChannel.allApiKeysModelsFailed')
       }
-      console.log('[fetchTargetModels] 成功获取模型', targetModelOptions.value.length)
       return true
     } catch (e) {
-      console.error('[fetchTargetModels] 请求失败', e)
+      // 意外编排错误（非 per-key API 失败）保留 stack trace 便于诊断；per-key 失败已在上方 catch 单独记录到 keyModelsStatus
+      console.error('[fetchTargetModels-请求失败]', e)
       fetchedModelsError.value = e instanceof Error
         ? e.message
         : typeof e === 'object' && e !== null

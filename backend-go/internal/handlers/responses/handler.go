@@ -168,6 +168,7 @@ func handleMultiChannel(
 				upstream,
 				sortedURLResults,
 				bodyBytes,
+				contextRequirement,
 				responsesReq.Stream,
 				func(upstream *config.UpstreamConfig, failedKeys map[string]bool) (string, error) {
 					return cfgManager.GetNextResponsesAPIKey(upstream, failedKeys)
@@ -301,6 +302,7 @@ func handleSingleChannel(
 		upstream,
 		urlResults,
 		bodyBytes,
+		contextRequirement,
 		responsesReq.Stream,
 		func(upstream *config.UpstreamConfig, failedKeys map[string]bool) (string, error) {
 			return cfgManager.GetNextResponsesAPIKey(upstream, failedKeys)

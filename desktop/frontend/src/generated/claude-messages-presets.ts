@@ -13,6 +13,8 @@ export interface ClaudeMessagesPreset {
   passbackThinkingBlocks: boolean
   stripEmptyTextBlocks: boolean
   normalizeSystemRoleToTopLevel: boolean
+  normalizeMetadataUserId?: boolean
+  stripBillingHeader?: boolean
   stripImageGenerationTool: boolean
   normalizeNonstandardChatRoles: boolean
   noVision: boolean
@@ -32,15 +34,17 @@ export const claudeMessagesPresets: Record<string, ClaudeMessagesPreset> = {
     "reasoningMapping": {},
     "reasoningParamStyle": "reasoning",
     "authHeader": "",
-    "passbackReasoningContent": true,
-    "passbackThinkingBlocks": true,
+    "passbackReasoningContent": false,
+    "passbackThinkingBlocks": false,
     "stripEmptyTextBlocks": true,
     "normalizeSystemRoleToTopLevel": true,
     "stripImageGenerationTool": true,
     "normalizeNonstandardChatRoles": false,
     "noVision": true,
     "noVisionModels": [],
-    "visionFallbackModel": ""
+    "visionFallbackModel": "",
+    "normalizeMetadataUserId": true,
+    "stripBillingHeader": true
   },
   "mimo": {
     "modelMapping": {

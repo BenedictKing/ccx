@@ -671,6 +671,70 @@ func TestIsUpstreamAccountPoolUnavailable(t *testing.T) {
 	}
 }
 
+
+func TestIsUpstreamTemporarilyOverloaded(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want bool
+	}{
+		{
+			name: "system_cpu_overloaded",
+			body: `{"error":{"message":"system cpu overloaded (current: 92.1%, threshold: 90%)","type":"new_api_error","param":"","code":"system_cpu_overloaded"}}`,
+			want: true,
+		},
+		{
+			name: "anthropic_overloaded_error",
+			body: `{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}`,
+			want: true,
+		},
+		{
+			name: "service_unavailable_code",
+			body: `{"error":{"code":"service_unavailable","message":"service unavailable","type":"api_error"}}`,
+			want: true,
+		},
+		{
+			name: "chinese_overloaded",
+			body: `{"error":{"message":"系统过载，请稍后重试","type":"server_error"}}`,
+			want: true,
+		},
+		{
+			name: "nested_upstream_error",
+			body: `{"error":{"upstream_error":{"code":"system_cpu_overloaded","message":"cpu overloaded"}}}`,
+			want: true,
+		},
+		{
+			name: "top_level_overloaded",
+			body: `{"message":"service_temporarily_unavailable"}`,
+			want: true,
+		},
+		{
+			name: "account_pool_not_overload",
+			body: `{"error":{"message":"无可用账号，请稍后重试","type":"server_error","code":"no_available_account"}}`,
+			want: false,
+		},
+		{
+			name: "generic_server_error",
+			body: `{"error":{"message":"internal error","type":"server_error","code":"server_error"}}`,
+			want: false,
+		},
+		{
+			name: "invalid_json",
+			body: `not json`,
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := IsUpstreamTemporarilyOverloaded([]byte(tt.body))
+			if got != tt.want {
+				t.Fatalf("IsUpstreamTemporarilyOverloaded() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 // TestIsContentModerationErrorCode 测试内容审核类错误码判断
 func TestIsContentModerationErrorCode(t *testing.T) {
 	tests := []struct {

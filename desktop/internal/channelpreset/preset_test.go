@@ -7,35 +7,40 @@ import (
 
 func TestBuildPayload(t *testing.T) {
 	tests := []struct {
-		name                string
-		req                 CreateChannelRequest
-		wantBaseURL         string
-		wantService         string
-		wantVision          bool
-		wantPassback        bool
-		wantCodex           bool
-		wantStripCodex      bool
-		wantNativeTool      bool
-		wantModels          []string
-		wantModelMap        map[string]string
-		wantNoModelMap      bool
-		wantReasoning       map[string]string
-		wantNoReasoningMap  bool
-		wantReasoningStyle  string
-		wantFallback        string
-		wantNormalize       bool
-		wantNormalizeSystem bool
-		wantNoVisionModels  []string
-		wantAuthHeader      string
+		name                  string
+		req                   CreateChannelRequest
+		wantBaseURL           string
+		wantService           string
+		wantVision            bool
+		wantPassback          bool
+		wantThinkingPassback  *bool
+		wantNormalizeMetadata *bool
+		wantStripBilling      bool
+		wantCodex             bool
+		wantStripCodex        bool
+		wantNativeTool        bool
+		wantModels            []string
+		wantModelMap          map[string]string
+		wantNoModelMap        bool
+		wantReasoning         map[string]string
+		wantNoReasoningMap    bool
+		wantReasoningStyle    string
+		wantFallback          string
+		wantNormalize         bool
+		wantNormalizeSystem   bool
+		wantNoVisionModels    []string
+		wantAuthHeader        string
 	}{
 		{
-			name:                "deepseek messages (anthropic endpoint)",
-			req:                 CreateChannelRequest{Provider: ProviderDeepSeek, Target: TargetMessages, APIKey: "sk-test"},
-			wantBaseURL:         "https://api.deepseek.com/anthropic",
-			wantService:         "claude",
-			wantVision:          true,
-			wantPassback:        true,
-			wantNormalizeSystem: true,
+			name:                  "deepseek messages (anthropic endpoint)",
+			req:                   CreateChannelRequest{Provider: ProviderDeepSeek, Target: TargetMessages, APIKey: "sk-test"},
+			wantBaseURL:           "https://api.deepseek.com/anthropic",
+			wantService:           "claude",
+			wantVision:            true,
+			wantThinkingPassback:  boolRef(false),
+			wantNormalizeMetadata: boolRef(true),
+			wantStripBilling:      true,
+			wantNormalizeSystem:   true,
 			wantModelMap: map[string]string{
 				"fable":  "deepseek-v4-pro",
 				"haiku":  "deepseek-v4-flash",
@@ -691,6 +696,20 @@ func TestBuildPayload(t *testing.T) {
 			}
 			if got.PassbackReasoningContent != tt.wantPassback {
 				t.Fatalf("PassbackReasoningContent = %v, want %v", got.PassbackReasoningContent, tt.wantPassback)
+			}
+			if tt.wantThinkingPassback != nil && got.PassbackThinkingBlocks != *tt.wantThinkingPassback {
+				t.Fatalf("PassbackThinkingBlocks = %v, want %v", got.PassbackThinkingBlocks, *tt.wantThinkingPassback)
+			}
+			if tt.wantNormalizeMetadata != nil {
+				if got.NormalizeMetadataUserId == nil {
+					t.Fatalf("NormalizeMetadataUserId = nil, want %v", *tt.wantNormalizeMetadata)
+				}
+				if *got.NormalizeMetadataUserId != *tt.wantNormalizeMetadata {
+					t.Fatalf("NormalizeMetadataUserId = %v, want %v", *got.NormalizeMetadataUserId, *tt.wantNormalizeMetadata)
+				}
+			}
+			if got.StripBillingHeader != tt.wantStripBilling {
+				t.Fatalf("StripBillingHeader = %v, want %v", got.StripBillingHeader, tt.wantStripBilling)
 			}
 			if got.CodexToolCompat != tt.wantCodex {
 				t.Fatalf("CodexToolCompat = %v, want %v", got.CodexToolCompat, tt.wantCodex)

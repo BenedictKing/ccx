@@ -95,6 +95,40 @@ func TestCandidatesForModel_FailedKeysFiltered(t *testing.T) {
 	}
 }
 
+func TestConfigForCandidate_UsesWindowSeconds(t *testing.T) {
+	up := config.UpstreamConfig{
+		RateLimitRPM:           50,
+		RateLimitWindowMinutes: 120,
+		RateLimitMaxConcurrent: 3,
+	}
+
+	got := ConfigForCandidate(up, config.APIKeyConfig{})
+	if got.WindowSeconds != 120 {
+		t.Fatalf("inherited WindowSeconds = %d, want 120", got.WindowSeconds)
+	}
+	if got.RPM != 50 {
+		t.Fatalf("inherited RPM = %d, want 50", got.RPM)
+	}
+	if got.MaxConcurrent != 3 {
+		t.Fatalf("inherited MaxConcurrent = %d, want 3", got.MaxConcurrent)
+	}
+
+	got = ConfigForCandidate(up, config.APIKeyConfig{
+		RateLimitRPM:           20,
+		RateLimitWindowMinutes: 30,
+		RateLimitMaxConcurrent: 1,
+	})
+	if got.WindowSeconds != 30 {
+		t.Fatalf("overridden WindowSeconds = %d, want 30", got.WindowSeconds)
+	}
+	if got.RPM != 20 {
+		t.Fatalf("overridden RPM = %d, want 20", got.RPM)
+	}
+	if got.MaxConcurrent != 1 {
+		t.Fatalf("overridden MaxConcurrent = %d, want 1", got.MaxConcurrent)
+	}
+}
+
 func TestMatchesModel(t *testing.T) {
 	tests := []struct {
 		name   string

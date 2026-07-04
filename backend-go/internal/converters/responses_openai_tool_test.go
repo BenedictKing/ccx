@@ -559,6 +559,65 @@ func TestResponsesToOpenAIChatMessages_DeepSeekMultiTurnToolCalls(t *testing.T) 
 	assertOpenAIChatTextContent(t, "run tests now", messages[3]["content"])
 }
 
+func TestResponsesToOpenAIChatMessages_OpaqueReasoningKeepsToolCallPassback(t *testing.T) {
+	sess := &session.Session{
+		Messages: []types.ResponsesItem{
+			{
+				Type:             "reasoning",
+				Status:           "completed",
+				EncryptedContent: "encrypted-reasoning-state",
+			},
+			{
+				Type: "message",
+				Role: "assistant",
+				Content: []types.ContentBlock{{
+					Type: "output_text",
+					Text: "Let me inspect the files.",
+				}},
+			},
+			{
+				Type:      "function_call",
+				Status:    "completed",
+				CallID:    "call_opaque",
+				Name:      "exec_command",
+				Arguments: `{"cmd":"rg validation"}`,
+			},
+		},
+	}
+
+	messages, err := ResponsesToOpenAIChatMessages(sess, []interface{}{
+		map[string]interface{}{
+			"type":    "function_call_output",
+			"call_id": "call_opaque",
+			"output":  "matches found",
+		},
+		map[string]interface{}{
+			"type": "message",
+			"role": "user",
+			"content": []interface{}{
+				map[string]interface{}{"type": "input_text", "text": "continue"},
+			},
+		},
+	}, "")
+
+	assert.NoError(t, err)
+	assert.Len(t, messages, 3)
+
+	assistant := messages[0]
+	assert.Equal(t, "assistant", assistant["role"])
+	assert.Equal(t, "Let me inspect the files.", assistant["content"])
+	assert.Equal(t, opaqueResponsesReasoningPlaceholder, assistant["reasoning_content"])
+
+	tc, ok := assistant["tool_calls"].([]map[string]interface{})
+	assert.True(t, ok, "assistant should have tool_calls")
+	assert.Len(t, tc, 1)
+	assert.Equal(t, "call_opaque", tc[0]["id"])
+
+	assert.Equal(t, "tool", messages[1]["role"])
+	assert.Equal(t, "call_opaque", messages[1]["tool_call_id"])
+	assert.Equal(t, "user", messages[2]["role"])
+}
+
 func TestResponsesToOpenAIChatMessages_DowngradesOrphanToolOutput(t *testing.T) {
 	sess := &session.Session{
 		Messages: []types.ResponsesItem{

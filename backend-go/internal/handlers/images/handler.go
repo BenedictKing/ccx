@@ -250,6 +250,7 @@ func handleMultiChannel(
 				upstream,
 				sortedURLResults,
 				bodyBytes,
+				nil,
 				isStream,
 				func(upstream *config.UpstreamConfig, failedKeys map[string]bool) (string, error) {
 					return cfgManager.GetNextImagesAPIKey(upstream, failedKeys)
@@ -328,6 +329,7 @@ func handleSingleChannel(
 		upstream,
 		urlResults,
 		bodyBytes,
+		nil,
 		isStream,
 		func(upstream *config.UpstreamConfig, failedKeys map[string]bool) (string, error) {
 			return cfgManager.GetNextImagesAPIKey(upstream, failedKeys)

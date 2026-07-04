@@ -153,6 +153,10 @@ var strictClaudeThinkingKeywords = []string{
 	"opencode",
 }
 
+var deepSeekClaudeThinkingCacheKeywords = []string{
+	"deepseek",
+}
+
 var domesticClaudeProviderKeywords = []string{
 	"deepseek", "mimo", "xiaomimimo",
 	"compshare",
@@ -177,6 +181,14 @@ var compatDiagnoseAggregateProviderKeywords = []string{
 }
 
 func shouldPassbackThinkingBlocksByDefault(channel *config.UpstreamConfig, baseURL string) bool {
+	return channelMatchesCompatKeywords(channel, baseURL, strictClaudeThinkingKeywords)
+}
+
+func shouldUseThinkingCacheForClaudePassback(channel *config.UpstreamConfig, baseURL string) bool {
+	return channelMatchesCompatKeywords(channel, baseURL, deepSeekClaudeThinkingCacheKeywords)
+}
+
+func shouldStripEmptyTextBlocksByDefault(channel *config.UpstreamConfig, baseURL string) bool {
 	return channelMatchesCompatKeywords(channel, baseURL, strictClaudeThinkingKeywords)
 }
 
@@ -398,8 +410,14 @@ func diagnoseImageGenerationTool(channel *config.UpstreamConfig, channelKind, ap
 func diagnoseClaudeChannel(channel *config.UpstreamConfig, apiKey, baseURL string, recs map[string]bool, evid map[string]string) {
 	probeModel := capabilityProbeModelClaudeFable5
 	shouldPassbackThinkingBlocks := shouldPassbackThinkingBlocksByDefault(channel, baseURL)
+	shouldUseThinkingCache := shouldUseThinkingCacheForClaudePassback(channel, baseURL)
+	shouldStripEmptyTextBlocks := shouldStripEmptyTextBlocksByDefault(channel, baseURL)
 	shouldNormalizeSystemRole := shouldNormalizeSystemRoleToTopLevelByDefault(channel, baseURL)
 	hasThinkingProbe := false
+
+	if shouldUseThinkingCache {
+		applyDeepSeekClaudeCacheRecommendations(recs, evid)
+	}
 
 	// 探测 1：带 thinking 的流式请求
 	ctx1, cancel1 := context.WithTimeout(context.Background(), 20*time.Second)
@@ -417,17 +435,28 @@ func diagnoseClaudeChannel(channel *config.UpstreamConfig, apiKey, baseURL strin
 			hasThinking, hasEmptyText := analyzeClaudeSSE(events)
 			hasThinkingProbe = hasThinking
 			if hasThinking {
-				recs["passbackReasoningContent"] = true
-				evid["passbackReasoningContent"] = "upstream returned thinking block in stream"
+				if shouldUseThinkingCache {
+					evid["passbackReasoningContent"] = "DeepSeek Claude thinking uses CCX SQLite cache; keep legacy reasoning_content passback disabled"
+					evid["passbackThinkingBlocks"] = "DeepSeek Claude thinking uses CCX SQLite cache; cached content[].thinking is injected only on exact history hits"
+				} else {
+					recs["passbackReasoningContent"] = true
+					evid["passbackReasoningContent"] = "upstream returned thinking block in stream"
+				}
 			} else {
-				recs["passbackReasoningContent"] = false
-				evid["passbackReasoningContent"] = "no thinking block detected"
-				recs["passbackThinkingBlocks"] = false
-				evid["passbackThinkingBlocks"] = "no thinking block detected"
+				if !shouldUseThinkingCache {
+					recs["passbackReasoningContent"] = false
+					evid["passbackReasoningContent"] = "no thinking block detected"
+					recs["passbackThinkingBlocks"] = false
+					evid["passbackThinkingBlocks"] = "no thinking block detected"
+				}
 			}
-			if hasEmptyText {
+			if hasEmptyText || shouldStripEmptyTextBlocks {
 				recs["stripEmptyTextBlocks"] = true
-				evid["stripEmptyTextBlocks"] = "upstream returned empty text content blocks"
+				if hasEmptyText {
+					evid["stripEmptyTextBlocks"] = "upstream returned empty text content blocks"
+				} else {
+					evid["stripEmptyTextBlocks"] = "strict Claude-compatible upstream defaults to stripping empty text blocks before tool_use"
+				}
 			} else {
 				recs["stripEmptyTextBlocks"] = false
 				evid["stripEmptyTextBlocks"] = "no empty text blocks detected"
@@ -435,7 +464,7 @@ func diagnoseClaudeChannel(channel *config.UpstreamConfig, apiKey, baseURL strin
 		}
 	}
 
-	if hasThinkingProbe {
+	if hasThinkingProbe && !shouldUseThinkingCache {
 		diagnoseClaudeThinkingBlockPassback(channel, apiKey, baseURL, probeModel, shouldPassbackThinkingBlocks, recs, evid)
 	}
 
@@ -458,6 +487,20 @@ func diagnoseClaudeChannel(channel *config.UpstreamConfig, apiKey, baseURL strin
 			evid["normalizeSystemRoleToTopLevel"] = "upstream accepted system role in messages array"
 		}
 	}
+}
+
+func applyDeepSeekClaudeCacheRecommendations(recs map[string]bool, evid map[string]string) {
+	recs["passbackReasoningContent"] = false
+	recs["passbackThinkingBlocks"] = false
+	recs["stripEmptyTextBlocks"] = true
+	recs["normalizeMetadataUserId"] = true
+	recs["stripBillingHeader"] = true
+
+	evid["passbackReasoningContent"] = "DeepSeek Claude thinking uses CCX SQLite cache; legacy reasoning_content passback must stay disabled"
+	evid["passbackThinkingBlocks"] = "DeepSeek Claude thinking uses CCX SQLite cache; do not project reasoning_content globally"
+	evid["stripEmptyTextBlocks"] = "DeepSeek Claude endpoint strictly validates empty text blocks before tool_use"
+	evid["normalizeMetadataUserId"] = "DeepSeek Claude endpoint expects flattened metadata.user_id"
+	evid["stripBillingHeader"] = "DeepSeek Claude endpoint should not receive Claude Code billing suffixes"
 }
 
 func diagnoseClaudeThinkingBlockPassback(channel *config.UpstreamConfig, apiKey, baseURL, probeModel string, defaultEnabled bool, recs map[string]bool, evid map[string]string) {

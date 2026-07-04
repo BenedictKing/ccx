@@ -18,6 +18,7 @@ func TestUpdateUpstream_RateLimitFields(t *testing.T) {
 	defer cm.Close()
 
 	rpm := 60
+	window := 120
 	burst := 10
 	concurrent := 3
 	auto := true
@@ -81,6 +82,7 @@ func TestUpdateUpstream_RateLimitFields(t *testing.T) {
 			// 更新限速字段
 			if err := tt.update(UpstreamUpdate{
 				RateLimitRPM:             &rpm,
+				RateLimitWindowMinutes:   &window,
 				RateLimitBurst:           &burst,
 				RateLimitMaxConcurrent:   &concurrent,
 				RateLimitAutoFromHeaders: &auto,
@@ -107,6 +109,9 @@ func TestUpdateUpstream_RateLimitFields(t *testing.T) {
 			if got.RateLimitRPM != 60 {
 				t.Errorf("%s RateLimitRPM = %d, want 60", tt.name, got.RateLimitRPM)
 			}
+			if got.RateLimitWindowMinutes != 120 {
+				t.Errorf("%s RateLimitWindowMinutes = %d, want 120", tt.name, got.RateLimitWindowMinutes)
+			}
 			if got.RateLimitBurst != 10 {
 				t.Errorf("%s RateLimitBurst = %d, want 10", tt.name, got.RateLimitBurst)
 			}
@@ -122,6 +127,7 @@ func TestUpdateUpstream_RateLimitFields(t *testing.T) {
 			falseVal := false
 			if err := tt.update(UpstreamUpdate{
 				RateLimitRPM:             &zero,
+				RateLimitWindowMinutes:   &zero,
 				RateLimitBurst:           &zero,
 				RateLimitMaxConcurrent:   &zero,
 				RateLimitAutoFromHeaders: &falseVal,
@@ -142,10 +148,19 @@ func TestUpdateUpstream_RateLimitFields(t *testing.T) {
 			case "images":
 				got = cfg.ImagesUpstream[idx]
 			}
-			if got.RateLimitRPM != 0 || got.RateLimitBurst != 0 || got.RateLimitMaxConcurrent != 0 {
-				t.Errorf("%s after clear: RPM=%d Burst=%d Concurrent=%d, want all 0",
-					tt.name, got.RateLimitRPM, got.RateLimitBurst, got.RateLimitMaxConcurrent)
+			if got.RateLimitRPM != 0 || got.RateLimitWindowMinutes != 0 || got.RateLimitBurst != 0 || got.RateLimitMaxConcurrent != 0 {
+				t.Errorf("%s after clear: RPM=%d Window=%d Burst=%d Concurrent=%d, want all 0",
+					tt.name, got.RateLimitRPM, got.RateLimitWindowMinutes, got.RateLimitBurst, got.RateLimitMaxConcurrent)
 			}
 		})
+	}
+}
+
+func TestRateLimitWindowSecondsKeepsSecondUnit(t *testing.T) {
+	if got := RateLimitWindowSeconds(120); got != 120 {
+		t.Fatalf("RateLimitWindowSeconds(120) = %d, want 120", got)
+	}
+	if got := RateLimitWindowSeconds(0); got != 0 {
+		t.Fatalf("RateLimitWindowSeconds(0) = %d, want 0", got)
 	}
 }

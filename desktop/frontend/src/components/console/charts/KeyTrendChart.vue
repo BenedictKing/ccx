@@ -28,7 +28,8 @@
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path v-if="view.value === 'traffic'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
             <path v-else-if="view.value === 'tokens'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            <path v-else-if="view.value === 'cache'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
           </svg>
           {{ t(view.label) }}
         </button>
@@ -70,6 +71,13 @@
         <div class="text-sm font-semibold">
           {{ formatNumber(summary.totalCacheReadTokens) }} / {{ formatNumber(summary.totalCacheCreationTokens) }}
         </div>
+      </div>
+      <div
+        v-if="(summary.totalCostUSD || 0) > 0"
+        class="flex-1 min-w-[80px] p-2 rounded-lg text-center bg-secondary/30 dark:bg-secondary/20"
+      >
+        <div class="text-xs text-muted-foreground font-medium mb-1">{{ t('chart.totalCost') }}</div>
+        <div class="text-sm font-semibold">${{ formatCost(summary.totalCostUSD || 0) }}</div>
       </div>
     </div>
 
@@ -152,7 +160,7 @@ const KEY_COLORS = [
 ]
 
 // View and duration mode
-type ViewMode = 'traffic' | 'tokens' | 'cache'
+type ViewMode = 'traffic' | 'tokens' | 'cache' | 'cost'
 type Duration = '1h' | '6h' | '24h' | 'today' | '7d' | '30d' | '90d' | '180d' | '365d' | 'thisyear'
 type SeriesDirection = 'in' | 'out'
 type ChartSeriesPoint = { x: number; y: number }
@@ -183,6 +191,7 @@ const viewOptions = computed(() => [
   { label: 'chart.traffic', value: 'traffic' as ViewMode },
   { label: 'chart.tokens', value: 'tokens' as ViewMode },
   { label: 'chart.cacheRw', value: 'cache' as ViewMode },
+  { label: 'chart.cost', value: 'cost' as ViewMode },
 ])
 
 watch(selectedDuration, (duration) => {
@@ -202,6 +211,7 @@ const hasData = computed(() => {
     if (!keyData.dataPoints?.length) return false
     return keyData.dataPoints.some(dp => {
       if (mode === 'traffic') return dp.requestCount > 0
+      if (mode === 'cost') return (dp.costUSD || 0) > 0
       if (mode === 'tokens') return dp.inputTokens > 0 || dp.outputTokens > 0
       return dp.cacheReadTokens > 0 || dp.cacheCreationTokens > 0
     })
@@ -242,9 +252,11 @@ const firstNonEmptyTimestamp = computed(() => {
     keyData.dataPoints.forEach(dp => {
       const hasVisibleData = selectedView.value === 'traffic'
         ? dp.requestCount > 0
-        : selectedView.value === 'tokens'
-          ? dp.inputTokens > 0 || dp.outputTokens > 0
-          : dp.cacheReadTokens > 0 || dp.cacheCreationTokens > 0
+        : selectedView.value === 'cost'
+          ? (dp.costUSD || 0) > 0
+          : selectedView.value === 'tokens'
+            ? dp.inputTokens > 0 || dp.outputTokens > 0
+            : dp.cacheReadTokens > 0 || dp.cacheCreationTokens > 0
       if (hasVisibleData) {
         const ts = new Date(dp.timestamp).getTime()
         if (ts < earliest) earliest = ts
@@ -330,11 +342,20 @@ function formatNumber(num: number): string {
   return num.toFixed(0)
 }
 
+// Helper: format cost (USD) for display
+function formatCost(val: number): string {
+  if (val >= 1000) return (val / 1000).toFixed(2) + 'K'
+  if (val >= 1) return val.toFixed(2)
+  return val.toFixed(4)
+}
+
 // Helper: format axis value based on view mode
 function formatAxisValue(val: number, mode: ViewMode): string {
   switch (mode) {
     case 'traffic':
       return Math.round(val).toString()
+    case 'cost':
+      return '$' + formatCost(Math.abs(val))
     case 'tokens':
     case 'cache':
       return formatNumber(Math.abs(val))
@@ -348,6 +369,8 @@ function formatTooltipValue(val: number, mode: ViewMode): string {
   switch (mode) {
     case 'traffic':
       return `${Math.round(val)} ${t('chart.requestUnit')}`
+    case 'cost':
+      return `$${formatCost(Math.abs(val))}`
     case 'tokens':
     case 'cache':
       return `${formatNumber(Math.abs(val))} ${t('chart.tokenUnit')}`
@@ -369,9 +392,9 @@ function buildChartSeries(): ChartSeriesMeta[] {
   if (!props.data?.length) return []
   const mode = selectedView.value
 
-  if (mode === 'traffic') {
+  if (mode === 'traffic' || mode === 'cost') {
     return props.data
-      .filter(keyData => keyData.dataPoints.reduce((sum, dp) => sum + dp.requestCount, 0) > 0)
+      .filter(keyData => keyData.dataPoints.reduce((sum, dp) => sum + (mode === 'cost' ? (dp.costUSD || 0) : dp.requestCount), 0) > 0)
       .map((keyData, index) => {
         const keyName = getDisplayName(keyData)
         return {
@@ -379,7 +402,7 @@ function buildChartSeries(): ChartSeriesMeta[] {
           color: getSeriesColor(keyData, index),
           data: keyData.dataPoints.map(dp => ({
             x: new Date(dp.timestamp).getTime(),
-            y: dp.requestCount,
+            y: mode === 'cost' ? (dp.costUSD || 0) : dp.requestCount,
           })),
         }
       })
@@ -428,7 +451,7 @@ const chartSeries = computed(() => chartSeriesData.value.map(({ name, data }) =>
 
 // Helper: get dash array (solid for forward, dashed for reverse)
 function getDashArray(): number | number[] {
-  if (selectedView.value === 'traffic') return 0
+  if (selectedView.value === 'traffic' || selectedView.value === 'cost') return 0
   const dashArray = chartSeriesData.value.map(series => series.direction === 'out' ? 5 : 0)
   return dashArray.length > 0 ? dashArray : 0
 }
@@ -442,13 +465,14 @@ function getChartColors(): string[] {
 // Token/cache mode: determine Y-axis anchor series names
 function getYaxisConfig() {
   const mode = selectedView.value
-  if (mode === 'traffic') {
+  if (mode === 'traffic' || mode === 'cost') {
     return {
       labels: {
         formatter: (val: number) => formatAxisValue(val, mode),
         style: { fontSize: '11px', colors: textColor.value },
       },
       min: 0,
+      forceNiceScale: true,
     }
   }
 
@@ -509,7 +533,7 @@ const chartOptions = computed<ApexOptions>(() => {
       background: 'transparent',
       fontFamily: 'inherit',
       defaultLocale: 'en',
-      stacked: selectedView.value === 'traffic',
+      stacked: selectedView.value === 'traffic' || selectedView.value === 'cost',
       animations: { enabled: false },
     },
     theme: { mode: isDark.value ? 'dark' : 'light' },

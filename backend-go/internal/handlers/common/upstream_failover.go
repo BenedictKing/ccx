@@ -24,6 +24,7 @@ import (
 
 const (
 	upstreamAccountPoolCooldown = time.Minute
+	upstreamOverloadedCooldown  = 15 * time.Second
 	halfOpenProbeWaitTimeout    = 5 * time.Second
 	halfOpenProbePollInterval   = 100 * time.Millisecond
 )
@@ -90,6 +91,7 @@ func TryUpstreamWithAllKeys(
 	upstream *config.UpstreamConfig,
 	urlResults []warmup.URLLatencyResult,
 	requestBody []byte,
+	contextRequirement *scheduler.ContextRequirement,
 	isStream bool,
 	nextAPIKey NextAPIKeyFunc,
 	buildRequest BuildRequestFunc,
@@ -137,6 +139,7 @@ func TryUpstreamWithAllKeys(
 
 	// 计算重定向后的模型（用于日志记录）
 	redirectedModel := config.RedirectModel(model, upstream)
+	capabilityRequestModel := model
 	var originalModel string
 	if redirectedModel != model {
 		originalModel = model // 仅当发生重定向时记录原始模型
@@ -167,6 +170,11 @@ func TryUpstreamWithAllKeys(
 				}
 				originalModel = model
 				redirectedModel = fallback
+				capabilityRequestModel = fallback
+				if err := channelScheduler.ValidateUpstreamContext(kind, redirectedModel, upstream, contextRequirement); err != nil {
+					RequestLogf(c, "[%s-Vision] fallback 模型 %s 不满足上下文需求，跳过渠道 [%d] %s: %v", apiType, redirectedModel, channelIndex, upstream.Name, err)
+					return false, "", 0, nil, nil, err
+				}
 			} else {
 				RequestLogf(c, "[%s-Vision] 模型 %s 不支持视觉且无 fallback，跳过渠道 [%d] %s", apiType, redirectedModel, channelIndex, upstream.Name)
 				return false, "", 0, nil, nil, fmt.Errorf("model %s does not support vision", redirectedModel)
@@ -203,7 +211,7 @@ func TryUpstreamWithAllKeys(
 			// 客户端/上游 subagent 可能发送超过模型上限的 max_tokens（如 Claude Code 默认 64000），
 			// 而部分平台（火山方舟 kimi 系列硬限 32768）会直接 400。此处静默下调到模型上限，
 			// 使请求成功而非被调度过滤为"无可用渠道"。
-			if cap := config.ResolveUpstreamCapability(model, upstream, cfgManager.GetConfig().UpstreamModelCapabilities); cap.Capability.MaxOutputTokens > 0 {
+			if cap := config.ResolveUpstreamCapability(capabilityRequestModel, upstream, cfgManager.GetConfig().UpstreamModelCapabilities); cap.Capability.MaxOutputTokens > 0 {
 				if clamped, changed := clampMaxTokensInBody(attemptBody, kind, cap.Capability.MaxOutputTokens); changed {
 					attemptBody = clamped
 					RequestLogf(c, "[%s-Clamp] max_tokens 超过模型 %q 上限 %d，已下调", apiType, cap.ActualModel, cap.Capability.MaxOutputTokens)
@@ -432,6 +440,11 @@ func TryUpstreamWithAllKeys(
 						RequestLogf(c, "[%s-Channel] 渠道 [%d] %s 上游账号池不可用，冷却 %s 并尝试下一个渠道", apiType, channelIndex, upstream.Name, upstreamAccountPoolCooldown)
 						return false, "", 0, lastFailoverError, nil, lastError
 					}
+					if IsUpstreamTemporarilyOverloaded(respBodyBytes) {
+						channelScheduler.MarkChannelCooldown(kind, channelIndex, upstreamOverloadedCooldown)
+						RequestLogf(c, "[%s-Channel] 渠道 [%d] %s 上游临时过载，冷却 %s 并尝试下一个渠道", apiType, channelIndex, upstream.Name, upstreamOverloadedCooldown)
+						return false, "", 0, lastFailoverError, nil, lastError
+					}
 					continue
 				}
 
@@ -619,7 +632,7 @@ func selectAttemptAPIKey(channelScheduler *scheduler.ChannelScheduler, kind sche
 		}
 		if channelScheduler != nil && selection.LimiterScope != "" {
 			cfg := keypool.ConfigForCandidate(*upstream, selection.Config)
-			deferForLoad, _ := channelScheduler.ShouldDeferForRateLimit(kind, channelIndex, selection.LimiterScope, cfg, time.Now())
+			deferForLoad, _, _ := channelScheduler.ShouldDeferForRateLimit(kind, channelIndex, selection.LimiterScope, cfg, time.Now())
 			if deferForLoad {
 				deferred = append(deferred, selection)
 				continue

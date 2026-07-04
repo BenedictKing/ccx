@@ -39,6 +39,7 @@ ccx/
 ```bash
 # 服务器配置
 PORT=3688                              # 服务器端口（程序内部默认 3000，建议 .env 中显式设置为 3688）
+# BIND_HOST=127.0.0.1                 # Optional bind host; unset keeps :PORT and listens on all interfaces
 ENABLE_HTTPS=false                     # Enable local HTTPS listener (default false)
 TLS_AUTO_CERT=true                     # Generate a temporary localhost self-signed certificate when no cert files are configured
 TLS_CERT_FILE=/path/to/localhost.pem   # Optional TLS certificate file; must be set with TLS_KEY_FILE
@@ -76,6 +77,10 @@ CORS_ORIGIN=*                          # Allowed CORS origin
 # METRICS_WINDOW_SIZE=10               # Sliding window size (min 3, default 10)
 # METRICS_FAILURE_THRESHOLD=0.5        # Failure-rate threshold (0-1, default 0.5)
 ```
+
+#### Bind Host
+
+`BIND_HOST` controls the backend listen host. Leave it empty to keep the default `:PORT` behavior, which listens on all interfaces (often shown as `0.0.0.0:3688` or `*:3688`). Set `BIND_HOST=127.0.0.1` for local-only access. For Docker deployments that should only be reachable from the host machine, usually keep container `BIND_HOST` empty and bind the host port as `127.0.0.1:3688:3688`.
 
 #### Local HTTPS
 
@@ -440,6 +445,7 @@ VITE_APP_ENV=production
 ```env
 # 服务器配置
 PORT=3688
+# BIND_HOST=127.0.0.1
 
 # 运行环境
 ENV=production

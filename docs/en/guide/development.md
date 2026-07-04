@@ -184,7 +184,7 @@ Verify connectivity:
 curl.exe -i http://192.168.1.23:3688/health
 ```
 
-The CCX backend listens on `:PORT` by default, which means all network interfaces. You generally do not need to change it to `0.0.0.0`. If the LAN IP is not accessible, first check whether the Windows firewall allows inbound traffic on the corresponding port.
+When `BIND_HOST` is empty, the CCX backend listens on `:PORT` by default, which means all network interfaces. You generally do not need to change it to `0.0.0.0`. Set `BIND_HOST=127.0.0.1` for local-only access. If the LAN IP is not accessible, first check whether the Windows firewall allows inbound traffic on the corresponding port.
 
 ## Common Development Tasks
 

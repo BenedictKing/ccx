@@ -11,11 +11,13 @@ type FormLike = {
   fastMode: boolean
   noVision: boolean
   normalizeNonstandardChatRoles: boolean
+  normalizeMetadataUserId: boolean
   normalizeSystemRoleToTopLevel: boolean
   passbackReasoningContent: boolean
   passbackThinkingBlocks: boolean
   reasoningParamStyle: 'reasoning' | 'reasoning_effort' | 'thinking'
   serviceType: 'openai' | 'claude' | 'gemini' | 'responses' | 'copilot' | ''
+  stripBillingHeader: boolean
   stripCodexClientTools: boolean
   stripEmptyTextBlocks: boolean
   stripImageGenerationTool: boolean
@@ -85,6 +87,10 @@ export function useChannelEditPresets(options: ChannelEditPresetOptions) {
     options.form.passbackThinkingBlocks = preset.passbackThinkingBlocks
     options.form.stripEmptyTextBlocks = preset.stripEmptyTextBlocks
     options.form.normalizeSystemRoleToTopLevel = preset.normalizeSystemRoleToTopLevel
+    if (preset.normalizeMetadataUserId) {
+      options.form.normalizeMetadataUserId = true
+    }
+    options.form.stripBillingHeader = !!preset.stripBillingHeader
     options.form.stripImageGenerationTool = preset.stripImageGenerationTool
     options.form.noVision = preset.noVision
     options.form.visionFallbackModel = preset.visionFallbackModel

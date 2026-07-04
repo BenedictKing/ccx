@@ -438,6 +438,7 @@ type KeyHistoryDataPoint struct {
 	OutputTokens             int64     `json:"outputTokens"`
 	CacheCreationInputTokens int64     `json:"cacheCreationTokens"`
 	CacheReadInputTokens     int64     `json:"cacheReadTokens"`
+	CostUSD                  float64   `json:"costUSD"`
 }
 
 // GetHistoricalStats 获取历史统计数据（按时间间隔聚合）
@@ -868,6 +869,7 @@ type KeyModelHistoryDataPoint struct {
 	OutputTokens             int64     `json:"outputTokens"`
 	CacheCreationInputTokens int64     `json:"cacheCreationTokens"`
 	CacheReadInputTokens     int64     `json:"cacheReadTokens"`
+	CostUSD                  float64   `json:"costUSD"`
 }
 
 // GetKeyModelHistoricalStatsMultiURL 获取单个 Key 按模型分组的历史数据
@@ -933,6 +935,7 @@ func (m *MetricsManager) GetKeyModelHistoricalStatsMultiURL(baseURLs []string, a
 				OutputTokens:             b.outputTokens,
 				CacheCreationInputTokens: b.cacheCreationTokens,
 				CacheReadInputTokens:     b.cacheReadTokens,
+				CostUSD:                  CalculateTokenCostUSD(model, b.inputTokens, b.outputTokens, b.cacheCreationTokens, b.cacheReadTokens),
 			}
 		}
 		result[model] = points
@@ -965,6 +968,7 @@ type GlobalHistoryDataPoint struct {
 	OutputTokens        int64     `json:"outputTokens"`
 	CacheCreationTokens int64     `json:"cacheCreationTokens"`
 	CacheReadTokens     int64     `json:"cacheReadTokens"`
+	CostUSD             float64   `json:"costUSD"`
 }
 
 // GlobalStatsSummary 全局统计汇总
@@ -976,6 +980,7 @@ type GlobalStatsSummary struct {
 	TotalOutputTokens        int64   `json:"totalOutputTokens"`
 	TotalCacheCreationTokens int64   `json:"totalCacheCreationTokens"`
 	TotalCacheReadTokens     int64   `json:"totalCacheReadTokens"`
+	TotalCostUSD             float64 `json:"totalCostUSD"`
 	AvgSuccessRate           float64 `json:"avgSuccessRate"`
 	Duration                 string  `json:"duration"`
 	IntervalSeconds          int64   `json:"intervalSeconds,omitempty"`
@@ -1128,13 +1133,14 @@ func (m *MetricsManager) GetGlobalHistoricalStatsWithTokens(duration, interval t
 		Duration:                 duration.String(),
 	}
 
-	// 构建模型维度数据点
+	// 构建模型维度数据点，并把模型成本汇总回全局桶。
 	var modelDataPoints map[string][]ModelHistoryDataPoint
 	if len(modelBuckets) > 0 {
 		modelDataPoints = make(map[string][]ModelHistoryDataPoint, len(modelBuckets))
 		for model, buckets := range modelBuckets {
 			points := make([]ModelHistoryDataPoint, numPoints)
 			for i := 0; i < numPoints; i++ {
+				costUSD := CalculateTokenCostUSD(model, buckets[i].inputTokens, buckets[i].outputTokens, buckets[i].cacheCreationTokens, buckets[i].cacheReadTokens)
 				points[i] = ModelHistoryDataPoint{
 					Timestamp:           startTime.Add(time.Duration(i+1) * interval),
 					RequestCount:        buckets[i].requestCount,
@@ -1144,7 +1150,10 @@ func (m *MetricsManager) GetGlobalHistoricalStatsWithTokens(duration, interval t
 					OutputTokens:        buckets[i].outputTokens,
 					CacheCreationTokens: buckets[i].cacheCreationTokens,
 					CacheReadTokens:     buckets[i].cacheReadTokens,
+					CostUSD:             costUSD,
 				}
+				dataPoints[i].CostUSD += costUSD
+				summary.TotalCostUSD += costUSD
 			}
 			modelDataPoints[model] = points
 		}
@@ -1301,6 +1310,7 @@ type ModelHistoryDataPoint struct {
 	OutputTokens        int64     `json:"outputTokens"`
 	CacheCreationTokens int64     `json:"cacheCreationTokens"`
 	CacheReadTokens     int64     `json:"cacheReadTokens"`
+	CostUSD             float64   `json:"costUSD"`
 }
 
 // GetModelStatsHistory 获取按模型分组的历史统计
@@ -1385,6 +1395,7 @@ func (m *MetricsManager) GetModelStatsHistory(duration, interval time.Duration) 
 				OutputTokens:        buckets[i].outputTokens,
 				CacheCreationTokens: buckets[i].cacheCreationTokens,
 				CacheReadTokens:     buckets[i].cacheReadTokens,
+				CostUSD:             CalculateTokenCostUSD(model, buckets[i].inputTokens, buckets[i].outputTokens, buckets[i].cacheCreationTokens, buckets[i].cacheReadTokens),
 			}
 		}
 		result[model] = points

@@ -612,38 +612,92 @@ func getChannelKeyMetricsHistoryWithKind(metricsManager *metrics.MetricsManager,
 			channelBuckets := filterBucketsByURLs(store, apiType, since, intervalSec, upstream.GetAllBaseURLs(), channelStatsAPIKeys(upstream), serviceType)
 			result.Summary = summarizeAggregatedBuckets(durationLabel, channelBuckets)
 			result.Summary.IntervalSeconds = intervalSec
+			channelModelBuckets := filterModelBucketsByURLs(store, apiType, since, intervalSec, upstream.GetAllBaseURLs(), channelStatsAPIKeys(upstream), serviceType)
+			for _, b := range channelModelBuckets {
+				result.Summary.TotalCostUSD += metrics.CalculateTokenCostUSD(b.Model, b.InputTokens, b.OutputTokens, b.CacheCreationTokens, b.CacheReadTokens)
+			}
 
-			// 逐 key 生成曲线
+			// 逐 key 按模型生成曲线
 			colorIndex := 0
 			for _, keyInfo := range displayKeys {
 				keyMask := truncateKeyMask(keyInfo.KeyMask, 8)
-				keyBuckets := filterBucketsByURLs(store, apiType, since, intervalSec, upstream.GetAllBaseURLs(), []string{keyInfo.APIKey}, serviceType)
+				keyModelBuckets := filterModelBucketsByURLs(store, apiType, since, intervalSec, upstream.GetAllBaseURLs(), []string{keyInfo.APIKey}, serviceType)
 
-				dataPoints := make([]metrics.KeyHistoryDataPoint, 0, len(keyBuckets))
-				for _, b := range keyBuckets {
-					var successRate float64
-					if b.TotalRequests > 0 {
-						successRate = float64(b.SuccessCount) / float64(b.TotalRequests) * 100
+				// 按 (timestamp, model) 聚合，复用 AggregatedBucket 作为 key 级合并
+				bucketByModel := make(map[string]map[int64]*metrics.AggregatedBucket)
+				for _, b := range keyModelBuckets {
+					ts := b.Timestamp.Unix()
+					if bucketByModel[b.Model] == nil {
+						bucketByModel[b.Model] = make(map[int64]*metrics.AggregatedBucket)
 					}
-					dataPoints = append(dataPoints, metrics.KeyHistoryDataPoint{
-						Timestamp:                b.Timestamp,
-						RequestCount:             b.TotalRequests,
-						SuccessCount:             b.SuccessCount,
-						FailureCount:             b.TotalRequests - b.SuccessCount,
-						SuccessRate:              successRate,
-						InputTokens:              b.InputTokens,
-						OutputTokens:             b.OutputTokens,
-						CacheCreationInputTokens: b.CacheCreationTokens,
-						CacheReadInputTokens:     b.CacheReadTokens,
-					})
+					if existing, ok := bucketByModel[b.Model][ts]; ok {
+						existing.TotalRequests += b.TotalRequests
+						existing.SuccessCount += b.SuccessCount
+						existing.InputTokens += b.InputTokens
+						existing.OutputTokens += b.OutputTokens
+						existing.CacheCreationTokens += b.CacheCreationTokens
+						existing.CacheReadTokens += b.CacheReadTokens
+					} else {
+						bucketByModel[b.Model][ts] = &metrics.AggregatedBucket{
+							Timestamp:           b.Timestamp,
+							TotalRequests:       b.TotalRequests,
+							SuccessCount:        b.SuccessCount,
+							InputTokens:         b.InputTokens,
+							OutputTokens:        b.OutputTokens,
+							CacheCreationTokens: b.CacheCreationTokens,
+							CacheReadTokens:     b.CacheReadTokens,
+						}
+					}
 				}
 
-				result.Keys = append(result.Keys, KeyMetricsHistoryResult{
-					KeyMask:    keyMask,
-					Color:      keyColors[colorIndex%len(keyColors)],
-					DataPoints: dataPoints,
-				})
-				colorIndex++
+				if len(bucketByModel) == 0 {
+					result.Keys = append(result.Keys, KeyMetricsHistoryResult{
+						KeyMask:    keyMask,
+						Color:      keyColors[colorIndex%len(keyColors)],
+						DataPoints: []metrics.KeyHistoryDataPoint{},
+					})
+					colorIndex++
+					continue
+				}
+
+				models := make([]string, 0, len(bucketByModel))
+				for model := range bucketByModel {
+					models = append(models, model)
+				}
+				sort.Strings(models)
+
+				for _, model := range models {
+					bucketMap := bucketByModel[model]
+					dataPoints := make([]metrics.KeyHistoryDataPoint, 0, len(bucketMap))
+					for _, b := range bucketMap {
+						var successRate float64
+						if b.TotalRequests > 0 {
+							successRate = float64(b.SuccessCount) / float64(b.TotalRequests) * 100
+						}
+						dataPoints = append(dataPoints, metrics.KeyHistoryDataPoint{
+							Timestamp:                b.Timestamp,
+							RequestCount:             b.TotalRequests,
+							SuccessCount:             b.SuccessCount,
+							FailureCount:             b.TotalRequests - b.SuccessCount,
+							SuccessRate:              successRate,
+							InputTokens:              b.InputTokens,
+							OutputTokens:             b.OutputTokens,
+							CacheCreationInputTokens: b.CacheCreationTokens,
+							CacheReadInputTokens:     b.CacheReadTokens,
+							CostUSD:                  metrics.CalculateTokenCostUSD(model, b.InputTokens, b.OutputTokens, b.CacheCreationTokens, b.CacheReadTokens),
+						})
+					}
+					sort.Slice(dataPoints, func(i, j int) bool {
+						return dataPoints[i].Timestamp.Before(dataPoints[j].Timestamp)
+					})
+					result.Keys = append(result.Keys, KeyMetricsHistoryResult{
+						KeyMask:    keyMask,
+						Model:      model,
+						Color:      keyColors[colorIndex%len(keyColors)],
+						DataPoints: dataPoints,
+					})
+					colorIndex++
+				}
 			}
 
 			c.JSON(200, result)
@@ -657,7 +711,8 @@ func getChannelKeyMetricsHistoryWithKind(metricsManager *metrics.MetricsManager,
 			fullDataPoints := metricsManager.GetKeyHistoricalStatsMultiURL(upstream.GetAllBaseURLs(), keyInfo.APIKey, serviceType, duration, interval)
 			modelData := metricsManager.GetKeyModelHistoricalStatsMultiURL(upstream.GetAllBaseURLs(), keyInfo.APIKey, serviceType, duration, interval)
 
-			if len(modelData) <= 1 {
+			// 没有任何模型时 fallback 到跨模型聚合数据（不计算 CostUSD，因为无模型定价依据）
+			if len(modelData) == 0 {
 				result.Keys = append(result.Keys, KeyMetricsHistoryResult{
 					KeyMask:    keyMask,
 					Color:      keyColors[colorIndex%len(keyColors)],
@@ -667,6 +722,8 @@ func getChannelKeyMetricsHistoryWithKind(metricsManager *metrics.MetricsManager,
 				continue
 			}
 
+			// 1 个或多个模型都走 per-model 路径，确保单模型 key 也能填入 CostUSD
+			// 与 SQLite 长时范围路径行为保持一致
 			models := make([]string, 0, len(modelData))
 			for model := range modelData {
 				models = append(models, model)
@@ -686,6 +743,7 @@ func getChannelKeyMetricsHistoryWithKind(metricsManager *metrics.MetricsManager,
 						OutputTokens:             p.OutputTokens,
 						CacheCreationInputTokens: p.CacheCreationInputTokens,
 						CacheReadInputTokens:     p.CacheReadInputTokens,
+						CostUSD:                  p.CostUSD,
 					}
 				}
 				result.Keys = append(result.Keys, KeyMetricsHistoryResult{
@@ -702,6 +760,15 @@ func getChannelKeyMetricsHistoryWithKind(metricsManager *metrics.MetricsManager,
 		channelDataPoints := metricsManager.GetHistoricalStatsMultiURL(upstream.GetAllBaseURLs(), channelStatsAPIKeys(upstream), serviceType, duration, interval)
 		result.Summary = summarizeHistoryDataPoints(durationLabel, channelDataPoints)
 		result.Summary.IntervalSeconds = int64(interval.Seconds())
+		// 按渠道所有 key+model 计算所选时间段总花费
+		for _, apiKey := range channelStatsAPIKeys(upstream) {
+			channelModelData := metricsManager.GetKeyModelHistoricalStatsMultiURL(upstream.GetAllBaseURLs(), apiKey, serviceType, duration, interval)
+			for model, points := range channelModelData {
+				for _, p := range points {
+					result.Summary.TotalCostUSD += metrics.CalculateTokenCostUSD(model, p.InputTokens, p.OutputTokens, p.CacheCreationInputTokens, p.CacheReadInputTokens)
+				}
+			}
+		}
 
 		c.JSON(200, result)
 	}
@@ -1094,6 +1161,39 @@ func filterBucketsByURLs(store metrics.PersistenceStore, apiType string, since t
 	}
 
 	return fillEmptyBuckets(bucketMap, since, time.Now(), intervalSec)
+}
+
+// filterModelBucketsByURLs 按 baseURL+apiKey 组合查询按模型聚合的历史桶。
+func filterModelBucketsByURLs(store metrics.PersistenceStore, apiType string, since time.Time, intervalSec int64, baseURLs []string, apiKeys []string, serviceType string) []metrics.ModelAggregatedBucket {
+	queriedMetricsKeys := make(map[string]struct{})
+	var results []metrics.ModelAggregatedBucket
+	for _, baseURL := range baseURLs {
+		for _, apiKey := range apiKeys {
+			lookupKeys := []string{metrics.GenerateMetricsIdentityKey(baseURL, apiKey, serviceType)}
+			for _, variant := range utils.EquivalentBaseURLVariants(baseURL, serviceType) {
+				lookupKey := metrics.GenerateMetricsKey(variant, apiKey)
+				if lookupKey == lookupKeys[0] {
+					continue
+				}
+				lookupKeys = append(lookupKeys, lookupKey)
+			}
+
+			for _, metricsKey := range lookupKeys {
+				if _, exists := queriedMetricsKeys[metricsKey]; exists {
+					continue
+				}
+				queriedMetricsKeys[metricsKey] = struct{}{}
+
+				buckets, err := store.QueryModelAggregatedHistory(apiType, since, intervalSec, metricsKey, "")
+				if err != nil {
+					log.Printf("[Metrics-History] 查询模型聚合 metricsKey %s 失败(baseURL=%s): %v", metricsKey, baseURL, err)
+					continue
+				}
+				results = append(results, buckets...)
+			}
+		}
+	}
+	return results
 }
 
 // fillEmptyBuckets 按 SQL 桶对齐规则 (timestamp/intervalSec)*intervalSec

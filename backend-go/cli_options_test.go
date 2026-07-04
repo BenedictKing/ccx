@@ -73,6 +73,7 @@ func TestResolveRuntimePathsDefaults(t *testing.T) {
 		ConfigPath:                 ".config/config.json",
 		StateDir:                   ".config",
 		MetricsDBPath:              filepath.Join(".config", "metrics.db"),
+		ThinkingCacheDBPath:        filepath.Join(".config", "thinking_cache.db"),
 		ConversationStatePath:      filepath.Join(".config", "conversation_state.json"),
 		ScheduledRecoveryStatePath: filepath.Join(".config", "scheduled_recovery_state.json"),
 		LogDir:                     "logs",
@@ -96,6 +97,9 @@ func TestResolveRuntimePathsConfigPathDoesNotMoveState(t *testing.T) {
 	if got.MetricsDBPath != filepath.Join(".config", "metrics.db") {
 		t.Fatalf("MetricsDBPath = %q", got.MetricsDBPath)
 	}
+	if got.ThinkingCacheDBPath != filepath.Join(".config", "thinking_cache.db") {
+		t.Fatalf("ThinkingCacheDBPath = %q", got.ThinkingCacheDBPath)
+	}
 	if got.ConversationStatePath != filepath.Join(".config", "conversation_state.json") {
 		t.Fatalf("ConversationStatePath = %q", got.ConversationStatePath)
 	}
@@ -118,6 +122,9 @@ func TestResolveRuntimePathsStateDir(t *testing.T) {
 	}
 	if got.MetricsDBPath != filepath.Join(stateDir, "metrics.db") {
 		t.Fatalf("MetricsDBPath = %q", got.MetricsDBPath)
+	}
+	if got.ThinkingCacheDBPath != filepath.Join(stateDir, "thinking_cache.db") {
+		t.Fatalf("ThinkingCacheDBPath = %q", got.ThinkingCacheDBPath)
 	}
 	if got.ConversationStatePath != filepath.Join(stateDir, "conversation_state.json") {
 		t.Fatalf("ConversationStatePath = %q", got.ConversationStatePath)

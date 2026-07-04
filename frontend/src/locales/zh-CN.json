@@ -538,6 +538,8 @@
   "chart.traffic": "流量",
   "chart.tokens": "Token",
   "chart.cacheRw": "缓存 R/W",
+  "chart.cost": "花费",
+  "chart.totalCost": "总花费",
   "chart.totalRequests": "总请求",
   "chart.successRate": "可用率",
   "chart.inputTokens": "输入 Token",

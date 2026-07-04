@@ -49,6 +49,12 @@ func NormalizeResponsesItem(item ResponsesItem) ResponsesItem {
 	}
 }
 
+// ResponsesItemFromMap 是 responsesItemFromMap 的导出封装，
+// 供 streamOutputCollector 等包外调用方从 SSE 事件 JSON 构建 ResponsesItem 时使用。
+func ResponsesItemFromMap(itemMap map[string]interface{}) ResponsesItem {
+	return responsesItemFromMap(itemMap)
+}
+
 func responsesItemFromMap(itemMap map[string]interface{}) ResponsesItem {
 	item := ResponsesItem{
 		ID:               stringFromMap(itemMap, "id"),

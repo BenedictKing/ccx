@@ -189,13 +189,13 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 				}
 				upstream := s.getUpstreamByIndex(ch.Index, kind)
 				if upstream != nil && s.channelIsRuntimeAvailable(upstream, kind, ch.Index) {
-					log.Printf("[%s-Override] 按手动排序选择渠道: [%d] %s (user: %s)", prefix, ch.Index, ch.Name, maskUserID(userID))
+					log.Printf("[%s-Override] 按手动排序选择渠道: [%d] %s (user: %s, role=%s, sequenceHead=%s)", prefix, ch.Index, ch.Name, maskUserID(userID), schedulerAgentRoleForLog(opts.AgentRole), formatOverrideSequenceHead(sequence, 3))
 					// Idle 续期：对话活跃时延长 override TTL
 					s.overrideManager.RefreshOverrideForUser(string(kind), userID)
 					return s.selectionResult(kind, upstream, ch.Index, "manual_override"), nil
 				}
 			}
-			log.Printf("[%s-Override] 手动排序序列中无当前可用渠道，保留排序并回退默认调度 (user: %s)", prefix, maskUserID(userID))
+			log.Printf("[%s-Override] 手动排序序列中无当前可用渠道，保留排序并回退默认调度 (user: %s, role=%s, sequenceHead=%s)", prefix, maskUserID(userID), schedulerAgentRoleForLog(opts.AgentRole), formatOverrideSequenceHead(sequence, 3))
 		}
 	}
 
@@ -289,10 +289,15 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 			continue
 		}
 
-		if deferred, ratio, scope := s.channelRateLimitSoftDeferred(upstream, kind, ch.Index, model, time.Now()); deferred {
+		if deferred, ratio, scope, cooldown := s.channelRateLimitSoftDeferred(upstream, kind, ch.Index, model, time.Now()); deferred {
 			prefix := kindSchedulerLogPrefix(kind)
-			log.Printf("[%s-RateLimit] 软跳过高水位渠道: [%d] %s scope=%s usage=%.0f%% (high=%.0f%%, recover<%.0f%%/%s)",
-				prefix, ch.Index, upstream.Name, scope, ratio*100, rateLimitLoadShedHighWatermark*100, rateLimitLoadShedLowWatermark*100, rateLimitLoadShedRecovery)
+			if cooldown {
+				log.Printf("[%s-RateLimit] 软跳过高水位渠道: [%d] %s scope=%s usage=%.0f%% cooldown (high=%.0f%%, recover<%.0f%%/%s)",
+					prefix, ch.Index, upstream.Name, scope, ratio*100, rateLimitLoadShedHighWatermark*100, rateLimitLoadShedLowWatermark*100, rateLimitLoadShedRecovery)
+			} else {
+				log.Printf("[%s-RateLimit] 软跳过高水位渠道: [%d] %s scope=%s usage=%.0f%% (high=%.0f%%, recover<%.0f%%/%s)",
+					prefix, ch.Index, upstream.Name, scope, ratio*100, rateLimitLoadShedHighWatermark*100, rateLimitLoadShedLowWatermark*100, rateLimitLoadShedRecovery)
+			}
 			softSkipped = append(softSkipped, softSkippedChannel{
 				channel:  ch,
 				upstream: upstream,
@@ -359,9 +364,10 @@ func (s *ChannelScheduler) channelInRuntimeCooldown(kind ChannelKind, channelInd
 }
 
 // ShouldDeferForRateLimit 判断指定渠道或 key/quota scope 是否应因高水位暂缓新请求。
-func (s *ChannelScheduler) ShouldDeferForRateLimit(kind ChannelKind, channelIndex int, scope string, cfg ratelimit.Config, now time.Time) (bool, float64) {
+// 第三个返回值 inCooldown 标识此次软跳是否由 cooldown 触发。
+func (s *ChannelScheduler) ShouldDeferForRateLimit(kind ChannelKind, channelIndex int, scope string, cfg ratelimit.Config, now time.Time) (bool, float64, bool) {
 	if s == nil || s.rateLimitManager == nil {
-		return false, 0
+		return false, 0, false
 	}
 	if now.IsZero() {
 		now = time.Now()
@@ -373,16 +379,21 @@ func (s *ChannelScheduler) ShouldDeferForRateLimit(kind ChannelKind, channelInde
 		limiter = s.rateLimitManager.GetOrCreateScoped(apiType, channelIndex, scope, cfg)
 	}
 	if limiter == nil {
-		return false, 0
+		return false, 0, false
 	}
 
 	status := limiter.Status(now)
+
+	// cooldown 优先检查：仅靠上游 Retry-After 学到的 cooldown 也需要软跳过，
+	// 且不写入 loadShed 状态，cooldown 到期后立即可用。
+	// 返回 utilization=1.0 表示饱和/不可用，防止调用方误判为低水位。
 	if status.InCooldown {
-		return true, 1
+		return true, 1.0, true
 	}
+
 	if status.MaxRequests <= 0 && status.MaxConcurrent <= 0 {
 		s.clearRateLimitLoadShed(apiType, channelIndex, scope)
-		return false, 0
+		return false, 0, false
 	}
 
 	ratio := status.Utilization()
@@ -395,35 +406,36 @@ func (s *ChannelScheduler) ShouldDeferForRateLimit(kind ChannelKind, channelInde
 	}
 
 	state := s.loadShedStates[key]
+
 	if ratio >= rateLimitLoadShedHighWatermark {
 		state.shedding = true
 		state.lowSince = time.Time{}
 		s.loadShedStates[key] = state
-		return true, ratio
+		return true, ratio, false
 	}
 
 	if !state.shedding {
 		delete(s.loadShedStates, key)
-		return false, ratio
+		return false, ratio, false
 	}
 
 	if ratio < rateLimitLoadShedLowWatermark {
 		if state.lowSince.IsZero() {
 			state.lowSince = now
 			s.loadShedStates[key] = state
-			return true, ratio
+			return true, ratio, false
 		}
 		if now.Sub(state.lowSince) >= rateLimitLoadShedRecovery {
 			delete(s.loadShedStates, key)
-			return false, ratio
+			return false, ratio, false
 		}
 		s.loadShedStates[key] = state
-		return true, ratio
+		return true, ratio, false
 	}
 
-	state.lowSince = time.Time{}
+	// 30% ≤ ratio < 50%：维持 lowSince 不变，继续等待恢复
 	s.loadShedStates[key] = state
-	return true, ratio
+	return true, ratio, false
 }
 
 func (s *ChannelScheduler) clearRateLimitLoadShed(apiType string, channelIndex int, scope string) {
@@ -436,6 +448,50 @@ func (s *ChannelScheduler) clearRateLimitLoadShed(apiType string, channelIndex i
 	delete(s.loadShedStates, key)
 }
 
+// Start 启动后台 reaper，定期推进到期的 loadShed 状态。
+func (s *ChannelScheduler) Start() {
+	go s.recoverExpiredLoadShedStates()
+}
+
+// Stop 停止后台 reaper。
+func (s *ChannelScheduler) Stop() {
+	close(s.loadShedStopCh)
+}
+
+func (s *ChannelScheduler) recoverExpiredLoadShedStates() {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			s.recoverLoadShedStates()
+		case <-s.loadShedStopCh:
+			return
+		}
+	}
+}
+
+// recoverLoadShedStates 为 high-watermark shedding 状态启动恢复计时器。
+// 实际恢复（删除状态）由 ShouldDeferForRateLimit 基于 limiter 实际利用率确认，
+// 避免 reaper 在 limiter 仍有活跃请求时误删状态。
+func (s *ChannelScheduler) recoverLoadShedStates() {
+	s.loadShedMu.Lock()
+	defer s.loadShedMu.Unlock()
+	now := time.Now()
+	for key, state := range s.loadShedStates {
+		if !state.shedding {
+			delete(s.loadShedStates, key)
+			continue
+		}
+		if state.lowSince.IsZero() {
+			// high-watermark shedding：启动恢复计时器，
+			// 使空闲状态在 rateLimitLoadShedRecovery 后由 ShouldDeferForRateLimit 清理。
+			state.lowSince = now
+			s.loadShedStates[key] = state
+		}
+	}
+}
+
 func rateLimitLoadShedKey(apiType string, channelIndex int, scope string) string {
 	if scope == "" {
 		scope = "channel"
@@ -443,41 +499,45 @@ func rateLimitLoadShedKey(apiType string, channelIndex int, scope string) string
 	return fmt.Sprintf("%s:%d:%s", apiType, channelIndex, scope)
 }
 
-func (s *ChannelScheduler) channelRateLimitSoftDeferred(upstream *config.UpstreamConfig, kind ChannelKind, channelIndex int, model string, now time.Time) (bool, float64, string) {
+func (s *ChannelScheduler) channelRateLimitSoftDeferred(upstream *config.UpstreamConfig, kind ChannelKind, channelIndex int, model string, now time.Time) (bool, float64, string, bool) {
 	if upstream == nil || s == nil || s.rateLimitManager == nil {
-		return false, 0, ""
+		return false, 0, "", false
 	}
 
-	if deferred, ratio := s.ShouldDeferForRateLimit(kind, channelIndex, "", ratelimit.Config{}, now); deferred {
-		return true, ratio, "channel"
+	if deferred, ratio, cooldown := s.ShouldDeferForRateLimit(kind, channelIndex, "", ratelimit.Config{}, now); deferred {
+		return true, ratio, "channel", cooldown
 	}
 
 	if !keypool.HasEffectiveConfig(upstream) {
-		return false, 0, ""
+		return false, 0, "", false
 	}
 
 	candidates := keypool.CandidatesForModel(upstream, nil, model)
 	if len(candidates) == 0 {
-		return false, 0, ""
+		return false, 0, "", false
 	}
 
 	maxRatio := 0.0
 	maxScope := ""
+	maxCooldown := false
 	for _, candidate := range candidates {
 		cfg := keypool.ConfigForCandidate(*upstream, candidate.Config)
-		deferred, ratio := s.ShouldDeferForRateLimit(kind, channelIndex, candidate.Scope, cfg, now)
+		deferred, ratio, cooldown := s.ShouldDeferForRateLimit(kind, channelIndex, candidate.Scope, cfg, now)
 		if ratio > maxRatio {
 			maxRatio = ratio
 			maxScope = candidate.Scope
 		}
+		if cooldown {
+			maxCooldown = true
+		}
 		if !deferred {
-			return false, ratio, candidate.Scope
+			return false, ratio, candidate.Scope, false
 		}
 	}
 	if maxScope == "" {
 		maxScope = "key"
 	}
-	return true, maxRatio, maxScope
+	return true, maxRatio, maxScope, maxCooldown
 }
 
 func shouldReserveVisionChannelForText(kind ChannelKind, hasImageContent bool, upstream *config.UpstreamConfig, softSkipped []softSkippedChannel) bool {
@@ -691,6 +751,34 @@ func applyManualOverrideOrder(activeChannels []ChannelInfo, sequence []conversat
 	return ordered
 }
 
+func schedulerAgentRoleForLog(role string) string {
+	if strings.TrimSpace(role) == "" {
+		return "unknown"
+	}
+	return role
+}
+
+func formatOverrideSequenceHead(sequence []conversation.ChannelEntry, limit int) string {
+	if len(sequence) == 0 {
+		return "[]"
+	}
+	if limit <= 0 || limit > len(sequence) {
+		limit = len(sequence)
+	}
+	parts := make([]string, 0, limit+1)
+	for _, entry := range sequence[:limit] {
+		name := entry.ChannelName
+		if name == "" {
+			name = "unknown"
+		}
+		parts = append(parts, fmt.Sprintf("%d:%s", entry.ChannelIndex, name))
+	}
+	if len(sequence) > limit {
+		parts = append(parts, fmt.Sprintf("+%d", len(sequence)-limit))
+	}
+	return "[" + strings.Join(parts, ",") + "]"
+}
+
 func traceAffinityKey(kind ChannelKind, userID string, requirement *ContextRequirement) string {
 	channelRequiredWindow := requirement.effectiveWindowTokens()
 	if channelRequiredWindow <= 0 {
@@ -895,7 +983,7 @@ func (s *ChannelScheduler) findBestAvailableChannelPriority(
 		if !s.channelIsRuntimeAvailable(upstream, kind, ch.Index) {
 			continue
 		}
-		if deferred, _, _ := s.channelRateLimitSoftDeferred(upstream, kind, ch.Index, model, time.Now()); deferred {
+		if deferred, _, _, _ := s.channelRateLimitSoftDeferred(upstream, kind, ch.Index, model, time.Now()); deferred {
 			continue
 		}
 

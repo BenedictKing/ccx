@@ -182,7 +182,7 @@ func TestSelectPort(t *testing.T) {
 
 	t.Run("skip occupied port", func(t *testing.T) {
 		// 占用第一个端口
-		ln, err := net.Listen("tcp", "127.0.0.1:19850")
+		ln, err := net.Listen("tcp", ":19850")
 		if err != nil {
 			t.Skipf("cannot bind port 19850: %v", err)
 		}
@@ -470,6 +470,7 @@ func TestBuildEnvIncludesHTTPSSettings(t *testing.T) {
 	dataDir := t.TempDir()
 	content := strings.Join([]string{
 		"PROXY_ACCESS_KEY=desktop-key",
+		"BIND_HOST=127.0.0.1",
 		"ENABLE_HTTPS=true",
 		"TLS_AUTO_CERT=false",
 		"TLS_CERT_FILE=/tmp/localhost.pem",
@@ -483,6 +484,7 @@ func TestBuildEnvIncludesHTTPSSettings(t *testing.T) {
 	got := m.buildEnv(8443)
 	for _, want := range []string{
 		"PORT=8443",
+		"BIND_HOST=127.0.0.1",
 		"ENABLE_HTTPS=true",
 		"TLS_AUTO_CERT=false",
 		"TLS_CERT_FILE=/tmp/localhost.pem",
@@ -491,6 +493,24 @@ func TestBuildEnvIncludesHTTPSSettings(t *testing.T) {
 		if !containsEnv(got, want) {
 			t.Fatalf("buildEnv() missing %s in %#v", want, got)
 		}
+	}
+}
+
+func TestBuildEnvIncludesBlankBindHost(t *testing.T) {
+	dataDir := t.TempDir()
+	content := strings.Join([]string{
+		"PROXY_ACCESS_KEY=desktop-key",
+		"BIND_HOST=",
+	}, "\n") + "\n"
+	if err := os.WriteFile(filepath.Join(dataDir, ".env"), []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("BIND_HOST", "127.0.0.1")
+	m := NewManager(Options{RootDir: t.TempDir(), DataDir: dataDir})
+
+	got := m.buildEnv(8443)
+	if !containsEnv(got, "BIND_HOST=") {
+		t.Fatalf("buildEnv() should preserve explicit blank BIND_HOST in %#v", got)
 	}
 }
 
@@ -533,6 +553,28 @@ func TestWebURLHTTPS(t *testing.T) {
 	m := NewManager(Options{RootDir: t.TempDir(), DataDir: dataDir, DefaultPort: 7777})
 	if got := m.WebURL(); got != "https://127.0.0.1:7777" {
 		t.Errorf("WebURL = %q, want %q", got, "https://127.0.0.1:7777")
+	}
+}
+
+func TestWebURLUsesBindHost(t *testing.T) {
+	dataDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dataDir, ".env"), []byte("BIND_HOST=192.168.1.23\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	m := NewManager(Options{RootDir: t.TempDir(), DataDir: dataDir, DefaultPort: 7777})
+	if got := m.WebURL(); got != "http://192.168.1.23:7777" {
+		t.Errorf("WebURL = %q, want %q", got, "http://192.168.1.23:7777")
+	}
+}
+
+func TestWebURLUsesLoopbackForUnspecifiedBindHost(t *testing.T) {
+	dataDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dataDir, ".env"), []byte("BIND_HOST=0.0.0.0\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	m := NewManager(Options{RootDir: t.TempDir(), DataDir: dataDir, DefaultPort: 7777})
+	if got := m.WebURL(); got != "http://127.0.0.1:7777" {
+		t.Errorf("WebURL = %q, want %q", got, "http://127.0.0.1:7777")
 	}
 }
 

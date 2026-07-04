@@ -1,3 +1,103 @@
+## [v2.9.34] - 2026-07-04
+
+### 新增
+
+- **注册 mdiCash 图标** - ui: 注册 mdiCash 图标，补充前端图标资源
+- **5xx + Retry-After 也触发限速 cooldown** - ratelimit: 上游返回 5xx 或 Retry-After 头时同样触发限速 cooldown
+- **上游临时过载检测与渠道冷却机制** - failover: 新增上游临时过载检测与渠道冷却机制，提升故障转移鲁棒性
+
+### 修复
+
+- **单模型渠道 CostUSD 不显示** - metrics: 修复单模型渠道 CostUSD 不显示的问题
+- **限速窗口单位语义修正** - ratelimit: 修正限速窗口单位语义，字段值直接以秒为单位
+
+### 其他
+
+- **Serena 本地记忆目录加入忽略列表** - chore: 将 Serena 本地记忆目录加入 gitignore
+
+## [v2.9.33] - 2026-07-04
+
+### 修复
+
+- **DeepSeek context_management 不兼容导致 400** - providers: 过滤 DeepSeek Claude 兼容端点不支持的 `context_management.clear_thinking_20251015` 编辑和 `context-management-2025-06-27` beta header，修复 Claude Code 首轮/recap 请求的 thinking 回传 400
+
+## [v2.9.32] - 2026-07-03
+
+### 修复
+
+- **ChannelManager canDeleteChannel 引用错误** - desktop: 修复 ChannelManager canDeleteChannel 引用错误
+
+## [v2.9.31] - 2026-07-03
+
+### 新增
+
+- **DeepSeek tool_use passback 双重降级缓存** - thinking: DeepSeek tool_use passback 双重降级缓存
+
+### 修复
+
+- **opaque encrypted_reasoning 占位保障 DeepSeek thinking passback** - responses: opaque encrypted_reasoning 占位保障 DeepSeek thinking passback
+
+## [v2.9.30] - 2026-07-03
+
+### 新增
+
+- **原生 WebSocket v2 透传** - responses: 支持原生 WebSocket v2 透传
+- **流式 session 回写与 incomplete 合成** - responses: 流式路径 session 回写并在 post-commit stall 时合成 incomplete
+- **Responses reasoning encrypted_content 缓存** - thinkingcache: 扩展存储 Responses reasoning encrypted_content
+- **分层保真 compact** - compact: 增加分层保真 compact 与 function_call_output 摘要
+
+### 修复
+
+- **快速创建渠道数据源提交** - desktop: 统一快速创建渠道时提交数据源
+- **视觉回退上下文校验** - failover: 校验 vision fallback context，避免无效视觉回退上下文继续传播
+- **agent skills 路径与 Store MSIX tag 下载** - skill: 修复 `.agents/skills` 内 skill 文档误指向 `.claude/skills` 的路径，并确保 store-update 脚本的 `--tag` 会传递给 `gh release download`
+
+### 其他
+
+- **desktop-store-update 技能清理** - skill: 删除 desktop-store-update 技能并更新工具配置
+- **agent skills 同步** - skill: 同步 agent skills 文档、脚本和 upstream-check 状态
+
+## [v2.9.29] - 2026-07-03
+
+### 新增
+
+- **token 成本(USD) 统计** - metrics: 新增 token 成本(USD) 统计
+- **loadShed reaper 与 cooldown 软跳过改进** - scheduler: loadShed reaper 自动推进到期状态、cooldown 软跳过与 scoped limiter 清理改进
+- **preflight 空响应详情诊断与敏感信息脱敏** - stream: preflight 空响应详情诊断与敏感信息脱敏
+
+### 修复
+
+- **MiniMax M2 系列上下文与输出元数据** - model-registry: 修正 MiniMax M2 系列上下文与输出元数据
+- **火山方舟 quota exceeded 识别与临时限流误判** - failover: 识别火山方舟 quota exceeded 并修复临时 token-per-minute 限流误判
+- **桌面渠道模型映射下拉框显示** - desktop: 修复渠道模型映射下拉框显示并清理调试日志
+
+### 文档
+
+- **Microsoft Store submission API 凭据获取说明** - skill: 补充 Microsoft Store submission API 凭据获取说明
+
+### 其他
+
+- **desktop-store-update 技能** - skill: 新增 desktop-store-update 技能
+
+## [v2.9.28] - 2026-07-02
+
+### 新增
+
+- **BIND_HOST 环境变量支持** - server: 新增 BIND_HOST 环境变量以绑定指定网络接口
+- **Claude thinking 回填缓存** - thinkingcache: 新增 Claude thinking 回填缓存模块
+- **子代理精确识别** - agent: 通过 X-Claude-Code-Agent-Id 精确识别子代理
+- **统一配置管理与 CLI 选项** - thinkingcache: 统一 thinking 缓存配置管理与 CLI 选项
+- **DeepSeek Claude thinking 缓存诊断** - compat-diagnose: DeepSeek Claude 渠道启用 thinking 缓存诊断
+- **DeepSeek Claude 预设 thinking 缓存模式** - preset: DeepSeek Claude 预设切换到 thinking 缓存模式
+
+### 修复
+
+- **stop_reason 仅事件误判** - stream: stop_reason 仅事件不再误判为语义内容
+
+### 重构
+
+- **override 日志增强** - scheduler: 增强 override 日志输出
+
 ## [v2.9.27] - 2026-07-02
 
 ### 新增

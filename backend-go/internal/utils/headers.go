@@ -107,7 +107,8 @@ func flattenMetadataUserID(raw interface{}) string {
 
 // ExtractAgentContext 提取请求的代理上下文，用于 subagent 观测与角色路由。
 // Codex Responses：通过 client_metadata 精确识别 subagent（exact）。
-// Claude Code Messages：通过 metadata.user_id + 消息/工具数量弱识别（heuristic，仅观测）。
+// Claude Code Messages：优先使用 X-Claude-Code-Agent-Id 精确识别 subagent；无该头时
+// 再通过 metadata.user_id + 消息/工具数量弱识别。
 func ExtractAgentContext(c *gin.Context, bodyBytes []byte) *types.AgentContext {
 	ctx := &types.AgentContext{}
 
@@ -140,6 +141,12 @@ func ExtractAgentContext(c *gin.Context, bodyBytes []byte) *types.AgentContext {
 	// Claude Code 弱识别（仅观测，不强制路由）
 	if metadata, ok := req["metadata"].(map[string]interface{}); ok {
 		if hasClaudeCodeSessionID(metadata) {
+			if c != nil && strings.TrimSpace(c.GetHeader("X-Claude-Code-Agent-Id")) != "" {
+				ctx.AgentRole = "subagent"
+				ctx.AgentType = "claude_code_subagent"
+				ctx.Confidence = "exact"
+				return ctx
+			}
 			if isLikelyClaudeCodeSubagent(req) {
 				ctx.AgentRole = "subagent"
 				ctx.AgentType = "claude_code_subagent"

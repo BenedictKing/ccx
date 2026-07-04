@@ -10,6 +10,7 @@ import (
 
 type EnvConfig struct {
 	Port                 int
+	BindHost             string
 	Env                  string
 	EnableHTTPS          bool
 	TLSCertFile          string
@@ -63,6 +64,7 @@ func NewEnvConfig() *EnvConfig {
 
 	return &EnvConfig{
 		Port:                 getEnvAsInt("PORT", 3000),
+		BindHost:             strings.TrimSpace(getEnv("BIND_HOST", "")),
 		Env:                  env,
 		EnableHTTPS:          getEnv("ENABLE_HTTPS", "false") == "true",
 		TLSCertFile:          getEnv("TLS_CERT_FILE", ""),

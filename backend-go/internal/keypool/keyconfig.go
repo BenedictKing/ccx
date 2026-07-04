@@ -181,9 +181,9 @@ func ConfigForCandidate(channel config.UpstreamConfig, cfg config.APIKeyConfig) 
 	if rpm <= 0 {
 		rpm = channel.RateLimitRPM
 	}
-	windowMinutes := cfg.RateLimitWindowMinutes
-	if windowMinutes <= 0 {
-		windowMinutes = channel.RateLimitWindowMinutes
+	windowSeconds := cfg.RateLimitWindowMinutes
+	if windowSeconds <= 0 {
+		windowSeconds = channel.RateLimitWindowMinutes
 	}
 	maxConcurrent := cfg.RateLimitMaxConcurrent
 	if maxConcurrent <= 0 {
@@ -195,7 +195,7 @@ func ConfigForCandidate(channel config.UpstreamConfig, cfg config.APIKeyConfig) 
 	}
 	return ratelimit.Config{
 		RPM:             rpm,
-		WindowSeconds:   windowMinutes * 60,
+		WindowSeconds:   config.RateLimitWindowSeconds(windowSeconds),
 		MaxConcurrent:   maxConcurrent,
 		AutoFromHeaders: autoFromHeaders,
 	}

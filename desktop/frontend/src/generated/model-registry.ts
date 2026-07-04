@@ -870,8 +870,8 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
   "(?:^|[-/])minimax-m2\\.7(?:-highspeed)?(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
     "provider": "minimax",
     "displayName": "MiniMax M2.7",
-    "contextWindowTokens": 1000000,
-    "maxOutputTokens": 8192,
+    "contextWindowTokens": 204800,
+    "maxOutputTokens": 131072,
     "reasoningEfforts": [
       "low",
       "medium",
@@ -892,8 +892,8 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
   "(?:^|[-/])minimax-m2\\.5(?:-highspeed)?(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
     "provider": "minimax",
     "displayName": "MiniMax M2.5",
-    "contextWindowTokens": 1000000,
-    "maxOutputTokens": 8192,
+    "contextWindowTokens": 204800,
+    "maxOutputTokens": 131072,
     "reasoningEfforts": [
       "low",
       "medium",
@@ -914,8 +914,8 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
   "(?:^|[-/])minimax-m2\\.1(?:-highspeed)?(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
     "provider": "minimax",
     "displayName": "MiniMax M2.1",
-    "contextWindowTokens": 1000000,
-    "maxOutputTokens": 8192,
+    "contextWindowTokens": 204800,
+    "maxOutputTokens": 131072,
     "reasoningEfforts": [
       "low",
       "medium",

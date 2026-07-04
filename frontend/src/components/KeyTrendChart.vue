@@ -44,6 +44,10 @@
           <v-icon size="small" class="mr-1">mdi-database</v-icon>
           {{ t('chart.cacheRw') }}
         </v-btn>
+        <v-btn value="cost" size="x-small" class="chart-control-btn">
+          <v-icon size="small" class="mr-1">mdi-cash</v-icon>
+          {{ t('chart.cost') }}
+        </v-btn>
       </v-btn-toggle>
     </div>
 
@@ -70,6 +74,10 @@
       <div v-if="summaryData.totalCacheReadTokens > 0 || summaryData.totalCacheCreationTokens > 0" class="summary-card">
         <div class="summary-label">{{ t('chart.cacheRw') }}</div>
         <div class="summary-value">{{ formatNumber(summaryData.totalCacheReadTokens) }} / {{ formatNumber(summaryData.totalCacheCreationTokens) }}</div>
+      </div>
+      <div v-if="(summaryData.totalCostUSD || 0) > 0" class="summary-card">
+        <div class="summary-label">{{ t('chart.totalCost') }}</div>
+        <div class="summary-value">${{ formatCost(summaryData.totalCostUSD || 0) }}</div>
       </div>
     </div>
 
@@ -119,7 +127,7 @@ const props = defineProps<{
 const { t } = useI18n()
 
 // View mode type
-type ViewMode = 'traffic' | 'tokens' | 'cache'
+type ViewMode = 'traffic' | 'tokens' | 'cache' | 'cost'
 type Duration = '1h' | '6h' | '24h' | 'today' | '7d' | '30d' | '90d' | '180d' | '365d' | 'thisyear'
 
 // LocalStorage keys for preferences (per channelType)
@@ -142,7 +150,7 @@ const loadSavedPreferences = (channelType: string): { view: ViewMode; duration: 
     const savedView = window.localStorage.getItem(getStorageKey(channelType, 'viewMode')) as ViewMode | null
     const savedDuration = window.localStorage.getItem(getStorageKey(channelType, 'duration')) as Duration | null
     return {
-      view: savedView && ['traffic', 'tokens', 'cache'].includes(savedView) ? savedView : 'traffic',
+      view: savedView && ['traffic', 'tokens', 'cache', 'cost'].includes(savedView) ? savedView : 'traffic',
       duration: savedDuration && ['1h', '6h', '24h', 'today', '7d', '30d', '90d', '180d', '365d', 'thisyear'].includes(savedDuration) ? savedDuration : '1h'
     }
   } catch {
@@ -251,6 +259,7 @@ const hasData = computed(() => {
     if (!keyData.dataPoints?.length) return false
     return keyData.dataPoints.some(dp => {
       if (mode === 'traffic') return dp.requestCount > 0
+      if (mode === 'cost') return (dp.costUSD || 0) > 0
       if (mode === 'tokens') return dp.inputTokens > 0 || dp.outputTokens > 0
       return dp.cacheReadTokens > 0 || dp.cacheCreationTokens > 0
     })
@@ -390,7 +399,7 @@ const firstNonEmptyTimestamp = computed(() => {
   historyData.value.keys.forEach(keyData => {
     if (!keyData.dataPoints?.length) return
     keyData.dataPoints.forEach(dp => {
-      const hasVisibleData = selectedView.value === 'traffic'
+      const hasVisibleData = selectedView.value === 'traffic' || selectedView.value === 'cost'
         ? dp.requestCount > 0
         : selectedView.value === 'tokens'
           ? dp.inputTokens > 0 || dp.outputTokens > 0
@@ -500,7 +509,7 @@ const chartOptions = computed<ApexCharts.ApexOptions>(() => {
       fontFamily: 'inherit',
       defaultLocale: 'en',
       sparkline: { enabled: false },
-      stacked: mode === 'traffic',
+      stacked: mode === 'traffic' || mode === 'cost',
       animations: {
         enabled: false
       }
@@ -577,18 +586,30 @@ const buildChartSeries = (data: ChannelKeyMetricsHistoryResponse | null) => {
     // Display name: show "keyMask/model" when a model exists; otherwise show only keyMask
     const displayName = keyData.model ? `${keyData.keyMask}/${keyData.model}` : keyData.keyMask
 
-    if (mode === 'traffic') {
-      const totalRequests = keyData.dataPoints.reduce((sum, dp) => sum + dp.requestCount, 0)
-      if (totalRequests === 0) return
+    if (mode === 'traffic' || mode === 'cost') {
+      if (mode === 'cost') {
+        const totalCost = keyData.dataPoints.reduce((sum, dp) => sum + (dp.costUSD || 0), 0)
+        if (totalCost <= 0) return
+        result.push({
+          name: displayName,
+          data: keyData.dataPoints.map(dp => ({
+            x: new Date(dp.timestamp).getTime(),
+            y: dp.costUSD || 0
+          }))
+        })
+      } else {
+        const totalRequests = keyData.dataPoints.reduce((sum, dp) => sum + dp.requestCount, 0)
+        if (totalRequests === 0) return
 
-      // One-way mode: show request count only
-      result.push({
-        name: displayName,
-        data: keyData.dataPoints.map(dp => ({
-          x: new Date(dp.timestamp).getTime(),
-          y: dp.requestCount
-        }))
-      })
+        // One-way mode: show request count only
+        result.push({
+          name: displayName,
+          data: keyData.dataPoints.map(dp => ({
+            x: new Date(dp.timestamp).getTime(),
+            y: dp.requestCount
+          }))
+        })
+      }
     } else {
       // Bidirectional mode: create two series per key (Input/Output or Read/Write)
       const inLabel = mode === 'tokens' ? 'Input' : 'Cache Read'
@@ -635,11 +656,20 @@ const formatNumber = (num: number): string => {
   return num.toFixed(0)
 }
 
+// Helper: format cost value (USD)
+const formatCost = (val: number): string => {
+  if (val >= 1000) return (val / 1000).toFixed(2) + 'K'
+  if (val >= 1) return val.toFixed(2)
+  return val.toFixed(4)
+}
+
 // Helper: format axis value based on view mode
 const formatAxisValue = (val: number, mode: ViewMode): string => {
   switch (mode) {
     case 'traffic':
       return Math.round(val).toString()
+    case 'cost':
+      return '$' + formatCost(Math.abs(val))
     case 'tokens':
     case 'cache':
       return formatNumber(Math.abs(val))
@@ -653,6 +683,8 @@ const formatTooltipValue = (val: number, mode: ViewMode): string => {
   switch (mode) {
     case 'traffic':
       return `${Math.round(val)} ${t('chart.requestUnit')}`
+    case 'cost':
+      return `$${formatCost(Math.abs(val))}`
     case 'tokens':
     case 'cache':
       return `${formatNumber(Math.abs(val))} ${t('chart.tokenUnit')}`
@@ -786,7 +818,7 @@ const _getDurationMs = (duration: Duration): number => {
 // traffic mode: all solid lines
 // tokens/cache mode: Input/Read solid, Output/Write dashed
 const getDashArray = (): number | number[] => {
-  if (selectedView.value === 'traffic') {
+  if (selectedView.value === 'traffic' || selectedView.value === 'cost') {
     return 0 // All solid lines
   }
   // Use actual series names to determine dash pattern
@@ -803,7 +835,7 @@ const getChartColors = (): string[] => {
   const series = chartSeriesData.value.series
   if (series.length === 0) return keyColors
 
-  if (selectedView.value === 'traffic') {
+  if (selectedView.value === 'traffic' || selectedView.value === 'cost') {
     return series.map((_, i) => keyColors[i % keyColors.length])
   }
   // Bidirectional mode: assign same color to Input/Read and Output/Write of each key

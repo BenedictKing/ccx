@@ -1,6 +1,6 @@
 ---
 name: upstream-check
-description: 检查 Codex / Codex 上游版本变更，对比本地版本，识别协议/工具/用法相关更新并追加 TODO 提醒
+description: 检查 Claude Code / Codex 上游版本变更，对比本地版本，识别协议/工具/用法相关更新并追加 TODO 提醒
 version: 1.0.0
 author: https://github.com/BenedictKing/ccx/
 allowed-tools: Bash, Read, Write, Edit
@@ -48,7 +48,7 @@ cat .agents/skills/upstream-check/scripts/upstream-state.json
 
 **判断标准**：
 - ✅ **真实变更**：影响 CCX 代理层协议转换、请求构造、响应解析的变更
-- ❌ **误报**：仅影响 Codex/Codex 客户端内部行为，不影响 API 协议的变更
+- ❌ **误报**：仅影响 Claude Code/Codex 客户端内部行为，不影响 API 协议的变更
 
 ### 4. 升级建议逻辑
 
@@ -82,7 +82,7 @@ cat .agents/skills/upstream-check/scripts/upstream-state.json
 
 > **上游版本变更**
 
-## [ ] Codex vX.Y.Z 上游协议/工具变更评估
+## [ ] Claude Code vX.Y.Z 上游协议/工具变更评估
 
 发现协议/工具/用法变更：keyword1, keyword2。请评估对 ccx Messages 渠道的影响。
 
@@ -98,7 +98,7 @@ cat .agents/skills/upstream-check/scripts/upstream-state.json
 ```json
 {
   "last_checked_at": "2026-06-07T12:00:00Z",
-  "Codex": {
+  "claude_code": {
     "remote_tag": "v2.1.168",
     "local_version": "2.1.168",
     "seen_tags": ["v2.1.168"]
@@ -118,7 +118,7 @@ cat .agents/skills/upstream-check/scripts/upstream-state.json
 ```
 📋 上游版本检查结果
 
-## Codex
+## Claude Code
 - 本地版本: 2.1.168
 - 远程版本: 2.1.168
 - 状态: ✅ 已是最新
@@ -141,7 +141,7 @@ cat .agents/skills/upstream-check/scripts/upstream-state.json
 
 1. 通过 `gh release view` 获取本地版本到最新远程版本之间所有中间版本的 Release Notes
 2. 从每个版本的 Release Notes 中筛选**新增功能**（New Features）和**体验改进**（Improvements / 性能优化 / UX 修复等）
-3. 按 Codex / Codex 分类，以表格和列表结构化呈现
+3. 按 Claude Code / Codex 分类，以表格和列表结构化呈现
 4. 末尾附「对 CCX 的潜在影响要点」，关联到 CCX 五类渠道（Messages / Chat / Responses / Gemini / Images）
 5. 语调：技术导向但易读，面向开发者
 

@@ -47,7 +47,8 @@
         >
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path v-if="view.value === 'traffic'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
-            <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            <path v-else-if="view.value === 'tokens'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
           </svg>
           {{ view.label }}
         </button>
@@ -90,6 +91,13 @@
           {{ formatNumber(summary.totalCacheReadTokens) }} / {{ formatNumber(summary.totalCacheCreationTokens) }}
         </div>
       </div>
+      <div
+        v-if="(summary.totalCostUSD || 0) > 0"
+        class="flex-1 min-w-[80px] p-2 rounded-lg text-center bg-secondary/30 dark:bg-secondary/20"
+      >
+        <div class="text-xs text-muted-foreground font-medium mb-1">{{ t('chart.totalCost') }}</div>
+        <div class="text-sm font-semibold">${{ formatCost(summary.totalCostUSD || 0) }}</div>
+      </div>
     </div>
 
     <!-- Compact summary (single line) -->
@@ -108,6 +116,9 @@
       <span><strong>{{ formatNumber(summary.totalOutputTokens) }}</strong> {{ t('chart.output') }}</span>
       <span v-if="summary.totalCacheReadTokens > 0 || summary.totalCacheCreationTokens > 0">
         <strong>{{ formatNumber(summary.totalCacheReadTokens) }}/{{ formatNumber(summary.totalCacheCreationTokens) }}</strong> Cache R/W
+      </span>
+      <span v-if="(summary.totalCostUSD || 0) > 0">
+        <strong>${{ formatCost(summary.totalCostUSD || 0) }}</strong> {{ t('chart.totalCost') }}
       </span>
     </div>
 
@@ -169,7 +180,7 @@ const emit = defineEmits<{
   refresh: [duration: string]
 }>()
 
-type ViewMode = 'traffic' | 'tokens'
+type ViewMode = 'traffic' | 'tokens' | 'cost'
 type Duration = '1h' | '6h' | '24h' | 'today' | '7d' | '30d' | '90d' | '180d' | '365d' | 'thisyear'
 
 // LocalStorage keys for preferences (per apiType)
@@ -180,7 +191,7 @@ const loadSavedPreferences = (apiType: string) => {
   const savedView = localStorage.getItem(getStorageKey(apiType, 'viewMode')) as ViewMode | null
   const savedDuration = localStorage.getItem(getStorageKey(apiType, 'duration')) as Duration | null
   return {
-    view: savedView && ['traffic', 'tokens'].includes(savedView) ? savedView : 'traffic',
+    view: savedView && ['traffic', 'tokens', 'cost'].includes(savedView) ? savedView : 'traffic',
     duration: savedDuration && ['1h', '6h', '24h', 'today', '7d', '30d', '90d', '180d', '365d', 'thisyear'].includes(savedDuration) ? savedDuration : '6h'
   }
 }
@@ -226,6 +237,7 @@ const durationOptions = computed(() => [
 const viewOptions = computed(() => [
   { label: t('chart.traffic'), value: 'traffic' as ViewMode },
   { label: t('chart.tokens'), value: 'tokens' as ViewMode },
+  { label: t('chart.cost'), value: 'cost' as ViewMode },
 ])
 
 // Expose data for parent to update
@@ -394,7 +406,9 @@ const firstNonEmptyTimestamp = computed(() => {
   historyData.value.dataPoints.forEach(dp => {
     const hasVisibleData = selectedView.value === 'traffic'
       ? dp.requestCount > 0
-      : dp.inputTokens > 0 || dp.outputTokens > 0 || dp.cacheReadTokens > 0 || dp.cacheCreationTokens > 0
+      : selectedView.value === 'cost'
+        ? (dp.costUSD || 0) > 0
+        : dp.inputTokens > 0 || dp.outputTokens > 0 || dp.cacheReadTokens > 0 || dp.cacheCreationTokens > 0
     if (hasVisibleData) {
       const ts = new Date(dp.timestamp).getTime()
       if (ts < earliest) earliest = ts
@@ -418,13 +432,20 @@ function formatNumber(num: number): string {
   return num.toFixed(0)
 }
 
+// Format cost (USD) for display
+function formatCost(val: number): string {
+  if (val >= 1000) return (val / 1000).toFixed(2) + 'K'
+  if (val >= 1) return val.toFixed(2)
+  return val.toFixed(4)
+}
+
 // Chart options
 const chartOptions = computed<ApexOptions>(() => {
   const mode = selectedView.value
-  const isTrafficMultiModel = mode === 'traffic' && hasMultiModel.value
+  const isMultiModelView = (mode === 'traffic' || mode === 'cost') && hasMultiModel.value
 
-  // Traffic mode colors: assign by model in multi-model mode, otherwise use a single color
-  const trafficColors = isTrafficMultiModel
+  // Traffic/cost mode colors: assign by model in multi-model mode, otherwise use a single color
+  const multiModelColors = isMultiModelView
     ? sortedModels.value.map((_, i) => modelColors[i % modelColors.length])
     : [chartColors.traffic.primary]
 
@@ -438,7 +459,7 @@ const chartOptions = computed<ApexOptions>(() => {
       zoom: { enabled: false },
       background: 'transparent',
       fontFamily: 'inherit',
-      stacked: isTrafficMultiModel,
+      stacked: isMultiModelView,
       animations: {
         enabled: false
       }
@@ -446,8 +467,8 @@ const chartOptions = computed<ApexOptions>(() => {
     theme: {
       mode: isDark.value ? 'dark' : 'light'
     },
-    colors: mode === 'traffic'
-      ? trafficColors
+    colors: mode === 'traffic' || mode === 'cost'
+      ? multiModelColors
       : hasCacheData.value
         ? [chartColors.tokens.input, chartColors.tokens.output, chartColors.tokens.cacheRead, chartColors.tokens.cacheWrite]
         : [chartColors.tokens.input, chartColors.tokens.output],
@@ -512,7 +533,7 @@ const chartOptions = computed<ApexOptions>(() => {
       return axes
     })() : {
       labels: {
-        formatter: (val: number) => Math.round(val).toString(),
+        formatter: (val: number) => mode === 'cost' ? '$' + formatCost(val) : Math.round(val).toString(),
         style: { fontSize: '11px', colors: textColor }
       },
       min: 0
@@ -524,7 +545,9 @@ const chartOptions = computed<ApexOptions>(() => {
       y: {
         formatter: (val: number) => mode === 'traffic'
           ? `${Math.round(val)} ${t('chart.requestUnit')}`
-          : `${formatNumber(val)} ${t('chart.tokenUnit')}`
+          : mode === 'cost'
+            ? `$${formatCost(val)}`
+            : `${formatNumber(val)} ${t('chart.tokenUnit')}`
       },
       custom: mode === 'traffic' ? buildTrafficTooltip : undefined
     },
@@ -532,7 +555,7 @@ const chartOptions = computed<ApexOptions>(() => {
       xaxis: failureAnnotations.value
     },
     legend: {
-      show: mode === 'tokens' || isTrafficMultiModel,
+      show: mode === 'tokens' || isMultiModelView,
       position: 'top' as const,
       horizontalAlign: 'right' as const,
       fontSize: '11px',
@@ -628,6 +651,26 @@ const chartSeries = computed(() => {
         data: dataPoints.map(dp => ({
           x: new Date(dp.timestamp).getTime(),
           y: dp.requestCount
+        }))
+      }
+    ]
+  } else if (mode === 'cost') {
+    const models = sortedModels.value
+    if (models.length > 0) {
+      return models.map(model => ({
+        name: model.name,
+        data: model.points.map((p: ModelHistoryDataPoint) => ({
+          x: new Date(p.timestamp).getTime(),
+          y: p.costUSD || 0
+        }))
+      }))
+    }
+    return [
+      {
+        name: t('chart.cost'),
+        data: dataPoints.map(dp => ({
+          x: new Date(dp.timestamp).getTime(),
+          y: dp.costUSD || 0
         }))
       }
     ]

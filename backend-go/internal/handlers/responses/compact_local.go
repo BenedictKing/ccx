@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -22,7 +23,11 @@ import (
 const localCompactMaxTranscriptRunes = 240000
 const localCompactMaxArgRunes = 8000
 const localCompactMaxReasoningRunes = 12000
+const localCompactMaxToolOutputRunes = 500
 const localCompactDefaultMaxTokens = 8192
+
+// localCompactLayeredReasoningKeep 分层保真 compact 默认保留最近 K 条带 encrypted_content 的 reasoning items
+const localCompactLayeredReasoningKeep = 5
 
 // PLACEHOLDER_COMPACT_LOCAL_CONTINUED
 
@@ -79,7 +84,13 @@ func formatSingleItem(item types.ResponsesItem) string {
 		}
 		return fmt.Sprintf("  -> Tool Call: %s(%s)", item.Name, args)
 	case "function_call_output":
-		return "" // skip tool results
+		// 工具返回不再完全丢弃：提取输出文本并截断为简要摘要，
+		// 让摘要模型能看到"调用了什么、返回了什么"，而非只能看到调用侧。
+		output := extractToolOutputText(item.Output)
+		if output == "" {
+			return ""
+		}
+		return fmt.Sprintf("  -> Tool Result: %s", truncateRunes(output, localCompactMaxToolOutputRunes))
 	case "reasoning":
 		text := extractContentText(item.Content)
 		if text == "" {
@@ -153,6 +164,38 @@ func extractContentText(content interface{}) string {
 
 func truncateTranscript(transcript string) string {
 	return truncateTranscriptWithLogTag(transcript, "")
+}
+
+// extractToolOutputText 从 function_call_output 的 output 字段提取文本。
+// output 可能是字符串、结构化对象或 content block 数组。
+func extractToolOutputText(output interface{}) string {
+	if output == nil {
+		return ""
+	}
+	switch v := output.(type) {
+	case string:
+		return v
+	case []interface{}:
+		// 复用 extractContentText 处理 content block 数组
+		return extractContentText(v)
+	case map[string]interface{}:
+		// 结构化输出：尝试常见文本字段，否则序列化整个对象
+		if t, ok := v["text"].(string); ok && t != "" {
+			return t
+		}
+		if t, ok := v["output"].(string); ok && t != "" {
+			return t
+		}
+		data, _ := json.Marshal(v)
+		return string(data)
+	}
+	return fmt.Sprintf("%v", output)
+}
+
+// isLayeredCompactEnabled 返回是否启用分层保真 compact（保留最近 K 条 reasoning items）。
+// 通过环境变量 RESPONSES_COMPACT_LAYERED=true 启用，默认关闭（现有 compact 行为不变）。
+func isLayeredCompactEnabled() bool {
+	return os.Getenv("RESPONSES_COMPACT_LAYERED") == "true"
 }
 
 func truncateTranscriptWithLogTag(transcript string, logTag string) string {
@@ -783,13 +826,48 @@ func writeCompactedSession(resp *types.ResponsesResponse, originalReq types.Resp
 			Role:    "user",
 			Content: "Conversation context has been compacted. Continue from this summary.",
 		},
-		{
-			Type:    "message",
-			Role:    "assistant",
-			Content: summaryText,
-		},
 	}
+
+	// 分层保真模式：在摘要前保留最近 K 条带 encrypted_content 的 reasoning items，
+	// 使压缩后的会话仍携带结构化推理状态（供未来续接重放），而非把 reasoning 彻底清零。
+	// 默认关闭，通过 RESPONSES_COMPACT_LAYERED=true 启用。
+	if isLayeredCompactEnabled() {
+		messages = append(messages, collectRecentReasoningWithEncryptedContent(originalReq, sessionManager)...)
+	}
+
+	messages = append(messages, types.ResponsesItem{
+		Type:    "message",
+		Role:    "assistant",
+		Content: summaryText,
+	})
 
 	totalTokens := resp.Usage.InputTokens + resp.Usage.OutputTokens
 	sessionManager.CreateCompactedSession(resp.ID, messages, totalTokens)
+}
+
+// collectRecentReasoningWithEncryptedContent 从原会话中收集最近 K 条带 encrypted_content 的 reasoning items。
+// 用于分层保真 compact：这些 items 原样保留到压缩后的 session，避免推理状态被文本摘要降级。
+func collectRecentReasoningWithEncryptedContent(originalReq types.ResponsesRequest, sessionManager *session.SessionManager) []types.ResponsesItem {
+	if originalReq.PreviousResponseID == "" {
+		return nil
+	}
+	sess, err := sessionManager.GetSessionByResponseID(originalReq.PreviousResponseID)
+	if err != nil || len(sess.Messages) == 0 {
+		return nil
+	}
+
+	// 从后往前扫描，收集最近 K 条带 encrypted_content 的 reasoning items（保持原顺序）
+	const keep = localCompactLayeredReasoningKeep
+	picked := make([]types.ResponsesItem, 0, keep)
+	for i := len(sess.Messages) - 1; i >= 0 && len(picked) < keep; i-- {
+		item := sess.Messages[i]
+		if item.Type == "reasoning" && strings.TrimSpace(item.EncryptedContent) != "" {
+			picked = append(picked, item)
+		}
+	}
+	// 反转为原顺序
+	for i, j := 0, len(picked)-1; i < j; i, j = i+1, j-1 {
+		picked[i], picked[j] = picked[j], picked[i]
+	}
+	return picked
 }

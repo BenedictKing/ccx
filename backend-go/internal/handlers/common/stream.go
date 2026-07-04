@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -46,6 +48,13 @@ type StreamPreflightTimeouts struct {
 }
 
 const shortStreamEOFRetryTokenThreshold = 20
+const streamPreflightDetailMaxEvents = 8
+const streamPreflightDetailPreviewLen = 800
+
+var (
+	streamPreflightSensitiveAssignmentPattern = regexp.MustCompile(`(?i)((?:"(?:authorization|x-api-key|x-goog-api-key|api[_-]?key|access[_-]?token|token)"|(?:authorization|x-api-key|x-goog-api-key|api[_-]?key|access[_-]?token|token))\s*[:=]\s*"?)([^",\s}\\]+)`)
+	streamPreflightBearerPattern              = regexp.MustCompile(`(?i)(bearer\s+)([A-Za-z0-9._~+/=-]{8,})`)
+)
 
 // ResolveStreamFirstContentTimeout 解析首字等待超时：渠道 >0 覆盖全局，否则继承全局
 func ResolveStreamFirstContentTimeout(channelValue int, globalValue int) int {
@@ -409,6 +418,237 @@ func buildClaudePreflightDiagnostic(seenEvent, seenMessageStop, seenUsageOnlyEve
 	default:
 		return "检测到空流，但未匹配到明确类别"
 	}
+}
+
+type streamPreflightEventInspection struct {
+	sseEvents        []string
+	dataTypes        []string
+	topKeys          []string
+	contentBlockType []string
+	deltaTypes       []string
+	deltaKeys        []string
+	stopReasons      []string
+	usageKeys        []string
+	jsonLines        int
+	jsonParseErrors  int
+	nonJSONDataLines int
+	textBytes        int
+	thinkingBytes    int
+	semanticContent  bool
+	usageOnly        bool
+	messageStop      bool
+	unknownType      string
+	rawBytes         int
+	preview          string
+}
+
+func buildStreamPreflightDetail(preflight *StreamPreflightResult) string {
+	if preflight == nil {
+		return "summary: preflight=nil"
+	}
+
+	var textBuf bytes.Buffer
+	var thinkingBuf bytes.Buffer
+	inspections := make([]streamPreflightEventInspection, 0, len(preflight.BufferedEvents))
+	for _, event := range preflight.BufferedEvents {
+		ExtractTextFromEvent(event, &textBuf)
+		ExtractThinkingFromEvent(event, &thinkingBuf)
+		inspections = append(inspections, inspectStreamPreflightEvent(event))
+	}
+
+	semanticEvents := 0
+	usageOnlyEvents := 0
+	messageStopEvents := 0
+	jsonParseErrors := 0
+	nonJSONDataLines := 0
+	for _, inspection := range inspections {
+		if inspection.semanticContent {
+			semanticEvents++
+		}
+		if inspection.usageOnly {
+			usageOnlyEvents++
+		}
+		if inspection.messageStop {
+			messageStopEvents++
+		}
+		jsonParseErrors += inspection.jsonParseErrors
+		nonJSONDataLines += inspection.nonJSONDataLines
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b,
+		"summary: events=%d shown=%d isEmpty=%t diagnostic=%q unknownType=%q textBytes=%d thinkingBytes=%d semanticEvents=%d usageOnlyEvents=%d messageStopEvents=%d jsonParseErrors=%d nonJSONDataLines=%d malformedToolCall=%t malformedToolCallName=%q blacklistReason=%q",
+		len(preflight.BufferedEvents),
+		min(len(preflight.BufferedEvents), streamPreflightDetailMaxEvents),
+		preflight.IsEmpty,
+		preflight.Diagnostic,
+		preflight.UnknownEventType,
+		textBuf.Len(),
+		thinkingBuf.Len(),
+		semanticEvents,
+		usageOnlyEvents,
+		messageStopEvents,
+		jsonParseErrors,
+		nonJSONDataLines,
+		preflight.MalformedToolCall,
+		preflight.MalformedToolCallName,
+		preflight.BlacklistReason,
+	)
+
+	for i, inspection := range inspections {
+		if i >= streamPreflightDetailMaxEvents {
+			fmt.Fprintf(&b, "\nevent[%d+]: omitted=%d", i, len(inspections)-i)
+			break
+		}
+		fmt.Fprintf(&b,
+			"\nevent[%d]: sse=%s dataTypes=%s topKeys=%s contentBlockTypes=%s deltaTypes=%s deltaKeys=%s stopReasons=%s usageKeys=%s jsonLines=%d jsonParseErrors=%d nonJSONDataLines=%d textBytes=%d thinkingBytes=%d semantic=%t usageOnly=%t messageStop=%t unknownType=%q rawBytes=%d preview=%q",
+			i,
+			formatStreamLogValues(inspection.sseEvents),
+			formatStreamLogValues(inspection.dataTypes),
+			formatStreamLogValues(inspection.topKeys),
+			formatStreamLogValues(inspection.contentBlockType),
+			formatStreamLogValues(inspection.deltaTypes),
+			formatStreamLogValues(inspection.deltaKeys),
+			formatStreamLogValues(inspection.stopReasons),
+			formatStreamLogValues(inspection.usageKeys),
+			inspection.jsonLines,
+			inspection.jsonParseErrors,
+			inspection.nonJSONDataLines,
+			inspection.textBytes,
+			inspection.thinkingBytes,
+			inspection.semanticContent,
+			inspection.usageOnly,
+			inspection.messageStop,
+			inspection.unknownType,
+			inspection.rawBytes,
+			inspection.preview,
+		)
+	}
+
+	return b.String()
+}
+
+func inspectStreamPreflightEvent(event string) streamPreflightEventInspection {
+	var textBuf bytes.Buffer
+	var thinkingBuf bytes.Buffer
+	ExtractTextFromEvent(event, &textBuf)
+	ExtractThinkingFromEvent(event, &thinkingBuf)
+
+	inspection := streamPreflightEventInspection{
+		textBytes:       textBuf.Len(),
+		thinkingBytes:   thinkingBuf.Len(),
+		semanticContent: HasClaudeSemanticContent(event),
+		usageOnly:       isUsageOnlySSEEvent(event),
+		messageStop:     IsMessageStopEvent(event),
+		rawBytes:        len(event),
+		preview:         truncateForLog(redactStreamPreflightLogText(event), streamPreflightDetailPreviewLen),
+	}
+	if unknownType, ok := firstUnknownSSEDataType(event); ok {
+		inspection.unknownType = unknownType
+	}
+
+	for _, line := range strings.Split(event, "\n") {
+		trimmedLine := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmedLine, "event:") {
+			inspection.sseEvents = appendUniqueString(inspection.sseEvents, strings.TrimSpace(strings.TrimPrefix(trimmedLine, "event:")))
+		}
+
+		jsonStr, ok := extractSSEJSONLine(trimmedLine)
+		if !ok {
+			continue
+		}
+		if strings.TrimSpace(jsonStr) == "" {
+			inspection.nonJSONDataLines++
+			continue
+		}
+
+		var data map[string]interface{}
+		if err := json.Unmarshal([]byte(jsonStr), &data); err != nil {
+			inspection.jsonParseErrors++
+			continue
+		}
+		inspection.jsonLines++
+		inspection.topKeys = mergeUniqueStrings(inspection.topKeys, sortedMapKeys(data))
+
+		if dataType, _ := data["type"].(string); dataType != "" {
+			inspection.dataTypes = appendUniqueString(inspection.dataTypes, dataType)
+		}
+
+		if contentBlock, ok := data["content_block"].(map[string]interface{}); ok {
+			if blockType, _ := contentBlock["type"].(string); blockType != "" {
+				inspection.contentBlockType = appendUniqueString(inspection.contentBlockType, blockType)
+			}
+		}
+
+		if delta, ok := data["delta"].(map[string]interface{}); ok {
+			inspection.deltaKeys = mergeUniqueStrings(inspection.deltaKeys, sortedMapKeys(delta))
+			if deltaType, _ := delta["type"].(string); deltaType != "" {
+				inspection.deltaTypes = appendUniqueString(inspection.deltaTypes, deltaType)
+			}
+			if stopReason, _ := delta["stop_reason"].(string); stopReason != "" {
+				inspection.stopReasons = appendUniqueString(inspection.stopReasons, stopReason)
+			}
+		}
+
+		if usage, ok := data["usage"].(map[string]interface{}); ok {
+			inspection.usageKeys = mergeUniqueStrings(inspection.usageKeys, prefixedSortedMapKeys("usage.", usage))
+		}
+		if message, ok := data["message"].(map[string]interface{}); ok {
+			if usage, ok := message["usage"].(map[string]interface{}); ok {
+				inspection.usageKeys = mergeUniqueStrings(inspection.usageKeys, prefixedSortedMapKeys("message.usage.", usage))
+			}
+		}
+	}
+
+	return inspection
+}
+
+func appendUniqueString(values []string, value string) []string {
+	if value == "" {
+		return values
+	}
+	for _, existing := range values {
+		if existing == value {
+			return values
+		}
+	}
+	return append(values, value)
+}
+
+func mergeUniqueStrings(values []string, more []string) []string {
+	for _, value := range more {
+		values = appendUniqueString(values, value)
+	}
+	return values
+}
+
+func sortedMapKeys(data map[string]interface{}) []string {
+	keys := make([]string, 0, len(data))
+	for key := range data {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func prefixedSortedMapKeys(prefix string, data map[string]interface{}) []string {
+	keys := sortedMapKeys(data)
+	for i := range keys {
+		keys[i] = prefix + keys[i]
+	}
+	return keys
+}
+
+func formatStreamLogValues(values []string) string {
+	if len(values) == 0 {
+		return "-"
+	}
+	return strings.Join(values, ",")
+}
+
+func redactStreamPreflightLogText(text string) string {
+	text = streamPreflightBearerPattern.ReplaceAllString(text, "${1}***")
+	return streamPreflightSensitiveAssignmentPattern.ReplaceAllString(text, "${1}***")
 }
 
 func estimatePreflightTextTokens(text string) int {

@@ -45,13 +45,32 @@ func TestFormatItemsAsTranscript_FunctionCall(t *testing.T) {
 
 // PLACEHOLDER_MORE_TESTS
 
-func TestFormatItemsAsTranscript_SkipsFunctionCallOutput(t *testing.T) {
+func TestFormatItemsAsTranscript_FunctionCallOutputSummary(t *testing.T) {
 	items := []types.ResponsesItem{
-		{Type: "function_call_output", Output: "very long output"},
+		{Type: "function_call_output", Output: "very long output from tool"},
 	}
 	transcript := formatItemsAsTranscript(items)
-	if transcript != "" {
-		t.Fatalf("function_call_output should be skipped, got: %s", transcript)
+	// function_call_output 不再完全丢弃，而是生成简要摘要
+	if !strings.Contains(transcript, "Tool Result") {
+		t.Fatalf("function_call_output should produce a Tool Result summary, got: %s", transcript)
+	}
+	if !strings.Contains(transcript, "very long output from tool") {
+		t.Fatalf("function_call_output summary should contain output text, got: %s", transcript)
+	}
+}
+
+func TestFormatItemsAsTranscript_FunctionCallOutputTruncated(t *testing.T) {
+	longOutput := strings.Repeat("x", 1000)
+	items := []types.ResponsesItem{
+		{Type: "function_call_output", Output: longOutput},
+	}
+	transcript := formatItemsAsTranscript(items)
+	// 超长输出应被截断到 localCompactMaxToolOutputRunes (500)
+	if strings.Contains(transcript, strings.Repeat("x", 600)) {
+		t.Fatalf("function_call_output output should be truncated to <=500 runes")
+	}
+	if !strings.Contains(transcript, "...") {
+		t.Fatalf("truncated output should end with ..., got: %s", transcript)
 	}
 }
 

@@ -152,6 +152,7 @@ func handleMultiChannel(
 				upstream,
 				sortedURLResults,
 				bodyBytes,
+				contextRequirement,
 				isStream,
 				func(upstream *config.UpstreamConfig, failedKeys map[string]bool) (string, error) {
 					return cfgManager.GetNextChatAPIKey(upstream, failedKeys)
@@ -243,6 +244,7 @@ func handleSingleChannel(
 		upstream,
 		urlResults,
 		bodyBytes,
+		contextRequirement,
 		isStream,
 		func(upstream *config.UpstreamConfig, failedKeys map[string]bool) (string, error) {
 			return cfgManager.GetNextChatAPIKey(upstream, failedKeys)

@@ -26,6 +26,9 @@ type PersistenceStore interface {
 	// 用于 >24h 的长时间范围查询（1周/1月），内存中仅保留 24h
 	QueryAggregatedHistory(apiType string, since time.Time, intervalSeconds int64, metricsKey string, baseURL string) ([]AggregatedBucket, error)
 
+	// QueryModelAggregatedHistory 查询按模型和时间桶分组的聚合历史数据。
+	QueryModelAggregatedHistory(apiType string, since time.Time, intervalSeconds int64, metricsKey string, baseURL string) ([]ModelAggregatedBucket, error)
+
 	// CleanupOldRecords 清理过期数据
 	CleanupOldRecords(before time.Time) (int64, error)
 

@@ -12,6 +12,8 @@ import (
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/converters"
 	"github.com/BenedictKing/ccx/internal/handlers/common"
+	"github.com/BenedictKing/ccx/internal/session"
+	"github.com/BenedictKing/ccx/internal/thinkingcache"
 	"github.com/BenedictKing/ccx/internal/types"
 	"github.com/BenedictKing/ccx/internal/utils"
 	"github.com/gin-gonic/gin"
@@ -22,6 +24,7 @@ func handleStreamSuccess(
 	resp *http.Response,
 	upstreamType string,
 	envCfg *config.EnvConfig,
+	sessionManager *session.SessionManager,
 	startTime time.Time,
 	originalReq *types.ResponsesRequest,
 	originalRequestJSON []byte,
@@ -359,6 +362,11 @@ func handleStreamSuccess(
 	eventsSentCount := 0
 	progress := common.NewStreamProgressLogger("Responses", startTime, envCfg.ShouldLog("info"), common.RequestLogTag(c))
 
+	// 收集流式 output items（含 reasoning 的 encrypted_content）用于 session 回写
+	outputCollector := newStreamOutputCollector()
+	// 收集 reasoning encrypted_content 到 thinkingcache，供未来续接重放使用
+	reasoningCollector := thinkingcache.NewResponsesStreamCollector()
+
 	// processLine 处理单行数据（复用于缓冲行回放和后续读取），并返回转换后的 Responses 事件用于 watchdog 状态判断。
 	processLine := func(line string) []string {
 
@@ -409,6 +417,10 @@ func handleStreamSuccess(
 		}
 
 		for _, event := range eventsToProcess {
+			// 收集 output items（含 reasoning encrypted_content）用于 session 回写
+			outputCollector.processEvent(event)
+			// 收集 reasoning encrypted_content 到 thinkingcache
+			reasoningCollector.ProcessEvent(event)
 			prevTextLen := outputTextBuffer.Len()
 			// 提取文本内容用于估算（限制缓冲区大小）
 			if outputTextBuffer.Len() < maxOutputBufferSize {
@@ -601,6 +613,19 @@ func handleStreamSuccess(
 				common.RequestLogf(c, "[Responses-StreamStalled] 流式断流: Header 已发送后 %dms 无上游输出", activePostCommitTimeoutMs)
 			}
 			close(scanDone)
+			// 补写 response.incomplete 终端事件，确保下游客户端收到带 incomplete_details.reason 的
+			// 终止信号，而非裸断连。对齐 Messages 协议在 post-commit stall 时的 BuildStreamErrorEvent 行为。
+			if !clientGone {
+				incompleteEvent := converters.SynthesizeResponsesIncomplete(eventsSentCount+1, outputCollector.responseID, "stream_stalled")
+				if _, err := c.Writer.Write([]byte(incompleteEvent)); err == nil && flusher != nil {
+					flusher.Flush()
+				}
+			}
+			// 流被中断时仍回写已收集的 reasoning 状态，避免推理状态因断流而丢失
+			stallSessionID := writeStreamSession(sessionManager, originalReq, outputCollector)
+			if stallSessionID != "" {
+				reasoningCollector.Store(stallSessionID)
+			}
 			return nil, common.ErrStreamPostCommitStalled
 		case <-keepaliveTicker.C:
 			if !clientGone {
@@ -641,6 +666,8 @@ streamEnd:
 		}
 
 		for _, event := range fallbackEvents {
+			// 兜底事件也纳入收集，确保合成 completed 事件的 responseID 被捕获
+			outputCollector.processEvent(event)
 			eventToSend := event
 			if isResponsesCompletedEvent(event) {
 				completedEventSent = true
@@ -669,6 +696,15 @@ streamEnd:
 				flusher.Flush()
 			}
 		}
+	}
+
+	// 会话回写：将流式收集的 input/output items（含 reasoning encrypted_content）写入 session。
+	// 即使客户端中途断连也执行，以保证会话历史完整。仅修改服务端 session，不改变客户端输出。
+	streamSessionID := writeStreamSession(sessionManager, originalReq, outputCollector)
+	// 将 reasoning encrypted_content 写入 thinkingcache，按 sessionID + itemID 索引，
+	// 供未来续接重放使用（与 session 存储互补：session 用于多轮上下文，thinkingcache 用于按 id 快速取回）
+	if streamSessionID != "" {
+		reasoningCollector.Store(streamSessionID)
 	}
 
 	if err := scanner.Err(); err != nil {

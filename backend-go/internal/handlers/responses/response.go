@@ -51,7 +51,7 @@ func handleSuccess(
 	}
 
 	if isStream {
-		return handleStreamSuccess(c, resp, upstreamType, envCfg, startTime, originalReq, originalRequestJSON, timeouts)
+		return handleStreamSuccess(c, resp, upstreamType, envCfg, sessionManager, startTime, originalReq, originalRequestJSON, timeouts)
 	}
 
 	// 非流式响应处理

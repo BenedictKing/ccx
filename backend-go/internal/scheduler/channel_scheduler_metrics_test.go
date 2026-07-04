@@ -585,7 +585,7 @@ func TestRateLimitSoftSheddingRequiresSustainedLowWater(t *testing.T) {
 		releases = append(releases, release)
 	}
 
-	deferred, ratio := scheduler.ShouldDeferForRateLimit(ChannelKindMessages, 0, "", ratelimit.Config{}, base)
+	deferred, ratio, _ := scheduler.ShouldDeferForRateLimit(ChannelKindMessages, 0, "", ratelimit.Config{}, base)
 	if !deferred || ratio < rateLimitLoadShedHighWatermark {
 		t.Fatalf("期望 50%% 水位进入软分流，deferred=%v ratio=%.2f", deferred, ratio)
 	}
@@ -594,12 +594,12 @@ func TestRateLimitSoftSheddingRequiresSustainedLowWater(t *testing.T) {
 		release()
 	}
 
-	deferred, ratio = scheduler.ShouldDeferForRateLimit(ChannelKindMessages, 0, "", ratelimit.Config{}, base.Add(time.Second))
+	deferred, ratio, _ = scheduler.ShouldDeferForRateLimit(ChannelKindMessages, 0, "", ratelimit.Config{}, base.Add(time.Second))
 	if !deferred || ratio >= rateLimitLoadShedLowWatermark {
 		t.Fatalf("期望低水位未满 5 分钟仍保持软分流，deferred=%v ratio=%.2f", deferred, ratio)
 	}
 
-	deferred, ratio = scheduler.ShouldDeferForRateLimit(ChannelKindMessages, 0, "", ratelimit.Config{}, base.Add(5*time.Minute+2*time.Second))
+	deferred, ratio, _ = scheduler.ShouldDeferForRateLimit(ChannelKindMessages, 0, "", ratelimit.Config{}, base.Add(5*time.Minute+2*time.Second))
 	if deferred || ratio >= rateLimitLoadShedLowWatermark {
 		t.Fatalf("期望低水位持续 5 分钟后恢复，deferred=%v ratio=%.2f", deferred, ratio)
 	}

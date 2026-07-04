@@ -1,0 +1,25 @@
+{
+  "last_checked_at": "2026-07-01T23:21:42Z",
+  "claude_code": {
+    "remote_tag": "v2.1.198",
+    "local_version": "2.1.196",
+    "seen_tags": [
+      "v2.1.186",
+      "v2.1.193",
+      "v2.1.196",
+      "v2.1.197",
+      "v2.1.198"
+    ]
+  },
+  "codex": {
+    "remote_tag": "rust-v0.142.5",
+    "local_version": "0.142.4",
+    "seen_tags": [
+      "rust-v0.141.0",
+      "rust-v0.142.0",
+      "rust-v0.142.2",
+      "rust-v0.142.4",
+      "rust-v0.142.5"
+    ]
+  }
+}

@@ -31,6 +31,7 @@ import (
 	"github.com/BenedictKing/ccx/internal/ratelimit"
 	"github.com/BenedictKing/ccx/internal/scheduler"
 	"github.com/BenedictKing/ccx/internal/session"
+	"github.com/BenedictKing/ccx/internal/thinkingcache"
 	"github.com/BenedictKing/ccx/internal/warmup"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -51,6 +52,7 @@ const (
 	defaultConfigPath              = ".config/config.json"
 	defaultStateDir                = ".config"
 	metricsDBFile                  = "metrics.db"
+	thinkingCacheDBFile            = "thinking_cache.db"
 	conversationStateFile          = "conversation_state.json"
 	scheduledRecoveryStateFileName = "scheduled_recovery_state.json"
 )
@@ -67,6 +69,7 @@ type runtimePaths struct {
 	ConfigPath                 string
 	StateDir                   string
 	MetricsDBPath              string
+	ThinkingCacheDBPath        string
 	ConversationStatePath      string
 	ScheduledRecoveryStatePath string
 	LogDir                     string
@@ -135,7 +138,7 @@ func writeCLIHelp(out io.Writer) {
 
 说明:
   --config 只改变配置文件位置。
-  --statedir 会让 metrics.db、conversation_state.json、scheduled_recovery_state.json
+  --statedir 会让 metrics.db、thinking_cache.db、conversation_state.json、scheduled_recovery_state.json
   写入指定目录；不指定时保持默认 .config。
   --logdir 只影响日志目录。使用 none 或 null 可禁用日志文件写入，适合 systemd/journald 等环境。
 	  --backupdir 只影响配置备份目录，不指定时默认为配置文件同级目录下的 backups。
@@ -222,6 +225,7 @@ func resolveRuntimePaths(opts cliOptions, envCfg *config.EnvConfig) (runtimePath
 		ConfigPath:                 configPath,
 		StateDir:                   stateDir,
 		MetricsDBPath:              filepath.Join(stateDir, metricsDBFile),
+		ThinkingCacheDBPath:        filepath.Join(stateDir, thinkingCacheDBFile),
 		ConversationStatePath:      filepath.Join(stateDir, conversationStateFile),
 		ScheduledRecoveryStatePath: filepath.Join(stateDir, scheduledRecoveryStateFileName),
 		LogDir:                     logDir,
@@ -280,6 +284,18 @@ func main() {
 		log.Fatalf("初始化配置管理器失败: %v", err)
 	}
 	defer cfgManager.Close()
+
+	applyThinkingCacheConfig := func(cfg config.Config) {
+		if err := thinkingcache.Configure(thinkingcache.Config{
+			DBPath: paths.ThinkingCacheDBPath,
+			TTL:    cfg.ThinkingCache.EffectiveTTL(),
+		}); err != nil {
+			log.Printf("[ThinkingCache-Init] 警告: 初始化 Claude thinking 缓存失败: %v，将使用内存缓存", err)
+		}
+	}
+	applyThinkingCacheConfig(cfgManager.GetConfig())
+	cfgManager.RegisterOnConfigChange(applyThinkingCacheConfig)
+	defer thinkingcache.Close()
 
 	// 初始化会话管理器（Responses API 专用）
 	sessionManager := session.NewSessionManager(
@@ -398,13 +414,9 @@ func main() {
 		for _, ct := range channelTypes {
 			for idx, upstream := range ct.upstreams {
 				autoFromHeaders := upstream.RateLimitAutoFromHeaders != nil && *upstream.RateLimitAutoFromHeaders
-				windowSeconds := 0
-				if upstream.RateLimitWindowMinutes > 0 {
-					windowSeconds = upstream.RateLimitWindowMinutes * 60
-				}
 				rateLimitManager.GetOrCreate(ct.apiType, idx, ratelimit.Config{
 					RPM:             upstream.RateLimitRPM,
-					WindowSeconds:   windowSeconds,
+					WindowSeconds:   config.RateLimitWindowSeconds(upstream.RateLimitWindowMinutes),
 					MaxConcurrent:   upstream.RateLimitMaxConcurrent,
 					AutoFromHeaders: autoFromHeaders,
 				})
@@ -445,6 +457,9 @@ func main() {
 
 	overrideManager := conversation.NewOverrideManager(overrideTTL)
 	channelScheduler.SetConversationComponents(conversationTracker, overrideManager)
+
+	// 启动 loadShed 后台 reaper（30s 推进到期状态）
+	channelScheduler.Start()
 
 	scheduledRecoveryStop := make(chan struct{})
 	go func() {
@@ -885,7 +900,7 @@ func main() {
 	}
 
 	// 启动服务器
-	addr := fmt.Sprintf(":%d", envCfg.Port)
+	addr := listenAddressForEnv(envCfg)
 	endpoint := endpointForEnv(envCfg)
 
 	// 创建 HTTP 服务器
@@ -910,6 +925,7 @@ func main() {
 	}
 	fmt.Printf("\n")
 	fmt.Printf("[Server-Info] 协议: %s\n", strings.ToUpper(endpoint.Scheme))
+	fmt.Printf("[Server-Info] 监听地址: %s\n", addr)
 	fmt.Printf("[Server-Info] 管理界面: %s\n", endpoint.URL(""))
 	fmt.Printf("[Server-Info] API 地址: %s\n", endpoint.URL("/v1"))
 	if envCfg.EnableHTTPS {
@@ -992,6 +1008,12 @@ func main() {
 		// 关闭对话追踪器（flush 持久化状态）
 		conversationTracker.Stop()
 		log.Println("[Conversation-Shutdown] 对话追踪器已安全关闭")
+
+		// 停止调度器后台 reaper
+		channelScheduler.Stop()
+
+		// 停止限速器后台清理协程
+		rateLimitManager.Stop()
 
 		close(scheduledRecoveryStop)
 		close(shutdownDone)

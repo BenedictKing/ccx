@@ -195,6 +195,8 @@ func HandleMultiChannelFailoverWithSelectionFilter(
 			} else {
 				lastError = fmt.Errorf("渠道 [%d] 失败", channelIndex)
 			}
+		} else if result.LastError != nil {
+			lastError = result.LastError
 		}
 
 		if result.Attempted && upstream != nil {

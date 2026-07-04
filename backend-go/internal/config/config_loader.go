@@ -134,6 +134,9 @@ func (cm *ConfigManager) createDefaultConfig() error {
 		GeminiUpstream:           []UpstreamConfig{},
 		VectorsUpstream:          []UpstreamConfig{},
 		FuzzyModeEnabled:         true, // 默认启用 Fuzzy 模式
+		ThinkingCache: ThinkingCacheConfig{
+			TTLHours: ThinkingCacheDefaultTTLHours,
+		},
 		// StripBillingHeader 旧全局字段默认关闭；新语义已下沉到渠道级开关
 	}
 
@@ -163,6 +166,18 @@ func (cm *ConfigManager) applyConfigDefaults(rawJSON []byte) bool {
 		}
 		if _, exists := rawMap["stripBillingHeader"]; !exists {
 			// 字段不存在，保留零值 false；新语义默认关闭，仅旧配置显式存在时才迁移
+		}
+		if _, exists := rawMap["thinkingCache"]; !exists {
+			cm.config.ThinkingCache.TTLHours = ThinkingCacheDefaultTTLHours
+			needSave = true
+			log.Printf("[Config-Migration] thinkingCache 字段不存在，ttlHours 设为默认值 %d", ThinkingCacheDefaultTTLHours)
+		} else {
+			normalized := NormalizeThinkingCacheTTLHours(cm.config.ThinkingCache.TTLHours)
+			if cm.config.ThinkingCache.TTLHours != normalized {
+				cm.config.ThinkingCache.TTLHours = normalized
+				needSave = true
+				log.Printf("[Config-Migration] thinkingCache.ttlHours 已归一化为 %d", normalized)
+			}
 		}
 
 		// 将旧全局 stripBillingHeader 迁移到已有 messages 渠道级字段

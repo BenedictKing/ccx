@@ -108,7 +108,7 @@ APP_UI_LANGUAGE=zh-CN
 
 3. 启动后访问 `http://localhost:3000`
 
-Windows 下如果客户端运行在 cmd、PowerShell、WSL 或 Docker 中，且 `localhost` 无法访问 CCX，建议改用 Windows 主机的局域网 IPv4 地址，例如 `http://192.168.1.23:3000`。CCX 默认通过 `:PORT` 监听所有网卡地址。
+Windows 下如果客户端运行在 cmd、PowerShell、WSL 或 Docker 中，且 `localhost` 无法访问 CCX，建议改用 Windows 主机的局域网 IPv4 地址，例如 `http://192.168.1.23:3000`。`BIND_HOST` 留空时，CCX 默认通过 `:PORT` 监听所有网卡地址；如需仅本机访问，设置 `BIND_HOST=127.0.0.1`。
 
 需要后台运行或开机自启动时，参考 [非 Docker 自启动](docs/service/README.md)。
 

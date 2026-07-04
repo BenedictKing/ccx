@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
+	"github.com/BenedictKing/ccx/internal/copilot"
 	"github.com/BenedictKing/ccx/internal/httpclient"
 	"github.com/BenedictKing/ccx/internal/keypool"
 	"github.com/BenedictKing/ccx/internal/middleware"
@@ -36,6 +37,9 @@ const (
 )
 
 var errNoChannelWithDisabledKeys = errors.New("no channel with disabled keys")
+
+// copilotTokenResolver 解析 Copilot runtime token；测试可替换以注入 mock，避免真实 GitHub 调用。
+var copilotTokenResolver = copilot.ResolveTokenWithProxy
 
 // ModelsResponse OpenAI 兼容的 models 响应格式
 type ModelsResponse struct {
@@ -869,7 +873,26 @@ func requestModelsFromSelection(ctx context.Context, cfgManager *config.ConfigMa
 	upstream := selection.Upstream
 
 	var candidateURLs []string
-	if upstream.ServiceType == "gemini" || kind == scheduler.ChannelKindGemini {
+	var copilotRuntimeToken string
+	if upstream.ServiceType == "copilot" {
+		keyCandidates := selectModelsAPIKeyCandidates(cfgManager, upstream, channelType)
+		if len(keyCandidates) == 0 {
+			log.Printf("[Models-Copilot] 获取 API Key 失败: channel=%s, error=没有可用于模型探测的密钥", upstream.Name)
+			return nil, upstream, false
+		}
+		proxyURL := strings.TrimSpace(upstream.ProxyURL)
+		rt, baseURL, err := copilotTokenResolver(ctx, keyCandidates[0].apiKey, proxyURL)
+		if err != nil {
+			log.Printf("[Models-Copilot] Copilot token exchange 失败: channel=%s, error=%v", upstream.Name, err)
+			return nil, upstream, false
+		}
+		copilotRuntimeToken = rt
+		targetBaseURL := strings.TrimSuffix(strings.TrimSuffix(upstream.BaseURL, "#"), "/")
+		if baseURL != "" {
+			targetBaseURL = strings.TrimRight(baseURL, "/")
+		}
+		candidateURLs = []string{targetBaseURL + "/models" + suffix}
+	} else if upstream.ServiceType == "gemini" || kind == scheduler.ChannelKindGemini {
 		candidateURLs = []string{buildGeminiModelsURL(upstream.BaseURL) + suffix}
 	} else if kind == scheduler.ChannelKindMessages {
 		bases := buildClaudeCompatibleModelsURLs(upstream.BaseURL)
@@ -901,7 +924,7 @@ func requestModelsFromSelection(ctx context.Context, cfgManager *config.ConfigMa
 	for _, candidate := range keyCandidates {
 		candidate := candidate
 		go func() {
-			body, ok := requestModelsWithKey(keyCtx, client, candidateURLs, upstream, method, kind, selection.Reason, candidate)
+			body, ok := requestModelsWithKey(keyCtx, client, candidateURLs, upstream, method, kind, selection.Reason, candidate, copilotRuntimeToken)
 			resultCh <- requestResult{body: body, ok: ok}
 		}()
 	}
@@ -965,7 +988,7 @@ func selectModelsAPIKeyCandidates(cfgManager *config.ConfigManager, upstream *co
 	return disabled
 }
 
-func requestModelsWithKey(ctx context.Context, client *http.Client, candidateURLs []string, upstream *config.UpstreamConfig, method string, kind scheduler.ChannelKind, reason string, candidate modelsAPIKeyCandidate) ([]byte, bool) {
+func requestModelsWithKey(ctx context.Context, client *http.Client, candidateURLs []string, upstream *config.UpstreamConfig, method string, kind scheduler.ChannelKind, reason string, candidate modelsAPIKeyCandidate, copilotRuntimeToken string) ([]byte, bool) {
 	channelType := channelKindLabel(kind)
 	apiKey := candidate.apiKey
 	if candidate.disabledFallback {
@@ -978,13 +1001,19 @@ func requestModelsWithKey(ctx context.Context, client *http.Client, candidateURL
 			log.Printf("[%s-Models] 创建请求失败: channel=%s, url=%s, error=%v", channelType, upstream.Name, candidateURL, err)
 			continue
 		}
-		if (upstream.ServiceType == "gemini" || kind == scheduler.ChannelKindGemini) && !utils.HasAuthenticationHeaderOverride(upstream.AuthHeader) {
+		if upstream.ServiceType == "copilot" {
+			copilot.ApplyRuntimeHeaders(req.Header, copilotRuntimeToken)
+		} else if (upstream.ServiceType == "gemini" || kind == scheduler.ChannelKindGemini) && !utils.HasAuthenticationHeaderOverride(upstream.AuthHeader) {
 			utils.SetGeminiAuthenticationHeader(req.Header, apiKey)
 		} else {
 			utils.SetAuthenticationHeaderWithOverride(req.Header, apiKey, upstream.AuthHeader)
 		}
 		req.Header.Set("Content-Type", "application/json")
-		utils.ApplyCustomHeaders(req.Header, upstream.CustomHeaders)
+		if upstream.ServiceType == "copilot" {
+			utils.ApplyCustomHeadersProtected(req.Header, upstream.CustomHeaders, utils.CopilotProtectedHeaders)
+		} else {
+			utils.ApplyCustomHeaders(req.Header, upstream.CustomHeaders)
+		}
 
 		resp, err := client.Do(req)
 		if err != nil {

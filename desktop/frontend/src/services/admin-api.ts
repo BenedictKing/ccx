@@ -453,6 +453,7 @@ export interface KeyHistoryDataPoint {
   outputTokens: number
   cacheCreationTokens: number
   cacheReadTokens: number
+  costUSD?: number
 }
 
 export interface KeyHistoryData {
@@ -479,6 +480,7 @@ export interface GlobalHistoryDataPoint {
   outputTokens: number
   cacheCreationTokens: number
   cacheReadTokens: number
+  costUSD?: number
 }
 
 export interface GlobalStatsSummary {
@@ -489,6 +491,7 @@ export interface GlobalStatsSummary {
   totalOutputTokens: number
   totalCacheCreationTokens: number
   totalCacheReadTokens: number
+  totalCostUSD?: number
   avgSuccessRate: number
   duration: string
   intervalSeconds?: number
@@ -509,6 +512,7 @@ export interface ModelHistoryDataPoint {
   outputTokens: number
   cacheCreationTokens: number
   cacheReadTokens: number
+  costUSD?: number
 }
 
 export interface ModelStatsHistoryResponse {

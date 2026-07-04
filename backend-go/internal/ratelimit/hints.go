@@ -23,8 +23,8 @@ func (l *ChannelLimiter) ApplyUpstreamHints(headers http.Header, statusCode int,
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	// 429 + Retry-After → cooldown
-	if statusCode == http.StatusTooManyRequests {
+	// 429 或 5xx + Retry-After → cooldown（5xx 语义为服务暂时不可用，尊重上游退避指示）
+	if statusCode == http.StatusTooManyRequests || statusCode >= 500 {
 		if ra := parseRetryAfter(headers, now); ra > 0 {
 			candidate := now.Add(ra)
 			if candidate.After(l.cooldownUntil) {

@@ -192,6 +192,7 @@ When installed as CCX Desktop, `.env` is stored in the CCX Desktop data director
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PORT` | 3688 | Gateway port |
+| `BIND_HOST` | unset | Bind host; unset listens on all interfaces, `127.0.0.1` allows local-only access |
 | `PROXY_ACCESS_KEY` | - | Client proxy key for accessing CCX |
 | `ADMIN_ACCESS_KEY` | - | Admin key |
 | `LOG_LEVEL` | info | Log level |

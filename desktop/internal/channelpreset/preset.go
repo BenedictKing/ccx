@@ -114,6 +114,7 @@ type ChannelPayload struct {
 	PassbackReasoningContent      bool              `json:"passbackReasoningContent,omitempty"`
 	PassbackThinkingBlocks        bool              `json:"passbackThinkingBlocks,omitempty"`
 	NormalizeSystemRoleToTopLevel bool              `json:"normalizeSystemRoleToTopLevel,omitempty"`
+	StripBillingHeader            bool              `json:"stripBillingHeader,omitempty"`
 	NoVision                      bool              `json:"noVision,omitempty"`
 	NoVisionModels                []string          `json:"noVisionModels,omitempty"`
 	VisionFallbackModel           string            `json:"visionFallbackModel,omitempty"`
@@ -768,6 +769,8 @@ type channelTargetConfig struct {
 	PassbackReasoningContent      bool
 	PassbackThinkingBlocks        bool
 	NormalizeSystemRoleToTopLevel bool
+	NormalizeMetadataUserId       *bool
+	StripBillingHeader            bool
 	NoVision                      bool
 	NoVisionModels                []string
 	VisionFallbackModel           string
@@ -846,6 +849,10 @@ func applyChannelTargetConfig(payload *ChannelPayload, config channelTargetConfi
 	payload.PassbackReasoningContent = payload.PassbackReasoningContent || config.PassbackReasoningContent
 	payload.PassbackThinkingBlocks = payload.PassbackThinkingBlocks || config.PassbackThinkingBlocks
 	payload.NormalizeSystemRoleToTopLevel = payload.NormalizeSystemRoleToTopLevel || config.NormalizeSystemRoleToTopLevel
+	if config.NormalizeMetadataUserId != nil {
+		payload.NormalizeMetadataUserId = config.NormalizeMetadataUserId
+	}
+	payload.StripBillingHeader = payload.StripBillingHeader || config.StripBillingHeader
 	payload.NoVision = payload.NoVision || config.NoVision
 	payload.VisionFallbackModel = config.VisionFallbackModel
 	payload.StripEmptyTextBlocks = payload.StripEmptyTextBlocks || config.StripEmptyTextBlocks

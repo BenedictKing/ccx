@@ -1,7 +1,7 @@
 ---
 name: version-bump
 description: 升级项目版本号并提交git，支持patch/minor/major版本升级或指定具体版本号，自动从git log生成CHANGELOG
-version: 1.2.0
+version: 1.5.0
 author: https://github.com/BenedictKing/ccx/
 allowed-tools: Bash, Read, Write, Edit
 context: fork
@@ -67,63 +67,62 @@ echo "v{新版本号}" > VERSION
 
 **前置检查（必须）：**
 
-1. 读取 CHANGELOG.md，查找 `## [Unreleased]` 区块
-2. 检查该区块下是否有实际变更内容（即 `## [Unreleased]` 与下一个 `## [v` 之间是否存在非空行）
-3. 根据检查结果决定行为：
-
-| 情况 | 行为 |
-|------|------|
-| 有 `[Unreleased]` 且有变更内容 | ✅ 正常替换为新版本号和日期 |
-| 有 `[Unreleased]` 但下方无变更内容 | 进入 **git log 自动生成** 流程 |
-| 无 `[Unreleased]` 区块 | 进入 **git log 自动生成** 流程 |
-
-**git log 自动生成流程：**
-
-当 CHANGELOG 中没有现成的变更内容时，从 git log 自动生成：
-
-1. 获取上一个版本 tag 到 HEAD 的提交记录：
+1. 读取 CHANGELOG.md，查找 `## [Unreleased]` 区块（若不存在则创建）
+2. 获取上一个版本 tag 到 HEAD 的全部提交记录，用于后续校验补全：
    ```bash
    git log v{上一个版本}..HEAD --pretty=format:"%h %s"
    ```
-2. 如果没有提交记录，❌ 中止流程，提示用户没有新的变更
-3. 按 Conventional Commits 的 `type` 将提交分组为 CHANGELOG 分类：
+3. 如果没有提交记录，❌ 中止流程，提示用户没有新的变更
 
-   | type | CHANGELOG 分类 |
-   |------|---------------|
-   | `feat` | 新增 |
-   | `fix` | 修复 |
-   | `perf` | 优化 |
-   | `refactor` | 重构 |
-   | `docs` | 文档 |
-   | `chore`, `ci`, `build` | 其他 |
-   | `revert` | 回滚 |
+**git log 校验与补全（始终执行）：**
 
-4. 为每个提交生成简洁的 CHANGELOG 条目，参考已有 CHANGELOG 条目的风格（含加粗标题和详情描述）
-5. 在 CHANGELOG.md 顶部插入新版本区块（在第一个 `## [v` 之前）：
-   ```markdown
-   ## [v{新版本号}] - YYYY-MM-DD
+无论 `[Unreleased]` 是否已有内容，**都必须**用 git log 逐条校验，确保每个提交都已在 CHANGELOG 中有对应条目：
 
-   ### 新增
+1. 解析 `[Unreleased]` 区块中已有的条目（按标题摘要匹配）
+2. 将 git log 中的每个 commit subject 与已有条目逐一比对
+3. 找出所有**尚未记录**的提交，分为两类：
+   - **根本不存在**：CHANGELOG 中完全没有该提交的条目 → 直接生成新条目追加到 `[Unreleased]`
+   - **错位到前一个版本下**：在 `## [v{上一个版本}]` 区块中找到了该提交的条目 → **必须将条目从旧版本区块中剪切，移动到 `[Unreleased]` 区块**（保留分类分组，删除原位置）
+4. 追加/移动完毕后，若全部已有记录则无需改动
 
-   - **功能标题** - 简要描述
+> ⚠️ **错位处理必须优先于补全**：先扫描 `[v{上一个版本}]` 区块是否有属于本次 v{新版本} 的提交，有则剪切移动，再对剩余遗漏的提交生成新条目。避免同一个提交在 CHANGELOG 中出现两次。
 
-   ### 修复
+**覆盖率校验（必须通过）：**
 
-   - **修复标题** - 简要描述
-   ```
-6. 仅保留有内容的分类，跳过空分类
+校验补全完成后，必须执行以下命令确认无遗漏：
 
-**替换规则（有 Unreleased 时）：**
+```bash
+# 获取本版本区间所有有效 commit 数量（排除 Merge 和 bump version）
+TOTAL=$(git log v{上一个版本}..HEAD --pretty=%s | grep -cvE "^(Merge |chore: bump version)")
+# 统计 CHANGELOG 中本版本的条目数量（按 "- **" 开头的行计数）
+RECORDED=$(sed -n '/^## \[v{新版本号}\]/,/^## \[/p' CHANGELOG.md | grep -c "^- \*\*")
+echo "有效提交: ${TOTAL} 条, 已记录: ${RECORDED} 条"
+```
+
+- 如果 `已记录 < 有效提交`：**必须回溯补全后才能继续**，不允许跳过
+- 允许 `已记录 >= 有效提交`（某些提交可能被合并为一条，或多条关联 commit 归为一个条目）
+
+**按 type 分组规则：**
+
+| type | CHANGELOG 分类 |
+|------|---------------|
+| `feat` | 新增 |
+| `fix` | 修复 |
+| `perf` | 优化 |
+| `refactor` | 重构 |
+| `docs` | 文档 |
+| `chore`, `ci`, `build` | 其他 |
+| `revert` | 回滚 |
+
+**替换为新版本号：**
+
+校验补全完成后，将 `## [Unreleased]` 替换为：
 
 ```markdown
-# 替换前
-
-## [Unreleased]
-
-# 替换后
-
 ## [v{新版本号}] - YYYY-MM-DD
 ```
+
+保留下方所有条目内容不变（已包含全部提交）。
 
 ### 5. 验证更新
 
@@ -162,7 +161,40 @@ git add VERSION CHANGELOG.md
 git commit -m "chore: bump version to v{新版本号}"
 ```
 
-### 8. 创建 Tag（默认必须执行）
+### 8. 本地编译与打包验证（必须通过）
+
+> ⚠️ **重要**: 提交后、创建 tag 前，必须通过本地编译验证。编译失败则中止流程，不允许推送。
+
+**执行步骤：**
+
+1. **运行后端测试：**
+   ```bash
+   cd backend-go && make test
+   ```
+   - 测试失败 → ❌ 中止流程，提示用户修复测试后重试
+
+2. **执行完整构建（前端 + 后端）：**
+   ```bash
+   make build
+   ```
+   - 构建失败 → ❌ 中止流程，提示用户修复编译错误后重试
+   - 构建成功 → ✅ 继续后续 tag 和推送流程
+
+3. **验证构建产物：**
+   ```bash
+   ls -lh dist/ccx-go
+   ```
+   - 确认产物存在且大小合理
+
+**中止时的处理：**
+
+如果编译验证失败：
+- 不创建 tag
+- 不推送
+- 已提交的 commit 保留在本地
+- 输出错误信息，提示用户修复后重新执行
+
+### 9. 创建 Tag（默认必须执行）
 
 > ⚠️ 除非用户明确说"不要 tag"，否则必须创建 tag！
 
@@ -170,7 +202,7 @@ git commit -m "chore: bump version to v{新版本号}"
 git tag v{新版本号}
 ```
 
-### 9. 推送到远程（默认必须执行）
+### 10. 推送到远程（默认必须执行）
 
 ```bash
 # 推送 commit
@@ -190,10 +222,13 @@ git push origin v{新版本号}
 
 1. 读取 VERSION: `v2.0.14`
 2. 计算新版本: `v2.0.15`
-3. 更新 VERSION 文件
-4. 执行 git commit
-5. 创建 git tag: `v2.0.15`
-6. 推送 commit 和 tag 到远程
+3. **从 git log 校验并补全 CHANGELOG** — 将 `v2.0.14..HEAD` 的每个 commit 逐一与 `[Unreleased]` 已有条目比对，遗漏的追加进去
+4. 将 `## [Unreleased]` 替换为 `## [v2.0.15] - YYYY-MM-DD`
+5. 更新 VERSION 文件
+6. 执行 git commit
+7. 本地编译验证（`make test` + `make build`）
+8. 创建 git tag: `v2.0.15`
+9. 推送 commit 和 tag 到远程
 
 ### 场景 2：升级 minor 版本
 
@@ -227,9 +262,10 @@ git push origin v{新版本号}
 2. 计算新版本: `v2.0.30`
 3. 更新 VERSION 文件
 4. 执行 git commit
-5. 创建 git tag: `v2.0.30`
-6. 推送 commit 和 tag 到远程
-7. GitHub Actions 自动触发，编译 6 平台版本并发布到 Releases
+5. 本地编译验证（`make test` + `make build`）
+6. 创建 git tag: `v2.0.30`
+7. 推送 commit 和 tag 到远程
+8. GitHub Actions 自动触发，编译 6 平台版本并发布到 Releases
 
 ### 场景 5：仅打 tag（不升级版本）
 
@@ -263,6 +299,7 @@ git push origin v{新版本号}
 - 升级类型: patch
 
 ✅ Git commit 已创建
+✅ 本地编译验证通过（测试 + 构建）
 ✅ Git tag v2.0.30 已创建
 
 是否推送到远程仓库? (Y/n)
@@ -273,34 +310,34 @@ git push origin v{新版本号}
 
 ## GitHub Actions 集成
 
-当推送 `v*` 格式的 tag 时，会自动触发以下 workflow：
+当推送 `v*` 格式的 tag 时，会自动触发 `release.yml` workflow，在三平台并行编译：
 
-| Workflow              | Runner         | 产物                                                               |
-| --------------------- | -------------- | ------------------------------------------------------------------ |
-| `release-linux.yml`   | ubuntu-latest  | `ccx-linux-amd64`, `ccx-linux-arm64`             |
-| `release-macos.yml`   | macos-latest   | `ccx-darwin-amd64`, `ccx-darwin-arm64`           |
-| `release-windows.yml` | windows-latest | `ccx-windows-amd64.exe`, `ccx-windows-arm64.exe` |
-| `docker-build.yml`    | ubuntu-latest  | Docker 镜像 (阿里云容器镜像服务, linux/amd64 + linux/arm64)        |
+| Job               | Runner              | 产物                                                      |
+| ----------------- | ------------------- | --------------------------------------------------------- |
+| `build-macos`     | macos-latest        | `ccx-darwin-arm64`, `ccx-darwin-amd64`, DMG 安装包        |
+| `build-windows`   | windows-latest      | `ccx-windows-amd64.exe`, `ccx-windows-arm64.exe`, NSIS 安装包 |
+| `build-linux`     | ubuntu-latest       | `ccx-linux-amd64`, `ccx-linux-arm64`, AppImage            |
+| `build-linux-arm64-desktop` | ubuntu-24.04-arm | `CCX-Desktop-linux-arm64.AppImage`              |
+| `docker-build`    | ubuntu-latest       | Docker 镜像 (阿里云容器镜像服务, linux/amd64 + linux/arm64) |
 
 ### Concurrency 配置
 
-每个 release workflow 使用独立的 concurrency group，确保三个平台**并行编译**：
+构建 job 使用独立的 concurrency group，确保三平台**并行编译**：
 
 ```yaml
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: release-${{ github.ref }}
   cancel-in-progress: false
 ```
 
-- `${{ github.workflow }}` 使用 workflow 名称作为前缀，避免不同平台的构建相互阻塞
 - `cancel-in-progress: false` 确保发布构建不会被取消
 
 ### 发布内容
 
-- 6 个平台的可执行文件（三平台并行构建）
-- 自动生成的 Release Notes
+- 6 个平台的可执行文件 + 安装包（三平台并行构建）
+- 各平台 checksum + cosign 签名文件
 - Docker 镜像（推送到阿里云容器镜像服务）
-- 发布为 **draft** 模式，需手动确认发布
+- 发布为 **draft** 模式，需在 GitHub Releases 页面手动确认发布
 
 ## 注意事项
 
@@ -308,5 +345,29 @@ concurrency:
 - 提交前会显示所有待提交的变更供用户确认
 - 如果工作区有其他未提交的修改，会询问用户是否一并提交
 - 遵循 Conventional Commits 规范，使用 `chore: bump version` 格式
-- 推送 tag 后，GitHub Actions 需要几分钟完成编译和发布
-- 可以在 GitHub Actions 页面查看构建进度
+- **编译验证是强制步骤**：commit 后必须通过 `make test` 和 `make build`，否则不允许创建 tag 和推送
+- 编译验证失败时，已提交的 commit 保留在本地，用户修复后可手动推送
+- 推送 tag 后，GitHub Actions 需要几分钟完成编译
+- 查看构建进度：`gh run list --limit 5`
+- 所有构建完成后，draft release 会包含全部平台产物，需手动确认发布
+
+## 构建监控
+
+推送 tag 后，**自动启动构建进度监控**：
+
+```bash
+# 每 5 分钟自动检查一次构建状态
+gh run list --limit 5
+```
+
+**监控行为：**
+
+1. **启动监控**：推送 tag 后，立即设置定时任务，每 5 分钟检查一次
+2. **进度汇报**：构建进行中时，简要汇报运行时长和状态
+3. **完成通知**：构建完成后，详细汇报：
+   - ✅/❌ 各 workflow 执行结果
+   - 📦 Release draft 产物清单
+   - 🐳 Docker 镜像推送状态
+4. **自动停止**：所有构建完成后，自动取消监控任务
+
+**手动查询**：用户随时可以问"构建进度如何"主动获取最新状态

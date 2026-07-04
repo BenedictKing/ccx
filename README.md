@@ -108,7 +108,7 @@ APP_UI_LANGUAGE=en
 
 3. Run the binary and open `http://localhost:3000`
 
-On Windows, if the client runs from cmd, PowerShell, WSL, or Docker and `localhost` does not reach CCX, use the Windows host IPv4 address instead, for example `http://192.168.1.23:3000`. CCX listens on all interfaces by default through `:PORT`.
+On Windows, if the client runs from cmd, PowerShell, WSL, or Docker and `localhost` does not reach CCX, use the Windows host IPv4 address instead, for example `http://192.168.1.23:3000`. When `BIND_HOST` is empty, CCX listens on all interfaces by default through `:PORT`; set `BIND_HOST=127.0.0.1` for local-only access.
 
 For background startup without Docker, see [Service Startup](docs/service/README.md).
 

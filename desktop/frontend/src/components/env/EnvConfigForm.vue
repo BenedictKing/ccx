@@ -25,6 +25,7 @@ type EnvField = {
   step?: number | string
   required?: boolean
   disallow?: string[]
+  omitWhenEmpty?: boolean
 }
 
 type EnvGroup = {
@@ -60,6 +61,7 @@ const envGroups = computed<EnvGroup[]>(() => [
     description: t('env.groupServerDesc'),
     fields: [
       { key: 'PORT', label: t('env.fieldPort'), type: 'number' as const, defaultValue: '3688', min: 1, max: 65535, description: t('env.descPort') },
+      { key: 'BIND_HOST', label: t('env.fieldBindHost'), type: 'text' as const, defaultValue: '', placeholder: '127.0.0.1', description: t('env.descBindHost'), omitWhenEmpty: true },
       { key: 'ENV', label: t('env.fieldEnv'), type: 'select' as const, defaultValue: 'production', options: [{ label: 'production', value: 'production' }, { label: 'development', value: 'development' }], description: t('env.descEnv') },
       { key: 'ENABLE_HTTPS', label: t('env.fieldEnableHttps'), type: 'select' as const, defaultValue: 'false', options: booleanOptions, description: t('env.descEnableHttps') },
       { key: 'TLS_AUTO_CERT', label: t('env.fieldTlsAutoCert'), type: 'select' as const, defaultValue: 'true', options: booleanOptions, description: t('env.descTlsAutoCert') },
@@ -106,7 +108,6 @@ const envGroups = computed<EnvGroup[]>(() => [
   },
 ])
 
-const supportedKeys = envGroups.value.flatMap((group) => group.fields.map((field) => field.key))
 const allFields = envGroups.value.flatMap((group) => group.fields)
 
 const { envFile, envLoading, envSaving, envMessage, envError, editors, openingEditor, loadEnvFile, saveEnvFile, loadEditors, openInEditor } = useEnvFile()
@@ -278,6 +279,12 @@ const save = async () => {
 
   clearMessages()
 
+  const fieldsToSave = allFields.filter((field) => {
+    if (!field.omitWhenEmpty) return true
+    if (String(form[field.key] ?? '').trim() !== '') return true
+    return entries.value.some((entry) => entry.type === 'pair' && entry.key === field.key)
+  })
+  const supportedKeys = fieldsToSave.map((field) => field.key)
   const serialized = serializeEnvFile(entries.value, form, supportedKeys, newline.value)
   await saveEnvFile(serialized)
 

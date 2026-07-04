@@ -390,9 +390,19 @@ function buildSequence(channels: ChannelInfo[]): ChannelSequenceEntry[] {
 }
 
 function getChannelTooltip(channel: ChannelInfo): string {
-  if (channel.index === props.conversation.currentChannel && !hasOverride.value) return t('cockpit.tooltip.quickCurrentChannel')
-  if (channel.index === nextChannel.value) return t('cockpit.tooltip.quickNextOverride')
-  if (channel.status === 'suspended' || channel.circuitOpen) return t('cockpit.tooltip.quickResumeAndSetNext')
+  // 该渠道已是 override 首位 → 已固定为此对话优先渠道
+  if (hasOverride.value && props.override?.sequence?.[0]?.channelIndex === channel.index) {
+    return t('cockpit.tooltip.quickPinned')
+  }
+  // 暂停或熔断 → 恢复并固定
+  if (channel.status === 'suspended' || channel.circuitOpen) {
+    return t('cockpit.tooltip.quickResumeAndSetNext')
+  }
+  // 当前渠道（未固定）→ 点击固定当前渠道
+  if (channel.index === props.conversation.currentChannel) {
+    return t('cockpit.tooltip.quickCurrentChannel')
+  }
+  // 其他渠道 → 固定为此对话优先渠道
   return t('cockpit.tooltip.quickSetNext')
 }
 
@@ -409,7 +419,11 @@ function channelChipClass(channel: ChannelInfo): string {
 }
 
 function handleQuickOverride(channel: ChannelInfo) {
-  if (!hasOverride.value && channel.index === props.conversation.currentChannel && channel.status !== 'suspended' && !channel.circuitOpen) return
+  // 已固定此渠道（override 首位）→ 再次点击取消固定
+  if (hasOverride.value && props.override?.sequence?.[0]?.channelIndex === channel.index) {
+    emit('removeOverride', props.conversation.id)
+    return
+  }
   const rest = channelSequence.value.filter(item => item.index !== channel.index)
   emit('setOverride', props.conversation.id, buildSequence([channel, ...rest]))
 }
@@ -435,6 +449,17 @@ function handleClearSubagentOverride() {
 }
 
 function handleMoveToTop(channel: ChannelInfo, currentIndex: number) {
+  // 当前渠道：toggle 固定/取消固定（与折叠态逻辑一致）
+  if (channel.index === props.conversation.currentChannel) {
+    if (hasOverride.value && props.override?.sequence?.[0]?.channelIndex === channel.index) {
+      emit('removeOverride', props.conversation.id)
+      return
+    }
+    const rest = channelSequence.value.filter(item => item.index !== channel.index)
+    emit('setOverride', props.conversation.id, buildSequence([channel, ...rest]))
+    return
+  }
+  // 非当前渠道：移到首位
   if (currentIndex === 0 && channel.status !== 'suspended' && !channel.circuitOpen) return
   const current = [...channelSequence.value]
   const [item] = current.splice(currentIndex, 1)

@@ -12,6 +12,8 @@ import (
 	"net"
 	"net/http"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -33,12 +35,29 @@ func endpointForEnv(envCfg *config.EnvConfig) serverEndpoint {
 	}
 	return serverEndpoint{
 		Scheme: scheme,
-		Host:   fmt.Sprintf("localhost:%d", envCfg.Port),
+		Host:   endpointHostForEnv(envCfg),
 	}
 }
 
 func (e serverEndpoint) URL(path string) string {
 	return fmt.Sprintf("%s://%s%s", e.Scheme, e.Host, path)
+}
+
+func endpointHostForEnv(envCfg *config.EnvConfig) string {
+	host := strings.TrimSpace(envCfg.BindHost)
+	switch host {
+	case "", "0.0.0.0", "::":
+		host = "localhost"
+	}
+	return net.JoinHostPort(host, strconv.Itoa(envCfg.Port))
+}
+
+func listenAddressForEnv(envCfg *config.EnvConfig) string {
+	host := strings.TrimSpace(envCfg.BindHost)
+	if host == "" {
+		return fmt.Sprintf(":%d", envCfg.Port)
+	}
+	return net.JoinHostPort(host, strconv.Itoa(envCfg.Port))
 }
 
 func configureServerTLS(srv *http.Server, envCfg *config.EnvConfig) error {

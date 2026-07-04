@@ -25,8 +25,10 @@ type ChannelLimiter struct {
 	sem chan struct{}
 
 	// --- 动态 cooldown ---
-	// cooldownUntil 非零且在当前时间之前时，acquire 直接快速失败。
+	// cooldownUntil 非零且在当前时间之后时，acquire 直接快速失败。
 	cooldownUntil time.Time
+
+	lastActivity time.Time
 }
 
 // Config 是 ChannelLimiter 的创建/更新配置。
@@ -150,6 +152,17 @@ func (l *ChannelLimiter) SetCooldown(until time.Time) {
 	if until.After(l.cooldownUntil) {
 		l.cooldownUntil = until
 	}
+	l.lastActivity = time.Now()
+}
+
+// LastActivity 返回最后活动时间（用于 reaper 判断是否可清理）。
+func (l *ChannelLimiter) LastActivity() time.Time {
+	if l == nil {
+		return time.Time{}
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.lastActivity
 }
 
 // Acquire 尝试获取一个请求许可。返回 release 函数（必须在请求完成后调用以释放并发信号量）。
@@ -242,6 +255,7 @@ func (l *ChannelLimiter) acquireToken(ctx context.Context, maxWait time.Duration
 	if len(l.timestamps) < l.maxRequests {
 		// 窗口未满，允许请求
 		l.timestamps = append(l.timestamps, now)
+		l.lastActivity = now
 		l.mu.Unlock()
 		return nil
 	}
@@ -315,6 +329,7 @@ func (l *ChannelLimiter) Status(now time.Time) LimiterStatus {
 	if l.sem != nil {
 		semUsed = len(l.sem)
 	}
+	l.lastActivity = now
 	return LimiterStatus{
 		WindowSize:      len(l.timestamps),
 		MaxRequests:     l.maxRequests,

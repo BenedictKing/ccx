@@ -44,7 +44,22 @@ function badgeClass(channel: ChannelInfo): string {
 }
 
 function getMoveToTopTooltip(channel: ChannelInfo, index: number): string {
-  if (index === 0 && channel.status !== 'suspended' && !channel.circuitOpen) return t('cockpit.tooltip.channelAlreadyFirst', { name: channel.name })
+  // 当前渠道 + 已固定（override + 在序列首位）→ 点击取消固定
+  if (channel.index === props.currentChannel && props.overrideActive && index === 0) {
+    return t('cockpit.tooltip.quickPinned')
+  }
+  // 当前渠道 + 未固定 → 点击固定
+  if (channel.index === props.currentChannel && !props.overrideActive) {
+    return t('cockpit.tooltip.quickCurrentChannel')
+  }
+  // 当前渠道 + override 但不在首位 → 移到首位固定
+  if (channel.index === props.currentChannel) {
+    return t('cockpit.tooltip.moveChannelToTop', { name: channel.name })
+  }
+  // 已在首位
+  if (index === 0 && channel.status !== 'suspended' && !channel.circuitOpen) {
+    return t('cockpit.tooltip.channelAlreadyFirst', { name: channel.name })
+  }
   return t('cockpit.tooltip.moveChannelToTop', { name: channel.name })
 }
 

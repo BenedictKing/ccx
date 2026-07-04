@@ -34,3 +34,13 @@ func TestNewEnvConfigHTTPSDefaults(t *testing.T) {
 		t.Fatal("TLSAutoCert = false, want true")
 	}
 }
+
+func TestNewEnvConfigParsesBindHost(t *testing.T) {
+	t.Setenv("BIND_HOST", " 127.0.0.1 ")
+
+	envCfg := NewEnvConfig()
+
+	if envCfg.BindHost != "127.0.0.1" {
+		t.Fatalf("BindHost = %q, want 127.0.0.1", envCfg.BindHost)
+	}
+}

@@ -33,12 +33,59 @@ func TestEndpointForEnv(t *testing.T) {
 			env:  &config.EnvConfig{Port: 8443, EnableHTTPS: true},
 			want: "https://localhost:8443/v1",
 		},
+		{
+			name: "configured bind host",
+			env:  &config.EnvConfig{Port: 3688, BindHost: "127.0.0.1"},
+			want: "http://127.0.0.1:3688/v1",
+		},
+		{
+			name: "wildcard bind host shows localhost endpoint",
+			env:  &config.EnvConfig{Port: 3688, BindHost: "0.0.0.0"},
+			want: "http://localhost:3688/v1",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := endpointForEnv(tt.env).URL("/v1"); got != tt.want {
 				t.Fatalf("URL() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestListenAddressForEnv(t *testing.T) {
+	tests := []struct {
+		name string
+		env  *config.EnvConfig
+		want string
+	}{
+		{
+			name: "empty bind host listens on all interfaces",
+			env:  &config.EnvConfig{Port: 3688},
+			want: ":3688",
+		},
+		{
+			name: "ipv4 loopback",
+			env:  &config.EnvConfig{Port: 3688, BindHost: "127.0.0.1"},
+			want: "127.0.0.1:3688",
+		},
+		{
+			name: "ipv6 loopback",
+			env:  &config.EnvConfig{Port: 3688, BindHost: "::1"},
+			want: "[::1]:3688",
+		},
+		{
+			name: "trims whitespace",
+			env:  &config.EnvConfig{Port: 3688, BindHost: " 127.0.0.1 "},
+			want: "127.0.0.1:3688",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := listenAddressForEnv(tt.env); got != tt.want {
+				t.Fatalf("listenAddressForEnv() = %q, want %q", got, tt.want)
 			}
 		})
 	}

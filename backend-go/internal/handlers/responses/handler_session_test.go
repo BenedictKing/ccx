@@ -106,6 +106,7 @@ func TestHandleStreamSuccess_PostCommitActivityResetsIdleWatchdog(t *testing.T) 
 		resp,
 		"responses",
 		&config.EnvConfig{LogLevel: "info"},
+		nil, // sessionManager
 		time.Now(),
 		&types.ResponsesRequest{Model: "gpt-5"},
 		[]byte(`{"model":"gpt-5","stream":true}`),
@@ -148,6 +149,7 @@ data: {"type":"response.completed","response":{"status":"completed","usage":{"in
 		resp,
 		"responses",
 		&config.EnvConfig{LogLevel: "info"},
+		nil, // sessionManager
 		time.Now(),
 		&types.ResponsesRequest{Model: "gpt-5"},
 		[]byte(`{"model":"gpt-5","stream":true}`),
@@ -194,6 +196,7 @@ data: {"type":"response.failed","response":{"id":"resp_1","status":"failed","err
 		resp,
 		"responses",
 		&config.EnvConfig{LogLevel: "info"},
+		nil, // sessionManager
 		time.Now(),
 		&types.ResponsesRequest{Model: "gpt-5"},
 		[]byte(`{"model":"gpt-5","stream":true}`),
@@ -231,6 +234,7 @@ data: {"type":"response.failed","response":{"id":"resp_1","status":"failed","err
 		resp,
 		"responses",
 		&config.EnvConfig{LogLevel: "info"},
+		nil, // sessionManager
 		time.Now(),
 		&types.ResponsesRequest{Model: "gpt-5"},
 		[]byte(`{"model":"gpt-5","stream":true}`),

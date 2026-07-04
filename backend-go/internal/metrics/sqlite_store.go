@@ -1016,6 +1016,18 @@ type AggregatedBucket struct {
 	CacheReadTokens     int64
 }
 
+// ModelAggregatedBucket 按模型聚合的时间桶。
+type ModelAggregatedBucket struct {
+	Model               string
+	Timestamp           time.Time
+	TotalRequests       int64
+	SuccessCount        int64
+	InputTokens         int64
+	OutputTokens        int64
+	CacheCreationTokens int64
+	CacheReadTokens     int64
+}
+
 // QueryAggregatedHistory 从 SQLite 查询聚合历史数据
 // 按指定时间间隔聚合，可选按 apiType、metricsKey、baseURL 过滤
 func (s *SQLiteStore) QueryAggregatedHistory(apiType string, since time.Time, intervalSeconds int64, metricsKey string, baseURL string) ([]AggregatedBucket, error) {
@@ -1063,6 +1075,58 @@ func (s *SQLiteStore) QueryAggregatedHistory(apiType string, since time.Time, in
 		var b AggregatedBucket
 		if err := rows.Scan(&bucket, &b.TotalRequests, &b.SuccessCount, &b.InputTokens, &b.OutputTokens, &b.CacheCreationTokens, &b.CacheReadTokens); err != nil {
 			return nil, fmt.Errorf("扫描聚合结果失败: %w", err)
+		}
+		b.Timestamp = time.Unix(bucket, 0)
+		results = append(results, b)
+	}
+	return results, rows.Err()
+}
+
+// QueryModelAggregatedHistory 从 SQLite 查询按模型聚合的历史数据。
+func (s *SQLiteStore) QueryModelAggregatedHistory(apiType string, since time.Time, intervalSeconds int64, metricsKey string, baseURL string) ([]ModelAggregatedBucket, error) {
+	// 先等待在途 flush 完成，再刷新当前缓冲区，确保查询视图尽可能完整。
+	s.flushMu.Lock()
+	s.flushBufferLocked()
+	s.flushMu.Unlock()
+
+	query := `
+		SELECT
+			model,
+			(timestamp / ?) * ? AS bucket,
+			COUNT(*) AS total,
+			SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) AS success_count,
+			SUM(input_tokens) AS input_tokens,
+			SUM(output_tokens) AS output_tokens,
+			SUM(cache_creation_tokens) AS cache_creation_tokens,
+			SUM(cache_read_tokens) AS cache_read_tokens
+		FROM request_records
+		WHERE api_type = ? AND timestamp >= ? AND model <> ''`
+
+	args := []any{intervalSeconds, intervalSeconds, apiType, since.Unix()}
+
+	if metricsKey != "" {
+		query += " AND metrics_key = ?"
+		args = append(args, metricsKey)
+	}
+	if baseURL != "" {
+		query += " AND base_url = ?"
+		args = append(args, baseURL)
+	}
+
+	query += " GROUP BY model, bucket ORDER BY model, bucket"
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("查询模型聚合历史失败: %w", err)
+	}
+	defer rows.Close()
+
+	var results []ModelAggregatedBucket
+	for rows.Next() {
+		var bucket int64
+		var b ModelAggregatedBucket
+		if err := rows.Scan(&b.Model, &bucket, &b.TotalRequests, &b.SuccessCount, &b.InputTokens, &b.OutputTokens, &b.CacheCreationTokens, &b.CacheReadTokens); err != nil {
+			return nil, fmt.Errorf("扫描模型聚合结果失败: %w", err)
 		}
 		b.Timestamp = time.Unix(bucket, 0)
 		results = append(results, b)

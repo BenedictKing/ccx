@@ -166,6 +166,7 @@ func handleMultiChannel(
 				upstream,
 				sortedURLResults,
 				bodyBytes,
+				contextRequirement,
 				claudeReq.Stream,
 				func(upstream *config.UpstreamConfig, failedKeys map[string]bool) (string, error) {
 					return cfgManager.GetNextAPIKey(upstream, failedKeys, "Messages")
@@ -299,6 +300,7 @@ func handleSingleChannel(
 		upstream,
 		urlResults,
 		bodyBytes,
+		contextRequirement,
 		claudeReq.Stream,
 		func(upstream *config.UpstreamConfig, failedKeys map[string]bool) (string, error) {
 			return cfgManager.GetNextAPIKey(upstream, failedKeys, "Messages")

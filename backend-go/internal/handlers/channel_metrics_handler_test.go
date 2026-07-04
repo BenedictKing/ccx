@@ -34,6 +34,9 @@ func (f *fakePersistenceStore) LoadCircuitStates(apiType string) (map[string]*me
 func (f *fakePersistenceStore) UpsertCircuitState(state metrics.PersistentCircuitState) error {
 	return nil
 }
+func (f *fakePersistenceStore) QueryModelAggregatedHistory(apiType string, since time.Time, intervalSeconds int64, metricsKey string, baseURL string) ([]metrics.ModelAggregatedBucket, error) {
+	return nil, nil
+}
 func (f *fakePersistenceStore) QueryAggregatedHistory(apiType string, since time.Time, intervalSeconds int64, metricsKey string, baseURL string) ([]metrics.AggregatedBucket, error) {
 	return append([]metrics.AggregatedBucket(nil), f.bucketsByMetricsKey[metricsKey]...), nil
 }

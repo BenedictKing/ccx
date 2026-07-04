@@ -66,6 +66,7 @@ make build
 ```env
 PORT=3688
 ENV=production
+# BIND_HOST=127.0.0.1  # 可选：仅本机访问；不设置时监听所有网卡
 # Claude Desktop 等客户端需要本地 HTTPS 时设置为 true
 ENABLE_HTTPS=false
 ENABLE_WEB_UI=true

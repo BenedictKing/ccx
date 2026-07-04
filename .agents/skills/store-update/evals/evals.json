@@ -1,0 +1,25 @@
+{
+  "skill_name": "store-update",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "刚发布完 CCX Desktop，帮我下载两个 store msix。",
+      "expected_output": "应使用 store-update skill，下载两个 MSIX，校验 sha256，输出文件路径和手动上传指引（包含 Partner Center Products 页面链接和「What's new in this version」字段位置）。"
+    },
+    {
+      "id": 2,
+      "prompt": "release 后从最新 release 下载 msix，顺便把更新说明也生成出来。",
+      "expected_output": "应下载两个 MSIX 并从 Release body 生成 Store releaseNotes 预览，输出 Partner Center 粘贴位置指引。"
+    },
+    {
+      "id": 3,
+      "prompt": "查一下 latest release 的 msix 名字和校验值，不要下载文件。",
+      "expected_output": "应只通过 GitHub API 读取 release assets 信息，不实际下载文件。"
+    },
+    {
+      "id": 4,
+      "prompt": "下载 v2.9.28 的 store msix 到 ./store 目录。",
+      "expected_output": "应使用 --tag v2.9.28 --download-dir ./store 下载两个 MSIX，校验通过后输出本地路径。"
+    }
+  ]
+}

@@ -40,6 +40,10 @@
           <v-icon size="small" class="mr-1">mdi-chart-areaspline</v-icon>
           {{ t('chart.tokens') }}
         </v-btn>
+        <v-btn value="cost" size="x-small" class="chart-control-btn">
+          <v-icon size="small" class="mr-1">mdi-cash</v-icon>
+          {{ t('chart.cost') }}
+        </v-btn>
       </v-btn-toggle>
     </div>
 
@@ -67,6 +71,10 @@
         <div class="summary-label">{{ t('chart.cacheRw') }}</div>
         <div class="summary-value">{{ formatNumber(summary.totalCacheReadTokens) }} / {{ formatNumber(summary.totalCacheCreationTokens) }}</div>
       </div>
+      <div v-if="(summary.totalCostUSD || 0) > 0" class="summary-card">
+        <div class="summary-label">{{ t('chart.totalCost') }}</div>
+        <div class="summary-value">${{ formatCost(summary.totalCostUSD || 0) }}</div>
+      </div>
     </div>
 
     <!-- Compact summary (single line) -->
@@ -79,6 +87,9 @@
       <span><strong>{{ formatNumber(summary.totalOutputTokens) }}</strong> {{ t('chart.output') }}</span>
       <span v-if="summary.totalCacheReadTokens > 0 || summary.totalCacheCreationTokens > 0">
         <strong>{{ formatNumber(summary.totalCacheReadTokens) }}/{{ formatNumber(summary.totalCacheCreationTokens) }}</strong> {{ t('chart.cacheRw') }}
+      </span>
+      <span v-if="(summary.totalCostUSD || 0) > 0">
+        <strong>${{ formatCost(summary.totalCostUSD || 0) }}</strong> {{ t('chart.totalCost') }}
       </span>
     </div>
 
@@ -129,7 +140,7 @@ const props = withDefaults(defineProps<{
 const { t } = useI18n()
 
 // Types
-type ViewMode = 'traffic' | 'tokens'
+type ViewMode = 'traffic' | 'tokens' | 'cost'
 type Duration = '1h' | '6h' | '24h' | 'today' | '7d' | '30d' | '90d' | '180d' | '365d' | 'thisyear'
 
 // LocalStorage keys for preferences (per apiType)
@@ -140,7 +151,7 @@ const loadSavedPreferences = (apiType: string) => {
   const savedView = localStorage.getItem(getStorageKey(apiType, 'viewMode')) as ViewMode | null
   const savedDuration = localStorage.getItem(getStorageKey(apiType, 'duration')) as Duration | null
   return {
-    view: savedView && ['traffic', 'tokens'].includes(savedView) ? savedView : 'traffic',
+    view: savedView && ['traffic', 'tokens', 'cost'].includes(savedView) ? savedView : 'traffic',
     duration: savedDuration && ['1h', '6h', '24h', 'today', '7d', '30d', '90d', '180d', '365d', 'thisyear'].includes(savedDuration) ? savedDuration : '6h'
   }
 }
@@ -324,7 +335,9 @@ const firstNonEmptyTimestamp = computed(() => {
   historyData.value.dataPoints.forEach(dp => {
     const hasVisibleData = selectedView.value === 'traffic'
       ? dp.requestCount > 0
-      : dp.inputTokens > 0 || dp.outputTokens > 0 || dp.cacheReadTokens > 0 || dp.cacheCreationTokens > 0
+      : selectedView.value === 'cost'
+        ? (dp.costUSD || 0) > 0
+        : dp.inputTokens > 0 || dp.outputTokens > 0 || dp.cacheReadTokens > 0 || dp.cacheCreationTokens > 0
     if (hasVisibleData) {
       const ts = new Date(dp.timestamp).getTime()
       if (ts < earliest) earliest = ts
@@ -348,13 +361,20 @@ const formatNumber = (num: number): string => {
   return num.toFixed(0)
 }
 
+// Format cost (USD) for display
+const formatCost = (val: number): string => {
+  if (val >= 1000) return (val / 1000).toFixed(2) + 'K'
+  if (val >= 1) return val.toFixed(2)
+  return val.toFixed(4)
+}
+
 // Chart options
 const chartOptions = computed<ApexCharts.ApexOptions>(() => {
   const mode = selectedView.value
-  const isTrafficMultiModel = mode === 'traffic' && hasMultiModel.value
+  const isMultiModelView = (mode === 'traffic' || mode === 'cost') && hasMultiModel.value
 
-  // Traffic mode colors: assign by model in multi-model mode, otherwise use a single color
-  const trafficColors = isTrafficMultiModel
+  // Traffic/cost mode colors: assign by model in multi-model mode, otherwise use a single color
+  const multiModelColors = isMultiModelView
     ? sortedModels.value.map((_, i) => modelColors[i % modelColors.length])
     : [chartColors.traffic.primary]
 
@@ -364,7 +384,7 @@ const chartOptions = computed<ApexCharts.ApexOptions>(() => {
       zoom: { enabled: false },
       background: 'transparent',
       fontFamily: 'inherit',
-      stacked: isTrafficMultiModel,
+      stacked: isMultiModelView,
       defaultLocale: 'en',
       animations: {
         enabled: false
@@ -373,8 +393,8 @@ const chartOptions = computed<ApexCharts.ApexOptions>(() => {
     theme: {
       mode: isDark.value ? 'dark' : 'light'
     },
-    colors: mode === 'traffic'
-      ? trafficColors
+    colors: mode === 'traffic' || mode === 'cost'
+      ? multiModelColors
       : hasCacheData.value
         ? [chartColors.tokens.input, chartColors.tokens.output, chartColors.tokens.cacheRead, chartColors.tokens.cacheWrite]
         : [chartColors.tokens.input, chartColors.tokens.output],
@@ -441,7 +461,7 @@ const chartOptions = computed<ApexCharts.ApexOptions>(() => {
       return axes
     })() : {
       labels: {
-        formatter: (val: number) => Math.round(val).toString(),
+        formatter: (val: number) => mode === 'cost' ? '$' + formatCost(val) : Math.round(val).toString(),
         style: { fontSize: '11px' }
       },
       min: 0,
@@ -454,7 +474,9 @@ const chartOptions = computed<ApexCharts.ApexOptions>(() => {
       y: {
         formatter: (val: number) => mode === 'traffic'
           ? `${Math.round(val)} ${t('chart.requestUnit')}`
-          : `${formatNumber(val)} ${t('chart.tokenUnit')}`
+          : mode === 'cost'
+            ? `$${formatCost(val)}`
+            : `${formatNumber(val)} ${t('chart.tokenUnit')}`
       },
       custom: mode === 'traffic' ? buildTrafficTooltip : undefined
     },
@@ -462,7 +484,7 @@ const chartOptions = computed<ApexCharts.ApexOptions>(() => {
       xaxis: failureAnnotations.value
     },
     legend: {
-      show: mode === 'tokens' || isTrafficMultiModel,
+      show: mode === 'tokens' || isMultiModelView,
       position: 'top' as const,
       horizontalAlign: 'right' as const,
       fontSize: '11px',
@@ -557,6 +579,27 @@ const chartSeries = computed(() => {
         data: dataPoints.map(dp => ({
           x: new Date(dp.timestamp).getTime(),
           y: dp.requestCount
+        }))
+      }
+    ]
+  } else if (mode === 'cost') {
+    // 按模型画花费曲线；无模型维度时回退到全局点成本
+    const models = sortedModels.value
+    if (models.length > 0) {
+      return models.map(model => ({
+        name: model.name,
+        data: model.points.map((p: ModelHistoryDataPoint) => ({
+          x: new Date(p.timestamp).getTime(),
+          y: p.costUSD || 0
+        }))
+      }))
+    }
+    return [
+      {
+        name: t('chart.cost'),
+        data: dataPoints.map(dp => ({
+          x: new Date(dp.timestamp).getTime(),
+          y: dp.costUSD || 0
         }))
       }
     ]

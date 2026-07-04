@@ -738,6 +738,38 @@ func TestPreflightStreamEvents_TrueEmptyStillDetected(t *testing.T) {
 	}
 }
 
+func TestBuildStreamPreflightDetail_IncludesEventShapeAndRedactsSecrets(t *testing.T) {
+	preflight := &StreamPreflightResult{
+		BufferedEvents: []string{
+			"event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":100,\"output_tokens\":0}}}\n\n",
+			"event: error\ndata: {\"type\":\"error\",\"api_key\":\"sk-test-secret-1234567890\",\"error\":{\"message\":\"Authorization: Bearer sk-bearer-secret-1234567890\"}}\n\n",
+			"event: done\ndata: [DONE]\n\n",
+		},
+		IsEmpty:    true,
+		Diagnostic: "检测到空流，但未匹配到明确类别",
+	}
+
+	detail := buildStreamPreflightDetail(preflight)
+	for _, want := range []string{
+		"events=3",
+		"dataTypes=message_start",
+		"topKeys=message,type",
+		"usageKeys=message.usage.input_tokens,message.usage.output_tokens",
+		"dataTypes=error",
+		"jsonParseErrors=1",
+		"preview=",
+	} {
+		if !strings.Contains(detail, want) {
+			t.Fatalf("detail missing %q:\n%s", want, detail)
+		}
+	}
+	for _, leaked := range []string{"sk-test-secret-1234567890", "sk-bearer-secret-1234567890"} {
+		if strings.Contains(detail, leaked) {
+			t.Fatalf("detail leaked sensitive value %q:\n%s", leaked, detail)
+		}
+	}
+}
+
 func TestPreflightStreamEvents_ContentBlockStopWithoutPendingStillEmpty(t *testing.T) {
 	events := []string{
 		"event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":100,\"output_tokens\":0}}}\n\n",
@@ -780,7 +812,7 @@ func TestPreflightStreamEvents_UnknownEventTypeRecordedInDiagnostic(t *testing.T
 	}
 }
 
-func TestPreflightStreamEvents_ToolUseStopReasonWithoutContentBlockStillNotEmpty(t *testing.T) {
+func TestPreflightStreamEvents_ToolUseStopReasonWithoutContentBlockIsEmpty(t *testing.T) {
 	eventChan := make(chan string, 4)
 	errChan := make(chan error, 1)
 
@@ -796,8 +828,8 @@ func TestPreflightStreamEvents_ToolUseStopReasonWithoutContentBlockStillNotEmpty
 	close(errChan)
 
 	result := PreflightStreamEvents(eventChan, errChan, StreamPreflightTimeouts{})
-	if result.IsEmpty {
-		t.Fatalf("tool_use stop_reason should NOT be detected as empty")
+	if !result.IsEmpty {
+		t.Fatalf("tool_use stop_reason without content_block should be detected as empty")
 	}
 }
 
@@ -927,7 +959,7 @@ func TestHasOpenAIChatSemanticContent(t *testing.T) {
 	}
 }
 
-func TestHasClaudeSemanticContent_ToolStopReason(t *testing.T) {
+func TestHasClaudeSemanticContent_ToolStopReasonOnly(t *testing.T) {
 	tests := []struct {
 		name  string
 		event string
@@ -944,8 +976,8 @@ func TestHasClaudeSemanticContent_ToolStopReason(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if !HasClaudeSemanticContent(tt.event) {
-				t.Fatal("expected tool stop reason to be treated as semantic content")
+			if HasClaudeSemanticContent(tt.event) {
+				t.Fatal("tool stop reason without a tool content block should not be treated as semantic content")
 			}
 		})
 	}

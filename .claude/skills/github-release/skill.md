@@ -248,3 +248,17 @@ gh release view <tag> --json url,publishedAt,assets --jq '{url: .url, publishedA
 - 支持多版本合并发布（如 v2.3.5 ~ v2.3.7）
 - 多个 Draft 时只发布最新版本，删除中间版本的 Draft
 - 删除 Draft 不影响 git tag，仅清理 GitHub Release 页面
+
+## 后续步骤
+
+**Release 发布成功后，自动调用 store-update 技能**：
+
+```
+/store-update
+```
+
+此操作会：
+1. 从刚发布的 Release 下载 Store MSIX 包（amd64/arm64）
+2. 校验 SHA256 完整性
+3. 从 Release body 生成 Store 更新说明预览
+4. 输出手动上传到 Microsoft Partner Center 的指引

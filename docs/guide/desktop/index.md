@@ -192,6 +192,7 @@ curl http://localhost:3688/v1/models \
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `PORT` | 3688 | 网关端口 |
+| `BIND_HOST` | 未设置 | 监听主机；不设置时监听所有网卡，填 `127.0.0.1` 仅允许本机访问 |
 | `PROXY_ACCESS_KEY` | - | 客户端访问 CCX 的代理密钥 |
 | `ADMIN_ACCESS_KEY` | - | 管理密钥 |
 | `LOG_LEVEL` | info | 日志级别 |

@@ -39,6 +39,7 @@ ccx/
 ```bash
 # 服务器配置
 PORT=3688                              # 服务器端口（程序内部默认 3000，建议 .env 中显式设置为 3688）
+# BIND_HOST=127.0.0.1                 # 可选监听主机；不设置时等价于 :PORT，监听所有网卡
 ENABLE_HTTPS=false                     # 是否启用本地 HTTPS 监听（默认 false）
 TLS_AUTO_CERT=true                     # 未配置证书文件时自动生成 localhost 临时自签名证书（默认 true）
 TLS_CERT_FILE=/path/to/localhost.pem   # 可选 TLS 证书文件；设置时必须同时设置 TLS_KEY_FILE
@@ -81,6 +82,10 @@ CORS_ORIGIN=*                          # CORS 允许的源
 # METRICS_WINDOW_SIZE=10               # 滑动窗口大小（最小 3，默认 10）
 # METRICS_FAILURE_THRESHOLD=0.5        # 失败率阈值（0-1，默认 0.5 即 50%）
 ```
+
+#### 监听地址
+
+`BIND_HOST` 控制后端监听的主机地址。留空时保持默认 `:PORT` 行为，等价于监听所有网卡（常见显示为 `0.0.0.0:3688` 或 `*:3688`）；设置 `BIND_HOST=127.0.0.1` 时只允许本机访问。Docker 部署如需只暴露到宿主机本地，通常应保持容器内 `BIND_HOST` 为空，并使用 `127.0.0.1:3688:3688` 端口映射。
 
 #### 本地 HTTPS
 
@@ -458,6 +463,7 @@ VITE_APP_ENV=production
 ```env
 # 服务器配置
 PORT=3688
+# BIND_HOST=127.0.0.1
 
 # 运行环境
 ENV=production

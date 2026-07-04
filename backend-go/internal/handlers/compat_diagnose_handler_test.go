@@ -89,6 +89,60 @@ func TestCompatDiagnoseThinkingPassbackDefaults(t *testing.T) {
 	}
 }
 
+func TestCompatDiagnoseDeepSeekUsesThinkingCacheDefaults(t *testing.T) {
+	tests := []struct {
+		name    string
+		channel *config.UpstreamConfig
+		baseURL string
+		want    bool
+	}{
+		{
+			name: "deepseek direct by base url",
+			channel: &config.UpstreamConfig{
+				ServiceType: "claude",
+			},
+			baseURL: "https://api.deepseek.com/anthropic",
+			want:    true,
+		},
+		{
+			name: "deepseek by model mapping",
+			channel: &config.UpstreamConfig{
+				ServiceType:  "claude",
+				ModelMapping: map[string]string{"sonnet": "deepseek-v4-pro"},
+			},
+			baseURL: "https://api.example.com/anthropic",
+			want:    true,
+		},
+		{
+			name: "openrouter aggregate is excluded",
+			channel: &config.UpstreamConfig{
+				Name:        "deepseek via openrouter",
+				ServiceType: "claude",
+			},
+			baseURL: "https://openrouter.ai/api",
+			want:    false,
+		},
+		{
+			name: "glm does not use deepseek cache default",
+			channel: &config.UpstreamConfig{
+				Name:        "glm",
+				ServiceType: "claude",
+			},
+			baseURL: "https://bigmodel.cn/api",
+			want:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := shouldUseThinkingCacheForClaudePassback(tt.channel, tt.baseURL)
+			if got != tt.want {
+				t.Fatalf("shouldUseThinkingCacheForClaudePassback() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestCompatDiagnoseSystemRoleNormalizeDefaults(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -216,7 +270,7 @@ func TestDiagnoseClaudeChannelEnablesThinkingBlocksWhenProbeAccepted(t *testing.
 	defer server.Close()
 
 	channel := &config.UpstreamConfig{
-		Name:        "deepseek",
+		Name:        "glm",
 		ServiceType: "claude",
 	}
 
@@ -226,6 +280,51 @@ func TestDiagnoseClaudeChannelEnablesThinkingBlocksWhenProbeAccepted(t *testing.
 	}
 	if got := result.Recommendations["passbackThinkingBlocks"]; got != true {
 		t.Fatalf("passbackThinkingBlocks = %v, want true; evidence=%q", got, result.Evidence["passbackThinkingBlocks"])
+	}
+}
+
+func TestDiagnoseClaudeChannelDeepSeekRecommendsCacheCompatibleState(t *testing.T) {
+	var historicalThinkingProbeSeen bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read request: %v", err)
+		}
+		if strings.Contains(string(body), `"type":"thinking"`) {
+			historicalThinkingProbeSeen = true
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		switch {
+		case strings.Contains(string(body), `"thinking":{"budget_tokens":512,"type":"enabled"}`) && !strings.Contains(string(body), `"type":"thinking"`):
+			_, _ = w.Write([]byte(`data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}` + "\n\n"))
+			_, _ = w.Write([]byte(`data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"thinking"}}` + "\n\n"))
+		default:
+			_, _ = w.Write([]byte(`data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"ok"}}` + "\n\n"))
+		}
+	}))
+	defer server.Close()
+
+	channel := &config.UpstreamConfig{
+		Name:        "deepseek",
+		ServiceType: "claude",
+	}
+
+	result := runCompatDiagnose(channel, "messages", "sk-test", server.URL)
+	if historicalThinkingProbeSeen {
+		t.Fatal("historical thinking block probe should be skipped for DeepSeek cache mode")
+	}
+
+	wants := map[string]bool{
+		"passbackReasoningContent": false,
+		"passbackThinkingBlocks":   false,
+		"stripEmptyTextBlocks":     true,
+		"normalizeMetadataUserId":  true,
+		"stripBillingHeader":       true,
+	}
+	for key, want := range wants {
+		if got := result.Recommendations[key]; got != want {
+			t.Fatalf("%s = %v, want %v; evidence=%q", key, got, want, result.Evidence[key])
+		}
 	}
 }
 

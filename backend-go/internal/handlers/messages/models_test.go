@@ -1406,3 +1406,156 @@ func TestTryModelsRequest_ClaudeCompatFallback(t *testing.T) {
 		t.Errorf("模型 ID = %q, want %q", resp.Data[0].ID, "deepseek-chat")
 	}
 }
+
+// TestModelsHandler_CopilotResolvesTokenAndHitsModelsEndpoint 验证 copilot 渠道在 /v1/models
+// 代理时：1) 走 Copilot token exchange 拿到 runtime token；2) 请求 {baseURL}/models（不含 /v1 前缀）；
+// 3) 用 runtime token 而非原始 GitHub OAuth token 认证；4) 注入 Copilot 识别头。
+// 回归 issue #245：修复前 requestModelsFromSelection 未处理 copilot，导致 /v1/models 返回 404。
+func TestModelsHandler_CopilotResolvesTokenAndHitsModelsEndpoint(t *testing.T) {
+	var sawPath, sawAuth, sawIntegrationID string
+	var copilotHits int32
+	copilotAPISrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&copilotHits, 1)
+		sawPath = r.URL.Path
+		sawAuth = r.Header.Get("Authorization")
+		sawIntegrationID = r.Header.Get("Copilot-Integration-Id")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"object":"list","data":[{"id":"gpt-4o","object":"model"}]}`))
+	}))
+	defer copilotAPISrv.Close()
+
+	// 注入 mock token resolver：返回 runtime token + Copilot API mock server 地址
+	oldResolver := copilotTokenResolver
+	t.Cleanup(func() { copilotTokenResolver = oldResolver })
+	copilotTokenResolver = func(ctx context.Context, githubToken, proxyURL string) (string, string, error) {
+		if githubToken != "gho_test_oauth" {
+			t.Errorf("token exchange 收到 GitHub token = %q, want gho_test_oauth", githubToken)
+		}
+		return "copilot-runtime-token", copilotAPISrv.URL, nil
+	}
+
+	cfgManager := setupModelsConfigManager(t, config.Config{
+		Upstream: []config.UpstreamConfig{{
+			Name:        "copilot-channel",
+			BaseURL:     "https://api.githubcopilot.com",
+			APIKeys:     []string{"gho_test_oauth"},
+			ServiceType: "copilot",
+		}},
+	})
+	sch := newModelsTestScheduler(cfgManager)
+	router := newModelsRouterForAggregate(&config.EnvConfig{ProxyAccessKey: "test-key"}, cfgManager, sch)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	req.Header.Set("Authorization", "Bearer test-key")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", w.Code, w.Body.String())
+	}
+	if atomic.LoadInt32(&copilotHits) != 1 {
+		t.Fatalf("期望 Copilot API 被命中 1 次，实际 %d 次", atomic.LoadInt32(&copilotHits))
+	}
+	if sawPath != "/models" {
+		t.Errorf("Copilot API 请求路径 = %q, want /models（不应包含 /v1 前缀）", sawPath)
+	}
+	if sawAuth != "Bearer copilot-runtime-token" {
+		t.Errorf("Copilot API Authorization = %q, want Bearer copilot-runtime-token（应为 runtime token 而非原始 GitHub OAuth token）", sawAuth)
+	}
+	if sawIntegrationID != "vscode-chat" {
+		t.Errorf("Copilot-Integration-Id = %q, want vscode-chat", sawIntegrationID)
+	}
+
+	var resp ModelsResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("解析响应失败: %v", err)
+	}
+	if len(resp.Data) == 0 || resp.Data[0].ID != "gpt-4o" {
+		t.Fatalf("期望返回 gpt-4o 模型，实际 %+v", resp.Data)
+	}
+}
+
+// TestModelsHandler_CopilotTokenExchangeFailure 验证 copilot token exchange 失败时
+// /v1/models 代理不命中 Copilot API 并最终返回 404。
+func TestModelsHandler_CopilotTokenExchangeFailure(t *testing.T) {
+	var copilotHits int32
+	copilotAPISrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&copilotHits, 1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer copilotAPISrv.Close()
+
+	oldResolver := copilotTokenResolver
+	t.Cleanup(func() { copilotTokenResolver = oldResolver })
+	copilotTokenResolver = func(ctx context.Context, githubToken, proxyURL string) (string, string, error) {
+		return "", "", fmt.Errorf("mock token exchange failure")
+	}
+
+	cfgManager := setupModelsConfigManager(t, config.Config{
+		Upstream: []config.UpstreamConfig{{
+			Name:        "copilot-channel",
+			BaseURL:     "https://api.githubcopilot.com",
+			APIKeys:     []string{"gho_test_oauth"},
+			ServiceType: "copilot",
+		}},
+	})
+	sch := newModelsTestScheduler(cfgManager)
+	router := newModelsRouterForAggregate(&config.EnvConfig{ProxyAccessKey: "test-key"}, cfgManager, sch)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	req.Header.Set("Authorization", "Bearer test-key")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if atomic.LoadInt32(&copilotHits) != 0 {
+		t.Fatalf("token exchange 失败时不应命中 Copilot API，实际命中 %d 次", atomic.LoadInt32(&copilotHits))
+	}
+	if w.Code != http.StatusNotFound {
+		t.Errorf("期望 token exchange 失败后返回 404，实际 %d", w.Code)
+	}
+}
+
+// TestModelsDetailHandler_Copilot 验证 /v1/models/:model 代理对 copilot 渠道也走 token exchange
+// 并请求 {baseURL}/models/{model}（而非 /v1/models/{model}）。
+func TestModelsDetailHandler_Copilot(t *testing.T) {
+	var sawPath, sawAuth string
+	copilotAPISrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sawPath = r.URL.Path
+		sawAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"gpt-4o","object":"model"}`))
+	}))
+	defer copilotAPISrv.Close()
+
+	oldResolver := copilotTokenResolver
+	t.Cleanup(func() { copilotTokenResolver = oldResolver })
+	copilotTokenResolver = func(ctx context.Context, githubToken, proxyURL string) (string, string, error) {
+		return "copilot-runtime-token", copilotAPISrv.URL, nil
+	}
+
+	cfgManager := setupModelsConfigManager(t, config.Config{
+		Upstream: []config.UpstreamConfig{{
+			Name:        "copilot-channel",
+			BaseURL:     "https://api.githubcopilot.com",
+			APIKeys:     []string{"gho_test_oauth"},
+			ServiceType: "copilot",
+		}},
+	})
+	sch := newModelsTestScheduler(cfgManager)
+	router := newModelsRouterForAggregate(&config.EnvConfig{ProxyAccessKey: "test-key"}, cfgManager, sch)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/models/gpt-4o", nil)
+	req.Header.Set("Authorization", "Bearer test-key")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", w.Code, w.Body.String())
+	}
+	if sawPath != "/models/gpt-4o" {
+		t.Errorf("Copilot API detail 请求路径 = %q, want /models/gpt-4o", sawPath)
+	}
+	if sawAuth != "Bearer copilot-runtime-token" {
+		t.Errorf("Authorization = %q, want Bearer copilot-runtime-token", sawAuth)
+	}
+}

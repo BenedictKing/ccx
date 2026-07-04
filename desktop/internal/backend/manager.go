@@ -473,12 +473,13 @@ func (m *Manager) binaryCandidates() []string {
 
 func (m *Manager) selectPort(ctx context.Context) (int, error) {
 	conflicts := []string{}
+	bindHost := configuredBindHost(m.dataDir)
 	for port := m.port; port < m.port+20; port++ {
 		if _, err := m.fetchHealth(ctx, port); err == nil {
 			conflicts = append(conflicts, fmt.Sprintf("%d(已被另一个 CCX 健康实例占用)", port))
 			continue
 		}
-		ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+		ln, err := net.Listen("tcp", listenAddress(bindHost, port))
 		if err != nil {
 			conflicts = append(conflicts, fmt.Sprintf("%d(端口被其他进程占用: %v)", port, err))
 			continue
@@ -502,7 +503,7 @@ func (m *Manager) fetchHealth(ctx context.Context, port int) (map[string]any, er
 	if port == 0 {
 		return nil, fmt.Errorf("端口未设置")
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s://127.0.0.1:%d/health", m.scheme(), port), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.healthURL(port), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -540,6 +541,9 @@ func (m *Manager) buildEnv(port int) []string {
 		if value := readEnvValueFromFile(envPath, key); value != "" {
 			env = setEnv(env, key, value)
 		}
+	}
+	if value, ok := readEnvValueFromFileWithPresence(envPath, "BIND_HOST"); ok {
+		env = setEnv(env, "BIND_HOST", strings.TrimSpace(value))
 	}
 
 	if key, err := m.EnsureProxyAccessKey(); err == nil && key != "" {
@@ -625,7 +629,7 @@ func (m *Manager) urlLocked() string {
 	if port == 0 {
 		port = defaultPort
 	}
-	return fmt.Sprintf("%s://127.0.0.1:%d", m.schemeLocked(), port)
+	return fmt.Sprintf("%s://%s", m.schemeLocked(), net.JoinHostPort(healthHost(configuredBindHost(m.dataDir)), strconv.Itoa(port)))
 }
 
 func (m *Manager) scheme() string {
@@ -640,6 +644,34 @@ func (m *Manager) schemeLocked() string {
 		return "https"
 	}
 	return "http"
+}
+
+func (m *Manager) healthURL(port int) string {
+	return fmt.Sprintf("%s://%s/health", m.scheme(), net.JoinHostPort(healthHost(configuredBindHost(m.dataDir)), strconv.Itoa(port)))
+}
+
+func configuredBindHost(dataDir string) string {
+	if value, ok := readEnvValueFromFileWithPresence(filepath.Join(dataDir, ".env"), "BIND_HOST"); ok {
+		return strings.TrimSpace(value)
+	}
+	return strings.TrimSpace(os.Getenv("BIND_HOST"))
+}
+
+func listenAddress(bindHost string, port int) string {
+	host := strings.TrimSpace(bindHost)
+	if host == "" {
+		return fmt.Sprintf(":%d", port)
+	}
+	return net.JoinHostPort(host, strconv.Itoa(port))
+}
+
+func healthHost(bindHost string) string {
+	switch strings.TrimSpace(bindHost) {
+	case "", "0.0.0.0", "::":
+		return "127.0.0.1"
+	default:
+		return strings.TrimSpace(bindHost)
+	}
 }
 
 func isEnvHTTPS(dataDir string) bool {
@@ -743,9 +775,14 @@ func readPortFromEnvFile(path string) (int, error) {
 // readEnvValueFromFile 从 .env 文件中读取指定 key 的值。
 // 找不到或文件不存在时返回空字符串。
 func readEnvValueFromFile(path, key string) string {
+	value, _ := readEnvValueFromFileWithPresence(path, key)
+	return value
+}
+
+func readEnvValueFromFileWithPresence(path, key string) (string, bool) {
 	content, err := os.ReadFile(path)
 	if err != nil {
-		return ""
+		return "", false
 	}
 	prefix := key + "="
 	for _, line := range strings.Split(string(content), "\n") {
@@ -760,9 +797,9 @@ func readEnvValueFromFile(path, key string) string {
 			continue
 		}
 		value := strings.TrimSpace(strings.TrimPrefix(line, prefix))
-		return strings.Trim(value, `"'`)
+		return strings.Trim(value, `"'`), true
 	}
-	return ""
+	return "", false
 }
 
 func appendEnvValue(path string, key string, value string) error {

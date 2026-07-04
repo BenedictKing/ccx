@@ -12,13 +12,22 @@ import (
 type Manager struct {
 	mu       sync.RWMutex
 	limiters map[string]*ChannelLimiter
+	stopCh   chan struct{}
 }
 
 // NewManager 创建一个空的限速器管理器。
 func NewManager() *Manager {
-	return &Manager{
+	m := &Manager{
 		limiters: make(map[string]*ChannelLimiter),
+		stopCh:   make(chan struct{}),
 	}
+	go m.cleanupStaleLimiters()
+	return m
+}
+
+// Stop 停止后台清理协程。
+func (m *Manager) Stop() {
+	close(m.stopCh)
 }
 
 func limiterKey(apiType string, channelIndex int) string {
@@ -195,4 +204,44 @@ func parseKey(key string) (apiType string, channelIndex int) {
 		}
 	}
 	return key, 0
+}
+
+// cleanupStaleLimiters 后台任务：每小时清理长期无活动的 scoped limiter 条目。
+func (m *Manager) cleanupStaleLimiters() {
+	ticker := time.NewTicker(1 * time.Hour)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			m.removeStaleLimiters()
+		case <-m.stopCh:
+			return
+		}
+	}
+}
+
+func (m *Manager) removeStaleLimiters() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	now := time.Now()
+	staleThreshold := 48 * time.Hour
+	var removed []string
+	for key, l := range m.limiters {
+		// 只清理 scoped limiter（key/quota 级），保留 channel 级 limiter
+		if !strings.Contains(key, ":") || strings.Count(key, ":") < 2 {
+			continue
+		}
+		if l.LastActivity().IsZero() || now.Sub(l.LastActivity()) <= staleThreshold {
+			continue
+		}
+		// 仍在 cooldown 的 limiter 不应被清理，避免绕过上游要求的冷却窗口
+		if inCooldown, _ := l.InCooldown(now); inCooldown {
+			continue
+		}
+		delete(m.limiters, key)
+		removed = append(removed, key)
+	}
+	if len(removed) > 0 {
+		log.Printf("[RateLimit-Manager] 清理 %d 个过期 scoped 限速器: %v", len(removed), removed)
+	}
 }

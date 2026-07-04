@@ -8,16 +8,31 @@
 - 新增 `extractThinkTag` 共享函数，支持非流式响应（`ConvertOpenAIChatToResponsesNonStream` 与 `OpenAIChatResponseToResponses`）中的思考标签提取。
 - 新增 `think_tag_fuzz_test.go`，包含 `SplitInvariant` 与 `ExtractThinkTag` 两个 fuzz 测试，覆盖 150 万次以上随机切分与边界输入。
 - 新增 `responses_converter_think_test.go`，覆盖 think 在开头、与原生 `reasoning_content` 共存合并、middle 不剥离、only tool_calls 无空 message、未闭合 think 等单测场景。
+- `ChannelLimiter` 增加 `lastActivity` 追踪与 `LastActivity()` 方法，支持 reaper 判断条目活跃度
+- `ratelimit.Manager` 新增后台清理过期 scoped limiter 协程（48 小时无活动自动清理，1 小时检查周期），附带 `Stop()` 生命周期方法
+- `ChannelScheduler` 新增后台 reaper（30 秒周期）自动推进到期的 loadShed 状态，附带 `Start()`/`Stop()` 生命周期方法
+- main.go 启动/关闭 scheduler reaper 和 ratelimit manager 清理协程
+- 目标模型下拉框异步数据到达后自动恢复显示（`watch(targetModelDatalist)`），修复首次 focus 时列表未返回导致下拉不出现的问题
 
 ### Changed
 
 - 重构 `ConvertOpenAIChatToResponses`，将内联的 reasoning 和 content 处理逻辑封装为 `handleReasoningPart` 和 `handleContentPart`，使流式事件发射与状态机解耦。
 - 移除 PR #83 引入的 `stripThinkTags` 直接丢弃逻辑，升级为协议级提取与原生推理字段转换。
+- `ShouldDeferForRateLimit` 新增第三返回值 `inCooldown`；cooldown 检查提前到无限速配置判断之前，确保仅靠上游 Retry-After 学到 cooldown 的 scoped limiter 也能被软跳过；cooldown 不再写入 loadShed 状态，到期后立即可用，软跳时报告 utilization=1.0 防止调用方误判为低水位
+- 30%–50% 使用率区间恢复策略优化：维持 `lowSince` 不变等待自然恢复，避免误重置恢复计时器
+- CNY→USD 汇率从 1/7.2 更新为 1/6.8
 
 ### Fixed
 
 - 修复被拉黑 Key 的历史统计数据在渠道图表（渠道历史、Key 趋势、活跃度）中消失的问题。统计查询现使用 `APIKeys ∪ HistoricalAPIKeys ∪ DisabledAPIKeys` 合并集合，确保拉黑 Key 的数据保留。
 - 同步修正渠道日志的 metricsKey 枚举口径，保持日志与统计图表对拉黑 Key 的归属一致性。
+- failover 增加 "exceeded" 关键词检测，修复火山方舟 `AccountQuotaExceeded` 等错误未被识别为余额不足的问题
+- `cooldownUntil` 注释逻辑描述修正（"之前"→"之后"）
+- 模型映射下拉框 blur 事件统一为 `hideTargetDropdown`，修复 `target-edit-end` 与下拉隐藏行为不一致
+- 清理前端调试 `console.log` 日志，规范 `fetchTargetModels` 错误日志格式
+- 临时 token-per-minute 配额限流（如 Gemini `Quota exceeded for quota metric ... tokens per minute`）不再被 "exceeded" 关键词误判为余额不足，避免可恢复 Key 被永久拉黑
+- loadShed reaper 现在会为 high-watermark shedding 状态启动恢复计时器；实际恢复由 `ShouldDeferForRateLimit` 基于 limiter 实际利用率确认，避免空闲渠道永久被软跳过，也避免 limiter 仍有活跃请求时误删状态
+- scoped limiter 清理前检查 cooldown 状态，避免上游要求的长 cooldown 被绕过
 
 ## [v2.7.5] - 2026-05-18
 

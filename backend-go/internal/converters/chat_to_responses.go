@@ -966,6 +966,19 @@ func (st *chatToResponsesState) generateCompletedEvents(originalRequestRawJSON [
 	return out
 }
 
+// SynthesizeResponsesIncomplete 在流异常中断（如 post-commit stall、上游 EOF）时合成
+// response.incomplete 事件，确保下游客户端收到一个带 incomplete_details.reason 的终端事件，
+// 而非裸断连。reason 描述中断原因（如 "stream_stalled"）。
+// sequenceNumber 由调用方保证单调递增。
+func SynthesizeResponsesIncomplete(sequenceNumber int, responseID, reason string) string {
+	if responseID == "" {
+		responseID = fmt.Sprintf("resp_%d", time.Now().UnixNano())
+	}
+	payload := fmt.Sprintf(`{"type":"response.incomplete","sequence_number":%d,"response":{"id":%q,"object":"response","created_at":0,"status":"incomplete","background":false,"error":null,"incomplete_details":{"reason":%q},"output":[],"usage":{"input_tokens":0,"output_tokens":0,"total_tokens":0}}}`,
+		sequenceNumber, responseID, reason)
+	return emitResponsesEvent("response.incomplete", payload)
+}
+
 // SynthesizeResponsesCompleted 在流异常结束（上游未发送终止符）时合成 response.completed 事件。
 // 根据 upstreamType 从 converterState 中提取已累积的状态来构建完整的完成事件。
 // lastSeq 用于在无法从 converter state 获取序列号时，确保生成的事件序列号单调递增。

@@ -88,7 +88,7 @@ type UpstreamConfig struct {
 	RoutePrefix string `json:"routePrefix,omitempty"` // 路由前缀（如 "kimi"），客户端可通过 /:routePrefix/v1/messages 访问
 	// 主动限速配置（渠道级，默认 0=不限）
 	RateLimitRPM             int   `json:"rateLimitRpm,omitempty"`             // 每分钟请求数上限（0=不限）
-	RateLimitWindowMinutes   int   `json:"rateLimitWindowMinutes,omitempty"`   // 滑动窗口时长（分钟，0=默认1分钟）
+	RateLimitWindowMinutes   int   `json:"rateLimitWindowMinutes,omitempty"`   // 滑动窗口时长（秒，0=默认60秒；JSON 字段名保留为兼容旧配置）
 	RateLimitBurst           int   `json:"rateLimitBurst,omitempty"`           // 已废弃，保留仅为兼容性
 	RateLimitMaxConcurrent   int   `json:"rateLimitMaxConcurrent,omitempty"`   // 最大并发上游请求数（0=不限）
 	RateLimitAutoFromHeaders *bool `json:"rateLimitAutoFromHeaders,omitempty"` // 自动从上游响应头解析限流信息并动态调速（默认 false）
@@ -110,7 +110,7 @@ type APIKeyConfig struct {
 	Enabled                  *bool    `json:"enabled,omitempty"`
 	QuotaGroup               string   `json:"quotaGroup,omitempty"`
 	RateLimitRPM             int      `json:"rateLimitRpm,omitempty"`
-	RateLimitWindowMinutes   int      `json:"rateLimitWindowMinutes,omitempty"`
+	RateLimitWindowMinutes   int      `json:"rateLimitWindowMinutes,omitempty"` // 滑动窗口时长（秒；JSON 字段名保留为兼容旧配置）
 	RateLimitMaxConcurrent   int      `json:"rateLimitMaxConcurrent,omitempty"`
 	RateLimitAutoFromHeaders *bool    `json:"rateLimitAutoFromHeaders,omitempty"`
 	Weight                   int      `json:"weight,omitempty"`
@@ -125,6 +125,15 @@ type DisabledKeyInfo struct {
 	DisabledAt string        `json:"disabledAt"`          // ISO8601 时间戳
 	RecoverAt  string        `json:"recoverAt,omitempty"` // 自动恢复时间（可选）
 	Config     *APIKeyConfig `json:"config,omitempty"`    // 拉黑前的 key 配置快照，restore 时恢复
+}
+
+// RateLimitWindowSeconds 返回限速器实际使用的窗口秒数。
+// JSON 字段名仍为 rateLimitWindowMinutes，仅用于兼容既有 API 和配置文件。
+func RateLimitWindowSeconds(value int) int {
+	if value > 0 {
+		return value
+	}
+	return 0
 }
 
 // AgentModelProfile 描述下游 agent 模型的上下文管理语义。
@@ -190,6 +199,38 @@ type ContextRoutingConfig struct {
 	Enabled                    *bool `json:"enabled,omitempty"`
 	DefaultOutputReserveTokens int   `json:"defaultOutputReserveTokens,omitempty"`
 	UnknownSafeWindowTokens    int   `json:"unknownSafeWindowTokens,omitempty"`
+}
+
+const (
+	ThinkingCacheDefaultTTLHours = 48
+	ThinkingCacheMinTTLHours     = 1
+	ThinkingCacheMaxTTLHours     = 24 * 30
+)
+
+// ThinkingCacheConfig 控制 Claude thinking 回填缓存。
+type ThinkingCacheConfig struct {
+	TTLHours int `json:"ttlHours,omitempty"`
+}
+
+func NormalizeThinkingCacheTTLHours(value int) int {
+	if value == 0 {
+		return ThinkingCacheDefaultTTLHours
+	}
+	if value < ThinkingCacheMinTTLHours {
+		return ThinkingCacheMinTTLHours
+	}
+	if value > ThinkingCacheMaxTTLHours {
+		return ThinkingCacheMaxTTLHours
+	}
+	return value
+}
+
+func (c ThinkingCacheConfig) EffectiveTTLHours() int {
+	return NormalizeThinkingCacheTTLHours(c.TTLHours)
+}
+
+func (c ThinkingCacheConfig) EffectiveTTL() time.Duration {
+	return time.Duration(c.EffectiveTTLHours()) * time.Hour
 }
 
 // IsAutoRecoverableDisabledReason 判断是否属于可自动恢复的拉黑原因。
@@ -481,6 +522,9 @@ type Config struct {
 
 	// 驾驶舱 override 默认有效期（分钟，1-1440；0 或未设置时使用环境变量 OVERRIDE_TTL_MINUTES）
 	OverrideTTLMinutes int `json:"overrideTtlMinutes,omitempty"`
+
+	// Claude thinking 回填缓存配置
+	ThinkingCache ThinkingCacheConfig `json:"thinkingCache,omitempty"`
 
 	// 熔断器运行时配置（可选，nil 使用环境变量或代码默认值）
 	CircuitBreaker *CircuitBreakerConfig `json:"circuitBreaker,omitempty"`

@@ -174,6 +174,7 @@ func handleVectorsFailover(
 				upstream,
 				sortedURLResults,
 				bodyBytes,
+				nil,
 				false,
 				func(upstream *config.UpstreamConfig, failedKeys map[string]bool) (string, error) {
 					return cfgManager.GetNextVectorsAPIKey(upstream, failedKeys)

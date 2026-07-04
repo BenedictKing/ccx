@@ -13,6 +13,8 @@ type FormLike = {
   passbackThinkingBlocks: boolean
   stripEmptyTextBlocks: boolean
   normalizeSystemRoleToTopLevel: boolean
+  normalizeMetadataUserId: boolean
+  stripBillingHeader: boolean
   stripImageGenerationTool: boolean
   noVision: boolean
   noVisionModels: string[]
@@ -76,6 +78,10 @@ export function useEditChannelPresets(options: EditChannelPresetOptions) {
     options.form.passbackThinkingBlocks = presetConfig.passbackThinkingBlocks
     options.form.stripEmptyTextBlocks = presetConfig.stripEmptyTextBlocks
     options.form.normalizeSystemRoleToTopLevel = presetConfig.normalizeSystemRoleToTopLevel
+    if (presetConfig.normalizeMetadataUserId) {
+      options.form.normalizeMetadataUserId = true
+    }
+    options.form.stripBillingHeader = !!presetConfig.stripBillingHeader
     options.form.stripImageGenerationTool = presetConfig.stripImageGenerationTool
     options.form.noVision = presetConfig.noVision
     options.form.noVisionModels = [...presetConfig.noVisionModels]

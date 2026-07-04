@@ -28,6 +28,10 @@ func TestIsInsufficientBalanceMessage_HighConfidenceVariants(t *testing.T) {
 		{name: "chinese balance exhausted", msg: "账户余额已用尽，请充值", want: true},
 		{name: "chinese quota used up", msg: "账户额度已用完", want: true},
 		{name: "chinese quota exhausted", msg: "当前额度耗尽", want: true},
+		// 火山/火山方舟 quota exceeded 场景（exceeded 在 quota 前面的语序）
+		{name: "volc ark 5-hour quota exceeded", msg: "You have exceeded the 5-hour usage quota. It will reset at 2026-07-03 11:37:21 +0800 CST. We recommend upgrading your plan for more quota, or waiting", want: true},
+		{name: "volc ark account quota exceeded", msg: "Account quota exceeded. Quota reset time: 2026-07-03T00:00:00Z", want: true},
+		{name: "generic quota exceeded", msg: "Monthly quota exceeded for your plan", want: true},
 		{name: "english subscription not found", msg: "No active subscription found for this group", want: true},
 		{name: "negative billing setup", msg: "billing not enabled for this account", want: false},
 		// 临时限流错误不应被误判为余额不足
@@ -36,6 +40,9 @@ func TestIsInsufficientBalanceMessage_HighConfidenceVariants(t *testing.T) {
 		{name: "too many requests", msg: "Too many requests, please try again later", want: false},
 		{name: "chinese rate limit", msg: "请求过于频繁，请稍后重试", want: false},
 		{name: "requests per minute", msg: "You have exceeded 60 requests per minute", want: false},
+		// Gemini token-per-minute 临时配额限流（含 quota + exceeded 但属于短期限流）
+		{name: "gemini tokens per minute", msg: "Quota exceeded for quota metric GenerateRequestsPerMinutePerProject of service generativelanguage.googleapis.com", want: false},
+		{name: "gemini input tokens per minute", msg: "Quota exceeded for quota metric input tokens per minute per project", want: false},
 	}
 
 	for _, tt := range tests {
@@ -183,6 +190,26 @@ func TestShouldBlacklistKey_BalanceMessages(t *testing.T) {
 				ShouldBlacklist: true,
 				Reason:          "insufficient_balance",
 				Message:         "daily usage limit exceeded",
+			},
+		},
+		{
+			name:       "429 volc ark AccountQuotaExceeded should blacklist as insufficient balance",
+			statusCode: 429,
+			body:       `{"error":{"code":"AccountQuotaExceeded","message":"You have exceeded the 5-hour usage quota. It will reset at 2026-07-03 11:37:21 +0800 CST. We recommend upgrading your plan for more quota, or waiting"}}`,
+			want: BlacklistResult{
+				ShouldBlacklist: true,
+				Reason:          "insufficient_balance",
+				Message:         "You have exceeded the 5-hour usage quota. It will reset at 2026-07-03 11:37:21 +0800 CST. We recommend upgrading your plan for more quota, or waiting",
+			},
+		},
+		{
+			name:       "429 volc ark AccountQuotaExceeded with different wording should blacklist",
+			statusCode: 429,
+			body:       `{"error":{"code":"AccountQuotaExceeded","message":"Account quota exceeded for this billing period. Try again after quota resets."}}`,
+			want: BlacklistResult{
+				ShouldBlacklist: true,
+				Reason:          "insufficient_balance",
+				Message:         "Account quota exceeded for this billing period. Try again after quota resets.",
 			},
 		},
 		{
