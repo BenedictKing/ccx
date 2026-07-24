@@ -10,6 +10,7 @@ import (
 
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/metrics"
+	"github.com/BenedictKing/ccx/internal/utils"
 )
 
 // readAllBody 读取响应体用于测试断言
@@ -30,15 +31,19 @@ func readAllBody(t *testing.T, resp *http.Response) []byte {
 	return buf
 }
 
-// runL1WithFetcher 用指定 fetcher 执行单 key L1 并返回写入的最后一条记录。
+// runL1WithFetcher 用指定 fetcher 执行单 key L1 并返回该 key 写入的记录。
+// 按 keyMask 过滤，避免 fakeKeyHealthStore 的 map 遍历顺序导致取错记录。
 func runL1WithFetcher(t *testing.T, f *checkKeyFixture, u *config.UpstreamConfig, baseURLs []string, apiKey string, fetcher L1Fetcher) metrics.KeyHealthRecord {
 	t.Helper()
 	f.manager.checkKeyL1("messages", 0, "0", u, baseURLs, apiKey, defaultTestPolicy(2*time.Second), nil, fetcher)
+	keyMask := utils.MaskAPIKey(apiKey)
 	recs, _ := f.store.GetKeyHealthForChannel("messages", "0")
-	if len(recs) == 0 {
-		return metrics.KeyHealthRecord{}
+	for i := range recs {
+		if recs[i].KeyMask == keyMask && recs[i].CheckKind == CheckKindL1 {
+			return recs[i]
+		}
 	}
-	return recs[len(recs)-1]
+	return metrics.KeyHealthRecord{}
 }
 
 // TestCheckKeyL1绑定Key只访问自己端点 覆盖 per-key BaseURL 路由：
