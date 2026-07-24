@@ -142,7 +142,7 @@ describe('mandatory automatic channel discovery', () => {
     const addModal = readFileSync(resolve(__dirname, '../components/AddChannelModal.vue'), 'utf8')
     const quickAdd = readFileSync(resolve(__dirname, '../components/QuickAddChannelForm.vue'), 'utf8')
 
-    expect(addModal).toContain('await discoverAutoAddRoutes(')
+    expect(addModal).toContain('await discoverFast(')
     expect(addModal).toContain('await autoAddChannel(targetChannelType')
     expect(quickAdd).toContain('recognizedBaseUrls[idx]')
     expect(quickAdd).not.toContain('v-model="autoManaged"')

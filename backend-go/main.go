@@ -540,6 +540,7 @@ func main() {
 
 	// 初始化 Autopilot 健康中心（Phase 1 shadow/read-only）
 	var autopilotManager *autopilot.Manager
+	var autoDiscoveryRunner *autopilot.AutoDiscoveryRunner
 	{
 		autopilotStore, apErr := autopilot.NewProfileStore(paths.AutopilotDBPath)
 		if apErr != nil {
@@ -1051,6 +1052,8 @@ func main() {
 		apiGroup.GET("/presets/status", presetstore.StatusHandler(presetUpdater))
 
 		apiGroup.POST("/channel-discovery", handlers.ChannelDiscoveryWithModelFetchers(cfgManager, discoveryModelFetchers))
+		// 快速探活：仅探一个真实模型以定 primaryKind，不做全量协议/能力探测。
+		apiGroup.POST("/channel-discovery-fast", handlers.ChannelDiscoveryFast(cfgManager))
 
 		// 渠道保活验证管理 API（六类渠道，挂在各渠道 ping 路由附近）
 		registerChannelHealthRoutes := func(channelType string) {
@@ -1295,10 +1298,21 @@ func main() {
 			// Phase 2 第三批：自动托管发现执行器。
 			// 提前到这里构造（原在 Phase 2 自动托管 API 注册处），因为 §8.5.1 new-api
 			// 订阅集成的 provision 端点也需要复用同一个 runner 实例来触发 Discovery。
-			autoDiscoveryRunner := autopilot.NewAutoDiscoveryRunner(autopilotManager.ProfileStore(), autopilotManager.EventHub())
+			autoDiscoveryRunner = autopilot.NewAutoDiscoveryRunner(autopilotManager.ProfileStore(), autopilotManager.EventHub())
 			// Phase 3B-2：注入 ModelProfileStore，使自动发现时同步写入 model_profiles
 			if mps := autopilotManager.ModelProfileStore(); mps != nil {
 				autoDiscoveryRunner.ModelProfileStore = mps
+			}
+			// 后台 discovery 任务落盘 + 断点续传：复用 ProfileStore 的 SQLite 连接，
+			// 注入 taskStore 启用端点级 checkpoint；并在接受请求前恢复未完成 discovery。
+			if ps := autopilotManager.ProfileStore(); ps != nil && ps.DB() != nil {
+				discoveryTaskStore, err := autopilot.NewDiscoveryTaskStoreWithDB(ps.DB())
+				if err != nil {
+					log.Printf("[Autopilot-DiscoveryTaskStore] 初始化失败，降级为纯内存 discovery: %v", err)
+				} else {
+					autoDiscoveryRunner.SetTaskStore(discoveryTaskStore)
+					autoDiscoveryRunner.ResumeIncompleteDiscoveries(cfgManager)
+				}
 			}
 
 			// 订阅中心 API
@@ -1590,6 +1604,13 @@ func main() {
 		if healthCheckManager != nil {
 			healthCheckManager.Stop()
 			log.Println("[HealthCheck-Shutdown] 渠道保活验证已安全关闭")
+		}
+
+		// 停止后台 discovery runner：取消未完成任务并停止 GC。
+		// 已持久化的 running 状态与 checkpoint 保留，下次启动经 ResumeIncompleteDiscoveries 续传。
+		if autoDiscoveryRunner != nil {
+			autoDiscoveryRunner.Stop()
+			log.Println("[AutoDiscovery-Shutdown] 后台发现执行器已停止")
 		}
 
 		// 关闭指标持久化存储

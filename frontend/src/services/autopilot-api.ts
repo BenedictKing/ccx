@@ -259,6 +259,27 @@ export async function discoverAutoAddRoutes(
   return { primaryKind, routes, rateLimitHint: discovery.rateLimit }
 }
 
+/** 快速探活：仅探一个真实模型以定 primaryKind，不做全量协议/能力探测。
+ *  返回单条路由 `{ channelKind: primaryKind }`，不含 supportedModels；
+ *  后台 discovery 会接管完整模型清单。images/vectors 沿用直接添加路径。 */
+export async function discoverFast(
+  kind: ChannelKind,
+  baseUrls: string[],
+  apiKeys: string[]
+): Promise<AutoAddRouteDiscovery | null> {
+  if (!supportsQuickAddProtocolDiscovery(kind)) {
+    return { primaryKind: kind, routes: [{ channelKind: kind }] }
+  }
+  const nonEmptyKeys = apiKeys.map(key => key.trim()).filter(Boolean)
+  if (baseUrls.length === 0 || nonEmptyKeys.length === 0) return null
+
+  // 不传 channelKind，让后端根据真实探测结果决定协议；透传全部 key，后端按 (baseURL,key) 组合择优。
+  const fast = await api.discoverChannelConfigFast({ baseUrls, apiKeys: nonEmptyKeys })
+  const primaryKind = normalizeDiscoveredChannelKind(fast.primaryKind)
+  if (!primaryKind) return null
+  return { primaryKind, routes: [{ channelKind: primaryKind }], rateLimitHint: fast.rateLimit }
+}
+
 export function extractAutoAddErrorMessage(err: unknown): string {
   const raw = err instanceof Error ? err.message : String(err)
   const jsonStart = raw.indexOf('{')

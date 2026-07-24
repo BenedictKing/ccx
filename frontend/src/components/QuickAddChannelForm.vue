@@ -162,7 +162,7 @@ import { useI18n } from '../i18n'
 import type { Channel } from '../services/api'
 import {
   autoAddChannel,
-  discoverAutoAddRoutes,
+  discoverFast,
   extractAutoAddErrorMessage,
   getProviderTemplates
 } from '../services/autopilot-api'
@@ -321,7 +321,7 @@ function getGeneratedName(): string {
 }
 
 async function discoverCustomRoutes(baseUrls: string[], apiKeys: string[]) {
-  const discovery = await discoverAutoAddRoutes(props.channelType, baseUrls, apiKeys)
+  const discovery = await discoverFast(props.channelType, baseUrls, apiKeys)
   if (!discovery) {
     throw new Error(t('autopilot.quickAdd.discoveryFailed'))
   }
