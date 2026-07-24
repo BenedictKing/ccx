@@ -20,7 +20,7 @@ import (
 // v1 = 现有 7 张表的建表语句本身（首次引入版本化时的基线，无需 ALTER）。
 // 后续新增/变更表结构时，在 ensureSchemaVersion 里追加 "if version < N { ... }" 迁移块，
 // 并将本常量递增。
-const autopilotSchemaVersion = 6
+const autopilotSchemaVersion = 7
 
 // ensureSchemaVersion 在任何 CREATE TABLE 之前执行一次版本检查/迁移。
 // 必须在 ProfileStore 打开 DB 后、调用 initProfileStoreSchema 之前调用——
@@ -148,6 +148,20 @@ func ensureSchemaVersion(db *sql.DB) error {
 		version = 6
 	}
 
+	// v6 -> v7: 后台 discovery 任务落盘（断点续传）。
+	// 新增 autopilot_discovery_tasks 表（CREATE TABLE IF NOT EXISTS，幂等），用于
+	// 记录 running/done/failed 状态与端点级 checkpoint，支撑重启续传。
+	if version > 0 && version < 7 {
+		if err := migrateV6ToV7(db); err != nil {
+			return fmt.Errorf("[Autopilot-SchemaMigration] v6->v7 迁移失败: %w", err)
+		}
+		if _, err := db.Exec("PRAGMA user_version = 7"); err != nil {
+			return fmt.Errorf("[Autopilot-SchemaMigration] 写入 v7 版本失败: %w", err)
+		}
+		log.Printf("[Autopilot-SchemaMigration] schema 升级: v6 -> v7")
+		version = 7
+	}
+
 	// version == 0：全新库，直接写入当前基线版本；version 属于 (0, autopilotSchemaVersion) 但
 	// 未命中任何迁移块的情况理论上不应出现（说明版本常量与迁移块不同步），同样兜底写回当前版本，
 	// 不阻塞启动——迁移块本身的正确性由后续新增迁移时的测试覆盖。
@@ -204,6 +218,22 @@ func migrateV5ToV6(db *sql.DB) error {
 	// 4. 创建新索引（表不存在则跳过）
 	if err := createV6IndexesTx(tx); err != nil {
 		return err
+	}
+
+	return tx.Commit()
+}
+
+// migrateV6ToV7 执行 v6 到 v7 的迁移：建立后台 discovery 任务表与索引。
+// 全程在单事务内，CREATE TABLE/INDEX IF NOT EXISTS 幂等；全新库的 store 建表也会执行同样语句。
+func migrateV6ToV7(db *sql.DB) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("开始事务失败: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := initDiscoveryTaskStoreSchemaTx(tx); err != nil {
+		return fmt.Errorf("建立 discovery tasks 表失败: %w", err)
 	}
 
 	return tx.Commit()

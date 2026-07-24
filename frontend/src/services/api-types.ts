@@ -969,6 +969,30 @@ export interface ChannelDiscoveryResponse {
   evidence?: DiscoveryEvidence[]
 }
 
+/** 快速探活请求：仅探一个真实模型以定 primaryKind，不做全量协议/能力探测。 */
+export interface ChannelDiscoveryFastRequest {
+  /** 可选提示，不能限制自动探测结果 */
+  channelKind?: ChannelDiscoveryKind
+  baseUrl?: string
+  baseUrls?: string[]
+  /** 兼容单个 key */
+  apiKey?: string
+  apiKeys?: string[]
+  authHeader?: ChannelAuthHeader | ''
+  customHeaders?: Record<string, string>
+  proxyUrl?: string
+  insecureSkipVerify?: boolean
+}
+
+/** 快速探活响应：primaryKind 必须来自成功协议；testedModel/streamingSupported 仅作证据，不写入渠道白名单。 */
+export interface ChannelDiscoveryFastResponse {
+  primaryKind: ChannelDiscoveryKind | ''
+  testedModel: string
+  streamingSupported: boolean
+  testedKeyHash: string
+  rateLimit: DiscoveryRateLimitResult
+}
+
 // ============== 健康中心类型 ==============
 
 export type HealthState = 'unknown' | 'healthy' | 'degraded' | 'limited' | 'misconfigured' | 'dead'

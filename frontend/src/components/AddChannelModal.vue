@@ -208,7 +208,7 @@ import { useAuthStore } from '../stores/auth'
 import { useChannelStore } from '../stores/channel'
 import {
   autoAddChannel,
-  discoverAutoAddRoutes,
+  discoverFast,
   extractAutoAddErrorMessage,
   preloadProviderTemplates
 } from '../services/autopilot-api'
@@ -418,7 +418,7 @@ async function handleQuickSubmit() {
   standardSubmitting.value = true
   standardSubmitError.value = ''
   try {
-    const routeDiscovery = await discoverAutoAddRoutes(props.channelType, detectedBaseUrls.value, detectedApiKeys.value)
+    const routeDiscovery = await discoverFast(props.channelType, detectedBaseUrls.value, detectedApiKeys.value)
     if (!routeDiscovery) {
       throw new Error(t('autopilot.quickAdd.discoveryFailed'))
     }

@@ -5,7 +5,7 @@ vi.mock('@/stores/auth', () => ({
 }))
 
 vi.mock('./api', () => ({
-  default: { discoverChannelConfig: vi.fn() }
+  default: { discoverChannelConfig: vi.fn(), discoverChannelConfigFast: vi.fn() }
 }))
 
 function providerTemplatesResponse(providers: unknown[]): Response {
@@ -137,5 +137,58 @@ describe('auto add route discovery', () => {
     expect(request).not.toHaveProperty('channelKind')
     expect(request).not.toHaveProperty('serviceType')
     expect(request).not.toHaveProperty('probeAllModels')
+  })
+})
+
+describe('fast discovery', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    vi.clearAllMocks()
+  })
+
+  it('仅探一个真实模型并返回单条不含 supportedModels 的路由', async () => {
+    const apiModule = await import('./api')
+    const discoverFast = vi.mocked(apiModule.default.discoverChannelConfigFast)
+    discoverFast.mockResolvedValue({
+      primaryKind: 'chat',
+      testedModel: 'nim-main',
+      streamingSupported: true,
+      testedKeyHash: 'abc123',
+      rateLimit: { initialRpm: 60, effectiveRpm: 60, rateLimited: false }
+    })
+    const { discoverFast: discover } = await import('./autopilot-api')
+
+    await expect(discover('messages', ['https://example.com'], ['sk-test', ''])).resolves.toEqual({
+      primaryKind: 'chat',
+      routes: [{ channelKind: 'chat' }],
+      rateLimitHint: { initialRpm: 60, effectiveRpm: 60, rateLimited: false }
+    })
+    const request = discoverFast.mock.calls[0][0]
+    expect(request).toEqual({ baseUrls: ['https://example.com'], apiKeys: ['sk-test'] })
+    expect(request).not.toHaveProperty('channelKind')
+  })
+
+  it('primaryKind 为空时返回 null 不建渠道', async () => {
+    const apiModule = await import('./api')
+    vi.mocked(apiModule.default.discoverChannelConfigFast).mockResolvedValue({
+      primaryKind: '',
+      testedModel: '',
+      streamingSupported: false,
+      testedKeyHash: '',
+      rateLimit: { initialRpm: 60, effectiveRpm: 60, rateLimited: false }
+    })
+    const { discoverFast: discover } = await import('./autopilot-api')
+    await expect(discover('chat', ['https://example.com'], ['sk-test'])).resolves.toBeNull()
+  })
+
+  it('images/vectors 不调用 fast discovery 直接添加', async () => {
+    const apiModule = await import('./api')
+    const discoverFast = vi.mocked(apiModule.default.discoverChannelConfigFast)
+    const { discoverFast: discover } = await import('./autopilot-api')
+    await expect(discover('images', ['https://example.com'], ['sk-test'])).resolves.toEqual({
+      primaryKind: 'images',
+      routes: [{ channelKind: 'images' }]
+    })
+    expect(discoverFast).not.toHaveBeenCalled()
   })
 })

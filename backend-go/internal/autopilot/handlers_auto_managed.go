@@ -2489,7 +2489,11 @@ func handleAutoDiscover(deps *AutoManagedDeps) gin.HandlerFunc {
 			return
 		}
 
-		started := deps.Runner.TriggerDiscovery(channel.ChannelUID, &channel, deps.CfgManager)
+		started, err := deps.Runner.TriggerDiscoveryWithStatus(channel.ChannelUID, &channel, deps.CfgManager)
+		if err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("发现任务持久化失败: %v", err)})
+			return
+		}
 		if !started {
 			c.JSON(http.StatusConflict, gin.H{"error": "发现任务已在运行中"})
 			return

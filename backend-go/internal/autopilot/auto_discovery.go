@@ -62,6 +62,9 @@ type DiscoveryTask struct {
 	Error      string                    `json:"error,omitempty"`
 	Endpoints  []EndpointDiscoveryResult `json:"endpoints"`
 	cancel     context.CancelFunc        `json:"-"`
+	// previousCheckpoints 续传时从 taskStore 加载的已持久化端点 checkpoint；
+	// 新触发时为 nil。runDiscovery 据此跳过已完成的端点。
+	previousCheckpoints []CheckpointedEndpoint `json:"-"`
 }
 
 // AutoDiscoveryRunner 自动发现执行器。
@@ -76,6 +79,15 @@ type AutoDiscoveryRunner struct {
 	timeout                        time.Duration             // 单次请求超时，默认 10s
 	volcengineControlPlaneEndpoint string
 
+	// taskStore 后台 discovery 任务落盘层（nil 时保持纯内存行为，供旧测试与无 DB 场景）。
+	taskStore *DiscoveryTaskStore
+	// runnerCtx/runnerCancel 服务级 root context：关闭时取消未完成任务并保留 running
+	// 状态与已持久化 checkpoint，下一次启动经 ResumeIncompleteDiscoveries 续传。
+	runnerCtx    context.Context
+	runnerCancel context.CancelFunc
+	// gcStop 终止 GC 定时器。
+	gcStop chan struct{}
+
 	// Phase 3B-2：自动发现时同步写入模型画像（nil 时不写 model_profiles，不影响现有功能）
 	ModelProfileStore *ModelProfileStore
 }
@@ -89,6 +101,145 @@ func NewAutoDiscoveryRunner(store *ProfileStore, hub *EventHub) *AutoDiscoveryRu
 		store:   store,
 		hub:     hub,
 		timeout: 10 * time.Second,
+		gcStop:  make(chan struct{}),
+	}
+}
+
+// SetTaskStore 注入任务落盘层并启动服务级 root context 与 GC 定时器。
+// 在 main.go 构造 runner 后、接受请求前调用；未调用时保持纯内存行为（向后兼容）。
+func (r *AutoDiscoveryRunner) SetTaskStore(taskStore *DiscoveryTaskStore) {
+	if taskStore == nil || taskStore.db == nil {
+		return
+	}
+	r.mu.Lock()
+	r.taskStore = taskStore
+	r.mu.Unlock()
+	r.runnerCtx, r.runnerCancel = context.WithCancel(context.Background())
+	go r.gcLoop()
+}
+
+// gcLoop 周期性清理 done/failed 且 finished_at 超过 24h 的记录，不删 running。
+func (r *AutoDiscoveryRunner) gcLoop() {
+	ticker := time.NewTicker(30 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-r.gcStop:
+			return
+		case <-r.runnerCtx.Done():
+			return
+		case <-ticker.C:
+			r.mu.Lock()
+			store := r.taskStore
+			r.mu.Unlock()
+			if store == nil {
+				continue
+			}
+			if deleted, err := store.GC(24 * time.Hour); err != nil {
+				log.Printf("[AutoDiscovery-GC] 清理失败: %v", err)
+			} else if deleted > 0 {
+				log.Printf("[AutoDiscovery-GC] 清理过期任务记录: %d 条", deleted)
+			}
+		}
+	}
+}
+
+// Stop 取消未完成任务并停止 GC 定时器。
+// 已持久化的 running 状态与 checkpoint 保留，供下次启动续传。
+func (r *AutoDiscoveryRunner) Stop() {
+	if r.runnerCancel != nil {
+		r.runnerCancel()
+	}
+	if r.gcStop != nil {
+		select {
+		case <-r.gcStop:
+		default:
+			close(r.gcStop)
+		}
+	}
+}
+
+// parentContext 返回用于 discovery goroutine 的父 context：
+// 有 root context（SetTaskStore 后）则用 root，否则退化为 Background（旧行为）。
+func (r *AutoDiscoveryRunner) parentContext() context.Context {
+	if r.runnerCtx != nil {
+		return r.runnerCtx
+	}
+	return context.Background()
+}
+
+// ResumeIncompleteDiscoveries 在服务开始接受请求前恢复所有 running 任务。
+// 必须在 SetTaskStore 之后、HTTP server 监听前同步调用。
+//
+// 对每条 running 记录：按 channel_uid 查找当前配置；找不到则标记 failed(渠道已删除)；
+// 内存已有同 channelUID 的 running task 时跳过，避免重复 goroutine。
+// previousCheckpoints 从持久化记录加载，runDiscovery 据此跳过已持久化端点。
+func (r *AutoDiscoveryRunner) ResumeIncompleteDiscoveries(cfgManager *config.ConfigManager) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	store := r.taskStore
+	r.mu.Unlock()
+	if store == nil {
+		return
+	}
+
+	running, err := store.LoadRunning()
+	if err != nil {
+		log.Printf("[AutoDiscovery-Resume] 加载 running 任务失败: %v", err)
+		return
+	}
+	if len(running) == 0 {
+		return
+	}
+
+	resumed := 0
+	for _, rt := range running {
+		channelUID := rt.ChannelUID
+		r.mu.Lock()
+		if existing, ok := r.tasks[channelUID]; ok && existing.Status == DiscoveryStatusRunning {
+			r.mu.Unlock()
+			log.Printf("[AutoDiscovery-Resume] 渠道 %s 内存已有 running 任务，跳过", channelUID)
+			continue
+		}
+		r.mu.Unlock()
+
+		if cfgManager == nil {
+			// 无配置管理器无法恢复，保留 running 记录供下次启动。
+			log.Printf("[AutoDiscovery-Resume] cfgManager 为 nil，跳过渠道 %s", channelUID)
+			continue
+		}
+		cfg := cfgManager.GetConfig()
+		channel := findChannelByUID(cfg, channelUID)
+		if channel == nil {
+			if err := store.Finish(channelUID, DiscoveryStatusFailed, "渠道已删除"); err != nil {
+				log.Printf("[AutoDiscovery-Resume] 标记渠道 %s failed 失败: %v", channelUID, err)
+			} else {
+				log.Printf("[AutoDiscovery-Resume] 渠道 %s 已删除，标记 discovery failed", channelUID)
+			}
+			continue
+		}
+
+		ctx, cancel := context.WithCancel(r.parentContext())
+		now := time.Now()
+		task := &DiscoveryTask{
+			ChannelUID:          channelUID,
+			Status:              DiscoveryStatusRunning,
+			StartedAt:           &now,
+			cancel:              cancel,
+			previousCheckpoints: rt.Endpoints,
+		}
+		r.mu.Lock()
+		r.tasks[channelUID] = task
+		r.mu.Unlock()
+		go r.runDiscovery(ctx, task, channel, cfgManager)
+		resumed++
+		log.Printf("[AutoDiscovery-Resume] 恢复渠道 %s 的未完成 discovery（已持久化端点 %d 个）",
+			channelUID, len(rt.Endpoints))
+	}
+	if resumed > 0 {
+		log.Printf("[AutoDiscovery-Resume] 共恢复 %d 个未完成 discovery 任务", resumed)
 	}
 }
 
@@ -115,15 +266,48 @@ func (r *AutoDiscoveryRunner) GetTask(channelUID string) *DiscoveryTask {
 // 如果同渠道已有 running 任务则返回 false（拒绝重复触发）。
 // 返回 true 表示已成功触发。
 func (r *AutoDiscoveryRunner) TriggerDiscovery(channelUID string, channel *config.UpstreamConfig, cfgManager *config.ConfigManager) bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	started, _ := r.TriggerDiscoveryWithStatus(channelUID, channel, cfgManager)
+	return started
+}
 
+// TriggerDiscoveryWithStatus 触发发现任务并区分拒绝原因。
+// 返回 (started, err)：
+//   - 同渠道已有 running 任务 → (false, nil)（409 语义，拒绝重复触发）
+//   - taskStore 持久化 running 记录失败 → (false, err)（503 语义，不启动 goroutine）
+//   - 成功 → (true, nil)
+func (r *AutoDiscoveryRunner) TriggerDiscoveryWithStatus(channelUID string, channel *config.UpstreamConfig, cfgManager *config.ConfigManager) (bool, error) {
+	r.mu.Lock()
 	if existing, ok := r.tasks[channelUID]; ok && existing.Status == DiscoveryStatusRunning {
 		log.Printf("[AutoDiscovery-Trigger] 渠道 %s 发现任务已在运行中，拒绝重复触发", channelUID)
-		return false
+		r.mu.Unlock()
+		return false, nil
+	}
+	store := r.taskStore
+	r.mu.Unlock()
+
+	// 持久化 running 记录失败时不启动 goroutine，让 handler 返回 503。
+	if store != nil {
+		accountUID, channelKind := "", ""
+		if cfgManager != nil {
+			_, channelKind = findChannelIndexAndKind(cfgManager.GetConfig(), channelUID)
+			if channel != nil {
+				accountUID = channel.AccountUID
+			}
+		}
+		if err := store.Start(channelUID, accountUID, channelKind); err != nil {
+			log.Printf("[AutoDiscovery-Trigger] 渠道 %s 持久化 running 记录失败，不启动发现: %v", channelUID, err)
+			return false, err
+		}
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	r.mu.Lock()
+	// 双重检查：释放锁期间可能被并发触发。
+	if existing, ok := r.tasks[channelUID]; ok && existing.Status == DiscoveryStatusRunning {
+		r.mu.Unlock()
+		log.Printf("[AutoDiscovery-Trigger] 渠道 %s 发现任务已被并发触发，跳过", channelUID)
+		return false, nil
+	}
+	ctx, cancel := context.WithCancel(r.parentContext())
 	now := time.Now()
 	task := &DiscoveryTask{
 		ChannelUID: channelUID,
@@ -132,12 +316,18 @@ func (r *AutoDiscoveryRunner) TriggerDiscovery(channelUID string, channel *confi
 		cancel:     cancel,
 	}
 	r.tasks[channelUID] = task
+	r.mu.Unlock()
 
 	go r.runDiscovery(ctx, task, channel, cfgManager)
-	return true
+	return true, nil
 }
 
 // runDiscovery 执行发现逻辑（在后台 goroutine 中运行）。
+//
+// 有 taskStore 时走端点级 checkpoint：逐端点探测 → 单端点画像写入 + 强制 Flush →
+// 只有 Flush 成功才 SaveCheckpoint(profilePersisted=true)。全部端点处理完且最后一次
+// Flush 成功才标记 done；全部端点失败则 failed。context 取消保留 running 与已存 checkpoint。
+// 无 taskStore 时退化为旧的单次 collect → writeProfiles 全量行为（兼容现有测试）。
 func (r *AutoDiscoveryRunner) runDiscovery(ctx context.Context, task *DiscoveryTask, channel *config.UpstreamConfig, cfgManager *config.ConfigManager) {
 	defer func() {
 		if rec := recover(); rec != nil {
@@ -147,10 +337,71 @@ func (r *AutoDiscoveryRunner) runDiscovery(ctx context.Context, task *DiscoveryT
 			task.FinishedAt = &now
 			task.Error = fmt.Sprintf("panic: %v", rec)
 			r.mu.Unlock()
+			if r.taskStore != nil {
+				_ = r.taskStore.Finish(task.ChannelUID, DiscoveryStatusFailed, fmt.Sprintf("panic: %v", rec))
+			}
 			log.Printf("[AutoDiscovery-Run] 渠道 %s 发现任务 panic: %v", task.ChannelUID, rec)
 		}
 	}()
 
+	r.mu.Lock()
+	store := r.taskStore
+	r.mu.Unlock()
+
+	if store == nil {
+		r.runDiscoveryLegacy(ctx, task, channel, cfgManager)
+		return
+	}
+
+	// checkpoint 路径：逐端点处理。
+	endpoints := r.discoverEndpointsWithCheckpoint(ctx, task.ChannelUID, channel, cfgManager, task.previousCheckpoints)
+
+	failedCount := 0
+	for _, ep := range endpoints {
+		if !ep.ProtocolOk {
+			failedCount++
+		}
+	}
+
+	r.mu.Lock()
+	task.Endpoints = endpoints
+	now := time.Now()
+	task.FinishedAt = &now
+	var status DiscoveryStatus
+	var taskErr string
+	if failedCount == len(endpoints) && len(endpoints) > 0 {
+		status = DiscoveryStatusFailed
+		taskErr = "所有端点均不可达"
+	} else {
+		status = DiscoveryStatusDone
+	}
+	// context 取消：保留 running 状态与已持久化 checkpoint，不标记 done。
+	if ctx.Err() != nil {
+		status = DiscoveryStatusRunning
+		task.FinishedAt = nil
+	} else {
+		task.Status = status
+		task.Error = taskErr
+	}
+	r.mu.Unlock()
+
+	if ctx.Err() == nil {
+		if err := store.Finish(task.ChannelUID, status, taskErr); err != nil {
+			log.Printf("[AutoDiscovery-Run] 渠道 %s 持久化终态失败: %v", task.ChannelUID, err)
+		}
+		// 探测完成后尝试自动写入 SupportedModels（安全守则：仅一致结果且用户未手动配置时写入）
+		if cfgManager != nil {
+			r.maybeAutoWriteChannelConfig(task.ChannelUID, channel, endpoints, cfgManager)
+		}
+		r.publishDiscoveryComplete(task.ChannelUID, cfgManager, status, taskErr, endpoints, failedCount)
+	}
+
+	log.Printf("[AutoDiscovery-Run] 渠道 %s 发现完成: %d/%d 端点可达 (status=%s)",
+		task.ChannelUID, len(endpoints)-failedCount, len(endpoints), status)
+}
+
+// runDiscoveryLegacy 无 taskStore 时的旧行为：collect 全部端点 → 一次性 writeProfiles。
+func (r *AutoDiscoveryRunner) runDiscoveryLegacy(ctx context.Context, task *DiscoveryTask, channel *config.UpstreamConfig, cfgManager *config.ConfigManager) {
 	endpoints := r.discoverEndpoints(ctx, channel, cfgManager)
 
 	r.mu.Lock()
@@ -158,53 +409,58 @@ func (r *AutoDiscoveryRunner) runDiscovery(ctx context.Context, task *DiscoveryT
 	now := time.Now()
 	task.FinishedAt = &now
 
-	// 检查是否有失败的端点
 	failedCount := 0
 	for _, ep := range endpoints {
 		if !ep.ProtocolOk {
 			failedCount++
 		}
 	}
+	var status DiscoveryStatus
+	var taskErr string
 	if failedCount == len(endpoints) && len(endpoints) > 0 {
-		task.Status = DiscoveryStatusFailed
-		task.Error = "所有端点均不可达"
+		status = DiscoveryStatusFailed
+		taskErr = "所有端点均不可达"
 	} else {
-		task.Status = DiscoveryStatusDone
+		status = DiscoveryStatusDone
 	}
+	task.Status = status
+	task.Error = taskErr
 	r.mu.Unlock()
 
-	// 写画像到 ProfileStore + ModelProfileStore（在锁外执行，避免阻塞其他操作）
 	r.writeProfiles(task.ChannelUID, channel, endpoints, cfgManager)
 
-	// 探测完成后尝试自动写入 SupportedModels（安全守则：仅一致结果且用户未手动配置时写入）
 	if cfgManager != nil {
 		r.maybeAutoWriteChannelConfig(task.ChannelUID, channel, endpoints, cfgManager)
 	}
-
-	// Phase 3A：发布 discovery_completed 事件（只读展示，不影响调度）
-	if r.hub != nil {
-		channelKind := ""
-		if cfgManager != nil {
-			_, channelKind = findChannelIndexAndKind(cfgManager.GetConfig(), task.ChannelUID)
-		}
-		summary := fmt.Sprintf("%d/%d 端点可达", len(endpoints)-failedCount, len(endpoints))
-		if task.Status == DiscoveryStatusFailed {
-			summary = "发现失败: " + task.Error
-		}
-		now := time.Now()
-		ev := ProfileChangeEvent{
-			ChannelUID:  task.ChannelUID,
-			ChannelKind: channelKind,
-			EventType:   EventTypeDiscoveryComplete,
-			Summary:     summary,
-			CreatedAt:   now,
-		}
-		ev.EventUID = GenerateChangeEventUID(task.ChannelUID, ev.EventType, now)
-		r.hub.Publish(ev)
-	}
+	r.publishDiscoveryComplete(task.ChannelUID, cfgManager, status, taskErr, endpoints, failedCount)
 
 	log.Printf("[AutoDiscovery-Run] 渠道 %s 发现完成: %d/%d 端点可达",
 		task.ChannelUID, len(endpoints)-failedCount, len(endpoints))
+}
+
+// publishDiscoveryComplete 发布 discovery_completed 事件（只读展示，不影响调度）。
+func (r *AutoDiscoveryRunner) publishDiscoveryComplete(channelUID string, cfgManager *config.ConfigManager, status DiscoveryStatus, taskErr string, endpoints []EndpointDiscoveryResult, failedCount int) {
+	if r.hub == nil {
+		return
+	}
+	channelKind := ""
+	if cfgManager != nil {
+		_, channelKind = findChannelIndexAndKind(cfgManager.GetConfig(), channelUID)
+	}
+	summary := fmt.Sprintf("%d/%d 端点可达", len(endpoints)-failedCount, len(endpoints))
+	if status == DiscoveryStatusFailed {
+		summary = "发现失败: " + taskErr
+	}
+	now := time.Now()
+	ev := ProfileChangeEvent{
+		ChannelUID:  channelUID,
+		ChannelKind: channelKind,
+		EventType:   EventTypeDiscoveryComplete,
+		Summary:     summary,
+		CreatedAt:   now,
+	}
+	ev.EventUID = GenerateChangeEventUID(channelUID, ev.EventType, now)
+	r.hub.Publish(ev)
 }
 
 // discoverEndpoints 遍历所有 (baseURL, key) 组合，调用 GET /v1/models。
@@ -255,6 +511,150 @@ func (r *AutoDiscoveryRunner) discoverEndpoints(ctx context.Context, channel *co
 		}
 	}
 	return results
+}
+
+// discoverEndpointsWithCheckpoint 端点级增量发现：每探测成功一个端点，
+// 立即用当前真实 key 写入画像并强制 Flush，Flush 成功后才 SaveCheckpoint(profilePersisted=true)。
+// 即使在画像写入与 checkpoint 之间崩溃，恢复时也只是重复一次幂等写入，
+// 不会出现“checkpoint 已成功但画像不存在”。
+// 仅跳过 previousResults 中 profilePersisted=true 且 endpointUID 仍匹配当前配置的结果；
+// 失败端点不跳过，重启后允许重试。
+func (r *AutoDiscoveryRunner) discoverEndpointsWithCheckpoint(ctx context.Context, channelUID string, channel *config.UpstreamConfig, cfgManager *config.ConfigManager, previous []CheckpointedEndpoint) []EndpointDiscoveryResult {
+	baseURLs := channel.GetAllBaseURLs()
+	keys := channel.APIKeys
+	if len(keys) == 0 && channel.AutoManaged && cfgManager != nil {
+		keys = r.resolveAutoManagedKeys(channel, cfgManager)
+	}
+	if len(baseURLs) == 0 || len(keys) == 0 {
+		return nil
+	}
+	client := r.client
+	if client == nil {
+		client = &http.Client{Timeout: r.timeout}
+	}
+
+	// 预计算已持久化且配置未变的端点 checkpoint，用于跳过重复探测。
+	// 只有 profilePersisted=true 且 endpointUID 仍匹配当前配置 (baseURL+keyHash) 才跳过；
+	// 失败端点不进入此 map，重启后允许重试。
+	prevByUID := make(map[string]CheckpointedEndpoint, len(previous))
+	for _, p := range previous {
+		if !p.ProfilePersisted || p.EndpointUID == "" {
+			continue
+		}
+		if r.endpointStillExists(channel, p, baseURLs, keys) {
+			prevByUID[p.EndpointUID] = p
+		}
+	}
+
+	// 准备 model profile 上下文。
+	var globalModelCapabilities map[string]config.UpstreamModelCapability
+	var channelKind string
+	var channelID int
+	if cfgManager != nil {
+		cfg := cfgManager.GetConfig()
+		globalModelCapabilities = cfg.UpstreamModelCapabilities
+		var idx int
+		idx, channelKind = findChannelIndexAndKind(cfg, channelUID)
+		if idx >= 0 {
+			channelID = idx
+		}
+	}
+
+	var results []EndpointDiscoveryResult
+	for _, key := range keys {
+		keyBaseURLs := baseURLs
+		if bound := channel.BoundBaseURLForKey(key); bound != "" {
+			keyBaseURLs = []string{bound}
+		}
+		for _, baseURL := range keyBaseURLs {
+			select {
+			case <-ctx.Done():
+				return results
+			default:
+			}
+
+			keyHash := KeyHashFromAPIKey(key)
+			canonicalBaseURL := utils.CanonicalBaseURL(baseURL, channel.ServiceType)
+			endpointUID := GenerateEndpointUID(channelUID, canonicalBaseURL, keyHash)
+
+			// 已持久化且配置未变：用 checkpoint 重建结果，不重新探测，避免重复请求 /models。
+			if cp, ok := prevByUID[endpointUID]; ok {
+				results = append(results, EndpointDiscoveryResult{
+					KeyMask:               utils.MaskAPIKey(key),
+					BaseURL:               baseURL,
+					Models:                cp.Models,
+					ModelsCount:           cp.ModelsCount,
+					ProtocolOk:            cp.ProtocolOk,
+					ModelDiscoverySource:  cp.ModelDiscoverySource,
+					ModelDiscoveryMessage: cp.ModelDiscoveryMessage,
+				})
+				continue
+			}
+
+			var result EndpointDiscoveryResult
+			if channel.ProviderID == "volcengine" {
+				result = r.discoverVolcenginePlanEndpoint(ctx, client, channel, baseURL, key, cfgManager)
+			} else {
+				result = r.probeEndpoint(ctx, client, channel, baseURL, key)
+			}
+			logEndpointDiscovery(channel.ChannelUID, result)
+			results = append(results, result)
+
+			if !result.ProtocolOk {
+				continue // 失败端点不写画像、不 checkpoint，重启后允许重试
+			}
+
+			// 先写画像并强制 Flush，成功后才写 checkpoint（至少一次 + 幂等）。
+			if _, err := r.writeProfileForEndpoint(channelUID, channel, result, channelID, channelKind, globalModelCapabilities); err != nil {
+				log.Printf("[AutoDiscovery-Checkpoint] 画像写入失败，不标记 checkpoint endpoint=%s: %v", endpointUID, err)
+				continue
+			}
+			if err := r.flushStores(); err != nil {
+				log.Printf("[AutoDiscovery-Checkpoint] 画像 Flush 失败，不标记 checkpoint endpoint=%s: %v", endpointUID, err)
+				continue
+			}
+			credentialUID := channel.CredentialUIDForKey(key)
+			checkpoint := CheckpointedEndpoint{
+				EndpointUID:           endpointUID,
+				KeyHash:               keyHash,
+				CredentialUID:         credentialUID,
+				BaseURL:               canonicalBaseURL,
+				Models:                result.Models,
+				ModelsCount:           result.ModelsCount,
+				ProtocolOk:            result.ProtocolOk,
+				Error:                 result.ErrorMessage,
+				ModelDiscoverySource:  result.ModelDiscoverySource,
+				ModelDiscoveryMessage: result.ModelDiscoveryMessage,
+				ProfilePersisted:      true,
+			}
+			if err := r.taskStore.UpsertEndpointCheckpoint(channelUID, checkpoint); err != nil {
+				log.Printf("[AutoDiscovery-Checkpoint] 写入 checkpoint 失败 endpoint=%s: %v", endpointUID, err)
+			}
+		}
+	}
+	return results
+}
+
+// endpointStillExists 判断 checkpoint 的端点身份是否仍匹配当前配置（同一 baseURL + keyHash）。
+// key rotation、baseURL canonicalization 或 credential 改变后返回 false，使恢复期重试该端点。
+func (r *AutoDiscoveryRunner) endpointStillExists(channel *config.UpstreamConfig, p CheckpointedEndpoint, baseURLs, keys []string) bool {
+	for _, key := range keys {
+		if KeyHashFromAPIKey(key) != p.KeyHash {
+			continue
+		}
+		keyBaseURLs := baseURLs
+		if bound := channel.BoundBaseURLForKey(key); bound != "" {
+			keyBaseURLs = []string{bound}
+		}
+		for _, baseURL := range keyBaseURLs {
+			canonical := utils.CanonicalBaseURL(baseURL, channel.ServiceType)
+			endpointUID := GenerateEndpointUID(channel.ChannelUID, canonical, p.KeyHash)
+			if endpointUID == p.EndpointUID {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // resolveAutoManagedKeys 从 apiKeyConfigs 和 ManagedAccountCredential 获取自动托管渠道的实际密钥。
@@ -608,140 +1008,159 @@ func (r *AutoDiscoveryRunner) writeProfiles(channelUID string, channel *config.U
 		if !ep.ProtocolOk {
 			continue
 		}
-
-		// 从 channel 的 APIKeys 中找到对应 key
-		apiKey := ""
-		for _, key := range channel.APIKeys {
-			if utils.MaskAPIKey(key) == ep.KeyMask {
-				apiKey = key
-				break
-			}
-		}
-		if apiKey == "" {
-			continue
-		}
-
-		keyHash := KeyHashFromAPIKey(apiKey)
-		canonicalBaseURL := utils.CanonicalBaseURL(ep.BaseURL, channel.ServiceType)
-		metricsKey := computeMetricsIdentityKey(canonicalBaseURL, apiKey, channel.ServiceType)
-		endpointUID := GenerateEndpointUID(channelUID, canonicalBaseURL, keyHash)
-
-		// 尝试获取已有画像
-		existing := r.store.Get(endpointUID)
-
-		var profile KeyEndpointProfile
-		if existing != nil {
-			profile = *existing
-		}
-
-		// 更新发现相关字段
-		profile.EndpointUID = endpointUID
-		profile.AccountUID = channel.AccountUID
-		profile.ChannelUID = channelUID
-		profile.ChannelID = channelID
-		if channelKind != "" {
-			profile.ChannelKind = channelKind
-		}
-		if channel.ServiceType != "" {
-			profile.ServiceType = channel.ServiceType
-		}
-		// Discovery 只证明端点和模型列表可达，不应把尚未经过 L1 profiler 的空档位
-		// 解释为 low/unstable。使用与 SmartRouter 无画像路径相同的中性默认值。
-		if profile.HealthState == "" {
-			profile.HealthState = HealthStateUnknown
-		}
-		if profile.QualityTier == "" {
-			profile.QualityTier = QualityTierNormal
-		}
-		if profile.StabilityTier == "" {
-			profile.StabilityTier = StabilityTierNormal
-		}
-		if profile.SpeedTier == "" {
-			profile.SpeedTier = SpeedTierNormal
-		}
-		if profile.CostTier == "" {
-			profile.CostTier = CostTierNormal
-		}
-		profile.BaseURL = canonicalBaseURL
-		profile.IdentityBaseURL = utils.MetricsIdentityBaseURL(canonicalBaseURL, channel.ServiceType)
-		profile.KeyMask = ep.KeyMask
-		profile.KeyHash = keyHash
-		profile.MetricsKey = metricsKey
-		profile.CredentialUID = channel.CredentialUIDForKey(apiKey)
-		profile.AvailableModels = ep.Models
-		if len(ep.Models) > 0 {
-			hash := sha256.Sum256([]byte(strings.Join(ep.Models, ",")))
-			profile.ModelListHash = hex.EncodeToString(hash[:8])
-		}
-		if ep.ModelDiscoverySource != "" {
-			profile.ModelDiscoverySource = ep.ModelDiscoverySource
-		}
-		if ep.ModelDiscoveryMessage != "" {
-			profile.ModelDiscoveryMessage = ep.ModelDiscoveryMessage
-		}
-		if ep.ModelsDiscoveredAt != nil {
-			discoveredAt := ep.ModelsDiscoveredAt.UTC()
-			profile.ModelsDiscoveredAt = &discoveredAt
-		}
-		profile.Source = "auto_discovery"
-		profile.UpdatedAt = time.Now()
-
-		if err := r.store.Upsert(&profile); err != nil {
-			log.Printf("[AutoDiscovery-Profile] 写入画像失败 endpoint=%s: %v", endpointUID, err)
-		}
-
-		// Phase 3B-2：写入每个发现模型的 ModelProfile 行
-		// 条件：modelProfileStore 非 nil + channel.AutoManaged == true + 有发现模型
-		if r.ModelProfileStore != nil && channel.AutoManaged && len(ep.Models) > 0 {
-			now := time.Now()
-			for _, modelID := range ep.Models {
-				family := InferModelFamily(modelID, "")
-				qualityTier := ModelProfileQualityTierFromFamily(family, modelID)
-
-				modelProfile := &ModelProfile{
-					ChannelUID:   channelUID,
-					ChannelID:    channelID,
-					ChannelKind:  channelKind,
-					ServiceType:  channel.ServiceType,
-					MetricsKey:   metricsKey,
-					ModelID:      modelID,
-					UpdatedAt:    now,
-					ModelFamily:  family,
-					QualityTier:  qualityTier,
-					ProbeSuccess: true, // 出现在 GET /v1/models 响应视为存在
-					Source:       "auto_discovery",
-				}
-				if resolved := config.ResolveUpstreamCapability(modelID, channel, globalModelCapabilities); resolved.Known {
-					applyUpstreamModelCapability(modelProfile, resolved.Capability)
-				}
-				// 自动发现会周期性重建能力画像，但不应清除 L3 探测或用户反馈写入的
-				// endpoint×model 质量证据。证据只在同一复合主键下继承，避免跨 Key 污染。
-				if existing := r.ModelProfileStore.Get(channelUID, channelKind, metricsKey, modelID); existing != nil {
-					modelProfile.ProviderQualityScore = existing.ProviderQualityScore
-					modelProfile.ProviderQualitySource = existing.ProviderQualitySource
-					modelProfile.ProviderQualityConfidence = existing.ProviderQualityConfidence
-					modelProfile.ProviderQualityProbeVersion = existing.ProviderQualityProbeVersion
-					modelProfile.LastProbeAt = existing.LastProbeAt
-					modelProfile.ProbeLatencyMs = existing.ProbeLatencyMs
-					modelProfile.ProbeConfidence = existing.ProbeConfidence
-				}
-				if err := r.ModelProfileStore.Upsert(modelProfile); err != nil {
-					log.Printf("[AutoDiscovery-ModelProfile] 写入模型画像失败 channel=%s model=%s: %v",
-						channelUID, modelID, err)
-				}
-			}
+		if _, err := r.writeProfileForEndpoint(channelUID, channel, ep, channelID, channelKind, globalModelCapabilities); err != nil {
+			log.Printf("[AutoDiscovery-Profile] 写入画像失败 endpoint=%s: %v", ep.KeyMask, err)
 		}
 	}
 
 	// 自动发现完成即持久化，避免等待下一轮 L1 画像刷新期间进程退出而丢失结果。
-	if err := r.store.Flush(); err != nil {
+	if err := r.flushStores(); err != nil {
 		log.Printf("[AutoDiscovery-Profile] 画像落盘失败 channel=%s: %v", channelUID, err)
 	}
-	if r.ModelProfileStore != nil {
-		if err := r.ModelProfileStore.Flush(); err != nil {
-			log.Printf("[AutoDiscovery-ModelProfile] 模型画像落盘失败 channel=%s: %v", channelUID, err)
+}
+
+// writeProfileForEndpoint 写入单个成功端点的 KeyEndpointProfile 与（自动托管时）ModelProfile。
+// 不调用 Flush（由调用方批量 flush）。返回 endpointUID 与写入错误（Upsert 失败时返回 error）。
+// checkpoint 路径用其返回值决定是否 SaveCheckpoint：只有 Upsert 成功才算可标记 profilePersisted。
+func (r *AutoDiscoveryRunner) writeProfileForEndpoint(channelUID string, channel *config.UpstreamConfig, ep EndpointDiscoveryResult, channelID int, channelKind string, globalModelCapabilities map[string]config.UpstreamModelCapability) (string, error) {
+	if r.store == nil {
+		return "", nil
+	}
+	if !ep.ProtocolOk {
+		return "", nil
+	}
+	// 从 channel 的 APIKeys 中找到对应 key
+	apiKey := ""
+	for _, key := range channel.APIKeys {
+		if utils.MaskAPIKey(key) == ep.KeyMask {
+			apiKey = key
+			break
 		}
 	}
+	if apiKey == "" {
+		return "", nil
+	}
+
+	keyHash := KeyHashFromAPIKey(apiKey)
+	canonicalBaseURL := utils.CanonicalBaseURL(ep.BaseURL, channel.ServiceType)
+	metricsKey := computeMetricsIdentityKey(canonicalBaseURL, apiKey, channel.ServiceType)
+	endpointUID := GenerateEndpointUID(channelUID, canonicalBaseURL, keyHash)
+
+	existing := r.store.Get(endpointUID)
+	var profile KeyEndpointProfile
+	if existing != nil {
+		profile = *existing
+	}
+	profile.EndpointUID = endpointUID
+	profile.AccountUID = channel.AccountUID
+	profile.ChannelUID = channelUID
+	profile.ChannelID = channelID
+	if channelKind != "" {
+		profile.ChannelKind = channelKind
+	}
+	if channel.ServiceType != "" {
+		profile.ServiceType = channel.ServiceType
+	}
+	if profile.HealthState == "" {
+		profile.HealthState = HealthStateUnknown
+	}
+	if profile.QualityTier == "" {
+		profile.QualityTier = QualityTierNormal
+	}
+	if profile.StabilityTier == "" {
+		profile.StabilityTier = StabilityTierNormal
+	}
+	if profile.SpeedTier == "" {
+		profile.SpeedTier = SpeedTierNormal
+	}
+	if profile.CostTier == "" {
+		profile.CostTier = CostTierNormal
+	}
+	profile.BaseURL = canonicalBaseURL
+	profile.IdentityBaseURL = utils.MetricsIdentityBaseURL(canonicalBaseURL, channel.ServiceType)
+	profile.KeyMask = ep.KeyMask
+	profile.KeyHash = keyHash
+	profile.MetricsKey = metricsKey
+	profile.CredentialUID = channel.CredentialUIDForKey(apiKey)
+	profile.AvailableModels = ep.Models
+	if len(ep.Models) > 0 {
+		hash := sha256.Sum256([]byte(strings.Join(ep.Models, ",")))
+		profile.ModelListHash = hex.EncodeToString(hash[:8])
+	}
+	if ep.ModelDiscoverySource != "" {
+		profile.ModelDiscoverySource = ep.ModelDiscoverySource
+	}
+	if ep.ModelDiscoveryMessage != "" {
+		profile.ModelDiscoveryMessage = ep.ModelDiscoveryMessage
+	}
+	if ep.ModelsDiscoveredAt != nil {
+		discoveredAt := ep.ModelsDiscoveredAt.UTC()
+		profile.ModelsDiscoveredAt = &discoveredAt
+	}
+	profile.Source = "auto_discovery"
+	profile.UpdatedAt = time.Now()
+
+	if err := r.store.Upsert(&profile); err != nil {
+		return endpointUID, err
+	}
+
+	// Phase 3B-2：写入每个发现模型的 ModelProfile 行
+	if r.ModelProfileStore != nil && channel.AutoManaged && len(ep.Models) > 0 {
+		now := time.Now()
+		for _, modelID := range ep.Models {
+			family := InferModelFamily(modelID, "")
+			qualityTier := ModelProfileQualityTierFromFamily(family, modelID)
+
+			modelProfile := &ModelProfile{
+				ChannelUID:   channelUID,
+				ChannelID:    channelID,
+				ChannelKind:  channelKind,
+				ServiceType:  channel.ServiceType,
+				MetricsKey:   metricsKey,
+				ModelID:      modelID,
+				UpdatedAt:    now,
+				ModelFamily:  family,
+				QualityTier:  qualityTier,
+				ProbeSuccess: true,
+				Source:       "auto_discovery",
+			}
+			if resolved := config.ResolveUpstreamCapability(modelID, channel, globalModelCapabilities); resolved.Known {
+				applyUpstreamModelCapability(modelProfile, resolved.Capability)
+			}
+			if existing := r.ModelProfileStore.Get(channelUID, channelKind, metricsKey, modelID); existing != nil {
+				modelProfile.ProviderQualityScore = existing.ProviderQualityScore
+				modelProfile.ProviderQualitySource = existing.ProviderQualitySource
+				modelProfile.ProviderQualityConfidence = existing.ProviderQualityConfidence
+				modelProfile.ProviderQualityProbeVersion = existing.ProviderQualityProbeVersion
+				modelProfile.LastProbeAt = existing.LastProbeAt
+				modelProfile.ProbeLatencyMs = existing.ProbeLatencyMs
+				modelProfile.ProbeConfidence = existing.ProbeConfidence
+			}
+			if err := r.ModelProfileStore.Upsert(modelProfile); err != nil {
+				log.Printf("[AutoDiscovery-ModelProfile] 写入模型画像失败 channel=%s model=%s: %v",
+					channelUID, modelID, err)
+			}
+		}
+	}
+	return endpointUID, nil
+}
+
+// flushStores 强制把 ProfileStore 与 ModelProfileStore 的脏数据落盘。
+// checkpoint 路径在每端点后调用以“先 Flush、后 checkpoint”。
+func (r *AutoDiscoveryRunner) flushStores() error {
+	if r.store == nil {
+		return nil
+	}
+	var firstErr error
+	if err := r.store.Flush(); err != nil {
+		firstErr = err
+	}
+	if r.ModelProfileStore != nil {
+		if err := r.ModelProfileStore.Flush(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
 }
 
 // maybeAutoWriteChannelConfig 在发现完成后，检查是否可以将一致模型列表写入渠道配置。
@@ -908,6 +1327,29 @@ func findChannelIndexAndKind(cfg config.Config, channelUID string) (int, string)
 		}
 	}
 	return -1, ""
+}
+
+// findChannelByUID 在所有 kind 下按 channelUID 查找渠道配置（找不到返回 nil）。
+func findChannelByUID(cfg config.Config, channelUID string) *config.UpstreamConfig {
+	type sliceKind struct {
+		channels []config.UpstreamConfig
+	}
+	slices := []sliceKind{
+		{cfg.Upstream},
+		{cfg.ChatUpstream},
+		{cfg.ResponsesUpstream},
+		{cfg.GeminiUpstream},
+		{cfg.ImagesUpstream},
+		{cfg.VectorsUpstream},
+	}
+	for _, sk := range slices {
+		for i := range sk.channels {
+			if sk.channels[i].ChannelUID == channelUID {
+				return &sk.channels[i]
+			}
+		}
+	}
+	return nil
 }
 
 // updateChannelByKind 根据渠道类型调用对应的 ConfigManager 更新方法。

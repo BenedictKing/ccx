@@ -14,6 +14,8 @@ import type {
   LlmChannelDashboardResponse,
   ChannelDiscoveryRequest,
   ChannelDiscoveryResponse,
+  ChannelDiscoveryFastRequest,
+  ChannelDiscoveryFastResponse,
   ChannelKeyMetricsHistoryResponse,
   ChannelLogsResponse,
   ChannelMetrics,
@@ -284,6 +286,14 @@ export class ApiService {
 
   async discoverChannelConfig(request: ChannelDiscoveryRequest): Promise<ChannelDiscoveryResponse> {
     return this.request('/channel-discovery', {
+      method: 'POST',
+      body: JSON.stringify(request)
+    })
+  }
+
+  /** 快速探活：仅探一个真实模型以定 primaryKind，不做全量协议/能力探测。 */
+  async discoverChannelConfigFast(request: ChannelDiscoveryFastRequest): Promise<ChannelDiscoveryFastResponse> {
+    return this.request('/channel-discovery-fast', {
       method: 'POST',
       body: JSON.stringify(request)
     })
