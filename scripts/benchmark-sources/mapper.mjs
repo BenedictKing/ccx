@@ -52,6 +52,7 @@ export const BENCHLM_MODEL_MAP = {
   'claude-sonnet-4-6': 'claude-sonnet-4-6',
   'glm-5-2': 'glm-5.2',
   'kimi-k2-7-code': 'kimi-k2.7-code',
+  'kimi-3': 'kimi-k3',
   'gemini-3-5-flash': 'gemini-3.5-flash',
   'claude-haiku-4-5': 'claude-haiku-4.5',
   'gpt-5-4-mini': 'gpt-5.4-mini',
