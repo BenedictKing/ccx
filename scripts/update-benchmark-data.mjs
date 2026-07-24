@@ -237,11 +237,12 @@ export function mergeBenchlmData(registry, benchlmData, report, models = targetM
       )
     }
 
-    // 更新 sources
+    // 更新 sources：benchlm 来源由本次数据全量替换（从对比页迁移到模型页），
+    // 保留其他来源（deepswe/dradar）。
     if (data.sources && data.sources.length > 0) {
       const existingSources = profile.sources || []
-      const newSources = [...new Set([...existingSources, ...data.sources])]
-      profile.sources = newSources
+      const nonBenchlm = existingSources.filter(s => !s.startsWith('https://benchlm.ai/'))
+      profile.sources = [...new Set([...nonBenchlm, ...data.sources])]
     }
     ensureEvidenceProfileMetadata(profile)
 
@@ -533,16 +534,17 @@ export async function main() {
     try {
       console.log('\n--- Fetching benchlm.ai data ---')
       const benchlmResult = await fetchBenchlmData(BENCHLM_MODEL_MAP, BENCHLM_CATEGORY_MAP)
-      const benchlmData = benchlmResult.data
-      // 移除内部统计字段，分别传给可视化和合并逻辑
-      const { _unchanged, ...cleanData } = benchlmData
+      // data 已是干净的 profiles（无内部统计字段），直接喂可视化和合并逻辑
+      const cleanData = { ...benchlmResult.data }
       visualizationSources.benchlmProfiles = cleanData
-      if (Object.keys(cleanData).length > 0) {
+      const isUnchanged = (benchlmResult.unchanged?.length ?? 0) > 0
+      // 仅在数据变更时 merge（避免每次刷 verifiedAt）；未变更时仍用缓存 profiles 喂图表
+      if (!isUnchanged && Object.keys(cleanData).length > 0) {
         mergeBenchlmData(registry, cleanData, report)
       }
-      if (benchlmResult.unchanged?.length > 0) {
-        console.log(`[benchlm] ${benchlmResult.unchanged.length} comparisons unchanged, skipped`)
-        report.benchlmUnchanged = benchlmResult.unchanged.length
+      if (isUnchanged) {
+        console.log(`[benchlm] ${benchlmResult.unchanged[0]}, skipping merge`)
+        report.benchlmUnchanged = benchlmResult.unchanged[0]
       }
     } catch (err) {
       report.errors.push({ source: 'benchlm', error: err.message })
@@ -638,7 +640,7 @@ export async function main() {
     console.log(`\nlitellm: unchanged, skipped`)
   }
   if (report.benchlmUnchanged) {
-    console.log(`\nbenchlm: ${report.benchlmUnchanged} comparisons unchanged, skipped`)
+    console.log(`\nbenchlm: ${report.benchlmUnchanged}`)
   }
   if (report.litellmSkipped.length > 0) {
     console.log(`\nlitellm skipped: ${report.litellmSkipped.length}`)
