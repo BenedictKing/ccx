@@ -385,8 +385,8 @@ function shortReleaseId(id?: string): string {
   return id.length > 12 ? id.slice(0, 12) + '...' : id
 }
 
-// 紧凑展示候选渠道：渠道名 (key掩码) → 映射模型
-// 无渠道名时回退到 channelUid，无映射模型时省略箭头部分。
+// 紧凑展示候选渠道：渠道名 (key掩码)  映射模型
+// 无渠道名时回退到 channelUid，无映射模型时省略模型部分。
 function formatChannelDisplay(cand: RoutingCandidate): string {
   const name = cand.channelName || cand.channelUid
   let left = name
@@ -394,7 +394,7 @@ function formatChannelDisplay(cand: RoutingCandidate): string {
     left += ` (${cand.keyMask})`
   }
   if (cand.mappedModel) {
-    return `${left} → ${cand.mappedModel}`
+    return `${left}  ${cand.mappedModel}`
   }
   return left
 }

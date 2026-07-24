@@ -888,7 +888,7 @@ func (r *SmartRouter) executeFilter(
 				candidates[i].FilterReasons = reasons
 				trace.GlobalFilterReasons["auto_hard_constraints"] = append(
 					trace.GlobalFilterReasons["auto_hard_constraints"],
-					se.entry.ChannelUID+": "+joinReasons(reasons),
+					buildFilterLabel(se.entry.ChannelName, se.entry.ChannelUID, se.entry.KeyMask)+": "+joinReasons(reasons),
 				)
 			} else {
 				// 保留未被过滤的渠道：匹配回 ChannelInfo
@@ -1428,6 +1428,18 @@ func routingHardConstraintReasons(profile *RequestProfile, entry *channelScoreEn
 	}, profile)...)
 
 	return reasons
+}
+
+// buildFilterLabel 构造过滤原因的渠道标签，优先使用渠道名，回退到 ChannelUID。
+// 格式：渠道名 (key掩码) 或 ch_xxx
+func buildFilterLabel(name, uid, keyMask string) string {
+	if name == "" {
+		name = uid
+	}
+	if keyMask != "" {
+		return name + " (" + keyMask + ")"
+	}
+	return name
 }
 
 // joinReasons 将原因列表拼接为逗号分隔字符串。
