@@ -15,9 +15,9 @@ import (
 type CostUnit string
 
 const (
-	CostUnitAFP CostUnit = "afp" // 火山 Agent Plan AFP
-	CostUnitUSD CostUnit = "usd" // 公共按量 USD
-	CostUnitUnknown CostUnit = "" // 未知单位
+	CostUnitAFP     CostUnit = "afp" // 火山 Agent Plan AFP
+	CostUnitUSD     CostUnit = "usd" // 公共按量 USD
+	CostUnitUnknown CostUnit = ""    // 未知单位
 )
 
 // CostConfidence 表示成本估算的置信度。
@@ -32,12 +32,12 @@ const (
 // CostEvidence 描述一个候选的成本证据。
 // 只有相同 unit + scopeID 的 CostEvidence 才可以直接比较。
 type CostEvidence struct {
-	Unit      CostUnit       // 计量单位
-	ScopeID   string         // 配额作用域标识（AFP 的 scopeID 来自 VolcenginePlanScope）
-	Estimated int64          // 估算成本（AFP 或 USD 的归一化值）
-	Actual    int64          // 实际成本（请求后回填，0 表示未知）
+	Unit       CostUnit       // 计量单位
+	ScopeID    string         // 配额作用域标识（AFP 的 scopeID 来自 VolcenginePlanScope）
+	Estimated  int64          // 估算成本（AFP 或 USD 的归一化值）
+	Actual     int64          // 实际成本（请求后回填，0 表示未知）
 	Confidence CostConfidence // 置信度
-	Source    string         // 来源说明
+	Source     string         // 来源说明
 }
 
 // IsComparableWith 判断两个 CostEvidence 是否可以直接比较。
@@ -64,15 +64,15 @@ func (ce CostEvidence) IsComparableWith(other CostEvidence) bool {
 type TokenEstimateSource string
 
 const (
-	TokenEstimateSourceClient   TokenEstimateSource = "client"   // 客户端显式提供
-	TokenEstimateSourceLocal    TokenEstimateSource = "local"    // 本地字符估算
-	TokenEstimateSourceUnknown  TokenEstimateSource = "unknown"  // 未知来源
+	TokenEstimateSourceClient  TokenEstimateSource = "client"  // 客户端显式提供
+	TokenEstimateSourceLocal   TokenEstimateSource = "local"   // 本地字符估算
+	TokenEstimateSourceUnknown TokenEstimateSource = "unknown" // 未知来源
 )
 
 // TokenEstimate 描述 token 数量估算及其置信度。
 type TokenEstimate struct {
-	Tokens int                  // 估算 token 数
-	Source TokenEstimateSource  // 来源
+	Tokens int                 // 估算 token 数
+	Source TokenEstimateSource // 来源
 }
 
 // PricingSnapshot 是请求入口冻结的定价评估快照。
@@ -173,6 +173,10 @@ type CandidateAFPCost struct {
 
 // ComputeCandidateAFPCost 在候选已知后计算 AFP 成本。
 // 仅在请求可识别为火山 Agent Plan 时返回有效结果。
+//
+// 注意：本函数假定单一请求级 scope（来自 AFPRequestProfile.AgentPlanScope）。
+// 当需要在评分阶段按渠道解析各自的 scope（火山多账号/多凭证场景）时，
+// 改用 ComputeCandidateAFPCostWithScope。
 func ComputeCandidateAFPCost(
 	at int64,
 	profile *AFPRequestProfile,
@@ -180,11 +184,27 @@ func ComputeCandidateAFPCost(
 	inputTokens int,
 	outputTokens int,
 ) *CandidateAFPCost {
-	if profile == nil || profile.AgentPlanScope == nil || !profile.AgentPlanScope.AFPComparable {
+	if profile == nil || profile.AgentPlanScope == nil {
+		return nil
+	}
+	return ComputeCandidateAFPCostWithScope(at, profile.AgentPlanScope, modelID, inputTokens, outputTokens)
+}
+
+// ComputeCandidateAFPCostWithScope 用显式传入的套餐作用域计算候选 AFP 成本。
+// 供 SmartRouter 在评分阶段按渠道（per-channel）解析 scope 后调用，
+// 使火山 Agent Plan 渠道的 AFP 折扣（如 GLM-5.2 ×0.25）能参与 SavingsScore。
+// scope 为 nil 或非可比（AFPComparable=false）时返回 nil，调用方回退到 USD EstimatedCost。
+func ComputeCandidateAFPCostWithScope(
+	at int64,
+	scope *config.VolcenginePlanScope,
+	modelID string,
+	inputTokens int,
+	outputTokens int,
+) *CandidateAFPCost {
+	if scope == nil || !scope.AFPComparable {
 		return nil
 	}
 
-	scope := profile.AgentPlanScope
 	t := timeFromUnix(at)
 	result := config.ResolveVolcengineAFPCost(t, scope.Plan, modelID, inputTokens, outputTokens)
 
@@ -192,7 +212,7 @@ func ComputeCandidateAFPCost(
 		return nil
 	}
 
-	cost := &CandidateAFPCost{
+	return &CandidateAFPCost{
 		Result: result,
 		Evidence: CostEvidence{
 			Unit:       CostUnitAFP,
@@ -202,8 +222,6 @@ func ComputeCandidateAFPCost(
 			Source:     "volcengine_afp_pricing",
 		},
 	}
-
-	return cost
 }
 
 // costConfidenceFromAFP 将 AFP 置信度转换为通用成本置信度。

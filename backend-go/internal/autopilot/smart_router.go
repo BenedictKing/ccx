@@ -228,7 +228,17 @@ func (r *SmartRouter) BuildPlan(profile *RequestProfile) *RoutingPlan {
 	for _, e := range entries {
 		costs[e.ChannelUID] = e.EstimatedCost
 	}
-	savingsMap := NormalizeSavingsScore(costs)
+	// AFP 路由与真实路径保持一致：开启时按渠道填充 AFP 成本并分组归一化。
+	afpEnabled := r.IsAFPCostRoutingEnabled()
+	if afpEnabled {
+		r.applyAFPCosts(entries, profile.EstTokens)
+	}
+	var savingsMap map[string]float64
+	if afpEnabled {
+		savingsMap = normalizeSavingsScoreGrouped(entries)
+	} else {
+		savingsMap = NormalizeSavingsScore(costs)
+	}
 
 	ctx := ScoringContext{
 		TaskClass:         profile.TaskClass,
@@ -584,7 +594,18 @@ func (r *SmartRouter) executeFilter(
 		entries = append(entries, entry)
 		costMap[entry.ChannelUID] = entry.EstimatedCost
 	}
-	savingsMap := NormalizeSavingsScore(costMap)
+	// AFP 路由：为火山 Agent Plan 渠道填充 AFP 成本（含折扣），开启时用分组归一化
+	// 替代扁平 USD 归一化，使 GLM-5.2 ×0.25 等折扣真正影响 SavingsScore。
+	afpEnabled := r.IsAFPCostRoutingEnabled()
+	if afpEnabled {
+		r.applyAFPCosts(entries, profile.EstTokens)
+	}
+	var savingsMap map[string]float64
+	if afpEnabled {
+		savingsMap = normalizeSavingsScoreGrouped(entries)
+	} else {
+		savingsMap = NormalizeSavingsScore(costMap)
+	}
 
 	// 评分；advisor 可能追加本地候选，因此统一在其后排序。
 	scoredEntries := make([]scoredChannelEntry, 0, len(entries))
@@ -793,13 +814,13 @@ func (r *SmartRouter) executeFilter(
 	for _, se := range scoredEntries {
 		e := se.entry
 		sc := se.scored
-			candidate := RoutingCandidate{
-				ChannelUID:     e.ChannelUID,
-				ChannelName:    e.ChannelName,
-				MetricsKey:     SanitizeMetricsKey(e.MetricsKey),
-				KeyMask:        e.KeyMask,
-				OriginTier:     string(e.OriginTier),
-				ChannelKind:    e.ChannelKind,
+		candidate := RoutingCandidate{
+			ChannelUID:     e.ChannelUID,
+			ChannelName:    e.ChannelName,
+			MetricsKey:     SanitizeMetricsKey(e.MetricsKey),
+			KeyMask:        e.KeyMask,
+			OriginTier:     string(e.OriginTier),
+			ChannelKind:    e.ChannelKind,
 			HealthState:    string(e.HealthState),
 			MappedModel:    e.MappedModel,
 			MappingSource:  e.MappingSource,
@@ -1339,6 +1360,173 @@ func (r *SmartRouter) currentTime() time.Time {
 		return r.now()
 	}
 	return time.Now()
+}
+
+// resolveChannelAFPScope 解析单个火山渠道的套餐作用域。
+// 仅 volcengine/volc-ark 渠道解析，其余返回 nil。用渠道首个可用 Key 作代表凭证：
+// 同 channel 多 Key 通常共享账号/套餐，首 Key 即可定位 scope；不同账号的边界以首 Key 近似。
+// ConfigManager 缺失或凭证未托管时 scope.AFPComparable=false，调用方自然回退 USD。
+func (r *SmartRouter) resolveChannelAFPScope(upstream *config.UpstreamConfig) *config.VolcenginePlanScope {
+	if r == nil || r.configManager == nil || upstream == nil {
+		return nil
+	}
+	if !config.IsVolcengineProvider(upstream) {
+		return nil
+	}
+	if len(upstream.APIKeys) == 0 {
+		return nil
+	}
+	scope := config.ResolveVolcenginePlanScopeFromUpstream(r.configManager, upstream, upstream.APIKeys[0])
+	return &scope
+}
+
+// applyAFPCosts 在评分前为火山 Agent Plan 渠道填充 AFP 成本证据。
+// 仅当 AFP 路由开启时执行；非火山或非可比 scope 的渠道保持 AFPCost=nil，回退 USD EstimatedCost。
+// inputTokens 取请求估算输入；outputTokens 暂用 0（confidence=Estimated），
+// 同 scope 内相对排序由 promotion 倍率决定，与输出 token 绝对值无关。
+func (r *SmartRouter) applyAFPCosts(entries []channelScoreEntry, inputTokens int) {
+	if r == nil || !r.IsAFPCostRoutingEnabled() {
+		return
+	}
+	at := r.currentTime().Unix()
+	for i := range entries {
+		e := &entries[i]
+		if e.ModelID == "" {
+			continue
+		}
+		upstream := r.upstreamByChannelUID(e.ChannelUID, e.ChannelKind)
+		if upstream == nil {
+			continue
+		}
+		scope := r.resolveChannelAFPScope(upstream)
+		if scope == nil {
+			continue
+		}
+		e.AFPCost = ComputeCandidateAFPCostWithScope(at, scope, e.ModelID, inputTokens, 0)
+	}
+}
+
+// upstreamByChannelUID 通过 ChannelUID 反查 UpstreamConfig。
+// buildChannelEntry 只在执行期持有了 upstream，但 applyAFPCosts 在 entries 构建后统一执行，
+// 需要重新定位 upstream 以解析火山 scope。
+func (r *SmartRouter) upstreamByChannelUID(channelUID, channelKind string) *config.UpstreamConfig {
+	if r == nil || r.configManager == nil || channelUID == "" {
+		return nil
+	}
+	cfg := r.configManager.GetConfig()
+	kind := scheduler.ChannelKindMessages
+	if channelKind != "" {
+		kind = scheduler.ChannelKind(channelKind)
+	}
+	var upstreams []config.UpstreamConfig
+	switch kind {
+	case scheduler.ChannelKindResponses:
+		upstreams = cfg.ResponsesUpstream
+	case scheduler.ChannelKindGemini:
+		upstreams = cfg.GeminiUpstream
+	case scheduler.ChannelKindChat:
+		upstreams = cfg.ChatUpstream
+	case scheduler.ChannelKindImages:
+		upstreams = cfg.ImagesUpstream
+	case scheduler.ChannelKindVectors:
+		upstreams = cfg.VectorsUpstream
+	default:
+		upstreams = cfg.Upstream
+	}
+	for i := range upstreams {
+		u := &upstreams[i]
+		uid := u.ChannelUID
+		if uid == "" {
+			uid = fmt.Sprintf("ch_%d", i)
+		}
+		if uid == channelUID {
+			return u
+		}
+	}
+	return nil
+}
+
+// normalizeSavingsScoreGrouped 按成本可比性分组归一化省钱分（§5.6 AFP 适配）。
+// AFP 候选按 ScopeID 分组组内归一化（用 TotalAFP）；USD 候选（有有效 EstimatedCost>=0
+// 且无 AFPCost）组内归一化；无成本候选得 0.5。AFP 与 USD 不可比，各自独立归一化，
+// 使"最便宜的火山 Agent Plan 渠道"与"最便宜的 USD 渠道"各得 1.0。
+func normalizeSavingsScoreGrouped(entries []channelScoreEntry) map[string]float64 {
+	result := make(map[string]float64, len(entries))
+	if len(entries) == 0 {
+		return result
+	}
+
+	// AFP 分组：scopeID -> (uid -> TotalAFP)
+	afpGroups := make(map[string]map[string]float64)
+	// USD 组：uid -> EstimatedCost
+	usdCosts := make(map[string]float64)
+
+	for _, e := range entries {
+		if e.AFPCost != nil && e.AFPCost.Evidence.Unit == CostUnitAFP && e.AFPCost.Evidence.ScopeID != "" {
+			scopeID := e.AFPCost.Evidence.ScopeID
+			if afpGroups[scopeID] == nil {
+				afpGroups[scopeID] = make(map[string]float64)
+			}
+			afpGroups[scopeID][e.ChannelUID] = float64(e.AFPCost.Evidence.Estimated)
+		} else if e.EstimatedCost >= 0 {
+			usdCosts[e.ChannelUID] = e.EstimatedCost
+		} else {
+			// 无成本证据：中性
+			result[e.ChannelUID] = 0.5
+		}
+	}
+
+	// 每个 AFP scope 组内归一化
+	for _, costs := range afpGroups {
+		savings := normalizeCostGroup(costs)
+		for uid, s := range savings {
+			result[uid] = s
+		}
+	}
+	// USD 组归一化
+	if len(usdCosts) > 0 {
+		savings := normalizeCostGroup(usdCosts)
+		for uid, s := range savings {
+			result[uid] = s
+		}
+	}
+	return result
+}
+
+// normalizeCostGroup 在单一可比组内做 min/max 归一化：最便宜得 1.0，最贵得 0.0，
+// 全部相同得 0.5。与 NormalizeSavingsScore 语义一致，但作用于已分组的子集。
+func normalizeCostGroup(costs map[string]float64) map[string]float64 {
+	result := make(map[string]float64, len(costs))
+	if len(costs) == 0 {
+		return result
+	}
+	minCost, maxCost := -1.0, -1.0
+	for _, c := range costs {
+		if c < 0 {
+			continue
+		}
+		if minCost < 0 || c < minCost {
+			minCost = c
+		}
+		if maxCost < 0 || c > maxCost {
+			maxCost = c
+		}
+	}
+	if maxCost <= minCost {
+		for uid := range costs {
+			result[uid] = 0.5
+		}
+		return result
+	}
+	diff := maxCost - minCost
+	for uid, c := range costs {
+		if c < 0 {
+			result[uid] = 0.5
+			continue
+		}
+		result[uid] = 1.0 - (c-minCost)/diff
+	}
+	return result
 }
 
 func (r *SmartRouter) attachDomainProfiles(entry *channelScoreEntry, provider string) {

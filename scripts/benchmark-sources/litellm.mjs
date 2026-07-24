@@ -89,7 +89,7 @@ export const LITELLM_MODEL_MAP = {
   'gpt-5.5': 'gpt-5.5',
   'gpt-5.4': 'gpt-5.4',
   'gpt-5.4-mini': 'gpt-5.4-mini',
-  'glm-5.2': 'glm-5.2',
+  'fireworks_ai/glm-5p2': 'glm-5.2',
   'kimi-k2.7-code': 'kimi-k2.7-code',
   'gemini-3.5-flash': 'gemini-3.5-flash',
   'gemini-3.1-pro': 'gemini-3.1-pro',

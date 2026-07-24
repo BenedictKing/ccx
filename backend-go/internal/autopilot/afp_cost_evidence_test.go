@@ -211,6 +211,74 @@ func TestComputeCandidateAFPCost_UnknownModel(t *testing.T) {
 	}
 }
 
+func TestComputeCandidateAFPCostWithScope_AgentPlan(t *testing.T) {
+	scope := &config.VolcenginePlanScope{
+		ScopeID:       "vp_test123",
+		Plan:          "agent_plan",
+		AFPComparable: true,
+	}
+	// 2026-07-25 00:00:00 Asia/Shanghai，落在 glm-5.2 ×0.25 活动窗口内
+	cost := ComputeCandidateAFPCostWithScope(1784908800, scope, "glm-5.2", 100000, 10000)
+	if cost == nil {
+		t.Fatal("expected non-nil cost for agent_plan glm-5.2")
+	}
+	if cost.Evidence.Unit != CostUnitAFP {
+		t.Fatalf("Unit = %v, want AFP", cost.Evidence.Unit)
+	}
+	if cost.Evidence.ScopeID != "vp_test123" {
+		t.Fatalf("ScopeID = %q, want vp_test123", cost.Evidence.ScopeID)
+	}
+	if cost.Result.TotalAFP <= 0 {
+		t.Fatalf("TotalAFP = %d, want > 0", cost.Result.TotalAFP)
+	}
+	if !cost.Result.PromotionApplied {
+		t.Fatal("expected glm-5.2 promotion applied at 2026-07-25")
+	}
+}
+
+func TestComputeCandidateAFPCostWithScope_NonComparable(t *testing.T) {
+	scope := &config.VolcenginePlanScope{
+		ScopeID:       "vp_test123",
+		Plan:          "agent_plan",
+		AFPComparable: false,
+	}
+	if cost := ComputeCandidateAFPCostWithScope(1753420800, scope, "glm-5.2", 100000, 10000); cost != nil {
+		t.Fatal("expected nil cost for non-comparable scope")
+	}
+}
+
+func TestComputeCandidateAFPCostWithScope_NilScope(t *testing.T) {
+	if cost := ComputeCandidateAFPCostWithScope(1753420800, nil, "glm-5.2", 100000, 10000); cost != nil {
+		t.Fatal("expected nil cost for nil scope")
+	}
+}
+
+// TestComputeCandidateAFPCostWithScope_GLMvsDeepSeek 验证 GLM-5.2（×0.25 折扣）
+// 在火山 Agent Plan 同 scope 下比 DeepSeek-V4-Pro（无折扣）便宜，体现折扣接入评分的核心收益。
+func TestComputeCandidateAFPCostWithScope_GLMvsDeepSeek(t *testing.T) {
+	scope := &config.VolcenginePlanScope{
+		ScopeID:       "vp_shared",
+		Plan:          "agent_plan",
+		AFPComparable: true,
+	}
+	at := int64(1784908800) // 2026-07-25 Asia/Shanghai
+	glm := ComputeCandidateAFPCostWithScope(at, scope, "glm-5.2", 100000, 10000)
+	dsv4 := ComputeCandidateAFPCostWithScope(at, scope, "deepseek-v4-pro", 100000, 10000)
+	if glm == nil || dsv4 == nil {
+		t.Fatal("expected both AFP costs to resolve")
+	}
+	if glm.Result.TotalAFP >= dsv4.Result.TotalAFP {
+		t.Fatalf("glm-5.2 (×0.25) AFP=%d should be cheaper than deepseek-v4-pro AFP=%d",
+			glm.Result.TotalAFP, dsv4.Result.TotalAFP)
+	}
+	if !glm.Result.PromotionApplied {
+		t.Fatal("glm-5.2 promotion should be applied at 2026-07-25")
+	}
+	if dsv4.Result.PromotionApplied {
+		t.Fatal("deepseek-v4-pro ×0.4 promo ended 2026-07-15, should not be applied at 2026-07-25")
+	}
+}
+
 func TestCostConfidenceFromAFP(t *testing.T) {
 	tests := []struct {
 		input    config.AFPCostConfidence

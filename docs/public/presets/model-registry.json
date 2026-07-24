@@ -598,13 +598,22 @@
       "capabilities": {
         "toolCalls": true,
         "streamingToolCalls": true,
-        "jsonMode": true
+        "jsonMode": true,
+        "reasoning": true,
+        "vision": false
       },
       "sources": [
         "https://docs.bigmodel.cn/cn/guide/models/text/glm-5.2",
         "https://docs.bigmodel.cn/cn/guide/capabilities/thinking",
         "https://docs.bigmodel.cn/cn/guide/capabilities/stream-tool"
-      ]
+      ],
+      "pricing": {
+        "unit": "per_1m_tokens_usd",
+        "currency": "USD",
+        "inputCacheMissPrice": 1.4,
+        "outputPrice": 4.4,
+        "inputCacheHitPrice": 0.14
+      }
     },
     {
       "patterns": [

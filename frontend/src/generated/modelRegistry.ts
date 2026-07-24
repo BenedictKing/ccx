@@ -801,7 +801,16 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
     "capabilities": {
       "toolCalls": true,
       "streamingToolCalls": true,
-      "jsonMode": true
+      "jsonMode": true,
+      "reasoning": true,
+      "vision": false
+    },
+    "pricing": {
+      "unit": "per_1m_tokens_usd",
+      "currency": "USD",
+      "inputCacheMissPrice": 1.4,
+      "outputPrice": 4.4,
+      "inputCacheHitPrice": 0.14
     },
     "sources": [
       "https://docs.bigmodel.cn/cn/guide/models/text/glm-5.2",
@@ -828,7 +837,16 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
     "capabilities": {
       "toolCalls": true,
       "streamingToolCalls": true,
-      "jsonMode": true
+      "jsonMode": true,
+      "reasoning": true,
+      "vision": false
+    },
+    "pricing": {
+      "unit": "per_1m_tokens_usd",
+      "currency": "USD",
+      "inputCacheMissPrice": 1.4,
+      "outputPrice": 4.4,
+      "inputCacheHitPrice": 0.14
     },
     "sources": [
       "https://docs.bigmodel.cn/cn/guide/models/text/glm-5.2",
