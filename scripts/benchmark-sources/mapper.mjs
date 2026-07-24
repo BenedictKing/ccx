@@ -38,6 +38,8 @@ export const DEEPSWE_MODEL_MAP = {
   'gpt-5-4-mini': 'gpt-5.4-mini',
   'gpt-5-4-nano': 'gpt-5.4-nano',
   'gpt-5-4-openai-compact': 'gpt-5.4',
+  'grok-4-5': 'grok-4.5',
+  'muse-spark-1-1': 'muse-spark-1.1',
 }
 
 /**
@@ -61,6 +63,8 @@ export const BENCHLM_MODEL_MAP = {
   'gemini-3-5-flash': 'gemini-3.5-flash',
   'claude-haiku-4-5': 'claude-haiku-4.5',
   'gpt-5-4-mini': 'gpt-5.4-mini',
+  'grok-4-5': 'grok-4.5',
+  'muse-spark-1-1': 'muse-spark-1.1',
 }
 
 /**
