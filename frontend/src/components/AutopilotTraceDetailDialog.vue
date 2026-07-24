@@ -394,7 +394,7 @@ function formatChannelDisplay(cand: RoutingCandidate): string {
     left += ` (${cand.keyMask})`
   }
   if (cand.mappedModel) {
-    return `${left}  ${cand.mappedModel}`
+    return `${left} ${cand.mappedModel}`
   }
   return left
 }
