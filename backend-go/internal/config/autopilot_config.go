@@ -119,9 +119,9 @@ type AutopilotRoutingConfig struct {
 	// 默认 false；需要在 shadow 中验证阶梯确定性、硬能力零放宽、手动映射零回归后启用。
 	FrontierRoutingEnabled bool `json:"frontierRoutingEnabled,omitempty"`
 
-	// AFPCostRoutingEnabled 控制 AFP 成本适配器是否参与可比树。
-	// 默认 false；需要确认 AFP 计算正确、跨 scope 不混算后启用。
-	// 仅对火山 Agent Plan 渠道生效；Coding Plan 始终不参与。
+	// AFPCostRoutingEnabled 已废弃，保留字段仅为 JSON 兼容。
+	// AFP 成本路由默认开启，在 assist/auto 模式下始终生效。
+	// 仅对火山 Agent Plan 渠道生效；scope 非可比时自动回退 USD。
 	AFPCostRoutingEnabled bool `json:"afpCostRoutingEnabled,omitempty"`
 }
 
@@ -132,9 +132,10 @@ func (c AutopilotRoutingConfig) IsFrontierRoutingEnabled() bool {
 }
 
 // IsAFPCostRoutingEnabled 返回 AFP 成本适配器是否参与可比树。
-// 仅在模式为 assist/auto 且 AFPCostRoutingEnabled 为 true 时生效。
+// 默认开启，在 assist/auto 模式下始终生效。仅对火山 Agent Plan 渠道有效；
+// scope 非可比（非 Running/非托管）时自动回退 USD，无需额外开关。
 func (c AutopilotRoutingConfig) IsAFPCostRoutingEnabled() bool {
-	return c.AFPCostRoutingEnabled && (c.RoutingMode == AutopilotModeAssist || c.RoutingMode == AutopilotModeAuto)
+	return c.RoutingMode == AutopilotModeAssist || c.RoutingMode == AutopilotModeAuto
 }
 
 // ── §9.1 子配置类型 ──
