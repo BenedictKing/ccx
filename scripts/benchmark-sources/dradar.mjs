@@ -24,6 +24,17 @@ export const DRADAR_MODEL_MAP = {
   'gpt-5.6-terra': 'gpt-5.6-terra',
   'gpt-5.6-luna': 'gpt-5.6-luna',
   'gpt-5.5': 'gpt-5.5',
+  'gpt-5-4': 'gpt-5.4',
+  'gpt-5-4-mini': 'gpt-5.4-mini',
+  'claude-opus-4-8': 'claude-opus-4-8',
+  'claude-sonnet-5': 'claude-sonnet-5',
+  'claude-sonnet-4-6': 'claude-sonnet-4-6',
+  'claude-haiku-4-5': 'claude-haiku-4.5',
+  'glm-5-2': 'glm-5.2',
+  'kimi-k2-7-code': 'kimi-k2.7-code',
+  'gemini-3-5-flash': 'gemini-3.5-flash',
+  'gemini-3-1-pro': 'gemini-3.1-pro',
+  'gemini-3-flash': 'gemini-3-flash',
 }
 
 const BASE_URL = 'https://api.codexradar.com'
