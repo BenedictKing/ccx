@@ -1471,7 +1471,7 @@ const setPromotion = async (channel: Channel) => {
   try {
     const PROMOTION_DURATION = 300 // 5 minutes
 
-    // If the channel is in a breaker-managed state, resume it first
+    // If the channel is recoverable (suspended / breaker open / 全部 Key 被拉黑), resume it first
     if (isRecoverableChannel(channel)) {
       await resumeChannelInternal(channel, { refresh: false, notify: false })
     }

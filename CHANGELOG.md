@@ -9,6 +9,12 @@
 - **受控发布与自动降级** - active 模式加入配置枚举/归一化/IsAutopilotActive；RolloutPercent/ControlPercent/ReleaseID/RolloutSeed 配置字段和 validateRollout 校验；ReleaseController 集中管理状态迁移（逐级晋升/降级随时允许）、稳定分桶、EvaluateAndApplyRegression 三窗口回归降级、SafetyOverride 安全覆盖；接入 SmartRouter 请求路径（入口冻结 RoutingReleaseSnapshot）；release/policy/cohort 隔离聚合
 - **只读 Trace API 与前端详情** - GET /api/autopilot/traces/:traceUid 详情端点（404/503/partial 契约、2s 查询 deadline）；列表 API 改为 TraceSummary 输出，支持 release/cohort/mode 过滤和游标分页；统计新增三态比较计数；前端 AutopilotTraceDetailDialog 决策→Scheduler→尝试→终态时间线；AutopilotTraceTable 适配 TraceSummary；ChannelLogsDialog 跳转入口
 - **分层测试（L1-L5）** - L1 纯函数 40+；L2 SmartRouter+TraceStore 集成 8；L3 SQLite 生命周期 12（重启还原/坏 JSON/过期清理/迁移幂等/脱敏）；L4 HTTP 契约 9（列表/详情/统计/404/脱敏/分页）；L5 真实上游 smoke 2（默认 t.Skip）；SSE golden 回归 6（帧顺序/trace 不改输出/取消/脱敏）
+- **火山套餐 Key 保活 per-key 路由与共享探针** - `config.BaseURLsForKey` 让已绑定端点的 Key 只在自己端点探测，不参与渠道级 BaseURL 笛卡尔积；新增 `internal/upstreamprobe` 共享火山 Agent/Coding Plan 数据面探针（autopilot 验证与 healthcheck 保活共用，避免请求特征漂移）；`L1Response.RealCallVerified` 标记真实调用，火山 L1 成功后同周期跳过等价 L2 避免重复消耗额度；L2 探针副本覆盖绑定 BaseURL，recordFailure 归因到 Key 实际绑定端点
+
+### 修复
+
+- **火山套餐 Key 跨套餐误探测** - 混合套餐渠道中 Agent Plan Key 不再被首地址 `/api/coding` 误打导致 auth_failed 误拉黑；火山官方套餐入口不再调用通用 `/v1/models`（套餐 Key 无法通过该接口探测），改用专用探针 + 内置 manifest 模型清单；400/404/500/网络错误不升级为认证失败
+- **渠道全部 Key 禁用时无恢复入口** - `hasOnlyDisabledChannelApiKeys` 判定（可用=0 且禁用>0）下渠道行直接显示恢复按钮，一次点击恢复全部禁用 Key，无需先暂停；active 渠道跳过冗余 `setStatus(active)`，直接 resume 并刷新
 
 ## [v3.0.0] - 2026-07-23
 
