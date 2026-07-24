@@ -57,6 +57,13 @@ type RoutingCandidate struct {
 
 	// 被过滤的原因列表（非空表示该候选被过滤掉）
 	FilterReasons []string `json:"filterReasons,omitempty"`
+
+	// AFP 成本信息（仅火山 Agent Plan 渠道有值）
+	AFPEstimated    int64  `json:"afpEstimated,omitempty"`    // 估算 AFP
+	AFPPromotion    string `json:"afpPromotion,omitempty"`    // 活动 ID
+	AFPConfidence   string `json:"afpConfidence,omitempty"`   // exact / estimated / unknown
+	AFPScope        string `json:"afpScope,omitempty"`        // 匿名配额作用域 ID
+	AFPBypassReason string `json:"afpBypassReason,omitempty"` // AFP 未生效的原因
 }
 
 // RoutingDecisionTrace 结构化路由决策追踪。

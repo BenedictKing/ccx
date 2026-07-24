@@ -114,6 +114,27 @@ type AutopilotRoutingConfig struct {
 	// abTest A/B 测试（低比例统计抽样双发）配置。
 	// 主请求路径完全不变，影子请求在主响应返回后异步发起。
 	ABTest ABTestConfig `json:"abTest,omitempty"`
+
+	// FrontierRoutingEnabled 控制通用 Frontier/Ladder 是否影响选路。
+	// 默认 false；需要在 shadow 中验证阶梯确定性、硬能力零放宽、手动映射零回归后启用。
+	FrontierRoutingEnabled bool `json:"frontierRoutingEnabled,omitempty"`
+
+	// AFPCostRoutingEnabled 控制 AFP 成本适配器是否参与可比树。
+	// 默认 false；需要确认 AFP 计算正确、跨 scope 不混算后启用。
+	// 仅对火山 Agent Plan 渠道生效；Coding Plan 始终不参与。
+	AFPCostRoutingEnabled bool `json:"afpCostRoutingEnabled,omitempty"`
+}
+
+// IsFrontierRoutingEnabled 返回 Frontier/Ladder 是否在生产中影响选路。
+// 仅在模式为 assist/auto 且 FrontierRoutingEnabled 为 true 时生效。
+func (c AutopilotRoutingConfig) IsFrontierRoutingEnabled() bool {
+	return c.FrontierRoutingEnabled && (c.RoutingMode == AutopilotModeAssist || c.RoutingMode == AutopilotModeAuto)
+}
+
+// IsAFPCostRoutingEnabled 返回 AFP 成本适配器是否参与可比树。
+// 仅在模式为 assist/auto 且 AFPCostRoutingEnabled 为 true 时生效。
+func (c AutopilotRoutingConfig) IsAFPCostRoutingEnabled() bool {
+	return c.AFPCostRoutingEnabled && (c.RoutingMode == AutopilotModeAssist || c.RoutingMode == AutopilotModeAuto)
 }
 
 // ── §9.1 子配置类型 ──

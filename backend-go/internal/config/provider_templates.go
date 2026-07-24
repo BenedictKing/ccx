@@ -144,7 +144,7 @@ var builtinProviderTemplates = []ProviderTemplate{
 		ProviderID:  "volcengine",
 		Aliases:     []string{"volc-ark"},
 		DisplayName: "火山方舟 Agent/Coding Plan",
-		Description: "ark- 套餐推理 Key（系统自动识别套餐；模型发现需为每个 Key 绑定火山云 Access Key）",
+		Description: "ark- 套餐推理 Key。Agent Plan 支持 AFP 感知路由（详见 volcengine_afp_pricing.go）；Coding Plan 计费规则未核验，仅使用通用定价。模型发现需为每个 Key 绑定火山云 Access Key。",
 		ChannelKind: "messages",
 		ServiceType: "claude",
 		OriginType:  "official_api",
