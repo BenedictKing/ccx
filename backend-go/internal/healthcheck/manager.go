@@ -51,6 +51,9 @@ type L1Request struct {
 type L1Response struct {
 	StatusCode int
 	Body       []byte
+	// RealCallVerified 标记该次 L1 已对上游发起过真实推理调用（如火山套餐数据面探针）。
+	// 调度器据此跳过同周期等价 L2，避免重复消耗套餐额度；通用 /v1/models 拉取不置位。
+	RealCallVerified bool
 }
 
 // L1Fetcher 按渠道类型注册的 L1 模型列表拉取器（main.go 接线时注册六类）
@@ -350,12 +353,14 @@ func (m *Manager) checkChannel(channelType string, channelIndex int) {
 	}
 
 	runL2 := policy.VerifyRealCall && supportsL2(channelType)
-	baseURLs := u.GetAllBaseURLs()
 	for _, apiKey := range keys {
-		outcome := m.checkKeyL1(channelType, channelIndex, channelID, u, baseURLs, apiKey, policy, prevL1, fetcher)
-		// 仅对 L1 成功的 key 做 L2（该 key 刚拉到过模型列表）
-		if runL2 && outcome.ok {
-			m.checkKeyL2(channelType, channelIndex, channelID, u, apiKey, outcome.models, policy, prevL2)
+		// per-key BaseURL 解析：已绑定端点的 Key 只在自己的端点上探测，
+		// 不参与渠道级 BaseURL 笛卡尔积（避免混合套餐把 Agent Plan Key 误打到 Coding Plan 入口）。
+		keyBaseURLs := u.BaseURLsForKey(apiKey)
+		outcome := m.checkKeyL1(channelType, channelIndex, channelID, u, keyBaseURLs, apiKey, policy, prevL1, fetcher)
+		// 仅对 L1 成功的 key 做 L2；火山套餐 L1 已是真实调用，同周期跳过等价 L2 避免重复消耗额度。
+		if runL2 && outcome.ok && !outcome.realCallVerified {
+			m.checkKeyL2(channelType, channelIndex, channelID, u, apiKey, keyBaseURLs, outcome.models, policy, prevL2)
 		}
 	}
 }

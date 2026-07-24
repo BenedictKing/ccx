@@ -14,6 +14,7 @@ import (
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/errutil"
 	"github.com/BenedictKing/ccx/internal/httpclient"
+	"github.com/BenedictKing/ccx/internal/upstreamprobe"
 	"github.com/BenedictKing/ccx/internal/utils"
 )
 
@@ -319,28 +320,16 @@ func buildKimiCodeModelsURL(baseURL string) string {
 }
 
 func verifyVolcenginePlanEndpoint(ctx context.Context, route config.ProviderRoute, baseURL, apiKey string) EndpointVerifyResult {
-	model := volcenginePlanProbeModel(baseURL)
-	switch route.ServiceType {
-	case "claude":
-		body := []byte(`{"model":"` + model + `","max_tokens":1,"messages":[{"role":"user","content":"ping"}]}`)
-		body, sessionID := utils.EnsureClaudeCodeProbeBody(body)
-		return verifyJSONPostEndpointWithPolicy(ctx, buildClaudeProbeURL(baseURL), apiKey, "", func(req *http.Request) {
-			utils.ApplyClaudeCodeProbeHeaders(req.Header, sessionID)
-		}, body, false)
-	case "openai":
-		body := []byte(`{"model":"` + model + `","messages":[{"role":"user","content":"ping"}],"max_tokens":1}`)
-		return verifyJSONPostEndpointWithPolicy(ctx, buildOpenAIChatProbeURL(baseURL), apiKey, "", nil, body, false)
+	// 复用 internal/upstreamprobe 共享火山套餐数据面探针，避免与 healthcheck 保活请求特征漂移。
+	res := upstreamprobe.ProbeVolcenginePlan(ctx, route.ServiceType, baseURL, apiKey, "")
+	switch {
+	case res.Err != nil:
+		return EndpointVerifyResult{Err: res.Err, Message: "请求失败: " + res.Err.Error()}
+	case res.OK:
+		return EndpointVerifyResult{OK: true, StatusCode: res.StatusCode}
+	case res.AuthFailed:
+		return EndpointVerifyResult{OK: false, StatusCode: res.StatusCode, AuthFailed: true, Message: "鉴权失败"}
 	default:
-		return EndpointVerifyResult{Message: fmt.Sprintf("不支持的 serviceType: %s", route.ServiceType)}
+		return EndpointVerifyResult{OK: false, StatusCode: res.StatusCode, Message: "端点不可用"}
 	}
-}
-
-// volcenginePlanProbeModel 选择端点验证用的探针模型。
-// Agent Plan 使用上游 Auto 模式；ark-code-latest 仍是两类套餐都支持的
-// 配置层逻辑模型名，Coding/Token Plan 探针沿用该兼容模型名。
-func volcenginePlanProbeModel(baseURL string) string {
-	if strings.Contains(strings.ToLower(baseURL), "/api/coding") {
-		return "ark-code-latest"
-	}
-	return "auto"
 }

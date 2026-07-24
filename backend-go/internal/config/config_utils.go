@@ -804,3 +804,17 @@ func (u *UpstreamConfig) BoundBaseURLForKey(apiKey string) string {
 	}
 	return ""
 }
+
+// BaseURLsForKey 返回某 API Key 应当探测的 BaseURL 列表。
+//
+// 绑定优先：Key 通过 APIKeyConfigs 绑定端点时，只返回该端点（已归一化），
+// 不参与渠道级 BaseURL 的笛卡尔积，避免混合套餐渠道把 Agent Plan Key 误打到 Coding Plan 入口。
+// 未绑定（历史手填 / 自定义渠道）时回退到 GetAllBaseURLs，保持原有按顺序回退遍历语义。
+//
+// 纯只读：不修改原 UpstreamConfig，避免并发保活任务污染共享配置快照。
+func (u *UpstreamConfig) BaseURLsForKey(apiKey string) []string {
+	if bound := u.BoundBaseURLForKey(apiKey); bound != "" {
+		return []string{bound}
+	}
+	return u.GetAllBaseURLs()
+}

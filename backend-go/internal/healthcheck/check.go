@@ -124,8 +124,9 @@ func jitteredInterval(channelType, channelID string, interval time.Duration) tim
 
 // l1KeyOutcome L1 单 key 验证结果（供 L2 分派使用）
 type l1KeyOutcome struct {
-	ok     bool     // L1 是否成功（只有成功的 key 才做 L2）
-	models []string // L1 成功时拉到的模型 ID 列表（L2 自动选模型用）
+	ok               bool     // L1 是否成功（只有成功的 key 才做 L2）
+	models           []string // L1 成功时拉到的模型 ID 列表（L2 自动选模型用）
+	realCallVerified bool     // L1 已发起过真实推理调用（如火山套餐探针），同周期应跳过等价 L2
 }
 
 // checkKeyL1 单 key L1 流程：对每个 BaseURL 尝试拉 models，任一成功即 ok；
@@ -172,6 +173,9 @@ func (m *Manager) checkKeyL1(
 		if err != nil {
 			lastErr = err
 			continue
+		}
+		if resp.RealCallVerified {
+			outcome.realCallVerified = true
 		}
 		statusCode, body := normalizeWrappedResponse(resp.StatusCode, resp.Body)
 		lastStatus = statusCode

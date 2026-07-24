@@ -40,6 +40,7 @@ import (
 	"github.com/BenedictKing/ccx/internal/scheduler"
 	"github.com/BenedictKing/ccx/internal/session"
 	"github.com/BenedictKing/ccx/internal/thinkingcache"
+	"github.com/BenedictKing/ccx/internal/upstreamprobe"
 	"github.com/BenedictKing/ccx/internal/warmup"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -129,10 +130,19 @@ func channelModelsHandlerFetcher(handler gin.HandlerFunc) handlers.ChannelDiscov
 }
 
 // healthCheckL1Fetcher 将渠道 GetChannelModels handler 适配为保活验证的 L1Fetcher
-// （与 channelModelsHandlerFetcher 同一包装路径，响应归一化在 healthcheck 包内完成）
+// （与 channelModelsHandlerFetcher 同一包装路径，响应归一化在 healthcheck 包内完成）。
+// 火山 Agent/Coding Plan 官方入口不走通用 /v1/models（套餐 Key 无法通过该接口探测），
+// 改用共享数据面探针 + 内置 manifest 模型清单，并标记 RealCallVerified 跳过同周期等价 L2。
 func healthCheckL1Fetcher(handler gin.HandlerFunc) healthcheck.L1Fetcher {
 	fetcher := channelModelsHandlerFetcher(handler)
 	return func(ctx context.Context, req healthcheck.L1Request) (healthcheck.L1Response, error) {
+		if upstreamprobe.IsVolcenginePlanBaseURL(req.BaseURL) {
+			sc, body, err := upstreamprobe.VolcenginePlanL1Probe(ctx, req.ServiceType, req.BaseURL, req.APIKey, req.AuthHeader)
+			if err != nil {
+				return healthcheck.L1Response{}, err
+			}
+			return healthcheck.L1Response{StatusCode: sc, Body: body, RealCallVerified: true}, nil
+		}
 		resp, err := fetcher(ctx, handlers.DiscoveryModelsFetchRequest{
 			ServiceType:        req.ServiceType,
 			BaseURL:            req.BaseURL,

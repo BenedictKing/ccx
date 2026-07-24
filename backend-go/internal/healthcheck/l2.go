@@ -29,7 +29,7 @@ func supportsL2(channelType string) bool {
 // 其他 → error（喂熔断）。落 check_kind='l2' 记录，consecutive_failures 基于该 (key,l2) 上次记录。
 func (m *Manager) checkKeyL2(
 	channelType string, channelIndex int, channelID string,
-	u *config.UpstreamConfig, apiKey string, l1Models []string,
+	u *config.UpstreamConfig, apiKey string, keyBaseURLs []string, l1Models []string,
 	policy config.ResolvedHealthCheckPolicy,
 	prev map[string]metrics.KeyHealthRecord,
 ) {
@@ -47,10 +47,15 @@ func (m *Manager) checkKeyL2(
 		}
 	}
 
-	// 按 key 裁剪渠道副本（能力测试请求构建取 APIKeys[0] 作为认证 key）
+	// 按 key 裁剪渠道副本（能力测试请求构建取 APIKeys[0] 作为认证 key）。
+	// 同时覆盖 BaseURL/BaseURLs 为该 Key 绑定的端点，避免把其他凭证配置或跨套餐地址带入探针。
 	probeChannel := *u
 	probeChannel.APIKeys = []string{apiKey}
 	probeChannel.DisabledAPIKeys = nil
+	if len(keyBaseURLs) > 0 {
+		probeChannel.BaseURL = keyBaseURLs[0]
+		probeChannel.BaseURLs = append([]string(nil), keyBaseURLs...)
+	}
 
 	start := time.Now()
 	rec := metrics.KeyHealthRecord{
@@ -95,11 +100,9 @@ func (m *Manager) checkKeyL2(
 		rec.LastStatus = StatusError
 		rec.ConsecutiveFailures = prevFailures + 1
 		rec.Detail = summarizeDetail(statusCode, respBody, sendErr)
-		// 失败喂熔断（L2 只打渠道首个 BaseURL，与能力测试口径一致）
-		if m.recordFailure != nil {
-			if baseURLs := u.GetAllBaseURLs(); len(baseURLs) > 0 {
-				m.recordFailure(channelType, channelIndex, baseURLs[0], apiKey)
-			}
+		// 失败喂熔断：归因到该 Key 实际绑定的 BaseURL（历史未绑定 Key 回退到渠道首个地址，保持原口径）
+		if m.recordFailure != nil && len(keyBaseURLs) > 0 {
+			m.recordFailure(channelType, channelIndex, keyBaseURLs[0], apiKey)
 		}
 	}
 

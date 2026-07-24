@@ -41,3 +41,44 @@ func TestBoundBaseURLForKey(t *testing.T) {
 		t.Errorf("BoundBaseURLForKey(missing) = %q, want \"\"", got)
 	}
 }
+
+// TestBaseURLsForKey 覆盖 per-key BaseURL 解析：
+// 绑定 Key 只返回自己的端点（单元素切片），未绑定 Key 回退到 GetAllBaseURLs（保持历史笛卡尔积）。
+func TestBaseURLsForKey(t *testing.T) {
+	upstream := UpstreamConfig{
+		ServiceType: "claude",
+		BaseURLs: []string{
+			"https://api.xiaomimimo.com/anthropic",
+			"https://token-plan-cn.xiaomimimo.com/anthropic",
+		},
+		APIKeys: []string{"sk-payg", "tp-token", "unbound"},
+		APIKeyConfigs: []APIKeyConfig{
+			{Key: "sk-payg", BaseURL: "https://api.xiaomimimo.com/anthropic"},
+			{Key: "tp-token", BaseURL: "https://token-plan-cn.xiaomimimo.com/anthropic"},
+			{Key: "unbound"}, // 无 BaseURL
+		},
+	}
+	all := upstream.GetAllBaseURLs()
+
+	// 绑定 Key：只返回自己的端点，单元素
+	got := upstream.BaseURLsForKey("sk-payg")
+	if len(got) != 1 || got[0] != all[0] {
+		t.Fatalf("BaseURLsForKey(sk-payg) = %v, 期望 [%s]", got, all[0])
+	}
+	got = upstream.BaseURLsForKey("tp-token")
+	if len(got) != 1 || got[0] != all[1] {
+		t.Fatalf("BaseURLsForKey(tp-token) = %v, 期望 [%s]", got, all[1])
+	}
+
+	// 未绑定 Key（APIKeyConfigs 有该 Key 但 BaseURL 为空）→ 回退 GetAllBaseURLs
+	got = upstream.BaseURLsForKey("unbound")
+	if len(got) != len(all) {
+		t.Fatalf("BaseURLsForKey(unbound) 长度 = %d, 期望 %d（回退渠道级）", len(got), len(all))
+	}
+
+	// 不存在的 Key → 回退 GetAllBaseURLs
+	got = upstream.BaseURLsForKey("missing")
+	if len(got) != len(all) {
+		t.Fatalf("BaseURLsForKey(missing) 长度 = %d, 期望 %d", len(got), len(all))
+	}
+}

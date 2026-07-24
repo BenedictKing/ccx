@@ -139,26 +139,6 @@ func TestIsKimiCodeBaseURL(t *testing.T) {
 	}
 }
 
-func TestVolcenginePlanProbeModel(t *testing.T) {
-	cases := []struct {
-		name    string
-		baseURL string
-		want    string
-	}{
-		{"Agent Plan", "https://ark.cn-beijing.volces.com/api/plan", "auto"},
-		{"Agent Plan OpenAI", "https://ark.cn-beijing.volces.com/api/plan/v3", "auto"},
-		{"Coding Plan", "https://ark.cn-beijing.volces.com/api/coding", "ark-code-latest"},
-		{"Coding Plan OpenAI", "https://ark.cn-beijing.volces.com/api/coding/v3", "ark-code-latest"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := volcenginePlanProbeModel(tc.baseURL); got != tc.want {
-				t.Errorf("volcenginePlanProbeModel(%q) = %q, want %q", tc.baseURL, got, tc.want)
-			}
-		})
-	}
-}
-
 func TestVerifyClaudeEndpoint(t *testing.T) {
 	cases := []struct {
 		name           string
