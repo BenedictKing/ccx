@@ -384,7 +384,7 @@
             <!-- Action buttons -->
             <div class="channel-actions" @click.stop>
               <v-btn
-                v-if="isBreakerManagedChannel(element)"
+                v-if="isRecoverableChannel(element)"
                 icon
                 size="x-small"
                 variant="text"
@@ -489,7 +489,7 @@
                     <v-list-item-title>{{ t('orchestration.moveBottom') }}</v-list-item-title>
                   </v-list-item>
                   <v-divider />
-                  <v-list-item v-if="isBreakerManagedChannel(element)" @click="resumeChannel(element)">
+                  <v-list-item v-if="isRecoverableChannel(element)" @click="resumeChannel(element)">
                     <template #prepend>
                       <v-icon size="small" color="success">mdi-play-circle</v-icon>
                     </template>
@@ -719,7 +719,7 @@ import { useChannelActivity } from '../composables/useChannelActivity'
 import ChannelStatusBadge from './ChannelStatusBadge.vue'
 import ChannelHealthBadge from './ChannelHealthBadge.vue'
 import { isManagedProviderChannel, isOfficialProviderChannel, providerDisplayName } from '../utils/providerDisplay'
-import { availableChannelApiKeyCount, disabledChannelApiKeyCount } from '../utils/channelApiKeys'
+import { availableChannelApiKeyCount, disabledChannelApiKeyCount, hasOnlyDisabledChannelApiKeys } from '../utils/channelApiKeys'
 import { getChannelWebsiteLinks, type ChannelWebsiteKind } from '../utils/channelWebsite'
 import type { ChannelHealthItem } from '../services/api-types'
 // Lazy-load chart components to reduce initial JS bundle size
@@ -1409,7 +1409,14 @@ const resumeChannelInternal = async (
   const { refresh = true, notify = true } = options
 
   const result = await getCurrentChannelTypeApi(channel).resume(getRouteIndex(channel))
-  await setChannelStatusInternal(channel, 'active', { refresh })
+  // 仅当渠道当前不是 active 时才更新状态：已是 active 但仅因全部 Key 被拉黑/耗尽而显示恢复的渠道，
+  // 跳过冗余的 setStatus(active) 请求，直接刷新数据即可。
+  if (channel.status !== 'active') {
+    await setChannelStatusInternal(channel, 'active', { refresh })
+  } else if (refresh) {
+    // active 渠道恢复全部禁用 Key 后，刷新以反映最新 disabledApiKeys 与计数
+    emit('refresh')
+  }
 
   if (notify) {
     if ((result?.restoredKeys || 0) > 0) {
@@ -1427,9 +1434,14 @@ const isTrippedChannel = (channel: Channel): boolean => {
   return channel.status === 'suspended' || channelMetrics?.circuitState === 'open'
 }
 
-const isBreakerManagedChannel = (channel: Channel): boolean => {
+// isRecoverableChannel 判定渠道是否应显示「恢复」主操作（一次点击恢复全部禁用 Key + 重置熔断）：
+//   - suspended 或熔断 open：原有恢复语义
+//   - active 但全部 Key 被拉黑/耗尽（可用数为 0 且禁用数 > 0）：无需先暂停即可直接恢复
+const isRecoverableChannel = (channel: Channel): boolean => {
   const channelMetrics = getChannelMetrics(channel)
-  return channel.status === 'suspended' || channelMetrics?.circuitState === 'open'
+  return channel.status === 'suspended'
+    || channelMetrics?.circuitState === 'open'
+    || hasOnlyDisabledChannelApiKeys(channel)
 }
 
 const getChannelRowClass = (channel: Channel) => {
@@ -1460,7 +1472,7 @@ const setPromotion = async (channel: Channel) => {
     const PROMOTION_DURATION = 300 // 5 minutes
 
     // If the channel is in a breaker-managed state, resume it first
-    if (isBreakerManagedChannel(channel)) {
+    if (isRecoverableChannel(channel)) {
       await resumeChannelInternal(channel, { refresh: false, notify: false })
     }
 

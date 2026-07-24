@@ -3,6 +3,7 @@ import {
   availableChannelApiKeyCount,
   buildChannelApiKeyRows,
   disabledChannelApiKeyCount,
+  hasOnlyDisabledChannelApiKeys,
 } from './channelApiKeys'
 
 describe('channel API key state', () => {
@@ -38,5 +39,48 @@ describe('channel API key state', () => {
   it('兼容后端 JSON 中的 null 列表', () => {
     expect(buildChannelApiKeyRows(null, null)).toEqual([])
     expect(availableChannelApiKeyCount({ apiKeys: ['key-active'], disabledApiKeys: null })).toBe(1)
+  })
+})
+
+describe('hasOnlyDisabledChannelApiKeys', () => {
+  const disabledKey = (key: string) => ({
+    key,
+    reason: 'authentication_error',
+    message: 'invalid key',
+    disabledAt: '2026-07-17T17:44:34+08:00',
+  })
+
+  it('可用数为 0 且禁用数 > 0 时返回 true', () => {
+    const channel = {
+      apiKeys: ['key-a', 'key-b'],
+      disabledApiKeys: [disabledKey('key-a'), disabledKey('key-b')],
+    }
+    expect(hasOnlyDisabledChannelApiKeys(channel)).toBe(true)
+  })
+
+  it('部分 Key 仍可用时返回 false', () => {
+    const channel = {
+      apiKeys: ['key-ok', 'key-down'],
+      disabledApiKeys: [disabledKey('key-down')],
+    }
+    expect(hasOnlyDisabledChannelApiKeys(channel)).toBe(false)
+  })
+
+  it('无任何 Key（空配置）时返回 false', () => {
+    expect(hasOnlyDisabledChannelApiKeys({ apiKeys: [], disabledApiKeys: [] })).toBe(false)
+    expect(hasOnlyDisabledChannelApiKeys({ apiKeys: null, disabledApiKeys: null })).toBe(false)
+  })
+
+  it('拉黑记录优先于同名活跃 Key：同名 Key 全部以 disabled 计入', () => {
+    const channel = {
+      apiKeys: ['key-x'],
+      disabledApiKeys: [disabledKey('key-x')],
+    }
+    expect(hasOnlyDisabledChannelApiKeys(channel)).toBe(true)
+  })
+
+  it('仅存在活跃 Key 无禁用记录时返回 false', () => {
+    const channel = { apiKeys: ['key-a'], disabledApiKeys: [] }
+    expect(hasOnlyDisabledChannelApiKeys(channel)).toBe(false)
   })
 })
