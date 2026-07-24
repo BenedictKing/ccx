@@ -40,6 +40,7 @@ import { fetchDradarData, DRADAR_MODEL_MAP } from './benchmark-sources/dradar.mj
 import { fetchLitellmModelInfo, LITELLM_MODEL_MAP } from './benchmark-sources/litellm.mjs'
 import { buildBenchmarkVisualizationData } from './benchmark-sources/visualization.mjs'
 import { presetArtifactPaths } from './generate-preset-manifest.mjs'
+import { saveCache } from './benchmark-sources/http-cache.mjs'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const registryPath = join(root, 'shared/model-registry/ccx_model_registry.json')
@@ -531,9 +532,18 @@ export async function main() {
   if (!skipBenchlm) {
     try {
       console.log('\n--- Fetching benchlm.ai data ---')
-      const benchlmData = await fetchBenchlmData(BENCHLM_MODEL_MAP, BENCHLM_CATEGORY_MAP)
-      visualizationSources.benchlmProfiles = benchlmData
-      mergeBenchlmData(registry, benchlmData, report)
+      const benchlmResult = await fetchBenchlmData(BENCHLM_MODEL_MAP, BENCHLM_CATEGORY_MAP)
+      const benchlmData = benchlmResult.data
+      // 移除内部统计字段，分别传给可视化和合并逻辑
+      const { _unchanged, ...cleanData } = benchlmData
+      visualizationSources.benchlmProfiles = cleanData
+      if (Object.keys(cleanData).length > 0) {
+        mergeBenchlmData(registry, cleanData, report)
+      }
+      if (benchlmResult.unchanged?.length > 0) {
+        console.log(`[benchlm] ${benchlmResult.unchanged.length} comparisons unchanged, skipped`)
+        report.benchlmUnchanged = benchlmResult.unchanged.length
+      }
     } catch (err) {
       report.errors.push({ source: 'benchlm', error: err.message })
       console.error('[benchlm] Failed:', err.message)
@@ -558,7 +568,12 @@ export async function main() {
     try {
       console.log('\n--- Fetching litellm pricing/context data ---')
       const litellmData = await fetchLitellmModelInfo(LITELLM_MODEL_MAP)
-      mergeLitellmData(registry, litellmData, report)
+      if (!litellmData._unchanged) {
+        mergeLitellmData(registry, litellmData, report)
+      } else {
+        console.log('[litellm] No changes, skipping merge')
+        report.litellmUnchanged = true
+      }
     } catch (err) {
       report.errors.push({ source: 'litellm', error: err.message })
       console.error('[litellm] Failed:', err.message)
@@ -619,6 +634,12 @@ export async function main() {
       console.log(`  ... and ${report.litellmUpdated.length - 10} more`)
     }
   }
+  if (report.litellmUnchanged) {
+    console.log(`\nlitellm: unchanged, skipped`)
+  }
+  if (report.benchlmUnchanged) {
+    console.log(`\nbenchlm: ${report.benchlmUnchanged} comparisons unchanged, skipped`)
+  }
   if (report.litellmSkipped.length > 0) {
     console.log(`\nlitellm skipped: ${report.litellmSkipped.length}`)
     for (const s of report.litellmSkipped.slice(0, 5)) {
@@ -626,6 +647,9 @@ export async function main() {
     }
   }
   console.log('='.repeat(60))
+
+  // 持久化 HTTP 缓存
+  saveCache()
 
   if (dryRun) {
     console.log('\nTo apply changes, run without --dry-run')

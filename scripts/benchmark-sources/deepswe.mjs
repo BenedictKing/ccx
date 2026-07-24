@@ -13,6 +13,7 @@
  */
 
 import { fetchWithTimeout } from './http.mjs'
+import { cachedFetch, cacheResponseData } from './http-cache.mjs'
 
 const BASE_URL = 'https://deepswe.datacurve.ai'
 
@@ -27,18 +28,21 @@ export async function fetchLeaderboard(version = 'v1.1') {
 
   console.log(`[deepswe] Fetching ${url}`)
 
-  const resp = await fetchWithTimeout(url, {
+  const result = await cachedFetch(url, {
     headers: {
       'User-Agent': 'ccx-benchmark-updater/1.0',
       Accept: 'application/json',
     },
   })
 
-  if (!resp.ok) {
-    throw new Error(`HTTP ${resp.status} ${resp.statusText} for ${url}`)
+  if (result.cached) {
+    console.log(`[deepswe] ${url} → 304 Not Modified, using cached data`)
+    return result.data
   }
 
-  return resp.json()
+  const data = await result.response.json()
+  cacheResponseData(url, data)
+  return data
 }
 
 /**
@@ -50,18 +54,21 @@ export async function fetchV1Delta() {
 
   console.log(`[deepswe] Fetching ${url}`)
 
-  const resp = await fetchWithTimeout(url, {
+  const result = await cachedFetch(url, {
     headers: {
       'User-Agent': 'ccx-benchmark-updater/1.0',
       Accept: 'application/json',
     },
   })
 
-  if (!resp.ok) {
-    throw new Error(`HTTP ${resp.status} ${resp.statusText} for ${url}`)
+  if (result.cached) {
+    console.log(`[deepswe] ${url} → 304 Not Modified, using cached data`)
+    return result.data
   }
 
-  return resp.json()
+  const data = await result.response.json()
+  cacheResponseData(url, data)
+  return data
 }
 
 /**

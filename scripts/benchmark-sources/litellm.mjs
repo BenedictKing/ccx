@@ -11,6 +11,7 @@
  */
 
 import { execFileSync } from 'node:child_process'
+import { getSimpleCache, setSimpleCache } from './http-cache.mjs'
 
 const REPO = 'BerriAI/litellm'
 const FILE_PATH = 'model_prices_and_context_window.json'
@@ -32,12 +33,29 @@ export async function fetchLitellmData() {
     // 1. 获取文件元数据（拿到 git blob sha）
     const metaOutput = execFileSync(
       'gh',
+      ['api', `repos/${REPO}/contents/${FILE_PATH}`, '--jq', '.sha'],
+      { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024, timeout: 20_000 }
+    )
+    const currentSha = metaOutput.trim()
+    const cachedSha = getSimpleCache('litellm:blobSha')
+
+    if (cachedSha === currentSha) {
+      console.log(`[litellm] Blob SHA unchanged (${currentSha.slice(0, 8)}), skipping fetch`)
+      return null // 表示无变更
+    }
+
+    console.log(`[litellm] Blob SHA changed: ${cachedSha?.slice(0, 8) || '(none)'} → ${currentSha.slice(0, 8)}`)
+    setSimpleCache('litellm:blobSha', currentSha)
+
+    // 2. 获取 git_url（需要用于 blob API）
+    const gitUrlOutput = execFileSync(
+      'gh',
       ['api', `repos/${REPO}/contents/${FILE_PATH}`, '--jq', '.git_url'],
       { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024, timeout: 20_000 }
     )
-    const gitUrl = metaOutput.trim()
+    const gitUrl = gitUrlOutput.trim()
 
-    // 2. 获取 blob 内容（base64 编码）
+    // 3. 获取 blob 内容（base64 编码）
     const blobOutput = execFileSync(
       'gh',
       ['api', gitUrl.replace('https://api.github.com/', ''), '--jq', '.content'],
@@ -45,7 +63,7 @@ export async function fetchLitellmData() {
     )
     const base64Content = blobOutput.trim()
 
-    // 3. base64 解码
+    // 4. base64 解码
     const content = Buffer.from(base64Content, 'base64').toString('utf8')
     return JSON.parse(content)
   } catch (err) {
@@ -132,6 +150,10 @@ export function extractModelInfo(data, modelMap) {
  */
 export async function fetchLitellmModelInfo(modelMap = LITELLM_MODEL_MAP) {
   const data = await fetchLitellmData()
+  if (data === null) {
+    console.log(`[litellm] No changes detected, skipping processing`)
+    return { _unchanged: true }
+  }
   const result = extractModelInfo(data, modelMap)
   console.log(`[litellm] Extracted data for ${Object.keys(result).length} models`)
   return result

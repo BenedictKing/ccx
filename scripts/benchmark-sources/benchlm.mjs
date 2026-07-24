@@ -14,6 +14,12 @@
  */
 
 import { fetchWithTimeout } from './http.mjs'
+import {
+  getCacheEntry,
+  setCacheEntry,
+  contentHash,
+  cacheContentData,
+} from './http-cache.mjs'
 
 const BASE_URL = 'https://benchlm.ai'
 
@@ -48,6 +54,52 @@ export async function fetchComparison(modelASlug, modelBSlug) {
 
   const data = JSON.parse(match[1])
   return data.props.pageProps.pageData
+}
+
+/**
+ * 带缓存的对比页面获取：
+ * - 提取 __NEXT_DATA__ 后计算内容哈希
+ * - 如果哈希与上次相同，返回 { unchanged: true } 跳过处理
+ * - 如果哈希不同，返回 pageData 并更新缓存
+ *
+ * @param {string} modelASlug
+ * @param {string} modelBSlug
+ * @returns {Promise<{unchanged: boolean, pageData?: Object}>}
+ */
+export async function fetchComparisonCached(modelASlug, modelBSlug) {
+  const url = `${BASE_URL}/compare/${modelASlug}-vs-${modelBSlug}`
+  const cacheKey = `benchlm:${modelASlug}-vs-${modelBSlug}`
+
+  const resp = await fetchWithTimeout(url, {
+    headers: {
+      'User-Agent': 'ccx-benchmark-updater/1.0',
+      Accept: 'text/html',
+    },
+  })
+
+  if (!resp.ok) {
+    throw new Error(`HTTP ${resp.status} ${resp.statusText} for ${url}`)
+  }
+
+  const html = await resp.text()
+  const match = html.match(/<script id="__NEXT_DATA__" type="application\/json">(.*?)<\/script>/s)
+
+  if (!match) {
+    throw new Error(`__NEXT_DATA__ not found in ${url}`)
+  }
+
+  // 对提取的 JSON 数据做哈希，而非整个 HTML（HTML 含时间戳等动态内容）
+  const dataHash = contentHash(match[1])
+  const cached = getCacheEntry(cacheKey)
+
+  if (cached?.dataHash === dataHash) {
+    return { unchanged: true }
+  }
+
+  // 内容变更，更新缓存
+  setCacheEntry(cacheKey, { dataHash })
+  const data = JSON.parse(match[1])
+  return { unchanged: false, pageData: data.props.pageProps.pageData }
 }
 
 /**
@@ -202,6 +254,7 @@ export const COMPARISON_PAIRS = [
 export async function fetchBenchlmData(modelMap, categoryMap) {
   const result = {}
   const errors = []
+  const unchanged = []
 
   // 去重对比对（避免重复抓取）
   const uniquePairs = []
@@ -214,40 +267,55 @@ export async function fetchBenchlmData(modelMap, categoryMap) {
     }
   }
 
-  for (const [slugA, slugB] of uniquePairs) {
+  // 金丝雀检测：先拉第一个对比页，若未变更则跳过其余
+  if (uniquePairs.length > 1) {
+    const [canaryA, canaryB] = uniquePairs[0]
+    console.log(`[benchlm] Canary check: ${canaryA}-vs-${canaryB}`)
     try {
-      const pageData = await fetchComparison(slugA, slugB)
-      const scores = extractModelScore(pageData, modelMap, categoryMap)
-
-      for (const [canonical, data] of Object.entries(scores)) {
-        if (!result[canonical]) {
-          result[canonical] = {
-            overallScore: data.overallScore,
-            categoryScores: {},
-            counts: data.counts,
-            scoreEvidence: data.scoreEvidence,
-            sources: [],
-          }
-        } else {
-          result[canonical].counts = mergeComparisonCounts(result[canonical].counts, data.counts)
-        }
-
-        // 合并 categoryScores (取最大值，因为不同对比可能覆盖不同分类)
-        for (const [cat, score] of Object.entries(data.categoryScores)) {
-          if (!result[canonical].categoryScores[cat] || score > result[canonical].categoryScores[cat]) {
-            result[canonical].categoryScores[cat] = score
-          }
-        }
-
-        // 添加 source URL
-        const sourceUrl = `${BASE_URL}/compare/${slugA}-vs-${slugB}`
-        if (!result[canonical].sources.includes(sourceUrl)) {
-          result[canonical].sources.push(sourceUrl)
-        }
+      const canaryResult = await fetchComparisonCached(canaryA, canaryB)
+      if (canaryResult.unchanged) {
+        console.log(`[benchlm] Canary unchanged, skipping remaining ${uniquePairs.length - 1} comparisons`)
+        unchanged.push(...uniquePairs.map(([a, b]) => `${a}-vs-${b}`))
+        // 全部未变更，直接返回空结果
+        console.log(`[benchlm] All ${uniquePairs.length} comparisons unchanged, no data to update`)
+        return { data: result, unchanged }
       }
+      // 金丝雀变更了，处理它的数据
+      processPageData(canaryResult.pageData, canaryA, canaryB, modelMap, categoryMap, result)
     } catch (err) {
-      errors.push({ pair: `${slugA}-vs-${slugB}`, error: err.message })
-      console.warn(`[benchlm] Failed to fetch ${slugA}-vs-${slugB}:`, err.message)
+      errors.push({ pair: `${canaryA}-vs-${canaryB}`, error: err.message })
+      console.warn(`[benchlm] Canary failed: ${canaryA}-vs-${canaryB}:`, err.message)
+    }
+  }
+
+  // 并行拉取剩余对比页（每批最多 6 个并发，避免压垮服务器）
+  const remaining = uniquePairs.length > 1 ? uniquePairs.slice(1) : uniquePairs
+  const BATCH_SIZE = 6
+
+  for (let i = 0; i < remaining.length; i += BATCH_SIZE) {
+    const batch = remaining.slice(i, i + BATCH_SIZE)
+    const batchResults = await Promise.allSettled(
+      batch.map(async ([slugA, slugB]) => {
+        const pairLabel = `${slugA}-vs-${slugB}`
+        try {
+          const cached = await fetchComparisonCached(slugA, slugB)
+          if (cached.unchanged) {
+            unchanged.push(pairLabel)
+            return null
+          }
+          processPageData(cached.pageData, slugA, slugB, modelMap, categoryMap, result)
+          return pairLabel
+        } catch (err) {
+          errors.push({ pair: pairLabel, error: err.message })
+          console.warn(`[benchlm] Failed to fetch ${pairLabel}:`, err.message)
+          return null
+        }
+      })
+    )
+
+    const changed = batchResults.filter(r => r.status === 'fulfilled' && r.value !== null)
+    if (changed.length > 0) {
+      console.log(`[benchlm] Batch ${Math.floor(i / BATCH_SIZE) + 1}: ${changed.length} changed, ${batch.length - changed.length} unchanged`)
     }
   }
 
@@ -259,15 +327,49 @@ export async function fetchBenchlmData(modelMap, categoryMap) {
     }
   }
 
-  console.log(`[benchlm] Extracted data for ${Object.keys(result).length} models`)
-  if (errors.length > 0) {
-    console.warn(`[benchlm] ${errors.length} comparisons failed`)
-  }
+  const changedCount = uniquePairs.length - unchanged.length - errors.length
+  console.log(`[benchlm] Extracted data for ${Object.keys(result).length} models (${changedCount} changed, ${unchanged.length} unchanged, ${errors.length} failed)`)
 
-  if (Object.keys(result).length === 0) {
+  if (Object.keys(result).length === 0 && errors.length > 0) {
     const detail = errors[0]?.error || 'no mapped benchmark results'
     throw new Error(`all ${uniquePairs.length} comparisons failed: ${detail}`)
   }
 
-  return result
+  // 返回变更统计，供上游报告
+  result._unchanged = unchanged
+  return { data: result, unchanged }
+}
+
+/**
+ * 处理单个对比页的数据，合并到 result 中
+ */
+function processPageData(pageData, slugA, slugB, modelMap, categoryMap, result) {
+  const scores = extractModelScore(pageData, modelMap, categoryMap)
+
+  for (const [canonical, data] of Object.entries(scores)) {
+    if (!result[canonical]) {
+      result[canonical] = {
+        overallScore: data.overallScore,
+        categoryScores: {},
+        counts: data.counts,
+        scoreEvidence: data.scoreEvidence,
+        sources: [],
+      }
+    } else {
+      result[canonical].counts = mergeComparisonCounts(result[canonical].counts, data.counts)
+    }
+
+    // 合并 categoryScores (取最大值，因为不同对比可能覆盖不同分类)
+    for (const [cat, score] of Object.entries(data.categoryScores)) {
+      if (!result[canonical].categoryScores[cat] || score > result[canonical].categoryScores[cat]) {
+        result[canonical].categoryScores[cat] = score
+      }
+    }
+
+    // 添加 source URL
+    const sourceUrl = `${BASE_URL}/compare/${slugA}-vs-${slugB}`
+    if (!result[canonical].sources.includes(sourceUrl)) {
+      result[canonical].sources.push(sourceUrl)
+    }
+  }
 }

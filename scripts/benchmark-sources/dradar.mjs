@@ -17,6 +17,7 @@
  * dradar 使用点号: "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5"
  */
 import { fetchWithTimeout } from './http.mjs'
+import { cachedFetch, cacheResponseData, getSimpleCache, setSimpleCache } from './http-cache.mjs'
 
 export const DRADAR_MODEL_MAP = {
   'gpt-5.6-sol': 'gpt-5.6-sol',
@@ -58,18 +59,21 @@ export async function fetchLeaderboard() {
 
   console.log(`[dradar] Fetching ${url}`)
 
-  const resp = await fetchWithTimeout(url, {
+  const result = await cachedFetch(url, {
     headers: {
       'User-Agent': 'ccx-benchmark-updater/1.0',
       Accept: 'application/json',
     },
   })
 
-  if (!resp.ok) {
-    throw new Error(`HTTP ${resp.status} ${resp.statusText} for ${url}`)
+  if (result.cached) {
+    console.log(`[dradar] ${url} → 304 Not Modified, using cached data`)
+    return result.data
   }
 
-  return resp.json()
+  const data = await result.response.json()
+  cacheResponseData(url, data)
+  return data
 }
 
 /**
@@ -78,7 +82,31 @@ export async function fetchLeaderboard() {
  */
 export async function fetchTable() {
   const cacheVersion = await fetchTableCacheVersion()
+  const cachedVersion = getSimpleCache('dradar:cacheVersion')
   const url = `${BASE_URL}/api/v1/table?ui=${encodeURIComponent(cacheVersion)}`
+
+  // 如果 cacheVersion 与上次相同，使用条件请求（ETag）
+  if (cachedVersion === cacheVersion) {
+    console.log(`[dradar] Cache version unchanged (${cacheVersion}), trying conditional request`)
+    const result = await cachedFetch(url, {
+      headers: {
+        'User-Agent': 'ccx-benchmark-updater/1.0',
+        Accept: 'application/json',
+      },
+    }, TABLE_FETCH_TIMEOUT_MS)
+
+    if (result.cached) {
+      console.log(`[dradar] ${url} → 304 Not Modified, using cached data`)
+      return result.data
+    }
+
+    const data = await result.response.json()
+    cacheResponseData(url, data)
+    return data
+  }
+
+  console.log(`[dradar] Cache version changed: ${cachedVersion || '(none)'} → ${cacheVersion}`)
+  setSimpleCache('dradar:cacheVersion', cacheVersion)
 
   console.log(`[dradar] Fetching ${url}`)
 
@@ -93,7 +121,9 @@ export async function fetchTable() {
     throw new Error(`HTTP ${resp.status} ${resp.statusText} for ${url}`)
   }
 
-  return resp.json()
+  const data = await resp.json()
+  cacheResponseData(url, data)
+  return data
 }
 
 /**
