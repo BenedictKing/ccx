@@ -26,6 +26,7 @@ export const DEEPSWE_MODEL_MAP = {
   'glm-5-2': 'glm-5.2',
   'kimi-k2-7-code': 'kimi-k2.7-code',
   'kimi-k2-7-code-highspeed': 'kimi-k2.7-code',
+  'kimi-k3': 'kimi-k3',
   'gemini-3-5-flash': 'gemini-3.5-flash',
   'gemini-3-1-pro-preview': 'gemini-3.1-pro',
   'gemini-3-flash-preview': 'gemini-3-flash',
