@@ -1,6 +1,5 @@
 <template>
   <div class="subscription-provider-grid">
-    <div class="text-h6 font-weight-bold mb-4">{{ t('subscription.quickAccess') }}</div>
     <div class="d-flex flex-wrap ga-4">
       <v-card
         class="provider-card pa-4 cursor-pointer"
@@ -31,15 +30,7 @@
           </div>
         </div>
       </v-card>
-    </div>
 
-    <!-- 内置服务商 + 赞助商（与「快速添加」同源清单，卡片网格展示） -->
-    <div class="text-h6 font-weight-bold mt-8 mb-4">{{ t('subscription.builtinProviders') }}</div>
-    <div v-if="builtinLoading" class="d-flex align-center ga-2 text-medium-emphasis">
-      <v-progress-circular indeterminate size="20" width="2" />
-      <span class="text-body-2">{{ t('subscription.loadingProviders') }}</span>
-    </div>
-    <div v-else class="d-flex flex-wrap ga-4">
       <v-card
         v-for="provider in builtinProviders"
         :key="provider.providerId"
@@ -67,17 +58,6 @@
         </div>
         <div class="text-caption text-medium-emphasis mb-3 provider-card__desc">
           {{ provider.description }}
-        </div>
-        <div v-if="capabilityKinds(provider).length" class="d-flex flex-wrap ga-1 mb-3">
-          <v-chip
-            v-for="kind in capabilityKinds(provider)"
-            :key="kind"
-            size="x-small"
-            variant="tonal"
-            color="primary"
-          >
-            {{ kindLabel(kind) }}
-          </v-chip>
         </div>
         <v-spacer />
         <div class="d-flex align-center ga-2 mt-auto">
@@ -111,7 +91,6 @@
         </div>
       </v-card>
 
-      <!-- 赞助商渠道（仅展示 + 推广外链，无内置模板） -->
       <v-card
         v-for="sponsor in sponsors"
         :key="sponsor.providerId"
@@ -175,9 +154,8 @@ const emit = defineEmits<{
 }>()
 const selectedProvider = ref('')
 
-// 内置服务商模板（与「快速添加」同源，仅用于展示 + 发起添加）
+// 服务商模板（从 autopilot 模板表加载）
 const builtinProviders = ref<ProviderTemplate[]>([])
-const builtinLoading = ref(false)
 
 // 赞助商 logo（真实品牌图）：内置 provider 与独立赞助卡共用
 const sponsorLogos: Record<string, string> = {
@@ -198,31 +176,12 @@ function selectProvider(provider: string) {
   emit('select', provider)
 }
 
-// 能力标签：由 routes 的渠道协议推导，去重保持顺序
-function capabilityKinds(provider: ProviderTemplate): string[] {
-  const kinds = new Set<string>()
-  for (const route of provider.routes ?? []) {
-    if (route.channelKind) kinds.add(route.channelKind)
-  }
-  if (kinds.size === 0 && provider.channelKind) kinds.add(provider.channelKind)
-  return [...kinds]
-}
-
-function kindLabel(kind: string): string {
-  const key = `autopilot.diagnose.kind.${kind}`
-  const label = t(key)
-  return label === key ? kind : label
-}
-
 onMounted(async () => {
-  builtinLoading.value = true
   try {
     builtinProviders.value = await getProviderTemplates()
   } catch (err) {
-    console.error('[Subscription-Providers] 加载内置服务商失败:', err)
+    console.error('[Subscription-Providers] 加载服务商失败:', err)
     builtinProviders.value = []
-  } finally {
-    builtinLoading.value = false
   }
 })
 </script>

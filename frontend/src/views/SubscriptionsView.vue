@@ -1,15 +1,9 @@
 <template>
   <div class="subscriptions-view">
-    <!-- Header -->
-    <div class="d-flex align-center mb-6">
-      <v-icon size="28" class="mr-2" color="primary">mdi-lightning-bolt</v-icon>
-      <span class="text-h5 font-weight-bold">{{ t('subscription.title') }}</span>
-    </div>
-
     <!-- Provider 卡片网格 -->
     <SubscriptionProviderGrid @select="handleProviderSelect" @add="handleProviderAdd" />
 
-    <!-- 内置服务商添加面板（key 前缀探测 + 自动建渠道，与「快速添加」同一后端流程） -->
+    <!-- 服务商添加面板（key 前缀探测 + 自动建渠道） -->
     <v-expand-transition>
       <v-card v-if="addProvider" variant="outlined" class="pa-4 mt-6">
         <v-card-title class="text-h6 d-flex align-center">
@@ -207,7 +201,7 @@ const { t } = useI18n()
 const selectedProvider = ref('')
 const snackbar = ref({ show: false, message: '', color: 'success' })
 
-// 内置服务商添加（key 前缀探测 + 自动建渠道，与「快速添加」同一后端流程）
+// 服务商添加（key 前缀探测 + 自动建渠道）
 const addProvider = ref<ProviderTemplate | null>(null)
 const addApiKey = ref('')
 const addSubmitting = ref(false)
@@ -237,7 +231,7 @@ const canNewApiVerify = computed(() => {
 
 function handleProviderSelect(provider: string) {
   selectedProvider.value = provider
-  // 与内置服务商添加面板互斥：选中快捷接入时收起添加面板
+  // 与服务商添加面板互斥：选中卡片时收起添加面板
   cancelProviderAdd()
   // 重置表单
   newApiForm.value = { baseUrl: '', accessToken: '', userId: '', authTokenMode: 'bearer', displayName: '' }
@@ -245,7 +239,7 @@ function handleProviderSelect(provider: string) {
   newApiError.value = ''
 }
 
-// 打开某内置服务商的添加面板（模板从 quickAdd 同源的模板表取）
+// 打开某服务商的添加面板
 async function handleProviderAdd(providerId: string) {
   addError.value = ''
   addApiKey.value = ''
