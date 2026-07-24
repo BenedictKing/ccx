@@ -81,6 +81,22 @@ func (r *SmartRouter) ConfigManager() *config.ConfigManager {
 	return r.configManager
 }
 
+// IsFrontierRoutingEnabled 返回 Frontier/Ladder 是否在生产中影响选路。
+func (r *SmartRouter) IsFrontierRoutingEnabled() bool {
+	if r.configManager == nil {
+		return false
+	}
+	return r.configManager.GetAutopilotRouting().IsFrontierRoutingEnabled()
+}
+
+// IsAFPCostRoutingEnabled 返回 AFP 成本适配器是否参与可比树。
+func (r *SmartRouter) IsAFPCostRoutingEnabled() bool {
+	if r.configManager == nil {
+		return false
+	}
+	return r.configManager.GetAutopilotRouting().IsAFPCostRoutingEnabled()
+}
+
 // TraceStore 返回内部 TraceStore 引用。
 func (r *SmartRouter) TraceStore() *TraceStore {
 	return r.traceStore
