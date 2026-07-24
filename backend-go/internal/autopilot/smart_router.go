@@ -24,6 +24,8 @@ type RoutingPlanCandidate struct {
 	MappedModel   string   `json:"mappedModel,omitempty"`
 	MappingSource string   `json:"mappingSource,omitempty"`
 	MappingReason string   `json:"mappingReason,omitempty"`
+	ChannelName   string   `json:"channelName,omitempty"`
+	KeyMask       string   `json:"keyMask,omitempty"`
 }
 
 // RoutingPlan 一次请求的路由计划（§4.6.1）。
@@ -257,6 +259,8 @@ func (r *SmartRouter) BuildPlan(profile *RequestProfile) *RoutingPlan {
 			MappedModel:     se.entry.MappedModel,
 			MappingSource:   se.entry.MappingSource,
 			MappingReason:   se.entry.MappingReason,
+			ChannelName:     se.entry.ChannelName,
+			KeyMask:         se.entry.KeyMask,
 		}
 		if candidate.Selected {
 			selectedCandidates = append(selectedCandidates, candidate)
@@ -310,6 +314,8 @@ func (r *SmartRouter) BuildPlan(profile *RequestProfile) *RoutingPlan {
 		for _, c := range candidates {
 			traceCandidates = append(traceCandidates, RoutingCandidate{
 				ChannelUID:    c.ChannelUID,
+				ChannelName:   c.ChannelName,
+				KeyMask:       c.KeyMask,
 				MappedModel:   c.MappedModel,
 				MappingSource: c.MappingSource,
 				MappingReason: c.MappingReason,
@@ -787,11 +793,13 @@ func (r *SmartRouter) executeFilter(
 	for _, se := range scoredEntries {
 		e := se.entry
 		sc := se.scored
-		candidate := RoutingCandidate{
-			ChannelUID:     e.ChannelUID,
-			MetricsKey:     SanitizeMetricsKey(e.MetricsKey),
-			OriginTier:     string(e.OriginTier),
-			ChannelKind:    e.ChannelKind,
+			candidate := RoutingCandidate{
+				ChannelUID:     e.ChannelUID,
+				ChannelName:    e.ChannelName,
+				MetricsKey:     SanitizeMetricsKey(e.MetricsKey),
+				KeyMask:        e.KeyMask,
+				OriginTier:     string(e.OriginTier),
+				ChannelKind:    e.ChannelKind,
 			HealthState:    string(e.HealthState),
 			MappedModel:    e.MappedModel,
 			MappingSource:  e.MappingSource,
@@ -1041,8 +1049,10 @@ func (r *SmartRouter) executeFilter(
 // channelScoreEntry 渠道评分输入条目。
 type channelScoreEntry struct {
 	ChannelUID          string
+	ChannelName         string // 渠道显示名（来自 upstream.Name）
 	ChannelKind         string
 	MetricsKey          string
+	KeyMask             string // 掩码后的 key，如 sk-***abc
 	MappedModel         string
 	MappingSource       string
 	MappingReason       string
@@ -1168,6 +1178,7 @@ func (r *SmartRouter) buildChannelEntry(
 	}
 	entry := channelScoreEntry{
 		ChannelUID:    channelUID,
+		ChannelName:   upstream.Name,
 		ChannelKind:   channelKind,
 		ChannelIndex:  ch.Index,
 		HealthState:   HealthStateUnknown,
@@ -1236,7 +1247,7 @@ func (r *SmartRouter) buildChannelEntry(
 			entry.HealthState = agg.HealthState
 			entry.OriginTier = ChannelOriginTier(agg.OriginTier)
 			entry.MetricsKey = matchingProfiles[0].MetricsKey
-
+			entry.KeyMask = matchingProfiles[0].KeyMask
 			// 注册表与画像都是正向能力证据；手动禁用视觉始终优先。
 			if !visionDisabled {
 				entry.SupportsVision = entry.SupportsVision || agg.SupportsVision

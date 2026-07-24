@@ -1456,7 +1456,9 @@ export interface DomainStrengthEvidence {
 
 export interface RoutingCandidate {
   channelUid: string
+  channelName?: string
   metricsKey?: string
+  keyMask?: string
   originTier?: string
   channelKind?: string
   healthState?: string

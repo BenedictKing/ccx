@@ -29,6 +29,7 @@ import (
 // 用于 EndpointAttemptPolicy 的过滤与排序输入/输出。
 type EndpointCandidate struct {
 	ChannelUID  string  `json:"channelUid"`            // 渠道唯一标识
+	ChannelName string  `json:"channelName,omitempty"` // 渠道显示名
 	ChannelKind string  `json:"channelKind"`           // messages | chat | responses | ...
 	MetricsKey  string  `json:"metricsKey,omitempty"`  // 画像存储键（已脱敏）
 	BaseURL     string  `json:"baseUrl"`               // 原始配置 URL
@@ -932,7 +933,9 @@ func buildEndpointTrace(req *RequestProfile, candidates []EndpointCandidate, sta
 	for _, cand := range candidates {
 		rc := RoutingCandidate{
 			ChannelUID:  cand.ChannelUID,
+			ChannelName: cand.ChannelName,
 			MetricsKey:  SanitizeMetricsKey(cand.MetricsKey),
+			KeyMask:     cand.KeyMask,
 			ChannelKind: cand.ChannelKind,
 			MappedModel: cand.MappedModel,
 			TotalScore:  cand.Score,

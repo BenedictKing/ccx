@@ -38,7 +38,9 @@ type CandidateScore struct {
 // RoutingCandidate 路由候选渠道信息（已脱敏）。
 type RoutingCandidate struct {
 	ChannelUID    string `json:"channelUid"`
-	MetricsKey    string `json:"metricsKey,omitempty"` // 已脱敏：不含 key 明文
+	ChannelName   string `json:"channelName,omitempty"` // 渠道显示名
+	MetricsKey    string `json:"metricsKey,omitempty"`  // 已脱敏：不含 key 明文
+	KeyMask       string `json:"keyMask,omitempty"`     // 掩码后的 key，如 sk-***abc
 	OriginTier    string `json:"originTier,omitempty"`
 	ChannelKind   string `json:"channelKind,omitempty"`
 	HealthState   string `json:"healthState,omitempty"`

@@ -153,7 +153,7 @@
             <v-table v-if="detail.candidates && detail.candidates.length > 0" density="compact">
               <thead>
                 <tr>
-                  <th class="text-caption">Channel UID</th>
+                  <th class="text-caption">Channel</th>
                   <th class="text-caption">Origin Tier</th>
                   <th class="text-caption">Score</th>
                   <th class="text-caption">Selected</th>
@@ -162,7 +162,7 @@
               </thead>
               <tbody>
                 <tr v-for="(cand, ci) in detail.candidates" :key="ci">
-                  <td class="text-caption">{{ cand.channelUid }}</td>
+                  <td class="text-caption">{{ formatChannelDisplay(cand) }}</td>
                   <td class="text-caption">{{ cand.originTier || '-' }}</td>
                   <td class="text-caption">{{ cand.totalScore.toFixed(3) }}</td>
                   <td>
@@ -314,7 +314,7 @@
 import { ref, watch } from 'vue'
 import { useI18n } from '@/i18n'
 import { api } from '@/services/api'
-import type { TraceDetailV2 } from '@/services/api-types'
+import type { TraceDetailV2, RoutingCandidate } from '@/services/api-types'
 
 const props = defineProps<{
   modelValue: boolean
@@ -383,6 +383,20 @@ function formatTime(iso?: string): string {
 function shortReleaseId(id?: string): string {
   if (!id) return '-'
   return id.length > 12 ? id.slice(0, 12) + '...' : id
+}
+
+// 紧凑展示候选渠道：渠道名 (key掩码) → 映射模型
+// 无渠道名时回退到 channelUid，无映射模型时省略箭头部分。
+function formatChannelDisplay(cand: RoutingCandidate): string {
+  const name = cand.channelName || cand.channelUid
+  let left = name
+  if (cand.keyMask) {
+    left += ` (${cand.keyMask})`
+  }
+  if (cand.mappedModel) {
+    return `${left} → ${cand.mappedModel}`
+  }
+  return left
 }
 
 function modeColor(mode?: string): string {
