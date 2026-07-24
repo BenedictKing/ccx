@@ -364,7 +364,10 @@ Fail-open 分两类记录，避免把业务约束与实现故障混为一谈：
 - [x] ReleaseController 接入 main.go 请求路径：SmartRouter 消费 RoutingReleaseSnapshot，入口冻结后回填 trace 发布维度。
 - [x] 补 L2 集成测试：SmartRouter + TraceStore 生命周期（BuildPlan dry-run、ReleaseController 快照冻结、安全覆盖、in-flight 提升、Scheduler 裁决同步、必落盘类别）。
 - [x] ChannelLog 展示面跳转入口：为非空 autopilotTraceUid 添加可点击 chip，点击打开 AutopilotTraceDetailDialog 展示决策详情。
-- [ ] L2/L3/L4 集成测试补充（TODO: 后续迭代）
+- [x] 补 L3 SQLite 生命周期测试：重启还原、坏 JSON、过期清理、迁移幂等、脱敏验证（12 个）。
+- [x] 补 L4 HTTP 契约测试：列表分页/过滤、详情 404/Found/脱敏、统计三态（9 个）。
+- [x] 真实上游 smoke（opt-in，`CCX_RUN_REAL_UPSTREAM_SMOKE=1`，默认 t.Skip，2 个测试覆盖非流式/流式）
+- [x] SSE golden 回归（本地 fake upstream，6 个测试覆盖帧顺序/trace 不改输出/取消不崩溃/脱敏）
 
 **文件：** `backend-go/internal/autopilot/smart_router.go`、`routing_trace.go`、`backend-go/internal/handlers/common/multi_channel_failover.go`、`upstream_failover.go`、`channel_log_helper.go`、`backend-go/internal/metrics/channel_log.go` 和相关测试。
 
