@@ -771,7 +771,7 @@ func (r *SmartRouter) executeFilter(
 	for _, se := range scoredEntries {
 		e := se.entry
 		sc := se.scored
-		candidates = append(candidates, RoutingCandidate{
+		candidate := RoutingCandidate{
 			ChannelUID:     e.ChannelUID,
 			MetricsKey:     SanitizeMetricsKey(e.MetricsKey),
 			OriginTier:     string(e.OriginTier),
@@ -793,7 +793,22 @@ func (r *SmartRouter) executeFilter(
 				{Dimension: "domain", Score: sc.DomainStrengthScore, Weight: weights.WDomain},
 			},
 			Selected: true,
-		})
+		}
+		// AFP 成本信息传递到 trace
+		if e.AFPCost != nil {
+			candidate.AFPEstimated = e.AFPCost.Result.TotalAFP
+			candidate.AFPConfidence = e.AFPCost.Result.Confidence.String()
+			if e.AFPCost.Result.PromotionApplied {
+				candidate.AFPPromotion = e.AFPCost.Result.PromotionID
+			}
+			if e.AFPCost.Evidence.ScopeID != "" {
+				candidate.AFPScope = e.AFPCost.Evidence.ScopeID
+			}
+		} else if config.IsVolcengineProvider(upstreamFor(scheduler.ChannelInfo{Index: e.ChannelIndex})) {
+			// 火山渠道但 AFP 未生效，记录原因
+			candidate.AFPBypassReason = "afp_data_unavailable"
+		}
+		candidates = append(candidates, candidate)
 
 		// 匹配回 ChannelInfo：优先用上游配置的 ChannelUID，回退到 ch_%d 格式
 		for _, ch := range channels {
@@ -1026,6 +1041,9 @@ type channelScoreEntry struct {
 	SupportsReasoning   bool // 渠道是否支持推理（模型注册表 + 画像聚合）
 	ContextWindowTokens int  // 渠道上下文窗口大小（0 = 未知，来自模型能力注册表）
 	ScoringCandidate    ScoringCandidate
+
+	// AFP 成本信息（仅火山 Agent Plan 渠道有值）
+	AFPCost *CandidateAFPCost // AFP 成本计算结果（nil = 非 AFP 渠道）
 }
 
 type scoredChannelEntry struct {
