@@ -131,7 +131,9 @@ export function canonicalModelToPattern(canonical) {
     return `(?:^|[-/])${escaped}(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)`
   }
   if (canonical.startsWith('kimi-')) {
-    // kimi-k2.7-code -> (?:^|[-/])kimi-k2\.7(?:-\d{4}-\d{2}-\d{2}|-\d{6,8})?(?=$|@)
+    // kimi-k2.7-code -> (?:^|[-/])kimi-k2\.7-code(?:-\d{4}-\d{2}-\d{2}|-\d{6,8})?(?=$|@)
+    // 注意：base 名 kimi-k2.7 与套餐名 kimi-for-coding 是别名，由注册表手工维护的多 patterns 合并，
+    // 不在此生成器退化（这里只转义点号 + 追加日期快照后缀）。
     const escaped = canonical.replace(/\./g, '\\.')
     return `(?:^|[-/])${escaped}(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)`
   }
