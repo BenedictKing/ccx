@@ -33,6 +33,9 @@ type RequestProfile struct {
 	// ── 人工意图匹配扩展（由 handler/main.go 层注入）──
 	SessionID  string // 统一会话标识，用于 session_pin 匹配
 	PromptHash string // prompt SHA256 前 16 位，用于确定性流量分配
+
+	// ── AFP 路由扩展（可选）──
+	AFPProfile *AFPRequestProfile
 }
 
 // ClassifierInput 是脱敏的请求特征集合，不含消息正文，用于确定性任务分类。
