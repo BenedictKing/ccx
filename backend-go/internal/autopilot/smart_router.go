@@ -1091,6 +1091,10 @@ type channelScoreEntry struct {
 
 	// AFP 成本信息（仅火山 Agent Plan 渠道有值）
 	AFPCost *CandidateAFPCost // AFP 成本计算结果（nil = 非 AFP 渠道）
+
+	// CompshareDeduction 优云智算套餐单次减扣倍数（0 = 非 compshare 渠道，>0 = 减扣次数）。
+	// 来自 ProviderTemplate.ModelCostMultipliers；越低越省，全局可比。
+	CompshareDeduction float64
 }
 
 type scoredChannelEntry struct {
@@ -1380,10 +1384,30 @@ func (r *SmartRouter) resolveChannelAFPScope(upstream *config.UpstreamConfig) *c
 	return &scope
 }
 
-// applyAFPCosts 在评分前为火山 Agent Plan 渠道填充 AFP 成本证据。
-// 仅当 AFP 路由开启时执行；非火山或非可比 scope 的渠道保持 AFPCost=nil，回退 USD EstimatedCost。
+// resolveCompshareDeduction 返回优云智算渠道指定模型的单次减扣次数。
+// 非 compshare 或模板未收录该模型时返回 0；模板来自内置 ProviderTemplate.ModelCostMultipliers。
+func (r *SmartRouter) resolveCompshareDeduction(upstream *config.UpstreamConfig, modelID string) float64 {
+	if r == nil || upstream == nil || modelID == "" {
+		return 0
+	}
+	if upstream.ProviderID != "compshare" {
+		return 0
+	}
+	tmpl, ok := config.GetProviderTemplate("compshare")
+	if !ok {
+		return 0
+	}
+	mult, ok := tmpl.ModelCostMultiplierForModel(modelID)
+	if !ok {
+		return 0
+	}
+	return mult
+}
+
+// applyAFPCosts 在评分前为火山 Agent Plan 渠道填充 AFP 成本证据，为优云智算渠道填充减扣次数。
+// 仅当 AFP 路由开启时执行；非火山/优云智算或非可比 scope 的渠道保持原状，回退 USD EstimatedCost。
 // inputTokens 取请求估算输入；outputTokens 暂用 0（confidence=Estimated），
-// 同 scope 内相对排序由 promotion 倍率决定，与输出 token 绝对值无关。
+// 同 scope 内相对排序由 promotion 倍率/减扣次数决定，与输出 token 绝对值无关。
 func (r *SmartRouter) applyAFPCosts(entries []channelScoreEntry, inputTokens int) {
 	if r == nil || !r.IsAFPCostRoutingEnabled() {
 		return
@@ -1398,11 +1422,14 @@ func (r *SmartRouter) applyAFPCosts(entries []channelScoreEntry, inputTokens int
 		if upstream == nil {
 			continue
 		}
-		scope := r.resolveChannelAFPScope(upstream)
-		if scope == nil {
-			continue
+		// 火山 Agent Plan AFP
+		if scope := r.resolveChannelAFPScope(upstream); scope != nil {
+			e.AFPCost = ComputeCandidateAFPCostWithScope(at, scope, e.ModelID, inputTokens, 0)
 		}
-		e.AFPCost = ComputeCandidateAFPCostWithScope(at, scope, e.ModelID, inputTokens, 0)
+		// 优云智算 compshare 单次减扣
+		if ded := r.resolveCompshareDeduction(upstream, e.ModelID); ded > 0 {
+			e.CompshareDeduction = ded
+		}
 	}
 }
 
@@ -1446,10 +1473,10 @@ func (r *SmartRouter) upstreamByChannelUID(channelUID, channelKind string) *conf
 	return nil
 }
 
-// normalizeSavingsScoreGrouped 按成本可比性分组归一化省钱分（§5.6 AFP 适配）。
-// AFP 候选按 ScopeID 分组组内归一化（用 TotalAFP）；USD 候选（有有效 EstimatedCost>=0
-// 且无 AFPCost）组内归一化；无成本候选得 0.5。AFP 与 USD 不可比，各自独立归一化，
-// 使"最便宜的火山 Agent Plan 渠道"与"最便宜的 USD 渠道"各得 1.0。
+// normalizeSavingsScoreGrouped 按成本可比性分组归一化省钱分（§5.6 AFP/Compshare 适配）。
+// AFP 候选按 ScopeID 分组组内归一化（用 TotalAFP）；compshare 候选按减扣次数组内归一化；
+// USD 候选（有有效 EstimatedCost>=0 且无折扣成本）组内归一化；无成本候选得 0.5。
+// 各成本类型不可比，各自独立归一化，使各自组内最便宜者各得 1.0。
 func normalizeSavingsScoreGrouped(entries []channelScoreEntry) map[string]float64 {
 	result := make(map[string]float64, len(entries))
 	if len(entries) == 0 {
@@ -1458,11 +1485,15 @@ func normalizeSavingsScoreGrouped(entries []channelScoreEntry) map[string]float6
 
 	// AFP 分组：scopeID -> (uid -> TotalAFP)
 	afpGroups := make(map[string]map[string]float64)
+	// compshare 组：uid -> 减扣次数
+	compshareCosts := make(map[string]float64)
 	// USD 组：uid -> EstimatedCost
 	usdCosts := make(map[string]float64)
 
 	for _, e := range entries {
-		if e.AFPCost != nil && e.AFPCost.Evidence.Unit == CostUnitAFP && e.AFPCost.Evidence.ScopeID != "" {
+		if e.CompshareDeduction > 0 {
+			compshareCosts[e.ChannelUID] = e.CompshareDeduction
+		} else if e.AFPCost != nil && e.AFPCost.Evidence.Unit == CostUnitAFP && e.AFPCost.Evidence.ScopeID != "" {
 			scopeID := e.AFPCost.Evidence.ScopeID
 			if afpGroups[scopeID] == nil {
 				afpGroups[scopeID] = make(map[string]float64)
@@ -1479,6 +1510,13 @@ func normalizeSavingsScoreGrouped(entries []channelScoreEntry) map[string]float6
 	// 每个 AFP scope 组内归一化
 	for _, costs := range afpGroups {
 		savings := normalizeCostGroup(costs)
+		for uid, s := range savings {
+			result[uid] = s
+		}
+	}
+	// compshare 组归一化
+	if len(compshareCosts) > 0 {
+		savings := normalizeCostGroup(compshareCosts)
 		for uid, s := range savings {
 			result[uid] = s
 		}

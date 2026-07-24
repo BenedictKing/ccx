@@ -15,9 +15,10 @@ import (
 type CostUnit string
 
 const (
-	CostUnitAFP     CostUnit = "afp" // 火山 Agent Plan AFP
-	CostUnitUSD     CostUnit = "usd" // 公共按量 USD
-	CostUnitUnknown CostUnit = ""    // 未知单位
+	CostUnitAFP       CostUnit = "afp"       // 火山 Agent Plan AFP
+	CostUnitCompshare CostUnit = "compshare" // 优云智算套餐单次减扣
+	CostUnitUSD       CostUnit = "usd"       // 公共按量 USD
+	CostUnitUnknown   CostUnit = ""          // 未知单位
 )
 
 // CostConfidence 表示成本估算的置信度。
@@ -52,7 +53,7 @@ func (ce CostEvidence) IsComparableWith(other CostEvidence) bool {
 	if ce.Unit == CostUnitAFP {
 		return ce.ScopeID != "" && ce.ScopeID == other.ScopeID
 	}
-	// USD 可以直接比较
+	// compshare 扣减次数全局可比（同一套餐模板），USD 直接可比
 	return true
 }
 
