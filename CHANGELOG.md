@@ -1,3 +1,15 @@
+## [Unreleased]
+
+### 新增
+
+- **Autopilot Trace v2 契约与脱敏边界** - 新增 TraceDetailV2/TraceSummary/SchedulerDecisionSummary/EndpointAttemptSummary DTO，ComparisonStatus 三态枚举（matched/mismatched/uncompared）替代裸 bool，SanitizeForPersistence/SanitizeForResponse 双边界脱敏，crypto/rand 碰撞安全 TraceUIDv2，策略指纹（排除比例/seed），稳定哈希分桶，v1→v2 读适配器；新增 40+ L1 表驱动测试
+- **SQLite v6 迁移、持久化与清理** - autopilot schema v5→v6 幂等迁移；trace 表新增 schema_version/trace_revision/request_correlation_id/release_id/policy_fingerprint/persistence_class/details_json 列；窗口表重建主键增加 release/policy/cohort 维度和 compared/matched/mismatch/uncompared 计数；safety event 增加 release/policy 字段；in-flight 索引和异常提升落盘；有界异步 writer（512 队列/128 终态预留/64KiB 上限/250ms deadline/1s drain）；7 天 trace + 30 天窗口清理策略
+- **Trace 关联接入请求生命周期** - 入口生成 requestCorrelationId 写入 gin context；选择渠道后写入 AutopilotTraceUID；ChannelLog 新增 RequestCorrelationID/AutopilotTraceUID 字段和 ChannelLogOption；BuildPlan 写入 dry-run trace（必落盘）；NormalizeSelectionTrace 将 SelectionTrace 规范化为安全摘要并 AttachSchedulerDecision；AppendEndpointAttempt 有序/容量受限/乱序合并的 attempt 摘要
+- **endpoint attempt 摘要接入实际请求链路** - SetAttemptRecorderHook + recordAttemptCompleted hook 模式；upstream_failover 在 CreatePendingLog 后记 "started"，成功/错误时记 "completed"；main.go 注册 hook 连接 TraceStore；fail-open 观测失败不影响代理请求
+- **受控发布与自动降级** - active 模式加入配置枚举/归一化/IsAutopilotActive；RolloutPercent/ControlPercent/ReleaseID/RolloutSeed 配置字段和 validateRollout 校验；ReleaseController 集中管理状态迁移（逐级晋升/降级随时允许）、稳定分桶、EvaluateAndApplyRegression 三窗口回归降级、SafetyOverride 安全覆盖；接入 SmartRouter 请求路径（入口冻结 RoutingReleaseSnapshot）；release/policy/cohort 隔离聚合
+- **只读 Trace API 与前端详情** - GET /api/autopilot/traces/:traceUid 详情端点（404/503/partial 契约、2s 查询 deadline）；列表 API 改为 TraceSummary 输出，支持 release/cohort/mode 过滤和游标分页；统计新增三态比较计数；前端 AutopilotTraceDetailDialog 决策→Scheduler→尝试→终态时间线；AutopilotTraceTable 适配 TraceSummary；ChannelLogsDialog 跳转入口
+- **分层测试（L1-L5）** - L1 纯函数 40+；L2 SmartRouter+TraceStore 集成 8；L3 SQLite 生命周期 12（重启还原/坏 JSON/过期清理/迁移幂等/脱敏）；L4 HTTP 契约 9（列表/详情/统计/404/脱敏/分页）；L5 真实上游 smoke 2（默认 t.Skip）；SSE golden 回归 6（帧顺序/trace 不改输出/取消/脱敏）
+
 ## [v3.0.0] - 2026-07-23
 
 ### 新增

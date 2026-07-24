@@ -163,6 +163,8 @@ type RoutingReleaseSnapshot struct {
 	Cohort            Cohort
 	BypassReason      string
 	RolloutPercent    int
+	RolloutSeed       string
+	ControlPercent    int
 	CreatedAt         time.Time
 }
 
