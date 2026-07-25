@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
+	"github.com/BenedictKing/ccx/internal/keypool"
 	"github.com/BenedictKing/ccx/internal/metrics"
 	"github.com/BenedictKing/ccx/internal/scheduler"
 )
@@ -130,8 +131,11 @@ type Manager struct {
 	smartRouter *SmartRouter
 
 	// Phase 2 第二批：endpoint 级策略 + L2 探测 + 限速应用
-	probeWorker      *ProbeWorker
-	rateLimitApplier *RateLimitApplier
+	probeWorker *ProbeWorker
+
+	rateLimitApplierMu sync.RWMutex
+	rateLimitApplier   *RateLimitApplier
+	rateLimitApplyCh   chan struct{}
 
 	// Phase 3A：画像变更事件（只读展示，不影响调度）
 	changelogStore *ProfileChangelogStore
@@ -222,7 +226,7 @@ func NewManager(
 		cfgManager: cfgManager,
 		cfg:        cfg,
 
-		rateLimitDiscoverer:  NewRateLimitDiscoverer(RateLimitDiscovererConfig{QuietLogs: cfg.QuietLogs}),
+		rateLimitDiscoverer:  NewRateLimitDiscoverer(RateLimitDiscovererConfig{PassiveAimdEnabled: true, QuietLogs: cfg.QuietLogs}),
 		timeBucketStore:      timeBucketStore,
 		qualityTrendDetector: NewQualityTrendDetector(timeBucketStore),
 		groupChangeDetector:  NewGroupChangeDetector(store),
@@ -243,6 +247,7 @@ func NewManager(
 		modelResolver:     NewModelResolver(modelProfileStore, cfgManager),
 
 		usagePatternAccumulator: NewUsagePatternAccumulator(defaultUsagePatternRetentionDays),
+		rateLimitApplyCh:        make(chan struct{}, 1),
 	}
 	manager.providerQualityProbe = NewProviderQualityProbe(
 		store,
@@ -269,6 +274,8 @@ func (m *Manager) TimeBucketStore() *TimeBucketStore {
 
 // ObserveRateLimitSignal 供信号回调调用：喂限速发现器和时间桶。
 // 并发安全，不修改调度链路。
+// reason 携带 429 细分原因（非 429 传空串），由 upstream_failover.go
+// 读完 body 分类后传入，确保同一次非 2xx 响应只通知一次 Discoverer。
 func (m *Manager) ObserveRateLimitSignal(
 	endpointUID string,
 	channelID int,
@@ -277,6 +284,7 @@ func (m *Manager) ObserveRateLimitSignal(
 	latencyMs int64,
 	headers http.Header,
 	statusCode int,
+	reason string,
 ) {
 	if endpointUID == "" {
 		return
@@ -294,6 +302,10 @@ func (m *Manager) ObserveRateLimitSignal(
 		IsStreaming: isStream,
 		LatencyMs:   latencyMs,
 		Timestamp:   now,
+		Reason:      RateLimitSignalReason(reason),
+	}
+	if signal.Reason == "" {
+		signal.Reason = RateLimitReasonUnknown
 	}
 
 	// 429 信号
@@ -377,10 +389,14 @@ func (m *Manager) ObserveRateLimitSignal(
 // 若 SubscriptionRefreshWorker 已设置，同步启动余额刷新 worker。
 func (m *Manager) StartWorker(ctx context.Context) {
 	ctx, m.cancel = context.WithCancel(ctx)
-	m.wg.Add(1)
+	m.wg.Add(2)
 	go func() {
 		defer m.wg.Done()
 		m.runWorker(ctx)
+	}()
+	go func() {
+		defer m.wg.Done()
+		m.runRateLimitApplyWorker(ctx)
 	}()
 	// L2 探测 worker（config 门控，由 main.go 按配置决定是否 SetProbeWorker）
 	if m.probeWorker != nil {
@@ -726,9 +742,46 @@ func (m *Manager) ResolveModelSupportWithFloor(
 	return false, "", "explain", rsn
 }
 
-// SetRateLimitApplier 设置 RateLimitApplier（由 main.go 在 NewManager 后调用）。
+// SetRateLimitApplier 设置 RateLimitApplier（由 main.go 在 StartWorker 前调用）。
 func (m *Manager) SetRateLimitApplier(rla *RateLimitApplier) {
+	if m == nil {
+		return
+	}
+	m.rateLimitApplierMu.Lock()
+	defer m.rateLimitApplierMu.Unlock()
 	m.rateLimitApplier = rla
+}
+
+func (m *Manager) getRateLimitApplier() *RateLimitApplier {
+	if m == nil {
+		return nil
+	}
+	m.rateLimitApplierMu.RLock()
+	defer m.rateLimitApplierMu.RUnlock()
+	return m.rateLimitApplier
+}
+
+// RefreshRateLimitMappings 依据当前配置刷新 endpoint 到 limiter 的完整映射。
+// 空 inventory 同样会替换为 nil，后续 Apply 可据此清理被删除渠道或轮换 Key 的旧状态。
+func (m *Manager) RefreshRateLimitMappings() {
+	applier := m.getRateLimitApplier()
+	if applier == nil {
+		return
+	}
+	inventory := m.refreshEndpointInventory()
+	applier.SetEndpointMappings(m.buildEndpointLimiterMappings(inventory))
+}
+
+// RequestRateLimitApply 向容量为 1 的 apply worker 发送合并通知。
+// 请求路径绝不等待全量遍历；连续 429 会自然折叠为一次最新状态的 Apply。
+func (m *Manager) RequestRateLimitApply() {
+	if m == nil || m.getRateLimitApplier() == nil {
+		return
+	}
+	select {
+	case m.rateLimitApplyCh <- struct{}{}:
+	default:
+	}
 }
 
 // runWorker 后台循环主逻辑。
@@ -760,11 +813,41 @@ func (m *Manager) runWorker(ctx context.Context) {
 	}
 }
 
+// runRateLimitApplyWorker 串行执行运行态 limiter 的短周期协调。
+// 精确 429 和配置变更通过 rateLimitApplyCh 立即唤醒；30 秒 ticker 用于
+// 处理通知丢失以及仅含 header/success 信号时的最终收敛。
+func (m *Manager) runRateLimitApplyWorker(ctx context.Context) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-m.rateLimitApplyCh:
+		case <-ticker.C:
+		}
+		if applier := m.getRateLimitApplier(); applier != nil {
+			applier.Apply()
+		}
+	}
+}
+
 // collectAll 遍历所有渠道的 endpoint，执行 L1 画像推导 + 健康诊断。
 func (m *Manager) collectAll() {
 	start := time.Now()
 	inventory := m.refreshEndpointInventory()
 	entries := inventory.Entries
+
+	// 限速 Applier 接线（设计 §6/§7）：刷新 endpoint→limiter mapping 并应用/清理 discovered RPM。
+	// 即使 inventory 为空也要调用，确保渠道删除/Key 轮换/kill switch 时旧 limiter 状态被清理，
+	// 不在 collectAll 开头直接跳过清理。
+	if applier := m.getRateLimitApplier(); applier != nil {
+		mappings := m.buildEndpointLimiterMappings(inventory)
+		applier.SetEndpointMappings(mappings)
+		applier.Apply()
+	}
+
 	if len(entries) == 0 {
 		if !m.cfg.QuietLogs {
 			log.Printf("[Autopilot-Worker] 无可遍历渠道，跳过本轮")
@@ -945,6 +1028,84 @@ func (m *Manager) collectAll() {
 	}
 }
 
+// buildEndpointLimiterMappings 从当前 inventory + config 构造 endpoint→limiter 映射。
+// 同一 limiter 可被多 endpoint 映射，Apply 阶段会取确定性最小 RPM。
+// ExplicitRPM 根据 key 配置及 channel 继承链计算；显式配置的 endpoint 不被注入发现 RPM。
+// 未知 channelKind 返回空 apiType 并跳过，不默认映射到 Messages。
+func (m *Manager) buildEndpointLimiterMappings(inv endpointInventory) []EndpointLimiterMapping {
+	if m == nil || m.cfgManager == nil {
+		return nil
+	}
+	cfg := m.cfgManager.GetConfig()
+	var mappings []EndpointLimiterMapping
+	for _, entry := range inv.Entries {
+		apiType := channelKindToAPIType(entry.ChannelKind)
+		if apiType == "" {
+			continue
+		}
+		upstreams := upstreamsByKind(cfg, entry.ChannelKind)
+		if entry.ChannelID < 0 || entry.ChannelID >= len(upstreams) {
+			continue
+		}
+		base := upstreams[entry.ChannelID]
+		// Auto-managed 渠道使用 runtime 上游（与 failover 一致）
+		upstream := base
+		if ru := config.RuntimeUpstreamForAutoManagedProvider(&base); ru != nil {
+			upstream = *ru
+		}
+		configs := config.NormalizeAPIKeyConfigsForView(upstream)
+		byKey := make(map[string]config.APIKeyConfig, len(configs))
+		for _, c := range configs {
+			byKey[c.Key] = c
+		}
+		useScopedLimiter := keypool.HasEffectiveConfig(&upstream)
+		for _, key := range entry.APIKeys {
+			kcfg := byKey[key]
+			if kcfg.Key == "" {
+				kcfg.Key = key
+			}
+			scope := ""
+			if useScopedLimiter {
+				scope = keypool.LimiterScopeFor(key, kcfg)
+			}
+			explicitRPM := kcfg.RateLimitRPM > 0 || upstream.RateLimitRPM > 0
+			limiterConfig := keypool.ConfigForCandidate(upstream, kcfg)
+			limiterKey := fmt.Sprintf("%s:%d", apiType, entry.ChannelID)
+			if scope != "" {
+				limiterKey += ":" + scope
+			}
+			euid := GenerateEndpointUID(entry.ChannelUID, entry.BaseURL, KeyHashFromAPIKey(key))
+			mappings = append(mappings, EndpointLimiterMapping{
+				EndpointUID:   euid,
+				LimiterKey:    limiterKey,
+				LimiterConfig: limiterConfig,
+				ExplicitRPM:   explicitRPM,
+			})
+		}
+	}
+	return mappings
+}
+
+// upstreamsByKind 返回渠道类型对应的 upstream 列表（原始 config 索引）。
+func upstreamsByKind(cfg config.Config, kind string) []config.UpstreamConfig {
+	switch kind {
+	case "messages":
+		return cfg.Upstream
+	case "responses":
+		return cfg.ResponsesUpstream
+	case "gemini":
+		return cfg.GeminiUpstream
+	case "chat":
+		return cfg.ChatUpstream
+	case "images":
+		return cfg.ImagesUpstream
+	case "vectors":
+		return cfg.VectorsUpstream
+	default:
+		return nil
+	}
+}
+
 func (m *Manager) evaluateAutoSafety(now time.Time) {
 	if m == nil || m.traceStore == nil || m.cfgManager == nil {
 		return
@@ -1001,6 +1162,18 @@ func carryForwardDiscoveryFields(old *KeyEndpointProfile, current *KeyEndpointPr
 	}
 	current.MiniMaxTokenPlanUsage = cloneMiniMaxTokenPlanUsage(old.MiniMaxTokenPlanUsage)
 	current.MiniMaxTokenPlanUsageError = old.MiniMaxTokenPlanUsageError
+	// 限速发现字段 carry-forward：DeriveEndpointProfile 每轮构造全新 struct，
+	// 限速画像字段是 Discoverer 写入、L1 流量画像无法重新推导的。不搬运的话
+	// Discoverer 暂无内存建议（如重启后）时 collectAll 不会从画像恢复，导致
+	// ProfileStore 已有画像被本轮 Upsert 清零。当前轮产生的新建议仍优先覆盖旧值
+	// （由下方 suggested.RPM>0 分支处理）。
+	current.DiscoveredRPM = old.DiscoveredRPM
+	current.DiscoveredMaxConcurrent = old.DiscoveredMaxConcurrent
+	current.RateLimitSource = old.RateLimitSource
+	current.RateLimitConfidence = old.RateLimitConfidence
+	current.SuggestedRPMSource = old.SuggestedRPMSource
+	current.SuggestedRPMTPM = old.SuggestedRPMTPM
+	current.SuggestedRPMRPD = old.SuggestedRPMRPD
 	if old.ModelMapping != nil {
 		current.ModelMapping = make(map[string]string, len(old.ModelMapping))
 		for source, target := range old.ModelMapping {

@@ -17,7 +17,7 @@ func TestNotifySignal_NoCallback(t *testing.T) {
 	headers.Set("x-ratelimit-limit-requests", "100")
 
 	// 不应 panic
-	NotifySignal("ep-001", "mk-001", "messages", false, 100, headers, http.StatusOK)
+	NotifySignal("ep-001", "mk-001", "messages", false, 100, headers, http.StatusOK, "")
 }
 
 // TestNotifySignal_WithCallback 验证回调被正确调用。
@@ -29,7 +29,7 @@ func TestNotifySignal_WithCallback(t *testing.T) {
 	var gotEndpointUID, gotMetricsKey, gotServiceType string
 	var gotStatusCode int
 
-	UpstreamSignalCallback = func(endpointUID, metricsKey, serviceType string, isStream bool, latencyMs int64, headers http.Header, statusCode int) {
+	UpstreamSignalCallback = func(endpointUID, metricsKey, serviceType string, isStream bool, latencyMs int64, headers http.Header, statusCode int, reason string) {
 		atomic.StoreInt32(&called, 1)
 		gotEndpointUID = endpointUID
 		gotMetricsKey = metricsKey
@@ -40,7 +40,7 @@ func TestNotifySignal_WithCallback(t *testing.T) {
 	headers := http.Header{}
 	headers.Set("x-ratelimit-limit-requests", "100")
 
-	NotifySignal("ep-test", "mk-test", "chat", true, 250, headers, http.StatusOK)
+	NotifySignal("ep-test", "mk-test", "chat", true, 250, headers, http.StatusOK, "")
 
 	if atomic.LoadInt32(&called) != 1 {
 		t.Fatal("回调未被调用")
@@ -65,11 +65,11 @@ func TestNotifySignal_NilHeadersSkips(t *testing.T) {
 	defer func() { UpstreamSignalCallback = original }()
 
 	var called int32
-	UpstreamSignalCallback = func(endpointUID, metricsKey, serviceType string, isStream bool, latencyMs int64, headers http.Header, statusCode int) {
+	UpstreamSignalCallback = func(endpointUID, metricsKey, serviceType string, isStream bool, latencyMs int64, headers http.Header, statusCode int, reason string) {
 		atomic.StoreInt32(&called, 1)
 	}
 
-	NotifySignal("ep", "mk", "messages", false, 100, nil, http.StatusOK)
+	NotifySignal("ep", "mk", "messages", false, 100, nil, http.StatusOK, "")
 
 	if atomic.LoadInt32(&called) != 0 {
 		t.Error("nil headers 时回调不应被调用")
@@ -81,7 +81,7 @@ func TestSetUpstreamSignalCallback_NilClears(t *testing.T) {
 	original := UpstreamSignalCallback
 	defer func() { UpstreamSignalCallback = original }()
 
-	SetUpstreamSignalCallback(func(endpointUID, metricsKey, serviceType string, isStream bool, latencyMs int64, headers http.Header, statusCode int) {
+	SetUpstreamSignalCallback(func(endpointUID, metricsKey, serviceType string, isStream bool, latencyMs int64, headers http.Header, statusCode int, reason string) {
 	})
 
 	if UpstreamSignalCallback == nil {

@@ -10,19 +10,71 @@ import (
 
 // Manager 按 (apiType, channelIndex) 管理所有渠道的 ChannelLimiter 实例。
 type Manager struct {
-	mu       sync.RWMutex
-	limiters map[string]*ChannelLimiter
-	stopCh   chan struct{}
+	mu          sync.RWMutex
+	limiters    map[string]*ChannelLimiter
+	channelUIDs map[string]string
+	stopCh      chan struct{}
+}
+
+// ChannelConfig 是一个配置渠道在 limiter Manager 中的稳定身份及限速配置。
+// ChannelUID 用于识别索引重排或渠道替换，避免旧 limiter 状态污染新渠道。
+type ChannelConfig struct {
+	APIType      string
+	ChannelIndex int
+	ChannelUID   string
+	Config       Config
 }
 
 // NewManager 创建一个空的限速器管理器。
 func NewManager() *Manager {
 	m := &Manager{
-		limiters: make(map[string]*ChannelLimiter),
-		stopCh:   make(chan struct{}),
+		limiters:    make(map[string]*ChannelLimiter),
+		channelUIDs: make(map[string]string),
+		stopCh:      make(chan struct{}),
 	}
 	go m.cleanupStaleLimiters()
 	return m
+}
+
+// ReconcileChannelConfigs 以当前完整渠道快照更新 channel limiter。
+// 若索引消失或同一索引的 ChannelUID 变化，会先移除该索引的 channel/scoped
+// limiter，再按新配置创建，避免已发现 RPM、cooldown 或 key scope 泄漏到新渠道。
+func (m *Manager) ReconcileChannelConfigs(entries []ChannelConfig) {
+	if m == nil {
+		return
+	}
+
+	desired := make(map[string]ChannelConfig, len(entries))
+	for _, entry := range entries {
+		if entry.APIType == "" || entry.ChannelIndex < 0 {
+			continue
+		}
+		desired[limiterKey(entry.APIType, entry.ChannelIndex)] = entry
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for key, previousUID := range m.channelUIDs {
+		entry, exists := desired[key]
+		if exists && entry.ChannelUID == previousUID {
+			continue
+		}
+		m.removeChannelLocked(key)
+	}
+
+	for key, entry := range desired {
+		if limiter := m.limiters[key]; limiter != nil {
+			limiter.UpdateConfig(entry.Config)
+		} else {
+			m.limiters[key] = NewChannelLimiter(entry.Config, time.Now())
+		}
+	}
+
+	m.channelUIDs = make(map[string]string, len(desired))
+	for key, entry := range desired {
+		m.channelUIDs[key] = entry.ChannelUID
+	}
 }
 
 // Stop 停止后台清理协程。
@@ -146,9 +198,14 @@ func (m *Manager) SetCooldown(apiType string, channelIndex int, duration time.Du
 // 渠道删除或 key 全部轮换时调用，避免 limiter map 累积无效条目。
 func (m *Manager) Remove(apiType string, channelIndex int) {
 	channelKey := limiterKey(apiType, channelIndex)
-	scopedPrefix := channelKey + ":"
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.removeChannelLocked(channelKey)
+	delete(m.channelUIDs, channelKey)
+}
+
+func (m *Manager) removeChannelLocked(channelKey string) {
+	scopedPrefix := channelKey + ":"
 	delete(m.limiters, channelKey)
 	for k := range m.limiters {
 		if strings.HasPrefix(k, scopedPrefix) {

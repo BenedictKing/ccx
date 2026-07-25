@@ -324,6 +324,70 @@ func classifyByErrorMessageWithLogTag(bodyBytes []byte, apiType string, logTag s
 	return false, false
 }
 
+// isAccountRateLimitExceededMap 判断错误对象是否表示火山账号级限流
+// (AccountRateLimitExceeded)。仅在 HTTP 429 分支使用，不能作为无状态码的
+// 全局 overloaded 标记。code/type/message/detail/msg 统一参与匹配：
+//   - 精确错误码 AccountRateLimitExceeded（大小写/分隔符无关）
+//   - 规范化形式 account_rate_limit_exceeded
+//   - 消息兜底 "requests are too frequent"
+func isAccountRateLimitExceededMap(m map[string]interface{}) bool {
+	combined := strings.ToLower(strings.Join([]string{
+		toStringField(m, "code"),
+		toStringField(m, "type"),
+		toStringField(m, "message"),
+		toStringField(m, "detail"),
+		toStringField(m, "msg"),
+	}, " "))
+
+	// 规范化（去非字母数字）后精确匹配，兼容 "Account Rate Limit Exceeded" 等带空格变体
+	if strings.Contains(normalizeAlnum(combined), "accountratelimitexceeded") {
+		return true
+	}
+	// 消息兜底：仅在 429 分支使用，不能升级为 channel 级 overloaded
+	if strings.Contains(combined, "requests are too frequent") {
+		return true
+	}
+	return false
+}
+
+// normalizeAlnum 保留字母与数字，去除其余字符，用于错误码归一化比较。
+func normalizeAlnum(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// IsUpstreamAccountRateLimited 判断上游响应是否为火山账号级限流
+// (AccountRateLimitExceeded)。仅在 HTTP 429 时解析 body，避免把账号级限流
+// 混入通用 CPU/service overloaded 标记。
+// 命中后调用方应对当前 key/quota scope 施加短期冷却，而非冻结整个渠道；
+// 同渠道其他独立账号可继续 failover。
+func IsUpstreamAccountRateLimited(statusCode int, bodyBytes []byte) bool {
+	if statusCode != 429 {
+		return false
+	}
+	var errResp map[string]interface{}
+	if err := json.Unmarshal(bodyBytes, &errResp); err != nil {
+		return false
+	}
+	if isAccountRateLimitExceededMap(errResp) {
+		return true
+	}
+	if errObj, ok := errResp["error"].(map[string]interface{}); ok {
+		if isAccountRateLimitExceededMap(errObj) {
+			return true
+		}
+		if upstreamErr, ok := errObj["upstream_error"].(map[string]interface{}); ok {
+			return isAccountRateLimitExceededMap(upstreamErr)
+		}
+	}
+	return false
+}
+
 func IsUpstreamAccountPoolUnavailable(bodyBytes []byte) bool {
 	var errResp map[string]interface{}
 	if err := json.Unmarshal(bodyBytes, &errResp); err != nil {

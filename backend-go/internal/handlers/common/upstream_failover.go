@@ -28,11 +28,12 @@ import (
 )
 
 const (
-	upstreamAccountPoolCooldown   = time.Minute
-	upstreamOverloadedCooldown    = 15 * time.Second
-	halfOpenProbeWaitTimeout      = 5 * time.Second
-	halfOpenProbePollInterval     = 100 * time.Millisecond
-	shortEmptyResponseRetryWindow = 10 * time.Second
+	upstreamAccountPoolCooldown      = time.Minute
+	upstreamOverloadedCooldown       = 15 * time.Second
+	upstreamAccountRateLimitCooldown = 15 * time.Second
+	halfOpenProbeWaitTimeout         = 5 * time.Second
+	halfOpenProbePollInterval        = 100 * time.Millisecond
+	shortEmptyResponseRetryWindow   = 10 * time.Second
 )
 
 // isClientSideError 判断错误是否由客户端明确取消（不应计入渠道失败）
@@ -659,13 +660,10 @@ func TryUpstreamWithAllKeys(
 			// 通知 Autopilot 限速发现器（Phase 1 shadow，不修改调度链路）
 			// endpointUID 与 profiler 同源：GenerateEndpointUID(channelUID, baseURL, keyHashFromAPIKey)
 			// 复用已有的 metricsKey（与统计同源的身份指纹）
+			// 非 2xx 响应：在读完 body 并分类后通知（带 reason），确保同一次 429
+			// 只通知一次 Discoverer，避免先记普通 429、再记精确账号限流导致连续降速。
 			keyHash := autopilot.KeyHashFromAPIKey(apiKey)
 			signalEndpointUID := autopilot.GenerateEndpointUID(upstream.ChannelUID, currentBaseURL, keyHash)
-			ratelimit.NotifySignal(
-				signalEndpointUID, metricsKey, apiType, isStream,
-				time.Since(attemptStartedAt).Milliseconds(),
-				resp.Header, resp.StatusCode,
-			)
 
 			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 				respBodyBytes, _ := io.ReadAll(resp.Body)
@@ -678,6 +676,20 @@ func TryUpstreamWithAllKeys(
 				shouldFailover, isQuotaRelated := ShouldRetryWithNextKeyWithLogTag(resp.StatusCode, respBodyBytes, cfgManager.GetFuzzyModeEnabled(), apiType, RequestLogTag(c))
 				isTemporarilyOverloaded := IsUpstreamTemporarilyOverloaded(respBodyBytes)
 				isAccountPoolUnavailable := IsUpstreamAccountPoolUnavailable(respBodyBytes)
+				// 火山账号级 429 (AccountRateLimitExceeded)：精确识别，仅冷却当前 scope
+				isAccountRateLimited := IsUpstreamAccountRateLimited(resp.StatusCode, respBodyBytes)
+
+				// 非 2xx 响应：读完 body 分类后通知 Discoverer 一次（带 reason），
+				// 避免先记普通 429、再记精确账号限流导致同一次响应连续降速两次。
+				signalReason := ""
+				if isAccountRateLimited {
+					signalReason = string(autopilot.RateLimitReasonAccountRateLimitExceeded)
+				}
+				ratelimit.NotifySignal(
+					signalEndpointUID, metricsKey, apiType, isStream,
+					time.Since(attemptStartedAt).Milliseconds(),
+					resp.Header, resp.StatusCode, signalReason,
+				)
 
 				// 检查是否应永久拉黑该 Key（认证/权限/余额错误）
 				blResult := ShouldBlacklistKey(resp.StatusCode, respBodyBytes)
@@ -710,7 +722,7 @@ func TryUpstreamWithAllKeys(
 					if isQuotaRelated {
 						failureClass = metrics.FailureClassQuota
 					}
-					if isTemporarilyOverloaded || isAccountPoolUnavailable {
+					if isTemporarilyOverloaded || isAccountPoolUnavailable || isAccountRateLimited {
 						failureClass = metrics.FailureClassOverloaded
 					}
 					metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, failureClass)
@@ -758,6 +770,22 @@ func TryUpstreamWithAllKeys(
 							failedQuotaGroups[selection.QuotaGroup] = true
 						}
 					}
+					// 火山账号级 429：只冷却当前 key/quota scope，同渠道其他独立账号继续 failover。
+					// scope 非空 → scoped cooldown + continue（尝试同渠道下一个独立 key）。
+					// scope 为空（无 keypool 配置）→ 回退 channel cooldown + 切下一渠道。
+					// 账号级 429 属可恢复临时限流，不永久 blacklist。
+					if isAccountRateLimited {
+						if selection.LimiterScope != "" {
+							channelScheduler.MarkLimiterScopeCooldown(kind, channelIndex, selection.LimiterScope, upstreamAccountRateLimitCooldown)
+							RequestLogf(c, "[%s-AccountRateLimit] 渠道 [%d] %s key=%s 账号级限流，冷却 scope=%s %s，尝试同渠道下一个独立 key",
+								apiType, channelIndex, upstream.Name, utils.MaskAPIKey(apiKey), selection.LimiterScope, upstreamAccountRateLimitCooldown)
+							continue
+						}
+						channelScheduler.MarkChannelCooldown(kind, channelIndex, upstreamAccountRateLimitCooldown)
+						RequestLogf(c, "[%s-AccountRateLimit] 渠道 [%d] %s 账号级限流且无 scope，冷却渠道 %s 并尝试下一个渠道",
+							apiType, channelIndex, upstream.Name, upstreamAccountRateLimitCooldown)
+						return false, "", 0, lastFailoverError, nil, lastError
+					}
 					if isAccountPoolUnavailable {
 						channelScheduler.MarkChannelCooldown(kind, channelIndex, upstreamAccountPoolCooldown)
 						RequestLogf(c, "[%s-Channel] 渠道 [%d] %s 上游账号池不可用，冷却 %s 并尝试下一个渠道", apiType, channelIndex, upstream.Name, upstreamAccountPoolCooldown)
@@ -789,6 +817,13 @@ func TryUpstreamWithAllKeys(
 				c.Data(clientStatusCode, "application/json", respBodyBytes)
 				return true, "", 0, nil, nil, nil
 			}
+
+			// 成功响应（2xx）：通知 Discoverer（header/success 路径），reason 为空
+			ratelimit.NotifySignal(
+				signalEndpointUID, metricsKey, apiType, isStream,
+				time.Since(attemptStartedAt).Milliseconds(),
+				resp.Header, resp.StatusCode, "",
+			)
 
 			// 成功响应：处理 quota key 降级
 			if deprioritizeKey != nil && len(deprioritizeCandidates) > 0 {

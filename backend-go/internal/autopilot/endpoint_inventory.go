@@ -7,6 +7,28 @@ import (
 	"github.com/BenedictKing/ccx/internal/scheduler"
 )
 
+// channelKindToAPIType 把渠道 kind 字符串映射为 limiter key 前缀。
+// 覆盖六类正式渠道（messages/responses/gemini/chat/images/vectors）；
+// 未知 kind 返回空字符串，调用方应跳过，不能默认映射到 Messages。
+func channelKindToAPIType(kind string) string {
+	switch kind {
+	case "messages":
+		return "Messages"
+	case "responses":
+		return "Responses"
+	case "gemini":
+		return "Gemini"
+	case "chat":
+		return "Chat"
+	case "images":
+		return "Images"
+	case "vectors":
+		return "Vectors"
+	default:
+		return ""
+	}
+}
+
 // channelEntry 是 L1 画像遍历使用的真实 endpoint 绑定。
 // 同一渠道的不同 BaseURL 会拆成独立 entry；绑定了 BaseURL 的 Key 只出现在对应 entry。
 type channelEntry struct {

@@ -252,6 +252,48 @@ func TestManager_RemoveCleansUpScopedLimiters(t *testing.T) {
 	}
 }
 
+func TestManager_ReconcileChannelConfigsRemovesChangedUIDState(t *testing.T) {
+	m := NewManager()
+	m.ReconcileChannelConfigs([]ChannelConfig{{
+		APIType: "Messages", ChannelIndex: 0, ChannelUID: "channel-a", Config: Config{RPM: 60},
+	}})
+	oldChannel := m.Get("Messages", 0)
+	oldScoped := m.GetOrCreateScoped("Messages", 0, "key:old", Config{})
+	oldScoped.SetDiscoveredRPM(30)
+
+	m.ReconcileChannelConfigs([]ChannelConfig{{
+		APIType: "Messages", ChannelIndex: 0, ChannelUID: "channel-b", Config: Config{RPM: 90},
+	}})
+
+	newChannel := m.Get("Messages", 0)
+	if newChannel == nil || newChannel == oldChannel {
+		t.Fatal("ChannelUID 变化后应移除旧 limiter 并创建新 limiter")
+	}
+	if newChannel.GetRPM() != 90 {
+		t.Fatalf("新渠道 RPM = %d, want 90", newChannel.GetRPM())
+	}
+	if m.GetScoped("Messages", 0, "key:old") != nil {
+		t.Fatal("ChannelUID 变化后旧 scoped limiter 应被移除")
+	}
+}
+
+func TestManager_ReconcileChannelConfigsRemovesDisappearedIndex(t *testing.T) {
+	m := NewManager()
+	m.ReconcileChannelConfigs([]ChannelConfig{
+		{APIType: "Messages", ChannelIndex: 0, ChannelUID: "channel-a", Config: Config{}},
+		{APIType: "Messages", ChannelIndex: 1, ChannelUID: "channel-b", Config: Config{}},
+	})
+	m.GetOrCreateScoped("Messages", 1, "key:removed", Config{}).SetDiscoveredRPM(30)
+
+	m.ReconcileChannelConfigs([]ChannelConfig{{
+		APIType: "Messages", ChannelIndex: 0, ChannelUID: "channel-a", Config: Config{},
+	}})
+
+	if m.Get("Messages", 1) != nil || m.GetScoped("Messages", 1, "key:removed") != nil {
+		t.Fatal("索引消失后 channel/scoped limiter 应全部移除")
+	}
+}
+
 // TestChannelLimiter_UpdateConfigSkipsWhenUnchanged 验证 UpdateConfig 在配置不变时跳过 applyConfig，
 // 通过观察 sem 通道是否被重建判断。
 func TestChannelLimiter_UpdateConfigSkipsWhenUnchanged(t *testing.T) {

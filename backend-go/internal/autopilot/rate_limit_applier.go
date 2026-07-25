@@ -2,39 +2,42 @@ package autopilot
 
 import (
 	"log"
+	"sync"
 
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/ratelimit"
 )
 
 // RateLimitApplier 将 RateLimitDiscoverer 的高置信建议应用到运行态 limiter。
-// 门控由 config.RateLimitDiscovery.Enabled 和 kill switch 控制：
-//   - 开关关闭 / kill switch 生效时：清除所有已注入的发现 RPM
-//   - 开关打开时：周期性从 discoverer 取高置信建议，调用 ApplyDiscoveredLimit
 //
-// 设计 §4.5.4：显式配置永远优先，只有「用户未显式设置 RPM」的 endpoint 才会被注入。
-// 并发安全：由调用方控制调用时机（集成阶段由 worker 节奏驱动）。
+// 门控（设计 §7）：RateLimitDiscovery.Enabled && AutopilotRouting.IsAutopilotActive() && !KillSwitch。
+// shadow/off/kill switch 时只学习与展示画像，不写运行态 limiter；并按 lastApplied
+// 中保存的 limiterKey 全量清理已注入的 discovered RPM。
+//
+// 显式配置永远优先：ExplicitRPM=true 的 endpoint 永不被注入发现 RPM。
+//
+// 并发安全：mapping 更新、Apply、Clear 由内部 mutex 串行保护，可在 worker
+// 节奏与请求 goroutine 触发的通知之间安全调用。
 type RateLimitApplier struct {
 	discoverer   *RateLimitDiscoverer
 	limiterMgr   *ratelimit.Manager
 	configGetter func() config.AutopilotRoutingConfig
 
-	// endpointToLimiterKeys 维护 endpointUID → limiter key 的映射。
-	// 由集成层在 GatherAndApply 时传入。
-	// limiter key 格式与 ratelimit.Manager 一致（apiType:channelIndex 或 apiType:channelIndex:scope）。
-	endpointToLimiterKeys map[string]string
+	mu sync.Mutex
 
-	// lastApplied 快照上次应用的发现 RPM，用于减少重复 UpdateConfig 开销。
-	// key = endpointUID, value = 已应用的 RPM。
+	// mappings 维护 endpointUID → limiter binding。由集成层在 worker 轮询时
+	// 通过 SetEndpointMappings 替换整个映射表。
+	mappings map[string]EndpointLimiterMapping
+
+	// lastApplied 快照上次应用的发现 RPM，按 limiterKey 去重。
+	// 多 endpoint 映射到同一 limiter 时只保存一条，保证清理时按 limiter 反查。
 	lastApplied map[string]int
 
 	quietLogs bool
 }
 
 // NewRateLimitApplier 创建 RateLimitApplier。
-// discoverer 为 nil 时 Apply 为 no-op。
-// limiterMgr 为 nil 时 Apply 为 no-op。
-// configGetter 为 nil 时 Apply 为 no-op。
+// discoverer / limiterMgr / configGetter 任一为 nil 时 Apply 为 no-op。
 func NewRateLimitApplier(
 	discoverer *RateLimitDiscoverer,
 	limiterMgr *ratelimit.Manager,
@@ -42,60 +45,69 @@ func NewRateLimitApplier(
 	quietLogs bool,
 ) *RateLimitApplier {
 	return &RateLimitApplier{
-		discoverer:            discoverer,
-		limiterMgr:            limiterMgr,
-		configGetter:          configGetter,
-		endpointToLimiterKeys: make(map[string]string),
-		lastApplied:           make(map[string]int),
-		quietLogs:             quietLogs,
+		discoverer:   discoverer,
+		limiterMgr:   limiterMgr,
+		configGetter: configGetter,
+		mappings:     make(map[string]EndpointLimiterMapping),
+		lastApplied:  make(map[string]int),
+		quietLogs:    quietLogs,
 	}
 }
 
-// EndpointLimiterMapping 表示一个 endpoint 到 limiter key 的映射关系。
+// EndpointLimiterMapping 表示一个 endpoint 到 limiter 的绑定关系。
 type EndpointLimiterMapping struct {
 	// EndpointUID autopilot 的 endpoint 唯一标识。
 	EndpointUID string
-	// LimiterKey ratelimit.Manager 中的 limiter key（apiType:channelIndex 或带 scope）。
+	// LimiterKey ratelimit.Manager 中的 limiter key
+	//（apiType:channelIndex 或 apiType:channelIndex:scope）。
 	LimiterKey string
+	// LimiterConfig scoped limiter 不存在时按此配置创建。
+	LimiterConfig ratelimit.Config
 	// ExplicitRPM 标记该 endpoint 的 RPM 是否来自用户显式配置。
-	// true 时跳过发现 RPM 注入。
+	// true 时跳过发现 RPM 注入（显式配置永远优先）。
 	ExplicitRPM bool
 }
 
-// SetEndpointMappings 批量设置 endpoint → limiter key 映射。
+// SetEndpointMappings 批量设置 endpoint → limiter 映射（并发安全）。
 // 每次 worker 轮询时由集成层调用，替换整个映射表。
 func (a *RateLimitApplier) SetEndpointMappings(mappings []EndpointLimiterMapping) {
 	if a == nil {
 		return
 	}
-	a.endpointToLimiterKeys = make(map[string]string, len(mappings))
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.mappings = make(map[string]EndpointLimiterMapping, len(mappings))
 	for _, m := range mappings {
 		if m.EndpointUID != "" && m.LimiterKey != "" {
-			a.endpointToLimiterKeys[m.EndpointUID] = m.LimiterKey
+			a.mappings[m.EndpointUID] = m
 		}
 	}
 }
 
-// Apply 执行一次发现 RPM 的应用周期。
+// Apply 执行一次发现 RPM 的应用周期（并发安全）。
 //
-// 行为（按优先级）：
-//  1. discoverer / limiterMgr / configGetter 任一为 nil → no-op
-//  2. KillSwitch=true 或 Enabled=false → ClearAllDiscoveredLimits
-//  3. Enabled=true → 遍历高置信建议，对未显式配置 RPM 的 endpoint 注入发现 RPM
-//
-// 并发安全：非线程安全，由集成层保证单线程调用（worker 节奏）。
+// 行为：
+//  1. 任一依赖为 nil → no-op
+//  2. 门控不满足（Enabled=false / 非 active / KillSwitch）→ 全量清理
+//  3. 构造 desiredByLimiterKey：过滤低置信、RPM<=0、未知 mapping、ExplicitRPM=true；
+//     多 endpoint 映射到同一 limiter 时取满足门槛建议中的最小 RPM（确定性，与 map 遍历顺序无关）
+//  4. scoped limiter 不存在时用 mapping 携带的配置 GetOrCreateScoped 创建
+//  5. SetDiscoveredRPM 返回 true 后才更新 lastApplied 和成功计数
+//  6. 本轮不再需要的旧 limiterKey 必须 ClearDiscoveredRPM 并从快照移除
 func (a *RateLimitApplier) Apply() {
 	if a == nil || a.discoverer == nil || a.limiterMgr == nil || a.configGetter == nil {
 		return
 	}
 
-	cfg := a.configGetter()
-	killSwitch := cfg.KillSwitch
-	rlCfg := cfg.RateLimitDiscovery
-	enabled := rlCfg.Enabled && !killSwitch
+	a.mu.Lock()
+	defer a.mu.Unlock()
 
-	if !enabled {
-		a.clearAllDiscoveredLimits()
+	cfg := a.configGetter()
+	rlCfg := cfg.RateLimitDiscovery
+	active := rlCfg.Enabled && cfg.IsAutopilotActive() && !cfg.KillSwitch
+
+	if !active {
+		a.clearAllLocked()
 		return
 	}
 
@@ -105,96 +117,126 @@ func (a *RateLimitApplier) Apply() {
 	}
 
 	suggestions := a.discoverer.AllSuggestedLimits()
-	applied := 0
 
-	for endpointUID, suggestion := range suggestions {
-		// 低置信度跳过
-		if suggestion.Confidence < confidenceThreshold {
+	// 构造 desiredByLimiterKey：多 endpoint → 同 limiter 取确定性最小 RPM
+	type desired struct {
+		rpm int
+		cfg ratelimit.Config
+	}
+	desiredByKey := make(map[string]desired, len(suggestions))
+	for endpointUID, s := range suggestions {
+		if s.Confidence < confidenceThreshold {
 			continue
 		}
-		if suggestion.RPM <= 0 {
+		if s.RPM <= 0 {
 			continue
 		}
-
-		limiterKey, ok := a.endpointToLimiterKeys[endpointUID]
-		if !ok {
+		m, ok := a.mappings[endpointUID]
+		if !ok || m.LimiterKey == "" {
 			continue
 		}
-
-		// 检查是否需要更新（避免重复 apply）
-		if prev, exists := a.lastApplied[endpointUID]; exists && prev == suggestion.RPM {
+		if m.ExplicitRPM {
+			continue // 显式配置永远优先
+		}
+		d, exists := desiredByKey[m.LimiterKey]
+		if !exists {
+			desiredByKey[m.LimiterKey] = desired{rpm: s.RPM, cfg: m.LimiterConfig}
 			continue
 		}
-
-		// ApplyDiscoveredLimit 会检查 explicitRPM，如果显式配置则忽略
-		a.applyDiscoveredLimit(limiterKey, suggestion.RPM)
-		a.lastApplied[endpointUID] = suggestion.RPM
-		applied++
+		// 取最小值，保证结果与 map 遍历顺序无关
+		if s.RPM < d.rpm {
+			d.rpm = s.RPM
+		}
+		// 同一 limiter 的 mapping 配置应一致；保留首次以稳定行为
+		desiredByKey[m.LimiterKey] = d
 	}
 
+	// 写 limiter + 更新 lastApplied
+	applied := 0
+	newApplied := make(map[string]int, len(desiredByKey))
+	for limiterKey, d := range desiredByKey {
+		apiType, channelIndex, scope := parseLimiterKey(limiterKey)
+		if apiType == "" {
+			continue
+		}
+		var l *ratelimit.ChannelLimiter
+		if scope != "" {
+			l = a.limiterMgr.GetOrCreateScoped(apiType, channelIndex, scope, d.cfg)
+		} else {
+			l = a.limiterMgr.GetOrCreate(apiType, channelIndex, d.cfg)
+		}
+		if l == nil {
+			continue
+		}
+		if l.SetDiscoveredRPM(d.rpm) {
+			newApplied[limiterKey] = d.rpm
+			applied++
+		} else {
+			// SetDiscoveredRPM 返回 false：值未变（已设为同值）或被显式覆盖
+			if prev, ok := a.lastApplied[limiterKey]; ok {
+				newApplied[limiterKey] = prev
+			}
+		}
+	}
+
+	// 清理本轮不再需要的旧 limiterKey
+	for limiterKey := range a.lastApplied {
+		if _, ok := newApplied[limiterKey]; ok {
+			continue
+		}
+		a.clearLimiterLocked(limiterKey)
+	}
+
+	a.lastApplied = newApplied
+
 	if applied > 0 && !a.quietLogs {
-		log.Printf("[RateLimitApplier-Apply] 应用发现 RPM: %d 个 endpoint", applied)
+		log.Printf("[RateLimitApplier-Apply] 应用发现 RPM: %d 个 limiter", applied)
 	}
 }
 
-// applyDiscoveredLimit 对单个 limiter 应用发现 RPM。
-// limiterKey 为 ratelimit.Manager 的 key 格式。
-// ratelimit.Manager 会自动 GetOrCreate，但我们这里只用已有的 limiter（避免创建空壳）。
-func (a *RateLimitApplier) applyDiscoveredLimit(limiterKey string, rpm int) {
-	// 解析 limiterKey 得到 apiType 和 channelIndex
+// Clear 主动清除所有已注入的发现 RPM（并发安全）。
+// 供 kill switch、配置变更或模式切换时调用，确保不遗留运行态覆盖。
+func (a *RateLimitApplier) Clear() {
+	if a == nil {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.clearAllLocked()
+}
+
+// clearLimiterLocked 清除单个 limiterKey 的发现 RPM（需持有 a.mu）。
+func (a *RateLimitApplier) clearLimiterLocked(limiterKey string) {
 	apiType, channelIndex, scope := parseLimiterKey(limiterKey)
 	if apiType == "" {
 		return
 	}
-
 	var l *ratelimit.ChannelLimiter
 	if scope != "" {
 		l = a.limiterMgr.GetScoped(apiType, channelIndex, scope)
 	} else {
 		l = a.limiterMgr.Get(apiType, channelIndex)
 	}
-	if l == nil {
-		return
+	if l != nil {
+		l.ClearDiscoveredRPM()
 	}
-
-	l.SetDiscoveredRPM(rpm)
 }
 
-// clearAllDiscoveredLimits 清除所有已注入的发现 RPM。
-// Kill switch 或开关关闭时调用，确保不遗留运行态覆盖。
-func (a *RateLimitApplier) clearAllDiscoveredLimits() {
+// clearAllLocked 全量清除已注入的发现 RPM（需持有 a.mu）。
+// 按 lastApplied 中保存的 limiterKey 反查清理，不依赖当前 endpoint mapping，
+// 因此 mapping 被替换为空或 endpoint 消失时仍能清理旧值。
+func (a *RateLimitApplier) clearAllLocked() {
 	if len(a.lastApplied) == 0 {
 		return
 	}
-
 	cleared := 0
-	for endpointUID, limiterKey := range a.endpointToLimiterKeys {
-		if _, exists := a.lastApplied[endpointUID]; !exists {
-			continue
-		}
-
-		apiType, channelIndex, scope := parseLimiterKey(limiterKey)
-		if apiType == "" {
-			continue
-		}
-
-		var l *ratelimit.ChannelLimiter
-		if scope != "" {
-			l = a.limiterMgr.GetScoped(apiType, channelIndex, scope)
-		} else {
-			l = a.limiterMgr.Get(apiType, channelIndex)
-		}
-		if l != nil {
-			l.ClearDiscoveredRPM()
-		}
+	for limiterKey := range a.lastApplied {
+		a.clearLimiterLocked(limiterKey)
 		cleared++
 	}
-
-	// 清空 lastApplied 快照
 	a.lastApplied = make(map[string]int)
-
 	if cleared > 0 && !a.quietLogs {
-		log.Printf("[RateLimitApplier-Clear] 已清除 %d 个发现 RPM（开关关闭或 kill switch）", cleared)
+		log.Printf("[RateLimitApplier-Clear] 已清除 %d 个发现 RPM（开关关闭/kill switch/非 active）", cleared)
 	}
 }
 

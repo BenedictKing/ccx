@@ -528,17 +528,24 @@ func main() {
 			{"Images", cfg.ImagesUpstream},
 			{"Vectors", cfg.VectorsUpstream},
 		}
+		entries := make([]ratelimit.ChannelConfig, 0)
 		for _, ct := range channelTypes {
 			for idx, upstream := range ct.upstreams {
 				autoFromHeaders := upstream.RateLimitAutoFromHeaders != nil && *upstream.RateLimitAutoFromHeaders
-				rateLimitManager.GetOrCreate(ct.apiType, idx, ratelimit.Config{
-					RPM:             upstream.RateLimitRPM,
-					WindowSeconds:   config.RateLimitWindowSeconds(upstream.RateLimitWindowMinutes),
-					MaxConcurrent:   upstream.RateLimitMaxConcurrent,
-					AutoFromHeaders: autoFromHeaders,
+				entries = append(entries, ratelimit.ChannelConfig{
+					APIType:      ct.apiType,
+					ChannelIndex: idx,
+					ChannelUID:   upstream.ChannelUID,
+					Config: ratelimit.Config{
+						RPM:             upstream.RateLimitRPM,
+						WindowSeconds:   config.RateLimitWindowSeconds(upstream.RateLimitWindowMinutes),
+						MaxConcurrent:   upstream.RateLimitMaxConcurrent,
+						AutoFromHeaders: autoFromHeaders,
+					},
 				})
 			}
 		}
+		rateLimitManager.ReconcileChannelConfigs(entries)
 	}
 	applyRateLimitConfig(cfgManager.GetConfig())
 	cfgManager.RegisterOnConfigChange(applyRateLimitConfig)
@@ -607,12 +614,47 @@ func main() {
 
 				// 注册限速信号回调：上游响应 → autopilot 限速发现器 + 时间桶
 				// endpointUID 和 metricsKey 由 upstream_failover.go 在请求上下文中计算后传入
-				ratelimit.SetUpstreamSignalCallback(func(endpointUID, metricsKey, serviceType string, isStream bool, latencyMs int64, headers http.Header, statusCode int) {
-					autopilotManager.ObserveRateLimitSignal(endpointUID, 0, metricsKey, isStream, latencyMs, headers, statusCode)
+				// reason 携带 429 细分原因（如 account_rate_limit_exceeded），由
+				// upstream_failover.go 读完 body 分类后传入，确保同一次 429 只通知一次
+				ratelimit.SetUpstreamSignalCallback(func(endpointUID, metricsKey, serviceType string, isStream bool, latencyMs int64, headers http.Header, statusCode int, reason string) {
+					autopilotManager.ObserveRateLimitSignal(endpointUID, 0, metricsKey, isStream, latencyMs, headers, statusCode, reason)
+					if statusCode == http.StatusTooManyRequests && reason == string(autopilot.RateLimitReasonAccountRateLimitExceeded) {
+						autopilotManager.RequestRateLimitApply()
+					}
 				})
 
-				autopilotManager.StartWorker(context.Background())
-				log.Printf("[Autopilot-Init] 健康中心已初始化 (DB: %s, 间隔: 5分钟)", paths.AutopilotDBPath)
+				// 限速发现器配置接线：从 AutopilotRouting.RateLimitDiscovery 映射到 Discoverer 参数。
+				// 配置热重载时同步刷新；PassiveAimdEnabled=false 时仍展示 header 信号但不执行 AIMD。
+				applyRateLimitDiscoveryConfig := func() {
+					disc := autopilotManager.RateLimitDiscoverer()
+					if disc == nil {
+						return
+					}
+					rlCfg := cfgManager.GetAutopilotRouting().RateLimitDiscovery
+					discCfg := autopilot.RateLimitDiscovererConfig{
+						PassiveAimdEnabled: rlCfg.PassiveAimdEnabled,
+					}
+					if rlCfg.MinRpm > 0 {
+						discCfg.MinRPM = rlCfg.MinRpm
+					}
+					if rlCfg.MaxAutoRpm > 0 {
+						discCfg.MaxAutoRPM = rlCfg.MaxAutoRpm
+					}
+					if rlCfg.ConfidenceThreshold > 0 {
+						discCfg.ConfidenceThreshold = rlCfg.ConfidenceThreshold
+					}
+					if rlCfg.IncreaseIntervalMinutes > 0 {
+						discCfg.AIMDIncreaseInterval = time.Duration(rlCfg.IncreaseIntervalMinutes) * time.Minute
+					}
+					if rlCfg.IncreaseStepPercent > 0 {
+						discCfg.AIMDIncreasePercent = float64(rlCfg.IncreaseStepPercent)
+					}
+					disc.UpdateConfig(discCfg)
+				}
+				applyRateLimitDiscoveryConfig()
+				cfgManager.RegisterOnConfigChange(func(_ config.Config) {
+					applyRateLimitDiscoveryConfig()
+				})
 
 				// Phase 4 Item 8: A/B 测试（低比例统计抽样双发）
 				// 默认关闭（Enabled=false），需显式 opt-in。
@@ -756,6 +798,14 @@ func main() {
 			envCfg.QuietPollingLogs,
 		)
 		autopilotManager.SetRateLimitApplier(rlApplier)
+		autopilotManager.RefreshRateLimitMappings()
+		// 配置变更时同步刷新 endpoint mapping，并立即唤醒 apply worker。
+		// 这会使 kill switch、Enabled=false 或模式切换到 shadow/off 立即清理
+		// 已注入 discovered RPM，而不等待 30 秒 ticker 或 5 分钟 collectAll。
+		cfgManager.RegisterOnConfigChange(func(_ config.Config) {
+			autopilotManager.RefreshRateLimitMappings()
+			autopilotManager.RequestRateLimitApply()
+		})
 	}
 
 	// Phase 4 Item 4: 用量画像记录 hook（渠道推荐用）。
@@ -802,6 +852,11 @@ func main() {
 			autopilotManager.SetSubscriptionRefreshWorker(refreshWorker)
 			log.Printf("[Autopilot-Init] SubscriptionRefreshWorker 已创建 (将在 StartWorker 时启动)")
 		}
+	}
+
+	if autopilotManager != nil {
+		autopilotManager.StartWorker(context.Background())
+		log.Printf("[Autopilot-Init] 健康中心已初始化 (DB: %s, 间隔: 5分钟)", paths.AutopilotDBPath)
 	}
 
 	// Phase 3B-2: ModelSupportResolver 注入（无条件注册，安全门控在 ResolveModelSupport 内部）。

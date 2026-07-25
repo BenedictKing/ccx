@@ -743,6 +743,21 @@ func (s *ChannelScheduler) MarkChannelCooldown(kind ChannelKind, channelIndex in
 	s.rateLimitManager.SetCooldown(kindAPIType(kind), channelIndex, duration, time.Now())
 }
 
+// MarkLimiterScopeCooldown 对当前 key/quota scope 施加短期冷却，避免因单个
+// 账号 429 冻结整个渠道的其他独立账号。scope 非空时只冷却该 scope 的
+// limiter；scope 为空时回退到 MarkChannelCooldown。
+// limiter Manager 封装在 scheduler 内，handler 不直接操作内部 manager。
+func (s *ChannelScheduler) MarkLimiterScopeCooldown(kind ChannelKind, channelIndex int, scope string, duration time.Duration) {
+	if s == nil || s.rateLimitManager == nil || duration <= 0 {
+		return
+	}
+	if scope == "" {
+		s.MarkChannelCooldown(kind, channelIndex, duration)
+		return
+	}
+	s.rateLimitManager.SetCooldownScoped(kindAPIType(kind), channelIndex, scope, duration, time.Now())
+}
+
 func (s *ChannelScheduler) channelFailureRate(upstream *config.UpstreamConfig, kind ChannelKind) float64 {
 	if upstream == nil {
 		return 0

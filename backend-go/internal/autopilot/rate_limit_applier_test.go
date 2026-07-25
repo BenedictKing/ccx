@@ -1,7 +1,9 @@
 package autopilot
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/ratelimit"
@@ -15,13 +17,51 @@ func newTestApplier(
 	cfg *config.AutopilotRoutingConfig,
 	quietLogs bool,
 ) (*RateLimitApplier, *RateLimitDiscoverer, *ratelimit.Manager) {
-	discoverer := NewRateLimitDiscoverer(RateLimitDiscovererConfig{QuietLogs: true})
+	discoverer := NewRateLimitDiscoverer(RateLimitDiscovererConfig{PassiveAimdEnabled: true, QuietLogs: true})
 	limiterMgr := ratelimit.NewManager()
 	configGetter := func() config.AutopilotRoutingConfig {
 		return *cfg
 	}
 	applier := NewRateLimitApplier(discoverer, limiterMgr, configGetter, quietLogs)
 	return applier, discoverer, limiterMgr
+}
+
+func TestManager_RequestRateLimitApplyRunsImmediately(t *testing.T) {
+	cfg := activeRoutingCfg()
+	applier, discoverer, limiterMgr := newTestApplier(&cfg, true)
+	limiterMgr.GetOrCreate("Messages", 0, ratelimit.Config{})
+	observeHeaderRPM(discoverer, "ep-immediate", 30)
+	applier.SetEndpointMappings([]EndpointLimiterMapping{{
+		EndpointUID: "ep-immediate", LimiterKey: "Messages:0",
+	}})
+
+	manager := &Manager{rateLimitApplyCh: make(chan struct{}, 1)}
+	manager.SetRateLimitApplier(applier)
+	manager.RequestRateLimitApply()
+	manager.RequestRateLimitApply()
+	if got := len(manager.rateLimitApplyCh); got != 1 {
+		t.Fatalf("连续通知应合并为一个待处理任务: got %d", got)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		manager.runRateLimitApplyWorker(ctx)
+	}()
+	t.Cleanup(func() {
+		cancel()
+		<-done
+		limiterMgr.Stop()
+	})
+
+	deadline := time.Now().Add(time.Second)
+	for limiterMgr.Get("Messages", 0).GetRPM() != 30 {
+		if time.Now().After(deadline) {
+			t.Fatal("apply 通知未在短周期内把 discovered RPM 注入 limiter")
+		}
+		time.Sleep(time.Millisecond)
+	}
 }
 
 // ── 门控行为测试（表驱动）──
@@ -114,6 +154,7 @@ func TestRateLimitApplier_Gating(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := config.DefaultAutopilotRoutingConfig()
+			cfg.RoutingMode = config.AutopilotModeAuto // active 模式才注入运行态 limiter（shadow/off 只展示）
 			cfg.KillSwitch = tt.killSwitch
 			cfg.RateLimitDiscovery.Enabled = tt.enabled
 			cfg.RateLimitDiscovery.ConfidenceThreshold = tt.threshold
@@ -129,9 +170,7 @@ func TestRateLimitApplier_Gating(t *testing.T) {
 				limiterCfg = ratelimit.Config{RPM: 60}
 			}
 			l := limiterMgr.GetOrCreate("messages", 0, limiterCfg)
-			if tt.explicitRPM {
-				l.SetExplicitRPM()
-			}
+			// NewChannelLimiter(Config{RPM>0}) 已设置 explicitRPM=true，无需 SetExplicitRPM
 
 			applier.SetEndpointMappings([]EndpointLimiterMapping{
 				{EndpointUID: endpointUID, LimiterKey: limiterKey, ExplicitRPM: tt.explicitRPM},
@@ -154,7 +193,7 @@ func TestRateLimitApplier_Gating(t *testing.T) {
 				// 对于 0.5 需要使用 429 无 RetryAfter
 				if tt.confidence < 0.7 {
 					// 重新创建 discoverer，使用 429 信号
-					discoverer2 := NewRateLimitDiscoverer(RateLimitDiscovererConfig{QuietLogs: true})
+					discoverer2 := NewRateLimitDiscoverer(RateLimitDiscovererConfig{PassiveAimdEnabled: true, QuietLogs: true})
 					discoverer2.Observe(endpointUID, RateLimitSignal{
 						Source: SignalSource429,
 					})
@@ -185,8 +224,9 @@ func TestRateLimitApplier_Gating(t *testing.T) {
 // ── kill switch 清除已有发现 RPM ──
 
 func TestRateLimitApplier_KillSwitchClearsExistingDiscovery(t *testing.T) {
-	// 第一阶段：enabled + 高置信度 → 应用
+	// 第一阶段：enabled + active + 高置信度 → 应用
 	cfg := config.DefaultAutopilotRoutingConfig()
+	cfg.RoutingMode = config.AutopilotModeAuto
 	cfg.KillSwitch = false
 	cfg.RateLimitDiscovery.Enabled = true
 	cfg.RateLimitDiscovery.ConfidenceThreshold = 0.7

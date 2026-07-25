@@ -16,6 +16,7 @@ import (
 	"github.com/BenedictKing/ccx/internal/autopilot"
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/errutil"
+	"github.com/BenedictKing/ccx/internal/keypool"
 	"github.com/BenedictKing/ccx/internal/metrics"
 	"github.com/BenedictKing/ccx/internal/ratelimit"
 	"github.com/BenedictKing/ccx/internal/scheduler"
@@ -1182,6 +1183,238 @@ func newTestFailoverDependencies(t *testing.T, upstream config.UpstreamConfig) (
 	}
 
 	return cfgManager, channelScheduler, messagesMetrics, cleanup
+}
+
+type accountRateLimitFailoverRun struct {
+	handled        bool
+	successKey     string
+	failoverErr    *FailoverError
+	lastErr        error
+	attemptedKeys  []string
+	accountSignals int
+	signalReasons  []string
+	cfgManager     *config.ConfigManager
+	scheduler      *scheduler.ChannelScheduler
+	limiterManager *ratelimit.Manager
+	metricsManager *metrics.MetricsManager
+	upstream       config.UpstreamConfig
+}
+
+func runAccountRateLimitFailover(
+	t *testing.T,
+	upstream config.UpstreamConfig,
+	respond func(apiKey string) (int, string),
+) accountRateLimitFailoverRun {
+	t.Helper()
+	attempted := make(chan string, len(upstream.APIKeys)+1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		apiKey := r.Header.Get("X-Test-Key")
+		attempted <- apiKey
+		status, body := respond(apiKey)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(server.Close)
+
+	upstream.BaseURL = server.URL
+	cfgManager, channelScheduler, messagesMetrics, cleanup := newTestFailoverDependencies(t, upstream)
+	t.Cleanup(cleanup)
+	limiterManager := ratelimit.NewManager()
+	t.Cleanup(limiterManager.Stop)
+	channelScheduler.SetRateLimitManager(limiterManager)
+
+	originalSignalCallback := ratelimit.UpstreamSignalCallback
+	var accountSignals int
+	var signalReasons []string
+	ratelimit.SetUpstreamSignalCallback(func(_ string, _ string, _ string, _ bool, _ int64, _ http.Header, statusCode int, reason string) {
+		if statusCode == http.StatusTooManyRequests {
+			accountSignals++
+			signalReasons = append(signalReasons, reason)
+		}
+	})
+	t.Cleanup(func() { ratelimit.SetUpstreamSignalCallback(originalSignalCallback) })
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader(`{"model":"test-model"}`))
+	cfg := cfgManager.GetConfig()
+	runtimeUpstream := &cfg.Upstream[0]
+	handled, successKey, _, failoverErr, _, lastErr := TryUpstreamWithAllKeys(
+		c,
+		config.NewEnvConfig(),
+		cfgManager,
+		channelScheduler,
+		scheduler.ChannelKindMessages,
+		"Messages",
+		messagesMetrics,
+		runtimeUpstream,
+		[]warmup.URLLatencyResult{{URL: server.URL, OriginalIdx: 0}},
+		[]byte(`{"model":"test-model","messages":[]}`),
+		nil,
+		false,
+		func(upstream *config.UpstreamConfig, failedKeys map[string]bool) (string, error) {
+			return cfgManager.GetNextAPIKey(upstream, failedKeys, "Messages")
+		},
+		func(c *gin.Context, upstreamCopy *config.UpstreamConfig, apiKey string) (*http.Request, error) {
+			req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodPost, upstreamCopy.BaseURL, strings.NewReader(`{}`))
+			if err == nil {
+				req.Header.Set("X-Test-Key", apiKey)
+			}
+			return req, err
+		},
+		func(string) {},
+		nil,
+		nil,
+		func(_ *gin.Context, resp *http.Response, _ *config.UpstreamConfig, _ string, _ []byte) (*types.Usage, error) {
+			_ = resp.Body.Close()
+			return nil, nil
+		},
+		"test-model",
+		"",
+		0,
+		channelScheduler.GetChannelLogStore(scheduler.ChannelKindMessages),
+	)
+
+	close(attempted)
+	attemptedKeys := make([]string, 0, len(attempted))
+	for key := range attempted {
+		attemptedKeys = append(attemptedKeys, key)
+	}
+	return accountRateLimitFailoverRun{
+		handled:        handled,
+		successKey:     successKey,
+		failoverErr:    failoverErr,
+		lastErr:        lastErr,
+		attemptedKeys:  attemptedKeys,
+		accountSignals: accountSignals,
+		signalReasons:  signalReasons,
+		cfgManager:     cfgManager,
+		scheduler:      channelScheduler,
+		limiterManager: limiterManager,
+		metricsManager: messagesMetrics,
+		upstream:       *runtimeUpstream,
+	}
+}
+
+func TestTryUpstreamWithAllKeys_AccountRateLimitRetriesIndependentKey(t *testing.T) {
+	upstream := config.UpstreamConfig{
+		Name:       "volc-independent-keys",
+		ChannelUID: "channel-independent",
+		APIKeys:    []string{"sk-account-a", "sk-account-b"},
+		APIKeyConfigs: []config.APIKeyConfig{
+			{Key: "sk-account-a", Name: "account-a"},
+			{Key: "sk-account-b", Name: "account-b"},
+		},
+		Status:      "active",
+		ServiceType: "openai",
+	}
+	run := runAccountRateLimitFailover(t, upstream, func(apiKey string) (int, string) {
+		if apiKey == "sk-account-a" {
+			return http.StatusTooManyRequests, `{"error":{"code":"AccountRateLimitExceeded","message":"requests are too frequent"}}`
+		}
+		return http.StatusOK, `{"ok":true}`
+	})
+
+	if !run.handled || run.successKey != "sk-account-b" || run.failoverErr != nil || run.lastErr != nil {
+		t.Fatalf("failover result = handled:%v key:%q failover:%v last:%v", run.handled, run.successKey, run.failoverErr, run.lastErr)
+	}
+	if len(run.attemptedKeys) != 2 || run.attemptedKeys[0] != "sk-account-a" || run.attemptedKeys[1] != "sk-account-b" {
+		t.Fatalf("attempted keys = %v, want [sk-account-a sk-account-b]", run.attemptedKeys)
+	}
+	if run.accountSignals != 1 || len(run.signalReasons) != 1 || run.signalReasons[0] != string(autopilot.RateLimitReasonAccountRateLimitExceeded) {
+		t.Fatalf("429 signals = %d reasons=%v, want one precise signal", run.accountSignals, run.signalReasons)
+	}
+
+	scopeA := keypool.LimiterScopeFor("sk-account-a", upstream.APIKeyConfigs[0])
+	scopeB := keypool.LimiterScopeFor("sk-account-b", upstream.APIKeyConfigs[1])
+	if limiter := run.limiterManager.GetScoped("Messages", 0, scopeA); limiter == nil {
+		t.Fatal("account A scoped limiter missing")
+	} else if inCooldown, _ := limiter.InCooldown(time.Now()); !inCooldown {
+		t.Fatal("account A scope should be in cooldown")
+	}
+	if limiter := run.limiterManager.GetScoped("Messages", 0, scopeB); limiter == nil {
+		t.Fatal("account B scoped limiter missing")
+	} else if inCooldown, _ := limiter.InCooldown(time.Now()); inCooldown {
+		t.Fatal("independent account B scope must not be cooled down")
+	}
+	if limiter := run.limiterManager.Get("Messages", 0); limiter != nil {
+		if inCooldown, _ := limiter.InCooldown(time.Now()); inCooldown {
+			t.Fatal("scoped account 429 must not cool down the whole channel")
+		}
+	}
+	if got := run.metricsManager.GetKeyCircuitState(run.upstream.BaseURL, "sk-account-b", scheduler.NormalizedMetricsServiceType(scheduler.ChannelKindMessages, run.upstream.ServiceType)); got != metrics.CircuitStateClosed {
+		t.Fatalf("independent successful key circuit = %v, want closed", got)
+	}
+	for _, disabledKey := range run.cfgManager.GetConfig().Upstream[0].DisabledAPIKeys {
+		if disabledKey.Key == "sk-account-a" {
+			t.Fatal("account-level 429 must not permanently blacklist the key")
+		}
+	}
+}
+
+func TestTryUpstreamWithAllKeys_AccountRateLimitSkipsQuotaGroup(t *testing.T) {
+	upstream := config.UpstreamConfig{
+		Name:       "volc-quota-group",
+		ChannelUID: "channel-quota-group",
+		APIKeys:    []string{"sk-group-a", "sk-group-b", "sk-independent"},
+		APIKeyConfigs: []config.APIKeyConfig{
+			{Key: "sk-group-a", Name: "group-a", QuotaGroup: "volc-account"},
+			{Key: "sk-group-b", Name: "group-b", QuotaGroup: "volc-account"},
+			{Key: "sk-independent", Name: "independent"},
+		},
+		Status:      "active",
+		ServiceType: "openai",
+	}
+	run := runAccountRateLimitFailover(t, upstream, func(apiKey string) (int, string) {
+		if apiKey == "sk-group-a" {
+			return http.StatusTooManyRequests, `{"error":{"code":"account_rate_limit_exceeded"}}`
+		}
+		return http.StatusOK, `{"ok":true}`
+	})
+
+	if !run.handled || run.successKey != "sk-independent" || run.failoverErr != nil || run.lastErr != nil {
+		t.Fatalf("quota failover result = handled:%v key:%q failover:%v last:%v", run.handled, run.successKey, run.failoverErr, run.lastErr)
+	}
+	if len(run.attemptedKeys) != 2 || run.attemptedKeys[0] != "sk-group-a" || run.attemptedKeys[1] != "sk-independent" {
+		t.Fatalf("attempted keys = %v, same quota group key B should be skipped", run.attemptedKeys)
+	}
+	quotaScope := keypool.LimiterScopeFor("sk-group-a", upstream.APIKeyConfigs[0])
+	if got := keypool.LimiterScopeFor("sk-group-b", upstream.APIKeyConfigs[1]); got != quotaScope {
+		t.Fatalf("quota scopes differ: %q != %q", got, quotaScope)
+	}
+	if limiter := run.limiterManager.GetScoped("Messages", 0, quotaScope); limiter == nil {
+		t.Fatal("quota group scoped limiter missing")
+	} else if inCooldown, _ := limiter.InCooldown(time.Now()); !inCooldown {
+		t.Fatal("quota group scope should be in cooldown")
+	}
+}
+
+func TestTryUpstreamWithAllKeys_AccountRateLimitWithoutScopeFallsBackToChannel(t *testing.T) {
+	upstream := config.UpstreamConfig{
+		Name:        "volc-no-scope",
+		ChannelUID:  "channel-no-scope",
+		APIKeys:     []string{"sk-no-scope"},
+		Status:      "active",
+		ServiceType: "openai",
+	}
+	run := runAccountRateLimitFailover(t, upstream, func(string) (int, string) {
+		return http.StatusTooManyRequests, `{"error":{"code":"AccountRateLimitExceeded"}}`
+	})
+
+	if run.handled || run.successKey != "" || run.failoverErr == nil || run.failoverErr.Status != http.StatusTooManyRequests || run.lastErr == nil {
+		t.Fatalf("fallback result = handled:%v key:%q failover:%v last:%v", run.handled, run.successKey, run.failoverErr, run.lastErr)
+	}
+	if run.accountSignals != 1 {
+		t.Fatalf("account signals = %d, want 1", run.accountSignals)
+	}
+	channelLimiter := run.limiterManager.Get("Messages", 0)
+	if channelLimiter == nil {
+		t.Fatal("scope unavailable should create channel limiter for cooldown")
+	}
+	if inCooldown, _ := channelLimiter.InCooldown(time.Now()); !inCooldown {
+		t.Fatal("scope unavailable should fall back to channel cooldown")
+	}
 }
 
 // ── EndpointAttemptPolicy 注入不变量测试 ──

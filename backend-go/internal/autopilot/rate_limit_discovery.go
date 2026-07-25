@@ -18,12 +18,26 @@ const (
 	SignalSourceSuccess RateLimitSignalSource = "success" // 成功响应（用于 AIMD 上调）
 )
 
+// ── 429 信号原因 ──
+
+// RateLimitSignalReason 区分普通 429 与已确认账号级限流。
+// 精确原因可提高 AIMD 置信度；普通无 header 429 不能被一并提升为高置信信号。
+type RateLimitSignalReason string
+
+const (
+	RateLimitReasonUnknown                  RateLimitSignalReason = "unknown"
+	RateLimitReasonAccountRateLimitExceeded RateLimitSignalReason = "account_rate_limit_exceeded"
+)
+
 // ── 输入信号 ──
 
 // RateLimitSignal 是一次上游响应携带的限速相关信号。
 type RateLimitSignal struct {
 	// Source 信号来源。
 	Source RateLimitSignalSource `json:"source"`
+
+	// Reason 429 信号的细分原因（仅 Source=429 时有意义）。
+	Reason RateLimitSignalReason `json:"reason,omitempty"`
 
 	// ── header 显式值 ──
 	// Limit 为 x-ratelimit-limit-requests 或 anthropic-ratelimit-limit-requests 解析值。
@@ -93,6 +107,9 @@ type endpointLearnState struct {
 
 // RateLimitDiscovererConfig 可调参数。
 type RateLimitDiscovererConfig struct {
+	// PassiveAimdEnabled 控制 429 AIMD 降速与成功上调是否执行。
+	// false 时仍展示显式 header 信号，但不执行 429 降速和成功上调。
+	PassiveAimdEnabled bool `json:"passiveAimdEnabled"`
 	// MinRPM 估算下限，防止降为 0 后永久不可用。默认 1。
 	MinRPM int `json:"minRpm"`
 	// MaxAutoRPM 无明确 header 时的自动估算上限。默认 120。
@@ -116,6 +133,7 @@ type RateLimitDiscovererConfig struct {
 // defaultDiscovererConfig 返回默认配置。
 func defaultDiscovererConfig() RateLimitDiscovererConfig {
 	return RateLimitDiscovererConfig{
+		PassiveAimdEnabled:     true,
 		MinRPM:                 1,
 		MaxAutoRPM:             120,
 		ConfidenceThreshold:    0.3,
@@ -402,13 +420,22 @@ func (d *RateLimitDiscoverer) observeHeader(state *endpointLearnState, sig RateL
 	}
 }
 
-// observe429 处理 429 信号。
-// 规则：有 Retry-After → cooldown 语义 + 估算 = floor(current * 0.5)；无 Retry-After → floor(current * 0.7)。
+// observe429 处理 429 信号。三档规则：
+//   - 有 Retry-After：×0.5，confidence >= 0.7
+//   - 无 Retry-After 且 Reason=AccountRateLimitExceeded：×0.7，confidence >= 0.6
+//   - 其他无 header 429：×0.7，confidence >= 0.5
+//
+// 已有 header 高置信基线时，429 只降低 RPM，不降低既有 confidence。
+// PassiveAimdEnabled=false 时只更新 429 时间戳，不降速。
 func (d *RateLimitDiscoverer) observe429(state *endpointLearnState, sig RateLimitSignal, now time.Time) {
 	state.Last429At = &now
-	// 重置连续成功计数
 	state.ConsecutiveSuccessesSince429 = 0
 	state.No429Since = nil
+
+	// PassiveAimdEnabled=false：仅记录画像时间戳，不执行 AIMD 降速
+	if !d.cfg.PassiveAimdEnabled {
+		return
+	}
 
 	currentRPM := state.EstimatedRPM
 	if currentRPM <= 0 {
@@ -416,43 +443,40 @@ func (d *RateLimitDiscoverer) observe429(state *endpointLearnState, sig RateLimi
 		currentRPM = d.cfg.MaxAutoRPM / 2
 	}
 
+	var newRPM int
+	var minConf float64
 	if sig.HasRetryAfter && sig.RetryAfterSeconds > 0 {
 		// 429 + Retry-After: 估算 = floor(current * 0.5)，confidence >= 0.7
-		newRPM := int(math.Floor(float64(currentRPM) * 0.5))
-		if newRPM < d.cfg.MinRPM {
-			newRPM = d.cfg.MinRPM
-		}
-		state.EstimatedRPM = newRPM
-		state.Source = RateLimitSourcePassiveAIMD
-		if state.Confidence < 0.7 {
-			state.Confidence = 0.7
-		}
-
-		if !d.cfg.QuietLogs {
-			log.Printf("[RateLimitDiscover-429] endpoint=unknown 429+Retry-After=%.0fs rpm: %d -> %d confidence=%.2f",
-				sig.RetryAfterSeconds, currentRPM, newRPM, state.Confidence)
-		}
+		newRPM = int(math.Floor(float64(currentRPM) * 0.5))
+		minConf = 0.7
+	} else if sig.Reason == RateLimitReasonAccountRateLimitExceeded {
+		// 无 Retry-After 且确认账号级限流：×0.7，confidence >= 0.6
+		newRPM = int(math.Floor(float64(currentRPM) * 0.7))
+		minConf = 0.6
 	} else {
-		// 429 无 Retry-After: 估算 = floor(current * 0.7)，confidence >= 0.5
-		newRPM := int(math.Floor(float64(currentRPM) * 0.7))
-		if newRPM < d.cfg.MinRPM {
-			newRPM = d.cfg.MinRPM
-		}
-		state.EstimatedRPM = newRPM
-		state.Source = RateLimitSourcePassiveAIMD
-		if state.Confidence < 0.5 {
-			state.Confidence = 0.5
-		}
+		// 其他无 header 429: 估算 = floor(current * 0.7)，confidence >= 0.5
+		newRPM = int(math.Floor(float64(currentRPM) * 0.7))
+		minConf = 0.5
+	}
+	if newRPM < d.cfg.MinRPM {
+		newRPM = d.cfg.MinRPM
+	}
+	state.EstimatedRPM = newRPM
+	state.Source = RateLimitSourcePassiveAIMD
+	// 只升不降：已有更高 confidence（如 header 0.9）时保留，429 只降 RPM
+	if state.Confidence < minConf {
+		state.Confidence = minConf
+	}
 
-		if !d.cfg.QuietLogs {
-			log.Printf("[RateLimitDiscover-429] endpoint=unknown 429 rpm: %d -> %d confidence=%.2f",
-				currentRPM, newRPM, state.Confidence)
-		}
+	if !d.cfg.QuietLogs {
+		log.Printf("[RateLimitDiscover-429] endpoint=unknown 429 reason=%s retryAfter=%v rpm: %d -> %d confidence=%.2f",
+			sig.Reason, sig.HasRetryAfter, currentRPM, newRPM, state.Confidence)
 	}
 }
 
 // observeSuccess 处理成功信号，用于 AIMD 缓慢上调。
 // 规则：每 10 分钟最多 +10%，且需要最近 15 分钟无 429。
+// PassiveAimdEnabled=false 时只更新成功时间戳，不上调 RPM。
 func (d *RateLimitDiscoverer) observeSuccess(state *endpointLearnState, sig RateLimitSignal, now time.Time) {
 	if sig.LatencyMs > 0 {
 		state.LastSuccessAt = &now
@@ -471,6 +495,11 @@ func (d *RateLimitDiscoverer) observeSuccess(state *endpointLearnState, sig Rate
 		if state.No429Since == nil {
 			state.No429Since = &now
 		}
+	}
+
+	// PassiveAimdEnabled=false：不执行 AIMD 上调
+	if !d.cfg.PassiveAimdEnabled {
+		return
 	}
 
 	// AIMD 上调条件：
@@ -514,6 +543,45 @@ func (d *RateLimitDiscoverer) observeSuccess(state *endpointLearnState, sig Rate
 				state.EstimatedRPM-int(increase), newRPM)
 		}
 	}
+}
+
+// UpdateConfig 热重载发现器参数（并发安全）。
+// 对 0 值字段保留默认，避免热重载把 NewRateLimitDiscoverer 已填的默认覆盖为 0。
+// PassiveAimdEnabled 直接采用传入值（配置默认 true 由 config 层保证）；
+// 从 true→false 时不会清除已写入的画像，只是停止后续 AIMD 调整。
+func (d *RateLimitDiscoverer) UpdateConfig(cfg RateLimitDiscovererConfig) {
+	if d == nil {
+		return
+	}
+	def := defaultDiscovererConfig()
+	if cfg.MinRPM <= 0 {
+		cfg.MinRPM = def.MinRPM
+	}
+	if cfg.MaxAutoRPM <= 0 {
+		cfg.MaxAutoRPM = def.MaxAutoRPM
+	}
+	if cfg.ConfidenceThreshold <= 0 {
+		cfg.ConfidenceThreshold = def.ConfidenceThreshold
+	}
+	if cfg.AIMDIncreaseInterval <= 0 {
+		cfg.AIMDIncreaseInterval = def.AIMDIncreaseInterval
+	}
+	if cfg.AIMDIncreasePercent <= 0 {
+		cfg.AIMDIncreasePercent = def.AIMDIncreasePercent
+	}
+	if cfg.AIMDNo429Grace <= 0 {
+		cfg.AIMDNo429Grace = def.AIMDNo429Grace
+	}
+	if cfg.HeaderConfidenceMax <= 0 {
+		cfg.HeaderConfidenceMax = def.HeaderConfidenceMax
+	}
+	if cfg.RemainingConfidenceMax <= 0 {
+		cfg.RemainingConfidenceMax = def.RemainingConfidenceMax
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	// 保留 nowFunc，仅替换可调参数
+	d.cfg = cfg
 }
 
 // ── 辅助函数 ──

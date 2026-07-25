@@ -85,10 +85,7 @@ func CandidatesForModel(upstream *config.UpstreamConfig, failedKeys map[string]b
 			continue
 		}
 		quotaGroup := strings.TrimSpace(cfg.QuotaGroup)
-		scope := "key:" + stableKeyID(key)
-		if quotaGroup != "" {
-			scope = "quota:" + stableKeyID("quota:"+quotaGroup)
-		}
+		scope := LimiterScopeFor(key, cfg)
 		out = append(out, Candidate{
 			APIKey:     key,
 			Config:     cfg,
@@ -214,6 +211,19 @@ func ConfigForCandidate(channel config.UpstreamConfig, cfg config.APIKeyConfig) 
 		MaxConcurrent:   maxConcurrent,
 		AutoFromHeaders: autoFromHeaders,
 	}
+}
+
+// LimiterScopeFor 根据 API Key 及其配置返回限速 scope。
+// 有 QuotaGroup 时返回 "quota:<stable-id>"，否则返回 "key:<stable-id>"。
+// CandidatesForModel 与 Autopilot inventory 必须复用该 helper，禁止复制
+// hash/quota 规则导致 scope 漂移。
+func LimiterScopeFor(key string, cfg config.APIKeyConfig) string {
+	key = strings.TrimSpace(key)
+	quotaGroup := strings.TrimSpace(cfg.QuotaGroup)
+	if quotaGroup != "" {
+		return "quota:" + stableKeyID("quota:"+quotaGroup)
+	}
+	return "key:" + stableKeyID(key)
 }
 
 func stableKeyID(key string) string {

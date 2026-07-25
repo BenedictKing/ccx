@@ -12,9 +12,9 @@ import (
 type ChannelLimiter struct {
 	mu sync.Mutex
 
-	// --- 滑动窗口 ---
+	// --- 滑动窗口（生效态）---
 	// window 是时间窗口大小（默认60秒=1分钟）
-	// maxRequests 是窗口内允许的最大请求数（RPM）
+	// maxRequests 是窗口内允许的最大请求数（effective RPM）
 	// timestamps 记录最近的请求时间戳
 	window      time.Duration
 	maxRequests int
@@ -30,12 +30,19 @@ type ChannelLimiter struct {
 
 	lastActivity time.Time
 
-	// --- 发现 RPM 覆盖 ---
-	// explicitRPM 标记 RPM 是否由用户在 config.json 中显式配置。
-	// 当 explicitRPM=true 时，SetDiscoveredRPM 不生效（显式配置永远优先）。
+	// --- 配置态（来自 config.json）---
+	// configuredRPM 是用户显式配置的 RPM；0 表示未配置。
+	// configuredWindow 是用户配置的窗口时长；0 表示未配置（effective 时回退 60s）。
+	// explicitRPM 等价于 configuredRPM > 0，保留为可读快照。
+	configuredRPM    int
+	configuredWindow time.Duration
 	explicitRPM      bool
-	discoveredRPM    int  // 由 autopilot 运行态注入的发现 RPM（0=无覆盖）
-	discoveredRPMSet bool // discoveredRPM 是否已被设置
+
+	// --- 发现态（来自 autopilot AIMD）---
+	// discoveredRPM 由 autopilot 运行态注入；仅在 configuredRPM==0 时生效。
+	// discoveredRPMSet 标记是否已设置（区分"0=未设置"与"建议值恰为 0"）。
+	discoveredRPM    int
+	discoveredRPMSet bool
 }
 
 // Config 是 ChannelLimiter 的创建/更新配置。
@@ -69,18 +76,22 @@ func NewChannelLimiter(cfg Config, now time.Time) *ChannelLimiter {
 }
 
 // applyConfig 将配置应用到 limiter。
+// 仅更新配置态字段（configuredRPM/configuredWindow）与并发信号量；
+// 发现态（discoveredRPM）不被 cfg.RPM==0 清除，由 recomputeLocked 重算生效值。
 func (l *ChannelLimiter) applyConfig(cfg Config) {
+	l.configuredRPM = cfg.RPM
+	l.explicitRPM = cfg.RPM > 0
 	if cfg.RPM > 0 {
-		l.maxRequests = cfg.RPM
 		if cfg.WindowSeconds > 0 {
-			l.window = time.Duration(cfg.WindowSeconds) * time.Second
+			l.configuredWindow = time.Duration(cfg.WindowSeconds) * time.Second
 		} else {
-			l.window = 60 * time.Second // 默认1分钟
+			l.configuredWindow = 60 * time.Second
 		}
 	} else {
-		l.maxRequests = 0
-		l.window = 0
+		// cfg.RPM==0：清除配置态窗口，但保留 discoveredRPM（recomputeLocked 会处理）
+		l.configuredWindow = 0
 	}
+	l.recomputeLocked()
 
 	if cfg.MaxConcurrent > 0 {
 		// 重新分配信号量：如果有变更需重建
@@ -92,9 +103,33 @@ func (l *ChannelLimiter) applyConfig(cfg Config) {
 	}
 }
 
-// UpdateConfig 热更新配置，不丢失运行态 cooldown 和当前令牌。
-// UpdateConfig 热更新配置，不丢失运行态 cooldown 和当前令牌。
-// 若 cfg 与当前实际状态一致，直接返回，避免高并发 hot path 上无意义重建 sem 通道。
+// recomputeLocked 根据 configuredRPM/discoveredRPM 重算 effective maxRequests/window。
+// 优先级：configuredRPM > 0 > discoveredRPM（若已设置且 > 0）> 0（不限速）。
+func (l *ChannelLimiter) recomputeLocked() {
+	var eff int
+	var win time.Duration
+	if l.configuredRPM > 0 {
+		eff = l.configuredRPM
+		win = l.configuredWindow
+		if win <= 0 {
+			win = 60 * time.Second
+		}
+	} else if l.discoveredRPMSet && l.discoveredRPM > 0 {
+		eff = l.discoveredRPM
+		// 发现态生效时沿用配置窗口（若有），否则默认 60s
+		win = l.configuredWindow
+		if win <= 0 {
+			win = 60 * time.Second
+		}
+	}
+	l.maxRequests = eff
+	l.window = win
+}
+
+// UpdateConfig 热更新配置，不丢失运行态 cooldown、已生效 discovered RPM 和当前令牌。
+// 若 cfg 与当前配置态一致，直接返回，避免高并发 hot path 上无意义重建 sem 通道。
+// cfg.RPM==0 不会清除已生效的 discoveredRPM；显式 RPM 的添加/移除通过 recomputeLocked
+// 立即覆盖或恢复 discovered 值。
 func (l *ChannelLimiter) UpdateConfig(cfg Config) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -104,24 +139,25 @@ func (l *ChannelLimiter) UpdateConfig(cfg Config) {
 	l.applyConfig(cfg)
 }
 
-// configMatchesLocked 在持有 l.mu 时判断 cfg 是否已与 limiter 当前生效配置一致。
+// configMatchesLocked 在持有 l.mu 时判断 cfg 是否已与 limiter 当前配置态一致。
+// 只比较配置态字段（configuredRPM/configuredWindow/MaxConcurrent），
+// 不比较 effective maxRequests（否则 discovered 生效后会与 cfg.RPM 永远不匹配）。
 func (l *ChannelLimiter) configMatchesLocked(cfg Config) bool {
-	// RPM / window
+	// 配置 RPM
+	if l.configuredRPM != cfg.RPM {
+		return false
+	}
+	// 配置窗口
+	var wantWindow time.Duration
 	if cfg.RPM > 0 {
-		if l.maxRequests != cfg.RPM {
-			return false
-		}
-		wantWindow := time.Duration(cfg.WindowSeconds) * time.Second
-		if cfg.WindowSeconds <= 0 {
+		if cfg.WindowSeconds > 0 {
+			wantWindow = time.Duration(cfg.WindowSeconds) * time.Second
+		} else {
 			wantWindow = 60 * time.Second
 		}
-		if l.window != wantWindow {
-			return false
-		}
-	} else {
-		if l.maxRequests != 0 || l.window != 0 {
-			return false
-		}
+	}
+	if l.configuredWindow != wantWindow {
+		return false
 	}
 	// 并发信号量
 	if cfg.MaxConcurrent > 0 {
@@ -174,18 +210,8 @@ func (l *ChannelLimiter) LastActivity() time.Time {
 
 // ── 显式 RPM 与发现 RPM 管理 ──
 
-// SetExplicitRPM 标记该 limiter 的 RPM 来自用户显式配置。
-// 后续 SetDiscoveredRPM 调用将被忽略（显式配置永远优先）。
-func (l *ChannelLimiter) SetExplicitRPM() {
-	if l == nil {
-		return
-	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.explicitRPM = true
-}
-
 // IsExplicitRPM 返回 RPM 是否由用户显式配置。
+// 显式配置永远优先：SetDiscoveredRPM 在 explicitRPM=true 时直接返回 false。
 func (l *ChannelLimiter) IsExplicitRPM() bool {
 	if l == nil {
 		return false
@@ -195,8 +221,8 @@ func (l *ChannelLimiter) IsExplicitRPM() bool {
 	return l.explicitRPM
 }
 
-// GetRPM 返回当前生效的 RPM 值（maxRequests）。
-// 0 表示不限速。
+// GetRPM 返回当前生效的 RPM 值（maxRequests / effective）。
+// 优先级：configuredRPM > 0 > discoveredRPM > 0 > 0（不限速）。
 func (l *ChannelLimiter) GetRPM() int {
 	if l == nil {
 		return 0
@@ -207,40 +233,44 @@ func (l *ChannelLimiter) GetRPM() int {
 }
 
 // SetDiscoveredRPM 应用 autopilot 发现的 RPM 到运行态 limiter。
-// 如果 RPM 由用户显式配置（explicitRPM=true），此调用被忽略。
+// 返回 true 仅在真正改变了生效状态（首次注入、值变化或清除）时；
+// 显式配置生效、非法值或 nil limiter 返回 false。
 // rpm <= 0 表示清除发现覆盖（与 ClearDiscoveredRPM 等效）。
-func (l *ChannelLimiter) SetDiscoveredRPM(rpm int) {
+func (l *ChannelLimiter) SetDiscoveredRPM(rpm int) bool {
 	if l == nil {
-		return
+		return false
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
+	// 显式配置优先，发现值永不生效
 	if l.explicitRPM {
-		return // 显式配置优先，不覆盖
+		return false
 	}
 
 	if rpm <= 0 {
-		// 清除发现覆盖并恢复不限速状态
+		if !l.discoveredRPMSet {
+			return false
+		}
 		l.discoveredRPM = 0
 		l.discoveredRPMSet = false
-		l.maxRequests = 0
-		l.window = 0
-		return
+		l.recomputeLocked()
+		return true
 	}
 
+	if l.discoveredRPMSet && l.discoveredRPM == rpm {
+		return false
+	}
 	l.discoveredRPM = rpm
 	l.discoveredRPMSet = true
-
-	// 立即应用到滑动窗口（保留窗口大小和并发信号量不变）
-	l.maxRequests = rpm
-	if l.window <= 0 {
-		l.window = 60 * time.Second
-	}
+	l.recomputeLocked()
+	return true
 }
 
-// ClearDiscoveredRPM 清除发现 RPM 覆盖，恢复到非限速状态（如果无显式配置）。
-// 如果有显式配置，此调用无效（显式配置不受发现覆盖清除影响）。
+// ClearDiscoveredRPM 清除发现 RPM 覆盖。
+// 清除后生效值恢复为 configuredRPM（若有显式配置）或 0（不限速）。
+// 即使显式 RPM 当前覆盖了发现值，也必须清除后者，避免 kill switch 或禁用
+// Autopilot 后在用户移除显式配置时重新激活陈旧的 discovered RPM。
 func (l *ChannelLimiter) ClearDiscoveredRPM() {
 	if l == nil {
 		return
@@ -248,15 +278,9 @@ func (l *ChannelLimiter) ClearDiscoveredRPM() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	if l.explicitRPM {
-		return
-	}
-
 	l.discoveredRPM = 0
 	l.discoveredRPMSet = false
-	// 清除发现覆盖后，如果没有显式配置，恢复不限速状态
-	l.maxRequests = 0
-	l.window = 0
+	l.recomputeLocked()
 }
 
 // HasDiscoveredRPM 返回当前是否有活跃的发现 RPM 覆盖。

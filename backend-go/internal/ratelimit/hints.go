@@ -13,18 +13,20 @@ import (
 // UpstreamSignalCallback 可选的信号回调，上游响应后触发。
 // 由 main.go 注册，仅传递解析后的信号；默认 nil 不影响现有行为。
 // endpointUID 和 metricsKey 由调用方（upstream_failover.go）在当前请求上下文中计算。
-var UpstreamSignalCallback func(endpointUID, metricsKey, serviceType string, isStream bool, latencyMs int64, headers http.Header, statusCode int)
+// reason 携带 429 细分原因（如 account_rate_limit_exceeded），用于 AIMD 精确置信度。
+var UpstreamSignalCallback func(endpointUID, metricsKey, serviceType string, isStream bool, latencyMs int64, headers http.Header, statusCode int, reason string)
 
 // SetUpstreamSignalCallback 设置上游信号回调（main.go 调用）。
 // 传 nil 可清除回调。
-func SetUpstreamSignalCallback(cb func(endpointUID, metricsKey, serviceType string, isStream bool, latencyMs int64, headers http.Header, statusCode int)) {
+func SetUpstreamSignalCallback(cb func(endpointUID, metricsKey, serviceType string, isStream bool, latencyMs int64, headers http.Header, statusCode int, reason string)) {
 	UpstreamSignalCallback = cb
 }
 
 // NotifySignal 若回调已注册，触发信号回调。
 // endpointUID / metricsKey 由调用方在请求上下文中计算好后传入。
+// reason 为 429 细分原因（非 429 传空串）。
 // 失败安全：回调 panic 不影响主流程。
-func NotifySignal(endpointUID, metricsKey, serviceType string, isStream bool, latencyMs int64, headers http.Header, statusCode int) {
+func NotifySignal(endpointUID, metricsKey, serviceType string, isStream bool, latencyMs int64, headers http.Header, statusCode int, reason string) {
 	cb := UpstreamSignalCallback
 	if cb == nil || headers == nil {
 		return
@@ -34,7 +36,7 @@ func NotifySignal(endpointUID, metricsKey, serviceType string, isStream bool, la
 			log.Printf("[RateLimit-Signal] 回调 panic（已忽略）: %v", r)
 		}
 	}()
-	cb(endpointUID, metricsKey, serviceType, isStream, latencyMs, headers, statusCode)
+	cb(endpointUID, metricsKey, serviceType, isStream, latencyMs, headers, statusCode, reason)
 }
 
 // ApplyUpstreamHints 从上游响应头解析限流信息，动态调整 limiter 状态。

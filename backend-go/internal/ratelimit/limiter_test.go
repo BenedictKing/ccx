@@ -437,10 +437,11 @@ func TestLimiter_DiscoveredRPM_AppliedWhenNotExplicit(t *testing.T) {
 func TestLimiter_DiscoveredRPM_BlockedByExplicit(t *testing.T) {
 	base := time.Now()
 	l := NewChannelLimiter(Config{RPM: 60}, base) // 有显式 RPM=60
-	l.SetExplicitRPM()
 
-	// 尝试设置发现 RPM → 应被忽略
-	l.SetDiscoveredRPM(30)
+	// 尝试设置发现 RPM → 应被忽略并返回 false
+	if ok := l.SetDiscoveredRPM(30); ok {
+		t.Fatal("SetDiscoveredRPM with explicit should return false")
+	}
 	if l.GetRPM() != 60 {
 		t.Fatalf("after SetDiscoveredRPM(30) with explicit: RPM = %d, want 60", l.GetRPM())
 	}
@@ -474,7 +475,6 @@ func TestLimiter_DiscoveredRPM_ClearWhenNotExplicit(t *testing.T) {
 func TestLimiter_DiscoveredRPM_ClearIgnoredWhenExplicit(t *testing.T) {
 	base := time.Now()
 	l := NewChannelLimiter(Config{RPM: 60}, base)
-	l.SetExplicitRPM()
 
 	// ClearDiscoveredRPM 不影响显式配置
 	l.ClearDiscoveredRPM()
@@ -485,9 +485,10 @@ func TestLimiter_DiscoveredRPM_ClearIgnoredWhenExplicit(t *testing.T) {
 
 func TestLimiter_DiscoveredRPM_NilSafety(t *testing.T) {
 	var l *ChannelLimiter
-	l.SetDiscoveredRPM(30)
+	if ok := l.SetDiscoveredRPM(30); ok {
+		t.Fatal("nil limiter SetDiscoveredRPM should return false")
+	}
 	l.ClearDiscoveredRPM()
-	l.SetExplicitRPM()
 	if l.IsExplicitRPM() {
 		t.Fatal("nil limiter IsExplicitRPM = true")
 	}
@@ -570,5 +571,151 @@ func TestLimiter_Status(t *testing.T) {
 	}
 	if s.InCooldown {
 		t.Fatal("should not be in cooldown")
+	}
+}
+
+// ── Fix 0: configured/discovered/effective 状态迁移 ──
+
+func TestLimiter_StateMigration_ConfiguredZeroDiscovered30(t *testing.T) {
+	base := time.Now()
+	l := NewChannelLimiter(Config{}, base) // configured=0
+	if !l.SetDiscoveredRPM(30) {
+		t.Fatal("SetDiscoveredRPM(30) should return true")
+	}
+	if l.GetRPM() != 30 {
+		t.Fatalf("configured=0, discovered=30 -> effective=%d, want 30", l.GetRPM())
+	}
+}
+
+func TestLimiter_StateMigration_ConfiguredOverridesDiscovered(t *testing.T) {
+	base := time.Now()
+	l := NewChannelLimiter(Config{}, base)
+	l.SetDiscoveredRPM(30)
+	if l.GetRPM() != 30 {
+		t.Fatalf("pre: effective=%d, want 30", l.GetRPM())
+	}
+	// 显式配置加入后立即覆盖 discovered
+	l.UpdateConfig(Config{RPM: 60})
+	if l.GetRPM() != 60 {
+		t.Fatalf("configured=60, discovered=30 -> effective=%d, want 60", l.GetRPM())
+	}
+	if !l.IsExplicitRPM() {
+		t.Fatal("after UpdateConfig(RPM:60) IsExplicitRPM should be true")
+	}
+	// discovered 仍记录在内存，但被显式覆盖，HasDiscoveredRPM 不受影响（仍 true）
+	if !l.HasDiscoveredRPM() {
+		t.Fatal("discovered state should still be recorded")
+	}
+}
+
+func TestLimiter_StateMigration_Configured60To0RestoresDiscovered(t *testing.T) {
+	base := time.Now()
+	l := NewChannelLimiter(Config{}, base)
+	l.SetDiscoveredRPM(30)
+	l.UpdateConfig(Config{RPM: 60})
+	if l.GetRPM() != 60 {
+		t.Fatalf("pre: effective=%d, want 60", l.GetRPM())
+	}
+	// 移除显式 RPM：discovered 值应恢复生效
+	l.UpdateConfig(Config{RPM: 0})
+	if l.GetRPM() != 30 {
+		t.Fatalf("configured 60 -> 0 should restore discovered, effective=%d, want 30", l.GetRPM())
+	}
+	if l.IsExplicitRPM() {
+		t.Fatal("after UpdateConfig(RPM:0) IsExplicitRPM should be false")
+	}
+}
+
+func TestLimiter_StateMigration_ClearRestoresConfiguredRPM(t *testing.T) {
+	base := time.Now()
+	l := NewChannelLimiter(Config{RPM: 60}, base) // configured=60
+	// 显式配置时 SetDiscoveredRPM 被拒，discoveredRPMSet 仍 false
+	if ok := l.SetDiscoveredRPM(30); ok {
+		t.Fatal("SetDiscoveredRPM under explicit should return false")
+	}
+	// 清除发现值（无发现值，no-op），生效值仍为 configured
+	l.ClearDiscoveredRPM()
+	if l.GetRPM() != 60 {
+		t.Fatalf("after Clear with configured=60: effective=%d, want 60", l.GetRPM())
+	}
+}
+
+func TestLimiter_ClearDiscoveredRPMRemovesHiddenValueUnderExplicitConfig(t *testing.T) {
+	base := time.Now()
+	l := NewChannelLimiter(Config{}, base)
+	l.SetDiscoveredRPM(30)
+	l.UpdateConfig(Config{RPM: 60})
+
+	l.ClearDiscoveredRPM()
+	if l.HasDiscoveredRPM() {
+		t.Fatal("ClearDiscoveredRPM 应清除被显式配置遮蔽的 discovered RPM")
+	}
+	if l.GetRPM() != 60 {
+		t.Fatalf("显式 RPM 应保持生效: got %d, want 60", l.GetRPM())
+	}
+
+	l.UpdateConfig(Config{})
+	if l.GetRPM() != 0 {
+		t.Fatalf("移除显式 RPM 后不应恢复已清除的 discovered 值: got %d, want 0", l.GetRPM())
+	}
+}
+
+func TestLimiter_StateMigration_UpdateMaxConcurrentPreservesDiscovered(t *testing.T) {
+	base := time.Now()
+	l := NewChannelLimiter(Config{}, base)
+	l.SetDiscoveredRPM(30)
+	if l.GetRPM() != 30 {
+		t.Fatalf("pre: effective=%d, want 30", l.GetRPM())
+	}
+	// 仅更新并发配置，cfg.RPM==0 不应清除 discovered
+	l.UpdateConfig(Config{RPM: 0, MaxConcurrent: 4})
+	if l.GetRPM() != 30 {
+		t.Fatalf("UpdateConfig(MaxConcurrent) cleared discovered: effective=%d, want 30", l.GetRPM())
+	}
+	if !l.HasDiscoveredRPM() {
+		t.Fatal("HasDiscoveredRPM should remain true after MaxConcurrent update")
+	}
+}
+
+func TestLimiter_SetDiscoveredRPM_ReturnValues(t *testing.T) {
+	base := time.Now()
+	l := NewChannelLimiter(Config{}, base)
+
+	// 首次注入 -> true
+	if ok := l.SetDiscoveredRPM(30); !ok {
+		t.Fatal("first SetDiscoveredRPM(30) should return true")
+	}
+	// 相同值 -> false（无变化）
+	if ok := l.SetDiscoveredRPM(30); ok {
+		t.Fatal("SetDiscoveredRPM(30) with same value should return false")
+	}
+	// 变化值 -> true
+	if ok := l.SetDiscoveredRPM(50); !ok {
+		t.Fatal("SetDiscoveredRPM(50) change should return true")
+	}
+	// 清除 -> true
+	if ok := l.SetDiscoveredRPM(0); !ok {
+		t.Fatal("SetDiscoveredRPM(0) clear should return true")
+	}
+	// 再次清除 -> false（未改变）
+	if ok := l.SetDiscoveredRPM(0); ok {
+		t.Fatal("SetDiscoveredRPM(0) when already cleared should return false")
+	}
+	if l.HasDiscoveredRPM() {
+		t.Fatal("HasDiscoveredRPM should be false after clear")
+	}
+	if l.GetRPM() != 0 {
+		t.Fatalf("after clear effective=%d, want 0", l.GetRPM())
+	}
+}
+
+func TestLimiter_SetDiscoveredRPM_NegativeRejected(t *testing.T) {
+	base := time.Now()
+	l := NewChannelLimiter(Config{}, base)
+	if ok := l.SetDiscoveredRPM(-5); ok {
+		t.Fatal("SetDiscoveredRPM(-5) should return false")
+	}
+	if l.HasDiscoveredRPM() {
+		t.Fatal("negative rpm should not set discovered")
 	}
 }

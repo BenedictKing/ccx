@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
+	"github.com/BenedictKing/ccx/internal/keypool"
 )
 
 func TestManagerCollectAllPreservesUpstreamServiceType(t *testing.T) {
@@ -139,13 +140,57 @@ func TestManagerCollectAllReconcilesActiveMultiURLEndpoints(t *testing.T) {
 	}
 }
 
+func TestManagerBuildEndpointLimiterMappingsMatchesFailoverScope(t *testing.T) {
+	const (
+		legacyKey = "sk-legacy"
+		scopedKey = "sk-scoped"
+	)
+	cfgManager, cleanup := createTestConfigManager(t, config.Config{
+		Upstream: []config.UpstreamConfig{
+			{
+				ChannelUID: "ch-legacy",
+				BaseURL:    "https://legacy.example.com",
+				APIKeys:    []string{legacyKey},
+			},
+			{
+				ChannelUID: "ch-scoped",
+				BaseURL:    "https://scoped.example.com",
+				APIKeys:    []string{scopedKey},
+				APIKeyConfigs: []config.APIKeyConfig{
+					{Key: scopedKey, Name: "scoped account"},
+				},
+			},
+		},
+	})
+	t.Cleanup(cleanup)
+
+	mgr := &Manager{cfgManager: cfgManager}
+	cfg := cfgManager.GetConfig()
+	mappings := mgr.buildEndpointLimiterMappings(buildEndpointInventory(cfg))
+	byEndpoint := make(map[string]EndpointLimiterMapping, len(mappings))
+	for _, mapping := range mappings {
+		byEndpoint[mapping.EndpointUID] = mapping
+	}
+
+	legacyUID := GenerateEndpointUID("ch-legacy", "https://legacy.example.com", KeyHashFromAPIKey(legacyKey))
+	if got := byEndpoint[legacyUID].LimiterKey; got != "Messages:0" {
+		t.Fatalf("legacy limiter key = %q, want channel limiter Messages:0", got)
+	}
+
+	scopedUID := GenerateEndpointUID("ch-scoped", "https://scoped.example.com", KeyHashFromAPIKey(scopedKey))
+	wantScope := keypool.LimiterScopeFor(scopedKey, config.APIKeyConfig{Key: scopedKey, Name: "scoped account"})
+	if got := byEndpoint[scopedUID].LimiterKey; got != "Messages:1:"+wantScope {
+		t.Fatalf("scoped limiter key = %q, want %q", got, "Messages:1:"+wantScope)
+	}
+}
+
 // TestObserveRateLimitSignal_FeedsDiscovererAndBuckets 验证 ObserveRateLimitSignal
 // 同时喂 RateLimitDiscoverer 和 TimeBucketStore。
 func TestObserveRateLimitSignal_FeedsDiscovererAndBuckets(t *testing.T) {
 	store := NewTimeBucketStore()
 	mgr := &Manager{
 		store:               nil, // collectAll 不调用，不需要
-		rateLimitDiscoverer: NewRateLimitDiscoverer(RateLimitDiscovererConfig{}),
+		rateLimitDiscoverer: NewRateLimitDiscoverer(RateLimitDiscovererConfig{PassiveAimdEnabled: true}),
 		timeBucketStore:     store,
 	}
 
@@ -158,7 +203,7 @@ func TestObserveRateLimitSignal_FeedsDiscovererAndBuckets(t *testing.T) {
 	headers.Set("anthropic-ratelimit-requests-remaining", "40")
 	headers.Set("anthropic-ratelimit-requests-reset", "2026-01-01T00:01:00Z")
 
-	mgr.ObserveRateLimitSignal(endpointUID, 1, metricsKey, false, 200, headers, http.StatusOK)
+	mgr.ObserveRateLimitSignal(endpointUID, 1, metricsKey, false, 200, headers, http.StatusOK, "")
 
 	// 验证 RateLimitDiscoverer 收到信号
 	state := mgr.rateLimitDiscoverer.GetState(endpointUID)
@@ -194,7 +239,7 @@ func TestObserveRateLimitSignal_FeedsDiscovererAndBuckets(t *testing.T) {
 func TestObserveRateLimitSignal_429FeedsDiscoverer(t *testing.T) {
 	store := NewTimeBucketStore()
 	mgr := &Manager{
-		rateLimitDiscoverer: NewRateLimitDiscoverer(RateLimitDiscovererConfig{}),
+		rateLimitDiscoverer: NewRateLimitDiscoverer(RateLimitDiscovererConfig{PassiveAimdEnabled: true}),
 		timeBucketStore:     store,
 	}
 
@@ -202,7 +247,7 @@ func TestObserveRateLimitSignal_429FeedsDiscoverer(t *testing.T) {
 	headers := http.Header{}
 	headers.Set("Retry-After", "30")
 
-	mgr.ObserveRateLimitSignal(endpointUID, 1, "mk-429", false, 100, headers, http.StatusTooManyRequests)
+	mgr.ObserveRateLimitSignal(endpointUID, 1, "mk-429", false, 100, headers, http.StatusTooManyRequests, "")
 
 	// 验证发现器收到 429 信号
 	state := mgr.rateLimitDiscoverer.GetState(endpointUID)
@@ -238,14 +283,14 @@ func TestObserveRateLimitSignal_429FeedsDiscoverer(t *testing.T) {
 func TestObserveRateLimitSignal_Non2xxNon429RecordsBucketOnly(t *testing.T) {
 	store := NewTimeBucketStore()
 	mgr := &Manager{
-		rateLimitDiscoverer: NewRateLimitDiscoverer(RateLimitDiscovererConfig{}),
+		rateLimitDiscoverer: NewRateLimitDiscoverer(RateLimitDiscovererConfig{PassiveAimdEnabled: true}),
 		timeBucketStore:     store,
 	}
 
 	endpointUID := "ep-test-500"
 	headers := http.Header{}
 
-	mgr.ObserveRateLimitSignal(endpointUID, 1, "mk-500", false, 50, headers, http.StatusInternalServerError)
+	mgr.ObserveRateLimitSignal(endpointUID, 1, "mk-500", false, 50, headers, http.StatusInternalServerError, "")
 
 	// 发现器不应收到信号
 	state := mgr.rateLimitDiscoverer.GetState(endpointUID)
@@ -267,12 +312,12 @@ func TestObserveRateLimitSignal_Non2xxNon429RecordsBucketOnly(t *testing.T) {
 func TestObserveRateLimitSignal_EmptyEndpointUIDNoop(t *testing.T) {
 	store := NewTimeBucketStore()
 	mgr := &Manager{
-		rateLimitDiscoverer: NewRateLimitDiscoverer(RateLimitDiscovererConfig{}),
+		rateLimitDiscoverer: NewRateLimitDiscoverer(RateLimitDiscovererConfig{PassiveAimdEnabled: true}),
 		timeBucketStore:     store,
 	}
 
 	headers := http.Header{}
-	mgr.ObserveRateLimitSignal("", 1, "mk", false, 100, headers, http.StatusOK)
+	mgr.ObserveRateLimitSignal("", 1, "mk", false, 100, headers, http.StatusOK, "")
 
 	if mgr.rateLimitDiscoverer.StateCount() != 0 {
 		t.Error("空 endpointUID 不应触发发现器")
@@ -286,10 +331,10 @@ func TestObserveRateLimitSignal_EmptyEndpointUIDNoop(t *testing.T) {
 func TestObserveRateLimitSignal_NilHeadersNoop(t *testing.T) {
 	store := NewTimeBucketStore()
 	mgr := &Manager{
-		rateLimitDiscoverer: NewRateLimitDiscoverer(RateLimitDiscovererConfig{}),
+		rateLimitDiscoverer: NewRateLimitDiscoverer(RateLimitDiscovererConfig{PassiveAimdEnabled: true}),
 		timeBucketStore:     store,
 	}
 
 	// nil headers 不应 panic
-	mgr.ObserveRateLimitSignal("ep", 1, "mk", false, 100, nil, http.StatusOK)
+	mgr.ObserveRateLimitSignal("ep", 1, "mk", false, 100, nil, http.StatusOK, "")
 }
