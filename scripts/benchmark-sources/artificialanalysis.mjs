@@ -99,6 +99,11 @@ function today() {
   return new Date().toISOString().split('T')[0]
 }
 
+// AA intelligence_index v4.1 由 9 项 evaluation 复合而成（见 AA 方法文档）。
+// composite index 无任务级 raw data，taskCount 用 evaluation 数作代理，满足
+// ModelBenchmarkEvidence.taskCount>0 的 schema 约束与 presetstore 校验。
+const INTELLIGENCE_INDEX_EVALUATION_COUNT = 9
+
 /**
  * 分页拉取 /language/models/free，合并所有页的 data[]。
  * 每页独立走 cachedFetch（304 复用缓存页）。
@@ -205,6 +210,7 @@ export function extractLlmProfiles(models, modelMap, version) {
         uncertainty: 0, // 复合指数无 CI
         cohortPercentile: cohortPercentile(raw, allScores),
         cohortSize,
+        taskCount: INTELLIGENCE_INDEX_EVALUATION_COUNT,
         effort: 'default',
         selectionBasis: 'composite_index',
         sourceUrl: `https://artificialanalysis.ai/models/${slug}`,

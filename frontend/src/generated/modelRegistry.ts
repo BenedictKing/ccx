@@ -2061,7 +2061,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-opus-4-8",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       },
       {
         "benchmark": "artificial_analysis",
@@ -2076,7 +2077,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-opus-4-8",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       },
       {
         "benchmark": "artificial_analysis",
@@ -2091,7 +2093,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-opus-4-8",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       }
     ],
     "sources": [
@@ -2162,7 +2165,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-terra",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       },
       {
         "benchmark": "artificial_analysis",
@@ -2177,7 +2181,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-terra",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       },
       {
         "benchmark": "artificial_analysis",
@@ -2192,7 +2197,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-terra",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       }
     ],
     "sources": [
@@ -2264,7 +2270,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-sol",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       },
       {
         "benchmark": "artificial_analysis",
@@ -2279,7 +2286,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-sol",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       },
       {
         "benchmark": "artificial_analysis",
@@ -2294,7 +2302,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-sol",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       }
     ],
     "sources": [
@@ -2366,7 +2375,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-luna",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       },
       {
         "benchmark": "artificial_analysis",
@@ -2381,7 +2391,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-luna",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       },
       {
         "benchmark": "artificial_analysis",
@@ -2396,7 +2407,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-luna",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       }
     ],
     "sources": [
@@ -2468,7 +2480,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-5",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       },
       {
         "benchmark": "artificial_analysis",
@@ -2483,7 +2496,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-5",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       },
       {
         "benchmark": "artificial_analysis",
@@ -2498,7 +2512,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-5",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       }
     ],
     "sources": [
@@ -2554,7 +2569,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-4",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       },
       {
         "benchmark": "artificial_analysis",
@@ -2569,7 +2585,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-4",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       },
       {
         "benchmark": "artificial_analysis",
@@ -2584,7 +2601,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-4",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       }
     ],
     "sources": [
@@ -2638,7 +2656,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-fable-5",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       },
       {
         "benchmark": "artificial_analysis",
@@ -2653,7 +2672,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-fable-5",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       },
       {
         "benchmark": "artificial_analysis",
@@ -2668,7 +2688,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-fable-5",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       }
     ],
     "sources": [
@@ -2722,7 +2743,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-sonnet-5",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       },
       {
         "benchmark": "artificial_analysis",
@@ -2737,7 +2759,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-sonnet-5",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       },
       {
         "benchmark": "artificial_analysis",
@@ -2752,7 +2775,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-sonnet-5",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       }
     ],
     "sources": [
@@ -2807,7 +2831,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-sonnet-4-6",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       },
       {
         "benchmark": "artificial_analysis",
@@ -2822,7 +2847,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-sonnet-4-6",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       },
       {
         "benchmark": "artificial_analysis",
@@ -2837,7 +2863,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-sonnet-4-6",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       }
     ],
     "sources": [
@@ -2891,7 +2918,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/glm-5-2",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       },
       {
         "benchmark": "artificial_analysis",
@@ -2906,7 +2934,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/glm-5-2",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       },
       {
         "benchmark": "artificial_analysis",
@@ -2921,7 +2950,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/glm-5-2",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       }
     ],
     "sources": [
@@ -2975,7 +3005,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/glm-5-2",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       },
       {
         "benchmark": "artificial_analysis",
@@ -2990,7 +3021,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/glm-5-2",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       },
       {
         "benchmark": "artificial_analysis",
@@ -3005,7 +3037,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/glm-5-2",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       }
     ],
     "sources": [
@@ -3057,7 +3090,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/kimi-k2-7-code",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       },
       {
         "benchmark": "artificial_analysis",
@@ -3072,7 +3106,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/kimi-k2-7-code",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       },
       {
         "benchmark": "artificial_analysis",
@@ -3087,7 +3122,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/kimi-k2-7-code",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       }
     ],
     "sources": [
@@ -3139,7 +3175,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/kimi-k2-7-code",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       },
       {
         "benchmark": "artificial_analysis",
@@ -3154,7 +3191,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/kimi-k2-7-code",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       },
       {
         "benchmark": "artificial_analysis",
@@ -3169,7 +3207,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/kimi-k2-7-code",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       }
     ],
     "sources": [
@@ -3221,7 +3260,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/kimi-k2-7-code",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       },
       {
         "benchmark": "artificial_analysis",
@@ -3236,7 +3276,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/kimi-k2-7-code",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       },
       {
         "benchmark": "artificial_analysis",
@@ -3251,7 +3292,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/kimi-k2-7-code",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       }
     ],
     "sources": [
@@ -3306,7 +3348,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gemini-3-5-flash",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       },
       {
         "benchmark": "artificial_analysis",
@@ -3321,7 +3364,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gemini-3-5-flash",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       },
       {
         "benchmark": "artificial_analysis",
@@ -3336,7 +3380,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gemini-3-5-flash",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       }
     ],
     "sources": [
@@ -3420,7 +3465,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-4-mini",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       },
       {
         "benchmark": "artificial_analysis",
@@ -3435,7 +3481,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-4-mini",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       },
       {
         "benchmark": "artificial_analysis",
@@ -3450,7 +3497,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-4-mini",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       }
     ],
     "sources": [
@@ -3497,7 +3545,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gemini-3-flash",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       },
       {
         "benchmark": "artificial_analysis",
@@ -3512,7 +3561,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gemini-3-flash",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       },
       {
         "benchmark": "artificial_analysis",
@@ -3527,7 +3577,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gemini-3-flash",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       }
     ],
     "sources": [
@@ -3615,7 +3666,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/kimi-k3",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       },
       {
         "benchmark": "artificial_analysis",
@@ -3630,7 +3682,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/kimi-k3",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       },
       {
         "benchmark": "artificial_analysis",
@@ -3645,7 +3698,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/kimi-k3",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       }
     ],
     "sources": [
@@ -3692,7 +3746,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gemini-3-6-flash",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       },
       {
         "benchmark": "artificial_analysis",
@@ -3707,7 +3762,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gemini-3-6-flash",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       },
       {
         "benchmark": "artificial_analysis",
@@ -3722,7 +3778,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gemini-3-6-flash",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       }
     ],
     "sources": [
@@ -3774,7 +3831,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/grok-4-5",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       },
       {
         "benchmark": "artificial_analysis",
@@ -3789,7 +3847,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/grok-4-5",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       },
       {
         "benchmark": "artificial_analysis",
@@ -3804,7 +3863,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/grok-4-5",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       }
     ],
     "sources": [
@@ -3858,7 +3918,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/muse-spark-1-1",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       },
       {
         "benchmark": "artificial_analysis",
@@ -3873,7 +3934,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/muse-spark-1-1",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       },
       {
         "benchmark": "artificial_analysis",
@@ -3888,7 +3950,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/muse-spark-1-1",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       }
     ],
     "sources": [
@@ -3935,7 +3998,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-opus-5",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       },
       {
         "benchmark": "artificial_analysis",
@@ -3950,7 +4014,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-opus-5",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       },
       {
         "benchmark": "artificial_analysis",
@@ -3965,7 +4030,8 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-opus-5",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-25",
+        "taskCount": 9
       }
     ],
     "sources": [
