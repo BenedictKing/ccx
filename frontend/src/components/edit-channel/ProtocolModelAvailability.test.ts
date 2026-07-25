@@ -5,6 +5,13 @@ import { describe, expect, it, vi } from 'vitest'
 
 import ProtocolModelAvailability from './ProtocolModelAvailability.vue'
 
+const autopilotMocks = vi.hoisted(() => ({
+  autoDiscoverChannel: vi.fn(),
+  getChannelAutoStatus: vi.fn(),
+}))
+
+vi.mock('../../services/autopilot-api', () => autopilotMocks)
+
 vi.mock('../../i18n', () => ({
   useI18n: () => ({
     t: (key: string, params?: Record<string, number>) => {
@@ -17,6 +24,11 @@ vi.mock('../../i18n', () => ({
 
 const passthroughStub = defineComponent({
   template: '<span><slot /></span>',
+})
+
+const buttonStub = defineComponent({
+  emits: ['click'],
+  template: '<button @click="$emit(\'click\')"><slot /></button>',
 })
 
 describe('ProtocolModelAvailability', () => {
@@ -230,5 +242,47 @@ describe('ProtocolModelAvailability', () => {
     expect(messages.text()).toContain('channelEditor.protocolModels.lastDiscovered')
     expect(messages.text()).toContain('channelEditor.protocolModels.source.controlPlane')
     expect(messages.text()).toContain('火山管控面 Coding Plan 模型清单')
+  })
+
+  it('只在区块头部重新发现，并标记发现但未配置的协议', async () => {
+    autopilotMocks.autoDiscoverChannel.mockResolvedValue({ discoveryStarted: true })
+    autopilotMocks.getChannelAutoStatus.mockResolvedValue({
+      autoManaged: true,
+      discovery: { status: 'done' },
+    })
+    const wrapper = mount(ProtocolModelAvailability, {
+      props: {
+        routes: [
+          {
+            kind: 'responses', upstreamKind: 'responses', index: 2, channelUid: 'ch-responses',
+            name: 'multi-protocol', serviceType: 'responses', configured: true,
+            modelInventoryKnown: true, discoveredModels: ['gpt-5.4'],
+          },
+          {
+            kind: 'messages', upstreamKind: 'messages', index: -1, channelUid: 'ch-responses',
+            name: 'multi-protocol', serviceType: 'claude', configured: false,
+            modelInventoryKnown: true, discoveredModels: ['claude-sonnet-4-6'],
+          },
+        ],
+      },
+      global: {
+        stubs: {
+          VAlert: passthroughStub,
+          VBtn: buttonStub,
+          VChip: passthroughStub,
+          VIcon: passthroughStub,
+          VProgressCircular: passthroughStub,
+        },
+      },
+    })
+
+    expect(wrapper.findAll('.protocol-model-availability__rediscover-all')).toHaveLength(1)
+    expect(wrapper.get('[data-kind="messages"]').classes()).toContain('protocol-model-route--unconfigured')
+    expect(wrapper.get('[data-kind="messages"]').text()).toContain('channelEditor.protocolModels.unconfiguredProtocol')
+
+    await wrapper.get('.protocol-model-availability__rediscover-all').trigger('click')
+    await vi.waitFor(() => {
+      expect(autopilotMocks.autoDiscoverChannel).toHaveBeenCalledWith('responses', 'ch-responses')
+    })
   })
 })

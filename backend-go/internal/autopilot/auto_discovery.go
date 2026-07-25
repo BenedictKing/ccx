@@ -17,6 +17,7 @@ import (
 
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/errutil"
+	"github.com/BenedictKing/ccx/internal/httpclient"
 	"github.com/BenedictKing/ccx/internal/utils"
 )
 
@@ -42,15 +43,22 @@ const (
 
 // EndpointDiscoveryResult 单个 (baseURL, key) 端点的发现结果。
 type EndpointDiscoveryResult struct {
-	KeyMask               string     `json:"keyMask"`
-	BaseURL               string     `json:"baseUrl"`
-	ModelsCount           int        `json:"modelsCount"`
-	Models                []string   `json:"models,omitempty"`
-	ProtocolOk            bool       `json:"protocolOk"`
-	ErrorMessage          string     `json:"errorMessage,omitempty"`
-	ModelDiscoverySource  string     `json:"modelDiscoverySource,omitempty"`
-	ModelDiscoveryMessage string     `json:"modelDiscoveryMessage,omitempty"`
-	ModelsDiscoveredAt    *time.Time `json:"modelsDiscoveredAt,omitempty"`
+	KeyMask                  string               `json:"keyMask"`
+	BaseURL                  string               `json:"baseUrl"`
+	ModelsCount              int                  `json:"modelsCount"`
+	Models                   []string             `json:"models,omitempty"`
+	ProtocolOk               bool                 `json:"protocolOk"`
+	ErrorMessage             string               `json:"errorMessage,omitempty"`
+	ModelDiscoverySource     string               `json:"modelDiscoverySource,omitempty"`
+	ModelDiscoveryMessage    string               `json:"modelDiscoveryMessage,omitempty"`
+	ModelsDiscoveredAt       *time.Time           `json:"modelsDiscoveredAt,omitempty"`
+	ProtocolModels           map[string][]string  `json:"protocolModels,omitempty"`
+	ProtocolDiscoveredAt     map[string]time.Time `json:"protocolDiscoveredAt,omitempty"`
+	ProtocolDiscoverySource  map[string]string    `json:"protocolDiscoverySource,omitempty"`
+	ProtocolDiscoveryMessage map[string]string    `json:"protocolDiscoveryMessage,omitempty"`
+	ProtocolDiscoveryError   map[string]string    `json:"protocolDiscoveryError,omitempty"`
+	apiKey                   string               `json:"-"`
+	credentialUID            string               `json:"-"`
 }
 
 // DiscoveryTask 单渠道发现任务的运行时状态。
@@ -480,7 +488,7 @@ func (r *AutoDiscoveryRunner) discoverEndpoints(ctx context.Context, channel *co
 
 	client := r.client
 	if client == nil {
-		client = &http.Client{Timeout: r.timeout}
+		client = httpclient.GetManager().GetStandardClient(r.timeout, channel.InsecureSkipVerify, channel.ProxyURL)
 	}
 
 	var results []EndpointDiscoveryResult
@@ -506,6 +514,11 @@ func (r *AutoDiscoveryRunner) discoverEndpoints(ctx context.Context, channel *co
 			} else {
 				result = r.probeEndpoint(ctx, client, channel, baseURL, key)
 			}
+			result.apiKey = key
+			result.credentialUID = r.resolveDiscoveryCredentialUID(channel, cfgManager, key)
+			if result.ProtocolOk && channel.AutoManaged {
+				r.discoverEndpointProtocols(ctx, channel, baseURL, key, &result)
+			}
 			logEndpointDiscovery(channel.ChannelUID, result)
 			results = append(results, result)
 		}
@@ -530,7 +543,7 @@ func (r *AutoDiscoveryRunner) discoverEndpointsWithCheckpoint(ctx context.Contex
 	}
 	client := r.client
 	if client == nil {
-		client = &http.Client{Timeout: r.timeout}
+		client = httpclient.GetManager().GetStandardClient(r.timeout, channel.InsecureSkipVerify, channel.ProxyURL)
 	}
 
 	// 预计算已持久化且配置未变的端点 checkpoint，用于跳过重复探测。
@@ -580,13 +593,21 @@ func (r *AutoDiscoveryRunner) discoverEndpointsWithCheckpoint(ctx context.Contex
 			// 已持久化且配置未变：用 checkpoint 重建结果，不重新探测，避免重复请求 /models。
 			if cp, ok := prevByUID[endpointUID]; ok {
 				results = append(results, EndpointDiscoveryResult{
-					KeyMask:               utils.MaskAPIKey(key),
-					BaseURL:               baseURL,
-					Models:                cp.Models,
-					ModelsCount:           cp.ModelsCount,
-					ProtocolOk:            cp.ProtocolOk,
-					ModelDiscoverySource:  cp.ModelDiscoverySource,
-					ModelDiscoveryMessage: cp.ModelDiscoveryMessage,
+					KeyMask:                  utils.MaskAPIKey(key),
+					BaseURL:                  baseURL,
+					Models:                   cp.Models,
+					ModelsCount:              cp.ModelsCount,
+					ProtocolOk:               cp.ProtocolOk,
+					ModelDiscoverySource:     cp.ModelDiscoverySource,
+					ModelDiscoveryMessage:    cp.ModelDiscoveryMessage,
+					ModelsDiscoveredAt:       cp.ModelsDiscoveredAt,
+					ProtocolModels:           cloneProtocolModels(cp.ProtocolModels),
+					ProtocolDiscoveredAt:     cloneTimeMap(cp.ProtocolDiscoveredAt),
+					ProtocolDiscoverySource:  cloneStringMap(cp.ProtocolDiscoverySource),
+					ProtocolDiscoveryMessage: cloneStringMap(cp.ProtocolDiscoveryMessage),
+					ProtocolDiscoveryError:   cloneStringMap(cp.ProtocolDiscoveryError),
+					apiKey:                   key,
+					credentialUID:            cp.CredentialUID,
 				})
 				continue
 			}
@@ -596,6 +617,11 @@ func (r *AutoDiscoveryRunner) discoverEndpointsWithCheckpoint(ctx context.Contex
 				result = r.discoverVolcenginePlanEndpoint(ctx, client, channel, baseURL, key, cfgManager)
 			} else {
 				result = r.probeEndpoint(ctx, client, channel, baseURL, key)
+			}
+			result.apiKey = key
+			result.credentialUID = r.resolveDiscoveryCredentialUID(channel, cfgManager, key)
+			if result.ProtocolOk && channel.AutoManaged {
+				r.discoverEndpointProtocols(ctx, channel, baseURL, key, &result)
 			}
 			logEndpointDiscovery(channel.ChannelUID, result)
 			results = append(results, result)
@@ -613,19 +639,24 @@ func (r *AutoDiscoveryRunner) discoverEndpointsWithCheckpoint(ctx context.Contex
 				log.Printf("[AutoDiscovery-Checkpoint] 画像 Flush 失败，不标记 checkpoint endpoint=%s: %v", endpointUID, err)
 				continue
 			}
-			credentialUID := channel.CredentialUIDForKey(key)
 			checkpoint := CheckpointedEndpoint{
-				EndpointUID:           endpointUID,
-				KeyHash:               keyHash,
-				CredentialUID:         credentialUID,
-				BaseURL:               canonicalBaseURL,
-				Models:                result.Models,
-				ModelsCount:           result.ModelsCount,
-				ProtocolOk:            result.ProtocolOk,
-				Error:                 result.ErrorMessage,
-				ModelDiscoverySource:  result.ModelDiscoverySource,
-				ModelDiscoveryMessage: result.ModelDiscoveryMessage,
-				ProfilePersisted:      true,
+				EndpointUID:              endpointUID,
+				KeyHash:                  keyHash,
+				CredentialUID:            result.credentialUID,
+				BaseURL:                  canonicalBaseURL,
+				Models:                   append([]string(nil), result.Models...),
+				ModelsCount:              result.ModelsCount,
+				ProtocolOk:               result.ProtocolOk,
+				Error:                    result.ErrorMessage,
+				ModelDiscoverySource:     result.ModelDiscoverySource,
+				ModelDiscoveryMessage:    result.ModelDiscoveryMessage,
+				ModelsDiscoveredAt:       cloneTimePointer(result.ModelsDiscoveredAt),
+				ProtocolModels:           cloneProtocolModels(result.ProtocolModels),
+				ProtocolDiscoveredAt:     cloneTimeMap(result.ProtocolDiscoveredAt),
+				ProtocolDiscoverySource:  cloneStringMap(result.ProtocolDiscoverySource),
+				ProtocolDiscoveryMessage: cloneStringMap(result.ProtocolDiscoveryMessage),
+				ProtocolDiscoveryError:   cloneStringMap(result.ProtocolDiscoveryError),
+				ProfilePersisted:         true,
 			}
 			if err := r.taskStore.UpsertEndpointCheckpoint(channelUID, checkpoint); err != nil {
 				log.Printf("[AutoDiscovery-Checkpoint] 写入 checkpoint 失败 endpoint=%s: %v", endpointUID, err)
@@ -684,6 +715,28 @@ func (r *AutoDiscoveryRunner) resolveAutoManagedKeys(channel *config.UpstreamCon
 	return keys
 }
 
+func (r *AutoDiscoveryRunner) resolveDiscoveryCredentialUID(channel *config.UpstreamConfig, cfgManager *config.ConfigManager, apiKey string) string {
+	if channel == nil || strings.TrimSpace(apiKey) == "" {
+		return ""
+	}
+	if credentialUID := channel.CredentialUIDForKey(apiKey); credentialUID != "" {
+		return credentialUID
+	}
+	if cfgManager == nil || channel.AccountUID == "" {
+		return ""
+	}
+	for _, keyConfig := range channel.APIKeyConfigs {
+		if keyConfig.CredentialUID == "" {
+			continue
+		}
+		credential, ok := cfgManager.GetManagedAccountCredential(channel.AccountUID, keyConfig.CredentialUID)
+		if ok && credential.APIKey == apiKey {
+			return keyConfig.CredentialUID
+		}
+	}
+	return ""
+}
+
 func (r *AutoDiscoveryRunner) discoverVolcenginePlanEndpoint(
 	ctx context.Context,
 	client *http.Client,
@@ -692,7 +745,7 @@ func (r *AutoDiscoveryRunner) discoverVolcenginePlanEndpoint(
 	apiKey string,
 	cfgManager *config.ConfigManager,
 ) EndpointDiscoveryResult {
-	result := EndpointDiscoveryResult{KeyMask: utils.MaskAPIKey(apiKey), BaseURL: baseURL}
+	result := EndpointDiscoveryResult{KeyMask: utils.MaskAPIKey(apiKey), BaseURL: baseURL, apiKey: apiKey}
 
 	// 缺少账号上下文或未绑定 Access Key 时，回退到内置兜底模型清单，
 	// 让渠道立即可用（绑定 Access Key 后会由管控面 FetchModels 覆盖为真实清单）。
@@ -759,6 +812,7 @@ func (r *AutoDiscoveryRunner) probeEndpoint(ctx context.Context, client *http.Cl
 	result := EndpointDiscoveryResult{
 		KeyMask: utils.MaskAPIKey(apiKey),
 		BaseURL: baseURL,
+		apiKey:  apiKey,
 	}
 	if channel == nil {
 		result.ErrorMessage = "渠道配置为空"
@@ -787,17 +841,10 @@ func (r *AutoDiscoveryRunner) probeEndpoint(ctx context.Context, client *http.Cl
 	}
 
 	// 构建 models URL。个别 provider 的协议入口与模型列表入口不同，优先使用清单覆盖值。
-	modelsURL := buildModelsProbeURL(baseURL)
+	modelsURL := buildModelsProbeURLForService(baseURL, channel.ServiceType)
 	if manifestURL, ok := config.ResolveBuiltinModelsURL(baseURL, discoveryManifestServiceType(channel.ServiceType)); ok {
 		modelsURL = manifestURL
 	}
-	if channel.ServiceType == "gemini" {
-		// Gemini 不支持 /v1/models，跳过
-		result.ProtocolOk = false
-		result.ErrorMessage = "Gemini 暂不支持 models 探测"
-		return result
-	}
-
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, modelsURL, nil)
 	if err != nil {
 		result.ErrorMessage = fmt.Sprintf("构建请求失败: %v", err)
@@ -805,7 +852,12 @@ func (r *AutoDiscoveryRunner) probeEndpoint(ctx context.Context, client *http.Cl
 	}
 
 	// 设置认证头
-	utils.SetAuthenticationHeaderWithOverride(req.Header, apiKey, channel.AuthHeader)
+	if protocolForServiceType(channel.ServiceType) == "gemini" && !utils.HasAuthenticationHeaderOverride(channel.AuthHeader) {
+		utils.SetGeminiAuthenticationHeader(req.Header, apiKey)
+	} else {
+		utils.SetAuthenticationHeaderWithOverride(req.Header, apiKey, channel.AuthHeader)
+	}
+	utils.ApplyCustomHeaders(req.Header, channel.CustomHeaders)
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -848,6 +900,17 @@ func (r *AutoDiscoveryRunner) probeEndpoint(ctx context.Context, client *http.Cl
 }
 
 func buildModelsProbeURL(baseURL string) string {
+	return buildModelsProbeURLWithVersion(baseURL, "/v1")
+}
+
+func buildModelsProbeURLForService(baseURL, serviceType string) string {
+	if protocolForServiceType(serviceType) == "gemini" {
+		return buildModelsProbeURLWithVersion(baseURL, "/v1beta")
+	}
+	return buildModelsProbeURL(baseURL)
+}
+
+func buildModelsProbeURLWithVersion(baseURL, versionPrefix string) string {
 	skipVersionPrefix := strings.HasSuffix(baseURL, "#")
 	if skipVersionPrefix {
 		baseURL = strings.TrimSuffix(baseURL, "#")
@@ -856,7 +919,7 @@ func buildModelsProbeURL(baseURL string) string {
 	if verifyVersionPattern.MatchString(baseURL) || skipVersionPrefix {
 		return baseURL + "/models"
 	}
-	return baseURL + "/v1/models"
+	return baseURL + versionPrefix + "/models"
 }
 
 func lookupDiscoveryBuiltinManifest(channel *config.UpstreamConfig, baseURL string) (config.BuiltinModelsManifest, bool) {
@@ -969,6 +1032,9 @@ func parseModelsResponse(body []byte) []string {
 		Data []struct {
 			ID string `json:"id"`
 		} `json:"data"`
+		Models []struct {
+			Name string `json:"name"`
+		} `json:"models"`
 	}
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return nil
@@ -977,6 +1043,15 @@ func parseModelsResponse(body []byte) []string {
 	for _, m := range resp.Data {
 		if m.ID != "" {
 			models = append(models, m.ID)
+		}
+	}
+	for _, m := range resp.Models {
+		modelID := strings.TrimSpace(m.Name)
+		if index := strings.LastIndex(modelID, "/"); index >= 0 {
+			modelID = modelID[index+1:]
+		}
+		if modelID != "" {
+			models = append(models, modelID)
 		}
 	}
 	return models
@@ -1030,11 +1105,13 @@ func (r *AutoDiscoveryRunner) writeProfileForEndpoint(channelUID string, channel
 		return "", nil
 	}
 	// 从 channel 的 APIKeys 中找到对应 key
-	apiKey := ""
-	for _, key := range channel.APIKeys {
-		if utils.MaskAPIKey(key) == ep.KeyMask {
-			apiKey = key
-			break
+	apiKey := ep.apiKey
+	if apiKey == "" {
+		for _, key := range channel.APIKeys {
+			if utils.MaskAPIKey(key) == ep.KeyMask {
+				apiKey = key
+				break
+			}
 		}
 	}
 	if apiKey == "" {
@@ -1081,8 +1158,18 @@ func (r *AutoDiscoveryRunner) writeProfileForEndpoint(channelUID string, channel
 	profile.KeyMask = ep.KeyMask
 	profile.KeyHash = keyHash
 	profile.MetricsKey = metricsKey
-	profile.CredentialUID = channel.CredentialUIDForKey(apiKey)
+	profile.CredentialUID = ep.credentialUID
+	if profile.CredentialUID == "" {
+		profile.CredentialUID = channel.CredentialUIDForKey(apiKey)
+	}
 	profile.AvailableModels = ep.Models
+	ensureConfiguredProtocolDiscovery(channel, &ep)
+	profile.ProtocolModels = cloneProtocolModels(ep.ProtocolModels)
+	profile.ProtocolModelsHash = hashProtocolModels(ep.ProtocolModels)
+	profile.ProtocolDiscoveredAt = cloneTimeMap(ep.ProtocolDiscoveredAt)
+	profile.ProtocolDiscoverySource = cloneStringMap(ep.ProtocolDiscoverySource)
+	profile.ProtocolDiscoveryMessage = cloneStringMap(ep.ProtocolDiscoveryMessage)
+	profile.ProtocolDiscoveryError = cloneStringMap(ep.ProtocolDiscoveryError)
 	if len(ep.Models) > 0 {
 		hash := sha256.Sum256([]byte(strings.Join(ep.Models, ",")))
 		profile.ModelListHash = hex.EncodeToString(hash[:8])

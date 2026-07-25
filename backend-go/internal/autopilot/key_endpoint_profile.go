@@ -210,8 +210,14 @@ type KeyEndpointProfile struct {
 	SupportsLongCtx   bool `json:"supportsLongCtx"`
 
 	// ── 该 endpoint 的可用模型列表 ──
-	AvailableModels []string          `json:"availableModels"` // 探测到的实际模型列表
-	ModelMapping    map[string]string `json:"modelMapping"`    // 该 endpoint 的模型映射
+	AvailableModels          []string             `json:"availableModels"`                    // 当前配置协议探测到的实际模型列表
+	ProtocolModels           map[string][]string  `json:"protocolModels,omitempty"`           // 上游原生协议 -> 模型列表
+	ProtocolModelsHash       map[string]string    `json:"protocolModelsHash,omitempty"`       // 上游原生协议 -> 模型列表哈希
+	ProtocolDiscoveredAt     map[string]time.Time `json:"protocolDiscoveredAt,omitempty"`     // 上游原生协议 -> 最近发现时间
+	ProtocolDiscoverySource  map[string]string    `json:"protocolDiscoverySource,omitempty"`  // 上游原生协议 -> 清单来源
+	ProtocolDiscoveryMessage map[string]string    `json:"protocolDiscoveryMessage,omitempty"` // 上游原生协议 -> 发现说明
+	ProtocolDiscoveryError   map[string]string    `json:"protocolDiscoveryError,omitempty"`   // 上游原生协议 -> 最近失败原因
+	ModelMapping             map[string]string    `json:"modelMapping"`                       // 该 endpoint 的模型映射
 
 	// ── 运行时指标（来自 MetricsManager）──
 	SuccessRate15m          float64    `json:"successRate15m"`

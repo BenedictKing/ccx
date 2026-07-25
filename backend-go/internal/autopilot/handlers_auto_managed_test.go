@@ -205,6 +205,41 @@ func TestManagedChannelModelAvailabilityIncludesDiscoveryMetadata(t *testing.T) 
 	}
 }
 
+func TestManagedProtocolAvailabilityViewsAggregatesByProtocolAndCredential(t *testing.T) {
+	discoveredAt := time.Date(2026, 7, 25, 10, 0, 0, 0, time.UTC)
+	profiles := []*KeyEndpointProfile{
+		{
+			EndpointUID: "ep-a", CredentialUID: "cred-a", KeyMask: "sk-a***001", ServiceType: "responses",
+			UpdatedAt: discoveredAt, ProtocolModels: map[string][]string{
+				"responses": {"shared", "responses-only"},
+				"chat":      {"shared"},
+			},
+			ProtocolDiscoveredAt:    map[string]time.Time{"responses": discoveredAt, "chat": discoveredAt},
+			ProtocolDiscoverySource: map[string]string{"responses": "models_api", "chat": "protocol_probe"},
+		},
+		{
+			EndpointUID: "ep-b", CredentialUID: "cred-b", KeyMask: "sk-b***002", ServiceType: "responses",
+			UpdatedAt: discoveredAt, ProtocolModels: map[string][]string{
+				"responses": {"shared"},
+				"messages":  {"shared", "messages-only"},
+			},
+			ProtocolDiscoveredAt:    map[string]time.Time{"responses": discoveredAt, "messages": discoveredAt},
+			ProtocolDiscoverySource: map[string]string{"responses": "models_api", "messages": "protocol_probe"},
+		},
+	}
+
+	views := managedProtocolAvailabilityViews(profiles)
+	if len(views) != 3 {
+		t.Fatalf("views=%+v", views)
+	}
+	if views[0].Protocol != "messages" || strings.Join(views[0].DiscoveredModels, ",") != "messages-only,shared" {
+		t.Fatalf("messages view=%+v", views[0])
+	}
+	if views[2].Protocol != "responses" || len(views[2].ModelBindings) != 2 {
+		t.Fatalf("responses view=%+v", views[2])
+	}
+}
+
 func TestPatchAccountCredentialsRemovesByUID(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "config.json")
@@ -485,7 +520,7 @@ func TestCustomAutoAddResponseIncludesActualRoute(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = manager.Close() })
 
-	discoverer := NewRateLimitDiscoverer(RateLimitDiscovererConfig{QuietLogs: true})
+	discoverer := NewRateLimitDiscoverer(RateLimitDiscovererConfig{PassiveAimdEnabled: true, QuietLogs: true})
 	router := setupAutoManagedRouter(&AutoManagedDeps{CfgManager: manager, RateLimitDiscoverer: discoverer})
 	req := httptest.NewRequest(http.MethodPost, "/api/responses/channels/auto-add", bytes.NewBufferString(
 		`{"name":"fastaitoken-com-test","baseUrls":["https://example.com"],"apiKeys":["sk-test"],"rateLimitHint":{"initialRpm":30,"effectiveRpm":15,"rateLimited":true,"rateLimitedCount":1}}`,

@@ -4,7 +4,9 @@ import (
 	"database/sql"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/BenedictKing/ccx/internal/errutil"
 	_ "modernc.org/sqlite"
@@ -122,6 +124,35 @@ func TestProfileStore_UpsertAndGet(t *testing.T) {
 				t.Errorf("ServiceType 不匹配: got=%s want=%s", got.ServiceType, tc.profile.ServiceType)
 			}
 		})
+	}
+}
+
+func TestProfileStore_RoundTripsProtocolDiscoveryFields(t *testing.T) {
+	db := newTestDB(t)
+	store, err := NewProfileStoreWithDB(db)
+	if err != nil {
+		t.Fatalf("NewProfileStoreWithDB 失败: %v", err)
+	}
+	discoveredAt := time.Date(2026, 7, 25, 11, 0, 0, 0, time.UTC)
+	profile := newTestProfile("ep-protocol", "ch-protocol", "responses", "https://api.example.com")
+	profile.ProtocolModels = map[string][]string{"responses": {"gpt-5.4"}, "chat": {"gpt-5.4"}}
+	profile.ProtocolModelsHash = hashProtocolModels(profile.ProtocolModels)
+	profile.ProtocolDiscoveredAt = map[string]time.Time{"responses": discoveredAt, "chat": discoveredAt}
+	profile.ProtocolDiscoverySource = map[string]string{"responses": "models_api", "chat": "protocol_probe"}
+	profile.ProtocolDiscoveryError = map[string]string{"gemini": "HTTP 404"}
+	if err := store.Upsert(profile); err != nil {
+		t.Fatalf("Upsert 失败: %v", err)
+	}
+	if err := store.Flush(); err != nil {
+		t.Fatalf("Flush 失败: %v", err)
+	}
+
+	got := store.Get(profile.EndpointUID)
+	if got == nil || strings.Join(got.ProtocolModels["chat"], ",") != "gpt-5.4" {
+		t.Fatalf("ProtocolModels 未正确持久化: %+v", got)
+	}
+	if got.ProtocolDiscoverySource["chat"] != "protocol_probe" || got.ProtocolDiscoveryError["gemini"] == "" {
+		t.Fatalf("协议元数据未正确持久化: %+v", got)
 	}
 }
 

@@ -41,16 +41,22 @@ CREATE INDEX IF NOT EXISTS idx_discovery_tasks_status
 
 // CheckpointedEndpoint 端点级 checkpoint（脱敏，不含明文 API Key）。
 type CheckpointedEndpoint struct {
-	EndpointUID           string   `json:"endpointUid"`
-	KeyHash               string   `json:"keyHash"`
-	CredentialUID         string   `json:"credentialUid"`
-	BaseURL               string   `json:"baseUrl"`
-	Models                []string `json:"models,omitempty"`
-	ModelsCount           int      `json:"modelsCount"`
-	ProtocolOk            bool     `json:"protocolOk"`
-	Error                 string   `json:"error,omitempty"`
-	ModelDiscoverySource  string   `json:"modelDiscoverySource,omitempty"`
-	ModelDiscoveryMessage string   `json:"modelDiscoveryMessage,omitempty"`
+	EndpointUID              string               `json:"endpointUid"`
+	KeyHash                  string               `json:"keyHash"`
+	CredentialUID            string               `json:"credentialUid"`
+	BaseURL                  string               `json:"baseUrl"`
+	Models                   []string             `json:"models,omitempty"`
+	ModelsCount              int                  `json:"modelsCount"`
+	ProtocolOk               bool                 `json:"protocolOk"`
+	Error                    string               `json:"error,omitempty"`
+	ModelDiscoverySource     string               `json:"modelDiscoverySource,omitempty"`
+	ModelDiscoveryMessage    string               `json:"modelDiscoveryMessage,omitempty"`
+	ModelsDiscoveredAt       *time.Time           `json:"modelsDiscoveredAt,omitempty"`
+	ProtocolModels           map[string][]string  `json:"protocolModels,omitempty"`
+	ProtocolDiscoveredAt     map[string]time.Time `json:"protocolDiscoveredAt,omitempty"`
+	ProtocolDiscoverySource  map[string]string    `json:"protocolDiscoverySource,omitempty"`
+	ProtocolDiscoveryMessage map[string]string    `json:"protocolDiscoveryMessage,omitempty"`
+	ProtocolDiscoveryError   map[string]string    `json:"protocolDiscoveryError,omitempty"`
 	// ProfilePersisted 表示该端点对应的画像已成功 Flush。
 	// 仅 true 且 endpointUID 仍匹配当前配置时，恢复期才跳过该端点。
 	ProfilePersisted bool `json:"profilePersisted"`

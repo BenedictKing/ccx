@@ -989,6 +989,12 @@ func carryForwardDiscoveryFields(old *KeyEndpointProfile, current *KeyEndpointPr
 	current.ModelListHash = old.ModelListHash
 	current.ModelDiscoverySource = old.ModelDiscoverySource
 	current.ModelDiscoveryMessage = old.ModelDiscoveryMessage
+	current.ProtocolModels = cloneProtocolModels(old.ProtocolModels)
+	current.ProtocolModelsHash = cloneStringMap(old.ProtocolModelsHash)
+	current.ProtocolDiscoveredAt = cloneTimeMap(old.ProtocolDiscoveredAt)
+	current.ProtocolDiscoverySource = cloneStringMap(old.ProtocolDiscoverySource)
+	current.ProtocolDiscoveryMessage = cloneStringMap(old.ProtocolDiscoveryMessage)
+	current.ProtocolDiscoveryError = cloneStringMap(old.ProtocolDiscoveryError)
 	if old.ModelsDiscoveredAt != nil {
 		discoveredAt := old.ModelsDiscoveredAt.UTC()
 		current.ModelsDiscoveredAt = &discoveredAt

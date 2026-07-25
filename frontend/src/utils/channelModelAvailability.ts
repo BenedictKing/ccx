@@ -21,6 +21,15 @@ const NATIVE_KIND_BY_SERVICE_TYPE: Record<string, ChannelKind> = {
 
 const DISPLAY_ORDER: ChannelKind[] = ['messages', 'chat', 'responses', 'gemini', 'images', 'vectors']
 
+const SERVICE_TYPE_BY_KIND: Record<ChannelKind, string> = {
+  messages: 'claude',
+  chat: 'openai',
+  responses: 'responses',
+  gemini: 'gemini',
+  images: 'openai',
+  vectors: 'openai',
+}
+
 type ManagedModelsApi = Pick<ApiService,
   | 'getChannels'
   | 'getChatChannels'
@@ -198,21 +207,50 @@ export function buildNativeProtocolModelRoutes(
     const existing = selected.get(upstreamKind)
     if (existing && (existing.native || !native)) continue
 
-    const availability = route.channelUid ? availabilityByChannel.get(route.channelUid) : undefined
+    const channelAvailability = route.channelUid ? availabilityByChannel.get(route.channelUid) : undefined
+    const protocolAvailability = channelAvailability?.protocolAvailability?.find(
+      availability => availability.protocol === upstreamKind,
+    )
+    const availability = protocolAvailability ?? channelAvailability
     selected.set(upstreamKind, {
       native,
       route: {
         ...route,
         upstreamKind,
+        configured: true,
         modelInventoryKnown: availability?.modelInventoryKnown,
         discoveredModels: availability?.discoveredModels,
         modelBindings: availability?.modelBindings,
-        modelsUpdatedAt: availability?.modelsUpdatedAt,
+        modelsUpdatedAt: protocolAvailability?.modelsDiscoveredAt ?? channelAvailability?.modelsUpdatedAt,
         modelsDiscoveredAt: availability?.modelsDiscoveredAt,
         modelDiscoverySource: availability?.modelDiscoverySource,
         modelDiscoveryMessage: availability?.modelDiscoveryMessage,
       },
     })
+  }
+
+  for (const channel of accountChannels ?? []) {
+    for (const availability of channel.protocolAvailability ?? []) {
+      if (selected.has(availability.protocol)) continue
+      selected.set(availability.protocol, {
+        native: false,
+        route: {
+          kind: availability.protocol,
+          upstreamKind: availability.protocol,
+          index: -1,
+          name: channel.name,
+          serviceType: SERVICE_TYPE_BY_KIND[availability.protocol],
+          channelUid: channel.channelUid,
+          configured: false,
+          modelInventoryKnown: availability.modelInventoryKnown,
+          discoveredModels: availability.discoveredModels,
+          modelBindings: availability.modelBindings,
+          modelsDiscoveredAt: availability.modelsDiscoveredAt,
+          modelDiscoverySource: availability.modelDiscoverySource,
+          modelDiscoveryMessage: availability.modelDiscoveryMessage,
+        },
+      })
+    }
   }
 
   return DISPLAY_ORDER.flatMap(kind => {

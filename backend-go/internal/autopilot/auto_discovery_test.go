@@ -494,6 +494,83 @@ func TestProbeEndpoint_ModelsUsesUnifiedAuthHeader(t *testing.T) {
 	}
 }
 
+func TestProbeEndpoint_GeminiModels(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1beta/models" {
+			t.Errorf("unexpected path %s", r.URL.Path)
+		}
+		if got := r.Header.Get("x-goog-api-key"); got != "gemini-test-key" {
+			t.Errorf("x-goog-api-key = %q, want gemini-test-key", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"models":[{"name":"models/gemini-3.5-flash"},{"name":"models/gemini-3.1-pro-preview"}]}`))
+	}))
+	defer srv.Close()
+
+	runner := NewAutoDiscoveryRunner(nil, nil)
+	channel := &config.UpstreamConfig{
+		ServiceType: "gemini",
+		BaseURL:     srv.URL,
+		APIKeys:     []string{"gemini-test-key"},
+	}
+
+	result := runner.probeEndpoint(context.Background(), srv.Client(), channel, channel.BaseURL, "gemini-test-key")
+	if !result.ProtocolOk || result.ModelsCount != 2 {
+		t.Fatalf("Gemini models discovery failed: %+v", result)
+	}
+	if got := strings.Join(result.Models, ","); got != "gemini-3.5-flash,gemini-3.1-pro-preview" {
+		t.Fatalf("models=%q", got)
+	}
+}
+
+func TestDiscoverEndpoints_ProbesAdditionalProtocols(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/models":
+			_, _ = w.Write([]byte(`{"data":[{"id":"gpt-5.4"}]}`))
+		case "/v1/messages", "/v1/chat/completions":
+			if r.Method != http.MethodPost {
+				t.Errorf("%s method=%s", r.URL.Path, r.Method)
+			}
+			_, _ = w.Write([]byte(`{"ok":true}`))
+		case "/v1beta/models/gpt-5.4:generateContent":
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":"unsupported protocol"}`))
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	runner := NewAutoDiscoveryRunner(nil, nil)
+	runner.client = srv.Client()
+	channel := &config.UpstreamConfig{
+		ChannelUID:  "ch-multi",
+		ServiceType: "responses",
+		BaseURL:     srv.URL,
+		APIKeys:     []string{"sk-test"},
+		AutoManaged: true,
+	}
+
+	results := runner.discoverEndpoints(context.Background(), channel)
+	if len(results) != 1 {
+		t.Fatalf("results=%d", len(results))
+	}
+	result := results[0]
+	for _, protocol := range []string{"messages", "chat", "responses"} {
+		if got := strings.Join(result.ProtocolModels[protocol], ","); got != "gpt-5.4" {
+			t.Fatalf("%s models=%q", protocol, got)
+		}
+	}
+	if result.ProtocolDiscoverySource["chat"] != "protocol_probe" {
+		t.Fatalf("chat source=%q", result.ProtocolDiscoverySource["chat"])
+	}
+	if result.ProtocolDiscoveryError["gemini"] == "" {
+		t.Fatal("Gemini 探测失败应记录原因")
+	}
+}
+
 func TestProbeEndpoint_ManifestExcludePatternsFilterModels(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/models" {

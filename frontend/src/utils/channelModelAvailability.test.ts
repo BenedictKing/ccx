@@ -74,6 +74,32 @@ describe('buildNativeProtocolModelRoutes', () => {
     expect(result.map(route => route.upstreamKind)).toEqual(['chat', 'responses'])
   })
 
+  it('展开后台发现但尚未配置的原生协议', () => {
+    const result = buildNativeProtocolModelRoutes([
+      { kind: 'responses', index: 2, channelUid: 'ch-responses', name: 'multi-protocol', serviceType: 'responses' },
+    ], [{
+      kind: 'responses',
+      channelUid: 'ch-responses',
+      name: 'multi-protocol',
+      serviceType: 'responses',
+      status: 'active',
+      protocolAvailability: [
+        { protocol: 'responses', modelInventoryKnown: true, discoveredModels: ['gpt-5.4'] },
+        { protocol: 'messages', modelInventoryKnown: true, discoveredModels: ['claude-sonnet-4-6'] },
+        { protocol: 'chat', modelInventoryKnown: true, discoveredModels: ['gpt-5.4'] },
+      ],
+    }])
+
+    expect(result.map(route => route.upstreamKind)).toEqual(['messages', 'chat', 'responses'])
+    expect(result.find(route => route.upstreamKind === 'responses')?.configured).toBe(true)
+    expect(result.find(route => route.upstreamKind === 'messages')).toMatchObject({
+      configured: false,
+      index: -1,
+      channelUid: 'ch-responses',
+      discoveredModels: ['claude-sonnet-4-6'],
+    })
+  })
+
   it('旧后端缺少画像字段时按协议和 Key 回退查询模型', async () => {
     const routes: ChannelProtocolRoute[] = [
       { kind: 'messages', index: 0, channelUid: 'ch-messages', name: 'compshare-claude', serviceType: 'claude' },

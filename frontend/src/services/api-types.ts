@@ -297,6 +297,7 @@ export interface ChannelProtocolRoute {
   modelsDiscoveredAt?: string
   modelDiscoverySource?: string
   modelDiscoveryMessage?: string
+  configured?: boolean
 }
 
 export interface ChannelsResponse {
@@ -1626,7 +1627,6 @@ export interface AutopilotTraceDetailResponse {
   trace: TraceDetailV2
 }
 
-
 // 自动添加渠道请求
 export interface AutoAddChannelRequest {
   name?: string
@@ -1892,6 +1892,17 @@ export interface ManagedAccountChannel {
   modelsDiscoveredAt?: string
   modelDiscoverySource?: string
   modelDiscoveryMessage?: string
+  protocolAvailability?: ProtocolAvailability[]
+}
+
+export interface ProtocolAvailability {
+  protocol: ChannelKind
+  modelInventoryKnown?: boolean
+  discoveredModels?: string[]
+  modelBindings?: ChannelModelBinding[]
+  modelsDiscoveredAt?: string
+  modelDiscoverySource?: string
+  modelDiscoveryMessage?: string
 }
 
 export interface ManagedAccount {
@@ -1916,11 +1927,16 @@ export interface EndpointDiscoveryInfo {
   modelDiscoverySource?: string
   modelDiscoveryMessage?: string
   modelsDiscoveredAt?: string
+  protocolModels?: Partial<Record<ChannelKind, string[]>>
+  protocolDiscoveredAt?: Partial<Record<ChannelKind, string>>
+  protocolDiscoverySource?: Partial<Record<ChannelKind, string>>
+  protocolDiscoveryMessage?: Partial<Record<ChannelKind, string>>
+  protocolDiscoveryError?: Partial<Record<ChannelKind, string>>
 }
 
 // 发现状态信息
 export interface DiscoveryStatusInfo {
-  status: 'pending' | 'running' | 'done' | 'failed'
+  status: 'idle' | 'pending' | 'running' | 'done' | 'failed'
   startedAt?: string
   finishedAt?: string
   error?: string

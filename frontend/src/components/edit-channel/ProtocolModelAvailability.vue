@@ -10,16 +10,58 @@
           {{ t('channelEditor.protocolModels.hint') }}
         </div>
       </div>
-      <v-progress-circular v-if="loading" class="ml-auto" color="primary" indeterminate size="18" width="2" />
+      <div class="protocol-model-availability__actions">
+        <div v-if="isDetecting" class="protocol-model-availability__detecting text-caption text-medium-emphasis">
+          <v-progress-circular color="primary" indeterminate size="18" width="2" />
+          <span>{{ t('channelEditor.protocolModels.detecting') }}</span>
+        </div>
+        <v-btn
+          v-if="primaryDiscoveryRoute"
+          class="protocol-model-availability__rediscover-all"
+          size="small"
+          variant="tonal"
+          color="primary"
+          :loading="rediscovering"
+          :disabled="rediscovering"
+          @click="rediscoverAll"
+        >
+          <v-icon start size="16">mdi-refresh</v-icon>
+          {{ t('channelEditor.protocolModels.rediscoverAll') }}
+        </v-btn>
+      </div>
     </div>
+
+    <v-alert
+      v-if="showIncompleteHint"
+      class="mb-3"
+      type="warning"
+      variant="tonal"
+      density="compact"
+    >
+      {{ t('channelEditor.protocolModels.incompleteHint') }}
+    </v-alert>
+    <v-alert
+      v-if="rediscoverError"
+      class="mb-3"
+      type="error"
+      variant="tonal"
+      density="compact"
+    >
+      {{ rediscoverError }}
+    </v-alert>
 
     <div class="protocol-model-availability__rows">
       <div
         v-for="route in normalizedRoutes"
         :key="`${route.kind}:${route.channelUid || route.index}`"
         class="protocol-model-route"
+        :class="{ 'protocol-model-route--unconfigured': !route.configured }"
         :data-kind="route.upstreamKind"
       >
+        <div v-if="!route.configured" class="protocol-model-route__unconfigured text-caption text-info">
+          <v-icon size="15" color="info">mdi-information-outline</v-icon>
+          {{ t('channelEditor.protocolModels.unconfiguredProtocol') }}
+        </div>
         <div class="protocol-model-route__identity">
           <v-icon size="18" color="primary">{{ route.icon }}</v-icon>
           <div class="protocol-model-route__label">
@@ -39,27 +81,9 @@
           <v-chip size="x-small" variant="tonal" color="secondary">
             {{ route.discoverySourceLabel }}
           </v-chip>
-          <v-btn
-            v-if="route.channelUid"
-            class="protocol-model-route__rediscover"
-            size="x-small"
-            variant="tonal"
-            color="primary"
-            :loading="isRediscovering(route)"
-            :disabled="isRediscovering(route)"
-            @click="handleRediscover(route)"
-          >
-            <v-icon start size="14">mdi-refresh</v-icon>
-            {{ isRediscovering(route)
-              ? t('channelEditor.protocolModels.rediscovering')
-              : t('channelEditor.protocolModels.rediscover') }}
-          </v-btn>
           <span v-if="route.modelDiscoveryMessage" class="text-caption text-medium-emphasis">
             {{ route.modelDiscoveryMessage }}
           </span>
-        </div>
-        <div v-if="route.rediscoverError" class="text-caption text-error">
-          {{ route.rediscoverError }}
         </div>
 
         <!-- 多 Key 按可用 Key 集合归组，直接展示共同模型与各子集专有模型。 -->
@@ -166,7 +190,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 
 import { useI18n } from '../../i18n'
 import type { ChannelKind, ChannelProtocolRoute } from '../../services/api'
@@ -237,68 +261,105 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 
-// 每个 route 的重新发现状态（按 channelUid 跟踪）。
-const rediscoverState = reactive<Record<string, { running: boolean; error: string }>>({})
-
-const routeKey = (route: ChannelProtocolRoute) => route.channelUid ?? ''
-
-const isRediscovering = (route: ChannelProtocolRoute) => rediscoverState[routeKey(route)]?.running === true
-
 const REDISCOVER_POLL_INTERVAL_MS = 1500
-const REDISCOVER_POLL_TIMEOUT_MS = 30000
+const REDISCOVER_POLL_TIMEOUT_MS = 5 * 60 * 1000
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+const rediscovering = ref(false)
+const rediscoverError = ref('')
+let pollingGeneration = 0
 
-const handleRediscover = async (route: ChannelProtocolRoute) => {
-  const key = routeKey(route)
-  if (!key || rediscoverState[key]?.running) return
-  const state = (rediscoverState[key] ??= { running: false, error: '' })
-  state.running = true
-  state.error = ''
+const primaryDiscoveryRoute = computed(() => (
+  (props.routes ?? []).find(route => route.configured !== false && route.channelUid && route.index >= 0)
+  ?? (props.routes ?? []).find(route => route.configured !== false && route.channelUid)
+))
+
+const isDetecting = computed(() => props.loading || rediscovering.value)
+
+const pollDiscovery = async (route: ChannelProtocolRoute, generation: number) => {
+  const channelUid = route.channelUid
+  if (!channelUid) return
+  const deadline = Date.now() + REDISCOVER_POLL_TIMEOUT_MS
+  for (;;) {
+    const status = await getChannelAutoStatus(route.kind, channelUid)
+    if (generation !== pollingGeneration) return
+    const discovery = status.discovery
+    if (discovery?.status === 'failed') {
+      throw new Error(discovery.error || t('channelEditor.protocolModels.rediscoverFailed'))
+    }
+    if (!discovery || (discovery.status !== 'pending' && discovery.status !== 'running')) {
+      emit('refreshed')
+      return
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(t('channelEditor.protocolModels.rediscoverTimedOut'))
+    }
+    await sleep(REDISCOVER_POLL_INTERVAL_MS)
+  }
+}
+
+const rediscoverAll = async () => {
+  const route = primaryDiscoveryRoute.value
+  const channelUid = route?.channelUid
+  if (!route || !channelUid || rediscovering.value) return
+  const generation = ++pollingGeneration
+  rediscovering.value = true
+  rediscoverError.value = ''
 
   try {
     try {
-      await autoDiscoverChannel(route.kind, key)
+      await autoDiscoverChannel(route.kind, channelUid)
     } catch (err) {
       // 409 表示发现任务已在运行，直接进入轮询等待，不算错误。
       const status = (err as { status?: number }).status
       if (status !== 409) throw err
     }
-
-    const deadline = Date.now() + REDISCOVER_POLL_TIMEOUT_MS
-    let discoveryError = ''
-    for (;;) {
-      await sleep(REDISCOVER_POLL_INTERVAL_MS)
-      const status = await getChannelAutoStatus(route.kind, key)
-      const discovery = status.discovery
-      if (discovery?.status === 'failed') {
-        discoveryError = discovery.error || t('channelEditor.protocolModels.rediscoverFailed')
-        break
-      }
-      if (!discovery || (discovery.status !== 'pending' && discovery.status !== 'running')) {
-        break
-      }
-      if (Date.now() >= deadline) break
-    }
-    if (discoveryError) {
-      state.error = discoveryError
-      return
-    }
-
-    // 任务结束后通知父组件刷新模型清单。
-    emit('refreshed')
+    await pollDiscovery(route, generation)
   } catch (err) {
-    state.error = err instanceof Error ? err.message : t('channelEditor.protocolModels.rediscoverFailed')
+    if (generation === pollingGeneration) {
+      rediscoverError.value = err instanceof Error ? err.message : t('channelEditor.protocolModels.rediscoverFailed')
+    }
   } finally {
-    state.running = false
+    if (generation === pollingGeneration) rediscovering.value = false
   }
 }
+
+watch(
+  () => {
+    const route = primaryDiscoveryRoute.value
+    return route?.channelUid ? `${route.kind}:${route.channelUid}` : ''
+  },
+  async (target) => {
+    const generation = ++pollingGeneration
+    rediscovering.value = false
+    rediscoverError.value = ''
+    const route = primaryDiscoveryRoute.value
+    if (!target || !route?.channelUid) return
+    try {
+      const status = await getChannelAutoStatus(route.kind, route.channelUid)
+      if (generation !== pollingGeneration) return
+      if (status.discovery?.status !== 'pending' && status.discovery?.status !== 'running') return
+      rediscovering.value = true
+      await pollDiscovery(route, generation)
+    } catch {
+      // 初始状态查询失败不阻断模型清单展示，用户仍可手动重新发现。
+    } finally {
+      if (generation === pollingGeneration) rediscovering.value = false
+    }
+  },
+  { immediate: true },
+)
+
+onBeforeUnmount(() => {
+  pollingGeneration++
+})
 
 const discoverySourceKey: Record<string, string> = {
   control_plane: 'channelEditor.protocolModels.source.controlPlane',
   models_api: 'channelEditor.protocolModels.source.modelsApi',
   builtin_manifest: 'channelEditor.protocolModels.source.builtinManifest',
   builtin_fallback: 'channelEditor.protocolModels.source.builtinFallback',
+  protocol_probe: 'channelEditor.protocolModels.source.protocolProbe',
   mixed: 'channelEditor.protocolModels.source.mixed',
 }
 
@@ -380,6 +441,7 @@ const normalizedRoutes = computed(() => (props.routes ?? []).map((route) => {
   return {
     ...route,
     upstreamKind,
+    configured: route.configured !== false,
     label: t(definition.labelKey),
     path: definition.path,
     icon: definition.icon,
@@ -391,9 +453,13 @@ const normalizedRoutes = computed(() => (props.routes ?? []).map((route) => {
     hasInventory: hasDiscoveredInventory || models.length > 0,
     discoveryTime: formatDiscoveryTime(route.modelsDiscoveredAt),
     discoverySourceLabel: discoverySourceLabel(route.modelDiscoverySource),
-    rediscoverError: rediscoverState[routeKey(route)]?.error ?? '',
   }
 }))
+
+const showIncompleteHint = computed(() => (
+  !isDetecting.value
+  && normalizedRoutes.value.some(route => route.configured && !route.hasInventory)
+))
 </script>
 
 <style scoped>
@@ -405,8 +471,33 @@ const normalizedRoutes = computed(() => (props.routes ?? []).map((route) => {
 .protocol-model-availability__header {
   display: flex;
   align-items: flex-start;
+  flex-wrap: wrap;
   gap: 10px;
   padding: 18px 0 12px;
+}
+
+.protocol-model-availability__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.protocol-model-availability__detecting {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+  .protocol-model-availability__actions {
+    width: 100%;
+    margin-left: 0;
+    justify-content: space-between;
+  }
 }
 
 .protocol-model-availability__rows {
@@ -424,6 +515,17 @@ const normalizedRoutes = computed(() => (props.routes ?? []).map((route) => {
 
 .protocol-model-route + .protocol-model-route {
   border-top: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+}
+
+.protocol-model-route--unconfigured {
+  border-left: 2px dashed rgb(var(--v-theme-info));
+  background: rgba(var(--v-theme-info), 0.035);
+}
+
+.protocol-model-route__unconfigured {
+  display: flex;
+  align-items: center;
+  gap: 5px;
 }
 
 .protocol-model-route__identity {
@@ -446,10 +548,6 @@ const normalizedRoutes = computed(() => (props.routes ?? []).map((route) => {
   align-items: center;
   flex-wrap: wrap;
   gap: 6px;
-}
-
-.protocol-model-route__rediscover {
-  margin-left: auto;
 }
 
 .protocol-model-route__path {

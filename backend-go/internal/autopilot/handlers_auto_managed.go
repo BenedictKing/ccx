@@ -87,13 +87,18 @@ type DiscoveryStatusInfo struct {
 
 // EndpointDiscoveryInfo 端点发现结果（key 已掩码）。
 type EndpointDiscoveryInfo struct {
-	KeyMask               string     `json:"keyMask"`
-	BaseURL               string     `json:"baseUrl"`
-	ModelsCount           int        `json:"modelsCount"`
-	ProtocolOk            bool       `json:"protocolOk"`
-	ModelDiscoverySource  string     `json:"modelDiscoverySource,omitempty"`
-	ModelDiscoveryMessage string     `json:"modelDiscoveryMessage,omitempty"`
-	ModelsDiscoveredAt    *time.Time `json:"modelsDiscoveredAt,omitempty"`
+	KeyMask                  string               `json:"keyMask"`
+	BaseURL                  string               `json:"baseUrl"`
+	ModelsCount              int                  `json:"modelsCount"`
+	ProtocolOk               bool                 `json:"protocolOk"`
+	ModelDiscoverySource     string               `json:"modelDiscoverySource,omitempty"`
+	ModelDiscoveryMessage    string               `json:"modelDiscoveryMessage,omitempty"`
+	ModelsDiscoveredAt       *time.Time           `json:"modelsDiscoveredAt,omitempty"`
+	ProtocolModels           map[string][]string  `json:"protocolModels,omitempty"`
+	ProtocolDiscoveredAt     map[string]time.Time `json:"protocolDiscoveredAt,omitempty"`
+	ProtocolDiscoverySource  map[string]string    `json:"protocolDiscoverySource,omitempty"`
+	ProtocolDiscoveryMessage map[string]string    `json:"protocolDiscoveryMessage,omitempty"`
+	ProtocolDiscoveryError   map[string]string    `json:"protocolDiscoveryError,omitempty"`
 }
 
 // ─── 路由注册 ─────────────────────────────────────────────────────────────────────────
@@ -296,6 +301,17 @@ type managedAccountChannelView struct {
 	ModelsDiscoveredAt    *time.Time                              `json:"modelsDiscoveredAt,omitempty"`
 	ModelDiscoverySource  string                                  `json:"modelDiscoverySource,omitempty"`
 	ModelDiscoveryMessage string                                  `json:"modelDiscoveryMessage,omitempty"`
+	ProtocolAvailability  []managedProtocolAvailabilityView       `json:"protocolAvailability,omitempty"`
+}
+
+type managedProtocolAvailabilityView struct {
+	Protocol              string                                  `json:"protocol"`
+	ModelInventoryKnown   bool                                    `json:"modelInventoryKnown"`
+	DiscoveredModels      []string                                `json:"discoveredModels,omitempty"`
+	ModelBindings         []managedAccountChannelModelBindingView `json:"modelBindings,omitempty"`
+	ModelsDiscoveredAt    *time.Time                              `json:"modelsDiscoveredAt,omitempty"`
+	ModelDiscoverySource  string                                  `json:"modelDiscoverySource,omitempty"`
+	ModelDiscoveryMessage string                                  `json:"modelDiscoveryMessage,omitempty"`
 }
 
 type managedAccountChannelModelBindingView struct {
@@ -365,7 +381,8 @@ func handleListAccounts(deps *AutoManagedDeps) gin.HandlerFunc {
 					ServiceType: channel.Upstream.ServiceType, Status: channel.Upstream.Status,
 				}
 				if profileStore != nil {
-					inventory := managedChannelModelAvailabilityDetails(profileStore.ListActiveByChannel(channel.Upstream.ChannelUID))
+					profiles := profileStore.ListActiveByChannel(channel.Upstream.ChannelUID)
+					inventory := managedChannelModelAvailabilityDetails(profiles)
 					channelView.DiscoveredModels = inventory.models
 					channelView.ModelBindings = inventory.bindings
 					// modelsUpdatedAt 兼容旧前端，但语义必须是模型清单发现时间，
@@ -375,6 +392,7 @@ func handleListAccounts(deps *AutoManagedDeps) gin.HandlerFunc {
 					channelView.ModelDiscoverySource = inventory.source
 					channelView.ModelDiscoveryMessage = inventory.message
 					channelView.ModelInventoryKnown = inventory.known
+					channelView.ProtocolAvailability = managedProtocolAvailabilityViews(profiles)
 				}
 				view.Channels = append(view.Channels, channelView)
 			}
@@ -414,6 +432,29 @@ func (inventory managedChannelModelInventory) latestDiscoveredAtPointer() *time.
 }
 
 func managedChannelModelAvailabilityDetails(profiles []*KeyEndpointProfile) managedChannelModelInventory {
+	return managedModelAvailabilityDetails(profiles, func(profile *KeyEndpointProfile) managedProfileModelInventory {
+		return managedProfileModelInventory{
+			models:       profile.AvailableModels,
+			known:        profileHasModelInventory(profile),
+			discoveredAt: profile.ModelsDiscoveredAt,
+			source:       profile.ModelDiscoverySource,
+			message:      profile.ModelDiscoveryMessage,
+		}
+	})
+}
+
+type managedProfileModelInventory struct {
+	models       []string
+	known        bool
+	discoveredAt *time.Time
+	source       string
+	message      string
+}
+
+func managedModelAvailabilityDetails(
+	profiles []*KeyEndpointProfile,
+	selectInventory func(*KeyEndpointProfile) managedProfileModelInventory,
+) managedChannelModelInventory {
 	type bindingAggregate struct {
 		credentialUID    string
 		keyMask          string
@@ -433,7 +474,11 @@ func managedChannelModelAvailabilityDetails(profiles []*KeyEndpointProfile) mana
 	var latestMessageAt time.Time
 	known := false
 	for _, profile := range profiles {
-		if profile == nil || !profileHasModelInventory(profile) {
+		if profile == nil {
+			continue
+		}
+		profileInventory := selectInventory(profile)
+		if !profileInventory.known {
 			continue
 		}
 		known = true
@@ -456,7 +501,7 @@ func managedChannelModelAvailabilityDetails(profiles []*KeyEndpointProfile) mana
 		if binding.keyMask == "" {
 			binding.keyMask = profile.KeyMask
 		}
-		for _, model := range profile.AvailableModels {
+		for _, model := range profileInventory.models {
 			model = strings.TrimSpace(model)
 			if model == "" {
 				continue
@@ -470,22 +515,22 @@ func managedChannelModelAvailabilityDetails(profiles []*KeyEndpointProfile) mana
 		if profile.UpdatedAt.After(latestUpdatedAt) {
 			latestUpdatedAt = profile.UpdatedAt
 		}
-		if profile.ModelDiscoverySource != "" {
-			sources[profile.ModelDiscoverySource] = struct{}{}
+		if profileInventory.source != "" {
+			sources[profileInventory.source] = struct{}{}
 		}
-		if profile.ModelsDiscoveredAt != nil {
-			discoveredAt := profile.ModelsDiscoveredAt.UTC()
+		if profileInventory.discoveredAt != nil {
+			discoveredAt := profileInventory.discoveredAt.UTC()
 			if discoveredAt.After(binding.discoveredAt) {
 				binding.discoveredAt = discoveredAt
-				binding.discoverySource = profile.ModelDiscoverySource
-				binding.discoveryMessage = profile.ModelDiscoveryMessage
+				binding.discoverySource = profileInventory.source
+				binding.discoveryMessage = profileInventory.message
 			}
 			if discoveredAt.After(latestDiscoveredAt) {
 				latestDiscoveredAt = discoveredAt
 			}
-			if discoveredAt.After(latestMessageAt) && strings.TrimSpace(profile.ModelDiscoveryMessage) != "" {
+			if discoveredAt.After(latestMessageAt) && strings.TrimSpace(profileInventory.message) != "" {
 				latestMessageAt = discoveredAt
-				latestMessage = profile.ModelDiscoveryMessage
+				latestMessage = profileInventory.message
 			}
 		}
 	}
@@ -533,6 +578,62 @@ func managedChannelModelAvailabilityDetails(profiles []*KeyEndpointProfile) mana
 		source:             source,
 		message:            latestMessage,
 		known:              known,
+	}
+}
+
+func managedProtocolAvailabilityViews(profiles []*KeyEndpointProfile) []managedProtocolAvailabilityView {
+	views := make([]managedProtocolAvailabilityView, 0, len(discoverableProtocols))
+	for _, protocol := range discoverableProtocols {
+		inventory := managedModelAvailabilityDetails(profiles, func(profile *KeyEndpointProfile) managedProfileModelInventory {
+			return managedProtocolProfileInventory(profile, protocol)
+		})
+		if !inventory.known {
+			continue
+		}
+		views = append(views, managedProtocolAvailabilityView{
+			Protocol:              protocol,
+			ModelInventoryKnown:   true,
+			DiscoveredModels:      inventory.models,
+			ModelBindings:         inventory.bindings,
+			ModelsDiscoveredAt:    inventory.latestDiscoveredAtPointer(),
+			ModelDiscoverySource:  inventory.source,
+			ModelDiscoveryMessage: inventory.message,
+		})
+	}
+	return views
+}
+
+func managedProtocolProfileInventory(profile *KeyEndpointProfile, protocol string) managedProfileModelInventory {
+	if profile == nil {
+		return managedProfileModelInventory{}
+	}
+	models, known := profile.ProtocolModels[protocol]
+	if !known && protocolForServiceType(profile.ServiceType) == protocol && profileHasModelInventory(profile) {
+		models = profile.AvailableModels
+		known = true
+	}
+	discoveredAt, hasDiscoveredAt := profile.ProtocolDiscoveredAt[protocol]
+	var discoveredAtPointer *time.Time
+	if hasDiscoveredAt {
+		value := discoveredAt.UTC()
+		discoveredAtPointer = &value
+	} else if known {
+		discoveredAtPointer = profile.ModelsDiscoveredAt
+	}
+	source := profile.ProtocolDiscoverySource[protocol]
+	if source == "" && known {
+		source = profile.ModelDiscoverySource
+	}
+	message := profile.ProtocolDiscoveryMessage[protocol]
+	if message == "" && known {
+		message = profile.ModelDiscoveryMessage
+	}
+	return managedProfileModelInventory{
+		models:       models,
+		known:        known,
+		discoveredAt: discoveredAtPointer,
+		source:       source,
+		message:      message,
 	}
 }
 
@@ -2544,13 +2645,18 @@ func handleAutoStatus(deps *AutoManagedDeps) gin.HandlerFunc {
 				}
 				for _, ep := range task.Endpoints {
 					info.Endpoints = append(info.Endpoints, EndpointDiscoveryInfo{
-						KeyMask:               ep.KeyMask,
-						BaseURL:               ep.BaseURL,
-						ModelsCount:           ep.ModelsCount,
-						ProtocolOk:            ep.ProtocolOk,
-						ModelDiscoverySource:  ep.ModelDiscoverySource,
-						ModelDiscoveryMessage: ep.ModelDiscoveryMessage,
-						ModelsDiscoveredAt:    ep.ModelsDiscoveredAt,
+						KeyMask:                  ep.KeyMask,
+						BaseURL:                  ep.BaseURL,
+						ModelsCount:              ep.ModelsCount,
+						ProtocolOk:               ep.ProtocolOk,
+						ModelDiscoverySource:     ep.ModelDiscoverySource,
+						ModelDiscoveryMessage:    ep.ModelDiscoveryMessage,
+						ModelsDiscoveredAt:       ep.ModelsDiscoveredAt,
+						ProtocolModels:           cloneProtocolModels(ep.ProtocolModels),
+						ProtocolDiscoveredAt:     cloneTimeMap(ep.ProtocolDiscoveredAt),
+						ProtocolDiscoverySource:  cloneStringMap(ep.ProtocolDiscoverySource),
+						ProtocolDiscoveryMessage: cloneStringMap(ep.ProtocolDiscoveryMessage),
+						ProtocolDiscoveryError:   cloneStringMap(ep.ProtocolDiscoveryError),
 					})
 				}
 				resp.Discovery = info
