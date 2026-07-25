@@ -22,6 +22,9 @@ function sourceName(evidence) {
   if (evidence.benchmark === 'deepswe') {
     return `DeepSWE ${evidence.benchmarkVersion || ''}`.trim()
   }
+  if (evidence.benchmark === 'artificial_analysis') {
+    return 'Artificial Analysis'
+  }
   return [evidence.benchmark, evidence.benchmarkVersion].filter(Boolean).join(' ')
 }
 
@@ -118,6 +121,27 @@ function benchlmComparisonRows(profiles, models) {
   return rows
 }
 
+/**
+ * Artificial Analysis 图像 arena Elo → 比较行。
+ * Elo 量表 ~1000-1300，按 category 独立显示，不走 normalizedScore（避免被当 0-1 放大）。
+ */
+function imageArenaComparisonRows(profiles, models) {
+  const rows = []
+  for (const [model, profile] of Object.entries(profiles || {})) {
+    if (!includesModel(model, models)) continue
+    const elo = Number(profile.elo)
+    if (!Number.isFinite(elo)) continue
+    rows.push({
+      model,
+      source: 'Artificial Analysis Image Arena',
+      category: 'image_arena',
+      metric: 'elo',
+      score: elo,
+    })
+  }
+  return rows
+}
+
 function deduplicateComparisonRows(rows) {
   const unique = new Map()
   for (const row of rows) {
@@ -136,6 +160,8 @@ export function buildBenchmarkVisualizationData({
   deepsweLeaderboard = null,
   benchlmProfiles = {},
   dradarProfiles = {},
+  artificialAnalysisProfiles = {},
+  artificialAnalysisImageArena = {},
   modelMap = {},
   models = null,
 } = {}) {
@@ -152,6 +178,8 @@ export function buildBenchmarkVisualizationData({
     ...evidenceComparisonRows(deepsweProfiles, models),
     ...benchlmComparisonRows(benchlmProfiles, models),
     ...evidenceComparisonRows(dradarProfiles, models),
+    ...evidenceComparisonRows(artificialAnalysisProfiles, models),
+    ...imageArenaComparisonRows(artificialAnalysisImageArena, models),
   ]).sort((a, b) => (
     a.category.localeCompare(b.category) ||
     a.model.localeCompare(b.model) ||

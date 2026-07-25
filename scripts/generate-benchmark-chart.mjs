@@ -215,7 +215,7 @@ tbody tr:hover { background: var(--accent-soft); }
     <div class="comparison-heading">
       <div>
         <h2>多来源能力比较</h2>
-        <p class="section-note">按同一能力类别展示 BenchLM.ai、DeepSWE 与 CodexRadar 的原始分数。不同基准的任务集和评分口径不同，仅用于观察来源内相对位置。</p>
+        <p class="section-note">按同一能力类别展示 BenchLM.ai、DeepSWE、CodexRadar 与 Artificial Analysis 的原始分数。不同基准的任务集和评分口径不同，仅用于观察来源内相对位置。</p>
       </div>
       <label class="control" for="comparison-category-control">
         <span class="control-label">能力类别</span>
@@ -268,6 +268,7 @@ const comparisonSources = [...new Set(COMPARISON_ROWS.map(row => row.source))].s
 const comparisonColors = new Map(comparisonSources.map((source, index) => [source, palette[index % palette.length]]));
 const categoryLabels = {
   overall: '综合', knowledge: '知识', math: '数学', coding: '编程', agentic: '智能体', multimodal: '多模态',
+  image_arena: '图像 Arena Elo',
 };
 const comparisonState = { category: null };
 const ns = 'http://www.w3.org/2000/svg';

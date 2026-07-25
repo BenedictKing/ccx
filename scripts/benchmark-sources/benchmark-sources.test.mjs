@@ -5,6 +5,8 @@ import test from 'node:test'
 import {
   canonicalModelToPattern,
   deepsweModelToPattern,
+  DEEPSWE_MODEL_MAP,
+  BENCHLM_MODEL_MAP,
 } from './mapper.mjs'
 import {
   extractBestPerModel as extractDeepSWEBest,
@@ -15,13 +17,22 @@ import {
   extractBestPerModel as extractDradarBest,
   extractLeaderboardFromTable,
   toBenchmarkEvidence as toDradarEvidence,
+  DRADAR_MODEL_MAP,
 } from './dradar.mjs'
-import { extractModelInfo } from './litellm.mjs'
+import { extractModelInfo, LITELLM_MODEL_MAP } from './litellm.mjs'
+import {
+  extractLlmProfiles as extractAaLlm,
+  extractImageArenaProfiles as extractAaImage,
+  ARTIFICIAL_ANALYSIS_MODEL_MAP,
+  ARTIFICIAL_ANALYSIS_IMAGE_MODEL_MAP,
+} from './artificialanalysis.mjs'
 import {
   generatedArtifactPaths,
   mergeBenchlmData,
   mergeDeepsweData,
   mergeLitellmData,
+  mergeArtificialAnalysisLlm,
+  mergeArtificialAnalysisImageArena,
   validateRegistry,
 } from '../update-benchmark-data.mjs'
 import { presetArtifactPaths } from '../generate-preset-manifest.mjs'
@@ -29,7 +40,18 @@ import { buildBenchmarkVisualizationData } from './visualization.mjs'
 import { renderBenchmarkChart, validateVisualizationData } from '../generate-benchmark-chart.mjs'
 
 function emptyReport() {
-  return { updated: [], added: [], errors: [], litellmUpdated: [], litellmSkipped: [] }
+  return {
+    updated: [],
+    added: [],
+    errors: [],
+    litellmUpdated: [],
+    litellmSkipped: [],
+    aaUpdated: [],
+    aaAdded: [],
+    aaImageArenaUpdated: [],
+    aaImageArenaAdded: [],
+    aaSkipped: false,
+  }
 }
 
 function readJson(relativePath) {
@@ -276,4 +298,179 @@ test('LiteLLM fills only unknown capabilities', () => {
 
   assert.equal(registry.upstreamCapabilities[0].capabilities.vision, true)
   assert.equal(registry.upstreamCapabilities[0].capabilities.toolCalls, true)
+})
+
+test('opus-5 is mapped across every benchmark source', () => {
+  assert.equal(DEEPSWE_MODEL_MAP['claude-opus-5'], 'claude-opus-5')
+  assert.equal(BENCHLM_MODEL_MAP['claude-opus-5'], 'claude-opus-5')
+  assert.equal(DRADAR_MODEL_MAP['claude-opus-5'], 'claude-opus-5')
+  assert.equal(LITELLM_MODEL_MAP['claude-opus-5'], 'claude-opus-5')
+  assert.equal(ARTIFICIAL_ANALYSIS_MODEL_MAP['claude-opus-5'], 'claude-opus-5')
+})
+
+test('Artificial Analysis LLM extraction yields one evidence per composite index', () => {
+  const models = [
+    { slug: 'claude-opus-5', evaluations: {
+      artificial_analysis_intelligence_index: 92,
+      artificial_analysis_coding_index: 88,
+      artificial_analysis_agentic_index: 80,
+    } },
+    { slug: 'claude-opus-4-8', evaluations: { artificial_analysis_intelligence_index: 77 } },
+    { slug: 'unmapped-foo', evaluations: { artificial_analysis_intelligence_index: 50 } },
+  ]
+  const { profiles, unmappedSlugs } = extractAaLlm(models, ARTIFICIAL_ANALYSIS_MODEL_MAP, 4.1)
+
+  assert.deepEqual(unmappedSlugs, ['unmapped-foo'])
+  const evidence = profiles['claude-opus-5'].benchmarkEvidence
+  assert.equal(evidence.length, 3)
+  assert.deepEqual(evidence.map(e => e.domain).sort(), ['agentic', 'coding', 'overall'])
+  assert.equal(evidence[0].benchmark, 'artificial_analysis')
+  assert.equal(evidence[0].benchmarkVersion, 'v4.1')
+  assert.equal(evidence[0].effort, 'default')
+  assert.equal(evidence[0].selectionBasis, 'composite_index')
+  // cohort 为数据集中所有有 intelligence_index 的模型（含未映射的，百分位相对全市场）
+  assert.equal(evidence[0].cohortSize, 3)
+  // opus-5 (92) 在 [92, 77, 50] 队列中百分位 = 1.0
+  const overall = evidence.find(e => e.domain === 'overall')
+  assert.equal(overall.rawValue, 92)
+  assert.equal(overall.cohortPercentile, 1)
+  assert.match(overall.sourceUrl, /^https:\/\/artificialanalysis\.ai\/models\/claude-opus-5$/)
+})
+
+test('Artificial Analysis image arena extraction maps Elo', () => {
+  const models = [
+    { slug: 'agnes-image-2.1-flash', elo: 1180, ci_95: 12 },
+    { slug: 'unmapped-img', elo: 900, ci_95: null },
+  ]
+  const { profiles, unmappedSlugs } = extractAaImage(models, ARTIFICIAL_ANALYSIS_IMAGE_MODEL_MAP)
+
+  assert.deepEqual(unmappedSlugs, ['unmapped-img'])
+  assert.equal(profiles['agnes-image-2.1-flash'].elo, 1180)
+  assert.equal(profiles['agnes-image-2.1-flash'].ci95, 12)
+  assert.ok(profiles['agnes-image-2.1-flash'].sources.length > 0)
+})
+
+test('Artificial Analysis LLM merge replaces evidence without clobbering overallScore', () => {
+  const registry = {
+    benchmarkProfiles: [{
+      patterns: ['(?:^|[-/])claude-opus-5(?=$|@)'],
+      canonicalModel: 'claude-opus-5',
+      overallScore: 70,
+      categoryScores: { coding: 60 },
+      benchmarkEvidence: [{
+        benchmark: 'deepswe',
+        benchmarkVersion: 'v1.1',
+        domain: 'coding',
+        sourceUrl: 'https://deepswe.example/',
+        cohortSize: 4,
+      }, {
+        benchmark: 'artificial_analysis',
+        benchmarkVersion: 'v4.0',
+        domain: 'overall',
+        sourceUrl: 'https://artificialanalysis.ai/models/claude-opus-5',
+      }],
+      sources: ['https://deepswe.example/', 'https://artificialanalysis.ai/models/claude-opus-5'],
+      verifiedAt: '2026-07-20',
+      lane: 'provisional',
+      sharedResults: 4,
+      comparableCategories: 1,
+      totalCategories: 1,
+    }],
+  }
+  mergeArtificialAnalysisLlm(registry, {
+    'claude-opus-5': {
+      aaMeta: { slug: 'claude-opus-5' },
+      benchmarkEvidence: [{
+        benchmark: 'artificial_analysis',
+        benchmarkVersion: 'v4.1',
+        sourceModel: 'claude-opus-5',
+        domain: 'overall',
+        metric: 'intelligence_index',
+        rawValue: 92,
+        uncertainty: 0,
+        cohortPercentile: 1,
+        cohortSize: 2,
+        effort: 'default',
+        selectionBasis: 'composite_index',
+        sourceUrl: 'https://artificialanalysis.ai/models/claude-opus-5',
+        capturedAt: '2026-07-25',
+      }],
+    },
+  }, emptyReport(), null)
+
+  const profile = registry.benchmarkProfiles[0]
+  // overallScore/categoryScores 保持 benchlm 原值，未被 AA 覆盖
+  assert.equal(profile.overallScore, 70)
+  assert.equal(profile.categoryScores.coding, 60)
+  // 旧 AA 证据被替换，deepswe 证据保留
+  const aa = profile.benchmarkEvidence.filter(e => e.benchmark === 'artificial_analysis')
+  assert.equal(aa.length, 1)
+  assert.equal(aa[0].benchmarkVersion, 'v4.1')
+  const deep = profile.benchmarkEvidence.filter(e => e.benchmark === 'deepswe')
+  assert.equal(deep.length, 1)
+  assert.doesNotThrow(() => validateRegistry(registry))
+})
+
+test('Artificial Analysis image arena merge builds and updates imageArenaProfiles', () => {
+  const registry = { benchmarkProfiles: [], imageArenaProfiles: [] }
+  mergeArtificialAnalysisImageArena(registry, {
+    'agnes-image-2.1-flash': {
+      canonicalModel: 'agnes-image-2.1-flash',
+      elo: 1180,
+      ci95: 12,
+      sources: ['https://artificialanalysis.ai/leaderboards/image-generation'],
+    },
+  }, emptyReport(), null)
+
+  assert.equal(registry.imageArenaProfiles.length, 1)
+  const arena = registry.imageArenaProfiles[0]
+  assert.equal(arena.canonicalModel, 'agnes-image-2.1-flash')
+  assert.equal(arena.elo, 1180)
+  assert.ok(arena.patterns.length > 0)
+  assert.ok(/^\d{4}-\d{2}-\d{2}$/.test(arena.verifiedAt))
+  assert.doesNotThrow(() => validateRegistry(registry))
+
+  // 更新路径：同 canonical 再次 merge 时替换 elo
+  mergeArtificialAnalysisImageArena(registry, {
+    'agnes-image-2.1-flash': {
+      canonicalModel: 'agnes-image-2.1-flash',
+      elo: 1195,
+      ci95: 10,
+      sources: ['https://artificialanalysis.ai/leaderboards/image-generation'],
+    },
+  }, emptyReport(), null)
+  assert.equal(registry.imageArenaProfiles.length, 1)
+  assert.equal(registry.imageArenaProfiles[0].elo, 1195)
+  assert.doesNotThrow(() => validateRegistry(registry))
+})
+
+test('visualization includes Artificial Analysis and image arena comparisons', () => {
+  const evidence = (benchmark, rawValue) => ({
+    benchmark,
+    benchmarkVersion: 'v4.1',
+    domain: 'overall',
+    metric: 'intelligence_index',
+    rawValue,
+    effort: 'default',
+  })
+  const visualization = buildBenchmarkVisualizationData({
+    modelMap: { source: 'model' },
+    deepsweProfiles: { model: { benchmarkEvidence: [evidence('deepswe', 0.7)] } },
+    benchlmProfiles: { model: { overallScore: 80, categoryScores: { coding: 75 } } },
+    dradarProfiles: { model: { benchmarkEvidence: [evidence('codexradar', 0.6)], efforts: {} } },
+    artificialAnalysisProfiles: { model: { benchmarkEvidence: [evidence('artificial_analysis', 92)] } },
+    artificialAnalysisImageArena: { 'agnes-image-2.1-flash': { elo: 1180 } },
+  })
+
+  assert.ok(
+    [...new Set(visualization.comparisons.map(row => row.source))].includes('Artificial Analysis'),
+    'comparisons should include Artificial Analysis',
+  )
+  const imgRow = visualization.comparisons.find(r => r.category === 'image_arena')
+  assert.ok(imgRow, 'comparisons should include image_arena rows')
+  assert.equal(imgRow.score, 1180)
+  const validated = validateVisualizationData(visualization)
+  const html = renderBenchmarkChart(validated.rows, validated.comparisons)
+  assert.match(html, /Artificial Analysis/)
+  assert.match(html, /图像 Arena Elo/)
 })

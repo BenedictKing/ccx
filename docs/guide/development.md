@@ -157,6 +157,24 @@ cd "frontend" && bun run build
 cd "backend-go" && make lint
 ```
 
+## 更新模型能力基准数据
+
+```bash
+make benchmark-update        # 抓取各源并写入注册表
+make benchmark-update-dry    # 预览变更（不写入）
+```
+
+数据源：deepswe、benchlm.ai、dradar (codexradar)、Artificial Analysis、litellm（价格/上下文）。
+
+**Artificial Analysis 是唯一需要 API key 的源**。未设置时自动跳过，其余源照常更新：
+
+```bash
+export ARTIFICIAL_ANALYSIS_API_KEY=your-key   # 缺失则自动跳过 AA，不报错
+make benchmark-update                          # 显式跳过用 --skip-artificial-analysis
+```
+
+新增模型时，在 `scripts/benchmark-sources/mapper.mjs`（deepswe/benchlm）及各源文件内的 `*_MODEL_MAP` 中补上映射，下次 `make benchmark-update` 即会自动捕获并创建其 benchmarkProfile。
+
 ## 本地访问入口
 
 - Web 管理界面：`http://localhost:3688`

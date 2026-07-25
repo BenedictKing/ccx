@@ -2,7 +2,7 @@
  * 模型能力基准自动更新编排脚本
  *
  * 功能：
- * 1. 从 deepswe、benchlm.ai、dradar (codexradar) 抓取最新 benchmark 数据
+ * 1. 从 deepswe、benchlm.ai、dradar (codexradar)、Artificial Analysis 抓取最新 benchmark 数据
  * 2. 从 litellm 抓取价格/上下文窗口数据
  * 3. 映射到 CCX 模型注册表
  * 4. 更新 shared/model-registry/ccx_model_registry.json
@@ -14,12 +14,16 @@
  *   node scripts/update-benchmark-data.mjs [--dry-run] [--skip-*] [--models <model1,model2>]
  *
  * 选项：
- *   --dry-run       只预览变更，不写入文件
- *   --skip-deepswe  跳过 deepswe 数据源
- *   --skip-benchlm  跳过 benchlm.ai 数据源
- *   --skip-dradar   跳过 dradar (codexradar) 数据源
- *   --skip-litellm  跳过 litellm 价格/上下文数据源
- *   --models        只更新指定模型 (逗号分隔)
+ *   --dry-run                   只预览变更，不写入文件
+ *   --skip-deepswe              跳过 deepswe 数据源
+ *   --skip-benchlm              跳过 benchlm.ai 数据源
+ *   --skip-dradar               跳过 dradar (codexradar) 数据源
+ *   --skip-litellm              跳过 litellm 价格/上下文数据源
+ *   --skip-artificial-analysis  跳过 Artificial Analysis 数据源（首个需 API key 的源）
+ *   --models                    只更新指定模型 (逗号分隔)
+ *
+ * 环境变量：
+ *   ARTIFICIAL_ANALYSIS_API_KEY  Artificial Analysis API key（缺失时自动跳过 AA，不报错）
  */
 
 import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
@@ -38,6 +42,11 @@ import { fetchDeepsweDataset } from './benchmark-sources/deepswe.mjs'
 import { fetchBenchlmData } from './benchmark-sources/benchlm.mjs'
 import { fetchDradarData, DRADAR_MODEL_MAP } from './benchmark-sources/dradar.mjs'
 import { fetchLitellmModelInfo, LITELLM_MODEL_MAP } from './benchmark-sources/litellm.mjs'
+import {
+  fetchArtificialAnalysisData,
+  ARTIFICIAL_ANALYSIS_MODEL_MAP,
+  ARTIFICIAL_ANALYSIS_IMAGE_MODEL_MAP,
+} from './benchmark-sources/artificialanalysis.mjs'
 import { buildBenchmarkVisualizationData } from './benchmark-sources/visualization.mjs'
 import { presetArtifactPaths } from './generate-preset-manifest.mjs'
 import { saveCache } from './benchmark-sources/http-cache.mjs'
@@ -54,6 +63,10 @@ const skipDeepswe = args.includes('--skip-deepswe')
 const skipBenchlm = args.includes('--skip-benchlm')
 const skipDradar = args.includes('--skip-dradar')
 const skipLitellm = args.includes('--skip-litellm')
+const skipArtificialAnalysis = args.includes('--skip-artificial-analysis')
+const artificialAnalysisApiKey = process.env.ARTIFICIAL_ANALYSIS_API_KEY || ''
+// 无 key 且未显式 skip 时自动跳过 AA（首个需 key 的源；保持现有工作流零破坏）
+const artificialAnalysisEnabled = !skipArtificialAnalysis && !!artificialAnalysisApiKey
 const modelsArg = args.find(a => a.startsWith('--models='))
 const modelsArgIndex = args.indexOf('--models')
 const modelsValue = modelsArg?.split('=', 2)[1] ?? (modelsArgIndex >= 0 ? args[modelsArgIndex + 1] : '')
@@ -391,6 +404,97 @@ export function mergeLitellmData(registry, litellmData, report, models = targetM
   }
 }
 
+/**
+ * 合并 Artificial Analysis LLM 复合指数到 benchmarkProfile.benchmarkEvidence。
+ * 仿 mergeDradarData：全量替换 artificial_analysis 证据，合并 sources，更新 verifiedAt。
+ * 刻意不碰 overallScore/categoryScores（benchlm 保留所有权，避免不同量表互相覆盖）。
+ */
+export function mergeArtificialAnalysisLlm(registry, aaLlmData, report, models = targetModels) {
+  if (!registry.benchmarkProfiles) {
+    registry.benchmarkProfiles = []
+  }
+
+  for (const [canonical, data] of Object.entries(aaLlmData)) {
+    if (models && !models.includes(canonical)) {
+      continue
+    }
+
+    const idx = findProfileIndex(registry.benchmarkProfiles, canonical)
+    const profile = idx >= 0 ? registry.benchmarkProfiles[idx] : createProfile(canonical)
+
+    if (!profile.benchmarkEvidence) {
+      profile.benchmarkEvidence = []
+    }
+
+    // 移除旧的 AA 证据
+    profile.benchmarkEvidence = profile.benchmarkEvidence.filter(e => e.benchmark !== 'artificial_analysis')
+
+    // 添加新的 AA 证据
+    profile.benchmarkEvidence.push(...(data.benchmarkEvidence || []))
+    ensureEvidenceProfileMetadata(profile)
+
+    // 合并 sources（保留其他来源，追加 AA model 页）
+    if (data.aaMeta?.slug) {
+      const aaUrl = `https://artificialanalysis.ai/models/${data.aaMeta.slug}`
+      const existing = profile.sources || []
+      const nonAA = existing.filter(s => !s.startsWith('https://artificialanalysis.ai/'))
+      profile.sources = [...new Set([...nonAA, aaUrl])]
+    }
+
+    profile.verifiedAt = new Date().toISOString().split('T')[0]
+
+    if (idx >= 0) {
+      registry.benchmarkProfiles[idx] = profile
+      report.updated.push({ canonical, source: 'artificial-analysis' })
+    } else {
+      registry.benchmarkProfiles.push(profile)
+      report.added.push({ canonical, source: 'artificial-analysis' })
+    }
+  }
+}
+
+/**
+ * 合并 Artificial Analysis 图像 arena Elo 到顶层 imageArenaProfiles section。
+ * 按 canonical 全量替换 elo/ci95/sources/verifiedAt。
+ */
+export function mergeArtificialAnalysisImageArena(registry, aaImageData, report, models = targetModels) {
+  if (!registry.imageArenaProfiles) {
+    registry.imageArenaProfiles = []
+  }
+
+  for (const [canonical, data] of Object.entries(aaImageData)) {
+    if (models && !models.includes(canonical)) {
+      continue
+    }
+
+    const idx = registry.imageArenaProfiles.findIndex(p => p.canonicalModel === canonical)
+    const arena = idx >= 0
+      ? registry.imageArenaProfiles[idx]
+      : {
+          patterns: [canonicalModelToPattern(canonical)],
+          canonicalModel: canonical,
+          lane: 'provisional',
+        }
+
+    arena.elo = data.elo
+    if (Object.prototype.hasOwnProperty.call(data, 'ci95')) {
+      arena.ci95 = data.ci95
+    }
+    if (data.sources && data.sources.length > 0) {
+      arena.sources = [...data.sources]
+    }
+    arena.verifiedAt = new Date().toISOString().split('T')[0]
+
+    if (idx >= 0) {
+      registry.imageArenaProfiles[idx] = arena
+      report.aaImageArenaUpdated.push({ canonical, elo: data.elo })
+    } else {
+      registry.imageArenaProfiles.push(arena)
+      report.aaImageArenaAdded.push({ canonical, elo: data.elo })
+    }
+  }
+}
+
 export function validateRegistry(registry) {
   for (const [index, profile] of (registry.benchmarkProfiles || []).entries()) {
     const prefix = `benchmarkProfiles[${index}]`
@@ -420,6 +524,26 @@ export function validateRegistry(registry) {
     }
     if (profile.comparableCategories > profile.totalCategories) {
       throw new Error(`${prefix}.comparableCategories exceeds totalCategories`)
+    }
+  }
+
+  // 图像 arena profile 校验（顶层 imageArenaProfiles section）
+  for (const [index, arena] of (registry.imageArenaProfiles || []).entries()) {
+    const prefix = `imageArenaProfiles[${index}]`
+    if (!arena.canonicalModel || !Array.isArray(arena.patterns) || arena.patterns.length === 0) {
+      throw new Error(`${prefix} is missing canonicalModel or patterns`)
+    }
+    if (!Number.isFinite(arena.elo)) {
+      throw new Error(`${prefix}.elo must be a finite number`)
+    }
+    if (!Array.isArray(arena.sources) || arena.sources.length === 0) {
+      throw new Error(`${prefix} requires at least one source`)
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(arena.verifiedAt || '')) {
+      throw new Error(`${prefix}.verifiedAt must use YYYY-MM-DD`)
+    }
+    if (!['provisional', 'verified'].includes(arena.lane)) {
+      throw new Error(`${prefix}.lane is invalid`)
     }
   }
 }
@@ -484,7 +608,7 @@ function saveAndGenerateAtomically(registry) {
 export async function main() {
   console.log('='.repeat(60))
 
-  if (skipDeepswe && skipBenchlm && skipDradar && skipLitellm) {
+  if (skipDeepswe && skipBenchlm && skipDradar && skipLitellm && !artificialAnalysisEnabled) {
     throw new Error('all benchmark sources are skipped')
   }
   console.log('CCX Benchmark Data Auto-Updater')
@@ -495,6 +619,7 @@ export async function main() {
   console.log(`Skip benchlm: ${skipBenchlm}`)
   console.log(`Skip dradar: ${skipDradar}`)
   console.log(`Skip litellm: ${skipLitellm}`)
+  console.log(`Skip artificial-analysis: ${skipArtificialAnalysis || !artificialAnalysisEnabled}`)
   if (targetModels) {
     console.log(`Target models: ${targetModels.join(', ')}`)
   }
@@ -507,12 +632,19 @@ export async function main() {
     errors: [],
     litellmUpdated: [],
     litellmSkipped: [],
+    aaUpdated: [],
+    aaAdded: [],
+    aaImageArenaUpdated: [],
+    aaImageArenaAdded: [],
+    aaSkipped: false,
   }
   const visualizationSources = {
     deepsweProfiles: {},
     deepsweLeaderboard: null,
     benchlmProfiles: {},
     dradarProfiles: {},
+    artificialAnalysisProfiles: {},
+    artificialAnalysisImageArena: {},
   }
 
   // 抓取 deepswe 数据
@@ -582,6 +714,42 @@ export async function main() {
     }
   }
 
+  // 抓取 Artificial Analysis 数据（首个需 API key 的源；无 key 自动跳过，不计错误）
+  if (skipArtificialAnalysis) {
+    console.log('\n--- Skipping Artificial Analysis (--skip-artificial-analysis) ---')
+    report.aaSkipped = true
+  } else if (!artificialAnalysisApiKey) {
+    console.log('\n--- Skipping Artificial Analysis (ARTIFICIAL_ANALYSIS_API_KEY not set) ---')
+    console.log('[artificial-analysis] Set ARTIFICIAL_ANALYSIS_API_KEY to enable, or pass --skip-artificial-analysis to silence this message.')
+    report.aaSkipped = true
+  } else {
+    try {
+      console.log('\n--- Fetching Artificial Analysis data ---')
+      const aaResult = await fetchArtificialAnalysisData(
+        artificialAnalysisApiKey,
+        ARTIFICIAL_ANALYSIS_MODEL_MAP,
+        ARTIFICIAL_ANALYSIS_IMAGE_MODEL_MAP,
+      )
+      visualizationSources.artificialAnalysisProfiles = aaResult.llm
+      visualizationSources.artificialAnalysisImageArena = aaResult.imageArena
+      mergeArtificialAnalysisLlm(registry, aaResult.llm, report)
+      mergeArtificialAnalysisImageArena(registry, aaResult.imageArena, report)
+
+      // 首跑调参提示：列出未命中的 AA slug（前 20 个）
+      const logUnmapped = (label, slugs) => {
+        if (!slugs || slugs.length === 0) return
+        const preview = slugs.slice(0, 20).join(', ')
+        const more = slugs.length > 20 ? ` ... and ${slugs.length - 20} more` : ''
+        console.log(`[artificial-analysis] ${label} unmapped slugs (${slugs.length}): ${preview}${more}`)
+      }
+      logUnmapped('LLM', aaResult.unmappedLlmSlugs)
+      logUnmapped('Image arena', aaResult.unmappedImageSlugs)
+    } catch (err) {
+      report.errors.push({ source: 'artificial-analysis', error: err.message })
+      console.error('[artificial-analysis] Failed:', err.message)
+    }
+  }
+
   if (report.errors.length > 0) {
     const failedSources = report.errors.map(item => item.source).join(', ')
     throw new Error(`enabled sources failed (${failedSources}); registry was not changed`)
@@ -647,6 +815,17 @@ export async function main() {
     for (const s of report.litellmSkipped.slice(0, 5)) {
       console.log(`  - ${s.canonical}: ${s.reason}`)
     }
+  }
+  if (report.aaSkipped) {
+    console.log(`\nartificial-analysis: skipped (no API key or --skip-artificial-analysis)`)
+  }
+  if (report.aaUpdated.length > 0 || report.aaAdded.length > 0 || report.aaImageArenaUpdated.length > 0 || report.aaImageArenaAdded.length > 0) {
+    console.log(`\nartificial-analysis LLM: ${report.aaUpdated.length} updated, ${report.aaAdded.length} added`)
+    for (const u of report.aaUpdated.slice(0, 10)) console.log(`  - ${u.canonical}`)
+    for (const a of report.aaAdded.slice(0, 10)) console.log(`  + ${a.canonical}`)
+    console.log(`artificial-analysis image arena: ${report.aaImageArenaUpdated.length} updated, ${report.aaImageArenaAdded.length} added`)
+    for (const u of report.aaImageArenaUpdated.slice(0, 10)) console.log(`  - ${u.canonical} (Elo ${u.elo})`)
+    for (const a of report.aaImageArenaAdded.slice(0, 10)) console.log(`  + ${a.canonical} (Elo ${a.elo})`)
   }
   console.log('='.repeat(60))
 
