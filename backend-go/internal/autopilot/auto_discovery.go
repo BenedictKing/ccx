@@ -371,10 +371,6 @@ func (r *AutoDiscoveryRunner) runDiscovery(ctx context.Context, task *DiscoveryT
 		}
 	}
 
-	r.mu.Lock()
-	task.Endpoints = endpoints
-	now := time.Now()
-	task.FinishedAt = &now
 	var status DiscoveryStatus
 	var taskErr string
 	if failedCount == len(endpoints) && len(endpoints) > 0 {
@@ -383,6 +379,20 @@ func (r *AutoDiscoveryRunner) runDiscovery(ctx context.Context, task *DiscoveryT
 	} else {
 		status = DiscoveryStatusDone
 	}
+	if ctx.Err() == nil && cfgManager != nil {
+		// 探测完成后尝试自动写入 SupportedModels（安全守则：仅一致结果且用户未手动配置时写入）
+		r.maybeAutoWriteChannelConfig(task.ChannelUID, channel, endpoints, cfgManager)
+		if err := r.maybeEnableDiscoveredProtocolRoutes(channel, endpoints, cfgManager); err != nil {
+			status = DiscoveryStatusFailed
+			taskErr = fmt.Sprintf("自动启用已发现协议失败: %v", err)
+			log.Printf("[AutoDiscovery-RouteEnable] 渠道 %s 自动启用协议失败: %v", task.ChannelUID, err)
+		}
+	}
+
+	r.mu.Lock()
+	task.Endpoints = endpoints
+	now := time.Now()
+	task.FinishedAt = &now
 	// context 取消：保留 running 状态与已持久化 checkpoint，不标记 done。
 	if ctx.Err() != nil {
 		status = DiscoveryStatusRunning
@@ -397,10 +407,6 @@ func (r *AutoDiscoveryRunner) runDiscovery(ctx context.Context, task *DiscoveryT
 		if err := store.Finish(task.ChannelUID, status, taskErr); err != nil {
 			log.Printf("[AutoDiscovery-Run] 渠道 %s 持久化终态失败: %v", task.ChannelUID, err)
 		}
-		// 探测完成后尝试自动写入 SupportedModels（安全守则：仅一致结果且用户未手动配置时写入）
-		if cfgManager != nil {
-			r.maybeAutoWriteChannelConfig(task.ChannelUID, channel, endpoints, cfgManager)
-		}
 		r.publishDiscoveryComplete(task.ChannelUID, cfgManager, status, taskErr, endpoints, failedCount)
 	}
 
@@ -411,11 +417,6 @@ func (r *AutoDiscoveryRunner) runDiscovery(ctx context.Context, task *DiscoveryT
 // runDiscoveryLegacy 无 taskStore 时的旧行为：collect 全部端点 → 一次性 writeProfiles。
 func (r *AutoDiscoveryRunner) runDiscoveryLegacy(ctx context.Context, task *DiscoveryTask, channel *config.UpstreamConfig, cfgManager *config.ConfigManager) {
 	endpoints := r.discoverEndpoints(ctx, channel, cfgManager)
-
-	r.mu.Lock()
-	task.Endpoints = endpoints
-	now := time.Now()
-	task.FinishedAt = &now
 
 	failedCount := 0
 	for _, ep := range endpoints {
@@ -431,15 +432,25 @@ func (r *AutoDiscoveryRunner) runDiscoveryLegacy(ctx context.Context, task *Disc
 	} else {
 		status = DiscoveryStatusDone
 	}
-	task.Status = status
-	task.Error = taskErr
-	r.mu.Unlock()
 
 	r.writeProfiles(task.ChannelUID, channel, endpoints, cfgManager)
 
 	if cfgManager != nil {
 		r.maybeAutoWriteChannelConfig(task.ChannelUID, channel, endpoints, cfgManager)
+		if err := r.maybeEnableDiscoveredProtocolRoutes(channel, endpoints, cfgManager); err != nil {
+			status = DiscoveryStatusFailed
+			taskErr = fmt.Sprintf("自动启用已发现协议失败: %v", err)
+			log.Printf("[AutoDiscovery-RouteEnable] 渠道 %s 自动启用协议失败: %v", task.ChannelUID, err)
+		}
 	}
+
+	r.mu.Lock()
+	task.Endpoints = endpoints
+	now := time.Now()
+	task.FinishedAt = &now
+	task.Status = status
+	task.Error = taskErr
+	r.mu.Unlock()
 	r.publishDiscoveryComplete(task.ChannelUID, cfgManager, status, taskErr, endpoints, failedCount)
 
 	log.Printf("[AutoDiscovery-Run] 渠道 %s 发现完成: %d/%d 端点可达",

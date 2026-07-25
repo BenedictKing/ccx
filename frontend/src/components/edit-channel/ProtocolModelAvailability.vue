@@ -50,6 +50,43 @@
       {{ rediscoverError }}
     </v-alert>
 
+    <section v-if="sharedModels.length" class="protocol-model-shared">
+      <div class="protocol-model-shared__header">
+        <v-icon size="18" color="success">mdi-check-all</v-icon>
+        <div class="protocol-model-shared__identity">
+          <span class="text-body-2 font-weight-medium">
+            {{ t('channelEditor.protocolModels.sharedTitle') }}
+          </span>
+          <span class="text-caption text-medium-emphasis">
+            {{ t('channelEditor.protocolModels.sharedHint', { count: sharedProtocolCount }) }}
+          </span>
+        </div>
+        <v-chip size="x-small" variant="tonal" color="success">
+          {{ t('channelEditor.protocolModels.sharedCount', { count: sharedModels.length }) }}
+        </v-chip>
+      </div>
+      <details class="protocol-model-shared__all">
+        <summary class="protocol-model-route__all-summary">
+          <span class="text-caption">
+            {{ t('channelEditor.protocolModels.viewShared', { count: sharedModels.length }) }}
+          </span>
+          <v-icon class="protocol-model-route__all-chevron" size="16">mdi-chevron-down</v-icon>
+        </summary>
+        <div class="protocol-model-route__models">
+          <v-chip
+            v-for="model in sharedModels"
+            :key="model"
+            size="small"
+            variant="outlined"
+            color="success"
+            class="protocol-model-route__model"
+          >
+            {{ model }}
+          </v-chip>
+        </div>
+      </details>
+    </section>
+
     <div class="protocol-model-availability__rows">
       <div
         v-for="route in normalizedRoutes"
@@ -162,16 +199,16 @@
           </div>
         </div>
 
-        <details v-if="route.models.length" class="protocol-model-route__all">
+        <details v-if="route.specificModels.length" class="protocol-model-route__all">
           <summary class="protocol-model-route__all-summary">
             <span class="text-caption">
-              {{ t('channelEditor.protocolModels.viewAll', { count: route.models.length }) }}
+              {{ t('channelEditor.protocolModels.viewSpecific', { count: route.specificModels.length }) }}
             </span>
             <v-icon class="protocol-model-route__all-chevron" size="16">mdi-chevron-down</v-icon>
           </summary>
           <div class="protocol-model-route__models">
             <v-chip
-              v-for="model in route.models"
+              v-for="model in route.specificModels"
               :key="model"
               size="small"
               variant="outlined"
@@ -181,6 +218,9 @@
             </v-chip>
           </div>
         </details>
+        <div v-else-if="route.hasInventory && sharedModels.length" class="text-caption text-medium-emphasis">
+          {{ t('channelEditor.protocolModels.specificEmpty') }}
+        </div>
         <div v-else class="text-caption text-medium-emphasis">
           {{ t('channelEditor.protocolModels.empty') }}
         </div>
@@ -415,7 +455,7 @@ const coverageGroupColor = (group: ModelCoverageGroup, bindingCount: number) => 
   return group.availableBindings.length > 0 ? 'warning' : 'error'
 }
 
-const normalizedRoutes = computed(() => (props.routes ?? []).map((route) => {
+const baseNormalizedRoutes = computed(() => (props.routes ?? []).map((route) => {
   const upstreamKind = route.upstreamKind ?? route.kind
   const definition = protocolDefinitions[upstreamKind]
   const hasDiscoveredInventory = route.modelInventoryKnown === true || Array.isArray(route.discoveredModels)
@@ -431,13 +471,6 @@ const normalizedRoutes = computed(() => (props.routes ?? []).map((route) => {
     ...inventoryModels,
     ...bindings.flatMap(binding => binding.models),
   ])
-  const coverageGroups = groupModelsByAvailability(models, bindings)
-  const diffModelCount = coverageGroups.reduce(
-    (count, group) => count + (group.isSharedByAll ? 0 : group.models.length),
-    0,
-  )
-  const hasBindingDifferences = diffModelCount > 0
-
   return {
     ...route,
     upstreamKind,
@@ -447,14 +480,47 @@ const normalizedRoutes = computed(() => (props.routes ?? []).map((route) => {
     icon: definition.icon,
     models,
     bindings,
-    coverageGroups,
-    diffModelCount,
-    hasBindingDifferences,
     hasInventory: hasDiscoveredInventory || models.length > 0,
     discoveryTime: formatDiscoveryTime(route.modelsDiscoveredAt),
     discoverySourceLabel: discoverySourceLabel(route.modelDiscoverySource),
   }
 }))
+
+const sharedProtocolRoutes = computed(() => (
+  baseNormalizedRoutes.value.filter(route => route.hasInventory)
+))
+
+const sharedProtocolCount = computed(() => sharedProtocolRoutes.value.length)
+
+const sharedModels = computed(() => {
+  const routes = sharedProtocolRoutes.value
+  if (routes.length < 2) return []
+  let intersection = routes[0].models
+  for (const route of routes.slice(1)) {
+    const available = new Set(route.models)
+    intersection = intersection.filter(model => available.has(model))
+  }
+  return intersection
+})
+
+const normalizedRoutes = computed(() => {
+  const shared = new Set(sharedModels.value)
+  return baseNormalizedRoutes.value.map((route) => {
+    const specificModels = route.models.filter(model => !shared.has(model))
+    const coverageGroups = groupModelsByAvailability(specificModels, route.bindings)
+    const diffModelCount = coverageGroups.reduce(
+      (count, group) => count + (group.isSharedByAll ? 0 : group.models.length),
+      0,
+    )
+    return {
+      ...route,
+      specificModels,
+      coverageGroups,
+      diffModelCount,
+      hasBindingDifferences: diffModelCount > 0,
+    }
+  })
+})
 
 const showIncompleteHint = computed(() => (
   !isDetecting.value
@@ -504,6 +570,31 @@ const showIncompleteHint = computed(() => (
   border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
   border-radius: 6px;
   overflow: hidden;
+}
+
+.protocol-model-shared {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 14px 16px;
+  border: 1px solid rgba(var(--v-theme-success), 0.28);
+  border-radius: 6px;
+  background: rgba(var(--v-theme-success), 0.045);
+}
+
+.protocol-model-shared__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.protocol-model-shared__identity {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .protocol-model-route {
@@ -650,7 +741,8 @@ const showIncompleteHint = computed(() => (
   transition: transform 0.16s ease;
 }
 
-.protocol-model-route__all[open] .protocol-model-route__all-chevron {
+.protocol-model-route__all[open] .protocol-model-route__all-chevron,
+.protocol-model-shared__all[open] .protocol-model-route__all-chevron {
   transform: rotate(180deg);
 }
 

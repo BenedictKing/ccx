@@ -3,6 +3,7 @@ import { mount } from '@vue/test-utils'
 import { defineComponent } from 'vue'
 import { describe, expect, it, vi } from 'vitest'
 
+import type { ChannelProtocolRoute } from '../../services/api'
 import ProtocolModelAvailability from './ProtocolModelAvailability.vue'
 
 const autopilotMocks = vi.hoisted(() => ({
@@ -70,6 +71,100 @@ describe('ProtocolModelAvailability', () => {
     expect(chat.text()).not.toContain('gpt-5.6-terra')
     expect(responses.text()).toContain('/v1/responses')
     expect(responses.text()).toContain('codex-auto-review')
+  })
+
+  it('模型清单一致时只展示一次跨协议共有模型', () => {
+    const routes: ChannelProtocolRoute[] = (['messages', 'chat', 'responses'] as const).map((kind, index) => ({
+      kind,
+      index,
+      name: `shared-${kind}`,
+      serviceType: kind === 'messages' ? 'claude' : kind === 'chat' ? 'openai' : 'responses',
+      modelInventoryKnown: true,
+      discoveredModels: ['model-a', 'model-b'],
+    }))
+    const wrapper = mount(ProtocolModelAvailability, {
+      props: { routes },
+      global: {
+        stubs: {
+          VChip: passthroughStub,
+          VIcon: passthroughStub,
+        },
+      },
+    })
+
+    const shared = wrapper.get('.protocol-model-shared')
+    expect(shared.text()).toContain('channelEditor.protocolModels.sharedTitle')
+    expect(shared.text()).toContain('channelEditor.protocolModels.sharedHint:3')
+    expect(shared.text()).toContain('model-a')
+    expect(shared.text()).toContain('model-b')
+    for (const kind of ['messages', 'chat', 'responses']) {
+      const route = wrapper.get(`[data-kind="${kind}"]`)
+      expect(route.text()).not.toContain('model-a')
+      expect(route.text()).not.toContain('model-b')
+      expect(route.text()).toContain('channelEditor.protocolModels.specificEmpty')
+    }
+  })
+
+  it('先展示跨协议交集，再按协议展示独有模型', () => {
+    const wrapper = mount(ProtocolModelAvailability, {
+      props: {
+        routes: [
+          {
+            kind: 'messages', index: 0, name: 'messages', serviceType: 'claude',
+            discoveredModels: ['shared-model', 'claude-only'],
+          },
+          {
+            kind: 'chat', index: 0, name: 'chat', serviceType: 'openai',
+            discoveredModels: ['shared-model', 'chat-only'],
+          },
+          {
+            kind: 'responses', index: 0, name: 'responses', serviceType: 'responses',
+            discoveredModels: ['shared-model'],
+          },
+        ],
+      },
+      global: {
+        stubs: {
+          VChip: passthroughStub,
+          VIcon: passthroughStub,
+        },
+      },
+    })
+
+    const shared = wrapper.get('.protocol-model-shared')
+    expect(shared.text()).toContain('shared-model')
+    expect(shared.text()).not.toContain('claude-only')
+    expect(shared.text()).not.toContain('chat-only')
+    expect(wrapper.get('[data-kind="messages"]').text()).toContain('claude-only')
+    expect(wrapper.get('[data-kind="messages"]').text()).not.toContain('shared-model')
+    expect(wrapper.get('[data-kind="chat"]').text()).toContain('chat-only')
+    expect(wrapper.get('[data-kind="responses"]').text()).toContain('channelEditor.protocolModels.specificEmpty')
+  })
+
+  it('已发现的空模型协议会使跨协议交集为空', () => {
+    const wrapper = mount(ProtocolModelAvailability, {
+      props: {
+        routes: [
+          {
+            kind: 'messages', index: 0, name: 'messages', serviceType: 'claude',
+            modelInventoryKnown: true, discoveredModels: ['model-a'],
+          },
+          {
+            kind: 'chat', index: 0, name: 'chat', serviceType: 'openai',
+            modelInventoryKnown: true, discoveredModels: [],
+          },
+        ],
+      },
+      global: {
+        stubs: {
+          VChip: passthroughStub,
+          VIcon: passthroughStub,
+        },
+      },
+    })
+
+    expect(wrapper.find('.protocol-model-shared').exists()).toBe(false)
+    expect(wrapper.get('[data-kind="messages"]').text()).toContain('model-a')
   })
 
   it('区分未记录模型范围与协议不可用', () => {
