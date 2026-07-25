@@ -1295,11 +1295,29 @@ func TestBuildTestRequestWithModel_ClaudeOpus48NormalizesSystemMessageWhenEnable
 			t.Fatalf("normalized probe should not include system message: %#v", messages)
 		}
 	}
-	systemText, ok := body["system"].(string)
+	// 归一化后顶层 system 应保留 block 数组结构（不拍平成字符串），
+	// 从而保住探测体中原有 block 的 cache_control 指纹。
+	systemArr, ok := body["system"].([]interface{})
 	if !ok {
-		t.Fatalf("system=%T, want string", body["system"])
+		t.Fatalf("system=%T, want []interface{}", body["system"])
 	}
-	if !strings.Contains(systemText, "cc_entrypoint=cli") || !strings.Contains(systemText, claudeCodeProbeIdentity) {
-		t.Fatalf("system=%q, want billing header and Claude Code identity", systemText)
+	var systemText strings.Builder
+	cacheControlKept := false
+	for _, raw := range systemArr {
+		block, _ := raw.(map[string]interface{})
+		if text, _ := block["text"].(string); text != "" {
+			systemText.WriteString(text)
+			systemText.WriteString("\n")
+		}
+		if _, has := block["cache_control"]; has {
+			cacheControlKept = true
+		}
+	}
+	joined := systemText.String()
+	if !strings.Contains(joined, "cc_entrypoint=cli") || !strings.Contains(joined, claudeCodeProbeIdentity) {
+		t.Fatalf("system=%q, want billing header and Claude Code identity", joined)
+	}
+	if !cacheControlKept {
+		t.Fatalf("cache_control should be preserved on system blocks: %#v", systemArr)
 	}
 }

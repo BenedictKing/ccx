@@ -11,6 +11,24 @@ import (
 	"github.com/BenedictKing/ccx/internal/config"
 )
 
+// collectClaudeSystemBlockText 从顶层 system（应为 block 数组）里按序拼出各 text block 的文本，
+// 仅用于断言内容存在与顺序；同时校验 system 已是数组结构而非被拍平的字符串。
+func collectClaudeSystemBlockText(t *testing.T, system interface{}, captured []byte) string {
+	t.Helper()
+	arr, ok := system.([]interface{})
+	if !ok {
+		t.Fatalf("top-level system should be a block array, got %T; body=%s", system, string(captured))
+	}
+	var parts []string
+	for _, raw := range arr {
+		block, _ := raw.(map[string]interface{})
+		if text, _ := block["text"].(string); text != "" {
+			parts = append(parts, text)
+		}
+	}
+	return strings.Join(parts, "\n\n")
+}
+
 // TestMessagesHandler_NormalizeSystemRoleToTopLevel 验证：messages 渠道开启
 // NormalizeSystemRoleToTopLevel 后，无论上游 ServiceType 为何，转发前都会把 messages
 // 数组里的 system 角色抽回顶层 system 字段。归一化发生在 provider 分发之前的统一入口，
@@ -70,8 +88,9 @@ func TestMessagesHandler_NormalizeSystemRoleToTopLevel(t *testing.T) {
 				if err := json.Unmarshal(captured, &req); err != nil {
 					t.Fatalf("unmarshal upstream request: %v", err)
 				}
-				// claude 直传：顶层 system 应合并两段文本
-				sysText, _ := req["system"].(string)
+				// claude 直传：顶层 system 应为保留 block 结构的数组（不拍平成字符串），
+				// 且按顺序包含 base prompt 与抽取出的 system 文本。
+				sysText := collectClaudeSystemBlockText(t, req["system"], captured)
 				if !strings.Contains(sysText, "base prompt") || !strings.Contains(sysText, "you are helpful") {
 					t.Fatalf("merged top-level system missing parts: %q; body=%s", sysText, string(captured))
 				}
@@ -149,6 +168,67 @@ func TestMessagesHandler_NormalizeSystemRoleToTopLevel(t *testing.T) {
 	}
 }
 
+// TestMessagesHandler_NormalizeSystemRolePreservesCacheControl 验证归一化后
+// 顶层 system 数组原有 block 的 cache_control 被原样保留，不会因抽取 inline system 而丢失。
+func TestMessagesHandler_NormalizeSystemRolePreservesCacheControl(t *testing.T) {
+	const reqBody = `{"model":"claude-sonnet-5","system":[{"type":"text","text":"cached base","cache_control":{"type":"ephemeral"}}],"messages":[{"role":"system","content":"you are helpful"},{"role":"user","content":[{"type":"text","text":"hello"}]}]}`
+
+	var captured []byte
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read upstream request: %v", err)
+		}
+		captured = body
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"id":"msg","type":"message","role":"assistant","content":[{"type":"text","text":"hi"}],"stop_reason":"end_turn","usage":{"input_tokens":1,"output_tokens":1}}`))
+	}))
+	defer upstream.Close()
+
+	router := newMessagesTestRouter(t, config.UpstreamConfig{
+		Name:                          "cache-control-preserve",
+		BaseURL:                       upstream.URL,
+		APIKeys:                       []string{"sk-test"},
+		ServiceType:                   "claude",
+		Status:                        "active",
+		NormalizeSystemRoleToTopLevel: true,
+	})
+
+	w := performMessagesHandlerRequest(t, router, reqBody)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", w.Code, w.Body.String())
+	}
+
+	var req map[string]interface{}
+	if err := json.Unmarshal(captured, &req); err != nil {
+		t.Fatalf("unmarshal upstream request: %v", err)
+	}
+	arr, ok := req["system"].([]interface{})
+	if !ok {
+		t.Fatalf("top-level system should be a block array, got %T; body=%s", req["system"], string(captured))
+	}
+	if len(arr) == 0 {
+		t.Fatalf("system array empty; body=%s", string(captured))
+	}
+	first, _ := arr[0].(map[string]interface{})
+	if text, _ := first["text"].(string); text != "cached base" {
+		t.Fatalf("first block text = %q, want %q; body=%s", text, "cached base", string(captured))
+	}
+	cc, ok := first["cache_control"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("cache_control lost on first system block; body=%s", string(captured))
+	}
+	if ccType, _ := cc["type"].(string); ccType != "ephemeral" {
+		t.Fatalf("cache_control.type = %q, want ephemeral; body=%s", ccType, string(captured))
+	}
+	// inline system 内容应作为独立新 block 追加，而不是合并进第一个 block
+	merged := collectClaudeSystemBlockText(t, req["system"], captured)
+	if !strings.Contains(merged, "you are helpful") {
+		t.Fatalf("appended inline system missing; body=%s", string(captured))
+	}
+}
+
 func TestMessagesHandler_AutoManagedCompshareNormalizesSystemRoles(t *testing.T) {
 	const reqBody = `{"model":"claude-sonnet-5","system":[{"type":"text","text":"base prompt"}],"messages":[{"role":"user","content":[{"type":"text","text":"first user"}]},{"role":"system","content":"mid prompt"},{"role":"assistant","content":[{"type":"text","text":"prior answer"}]},{"role":"user","content":[{"type":"text","text":"second user"}]},{"role":"system","content":[{"type":"text","text":"tail prompt"}]}]}`
 
@@ -184,7 +264,7 @@ func TestMessagesHandler_AutoManagedCompshareNormalizesSystemRoles(t *testing.T)
 	if err := json.Unmarshal(captured, &forwarded); err != nil {
 		t.Fatalf("unmarshal upstream request: %v", err)
 	}
-	system, _ := forwarded["system"].(string)
+	system := collectClaudeSystemBlockText(t, forwarded["system"], captured)
 	for _, want := range []string{"base prompt", "mid prompt", "tail prompt"} {
 		if !strings.Contains(system, want) {
 			t.Fatalf("top-level system missing %q: %q; body=%s", want, system, string(captured))

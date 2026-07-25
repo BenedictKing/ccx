@@ -612,29 +612,38 @@ func stripEmptyTextBlocksFromRequestMap(reqMap map[string]interface{}) map[strin
 	return transformRequestMap(reqMap, stripEmptyTextBlocksFromBody)
 }
 
-func extractClaudeSystemText(content interface{}) string {
+// claudeSystemToBlocks 将 system 内容归一化为 content block 数组，
+// 原样保留数组里每个 block 的全部字段（含 cache_control），从而不破坏 prompt cache 指纹。
+// 字符串形式包成单个 text block；空内容返回 nil。
+func claudeSystemToBlocks(content interface{}) []interface{} {
 	switch v := content.(type) {
 	case string:
-		return strings.TrimSpace(v)
+		text := strings.TrimSpace(v)
+		if text == "" {
+			return nil
+		}
+		return []interface{}{map[string]interface{}{"type": "text", "text": text}}
 	case []interface{}:
-		parts := make([]string, 0, len(v))
+		blocks := make([]interface{}, 0, len(v))
 		for _, item := range v {
 			block, ok := item.(map[string]interface{})
 			if !ok {
 				continue
 			}
-			if blockType, _ := block["type"].(string); blockType != "text" {
-				continue
+			// 原样保留整个 block（含 cache_control、type 等字段），仅跳过空 text block
+			if blockType, _ := block["type"].(string); blockType == "text" {
+				if text, _ := block["text"].(string); strings.TrimSpace(text) == "" {
+					continue
+				}
 			}
-			text, _ := block["text"].(string)
-			text = strings.TrimSpace(text)
-			if text != "" {
-				parts = append(parts, text)
-			}
+			blocks = append(blocks, block)
 		}
-		return strings.Join(parts, "\n")
+		if len(blocks) == 0 {
+			return nil
+		}
+		return blocks
 	default:
-		return ""
+		return nil
 	}
 }
 
@@ -652,7 +661,9 @@ func NormalizeSystemRoleToTopLevel(bodyBytes []byte) []byte {
 		return bodyBytes
 	}
 
-	systemTexts := make([]string, 0, 2)
+	// 顶层原有 system 的 block 原样保留在最前，inline system 消息按出现顺序追加为新 block。
+	// 全程不拍平成字符串，因此每个 block 的 cache_control 边界与指纹保持不变。
+	systemBlocks := claudeSystemToBlocks(data["system"])
 	filteredMessages := make([]interface{}, 0, len(messages))
 	modified := false
 
@@ -668,29 +679,16 @@ func NormalizeSystemRoleToTopLevel(bodyBytes []byte) []byte {
 			continue
 		}
 		modified = true
-		if text := extractClaudeSystemText(msgMap["content"]); text != "" {
-			systemTexts = append(systemTexts, text)
-		}
+		systemBlocks = append(systemBlocks, claudeSystemToBlocks(msgMap["content"])...)
 	}
 
 	if !modified {
 		return bodyBytes
 	}
 
-	existingTopLevel := ""
-	switch s := data["system"].(type) {
-	case string:
-		existingTopLevel = strings.TrimSpace(s)
-	case []interface{}:
-		existingTopLevel = extractClaudeSystemText(s)
-	}
-	if existingTopLevel != "" {
-		systemTexts = append([]string{existingTopLevel}, systemTexts...)
-	}
-
 	data["messages"] = filteredMessages
-	if len(systemTexts) > 0 {
-		data["system"] = strings.Join(systemTexts, "\n\n")
+	if len(systemBlocks) > 0 {
+		data["system"] = systemBlocks
 	}
 
 	newBytes, err := utils.MarshalJSONNoEscape(data)
