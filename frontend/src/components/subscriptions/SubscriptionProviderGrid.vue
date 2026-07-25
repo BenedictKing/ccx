@@ -2,21 +2,6 @@
   <div class="subscription-provider-grid">
     <div class="d-flex flex-wrap ga-4">
       <v-card
-        class="provider-card pa-4 cursor-pointer"
-        variant="outlined"
-        :class="{ 'provider-card--active': selectedProvider === 'github-copilot' }"
-        @click="selectProvider('github-copilot')"
-      >
-        <div class="d-flex align-center ga-3">
-          <v-icon size="32" color="primary">mdi-github</v-icon>
-          <div>
-            <div class="text-subtitle-1 font-weight-bold">GitHub Copilot</div>
-            <div class="text-caption text-medium-emphasis">{{ t('subscription.copilotDescription') }}</div>
-          </div>
-        </div>
-      </v-card>
-
-      <v-card
         v-for="sponsor in sponsorCards"
         :key="`sponsor-${sponsor.providerId}`"
         class="provider-card pa-4 d-flex flex-column provider-card--sponsor"
@@ -107,6 +92,21 @@
           >
             {{ t('subscription.visitSite') }}
           </v-btn>
+        </div>
+      </v-card>
+
+      <v-card
+        class="provider-card pa-4 cursor-pointer"
+        variant="outlined"
+        :class="{ 'provider-card--active': selectedProvider === 'github-copilot' }"
+        @click="selectProvider('github-copilot')"
+      >
+        <div class="d-flex align-center ga-3">
+          <v-icon size="32" color="primary">mdi-github</v-icon>
+          <div>
+            <div class="text-subtitle-1 font-weight-bold">GitHub Copilot</div>
+            <div class="text-caption text-medium-emphasis">{{ t('subscription.copilotDescription') }}</div>
+          </div>
         </div>
       </v-card>
 
