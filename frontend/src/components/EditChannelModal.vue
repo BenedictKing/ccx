@@ -462,12 +462,16 @@ import type { ManagedAccountChannel } from '../services/api-types'
 import { buildNativeProtocolModelRoutes, loadLegacyManagedModelAvailability } from '../utils/channelModelAvailability'
 import { getManagedProviderWebsiteLinks } from '../utils/channelWebsite'
 import { isManagedProviderChannel, isOfficialProviderChannel, providerDisplayName } from '../utils/providerDisplay'
+import { useChannelStore } from '../stores/channel'
+import { useDialogStore } from '../stores/dialog'
 
 const props = withDefaults(defineProps<EditChannelModalProps>(), {
   channelType: 'messages',
 })
 
 const emit = defineEmits<EditChannelModalEmits>()
+const channelStore = useChannelStore()
+const dialogStore = useDialogStore()
 const managedProviderName = computed(() => providerDisplayName(props.channel?.providerId))
 const isManagedProvider = computed(() => isManagedProviderChannel(props.channel))
 const isOfficialManagedProvider = computed(() => isOfficialProviderChannel(props.channel))
@@ -509,6 +513,27 @@ const reloadManagedModels = async (accountUid: string) => {
 const handleProtocolModelsRefreshed = () => {
   const accountUid = props.channel?.accountUid
   if (accountUid) void reloadManagedModels(accountUid)
+  // 重新发现可能已为该账号补建了缺失协议的渠道（如 chat/gemini），
+  // 但 props.channel 是打开弹窗时的静态快照，protocolRoutes 不会自动更新。
+  // 这里重新拉取渠道列表，并用刷新后的最新渠道对象替换 editingChannel 快照，
+  // 让 protocolRoutes 反映新落地的路由，"未配置路由" 提示才能正确消失。
+  void refreshEditingChannelAfterRediscovery()
+}
+
+const refreshEditingChannelAfterRediscovery = async () => {
+  const accountUid = props.channel?.accountUid
+  if (!accountUid) return
+  try {
+    await channelStore.refreshChannels()
+  } catch {
+    // 刷新失败时保留旧快照，不阻断后续操作。
+    return
+  }
+  if (!props.show) return
+  const latest = channelStore.unifiedLlmChannelsData.channels.find(
+    channel => channel.accountUid === accountUid,
+  )
+  if (latest) dialogStore.editingChannel = latest
 }
 
 watch(
