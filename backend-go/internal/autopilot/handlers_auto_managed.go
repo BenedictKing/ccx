@@ -1769,19 +1769,12 @@ func handleCustomAutoAdd(c *gin.Context, deps *AutoManagedDeps, requestKind stri
 	accountUID := config.GenerateAccountUID()
 	additions := make([]config.AccountChannelAddition, 0, len(routes))
 	for _, route := range routes {
-		upstream := config.UpstreamConfig{
-			Name:            customAutoAddRouteName(baseName, route.ChannelKind, multiRoute),
-			AccountUID:      accountUID,
-			ChannelUID:      config.GenerateChannelUID(),
-			ServiceType:     kindToDefaultServiceType(route.ChannelKind),
-			Status:          "active",
-			AutoManaged:     true,
-			AutoManagedAt:   &now,
+		upstream := buildCustomManagedProtocolRoute(config.UpstreamConfig{
 			BaseURL:         baseURLs[0],
 			BaseURLs:        append([]string(nil), baseURLs...),
 			APIKeys:         append([]string(nil), req.APIKeys...),
 			SupportedModels: append([]string(nil), route.SupportedModels...),
-		}
+		}, accountUID, baseName, route.ChannelKind, multiRoute, now)
 		additions = append(additions, config.AccountChannelAddition{Kind: route.ChannelKind, Upstream: upstream})
 	}
 	if err := deps.CfgManager.ApplyAccountChannelChanges(accountUID, nil, additions); err != nil {
@@ -1882,20 +1875,13 @@ func appendCredentialsToCustomAccount(
 			c.JSON(http.StatusConflict, gin.H{"error": fmt.Sprintf("渠道名称 '%s' 已存在", name)})
 			return
 		}
-		upstream := config.UpstreamConfig{
-			Name:            name,
-			AccountUID:      accountUID,
-			ChannelUID:      config.GenerateChannelUID(),
-			ServiceType:     kindToDefaultServiceType(route.ChannelKind),
-			Status:          "active",
-			AutoManaged:     true,
-			AutoManagedAt:   &now,
+		upstream := buildCustomManagedProtocolRoute(config.UpstreamConfig{
 			BaseURL:         baseURLs[0],
 			BaseURLs:        append([]string(nil), baseURLs...),
 			APIKeys:         append([]string(nil), desiredKeys...),
 			APIKeyConfigs:   customAutoAddKeyConfigs(accountUID, desiredKeys, baseURLs[0]),
 			SupportedModels: append([]string(nil), route.SupportedModels...),
-		}
+		}, accountUID, baseName, route.ChannelKind, totalRouteCount > 1, now)
 		additions = append(additions, config.AccountChannelAddition{Kind: route.ChannelKind, Upstream: upstream})
 	}
 
@@ -2130,13 +2116,6 @@ func normalizeCustomAutoAddRoutes(requestKind string, requested []AutoAddRouteRe
 		return nil, fmt.Errorf("routes 不能为空")
 	}
 	return routes, nil
-}
-
-func customAutoAddRouteName(baseName, kind string, multiRoute bool) string {
-	if !multiRoute {
-		return baseName
-	}
-	return baseName + accountRouteSuffix(kind)
 }
 
 func handleProviderAutoAdd(c *gin.Context, deps *AutoManagedDeps, requestKind string, req AutoAddRequest) {

@@ -44,21 +44,39 @@ func (r *AutoDiscoveryRunner) maybeEnableDiscoveredProtocolRoutes(
 	}
 	baseName := managedCustomAccountName(channels[0])
 	totalRoutes := len(present) + len(missing)
+	routeSeed := source.Clone()
 	if len(missing) > 0 {
-		updates := make([]config.AccountChannelUpdate, 0, len(channels))
+		desiredKeys := make([]string, 0)
 		for _, channel := range channels {
-			updates = append(updates, config.AccountChannelUpdate{
-				ChannelUID:   channel.Upstream.ChannelUID,
-				Name:         customAutoAddRouteName(baseName, channel.Kind, totalRoutes > 1),
-				APIKeys:      append([]string(nil), channel.Upstream.APIKeys...),
-				APIKeyConfig: append([]config.APIKeyConfig(nil), channel.Upstream.APIKeyConfigs...),
-				BaseURLs:     append([]string(nil), channel.Upstream.GetAllBaseURLs()...),
-			})
+			desiredKeys = append(desiredKeys, channel.Upstream.APIKeys...)
+		}
+		updates, _, err := planCustomManagedAccountUpdates(source.AccountUID, updateAccountRequest{
+			Name: baseName, APIKeys: uniqueNonEmptyStrings(desiredKeys),
+		}, channels, totalRoutes)
+		if err != nil {
+			return fmt.Errorf("规划协议渠道更新失败: %w", err)
+		}
+		seedUpdated := false
+		for _, update := range updates {
+			if update.ChannelUID != source.ChannelUID {
+				continue
+			}
+			routeSeed.APIKeys = append([]string(nil), update.APIKeys...)
+			routeSeed.APIKeyConfigs = append([]config.APIKeyConfig(nil), update.APIKeyConfig...)
+			routeSeed.BaseURLs = append([]string(nil), update.BaseURLs...)
+			if len(routeSeed.BaseURLs) > 0 {
+				routeSeed.BaseURL = routeSeed.BaseURLs[0]
+			}
+			seedUpdated = true
+			break
+		}
+		if !seedUpdated {
+			return fmt.Errorf("规划结果缺少源渠道 %s", source.ChannelUID)
 		}
 
 		additions := make([]config.AccountChannelAddition, 0, len(missing))
 		for _, protocol := range missing {
-			upstream := discoveredProtocolUpstream(source, protocol, customAutoAddRouteName(baseName, protocol, totalRoutes > 1))
+			upstream := discoveredProtocolUpstream(routeSeed, protocol, baseName, totalRoutes > 1)
 			additions = append(additions, config.AccountChannelAddition{Kind: protocol, Upstream: upstream})
 		}
 		if err := cfgManager.ApplyAccountChannelChanges(source.AccountUID, updates, additions); err != nil {
@@ -113,27 +131,22 @@ func managedCustomAccountName(channel config.AccountChannel) string {
 	return strings.TrimSuffix(channel.Upstream.Name, accountRouteSuffix(channel.Kind))
 }
 
-func discoveredProtocolUpstream(source *config.UpstreamConfig, protocol, name string) config.UpstreamConfig {
+func discoveredProtocolUpstream(source *config.UpstreamConfig, protocol, baseName string, multiRoute bool) config.UpstreamConfig {
 	cloned := source.Clone()
 	now := time.Now()
 	if cloned.AutoManagedAt != nil {
 		now = *cloned.AutoManagedAt
 	}
-	return config.UpstreamConfig{
-		AccountUID:                  cloned.AccountUID,
-		ChannelUID:                  config.GenerateChannelUID(),
+	seed := config.UpstreamConfig{
 		BaseURL:                     cloned.BaseURL,
 		BaseURLs:                    cloned.BaseURLs,
 		APIKeys:                     cloned.APIKeys,
 		APIKeyConfigs:               cloned.APIKeyConfigs,
-		ServiceType:                 kindToDefaultServiceType(protocol),
 		AuthHeader:                  cloned.AuthHeader,
-		Name:                        name,
 		Description:                 cloned.Description,
 		Website:                     cloned.Website,
 		InsecureSkipVerify:          cloned.InsecureSkipVerify,
 		Priority:                    cloned.Priority,
-		Status:                      "active",
 		PromotionUntil:              cloned.PromotionUntil,
 		AutoBlacklistBalance:        cloned.AutoBlacklistBalance,
 		NormalizeMetadataUserID:     cloned.NormalizeMetadataUserID,
@@ -150,13 +163,12 @@ func discoveredProtocolUpstream(source *config.UpstreamConfig, protocol, name st
 		RateLimitBurst:              cloned.RateLimitBurst,
 		RateLimitMaxConcurrent:      cloned.RateLimitMaxConcurrent,
 		RateLimitAutoFromHeaders:    cloned.RateLimitAutoFromHeaders,
-		AutoManaged:                 true,
-		AutoManagedAt:               &now,
 		OriginType:                  cloned.OriginType,
 		OriginTier:                  cloned.OriginTier,
 		Tags:                        cloned.Tags,
 		HealthCheck:                 cloned.HealthCheck,
 	}
+	return buildCustomManagedProtocolRoute(seed, cloned.AccountUID, baseName, protocol, multiRoute, now)
 }
 
 func endpointResultsForProtocol(endpoints []EndpointDiscoveryResult, protocol string) []EndpointDiscoveryResult {
