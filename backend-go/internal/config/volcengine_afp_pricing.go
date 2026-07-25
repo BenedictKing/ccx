@@ -147,11 +147,11 @@ type AFPCostResult struct {
 	Matched bool
 
 	// 规则信息
-	RuleID      string // 匹配的模型规则 ID
-	ModelID     string // 实际匹配的模型 ID（可能是别名解析后的）
-	IsAlias     bool   // 输入 modelID 是否为别名
-	AliasOf     string // 别名指向的规范模型 ID
-	Plan        string // 套餐类型
+	RuleID  string // 匹配的模型规则 ID
+	ModelID string // 实际匹配的模型 ID（可能是别名解析后的）
+	IsAlias bool   // 输入 modelID 是否为别名
+	AliasOf string // 别名指向的规范模型 ID
+	Plan    string // 套餐类型
 
 	// 系数
 	InputBaseCoeff  AFPScaledCoefficient // 基础输入系数
@@ -160,8 +160,8 @@ type AFPCostResult struct {
 	SegmentMult     AFPScaledCoefficient // 输入分段倍率
 
 	// 活动
-	PromotionApplied bool               // 是否命中活动
-	PromotionID      string             // 活动 ID
+	PromotionApplied bool                 // 是否命中活动
+	PromotionID      string               // 活动 ID
 	PromotionMult    AFPScaledCoefficient // 活动倍率
 
 	// 有效系数 = 基础 × 分段 × 活动
@@ -169,9 +169,9 @@ type AFPCostResult struct {
 	EffectiveOutputCoeff AFPScaledCoefficient
 
 	// AFP 计算结果
-	InputAFP  int64            // 输入 AFP = ceil(inputTokens × effectiveInput / 10000)
-	OutputAFP int64            // 输出 AFP = ceil(outputTokens × effectiveOutput / 10000)
-	TotalAFP  int64            // 总 AFP = inputAFP + outputAFP
+	InputAFP  int64 // 输入 AFP = ceil(inputTokens × effectiveInput / 10000)
+	OutputAFP int64 // 输出 AFP = ceil(outputTokens × effectiveOutput / 10000)
+	TotalAFP  int64 // 总 AFP = inputAFP + outputAFP
 
 	// 置信度与不可计算原因
 	Confidence AFPCostConfidence

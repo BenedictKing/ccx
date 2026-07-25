@@ -110,7 +110,7 @@ func TestComputeFrontierForest_SinglePoint(t *testing.T) {
 
 func TestComputeFrontierForest_TwoDominatingPoints(t *testing.T) {
 	points := []FrontierPoint{
-		testPoint("cheap-good", 0.7, 0.65, 0.75, 5),   // 低成本、高质量
+		testPoint("cheap-good", 0.7, 0.65, 0.75, 5),     // 低成本、高质量
 		testPoint("expensive-bad", 0.4, 0.35, 0.45, 20), // 高成本、低质量（被支配）
 	}
 	forest := ComputeFrontierForest(points, "vp_test", "v1")
@@ -314,7 +314,7 @@ func TestKneePointIndex_Single(t *testing.T) {
 func TestKneePointIndex_ThreePoints(t *testing.T) {
 	clusters := []FrontierCluster{
 		{Index: 0, AvgQuality: 0.2, AvgCost: 1},
-		{Index: 1, AvgQuality: 0.5, AvgCost: 5},  // 膝点：从廉价低质到中等的拐点
+		{Index: 1, AvgQuality: 0.5, AvgCost: 5},   // 膝点：从廉价低质到中等的拐点
 		{Index: 2, AvgQuality: 0.55, AvgCost: 20}, // 成本急升但质量增长小
 	}
 	idx := kneePointIndex(clusters)

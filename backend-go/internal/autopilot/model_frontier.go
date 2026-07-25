@@ -12,16 +12,16 @@ import (
 
 // FrontierPoint 是请求级能力—成本路由点。
 type FrontierPoint struct {
-	CandidateID     string        // 候选唯一标识（如 channelUID + modelID）
-	CanonicalModel  string        // 规范模型 ID
-	ModelVersion    string        // 模型版本
-	Effort          string        // effort 级别
-	Domain          TaskDomain    // 任务域
-	QualityScore    float64       // 归一化质量分 0.0-1.0
-	QualityLow      float64       // 质量置信下界
-	QualityHigh     float64       // 质量置信上界
-	Cost            CostEvidence  // 成本证据
-	EvidenceVersion string        // 证据版本标识
+	CandidateID     string       // 候选唯一标识（如 channelUID + modelID）
+	CanonicalModel  string       // 规范模型 ID
+	ModelVersion    string       // 模型版本
+	Effort          string       // effort 级别
+	Domain          TaskDomain   // 任务域
+	QualityScore    float64      // 归一化质量分 0.0-1.0
+	QualityLow      float64      // 质量置信下界
+	QualityHigh     float64      // 质量置信上界
+	Cost            CostEvidence // 成本证据
+	EvidenceVersion string       // 证据版本标识
 }
 
 // EffectiveQualityRange 返回置信区间的宽度。
@@ -49,17 +49,17 @@ func dominates(a, b FrontierPoint) bool {
 
 // FrontierCluster 是一组能力—成本近似的前沿点。
 type FrontierCluster struct {
-	Index     int             // 簇序号，按能力由低到高 F0...Fn
-	Points    []FrontierPoint // 簇内点
-	AvgQuality float64        // 簇内平均质量分
-	AvgCost    float64        // 簇内平均成本
+	Index      int             // 簇序号，按能力由低到高 F0...Fn
+	Points     []FrontierPoint // 簇内点
+	AvgQuality float64         // 簇内平均质量分
+	AvgCost    float64         // 簇内平均成本
 }
 
 // FrontierForest 是一棵可比成本域的完整 Pareto 边界。
 type FrontierForest struct {
-	ScopeID   string              // 成本作用域
-	Clusters  []FrontierCluster   // 按能力升序排列的微簇
-	Version   string              // 边界版本
+	ScopeID  string            // 成本作用域
+	Clusters []FrontierCluster // 按能力升序排列的微簇
+	Version  string            // 边界版本
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -162,7 +162,7 @@ func filterByRank(ranked []rankedPoint, targetRank int) []FrontierPoint {
 // clusterFrontierPoints 对 Pareto 前沿点按能力—成本自然断点聚类。
 //
 // 算法：按成本升序扫描，当相邻点之间的能力差距超过稳健阈值
-//（中位数 + MAD）时形成新簇。样本过少时使用保守最小阈值。
+// （中位数 + MAD）时形成新簇。样本过少时使用保守最小阈值。
 func clusterFrontierPoints(points []FrontierPoint) []FrontierCluster {
 	if len(points) == 0 {
 		return nil
@@ -268,16 +268,14 @@ func medianAbsoluteDeviation(sorted []float64, medianVal float64) float64 {
 // 三倾向候选阶梯
 // ────────────────────────────────────────────────────────────────
 
-
-
 // LadderStage 是候选阶梯的一个阶段。
 type LadderStage struct {
-	Index       int              // 阶段序号（0 = 目标档）
-	ClusterIdx  int              // 对应的 FrontierCluster 序号
-	Points      []FrontierPoint  // 该阶段的候选点（按健康/延迟排序）
-	AvgQuality  float64          // 阶段平均质量分
-	AvgCost     float64          // 阶段平均成本
-	Reason      string           // 进入该阶段的原因
+	Index      int             // 阶段序号（0 = 目标档）
+	ClusterIdx int             // 对应的 FrontierCluster 序号
+	Points     []FrontierPoint // 该阶段的候选点（按健康/延迟排序）
+	AvgQuality float64         // 阶段平均质量分
+	AvgCost    float64         // 阶段平均成本
+	Reason     string          // 进入该阶段的原因
 }
 
 // CandidateLadder 是请求级候选阶梯。
