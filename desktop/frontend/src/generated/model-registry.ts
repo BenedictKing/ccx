@@ -1751,12 +1751,12 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
 export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile> = {
   "(?:^|[-/])claude-opus-4-8(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
     "canonicalModel": "claude-opus-4-8",
-    "overallScore": 78.34,
+    "overallScore": 77.44,
     "categoryScores": {
-      "agentic": 83,
-      "coding": 78.7,
-      "multimodal": 91.5,
-      "knowledge": 92.5,
+      "agentic": 83.1,
+      "coding": 69.1,
+      "multimodal": 90.2,
+      "knowledge": 87.6,
       "math": 66.9
     },
     "benchmarkEvidence": [
@@ -1774,7 +1774,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "max",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-24"
+        "capturedAt": "2026-07-25"
       }
     ],
     "sources": [
@@ -1782,20 +1782,20 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/models/claude-opus-4-8",
       "https://benchlm.ai/methodology"
     ],
-    "verifiedAt": "2026-07-24",
+    "verifiedAt": "2026-07-25",
     "lane": "provisional",
-    "sharedResults": 28,
+    "sharedResults": 30,
     "comparableCategories": 5,
     "totalCategories": 8
   },
   "(?:^|[-/])gpt-5\\.6-terra(?=$|@)": {
     "canonicalModel": "gpt-5.6-terra",
-    "overallScore": 72.57,
+    "overallScore": 71.99,
     "categoryScores": {
       "agentic": 91.4,
-      "coding": 58.9,
-      "multimodal": 74.9,
-      "knowledge": 81.5,
+      "coding": 52.8,
+      "multimodal": 75.9,
+      "knowledge": 81.3,
       "math": 97.1
     },
     "benchmarkEvidence": [
@@ -1813,7 +1813,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "max",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-24"
+        "capturedAt": "2026-07-25"
       },
       {
         "benchmark": "codexradar",
@@ -1829,7 +1829,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "ultra",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deng.codexradar.com/",
-        "capturedAt": "2026-07-24"
+        "capturedAt": "2026-07-25"
       }
     ],
     "sources": [
@@ -1838,20 +1838,20 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/models/gpt-5-6-terra",
       "https://benchlm.ai/methodology"
     ],
-    "verifiedAt": "2026-07-24",
+    "verifiedAt": "2026-07-25",
     "lane": "provisional",
-    "sharedResults": 20,
+    "sharedResults": 21,
     "comparableCategories": 5,
     "totalCategories": 8
   },
   "(?:^|[-/])gpt-5\\.6-sol(?=$|@)": {
     "canonicalModel": "gpt-5.6-sol",
-    "overallScore": 81.96,
+    "overallScore": 81.46,
     "categoryScores": {
       "agentic": 94.7,
-      "coding": 61.5,
-      "multimodal": 84.3,
-      "knowledge": 83.2,
+      "coding": 55,
+      "multimodal": 85.3,
+      "knowledge": 83,
       "math": 97.1
     },
     "benchmarkEvidence": [
@@ -1869,7 +1869,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "max",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-24"
+        "capturedAt": "2026-07-25"
       },
       {
         "benchmark": "codexradar",
@@ -1877,7 +1877,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "sourceModel": "gpt-5.6-sol",
         "domain": "coding",
         "metric": "pass_at_1",
-        "rawValue": 0.6964285714285714,
+        "rawValue": 0.6785714285714286,
         "uncertainty": 0,
         "cohortPercentile": 1,
         "taskCount": 112,
@@ -1885,7 +1885,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "max",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deng.codexradar.com/",
-        "capturedAt": "2026-07-24"
+        "capturedAt": "2026-07-25"
       }
     ],
     "sources": [
@@ -1894,20 +1894,20 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/models/gpt-5-6-sol",
       "https://benchlm.ai/methodology"
     ],
-    "verifiedAt": "2026-07-24",
+    "verifiedAt": "2026-07-25",
     "lane": "provisional",
-    "sharedResults": 22,
+    "sharedResults": 23,
     "comparableCategories": 5,
     "totalCategories": 8
   },
   "(?:^|[-/])gpt-5\\.6-luna(?=$|@)": {
     "canonicalModel": "gpt-5.6-luna",
-    "overallScore": 67.17,
+    "overallScore": 66.59,
     "categoryScores": {
       "agentic": 84.8,
-      "coding": 57.8,
-      "multimodal": 65.9,
-      "knowledge": 80.9,
+      "coding": 51.5,
+      "multimodal": 66.7,
+      "knowledge": 80.7,
       "math": 97.1
     },
     "benchmarkEvidence": [
@@ -1925,7 +1925,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "max",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-24"
+        "capturedAt": "2026-07-25"
       },
       {
         "benchmark": "codexradar",
@@ -1941,7 +1941,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "max",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deng.codexradar.com/",
-        "capturedAt": "2026-07-24"
+        "capturedAt": "2026-07-25"
       }
     ],
     "sources": [
@@ -1950,20 +1950,20 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/models/gpt-5-6-luna",
       "https://benchlm.ai/methodology"
     ],
-    "verifiedAt": "2026-07-24",
+    "verifiedAt": "2026-07-25",
     "lane": "provisional",
-    "sharedResults": 20,
+    "sharedResults": 21,
     "comparableCategories": 5,
     "totalCategories": 8
   },
   "(?:^|[-/])gpt-5\\.5(?=$|@)": {
     "canonicalModel": "gpt-5.5",
-    "overallScore": 73.51,
+    "overallScore": 72.05,
     "categoryScores": {
       "agentic": 85,
-      "coding": 48.7,
-      "multimodal": 70.1,
-      "knowledge": 83.4,
+      "coding": 44,
+      "multimodal": 69.8,
+      "knowledge": 79.2,
       "math": 71.3
     },
     "benchmarkEvidence": [
@@ -1981,7 +1981,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "xhigh",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-24"
+        "capturedAt": "2026-07-25"
       },
       {
         "benchmark": "codexradar",
@@ -1997,7 +1997,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "xhigh",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deng.codexradar.com/",
-        "capturedAt": "2026-07-24"
+        "capturedAt": "2026-07-25"
       }
     ],
     "sources": [
@@ -2006,20 +2006,20 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/models/gpt-5-5",
       "https://benchlm.ai/methodology"
     ],
-    "verifiedAt": "2026-07-24",
+    "verifiedAt": "2026-07-25",
     "lane": "provisional",
-    "sharedResults": 29,
+    "sharedResults": 30,
     "comparableCategories": 5,
     "totalCategories": 8
   },
   "(?:^|[-/])gpt-5\\.4(?:-openai-compact)?(?=$|@)": {
     "canonicalModel": "gpt-5.4",
-    "overallScore": 74.24,
+    "overallScore": 73.37,
     "categoryScores": {
       "agentic": 74.7,
-      "coding": 46.7,
-      "multimodal": 68.9,
-      "knowledge": 81.9,
+      "coding": 42.4,
+      "multimodal": 68.5,
+      "knowledge": 77.3,
       "math": 65.9
     },
     "benchmarkEvidence": [
@@ -2037,7 +2037,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "xhigh",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-24"
+        "capturedAt": "2026-07-25"
       }
     ],
     "sources": [
@@ -2045,20 +2045,20 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/models/gpt-5-4",
       "https://benchlm.ai/methodology"
     ],
-    "verifiedAt": "2026-07-24",
+    "verifiedAt": "2026-07-25",
     "lane": "provisional",
-    "sharedResults": 31,
+    "sharedResults": 33,
     "comparableCategories": 5,
     "totalCategories": 8
   },
   "(?:^|[-/])claude-fable-5(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
     "canonicalModel": "claude-fable-5",
-    "overallScore": 83.68,
+    "overallScore": 82.76,
     "categoryScores": {
-      "agentic": 92.9,
+      "agentic": 93.1,
       "coding": 83.1,
-      "multimodal": 65.2,
-      "knowledge": 72.9
+      "multimodal": 64,
+      "knowledge": 69.2
     },
     "benchmarkEvidence": [
       {
@@ -2075,7 +2075,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "xhigh",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-24"
+        "capturedAt": "2026-07-25"
       }
     ],
     "sources": [
@@ -2083,7 +2083,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/models/claude-fable",
       "https://benchlm.ai/methodology"
     ],
-    "verifiedAt": "2026-07-24",
+    "verifiedAt": "2026-07-25",
     "lane": "provisional",
     "sharedResults": 17,
     "comparableCategories": 4,
@@ -2091,12 +2091,12 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
   },
   "(?:^|[-/])claude-sonnet-5(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
     "canonicalModel": "claude-sonnet-5",
-    "overallScore": 65.32,
+    "overallScore": 64.65,
     "categoryScores": {
       "agentic": 86.1,
-      "coding": 69,
-      "multimodal": 78.9,
-      "knowledge": 91.2
+      "coding": 61.4,
+      "multimodal": 79.9,
+      "knowledge": 85.9
     },
     "benchmarkEvidence": [
       {
@@ -2113,7 +2113,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "max",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-24"
+        "capturedAt": "2026-07-25"
       }
     ],
     "sources": [
@@ -2121,7 +2121,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/models/claude-sonnet-5",
       "https://benchlm.ai/methodology"
     ],
-    "verifiedAt": "2026-07-24",
+    "verifiedAt": "2026-07-25",
     "lane": "provisional",
     "sharedResults": 17,
     "comparableCategories": 4,
@@ -2129,12 +2129,12 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
   },
   "(?:^|[-/])claude-sonnet-4-6(?:-thinking)?(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
     "canonicalModel": "claude-sonnet-4-6",
-    "overallScore": 65.07,
+    "overallScore": 64.4,
     "categoryScores": {
-      "agentic": 54.8,
-      "coding": 67.4,
-      "multimodal": 56.5,
-      "knowledge": 79.7,
+      "agentic": 55,
+      "coding": 63.7,
+      "multimodal": 57.5,
+      "knowledge": 76.9,
       "math": 49.5
     },
     "benchmarkEvidence": [
@@ -2152,7 +2152,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "high",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-24"
+        "capturedAt": "2026-07-25"
       }
     ],
     "sources": [
@@ -2160,7 +2160,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/models/claude-sonnet-4-6",
       "https://benchlm.ai/methodology"
     ],
-    "verifiedAt": "2026-07-24",
+    "verifiedAt": "2026-07-25",
     "lane": "provisional",
     "sharedResults": 19,
     "comparableCategories": 5,
@@ -2168,11 +2168,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
   },
   "(?:^|[-/])glm-5\\.2(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
     "canonicalModel": "glm-5.2",
-    "overallScore": 63.96,
+    "overallScore": 62.97,
     "categoryScores": {
-      "agentic": 81,
-      "coding": 56.5,
-      "knowledge": 86.9,
+      "agentic": 81.2,
+      "coding": 50.4,
+      "knowledge": 82.4,
       "math": 81.4
     },
     "benchmarkEvidence": [
@@ -2190,7 +2190,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "max",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-24"
+        "capturedAt": "2026-07-25"
       }
     ],
     "sources": [
@@ -2198,7 +2198,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/models/glm-5-2",
       "https://benchlm.ai/methodology"
     ],
-    "verifiedAt": "2026-07-24",
+    "verifiedAt": "2026-07-25",
     "lane": "provisional",
     "sharedResults": 17,
     "comparableCategories": 4,
@@ -2206,11 +2206,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
   },
   "(?:^|[-/])glm-5p2(?=$|@)": {
     "canonicalModel": "glm-5.2",
-    "overallScore": 63.96,
+    "overallScore": 62.97,
     "categoryScores": {
-      "agentic": 81,
-      "coding": 56.5,
-      "knowledge": 86.9,
+      "agentic": 81.2,
+      "coding": 50.4,
+      "knowledge": 82.4,
       "math": 81.4
     },
     "benchmarkEvidence": [
@@ -2228,7 +2228,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "max",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-24"
+        "capturedAt": "2026-07-25"
       }
     ],
     "sources": [
@@ -2236,7 +2236,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/models/glm-5-2",
       "https://benchlm.ai/methodology"
     ],
-    "verifiedAt": "2026-07-24",
+    "verifiedAt": "2026-07-25",
     "lane": "provisional",
     "sharedResults": 17,
     "comparableCategories": 4,
@@ -2244,10 +2244,10 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
   },
   "(?:^|[-/])kimi-k2\\.7(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
     "canonicalModel": "kimi-k2.7-code",
-    "overallScore": 55,
+    "overallScore": 54.03,
     "categoryScores": {
-      "agentic": 69.6,
-      "coding": 67
+      "agentic": 68.8,
+      "coding": 63.6
     },
     "benchmarkEvidence": [
       {
@@ -2264,7 +2264,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-24"
+        "capturedAt": "2026-07-25"
       }
     ],
     "sources": [
@@ -2272,7 +2272,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/models/kimi-k2-7-code",
       "https://benchlm.ai/methodology"
     ],
-    "verifiedAt": "2026-07-24",
+    "verifiedAt": "2026-07-25",
     "lane": "provisional",
     "sharedResults": 17,
     "comparableCategories": 2,
@@ -2280,10 +2280,10 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
   },
   "(?:^|[-/])kimi-k2\\.7-code(?:-highspeed)?(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
     "canonicalModel": "kimi-k2.7-code",
-    "overallScore": 55,
+    "overallScore": 54.03,
     "categoryScores": {
-      "agentic": 69.6,
-      "coding": 67
+      "agentic": 68.8,
+      "coding": 63.6
     },
     "benchmarkEvidence": [
       {
@@ -2300,7 +2300,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-24"
+        "capturedAt": "2026-07-25"
       }
     ],
     "sources": [
@@ -2308,7 +2308,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/models/kimi-k2-7-code",
       "https://benchlm.ai/methodology"
     ],
-    "verifiedAt": "2026-07-24",
+    "verifiedAt": "2026-07-25",
     "lane": "provisional",
     "sharedResults": 17,
     "comparableCategories": 2,
@@ -2316,10 +2316,10 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
   },
   "(?:^|[-/])kimi-for-coding(?:-highspeed)?(?=$|@)": {
     "canonicalModel": "kimi-k2.7-code",
-    "overallScore": 55,
+    "overallScore": 54.03,
     "categoryScores": {
-      "agentic": 69.6,
-      "coding": 67
+      "agentic": 68.8,
+      "coding": 63.6
     },
     "benchmarkEvidence": [
       {
@@ -2336,7 +2336,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-24"
+        "capturedAt": "2026-07-25"
       }
     ],
     "sources": [
@@ -2344,7 +2344,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/models/kimi-k2-7-code",
       "https://benchlm.ai/methodology"
     ],
-    "verifiedAt": "2026-07-24",
+    "verifiedAt": "2026-07-25",
     "lane": "provisional",
     "sharedResults": 17,
     "comparableCategories": 2,
@@ -2352,12 +2352,12 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
   },
   "(?:^|[-/])gemini-3.5-flash(?=$|@)": {
     "canonicalModel": "gemini-3.5-flash",
-    "overallScore": 64.75,
+    "overallScore": 63.89,
     "categoryScores": {
-      "agentic": 77.7,
-      "coding": 58.4,
-      "multimodal": 84,
-      "knowledge": 65.5,
+      "agentic": 77.9,
+      "coding": 56.1,
+      "multimodal": 85,
+      "knowledge": 62.8,
       "math": 56
     },
     "benchmarkEvidence": [
@@ -2375,7 +2375,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "medium",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-24"
+        "capturedAt": "2026-07-25"
       }
     ],
     "sources": [
@@ -2383,7 +2383,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/models/gemini-3-5-flash",
       "https://benchlm.ai/methodology"
     ],
-    "verifiedAt": "2026-07-24",
+    "verifiedAt": "2026-07-25",
     "lane": "provisional",
     "sharedResults": 23,
     "comparableCategories": 5,
@@ -2406,13 +2406,13 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "high",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-24"
+        "capturedAt": "2026-07-25"
       }
     ],
     "sources": [
       "https://deepswe.datacurve.ai/"
     ],
-    "verifiedAt": "2026-07-24",
+    "verifiedAt": "2026-07-25",
     "lane": "provisional",
     "sharedResults": 17,
     "comparableCategories": 1,
@@ -2420,12 +2420,12 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
   },
   "(?:^|[-/])gpt-5\\.4-mini(?=$|@)": {
     "canonicalModel": "gpt-5.4-mini",
-    "overallScore": 56.77,
+    "overallScore": 55.82,
     "categoryScores": {
-      "agentic": 55.6,
-      "coding": 57.6,
-      "multimodal": 58.2,
-      "knowledge": 63.4,
+      "agentic": 55.7,
+      "coding": 54.3,
+      "multimodal": 59.2,
+      "knowledge": 60.2,
       "math": 44.7
     },
     "benchmarkEvidence": [
@@ -2443,7 +2443,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-24"
+        "capturedAt": "2026-07-25"
       }
     ],
     "sources": [
@@ -2451,7 +2451,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/models/gpt-5-4-mini",
       "https://benchlm.ai/methodology"
     ],
-    "verifiedAt": "2026-07-24",
+    "verifiedAt": "2026-07-25",
     "lane": "provisional",
     "sharedResults": 12,
     "comparableCategories": 5,
@@ -2474,13 +2474,13 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-24"
+        "capturedAt": "2026-07-25"
       }
     ],
     "sources": [
       "https://deepswe.datacurve.ai/"
     ],
-    "verifiedAt": "2026-07-24",
+    "verifiedAt": "2026-07-25",
     "lane": "provisional",
     "sharedResults": 8,
     "comparableCategories": 1,
@@ -2488,9 +2488,9 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
   },
   "(?:^|[-/])claude-haiku-4.5(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
     "canonicalModel": "claude-haiku-4.5",
-    "overallScore": 56.58,
+    "overallScore": 55.85,
     "categoryScores": {
-      "coding": 54.6,
+      "coding": 49.2,
       "math": 29.2
     },
     "benchmarkEvidence": [
@@ -2508,7 +2508,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-24"
+        "capturedAt": "2026-07-25"
       }
     ],
     "sources": [
@@ -2516,7 +2516,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/models/claude-haiku-4-5",
       "https://benchlm.ai/methodology"
     ],
-    "verifiedAt": "2026-07-24",
+    "verifiedAt": "2026-07-25",
     "lane": "provisional",
     "sharedResults": 8,
     "comparableCategories": 2,
@@ -2524,12 +2524,12 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
   },
   "(?:^|[-/])kimi-k3(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
     "canonicalModel": "kimi-k3",
-    "overallScore": 80.96,
+    "overallScore": 79.98,
     "categoryScores": {
       "agentic": 94.7,
-      "coding": 69,
-      "multimodal": 90.3,
-      "knowledge": 89.4
+      "coding": 64.4,
+      "multimodal": 89.6,
+      "knowledge": 84.8
     },
     "benchmarkEvidence": [
       {
@@ -2546,7 +2546,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "max",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-24"
+        "capturedAt": "2026-07-25"
       }
     ],
     "sources": [
@@ -2554,7 +2554,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/models/kimi-3",
       "https://benchlm.ai/methodology"
     ],
-    "verifiedAt": "2026-07-24",
+    "verifiedAt": "2026-07-25",
     "lane": "provisional",
     "sharedResults": 29,
     "comparableCategories": 4,
@@ -2577,13 +2577,13 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "high",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-24"
+        "capturedAt": "2026-07-25"
       }
     ],
     "sources": [
       "https://deepswe.datacurve.ai/"
     ],
-    "verifiedAt": "2026-07-24",
+    "verifiedAt": "2026-07-25",
     "lane": "provisional",
     "sharedResults": 17,
     "comparableCategories": 1,
@@ -2591,12 +2591,12 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
   },
   "(?:^|[-/])grok-4.5(?=$|@)": {
     "canonicalModel": "grok-4.5",
-    "overallScore": 76.72,
+    "overallScore": 75.55,
     "categoryScores": {
-      "agentic": 84.5,
-      "coding": 61.5,
-      "multimodal": 69.1,
-      "knowledge": 71.4
+      "agentic": 84.7,
+      "coding": 55,
+      "multimodal": 69.5,
+      "knowledge": 68
     },
     "benchmarkEvidence": [
       {
@@ -2613,7 +2613,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "high",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-24"
+        "capturedAt": "2026-07-25"
       }
     ],
     "sources": [
@@ -2621,7 +2621,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/models/grok-4-5",
       "https://benchlm.ai/methodology"
     ],
-    "verifiedAt": "2026-07-24",
+    "verifiedAt": "2026-07-25",
     "lane": "provisional",
     "sharedResults": 17,
     "comparableCategories": 4,
@@ -2629,11 +2629,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
   },
   "(?:^|[-/])muse-spark-1.1(?=$|@)": {
     "canonicalModel": "muse-spark-1.1",
-    "overallScore": 77.44,
+    "overallScore": 76.6,
     "categoryScores": {
-      "agentic": 84.1,
-      "coding": 55.2,
-      "multimodal": 79.1,
+      "agentic": 84.3,
+      "coding": 49.3,
+      "multimodal": 80.1,
       "knowledge": 93.5
     },
     "benchmarkEvidence": [
@@ -2651,7 +2651,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "xhigh",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-24"
+        "capturedAt": "2026-07-25"
       }
     ],
     "sources": [
@@ -2659,7 +2659,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/models/muse-spark-1-1",
       "https://benchlm.ai/methodology"
     ],
-    "verifiedAt": "2026-07-24",
+    "verifiedAt": "2026-07-25",
     "lane": "provisional",
     "sharedResults": 19,
     "comparableCategories": 4,
