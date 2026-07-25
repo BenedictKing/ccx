@@ -319,18 +319,6 @@
               {{ t('app.actions.addChannel') }}
             </v-btn>
 
-            <v-btn
-              color="info"
-              size="large"
-              prepend-icon="mdi-speedometer"
-              variant="tonal"
-              :loading="channelStore.isPingingAll"
-              class="action-btn"
-              @click="pingAllChannels"
-            >
-              {{ t('app.actions.ping') }}
-            </v-btn>
-
             <v-btn size="large" prepend-icon="mdi-refresh" variant="text" class="action-btn" @click="refreshChannels">
               {{ t('app.actions.refresh') }}
             </v-btn>
@@ -382,8 +370,6 @@
         <router-view
           @edit="editChannel"
           @delete="deleteChannel"
-          @ping="pingChannel"
-          @test-capability="testChannelCapability"
           @refresh="refreshChannels"
           @error="showErrorToast"
           @success="showSuccessToast"
@@ -406,23 +392,7 @@
       :channel="dialogStore.editingChannel"
       :channel-type="editingChannelType"
       @save="saveChannel"
-      @test-capability="testChannelCapability"
       @error="showErrorToast"
-    />
-
-    <!-- 能力测试对话框 -->
-    <CapabilityTestDialog
-      ref="capabilityTestDialogRef"
-      v-model="showCapabilityTestDialog"
-      :channel-name="capabilityTestChannelName"
-      :current-tab="capabilityTestSourceTab"
-      :capability-job="capabilityTestJob"
-      :capability-rpm="capabilityTestRpm"
-      @update:capability-rpm="capabilityTestRpm = $event"
-      @copy-to-tab="handleCopyToTab"
-      @cancel="handleCancelCapabilityTest"
-      @retry-model="handleRetryCapabilityModel"
-      @test-protocol="handleTestCapabilityProtocol"
     />
 
     <!-- OTA 更新对话框 -->
@@ -713,7 +683,6 @@ import { defineAsyncComponent } from 'vue'
 import Logo from './components/Logo.vue'
 import AddChannelModal from './components/AddChannelModal.vue'
 import EditChannelModal from './components/EditChannelModal.vue'
-import CapabilityTestDialog from './components/CapabilityTestDialog.vue'
 import UpdateDialog from './components/UpdateDialog.vue'
 import UserGuideDialog from './components/UserGuideDialog.vue'
 import { useAppController } from './composables/useAppController'
@@ -752,19 +721,6 @@ const {
   deleteChannel,
   openAddChannelModal,
   addApiKey,
-  pingChannel,
-  showCapabilityTestDialog,
-  capabilityTestChannelName,
-  capabilityTestSourceTab,
-  capabilityTestDialogRef,
-  capabilityTestJob,
-  capabilityTestRpm,
-  testChannelCapability,
-  handleTestCapabilityProtocol,
-  handleCancelCapabilityTest,
-  handleRetryCapabilityModel,
-  handleCopyToTab,
-  pingAllChannels,
   toggleFuzzyMode,
   showGuide,
   openGuide,

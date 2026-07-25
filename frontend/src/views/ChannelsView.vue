@@ -59,6 +59,7 @@ import ChannelOrchestration from '@/components/ChannelOrchestration.vue'
 import ManualIntentForm from '@/components/ManualIntentForm.vue'
 import type { ManualRoutingIntent } from '@/services/api-types'
 import { useI18n } from '@/i18n'
+import { useGlobalTick } from '@/composables/useGlobalTick'
 
 // 接收路由参数
 const props = defineProps<{ type: string }>()
@@ -72,17 +73,20 @@ const channelStore = useChannelStore()
 const dialogStore = useDialogStore()
 const { t } = useI18n()
 
-// Health center data: channelId → health item (§8.2 badge integration).
-// Matching strategy: ChannelHealthItem.channelId is the 0-based index
-// that matches Channel.index in the backend config array.
-const healthMap = ref<Map<number, ChannelHealthItem>>(new Map())
+// Health center data uses channelUid as the stable identity. The kind/index
+// fallback keeps older backend responses compatible without cross-protocol collisions.
+const healthMap = ref<Map<string, ChannelHealthItem>>(new Map())
+
+const healthKey = (item: ChannelHealthItem) =>
+  item.channelUid || `${item.channelKind}:${item.channelId}`
 
 const loadHealthData = async () => {
   try {
     const resp = await api.getHealthCenterChannels()
-    const map = new Map<number, ChannelHealthItem>()
+    const map = new Map<string, ChannelHealthItem>()
     for (const item of resp.channels) {
-      map.set(item.channelId, item)
+      map.set(healthKey(item), item)
+      map.set(`${item.channelKind}:${item.channelId}`, item)
     }
     healthMap.value = map
   } catch {
@@ -90,8 +94,11 @@ const loadHealthData = async () => {
   }
 }
 
+const healthTick = useGlobalTick(30_000, 'ChannelsView-health')
+
 onMounted(() => {
-  loadHealthData()
+  void loadHealthData()
+  healthTick.onTick(loadHealthData)
 })
 
 const emitAddChannel = () => {

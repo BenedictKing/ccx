@@ -1,9 +1,11 @@
 import { computed, ref, type ComputedRef } from 'vue'
 import { ApiService, type Channel } from '../services/api'
+import type { APIKeyConfig } from '../services/api-types'
 
 type ChannelType = 'messages' | 'chat' | 'responses' | 'gemini' | 'images' | 'vectors'
 type FormLike = {
   apiKeys: string[]
+  apiKeyConfigs?: APIKeyConfig[]
 }
 
 type DisabledApiKeyOptions = {
@@ -24,6 +26,33 @@ export function useDisabledApiKeys(options: DisabledApiKeyOptions) {
   const localResumedKeys = ref(new Set<string>())
 
   const keyModelKey = (apiKey: string, model: string) => `${apiKey}|${model}`
+  const channelId = (channel: Channel) => channel.routeIndex ?? channel.index
+
+  const markKeySuspended = (apiKey: string) => {
+    const configs = options.form.apiKeyConfigs ?? []
+    const existingIndex = configs.findIndex(config => config.key === apiKey)
+    if (existingIndex < 0) {
+      options.form.apiKeyConfigs = [...configs, { key: apiKey, enabled: false }]
+      return
+    }
+    options.form.apiKeyConfigs = configs.map((config, index) => (
+      index === existingIndex ? { ...config, enabled: false } : config
+    ))
+  }
+
+  const markKeyResumed = (apiKey: string) => {
+    const configs = options.form.apiKeyConfigs ?? []
+    const existingIndex = configs.findIndex(config => config.key === apiKey)
+    if (existingIndex < 0) return
+
+    const resumedConfig = { ...configs[existingIndex] }
+    delete resumedConfig.enabled
+    const hasOtherConfig = Object.keys(resumedConfig).some(key => key !== 'key')
+    const nextConfigs = hasOtherConfig
+      ? configs.map((config, index) => index === existingIndex ? resumedConfig : config)
+      : configs.filter((_, index) => index !== existingIndex)
+    options.form.apiKeyConfigs = nextConfigs.length > 0 ? nextConfigs : undefined
+  }
 
   const disabledKeys = computed(() => options.channel.value?.disabledApiKeys || [])
   const visibleDisabledKeys = computed(() =>
@@ -52,25 +81,25 @@ export function useDisabledApiKeys(options: DisabledApiKeyOptions) {
     if (!channel || restoringKey.value) return
     restoringKey.value = apiKey
     try {
-      const channelId = channel.index
+      const id = channelId(channel)
       switch (options.channelType.value) {
         case 'chat':
-          await options.apiService.restoreChatApiKey(channelId, apiKey)
+          await options.apiService.restoreChatApiKey(id, apiKey)
           break
         case 'images':
-          await options.apiService.restoreImagesApiKey(channelId, apiKey)
+          await options.apiService.restoreImagesApiKey(id, apiKey)
           break
         case 'vectors':
-          await options.apiService.restoreVectorsApiKey(channelId, apiKey)
+          await options.apiService.restoreVectorsApiKey(id, apiKey)
           break
         case 'gemini':
-          await options.apiService.restoreGeminiApiKey(channelId, apiKey)
+          await options.apiService.restoreGeminiApiKey(id, apiKey)
           break
         case 'responses':
-          await options.apiService.restoreResponsesApiKey(channelId, apiKey)
+          await options.apiService.restoreResponsesApiKey(id, apiKey)
           break
         default:
-          await options.apiService.restoreApiKey(channelId, apiKey)
+          await options.apiService.restoreApiKey(id, apiKey)
       }
       localRestoredKeys.value = new Set([...localRestoredKeys.value, apiKey])
       if (!options.form.apiKeys.includes(apiKey)) {
@@ -89,25 +118,25 @@ export function useDisabledApiKeys(options: DisabledApiKeyOptions) {
     if (!channel || restoringKeyModel.value) return
     restoringKeyModel.value = key
     try {
-      const channelId = channel.index
+      const id = channelId(channel)
       switch (options.channelType.value) {
         case 'chat':
-          await options.apiService.restoreChatKeyModel(channelId, apiKey, model)
+          await options.apiService.restoreChatKeyModel(id, apiKey, model)
           break
         case 'images':
-          await options.apiService.restoreImagesKeyModel(channelId, apiKey, model)
+          await options.apiService.restoreImagesKeyModel(id, apiKey, model)
           break
         case 'vectors':
-          await options.apiService.restoreVectorsKeyModel(channelId, apiKey, model)
+          await options.apiService.restoreVectorsKeyModel(id, apiKey, model)
           break
         case 'gemini':
-          await options.apiService.restoreGeminiKeyModel(channelId, apiKey, model)
+          await options.apiService.restoreGeminiKeyModel(id, apiKey, model)
           break
         case 'responses':
-          await options.apiService.restoreResponsesKeyModel(channelId, apiKey, model)
+          await options.apiService.restoreResponsesKeyModel(id, apiKey, model)
           break
         default:
-          await options.apiService.restoreKeyModel(channelId, apiKey, model)
+          await options.apiService.restoreKeyModel(id, apiKey, model)
       }
       localRestoredKeyModels.value = new Set([...localRestoredKeyModels.value, key])
     } catch (error) {
@@ -122,26 +151,27 @@ export function useDisabledApiKeys(options: DisabledApiKeyOptions) {
     if (!channel || suspendingKey.value) return
     suspendingKey.value = apiKey
     try {
-      const channelId = channel.index
+      const id = channelId(channel)
       switch (options.channelType.value) {
         case 'chat':
-          await options.apiService.suspendChatApiKey(channelId, apiKey)
+          await options.apiService.suspendChatApiKey(id, apiKey)
           break
         case 'images':
-          await options.apiService.suspendImagesApiKey(channelId, apiKey)
+          await options.apiService.suspendImagesApiKey(id, apiKey)
           break
         case 'vectors':
-          await options.apiService.suspendVectorsApiKey(channelId, apiKey)
+          await options.apiService.suspendVectorsApiKey(id, apiKey)
           break
         case 'gemini':
-          await options.apiService.suspendGeminiApiKey(channelId, apiKey)
+          await options.apiService.suspendGeminiApiKey(id, apiKey)
           break
         case 'responses':
-          await options.apiService.suspendResponsesApiKey(channelId, apiKey)
+          await options.apiService.suspendResponsesApiKey(id, apiKey)
           break
         default:
-          await options.apiService.suspendApiKey(channelId, apiKey)
+          await options.apiService.suspendApiKey(id, apiKey)
       }
+      markKeySuspended(apiKey)
       localSuspendedKeys.value = new Set([...localSuspendedKeys.value, apiKey])
       localResumedKeys.value.delete(apiKey)
     } catch (error) {
@@ -156,26 +186,27 @@ export function useDisabledApiKeys(options: DisabledApiKeyOptions) {
     if (!channel || suspendingKey.value) return
     suspendingKey.value = apiKey
     try {
-      const channelId = channel.index
+      const id = channelId(channel)
       switch (options.channelType.value) {
         case 'chat':
-          await options.apiService.resumeChatApiKey(channelId, apiKey)
+          await options.apiService.resumeChatApiKey(id, apiKey)
           break
         case 'images':
-          await options.apiService.resumeImagesApiKey(channelId, apiKey)
+          await options.apiService.resumeImagesApiKey(id, apiKey)
           break
         case 'vectors':
-          await options.apiService.resumeVectorsApiKey(channelId, apiKey)
+          await options.apiService.resumeVectorsApiKey(id, apiKey)
           break
         case 'gemini':
-          await options.apiService.resumeGeminiApiKey(channelId, apiKey)
+          await options.apiService.resumeGeminiApiKey(id, apiKey)
           break
         case 'responses':
-          await options.apiService.resumeResponsesApiKey(channelId, apiKey)
+          await options.apiService.resumeResponsesApiKey(id, apiKey)
           break
         default:
-          await options.apiService.resumeApiKey(channelId, apiKey)
+          await options.apiService.resumeApiKey(id, apiKey)
       }
+      markKeyResumed(apiKey)
       localResumedKeys.value = new Set([...localResumedKeys.value, apiKey])
       localSuspendedKeys.value.delete(apiKey)
     } catch (error) {

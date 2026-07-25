@@ -53,24 +53,27 @@ export function buildChannelApiKeyRows(
 type ChannelKeyState = {
   apiKeys?: string[] | null
   disabledApiKeys?: DisabledKeyInfo[] | null
+  apiKeyConfigs?: APIKeyConfig[] | null
 }
 
 export function availableChannelApiKeyCount(channel: ChannelKeyState): number {
-  return buildChannelApiKeyRows(channel.apiKeys, channel.disabledApiKeys).filter(row => !row.disabled).length
+  return buildChannelApiKeyRows(channel.apiKeys, channel.disabledApiKeys, channel.apiKeyConfigs)
+    .filter(row => !row.disabled && row.enabled !== false)
+    .length
 }
 
 export function disabledChannelApiKeyCount(channel: ChannelKeyState): number {
   return buildChannelApiKeyRows(channel.apiKeys, channel.disabledApiKeys).filter(row => !!row.disabled).length
 }
 
-/**
- * 渠道是否因全部 Key 被拉黑/耗尽而可恢复（且至少存在一个禁用 Key）。
- *
- * 条件必须同时满足「可用数为 0」与「禁用数 > 0」：
- *   - 可用数 > 0：仍有可用 Key，不应误导为可恢复（保留暂停主操作）。
- *   - 禁用数 = 0：尚未配置任何 Key 或仅有手动暂停（enabled=false）的 Key，
- *     渠道恢复接口不会改变这两类状态，因此不能算作该按钮可处理的状态。
- */
+/** 渠道是否仅包含拉黑 Key，可由“恢复渠道”操作完全处理。 */
 export function hasOnlyDisabledChannelApiKeys(channel: ChannelKeyState): boolean {
-  return availableChannelApiKeyCount(channel) === 0 && disabledChannelApiKeyCount(channel) > 0
+  const rows = buildChannelApiKeyRows(channel.apiKeys, channel.disabledApiKeys, channel.apiKeyConfigs)
+  return rows.length > 0 && rows.every(row => !!row.disabled)
+}
+
+/** 渠道至少配置过一个 Key，且所有 Key 均处于手动暂停或拉黑状态。 */
+export function hasNoUsableChannelApiKeys(channel: ChannelKeyState): boolean {
+  const rows = buildChannelApiKeyRows(channel.apiKeys, channel.disabledApiKeys, channel.apiKeyConfigs)
+  return rows.length > 0 && rows.every(row => !!row.disabled || row.enabled === false)
 }

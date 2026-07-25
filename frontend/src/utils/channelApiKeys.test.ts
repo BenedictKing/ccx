@@ -3,6 +3,7 @@ import {
   availableChannelApiKeyCount,
   buildChannelApiKeyRows,
   disabledChannelApiKeyCount,
+  hasNoUsableChannelApiKeys,
   hasOnlyDisabledChannelApiKeys,
 } from './channelApiKeys'
 
@@ -39,6 +40,15 @@ describe('channel API key state', () => {
   it('兼容后端 JSON 中的 null 列表', () => {
     expect(buildChannelApiKeyRows(null, null)).toEqual([])
     expect(availableChannelApiKeyCount({ apiKeys: ['key-active'], disabledApiKeys: null })).toBe(1)
+  })
+
+  it('可用 Key 数量排除手动暂停项', () => {
+    const channel = {
+      apiKeys: ['key-active', 'key-suspended'],
+      disabledApiKeys: [],
+      apiKeyConfigs: [{ key: 'key-suspended', enabled: false }],
+    }
+    expect(availableChannelApiKeyCount(channel)).toBe(1)
   })
 })
 
@@ -82,5 +92,60 @@ describe('hasOnlyDisabledChannelApiKeys', () => {
   it('仅存在活跃 Key 无禁用记录时返回 false', () => {
     const channel = { apiKeys: ['key-a'], disabledApiKeys: [] }
     expect(hasOnlyDisabledChannelApiKeys(channel)).toBe(false)
+  })
+
+  it('暂停与拉黑混合时不视为可由恢复拉黑操作完全处理', () => {
+    const channel = {
+      apiKeys: ['key-paused', 'key-disabled'],
+      disabledApiKeys: [disabledKey('key-disabled')],
+      apiKeyConfigs: [{ key: 'key-paused', enabled: false }],
+    }
+    expect(hasOnlyDisabledChannelApiKeys(channel)).toBe(false)
+  })
+})
+
+describe('hasNoUsableChannelApiKeys', () => {
+  const disabledKey = (key: string) => ({
+    key,
+    reason: 'authentication_error',
+    message: 'invalid key',
+    disabledAt: '2026-07-17T17:44:34+08:00',
+  })
+
+  it('全部拉黑时返回 true', () => {
+    expect(hasNoUsableChannelApiKeys({
+      apiKeys: ['key-a', 'key-b'],
+      disabledApiKeys: [disabledKey('key-a'), disabledKey('key-b')],
+    })).toBe(true)
+  })
+
+  it('全部暂停时返回 true', () => {
+    expect(hasNoUsableChannelApiKeys({
+      apiKeys: ['key-a', 'key-b'],
+      apiKeyConfigs: [
+        { key: 'key-a', enabled: false },
+        { key: 'key-b', enabled: false },
+      ],
+    })).toBe(true)
+  })
+
+  it('暂停与拉黑混合且无可用 Key 时返回 true', () => {
+    expect(hasNoUsableChannelApiKeys({
+      apiKeys: ['key-paused', 'key-disabled'],
+      disabledApiKeys: [disabledKey('key-disabled')],
+      apiKeyConfigs: [{ key: 'key-paused', enabled: false }],
+    })).toBe(true)
+  })
+
+  it('至少存在一个正常 Key 时返回 false', () => {
+    expect(hasNoUsableChannelApiKeys({
+      apiKeys: ['key-active', 'key-paused'],
+      apiKeyConfigs: [{ key: 'key-paused', enabled: false }],
+    })).toBe(false)
+  })
+
+  it('从未配置 Key 时返回 false', () => {
+    expect(hasNoUsableChannelApiKeys({ apiKeys: [], disabledApiKeys: [] })).toBe(false)
+    expect(hasNoUsableChannelApiKeys({ apiKeys: null, disabledApiKeys: null })).toBe(false)
   })
 })

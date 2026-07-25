@@ -230,7 +230,7 @@ const emit = defineEmits<{
   'update:show': [value: boolean]
   save: [
     channel: Omit<Channel, 'index' | 'latency' | 'status'>,
-    options?: { isQuickAdd?: boolean; triggerCapabilityTest?: boolean }
+    options?: { isQuickAdd?: boolean }
   ]
   error: [message: string]
   autoAdded: [channelId: number]

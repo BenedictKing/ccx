@@ -139,7 +139,11 @@
 
             <!-- Status indicator -->
             <div class="status-badge-wrapper" @click.stop>
-              <ChannelStatusBadge :status="element.status || 'active'" :metrics="getChannelMetrics(element)" />
+              <ChannelStatusBadge
+                :status="element.status || 'active'"
+                :metrics="getChannelMetrics(element)"
+                :tripped="hasNoUsableChannelApiKeys(element)"
+              />
               <!-- Health badge (§8.2) -->
               <ChannelHealthBadge :health="getChannelHealth(element) ?? null" />
             </div>
@@ -356,14 +360,26 @@
 
             <!-- Latency display -->
             <div class="channel-latency" @click.stop>
-              <v-chip
-                v-if="isLatencyValid(element)"
-                size="x-small"
-                :color="getLatencyColor(element.latency!)"
-                variant="tonal"
+              <v-tooltip
+                v-if="isLongLatencyChannel(element)"
+                location="top"
+                content-class="ccx-tooltip"
               >
-                {{ element.latency }}ms
-              </v-chip>
+                <template #activator="{ props: tooltipProps }">
+                  <v-chip
+                    v-bind="tooltipProps"
+                    size="x-small"
+                    color="error"
+                    variant="tonal"
+                  >
+                    <v-icon start size="12">mdi-timer-alert-outline</v-icon>
+                    P95 {{ formatObservedLatency(getChannelHealth(element)?.p95FirstByteLatencyMs) }}
+                  </v-chip>
+                </template>
+                {{ t('healthCenter.detail.firstByteP95') }}:
+                {{ formatObservedLatency(getChannelHealth(element)?.p95FirstByteLatencyMs) }}
+                (n={{ getChannelHealth(element)?.firstByteSampleCount ?? 0 }})
+              </v-tooltip>
             </div>
 
             <!-- API key count -->
@@ -445,18 +461,6 @@
                       <v-icon size="small">mdi-pencil</v-icon>
                     </template>
                     <v-list-item-title>{{ t('orchestration.edit') }}</v-list-item-title>
-                  </v-list-item>
-                  <v-list-item @click="$emit('ping', element)">
-                    <template #prepend>
-                      <v-icon size="small">mdi-speedometer</v-icon>
-                    </template>
-                    <v-list-item-title>{{ t('app.actions.ping') }}</v-list-item-title>
-                  </v-list-item>
-                  <v-list-item v-if="getRouteKind(element) !== 'images' && getRouteKind(element) !== 'vectors'" @click="$emit('testCapability', element)">
-                    <template #prepend>
-                      <v-icon size="small" color="success">mdi-test-tube</v-icon>
-                    </template>
-                    <v-list-item-title>{{ t('addChannel.testCapability') }}</v-list-item-title>
                   </v-list-item>
                   <v-list-item @click="$emit('trial', element)">
                     <template #prepend>
@@ -652,12 +656,6 @@
                   </template>
                   <v-list-item-title>{{ t('orchestration.edit') }}</v-list-item-title>
                 </v-list-item>
-                <v-list-item v-if="getRouteKind(channel) !== 'images' && getRouteKind(channel) !== 'vectors'" @click="$emit('testCapability', channel)">
-                  <template #prepend>
-                    <v-icon size="small" color="success">mdi-test-tube</v-icon>
-                  </template>
-                  <v-list-item-title>{{ t('addChannel.testCapability') }}</v-list-item-title>
-                </v-list-item>
                 <v-list-item @click="$emit('trial', channel)">
                   <template #prepend>
                     <v-icon size="small" color="deep-purple">mdi-flask-outline</v-icon>
@@ -719,7 +717,7 @@ import { useChannelActivity } from '../composables/useChannelActivity'
 import ChannelStatusBadge from './ChannelStatusBadge.vue'
 import ChannelHealthBadge from './ChannelHealthBadge.vue'
 import { isManagedProviderChannel, isOfficialProviderChannel, providerDisplayName } from '../utils/providerDisplay'
-import { availableChannelApiKeyCount, disabledChannelApiKeyCount, hasOnlyDisabledChannelApiKeys } from '../utils/channelApiKeys'
+import { availableChannelApiKeyCount, disabledChannelApiKeyCount, hasNoUsableChannelApiKeys, hasOnlyDisabledChannelApiKeys } from '../utils/channelApiKeys'
 import { getChannelWebsiteLinks, type ChannelWebsiteKind } from '../utils/channelWebsite'
 import type { ChannelHealthItem } from '../services/api-types'
 // Lazy-load chart components to reduce initial JS bundle size
@@ -736,15 +734,13 @@ const props = defineProps<{
   dashboardStats?: SchedulerStatsResponse
   // Optional: realtime activity data passed from the parent component
   dashboardRecentActivity?: ChannelRecentActivity[]
-  // Optional: channelId → health data mapping (§8.2 badge integration)
-  healthMap?: Map<number, ChannelHealthItem>
+  // Optional: stable channel identity → health data mapping (§8.2 badge integration)
+  healthMap?: Map<string, ChannelHealthItem>
 }>()
 
 const emit = defineEmits<{
   (_e: 'edit', _channel: Channel): void
   (_e: 'delete', _channel: Channel): void
-  (_e: 'ping', _channel: Channel): void
-  (_e: 'testCapability', _channel: Channel): void
   (_e: 'trial', _channel: Channel): void
   (_e: 'refresh'): void
   (_e: 'error', _message: string): void
@@ -794,11 +790,6 @@ const openLogsDialog = (ch: Channel) => {
   logsProtocolRoutes.value = ch.protocolRoutes ?? []
   showLogsDialog.value = true
 }
-
-// Validity period for latency test results (5 minutes)
-const LATENCY_VALID_DURATION = 5 * 60 * 1000
-// Timestamp used to trigger reactive updates
-const currentTime = ref(Date.now())
 
 // Timestamp used to trigger activity view updates (updated every 2 seconds)
 const activityUpdateTick = ref(0)
@@ -1061,10 +1052,27 @@ const getChannelMetrics = (channel: Channel): ChannelMetrics | undefined => {
   })
 }
 
-// Fetch channel health (§8.2): channelId matches channel.index in the backend config.
+// Fetch channel health (§8.2) by stable UID, with a kind/index fallback for older data.
 const getChannelHealth = (channel: Channel): ChannelHealthItem | undefined => {
-  if (getRouteKind(channel) !== props.channelType) return undefined
-  return props.healthMap?.get(getRouteIndex(channel))
+  const channelUid = channel.channelUid?.trim()
+  if (channelUid) {
+    const health = props.healthMap?.get(channelUid)
+    if (health) return health
+  }
+  return props.healthMap?.get(`${getRouteKind(channel)}:${getRouteIndex(channel)}`)
+}
+
+const isLongLatencyChannel = (channel: Channel): boolean => {
+  const health = getChannelHealth(channel)
+  return health?.speedTier === 'slow'
+    && (health.firstByteSampleCount ?? 0) > 0
+    && (health.p95FirstByteLatencyMs ?? 0) > 0
+}
+
+const formatObservedLatency = (latencyMs?: number): string => {
+  if (!latencyMs || latencyMs <= 0) return '--'
+  if (latencyMs >= 1_000) return `${(latencyMs / 1_000).toFixed(1)}s`
+  return `${Math.round(latencyMs)}ms`
 }
 
 // Origin / pool tags for a channel (§8.2 标签系统)
@@ -1181,23 +1189,6 @@ const shouldShowCacheWriteWarning = (stats?: TimeWindowStats): boolean => {
   const denom = inputTokens + cacheReadTokens
   if (denom <= 0 || cacheCreationTokens < CACHE_WRITE_WARNING_MIN_TOKENS) return false
   return (cacheCreationTokens / denom) >= CACHE_WRITE_WARNING_RATIO
-}
-
-// Get latency color
-const getLatencyColor = (latency: number): string => {
-  if (latency < 500) return 'success'
-  if (latency < 1000) return 'warning'
-  return 'error'
-}
-
-// Check whether the latency test result is still valid (within 5 minutes)
-const isLatencyValid = (channel: Channel): boolean => {
-  // Do not display when there is no latency value
-  if (channel.latency === undefined || channel.latency === null) return false
-  // Do not display when there is no test timestamp (for compatibility with old data)
-  if (!channel.latencyTestTime) return false
-  // Check whether it is within the validity period (use currentTime.value to trigger reactive updates)
-  return (currentTime.value - channel.latencyTestTime) < LATENCY_VALID_DURATION
 }
 
 // Check whether the channel is in a promotion period
@@ -1431,7 +1422,9 @@ const resumeChannelInternal = async (
 
 const isTrippedChannel = (channel: Channel): boolean => {
   const channelMetrics = getChannelMetrics(channel)
-  return channel.status === 'suspended' || channelMetrics?.circuitState === 'open'
+  return channel.status === 'suspended'
+    || channelMetrics?.circuitState === 'open'
+    || hasNoUsableChannelApiKeys(channel)
 }
 
 // isRecoverableChannel 判定渠道是否应显示「恢复」主操作（一次点击恢复全部禁用 Key + 重置熔断）：
@@ -1514,14 +1507,11 @@ const handleDeleteChannel = (channel: Channel) => {
   emit('delete', channel)
 }
 
-// Load metrics and start the latency expiry check timer when the component mounts
 // 全局 tick 订阅（visibility hidden 时自动暂停）
-const latencyTick = useGlobalTick(30000, 'ChannelOrch-latency')
 const activityTick = useGlobalTick(2000, 'ChannelOrch-activity')
 
 onMounted(() => {
   refreshMetrics()
-  latencyTick.onTick(() => { currentTime.value = Date.now() })
   activityTick.onTick(() => { activityUpdateTick.value++ })
 })
 

@@ -30,17 +30,6 @@
           </v-btn>
         </template>
       </v-tooltip>
-
-      <v-btn
-        color="success"
-        variant="flat"
-        size="small"
-        prepend-icon="mdi-test-tube"
-        class="capability-test-btn"
-        @click="$emit('test-capability')"
-      >
-        {{ testCapabilityLabel }}
-      </v-btn>
     </div>
   </v-card-title>
 </template>
@@ -60,7 +49,6 @@ interface Props {
   createTitle?: string
   editSubtitle?: string
   createSubtitle?: string
-  testCapabilityLabel?: string
   visionTooltip?: string
 }
 
@@ -73,7 +61,6 @@ withDefaults(defineProps<Props>(), {
 
 defineEmits<{
   'toggle-no-vision': []
-  'test-capability': []
 }>()
 </script>
 
@@ -101,19 +88,6 @@ defineEmits<{
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
-}
-
-.capability-test-btn {
-  text-transform: none;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  letter-spacing: 0;
-  padding-inline: 12px;
-}
-
-.capability-test-btn :deep(.v-btn__content) {
-  gap: 4px;
-  line-height: 1.5;
 }
 
 .text-white-subtitle {

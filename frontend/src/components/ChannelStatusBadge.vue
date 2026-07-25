@@ -48,9 +48,11 @@ type DisplayStatus = 'normal' | 'paused' | 'tripped' | 'disabled' | 'error' | 'u
 const props = withDefaults(defineProps<{
   status: ChannelStatus | 'healthy' | 'error' | 'unknown'
   metrics?: ChannelMetrics
+  tripped?: boolean
   showLabel?: boolean
   size?: 'small' | 'default' | 'large'
 }>(), {
+  tripped: false,
   showLabel: true,
   size: 'default'
 })
@@ -62,7 +64,7 @@ const hovered = ref(false)
 
 const effectiveStatus = computed<DisplayStatus>(() => {
   if (props.status === 'disabled') return 'disabled'
-  if (props.metrics?.circuitState === 'open') return 'tripped'
+  if (props.tripped || props.metrics?.circuitState === 'open') return 'tripped'
   if (props.status === 'suspended') return 'paused'
   if (props.status === 'error') return 'error'
   if (props.status === 'unknown') return 'unknown'

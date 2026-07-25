@@ -19,18 +19,21 @@ type OverviewResponse struct {
 
 // ChannelHealthItem 渠道级聚合健康信息。
 type ChannelHealthItem struct {
-	ChannelUID     string  `json:"channelUid"`
-	ChannelID      int     `json:"channelId"`
-	ChannelKind    string  `json:"channelKind"`
-	ChannelName    string  `json:"channelName,omitempty"`
-	AggState       string  `json:"aggState"` // AggregateHealthState 结果
-	EndpointCount  int     `json:"endpointCount"`
-	HealthyCount   int     `json:"healthyCount"`
-	DegradedCount  int     `json:"degradedCount"`
-	LimitedCount   int     `json:"limitedCount"`
-	DeadCount      int     `json:"deadCount"`
-	UnknownCount   int     `json:"unknownCount"`
-	AvgSuccessRate float64 `json:"avgSuccessRate,omitempty"`
+	ChannelUID            string  `json:"channelUid"`
+	ChannelID             int     `json:"channelId"`
+	ChannelKind           string  `json:"channelKind"`
+	ChannelName           string  `json:"channelName,omitempty"`
+	AggState              string  `json:"aggState"` // AggregateHealthState 结果
+	EndpointCount         int     `json:"endpointCount"`
+	HealthyCount          int     `json:"healthyCount"`
+	DegradedCount         int     `json:"degradedCount"`
+	LimitedCount          int     `json:"limitedCount"`
+	DeadCount             int     `json:"deadCount"`
+	UnknownCount          int     `json:"unknownCount"`
+	AvgSuccessRate        float64 `json:"avgSuccessRate,omitempty"`
+	SpeedTier             string  `json:"speedTier,omitempty"`
+	FirstByteSampleCount  int64   `json:"firstByteSampleCount,omitempty"`
+	P95FirstByteLatencyMs int64   `json:"p95FirstByteLatencyMs,omitempty"`
 }
 
 // ChannelsResponse GET /api/health-center/channels 返回结构。
@@ -289,6 +292,7 @@ func aggregateChannel(channelUID string, profiles []*KeyEndpointProfile) Channel
 
 	var totalSuccessRate float64
 	var states []DiagnosisResult
+	var firstByteP95Values []int64
 
 	for _, p := range profiles {
 		switch p.HealthState {
@@ -305,14 +309,33 @@ func aggregateChannel(channelUID string, profiles []*KeyEndpointProfile) Channel
 		}
 		totalSuccessRate += p.SuccessRate15m
 		states = append(states, DiagnosisResult{State: p.HealthState})
+		if p.FirstByteSampleCount > 0 && p.P95FirstByteLatencyMs > 0 {
+			item.FirstByteSampleCount += p.FirstByteSampleCount
+			firstByteP95Values = append(firstByteP95Values, p.P95FirstByteLatencyMs)
+		}
 	}
 
 	if len(profiles) > 0 {
 		item.AvgSuccessRate = totalSuccessRate / float64(len(profiles))
 	}
+	if len(firstByteP95Values) > 0 {
+		item.P95FirstByteLatencyMs = medianInt64(firstByteP95Values)
+		item.SpeedTier = string(classifyFirstByteSpeedTier(item.P95FirstByteLatencyMs))
+	}
 
 	item.AggState = string(AggregateHealthState(states))
 	return item
+}
+
+func classifyFirstByteSpeedTier(p95LatencyMs int64) SpeedTier {
+	switch {
+	case p95LatencyMs < 500:
+		return SpeedTierFast
+	case p95LatencyMs < 2_000:
+		return SpeedTierNormal
+	default:
+		return SpeedTierSlow
+	}
 }
 
 // buildChannelNameMap 从配置中构建 channelUID -> 名称 映射。

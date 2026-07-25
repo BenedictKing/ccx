@@ -11,7 +11,6 @@ import { useSystemStore } from '../stores/system'
 import { useI18n } from '../i18n'
 import type { SupportedLocale } from '../i18n'
 import { useAppTheme } from './useTheme'
-import { useCapabilityTestManager } from './useCapabilityTestManager'
 import { useToasts } from './useToasts'
 import { streamTimeoutPresets as sharedStreamPresets } from '../utils/streamTimeoutPresets'
 import { isAutoManagedAccountChannel } from '../utils/providerDisplay'
@@ -138,7 +137,7 @@ export function useAppController() {
 
   const saveChannel = async (
     channel: Omit<Channel, 'index' | 'latency' | 'status'>,
-    options?: { isQuickAdd?: boolean; triggerCapabilityTest?: boolean },
+    options?: { isQuickAdd?: boolean },
     onComplete?: () => void,
   ) => {
     try {
@@ -161,15 +160,6 @@ export function useAppController() {
       dialogStore.closeAddChannelModal()
       dialogStore.closeEditChannelModal()
       await refreshChannels()
-
-      if (options?.triggerCapabilityTest && result.channelId !== undefined) {
-        testChannelCapability({
-          ...(channel as Channel),
-          index: result.channelId,
-          routeIndex: result.channelId,
-          routeKind: getChannelRouteKind(editingChannel),
-        })
-      }
 
       return result
     } catch (error) {
@@ -266,48 +256,6 @@ export function useAppController() {
       await refreshChannels()
     } catch (error) {
       showToast(t('toast.apiKeyDeleteFailed', { message: error instanceof Error ? error.message : t('system.unknown') }), 'error')
-    }
-  }
-
-  const pingChannel = async (target: number | Channel) => {
-    try {
-      const channelId = typeof target === 'number' ? target : getChannelRouteIndex(target)
-      const channelType = typeof target === 'number' ? channelStore.activeTab : getChannelRouteKind(target)
-      await channelStore.pingChannel(channelId, channelType)
-      // 不再使用 Toast，延迟结果直接显示在渠道列表中
-    } catch (error) {
-      showToast(t('toast.latencyFailed', { message: error instanceof Error ? error.message : t('system.unknown') }), 'error')
-    }
-  }
-
-  // ============== 能力测试 ==============
-  const {
-    showCapabilityTestDialog, capabilityTestChannelName, capabilityTestChannelId,
-    capabilityTestChannelType, capabilityTestSourceTab, capabilityTestDialogRef,
-    capabilityTestJobId, capabilityPollers, capabilityTestJob, capabilityTestRpm,
-    capabilityTestPreviousJobId, capabilityRetryPendingUntil,
-    isCapabilityChannelKind, capabilityPlaceholderModels, getPlaceholderModelsForProtocol,
-    capabilityBaseProtocolOrder, capabilityNativeServiceTypeByProtocol,
-    getCapabilityNativeServiceType, isCapabilityProtocol, buildCapabilityModels,
-    buildCapabilityProtocolResult, toRetryingCapabilityModel, markCapabilityModelRetrying,
-    applyCapabilityRetryPending, isIdleCapabilityTest, isActiveCapabilityTest,
-    isBusyCapabilityTest, isPendingCapabilityTest, isSuccessfulCapabilityTest,
-    getCapabilityAggregateState, buildCapabilityProgress, mergeCapabilityProtocolResult,
-    normalizeCapabilityTests, buildCapabilityIdleJob, mergeCapabilityJob,
-    getCapabilitySnapshotJobId, buildCapabilityJobFromSnapshot,
-    collectActiveJobIds, isCapabilityJobTerminal, stopCapabilityPolling,
-    stopAllCapabilityPolling, startCapabilityPolling, updateCapabilityJob,
-    getCapabilityPreviousJobId, testChannelCapability, handleTestCapabilityProtocol,
-    handleTestCapabilityProtocolWithModels, handleCancelCapabilityTest,
-    handleRetryCapabilityModel, handleCopyToTab,
-  } = useCapabilityTestManager(channelStore, dialogStore, showToast, t, refreshChannels)
-
-  const pingAllChannels = async () => {
-    try {
-      await channelStore.pingAllChannels()
-      // 不再使用 Toast，延迟结果直接显示在渠道列表中
-    } catch (error) {
-      showToast(t('toast.batchLatencyFailed', { message: error instanceof Error ? error.message : t('system.unknown') }), 'error')
     }
   }
 
@@ -905,7 +853,6 @@ export function useAppController() {
   // 在组件卸载时清除定时器和事件监听器
   onUnmounted(() => {
     channelStore.stopAutoRefresh()
-    stopAllCapabilityPolling()
     mediaQuery?.removeEventListener('change', handlePref)
     if (typeof window !== 'undefined') {
       window.removeEventListener('keydown', handleCircuitBreakerKeydown)
@@ -946,58 +893,6 @@ export function useAppController() {
     deleteChannel,
     openAddChannelModal,
     addApiKey,
-    pingChannel,
-    showCapabilityTestDialog,
-    capabilityTestChannelName,
-    capabilityTestChannelId,
-    capabilityTestChannelType,
-    capabilityTestSourceTab,
-    capabilityTestDialogRef,
-    capabilityTestJobId,
-    capabilityPollers,
-    capabilityTestJob,
-    capabilityTestRpm,
-    capabilityTestPreviousJobId,
-    capabilityRetryPendingUntil,
-    isCapabilityChannelKind,
-    capabilityPlaceholderModels,
-    getPlaceholderModelsForProtocol,
-    capabilityBaseProtocolOrder,
-    capabilityNativeServiceTypeByProtocol,
-    getCapabilityNativeServiceType,
-    isCapabilityProtocol,
-    buildCapabilityModels,
-    buildCapabilityProtocolResult,
-    toRetryingCapabilityModel,
-    markCapabilityModelRetrying,
-    applyCapabilityRetryPending,
-    isIdleCapabilityTest,
-    isActiveCapabilityTest,
-    isBusyCapabilityTest,
-    isPendingCapabilityTest,
-    isSuccessfulCapabilityTest,
-    getCapabilityAggregateState,
-    buildCapabilityProgress,
-    mergeCapabilityProtocolResult,
-    normalizeCapabilityTests,
-    buildCapabilityIdleJob,
-    mergeCapabilityJob,
-    getCapabilitySnapshotJobId,
-    buildCapabilityJobFromSnapshot,
-    collectActiveJobIds,
-    isCapabilityJobTerminal,
-    stopCapabilityPolling,
-    stopAllCapabilityPolling,
-    startCapabilityPolling,
-    updateCapabilityJob,
-    getCapabilityPreviousJobId,
-    testChannelCapability,
-    handleTestCapabilityProtocol,
-    handleTestCapabilityProtocolWithModels,
-    handleCancelCapabilityTest,
-    handleRetryCapabilityModel,
-    handleCopyToTab,
-    pingAllChannels,
     toggleFuzzyMode,
     showGuide,
     openGuide,
