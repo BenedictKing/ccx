@@ -373,7 +373,7 @@
                     variant="tonal"
                   >
                     <v-icon start size="12">mdi-timer-alert-outline</v-icon>
-                    P95 {{ formatObservedLatency(getChannelHealth(element)?.p95FirstByteLatencyMs) }}
+                    {{ formatObservedLatency(getChannelHealth(element)?.p95FirstByteLatencyMs) }}
                   </v-chip>
                 </template>
                 {{ t('healthCenter.detail.firstByteP95') }}:
