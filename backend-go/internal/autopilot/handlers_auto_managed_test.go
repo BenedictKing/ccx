@@ -134,6 +134,86 @@ func TestListAccountsIncludesActiveEndpointModelAvailability(t *testing.T) {
 	}
 }
 
+func TestListAccountsIncludesCustomAutoManagedProtocolAvailability(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.json")
+	data := `{
+  "managedAccounts": [],
+  "upstream": [], "chatUpstream": [],
+  "responsesUpstream": [{"accountUid":"acct_custom","channelUid":"ch_custom","name":"custom-endpoint","serviceType":"responses","baseUrl":"https://example.com","apiKeys":["sk-custom-secret"],"apiKeyConfigs":[{"key":"sk-custom-secret","credentialUid":"cred_custom","baseUrl":"https://example.com"}],"autoManaged":true,"status":"active"}],
+  "geminiUpstream": [], "imagesUpstream": [], "vectorsUpstream": []
+}`
+	if err := os.WriteFile(configPath, []byte(data), 0600); err != nil {
+		t.Fatalf("写测试配置失败: %v", err)
+	}
+	cfgManager, err := config.NewConfigManager(configPath, filepath.Join(dir, "backups"))
+	if err != nil {
+		t.Fatalf("NewConfigManager 失败: %v", err)
+	}
+	t.Cleanup(func() { _ = cfgManager.Close() })
+
+	store, err := NewProfileStoreWithDB(newTestDB(t))
+	if err != nil {
+		t.Fatalf("NewProfileStoreWithDB 失败: %v", err)
+	}
+	discoveredAt := time.Date(2026, 7, 25, 5, 11, 29, 0, time.UTC)
+	profile := &KeyEndpointProfile{
+		EndpointUID: "ep_custom", AccountUID: "acct_custom", ChannelUID: "ch_custom",
+		CredentialUID: "cred_custom", KeyMask: "sk-c***ret", ServiceType: "responses",
+		AvailableModels: []string{"gpt-5.6-sol"}, ModelsDiscoveredAt: &discoveredAt,
+		ModelDiscoverySource: ModelDiscoverySourceModelsAPI,
+		ProtocolModels: map[string][]string{
+			"messages":  {"gpt-5.6-sol"},
+			"chat":      {"gpt-5.6-sol"},
+			"responses": {"gpt-5.6-sol"},
+		},
+		ProtocolDiscoveredAt: map[string]time.Time{
+			"messages": discoveredAt, "chat": discoveredAt, "responses": discoveredAt,
+		},
+		ProtocolDiscoverySource: map[string]string{
+			"messages": "protocol_probe", "chat": "protocol_probe", "responses": "models_api",
+		},
+		UpdatedAt: discoveredAt,
+	}
+	if err := store.Upsert(profile); err != nil {
+		t.Fatalf("ProfileStore.Upsert 失败: %v", err)
+	}
+
+	router := setupAutoManagedRouter(&AutoManagedDeps{
+		CfgManager: cfgManager,
+		Runner:     NewAutoDiscoveryRunner(store, nil),
+	})
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/accounts", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /api/accounts status=%d body=%s", w.Code, w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), "sk-custom-secret") {
+		t.Fatalf("账号列表泄露自定义渠道明文 Key: %s", w.Body.String())
+	}
+
+	var response struct {
+		Accounts []managedAccountView `json:"accounts"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("解析响应失败: %v", err)
+	}
+	if len(response.Accounts) != 1 {
+		t.Fatalf("Accounts=%+v, want 1", response.Accounts)
+	}
+	account := response.Accounts[0]
+	if account.AccountUID != "acct_custom" || len(account.Credentials) != 1 || len(account.Channels) != 1 {
+		t.Fatalf("自定义自动托管账号聚合错误: %+v", account)
+	}
+	protocols := make([]string, 0, len(account.Channels[0].ProtocolAvailability))
+	for _, availability := range account.Channels[0].ProtocolAvailability {
+		protocols = append(protocols, availability.Protocol)
+	}
+	if got, want := strings.Join(protocols, ","), "messages,chat,responses"; got != want {
+		t.Fatalf("ProtocolAvailability=%q, want %q", got, want)
+	}
+}
+
 func TestManagedChannelModelAvailabilityIncludesEmptyAutoDiscoveryResult(t *testing.T) {
 	updatedAt := time.Date(2026, 7, 17, 11, 2, 0, 0, time.UTC)
 	models, bindings, latest, known := managedChannelModelAvailability([]*KeyEndpointProfile{

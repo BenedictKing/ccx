@@ -344,8 +344,9 @@ func handleListAccounts(deps *AutoManagedDeps) gin.HandlerFunc {
 		if deps.Runner != nil {
 			profileStore = deps.Runner.store
 		}
-		accounts := make([]managedAccountView, 0, len(cfg.ManagedAccounts))
-		for _, account := range cfg.ManagedAccounts {
+		listableAccounts := managedAccountsForList(cfg)
+		accounts := make([]managedAccountView, 0, len(listableAccounts))
+		for _, account := range listableAccounts {
 			view := managedAccountView{AccountUID: account.AccountUID, ProviderID: account.ProviderID, Name: account.Name}
 			for _, credential := range account.Credentials {
 				credentialView := managedAccountCredentialView{
@@ -403,6 +404,86 @@ func handleListAccounts(deps *AutoManagedDeps) gin.HandlerFunc {
 		}
 		c.JSON(http.StatusOK, gin.H{"accounts": accounts})
 	}
+}
+
+// managedAccountsForList 将自定义自动托管渠道补入账号列表。
+// 自定义渠道的 ProviderID 为空，配置层不会将其写入 ManagedAccounts；
+// 但编辑器仍需要通过账号接口读取 endpoint profile 中的协议发现结果。
+func managedAccountsForList(cfg config.Config) []config.ManagedAccountConfig {
+	accounts := append([]config.ManagedAccountConfig(nil), cfg.ManagedAccounts...)
+	accountIndex := make(map[string]int, len(accounts))
+	credentialSeen := make(map[string]map[string]bool, len(accounts))
+	deriveCredentials := make(map[string]bool, len(accounts))
+	for i := range accounts {
+		account := &accounts[i]
+		accountIndex[account.AccountUID] = i
+		deriveCredentials[account.AccountUID] = account.ProviderID == ""
+		seen := make(map[string]bool, len(account.Credentials))
+		for _, credential := range account.Credentials {
+			seen[credential.CredentialUID] = true
+		}
+		credentialSeen[account.AccountUID] = seen
+	}
+
+	visit := func(kind string, channels []config.UpstreamConfig) {
+		for i := range channels {
+			channel := &channels[i]
+			if !channel.AutoManaged || channel.AccountUID == "" {
+				continue
+			}
+			index, exists := accountIndex[channel.AccountUID]
+			if !exists {
+				name := strings.TrimSuffix(channel.Name, accountRouteSuffix(kind))
+				accounts = append(accounts, config.ManagedAccountConfig{
+					AccountUID: channel.AccountUID,
+					ProviderID: channel.ProviderID,
+					Name:       name,
+				})
+				index = len(accounts) - 1
+				accountIndex[channel.AccountUID] = index
+				credentialSeen[channel.AccountUID] = make(map[string]bool)
+				deriveCredentials[channel.AccountUID] = true
+			}
+			if !deriveCredentials[channel.AccountUID] {
+				continue
+			}
+
+			addCredential := func(apiKey string, keyConfig *config.APIKeyConfig) {
+				if apiKey == "" {
+					return
+				}
+				credentialUID := ""
+				if keyConfig != nil {
+					credentialUID = keyConfig.CredentialUID
+				}
+				if credentialUID == "" {
+					credentialUID = channel.CredentialUIDForKey(apiKey)
+				}
+				seen := credentialSeen[channel.AccountUID]
+				if seen[credentialUID] {
+					return
+				}
+				accounts[index].Credentials = append(accounts[index].Credentials, config.ManagedAccountCredential{
+					CredentialUID: credentialUID,
+					APIKey:        apiKey,
+				})
+				seen[credentialUID] = true
+			}
+			for _, apiKey := range channel.APIKeys {
+				addCredential(apiKey, nil)
+			}
+			for _, disabled := range channel.DisabledAPIKeys {
+				addCredential(disabled.Key, disabled.Config)
+			}
+		}
+	}
+	visit("messages", cfg.Upstream)
+	visit("chat", cfg.ChatUpstream)
+	visit("responses", cfg.ResponsesUpstream)
+	visit("gemini", cfg.GeminiUpstream)
+	visit("images", cfg.ImagesUpstream)
+	visit("vectors", cfg.VectorsUpstream)
+	return accounts
 }
 
 type managedChannelModelInventory struct {
