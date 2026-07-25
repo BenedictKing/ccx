@@ -1,6 +1,7 @@
 package presetstore
 
 import (
+	"math"
 	"sync"
 	"testing"
 )
@@ -130,6 +131,18 @@ func TestValidateModelBenchmarkProfiles(t *testing.T) {
 		t.Fatalf("只含 benchmark evidence 的 profile 未通过校验: %v", err)
 	}
 
+	indexEvidence := evidenceOnly
+	indexEvidence.BenchmarkEvidence = append([]ModelBenchmarkEvidencePreset(nil), evidenceOnly.BenchmarkEvidence...)
+	indexEvidence.BenchmarkEvidence[0].Benchmark = "artificial_analysis"
+	indexEvidence.BenchmarkEvidence[0].BenchmarkVersion = "v4.1"
+	indexEvidence.BenchmarkEvidence[0].Metric = "coding_index"
+	indexEvidence.BenchmarkEvidence[0].RawValue = 74.3
+	indexEvidence.BenchmarkEvidence[0].Uncertainty = 0
+	b.ModelRegistry = &ModelRegistryPreset{SchemaVersion: 1, BenchmarkProfiles: []ModelBenchmarkProfilePreset{indexEvidence}}
+	if err := Validate(b); err != nil {
+		t.Fatalf("使用 0-100 原始量纲的 benchmark evidence 未通过校验: %v", err)
+	}
+
 	tests := map[string]func(*ModelBenchmarkProfilePreset){
 		"缺少 pattern":         func(p *ModelBenchmarkProfilePreset) { p.Patterns = nil },
 		"pattern 非法":         func(p *ModelBenchmarkProfilePreset) { p.Patterns = []string{"("} },
@@ -146,6 +159,18 @@ func TestValidateModelBenchmarkProfiles(t *testing.T) {
 			p.BenchmarkEvidence = append([]ModelBenchmarkEvidencePreset(nil), evidenceOnly.BenchmarkEvidence...)
 			p.CategoryScores = nil
 			p.BenchmarkEvidence[0].SourceURL = "http://deepswe.datacurve.ai/"
+		},
+		"证据原始值为负数": func(p *ModelBenchmarkProfilePreset) {
+			p.BenchmarkEvidence = append([]ModelBenchmarkEvidencePreset(nil), evidenceOnly.BenchmarkEvidence...)
+			p.BenchmarkEvidence[0].RawValue = -1
+		},
+		"证据不确定性非有限数": func(p *ModelBenchmarkProfilePreset) {
+			p.BenchmarkEvidence = append([]ModelBenchmarkEvidencePreset(nil), evidenceOnly.BenchmarkEvidence...)
+			p.BenchmarkEvidence[0].Uncertainty = math.Inf(1)
+		},
+		"证据百分位越界": func(p *ModelBenchmarkProfilePreset) {
+			p.BenchmarkEvidence = append([]ModelBenchmarkEvidencePreset(nil), evidenceOnly.BenchmarkEvidence...)
+			p.BenchmarkEvidence[0].CohortPercentile = 1.01
 		},
 	}
 	for name, corrupt := range tests {

@@ -3,6 +3,7 @@ package presetstore
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/url"
 	"regexp"
 	"strings"
@@ -230,7 +231,7 @@ func validateModelBenchmarkEvidence(evidence ModelBenchmarkEvidencePreset) error
 			return fmt.Errorf("%s 不能为空", field)
 		}
 	}
-	if err := validateBenchmarkFraction("rawValue", evidence.RawValue); err != nil {
+	if err := validateBenchmarkRawValue(evidence.RawValue); err != nil {
 		return err
 	}
 	if err := validateBenchmarkFraction("uncertainty", evidence.Uncertainty); err != nil {
@@ -252,8 +253,16 @@ func validateModelBenchmarkEvidence(evidence ModelBenchmarkEvidencePreset) error
 	return nil
 }
 
+// rawValue 保留来源基准的原始量纲，不能假设都是 0-1 比例。
+func validateBenchmarkRawValue(value float64) error {
+	if math.IsNaN(value) || math.IsInf(value, 0) || value < 0 {
+		return fmt.Errorf("rawValue 必须是有限非负数")
+	}
+	return nil
+}
+
 func validateBenchmarkFraction(field string, value float64) error {
-	if value < 0 || value > 1 {
+	if math.IsNaN(value) || math.IsInf(value, 0) || value < 0 || value > 1 {
 		return fmt.Errorf("%s 必须在 0-1 之间", field)
 	}
 	return nil
