@@ -99,12 +99,16 @@ func findEquivalentModelProfile(profiles []ModelProfile, requestModel string) (M
 // canonicalCompatibilityModelID 收敛供应商官方文档中的兼容别名。
 // 未列出的模型保持原 ID，确保 exact-only 的安全默认值不变。
 func canonicalCompatibilityModelID(model string) string {
-	switch normalizeRoutingModelID(model) {
+	normalized := normalizeRoutingModelID(model)
+	if strings.HasPrefix(normalized, "claude-opus-4.8") {
+		return strings.Replace(normalized, "claude-opus-4.8", "claude-opus-4-8", 1)
+	}
+	switch normalized {
 	case "deepseek-chat":
 		return "deepseek-v4-flash"
 	case "deepseek-reasoner":
 		return "deepseek-v4-pro"
 	default:
-		return normalizeRoutingModelID(model)
+		return normalized
 	}
 }

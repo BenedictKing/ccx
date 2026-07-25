@@ -23,6 +23,7 @@ type CapabilityFloor struct {
 	NeedsToolCalls    bool        // 必须支持工具调用
 	MinQualityTier    QualityTier // 目标质量档（无同档候选时允许降档）
 	QualityBenefitCap QualityTier // 简单/常规任务超过该档后不再自动获得质量排序收益
+	TaskClass         TaskClass   // 用于读取任务级 CostPreference
 }
 
 // BuildCapabilityFloorFromRequestProfile 从 RequestProfile 推导能力下界。
@@ -39,6 +40,7 @@ func BuildCapabilityFloorFromRequestProfile(profile *RequestProfile) CapabilityF
 		NeedsToolCalls:    profile.ToolUseNeed,
 		MinQualityTier:    requestQualityTarget(profile),
 		QualityBenefitCap: requestQualityBenefitCap(profile),
+		TaskClass:         profile.TaskClass,
 	}
 }
 
@@ -343,6 +345,9 @@ type rankedModelCandidate struct {
 	providerCostSource             string
 	publicCostKnown                bool
 	normalizedPublicCostUSD        float64
+	benchmarkKnown                 bool
+	benchmarkScore                 float64
+	benchmarkModel                 string
 	versionLineage                 string
 	versionNumbers                 []int
 	sameFamily                     bool
@@ -378,23 +383,26 @@ func (candidate rankedModelCandidate) reasonSummary() string {
 	if candidate.publicCostKnown {
 		publicCost = fmt.Sprintf("%.6f", candidate.normalizedPublicCostUSD)
 	}
+	benchmark := "unknown"
+	if candidate.benchmarkKnown {
+		benchmark = fmt.Sprintf("%.2f(%s)", candidate.benchmarkScore, candidate.benchmarkModel)
+	}
 	version := "unknown"
 	if candidate.versionLineage != "" {
 		version = fmt.Sprintf("%s:%v", candidate.versionLineage, candidate.versionNumbers)
 	}
-	return fmt.Sprintf("family:%s, quality:%s, provider_quality_priority:%s, measured_quality:%s, version:%s, latency:%s, provider_cost_multiplier:%s, normalized_public_cost_usd:%s",
-		candidate.profile.ModelFamily, quality, providerQuality, measuredQuality, version, latency, providerCost, publicCost)
+	return fmt.Sprintf("family:%s, quality:%s, provider_quality_priority:%s, measured_quality:%s, benchmark:%s, version:%s, latency:%s, provider_cost_multiplier:%s, normalized_public_cost_usd:%s",
+		candidate.profile.ModelFamily, quality, providerQuality, measuredQuality, benchmark, version, latency, providerCost, publicCost)
 }
 
 // rankEligibleModels 在已经满足能力下界的候选中选择最佳模型。
 //
 // 排序优先级（高→低）：
 //  1. 模型质量档越高越优先；简单/常规任务在 QualityBenefitCap 处收益饱和
-//  2. 同档候选均有 provider 已确认的能力顺序时，优先选择更强模型
-//  3. 带置信度折算的供应商实测质量越高越优先
-//  4. 已测延迟优先于未知延迟，同为已测时延迟越低越优先
-//  5. 同渠道/provider 的模型相对消耗越低越优先；倍率相同或缺失时回退公开成本
-//  6. 同模型族作为兼容性兜底，最后按 model ID 保证确定性
+//  2. 优先保持请求模型族，避免同档降级时无故跨协议语义族
+//  3. 同档候选均有 provider 已确认的能力顺序时，优先选择更强模型
+//  4. 结合 CostPreference 使用实测质量、规范基准、版本、延迟与成本证据
+//  5. model ID 仅作为最终稳定兜底，不承载推荐顺序
 func (r *ModelResolver) rankEligibleModels(
 	eligible []ModelProfile,
 	requestModel string,
@@ -410,6 +418,7 @@ func (r *ModelResolver) rankEligibleModels(
 		qualityPriority, qualitySource, qualityKnown := providerModelQualityPriority(profile.ModelID, upstream)
 		providerMultiplier, providerSource, providerKnown := providerModelCostMultiplier(profile.ModelID, upstream)
 		publicCostUSD, publicCostKnown := normalizedModelCostUSD(profile.ModelID, upstream, global)
+		benchmark := config.ResolveModelBenchmarkProfile(profile.ModelID)
 		ranked = append(ranked, rankedModelCandidate{
 			profile:                      profile,
 			qualityRank:                  qualityTierRank(profile.QualityTier),
@@ -425,12 +434,16 @@ func (r *ModelResolver) rankEligibleModels(
 			providerCostSource:           providerSource,
 			publicCostKnown:              publicCostKnown,
 			normalizedPublicCostUSD:      publicCostUSD,
+			benchmarkKnown:               benchmark.Known && benchmark.Profile.OverallScore > 0,
+			benchmarkScore:               benchmark.Profile.OverallScore,
+			benchmarkModel:               benchmark.Profile.CanonicalModel,
 			versionLineage:               modelVersionLineage(profile.ModelFamily, profile.ModelID),
 			versionNumbers:               modelVersionNumbers(profile.ModelFamily, profile.ModelID),
 			sameFamily:                   profile.ModelFamily == reqFamily,
 			normalizedCandidateID:        strings.ToLower(profile.ModelID),
 		})
 	}
+	preferenceMode := r.modelCostPreferenceMode(floor.TaskClass)
 	ranked = selectQualityBenefitBand(ranked, floor.QualityBenefitCap)
 	qualityPriorityComplete := make(map[int]bool)
 	qualityRankSeen := make(map[int]bool)
@@ -450,26 +463,56 @@ func (r *ModelResolver) rankEligibleModels(
 
 	best := ranked[0]
 	for i := 1; i < len(ranked); i++ {
-		if betterRankedModel(ranked[i], best) {
+		if betterRankedModel(ranked[i], best, preferenceMode) {
 			best = ranked[i]
 		}
 	}
 	return best
 }
 
-func betterRankedModel(candidate, current rankedModelCandidate) bool {
+func (r *ModelResolver) modelCostPreferenceMode(taskClass TaskClass) CostPreferenceMode {
+	if r == nil || r.cfgManager == nil {
+		return CostPrefBalanced
+	}
+	mode := CostPreferenceMode(r.cfgManager.GetAutopilotRouting().CostPreference.GetEffectiveCostPreferenceMode(string(taskClass)))
+	switch mode {
+	case CostPrefQualityFirst, CostPrefBalanced, CostPrefCostFirst:
+		return mode
+	default:
+		return CostPrefBalanced
+	}
+}
+
+func betterRankedModel(candidate, current rankedModelCandidate, preferenceMode CostPreferenceMode) bool {
 	if candidate.qualityRank != current.qualityRank {
 		return candidate.qualityRank > current.qualityRank
+	}
+	if candidate.sameFamily != current.sameFamily {
+		return candidate.sameFamily
 	}
 	if candidate.providerModelQualityComparable && current.providerModelQualityComparable &&
 		candidate.providerModelQualityPriority != current.providerModelQualityPriority {
 		return candidate.providerModelQualityPriority > current.providerModelQualityPriority
 	}
-	if candidate.measuredQualityScore != current.measuredQualityScore {
-		return candidate.measuredQualityScore > current.measuredQualityScore
+
+	if preferenceMode == CostPrefCostFirst {
+		if better, decided := compareRankedModelCost(candidate, current); decided {
+			return better
+		}
 	}
 	if better, decided := compareModelVersion(candidate, current); decided {
 		return better
+	}
+	if better, decided := compareModelBenchmark(candidate, current); decided {
+		return better
+	}
+	if candidate.measuredQualityScore != current.measuredQualityScore {
+		return candidate.measuredQualityScore > current.measuredQualityScore
+	}
+	if preferenceMode == CostPrefBalanced {
+		if better, decided := compareRankedModelCost(candidate, current); decided {
+			return better
+		}
 	}
 	if candidate.latencyKnown != current.latencyKnown {
 		return candidate.latencyKnown
@@ -477,13 +520,22 @@ func betterRankedModel(candidate, current rankedModelCandidate) bool {
 	if candidate.latencyKnown && candidate.latencyMs != current.latencyMs {
 		return candidate.latencyMs < current.latencyMs
 	}
-	if better, decided := compareRankedModelCost(candidate, current); decided {
-		return better
-	}
-	if candidate.sameFamily != current.sameFamily {
-		return candidate.sameFamily
+	if preferenceMode == CostPrefQualityFirst {
+		if better, decided := compareRankedModelCost(candidate, current); decided {
+			return better
+		}
 	}
 	return candidate.normalizedCandidateID < current.normalizedCandidateID
+}
+
+func compareModelBenchmark(candidate, current rankedModelCandidate) (better bool, decided bool) {
+	if candidate.benchmarkKnown != current.benchmarkKnown {
+		return candidate.benchmarkKnown, true
+	}
+	if candidate.benchmarkKnown && candidate.benchmarkScore != current.benchmarkScore {
+		return candidate.benchmarkScore > current.benchmarkScore, true
+	}
+	return false, false
 }
 
 // modelVersionPattern 提取模型 ID 中最接近厂商/系列标记的版本串。
@@ -497,6 +549,9 @@ func modelVersionLineage(family ModelFamily, modelID string) string {
 	prefix, numbers, ok := parseModelVersion(modelID)
 	if !ok || len(numbers) == 0 {
 		return ""
+	}
+	if family == ModelFamilyClaude {
+		return prefix
 	}
 	return fmt.Sprintf("%s%d", prefix, numbers[0])
 }

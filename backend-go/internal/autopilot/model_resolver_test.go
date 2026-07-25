@@ -262,6 +262,70 @@ func TestRankEligibleModels_PrefersSameFamilyAsFinalTieBreaker(t *testing.T) {
 	}
 }
 
+func TestRankEligibleModels_UsesBenchmarkInsteadOfModelIDForGPT56(t *testing.T) {
+	profiles := []ModelProfile{
+		makeModelProfile("gpt-5.6-luna", ModelFamilyOpenAI, QualityTierPremium, 272000,
+			true, true, true, true, 50),
+		makeModelProfile("gpt-5.6-terra", ModelFamilyOpenAI, QualityTierPremium, 272000,
+			true, true, true, true, 50),
+		makeModelProfile("gpt-5.6-sol", ModelFamilyOpenAI, QualityTierPremium, 272000,
+			true, true, true, true, 50),
+	}
+
+	orders := [][]ModelProfile{profiles, {profiles[2], profiles[1], profiles[0]}}
+	for _, order := range orders {
+		best := rankTestModels(order, "claude-fable-5")
+		if best.ModelID != "gpt-5.6-sol" {
+			t.Fatalf("同档 GPT-5.6 应按基准能力选择 sol，got %s", best.ModelID)
+		}
+	}
+}
+
+func TestRankEligibleModels_AppliesQualityFirstToCostLatencyTieBreak(t *testing.T) {
+	profiles := []ModelProfile{
+		makeModelProfile("model-cheap", ModelFamilyUnknown, QualityTierLow, 100_000,
+			true, false, true, true, 100),
+		makeModelProfile("model-fast", ModelFamilyUnknown, QualityTierLow, 100_000,
+			true, false, true, true, 10),
+	}
+	cheapInput, cheapOutput := 1.0, 1.0
+	fastInput, fastOutput := 10.0, 10.0
+	baseConfig := config.Config{
+		Upstream: []config.UpstreamConfig{{ChannelUID: "ch_test", ServiceType: "claude"}},
+		UpstreamModelCapabilities: map[string]config.UpstreamModelCapability{
+			"model-cheap": {Pricing: &config.ModelPricing{InputCacheMissPrice: &cheapInput, OutputPrice: &cheapOutput}},
+			"model-fast":  {Pricing: &config.ModelPricing{InputCacheMissPrice: &fastInput, OutputPrice: &fastOutput}},
+		},
+	}
+
+	balanced := newTestResolverWithConfig(t, profiles, baseConfig)
+	if got := balanced.rankEligibleModels(profiles, "claude-fable-5", "ch_test", "messages", CapabilityFloor{}).profile.ModelID; got != "model-cheap" {
+		t.Fatalf("balanced 应先平衡公开成本，got %s", got)
+	}
+
+	qualityConfig := baseConfig
+	qualityConfig.AutopilotRouting = config.DefaultAutopilotRoutingConfig()
+	qualityConfig.AutopilotRouting.CostPreference.Mode = "quality_first"
+	qualityFirst := newTestResolverWithConfig(t, profiles, qualityConfig)
+	if got := qualityFirst.rankEligibleModels(profiles, "claude-fable-5", "ch_test", "messages", CapabilityFloor{}).profile.ModelID; got != "model-fast" {
+		t.Fatalf("quality_first 应把成本放到延迟之后，got %s", got)
+	}
+}
+
+func TestRankEligibleModels_PrefersNewerClaudeLineWithinSameFamily(t *testing.T) {
+	eligible := []ModelProfile{
+		makeModelProfile("claude-opus-4.8", ModelFamilyClaude, QualityTierPremium, 1_000_000,
+			true, true, true, true, 50),
+		makeModelProfile("claude-opus-5", ModelFamilyClaude, QualityTierPremium, 1_000_000,
+			true, true, true, true, 50),
+	}
+
+	best := rankTestModels(eligible, "claude-fable-5")
+	if best.ModelID != "claude-opus-5" {
+		t.Fatalf("Claude 同族降级应优先新版 Opus，got %s", best.ModelID)
+	}
+}
+
 func TestRankEligibleModels_PrefersHigherQualityAboveFloor(t *testing.T) {
 	eligible := []ModelProfile{
 		makeModelProfile("gpt-5.3", ModelFamilyOpenAI, QualityTierHigh, 200000,
@@ -607,8 +671,8 @@ func TestResolveModel_FindsBestMatch(t *testing.T) {
 	if !resolved {
 		t.Error("expected resolved=true")
 	}
-	if mapped != "gpt-5.3" {
-		t.Errorf("expected lower-latency gpt-5.3, got %s", mapped)
+	if mapped != "claude-sonnet-4-6" {
+		t.Errorf("expected same-family claude-sonnet-4-6, got %s", mapped)
 	}
 	if reason == "" {
 		t.Error("expected non-empty reason")
@@ -670,6 +734,46 @@ func TestResolveModel_GPT56RequiresPremiumReplacement(t *testing.T) {
 		"gpt-5.6-sol", "ch_test", "responses", "metrics_test", floor)
 	if !resolved || mapped != "glm-5.2" {
 		t.Fatalf("ResolveModel() = (%q, %v, %q), want premium glm-5.2", mapped, resolved, reason)
+	}
+}
+
+func TestResolveModel_RecognizesDottedOpus48AndOpus5BeforeCapabilityFilter(t *testing.T) {
+	profiles := []ModelProfile{
+		makeModelProfile("claude-opus-4.8", ModelFamilyClaude, QualityTierLow, 0,
+			false, false, false, true, 20),
+		makeModelProfile("claude-opus-5", ModelFamilyClaude, QualityTierLow, 0,
+			false, false, false, true, 30),
+	}
+	for i := range profiles {
+		profiles[i].ChannelKind = "messages"
+		profiles[i].Source = "auto_discovery"
+	}
+	resolver := newTestResolverWithConfig(t, profiles, config.Config{Upstream: []config.UpstreamConfig{{
+		ChannelUID: "ch_test", AutoManaged: true, ServiceType: "claude",
+	}}})
+	floor := CapabilityFloor{
+		MinContextTokens: 200_000,
+		MinQualityTier:   QualityTierPremium,
+		NeedsReasoning:   true,
+		NeedsVision:      true,
+		NeedsToolCalls:   true,
+	}
+
+	tests := []struct {
+		request string
+		want    string
+	}{
+		{request: "claude-opus-4-8", want: "claude-opus-4.8"},
+		{request: "claude-opus-5", want: "claude-opus-5"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.request, func(t *testing.T) {
+			mapped, resolved, reason := resolver.ResolveModel(
+				tt.request, "ch_test", "messages", "metrics_test", floor)
+			if !resolved || mapped != tt.want {
+				t.Fatalf("ResolveModel() = (%q, %v, %q), want %q", mapped, resolved, reason, tt.want)
+			}
+		})
 	}
 }
 
