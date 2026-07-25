@@ -2,8 +2,10 @@ package autopilot
 
 import (
 	"database/sql"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -594,6 +596,63 @@ func TestHandler_ListIntents(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		t.Errorf("GET /manual-intents?all=true 状态码 = %d, want %d", w.Code, http.StatusOK)
+	}
+}
+
+// TestHandler_ListIntentsNeverReturnsNullSlice 锁定 intents 字段必须是 JSON 数组。
+// nil slice 会被序列化成 null，前端对 null 取 .length 会抛错并导致驾驶舱整页空白。
+func TestHandler_ListIntentsNeverReturnsNullSlice(t *testing.T) {
+	tests := []struct {
+		name  string
+		query string
+		seed  func(store *ManualIntentStore)
+	}{
+		{
+			name:  "空 store 默认查询",
+			query: "/manual-intents",
+			seed:  func(_ *ManualIntentStore) {},
+		},
+		{
+			name:  "空 store all=true",
+			query: "/manual-intents?all=true",
+			seed:  func(_ *ManualIntentStore) {},
+		},
+		{
+			name:  "仅有过期意图时默认查询",
+			query: "/manual-intents",
+			seed: func(store *ManualIntentStore) {
+				_ = store.Create(sampleIntent(-1 * time.Hour))
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := newTestManualIntentStore(t)
+			tt.seed(store)
+			r := newTestRouter(store)
+
+			w := httptest.NewRecorder()
+			req, _ := http.NewRequest("GET", tt.query, nil)
+			r.ServeHTTP(w, req)
+
+			if w.Code != http.StatusOK {
+				t.Fatalf("GET %s 状态码 = %d, want %d", tt.query, w.Code, http.StatusOK)
+			}
+
+			var raw map[string]json.RawMessage
+			if err := json.Unmarshal(w.Body.Bytes(), &raw); err != nil {
+				t.Fatalf("解析响应失败: %v, body=%s", err, w.Body.String())
+			}
+
+			got := string(raw["intents"])
+			if got == "null" {
+				t.Errorf("intents 序列化为 null，前端会渲染失败; body=%s", w.Body.String())
+			}
+			if !strings.HasPrefix(got, "[") {
+				t.Errorf("intents = %s, want JSON 数组", got)
+			}
+		})
 	}
 }
 

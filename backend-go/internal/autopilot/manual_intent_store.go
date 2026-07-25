@@ -190,7 +190,9 @@ func (s *ManualIntentStore) ListActive() []*ManualRoutingIntent {
 	defer s.mu.RUnlock()
 
 	now := time.Now()
-	var result []*ManualRoutingIntent
+	// 显式初始化为空切片：nil slice 会被 JSON 序列化成 null，
+	// 前端拿到 null 后对其取 .length 会抛错并导致整页渲染失败。
+	result := make([]*ManualRoutingIntent, 0, len(s.cache))
 	var stateChanged []*ManualRoutingIntent
 
 	for _, intent := range s.cache {

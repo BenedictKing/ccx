@@ -373,7 +373,7 @@ async function fetchOverview() {
 async function fetchRecommendations() {
   try {
     const resp = await api.getRecommendations()
-    recommendations.value = resp.recommendations
+    recommendations.value = resp.recommendations ?? []
   } catch (e) {
     console.error('Failed to fetch channel recommendations:', e)
     recommendations.value = []
@@ -383,7 +383,7 @@ async function fetchRecommendations() {
 async function fetchActiveTrials() {
   try {
     const resp = await api.getManualIntents({ all: false })
-    activeTrials.value = resp.intents
+    activeTrials.value = resp.intents ?? []
   } catch (e) {
     console.error('Failed to fetch active trial intents:', e)
     activeTrials.value = []
