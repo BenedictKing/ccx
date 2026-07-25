@@ -24,10 +24,11 @@ function pricePerMillionOrNull(value) {
 
 /**
  * 通过 gh CLI 获取文件内容
- * @returns {Promise<Object>}
+ * @param {boolean} force - 忽略 blob SHA 缓存，强制重新拉取并处理
+ * @returns {Promise<Object|null>}
  */
-export async function fetchLitellmData() {
-  console.log(`[litellm] Fetching ${FILE_PATH} via gh CLI...`)
+export async function fetchLitellmData(force = false) {
+  console.log(`[litellm] Fetching ${FILE_PATH} via gh CLI${force ? ' (forced)' : ''}...`)
 
   try {
     // 1. 获取文件元数据（拿到 git blob sha）
@@ -39,7 +40,7 @@ export async function fetchLitellmData() {
     const currentSha = metaOutput.trim()
     const cachedSha = getSimpleCache('litellm:blobSha')
 
-    if (cachedSha === currentSha) {
+    if (!force && cachedSha === currentSha) {
       console.log(`[litellm] Blob SHA unchanged (${currentSha.slice(0, 8)}), skipping fetch`)
       return null // 表示无变更
     }
@@ -74,24 +75,52 @@ export async function fetchLitellmData() {
 
 /**
  * litellm 模型名 -> CCX canonicalModel 映射
- * litellm 使用带日期的版本名，CCX 使用不带日期的 canonical 名
+ *
+ * 重要：canonicalModel 的形式必须能匹配 registry.upstreamCapabilities 对应条目的 pattern
+ * （mergeLitellmData 用 `new RegExp(pattern).test(canonical)` 查找）。
+ * 因此 claude 系列用连字符（pattern 为 claude-haiku-4-5），gpt/glm/mimo 用点号（pattern 为 gpt-5\.2）。
+ * litellm slug 可用带日期别名或 provider 前缀，只要 litellm 数据里存在该 key 即可。
  */
 export const LITELLM_MODEL_MAP = {
+  // Claude（pattern 用连字符；旧版 value 曾误用点号导致匹配失败，已修正）
   'claude-opus-4-8': 'claude-opus-4-8',
   'claude-opus-5': 'claude-opus-5',
-  'claude-fable-5': 'claude-fable-5',
   'claude-sonnet-5': 'claude-sonnet-5',
   'claude-sonnet-4-6': 'claude-sonnet-4-6',
-  'claude-haiku-4-5': 'claude-haiku-4.5',
+  'claude-haiku-4-5-20251001': 'claude-haiku-4-5',
+  'claude-sonnet-4-5-20250929': 'claude-sonnet-4-5',
+  'claude-opus-4-5': 'claude-opus-4-5',
+  'claude-opus-4-6': 'claude-opus-4-6',
+  'claude-opus-4-7': 'claude-opus-4-7',
+  'claude-fable-5': 'claude-fable-5',
+  // GPT（pattern 用点号）
   'gpt-5.6-sol': 'gpt-5.6-sol',
   'gpt-5.6-terra': 'gpt-5.6-terra',
   'gpt-5.6-luna': 'gpt-5.6-luna',
   'gpt-5.6': 'gpt-5.6',
   'gpt-5.5': 'gpt-5.5',
+  'gpt-5.5-pro': 'gpt-5.5-pro',
   'gpt-5.4': 'gpt-5.4',
   'gpt-5.4-mini': 'gpt-5.4-mini',
+  'gpt-5.4-nano': 'gpt-5.4-nano',
+  'gpt-5.4-pro': 'gpt-5.4-pro',
+  'gpt-5.2': 'gpt-5.2',
+  'gpt-5.2-chat-latest': 'gpt-5.2-chat-latest',
+  'gpt-5.2-pro': 'gpt-5.2-pro',
+  'gpt-5.2-codex': 'gpt-5.2-codex',
+  'gpt-5.3-codex': 'gpt-5.3-codex',
+  'gpt-5.3-chat-latest': 'gpt-5.3-chat-latest',
+  // GLM / Qwen / 其他国产（litellm 多用 provider 前缀 slug）
   'fireworks_ai/glm-5p2': 'glm-5.2',
+  'zai/glm-5.1': 'glm-5.1',
+  'dashscope/qwen-coder': 'qwen3-coder',
+  'dashscope/qwen-max': 'qwen3-max',
   'kimi-k2.7-code': 'kimi-k2.7-code',
+  'moonshot/kimi-k2-thinking': 'kimi-k2-thinking',
+  'minimax/MiniMax-M3': 'minimax-m3',
+  'openrouter/xiaomi/mimo-v2.5': 'mimo-v2.5',
+  'openrouter/xiaomi/mimo-v2.5-pro': 'mimo-v2.5-pro',
+  // Gemini
   'gemini-3.5-flash': 'gemini-3.5-flash',
   'gemini-3.1-pro': 'gemini-3.1-pro',
   'gemini-3-flash': 'gemini-3-flash',
@@ -147,10 +176,11 @@ export function extractModelInfo(data, modelMap) {
 /**
  * 主函数：抓取并转换 litellm 数据
  * @param {Object} modelMap - litellm 模型名 -> CCX canonicalModel 映射
+ * @param {boolean} force - 忽略 SHA 缓存强制重新处理
  * @returns {Promise<Object>} - {canonicalModel: {contextWindowTokens, maxOutputTokens, pricing, supports}}
  */
-export async function fetchLitellmModelInfo(modelMap = LITELLM_MODEL_MAP) {
-  const data = await fetchLitellmData()
+export async function fetchLitellmModelInfo(modelMap = LITELLM_MODEL_MAP, force = false) {
+  const data = await fetchLitellmData(force)
   if (data === null) {
     console.log(`[litellm] No changes detected, skipping processing`)
     return { _unchanged: true }

@@ -20,6 +20,7 @@
  *   --skip-dradar               跳过 dradar (codexradar) 数据源
  *   --skip-litellm              跳过 litellm 价格/上下文数据源
  *   --skip-artificial-analysis  跳过 Artificial Analysis 数据源（首个需 API key 的源）
+ *   --force-litellm             强制重新拉取并处理 litellm（忽略 blob SHA 缓存）
  *   --models                    只更新指定模型 (逗号分隔)
  *
  * 环境变量：
@@ -63,6 +64,7 @@ const skipDeepswe = args.includes('--skip-deepswe')
 const skipBenchlm = args.includes('--skip-benchlm')
 const skipDradar = args.includes('--skip-dradar')
 const skipLitellm = args.includes('--skip-litellm')
+const forceLitellm = args.includes('--force-litellm')
 const skipArtificialAnalysis = args.includes('--skip-artificial-analysis')
 const artificialAnalysisApiKey = process.env.ARTIFICIAL_ANALYSIS_API_KEY || ''
 // 无 key 且未显式 skip 时自动跳过 AA（首个需 key 的源；保持现有工作流零破坏）
@@ -701,7 +703,7 @@ export async function main() {
   if (!skipLitellm) {
     try {
       console.log('\n--- Fetching litellm pricing/context data ---')
-      const litellmData = await fetchLitellmModelInfo(LITELLM_MODEL_MAP)
+      const litellmData = await fetchLitellmModelInfo(LITELLM_MODEL_MAP, forceLitellm)
       if (!litellmData._unchanged) {
         mergeLitellmData(registry, litellmData, report)
       } else {
