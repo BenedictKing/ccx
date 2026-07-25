@@ -174,10 +174,6 @@
                 <div v-if="log.errorInfo">
                   {{ formatErrorInfo(log.errorInfo) }}
                 </div>
-                <div v-if="log.selectionTraceSummary" :class="{ 'mt-2': log.errorInfo }">
-                  <div class="log-detail-label">{{ t('channelLogs.selectionTrace') }}</div>
-                  <code class="log-selection-trace">{{ log.selectionTraceSummary }}</code>
-                </div>
               </div>
             </v-expand-transition>
             <v-divider v-if="i < logs.length - 1" />
@@ -290,7 +286,7 @@ const toggleExpand = (i: number) => {
 }
 
 const hasLogDetails = (log: ChannelLogEntry): boolean => {
-  return Boolean(log.errorInfo?.trim() || log.selectionTraceSummary?.trim())
+  return Boolean(log.errorInfo?.trim())
 }
 
 const statusColor = (code: number): string => {
@@ -629,20 +625,6 @@ onUnmounted(() => {
   word-break: break-all;
   font-size: 0.875rem;
   line-height: 1.6;
-}
-
-.log-detail-label {
-  color: rgba(var(--v-theme-on-surface), 0.68);
-  font-size: 0.75rem;
-  font-weight: 600;
-  margin-bottom: 2px;
-}
-
-.log-selection-trace {
-  display: block;
-  white-space: pre-wrap;
-  word-break: break-all;
-  font-family: ui-monospace, SFMono-Regular, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
 .bg-error-subtle {

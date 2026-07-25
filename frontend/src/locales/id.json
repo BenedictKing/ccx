@@ -538,7 +538,6 @@
   "channelLogs.retry": "Retry",
   "channelLogs.sourceCapabilityTest": "Tes Kemampuan",
   "channelLogs.selectionReason": "Seleksi",
-  "channelLogs.selectionTrace": "Ringkasan seleksi",
   "channelLogs.autopilotTrace": "Trace",
   "channelLogs.viewAutopilotTrace": "Lihat detail keputusan routing Autopilot",
   "channelLogs.reasoning.original": "Asli",

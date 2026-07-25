@@ -538,7 +538,6 @@
   "channelLogs.retry": "重试",
   "channelLogs.sourceCapabilityTest": "能力测试",
   "channelLogs.selectionReason": "调度",
-  "channelLogs.selectionTrace": "调度摘要",
   "channelLogs.autopilotTrace": "决策",
   "channelLogs.viewAutopilotTrace": "查看 Autopilot 路由决策详情",
   "channelLogs.reasoning.original": "原始",

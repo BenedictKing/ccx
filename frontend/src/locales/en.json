@@ -538,7 +538,6 @@
   "channelLogs.retry": "Retry",
   "channelLogs.sourceCapabilityTest": "Capability Test",
   "channelLogs.selectionReason": "Selection",
-  "channelLogs.selectionTrace": "Selection trace",
   "channelLogs.autopilotTrace": "Trace",
   "channelLogs.viewAutopilotTrace": "View Autopilot routing decision detail",
   "channelLogs.reasoning.original": "Original",
