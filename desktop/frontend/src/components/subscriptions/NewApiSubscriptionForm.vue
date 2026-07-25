@@ -12,6 +12,7 @@ import {
   NEWAPI_PROVISION_PATH,
   NEWAPI_VERIFY_PATH,
 } from '@/services/admin-api'
+import { stripDashboardPathFromBaseUrl } from '@/utils/base-url-semantics'
 import type {
   NewApiProvisionRequest,
   NewApiProvisionResponse,
@@ -93,8 +94,13 @@ watch(
   },
 )
 
+function normalizeVerifyBaseUrl() {
+  verifyForm.value.baseUrl = stripDashboardPathFromBaseUrl(verifyForm.value.baseUrl)
+}
+
 async function handleVerify() {
   if (!canVerify.value) return
+  normalizeVerifyBaseUrl()
   verifying.value = true
   try {
     const result = await adminApi.post<NewApiVerifyResponse>(NEWAPI_VERIFY_PATH, {
@@ -171,6 +177,7 @@ async function handleProvision() {
           v-model="verifyForm.baseUrl"
           placeholder="https://your-newapi-instance.com"
           :disabled="verified"
+          @blur="normalizeVerifyBaseUrl"
         />
       </div>
 

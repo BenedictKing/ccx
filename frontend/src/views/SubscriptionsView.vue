@@ -77,6 +77,7 @@
                   variant="outlined"
                   density="compact"
                   required
+                  @blur="normalizeNewApiBaseUrl"
                 />
                 <v-text-field
                   v-model="newApiForm.accessToken"
@@ -195,6 +196,7 @@ import {
   type ProviderTemplate,
 } from '@/services/autopilot-api'
 import type { NewApiVerifyResponse, NewApiProvisionResponse } from '@/services/api-types'
+import { stripDashboardPathFromBaseUrl } from '@/utils/baseUrlSemantics'
 
 const { t } = useI18n()
 
@@ -286,8 +288,13 @@ async function handleNewApiSubmit() {
   }
 }
 
+function normalizeNewApiBaseUrl() {
+  newApiForm.value.baseUrl = stripDashboardPathFromBaseUrl(newApiForm.value.baseUrl)
+}
+
 async function handleNewApiVerify() {
   if (!canNewApiVerify.value) return
+  normalizeNewApiBaseUrl()
   newApiVerifying.value = true
   newApiError.value = ''
   try {

@@ -1,14 +1,49 @@
 export type ServiceType = 'openai' | 'gemini' | 'claude' | 'responses' | 'copilot' | ''
 
 const versionSuffixPattern = /\/v\d+[a-z]*$/
+const dashboardPathPrefixes = [
+  '/admin',
+  '/console',
+  '/dashboard',
+  '/keys',
+  '/api-keys',
+  '/apikeys',
+  '/panel',
+  '/token',
+  '/profile',
+  '/usage',
+  '/wallet',
+  '/log',
+  '/pricing'
+]
 
 export function getDefaultVersionPrefix(serviceType: ServiceType): '/v1' | '/v1beta' | '' {
   if (serviceType === 'copilot') return ''
   return serviceType === 'gemini' ? '/v1beta' : '/v1'
 }
 
-export function normalizeBaseUrl(rawUrl: string): { normalized: string; hasHash: boolean } {
+export function stripDashboardPathFromBaseUrl(rawUrl: string): string {
   const trimmed = rawUrl.trim()
+  if (!trimmed) return ''
+
+  const hasHash = trimmed.endsWith('#')
+  const withoutHash = hasHash ? trimmed.slice(0, -1) : trimmed
+
+  try {
+    const parsed = new URL(withoutHash)
+    const path = parsed.pathname.toLowerCase()
+    if (dashboardPathPrefixes.some(prefix => path === prefix || path.startsWith(prefix + '/'))) {
+      return parsed.origin + (hasHash ? '#' : '')
+    }
+  } catch {
+    return trimmed
+  }
+
+  return trimmed
+}
+
+export function normalizeBaseUrl(rawUrl: string): { normalized: string; hasHash: boolean } {
+  const trimmed = stripDashboardPathFromBaseUrl(rawUrl)
   if (!trimmed) {
     return { normalized: '', hasHash: false }
   }
