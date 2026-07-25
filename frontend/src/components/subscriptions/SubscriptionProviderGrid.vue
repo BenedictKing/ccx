@@ -17,44 +17,63 @@
       </v-card>
 
       <v-card
-        class="provider-card pa-4 cursor-pointer"
+        v-for="sponsor in sponsorCards"
+        :key="`sponsor-${sponsor.providerId}`"
+        class="provider-card pa-4 d-flex flex-column provider-card--sponsor"
         variant="outlined"
-        :class="{ 'provider-card--active': selectedProvider === 'new-api' }"
-        @click="selectProvider('new-api')"
       >
-        <div class="d-flex align-center ga-3">
-          <v-icon size="32" color="warning">mdi-server-network</v-icon>
-          <div>
-            <div class="text-subtitle-1 font-weight-bold">new-api</div>
-            <div class="text-caption text-medium-emphasis">{{ t('subscription.newApiDescription') }}</div>
-          </div>
+        <div class="d-flex align-center ga-3 mb-2">
+          <img :src="sponsorLogos[sponsor.providerId]" :alt="sponsor.displayName" class="sponsor-logo flex-shrink-0" />
+          <div class="text-subtitle-1 font-weight-bold">{{ sponsor.displayName }}</div>
+          <v-chip size="x-small" color="deep-purple" variant="tonal" class="ml-auto">
+            {{ t('subscription.sponsorBadge') }}
+          </v-chip>
+        </div>
+        <div class="text-caption text-medium-emphasis mb-3 provider-card__desc">
+          {{ sponsor.description }}
+        </div>
+        <v-spacer />
+        <div class="d-flex align-center ga-2 mt-auto">
+          <v-btn
+            v-if="sponsor.hasTemplate"
+            size="small"
+            color="primary"
+            variant="flat"
+            @click="emit('add', sponsor.providerId)"
+          >
+            {{ t('subscription.addProvider') }}
+          </v-btn>
+          <v-btn
+            v-if="providerPromotionLinks[sponsor.providerId]"
+            size="small"
+            :color="sponsor.hasTemplate ? 'secondary' : 'deep-purple'"
+            :variant="sponsor.hasTemplate ? 'text' : 'flat'"
+            append-icon="mdi-open-in-new"
+            @click="openProviderPromotion(sponsor.providerId)"
+          >
+            {{ t('subscription.visitSite') }}
+          </v-btn>
+          <v-btn
+            v-if="providerConsoleLinks[sponsor.providerId]"
+            size="small"
+            variant="text"
+            append-icon="mdi-open-in-new"
+            @click="openProviderConsole(sponsor.providerId)"
+          >
+            {{ t('subscription.visitConsole') }}
+          </v-btn>
         </div>
       </v-card>
 
       <v-card
-        v-for="provider in builtinProviders"
+        v-for="provider in otherProviders"
         :key="provider.providerId"
         class="provider-card pa-4 d-flex flex-column"
         variant="outlined"
       >
         <div class="d-flex align-center ga-3 mb-2">
-          <img
-            v-if="sponsorLogos[provider.providerId]"
-            :src="sponsorLogos[provider.providerId]"
-            :alt="provider.displayName"
-            class="sponsor-logo flex-shrink-0"
-          />
-          <v-icon v-else size="32" color="secondary">mdi-domain</v-icon>
+          <v-icon size="32" color="secondary">mdi-domain</v-icon>
           <div class="text-subtitle-1 font-weight-bold">{{ provider.displayName }}</div>
-          <v-chip
-            v-if="isSponsor(provider.providerId)"
-            size="x-small"
-            color="deep-purple"
-            variant="tonal"
-            class="ml-auto"
-          >
-            {{ t('subscription.sponsorBadge') }}
-          </v-chip>
         </div>
         <div class="text-caption text-medium-emphasis mb-3 provider-card__desc">
           {{ provider.description }}
@@ -92,41 +111,17 @@
       </v-card>
 
       <v-card
-        v-for="sponsor in sponsors"
-        :key="sponsor.providerId"
-        class="provider-card pa-4 d-flex flex-column provider-card--sponsor"
+        class="provider-card pa-4 cursor-pointer"
         variant="outlined"
+        :class="{ 'provider-card--active': selectedProvider === 'new-api' }"
+        @click="selectProvider('new-api')"
       >
-        <div class="d-flex align-center ga-3 mb-2">
-          <img :src="sponsor.logo" :alt="sponsor.displayName" class="sponsor-logo flex-shrink-0" />
-          <div class="text-subtitle-1 font-weight-bold">{{ sponsor.displayName }}</div>
-          <v-chip size="x-small" color="deep-purple" variant="tonal" class="ml-auto">
-            {{ t('subscription.sponsorBadge') }}
-          </v-chip>
-        </div>
-        <div class="text-caption text-medium-emphasis mb-3 provider-card__desc">
-          {{ t(`subscription.sponsors.${sponsor.providerId}.description`) }}
-        </div>
-        <v-spacer />
-        <div class="d-flex align-center ga-2 mt-auto">
-          <v-btn
-            size="small"
-            color="deep-purple"
-            variant="flat"
-            append-icon="mdi-open-in-new"
-            @click="openProviderPromotion(sponsor.providerId)"
-          >
-            {{ t('subscription.visitSite') }}
-          </v-btn>
-          <v-btn
-            v-if="providerConsoleLinks[sponsor.providerId]"
-            size="small"
-            variant="text"
-            append-icon="mdi-open-in-new"
-            @click="openProviderConsole(sponsor.providerId)"
-          >
-            {{ t('subscription.visitConsole') }}
-          </v-btn>
+        <div class="d-flex align-center ga-3">
+          <v-icon size="32" color="warning">mdi-server-network</v-icon>
+          <div>
+            <div class="text-subtitle-1 font-weight-bold">new-api</div>
+            <div class="text-caption text-medium-emphasis">{{ t('subscription.newApiDescription') }}</div>
+          </div>
         </div>
       </v-card>
     </div>
@@ -134,7 +129,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useI18n } from '@/i18n'
 import { getProviderTemplates, type ProviderTemplate } from '@/services/autopilot-api'
 import {
@@ -164,12 +159,37 @@ const sponsorLogos: Record<string, string> = {
   runapi: runapiLogo,
 }
 
-function isSponsor(providerId: string): boolean {
-  return providerId in sponsorLogos
+// 赞助商展示顺序与 README 赞助商表格保持一致，排在服务商列表最前
+const sponsorOrder = [
+  { providerId: 'volcengine', displayName: '火山引擎' },
+  { providerId: 'compshare', displayName: '优云智算' },
+  { providerId: 'runapi', displayName: 'RunAPI' },
+]
+
+interface SponsorCard {
+  providerId: string
+  displayName: string
+  description: string
+  hasTemplate: boolean
 }
 
-// 独立赞助商渠道：无内置模板，仅展示 + 推广外链（优云智算/火山已是内置 provider 卡）
-const sponsors = [{ providerId: 'runapi', displayName: 'RunAPI', logo: runapiLogo }]
+// 赞助商卡片：有内置模板则复用模板文案与添加按钮，否则退化为纯推广卡
+const sponsorCards = computed<SponsorCard[]>(() =>
+  sponsorOrder.map(sponsor => {
+    const template = builtinProviders.value.find(item => item.providerId === sponsor.providerId)
+    return {
+      providerId: sponsor.providerId,
+      displayName: template?.displayName || sponsor.displayName,
+      description: template?.description || t(`subscription.sponsors.${sponsor.providerId}.description`),
+      hasTemplate: !!template,
+    }
+  })
+)
+
+// 非赞助商模板，保持后端返回顺序
+const otherProviders = computed(() =>
+  builtinProviders.value.filter(item => !(item.providerId in sponsorLogos))
+)
 
 function selectProvider(provider: string) {
   selectedProvider.value = provider
