@@ -387,18 +387,6 @@
       <div class="action-buttons d-flex flex-wrap ga-2 justify-end w-100">
         <v-btn
           size="small"
-          color="deep-purple"
-          variant="outlined"
-          rounded="lg"
-          class="action-btn"
-          prepend-icon="mdi-flask-outline"
-          @click="$emit('trial', channel.index)"
-        >
-          {{ t('orchestration.trial') }}
-        </v-btn>
-
-        <v-btn
-          size="small"
           color="info"
           variant="outlined"
           rounded="lg"
@@ -470,7 +458,6 @@ defineEmits<{
   moveKeyToBottom: [channelId: number, apiKey: string]
   togglePin: [channelId: number]
   toggleVision: [channelId: number]
-  trial: [channelId: number]
 }>()
 
 const isKeyPaused = (apiKey: string) => {

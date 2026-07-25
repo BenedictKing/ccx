@@ -462,12 +462,6 @@
                     </template>
                     <v-list-item-title>{{ t('orchestration.edit') }}</v-list-item-title>
                   </v-list-item>
-                  <v-list-item @click="$emit('trial', element)">
-                    <template #prepend>
-                      <v-icon size="small" color="deep-purple">mdi-flask-outline</v-icon>
-                    </template>
-                    <v-list-item-title>{{ t('orchestration.trial') }}</v-list-item-title>
-                  </v-list-item>
                   <v-list-item @click="copyChannelInfo(element)">
                     <template #prepend>
                       <v-icon size="small">mdi-content-copy</v-icon>
@@ -656,12 +650,6 @@
                   </template>
                   <v-list-item-title>{{ t('orchestration.edit') }}</v-list-item-title>
                 </v-list-item>
-                <v-list-item @click="$emit('trial', channel)">
-                  <template #prepend>
-                    <v-icon size="small" color="deep-purple">mdi-flask-outline</v-icon>
-                  </template>
-                  <v-list-item-title>{{ t('orchestration.trial') }}</v-list-item-title>
-                </v-list-item>
                 <v-list-item @click="copyChannelInfo(channel)">
                   <template #prepend>
                     <v-icon size="small">mdi-content-copy</v-icon>
@@ -742,7 +730,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   (_e: 'edit', _channel: Channel): void
   (_e: 'delete', _channel: Channel): void
-  (_e: 'trial', _channel: Channel): void
   (_e: 'refresh'): void
   (_e: 'error', _message: string): void
   (_e: 'success', _message: string): void

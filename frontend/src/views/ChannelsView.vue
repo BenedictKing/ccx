@@ -11,28 +11,7 @@
     :health-map="healthMap"
     class="mb-6"
     v-bind="$attrs"
-    @trial="openTrialDialog"
   />
-
-  <!-- 试用意图创建对话框 -->
-  <v-dialog v-model="showTrialDialog" max-width="720" scrollable>
-    <v-card rounded="lg">
-      <v-card-title class="d-flex align-center ga-2">
-        <v-icon color="deep-purple">mdi-flask-outline</v-icon>
-        {{ t('manualIntent.dialogTitle') }}
-      </v-card-title>
-      <v-divider />
-      <v-card-text class="pt-4">
-        <ManualIntentForm
-          :key="trialFormKey"
-          :prefill-channel-kind="trialChannelKind"
-          :prefill-channel-uid="trialChannelUid"
-          @created="onTrialCreated"
-          @close="showTrialDialog = false"
-        />
-      </v-card-text>
-    </v-card>
-  </v-dialog>
 
   <!-- 空状态 -->
   <v-card v-if="!(channelStore.currentChannelsData as any).channels?.length" elevation="2" class="text-center pa-12" rounded="lg">
@@ -54,10 +33,8 @@ import { computed, onMounted, ref } from 'vue'
 import { useChannelStore } from '@/stores/channel'
 import { useDialogStore } from '@/stores/dialog'
 import { api } from '@/services/api'
-import type { Channel, ChannelHealthItem } from '@/services/api-types'
+import type { ChannelHealthItem } from '@/services/api-types'
 import ChannelOrchestration from '@/components/ChannelOrchestration.vue'
-import ManualIntentForm from '@/components/ManualIntentForm.vue'
-import type { ManualRoutingIntent } from '@/services/api-types'
 import { useI18n } from '@/i18n'
 import { useGlobalTick } from '@/composables/useGlobalTick'
 
@@ -104,22 +81,5 @@ onMounted(() => {
 const emitAddChannel = () => {
   // 打开添加渠道对话框
   dialogStore.openAddChannelModal()
-}
-
-// 试用意图对话框
-const showTrialDialog = ref(false)
-const trialChannelUid = ref<string>('')
-const trialChannelKind = ref(channelType.value)
-const trialFormKey = ref(0)
-
-const openTrialDialog = (channel: Channel) => {
-  trialChannelUid.value = channel.channelUid ?? ''
-  trialChannelKind.value = channel.routeKind ?? channelType.value
-  trialFormKey.value += 1 // 强制重建表单以刷新预填
-  showTrialDialog.value = true
-}
-
-const onTrialCreated = (_intent: ManualRoutingIntent) => {
-  showTrialDialog.value = false
 }
 </script>
