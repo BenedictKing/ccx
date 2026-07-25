@@ -186,7 +186,7 @@ func TestBreakerHealthWindowKeepsRecentFailures(t *testing.T) {
 	}
 }
 
-func TestGetTimeWindowStatsForKeyTracksFirstByteP95(t *testing.T) {
+func TestGetTimeWindowStatsForKeyTracksConnectAndFirstByteP95(t *testing.T) {
 	m := NewMetricsManager()
 	defer m.Stop()
 
@@ -198,9 +198,11 @@ func TestGetTimeWindowStatsForKeyTracksFirstByteP95(t *testing.T) {
 	startedAt := time.Now().Add(-time.Minute)
 	for i := 1; i <= 20; i++ {
 		requestID := m.RecordRequestConnectedAt(baseURL, apiKey, serviceType, "glm-5.2", startedAt.Add(time.Duration(i)*time.Millisecond))
+		m.RecordRequestConnectionLatency(baseURL, apiKey, serviceType, requestID, time.Duration(i*2)*time.Millisecond)
 		m.RecordRequestFirstByte(baseURL, apiKey, serviceType, requestID, time.Duration(i)*time.Millisecond)
 		if i == 1 {
 			// 同一请求只接受首次观测，后续回调不得污染样本。
+			m.RecordRequestConnectionLatency(baseURL, apiKey, serviceType, requestID, time.Second)
 			m.RecordRequestFirstByte(baseURL, apiKey, serviceType, requestID, time.Second)
 		}
 		m.RecordRequestFinalizeSuccess(baseURL, apiKey, serviceType, requestID, nil)
@@ -211,12 +213,19 @@ func TestGetTimeWindowStatsForKeyTracksFirstByteP95(t *testing.T) {
 	m.RecordRequestFinalizeFailure(baseURL, apiKey, serviceType, requestID)
 	// 快速返回错误响应同样不能拉低成功请求的 TTFB 画像。
 	requestID = m.RecordRequestConnectedAt(baseURL, apiKey, serviceType, "glm-5.2", startedAt)
+	m.RecordRequestConnectionLatency(baseURL, apiKey, serviceType, requestID, time.Millisecond)
 	m.RecordRequestFirstByte(baseURL, apiKey, serviceType, requestID, time.Millisecond)
 	m.RecordRequestFinalizeFailure(baseURL, apiKey, serviceType, requestID)
 
 	stats := m.GetTimeWindowStatsForKey(baseURL, apiKey, serviceType, time.Hour)
 	if stats.RequestCount != 22 {
 		t.Fatalf("RequestCount = %d, want 22", stats.RequestCount)
+	}
+	if stats.ConnectSampleCount != 20 {
+		t.Fatalf("ConnectSampleCount = %d, want 20", stats.ConnectSampleCount)
+	}
+	if stats.P95ConnectLatencyMs != 38 {
+		t.Fatalf("P95ConnectLatencyMs = %d, want 38", stats.P95ConnectLatencyMs)
 	}
 	if stats.FirstByteSampleCount != 20 {
 		t.Fatalf("FirstByteSampleCount = %d, want 20", stats.FirstByteSampleCount)
@@ -225,6 +234,10 @@ func TestGetTimeWindowStatsForKeyTracksFirstByteP95(t *testing.T) {
 		t.Fatalf("P95FirstByteLatencyMs = %d, want 19", stats.P95FirstByteLatencyMs)
 	}
 	aggregated := m.ToResponse(0, baseURL, []string{apiKey}, serviceType, 0).TimeWindows["1h"]
+	if aggregated.ConnectSampleCount != 20 || aggregated.P95ConnectLatencyMs != 38 {
+		t.Fatalf("aggregated connect = samples:%d p95:%dms, want 20/38ms",
+			aggregated.ConnectSampleCount, aggregated.P95ConnectLatencyMs)
+	}
 	if aggregated.FirstByteSampleCount != 20 || aggregated.P95FirstByteLatencyMs != 19 {
 		t.Fatalf("aggregated TTFB = samples:%d p95:%dms, want 20/19ms",
 			aggregated.FirstByteSampleCount, aggregated.P95FirstByteLatencyMs)

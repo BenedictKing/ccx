@@ -1079,6 +1079,7 @@
   "healthCenter.detail.successRate1h": "Tingkat Keberhasilan (1j)",
   "healthCenter.detail.p95": "Latensi P95",
   "healthCenter.detail.firstByteP95": "Byte Pertama P95",
+  "healthCenter.detail.connectP95": "Latensi Koneksi P95",
   "healthCenter.detail.consecutiveFail": "Kegagalan Beruntun",
   "healthCenter.detail.lastSuccess": "Terakhir Berhasil",
   "healthCenter.detail.updatedAt": "Terakhir Diperbarui",

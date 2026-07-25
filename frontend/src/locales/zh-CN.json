@@ -1079,6 +1079,7 @@
   "healthCenter.detail.successRate1h": "成功率(1h)",
   "healthCenter.detail.p95": "P95 延迟",
   "healthCenter.detail.firstByteP95": "P95 首字节",
+  "healthCenter.detail.connectP95": "P95 连接延迟",
   "healthCenter.detail.consecutiveFail": "连续失败",
   "healthCenter.detail.lastSuccess": "最近成功",
   "healthCenter.detail.updatedAt": "更新时间",

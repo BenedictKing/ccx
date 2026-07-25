@@ -893,6 +893,9 @@ export interface ChannelHealthItem {
   deadCount: number
   unknownCount: number
   avgSuccessRate?: number
+  speedTier?: 'fast' | 'normal' | 'slow'
+  connectSampleCount?: number
+  p95ConnectLatencyMs?: number
   originTier?: 'first' | 'second' | 'third' | 'unknown'
   poolTag?: 'free' | 'temp' | ''
 }
@@ -917,6 +920,8 @@ export interface EndpointDetailItem {
   successRate15m?: number
   successRate1h?: number
   p95LatencyMs?: number
+  connectSampleCount?: number
+  p95ConnectLatencyMs?: number
   firstByteSampleCount?: number
   p95FirstByteLatencyMs?: number
   consecutiveFail: number

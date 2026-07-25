@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/BenedictKing/ccx/internal/autopilot"
@@ -33,7 +34,7 @@ const (
 	upstreamAccountRateLimitCooldown = 15 * time.Second
 	halfOpenProbeWaitTimeout         = 5 * time.Second
 	halfOpenProbePollInterval        = 100 * time.Millisecond
-	shortEmptyResponseRetryWindow   = 10 * time.Second
+	shortEmptyResponseRetryWindow    = 10 * time.Second
 )
 
 // isClientSideError 判断错误是否由客户端明确取消（不应计入渠道失败）
@@ -587,9 +588,16 @@ func TryUpstreamWithAllKeys(
 			requestID := metricsManager.RecordRequestConnectedWithProxyKeyMask(currentBaseURL, apiKey, metricsServiceType, actualAttemptModel, proxyKeyMask)
 
 			attemptStartedAt := time.Now()
+			var connectedOnce sync.Once
 			lifecycleTrace := &RequestLifecycleTrace{
 				OnConnected: func() {
-					UpdateLogStatus(channelLogStore, metricsKey, logRequestID, metrics.StatusConnecting)
+					connectedOnce.Do(func() {
+						connectedAt := time.Now()
+						UpdateLogStatus(channelLogStore, metricsKey, logRequestID, metrics.StatusConnecting)
+						metricsManager.RecordRequestConnectionLatency(
+							currentBaseURL, apiKey, metricsServiceType, requestID, connectedAt.Sub(attemptStartedAt),
+						)
+					})
 				},
 				OnFirstResponseByte: func() {
 					firstByteAt := time.Now()

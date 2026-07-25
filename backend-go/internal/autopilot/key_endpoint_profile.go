@@ -222,6 +222,9 @@ type KeyEndpointProfile struct {
 	// ── 运行时指标（来自 MetricsManager）──
 	SuccessRate15m          float64    `json:"successRate15m"`
 	P95LatencyMs            int64      `json:"p95LatencyMs"`
+	ConnectSampleCount      int64      `json:"connectSampleCount,omitempty"`
+	P95ConnectLatencyMs     int64      `json:"p95ConnectLatencyMs,omitempty"`
+	ConnectStatsUpdatedAt   *time.Time `json:"connectStatsUpdatedAt,omitempty"`
 	FirstByteSampleCount    int64      `json:"firstByteSampleCount,omitempty"`
 	P95FirstByteLatencyMs   int64      `json:"p95FirstByteLatencyMs,omitempty"`
 	FirstByteStatsUpdatedAt *time.Time `json:"firstByteStatsUpdatedAt,omitempty"`

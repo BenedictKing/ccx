@@ -373,12 +373,12 @@
                     variant="tonal"
                   >
                     <v-icon start size="12">mdi-timer-alert-outline</v-icon>
-                    {{ formatObservedLatency(getChannelHealth(element)?.p95FirstByteLatencyMs) }}
+                    {{ formatObservedLatency(getChannelHealth(element)?.p95ConnectLatencyMs) }}
                   </v-chip>
                 </template>
-                {{ t('healthCenter.detail.firstByteP95') }}:
-                {{ formatObservedLatency(getChannelHealth(element)?.p95FirstByteLatencyMs) }}
-                (n={{ getChannelHealth(element)?.firstByteSampleCount ?? 0 }})
+                {{ t('healthCenter.detail.connectP95') }}:
+                {{ formatObservedLatency(getChannelHealth(element)?.p95ConnectLatencyMs) }}
+                (n={{ getChannelHealth(element)?.connectSampleCount ?? 0 }})
               </v-tooltip>
             </div>
 
@@ -1065,8 +1065,8 @@ const getChannelHealth = (channel: Channel): ChannelHealthItem | undefined => {
 const isLongLatencyChannel = (channel: Channel): boolean => {
   const health = getChannelHealth(channel)
   return health?.speedTier === 'slow'
-    && (health.firstByteSampleCount ?? 0) > 0
-    && (health.p95FirstByteLatencyMs ?? 0) > 0
+    && (health.connectSampleCount ?? 0) > 0
+    && (health.p95ConnectLatencyMs ?? 0) > 0
 }
 
 const formatObservedLatency = (latencyMs?: number): string => {

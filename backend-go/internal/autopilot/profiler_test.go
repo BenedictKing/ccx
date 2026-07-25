@@ -550,6 +550,8 @@ func TestProfilerDeriveEndpointProfile(t *testing.T) {
 			SuccessCount:          48,
 			FailureCount:          2,
 			SuccessRate:           96,
+			ConnectSampleCount:    42,
+			P95ConnectLatencyMs:   2_100,
 			FirstByteSampleCount:  40,
 			P95FirstByteLatencyMs: 2300,
 		},
@@ -602,8 +604,8 @@ func TestProfilerDeriveEndpointProfile(t *testing.T) {
 	if profile.HealthState != HealthStateHealthy {
 		t.Errorf("HealthState = %q, want %q", profile.HealthState, HealthStateHealthy)
 	}
-	if profile.SpeedTier != SpeedTierNormal {
-		t.Errorf("SpeedTier = %q, want %q", profile.SpeedTier, SpeedTierNormal)
+	if profile.SpeedTier != SpeedTierSlow {
+		t.Errorf("SpeedTier = %q, want %q", profile.SpeedTier, SpeedTierSlow)
 	}
 	if profile.CostTier != CostTierNormal {
 		t.Errorf("CostTier = %q, want %q", profile.CostTier, CostTierNormal)
@@ -611,6 +613,13 @@ func TestProfilerDeriveEndpointProfile(t *testing.T) {
 	if profile.FirstByteSampleCount != 40 || profile.P95FirstByteLatencyMs != 2300 {
 		t.Errorf("TTFB profile = samples:%d p95:%dms, want 40/2300ms",
 			profile.FirstByteSampleCount, profile.P95FirstByteLatencyMs)
+	}
+	if profile.ConnectSampleCount != 42 || profile.P95ConnectLatencyMs != 2_100 {
+		t.Errorf("connect profile = samples:%d p95:%dms, want 42/2100ms",
+			profile.ConnectSampleCount, profile.P95ConnectLatencyMs)
+	}
+	if profile.ConnectStatsUpdatedAt == nil || profile.ConnectStatsUpdatedAt.Before(now) {
+		t.Errorf("connect profile freshness timestamp = %v, want >= %v", profile.ConnectStatsUpdatedAt, now)
 	}
 	if profile.FirstByteStatsUpdatedAt == nil || profile.FirstByteStatsUpdatedAt.Before(now) {
 		t.Errorf("TTFB profile freshness timestamp = %v, want >= %v", profile.FirstByteStatsUpdatedAt, now)

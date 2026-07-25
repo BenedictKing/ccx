@@ -104,6 +104,31 @@ func (m *MetricsManager) RecordRequestConnectedAt(baseURL, apiKey, serviceType s
 	return m.recordRequestConnectedInternal(baseURL, apiKey, serviceType, model, "", timestamp)
 }
 
+// RecordRequestConnectionLatency 记录从发起上游请求到取得连接（httptrace.GotConn）的耗时。
+// 连接复用同样会产生样本；同一请求仅保留第一次连接事件。
+func (m *MetricsManager) RecordRequestConnectionLatency(baseURL, apiKey, serviceType string, requestID uint64, latency time.Duration) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	metrics := m.findPendingRequestMetricsLocked(baseURL, apiKey, serviceType, requestID)
+	if metrics == nil {
+		return
+	}
+	idx, ok := metrics.pendingHistoryIdx[requestID]
+	if !ok || idx < 0 || idx >= len(metrics.requestHistory) {
+		return
+	}
+	record := &metrics.requestHistory[idx]
+	if record.ConnectLatencyMs > 0 {
+		return
+	}
+	latencyMs := latency.Milliseconds()
+	if latencyMs < 1 {
+		latencyMs = 1
+	}
+	record.ConnectLatencyMs = latencyMs
+}
+
 // RecordRequestFirstByte 记录从发起上游请求到收到首个响应字节的耗时。
 // 该值只写入当前进程的滑动历史；未收到响应头的超时/取消请求不产生样本。
 func (m *MetricsManager) RecordRequestFirstByte(baseURL, apiKey, serviceType string, requestID uint64, latency time.Duration) {

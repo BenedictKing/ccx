@@ -38,6 +38,8 @@ func (a *metricsManagerAdapter) GetTimeWindowStatsForKey(_ string, baseURL, apiK
 		SuccessCount:          stats.SuccessCount,
 		FailureCount:          stats.FailureCount,
 		SuccessRate:           stats.SuccessRate,
+		ConnectSampleCount:    stats.ConnectSampleCount,
+		P95ConnectLatencyMs:   stats.P95ConnectLatencyMs,
 		FirstByteSampleCount:  stats.FirstByteSampleCount,
 		P95FirstByteLatencyMs: stats.P95FirstByteLatencyMs,
 	}
@@ -877,6 +879,7 @@ func (m *Manager) collectAll() {
 			)
 			oldProfile := m.store.Get(profile.EndpointUID)
 			carryForwardDiscoveryFields(oldProfile, &profile)
+			carryForwardConnectStats(oldProfile, &profile, time.Now())
 			carryForwardFirstByteStats(oldProfile, &profile, time.Now())
 			profiled++
 
@@ -1216,6 +1219,23 @@ func carryForwardFirstByteStats(old *KeyEndpointProfile, current *KeyEndpointPro
 	current.P95FirstByteLatencyMs = old.P95FirstByteLatencyMs
 	updatedAt := *old.FirstByteStatsUpdatedAt
 	current.FirstByteStatsUpdatedAt = &updatedAt
+}
+
+// carryForwardConnectStats 在连接耗时原始样本仅驻留内存时，跨重启保留仍新鲜的最近聚合值。
+func carryForwardConnectStats(old *KeyEndpointProfile, current *KeyEndpointProfile, now time.Time) {
+	if old == nil || current == nil || current.ConnectSampleCount > 0 || current.P95ConnectLatencyMs > 0 {
+		return
+	}
+	if old.ConnectSampleCount <= 0 || old.P95ConnectLatencyMs <= 0 {
+		return
+	}
+	if !isFirstByteStatsFresh(old.ConnectStatsUpdatedAt, now) {
+		return
+	}
+	current.ConnectSampleCount = old.ConnectSampleCount
+	current.P95ConnectLatencyMs = old.P95ConnectLatencyMs
+	updatedAt := *old.ConnectStatsUpdatedAt
+	current.ConnectStatsUpdatedAt = &updatedAt
 }
 
 // emitProfileChangeEvents 对比 endpointUID 的旧画像与本轮新画像，

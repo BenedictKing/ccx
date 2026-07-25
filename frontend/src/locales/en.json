@@ -1079,6 +1079,7 @@
   "healthCenter.detail.successRate1h": "Success Rate (1h)",
   "healthCenter.detail.p95": "P95 Latency",
   "healthCenter.detail.firstByteP95": "P95 First Byte",
+  "healthCenter.detail.connectP95": "P95 Connection Latency",
   "healthCenter.detail.consecutiveFail": "Consecutive Failures",
   "healthCenter.detail.lastSuccess": "Last Success",
   "healthCenter.detail.updatedAt": "Updated At",

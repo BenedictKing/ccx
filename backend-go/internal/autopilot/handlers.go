@@ -32,6 +32,8 @@ type ChannelHealthItem struct {
 	UnknownCount          int     `json:"unknownCount"`
 	AvgSuccessRate        float64 `json:"avgSuccessRate,omitempty"`
 	SpeedTier             string  `json:"speedTier,omitempty"`
+	ConnectSampleCount    int64   `json:"connectSampleCount,omitempty"`
+	P95ConnectLatencyMs   int64   `json:"p95ConnectLatencyMs,omitempty"`
 	FirstByteSampleCount  int64   `json:"firstByteSampleCount,omitempty"`
 	P95FirstByteLatencyMs int64   `json:"p95FirstByteLatencyMs,omitempty"`
 }
@@ -59,6 +61,8 @@ type EndpointDetailItem struct {
 	SuccessRate15m        float64 `json:"successRate15m,omitempty"`
 	SuccessRate1h         float64 `json:"successRate1h,omitempty"`
 	P95LatencyMs          float64 `json:"p95LatencyMs,omitempty"`
+	ConnectSampleCount    int64   `json:"connectSampleCount,omitempty"`
+	P95ConnectLatencyMs   float64 `json:"p95ConnectLatencyMs,omitempty"`
 	FirstByteSampleCount  int64   `json:"firstByteSampleCount,omitempty"`
 	P95FirstByteLatencyMs float64 `json:"p95FirstByteLatencyMs,omitempty"`
 	ConsecutiveFail       int     `json:"consecutiveFail"`
@@ -209,6 +213,8 @@ func handleEndpoints(mgr *Manager) gin.HandlerFunc {
 				SpeedTier:             string(p.SpeedTier),
 				SuccessRate15m:        p.SuccessRate15m,
 				P95LatencyMs:          float64(p.P95LatencyMs),
+				ConnectSampleCount:    p.ConnectSampleCount,
+				P95ConnectLatencyMs:   float64(p.P95ConnectLatencyMs),
 				FirstByteSampleCount:  p.FirstByteSampleCount,
 				P95FirstByteLatencyMs: float64(p.P95FirstByteLatencyMs),
 				ConsecutiveFail:       p.ConsecutiveFail,
@@ -292,6 +298,7 @@ func aggregateChannel(channelUID string, profiles []*KeyEndpointProfile) Channel
 
 	var totalSuccessRate float64
 	var states []DiagnosisResult
+	var maxConnectP95 int64
 	var firstByteP95Values []int64
 
 	for _, p := range profiles {
@@ -309,6 +316,12 @@ func aggregateChannel(channelUID string, profiles []*KeyEndpointProfile) Channel
 		}
 		totalSuccessRate += p.SuccessRate15m
 		states = append(states, DiagnosisResult{State: p.HealthState})
+		if p.ConnectSampleCount > 0 && p.P95ConnectLatencyMs > 0 {
+			item.ConnectSampleCount += p.ConnectSampleCount
+			if p.P95ConnectLatencyMs > maxConnectP95 {
+				maxConnectP95 = p.P95ConnectLatencyMs
+			}
+		}
 		if p.FirstByteSampleCount > 0 && p.P95FirstByteLatencyMs > 0 {
 			item.FirstByteSampleCount += p.FirstByteSampleCount
 			firstByteP95Values = append(firstByteP95Values, p.P95FirstByteLatencyMs)
@@ -318,24 +331,16 @@ func aggregateChannel(channelUID string, profiles []*KeyEndpointProfile) Channel
 	if len(profiles) > 0 {
 		item.AvgSuccessRate = totalSuccessRate / float64(len(profiles))
 	}
+	if maxConnectP95 > 0 {
+		item.P95ConnectLatencyMs = maxConnectP95
+		item.SpeedTier = string(classifyConnectSpeedTier(item.P95ConnectLatencyMs))
+	}
 	if len(firstByteP95Values) > 0 {
 		item.P95FirstByteLatencyMs = medianInt64(firstByteP95Values)
-		item.SpeedTier = string(classifyFirstByteSpeedTier(item.P95FirstByteLatencyMs))
 	}
 
 	item.AggState = string(AggregateHealthState(states))
 	return item
-}
-
-func classifyFirstByteSpeedTier(p95LatencyMs int64) SpeedTier {
-	switch {
-	case p95LatencyMs < 500:
-		return SpeedTierFast
-	case p95LatencyMs < 2_000:
-		return SpeedTierNormal
-	default:
-		return SpeedTierSlow
-	}
 }
 
 // buildChannelNameMap 从配置中构建 channelUID -> 名称 映射。

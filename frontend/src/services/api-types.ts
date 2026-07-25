@@ -1018,6 +1018,8 @@ export interface ChannelHealthItem {
   unknownCount: number
   avgSuccessRate?: number
   speedTier?: 'fast' | 'normal' | 'slow'
+  connectSampleCount?: number
+  p95ConnectLatencyMs?: number
   firstByteSampleCount?: number
   p95FirstByteLatencyMs?: number
   // Forward-compat: origin/pool tags for card badge system (§8.2).
@@ -1047,6 +1049,8 @@ export interface EndpointDetailItem {
   successRate15m?: number
   successRate1h?: number
   p95LatencyMs?: number
+  connectSampleCount?: number
+  p95ConnectLatencyMs?: number
   firstByteSampleCount?: number
   p95FirstByteLatencyMs?: number
   consecutiveFail: number

@@ -179,6 +179,27 @@ func TestCarryForwardFirstByteStats(t *testing.T) {
 	})
 }
 
+func TestCarryForwardConnectStats(t *testing.T) {
+	now := time.Date(2026, 7, 25, 12, 0, 0, 0, time.UTC)
+	updatedAt := now.Add(-20 * time.Minute)
+	old := newTestProfile("ep-connect", "ch-1", "messages", "https://example.com")
+	old.ConnectSampleCount = 18
+	old.P95ConnectLatencyMs = 2_200
+	old.ConnectStatsUpdatedAt = &updatedAt
+	current := newTestProfile("ep-connect", "ch-1", "messages", "https://example.com")
+
+	carryForwardConnectStats(old, current, now)
+
+	if current.ConnectSampleCount != 18 || current.P95ConnectLatencyMs != 2_200 {
+		t.Fatalf("连接延迟画像未保留: samples=%d p95=%d", current.ConnectSampleCount, current.P95ConnectLatencyMs)
+	}
+	if current.ConnectStatsUpdatedAt == nil || !current.ConnectStatsUpdatedAt.Equal(updatedAt) ||
+		current.ConnectStatsUpdatedAt == old.ConnectStatsUpdatedAt {
+		t.Fatalf("连接延迟时间戳复制错误: old=%p current=%p value=%v",
+			old.ConnectStatsUpdatedAt, current.ConnectStatsUpdatedAt, current.ConnectStatsUpdatedAt)
+	}
+}
+
 func TestCarryForwardFirstByteStats_SurvivesProfileStoreRestart(t *testing.T) {
 	now := time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)
 	updatedAt := now.Add(-20 * time.Minute)

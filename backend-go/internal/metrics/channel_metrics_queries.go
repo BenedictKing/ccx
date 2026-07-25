@@ -612,6 +612,7 @@ func (m *MetricsManager) GetTimeWindowStatsForKey(baseURL, apiKey, serviceType s
 
 	cutoff := time.Now().Add(-duration)
 	var requestCount, successCount, failureCount int64
+	connectLatencies := make([]int64, 0)
 	firstByteLatencies := make([]int64, 0)
 
 	metrics := m.getIdentityMetricsLocked(baseURL, apiKey, serviceType)
@@ -627,6 +628,9 @@ func (m *MetricsManager) GetTimeWindowStatsForKey(baseURL, apiKey, serviceType s
 				if record.Success && record.FirstByteLatencyMs > 0 {
 					firstByteLatencies = append(firstByteLatencies, record.FirstByteLatencyMs)
 				}
+				if record.Success && record.ConnectLatencyMs > 0 {
+					connectLatencies = append(connectLatencies, record.ConnectLatencyMs)
+				}
 			}
 		}
 	}
@@ -636,6 +640,7 @@ func (m *MetricsManager) GetTimeWindowStatsForKey(baseURL, apiKey, serviceType s
 	}
 
 	successRate := float64(successCount) / float64(requestCount) * 100
+	sort.Slice(connectLatencies, func(i, j int) bool { return connectLatencies[i] < connectLatencies[j] })
 	sort.Slice(firstByteLatencies, func(i, j int) bool { return firstByteLatencies[i] < firstByteLatencies[j] })
 
 	return TimeWindowStats{
@@ -643,6 +648,8 @@ func (m *MetricsManager) GetTimeWindowStatsForKey(baseURL, apiKey, serviceType s
 		SuccessCount:          successCount,
 		FailureCount:          failureCount,
 		SuccessRate:           successRate,
+		ConnectSampleCount:    int64(len(connectLatencies)),
+		P95ConnectLatencyMs:   nearestRankPercentile(connectLatencies, 95),
 		FirstByteSampleCount:  int64(len(firstByteLatencies)),
 		P95FirstByteLatencyMs: nearestRankPercentile(firstByteLatencies, 95),
 	}

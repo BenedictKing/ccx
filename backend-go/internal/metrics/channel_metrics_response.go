@@ -306,6 +306,7 @@ func (m *MetricsManager) calculateAggregatedTimeWindowsMultiURL(baseURLs []strin
 		cutoff := now.Add(-duration)
 		var requestCount, successCount, failureCount int64
 		var inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens int64
+		connectLatencies := make([]int64, 0)
 		firstByteLatencies := make([]int64, 0)
 
 		// 遍历所有 BaseURL 和 Key 的组合
@@ -325,6 +326,9 @@ func (m *MetricsManager) calculateAggregatedTimeWindowsMultiURL(baseURLs []strin
 					if record.Success && record.FirstByteLatencyMs > 0 {
 						firstByteLatencies = append(firstByteLatencies, record.FirstByteLatencyMs)
 					}
+					if record.Success && record.ConnectLatencyMs > 0 {
+						connectLatencies = append(connectLatencies, record.ConnectLatencyMs)
+					}
 				}
 			}
 		}
@@ -340,6 +344,7 @@ func (m *MetricsManager) calculateAggregatedTimeWindowsMultiURL(baseURLs []strin
 			cacheHitRate = float64(cacheReadTokens) / float64(denom) * 100
 		}
 
+		sort.Slice(connectLatencies, func(i, j int) bool { return connectLatencies[i] < connectLatencies[j] })
 		sort.Slice(firstByteLatencies, func(i, j int) bool { return firstByteLatencies[i] < firstByteLatencies[j] })
 		result[label] = TimeWindowStats{
 			RequestCount:          requestCount,
@@ -351,6 +356,8 @@ func (m *MetricsManager) calculateAggregatedTimeWindowsMultiURL(baseURLs []strin
 			CacheCreationTokens:   cacheCreationTokens,
 			CacheReadTokens:       cacheReadTokens,
 			CacheHitRate:          cacheHitRate,
+			ConnectSampleCount:    int64(len(connectLatencies)),
+			P95ConnectLatencyMs:   nearestRankPercentile(connectLatencies, 95),
 			FirstByteSampleCount:  int64(len(firstByteLatencies)),
 			P95FirstByteLatencyMs: nearestRankPercentile(firstByteLatencies, 95),
 		}

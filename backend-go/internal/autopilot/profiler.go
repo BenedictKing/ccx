@@ -38,6 +38,8 @@ type TimeWindowStats struct {
 	SuccessCount          int64
 	FailureCount          int64
 	SuccessRate           float64
+	ConnectSampleCount    int64
+	P95ConnectLatencyMs   int64
 	FirstByteSampleCount  int64
 	P95FirstByteLatencyMs int64
 }
@@ -124,6 +126,11 @@ func (p *Profiler) DeriveEndpointProfile(
 	profile.ConsecutiveFail = int(snapshot.ConsecutiveFailures)
 	profile.LastSuccessAt = snapshot.LastSuccessAt
 	profile.SuccessRate15m = stats1h.SuccessRate // 用 1h 窗口近似（Phase 1 精度足够）
+	profile.ConnectSampleCount = stats1h.ConnectSampleCount
+	profile.P95ConnectLatencyMs = stats1h.P95ConnectLatencyMs
+	if stats1h.ConnectSampleCount > 0 && stats1h.P95ConnectLatencyMs > 0 {
+		profile.ConnectStatsUpdatedAt = &now
+	}
 	profile.FirstByteSampleCount = stats1h.FirstByteSampleCount
 	profile.P95FirstByteLatencyMs = stats1h.P95FirstByteLatencyMs
 	if stats1h.FirstByteSampleCount > 0 && stats1h.P95FirstByteLatencyMs > 0 {
@@ -132,7 +139,7 @@ func (p *Profiler) DeriveEndpointProfile(
 
 	// 推导各维度
 	profile.StabilityTier = DeriveStabilityTier(stats1h, snapshot)
-	profile.SpeedTier = DeriveSpeedTier(snapshot) // Phase 1 无延迟数据，依赖冷启动信号
+	profile.SpeedTier = DeriveSpeedTierFromConnectStats(stats1h, snapshot)
 	profile.CostTier = DeriveCostTier(stats1h, snapshot)
 	profile.HealthState = deriveHealthState(stats1h, snapshot)
 
@@ -213,13 +220,29 @@ func applyStabilityDowngrades(current StabilityTier, snapshot KeyCircuitSnapshot
 // ── 速度推导 ──
 
 // DeriveSpeedTier 推导 SpeedTier。
-// Phase 1：当前 metrics 系统不采集 p95 首 token 延迟。
-// 无足够数据时返回 SpeedTierNormal 作为安全默认值。
+// 无连接耗时样本时返回 SpeedTierNormal 作为安全默认值。
 func DeriveSpeedTier(snapshot KeyCircuitSnapshot) SpeedTier {
-	// Phase 1 无延迟指标数据
-	// 后续 Phase 2 可从 requestHistory 的 Duration 字段计算 p95
 	_ = snapshot
 	return SpeedTierNormal
+}
+
+// DeriveSpeedTierFromConnectStats 优先按连接取得耗时推导速度档；无样本时保留安全默认值。
+func DeriveSpeedTierFromConnectStats(stats TimeWindowStats, snapshot KeyCircuitSnapshot) SpeedTier {
+	if stats.ConnectSampleCount <= 0 || stats.P95ConnectLatencyMs <= 0 {
+		return DeriveSpeedTier(snapshot)
+	}
+	return classifyConnectSpeedTier(stats.P95ConnectLatencyMs)
+}
+
+func classifyConnectSpeedTier(p95LatencyMs int64) SpeedTier {
+	switch {
+	case p95LatencyMs < 500:
+		return SpeedTierFast
+	case p95LatencyMs < 2_000:
+		return SpeedTierNormal
+	default:
+		return SpeedTierSlow
+	}
 }
 
 // ── 成本推导 ──
