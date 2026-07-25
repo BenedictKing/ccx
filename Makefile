@@ -30,6 +30,10 @@ help:
 	@echo "  make benchmark-update         - 更新模型能力基准数据并生成多来源图表"
 	@echo "  make benchmark-update-dry     - 预览基准数据变更（不写入）"
 	@echo "  make benchmark-chart          - 生成能力-成本边界曲线"
+	@echo ""
+	@echo "$(YELLOW)Benchmark 数据源参数:$(NC)"
+	@echo "  make benchmark-update ARTIFICIAL_ANALYSIS_API_KEY=xxx - 传入 Artificial Analysis API key"
+	@echo "  未传 key 时自动跳过 Artificial Analysis，其余源照常更新"
 
 install:
 	@echo "$(GREEN)📦 安装前端依赖...$(NC)"
