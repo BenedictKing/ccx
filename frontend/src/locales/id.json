@@ -913,7 +913,7 @@
   "channelEditor.compat.normalizeUserId.label": "Normalisasi user ID",
   "channelEditor.compat.normalizeUserId.hint": "Ratakan metadata user ID",
   "channelEditor.compat.stripBillingHeader.label": "Hapus header billing",
-  "channelEditor.compat.stripBillingHeader.hint": "Hapus akhiran billing CCH",
+  "channelEditor.compat.stripBillingHeader.hint": "Hapus akhiran billing CCH (aktif default untuk domain non-resmi)",
   "channelEditor.compat.normalizeRoles.label": "Normalisasi role chat",
   "channelEditor.compat.normalizeRoles.hint": "Normalisasi role chat non-standar",
   "channelEditor.compat.codexNativeTools.label": "Passthrough alat native Codex",

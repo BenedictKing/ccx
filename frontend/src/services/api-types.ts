@@ -218,7 +218,7 @@ export interface Channel {
   routePrefix?: string                     // 路由前缀（如 "kimi"，访问 /kimi/v1/messages）
   autoBlacklistBalance?: boolean           // 余额不足自动拉黑（默认 true）
   normalizeMetadataUserId?: boolean        // 规范化 metadata.user_id（默认 true）
-  stripBillingHeader?: boolean             // Messages 渠道特定：转发前移除 system 中 cch= 计费参数（默认 true）
+  stripBillingHeader?: boolean             // Messages 渠道：移除 billing header（默认：非官方 Anthropic 域名 true，官方域名 false）
   stripEmptyTextBlocks?: boolean           // Claude 协议特定：转发前移除裸空 text content block（兼容严格校验的第三方上游）
   normalizeSystemRoleToTopLevel?: boolean  // Claude 协议特定：将 messages 中 system 角色抽取回顶层 system 字段（兼容仅支持 user/assistant 的旧上游）
   codexNativeToolPassthrough?: boolean    // Codex 原生工具透传（默认 true）

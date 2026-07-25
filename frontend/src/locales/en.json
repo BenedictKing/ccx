@@ -916,7 +916,7 @@
   "channelEditor.compat.normalizeUserId.label": "Normalize user ID",
   "channelEditor.compat.normalizeUserId.hint": "Flatten metadata user ID",
   "channelEditor.compat.stripBillingHeader.label": "Strip billing header",
-  "channelEditor.compat.stripBillingHeader.hint": "Remove CCH billing suffix",
+  "channelEditor.compat.stripBillingHeader.hint": "Remove CCH billing suffix (default on for non-official domains)",
   "channelEditor.compat.normalizeRoles.label": "Normalize chat roles",
   "channelEditor.compat.normalizeRoles.hint": "Normalize non-standard chat roles",
   "channelEditor.compat.codexNativeTools.label": "Codex native tool passthrough",

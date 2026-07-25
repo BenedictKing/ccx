@@ -916,7 +916,7 @@
   "channelEditor.compat.normalizeUserId.label": "规范化用户 ID",
   "channelEditor.compat.normalizeUserId.hint": "扁平化 metadata 中的 user ID",
   "channelEditor.compat.stripBillingHeader.label": "剔除 CCH 计费尾缀",
-  "channelEditor.compat.stripBillingHeader.hint": "移除 CCH 计费后缀",
+  "channelEditor.compat.stripBillingHeader.hint": "移除 CCH 计费后缀（非官方域名默认开启）",
   "channelEditor.compat.normalizeRoles.label": "规范化非标准聊天角色",
   "channelEditor.compat.normalizeRoles.hint": "规范化非标准聊天角色",
   "channelEditor.compat.codexNativeTools.label": "Codex 原生工具透传",

@@ -784,6 +784,92 @@ func TestStripBillingHeaderDefaultsUpdateAndMigration(t *testing.T) {
 	}
 }
 
+func TestRequiresAnthropicBillingHeader(t *testing.T) {
+	tests := []struct {
+		name     string
+		baseURL  string
+		expected bool
+	}{
+		{name: "official host", baseURL: "api.anthropic.com", expected: true},
+		{name: "official host with scheme", baseURL: "https://api.anthropic.com", expected: true},
+		{name: "official host with path", baseURL: "http://api.anthropic.com/v1", expected: true},
+		{name: "official host with trailing slash", baseURL: "https://api.anthropic.com/", expected: true},
+		{name: "subdomain is not official", baseURL: "https://proxy.api.anthropic.com", expected: false},
+		{name: "third-party domain", baseURL: "https://api.deepseek.com", expected: false},
+		{name: "empty string", baseURL: "", expected: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := requiresAnthropicBillingHeader(tt.baseURL); got != tt.expected {
+				t.Errorf("requiresAnthropicBillingHeader(%q) = %v, want %v", tt.baseURL, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestShouldStripBillingHeaderByDefault(t *testing.T) {
+	tests := []struct {
+		name     string
+		upstream *UpstreamConfig
+		expected bool
+	}{
+		{
+			name:     "nil upstream",
+			upstream: nil,
+			expected: true,
+		},
+		{
+			name:     "all urls official",
+			upstream: &UpstreamConfig{BaseURL: "https://api.anthropic.com", BaseURLs: []string{"https://api.anthropic.com/v1"}},
+			expected: false,
+		},
+		{
+			name:     "primary official, secondary third-party",
+			upstream: &UpstreamConfig{BaseURL: "https://api.anthropic.com", BaseURLs: []string{"https://api.deepseek.com/anthropic"}},
+			expected: true,
+		},
+		{
+			name:     "primary third-party",
+			upstream: &UpstreamConfig{BaseURL: "https://api.deepseek.com/anthropic"},
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := shouldStripBillingHeaderByDefault(tt.upstream); got != tt.expected {
+				t.Errorf("shouldStripBillingHeaderByDefault(%+v) = %v, want %v", tt.upstream, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestIsStripBillingHeaderEnabledDefaultByDomain(t *testing.T) {
+	trueVal := true
+	falseVal := false
+
+	official := &UpstreamConfig{BaseURL: "https://api.anthropic.com"}
+	thirdParty := &UpstreamConfig{BaseURL: "https://api.deepseek.com/anthropic"}
+
+	if got := official.IsStripBillingHeaderEnabled(); got != false {
+		t.Errorf("official endpoint default IsStripBillingHeaderEnabled() = %v, want false", got)
+	}
+	if got := thirdParty.IsStripBillingHeaderEnabled(); got != true {
+		t.Errorf("third-party endpoint default IsStripBillingHeaderEnabled() = %v, want true", got)
+	}
+
+	thirdParty.StripBillingHeader = &falseVal
+	if got := thirdParty.IsStripBillingHeaderEnabled(); got != false {
+		t.Errorf("explicit false should override domain default, got %v", got)
+	}
+
+	official.StripBillingHeader = &trueVal
+	if got := official.IsStripBillingHeaderEnabled(); got != true {
+		t.Errorf("explicit true should override domain default, got %v", got)
+	}
+}
+
 // TestBlacklistKeyConfigSnapshotDeepCopy 验证 BlacklistKey 深拷贝 APIKeyConfig 快照，
 // 拉黑后修改源 config 不影响快照。
 func TestBlacklistKeyConfigSnapshotDeepCopy(t *testing.T) {

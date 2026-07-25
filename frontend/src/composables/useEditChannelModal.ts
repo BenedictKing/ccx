@@ -187,7 +187,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     supportedModels: [] as string[],
     autoBlacklistBalance: true,
     normalizeMetadataUserId: defaultNormalizeMetadataUserId(),
-    stripBillingHeader: false,
+    stripBillingHeader: defaultServiceTypeValueFallback() !== 'claude',
     codexNativeToolPassthrough: false,
     codexToolCompat: false,
     normalizeNonstandardChatRoles: false,
@@ -887,7 +887,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     supportedModelsError.value = ''
     form.autoBlacklistBalance = true
     form.normalizeMetadataUserId = defaultNormalizeMetadataUserId()
-    form.stripBillingHeader = false
+    form.stripBillingHeader = defaultServiceTypeValueFallback() !== 'claude'
     form.codexNativeToolPassthrough = false
     form.codexToolCompat = false
     form.normalizeNonstandardChatRoles = false

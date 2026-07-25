@@ -67,7 +67,7 @@ type UpstreamConfig struct {
 	AutoBlacklistBalance *bool `json:"autoBlacklistBalance,omitempty"` // 余额不足时自动拉黑 Key（默认 true）
 	// Claude Messages metadata.user_id 规范化开关
 	NormalizeMetadataUserID *bool `json:"normalizeMetadataUserId,omitempty"` // 规范化 metadata.user_id（默认 true）
-	// Messages 渠道级移除计费头：转发前从 system 数组移除 cch=xxx; 计费参数（默认关闭）
+	// Messages 渠道级移除 billing header：转发前从 system 数组移除 x-anthropic-billing-header block（默认按域名推断）
 	StripBillingHeader *bool `json:"stripBillingHeader,omitempty"`
 	// Claude 协议空文本兼容
 	StripEmptyTextBlocks bool `json:"stripEmptyTextBlocks,omitempty"` // 转发前移除裸空 text content block（兼容严格校验的第三方 Claude 上游）
@@ -631,12 +631,47 @@ func (u *UpstreamConfig) IsNormalizeMetadataUserIDEnabled() bool {
 	return *u.NormalizeMetadataUserID
 }
 
-// IsStripBillingHeaderEnabled 检查是否移除 cch= 计费参数（默认 false）。
+// IsStripBillingHeaderEnabled 检查是否移除 billing header block（默认：按域名推断）。
 func (u *UpstreamConfig) IsStripBillingHeaderEnabled() bool {
-	if u.StripBillingHeader == nil {
-		return false
+	if u.StripBillingHeader != nil {
+		return *u.StripBillingHeader
 	}
-	return *u.StripBillingHeader
+	return shouldStripBillingHeaderByDefault(u)
+}
+
+// requiresAnthropicBillingHeader 判断 base URL 是否需要 x-anthropic-billing-header。
+// Anthropic 官方 API（api.anthropic.com）需要这行 header 进行计费归属，返回 true；
+// 第三方代理、自建网关、本地模型等不需要，返回 false（且 cch= 每次变化会打穿上游 prompt 缓存前缀）。
+// 只精确匹配主域名，子域名（如 proxy.api.anthropic.com）视为第三方。
+func requiresAnthropicBillingHeader(baseURL string) bool {
+	s := strings.ToLower(strings.TrimSpace(baseURL))
+	if idx := strings.Index(s, "://"); idx >= 0 {
+		s = s[idx+3:]
+	}
+	s = strings.TrimRight(s, "/")
+	host := s
+	if i := strings.Index(s, "/"); i >= 0 {
+		host = s[:i]
+	}
+	return host == "api.anthropic.com"
+}
+
+// shouldStripBillingHeaderByDefault 判断该渠道是否应默认剔除 Claude Code billing header。
+// 遍历渠道所有 BaseURL：只有全部均需要 billing header 时才保留；
+// 只要有一个 URL 不需要（第三方域名），则默认剔除。
+// 用户显式设置 StripBillingHeader 时（非 nil），以用户配置为准，本函数不被调用。
+func shouldStripBillingHeaderByDefault(upstream *UpstreamConfig) bool {
+	if upstream == nil {
+		return true
+	}
+	urls := []string{upstream.BaseURL}
+	urls = append(urls, upstream.BaseURLs...)
+	for _, u := range urls {
+		if !requiresAnthropicBillingHeader(u) {
+			return true
+		}
+	}
+	return false
 }
 
 // IsCodexToolCompatEnabled 检查 Codex 工具兼容是否启用（默认 false）。

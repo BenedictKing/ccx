@@ -15,6 +15,7 @@
 
 - **火山套餐 Key 跨套餐误探测** - 混合套餐渠道中 Agent Plan Key 不再被首地址 `/api/coding` 误打导致 auth_failed 误拉黑；火山官方套餐入口不再调用通用 `/v1/models`（套餐 Key 无法通过该接口探测），改用专用探针 + 内置 manifest 模型清单；400/404/500/网络错误不升级为认证失败
 - **渠道全部 Key 禁用时无恢复入口** - `hasOnlyDisabledChannelApiKeys` 判定（可用=0 且禁用>0）下渠道行直接显示恢复按钮，一次点击恢复全部禁用 Key，无需先暂停；active 渠道跳过冗余 `setStatus(active)`，直接 resume 并刷新
+- **非官方域名默认剔除 billing header** - `stripBillingHeader` 未显式设置时按渠道 BaseURL 推断默认值：仅当渠道所有地址均为 Anthropic 官方 API（`api.anthropic.com`）时保留计费 header，其余第三方渠道默认剔除；此前默认关闭，导致 Claude Code 每次请求变化的 `cch=` 计费 nonce 打穿第三方上游的 prompt 缓存前缀，造成缓存命中率异常下降
 
 ## [v3.0.0] - 2026-07-23
 
