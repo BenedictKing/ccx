@@ -2001,7 +2001,7 @@ const volcengineWindowCell = (labelKey: string, win?: VolcenginePlanUsageWindow)
     const remainingPercent = Math.max(0, Math.min(100, (remaining / win.quota) * 100))
     return {
       labelKey,
-      text: `${remainingPercent.toFixed(1)}% · ${numberFmt.format(win.used)}/${numberFmt.format(win.quota)}`,
+      text: `${t('volcengineAccessKey.remaining')} ${remainingPercent.toFixed(1)}% · ${numberFmt.format(win.used)}/${numberFmt.format(win.quota)}`,
       colorClass: volcengineUsageColor(remainingPercent),
     }
   }
