@@ -711,6 +711,7 @@ import draggable from 'vuedraggable'
 import { api, type Channel, type ChannelKind, type ChannelMetrics, type ChannelProtocolRoute, type ChannelStatus, type TimeWindowStats, type ChannelRecentActivity, type SchedulerStatsResponse } from '../services/api'
 import { getChannelTypeApi } from '../utils/channelTypeApi'
 import { isLlmChannelKind } from '../utils/unifiedChannels'
+import { sortChannelsByPriority } from '../utils/channelOrder'
 import { useI18n } from '../i18n'
 import { useGlobalTick } from '../composables/useGlobalTick'
 import { useChannelActivity } from '../composables/useChannelActivity'
@@ -925,34 +926,17 @@ const initialBuiltInOrder = computed(() => props.channels.map(getChannelUiKey))
 const lastKnownActiveOrder = ref<string[]>([])
 const lastKnownInactiveOrder = ref<string[]>([])
 
-// 按用户排序/后端 priority 稳定排序；有无 key 只作为缺省顺序的兜底，不覆盖用户排序
+// 按用户排序/后端 priority 稳定排序，排序依据与 key 运行时状态无关（见 sortChannelsByPriority）
 const buildChannelOrder = (
   source: Channel[],
   fallbackOrder: string[]
-): Channel[] => {
-  const fallbackRank = new Map<string, number>()
-  fallbackOrder.forEach((key, rank) => fallbackRank.set(key, rank))
-
-  const originalRank = new Map<string, number>()
-  initialBuiltInOrder.value.forEach((key, rank) => originalRank.set(key, rank))
-
-  const hasKey = (ch: Channel) =>
-    Array.isArray(ch.apiKeys) && ch.apiKeys.length > 0
-
-  const getRank = (ch: Channel): number =>
-    ch.priority ?? fallbackRank.get(getChannelUiKey(ch)) ?? originalRank.get(getChannelUiKey(ch)) ?? getRouteIndex(ch)
-
-  return [...source].sort((a, b) => {
-    const rankDiff = getRank(a) - getRank(b)
-    if (rankDiff !== 0) return rankDiff
-
-    // 只有在优先级完全相同时，才把已配置 key 的渠道排前，避免覆盖用户拖拽/置顶排序
-    const keyDiff = Number(hasKey(b)) - Number(hasKey(a))
-    if (keyDiff !== 0) return keyDiff
-
-    return getRouteIndex(a) - getRouteIndex(b)
-  })
-}
+): Channel[] => sortChannelsByPriority(
+  source,
+  fallbackOrder,
+  initialBuiltInOrder.value,
+  getChannelUiKey,
+  getRouteIndex,
+)
 
 const isSameKeyOrder = (current: string[], next: string[]) => (
   current.length === next.length && current.every((index, position) => index === next[position])
