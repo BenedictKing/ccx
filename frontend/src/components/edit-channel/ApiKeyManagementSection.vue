@@ -1774,7 +1774,8 @@ const compshareDateTimeFormat = new Intl.DateTimeFormat(undefined, {
 
 const compshareFormatRemaining = (window: CompsharePlanUsageWindow) => {
   const remaining = Math.max(0, window.limit - window.used)
-  return `${compshareNumberFormat.format(remaining)} / ${compshareNumberFormat.format(window.limit)}`
+  const remainingPercent = window.limit > 0 ? ((remaining / window.limit) * 100).toFixed(1) : '0.0'
+  return `${t('volcengineAccessKey.remaining')} ${remainingPercent}% · ${compshareNumberFormat.format(remaining)}/${compshareNumberFormat.format(window.limit)}`
 }
 
 const compshareUsagePercent = (window: CompsharePlanUsageWindow) => {
@@ -1835,7 +1836,7 @@ const mimoUsageSummary = (credential: ManagedAccountCredential): string => {
 
 const minimaxFormatQuota = (remainingPercent: number, used: number, total: number) => {
   const percent = Math.max(0, Math.min(100, remainingPercent)).toFixed(0)
-  return total > 0 ? `${percent}% (${used}/${total})` : `${percent}%`
+  return total > 0 ? `剩余 ${percent}% (${used}/${total})` : `剩余 ${percent}%`
 }
 
 const minimaxQuotaColor = (remainingPercent: number) => {
@@ -1864,7 +1865,7 @@ const minimaxUsageSummary = (endpoint: EndpointDetailItem): string => {
   const usage = endpoint.miniMaxTokenPlanUsage
   if (!usage?.models.length) return t('healthCenter.detail.noUsageData')
   return usage.models
-    .map(model => `${model.modelName} ${Math.max(0, Math.min(100, model.currentIntervalRemainingPercent)).toFixed(0)}%`)
+    .map(model => `${model.modelName} 剩余 ${Math.max(0, Math.min(100, model.currentIntervalRemainingPercent)).toFixed(0)}%`)
     .join(' · ')
 }
 
@@ -1959,7 +1960,7 @@ const clearMiMoConsoleCookie = async (credential: ManagedAccountCredential) => {
 const formatMiMoQuota = (quota: MiMoTokenPlanQuota) => {
   const remainingPercent = Math.max(0, Math.min(100, (1 - quota.usedPercent) * 100)).toFixed(1)
   const remaining = Math.max(0, quota.limit - quota.used)
-  return `${remainingPercent}% · ${Intl.NumberFormat().format(remaining)} tokens`
+  return `剩余 ${remainingPercent}% · ${Intl.NumberFormat().format(remaining)} tokens`
 }
 
 const planDisplayName = (plan?: string) => plan === 'agent_plan' ? 'Agent Plan' : 'Coding Plan'
@@ -2214,7 +2215,7 @@ const kimiFormatCountdown = (resetTime?: string) => {
   return parts.join(' ')
 }
 
-// Key 行摘要：未绑定令牌时提示绑定，否则与官方 Plan usage 一致，拼接各限额已用百分比。
+// Key 行摘要：未绑定令牌时提示绑定，否则展示各限额剩余百分比。
 const kimiUsageSummary = (credential: ManagedAccountCredential): string => {
   if (!credential.hasKimiConsoleToken) return t('kimiConsoleToken.notConfigured')
   const usage = credential.kimiCodeUsage
@@ -2222,7 +2223,7 @@ const kimiUsageSummary = (credential: ManagedAccountCredential): string => {
   const rows = kimiPlanUsageRows(usage)
   if (!rows.length) return t('kimiConsoleToken.noUsageData')
   return rows
-    .map(item => `${item.label} ${t('kimiConsoleToken.percentUsed', { percent: Math.round(item.usedPercent) })}`)
+    .map(item => `${item.label} ${t('kimiConsoleToken.percentRemaining', { percent: Math.max(0, Math.min(100, Math.round(100 - item.usedPercent))) })}`)
     .join(' · ')
 }
 
