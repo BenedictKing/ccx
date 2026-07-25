@@ -137,10 +137,10 @@ func TestResolveDomainStrength_CanonicalBenchmarkByVariant(t *testing.T) {
 		domain TaskDomain
 		want   float64
 	}{
-		{model: "claude-opus-4-8", domain: TaskDomainCoding, want: 0.811},
-		{model: "gpt-5.6-terra", domain: TaskDomainReasoning, want: 0.808},
-		{model: "gpt-5.6-sol", domain: TaskDomainReasoning, want: 0.875},
-		{model: "gpt-5.6-sol", domain: TaskDomainAgentic, want: 0.92},
+		{model: "claude-opus-4-8", domain: TaskDomainCoding, want: 0.691},
+		{model: "gpt-5.6-terra", domain: TaskDomainReasoning, want: 0.971},
+		{model: "gpt-5.6-sol", domain: TaskDomainReasoning, want: 0.971},
+		{model: "gpt-5.6-sol", domain: TaskDomainAgentic, want: 0.947},
 	}
 
 	for _, tt := range tests {
@@ -156,7 +156,7 @@ func TestResolveDomainStrength_CanonicalBenchmarkByVariant(t *testing.T) {
 			if evidence.ProviderQualityFactor != 1 {
 				t.Fatalf("ProviderQualityFactor = %v, want 1 without endpoint evidence", evidence.ProviderQualityFactor)
 			}
-			if evidence.BenchmarkLane != "provisional" || evidence.BenchmarkVerifiedAt != "2026-07-22" {
+			if evidence.BenchmarkLane != "provisional" || evidence.BenchmarkVerifiedAt != "2026-07-25" {
 				t.Fatalf("benchmark metadata = lane %q date %q", evidence.BenchmarkLane, evidence.BenchmarkVerifiedAt)
 			}
 			if evidence.EvidenceConfidence != 0.625 {
@@ -174,17 +174,17 @@ func TestResolveDomainStrength_AppliesProviderQualityAsDownwardFactor(t *testing
 		ProviderQualityConfidence: 0.75,
 	}
 	evidence := ResolveDomainStrength(profile, TaskDomainReasoning)
-	// factor = 1 - 0.75 * (1 - 0.8) = 0.85; effective = 0.875 * 0.85.
+	// factor = 1 - 0.75 * (1 - 0.8) = 0.85; effective = 0.971 * 0.85.
 	if math.Abs(evidence.ProviderQualityFactor-0.85) > 1e-9 {
 		t.Fatalf("ProviderQualityFactor = %v, want 0.85", evidence.ProviderQualityFactor)
 	}
-	if math.Abs(evidence.Score-0.74375) > 1e-9 {
-		t.Fatalf("Score = %v, want 0.74375", evidence.Score)
+	if math.Abs(evidence.Score-0.82535) > 1e-9 {
+		t.Fatalf("Score = %v, want 0.82535", evidence.Score)
 	}
 
 	profile.ProviderQualityConfidence = 0.49
 	lowConfidence := ResolveDomainStrength(profile, TaskDomainReasoning)
-	if lowConfidence.ProviderQualityFactor != 1 || lowConfidence.Score != 0.875 {
+	if lowConfidence.ProviderQualityFactor != 1 || lowConfidence.Score != 0.971 {
 		t.Fatalf("低置信度不应下调规范上界: %+v", lowConfidence)
 	}
 }
@@ -268,7 +268,7 @@ func TestResolveDomainStrength_DeepSWEUsesBoundedRelativeCodingSignal(t *testing
 func TestResolveDomainStrength_CategoryScoreWinsOverRelativeEvidence(t *testing.T) {
 	profile := &ModelProfile{ModelID: "gpt-5.6-sol", ModelFamily: ModelFamilyOpenAI}
 	evidence := ResolveDomainStrength(profile, TaskDomainCoding)
-	if evidence.Source != "canonical_benchmark" || math.Abs(evidence.Score-0.646) > 1e-9 {
+	if evidence.Source != "canonical_benchmark" || math.Abs(evidence.Score-0.55) > 1e-9 {
 		t.Fatalf("evidence = %+v, want existing category score", evidence)
 	}
 }
@@ -301,8 +301,8 @@ func TestResolveDomainStrength_MultimodalProxyHasLowerConfidence(t *testing.T) {
 		ModelID:     "claude-opus-4-8",
 		ModelFamily: ModelFamilyClaude,
 	}, TaskDomainAestheticsUI)
-	if evidence.Score != 0.77 {
-		t.Fatalf("Score = %v, want 0.77", evidence.Score)
+	if evidence.Score != 0.902 {
+		t.Fatalf("Score = %v, want 0.902", evidence.Score)
 	}
 	if evidence.EvidenceConfidence != 0.3125 {
 		t.Fatalf("EvidenceConfidence = %v, want 0.3125", evidence.EvidenceConfidence)

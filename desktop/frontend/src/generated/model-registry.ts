@@ -141,7 +141,33 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
       "inputCacheHitPrice": 0.5
     }
   },
-  "(?:^|[-/])claude-opus-4-8(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
+  "(?:^|[-/])claude-opus-5(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
+    "provider": "anthropic",
+    "displayName": "Claude Opus 5",
+    "contextWindowTokens": 1000000,
+    "maxOutputTokens": 128000,
+    "thinkingMode": "adaptive_only",
+    "reasoningEfforts": [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+    ],
+    "capabilities": {
+      "reasoning": true,
+      "vision": true,
+      "toolCalls": true
+    },
+    "pricing": {
+      "unit": "per_1m_tokens_usd",
+      "currency": "USD",
+      "inputCacheMissPrice": 5,
+      "outputPrice": 25,
+      "inputCacheHitPrice": 0.5
+    }
+  },
+  "(?:^|[-/])claude-opus-4[.-]8(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
     "provider": "anthropic",
     "displayName": "Claude Opus 4.8",
     "contextWindowTokens": 1000000,
@@ -2021,7 +2047,7 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
 }
 
 export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile> = {
-  "(?:^|[-/])claude-opus-4-8(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
+  "(?:^|[-/])claude-opus-4[.-]8(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
     "canonicalModel": "claude-opus-4-8",
     "overallScore": 77.44,
     "categoryScores": {

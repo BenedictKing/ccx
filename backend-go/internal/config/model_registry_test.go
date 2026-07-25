@@ -129,7 +129,7 @@ func TestResolveAgentModelProfile_KimiCodeBuiltins(t *testing.T) {
 		efforts    []string
 	}{
 		{model: "k3", context: 262144, maxContext: 1048576, efforts: []string{"low", "high", "max"}},
-		{model: "k3[1m]", context: 262144, maxContext: 1048576, efforts: []string{"low", "high", "max"}},
+		{model: "k3[1m]", context: 1048576, maxContext: 1048576, efforts: []string{"low", "high", "max"}},
 		{model: "kimi-for-coding", context: 262144, maxContext: 0},
 		{model: "kimi-for-coding-highspeed", context: 262144, maxContext: 0},
 	}
@@ -243,9 +243,9 @@ func TestResolveUpstreamCapability_KimiCodeModels(t *testing.T) {
 		wantThinking string
 	}{
 		{model: "k3", context: 262144, reasoning: []string{"low", "high", "max"}, displayName: "Kimi K3", wantThinking: "thinking"},
-		{model: "k3[1m]", context: 262144, reasoning: []string{"low", "high", "max"}, displayName: "Kimi K3", wantThinking: "thinking"},
+		{model: "k3[1m]", context: 1048576, reasoning: []string{"low", "high", "max"}, displayName: "Kimi K3 (1M)", wantThinking: "thinking"},
 		{model: "kimi-k3", context: 262144, reasoning: []string{"low", "high", "max"}, displayName: "Kimi K3", wantThinking: "thinking"},
-		{model: "kimi-for-coding", context: 262144, maxOutput: 32768, reasoning: []string{"high"}, displayName: "Kimi K2.7 Code", wantThinking: "thinking"},
+		{model: "kimi-for-coding", context: 262144, maxOutput: 32768, reasoning: []string{"high"}, displayName: "Kimi K2.7 Code (Kimi Code 会员)", wantThinking: "thinking"},
 		{model: "kimi-for-coding-highspeed", context: 262144, maxOutput: 32768, reasoning: []string{"high"}, displayName: "Kimi K2.7 Code HighSpeed", wantThinking: "thinking"},
 	}
 	for _, tt := range tests {
@@ -423,6 +423,32 @@ func TestResolveUpstreamCapability_GPT56BedrockBuiltin(t *testing.T) {
 		if !resolved.Capability.Capabilities[capability] {
 			t.Fatalf("Capabilities[%q] = false, want true", capability)
 		}
+	}
+}
+
+func TestResolveUpstreamCapability_ClaudeOpusAliasesAndOpus5(t *testing.T) {
+	tests := []struct {
+		model       string
+		displayName string
+	}{
+		{model: "claude-opus-4-8", displayName: "Claude Opus 4.8"},
+		{model: "claude-opus-4.8", displayName: "Claude Opus 4.8"},
+		{model: "claude-opus-5", displayName: "Claude Opus 5"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			resolved := ResolveUpstreamCapability(tt.model, nil, nil)
+			if !resolved.Known || resolved.Source != "builtin" {
+				t.Fatalf("resolved = %+v, want builtin capability", resolved)
+			}
+			capability := resolved.Capability
+			if capability.DisplayName != tt.displayName || capability.ContextWindowTokens != 1_000_000 ||
+				capability.MaxOutputTokens != 128_000 || !capability.Capabilities["reasoning"] ||
+				!capability.Capabilities["vision"] || !capability.Capabilities["toolCalls"] {
+				t.Fatalf("capability = %+v", capability)
+			}
+		})
 	}
 }
 
@@ -776,9 +802,9 @@ func TestResolveModelBenchmarkProfile_DistinguishesGPT56Variants(t *testing.T) {
 		codingScore  float64
 		reasoningRaw float64
 	}{
-		{model: "claude-opus-4-8-20260713", canonical: "claude-opus-4-8", codingScore: 81.1, reasoningRaw: 53.9},
-		{model: "gpt-5.6-terra", canonical: "gpt-5.6-terra", codingScore: 63.4, reasoningRaw: 80.8},
-		{model: "gpt-5.6-sol", canonical: "gpt-5.6-sol", codingScore: 64.6, reasoningRaw: 87.5},
+		{model: "claude-opus-4-8-20260713", canonical: "claude-opus-4-8", codingScore: 69.1, reasoningRaw: 66.9},
+		{model: "gpt-5.6-terra", canonical: "gpt-5.6-terra", codingScore: 52.8, reasoningRaw: 97.1},
+		{model: "gpt-5.6-sol", canonical: "gpt-5.6-sol", codingScore: 55, reasoningRaw: 97.1},
 	}
 
 	for _, tt := range tests {
@@ -796,7 +822,7 @@ func TestResolveModelBenchmarkProfile_DistinguishesGPT56Variants(t *testing.T) {
 			if got := resolved.Profile.CategoryScores["math"]; got != tt.reasoningRaw {
 				t.Fatalf("math score = %v, want %v", got, tt.reasoningRaw)
 			}
-			if resolved.Profile.Lane != "provisional" || resolved.Profile.VerifiedAt != "2026-07-22" {
+			if resolved.Profile.Lane != "provisional" || resolved.Profile.VerifiedAt != "2026-07-25" {
 				t.Fatalf("evidence metadata = lane %q date %q", resolved.Profile.Lane, resolved.Profile.VerifiedAt)
 			}
 		})
@@ -806,11 +832,11 @@ func TestResolveModelBenchmarkProfile_DistinguishesGPT56Variants(t *testing.T) {
 	if !luna.Known || luna.Profile.CanonicalModel != "gpt-5.6-luna" {
 		t.Fatalf("Luna 应有独立基准证据: %+v", luna)
 	}
-	if len(luna.Profile.BenchmarkEvidence) != 2 ||
+	if len(luna.Profile.BenchmarkEvidence) < 2 ||
 		luna.Profile.BenchmarkEvidence[0].Benchmark != "deepswe" ||
 		luna.Profile.BenchmarkEvidence[0].RawValue != 0.671875 ||
 		luna.Profile.BenchmarkEvidence[1].Benchmark != "codexradar" ||
-		luna.Profile.BenchmarkEvidence[1].RawValue != 0.5982142857142857 {
+		luna.Profile.BenchmarkEvidence[1].RawValue != 0.5625 {
 		t.Fatalf("Luna benchmark evidence = %+v", luna.Profile.BenchmarkEvidence)
 	}
 }
@@ -863,8 +889,8 @@ func TestBuiltinModelBenchmarkProfiles_ReturnsDeepCopy(t *testing.T) {
 	}
 
 	resolved := ResolveModelBenchmarkProfile("gpt-5.6-sol")
-	if got := resolved.Profile.CategoryScores["coding"]; got != 64.6 {
-		t.Fatalf("coding score = %v, want 64.6", got)
+	if got := resolved.Profile.CategoryScores["coding"]; got != 55 {
+		t.Fatalf("coding score = %v, want 55", got)
 	}
 	if len(resolved.Profile.Sources) == 0 || resolved.Profile.Sources[0] == "mutated" {
 		t.Fatalf("Sources 未深拷贝: %v", resolved.Profile.Sources)

@@ -142,8 +142,8 @@ func TestSmartRouterAppliesCanonicalBenchmarkToDomainScore(t *testing.T) {
 	)
 	applyDomainStrength(&entry, TaskDomainReasoning)
 
-	if math.Abs(entry.ScoringCandidate.DomainStrengthScore-0.875) > 1e-9 {
-		t.Fatalf("DomainStrengthScore = %v, want 0.875", entry.ScoringCandidate.DomainStrengthScore)
+	if math.Abs(entry.ScoringCandidate.DomainStrengthScore-0.971) > 1e-9 {
+		t.Fatalf("DomainStrengthScore = %v, want 0.971", entry.ScoringCandidate.DomainStrengthScore)
 	}
 	if entry.ScoringCandidate.DomainEvidence == nil ||
 		entry.ScoringCandidate.DomainEvidence.Source != "canonical_benchmark" ||
@@ -152,7 +152,7 @@ func TestSmartRouterAppliesCanonicalBenchmarkToDomainScore(t *testing.T) {
 	}
 
 	scored := ScoreCandidate(entry.ScoringCandidate, ScoringContext{Weights: DefaultTaskWeights()[TaskClassWorker]})
-	if scored.DomainEvidence == nil || scored.DomainEvidence.CanonicalCeiling != 0.875 {
+	if scored.DomainEvidence == nil || scored.DomainEvidence.CanonicalCeiling != 0.971 {
 		t.Fatalf("scored DomainEvidence = %+v", scored.DomainEvidence)
 	}
 }
@@ -176,8 +176,8 @@ func TestSmartRouterPrefersEndpointDomainOverrideAndAppliesProviderFactor(t *tes
 		&config.UpstreamConfig{ChannelUID: "ch_sol"}, "responses", "gpt-5.6-sol", nil,
 	)
 	applyDomainStrength(&entry, TaskDomainReasoning)
-	if math.Abs(entry.ScoringCandidate.DomainStrengthScore-0.74375) > 1e-9 {
-		t.Fatalf("quality-adjusted DomainStrengthScore = %v, want 0.74375", entry.ScoringCandidate.DomainStrengthScore)
+	if math.Abs(entry.ScoringCandidate.DomainStrengthScore-0.82535) > 1e-9 {
+		t.Fatalf("quality-adjusted DomainStrengthScore = %v, want 0.82535", entry.ScoringCandidate.DomainStrengthScore)
 	}
 
 	profile.TaskDomainStrengths = map[TaskDomain]float64{TaskDomainReasoning: 0.97}

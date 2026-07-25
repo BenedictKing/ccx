@@ -3,7 +3,8 @@
 const modelPriorityPatterns: RegExp[] = [
   // Anthropic Claude
   /fable-5/i,
-  /opus-4-8/i,
+  /opus-5/i,
+  /opus-4[.-]8/i,
   /opus-4-7/i,
   /sonnet-5/i,
   /sonnet-4-7/i,
@@ -16,6 +17,9 @@ const modelPriorityPatterns: RegExp[] = [
   /haiku-4-5/i,
 
   // OpenAI GPT-5 系列
+  /gpt-5\.6-sol/i,
+  /gpt-5\.6-terra/i,
+  /gpt-5\.6-luna/i,
   /gpt-5\.6/i,
   /gpt-5\.5-pro/i,
   /gpt-5\.5/i,

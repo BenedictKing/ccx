@@ -284,6 +284,12 @@ func BuiltinAgentModelProfiles() map[string]AgentModelProfile {
 			MaxOutputTokens:     128000,
 			ReasoningEfforts:    []string{"low", "medium", "high", "xhigh", "max"},
 		},
+		"claude-opus-5*": {
+			DisplayName:         "Claude Opus 5",
+			ContextWindowTokens: 1000000,
+			MaxOutputTokens:     128000,
+			ReasoningEfforts:    []string{"low", "medium", "high", "xhigh", "max"},
+		},
 		"claude-sonnet-5*": {
 			DisplayName:         "Claude Sonnet 5",
 			ContextWindowTokens: 1000000,
