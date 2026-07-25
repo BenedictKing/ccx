@@ -84,6 +84,9 @@
             </div>
             <div class="text-caption text-medium-emphasis">
               {{ t('subscription.newApi.quota') }}: {{ account.balance }}
+              <template v-if="account.accessTokenMasked">
+                · {{ t('subscription.newApi.accessToken') }}: {{ account.accessTokenMasked }}
+              </template>
             </div>
           </div>
         </div>

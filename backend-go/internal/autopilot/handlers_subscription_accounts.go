@@ -20,13 +20,14 @@ type NewApiAccountCreateRequest struct {
 
 // NewApiAccountItem 账号列表响应单条（脱敏）。
 type NewApiAccountItem struct {
-	AccountUID    string    `json:"accountUid"`
-	UserID        string    `json:"userId,omitempty"`
-	DisplayName   string    `json:"displayName,omitempty"`
-	Balance       float64   `json:"balance,omitempty"`
-	Status        string    `json:"status,omitempty"`
-	LastCheckedAt time.Time `json:"lastCheckedAt,omitempty"`
-	CreatedAt     time.Time `json:"createdAt"`
+	AccountUID        string    `json:"accountUid"`
+	UserID            string    `json:"userId,omitempty"`
+	DisplayName       string    `json:"displayName,omitempty"`
+	Balance           float64   `json:"balance,omitempty"`
+	Status            string    `json:"status,omitempty"`
+	AccessTokenMasked string    `json:"accessTokenMasked,omitempty"`
+	LastCheckedAt     time.Time `json:"lastCheckedAt,omitempty"`
+	CreatedAt         time.Time `json:"createdAt"`
 }
 
 // NewApiAccountListResponse GET /api/subscriptions/:uid/accounts 响应体。
@@ -90,13 +91,14 @@ func handleAddSubscriptionAccount(deps *NewApiRouteDeps) gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusCreated, NewApiAccountItem{
-			AccountUID:    account.AccountUID,
-			UserID:        account.UserID,
-			DisplayName:   account.DisplayName,
-			Balance:       account.Balance,
-			Status:        account.Status,
-			LastCheckedAt: account.LastCheckedAt,
-			CreatedAt:     account.CreatedAt,
+			AccountUID:        account.AccountUID,
+			UserID:            account.UserID,
+			DisplayName:       account.DisplayName,
+			Balance:           account.Balance,
+			Status:            account.Status,
+			AccessTokenMasked: maskAccessToken(account.AccessToken),
+			LastCheckedAt:     account.LastCheckedAt,
+			CreatedAt:         account.CreatedAt,
 		})
 	}
 }
@@ -119,13 +121,14 @@ func handleListSubscriptionAccounts(deps *NewApiRouteDeps) gin.HandlerFunc {
 		items := make([]NewApiAccountItem, 0, len(profile.Accounts))
 		for _, acc := range profile.Accounts {
 			items = append(items, NewApiAccountItem{
-				AccountUID:    acc.AccountUID,
-				UserID:        acc.UserID,
-				DisplayName:   acc.DisplayName,
-				Balance:       acc.Balance,
-				Status:        acc.Status,
-				LastCheckedAt: acc.LastCheckedAt,
-				CreatedAt:     acc.CreatedAt,
+				AccountUID:        acc.AccountUID,
+				UserID:            acc.UserID,
+				DisplayName:       acc.DisplayName,
+				Balance:           acc.Balance,
+				Status:            acc.Status,
+				AccessTokenMasked: maskAccessToken(acc.AccessToken),
+				LastCheckedAt:     acc.LastCheckedAt,
+				CreatedAt:         acc.CreatedAt,
 			})
 		}
 
@@ -207,13 +210,14 @@ func handleRefreshSubscriptionAccount(deps *NewApiRouteDeps) gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusOK, NewApiAccountItem{
-			AccountUID:    account.AccountUID,
-			UserID:        account.UserID,
-			DisplayName:   account.DisplayName,
-			Balance:       account.Balance,
-			Status:        account.Status,
-			LastCheckedAt: account.LastCheckedAt,
-			CreatedAt:     account.CreatedAt,
+			AccountUID:        account.AccountUID,
+			UserID:            account.UserID,
+			DisplayName:       account.DisplayName,
+			Balance:           account.Balance,
+			Status:            account.Status,
+			AccessTokenMasked: maskAccessToken(account.AccessToken),
+			LastCheckedAt:     account.LastCheckedAt,
+			CreatedAt:         account.CreatedAt,
 		})
 	}
 }

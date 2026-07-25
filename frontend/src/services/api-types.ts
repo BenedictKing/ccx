@@ -1246,6 +1246,7 @@ export interface NewApiAccountItem {
   displayName?: string
   balance?: number
   status?: string
+  accessTokenMasked?: string
   lastCheckedAt?: string
   createdAt: string
 }
