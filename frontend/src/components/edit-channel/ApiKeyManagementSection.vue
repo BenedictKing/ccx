@@ -280,7 +280,10 @@
                 </v-list-item-title>
                 <v-list-item-subtitle v-if="row.volcengineCredential" class="mt-1 text-caption">
                   <v-icon size="12" class="mr-1">mdi-chart-timeline-variant</v-icon>
-                  {{ volcengineUsageSummary(row.volcengineCredential) }}
+                  <template v-for="(part, idx) in volcengineUsageSummaryParts(row.volcengineCredential)" :key="part.labelKey || idx">
+                    <span v-if="idx > 0" class="text-medium-emphasis"> · </span>
+                    <span :class="part.colorClass || 'text-medium-emphasis'">{{ part.text }}</span>
+                  </template>
                 </v-list-item-subtitle>
                 <v-list-item-subtitle v-if="row.kimiCredential" class="mt-1 text-caption">
                   <v-icon size="12" class="mr-1">mdi-chart-donut</v-icon>
@@ -2023,14 +2026,23 @@ const volcengineUsageWindows = (usage?: VolcenginePlanUsage): VolcengineUsageCel
   ].filter((cell): cell is VolcengineUsageCell => cell !== null)
 }
 
-const volcengineUsageSummary = (credential: ManagedAccountCredential): string => {
-  if (!credential.hasVolcengineAccessKey) return t('volcengineAccessKey.notConfigured')
-  if (credential.volcenginePlanUsage?.error) return credential.volcenginePlanUsage.error
+// 折叠摘要按窗口拆分为独立片段，复用 volcengineUsageColor 的阈值高亮低余量窗口。
+const volcengineUsageSummaryParts = (credential: ManagedAccountCredential): VolcengineUsageCell[] => {
+  if (!credential.hasVolcengineAccessKey) {
+    return [{ labelKey: '', text: t('volcengineAccessKey.notConfigured'), colorClass: '' }]
+  }
+  if (credential.volcenginePlanUsage?.error) {
+    return [{ labelKey: '', text: credential.volcenginePlanUsage.error, colorClass: '' }]
+  }
   const windows = volcengineUsageWindows(credential.volcenginePlanUsage)
-  if (!windows.length) return t('volcengineAccessKey.noUsageData')
-  return windows
-    .map(window => `${t(window.labelKey)} ${window.text.split(' · ')[0]}`)
-    .join(' · ')
+  if (!windows.length) {
+    return [{ labelKey: '', text: t('volcengineAccessKey.noUsageData'), colorClass: '' }]
+  }
+  return windows.map(window => ({
+    labelKey: window.labelKey,
+    text: `${t(window.labelKey)} ${window.text.split(' · ')[0]}`,
+    colorClass: window.colorClass,
+  }))
 }
 
 const formatVolcengineTime = (iso: string): string => {
