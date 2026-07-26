@@ -44,6 +44,17 @@ type usageCounter struct {
 	lastRequestAt time.Time
 }
 
+// ── RecordRequest 上下文（由信号调用方提供，供日志排障用）──
+
+// RequestRecordMeta 承载一次上游请求的可读上下文，仅用于日志展示，不参与计量逻辑。
+type RequestRecordMeta struct {
+	ChannelName string // 渠道名（upstream.Name），可能为空（如渠道已被删除）
+	ServiceType string // 接口类型：messages/chat/responses/gemini/images/vectors
+	StatusCode  int    // 上游响应状态码
+	IsStream    bool   // 是否为流式请求
+	Reason      string // 429 细分原因等（可能为空）
+}
+
 // ── UsageMeter 主体 ──
 
 // UsageMeter 本地计量兜底，为 endpoint 生成 UsageWindow 数据。
@@ -79,9 +90,11 @@ func NewUsageMeter(cfg UsageMeterConfig, buckets BucketReader) *UsageMeter {
 }
 
 // RecordRequest 记录一次请求到 endpoint 的计量器。
-// tokens 为该次请求的 token 消耗（传 0 表示仅记录请求次数）。
+// tokens 为该次请求的 token 消耗；代理层当前无法精确获取上游 token 用量，
+// 调用方恒传 0，计量逻辑仅按请求次数累加（不使用 tokens 值）。
+// meta 为可读上下文（渠道名/接口类型/状态码等），仅用于日志展示。
 // 并发安全。
-func (m *UsageMeter) RecordRequest(endpointUID string, tokens int64) {
+func (m *UsageMeter) RecordRequest(endpointUID string, tokens int64, meta RequestRecordMeta) {
 	if endpointUID == "" {
 		return
 	}
@@ -106,7 +119,22 @@ func (m *UsageMeter) RecordRequest(endpointUID string, tokens int64) {
 	}
 
 	if !m.quiet {
-		log.Printf("[UsageMeter-Record] endpoint=%s tokens=%d", endpointUID, tokens)
+		channelName := meta.ChannelName
+		if channelName == "" {
+			channelName = "-"
+		}
+		serviceType := meta.ServiceType
+		if serviceType == "" {
+			serviceType = "-"
+		}
+		reason := meta.Reason
+		if reason == "" {
+			reason = "-"
+		}
+		// tokens 当前恒为 0（未接入真实 usage），此处仍打印以保留字段兼容性，
+		// 但不作为用量依据；请以 status/reason 判断请求结果。
+		log.Printf("[UsageMeter-Record] endpoint=%s channel=%s service=%s status=%d stream=%t reason=%s tokens=%d",
+			endpointUID, channelName, serviceType, meta.StatusCode, meta.IsStream, reason, tokens)
 	}
 }
 

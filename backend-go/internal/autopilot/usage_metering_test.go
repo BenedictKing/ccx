@@ -35,9 +35,9 @@ func (m *mockBucketReader) addBuckets(endpointUID string, buckets []*TimeBucketM
 func TestUsageMeter_RecordRequest(t *testing.T) {
 	m := NewUsageMeter(UsageMeterConfig{QuietLogs: true}, nil)
 
-	m.RecordRequest("ep-001", 100)
-	m.RecordRequest("ep-001", 200)
-	m.RecordRequest("ep-002", 50)
+	m.RecordRequest("ep-001", 100, RequestRecordMeta{})
+	m.RecordRequest("ep-001", 200, RequestRecordMeta{})
+	m.RecordRequest("ep-002", 50, RequestRecordMeta{})
 
 	if m.EndpointCount() != 2 {
 		t.Fatalf("EndpointCount = %d, 期望 2", m.EndpointCount())
@@ -62,7 +62,7 @@ func TestUsageMeter_RecordRequest(t *testing.T) {
 
 func TestUsageMeter_RecordRequestEmptyUID(t *testing.T) {
 	m := NewUsageMeter(UsageMeterConfig{QuietLogs: true}, nil)
-	m.RecordRequest("", 0) // 空 UID 应被忽略
+	m.RecordRequest("", 0, RequestRecordMeta{}) // 空 UID 应被忽略
 	if m.EndpointCount() != 0 {
 		t.Errorf("空 UID 后 EndpointCount = %d, 期望 0", m.EndpointCount())
 	}
@@ -203,7 +203,7 @@ func TestUsageMeter_WindowResetTimes(t *testing.T) {
 
 func TestUsageMeter_Clear(t *testing.T) {
 	m := NewUsageMeter(UsageMeterConfig{QuietLogs: true}, nil)
-	m.RecordRequest("ep-001", 10)
+	m.RecordRequest("ep-001", 10, RequestRecordMeta{})
 	if m.EndpointCount() != 1 {
 		t.Fatalf("Clear 前 EndpointCount = %d", m.EndpointCount())
 	}
@@ -334,7 +334,7 @@ func TestUsageMeter_ConcurrentSafety(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		go func() {
 			defer func() { done <- struct{}{} }()
-			m.RecordRequest("ep-concurrent", 10)
+			m.RecordRequest("ep-concurrent", 10, RequestRecordMeta{})
 		}()
 	}
 	for i := 0; i < 10; i++ {
@@ -365,9 +365,9 @@ func TestUsageMeter_FallbackToCounter(t *testing.T) {
 	}
 	m := NewUsageMeter(cfg, reader)
 
-	m.RecordRequest("ep-fallback", 0)
-	m.RecordRequest("ep-fallback", 0)
-	m.RecordRequest("ep-fallback", 0)
+	m.RecordRequest("ep-fallback", 0, RequestRecordMeta{})
+	m.RecordRequest("ep-fallback", 0, RequestRecordMeta{})
+	m.RecordRequest("ep-fallback", 0, RequestRecordMeta{})
 
 	windows := m.ComputeWindows("ep-fallback")
 	if len(windows) != 1 {

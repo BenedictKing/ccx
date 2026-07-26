@@ -276,12 +276,15 @@ func (m *Manager) TimeBucketStore() *TimeBucketStore {
 
 // ObserveRateLimitSignal 供信号回调调用：喂限速发现器和时间桶。
 // 并发安全，不修改调度链路。
+// channelName 为渠道可读名（upstream.Name），仅用于日志展示，可能为空。
 // reason 携带 429 细分原因（非 429 传空串），由 upstream_failover.go
 // 读完 body 分类后传入，确保同一次非 2xx 响应只通知一次 Discoverer。
 func (m *Manager) ObserveRateLimitSignal(
 	endpointUID string,
 	channelID int,
 	metricsKey string,
+	serviceType string,
+	channelName string,
 	isStream bool,
 	latencyMs int64,
 	headers http.Header,
@@ -294,9 +297,15 @@ func (m *Manager) ObserveRateLimitSignal(
 	now := time.Now()
 
 	// 记录请求到 UsageMeter（本地计量兜底，Unit=requests）
-	// token 数量在代理层难以精确获取，暂按请求数计量
+	// token 数量在代理层难以精确获取，暂按请求数计量（tokens 恒传 0）
 	if m.usageMeter != nil {
-		m.usageMeter.RecordRequest(endpointUID, 0)
+		m.usageMeter.RecordRequest(endpointUID, 0, RequestRecordMeta{
+			ChannelName: channelName,
+			ServiceType: serviceType,
+			StatusCode:  statusCode,
+			IsStream:    isStream,
+			Reason:      reason,
+		})
 	}
 
 	// 构造限速信号喂给 Discoverer

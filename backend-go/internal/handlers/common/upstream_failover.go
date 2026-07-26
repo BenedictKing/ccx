@@ -758,7 +758,7 @@ func TryUpstreamWithAllKeys(
 					signalReason = string(autopilot.RateLimitReasonAccountRateLimitExceeded)
 				}
 				ratelimit.NotifySignal(
-					signalEndpointUID, metricsKey, apiType, isStream,
+					signalEndpointUID, metricsKey, apiType, upstream.Name, isStream,
 					time.Since(attemptStartedAt).Milliseconds(),
 					resp.Header, resp.StatusCode, signalReason,
 				)
@@ -916,7 +916,7 @@ func TryUpstreamWithAllKeys(
 
 			// 成功响应（2xx）：通知 Discoverer（header/success 路径），reason 为空
 			ratelimit.NotifySignal(
-				signalEndpointUID, metricsKey, apiType, isStream,
+				signalEndpointUID, metricsKey, apiType, upstream.Name, isStream,
 				time.Since(attemptStartedAt).Milliseconds(),
 				resp.Header, resp.StatusCode, "",
 			)

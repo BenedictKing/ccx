@@ -616,8 +616,8 @@ func main() {
 				// endpointUID 和 metricsKey 由 upstream_failover.go 在请求上下文中计算后传入
 				// reason 携带 429 细分原因（如 account_rate_limit_exceeded），由
 				// upstream_failover.go 读完 body 分类后传入，确保同一次 429 只通知一次
-				ratelimit.SetUpstreamSignalCallback(func(endpointUID, metricsKey, serviceType string, isStream bool, latencyMs int64, headers http.Header, statusCode int, reason string) {
-					autopilotManager.ObserveRateLimitSignal(endpointUID, 0, metricsKey, isStream, latencyMs, headers, statusCode, reason)
+				ratelimit.SetUpstreamSignalCallback(func(endpointUID, metricsKey, serviceType, channelName string, isStream bool, latencyMs int64, headers http.Header, statusCode int, reason string) {
+					autopilotManager.ObserveRateLimitSignal(endpointUID, 0, metricsKey, serviceType, channelName, isStream, latencyMs, headers, statusCode, reason)
 					if statusCode == http.StatusTooManyRequests && reason == string(autopilot.RateLimitReasonAccountRateLimitExceeded) {
 						autopilotManager.RequestRateLimitApply()
 					}

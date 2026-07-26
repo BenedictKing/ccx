@@ -203,7 +203,7 @@ func TestObserveRateLimitSignal_FeedsDiscovererAndBuckets(t *testing.T) {
 	headers.Set("anthropic-ratelimit-requests-remaining", "40")
 	headers.Set("anthropic-ratelimit-requests-reset", "2026-01-01T00:01:00Z")
 
-	mgr.ObserveRateLimitSignal(endpointUID, 1, metricsKey, false, 200, headers, http.StatusOK, "")
+	mgr.ObserveRateLimitSignal(endpointUID, 1, metricsKey, "messages", "test-channel", false, 200, headers, http.StatusOK, "")
 
 	// 验证 RateLimitDiscoverer 收到信号
 	state := mgr.rateLimitDiscoverer.GetState(endpointUID)
@@ -247,7 +247,7 @@ func TestObserveRateLimitSignal_429FeedsDiscoverer(t *testing.T) {
 	headers := http.Header{}
 	headers.Set("Retry-After", "30")
 
-	mgr.ObserveRateLimitSignal(endpointUID, 1, "mk-429", false, 100, headers, http.StatusTooManyRequests, "")
+	mgr.ObserveRateLimitSignal(endpointUID, 1, "mk-429", "messages", "test-channel", false, 100, headers, http.StatusTooManyRequests, "")
 
 	// 验证发现器收到 429 信号
 	state := mgr.rateLimitDiscoverer.GetState(endpointUID)
@@ -290,7 +290,7 @@ func TestObserveRateLimitSignal_Non2xxNon429RecordsBucketOnly(t *testing.T) {
 	endpointUID := "ep-test-500"
 	headers := http.Header{}
 
-	mgr.ObserveRateLimitSignal(endpointUID, 1, "mk-500", false, 50, headers, http.StatusInternalServerError, "")
+	mgr.ObserveRateLimitSignal(endpointUID, 1, "mk-500", "messages", "test-channel", false, 50, headers, http.StatusInternalServerError, "")
 
 	// 发现器不应收到信号
 	state := mgr.rateLimitDiscoverer.GetState(endpointUID)
@@ -317,7 +317,7 @@ func TestObserveRateLimitSignal_EmptyEndpointUIDNoop(t *testing.T) {
 	}
 
 	headers := http.Header{}
-	mgr.ObserveRateLimitSignal("", 1, "mk", false, 100, headers, http.StatusOK, "")
+	mgr.ObserveRateLimitSignal("", 1, "mk", "messages", "test-channel", false, 100, headers, http.StatusOK, "")
 
 	if mgr.rateLimitDiscoverer.StateCount() != 0 {
 		t.Error("空 endpointUID 不应触发发现器")
@@ -336,5 +336,5 @@ func TestObserveRateLimitSignal_NilHeadersNoop(t *testing.T) {
 	}
 
 	// nil headers 不应 panic
-	mgr.ObserveRateLimitSignal("ep", 1, "mk", false, 100, nil, http.StatusOK, "")
+	mgr.ObserveRateLimitSignal("ep", 1, "mk", "messages", "test-channel", false, 100, nil, http.StatusOK, "")
 }
