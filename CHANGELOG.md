@@ -2,6 +2,7 @@
 
 ### 新增
 
+- **订阅中心与密钥管理体验** - 订阅中心改为渠道中心式 Provider 快捷接入，支持一键添加 GitHub Copilot、new-api 与手动订阅；三家赞助商展示真实 Logo/徽标并移除 Unity2.ai；API Key 支持手动暂停/恢复，模型覆盖按 Key 集合归组，火山折叠摘要及 Kimi/Compshare/MiniMax 余量改为统一五档阈值着色，Kimi 同时展示订阅总用量、赠送额度和加油包余额
 - **Autopilot Trace v2 契约与脱敏边界** - 新增 TraceDetailV2/TraceSummary/SchedulerDecisionSummary/EndpointAttemptSummary DTO，ComparisonStatus 三态枚举（matched/mismatched/uncompared）替代裸 bool，SanitizeForPersistence/SanitizeForResponse 双边界脱敏，crypto/rand 碰撞安全 TraceUIDv2，策略指纹（排除比例/seed），稳定哈希分桶，v1→v2 读适配器；新增 40+ L1 表驱动测试
 - **SQLite v6 迁移、持久化与清理** - autopilot schema v5→v6 幂等迁移；trace 表新增 schema_version/trace_revision/request_correlation_id/release_id/policy_fingerprint/persistence_class/details_json 列；窗口表重建主键增加 release/policy/cohort 维度和 compared/matched/mismatch/uncompared 计数；safety event 增加 release/policy 字段；in-flight 索引和异常提升落盘；有界异步 writer（512 队列/128 终态预留/64KiB 上限/250ms deadline/1s drain）；7 天 trace + 30 天窗口清理策略
 - **Trace 关联接入请求生命周期** - 入口生成 requestCorrelationId 写入 gin context；选择渠道后写入 AutopilotTraceUID；ChannelLog 新增 RequestCorrelationID/AutopilotTraceUID 字段和 ChannelLogOption；BuildPlan 写入 dry-run trace（必落盘）；NormalizeSelectionTrace 将 SelectionTrace 规范化为安全摘要并 AttachSchedulerDecision；AppendEndpointAttempt 有序/容量受限/乱序合并的 attempt 摘要
@@ -9,13 +10,66 @@
 - **受控发布与自动降级** - active 模式加入配置枚举/归一化/IsAutopilotActive；RolloutPercent/ControlPercent/ReleaseID/RolloutSeed 配置字段和 validateRollout 校验；ReleaseController 集中管理状态迁移（逐级晋升/降级随时允许）、稳定分桶、EvaluateAndApplyRegression 三窗口回归降级、SafetyOverride 安全覆盖；接入 SmartRouter 请求路径（入口冻结 RoutingReleaseSnapshot）；release/policy/cohort 隔离聚合
 - **只读 Trace API 与前端详情** - GET /api/autopilot/traces/:traceUid 详情端点（404/503/partial 契约、2s 查询 deadline）；列表 API 改为 TraceSummary 输出，支持 release/cohort/mode 过滤和游标分页；统计新增三态比较计数；前端 AutopilotTraceDetailDialog 决策→Scheduler→尝试→终态时间线；AutopilotTraceTable 适配 TraceSummary；ChannelLogsDialog 跳转入口
 - **分层测试（L1-L5）** - L1 纯函数 40+；L2 SmartRouter+TraceStore 集成 8；L3 SQLite 生命周期 12（重启还原/坏 JSON/过期清理/迁移幂等/脱敏）；L4 HTTP 契约 9（列表/详情/统计/404/脱敏/分页）；L5 真实上游 smoke 2（默认 t.Skip）；SSE golden 回归 6（帧顺序/trace 不改输出/取消/脱敏）
+- **Autopilot 模型与思考强度联合路由** - 自动路由的决策单元从「模型」提升为「模型 + 思考强度」的原子组合，解决模型被改写为异构上游后仍沿用客户端原档位、落在从未评测过的能力点上的问题。新增 `ResolvedRouteTarget` 作为贯穿全链路的唯一决策载体；`NormalizeEffortLevel` 统一证据侧/能力侧/请求侧的厂商档位命名，`IsUnpinnedEffort` 使 `default` 类未固定档位证据只能作降级 fallback 而非冒充精确匹配；`rankEligibleModels` 按 `SupportedEffortLevels × PerTaskClass` 展开 model×effort 候选，`betterRankedModel` 加入「够用即止」平手规则防档位膨胀，`filterEffortFloor` 按任务类下界过滤且全被过滤时 fail-open；`upstream_failover` 原子改写 model + 思考参数（任一步失败整体放弃），含 `adaptive_only` 守卫与 Gemini `thinkingConfig.thinkingLevel` 原生注入路径；`ManualRoutingIntent` 新增可选 `Effort` 字段（未知值校验拒绝，客户端显式 off/none 优先于意图锁定）；`ChannelLog` 新增 `effortDecisionSource`/`effortClampedByClient`（仅在客户端上限实际生效时置位）与 Trace `effort` 维度；`PreferAutoOverManual` 开关支持手工映射优先级反转（默认关闭，可零代码回滚），新增 `GET /health-center/profile-coverage` 只读画像覆盖率诊断作为手工表退役前置门槛
+- **火山 Agent Plan AFP 成本感知路由** - 新增火山 AFP 政策目录与纯计算器、套餐作用域解析与可比较性判断、AFP 请求快照与候选级成本证据；AFP 折扣接入 SavingsScore 参与评分并写入 trace，compshare 单次减扣同样纳入；新增 `frontierRoutingEnabled` / `afpCostRoutingEnabled` 两个正交开关，AFP 成本路由默认开启
+- **确定性 Pareto 分层与三倾向候选阶梯** - 候选排序改为确定性 Pareto 分层，输出成本/质量/均衡三倾向阶梯；模型候选排序重排并接入 CostPreference
+- **渠道预检异步化与后台 discovery 断点续传** - 渠道预检不再阻塞添加流程，后台 discovery 支持断点续传
+- **多协议自动发现补全** - 补全多协议自动发现并自动启用已发现协议路由；自动发现改从 `apiKeyConfigs` 取密钥；协议探测改为逐模型验证；快速探活改为多模型候选策略（含回退测试）；自定义协议渠道构造统一
+- **发现 RPM 应用与账号级 429 scoped cooldown** - 接线自动发现出的 RPM 到运行态限速，429 冷却收敛到账号级作用域
+- **连接耗时采集驱动 SpeedTier** - 新增连接建立耗时指标并参与速度分级
+- **弃用参数自动发现与记忆落盘** - 上游不支持的参数按渠道-Key-模型维度自动发现并剥离，记忆落盘后重启免重新探测
+- **注册 Claude Opus 5** - 新增 Claude Opus 5 模型注册并支持 4.8 点号别名
+- **模型能力基准数据源扩展** - 接入 Artificial Analysis 数据源并纳入 opus-5；benchlm 改用官方 `models.json` 取代对比页抓取；benchmark-update 增加页面变更检测缓存层；补全 DEEPSWE/BENCHLM/DRADAR 白名单 CCX 模型映射与 kimi-k3、grok-4.5、muse-spark-1.1 等模型，DEEPSWE cohort 扩展至 17 模型；刷新 model registry 至 20260726
+- **trace 与账号信息可读性** - trace 候选渠道展示渠道名与 Key 掩码；账号列表返回脱敏 access token；`UsageMeter-Record` 日志补充渠道/接口/状态上下文
+- **auto 模式 SLO 回归保护可配置** - SLO 回归自动降级改为开关控制
+- **模型清单展示改进** - 共有/协议专属模型少于 10 个时直接展开列出，其余默认两行、仅实际溢出时显示展开
 - **火山套餐 Key 保活 per-key 路由与共享探针** - `config.BaseURLsForKey` 让已绑定端点的 Key 只在自己端点探测，不参与渠道级 BaseURL 笛卡尔积；新增 `internal/upstreamprobe` 共享火山 Agent/Coding Plan 数据面探针（autopilot 验证与 healthcheck 保活共用，避免请求特征漂移）；`L1Response.RealCallVerified` 标记真实调用，火山 L1 成功后同周期跳过等价 L2 避免重复消耗额度；L2 探针副本覆盖绑定 BaseURL，recordFailure 归因到 Key 实际绑定端点
 
 ### 修复
 
+- **effort 注入形态误判与三处死代码** - 自动托管渠道被 `RuntimeUpstreamForAutoManagedProvider` 清空 `ReasoningParamStyle` 后，`effortInjectionStyle` 一律回落 `reasoning` 对象形式，导致 Claude messages 渠道被写入 `reasoning.effort`、chat 渠道被写成对象，上游均不识别而静默丢弃 effort；改为按渠道类型推导原生形态（messages→`thinking`，chat→`reasoning_effort`）。同时修复三处「代码存在但调用链不通」的死代码：`CapabilityFloor.EffortFloor` 从未被赋值致 `filterEffortFloor` 恒直接返回，改为在 `rankEligibleModels` 内按 `ReasoningEffortConfig.PerTaskClass` 推导；`resolveRelativeBenchmarkEvidence` 的 `targetEffort` 恒传空串致 `(domain, effort)` 精确匹配与置信度折算永不执行，新增 `ResolveDomainStrengthForEffort` 并在候选展开处按变体实际档位取证据；`extractClientEffort` 协议无关全字段扫描与按渠道分支的 `ExtractClientEffortExplicit` 对跨协议字段判定相反，导致手动意图 effort 被静默屏蔽而日志记录未钳位，删除前者统一走后者。另补齐 messages 分支的 `thinking.effort` 提取（此前 `type=enabled` 只返回 `enabled` 占位而非真实档位）
+- **精确模型命中绕过 effort 决策** - `ResolveModel` 的精确/等价模型命中路径直接返回，从未调用 `resolveEffortVariants`，导致请求模型能在渠道内精确匹配时（最常见路径）手动意图锁定档位与自动展开全部失效，仅跨模型替换才走 effort 逻辑；抽出 `resolveSingleProfileEffort` 在两处分支补齐，语义与排序路径一致（意图锁定优先，否则按配置展开取最低档）
+- **effort 钳位语义与 Gemini 档位提取** - 修正 effort 钳位语义并在 failover 时重置标记；Gemini effort 提取取真实档位而非占位值，`targetByUID` 写入条件统一；`ResolvedRouteTarget` 定义与 `upstream_failover` 旧 API 保留兼容 fallback
+- **火山套餐 Key 识别与恢复** - 优先识别火山 Agent Plan 的 Kimi K3；按火山额度重置时间恢复被拉黑的 Key；`ListArkAgentPlanModel` 签名 scope 从 `ark_stg` 改回 `ark`
+- **渠道列表与诊断展示错位** - 渠道列表第二个渠道不再错显首个渠道的请求数与缓存率；渠道排序不再随 Key 拉黑变动；重新发现协议后同步刷新渠道列表；自定义渠道协议发现结果正常展示；路由过滤原因与诊断面板改用渠道名和热门模型替代 `ch_xxx` 内部 ID；Key 与健康状态同步修复
+- **驾驶舱空白** - 意图列表 nil slice 被序列化成 `null` 导致驾驶舱整页空白
+- **system 角色归一化破坏缓存边界** - providers 归一化 system 角色时保留 `cache_control` block 边界，避免打断上游 prompt 缓存
+- **billing header 域名判断忽略端口号** - 带端口的自建地址不再被误判为非官方域名，新建渠道默认值跟随 baseUrl
+- **保活验证失败无痕迹** - healthcheck 保活验证失败写入渠道日志
+- **连接延迟慢速判定误报** - 样本数不足 20 时 P95 退化为最大值导致误判慢速，新增最小样本门槛
+- **new-api 地址与图标注册** - new-api 地址自动剥离控制台路径；补齐 `mdi-github`/`mdi-plus-circle`/`mdiPause`/`timer-alert-outline`/信息提示轮廓等缺失图标注册；简化延迟告警芯片文案
+- **基准与预置数据修正** - litellm 映射补齐 26 个模型定价并去重 Kimi 会员条目；AA evidence 补 `taskCount` 修复 TS 类型校验；presetstore 支持多量纲基准原始值；区分 kimi-k3 的 256k/1m 变体上下文；清理渠道配置中过时的 grok 精确模型映射
+- **RoutingReleaseSnapshot 字段缺失** - 补全 `RolloutSeed`/`ControlPercent`，避免灰度分桶快照失真
 - **火山套餐 Key 跨套餐误探测** - 混合套餐渠道中 Agent Plan Key 不再被首地址 `/api/coding` 误打导致 auth_failed 误拉黑；火山官方套餐入口不再调用通用 `/v1/models`（套餐 Key 无法通过该接口探测），改用专用探针 + 内置 manifest 模型清单；400/404/500/网络错误不升级为认证失败
 - **渠道全部 Key 禁用时无恢复入口** - `hasOnlyDisabledChannelApiKeys` 判定（可用=0 且禁用>0）下渠道行直接显示恢复按钮，一次点击恢复全部禁用 Key，无需先暂停；active 渠道跳过冗余 `setStatus(active)`，直接 resume 并刷新
 - **非官方域名默认剔除 billing header** - `stripBillingHeader` 未显式设置时按渠道 BaseURL 推断默认值：仅当渠道所有地址均为 Anthropic 官方 API（`api.anthropic.com`）时保留计费 header，其余第三方渠道默认剔除；此前默认关闭，导致 Claude Code 每次请求变化的 `cch=` 计费 nonce 打穿第三方上游的 prompt 缓存前缀，造成缓存命中率异常下降
+
+### 重构
+
+- **订阅中心精简** - 移除分区标题、能力标签与手动添加入口，补齐快捷接入文案；赞助商置顶、new-api 置底，GitHub Copilot 卡移到倒数第二位
+- **移除渠道菜单的试用意图入口**
+- **清理火山套餐历史分支** - 移除 `volcenginePlanModelsHost` 常量与 `endpointFor` 的 `ark_stg` 分支
+
+### 优化
+
+- **展示格式统一** - 统一所有订阅套餐余量展示格式并补全火山"剩余"前缀；组合展示统一为单空格分隔；渠道日志不再展示调度摘要原始串
+- **后端代码质量** - 清理 Go lint 问题，gofmt 对齐结构体字段与注释缩进
+
+### 测试
+
+- **Autopilot 分层测试补齐** - L2 SmartRouter + TraceStore 集成、L3 SQLite 生命周期、L4 HTTP 契约、L5 真实上游 smoke 与 SSE golden 回归
+- **回归与稳定性** - 快速探活多模型候选回退测试；healthcheck `per_key_test` flaky 记录断言修复
+- **基准断言同步** - 同步模型能力基准断言，且不再硬编码 registry 刷新日期与分值
+
+### 文档
+
+- **Autopilot 计划与设计** - 新增 trace 灰度实施计划、火山 AFP 感知路由计划、火山套餐 Key 保活恢复计划、渠道异步发现方案，并补充 model+effort 联合决策现状与进度
+- **配置与基准说明** - 火山 provider 模板补充 AFP 路由说明；`make help` 补充 `ARTIFICIAL_ANALYSIS_API_KEY` 用法；量化 Kimi HighSpeed 配额消耗为 3 倍；修正 `canonicalModelToPattern` 的 kimi 分支注释
+
+### 其他
+
+- **停止跟踪 upstream-check 运行时状态文件**
+- **重新生成 model registry 产物**
 
 ## [v3.0.0] - 2026-07-23
 
