@@ -1124,6 +1124,24 @@ func (m *Manager) evaluateAutoSafety(now time.Time) {
 	if !report.ShouldRollback {
 		return
 	}
+	routingCfg := m.cfgManager.GetAutopilotRouting()
+	if !routingCfg.AutoSafetyDowngrade {
+		// 仅监控：记录警告和安全事件，但不切换模式
+		event := AutoSafetyEvent{
+			EventUID:  fmt.Sprintf("monitor_%d", now.UnixMilli()),
+			FromMode:  config.AutopilotModeAuto,
+			ToMode:    "monitor_only",
+			Reasons:   report.Reasons,
+			Observed:  report.Observed,
+			Baseline:  report.Baseline,
+			CreatedAt: now.UTC(),
+		}
+		if err := m.traceStore.RecordAutoSafetyEvent(event); err != nil {
+			log.Printf("[Autopilot-AutoSafety] 警告: 监控事件落盘失败: %v", err)
+		}
+		log.Printf("[Autopilot-AutoSafety] 检测到连续 SLO 回归（监控模式，不降级）: reasons=%v", report.Reasons)
+		return
+	}
 	if err := m.cfgManager.SetAutopilotRoutingMode(config.AutopilotModeAssist); err != nil {
 		log.Printf("[Autopilot-AutoSafety] 警告: 自动降级到 assist 失败: %v", err)
 		return

@@ -165,7 +165,7 @@ func TestManagerAutoSafetyDowngradesToAssist(t *testing.T) {
 
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "config.json")
-	if err := os.WriteFile(configPath, []byte(`{}`), 0o600); err != nil {
+	if err := os.WriteFile(configPath, []byte(`{"autopilot":{"autoSafetyDowngrade":true}}`), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 	cfgManager, err := config.NewConfigManager(configPath, "")
@@ -183,5 +183,47 @@ func TestManagerAutoSafetyDowngradesToAssist(t *testing.T) {
 	lastEvent, err := store.LastAutoSafetyEvent()
 	if err != nil || lastEvent == nil || lastEvent.FromMode != "auto" || lastEvent.ToMode != "assist" {
 		t.Fatalf("last safety event = %+v, err=%v", lastEvent, err)
+	}
+}
+
+func TestManagerAutoSafetyMonitorOnlyWhenDowngradeDisabled(t *testing.T) {
+	store := newRoutingReadinessTestStore(t)
+	now := time.Date(2026, 7, 17, 12, 0, 0, 0, time.UTC)
+	baselineStart := now.Add(-48 * time.Hour)
+	for i := 0; i < 500; i++ {
+		recordReadinessOutcome(t, store, fmt.Sprintf("rt_mgr_mon_%03d", i), RoutingModeAssist,
+			baselineStart.Add(time.Duration(i%96)*routingWindowDuration+time.Minute), true, false, false, 800, 400)
+	}
+	completedEnd := now.Truncate(routingWindowDuration)
+	for window := 0; window < autoRollbackWindows; window++ {
+		windowStart := completedEnd.Add(-time.Duration(autoRollbackWindows-window) * routingWindowDuration)
+		for sample := 0; sample < int(autoRollbackMinWindowSamples); sample++ {
+			recordReadinessOutcome(t, store, fmt.Sprintf("rt_mgr_mon_auto_%d_%d", window, sample), RoutingModeAuto,
+				windowStart.Add(time.Duration(sample)*time.Second), false, true, true, 10000, 5000)
+		}
+	}
+
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.json")
+	if err := os.WriteFile(configPath, []byte(`{}`), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	cfgManager, err := config.NewConfigManager(configPath, "")
+	if err != nil {
+		t.Fatalf("NewConfigManager() error = %v", err)
+	}
+	if err := cfgManager.SetAutopilotRoutingMode(config.AutopilotModeAuto); err != nil {
+		t.Fatalf("SetAutopilotRoutingMode(auto) error = %v", err)
+	}
+	manager := &Manager{traceStore: store, cfgManager: cfgManager}
+	manager.evaluateAutoSafety(now)
+	// 默认不降级，模式应保持 auto
+	if got := cfgManager.GetEffectiveRoutingMode(); got != config.AutopilotModeAuto {
+		t.Fatalf("effective mode = %q, want auto (monitor-only)", got)
+	}
+	// 安全事件应以 monitor_only 落盘
+	lastEvent, err := store.LastAutoSafetyEvent()
+	if err != nil || lastEvent == nil || lastEvent.ToMode != "monitor_only" {
+		t.Fatalf("expected monitor_only event, got %+v, err=%v", lastEvent, err)
 	}
 }

@@ -119,6 +119,11 @@ type AutopilotRoutingConfig struct {
 	// 默认 false；需要在 shadow 中验证阶梯确定性、硬能力零放宽、手动映射零回归后启用。
 	FrontierRoutingEnabled bool `json:"frontierRoutingEnabled,omitempty"`
 
+	// AutoSafetyDowngrade 控制 auto 模式是否因 SLO 回归自动降级到 assist。
+	// 默认 false：检测到回归时仅记录警告日志，不切换模式。
+	// 设为 true 时恢复原有自动降级行为（连续 3 个窗口回归 → assist）。
+	AutoSafetyDowngrade bool `json:"autoSafetyDowngrade,omitempty"`
+
 	// AFPCostRoutingEnabled 已废弃，保留字段仅为 JSON 兼容。
 	// AFP 成本路由默认开启，在 assist/auto 模式下始终生效。
 	// 仅对火山 Agent Plan 渠道生效；scope 非可比时自动回退 USD。
