@@ -13,8 +13,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// fast 探活专用参数：单模型 × 4 协议并行探测，相较全量 ChannelDiscovery
-// 不遍历全部模型、不做能力/兼容诊断，只为“快速定 kind 并建渠道”服务。
+// fast 探活专用参数：多模型候选 × 4 协议并行探测，相较全量 ChannelDiscovery
+// 不遍历全部模型、不做能力/兼容诊断，只为”快速定 kind 并建渠道”服务。
+// 采用”一模型一协议成功即返回”策略，降低因单模型上游限流导致整体验活失败的风险。
 const (
 	fastDiscoveryProbeTimeout = 8 * time.Second
 	fastDiscoveryRPM          = 60
@@ -51,8 +52,10 @@ type ChannelDiscoveryFastResponse struct {
 	RateLimit          DiscoveryRateLimitResult `json:"rateLimit"`
 }
 
-// ChannelDiscoveryFast 快速探活 handler：获取一个真实模型并探测协议，返回推荐 primaryKind。
-// 全部协议失败时返回 4xx，不建渠道；错误信息不泄露 API Key / baseURL 明文。
+// ChannelDiscoveryFast 快速探活 handler：获取真实模型列表并逐模型探测协议，返回推荐 primaryKind。
+// 采用多模型候选策略：Strong/Primary/Fast + 全列表前几个模型，逐个并行探测 4 协议，
+// 只要有一个模型在一个协议上成功就返回成功，其余模型留给后台 discovery 补全。
+// 全部候选模型均失败时返回 4xx，不建渠道；错误信息不泄露 API Key / baseURL 明文。
 func ChannelDiscoveryFast(cfgManager *config.ConfigManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req ChannelDiscoveryFastRequest
@@ -124,76 +127,99 @@ func ChannelDiscoveryFast(cfgManager *config.ConfigManager) gin.HandlerFunc {
 			return
 		}
 
-		// 选择一个首选真实模型（不作为渠道白名单）。
+		// 构建候选模型列表（Strong/Primary/Fast + 全列表前几个），逐模型探测。
+		// 只要有一个模型在一个协议上成功就通过，其余模型留给后台补全。
 		globalCapabilities := map[string]config.UpstreamModelCapability(nil)
 		if cfgManager != nil {
 			globalCapabilities = cfgManager.GetConfig().UpstreamModelCapabilities
 		}
 		selectedModels := selectDiscoveryModels(selected.models, globalCapabilities)
-		testedModel := firstNonEmptyDiscoveryModel(selectedModels.Primary, selectedModels.Strong, selectedModels.Fast)
-		if testedModel == "" && len(selected.models) > 0 {
-			testedModel = selected.models[0]
-		}
-		if testedModel == "" {
+		probeModels := discoveryProbeModels(selectedModels, selected.models)
+		if len(probeModels) == 0 {
 			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "未找到可探测的真实模型"})
 			return
 		}
 
-		// 对同一个真实模型并行探测 4 协议，每个 goroutine 独立 pacer 避免共享状态竞争。
 		probeChannel := buildFastTransientChannel(baseURLs[0], selected.testedKey, req)
 		protocols := []string{"messages", "responses", "chat", "gemini"}
-		results := make([]DiscoveryProtocolResult, len(protocols))
-		streamingSupported := false
-		var rateLimitMu sync.Mutex
-		rateLimitedCount := 0
-		anyRateLimited := false
-		minEffectiveRPM := fastDiscoveryRPM
 
-		var wg sync.WaitGroup
-		for i, protocol := range protocols {
-			wg.Add(1)
-			go func(idx int, proto string) {
-				defer wg.Done()
-				pacer := newDiscoveryProbePacer(fastDiscoveryRPM)
-				success, streaming := fastProbeProtocol(c.Request.Context(), probeChannel, proto, testedModel, fastDiscoveryProbeTimeout, cfgManager, pacer)
-				results[idx] = DiscoveryProtocolResult{Protocol: proto, Success: success}
-				if success && streaming {
-					streamingSupported = true
+		var bestModel string
+		var bestKind string
+		var bestResults []DiscoveryProtocolResult
+		bestStreaming := false
+		var bestRateLimit DiscoveryRateLimitResult
+
+		for _, model := range probeModels {
+			// 对当前模型并行探测 4 协议。
+			results := make([]DiscoveryProtocolResult, len(protocols))
+			streamingSupported := false
+			var rateLimitMu sync.Mutex
+			rateLimitedCount := 0
+			anyRateLimited := false
+			minEffectiveRPM := fastDiscoveryRPM
+
+			var wg sync.WaitGroup
+			for i, protocol := range protocols {
+				wg.Add(1)
+				go func(idx int, proto string) {
+					defer wg.Done()
+					pacer := newDiscoveryProbePacer(fastDiscoveryRPM)
+					success, streaming := fastProbeProtocol(c.Request.Context(), probeChannel, proto, model, fastDiscoveryProbeTimeout, cfgManager, pacer)
+					results[idx] = DiscoveryProtocolResult{Protocol: proto, Success: success}
+					if success && streaming {
+						streamingSupported = true
+					}
+					r := pacer.result()
+					rateLimitMu.Lock()
+					if r.RateLimited {
+						anyRateLimited = true
+					}
+					rateLimitedCount += r.RateLimitedCount
+					if r.EffectiveRPM > 0 && r.EffectiveRPM < minEffectiveRPM {
+						minEffectiveRPM = r.EffectiveRPM
+					}
+					rateLimitMu.Unlock()
+				}(i, protocol)
+			}
+			wg.Wait()
+
+			// 只要当前模型有任意一个协议成功，就采用该结果并停止后续模型探测。
+			primaryKind := recommendDiscoveryChannelKind(req.ChannelKind, nil, results)
+			if primaryKind != "" {
+				bestModel = model
+				bestKind = primaryKind
+				bestResults = results
+				bestStreaming = streamingSupported
+				bestRateLimit = DiscoveryRateLimitResult{
+					InitialRPM:       fastDiscoveryRPM,
+					EffectiveRPM:     minEffectiveRPM,
+					RateLimited:      anyRateLimited,
+					RateLimitedCount: rateLimitedCount,
 				}
-				r := pacer.result()
-				rateLimitMu.Lock()
-				if r.RateLimited {
-					anyRateLimited = true
-				}
-				rateLimitedCount += r.RateLimitedCount
-				if r.EffectiveRPM > 0 && r.EffectiveRPM < minEffectiveRPM {
-					minEffectiveRPM = r.EffectiveRPM
-				}
-				rateLimitMu.Unlock()
-			}(i, protocol)
+				break
+			}
+			// 当前模型全部协议失败，记录速率限制信息用于最终兜底返回。
+			if anyRateLimited {
+				bestRateLimit.RateLimited = true
+			}
+			bestRateLimit.RateLimitedCount += rateLimitedCount
 		}
-		wg.Wait()
 
-		primaryKind := recommendDiscoveryChannelKind(req.ChannelKind, nil, results)
-		if primaryKind == "" {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "所有协议探测均失败，无法确定渠道类型"})
+		if bestModel == "" {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "所有候选模型的协议探测均失败，无法确定渠道类型"})
 			return
 		}
 
 		c.JSON(http.StatusOK, ChannelDiscoveryFastResponse{
-			PrimaryKind:        primaryKind,
-			TestedModel:        testedModel,
-			StreamingSupported: streamingSupported,
+			PrimaryKind:        bestKind,
+			TestedModel:        bestModel,
+			StreamingSupported: bestStreaming,
 			TestedKeyHash:      autopilot.KeyHashFromAPIKey(selected.testedKey),
-			RateLimit: DiscoveryRateLimitResult{
-				InitialRPM:       fastDiscoveryRPM,
-				EffectiveRPM:     minEffectiveRPM,
-				RateLimited:      anyRateLimited,
-				RateLimitedCount: rateLimitedCount,
-			},
+			RateLimit:          bestRateLimit,
 		})
 		_ = modelsSource // 保留用于后续诊断日志，当前不返回
 		_ = warnings
+		_ = bestResults // 最终探测结果，用于未来扩展诊断
 	}
 }
 
