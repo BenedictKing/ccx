@@ -305,6 +305,8 @@ type recordFailureCall struct {
 	channelIndex int
 	baseURL      string
 	apiKey       string
+	serviceType  string
+	detail       string
 }
 
 func newCheckKeyFixture() *checkKeyFixture {
@@ -315,8 +317,8 @@ func newCheckKeyFixture() *checkKeyFixture {
 		func(channelType string, channelIndex int, apiKey, reason, message, recoverAt string) {
 			f.blacklistCalls = append(f.blacklistCalls, blacklistCall{channelType, channelIndex, apiKey, reason, message, recoverAt})
 		},
-		func(channelType string, channelIndex int, baseURL, apiKey string) {
-			f.recordFailureCalls = append(f.recordFailureCalls, recordFailureCall{channelType, channelIndex, baseURL, apiKey})
+		func(channelType string, channelIndex int, baseURL, apiKey, serviceType, detail string) {
+			f.recordFailureCalls = append(f.recordFailureCalls, recordFailureCall{channelType, channelIndex, baseURL, apiKey, serviceType, detail})
 		},
 		Options{},
 	)

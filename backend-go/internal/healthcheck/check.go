@@ -218,7 +218,7 @@ func (m *Manager) checkKeyL1(
 		rec.Detail = summarizeDetail(lastStatus, lastBody, lastErr)
 		// 失败喂熔断
 		if m.recordFailure != nil && lastBaseURL != "" {
-			m.recordFailure(channelType, channelIndex, lastBaseURL, apiKey)
+			m.recordFailure(channelType, channelIndex, lastBaseURL, apiKey, u.ServiceType, rec.Detail)
 		}
 	}
 

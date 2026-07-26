@@ -94,6 +94,9 @@
                 <v-chip v-if="log.requestSource === 'capability_test'" size="small" color="warning" variant="tonal">
                   {{ t('channelLogs.sourceCapabilityTest') }}
                 </v-chip>
+                <v-chip v-else-if="log.requestSource === 'healthcheck'" size="small" color="default" variant="tonal">
+                  {{ t('channelLogs.sourceHealthCheck') }}
+                </v-chip>
                 <span v-if="log.originalModel" class="text-medium-emphasis log-meta">{{ log.originalModel }} →</span>
                 <span class="font-weight-medium log-model">{{ log.model }}</span>
                 <v-chip

@@ -69,8 +69,9 @@ type KeyHealthStore interface {
 // BlacklistFunc 鉴权失败拉黑回调（main.go 注入，内部调 ConfigManager.BlacklistKeyWithRecoverAt）
 type BlacklistFunc func(channelType string, channelIndex int, apiKey, reason, message, recoverAt string)
 
-// RecordFailureFunc 失败喂熔断回调（main.go 注入，内部调 scheduler.RecordFailure）
-type RecordFailureFunc func(channelType string, channelIndex int, baseURL, apiKey string)
+// RecordFailureFunc 失败喂熔断回调（main.go 注入，内部调 scheduler.RecordFailure 并写渠道日志）
+// serviceType 为渠道配置的原始 ServiceType（未归一化），detail 为失败原因摘要（已截断）。
+type RecordFailureFunc func(channelType string, channelIndex int, baseURL, apiKey, serviceType, detail string)
 
 // Options Manager 可选参数（零值使用默认值；测试可注入时钟与间隔）
 type Options struct {

@@ -536,6 +536,7 @@
   "channelLogs.copiedEntry": "Log disalin",
   "channelLogs.retry": "Retry",
   "channelLogs.sourceCapabilityTest": "Tes Kemampuan",
+  "channelLogs.sourceHealthCheck": "Pemeriksaan Kesehatan",
   "channelLogs.selectionReason": "Seleksi",
   "channelLogs.autopilotTrace": "Trace",
   "channelLogs.viewAutopilotTrace": "Lihat detail keputusan routing Autopilot",

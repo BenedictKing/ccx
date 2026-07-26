@@ -915,15 +915,28 @@ func main() {
 					log.Printf("[HealthCheck-Blacklist] 警告: 拉黑 Key 失败: %v", err)
 				}
 			},
-			// 失败喂熔断：按渠道类型喂对应指标管理器
-			func(channelType string, channelIndex int, baseURL, apiKey string) {
+			// 失败喂熔断：按渠道类型喂对应指标管理器，并写入渠道日志（保活验证失败此前对渠道日志不可见）
+			func(channelType string, channelIndex int, baseURL, apiKey, serviceType, detail string) {
 				kind := scheduler.ChannelKind(channelType)
-				serviceType := ""
+				normalizedServiceType := scheduler.NormalizedMetricsServiceType(kind, serviceType)
+				channelScheduler.RecordFailure(baseURL, apiKey, normalizedServiceType, kind)
+
+				channelName := ""
 				cfg := cfgManager.GetConfig()
 				if upstreams := healthcheck.UpstreamsFor(&cfg, channelType); channelIndex >= 0 && channelIndex < len(upstreams) {
-					serviceType = upstreams[channelIndex].ServiceType
+					channelName = upstreams[channelIndex].Name
 				}
-				channelScheduler.RecordFailure(baseURL, apiKey, scheduler.NormalizedMetricsServiceType(kind, serviceType), kind)
+				metricsKey := metrics.GenerateMetricsIdentityKey(baseURL, apiKey, normalizedServiceType)
+				common.RecordChannelLogWithSource(
+					channelScheduler.GetChannelLogStore(kind),
+					metricsKey,
+					channelIndex,
+					"", "", 0, 0, false,
+					apiKey, baseURL, detail, channelType,
+					false,
+					metrics.RequestSourceHealthCheck,
+					channelName,
+				)
 			},
 			healthcheck.Options{},
 		)

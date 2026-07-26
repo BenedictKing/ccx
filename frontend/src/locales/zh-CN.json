@@ -536,6 +536,7 @@
   "channelLogs.copiedEntry": "已复制日志",
   "channelLogs.retry": "重试",
   "channelLogs.sourceCapabilityTest": "能力测试",
+  "channelLogs.sourceHealthCheck": "保活验证",
   "channelLogs.selectionReason": "调度",
   "channelLogs.autopilotTrace": "决策",
   "channelLogs.viewAutopilotTrace": "查看 Autopilot 路由决策详情",

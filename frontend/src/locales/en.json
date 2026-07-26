@@ -536,6 +536,7 @@
   "channelLogs.copiedEntry": "Log copied",
   "channelLogs.retry": "Retry",
   "channelLogs.sourceCapabilityTest": "Capability Test",
+  "channelLogs.sourceHealthCheck": "Health Check",
   "channelLogs.selectionReason": "Selection",
   "channelLogs.autopilotTrace": "Trace",
   "channelLogs.viewAutopilotTrace": "View Autopilot routing decision detail",

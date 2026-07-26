@@ -60,6 +60,7 @@ type ChannelLog struct {
 const (
 	RequestSourceProxy          = "proxy"
 	RequestSourceCapabilityTest = "capability_test"
+	RequestSourceHealthCheck    = "healthcheck"
 	maxChannelLogs              = 50
 
 	// 请求状态常量
