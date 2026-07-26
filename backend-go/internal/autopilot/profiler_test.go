@@ -259,6 +259,56 @@ func TestDeriveSpeedTier(t *testing.T) {
 	}
 }
 
+// ── DeriveSpeedTierFromConnectStats 测试 ──
+
+func TestDeriveSpeedTierFromConnectStats(t *testing.T) {
+	tests := []struct {
+		name  string
+		stats TimeWindowStats
+		want  SpeedTier
+	}{
+		{
+			name:  "无样本 → normal（安全默认值）",
+			stats: TimeWindowStats{ConnectSampleCount: 0, P95ConnectLatencyMs: 0},
+			want:  SpeedTierNormal,
+		},
+		{
+			name:  "n=7 单次偶发慢连接拉高 P95 → 样本不足，不判定为 slow",
+			stats: TimeWindowStats{ConnectSampleCount: 7, P95ConnectLatencyMs: 4000},
+			want:  SpeedTierNormal,
+		},
+		{
+			name:  "n=19 仍低于门槛 → normal",
+			stats: TimeWindowStats{ConnectSampleCount: 19, P95ConnectLatencyMs: 4000},
+			want:  SpeedTierNormal,
+		},
+		{
+			name:  "n=20 达到门槛且 P95 高 → slow",
+			stats: TimeWindowStats{ConnectSampleCount: 20, P95ConnectLatencyMs: 4000},
+			want:  SpeedTierSlow,
+		},
+		{
+			name:  "n=25 达到门槛但 P95 快 → fast",
+			stats: TimeWindowStats{ConnectSampleCount: 25, P95ConnectLatencyMs: 200},
+			want:  SpeedTierFast,
+		},
+		{
+			name:  "n=25 达到门槛，P95 处于中间档 → normal",
+			stats: TimeWindowStats{ConnectSampleCount: 25, P95ConnectLatencyMs: 1000},
+			want:  SpeedTierNormal,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := DeriveSpeedTierFromConnectStats(tt.stats, KeyCircuitSnapshot{})
+			if got != tt.want {
+				t.Errorf("DeriveSpeedTierFromConnectStats() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 // ── DeriveCostTier 测试 ──
 
 func TestDeriveCostTier(t *testing.T) {

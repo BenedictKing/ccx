@@ -299,6 +299,7 @@ func aggregateChannel(channelUID string, profiles []*KeyEndpointProfile) Channel
 	var totalSuccessRate float64
 	var states []DiagnosisResult
 	var maxConnectP95 int64
+	var maxDisplayConnectP95 int64
 	var firstByteP95Values []int64
 
 	for _, p := range profiles {
@@ -318,7 +319,13 @@ func aggregateChannel(channelUID string, profiles []*KeyEndpointProfile) Channel
 		states = append(states, DiagnosisResult{State: p.HealthState})
 		if p.ConnectSampleCount > 0 && p.P95ConnectLatencyMs > 0 {
 			item.ConnectSampleCount += p.ConnectSampleCount
-			if p.P95ConnectLatencyMs > maxConnectP95 {
+			if p.P95ConnectLatencyMs > maxDisplayConnectP95 {
+				maxDisplayConnectP95 = p.P95ConnectLatencyMs
+			}
+			// 只有 endpoint 自身样本量达到 DeriveSpeedTierFromConnectStats 的最小门槛并被判定为
+			// SpeedTierSlow 时，才允许把渠道级 SpeedTier 标为慢速，避免样本不足的孤立异常
+			// 被拿来判定渠道整体慢速。
+			if p.ConnectSampleCount >= connectLatencyMinSamples && p.SpeedTier == SpeedTierSlow && p.P95ConnectLatencyMs > maxConnectP95 {
 				maxConnectP95 = p.P95ConnectLatencyMs
 			}
 		}
@@ -333,7 +340,10 @@ func aggregateChannel(channelUID string, profiles []*KeyEndpointProfile) Channel
 	}
 	if maxConnectP95 > 0 {
 		item.P95ConnectLatencyMs = maxConnectP95
-		item.SpeedTier = string(classifyConnectSpeedTier(item.P95ConnectLatencyMs))
+		item.SpeedTier = string(SpeedTierSlow)
+	} else if maxDisplayConnectP95 > 0 {
+		// 展示层仍给出可读的 P95 数值，但 SpeedTier 保持默认（未设置），不会触发前端红色 chip。
+		item.P95ConnectLatencyMs = maxDisplayConnectP95
 	}
 	if len(firstByteP95Values) > 0 {
 		item.P95FirstByteLatencyMs = medianInt64(firstByteP95Values)

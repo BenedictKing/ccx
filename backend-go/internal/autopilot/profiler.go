@@ -226,9 +226,13 @@ func DeriveSpeedTier(snapshot KeyCircuitSnapshot) SpeedTier {
 	return SpeedTierNormal
 }
 
-// DeriveSpeedTierFromConnectStats 优先按连接取得耗时推导速度档；无样本时保留安全默认值。
+// connectLatencyMinSamples 是 P95 连接延迟具备统计意义所需的最小样本量。
+// n < 20 时 nearestRankPercentile 计算出的 P95 会退化为近似最大值，单次异常连接即可污染判定。
+const connectLatencyMinSamples int64 = 20
+
+// DeriveSpeedTierFromConnectStats 优先按连接取得耗时推导速度档；样本不足时保留安全默认值。
 func DeriveSpeedTierFromConnectStats(stats TimeWindowStats, snapshot KeyCircuitSnapshot) SpeedTier {
-	if stats.ConnectSampleCount <= 0 || stats.P95ConnectLatencyMs <= 0 {
+	if stats.ConnectSampleCount < connectLatencyMinSamples || stats.P95ConnectLatencyMs <= 0 {
 		return DeriveSpeedTier(snapshot)
 	}
 	return classifyConnectSpeedTier(stats.P95ConnectLatencyMs)
