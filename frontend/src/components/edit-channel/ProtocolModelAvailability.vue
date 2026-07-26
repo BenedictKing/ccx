@@ -65,42 +65,7 @@
           {{ t('channelEditor.protocolModels.sharedCount', { count: sharedModels.length }) }}
         </v-chip>
       </div>
-      <div v-if="sharedModels.length <= 10" class="protocol-model-route__models">
-        <v-chip
-          v-for="model in sharedModels"
-          :key="model"
-          size="small"
-          variant="outlined"
-          color="success"
-          class="protocol-model-route__model"
-        >
-          {{ model }}
-        </v-chip>
-      </div>
-      <template v-else>
-        <button
-          type="button"
-          class="protocol-model-route__all-summary"
-          @click="expandedShared = !expandedShared"
-        >
-          <span class="text-caption">
-            {{ t('channelEditor.protocolModels.viewShared', { count: sharedModels.length }) }}
-          </span>
-          <v-icon class="protocol-model-route__all-chevron" :class="{ 'protocol-model-route__all-chevron--open': expandedShared }" size="16">mdi-chevron-down</v-icon>
-        </button>
-        <div v-if="expandedShared" class="protocol-model-route__models">
-          <v-chip
-            v-for="model in sharedModels"
-            :key="model"
-            size="small"
-            variant="outlined"
-            color="success"
-            class="protocol-model-route__model"
-          >
-            {{ model }}
-          </v-chip>
-        </div>
-      </template>
+      <ModelChipList :models="sharedModels" color="success" />
     </section>
 
     <div class="protocol-model-availability__rows">
@@ -188,17 +153,7 @@
                   {{ binding.keyMask }}
                 </v-chip>
               </div>
-              <div class="protocol-model-coverage-group__models">
-                <v-chip
-                  v-for="model in group.models"
-                  :key="model"
-                  size="small"
-                  variant="outlined"
-                  class="protocol-model-coverage-group__model"
-                >
-                  {{ model }}
-                </v-chip>
-              </div>
+              <ModelChipList :models="group.models" />
             </section>
           </div>
           <div v-if="route.hasBindingDifferences" class="protocol-model-route__coverage">
@@ -215,44 +170,7 @@
           </div>
         </div>
 
-        <template v-if="route.specificModels.length">
-          <template v-if="route.specificModels.length <= 10">
-            <div class="protocol-model-route__models">
-              <v-chip
-                v-for="model in route.specificModels"
-                :key="model"
-                size="small"
-                variant="outlined"
-                class="protocol-model-route__model"
-              >
-                {{ model }}
-              </v-chip>
-            </div>
-          </template>
-          <template v-else>
-            <button
-              type="button"
-              class="protocol-model-route__all-summary"
-              @click="toggleSpecificExpanded(route)"
-            >
-              <span class="text-caption">
-                {{ t('channelEditor.protocolModels.viewSpecific', { count: route.specificModels.length }) }}
-              </span>
-              <v-icon class="protocol-model-route__all-chevron" :class="{ 'protocol-model-route__all-chevron--open': isSpecificExpanded(route) }" size="16">mdi-chevron-down</v-icon>
-            </button>
-            <div v-if="isSpecificExpanded(route)" class="protocol-model-route__models">
-              <v-chip
-                v-for="model in route.specificModels"
-                :key="model"
-                size="small"
-                variant="outlined"
-                class="protocol-model-route__model"
-              >
-                {{ model }}
-              </v-chip>
-            </div>
-          </template>
-        </template>
+        <ModelChipList v-if="route.specificModels.length" :models="route.specificModels" />
         <div v-else-if="route.hasInventory && sharedModels.length" class="text-caption text-medium-emphasis">
           {{ t('channelEditor.protocolModels.specificEmpty') }}
         </div>
@@ -270,6 +188,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from '../../i18n'
 import type { ChannelKind, ChannelProtocolRoute } from '../../services/api'
 import { autoDiscoverChannel, getChannelAutoStatus } from '../../services/autopilot-api'
+import ModelChipList from './ModelChipList.vue'
 
 interface ProtocolDefinition {
   labelKey: string
@@ -343,24 +262,6 @@ const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 const rediscovering = ref(false)
 const rediscoverError = ref('')
 let pollingGeneration = 0
-
-const expandedShared = ref(false)
-const expandedSpecificKeys = ref(new Set<string>())
-
-const specificRouteKey = (route: ChannelProtocolRoute) => `${route.kind}:${route.channelUid || route.index}`
-
-const isSpecificExpanded = (route: ChannelProtocolRoute) => expandedSpecificKeys.value.has(specificRouteKey(route))
-
-const toggleSpecificExpanded = (route: ChannelProtocolRoute) => {
-  const key = specificRouteKey(route)
-  const next = new Set(expandedSpecificKeys.value)
-  if (next.has(key)) {
-    next.delete(key)
-  } else {
-    next.add(key)
-  }
-  expandedSpecificKeys.value = next
-}
 
 const primaryDiscoveryRoute = computed(() => (
   (props.routes ?? []).find(route => route.configured !== false && route.channelUid && route.index >= 0)
@@ -752,22 +653,6 @@ const showIncompleteHint = computed(() => (
   font-family: var(--v-font-family-mono, monospace);
 }
 
-.protocol-model-coverage-group__models {
-  align-items: flex-start;
-}
-
-.protocol-model-coverage-group__model {
-  height: auto;
-  min-height: 24px;
-  max-width: 100%;
-}
-
-.protocol-model-coverage-group__model :deep(.v-chip__content) {
-  overflow-wrap: anywhere;
-  white-space: normal;
-  line-height: 1.35;
-}
-
 .protocol-model-route__coverage {
   display: flex;
   flex-wrap: wrap;
@@ -776,45 +661,4 @@ const showIncompleteHint = computed(() => (
   border-top: 1px dashed rgba(var(--v-theme-warning), 0.25);
 }
 
-.protocol-model-route__all-summary {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  width: fit-content;
-  cursor: pointer;
-  border: none;
-  background: none;
-  padding: 0;
-  color: rgba(var(--v-theme-on-surface), 0.62);
-}
-
-.protocol-model-route__all-chevron {
-  transition: transform 0.16s ease;
-}
-
-.protocol-model-route__all-chevron--open {
-  transform: rotate(180deg);
-}
-
-.protocol-model-route__models {
-  display: flex;
-  align-items: flex-start;
-  align-content: flex-start;
-  flex-wrap: wrap;
-  gap: 6px;
-  min-width: 0;
-  padding-top: 8px;
-}
-
-.protocol-model-route__model {
-  height: auto;
-  min-height: 24px;
-  max-width: 100%;
-}
-
-.protocol-model-route__model :deep(.v-chip__content) {
-  overflow-wrap: anywhere;
-  white-space: normal;
-  line-height: 1.35;
-}
 </style>

@@ -236,8 +236,8 @@ describe('ProtocolModelAvailability', () => {
     expect(messages.text()).toContain('ark-a***001')
     expect(messages.text()).toContain('ark-b***002')
     expect(messages.text()).toContain('channelEditor.protocolModels.coverage:1/2')
-    // 覆盖分组内模型数量少于 10 个时直接展开列出，不折叠。
-    expect(messages.findAll('.protocol-model-route__all-summary')).toHaveLength(0)
+    // 模型列表交由 ModelChipList 渲染，未溢出两行时不出现展开按钮。
+    expect(messages.findAll('.model-chip-list__toggle')).toHaveLength(0)
     expect(messages.text()).toContain('actual-model')
     expect(messages.text()).toContain('other-model')
   })
