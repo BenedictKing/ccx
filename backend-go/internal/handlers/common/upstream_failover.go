@@ -147,6 +147,10 @@ func SetUsagePatternRecorderHook(hook func(proxyKeyMask, channelKind, channelUID
 // 仅对 Claude Messages 入口生效；其余入口的过滤由 provider 层负责。
 var systemHeaderFilterCache = config.NewSystemHeaderFilterCache()
 
+// deprecatedParamCache 按渠道-keyHash-模型记忆上游拒绝的弃用请求参数（如 temperature）。
+// 首次 400 触发探测并同 Key 重试，后续同组合请求在发送前主动剥离，避免重复失败往返。
+var deprecatedParamCache = config.NewDeprecatedParamCache()
+
 func shouldNormalizeMetadataUserID(kind scheduler.ChannelKind, upstream *config.UpstreamConfig) bool {
 	if upstream == nil {
 		return false
@@ -509,6 +513,23 @@ func TryUpstreamWithAllKeys(
 					}
 				}
 			}
+
+			// 弃用参数自适应（主动侧）：命中记忆时在发送前剥离上游已拒绝的参数。
+			// 记忆键为 channelUID:keyHash:实际请求模型，不影响同渠道的其他模型/Key。
+			if upstream.ChannelUID != "" {
+				keyHash := autopilot.KeyHashFromAPIKey(apiKey)
+				if params := deprecatedParamCache.Params(upstream.ChannelUID, keyHash, attemptModel); len(params) > 0 {
+					if stripped, modified := StripDeprecatedParams(attemptBody, params); modified {
+						attemptBody = stripped
+						RestoreRequestBody(c, attemptBody)
+						c.Set("requestBodyBytes", attemptBody)
+						deprecatedParamCache.MarkStripped(upstream.ChannelUID, keyHash, attemptModel)
+						RequestLogf(c, "[%s-DeprecatedParam] 渠道 %s 模型 %s 预剥离已知弃用参数: %s",
+							apiType, upstream.Name, attemptModel, strings.Join(params, ","))
+					}
+				}
+			}
+
 			// 主动限速：在构建/发送请求前获取许可（渠道级 + Key/Quota scope）
 			if rateLimitMgr := channelScheduler.GetRateLimitManager(); rateLimitMgr != nil {
 				const maxRateLimitWait = 10 * time.Second
@@ -840,6 +861,30 @@ func TryUpstreamWithAllKeys(
 						return false, "", 0, lastFailoverError, nil, lastError
 					}
 					continue
+				}
+
+				// 弃用参数自适应（被动侧）：上游以 400 明确拒绝某个采样参数时，
+				// 记忆该 渠道-Key-模型 组合并用同一 Key 立即重试（剥离在下一轮循环开头生效）。
+				// 仅当参数首次记录且请求体中确实存在该字段时重试，避免记忆已生效后死循环。
+				if resp.StatusCode == 400 && upstream.ChannelUID != "" && !c.Writer.Written() {
+					if param := DeprecatedParamFromError(respBodyBytes); param != "" {
+						keyHash := autopilot.KeyHashFromAPIKey(apiKey)
+						if _, present := StripDeprecatedParams(attemptBody, []string{param}); present &&
+							deprecatedParamCache.Record(upstream.ChannelUID, keyHash, attemptModel, param) {
+							retrySelection = selection
+							retryAPIKey = apiKey
+							metricsManager.RecordRequestFinalizeIgnored(currentBaseURL, apiKey, metricsServiceType, requestID)
+							channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
+							if probeKey := currentBaseURL + "|" + apiKey; probeAcquired[probeKey] {
+								metricsManager.ReleaseProbe(currentBaseURL, apiKey, metricsServiceType)
+								delete(probeAcquired, probeKey)
+							}
+							CompleteLog(channelLogStore, metricsKey, logRequestID, resp.StatusCode, false, string(respBodyBytes), isRetryAttempt)
+							RequestLogf(c, "[%s-DeprecatedParam] 渠道 %s 模型 %s 拒绝参数 %q，已记忆并剥离后同 Key 重试",
+								apiType, upstream.Name, attemptModel, param)
+							continue
+						}
+					}
 				}
 
 				// 非 failover 错误，记录失败指标后返回（请求已处理）
