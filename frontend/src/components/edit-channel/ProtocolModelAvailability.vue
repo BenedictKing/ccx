@@ -65,14 +65,30 @@
           {{ t('channelEditor.protocolModels.sharedCount', { count: sharedModels.length }) }}
         </v-chip>
       </div>
-      <details class="protocol-model-shared__all">
-        <summary class="protocol-model-route__all-summary">
+      <div v-if="sharedModels.length <= 10" class="protocol-model-route__models">
+        <v-chip
+          v-for="model in sharedModels"
+          :key="model"
+          size="small"
+          variant="outlined"
+          color="success"
+          class="protocol-model-route__model"
+        >
+          {{ model }}
+        </v-chip>
+      </div>
+      <template v-else>
+        <button
+          type="button"
+          class="protocol-model-route__all-summary"
+          @click="expandedShared = !expandedShared"
+        >
           <span class="text-caption">
             {{ t('channelEditor.protocolModels.viewShared', { count: sharedModels.length }) }}
           </span>
-          <v-icon class="protocol-model-route__all-chevron" size="16">mdi-chevron-down</v-icon>
-        </summary>
-        <div class="protocol-model-route__models">
+          <v-icon class="protocol-model-route__all-chevron" :class="{ 'protocol-model-route__all-chevron--open': expandedShared }" size="16">mdi-chevron-down</v-icon>
+        </button>
+        <div v-if="expandedShared" class="protocol-model-route__models">
           <v-chip
             v-for="model in sharedModels"
             :key="model"
@@ -84,7 +100,7 @@
             {{ model }}
           </v-chip>
         </div>
-      </details>
+      </template>
     </section>
 
     <div class="protocol-model-availability__rows">
@@ -199,25 +215,44 @@
           </div>
         </div>
 
-        <details v-if="route.specificModels.length" class="protocol-model-route__all">
-          <summary class="protocol-model-route__all-summary">
-            <span class="text-caption">
-              {{ t('channelEditor.protocolModels.viewSpecific', { count: route.specificModels.length }) }}
-            </span>
-            <v-icon class="protocol-model-route__all-chevron" size="16">mdi-chevron-down</v-icon>
-          </summary>
-          <div class="protocol-model-route__models">
-            <v-chip
-              v-for="model in route.specificModels"
-              :key="model"
-              size="small"
-              variant="outlined"
-              class="protocol-model-route__model"
+        <template v-if="route.specificModels.length">
+          <template v-if="route.specificModels.length <= 10">
+            <div class="protocol-model-route__models">
+              <v-chip
+                v-for="model in route.specificModels"
+                :key="model"
+                size="small"
+                variant="outlined"
+                class="protocol-model-route__model"
+              >
+                {{ model }}
+              </v-chip>
+            </div>
+          </template>
+          <template v-else>
+            <button
+              type="button"
+              class="protocol-model-route__all-summary"
+              @click="toggleSpecificExpanded(route)"
             >
-              {{ model }}
-            </v-chip>
-          </div>
-        </details>
+              <span class="text-caption">
+                {{ t('channelEditor.protocolModels.viewSpecific', { count: route.specificModels.length }) }}
+              </span>
+              <v-icon class="protocol-model-route__all-chevron" :class="{ 'protocol-model-route__all-chevron--open': isSpecificExpanded(route) }" size="16">mdi-chevron-down</v-icon>
+            </button>
+            <div v-if="isSpecificExpanded(route)" class="protocol-model-route__models">
+              <v-chip
+                v-for="model in route.specificModels"
+                :key="model"
+                size="small"
+                variant="outlined"
+                class="protocol-model-route__model"
+              >
+                {{ model }}
+              </v-chip>
+            </div>
+          </template>
+        </template>
         <div v-else-if="route.hasInventory && sharedModels.length" class="text-caption text-medium-emphasis">
           {{ t('channelEditor.protocolModels.specificEmpty') }}
         </div>
@@ -308,6 +343,24 @@ const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 const rediscovering = ref(false)
 const rediscoverError = ref('')
 let pollingGeneration = 0
+
+const expandedShared = ref(false)
+const expandedSpecificKeys = ref(new Set<string>())
+
+const specificRouteKey = (route: ChannelProtocolRoute) => `${route.kind}:${route.channelUid || route.index}`
+
+const isSpecificExpanded = (route: ChannelProtocolRoute) => expandedSpecificKeys.value.has(specificRouteKey(route))
+
+const toggleSpecificExpanded = (route: ChannelProtocolRoute) => {
+  const key = specificRouteKey(route)
+  const next = new Set(expandedSpecificKeys.value)
+  if (next.has(key)) {
+    next.delete(key)
+  } else {
+    next.add(key)
+  }
+  expandedSpecificKeys.value = next
+}
 
 const primaryDiscoveryRoute = computed(() => (
   (props.routes ?? []).find(route => route.configured !== false && route.channelUid && route.index >= 0)
@@ -729,20 +782,17 @@ const showIncompleteHint = computed(() => (
   gap: 4px;
   width: fit-content;
   cursor: pointer;
-  list-style: none;
+  border: none;
+  background: none;
+  padding: 0;
   color: rgba(var(--v-theme-on-surface), 0.62);
-}
-
-.protocol-model-route__all-summary::-webkit-details-marker {
-  display: none;
 }
 
 .protocol-model-route__all-chevron {
   transition: transform 0.16s ease;
 }
 
-.protocol-model-route__all[open] .protocol-model-route__all-chevron,
-.protocol-model-shared__all[open] .protocol-model-route__all-chevron {
+.protocol-model-route__all-chevron--open {
   transform: rotate(180deg);
 }
 

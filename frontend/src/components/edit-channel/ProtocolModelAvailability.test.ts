@@ -236,10 +236,10 @@ describe('ProtocolModelAvailability', () => {
     expect(messages.text()).toContain('ark-a***001')
     expect(messages.text()).toContain('ark-b***002')
     expect(messages.text()).toContain('channelEditor.protocolModels.coverage:1/2')
-    // 全量模型列表折叠为一个 details，覆盖分组直接列出模型与可用 Key 集合。
-    expect(messages.findAll('details')).toHaveLength(1)
-    expect(messages.findAll('details')[0].text()).toContain('actual-model')
-    expect(messages.findAll('details')[0].text()).toContain('other-model')
+    // 覆盖分组内模型数量少于 10 个时直接展开列出，不折叠。
+    expect(messages.findAll('.protocol-model-route__all-summary')).toHaveLength(0)
+    expect(messages.text()).toContain('actual-model')
+    expect(messages.text()).toContain('other-model')
   })
 
   it('按相同可用 Key 集合归并共同与专有模型', () => {
