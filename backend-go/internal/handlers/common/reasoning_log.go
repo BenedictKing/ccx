@@ -126,10 +126,13 @@ func stringReasoningValue(bodyBytes []byte, path string) string {
 // ExtractClientEffortExplicit 判断客户端是否显式设置了 effort 值。
 // 返回 (raw_effort_string, true) 如果显式设置，("", false) 如果未声明。
 // 区分协议：
-// - Claude: thinking.type 存在（即使 "enabled" 无 effort）→ explicit；无 thinking 字段 → not explicit
-// - OpenAI: reasoning_effort 存在 → explicit；absent → not explicit
-// - Responses: reasoning.effort 存在 → explicit；absent → not explicit
-// - Gemini: thinkingConfig 存在 → explicit；absent → not explicit
+//   - Claude: thinking.type 存在（即使 "enabled" 无 effort）→ explicit；无 thinking 字段 → not explicit
+//   - OpenAI: reasoning_effort 存在 → explicit；absent → not explicit
+//   - Responses: reasoning.effort 存在 → explicit；absent → not explicit
+//   - Gemini: thinkingConfig.thinkingLevel 存在 → explicit，raw 为实际 level；
+//     thinkingConfig 存在但无 thinkingLevel 时，仅当 thinkingBudget=0（关闭思考）才视为
+//     explicit 且 raw="none"，否则视为未钳定 effort 级别 → not explicit；
+//     thinkingConfig 整体缺失 → not explicit
 func ExtractClientEffortExplicit(bodyBytes []byte, channelKind string) (raw string, explicit bool) {
 	if len(bytes.TrimSpace(bodyBytes)) == 0 || !gjson.ValidBytes(bodyBytes) {
 		return "", false
@@ -156,13 +159,48 @@ func ExtractClientEffortExplicit(bodyBytes []byte, channelKind string) (raw stri
 		}
 	}
 
-	// Gemini: thinkingConfig present → explicit
+	// Gemini: thinkingConfig.thinkingLevel present → explicit（取真实 effort 值，
+	// 与 extractReasoningEffortForLog 的 Gemini 路径保持一致，不返回容器名占位）
 	if channelKind == "gemini" || channelKind == "" {
-		if value := gjson.GetBytes(bodyBytes, "generationConfig.thinkingConfig"); value.Exists() {
-			return "thinkingConfig", true
+		if raw, explicit := extractGeminiEffortExplicit(bodyBytes); explicit {
+			return raw, true
 		}
-		if value := gjson.GetBytes(bodyBytes, "thinkingConfig"); value.Exists() {
-			return "thinkingConfig", true
+	}
+
+	return "", false
+}
+
+// extractGeminiEffortExplicit 从 Gemini 请求体解析真实 effort 级别，而不是返回容器字段名占位。
+// 路径顺序与 extractReasoningEffortForLog 的 Gemini 分支一致：
+// generationConfig.thinkingConfig.thinkingLevel 优先，裸 thinkingConfig.thinkingLevel 作为兼容回退。
+// - thinkingLevel 存在 → 返回该原始值，explicit=true
+// - thinkingConfig 存在但无 thinkingLevel：
+//   - thinkingBudget=0（关闭思考）→ 返回 "none"，explicit=true
+//   - 否则视为未钳定任何 effort 级别 → 返回 ""，explicit=false
+//
+// - thinkingConfig 整体不存在 → 返回 ""，explicit=false
+func extractGeminiEffortExplicit(bodyBytes []byte) (raw string, explicit bool) {
+	for _, path := range []string{
+		"generationConfig.thinkingConfig.thinkingLevel",
+		"thinkingConfig.thinkingLevel",
+	} {
+		if value := stringReasoningValue(bodyBytes, path); value != "" {
+			return value, true
+		}
+	}
+
+	containerExists := gjson.GetBytes(bodyBytes, "generationConfig.thinkingConfig").Exists() ||
+		gjson.GetBytes(bodyBytes, "thinkingConfig").Exists()
+	if !containerExists {
+		return "", false
+	}
+
+	for _, path := range []string{
+		"generationConfig.thinkingConfig.thinkingBudget",
+		"thinkingConfig.thinkingBudget",
+	} {
+		if value := gjson.GetBytes(bodyBytes, path); value.Exists() && value.Type == gjson.Number && value.Float() == 0 {
+			return "none", true
 		}
 	}
 

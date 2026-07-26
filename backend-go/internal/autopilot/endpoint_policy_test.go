@@ -1183,6 +1183,153 @@ func TestAutoPolicyDoesNotFilterWholeURLFromOneDeadBinding(t *testing.T) {
 	}
 }
 
+// TestTargetByUIDFillConsistency 验证 Finding 6 的修复：
+// 五个写入 targetByUID 的位置（shadow SortURLs / shadow SortKeys /
+// active SortURLs / active SortKeys / scoreAndSortKeyBindings）
+// 对同一种候选（MappedModel 非空但 MappedEffortDecided=false，
+// 即手动 modelMapping 场景）必须一致地记录 target，
+// 而不能因排序路径不同产生"有的记、有的不记"的漂移。
+func TestTargetByUIDFillConsistency(t *testing.T) {
+	const (
+		channelUID   = "ch-consistency"
+		baseURL      = "https://api.example.com/consistency"
+		bindingURL   = "https://api.example.com/consistency-binding"
+		apiKey       = "sk-consistency"
+		requestModel = "claude-sonnet-5"
+		mappedModel  = "glm-5.2"
+	)
+	keyHash := KeyHashFromAPIKey(apiKey)
+
+	// profile1：ChannelUID 为空，供 URL/Key 两类无 channel 上下文的评分函数命中。
+	profile1UID := GenerateEndpointUID("", baseURL, keyHash)
+	// profile2：独立 baseURL + 真实 channelUID，供 binding 评分函数
+	// （scoreEndpointForBinding）命中；与 profile1 分用不同 baseURL，
+	// 避免 findProfileByBaseURL 在同一 baseURL 下的 map 迭代顺序不确定
+	// 导致 scoreEndpointForURL 误把 profile2 当作 profile1 命中。
+	profile2UID := GenerateEndpointUID(channelUID, bindingURL, keyHash)
+
+	newStoreWithProfiles := func(t *testing.T) *ProfileStore {
+		store := newTestProfileStore(t)
+		if err := store.Upsert(&KeyEndpointProfile{
+			EndpointUID:     profile1UID,
+			BaseURL:         baseURL,
+			KeyHash:         keyHash,
+			HealthState:     HealthStateHealthy,
+			ModelMapping:    map[string]string{requestModel: mappedModel},
+			AvailableModels: []string{mappedModel},
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if err := store.Upsert(&KeyEndpointProfile{
+			ChannelUID:      channelUID,
+			EndpointUID:     profile2UID,
+			BaseURL:         bindingURL,
+			KeyHash:         keyHash,
+			HealthState:     HealthStateHealthy,
+			ModelMapping:    map[string]string{requestModel: mappedModel},
+			AvailableModels: []string{mappedModel},
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return store
+	}
+
+	req := &RequestProfile{Model: requestModel, ChannelKind: "messages"}
+	assertTarget := func(t *testing.T, label string, target *ResolvedRouteTarget) {
+		t.Helper()
+		if target == nil {
+			t.Fatalf("%s: 期望记录 targetByUID，实际为 nil", label)
+		}
+		if target.Model != mappedModel {
+			t.Fatalf("%s: target.Model = %q, 期望 %q", label, target.Model, mappedModel)
+		}
+		if target.EffortDecided {
+			t.Fatalf("%s: manual_mapping 场景 EffortDecided 应为 false", label)
+		}
+	}
+
+	t.Run("shadow_SortURLs", func(t *testing.T) {
+		store := newStoreWithProfiles(t)
+		policy := BuildEndpointPolicy(EndpointPolicyDeps{ProfileStore: store}, req, RoutingModeShadow)
+		policy.SortURLs([]string{baseURL})
+		assertTarget(t, "shadow_SortURLs", policy.ResolvedTargetByEndpointUID(profile1UID))
+	})
+
+	t.Run("shadow_SortKeys", func(t *testing.T) {
+		store := newStoreWithProfiles(t)
+		policy := BuildEndpointPolicy(EndpointPolicyDeps{ProfileStore: store}, req, RoutingModeShadow)
+		policy.SortKeys(baseURL, []string{apiKey})
+		assertTarget(t, "shadow_SortKeys", policy.ResolvedTargetByEndpointUID(profile1UID))
+	})
+
+	t.Run("active_SortURLs", func(t *testing.T) {
+		store := newStoreWithProfiles(t)
+		policy := BuildEndpointPolicy(EndpointPolicyDeps{ProfileStore: store}, req, RoutingModeAssist)
+		policy.SortURLs([]string{baseURL})
+		assertTarget(t, "active_SortURLs", policy.ResolvedTargetByEndpointUID(profile1UID))
+	})
+
+	t.Run("active_SortKeys", func(t *testing.T) {
+		store := newStoreWithProfiles(t)
+		policy := BuildEndpointPolicy(EndpointPolicyDeps{ProfileStore: store}, req, RoutingModeAssist)
+		policy.SortKeys(baseURL, []string{apiKey})
+		assertTarget(t, "active_SortKeys", policy.ResolvedTargetByEndpointUID(profile1UID))
+	})
+
+	t.Run("scoreAndSortKeyBindings_via_SortKeyBindings", func(t *testing.T) {
+		store := newStoreWithProfiles(t)
+		policy := BuildEndpointPolicy(EndpointPolicyDeps{ProfileStore: store}, req, RoutingModeAssist)
+		policy.SortKeyBindings(channelUID, bindingURL, []string{apiKey})
+		assertTarget(t, "scoreAndSortKeyBindings", policy.ResolvedTargetByEndpointUID(profile2UID))
+	})
+}
+
+// TestRecordTargetByUID_GatingCondition 直接验证共享 helper recordTargetByUID 的
+// 写入门槛：只要 MappedModel 非空就记录（不要求 MappedEffortDecided），
+// MappedModel 为空则完全不写入（避免产生空改写）。
+func TestRecordTargetByUID_GatingCondition(t *testing.T) {
+	tests := []struct {
+		name       string
+		cand       EndpointCandidate
+		wantRecord bool
+	}{
+		{
+			name:       "mapped model + effort decided",
+			cand:       EndpointCandidate{EndpointUID: "uid-1", MappedModel: "m2", MappedEffort: EffortHigh, MappedEffortDecided: true},
+			wantRecord: true,
+		},
+		{
+			name:       "mapped model only, effort not decided (manual mapping)",
+			cand:       EndpointCandidate{EndpointUID: "uid-2", MappedModel: "m2", MappedEffortDecided: false},
+			wantRecord: true,
+		},
+		{
+			name:       "no mapped model must not produce a rewrite",
+			cand:       EndpointCandidate{EndpointUID: "uid-3", MappedModel: "", MappedEffortDecided: true},
+			wantRecord: false,
+		},
+		{
+			name:       "mapped model without endpoint uid cannot be indexed",
+			cand:       EndpointCandidate{EndpointUID: "", MappedModel: "m2"},
+			wantRecord: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			targetByUID := make(map[string]*ResolvedRouteTarget)
+			recordTargetByUID(tt.cand, targetByUID)
+			_, got := targetByUID[tt.cand.EndpointUID]
+			if tt.cand.EndpointUID == "" {
+				got = len(targetByUID) > 0
+			}
+			if got != tt.wantRecord {
+				t.Fatalf("recordTargetByUID(%+v) recorded=%v, want %v", tt.cand, got, tt.wantRecord)
+			}
+		})
+	}
+}
+
 // ── 辅助函数测试 ──
 
 func TestTopN(t *testing.T) {

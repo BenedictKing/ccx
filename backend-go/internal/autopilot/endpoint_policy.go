@@ -28,18 +28,18 @@ import (
 // EndpointCandidate 描述一个具体的 endpoint 候选（baseURL + key 组合）。
 // 用于 EndpointAttemptPolicy 的过滤与排序输入/输出。
 type EndpointCandidate struct {
-	ChannelUID  string  `json:"channelUid"`            // 渠道唯一标识
-	ChannelName string  `json:"channelName,omitempty"` // 渠道显示名
-	ChannelKind string  `json:"channelKind"`           // messages | chat | responses | ...
-	MetricsKey  string  `json:"metricsKey,omitempty"`  // 画像存储键（已脱敏）
-	BaseURL     string  `json:"baseUrl"`               // 原始配置 URL
-	KeyMask     string  `json:"keyMask,omitempty"`     // 掩码后的 key，如 sk-***abc
+	ChannelUID          string      `json:"channelUid"`                    // 渠道唯一标识
+	ChannelName         string      `json:"channelName,omitempty"`         // 渠道显示名
+	ChannelKind         string      `json:"channelKind"`                   // messages | chat | responses | ...
+	MetricsKey          string      `json:"metricsKey,omitempty"`          // 画像存储键（已脱敏）
+	BaseURL             string      `json:"baseUrl"`                       // 原始配置 URL
+	KeyMask             string      `json:"keyMask,omitempty"`             // 掩码后的 key，如 sk-***abc
 	MappedModel         string      `json:"mappedModel,omitempty"`         // 可选模型覆盖
 	MappedEffort        EffortLevel `json:"mappedEffort,omitempty"`        // 自动映射的 effort 级别
 	MappedEffortDecided bool        `json:"mappedEffortDecided,omitempty"` // effort 是否由 Autopilot 决定
 	EndpointUID         string      `json:"endpointUid,omitempty"`         // 稳定 endpoint ID
-	Score       float64 `json:"score"`                 // endpoint 级评分
-	Reason      string  `json:"reason,omitempty"`      // 评分/排序原因
+	Score               float64     `json:"score"`                         // endpoint 级评分
+	Reason              string      `json:"reason,omitempty"`              // 评分/排序原因
 
 	// ── 评分明细（供 trace 展示）──
 	HealthScore    float64 `json:"healthScore"`
@@ -161,8 +161,8 @@ func BuildEndpointPolicy(deps EndpointPolicyDeps, req *RequestProfile, mode Rout
 // buildShadowPolicy 构建 shadow 模式的策略。
 // 计算评分 + 记录 trace，但原样返回输入。
 func buildShadowPolicy(deps EndpointPolicyDeps, req *RequestProfile) *EndpointAttemptPolicy {
-	modelByUID := make(map[string]string)                  // endpointUID → mappedModel（向后兼容）
-	targetByUID := make(map[string]*ResolvedRouteTarget)   // endpointUID → 完整路由目标
+	modelByUID := make(map[string]string)                // endpointUID → mappedModel（向后兼容）
+	targetByUID := make(map[string]*ResolvedRouteTarget) // endpointUID → 完整路由目标
 
 	policy := &EndpointAttemptPolicy{
 		RequestModel: req.Model,
@@ -196,13 +196,8 @@ func buildShadowPolicy(deps EndpointPolicyDeps, req *RequestProfile) *EndpointAt
 		for _, cand := range candidates {
 			if cand.MappedModel != "" && cand.EndpointUID != "" {
 				modelByUID[cand.EndpointUID] = cand.MappedModel
-				if cand.MappedEffortDecided {
-					targetByUID[cand.EndpointUID] = &ResolvedRouteTarget{
-						Model: cand.MappedModel, Effort: cand.MappedEffort,
-						EffortDecided: cand.MappedEffortDecided, Reason: "endpoint_policy",
-					}
-				}
 			}
+			recordTargetByUID(cand, targetByUID)
 		}
 
 		// 原样返回
@@ -236,13 +231,8 @@ func buildShadowPolicy(deps EndpointPolicyDeps, req *RequestProfile) *EndpointAt
 		for _, cand := range candidates {
 			if cand.MappedModel != "" && cand.EndpointUID != "" {
 				modelByUID[cand.EndpointUID] = cand.MappedModel
-				if cand.MappedEffortDecided {
-					targetByUID[cand.EndpointUID] = &ResolvedRouteTarget{
-						Model: cand.MappedModel, Effort: cand.MappedEffort,
-						EffortDecided: cand.MappedEffortDecided, Reason: "endpoint_policy",
-					}
-				}
 			}
+			recordTargetByUID(cand, targetByUID)
 		}
 
 		// 原样返回
@@ -334,13 +324,8 @@ func buildActivePolicy(deps EndpointPolicyDeps, req *RequestProfile, enableFilte
 		for _, cand := range candidates {
 			if cand.MappedModel != "" && cand.EndpointUID != "" {
 				modelByUID[cand.EndpointUID] = cand.MappedModel
-				if cand.MappedEffortDecided {
-					targetByUID[cand.EndpointUID] = &ResolvedRouteTarget{
-						Model: cand.MappedModel, Effort: cand.MappedEffort,
-						EffortDecided: cand.MappedEffortDecided, Reason: "endpoint_policy",
-					}
-				}
 			}
+			recordTargetByUID(cand, targetByUID)
 		}
 
 		return sortedURLs, candidates
@@ -427,13 +412,8 @@ func buildActivePolicy(deps EndpointPolicyDeps, req *RequestProfile, enableFilte
 		for _, cand := range candidates {
 			if cand.MappedModel != "" && cand.EndpointUID != "" {
 				modelByUID[cand.EndpointUID] = cand.MappedModel
-				if cand.MappedEffortDecided {
-					targetByUID[cand.EndpointUID] = &ResolvedRouteTarget{
-						Model: cand.MappedModel, Effort: cand.MappedEffort,
-						EffortDecided: cand.MappedEffortDecided, Reason: "endpoint_policy",
-					}
-				}
 			}
+			recordTargetByUID(cand, targetByUID)
 		}
 
 		return sortedKeys, candidates
@@ -492,18 +472,29 @@ func scoreAndSortKeyBindings(deps EndpointPolicyDeps, req *RequestProfile, targe
 	for _, key := range apiKeys {
 		cand := scoreEndpointForBinding(deps.ProfileStore, deps.FastDecay, req.Model, channelUID, baseURL, key, req, &deps)
 		candidates = append(candidates, cand)
-		if cand.MappedModel != "" && cand.EndpointUID != "" {
-			targetByUID[cand.EndpointUID] = &ResolvedRouteTarget{
-				Model: cand.MappedModel, Effort: cand.MappedEffort,
-				EffortDecided: cand.MappedEffortDecided, Reason: "endpoint_policy",
-			}
-		}
+		recordTargetByUID(cand, targetByUID)
 	}
 	sorted := append([]string(nil), apiKeys...)
 	if active {
 		sortEndpointsByScore(sorted, candidates)
 	}
 	return sorted, candidates
+}
+
+// recordTargetByUID 统一 targetByUID 的写入条件：只要候选携带非空 MappedModel 就记录，
+// MappedEffort / MappedEffortDecided 原样带过，避免不同调用路径出现"写入条件"漂移。
+// 门槛用 MappedModel 而非 MappedEffortDecided，因为无映射模型的候选不应产生任何改写，
+// 而"有模型映射但 effort 未决定"是合法的"只改模型"场景，也需要落入 targetByUID。
+func recordTargetByUID(cand EndpointCandidate, targetByUID map[string]*ResolvedRouteTarget) {
+	if cand.MappedModel == "" || cand.EndpointUID == "" {
+		return
+	}
+	targetByUID[cand.EndpointUID] = &ResolvedRouteTarget{
+		Model:         cand.MappedModel,
+		Effort:        cand.MappedEffort,
+		EffortDecided: cand.MappedEffortDecided,
+		Reason:        "endpoint_policy",
+	}
 }
 
 // ── endpoint 级评分函数 ──
