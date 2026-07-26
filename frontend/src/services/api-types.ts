@@ -1850,6 +1850,21 @@ export interface KimiCodeRatioWindow {
   resetTime?: string
 }
 
+export interface KimiCodeMoney {
+  currency?: string
+  priceInCents: number
+}
+
+export interface KimiBoosterWallet {
+  id?: string
+  status?: string
+  allowTopup: boolean
+  moneyLeft: KimiCodeMoney
+  moneyTotal: KimiCodeMoney
+  monthlyChargeLimit: KimiCodeMoney
+  monthlyUsed: KimiCodeMoney
+}
+
 export interface KimiCodeBalance {
   feature?: string
   type?: string
@@ -1867,6 +1882,7 @@ export interface KimiCodeUsageSnapshot {
   codeSevenDay?: KimiCodeRatioWindow
   subscriptionBalance?: KimiCodeBalance
   giftBalances?: KimiCodeBalance[]
+  boosterWallets?: KimiBoosterWallet[]
   validatedAt: string
 }
 

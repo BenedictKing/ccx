@@ -62,6 +62,13 @@ func TestKimiConsoleClientVerify(t *testing.T) {
   "giftBalances":[{
     "feature":"FEATURE_OMNI","type":"GIFT","unit":"UNIT_CREDIT",
     "amountUsedRatio":0,"kimiCodeUsedRatio":0,"expireTime":"2026-12-31T15:59:59Z"
+  }],
+  "boosterWallets":[{
+    "id":"wallet-1","status":"STATUS_ACTIVE","allowTopup":true,
+    "moneyLeft":{"currency":"CNY","priceInCents":"4912"},
+    "moneyTotal":{"currency":"CNY","priceInCents":"5000"},
+    "monthlyChargeLimit":{"currency":"CNY","priceInCents":"10000"},
+    "monthlyUsed":{"currency":"CNY","priceInCents":"88"}
   }]
 }`))
 		default:
@@ -92,6 +99,16 @@ func TestKimiConsoleClientVerify(t *testing.T) {
 	}
 	if usage.SubscriptionBalance == nil || usage.SubscriptionBalance.KimiCodeUsedRatio != 0.15 || len(usage.GiftBalances) != 1 {
 		t.Fatalf("订阅余额解析错误: %+v", usage)
+	}
+	if len(usage.BoosterWallets) != 1 {
+		t.Fatalf("加油包解析错误: %+v", usage.BoosterWallets)
+	}
+	wallet := usage.BoosterWallets[0]
+	if wallet.ID != "wallet-1" || wallet.Status != "STATUS_ACTIVE" || !wallet.AllowTopup {
+		t.Fatalf("加油包元信息解析错误: %+v", wallet)
+	}
+	if wallet.MoneyLeft.PriceInCents != 4912 || wallet.MoneyTotal.PriceInCents != 5000 || wallet.MonthlyUsed.PriceInCents != 88 {
+		t.Fatalf("加油包金额解析错误: %+v", wallet)
 	}
 	if !usage.ValidatedAt.Equal(now) {
 		t.Fatalf("ValidatedAt=%s, want %s", usage.ValidatedAt, now)

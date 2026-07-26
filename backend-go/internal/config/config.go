@@ -181,6 +181,7 @@ type KimiCodeUsageSnapshot struct {
 	CodeSevenDay        *KimiCodeRatioWindow `json:"codeSevenDay,omitempty"`
 	SubscriptionBalance *KimiCodeBalance     `json:"subscriptionBalance,omitempty"`
 	GiftBalances        []KimiCodeBalance    `json:"giftBalances,omitempty"`
+	BoosterWallets      []KimiBoosterWallet  `json:"boosterWallets,omitempty"`
 	ValidatedAt         time.Time            `json:"validatedAt"`
 }
 
@@ -211,6 +212,23 @@ type KimiCodeBalance struct {
 	AmountUsedRatio   float64 `json:"amountUsedRatio"`
 	KimiCodeUsedRatio float64 `json:"kimiCodeUsedRatio"`
 	ExpireTime        string  `json:"expireTime,omitempty"`
+}
+
+// KimiCodeMoney 是 GetSubscriptionStats 返回的金额字段，单位为分。
+type KimiCodeMoney struct {
+	Currency     string `json:"currency,omitempty"`
+	PriceInCents int64  `json:"priceInCents"`
+}
+
+// KimiBoosterWallet 是 Kimi 额度加油包（按量计费余额钱包）快照。
+type KimiBoosterWallet struct {
+	ID                 string        `json:"id,omitempty"`
+	Status             string        `json:"status,omitempty"`
+	AllowTopup         bool          `json:"allowTopup"`
+	MoneyLeft          KimiCodeMoney `json:"moneyLeft"`
+	MoneyTotal         KimiCodeMoney `json:"moneyTotal"`
+	MonthlyChargeLimit KimiCodeMoney `json:"monthlyChargeLimit"`
+	MonthlyUsed        KimiCodeMoney `json:"monthlyUsed"`
 }
 
 // VolcengineAccessKeyPair 是火山云管控面签名凭证，用于 Agent/Coding Plan 识别与模型发现。

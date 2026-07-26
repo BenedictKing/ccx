@@ -96,11 +96,27 @@ type kimiBalanceResponse struct {
 	ExpireTime        string   `json:"expireTime"`
 }
 
+type kimiMoneyResponse struct {
+	Currency     string         `json:"currency"`
+	PriceInCents *kimiJSONInt64 `json:"priceInCents"`
+}
+
+type kimiBoosterWalletResponse struct {
+	ID                 string             `json:"id"`
+	Status             string             `json:"status"`
+	AllowTopup         bool               `json:"allowTopup"`
+	MoneyLeft          *kimiMoneyResponse `json:"moneyLeft"`
+	MoneyTotal         *kimiMoneyResponse `json:"moneyTotal"`
+	MonthlyChargeLimit *kimiMoneyResponse `json:"monthlyChargeLimit"`
+	MonthlyUsed        *kimiMoneyResponse `json:"monthlyUsed"`
+}
+
 type kimiSubscriptionStatsResponse struct {
-	RateLimitCodeFiveHour *kimiRatioResponse    `json:"ratelimitCode5h"`
-	RateLimitCodeSevenDay *kimiRatioResponse    `json:"ratelimitCode7d"`
-	SubscriptionBalance   *kimiBalanceResponse  `json:"subscriptionBalance"`
-	GiftBalances          []kimiBalanceResponse `json:"giftBalances"`
+	RateLimitCodeFiveHour *kimiRatioResponse          `json:"ratelimitCode5h"`
+	RateLimitCodeSevenDay *kimiRatioResponse          `json:"ratelimitCode7d"`
+	SubscriptionBalance   *kimiBalanceResponse        `json:"subscriptionBalance"`
+	GiftBalances          []kimiBalanceResponse       `json:"giftBalances"`
+	BoosterWallets        []kimiBoosterWalletResponse `json:"boosterWallets"`
 }
 
 // Verify 校验 Kimi Web 会话，返回待持久化的令牌与套餐快照。
@@ -192,6 +208,15 @@ func buildKimiCodeUsageSnapshot(usages kimiUsagesResponse, stats kimiSubscriptio
 		}
 		if balance != nil {
 			snapshot.GiftBalances = append(snapshot.GiftBalances, *balance)
+		}
+	}
+	for index := range stats.BoosterWallets {
+		wallet, err := kimiBoosterWalletSnapshot(&stats.BoosterWallets[index])
+		if err != nil {
+			return config.KimiCodeUsageSnapshot{}, fmt.Errorf("解析 Kimi 加油包失败: %w", err)
+		}
+		if wallet != nil {
+			snapshot.BoosterWallets = append(snapshot.BoosterWallets, *wallet)
 		}
 	}
 	return snapshot, nil
@@ -304,6 +329,32 @@ func kimiBalanceSnapshot(source *kimiBalanceResponse) (*config.KimiCodeBalance, 
 	return &config.KimiCodeBalance{
 		Feature: strings.TrimSpace(source.Feature), Type: strings.TrimSpace(source.Type), Unit: strings.TrimSpace(source.Unit),
 		AmountUsedRatio: amountRatio, KimiCodeUsedRatio: codeRatio, ExpireTime: expireTime,
+	}, nil
+}
+
+func kimiMoneySnapshot(source *kimiMoneyResponse) config.KimiCodeMoney {
+	if source == nil {
+		return config.KimiCodeMoney{}
+	}
+	priceInCents := int64(0)
+	if source.PriceInCents != nil {
+		priceInCents = int64(*source.PriceInCents)
+	}
+	return config.KimiCodeMoney{Currency: strings.TrimSpace(source.Currency), PriceInCents: priceInCents}
+}
+
+func kimiBoosterWalletSnapshot(source *kimiBoosterWalletResponse) (*config.KimiBoosterWallet, error) {
+	if source == nil {
+		return nil, nil
+	}
+	return &config.KimiBoosterWallet{
+		ID:                 strings.TrimSpace(source.ID),
+		Status:             strings.TrimSpace(source.Status),
+		AllowTopup:         source.AllowTopup,
+		MoneyLeft:          kimiMoneySnapshot(source.MoneyLeft),
+		MoneyTotal:         kimiMoneySnapshot(source.MoneyTotal),
+		MonthlyChargeLimit: kimiMoneySnapshot(source.MonthlyChargeLimit),
+		MonthlyUsed:        kimiMoneySnapshot(source.MonthlyUsed),
 	}, nil
 }
 
