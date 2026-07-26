@@ -1266,7 +1266,7 @@ import type {
 import { maskApiKey } from '../../utils/apiKeyMask'
 import { buildChannelApiKeyRows } from '../../utils/channelApiKeys'
 import { getVolcenginePlanConsoleURL } from '../../utils/channelWebsite'
-import { quotaRemainingColorClass } from '../../utils/quotaColor'
+import { quotaRemainingColorClass, quotaRemainingColorHex } from '../../utils/quotaColor'
 import { selectMiniMaxTokenPlanEndpoint, sha256KeyHash } from '../../utils/minimaxEndpointUsage'
 
 interface KeyModelsStatus {
@@ -1787,11 +1787,9 @@ const compshareUsagePercent = (window: CompsharePlanUsageWindow) => {
   return Math.max(0, Math.min(100, (window.used / window.limit) * 100))
 }
 
+// Compshare 传入的是"已用百分比"，进度条 color 属性需要 Vuetify 色名或 hex。
 const compshareUsageColor = (window: CompsharePlanUsageWindow) => {
-  const percent = compshareUsagePercent(window)
-  if (percent >= 90) return 'error'
-  if (percent >= 70) return 'warning'
-  return 'success'
+  return quotaRemainingColorHex(100 - compshareUsagePercent(window))
 }
 
 const compshareFormatEpoch = (value?: number) =>
@@ -1843,10 +1841,9 @@ const minimaxFormatQuota = (remainingPercent: number, used: number, total: numbe
   return total > 0 ? `剩余 ${percent}% (${used}/${total})` : `剩余 ${percent}%`
 }
 
+// MiniMax 传入的是"剩余百分比"，:class 绑定表格单元格文字颜色，需要 scoped CSS 类名。
 const minimaxQuotaColor = (remainingPercent: number) => {
-  if (remainingPercent >= 50) return 'text-success'
-  if (remainingPercent >= 20) return 'text-warning'
-  return 'text-error'
+  return quotaRemainingColorClass(remainingPercent)
 }
 
 const minimaxFormatRemainsTime = (milliseconds: number) => {
@@ -2195,10 +2192,9 @@ const kimiPlanUsageRows = (usage: KimiCodeUsageSnapshot) => {
   return rows
 }
 
-const kimiUsageColor = (percent: number) => {
-  if (percent >= 90) return 'error'
-  if (percent >= 70) return 'warning'
-  return 'success'
+// Kimi 传入的是"已用百分比"，进度条 color 属性需要 Vuetify 色名或 hex。
+const kimiUsageColor = (usedPercent: number) => {
+  return quotaRemainingColorHex(100 - usedPercent)
 }
 
 const kimiFormatDateTime = (value?: string) => {
