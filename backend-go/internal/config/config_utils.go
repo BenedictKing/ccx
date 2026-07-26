@@ -31,6 +31,42 @@ func deduplicateStrings(items []string) []string {
 	return result
 }
 
+// deprecatedGrokModelMappings 记录已下线/不再需要的 grok 模型映射精确对照，
+// 用于从渠道 modelMapping 中清除历史遗留项。
+var deprecatedGrokModelMappings = map[string]string{
+	"grok-4.1": "grok-4.1-thinking",
+	"grok-4.2": "grok-4.20-beta",
+}
+
+// sanitizeDeprecatedGrokModelMapping 从 mapping 中精确剔除已废弃的 grok 映射对。
+// 仅当 key 与 value 同时匹配才删除，避免影响用户自定义的其他 target。
+// 返回 changed=true 表示发生了删除；未命中或 mapping 为 nil/空时原样返回，不分配新 map。
+func sanitizeDeprecatedGrokModelMapping(mapping map[string]string) (map[string]string, bool) {
+	if len(mapping) == 0 {
+		return mapping, false
+	}
+	changed := false
+	for k, v := range deprecatedGrokModelMappings {
+		if mapping[k] == v {
+			changed = true
+			break
+		}
+	}
+	if !changed {
+		return mapping, false
+	}
+	cleaned := make(map[string]string, len(mapping))
+	for k, v := range mapping {
+		cleaned[k] = v
+	}
+	for k, v := range deprecatedGrokModelMappings {
+		if cleaned[k] == v {
+			delete(cleaned, k)
+		}
+	}
+	return cleaned, true
+}
+
 func normalizeUpstreamServiceType(serviceType, fallback string) string {
 	trimmed := strings.TrimSpace(serviceType)
 	if trimmed != "" {

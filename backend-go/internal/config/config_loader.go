@@ -114,6 +114,9 @@ func (cm *ConfigManager) loadConfig() error {
 	if cm.migrateFableReasoningMapping() {
 		needSaveDefaults = true
 	}
+	if cm.migrateDeprecatedGrokModelMapping() {
+		needSaveDefaults = true
+	}
 	if cm.ensureChannelUIDs() {
 		needSaveDefaults = true
 	}
@@ -536,6 +539,30 @@ func (cm *ConfigManager) migrateFableModelMapping() bool {
 	apply(cm.config.GeminiUpstream, "Gemini")
 	apply(cm.config.ChatUpstream, "Chat")
 	apply(cm.config.ImagesUpstream, "Images")
+	return updated
+}
+
+// migrateDeprecatedGrokModelMapping 清除历史遗留的 grok 精确模型映射
+// （grok-4.1 -> grok-4.1-thinking，grok-4.2 -> grok-4.20-beta），
+// 保证老配置文件里的渠道即使用户从不编辑，也会在下次启动时被清理。
+func (cm *ConfigManager) migrateDeprecatedGrokModelMapping() bool {
+	updated := false
+	apply := func(channels []UpstreamConfig, channelName string) {
+		for i := range channels {
+			cleaned, changed := sanitizeDeprecatedGrokModelMapping(channels[i].ModelMapping)
+			if changed {
+				channels[i].ModelMapping = cleaned
+				updated = true
+				log.Printf("[Config-Migration] %s 渠道 [%d] %s 已清除过时的 grok modelMapping", channelName, i, channels[i].Name)
+			}
+		}
+	}
+	apply(cm.config.Upstream, "Messages")
+	apply(cm.config.ResponsesUpstream, "Responses")
+	apply(cm.config.GeminiUpstream, "Gemini")
+	apply(cm.config.ChatUpstream, "Chat")
+	apply(cm.config.ImagesUpstream, "Images")
+	apply(cm.config.VectorsUpstream, "Vectors")
 	return updated
 }
 

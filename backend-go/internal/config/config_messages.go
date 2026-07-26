@@ -95,6 +95,7 @@ func (cm *ConfigManager) AddUpstream(upstream UpstreamConfig) error {
 	upstream.BaseURLs = deduplicateBaseURLs(upstream.BaseURLs, upstream.ServiceType)
 	applyDefaultBaseURL(&upstream)
 
+	upstream.ModelMapping, _ = sanitizeDeprecatedGrokModelMapping(upstream.ModelMapping)
 	cm.config.Upstream = append([]UpstreamConfig{upstream}, cm.config.Upstream...)
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
@@ -199,6 +200,7 @@ func (cm *ConfigManager) UpdateUpstream(index int, updates UpstreamUpdate) (shou
 	if updates.ModelMapping != nil {
 		upstream.ModelMapping = updates.ModelMapping
 	}
+	upstream.ModelMapping, _ = sanitizeDeprecatedGrokModelMapping(upstream.ModelMapping)
 	applyModelCapabilityUpdates(upstream, updates)
 	if updates.ReasoningMapping != nil {
 		upstream.ReasoningMapping = updates.ReasoningMapping
@@ -784,6 +786,7 @@ func (cm *ConfigManager) UpdateModelMapping(index int, sourcePattern, targetMode
 
 	// 更新 ModelMapping
 	upstream.ModelMapping[sourcePattern] = targetModel
+	upstream.ModelMapping, _ = sanitizeDeprecatedGrokModelMapping(upstream.ModelMapping)
 
 	// 更新 ReasoningMapping
 	if reasoning != "" {

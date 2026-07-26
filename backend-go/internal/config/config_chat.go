@@ -95,6 +95,7 @@ func (cm *ConfigManager) AddChatUpstream(upstream UpstreamConfig) error {
 	upstream.BaseURLs = deduplicateBaseURLs(upstream.BaseURLs, upstream.ServiceType)
 	applyDefaultBaseURL(&upstream)
 
+	upstream.ModelMapping, _ = sanitizeDeprecatedGrokModelMapping(upstream.ModelMapping)
 	cm.config.ChatUpstream = append([]UpstreamConfig{upstream}, cm.config.ChatUpstream...)
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
@@ -199,6 +200,7 @@ func (cm *ConfigManager) UpdateChatUpstream(index int, updates UpstreamUpdate) (
 	if updates.ModelMapping != nil {
 		upstream.ModelMapping = updates.ModelMapping
 	}
+	upstream.ModelMapping, _ = sanitizeDeprecatedGrokModelMapping(upstream.ModelMapping)
 	applyModelCapabilityUpdates(upstream, updates)
 	if updates.ReasoningMapping != nil {
 		upstream.ReasoningMapping = updates.ReasoningMapping
@@ -678,6 +680,7 @@ func (cm *ConfigManager) UpdateChatModelMapping(index int, sourcePattern, target
 
 	// 更新 ModelMapping
 	upstream.ModelMapping[sourcePattern] = targetModel
+	upstream.ModelMapping, _ = sanitizeDeprecatedGrokModelMapping(upstream.ModelMapping)
 
 	// 更新 ReasoningMapping
 	if reasoning != "" {

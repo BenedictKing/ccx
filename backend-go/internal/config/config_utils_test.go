@@ -201,6 +201,176 @@ func TestIsValidSupportedModelPattern(t *testing.T) {
 	}
 }
 
+func TestSanitizeDeprecatedGrokModelMapping(t *testing.T) {
+	t.Run("nil map 原样返回", func(t *testing.T) {
+		cleaned, changed := sanitizeDeprecatedGrokModelMapping(nil)
+		if changed {
+			t.Fatalf("expected changed=false for nil map")
+		}
+		if cleaned != nil {
+			t.Fatalf("expected nil map to remain nil, got %v", cleaned)
+		}
+	})
+
+	t.Run("空 map 原样返回", func(t *testing.T) {
+		mm := map[string]string{}
+		cleaned, changed := sanitizeDeprecatedGrokModelMapping(mm)
+		if changed {
+			t.Fatalf("expected changed=false for empty map")
+		}
+		if len(cleaned) != 0 {
+			t.Fatalf("expected empty map, got %v", cleaned)
+		}
+	})
+
+	t.Run("无关映射不受影响", func(t *testing.T) {
+		mm := map[string]string{"gpt": "gpt-5"}
+		cleaned, changed := sanitizeDeprecatedGrokModelMapping(mm)
+		if changed {
+			t.Fatalf("expected changed=false, got true")
+		}
+		if cleaned["gpt"] != "gpt-5" {
+			t.Fatalf("unrelated mapping got altered: %v", cleaned)
+		}
+	})
+
+	t.Run("命中第一对精确映射被删除", func(t *testing.T) {
+		mm := map[string]string{"grok-4.1": "grok-4.1-thinking", "gpt": "gpt-5"}
+		cleaned, changed := sanitizeDeprecatedGrokModelMapping(mm)
+		if !changed {
+			t.Fatalf("expected changed=true")
+		}
+		if _, ok := cleaned["grok-4.1"]; ok {
+			t.Fatalf("expected grok-4.1 removed, got %v", cleaned)
+		}
+		if cleaned["gpt"] != "gpt-5" {
+			t.Fatalf("expected unrelated mapping preserved, got %v", cleaned)
+		}
+	})
+
+	t.Run("命中第二对精确映射被删除", func(t *testing.T) {
+		mm := map[string]string{"grok-4.2": "grok-4.20-beta"}
+		cleaned, changed := sanitizeDeprecatedGrokModelMapping(mm)
+		if !changed {
+			t.Fatalf("expected changed=true")
+		}
+		if len(cleaned) != 0 {
+			t.Fatalf("expected empty map after cleanup, got %v", cleaned)
+		}
+	})
+
+	t.Run("两对同时命中且保留其他 key", func(t *testing.T) {
+		mm := map[string]string{
+			"grok-4.1": "grok-4.1-thinking",
+			"grok-4.2": "grok-4.20-beta",
+			"gpt":      "gpt-5",
+		}
+		cleaned, changed := sanitizeDeprecatedGrokModelMapping(mm)
+		if !changed {
+			t.Fatalf("expected changed=true")
+		}
+		if len(cleaned) != 1 || cleaned["gpt"] != "gpt-5" {
+			t.Fatalf("expected only gpt mapping to remain, got %v", cleaned)
+		}
+	})
+
+	t.Run("相同 key 不同 target 不删除", func(t *testing.T) {
+		mm := map[string]string{"grok-4.1": "custom-grok-4.1"}
+		cleaned, changed := sanitizeDeprecatedGrokModelMapping(mm)
+		if changed {
+			t.Fatalf("expected changed=false for custom target")
+		}
+		if cleaned["grok-4.1"] != "custom-grok-4.1" {
+			t.Fatalf("expected custom mapping preserved, got %v", cleaned)
+		}
+	})
+
+	t.Run("相同 target 不同 key 不删除", func(t *testing.T) {
+		mm := map[string]string{"my-alias": "grok-4.1-thinking"}
+		cleaned, changed := sanitizeDeprecatedGrokModelMapping(mm)
+		if changed {
+			t.Fatalf("expected changed=false for unrelated key with same target")
+		}
+		if cleaned["my-alias"] != "grok-4.1-thinking" {
+			t.Fatalf("expected mapping preserved, got %v", cleaned)
+		}
+	})
+
+	t.Run("对已清理结果二次调用保持幂等且不分配新 map", func(t *testing.T) {
+		mm := map[string]string{"gpt": "gpt-5"}
+		cleaned1, changed1 := sanitizeDeprecatedGrokModelMapping(mm)
+		if changed1 {
+			t.Fatalf("expected changed=false on first call without deprecated pairs")
+		}
+		cleaned2, changed2 := sanitizeDeprecatedGrokModelMapping(cleaned1)
+		if changed2 {
+			t.Fatalf("expected changed=false on second call")
+		}
+		if len(cleaned2) != 1 || cleaned2["gpt"] != "gpt-5" {
+			t.Fatalf("expected mapping unchanged, got %v", cleaned2)
+		}
+	})
+}
+
+func TestMigrateDeprecatedGrokModelMapping(t *testing.T) {
+	newChannels := func() []UpstreamConfig {
+		return []UpstreamConfig{
+			{
+				Name: "legacy",
+				ModelMapping: map[string]string{
+					"grok-4.1": "grok-4.1-thinking",
+					"grok-4.2": "grok-4.20-beta",
+				},
+			},
+			{
+				Name: "custom",
+				ModelMapping: map[string]string{
+					"grok-4.1": "my-custom-target",
+				},
+			},
+		}
+	}
+
+	cm := &ConfigManager{}
+	cm.config.Upstream = newChannels()
+	cm.config.ResponsesUpstream = newChannels()
+	cm.config.GeminiUpstream = newChannels()
+	cm.config.ChatUpstream = newChannels()
+	cm.config.ImagesUpstream = newChannels()
+	cm.config.VectorsUpstream = newChannels()
+
+	if !cm.migrateDeprecatedGrokModelMapping() {
+		t.Fatalf("expected migrateDeprecatedGrokModelMapping to return true")
+	}
+
+	channelSets := map[string][]UpstreamConfig{
+		"Upstream":          cm.config.Upstream,
+		"ResponsesUpstream": cm.config.ResponsesUpstream,
+		"GeminiUpstream":    cm.config.GeminiUpstream,
+		"ChatUpstream":      cm.config.ChatUpstream,
+		"ImagesUpstream":    cm.config.ImagesUpstream,
+		"VectorsUpstream":   cm.config.VectorsUpstream,
+	}
+	for name, channels := range channelSets {
+		legacy := channels[0]
+		if _, ok := legacy.ModelMapping["grok-4.1"]; ok {
+			t.Fatalf("%s: expected legacy grok-4.1 mapping removed, got %v", name, legacy.ModelMapping)
+		}
+		if _, ok := legacy.ModelMapping["grok-4.2"]; ok {
+			t.Fatalf("%s: expected legacy grok-4.2 mapping removed, got %v", name, legacy.ModelMapping)
+		}
+		custom := channels[1]
+		if custom.ModelMapping["grok-4.1"] != "my-custom-target" {
+			t.Fatalf("%s: expected custom grok-4.1 mapping preserved, got %v", name, custom.ModelMapping)
+		}
+	}
+
+	// 再次调用应为幂等，不再产生变更
+	if cm.migrateDeprecatedGrokModelMapping() {
+		t.Fatalf("expected migrateDeprecatedGrokModelMapping to return false on second call")
+	}
+}
+
 func TestMigrateFableReasoningMapping(t *testing.T) {
 	cm := &ConfigManager{}
 	cm.config.Upstream = []UpstreamConfig{
