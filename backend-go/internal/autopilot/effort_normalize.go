@@ -34,6 +34,16 @@ func NormalizeEffortLevel(raw string) EffortLevel {
 	}
 }
 
+// EffortLevelOrdinal 返回 EffortLevel 在序数轴上的索引值。
+// off=0, minimal=1, low=2, medium=3, high=4, max=5。
+// 空串或无法识别的值返回 -1。
+func EffortLevelOrdinal(level EffortLevel) int {
+	if ord, ok := effortOrdinal[level]; ok {
+		return ord
+	}
+	return -1
+}
+
 // EffortLevelDistance 返回两个 EffortLevel 在序数轴上的绝对距离。
 // off=0, minimal=1, low=2, medium=3, high=4, max=5。
 // 任一参数为空或无法识别时返回 -1（表示无法计算距离）。

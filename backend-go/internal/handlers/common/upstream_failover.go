@@ -354,6 +354,10 @@ func TryUpstreamWithAllKeys(
 
 		for keyAttempts, attemptOrdinal := 0, 0; keyAttempts < maxRetries || retryAPIKey != ""; attemptOrdinal++ {
 			isRetryAttempt := attemptOrdinal > 0 || urlIdx > 0
+			// 每次 attempt 开始时清除上一轮的 effort 可观测性标记，
+			// 防止 failover 到未产生 resolved target 的 endpoint 时残留旧值。
+			c.Set("effortDecisionSource", "passthrough")
+			c.Set("effortClampedByClient", false)
 			// 释放上一轮 attempt 的并发信号量（首次为空操作）
 			if activeRateLimitRelease != nil {
 				activeRateLimitRelease()
@@ -505,7 +509,10 @@ func TryUpstreamWithAllKeys(
 					// 记录 effort 决策来源与钳位状态，供 ChannelLog 可观测性字段使用
 					if target.EffortDecided {
 						c.Set("effortDecisionSource", "autopilot")
-						if _, clientExplicit := ExtractClientEffortExplicit(requestBody, apiType); clientExplicit {
+						// 注意：ExtractClientEffortExplicit 按 scheduler.ChannelKind（小写 messages/chat/...）
+						// 分支判断协议字段，而非 apiType 显示名（Messages/Chat/...），此处须传入 kind。
+						clientRaw, clientExplicit := ExtractClientEffortExplicit(requestBody, string(kind))
+						if isEffortClampedByClient(clientRaw, clientExplicit, target.Effort) {
 							c.Set("effortClampedByClient", true)
 						}
 					} else {
@@ -1581,6 +1588,18 @@ func isSystemHeaderError(errStr string) bool {
 // atomicModelEffortRewrite 原子地改写请求体中的 model 和 effort。
 // 保证：如果 effort 改写失败，model 也保持不变（原子性）。
 // 返回 (newBody, true) 表示成功，(originalBody, false) 表示失败或无需改写。
+// isEffortClampedByClient 判断客户端显式声明的 effort 是否被 autopilot 的选择钳位。
+// 仅当客户端 effort 的序数值严格低于 autopilot 选择的 effort 时返回 true。
+// 客户端未显式声明 effort 时返回 false。
+func isEffortClampedByClient(clientRaw string, clientExplicit bool, targetEffort autopilot.EffortLevel) bool {
+	if !clientExplicit {
+		return false
+	}
+	clientOrd := autopilot.EffortLevelOrdinal(autopilot.NormalizeEffortLevel(clientRaw))
+	targetOrd := autopilot.EffortLevelOrdinal(autopilot.NormalizeEffortLevel(string(targetEffort)))
+	return clientOrd >= 0 && targetOrd >= 0 && clientOrd < targetOrd
+}
+
 func atomicModelEffortRewrite(body []byte, target *autopilot.ResolvedRouteTarget, upstream *config.UpstreamConfig) ([]byte, bool) {
 	if target == nil || target.Model == "" {
 		return body, false

@@ -104,6 +104,34 @@ func TestEffortLevelDistance(t *testing.T) {
 	})
 }
 
+// ── EffortLevelOrdinal 测试 ──
+
+func TestEffortLevelOrdinal(t *testing.T) {
+	tests := []struct {
+		name     string
+		level    EffortLevel
+		expected int
+	}{
+		{"off", EffortOff, 0},
+		{"minimal", EffortMinimal, 1},
+		{"low", EffortLow, 2},
+		{"medium", EffortMedium, 3},
+		{"high", EffortHigh, 4},
+		{"max", EffortMax, 5},
+		{"empty string", "", -1},
+		{"unknown", EffortLevel("unknown"), -1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := EffortLevelOrdinal(tt.level)
+			if got != tt.expected {
+				t.Errorf("EffortLevelOrdinal(%q) = %d, want %d", tt.level, got, tt.expected)
+			}
+		})
+	}
+}
+
 // ── EffortFallbackConfidence 测试 ──
 
 func TestEffortFallbackConfidence(t *testing.T) {
