@@ -700,6 +700,7 @@ import { api, type Channel, type ChannelKind, type ChannelMetrics, type ChannelP
 import { getChannelTypeApi } from '../utils/channelTypeApi'
 import { isLlmChannelKind } from '../utils/unifiedChannels'
 import { sortChannelsByPriority } from '../utils/channelOrder'
+import { buildChannelMetricsLookup } from '../utils/channelMetricsLookup'
 import { useI18n } from '../i18n'
 import { useGlobalTick } from '../composables/useGlobalTick'
 import { useChannelActivity } from '../composables/useChannelActivity'
@@ -1013,14 +1014,13 @@ watch(() => props.channelType, () => {
   }
 })
 
-// Fetch channel metrics
+// Fetch channel metrics —— 按 `routeKind:channelIndex` 复合键精确匹配。
+// 统一列表里不同协议的渠道可能共用同一个 channelIndex，用 find 取首条会把
+// 前一个渠道的请求数/缓存率复用给后面的渠道。
+const metricsLookup = computed(() => buildChannelMetricsLookup(metrics.value))
+
 const getChannelMetrics = (channel: Channel): ChannelMetrics | undefined => {
-  const routeKind = getRouteKind(channel)
-  const routeIndex = getRouteIndex(channel)
-  return metrics.value.find(m => {
-    if (m.channelIndex !== routeIndex) return false
-    return !m.routeKind || m.routeKind === routeKind
-  })
+  return metricsLookup.value.get(getRouteIndex(channel), getRouteKind(channel))
 }
 
 // Fetch channel health (§8.2) by stable UID, with a kind/index fallback for older data.
@@ -1236,7 +1236,11 @@ const refreshMetrics = async () => {
       channelTypeApi.getMetrics(),
       channelTypeApi.getSchedulerStats()
     ])
-    metrics.value = metricsData
+    // 直拉的指标不带 routeKind，补上当前 tab 的类型，避免复合键匹配退化
+    metrics.value = metricsData.map(metric => ({
+      ...metric,
+      routeKind: metric.routeKind ?? props.channelType,
+    }))
     schedulerStats.value = statsData
   } catch (error) {
     console.error('Failed to load metrics:', error)
@@ -1482,7 +1486,11 @@ const handleDeleteChannel = (channel: Channel) => {
 const activityTick = useGlobalTick(2000, 'ChannelOrch-activity')
 
 onMounted(() => {
-  refreshMetrics()
+  // 父组件已下发 dashboard 指标时不要再直拉：统一 LLM 视图下直拉只能拿到当前
+  // tab 一种协议的指标，会覆盖掉父组件合并好的多协议数据
+  if (!props.dashboardMetrics) {
+    refreshMetrics()
+  }
   activityTick.onTick(() => { activityUpdateTick.value++ })
 })
 
