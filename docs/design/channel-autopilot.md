@@ -1540,20 +1540,29 @@ func (r *SmartRouter) BuildPlan(profile *RequestProfile) *RequestRoutingPlan {
 // backend-go/internal/autopilot/endpoint_policy.go
 
 type EndpointCandidate struct {
-    ChannelUID  string
-    ChannelKind string
-    MetricsKey  string
-    BaseURL     string
-    KeyMask     string
-    MappedModel string
-    Score       float64
-    Reason      string
+    ChannelUID          string
+    ChannelKind         string
+    MetricsKey          string
+    BaseURL             string
+    KeyMask             string
+    MappedModel         string
+    MappedEffort        EffortLevel  // 自动映射的 effort 级别（空=未决定）
+    MappedEffortDecided bool         // effort 是否由 Autopilot 决定
+    EndpointUID         string       // 稳定 endpoint ID
+    Score               float64
+    Reason              string
 }
 
 type EndpointAttemptPolicy struct {
     RequestModel string
     ByChannelUID map[string][]EndpointCandidate // 已按优先级排序
     FailOpen     bool                           // true: 无画像时回退现有 key/baseURL 轮转
+
+    // ResolvedModelByEndpointUID（旧 API）：仅返回模型名，向后兼容。
+    // ResolvedTargetByEndpointUID（新 API）：返回 model + effort 原子决策。
+    // 两者从同一份 targetByUID 派生，避免两个真值源。
+    ResolvedModelByEndpointUID  func(endpointUID string) string
+    ResolvedTargetByEndpointUID func(endpointUID string) *ResolvedRouteTarget
 }
 ```
 
@@ -2438,6 +2447,43 @@ long_context: [medium, high]     image_generation/embedding: 不展开
    "低档模型 + max 思考"不能顶替下界要求的高档模型
 5. 上游不支持该档位时就近降档（max→high），但绝不低于客户端等效请求的档位
 ```
+
+#### 5.8.4 联合决策的现状实现（model + effort 原子化）
+
+> 状态说明（2026-07-26）：本节描述的联合决策链路已实现并接入真实请求路径（关联计划 [2026-07-26-autopilot-model-effort-joint-routing.md](../superpowers/plans/2026-07-26-autopilot-model-effort-joint-routing.md) 的 Task 1~7）。**渠道级手工 `modelMapping` / `reasoningMapping` 表目前仍然存在且仍然生效**，退役是该计划的 Task 8，尚未执行；手工表当前的优先级关系见下文。
+
+**决策对象。** 自动路由的返回值不再是裸模型名，而是 `autopilot.ResolvedRouteTarget`（`backend-go/internal/autopilot/route_target.go`）：
+
+```go
+type ResolvedRouteTarget struct {
+    Model         string      // 目标模型 ID
+    Effort        EffortLevel // 目标思考档位；空串表示不改写
+    EffortDecided bool        // true 表示 effort 由 Autopilot 决定；false 为 passthrough
+    Reason        string      // 决策原因，用于 Trace 与日志
+}
+```
+
+`EffortDecided=false` 且 `Effort` 为空是合法的 fail-open 结果：模型可能被改写，但思考参数保持原样。
+
+**决策发生的位置。** `autopilot/endpoint_policy.go` 的 `resolveMappedModel()` 是统一入口，内部分两路：`resolveManualMapping()` 处理渠道级显式 `ModelMapping`（仍是当前优先级更高的一路，返回的 `ResolvedRouteTarget.EffortDecided` 恒为 `false`，即手工映射只改模型不改档位）；`resolveAutoModel()` 调用 `ModelResolver` 做自动模型解析，并在 `model_resolver.go` 的 `rankEligibleModels()` 中按 `SupportedEffortLevels` × `PerTaskClass` 展开 `(model, effort)` 候选、应用 `EffortQualityBonus` 与 anti-effort-inflation 反膨胀 tiebreak（同质量档优先选低 effort）、并按 `EffortFloor` 过滤掉低于任务下界的候选。产出的 `ResolvedRouteTarget` 经 `buildResolvedTargetLookup()` 挂到 `EndpointAttemptPolicy.ResolvedTargetByEndpointUID`，与旧的 `ResolvedModelByEndpointUID`（仅模型，向后兼容）并列。
+
+**决策如何到达上游请求。** `handlers/common/upstream_failover.go` 的 `TryUpstreamWithAllKeys` 在为每个 endpoint 尝试构建请求前，通过 `ResolvedTargetByEndpointUID` 取得 `*ResolvedRouteTarget`，交给 `atomicModelEffortRewrite()` 做一次原子改写：先用 `sjson` 改写 `model` 字段；若 `EffortDecided=true` 且 `Effort` 非空，再检查目标模型的 `ThinkingMode`——`adaptive_only` 的模型跳过思考参数注入（模型自身决定思考深度，守卫逻辑对齐 `providers/claude.go` 的 `applyClaudeReasoningEffort`），否则调用 `config.ApplyReasoningParamStyle()` 写入。模型改写与档位改写共用一次函数调用，任一步 `sjson`/`json` 处理失败即整体放弃、保持原始 body，不会出现"模型改了、档位没改"的中间态。
+
+**各协议的注入形态。** `config.ApplyReasoningParamStyle(req, style, effort)`（`config/config_utils.go`）按 `upstream.ReasoningParamStyle` 三态分支：
+
+```text
+style="thinking"          → Claude 派系：写 thinking.type=enabled + thinking.effort=<effort>；
+                             effort 为 off/none 时写 thinking.type=disabled；同时清理互斥字段
+                             reasoning / reasoning_effort / thinking.budget_tokens
+style="reasoning_effort"   → OpenAI Chat 派系：写顶层 reasoning_effort 字段，清理 reasoning
+style="" / 默认            → Responses 派系：写 reasoning.effort 对象形态
+```
+
+**Gemini 派系是尚未接通的缺口。** 请求侧提取（`extractGeminiEffortExplicit()`，`handlers/common/reasoning_log.go`）已经能读取 `generationConfig.thinkingConfig.thinkingLevel` 并识别显式 `none`（`thinkingBudget=0`），这条读路径用于日志与 `RequestProfile.ClientEffort` 提取。但写路径——把联合决策的 `target.Effort` 写回 Gemini 请求体的 `thinkingConfig.thinkingLevel`——目前代码中不存在：`atomicModelEffortRewrite()` 唯一的写出口是 `ApplyReasoningParamStyle()`，它只覆盖 Claude/Chat/Responses 三种形态，没有 Gemini 分支；`handlers/gemini/handler.go` 的 `buildProviderRequest()` 也没有调用任何 effort 注入函数。也就是说，Gemini 渠道当前仍会经过 endpoint 级模型改写（`atomicModelEffortRewrite` 会改写 `model` 字段本身），但联合决策选中的思考档位不会落到 Gemini 请求体上，效果等同于 fail-open passthrough。此项在原计划里归属 Task 5 的"Gemini 派系注入路径"，尚未实现。
+
+**可观测性字段。** 原子改写点会向 `gin.Context` 写入两个字段供 ChannelLog 使用：`effortDecisionSource`（`autopilot` 表示由联合决策产出，`passthrough` 表示未改写或手工映射路径）、`effortClampedByClient`（当客户端显式声明的档位低于 Autopilot 选择的档位时置 `true`，由 `isEffortClampedByClient()` 基于 `EffortLevelOrdinal` 比较得出）。
+
+**手工映射表的现状。** `resolveMappedModel()` 当前的分支顺序是"显式 `ModelMapping` 优先，自动决策兜底"——与原计划 Task 7 描述的"反转优先级"目标相反的方向仍是默认值；反转开关已作为可配置项落地（提交 `d15e776e`），但默认状态未切换，`ModelMapping` / `ReasoningMapping` 两张表本身尚未删除，`config.ResolveReasoningEffort()`（`config/config_utils.go`）与 provider 层（如 `providers/claude.go`）仍会读取 `ReasoningMapping` 独立生效。表的整体退役是 Task 8 的范围，未开始。
 
 ### 5.4 模型自动映射 (ModelResolver)
 
