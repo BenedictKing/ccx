@@ -991,3 +991,278 @@ func TestResolveModel_ProbeSuccessFalse_Filtered(t *testing.T) {
 		t.Errorf("expected 'no_capable_model', got %s", reason)
 	}
 }
+
+// ── Effort 变体展开测试 ──
+
+// makeEffortProfile 创建带 effort 控制能力的测试 ModelProfile。
+func makeEffortProfile(modelID string, family ModelFamily, tier QualityTier, ctxTokens int,
+	probeOK bool, latencyMs int64, effortControl bool, effortLevels []EffortLevel) ModelProfile {
+	return ModelProfile{
+		ChannelUID:            "ch_test",
+		ChannelKind:           "messages",
+		MetricsKey:            "metrics_test",
+		ModelID:               modelID,
+		ModelFamily:           family,
+		QualityTier:           tier,
+		ContextTokens:         ctxTokens,
+		SupportsReasoning:     true,
+		SupportsVision:        true,
+		SupportsToolCalls:     true,
+		ProbeSuccess:          probeOK,
+		ProbeLatencyMs:        latencyMs,
+		SupportsEffortControl: effortControl,
+		SupportedEffortLevels: effortLevels,
+	}
+}
+
+// makeRoutingConfig 构造带 ReasoningEffort 配置的 Config。
+// SchemaVersion 设为 99 避免 ConfigManager 迁移覆盖测试值。
+func makeRoutingConfig(enabled, expandVariants bool, perTaskClass map[string][]string) config.Config {
+	return config.Config{
+		AutopilotRouting: config.AutopilotRoutingConfig{
+			SchemaVersion: 99,
+			ModelMapping: config.ModelMappingRoutingConfig{
+				CapabilityFloorEnabled: true,
+			},
+			ReasoningEffort: config.ReasoningEffortConfig{
+				Enabled:        enabled,
+				ExpandVariants: expandVariants,
+				PerTaskClass:   perTaskClass,
+			},
+		},
+	}
+}
+
+func TestResolveEffortVariants_Disabled_ReturnsPassthrough(t *testing.T) {
+	profiles := []ModelProfile{
+		makeEffortProfile("claude-sonnet-5", ModelFamilyClaude, QualityTierHigh, 1000000,
+			true, 100, true, []EffortLevel{EffortLow, EffortMedium, EffortHigh}),
+	}
+	cfg := makeRoutingConfig(false, false, nil) // Enabled=false
+	resolver := newTestResolverWithConfig(t, profiles, cfg)
+
+	target, resolved, _ := resolver.ResolveModel(
+		"claude-sonnet-5", "ch_test", "messages", "metrics_test", CapabilityFloor{})
+	if !resolved {
+		t.Fatal("expected resolved=true")
+	}
+	if target.EffortDecided {
+		t.Error("expected EffortDecided=false when reasoning effort disabled")
+	}
+	if target.Effort != "" {
+		t.Errorf("expected empty Effort, got %s", target.Effort)
+	}
+}
+
+func TestResolveEffortVariants_NoEffortControl_ReturnsPassthrough(t *testing.T) {
+	profiles := []ModelProfile{
+		makeEffortProfile("claude-sonnet-5", ModelFamilyClaude, QualityTierHigh, 1000000,
+			true, 100, false, nil), // SupportsEffortControl=false
+	}
+	cfg := makeRoutingConfig(true, false, nil)
+	resolver := newTestResolverWithConfig(t, profiles, cfg)
+
+	target, resolved, _ := resolver.ResolveModel(
+		"claude-sonnet-5", "ch_test", "messages", "metrics_test", CapabilityFloor{})
+	if !resolved {
+		t.Fatal("expected resolved=true")
+	}
+	if target.EffortDecided {
+		t.Error("expected EffortDecided=false when model lacks effort control")
+	}
+}
+
+func TestResolveEffortVariants_ExpandVariantsFalse_ReturnsLowest(t *testing.T) {
+	// 注意: ExpandVariants=false 在 JSON 中因 omitempty 被省略，ConfigManager 的
+	// overlay 逻辑会保留默认 true。因此该场景直接测试 resolveEffortVariants 方法。
+	profile := makeEffortProfile("claude-sonnet-5", ModelFamilyClaude, QualityTierHigh, 1000000,
+		true, 100, true, []EffortLevel{EffortLow, EffortMedium, EffortHigh, EffortMax})
+	floor := CapabilityFloor{TaskClass: TaskClass("coding")}
+
+	// 手动构造一个带 ExpandVariants=false 的 cfgManager 来测试。
+	cfg := config.Config{
+		AutopilotRouting: config.AutopilotRoutingConfig{
+			SchemaVersion: 99, // 避免迁移覆盖
+			ReasoningEffort: config.ReasoningEffortConfig{
+				Enabled:        true,
+				ExpandVariants: false,
+			},
+		},
+	}
+	resolver := newTestResolverWithConfig(t, []ModelProfile{profile}, cfg)
+	levels, decided := resolver.resolveEffortVariants(profile, floor)
+
+	if len(levels) != 1 {
+		t.Fatalf("expected 1 variant with ExpandVariants=false, got %d", len(levels))
+	}
+	if !decided[0] {
+		t.Error("expected decided=true")
+	}
+	if levels[0] != EffortLow {
+		t.Errorf("expected lowest effort 'low', got '%s'", levels[0])
+	}
+}
+
+func TestResolveEffortVariants_ExpandVariantsTrue_UsesPerTaskClass(t *testing.T) {
+	profiles := []ModelProfile{
+		makeEffortProfile("claude-sonnet-5", ModelFamilyClaude, QualityTierHigh, 1000000,
+			true, 100, true, []EffortLevel{EffortLow, EffortMedium, EffortHigh, EffortMax}),
+	}
+	// 只允许 supervisor 任务用 high 和 max
+	perTaskClass := map[string][]string{
+		"supervisor": {"high", "max"},
+	}
+	cfg := makeRoutingConfig(true, true, perTaskClass)
+	resolver := newTestResolverWithConfig(t, profiles, cfg)
+
+	floor := CapabilityFloor{TaskClass: TaskClass("supervisor")}
+	best := resolver.rankEligibleModels(profiles, "claude-sonnet-5", "ch_test", "messages", floor)
+
+	// 验证选出的 effort 在 {high, max} 范围内
+	if !best.effortDecided {
+		t.Error("expected effortDecided=true")
+	}
+	if best.effort != EffortHigh && best.effort != EffortMax {
+		t.Errorf("expected effort in {high, max}, got '%s'", best.effort)
+	}
+}
+
+func TestResolveEffortVariants_PerTaskClassIntersectionEmpty_FallbackToLowestAboveFloor(t *testing.T) {
+	profiles := []ModelProfile{
+		makeEffortProfile("claude-sonnet-5", ModelFamilyClaude, QualityTierHigh, 1000000,
+			true, 100, true, []EffortLevel{EffortMedium, EffortHigh}),
+	}
+	// 配置的档位 {max} 与模型支持的 {medium, high} 无交集
+	perTaskClass := map[string][]string{
+		"coding": {"max"},
+	}
+	cfg := makeRoutingConfig(true, false, perTaskClass)
+	resolver := newTestResolverWithConfig(t, profiles, cfg)
+
+	floor := CapabilityFloor{TaskClass: TaskClass("coding"), EffortFloor: EffortMedium}
+	best := resolver.rankEligibleModels(profiles, "claude-sonnet-5", "ch_test", "messages", floor)
+
+	if !best.effortDecided {
+		t.Error("expected effortDecided=true on fallback")
+	}
+	if best.effort != EffortMedium {
+		t.Errorf("expected fallback to 'medium', got '%s'", best.effort)
+	}
+}
+
+func TestEffortFloorFilter_BelowFloorFilteredOut(t *testing.T) {
+	lowModel := makeEffortProfile("model-low", ModelFamilyDeepSeek, QualityTierNormal, 100000,
+		true, 100, true, []EffortLevel{EffortLow, EffortMedium})
+	highModel := makeEffortProfile("model-high", ModelFamilyDeepSeek, QualityTierNormal, 100000,
+		true, 100, true, []EffortLevel{EffortLow, EffortHigh})
+
+	profiles := []ModelProfile{lowModel, highModel}
+	// 不限制 PerTaskClass，让两个模型都展开
+	cfg := makeRoutingConfig(true, true, nil)
+	resolver := newTestResolverWithConfig(t, profiles, cfg)
+
+	// EffortFloor=medium 应该过滤掉两个模型的 low 变体
+	floor := CapabilityFloor{EffortFloor: EffortMedium, TaskClass: TaskClass("coding")}
+	best := resolver.rankEligibleModels(profiles, "deepseek-v4", "ch_test", "messages", floor)
+
+	if !best.effortDecided {
+		t.Error("expected effortDecided=true")
+	}
+	bestOrd, _ := effortOrdinal[best.effort]
+	floorOrd, _ := effortOrdinal[EffortMedium]
+	if bestOrd < floorOrd {
+		t.Errorf("expected effort >= medium, got '%s'", best.effort)
+	}
+}
+
+func TestEffortFloorFilter_FailOpen_WhenAllFiltered(t *testing.T) {
+	// 模型只有 low 档位，EffortFloor=high 会把所有变体都过滤掉
+	profile := makeEffortProfile("model-low-only", ModelFamilyDeepSeek, QualityTierNormal, 100000,
+		true, 100, true, []EffortLevel{EffortLow})
+	profiles := []ModelProfile{profile}
+	cfg := makeRoutingConfig(true, true, nil)
+	resolver := newTestResolverWithConfig(t, profiles, cfg)
+
+	floor := CapabilityFloor{EffortFloor: EffortHigh, TaskClass: TaskClass("coding")}
+	best := resolver.rankEligibleModels(profiles, "deepseek-v4", "ch_test", "messages", floor)
+
+	// fail-open: 应该仍然返回该候选（而不是 panic 或返回零值）
+	if best.profile.ModelID == "" {
+		t.Error("expected fail-open: should still return a candidate")
+	}
+}
+
+func TestBetterRankedModel_AntiEffortInflation_Tiebreak(t *testing.T) {
+	// 同模型、同质量分数、同 normalizedCandidateID，高 effort 应该输给低 effort（够用即止）。
+	// anti-effort-inflation 分支在 normalizedCandidateID 相同且质量分完全一致时生效。
+	sameScoreLow := rankedModelCandidate{
+		profile:               ModelProfile{ModelID: "model-x", ModelFamily: ModelFamilyClaude, QualityTier: QualityTierHigh},
+		effort:                EffortLow,
+		effortDecided:         true,
+		qualityRank:           qualityTierRank(QualityTierHigh),
+		measuredQualityScore:  0.5,
+		normalizedCandidateID: "model-x",
+	}
+	sameScoreHigh := rankedModelCandidate{
+		profile:               ModelProfile{ModelID: "model-x", ModelFamily: ModelFamilyClaude, QualityTier: QualityTierHigh},
+		effort:                EffortHigh,
+		effortDecided:         true,
+		qualityRank:           qualityTierRank(QualityTierHigh),
+		measuredQualityScore:  0.5,
+		normalizedCandidateID: "model-x",
+	}
+
+	if !betterRankedModel(sameScoreLow, sameScoreHigh, CostPrefBalanced) {
+		t.Error("expected lower effort to win when all else equal (anti-inflation)")
+	}
+	if betterRankedModel(sameScoreHigh, sameScoreLow, CostPrefBalanced) {
+		t.Error("expected higher effort NOT to win when all else equal (anti-inflation)")
+	}
+}
+
+func TestBetterRankedModel_AntiEffortInflation_DifferentModelsIgnored(t *testing.T) {
+	// 不同模型不应触发 effort anti-inflation 逻辑
+	a := rankedModelCandidate{
+		profile:               ModelProfile{ModelID: "model-a", QualityTier: QualityTierHigh},
+		effort:                EffortHigh,
+		effortDecided:         true,
+		qualityRank:           qualityTierRank(QualityTierHigh),
+		measuredQualityScore:  0.5,
+		normalizedCandidateID: "model-a",
+	}
+	b := rankedModelCandidate{
+		profile:               ModelProfile{ModelID: "model-b", QualityTier: QualityTierHigh},
+		effort:                EffortLow,
+		effortDecided:         true,
+		qualityRank:           qualityTierRank(QualityTierHigh),
+		measuredQualityScore:  0.5,
+		normalizedCandidateID: "model-b",
+	}
+	// 不同模型、effort 不同，不应因为 effort 低就赢
+	// 应该走到 normalizedCandidateID 比较（model-a < model-b 字典序）
+	if !betterRankedModel(a, b, CostPrefBalanced) {
+		t.Error("expected model-a to win by normalizedCandidateID, not effort")
+	}
+}
+
+func TestEffortQualityBonus_AppliedToScore(t *testing.T) {
+	// 验证 EffortQualityBonus * 0.1 被加到 measuredQualityScore
+	profile := makeEffortProfile("claude-sonnet-5", ModelFamilyClaude, QualityTierHigh, 1000000,
+		true, 100, true, []EffortLevel{EffortLow, EffortMax})
+	cfg := makeRoutingConfig(true, true, nil)
+	resolver := newTestResolverWithConfig(t, []ModelProfile{profile}, cfg)
+
+	floor := CapabilityFloor{TaskClass: TaskClass("coding")}
+	best := resolver.rankEligibleModels([]ModelProfile{profile}, "claude-sonnet-5", "ch_test", "messages", floor)
+
+	if !best.effortDecided {
+		t.Fatal("expected effortDecided=true")
+	}
+	// Max 应该因 bonus 更高而被选中（同模型唯一候选，bonus 影响分数）
+	expectedBonus := EffortQualityBonus(best.effort) * 0.1
+	baseScore := measuredProviderQualityScore(profile)
+	if best.measuredQualityScore < baseScore+expectedBonus-0.001 {
+		t.Errorf("expected bonus applied: score=%.4f, base=%.4f, bonus=%.4f",
+			best.measuredQualityScore, baseScore, expectedBonus)
+	}
+}

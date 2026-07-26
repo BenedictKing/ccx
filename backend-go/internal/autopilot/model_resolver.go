@@ -275,7 +275,141 @@ func (r *ModelResolver) resolveModelAnyEndpoint(
 
 // ── 过滤与排序 ──
 
-// filterByCapabilityFloor 只保留满足所有能力下界约束的模型。
+// resolveEffortVariants 决定给定画像可用的 effort 变体列表。
+// 每个返回的 EffortLevel 会生成一个独立的 rankedModelCandidate。
+func (r *ModelResolver) resolveEffortVariants(profile ModelProfile, floor CapabilityFloor) ([]EffortLevel, []bool) {
+	// 读取全局 reasoning effort 配置；cfgManager 为 nil 时 fail-open。
+	var cfg *config.ReasoningEffortConfig
+	if r != nil && r.cfgManager != nil {
+		rc := r.cfgManager.GetAutopilotRouting().ReasoningEffort
+		cfg = &rc
+	}
+
+	// 配置未启用：不展开 effort 变体，返回单个空 level（passthrough）。
+	if cfg == nil || !cfg.Enabled {
+		return []EffortLevel{""}, []bool{false}
+	}
+
+	// 模型不支持 effort 控制或没有声明可用档位。
+	if !profile.SupportsEffortControl || len(profile.SupportedEffortLevels) == 0 {
+		return []EffortLevel{""}, []bool{false}
+	}
+
+	// 计算 profile 支持的 effort 与 PerTaskClass 配置的交集。
+	taskClassKey := string(floor.TaskClass)
+	var configuredLevels []EffortLevel
+	if cfg.PerTaskClass != nil {
+		if raw, ok := cfg.PerTaskClass[taskClassKey]; ok {
+			for _, s := range raw {
+				if norm := NormalizeEffortLevel(s); norm != "" {
+					configuredLevels = append(configuredLevels, norm)
+				}
+			}
+		}
+	}
+	// 如果没有为该 TaskClass 配置特定档位，也没有全局交集，使用模型支持的全部档位。
+	var intersection []EffortLevel
+	if len(configuredLevels) > 0 {
+		supportedSet := make(map[EffortLevel]bool, len(profile.SupportedEffortLevels))
+		for _, lv := range profile.SupportedEffortLevels {
+			if norm := NormalizeEffortLevel(string(lv)); norm != "" {
+				supportedSet[norm] = true
+			}
+		}
+		for _, lv := range configuredLevels {
+			if supportedSet[lv] {
+				intersection = append(intersection, lv)
+			}
+		}
+	} else {
+		// 没有 PerTaskClass 约束时，使用模型支持的全部档位。
+		for _, lv := range profile.SupportedEffortLevels {
+			if norm := NormalizeEffortLevel(string(lv)); norm != "" {
+				intersection = append(intersection, norm)
+			}
+		}
+	}
+
+	// 交集为空时，回退到 SupportedEffortLevels 中 >= EffortFloor 的最低档。
+	if len(intersection) == 0 {
+		floorOrdinal := 0 // EffortFloor 为空时不设下界
+		if floor.EffortFloor != "" {
+			if ord, ok := effortOrdinal[floor.EffortFloor]; ok {
+				floorOrdinal = ord
+			}
+		}
+		levels := AllEffortLevels()
+		for _, lv := range levels {
+			ord, ok := effortOrdinal[lv]
+			if !ok {
+				continue
+			}
+			for _, supported := range profile.SupportedEffortLevels {
+				if NormalizeEffortLevel(string(supported)) == lv && ord >= floorOrdinal {
+					return []EffortLevel{lv}, []bool{true}
+				}
+			}
+		}
+		// 完全无法匹配时 fail-open。
+		return []EffortLevel{""}, []bool{false}
+	}
+
+	// 按 ordinal 排序 intersection 以便后续选最低。
+	sortEffortLevels(intersection)
+
+	// ExpandVariants=false 时仅返回最低档。
+	if !cfg.ExpandVariants {
+		return []EffortLevel{intersection[0]}, []bool{true}
+	}
+	decided := make([]bool, len(intersection))
+	for i := range decided {
+		decided[i] = true
+	}
+	return intersection, decided
+}
+
+// sortEffortLevels 按 effortOrdinal 升序排列。
+func sortEffortLevels(levels []EffortLevel) {
+	for i := 1; i < len(levels); i++ {
+		for j := i; j > 0; j-- {
+			prevOrd, _ := effortOrdinal[levels[j-1]]
+			currOrd, _ := effortOrdinal[levels[j]]
+			if prevOrd > currOrd {
+				levels[j-1], levels[j] = levels[j], levels[j-1]
+			}
+		}
+	}
+}
+
+// filterEffortFloor 过滤掉 effort 低于 EffortFloor 的已决定候选。
+// 仅在 EffortFloor 非空且至少一个候选存活时生效；全部被过滤时 fail-open。
+func filterEffortFloor(candidates []rankedModelCandidate, floor CapabilityFloor) []rankedModelCandidate {
+	if floor.EffortFloor == "" {
+		return candidates
+	}
+	floorOrdinal, ok := effortOrdinal[floor.EffortFloor]
+	if !ok {
+		return candidates
+	}
+	var filtered []rankedModelCandidate
+	for _, c := range candidates {
+		if !c.effortDecided {
+			// 未决定 effort 的候选不受 EffortFloor 约束。
+			filtered = append(filtered, c)
+			continue
+		}
+		candOrdinal, cok := effortOrdinal[c.effort]
+		if !cok || candOrdinal >= floorOrdinal {
+			filtered = append(filtered, c)
+		}
+	}
+	// fail-open：如果全部被过滤则保留原始列表。
+	if len(filtered) == 0 {
+		return candidates
+	}
+	return filtered
+}
+
 // 与 capability_floor.go 的 CapabilityFloorReasons 逻辑一致，
 // 但作用于 ModelProfile（而非 CandidateCapabilities），并额外检查 QualityTier。
 func filterByCapabilityFloor(profiles []ModelProfile, floor CapabilityFloor) []ModelProfile {
@@ -438,30 +572,45 @@ func (r *ModelResolver) rankEligibleModels(
 		providerMultiplier, providerSource, providerKnown := providerModelCostMultiplier(profile.ModelID, upstream)
 		publicCostUSD, publicCostKnown := normalizedModelCostUSD(profile.ModelID, upstream, global)
 		benchmark := config.ResolveModelBenchmarkProfile(profile.ModelID)
-		ranked = append(ranked, rankedModelCandidate{
-			profile:                      profile,
-			qualityRank:                  qualityTierRank(profile.QualityTier),
-			qualityBenefitCap:            floor.QualityBenefitCap,
-			providerModelQualityKnown:    qualityKnown,
-			providerModelQualityPriority: qualityPriority,
-			providerModelQualitySource:   qualitySource,
-			measuredQualityScore:         measuredProviderQualityScore(profile),
-			latencyKnown:                 profile.ProbeLatencyMs > 0,
-			latencyMs:                    profile.ProbeLatencyMs,
-			providerCostKnown:            providerKnown,
-			providerCostMultiplier:       providerMultiplier,
-			providerCostSource:           providerSource,
-			publicCostKnown:              publicCostKnown,
-			normalizedPublicCostUSD:      publicCostUSD,
-			benchmarkKnown:               benchmark.Known && benchmark.Profile.OverallScore > 0,
-			benchmarkScore:               benchmark.Profile.OverallScore,
-			benchmarkModel:               benchmark.Profile.CanonicalModel,
-			versionLineage:               modelVersionLineage(profile.ModelFamily, profile.ModelID),
-			versionNumbers:               modelVersionNumbers(profile.ModelFamily, profile.ModelID),
-			sameFamily:                   profile.ModelFamily == reqFamily,
-			normalizedCandidateID:        strings.ToLower(profile.ModelID),
-		})
+		baseScore := measuredProviderQualityScore(profile)
+
+		effortLevels, effortDecided := r.resolveEffortVariants(profile, floor)
+		for i, effort := range effortLevels {
+			decided := effortDecided[i]
+			bonus := 0.0
+			if decided && effort != "" {
+				bonus = EffortQualityBonus(effort) * 0.1
+			}
+			ranked = append(ranked, rankedModelCandidate{
+				profile:                      profile,
+				effort:                       effort,
+				effortDecided:                decided,
+				qualityRank:                  qualityTierRank(profile.QualityTier),
+				qualityBenefitCap:            floor.QualityBenefitCap,
+				providerModelQualityKnown:    qualityKnown,
+				providerModelQualityPriority: qualityPriority,
+				providerModelQualitySource:   qualitySource,
+				measuredQualityScore:         baseScore + bonus,
+				latencyKnown:                 profile.ProbeLatencyMs > 0,
+				latencyMs:                    profile.ProbeLatencyMs,
+				providerCostKnown:            providerKnown,
+				providerCostMultiplier:       providerMultiplier,
+				providerCostSource:           providerSource,
+				publicCostKnown:              publicCostKnown,
+				normalizedPublicCostUSD:      publicCostUSD,
+				benchmarkKnown:               benchmark.Known && benchmark.Profile.OverallScore > 0,
+				benchmarkScore:               benchmark.Profile.OverallScore,
+				benchmarkModel:               benchmark.Profile.CanonicalModel,
+				versionLineage:               modelVersionLineage(profile.ModelFamily, profile.ModelID),
+				versionNumbers:               modelVersionNumbers(profile.ModelFamily, profile.ModelID),
+				sameFamily:                   profile.ModelFamily == reqFamily,
+				normalizedCandidateID:        strings.ToLower(profile.ModelID),
+			})
+		}
 	}
+
+	// EffortFloor 过滤：移除低于下界的已决定候选（fail-open）。
+	ranked = filterEffortFloor(ranked, floor)
 	preferenceMode := r.modelCostPreferenceMode(floor.TaskClass)
 	ranked = selectQualityBenefitBand(ranked, floor.QualityBenefitCap)
 	qualityPriorityComplete := make(map[int]bool)
@@ -542,6 +691,15 @@ func betterRankedModel(candidate, current rankedModelCandidate, preferenceMode C
 	if preferenceMode == CostPrefQualityFirst {
 		if better, decided := compareRankedModelCost(candidate, current); decided {
 			return better
+		}
+	}
+	// anti-effort-inflation：同模型同等质量时，优先选低 effort（够用即止）。
+	if candidate.effortDecided && current.effortDecided &&
+		candidate.normalizedCandidateID == current.normalizedCandidateID {
+		candOrd, cok := effortOrdinal[candidate.effort]
+		currOrd, uok := effortOrdinal[current.effort]
+		if cok && uok && candOrd != currOrd {
+			return candOrd < currOrd
 		}
 	}
 	return candidate.normalizedCandidateID < current.normalizedCandidateID
