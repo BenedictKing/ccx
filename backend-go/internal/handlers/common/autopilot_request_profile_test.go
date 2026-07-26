@@ -119,6 +119,87 @@ func TestEnsureAutopilotRequestProfilePreservesAttachedProfile(t *testing.T) {
 	}
 }
 
+func TestAttachAutopilotRequestProfileExtractsClientEffort(t *testing.T) {
+	tests := []struct {
+		name         string
+		kind         scheduler.ChannelKind
+		path         string
+		body         string
+		wantExplicit bool
+		wantEffort   autopilot.EffortLevel
+	}{
+		{
+			name:         "claude thinking disabled is explicit none",
+			kind:         scheduler.ChannelKindMessages,
+			path:         "/v1/messages",
+			body:         `{"model":"claude-sonnet-5","messages":[{"role":"user","content":"hi"}],"thinking":{"type":"disabled"}}`,
+			wantExplicit: true,
+			wantEffort:   autopilot.EffortOff,
+		},
+		{
+			name:         "claude thinking effort is explicit",
+			kind:         scheduler.ChannelKindMessages,
+			path:         "/v1/messages",
+			body:         `{"model":"claude-sonnet-5","messages":[{"role":"user","content":"hi"}],"thinking":{"type":"enabled","effort":"high"}}`,
+			wantExplicit: true,
+			wantEffort:   autopilot.EffortHigh,
+		},
+		{
+			name:         "chat reasoning_effort is explicit",
+			kind:         scheduler.ChannelKindChat,
+			path:         "/v1/chat/completions",
+			body:         `{"model":"gpt-5","messages":[{"role":"user","content":"hi"}],"reasoning_effort":"low"}`,
+			wantExplicit: true,
+			wantEffort:   autopilot.EffortLow,
+		},
+		{
+			name:         "chat reasoning_effort none is explicit off",
+			kind:         scheduler.ChannelKindChat,
+			path:         "/v1/chat/completions",
+			body:         `{"model":"gpt-5","messages":[{"role":"user","content":"hi"}],"reasoning_effort":"none"}`,
+			wantExplicit: true,
+			wantEffort:   autopilot.EffortOff,
+		},
+		{
+			name:         "responses reasoning.effort is explicit",
+			kind:         scheduler.ChannelKindResponses,
+			path:         "/v1/responses",
+			body:         `{"model":"claude-sonnet-5","input":"hi","reasoning":{"effort":"medium"}}`,
+			wantExplicit: true,
+			wantEffort:   autopilot.EffortMedium,
+		},
+		{
+			name:         "gemini thinkingLevel is explicit",
+			kind:         scheduler.ChannelKindGemini,
+			path:         "/v1beta/models/gemini-3.5-flash:generateContent",
+			body:         `{"contents":[{"role":"user","parts":[{"text":"hi"}]}],"generationConfig":{"thinkingConfig":{"thinkingLevel":"high"}}}`,
+			wantExplicit: true,
+			wantEffort:   autopilot.EffortHigh,
+		},
+		{
+			name:         "no effort field is not declared",
+			kind:         scheduler.ChannelKindMessages,
+			path:         "/v1/messages",
+			body:         `{"model":"claude-sonnet-5","messages":[{"role":"user","content":"hi"}]}`,
+			wantExplicit: false,
+			wantEffort:   "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := newAutopilotProfileTestContext(t, tt.path, tt.body, nil)
+			profile := AttachAutopilotRequestProfile(c, tt.kind, "model", "completion", "session-test", []byte(tt.body), 0)
+			if profile.ClientEffortExplicit != tt.wantExplicit {
+				t.Fatalf("ClientEffortExplicit = %v, want %v", profile.ClientEffortExplicit, tt.wantExplicit)
+			}
+			if profile.ClientEffort != tt.wantEffort {
+				t.Fatalf("ClientEffort = %q, want %q", profile.ClientEffort, tt.wantEffort)
+			}
+		})
+	}
+}
+
 func TestAnalyzeAutopilotPromptExtractsEphemeralRoutingSignals(t *testing.T) {
 	req := decodeAutopilotRequest([]byte(`{
 		"system":"You are a coding assistant",

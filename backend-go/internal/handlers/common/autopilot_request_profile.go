@@ -10,6 +10,7 @@ import (
 	"github.com/BenedictKing/ccx/internal/scheduler"
 	"github.com/BenedictKing/ccx/internal/utils"
 	"github.com/gin-gonic/gin"
+	"github.com/tidwall/gjson"
 )
 
 // AttachAutopilotRequestProfile 从已校验的请求体提取脱敏特征，并绑定到请求 context。
@@ -42,25 +43,28 @@ func AttachAutopilotRequestProfile(
 		explicitDomain = c.GetHeader("X-Task-Domain")
 	}
 	promptAnalysis := analyzeAutopilotPrompt(req, explicitDomain)
+	clientEffortRaw, clientEffortExplicit := extractClientEffort(bodyBytes)
 	profile := autopilot.BuildRequestProfile(autopilot.RequestProfileFeatures{
-		Model:              model,
-		ChannelKind:        string(kind),
-		Operation:          normalizeAutopilotOperation(kind, operation, c),
-		AgentRole:          agentRole,
-		AgentType:          agentType,
-		HasImage:           hasImage,
-		EstTokens:          estTokens,
-		Complexity:         promptAnalysis.Complexity,
-		ContextNeed:        estTokens,
-		VisionNeed:         hasImage,
-		ImageGenNeed:       kind == scheduler.ChannelKindImages,
-		EmbeddingNeed:      kind == scheduler.ChannelKindVectors,
-		ToolUseNeed:        autopilotRequestUsesTools(req),
-		ReasoningNeed:      autopilotRequestNeedsReasoning(req),
-		EmbeddingDimension: embeddingDimension,
-		SessionID:          sessionID,
-		PromptHash:         hashAutopilotRequest(bodyBytes),
-		DomainHints:        promptAnalysis.DomainHints,
+		Model:                model,
+		ChannelKind:          string(kind),
+		Operation:            normalizeAutopilotOperation(kind, operation, c),
+		AgentRole:            agentRole,
+		AgentType:            agentType,
+		HasImage:             hasImage,
+		EstTokens:            estTokens,
+		Complexity:           promptAnalysis.Complexity,
+		ContextNeed:          estTokens,
+		VisionNeed:           hasImage,
+		ImageGenNeed:         kind == scheduler.ChannelKindImages,
+		EmbeddingNeed:        kind == scheduler.ChannelKindVectors,
+		ToolUseNeed:          autopilotRequestUsesTools(req),
+		ReasoningNeed:        autopilotRequestNeedsReasoning(req),
+		EmbeddingDimension:   embeddingDimension,
+		SessionID:            sessionID,
+		PromptHash:           hashAutopilotRequest(bodyBytes),
+		DomainHints:          promptAnalysis.DomainHints,
+		ClientEffortRaw:      clientEffortRaw,
+		ClientEffortExplicit: clientEffortExplicit,
 	})
 
 	if c != nil && c.Request != nil {
@@ -191,4 +195,51 @@ func hashAutopilotRequest(bodyBytes []byte) string {
 	}
 	sum := sha256.Sum256(bodyBytes)
 	return hex.EncodeToString(sum[:8])
+}
+
+// extractClientEffort 从请求体提取客户端显式声明的思考等级。
+// 复用 reasoning_log.go 的多协议覆盖路径逻辑，但增加 explicit 标志：
+//   - "explicit none"（客户端发送了 thinking.type=disabled 或 reasoning_effort=none）→ raw="none", explicit=true
+//   - "not declared"（请求中无任何 effort 字段）→ raw="", explicit=false
+func extractClientEffort(bodyBytes []byte) (raw string, explicit bool) {
+	if len(bodyBytes) == 0 || !gjson.ValidBytes(bodyBytes) {
+		return "", false
+	}
+
+	// Claude Messages: thinking.type=disabled → 显式 none
+	if value := strings.TrimSpace(gjson.GetBytes(bodyBytes, "thinking.type").String()); strings.EqualFold(value, "disabled") {
+		return "none", true
+	}
+
+	// 多协议 effort 字段扫描（与 extractReasoningEffortForLog 保持一致）
+	for _, path := range []string{
+		"thinking.effort",      // Claude Messages
+		"reasoning_effort",     // OpenAI Chat / Responses
+		"reasoning.effort",     // Responses 变体
+		"output_config.effort", // 备用
+		"generationConfig.thinkingConfig.thinkingLevel", // Gemini
+		"thinkingConfig.thinkingLevel",                  // Gemini 变体
+		"thinking.thinkingLevel",                        // Gemini 变体
+	} {
+		value := gjson.GetBytes(bodyBytes, path)
+		if !value.Exists() {
+			continue
+		}
+		switch value.Type {
+		case gjson.String:
+			v := strings.TrimSpace(value.String())
+			if v != "" {
+				return v, true
+			}
+		case gjson.Number, gjson.True, gjson.False:
+			return strings.TrimSpace(value.String()), true
+		}
+	}
+
+	// thinking.type 非 disabled 的其他显式值（如 "enabled"）
+	if value := strings.TrimSpace(gjson.GetBytes(bodyBytes, "thinking.type").String()); value != "" {
+		return value, true
+	}
+
+	return "", false
 }

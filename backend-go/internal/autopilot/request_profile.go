@@ -25,6 +25,8 @@ type RequestProfile struct {
 	ToolUseNeed        bool        // 是否需要工具调用
 	ReasoningNeed      bool        // 是否需要推理
 	EmbeddingDimension int         // vectors handler 的硬约束；未知时为 0
+	ClientEffort       EffortLevel // 客户端显式声明的思考等级；空=未声明
+	ClientEffortExplicit bool      // 客户端是否显式设置了思考等级（区分"显式无"和"未声明"）
 
 	// ── 任务分类结果 ──
 	TaskClass  TaskClass  // 分类结果：supervisor | worker | lightweight | vision | long_context | image_generation | embedding

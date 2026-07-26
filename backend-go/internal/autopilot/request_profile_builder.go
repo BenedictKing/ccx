@@ -3,24 +3,26 @@ package autopilot
 // RequestProfileFeatures 是协议层提取出的脱敏请求特征。
 // 这里只接收结构化元数据，不接收或持久化消息正文。
 type RequestProfileFeatures struct {
-	Model              string
-	ChannelKind        string
-	Operation          string
-	AgentRole          string
-	AgentType          string
-	HasImage           bool
-	EstTokens          int
-	Complexity         TaskComplexity
-	ContextNeed        int
-	VisionNeed         bool
-	ImageGenNeed       bool
-	EmbeddingNeed      bool
-	ToolUseNeed        bool
-	ReasoningNeed      bool
-	EmbeddingDimension int
-	SessionID          string
-	PromptHash         string
-	DomainHints        DomainHints
+	Model                string
+	ChannelKind          string
+	Operation            string
+	AgentRole            string
+	AgentType            string
+	HasImage             bool
+	EstTokens            int
+	Complexity           TaskComplexity
+	ContextNeed          int
+	VisionNeed           bool
+	ImageGenNeed         bool
+	EmbeddingNeed        bool
+	ToolUseNeed          bool
+	ReasoningNeed        bool
+	EmbeddingDimension   int
+	SessionID            string
+	PromptHash           string
+	DomainHints          DomainHints
+	ClientEffortRaw      string // 客户端显式声明的 effort 原始值（归一化前）
+	ClientEffortExplicit bool   // 客户端是否显式设置了思考等级（区分"显式无"和"未声明"）
 }
 
 // BuildRequestProfile 将协议无关特征收敛为 SmartRouter 使用的请求画像。
@@ -62,6 +64,12 @@ func BuildRequestProfile(features RequestProfileFeatures) RequestProfile {
 	input.DomainHints = features.DomainHints
 	ClassifyAndFill(&profile, input)
 	profile.QualityTarget = ResolveQualityTarget(&profile)
+
+	if features.ClientEffortExplicit {
+		profile.ClientEffort = NormalizeEffortLevel(features.ClientEffortRaw)
+		profile.ClientEffortExplicit = true
+	}
+
 	return profile
 }
 
