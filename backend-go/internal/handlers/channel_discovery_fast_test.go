@@ -185,6 +185,60 @@ func TestChannelDiscoveryFastDualProtocolRecommendsResponses(t *testing.T) {
 	}
 }
 
+// TestChannelDiscoveryFastFallsBackToSecondModel 验证：
+// 第一个模型全部协议失败时，自动尝试下一个候选模型，第二个模型成功即返回 OK。
+func TestChannelDiscoveryFastFallsBackToSecondModel(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/models":
+			w.Header().Set("Content-Type", "application/json")
+			// sonnet 排在 Primary 位（含 "sonnet" 关键词），haiku 排在 Fast 位（含 "haiku" 关键词）
+			_, _ = w.Write([]byte(`{"object":"list","data":[{"id":"claude-sonnet-4-6"},{"id":"claude-haiku-4-5"}]}`))
+		case "/v1/chat/completions":
+			// 根据请求体判断模型：sonnet 返回错误，haiku 返回成功
+			var body struct {
+				Model string `json:"model"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			if strings.Contains(body.Model, "sonnet") {
+				http.Error(w, `{"error":{"message":"No available accounts","type":"api_error"}}`, http.StatusServiceUnavailable)
+				return
+			}
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = w.Write([]byte(`data: {"choices":[{"delta":{"content":"ok"}}]}` + "\n\n"))
+		default:
+			// messages/responses/gemini 对 sonnet 也返回错误
+			http.NotFound(w, r)
+		}
+	}))
+	defer upstream.Close()
+
+	router := gin.New()
+	router.POST("/api/channel-discovery-fast", channelDiscoveryFastForTest())
+
+	body := []byte(`{"baseUrls":["` + upstream.URL + `"],"apiKeys":["sk-test"]}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/channel-discovery-fast", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	var resp ChannelDiscoveryFastResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.PrimaryKind != "chat" {
+		t.Fatalf("primaryKind=%q, want chat", resp.PrimaryKind)
+	}
+	if !strings.Contains(resp.TestedModel, "haiku") {
+		t.Fatalf("testedModel=%q, want haiku (second model fallback)", resp.TestedModel)
+	}
+}
+
 // TestChannelDiscoveryFastAllProtocolsFailReturnsError 验证：
 // 模型可获取但所有协议探测均失败时返回 4xx，不建渠道。
 func TestChannelDiscoveryFastAllProtocolsFailReturnsError(t *testing.T) {
