@@ -328,7 +328,7 @@ func ResolveDomainStrength(profile *ModelProfile, domain TaskDomain) DomainStren
 					EvidenceConfidence:    clampUnit(confidence),
 				}
 			}
-			if evidence, ok := resolveRelativeBenchmarkEvidence(profile, resolved.Profile, domain); ok {
+			if evidence, ok := resolveRelativeBenchmarkEvidence(profile, resolved.Profile, domain, ""); ok {
 				return evidence
 			}
 		}
@@ -363,7 +363,9 @@ func benchmarkEvidenceConfidence(profile config.ModelBenchmarkProfile) float64 {
 
 // resolveRelativeBenchmarkEvidence 将固定 cohort 内的 percentile 保守地折算到家族先验。
 // 该路径刻意不使用 raw Pass@1 作为能力绝对值；它仅说明同一 harness 下的相对位置。
-func resolveRelativeBenchmarkEvidence(profile *ModelProfile, benchmark config.ModelBenchmarkProfile, domain TaskDomain) (DomainStrengthEvidence, bool) {
+// targetEffort 为空时退化为纯 domain 匹配（与旧行为一致）。
+// 非空时优先匹配 (domain, effort) 双键；无精确匹配则回退到 domain-only 并衰减置信度。
+func resolveRelativeBenchmarkEvidence(profile *ModelProfile, benchmark config.ModelBenchmarkProfile, domain TaskDomain, targetEffort EffortLevel) (DomainStrengthEvidence, bool) {
 	if profile == nil {
 		return DomainStrengthEvidence{}, false
 	}
@@ -373,18 +375,56 @@ func resolveRelativeBenchmarkEvidence(profile *ModelProfile, benchmark config.Mo
 		prior = 0.5
 	}
 
+	// ── Pass 1：精确 (domain, effort) 匹配 ──
 	var selected config.ModelBenchmarkEvidence
 	confidence := 0.0
-	for _, candidate := range benchmark.BenchmarkEvidence {
-		if !strings.EqualFold(candidate.Domain, string(domain)) {
-			continue
-		}
-		candidateConfidence := relativeBenchmarkEvidenceConfidence(candidate)
-		if candidateConfidence > confidence {
-			selected = candidate
-			confidence = candidateConfidence
+	effortMatched := false
+	if targetEffort != "" {
+		for _, candidate := range benchmark.BenchmarkEvidence {
+			if !strings.EqualFold(candidate.Domain, string(domain)) {
+				continue
+			}
+			candidateEffort := NormalizeEffortLevel(candidate.Effort)
+			if candidateEffort != targetEffort {
+				continue
+			}
+			candidateConfidence := relativeBenchmarkEvidenceConfidence(candidate)
+			if candidateConfidence > confidence {
+				selected = candidate
+				confidence = candidateConfidence
+				effortMatched = true
+			}
 		}
 	}
+
+	// ── Pass 2（fallback）：仅 domain 匹配，衰减置信度 ──
+	if !effortMatched {
+		domainConfidence := 0.0
+		var domainSelected config.ModelBenchmarkEvidence
+		for _, candidate := range benchmark.BenchmarkEvidence {
+			if !strings.EqualFold(candidate.Domain, string(domain)) {
+				continue
+			}
+			candidateConfidence := relativeBenchmarkEvidenceConfidence(candidate)
+			if candidateConfidence > domainConfidence {
+				domainSelected = candidate
+				domainConfidence = candidateConfidence
+			}
+		}
+		if domainConfidence <= 0 {
+			return DomainStrengthEvidence{}, false
+		}
+
+		// 有 targetEffort 时按距离衰减置信度；空 effort 时保持原行为（乘数 1.0）
+		fallbackMultiplier := 1.0
+		if targetEffort != "" {
+			closestDistance := findClosestEffortDistance(targetEffort, benchmark.BenchmarkEvidence, domain)
+			fallbackMultiplier = EffortFallbackConfidence(closestDistance)
+		}
+		selected = domainSelected
+		confidence = domainConfidence * fallbackMultiplier
+	}
+
 	if confidence <= 0 {
 		return DomainStrengthEvidence{}, false
 	}
@@ -409,6 +449,26 @@ func resolveRelativeBenchmarkEvidence(profile *ModelProfile, benchmark config.Mo
 		BenchmarkSelection:    selected.SelectionBasis,
 		EvidenceConfidence:    confidence,
 	}, true
+}
+
+// findClosestEffortDistance 在同 domain 的 benchmark 证据中找到与 targetEffort 距离最近的 effort。
+// 无匹配证据时返回 3+（保守衰减）。
+func findClosestEffortDistance(targetEffort EffortLevel, candidates []config.ModelBenchmarkEvidence, domain TaskDomain) int {
+	minDist := 4 // 超出 max(3)=3 的范围，等效于 3+
+	for _, c := range candidates {
+		if !strings.EqualFold(c.Domain, string(domain)) {
+			continue
+		}
+		effort := NormalizeEffortLevel(c.Effort)
+		if effort == "" {
+			continue
+		}
+		dist := EffortLevelDistance(targetEffort, effort)
+		if dist >= 0 && dist < minDist {
+			minDist = dist
+		}
+	}
+	return minDist
 }
 
 func relativeBenchmarkEvidenceConfidence(evidence config.ModelBenchmarkEvidence) float64 {
