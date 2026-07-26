@@ -25,6 +25,7 @@ type CapabilityFloor struct {
 	QualityBenefitCap QualityTier // 简单/常规任务超过该档后不再自动获得质量排序收益
 	TaskClass         TaskClass   // 用于读取任务级 CostPreference
 	EffortFloor       EffortLevel // 该请求的 effort 下界；空=不限
+	PinnedEffort      EffortLevel // 手动意图精确锁定的 effort 档位；空=不锁定，由 Autopilot 选优
 }
 
 // BuildCapabilityFloorFromRequestProfile 从 RequestProfile 推导能力下界。
@@ -42,7 +43,22 @@ func BuildCapabilityFloorFromRequestProfile(profile *RequestProfile) CapabilityF
 		MinQualityTier:    requestQualityTarget(profile),
 		QualityBenefitCap: requestQualityBenefitCap(profile),
 		TaskClass:         profile.TaskClass,
+		PinnedEffort:      resolveIntentPinnedEffort(profile),
 	}
+}
+
+// resolveIntentPinnedEffort 解析手动意图对 effort 的锁定值，遵循优先级约束：
+// 客户端显式声明的 off/none 是最强信号，任何手动意图都不得覆盖它重新开启思考。
+// 未被客户端显式关闭时，手动意图指定的 effort 才会被采纳为锁定档位。
+func resolveIntentPinnedEffort(profile *RequestProfile) EffortLevel {
+	if profile == nil || profile.IntentEffortPin == nil || !profile.IntentEffortPin.Set {
+		return ""
+	}
+	if profile.ClientEffortExplicit && profile.ClientEffort == EffortOff {
+		// 客户端显式关闭思考：手动意图的 effort 覆盖必须让路。
+		return ""
+	}
+	return profile.IntentEffortPin.Effort
 }
 
 func requestQualityTarget(profile *RequestProfile) QualityTier {
@@ -160,13 +176,17 @@ func (r *ModelResolver) ResolveModel(
 	}
 
 	// Step 5: 精确模型始终优先；非自适应入口不得跨模型替代。
+	// 精确/等价命中不经过 rankEligibleModels，因此需在此单独应用 effort 决策，
+	// 否则手动意图锁定的档位与自动展开都会被这条短路路径绕过。
 	if exact, found := findExactModelProfile(candidates, requestModel); found {
 		rsn := modelResolutionReason("found_exact_model_in_profile", qualityFallback)
-		return ResolvedRouteTarget{Model: exact.ModelID, Reason: rsn}, true, rsn
+		effort, decided := r.resolveSingleProfileEffort(exact, floor)
+		return ResolvedRouteTarget{Model: exact.ModelID, Effort: effort, EffortDecided: decided, Reason: rsn}, true, rsn
 	}
 	if equivalent, found := findEquivalentModelProfile(candidates, requestModel); found {
 		rsn := modelResolutionReason("found_equivalent_model_in_profile", qualityFallback)
-		return ResolvedRouteTarget{Model: equivalent.ModelID, Reason: rsn}, true, rsn
+		effort, decided := r.resolveSingleProfileEffort(equivalent, floor)
+		return ResolvedRouteTarget{Model: equivalent.ModelID, Effort: effort, EffortDecided: decided, Reason: rsn}, true, rsn
 	}
 	intent := ClassifyModelRoutingIntent(channelKind, requestModel)
 	if !intent.AllowsSubstitution() {
@@ -277,7 +297,30 @@ func (r *ModelResolver) resolveModelAnyEndpoint(
 
 // resolveEffortVariants 决定给定画像可用的 effort 变体列表。
 // 每个返回的 EffortLevel 会生成一个独立的 rankedModelCandidate。
+// resolveSingleProfileEffort 为单个已确定的画像解析 effort 档位。
+// 供精确/等价模型命中路径使用：这些路径不进入候选排序，但仍需与排序路径
+// 保持一致的 effort 决策语义（手动意图锁定优先，其次按配置展开取最低档）。
+func (r *ModelResolver) resolveSingleProfileEffort(profile ModelProfile, floor CapabilityFloor) (EffortLevel, bool) {
+	levels, decidedFlags := r.resolveEffortVariants(profile, floor)
+	if len(levels) == 0 {
+		return "", false
+	}
+	// 展开可能返回多个档位；精确命中场景没有排序阶段，按“够用即止”取最低档。
+	return levels[0], decidedFlags[0]
+}
+
 func (r *ModelResolver) resolveEffortVariants(profile ModelProfile, floor CapabilityFloor) ([]EffortLevel, []bool) {
+	// 手动意图锁定的 effort 优先于自动决策管线，视为已知正确（类比显式 modelMapping 的处理方式）：
+	// 只要模型确实支持该档位就直接采纳，不受下方 ReasoningEffort.Enabled 全局开关影响。
+	// 模型不支持该档位时 fail-open，落回下方常规展开逻辑，由 Autopilot 自行决定。
+	if pinned := NormalizeEffortLevel(string(floor.PinnedEffort)); pinned != "" && profile.SupportsEffortControl {
+		for _, lv := range profile.SupportedEffortLevels {
+			if NormalizeEffortLevel(string(lv)) == pinned {
+				return []EffortLevel{pinned}, []bool{true}
+			}
+		}
+	}
+
 	// 读取全局 reasoning effort 配置；cfgManager 为 nil 时 fail-open。
 	var cfg *config.ReasoningEffortConfig
 	if r != nil && r.cfgManager != nil {

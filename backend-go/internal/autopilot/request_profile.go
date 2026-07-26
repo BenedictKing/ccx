@@ -36,6 +36,11 @@ type RequestProfile struct {
 	SessionID  string // 统一会话标识，用于 session_pin 匹配
 	PromptHash string // prompt SHA256 前 16 位，用于确定性流量分配
 
+	// ── 人工意图 effort 覆盖（跨 SmartRouter → EndpointPolicy 共享）──
+	// AttachAutopilotRequestProfile 初始化后，通过值拷贝共享指针；
+	// SmartRouter 命中带 effort 的手动意图后写入，EndpointPolicy 读取并注入 CapabilityFloor。
+	IntentEffortPin *IntentEffortPin `json:"-"`
+
 	// ── AFP 路由扩展（可选）──
 	AFPProfile *AFPRequestProfile
 }
@@ -65,4 +70,14 @@ type ClassifierInput struct {
 
 	// ── 域推导输入（透传给 InferTaskDomain）──
 	DomainHints DomainHints
+}
+
+// IntentEffortPin 手动意图 effort 覆盖载体。
+// 通过 RequestProfile 中的指针字段在 SmartRouter 与 EndpointPolicy 间共享：
+// SmartRouter 命中带 effort 的手动意图后写入 Effort/Set，
+// EndpointPolicy 通过 BuildCapabilityFloorFromRequestProfile 读取并注入 CapabilityFloor。
+// AttachAutopilotRequestProfile 中初始化，经 context 值拷贝共享同一堆对象。
+type IntentEffortPin struct {
+	Effort EffortLevel // 意图指定的思考档位
+	Set    bool        // true 表示已有意图设置了 effort
 }

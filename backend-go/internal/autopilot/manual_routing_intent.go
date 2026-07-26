@@ -79,11 +79,12 @@ type ManualRoutingIntent struct {
 	IntentType IntentType `json:"intentType"`
 
 	// 目标
-	ChannelKind string `json:"channelKind"`           // messages/chat/responses/gemini/images/vectors
-	ChannelUID  string `json:"channelUid,omitempty"`  // 可选：指定渠道
-	MetricsKey  string `json:"metricsKey,omitempty"`  // 可选：精确到 baseURL+key endpoint
-	Model       string `json:"model,omitempty"`       // 请求模型，例如 fable-5
-	MappedModel string `json:"mappedModel,omitempty"` // 可选：上游实际模型
+	ChannelKind string      `json:"channelKind"`           // messages/chat/responses/gemini/images/vectors
+	ChannelUID  string      `json:"channelUid,omitempty"`  // 可选：指定渠道
+	MetricsKey  string      `json:"metricsKey,omitempty"`  // 可选：精确到 baseURL+key endpoint
+	Model       string      `json:"model,omitempty"`       // 请求模型，例如 fable-5
+	MappedModel string      `json:"mappedModel,omitempty"` // 可选：上游实际模型
+	Effort      EffortLevel `json:"effort,omitempty"`      // 可选：固定思考档位；空=不覆盖，由 Autopilot 决定
 
 	// 作用范围
 	AgentRoles     []string    `json:"agentRoles,omitempty"`     // main/subagent；为空表示全部
@@ -186,7 +187,22 @@ func (m *ManualRoutingIntent) Validate() error {
 		return ErrSessionPinRequiresSessionID
 	}
 
+	// Effort 非空时必须是 EffortLevel 枚举合法值之一，拒绝未知值而非静默丢弃。
+	if m.Effort != "" && !isValidEffortLevel(m.Effort) {
+		return ErrInvalidEffort
+	}
+
 	return nil
+}
+
+// isValidEffortLevel 检查给定值是否是 EffortLevel 枚举中的合法档位。
+func isValidEffortLevel(level EffortLevel) bool {
+	for _, lv := range AllEffortLevels() {
+		if lv == level {
+			return true
+		}
+	}
+	return false
 }
 
 // ── 错误定义 ──
@@ -198,6 +214,7 @@ var (
 	ErrInvalidTrafficPercent       = &IntentValidationError{Field: "trafficPercent", Message: "必须在 0-100 之间"}
 	ErrSessionPinRequiresSessionID = &IntentValidationError{Field: "sessionId", Message: "session_pin 类型必须指定 sessionId"}
 	ErrIntentNotFound              = &IntentValidationError{Field: "intentUid", Message: "意图不存在"}
+	ErrInvalidEffort               = &IntentValidationError{Field: "effort", Message: "必须是 off/minimal/low/medium/high/max 之一"}
 )
 
 // IntentValidationError 意图校验错误。

@@ -18,6 +18,7 @@ type CreateIntentRequest struct {
 	MetricsKey             string      `json:"metricsKey,omitempty"`
 	Model                  string      `json:"model,omitempty"`
 	MappedModel            string      `json:"mappedModel,omitempty"`
+	Effort                 EffortLevel `json:"effort,omitempty"`
 	AgentRoles             []string    `json:"agentRoles,omitempty"`
 	TaskClasses            []TaskClass `json:"taskClasses,omitempty"`
 	SessionID              string      `json:"sessionId,omitempty"`
@@ -94,6 +95,7 @@ func handleCreateIntent(store *ManualIntentStore) gin.HandlerFunc {
 			MetricsKey:             req.MetricsKey,
 			Model:                  req.Model,
 			MappedModel:            req.MappedModel,
+			Effort:                 req.Effort,
 			AgentRoles:             req.AgentRoles,
 			TaskClasses:            req.TaskClasses,
 			SessionID:              req.SessionID,

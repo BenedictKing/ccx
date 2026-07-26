@@ -70,6 +70,13 @@ func BuildRequestProfile(features RequestProfileFeatures) RequestProfile {
 		profile.ClientEffortExplicit = true
 	}
 
+	// IntentEffortPin 始终初始化为空指针载体（Set=false）。
+	// RequestProfile 经 context 值拷贝在 SmartRouter（channel 级）与
+	// EndpointPolicy（endpoint 级）之间传递时，指针字段共享同一底层对象，
+	// SmartRouter 命中带 effort 的手动意图后写入 Set=true，
+	// EndpointPolicy 随后通过 BuildCapabilityFloorFromRequestProfile 读取生效。
+	profile.IntentEffortPin = &IntentEffortPin{}
+
 	return profile
 }
 

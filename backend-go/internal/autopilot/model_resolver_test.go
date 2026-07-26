@@ -992,6 +992,116 @@ func TestResolveModel_ProbeSuccessFalse_Filtered(t *testing.T) {
 	}
 }
 
+// ── ManualRoutingIntent effort 覆盖优先级测试 ──
+//
+// 覆盖计划要求的三个场景（加上 resolveIntentPinnedEffort 单测）：
+//   - 只锁模型不锁 effort：effort 仍由 Autopilot 决定
+//   - 模型和 effort 都锁：两者都生效
+//   - 客户端显式 off 优先于意图的 effort 覆盖
+
+func TestResolveIntentPinnedEffort_ModelOnlyIntentLeavesEffortToAutopilot(t *testing.T) {
+	profile := &RequestProfile{
+		IntentEffortPin: &IntentEffortPin{Set: false}, // 意图只锁了模型，Set 保持 false
+	}
+	floor := BuildCapabilityFloorFromRequestProfile(profile)
+	if floor.PinnedEffort != "" {
+		t.Errorf("PinnedEffort = %q, want empty when intent only pins model", floor.PinnedEffort)
+	}
+}
+
+func TestResolveIntentPinnedEffort_ModelAndEffortBothHonored(t *testing.T) {
+	profile := &RequestProfile{
+		IntentEffortPin: &IntentEffortPin{Effort: EffortHigh, Set: true},
+	}
+	floor := BuildCapabilityFloorFromRequestProfile(profile)
+	if floor.PinnedEffort != EffortHigh {
+		t.Errorf("PinnedEffort = %q, want %q when intent pins both model and effort", floor.PinnedEffort, EffortHigh)
+	}
+}
+
+func TestResolveIntentPinnedEffort_ClientExplicitOffOverridesIntentEffort(t *testing.T) {
+	profile := &RequestProfile{
+		ClientEffort:         EffortOff,
+		ClientEffortExplicit: true,
+		IntentEffortPin:      &IntentEffortPin{Effort: EffortHigh, Set: true},
+	}
+	floor := BuildCapabilityFloorFromRequestProfile(profile)
+	if floor.PinnedEffort != "" {
+		t.Errorf("PinnedEffort = %q, want empty: client explicit off must win over intent effort", floor.PinnedEffort)
+	}
+}
+
+func TestResolveIntentPinnedEffort_ClientExplicitNonOffDoesNotBlockIntent(t *testing.T) {
+	// 客户端显式声明了非 off 的 effort（例如 low）时，不属于"关闭思考"的最强信号，
+	// 意图的 effort 覆盖仍应生效。
+	profile := &RequestProfile{
+		ClientEffort:         EffortLow,
+		ClientEffortExplicit: true,
+		IntentEffortPin:      &IntentEffortPin{Effort: EffortHigh, Set: true},
+	}
+	floor := BuildCapabilityFloorFromRequestProfile(profile)
+	if floor.PinnedEffort != EffortHigh {
+		t.Errorf("PinnedEffort = %q, want %q: client non-off explicit effort must not block intent pin", floor.PinnedEffort, EffortHigh)
+	}
+}
+
+// TestResolveEffortVariants_PinnedEffortHonoredWhenSupported 验证 ResolveModel 端到端：
+// CapabilityFloor.PinnedEffort 命中模型支持的档位时，直接采纳该档位并标记 EffortDecided=true，
+// 从而确保 effort 真正被注入下游（而非仅停留在 CapabilityFloor 层）。
+func TestResolveEffortVariants_PinnedEffortHonoredWhenSupported(t *testing.T) {
+	profiles := []ModelProfile{
+		makeEffortProfile("claude-sonnet-5", ModelFamilyClaude, QualityTierHigh, 1000000,
+			true, 100, true, []EffortLevel{EffortLow, EffortMedium, EffortHigh, EffortMax}),
+	}
+	// ReasoningEffort 全局开关关闭，验证 PinnedEffort 不受该开关影响（fail-open 之外的强制路径）。
+	cfg := makeRoutingConfig(false, false, nil)
+	resolver := newTestResolverWithConfig(t, profiles, cfg)
+
+	floor := CapabilityFloor{PinnedEffort: EffortHigh}
+	// 使用自适应别名 "sonnet" 而非精确模型 ID，确保命中 Step 6 的排序/effort 展开路径
+	// 而不是 Step 5 的精确匹配短路（精确匹配不会经过 resolveEffortVariants）。
+	target, resolved, _ := resolver.ResolveModel(
+		"sonnet", "ch_test", "messages", "metrics_test", floor)
+	if !resolved {
+		t.Fatal("expected resolved=true")
+	}
+	if target.Effort != EffortHigh {
+		t.Errorf("Effort = %q, want %q", target.Effort, EffortHigh)
+	}
+	if !target.EffortDecided {
+		t.Error("expected EffortDecided=true so the pinned effort is actually injected downstream")
+	}
+}
+
+// TestResolveEffortVariants_PinnedEffortUnsupportedFallsBackToAutopilot 验证模型不支持
+// 锁定档位时 fail-open，落回常规展开逻辑而不是硬失败。
+func TestResolveEffortVariants_PinnedEffortUnsupportedFallsBackToAutopilot(t *testing.T) {
+	profiles := []ModelProfile{
+		makeEffortProfile("claude-sonnet-5", ModelFamilyClaude, QualityTierHigh, 1000000,
+			true, 100, true, []EffortLevel{EffortLow, EffortMedium}), // 不含 EffortMax
+	}
+	cfg := makeRoutingConfig(true, false, nil)
+	resolver := newTestResolverWithConfig(t, profiles, cfg)
+
+	floor := CapabilityFloor{PinnedEffort: EffortMax} // 模型不支持
+	// 同样使用自适应别名 "sonnet"，确保真正落入 resolveEffortVariants 的展开逻辑。
+	target, resolved, _ := resolver.ResolveModel(
+		"sonnet", "ch_test", "messages", "metrics_test", floor)
+	if !resolved {
+		t.Fatal("expected resolved=true")
+	}
+	if target.Effort == EffortMax {
+		t.Error("expected fail-open: unsupported pinned effort should not be forced onto the model")
+	}
+	// fail-open 后仍应落到常规展开逻辑，产生一个已决定的、模型支持的档位。
+	if !target.EffortDecided {
+		t.Error("expected EffortDecided=true from the regular expansion fallback")
+	}
+	if target.Effort != EffortLow {
+		t.Errorf("Effort = %q, want %q (lowest supported, ExpandVariants=false)", target.Effort, EffortLow)
+	}
+}
+
 // ── Effort 变体展开测试 ──
 
 // makeEffortProfile 创建带 effort 控制能力的测试 ModelProfile。

@@ -251,6 +251,48 @@ func TestManualIntentStore_CreateValidation(t *testing.T) {
 	}
 }
 
+// TestManualRoutingIntent_ValidateEffort 校验 Effort 字段的合法性检查：
+// 未知档位必须被拒绝而非静默丢弃；空值和枚举内的合法值都应通过。
+func TestManualRoutingIntent_ValidateEffort(t *testing.T) {
+	baseIntent := func(effort EffortLevel) *ManualRoutingIntent {
+		return &ManualRoutingIntent{
+			IntentType:  IntentTypeModelTrial,
+			ChannelKind: "messages",
+			Model:       "fable-5",
+			MappedModel: "fable-5-thinking",
+			Effort:      effort,
+			ExpiresAt:   time.Now().Add(time.Hour),
+		}
+	}
+
+	tests := []struct {
+		name    string
+		effort  EffortLevel
+		wantErr error
+	}{
+		{name: "空 effort 表示不锁定，合法", effort: "", wantErr: nil},
+		{name: "off 合法", effort: EffortOff, wantErr: nil},
+		{name: "minimal 合法", effort: EffortMinimal, wantErr: nil},
+		{name: "low 合法", effort: EffortLow, wantErr: nil},
+		{name: "medium 合法", effort: EffortMedium, wantErr: nil},
+		{name: "high 合法", effort: EffortHigh, wantErr: nil},
+		{name: "max 合法", effort: EffortMax, wantErr: nil},
+		{name: "未知档位必须被拒绝", effort: EffortLevel("ultra"), wantErr: ErrInvalidEffort},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := baseIntent(tt.effort).Validate()
+			if tt.wantErr == nil && err != nil {
+				t.Errorf("Validate() error = %v, want nil", err)
+			}
+			if tt.wantErr != nil && err != tt.wantErr {
+				t.Errorf("Validate() error = %v, want %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
 func TestManualIntentStore_Get(t *testing.T) {
 	store := newTestManualIntentStore(t)
 
@@ -515,6 +557,48 @@ func TestManualIntentStore_Persistence(t *testing.T) {
 	}
 	if got.TrialResult.SuccessCount != 1 {
 		t.Errorf("重载后 SuccessCount = %d, want 1", got.TrialResult.SuccessCount)
+	}
+}
+
+// TestManualIntentStore_Persistence_BackwardCompatibleWithoutEffort 验证不带 effort 字段的
+// 历史存量意图（intent_json 中无 "effort" 键）在反序列化后仍能正常解析，Effort 归零值而非报错。
+func TestManualIntentStore_Persistence_BackwardCompatibleWithoutEffort(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("打开内存数据库失败: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	if err := initManualIntentSchema(db); err != nil {
+		t.Fatalf("建表失败: %v", err)
+	}
+
+	// 模拟历史存量数据：intent_json 中完全不含 "effort" 键（旧版本写入）。
+	legacyUID := "legacy-uid-no-effort"
+	legacyJSON := `{"intentUid":"legacy-uid-no-effort","intentType":"model_trial","channelKind":"messages","model":"fable-5","status":"active","expiresAt":"2099-01-01T00:00:00Z"}`
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err = db.Exec(`INSERT INTO manual_routing_intents
+		(intent_uid, intent_type, channel_kind, intent_json, status, expires_at, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		legacyUID, "model_trial", "messages", legacyJSON, "active", "2099-01-01T00:00:00Z", now, now)
+	if err != nil {
+		t.Fatalf("写入历史存量记录失败: %v", err)
+	}
+
+	store, err := NewManualIntentStoreWithDB(db)
+	if err != nil {
+		t.Fatalf("创建 Store 失败: %v", err)
+	}
+
+	got := store.Get(legacyUID)
+	if got == nil {
+		t.Fatal("Get() 返回 nil，历史存量意图解析失败")
+	}
+	if got.Effort != "" {
+		t.Errorf("Effort = %q, want 空字符串（历史数据无该字段）", got.Effort)
+	}
+	if got.Model != "fable-5" {
+		t.Errorf("Model = %q, want fable-5", got.Model)
 	}
 }
 

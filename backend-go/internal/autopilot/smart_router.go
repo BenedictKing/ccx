@@ -802,9 +802,17 @@ func (r *SmartRouter) executeFilter(
 			trace.ManualIntentUID = matchedIntent.Intent.IntentUID
 			trace.GlobalFilterReasons["intent_match"] = matchedIntent.Reasons
 
-			log.Printf("[SmartRouter-IntentMatch] uid=%s type=%s target=%s specificity=%d",
+			// 意图指定了 effort 时写入共享的 IntentEffortPin，供 EndpointPolicy 的
+			// CapabilityFloor.PinnedEffort 读取。意图只指定了模型未指定 effort 时
+			// Pin 保持 nil/Set=false，effort 仍由 Autopilot 自行决定。
+			if matchedIntent.Intent.Effort != "" && profile.IntentEffortPin != nil {
+				profile.IntentEffortPin.Effort = matchedIntent.Intent.Effort
+				profile.IntentEffortPin.Set = true
+			}
+
+			log.Printf("[SmartRouter-IntentMatch] uid=%s type=%s target=%s specificity=%d effort=%s",
 				matchedIntent.Intent.IntentUID, string(matchedIntent.Intent.IntentType),
-				intentTargetUID, matchedIntent.Specificity)
+				intentTargetUID, matchedIntent.Specificity, string(matchedIntent.Intent.Effort))
 		}()
 	}
 
