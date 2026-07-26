@@ -242,6 +242,12 @@ type ModelMappingRoutingConfig struct {
 	CapabilityFloorEnabled bool `json:"capabilityFloorEnabled,omitempty"`
 	EchoMappedModel        bool `json:"echoMappedModel,omitempty"`
 	ForbidChainMapping     bool `json:"forbidChainMapping,omitempty"`
+
+	// PreferAutoOverManual 控制手动映射表退役期间的优先级反转。
+	// false（默认）：与历史行为一致，显式 profile.ModelMapping 优先，ModelResolver 自动决策仅作兜底。
+	// true：ModelResolver 自动决策优先；仅当自动决策 fail-open（未命中）时才回退到显式手动映射。
+	// 必须显式开启，可在不改代码的情况下随时回滚。
+	PreferAutoOverManual bool `json:"preferAutoOverManual,omitempty"`
 }
 
 // CostOptimizationConfig 成本优化配置。

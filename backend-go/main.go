@@ -1372,6 +1372,8 @@ func main() {
 		// 健康中心 API（Phase 1 shadow/read-only）
 		if autopilotManager != nil {
 			autopilot.RegisterRoutes(apiGroup, autopilotManager)
+			// 画像覆盖率诊断只读 API（Task 7 覆盖率门槛，手工映射表退役前验证用）
+			autopilot.RegisterProfileCoverageRoutes(apiGroup, autopilotManager)
 
 			// Phase 2 第三批：自动托管发现执行器。
 			// 提前到这里构造（原在 Phase 2 自动托管 API 注册处），因为 §8.5.1 new-api

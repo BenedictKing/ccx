@@ -868,21 +868,46 @@ func resolveMappedModel(profile *KeyEndpointProfile, model string, req *RequestP
 		return nil
 	}
 
-	// 优先级 1：显式 modelMapping（用户手动配置，视为已知正确；不覆盖 effort）
-	if len(profile.ModelMapping) > 0 {
-		if mapped, ok := profile.ModelMapping[model]; ok {
-			return &ResolvedRouteTarget{Model: mapped, Effort: "", EffortDecided: false, Reason: "manual_mapping"}
+	routingCfg := getRoutingCfgFromDeps(deps)
+	preferAutoOverManual := routingCfg != nil && routingCfg.ModelMapping.PreferAutoOverManual
+
+	if preferAutoOverManual {
+		// 反转顺序（退役期灰度）：ModelResolver 自动决策优先；
+		// 自动决策 fail-open（未命中）时才回退到显式手动映射。
+		if target := resolveAutoModel(profile, model, req, deps, routingCfg); target != nil {
+			return target
 		}
+		return resolveManualMapping(profile, model, "manual_mapping_fallback")
 	}
 
-	// 优先级 2：ModelResolver 自动映射（Phase 3B-2）
+	// 默认顺序（历史行为不变）：显式 modelMapping 优先，ModelResolver 自动映射兜底。
+	if target := resolveManualMapping(profile, model, "manual_mapping"); target != nil {
+		return target
+	}
+	return resolveAutoModel(profile, model, req, deps, routingCfg)
+}
+
+// resolveManualMapping 解析 profile 上显式配置的 modelMapping（用户手动配置，视为已知正确；不覆盖 effort）。
+// reason 由调用方指定，用于区分默认优先级路径（manual_mapping）与自动决策 fail-open 后的兜底路径（manual_mapping_fallback）。
+func resolveManualMapping(profile *KeyEndpointProfile, model string, reason string) *ResolvedRouteTarget {
+	if len(profile.ModelMapping) == 0 {
+		return nil
+	}
+	mapped, ok := profile.ModelMapping[model]
+	if !ok {
+		return nil
+	}
+	return &ResolvedRouteTarget{Model: mapped, Effort: "", EffortDecided: false, Reason: reason}
+}
+
+// resolveAutoModel 解析 ModelResolver 自动映射（Phase 3B-2）。
+// 三条件门控：AutoResolve + RoutingMode in {assist, auto} + no KillSwitch；不满足任一条件时返回 nil（fail-open）。
+func resolveAutoModel(profile *KeyEndpointProfile, model string, req *RequestProfile, deps *EndpointPolicyDeps, routingCfg *config.AutopilotRoutingConfig) *ResolvedRouteTarget {
 	resolver := getModelResolverFromDeps(deps)
 	if resolver == nil || req == nil {
 		return nil
 	}
 
-	// 三条件门控：AutoResolve + RoutingMode in {assist, auto} + no KillSwitch
-	routingCfg := getRoutingCfgFromDeps(deps)
 	if routingCfg == nil || !routingCfg.ModelMapping.AutoResolve {
 		return nil
 	}
