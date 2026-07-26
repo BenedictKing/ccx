@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 func TestSupportsModel(t *testing.T) {
 	tests := []struct {
@@ -659,6 +662,101 @@ func TestApplyReasoningParamStyle(t *testing.T) {
 				}
 				if _, ok := req["reasoning_effort"]; ok {
 					t.Error("stale 'reasoning_effort' key should be deleted when style=thinking")
+				}
+			}
+		})
+	}
+}
+
+// TestApplyReasoningParamStyle_Gemini 覆盖 Gemini 原生 thinkingConfig 注入形态。
+func TestApplyReasoningParamStyle_Gemini(t *testing.T) {
+	tests := []struct {
+		name        string
+		effort      string
+		initial     map[string]interface{}
+		wantLevel   string // 期望的 thinkingLevel；空串表示不应存在该字段
+		wantBudget  bool   // 期望 thinkingBudget=0（关闭思考）
+		wantNoInjet bool   // 期望完全不注入 generationConfig.thinkingConfig
+	}{
+		{name: "minimal maps to minimal", effort: "minimal", wantLevel: "minimal"},
+		{name: "low maps to low", effort: "low", wantLevel: "low"},
+		{name: "medium maps to medium", effort: "medium", wantLevel: "medium"},
+		{name: "high maps to high", effort: "high", wantLevel: "high"},
+		// Gemini 官方枚举没有 max/xhigh，最高档收敛到 high
+		{name: "max clamps to high", effort: "max", wantLevel: "high"},
+		{name: "xhigh clamps to high", effort: "xhigh", wantLevel: "high"},
+		// off/none 走 thinkingBudget=0，而不是发明新的 level token
+		{name: "off disables via thinkingBudget", effort: "off", wantBudget: true},
+		{name: "none disables via thinkingBudget", effort: "none", wantBudget: true},
+		// 无法映射与空档位都必须 fail-open：不注入任何字段
+		{name: "empty effort injects nothing", effort: "", wantNoInjet: true},
+		{name: "unmappable effort injects nothing", effort: "turbo", wantNoInjet: true},
+		{
+			name:       "existing thinkingBudget is cleared when level is set",
+			effort:     "high",
+			initial:    map[string]interface{}{"generationConfig": map[string]interface{}{"thinkingConfig": map[string]interface{}{"thinkingBudget": 1024}}},
+			wantLevel:  "high",
+			wantBudget: false,
+		},
+		{
+			name:    "existing thinkingLevel is cleared when disabled",
+			effort:  "off",
+			initial: map[string]interface{}{"generationConfig": map[string]interface{}{"thinkingConfig": map[string]interface{}{"thinkingLevel": "high"}}},
+			// 关闭时不能残留 thinkingLevel，否则与 thinkingBudget 冲突
+			wantBudget: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := make(map[string]interface{})
+			for k, v := range tt.initial {
+				req[k] = v
+			}
+			ApplyReasoningParamStyle(req, ReasoningParamStyleGemini, tt.effort)
+
+			// Gemini 形态绝不写 Claude/OpenAI/Responses 的互斥字段
+			for _, forbidden := range []string{"thinking", "reasoning", "reasoning_effort"} {
+				if _, ok := req[forbidden]; ok {
+					t.Errorf("gemini style must not set %q, got %v", forbidden, req[forbidden])
+				}
+			}
+
+			generationConfig, hasGenerationConfig := req["generationConfig"].(map[string]interface{})
+			if tt.wantNoInjet {
+				if hasGenerationConfig {
+					if _, ok := generationConfig["thinkingConfig"]; ok {
+						t.Fatalf("want no thinkingConfig injection, got %v", generationConfig["thinkingConfig"])
+					}
+				}
+				return
+			}
+			if !hasGenerationConfig {
+				t.Fatalf("want generationConfig, got %T: %v", req["generationConfig"], req["generationConfig"])
+			}
+			thinkingConfig, ok := generationConfig["thinkingConfig"].(map[string]interface{})
+			if !ok {
+				t.Fatalf("want thinkingConfig map, got %T: %v", generationConfig["thinkingConfig"], generationConfig["thinkingConfig"])
+			}
+
+			if tt.wantLevel != "" {
+				if got, _ := thinkingConfig["thinkingLevel"].(string); got != tt.wantLevel {
+					t.Errorf("thinkingLevel = %q, want %q", got, tt.wantLevel)
+				}
+				if _, ok := thinkingConfig["thinkingBudget"]; ok {
+					t.Error("thinkingBudget must be cleared when thinkingLevel is set")
+				}
+			}
+			if tt.wantBudget {
+				budget, ok := thinkingConfig["thinkingBudget"]
+				if !ok {
+					t.Fatal("want thinkingBudget=0 for disabled thinking")
+				}
+				if fmt.Sprintf("%v", budget) != "0" {
+					t.Errorf("thinkingBudget = %v, want 0", budget)
+				}
+				if _, ok := thinkingConfig["thinkingLevel"]; ok {
+					t.Error("thinkingLevel must be cleared when thinking is disabled")
 				}
 			}
 		})

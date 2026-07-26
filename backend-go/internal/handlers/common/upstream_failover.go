@@ -497,7 +497,7 @@ func TryUpstreamWithAllKeys(
 				}
 				if target != nil && target.Model != "" {
 					// Atomic rewrite: model + effort together
-					attemptBody, rewriteOk := atomicModelEffortRewrite(attemptBody, target, upstreamCopy)
+					attemptBody, rewriteOk := atomicModelEffortRewrite(attemptBody, target, upstreamCopy, kind)
 					if rewriteOk {
 						attemptModel = target.Model
 						appliedMappedModel = target.Model
@@ -1601,7 +1601,7 @@ func isEffortClampedByClient(clientRaw string, clientExplicit bool, targetEffort
 	return clientOrd >= 0 && targetOrd >= 0 && clientOrd < targetOrd
 }
 
-func atomicModelEffortRewrite(body []byte, target *autopilot.ResolvedRouteTarget, upstream *config.UpstreamConfig) ([]byte, bool) {
+func atomicModelEffortRewrite(body []byte, target *autopilot.ResolvedRouteTarget, upstream *config.UpstreamConfig, kind scheduler.ChannelKind) ([]byte, bool) {
 	if target == nil || target.Model == "" {
 		return body, false
 	}
@@ -1622,9 +1622,10 @@ func atomicModelEffortRewrite(body []byte, target *autopilot.ResolvedRouteTarget
 			return modelBody, true
 		}
 
-		style := upstream.ReasoningParamStyle
+		style := effortInjectionStyle(kind, upstream)
 		if style == "" {
-			style = "reasoning"
+			// 该渠道类型不接受思考参数（images/vectors），只改写 model。
+			return modelBody, true
 		}
 		var reqMap map[string]interface{}
 		if err := json.Unmarshal(modelBody, &reqMap); err != nil {
@@ -1639,4 +1640,26 @@ func atomicModelEffortRewrite(body []byte, target *autopilot.ResolvedRouteTarget
 	}
 
 	return modelBody, true
+}
+
+// effortInjectionStyle 决定该渠道的 effort 注入形态。
+//
+// 判定依据是渠道种类与 ServiceType，而不是模型名匹配：
+//   - gemini 渠道（或 ServiceType=gemini 的上游）走 Gemini 原生 thinkingConfig 形态；
+//   - images / vectors 渠道不接受思考参数，返回空串表示"不注入"；
+//   - 其余渠道沿用渠道配置的 ReasoningParamStyle，缺省为 Responses 的 reasoning 对象形态。
+func effortInjectionStyle(kind scheduler.ChannelKind, upstream *config.UpstreamConfig) string {
+	switch kind {
+	case scheduler.ChannelKindImages, scheduler.ChannelKindVectors:
+		return ""
+	case scheduler.ChannelKindGemini:
+		return config.ReasoningParamStyleGemini
+	}
+	if upstream != nil && strings.EqualFold(strings.TrimSpace(upstream.ServiceType), "gemini") {
+		return config.ReasoningParamStyleGemini
+	}
+	if upstream != nil && upstream.ReasoningParamStyle != "" {
+		return upstream.ReasoningParamStyle
+	}
+	return "reasoning"
 }

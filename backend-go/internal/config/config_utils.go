@@ -290,11 +290,91 @@ func ApplyReasoningParamStyle(req map[string]interface{}, style string, effort s
 		if effort != "" {
 			req["reasoning_effort"] = effort
 		}
+	case ReasoningParamStyleGemini:
+		applyGeminiThinkingConfig(req, effort)
 	default:
 		if effort != "" {
 			req["reasoning"] = map[string]interface{}{"effort": effort}
 		}
 	}
+}
+
+// ReasoningParamStyleGemini 是 Gemini 原生协议的思考参数形态标识。
+// Gemini 不使用 thinking / reasoning_effort / reasoning 任一形态，
+// 而是写 generationConfig.thinkingConfig.thinkingLevel。
+const ReasoningParamStyleGemini = "gemini"
+
+// GeminiThinkingLevelForEffort 把统一 EffortLevel 字符串映射为 Gemini 的 thinkingLevel 取值。
+//
+// Gemini 官方 ThinkingLevel 枚举只有 MINIMAL / LOW / MEDIUM / HIGH（REST JSON 用小写），
+// 没有对应 max/xhigh 的档位，因此最高档统一收敛到 "high"。
+// 关闭思考不使用 thinkingLevel，而是走 thinkingBudget=0（仓库内既有的"已关闭"表示），
+// 因此本函数对 off/none 返回 ok=false，由调用方按关闭语义处理。
+// 无法识别的档位返回 ok=false，调用方必须保持请求体原样（fail-open，不注入伪字段）。
+func GeminiThinkingLevelForEffort(effort string) (string, bool) {
+	switch strings.ToLower(strings.TrimSpace(effort)) {
+	case "minimal", "min":
+		return "minimal", true
+	case "low":
+		return "low", true
+	case "medium", "med", "default":
+		return "medium", true
+	case "high", "xhigh", "max", "ultra":
+		return "high", true
+	default:
+		return "", false
+	}
+}
+
+// isGeminiThinkingDisabledEffort 判断 effort 是否表示"关闭思考"。
+func isGeminiThinkingDisabledEffort(effort string) bool {
+	switch strings.ToLower(strings.TrimSpace(effort)) {
+	case "off", "none", "disabled":
+		return true
+	default:
+		return false
+	}
+}
+
+// applyGeminiThinkingConfig 把 effort 写入 generationConfig.thinkingConfig。
+//
+// 约束：
+//   - thinkingLevel 与 thinkingBudget 互斥，写一个必须清掉另一个（上游会因两者同时出现报错）。
+//   - off/none 用 thinkingBudget=0 表示关闭，与 extractGeminiEffortExplicit 的读路径一致。
+//   - effort 为空或无法映射时整体不落任何字段，请求体保持原样。
+func applyGeminiThinkingConfig(req map[string]interface{}, effort string) {
+	if strings.TrimSpace(effort) == "" {
+		return
+	}
+
+	disabled := isGeminiThinkingDisabledEffort(effort)
+	level, ok := GeminiThinkingLevelForEffort(effort)
+	if !disabled && !ok {
+		// 无法映射到 Gemini 档位：不注入伪字段，交由上游沿用自身默认。
+		return
+	}
+
+	generationConfig, _ := req["generationConfig"].(map[string]interface{})
+	if generationConfig == nil {
+		generationConfig = make(map[string]interface{})
+	}
+	thinkingConfig, _ := generationConfig["thinkingConfig"].(map[string]interface{})
+	if thinkingConfig == nil {
+		thinkingConfig = make(map[string]interface{})
+	}
+
+	if disabled {
+		thinkingConfig["thinkingBudget"] = 0
+		delete(thinkingConfig, "thinkingLevel")
+	} else {
+		thinkingConfig["thinkingLevel"] = level
+		delete(thinkingConfig, "thinkingBudget")
+	}
+
+	generationConfig["thinkingConfig"] = thinkingConfig
+	req["generationConfig"] = generationConfig
+	// 清理裸 thinkingConfig 兼容形态，避免同一请求出现两处冲突配置。
+	delete(req, "thinkingConfig")
 }
 
 func isValidReasoningEffort(reasoning string) bool {
