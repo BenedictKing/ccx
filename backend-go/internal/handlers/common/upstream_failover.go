@@ -467,22 +467,24 @@ func TryUpstreamWithAllKeys(
 			upstreamCopy := upstream.Clone()
 			upstreamCopy.BaseURL = currentBaseURL
 
-			// Phase 3B-2: 应用 EndpointAttemptPolicy 的自动模型映射。
-			// MappedModel 来自 ModelResolver（AutoManaged 渠道，三条件门控通过），
-			// 优先级低于 RedirectModel（手动配置短路后 MappedModel 恒为空，不会双重映射）。
+			// Phase 3B-2: 应用 EndpointAttemptPolicy 的自动模型映射（含 effort 原子改写）。
+			// ResolvedRouteTarget 来自 ModelResolver（AutoManaged 渠道，三条件门控通过），
+			// 优先级低于 RedirectModel（手动配置短路后 target 恒为 nil，不会双重映射）。
 			attemptModel := redirectedModel
 			var appliedMappedModel string
-			if endpointPolicy != nil && endpointPolicy.ResolvedModelByEndpointUID != nil {
+			if endpointPolicy != nil && endpointPolicy.ResolvedTargetByEndpointUID != nil {
 				keyHash := autopilot.KeyHashFromAPIKey(apiKey)
 				euid := autopilot.GenerateEndpointUID(upstream.ChannelUID, currentBaseURL, keyHash)
-				if mm := endpointPolicy.ResolvedModelByEndpointUID(euid); mm != "" {
-					if replaced, err := sjson.SetBytes(attemptBody, "model", mm); err == nil {
-						attemptBody = replaced
-						appliedMappedModel = mm
-						attemptModel = mm
+				if target := endpointPolicy.ResolvedTargetByEndpointUID(euid); target != nil && target.Model != "" {
+					// Atomic rewrite: model + effort together
+					attemptBody, rewriteOk := atomicModelEffortRewrite(attemptBody, target, upstreamCopy)
+					if rewriteOk {
+						attemptModel = target.Model
+						appliedMappedModel = target.Model
 						RestoreRequestBody(c, attemptBody)
 						c.Set("requestBodyBytes", attemptBody)
-						RequestLogf(c, "[%s-AutoModel] endpoint=%s model override: %s -> %s", apiType, euid, model, mm)
+						RequestLogf(c, "[%s-AutoModel] endpoint=%s model override: %s -> %s (effort=%s, decided=%v)",
+							apiType, euid, model, target.Model, target.Effort, target.EffortDecided)
 					}
 				}
 			}
@@ -1496,4 +1498,47 @@ func isSystemHeaderError(errStr string) bool {
 		}
 	}
 	return false
+}
+
+// atomicModelEffortRewrite 原子地改写请求体中的 model 和 effort。
+// 保证：如果 effort 改写失败，model 也保持不变（原子性）。
+// 返回 (newBody, true) 表示成功，(originalBody, false) 表示失败或无需改写。
+func atomicModelEffortRewrite(body []byte, target *autopilot.ResolvedRouteTarget, upstream *config.UpstreamConfig) ([]byte, bool) {
+	if target == nil || target.Model == "" {
+		return body, false
+	}
+
+	// Step 1: 改写 model
+	modelBody, err := sjson.SetBytes(body, "model", target.Model)
+	if err != nil {
+		return body, false
+	}
+
+	// Step 2: 如果 effort 由 Autopilot 决定，注入 reasoning params
+	if target.EffortDecided && target.Effort != "" {
+		// adaptive_only guard: ThinkingMode=adaptive_only 的模型不注入 thinking params
+		// （模型自身决定思考深度，Autopilot 只负责模型选择）
+		cap := config.ResolveUpstreamCapability(target.Model, upstream, nil)
+		if cap.Known && cap.Capability.ThinkingMode == "adaptive_only" {
+			// 只改写 model，不注入 effort
+			return modelBody, true
+		}
+
+		style := upstream.ReasoningParamStyle
+		if style == "" {
+			style = "reasoning"
+		}
+		var reqMap map[string]interface{}
+		if err := json.Unmarshal(modelBody, &reqMap); err != nil {
+			return body, false
+		}
+		config.ApplyReasoningParamStyle(reqMap, style, string(target.Effort))
+		effortBody, err := json.Marshal(reqMap)
+		if err != nil {
+			return body, false
+		}
+		return effortBody, true
+	}
+
+	return modelBody, true
 }

@@ -520,3 +520,147 @@ func TestIsValidReasoningEffort(t *testing.T) {
 		t.Fatalf("isValidReasoningEffort(%q) = true, want false", "ultra")
 	}
 }
+
+func TestApplyReasoningParamStyle(t *testing.T) {
+	tests := []struct {
+		name       string
+		style      string
+		effort     string
+		initial    map[string]interface{}
+		wantKey    string
+		wantNil    bool // true = want no reasoning/thinking key at all
+		wantType   string
+		wantEffort string
+	}{
+		// ── thinking style ──
+		{
+			name:       "thinking: enabled with effort",
+			style:      "thinking",
+			effort:     "high",
+			initial:    map[string]interface{}{},
+			wantKey:    "thinking",
+			wantType:   "enabled",
+			wantEffort: "high",
+		},
+		{
+			name:    "thinking: disabled on off",
+			style:   "thinking",
+			effort:  "off",
+			initial: map[string]interface{}{},
+			wantKey: "thinking",
+			wantType: "disabled",
+		},
+		{
+			name:    "thinking: disabled on none",
+			style:   "thinking",
+			effort:  "none",
+			initial: map[string]interface{}{},
+			wantKey: "thinking",
+			wantType: "disabled",
+		},
+		{
+			name:    "thinking: empty effort = passthrough (no thinking key)",
+			style:   "thinking",
+			effort:  "",
+			initial: map[string]interface{}{},
+			wantNil: true,
+		},
+		{
+			name:       "thinking: preserves existing thinking map",
+			style:      "thinking",
+			effort:     "medium",
+			initial:    map[string]interface{}{"thinking": map[string]interface{}{"type": "enabled", "budget_tokens": 5000}},
+			wantKey:    "thinking",
+			wantType:   "enabled",
+			wantEffort: "medium",
+		},
+		{
+			name:    "thinking: cleans up stale reasoning key",
+			style:   "thinking",
+			effort:  "high",
+			initial: map[string]interface{}{"reasoning": map[string]interface{}{"effort": "low"}},
+			wantKey: "thinking",
+		},
+		// ── reasoning_effort style ──
+		{
+			name:    "reasoning_effort: sets effort string",
+			style:   "reasoning_effort",
+			effort:  "high",
+			initial: map[string]interface{}{},
+			wantKey: "reasoning_effort",
+		},
+		{
+			name:    "reasoning_effort: empty effort = no key",
+			style:   "reasoning_effort",
+			effort:  "",
+			initial: map[string]interface{}{},
+			wantNil: true,
+		},
+		// ── default (reasoning object) style ──
+		{
+			name:    "default: sets reasoning.effort",
+			style:   "reasoning",
+			effort:  "medium",
+			initial: map[string]interface{}{},
+			wantKey: "reasoning",
+		},
+		{
+			name:    "default: empty effort = no key",
+			style:   "reasoning",
+			effort:  "",
+			initial: map[string]interface{}{},
+			wantNil: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := make(map[string]interface{})
+			for k, v := range tt.initial {
+				req[k] = v
+			}
+			ApplyReasoningParamStyle(req, tt.style, tt.effort)
+
+			if tt.wantNil {
+				if _, ok := req["thinking"]; ok {
+					t.Errorf("want no 'thinking' key, got %v", req["thinking"])
+				}
+				if _, ok := req["reasoning"]; ok {
+					t.Errorf("want no 'reasoning' key, got %v", req["reasoning"])
+				}
+				if _, ok := req["reasoning_effort"]; ok {
+					t.Errorf("want no 'reasoning_effort' key, got %v", req["reasoning_effort"])
+				}
+				return
+			}
+
+			if tt.wantKey == "thinking" {
+				thinking, ok := req["thinking"].(map[string]interface{})
+				if !ok {
+					t.Fatalf("want thinking map, got %T: %v", req["thinking"], req["thinking"])
+				}
+				if tt.wantType != "" {
+					if got, _ := thinking["type"].(string); got != tt.wantType {
+						t.Errorf("thinking.type = %q, want %q", got, tt.wantType)
+					}
+				}
+				if tt.wantEffort != "" {
+					if got, _ := thinking["effort"].(string); got != tt.wantEffort {
+						t.Errorf("thinking.effort = %q, want %q", got, tt.wantEffort)
+					}
+				}
+				// budget_tokens must be cleaned up
+				if _, ok := thinking["budget_tokens"]; ok {
+					t.Error("thinking.budget_tokens should be deleted")
+				}
+				// stale reasoning key must be cleaned up
+				if _, ok := req["reasoning"]; ok {
+					t.Error("stale 'reasoning' key should be deleted when style=thinking")
+				}
+				if _, ok := req["reasoning_effort"]; ok {
+					t.Error("stale 'reasoning_effort' key should be deleted when style=thinking")
+				}
+			}
+		})
+	}
+}

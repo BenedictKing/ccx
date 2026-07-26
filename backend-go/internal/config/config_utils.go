@@ -277,7 +277,14 @@ func ApplyReasoningParamStyle(req map[string]interface{}, style string, effort s
 			req["thinking"] = map[string]interface{}{"type": "disabled"}
 			return
 		}
-		req["thinking"] = map[string]interface{}{"type": "enabled"}
+		thinking, _ := req["thinking"].(map[string]interface{})
+		if thinking == nil {
+			thinking = make(map[string]interface{})
+		}
+		thinking["type"] = "enabled"
+		thinking["effort"] = effort
+		delete(thinking, "budget_tokens")
+		req["thinking"] = thinking
 	case "reasoning_effort":
 		delete(req, "reasoning")
 		if effort != "" {
