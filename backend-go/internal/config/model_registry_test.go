@@ -822,8 +822,16 @@ func TestResolveModelBenchmarkProfile_DistinguishesGPT56Variants(t *testing.T) {
 			if got := resolved.Profile.CategoryScores["math"]; got != tt.reasoningRaw {
 				t.Fatalf("math score = %v, want %v", got, tt.reasoningRaw)
 			}
-			if resolved.Profile.Lane != "provisional" || resolved.Profile.VerifiedAt != "2026-07-25" {
+			// VerifiedAt 随 registry 刷新变动，只断言不变量：lane 为 provisional、
+			// 日期非空且与证据的 CapturedAt 对齐，避免每次刷新数据都要改测试。
+			if resolved.Profile.Lane != "provisional" || resolved.Profile.VerifiedAt == "" {
 				t.Fatalf("evidence metadata = lane %q date %q", resolved.Profile.Lane, resolved.Profile.VerifiedAt)
+			}
+			for _, ev := range resolved.Profile.BenchmarkEvidence {
+				if ev.CapturedAt != resolved.Profile.VerifiedAt {
+					t.Fatalf("evidence %q CapturedAt = %q, want VerifiedAt %q",
+						ev.Benchmark, ev.CapturedAt, resolved.Profile.VerifiedAt)
+				}
 			}
 		})
 	}
@@ -832,12 +840,16 @@ func TestResolveModelBenchmarkProfile_DistinguishesGPT56Variants(t *testing.T) {
 	if !luna.Known || luna.Profile.CanonicalModel != "gpt-5.6-luna" {
 		t.Fatalf("Luna 应有独立基准证据: %+v", luna)
 	}
+	// 断言证据来源与顺序，不锁死 rawValue：具体分值随 registry 刷新变动
 	if len(luna.Profile.BenchmarkEvidence) < 2 ||
 		luna.Profile.BenchmarkEvidence[0].Benchmark != "deepswe" ||
-		luna.Profile.BenchmarkEvidence[0].RawValue != 0.671875 ||
-		luna.Profile.BenchmarkEvidence[1].Benchmark != "codexradar" ||
-		luna.Profile.BenchmarkEvidence[1].RawValue != 0.5625 {
+		luna.Profile.BenchmarkEvidence[1].Benchmark != "codexradar" {
 		t.Fatalf("Luna benchmark evidence = %+v", luna.Profile.BenchmarkEvidence)
+	}
+	for _, ev := range luna.Profile.BenchmarkEvidence[:2] {
+		if ev.RawValue <= 0 || ev.RawValue > 1 {
+			t.Fatalf("Luna %q pass_at_1 = %v, want (0,1]", ev.Benchmark, ev.RawValue)
+		}
 	}
 }
 

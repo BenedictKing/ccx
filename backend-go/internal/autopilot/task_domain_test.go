@@ -156,7 +156,8 @@ func TestResolveDomainStrength_CanonicalBenchmarkByVariant(t *testing.T) {
 			if evidence.ProviderQualityFactor != 1 {
 				t.Fatalf("ProviderQualityFactor = %v, want 1 without endpoint evidence", evidence.ProviderQualityFactor)
 			}
-			if evidence.BenchmarkLane != "provisional" || evidence.BenchmarkVerifiedAt != "2026-07-25" {
+			// BenchmarkVerifiedAt 随 registry 刷新变动，只断言 lane 与日期非空
+			if evidence.BenchmarkLane != "provisional" || evidence.BenchmarkVerifiedAt == "" {
 				t.Fatalf("benchmark metadata = lane %q date %q", evidence.BenchmarkLane, evidence.BenchmarkVerifiedAt)
 			}
 			if evidence.EvidenceConfidence != 0.625 {
