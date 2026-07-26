@@ -641,6 +641,26 @@ func endpointCostScore(ct CostTier) float64 {
 	}
 }
 
+// effortLevelToScore 将 EffortLevel 映射为 0-100 数值分，供 trace 维度展示。
+func effortLevelToScore(e EffortLevel) float64 {
+	switch e {
+	case EffortOff:
+		return 0
+	case EffortMinimal:
+		return 15
+	case EffortLow:
+		return 30
+	case EffortMedium:
+		return 50
+	case EffortHigh:
+		return 75
+	case EffortMax:
+		return 100
+	default:
+		return 50
+	}
+}
+
 // ── 评分辅助函数 ──
 
 // scoreEndpointForURL 为指定 baseURL 评分。
@@ -1006,14 +1026,22 @@ func buildEndpointTrace(req *RequestProfile, candidates []EndpointCandidate, sta
 			MappedModel: cand.MappedModel,
 			TotalScore:  cand.Score,
 			Selected:    true,
-			Scores: []CandidateScore{
-				{Dimension: "endpoint_health", Score: cand.HealthScore, Weight: endpointScoreWeights.Health},
-				{Dimension: "endpoint_fast_decay", Score: cand.FastDecayScore, Weight: endpointScoreWeights.FastDecay},
-				{Dimension: "endpoint_success_rate", Score: cand.SuccessRate * 100, Weight: endpointScoreWeights.Success},
-				{Dimension: "endpoint_latency", Score: cand.LatencyScore, Weight: endpointScoreWeights.Latency},
-				{Dimension: "endpoint_cost", Score: cand.CostScore, Weight: endpointScoreWeights.Cost},
-			},
 		}
+		scores := []CandidateScore{
+			{Dimension: "endpoint_health", Score: cand.HealthScore, Weight: endpointScoreWeights.Health},
+			{Dimension: "endpoint_fast_decay", Score: cand.FastDecayScore, Weight: endpointScoreWeights.FastDecay},
+			{Dimension: "endpoint_success_rate", Score: cand.SuccessRate * 100, Weight: endpointScoreWeights.Success},
+			{Dimension: "endpoint_latency", Score: cand.LatencyScore, Weight: endpointScoreWeights.Latency},
+			{Dimension: "endpoint_cost", Score: cand.CostScore, Weight: endpointScoreWeights.Cost},
+		}
+		if cand.MappedEffortDecided {
+			scores = append(scores, CandidateScore{
+				Dimension: "effort",
+				Score:     effortLevelToScore(cand.MappedEffort),
+				Weight:    0, // informational, not weighted in total
+			})
+		}
+		rc.Scores = scores
 		trace.Candidates = append(trace.Candidates, rc)
 	}
 

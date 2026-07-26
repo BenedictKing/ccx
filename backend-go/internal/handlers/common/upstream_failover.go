@@ -486,6 +486,17 @@ func TryUpstreamWithAllKeys(
 						RequestLogf(c, "[%s-AutoModel] endpoint=%s model override: %s -> %s (effort=%s, decided=%v)",
 							apiType, euid, model, target.Model, target.Effort, target.EffortDecided)
 					}
+
+					// 记录 effort 决策来源与钳位状态，供 ChannelLog 可观测性字段使用
+					if target.EffortDecided {
+						c.Set("effortDecisionSource", "autopilot")
+						// 判断客户端是否显式设置了 effort，且被 Autopilot 的目标值钳位
+						if _, clientExplicit := ExtractClientEffortExplicit(requestBody, apiType); clientExplicit {
+							c.Set("effortClampedByClient", true)
+						}
+					} else {
+						c.Set("effortDecisionSource", "passthrough")
+					}
 				}
 			}
 			// 主动限速：在构建/发送请求前获取许可（渠道级 + Key/Quota scope）
@@ -568,6 +579,18 @@ func TryUpstreamWithAllKeys(
 			if traceUID, ok := c.Get("ccx.autopilot_trace_uid"); ok {
 				if uid, ok := traceUID.(string); ok && uid != "" {
 					logOpts = append(logOpts, WithAutopilotTraceUID(uid))
+				}
+			}
+
+			// 提取 effort 决策来源与钳位状态（endpoint policy 写入 gin context）
+			if source, ok := c.Get("effortDecisionSource"); ok {
+				if s, ok := source.(string); ok && s != "" {
+					logOpts = append(logOpts, WithEffortDecisionSource(s))
+				}
+			}
+			if clamped, ok := c.Get("effortClampedByClient"); ok {
+				if c, ok := clamped.(bool); ok && c {
+					logOpts = append(logOpts, WithEffortClampedByClient(true))
 				}
 			}
 

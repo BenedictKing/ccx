@@ -18,6 +18,8 @@ type ChannelLog struct {
 	Operation               string    `json:"operation,omitempty"`               // Images 端点（generations/edits/variations）
 	OriginalReasoningEffort string    `json:"originalReasoningEffort,omitempty"` // 原始请求的思考强度
 	ActualReasoningEffort   string    `json:"actualReasoningEffort,omitempty"`   // 实际发往上游的思考强度
+	EffortDecisionSource    string    `json:"effortDecisionSource,omitempty"`    // autopilot | client | passthrough
+	EffortClampedByClient   bool      `json:"effortClampedByClient,omitempty"`   // true if effort clamped by client upper bound
 	StatusCode              int       `json:"statusCode"`
 	DurationMs              int64     `json:"durationMs"`
 	Success                 bool      `json:"success"`

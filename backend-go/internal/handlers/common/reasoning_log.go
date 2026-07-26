@@ -122,3 +122,49 @@ func stringReasoningValue(bodyBytes []byte, path string) string {
 		return ""
 	}
 }
+
+// ExtractClientEffortExplicit 判断客户端是否显式设置了 effort 值。
+// 返回 (raw_effort_string, true) 如果显式设置，("", false) 如果未声明。
+// 区分协议：
+// - Claude: thinking.type 存在（即使 "enabled" 无 effort）→ explicit；无 thinking 字段 → not explicit
+// - OpenAI: reasoning_effort 存在 → explicit；absent → not explicit
+// - Responses: reasoning.effort 存在 → explicit；absent → not explicit
+// - Gemini: thinkingConfig 存在 → explicit；absent → not explicit
+func ExtractClientEffortExplicit(bodyBytes []byte, channelKind string) (raw string, explicit bool) {
+	if len(bytes.TrimSpace(bodyBytes)) == 0 || !gjson.ValidBytes(bodyBytes) {
+		return "", false
+	}
+
+	// Claude Messages: thinking.type present → explicit
+	if channelKind == "messages" || channelKind == "" {
+		if value := gjson.GetBytes(bodyBytes, "thinking.type"); value.Exists() {
+			return strings.TrimSpace(value.String()), true
+		}
+	}
+
+	// OpenAI Chat: reasoning_effort present → explicit
+	if channelKind == "chat" || channelKind == "" {
+		if value := stringReasoningValue(bodyBytes, "reasoning_effort"); value != "" {
+			return value, true
+		}
+	}
+
+	// Responses: reasoning.effort present → explicit
+	if channelKind == "responses" || channelKind == "" {
+		if value := stringReasoningValue(bodyBytes, "reasoning.effort"); value != "" {
+			return value, true
+		}
+	}
+
+	// Gemini: thinkingConfig present → explicit
+	if channelKind == "gemini" || channelKind == "" {
+		if value := gjson.GetBytes(bodyBytes, "generationConfig.thinkingConfig"); value.Exists() {
+			return "thinkingConfig", true
+		}
+		if value := gjson.GetBytes(bodyBytes, "thinkingConfig"); value.Exists() {
+			return "thinkingConfig", true
+		}
+	}
+
+	return "", false
+}

@@ -68,6 +68,26 @@ func WithAutopilotTraceUID(traceUID string) ChannelLogOption {
 	}
 }
 
+// WithEffortDecisionSource 记录 effort 决策来源（autopilot | client | passthrough）。
+func WithEffortDecisionSource(source string) ChannelLogOption {
+	return func(log *metrics.ChannelLog) {
+		if log == nil || source == "" {
+			return
+		}
+		log.EffortDecisionSource = source
+	}
+}
+
+// WithEffortClampedByClient 标记 effort 是否被客户端显式值钳位。
+func WithEffortClampedByClient(clamped bool) ChannelLogOption {
+	return func(log *metrics.ChannelLog) {
+		if log == nil || !clamped {
+			return
+		}
+		log.EffortClampedByClient = true
+	}
+}
+
 // CreatePendingLog 创建 pending 状态的日志条目（请求开始时调用）
 func CreatePendingLog(
 	channelLogStore *metrics.ChannelLogStore,
