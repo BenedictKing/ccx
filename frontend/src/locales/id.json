@@ -1325,7 +1325,7 @@
   "autopilot.diagnose.recommendation": "Rekomendasi",
   "autopilot.diagnose.noCandidates": "Tidak ada channel yang cocok dengan protokol, model, dan konfigurasi saat ini.",
   "autopilot.diagnose.col.chosen": "Dipilih",
-  "autopilot.diagnose.col.channel": "UID Channel",
+  "autopilot.diagnose.col.channel": "Channel",
   "autopilot.diagnose.col.actualModel": "Model Aktual",
   "autopilot.diagnose.col.mapping": "Sumber Pemetaan",
   "autopilot.diagnose.col.score": "Skor",

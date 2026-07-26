@@ -1326,7 +1326,7 @@
   "autopilot.diagnose.recommendation": "推荐结果",
   "autopilot.diagnose.noCandidates": "没有符合当前协议、模型和配置条件的候选渠道。",
   "autopilot.diagnose.col.chosen": "推荐",
-  "autopilot.diagnose.col.channel": "渠道 UID",
+  "autopilot.diagnose.col.channel": "渠道",
   "autopilot.diagnose.col.actualModel": "实际模型",
   "autopilot.diagnose.col.mapping": "映射来源",
   "autopilot.diagnose.col.score": "得分",

@@ -154,7 +154,11 @@
               {{ t('autopilot.diagnose.recommendation') }}
             </div>
             <div class="d-flex flex-wrap align-center ga-2 mt-1">
-              <span class="font-weight-bold">{{ shortenUid(plan.selectedChannelUid) }}</span>
+              <v-tooltip :text="plan.selectedChannelUid || '-'" location="top" :open-delay="150" content-class="ccx-tooltip">
+                <template #activator="{ props: tooltipProps }">
+                  <span v-bind="tooltipProps" class="font-weight-bold">{{ channelName(plan.selectedChannelUid) }}</span>
+                </template>
+              </v-tooltip>
               <v-icon size="16">mdi-arrow-right</v-icon>
               <span class="font-weight-bold">{{ plan.selectedModel || profile?.Model || '-' }}</span>
               <v-chip
@@ -200,7 +204,13 @@
                   >mdi-star</v-icon>
                   <v-icon v-else size="16" color="grey">mdi-minus</v-icon>
                 </td>
-                <td class="text-caption">{{ shortenUid(candidate.channelUid) }}</td>
+                <td class="text-caption">
+                  <v-tooltip :text="candidate.channelUid" location="top" :open-delay="150" content-class="ccx-tooltip">
+                    <template #activator="{ props: tooltipProps }">
+                      <span v-bind="tooltipProps">{{ channelName(candidate.channelUid) }}</span>
+                    </template>
+                  </v-tooltip>
+                </td>
                 <td class="text-caption">
                   {{ candidate.mappedModel || profile?.Model || '-' }}
                 </td>
@@ -246,6 +256,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
 import { useI18n } from '@/i18n'
+import { api } from '@/services/api'
 import {
   diagnoseSmartRouting,
   type SmartRoutingDiagnoseChannelKind,
@@ -264,7 +275,29 @@ interface DiagnoseForm {
 }
 
 const { t } = useI18n()
-const modelPresets = ['claude-sonnet-5', 'glm-5.2', 'mimo-v2.5-pro']
+const featuredModelPresets = [
+  'claude-opus-5',
+  'claude-fable-5',
+  'claude-sonnet-5',
+  'gpt-5.6-sol',
+  'gpt-5.6-terra',
+  'gpt-5.6-luna',
+  'gemini-3.6-flash',
+  'gemini-3.5-flash',
+  'gemini-3.1-pro',
+  'grok-4.5',
+  'glm-5.2',
+  'kimi-k3',
+  'kimi-k2.7-code',
+  'deepseek-v4-pro',
+  'deepseek-v4-flash',
+  'qwen3.7-max',
+  'qwen3-max',
+  'minimax-m3',
+  'mimo-v2.5-pro',
+  'mimo-v2.5',
+]
+const modelPresets = featuredModelPresets
 const form = reactive<DiagnoseForm>({
   model: modelPresets[0],
   channelKind: 'messages',
@@ -277,6 +310,7 @@ const form = reactive<DiagnoseForm>({
 const loading = ref(false)
 const error = ref('')
 const response = ref<SmartRoutingDiagnoseResponse | null>(null)
+const channelNamesByUid = ref(new Map<string, string>())
 const completionFeaturesEnabled = computed(() => (
   form.channelKind !== 'images' && form.channelKind !== 'vectors'
 ))
@@ -308,6 +342,26 @@ function operationFor(kind: SmartRoutingDiagnoseChannelKind): string {
   return 'completion'
 }
 
+async function loadChannelNames() {
+  const results = await Promise.all([
+    api.getChannels(),
+    api.getChatChannels(),
+    api.getResponsesChannels(),
+    api.getGeminiChannels(),
+    api.getImagesChannels(),
+    api.getVectorsChannels(),
+  ])
+  const names = new Map<string, string>()
+
+  for (const result of results) {
+    for (const channel of result.channels) {
+      if (channel.channelUid) names.set(channel.channelUid, channel.name)
+    }
+  }
+
+  channelNamesByUid.value = names
+}
+
 async function runDiagnose(model?: string) {
   if (model) form.model = model
   const requestedModel = String(form.model ?? '').trim()
@@ -319,6 +373,7 @@ async function runDiagnose(model?: string) {
   loading.value = true
   error.value = ''
   try {
+    await loadChannelNames()
     const request: SmartRoutingDiagnoseRequest = {
       model: requestedModel,
       channelKind: form.channelKind,
@@ -344,6 +399,11 @@ function shortenUid(uid?: string): string {
   if (!uid) return '-'
   const stripped = uid.replace(/^ch_/, '')
   return stripped.length > 12 ? `ch_${stripped.slice(0, 12)}…` : uid
+}
+
+function channelName(uid?: string): string {
+  if (!uid) return '-'
+  return channelNamesByUid.value.get(uid) ?? shortenUid(uid)
 }
 
 function formatScore(score: number): string {

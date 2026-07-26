@@ -1326,7 +1326,7 @@
   "autopilot.diagnose.recommendation": "Recommendation",
   "autopilot.diagnose.noCandidates": "No channel matches the current protocol, model, and configuration.",
   "autopilot.diagnose.col.chosen": "Chosen",
-  "autopilot.diagnose.col.channel": "Channel UID",
+  "autopilot.diagnose.col.channel": "Channel",
   "autopilot.diagnose.col.actualModel": "Actual Model",
   "autopilot.diagnose.col.mapping": "Mapping Source",
   "autopilot.diagnose.col.score": "Score",
