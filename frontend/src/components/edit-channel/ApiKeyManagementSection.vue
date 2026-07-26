@@ -1266,6 +1266,7 @@ import type {
 import { maskApiKey } from '../../utils/apiKeyMask'
 import { buildChannelApiKeyRows } from '../../utils/channelApiKeys'
 import { getVolcenginePlanConsoleURL } from '../../utils/channelWebsite'
+import { quotaRemainingColorClass } from '../../utils/quotaColor'
 import { selectMiniMaxTokenPlanEndpoint, sha256KeyHash } from '../../utils/minimaxEndpointUsage'
 
 interface KeyModelsStatus {
@@ -1981,12 +1982,7 @@ const hasVolcengineUsageData = (usage?: VolcenginePlanUsage) => {
   return !!(usage.fiveHour || usage.daily || usage.weekly || usage.monthly)
 }
 
-// 根据剩余百分比着色：低于 20% 红，低于 50% 橙。
-const volcengineUsageColor = (remainingPercent: number): string => {
-  if (remainingPercent < 20) return 'text-error'
-  if (remainingPercent < 50) return 'text-warning'
-  return ''
-}
+const volcengineUsageColor = quotaRemainingColorClass
 
 // 单窗口展示：Agent Plan 显示剩余%与已用/额度，Coding Plan 显示剩余%与已用%。
 const volcengineWindowCell = (labelKey: string, win?: VolcenginePlanUsageWindow): VolcengineUsageCell | null => {
@@ -2432,6 +2428,28 @@ const getDisabledKeyLabel = (reason: string) => {
   50% {
     opacity: 0.6;
   }
+}
+
+/* 额度余量 5 档着色，阈值 5/10/20/30/50%，从深到浅表示余量递增。 */
+.quota-critical {
+  color: rgb(var(--v-theme-error)) !important;
+  font-weight: 700;
+}
+
+.quota-danger {
+  color: rgb(var(--v-theme-error)) !important;
+}
+
+.quota-warning {
+  color: #EA580C !important;
+}
+
+.quota-caution {
+  color: rgb(var(--v-theme-warning)) !important;
+}
+
+.quota-low {
+  color: rgb(var(--v-theme-info)) !important;
 }
 
 .font-weight-mono {
