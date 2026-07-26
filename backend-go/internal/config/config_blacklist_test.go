@@ -794,7 +794,10 @@ func TestRequiresAnthropicBillingHeader(t *testing.T) {
 		{name: "official host with scheme", baseURL: "https://api.anthropic.com", expected: true},
 		{name: "official host with path", baseURL: "http://api.anthropic.com/v1", expected: true},
 		{name: "official host with trailing slash", baseURL: "https://api.anthropic.com/", expected: true},
+		{name: "official host with explicit port", baseURL: "https://api.anthropic.com:443/v1", expected: true},
+		{name: "official host with port no path", baseURL: "https://api.anthropic.com:8443", expected: true},
 		{name: "subdomain is not official", baseURL: "https://proxy.api.anthropic.com", expected: false},
+		{name: "subdomain with port is not official", baseURL: "https://proxy.api.anthropic.com:443", expected: false},
 		{name: "third-party domain", baseURL: "https://api.deepseek.com", expected: false},
 		{name: "empty string", baseURL: "", expected: false},
 	}

@@ -854,7 +854,7 @@
   "channelEditor.compat.stripEmptyBlocks.hint": "Remove the bare empty text block Claude Code inserts before tool_use. Strict first-party APIs of Chinese models (e.g. DeepSeek, GLM) often return 400 because of it and usually need this on; standard Anthropic endpoints or lenient relays usually don't. Run Diagnose to auto-detect.",
   "channelEditor.compat.normalizeSystem.hint": "Extract system messages from the messages array back to the top-level system field. Native first-party APIs of Chinese models (DeepSeek, Kimi, GLM, MiniMax, etc.) often accept only user/assistant roles and usually need this on; standard Anthropic endpoints or full-featured relays usually don't. Run Diagnose to auto-detect.",
   "channelEditor.compat.normalizeUserId.hint": "Flatten metadata user ID",
-  "channelEditor.compat.stripBillingHeader.hint": "Remove CCH billing suffix",
+  "channelEditor.compat.stripBillingHeader.hint": "Remove CCH billing suffix (default on for non-official domains)",
   "channelEditor.compat.normalizeRoles.hint": "Normalize non-standard chat roles",
   "channelEditor.transport.lowQuality.hint": "Mark this channel as low quality, used as last resort",
   "channelEditor.runtime.autoBlacklist.hint": "Automatically trip/disable keys with balance errors",

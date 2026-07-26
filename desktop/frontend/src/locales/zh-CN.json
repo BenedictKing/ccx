@@ -854,7 +854,7 @@
   "channelEditor.compat.stripEmptyBlocks.hint": "转发前移除 Claude Code 在 tool_use 前插入的裸空 text block。严格校验的国产模型官方直连（如 DeepSeek、GLM）常因此返回 400，通常需要开启；标准 Anthropic 端点或宽松中转站一般无需。建议先点「诊断」自动检测。",
   "channelEditor.compat.normalizeSystem.hint": "将 messages 数组里的 system 消息抽取回顶层 system 字段。国产模型官方直连（DeepSeek、Kimi、GLM、MiniMax 等）多仅支持 user/assistant，通常需要开启；标准 Anthropic 端点或完整中转站一般无需开启。建议先点「诊断」自动检测。",
   "channelEditor.compat.normalizeUserId.hint": "扁平化 metadata 中的 user ID",
-  "channelEditor.compat.stripBillingHeader.hint": "移除 CCH 计费后缀",
+  "channelEditor.compat.stripBillingHeader.hint": "移除 CCH 计费后缀（非官方域名默认开启）",
   "channelEditor.compat.normalizeRoles.hint": "规范化非标准聊天角色",
   "channelEditor.transport.lowQuality.hint": "标记此渠道为低质量，作为最后手段",
   "channelEditor.runtime.autoBlacklist.hint": "自动禁用余额异常的 Key",

@@ -642,7 +642,7 @@ func (u *UpstreamConfig) IsStripBillingHeaderEnabled() bool {
 // requiresAnthropicBillingHeader 判断 base URL 是否需要 x-anthropic-billing-header。
 // Anthropic 官方 API（api.anthropic.com）需要这行 header 进行计费归属，返回 true；
 // 第三方代理、自建网关、本地模型等不需要，返回 false（且 cch= 每次变化会打穿上游 prompt 缓存前缀）。
-// 只精确匹配主域名，子域名（如 proxy.api.anthropic.com）视为第三方。
+// 只精确匹配主域名，子域名（如 proxy.api.anthropic.com）视为第三方；端口号不影响判断。
 func requiresAnthropicBillingHeader(baseURL string) bool {
 	s := strings.ToLower(strings.TrimSpace(baseURL))
 	if idx := strings.Index(s, "://"); idx >= 0 {
@@ -652,6 +652,10 @@ func requiresAnthropicBillingHeader(baseURL string) bool {
 	host := s
 	if i := strings.Index(s, "/"); i >= 0 {
 		host = s[:i]
+	}
+	// 去掉端口号（如 api.anthropic.com:443），避免官方域名被误判为第三方
+	if i := strings.LastIndex(host, ":"); i >= 0 {
+		host = host[:i]
 	}
 	return host == "api.anthropic.com"
 }

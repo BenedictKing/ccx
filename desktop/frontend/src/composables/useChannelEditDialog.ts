@@ -11,6 +11,7 @@ import {
   type EmbeddingCapabilityRow,
   type ModelCapabilityRow,
 } from '@/utils/channel-payload'
+import { defaultStripBillingHeader } from '@/utils/base-url-semantics'
 import { supportsAdvancedChannelOptions, supportsReasoningMapping } from '@/utils/channel-advanced-options'
 import { extractChannelNamePrefix, syncBaseUrlsFormState } from '@/utils/channel-dialog-state'
 import type { ManagedChannelType } from '@/utils/channel-type-api'
@@ -53,6 +54,8 @@ const { t } = useLanguage()
   const adminApi = useAdminApi()
 
   const isEditMode = computed(() => !!props.channel)
+  // 新建渠道时 stripBillingHeader 跟随 baseUrl 自动推断；用户手动切换过则不再覆盖
+  const stripBillingHeaderTouched = ref(false)
   const isMac = computed(() => typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform))
   const managedProviderName = computed(() => providerDisplayName(props.channel?.providerId))
   const isOfficialManagedProvider = computed(() => isOfficialProviderChannel(props.channel))
@@ -374,6 +377,7 @@ const { t } = useLanguage()
     form.normalizeSystemRoleToTopLevel = false
     form.normalizeMetadataUserId = defaultNormalizeMetadataUserId()
     form.stripBillingHeader = false
+    stripBillingHeaderTouched.value = false
     form.normalizeNonstandardChatRoles = false
     form.autoBlacklistBalance = true
     form.codexNativeToolPassthrough = false
@@ -462,6 +466,8 @@ const { t } = useLanguage()
     form.normalizeSystemRoleToTopLevel = ch.normalizeSystemRoleToTopLevel ?? false
     form.normalizeMetadataUserId = ch.normalizeMetadataUserId ?? true
     form.stripBillingHeader = ch.stripBillingHeader ?? false
+    // 载入既有渠道的值即视为显式配置，避免 baseUrl watcher 覆盖用户已保存的选择
+    stripBillingHeaderTouched.value = true
     form.normalizeNonstandardChatRoles = ch.normalizeNonstandardChatRoles ?? false
     form.autoBlacklistBalance = ch.autoBlacklistBalance ?? true
     form.codexNativeToolPassthrough = ch.codexNativeToolPassthrough ?? false
@@ -489,6 +495,15 @@ const { t } = useLanguage()
   watch([() => form.baseUrlsText, () => form.serviceType], () => {
     const { baseUrl } = syncBaseUrlsFormState(form.baseUrlsText, form.serviceType)
     form.baseUrl = baseUrl
+  }, { immediate: true })
+
+  // 新建 Messages 渠道时按 baseUrl 推断 stripBillingHeader 默认值：
+  // 非官方 Anthropic 域名默认剔除，避免每次变化的 cch= nonce 打穿上游 prompt 缓存。
+  // 编辑既有渠道或用户已手动切换开关时不覆盖。
+  watch(() => form.baseUrlsText, () => {
+    if (isEditMode.value || stripBillingHeaderTouched.value) return
+    if (props.channelType !== 'messages') return
+    form.stripBillingHeader = defaultStripBillingHeader(parseLines(form.baseUrlsText))
   }, { immediate: true })
 
   // In create mode, textarea quick input is the submit source; paste handling is only an enhancement.
@@ -1084,7 +1099,16 @@ const { t } = useLanguage()
     }, { channelType: props.channelType })
   }
 
+  // 合并子面板的表单更新；stripBillingHeader 被显式改动时停止 baseUrl 自动推断
+  const applyFormUpdates = (updates: Record<string, unknown>) => {
+    if ('stripBillingHeader' in updates) {
+      stripBillingHeaderTouched.value = true
+    }
+    Object.assign(form, updates)
+  }
+
   return {
+    applyFormUpdates,
     isEditMode,
     isMac,
     saving,

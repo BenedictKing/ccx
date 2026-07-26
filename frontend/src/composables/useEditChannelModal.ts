@@ -33,7 +33,7 @@ import { useTargetModelFetch } from './useTargetModelFetch'
 import { useStreamTimeoutStrategy } from './useStreamTimeoutStrategy'
 import { useSupportedModelFilters } from './useSupportedModelFilters'
 import { useEditChannelOptions } from '../utils/editChannelOptions'
-import { isValidUrl, normalizeModelCapabilities } from '../utils/editChannelHelpers'
+import { defaultStripBillingHeader, isValidUrl, normalizeModelCapabilities } from '../utils/editChannelHelpers'
 import { isAutoManagedAccountChannel } from '../utils/providerDisplay'
 import { getManagedProviderWebsiteLinks } from '../utils/channelWebsite'
 
@@ -105,6 +105,9 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
   }
 
   const defaultNormalizeMetadataUserId = () => props.channelType === 'messages'
+
+  // 新建渠道时 stripBillingHeader 跟随 baseUrl 自动推断；用户手动切换过则不再覆盖
+  const stripBillingHeaderTouched = ref(false)
 
   // 详细表单预期请求 URL 预览（防止输入时抖动）
   const formBaseUrlPreview = ref('')
@@ -187,7 +190,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     supportedModels: [] as string[],
     autoBlacklistBalance: true,
     normalizeMetadataUserId: defaultNormalizeMetadataUserId(),
-    stripBillingHeader: defaultServiceTypeValueFallback() !== 'claude',
+    stripBillingHeader: false,
     codexNativeToolPassthrough: false,
     codexToolCompat: false,
     normalizeNonstandardChatRoles: false,
@@ -227,6 +230,18 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     form.baseUrl = baseUrl
     form.baseUrls = baseUrls
   })
+
+  // 新建 Messages 渠道时按 baseUrl 推断 stripBillingHeader 默认值：
+  // 非官方 Anthropic 域名默认剔除，避免每次变化的 cch= nonce 打穿上游 prompt 缓存。
+  // 编辑既有渠道或用户已手动切换开关时不覆盖。
+  watch(
+    () => [form.baseUrl, form.baseUrls.join(',')],
+    () => {
+      if (props.channel || stripBillingHeaderTouched.value) return
+      if (props.channelType !== 'messages') return
+      form.stripBillingHeader = defaultStripBillingHeader([form.baseUrl, ...form.baseUrls])
+    },
+  )
 
   // 模型映射行数据结构（改用数组存储，支持直接编辑）
   interface ModelMappingRow {
@@ -887,7 +902,8 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     supportedModelsError.value = ''
     form.autoBlacklistBalance = true
     form.normalizeMetadataUserId = defaultNormalizeMetadataUserId()
-    form.stripBillingHeader = defaultServiceTypeValueFallback() !== 'claude'
+    form.stripBillingHeader = false
+    stripBillingHeaderTouched.value = false
     form.codexNativeToolPassthrough = false
     form.codexToolCompat = false
     form.normalizeNonstandardChatRoles = false
@@ -984,6 +1000,8 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     form.autoBlacklistBalance = channel.autoBlacklistBalance ?? true
     form.normalizeMetadataUserId = channel.normalizeMetadataUserId ?? true
     form.stripBillingHeader = channel.stripBillingHeader ?? false
+    // 载入既有渠道的值即视为显式配置，避免 baseUrl watcher 覆盖用户已保存的选择
+    stripBillingHeaderTouched.value = true
     form.codexNativeToolPassthrough = !!channel.codexNativeToolPassthrough
     form.codexToolCompat = channel.codexToolCompat ?? channel.stripCodexClientTools ?? false
     form.normalizeNonstandardChatRoles = !!channel.normalizeNonstandardChatRoles
@@ -1125,6 +1143,9 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
 
   // 辅助函数：更新表单字段
   const updateForm = (partial: Record<string, unknown>) => {
+    if ('stripBillingHeader' in partial) {
+      stripBillingHeaderTouched.value = true
+    }
     Object.assign(form, partial)
   }
 

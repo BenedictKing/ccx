@@ -68,6 +68,7 @@ const {
   DEFAULT_SELECT_VALUE,
   reasoningEffortOptions,
   form,
+  applyFormUpdates,
   disabledApiKeys,
   historicalApiKeys,
   detectedBaseUrls,
@@ -547,7 +548,7 @@ const embeddingTargetModels = computed(() =>
                         :text-verbosity-options="textVerbosityOptions"
                         :diagnosing="diagnosingCompat"
                         :diagnose-result="diagnoseResult"
-                        @update:form="(updates) => Object.assign(form, updates)"
+                        @update:form="applyFormUpdates"
                         @diagnose="handleDiagnoseCompat"
                       />
                     </section>
