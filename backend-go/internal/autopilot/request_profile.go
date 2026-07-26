@@ -16,17 +16,17 @@ type RequestProfile struct {
 	Complexity  TaskComplexity // 不含正文的任务难度信号
 
 	// ── 路由能力下界 ──
-	QualityNeed        QualityTier // 该模型对应的质量需求
-	QualityTarget      QualityTier // 结合任务难度后的首选质量档
-	ContextNeed        int         // 估算输入 token 数；输出上限由 scheduler 独立校验
-	VisionNeed         bool        // 是否需要识图
-	ImageGenNeed       bool        // 是否需要原生生图端点
-	EmbeddingNeed      bool        // 是否需要原生 embedding 端点
-	ToolUseNeed        bool        // 是否需要工具调用
-	ReasoningNeed      bool        // 是否需要推理
-	EmbeddingDimension int         // vectors handler 的硬约束；未知时为 0
-	ClientEffort       EffortLevel // 客户端显式声明的思考等级；空=未声明
-	ClientEffortExplicit bool      // 客户端是否显式设置了思考等级（区分"显式无"和"未声明"）
+	QualityNeed          QualityTier // 该模型对应的质量需求
+	QualityTarget        QualityTier // 结合任务难度后的首选质量档
+	ContextNeed          int         // 估算输入 token 数；输出上限由 scheduler 独立校验
+	VisionNeed           bool        // 是否需要识图
+	ImageGenNeed         bool        // 是否需要原生生图端点
+	EmbeddingNeed        bool        // 是否需要原生 embedding 端点
+	ToolUseNeed          bool        // 是否需要工具调用
+	ReasoningNeed        bool        // 是否需要推理
+	EmbeddingDimension   int         // vectors handler 的硬约束；未知时为 0
+	ClientEffort         EffortLevel // 客户端显式声明的思考等级；空=未声明
+	ClientEffortExplicit bool        // 客户端是否显式设置了思考等级（区分"显式无"和"未声明"）
 
 	// ── 任务分类结果 ──
 	TaskClass  TaskClass  // 分类结果：supervisor | worker | lightweight | vision | long_context | image_generation | embedding
