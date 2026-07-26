@@ -296,6 +296,13 @@ func DomainStrength(profile *ModelProfile, domain TaskDomain) float64 {
 // ResolveDomainStrength 返回任务域强度及其可解释证据。
 // 规范基准代表模型能力上界；有可信渠道质量证据时只允许向下折算。
 func ResolveDomainStrength(profile *ModelProfile, domain TaskDomain) DomainStrengthEvidence {
+	return ResolveDomainStrengthForEffort(profile, domain, "")
+}
+
+// ResolveDomainStrengthForEffort 在已知目标思考档位时解析任务域强度证据。
+// targetEffort 非空时，基准证据优先精确匹配 (domain, effort)，跨档位回退会降低置信度；
+// 为空时退化为原有的 domain-only 行为，供尚未决定 effort 的渠道打分阶段使用。
+func ResolveDomainStrengthForEffort(profile *ModelProfile, domain TaskDomain, targetEffort EffortLevel) DomainStrengthEvidence {
 	if profile == nil {
 		return DomainStrengthEvidence{Source: "neutral", Score: 0.5}
 	}
@@ -328,7 +335,7 @@ func ResolveDomainStrength(profile *ModelProfile, domain TaskDomain) DomainStren
 					EvidenceConfidence:    clampUnit(confidence),
 				}
 			}
-			if evidence, ok := resolveRelativeBenchmarkEvidence(profile, resolved.Profile, domain, ""); ok {
+			if evidence, ok := resolveRelativeBenchmarkEvidence(profile, resolved.Profile, domain, targetEffort); ok {
 				return evidence
 			}
 		}

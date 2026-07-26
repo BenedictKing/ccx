@@ -139,9 +139,17 @@ func ExtractClientEffortExplicit(bodyBytes []byte, channelKind string) (raw stri
 	}
 
 	// Claude Messages: thinking.type present → explicit
+	// type=enabled 时真实档位在 thinking.effort，优先取它；缺失才回退到 type 值本身
+	// （type=disabled 即代表显式关闭思考）。
 	if channelKind == "messages" || channelKind == "" {
 		if value := gjson.GetBytes(bodyBytes, "thinking.type"); value.Exists() {
+			if effort := stringReasoningValue(bodyBytes, "thinking.effort"); effort != "" {
+				return effort, true
+			}
 			return strings.TrimSpace(value.String()), true
+		}
+		if effort := stringReasoningValue(bodyBytes, "thinking.effort"); effort != "" {
+			return effort, true
 		}
 	}
 

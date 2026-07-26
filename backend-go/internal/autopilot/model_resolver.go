@@ -24,6 +24,7 @@ type CapabilityFloor struct {
 	MinQualityTier    QualityTier // 目标质量档（无同档候选时允许降档）
 	QualityBenefitCap QualityTier // 简单/常规任务超过该档后不再自动获得质量排序收益
 	TaskClass         TaskClass   // 用于读取任务级 CostPreference
+	TaskDomain        TaskDomain  // 用于按 (domain, effort) 取任务域强度证据
 	EffortFloor       EffortLevel // 该请求的 effort 下界；空=不限
 	PinnedEffort      EffortLevel // 手动意图精确锁定的 effort 档位；空=不锁定，由 Autopilot 选优
 }
@@ -43,6 +44,7 @@ func BuildCapabilityFloorFromRequestProfile(profile *RequestProfile) CapabilityF
 		MinQualityTier:    requestQualityTarget(profile),
 		QualityBenefitCap: requestQualityBenefitCap(profile),
 		TaskClass:         profile.TaskClass,
+		TaskDomain:        profile.TaskDomain,
 		PinnedEffort:      resolveIntentPinnedEffort(profile),
 	}
 }
@@ -426,6 +428,40 @@ func sortEffortLevels(levels []EffortLevel) {
 
 // filterEffortFloor 过滤掉 effort 低于 EffortFloor 的已决定候选。
 // 仅在 EffortFloor 非空且至少一个候选存活时生效；全部被过滤时 fail-open。
+// resolveEffortFloor 按任务类从 ReasoningEffortConfig.PerTaskClass 推导 effort 下界。
+// 取该任务类允许档位中的最低档作为下界，使 supervisor 类请求不会被选到 off 档。
+// 配置缺失、未启用或任务类无配置时返回空串（不设下界）。
+func (r *ModelResolver) resolveEffortFloor(taskClass TaskClass) EffortLevel {
+	if r == nil || r.cfgManager == nil || taskClass == "" {
+		return ""
+	}
+	cfg := r.cfgManager.GetAutopilotRouting().ReasoningEffort
+	if !cfg.Enabled || len(cfg.PerTaskClass) == 0 {
+		return ""
+	}
+	allowed, ok := cfg.PerTaskClass[string(taskClass)]
+	if !ok || len(allowed) == 0 {
+		return ""
+	}
+	lowest := EffortLevel("")
+	lowestOrdinal := -1
+	for _, raw := range allowed {
+		level := NormalizeEffortLevel(raw)
+		if level == "" {
+			continue
+		}
+		ord, exists := effortOrdinal[level]
+		if !exists {
+			continue
+		}
+		if lowestOrdinal < 0 || ord < lowestOrdinal {
+			lowest = level
+			lowestOrdinal = ord
+		}
+	}
+	return lowest
+}
+
 func filterEffortFloor(candidates []rankedModelCandidate, floor CapabilityFloor) []rankedModelCandidate {
 	if floor.EffortFloor == "" {
 		return candidates
@@ -608,6 +644,12 @@ func (r *ModelResolver) rankEligibleModels(
 ) rankedModelCandidate {
 	reqFamily := InferModelFamily(requestModel, "")
 	upstream, global := r.modelRankingCapabilityContext(channelUID, channelKind)
+	// EffortFloor 由 ReasoningEffortConfig.PerTaskClass 按任务类推导。
+	// 调用方构造 CapabilityFloor 时拿不到 autopilot 配置，因此在此补齐，
+	// 使下界过滤与档位回退真正生效而非停留在结构体字段上。
+	if floor.EffortFloor == "" {
+		floor.EffortFloor = r.resolveEffortFloor(floor.TaskClass)
+	}
 
 	ranked := make([]rankedModelCandidate, 0, len(eligible))
 	for _, profile := range eligible {
@@ -624,6 +666,12 @@ func (r *ModelResolver) rankEligibleModels(
 			if decided && effort != "" {
 				bonus = EffortQualityBonus(effort) * 0.1
 			}
+			// 按该候选实际代表的 effort 档位取任务域证据，使 (domain, effort)
+			// 精确匹配与跨档位置信度折算真正参与排序，而非恒走 domain-only 回退。
+			domainScore := 0.5
+			if floor.TaskDomain != "" {
+				domainScore = ResolveDomainStrengthForEffort(&profile, floor.TaskDomain, effort).Score
+			}
 			ranked = append(ranked, rankedModelCandidate{
 				profile:                      profile,
 				effort:                       effort,
@@ -633,7 +681,7 @@ func (r *ModelResolver) rankEligibleModels(
 				providerModelQualityKnown:    qualityKnown,
 				providerModelQualityPriority: qualityPriority,
 				providerModelQualitySource:   qualitySource,
-				measuredQualityScore:         baseScore + bonus,
+				measuredQualityScore:         baseScore + bonus + (domainScore-0.5)*0.1,
 				latencyKnown:                 profile.ProbeLatencyMs > 0,
 				latencyMs:                    profile.ProbeLatencyMs,
 				providerCostKnown:            providerKnown,

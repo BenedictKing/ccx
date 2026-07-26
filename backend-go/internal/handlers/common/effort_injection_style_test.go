@@ -53,6 +53,20 @@ func TestEffortInjectionStyle(t *testing.T) {
 			upstream: &config.UpstreamConfig{},
 			want:     "reasoning",
 		},
+		// 自动托管渠道会被 RuntimeUpstreamForAutoManagedProvider 清空 ReasoningParamStyle，
+		// 此时必须按渠道类型推导原生形态，否则 effort 会写到上游不识别的字段被静默丢弃。
+		{
+			name:     "messages 渠道未配置形态时推导为 thinking",
+			kind:     scheduler.ChannelKindMessages,
+			upstream: &config.UpstreamConfig{},
+			want:     "thinking",
+		},
+		{
+			name:     "chat 渠道未配置形态时推导为 reasoning_effort",
+			kind:     scheduler.ChannelKindChat,
+			upstream: &config.UpstreamConfig{},
+			want:     "reasoning_effort",
+		},
 		// images / vectors 不接受思考参数，返回空串表示不注入
 		{
 			name:     "images 渠道不注入",

@@ -1661,5 +1661,14 @@ func effortInjectionStyle(kind scheduler.ChannelKind, upstream *config.UpstreamC
 	if upstream != nil && upstream.ReasoningParamStyle != "" {
 		return upstream.ReasoningParamStyle
 	}
+	// ReasoningParamStyle 为空时（如自动托管渠道被 RuntimeUpstreamForAutoManagedProvider 清空），
+	// 按渠道类型推导原生形态，不能一律回退到 responses 的 reasoning 对象形式，
+	// 否则 Claude/Chat 上游收到不识别的字段会静默丢弃 effort。
+	switch kind {
+	case scheduler.ChannelKindMessages:
+		return "thinking"
+	case scheduler.ChannelKindChat:
+		return "reasoning_effort"
+	}
 	return "reasoning"
 }
