@@ -815,7 +815,7 @@ func resolveMappedModel(profile *KeyEndpointProfile, model string, req *RequestP
 	}
 
 	floor := BuildCapabilityFloorFromRequestProfile(req)
-	mapped, resolved, _ := resolver.ResolveModel(
+	target, resolved, _ := resolver.ResolveModel(
 		model,
 		profile.ChannelUID,
 		profile.ChannelKind,
@@ -823,7 +823,7 @@ func resolveMappedModel(profile *KeyEndpointProfile, model string, req *RequestP
 		floor,
 	)
 	if resolved {
-		return mapped
+		return target.Model
 	}
 	return ""
 }

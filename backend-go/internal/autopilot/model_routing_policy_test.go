@@ -57,18 +57,18 @@ func TestModelResolver_ExactOnlyRejectsCrossModelMapping(t *testing.T) {
 			profile := routingPolicyProfile(tt.channelKind, tt.candidateModel, tt.family)
 			resolver := newTestResolver(t, []ModelProfile{profile})
 
-			mapped, resolved, reason := resolver.ResolveModel(
+			target, resolved, reason := resolver.ResolveModel(
 				tt.requestModel, "ch_test", tt.channelKind, "metrics_test", CapabilityFloor{})
-			if resolved || mapped != tt.requestModel || reason != "exact_model_required" {
+			if resolved || target.Model != tt.requestModel || reason != "exact_model_required" {
 				t.Fatalf("ResolveModel() = (%q, %v, %q), want (%q, false, exact_model_required)",
-					mapped, resolved, reason, tt.requestModel)
+					target.Model, resolved, reason, tt.requestModel)
 			}
 
-			mapped, found, reason := resolver.ResolveModelAnyEndpoint(
+			target, found, reason := resolver.ResolveModelAnyEndpoint(
 				tt.requestModel, "ch_test", tt.channelKind)
-			if found || mapped != tt.requestModel || reason != "exact_model_required" {
+			if found || target.Model != tt.requestModel || reason != "exact_model_required" {
 				t.Fatalf("ResolveModelAnyEndpoint() = (%q, %v, %q), want (%q, false, exact_model_required)",
-					mapped, found, reason, tt.requestModel)
+					target.Model, found, reason, tt.requestModel)
 			}
 		})
 	}
@@ -80,15 +80,15 @@ func TestModelResolver_ExactOnlyFindsSameNormalizedModel(t *testing.T) {
 	alternative.ProbeLatencyMs = 1
 	resolver := newTestResolver(t, []ModelProfile{alternative, exact})
 
-	mapped, resolved, reason := resolver.ResolveModel(
+	target, resolved, reason := resolver.ResolveModel(
 		" deepseek-chat ", "ch_test", "chat", "metrics_test", CapabilityFloor{})
-	if !resolved || mapped != "DeepSeek-Chat" || reason != "found_exact_model_in_profile" {
-		t.Fatalf("ResolveModel() = (%q, %v, %q), want exact DeepSeek model", mapped, resolved, reason)
+	if !resolved || target.Model != "DeepSeek-Chat" || reason != "found_exact_model_in_profile" {
+		t.Fatalf("ResolveModel() = (%q, %v, %q), want exact DeepSeek model", target.Model, resolved, reason)
 	}
 
-	mapped, found, reason := resolver.ResolveModelAnyEndpoint("deepseek-chat", "ch_test", "chat")
-	if !found || mapped != "DeepSeek-Chat" || reason != "found_exact_model_in_profile" {
-		t.Fatalf("ResolveModelAnyEndpoint() = (%q, %v, %q), want exact DeepSeek model", mapped, found, reason)
+	target, found, reason := resolver.ResolveModelAnyEndpoint("deepseek-chat", "ch_test", "chat")
+	if !found || target.Model != "DeepSeek-Chat" || reason != "found_exact_model_in_profile" {
+		t.Fatalf("ResolveModelAnyEndpoint() = (%q, %v, %q), want exact DeepSeek model", target.Model, found, reason)
 	}
 }
 
@@ -98,15 +98,15 @@ func TestModelResolver_ExactOnlyAcceptsDocumentedCompatibilityAlias(t *testing.T
 	pro.ProbeLatencyMs = 1
 	resolver := newTestResolver(t, []ModelProfile{pro, flash})
 
-	mapped, resolved, reason := resolver.ResolveModel(
+	target, resolved, reason := resolver.ResolveModel(
 		"deepseek-chat", "ch_test", "chat", "metrics_test", CapabilityFloor{})
-	if !resolved || mapped != "deepseek-v4-flash" || reason != "found_equivalent_model_in_profile" {
-		t.Fatalf("ResolveModel() = (%q, %v, %q), want documented DeepSeek compatibility alias", mapped, resolved, reason)
+	if !resolved || target.Model != "deepseek-v4-flash" || reason != "found_equivalent_model_in_profile" {
+		t.Fatalf("ResolveModel() = (%q, %v, %q), want documented DeepSeek compatibility alias", target.Model, resolved, reason)
 	}
 
-	mapped, found, reason := resolver.ResolveModelAnyEndpoint("deepseek-chat", "ch_test", "chat")
-	if !found || mapped != "deepseek-v4-flash" || reason != "found_equivalent_model_in_profile" {
-		t.Fatalf("ResolveModelAnyEndpoint() = (%q, %v, %q), want documented DeepSeek compatibility alias", mapped, found, reason)
+	target, found, reason := resolver.ResolveModelAnyEndpoint("deepseek-chat", "ch_test", "chat")
+	if !found || target.Model != "deepseek-v4-flash" || reason != "found_equivalent_model_in_profile" {
+		t.Fatalf("ResolveModelAnyEndpoint() = (%q, %v, %q), want documented DeepSeek compatibility alias", target.Model, found, reason)
 	}
 }
 
@@ -130,18 +130,18 @@ func TestModelResolver_AdaptiveEntrypointsAllowSubstitution(t *testing.T) {
 			profile := routingPolicyProfile(tt.channelKind, tt.candidateModel, tt.family)
 			resolver := newTestResolver(t, []ModelProfile{profile})
 
-			mapped, resolved, reason := resolver.ResolveModel(
+			target, resolved, reason := resolver.ResolveModel(
 				tt.requestModel, "ch_test", tt.channelKind, "metrics_test", CapabilityFloor{})
-			if !resolved || mapped != tt.candidateModel || reason == "" {
+			if !resolved || target.Model != tt.candidateModel || reason == "" {
 				t.Fatalf("ResolveModel() = (%q, %v, %q), want adaptive mapping to %q",
-					mapped, resolved, reason, tt.candidateModel)
+					target.Model, resolved, reason, tt.candidateModel)
 			}
 
-			mapped, found, reason := resolver.ResolveModelAnyEndpoint(
+			target, found, reason := resolver.ResolveModelAnyEndpoint(
 				tt.requestModel, "ch_test", tt.channelKind)
-			if !found || mapped != tt.candidateModel || reason == "" {
+			if !found || target.Model != tt.candidateModel || reason == "" {
 				t.Fatalf("ResolveModelAnyEndpoint() = (%q, %v, %q), want adaptive mapping to %q",
-					mapped, found, reason, tt.candidateModel)
+					target.Model, found, reason, tt.candidateModel)
 			}
 		})
 	}

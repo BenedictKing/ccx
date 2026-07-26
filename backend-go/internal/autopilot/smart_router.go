@@ -1165,17 +1165,17 @@ func (r *SmartRouter) resolveChannelModel(
 	}
 
 	if upstream.AutoManaged && r.modelResolver != nil {
-		mapped, found, reason := r.modelResolver.ResolveModelAnyEndpointWithFloor(
+		target, found, reason := r.modelResolver.ResolveModelAnyEndpointWithFloor(
 			requestModel,
 			upstream.ChannelUID,
 			profile.ChannelKind,
 			BuildCapabilityFloorFromRequestProfile(profile),
 		)
-		if found && mapped != "" {
-			resolution.ActualModel = mapped
+		if found && target.Model != "" {
+			resolution.ActualModel = target.Model
 			resolution.Supported = true
-			if normalizeRoutingModelID(mapped) != normalizeRoutingModelID(requestModel) {
-				resolution.MappedModel = mapped
+			if normalizeRoutingModelID(target.Model) != normalizeRoutingModelID(requestModel) {
+				resolution.MappedModel = target.Model
 				resolution.MappingSource = "auto_resolve"
 				resolution.MappingReason = reason
 			}

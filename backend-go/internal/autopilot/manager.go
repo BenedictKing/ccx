@@ -717,7 +717,7 @@ func (m *Manager) ResolveModelSupportWithFloor(
 
 	// 使用完整能力下界判断渠道所有 endpoint 是否能通过自动映射承接该模型。
 	// 真正请求发送前，resolveMappedModel 会用完整 metricsKey 和 CapabilityFloor 再做 endpoint 级映射。
-	mapped, found, resolverReason := m.modelResolver.ResolveModelAnyEndpointWithFloor(
+	target, found, resolverReason := m.modelResolver.ResolveModelAnyEndpointWithFloor(
 		model,
 		upstream.ChannelUID,
 		kind,
@@ -731,7 +731,7 @@ func (m *Manager) ResolveModelSupportWithFloor(
 		case "found_equivalent_model_in_profile":
 			source = "model_profile_equivalent"
 		}
-		return true, mapped, source, resolverReason
+		return true, target.Model, source, resolverReason
 	}
 
 	// 自动托管渠道没有显式 SupportedModels 时，画像是模型支持事实源。

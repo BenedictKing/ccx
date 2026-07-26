@@ -24,6 +24,7 @@ type CapabilityFloor struct {
 	MinQualityTier    QualityTier // 目标质量档（无同档候选时允许降档）
 	QualityBenefitCap QualityTier // 简单/常规任务超过该档后不再自动获得质量排序收益
 	TaskClass         TaskClass   // 用于读取任务级 CostPreference
+	EffortFloor       EffortLevel // 该请求的 effort 下界；空=不限
 }
 
 // BuildCapabilityFloorFromRequestProfile 从 RequestProfile 推导能力下界。
@@ -108,7 +109,7 @@ func (r *ModelResolver) ResolveModel(
 	channelKind string,
 	metricsKey string,
 	floor CapabilityFloor,
-) (mappedModel string, resolved bool, reason string) {
+) (target ResolvedRouteTarget, resolved bool, reason string) {
 
 	// Step 1: 显式 modelMapping（精确 → 模糊）始终优先。
 	// 手动配置视为已知正确，不经过能力下界检查（设计 doc 安全边界）。
@@ -117,20 +118,20 @@ func (r *ModelResolver) ResolveModel(
 		if upstream != nil && !upstream.AutoManaged {
 			redirected, matched := config.RedirectModelWithMatch(requestModel, upstream)
 			if matched && redirected != requestModel {
-				return redirected, true, "manual_redirect"
+				return ResolvedRouteTarget{Model: redirected, Reason: "manual_redirect"}, true, "manual_redirect"
 			}
 		}
 	}
 
 	// Step 2: 无 ModelProfileStore 时自动映射不可用，fail-open。
 	if r.profileStore == nil {
-		return requestModel, false, "model_profile_store_unavailable"
+		return ResolvedRouteTarget{Model: requestModel, Reason: "model_profile_store_unavailable"}, false, "model_profile_store_unavailable"
 	}
 
 	// Step 3: 查询候选模型画像。
 	candidates := r.profileStore.GetModelProfiles(channelUID, channelKind, metricsKey)
 	if len(candidates) == 0 {
-		return requestModel, false, "no_model_profiles"
+		return ResolvedRouteTarget{Model: requestModel, Reason: "no_model_profiles"}, false, "no_model_profiles"
 	}
 	candidates = r.refreshAutoDiscoveryCapabilities(candidates, channelUID, channelKind)
 
@@ -145,7 +146,7 @@ func (r *ModelResolver) ResolveModel(
 			// 仅过滤掉未验证的模型，不做能力下界检查。
 			probeEligible := filterProbedModelProfiles(candidates)
 			if len(probeEligible) == 0 {
-				return requestModel, false, "no_probed_model"
+				return ResolvedRouteTarget{Model: requestModel, Reason: "no_probed_model"}, false, "no_probed_model"
 			}
 			candidates = probeEligible
 		} else {
@@ -155,26 +156,34 @@ func (r *ModelResolver) ResolveModel(
 		candidates, qualityFallback = filterByCapabilityFloorWithQualityFallback(candidates, floor)
 	}
 	if len(candidates) == 0 {
-		return requestModel, false, "no_capable_model"
+		return ResolvedRouteTarget{Model: requestModel, Reason: "no_capable_model"}, false, "no_capable_model"
 	}
 
 	// Step 5: 精确模型始终优先；非自适应入口不得跨模型替代。
 	if exact, found := findExactModelProfile(candidates, requestModel); found {
-		return exact.ModelID, true, modelResolutionReason("found_exact_model_in_profile", qualityFallback)
+		rsn := modelResolutionReason("found_exact_model_in_profile", qualityFallback)
+		return ResolvedRouteTarget{Model: exact.ModelID, Reason: rsn}, true, rsn
 	}
 	if equivalent, found := findEquivalentModelProfile(candidates, requestModel); found {
-		return equivalent.ModelID, true, modelResolutionReason("found_equivalent_model_in_profile", qualityFallback)
+		rsn := modelResolutionReason("found_equivalent_model_in_profile", qualityFallback)
+		return ResolvedRouteTarget{Model: equivalent.ModelID, Reason: rsn}, true, rsn
 	}
 	intent := ClassifyModelRoutingIntent(channelKind, requestModel)
 	if !intent.AllowsSubstitution() {
-		return requestModel, false, "exact_model_required"
+		return ResolvedRouteTarget{Model: requestModel, Reason: "exact_model_required"}, false, "exact_model_required"
 	}
 
 	// Step 6: 自适应入口在满足下界的候选中按模型质量、实测表现和成本选优。
 	best := r.rankEligibleModels(candidates, requestModel, channelUID, channelKind, floor)
 	baseReason := fmt.Sprintf("mapped %s->%s (intent:%s, %s)",
 		requestModel, best.profile.ModelID, intent, best.reasonSummary())
-	return best.profile.ModelID, true, modelResolutionReason(baseReason, qualityFallback)
+	finalReason := modelResolutionReason(baseReason, qualityFallback)
+	return ResolvedRouteTarget{
+		Model:         best.profile.ModelID,
+		Effort:        best.effort,
+		EffortDecided: best.effortDecided,
+		Reason:        finalReason,
+	}, true, finalReason
 }
 
 // ResolveModelAnyEndpoint 在渠道的所有 endpoint 中判断 requestModel 是否可由自动映射支持。
@@ -186,7 +195,7 @@ func (r *ModelResolver) ResolveModelAnyEndpoint(
 	requestModel string,
 	channelUID string,
 	channelKind string,
-) (mappedModel string, found bool, reason string) {
+) (target ResolvedRouteTarget, found bool, reason string) {
 	return r.resolveModelAnyEndpoint(requestModel, channelUID, channelKind, CapabilityFloor{})
 }
 
@@ -197,7 +206,7 @@ func (r *ModelResolver) ResolveModelAnyEndpointWithFloor(
 	channelUID string,
 	channelKind string,
 	floor CapabilityFloor,
-) (mappedModel string, found bool, reason string) {
+) (target ResolvedRouteTarget, found bool, reason string) {
 	return r.resolveModelAnyEndpoint(requestModel, channelUID, channelKind, floor)
 }
 
@@ -206,9 +215,9 @@ func (r *ModelResolver) resolveModelAnyEndpoint(
 	channelUID string,
 	channelKind string,
 	floor CapabilityFloor,
-) (mappedModel string, found bool, reason string) {
+) (target ResolvedRouteTarget, found bool, reason string) {
 	if r.profileStore == nil {
-		return requestModel, false, "model_profile_store_unavailable"
+		return ResolvedRouteTarget{Model: requestModel, Reason: "model_profile_store_unavailable"}, false, "model_profile_store_unavailable"
 	}
 
 	candidates := make([]ModelProfile, 0)
@@ -223,7 +232,7 @@ func (r *ModelResolver) resolveModelAnyEndpoint(
 		candidates = append(candidates, p)
 	}
 	if len(candidates) == 0 {
-		return requestModel, false, "no_probed_model_profiles"
+		return ResolvedRouteTarget{Model: requestModel, Reason: "no_probed_model_profiles"}, false, "no_probed_model_profiles"
 	}
 	candidates = r.refreshAutoDiscoveryCapabilities(candidates, channelUID, channelKind)
 
@@ -237,23 +246,31 @@ func (r *ModelResolver) resolveModelAnyEndpoint(
 		candidates, qualityFallback = filterByCapabilityFloorWithQualityFallback(candidates, floor)
 	}
 	if len(candidates) == 0 {
-		return requestModel, false, "no_capable_model"
+		return ResolvedRouteTarget{Model: requestModel, Reason: "no_capable_model"}, false, "no_capable_model"
 	}
 	if exact, found := findExactModelProfile(candidates, requestModel); found {
-		return exact.ModelID, true, modelResolutionReason("found_exact_model_in_profile", qualityFallback)
+		rsn := modelResolutionReason("found_exact_model_in_profile", qualityFallback)
+		return ResolvedRouteTarget{Model: exact.ModelID, Reason: rsn}, true, rsn
 	}
 	if equivalent, found := findEquivalentModelProfile(candidates, requestModel); found {
-		return equivalent.ModelID, true, modelResolutionReason("found_equivalent_model_in_profile", qualityFallback)
+		rsn := modelResolutionReason("found_equivalent_model_in_profile", qualityFallback)
+		return ResolvedRouteTarget{Model: equivalent.ModelID, Reason: rsn}, true, rsn
 	}
 	intent := ClassifyModelRoutingIntent(channelKind, requestModel)
 	if !intent.AllowsSubstitution() {
-		return requestModel, false, "exact_model_required"
+		return ResolvedRouteTarget{Model: requestModel, Reason: "exact_model_required"}, false, "exact_model_required"
 	}
 
 	best := r.rankEligibleModels(candidates, requestModel, channelUID, channelKind, floor)
 	baseReason := fmt.Sprintf("mapped_any_endpoint %s->%s (intent:%s, %s)",
 		requestModel, best.profile.ModelID, intent, best.reasonSummary())
-	return best.profile.ModelID, true, modelResolutionReason(baseReason, qualityFallback)
+	finalReason := modelResolutionReason(baseReason, qualityFallback)
+	return ResolvedRouteTarget{
+		Model:         best.profile.ModelID,
+		Effort:        best.effort,
+		EffortDecided: best.effortDecided,
+		Reason:        finalReason,
+	}, true, finalReason
 }
 
 // ── 过滤与排序 ──
@@ -331,6 +348,8 @@ func modelResolutionReason(reason string, qualityFallback bool) string {
 // 上下文窗口不在这里评分；它只在 CapabilityFloor 阶段作为硬下限使用。
 type rankedModelCandidate struct {
 	profile                        ModelProfile
+	effort                         EffortLevel // 该候选代表的 effort 档位；空=该模型未展开 effort 变体
+	effortDecided                  bool        // true 表示 effort 由 autopilot 决定（非 passthrough）
 	qualityRank                    int
 	qualityBenefitCap              QualityTier
 	providerModelQualityKnown      bool

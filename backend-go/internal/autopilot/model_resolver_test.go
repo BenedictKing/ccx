@@ -410,10 +410,10 @@ func TestResolveModel_UsesQualityBenefitCapForRoutineTasks(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			floor := BuildCapabilityFloorFromRequestProfile(&tt.profile)
-			mapped, resolved, reason := resolver.ResolveModel(
+			target, resolved, reason := resolver.ResolveModel(
 				tt.profile.Model, "ch_test", "messages", "metrics_test", floor)
-			if !resolved || mapped != tt.wantModel {
-				t.Fatalf("ResolveModel() = (%q, %v, %q), want %q", mapped, resolved, reason, tt.wantModel)
+			if !resolved || target.Model != tt.wantModel {
+				t.Fatalf("ResolveModel() = (%q, %v, %q), want %q", target.Model, resolved, reason, tt.wantModel)
 			}
 		})
 	}
@@ -619,13 +619,13 @@ func TestProviderModelCostMultiplierInfersLegacyCompshareURL(t *testing.T) {
 
 func TestResolveModel_NoProfiles_ReturnsFalse(t *testing.T) {
 	resolver := newTestResolver(t, nil)
-	mapped, resolved, reason := resolver.ResolveModel(
+	target, resolved, reason := resolver.ResolveModel(
 		"claude-opus-4-8", "ch_empty", "messages", "mkey", CapabilityFloor{})
 	if resolved {
 		t.Error("expected resolved=false when no profiles")
 	}
-	if mapped != "claude-opus-4-8" {
-		t.Errorf("expected passthrough model, got %s", mapped)
+	if target.Model != "claude-opus-4-8" {
+		t.Errorf("expected passthrough model, got %s", target.Model)
 	}
 	if reason != "no_model_profiles" {
 		t.Errorf("expected reason 'no_model_profiles', got %s", reason)
@@ -643,7 +643,7 @@ func TestResolveModel_AllFilteredOut_ReturnsFalse(t *testing.T) {
 		MinContextTokens: 100000,
 		MinQualityTier:   QualityTierHigh,
 	}
-	mapped, resolved, reason := resolver.ResolveModel(
+	target, resolved, reason := resolver.ResolveModel(
 		"claude-opus-4-8", "ch_test", "messages", "metrics_test", floor)
 	if resolved {
 		t.Error("expected resolved=false when all filtered")
@@ -651,8 +651,8 @@ func TestResolveModel_AllFilteredOut_ReturnsFalse(t *testing.T) {
 	if reason != "no_capable_model" {
 		t.Errorf("expected reason 'no_capable_model', got %s", reason)
 	}
-	if mapped != "claude-opus-4-8" {
-		t.Errorf("expected passthrough model, got %s", mapped)
+	if target.Model != "claude-opus-4-8" {
+		t.Errorf("expected passthrough model, got %s", target.Model)
 	}
 }
 
@@ -666,13 +666,13 @@ func TestResolveModel_FindsBestMatch(t *testing.T) {
 	resolver := newTestResolver(t, profiles)
 
 	floor := CapabilityFloor{MinQualityTier: QualityTierHigh}
-	mapped, resolved, reason := resolver.ResolveModel(
+	target, resolved, reason := resolver.ResolveModel(
 		"claude-sonnet-5", "ch_test", "messages", "metrics_test", floor)
 	if !resolved {
 		t.Error("expected resolved=true")
 	}
-	if mapped != "claude-sonnet-4-6" {
-		t.Errorf("expected same-family claude-sonnet-4-6, got %s", mapped)
+	if target.Model != "claude-sonnet-4-6" {
+		t.Errorf("expected same-family claude-sonnet-4-6, got %s", target.Model)
 	}
 	if reason == "" {
 		t.Error("expected non-empty reason")
@@ -707,10 +707,10 @@ func TestResolveModel_CompshareInventoryPrefersGLM52OverDeepSeekFallbacks(t *tes
 		},
 	}
 	for _, floor := range floors {
-		mapped, resolved, reason := resolver.ResolveModel(
+		target, resolved, reason := resolver.ResolveModel(
 			"claude-sonnet-5", "ch_test", "messages", "metrics_test", floor)
-		if !resolved || mapped != "glm-5.2" {
-			t.Fatalf("ResolveModel(%+v) = (%q, %v, %q), want glm-5.2", floor, mapped, resolved, reason)
+		if !resolved || target.Model != "glm-5.2" {
+			t.Fatalf("ResolveModel(%+v) = (%q, %v, %q), want glm-5.2", floor, target.Model, resolved, reason)
 		}
 	}
 }
@@ -730,10 +730,10 @@ func TestResolveModel_GPT56RequiresPremiumReplacement(t *testing.T) {
 	resolver := newTestResolver(t, profiles)
 	floor := CapabilityFloor{MinQualityTier: ModelProfileQualityTierFromFamily(ModelFamilyOpenAI, "gpt-5.6-sol")}
 
-	mapped, resolved, reason := resolver.ResolveModel(
+	target, resolved, reason := resolver.ResolveModel(
 		"gpt-5.6-sol", "ch_test", "responses", "metrics_test", floor)
-	if !resolved || mapped != "glm-5.2" {
-		t.Fatalf("ResolveModel() = (%q, %v, %q), want premium glm-5.2", mapped, resolved, reason)
+	if !resolved || target.Model != "glm-5.2" {
+		t.Fatalf("ResolveModel() = (%q, %v, %q), want premium glm-5.2", target.Model, resolved, reason)
 	}
 }
 
@@ -768,10 +768,10 @@ func TestResolveModel_RecognizesDottedOpus48AndOpus5BeforeCapabilityFilter(t *te
 	}
 	for _, tt := range tests {
 		t.Run(tt.request, func(t *testing.T) {
-			mapped, resolved, reason := resolver.ResolveModel(
+			target, resolved, reason := resolver.ResolveModel(
 				tt.request, "ch_test", "messages", "metrics_test", floor)
-			if !resolved || mapped != tt.want {
-				t.Fatalf("ResolveModel() = (%q, %v, %q), want %q", mapped, resolved, reason, tt.want)
+			if !resolved || target.Model != tt.want {
+				t.Fatalf("ResolveModel() = (%q, %v, %q), want %q", target.Model, resolved, reason, tt.want)
 			}
 		})
 	}
@@ -797,11 +797,11 @@ func TestResolveModel_RefreshesLegacyAutoDiscoveryCapabilities(t *testing.T) {
 	defer cleanup()
 	resolver := NewModelResolver(store, cfgManager)
 
-	mapped, resolved, reason := resolver.ResolveModel(
+	target, resolved, reason := resolver.ResolveModel(
 		"gpt-5.6-sol", "ch_test", "responses", "metrics_test",
 		CapabilityFloor{MinQualityTier: QualityTierPremium, NeedsReasoning: true, NeedsToolCalls: true})
-	if !resolved || mapped != "glm-5.2" {
-		t.Fatalf("ResolveModel() = (%q, %v, %q), want refreshed glm-5.2 capabilities", mapped, resolved, reason)
+	if !resolved || target.Model != "glm-5.2" {
+		t.Fatalf("ResolveModel() = (%q, %v, %q), want refreshed glm-5.2 capabilities", target.Model, resolved, reason)
 	}
 	refreshed := store.Get("ch_test", "responses", "metrics_test", "glm-5.2")
 	if refreshed == nil || refreshed.QualityTier != QualityTierPremium ||
@@ -829,7 +829,7 @@ func TestResolveModel_RefreshesKimiK3VisionCapabilities(t *testing.T) {
 	defer cleanup()
 	resolver := NewModelResolver(store, cfgManager)
 
-	mapped, resolved, reason := resolver.ResolveModel(
+	target, resolved, reason := resolver.ResolveModel(
 		"claude-opus-4-8", "ch_test", "messages", "metrics_test",
 		CapabilityFloor{
 			MinContextTokens: 200000,
@@ -838,8 +838,8 @@ func TestResolveModel_RefreshesKimiK3VisionCapabilities(t *testing.T) {
 			NeedsVision:      true,
 			NeedsToolCalls:   true,
 		})
-	if !resolved || mapped != "k3" {
-		t.Fatalf("ResolveModel() = (%q, %v, %q), want vision-capable k3", mapped, resolved, reason)
+	if !resolved || target.Model != "k3" {
+		t.Fatalf("ResolveModel() = (%q, %v, %q), want vision-capable k3", target.Model, resolved, reason)
 	}
 	refreshed := store.Get("ch_test", "messages", "metrics_test", "k3")
 	if refreshed == nil || !refreshed.SupportsVision || !refreshed.SupportsToolCalls ||
@@ -857,12 +857,12 @@ func TestResolveModelAnyEndpoint_MapsWithoutExactModelMatch(t *testing.T) {
 	}
 	resolver := newTestResolver(t, profiles)
 
-	mapped, found, reason := resolver.ResolveModelAnyEndpoint("claude-sonnet-5", "ch_test", "messages")
+	target, found, reason := resolver.ResolveModelAnyEndpoint("claude-sonnet-5", "ch_test", "messages")
 	if !found {
 		t.Fatalf("expected found=true, reason=%s", reason)
 	}
-	if mapped == "" || mapped == "claude-sonnet-5" {
-		t.Fatalf("expected request model to be mapped to discovered model, got %q", mapped)
+	if target.Model == "" || target.Model == "claude-sonnet-5" {
+		t.Fatalf("expected request model to be target.Model to discovered model, got %q", target.Model)
 	}
 }
 
@@ -890,16 +890,16 @@ func TestResolveModel_IgnoresLegacyManualRedirectForAutoManagedProvider(t *testi
 	}
 	resolver := NewModelResolver(store, cfgManager)
 
-	mapped, resolved, reason := resolver.ResolveModel(
+	target, resolved, reason := resolver.ResolveModel(
 		"claude-sonnet-5", "ch_test", "messages", "metrics_test", CapabilityFloor{})
 	if !resolved {
 		t.Fatalf("expected resolved=true, reason=%s", reason)
 	}
-	if mapped == "legacy-target" {
-		t.Fatalf("autoManaged provider should ignore legacy modelMapping, got %q", mapped)
+	if target.Model == "legacy-target" {
+		t.Fatalf("autoManaged provider should ignore legacy modelMapping, got %q", target.Model)
 	}
-	if mapped != "mimo-v2.5-pro" {
-		t.Fatalf("mapped = %q, want mimo-v2.5-pro", mapped)
+	if target.Model != "mimo-v2.5-pro" {
+		t.Fatalf("target.Model = %q, want mimo-v2.5-pro", target.Model)
 	}
 }
 
@@ -919,14 +919,14 @@ func TestResolveModel_ManualRedirect_ShortCircuits(t *testing.T) {
 		cfgManager:   cfgManager,
 	}
 
-	mapped, resolved, reason := resolver.ResolveModel(
+	target, resolved, reason := resolver.ResolveModel(
 		"claude-opus-4-8", "ch_manual", "messages", "any", CapabilityFloor{})
 
 	if !resolved {
 		t.Error("expected resolved=true for manual redirect")
 	}
-	if mapped != "claude-opus-4-7" {
-		t.Errorf("expected claude-opus-4-7, got %s", mapped)
+	if target.Model != "claude-opus-4-7" {
+		t.Errorf("expected claude-opus-4-7, got %s", target.Model)
 	}
 	if reason != "manual_redirect" {
 		t.Errorf("expected reason 'manual_redirect', got %s", reason)
@@ -949,20 +949,20 @@ func TestResolveModel_ManualRedirect_NotApplied_WhenNoMapping(t *testing.T) {
 		cfgManager:   cfgManager,
 	}
 
-	mapped, resolved, _ := resolver.ResolveModel(
+	target, resolved, _ := resolver.ResolveModel(
 		"claude-opus-4-8", "ch_manual", "messages", "any", CapabilityFloor{})
 
 	if resolved {
 		t.Error("expected resolved=false when no mapping and no store")
 	}
-	if mapped != "claude-opus-4-8" {
-		t.Errorf("expected passthrough, got %s", mapped)
+	if target.Model != "claude-opus-4-8" {
+		t.Errorf("expected passthrough, got %s", target.Model)
 	}
 }
 
 func TestResolveModel_NilStore_FailOpen(t *testing.T) {
 	resolver := NewModelResolver(nil, nil)
-	mapped, resolved, reason := resolver.ResolveModel(
+	target, resolved, reason := resolver.ResolveModel(
 		"claude-sonnet-5", "ch_x", "messages", "mkey", CapabilityFloor{})
 	if resolved {
 		t.Error("expected resolved=false with nil store")
@@ -970,8 +970,8 @@ func TestResolveModel_NilStore_FailOpen(t *testing.T) {
 	if reason != "model_profile_store_unavailable" {
 		t.Errorf("expected 'model_profile_store_unavailable', got %s", reason)
 	}
-	if mapped != "claude-sonnet-5" {
-		t.Errorf("expected passthrough, got %s", mapped)
+	if target.Model != "claude-sonnet-5" {
+		t.Errorf("expected passthrough, got %s", target.Model)
 	}
 }
 
