@@ -149,7 +149,8 @@ var systemHeaderFilterCache = config.NewSystemHeaderFilterCache()
 
 // deprecatedParamCache 按渠道-keyHash-模型记忆上游拒绝的弃用请求参数（如 temperature）。
 // 首次 400 触发探测并同 Key 重试，后续同组合请求在发送前主动剥离，避免重复失败往返。
-var deprecatedParamCache = config.NewDeprecatedParamCache()
+// 记忆落盘到 .config/deprecated_params.json，重启后无需重新探测；属内部状态，用户无需感知。
+var deprecatedParamCache = config.NewDeprecatedParamCacheWithPersistence(config.DeprecatedParamStatePath)
 
 func shouldNormalizeMetadataUserID(kind scheduler.ChannelKind, upstream *config.UpstreamConfig) bool {
 	if upstream == nil {
