@@ -353,7 +353,10 @@ const discoverySourceKey: Record<string, string> = {
   models_api: 'channelEditor.protocolModels.source.modelsApi',
   builtin_manifest: 'channelEditor.protocolModels.source.builtinManifest',
   builtin_fallback: 'channelEditor.protocolModels.source.builtinFallback',
+  // protocol_probe 为旧数据兼容：历史 profile 可能仍保留单模型代表全部协议的探测来源，
+  // 刷新一次发现后会被 protocol_model_probe 取代。
   protocol_probe: 'channelEditor.protocolModels.source.protocolProbe',
+  protocol_model_probe: 'channelEditor.protocolModels.source.protocolModelProbe',
   mixed: 'channelEditor.protocolModels.source.mixed',
 }
 

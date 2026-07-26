@@ -759,6 +759,7 @@
   "channelEditor.protocolModels.source.builtinManifest": "Built-in model manifest",
   "channelEditor.protocolModels.source.builtinFallback": "Static fallback manifest",
   "channelEditor.protocolModels.source.protocolProbe": "Protocol probe inference",
+  "channelEditor.protocolModels.source.protocolModelProbe": "Per-model probe verified",
   "channelEditor.protocolModels.source.mixed": "Multiple sources",
   "channelEditor.protocolModels.source.unknown": "Unknown source",
   "channelEditor.protocolModels.diffCount": "{count} models are not covered by every key",

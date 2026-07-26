@@ -759,6 +759,7 @@
   "channelEditor.protocolModels.source.builtinManifest": "内置模型清单",
   "channelEditor.protocolModels.source.builtinFallback": "静态兜底清单",
   "channelEditor.protocolModels.source.protocolProbe": "协议探测推断",
+  "channelEditor.protocolModels.source.protocolModelProbe": "逐模型探测验证",
   "channelEditor.protocolModels.source.mixed": "多个来源",
   "channelEditor.protocolModels.source.unknown": "来源未知",
   "channelEditor.protocolModels.diffCount": "{count} 个模型未被全部 Key 覆盖",

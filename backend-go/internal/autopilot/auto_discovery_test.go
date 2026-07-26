@@ -563,7 +563,7 @@ func TestDiscoverEndpoints_ProbesAdditionalProtocols(t *testing.T) {
 			t.Fatalf("%s models=%q", protocol, got)
 		}
 	}
-	if result.ProtocolDiscoverySource["chat"] != "protocol_probe" {
+	if result.ProtocolDiscoverySource["chat"] != "protocol_model_probe" {
 		t.Fatalf("chat source=%q", result.ProtocolDiscoverySource["chat"])
 	}
 	if result.ProtocolDiscoveryError["gemini"] == "" {

@@ -759,6 +759,7 @@
   "channelEditor.protocolModels.source.builtinManifest": "Manifest model bawaan",
   "channelEditor.protocolModels.source.builtinFallback": "Manifest fallback statis",
   "channelEditor.protocolModels.source.protocolProbe": "Inferensi probe protokol",
+  "channelEditor.protocolModels.source.protocolModelProbe": "Terverifikasi per model",
   "channelEditor.protocolModels.source.mixed": "Beberapa sumber",
   "channelEditor.protocolModels.source.unknown": "Sumber tidak diketahui",
   "channelEditor.protocolModels.diffCount": "{count} model tidak tersedia di semua key",
