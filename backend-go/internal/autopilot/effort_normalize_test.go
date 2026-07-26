@@ -132,6 +132,41 @@ func TestEffortLevelOrdinal(t *testing.T) {
 	}
 }
 
+// ── IsUnpinnedEffort 测试 ──
+
+func TestIsUnpinnedEffort(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected bool
+	}{
+		{"default is unpinned", "default", true},
+		{"unknown is unpinned", "unknown", true},
+		{"empty is unpinned", "", true},
+		{"whitespace only is unpinned", "   ", true},
+		{"uppercase DEFAULT is unpinned", "DEFAULT", true},
+		{"mixed case Unknown is unpinned", "Unknown", true},
+		{"trimmed default is unpinned", "  default  ", true},
+
+		{"high is pinned", "high", false},
+		{"max is pinned", "max", false},
+		{"xhigh is pinned", "xhigh", false},
+		{"medium is pinned", "medium", false},
+		{"low is pinned", "low", false},
+		{"ultra is pinned", "ultra", false},
+		{"off is pinned", "off", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := IsUnpinnedEffort(tt.input)
+			if got != tt.expected {
+				t.Errorf("IsUnpinnedEffort(%q) = %v, want %v", tt.input, got, tt.expected)
+			}
+		})
+	}
+}
+
 // ── EffortFallbackConfidence 测试 ──
 
 func TestEffortFallbackConfidence(t *testing.T) {

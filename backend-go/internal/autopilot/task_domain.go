@@ -376,12 +376,17 @@ func resolveRelativeBenchmarkEvidence(profile *ModelProfile, benchmark config.Mo
 	}
 
 	// ── Pass 1：精确 (domain, effort) 匹配 ──
+	// 未锚定 effort 的证据（如 "default"）不代表任何具体挡位，
+	// 即便标准化后恰好等于 targetEffort，也不能作为精确匹配。
 	var selected config.ModelBenchmarkEvidence
 	confidence := 0.0
 	effortMatched := false
 	if targetEffort != "" {
 		for _, candidate := range benchmark.BenchmarkEvidence {
 			if !strings.EqualFold(candidate.Domain, string(domain)) {
+				continue
+			}
+			if IsUnpinnedEffort(candidate.Effort) {
 				continue
 			}
 			candidateEffort := NormalizeEffortLevel(candidate.Effort)
@@ -415,11 +420,17 @@ func resolveRelativeBenchmarkEvidence(profile *ModelProfile, benchmark config.Mo
 			return DomainStrengthEvidence{}, false
 		}
 
-		// 有 targetEffort 时按距离衰减置信度；空 effort 时保持原行为（乘数 1.0）
+		// 有 targetEffort 时按距离衰减置信度；空 effort 时保持原行为（乘数 1.0）。
+		// 命中的证据若本身未锚定 effort，统一按距离 1 的折扣（0.7）处理：
+		// 它只能证明与 domain 相关，无法说明模型在 targetEffort 挡位上的表现。
 		fallbackMultiplier := 1.0
 		if targetEffort != "" {
-			closestDistance := findClosestEffortDistance(targetEffort, benchmark.BenchmarkEvidence, domain)
-			fallbackMultiplier = EffortFallbackConfidence(closestDistance)
+			if IsUnpinnedEffort(domainSelected.Effort) {
+				fallbackMultiplier = EffortFallbackConfidence(1)
+			} else {
+				closestDistance := findClosestEffortDistance(targetEffort, benchmark.BenchmarkEvidence, domain)
+				fallbackMultiplier = EffortFallbackConfidence(closestDistance)
+			}
 		}
 		selected = domainSelected
 		confidence = domainConfidence * fallbackMultiplier
@@ -452,11 +463,15 @@ func resolveRelativeBenchmarkEvidence(profile *ModelProfile, benchmark config.Mo
 }
 
 // findClosestEffortDistance 在同 domain 的 benchmark 证据中找到与 targetEffort 距离最近的 effort。
+// 未锚定 effort（如 "default"）的证据会被跳过：它们没有具体挡位，不能参与距离计算。
 // 无匹配证据时返回 3+（保守衰减）。
 func findClosestEffortDistance(targetEffort EffortLevel, candidates []config.ModelBenchmarkEvidence, domain TaskDomain) int {
 	minDist := 4 // 超出 max(3)=3 的范围，等效于 3+
 	for _, c := range candidates {
 		if !strings.EqualFold(c.Domain, string(domain)) {
+			continue
+		}
+		if IsUnpinnedEffort(c.Effort) {
 			continue
 		}
 		effort := NormalizeEffortLevel(c.Effort)

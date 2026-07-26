@@ -4,6 +4,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/presetstore"
 )
 
@@ -264,6 +265,100 @@ func TestResolveDomainStrength_DeepSWEUsesBoundedRelativeCodingSignal(t *testing
 	if review.Source != "family_seed" || review.Score != 0.9 {
 		t.Fatalf("DeepSWE coding evidence must not leak to code review: %+v", review)
 	}
+}
+
+// ── resolveRelativeBenchmarkEvidence 的未锚定 effort 语义测试 ──
+//
+// "default" 不代表某个具体 effort 挡位，仅说明采集时没有固定 effort。
+// 这组测试验证：它不能冒充精确匹配，只能作为打折后的 domain-only 回退证据。
+
+func benchmarkEvidenceFixture(effort string, percentile float64) config.ModelBenchmarkEvidence {
+	return config.ModelBenchmarkEvidence{
+		Benchmark:        "fixture-bench",
+		BenchmarkVersion: "v1",
+		SourceModel:      "fixture-model",
+		Domain:           "coding",
+		Metric:           "pass_at_1",
+		RawValue:         percentile,
+		CohortPercentile: percentile,
+		TaskCount:        100,
+		CohortSize:       10,
+		Effort:           effort,
+		SelectionBasis:   "best_available_effort",
+		SourceURL:        "https://example.test/fixture",
+		CapturedAt:       "2026-07-26",
+	}
+}
+
+func TestResolveRelativeBenchmarkEvidence_UnpinnedEffortSemantics(t *testing.T) {
+	profile := &ModelProfile{ModelID: "fixture-model", ModelFamily: ModelFamilyOpenAI}
+
+	t.Run("pinned exact match keeps full confidence", func(t *testing.T) {
+		benchmark := config.ModelBenchmarkProfile{
+			CanonicalModel:    "fixture-model",
+			BenchmarkEvidence: []config.ModelBenchmarkEvidence{benchmarkEvidenceFixture("high", 0.9)},
+		}
+		evidence, ok := resolveRelativeBenchmarkEvidence(profile, benchmark, TaskDomainCoding, EffortHigh)
+		if !ok {
+			t.Fatal("expected evidence to be resolved")
+		}
+		if math.Abs(evidence.EvidenceConfidence-1.0) > 1e-9 {
+			t.Fatalf("EvidenceConfidence = %v, want 1.0 (pinned exact match)", evidence.EvidenceConfidence)
+		}
+		if evidence.BenchmarkEffort != "high" {
+			t.Fatalf("BenchmarkEffort = %q, want %q", evidence.BenchmarkEffort, "high")
+		}
+	})
+
+	t.Run("unpinned vs specific target is not exact and is penalized", func(t *testing.T) {
+		benchmark := config.ModelBenchmarkProfile{
+			CanonicalModel:    "fixture-model",
+			BenchmarkEvidence: []config.ModelBenchmarkEvidence{benchmarkEvidenceFixture("default", 0.9)},
+		}
+		evidence, ok := resolveRelativeBenchmarkEvidence(profile, benchmark, TaskDomainCoding, EffortHigh)
+		if !ok {
+			t.Fatal("expected evidence to be resolved via domain-only fallback")
+		}
+		// domainConfidence 为 1.0，未锚定证据按距离 1 的折扣（0.7）处理。
+		if math.Abs(evidence.EvidenceConfidence-0.7) > 1e-9 {
+			t.Fatalf("EvidenceConfidence = %v, want 0.7 (unpinned fallback penalty)", evidence.EvidenceConfidence)
+		}
+		if evidence.BenchmarkEffort != "default" {
+			t.Fatalf("BenchmarkEffort = %q, want %q", evidence.BenchmarkEffort, "default")
+		}
+	})
+
+	t.Run("unpinned vs empty target is full confidence", func(t *testing.T) {
+		benchmark := config.ModelBenchmarkProfile{
+			CanonicalModel:    "fixture-model",
+			BenchmarkEvidence: []config.ModelBenchmarkEvidence{benchmarkEvidenceFixture("default", 0.9)},
+		}
+		evidence, ok := resolveRelativeBenchmarkEvidence(profile, benchmark, TaskDomainCoding, "")
+		if !ok {
+			t.Fatal("expected evidence to be resolved")
+		}
+		if math.Abs(evidence.EvidenceConfidence-1.0) > 1e-9 {
+			t.Fatalf("EvidenceConfidence = %v, want 1.0 (empty target, neither side pins anything)", evidence.EvidenceConfidence)
+		}
+	})
+
+	t.Run("pinned but wrong effort falls back with reduced confidence", func(t *testing.T) {
+		benchmark := config.ModelBenchmarkProfile{
+			CanonicalModel:    "fixture-model",
+			BenchmarkEvidence: []config.ModelBenchmarkEvidence{benchmarkEvidenceFixture("low", 0.9)},
+		}
+		evidence, ok := resolveRelativeBenchmarkEvidence(profile, benchmark, TaskDomainCoding, EffortHigh)
+		if !ok {
+			t.Fatal("expected evidence to be resolved via domain-only fallback")
+		}
+		// EffortLevelDistance(high, low) = 2 → EffortFallbackConfidence(2) = 0.4。
+		if math.Abs(evidence.EvidenceConfidence-0.4) > 1e-9 {
+			t.Fatalf("EvidenceConfidence = %v, want 0.4 (distance-2 fallback penalty)", evidence.EvidenceConfidence)
+		}
+		if evidence.BenchmarkEffort != "low" {
+			t.Fatalf("BenchmarkEffort = %q, want %q", evidence.BenchmarkEffort, "low")
+		}
+	})
 }
 
 func TestResolveDomainStrength_CategoryScoreWinsOverRelativeEvidence(t *testing.T) {

@@ -75,3 +75,18 @@ func EffortFallbackConfidence(distance int) float64 {
 		return 0.2
 	}
 }
+
+// IsUnpinnedEffort 判断原始 effort 字符串是否未锚定具体挡位。
+// "default"、"unknown" 以及空串/纯空白均视为未锚定：
+// 它们说明该条 benchmark 证据采集时没有固定 effort，
+// 不能被当作对某个具体 EffortLevel 的证明。
+// 大小写不敏感，自动 trim。
+func IsUnpinnedEffort(raw string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(raw))
+	switch normalized {
+	case "", "default", "unknown":
+		return true
+	default:
+		return false
+	}
+}
