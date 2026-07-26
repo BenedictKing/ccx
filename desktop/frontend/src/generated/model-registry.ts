@@ -2072,7 +2072,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "max",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2084,11 +2084,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.984641638225256,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-opus-4-8",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2100,11 +2100,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 1,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-opus-4-8",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2116,11 +2116,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.9505119453924915,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-opus-4-8",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       }
     ],
     "sources": [
@@ -2129,7 +2129,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/methodology",
       "https://artificialanalysis.ai/models/claude-opus-4-8"
     ],
-    "verifiedAt": "2026-07-25",
+    "verifiedAt": "2026-07-26",
     "lane": "provisional",
     "sharedResults": 586,
     "comparableCategories": 5,
@@ -2160,7 +2160,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "max",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "codexradar",
@@ -2176,7 +2176,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "ultra",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deng.codexradar.com/",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2188,11 +2188,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.9829351535836177,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-terra",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2204,11 +2204,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 1,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-terra",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2220,11 +2220,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.9505119453924915,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-terra",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       }
     ],
     "sources": [
@@ -2234,7 +2234,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/methodology",
       "https://artificialanalysis.ai/models/gpt-5-6-terra"
     ],
-    "verifiedAt": "2026-07-25",
+    "verifiedAt": "2026-07-26",
     "lane": "provisional",
     "sharedResults": 586,
     "comparableCategories": 5,
@@ -2265,7 +2265,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "max",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "codexradar",
@@ -2278,10 +2278,10 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "cohortPercentile": 1,
         "taskCount": 112,
         "cohortSize": 4,
-        "effort": "max",
+        "effort": "high",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deng.codexradar.com/",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2293,11 +2293,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.9948805460750854,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-sol",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2309,11 +2309,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 1,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-sol",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2325,11 +2325,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.9795221843003413,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-sol",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       }
     ],
     "sources": [
@@ -2339,7 +2339,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/methodology",
       "https://artificialanalysis.ai/models/gpt-5-6-sol"
     ],
-    "verifiedAt": "2026-07-25",
+    "verifiedAt": "2026-07-26",
     "lane": "provisional",
     "sharedResults": 586,
     "comparableCategories": 5,
@@ -2370,7 +2370,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "max",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "codexradar",
@@ -2378,7 +2378,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "sourceModel": "gpt-5.6-luna",
         "domain": "coding",
         "metric": "pass_at_1",
-        "rawValue": 0.5625,
+        "rawValue": 0.5803571428571429,
         "uncertainty": 0,
         "cohortPercentile": 0.25,
         "taskCount": 112,
@@ -2386,7 +2386,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "max",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deng.codexradar.com/",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2398,11 +2398,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.9675767918088737,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-luna",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2414,11 +2414,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 1,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-luna",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2430,11 +2430,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.9436860068259386,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-luna",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       }
     ],
     "sources": [
@@ -2444,7 +2444,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/methodology",
       "https://artificialanalysis.ai/models/gpt-5-6-luna"
     ],
-    "verifiedAt": "2026-07-25",
+    "verifiedAt": "2026-07-26",
     "lane": "provisional",
     "sharedResults": 586,
     "comparableCategories": 5,
@@ -2475,7 +2475,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "xhigh",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "codexradar",
@@ -2483,7 +2483,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "sourceModel": "gpt-5.5",
         "domain": "coding",
         "metric": "pass_at_1",
-        "rawValue": 0.6339285714285714,
+        "rawValue": 0.625,
         "uncertainty": 0,
         "cohortPercentile": 0.5,
         "taskCount": 112,
@@ -2491,7 +2491,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "xhigh",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deng.codexradar.com/",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2503,11 +2503,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.9812286689419796,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-5",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2519,11 +2519,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 1,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-5",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2535,11 +2535,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.9402730375426621,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-5",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       }
     ],
     "sources": [
@@ -2549,7 +2549,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/methodology",
       "https://artificialanalysis.ai/models/gpt-5-5"
     ],
-    "verifiedAt": "2026-07-25",
+    "verifiedAt": "2026-07-26",
     "lane": "provisional",
     "sharedResults": 586,
     "comparableCategories": 5,
@@ -2580,7 +2580,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "xhigh",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2592,11 +2592,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.9692832764505119,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-4",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2608,11 +2608,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 1,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-4",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2624,11 +2624,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.9129692832764505,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-4",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       }
     ],
     "sources": [
@@ -2637,7 +2637,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/methodology",
       "https://artificialanalysis.ai/models/gpt-5-4"
     ],
-    "verifiedAt": "2026-07-25",
+    "verifiedAt": "2026-07-26",
     "lane": "provisional",
     "sharedResults": 586,
     "comparableCategories": 5,
@@ -2667,7 +2667,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "xhigh",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2679,11 +2679,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.9965870307167235,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-fable-5",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2695,11 +2695,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 1,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-fable-5",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2711,11 +2711,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.9709897610921502,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-fable-5",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       }
     ],
     "sources": [
@@ -2724,7 +2724,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/methodology",
       "https://artificialanalysis.ai/models/claude-fable-5"
     ],
-    "verifiedAt": "2026-07-25",
+    "verifiedAt": "2026-07-26",
     "lane": "provisional",
     "sharedResults": 586,
     "comparableCategories": 4,
@@ -2754,7 +2754,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "max",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2766,11 +2766,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.9744027303754266,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-sonnet-5",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2782,11 +2782,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 1,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-sonnet-5",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2798,11 +2798,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.9488054607508533,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-sonnet-5",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       }
     ],
     "sources": [
@@ -2811,7 +2811,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/methodology",
       "https://artificialanalysis.ai/models/claude-sonnet-5"
     ],
-    "verifiedAt": "2026-07-25",
+    "verifiedAt": "2026-07-26",
     "lane": "provisional",
     "sharedResults": 586,
     "comparableCategories": 4,
@@ -2842,7 +2842,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "high",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2854,11 +2854,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.8481228668941979,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-sonnet-4-6",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2870,11 +2870,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.02218430034129693,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-sonnet-4-6",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2886,11 +2886,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.02218430034129693,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-sonnet-4-6",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       }
     ],
     "sources": [
@@ -2899,7 +2899,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/methodology",
       "https://artificialanalysis.ai/models/claude-sonnet-4-6"
     ],
-    "verifiedAt": "2026-07-25",
+    "verifiedAt": "2026-07-26",
     "lane": "provisional",
     "sharedResults": 586,
     "comparableCategories": 5,
@@ -2929,7 +2929,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "max",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2941,11 +2941,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.9658703071672355,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/glm-5-2",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2957,11 +2957,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 1,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/glm-5-2",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2973,11 +2973,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.9283276450511946,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/glm-5-2",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       }
     ],
     "sources": [
@@ -2986,7 +2986,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/methodology",
       "https://artificialanalysis.ai/models/glm-5-2"
     ],
-    "verifiedAt": "2026-07-25",
+    "verifiedAt": "2026-07-26",
     "lane": "provisional",
     "sharedResults": 586,
     "comparableCategories": 4,
@@ -3016,7 +3016,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "max",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3028,11 +3028,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.9658703071672355,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/glm-5-2",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3044,11 +3044,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 1,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/glm-5-2",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3060,11 +3060,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.9283276450511946,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/glm-5-2",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       }
     ],
     "sources": [
@@ -3073,7 +3073,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/methodology",
       "https://artificialanalysis.ai/models/glm-5-2"
     ],
-    "verifiedAt": "2026-07-25",
+    "verifiedAt": "2026-07-26",
     "lane": "provisional",
     "sharedResults": 586,
     "comparableCategories": 4,
@@ -3101,7 +3101,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3113,11 +3113,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.9197952218430034,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/kimi-k2-7-code",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3129,11 +3129,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 1,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/kimi-k2-7-code",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3145,11 +3145,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.7559726962457338,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/kimi-k2-7-code",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       }
     ],
     "sources": [
@@ -3158,7 +3158,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/methodology",
       "https://artificialanalysis.ai/models/kimi-k2-7-code"
     ],
-    "verifiedAt": "2026-07-25",
+    "verifiedAt": "2026-07-26",
     "lane": "provisional",
     "sharedResults": 586,
     "comparableCategories": 3,
@@ -3186,7 +3186,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3198,11 +3198,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.9197952218430034,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/kimi-k2-7-code",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3214,11 +3214,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 1,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/kimi-k2-7-code",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3230,11 +3230,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.7559726962457338,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/kimi-k2-7-code",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       }
     ],
     "sources": [
@@ -3243,7 +3243,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/methodology",
       "https://artificialanalysis.ai/models/kimi-k2-7-code"
     ],
-    "verifiedAt": "2026-07-25",
+    "verifiedAt": "2026-07-26",
     "lane": "provisional",
     "sharedResults": 586,
     "comparableCategories": 3,
@@ -3271,7 +3271,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3283,11 +3283,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.9197952218430034,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/kimi-k2-7-code",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3299,11 +3299,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 1,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/kimi-k2-7-code",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3315,11 +3315,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.7559726962457338,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/kimi-k2-7-code",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       }
     ],
     "sources": [
@@ -3328,7 +3328,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/methodology",
       "https://artificialanalysis.ai/models/kimi-k2-7-code"
     ],
-    "verifiedAt": "2026-07-25",
+    "verifiedAt": "2026-07-26",
     "lane": "provisional",
     "sharedResults": 586,
     "comparableCategories": 3,
@@ -3359,7 +3359,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "medium",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3371,11 +3371,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.9590443686006825,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gemini-3-5-flash",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3387,11 +3387,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 1,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gemini-3-5-flash",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3403,11 +3403,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.8651877133105802,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gemini-3-5-flash",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       }
     ],
     "sources": [
@@ -3416,7 +3416,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/methodology",
       "https://artificialanalysis.ai/models/gemini-3-5-flash"
     ],
-    "verifiedAt": "2026-07-25",
+    "verifiedAt": "2026-07-26",
     "lane": "provisional",
     "sharedResults": 586,
     "comparableCategories": 5,
@@ -3439,13 +3439,13 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "high",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-26"
       }
     ],
     "sources": [
       "https://deepswe.datacurve.ai/"
     ],
-    "verifiedAt": "2026-07-25",
+    "verifiedAt": "2026-07-26",
     "lane": "provisional",
     "sharedResults": 18,
     "comparableCategories": 1,
@@ -3476,7 +3476,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3488,11 +3488,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.8993174061433447,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-4-mini",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3504,11 +3504,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.9863481228668942,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-4-mini",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3520,11 +3520,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.7610921501706485,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-4-mini",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       }
     ],
     "sources": [
@@ -3533,7 +3533,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/methodology",
       "https://artificialanalysis.ai/models/gpt-5-4-mini"
     ],
-    "verifiedAt": "2026-07-25",
+    "verifiedAt": "2026-07-26",
     "lane": "provisional",
     "sharedResults": 586,
     "comparableCategories": 5,
@@ -3556,7 +3556,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3568,11 +3568,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.726962457337884,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gemini-3-flash",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3584,11 +3584,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.02218430034129693,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gemini-3-flash",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3600,18 +3600,18 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.02218430034129693,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gemini-3-flash",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       }
     ],
     "sources": [
       "https://deepswe.datacurve.ai/",
       "https://artificialanalysis.ai/models/gemini-3-flash"
     ],
-    "verifiedAt": "2026-07-25",
+    "verifiedAt": "2026-07-26",
     "lane": "provisional",
     "sharedResults": 586,
     "comparableCategories": 3,
@@ -3639,7 +3639,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-26"
       }
     ],
     "sources": [
@@ -3647,7 +3647,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/models/claude-haiku-4-5",
       "https://benchlm.ai/methodology"
     ],
-    "verifiedAt": "2026-07-25",
+    "verifiedAt": "2026-07-26",
     "lane": "provisional",
     "sharedResults": 8,
     "comparableCategories": 2,
@@ -3677,7 +3677,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "max",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3689,11 +3689,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.9897610921501706,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/kimi-k3",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3705,11 +3705,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 1,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/kimi-k3",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3721,11 +3721,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.9573378839590444,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/kimi-k3",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       }
     ],
     "sources": [
@@ -3734,7 +3734,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/methodology",
       "https://artificialanalysis.ai/models/kimi-k3"
     ],
-    "verifiedAt": "2026-07-25",
+    "verifiedAt": "2026-07-26",
     "lane": "provisional",
     "sharedResults": 586,
     "comparableCategories": 4,
@@ -3757,7 +3757,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "high",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3769,11 +3769,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.9573378839590444,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gemini-3-6-flash",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3785,11 +3785,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 1,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gemini-3-6-flash",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3801,18 +3801,18 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.8822525597269625,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gemini-3-6-flash",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       }
     ],
     "sources": [
       "https://deepswe.datacurve.ai/",
       "https://artificialanalysis.ai/models/gemini-3-6-flash"
     ],
-    "verifiedAt": "2026-07-25",
+    "verifiedAt": "2026-07-26",
     "lane": "provisional",
     "sharedResults": 586,
     "comparableCategories": 3,
@@ -3842,7 +3842,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "high",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3854,11 +3854,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.9795221843003413,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/grok-4-5",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3870,11 +3870,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 1,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/grok-4-5",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3886,11 +3886,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.9436860068259386,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/grok-4-5",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       }
     ],
     "sources": [
@@ -3899,7 +3899,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/methodology",
       "https://artificialanalysis.ai/models/grok-4-5"
     ],
-    "verifiedAt": "2026-07-25",
+    "verifiedAt": "2026-07-26",
     "lane": "provisional",
     "sharedResults": 586,
     "comparableCategories": 4,
@@ -3929,7 +3929,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "xhigh",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3941,11 +3941,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.9641638225255973,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/muse-spark-1-1",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3957,11 +3957,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 1,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/muse-spark-1-1",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3973,11 +3973,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.8668941979522184,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/muse-spark-1-1",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       }
     ],
     "sources": [
@@ -3986,7 +3986,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/methodology",
       "https://artificialanalysis.ai/models/muse-spark-1-1"
     ],
-    "verifiedAt": "2026-07-25",
+    "verifiedAt": "2026-07-26",
     "lane": "provisional",
     "sharedResults": 586,
     "comparableCategories": 4,
@@ -3994,6 +3994,13 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
   },
   "(?:^|[-/])claude-opus-5(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
     "canonicalModel": "claude-opus-5",
+    "overallScore": 85.88,
+    "categoryScores": {
+      "agentic": 84.7,
+      "coding": 83.1,
+      "multimodal": 89.1,
+      "knowledge": 93.5
+    },
     "benchmarkEvidence": [
       {
         "benchmark": "deepswe",
@@ -4009,7 +4016,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "max",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deepswe.datacurve.ai/",
-        "capturedAt": "2026-07-25"
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -4021,11 +4028,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 1,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-opus-5",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -4037,11 +4044,11 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 1,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-opus-5",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       },
       {
         "benchmark": "artificial_analysis",
@@ -4053,21 +4060,23 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "uncertainty": 0,
         "cohortPercentile": 0.9829351535836177,
         "cohortSize": 586,
+        "taskCount": 9,
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-opus-5",
-        "capturedAt": "2026-07-25",
-        "taskCount": 9
+        "capturedAt": "2026-07-26"
       }
     ],
     "sources": [
       "https://deepswe.datacurve.ai/",
+      "https://benchlm.ai/models/claude-opus-5",
+      "https://benchlm.ai/methodology",
       "https://artificialanalysis.ai/models/claude-opus-5"
     ],
-    "verifiedAt": "2026-07-25",
+    "verifiedAt": "2026-07-26",
     "lane": "provisional",
     "sharedResults": 586,
-    "comparableCategories": 3,
-    "totalCategories": 3
+    "comparableCategories": 4,
+    "totalCategories": 8
   }
 }
