@@ -472,10 +472,21 @@ func TryUpstreamWithAllKeys(
 			// 优先级低于 RedirectModel（手动配置短路后 target 恒为 nil，不会双重映射）。
 			attemptModel := redirectedModel
 			var appliedMappedModel string
-			if endpointPolicy != nil && endpointPolicy.ResolvedTargetByEndpointUID != nil {
+			if endpointPolicy != nil {
 				keyHash := autopilot.KeyHashFromAPIKey(apiKey)
 				euid := autopilot.GenerateEndpointUID(upstream.ChannelUID, currentBaseURL, keyHash)
-				if target := endpointPolicy.ResolvedTargetByEndpointUID(euid); target != nil && target.Model != "" {
+
+				// 优先使用新 API（原子 model+effort），回退到旧 API（仅 model）
+				var target *autopilot.ResolvedRouteTarget
+				if endpointPolicy.ResolvedTargetByEndpointUID != nil {
+					target = endpointPolicy.ResolvedTargetByEndpointUID(euid)
+				}
+				if target == nil && endpointPolicy.ResolvedModelByEndpointUID != nil {
+					if mm := endpointPolicy.ResolvedModelByEndpointUID(euid); mm != "" {
+						target = &autopilot.ResolvedRouteTarget{Model: mm}
+					}
+				}
+				if target != nil && target.Model != "" {
 					// Atomic rewrite: model + effort together
 					attemptBody, rewriteOk := atomicModelEffortRewrite(attemptBody, target, upstreamCopy)
 					if rewriteOk {
@@ -490,7 +501,6 @@ func TryUpstreamWithAllKeys(
 					// 记录 effort 决策来源与钳位状态，供 ChannelLog 可观测性字段使用
 					if target.EffortDecided {
 						c.Set("effortDecisionSource", "autopilot")
-						// 判断客户端是否显式设置了 effort，且被 Autopilot 的目标值钳位
 						if _, clientExplicit := ExtractClientEffortExplicit(requestBody, apiType); clientExplicit {
 							c.Set("effortClampedByClient", true)
 						}
