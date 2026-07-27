@@ -273,7 +273,7 @@ func TestExecuteCodexImageGenerationCapabilityTestStripFallback(t *testing.T) {
 		APIKeys:                  []string{apiKey},
 		AuthHeader:               "bearer",
 		ServiceType:              "responses",
-		StripImageGenerationTool: true,
+		StripImageGenerationTool: config.BoolPtr(true),
 	}
 	cfgManager := newResponsesConfigManager(t, channel)
 	configured := cfgManager.GetConfig().ResponsesUpstream[0]

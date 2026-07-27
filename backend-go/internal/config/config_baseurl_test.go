@@ -586,7 +586,7 @@ func TestUpdateChatUpstreamCanSetNormalizeNonstandardChatRoles(t *testing.T) {
 	defer errutil.IgnoreDeferred(cm.Close)
 
 	cfg := cm.GetConfig()
-	if cfg.ChatUpstream[0].NormalizeNonstandardChatRoles {
+	if cfg.ChatUpstream[0].IsNormalizeNonstandardChatRolesEnabled() {
 		t.Fatal("NormalizeNonstandardChatRoles = true, want default false")
 	}
 
@@ -595,7 +595,7 @@ func TestUpdateChatUpstreamCanSetNormalizeNonstandardChatRoles(t *testing.T) {
 		t.Fatalf("UpdateChatUpstream(enable) 失败: %v", err)
 	}
 	cfg = cm.GetConfig()
-	if !cfg.ChatUpstream[0].NormalizeNonstandardChatRoles {
+	if !cfg.ChatUpstream[0].IsNormalizeNonstandardChatRolesEnabled() {
 		t.Fatal("NormalizeNonstandardChatRoles = false, want true")
 	}
 
@@ -604,7 +604,7 @@ func TestUpdateChatUpstreamCanSetNormalizeNonstandardChatRoles(t *testing.T) {
 		t.Fatalf("UpdateChatUpstream(disable) 失败: %v", err)
 	}
 	cfg = cm.GetConfig()
-	if cfg.ChatUpstream[0].NormalizeNonstandardChatRoles {
+	if cfg.ChatUpstream[0].IsNormalizeNonstandardChatRolesEnabled() {
 		t.Fatal("NormalizeNonstandardChatRoles = true, want false")
 	}
 }

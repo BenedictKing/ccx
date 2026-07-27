@@ -753,9 +753,9 @@ func TestResponsesProviderCodexToolCompatDiffersFromNativePassthroughForOpenAI(t
 		upstream := &config.UpstreamConfig{
 			ServiceType:                   "openai",
 			CodexToolCompat:               &compat,
-			CodexNativeToolPassthrough:    false,
-			StripImageGenerationTool:      false,
-			NormalizeNonstandardChatRoles: false,
+			CodexNativeToolPassthrough:    config.BoolPtr(false),
+			StripImageGenerationTool:      config.BoolPtr(false),
+			NormalizeNonstandardChatRoles: config.BoolPtr(false),
 		}
 		body := []byte(`{
 			"model": "gpt-5.5",
@@ -785,7 +785,7 @@ func TestResponsesProviderCodexToolCompatDiffersFromNativePassthroughForOpenAI(t
 		upstream := &config.UpstreamConfig{
 			ServiceType:                "openai",
 			CodexToolCompat:            &compat,
-			CodexNativeToolPassthrough: true,
+			CodexNativeToolPassthrough: config.BoolPtr(true),
 		}
 		body := []byte(`{
 			"model": "gpt-5.5",
@@ -816,7 +816,7 @@ func TestResponsesProviderPassthroughCodexCompatStripsToolSearch(t *testing.T) {
 	upstream := &config.UpstreamConfig{
 		ServiceType:                "responses",
 		CodexToolCompat:            &compat,
-		CodexNativeToolPassthrough: false,
+		CodexNativeToolPassthrough: config.BoolPtr(false),
 	}
 	body := []byte(`{
 		"model": "gpt-5.5",

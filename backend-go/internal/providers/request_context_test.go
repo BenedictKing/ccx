@@ -44,7 +44,7 @@ func TestClaudeProvider_ConvertToProviderRequest_PassbackConvertsRealThinking(t 
 	upstream := &config.UpstreamConfig{
 		BaseURL:                  "https://api.example.com",
 		ServiceType:              "claude",
-		PassbackReasoningContent: true,
+		PassbackReasoningContent: config.BoolPtr(true),
 	}
 
 	p := &ClaudeProvider{}

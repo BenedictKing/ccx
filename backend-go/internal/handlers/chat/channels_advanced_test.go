@@ -53,7 +53,7 @@ func TestGetUpstreams_IncludesUnifiedStateFields(t *testing.T) {
 		BaseURL:                       "https://api.example.com",
 		APIKeys:                       []string{"sk-1"},
 		Status:                        "suspended",
-		NormalizeNonstandardChatRoles: true,
+		NormalizeNonstandardChatRoles: config.BoolPtr(true),
 		DisabledAPIKeys: []config.DisabledKeyInfo{{
 			Key:        "sk-disabled",
 			Reason:     "insufficient_balance",

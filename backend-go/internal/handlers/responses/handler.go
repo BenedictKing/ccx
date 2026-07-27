@@ -199,7 +199,7 @@ func handleMultiChannel(
 					if responsesReq.TransformerMetadata == nil {
 						responsesReq.TransformerMetadata = make(map[string]interface{})
 					}
-					responsesReq.TransformerMetadata["codex_tool_compat_enabled"] = upstreamCopy.IsCodexToolCompatEnabled() || upstreamCopy.CodexNativeToolPassthrough
+					responsesReq.TransformerMetadata["codex_tool_compat_enabled"] = upstreamCopy.IsCodexToolCompatEnabled() || upstreamCopy.IsCodexNativeToolPassthroughEnabled()
 					timeouts := common.ResolveStreamPreflightTimeouts(upstreamCopy, metricsManager.GetCircuitBreakerConfig())
 					return handleSuccess(c, resp, provider, upstreamCopy, apiKey, upstream.ServiceType, envCfg, sessionManager, startTime, &responsesReq, actualRequestBody, cfgManager.GetFuzzyModeEnabled(), timeouts)
 				},
@@ -332,7 +332,7 @@ func handleSingleChannel(
 			if responsesReq.TransformerMetadata == nil {
 				responsesReq.TransformerMetadata = make(map[string]interface{})
 			}
-			responsesReq.TransformerMetadata["codex_tool_compat_enabled"] = upstreamCopy.IsCodexToolCompatEnabled() || upstreamCopy.CodexNativeToolPassthrough
+			responsesReq.TransformerMetadata["codex_tool_compat_enabled"] = upstreamCopy.IsCodexToolCompatEnabled() || upstreamCopy.IsCodexNativeToolPassthroughEnabled()
 			timeouts := common.ResolveStreamPreflightTimeouts(upstreamCopy, metricsManager.GetCircuitBreakerConfig())
 			return handleSuccess(c, resp, provider, upstreamCopy, apiKey, upstream.ServiceType, envCfg, sessionManager, startTime, &responsesReq, actualRequestBody, cfgManager.GetFuzzyModeEnabled(), timeouts)
 		},

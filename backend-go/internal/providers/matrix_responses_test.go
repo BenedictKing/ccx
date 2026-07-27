@@ -234,7 +234,7 @@ func TestResponsesProvider_NormalizeNonstandardChatRolesForOpenAIChatUpstream(t 
 			upstream := &config.UpstreamConfig{
 				BaseURL:                       "https://api.example.com",
 				ServiceType:                   "openai",
-				NormalizeNonstandardChatRoles: tt.enabled,
+				NormalizeNonstandardChatRoles: config.BoolPtr(tt.enabled),
 			}
 
 			provider := &ResponsesProvider{}

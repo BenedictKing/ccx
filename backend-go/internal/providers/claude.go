@@ -775,16 +775,18 @@ func (p *ClaudeProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 		bodyBytes = redirectModelInBody(bodyBytes, upstream)
 	}
 
-	if upstream.PassbackReasoningContent {
+	passbackReasoning := upstream.IsPassbackReasoningContentEnabled()
+	passbackThinking := upstream.IsPassbackThinkingBlocksEnabled()
+	if passbackReasoning {
 		bodyBytes = convertThinkingToReasoningContent(bodyBytes)
 	}
-	if upstream.PassbackThinkingBlocks {
-		bodyBytes = convertReasoningContentToThinkingBlocks(bodyBytes, upstream.PassbackReasoningContent)
+	if passbackThinking {
+		bodyBytes = convertReasoningContentToThinkingBlocks(bodyBytes, passbackReasoning)
 	}
 	bodyBytes = stripUnsupportedDeepSeekContextManagement(bodyBytes, upstream)
-	if upstream.StripEmptyTextBlocks {
+	if upstream.IsStripEmptyTextBlocksEnabled() {
 		bodyBytes = stripEmptyTextBlocksFromBody(bodyBytes)
-		if !upstream.PassbackReasoningContent && !upstream.PassbackThinkingBlocks {
+		if !passbackReasoning && !passbackThinking {
 			bodyBytes = stripThinkingBlocksFromBody(bodyBytes)
 		}
 	}

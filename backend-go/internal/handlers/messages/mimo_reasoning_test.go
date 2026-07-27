@@ -216,7 +216,7 @@ func TestMessagesHandler_MimoReasoningContentPassback(t *testing.T) {
 				APIKeys:                  []string{"sk-test"},
 				ServiceType:              "claude",
 				Status:                   "active",
-				PassbackReasoningContent: tt.passbackEnabled,
+				PassbackReasoningContent: config.BoolPtr(tt.passbackEnabled),
 			})
 
 			w := performMessagesHandlerRequest(t, router, tt.requestBody)
@@ -266,7 +266,7 @@ func TestMessagesHandler_MimoStreamReasoningContentPassback(t *testing.T) {
 		APIKeys:                  []string{"sk-test"},
 		ServiceType:              "claude",
 		Status:                   "active",
-		PassbackReasoningContent: true,
+		PassbackReasoningContent: config.BoolPtr(true),
 	})
 
 	reqBody := `{"model":"mimo-v2.5-pro","messages":[{"role":"user","content":[{"type":"text","text":"hello"}]}],"stream":true}`

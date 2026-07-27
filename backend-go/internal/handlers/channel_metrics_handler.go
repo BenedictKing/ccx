@@ -859,17 +859,17 @@ func buildChannelDashboard(cfg config.Config, sch *scheduler.ChannelScheduler, c
 		}
 
 		if channelType == "messages" {
-			channel["passbackReasoningContent"] = up.PassbackReasoningContent
-			channel["passbackThinkingBlocks"] = up.PassbackThinkingBlocks
-			channel["stripEmptyTextBlocks"] = up.StripEmptyTextBlocks
+			channel["passbackReasoningContent"] = up.IsPassbackReasoningContentEnabled()
+			channel["passbackThinkingBlocks"] = up.IsPassbackThinkingBlocksEnabled()
+			channel["stripEmptyTextBlocks"] = up.IsStripEmptyTextBlocksEnabled()
 			channel["stripImageGenerationTool"] = up.IsStripImageGenerationToolEnabled()
 			channel["injectDummyThoughtSignature"] = up.InjectDummyThoughtSignature
 			channel["stripThoughtSignature"] = up.StripThoughtSignature
 		}
 
 		if channelType == "chat" || channelType == "responses" {
-			channel["passbackReasoningContent"] = up.PassbackReasoningContent
-			channel["passbackThinkingBlocks"] = up.PassbackThinkingBlocks
+			channel["passbackReasoningContent"] = up.IsPassbackReasoningContentEnabled()
+			channel["passbackThinkingBlocks"] = up.IsPassbackThinkingBlocksEnabled()
 			channel["stripImageGenerationTool"] = up.IsStripImageGenerationToolEnabled()
 			channel["injectDummyThoughtSignature"] = up.InjectDummyThoughtSignature
 			channel["stripThoughtSignature"] = up.StripThoughtSignature

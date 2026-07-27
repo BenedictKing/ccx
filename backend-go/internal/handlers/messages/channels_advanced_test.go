@@ -134,7 +134,7 @@ func TestGetUpstreams_IncludesStripEmptyTextBlocksField(t *testing.T) {
 		ServiceType:          "claude",
 		BaseURL:              "https://api.example.com",
 		APIKeys:              []string{"sk-1"},
-		StripEmptyTextBlocks: true,
+		StripEmptyTextBlocks: config.BoolPtr(true),
 	}})
 
 	gin.SetMode(gin.TestMode)

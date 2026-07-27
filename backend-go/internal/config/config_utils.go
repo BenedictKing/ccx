@@ -571,7 +571,7 @@ func ApplyProviderUpstreamDefaults(providerID string, upstream *UpstreamConfig) 
 	case "glm":
 		if upstream.ServiceType == "openai" {
 			upstream.ReasoningParamStyle = "reasoning_effort"
-			upstream.PassbackReasoningContent = true
+			upstream.PassbackReasoningContent = BoolPtr(true)
 		}
 	case "compshare":
 		// Compshare 的 Claude 兼容端点只接受 user/assistant 消息。最新 Claude Code
@@ -597,20 +597,22 @@ func RuntimeUpstreamForAutoManagedProvider(upstream *UpstreamConfig) *UpstreamCo
 	runtime.ReasoningMapping = nil
 	runtime.ReasoningParamStyle = ""
 	runtime.FastMode = false
-	runtime.NormalizeNonstandardChatRoles = false
-	runtime.CodexNativeToolPassthrough = false
+	// 兼容性开关置 nil 而非 false：nil 表示"用户未设置"，运行时兼容性学习结论仍可生效；
+	// 置 false 会被当作"用户显式关闭"，使自动托管渠道永远学不会兼容改写。
+	runtime.NormalizeNonstandardChatRoles = nil
+	runtime.CodexNativeToolPassthrough = nil
 	runtime.CodexToolCompat = nil
 	runtime.StripCodexClientTools = false
-	runtime.StripImageGenerationTool = false
+	runtime.StripImageGenerationTool = nil
 	runtime.ConvertImageURLToB64JSON = false
 	runtime.NormalizeMetadataUserID = nil
 	runtime.StripBillingHeader = nil
-	runtime.StripEmptyTextBlocks = false
+	runtime.StripEmptyTextBlocks = nil
 	runtime.NormalizeSystemRoleToTopLevel = false
 	runtime.InjectDummyThoughtSignature = false
 	runtime.StripThoughtSignature = false
-	runtime.PassbackReasoningContent = false
-	runtime.PassbackThinkingBlocks = false
+	runtime.PassbackReasoningContent = nil
+	runtime.PassbackThinkingBlocks = nil
 	runtime.NoVision = false
 	runtime.NoVisionModels = nil
 	runtime.VisionFallbackModel = ""

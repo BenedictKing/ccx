@@ -262,7 +262,7 @@ func (cm *ConfigManager) UpdateVectorsUpstream(index int, updates UpstreamUpdate
 		upstream.FastMode = *updates.FastMode
 	}
 	if updates.NormalizeNonstandardChatRoles != nil {
-		upstream.NormalizeNonstandardChatRoles = *updates.NormalizeNonstandardChatRoles
+		upstream.NormalizeNonstandardChatRoles = updates.NormalizeNonstandardChatRoles
 	}
 	if updates.InsecureSkipVerify != nil {
 		upstream.InsecureSkipVerify = *updates.InsecureSkipVerify
@@ -292,23 +292,23 @@ func (cm *ConfigManager) UpdateVectorsUpstream(index int, updates UpstreamUpdate
 		upstream.StripBillingHeader = &v
 	}
 	if updates.CodexNativeToolPassthrough != nil {
-		upstream.CodexNativeToolPassthrough = *updates.CodexNativeToolPassthrough
+		upstream.CodexNativeToolPassthrough = updates.CodexNativeToolPassthrough
 	}
 	if updates.CodexToolCompat != nil {
 		v := *updates.CodexToolCompat
 		upstream.CodexToolCompat = &v
 	}
 	if updates.StripImageGenerationTool != nil {
-		upstream.StripImageGenerationTool = *updates.StripImageGenerationTool
+		upstream.StripImageGenerationTool = updates.StripImageGenerationTool
 	}
 	if updates.ConvertImageURLToB64JSON != nil {
 		upstream.ConvertImageURLToB64JSON = *updates.ConvertImageURLToB64JSON
 	}
 	if updates.PassbackReasoningContent != nil {
-		upstream.PassbackReasoningContent = *updates.PassbackReasoningContent
+		upstream.PassbackReasoningContent = updates.PassbackReasoningContent
 	}
 	if updates.PassbackThinkingBlocks != nil {
-		upstream.PassbackThinkingBlocks = *updates.PassbackThinkingBlocks
+		upstream.PassbackThinkingBlocks = updates.PassbackThinkingBlocks
 	}
 	if updates.CustomHeaders != nil {
 		upstream.CustomHeaders = updates.CustomHeaders

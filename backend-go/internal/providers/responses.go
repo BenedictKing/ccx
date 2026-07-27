@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"regexp"
 	"sort"
@@ -137,12 +138,12 @@ func (p *ResponsesProvider) buildProviderRequestBody(c *gin.Context, requestPath
 			return nil, nil, fmt.Errorf("透传模式下解析请求失败: %w", err)
 		}
 		normalizeResponsesInputForPassthrough(reqMap)
-		if upstream.CodexNativeToolPassthrough {
+		if upstream.IsCodexNativeToolPassthroughEnabled() {
 			convertCodexToolsForPassthrough(reqMap)
 		} else if upstream.IsCodexToolCompatEnabled() {
 			stripCodexClientOnlyTools(reqMap)
 		}
-		if upstream.StripImageGenerationTool {
+		if upstream.IsStripImageGenerationToolEnabled() {
 			stripImageGenerationFromTools(reqMap)
 		}
 		if model, ok := reqMap["model"].(string); ok {
@@ -239,7 +240,7 @@ func (p *ResponsesProvider) buildProviderRequestBody(c *gin.Context, requestPath
 			}
 
 			// converter 路径转成 Claude/Messages 风格后，MiMo 等上游同样需要回传 reasoning_content
-			if upstream.PassbackReasoningContent {
+			if upstream.IsPassbackReasoningContentEnabled() {
 				if marshaledReq, err := utils.MarshalJSONNoEscape(reqMap); err == nil {
 					var normalized map[string]interface{}
 					if normalizedBytes := convertThinkingToReasoningContent(marshaledReq); json.Unmarshal(normalizedBytes, &normalized) == nil {
@@ -248,22 +249,22 @@ func (p *ResponsesProvider) buildProviderRequestBody(c *gin.Context, requestPath
 					}
 				}
 			}
-			if upstream.StripEmptyTextBlocks {
+			if upstream.IsStripEmptyTextBlocksEnabled() {
 				if normalized := stripEmptyTextBlocksFromRequestMap(reqMap); normalized != nil {
 					reqMap = normalized
 					convertedReq = reqMap
 				}
 			}
-			if !upstream.PassbackThinkingBlocks {
+			if !upstream.IsPassbackThinkingBlocksEnabled() {
 				if normalized := stripThinkingBlocksFromRequestMap(reqMap); normalized != nil {
 					reqMap = normalized
 					convertedReq = reqMap
 				}
 			}
-			if upstream.PassbackThinkingBlocks {
+			if upstream.IsPassbackThinkingBlocksEnabled() {
 				if marshaledReq, err := utils.MarshalJSONNoEscape(reqMap); err == nil {
 					var normalized map[string]interface{}
-					if normalizedBytes := convertReasoningContentToThinkingBlocks(marshaledReq, upstream.PassbackReasoningContent); json.Unmarshal(normalizedBytes, &normalized) == nil {
+					if normalizedBytes := convertReasoningContentToThinkingBlocks(marshaledReq, upstream.IsPassbackReasoningContentEnabled()); json.Unmarshal(normalizedBytes, &normalized) == nil {
 						reqMap = normalized
 						convertedReq = reqMap
 					}
@@ -274,9 +275,15 @@ func (p *ResponsesProvider) buildProviderRequestBody(c *gin.Context, requestPath
 		providerReq = convertedReq
 	}
 
-	if upstream.NormalizeNonstandardChatRoles {
-		if reqMap, ok := providerReq.(map[string]interface{}); ok {
+	if reqMap, ok := providerReq.(map[string]interface{}); ok {
+		if upstream.IsNormalizeNonstandardChatRolesEnabled() {
+			// 用户显式开启的宽泛归一化：所有非标准 role 一律降为 user（既有契约）
 			converters.NormalizeNonstandardChatRolesInRequest(reqMap)
+		} else if upstream.IsDowngradeDeveloperRoleEnabled() {
+			// 自动学习到的窄改写：只把 developer 降为 system，语义损失最小
+			if converters.DowngradeDeveloperRoleToSystem(reqMap) {
+				log.Printf("[Responses-CompatRole] 渠道 %s 已学习到不支持 developer role，降级为 system", upstream.Name)
+			}
 		}
 	}
 	if reqMap, ok := providerReq.(map[string]interface{}); ok {

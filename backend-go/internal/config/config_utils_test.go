@@ -82,16 +82,16 @@ func TestRuntimeUpstreamForAutoManagedProviderStripsLegacyCompat(t *testing.T) {
 		ReasoningParamStyle:           "thinking",
 		NormalizeMetadataUserID:       &trueValue,
 		StripBillingHeader:            &trueValue,
-		StripEmptyTextBlocks:          true,
+		StripEmptyTextBlocks:          BoolPtr(true),
 		NormalizeSystemRoleToTopLevel: true,
-		PassbackReasoningContent:      true,
-		PassbackThinkingBlocks:        true,
+		PassbackReasoningContent:      BoolPtr(true),
+		PassbackThinkingBlocks:        BoolPtr(true),
 		NoVision:                      true,
 		NoVisionModels:                []string{"mimo-v2.5-pro"},
 		VisionFallbackModel:           "mimo-v2.5",
-		StripImageGenerationTool:      true,
-		NormalizeNonstandardChatRoles: true,
-		CodexNativeToolPassthrough:    true,
+		StripImageGenerationTool:      BoolPtr(true),
+		NormalizeNonstandardChatRoles: BoolPtr(true),
+		CodexNativeToolPassthrough:    BoolPtr(true),
 		CodexToolCompat:               &trueValue,
 		StripCodexClientTools:         true,
 		ConvertImageURLToB64JSON:      true,
@@ -108,7 +108,7 @@ func TestRuntimeUpstreamForAutoManagedProviderStripsLegacyCompat(t *testing.T) {
 	if len(runtime.ModelMapping) != 0 || len(runtime.ReasoningMapping) != 0 || runtime.ReasoningParamStyle != "" {
 		t.Fatalf("legacy model/reasoning fields not stripped: %#v", runtime)
 	}
-	if runtime.PassbackReasoningContent || runtime.PassbackThinkingBlocks || runtime.StripEmptyTextBlocks || runtime.NormalizeSystemRoleToTopLevel {
+	if runtime.IsPassbackReasoningContentEnabled() || runtime.IsPassbackThinkingBlocksEnabled() || runtime.IsStripEmptyTextBlocksEnabled() || runtime.NormalizeSystemRoleToTopLevel {
 		t.Fatalf("legacy Claude compat fields not stripped: %#v", runtime)
 	}
 	if runtime.NoVision || len(runtime.NoVisionModels) != 0 || runtime.VisionFallbackModel != "" {
@@ -117,7 +117,7 @@ func TestRuntimeUpstreamForAutoManagedProviderStripsLegacyCompat(t *testing.T) {
 	if len(runtime.SupportedModels) != 2 || runtime.RateLimitRPM != 80 || runtime.ProviderID != "mimo" {
 		t.Fatalf("runtime scheduling fields should be preserved: %#v", runtime)
 	}
-	if len(upstream.ModelMapping) == 0 || upstream.PassbackReasoningContent == false {
+	if len(upstream.ModelMapping) == 0 || !upstream.IsPassbackReasoningContentEnabled() {
 		t.Fatal("original upstream must not be mutated")
 	}
 }
@@ -145,14 +145,14 @@ func TestRuntimeUpstreamForAutoManagedProviderReappliesNativeDefaults(t *testing
 		AutoManaged:              true,
 		ServiceType:              "openai",
 		ReasoningParamStyle:      "thinking",
-		PassbackReasoningContent: false,
+		PassbackReasoningContent: BoolPtr(false),
 	}
 
 	runtime := RuntimeUpstreamForAutoManagedProvider(upstream)
-	if runtime.ReasoningParamStyle != "reasoning_effort" || !runtime.PassbackReasoningContent {
+	if runtime.ReasoningParamStyle != "reasoning_effort" || !runtime.IsPassbackReasoningContentEnabled() {
 		t.Fatalf("GLM OpenAI 原生默认值未在运行时恢复: %#v", runtime)
 	}
-	if upstream.ReasoningParamStyle != "thinking" || upstream.PassbackReasoningContent {
+	if upstream.ReasoningParamStyle != "thinking" || upstream.IsPassbackReasoningContentEnabled() {
 		t.Fatalf("原始配置不应被运行时归一化修改: %#v", upstream)
 	}
 }

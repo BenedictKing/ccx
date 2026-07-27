@@ -461,19 +461,19 @@ func TestInferAutoAddProviderID(t *testing.T) {
 func TestApplyProviderUpstreamDefaults(t *testing.T) {
 	glmChat := config.UpstreamConfig{ServiceType: "openai"}
 	config.ApplyProviderUpstreamDefaults("glm", &glmChat)
-	if glmChat.ReasoningParamStyle != "reasoning_effort" || !glmChat.PassbackReasoningContent {
+	if glmChat.ReasoningParamStyle != "reasoning_effort" || !glmChat.IsPassbackReasoningContentEnabled() {
 		t.Fatalf("GLM OpenAI 默认兼容参数未补齐: %+v", glmChat)
 	}
 
 	glmClaude := config.UpstreamConfig{ServiceType: "claude"}
 	config.ApplyProviderUpstreamDefaults("glm", &glmClaude)
-	if glmClaude.ReasoningParamStyle != "" || glmClaude.PassbackReasoningContent {
+	if glmClaude.ReasoningParamStyle != "" || glmClaude.IsPassbackReasoningContentEnabled() {
 		t.Fatalf("GLM Claude 原生 route 不应注入 OpenAI 参数: %+v", glmClaude)
 	}
 
 	custom := config.UpstreamConfig{ServiceType: "openai"}
 	config.ApplyProviderUpstreamDefaults("", &custom)
-	if custom.ReasoningParamStyle != "" || custom.PassbackReasoningContent {
+	if custom.ReasoningParamStyle != "" || custom.IsPassbackReasoningContentEnabled() {
 		t.Fatalf("自定义渠道不应应用 GLM 默认值: %+v", custom)
 	}
 }

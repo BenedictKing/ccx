@@ -46,16 +46,17 @@ type UpstreamConfig struct {
 	ReasoningParamStyle   string                             `json:"reasoningParamStyle,omitempty"`
 	TextVerbosity         string                             `json:"textVerbosity,omitempty"`
 	FastMode              bool                               `json:"fastMode,omitempty"`
-	// OpenAI Chat 上游配置：启用后将非标准 Chat role 改写为 user（默认 false）
-	NormalizeNonstandardChatRoles bool `json:"normalizeNonstandardChatRoles,omitempty"`
-	// Codex 工具兼容开关（默认 false）。
-	// 透传分支中将 Codex 原生工具转换为 OpenAI function 格式（默认 false）。
-	CodexNativeToolPassthrough bool  `json:"codexNativeToolPassthrough,omitempty"`
+	// OpenAI Chat 上游配置：启用后将非标准 Chat role 改写为 user。
+	// nil 表示用户未设置，可由运行时兼容性学习决定；非 nil 时用户配置优先。
+	NormalizeNonstandardChatRoles *bool `json:"normalizeNonstandardChatRoles,omitempty"`
+	// Codex 工具兼容开关。
+	// 透传分支中将 Codex 原生工具转换为 OpenAI function 格式。
+	CodexNativeToolPassthrough *bool `json:"codexNativeToolPassthrough,omitempty"`
 	CodexToolCompat            *bool `json:"codexToolCompat,omitempty"`
 	// Deprecated: 使用 codexToolCompat；保留旧字段仅用于配置读取和旧前端写入兼容。
 	StripCodexClientTools bool `json:"stripCodexClientTools,omitempty"`
 	// Responses/Chat 工具兼容：移除 image_generation 与 Codex image_gen 工具（兼容未开通图片生成权限的上游）
-	StripImageGenerationTool bool `json:"stripImageGenerationTool,omitempty"`
+	StripImageGenerationTool *bool `json:"stripImageGenerationTool,omitempty"`
 	// Images 响应兼容：当客户端请求 b64_json 而上游只返回 URL 时，下载并转换为 b64_json（默认 false）
 	ConvertImageURLToB64JSON bool `json:"convertImageUrlToB64Json,omitempty"`
 	// 多渠道调度相关字段
@@ -70,15 +71,19 @@ type UpstreamConfig struct {
 	// Messages 渠道级移除 billing header：转发前从 system 数组移除 x-anthropic-billing-header block（默认按域名推断）
 	StripBillingHeader *bool `json:"stripBillingHeader,omitempty"`
 	// Claude 协议空文本兼容
-	StripEmptyTextBlocks bool `json:"stripEmptyTextBlocks,omitempty"` // 转发前移除裸空 text content block（兼容严格校验的第三方 Claude 上游）
+	StripEmptyTextBlocks *bool `json:"stripEmptyTextBlocks,omitempty"` // 转发前移除裸空 text content block（兼容严格校验的第三方 Claude 上游）
 	// Claude 协议 system 角色兼容
 	NormalizeSystemRoleToTopLevel bool `json:"normalizeSystemRoleToTopLevel,omitempty"` // 将 messages 中的 system 角色抽取回顶层 system 字段（针对 Opus 4.8 / Fable 5 等新客户端将 system 作为消息 role 发送，兼容仅支持 user/assistant role 的旧 Claude 上游）
 	// Gemini 特定配置
 	InjectDummyThoughtSignature bool `json:"injectDummyThoughtSignature,omitempty"` // 给空 thought_signature 注入 dummy 值（兼容 x666.me 等要求必须有该字段的 API）
 	StripThoughtSignature       bool `json:"stripThoughtSignature,omitempty"`       // 移除 thought_signature 字段（兼容旧版 Gemini API）
 	// Claude 协议 thinking 回传配置
-	PassbackReasoningContent bool `json:"passbackReasoningContent,omitempty"` // 将 thinking 块转为 reasoning_content 回传（兼容 mimo 等要求 OpenAI 风格 reasoning_content 的 Claude 协议上游）
-	PassbackThinkingBlocks   bool `json:"passbackThinkingBlocks,omitempty"`   // 将真实 reasoning_content 回传为 content[].thinking（兼容 DeepSeek/GLM 等严格 Claude thinking 上游）
+	PassbackReasoningContent *bool `json:"passbackReasoningContent,omitempty"` // 将 thinking 块转为 reasoning_content 回传（兼容 mimo 等要求 OpenAI 风格 reasoning_content 的 Claude 协议上游）
+	PassbackThinkingBlocks   *bool `json:"passbackThinkingBlocks,omitempty"`   // 将真实 reasoning_content 回传为 content[].thinking（兼容 DeepSeek/GLM 等严格 Claude thinking 上游）
+	// LearnedDowngradeDeveloperRole 运行时字段：本次请求是否应用"developer role 降级为 system"。
+	// 由 failover 在发送前按 渠道-Key-模型 的学习结论注入，不持久化到 config.json，
+	// 也不暴露给前端配置（用户侧对应能力是 NormalizeNonstandardChatRoles）。
+	LearnedDowngradeDeveloperRole bool `json:"-"`
 	// 自定义请求头
 	CustomHeaders map[string]string `json:"customHeaders,omitempty"` // 自定义请求头（覆盖或添加到上游请求）
 	// 渠道级代理
@@ -712,9 +717,88 @@ func (u *UpstreamConfig) IsRateLimitAutoFromHeadersEnabled() bool {
 	return true
 }
 
-// IsStripImageGenerationToolEnabled 检查是否移除 image_generation 与 Codex image_gen 工具（默认 false）。
+// 兼容性开关的三态合成。
+//
+// 这些开关原为静态 bool，需要用户手工勾选；现改为 *bool 三态，语义为：
+//
+//	非 nil  -> 用户显式设置，最高优先级（既是强制覆盖也是逃生阀）
+//	nil    -> 未设置，交由运行时兼容性学习结论决定
+//	学习也没有 -> 回落静态默认（多数为 false，个别按域名/关键词推断）
+//
+// 裸 bool 无法区分"用户显式关闭"与"用户没设置"，因此三态是自动学习能生效的前提。
+// learned 传 nil 表示当前无学习结论（调用方未接入缓存或缓存未命中）。
+
+// IsDowngradeDeveloperRoleEnabled 检查是否需要把 developer role 降级为 system。
+// 该开关没有对应的用户配置字段：它完全由运行时兼容性学习驱动（用户想手工处理非标准 role 时用
+// NormalizeNonstandardChatRoles）。failover 在发送前把学习结论写入 LearnedDowngradeDeveloperRole。
+func (u *UpstreamConfig) IsDowngradeDeveloperRoleEnabled() bool {
+	return u.LearnedDowngradeDeveloperRole
+}
+
+// BoolPtr 返回指向给定布尔值的指针，用于显式设置三态开关。
+func BoolPtr(v bool) *bool {
+	return &v
+}
+
+// resolveCompatSwitch 按 用户配置 > 学习结论 > 静态默认 合成最终生效值。
+func resolveCompatSwitch(userSet *bool, learned *bool, staticDefault bool) bool {
+	if userSet != nil {
+		return *userSet
+	}
+	if learned != nil {
+		return *learned
+	}
+	return staticDefault
+}
+
+// IsStripImageGenerationToolEnabled 检查是否移除 image_generation 与 Codex image_gen 工具。
 func (u *UpstreamConfig) IsStripImageGenerationToolEnabled() bool {
-	return u.StripImageGenerationTool
+	return u.IsStripImageGenerationToolEnabledWith(nil)
+}
+
+// IsStripImageGenerationToolEnabledWith 带学习结论的版本（默认 false）。
+func (u *UpstreamConfig) IsStripImageGenerationToolEnabledWith(learned *bool) bool {
+	return resolveCompatSwitch(u.StripImageGenerationTool, learned, false)
+}
+
+// IsNormalizeNonstandardChatRolesEnabled 检查是否将非标准 Chat role 改写为 user（默认 false）。
+func (u *UpstreamConfig) IsNormalizeNonstandardChatRolesEnabled() bool {
+	return resolveCompatSwitch(u.NormalizeNonstandardChatRoles, nil, false)
+}
+
+// IsCodexNativeToolPassthroughEnabled 检查是否将 Codex 原生工具转为 OpenAI function（默认 false）。
+func (u *UpstreamConfig) IsCodexNativeToolPassthroughEnabled() bool {
+	return resolveCompatSwitch(u.CodexNativeToolPassthrough, nil, false)
+}
+
+// IsStripEmptyTextBlocksEnabledWith 检查是否剥离空 text content block（默认 false）。
+func (u *UpstreamConfig) IsStripEmptyTextBlocksEnabledWith(learned *bool) bool {
+	return resolveCompatSwitch(u.StripEmptyTextBlocks, learned, false)
+}
+
+// IsStripEmptyTextBlocksEnabled 无学习结论的版本。
+func (u *UpstreamConfig) IsStripEmptyTextBlocksEnabled() bool {
+	return u.IsStripEmptyTextBlocksEnabledWith(nil)
+}
+
+// IsPassbackReasoningContentEnabledWith 检查是否将 thinking 转为 reasoning_content 回传（默认 false）。
+func (u *UpstreamConfig) IsPassbackReasoningContentEnabledWith(learned *bool) bool {
+	return resolveCompatSwitch(u.PassbackReasoningContent, learned, false)
+}
+
+// IsPassbackReasoningContentEnabled 无学习结论的版本。
+func (u *UpstreamConfig) IsPassbackReasoningContentEnabled() bool {
+	return u.IsPassbackReasoningContentEnabledWith(nil)
+}
+
+// IsPassbackThinkingBlocksEnabledWith 检查是否回传 content[].thinking（默认 false）。
+func (u *UpstreamConfig) IsPassbackThinkingBlocksEnabledWith(learned *bool) bool {
+	return resolveCompatSwitch(u.PassbackThinkingBlocks, learned, false)
+}
+
+// IsPassbackThinkingBlocksEnabled 无学习结论的版本。
+func (u *UpstreamConfig) IsPassbackThinkingBlocksEnabled() bool {
+	return u.IsPassbackThinkingBlocksEnabledWith(nil)
 }
 
 // GetEffectiveRequestTimeoutMs 返回渠道生效的非流式上游请求超时时间（毫秒）。

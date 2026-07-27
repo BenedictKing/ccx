@@ -617,7 +617,7 @@ func TestResponsesProvider_BuildProviderRequestBody_PassbackReasoningContentForC
 	provider := &ResponsesProvider{}
 	upstream := &config.UpstreamConfig{
 		ServiceType:              "claude",
-		PassbackReasoningContent: true,
+		PassbackReasoningContent: config.BoolPtr(true),
 	}
 
 	body := []byte(`{
@@ -658,8 +658,8 @@ func TestResponsesProvider_BuildProviderRequestBody_PassbackReasoningContentStri
 	provider := &ResponsesProvider{}
 	upstream := &config.UpstreamConfig{
 		ServiceType:              "claude",
-		PassbackReasoningContent: true,
-		PassbackThinkingBlocks:   false,
+		PassbackReasoningContent: config.BoolPtr(true),
+		PassbackThinkingBlocks:   config.BoolPtr(false),
 	}
 
 	body := []byte(`{
@@ -753,7 +753,7 @@ func TestResponsesProvider_BuildProviderRequestBody_PassbackThinkingBlocksForCla
 	provider := &ResponsesProvider{}
 	upstream := &config.UpstreamConfig{
 		ServiceType:            "claude",
-		PassbackThinkingBlocks: true,
+		PassbackThinkingBlocks: config.BoolPtr(true),
 	}
 
 	body := []byte(`{

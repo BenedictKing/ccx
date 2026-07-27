@@ -152,6 +152,12 @@ var systemHeaderFilterCache = config.NewSystemHeaderFilterCache()
 // 记忆落盘到 .config/deprecated_params.json，重启后无需重新探测；属内部状态，用户无需感知。
 var deprecatedParamCache = config.NewDeprecatedParamCacheWithPersistence(config.DeprecatedParamStatePath)
 
+// channelCompatCache 按渠道-keyHash-模型记忆上游的协议兼容性能力（如不支持 developer role）。
+// 与 deprecatedParamCache 同构：首次 400 学习并同 Key 重试，后续同组合请求在构造上游请求时
+// 直接应用兼容改写，用户无需手工勾选兼容性开关。
+// 记忆落盘到 .config/channel_compat.json，重启后免重学。
+var channelCompatCache = config.NewChannelCompatCacheWithPersistence(config.ChannelCompatStatePath)
+
 func shouldNormalizeMetadataUserID(kind scheduler.ChannelKind, upstream *config.UpstreamConfig) bool {
 	if upstream == nil {
 		return false
@@ -522,6 +528,62 @@ func TryUpstreamWithAllKeys(
 				}
 			}
 
+			// 已知厂商参数约束（主动侧）：无需先失败一次，按模型文档约束直接规避。
+			// 例如 Kimi K3/K2.7-code/K2.6 的 temperature/top_p/n 等为固定值，传入即 400。
+			if stripped, applied := ApplyKnownParamConstraints(attemptBody, attemptModel); len(applied) > 0 {
+				attemptBody = stripped
+				RestoreRequestBody(c, attemptBody)
+				c.Set("requestBodyBytes", attemptBody)
+				RequestLogf(c, "[%s-ParamConstraint] 模型 %s 应用已知参数约束: %s",
+					apiType, attemptModel, strings.Join(applied, ","))
+			}
+
+			// 内容启发式兼容项（无上游报错信号）：首次遇到该组合时异步探测一次并记忆，
+			// 不阻塞当前请求，结论对后续请求生效。替代原先要用户手工点诊断按钮的做法。
+			maybeTriggerCompatProbe(upstream, apiKey, currentBaseURL, attemptModel)
+
+			// 渠道兼容性自学习（主动侧）：命中记忆时把学习结论注入本次请求所用的上游副本。
+			// 实际改写由各 provider 在构造上游请求时执行（那里才知道协议形态），此处只传递结论。
+			if upstream.ChannelUID != "" {
+				keyHash := autopilot.KeyHashFromAPIKey(apiKey)
+				if state, ok := channelCompatCache.Trait(upstream.ChannelUID, keyHash, attemptModel, config.TraitDowngradeDeveloperRole); ok && state.Enabled {
+					upstreamCopy.LearnedDowngradeDeveloperRole = true
+					channelCompatCache.MarkApplied(upstream.ChannelUID, keyHash, attemptModel, config.TraitDowngradeDeveloperRole)
+				}
+				if state, ok := channelCompatCache.Trait(upstream.ChannelUID, keyHash, attemptModel, config.TraitStripImageGenTool); ok && state.Enabled {
+					if upstreamCopy.StripImageGenerationTool == nil {
+						upstreamCopy.StripImageGenerationTool = config.BoolPtr(true)
+						channelCompatCache.MarkApplied(upstream.ChannelUID, keyHash, attemptModel, config.TraitStripImageGenTool)
+					}
+				}
+				if state, ok := channelCompatCache.Trait(upstream.ChannelUID, keyHash, attemptModel, config.TraitStripCodexClientTools); ok && state.Enabled {
+					if upstreamCopy.CodexToolCompat == nil {
+						upstreamCopy.CodexToolCompat = config.BoolPtr(true)
+						channelCompatCache.MarkApplied(upstream.ChannelUID, keyHash, attemptModel, config.TraitStripCodexClientTools)
+					}
+				}
+				if state, ok := channelCompatCache.Trait(upstream.ChannelUID, keyHash, attemptModel, config.TraitPassbackThinkingBlocks); ok && state.Enabled {
+					if upstreamCopy.PassbackThinkingBlocks == nil {
+						upstreamCopy.PassbackThinkingBlocks = config.BoolPtr(true)
+						channelCompatCache.MarkApplied(upstream.ChannelUID, keyHash, attemptModel, config.TraitPassbackThinkingBlocks)
+					}
+				}
+				// 探针学习的内容启发式兼容项：结论可能为 false（探测确认不需要），
+				// 因此按 state.Enabled 原值注入而非只在 true 时注入。
+				if state, ok := channelCompatCache.Trait(upstream.ChannelUID, keyHash, attemptModel, config.TraitPassbackReasoningContent); ok {
+					if upstreamCopy.PassbackReasoningContent == nil {
+						upstreamCopy.PassbackReasoningContent = config.BoolPtr(state.Enabled)
+						channelCompatCache.MarkApplied(upstream.ChannelUID, keyHash, attemptModel, config.TraitPassbackReasoningContent)
+					}
+				}
+				if state, ok := channelCompatCache.Trait(upstream.ChannelUID, keyHash, attemptModel, config.TraitStripEmptyTextBlocks); ok {
+					if upstreamCopy.StripEmptyTextBlocks == nil {
+						upstreamCopy.StripEmptyTextBlocks = config.BoolPtr(state.Enabled)
+						channelCompatCache.MarkApplied(upstream.ChannelUID, keyHash, attemptModel, config.TraitStripEmptyTextBlocks)
+					}
+				}
+			}
+
 			// 弃用参数自适应（主动侧）：命中记忆时在发送前剥离上游已拒绝的参数。
 			// 记忆键为 channelUID:keyHash:实际请求模型，不影响同渠道的其他模型/Key。
 			if upstream.ChannelUID != "" {
@@ -778,11 +840,30 @@ func TryUpstreamWithAllKeys(
 					}
 				} else if restrictionReason := keyModelRestrictionReason(respBodyBytes); actualAttemptModel != "" && restrictionReason != "" &&
 					(restrictionReason != "image_generation_not_enabled" || !upstream.IsStripImageGenerationToolEnabled()) {
-					// 上游明确声明该模型或其 Codex 图片工具不受支持：限制该 Key 对这个实际模型的路由。
-					// 仅限制 (Key, 模型) 组合（持久化+定时恢复），保留 failover 换渠道，不连累该 Key 其他模型。
-					summary := errorBodySummaryForLog(apiType, resp.StatusCode, respBodyBytes)
-					if err := cfgManager.DisableKeyModel(apiType, channelIndex, apiKey, actualAttemptModel, restrictionReason, summary); err != nil {
-						RequestLogf(c, "[%s-KeyModel] 限制 (Key,模型) 组合失败: %v", apiType, err)
+					// 图片生成受限且用户未显式配置剥离：先学习"该组合需剥离图片工具"，
+					// 由下一轮主动注入后重试修复请求，而不是直接惩罚这个 Key。
+					// 只有学习已记录过（说明剥离后仍失败）才回落到限制 (Key,模型)。
+					learnedImageStrip := false
+					if restrictionReason == "image_generation_not_enabled" && upstream.ChannelUID != "" &&
+						upstream.StripImageGenerationTool == nil {
+						keyHash := autopilot.KeyHashFromAPIKey(apiKey)
+						summary := errorBodySummaryForLog(apiType, resp.StatusCode, respBodyBytes)
+						// 记忆键用 attemptModel（而非 actualAttemptModel）：主动注入侧按 attemptModel 查询，
+						// 两者在 provider 改写模型时会不一致，键不统一会导致学到的结论永远查不到。
+						learnedImageStrip = channelCompatCache.Record(upstream.ChannelUID, keyHash, attemptModel,
+							config.TraitStripImageGenTool, true, config.CompatSourceErrorSignal, summary)
+						if learnedImageStrip {
+							RequestLogf(c, "[%s-ChannelCompat] 渠道 %s 模型 %s 未开通图片生成，已记忆并将在重试时剥离图片工具",
+								apiType, upstream.Name, attemptModel)
+						}
+					}
+					if !learnedImageStrip {
+						// 上游明确声明该模型或其 Codex 图片工具不受支持：限制该 Key 对这个实际模型的路由。
+						// 仅限制 (Key, 模型) 组合（持久化+定时恢复），保留 failover 换渠道，不连累该 Key 其他模型。
+						summary := errorBodySummaryForLog(apiType, resp.StatusCode, respBodyBytes)
+						if err := cfgManager.DisableKeyModel(apiType, channelIndex, apiKey, actualAttemptModel, restrictionReason, summary); err != nil {
+							RequestLogf(c, "[%s-KeyModel] 限制 (Key,模型) 组合失败: %v", apiType, err)
+						}
 					}
 				}
 
@@ -891,6 +972,35 @@ func TryUpstreamWithAllKeys(
 							RequestLogf(c, "[%s-DeprecatedParam] 渠道 %s 模型 %s 拒绝参数 %q，已记忆并剥离后同 Key 重试",
 								apiType, upstream.Name, attemptModel, param)
 							continue
+						}
+					}
+
+					// 渠道兼容性自学习（被动侧）：上游以 400/422 明确表示缺少某项协议能力时，
+					// 记忆该 渠道-Key-模型 组合并用同一 Key 立即重试（改写在下一轮循环开头注入）。
+					// 仅当结论首次记录时重试，避免记忆已生效后死循环。
+					if (resp.StatusCode == 400 || resp.StatusCode == 422) && upstream.ChannelUID != "" && !c.Writer.Written() {
+						signalCtx := CompatSignalContext{
+							HasDeveloperRole:      BodyHasDeveloperRole(attemptBody),
+							HasCodexClientTools:   kind == scheduler.ChannelKindResponses,
+							HasHistoricalThinking: BodyHasHistoricalThinking(attemptBody),
+						}
+						if signal := CompatTraitFromError(resp.StatusCode, respBodyBytes, signalCtx); signal != nil {
+							keyHash := autopilot.KeyHashFromAPIKey(apiKey)
+							if channelCompatCache.Record(upstream.ChannelUID, keyHash, attemptModel,
+								signal.Trait, signal.Enabled, config.CompatSourceErrorSignal, signal.Evidence) {
+								retrySelection = selection
+								retryAPIKey = apiKey
+								metricsManager.RecordRequestFinalizeIgnored(currentBaseURL, apiKey, metricsServiceType, requestID)
+								channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
+								if probeKey := currentBaseURL + "|" + apiKey; probeAcquired[probeKey] {
+									metricsManager.ReleaseProbe(currentBaseURL, apiKey, metricsServiceType)
+									delete(probeAcquired, probeKey)
+								}
+								CompleteLog(channelLogStore, metricsKey, logRequestID, resp.StatusCode, false, string(respBodyBytes), isRetryAttempt)
+								RequestLogf(c, "[%s-ChannelCompat] 渠道 %s 模型 %s 缺少能力 %s，已记忆并应用兼容改写后同 Key 重试",
+									apiType, upstream.Name, attemptModel, signal.Trait)
+								continue
+							}
 						}
 					}
 				}

@@ -84,7 +84,7 @@ func TestChatHandler_DeepSeekChatAndMessagesThinkingMatrix(t *testing.T) {
 				APIKeys:                  []string{"sk-test"},
 				ServiceType:              tt.serviceType,
 				Status:                   "active",
-				PassbackReasoningContent: true,
+				PassbackReasoningContent: config.BoolPtr(true),
 			})
 
 			reqBody := `{"model":"deepseek-v4-pro","messages":[{"role":"user","content":"hello"},{"role":"assistant","reasoning_content":"previous reasoning","content":"previous text"}]}`

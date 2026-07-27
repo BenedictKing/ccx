@@ -43,7 +43,10 @@ func buildChatCompletionRequestBody(
 	upstream *config.UpstreamConfig,
 	includeAdvancedOptions bool,
 ) ([]byte, error) {
-	needsRewrite := includeAdvancedOptions || mappedModel != model || upstream.NormalizeNonstandardChatRoles || upstream.StripImageGenerationTool
+	normalizeRoles := upstream.IsNormalizeNonstandardChatRolesEnabled()
+	downgradeDeveloperRole := upstream.IsDowngradeDeveloperRoleEnabled()
+	stripImageTool := upstream.IsStripImageGenerationToolEnabled()
+	needsRewrite := includeAdvancedOptions || mappedModel != model || normalizeRoles || downgradeDeveloperRole || stripImageTool
 	if !needsRewrite {
 		return bodyBytes, nil
 	}
@@ -54,7 +57,7 @@ func buildChatCompletionRequestBody(
 	}
 
 	reqMap["model"] = mappedModel
-	if upstream.StripImageGenerationTool {
+	if stripImageTool {
 		stripImageGenerationFromChatTools(reqMap)
 	}
 
@@ -70,8 +73,12 @@ func buildChatCompletionRequestBody(
 		}
 	}
 
-	if upstream.NormalizeNonstandardChatRoles {
+	if normalizeRoles {
+		// 用户显式开启的宽泛归一化：所有非标准 role 一律降为 user（既有契约）
 		converters.NormalizeNonstandardChatRolesInRequest(reqMap)
+	} else if downgradeDeveloperRole {
+		// 自动学习到的窄改写：只把 developer 降为 system
+		converters.DowngradeDeveloperRoleToSystem(reqMap)
 	}
 	providers.ApplyNativeToolStreaming(reqMap, upstream)
 
@@ -255,7 +262,7 @@ func buildProviderRequest(
 		if err != nil {
 			return nil, err
 		}
-		if !upstream.PassbackReasoningContent && !upstream.PassbackThinkingBlocks {
+		if !upstream.IsPassbackReasoningContentEnabled() && !upstream.IsPassbackThinkingBlocksEnabled() {
 			requestBody = stripThinkingBlocksFromBody(requestBody)
 		}
 		if skipVersionPrefix {

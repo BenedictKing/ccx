@@ -2867,6 +2867,53 @@ func (s *FastDecayScore) EffectiveScore() float64 {
 - 成功一次立即回升 15%，避免"一朝被蛇咬"的永久惩罚
 - 这比滑动窗口快得多：滑动窗口需要窗口滚动才反映变化，FastDecay 是请求级即时反应
 
+### 6.9 渠道兼容性统一自学习
+
+渠道级兼容性配置不应要求用户先踩坑、再去翻设置面板找开关。这一节描述如何把这些开关从
+「静态布尔」转为「运行时学习到的能力事实」。
+
+**三态合成**（`config.resolveCompatSwitch`）
+
+```text
+最终生效值 = 用户显式设置（*bool 非 nil） ?? 学习结论 ?? 静态默认
+```
+
+裸 `bool` 无法区分「用户显式关闭」与「用户没设置」，因此六个兼容性字段
+（`NormalizeNonstandardChatRoles`、`StripImageGenerationTool`、`CodexNativeToolPassthrough`、
+`StripEmptyTextBlocks`、`PassbackReasoningContent`、`PassbackThinkingBlocks`）均迁移为 `*bool`。
+用户配置永远最高优先，既是强制覆盖也是逃生阀。
+
+注意：`RuntimeUpstreamForAutoManagedProvider` 清理自动托管渠道的手工配置时必须置 `nil` 而非
+`false`，否则会被当作「用户显式关闭」，使自动托管渠道永远学不会兼容改写。
+
+**记忆载体**：`config.ChannelCompatCache`，落盘 `.config/channel_compat.json`，
+键 `channelUID:keyHash:model`，TTL 24h（与 `DeprecatedParamCache`/`SystemHeaderFilterCache` 一致）。
+`Record` 仅在结论新增或翻转时返回 `true`，调用方据此决定是否重试，防止记忆生效后死循环。
+
+**三条学习路径**（按上游信号强度区分，不可一概而论）
+
+| 信号类型 | 兼容项 | 学习方式 |
+| --- | --- | --- |
+| 硬 400/422 + 可正则匹配 | developer role 降级、Codex 专属工具剥离、历史 thinking 回传、图片工具剥离 | 错误驱动：`CompatTraitFromError` 识别 → 记忆 → 同 Key 立即重试 |
+| 无报错，仅响应形态差异 | `passbackReasoningContent`、`stripEmptyTextBlocks` | 探针驱动：首次遇到该组合时 singleflight 后台探测一次 |
+| 厂商文档已公布约束 | Kimi 固定值参数、`tool_choice`、`thinking` | 前置规避：`ApplyKnownParamConstraints` 发送前直接改写，无需失败一次 |
+
+**分层职责**：`upstream_failover` 负责识别信号、写缓存、编排重试、把结论注入 `upstreamCopy`；
+各 provider 在构造上游请求时读取合成值并执行改写。这样 developer role 降级发生在
+Responses→Chat 转换**之后**的 `reqMap` 上，避开「failover 层拿到的是 Responses `input` 而非
+Chat `messages`」这个陷阱。
+
+**防误判约束**（学错并持久化比不学更糟）
+
+- 双条件门控：正则命中之外，还要求请求侧确实携带对应结构（`BodyHasDeveloperRole` 等）
+- 单次重试上限：`Record` 返回 `false` 即不再重试
+- 不跨维度污染：结论不外溢到同渠道其他 Key/模型
+- 仅 400/422 参与学习；429/5xx/超时属容量问题，不是能力问题
+- fail-open：缓存损坏、探测失败一律退化为静态默认，不阻断代理请求
+
+**图片工具归因修正**：图片生成受限时，原实现直接拉黑 (Key,模型)。现改为先学习
+「需剥离图片工具」并重试修复请求，只有剥离后仍失败才回落拉黑——从「惩罚渠道」改为「先修复请求」。
+
 ## 7. API 设计
 
 ### 7.1 新增 API 端点

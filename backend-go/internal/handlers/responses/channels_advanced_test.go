@@ -56,8 +56,8 @@ func TestGetUpstreams_IncludesUnifiedStateFields(t *testing.T) {
 		BaseURL:                  "https://api.example.com",
 		APIKeys:                  []string{"sk-1"},
 		Status:                   "suspended",
-		PassbackReasoningContent: true,
-		PassbackThinkingBlocks:   true,
+		PassbackReasoningContent: config.BoolPtr(true),
+		PassbackThinkingBlocks:   config.BoolPtr(true),
 		DisabledAPIKeys: []config.DisabledKeyInfo{{
 			Key:        "sk-disabled",
 			Reason:     "insufficient_balance",

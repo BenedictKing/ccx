@@ -667,8 +667,8 @@ func TestStripImageGenerationToolDefaultsAndUpdate(t *testing.T) {
 	}
 
 	cloned := cfg.ResponsesUpstream[0].Clone()
-	if !cloned.StripImageGenerationTool {
-		t.Fatalf("cloned StripImageGenerationTool = %v, want true", cloned.StripImageGenerationTool)
+	if !cloned.IsStripImageGenerationToolEnabled() {
+		t.Fatalf("cloned StripImageGenerationTool = %v, want true", cloned.IsStripImageGenerationToolEnabled())
 	}
 
 	disabled := false

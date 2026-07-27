@@ -377,7 +377,7 @@ func TestGetChannelDashboard_MessagesIncludesStripEmptyTextBlocks(t *testing.T) 
 			ServiceType:          "claude",
 			BaseURL:              "https://example.com",
 			APIKeys:              []string{"sk-test"},
-			StripEmptyTextBlocks: true,
+			StripEmptyTextBlocks: config.BoolPtr(true),
 		}},
 	}
 

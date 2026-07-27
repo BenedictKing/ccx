@@ -361,6 +361,10 @@ func main() {
 	// 设置版本信息到 handlers 包
 	handlers.SetVersionInfo(Version, BuildTime, GitCommit)
 
+	// 注册渠道兼容性探测：让无上游报错信号的兼容项（reasoning_content 回传、空 text block 剥离）
+	// 在首次遇到渠道-Key-模型组合时自动探测一次并记忆，无需用户手工点诊断按钮
+	handlers.RegisterCompatProbeHook()
+
 	// 初始化环境配置，并应用命令行运行时路径覆盖
 	envCfg := config.NewEnvConfig()
 	paths, err := resolveRuntimePaths(cliOpts, envCfg)
