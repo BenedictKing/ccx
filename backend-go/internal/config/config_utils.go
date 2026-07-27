@@ -512,6 +512,12 @@ func (u *UpstreamConfig) Clone() *UpstreamConfig {
 			cloned.CustomHeaders[k] = v
 		}
 	}
+	if u.CompatSeeds != nil {
+		cloned.CompatSeeds = make(map[string]bool, len(u.CompatSeeds))
+		for k, v := range u.CompatSeeds {
+			cloned.CompatSeeds[k] = v
+		}
+	}
 	if u.PromotionUntil != nil {
 		t := *u.PromotionUntil
 		cloned.PromotionUntil = &t
@@ -599,6 +605,9 @@ func RuntimeUpstreamForAutoManagedProvider(upstream *UpstreamConfig) *UpstreamCo
 	runtime.FastMode = false
 	// 兼容性开关置 nil 而非 false：nil 表示"用户未设置"，运行时兼容性学习结论仍可生效；
 	// 置 false 会被当作"用户显式关闭"，使自动托管渠道永远学不会兼容改写。
+	// 种子同样清空：自动托管渠道的兼容性由 ApplyProviderUpstreamDefaults 重建已知厂商真相
+	// 加运行时学习决定，不保留手工配置派生的历史证据。
+	runtime.CompatSeeds = nil
 	runtime.NormalizeNonstandardChatRoles = nil
 	runtime.CodexNativeToolPassthrough = nil
 	runtime.CodexToolCompat = nil

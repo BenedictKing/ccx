@@ -84,6 +84,15 @@ type UpstreamConfig struct {
 	// 由 failover 在发送前按 渠道-Key-模型 的学习结论注入，不持久化到 config.json，
 	// 也不暴露给前端配置（用户侧对应能力是 NormalizeNonstandardChatRoles）。
 	LearnedDowngradeDeveloperRole bool `json:"-"`
+	// CompatSeeds 用户历史手工兼容配置升级而来的「初始证据」。
+	//
+	// 语义：用户曾经手工开/关过某项兼容改写，说明他观察到过这个上游的真实行为，这个判断值得保留；
+	// 但保留方式不应是「永久压过自动学习」，否则上游能力变化后用户还得再手工改一次。
+	// 因此把手工值降级为种子：作为学习结论缺失时的兜底，一旦学到真实结论就让位。
+	//
+	// 与学习记忆的区别：种子是渠道级且无 TTL（用户意图不会过期），学习记忆是
+	// 渠道-Key-模型 级且 TTL 24h（上游能力会变）。二者不能混存，否则种子 24h 后凭空消失。
+	CompatSeeds map[string]bool `json:"compatSeeds,omitempty"`
 	// 自定义请求头
 	CustomHeaders map[string]string `json:"customHeaders,omitempty"` // 自定义请求头（覆盖或添加到上游请求）
 	// 渠道级代理
@@ -740,15 +749,41 @@ func BoolPtr(v bool) *bool {
 	return &v
 }
 
-// resolveCompatSwitch 按 用户配置 > 学习结论 > 静态默认 合成最终生效值。
-func resolveCompatSwitch(userSet *bool, learned *bool, staticDefault bool) bool {
+// resolveCompatSwitch 按 用户配置 > 学习结论 > 种子 > 静态默认 合成最终生效值。
+//
+// 目标是「用户此后不需要再手工干预」：历史手工配置由一次性迁移降级为种子（第 3 级），
+// 学到真实结论后自动让位；第 1 级保留给用户仍需临时强制压制的场合。
+// learned/seed 传 nil 表示该层无结论。
+func resolveCompatSwitch(userSet *bool, learned *bool, seed *bool, staticDefault bool) bool {
 	if userSet != nil {
 		return *userSet
 	}
 	if learned != nil {
 		return *learned
 	}
+	if seed != nil {
+		return *seed
+	}
 	return staticDefault
+}
+
+// compatSeed 读取该 trait 的种子值；未设置时返回 nil。
+func (u *UpstreamConfig) compatSeed(trait CompatTrait) *bool {
+	if len(u.CompatSeeds) == 0 {
+		return nil
+	}
+	if v, ok := u.CompatSeeds[string(trait)]; ok {
+		return &v
+	}
+	return nil
+}
+
+// SetCompatSeed 写入一条种子（供配置迁移使用）。
+func (u *UpstreamConfig) SetCompatSeed(trait CompatTrait, enabled bool) {
+	if u.CompatSeeds == nil {
+		u.CompatSeeds = make(map[string]bool, 1)
+	}
+	u.CompatSeeds[string(trait)] = enabled
 }
 
 // IsStripImageGenerationToolEnabled 检查是否移除 image_generation 与 Codex image_gen 工具。
@@ -758,22 +793,22 @@ func (u *UpstreamConfig) IsStripImageGenerationToolEnabled() bool {
 
 // IsStripImageGenerationToolEnabledWith 带学习结论的版本（默认 false）。
 func (u *UpstreamConfig) IsStripImageGenerationToolEnabledWith(learned *bool) bool {
-	return resolveCompatSwitch(u.StripImageGenerationTool, learned, false)
+	return resolveCompatSwitch(u.StripImageGenerationTool, learned, u.compatSeed(TraitStripImageGenTool), false)
 }
 
 // IsNormalizeNonstandardChatRolesEnabled 检查是否将非标准 Chat role 改写为 user（默认 false）。
 func (u *UpstreamConfig) IsNormalizeNonstandardChatRolesEnabled() bool {
-	return resolveCompatSwitch(u.NormalizeNonstandardChatRoles, nil, false)
+	return resolveCompatSwitch(u.NormalizeNonstandardChatRoles, nil, u.compatSeed(TraitNormalizeNonstandardChatRoles), false)
 }
 
 // IsCodexNativeToolPassthroughEnabled 检查是否将 Codex 原生工具转为 OpenAI function（默认 false）。
 func (u *UpstreamConfig) IsCodexNativeToolPassthroughEnabled() bool {
-	return resolveCompatSwitch(u.CodexNativeToolPassthrough, nil, false)
+	return resolveCompatSwitch(u.CodexNativeToolPassthrough, nil, u.compatSeed(TraitCodexNativeToolPassthrough), false)
 }
 
 // IsStripEmptyTextBlocksEnabledWith 检查是否剥离空 text content block（默认 false）。
 func (u *UpstreamConfig) IsStripEmptyTextBlocksEnabledWith(learned *bool) bool {
-	return resolveCompatSwitch(u.StripEmptyTextBlocks, learned, false)
+	return resolveCompatSwitch(u.StripEmptyTextBlocks, learned, u.compatSeed(TraitStripEmptyTextBlocks), false)
 }
 
 // IsStripEmptyTextBlocksEnabled 无学习结论的版本。
@@ -783,7 +818,7 @@ func (u *UpstreamConfig) IsStripEmptyTextBlocksEnabled() bool {
 
 // IsPassbackReasoningContentEnabledWith 检查是否将 thinking 转为 reasoning_content 回传（默认 false）。
 func (u *UpstreamConfig) IsPassbackReasoningContentEnabledWith(learned *bool) bool {
-	return resolveCompatSwitch(u.PassbackReasoningContent, learned, false)
+	return resolveCompatSwitch(u.PassbackReasoningContent, learned, u.compatSeed(TraitPassbackReasoningContent), false)
 }
 
 // IsPassbackReasoningContentEnabled 无学习结论的版本。
@@ -793,7 +828,7 @@ func (u *UpstreamConfig) IsPassbackReasoningContentEnabled() bool {
 
 // IsPassbackThinkingBlocksEnabledWith 检查是否回传 content[].thinking（默认 false）。
 func (u *UpstreamConfig) IsPassbackThinkingBlocksEnabledWith(learned *bool) bool {
-	return resolveCompatSwitch(u.PassbackThinkingBlocks, learned, false)
+	return resolveCompatSwitch(u.PassbackThinkingBlocks, learned, u.compatSeed(TraitPassbackThinkingBlocks), false)
 }
 
 // IsPassbackThinkingBlocksEnabled 无学习结论的版本。

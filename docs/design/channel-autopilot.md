@@ -2872,16 +2872,27 @@ func (s *FastDecayScore) EffectiveScore() float64 {
 渠道级兼容性配置不应要求用户先踩坑、再去翻设置面板找开关。这一节描述如何把这些开关从
 「静态布尔」转为「运行时学习到的能力事实」。
 
-**三态合成**（`config.resolveCompatSwitch`）
+**优先级合成**（`config.resolveCompatSwitch`）
 
 ```text
-最终生效值 = 用户显式设置（*bool 非 nil） ?? 学习结论 ?? 静态默认
+最终生效值 = 用户当前显式设置 ?? 学习结论 ?? 手工配置升级来的种子 ?? 静态默认
 ```
 
 裸 `bool` 无法区分「用户显式关闭」与「用户没设置」，因此六个兼容性字段
 （`NormalizeNonstandardChatRoles`、`StripImageGenerationTool`、`CodexNativeToolPassthrough`、
 `StripEmptyTextBlocks`、`PassbackReasoningContent`、`PassbackThinkingBlocks`）均迁移为 `*bool`。
-用户配置永远最高优先，既是强制覆盖也是逃生阀。
+
+**手工配置升级合并**（`migrateManualCompatSwitchesToSeeds`）：目标是「用户此后不需要再手工干预」。
+手工开关若永久压过自动学习，老用户仍要人工维护这些开关、上游能力变化后还得再改一次。因此启动时
+一次性把历史手工值搬到 `UpstreamConfig.CompatSeeds` 并将原字段置 `nil`：
+
+- 种子是**渠道级、无 TTL**（用户意图不会过期），学习记忆是**渠道-Key-模型级、TTL 24h**（上游能力会变）。
+  二者必须分开存，否则种子 24h 后凭空消失，用户原本的判断被静默丢弃。
+- 迁移保留 `false` 值：用户「显式关闭」同样是他观察到的行为证据。
+- 迁移不改变可感知行为（学习缺失时按种子生效），但学到真实结论后自动让位。
+- 幂等：已有种子的渠道跳过，用户之后重新手工设置的值保持第 1 优先级，直到他自己清空。
+- 自动托管渠道在 `RuntimeUpstreamForAutoManagedProvider` 里连种子一起清空，其兼容性完全由
+  厂商原生默认值加运行时学习决定。
 
 注意：`RuntimeUpstreamForAutoManagedProvider` 清理自动托管渠道的手工配置时必须置 `nil` 而非
 `false`，否则会被当作「用户显式关闭」，使自动托管渠道永远学不会兼容改写。

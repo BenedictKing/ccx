@@ -93,6 +93,35 @@ func TestCompatUserConfigOverridesLearned(t *testing.T) {
 	}
 }
 
+// 迁移后的老用户渠道：手工值已降级为种子，学习结论必须能覆盖它，
+// 这样用户此后不需要再手工干预。
+func TestLearnedConclusionOverridesMigratedSeed(t *testing.T) {
+	// 老用户曾手工开启剥离图片工具，迁移后成为种子、字段置 nil
+	upstream := &config.UpstreamConfig{
+		Name:       "migrated",
+		ChannelUID: "ch_seed",
+	}
+	upstream.SetCompatSeed(config.TraitStripImageGenTool, true)
+
+	// 无学习结论时按种子生效，行为与迁移前一致
+	if !upstream.IsStripImageGenerationToolEnabled() {
+		t.Fatal("无学习结论时应沿用种子（迁移不改变可感知行为）")
+	}
+
+	// 学到"该上游其实支持图片生成"后，注入 false 应压过种子
+	upstreamCopy := upstream.Clone()
+	upstreamCopy.StripImageGenerationTool = config.BoolPtr(false)
+	if upstreamCopy.IsStripImageGenerationToolEnabled() {
+		t.Error("学习结论应压过种子，否则用户还得手工去关")
+	}
+
+	// 种子不因 Clone 而与原对象共享（map 必须深拷贝）
+	upstreamCopy.SetCompatSeed(config.TraitStripImageGenTool, false)
+	if v := upstream.CompatSeeds[string(config.TraitStripImageGenTool)]; !v {
+		t.Error("Clone 后修改副本种子不应影响原对象")
+	}
+}
+
 // 自动托管渠道的兼容性开关被清为 nil（而非 false），学习结论才能生效。
 func TestAutoManagedRuntimeKeepsCompatSwitchesUnset(t *testing.T) {
 	upstream := &config.UpstreamConfig{

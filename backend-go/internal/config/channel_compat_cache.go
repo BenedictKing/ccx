@@ -35,7 +35,25 @@ const (
 	TraitPassbackReasoningContent CompatTrait = "passback_reasoning_content"
 	// TraitStripEmptyTextBlocks 上游严格校验空 text content block，需转发前剥离
 	TraitStripEmptyTextBlocks CompatTrait = "strip_empty_text_blocks"
+	// TraitNormalizeNonstandardChatRoles 上游只接受标准 Chat role，需把非标准 role 降为 user
+	TraitNormalizeNonstandardChatRoles CompatTrait = "normalize_nonstandard_chat_roles"
+	// TraitCodexNativeToolPassthrough 上游需要 Codex 原生工具转为 OpenAI function 格式
+	TraitCodexNativeToolPassthrough CompatTrait = "codex_native_tool_passthrough"
 )
+
+// AllCompatTraits 全部可学习兼容项，供配置迁移与诊断遍历。
+func AllCompatTraits() []CompatTrait {
+	return []CompatTrait{
+		TraitDowngradeDeveloperRole,
+		TraitStripImageGenTool,
+		TraitStripCodexClientTools,
+		TraitPassbackThinkingBlocks,
+		TraitPassbackReasoningContent,
+		TraitStripEmptyTextBlocks,
+		TraitNormalizeNonstandardChatRoles,
+		TraitCodexNativeToolPassthrough,
+	}
+}
 
 // 学习来源。error_signal 来自上游明确报错（强证据）；probe 来自主动探测（弱证据）。
 const (

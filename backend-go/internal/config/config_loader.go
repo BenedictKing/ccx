@@ -135,6 +135,9 @@ func (cm *ConfigManager) loadConfig() error {
 	if cm.migrateDisabledKeyRecoveryTimes(time.Now()) {
 		needSaveDefaults = true
 	}
+	if cm.migrateManualCompatSwitchesToSeeds() {
+		needSaveDefaults = true
+	}
 
 	// 兼容旧格式：检测是否需要迁移
 	needMigration := cm.migrateOldFormat()
@@ -517,6 +520,64 @@ func (cm *ConfigManager) applyCodexToolCompatMigration(rawJSON []byte) bool {
 // migrateFableModelMapping 自动为现有渠道补齐 fable 模型映射。
 // 若渠道 modelMapping 中存在 "opus" 映射但缺少 "fable"，则将 "fable" 指向同一目标。
 // 确保已有 opus 转发配置的渠道在升级后无需手动添加 fable 条目。
+// migrateManualCompatSwitchesToSeeds 把用户历史手工兼容配置升级合并进自学习体系。
+//
+// 动机：手工开关原本永久压过自动学习，意味着老用户即使装了自学习也还得手工维护这些开关，
+// 上游能力变化后仍要人工改一次。迁移后手工值降级为「初始证据」种子（渠道级、无 TTL），
+// 学到真实结论即自动让位，此后用户不需要再手工干预。
+//
+// 幂等：迁移后原字段置 nil，下次启动不再命中；用户之后重新手工设置的值不会被再次搬走
+// （那是他此刻的明确意图，应保持第 1 优先级直到他自己清空）。
+func (cm *ConfigManager) migrateManualCompatSwitchesToSeeds() bool {
+	updated := false
+
+	apply := func(channels []UpstreamConfig, channelName string) {
+		for i := range channels {
+			ch := &channels[i]
+			// 已迁移过（有种子）则跳过，避免把用户新设的值再次降级
+			if len(ch.CompatSeeds) > 0 {
+				continue
+			}
+
+			type binding struct {
+				field *(*bool)
+				trait CompatTrait
+			}
+			bindings := []binding{
+				{&ch.StripImageGenerationTool, TraitStripImageGenTool},
+				{&ch.StripEmptyTextBlocks, TraitStripEmptyTextBlocks},
+				{&ch.PassbackReasoningContent, TraitPassbackReasoningContent},
+				{&ch.PassbackThinkingBlocks, TraitPassbackThinkingBlocks},
+				{&ch.NormalizeNonstandardChatRoles, TraitNormalizeNonstandardChatRoles},
+				{&ch.CodexNativeToolPassthrough, TraitCodexNativeToolPassthrough},
+			}
+
+			var migrated []string
+			for _, b := range bindings {
+				if *b.field == nil {
+					continue
+				}
+				ch.SetCompatSeed(b.trait, **b.field)
+				*b.field = nil
+				migrated = append(migrated, string(b.trait))
+			}
+			if len(migrated) > 0 {
+				updated = true
+				log.Printf("[Config-Migration] %s 渠道 [%d] %s 手工兼容开关已升级为自学习种子: %s",
+					channelName, i, ch.Name, strings.Join(migrated, ","))
+			}
+		}
+	}
+
+	apply(cm.config.Upstream, "Messages")
+	apply(cm.config.ResponsesUpstream, "Responses")
+	apply(cm.config.GeminiUpstream, "Gemini")
+	apply(cm.config.ChatUpstream, "Chat")
+	apply(cm.config.ImagesUpstream, "Images")
+	apply(cm.config.VectorsUpstream, "Vectors")
+	return updated
+}
+
 func (cm *ConfigManager) migrateFableModelMapping() bool {
 	updated := false
 	apply := func(channels []UpstreamConfig, channelName string) {
