@@ -120,10 +120,12 @@ export const LITELLM_MODEL_MAP = {
   'minimax/MiniMax-M3': 'minimax-m3',
   'openrouter/xiaomi/mimo-v2.5': 'mimo-v2.5',
   'openrouter/xiaomi/mimo-v2.5-pro': 'mimo-v2.5-pro',
-  // Gemini
+  // Gemini（litellm 对未 GA 的型号只提供 -preview 后缀 key，
+  // 裸 gemini-3.1-pro / gemini-3-flash 在上游数据中不存在，映射左侧必须用真实 key）
   'gemini-3.5-flash': 'gemini-3.5-flash',
-  'gemini-3.1-pro': 'gemini-3.1-pro',
-  'gemini-3-flash': 'gemini-3-flash',
+  'gemini-3.6-flash': 'gemini-3.6-flash',
+  'gemini-3.1-pro-preview': 'gemini-3.1-pro',
+  'gemini-3-flash-preview': 'gemini-3-flash',
 }
 
 /**
