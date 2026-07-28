@@ -111,6 +111,10 @@ type EndpointAttemptPolicy struct {
 	// 签名：(endpointUID) → *ResolvedRouteTarget（nil = 无映射）
 	ResolvedTargetByEndpointUID func(endpointUID string) *ResolvedRouteTarget
 
+	// ResolvedTargetForBinding 按最终选中的 channel + URL + Key 解析完整路由目标。
+	// 发送阶段优先使用此入口，避免同 URL 多 Key 或旧画像 UID 导致缓存查找落空。
+	ResolvedTargetForBinding func(channelUID, baseURL, apiKey string) *ResolvedRouteTarget
+
 	// ResponseHeaderTimeoutForEndpoint 根据 endpoint TTFB 画像返回响应头超时建议。
 	// 返回 0 表示样本不足或当前请求不应缩短超时。
 	ResponseHeaderTimeoutForEndpoint func(endpointUID string, inheritedMs int, isStream bool) int
@@ -252,7 +256,8 @@ func buildShadowPolicy(deps EndpointPolicyDeps, req *RequestProfile) *EndpointAt
 	}
 
 	policy.ResolvedModelByEndpointUID = buildResolvedModelLookup(modelByUID)
-	policy.ResolvedTargetByEndpointUID = buildResolvedTargetLookup(targetByUID)
+	policy.ResolvedTargetByEndpointUID = buildResolvedTargetLookup(targetByUID, deps, req)
+	policy.ResolvedTargetForBinding = buildResolvedTargetForBinding(targetByUID, deps, req)
 	policy.ResponseHeaderTimeoutForEndpoint = buildResponseHeaderTimeoutLookup(deps.ProfileStore, req)
 	return policy
 }
@@ -433,7 +438,8 @@ func buildActivePolicy(deps EndpointPolicyDeps, req *RequestProfile, enableFilte
 	}
 
 	policy.ResolvedModelByEndpointUID = buildResolvedModelLookup(modelByUID)
-	policy.ResolvedTargetByEndpointUID = buildResolvedTargetLookup(targetByUID)
+	policy.ResolvedTargetByEndpointUID = buildResolvedTargetLookup(targetByUID, deps, req)
+	policy.ResolvedTargetForBinding = buildResolvedTargetForBinding(targetByUID, deps, req)
 	policy.ResponseHeaderTimeoutForEndpoint = buildResponseHeaderTimeoutLookup(deps.ProfileStore, req)
 	return policy
 }
@@ -1094,10 +1100,48 @@ func buildResolvedModelLookup(m map[string]string) func(string) string {
 }
 
 // buildResolvedTargetLookup 从 endpointUID → *ResolvedRouteTarget 映射构建闭包。
-// 空 map 时返回总是返回 nil 的闭包（调用方需检查 nil）。
-func buildResolvedTargetLookup(m map[string]*ResolvedRouteTarget) func(string) *ResolvedRouteTarget {
+// 排序阶段填充的 map 仅作为缓存；缓存未命中时按最终选中的 endpoint 画像现场解析。
+// 同一 BaseURL 下可能有多个 Key，URL 级评分只会观察其中一个画像，不能让模型改写
+// 依赖排序副作用，否则最终选中另一 Key 时会把原始模型名直接发给上游。
+func buildResolvedTargetLookup(m map[string]*ResolvedRouteTarget, deps EndpointPolicyDeps, req *RequestProfile) func(string) *ResolvedRouteTarget {
 	return func(endpointUID string) *ResolvedRouteTarget {
-		return m[endpointUID]
+		if target := m[endpointUID]; target != nil {
+			return target
+		}
+		if deps.ProfileStore == nil || req == nil || endpointUID == "" {
+			return nil
+		}
+		profile := deps.ProfileStore.Get(endpointUID)
+		if profile == nil {
+			return nil
+		}
+		target := resolveMappedModel(profile, req.Model, req, &deps)
+		if target != nil && target.Model != "" {
+			m[endpointUID] = target
+			return target
+		}
+		return nil
+	}
+}
+
+func buildResolvedTargetForBinding(m map[string]*ResolvedRouteTarget, deps EndpointPolicyDeps, req *RequestProfile) func(string, string, string) *ResolvedRouteTarget {
+	return func(channelUID, baseURL, apiKey string) *ResolvedRouteTarget {
+		if deps.ProfileStore == nil || req == nil {
+			return nil
+		}
+		profile := findProfileForBinding(deps.ProfileStore, channelUID, baseURL, apiKey)
+		if profile == nil {
+			return nil
+		}
+		if target := m[profile.EndpointUID]; target != nil {
+			return target
+		}
+		target := resolveMappedModel(profile, req.Model, req, &deps)
+		if target != nil && target.Model != "" {
+			m[profile.EndpointUID] = target
+			return target
+		}
+		return nil
 	}
 }
 func GetEndpointCandidates(store *ProfileStore, fastDecay *FastDecayScorer, model string, urls []string) []EndpointCandidate {

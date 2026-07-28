@@ -4,10 +4,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"github.com/BenedictKing/ccx/internal/errutil"
 	"math"
 	"strings"
 	"time"
+
+	"github.com/BenedictKing/ccx/internal/config"
+	"github.com/BenedictKing/ccx/internal/errutil"
 )
 
 const (
@@ -67,6 +69,7 @@ type RoutingWindowSummary struct {
 // AutoReadinessReport 描述 auto 模式是否达到最小上线门槛。
 type AutoReadinessReport struct {
 	Ready                    bool                 `json:"ready"`
+	RecoveryPending          bool                 `json:"recoveryPending"`
 	RequiredSamples          int64                `json:"requiredSamples"`
 	RequiredObservationHours int                  `json:"requiredObservationHours"`
 	ObservationHours         float64              `json:"observationHours"`
@@ -587,7 +590,9 @@ func (s *TraceStore) EvaluateAutoReadiness(now time.Time) AutoReadinessReport {
 		report.BlockingReasons = append(report.BlockingReasons, "telemetry_unavailable")
 		return report
 	}
-	report.LastRollback, _ = s.LastAutoSafetyEvent()
+	lastEvent, _ := s.LastAutoSafetyEvent()
+	report.RecoveryPending = isPendingAutoRecovery(lastEvent)
+	report.LastRollback, _ = s.LastAutoRollbackEvent()
 
 	safeModes := []RoutingMode{RoutingModeShadow, RoutingModeAssist}
 	lookbackStart := now.Add(-autoReadinessLookback).Truncate(routingWindowDuration)
@@ -664,6 +669,14 @@ type AutoRegressionReport struct {
 	Baseline       RoutingWindowSummary
 }
 
+// AutoRecoveryReport 是自动安全降级后的恢复检测结果。
+type AutoRecoveryReport struct {
+	ShouldRecover bool
+	Reasons       []string
+	Observed      RoutingWindowSummary
+	Baseline      RoutingWindowSummary
+}
+
 // EvaluateAutoRegression 检查最近三个已完成 auto 窗口是否全部相对安全模式基线恶化。
 func (s *TraceStore) EvaluateAutoRegression(now time.Time) (AutoRegressionReport, error) {
 	var report AutoRegressionReport
@@ -709,6 +722,61 @@ func (s *TraceStore) EvaluateAutoRegression(now time.Time) (AutoRegressionReport
 	finalizeWindowSummary(&observed)
 	report.Observed = observed
 	report.ShouldRollback = true
+	return report, nil
+}
+
+// EvaluateAutoRecovery 检查最近一次系统降级是否已满足自动恢复条件。
+// 除完整 readiness 门槛外，最近三个已完成 assist 窗口必须逐个不劣于降级时基线，
+// 避免单个短暂好窗口造成 auto/assist 来回震荡。
+func (s *TraceStore) EvaluateAutoRecovery(now time.Time) (AutoRecoveryReport, error) {
+	var report AutoRecoveryReport
+	if s == nil || s.db == nil {
+		return report, nil
+	}
+	lastEvent, err := s.LastAutoSafetyEvent()
+	if err != nil || !isPendingAutoRecovery(lastEvent) {
+		return report, err
+	}
+
+	readiness := s.EvaluateAutoReadiness(now)
+	report.Baseline = lastEvent.Baseline
+	if report.Baseline.RequestCount == 0 {
+		report.Baseline = readiness.BaselineMetrics
+	}
+	if !readiness.Ready {
+		report.Reasons = append(report.Reasons, readiness.BlockingReasons...)
+		return report, nil
+	}
+
+	completedEnd := now.UTC().Truncate(routingWindowDuration)
+	recoveryStart := completedEnd.Add(-time.Duration(autoRollbackWindows) * routingWindowDuration)
+	if !lastEvent.CreatedAt.IsZero() && lastEvent.CreatedAt.UTC().After(recoveryStart) {
+		report.Reasons = append(report.Reasons, "insufficient_recovery_observation")
+		return report, nil
+	}
+	windows, err := s.listModeWindows(RoutingModeAssist, recoveryStart, completedEnd)
+	if err != nil {
+		return report, err
+	}
+	if len(windows) != autoRollbackWindows {
+		report.Reasons = append(report.Reasons, "insufficient_recovery_observation")
+		return report, nil
+	}
+
+	for index, window := range windows {
+		expected := recoveryStart.Add(time.Duration(index) * routingWindowDuration)
+		if !window.FirstWindowAt.Equal(expected) || window.RequestCount < autoRollbackMinWindowSamples {
+			report.Reasons = append(report.Reasons, "insufficient_recovery_observation")
+			return report, nil
+		}
+		if reasons := regressionReasons(window, report.Baseline); len(reasons) > 0 {
+			report.Reasons = append(report.Reasons, reasons...)
+			return report, nil
+		}
+		mergeWindowSummary(&report.Observed, window)
+	}
+	finalizeWindowSummary(&report.Observed)
+	report.ShouldRecover = true
 	return report, nil
 }
 
@@ -809,14 +877,33 @@ VALUES (?, ?, ?, ?, ?, ?, ?)`,
 }
 
 func (s *TraceStore) LastAutoSafetyEvent() (*AutoSafetyEvent, error) {
+	return s.queryLastAutoSafetyEvent(false)
+}
+
+func (s *TraceStore) LastAutoRollbackEvent() (*AutoSafetyEvent, error) {
 	if s == nil || s.db == nil {
 		return nil, nil
 	}
+	return s.queryLastAutoSafetyEvent(true)
+}
+
+func (s *TraceStore) queryLastAutoSafetyEvent(rollbackOnly bool) (*AutoSafetyEvent, error) {
+	if s == nil || s.db == nil {
+		return nil, nil
+	}
+	query := `
+SELECT event_uid, from_mode, to_mode, reasons, observed_json, baseline_json, created_at
+FROM autopilot_auto_safety_events ORDER BY created_at DESC LIMIT 1`
+	if rollbackOnly {
+		query = `
+SELECT event_uid, from_mode, to_mode, reasons, observed_json, baseline_json, created_at
+FROM autopilot_auto_safety_events
+WHERE from_mode = 'auto' AND to_mode = 'assist'
+ORDER BY created_at DESC LIMIT 1`
+	}
 	var event AutoSafetyEvent
 	var reasonsJSON, observedJSON, baselineJSON, createdAt string
-	err := s.db.QueryRow(`
-SELECT event_uid, from_mode, to_mode, reasons, observed_json, baseline_json, created_at
-FROM autopilot_auto_safety_events ORDER BY created_at DESC LIMIT 1`).Scan(
+	err := s.db.QueryRow(query).Scan(
 		&event.EventUID, &event.FromMode, &event.ToMode, &reasonsJSON,
 		&observedJSON, &baselineJSON, &createdAt,
 	)
@@ -831,4 +918,8 @@ FROM autopilot_auto_safety_events ORDER BY created_at DESC LIMIT 1`).Scan(
 	_ = json.Unmarshal([]byte(baselineJSON), &event.Baseline)
 	event.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
 	return &event, nil
+}
+
+func isPendingAutoRecovery(event *AutoSafetyEvent) bool {
+	return event != nil && event.FromMode == config.AutopilotModeAuto && event.ToMode == config.AutopilotModeAssist
 }

@@ -186,6 +186,93 @@ func TestManagerAutoSafetyDowngradesToAssist(t *testing.T) {
 	}
 }
 
+func TestManagerAutoSafetyRecoversToAutoAfterStableAssistWindows(t *testing.T) {
+	store := newRoutingReadinessTestStore(t)
+	now := time.Date(2026, 7, 17, 12, 0, 0, 0, time.UTC)
+	baselineStart := now.Add(-autoReadinessLookback)
+	for i := 0; i < 500; i++ {
+		completedAt := baselineStart.Add(time.Duration(i%92)*routingWindowDuration + time.Minute)
+		recordReadinessOutcome(t, store, fmt.Sprintf("rt_recover_base_%03d", i), RoutingModeAssist,
+			completedAt, true, false, false, 800, 400)
+	}
+
+	completedEnd := now.Truncate(routingWindowDuration)
+	for window := 0; window < autoRollbackWindows; window++ {
+		windowStart := completedEnd.Add(-time.Duration(autoRollbackWindows-window) * routingWindowDuration)
+		for sample := 0; sample < int(autoRollbackMinWindowSamples); sample++ {
+			recordReadinessOutcome(t, store, fmt.Sprintf("rt_recover_%d_%d", window, sample), RoutingModeAssist,
+				windowStart.Add(time.Duration(sample)*time.Second), true, false, false, 800, 400)
+		}
+	}
+
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.json")
+	if err := os.WriteFile(configPath, []byte(`{}`), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	cfgManager, err := config.NewConfigManager(configPath, "")
+	if err != nil {
+		t.Fatalf("NewConfigManager() error = %v", err)
+	}
+	if err := cfgManager.SetAutopilotRoutingMode(config.AutopilotModeAssist); err != nil {
+		t.Fatalf("SetAutopilotRoutingMode(assist) error = %v", err)
+	}
+	rollback := AutoSafetyEvent{
+		FromMode: config.AutopilotModeAuto,
+		ToMode:   config.AutopilotModeAssist,
+		Reasons:  []string{"latency_regression"},
+		Baseline: RoutingWindowSummary{
+			RequestCount: 500, SuccessRate: 1, P95LatencyMs: 1000, P95FirstByteLatencyMs: 500,
+		},
+		CreatedAt: now.Add(-time.Hour),
+	}
+	if err := store.RecordAutoSafetyEvent(rollback); err != nil {
+		t.Fatalf("RecordAutoSafetyEvent(rollback) error = %v", err)
+	}
+
+	manager := &Manager{traceStore: store, cfgManager: cfgManager}
+	manager.evaluateAutoSafety(now)
+	if got := cfgManager.GetEffectiveRoutingMode(); got != config.AutopilotModeAuto {
+		t.Fatalf("effective mode = %q, want auto", got)
+	}
+	lastEvent, err := store.LastAutoSafetyEvent()
+	if err != nil || lastEvent == nil || lastEvent.FromMode != "assist" || lastEvent.ToMode != "auto" {
+		t.Fatalf("last safety event = %+v, err=%v", lastEvent, err)
+	}
+	readiness := store.EvaluateAutoReadiness(now)
+	if readiness.RecoveryPending || readiness.LastRollback == nil {
+		t.Fatalf("readiness recovery state = %+v, want historical rollback without pending recovery", readiness)
+	}
+}
+
+func TestEvaluateAutoRecoveryStopsAfterManualModeChange(t *testing.T) {
+	store := newRoutingReadinessTestStore(t)
+	now := time.Date(2026, 7, 17, 12, 0, 0, 0, time.UTC)
+	if err := store.RecordAutoSafetyEvent(AutoSafetyEvent{
+		FromMode:  config.AutopilotModeAuto,
+		ToMode:    config.AutopilotModeAssist,
+		CreatedAt: now.Add(-time.Hour),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RecordAutoSafetyEvent(AutoSafetyEvent{
+		FromMode:  config.AutopilotModeAssist,
+		ToMode:    config.AutopilotModeAssist,
+		Reasons:   []string{"manual_mode_change"},
+		CreatedAt: now.Add(-30 * time.Minute),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	report, err := store.EvaluateAutoRecovery(now)
+	if err != nil {
+		t.Fatalf("EvaluateAutoRecovery() error = %v", err)
+	}
+	if report.ShouldRecover {
+		t.Fatalf("manual mode change must cancel pending recovery: %+v", report)
+	}
+}
+
 func TestManagerAutoSafetyMonitorOnlyWhenDowngradeDisabled(t *testing.T) {
 	store := newRoutingReadinessTestStore(t)
 	now := time.Date(2026, 7, 17, 12, 0, 0, 0, time.UTC)

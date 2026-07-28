@@ -1122,7 +1122,12 @@ func (m *Manager) evaluateAutoSafety(now time.Time) {
 	if m == nil || m.traceStore == nil || m.cfgManager == nil {
 		return
 	}
-	if m.cfgManager.GetEffectiveRoutingMode() != config.AutopilotModeAuto {
+	mode := m.cfgManager.GetEffectiveRoutingMode()
+	if mode == config.AutopilotModeAssist {
+		m.evaluateAutoRecovery(now)
+		return
+	}
+	if mode != config.AutopilotModeAuto {
 		return
 	}
 	report, err := m.traceStore.EvaluateAutoRegression(now)
@@ -1167,6 +1172,33 @@ func (m *Manager) evaluateAutoSafety(now time.Time) {
 		log.Printf("[Autopilot-AutoSafety] 警告: 自动降级事件落盘失败: %v", err)
 	}
 	log.Printf("[Autopilot-AutoSafety] auto 连续窗口恶化，已降级到 assist: reasons=%v", report.Reasons)
+}
+
+func (m *Manager) evaluateAutoRecovery(now time.Time) {
+	report, err := m.traceStore.EvaluateAutoRecovery(now)
+	if err != nil {
+		log.Printf("[Autopilot-AutoSafety] 警告: 自动恢复检测失败: %v", err)
+		return
+	}
+	if !report.ShouldRecover {
+		return
+	}
+	if err := m.cfgManager.SetAutopilotRoutingMode(config.AutopilotModeAuto); err != nil {
+		log.Printf("[Autopilot-AutoSafety] 警告: 自动恢复到 auto 失败: %v", err)
+		return
+	}
+	event := AutoSafetyEvent{
+		FromMode:  config.AutopilotModeAssist,
+		ToMode:    config.AutopilotModeAuto,
+		Reasons:   []string{"slo_recovered"},
+		Observed:  report.Observed,
+		Baseline:  report.Baseline,
+		CreatedAt: now.UTC(),
+	}
+	if err := m.traceStore.RecordAutoSafetyEvent(event); err != nil {
+		log.Printf("[Autopilot-AutoSafety] 警告: 自动恢复事件落盘失败: %v", err)
+	}
+	log.Printf("[Autopilot-AutoSafety] assist 连续窗口恢复稳定，已自动升回 auto")
 }
 
 // carryForwardDiscoveryFields 保留由自动发现写入、L1 流量画像无法重新推导的字段。

@@ -21,14 +21,14 @@
 
         <v-alert
           v-if="localConfig.readiness"
-          :type="localConfig.readiness.ready ? 'success' : 'info'"
+          :type="localConfig.readiness.recoveryPending ? 'warning' : (localConfig.readiness.ready ? 'success' : 'info')"
           variant="tonal"
           density="compact"
           class="mb-4"
-          :icon="localConfig.readiness.ready ? 'mdi-check-decagram' : 'mdi-chart-timeline-variant'"
+          :icon="localConfig.readiness.recoveryPending ? 'mdi-shield-sync' : (localConfig.readiness.ready ? 'mdi-check-decagram' : 'mdi-chart-timeline-variant')"
         >
           <div class="font-weight-medium">
-            {{ t(localConfig.readiness.ready ? 'autopilot.readiness.ready' : 'autopilot.readiness.collecting') }}
+            {{ t(localConfig.readiness.recoveryPending ? 'autopilot.readiness.recovering' : (localConfig.readiness.ready ? 'autopilot.readiness.ready' : 'autopilot.readiness.collecting')) }}
           </div>
           <div class="text-caption mt-1">
             {{ t('autopilot.readiness.progress', {
@@ -49,7 +49,8 @@
             <span>{{ t('autopilot.readiness.successRate') }} {{ formatRate(localConfig.readiness.safeModeMetrics.successRate) }}</span>
             <span>{{ t('autopilot.readiness.fallbackRate') }} {{ formatRate(localConfig.readiness.safeModeMetrics.fallbackRate) }}</span>
             <span>{{ t('autopilot.readiness.failOpenRate') }} {{ formatRate(localConfig.readiness.safeModeMetrics.failOpenRate) }}</span>
-            <span>p95 {{ localConfig.readiness.safeModeMetrics.p95LatencyMs || '-' }}ms</span>
+            <span>{{ t('autopilot.readiness.recentP95') }} {{ localConfig.readiness.recentMetrics.p95LatencyMs || '-' }}ms</span>
+            <span>{{ t('autopilot.readiness.baselineP95') }} {{ localConfig.readiness.baselineMetrics.p95LatencyMs || '-' }}ms</span>
           </div>
           <div v-if="!localConfig.readiness.ready" class="text-caption mt-2">
             {{ readinessReasons }}
@@ -58,13 +59,13 @@
 
         <v-alert
           v-if="lastRollback"
-          type="warning"
+          :type="localConfig.readiness?.recoveryPending ? 'warning' : 'info'"
           variant="tonal"
           density="compact"
           class="mb-4"
           icon="mdi-restore-alert"
         >
-          {{ t('autopilot.readiness.lastRollback', {
+          {{ t(localConfig.readiness?.recoveryPending ? 'autopilot.readiness.lastRollbackPending' : 'autopilot.readiness.lastRollback', {
             time: formatRollbackTime(lastRollback.createdAt),
           }) }}
         </v-alert>

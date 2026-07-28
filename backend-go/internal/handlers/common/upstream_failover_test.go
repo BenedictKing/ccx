@@ -662,7 +662,12 @@ func TestTryUpstreamWithAllKeysLogsFinalRequestModelAndReasoningEffort(t *testin
 	cfg := cfgManager.GetConfig()
 	upstream := &cfg.Upstream[0]
 	policy := &autopilot.EndpointAttemptPolicy{
-		ResolvedModelByEndpointUID: func(string) string { return "glm-5.2" },
+		ResolvedTargetForBinding: func(channelUID, baseURL, apiKey string) *autopilot.ResolvedRouteTarget {
+			if channelUID != upstream.ChannelUID || baseURL != server.URL || apiKey != "sk-auto-mapped" {
+				t.Fatalf("unexpected binding identity: channel=%q url=%q key=%q", channelUID, baseURL, apiKey)
+			}
+			return &autopilot.ResolvedRouteTarget{Model: "glm-5.2"}
+		},
 	}
 
 	handled, successKey, _, failoverErr, _, lastErr := TryUpstreamWithAllKeys(

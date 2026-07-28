@@ -1434,6 +1434,7 @@ export interface AutoSafetyEvent {
 
 export interface AutoReadinessReport {
   ready: boolean
+  recoveryPending: boolean
   requiredSamples: number
   requiredObservationHours: number
   observationHours: number

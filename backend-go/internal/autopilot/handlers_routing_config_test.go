@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/gin-gonic/gin"
@@ -220,5 +221,41 @@ func TestPutRoutingConfigRejectsAutoBeforeReadiness(t *testing.T) {
 	}
 	if got := cfgManager.GetEffectiveRoutingMode(); got != config.AutopilotModeShadow {
 		t.Fatalf("mode changed despite failed readiness: %q", got)
+	}
+}
+
+func TestPutRoutingConfigManualAssistCancelsPendingAutoRecovery(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.json")
+	if err := os.WriteFile(configPath, []byte(`{"autopilot":{"mode":"assist"}}`), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	cfgManager, err := config.NewConfigManager(configPath, "")
+	if err != nil {
+		t.Fatalf("NewConfigManager() error = %v", err)
+	}
+	store := newRoutingReadinessTestStore(t)
+	if err := store.RecordAutoSafetyEvent(AutoSafetyEvent{
+		FromMode: config.AutopilotModeAuto,
+		ToMode:   config.AutopilotModeAssist,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	router := setupRoutingConfigRouter(&RoutingConfigDeps{CfgManager: cfgManager, TraceStore: store})
+
+	req := httptest.NewRequest(http.MethodPut, "/api/smart-routing/config", bytes.NewBufferString(`{"mode":"assist"}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", resp.Code, resp.Body.String())
+	}
+	lastEvent, err := store.LastAutoSafetyEvent()
+	if err != nil || lastEvent == nil || !containsString(lastEvent.Reasons, "manual_mode_change") {
+		t.Fatalf("last safety event = %+v, err=%v", lastEvent, err)
+	}
+	if readiness := store.EvaluateAutoReadiness(time.Now()); readiness.RecoveryPending {
+		t.Fatalf("manual assist should cancel pending recovery: %+v", readiness)
 	}
 }

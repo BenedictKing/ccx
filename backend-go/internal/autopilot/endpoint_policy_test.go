@@ -1123,6 +1123,67 @@ func TestAssistPolicyRepairsLegacyMetricsKeyForAutoMapping(t *testing.T) {
 	}
 }
 
+func TestAssistPolicyResolvesTargetForEveryKeyOnSharedBaseURL(t *testing.T) {
+	store := newTestProfileStore(t)
+	modelStore, err := NewModelProfileStoreWithDB(store.DB())
+	if err != nil {
+		t.Fatalf("NewModelProfileStoreWithDB: %v", err)
+	}
+	const (
+		channelUID   = "ch-shared-base-url"
+		baseURL      = "https://relay.example.com"
+		requestModel = "claude-fable-5"
+		mappedModel  = "kimi-k2.7-code"
+	)
+	apiKeys := []string{"sk-shared-first", "sk-shared-second"}
+	endpointUIDs := make([]string, 0, len(apiKeys))
+	for _, apiKey := range apiKeys {
+		keyHash := KeyHashFromAPIKey(apiKey)
+		endpointUID := GenerateEndpointUID(channelUID, baseURL, keyHash)
+		metricsKey := computeMetricsIdentityKey(baseURL, apiKey, "claude")
+		endpointUIDs = append(endpointUIDs, endpointUID)
+		if err := store.Upsert(&KeyEndpointProfile{
+			ChannelUID: channelUID, ChannelKind: "messages", ServiceType: "claude",
+			EndpointUID: endpointUID, BaseURL: baseURL, KeyHash: keyHash,
+			MetricsKey: metricsKey, AvailableModels: []string{mappedModel},
+			HealthState: HealthStateHealthy,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if err := modelStore.Upsert(&ModelProfile{
+			ChannelUID: channelUID, ChannelKind: "messages", ServiceType: "claude",
+			MetricsKey: metricsKey, ModelID: mappedModel, ModelFamily: ModelFamilyKimi,
+			QualityTier: QualityTierHigh, ContextTokens: 1_000_000, ProbeSuccess: true,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	routingCfg := config.DefaultAutopilotRoutingConfig()
+	routingCfg.RoutingMode = config.AutopilotModeAssist
+	routingCfg.ModelMapping.AutoResolve = true
+	policy := BuildEndpointPolicy(EndpointPolicyDeps{
+		ProfileStore:  store,
+		ModelResolver: NewModelResolver(modelStore, nil),
+		GetRoutingCfg: func() config.AutopilotRoutingConfig { return routingCfg },
+	}, &RequestProfile{
+		Model: requestModel, ChannelKind: "messages", QualityNeed: QualityTierHigh,
+	}, RoutingModeAssist)
+
+	// URL 级排序最多只能缓存其中一个画像；发送阶段必须仍能解析任意实际选中的 Key。
+	policy.SortURLs([]string{baseURL})
+	for index, endpointUID := range endpointUIDs {
+		target := policy.ResolvedTargetByEndpointUID(endpointUID)
+		if target == nil || target.Model != mappedModel {
+			t.Fatalf("endpoint %s target = %+v, want model %s", endpointUID, target, mappedModel)
+		}
+		bindingTarget := policy.ResolvedTargetForBinding(channelUID, baseURL, apiKeys[index])
+		if bindingTarget == nil || bindingTarget.Model != mappedModel {
+			t.Fatalf("binding %s target = %+v, want model %s", endpointUID, bindingTarget, mappedModel)
+		}
+	}
+}
+
 func TestAutoPolicyBindingLookupIncludesChannelUID(t *testing.T) {
 	store := newTestProfileStore(t)
 	const (

@@ -493,7 +493,10 @@ func TryUpstreamWithAllKeys(
 
 				// 优先使用新 API（原子 model+effort），回退到旧 API（仅 model）
 				var target *autopilot.ResolvedRouteTarget
-				if endpointPolicy.ResolvedTargetByEndpointUID != nil {
+				if endpointPolicy.ResolvedTargetForBinding != nil {
+					target = endpointPolicy.ResolvedTargetForBinding(upstream.ChannelUID, currentBaseURL, apiKey)
+				}
+				if target == nil && endpointPolicy.ResolvedTargetByEndpointUID != nil {
 					target = endpointPolicy.ResolvedTargetByEndpointUID(euid)
 				}
 				if target == nil && endpointPolicy.ResolvedModelByEndpointUID != nil {

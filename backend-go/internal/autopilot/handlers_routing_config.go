@@ -1,6 +1,7 @@
 package autopilot
 
 import (
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -79,6 +80,7 @@ func handleUpdateRoutingConfig(deps *RoutingConfigDeps) gin.HandlerFunc {
 
 		// 校验 mode
 		if req.Mode != "" {
+			previousMode := deps.CfgManager.GetEffectiveRoutingMode()
 			normalizedMode := strings.ToLower(req.Mode)
 			validModes := map[string]bool{"off": true, "shadow": true, "assist": true, "auto": true, "active": true}
 			if !validModes[normalizedMode] {
@@ -98,6 +100,19 @@ func handleUpdateRoutingConfig(deps *RoutingConfigDeps) gin.HandlerFunc {
 			if err := deps.CfgManager.SetAutopilotRoutingMode(req.Mode); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "保存路由模式失败"})
 				return
+			}
+			// 人工模式选择是显式接管信号。即使仍选择 assist，也要覆盖先前的
+			// auto->assist 安全事件，防止后台恢复任务违背用户意图自动升回 auto。
+			if deps.TraceStore != nil {
+				event := AutoSafetyEvent{
+					FromMode:  previousMode,
+					ToMode:    deps.CfgManager.GetEffectiveRoutingMode(),
+					Reasons:   []string{"manual_mode_change"},
+					CreatedAt: time.Now().UTC(),
+				}
+				if err := deps.TraceStore.RecordAutoSafetyEvent(event); err != nil {
+					log.Printf("[Autopilot-Config] 警告: 人工模式变更事件落盘失败: %v", err)
+				}
 			}
 		}
 
