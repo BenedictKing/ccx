@@ -511,16 +511,17 @@ onUnmounted(() => {
 }
 
 .log-item {
+  --log-copy-gutter: 52px;
   position: relative;
   padding-top: 10px;
-  padding-inline-end: 52px !important;
+  padding-inline-end: var(--log-copy-gutter) !important;
   padding-bottom: 10px;
 }
 
 .log-item :deep(.v-list-item__append) {
   position: absolute;
   top: 8px;
-  right: 8px;
+  inset-inline-end: calc(8px - var(--log-copy-gutter));
   z-index: 1;
   margin-inline-start: 0;
 }
