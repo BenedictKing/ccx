@@ -737,21 +737,52 @@ func ResolveUpstreamCapability(requestModel string, upstream *UpstreamConfig, gl
 	actualModel := requestModel
 	if upstream != nil {
 		actualModel = RedirectModel(requestModel, upstream)
-		if capability, pattern, ok := resolveCapabilityForModels(actualModel, requestModel, upstream.ModelCapabilities); ok {
+	}
+	// allowRequestModelFallback=true：未提供动态映射结果时，保留历史行为——渠道/全局能力表
+	// 按 requestModel 的通配符也可命中，兼容"能力表只登记请求侧别名"的既有配置。
+	return resolveUpstreamCapabilityForModels(requestModel, actualModel, upstream, global, true)
+}
+
+// ResolveMappedUpstreamCapability 解析动态路由已决定的实际上游模型能力。
+// mappedModel 来自 endpoint/SmartRouter 映射，不能再回退用 requestModel 的通配符命中；
+// 否则会把下游 1M 模型窗口误套到实际发往上游的短窗口模型上。
+func ResolveMappedUpstreamCapability(requestModel, mappedModel string, upstream *UpstreamConfig, global map[string]UpstreamModelCapability) ResolvedUpstreamCapability {
+	actualModel := strings.TrimSpace(mappedModel)
+	if actualModel == "" {
+		return ResolveUpstreamCapability(requestModel, upstream, global)
+	}
+	return resolveUpstreamCapabilityForModels(requestModel, actualModel, upstream, global, false)
+}
+
+func resolveUpstreamCapabilityForModels(requestModel, actualModel string, upstream *UpstreamConfig, global map[string]UpstreamModelCapability, allowRequestModelFallback bool) ResolvedUpstreamCapability {
+	if upstream != nil {
+		if capability, pattern, ok := resolveCapabilityForModelsAllowFallback(actualModel, requestModel, upstream.ModelCapabilities, allowRequestModelFallback); ok {
 			return ResolvedUpstreamCapability{Capability: capability, RequestModel: requestModel, ActualModel: actualModel, MatchedPattern: pattern, Source: "channel", Known: true}
 		}
 	}
-	if capability, pattern, ok := resolveCapabilityForModels(actualModel, requestModel, global); ok {
+	if capability, pattern, ok := resolveCapabilityForModelsAllowFallback(actualModel, requestModel, global, allowRequestModelFallback); ok {
 		return ResolvedUpstreamCapability{Capability: capability, RequestModel: requestModel, ActualModel: actualModel, MatchedPattern: pattern, Source: "global", Known: true}
 	}
 	snapshot := currentBuiltinSnapshot()
-	if capability, pattern, ok := resolveCapabilityForModelsFold(actualModel, requestModel, snapshot.capabilities, snapshot.patternCache); ok {
+	if capability, pattern, ok := resolvePatternValueFold(actualModel, snapshot.capabilities, snapshot.patternCache); ok {
 		return ResolvedUpstreamCapability{Capability: cloneCapability(capability), RequestModel: requestModel, ActualModel: actualModel, MatchedPattern: pattern, Source: "builtin", Known: true}
 	}
 	if upstream != nil && (upstream.DefaultCapability.ContextWindowTokens > 0 || upstream.DefaultCapability.MaxOutputTokens > 0) {
 		return ResolvedUpstreamCapability{Capability: upstream.DefaultCapability, RequestModel: requestModel, ActualModel: actualModel, Source: "channel_default", Known: true}
 	}
 	return ResolvedUpstreamCapability{RequestModel: requestModel, ActualModel: actualModel}
+}
+
+func resolveCapabilityForModelsAllowFallback(actualModel, requestModel string, capabilities map[string]UpstreamModelCapability, allowRequestModelFallback bool) (UpstreamModelCapability, string, bool) {
+	if capability, pattern, ok := resolvePatternValue(actualModel, capabilities); ok {
+		return capability, pattern, true
+	}
+	if allowRequestModelFallback && requestModel != actualModel {
+		if capability, pattern, ok := resolvePatternValue(requestModel, capabilities); ok {
+			return capability, pattern, true
+		}
+	}
+	return UpstreamModelCapability{}, "", false
 }
 
 // ResolveModelBenchmarkProfile 解析规范模型的能力上界证据。
@@ -772,18 +803,6 @@ func ResolveModelBenchmarkProfile(model string) ResolvedModelBenchmarkProfile {
 		}
 	}
 	return ResolvedModelBenchmarkProfile{Model: model}
-}
-
-func resolveCapabilityForModels(actualModel, requestModel string, capabilities map[string]UpstreamModelCapability) (UpstreamModelCapability, string, bool) {
-	if capability, pattern, ok := resolvePatternValue(actualModel, capabilities); ok {
-		return capability, pattern, true
-	}
-	if requestModel != actualModel {
-		if capability, pattern, ok := resolvePatternValue(requestModel, capabilities); ok {
-			return capability, pattern, true
-		}
-	}
-	return UpstreamModelCapability{}, "", false
 }
 
 func resolveCapabilityForModelsFold(actualModel, requestModel string, capabilities map[string]UpstreamModelCapability, patternCache map[string]*compiledBuiltinPattern) (UpstreamModelCapability, string, bool) {

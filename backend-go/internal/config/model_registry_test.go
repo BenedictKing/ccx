@@ -681,6 +681,23 @@ func TestResolveUpstreamCapability_RequestModelFallback(t *testing.T) {
 	}
 }
 
+func TestResolveMappedUpstreamCapability_DoesNotFallbackToRequestModel(t *testing.T) {
+	upstream := &UpstreamConfig{
+		ModelCapabilities: map[string]UpstreamModelCapability{
+			"claude-fable-5": {ContextWindowTokens: 1_000_000},
+			"gpt-5.6-sol":    {ContextWindowTokens: 272_000},
+		},
+	}
+
+	resolved := ResolveMappedUpstreamCapability("claude-fable-5", "gpt-5.6-sol", upstream, nil)
+	if !resolved.Known || resolved.ActualModel != "gpt-5.6-sol" {
+		t.Fatalf("resolved = %+v, want mapped gpt-5.6-sol capability", resolved)
+	}
+	if resolved.Capability.ContextWindowTokens != 272_000 {
+		t.Fatalf("ContextWindowTokens = %d, want 272000", resolved.Capability.ContextWindowTokens)
+	}
+}
+
 func assertFloatPointerValue(t *testing.T, got *float64, want float64, name string) {
 	t.Helper()
 	if got == nil {

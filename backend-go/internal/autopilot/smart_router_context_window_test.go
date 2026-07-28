@@ -46,6 +46,17 @@ func TestBuildChannelEntryResolvesContextWindow(t *testing.T) {
 			wantTokens: 1_048_576,
 		},
 		{
+			name:  "动态映射后只使用实际模型能力",
+			model: "gpt-5.6-sol",
+			upstream: config.UpstreamConfig{
+				ModelCapabilities: map[string]config.UpstreamModelCapability{
+					"claude-fable-5": {ContextWindowTokens: 1_000_000},
+					"gpt-5.6-sol":    {ContextWindowTokens: 272_000},
+				},
+			},
+			wantTokens: 272_000,
+		},
+		{
 			name:       "未知模型保持 fail-open",
 			model:      "unknown-model-without-capability",
 			wantTokens: 0,

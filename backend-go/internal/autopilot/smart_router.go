@@ -1141,7 +1141,9 @@ func (r *SmartRouter) buildChannelEntry(
 	modelProvider := ""
 	var modelPricing *config.ModelPricing
 	if model != "" {
-		resolved := config.ResolveUpstreamCapability(model, upstream, upstreamModelCapabilities)
+		// model 已由 resolveChannelModel 收敛为实际发送模型；这里仍需保留渠道显式
+		// ModelMapping 的兼容路径，但动态映射场景不得回退匹配原请求模型能力。
+		resolved := config.ResolveMappedUpstreamCapability(model, config.RedirectModel(model, upstream), upstream, upstreamModelCapabilities)
 		actualModel = resolved.ActualModel
 		if resolved.Known {
 			capability := resolved.Capability
