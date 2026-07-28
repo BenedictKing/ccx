@@ -37,6 +37,8 @@ describe('buildKimiUsageSections', () => {
       'booster',
     ])
     expect(sections.map(section => section.usedPercent)).toEqual([25, 50, 20, 40, 75])
+    expect(sections[2]).toMatchObject({ kimiUsedPercent: 10, codeUsedPercent: 10 })
+    expect(sections[3]).toMatchObject({ kimiUsedPercent: 10, codeUsedPercent: 30 })
   })
 
   it('跳过禁用时间窗口，但保留余额类分项', () => {

@@ -652,14 +652,18 @@
                     <div v-if="row.kimiCredential.kimiCodeUsage.subscriptionBalance" class="kimi-plan-usage mb-3">
                       <div class="kimi-plan-usage-row">
                         <span class="text-body-2 text-medium-emphasis">{{ t('kimiConsoleToken.subscriptionBalance') }}</span>
-                        <v-progress-linear
-                          :model-value="kimiBalancePercent(row.kimiCredential.kimiCodeUsage.subscriptionBalance)"
-                          :color="kimiUsageColor(kimiBalancePercent(row.kimiCredential.kimiCodeUsage.subscriptionBalance))"
-                          height="6"
-                          rounded
-                        />
+                        <div class="kimi-balance-stack">
+                          <span
+                            class="kimi-balance-stack__kimi"
+                            :style="{ width: `${getKimiBalanceUsage(row.kimiCredential.kimiCodeUsage.subscriptionBalance).kimiUsedPercent}%` }"
+                          />
+                          <span
+                            class="kimi-balance-stack__code"
+                            :style="{ width: `${getKimiBalanceUsage(row.kimiCredential.kimiCodeUsage.subscriptionBalance).codeUsedPercent}%` }"
+                          />
+                        </div>
                         <span class="text-body-2 font-weight-medium text-no-wrap">
-                          {{ t('kimiConsoleToken.percentUsed', { percent: Math.round(kimiBalancePercent(row.kimiCredential.kimiCodeUsage.subscriptionBalance)) }) }}
+                          Kimi {{ Math.round(getKimiBalanceUsage(row.kimiCredential.kimiCodeUsage.subscriptionBalance).kimiUsedPercent) }}% · Code {{ Math.round(getKimiBalanceUsage(row.kimiCredential.kimiCodeUsage.subscriptionBalance).codeUsedPercent) }}% · {{ t('kimiConsoleToken.percentUsed', { percent: Math.round(getKimiBalanceUsage(row.kimiCredential.kimiCodeUsage.subscriptionBalance).usedPercent) }) }}
                         </span>
                         <span class="text-caption text-disabled text-no-wrap">
                           {{ t('kimiConsoleToken.expiresAt') }} {{ kimiFormatExpireTime(row.kimiCredential.kimiCodeUsage.subscriptionBalance.expireTime) }}
@@ -674,14 +678,18 @@
                         class="kimi-plan-usage-row"
                       >
                         <span class="text-body-2 text-medium-emphasis">{{ t('kimiConsoleToken.giftBalance') }}</span>
-                        <v-progress-linear
-                          :model-value="kimiBalancePercent(gift)"
-                          :color="kimiUsageColor(kimiBalancePercent(gift))"
-                          height="6"
-                          rounded
-                        />
+                        <div class="kimi-balance-stack">
+                          <span
+                            class="kimi-balance-stack__kimi"
+                            :style="{ width: `${getKimiBalanceUsage(gift).kimiUsedPercent}%` }"
+                          />
+                          <span
+                            class="kimi-balance-stack__code"
+                            :style="{ width: `${getKimiBalanceUsage(gift).codeUsedPercent}%` }"
+                          />
+                        </div>
                         <span class="text-body-2 font-weight-medium text-no-wrap">
-                          {{ t('kimiConsoleToken.percentUsed', { percent: Math.round(kimiBalancePercent(gift)) }) }}
+                          Kimi {{ Math.round(getKimiBalanceUsage(gift).kimiUsedPercent) }}% · Code {{ Math.round(getKimiBalanceUsage(gift).codeUsedPercent) }}% · {{ t('kimiConsoleToken.percentUsed', { percent: Math.round(getKimiBalanceUsage(gift).usedPercent) }) }}
                         </span>
                         <span class="text-caption text-disabled text-no-wrap">
                           {{ t('kimiConsoleToken.expiresAt') }} {{ kimiFormatExpireTime(gift.expireTime) }}
@@ -1320,7 +1328,6 @@ import type {
   DisabledKeyInfo,
   EndpointDetailItem,
   KimiBoosterWallet,
-  KimiCodeBalance,
   KimiCodeMoney,
   KimiCodeUsageSnapshot,
   ManagedAccountCredential,
@@ -1333,7 +1340,7 @@ import { maskApiKey } from '../../utils/apiKeyMask'
 import { buildChannelApiKeyRows } from '../../utils/channelApiKeys'
 import { getVolcenginePlanConsoleURL } from '../../utils/channelWebsite'
 import { quotaRemainingColorClass, quotaRemainingColorHex } from '../../utils/quotaColor'
-import { buildKimiUsageSections } from '../../utils/kimiPlanUsage'
+import { buildKimiUsageSections, getKimiBalanceUsage } from '../../utils/kimiPlanUsage'
 import { selectMiniMaxTokenPlanEndpoint, sha256KeyHash } from '../../utils/minimaxEndpointUsage'
 
 interface KeyModelsStatus {
@@ -2254,10 +2261,6 @@ const kimiUsageColor = (usedPercent: number) => {
   return quotaRemainingColorHex(100 - usedPercent)
 }
 
-// 官方页面的"用量进度/赠送额度"用 amountUsedRatio 展示总使用量。
-const kimiBalancePercent = (balance: KimiCodeBalance) =>
-  Math.max(0, Math.min(100, balance.amountUsedRatio * 100))
-
 const kimiFormatExpireTime = (value?: string) => {
   if (!value) return ''
   const date = new Date(value)
@@ -2337,9 +2340,12 @@ const kimiUsageSummaryParts = (credential: ManagedAccountCredential): Volcengine
       return { labelKey: '', text: t('kimiConsoleToken.noUsageData'), colorClass: '' }
     }
     const remainingPercent = Math.max(0, Math.min(100, 100 - usedPercent))
+    const usageBreakdown = section.kind === 'subscription' || section.kind === 'gift'
+      ? `Kimi ${Math.round(section.kimiUsedPercent)}% / Code ${Math.round(section.codeUsedPercent)}% / `
+      : ''
     return {
       labelKey: section.labelKey,
-      text: `${label} ${t('kimiConsoleToken.percentRemaining', { percent: Math.round(remainingPercent) })}`,
+      text: `${label} ${usageBreakdown}${t('kimiConsoleToken.percentRemaining', { percent: Math.round(remainingPercent) })}`,
       colorClass: quotaRemainingColorClass(remainingPercent),
     }
   })
@@ -2631,6 +2637,26 @@ const getDisabledKeyLabel = (reason: string) => {
   grid-template-columns: 110px minmax(120px, 1fr) auto auto;
   align-items: center;
   gap: 12px;
+}
+
+.kimi-balance-stack {
+  display: flex;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(var(--v-theme-on-surface), 0.08);
+}
+
+.kimi-balance-stack__kimi {
+  background: #18181b;
+}
+
+.kimi-balance-stack__code {
+  background: #2684ff;
+}
+
+.v-theme--dark .kimi-balance-stack__kimi {
+  background: #f4f4f5;
 }
 
 .compshare-usage-grid,

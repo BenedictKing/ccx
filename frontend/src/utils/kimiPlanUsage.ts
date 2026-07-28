@@ -17,6 +17,8 @@ export type KimiUsageSection =
       kind: 'subscription' | 'gift'
       labelKey: string
       usedPercent: number
+      kimiUsedPercent: number
+      codeUsedPercent: number
       balance: KimiCodeBalance
     }
   | {
@@ -29,8 +31,15 @@ export type KimiUsageSection =
 
 const clampPercent = (value: number): number => Math.max(0, Math.min(100, value))
 
-const balanceUsedPercent = (balance: KimiCodeBalance): number =>
-  clampPercent(balance.amountUsedRatio * 100)
+export const getKimiBalanceUsage = (balance: KimiCodeBalance) => {
+  const usedPercent = clampPercent(balance.amountUsedRatio * 100)
+  const codeUsedPercent = clampPercent(balance.kimiCodeUsedRatio * 100)
+  return {
+    usedPercent,
+    codeUsedPercent: Math.min(usedPercent, codeUsedPercent),
+    kimiUsedPercent: Math.max(0, usedPercent - codeUsedPercent),
+  }
+}
 
 const boosterUsedPercent = (wallet: KimiBoosterWallet): number | undefined => {
   if (!wallet.allowTopup || wallet.moneyTotal.priceInCents <= 0) return undefined
@@ -66,7 +75,7 @@ export const buildKimiUsageSections = (usage: KimiCodeUsageSnapshot): KimiUsageS
       key: 'subscription',
       kind: 'subscription',
       labelKey: 'kimiConsoleToken.subscriptionBalance',
-      usedPercent: balanceUsedPercent(usage.subscriptionBalance),
+      ...getKimiBalanceUsage(usage.subscriptionBalance),
       balance: usage.subscriptionBalance,
     })
   }
@@ -75,7 +84,7 @@ export const buildKimiUsageSections = (usage: KimiCodeUsageSnapshot): KimiUsageS
       key: `gift-${index}`,
       kind: 'gift',
       labelKey: 'kimiConsoleToken.giftBalance',
-      usedPercent: balanceUsedPercent(gift),
+      ...getKimiBalanceUsage(gift),
       balance: gift,
     })
   }
