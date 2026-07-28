@@ -250,12 +250,13 @@ func TestBuildProviderRequest_InjectsReasoningEffortStyle(t *testing.T) {
 
 func TestBuildProviderRequest_InjectsThinkingParamStyle(t *testing.T) {
 	tests := []struct {
-		name     string
-		effort   string
-		wantType string
+		name       string
+		effort     string
+		wantType   string
+		wantEffort string
 	}{
 		{name: "none disables thinking", effort: "none", wantType: "disabled"},
-		{name: "high enables thinking", effort: "high", wantType: "enabled"},
+		{name: "high enables thinking", effort: "high", wantType: "enabled", wantEffort: "high"},
 	}
 
 	for _, tt := range tests {
@@ -288,8 +289,8 @@ func TestBuildProviderRequest_InjectsThinkingParamStyle(t *testing.T) {
 			if !ok || thinking["type"] != tt.wantType {
 				t.Fatalf("thinking = %#v, want type=%s; body=%#v", got["thinking"], tt.wantType, got)
 			}
-			if _, ok := thinking["effort"]; ok {
-				t.Fatalf("thinking should not include effort for thinking.type style: %#v", thinking)
+			if gotEffort, _ := thinking["effort"].(string); gotEffort != tt.wantEffort {
+				t.Fatalf("thinking.effort = %q, want %q; thinking=%#v", gotEffort, tt.wantEffort, thinking)
 			}
 			if _, ok := got["reasoning"]; ok {
 				t.Fatalf("reasoning should be removed for thinking style: %#v", got)

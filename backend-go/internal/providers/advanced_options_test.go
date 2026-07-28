@@ -104,12 +104,13 @@ func TestResponsesProvider_PassthroughInjectsModelLevelReasoningAndChannelLevelO
 
 func TestResponsesProvider_PassthroughInjectsThinkingParamStyle(t *testing.T) {
 	tests := []struct {
-		name     string
-		effort   string
-		wantType string
+		name       string
+		effort     string
+		wantType   string
+		wantEffort string
 	}{
 		{name: "none disables thinking", effort: "none", wantType: "disabled"},
-		{name: "high enables thinking", effort: "high", wantType: "enabled"},
+		{name: "high enables thinking", effort: "high", wantType: "enabled", wantEffort: "high"},
 	}
 
 	for _, tt := range tests {
@@ -139,8 +140,8 @@ func TestResponsesProvider_PassthroughInjectsThinkingParamStyle(t *testing.T) {
 			if !ok || thinking["type"] != tt.wantType {
 				t.Fatalf("thinking = %#v, want type=%s; body=%#v", body["thinking"], tt.wantType, body)
 			}
-			if _, ok := thinking["effort"]; ok {
-				t.Fatalf("thinking should not include effort for thinking.type style: %#v", thinking)
+			if gotEffort, _ := thinking["effort"].(string); gotEffort != tt.wantEffort {
+				t.Fatalf("thinking.effort = %q, want %q; thinking=%#v", gotEffort, tt.wantEffort, thinking)
 			}
 			if _, ok := body["reasoning"]; ok {
 				t.Fatalf("reasoning should be removed for thinking style: %#v", body)
