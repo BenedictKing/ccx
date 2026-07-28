@@ -254,6 +254,12 @@ import {
   mdiShieldKeyOutline,
   mdiGauge,
   mdiLinkOff,
+  mdiShieldSync,
+  mdiRestoreAlert,
+  mdiCogSync,
+  mdiDownload,
+  mdiFileQuestionOutline,
+  mdiLightningBoltOutline,
 } from '@mdi/js'
 
 // 图标名称到 SVG path 的映射 (使用 kebab-case)
@@ -335,6 +341,7 @@ const iconMap: Record<string, string> = {
   'swap-horizontal': mdiSwapHorizontal,
   'rotate-right': mdiRotateRight,
   'backup-restore': mdiBackupRestore,
+  'download': mdiDownload,
 
   // 状态图标
   'play-circle': mdiPlayCircle,
@@ -347,13 +354,16 @@ const iconMap: Record<string, string> = {
   'alert-circle-outline': mdiAlertCircleOutline,
   'close-circle': mdiCloseCircle,
   'help-circle': mdiHelpCircle,
+  'file-question-outline': mdiFileQuestionOutline,
   'alert': mdiAlert,
 
   // 防护盾牌图标
   'shield-refresh': mdiShieldRefresh,
   'shield-off-outline': mdiShieldOffOutline,
   'shield-lock-outline': mdiShieldLockOutline,
+  'shield-sync': mdiShieldSync,
   'shape-outline': mdiShapeOutline,
+  'restore-alert': mdiRestoreAlert,
 
   // 功能图标
   'key': mdiKey,
@@ -377,6 +387,7 @@ const iconMap: Record<string, string> = {
   'information-outline': mdiInformationOutline,
   'cog': mdiCog,
   'cog-outline': mdiCogOutline,
+  'cog-sync': mdiCogSync,
   'web': mdiWeb,
   'shield-alert': mdiShieldAlert,
   'text': mdiText,
@@ -392,6 +403,7 @@ const iconMap: Record<string, string> = {
   'pin': mdiPin,
   'pin-outline': mdiPinOutline,
   'lightning-bolt': mdiLightningBolt,
+  'lightning-bolt-outline': mdiLightningBoltOutline,
   'fast-forward': mdiFastForward,
   'form-textbox': mdiFormTextbox,
   'identifier': mdiIdentifier,
