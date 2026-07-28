@@ -225,6 +225,7 @@
   "orchestration.resumeSuccess": "Channel dilanjutkan dan metrik direset",
   "orchestration.resumeSuccessWithKeys": "Channel dilanjutkan, metrik direset, dan {count} key blacklist dipulihkan",
   "orchestration.deleteActiveGuard": "Tidak bisa dihapus: urutan failover harus menyisakan minimal satu channel aktif",
+  "orchestration.pausedKeys": "{count} key dijeda",
   "orchestration.blacklistedKeys": "{count} key diblokir",
   "orchestration.cacheWriteHigh": "Cache write tinggi",
   "orchestration.cacheWriteHighHint": "Rasio penulisan cache tinggi dalam 15 menit terakhir, yang bisa menandakan konfigurasi cache-hit kurang optimal.",

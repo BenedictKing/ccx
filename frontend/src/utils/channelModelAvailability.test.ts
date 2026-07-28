@@ -177,6 +177,37 @@ describe('buildNativeProtocolModelRoutes', () => {
     expect(getResponsesChannels).not.toHaveBeenCalled()
   })
 
+  it('全部 Key 被暂停时仍回退查询模型清单', async () => {
+    const pausedKey = 'sk-kimi-paused'
+    const routes: ChannelProtocolRoute[] = [
+      { kind: 'chat', index: 0, channelUid: 'ch-chat', name: 'kimi-chat', serviceType: 'openai' },
+    ]
+    const api = {
+      getChatChannels: vi.fn().mockResolvedValue({
+        current: 0,
+        channels: [channel({
+          index: 0,
+          name: 'kimi-chat',
+          channelUid: 'ch-chat',
+          serviceType: 'openai',
+          baseUrl: 'https://api.moonshot.cn/v1',
+          apiKeys: [pausedKey],
+          apiKeyConfigs: [{ key: pausedKey, credentialUid: 'cred-kimi', enabled: false }],
+        })],
+      }),
+      getChatChannelModels: vi.fn().mockResolvedValue(modelsResponse(['kimi-k2.5'])),
+    } as unknown as ApiService
+
+    const result = await loadLegacyManagedModelAvailability(api, routes, [{
+      kind: 'chat', channelUid: 'ch-chat', name: 'kimi-chat', serviceType: 'openai', status: 'suspended',
+    }])
+
+    expect(result.find(item => item.channelUid === 'ch-chat')).toMatchObject({
+      modelInventoryKnown: true,
+      discoveredModels: ['kimi-k2.5'],
+    })
+  })
+
   it('新版后端已有画像时不重复查询上游', async () => {
     const route: ChannelProtocolRoute = {
       kind: 'messages', index: 0, channelUid: 'ch-messages', name: 'managed-claude', serviceType: 'claude',

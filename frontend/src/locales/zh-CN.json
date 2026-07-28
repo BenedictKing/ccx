@@ -225,6 +225,7 @@
   "orchestration.resumeSuccess": "渠道已恢复，熔断指标已重置",
   "orchestration.resumeSuccessWithKeys": "渠道已恢复，熔断指标已重置，并恢复了 {count} 个拉黑密钥",
   "orchestration.deleteActiveGuard": "无法删除：故障转移序列中至少需要保留一个活跃渠道",
+  "orchestration.pausedKeys": "{count} 个密钥已暂停",
   "orchestration.blacklistedKeys": "{count} 个密钥已拉黑",
   "orchestration.cacheWriteHigh": "缓存写偏高",
   "orchestration.cacheWriteHighHint": "15 分钟内缓存写入占比偏高，可能存在缓存命中配置不合理的问题。",

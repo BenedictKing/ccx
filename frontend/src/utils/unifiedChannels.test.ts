@@ -41,6 +41,39 @@ describe('buildUnifiedChannelsData account grouping', () => {
     expect(result.channels[0].protocolRoutes?.map(item => item.status)).toEqual([undefined, undefined, undefined, undefined])
   })
 
+  it('聚合账号合并各协议凭证并按全部路由计算状态', () => {
+    const data: Record<LlmChannelKind, ChannelsResponse> = {
+      messages: response([channel('kimi-claude', 'acct-kimi', 0, [], {
+        status: 'suspended',
+      })]),
+      chat: response([channel('kimi-chat', 'acct-kimi', 1, ['sk-kimi', 'sk-disabled'], {
+        status: 'active',
+        apiKeyConfigs: [{ key: 'sk-kimi', credentialUid: 'cred-kimi' }],
+        disabledApiKeys: [{
+          key: 'sk-disabled',
+          reason: 'authentication_error',
+          message: 'invalid key',
+          disabledAt: '2026-07-28T00:00:00Z',
+        }],
+      })]),
+      responses: response([]),
+      gemini: response([]),
+    }
+
+    const [logicalChannel] = buildUnifiedChannelsData(data).channels
+    expect(logicalChannel.apiKeys).toEqual(['sk-kimi', 'sk-disabled'])
+    expect(logicalChannel.apiKeyConfigs).toEqual([
+      { key: 'sk-kimi', credentialUid: 'cred-kimi' },
+    ])
+    expect(logicalChannel.disabledApiKeys).toEqual([{
+      key: 'sk-disabled',
+      reason: 'authentication_error',
+      message: 'invalid key',
+      disabledAt: '2026-07-28T00:00:00Z',
+    }])
+    expect(logicalChannel.status).toBe('active')
+  })
+
   it('保留各协议路由状态供聚合渠道恢复使用', () => {
     const data: Record<LlmChannelKind, ChannelsResponse> = {
       messages: response([channel('mimo-main-claude', 'acct-main', 0, ['sk-a'], { status: 'suspended' })]),
@@ -61,6 +94,7 @@ describe('buildUnifiedChannelsData account grouping', () => {
       { kind: 'responses', index: 2, status: 'disabled' },
     ])
   })
+
 
   it('相同 provider 和名称下不同 accountUid 不应合并', () => {
     const data: Record<LlmChannelKind, ChannelsResponse> = {

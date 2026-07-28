@@ -169,11 +169,41 @@ const getGroupPriority = (channels: Partial<Record<LlmChannelKind, RoutedChannel
   return Math.min(...Object.values(channels).map(channel => channel.priority ?? channel.routeIndex))
 }
 
+const mergeAccountCredentials = (channels: Partial<Record<LlmChannelKind, RoutedChannel>>) => {
+  const apiKeys = Array.from(new Set(
+    Object.values(channels).flatMap(channel => channel.apiKeys ?? []),
+  ))
+  const configsByKey = new Map(
+    Object.values(channels)
+      .flatMap(channel => channel.apiKeyConfigs ?? [])
+      .map(config => [config.key, config]),
+  )
+  const disabledByKey = new Map(
+    Object.values(channels)
+      .flatMap(channel => channel.disabledApiKeys ?? [])
+      .map(item => [item.key, item]),
+  )
+  return {
+    apiKeys,
+    apiKeyConfigs: configsByKey.size > 0 ? Array.from(configsByKey.values()) : undefined,
+    disabledApiKeys: disabledByKey.size > 0 ? Array.from(disabledByKey.values()) : undefined,
+  }
+}
+
+const resolveGroupStatus = (channels: Partial<Record<LlmChannelKind, RoutedChannel>>): Channel['status'] => {
+  const statuses = Object.values(channels).map(channel => channel.status)
+  if (statuses.some(status => status === 'active' || status === 'healthy' || !status)) return 'active'
+  if (statuses.some(status => status === 'suspended')) return 'suspended'
+  return statuses[0]
+}
+
 const buildDisplayChannel = (group: ChannelGroup): Channel => {
   const primary = selectPrimary(group.channels)
+  const credentials = mergeAccountCredentials(group.channels)
 
   return {
     ...primary,
+    ...credentials,
     index: primary.routeIndex,
     name: group.logicalName,
     logicalName: group.logicalName,
@@ -181,6 +211,7 @@ const buildDisplayChannel = (group: ChannelGroup): Channel => {
     routeIndex: primary.routeIndex,
     displayKey: `logical:${group.key}`,
     priority: getGroupPriority(group.channels),
+    status: resolveGroupStatus(group.channels),
     protocolCapsules: buildProtocolCapsules(group.channels),
     protocolRoutes: buildProtocolRoutes(group.channels),
   }

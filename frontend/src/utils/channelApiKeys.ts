@@ -62,6 +62,12 @@ export function availableChannelApiKeyCount(channel: ChannelKeyState): number {
     .length
 }
 
+export function pausedChannelApiKeyCount(channel: ChannelKeyState): number {
+  return buildChannelApiKeyRows(channel.apiKeys, channel.disabledApiKeys, channel.apiKeyConfigs)
+    .filter(row => !row.disabled && row.enabled === false)
+    .length
+}
+
 export function disabledChannelApiKeyCount(channel: ChannelKeyState): number {
   return buildChannelApiKeyRows(channel.apiKeys, channel.disabledApiKeys).filter(row => !!row.disabled).length
 }

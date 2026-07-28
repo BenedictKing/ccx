@@ -287,7 +287,10 @@
                 </v-list-item-subtitle>
                 <v-list-item-subtitle v-if="row.kimiCredential" class="mt-1 text-caption">
                   <v-icon size="12" class="mr-1">mdi-chart-donut</v-icon>
-                  {{ kimiUsageSummary(row.kimiCredential) }}
+                  <template v-for="(part, idx) in kimiUsageSummaryParts(row.kimiCredential)" :key="part.labelKey || idx">
+                    <span v-if="idx > 0" class="text-medium-emphasis"> · </span>
+                    <span :class="part.colorClass || 'text-medium-emphasis'">{{ part.text }}</span>
+                  </template>
                 </v-list-item-subtitle>
                 <v-list-item-subtitle v-if="row.mimoCredential" class="mt-1 text-caption">
                   <v-icon size="12" class="mr-1">mdi-cookie-cog-outline</v-icon>
@@ -1330,6 +1333,7 @@ import { maskApiKey } from '../../utils/apiKeyMask'
 import { buildChannelApiKeyRows } from '../../utils/channelApiKeys'
 import { getVolcenginePlanConsoleURL } from '../../utils/channelWebsite'
 import { quotaRemainingColorClass, quotaRemainingColorHex } from '../../utils/quotaColor'
+import { buildKimiUsageSections } from '../../utils/kimiPlanUsage'
 import { selectMiniMaxTokenPlanEndpoint, sha256KeyHash } from '../../utils/minimaxEndpointUsage'
 
 interface KeyModelsStatus {
@@ -2236,24 +2240,14 @@ const kimiDateTimeFormat = new Intl.DateTimeFormat(undefined, {
 })
 
 // 与 Kimi Code 官方 CLI 的 Plan usage 保持一致：Weekly limit（7 天频限）+ 5h limit（5 小时频限）。
-const kimiPlanUsageRows = (usage: KimiCodeUsageSnapshot) => {
-  const rows: Array<{ label: string; usedPercent: number; resetTime?: string }> = []
-  if (usage.codeSevenDay?.enabled) {
-    rows.push({
-      label: t('kimiConsoleToken.weeklyLimit'),
-      usedPercent: Math.max(0, Math.min(100, usage.codeSevenDay.ratio * 100)),
-      resetTime: usage.codeSevenDay.resetTime,
-    })
-  }
-  if (usage.codeFiveHour?.enabled) {
-    rows.push({
-      label: t('kimiConsoleToken.fiveHourLimit'),
-      usedPercent: Math.max(0, Math.min(100, usage.codeFiveHour.ratio * 100)),
-      resetTime: usage.codeFiveHour.resetTime,
-    })
-  }
-  return rows
-}
+const kimiPlanUsageRows = (usage: KimiCodeUsageSnapshot) =>
+  buildKimiUsageSections(usage)
+    .filter(section => section.kind === 'window')
+    .map(section => ({
+      label: t(section.labelKey),
+      usedPercent: section.usedPercent,
+      resetTime: section.resetTime,
+    }))
 
 // Kimi 传入的是"已用百分比"，进度条 color 属性需要 Vuetify 色名或 hex。
 const kimiUsageColor = (usedPercent: number) => {
@@ -2307,16 +2301,48 @@ const kimiFormatCountdown = (resetTime?: string) => {
   return parts.join(' ')
 }
 
-// Key 行摘要：未绑定令牌时提示绑定，否则展示各限额剩余百分比。
-const kimiUsageSummary = (credential: ManagedAccountCredential): string => {
-  if (!credential.hasKimiConsoleToken) return t('kimiConsoleToken.notConfigured')
+// Key 行摘要与展开明细共享固定分项顺序，并按各分项剩余量独立着色。
+const kimiUsageSummaryParts = (credential: ManagedAccountCredential): VolcengineUsageCell[] => {
+  if (!credential.hasKimiConsoleToken) {
+    return [{ labelKey: '', text: t('kimiConsoleToken.notConfigured'), colorClass: '' }]
+  }
   const usage = credential.kimiCodeUsage
-  if (!usage) return t('kimiConsoleToken.noUsageData')
-  const rows = kimiPlanUsageRows(usage)
-  if (!rows.length) return t('kimiConsoleToken.noUsageData')
-  return rows
-    .map(item => `${item.label} ${t('kimiConsoleToken.percentRemaining', { percent: Math.max(0, Math.min(100, Math.round(100 - item.usedPercent))) })}`)
-    .join(' · ')
+  if (!usage) return [{ labelKey: '', text: t('kimiConsoleToken.noUsageData'), colorClass: '' }]
+
+  const sections = buildKimiUsageSections(usage)
+  if (!sections.length) {
+    return [{ labelKey: '', text: t('kimiConsoleToken.noUsageData'), colorClass: '' }]
+  }
+
+  return sections.map(section => {
+    const label = t(section.labelKey)
+    if (section.kind === 'booster') {
+      if (!section.wallet.allowTopup) {
+        return {
+          labelKey: section.labelKey,
+          text: `${label} ${t('kimiConsoleToken.boosterWalletDisabled')}`,
+          colorClass: '',
+        }
+      }
+      if (section.usedPercent === undefined) {
+        return {
+          labelKey: section.labelKey,
+          text: `${label} ${kimiFormatMoney(section.wallet.moneyLeft)} / ${kimiFormatMoney(section.wallet.moneyTotal)}`,
+          colorClass: '',
+        }
+      }
+    }
+    const usedPercent = section.usedPercent
+    if (usedPercent === undefined) {
+      return { labelKey: '', text: t('kimiConsoleToken.noUsageData'), colorClass: '' }
+    }
+    const remainingPercent = Math.max(0, Math.min(100, 100 - usedPercent))
+    return {
+      labelKey: section.labelKey,
+      text: `${label} ${t('kimiConsoleToken.percentRemaining', { percent: Math.round(remainingPercent) })}`,
+      colorClass: quotaRemainingColorClass(remainingPercent),
+    }
+  })
 }
 
 const handleInput = () => {

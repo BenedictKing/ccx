@@ -141,7 +141,10 @@ export async function loadLegacyManagedModelAvailability(
       const config = channel.apiKeyConfigs?.find(candidate => candidate.key === key)
       return config?.enabled !== false
     })
-    const bindings = (await Promise.all(enabledKeys.map(async (key) => {
+    // 暂停 Key 只退出调度，不代表凭证失效；全部 Key 暂停时仍用它们探测模型，
+    // 否则渠道会退化成"尚无自动发现结果"，无法恢复。
+    const probeKeys = enabledKeys.length > 0 ? enabledKeys : channel.apiKeys
+    const bindings = (await Promise.all(probeKeys.map(async (key) => {
       try {
         const modelsResponse = await getModelsForKind(
           api,

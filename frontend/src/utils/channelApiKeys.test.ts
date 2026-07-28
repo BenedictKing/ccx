@@ -4,6 +4,7 @@ import {
   buildChannelApiKeyRows,
   disabledChannelApiKeyCount,
   hasNoUsableChannelApiKeys,
+  pausedChannelApiKeyCount,
   hasOnlyDisabledChannelApiKeys,
 } from './channelApiKeys'
 
@@ -49,6 +50,7 @@ describe('channel API key state', () => {
       apiKeyConfigs: [{ key: 'key-suspended', enabled: false }],
     }
     expect(availableChannelApiKeyCount(channel)).toBe(1)
+    expect(pausedChannelApiKeyCount(channel)).toBe(1)
   })
 })
 

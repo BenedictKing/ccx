@@ -225,6 +225,7 @@
   "orchestration.resumeSuccess": "Channel resumed and metrics reset",
   "orchestration.resumeSuccessWithKeys": "Channel resumed, metrics reset, and {count} blacklisted key(s) restored",
   "orchestration.deleteActiveGuard": "Cannot delete: keep at least one active channel in the failover sequence",
+  "orchestration.pausedKeys": "{count} key(s) paused",
   "orchestration.blacklistedKeys": "{count} key(s) blacklisted",
   "orchestration.cacheWriteHigh": "Cache write high",
   "orchestration.cacheWriteHighHint": "The cache write ratio is high in the last 15 minutes, which may indicate suboptimal cache-hit configuration.",
