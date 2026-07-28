@@ -35,10 +35,17 @@ var compatProbeInflight sync.Map
 // swapChannelCompatCacheForTest 临时替换全局兼容性记忆，返回还原函数。
 // 仅供测试使用：全局实例带落盘，测试直接写它会在源码树里产生状态文件，
 // 且上一次运行的记忆会影响下一次运行的结果。
+//
+// 同时替换 config 侧的共享实例：SmartRouter 从那里读取实测上下文上限，
+// 只换本包变量会让读写两侧在测试里指向不同实例。
 func swapChannelCompatCacheForTest(replacement *config.ChannelCompatCache) func() {
 	original := channelCompatCache
 	channelCompatCache = replacement
-	return func() { channelCompatCache = original }
+	restoreShared := config.SwapSharedChannelCompatCacheForTest(replacement)
+	return func() {
+		restoreShared()
+		channelCompatCache = original
+	}
 }
 
 // maybeTriggerCompatProbe 在该组合尚无任何学习记录时，异步触发一次探测。

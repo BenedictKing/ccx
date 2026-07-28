@@ -1156,6 +1156,14 @@ func (r *SmartRouter) buildChannelEntry(
 		}
 	}
 	entry.ModelID = actualModel
+	// 实测上下文上限收紧：注册表登记的是模型公开窗口，个别渠道对某个模型的实际窗口更短
+	// （中转商截断、套餐限制）。这类事实由 failover 观测真实 400 学到，按 渠道-Key-模型 存储。
+	// 取 min(注册表窗口, 实测上限) 让上下文硬约束按真实容量判断。
+	if learned, ok := learnedContextLimit(channelUID, actualModel); ok {
+		if entry.ContextWindowTokens == 0 || learned < entry.ContextWindowTokens {
+			entry.ContextWindowTokens = learned
+		}
+	}
 	if modelPricing != nil {
 		multiplier := 1.0
 		pricingProviderID := strings.TrimSpace(upstream.ProviderID)

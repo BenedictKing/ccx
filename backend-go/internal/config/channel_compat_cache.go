@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -82,10 +83,39 @@ type CompatTraitState struct {
 	ApplyCount int       `json:"apply_count"` // 命中记忆并主动改写的次数
 }
 
+// 上下文上限的两种证据来源，强弱不同，合成规则也不同（见 RecordContextLimit）。
+const (
+	// CompatSourceUpstreamDeclared 上游报错里明确写出了它接受的最大 token 数（强证据，直接采信）
+	CompatSourceUpstreamDeclared = "upstream_declared"
+	// CompatSourceRejectedEstimate 上游只说"太长"没给数值，只能由本次请求估算值反推上界（弱证据，取更小值）
+	CompatSourceRejectedEstimate = "rejected_estimate"
+)
+
+// ContextLimitState 该 渠道-Key-模型 组合实测的上下文输入上限。
+//
+// 存在意义：模型注册表登记的是"该模型公开的窗口"，但个别渠道对某个模型的实际窗口更短
+// （中转商自行截断、上游按套餐限制等）。这类事实只能由真实请求被拒绝后学到，
+// 且不能外溢到同渠道的其他 Key 或其他模型——同一渠道不同套餐的 Key 上限可能不同。
+type ContextLimitState struct {
+	// MaxInputTokens 该组合可接受的输入 token 上限（保守值，宁小勿大）
+	MaxInputTokens int `json:"max_input_tokens"`
+	// Source CompatSourceUpstreamDeclared / CompatSourceRejectedEstimate
+	Source string `json:"source"`
+	// Evidence 触发学习时的上游错误摘要（截断）
+	Evidence string `json:"evidence"`
+	// LearnedAt 该结论的学习时间。独立于 ChannelCompatEntry.DetectedAt 计算 TTL：
+	// trait 侧的 MarkApplied 会刷新 DetectedAt，若共用会让上下文上限被无限续期。
+	LearnedAt time.Time `json:"learned_at"`
+	// RejectedTokens 触发学习时本次请求的估算输入 token，仅用于事后追溯
+	RejectedTokens int `json:"rejected_tokens"`
+}
+
 // ChannelCompatEntry 记录单个 渠道-Key-模型 组合已学习到的全部兼容性事实。
 type ChannelCompatEntry struct {
-	Traits     map[CompatTrait]CompatTraitState `json:"traits"`
-	DetectedAt time.Time                        `json:"detected_at"` // 最近一次学习/命中时间
+	Traits map[CompatTrait]CompatTraitState `json:"traits"`
+	// ContextLimit 实测上下文上限；nil 表示未学习过（不做任何限制）。
+	ContextLimit *ContextLimitState `json:"context_limit,omitempty"`
+	DetectedAt   time.Time          `json:"detected_at"` // 最近一次学习/命中时间
 }
 
 // ChannelCompatCache 按 渠道-Key-模型 记忆上游的兼容性能力事实。
@@ -145,12 +175,27 @@ func (c *ChannelCompatCache) load() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for key, entry := range stored {
-		if entry == nil || entry.Traits == nil {
+		if entry == nil {
 			continue
+		}
+		// 只有 ContextLimit 没有 traits 的条目同样有效，不能因 Traits 为 nil 丢弃
+		if entry.Traits == nil && entry.ContextLimit == nil {
+			continue
+		}
+		if entry.Traits == nil {
+			entry.Traits = make(map[CompatTrait]CompatTraitState)
 		}
 		// 过期条目不加载，等价于重新学习
 		if time.Since(entry.DetectedAt) > channelCompatTTL {
 			continue
+		}
+		// 上下文上限按自己的 LearnedAt 判定过期：trait 命中会刷新 DetectedAt，
+		// 共用会让实测上限被无限续期，上游放宽窗口后永远学不回来。
+		if entry.ContextLimit != nil && time.Since(entry.ContextLimit.LearnedAt) > channelCompatTTL {
+			entry.ContextLimit = nil
+			if len(entry.Traits) == 0 {
+				continue
+			}
 		}
 		c.cache[key] = entry
 	}
@@ -318,4 +363,114 @@ func (c *ChannelCompatCache) Size() int {
 	defer c.mu.RUnlock()
 
 	return len(c.cache)
+}
+
+// minLearnableContextLimit 可学习上限的下界。
+// 上游报错反推出的上限低于此值时不予采信：正常对话请求不会只有几百 token 还被判超长，
+// 这种情况更可能是把无关 400 误判成上下文超限，学进去会直接把渠道永久排除。
+const minLearnableContextLimit = 4096
+
+// RecordContextLimit 记录该 渠道-Key-模型 组合实测的上下文输入上限。
+// 返回是否写入了更严格的新结论（调用方据此决定是否输出日志）。
+//
+// 合成规则「宁小勿大」：多次学习之间取最小值。上游明确声明的窗口值（upstream_declared）
+// 是精确事实，直接采信；只能反推的估算上界（rejected_estimate）取 rejectedTokens 的
+// 保守折扣值，因为真实上限一定小于被拒绝的这次请求量，但具体小多少无从得知。
+//
+// 不做扩大：已学到 200k 后又出现一次 500k 被拒，不能推翻 200k 结论。上限只在遇到
+// 更严格的证据时收紧，放宽只能靠 TTL 到期后重新学习。
+func (c *ChannelCompatCache) RecordContextLimit(channelUID, keyHash, model string, limit int, source, evidence string, rejectedTokens int) bool {
+	if limit < minLearnableContextLimit {
+		return false
+	}
+
+	c.mu.Lock()
+	key := GenerateCacheKey(channelUID, keyHash, model)
+	entry, ok := c.cache[key]
+	if !ok || time.Since(entry.DetectedAt) > channelCompatTTL {
+		entry = &ChannelCompatEntry{Traits: make(map[CompatTrait]CompatTraitState)}
+		c.cache[key] = entry
+	}
+	if entry.Traits == nil {
+		entry.Traits = make(map[CompatTrait]CompatTraitState)
+	}
+
+	// 已有更严格（或相等）的上限时不覆盖，避免来回抖动
+	if entry.ContextLimit != nil &&
+		time.Since(entry.ContextLimit.LearnedAt) <= channelCompatTTL &&
+		entry.ContextLimit.MaxInputTokens <= limit {
+		c.mu.Unlock()
+		return false
+	}
+
+	entry.ContextLimit = &ContextLimitState{
+		MaxInputTokens: limit,
+		Source:         source,
+		Evidence:       truncateCompatEvidence(evidence),
+		LearnedAt:      time.Now(),
+		RejectedTokens: rejectedTokens,
+	}
+	entry.DetectedAt = time.Now()
+	c.dirty = true
+	c.mu.Unlock()
+
+	// 锁外做 IO，避免阻塞并发请求路径
+	if err := c.Flush(); err != nil {
+		log.Printf("[ChannelCompat-Flush] 落盘渠道上下文上限失败: %v", err)
+	}
+	return true
+}
+
+// ContextLimit 返回该组合实测的上下文输入上限；未学习过或已过期时第二个返回值为 false。
+// fail-open：无记忆时返回 false，调用方应沿用模型注册表窗口，不做额外限制。
+func (c *ChannelCompatCache) ContextLimit(channelUID, keyHash, model string) (ContextLimitState, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	entry, ok := c.cache[GenerateCacheKey(channelUID, keyHash, model)]
+	if !ok || entry.ContextLimit == nil {
+		return ContextLimitState{}, false
+	}
+	if time.Since(entry.ContextLimit.LearnedAt) > channelCompatTTL {
+		return ContextLimitState{}, false
+	}
+	return *entry.ContextLimit, true
+}
+
+// MinContextLimitForChannelModel 返回该渠道-模型在所有已知 Key 上实测到的最小上下文上限。
+//
+// 用途：路由决策发生在选定具体 Key 之前，此时只知道渠道和目标模型。取最小值是保守的：
+// 宁可放过一个窗口更大的 Key，也不要把请求送进已知会 400 的组合。
+// 第二个返回值为 false 表示该渠道-模型无任何 Key 学到过上限，调用方沿用注册表窗口。
+func (c *ChannelCompatCache) MinContextLimitForChannelModel(channelUID, model string) (int, bool) {
+	if channelUID == "" || model == "" {
+		return 0, false
+	}
+
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	minLimit := 0
+	for key, entry := range c.cache {
+		if entry == nil || entry.ContextLimit == nil {
+			continue
+		}
+		// 键形如 channelUID:keyHash:model。模型名本身可能含冒号（如 Gemini 的
+		// models/x:generateContent 形态），因此按前两个冒号切分后精确比对，
+		// 不能用 HasPrefix/HasSuffix，否则会跨模型误命中。
+		parts := strings.SplitN(key, ":", 3)
+		if len(parts) != 3 {
+			continue
+		}
+		if parts[0] != channelUID || !strings.EqualFold(parts[2], model) {
+			continue
+		}
+		if time.Since(entry.ContextLimit.LearnedAt) > channelCompatTTL {
+			continue
+		}
+		if minLimit == 0 || entry.ContextLimit.MaxInputTokens < minLimit {
+			minLimit = entry.ContextLimit.MaxInputTokens
+		}
+	}
+	return minLimit, minLimit > 0
 }

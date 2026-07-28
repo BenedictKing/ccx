@@ -156,7 +156,7 @@ var deprecatedParamCache = config.NewDeprecatedParamCacheWithPersistence(config.
 // 与 deprecatedParamCache 同构：首次 400 学习并同 Key 重试，后续同组合请求在构造上游请求时
 // 直接应用兼容改写，用户无需手工勾选兼容性开关。
 // 记忆落盘到 .config/channel_compat.json，重启后免重学。
-var channelCompatCache = config.NewChannelCompatCacheWithPersistence(config.ChannelCompatStatePath)
+var channelCompatCache = config.SharedChannelCompatCache()
 
 func shouldNormalizeMetadataUserID(kind scheduler.ChannelKind, upstream *config.UpstreamConfig) bool {
 	if upstream == nil {
@@ -856,6 +856,26 @@ func TryUpstreamWithAllKeys(
 						summary := errorBodySummaryForLog(apiType, resp.StatusCode, respBodyBytes)
 						if err := cfgManager.DisableKeyModel(apiType, channelIndex, apiKey, actualAttemptModel, restrictionReason, summary); err != nil {
 							RequestLogf(c, "[%s-KeyModel] 限制 (Key,模型) 组合失败: %v", apiType, err)
+						}
+					}
+				}
+
+				// 上下文上限自学习（被动侧）：上游以 400/422 明确表示输入超出其上下文窗口时，
+				// 记忆该 渠道-Key-模型 组合的实测上限，供后续路由硬约束提前排除该组合。
+				//
+				// 与其他兼容项不同，这里不做同 Key 重试：请求内容本身没有可自动改写之处，
+				// 换 Key 也不会变短。学到结论后按正常流程 failover 到其他渠道，
+				// 下一次同类请求由 SmartRouter 在选渠道阶段就避开这个组合。
+				//
+				// 位置在 shouldFailover 判断之前：上下文超限报错常含 "exceeded" 等词而被归为
+				// 配额类可 failover 错误并提前 continue，放在后面会永远学不到。
+				if (resp.StatusCode == 400 || resp.StatusCode == 422) && upstream.ChannelUID != "" {
+					estimatedInput := estimatedInputTokensForContextLimit(c, attemptBody)
+					if signal := ContextLimitFromError(resp.StatusCode, respBodyBytes, estimatedInput); signal != nil {
+						if channelCompatCache.RecordContextLimit(upstream.ChannelUID, keyHash, attemptModel,
+							signal.MaxInputTokens, signal.Source, signal.Evidence, estimatedInput) {
+							RequestLogf(c, "[%s-ContextLimit] 渠道 %s 模型 %s 实测上下文上限 %d tokens（来源 %s，本次请求约 %d tokens），已记忆并将在后续路由中规避",
+								apiType, upstream.Name, attemptModel, signal.MaxInputTokens, signal.Source, estimatedInput)
 						}
 					}
 				}
