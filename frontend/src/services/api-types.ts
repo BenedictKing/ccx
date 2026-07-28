@@ -1417,41 +1417,9 @@ export interface SmartRoutingCostPreference {
 }
 
 export interface SmartRoutingConfig {
-  mode: 'off' | 'shadow' | 'assist' | 'auto'
   killSwitchActive: boolean
   costPreference: string
   l2ProbeEnabled?: boolean
-  readiness?: AutoReadinessReport
-}
-
-export interface RoutingWindowSummary {
-  requestCount: number
-  successRate: number
-  fallbackRate: number
-  failOpenRate: number
-  p95LatencyMs: number
-  p95FirstByteLatencyMs: number
-}
-
-export interface AutoSafetyEvent {
-  eventUid: string
-  fromMode: string
-  toMode: string
-  reasons: string[]
-  createdAt: string
-}
-
-export interface AutoReadinessReport {
-  ready: boolean
-  recoveryPending: boolean
-  requiredSamples: number
-  requiredObservationHours: number
-  observationHours: number
-  blockingReasons: string[]
-  safeModeMetrics: RoutingWindowSummary
-  recentMetrics: RoutingWindowSummary
-  baselineMetrics: RoutingWindowSummary
-  lastRollback?: AutoSafetyEvent
 }
 
 export interface CandidateScore {
