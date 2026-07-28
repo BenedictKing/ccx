@@ -1054,10 +1054,12 @@ func (c *Config) syncManagedAccountsFromChannels() {
 
 func (c *Config) hydrateManagedAccountCredentials() {
 	credentials := make(map[string]map[string]string, len(c.ManagedAccounts))
+	orderedUIDs := make(map[string][]string, len(c.ManagedAccounts))
 	for _, account := range c.ManagedAccounts {
 		byUID := make(map[string]string, len(account.Credentials))
 		for _, credential := range account.Credentials {
 			byUID[credential.CredentialUID] = credential.APIKey
+			orderedUIDs[account.AccountUID] = append(orderedUIDs[account.AccountUID], credential.CredentialUID)
 		}
 		credentials[account.AccountUID] = byUID
 	}
@@ -1067,6 +1069,14 @@ func (c *Config) hydrateManagedAccountCredentials() {
 			byUID := credentials[channel.AccountUID]
 			if len(byUID) == 0 {
 				continue
+			}
+			// 历史配置可能丢失单个路由的 APIKeyConfigs（其余路由仍有 credentialUid 绑定），
+			// 该路由会退化为无 Key 可用且发现任务产出空端点。provider 托管渠道按账号
+			// 凭证顺序回填绑定，恢复调度与发现能力。
+			if channel.AutoManaged && channel.ProviderID != "" && len(channel.APIKeyConfigs) == 0 {
+				for _, credentialUID := range orderedUIDs[channel.AccountUID] {
+					channel.APIKeyConfigs = append(channel.APIKeyConfigs, APIKeyConfig{CredentialUID: credentialUID})
+				}
 			}
 			channel.APIKeys = channel.APIKeys[:0]
 			for j := range channel.APIKeyConfigs {

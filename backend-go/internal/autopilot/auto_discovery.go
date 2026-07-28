@@ -373,10 +373,16 @@ func (r *AutoDiscoveryRunner) runDiscovery(ctx context.Context, task *DiscoveryT
 
 	var status DiscoveryStatus
 	var taskErr string
-	if failedCount == len(endpoints) && len(endpoints) > 0 {
+	switch {
+	case len(endpoints) == 0:
+		// baseURL/Key 均未解析出可探测端点：多为凭证回填缺失或渠道未配置 Key，
+		// 不能算发现成功，否则前端会把"重新发现"误报为已完成但模型清单仍为空。
+		status = DiscoveryStatusFailed
+		taskErr = "未找到可探测的端点（缺少 baseURL 或 API Key）"
+	case failedCount == len(endpoints):
 		status = DiscoveryStatusFailed
 		taskErr = "所有端点均不可达"
-	} else {
+	default:
 		status = DiscoveryStatusDone
 	}
 	if ctx.Err() == nil && cfgManager != nil {
@@ -426,10 +432,14 @@ func (r *AutoDiscoveryRunner) runDiscoveryLegacy(ctx context.Context, task *Disc
 	}
 	var status DiscoveryStatus
 	var taskErr string
-	if failedCount == len(endpoints) && len(endpoints) > 0 {
+	switch {
+	case len(endpoints) == 0:
+		status = DiscoveryStatusFailed
+		taskErr = "未找到可探测的端点（缺少 baseURL 或 API Key）"
+	case failedCount == len(endpoints):
 		status = DiscoveryStatusFailed
 		taskErr = "所有端点均不可达"
-	} else {
+	default:
 		status = DiscoveryStatusDone
 	}
 

@@ -36,7 +36,14 @@ describe('buildKimiUsageSections', () => {
       'gift',
       'booster',
     ])
-    expect(sections.map(section => section.usedPercent)).toEqual([25, 50, 20, 40, 75])
+    expect(sections.map(section => section.key)).toEqual([
+      'window-five-hour',
+      'window-seven-day',
+      'subscription',
+      'gift-0',
+      'booster-wallet-1',
+    ])
+    expect(sections.map(section => section.usedPercent)).toEqual([50, 25, 20, 40, 75])
     expect(sections[2]).toMatchObject({ kimiUsedPercent: 10, codeUsedPercent: 10 })
     expect(sections[3]).toMatchObject({ kimiUsedPercent: 10, codeUsedPercent: 30 })
   })

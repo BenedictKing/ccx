@@ -2246,7 +2246,7 @@ const kimiDateTimeFormat = new Intl.DateTimeFormat(undefined, {
   minute: '2-digit',
 })
 
-// 与 Kimi Code 官方 CLI 的 Plan usage 保持一致：Weekly limit（7 天频限）+ 5h limit（5 小时频限）。
+// 与 Kimi Code 官方 CLI 的 Plan usage 保持一致：5h limit（5 小时频限）+ Weekly limit（7 天频限），短窗口优先。
 const kimiPlanUsageRows = (usage: KimiCodeUsageSnapshot) =>
   buildKimiUsageSections(usage)
     .filter(section => section.kind === 'window')

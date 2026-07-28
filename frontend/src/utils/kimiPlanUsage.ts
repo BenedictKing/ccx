@@ -52,15 +52,7 @@ const boosterUsedPercent = (wallet: KimiBoosterWallet): number | undefined => {
 export const buildKimiUsageSections = (usage: KimiCodeUsageSnapshot): KimiUsageSection[] => {
   const sections: KimiUsageSection[] = []
 
-  if (usage.codeSevenDay?.enabled) {
-    sections.push({
-      key: 'window-seven-day',
-      kind: 'window',
-      labelKey: 'kimiConsoleToken.weeklyLimit',
-      usedPercent: clampPercent(usage.codeSevenDay.ratio * 100),
-      resetTime: usage.codeSevenDay.resetTime,
-    })
-  }
+  // 短窗口（近5小时）恢复更快、对当前可用性影响最大，固定排在长窗口之前。
   if (usage.codeFiveHour?.enabled) {
     sections.push({
       key: 'window-five-hour',
@@ -68,6 +60,15 @@ export const buildKimiUsageSections = (usage: KimiCodeUsageSnapshot): KimiUsageS
       labelKey: 'kimiConsoleToken.fiveHourLimit',
       usedPercent: clampPercent(usage.codeFiveHour.ratio * 100),
       resetTime: usage.codeFiveHour.resetTime,
+    })
+  }
+  if (usage.codeSevenDay?.enabled) {
+    sections.push({
+      key: 'window-seven-day',
+      kind: 'window',
+      labelKey: 'kimiConsoleToken.weeklyLimit',
+      usedPercent: clampPercent(usage.codeSevenDay.ratio * 100),
+      resetTime: usage.codeSevenDay.resetTime,
     })
   }
   if (usage.subscriptionBalance) {
