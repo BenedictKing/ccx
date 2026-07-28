@@ -6,21 +6,15 @@ import type { ManagedChannelType } from '@/utils/channel-type-api'
 import type { ModelMappingRow } from '@/composables/useChannelModelMapping'
 
 type FormLike = {
-  codexNativeToolPassthrough: boolean
   codexToolCompat: boolean
   fastMode: boolean
   noVision: boolean
-  normalizeNonstandardChatRoles: boolean
   normalizeMetadataUserId: boolean
   normalizeSystemRoleToTopLevel: boolean
-  passbackReasoningContent: boolean
-  passbackThinkingBlocks: boolean
   reasoningParamStyle: 'reasoning' | 'reasoning_effort' | 'thinking'
   serviceType: 'openai' | 'claude' | 'gemini' | 'responses' | 'copilot' | ''
   stripBillingHeader: boolean
   stripCodexClientTools: boolean
-  stripEmptyTextBlocks: boolean
-  stripImageGenerationTool: boolean
   textVerbosity: 'low' | 'medium' | 'high' | ''
   visionFallbackModel: string
   visionFallbackReasoningEffort: ModelMappingRow['reasoning']
@@ -83,15 +77,11 @@ export function useChannelEditPresets(options: ChannelEditPresetOptions) {
     if (preset.serviceType) {
       options.form.serviceType = preset.serviceType as typeof options.form.serviceType
     }
-    options.form.passbackReasoningContent = preset.passbackReasoningContent
-    options.form.passbackThinkingBlocks = preset.passbackThinkingBlocks
-    options.form.stripEmptyTextBlocks = preset.stripEmptyTextBlocks
     options.form.normalizeSystemRoleToTopLevel = preset.normalizeSystemRoleToTopLevel
     if (preset.normalizeMetadataUserId) {
       options.form.normalizeMetadataUserId = true
     }
     options.form.stripBillingHeader = !!preset.stripBillingHeader
-    options.form.stripImageGenerationTool = preset.stripImageGenerationTool
     options.form.noVision = preset.noVision
     options.form.visionFallbackModel = preset.visionFallbackModel
     options.form.visionFallbackReasoningEffort = ''
@@ -113,11 +103,8 @@ export function useChannelEditPresets(options: ChannelEditPresetOptions) {
     if (preset.serviceType) {
       options.form.serviceType = preset.serviceType as typeof options.form.serviceType
     }
-    options.form.codexNativeToolPassthrough = preset.codexNativeToolPassthrough
     options.form.codexToolCompat = preset.codexToolCompat
     options.form.stripCodexClientTools = preset.stripCodexClientTools
-    options.form.stripImageGenerationTool = preset.stripImageGenerationTool
-    options.form.normalizeNonstandardChatRoles = preset.normalizeNonstandardChatRoles
     options.form.noVision = preset.noVision
     options.form.visionFallbackModel = preset.visionFallbackModel
     options.form.visionFallbackReasoningEffort = ''

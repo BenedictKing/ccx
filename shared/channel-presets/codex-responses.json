@@ -13,8 +13,6 @@
       "reasoningParamStyle": "reasoning",
       "codexToolCompat": false,
       "stripCodexClientTools": false,
-      "codexNativeToolPassthrough": true,
-      "normalizeNonstandardChatRoles": true,
       "noVision": true
     },
     "mimo": {
@@ -51,20 +49,16 @@
       "reasoningParamStyle": "reasoning",
       "codexToolCompat": false,
       "stripCodexClientTools": false,
-      "codexNativeToolPassthrough": true,
-      "normalizeNonstandardChatRoles": true,
       "noVisionModels": ["glm-5.2", "deepseek-v4-flash"],
       "visionFallbackModel": "MiniMax-M2.7"
     },
     "runapi": {
       "codexToolCompat": false,
-      "stripCodexClientTools": false,
-      "stripImageGenerationTool": true
+      "stripCodexClientTools": false
     },
     "unity2": {
       "codexToolCompat": false,
-      "stripCodexClientTools": false,
-      "stripImageGenerationTool": true
+      "stripCodexClientTools": false
     },
     "minimax": {
       "modelMapping": {
@@ -73,9 +67,7 @@
         "mini": "MiniMax-M2.7"
       },
       "codexToolCompat": false,
-      "stripCodexClientTools": false,
-      "codexNativeToolPassthrough": true,
-      "normalizeNonstandardChatRoles": true
+      "stripCodexClientTools": false
     },
     "dashscope": {
       "modelMapping": {
@@ -135,7 +127,6 @@
         "gpt": "glm-5.2",
         "mini": "deepseek-v4-flash"
       },
-      "normalizeNonstandardChatRoles": true,
       "noVisionModels": ["glm-5.2", "deepseek-v4-flash"],
       "visionFallbackModel": "sensenova-6.7-flash-lite"
     },
@@ -150,8 +141,7 @@
         "mini": "deepseek-ai/DeepSeek-V4-Flash"
       },
       "codexToolCompat": false,
-      "stripCodexClientTools": false,
-      "normalizeNonstandardChatRoles": true
+      "stripCodexClientTools": false
     },
     "volc-ark": {
       "modelMapping": {
@@ -168,8 +158,6 @@
       "reasoningParamStyle": "reasoning",
       "codexToolCompat": false,
       "stripCodexClientTools": false,
-      "codexNativeToolPassthrough": true,
-      "normalizeNonstandardChatRoles": true,
       "noVisionModels": ["glm-5.2", "deepseek-v4-flash"],
       "visionFallbackModel": "minimax-m3"
     },
@@ -178,8 +166,7 @@
         "codex": "qianfan-code-latest",
         "gpt": "qianfan-code-latest",
         "mini": "qianfan-code-latest"
-      },
-      "normalizeNonstandardChatRoles": true
+      }
     },
     "xfyun": {
       "modelMapping": {
@@ -187,17 +174,13 @@
         "gpt": "astron-code-latest",
         "mini": "astron-code-latest"
       },
-      "serviceType": "responses",
-      "normalizeNonstandardChatRoles": true
+      "serviceType": "responses"
     },
     "github-copilot": {
       "serviceType": "copilot",
       "baseUrl": "https://api.githubcopilot.com",
       "codexToolCompat": false,
-      "stripCodexClientTools": false,
-      "codexNativeToolPassthrough": true,
-      "stripImageGenerationTool": true,
-      "normalizeNonstandardChatRoles": false
+      "stripCodexClientTools": false
     }
   }
 }

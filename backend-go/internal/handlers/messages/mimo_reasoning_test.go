@@ -210,14 +210,16 @@ func TestMessagesHandler_MimoReasoningContentPassback(t *testing.T) {
 			}))
 			defer upstream.Close()
 
-			router := newMessagesTestRouter(t, config.UpstreamConfig{
-				Name:                     tt.name,
-				BaseURL:                  upstream.URL,
-				APIKeys:                  []string{"sk-test"},
-				ServiceType:              "claude",
-				Status:                   "active",
-				PassbackReasoningContent: config.BoolPtr(tt.passbackEnabled),
-			})
+			channel := config.UpstreamConfig{
+				Name:        tt.name,
+				BaseURL:     upstream.URL,
+				APIKeys:     []string{"sk-test"},
+				ServiceType: "claude",
+				Status:      "active",
+			}
+			// 该兼容开关已无手工字段：走配置落盘的链路用种子表达生效值。
+			channel.SetCompatSeed(config.TraitPassbackReasoningContent, tt.passbackEnabled)
+			router := newMessagesTestRouter(t, channel)
 
 			w := performMessagesHandlerRequest(t, router, tt.requestBody)
 			if w.Code != http.StatusOK {
@@ -260,14 +262,15 @@ func TestMessagesHandler_MimoStreamReasoningContentPassback(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	router := newMessagesTestRouter(t, config.UpstreamConfig{
-		Name:                     "mimo-stream",
-		BaseURL:                  upstream.URL,
-		APIKeys:                  []string{"sk-test"},
-		ServiceType:              "claude",
-		Status:                   "active",
-		PassbackReasoningContent: config.BoolPtr(true),
-	})
+	channel := config.UpstreamConfig{
+		Name:        "mimo-stream",
+		BaseURL:     upstream.URL,
+		APIKeys:     []string{"sk-test"},
+		ServiceType: "claude",
+		Status:      "active",
+	}
+	channel.SetCompatSeed(config.TraitPassbackReasoningContent, true)
+	router := newMessagesTestRouter(t, channel)
 
 	reqBody := `{"model":"mimo-v2.5-pro","messages":[{"role":"user","content":[{"type":"text","text":"hello"}]}],"stream":true}`
 	w := performMessagesHandlerRequest(t, router, reqBody)

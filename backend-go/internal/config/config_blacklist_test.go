@@ -630,56 +630,9 @@ func TestCodexToolCompatDefaultsAndUpdate(t *testing.T) {
 	}
 }
 
-func TestStripImageGenerationToolDefaultsAndUpdate(t *testing.T) {
-	tempDir := t.TempDir()
-	configPath := filepath.Join(tempDir, "config.json")
-	initialConfig := `{
-		"responsesUpstream": [{
-			"name": "test-channel",
-			"baseUrl": "https://example.com",
-			"apiKeys": ["sk-active"],
-			"serviceType": "openai"
-		}]
-	}`
-	if err := os.WriteFile(configPath, []byte(initialConfig), 0644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-
-	cm, err := NewConfigManager(configPath, "")
-	if err != nil {
-		t.Fatalf("NewConfigManager() error = %v", err)
-	}
-	defer errutil.IgnoreDeferred(cm.Close)
-
-	cfg := cm.GetConfig()
-	if got := cfg.ResponsesUpstream[0].IsStripImageGenerationToolEnabled(); got != false {
-		t.Fatalf("default IsStripImageGenerationToolEnabled() = %v, want false", got)
-	}
-
-	enabled := true
-	if _, err := cm.UpdateResponsesUpstream(0, UpstreamUpdate{StripImageGenerationTool: &enabled}); err != nil {
-		t.Fatalf("UpdateResponsesUpstream() error = %v", err)
-	}
-
-	cfg = cm.GetConfig()
-	if got := cfg.ResponsesUpstream[0].IsStripImageGenerationToolEnabled(); got != true {
-		t.Fatalf("IsStripImageGenerationToolEnabled() = %v, want true", got)
-	}
-
-	cloned := cfg.ResponsesUpstream[0].Clone()
-	if !cloned.IsStripImageGenerationToolEnabled() {
-		t.Fatalf("cloned StripImageGenerationTool = %v, want true", cloned.IsStripImageGenerationToolEnabled())
-	}
-
-	disabled := false
-	if _, err := cm.UpdateResponsesUpstream(0, UpstreamUpdate{StripImageGenerationTool: &disabled}); err != nil {
-		t.Fatalf("UpdateResponsesUpstream() error = %v", err)
-	}
-	cfg = cm.GetConfig()
-	if got := cfg.ResponsesUpstream[0].IsStripImageGenerationToolEnabled(); got != false {
-		t.Fatalf("after disable IsStripImageGenerationToolEnabled() = %v, want false", got)
-	}
-}
+// 已移除 TestStripImageGenerationToolDefaultsAndUpdate：StripImageGenerationTool 已从
+// UpstreamUpdate 移除，渠道更新接口不再接受手工写入，该开关完全由运行时学习驱动，
+// 见 config.resolveCompatSwitch。
 
 func TestConvertImageURLToB64JSONDefaultsAndImagesUpdate(t *testing.T) {
 	tempDir := t.TempDir()

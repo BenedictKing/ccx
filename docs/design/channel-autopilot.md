@@ -2875,27 +2875,36 @@ func (s *FastDecayScore) EffectiveScore() float64 {
 **优先级合成**（`config.resolveCompatSwitch`）
 
 ```text
-最终生效值 = 用户当前显式设置 ?? 学习结论 ?? 手工配置升级来的种子 ?? 静态默认
+最终生效值 = 学习结论 ?? 历史种子（14 天内） ?? 静态默认
 ```
 
-裸 `bool` 无法区分「用户显式关闭」与「用户没设置」，因此六个兼容性字段
-（`NormalizeNonstandardChatRoles`、`StripImageGenerationTool`、`CodexNativeToolPassthrough`、
-`StripEmptyTextBlocks`、`PassbackReasoningContent`、`PassbackThinkingBlocks`）均迁移为 `*bool`。
+六个兼容性字段（`NormalizeNonstandardChatRoles`、`StripImageGenerationTool`、
+`CodexNativeToolPassthrough`、`StripEmptyTextBlocks`、`PassbackReasoningContent`、
+`PassbackThinkingBlocks`）已从 `UpstreamConfig`/`UpstreamUpdate` 整体删除：管理面板不提供编辑
+入口，渠道更新接口不接受手工写入，完全交由运行时自动决策。不再有「用户当前显式设置」这一档——
+历史手工值不代表可信的长期事实，可能当初就设错，也可能上游后来有了新情况已不再适用，因此不作为
+可以无限期压过学习的强制覆盖，只作为学习结论缺失时的一次性低置信度提示。
 
-**手工配置升级合并**（`migrateManualCompatSwitchesToSeeds`）：目标是「用户此后不需要再手工干预」。
-手工开关若永久压过自动学习，老用户仍要人工维护这些开关、上游能力变化后还得再改一次。因此启动时
-一次性把历史手工值搬到 `UpstreamConfig.CompatSeeds` 并将原字段置 `nil`：
+学习结论通过 `UpstreamConfig.LearnedCompatTraits`（运行时字段，`json:"-"`，不落盘）传递：
+failover 在发送前按 渠道-Key-模型 查询 `ChannelCompatCache`，把结论注入当次请求专用的
+upstream 副本，provider 构造请求时读取。
 
-- 种子是**渠道级、无 TTL**（用户意图不会过期），学习记忆是**渠道-Key-模型级、TTL 24h**（上游能力会变）。
-  二者必须分开存，否则种子 24h 后凭空消失，用户原本的判断被静默丢弃。
-- 迁移保留 `false` 值：用户「显式关闭」同样是他观察到的行为证据。
-- 迁移不改变可感知行为（学习缺失时按种子生效），但学到真实结论后自动让位。
-- 幂等：已有种子的渠道跳过，用户之后重新手工设置的值保持第 1 优先级，直到他自己清空。
+**历史手工配置降级为种子**（`migrateManualCompatSwitchesToSeeds`）：老用户配置文件里的六个字段
+已从结构体删除，只能在启动时从磁盘原始 JSON 里读到历史手工值。迁移把这些值降级为
+`UpstreamConfig.CompatSeeds`（`map[string]CompatSeedEntry`，带 `ExpiresAt`）：
+
+- 种子带 **14 天有效期**（`CompatSeedTTL`），过期后自动失效、不再参与判断，回落学习结论或静态
+  默认重新判断。种子与学习记忆分开存储且 TTL 不同（种子 14 天 vs 学习记忆 24 小时），因为二者
+  语义不同：种子是"曾经的一个信号"，学习记忆是"渠道-Key-模型级的当前能力事实"。
+- 迁移保留 `false` 值：用户「显式关闭」同样是他曾观察到的行为证据。
+- 迁移当下不改变可感知行为（学习缺失时按种子生效），但学到真实结论后立即让位，种子过期后也
+  自动退场。
+- 幂等：已有种子的渠道跳过。
 - 自动托管渠道在 `RuntimeUpstreamForAutoManagedProvider` 里连种子一起清空，其兼容性完全由
-  厂商原生默认值加运行时学习决定。
-
-注意：`RuntimeUpstreamForAutoManagedProvider` 清理自动托管渠道的手工配置时必须置 `nil` 而非
-`false`，否则会被当作「用户显式关闭」，使自动托管渠道永远学不会兼容改写。
+  厂商原生默认值加运行时学习决定。已知厂商协议事实（如 GLM 的 OpenAI 兼容协议要求
+  `passbackReasoningContent`）不走种子这条给"可能出错的历史手工值"用的临时通道，而是在对应
+  accessor 里按 `ProviderID`/`ServiceType` 直接计算为静态默认（`shouldPassbackReasoningContentByDefault`
+  之类），因为这是不会过期的协议事实而非猜测。
 
 **记忆载体**：`config.ChannelCompatCache`，落盘 `.config/channel_compat.json`，
 键 `channelUID:keyHash:model`，TTL 24h（与 `DeprecatedParamCache`/`SystemHeaderFilterCache` 一致）。

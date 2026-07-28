@@ -42,10 +42,10 @@ func TestClaudeProvider_ConvertToProviderRequest_PassbackConvertsRealThinking(t 
 	}`)
 	c := newGinContext(http.MethodPost, "/v1/messages", body, context.Background())
 	upstream := &config.UpstreamConfig{
-		BaseURL:                  "https://api.example.com",
-		ServiceType:              "claude",
-		PassbackReasoningContent: config.BoolPtr(true),
+		BaseURL:     "https://api.example.com",
+		ServiceType: "claude",
 	}
+	upstream.SetLearnedCompatTrait(config.TraitPassbackReasoningContent, true)
 
 	p := &ClaudeProvider{}
 	_, reqBody, err := p.ConvertToProviderRequest(c, upstream, "sk-ant-test")

@@ -6,13 +6,9 @@ type FormLike = {
   serviceType: 'openai' | 'gemini' | 'claude' | 'responses' | 'copilot' | ''
   fastMode: boolean
   textVerbosity: 'low' | 'medium' | 'high' | ''
-  passbackReasoningContent: boolean
-  passbackThinkingBlocks: boolean
-  stripEmptyTextBlocks: boolean
   normalizeSystemRoleToTopLevel: boolean
   normalizeMetadataUserId: boolean
   stripBillingHeader: boolean
-  stripImageGenerationTool: boolean
   noVision: boolean
   noVisionModels: string[]
   visionFallbackModel: string
@@ -20,10 +16,8 @@ type FormLike = {
   modelMapping: Record<string, string>
   reasoningMapping: Record<string, 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'>
   reasoningParamStyle: 'reasoning' | 'reasoning_effort' | 'thinking'
-  codexNativeToolPassthrough: boolean
   codexToolCompat: boolean
   stripCodexClientTools: boolean
-  normalizeNonstandardChatRoles: boolean
   authHeader: 'auto' | 'bearer' | 'x-api-key' | ''
 }
 
@@ -76,15 +70,11 @@ export function useEditChannelPresets(options: EditChannelPresetOptions) {
   const applyClaudeChannelPreset = (preset: string) => {
     const presetConfig = claudeChannelPresets.value[preset]
     if (!presetConfig) return
-    options.form.passbackReasoningContent = !!presetConfig.passbackReasoningContent
-    options.form.passbackThinkingBlocks = !!presetConfig.passbackThinkingBlocks
-    options.form.stripEmptyTextBlocks = !!presetConfig.stripEmptyTextBlocks
     options.form.normalizeSystemRoleToTopLevel = !!presetConfig.normalizeSystemRoleToTopLevel
     if (presetConfig.normalizeMetadataUserId) {
       options.form.normalizeMetadataUserId = true
     }
     options.form.stripBillingHeader = !!presetConfig.stripBillingHeader
-    options.form.stripImageGenerationTool = !!presetConfig.stripImageGenerationTool
     options.form.noVision = !!presetConfig.noVision
     options.form.noVisionModels = [...(presetConfig.noVisionModels || [])]
     options.form.visionFallbackModel = presetConfig.visionFallbackModel || ''
@@ -117,11 +107,8 @@ export function useEditChannelPresets(options: EditChannelPresetOptions) {
     if (presetConfig.serviceType) {
       options.form.serviceType = presetConfig.serviceType as FormLike['serviceType']
     }
-    options.form.codexNativeToolPassthrough = !!presetConfig.codexNativeToolPassthrough
     options.form.codexToolCompat = !!presetConfig.codexToolCompat
     options.form.stripCodexClientTools = !!presetConfig.stripCodexClientTools
-    options.form.stripImageGenerationTool = !!presetConfig.stripImageGenerationTool
-    options.form.normalizeNonstandardChatRoles = !!presetConfig.normalizeNonstandardChatRoles
     options.form.noVision = !!presetConfig.noVision
     options.form.noVisionModels = [...(presetConfig.noVisionModels || [])]
     options.form.visionFallbackModel = presetConfig.visionFallbackModel || ''

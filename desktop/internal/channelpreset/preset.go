@@ -111,22 +111,16 @@ type ChannelPayload struct {
 	ModelMapping                  map[string]string `json:"modelMapping,omitempty"`
 	ReasoningMapping              map[string]string `json:"reasoningMapping,omitempty"`
 	ReasoningParamStyle           string            `json:"reasoningParamStyle,omitempty"`
-	PassbackReasoningContent      bool              `json:"passbackReasoningContent,omitempty"`
-	PassbackThinkingBlocks        bool              `json:"passbackThinkingBlocks,omitempty"`
 	NormalizeSystemRoleToTopLevel bool              `json:"normalizeSystemRoleToTopLevel,omitempty"`
 	StripBillingHeader            bool              `json:"stripBillingHeader,omitempty"`
 	NoVision                      bool              `json:"noVision,omitempty"`
 	NoVisionModels                []string          `json:"noVisionModels,omitempty"`
 	VisionFallbackModel           string            `json:"visionFallbackModel,omitempty"`
 	SupportedModels               []string          `json:"supportedModels,omitempty"`
-	StripEmptyTextBlocks          bool              `json:"stripEmptyTextBlocks,omitempty"`
 	InjectDummyThoughtSignature   bool              `json:"injectDummyThoughtSignature,omitempty"`
 	StripThoughtSignature         bool              `json:"stripThoughtSignature,omitempty"`
-	CodexNativeToolPassthrough    bool              `json:"codexNativeToolPassthrough,omitempty"`
 	CodexToolCompat               bool              `json:"codexToolCompat,omitempty"`
 	StripCodexClientTools         bool              `json:"stripCodexClientTools,omitempty"`
-	StripImageGenerationTool      bool              `json:"stripImageGenerationTool,omitempty"`
-	NormalizeNonstandardChatRoles bool              `json:"normalizeNonstandardChatRoles,omitempty"`
 	NormalizeMetadataUserId       *bool             `json:"normalizeMetadataUserId,omitempty"`
 	RateLimitRPM                  int               `json:"rateLimitRpm,omitempty"`
 	RateLimitBurst                int               `json:"rateLimitBurst,omitempty"`
@@ -766,20 +760,14 @@ type channelTargetConfig struct {
 	ModelMapping                  map[string]string
 	ReasoningMapping              map[string]string
 	ReasoningParamStyle           string
-	PassbackReasoningContent      bool
-	PassbackThinkingBlocks        bool
 	NormalizeSystemRoleToTopLevel bool
 	NormalizeMetadataUserId       *bool
 	StripBillingHeader            bool
 	NoVision                      bool
 	NoVisionModels                []string
 	VisionFallbackModel           string
-	StripEmptyTextBlocks          bool
-	CodexNativeToolPassthrough    bool
 	CodexToolCompat               *bool
 	StripCodexClientTools         *bool
-	StripImageGenerationTool      bool
-	NormalizeNonstandardChatRoles bool
 	RateLimitRPM                  int // 主动限速默认 RPM（0=不设默认）
 }
 
@@ -846,8 +834,6 @@ func applyChannelTargetConfig(payload *ChannelPayload, config channelTargetConfi
 	payload.ReasoningMapping = maps.Clone(config.ReasoningMapping)
 	payload.NoVisionModels = slices.Clone(config.NoVisionModels)
 	payload.ReasoningParamStyle = config.ReasoningParamStyle
-	payload.PassbackReasoningContent = payload.PassbackReasoningContent || config.PassbackReasoningContent
-	payload.PassbackThinkingBlocks = payload.PassbackThinkingBlocks || config.PassbackThinkingBlocks
 	payload.NormalizeSystemRoleToTopLevel = payload.NormalizeSystemRoleToTopLevel || config.NormalizeSystemRoleToTopLevel
 	if config.NormalizeMetadataUserId != nil {
 		payload.NormalizeMetadataUserId = config.NormalizeMetadataUserId
@@ -855,10 +841,6 @@ func applyChannelTargetConfig(payload *ChannelPayload, config channelTargetConfi
 	payload.StripBillingHeader = payload.StripBillingHeader || config.StripBillingHeader
 	payload.NoVision = payload.NoVision || config.NoVision
 	payload.VisionFallbackModel = config.VisionFallbackModel
-	payload.StripEmptyTextBlocks = payload.StripEmptyTextBlocks || config.StripEmptyTextBlocks
-	payload.CodexNativeToolPassthrough = payload.CodexNativeToolPassthrough || config.CodexNativeToolPassthrough
-	payload.StripImageGenerationTool = payload.StripImageGenerationTool || config.StripImageGenerationTool
-	payload.NormalizeNonstandardChatRoles = payload.NormalizeNonstandardChatRoles || config.NormalizeNonstandardChatRoles
 	if config.CodexToolCompat != nil {
 		payload.CodexToolCompat = *config.CodexToolCompat
 	}
@@ -874,7 +856,6 @@ func applyTargetDefaults(payload *ChannelPayload, provider string, target string
 	switch target {
 	case TargetMessages:
 		payload.ServiceType = "claude"
-		payload.StripEmptyTextBlocks = true
 		payload.StripThoughtSignature = true
 		if provider == ProviderOpenCodeGo {
 			payload.AuthHeader = "x-api-key"
@@ -884,7 +865,6 @@ func applyTargetDefaults(payload *ChannelPayload, provider string, target string
 		}
 	case TargetChat:
 		payload.ServiceType = "openai"
-		payload.NormalizeNonstandardChatRoles = true
 	case TargetResponses:
 		payload.ServiceType = "openai"
 		payload.CodexToolCompat = true

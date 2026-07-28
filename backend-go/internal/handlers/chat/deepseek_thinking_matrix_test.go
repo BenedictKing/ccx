@@ -78,14 +78,16 @@ func TestChatHandler_DeepSeekChatAndMessagesThinkingMatrix(t *testing.T) {
 			}))
 			defer upstream.Close()
 
-			router := newChatTestRouter(t, config.UpstreamConfig{
-				Name:                     tt.name,
-				BaseURL:                  upstream.URL,
-				APIKeys:                  []string{"sk-test"},
-				ServiceType:              tt.serviceType,
-				Status:                   "active",
-				PassbackReasoningContent: config.BoolPtr(true),
-			})
+			channel := config.UpstreamConfig{
+				Name:        tt.name,
+				BaseURL:     upstream.URL,
+				APIKeys:     []string{"sk-test"},
+				ServiceType: tt.serviceType,
+				Status:      "active",
+			}
+			// 该兼容开关没有手工字段：走配置落盘的链路只能用种子表达"生效值为 true"。
+			channel.SetCompatSeed(config.TraitPassbackReasoningContent, true)
+			router := newChatTestRouter(t, channel)
 
 			reqBody := `{"model":"deepseek-v4-pro","messages":[{"role":"user","content":"hello"},{"role":"assistant","reasoning_content":"previous reasoning","content":"previous text"}]}`
 			w := performChatHandlerRequest(t, router, reqBody)

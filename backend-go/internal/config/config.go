@@ -46,17 +46,11 @@ type UpstreamConfig struct {
 	ReasoningParamStyle   string                             `json:"reasoningParamStyle,omitempty"`
 	TextVerbosity         string                             `json:"textVerbosity,omitempty"`
 	FastMode              bool                               `json:"fastMode,omitempty"`
-	// OpenAI Chat 上游配置：启用后将非标准 Chat role 改写为 user。
-	// nil 表示用户未设置，可由运行时兼容性学习决定；非 nil 时用户配置优先。
-	NormalizeNonstandardChatRoles *bool `json:"normalizeNonstandardChatRoles,omitempty"`
-	// Codex 工具兼容开关。
-	// 透传分支中将 Codex 原生工具转换为 OpenAI function 格式。
-	CodexNativeToolPassthrough *bool `json:"codexNativeToolPassthrough,omitempty"`
-	CodexToolCompat            *bool `json:"codexToolCompat,omitempty"`
+	// Codex 工具兼容开关（此项保持既有手工配置语义，不在本次自学习范围内：
+	// 无可靠上游报错信号可用于错误驱动学习，见 compat_signal.go 的判断依据）。
+	CodexToolCompat *bool `json:"codexToolCompat,omitempty"`
 	// Deprecated: 使用 codexToolCompat；保留旧字段仅用于配置读取和旧前端写入兼容。
 	StripCodexClientTools bool `json:"stripCodexClientTools,omitempty"`
-	// Responses/Chat 工具兼容：移除 image_generation 与 Codex image_gen 工具（兼容未开通图片生成权限的上游）
-	StripImageGenerationTool *bool `json:"stripImageGenerationTool,omitempty"`
 	// Images 响应兼容：当客户端请求 b64_json 而上游只返回 URL 时，下载并转换为 b64_json（默认 false）
 	ConvertImageURLToB64JSON bool `json:"convertImageUrlToB64Json,omitempty"`
 	// 多渠道调度相关字段
@@ -70,29 +64,30 @@ type UpstreamConfig struct {
 	NormalizeMetadataUserID *bool `json:"normalizeMetadataUserId,omitempty"` // 规范化 metadata.user_id（默认 true）
 	// Messages 渠道级移除 billing header：转发前从 system 数组移除 x-anthropic-billing-header block（默认按域名推断）
 	StripBillingHeader *bool `json:"stripBillingHeader,omitempty"`
-	// Claude 协议空文本兼容
-	StripEmptyTextBlocks *bool `json:"stripEmptyTextBlocks,omitempty"` // 转发前移除裸空 text content block（兼容严格校验的第三方 Claude 上游）
 	// Claude 协议 system 角色兼容
 	NormalizeSystemRoleToTopLevel bool `json:"normalizeSystemRoleToTopLevel,omitempty"` // 将 messages 中的 system 角色抽取回顶层 system 字段（针对 Opus 4.8 / Fable 5 等新客户端将 system 作为消息 role 发送，兼容仅支持 user/assistant role 的旧 Claude 上游）
 	// Gemini 特定配置
 	InjectDummyThoughtSignature bool `json:"injectDummyThoughtSignature,omitempty"` // 给空 thought_signature 注入 dummy 值（兼容 x666.me 等要求必须有该字段的 API）
 	StripThoughtSignature       bool `json:"stripThoughtSignature,omitempty"`       // 移除 thought_signature 字段（兼容旧版 Gemini API）
-	// Claude 协议 thinking 回传配置
-	PassbackReasoningContent *bool `json:"passbackReasoningContent,omitempty"` // 将 thinking 块转为 reasoning_content 回传（兼容 mimo 等要求 OpenAI 风格 reasoning_content 的 Claude 协议上游）
-	PassbackThinkingBlocks   *bool `json:"passbackThinkingBlocks,omitempty"`   // 将真实 reasoning_content 回传为 content[].thinking（兼容 DeepSeek/GLM 等严格 Claude thinking 上游）
-	// LearnedDowngradeDeveloperRole 运行时字段：本次请求是否应用"developer role 降级为 system"。
-	// 由 failover 在发送前按 渠道-Key-模型 的学习结论注入，不持久化到 config.json，
-	// 也不暴露给前端配置（用户侧对应能力是 NormalizeNonstandardChatRoles）。
-	LearnedDowngradeDeveloperRole bool `json:"-"`
-	// CompatSeeds 用户历史手工兼容配置升级而来的「初始证据」。
+	// LearnedCompatTraits 运行时字段：本次请求应生效的兼容性学习结论。
+	// 由 failover 在发送前按 渠道-Key-模型 查询 ChannelCompatCache 并注入到当次请求所用的
+	// upstream 副本上，provider 构造请求时读取；不持久化到 config.json，不暴露给前端配置。
+	// key 为 CompatTrait 字符串（跨包引用不方便用 CompatTrait 类型做 map key 的字面量，
+	// 用字符串保持和 CompatSeeds 一致的存储形态）。
+	LearnedCompatTraits map[string]bool `json:"-"`
+	// CompatSeeds 历史手工兼容配置降级而来的一次性低置信度提示。
 	//
-	// 语义：用户曾经手工开/关过某项兼容改写，说明他观察到过这个上游的真实行为，这个判断值得保留；
-	// 但保留方式不应是「永久压过自动学习」，否则上游能力变化后用户还得再手工改一次。
-	// 因此把手工值降级为种子：作为学习结论缺失时的兜底，一旦学到真实结论就让位。
+	// 六个兼容性开关（developer role 降级、图片工具剥离、Codex 原生工具透传、空文本块剥离、
+	// reasoning_content/thinking 回传）已从本结构体整体移除：管理面板不再提供编辑入口，
+	// 渠道更新接口也不再接受手工写入，完全交由运行时自动学习决定。
 	//
-	// 与学习记忆的区别：种子是渠道级且无 TTL（用户意图不会过期），学习记忆是
-	// 渠道-Key-模型 级且 TTL 24h（上游能力会变）。二者不能混存，否则种子 24h 后凭空消失。
-	CompatSeeds map[string]bool `json:"compatSeeds,omitempty"`
+	// 老配置文件里残留的历史手工值不代表可信的长期事实——当初可能就设错，也可能上游后来有了
+	// 新情况已不适用，因此不当作"用户意图"永久保留，而是一次性迁移为带 CompatSeedTTL 有效期的
+	// 种子：只在学习结论出现前提供一点参考，过期或学到真实结论后都会让位。
+	//
+	// 与学习记忆（ChannelCompatCache）的区别：种子存在配置文件里、渠道级、TTL 14 天；
+	// 学习记忆是独立的运行时缓存、渠道-Key-模型级、TTL 24 小时。二者不能混存。
+	CompatSeeds map[string]CompatSeedEntry `json:"compatSeeds,omitempty"`
 	// 自定义请求头
 	CustomHeaders map[string]string `json:"customHeaders,omitempty"` // 自定义请求头（覆盖或添加到上游请求）
 	// 渠道级代理
@@ -744,22 +739,15 @@ func (u *UpstreamConfig) IsRateLimitAutoFromHeadersEnabled() bool {
 	return true
 }
 
-// 兼容性开关的三态合成。
-//
-// 这些开关原为静态 bool，需要用户手工勾选；现改为 *bool 三态，语义为：
-//
-//	非 nil  -> 用户显式设置，最高优先级（既是强制覆盖也是逃生阀）
-//	nil    -> 未设置，交由运行时兼容性学习结论决定
-//	学习也没有 -> 回落静态默认（多数为 false，个别按域名/关键词推断）
-//
-// 裸 bool 无法区分"用户显式关闭"与"用户没设置"，因此三态是自动学习能生效的前提。
-// learned 传 nil 表示当前无学习结论（调用方未接入缓存或缓存未命中）。
+// 六个兼容性开关（developer role 降级、图片工具剥离、Codex 原生工具透传、空文本块剥离、
+// reasoning_content/thinking 回传）完全由运行时自动学习驱动：学习结论 > 种子 > 静态默认。
+// 没有对应的手工配置字段，管理面板不提供编辑入口，渠道更新接口不接受手工写入。
+// 学习结论存在 LearnedCompatTraits（本次请求专用，failover 发送前查 ChannelCompatCache 注入）。
 
 // IsDowngradeDeveloperRoleEnabled 检查是否需要把 developer role 降级为 system。
-// 该开关没有对应的用户配置字段：它完全由运行时兼容性学习驱动（用户想手工处理非标准 role 时用
-// NormalizeNonstandardChatRoles）。failover 在发送前把学习结论写入 LearnedDowngradeDeveloperRole。
+// 该开关没有静态默认（未学到时不降级）：用户想手工处理非标准 role 时用 NormalizeNonstandardChatRoles。
 func (u *UpstreamConfig) IsDowngradeDeveloperRoleEnabled() bool {
-	return u.LearnedDowngradeDeveloperRole
+	return resolveCompatSwitch(u.learnedCompatTrait(TraitDowngradeDeveloperRole), nil, false)
 }
 
 // BoolPtr 返回指向给定布尔值的指针，用于显式设置三态开关。
@@ -767,15 +755,24 @@ func BoolPtr(v bool) *bool {
 	return &v
 }
 
-// resolveCompatSwitch 按 用户配置 > 学习结论 > 种子 > 静态默认 合成最终生效值。
+// CompatSeedTTL 历史手工配置降级为种子后的有效期。
 //
-// 目标是「用户此后不需要再手工干预」：历史手工配置由一次性迁移降级为种子（第 3 级），
-// 学到真实结论后自动让位；第 1 级保留给用户仍需临时强制压制的场合。
-// learned/seed 传 nil 表示该层无结论。
-func resolveCompatSwitch(userSet *bool, learned *bool, seed *bool, staticDefault bool) bool {
-	if userSet != nil {
-		return *userSet
-	}
+// 种子不是"用户意图"，只是一条一次性、低置信度的初始提示：老配置里的手工值可能当初就设错，
+// 也可能上游后来有了新情况已不再适用。过期后完全不再参与判断，交给学习结论与静态默认重新判断，
+// 避免过时的历史判断无限期地干扰后续学习。
+const CompatSeedTTL = 14 * 24 * time.Hour
+
+// CompatSeedEntry 一条带有效期的兼容性种子。
+type CompatSeedEntry struct {
+	Enabled   bool      `json:"enabled"`
+	ExpiresAt time.Time `json:"expiresAt"`
+}
+
+// resolveCompatSwitch 按 学习结论 > 种子 > 静态默认 合成最终生效值。
+//
+// 不再有"用户当前显式设置"这一档：兼容性开关已完全收归运行时自动决策，管理面板不再提供
+// 手工编辑入口，渠道更新接口也不接受这几个字段的写入。learned/seed 传 nil 表示该层无结论。
+func resolveCompatSwitch(learned *bool, seed *bool, staticDefault bool) bool {
 	if learned != nil {
 		return *learned
 	}
@@ -785,73 +782,91 @@ func resolveCompatSwitch(userSet *bool, learned *bool, seed *bool, staticDefault
 	return staticDefault
 }
 
-// compatSeed 读取该 trait 的种子值；未设置时返回 nil。
+// compatSeed 读取该 trait 的种子值；未设置或已过期时返回 nil。
 func (u *UpstreamConfig) compatSeed(trait CompatTrait) *bool {
 	if len(u.CompatSeeds) == 0 {
 		return nil
 	}
-	if v, ok := u.CompatSeeds[string(trait)]; ok {
+	entry, ok := u.CompatSeeds[string(trait)]
+	if !ok || time.Now().After(entry.ExpiresAt) {
+		return nil
+	}
+	v := entry.Enabled
+	return &v
+}
+
+// SetCompatSeed 写入一条带有效期的种子（供配置迁移使用）。
+func (u *UpstreamConfig) SetCompatSeed(trait CompatTrait, enabled bool) {
+	if u.CompatSeeds == nil {
+		u.CompatSeeds = make(map[string]CompatSeedEntry, 1)
+	}
+	u.CompatSeeds[string(trait)] = CompatSeedEntry{Enabled: enabled, ExpiresAt: time.Now().Add(CompatSeedTTL)}
+}
+
+// learnedCompatTrait 读取本次请求已注入的学习结论；未注入时返回 nil。
+func (u *UpstreamConfig) learnedCompatTrait(trait CompatTrait) *bool {
+	if len(u.LearnedCompatTraits) == 0 {
+		return nil
+	}
+	if v, ok := u.LearnedCompatTraits[string(trait)]; ok {
 		return &v
 	}
 	return nil
 }
 
-// SetCompatSeed 写入一条种子（供配置迁移使用）。
-func (u *UpstreamConfig) SetCompatSeed(trait CompatTrait, enabled bool) {
-	if u.CompatSeeds == nil {
-		u.CompatSeeds = make(map[string]bool, 1)
+// SetLearnedCompatTrait 供 failover 在发送前注入本次请求应生效的学习结论。
+// 只作用于当次请求所用的 upstream 副本，不落盘、不影响其他并发请求。
+func (u *UpstreamConfig) SetLearnedCompatTrait(trait CompatTrait, enabled bool) {
+	if u.LearnedCompatTraits == nil {
+		u.LearnedCompatTraits = make(map[string]bool, 1)
 	}
-	u.CompatSeeds[string(trait)] = enabled
+	u.LearnedCompatTraits[string(trait)] = enabled
 }
+
+// 以下五个兼容性开关同样完全由运行时自动学习驱动（学习结论 > 种子 > 静态默认），没有对应的
+// UpstreamConfig 字段：管理面板不提供编辑入口，渠道更新接口不接受手工写入。
+// 学习结论从 u.LearnedCompatTraits 读取，由 failover 按 渠道-Key-模型 查询
+// ChannelCompatCache 后注入到当次请求所用的 upstream 副本上。
 
 // IsStripImageGenerationToolEnabled 检查是否移除 image_generation 与 Codex image_gen 工具。
 func (u *UpstreamConfig) IsStripImageGenerationToolEnabled() bool {
-	return u.IsStripImageGenerationToolEnabledWith(nil)
-}
-
-// IsStripImageGenerationToolEnabledWith 带学习结论的版本（默认 false）。
-func (u *UpstreamConfig) IsStripImageGenerationToolEnabledWith(learned *bool) bool {
-	return resolveCompatSwitch(u.StripImageGenerationTool, learned, u.compatSeed(TraitStripImageGenTool), false)
+	return resolveCompatSwitch(u.learnedCompatTrait(TraitStripImageGenTool), u.compatSeed(TraitStripImageGenTool), false)
 }
 
 // IsNormalizeNonstandardChatRolesEnabled 检查是否将非标准 Chat role 改写为 user（默认 false）。
 func (u *UpstreamConfig) IsNormalizeNonstandardChatRolesEnabled() bool {
-	return resolveCompatSwitch(u.NormalizeNonstandardChatRoles, nil, u.compatSeed(TraitNormalizeNonstandardChatRoles), false)
+	return resolveCompatSwitch(u.learnedCompatTrait(TraitNormalizeNonstandardChatRoles), u.compatSeed(TraitNormalizeNonstandardChatRoles), false)
 }
 
 // IsCodexNativeToolPassthroughEnabled 检查是否将 Codex 原生工具转为 OpenAI function（默认 false）。
 func (u *UpstreamConfig) IsCodexNativeToolPassthroughEnabled() bool {
-	return resolveCompatSwitch(u.CodexNativeToolPassthrough, nil, u.compatSeed(TraitCodexNativeToolPassthrough), false)
+	return resolveCompatSwitch(u.learnedCompatTrait(TraitCodexNativeToolPassthrough), u.compatSeed(TraitCodexNativeToolPassthrough), false)
 }
 
-// IsStripEmptyTextBlocksEnabledWith 检查是否剥离空 text content block（默认 false）。
-func (u *UpstreamConfig) IsStripEmptyTextBlocksEnabledWith(learned *bool) bool {
-	return resolveCompatSwitch(u.StripEmptyTextBlocks, learned, u.compatSeed(TraitStripEmptyTextBlocks), false)
-}
-
-// IsStripEmptyTextBlocksEnabled 无学习结论的版本。
+// IsStripEmptyTextBlocksEnabled 检查是否剥离空 text content block（默认 false）。
 func (u *UpstreamConfig) IsStripEmptyTextBlocksEnabled() bool {
-	return u.IsStripEmptyTextBlocksEnabledWith(nil)
+	return resolveCompatSwitch(u.learnedCompatTrait(TraitStripEmptyTextBlocks), u.compatSeed(TraitStripEmptyTextBlocks), false)
 }
 
-// IsPassbackReasoningContentEnabledWith 检查是否将 thinking 转为 reasoning_content 回传（默认 false）。
-func (u *UpstreamConfig) IsPassbackReasoningContentEnabledWith(learned *bool) bool {
-	return resolveCompatSwitch(u.PassbackReasoningContent, learned, u.compatSeed(TraitPassbackReasoningContent), false)
-}
-
-// IsPassbackReasoningContentEnabled 无学习结论的版本。
+// IsPassbackReasoningContentEnabled 检查是否将 thinking 转为 reasoning_content 回传。
 func (u *UpstreamConfig) IsPassbackReasoningContentEnabled() bool {
-	return u.IsPassbackReasoningContentEnabledWith(nil)
+	return resolveCompatSwitch(u.learnedCompatTrait(TraitPassbackReasoningContent), u.compatSeed(TraitPassbackReasoningContent), shouldPassbackReasoningContentByDefault(u))
 }
 
-// IsPassbackThinkingBlocksEnabledWith 检查是否回传 content[].thinking（默认 false）。
-func (u *UpstreamConfig) IsPassbackThinkingBlocksEnabledWith(learned *bool) bool {
-	return resolveCompatSwitch(u.PassbackThinkingBlocks, learned, u.compatSeed(TraitPassbackThinkingBlocks), false)
+// shouldPassbackReasoningContentByDefault 已知厂商真相：GLM 的 OpenAI 兼容协议要求把
+// thinking 块转为 reasoning_content 回传。这是厂商协议事实，不是猜测也不会过期，
+// 因此直接算作静态默认，不走 14 天种子这条给"可能出错的历史手工值"用的临时通道。
+func shouldPassbackReasoningContentByDefault(upstream *UpstreamConfig) bool {
+	if upstream == nil {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(upstream.ProviderID), "glm") &&
+		strings.EqualFold(strings.TrimSpace(upstream.ServiceType), "openai")
 }
 
-// IsPassbackThinkingBlocksEnabled 无学习结论的版本。
+// IsPassbackThinkingBlocksEnabled 检查是否回传 content[].thinking（默认 false）。
 func (u *UpstreamConfig) IsPassbackThinkingBlocksEnabled() bool {
-	return u.IsPassbackThinkingBlocksEnabledWith(nil)
+	return resolveCompatSwitch(u.learnedCompatTrait(TraitPassbackThinkingBlocks), u.compatSeed(TraitPassbackThinkingBlocks), false)
 }
 
 // GetEffectiveRequestTimeoutMs 返回渠道生效的非流式上游请求超时时间（毫秒）。
@@ -878,31 +893,28 @@ func (u *UpstreamConfig) GetEffectiveResponseHeaderTimeoutMs(fallbackMs int) int
 
 // UpstreamUpdate 用于部分更新 UpstreamConfig
 type UpstreamUpdate struct {
-	Name                          *string                            `json:"name"`
-	ServiceType                   *string                            `json:"serviceType"`
-	AuthHeader                    *string                            `json:"authHeader"`
-	BaseURL                       *string                            `json:"baseUrl"`
-	BaseURLs                      []string                           `json:"baseUrls"`
-	APIKeys                       []string                           `json:"apiKeys"`
-	APIKeyConfigs                 []APIKeyConfig                     `json:"apiKeyConfigs"`
-	Description                   *string                            `json:"description"`
-	Website                       *string                            `json:"website"`
-	InsecureSkipVerify            *bool                              `json:"insecureSkipVerify"`
-	ModelMapping                  map[string]string                  `json:"modelMapping"`
-	ModelCapabilities             map[string]UpstreamModelCapability `json:"modelCapabilities"`
-	EmbeddingCapabilities         map[string]EmbeddingCapability     `json:"embeddingCapabilities"`
-	DefaultCapability             *UpstreamModelCapability           `json:"defaultCapability"`
-	AllowUnknownContext           *bool                              `json:"allowUnknownContext"`
-	ReasoningMapping              map[string]string                  `json:"reasoningMapping"`
-	ReasoningParamStyle           *string                            `json:"reasoningParamStyle"`
-	TextVerbosity                 *string                            `json:"textVerbosity"`
-	FastMode                      *bool                              `json:"fastMode"`
-	NormalizeNonstandardChatRoles *bool                              `json:"normalizeNonstandardChatRoles"`
-	CodexNativeToolPassthrough    *bool                              `json:"codexNativeToolPassthrough"`
-	CodexToolCompat               *bool                              `json:"codexToolCompat"`
-	StripCodexClientTools         *bool                              `json:"stripCodexClientTools"`
-	StripImageGenerationTool      *bool                              `json:"stripImageGenerationTool"`
-	ConvertImageURLToB64JSON      *bool                              `json:"convertImageUrlToB64Json"`
+	Name                     *string                            `json:"name"`
+	ServiceType              *string                            `json:"serviceType"`
+	AuthHeader               *string                            `json:"authHeader"`
+	BaseURL                  *string                            `json:"baseUrl"`
+	BaseURLs                 []string                           `json:"baseUrls"`
+	APIKeys                  []string                           `json:"apiKeys"`
+	APIKeyConfigs            []APIKeyConfig                     `json:"apiKeyConfigs"`
+	Description              *string                            `json:"description"`
+	Website                  *string                            `json:"website"`
+	InsecureSkipVerify       *bool                              `json:"insecureSkipVerify"`
+	ModelMapping             map[string]string                  `json:"modelMapping"`
+	ModelCapabilities        map[string]UpstreamModelCapability `json:"modelCapabilities"`
+	EmbeddingCapabilities    map[string]EmbeddingCapability     `json:"embeddingCapabilities"`
+	DefaultCapability        *UpstreamModelCapability           `json:"defaultCapability"`
+	AllowUnknownContext      *bool                              `json:"allowUnknownContext"`
+	ReasoningMapping         map[string]string                  `json:"reasoningMapping"`
+	ReasoningParamStyle      *string                            `json:"reasoningParamStyle"`
+	TextVerbosity            *string                            `json:"textVerbosity"`
+	FastMode                 *bool                              `json:"fastMode"`
+	CodexToolCompat          *bool                              `json:"codexToolCompat"`
+	StripCodexClientTools    *bool                              `json:"stripCodexClientTools"`
+	ConvertImageURLToB64JSON *bool                              `json:"convertImageUrlToB64Json"`
 	// 多渠道调度相关字段
 	Priority                *int       `json:"priority"`
 	Status                  *string    `json:"status"`
@@ -911,15 +923,11 @@ type UpstreamUpdate struct {
 	AutoBlacklistBalance    *bool      `json:"autoBlacklistBalance"`
 	NormalizeMetadataUserID *bool      `json:"normalizeMetadataUserId"`
 	StripBillingHeader      *bool      `json:"stripBillingHeader"`
-	// Claude 协议空文本兼容
-	StripEmptyTextBlocks *bool `json:"stripEmptyTextBlocks"`
 	// Claude 协议 system 角色兼容
 	NormalizeSystemRoleToTopLevel *bool `json:"normalizeSystemRoleToTopLevel"`
 	// Gemini 特定配置
 	InjectDummyThoughtSignature *bool `json:"injectDummyThoughtSignature"`
 	StripThoughtSignature       *bool `json:"stripThoughtSignature"`
-	PassbackReasoningContent    *bool `json:"passbackReasoningContent"`
-	PassbackThinkingBlocks      *bool `json:"passbackThinkingBlocks"`
 	// 自定义请求头
 	CustomHeaders map[string]string `json:"customHeaders"`
 	// 渠道级代理

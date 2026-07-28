@@ -40,10 +40,10 @@ func TestCompatLearningFlowDeveloperRole(t *testing.T) {
 		t.Fatal("重复学习必须返回 false 以终止重试")
 	}
 
-	// 3. 重试前注入：模拟 failover 主动侧
+	// 3. 重试前注入：模拟 failover 主动侧，写入本次请求专用的 LearnedCompatTraits
 	upstream := &config.UpstreamConfig{Name: "test", ChannelUID: channelUID}
 	if state, ok := cache.Trait(channelUID, keyHash, model, config.TraitDowngradeDeveloperRole); ok && state.Enabled {
-		upstream.LearnedDowngradeDeveloperRole = true
+		upstream.SetLearnedCompatTrait(config.TraitDowngradeDeveloperRole, true)
 	}
 	if !upstream.IsDowngradeDeveloperRoleEnabled() {
 		t.Fatal("注入后 upstream 应报告需要降级 developer role")
@@ -65,79 +65,73 @@ func TestCompatLearningFlowDeveloperRole(t *testing.T) {
 	}
 }
 
-// 用户显式配置必须压过学习结论：这是整套自动机制的逃生阀。
-func TestCompatUserConfigOverridesLearned(t *testing.T) {
-	learnedTrue := config.BoolPtr(true)
+// 学习结论压过种子：这是"此后不需要手工干预"的关键。种子只是历史手工值降级来的
+// 一次性低置信度提示，一旦学到上游真实结论就必须让位。
+func TestCompatLearnedConclusionOverridesSeed(t *testing.T) {
+	upstream := &config.UpstreamConfig{Name: "test", ChannelUID: "ch_seed"}
 
-	// 用户显式关闭 + 学到"应启用" -> 最终关闭
-	userOff := &config.UpstreamConfig{StripImageGenerationTool: config.BoolPtr(false)}
-	if userOff.IsStripImageGenerationToolEnabledWith(learnedTrue) {
-		t.Error("用户显式关闭应压过学习结论")
+	// 历史种子：曾经手工判断"需要剥离图片工具"
+	upstream.SetCompatSeed(config.TraitStripImageGenTool, true)
+	if !upstream.IsStripImageGenerationToolEnabled() {
+		t.Fatal("无学习结论时应沿用种子")
 	}
 
-	// 用户未设置 + 学到"应启用" -> 最终启用
-	unset := &config.UpstreamConfig{}
-	if !unset.IsStripImageGenerationToolEnabledWith(learnedTrue) {
-		t.Error("用户未设置时应采用学习结论")
-	}
-
-	// 用户未设置 + 无学习结论 -> 回落静态默认（false）
-	if unset.IsStripImageGenerationToolEnabledWith(nil) {
-		t.Error("无学习结论时应回落静态默认 false")
-	}
-
-	// 用户显式开启 + 无学习结论 -> 启用
-	userOn := &config.UpstreamConfig{StripImageGenerationTool: config.BoolPtr(true)}
-	if !userOn.IsStripImageGenerationToolEnabledWith(nil) {
-		t.Error("用户显式开启应生效")
+	// 学到"该上游其实支持图片生成"后，学习结论应压过种子
+	upstream.SetLearnedCompatTrait(config.TraitStripImageGenTool, false)
+	if upstream.IsStripImageGenerationToolEnabled() {
+		t.Error("学习结论应压过种子，否则用户还得手工去关")
 	}
 }
 
-// 迁移后的老用户渠道：手工值已降级为种子，学习结论必须能覆盖它，
-// 这样用户此后不需要再手工干预。
-func TestLearnedConclusionOverridesMigratedSeed(t *testing.T) {
-	// 老用户曾手工开启剥离图片工具，迁移后成为种子、字段置 nil
-	upstream := &config.UpstreamConfig{
-		Name:       "migrated",
-		ChannelUID: "ch_seed",
-	}
+// 种子有 14 天有效期：过期后不再参与判断，回落静态默认。
+// 历史手工值不是永久事实——可能当初就设错，也可能上游后来有了新情况。
+func TestCompatSeedExpiresAfterTTL(t *testing.T) {
+	upstream := &config.UpstreamConfig{Name: "test", ChannelUID: "ch_expiry"}
 	upstream.SetCompatSeed(config.TraitStripImageGenTool, true)
 
-	// 无学习结论时按种子生效，行为与迁移前一致
-	if !upstream.IsStripImageGenerationToolEnabled() {
-		t.Fatal("无学习结论时应沿用种子（迁移不改变可感知行为）")
-	}
+	// 手动把种子写成已过期，模拟 14 天后的状态
+	entry := upstream.CompatSeeds[string(config.TraitStripImageGenTool)]
+	entry.ExpiresAt = entry.ExpiresAt.Add(-2 * config.CompatSeedTTL)
+	upstream.CompatSeeds[string(config.TraitStripImageGenTool)] = entry
 
-	// 学到"该上游其实支持图片生成"后，注入 false 应压过种子
-	upstreamCopy := upstream.Clone()
-	upstreamCopy.StripImageGenerationTool = config.BoolPtr(false)
-	if upstreamCopy.IsStripImageGenerationToolEnabled() {
-		t.Error("学习结论应压过种子，否则用户还得手工去关")
+	if upstream.IsStripImageGenerationToolEnabled() {
+		t.Error("过期种子不应再参与判断，应回落静态默认 false")
 	}
+}
 
-	// 种子不因 Clone 而与原对象共享（map 必须深拷贝）
-	upstreamCopy.SetCompatSeed(config.TraitStripImageGenTool, false)
-	if v := upstream.CompatSeeds[string(config.TraitStripImageGenTool)]; !v {
+// Clone 必须深拷贝 CompatSeeds：否则副本上的种子修改会污染原始配置。
+func TestCompatSeedsNotSharedAfterClone(t *testing.T) {
+	upstream := &config.UpstreamConfig{Name: "migrated", ChannelUID: "ch_clone"}
+	upstream.SetCompatSeed(config.TraitStripImageGenTool, true)
+
+	clone := upstream.Clone()
+	clone.SetCompatSeed(config.TraitStripImageGenTool, false)
+
+	original := upstream.CompatSeeds[string(config.TraitStripImageGenTool)]
+	if !original.Enabled {
 		t.Error("Clone 后修改副本种子不应影响原对象")
 	}
 }
 
-// 自动托管渠道的兼容性开关被清为 nil（而非 false），学习结论才能生效。
-func TestAutoManagedRuntimeKeepsCompatSwitchesUnset(t *testing.T) {
+// 自动托管渠道的种子与学习结论一并清空：其兼容性完全由厂商原生默认加运行时学习决定，
+// 不保留手工配置派生的历史证据。
+func TestAutoManagedRuntimeClearsCompatSeeds(t *testing.T) {
 	upstream := &config.UpstreamConfig{
-		ProviderID:               "mimo",
-		AutoManaged:              true,
-		ServiceType:              "claude",
-		StripImageGenerationTool: config.BoolPtr(true),
-		PassbackThinkingBlocks:   config.BoolPtr(true),
+		ProviderID:  "mimo",
+		AutoManaged: true,
+		ServiceType: "claude",
 	}
+	upstream.SetCompatSeed(config.TraitStripImageGenTool, true)
+	upstream.SetCompatSeed(config.TraitPassbackThinkingBlocks, true)
 
 	runtime := config.RuntimeUpstreamForAutoManagedProvider(upstream)
-	if runtime.StripImageGenerationTool != nil || runtime.PassbackThinkingBlocks != nil {
-		t.Fatalf("自动托管渠道的兼容性开关应清为 nil 以便学习生效: %+v", runtime)
+	if len(runtime.CompatSeeds) != 0 {
+		t.Fatalf("自动托管渠道的种子应被清空: %+v", runtime.CompatSeeds)
 	}
-	// 清为 nil 后，学习结论可以生效
-	if !runtime.IsStripImageGenerationToolEnabledWith(config.BoolPtr(true)) {
-		t.Error("清为 nil 后学习结论应可生效")
+
+	// 清空后学习结论仍可正常生效
+	runtime.SetLearnedCompatTrait(config.TraitStripImageGenTool, true)
+	if !runtime.IsStripImageGenerationToolEnabled() {
+		t.Error("清空种子后学习结论应仍可生效")
 	}
 }

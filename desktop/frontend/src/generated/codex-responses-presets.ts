@@ -8,11 +8,8 @@ export interface CodexResponsesPreset {
   reasoningMapping: Partial<Record<string, CodexResponsesReasoningEffort>>
   reasoningParamStyle: CodexResponsesReasoningParamStyle
   serviceType?: 'openai' | 'gemini' | 'claude' | 'responses' | 'copilot'
-  codexNativeToolPassthrough: boolean
   codexToolCompat: boolean
   stripCodexClientTools: boolean
-  stripImageGenerationTool: boolean
-  normalizeNonstandardChatRoles: boolean
   noVision: boolean
   noVisionModels: string[]
   visionFallbackModel: string
@@ -30,11 +27,8 @@ export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
       "gpt": "max"
     },
     "reasoningParamStyle": "reasoning",
-    "codexNativeToolPassthrough": true,
     "codexToolCompat": false,
     "stripCodexClientTools": false,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": true,
     "noVision": true,
     "noVisionModels": [],
     "visionFallbackModel": ""
@@ -52,11 +46,8 @@ export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
       "mini": "high"
     },
     "reasoningParamStyle": "reasoning",
-    "codexNativeToolPassthrough": false,
     "codexToolCompat": true,
     "stripCodexClientTools": true,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": false,
     "noVision": false,
     "noVisionModels": [
       "mimo-v2.5-pro"
@@ -77,11 +68,8 @@ export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
       "mini": "high"
     },
     "reasoningParamStyle": "reasoning",
-    "codexNativeToolPassthrough": true,
     "codexToolCompat": false,
     "stripCodexClientTools": false,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": true,
     "noVision": false,
     "noVisionModels": [
       "glm-5.2",
@@ -93,11 +81,8 @@ export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
     "modelMapping": {},
     "reasoningMapping": {},
     "reasoningParamStyle": "",
-    "codexNativeToolPassthrough": false,
     "codexToolCompat": false,
     "stripCodexClientTools": false,
-    "stripImageGenerationTool": true,
-    "normalizeNonstandardChatRoles": false,
     "noVision": false,
     "noVisionModels": [],
     "visionFallbackModel": ""
@@ -106,11 +91,8 @@ export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
     "modelMapping": {},
     "reasoningMapping": {},
     "reasoningParamStyle": "",
-    "codexNativeToolPassthrough": false,
     "codexToolCompat": false,
     "stripCodexClientTools": false,
-    "stripImageGenerationTool": true,
-    "normalizeNonstandardChatRoles": false,
     "noVision": false,
     "noVisionModels": [],
     "visionFallbackModel": ""
@@ -123,11 +105,8 @@ export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
     },
     "reasoningMapping": {},
     "reasoningParamStyle": "",
-    "codexNativeToolPassthrough": true,
     "codexToolCompat": false,
     "stripCodexClientTools": false,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": true,
     "noVision": false,
     "noVisionModels": [],
     "visionFallbackModel": ""
@@ -142,11 +121,8 @@ export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
       "gpt": "max"
     },
     "reasoningParamStyle": "",
-    "codexNativeToolPassthrough": false,
     "codexToolCompat": true,
     "stripCodexClientTools": true,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": false,
     "noVision": false,
     "noVisionModels": [],
     "visionFallbackModel": ""
@@ -163,11 +139,8 @@ export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
       "mini": "high"
     },
     "reasoningParamStyle": "reasoning",
-    "codexNativeToolPassthrough": false,
     "codexToolCompat": true,
     "stripCodexClientTools": true,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": false,
     "noVision": false,
     "noVisionModels": [
       "glm-5.2",
@@ -187,11 +160,8 @@ export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
       "mini": "high"
     },
     "reasoningParamStyle": "reasoning",
-    "codexNativeToolPassthrough": false,
     "codexToolCompat": true,
     "stripCodexClientTools": true,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": false,
     "noVision": false,
     "noVisionModels": [
       "glm-5.2",
@@ -206,11 +176,8 @@ export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
     },
     "reasoningMapping": {},
     "reasoningParamStyle": "",
-    "codexNativeToolPassthrough": false,
     "codexToolCompat": true,
     "stripCodexClientTools": true,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": false,
     "noVision": false,
     "noVisionModels": [],
     "visionFallbackModel": ""
@@ -222,11 +189,8 @@ export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
     },
     "reasoningMapping": {},
     "reasoningParamStyle": "",
-    "codexNativeToolPassthrough": false,
     "codexToolCompat": true,
     "stripCodexClientTools": true,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": false,
     "noVision": false,
     "noVisionModels": [],
     "visionFallbackModel": ""
@@ -239,11 +203,8 @@ export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
     },
     "reasoningMapping": {},
     "reasoningParamStyle": "",
-    "codexNativeToolPassthrough": false,
     "codexToolCompat": true,
     "stripCodexClientTools": true,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": true,
     "noVision": false,
     "noVisionModels": [
       "glm-5.2",
@@ -255,11 +216,8 @@ export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
     "modelMapping": {},
     "reasoningMapping": {},
     "reasoningParamStyle": "",
-    "codexNativeToolPassthrough": false,
     "codexToolCompat": false,
     "stripCodexClientTools": false,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": false,
     "noVision": false,
     "noVisionModels": [],
     "visionFallbackModel": ""
@@ -272,11 +230,8 @@ export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
     },
     "reasoningMapping": {},
     "reasoningParamStyle": "",
-    "codexNativeToolPassthrough": false,
     "codexToolCompat": false,
     "stripCodexClientTools": false,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": true,
     "noVision": false,
     "noVisionModels": [],
     "visionFallbackModel": ""
@@ -294,11 +249,8 @@ export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
       "minimax-m3": "xhigh"
     },
     "reasoningParamStyle": "reasoning",
-    "codexNativeToolPassthrough": true,
     "codexToolCompat": false,
     "stripCodexClientTools": false,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": true,
     "noVision": false,
     "noVisionModels": [
       "glm-5.2",
@@ -314,11 +266,8 @@ export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
     },
     "reasoningMapping": {},
     "reasoningParamStyle": "",
-    "codexNativeToolPassthrough": false,
     "codexToolCompat": true,
     "stripCodexClientTools": true,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": true,
     "noVision": false,
     "noVisionModels": [],
     "visionFallbackModel": ""
@@ -331,11 +280,8 @@ export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
     },
     "reasoningMapping": {},
     "reasoningParamStyle": "",
-    "codexNativeToolPassthrough": false,
     "codexToolCompat": true,
     "stripCodexClientTools": true,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": true,
     "noVision": false,
     "noVisionModels": [],
     "visionFallbackModel": "",
@@ -345,11 +291,8 @@ export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
     "modelMapping": {},
     "reasoningMapping": {},
     "reasoningParamStyle": "",
-    "codexNativeToolPassthrough": true,
     "codexToolCompat": false,
     "stripCodexClientTools": false,
-    "stripImageGenerationTool": true,
-    "normalizeNonstandardChatRoles": false,
     "noVision": false,
     "noVisionModels": [],
     "visionFallbackModel": "",

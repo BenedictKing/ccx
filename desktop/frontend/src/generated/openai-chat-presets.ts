@@ -9,12 +9,7 @@ export interface OpenAIChatPreset {
   reasoningParamStyle: OpenAIChatReasoningParamStyle
   serviceType?: 'openai' | 'gemini' | 'claude' | 'responses' | 'copilot'
   authHeader: '' | 'auto' | 'bearer' | 'x-api-key'
-  passbackReasoningContent: boolean
-  passbackThinkingBlocks: boolean
-  stripEmptyTextBlocks: boolean
   normalizeSystemRoleToTopLevel: boolean
-  stripImageGenerationTool: boolean
-  normalizeNonstandardChatRoles: boolean
   noVision: boolean
   noVisionModels: string[]
   visionFallbackModel: string
@@ -27,12 +22,7 @@ export const openaiChatPresets: Record<string, OpenAIChatPreset> = {
     "reasoningMapping": {},
     "reasoningParamStyle": "reasoning",
     "authHeader": "",
-    "passbackReasoningContent": false,
-    "passbackThinkingBlocks": false,
-    "stripEmptyTextBlocks": false,
     "normalizeSystemRoleToTopLevel": false,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": false,
     "noVision": true,
     "noVisionModels": [],
     "visionFallbackModel": ""
@@ -42,12 +32,7 @@ export const openaiChatPresets: Record<string, OpenAIChatPreset> = {
     "reasoningMapping": {},
     "reasoningParamStyle": "thinking",
     "authHeader": "",
-    "passbackReasoningContent": false,
-    "passbackThinkingBlocks": false,
-    "stripEmptyTextBlocks": false,
     "normalizeSystemRoleToTopLevel": false,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": false,
     "noVision": false,
     "noVisionModels": [
       "mimo-v2.5-pro"
@@ -60,12 +45,7 @@ export const openaiChatPresets: Record<string, OpenAIChatPreset> = {
     "reasoningMapping": {},
     "reasoningParamStyle": "reasoning",
     "authHeader": "",
-    "passbackReasoningContent": false,
-    "passbackThinkingBlocks": false,
-    "stripEmptyTextBlocks": false,
     "normalizeSystemRoleToTopLevel": false,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": false,
     "noVision": false,
     "noVisionModels": [
       "glm-5.2",
@@ -78,12 +58,7 @@ export const openaiChatPresets: Record<string, OpenAIChatPreset> = {
     "reasoningMapping": {},
     "reasoningParamStyle": "",
     "authHeader": "",
-    "passbackReasoningContent": false,
-    "passbackThinkingBlocks": false,
-    "stripEmptyTextBlocks": false,
     "normalizeSystemRoleToTopLevel": false,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": false,
     "noVision": false,
     "noVisionModels": [],
     "visionFallbackModel": ""
@@ -93,12 +68,7 @@ export const openaiChatPresets: Record<string, OpenAIChatPreset> = {
     "reasoningMapping": {},
     "reasoningParamStyle": "",
     "authHeader": "",
-    "passbackReasoningContent": false,
-    "passbackThinkingBlocks": false,
-    "stripEmptyTextBlocks": false,
     "normalizeSystemRoleToTopLevel": false,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": false,
     "noVision": false,
     "noVisionModels": [],
     "visionFallbackModel": ""
@@ -108,12 +78,7 @@ export const openaiChatPresets: Record<string, OpenAIChatPreset> = {
     "reasoningMapping": {},
     "reasoningParamStyle": "",
     "authHeader": "",
-    "passbackReasoningContent": false,
-    "passbackThinkingBlocks": false,
-    "stripEmptyTextBlocks": false,
     "normalizeSystemRoleToTopLevel": false,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": false,
     "noVision": false,
     "noVisionModels": [],
     "visionFallbackModel": ""
@@ -123,12 +88,7 @@ export const openaiChatPresets: Record<string, OpenAIChatPreset> = {
     "reasoningMapping": {},
     "reasoningParamStyle": "",
     "authHeader": "",
-    "passbackReasoningContent": false,
-    "passbackThinkingBlocks": false,
-    "stripEmptyTextBlocks": false,
     "normalizeSystemRoleToTopLevel": false,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": true,
     "noVision": false,
     "noVisionModels": [
       "glm-5.2",
@@ -141,12 +101,7 @@ export const openaiChatPresets: Record<string, OpenAIChatPreset> = {
     "reasoningMapping": {},
     "reasoningParamStyle": "",
     "authHeader": "",
-    "passbackReasoningContent": false,
-    "passbackThinkingBlocks": false,
-    "stripEmptyTextBlocks": false,
     "normalizeSystemRoleToTopLevel": false,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": true,
     "noVision": false,
     "noVisionModels": [],
     "visionFallbackModel": ""
@@ -156,12 +111,7 @@ export const openaiChatPresets: Record<string, OpenAIChatPreset> = {
     "reasoningMapping": {},
     "reasoningParamStyle": "",
     "authHeader": "",
-    "passbackReasoningContent": false,
-    "passbackThinkingBlocks": false,
-    "stripEmptyTextBlocks": false,
     "normalizeSystemRoleToTopLevel": false,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": false,
     "noVision": false,
     "noVisionModels": [],
     "visionFallbackModel": ""
@@ -171,12 +121,7 @@ export const openaiChatPresets: Record<string, OpenAIChatPreset> = {
     "reasoningMapping": {},
     "reasoningParamStyle": "",
     "authHeader": "",
-    "passbackReasoningContent": false,
-    "passbackThinkingBlocks": false,
-    "stripEmptyTextBlocks": false,
     "normalizeSystemRoleToTopLevel": false,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": false,
     "noVision": false,
     "noVisionModels": [],
     "visionFallbackModel": ""
@@ -194,12 +139,7 @@ export const openaiChatPresets: Record<string, OpenAIChatPreset> = {
     },
     "reasoningParamStyle": "reasoning",
     "authHeader": "bearer",
-    "passbackReasoningContent": false,
-    "passbackThinkingBlocks": false,
-    "stripEmptyTextBlocks": false,
     "normalizeSystemRoleToTopLevel": false,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": true,
     "noVision": false,
     "noVisionModels": [
       "glm-5.2",
@@ -220,12 +160,7 @@ export const openaiChatPresets: Record<string, OpenAIChatPreset> = {
     },
     "reasoningParamStyle": "reasoning",
     "authHeader": "bearer",
-    "passbackReasoningContent": false,
-    "passbackThinkingBlocks": false,
-    "stripEmptyTextBlocks": false,
     "normalizeSystemRoleToTopLevel": false,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": true,
     "noVision": false,
     "noVisionModels": [
       "glm-5.2",
@@ -238,12 +173,7 @@ export const openaiChatPresets: Record<string, OpenAIChatPreset> = {
     "reasoningMapping": {},
     "reasoningParamStyle": "",
     "authHeader": "",
-    "passbackReasoningContent": false,
-    "passbackThinkingBlocks": false,
-    "stripEmptyTextBlocks": false,
     "normalizeSystemRoleToTopLevel": false,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": true,
     "noVision": false,
     "noVisionModels": [],
     "visionFallbackModel": ""
@@ -253,12 +183,7 @@ export const openaiChatPresets: Record<string, OpenAIChatPreset> = {
     "reasoningMapping": {},
     "reasoningParamStyle": "",
     "authHeader": "",
-    "passbackReasoningContent": false,
-    "passbackThinkingBlocks": false,
-    "stripEmptyTextBlocks": false,
     "normalizeSystemRoleToTopLevel": false,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": true,
     "noVision": false,
     "noVisionModels": [],
     "visionFallbackModel": ""
@@ -272,12 +197,7 @@ export const openaiChatPresets: Record<string, OpenAIChatPreset> = {
     "reasoningMapping": {},
     "reasoningParamStyle": "",
     "authHeader": "",
-    "passbackReasoningContent": false,
-    "passbackThinkingBlocks": false,
-    "stripEmptyTextBlocks": false,
     "normalizeSystemRoleToTopLevel": false,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": true,
     "noVision": false,
     "noVisionModels": [],
     "visionFallbackModel": ""

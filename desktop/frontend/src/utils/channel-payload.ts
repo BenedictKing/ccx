@@ -48,8 +48,6 @@ export interface ChannelFormLike {
   lowQuality: boolean
   injectDummyThoughtSignature: boolean
   stripThoughtSignature: boolean
-  passbackReasoningContent: boolean
-  passbackThinkingBlocks: boolean
   description: string
   apiKeys: string[]
   apiKeyConfigs?: Channel['apiKeyConfigs']
@@ -80,13 +78,9 @@ export interface ChannelFormLike {
   autoBlacklistBalance: boolean
   normalizeMetadataUserId: boolean
   stripBillingHeader?: boolean
-  stripEmptyTextBlocks: boolean
   normalizeSystemRoleToTopLevel: boolean
-  codexNativeToolPassthrough: boolean
   codexToolCompat: boolean
-  normalizeNonstandardChatRoles?: boolean
   stripCodexClientTools?: boolean
-  stripImageGenerationTool?: boolean
   noVision: boolean
   noVisionModels: string[]
   visionFallbackModel: string
@@ -512,8 +506,6 @@ export function buildChannelPayload(
     lowQuality: form.lowQuality,
     injectDummyThoughtSignature: form.injectDummyThoughtSignature,
     stripThoughtSignature: form.stripThoughtSignature,
-    passbackReasoningContent: form.passbackReasoningContent,
-    passbackThinkingBlocks: form.passbackThinkingBlocks,
     description: form.description.trim(),
     apiKeys: processedApiKeys,
     modelMapping: form.modelMapping,
@@ -531,13 +523,9 @@ export function buildChannelPayload(
     autoBlacklistBalance: form.autoBlacklistBalance,
     normalizeMetadataUserId,
     stripBillingHeader: !!form.stripBillingHeader,
-    stripEmptyTextBlocks: form.stripEmptyTextBlocks,
     normalizeSystemRoleToTopLevel: form.normalizeSystemRoleToTopLevel,
-    codexNativeToolPassthrough: form.codexNativeToolPassthrough,
     codexToolCompat: form.codexToolCompat,
-    normalizeNonstandardChatRoles: !!form.normalizeNonstandardChatRoles,
     stripCodexClientTools: form.codexToolCompat,
-    stripImageGenerationTool: !!form.stripImageGenerationTool,
     noVision: form.noVision,
     noVisionModels: form.noVisionModels,
     visionFallbackModel: typeof form.visionFallbackModel === 'object' && form.visionFallbackModel !== null

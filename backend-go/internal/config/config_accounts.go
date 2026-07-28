@@ -587,6 +587,16 @@ func (cm *ConfigManager) mergeManagedProviderAccounts() bool {
 			if channel.Status == "active" {
 				merged.Status = "active"
 			}
+			// 兼容性种子随渠道一起合并：被合并掉的渠道若带有历史手工配置降级来的种子，
+			// 不合并就会连同渠道一起丢弃。已存在的种子优先（canonical 渠道的观察更可信）。
+			for trait, entry := range channel.CompatSeeds {
+				if merged.CompatSeeds == nil {
+					merged.CompatSeeds = make(map[string]CompatSeedEntry, len(channel.CompatSeeds))
+				}
+				if _, exists := merged.CompatSeeds[trait]; !exists {
+					merged.CompatSeeds[trait] = entry
+				}
+			}
 			updated = true
 		}
 		return out

@@ -82,16 +82,10 @@ func TestRuntimeUpstreamForAutoManagedProviderStripsLegacyCompat(t *testing.T) {
 		ReasoningParamStyle:           "thinking",
 		NormalizeMetadataUserID:       &trueValue,
 		StripBillingHeader:            &trueValue,
-		StripEmptyTextBlocks:          BoolPtr(true),
 		NormalizeSystemRoleToTopLevel: true,
-		PassbackReasoningContent:      BoolPtr(true),
-		PassbackThinkingBlocks:        BoolPtr(true),
 		NoVision:                      true,
 		NoVisionModels:                []string{"mimo-v2.5-pro"},
 		VisionFallbackModel:           "mimo-v2.5",
-		StripImageGenerationTool:      BoolPtr(true),
-		NormalizeNonstandardChatRoles: BoolPtr(true),
-		CodexNativeToolPassthrough:    BoolPtr(true),
 		CodexToolCompat:               &trueValue,
 		StripCodexClientTools:         true,
 		ConvertImageURLToB64JSON:      true,
@@ -100,6 +94,13 @@ func TestRuntimeUpstreamForAutoManagedProviderStripsLegacyCompat(t *testing.T) {
 		HistoricalImageTurnLimit:      4,
 		CompactModel:                  "legacy-compact",
 	}
+	// 六个兼容性开关不再是可写字段：历史手工值只会以种子形态存在，运行时归一化须清空它们。
+	upstream.SetCompatSeed(TraitStripEmptyTextBlocks, true)
+	upstream.SetCompatSeed(TraitPassbackReasoningContent, true)
+	upstream.SetCompatSeed(TraitPassbackThinkingBlocks, true)
+	upstream.SetCompatSeed(TraitStripImageGenTool, true)
+	upstream.SetCompatSeed(TraitNormalizeNonstandardChatRoles, true)
+	upstream.SetCompatSeed(TraitCodexNativeToolPassthrough, true)
 
 	runtime := RuntimeUpstreamForAutoManagedProvider(upstream)
 	if runtime == upstream {
@@ -141,12 +142,13 @@ func TestRuntimeUpstreamForAutoManagedProviderLeavesManualChannelUntouched(t *te
 
 func TestRuntimeUpstreamForAutoManagedProviderReappliesNativeDefaults(t *testing.T) {
 	upstream := &UpstreamConfig{
-		ProviderID:               "glm",
-		AutoManaged:              true,
-		ServiceType:              "openai",
-		ReasoningParamStyle:      "thinking",
-		PassbackReasoningContent: BoolPtr(false),
+		ProviderID:          "glm",
+		AutoManaged:         true,
+		ServiceType:         "openai",
+		ReasoningParamStyle: "thinking",
 	}
+	// 历史手工关闭 passback 只会以种子形态残留；运行时归一化须清掉种子并恢复 GLM 静态默认。
+	upstream.SetCompatSeed(TraitPassbackReasoningContent, false)
 
 	runtime := RuntimeUpstreamForAutoManagedProvider(upstream)
 	if runtime.ReasoningParamStyle != "reasoning_effort" || !runtime.IsPassbackReasoningContentEnabled() {

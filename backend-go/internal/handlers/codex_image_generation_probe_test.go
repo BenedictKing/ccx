@@ -268,13 +268,14 @@ func TestExecuteCodexImageGenerationCapabilityTestStripFallback(t *testing.T) {
 	defer server.Close()
 
 	channel := config.UpstreamConfig{
-		Name:                     "responses-strip",
-		BaseURL:                  server.URL,
-		APIKeys:                  []string{apiKey},
-		AuthHeader:               "bearer",
-		ServiceType:              "responses",
-		StripImageGenerationTool: config.BoolPtr(true),
+		Name:        "responses-strip",
+		BaseURL:     server.URL,
+		APIKeys:     []string{apiKey},
+		AuthHeader:  "bearer",
+		ServiceType: "responses",
 	}
+	// 该兼容开关已无手工字段：用可落盘的种子表达"剥离已生效"。
+	channel.SetCompatSeed(config.TraitStripImageGenTool, true)
 	cfgManager := newResponsesConfigManager(t, channel)
 	configured := cfgManager.GetConfig().ResponsesUpstream[0]
 	result := executeCodexImageGenerationCapabilityTest(context.Background(), &configured, codexAutoReviewModel, 5*time.Second, cfgManager, 0, "responses")

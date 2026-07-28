@@ -11,12 +11,7 @@ const channelPresetDefaults = {
   reasoningMapping: {},
   reasoningParamStyle: '',
   authHeader: '',
-  passbackReasoningContent: false,
-  passbackThinkingBlocks: false,
-  stripEmptyTextBlocks: false,
   normalizeSystemRoleToTopLevel: false,
-  stripImageGenerationTool: false,
-  normalizeNonstandardChatRoles: false,
   noVision: false,
   noVisionModels: [],
   visionFallbackModel: '',
@@ -26,11 +21,8 @@ const codexResponsesDefaults = {
   modelMapping: {},
   reasoningMapping: {},
   reasoningParamStyle: '',
-  codexNativeToolPassthrough: false,
   codexToolCompat: true,
   stripCodexClientTools: true,
-  stripImageGenerationTool: false,
-  normalizeNonstandardChatRoles: false,
   noVision: false,
   noVisionModels: [],
   visionFallbackModel: '',
@@ -169,11 +161,8 @@ export interface ${config.interfaceName} {
   reasoningMapping: Partial<Record<string, ${config.typePrefix}ReasoningEffort>>
   reasoningParamStyle: ${config.typePrefix}ReasoningParamStyle
   serviceType?: 'openai' | 'gemini' | 'claude' | 'responses' | 'copilot'
-  codexNativeToolPassthrough: boolean
   codexToolCompat: boolean
   stripCodexClientTools: boolean
-  stripImageGenerationTool: boolean
-  normalizeNonstandardChatRoles: boolean
   noVision: boolean
   noVisionModels: string[]
   visionFallbackModel: string
@@ -195,13 +184,8 @@ export interface ${config.interfaceName} {
   reasoningParamStyle: ${config.typePrefix}ReasoningParamStyle
   serviceType?: 'openai' | 'gemini' | 'claude' | 'responses' | 'copilot'
   authHeader: '' | 'auto' | 'bearer' | 'x-api-key'
-  passbackReasoningContent: boolean
-  passbackThinkingBlocks: boolean
-  stripEmptyTextBlocks: boolean
   normalizeSystemRoleToTopLevel: boolean
-${compatibilityInterfaceFields}  stripImageGenerationTool: boolean
-  normalizeNonstandardChatRoles: boolean
-  noVision: boolean
+${compatibilityInterfaceFields}  noVision: boolean
   noVisionModels: string[]
   visionFallbackModel: string
   rateLimitRpm?: number
@@ -233,20 +217,14 @@ function formatGoConfig(preset) {
   if (preset.serviceType) fields.push(`ServiceType: ${quote(preset.serviceType)}`)
   if (preset.reasoningParamStyle) fields.push(`ReasoningParamStyle: ${quote(preset.reasoningParamStyle)}`)
   if (preset.authHeader) fields.push(`AuthHeader: ${quote(preset.authHeader)}`)
-  if (preset.passbackReasoningContent) fields.push('PassbackReasoningContent: true')
-  if (preset.passbackThinkingBlocks) fields.push('PassbackThinkingBlocks: true')
   if (preset.normalizeSystemRoleToTopLevel) fields.push('NormalizeSystemRoleToTopLevel: true')
   if (hasOwn(preset, 'normalizeMetadataUserId')) fields.push(`NormalizeMetadataUserId: boolRef(${Boolean(preset.normalizeMetadataUserId)})`)
   if (preset.stripBillingHeader) fields.push('StripBillingHeader: true')
   if (preset.noVision) fields.push('NoVision: true')
   if (noVisionModels) fields.push(`NoVisionModels: ${noVisionModels}`)
   if (preset.visionFallbackModel) fields.push(`VisionFallbackModel: ${quote(preset.visionFallbackModel)}`)
-  if (preset.stripEmptyTextBlocks) fields.push('StripEmptyTextBlocks: true')
-  if (preset.codexNativeToolPassthrough) fields.push('CodexNativeToolPassthrough: true')
   if (hasOwn(preset, 'codexToolCompat')) fields.push(`CodexToolCompat: boolRef(${Boolean(preset.codexToolCompat)})`)
   if (hasOwn(preset, 'stripCodexClientTools')) fields.push(`StripCodexClientTools: boolRef(${Boolean(preset.stripCodexClientTools)})`)
-  if (preset.stripImageGenerationTool) fields.push('StripImageGenerationTool: true')
-  if (preset.normalizeNonstandardChatRoles) fields.push('NormalizeNonstandardChatRoles: true')
   if (preset.rateLimitRpm) fields.push(`RateLimitRPM: ${Number(preset.rateLimitRpm)}`)
 
   return `channelTargetConfig{${fields.join(', ')}}`

@@ -108,6 +108,12 @@ func (cm *ConfigManager) loadConfig() error {
 	if cm.applyCodexToolCompatMigration(data) {
 		needSaveDefaults = true
 	}
+	// 必须在 mergeManagedProviderAccounts 之前：该迁移按数组下标把原始 JSON 的历史字段对到
+	// 当前渠道，而 merge 会合并/重排渠道数组（多账号同 provider 时 out 比输入更短），
+	// 一旦先 merge 再迁移，种子就会写到错误的渠道或随被合并渠道一起丢失。
+	if cm.migrateManualCompatSwitchesToSeeds(data) {
+		needSaveDefaults = true
+	}
 	if cm.migrateFableModelMapping() {
 		needSaveDefaults = true
 	}
@@ -133,9 +139,6 @@ func (cm *ConfigManager) loadConfig() error {
 		needSaveDefaults = true
 	}
 	if cm.migrateDisabledKeyRecoveryTimes(time.Now()) {
-		needSaveDefaults = true
-	}
-	if cm.migrateManualCompatSwitchesToSeeds() {
 		needSaveDefaults = true
 	}
 
@@ -520,61 +523,77 @@ func (cm *ConfigManager) applyCodexToolCompatMigration(rawJSON []byte) bool {
 // migrateFableModelMapping 自动为现有渠道补齐 fable 模型映射。
 // 若渠道 modelMapping 中存在 "opus" 映射但缺少 "fable"，则将 "fable" 指向同一目标。
 // 确保已有 opus 转发配置的渠道在升级后无需手动添加 fable 条目。
-// migrateManualCompatSwitchesToSeeds 把用户历史手工兼容配置升级合并进自学习体系。
+// compatSeedMigrationJSONKeys 历史手工兼容开关的 JSON 字段名 -> trait。
+// 这些字段已从 UpstreamConfig 结构体删除（管理面板不再提供编辑入口，渠道更新接口不再接受
+// 手工写入），只能从磁盘原始 JSON 里读到老用户的历史值，因此本迁移必须读 rawJSON 而非结构体字段。
+var compatSeedMigrationJSONKeys = map[string]CompatTrait{
+	"stripImageGenerationTool":      TraitStripImageGenTool,
+	"stripEmptyTextBlocks":          TraitStripEmptyTextBlocks,
+	"passbackReasoningContent":      TraitPassbackReasoningContent,
+	"passbackThinkingBlocks":        TraitPassbackThinkingBlocks,
+	"normalizeNonstandardChatRoles": TraitNormalizeNonstandardChatRoles,
+	"codexNativeToolPassthrough":    TraitCodexNativeToolPassthrough,
+}
+
+// migrateManualCompatSwitchesToSeeds 把用户历史手工兼容配置降级为一次性低置信度提示。
 //
-// 动机：手工开关原本永久压过自动学习，意味着老用户即使装了自学习也还得手工维护这些开关，
-// 上游能力变化后仍要人工改一次。迁移后手工值降级为「初始证据」种子（渠道级、无 TTL），
-// 学到真实结论即自动让位，此后用户不需要再手工干预。
+// 动机：手工开关原本会永久压过自动学习。但历史手工值不代表可信的长期事实——当初可能就设错，
+// 或者上游后来有了新情况已不再适用。因此不当作"用户意图"保留，而是降级为带 CompatSeedTTL
+// 有效期的种子：在学习结论出现前提供一点初始参考，过期后（或学到真实结论后）完全不再参与判断。
 //
-// 幂等：迁移后原字段置 nil，下次启动不再命中；用户之后重新手工设置的值不会被再次搬走
-// （那是他此刻的明确意图，应保持第 1 优先级直到他自己清空）。
-func (cm *ConfigManager) migrateManualCompatSwitchesToSeeds() bool {
+// 六个兼容性字段已从 UpstreamConfig 结构体整体删除，管理面板与渠道更新接口都不再接受手工写入，
+// 此后这些开关完全是运行时内部状态。本迁移只是给老配置一次性的"温和退场"，不是持续入口。
+//
+// 幂等：迁移后原 JSON 键在下次序列化时自然消失（结构体已无对应字段）；已有种子的渠道跳过。
+func (cm *ConfigManager) migrateManualCompatSwitchesToSeeds(rawJSON []byte) bool {
+	var rawMap map[string]json.RawMessage
+	if err := json.Unmarshal(rawJSON, &rawMap); err != nil {
+		return false
+	}
 	updated := false
 
-	apply := func(channels []UpstreamConfig, channelName string) {
+	apply := func(raw json.RawMessage, channels []UpstreamConfig, channelName string) {
+		var rawChannels []map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &rawChannels); err != nil {
+			return
+		}
 		for i := range channels {
+			if i >= len(rawChannels) {
+				continue
+			}
 			ch := &channels[i]
-			// 已迁移过（有种子）则跳过，避免把用户新设的值再次降级
 			if len(ch.CompatSeeds) > 0 {
 				continue
 			}
-
-			type binding struct {
-				field *(*bool)
-				trait CompatTrait
-			}
-			bindings := []binding{
-				{&ch.StripImageGenerationTool, TraitStripImageGenTool},
-				{&ch.StripEmptyTextBlocks, TraitStripEmptyTextBlocks},
-				{&ch.PassbackReasoningContent, TraitPassbackReasoningContent},
-				{&ch.PassbackThinkingBlocks, TraitPassbackThinkingBlocks},
-				{&ch.NormalizeNonstandardChatRoles, TraitNormalizeNonstandardChatRoles},
-				{&ch.CodexNativeToolPassthrough, TraitCodexNativeToolPassthrough},
-			}
+			rawChannel := rawChannels[i]
 
 			var migrated []string
-			for _, b := range bindings {
-				if *b.field == nil {
+			for jsonKey, trait := range compatSeedMigrationJSONKeys {
+				raw, exists := rawChannel[jsonKey]
+				if !exists {
 					continue
 				}
-				ch.SetCompatSeed(b.trait, **b.field)
-				*b.field = nil
-				migrated = append(migrated, string(b.trait))
+				var v bool
+				if err := json.Unmarshal(raw, &v); err != nil {
+					continue
+				}
+				ch.SetCompatSeed(trait, v)
+				migrated = append(migrated, string(trait))
 			}
 			if len(migrated) > 0 {
 				updated = true
-				log.Printf("[Config-Migration] %s 渠道 [%d] %s 手工兼容开关已升级为自学习种子: %s",
-					channelName, i, ch.Name, strings.Join(migrated, ","))
+				log.Printf("[Config-Migration] %s 渠道 [%d] %s 手工兼容开关已降级为 %s 一次性提示（%s）",
+					channelName, i, ch.Name, CompatSeedTTL, strings.Join(migrated, ","))
 			}
 		}
 	}
 
-	apply(cm.config.Upstream, "Messages")
-	apply(cm.config.ResponsesUpstream, "Responses")
-	apply(cm.config.GeminiUpstream, "Gemini")
-	apply(cm.config.ChatUpstream, "Chat")
-	apply(cm.config.ImagesUpstream, "Images")
-	apply(cm.config.VectorsUpstream, "Vectors")
+	apply(rawMap["upstream"], cm.config.Upstream, "Messages")
+	apply(rawMap["responsesUpstream"], cm.config.ResponsesUpstream, "Responses")
+	apply(rawMap["geminiUpstream"], cm.config.GeminiUpstream, "Gemini")
+	apply(rawMap["chatUpstream"], cm.config.ChatUpstream, "Chat")
+	apply(rawMap["imagesUpstream"], cm.config.ImagesUpstream, "Images")
+	apply(rawMap["vectorsUpstream"], cm.config.VectorsUpstream, "Vectors")
 	return updated
 }
 

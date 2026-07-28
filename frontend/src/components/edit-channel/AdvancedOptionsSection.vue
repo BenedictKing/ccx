@@ -68,7 +68,6 @@
           v-if="channelType !== 'vectors'"
           :form="form"
           :channel-type="channelType"
-          :supports-chat-role-normalization="supportsChatRoleNormalization"
           :supports-open-a-i-advanced-options="supportsOpenAIAdvancedOptions"
           :reasoning-param-style-options="reasoningParamStyleOptions"
           :text-verbosity-options="textVerbosityOptions"
@@ -93,21 +92,15 @@ interface FormData {
   insecureSkipVerify: boolean
   lowQuality: boolean
   autoBlacklistBalance: boolean
-  codexNativeToolPassthrough?: boolean
   codexToolCompat?: boolean
-  stripImageGenerationTool?: boolean
   convertImageUrlToB64Json?: boolean
   normalizeMetadataUserId?: boolean
   stripBillingHeader?: boolean
-  normalizeNonstandardChatRoles?: boolean
   reasoningParamStyle?: string
   textVerbosity?: string
   fastMode?: boolean
   injectDummyThoughtSignature?: boolean
   stripThoughtSignature?: boolean
-  passbackReasoningContent?: boolean
-  passbackThinkingBlocks?: boolean
-  stripEmptyTextBlocks?: boolean
   normalizeSystemRoleToTopLevel?: boolean
   historicalImageTurnLimit?: number
   authHeader?: 'auto' | 'bearer' | 'x-api-key' | ''
@@ -118,7 +111,6 @@ interface FormData {
 interface Props {
   form: FormData
   channelType: string
-  supportsChatRoleNormalization: boolean
   supportsOpenAIAdvancedOptions: boolean
   reasoningParamStyleOptions: Array<{ title: string; value: string }>
   textVerbosityOptions: Array<{ title: string; value: string }>

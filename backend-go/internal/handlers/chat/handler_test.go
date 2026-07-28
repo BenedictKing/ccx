@@ -171,9 +171,9 @@ func TestBuildProviderRequest_StripsImageGenerationTool(t *testing.T) {
 
 	bodyBytes := []byte(`{"model":"gpt-5.5","messages":[{"role":"user","content":"hi"}],"tools":[{"type":"image_generation","output_format":"png"},{"type":"function","function":{"name":"lookup_user"}}]}`)
 	upstream := &config.UpstreamConfig{
-		ServiceType:              "openai",
-		StripImageGenerationTool: config.BoolPtr(true),
+		ServiceType: "openai",
 	}
+	upstream.SetLearnedCompatTrait(config.TraitStripImageGenTool, true)
 
 	req, err := buildProviderRequest(c, upstream, "https://api.example.com", "sk-test", bodyBytes, "gpt-5.5", false)
 	if err != nil {
@@ -347,9 +347,9 @@ func TestBuildProviderRequest_NormalizeNonstandardChatRoles(t *testing.T) {
 			c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil).WithContext(context.Background())
 
 			upstream := &config.UpstreamConfig{
-				ServiceType:                   tt.serviceType,
-				NormalizeNonstandardChatRoles: config.BoolPtr(true),
+				ServiceType: tt.serviceType,
 			}
+			upstream.SetLearnedCompatTrait(config.TraitNormalizeNonstandardChatRoles, true)
 			req, err := buildProviderRequest(c, upstream, "https://api.example.com", "sk-test", bodyBytes, "gpt-5", false)
 			if err != nil {
 				t.Fatalf("buildProviderRequest() err = %v", err)
@@ -386,9 +386,9 @@ func TestBuildProviderRequest_FunctionWithToolCallIDMapsToTool(t *testing.T) {
 
 	bodyBytes := []byte(`{"model":"gpt-5","messages":[{"role":"assistant","content":"ok","tool_calls":[{"id":"call_1","type":"function","function":{"name":"f","arguments":"{}"}}]},{"role":"function","name":"f","content":"result","tool_call_id":"call_1"}]}`)
 	upstream := &config.UpstreamConfig{
-		ServiceType:                   "openai",
-		NormalizeNonstandardChatRoles: config.BoolPtr(true),
+		ServiceType: "openai",
 	}
+	upstream.SetLearnedCompatTrait(config.TraitNormalizeNonstandardChatRoles, true)
 	req, err := buildProviderRequest(c, upstream, "https://api.example.com", "sk-test", bodyBytes, "gpt-5", false)
 	if err != nil {
 		t.Fatalf("buildProviderRequest() err = %v", err)
@@ -558,9 +558,9 @@ func TestBuildProviderRequest_ClaudePassbackThinkingBlocksKeepsThinking(t *testi
 	}`)
 
 	upstream := &config.UpstreamConfig{
-		ServiceType:            "claude",
-		PassbackThinkingBlocks: config.BoolPtr(true),
+		ServiceType: "claude",
 	}
+	upstream.SetLearnedCompatTrait(config.TraitPassbackThinkingBlocks, true)
 
 	req, err := buildProviderRequest(c, upstream, "https://api.example.com/anthropic", "sk-test", bodyBytes, "deepseek-v4-pro", false)
 	if err != nil {

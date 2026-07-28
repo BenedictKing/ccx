@@ -11,20 +11,14 @@ interface FormData {
   modelCapabilitiesText: string
   historicalImageTurnLimit: number
   insecureSkipVerify: boolean
-  passbackReasoningContent: boolean
-  passbackThinkingBlocks: boolean
   lowQuality: boolean
   injectDummyThoughtSignature: boolean
   stripThoughtSignature: boolean
-  stripEmptyTextBlocks: boolean
   normalizeSystemRoleToTopLevel: boolean
   normalizeMetadataUserId: boolean
   stripBillingHeader: boolean
-  normalizeNonstandardChatRoles: boolean
   autoBlacklistBalance: boolean
-  codexNativeToolPassthrough: boolean
   codexToolCompat: boolean
-  stripImageGenerationTool: boolean
   reasoningParamStyle: string
   textVerbosity: string
   serviceType: string
@@ -36,7 +30,6 @@ defineProps<{
   form: FormData
   channelType: string
   supportsOpenAIAdvancedOptions: boolean
-  supportsChatRoleNormalization: boolean
   reasoningParamStyleOptions: Array<{ label: string; value: string }>
   textVerbosityOptions: Array<{ label: string; value: string }>
   diagnosing?: boolean
@@ -206,24 +199,10 @@ function updateTextVerbosity(value: string) {
         <div class="compat-option-list space-y-2">
           <div v-if="channelType === 'responses'" class="flex items-center justify-between gap-3">
             <div class="min-w-0 space-y-0.5">
-              <Label class="text-xs font-medium">{{ t('channelEditor.compat.codexNativeTools.label') }}</Label>
-              <p class="text-[10px] leading-4 text-muted-foreground">{{ t('channelEditor.compat.codexNativeTools.hint') }}</p>
-            </div>
-            <Switch :model-value="form.codexNativeToolPassthrough" @update:model-value="updateField('codexNativeToolPassthrough', $event)" />
-          </div>
-          <div v-if="channelType === 'responses'" class="flex items-center justify-between gap-3">
-            <div class="min-w-0 space-y-0.5">
               <Label class="text-xs font-medium">{{ t('channelEditor.compat.codexCompat.label') }}</Label>
               <p class="text-[10px] leading-4 text-muted-foreground">{{ t('channelEditor.compat.codexCompat.hint') }}</p>
             </div>
             <Switch :model-value="form.codexToolCompat" @update:model-value="updateField('codexToolCompat', $event)" />
-          </div>
-          <div v-if="channelType === 'responses' || channelType === 'chat'" class="flex items-center justify-between gap-3">
-            <div class="min-w-0 space-y-0.5">
-              <Label class="text-xs font-medium">{{ t('channelEditor.compat.stripImageGen.label') }}</Label>
-              <p class="text-[10px] leading-4 text-muted-foreground">{{ t('channelEditor.compat.stripImageGen.hint') }}</p>
-            </div>
-            <Switch :model-value="form.stripImageGenerationTool" @update:model-value="updateField('stripImageGenerationTool', $event)" />
           </div>
           <div v-if="channelType === 'messages'" class="flex items-center justify-between gap-3">
             <div class="min-w-0 space-y-0.5">
@@ -245,13 +224,6 @@ function updateTextVerbosity(value: string) {
               <p class="text-[10px] leading-4 text-muted-foreground">{{ t('channelEditor.compat.stripBillingHeader.hint') }}</p>
             </div>
             <Switch :model-value="form.stripBillingHeader" @update:model-value="updateField('stripBillingHeader', $event)" />
-          </div>
-          <div v-if="supportsChatRoleNormalization" class="flex items-center justify-between gap-3">
-            <div class="min-w-0 space-y-0.5">
-              <Label class="text-xs font-medium">{{ t('channelEditor.compat.normalizeRoles.label') }}</Label>
-              <p class="text-[10px] leading-4 text-muted-foreground">{{ t('channelEditor.compat.normalizeRoles.hint') }}</p>
-            </div>
-            <Switch :model-value="form.normalizeNonstandardChatRoles" @update:model-value="updateField('normalizeNonstandardChatRoles', $event)" />
           </div>
           <div v-if="supportsOpenAIAdvancedOptions" class="flex items-center justify-between gap-3">
             <div class="min-w-0 flex-1 space-y-0.5">
@@ -313,27 +285,6 @@ function updateTextVerbosity(value: string) {
               <p class="text-[10px] leading-4 text-muted-foreground">{{ t('channelEditor.compat.stripThoughtSignature.hint') }}</p>
             </div>
             <Switch :model-value="form.stripThoughtSignature" @update:model-value="updateField('stripThoughtSignature', $event)" />
-          </div>
-          <div v-if="(channelType === 'messages' || channelType === 'chat' || channelType === 'responses') && form.serviceType === 'claude'" class="flex items-center justify-between gap-3">
-            <div class="min-w-0 space-y-0.5">
-              <Label class="text-xs font-medium">{{ t('channelEditor.compat.passbackReasoning.label') }}</Label>
-              <p class="text-[10px] leading-4 text-muted-foreground">{{ t('channelEditor.compat.passbackReasoning.hint') }}</p>
-            </div>
-            <Switch :model-value="form.passbackReasoningContent" @update:model-value="updateField('passbackReasoningContent', $event)" />
-          </div>
-          <div v-if="(channelType === 'messages' || channelType === 'chat' || channelType === 'responses') && form.serviceType === 'claude'" class="flex items-center justify-between gap-3">
-            <div class="min-w-0 space-y-0.5">
-              <Label class="text-xs font-medium">{{ t('channelEditor.compat.passbackThinking.label') }}</Label>
-              <p class="text-[10px] leading-4 text-muted-foreground">{{ t('channelEditor.compat.passbackThinking.hint') }}</p>
-            </div>
-            <Switch :model-value="form.passbackThinkingBlocks" @update:model-value="updateField('passbackThinkingBlocks', $event)" />
-          </div>
-          <div v-if="channelType === 'messages' && form.serviceType === 'claude'" class="flex items-center justify-between gap-3">
-            <div class="min-w-0 space-y-0.5">
-              <Label class="text-xs font-medium">{{ t('channelEditor.compat.stripEmptyBlocks.label') }}</Label>
-              <p class="text-[10px] leading-4 text-muted-foreground">{{ t('channelEditor.compat.stripEmptyBlocks.hint') }}</p>
-            </div>
-            <Switch :model-value="form.stripEmptyTextBlocks" @update:model-value="updateField('stripEmptyTextBlocks', $event)" />
           </div>
           <div v-if="channelType !== 'images' && channelType !== 'vectors'" class="flex items-center justify-between gap-3">
             <div class="min-w-0 flex-1 space-y-0.5">

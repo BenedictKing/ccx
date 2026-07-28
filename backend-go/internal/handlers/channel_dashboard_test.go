@@ -371,14 +371,16 @@ func TestGetChannelDashboard_Gemini_IncludesAdvancedOptionFields(t *testing.T) {
 func TestGetChannelDashboard_MessagesIncludesStripEmptyTextBlocks(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
+	channel := config.UpstreamConfig{
+		Name:        "msg-claude",
+		ServiceType: "claude",
+		BaseURL:     "https://example.com",
+		APIKeys:     []string{"sk-test"},
+	}
+	// 该兼容开关已无手工字段：用可落盘的种子表达"生效值为 true"。
+	channel.SetCompatSeed(config.TraitStripEmptyTextBlocks, true)
 	cfg := config.Config{
-		Upstream: []config.UpstreamConfig{{
-			Name:                 "msg-claude",
-			ServiceType:          "claude",
-			BaseURL:              "https://example.com",
-			APIKeys:              []string{"sk-test"},
-			StripEmptyTextBlocks: config.BoolPtr(true),
-		}},
+		Upstream: []config.UpstreamConfig{channel},
 	}
 
 	tmpDir := t.TempDir()

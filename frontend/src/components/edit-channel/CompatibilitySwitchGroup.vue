@@ -52,18 +52,6 @@
     </v-expand-transition>
 
     <div class="d-flex flex-column ga-3 compat-options">
-      <!-- Codex Native Tool Passthrough -->
-      <div v-if="channelType === 'responses'" class="d-flex align-center justify-space-between">
-        <div class="d-flex align-center ga-2">
-          <v-icon color="primary">mdi-cog</v-icon>
-          <div>
-            <div class="section-title section-title--soft">{{ t('channelEditor.compat.codexNativeTools.label') }}</div>
-            <div class="text-caption text-medium-emphasis">{{ t('channelEditor.compat.codexNativeTools.hint') }}</div>
-          </div>
-        </div>
-        <v-switch :model-value="form.codexNativeToolPassthrough" inset color="primary" hide-details @update:model-value="updateField('codexNativeToolPassthrough', $event)" />
-      </div>
-
       <!-- Codex Tool Compat -->
       <div v-if="channelType === 'responses'" class="d-flex align-center justify-space-between">
         <div class="d-flex align-center ga-2">
@@ -74,18 +62,6 @@
           </div>
         </div>
         <v-switch :model-value="form.codexToolCompat" inset color="primary" hide-details @update:model-value="updateField('codexToolCompat', $event)" />
-      </div>
-
-      <!-- Strip Image Generation Tool -->
-      <div v-if="channelType === 'responses' || channelType === 'chat'" class="d-flex align-center justify-space-between">
-        <div class="d-flex align-center ga-2">
-          <v-icon color="warning">mdi-filter-remove</v-icon>
-          <div>
-            <div class="section-title section-title--soft">{{ t('channelEditor.compat.stripImageGen.label') }}</div>
-            <div class="text-caption text-medium-emphasis">{{ t('channelEditor.compat.stripImageGen.hint') }}</div>
-          </div>
-        </div>
-        <v-switch :model-value="form.stripImageGenerationTool" inset color="warning" hide-details @update:model-value="updateField('stripImageGenerationTool', $event)" />
       </div>
 
       <!-- Convert Images URL to b64_json -->
@@ -134,18 +110,6 @@
           </div>
         </div>
         <v-switch :model-value="form.stripBillingHeader" inset color="warning" hide-details @update:model-value="updateField('stripBillingHeader', $event)" />
-      </div>
-
-      <!-- Normalize Nonstandard Chat Roles -->
-      <div v-if="supportsChatRoleNormalization" class="d-flex align-center justify-space-between">
-        <div class="d-flex align-center ga-2">
-          <v-icon color="primary">mdi-account-switch</v-icon>
-          <div>
-            <div class="section-title section-title--soft">{{ t('channelEditor.compat.normalizeRoles.label') }}</div>
-            <div class="text-caption text-medium-emphasis">{{ t('channelEditor.compat.normalizeRoles.hint') }}</div>
-          </div>
-        </div>
-        <v-switch :model-value="form.normalizeNonstandardChatRoles" inset color="primary" hide-details @update:model-value="updateField('normalizeNonstandardChatRoles', $event)" />
       </div>
 
       <!-- Reasoning Param Style -->
@@ -229,42 +193,6 @@
         <v-switch :model-value="form.stripThoughtSignature" inset color="error" hide-details @update:model-value="updateField('stripThoughtSignature', $event)" />
       </div>
 
-      <!-- Passback Reasoning Content (Claude) -->
-      <div v-if="(channelType === 'messages' || channelType === 'chat' || channelType === 'responses') && form.serviceType === 'claude'" class="d-flex align-center justify-space-between">
-        <div class="d-flex align-center ga-2">
-          <v-icon color="secondary">mdi-brain</v-icon>
-          <div>
-            <div class="section-title section-title--soft">{{ t('channelEditor.compat.passbackReasoning.label') }}</div>
-            <div class="text-caption text-medium-emphasis">{{ t('channelEditor.compat.passbackReasoning.hint') }}</div>
-          </div>
-        </div>
-        <v-switch :model-value="form.passbackReasoningContent" inset color="secondary" hide-details @update:model-value="updateField('passbackReasoningContent', $event)" />
-      </div>
-
-      <!-- Passback Thinking Blocks (Claude) -->
-      <div v-if="(channelType === 'messages' || channelType === 'chat' || channelType === 'responses') && form.serviceType === 'claude'" class="d-flex align-center justify-space-between">
-        <div class="d-flex align-center ga-2">
-          <v-icon color="secondary">mdi-head-snowflake</v-icon>
-          <div>
-            <div class="section-title section-title--soft">{{ t('channelEditor.compat.passbackThinking.label') }}</div>
-            <div class="text-caption text-medium-emphasis">{{ t('channelEditor.compat.passbackThinking.hint') }}</div>
-          </div>
-        </div>
-        <v-switch :model-value="form.passbackThinkingBlocks" inset color="secondary" hide-details @update:model-value="updateField('passbackThinkingBlocks', $event)" />
-      </div>
-
-      <!-- Strip Empty Text Blocks (Claude) -->
-      <div v-if="channelType === 'messages' && form.serviceType === 'claude'" class="d-flex align-center justify-space-between">
-        <div class="d-flex align-center ga-2">
-          <v-icon color="warning">mdi-filter-remove</v-icon>
-          <div>
-            <div class="section-title section-title--soft">{{ t('channelEditor.compat.stripEmptyBlocks.label') }}</div>
-            <div class="text-caption text-medium-emphasis">{{ t('channelEditor.compat.stripEmptyBlocks.hint') }}</div>
-          </div>
-        </div>
-        <v-switch :model-value="form.stripEmptyTextBlocks" inset color="warning" hide-details @update:model-value="updateField('stripEmptyTextBlocks', $event)" />
-      </div>
-
       <!-- Historical Image Turn Limit -->
       <div v-if="channelType !== 'images' && channelType !== 'vectors'" class="d-flex align-center justify-space-between">
         <div class="d-flex align-center ga-2">
@@ -296,29 +224,22 @@ import { useI18n } from '../../i18n'
 
 interface FormData {
   serviceType: string
-  codexNativeToolPassthrough?: boolean
   codexToolCompat?: boolean
-  stripImageGenerationTool?: boolean
   convertImageUrlToB64Json?: boolean
   normalizeSystemRoleToTopLevel?: boolean
   normalizeMetadataUserId?: boolean
   stripBillingHeader?: boolean
-  normalizeNonstandardChatRoles?: boolean
   reasoningParamStyle?: string
   textVerbosity?: string
   fastMode?: boolean
   injectDummyThoughtSignature?: boolean
   stripThoughtSignature?: boolean
-  passbackReasoningContent?: boolean
-  passbackThinkingBlocks?: boolean
-  stripEmptyTextBlocks?: boolean
   historicalImageTurnLimit?: number
 }
 
 interface Props {
   form: FormData
   channelType: string
-  supportsChatRoleNormalization: boolean
   supportsOpenAIAdvancedOptions: boolean
   reasoningParamStyleOptions: Array<{ title: string; value: string }>
   textVerbosityOptions: Array<{ title: string; value: string }>

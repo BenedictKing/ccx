@@ -129,13 +129,15 @@ func TestGetUpstreams_IncludesStripBillingHeaderField(t *testing.T) {
 }
 
 func TestGetUpstreams_IncludesStripEmptyTextBlocksField(t *testing.T) {
-	cm := setupTestConfigManager(t, []config.UpstreamConfig{{
-		Name:                 "msg-ch",
-		ServiceType:          "claude",
-		BaseURL:              "https://api.example.com",
-		APIKeys:              []string{"sk-1"},
-		StripEmptyTextBlocks: config.BoolPtr(true),
-	}})
+	channel := config.UpstreamConfig{
+		Name:        "msg-ch",
+		ServiceType: "claude",
+		BaseURL:     "https://api.example.com",
+		APIKeys:     []string{"sk-1"},
+	}
+	// 该兼容开关已无手工字段：用可落盘的种子表达"生效值为 true"。
+	channel.SetCompatSeed(config.TraitStripEmptyTextBlocks, true)
+	cm := setupTestConfigManager(t, []config.UpstreamConfig{channel})
 
 	gin.SetMode(gin.TestMode)
 	r := gin.New()

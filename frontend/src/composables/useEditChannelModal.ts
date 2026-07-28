@@ -70,6 +70,17 @@ interface ChannelDiscoverySession {
 
 const channelDiscoverySessions = new Map<string, ChannelDiscoverySession>()
 
+// 已完全收归运行时自动学习的兼容性字段，不再接受前端编辑，
+// 诊断（compat-diagnose）返回的建议中这些字段仅供只读参考，不写回表单。
+const RUNTIME_MANAGED_COMPAT_FIELDS = new Set([
+  'normalizeNonstandardChatRoles',
+  'codexNativeToolPassthrough',
+  'stripImageGenerationTool',
+  'stripEmptyTextBlocks',
+  'passbackReasoningContent',
+  'passbackThinkingBlocks',
+])
+
 function stableStringify(value: unknown): string {
   if (Array.isArray(value)) {
     return `[${value.map(item => stableStringify(item)).join(',')}]`
@@ -131,9 +142,6 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
 
   const supportsOpenAIAdvancedOptions = computed(() => props.channelType !== 'vectors' && supportsAdvancedChannelOptions(form.serviceType))
   const supportsReasoningMappingOptions = computed(() => props.channelType !== 'vectors' && supportsReasoningMapping(form.serviceType))
-  const supportsChatRoleNormalization = computed(() => {
-    return props.channelType === 'chat' || (props.channelType === 'responses' && form.serviceType === 'openai')
-  })
   const supportsChannelDiscovery = computed(() => {
     return !isAutoManagedChannel.value && props.channelType !== 'images' && props.channelType !== 'vectors'
   })
@@ -153,9 +161,6 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     lowQuality: false,
     injectDummyThoughtSignature: false,
     stripThoughtSignature: false,
-    passbackReasoningContent: false,
-    passbackThinkingBlocks: false,
-    stripEmptyTextBlocks: false,
     normalizeSystemRoleToTopLevel: false,
     description: '',
     tags: [] as string[],
@@ -191,11 +196,8 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     autoBlacklistBalance: true,
     normalizeMetadataUserId: defaultNormalizeMetadataUserId(),
     stripBillingHeader: false,
-    codexNativeToolPassthrough: false,
     codexToolCompat: false,
-    normalizeNonstandardChatRoles: false,
     stripCodexClientTools: false,
-    stripImageGenerationTool: false,
     convertImageUrlToB64Json: false,
     noVision: false,
     noVisionModels: [] as string[],
@@ -753,18 +755,12 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
         lowQuality: !!props.channel.lowQuality,
         injectDummyThoughtSignature: !!props.channel.injectDummyThoughtSignature,
         stripThoughtSignature: !!props.channel.stripThoughtSignature,
-        passbackReasoningContent: !!props.channel.passbackReasoningContent,
-        passbackThinkingBlocks: !!props.channel.passbackThinkingBlocks,
         autoBlacklistBalance: props.channel.autoBlacklistBalance,
         normalizeMetadataUserId: props.channel.normalizeMetadataUserId,
         stripBillingHeader: props.channel.stripBillingHeader,
-        stripEmptyTextBlocks: props.channel.stripEmptyTextBlocks,
         normalizeSystemRoleToTopLevel: props.channel.normalizeSystemRoleToTopLevel,
-        codexNativeToolPassthrough: props.channel.codexNativeToolPassthrough,
         codexToolCompat: props.channel.codexToolCompat,
-        normalizeNonstandardChatRoles: props.channel.normalizeNonstandardChatRoles,
         stripCodexClientTools: props.channel.stripCodexClientTools,
-        stripImageGenerationTool: props.channel.stripImageGenerationTool,
         convertImageUrlToB64Json: props.channel.convertImageUrlToB64Json,
         historicalImageTurnLimit: props.channel.historicalImageTurnLimit,
         customHeaders: { ...(props.channel.customHeaders || {}) },
@@ -861,9 +857,6 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     form.lowQuality = false
     form.injectDummyThoughtSignature = false
     form.stripThoughtSignature = false
-    form.passbackReasoningContent = false
-    form.passbackThinkingBlocks = false
-    form.stripEmptyTextBlocks = false
     form.normalizeSystemRoleToTopLevel = false
     form.description = ''
     form.apiKeys = []
@@ -904,11 +897,8 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     form.normalizeMetadataUserId = defaultNormalizeMetadataUserId()
     form.stripBillingHeader = false
     stripBillingHeaderTouched.value = false
-    form.codexNativeToolPassthrough = false
     form.codexToolCompat = false
-    form.normalizeNonstandardChatRoles = false
     form.stripCodexClientTools = false
-    form.stripImageGenerationTool = false
     form.convertImageUrlToB64Json = false
     form.noVision = false
     form.noVisionModels = []
@@ -940,9 +930,6 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     form.lowQuality = !!channel.lowQuality
     form.injectDummyThoughtSignature = !!channel.injectDummyThoughtSignature
     form.stripThoughtSignature = !!channel.stripThoughtSignature
-    form.passbackReasoningContent = !!channel.passbackReasoningContent
-    form.passbackThinkingBlocks = !!channel.passbackThinkingBlocks
-    form.stripEmptyTextBlocks = !!channel.stripEmptyTextBlocks
     form.normalizeSystemRoleToTopLevel = !!channel.normalizeSystemRoleToTopLevel
     form.description = channel.description || ''
     form.tags = [...(channel.tags || [])]
@@ -1002,11 +989,8 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     form.stripBillingHeader = channel.stripBillingHeader ?? false
     // 载入既有渠道的值即视为显式配置，避免 baseUrl watcher 覆盖用户已保存的选择
     stripBillingHeaderTouched.value = true
-    form.codexNativeToolPassthrough = !!channel.codexNativeToolPassthrough
     form.codexToolCompat = channel.codexToolCompat ?? channel.stripCodexClientTools ?? false
-    form.normalizeNonstandardChatRoles = !!channel.normalizeNonstandardChatRoles
     form.stripCodexClientTools = channel.codexToolCompat ?? channel.stripCodexClientTools ?? false
-    form.stripImageGenerationTool = !!channel.stripImageGenerationTool
     form.convertImageUrlToB64Json = !!channel.convertImageUrlToB64Json
     form.noVision = !!channel.noVision
     form.noVisionModels = [...(channel.noVisionModels || [])]
@@ -1212,6 +1196,8 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
       const result = await apiService.diagnoseChannelCompat(type, props.channel.index)
       const applied: string[] = []
       for (const [key, val] of Object.entries(result.recommendations)) {
+        // 以下六项已完全收归运行时自动学习，不再是可编辑字段，诊断建议不写回表单
+        if (RUNTIME_MANAGED_COMPAT_FIELDS.has(key)) continue
         if (val !== undefined && (form as Record<string, unknown>)[key] !== val) {
           updateForm({ [key]: val })
           applied.push(key)
@@ -1395,7 +1381,6 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     textVerbosityOptions,
     supportsOpenAIAdvancedOptions,
     supportsReasoningMappingOptions,
-    supportsChatRoleNormalization,
     supportsChannelDiscovery,
     isAutoManagedChannel,
     showModelMappingPresets,

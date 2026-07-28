@@ -182,22 +182,16 @@ const { t } = useLanguage()
     visionFallbackReasoningEffort: '' as ReasoningEffort | '',
     noVision: false,
     historicalImageTurnLimit: 0,
-    passbackReasoningContent: false,
-    passbackThinkingBlocks: false,
     fastMode: false,
     lowQuality: false,
     injectDummyThoughtSignature: false,
     stripThoughtSignature: false,
-    stripEmptyTextBlocks: false,
     normalizeSystemRoleToTopLevel: false,
     normalizeMetadataUserId: defaultNormalizeMetadataUserId(),
     stripBillingHeader: false,
-    normalizeNonstandardChatRoles: false,
     autoBlacklistBalance: true,
-    codexNativeToolPassthrough: false,
     codexToolCompat: false,
     stripCodexClientTools: false,
-    stripImageGenerationTool: false,
   })
 
   const supportsOpenAIAdvanced = computed(() => props.channelType !== 'vectors' && supportsAdvancedChannelOptions(form.serviceType))
@@ -283,7 +277,6 @@ const { t } = useLanguage()
     reasoningEffortOptions,
     serviceTypeOptions,
     headerServiceTypeItems,
-    supportsChatRoleNormalization,
     modelMappingHint,
     targetModelPlaceholder,
   } = useChannelEditorOptions({
@@ -367,23 +360,17 @@ const { t } = useLanguage()
     form.visionFallbackReasoningEffort = ''
     form.noVision = false
     form.historicalImageTurnLimit = 0
-    form.passbackReasoningContent = false
-    form.passbackThinkingBlocks = false
     form.fastMode = false
     form.lowQuality = false
     form.injectDummyThoughtSignature = false
     form.stripThoughtSignature = false
-    form.stripEmptyTextBlocks = false
     form.normalizeSystemRoleToTopLevel = false
     form.normalizeMetadataUserId = defaultNormalizeMetadataUserId()
     form.stripBillingHeader = false
     stripBillingHeaderTouched.value = false
-    form.normalizeNonstandardChatRoles = false
     form.autoBlacklistBalance = true
-    form.codexNativeToolPassthrough = false
     form.codexToolCompat = false
     form.stripCodexClientTools = false
-    form.stripImageGenerationTool = false
     quickInput.value = ''
     quickServiceTypeTouched.value = false
     existingApiKeys.value = []
@@ -456,24 +443,18 @@ const { t } = useLanguage()
     form.visionFallbackReasoningEffort = (ch.reasoningMapping?.[form.visionFallbackModel] || '') as ReasoningEffort | ''
     form.noVision = ch.noVision ?? false
     form.historicalImageTurnLimit = ch.historicalImageTurnLimit ?? 0
-    form.passbackReasoningContent = ch.passbackReasoningContent ?? false
-    form.passbackThinkingBlocks = ch.passbackThinkingBlocks ?? false
     form.fastMode = ch.fastMode ?? false
     form.lowQuality = ch.lowQuality ?? false
     form.injectDummyThoughtSignature = ch.injectDummyThoughtSignature ?? false
     form.stripThoughtSignature = ch.stripThoughtSignature ?? false
-    form.stripEmptyTextBlocks = ch.stripEmptyTextBlocks ?? false
     form.normalizeSystemRoleToTopLevel = ch.normalizeSystemRoleToTopLevel ?? false
     form.normalizeMetadataUserId = ch.normalizeMetadataUserId ?? true
     form.stripBillingHeader = ch.stripBillingHeader ?? false
     // 载入既有渠道的值即视为显式配置，避免 baseUrl watcher 覆盖用户已保存的选择
     stripBillingHeaderTouched.value = true
-    form.normalizeNonstandardChatRoles = ch.normalizeNonstandardChatRoles ?? false
     form.autoBlacklistBalance = ch.autoBlacklistBalance ?? true
-    form.codexNativeToolPassthrough = ch.codexNativeToolPassthrough ?? false
     form.codexToolCompat = ch.codexToolCompat ?? ch.stripCodexClientTools ?? false
     form.stripCodexClientTools = ch.stripCodexClientTools ?? ch.codexToolCompat ?? false
-    form.stripImageGenerationTool = ch.stripImageGenerationTool ?? false
   }
 
   watch(() => props.channel, (ch) => {
@@ -783,8 +764,6 @@ const { t } = useLanguage()
           lowQuality: form.lowQuality,
           injectDummyThoughtSignature: form.injectDummyThoughtSignature,
           stripThoughtSignature: form.stripThoughtSignature,
-          passbackReasoningContent: form.passbackReasoningContent,
-          passbackThinkingBlocks: form.passbackThinkingBlocks,
           description: form.description,
           apiKeys: submitApiKeys.value,
           modelMapping: parseJsonObject<Record<string, string>>(form.modelMappingText, 'Model mapping'),
@@ -807,13 +786,9 @@ const { t } = useLanguage()
           autoBlacklistBalance: form.autoBlacklistBalance,
           normalizeMetadataUserId: form.normalizeMetadataUserId,
           stripBillingHeader: form.stripBillingHeader,
-          stripEmptyTextBlocks: form.stripEmptyTextBlocks,
           normalizeSystemRoleToTopLevel: form.normalizeSystemRoleToTopLevel,
-          codexNativeToolPassthrough: form.codexNativeToolPassthrough,
           codexToolCompat: form.codexToolCompat,
-          normalizeNonstandardChatRoles: form.normalizeNonstandardChatRoles,
           stripCodexClientTools: form.stripCodexClientTools,
-          stripImageGenerationTool: form.stripImageGenerationTool,
           noVision: form.noVision,
           noVisionModels: getNoVisionModelsFromRows(),
           visionFallbackModel: form.visionFallbackModel,
@@ -1058,8 +1033,6 @@ const { t } = useLanguage()
       lowQuality: form.lowQuality,
       injectDummyThoughtSignature: form.injectDummyThoughtSignature,
       stripThoughtSignature: form.stripThoughtSignature,
-      passbackReasoningContent: form.passbackReasoningContent,
-      passbackThinkingBlocks: form.passbackThinkingBlocks,
       description: form.description,
       apiKeys: getSubmitApiKeys(),
       modelMapping,
@@ -1085,13 +1058,9 @@ const { t } = useLanguage()
       autoBlacklistBalance: form.autoBlacklistBalance,
       normalizeMetadataUserId: form.normalizeMetadataUserId,
       stripBillingHeader: form.stripBillingHeader,
-      stripEmptyTextBlocks: form.stripEmptyTextBlocks,
       normalizeSystemRoleToTopLevel: form.normalizeSystemRoleToTopLevel,
-      codexNativeToolPassthrough: form.codexNativeToolPassthrough,
       codexToolCompat: form.codexToolCompat,
-      normalizeNonstandardChatRoles: form.normalizeNonstandardChatRoles,
       stripCodexClientTools: form.stripCodexClientTools,
-      stripImageGenerationTool: form.stripImageGenerationTool,
       noVision: form.noVision,
       noVisionModels: getNoVisionModelsFromRows(),
       visionFallbackModel: form.visionFallbackModel,
@@ -1163,7 +1132,6 @@ const { t } = useLanguage()
     headerServiceTypeItems,
     supportsOpenAIAdvancedOptions,
     supportsReasoningMappingOptions,
-    supportsChatRoleNormalization,
     supportsChannelDiscovery,
     modelMappingHint,
     targetModelPlaceholder,

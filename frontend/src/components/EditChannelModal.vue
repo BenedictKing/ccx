@@ -365,7 +365,6 @@
               <AdvancedOptionsSection
                 :form="form"
                 :channel-type="props.channelType"
-                :supports-chat-role-normalization="supportsChatRoleNormalization"
                 :supports-open-a-i-advanced-options="supportsOpenAIAdvancedOptions"
                 :reasoning-param-style-options="reasoningParamStyleOptions"
                 :text-verbosity-options="textVerbosityOptions"
@@ -563,7 +562,6 @@ const {
   textVerbosityOptions,
   supportsOpenAIAdvancedOptions,
   supportsReasoningMappingOptions,
-  supportsChatRoleNormalization,
   supportsChannelDiscovery,
   isAutoManagedChannel,
   showModelMappingPresets,

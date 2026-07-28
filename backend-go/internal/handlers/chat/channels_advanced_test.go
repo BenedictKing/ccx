@@ -47,20 +47,22 @@ func TestBuildHealthCheckURLs_UseExistingVersionSuffix(t *testing.T) {
 }
 
 func TestGetUpstreams_IncludesUnifiedStateFields(t *testing.T) {
-	cm := setupChatConfigManager(t, []config.UpstreamConfig{{
-		Name:                          "chat-ch",
-		ServiceType:                   "openai",
-		BaseURL:                       "https://api.example.com",
-		APIKeys:                       []string{"sk-1"},
-		Status:                        "suspended",
-		NormalizeNonstandardChatRoles: config.BoolPtr(true),
+	channel := config.UpstreamConfig{
+		Name:        "chat-ch",
+		ServiceType: "openai",
+		BaseURL:     "https://api.example.com",
+		APIKeys:     []string{"sk-1"},
+		Status:      "suspended",
 		DisabledAPIKeys: []config.DisabledKeyInfo{{
 			Key:        "sk-disabled",
 			Reason:     "insufficient_balance",
 			Message:    "no balance",
 			DisabledAt: "2026-04-11T00:00:00Z",
 		}},
-	}})
+	}
+	// 该兼容开关已无手工字段：用可持久化的种子模拟"生效值为 true"，学习结论不落盘。
+	channel.SetCompatSeed(config.TraitNormalizeNonstandardChatRoles, true)
+	cm := setupChatConfigManager(t, []config.UpstreamConfig{channel})
 
 	gin.SetMode(gin.TestMode)
 	r := gin.New()

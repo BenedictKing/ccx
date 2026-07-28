@@ -50,21 +50,23 @@ func TestBuildHealthCheckURLs_UseExistingVersionSuffix(t *testing.T) {
 }
 
 func TestGetUpstreams_IncludesUnifiedStateFields(t *testing.T) {
-	cm := setupResponsesConfigManager(t, []config.UpstreamConfig{{
-		Name:                     "resp-ch",
-		ServiceType:              "claude",
-		BaseURL:                  "https://api.example.com",
-		APIKeys:                  []string{"sk-1"},
-		Status:                   "suspended",
-		PassbackReasoningContent: config.BoolPtr(true),
-		PassbackThinkingBlocks:   config.BoolPtr(true),
+	channel := config.UpstreamConfig{
+		Name:        "resp-ch",
+		ServiceType: "claude",
+		BaseURL:     "https://api.example.com",
+		APIKeys:     []string{"sk-1"},
+		Status:      "suspended",
 		DisabledAPIKeys: []config.DisabledKeyInfo{{
 			Key:        "sk-disabled",
 			Reason:     "insufficient_balance",
 			Message:    "no balance",
 			DisabledAt: "2026-04-11T00:00:00Z",
 		}},
-	}})
+	}
+	// 两个兼容开关已无手工字段：用可落盘的种子表达"生效值为 true"。
+	channel.SetCompatSeed(config.TraitPassbackReasoningContent, true)
+	channel.SetCompatSeed(config.TraitPassbackThinkingBlocks, true)
+	cm := setupResponsesConfigManager(t, []config.UpstreamConfig{channel})
 
 	gin.SetMode(gin.TestMode)
 	r := gin.New()

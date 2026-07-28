@@ -85,7 +85,8 @@ func TestResponsesHandler_DeepSeekChatAndMessagesThinkingMatrix(t *testing.T) {
 			serviceType:  "claude",
 			responseBody: `{"id":"msg_ds","type":"message","role":"assistant","content":[{"type":"thinking","thinking":"messages thinking","signature":"sig_ds"},{"type":"text","text":"messages text"}],"stop_reason":"end_turn","usage":{"input_tokens":1,"output_tokens":2}}`,
 			configure: func(upstream *config.UpstreamConfig) {
-				upstream.PassbackThinkingBlocks = config.BoolPtr(true)
+				// 该兼容开关已无手工字段：走配置落盘的链路用种子表达生效值。
+				upstream.SetCompatSeed(config.TraitPassbackThinkingBlocks, true)
 			},
 			wantUpstream: func(t *testing.T, body []byte) {
 				var req struct {

@@ -9,14 +9,9 @@ export interface ClaudeMessagesPreset {
   reasoningParamStyle: ClaudeMessagesReasoningParamStyle
   serviceType?: 'openai' | 'gemini' | 'claude' | 'responses' | 'copilot'
   authHeader: '' | 'auto' | 'bearer' | 'x-api-key'
-  passbackReasoningContent: boolean
-  passbackThinkingBlocks: boolean
-  stripEmptyTextBlocks: boolean
   normalizeSystemRoleToTopLevel: boolean
   normalizeMetadataUserId?: boolean
   stripBillingHeader?: boolean
-  stripImageGenerationTool: boolean
-  normalizeNonstandardChatRoles: boolean
   noVision: boolean
   noVisionModels: string[]
   visionFallbackModel: string
@@ -34,12 +29,7 @@ export const claudeMessagesPresets: Record<string, ClaudeMessagesPreset> = {
     "reasoningMapping": {},
     "reasoningParamStyle": "reasoning",
     "authHeader": "",
-    "passbackReasoningContent": false,
-    "passbackThinkingBlocks": false,
-    "stripEmptyTextBlocks": true,
     "normalizeSystemRoleToTopLevel": true,
-    "stripImageGenerationTool": true,
-    "normalizeNonstandardChatRoles": false,
     "noVision": true,
     "noVisionModels": [],
     "visionFallbackModel": "",
@@ -62,12 +52,7 @@ export const claudeMessagesPresets: Record<string, ClaudeMessagesPreset> = {
     },
     "reasoningParamStyle": "thinking",
     "authHeader": "",
-    "passbackReasoningContent": true,
-    "passbackThinkingBlocks": false,
-    "stripEmptyTextBlocks": false,
     "normalizeSystemRoleToTopLevel": true,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": false,
     "noVision": false,
     "noVisionModels": [
       "mimo-v2.5-pro"
@@ -91,12 +76,7 @@ export const claudeMessagesPresets: Record<string, ClaudeMessagesPreset> = {
     },
     "reasoningParamStyle": "reasoning",
     "authHeader": "",
-    "passbackReasoningContent": true,
-    "passbackThinkingBlocks": true,
-    "stripEmptyTextBlocks": true,
     "normalizeSystemRoleToTopLevel": true,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": false,
     "noVision": false,
     "noVisionModels": [
       "glm-5.2",
@@ -109,12 +89,7 @@ export const claudeMessagesPresets: Record<string, ClaudeMessagesPreset> = {
     "reasoningMapping": {},
     "reasoningParamStyle": "",
     "authHeader": "",
-    "passbackReasoningContent": false,
-    "passbackThinkingBlocks": false,
-    "stripEmptyTextBlocks": false,
     "normalizeSystemRoleToTopLevel": false,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": false,
     "noVision": false,
     "noVisionModels": [],
     "visionFallbackModel": ""
@@ -124,12 +99,7 @@ export const claudeMessagesPresets: Record<string, ClaudeMessagesPreset> = {
     "reasoningMapping": {},
     "reasoningParamStyle": "",
     "authHeader": "",
-    "passbackReasoningContent": false,
-    "passbackThinkingBlocks": false,
-    "stripEmptyTextBlocks": false,
     "normalizeSystemRoleToTopLevel": false,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": false,
     "noVision": false,
     "noVisionModels": [],
     "visionFallbackModel": ""
@@ -144,12 +114,7 @@ export const claudeMessagesPresets: Record<string, ClaudeMessagesPreset> = {
     "reasoningMapping": {},
     "reasoningParamStyle": "",
     "authHeader": "",
-    "passbackReasoningContent": false,
-    "passbackThinkingBlocks": false,
-    "stripEmptyTextBlocks": false,
     "normalizeSystemRoleToTopLevel": true,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": false,
     "noVision": false,
     "noVisionModels": [],
     "visionFallbackModel": ""
@@ -164,12 +129,7 @@ export const claudeMessagesPresets: Record<string, ClaudeMessagesPreset> = {
     "reasoningMapping": {},
     "reasoningParamStyle": "",
     "authHeader": "",
-    "passbackReasoningContent": false,
-    "passbackThinkingBlocks": false,
-    "stripEmptyTextBlocks": false,
     "normalizeSystemRoleToTopLevel": true,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": false,
     "noVision": false,
     "noVisionModels": [],
     "visionFallbackModel": ""
@@ -184,12 +144,7 @@ export const claudeMessagesPresets: Record<string, ClaudeMessagesPreset> = {
     "reasoningMapping": {},
     "reasoningParamStyle": "",
     "authHeader": "",
-    "passbackReasoningContent": false,
-    "passbackThinkingBlocks": false,
-    "stripEmptyTextBlocks": false,
     "normalizeSystemRoleToTopLevel": true,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": false,
     "noVision": false,
     "noVisionModels": [
       "glm-5.2",
@@ -207,12 +162,7 @@ export const claudeMessagesPresets: Record<string, ClaudeMessagesPreset> = {
     "reasoningMapping": {},
     "reasoningParamStyle": "",
     "authHeader": "",
-    "passbackReasoningContent": true,
-    "passbackThinkingBlocks": false,
-    "stripEmptyTextBlocks": false,
     "normalizeSystemRoleToTopLevel": true,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": false,
     "noVision": false,
     "noVisionModels": [
       "MiniMax-M2.7"
@@ -229,12 +179,7 @@ export const claudeMessagesPresets: Record<string, ClaudeMessagesPreset> = {
     "reasoningMapping": {},
     "reasoningParamStyle": "",
     "authHeader": "",
-    "passbackReasoningContent": false,
-    "passbackThinkingBlocks": false,
-    "stripEmptyTextBlocks": false,
     "normalizeSystemRoleToTopLevel": true,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": false,
     "noVision": false,
     "noVisionModels": [],
     "visionFallbackModel": ""
@@ -255,12 +200,7 @@ export const claudeMessagesPresets: Record<string, ClaudeMessagesPreset> = {
     },
     "reasoningParamStyle": "reasoning",
     "authHeader": "bearer",
-    "passbackReasoningContent": false,
-    "passbackThinkingBlocks": false,
-    "stripEmptyTextBlocks": false,
     "normalizeSystemRoleToTopLevel": true,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": false,
     "noVision": false,
     "noVisionModels": [
       "glm-5.2",
@@ -285,12 +225,7 @@ export const claudeMessagesPresets: Record<string, ClaudeMessagesPreset> = {
     },
     "reasoningParamStyle": "reasoning",
     "authHeader": "bearer",
-    "passbackReasoningContent": false,
-    "passbackThinkingBlocks": false,
-    "stripEmptyTextBlocks": false,
     "normalizeSystemRoleToTopLevel": true,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": false,
     "noVision": false,
     "noVisionModels": [
       "glm-5.2",
@@ -309,12 +244,7 @@ export const claudeMessagesPresets: Record<string, ClaudeMessagesPreset> = {
     "reasoningMapping": {},
     "reasoningParamStyle": "",
     "authHeader": "",
-    "passbackReasoningContent": false,
-    "passbackThinkingBlocks": false,
-    "stripEmptyTextBlocks": false,
     "normalizeSystemRoleToTopLevel": true,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": false,
     "noVision": false,
     "noVisionModels": [
       "deepseek-ai/DeepSeek-V4-Flash"
@@ -337,12 +267,7 @@ export const claudeMessagesPresets: Record<string, ClaudeMessagesPreset> = {
     },
     "reasoningParamStyle": "reasoning",
     "authHeader": "",
-    "passbackReasoningContent": true,
-    "passbackThinkingBlocks": true,
-    "stripEmptyTextBlocks": true,
     "normalizeSystemRoleToTopLevel": true,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": false,
     "noVision": false,
     "noVisionModels": [
       "glm-5.2",
@@ -360,12 +285,7 @@ export const claudeMessagesPresets: Record<string, ClaudeMessagesPreset> = {
     "reasoningMapping": {},
     "reasoningParamStyle": "",
     "authHeader": "",
-    "passbackReasoningContent": false,
-    "passbackThinkingBlocks": false,
-    "stripEmptyTextBlocks": false,
     "normalizeSystemRoleToTopLevel": true,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": false,
     "noVision": false,
     "noVisionModels": [],
     "visionFallbackModel": ""
@@ -380,12 +300,7 @@ export const claudeMessagesPresets: Record<string, ClaudeMessagesPreset> = {
     "reasoningMapping": {},
     "reasoningParamStyle": "",
     "authHeader": "",
-    "passbackReasoningContent": false,
-    "passbackThinkingBlocks": false,
-    "stripEmptyTextBlocks": false,
     "normalizeSystemRoleToTopLevel": true,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": false,
     "noVision": false,
     "noVisionModels": [],
     "visionFallbackModel": ""
@@ -395,12 +310,7 @@ export const claudeMessagesPresets: Record<string, ClaudeMessagesPreset> = {
     "reasoningMapping": {},
     "reasoningParamStyle": "",
     "authHeader": "",
-    "passbackReasoningContent": false,
-    "passbackThinkingBlocks": false,
-    "stripEmptyTextBlocks": false,
     "normalizeSystemRoleToTopLevel": true,
-    "stripImageGenerationTool": false,
-    "normalizeNonstandardChatRoles": false,
     "noVision": false,
     "noVisionModels": [],
     "visionFallbackModel": ""

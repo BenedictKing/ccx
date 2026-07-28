@@ -232,10 +232,10 @@ func TestResponsesProvider_NormalizeNonstandardChatRolesForOpenAIChatUpstream(t 
 		t.Run(tt.name, func(t *testing.T) {
 			c := newGinContext(http.MethodPost, "/v1/responses", body, context.Background())
 			upstream := &config.UpstreamConfig{
-				BaseURL:                       "https://api.example.com",
-				ServiceType:                   "openai",
-				NormalizeNonstandardChatRoles: config.BoolPtr(tt.enabled),
+				BaseURL:     "https://api.example.com",
+				ServiceType: "openai",
 			}
+			upstream.SetLearnedCompatTrait(config.TraitNormalizeNonstandardChatRoles, tt.enabled)
 
 			provider := &ResponsesProvider{}
 			req, _, err := provider.ConvertToProviderRequest(c, upstream, "sk-test")

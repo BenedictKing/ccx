@@ -513,9 +513,18 @@ func (u *UpstreamConfig) Clone() *UpstreamConfig {
 		}
 	}
 	if u.CompatSeeds != nil {
-		cloned.CompatSeeds = make(map[string]bool, len(u.CompatSeeds))
+		cloned.CompatSeeds = make(map[string]CompatSeedEntry, len(u.CompatSeeds))
 		for k, v := range u.CompatSeeds {
 			cloned.CompatSeeds[k] = v
+		}
+	}
+	// LearnedCompatTraits 是逐请求注入的运行时状态。虽然当前调用路径下克隆时它总为 nil
+	// （failover 先 Clone 再 SetLearnedCompatTrait，lazy init 会新建 map），但浅拷贝会让
+	// 任何"克隆一个已注入结论的 upstream"的调用方共享同一个 map，并发写入即数据竞争。
+	if u.LearnedCompatTraits != nil {
+		cloned.LearnedCompatTraits = make(map[string]bool, len(u.LearnedCompatTraits))
+		for k, v := range u.LearnedCompatTraits {
+			cloned.LearnedCompatTraits[k] = v
 		}
 	}
 	if u.PromotionUntil != nil {
@@ -577,7 +586,8 @@ func ApplyProviderUpstreamDefaults(providerID string, upstream *UpstreamConfig) 
 	case "glm":
 		if upstream.ServiceType == "openai" {
 			upstream.ReasoningParamStyle = "reasoning_effort"
-			upstream.PassbackReasoningContent = BoolPtr(true)
+			// PassbackReasoningContent 不再是可写字段，其默认值由
+			// shouldPassbackReasoningContentByDefault 按 ProviderID/ServiceType 静态推导。
 		}
 	case "compshare":
 		// Compshare 的 Claude 兼容端点只接受 user/assistant 消息。最新 Claude Code
@@ -603,25 +613,18 @@ func RuntimeUpstreamForAutoManagedProvider(upstream *UpstreamConfig) *UpstreamCo
 	runtime.ReasoningMapping = nil
 	runtime.ReasoningParamStyle = ""
 	runtime.FastMode = false
-	// 兼容性开关置 nil 而非 false：nil 表示"用户未设置"，运行时兼容性学习结论仍可生效；
-	// 置 false 会被当作"用户显式关闭"，使自动托管渠道永远学不会兼容改写。
-	// 种子同样清空：自动托管渠道的兼容性由 ApplyProviderUpstreamDefaults 重建已知厂商真相
-	// 加运行时学习决定，不保留手工配置派生的历史证据。
+	// 六个兼容性开关已从结构体移除，无需清理；自动托管渠道的兼容性完全由
+	// ApplyProviderUpstreamDefaults 重建已知厂商真相加运行时学习决定。
+	// 种子同样清空：不保留手工配置派生的历史提示。
 	runtime.CompatSeeds = nil
-	runtime.NormalizeNonstandardChatRoles = nil
-	runtime.CodexNativeToolPassthrough = nil
 	runtime.CodexToolCompat = nil
 	runtime.StripCodexClientTools = false
-	runtime.StripImageGenerationTool = nil
 	runtime.ConvertImageURLToB64JSON = false
 	runtime.NormalizeMetadataUserID = nil
 	runtime.StripBillingHeader = nil
-	runtime.StripEmptyTextBlocks = nil
 	runtime.NormalizeSystemRoleToTopLevel = false
 	runtime.InjectDummyThoughtSignature = false
 	runtime.StripThoughtSignature = false
-	runtime.PassbackReasoningContent = nil
-	runtime.PassbackThinkingBlocks = nil
 	runtime.NoVision = false
 	runtime.NoVisionModels = nil
 	runtime.VisionFallbackModel = ""

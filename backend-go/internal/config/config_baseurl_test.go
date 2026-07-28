@@ -564,7 +564,9 @@ func TestLoadConfig_BackfillsLegacyServiceTypeDefaults(t *testing.T) {
 	}
 }
 
-func TestUpdateChatUpstreamCanSetNormalizeNonstandardChatRoles(t *testing.T) {
+func TestUpdateChatUpstreamCannotSetNormalizeNonstandardChatRoles(t *testing.T) {
+	// NormalizeNonstandardChatRoles 已从 UpstreamUpdate 移除：该开关完全交由运行时自动学习
+	// 驱动，UpdateChatUpstream 不再接受这个字段的手工写入，此处断言默认行为不受影响。
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "config.json")
 	initialConfig := `{
@@ -590,22 +592,21 @@ func TestUpdateChatUpstreamCanSetNormalizeNonstandardChatRoles(t *testing.T) {
 		t.Fatal("NormalizeNonstandardChatRoles = true, want default false")
 	}
 
-	enabled := true
-	if _, err := cm.UpdateChatUpstream(0, UpstreamUpdate{NormalizeNonstandardChatRoles: &enabled}); err != nil {
-		t.Fatalf("UpdateChatUpstream(enable) 失败: %v", err)
-	}
-	cfg = cm.GetConfig()
-	if !cfg.ChatUpstream[0].IsNormalizeNonstandardChatRolesEnabled() {
-		t.Fatal("NormalizeNonstandardChatRoles = false, want true")
-	}
-
-	disabled := false
-	if _, err := cm.UpdateChatUpstream(0, UpstreamUpdate{NormalizeNonstandardChatRoles: &disabled}); err != nil {
-		t.Fatalf("UpdateChatUpstream(disable) 失败: %v", err)
+	// UpstreamUpdate 已无该字段，普通渠道更新（如改名）不应意外改变兼容性生效值
+	newName := "chat-channel-renamed"
+	if _, err := cm.UpdateChatUpstream(0, UpstreamUpdate{Name: &newName}); err != nil {
+		t.Fatalf("UpdateChatUpstream 失败: %v", err)
 	}
 	cfg = cm.GetConfig()
 	if cfg.ChatUpstream[0].IsNormalizeNonstandardChatRolesEnabled() {
-		t.Fatal("NormalizeNonstandardChatRoles = true, want false")
+		t.Fatal("普通更新后 NormalizeNonstandardChatRoles 生效值不应改变")
+	}
+
+	// 唯一能让该开关生效的路径是运行时学习注入（LearnedCompatTraits），不经过 UpstreamUpdate
+	upstream := &cm.config.ChatUpstream[0]
+	upstream.SetLearnedCompatTrait(TraitNormalizeNonstandardChatRoles, true)
+	if !upstream.IsNormalizeNonstandardChatRolesEnabled() {
+		t.Fatal("学习结论注入后应生效为 true")
 	}
 }
 

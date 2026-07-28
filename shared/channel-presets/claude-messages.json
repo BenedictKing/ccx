@@ -9,13 +9,9 @@
         "sonnet": "deepseek-v4-pro"
       },
       "reasoningParamStyle": "reasoning",
-      "passbackReasoningContent": false,
-      "passbackThinkingBlocks": false,
-      "stripEmptyTextBlocks": true,
       "normalizeSystemRoleToTopLevel": true,
       "normalizeMetadataUserId": true,
       "stripBillingHeader": true,
-      "stripImageGenerationTool": true,
       "noVision": true
     },
     "mimo": {
@@ -33,7 +29,6 @@
         "sonnet": "max"
       },
       "reasoningParamStyle": "thinking",
-      "passbackReasoningContent": true,
       "normalizeSystemRoleToTopLevel": true,
       "noVisionModels": ["mimo-v2.5-pro"],
       "visionFallbackModel": "mimo-v2.5",
@@ -54,9 +49,6 @@
         "sonnet": "max"
       },
       "reasoningParamStyle": "reasoning",
-      "passbackReasoningContent": true,
-      "passbackThinkingBlocks": true,
-      "stripEmptyTextBlocks": true,
       "normalizeSystemRoleToTopLevel": true,
       "noVisionModels": ["glm-5.2", "deepseek-v4-flash"],
       "visionFallbackModel": "MiniMax-M2.7"
@@ -99,7 +91,6 @@
         "opus": "MiniMax-M3",
         "sonnet": "MiniMax-M3"
       },
-      "passbackReasoningContent": true,
       "normalizeSystemRoleToTopLevel": true,
       "noVisionModels": ["MiniMax-M2.7"],
       "visionFallbackModel": "MiniMax-M3"
@@ -181,9 +172,6 @@
         "minimax-m3": "xhigh"
       },
       "reasoningParamStyle": "reasoning",
-      "passbackReasoningContent": true,
-      "passbackThinkingBlocks": true,
-      "stripEmptyTextBlocks": true,
       "normalizeSystemRoleToTopLevel": true,
       "noVisionModels": ["glm-5.2", "deepseek-v4-flash"],
       "visionFallbackModel": "minimax-m3"

@@ -20,13 +20,10 @@
     "unity2": {},
     "openrouter": {},
     "sensenova": {
-      "normalizeNonstandardChatRoles": true,
       "noVisionModels": ["glm-5.2", "deepseek-v4-flash"],
       "visionFallbackModel": "sensenova-6.7-flash-lite"
     },
-    "modelscope": {
-      "normalizeNonstandardChatRoles": true
-    },
+    "modelscope": {},
     "minimax": {},
     "dashscope": {},
     "opencode-zen": {
@@ -42,7 +39,6 @@
       },
       "reasoningParamStyle": "reasoning",
       "authHeader": "bearer",
-      "normalizeNonstandardChatRoles": true,
       "noVisionModels": ["glm-5.2", "deepseek-v4-flash"],
       "visionFallbackModel": "minimax-m3"
     },
@@ -59,23 +55,17 @@
       },
       "reasoningParamStyle": "reasoning",
       "authHeader": "bearer",
-      "normalizeNonstandardChatRoles": true,
       "noVisionModels": ["glm-5.2", "deepseek-v4-flash"],
       "visionFallbackModel": "minimax-m3"
     },
-    "volc-ark": {
-      "normalizeNonstandardChatRoles": true
-    },
-    "qianfan": {
-      "normalizeNonstandardChatRoles": true
-    },
+    "volc-ark": {},
+    "qianfan": {},
     "xfyun": {
       "modelMapping": {
         "codex": "astron-code-latest",
         "gpt": "astron-code-latest",
         "mini": "astron-code-latest"
-      },
-      "normalizeNonstandardChatRoles": true
+      }
     }
   }
 }

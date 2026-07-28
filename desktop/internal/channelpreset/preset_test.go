@@ -12,13 +12,10 @@ func TestBuildPayload(t *testing.T) {
 		wantBaseURL           string
 		wantService           string
 		wantVision            bool
-		wantPassback          bool
-		wantThinkingPassback  *bool
 		wantNormalizeMetadata *bool
 		wantStripBilling      bool
 		wantCodex             bool
 		wantStripCodex        bool
-		wantNativeTool        bool
 		wantModels            []string
 		wantModelMap          map[string]string
 		wantNoModelMap        bool
@@ -26,7 +23,6 @@ func TestBuildPayload(t *testing.T) {
 		wantNoReasoningMap    bool
 		wantReasoningStyle    string
 		wantFallback          string
-		wantNormalize         bool
 		wantNormalizeSystem   bool
 		wantNoVisionModels    []string
 		wantAuthHeader        string
@@ -37,7 +33,6 @@ func TestBuildPayload(t *testing.T) {
 			wantBaseURL:           "https://api.deepseek.com/anthropic",
 			wantService:           "claude",
 			wantVision:            true,
-			wantThinkingPassback:  boolRef(false),
 			wantNormalizeMetadata: boolRef(true),
 			wantStripBilling:      true,
 			wantNormalizeSystem:   true,
@@ -53,7 +48,6 @@ func TestBuildPayload(t *testing.T) {
 			req:           CreateChannelRequest{Provider: ProviderDeepSeek, Target: TargetChat, APIKey: "sk-test"},
 			wantBaseURL:   "https://api.deepseek.com/v1",
 			wantService:   "openai",
-			wantNormalize: true,
 			wantVision:    true,
 		},
 		{
@@ -62,8 +56,6 @@ func TestBuildPayload(t *testing.T) {
 			wantBaseURL:    "https://api.deepseek.com/v1",
 			wantService:    "openai",
 			wantVision:     true,
-			wantNativeTool: true,
-			wantNormalize:  true,
 			wantModelMap: map[string]string{
 				"codex": "deepseek-v4-flash",
 				"gpt":   "deepseek-v4-pro",
@@ -75,7 +67,6 @@ func TestBuildPayload(t *testing.T) {
 			req:                 CreateChannelRequest{Provider: ProviderMiMo, Target: TargetMessages, PlanID: "token-sgp-anthropic", APIKey: "tp-test"},
 			wantBaseURL:         "https://token-plan-sgp.xiaomimimo.com/anthropic",
 			wantService:         "claude",
-			wantPassback:        true,
 			wantNormalizeSystem: true,
 			wantModelMap: map[string]string{
 				"fable":  "mimo-v2.5-pro",
@@ -99,7 +90,6 @@ func TestBuildPayload(t *testing.T) {
 			req:                 CreateChannelRequest{Provider: ProviderMiMo, Target: TargetMessages, APIKey: "tp-test"},
 			wantBaseURL:         "https://api.xiaomimimo.com/anthropic",
 			wantService:         "claude",
-			wantPassback:        true,
 			wantNormalizeSystem: true,
 			wantModelMap: map[string]string{
 				"fable":  "mimo-v2.5-pro",
@@ -116,7 +106,6 @@ func TestBuildPayload(t *testing.T) {
 			req:                CreateChannelRequest{Provider: ProviderMiMo, Target: TargetChat, APIKey: "tp-test"},
 			wantBaseURL:        "https://api.xiaomimimo.com/v1",
 			wantService:        "openai",
-			wantNormalize:      true,
 			wantReasoningStyle: "thinking",
 			wantNoVisionModels: []string{"mimo-v2.5-pro"},
 			wantFallback:       "mimo-v2.5",
@@ -149,7 +138,6 @@ func TestBuildPayload(t *testing.T) {
 			wantBaseURL:         "https://cp.compshare.cn",
 			wantService:         "claude",
 			wantVision:          false,
-			wantPassback:        true,
 			wantNormalizeSystem: true,
 			wantModelMap: map[string]string{
 				"fable":  "glm-5.2",
@@ -165,7 +153,6 @@ func TestBuildPayload(t *testing.T) {
 			req:                CreateChannelRequest{Provider: ProviderCompshare, Target: TargetChat, APIKey: "cs-test"},
 			wantBaseURL:        "https://cp.compshare.cn/v1",
 			wantService:        "openai",
-			wantNormalize:      true,
 			wantVision:         false,
 			wantNoVisionModels: []string{"glm-5.2", "deepseek-v4-flash"},
 			wantFallback:       "MiniMax-M2.7",
@@ -176,8 +163,6 @@ func TestBuildPayload(t *testing.T) {
 			wantBaseURL:    "https://cp.compshare.cn/v1",
 			wantService:    "openai",
 			wantVision:     false,
-			wantNativeTool: true,
-			wantNormalize:  true,
 			wantModelMap: map[string]string{
 				"codex": "deepseek-v4-flash",
 				"gpt":   "glm-5.2",
@@ -192,14 +177,12 @@ func TestBuildPayload(t *testing.T) {
 			wantBaseURL:    "https://runapi.co/v1",
 			wantService:    "claude",
 			wantNoModelMap: true,
-			wantNormalize:  false,
 		},
 		{
 			name:           "runapi chat",
 			req:            CreateChannelRequest{Provider: ProviderRunAPI, Target: TargetChat, APIKey: "runapi-test"},
 			wantBaseURL:    "https://runapi.co/v1",
 			wantService:    "openai",
-			wantNormalize:  true,
 			wantNoModelMap: true,
 		},
 		{
@@ -217,7 +200,6 @@ func TestBuildPayload(t *testing.T) {
 			req:           CreateChannelRequest{Provider: ProviderKimi, Target: TargetChat, APIKey: "sk-test"},
 			wantBaseURL:   "https://api.moonshot.cn/v1",
 			wantService:   "openai",
-			wantNormalize: true,
 		},
 		{
 			name:           "kimi responses",
@@ -254,7 +236,6 @@ func TestBuildPayload(t *testing.T) {
 			req:           CreateChannelRequest{Provider: ProviderGLM, Target: TargetChat, APIKey: "sk-test"},
 			wantBaseURL:   "https://open.bigmodel.cn/api/coding/paas/v4#",
 			wantService:   "openai",
-			wantNormalize: true,
 		},
 		{
 			name:           "glm responses",
@@ -269,7 +250,6 @@ func TestBuildPayload(t *testing.T) {
 			req:           CreateChannelRequest{Provider: ProviderMiniMax, Target: TargetChat, APIKey: "sk-test"},
 			wantBaseURL:   "https://api.minimax.chat/v1",
 			wantService:   "openai",
-			wantNormalize: true,
 		},
 		{
 			name:           "minimax responses",
@@ -278,16 +258,13 @@ func TestBuildPayload(t *testing.T) {
 			wantService:    "openai",
 			wantCodex:      false,
 			wantStripCodex: false,
-			wantNativeTool: true,
 			wantModelMap:   map[string]string{"codex": "MiniMax-M2.7", "gpt": "MiniMax-M3", "mini": "MiniMax-M2.7"},
-			wantNormalize:  true,
 		},
 		{
 			name:          "dashscope chat",
 			req:           CreateChannelRequest{Provider: ProviderDashScope, Target: TargetChat, APIKey: "sk-test"},
 			wantBaseURL:   "https://dashscope.aliyuncs.com/compatible-mode/v1",
 			wantService:   "openai",
-			wantNormalize: true,
 		},
 		{
 			name:           "dashscope responses",
@@ -333,7 +310,6 @@ func TestBuildPayload(t *testing.T) {
 			req:           CreateChannelRequest{Provider: ProviderDashScope, Target: TargetChat, PlanID: "coding-openai-chat", APIKey: "sk-sp-test"},
 			wantBaseURL:   "https://coding.dashscope.aliyuncs.com/v1",
 			wantService:   "openai",
-			wantNormalize: true,
 		},
 		{
 			name:                "dashscope token plan messages",
@@ -347,7 +323,6 @@ func TestBuildPayload(t *testing.T) {
 			req:           CreateChannelRequest{Provider: ProviderDashScope, Target: TargetChat, PlanID: "token-plan-openai-chat", APIKey: "sk-tp-test"},
 			wantBaseURL:   "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
 			wantService:   "openai",
-			wantNormalize: true,
 		},
 		{
 			name:           "dashscope token plan responses",
@@ -442,7 +417,6 @@ func TestBuildPayload(t *testing.T) {
 			req:           CreateChannelRequest{Provider: ProviderOpenCodeZen, Target: TargetChat, PlanID: "openai-chat", APIKey: "sk-test"},
 			wantBaseURL:   "https://opencode.ai/zen/v1",
 			wantService:   "openai",
-			wantNormalize: true,
 			wantModelMap:  map[string]string{"codex": "deepseek-v4-flash", "gpt": "glm-5.2", "mini": "deepseek-v4-flash"},
 			wantReasoning: map[string]string{"codex": "high", "gpt": "max", "mini": "high"},
 			wantNoVisionModels: []string{
@@ -458,7 +432,6 @@ func TestBuildPayload(t *testing.T) {
 			req:           CreateChannelRequest{Provider: ProviderOpenCodeGo, Target: TargetChat, APIKey: "sk-test"},
 			wantBaseURL:   "https://opencode.ai/zen/go/v1",
 			wantService:   "openai",
-			wantNormalize: true,
 			wantModelMap:  map[string]string{"codex": "deepseek-v4-flash", "gpt": "glm-5.2", "mini": "deepseek-v4-flash"},
 			wantReasoning: map[string]string{"codex": "high", "gpt": "max", "mini": "high"},
 			wantNoVisionModels: []string{
@@ -539,7 +512,6 @@ func TestBuildPayload(t *testing.T) {
 			req:                CreateChannelRequest{Provider: ProviderSenseNova, Target: TargetChat, APIKey: "sk-test"},
 			wantBaseURL:        "https://token.sensenova.cn/v1",
 			wantService:        "openai",
-			wantNormalize:      true,
 			wantNoVisionModels: []string{"glm-5.2", "deepseek-v4-flash"},
 			wantFallback:       "sensenova-6.7-flash-lite",
 		},
@@ -550,7 +522,6 @@ func TestBuildPayload(t *testing.T) {
 			wantService:    "openai",
 			wantCodex:      true,
 			wantStripCodex: true,
-			wantNormalize:  true,
 			wantModelMap: map[string]string{
 				"codex": "deepseek-v4-flash",
 				"gpt":   "glm-5.2",
@@ -564,7 +535,6 @@ func TestBuildPayload(t *testing.T) {
 			req:                 CreateChannelRequest{Provider: ProviderVolcArk, Target: TargetMessages, APIKey: "ark-test"},
 			wantBaseURL:         "https://ark.cn-beijing.volces.com/api/coding",
 			wantService:         "claude",
-			wantPassback:        true,
 			wantNormalizeSystem: true,
 			wantModelMap: map[string]string{
 				"fable":  "glm-5.2",
@@ -587,7 +557,6 @@ func TestBuildPayload(t *testing.T) {
 			req:           CreateChannelRequest{Provider: ProviderVolcArk, Target: TargetChat, APIKey: "ark-test"},
 			wantBaseURL:   "https://ark.cn-beijing.volces.com/api/coding/v3",
 			wantService:   "openai",
-			wantNormalize: true,
 		},
 		{
 			name:        "volc-ark responses",
@@ -605,8 +574,6 @@ func TestBuildPayload(t *testing.T) {
 				"mini":       "high",
 				"minimax-m3": "xhigh",
 			},
-			wantNormalize:      true,
-			wantNativeTool:     true,
 			wantNoVisionModels: []string{"glm-5.2", "deepseek-v4-flash"},
 			wantFallback:       "minimax-m3",
 		},
@@ -628,7 +595,6 @@ func TestBuildPayload(t *testing.T) {
 			req:           CreateChannelRequest{Provider: ProviderQianfan, Target: TargetChat, APIKey: "qf-test"},
 			wantBaseURL:   "https://qianfan.baidubce.com/v2/coding#",
 			wantService:   "openai",
-			wantNormalize: true,
 		},
 		{
 			name:        "qianfan responses",
@@ -640,7 +606,6 @@ func TestBuildPayload(t *testing.T) {
 				"gpt":   "qianfan-code-latest",
 				"mini":  "qianfan-code-latest",
 			},
-			wantNormalize:  true,
 			wantCodex:      true,
 			wantStripCodex: true,
 		},
@@ -662,7 +627,6 @@ func TestBuildPayload(t *testing.T) {
 			req:           CreateChannelRequest{Provider: ProviderXFyun, Target: TargetChat, APIKey: "xf-test"},
 			wantBaseURL:   "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2",
 			wantService:   "openai",
-			wantNormalize: true,
 			wantModelMap:  map[string]string{"codex": "astron-code-latest", "gpt": "astron-code-latest", "mini": "astron-code-latest"},
 		},
 		{
@@ -670,7 +634,6 @@ func TestBuildPayload(t *testing.T) {
 			req:            CreateChannelRequest{Provider: ProviderXFyun, Target: TargetResponses, APIKey: "xf-test"},
 			wantBaseURL:    "https://maas-coding-api.cn-huabei-1.xf-yun.com/v1/responses",
 			wantService:    "responses",
-			wantNormalize:  true,
 			wantCodex:      true,
 			wantStripCodex: true,
 			wantModelMap:   map[string]string{"codex": "astron-code-latest", "gpt": "astron-code-latest", "mini": "astron-code-latest"},
@@ -694,12 +657,6 @@ func TestBuildPayload(t *testing.T) {
 			if got.NoVision != tt.wantVision {
 				t.Fatalf("NoVision = %v, want %v", got.NoVision, tt.wantVision)
 			}
-			if got.PassbackReasoningContent != tt.wantPassback {
-				t.Fatalf("PassbackReasoningContent = %v, want %v", got.PassbackReasoningContent, tt.wantPassback)
-			}
-			if tt.wantThinkingPassback != nil && got.PassbackThinkingBlocks != *tt.wantThinkingPassback {
-				t.Fatalf("PassbackThinkingBlocks = %v, want %v", got.PassbackThinkingBlocks, *tt.wantThinkingPassback)
-			}
 			if tt.wantNormalizeMetadata != nil {
 				if got.NormalizeMetadataUserId == nil {
 					t.Fatalf("NormalizeMetadataUserId = nil, want %v", *tt.wantNormalizeMetadata)
@@ -716,12 +673,6 @@ func TestBuildPayload(t *testing.T) {
 			}
 			if got.StripCodexClientTools != tt.wantStripCodex {
 				t.Fatalf("StripCodexClientTools = %v, want %v", got.StripCodexClientTools, tt.wantStripCodex)
-			}
-			if got.CodexNativeToolPassthrough != tt.wantNativeTool {
-				t.Fatalf("CodexNativeToolPassthrough = %v, want %v", got.CodexNativeToolPassthrough, tt.wantNativeTool)
-			}
-			if got.NormalizeNonstandardChatRoles != tt.wantNormalize {
-				t.Fatalf("NormalizeNonstandardChatRoles = %v, want %v", got.NormalizeNonstandardChatRoles, tt.wantNormalize)
 			}
 			if got.NormalizeSystemRoleToTopLevel != tt.wantNormalizeSystem {
 				t.Fatalf("NormalizeSystemRoleToTopLevel = %v, want %v", got.NormalizeSystemRoleToTopLevel, tt.wantNormalizeSystem)

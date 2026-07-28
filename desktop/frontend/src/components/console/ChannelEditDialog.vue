@@ -81,7 +81,6 @@ const {
   headerServiceTypeItems,
   supportsOpenAIAdvancedOptions,
   supportsReasoningMappingOptions,
-  supportsChatRoleNormalization,
   supportsChannelDiscovery,
   modelMappingHint,
   targetModelPlaceholder,
@@ -543,7 +542,6 @@ const embeddingTargetModels = computed(() =>
                         :form="form"
                         :channel-type="channelType"
                         :supports-open-a-i-advanced-options="supportsOpenAIAdvancedOptions"
-                        :supports-chat-role-normalization="supportsChatRoleNormalization"
                         :reasoning-param-style-options="reasoningParamStyleOptions"
                         :text-verbosity-options="textVerbosityOptions"
                         :diagnosing="diagnosingCompat"

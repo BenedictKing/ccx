@@ -549,44 +549,28 @@ func TryUpstreamWithAllKeys(
 			// 不阻塞当前请求，结论对后续请求生效。替代原先要用户手工点诊断按钮的做法。
 			maybeTriggerCompatProbe(upstream, apiKey, currentBaseURL, attemptModel)
 
-			// 渠道兼容性自学习（主动侧）：命中记忆时把学习结论注入本次请求所用的上游副本。
-			// 实际改写由各 provider 在构造上游请求时执行（那里才知道协议形态），此处只传递结论。
+			// 渠道兼容性自学习（主动侧）：命中记忆时把学习结论注入本次请求所用的上游副本
+			// （LearnedCompatTraits，仅当次请求生效，不落盘）。实际改写由各 provider 在
+			// 构造上游请求时执行（那里才知道协议形态），此处只传递结论。
+			//
+			// 注意 TraitStripCodexClientTools 不在此处注入：它没有独立的运行时字段，
+			// CodexToolCompat 是保留给用户手工控制的既有开关（无可靠错误信号，见
+			// compat_signal.go 说明），自学习信号不应该复用/覆盖这个手工语义的字段。
 			if upstream.ChannelUID != "" {
 				keyHash := autopilot.KeyHashFromAPIKey(apiKey)
-				if state, ok := channelCompatCache.Trait(upstream.ChannelUID, keyHash, attemptModel, config.TraitDowngradeDeveloperRole); ok && state.Enabled {
-					upstreamCopy.LearnedDowngradeDeveloperRole = true
-					channelCompatCache.MarkApplied(upstream.ChannelUID, keyHash, attemptModel, config.TraitDowngradeDeveloperRole)
+				learnedTraits := []config.CompatTrait{
+					config.TraitDowngradeDeveloperRole,
+					config.TraitStripImageGenTool,
+					config.TraitPassbackThinkingBlocks,
+					config.TraitPassbackReasoningContent,
+					config.TraitStripEmptyTextBlocks,
+					config.TraitNormalizeNonstandardChatRoles,
+					config.TraitCodexNativeToolPassthrough,
 				}
-				if state, ok := channelCompatCache.Trait(upstream.ChannelUID, keyHash, attemptModel, config.TraitStripImageGenTool); ok && state.Enabled {
-					if upstreamCopy.StripImageGenerationTool == nil {
-						upstreamCopy.StripImageGenerationTool = config.BoolPtr(true)
-						channelCompatCache.MarkApplied(upstream.ChannelUID, keyHash, attemptModel, config.TraitStripImageGenTool)
-					}
-				}
-				if state, ok := channelCompatCache.Trait(upstream.ChannelUID, keyHash, attemptModel, config.TraitStripCodexClientTools); ok && state.Enabled {
-					if upstreamCopy.CodexToolCompat == nil {
-						upstreamCopy.CodexToolCompat = config.BoolPtr(true)
-						channelCompatCache.MarkApplied(upstream.ChannelUID, keyHash, attemptModel, config.TraitStripCodexClientTools)
-					}
-				}
-				if state, ok := channelCompatCache.Trait(upstream.ChannelUID, keyHash, attemptModel, config.TraitPassbackThinkingBlocks); ok && state.Enabled {
-					if upstreamCopy.PassbackThinkingBlocks == nil {
-						upstreamCopy.PassbackThinkingBlocks = config.BoolPtr(true)
-						channelCompatCache.MarkApplied(upstream.ChannelUID, keyHash, attemptModel, config.TraitPassbackThinkingBlocks)
-					}
-				}
-				// 探针学习的内容启发式兼容项：结论可能为 false（探测确认不需要），
-				// 因此按 state.Enabled 原值注入而非只在 true 时注入。
-				if state, ok := channelCompatCache.Trait(upstream.ChannelUID, keyHash, attemptModel, config.TraitPassbackReasoningContent); ok {
-					if upstreamCopy.PassbackReasoningContent == nil {
-						upstreamCopy.PassbackReasoningContent = config.BoolPtr(state.Enabled)
-						channelCompatCache.MarkApplied(upstream.ChannelUID, keyHash, attemptModel, config.TraitPassbackReasoningContent)
-					}
-				}
-				if state, ok := channelCompatCache.Trait(upstream.ChannelUID, keyHash, attemptModel, config.TraitStripEmptyTextBlocks); ok {
-					if upstreamCopy.StripEmptyTextBlocks == nil {
-						upstreamCopy.StripEmptyTextBlocks = config.BoolPtr(state.Enabled)
-						channelCompatCache.MarkApplied(upstream.ChannelUID, keyHash, attemptModel, config.TraitStripEmptyTextBlocks)
+				for _, trait := range learnedTraits {
+					if state, ok := channelCompatCache.Trait(upstream.ChannelUID, keyHash, attemptModel, trait); ok {
+						upstreamCopy.SetLearnedCompatTrait(trait, state.Enabled)
+						channelCompatCache.MarkApplied(upstream.ChannelUID, keyHash, attemptModel, trait)
 					}
 				}
 			}
@@ -851,8 +835,10 @@ func TryUpstreamWithAllKeys(
 					// 由下一轮主动注入后重试修复请求，而不是直接惩罚这个 Key。
 					// 只有学习已记录过（说明剥离后仍失败）才回落到限制 (Key,模型)。
 					learnedImageStrip := false
-					if restrictionReason == "image_generation_not_enabled" && upstream.ChannelUID != "" &&
-						upstream.StripImageGenerationTool == nil {
+					// 外层条件已保证 restrictionReason=="image_generation_not_enabled" 时
+					// IsStripImageGenerationToolEnabled() 为 false（尚未学到/未过期种子判定为需要剥离），
+					// 无需再判断字段是否被"用户显式设置"——该字段已不存在，六个兼容性开关完全交由学习决定。
+					if restrictionReason == "image_generation_not_enabled" && upstream.ChannelUID != "" {
 						keyHash := autopilot.KeyHashFromAPIKey(apiKey)
 						summary := errorBodySummaryForLog(apiType, resp.StatusCode, respBodyBytes)
 						// 记忆键用 attemptModel（而非 actualAttemptModel）：主动注入侧按 attemptModel 查询，

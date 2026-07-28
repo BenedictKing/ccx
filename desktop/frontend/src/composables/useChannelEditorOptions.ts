@@ -75,11 +75,6 @@ export function useChannelEditorOptions(options: ChannelEditorOptionsOptions) {
     )
   })
 
-  const supportsChatRoleNormalization = computed(() => {
-    return options.channelType() === 'chat'
-      || (options.channelType() === 'responses' && options.form.serviceType === 'openai')
-  })
-
   const modelMappingHint = computed(() => {
     if (options.channelType() === 'vectors') {
       return options.t('addChannel.modelMappingHintVectors')
@@ -111,7 +106,6 @@ export function useChannelEditorOptions(options: ChannelEditorOptionsOptions) {
     reasoningEffortOptions,
     serviceTypeOptions,
     headerServiceTypeItems,
-    supportsChatRoleNormalization,
     modelMappingHint,
     targetModelPlaceholder,
   }

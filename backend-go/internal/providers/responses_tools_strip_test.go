@@ -751,12 +751,12 @@ func TestResponsesProviderCodexToolCompatDiffersFromNativePassthroughForOpenAI(t
 	t.Run("OpenAI Chat 转换只由 codexToolCompat 启用 Codex proxy", func(t *testing.T) {
 		compat := true
 		upstream := &config.UpstreamConfig{
-			ServiceType:                   "openai",
-			CodexToolCompat:               &compat,
-			CodexNativeToolPassthrough:    config.BoolPtr(false),
-			StripImageGenerationTool:      config.BoolPtr(false),
-			NormalizeNonstandardChatRoles: config.BoolPtr(false),
+			ServiceType:     "openai",
+			CodexToolCompat: &compat,
 		}
+		upstream.SetLearnedCompatTrait(config.TraitCodexNativeToolPassthrough, false)
+		upstream.SetLearnedCompatTrait(config.TraitStripImageGenTool, false)
+		upstream.SetLearnedCompatTrait(config.TraitNormalizeNonstandardChatRoles, false)
 		body := []byte(`{
 			"model": "gpt-5.5",
 			"input": "search",
@@ -783,10 +783,10 @@ func TestResponsesProviderCodexToolCompatDiffersFromNativePassthroughForOpenAI(t
 	t.Run("codexNativeToolPassthrough 不等价于 Chat 转换兼容", func(t *testing.T) {
 		compat := false
 		upstream := &config.UpstreamConfig{
-			ServiceType:                "openai",
-			CodexToolCompat:            &compat,
-			CodexNativeToolPassthrough: config.BoolPtr(true),
+			ServiceType:     "openai",
+			CodexToolCompat: &compat,
 		}
+		upstream.SetLearnedCompatTrait(config.TraitCodexNativeToolPassthrough, true)
 		body := []byte(`{
 			"model": "gpt-5.5",
 			"input": "search",
@@ -814,10 +814,10 @@ func TestResponsesProviderCodexToolCompatDiffersFromNativePassthroughForOpenAI(t
 func TestResponsesProviderPassthroughCodexCompatStripsToolSearch(t *testing.T) {
 	compat := true
 	upstream := &config.UpstreamConfig{
-		ServiceType:                "responses",
-		CodexToolCompat:            &compat,
-		CodexNativeToolPassthrough: config.BoolPtr(false),
+		ServiceType:     "responses",
+		CodexToolCompat: &compat,
 	}
+	upstream.SetLearnedCompatTrait(config.TraitCodexNativeToolPassthrough, false)
 	body := []byte(`{
 		"model": "gpt-5.5",
 		"input": "search",

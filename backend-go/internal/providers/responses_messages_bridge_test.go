@@ -616,9 +616,9 @@ func TestResponsesProvider_BuildProviderRequestBody_NormalizesPassthroughInputTe
 func TestResponsesProvider_BuildProviderRequestBody_PassbackReasoningContentForClaudeUpstream(t *testing.T) {
 	provider := &ResponsesProvider{}
 	upstream := &config.UpstreamConfig{
-		ServiceType:              "claude",
-		PassbackReasoningContent: config.BoolPtr(true),
+		ServiceType: "claude",
 	}
+	upstream.SetLearnedCompatTrait(config.TraitPassbackReasoningContent, true)
 
 	body := []byte(`{
 		"model":"gpt-5",
@@ -657,10 +657,10 @@ func TestResponsesProvider_BuildProviderRequestBody_PassbackReasoningContentForC
 func TestResponsesProvider_BuildProviderRequestBody_PassbackReasoningContentStripsThinkingBlocksForClaudeUpstream(t *testing.T) {
 	provider := &ResponsesProvider{}
 	upstream := &config.UpstreamConfig{
-		ServiceType:              "claude",
-		PassbackReasoningContent: config.BoolPtr(true),
-		PassbackThinkingBlocks:   config.BoolPtr(false),
+		ServiceType: "claude",
 	}
+	upstream.SetLearnedCompatTrait(config.TraitPassbackReasoningContent, true)
+	upstream.SetLearnedCompatTrait(config.TraitPassbackThinkingBlocks, false)
 
 	body := []byte(`{
 		"model":"gpt-5",
@@ -752,9 +752,9 @@ func TestResponsesProvider_BuildProviderRequestBody_StripsThinkingBlocksUnlessPa
 func TestResponsesProvider_BuildProviderRequestBody_PassbackThinkingBlocksForClaudeUpstream(t *testing.T) {
 	provider := &ResponsesProvider{}
 	upstream := &config.UpstreamConfig{
-		ServiceType:            "claude",
-		PassbackThinkingBlocks: config.BoolPtr(true),
+		ServiceType: "claude",
 	}
+	upstream.SetLearnedCompatTrait(config.TraitPassbackThinkingBlocks, true)
 
 	body := []byte(`{
 		"model":"gpt-5",

@@ -11,13 +11,9 @@
           "sonnet": "deepseek-v4-pro"
         },
         "reasoningParamStyle": "reasoning",
-        "passbackReasoningContent": false,
-        "passbackThinkingBlocks": false,
-        "stripEmptyTextBlocks": true,
         "normalizeSystemRoleToTopLevel": true,
         "normalizeMetadataUserId": true,
         "stripBillingHeader": true,
-        "stripImageGenerationTool": true,
         "noVision": true
       },
       "mimo": {
@@ -35,7 +31,6 @@
           "sonnet": "max"
         },
         "reasoningParamStyle": "thinking",
-        "passbackReasoningContent": true,
         "normalizeSystemRoleToTopLevel": true,
         "noVisionModels": [
           "mimo-v2.5-pro"
@@ -58,9 +53,6 @@
           "sonnet": "max"
         },
         "reasoningParamStyle": "reasoning",
-        "passbackReasoningContent": true,
-        "passbackThinkingBlocks": true,
-        "stripEmptyTextBlocks": true,
         "normalizeSystemRoleToTopLevel": true,
         "noVisionModels": [
           "glm-5.2",
@@ -109,7 +101,6 @@
           "opus": "MiniMax-M3",
           "sonnet": "MiniMax-M3"
         },
-        "passbackReasoningContent": true,
         "normalizeSystemRoleToTopLevel": true,
         "noVisionModels": [
           "MiniMax-M2.7"
@@ -201,9 +192,6 @@
           "minimax-m3": "xhigh"
         },
         "reasoningParamStyle": "reasoning",
-        "passbackReasoningContent": true,
-        "passbackThinkingBlocks": true,
-        "stripEmptyTextBlocks": true,
         "normalizeSystemRoleToTopLevel": true,
         "noVisionModels": [
           "glm-5.2",
@@ -261,16 +249,13 @@
       "unity2": {},
       "openrouter": {},
       "sensenova": {
-        "normalizeNonstandardChatRoles": true,
         "noVisionModels": [
           "glm-5.2",
           "deepseek-v4-flash"
         ],
         "visionFallbackModel": "sensenova-6.7-flash-lite"
       },
-      "modelscope": {
-        "normalizeNonstandardChatRoles": true
-      },
+      "modelscope": {},
       "minimax": {},
       "dashscope": {},
       "opencode-zen": {
@@ -286,7 +271,6 @@
         },
         "reasoningParamStyle": "reasoning",
         "authHeader": "bearer",
-        "normalizeNonstandardChatRoles": true,
         "noVisionModels": [
           "glm-5.2",
           "deepseek-v4-flash"
@@ -306,26 +290,20 @@
         },
         "reasoningParamStyle": "reasoning",
         "authHeader": "bearer",
-        "normalizeNonstandardChatRoles": true,
         "noVisionModels": [
           "glm-5.2",
           "deepseek-v4-flash"
         ],
         "visionFallbackModel": "minimax-m3"
       },
-      "volc-ark": {
-        "normalizeNonstandardChatRoles": true
-      },
-      "qianfan": {
-        "normalizeNonstandardChatRoles": true
-      },
+      "volc-ark": {},
+      "qianfan": {},
       "xfyun": {
         "modelMapping": {
           "codex": "astron-code-latest",
           "gpt": "astron-code-latest",
           "mini": "astron-code-latest"
-        },
-        "normalizeNonstandardChatRoles": true
+        }
       }
     }
   },
@@ -344,8 +322,6 @@
         "reasoningParamStyle": "reasoning",
         "codexToolCompat": false,
         "stripCodexClientTools": false,
-        "codexNativeToolPassthrough": true,
-        "normalizeNonstandardChatRoles": true,
         "noVision": true
       },
       "mimo": {
@@ -384,8 +360,6 @@
         "reasoningParamStyle": "reasoning",
         "codexToolCompat": false,
         "stripCodexClientTools": false,
-        "codexNativeToolPassthrough": true,
-        "normalizeNonstandardChatRoles": true,
         "noVisionModels": [
           "glm-5.2",
           "deepseek-v4-flash"
@@ -394,13 +368,11 @@
       },
       "runapi": {
         "codexToolCompat": false,
-        "stripCodexClientTools": false,
-        "stripImageGenerationTool": true
+        "stripCodexClientTools": false
       },
       "unity2": {
         "codexToolCompat": false,
-        "stripCodexClientTools": false,
-        "stripImageGenerationTool": true
+        "stripCodexClientTools": false
       },
       "minimax": {
         "modelMapping": {
@@ -409,9 +381,7 @@
           "mini": "MiniMax-M2.7"
         },
         "codexToolCompat": false,
-        "stripCodexClientTools": false,
-        "codexNativeToolPassthrough": true,
-        "normalizeNonstandardChatRoles": true
+        "stripCodexClientTools": false
       },
       "dashscope": {
         "modelMapping": {
@@ -477,7 +447,6 @@
           "gpt": "glm-5.2",
           "mini": "deepseek-v4-flash"
         },
-        "normalizeNonstandardChatRoles": true,
         "noVisionModels": [
           "glm-5.2",
           "deepseek-v4-flash"
@@ -495,8 +464,7 @@
           "mini": "deepseek-ai/DeepSeek-V4-Flash"
         },
         "codexToolCompat": false,
-        "stripCodexClientTools": false,
-        "normalizeNonstandardChatRoles": true
+        "stripCodexClientTools": false
       },
       "volc-ark": {
         "modelMapping": {
@@ -513,8 +481,6 @@
         "reasoningParamStyle": "reasoning",
         "codexToolCompat": false,
         "stripCodexClientTools": false,
-        "codexNativeToolPassthrough": true,
-        "normalizeNonstandardChatRoles": true,
         "noVisionModels": [
           "glm-5.2",
           "deepseek-v4-flash"
@@ -526,8 +492,7 @@
           "codex": "qianfan-code-latest",
           "gpt": "qianfan-code-latest",
           "mini": "qianfan-code-latest"
-        },
-        "normalizeNonstandardChatRoles": true
+        }
       },
       "xfyun": {
         "modelMapping": {
@@ -535,17 +500,13 @@
           "gpt": "astron-code-latest",
           "mini": "astron-code-latest"
         },
-        "serviceType": "responses",
-        "normalizeNonstandardChatRoles": true
+        "serviceType": "responses"
       },
       "github-copilot": {
         "serviceType": "copilot",
         "baseUrl": "https://api.githubcopilot.com",
         "codexToolCompat": false,
-        "stripCodexClientTools": false,
-        "codexNativeToolPassthrough": true,
-        "stripImageGenerationTool": true,
-        "normalizeNonstandardChatRoles": false
+        "stripCodexClientTools": false
       }
     }
   },
