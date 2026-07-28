@@ -531,14 +531,18 @@ func TryUpstreamWithAllKeys(
 				}
 			}
 
-			// 已知厂商参数约束（主动侧）：无需先失败一次，按模型文档约束直接规避。
+			// 已知厂商参数约束（主动侧）：无需先失败一次，按 model-registry 里的文档约束直接规避。
 			// 例如 Kimi K3/K2.7-code/K2.6 的 temperature/top_p/n 等为固定值，传入即 400。
-			if stripped, applied := ApplyKnownParamConstraints(attemptBody, attemptModel); len(applied) > 0 {
-				attemptBody = stripped
-				RestoreRequestBody(c, attemptBody)
-				c.Set("requestBodyBytes", attemptBody)
-				RequestLogf(c, "[%s-ParamConstraint] 模型 %s 应用已知参数约束: %s",
-					apiType, attemptModel, strings.Join(applied, ","))
+			// 约束数据随 model-registry 走 presetstore 刷新链路，运营者更新 JSON 即可生效，
+			// 不需要重新编译发版。
+			if paramCap := config.ResolveUpstreamCapability(attemptModel, upstream, cfgManager.GetConfig().UpstreamModelCapabilities); paramCap.Capability.ParamConstraints != nil {
+				if stripped, applied := ApplyKnownParamConstraints(attemptBody, paramCap.Capability.ParamConstraints); len(applied) > 0 {
+					attemptBody = stripped
+					RestoreRequestBody(c, attemptBody)
+					c.Set("requestBodyBytes", attemptBody)
+					RequestLogf(c, "[%s-ParamConstraint] 模型 %s 应用已知参数约束: %s",
+						apiType, attemptModel, strings.Join(applied, ","))
+				}
 			}
 
 			// 内容启发式兼容项（无上游报错信号）：首次遇到该组合时异步探测一次并记忆，

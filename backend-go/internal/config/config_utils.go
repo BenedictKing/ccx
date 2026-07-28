@@ -751,6 +751,20 @@ func cloneUpstreamModelCapability(capability UpstreamModelCapability) UpstreamMo
 	if capability.Sources != nil {
 		capability.Sources = append([]string(nil), capability.Sources...)
 	}
+	if capability.ParamConstraints != nil {
+		constraints := *capability.ParamConstraints
+		if constraints.FixedParams != nil {
+			constraints.FixedParams = append([]string(nil), constraints.FixedParams...)
+		}
+		if constraints.ThinkingFixedValue != nil {
+			thinking := make(map[string]interface{}, len(constraints.ThinkingFixedValue))
+			for k, v := range constraints.ThinkingFixedValue {
+				thinking[k] = v
+			}
+			constraints.ThinkingFixedValue = thinking
+		}
+		capability.ParamConstraints = &constraints
+	}
 	return capability
 }
 

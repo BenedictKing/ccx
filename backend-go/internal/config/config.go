@@ -394,6 +394,24 @@ type UpstreamModelCapability struct {
 	Capabilities            map[string]bool `json:"capabilities,omitempty"`
 	Pricing                 *ModelPricing   `json:"pricing,omitempty"`
 	Sources                 []string        `json:"sources,omitempty"`
+	// ParamConstraints 厂商文档已明确公布的请求参数硬约束（如 Kimi K3/K2.7-code/K2.6 的
+	// temperature/top_p 固定值不可改）。随 model-registry 走 presetstore 的定期刷新链路，
+	// 不需要重新编译发版；应用逻辑见 internal/handlers/common/compat_param_constraints.go。
+	ParamConstraints *ModelParamConstraints `json:"paramConstraints,omitempty"`
+}
+
+// ModelParamConstraints 描述单个模型在请求参数上的厂商级硬约束。
+// 与 ChannelCompatCache 的错误驱动学习互补：这里是文档已知、无需先失败一次即可规避的约束。
+type ModelParamConstraints struct {
+	// FixedParams 值被厂商固定、传入其他值即报错的采样参数名（如 "temperature"）。
+	// 命中时直接从请求体删除，上游使用自身默认值，语义无损。
+	FixedParams []string `json:"fixedParams,omitempty"`
+	// ToolChoiceRequiredUnsupported 为 true 时，tool_choice:"required" 会被降级为 "auto"
+	// （保留"可调工具"、丢弃"强制"，是语义损失最小的降级）。
+	ToolChoiceRequiredUnsupported bool `json:"toolChoiceRequiredUnsupported,omitempty"`
+	// ThinkingFixedValue 非空时，thinking 参数只接受此固定值（如
+	// {"type":"enabled","keep":"all"}），其余取值会被归一化为该值。
+	ThinkingFixedValue map[string]interface{} `json:"thinkingFixedValue,omitempty"`
 }
 
 // ModelBenchmarkProfile 描述规范模型在独立基准中的能力上界证据。

@@ -528,6 +528,20 @@ func cloneCapability(src UpstreamModelCapability) UpstreamModelCapability {
 		}
 		dst.Pricing = &pricing
 	}
+	if src.ParamConstraints != nil {
+		constraints := *src.ParamConstraints
+		if len(src.ParamConstraints.FixedParams) > 0 {
+			constraints.FixedParams = append([]string(nil), src.ParamConstraints.FixedParams...)
+		}
+		if len(src.ParamConstraints.ThinkingFixedValue) > 0 {
+			thinking := make(map[string]interface{}, len(src.ParamConstraints.ThinkingFixedValue))
+			for k, v := range src.ParamConstraints.ThinkingFixedValue {
+				thinking[k] = v
+			}
+			constraints.ThinkingFixedValue = thinking
+		}
+		dst.ParamConstraints = &constraints
+	}
 	return dst
 }
 
@@ -620,6 +634,19 @@ func convertRuntimeCapabilities(preset *presetstore.ModelRegistryPreset) map[str
 						OutputPrice:         cloneFloatPointer(tier.OutputPrice),
 					}
 				}
+			}
+		}
+		if entry.ParamConstraints != nil {
+			capability.ParamConstraints = &ModelParamConstraints{
+				FixedParams:                   append([]string(nil), entry.ParamConstraints.FixedParams...),
+				ToolChoiceRequiredUnsupported: entry.ParamConstraints.ToolChoiceRequiredUnsupported,
+			}
+			if len(entry.ParamConstraints.ThinkingFixedValue) > 0 {
+				thinking := make(map[string]interface{}, len(entry.ParamConstraints.ThinkingFixedValue))
+				for k, v := range entry.ParamConstraints.ThinkingFixedValue {
+					thinking[k] = v
+				}
+				capability.ParamConstraints.ThinkingFixedValue = thinking
 			}
 		}
 		for _, pattern := range entry.Patterns {

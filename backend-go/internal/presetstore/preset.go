@@ -52,6 +52,16 @@ type ModelRegistryCapabilityPreset struct {
 	Capabilities            map[string]bool     `json:"capabilities,omitempty"`
 	Pricing                 *ModelPricingPreset `json:"pricing,omitempty"`
 	Sources                 []string            `json:"sources,omitempty"`
+	// ParamConstraints 厂商文档已知的请求参数硬约束（如 Kimi 固定值采样参数）。
+	// 与 config.ModelParamConstraints 字段一一对应；随本 preset 走定期刷新链路。
+	ParamConstraints *ModelParamConstraintsPreset `json:"paramConstraints,omitempty"`
+}
+
+// ModelParamConstraintsPreset 对应 config.ModelParamConstraints 的可刷新载体。
+type ModelParamConstraintsPreset struct {
+	FixedParams                   []string               `json:"fixedParams,omitempty"`
+	ToolChoiceRequiredUnsupported bool                   `json:"toolChoiceRequiredUnsupported,omitempty"`
+	ThinkingFixedValue            map[string]interface{} `json:"thinkingFixedValue,omitempty"`
 }
 
 type ModelBenchmarkProfilePreset struct {

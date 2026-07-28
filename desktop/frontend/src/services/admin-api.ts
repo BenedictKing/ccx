@@ -121,6 +121,14 @@ export interface UpstreamModelCapability {
   capabilities?: Record<string, boolean>
   pricing?: ModelPricing
   sources?: string[]
+  /** 厂商文档已知的请求参数硬约束（如 Kimi 固定值采样参数），只读展示用，不参与前端逻辑。 */
+  paramConstraints?: ModelParamConstraints
+}
+
+export interface ModelParamConstraints {
+  fixedParams?: string[]
+  toolChoiceRequiredUnsupported?: boolean
+  thinkingFixedValue?: Record<string, unknown>
 }
 
 export interface ModelBenchmarkProfile {

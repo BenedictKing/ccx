@@ -28,6 +28,7 @@ function compactCapability(entry) {
     'capabilities',
     'pricing',
     'sources',
+    'paramConstraints',
   ]) {
     if (entry[key] !== undefined) {
       capability[key] = entry[key]
@@ -166,6 +167,8 @@ function formatGoCapability(capability) {
   const pricing = formatGoPricing(capability.Pricing)
   if (pricing) fields.push(`Pricing: ${pricing}`)
   if (capability.Sources?.length) fields.push(`Sources: ${formatGoStringSlice(capability.Sources)}`)
+  const paramConstraints = formatGoParamConstraints(capability.ParamConstraints)
+  if (paramConstraints) fields.push(`ParamConstraints: ${paramConstraints}`)
   return `UpstreamModelCapability{${fields.join(', ')}}`
 }
 
@@ -183,7 +186,24 @@ function toGoCapability(capability) {
     Capabilities: capability.capabilities,
     Pricing: capability.pricing,
     Sources: capability.sources,
+    ParamConstraints: capability.paramConstraints,
   }
+}
+
+// formatGoParamConstraints 渲染 config.ModelParamConstraints 字面量。
+// 对应厂商文档已知的请求参数硬约束（如 Kimi 固定值采样参数），走 model-registry 刷新链路，
+// 不需要重新编译发版即可更新；应用逻辑见 internal/handlers/common/compat_param_constraints.go。
+function formatGoParamConstraints(constraints) {
+  if (!constraints) return ''
+  const fields = []
+  if (constraints.fixedParams?.length) fields.push(`FixedParams: ${formatGoStringSlice(constraints.fixedParams)}`)
+  if (constraints.toolChoiceRequiredUnsupported) fields.push(`ToolChoiceRequiredUnsupported: true`)
+  if (constraints.thinkingFixedValue) {
+    const entries = Object.entries(constraints.thinkingFixedValue)
+      .map(([k, v]) => `${quoteGoString(k)}: ${typeof v === 'string' ? quoteGoString(v) : JSON.stringify(v)}`)
+    fields.push(`ThinkingFixedValue: map[string]interface{}{${entries.join(', ')}}`)
+  }
+  return `&ModelParamConstraints{${fields.join(', ')}}`
 }
 
 function formatGoBenchmarkProfile(profile) {
