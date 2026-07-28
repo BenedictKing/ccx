@@ -131,16 +131,16 @@ type AutopilotRoutingConfig struct {
 }
 
 // IsFrontierRoutingEnabled 返回 Frontier/Ladder 是否在生产中影响选路。
-// 仅在模式为 assist/auto 且 FrontierRoutingEnabled 为 true 时生效。
+// 由 FrontierRoutingEnabled 独立控制，不再受运行模式门控。
 func (c AutopilotRoutingConfig) IsFrontierRoutingEnabled() bool {
-	return c.FrontierRoutingEnabled && (c.RoutingMode == AutopilotModeAssist || c.RoutingMode == AutopilotModeAuto)
+	return c.FrontierRoutingEnabled
 }
 
 // IsAFPCostRoutingEnabled 返回 AFP 成本适配器是否参与可比树。
-// 默认开启，在 assist/auto 模式下始终生效。仅对火山 Agent Plan 渠道有效；
+// 始终开启。仅对火山 Agent Plan 渠道有效；
 // scope 非可比（非 Running/非托管）时自动回退 USD，无需额外开关。
 func (c AutopilotRoutingConfig) IsAFPCostRoutingEnabled() bool {
-	return c.RoutingMode == AutopilotModeAssist || c.RoutingMode == AutopilotModeAuto
+	return true
 }
 
 // ── §9.1 子配置类型 ──
@@ -412,16 +412,8 @@ type ABTestConfig struct {
 const (
 	currentAutopilotConfigSchemaVersion = 3
 
-	// AutopilotModeOff 完全关闭。
-	AutopilotModeOff = "off"
-	// AutopilotModeShadow 影子模式：只计算+记录，不影响真实调度（默认）。
-	AutopilotModeShadow = "shadow"
-	// AutopilotModeAssist 辅助模式：保留全部候选并按评分重排。
-	AutopilotModeAssist = "assist"
 	// AutopilotModeAuto 全自动模式：应用硬约束过滤并按评分重排，支持 fail-open。
 	AutopilotModeAuto = "auto"
-	// AutopilotModeActive 全量自动模式：与 auto 路由语义相同，代表已完成 100% 放量。
-	AutopilotModeActive = "active"
 )
 
 const (
@@ -436,7 +428,7 @@ const (
 func DefaultAutopilotRoutingConfig() AutopilotRoutingConfig {
 	return AutopilotRoutingConfig{
 		SchemaVersion: currentAutopilotConfigSchemaVersion,
-		RoutingMode:   AutopilotModeShadow,
+		RoutingMode:   AutopilotModeAuto,
 		KillSwitch:    false,
 
 		CostPreference: CostPreferenceConfig{
@@ -560,7 +552,7 @@ func DefaultAutopilotRoutingConfig() AutopilotRoutingConfig {
 
 		TrustedRoutingAdvisor: TrustedRoutingAdvisorConfig{
 			Enabled:                         true,
-			Mode:                            AutopilotModeShadow,
+			Mode:                            AutopilotModeAuto,
 			AllowedAdvisorOriginTiers:       []string{"first", "local"},
 			ForbidAdvisorOnRelayOrCommunity: true,
 			AdvisorTimeoutMs:                1200,
@@ -582,7 +574,7 @@ func DefaultAutopilotRoutingConfig() AutopilotRoutingConfig {
 
 		LocalModelRouting: LocalModelRoutingConfig{
 			Enabled:                     true,
-			Mode:                        AutopilotModeShadow,
+			Mode:                        AutopilotModeAuto,
 			AllowLocalForTaskClasses:    []string{"lightweight", "worker"},
 			NeverDemoteTaskClasses:      []string{"supervisor", "vision", "long_context"},
 			ForbidAutoDecomposeAndMerge: true,
@@ -611,21 +603,10 @@ func DefaultAutopilotRoutingConfig() AutopilotRoutingConfig {
 
 // ── 校验与归一化 ──
 
-// validateRollout 校验灰度比例，非法值回退到安全默认。
+// validateRollout 将放量比例固定为全量，并补齐追踪标识。
 func (c *AutopilotRoutingConfig) validateRollout() {
-	switch c.RoutingMode {
-	case AutopilotModeOff, AutopilotModeShadow:
-		c.RolloutPercent = 0
-	case AutopilotModeActive:
-		c.RolloutPercent = 100
-		if c.ControlPercent <= 0 || c.ControlPercent > 10 {
-			c.ControlPercent = 1
-		}
-	case AutopilotModeAssist, AutopilotModeAuto:
-		if c.RolloutPercent < 1 || c.RolloutPercent > 100 {
-			c.RolloutPercent = 1
-		}
-	}
+	c.RolloutPercent = 100
+	c.ControlPercent = 1
 	if c.RolloutSeed == "" {
 		c.RolloutSeed = fmt.Sprintf("seed_%d", time.Now().UnixNano())
 	}
@@ -638,7 +619,7 @@ func (c *AutopilotRoutingConfig) validateRollout() {
 // 非法值回退到安全默认，不返回 error（fail-open 策略）。
 func (c *AutopilotRoutingConfig) Validate() {
 	// 1. 模式校验
-	c.RoutingMode = normalizeAutopilotMode(c.RoutingMode)
+	c.RoutingMode = AutopilotModeAuto
 
 	// 2. 灰度比例校验
 	c.validateRollout()
@@ -722,19 +703,6 @@ func dedupeNonEmptyStrings(items []string) []string {
 		return nil
 	}
 	return result
-}
-
-// normalizeAutopilotMode 归一化路由模式。
-// 非法值回退到 AutopilotModeShadow。
-func normalizeAutopilotMode(mode string) string {
-	switch strings.ToLower(strings.TrimSpace(mode)) {
-	case AutopilotModeOff, AutopilotModeShadow, AutopilotModeAssist, AutopilotModeAuto, AutopilotModeActive:
-		return strings.ToLower(strings.TrimSpace(mode))
-	case "":
-		return AutopilotModeShadow
-	default:
-		return AutopilotModeShadow
-	}
 }
 
 // validate 归一化 CostPreferenceConfig。
@@ -920,24 +888,6 @@ func (cm *ConfigManager) GetAutopilotRouting() AutopilotRoutingConfig {
 	return cfg
 }
 
-// SetAutopilotRoutingMode 更新智能路由运行模式并持久化。
-// mode 经 normalizeAutopilotMode 规范化后写入（空字符串回退到 shadow）。
-func (cm *ConfigManager) SetAutopilotRoutingMode(mode string) error {
-	if mode == "" {
-		return fmt.Errorf("mode 不能为空")
-	}
-	normalized := normalizeAutopilotMode(mode)
-	cm.mu.Lock()
-	cm.config.AutopilotRouting.RoutingMode = normalized
-	if err := cm.saveConfigLocked(cm.config); err != nil {
-		cm.mu.Unlock()
-		return err
-	}
-	log.Printf("[Config-Autopilot] 路由模式已更新: %s", normalized)
-	cm.fireConfigChangeCallbacks()
-	return nil
-}
-
 // SetAutopilotCostPreference 更新价格偏向并持久化。
 func (cm *ConfigManager) SetCostPreference(cp CostPreferenceConfig) error {
 	cm.mu.Lock()
@@ -996,15 +946,14 @@ func (cm *ConfigManager) GetEffectiveRoutingMode() string {
 // KillSwitch=true 时无条件返回 "off"。
 func (c AutopilotRoutingConfig) EffectiveRoutingMode() string {
 	if c.KillSwitch {
-		return AutopilotModeOff
+		return "off"
 	}
-	return c.RoutingMode
+	return AutopilotModeAuto
 }
 
 // IsAutopilotActive 判断智能路由是否处于影响真实调度的模式。
 func (c AutopilotRoutingConfig) IsAutopilotActive() bool {
-	mode := c.EffectiveRoutingMode()
-	return mode == AutopilotModeAuto || mode == AutopilotModeAssist || mode == AutopilotModeActive
+	return !c.KillSwitch
 }
 
 // applyAutopilotEnvOverrides 将环境变量覆盖应用到 AutopilotRoutingConfig。
