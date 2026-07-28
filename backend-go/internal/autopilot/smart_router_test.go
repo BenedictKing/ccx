@@ -499,7 +499,7 @@ func TestIntentExec_SupervisorProtection_ThirdPartyBlocked(t *testing.T) {
 
 // ── Shadow 模式不改变输出的不变量验证 ──
 
-func TestIntentExec_ShadowMode_PreservesOriginalOrder(t *testing.T) {
+func TestIntentExec_LegacyShadowMode_TargetPromoted(t *testing.T) {
 	cfg := baseTestConfig()
 	cfg.AutopilotRouting = config.AutopilotRoutingConfig{
 		RoutingMode: "shadow",
@@ -509,11 +509,9 @@ func TestIntentExec_ShadowMode_PreservesOriginalOrder(t *testing.T) {
 	defer cleanup()
 
 	intentStore := createTestIntentStore(t)
-
 	processedCfg := cfgManager.GetConfig()
 	ch2UID := processedCfg.Upstream[2].ChannelUID
 
-	// 创建一个意图指向 ch-economy
 	intent := &ManualRoutingIntent{
 		IntentType:     IntentTypeModelTrial,
 		ChannelKind:    "messages",
@@ -524,29 +522,17 @@ func TestIntentExec_ShadowMode_PreservesOriginalOrder(t *testing.T) {
 	}
 	_ = intentStore.Create(intent)
 
-	// 有意图的 SmartRouter
-	srWithIntent := &SmartRouter{
+	sr := &SmartRouter{
 		configManager: cfgManager,
 		intentStore:   intentStore,
-		traceStore:    nil,
 	}
-
-	// 无意图的 SmartRouter
-	srNoIntent := &SmartRouter{
-		configManager: cfgManager,
-		intentStore:   nil,
-		traceStore:    nil,
-	}
-
 	profile := testProfile()
 	profile.Model = "claude-sonnet-4"
-
 	channels := []scheduler.ChannelInfo{
 		{Index: 0, Name: "ch-premium", Priority: 1, Status: "active"},
 		{Index: 1, Name: "ch-standard", Priority: 2, Status: "active"},
 		{Index: 2, Name: "ch-economy", Priority: 3, Status: "active"},
 	}
-
 	upstreamFor := func(ch scheduler.ChannelInfo) *config.UpstreamConfig {
 		if ch.Index >= 0 && ch.Index < len(processedCfg.Upstream) {
 			u := processedCfg.Upstream[ch.Index]
@@ -558,27 +544,16 @@ func TestIntentExec_ShadowMode_PreservesOriginalOrder(t *testing.T) {
 		return ch.Status == "active" && len(u.APIKeys) > 0
 	}
 
-	filterWith := srWithIntent.CandidateFilterFor(profile)
-	filterNo := srNoIntent.CandidateFilterFor(profile)
-
-	resultWith, err := filterWith(channels, upstreamFor, available)
+	filter := sr.CandidateFilterFor(profile)
+	if filter == nil {
+		t.Fatal("legacy shadow 输入下 filter 不应为 nil")
+	}
+	result, err := filter(channels, upstreamFor, available)
 	if err != nil {
-		t.Fatalf("有意图 filter 失败: %v", err)
+		t.Fatalf("filter 失败: %v", err)
 	}
-
-	resultNo, err := filterNo(channels, upstreamFor, available)
-	if err != nil {
-		t.Fatalf("无意图 filter 失败: %v", err)
-	}
-
-	// shadow 模式：两个结果必须完全一致
-	if len(resultWith) != len(resultNo) {
-		t.Fatalf("shadow 模式结果长度不一致: with=%d no=%d", len(resultWith), len(resultNo))
-	}
-	for i := range resultWith {
-		if resultWith[i].Name != resultNo[i].Name {
-			t.Errorf("shadow 模式候选 %d 不一致: with=%s no=%s", i, resultWith[i].Name, resultNo[i].Name)
-		}
+	if len(result) == 0 || result[0].Name != "ch-economy" {
+		t.Fatalf("legacy shadow 应按 auto 执行意图重排: result=%v", result)
 	}
 }
 

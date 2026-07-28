@@ -49,7 +49,6 @@ type SmartRouter struct {
 	intentStore       *ManualIntentStore
 	traceStore        *TraceStore
 	configManager     *config.ConfigManager
-	releaseController *ReleaseController     // 灰度发布控制器（nil = 使用配置直接判定模式）
 	advisor           *TrustedRoutingAdvisor // Phase 2: 可信路由顾问（nil = 不启用）
 	decisionStore     *AdvisorDecisionStore  // Phase 2: advisor 决策记录存储
 	localRuntimeStore *LocalRuntimeStore     // Phase 2: 本地运行时存储（nil = 不纳入本地候选）
@@ -137,12 +136,6 @@ func (r *SmartRouter) SetModelResolver(resolver *ModelResolver) {
 // SetModelProfileStore 设置 endpoint 模型画像，用于规范能力上界的渠道质量折算。
 func (r *SmartRouter) SetModelProfileStore(store *ModelProfileStore) {
 	r.modelProfileStore = store
-}
-
-// SetReleaseController 设置灰度发布控制器（由 main.go 在构造后调用）。
-// nil 表示不启用灰度发布分桶，模式直接从配置判定（向后兼容）。
-func (r *SmartRouter) SetReleaseController(rc *ReleaseController) {
-	r.releaseController = rc
 }
 
 // SetOnCandidatesRanked 设置候选排名回调（Phase 4 Item 8: A/B 测试用）。
@@ -407,22 +400,10 @@ func (r *SmartRouter) candidateFilterFor(
 
 	cfg := r.configManager.GetConfig()
 	autopilotCfg := cfg.AutopilotRouting
-
-	// 模式判定：优先使用 ReleaseController（考虑安全覆盖和灰度分桶），回退到配置直接判定
-	var routerMode RoutingMode
-	var releaseSnapshot *RoutingReleaseSnapshot
-	if r.releaseController != nil {
-		routerMode = r.releaseController.EffectiveMode()
-		snap := r.releaseController.CurrentSnapshot()
-		releaseSnapshot = &snap
-	} else {
-		routerMode = RoutingMode(autopilotCfg.EffectiveRoutingMode())
-	}
-
-	// off / kill switch 不注入
-	if routerMode == RoutingModeOff {
+	if autopilotCfg.KillSwitch {
 		return nil
 	}
+	routerMode := RoutingModeAuto
 
 	// 确定分类
 	input := BuildClassifierInput(profile)
@@ -475,7 +456,6 @@ func (r *SmartRouter) candidateFilterFor(
 			profile, weights, familyPrefs, routerMode, traceStore, disabledChannelUIDs,
 			cfg.UpstreamModelCapabilities,
 			onTraceRecorded,
-			releaseSnapshot,
 		)
 	}
 }
@@ -515,7 +495,6 @@ func (r *SmartRouter) executeFilter(
 	disabledChannelUIDs map[string]bool,
 	upstreamModelCapabilities map[string]config.UpstreamModelCapability,
 	onTraceRecorded func(traceUID string),
-	releaseSnapshot *RoutingReleaseSnapshot,
 ) ([]scheduler.ChannelInfo, error) {
 	startTime := time.Now()
 
@@ -534,16 +513,6 @@ func (r *SmartRouter) executeFilter(
 		GlobalFilterReasons: make(map[string][]string),
 	}
 
-	// 从入口冻结的 release 快照回填发布维度（热重载只影响之后进入的请求）
-	if releaseSnapshot != nil {
-		trace.ReleaseID = releaseSnapshot.ReleaseID
-		trace.PolicyFingerprint = releaseSnapshot.PolicyFingerprint
-		trace.TargetMode = releaseSnapshot.TargetMode
-		trace.EffectiveMode = releaseSnapshot.EffectiveMode
-		trace.Cohort = releaseSnapshot.Cohort
-		trace.BypassReason = releaseSnapshot.BypassReason
-	}
-
 	// 构建评分上下文
 	scoringCtx := ScoringContext{
 		TaskClass:         profile.TaskClass,
@@ -557,15 +526,9 @@ func (r *SmartRouter) executeFilter(
 	// 收集所有候选的估算成本用于归一化
 	costMap := make(map[string]float64, len(channels))
 	entries := make([]channelScoreEntry, 0, len(channels))
-	// assist 只重排，不得删除原调度仍可能使用的候选。基础可用性检查
-	// 未通过的渠道不参与评分，但保留在已评分候选之后供原调度 failover。
-	passthroughChannels := make([]scheduler.ChannelInfo, 0)
 	for _, ch := range channels {
 		upstream := upstreamFor(ch)
 		if upstream == nil {
-			if mode == RoutingModeAssist {
-				passthroughChannels = append(passthroughChannels, ch)
-			}
 			continue
 		}
 		// P1.5：按 channel 禁用——命中的渠道对 autopilot 不存在，走和
@@ -574,9 +537,6 @@ func (r *SmartRouter) executeFilter(
 			continue
 		}
 		if !candidateAvailable(ch, upstream) {
-			if mode == RoutingModeAssist {
-				passthroughChannels = append(passthroughChannels, ch)
-			}
 			continue
 		}
 		modelResolution := r.resolveChannelModel(profile, upstream, upstreamModelCapabilities)
@@ -671,8 +631,8 @@ func (r *SmartRouter) executeFilter(
 			trace.AdvisorDecisionUID = advisorDecisionUID
 
 			if effect.Applied {
-				// auto 模式下：MinQualityTier 转化为硬约束过滤条件
-				if mode == RoutingModeAuto && effect.MinQualityTier != "" {
+				// MinQualityTier 转化为硬约束过滤条件
+				if effect.MinQualityTier != "" {
 					advisorMinQualityTier = effect.MinQualityTier
 					// trace 侧仍记录可读原因，供 UI/人工审查展示（非控制流依赖）。
 					trace.GlobalFilterReasons["advisor_min_quality_tier"] = []string{
@@ -725,7 +685,7 @@ func (r *SmartRouter) executeFilter(
 	sortScoredChannelEntries(scoredEntries)
 
 	// ── 人工意图匹配（设计 §4.6.4）──
-	// 在评分排序后、构建结果前执行；shadow 模式只标注不影响输出。
+	// 在评分排序后、构建结果前执行。
 	var matchedIntent *IntentMatchResult
 	var intentTargetUID string
 	if r.intentStore != nil && len(scoredEntries) > 1 {
@@ -876,36 +836,15 @@ func (r *SmartRouter) executeFilter(
 			}
 		}
 	}
-	if mode == RoutingModeAssist && len(passthroughChannels) > 0 {
-		for _, ch := range passthroughChannels {
-			channelUID := fmt.Sprintf("ch_%d", ch.Index)
-			if upstream := upstreamFor(ch); upstream != nil && upstream.ChannelUID != "" {
-				channelUID = upstream.ChannelUID
-			}
-			result = append(result, ch)
-			candidates = append(candidates, RoutingCandidate{
-				ChannelUID:  channelUID,
-				ChannelKind: profile.ChannelKind,
-				HealthState: string(HealthStateUnknown),
-				Selected:    true,
-			})
-		}
-		trace.GlobalFilterReasons["assist_passthrough"] = []string{
-			fmt.Sprintf("%d 个基础可用性未知的候选保留在评分候选之后", len(passthroughChannels)),
-		}
-	}
 
-	// ── auto 生效 / shadow 模拟：硬约束过滤 + fail-open ──
-	// shadow/dry-run 只把模拟结果写入 trace，函数末尾仍返回原始候选列表。
-	// 这样 shadow 推荐与未来切换到 auto 后的决策语义一致，同时不影响真实调度。
+	// ── auto 生效：硬约束过滤 + fail-open ──
 	fallbackUsed := false
-	simulateAuto := mode == RoutingModeAuto || mode == RoutingModeShadow || mode == RoutingModeDryRun
-	if simulateAuto {
+	{
 		filteredResult := make([]scheduler.ChannelInfo, 0, len(scoredEntries))
 		for i, se := range scoredEntries {
 			reasons := routingHardConstraintReasons(profile, &se.entry)
 
-			// advisor hint 的 MinQualityTier 约束（只在 auto 模式生效，且 hint 真正 Applied 时才非零值）
+			// advisor hint 的 MinQualityTier 约束（hint 真正 Applied 时才非零值）
 			if advisorMinQualityTier != "" {
 				if advisorMinQualityReasons := MinQualityTierReasons(se.entry.ScoringCandidate.QualityTier, advisorMinQualityTier); len(advisorMinQualityReasons) > 0 {
 					reasons = append(reasons, advisorMinQualityReasons...)
@@ -972,12 +911,12 @@ func (r *SmartRouter) executeFilter(
 						matchedIntent.Intent.IntentUID, intentTargetUID),
 				}
 				matchedIntent.FallbackUsed = true
-				if mode == RoutingModeAuto && r.intentStore != nil {
+				if r.intentStore != nil {
 					_ = r.intentStore.RecordFallback(matchedIntent.Intent.IntentUID)
 				}
 				log.Printf("[SmartRouter-IntentFallback] uid=%s target=%s filtered by hard constraints",
 					matchedIntent.Intent.IntentUID, intentTargetUID)
-			} else if mode == RoutingModeAuto && r.intentStore != nil {
+			} else if r.intentStore != nil {
 				_ = r.intentStore.RecordHit(matchedIntent.Intent.IntentUID, true, 0)
 			}
 		}
@@ -995,25 +934,10 @@ func (r *SmartRouter) executeFilter(
 			trace.SortReasons = append(trace.SortReasons, "intent_fallback")
 		}
 	}
-	switch mode {
-	case RoutingModeAssist:
-		trace.SortReasons = append(trace.SortReasons, "assist_reorder")
-		// assist 模式下意图命中即生效（无硬约束过滤），记录 RecordHit
-		if matchedIntent != nil && !matchedIntent.FallbackUsed && r.intentStore != nil {
-			_ = r.intentStore.RecordHit(matchedIntent.Intent.IntentUID, true, 0)
-		}
-	case RoutingModeAuto:
-		if fallbackUsed {
-			trace.SortReasons = append(trace.SortReasons, "auto_failopen_reorder")
-		} else {
-			trace.SortReasons = append(trace.SortReasons, "auto_filter_and_reorder")
-		}
-	case RoutingModeShadow, RoutingModeDryRun:
-		if fallbackUsed {
-			trace.SortReasons = append(trace.SortReasons, "shadow_auto_failopen_simulation")
-		} else {
-			trace.SortReasons = append(trace.SortReasons, "shadow_auto_filter_simulation")
-		}
+	if fallbackUsed {
+		trace.SortReasons = append(trace.SortReasons, "auto_failopen_reorder")
+	} else {
+		trace.SortReasons = append(trace.SortReasons, "auto_filter_and_reorder")
 	}
 
 	selectedCandidateIndex := -1
@@ -1066,12 +990,7 @@ func (r *SmartRouter) executeFilter(
 		string(profile.TaskClass), string(mode), len(candidates), fallbackUsed,
 		intentUID, trace.ShadowChannelUID, trace.DurationMs)
 
-	// shadow/dryrun 模式：返回原始候选列表（不影响真实调度）
-	if mode == RoutingModeShadow || mode == RoutingModeDryRun {
-		return channels, nil
-	}
-
-	// assist/auto 模式：返回评分重排后的候选列表
+	// 返回评分过滤与重排后的候选列表
 	return result, nil
 }
 

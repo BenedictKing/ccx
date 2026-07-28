@@ -39,10 +39,9 @@ func ResolveAdvisorHintEffect(
 		}
 	}
 
-	// cfg.Mode 为 shadow/disabled/空 → 只记录不生效
+	// TrustedRoutingAdvisor.Mode 是独立子开关；兼容旧配置中的 shadow/off。
 	mode := cfg.Mode
-	switch mode {
-	case config.AutopilotModeShadow, "disabled", "":
+	if mode == "shadow" || mode == "off" || mode == "disabled" || mode == "" {
 		return AdvisorHintEffect{
 			Applied: false,
 			Reasons: []string{fmt.Sprintf("advisor 模式不允许真实生效 (Mode=%s)", mode)},

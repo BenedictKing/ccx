@@ -89,9 +89,9 @@ func TestRateLimitApplier_ExplicitRPMNotOverwritten(t *testing.T) {
 	}
 }
 
-func TestRateLimitApplier_ShadowModeDoesNotInject(t *testing.T) {
+func TestRateLimitApplier_LegacyShadowModeInjectsDiscoveredRPM(t *testing.T) {
 	cfg := config.DefaultAutopilotRoutingConfig()
-	cfg.RoutingMode = config.AutopilotModeShadow // shadow：只展示不注入
+	cfg.RoutingMode = "shadow"
 	cfg.RateLimitDiscovery.Enabled = true
 	cfg.RateLimitDiscovery.ConfidenceThreshold = 0.7
 
@@ -105,8 +105,8 @@ func TestRateLimitApplier_ShadowModeDoesNotInject(t *testing.T) {
 	applier.Apply()
 
 	l := limiterMgr.Get("messages", 0)
-	if l.GetRPM() != 0 {
-		t.Fatalf("shadow 模式不应注入 discovered RPM, got %d", l.GetRPM())
+	if l.GetRPM() != 30 {
+		t.Fatalf("legacy shadow 值应按自动态注入 discovered RPM, got %d, want 30", l.GetRPM())
 	}
 }
 

@@ -20,12 +20,16 @@ import (
 type RoutingMode string
 
 const (
-	RoutingModeOff    RoutingMode = "off"     // 完全关闭
-	RoutingModeShadow RoutingMode = "shadow"  // shadow：只计算+记录，不影响真实调度
-	RoutingModeDryRun RoutingMode = "dry_run" // dry-run：计算但不生效，与 shadow 等价
-	RoutingModeAssist RoutingMode = "assist"  // assist：重排候选列表（不删除），影响调度顺序
-	RoutingModeAuto   RoutingMode = "auto"    // auto：硬约束过滤+重排，fail-open 兜底
-	RoutingModeActive RoutingMode = "active"  // active：计算并影响真实调度（Phase 2+）
+	// Deprecated: 仅用于读取历史 trace 数据，不再作为运行态。
+	RoutingModeOff RoutingMode = "off"
+	// Deprecated: 仅用于读取历史 trace 数据，不再作为运行态。
+	RoutingModeShadow RoutingMode = "shadow"
+	RoutingModeDryRun RoutingMode = "dry_run" // dry-run：独立诊断态，不影响真实调度
+	// Deprecated: 仅用于读取历史 trace 数据，不再作为运行态。
+	RoutingModeAssist RoutingMode = "assist"
+	RoutingModeAuto   RoutingMode = "auto" // auto：硬约束过滤+重排，fail-open 兜底
+	// Deprecated: 仅用于读取历史 trace 数据，不再作为运行态。
+	RoutingModeActive RoutingMode = "active"
 )
 
 // CandidateScore 候选渠道单项得分明细。

@@ -5,62 +5,26 @@ import (
 )
 
 func TestAutopilotRoutingConfig_IsFrontierRoutingEnabled(t *testing.T) {
-	tests := []struct {
-		name     string
-		mode     string
-		enabled  bool
-		expected bool
-	}{
-		{"off", "off", true, false},
-		{"shadow", "shadow", true, false},
-		{"assist_enabled", "assist", true, true},
-		{"auto_enabled", "auto", true, true},
-		{"assist_disabled", "assist", false, false},
-		{"auto_disabled", "auto", false, false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			c := &AutopilotRoutingConfig{
-				RoutingMode:            tt.mode,
-				FrontierRoutingEnabled: tt.enabled,
-			}
-			got := c.IsFrontierRoutingEnabled()
-			if got != tt.expected {
-				t.Fatalf("IsFrontierRoutingEnabled() = %v, want %v", got, tt.expected)
-			}
-		})
+	for _, enabled := range []bool{false, true} {
+		c := &AutopilotRoutingConfig{RoutingMode: "shadow", FrontierRoutingEnabled: enabled}
+		if got := c.IsFrontierRoutingEnabled(); got != enabled {
+			t.Fatalf("IsFrontierRoutingEnabled() = %v, want %v", got, enabled)
+		}
 	}
 }
 
 func TestAutopilotRoutingConfig_IsAFPCostRoutingEnabled(t *testing.T) {
-	tests := []struct {
-		name     string
-		mode     string
-		expected bool
-	}{
-		{"off", "off", false},
-		{"shadow", "shadow", false},
-		{"assist", "assist", true},
-		{"auto", "auto", true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			c := &AutopilotRoutingConfig{RoutingMode: tt.mode}
-			got := c.IsAFPCostRoutingEnabled()
-			if got != tt.expected {
-				t.Fatalf("IsAFPCostRoutingEnabled() = %v, want %v", got, tt.expected)
-			}
-		})
+	for _, legacyMode := range []string{"off", "shadow", "assist", "auto", "active"} {
+		c := &AutopilotRoutingConfig{RoutingMode: legacyMode}
+		if !c.IsAFPCostRoutingEnabled() {
+			t.Fatalf("legacy mode=%q 不应关闭 AFP 成本路由", legacyMode)
+		}
 	}
 }
 
 func TestAutopilotRoutingConfig_AFPDefaultEnabled(t *testing.T) {
-	c := &AutopilotRoutingConfig{RoutingMode: "assist"}
-	if !c.IsAFPCostRoutingEnabled() {
-		t.Fatal("AFPCostRouting should be enabled by default in assist/auto mode")
-	}
-	if c.RoutingMode == "off" && c.IsAFPCostRoutingEnabled() {
-		t.Fatal("AFPCostRouting should be disabled in off mode")
+	if !DefaultAutopilotRoutingConfig().IsAFPCostRoutingEnabled() {
+		t.Fatal("Autopilot 唯一运行态应默认启用 AFP 成本路由")
 	}
 }
 

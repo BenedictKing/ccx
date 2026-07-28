@@ -4320,26 +4320,13 @@ trace 只记录解释性字段，不记录明文 prompt、密钥、敏感 header
 - 窗口表重建主键：增加 `release_id`/`policy_fingerprint`/`cohort` 维度，新增 `compared_count`/`matched_count`/`mismatch_count`/`uncompared_count` 全量比较计数。
 - safety event 表增加 `release_id`/`policy_fingerprint` 字段。
 
-**灰度发布状态机：**
+**Autopilot 单一运行态（2026-07-28）：**
 
-```text
-off --管理员启用--> shadow --门槛满足--> assist --门槛满足--> auto --100% 稳定--> active
-```
+顶层 `off → shadow → assist → auto → active` 灰度状态机已经废止。系统启动后固定执行 Autopilot 自动路由：应用硬约束过滤并按评分重排，候选全部被过滤时 fail-open。旧配置中的 `mode` 值会在加载时统一归一化为 `auto`，不再提供模式切换 API 或管理界面。
 
-| 状态 | 行为 | 放量规则 |
-|---|---|---|
-| `off` | 不调用 Autopilot | rolloutPercent=0 |
-| `shadow` | 计算+记录，不影响调度 | rolloutPercent=0，安全基线 |
-| `assist` | 重排候选，不删除 | rolloutPercent 1→100 |
-| `auto` | 硬约束过滤+重排 | rolloutPercent 1→100 |
-| `active` | 与 auto 语义相同 | rolloutPercent=100，1% shadow control |
+`AUTOPILOT_KILL_SWITCH` 与配置中的 `killSwitch` 是唯一的全局急停入口；启用后不注入 SmartRouter 和 EndpointAttemptPolicy，恢复调度器默认行为。管理端 dry-run 仍作为独立诊断能力保留，不属于运行模式。
 
-**ReleaseController**（`release_controller.go`）：
-
-- 集中处理相邻状态迁移校验（逐级晋升，降级随时允许）。
-- `ComputeCohort` 使用 session ID / request correlation ID 与 `rolloutSeed` 做稳定哈希分桶。
-- `EvaluateAndApplyRegression` 检查三窗口回归并应用 `SafetyOverride`。
-- `AllowedTransition` 禁止跳级，`modeRank` 确定顺序。
+发布批次、策略指纹和 cohort 字段继续保留在 Trace 契约中，用于兼容历史数据及诊断聚合；`ReleaseController`、readiness 样本门槛、自动降级/恢复和灰度模式切换代码均已删除。
 
 **只读 Trace API：**
 
@@ -4377,7 +4364,7 @@ P2 不阻塞核心落地，但应进入后续 backlog：
 | 人工试用变成永久偏置 | 用户临时测试的 fable-5 或公益站长期压过 Autopilot | `ManualRoutingIntent` 必须有 TTL、请求/成本预算、fallback；到期只生成建议，不自动写长期策略 |
 | 未知模型污染全局映射 | 测试新模型时把错误映射写入所有请求 | `model_trial` 只做 request-scoped 透传/映射；结果标记 `manual_trial`，用户显式保存后才进入 `modelMapping` |
 | 隐私内容被发给低信任上游做判定 | 中转站/公益站接触额外 prompt、系统提示或 metadata | routing advisor 只允许 `OriginTier=first|local`；second/third/unknown 只可作为候选执行上游，不可做隐私敏感 classifier/evaluator |
-| advisor 误判后持续影响真实调度 | 低风险任务被系统性降级，用户质量下降 | shadow 样本/准确率/critical misroute 门槛；active 后 SLO regression 自动 rollback；全局 kill switch |
+| advisor 误判后持续影响真实调度 | 低风险任务被系统性降级，用户质量下降 | advisor/local-model 保留独立 shadow 门槛；全局 Kill Switch 可立即停止 Autopilot |
 | trace 或 advisor 记录泄露隐私 | prompt、文件内容或密钥进入 SQLite/API 响应 | `AdvisorInput` 白名单、prompt hash、短 TTL、导出二次脱敏；禁止记录 Authorization/API Key/multipart |
 | 成本倍率配置错误 | 用户看到的具体费用不准，调度可能选错 key | 倍率必须显式展示来源和公式；低置信度成本只做 tie-breaker；UI 提供按 key 的有效价格预览 |
 | 生图成本被误按 chat token 估算 | images 调度选错上游或显示错误节省 | image_generation 使用 image unit price；缺价格时只 shadow 展示，不用 chat token 价格替代 |

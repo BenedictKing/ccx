@@ -376,7 +376,7 @@ func TestResolveAdvisorHintEffect_DefaultConfigInvariant(t *testing.T) {
 	adCfg := cfg.TrustedRoutingAdvisor
 
 	// 确认默认配置确实是 shadow 模式
-	assert.Equal(t, config.AutopilotModeShadow, adCfg.Mode, "默认模式应为 shadow")
+	assert.Equal(t, "shadow", adCfg.Mode, "默认模式应为 shadow")
 
 	// 对所有 TaskClass 种类进行穷举，确认默认配置下全部返回 Applied=false
 	allTaskClasses := []TaskClass{

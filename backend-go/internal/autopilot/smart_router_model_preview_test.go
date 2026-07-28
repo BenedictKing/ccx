@@ -303,25 +303,16 @@ func TestResolveModelSupportWithFloorRefreshesLegacyKimiK3Profile(t *testing.T) 
 	}
 }
 
-func TestResolveModelSupportDoesNotExpandRealCandidatesInShadow(t *testing.T) {
+func TestResolveModelSupportUsesAutoResolveInAutopilot(t *testing.T) {
 	cfgManager, cleanup := createTestConfigManager(t, modelPreviewConfig("shadow"))
 	defer cleanup()
 	resolver := NewModelResolver(newModelPreviewStore(t, glmPreviewProfile()), cfgManager)
 	manager := &Manager{cfgManager: cfgManager, modelResolver: resolver}
 	upstream := cfgManager.GetConfig().Upstream[0]
 
-	supported, _, source, _ := manager.ResolveModelSupport("messages", &upstream, "claude-sonnet-5")
-	if supported || source != "explain" {
-		t.Fatalf("shadow support = %v source=%q, want false/explain", supported, source)
-	}
-
-	if err := cfgManager.SetAutopilotRoutingMode("assist"); err != nil {
-		t.Fatalf("SetAutopilotRoutingMode() error = %v", err)
-	}
 	supported, mapped, source, reason := manager.ResolveModelSupport("messages", &upstream, "claude-sonnet-5")
 	if !supported || mapped != "glm-5.2" || source != "auto_resolve" || reason == "" {
-		t.Fatalf("assist support = %v mapped=%q source=%q reason=%q",
-			supported, mapped, source, reason)
+		t.Fatalf("Autopilot support = %v mapped=%q source=%q reason=%q", supported, mapped, source, reason)
 	}
 }
 

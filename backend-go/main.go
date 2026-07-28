@@ -594,7 +594,7 @@ func main() {
 					log.Printf("[Autopilot-Init] TraceStore 已初始化")
 				}
 
-				// Phase 2: 创建 SmartRouter（shadow 注入）
+				// 创建始终自动运行的 SmartRouter
 				smartRouter := autopilot.NewSmartRouter(
 					autopilotStore,
 					autopilotManager.ManualIntentStore(),
@@ -607,14 +607,7 @@ func main() {
 				autopilotManager.WireSmartRouter()
 				log.Printf("[Autopilot-Init] SmartRouter advisor + localRuntimeStore 已注入")
 
-				// 灰度发布控制器：集中处理状态迁移、分桶和自动降级
-				releaseController := autopilot.NewReleaseController(cfgManager, traceStore)
-				smartRouter.SetReleaseController(releaseController)
-				cfgManager.RegisterOnConfigChange(func(_ config.Config) {
-					releaseController.RefreshSnapshot()
-				})
-				log.Printf("[Autopilot-Init] ReleaseController 已注入 SmartRouter")
-				log.Printf("[Autopilot-Init] SmartRouter 已初始化 (默认模式: shadow)")
+				log.Printf("[Autopilot-Init] SmartRouter 已初始化 (Autopilot 自动运行)")
 
 				// 注册限速信号回调：上游响应 → autopilot 限速发现器 + 时间桶
 				// endpointUID 和 metricsKey 由 upstream_failover.go 在请求上下文中计算后传入
@@ -716,10 +709,8 @@ func main() {
 	log.Printf("[Scheduler-Init] 多渠道调度器已初始化 (失败率阈值: %.0f%%, 滑动窗口: %d, 连续失败阈值: %d)",
 		messagesMetricsManager.GetFailureThreshold()*100, messagesMetricsManager.GetWindowSize(), messagesMetricsManager.GetConsecutiveRetryableFailuresThreshold())
 
-	// Phase 2: SmartRouter shadow 注入
-	// 通过 CandidateFilter 回调注入 autopilot SmartRouter 的 channel 级重排逻辑。
-	// shadow 模式：记录 RoutingDecisionTrace，返回原始候选列表（不影响真实调度）。
-	// off / kill switch：不注入任何 filter，行为完全不变。
+	// 通过 CandidateFilter 回调注入 Autopilot SmartRouter 的渠道级过滤与重排逻辑。
+	// Kill Switch 启用时不注入 filter，恢复调度器默认行为。
 	if autopilotManager != nil && autopilotManager.SmartRouter() != nil {
 		sr := autopilotManager.SmartRouter()
 		channelScheduler.SetCandidateFilterProvider(func(ctx context.Context, kind scheduler.ChannelKind, model string) (scheduler.CandidateFilterFunc, scheduler.CandidateSelectionObserver) {
@@ -735,13 +726,12 @@ func main() {
 			profile.ChannelKind = string(kind)
 			return sr.CandidateFilterForWithActual(&profile)
 		})
-		log.Printf("[Scheduler-Init] SmartRouter shadow filter 已注册 (默认模式: shadow)")
+		log.Printf("[Scheduler-Init] SmartRouter Autopilot filter 已注册")
 	}
 
-	// Phase 2 第二批：EndpointAttemptPolicy 注入 + FastDecay 通知 + L2 探测 + 限速应用
-	// 注册 endpoint policy hook：handlers 层 TryUpstreamWithAllKeys 调用时自动获取 policy。
-	// shadow 模式：计算评分 + 记录 trace，不影响真实排序（默认行为不变）。
-	// off / kill switch：hook 内部检查模式，返回 nil（不注入）。
+	// EndpointAttemptPolicy 注入 + FastDecay 通知 + L2 探测 + 限速应用。
+	// 注册 endpoint policy hook：handlers 层 TryUpstreamWithAllKeys 调用时自动获取 policy；
+	// Kill Switch 启用时返回 nil，不注入策略。
 	if autopilotManager != nil && autopilotManager.SmartRouter() != nil {
 		sr := autopilotManager.SmartRouter()
 		profileStore := sr.ProfileStore()
@@ -762,11 +752,10 @@ func main() {
 		// endpoint policy hook：为每个请求构建 EndpointAttemptPolicy
 		common.SetEndpointPolicyProviderHook(func(c *gin.Context, model string, upstream *config.UpstreamConfig) *autopilot.EndpointAttemptPolicy {
 			autopilotCfg := cfgManager.GetAutopilotRouting()
-			effectiveMode := autopilotCfg.EffectiveRoutingMode()
-			if effectiveMode == config.AutopilotModeOff {
+			if autopilotCfg.KillSwitch {
 				return nil
 			}
-			mode := autopilot.RoutingMode(effectiveMode)
+			mode := autopilot.RoutingModeAuto
 			req := autopilot.BuildRequestProfile(autopilot.RequestProfileFeatures{Model: model})
 			if c != nil && c.Request != nil {
 				if profile, ok := autopilot.RequestProfileFromContext(c.Request.Context()); ok {

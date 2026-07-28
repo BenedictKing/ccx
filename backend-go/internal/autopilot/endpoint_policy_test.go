@@ -20,8 +20,11 @@ func TestBuildEndpointPolicy_OffMode(t *testing.T) {
 	deps := EndpointPolicyDeps{}
 	req := &RequestProfile{Model: "test-model", ChannelKind: "messages"}
 	policy := BuildEndpointPolicy(deps, req, "off")
-	if policy != nil {
-		t.Error("off 模式应返回 nil policy")
+	if policy == nil {
+		t.Fatal("legacy off 输入应返回 active policy")
+	}
+	if policy.Mode != RoutingModeActive {
+		t.Errorf("Mode = %q, 期望 %q", policy.Mode, RoutingModeActive)
 	}
 }
 
@@ -29,27 +32,29 @@ func TestBuildEndpointPolicy_UnknownMode(t *testing.T) {
 	deps := EndpointPolicyDeps{}
 	req := &RequestProfile{Model: "test-model", ChannelKind: "messages"}
 	policy := BuildEndpointPolicy(deps, req, "unknown_mode")
-	if policy != nil {
-		t.Error("未知模式应返回 nil policy")
+	if policy == nil {
+		t.Fatal("未知模式输入应返回 active policy")
+	}
+	if policy.Mode != RoutingModeActive {
+		t.Errorf("Mode = %q, 期望 %q", policy.Mode, RoutingModeActive)
 	}
 }
 
-func TestBuildEndpointPolicy_ShadowMode_Fields(t *testing.T) {
+func TestBuildEndpointPolicy_LegacyShadowMode_UsesActivePolicy(t *testing.T) {
 	deps := EndpointPolicyDeps{}
 	req := &RequestProfile{Model: "test-model", ChannelKind: "messages"}
 	policy := BuildEndpointPolicy(deps, req, RoutingModeShadow)
 	if policy == nil {
-		t.Fatal("shadow 模式应返回非 nil policy")
+		t.Fatal("legacy shadow 输入应返回非 nil policy")
 	}
-	if policy.Mode != RoutingModeShadow {
-		t.Errorf("Mode = %q, 期望 %q", policy.Mode, RoutingModeShadow)
+	if policy.Mode != RoutingModeActive {
+		t.Errorf("Mode = %q, 期望 %q", policy.Mode, RoutingModeActive)
 	}
 	if policy.RequestModel != "test-model" {
 		t.Errorf("RequestModel = %q, 期望 %q", policy.RequestModel, "test-model")
 	}
-	// shadow 模式所有函数都应非 nil
 	if policy.FilterURLs == nil || policy.SortURLs == nil || policy.FilterKeys == nil || policy.SortKeys == nil {
-		t.Error("shadow 模式所有函数字段应非 nil")
+		t.Error("active policy 所有函数字段应非 nil")
 	}
 }
 
@@ -58,17 +63,17 @@ func TestBuildEndpointPolicy_ShadowMode_Fields(t *testing.T) {
 func TestShadowFilterURLs_Passthrough(t *testing.T) {
 	deps := EndpointPolicyDeps{}
 	req := &RequestProfile{Model: "m1", ChannelKind: "messages"}
-	policy := BuildEndpointPolicy(deps, req, RoutingModeShadow)
+	policy := BuildEndpointPolicy(deps, req, RoutingModeDryRun)
 
 	input := []string{"https://a.com", "https://b.com", "https://c.com"}
 	output := policy.FilterURLs(input)
 
 	if len(output) != len(input) {
-		t.Fatalf("shadow FilterURLs 应原样返回: got %d, want %d", len(output), len(input))
+		t.Fatalf("dry_run FilterURLs 应原样返回: got %d, want %d", len(output), len(input))
 	}
 	for i, url := range output {
 		if url != input[i] {
-			t.Errorf("shadow FilterURLs[%d] = %q, 期望 %q", i, url, input[i])
+			t.Errorf("dry_run FilterURLs[%d] = %q, 期望 %q", i, url, input[i])
 		}
 	}
 }
@@ -76,17 +81,17 @@ func TestShadowFilterURLs_Passthrough(t *testing.T) {
 func TestShadowFilterKeys_Passthrough(t *testing.T) {
 	deps := EndpointPolicyDeps{}
 	req := &RequestProfile{Model: "m1", ChannelKind: "messages"}
-	policy := BuildEndpointPolicy(deps, req, RoutingModeShadow)
+	policy := BuildEndpointPolicy(deps, req, RoutingModeDryRun)
 
 	input := []string{"sk-aaa", "sk-bbb", "sk-ccc"}
 	output := policy.FilterKeys("https://a.com", input)
 
 	if len(output) != len(input) {
-		t.Fatalf("shadow FilterKeys 应原样返回: got %d, want %d", len(output), len(input))
+		t.Fatalf("dry_run FilterKeys 应原样返回: got %d, want %d", len(output), len(input))
 	}
 	for i, key := range output {
 		if key != input[i] {
-			t.Errorf("shadow FilterKeys[%d] = %q, 期望 %q", i, key, input[i])
+			t.Errorf("dry_run FilterKeys[%d] = %q, 期望 %q", i, key, input[i])
 		}
 	}
 }
@@ -94,18 +99,18 @@ func TestShadowFilterKeys_Passthrough(t *testing.T) {
 func TestShadowSortURLs_ReturnsOriginalOrder(t *testing.T) {
 	deps := EndpointPolicyDeps{}
 	req := &RequestProfile{Model: "m1", ChannelKind: "messages"}
-	policy := BuildEndpointPolicy(deps, req, RoutingModeShadow)
+	policy := BuildEndpointPolicy(deps, req, RoutingModeDryRun)
 
 	input := []string{"https://a.com", "https://b.com", "https://c.com"}
 	sortedURLs, candidates := policy.SortURLs(input)
 
 	// 原始顺序应保持
 	if len(sortedURLs) != len(input) {
-		t.Fatalf("shadow SortURLs 应返回等长列表: got %d, want %d", len(sortedURLs), len(input))
+		t.Fatalf("dry_run SortURLs 应返回等长列表: got %d, want %d", len(sortedURLs), len(input))
 	}
 	for i, url := range sortedURLs {
 		if url != input[i] {
-			t.Errorf("shadow SortURLs[%d] = %q, 期望 %q (应保持原始顺序)", i, url, input[i])
+			t.Errorf("dry_run SortURLs[%d] = %q, 期望 %q (应保持原始顺序)", i, url, input[i])
 		}
 	}
 
@@ -130,7 +135,7 @@ func TestShadowSortURLs_ReturnsOriginalOrder(t *testing.T) {
 func TestShadowSortKeys_ReturnsOriginalOrder(t *testing.T) {
 	deps := EndpointPolicyDeps{}
 	req := &RequestProfile{Model: "m1", ChannelKind: "messages"}
-	policy := BuildEndpointPolicy(deps, req, RoutingModeShadow)
+	policy := BuildEndpointPolicy(deps, req, RoutingModeDryRun)
 
 	input := []string{"sk-aaa", "sk-bbb", "sk-ccc"}
 	baseURL := "https://a.com"
@@ -138,11 +143,11 @@ func TestShadowSortKeys_ReturnsOriginalOrder(t *testing.T) {
 
 	// 原始顺序应保持
 	if len(sortedKeys) != len(input) {
-		t.Fatalf("shadow SortKeys 应返回等长列表: got %d, want %d", len(sortedKeys), len(input))
+		t.Fatalf("dry_run SortKeys 应返回等长列表: got %d, want %d", len(sortedKeys), len(input))
 	}
 	for i, key := range sortedKeys {
 		if key != input[i] {
-			t.Errorf("shadow SortKeys[%d] = %q, 期望 %q (应保持原始顺序)", i, key, input[i])
+			t.Errorf("dry_run SortKeys[%d] = %q, 期望 %q (应保持原始顺序)", i, key, input[i])
 		}
 	}
 
@@ -322,7 +327,7 @@ func TestFailOpen_EmptyURLs(t *testing.T) {
 	// 空 URL 列表应返回空列表
 	deps := EndpointPolicyDeps{}
 	req := &RequestProfile{Model: "m1", ChannelKind: "messages"}
-	policy := BuildEndpointPolicy(deps, req, RoutingModeShadow)
+	policy := BuildEndpointPolicy(deps, req, RoutingModeDryRun)
 
 	output := policy.FilterURLs(nil)
 	if len(output) != 0 {
@@ -339,7 +344,7 @@ func TestFailOpen_EmptyKeys(t *testing.T) {
 	// 空 key 列表应返回空列表
 	deps := EndpointPolicyDeps{}
 	req := &RequestProfile{Model: "m1", ChannelKind: "messages"}
-	policy := BuildEndpointPolicy(deps, req, RoutingModeShadow)
+	policy := BuildEndpointPolicy(deps, req, RoutingModeDryRun)
 
 	output := policy.FilterKeys("https://a.com", nil)
 	if len(output) != 0 {
@@ -357,7 +362,7 @@ func TestFailOpen_EmptyKeys(t *testing.T) {
 func TestNoDeletion_NoDuplication_NoLoss(t *testing.T) {
 	deps := EndpointPolicyDeps{}
 	req := &RequestProfile{Model: "m1", ChannelKind: "messages"}
-	policy := BuildEndpointPolicy(deps, req, RoutingModeShadow)
+	policy := BuildEndpointPolicy(deps, req, RoutingModeDryRun)
 
 	// 测试 URLs
 	urls := []string{"https://a.com", "https://b.com", "https://c.com", "https://d.com", "https://e.com"}
@@ -713,7 +718,7 @@ func TestAutoMode_FilterKeys_AllLowDecay_FailOpen(t *testing.T) {
 func TestShadowMode_URLs_OriginalOrderInvariant(t *testing.T) {
 	deps := EndpointPolicyDeps{}
 	req := &RequestProfile{Model: "m1", ChannelKind: "messages"}
-	policy := BuildEndpointPolicy(deps, req, RoutingModeShadow)
+	policy := BuildEndpointPolicy(deps, req, RoutingModeDryRun)
 
 	input := []string{"https://z.com", "https://a.com", "https://m.com"}
 
@@ -721,7 +726,7 @@ func TestShadowMode_URLs_OriginalOrderInvariant(t *testing.T) {
 	filtered := policy.FilterURLs(input)
 	for i, url := range filtered {
 		if url != input[i] {
-			t.Errorf("shadow FilterURLs[%d] = %q, 期望 %q", i, url, input[i])
+			t.Errorf("dry_run FilterURLs[%d] = %q, 期望 %q", i, url, input[i])
 		}
 	}
 
@@ -729,7 +734,7 @@ func TestShadowMode_URLs_OriginalOrderInvariant(t *testing.T) {
 	sorted, _ := policy.SortURLs(input)
 	for i, url := range sorted {
 		if url != input[i] {
-			t.Errorf("shadow SortURLs[%d] = %q, 期望 %q", i, url, input[i])
+			t.Errorf("dry_run SortURLs[%d] = %q, 期望 %q", i, url, input[i])
 		}
 	}
 }
@@ -737,7 +742,7 @@ func TestShadowMode_URLs_OriginalOrderInvariant(t *testing.T) {
 func TestShadowMode_Keys_OriginalOrderInvariant(t *testing.T) {
 	deps := EndpointPolicyDeps{}
 	req := &RequestProfile{Model: "m1", ChannelKind: "messages"}
-	policy := BuildEndpointPolicy(deps, req, RoutingModeShadow)
+	policy := BuildEndpointPolicy(deps, req, RoutingModeDryRun)
 
 	baseURL := "https://a.com"
 	input := []string{"sk-zzz", "sk-aaa", "sk-mmm"}
@@ -746,7 +751,7 @@ func TestShadowMode_Keys_OriginalOrderInvariant(t *testing.T) {
 	filtered := policy.FilterKeys(baseURL, input)
 	for i, key := range filtered {
 		if key != input[i] {
-			t.Errorf("shadow FilterKeys[%d] = %q, 期望 %q", i, key, input[i])
+			t.Errorf("dry_run FilterKeys[%d] = %q, 期望 %q", i, key, input[i])
 		}
 	}
 
@@ -754,7 +759,7 @@ func TestShadowMode_Keys_OriginalOrderInvariant(t *testing.T) {
 	sorted, _ := policy.SortKeys(baseURL, input)
 	for i, key := range sorted {
 		if key != input[i] {
-			t.Errorf("shadow SortKeys[%d] = %q, 期望 %q", i, key, input[i])
+			t.Errorf("dry_run SortKeys[%d] = %q, 期望 %q", i, key, input[i])
 		}
 	}
 }
@@ -1103,7 +1108,7 @@ func TestAssistPolicyRepairsLegacyMetricsKeyForAutoMapping(t *testing.T) {
 		t.Fatal(err)
 	}
 	routingCfg := config.DefaultAutopilotRoutingConfig()
-	routingCfg.RoutingMode = config.AutopilotModeAssist
+	routingCfg.RoutingMode = config.AutopilotModeAuto
 	routingCfg.ModelMapping.AutoResolve = true
 	policy := BuildEndpointPolicy(EndpointPolicyDeps{
 		ProfileStore:  store,
@@ -1160,7 +1165,7 @@ func TestAssistPolicyResolvesTargetForEveryKeyOnSharedBaseURL(t *testing.T) {
 	}
 
 	routingCfg := config.DefaultAutopilotRoutingConfig()
-	routingCfg.RoutingMode = config.AutopilotModeAssist
+	routingCfg.RoutingMode = config.AutopilotModeAuto
 	routingCfg.ModelMapping.AutoResolve = true
 	policy := BuildEndpointPolicy(EndpointPolicyDeps{
 		ProfileStore:  store,
@@ -1245,7 +1250,7 @@ func TestAutoPolicyDoesNotFilterWholeURLFromOneDeadBinding(t *testing.T) {
 }
 
 // TestTargetByUIDFillConsistency 验证 Finding 6 的修复：
-// 五个写入 targetByUID 的位置（shadow SortURLs / shadow SortKeys /
+// 五个写入 targetByUID 的位置（dry_run SortURLs / dry_run SortKeys /
 // active SortURLs / active SortKeys / scoreAndSortKeyBindings）
 // 对同一种候选（MappedModel 非空但 MappedEffortDecided=false，
 // 即手动 modelMapping 场景）必须一致地记录 target，
@@ -1486,14 +1491,14 @@ func BenchmarkBuildEndpointPolicy_Shadow(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		BuildEndpointPolicy(deps, req, RoutingModeShadow)
+		BuildEndpointPolicy(deps, req, RoutingModeDryRun)
 	}
 }
 
 func BenchmarkShadowSortURLs_10URLs(b *testing.B) {
 	deps := EndpointPolicyDeps{}
 	req := &RequestProfile{Model: "m1", ChannelKind: "messages"}
-	policy := BuildEndpointPolicy(deps, req, RoutingModeShadow)
+	policy := BuildEndpointPolicy(deps, req, RoutingModeDryRun)
 
 	urls := make([]string, 10)
 	for i := range urls {

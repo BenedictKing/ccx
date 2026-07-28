@@ -10,32 +10,21 @@ import (
 func TestDefaultAutopilotRoutingConfig(t *testing.T) {
 	cfg := DefaultAutopilotRoutingConfig()
 
-	// 默认模式为 shadow
-	if cfg.RoutingMode != AutopilotModeShadow {
-		t.Errorf("默认 RoutingMode = %q, 期望 %q", cfg.RoutingMode, AutopilotModeShadow)
+	if cfg.RoutingMode != AutopilotModeAuto {
+		t.Errorf("默认 RoutingMode = %q, 期望 %q", cfg.RoutingMode, AutopilotModeAuto)
 	}
-
-	// 默认 kill switch 关闭
 	if cfg.KillSwitch {
 		t.Error("默认 KillSwitch 应为 false")
 	}
-
-	// 默认成本偏好为 balanced
 	if cfg.CostPreference.Mode != "balanced" {
 		t.Errorf("默认 CostPreference.Mode = %q, 期望 %q", cfg.CostPreference.Mode, "balanced")
 	}
-
-	// 默认派系偏好启用
 	if !cfg.ModelFamilyPreference.Enabled {
 		t.Error("默认 ModelFamilyPreference.Enabled 应为 true")
 	}
-
-	// 默认 GlobalOrder 非空
 	if len(cfg.ModelFamilyPreference.GlobalOrder) == 0 {
 		t.Error("默认 ModelFamilyPreference.GlobalOrder 不应为空")
 	}
-
-	// 默认权重为 0.2
 	if cfg.ModelFamilyPreference.Weight != 0.2 {
 		t.Errorf("默认 ModelFamilyPreference.Weight = %f, 期望 0.2", cfg.ModelFamilyPreference.Weight)
 	}
@@ -71,72 +60,32 @@ func TestDeepSeekProviderTimePricingSchedule(t *testing.T) {
 }
 
 func TestAutopilotRoutingConfig_Validate_ModeNormalization(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		{"off 小写", "off", "off"},
-		{"shadow 小写", "shadow", "shadow"},
-		{"assist 小写", "assist", "assist"},
-		{"auto 小写", "auto", "auto"},
-		{"OFF 大写", "OFF", "off"},
-		{"SHADOW 大写", "SHADOW", "shadow"},
-		{"ASSIST 大写", "ASSIST", "assist"},
-		{"AUTO 大写", "AUTO", "auto"},
-		{"带空格", "  shadow  ", "shadow"},
-		{"空字符串回退 shadow", "", "shadow"},
-		{"非法值回退 shadow", "invalid", "shadow"},
-		{"random 回退 shadow", "random_mode", "shadow"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg := AutopilotRoutingConfig{RoutingMode: tt.input}
+	for _, input := range []string{"", "off", "shadow", "assist", "auto", "active", "invalid"} {
+		t.Run(input, func(t *testing.T) {
+			cfg := AutopilotRoutingConfig{RoutingMode: input}
 			cfg.Validate()
-			if cfg.RoutingMode != tt.expected {
-				t.Errorf("输入 %q → RoutingMode = %q, 期望 %q", tt.input, cfg.RoutingMode, tt.expected)
+			if cfg.RoutingMode != AutopilotModeAuto {
+				t.Errorf("输入 %q 后 RoutingMode = %q, 期望 %q", input, cfg.RoutingMode, AutopilotModeAuto)
 			}
 		})
 	}
 }
 
 func TestAutopilotRoutingConfig_KillSwitchOverridesMode(t *testing.T) {
-	tests := []struct {
-		name           string
-		killSwitch     bool
-		mode           string
-		expectedMode   string
-		expectedActive bool
-	}{
-		{"kill switch 关闭 + shadow", false, "shadow", "shadow", false},
-		{"kill switch 关闭 + off", false, "off", "off", false},
-		{"kill switch 关闭 + assist", false, "assist", "assist", true},
-		{"kill switch 关闭 + auto", false, "auto", "auto", true},
-		{"kill switch 开启 + shadow", true, "shadow", "off", false},
-		{"kill switch 开启 + auto", true, "auto", "off", false},
-		{"kill switch 开启 + off", true, "off", "off", false},
-		{"kill switch 开启 + assist", true, "assist", "off", false},
-	}
+	for _, killSwitch := range []bool{false, true} {
+		cfg := AutopilotRoutingConfig{KillSwitch: killSwitch, RoutingMode: "shadow"}
+		cfg.Validate()
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg := AutopilotRoutingConfig{
-				KillSwitch:  tt.killSwitch,
-				RoutingMode: tt.mode,
-			}
-			cfg.Validate()
-
-			effective := cfg.EffectiveRoutingMode()
-			if effective != tt.expectedMode {
-				t.Errorf("EffectiveRoutingMode = %q, 期望 %q", effective, tt.expectedMode)
-			}
-
-			active := cfg.IsAutopilotActive()
-			if active != tt.expectedActive {
-				t.Errorf("IsAutopilotActive = %v, 期望 %v", active, tt.expectedActive)
-			}
-		})
+		expectedMode := AutopilotModeAuto
+		if killSwitch {
+			expectedMode = "off"
+		}
+		if effective := cfg.EffectiveRoutingMode(); effective != expectedMode {
+			t.Errorf("KillSwitch=%v 时 EffectiveRoutingMode = %q, 期望 %q", killSwitch, effective, expectedMode)
+		}
+		if active := cfg.IsAutopilotActive(); active != !killSwitch {
+			t.Errorf("KillSwitch=%v 时 IsAutopilotActive = %v, 期望 %v", killSwitch, active, !killSwitch)
+		}
 	}
 }
 
@@ -187,9 +136,9 @@ func TestAutopilotRoutingConfig_EnvKillSwitch(t *testing.T) {
 			if tt.expected {
 				cfg.Validate()
 				effective := cfg.EffectiveRoutingMode()
-				if effective != AutopilotModeOff {
+				if effective != "off" {
 					t.Errorf("KillSwitch=true 时 EffectiveRoutingMode = %q, 期望 %q",
-						effective, AutopilotModeOff)
+						effective, "off")
 				}
 			}
 		})

@@ -50,7 +50,7 @@ func TestResolveMappedModel_PreferAutoOverManual(t *testing.T) {
 
 	makeRoutingCfg := func(preferAuto bool) config.AutopilotRoutingConfig {
 		cfg := config.DefaultAutopilotRoutingConfig()
-		cfg.RoutingMode = config.AutopilotModeAssist
+		cfg.RoutingMode = config.AutopilotModeAuto
 		cfg.ModelMapping.AutoResolve = true
 		cfg.ModelMapping.PreferAutoOverManual = preferAuto
 		return cfg

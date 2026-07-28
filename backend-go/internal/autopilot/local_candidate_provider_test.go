@@ -64,7 +64,7 @@ func TestCollectLocalCandidates(t *testing.T) {
 			name: "默认配置_Mode=shadow_返回空_零行为不变量",
 			cfg: config.LocalModelRoutingConfig{
 				Enabled:                  true,
-				Mode:                     config.AutopilotModeShadow,
+				Mode:                     "shadow",
 				AllowLocalForTaskClasses: []string{"lightweight", "worker"},
 				NeverDemoteTaskClasses:   []string{"supervisor", "vision", "long_context"},
 			},
@@ -95,7 +95,7 @@ func TestCollectLocalCandidates(t *testing.T) {
 			name: "Mode=off_返回空",
 			cfg: config.LocalModelRoutingConfig{
 				Enabled:                  true,
-				Mode:                     config.AutopilotModeOff,
+				Mode:                     "off",
 				AllowLocalForTaskClasses: []string{"lightweight", "worker"},
 			},
 			taskClass: TaskClassLightweight,
@@ -148,7 +148,7 @@ func TestCollectLocalCandidates(t *testing.T) {
 			name: "Mode=assist_taskClass=worker_只返回健康的运行时",
 			cfg: config.LocalModelRoutingConfig{
 				Enabled:                  true,
-				Mode:                     config.AutopilotModeAssist,
+				Mode:                     config.AutopilotModeAuto,
 				AllowLocalForTaskClasses: []string{"lightweight", "worker"},
 				NeverDemoteTaskClasses:   []string{"supervisor", "vision"},
 			},

@@ -714,11 +714,6 @@ func (m *Manager) ResolveModelSupportWithFloor(
 	if !routingCfg.ModelMapping.AutoResolve {
 		return sup, "", "explain", rsn
 	}
-	effectiveMode := routingCfg.EffectiveRoutingMode()
-	if effectiveMode != config.AutopilotModeAssist && effectiveMode != config.AutopilotModeAuto {
-		return sup, "", "explain", rsn
-	}
-
 	// 门控通过：调用 ModelResolver（调度器候选筛选阶段，无具体 API Key）
 	if m.modelResolver == nil {
 		return sup, "", "explain", rsn
@@ -1026,10 +1021,6 @@ func (m *Manager) collectAll() {
 		log.Printf("[Autopilot-Worker] 警告: flush 失败: %v", err)
 	}
 
-	// auto 安全保险丝：只读取已完成的 15 分钟窗口；连续三个窗口均恶化时
-	// 持久化降回 assist。样本或安全模式基线不足时不做推断。
-	m.evaluateAutoSafety(time.Now())
-
 	// ── 订阅级能力推导 + drift 检测（shadow，不修改调度）──
 	m.updateSubscriptionCapabilities(allProfiles)
 
@@ -1116,89 +1107,6 @@ func upstreamsByKind(cfg config.Config, kind string) []config.UpstreamConfig {
 	default:
 		return nil
 	}
-}
-
-func (m *Manager) evaluateAutoSafety(now time.Time) {
-	if m == nil || m.traceStore == nil || m.cfgManager == nil {
-		return
-	}
-	mode := m.cfgManager.GetEffectiveRoutingMode()
-	if mode == config.AutopilotModeAssist {
-		m.evaluateAutoRecovery(now)
-		return
-	}
-	if mode != config.AutopilotModeAuto {
-		return
-	}
-	report, err := m.traceStore.EvaluateAutoRegression(now)
-	if err != nil {
-		log.Printf("[Autopilot-AutoSafety] 警告: 回归检测失败: %v", err)
-		return
-	}
-	if !report.ShouldRollback {
-		return
-	}
-	routingCfg := m.cfgManager.GetAutopilotRouting()
-	if !routingCfg.AutoSafetyDowngrade {
-		// 仅监控：记录警告和安全事件，但不切换模式
-		event := AutoSafetyEvent{
-			EventUID:  fmt.Sprintf("monitor_%d", now.UnixMilli()),
-			FromMode:  config.AutopilotModeAuto,
-			ToMode:    "monitor_only",
-			Reasons:   report.Reasons,
-			Observed:  report.Observed,
-			Baseline:  report.Baseline,
-			CreatedAt: now.UTC(),
-		}
-		if err := m.traceStore.RecordAutoSafetyEvent(event); err != nil {
-			log.Printf("[Autopilot-AutoSafety] 警告: 监控事件落盘失败: %v", err)
-		}
-		log.Printf("[Autopilot-AutoSafety] 检测到连续 SLO 回归（监控模式，不降级）: reasons=%v", report.Reasons)
-		return
-	}
-	if err := m.cfgManager.SetAutopilotRoutingMode(config.AutopilotModeAssist); err != nil {
-		log.Printf("[Autopilot-AutoSafety] 警告: 自动降级到 assist 失败: %v", err)
-		return
-	}
-	event := AutoSafetyEvent{
-		FromMode:  config.AutopilotModeAuto,
-		ToMode:    config.AutopilotModeAssist,
-		Reasons:   report.Reasons,
-		Observed:  report.Observed,
-		Baseline:  report.Baseline,
-		CreatedAt: now.UTC(),
-	}
-	if err := m.traceStore.RecordAutoSafetyEvent(event); err != nil {
-		log.Printf("[Autopilot-AutoSafety] 警告: 自动降级事件落盘失败: %v", err)
-	}
-	log.Printf("[Autopilot-AutoSafety] auto 连续窗口恶化，已降级到 assist: reasons=%v", report.Reasons)
-}
-
-func (m *Manager) evaluateAutoRecovery(now time.Time) {
-	report, err := m.traceStore.EvaluateAutoRecovery(now)
-	if err != nil {
-		log.Printf("[Autopilot-AutoSafety] 警告: 自动恢复检测失败: %v", err)
-		return
-	}
-	if !report.ShouldRecover {
-		return
-	}
-	if err := m.cfgManager.SetAutopilotRoutingMode(config.AutopilotModeAuto); err != nil {
-		log.Printf("[Autopilot-AutoSafety] 警告: 自动恢复到 auto 失败: %v", err)
-		return
-	}
-	event := AutoSafetyEvent{
-		FromMode:  config.AutopilotModeAssist,
-		ToMode:    config.AutopilotModeAuto,
-		Reasons:   []string{"slo_recovered"},
-		Observed:  report.Observed,
-		Baseline:  report.Baseline,
-		CreatedAt: now.UTC(),
-	}
-	if err := m.traceStore.RecordAutoSafetyEvent(event); err != nil {
-		log.Printf("[Autopilot-AutoSafety] 警告: 自动恢复事件落盘失败: %v", err)
-	}
-	log.Printf("[Autopilot-AutoSafety] assist 连续窗口恢复稳定，已自动升回 auto")
 }
 
 // carryForwardDiscoveryFields 保留由自动发现写入、L1 流量画像无法重新推导的字段。

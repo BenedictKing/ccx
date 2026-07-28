@@ -410,7 +410,7 @@ type ABTestConfig struct {
 // ── 模式常量 ──
 
 const (
-	currentAutopilotConfigSchemaVersion = 3
+	currentAutopilotConfigSchemaVersion = 4
 
 	// AutopilotModeAuto 全自动模式：应用硬约束过滤并按评分重排，支持 fail-open。
 	AutopilotModeAuto = "auto"
@@ -552,7 +552,7 @@ func DefaultAutopilotRoutingConfig() AutopilotRoutingConfig {
 
 		TrustedRoutingAdvisor: TrustedRoutingAdvisorConfig{
 			Enabled:                         true,
-			Mode:                            AutopilotModeAuto,
+			Mode:                            "shadow",
 			AllowedAdvisorOriginTiers:       []string{"first", "local"},
 			ForbidAdvisorOnRelayOrCommunity: true,
 			AdvisorTimeoutMs:                1200,
@@ -574,7 +574,7 @@ func DefaultAutopilotRoutingConfig() AutopilotRoutingConfig {
 
 		LocalModelRouting: LocalModelRoutingConfig{
 			Enabled:                     true,
-			Mode:                        AutopilotModeAuto,
+			Mode:                        "shadow",
 			AllowLocalForTaskClasses:    []string{"lightweight", "worker"},
 			NeverDemoteTaskClasses:      []string{"supervisor", "vision", "long_context"},
 			ForbidAutoDecomposeAndMerge: true,

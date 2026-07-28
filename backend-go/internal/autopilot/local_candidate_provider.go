@@ -45,10 +45,9 @@ func CollectLocalCandidates(
 		return nil
 	}
 
-	// 2. 模式校验：只有 auto/assist 模式才真正纳入候选；
-	//    shadow / disabled / 空字符串均返回空（fail-safe）
+	// 2. LocalModelRouting.Mode 是独立子开关；兼容旧配置中的 shadow/off。
 	mode := cfg.Mode
-	if mode == "" || mode == config.AutopilotModeShadow || mode == config.AutopilotModeOff || mode == "disabled" {
+	if mode == "" || mode == "shadow" || mode == "off" || mode == "disabled" {
 		return nil
 	}
 

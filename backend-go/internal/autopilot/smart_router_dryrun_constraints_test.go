@@ -208,9 +208,9 @@ func TestDryRunUsesCanonicalRequestProfileBuilder(t *testing.T) {
 	}
 }
 
-func TestShadowTraceCandidatesAfterReflectsHardConstraintResult(t *testing.T) {
+func TestAutoTraceCandidatesAfterReflectsHardConstraintResult(t *testing.T) {
 	cfg := baseTestConfig()
-	cfg.AutopilotRouting = config.AutopilotRoutingConfig{RoutingMode: "shadow"}
+	cfg.AutopilotRouting = config.AutopilotRoutingConfig{RoutingMode: "auto"}
 	cfg.Upstream[0].ChannelUID = "ch_vision"
 	cfg.Upstream[1].ChannelUID = "ch_text_1"
 	cfg.Upstream[1].NoVision = true
@@ -229,7 +229,7 @@ func TestShadowTraceCandidatesAfterReflectsHardConstraintResult(t *testing.T) {
 	})
 	filter := router.CandidateFilterFor(&profile)
 	if filter == nil {
-		t.Fatal("shadow mode should return a candidate filter")
+		t.Fatal("auto mode should return a candidate filter")
 	}
 
 	channels := []scheduler.ChannelInfo{
@@ -246,8 +246,8 @@ func TestShadowTraceCandidatesAfterReflectsHardConstraintResult(t *testing.T) {
 	if err != nil {
 		t.Fatalf("filter error = %v", err)
 	}
-	if len(result) != len(channels) {
-		t.Fatalf("shadow result len = %d, want unchanged %d", len(result), len(channels))
+	if len(result) != 1 || result[0].Index != 0 {
+		t.Fatalf("auto result = %v, want only vision candidate", result)
 	}
 
 	traces := traceStore.ListRecent(1)
@@ -257,5 +257,11 @@ func TestShadowTraceCandidatesAfterReflectsHardConstraintResult(t *testing.T) {
 	trace := traces[0]
 	if trace.CandidatesBefore != 3 || trace.CandidatesAfter != 1 {
 		t.Fatalf("candidate counts = %d/%d, want 3/1", trace.CandidatesBefore, trace.CandidatesAfter)
+	}
+	if trace.SelectedChannelUID != "ch_vision" {
+		t.Fatalf("selected channel = %q, want ch_vision", trace.SelectedChannelUID)
+	}
+	if len(trace.Candidates) != 3 || !trace.Candidates[0].Selected || trace.Candidates[1].Selected || trace.Candidates[2].Selected {
+		t.Fatalf("trace candidate selection = %+v", trace.Candidates)
 	}
 }

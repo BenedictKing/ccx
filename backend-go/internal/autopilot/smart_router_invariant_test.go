@@ -244,7 +244,7 @@ func TestInvariant_KillSwitch_NotInjected(t *testing.T) {
 
 // TestInvariant_ModeOff_NotInjected 验证：
 // mode=off 时 CandidateFilterFor 返回 nil。
-func TestInvariant_ModeOff_NotInjected(t *testing.T) {
+func TestInvariant_LegacyModeOff_StillInjected(t *testing.T) {
 	cfg := baseTestConfig()
 	cfg.AutopilotRouting = config.AutopilotRoutingConfig{
 		RoutingMode: "off",
@@ -258,8 +258,8 @@ func TestInvariant_ModeOff_NotInjected(t *testing.T) {
 	profile := testProfile()
 
 	filter := smartRouter.CandidateFilterFor(profile)
-	if filter != nil {
-		t.Error("mode=off 时 CandidateFilterFor 应返回 nil")
+	if filter == nil {
+		t.Error("legacy mode=off 不应停用 CandidateFilterFor")
 	}
 }
 
@@ -543,8 +543,8 @@ func TestInvariant_RoutingTraceRecorded(t *testing.T) {
 	if trace.TaskClass != TaskClassLightweight {
 		t.Errorf("TaskClass 应为 lightweight（EstTokens=1000, AgentRole=main），实际: %s", trace.TaskClass)
 	}
-	if trace.Mode != RoutingModeShadow {
-		t.Errorf("Mode 应为 shadow，实际: %s", trace.Mode)
+	if trace.Mode != RoutingModeAuto {
+		t.Errorf("Mode 应为 auto，实际: %s", trace.Mode)
 	}
 	if trace.CandidatesBefore != 3 {
 		t.Errorf("CandidatesBefore 应为 3，实际: %d", trace.CandidatesBefore)
@@ -621,7 +621,7 @@ func TestInvariant_AssistMode_PermutationInvariant(t *testing.T) {
 
 // TestInvariant_AssistMode_RecordsTrace 验证：
 // assist 模式正确记录 RoutingDecisionTrace。
-func TestInvariant_AssistMode_RecordsTrace(t *testing.T) {
+func TestInvariant_LegacyAssistMode_RecordsAutoTrace(t *testing.T) {
 	cfg := baseTestConfig()
 	cfg.AutopilotRouting = config.AutopilotRoutingConfig{
 		RoutingMode: "assist",
@@ -644,7 +644,7 @@ func TestInvariant_AssistMode_RecordsTrace(t *testing.T) {
 	profile := testProfile()
 	filter := smartRouter.CandidateFilterFor(profile)
 	if filter == nil {
-		t.Fatal("assist 模式下 filter 不应为 nil")
+		t.Fatal("legacy assist 输入下 filter 不应为 nil")
 	}
 
 	channels := []scheduler.ChannelInfo{
@@ -673,27 +673,17 @@ func TestInvariant_AssistMode_RecordsTrace(t *testing.T) {
 	}
 
 	trace := traces[0]
-	if trace.Mode != RoutingModeAssist {
-		t.Errorf("trace Mode 应为 assist，实际: %s", trace.Mode)
+	if trace.Mode != RoutingModeAuto {
+		t.Errorf("trace Mode 应为 auto，实际: %s", trace.Mode)
 	}
-	if len(trace.SortReasons) == 0 {
-		t.Error("trace SortReasons 不应为空")
-	}
-	hasAssistSort := false
-	for _, r := range trace.SortReasons {
-		if r == "assist_reorder" {
-			hasAssistSort = true
-			break
-		}
-	}
-	if !hasAssistSort {
-		t.Errorf("trace SortReasons 应包含 assist_reorder，实际: %v", trace.SortReasons)
+	if !containsString(trace.SortReasons, "auto_filter_and_reorder") {
+		t.Errorf("trace SortReasons 应包含 auto_filter_and_reorder，实际: %v", trace.SortReasons)
 	}
 }
 
 // TestInvariant_AssistMode_PreservesUnscoredCandidates 验证 assist 只重排，
 // 基础可用性检查未通过的候选仍保留在末尾供原调度 failover。
-func TestInvariant_AssistMode_PreservesUnscoredCandidates(t *testing.T) {
+func TestInvariant_LegacyAssistMode_FiltersUnavailableCandidates(t *testing.T) {
 	cfg := baseTestConfig()
 	cfg.AutopilotRouting = config.AutopilotRoutingConfig{RoutingMode: "assist"}
 
@@ -707,7 +697,7 @@ func TestInvariant_AssistMode_PreservesUnscoredCandidates(t *testing.T) {
 	router := &SmartRouter{configManager: cfgManager, traceStore: traceStore}
 	filter := router.CandidateFilterFor(testProfile())
 	if filter == nil {
-		t.Fatal("assist 模式下 filter 不应为 nil")
+		t.Fatal("legacy assist 输入下 filter 不应为 nil")
 	}
 
 	channels := []scheduler.ChannelInfo{
@@ -728,20 +718,13 @@ func TestInvariant_AssistMode_PreservesUnscoredCandidates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("filter 执行失败: %v", err)
 	}
-	if len(result) != len(channels) {
-		t.Fatalf("assist 不得删除候选: before=%d after=%d result=%v", len(channels), len(result), result)
+	if len(result) != 2 {
+		t.Fatalf("legacy assist 应按 auto 过滤不可用候选: got=%d want=2 result=%v", len(result), result)
 	}
-	seen := make(map[int]bool, len(result))
 	for _, ch := range result {
-		seen[ch.Index] = true
-	}
-	for _, ch := range channels {
-		if !seen[ch.Index] {
-			t.Fatalf("assist 丢失候选 index=%d: result=%v", ch.Index, result)
+		if ch.Index == 1 {
+			t.Fatalf("不可用候选不应保留: result=%v", result)
 		}
-	}
-	if result[len(result)-1].Index != 1 {
-		t.Fatalf("未评分候选应保留在评分候选之后: result=%v", result)
 	}
 
 	traces := traceStore.ListRecent(1)
@@ -749,8 +732,8 @@ func TestInvariant_AssistMode_PreservesUnscoredCandidates(t *testing.T) {
 		t.Fatalf("应记录 1 条 trace，实际: %d", len(traces))
 	}
 	trace := traces[0]
-	if trace.CandidatesBefore != len(channels) || trace.CandidatesAfter != len(channels) || len(trace.Candidates) != len(channels) {
-		t.Fatalf("assist trace 候选数不一致: before=%d after=%d candidates=%d", trace.CandidatesBefore, trace.CandidatesAfter, len(trace.Candidates))
+	if trace.CandidatesBefore != len(channels) || trace.CandidatesAfter != len(result) || len(trace.Candidates) != len(result) {
+		t.Fatalf("auto trace 候选数不一致: before=%d after=%d candidates=%d", trace.CandidatesBefore, trace.CandidatesAfter, len(trace.Candidates))
 	}
 }
 

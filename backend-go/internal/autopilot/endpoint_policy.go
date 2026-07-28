@@ -18,10 +18,8 @@ import (
 // 不碰 handlers/common（WithEndpointAttemptPolicy 注入在 integration 阶段统一接线）。
 //
 // 模式门控：
-//   - off / kill switch → BuildEndpointPolicy 返回 nil（不注入）
-//   - shadow / dry_run → 计算评分 + 记录 trace，不应用健康优化；仍执行模型兼容硬约束
-//   - assist → 真实排序但不应用健康过滤；仍执行模型兼容硬约束
-//   - auto → binding 级真实过滤（健康 / 衰减 / 模型能力）+ 排序，未知画像 fail-open
+//   - dry_run → 计算评分并记录 trace，不应用健康优化；仍执行模型兼容硬约束
+//   - 其余模式 → binding 级真实过滤（健康 / 衰减 / 模型能力）+ 排序，未知画像 fail-open
 
 // ── EndpointCandidate（§4.6.2 契约）──
 
@@ -147,19 +145,10 @@ func BuildEndpointPolicy(deps EndpointPolicyDeps, req *RequestProfile, mode Rout
 		return nil
 	}
 
-	switch mode {
-	case RoutingModeShadow, RoutingModeDryRun:
+	if mode == RoutingModeDryRun {
 		return buildShadowPolicy(deps, req)
-	case RoutingModeAssist:
-		// assist：真实排序但不过滤（FilterURLs/FilterKeys 原样返回）
-		return buildActivePolicy(deps, req, false)
-	case RoutingModeAuto:
-		// auto：在 binding 层真实过滤 + 排序，未知画像 fail-open
-		return buildActivePolicy(deps, req, true)
-	default:
-		// off 或未知模式
-		return nil
 	}
+	return buildActivePolicy(deps, req, true)
 }
 
 // buildShadowPolicy 构建 shadow 模式的策略。
@@ -917,11 +906,6 @@ func resolveAutoModel(profile *KeyEndpointProfile, model string, req *RequestPro
 	if routingCfg == nil || !routingCfg.ModelMapping.AutoResolve {
 		return nil
 	}
-	effectiveMode := routingCfg.EffectiveRoutingMode()
-	if effectiveMode != config.AutopilotModeAssist && effectiveMode != config.AutopilotModeAuto {
-		return nil
-	}
-
 	floor := BuildCapabilityFloorFromRequestProfile(req)
 	target, resolved, _ := resolver.ResolveModel(
 		model,

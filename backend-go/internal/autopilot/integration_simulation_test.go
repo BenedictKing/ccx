@@ -65,7 +65,7 @@ func TestAutopilotSimulation_EndToEnd(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.NotNil(t, resp.Plan, "应返回路由计划")
-		assert.Equal(t, "shadow", resp.Mode, "默认模式应为 shadow")
+		assert.Equal(t, "auto", resp.Mode, "默认模式应为 auto")
 
 		require.NotEmpty(t, resp.Plan.Candidates, "候选列表不应为空（config 已填充3个渠道）")
 		for i, c := range resp.Plan.Candidates {
@@ -264,7 +264,7 @@ func TestAutopilotSimulation_EndToEnd(t *testing.T) {
 	})
 
 	// 6. 测试 smart-routing config 切换
-	t.Run("RoutingConfig_Switch_Mode", func(t *testing.T) {
+	t.Run("RoutingConfig_LegacyMode_NormalizedToAuto", func(t *testing.T) {
 		deps := &RoutingConfigDeps{
 			CfgManager: cfgManager,
 		}
@@ -272,7 +272,7 @@ func TestAutopilotSimulation_EndToEnd(t *testing.T) {
 		apiGroup := router.Group("/")
 		RegisterRoutingConfigRoutes(apiGroup, deps)
 
-		// 切换到 assist 模式
+		// 旧 assist 配置应被归一化为唯一 auto 运行态
 		updateReq := map[string]interface{}{
 			"mode":           "assist",
 			"costPreference": "quality_first",
@@ -293,9 +293,11 @@ func TestAutopilotSimulation_EndToEnd(t *testing.T) {
 
 		assert.Equal(t, http.StatusOK, getW.Code)
 
-		var cfg map[string]interface{}
-		_ = json.Unmarshal(getW.Body.Bytes(), &cfg)
-		assert.Equal(t, "assist", cfg["mode"], "模式应已切换到 assist")
+		var response map[string]interface{}
+		_ = json.Unmarshal(getW.Body.Bytes(), &response)
+		_, exposesMode := response["mode"]
+		assert.False(t, exposesMode, "配置 API 不应再暴露 mode")
+		assert.Equal(t, config.AutopilotModeAuto, cfgManager.GetEffectiveRoutingMode())
 	})
 }
 

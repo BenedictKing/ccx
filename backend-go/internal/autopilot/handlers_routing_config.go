@@ -1,11 +1,9 @@
 package autopilot
 
 import (
-	"log"
 	"net/http"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/gin-gonic/gin"
@@ -16,20 +14,14 @@ import (
 // RoutingConfigResponse GET /smart-routing/config 响应体。
 // 安全视图，只暴露只读字段，不暴露完整配置。
 type RoutingConfigResponse struct {
-	Mode             string               `json:"mode"`
-	KillSwitchActive bool                 `json:"killSwitchActive"`
-	RolloutPercent   int                  `json:"rolloutPercent"`
-	ControlPercent   int                  `json:"controlPercent"`
-	ReleaseID        string               `json:"releaseId"`
-	CostPreference   string               `json:"costPreference,omitempty"`
-	L2ProbeEnabled   bool                 `json:"l2ProbeEnabled,omitempty"`
-	Readiness        *AutoReadinessReport `json:"readiness,omitempty"`
+	KillSwitchActive bool   `json:"killSwitchActive"`
+	CostPreference   string `json:"costPreference,omitempty"`
+	L2ProbeEnabled   bool   `json:"l2ProbeEnabled,omitempty"`
 }
 
 // RoutingConfigUpdateRequest PUT /smart-routing/config 请求体。
-// 只允许修改 mode、rolloutPercent 和 costPreference。
+// 只允许修改 rolloutPercent 和 costPreference。
 type RoutingConfigUpdateRequest struct {
-	Mode           string `json:"mode,omitempty"`
 	RolloutPercent *int   `json:"rolloutPercent,omitempty"`
 	CostPreference string `json:"costPreference,omitempty"`
 }
@@ -64,7 +56,7 @@ func handleGetRoutingConfig(deps *RoutingConfigDeps) gin.HandlerFunc {
 		}
 		killSwitchActive := cfg.KillSwitch || envKillSwitch
 
-		c.JSON(http.StatusOK, routingConfigResponse(cfg, killSwitchActive, deps.TraceStore))
+		c.JSON(http.StatusOK, routingConfigResponse(cfg, killSwitchActive))
 	}
 }
 
@@ -76,44 +68,6 @@ func handleUpdateRoutingConfig(deps *RoutingConfigDeps) gin.HandlerFunc {
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "无效的请求体"})
 			return
-		}
-
-		// 校验 mode
-		if req.Mode != "" {
-			previousMode := deps.CfgManager.GetEffectiveRoutingMode()
-			normalizedMode := strings.ToLower(req.Mode)
-			validModes := map[string]bool{"off": true, "shadow": true, "assist": true, "auto": true, "active": true}
-			if !validModes[normalizedMode] {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "无效的 mode，可选值: off/shadow/assist/auto/active"})
-				return
-			}
-			if normalizedMode == config.AutopilotModeAuto && deps.CfgManager.GetEffectiveRoutingMode() != config.AutopilotModeAuto {
-				readiness := deps.TraceStore.EvaluateAutoReadiness(time.Now())
-				if !readiness.Ready {
-					c.JSON(http.StatusConflict, gin.H{
-						"error":     "auto 模式尚未达到安全上线门槛",
-						"readiness": readiness,
-					})
-					return
-				}
-			}
-			if err := deps.CfgManager.SetAutopilotRoutingMode(req.Mode); err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "保存路由模式失败"})
-				return
-			}
-			// 人工模式选择是显式接管信号。即使仍选择 assist，也要覆盖先前的
-			// auto->assist 安全事件，防止后台恢复任务违背用户意图自动升回 auto。
-			if deps.TraceStore != nil {
-				event := AutoSafetyEvent{
-					FromMode:  previousMode,
-					ToMode:    deps.CfgManager.GetEffectiveRoutingMode(),
-					Reasons:   []string{"manual_mode_change"},
-					CreatedAt: time.Now().UTC(),
-				}
-				if err := deps.TraceStore.RecordAutoSafetyEvent(event); err != nil {
-					log.Printf("[Autopilot-Config] 警告: 人工模式变更事件落盘失败: %v", err)
-				}
-			}
 		}
 
 		// 校验 costPreference
@@ -130,8 +84,8 @@ func handleUpdateRoutingConfig(deps *RoutingConfigDeps) gin.HandlerFunc {
 			}
 		}
 
-		if req.Mode == "" && req.CostPreference == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "至少需要提供 mode 或 costPreference"})
+		if req.CostPreference == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "至少需要提供 costPreference"})
 			return
 		}
 
@@ -142,25 +96,16 @@ func handleUpdateRoutingConfig(deps *RoutingConfigDeps) gin.HandlerFunc {
 			envKillSwitch = true
 		}
 
-		c.JSON(http.StatusOK, routingConfigResponse(cfg, cfg.KillSwitch || envKillSwitch, deps.TraceStore))
+		c.JSON(http.StatusOK, routingConfigResponse(cfg, cfg.KillSwitch || envKillSwitch))
 	}
 }
 
-func routingConfigResponse(cfg config.AutopilotRoutingConfig, killSwitchActive bool, store *TraceStore) RoutingConfigResponse {
-	resp := RoutingConfigResponse{
-		Mode:             cfg.EffectiveRoutingMode(),
+func routingConfigResponse(cfg config.AutopilotRoutingConfig, killSwitchActive bool) RoutingConfigResponse {
+	return RoutingConfigResponse{
 		KillSwitchActive: killSwitchActive,
-		RolloutPercent:   cfg.RolloutPercent,
-		ControlPercent:   cfg.ControlPercent,
-		ReleaseID:        cfg.ReleaseID,
 		CostPreference:   cfg.CostPreference.Mode,
 		L2ProbeEnabled:   cfg.HealthCheck.L2ProbeEnabled,
 	}
-	if store != nil {
-		readiness := store.EvaluateAutoReadiness(time.Now())
-		resp.Readiness = &readiness
-	}
-	return resp
 }
 
 // isTruthyEnv 判断环境变量值是否为真。

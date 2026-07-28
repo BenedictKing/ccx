@@ -57,75 +57,29 @@ func TestBuildPlan_WritesDryRunTrace(t *testing.T) {
 }
 
 // TestCandidateFilterWithReleaseController 验证 ReleaseController 集成。
-func TestCandidateFilterWithReleaseController(t *testing.T) {
+func TestCandidateFilterUsesAutopilotMode(t *testing.T) {
 	cfg := baseTestConfig()
-	cfg.AutopilotRouting = config.AutopilotRoutingConfig{
-		RoutingMode:    "shadow",
-		ReleaseID:      "rel_test_001",
-		RolloutSeed:    "seed_abc123",
-		RolloutPercent: 0, // shadow 强制 0
-		ControlPercent: 1,
-	}
-
+	cfg.AutopilotRouting = config.AutopilotRoutingConfig{RoutingMode: "shadow"}
 	cfgManager, cleanup := createTestConfigManager(t, cfg)
 	defer cleanup()
 
-	traceStore := createTestTraceStore(t)
-	rc := NewReleaseController(cfgManager, traceStore)
-	smartRouter := &SmartRouter{
-		configManager:     cfgManager,
-		traceStore:        traceStore,
-		releaseController: rc,
-	}
-
-	profile := testProfile()
-	filter := smartRouter.CandidateFilterFor(profile)
+	smartRouter := &SmartRouter{configManager: cfgManager, traceStore: createTestTraceStore(t)}
+	filter := smartRouter.CandidateFilterFor(testProfile())
 	if filter == nil {
-		t.Fatal("shadow 模式下 CandidateFilterFor 应返回非 nil")
-	}
-
-	// 验证快照被冻结
-	snapshot := rc.CurrentSnapshot()
-	if snapshot.ReleaseID == "" {
-		t.Error("ReleaseID 不应为空")
-	}
-	if snapshot.RolloutPercent != 0 {
-		t.Errorf("shadow 模式 RolloutPercent 应为 0，实际: %d", snapshot.RolloutPercent)
-	}
-	if snapshot.RolloutSeed == "" {
-		t.Error("RolloutSeed 不应为空")
+		t.Fatal("Autopilot 自动运行态应返回 CandidateFilter")
 	}
 }
 
 // TestCandidateFilterWithSafetyOverride 验证安全覆盖生效。
-func TestCandidateFilterWithSafetyOverride(t *testing.T) {
+func TestCandidateFilterIgnoresLegacyMode(t *testing.T) {
 	cfg := baseTestConfig()
-	cfg.AutopilotRouting = config.AutopilotRoutingConfig{
-		RoutingMode: "auto",
-		ReleaseID:   "rel_override",
-		RolloutSeed: "seed_xyz",
-	}
-
+	cfg.AutopilotRouting = config.AutopilotRoutingConfig{RoutingMode: "off"}
 	cfgManager, cleanup := createTestConfigManager(t, cfg)
 	defer cleanup()
 
-	traceStore := createTestTraceStore(t)
-	rc := NewReleaseController(cfgManager, traceStore)
-
-	// 设置安全覆盖到 shadow
-	rc.SetSafetyOverride(RoutingModeShadow)
-
-	smartRouter := &SmartRouter{
-		configManager:     cfgManager,
-		traceStore:        traceStore,
-		releaseController: rc,
-	}
-
-	profile := testProfile()
-	// auto 模式下设置安全覆盖到 shadow，SmartRouter 应使用 shadow 模式
-	filter := smartRouter.CandidateFilterFor(profile)
-	if filter == nil {
-		t.Fatal("shadow 模式下 CandidateFilterFor 应返回非 nil")
+	smartRouter := &SmartRouter{configManager: cfgManager, traceStore: createTestTraceStore(t)}
+	if filter := smartRouter.CandidateFilterFor(testProfile()); filter == nil {
+		t.Fatal("旧 mode 字段不应关闭 Autopilot；只能使用 Kill Switch")
 	}
 }
 

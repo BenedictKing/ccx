@@ -64,7 +64,7 @@ func TestLoadConfigUpgradesPartialAutopilotAndPreservesExplicitValues(t *testing
 
 func TestLoadConfigDoesNotPersistAutopilotEnvKillSwitch(t *testing.T) {
 	t.Setenv(autopilotKillSwitchEnv, "true")
-	configPath := writeAutopilotMigrationConfig(t, json.RawMessage(`{"mode":"auto"}`))
+	configPath := writeAutopilotMigrationConfig(t, json.RawMessage(`{"mode":"shadow"}`))
 
 	cm, err := NewConfigManager(configPath, "")
 	if err != nil {
@@ -73,7 +73,7 @@ func TestLoadConfigDoesNotPersistAutopilotEnvKillSwitch(t *testing.T) {
 	cm.CloseWatcher()
 
 	runtimeCfg := cm.GetAutopilotRouting()
-	if !runtimeCfg.KillSwitch || runtimeCfg.EffectiveRoutingMode() != AutopilotModeOff {
+	if !runtimeCfg.KillSwitch || runtimeCfg.EffectiveRoutingMode() != "off" {
 		t.Fatalf("运行态环境急停未生效: %+v", runtimeCfg)
 	}
 	if !cm.GetConfig().AutopilotRouting.KillSwitch {
@@ -92,7 +92,6 @@ func TestLoadConfigDoesNotPersistAutopilotEnvKillSwitch(t *testing.T) {
 		name string
 		set  func() error
 	}{
-		{name: "routing mode", set: func() error { return cm.SetAutopilotRoutingMode(AutopilotModeAssist) }},
 		{name: "cost preference", set: func() error {
 			return cm.SetCostPreference(CostPreferenceConfig{Mode: "quality_first"})
 		}},
@@ -206,8 +205,8 @@ func assertCurrentAutopilotDefaults(t *testing.T, cfg AutopilotRoutingConfig) {
 	if cfg.SchemaVersion != currentAutopilotConfigSchemaVersion {
 		t.Fatalf("schemaVersion = %d, want %d", cfg.SchemaVersion, currentAutopilotConfigSchemaVersion)
 	}
-	if cfg.RoutingMode != AutopilotModeShadow {
-		t.Fatalf("mode = %q, want %q", cfg.RoutingMode, AutopilotModeShadow)
+	if cfg.RoutingMode != AutopilotModeAuto {
+		t.Fatalf("mode = %q, want %q", cfg.RoutingMode, AutopilotModeAuto)
 	}
 	if !cfg.HealthCheck.Enabled || !cfg.ModelMapping.CapabilityFloorEnabled {
 		t.Fatalf("缺失当前默认能力配置: health=%v modelMapping=%v", cfg.HealthCheck, cfg.ModelMapping)
@@ -223,8 +222,8 @@ func assertLegacyAutopilotOverrides(t *testing.T, cfg AutopilotRoutingConfig) {
 	if cfg.SchemaVersion != currentAutopilotConfigSchemaVersion {
 		t.Fatalf("schemaVersion = %d, want %d", cfg.SchemaVersion, currentAutopilotConfigSchemaVersion)
 	}
-	if cfg.RoutingMode != AutopilotModeAssist {
-		t.Fatalf("mode = %q, want %q", cfg.RoutingMode, AutopilotModeAssist)
+	if cfg.RoutingMode != AutopilotModeAuto {
+		t.Fatalf("legacy mode 应迁移为 %q，实际 %q", AutopilotModeAuto, cfg.RoutingMode)
 	}
 	if cfg.ModelFamilyPreference.Enabled || cfg.ModelFamilyPreference.Weight != 0 || len(cfg.ModelFamilyPreference.GlobalOrder) != 0 {
 		t.Fatalf("显式模型派系零值未保留: %+v", cfg.ModelFamilyPreference)

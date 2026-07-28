@@ -93,9 +93,9 @@ func TestResolvedContextWindowFeedsAutoHardConstraint(t *testing.T) {
 	}
 }
 
-func TestShadowSimulatesContextHardConstraintWithoutChangingCandidates(t *testing.T) {
+func TestAutoFiltersContextHardConstraintCandidates(t *testing.T) {
 	const (
-		model       = "shadow-context-model"
+		model       = "auto-context-model"
 		shortUID    = "ch_shadow_short"
 		longUID     = "ch_shadow_long"
 		contextNeed = 8192
@@ -111,7 +111,7 @@ func TestShadowSimulatesContextHardConstraintWithoutChangingCandidates(t *testin
 	cfg.Upstream[1].ModelCapabilities = map[string]config.UpstreamModelCapability{
 		model: {ContextWindowTokens: 16384},
 	}
-	cfg.AutopilotRouting = config.AutopilotRoutingConfig{RoutingMode: "shadow"}
+	cfg.AutopilotRouting = config.AutopilotRoutingConfig{RoutingMode: "auto"}
 
 	cfgManager, cleanup := createTestConfigManager(t, cfg)
 	defer cleanup()
@@ -125,7 +125,7 @@ func TestShadowSimulatesContextHardConstraintWithoutChangingCandidates(t *testin
 		EstTokens: 1000, ContextNeed: contextNeed,
 	})
 	if filter == nil || observeActual == nil {
-		t.Fatal("shadow mode should return filter and actual-channel observer")
+		t.Fatal("auto mode should return filter and actual-channel observer")
 	}
 
 	processed := cfgManager.GetConfig()
@@ -139,10 +139,10 @@ func TestShadowSimulatesContextHardConstraintWithoutChangingCandidates(t *testin
 		func(_ scheduler.ChannelInfo, upstream *config.UpstreamConfig) bool { return upstream != nil },
 	)
 	if err != nil {
-		t.Fatalf("shadow filter error = %v", err)
+		t.Fatalf("auto filter error = %v", err)
 	}
-	if len(result) != len(channels) || result[0].Index != channels[0].Index || result[1].Index != channels[1].Index {
-		t.Fatalf("shadow changed real candidates: got %v, want %v", result, channels)
+	if len(result) != 1 || result[0].Name != "ch-standard" {
+		t.Fatalf("auto context filter result = %v, want only ch-standard", result)
 	}
 
 	traces := traceStore.ListRecent(1)
@@ -150,11 +150,14 @@ func TestShadowSimulatesContextHardConstraintWithoutChangingCandidates(t *testin
 		t.Fatalf("trace count = %d, want 1", len(traces))
 	}
 	trace := traces[0]
-	if trace.ShadowChannelUID != longUID || trace.SelectedChannelUID != longUID {
-		t.Fatalf("shadow recommendation = %q/%q, want %q", trace.ShadowChannelUID, trace.SelectedChannelUID, longUID)
+	if trace.SelectedChannelUID != longUID {
+		t.Fatalf("selected channel = %q, want %q", trace.SelectedChannelUID, longUID)
 	}
-	if !containsString(trace.SortReasons, "shadow_auto_filter_simulation") {
-		t.Fatalf("sort reasons = %v, want shadow_auto_filter_simulation", trace.SortReasons)
+	if trace.Mode != RoutingModeAuto {
+		t.Fatalf("trace mode = %q, want %q", trace.Mode, RoutingModeAuto)
+	}
+	if !containsString(trace.SortReasons, "auto_filter_and_reorder") {
+		t.Fatalf("sort reasons = %v, want auto_filter_and_reorder", trace.SortReasons)
 	}
 	if len(trace.Candidates) != 2 {
 		t.Fatalf("candidate count = %d, want 2", len(trace.Candidates))
@@ -167,9 +170,9 @@ func TestShadowSimulatesContextHardConstraintWithoutChangingCandidates(t *testin
 		t.Fatalf("long candidate trace = %+v", trace.Candidates[1])
 	}
 
-	observeActual(shortUID)
+	observeActual(longUID)
 	trace = traceStore.ListRecent(1)[0]
-	if trace.ActualChannelUID != shortUID || trace.Match {
-		t.Fatalf("shadow comparison actual=%q match=%v, want actual=%q match=false", trace.ActualChannelUID, trace.Match, shortUID)
+	if trace.ActualChannelUID != longUID || trace.Match {
+		t.Fatalf("auto trace actual=%q match=%v, want actual=%q without shadow comparison", trace.ActualChannelUID, trace.Match, longUID)
 	}
 }

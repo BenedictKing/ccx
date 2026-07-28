@@ -3,7 +3,6 @@ package autopilot
 import (
 	"net/http"
 
-	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/gin-gonic/gin"
 )
 
@@ -77,7 +76,7 @@ func handleDryRunRoute(smartRouter *SmartRouter) gin.HandlerFunc {
 		cfg := smartRouter.ConfigManager().GetConfig()
 		autopilotCfg := cfg.AutopilotRouting
 		mode := autopilotCfg.EffectiveRoutingMode()
-		if mode == config.AutopilotModeOff {
+		if autopilotCfg.KillSwitch {
 			c.JSON(http.StatusOK, DryRunResponse{
 				Plan:    nil,
 				Mode:    mode,
