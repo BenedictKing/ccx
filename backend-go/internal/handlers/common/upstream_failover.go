@@ -987,33 +987,37 @@ func TryUpstreamWithAllKeys(
 							continue
 						}
 					}
+				}
 
-					// 渠道兼容性自学习（被动侧）：上游以 400/422 明确表示缺少某项协议能力时，
-					// 记忆该 渠道-Key-模型 组合并用同一 Key 立即重试（改写在下一轮循环开头注入）。
-					// 仅当结论首次记录时重试，避免记忆已生效后死循环。
-					if (resp.StatusCode == 400 || resp.StatusCode == 422) && upstream.ChannelUID != "" && !c.Writer.Written() {
-						signalCtx := CompatSignalContext{
-							HasDeveloperRole:      BodyHasDeveloperRole(attemptBody),
-							HasCodexClientTools:   kind == scheduler.ChannelKindResponses,
-							HasHistoricalThinking: BodyHasHistoricalThinking(attemptBody),
-						}
-						if signal := CompatTraitFromError(resp.StatusCode, respBodyBytes, signalCtx); signal != nil {
-							keyHash := autopilot.KeyHashFromAPIKey(apiKey)
-							if channelCompatCache.Record(upstream.ChannelUID, keyHash, attemptModel,
-								signal.Trait, signal.Enabled, config.CompatSourceErrorSignal, signal.Evidence) {
-								retrySelection = selection
-								retryAPIKey = apiKey
-								metricsManager.RecordRequestFinalizeIgnored(currentBaseURL, apiKey, metricsServiceType, requestID)
-								channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
-								if probeKey := currentBaseURL + "|" + apiKey; probeAcquired[probeKey] {
-									metricsManager.ReleaseProbe(currentBaseURL, apiKey, metricsServiceType)
-									delete(probeAcquired, probeKey)
-								}
-								CompleteLog(channelLogStore, metricsKey, logRequestID, resp.StatusCode, false, string(respBodyBytes), isRetryAttempt)
-								RequestLogf(c, "[%s-ChannelCompat] 渠道 %s 模型 %s 缺少能力 %s，已记忆并应用兼容改写后同 Key 重试",
-									apiType, upstream.Name, attemptModel, signal.Trait)
-								continue
+				// 渠道兼容性自学习（被动侧）：上游以 400/422 明确表示缺少某项协议能力时，
+				// 记忆该 渠道-Key-模型 组合并用同一 Key 立即重试（改写在下一轮循环开头注入）。
+				// 仅当结论首次记录时重试，避免记忆已生效后死循环。
+				//
+				// 与上面的弃用参数块是兄弟关系而非嵌套：弃用参数识别只针对 400，
+				// 兼容性学习同时覆盖 400 与 422（部分上游用 422 表达结构不受支持），
+				// 嵌进 400 守卫里会让 422 分支永远不可达。
+				if (resp.StatusCode == 400 || resp.StatusCode == 422) && upstream.ChannelUID != "" && !c.Writer.Written() {
+					signalCtx := CompatSignalContext{
+						HasDeveloperRole:      BodyHasDeveloperRole(attemptBody),
+						HasCodexClientTools:   kind == scheduler.ChannelKindResponses,
+						HasHistoricalThinking: BodyHasHistoricalThinking(attemptBody),
+					}
+					if signal := CompatTraitFromError(resp.StatusCode, respBodyBytes, signalCtx); signal != nil {
+						keyHash := autopilot.KeyHashFromAPIKey(apiKey)
+						if channelCompatCache.Record(upstream.ChannelUID, keyHash, attemptModel,
+							signal.Trait, signal.Enabled, config.CompatSourceErrorSignal, signal.Evidence) {
+							retrySelection = selection
+							retryAPIKey = apiKey
+							metricsManager.RecordRequestFinalizeIgnored(currentBaseURL, apiKey, metricsServiceType, requestID)
+							channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
+							if probeKey := currentBaseURL + "|" + apiKey; probeAcquired[probeKey] {
+								metricsManager.ReleaseProbe(currentBaseURL, apiKey, metricsServiceType)
+								delete(probeAcquired, probeKey)
 							}
+							CompleteLog(channelLogStore, metricsKey, logRequestID, resp.StatusCode, false, string(respBodyBytes), isRetryAttempt)
+							RequestLogf(c, "[%s-ChannelCompat] 渠道 %s 模型 %s 缺少能力 %s，已记忆并应用兼容改写后同 Key 重试",
+								apiType, upstream.Name, attemptModel, signal.Trait)
+							continue
 						}
 					}
 				}
