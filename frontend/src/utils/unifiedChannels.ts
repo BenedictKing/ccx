@@ -57,6 +57,27 @@ export const protocolLabelForKind = (kind: ChannelKind): string => {
   return isLlmChannelKind(kind) ? PROTOCOL_LABELS[kind] : kind
 }
 
+export type ChannelRecoveryRoute = {
+  kind: ChannelKind
+  index: number
+  status?: Channel['status']
+}
+
+export const resolveChannelRecoveryRoutes = (channel: Channel): ChannelRecoveryRoute[] => {
+  if (channel.protocolRoutes?.length) {
+    return channel.protocolRoutes.map(route => ({
+      kind: route.kind,
+      index: route.index,
+      status: route.status,
+    }))
+  }
+  return [{
+    kind: channel.routeKind ?? 'messages',
+    index: channel.routeIndex ?? channel.index,
+    status: channel.status,
+  }]
+}
+
 const stripRouteSuffix = (name: string, kind: LlmChannelKind): string => {
   return name.replace(PROVIDER_ROUTE_SUFFIXES[kind], '')
 }
@@ -138,6 +159,7 @@ const buildProtocolRoutes = (channels: Partial<Record<LlmChannelKind, RoutedChan
       name: channel.name,
       serviceType: channel.serviceType,
       channelUid: channel.channelUid,
+      status: channel.status,
       supportedModels: channel.supportedModels == null ? undefined : [...channel.supportedModels],
     }]
   })

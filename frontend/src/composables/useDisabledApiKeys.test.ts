@@ -26,6 +26,7 @@ type TestForm = {
 const createOptions = (
   apiService: Partial<ApiService>,
   form: TestForm = { apiKeys: [] },
+  onKeysChanged?: () => Promise<void>,
 ) => {
   const channel = createChannel()
   const state = useDisabledApiKeys({
@@ -34,6 +35,7 @@ const createOptions = (
     channelType: computed(() => 'messages' as const),
     emitError: vi.fn(),
     form,
+    onKeysChanged,
   })
   return { channel, form, state }
 }
@@ -52,6 +54,20 @@ describe('useDisabledApiKeys', () => {
     expect(form.apiKeys).toEqual([disabledKey])
     expect(state.visibleDisabledKeys.value).toEqual([])
     expect(state.restoringKey.value).toBe('')
+  })
+
+  it('恢复 Key 后等待服务端渠道快照刷新', async () => {
+    const onKeysChanged = vi.fn().mockResolvedValue(undefined)
+    const { state } = createOptions(
+      { restoreApiKey: vi.fn().mockResolvedValue(undefined) },
+      { apiKeys: [] },
+      onKeysChanged,
+    )
+
+    await state.restoreDisabledKey(disabledKey)
+
+    expect(onKeysChanged).toHaveBeenCalledTimes(1)
+    expect(state.visibleDisabledKeys.value).toHaveLength(1)
   })
 
   it('ignores a second key restore while the first request is pending', async () => {

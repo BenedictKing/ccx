@@ -36,6 +36,8 @@ import { useEditChannelOptions } from '../utils/editChannelOptions'
 import { defaultStripBillingHeader, isValidUrl, normalizeModelCapabilities } from '../utils/editChannelHelpers'
 import { isAutoManagedAccountChannel } from '../utils/providerDisplay'
 import { getManagedProviderWebsiteLinks } from '../utils/channelWebsite'
+import { useChannelStore } from '../stores/channel'
+import { useDialogStore } from '../stores/dialog'
 
 export interface EditChannelModalProps {
   show: boolean
@@ -100,6 +102,8 @@ function stableStringify(value: unknown): string {
 export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: EditChannelModalEmit) {
   const { t } = useI18n()
   const apiService = new ApiService()
+  const channelStore = useChannelStore()
+  const dialogStore = useDialogStore()
 
   // 主题
   const theme = useTheme()
@@ -1032,6 +1036,17 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     channelType: channelTypeRef,
     emitError: message => emit('error', message),
     form,
+    onKeysChanged: async () => {
+      const routeKind = props.channel?.routeKind ?? props.channelType
+      const routeIndex = props.channel?.routeIndex ?? props.channel?.index
+      await channelStore.refreshChannels()
+      if (routeIndex == null) return
+      const latest = channelStore.currentChannelsData.channels.find(channel =>
+        (channel.routeKind === routeKind && (channel.routeIndex ?? channel.index) === routeIndex)
+        || channel.protocolRoutes?.some(route => route.kind === routeKind && route.index === routeIndex),
+      )
+      if (latest) dialogStore.editingChannel = latest
+    },
   })
 
   // 提交状态

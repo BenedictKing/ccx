@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { Channel, ChannelRecentActivity, ChannelsResponse } from '@/services/api'
-import { buildUnifiedChannelsData, buildUnifiedRecentActivity, type LlmChannelKind } from './unifiedChannels'
+import { buildUnifiedChannelsData, buildUnifiedRecentActivity, resolveChannelRecoveryRoutes, type LlmChannelKind } from './unifiedChannels'
 
 const channel = (
   name: string,
@@ -38,6 +38,28 @@ describe('buildUnifiedChannelsData account grouping', () => {
     expect(result.channels[0].accountUid).toBe('acct-main')
     expect(result.channels[0].protocolCapsules?.map(item => item.label)).toEqual(['CLAUDE', 'CHAT'])
     expect(result.channels[0].protocolRoutes?.map(item => item.kind)).toEqual(['messages', 'chat', 'responses', 'gemini'])
+    expect(result.channels[0].protocolRoutes?.map(item => item.status)).toEqual([undefined, undefined, undefined, undefined])
+  })
+
+  it('保留各协议路由状态供聚合渠道恢复使用', () => {
+    const data: Record<LlmChannelKind, ChannelsResponse> = {
+      messages: response([channel('mimo-main-claude', 'acct-main', 0, ['sk-a'], { status: 'suspended' })]),
+      chat: response([channel('mimo-main-chat', 'acct-main', 1, ['sk-a'], { status: 'active' })]),
+      responses: response([channel('mimo-main-codex', 'acct-main', 2, ['sk-a'], { status: 'disabled' })]),
+      gemini: response([]),
+    }
+
+    const logicalChannel = buildUnifiedChannelsData(data).channels[0]
+    expect(logicalChannel.protocolRoutes?.map(route => route.status)).toEqual([
+      'suspended',
+      'active',
+      'disabled',
+    ])
+    expect(resolveChannelRecoveryRoutes(logicalChannel)).toEqual([
+      { kind: 'messages', index: 0, status: 'suspended' },
+      { kind: 'chat', index: 1, status: 'active' },
+      { kind: 'responses', index: 2, status: 'disabled' },
+    ])
   })
 
   it('相同 provider 和名称下不同 accountUid 不应合并', () => {

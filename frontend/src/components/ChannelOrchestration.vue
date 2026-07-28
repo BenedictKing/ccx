@@ -698,7 +698,7 @@ import { ref, computed, watch, onMounted, onUnmounted, defineAsyncComponent, nex
 import draggable from 'vuedraggable'
 import { api, type Channel, type ChannelKind, type ChannelMetrics, type ChannelProtocolRoute, type ChannelStatus, type TimeWindowStats, type ChannelRecentActivity, type SchedulerStatsResponse } from '../services/api'
 import { getChannelTypeApi } from '../utils/channelTypeApi'
-import { isLlmChannelKind } from '../utils/unifiedChannels'
+import { isLlmChannelKind, resolveChannelRecoveryRoutes } from '../utils/unifiedChannels'
 import { sortChannelsByPriority } from '../utils/channelOrder'
 import { buildChannelMetricsLookup } from '../utils/channelMetricsLookup'
 import { useI18n } from '../i18n'
@@ -1374,25 +1374,26 @@ const resumeChannelInternal = async (
 ) => {
   const { refresh = true, notify = true } = options
 
-  const result = await getCurrentChannelTypeApi(channel).resume(getRouteIndex(channel))
-  // 仅当渠道当前不是 active 时才更新状态：已是 active 但仅因全部 Key 被拉黑/耗尽而显示恢复的渠道，
-  // 跳过冗余的 setStatus(active) 请求，直接刷新数据即可。
-  if (channel.status !== 'active') {
-    await setChannelStatusInternal(channel, 'active', { refresh })
-  } else if (refresh) {
-    // active 渠道恢复全部禁用 Key 后，刷新以反映最新 disabledApiKeys 与计数
-    emit('refresh')
+  let restoredKeys = 0
+  for (const route of resolveChannelRecoveryRoutes(channel)) {
+    const routeApi = getChannelTypeApi(api, route.kind)
+    const result = await routeApi.resume(route.index)
+    restoredKeys += result?.restoredKeys || 0
+    if (route.status === 'suspended') {
+      await routeApi.setStatus(route.index, 'active')
+    }
   }
+  if (refresh) emit('refresh')
 
   if (notify) {
-    if ((result?.restoredKeys || 0) > 0) {
-      emit('success', t('orchestration.resumeSuccessWithKeys', { count: result?.restoredKeys || 0 }))
+    if (restoredKeys > 0) {
+      emit('success', t('orchestration.resumeSuccessWithKeys', { count: restoredKeys }))
     } else {
       emit('success', t('orchestration.resumeSuccess'))
     }
   }
 
-  return result
+  return { restoredKeys }
 }
 
 const isTrippedChannel = (channel: Channel): boolean => {

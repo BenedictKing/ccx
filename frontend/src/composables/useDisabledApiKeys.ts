@@ -14,6 +14,7 @@ type DisabledApiKeyOptions = {
   channelType: ComputedRef<ChannelType>
   emitError: (message: string) => void
   form: FormLike
+  onKeysChanged?: () => Promise<void>
 }
 
 export function useDisabledApiKeys(options: DisabledApiKeyOptions) {
@@ -101,9 +102,13 @@ export function useDisabledApiKeys(options: DisabledApiKeyOptions) {
         default:
           await options.apiService.restoreApiKey(id, apiKey)
       }
-      localRestoredKeys.value = new Set([...localRestoredKeys.value, apiKey])
       if (!options.form.apiKeys.includes(apiKey)) {
         options.form.apiKeys = [...options.form.apiKeys, apiKey]
+      }
+      if (options.onKeysChanged) {
+        await options.onKeysChanged()
+      } else {
+        localRestoredKeys.value = new Set([...localRestoredKeys.value, apiKey])
       }
     } catch (error) {
       options.emitError(error instanceof Error ? error.message : 'Restore failed')
@@ -174,6 +179,7 @@ export function useDisabledApiKeys(options: DisabledApiKeyOptions) {
       markKeySuspended(apiKey)
       localSuspendedKeys.value = new Set([...localSuspendedKeys.value, apiKey])
       localResumedKeys.value.delete(apiKey)
+      await options.onKeysChanged?.()
     } catch (error) {
       options.emitError(error instanceof Error ? error.message : 'Suspend failed')
     } finally {
@@ -209,6 +215,7 @@ export function useDisabledApiKeys(options: DisabledApiKeyOptions) {
       markKeyResumed(apiKey)
       localResumedKeys.value = new Set([...localResumedKeys.value, apiKey])
       localSuspendedKeys.value.delete(apiKey)
+      await options.onKeysChanged?.()
     } catch (error) {
       options.emitError(error instanceof Error ? error.message : 'Resume failed')
     } finally {
