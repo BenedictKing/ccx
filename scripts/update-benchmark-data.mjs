@@ -142,6 +142,23 @@ export function createProfile(canonicalModel, pattern = canonicalModelToPattern(
   }
 }
 
+/**
+ * 比较两条证据列表是否等价：忽略 capturedAt（抓取日期），元素顺序无关。
+ * 用于判断上游数据是否真的变了，没变就跳过 merge，避免只刷日期产生无效 diff。
+ */
+function evidenceListsEqual(a, b) {
+  if (a.length !== b.length) return false
+  const normalize = list =>
+    list.map(item => JSON.stringify({ ...item, capturedAt: undefined })).sort()
+  const sortedA = normalize(a)
+  const sortedB = normalize(b)
+  return sortedA.every((item, i) => item === sortedB[i])
+}
+
+function stringArraysEqual(a, b) {
+  return JSON.stringify(a || []) === JSON.stringify(b || [])
+}
+
 function ensureEvidenceProfileMetadata(profile) {
   const evidence = profile.benchmarkEvidence || []
   const sourceURLs = evidence.map(item => item.sourceUrl).filter(Boolean)
@@ -183,11 +200,19 @@ export function mergeDeepsweData(registry, deepsweData, report, models = targetM
       profile.benchmarkEvidence = []
     }
 
-    // 移除旧的 deepswe 证据
-    profile.benchmarkEvidence = profile.benchmarkEvidence.filter(e => e.benchmark !== 'deepswe')
+    // 移除旧的 deepswe 证据，与新证据合并
+    const nextEvidence = [
+      ...profile.benchmarkEvidence.filter(e => e.benchmark !== 'deepswe'),
+      ...data.benchmarkEvidence,
+    ]
 
-    // 添加新的 deepswe 证据
-    profile.benchmarkEvidence.push(...data.benchmarkEvidence)
+    // 数据未变化（忽略 capturedAt）时跳过，不刷 verifiedAt，避免无效 diff
+    if (idx >= 0 && evidenceListsEqual(nextEvidence, profile.benchmarkEvidence)) {
+      report.unchanged.push({ canonical, source: 'deepswe' })
+      continue
+    }
+
+    profile.benchmarkEvidence = nextEvidence
     ensureEvidenceProfileMetadata(profile)
 
     // 更新 verifiedAt
@@ -296,14 +321,22 @@ export function mergeDradarData(registry, dradarData, report, models = targetMod
       profile.benchmarkEvidence = []
     }
 
-    // 移除当前及旧格式的 codexradar 证据
-    profile.benchmarkEvidence = profile.benchmarkEvidence.filter(
-      e => e.benchmark !== 'codexradar' &&
-        !(e.benchmark === 'deepswe' && e.benchmarkVersion === 'codexradar')
-    )
+    // 移除当前及旧格式的 codexradar 证据，与新证据合并
+    const nextEvidence = [
+      ...profile.benchmarkEvidence.filter(
+        e => e.benchmark !== 'codexradar' &&
+          !(e.benchmark === 'deepswe' && e.benchmarkVersion === 'codexradar')
+      ),
+      ...data.benchmarkEvidence,
+    ]
 
-    // 添加新的 dradar 证据
-    profile.benchmarkEvidence.push(...data.benchmarkEvidence)
+    // 数据未变化（忽略 capturedAt）时跳过，不刷 verifiedAt，避免无效 diff
+    if (idx >= 0 && evidenceListsEqual(nextEvidence, profile.benchmarkEvidence)) {
+      report.unchanged.push({ canonical, source: 'dradar' })
+      continue
+    }
+
+    profile.benchmarkEvidence = nextEvidence
     ensureEvidenceProfileMetadata(profile)
 
     // 成本明细仅用于临时图表输入，不属于 ModelBenchmarkProfile 注册表结构
@@ -428,20 +461,33 @@ export function mergeArtificialAnalysisLlm(registry, aaLlmData, report, models =
       profile.benchmarkEvidence = []
     }
 
-    // 移除旧的 AA 证据
-    profile.benchmarkEvidence = profile.benchmarkEvidence.filter(e => e.benchmark !== 'artificial_analysis')
-
-    // 添加新的 AA 证据
-    profile.benchmarkEvidence.push(...(data.benchmarkEvidence || []))
-    ensureEvidenceProfileMetadata(profile)
+    // 移除旧的 AA 证据，与新证据合并
+    const nextEvidence = [
+      ...profile.benchmarkEvidence.filter(e => e.benchmark !== 'artificial_analysis'),
+      ...(data.benchmarkEvidence || []),
+    ]
 
     // 合并 sources（保留其他来源，追加 AA model 页）
+    let nextSources = profile.sources || []
     if (data.aaMeta?.slug) {
       const aaUrl = `https://artificialanalysis.ai/models/${data.aaMeta.slug}`
-      const existing = profile.sources || []
-      const nonAA = existing.filter(s => !s.startsWith('https://artificialanalysis.ai/'))
-      profile.sources = [...new Set([...nonAA, aaUrl])]
+      const nonAA = nextSources.filter(s => !s.startsWith('https://artificialanalysis.ai/'))
+      nextSources = [...new Set([...nonAA, aaUrl])]
     }
+
+    // 证据和来源都未变化（忽略 capturedAt）时跳过，不刷 verifiedAt，避免无效 diff
+    if (
+      idx >= 0 &&
+      evidenceListsEqual(nextEvidence, profile.benchmarkEvidence) &&
+      stringArraysEqual(nextSources, profile.sources)
+    ) {
+      report.unchanged.push({ canonical, source: 'artificial-analysis' })
+      continue
+    }
+
+    profile.benchmarkEvidence = nextEvidence
+    ensureEvidenceProfileMetadata(profile)
+    profile.sources = nextSources
 
     profile.verifiedAt = new Date().toISOString().split('T')[0]
 
@@ -478,12 +524,26 @@ export function mergeArtificialAnalysisImageArena(registry, aaImageData, report,
           lane: 'provisional',
         }
 
+    const nextCi95 = Object.prototype.hasOwnProperty.call(data, 'ci95') ? data.ci95 : arena.ci95
+    const nextSources = data.sources && data.sources.length > 0 ? [...data.sources] : arena.sources
+
+    // elo/ci95/sources 都未变化时跳过，不刷 verifiedAt，避免无效 diff
+    if (
+      idx >= 0 &&
+      arena.elo === data.elo &&
+      arena.ci95 === nextCi95 &&
+      stringArraysEqual(arena.sources, nextSources)
+    ) {
+      report.unchanged.push({ canonical, source: 'artificial-analysis-image-arena' })
+      continue
+    }
+
     arena.elo = data.elo
     if (Object.prototype.hasOwnProperty.call(data, 'ci95')) {
       arena.ci95 = data.ci95
     }
     if (data.sources && data.sources.length > 0) {
-      arena.sources = [...data.sources]
+      arena.sources = nextSources
     }
     arena.verifiedAt = new Date().toISOString().split('T')[0]
 
@@ -631,6 +691,7 @@ export async function main() {
   const report = {
     updated: [],
     added: [],
+    unchanged: [],
     errors: [],
     litellmUpdated: [],
     litellmSkipped: [],
@@ -790,6 +851,9 @@ export async function main() {
   console.log(`Added profiles: ${report.added.length}`)
   for (const a of report.added) {
     console.log(`  + ${a.canonical} (${a.source})`)
+  }
+  if (report.unchanged.length > 0) {
+    console.log(`Unchanged profiles (skipped, dates preserved): ${report.unchanged.length}`)
   }
   if (report.errors.length > 0) {
     console.log(`Errors: ${report.errors.length}`)

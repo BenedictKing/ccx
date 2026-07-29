@@ -43,6 +43,7 @@ function emptyReport() {
   return {
     updated: [],
     added: [],
+    unchanged: [],
     errors: [],
     litellmUpdated: [],
     litellmSkipped: [],
@@ -413,6 +414,59 @@ test('Artificial Analysis LLM merge replaces evidence without clobbering overall
   assert.doesNotThrow(() => validateRegistry(registry))
 })
 
+test('AA llm merge skips unchanged data and preserves verifiedAt', () => {
+  const makeRegistry = () => ({
+    benchmarkProfiles: [{
+      patterns: ['(?:^|[-/])claude-opus-5(?=$|@)'],
+      canonicalModel: 'claude-opus-5',
+      benchmarkEvidence: [{
+        benchmark: 'artificial_analysis',
+        benchmarkVersion: 'v4.1',
+        sourceModel: 'claude-opus-5',
+        domain: 'overall',
+        metric: 'intelligence_index',
+        rawValue: 92,
+        cohortSize: 2,
+        sourceUrl: 'https://artificialanalysis.ai/models/claude-opus-5',
+        capturedAt: '2026-07-25',
+      }],
+      sources: ['https://artificialanalysis.ai/models/claude-opus-5'],
+      verifiedAt: '2026-07-20',
+      lane: 'provisional',
+      sharedResults: 4,
+      comparableCategories: 1,
+      totalCategories: 1,
+    }],
+  })
+  const aaData = {
+    'claude-opus-5': {
+      aaMeta: { slug: 'claude-opus-5' },
+      benchmarkEvidence: [{
+        benchmark: 'artificial_analysis',
+        benchmarkVersion: 'v4.1',
+        sourceModel: 'claude-opus-5',
+        domain: 'overall',
+        metric: 'intelligence_index',
+        rawValue: 92,
+        cohortSize: 2,
+        sourceUrl: 'https://artificialanalysis.ai/models/claude-opus-5',
+        capturedAt: '2026-07-29',
+      }],
+    },
+  }
+
+  const registry = makeRegistry()
+  const report = emptyReport()
+  mergeArtificialAnalysisLlm(registry, aaData, report, null)
+
+  assert.equal(report.unchanged.length, 1)
+  assert.equal(report.updated.length, 0)
+  const profile = registry.benchmarkProfiles[0]
+  assert.equal(profile.verifiedAt, '2026-07-20')
+  assert.equal(profile.benchmarkEvidence[0].capturedAt, '2026-07-25')
+  assert.doesNotThrow(() => validateRegistry(registry))
+})
+
 test('Artificial Analysis image arena merge builds and updates imageArenaProfiles', () => {
   const registry = { benchmarkProfiles: [], imageArenaProfiles: [] }
   mergeArtificialAnalysisImageArena(registry, {
@@ -443,6 +497,115 @@ test('Artificial Analysis image arena merge builds and updates imageArenaProfile
   }, emptyReport(), null)
   assert.equal(registry.imageArenaProfiles.length, 1)
   assert.equal(registry.imageArenaProfiles[0].elo, 1195)
+  assert.doesNotThrow(() => validateRegistry(registry))
+})
+
+test('deepswe merge skips unchanged data and preserves capturedAt/verifiedAt', () => {
+  const registry = { benchmarkProfiles: [], upstreamCapabilities: [] }
+  const evidence = {
+    benchmark: 'deepswe',
+    benchmarkVersion: 'v1.1',
+    sourceModel: 'gpt-5-6-sol',
+    domain: 'coding',
+    metric: 'pass_at_1',
+    rawValue: 0.8,
+    uncertainty: 0.01,
+    cohortPercentile: 1,
+    taskCount: 100,
+    cohortSize: 4,
+    effort: 'high',
+    selectionBasis: 'best_available_effort',
+    sourceUrl: 'https://deepswe.example/',
+    capturedAt: '2026-07-21',
+  }
+  mergeDeepsweData(registry, {
+    'gpt-5.6-sol': {
+      deepsweMeta: { deepsweModel: 'gpt-5-6-sol' },
+      benchmarkEvidence: [evidence],
+    },
+  }, emptyReport(), null)
+  registry.benchmarkProfiles[0].verifiedAt = '2026-07-01'
+
+  // 相同数据（仅 capturedAt 变为新日期）再次 merge：应跳过，日期保持原值
+  const report = emptyReport()
+  mergeDeepsweData(registry, {
+    'gpt-5.6-sol': {
+      deepsweMeta: { deepsweModel: 'gpt-5-6-sol' },
+      benchmarkEvidence: [{ ...evidence, capturedAt: '2026-07-29' }],
+    },
+  }, report, null)
+
+  assert.equal(report.unchanged.length, 1)
+  assert.equal(report.updated.length, 0)
+  const profile = registry.benchmarkProfiles[0]
+  assert.equal(profile.verifiedAt, '2026-07-01')
+  assert.equal(profile.benchmarkEvidence[0].capturedAt, '2026-07-21')
+  assert.doesNotThrow(() => validateRegistry(registry))
+
+  // 数据真正变化（rawValue 不同）时正常更新并刷新 verifiedAt
+  const report2 = emptyReport()
+  mergeDeepsweData(registry, {
+    'gpt-5.6-sol': {
+      deepsweMeta: { deepsweModel: 'gpt-5-6-sol' },
+      benchmarkEvidence: [{ ...evidence, rawValue: 0.85, capturedAt: '2026-07-29' }],
+    },
+  }, report2, null)
+
+  assert.equal(report2.updated.length, 1)
+  assert.equal(registry.benchmarkProfiles[0].benchmarkEvidence[0].rawValue, 0.85)
+  assert.notEqual(registry.benchmarkProfiles[0].verifiedAt, '2026-07-01')
+})
+
+test('deepswe merge treats reordered evidence as unchanged', () => {
+  const makeEvidence = (rawValue) => ({
+    benchmark: 'deepswe',
+    benchmarkVersion: 'v1.1',
+    sourceModel: 'gpt-5-6-sol',
+    domain: 'coding',
+    metric: 'pass_at_1',
+    rawValue,
+    sourceUrl: 'https://deepswe.example/',
+    capturedAt: '2026-07-21',
+  })
+  const registry = { benchmarkProfiles: [], upstreamCapabilities: [] }
+  mergeDeepsweData(registry, {
+    'gpt-5.6-sol': {
+      deepsweMeta: { deepsweModel: 'gpt-5-6-sol' },
+      benchmarkEvidence: [makeEvidence(0.8), makeEvidence(0.6)],
+    },
+  }, emptyReport(), null)
+  registry.benchmarkProfiles[0].verifiedAt = '2026-07-01'
+
+  // 上游返回顺序颠倒但内容相同：应视为未变更
+  const report = emptyReport()
+  mergeDeepsweData(registry, {
+    'gpt-5.6-sol': {
+      deepsweMeta: { deepsweModel: 'gpt-5-6-sol' },
+      benchmarkEvidence: [makeEvidence(0.6), makeEvidence(0.8)],
+    },
+  }, report, null)
+
+  assert.equal(report.unchanged.length, 1)
+  assert.equal(registry.benchmarkProfiles[0].verifiedAt, '2026-07-01')
+})
+
+test('image arena merge skips unchanged elo and preserves verifiedAt', () => {
+  const registry = { benchmarkProfiles: [], imageArenaProfiles: [] }
+  const data = {
+    canonicalModel: 'agnes-image-2.1-flash',
+    elo: 1180,
+    ci95: 12,
+    sources: ['https://artificialanalysis.ai/leaderboards/image-generation'],
+  }
+  mergeArtificialAnalysisImageArena(registry, { 'agnes-image-2.1-flash': data }, emptyReport(), null)
+  registry.imageArenaProfiles[0].verifiedAt = '2026-07-01'
+
+  const report = emptyReport()
+  mergeArtificialAnalysisImageArena(registry, { 'agnes-image-2.1-flash': { ...data } }, report, null)
+
+  assert.equal(report.unchanged.length, 1)
+  assert.equal(report.aaImageArenaUpdated.length, 0)
+  assert.equal(registry.imageArenaProfiles[0].verifiedAt, '2026-07-01')
   assert.doesNotThrow(() => validateRegistry(registry))
 })
 
