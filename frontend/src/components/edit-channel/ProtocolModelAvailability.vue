@@ -119,59 +119,81 @@
                 : t('channelEditor.protocolModels.consistent', { count: route.bindings.length }) }}
             </span>
           </div>
-          <div class="protocol-model-route__coverage-group-list">
-            <section
-              v-for="group in route.coverageGroups"
-              :key="group.signature"
-              class="protocol-model-coverage-group"
-            >
-              <div class="protocol-model-coverage-group__meta">
-                <span class="text-caption font-weight-medium">
-                  {{ group.isSharedByAll
-                    ? t('channelEditor.protocolModels.coverageGroupShared', { count: route.bindings.length })
-                    : group.availableBindings.length
-                      ? t('channelEditor.protocolModels.coverageGroupExclusive', { count: group.availableBindings.length })
-                      : t('channelEditor.protocolModels.coverageGroupUnavailable') }}
-                </span>
-                <v-chip
-                  size="x-small"
-                  variant="tonal"
-                  :color="coverageGroupColor(group, route.bindings.length)"
-                >
-                  {{ t('channelEditor.protocolModels.coverageGroupModelCount', { count: group.models.length }) }}
-                </v-chip>
-              </div>
-              <div v-if="group.availableBindings.length" class="protocol-model-coverage-group__keys">
-                <v-chip
-                  v-for="binding in group.availableBindings"
-                  :key="binding.credentialUid || binding.keyMask"
-                  size="x-small"
-                  variant="tonal"
-                  :color="coverageGroupColor(group, route.bindings.length)"
-                  class="protocol-model-coverage-group__key"
-                >
-                  {{ binding.keyMask }}
-                </v-chip>
-              </div>
-              <ModelChipList :models="group.models" />
-            </section>
-          </div>
-          <div v-if="route.hasBindingDifferences" class="protocol-model-route__coverage">
-            <v-chip
-              v-for="binding in route.bindings"
-              :key="binding.credentialUid || binding.keyMask"
-              size="x-small"
-              variant="tonal"
-              :color="binding.models.length === route.models.length ? 'success' : 'warning'"
-            >
-              {{ binding.keyMask }} ·
-              {{ t('channelEditor.protocolModels.coverage', { available: binding.models.length, total: route.models.length }) }}
-            </v-chip>
-          </div>
+          <!-- 各 Key 模型一致时只会归出“全部共同可用”一个分组，其元信息与上方“一致”提示重复，
+               直接列出 Key 与模型即可；存在差异时才按可用 Key 集合分组展示。 -->
+          <template v-if="!route.hasBindingDifferences">
+            <div class="protocol-model-coverage-group__keys">
+              <v-chip
+                v-for="binding in route.bindings"
+                :key="binding.credentialUid || binding.keyMask"
+                size="x-small"
+                variant="tonal"
+                color="success"
+                class="protocol-model-coverage-group__key"
+              >
+                {{ binding.keyMask }}
+              </v-chip>
+            </div>
+            <ModelChipList :models="route.specificModels" />
+          </template>
+          <template v-else>
+            <div class="protocol-model-route__coverage-group-list">
+              <section
+                v-for="group in route.coverageGroups"
+                :key="group.signature"
+                class="protocol-model-coverage-group"
+              >
+                <div class="protocol-model-coverage-group__meta">
+                  <span class="text-caption font-weight-medium">
+                    {{ group.isSharedByAll
+                      ? t('channelEditor.protocolModels.coverageGroupShared', { count: route.bindings.length })
+                      : group.availableBindings.length
+                        ? t('channelEditor.protocolModels.coverageGroupExclusive', { count: group.availableBindings.length })
+                        : t('channelEditor.protocolModels.coverageGroupUnavailable') }}
+                  </span>
+                  <v-chip
+                    size="x-small"
+                    variant="tonal"
+                    :color="coverageGroupColor(group, route.bindings.length)"
+                  >
+                    {{ t('channelEditor.protocolModels.coverageGroupModelCount', { count: group.models.length }) }}
+                  </v-chip>
+                </div>
+                <div v-if="group.availableBindings.length" class="protocol-model-coverage-group__keys">
+                  <v-chip
+                    v-for="binding in group.availableBindings"
+                    :key="binding.credentialUid || binding.keyMask"
+                    size="x-small"
+                    variant="tonal"
+                    :color="coverageGroupColor(group, route.bindings.length)"
+                    class="protocol-model-coverage-group__key"
+                  >
+                    {{ binding.keyMask }}
+                  </v-chip>
+                </div>
+                <ModelChipList :models="group.models" />
+              </section>
+            </div>
+            <div class="protocol-model-route__coverage">
+              <v-chip
+                v-for="binding in route.bindings"
+                :key="binding.credentialUid || binding.keyMask"
+                size="x-small"
+                variant="tonal"
+                :color="binding.models.length === route.models.length ? 'success' : 'warning'"
+              >
+                {{ binding.keyMask }} ·
+                {{ t('channelEditor.protocolModels.coverage', { available: binding.models.length, total: route.models.length }) }}
+              </v-chip>
+            </div>
+          </template>
         </div>
 
-        <ModelChipList v-if="route.specificModels.length" :models="route.specificModels" />
-        <div v-else-if="route.hasInventory && sharedModels.length" class="text-caption text-medium-emphasis">
+        <ModelChipList
+          v-if="route.specificModels.length && !route.coverageGroups.length"
+          :models="route.specificModels"
+        />
+        <div v-else-if="!route.coverageGroups.length && route.hasInventory && sharedModels.length" class="text-caption text-medium-emphasis">
           {{ t('channelEditor.protocolModels.specificEmpty') }}
         </div>
         <div v-else class="text-caption text-medium-emphasis">

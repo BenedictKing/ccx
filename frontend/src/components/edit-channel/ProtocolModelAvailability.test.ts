@@ -284,7 +284,7 @@ describe('ProtocolModelAvailability', () => {
     expect(agentOnly?.text()).not.toContain('ark-f5***2fd')
   })
 
-  it('多 Key 模型一致时展示共同模型分组', () => {
+  it('多 Key 模型一致时直接展示 Key 与模型', () => {
     const wrapper = mount(ProtocolModelAvailability, {
       props: {
         routes: [{
@@ -308,9 +308,38 @@ describe('ProtocolModelAvailability', () => {
     expect(messages.text()).toContain('channelEditor.protocolModels.consistent:2')
     expect(messages.text()).not.toContain('channelEditor.protocolModels.diffCount')
     expect(messages.find('.protocol-model-route__coverage-groups').exists()).toBe(true)
-    expect(messages.text()).toContain('channelEditor.protocolModels.coverageGroupShared:2')
-    expect(messages.text()).toContain('model-a')
-    expect(messages.text()).toContain('model-b')
+    // 一致时不再重复展示“共同可用”分组元信息，Key 与模型各只出现一次。
+    expect(messages.findAll('.protocol-model-coverage-group')).toHaveLength(0)
+    expect(messages.text()).not.toContain('channelEditor.protocolModels.coverageGroupShared')
+    expect(messages.text()).toContain('sk-a***001')
+    expect(messages.text()).toContain('sk-b***002')
+    expect(messages.text().match(/model-a/g)).toHaveLength(1)
+    expect(messages.text().match(/model-b/g)).toHaveLength(1)
+  })
+
+  it('多 Key 归组展示时不再重复渲染平铺模型列表', () => {
+    const wrapper = mount(ProtocolModelAvailability, {
+      props: {
+        routes: [{
+          kind: 'messages', index: 0, name: 'multi-key', serviceType: 'claude',
+          discoveredModels: ['grok-4.5'],
+          modelBindings: [
+            { credentialUid: 'cred-a', keyMask: 'sk-a***001', models: ['grok-4.5'] },
+            { credentialUid: 'cred-b', keyMask: 'sk-b***002', models: ['grok-4.5'] },
+          ],
+        }],
+      },
+      global: {
+        stubs: {
+          VChip: passthroughStub,
+          VIcon: passthroughStub,
+        },
+      },
+    })
+
+    const messages = wrapper.get('[data-kind="messages"]')
+    expect(messages.text().match(/grok-4\.5/g)).toHaveLength(1)
+    expect(messages.text()).not.toContain('channelEditor.protocolModels.specificEmpty')
   })
 
   it('展示模型清单的发现时间、来源和说明', () => {
