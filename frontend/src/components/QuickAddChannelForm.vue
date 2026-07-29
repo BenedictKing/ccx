@@ -181,10 +181,13 @@ type ChannelType = 'messages' | 'chat' | 'responses' | 'gemini' | 'images' | 've
 interface Props {
   channelType: ChannelType
   existingChannels?: Channel[]
+  /** 新渠道故障转移位置：front（首位）| back（末尾，默认） */
+  placement?: 'front' | 'back'
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  existingChannels: () => []
+  existingChannels: () => [],
+  placement: 'back'
 })
 
 const emit = defineEmits<{
@@ -346,14 +349,16 @@ async function handleSubmit() {
       isProviderMode.value
         ? {
             providerId: effectiveProviderId.value,
-            apiKeys: filteredApiKeys
+            apiKeys: filteredApiKeys,
+            placement: props.placement
           }
         : {
             name: getGeneratedName(),
             baseUrls: filteredBaseUrls,
             apiKeys: filteredApiKeys,
             routes: routeDiscovery?.routes,
-            rateLimitHint: routeDiscovery?.rateLimitHint
+            rateLimitHint: routeDiscovery?.rateLimitHint,
+            placement: props.placement
           }
     )
 

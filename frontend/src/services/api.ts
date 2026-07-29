@@ -20,6 +20,7 @@ import type {
   ChannelLogsResponse,
   ChannelMetrics,
   ChannelModelsRequest,
+  ChannelPlacement,
   ChannelSequenceEntry,
   ChannelsResponse,
   ChannelStatus,
@@ -192,10 +193,10 @@ export class ApiService {
     return this.request('/messages/channels')
   }
 
-  async addChannel(channel: Omit<Channel, 'index' | 'latency' | 'status'>): Promise<void> {
+  async addChannel(channel: Omit<Channel, 'index' | 'latency' | 'status'>, placement?: ChannelPlacement): Promise<void> {
     await this.request('/messages/channels', {
       method: 'POST',
-      body: JSON.stringify(channel)
+      body: JSON.stringify(placement ? { ...channel, placement } : channel)
     })
   }
 
@@ -366,10 +367,10 @@ export class ApiService {
     return this.request('/responses/channels')
   }
 
-  async addResponsesChannel(channel: Omit<Channel, 'index' | 'latency' | 'status'>): Promise<void> {
+  async addResponsesChannel(channel: Omit<Channel, 'index' | 'latency' | 'status'>, placement?: ChannelPlacement): Promise<void> {
     await this.request('/responses/channels', {
       method: 'POST',
-      body: JSON.stringify(channel)
+      body: JSON.stringify(placement ? { ...channel, placement } : channel)
     })
   }
 
@@ -644,10 +645,10 @@ export class ApiService {
     return this.request('/chat/channels')
   }
 
-  async addChatChannel(channel: Omit<Channel, 'index' | 'latency' | 'status'>): Promise<void> {
+  async addChatChannel(channel: Omit<Channel, 'index' | 'latency' | 'status'>, placement?: ChannelPlacement): Promise<void> {
     await this.request('/chat/channels', {
       method: 'POST',
-      body: JSON.stringify(channel)
+      body: JSON.stringify(placement ? { ...channel, placement } : channel)
     })
   }
 
@@ -798,10 +799,10 @@ export class ApiService {
     return this.request('/images/channels')
   }
 
-  async addImagesChannel(channel: Omit<Channel, 'index' | 'latency' | 'status'>): Promise<void> {
+  async addImagesChannel(channel: Omit<Channel, 'index' | 'latency' | 'status'>, placement?: ChannelPlacement): Promise<void> {
     await this.request('/images/channels', {
       method: 'POST',
-      body: JSON.stringify(channel)
+      body: JSON.stringify(placement ? { ...channel, placement } : channel)
     })
   }
 
@@ -948,10 +949,10 @@ export class ApiService {
     return this.request('/vectors/channels')
   }
 
-  async addVectorsChannel(channel: Omit<Channel, 'index' | 'latency' | 'status'>): Promise<void> {
+  async addVectorsChannel(channel: Omit<Channel, 'index' | 'latency' | 'status'>, placement?: ChannelPlacement): Promise<void> {
     await this.request('/vectors/channels', {
       method: 'POST',
-      body: JSON.stringify(channel)
+      body: JSON.stringify(placement ? { ...channel, placement } : channel)
     })
   }
 
@@ -1098,10 +1099,10 @@ export class ApiService {
     return this.request('/gemini/channels')
   }
 
-  async addGeminiChannel(channel: Omit<Channel, 'index' | 'latency' | 'status'>): Promise<void> {
+  async addGeminiChannel(channel: Omit<Channel, 'index' | 'latency' | 'status'>, placement?: ChannelPlacement): Promise<void> {
     await this.request('/gemini/channels', {
       method: 'POST',
-      body: JSON.stringify(channel)
+      body: JSON.stringify(placement ? { ...channel, placement } : channel)
     })
   }
 

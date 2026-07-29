@@ -33,6 +33,8 @@ type AutoAddRequest struct {
 	Routes          []AutoAddRouteRequest `json:"routes,omitempty"`
 	RateLimitHint   *AutoAddRateLimitHint `json:"rateLimitHint,omitempty"`
 	SubscriptionUID string                `json:"subscriptionUid,omitempty"`
+	// Placement 故障转移位置："front"（首位）| 缺省末尾
+	Placement string `json:"placement,omitempty"`
 }
 
 // AutoAddRateLimitHint 是添加前主动探测得到的 endpoint 限速提示，不是用户显式限额。
@@ -1775,7 +1777,7 @@ func handleCustomAutoAdd(c *gin.Context, deps *AutoManagedDeps, requestKind stri
 			APIKeys:         append([]string(nil), req.APIKeys...),
 			SupportedModels: append([]string(nil), route.SupportedModels...),
 		}, accountUID, baseName, route.ChannelKind, multiRoute, now)
-		additions = append(additions, config.AccountChannelAddition{Kind: route.ChannelKind, Upstream: upstream})
+		additions = append(additions, config.AccountChannelAddition{Kind: route.ChannelKind, Upstream: upstream, Placement: req.Placement})
 	}
 	if err := deps.CfgManager.ApplyAccountChannelChanges(accountUID, nil, additions); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("创建渠道失败: %v", err)})
@@ -1882,7 +1884,7 @@ func appendCredentialsToCustomAccount(
 			APIKeyConfigs:   customAutoAddKeyConfigs(accountUID, desiredKeys, baseURLs[0]),
 			SupportedModels: append([]string(nil), route.SupportedModels...),
 		}, accountUID, baseName, route.ChannelKind, totalRouteCount > 1, now)
-		additions = append(additions, config.AccountChannelAddition{Kind: route.ChannelKind, Upstream: upstream})
+		additions = append(additions, config.AccountChannelAddition{Kind: route.ChannelKind, Upstream: upstream, Placement: req.Placement})
 	}
 
 	if err := deps.CfgManager.ApplyAccountChannelChanges(accountUID, updates, additions); err != nil {
@@ -2196,7 +2198,7 @@ func handleProviderAutoAdd(c *gin.Context, deps *AutoManagedDeps, requestKind st
 			APIKeyConfigs: item.keyConfigs,
 		}
 		config.ApplyProviderUpstreamDefaults(tmpl.ProviderID, &upstream)
-		additions = append(additions, config.AccountChannelAddition{Kind: item.route.ChannelKind, Upstream: upstream})
+		additions = append(additions, config.AccountChannelAddition{Kind: item.route.ChannelKind, Upstream: upstream, Placement: req.Placement})
 	}
 	if err := deps.CfgManager.ApplyAccountChannelChanges(accountUID, nil, additions); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("创建渠道失败: %v", err)})

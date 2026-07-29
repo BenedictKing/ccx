@@ -67,7 +67,8 @@ func (cm *ConfigManager) GetCurrentImagesUpstreamWithIndex() (*UpstreamConfig, i
 }
 
 // AddImagesUpstream 添加 Images 上游
-func (cm *ConfigManager) AddImagesUpstream(upstream UpstreamConfig) error {
+// placements 可选传 "front"（故障转移序列首位），缺省为追加到序列末尾（见 assignChannelPriority）
+func (cm *ConfigManager) AddImagesUpstream(upstream UpstreamConfig, placements ...string) error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -115,6 +116,7 @@ func (cm *ConfigManager) AddImagesUpstream(upstream UpstreamConfig) error {
 	upstream.BaseURLs = deduplicateBaseURLs(upstream.BaseURLs, upstream.ServiceType)
 
 	upstream.ModelMapping, _ = sanitizeDeprecatedGrokModelMapping(upstream.ModelMapping)
+	assignChannelPriority(cm.config.ImagesUpstream, &upstream, resolvePlacement(placements))
 	cm.config.ImagesUpstream = append([]UpstreamConfig{upstream}, cm.config.ImagesUpstream...)
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {

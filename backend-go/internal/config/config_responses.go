@@ -53,7 +53,8 @@ func (cm *ConfigManager) GetCurrentResponsesUpstreamWithIndex() (*UpstreamConfig
 }
 
 // AddResponsesUpstream 添加 Responses 上游
-func (cm *ConfigManager) AddResponsesUpstream(upstream UpstreamConfig) error {
+// placements 可选传 "front"（故障转移序列首位），缺省为追加到序列末尾（见 assignChannelPriority）
+func (cm *ConfigManager) AddResponsesUpstream(upstream UpstreamConfig, placements ...string) error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -96,6 +97,7 @@ func (cm *ConfigManager) AddResponsesUpstream(upstream UpstreamConfig) error {
 	applyDefaultBaseURL(&upstream)
 
 	upstream.ModelMapping, _ = sanitizeDeprecatedGrokModelMapping(upstream.ModelMapping)
+	assignChannelPriority(cm.config.ResponsesUpstream, &upstream, resolvePlacement(placements))
 	cm.config.ResponsesUpstream = append([]UpstreamConfig{upstream}, cm.config.ResponsesUpstream...)
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
@@ -575,7 +577,7 @@ func (cm *ConfigManager) ReorderResponsesUpstreams(order []int) error {
 	}
 
 	// 更新传入渠道的优先级（未传入的渠道保持原优先级不变）
-	// 注意：priority 从 1 开始，避免 omitempty 吞掉 0 值
+	// 注意：priority 从 1 开始，0 保留为"未显式配置"语义（调度层回退为索引，前端排序落入兜底）
 	for i, idx := range order {
 		cm.config.ResponsesUpstream[idx].Priority = i + 1
 	}

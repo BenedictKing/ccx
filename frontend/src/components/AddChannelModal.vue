@@ -38,12 +38,36 @@
           </v-btn-toggle>
         </div>
 
+        <!-- 故障转移位置选择（两种模式共用） -->
+        <div class="d-flex align-center justify-center ga-3 mb-4">
+          <span class="text-caption text-medium-emphasis">{{ t('addChannel.placementLabel') }}</span>
+          <v-btn-toggle
+            v-model="placement"
+            mandatory
+            :disabled="isCreatingChannel"
+            density="compact"
+            rounded="lg"
+            color="primary"
+            variant="outlined"
+          >
+            <v-btn value="back" size="small">
+              <v-icon start size="small">mdi-playlist-plus</v-icon>
+              {{ t('addChannel.placementBack') }}
+            </v-btn>
+            <v-btn value="front" size="small">
+              <v-icon start size="small">mdi-rocket-launch</v-icon>
+              {{ t('addChannel.placementFront') }}
+            </v-btn>
+          </v-btn-toggle>
+        </div>
+
         <!-- 快速添加模式 -->
         <QuickAddChannelForm
           v-if="quickAddMode"
           ref="quickAddFormRef"
           :channel-type="channelType"
           :existing-channels="existingCustomChannels"
+          :placement="placement"
           @added="onQuickAddSuccess"
         />
 
@@ -195,7 +219,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useTheme } from 'vuetify'
-import type { Channel } from '../services/api'
+import type { Channel, ChannelPlacement } from '../services/api'
 import {
   buildDiscoveryExpectedRequestUrls,
   buildExpectedRequestUrls,
@@ -206,6 +230,7 @@ import { buildQuickAddChannelName, findExistingQuickAddChannel } from '../utils/
 import { useI18n } from '../i18n'
 import { useAuthStore } from '../stores/auth'
 import { useChannelStore } from '../stores/channel'
+import { usePreferencesStore } from '../stores/preferences'
 import {
   autoAddChannel,
   discoverFast,
@@ -230,7 +255,7 @@ const emit = defineEmits<{
   'update:show': [value: boolean]
   save: [
     channel: Omit<Channel, 'index' | 'latency' | 'status'>,
-    options?: { isQuickAdd?: boolean }
+    options?: { isQuickAdd?: boolean; placement?: ChannelPlacement }
   ]
   error: [message: string]
   autoAdded: [channelId: number]
@@ -240,6 +265,7 @@ const { t } = useI18n()
 const theme = useTheme()
 const authStore = useAuthStore()
 const channelStore = useChannelStore()
+const preferencesStore = usePreferencesStore()
 
 const quickInput = ref('')
 const detectedBaseUrl = ref('')
@@ -250,6 +276,11 @@ const quickServiceType = ref<ServiceType>(getDefaultServiceTypeValue())
 const randomSuffix = ref(generateRandomString(6))
 const standardSubmitting = ref(false)
 const standardSubmitError = ref('')
+
+// 新渠道故障转移位置：默认跟随全局偏好（top=front / bottom=back）
+const defaultPlacement = (): ChannelPlacement =>
+  preferencesStore.newChannelPlacement === 'bottom' ? 'back' : 'front'
+const placement = ref<ChannelPlacement>(defaultPlacement())
 
 // 快速添加模式
 const quickAddMode = ref(false)
@@ -391,6 +422,7 @@ function resetQuickState() {
   randomSuffix.value = generateRandomString(6)
   standardSubmitting.value = false
   standardSubmitError.value = ''
+  placement.value = defaultPlacement()
 }
 
 async function handleQuickSubmit() {
@@ -410,7 +442,7 @@ async function handleQuickSubmit() {
         modelMapping: {},
         normalizeMetadataUserId: false
       },
-      { isQuickAdd: true }
+      { isQuickAdd: true, placement: placement.value }
     )
     return
   }
@@ -428,7 +460,8 @@ async function handleQuickSubmit() {
       baseUrls: detectedBaseUrls.value,
       apiKeys: detectedApiKeys.value,
       routes: routeDiscovery.routes,
-      rateLimitHint: routeDiscovery.rateLimitHint
+      rateLimitHint: routeDiscovery.rateLimitHint,
+      placement: placement.value
     })
     const currentChannel = result.channels?.find(channel => channel.channelKind === targetChannelType)
     onQuickAddSuccess(currentChannel?.index ?? result.index)

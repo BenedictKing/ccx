@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed, unref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePreferencesStore } from '@/stores/preferences'
-import { api, type Channel, type ChannelsResponse, type ChannelMetrics, type ChannelDashboardResponse } from '@/services/api'
+import { api, type Channel, type ChannelPlacement, type ChannelsResponse, type ChannelMetrics, type ChannelDashboardResponse } from '@/services/api'
 import { normalizeLocale } from '@/i18n/core'
 import { translate } from '@/i18n'
 import { registerGlobalTick } from '@/composables/useGlobalTick'
@@ -318,7 +318,7 @@ export const useChannelStore = defineStore('channel', () => {
   async function saveChannel(
     channel: Omit<Channel, 'index' | 'latency' | 'status'>,
     editingChannelIndex: number | null,
-    options?: { isQuickAdd?: boolean; channelType?: ApiTab; autoManaged?: boolean; accountUid?: string; originalChannel?: Channel }
+    options?: { isQuickAdd?: boolean; placement?: ChannelPlacement; channelType?: ApiTab; autoManaged?: boolean; accountUid?: string; originalChannel?: Channel }
   ): Promise<{ success: boolean; message: string; quickAddMessage?: string; channelId?: number }> {
     const targetTab = options?.channelType ?? activeTab.value
     const isResponses = targetTab === 'responses'
@@ -369,19 +369,21 @@ export const useChannelStore = defineStore('channel', () => {
       }
       return { success: true, message: t('store.channel.updated'), channelId: editingChannelIndex }
     } else {
-      // 添加新渠道
+      // 添加新渠道：placement 优先取调用方（新增弹窗选择），缺省跟随全局偏好
+      const placement: ChannelPlacement =
+        options?.placement ?? (unref(preferencesStore.newChannelPlacement) === 'bottom' ? 'back' : 'front')
       if (isChat) {
-        await api.addChatChannel(channel)
+        await api.addChatChannel(channel, placement)
       } else if (isVectors) {
-        await api.addVectorsChannel(channel)
+        await api.addVectorsChannel(channel, placement)
       } else if (isImages) {
-        await api.addImagesChannel(channel)
+        await api.addImagesChannel(channel, placement)
       } else if (isGemini) {
-        await api.addGeminiChannel(channel)
+        await api.addGeminiChannel(channel, placement)
       } else if (isResponses) {
-        await api.addResponsesChannel(channel)
+        await api.addResponsesChannel(channel, placement)
       } else {
-        await api.addChannel(channel)
+        await api.addChannel(channel, placement)
       }
 
       // 快速添加模式：根据用户偏好将新渠道放到队列顶部（含 5 分钟促销期）或末尾
@@ -403,7 +405,7 @@ export const useChannelStore = defineStore('channel', () => {
         const newChannel = allChannels.find(ch => ch.name === channel.name && ch.status !== 'disabled')
         if (newChannel) {
           try {
-            const placeAtBottom = unref(preferencesStore.newChannelPlacement) === 'bottom'
+            const placeAtBottom = placement === 'back'
 
             // 1. 重新排序：根据偏好决定新渠道放首位还是末尾（其余渠道按既有 priority/index 升序）
             const otherIndexes = allChannels

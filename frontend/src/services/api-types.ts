@@ -6,6 +6,9 @@ import type { OpenAIMessagesPreset } from '../generated/openaiMessagesPresets'
 // API 数据结构类型
 export type ChannelStatus = 'active' | 'suspended' | 'disabled'
 
+// 新增渠道在故障转移序列中的放置位置：front（首位）| back（末尾，默认）
+export type ChannelPlacement = 'front' | 'back'
+
 // 渠道指标
 // 分时段统计
 export interface TimeWindowStats {

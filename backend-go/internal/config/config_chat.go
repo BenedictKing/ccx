@@ -53,7 +53,8 @@ func (cm *ConfigManager) GetCurrentChatUpstreamWithIndex() (*UpstreamConfig, int
 }
 
 // AddChatUpstream 添加 Chat 上游
-func (cm *ConfigManager) AddChatUpstream(upstream UpstreamConfig) error {
+// placements 可选传 "front"（故障转移序列首位），缺省为追加到序列末尾（见 assignChannelPriority）
+func (cm *ConfigManager) AddChatUpstream(upstream UpstreamConfig, placements ...string) error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -96,6 +97,7 @@ func (cm *ConfigManager) AddChatUpstream(upstream UpstreamConfig) error {
 	applyDefaultBaseURL(&upstream)
 
 	upstream.ModelMapping, _ = sanitizeDeprecatedGrokModelMapping(upstream.ModelMapping)
+	assignChannelPriority(cm.config.ChatUpstream, &upstream, resolvePlacement(placements))
 	cm.config.ChatUpstream = append([]UpstreamConfig{upstream}, cm.config.ChatUpstream...)
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {

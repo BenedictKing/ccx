@@ -5,7 +5,7 @@ import {
 } from '@/utils/quickAddChannel'
 import api from './api'
 import { API_BASE } from './api-helpers'
-import type { ChannelKind, DiscoveryRateLimitResult } from './api-types'
+import type { ChannelKind, ChannelPlacement, DiscoveryRateLimitResult } from './api-types'
 
 // ─── 类型定义 ───
 
@@ -19,6 +19,8 @@ export interface AutoAddChannelRequest {
   routes?: AutoAddRouteRequest[]
   rateLimitHint?: DiscoveryRateLimitResult
   subscriptionUid?: string
+  /** 故障转移位置：front（首位）| back（末尾，默认） */
+  placement?: ChannelPlacement
 }
 
 export interface AutoAddRouteRequest {

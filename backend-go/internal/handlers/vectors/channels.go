@@ -39,12 +39,15 @@ func GetUpstreams(cfgManager *config.ConfigManager) gin.HandlerFunc {
 
 func AddUpstream(cfgManager *config.ConfigManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var upstream config.UpstreamConfig
-		if err := c.ShouldBindJSON(&upstream); err != nil {
+		var req struct {
+			config.UpstreamConfig
+			Placement string `json:"placement"` // 故障转移位置：front（首位）| back（末尾，默认）
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		if err := cfgManager.AddVectorsUpstream(upstream); err != nil {
+		if err := cfgManager.AddVectorsUpstream(req.UpstreamConfig, req.Placement); err != nil {
 			status := http.StatusInternalServerError
 			if errors.Is(err, config.ErrUnsupportedServiceType) || errors.Is(err, config.ErrInvalidEmbeddingCapability) {
 				status = http.StatusBadRequest

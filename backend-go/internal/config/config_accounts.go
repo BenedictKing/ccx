@@ -28,6 +28,8 @@ type AccountChannelUpdate struct {
 type AccountChannelAddition struct {
 	Kind     string
 	Upstream UpstreamConfig
+	// Placement 故障转移位置："front"（首位）| ""（默认末尾）
+	Placement string
 }
 
 // GetAccountChannels 返回账号下全部协议渠道的深拷贝。
@@ -823,6 +825,8 @@ func appendAccountChannelAddition(cfg *Config, accountUID string, addition Accou
 	upstream.BaseURL = utils.CanonicalBaseURL(upstream.BaseURL, upstream.ServiceType)
 	upstream.BaseURLs = deduplicateBaseURLs(upstream.BaseURLs, upstream.ServiceType)
 	applyDefaultBaseURL(&upstream)
+	// 账号同步渠道默认追加到故障转移序列末尾，调用方可用 Placement 指定 "front"
+	assignChannelPriority(*channels, &upstream, addition.Placement)
 	*channels = append([]UpstreamConfig{upstream}, (*channels)...)
 	return nil
 }

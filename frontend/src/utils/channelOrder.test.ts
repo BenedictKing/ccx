@@ -87,4 +87,14 @@ describe('sortChannelsByPriority', () => {
     sort(channels)
     expect(channels.map(ch => ch.name)).toEqual(['second', 'first'])
   })
+
+  it('priority 为 0 时视为未配置，落入兜底而不排在显式 priority 之前', () => {
+    const channels = [
+      channel('legacy-zero', 10, ['sk-z'], { priority: 0 }),
+      channel('pinned', 5, ['sk-p'], { priority: 1 }),
+      channel('second', 1, ['sk-s'], { priority: 2 }),
+    ]
+    // 0 不参与数值比较：pinned 仍在首位，legacy-zero 按 routeIndex(10) 兜底排最后
+    expect(sort(channels)).toEqual(['pinned', 'second', 'legacy-zero'])
+  })
 })

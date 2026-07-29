@@ -134,6 +134,43 @@ type UpstreamConfig struct {
 	HealthCheck *ChannelHealthCheckConfig `json:"healthCheck,omitempty"`
 }
 
+// ChannelPlacementFront 表示新渠道放置到故障转移序列首位。
+const ChannelPlacementFront = "front"
+
+// assignChannelPriority 为新增渠道分配 Priority（数字越小越优先，0 表示未显式配置）。
+// placement 为 "front" 时：已显式排序（Priority>0）的现有渠道整体后移一位，新渠道取 1；
+// 其他情况（含空串）：调用方显式指定的 Priority（>0）保持不变，
+// 否则取当前最大 Priority + 1，即追加到故障转移序列末尾。
+func assignChannelPriority(channels []UpstreamConfig, upstream *UpstreamConfig, placement string) {
+	if placement == ChannelPlacementFront {
+		for i := range channels {
+			if channels[i].Priority > 0 {
+				channels[i].Priority++
+			}
+		}
+		upstream.Priority = 1
+		return
+	}
+	if upstream.Priority > 0 {
+		return
+	}
+	maxPriority := 0
+	for _, ch := range channels {
+		if ch.Priority > maxPriority {
+			maxPriority = ch.Priority
+		}
+	}
+	upstream.Priority = maxPriority + 1
+}
+
+// resolvePlacement 从可变参数中提取 placement，缺省为空串（按 "back" 处理）。
+func resolvePlacement(placements []string) string {
+	if len(placements) > 0 {
+		return placements[0]
+	}
+	return ""
+}
+
 // APIKeyConfig 描述单个 API Key 的附加调度配置。
 type APIKeyConfig struct {
 	Key           string `json:"key,omitempty"`

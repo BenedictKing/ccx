@@ -70,7 +70,8 @@ func (cm *ConfigManager) GetCurrentVectorsUpstreamWithIndex() (*UpstreamConfig, 
 }
 
 // AddVectorsUpstream 添加 Vectors 上游
-func (cm *ConfigManager) AddVectorsUpstream(upstream UpstreamConfig) error {
+// placements 可选传 "front"（故障转移序列首位），缺省为追加到序列末尾（见 assignChannelPriority）
+func (cm *ConfigManager) AddVectorsUpstream(upstream UpstreamConfig, placements ...string) error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -124,6 +125,7 @@ func (cm *ConfigManager) AddVectorsUpstream(upstream UpstreamConfig) error {
 	upstream.BaseURLs = deduplicateBaseURLs(upstream.BaseURLs, upstream.ServiceType)
 
 	upstream.ModelMapping, _ = sanitizeDeprecatedGrokModelMapping(upstream.ModelMapping)
+	assignChannelPriority(cm.config.VectorsUpstream, &upstream, resolvePlacement(placements))
 	cm.config.VectorsUpstream = append([]UpstreamConfig{upstream}, cm.config.VectorsUpstream...)
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
