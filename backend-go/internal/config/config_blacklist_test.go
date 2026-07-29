@@ -282,6 +282,89 @@ func TestAddAPIKeyRemovesDisabledEntryAndRestoreAvoidsDuplicate(t *testing.T) {
 	}
 }
 
+func TestRemoveAPIKeyDeletesDisabledEntry(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "config.json")
+	initialConfig := `{
+		"upstream": [{
+			"name": "test-channel",
+			"baseUrl": "https://example.com",
+			"apiKeys": ["sk-active"],
+			"disabledApiKeys": [{
+				"key": "sk-disabled",
+				"reason": "authentication_error",
+				"message": "invalid key",
+				"disabledAt": "2026-04-04T00:00:00Z"
+			}],
+			"disabledKeyModels": [{
+				"key": "sk-disabled",
+				"model": "claude-opus-4",
+				"reason": "model_not_found",
+				"disabledAt": "2026-04-04T00:00:00Z"
+			}],
+			"serviceType": "claude"
+		}],
+		"chatUpstream": [{
+			"name": "test-chat",
+			"baseUrl": "https://example.com",
+			"apiKeys": ["sk-chat"],
+			"disabledApiKeys": [{
+				"key": "sk-chat",
+				"reason": "insufficient_balance",
+				"message": "balance",
+				"disabledAt": "2026-04-04T00:00:00Z"
+			}],
+			"serviceType": "openai"
+		}]
+	}`
+	if err := os.WriteFile(configPath, []byte(initialConfig), 0644); err != nil {
+		t.Fatalf("写入初始配置失败: %v", err)
+	}
+
+	cm, err := NewConfigManager(configPath, "")
+	if err != nil {
+		t.Fatalf("NewConfigManager() error = %v", err)
+	}
+	defer errutil.IgnoreDeferred(cm.Close)
+
+	cm.MarkKeyAsFailed("sk-disabled", "Messages")
+
+	// 仅存在于拉黑列表的 Key 可以直接删除，且同时清理 (Key,模型) 限制与内存失败记录
+	if err := cm.RemoveAPIKey(0, "sk-disabled"); err != nil {
+		t.Fatalf("RemoveAPIKey() error = %v", err)
+	}
+	cfg := cm.GetConfig()
+	if len(cfg.Upstream[0].DisabledAPIKeys) != 0 {
+		t.Fatalf("DisabledAPIKeys = %+v, want empty after RemoveAPIKey", cfg.Upstream[0].DisabledAPIKeys)
+	}
+	if len(cfg.Upstream[0].DisabledKeyModels) != 0 {
+		t.Fatalf("DisabledKeyModels = %+v, want empty after RemoveAPIKey", cfg.Upstream[0].DisabledKeyModels)
+	}
+	if len(cfg.Upstream[0].APIKeys) != 1 || cfg.Upstream[0].APIKeys[0] != "sk-active" {
+		t.Fatalf("APIKeys = %v, want [sk-active]", cfg.Upstream[0].APIKeys)
+	}
+	if cm.IsKeyFailed("sk-disabled", "Messages") {
+		t.Fatal("IsKeyFailed() = true, want failure cache cleared after RemoveAPIKey")
+	}
+
+	// 活跃 Key 删除时一并清理残留的禁用记录
+	if err := cm.RemoveChatAPIKey(0, "sk-chat"); err != nil {
+		t.Fatalf("RemoveChatAPIKey() error = %v", err)
+	}
+	chatCfg := cm.GetConfig()
+	if len(chatCfg.ChatUpstream[0].APIKeys) != 0 {
+		t.Fatalf("Chat APIKeys = %v, want empty", chatCfg.ChatUpstream[0].APIKeys)
+	}
+	if len(chatCfg.ChatUpstream[0].DisabledAPIKeys) != 0 {
+		t.Fatalf("Chat DisabledAPIKeys = %+v, want empty after RemoveChatAPIKey", chatCfg.ChatUpstream[0].DisabledAPIKeys)
+	}
+
+	// 活跃与拉黑列表都不存在的 Key 仍然报错
+	if err := cm.RemoveAPIKey(0, "sk-missing"); err == nil {
+		t.Fatal("RemoveAPIKey() error = nil, want error for missing key")
+	}
+}
+
 func TestMarkKeyAsFailedCoolingWindowAndRecoveryLog(t *testing.T) {
 	cm := &ConfigManager{
 		failedKeysCache: make(map[string]*FailedKey),

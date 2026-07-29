@@ -74,6 +74,7 @@
                 :is-editing="isEditing"
                 :restoring-key="restoringKey"
                 :restoring-key-model="restoringKeyModel"
+                :removing-key="removingKey"
                 :suspending-key="suspendingKey"
                 :service-type="form.serviceType"
                 :is-auto-managed="isAutoManagedChannel"
@@ -87,6 +88,7 @@
                 @update:proxy-url="form.proxyUrl = $event"
                 @restore-key="restoreDisabledKey"
                 @restore-key-model="restoreDisabledKeyModel"
+                @remove-key="removeDisabledKey"
                 @suspend-key="suspendKey"
                 @resume-key="resumeKey"
               />
@@ -604,6 +606,8 @@ const {
   customHeadersArray,
   updateCustomHeaders,
   restoreDisabledKey,
+  removingKey,
+  removeDisabledKey,
   restoringKeyModel,
   visibleDisabledKeyModels,
   restoreDisabledKeyModel,

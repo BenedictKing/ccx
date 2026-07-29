@@ -85,6 +85,48 @@ describe('useDisabledApiKeys', () => {
     await Promise.all([firstRestore, secondRestore])
   })
 
+  it('删除拉黑 Key 后立即从可见列表移除', async () => {
+    const removeApiKey = vi.fn().mockResolvedValue(undefined)
+    const { state } = createOptions({ removeApiKey })
+
+    const remove = state.removeDisabledKey(disabledKey)
+    expect(state.removingKey.value).toBe(disabledKey)
+
+    await remove
+
+    expect(removeApiKey).toHaveBeenCalledWith(3, disabledKey)
+    expect(state.visibleDisabledKeys.value).toEqual([])
+    expect(state.removingKey.value).toBe('')
+  })
+
+  it('删除拉黑 Key 时一并清理表单中残留的同名 Key', async () => {
+    const removeApiKey = vi.fn().mockResolvedValue(undefined)
+    const form: TestForm = { apiKeys: [disabledKey, activeKey] }
+    const { state } = createOptions({ removeApiKey }, form)
+
+    await state.removeDisabledKey(disabledKey)
+
+    expect(form.apiKeys).toEqual([activeKey])
+  })
+
+  it('删除拉黑 Key 失败时提示错误且不移出列表', async () => {
+    const removeApiKey = vi.fn().mockRejectedValue(new Error('boom'))
+    const emitError = vi.fn()
+    const channel = createChannel()
+    const state = useDisabledApiKeys({
+      apiService: { removeApiKey } as unknown as ApiService,
+      channel: computed(() => channel.value),
+      channelType: computed(() => 'messages' as const),
+      emitError,
+      form: { apiKeys: [] },
+    })
+
+    await state.removeDisabledKey(disabledKey)
+
+    expect(emitError).toHaveBeenCalledWith('boom')
+    expect(state.visibleDisabledKeys.value).toHaveLength(1)
+  })
+
   it('暂停成功后立即写入 enabled=false，并使用真实路由索引', async () => {
     const suspendApiKey = vi.fn().mockResolvedValue(undefined)
     const form: TestForm = { apiKeys: [activeKey] }

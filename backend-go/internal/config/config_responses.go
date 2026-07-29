@@ -465,6 +465,11 @@ func (cm *ConfigManager) RemoveResponsesAPIKey(index int, apiKey string) error {
 		}
 	}
 
+	// 已拉黑的 Key 不在活跃列表中，允许连同禁用记录一起删除
+	if cm.removeDisabledKeyEntryLocked(&cm.config.ResponsesUpstream[index], "Responses", apiKey) {
+		found = true
+	}
+
 	if !found {
 		return fmt.Errorf("API密钥不存在")
 	}

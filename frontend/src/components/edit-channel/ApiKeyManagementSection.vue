@@ -423,8 +423,9 @@
                       </v-btn>
                     </template>
                   </v-tooltip>
+                    </template>
                   <v-tooltip
-                    :text="copiedKeyIndex === row.activeIndex ? t('channelCard.copied') : t('channelCard.copyKey')"
+                    :text="copiedKey === row.key ? t('channelCard.copied') : t('channelCard.copyKey')"
                     location="top"
                     :open-delay="150"
                     content-class="key-tooltip"
@@ -433,13 +434,13 @@
                       <v-btn
                         v-bind="tooltipProps"
                         size="small"
-                        :color="copiedKeyIndex === row.activeIndex ? 'success' : 'primary'"
+                        :color="copiedKey === row.key ? 'success' : 'primary'"
                         icon
                         variant="text"
-                        @click="copyKey(row.key, row.activeIndex)"
+                        @click="copyKey(row.key)"
                       >
                         <v-icon size="small">{{
-                          copiedKeyIndex === row.activeIndex ? 'mdi-check' : 'mdi-content-copy'
+                          copiedKey === row.key ? 'mdi-check' : 'mdi-content-copy'
                         }}</v-icon>
                       </v-btn>
                     </template>
@@ -452,13 +453,14 @@
                         color="error"
                         icon
                         variant="text"
-                        @click="removeKey(row.activeIndex)"
+                        :loading="removingKey === row.key"
+                        :disabled="!!removingKey"
+                        @click="handleRemoveKey(row)"
                       >
                         <v-icon size="small" color="error">mdi-close</v-icon>
                       </v-btn>
                     </template>
                   </v-tooltip>
-                    </template>
                   </div>
                 </template>
               </v-list-item>
@@ -1337,7 +1339,7 @@ import type {
   APIKeyConfig,
 } from '../../services/api-types'
 import { maskApiKey } from '../../utils/apiKeyMask'
-import { buildChannelApiKeyRows } from '../../utils/channelApiKeys'
+import { buildChannelApiKeyRows, type ChannelApiKeyRow } from '../../utils/channelApiKeys'
 import { getVolcenginePlanConsoleURL } from '../../utils/channelWebsite'
 import { quotaRemainingColorClass, quotaRemainingColorHex } from '../../utils/quotaColor'
 import { buildKimiUsageSections, getKimiBalanceUsage } from '../../utils/kimiPlanUsage'
@@ -1368,6 +1370,7 @@ interface Props {
   isEditing: boolean
   restoringKey: string
   restoringKeyModel?: string
+  removingKey?: string
   suspendingKey?: string
   serviceType?: string
   isAutoManaged?: boolean
@@ -1386,6 +1389,7 @@ const emit = defineEmits<{
   'update:proxyUrl': [string]
   'restore-key': [string]
   'restore-key-model': [string, string]
+  'remove-key': [string]
   'suspend-key': [string]
   'resume-key': [string]
 }>()
@@ -1396,7 +1400,7 @@ const apiService = new ApiService()
 const newApiKey = ref('')
 const apiKeyError = ref('')
 const duplicateKeyIndex = ref<number | null>(null)
-const copiedKeyIndex = ref<number | null>(null)
+const copiedKey = ref('')
 const deepseekBalances = ref<DeepSeekCredentialBalance[]>([])
 const deepseekBalancesLoading = ref(false)
 const deepseekBalancesError = ref('')
@@ -2383,6 +2387,15 @@ const removeKey = (index: number) => {
   emit('update:apiKeys', updated)
 }
 
+// 活跃 Key 从表单移除（随保存生效）；已拉黑 Key 不在表单内，交由父组件立即调用后端删除。
+const handleRemoveKey = (row: ChannelApiKeyRow) => {
+  if (row.disabled) {
+    emit('remove-key', row.key)
+    return
+  }
+  removeKey(row.activeIndex)
+}
+
 const moveToTop = (index: number) => {
   const updated = [...props.apiKeys]
   const [key] = updated.splice(index, 1)
@@ -2506,11 +2519,11 @@ const diagnoseCopilotChannel = async () => {
   }
 }
 
-const copyKey = (key: string, index: number) => {
+const copyKey = (key: string) => {
   navigator.clipboard.writeText(key)
-  copiedKeyIndex.value = index
+  copiedKey.value = key
   setTimeout(() => {
-    copiedKeyIndex.value = null
+    copiedKey.value = ''
   }, 2000)
 }
 

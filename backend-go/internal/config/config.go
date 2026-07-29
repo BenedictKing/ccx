@@ -1338,6 +1338,20 @@ func removeDisabledKeyModelsForKey(upstream *UpstreamConfig, apiKey string) {
 	upstream.DisabledKeyModels = newList
 }
 
+// removeDisabledKeyEntryLocked 从拉黑列表移除指定 Key 及其 (Key,模型) 组合限制与内存失败记录，返回是否发生移除。
+// 用于直接删除已拉黑（不在活跃列表中）的 Key。调用方需持有锁。
+func (cm *ConfigManager) removeDisabledKeyEntryLocked(upstream *UpstreamConfig, apiType, apiKey string) bool {
+	for i, dk := range upstream.DisabledAPIKeys {
+		if dk.Key == apiKey {
+			upstream.DisabledAPIKeys = append(upstream.DisabledAPIKeys[:i], upstream.DisabledAPIKeys[i+1:]...)
+			removeDisabledKeyModelsForKey(upstream, apiKey)
+			delete(cm.failedKeysCache, failedKeyCacheKey(apiType, apiKey))
+			return true
+		}
+	}
+	return false
+}
+
 // cleanupExpiredFailures 清理过期的失败记录
 func (cm *ConfigManager) cleanupExpiredFailures() {
 	ticker := time.NewTicker(1 * time.Minute)

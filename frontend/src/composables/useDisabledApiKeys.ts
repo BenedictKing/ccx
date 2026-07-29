@@ -20,6 +20,8 @@ type DisabledApiKeyOptions = {
 export function useDisabledApiKeys(options: DisabledApiKeyOptions) {
   const restoringKey = ref('')
   const localRestoredKeys = ref(new Set<string>())
+  const removingKey = ref('')
+  const localRemovedKeys = ref(new Set<string>())
   const restoringKeyModel = ref('')
   const localRestoredKeyModels = ref(new Set<string>())
   const suspendingKey = ref('')
@@ -57,7 +59,9 @@ export function useDisabledApiKeys(options: DisabledApiKeyOptions) {
 
   const disabledKeys = computed(() => options.channel.value?.disabledApiKeys || [])
   const visibleDisabledKeys = computed(() =>
-    (options.channel.value?.disabledApiKeys || []).filter(dk => !localRestoredKeys.value.has(dk.key))
+    (options.channel.value?.disabledApiKeys || []).filter(
+      dk => !localRestoredKeys.value.has(dk.key) && !localRemovedKeys.value.has(dk.key),
+    )
   )
 
   const disabledKeyModels = computed(() => options.channel.value?.disabledKeyModels || [])
@@ -70,6 +74,8 @@ export function useDisabledApiKeys(options: DisabledApiKeyOptions) {
   const resetRestoredKeys = () => {
     localRestoredKeys.value = new Set<string>()
     restoringKey.value = ''
+    localRemovedKeys.value = new Set<string>()
+    removingKey.value = ''
     localRestoredKeyModels.value = new Set<string>()
     restoringKeyModel.value = ''
     localSuspendedKeys.value = new Set<string>()
@@ -114,6 +120,47 @@ export function useDisabledApiKeys(options: DisabledApiKeyOptions) {
       options.emitError(error instanceof Error ? error.message : 'Restore failed')
     } finally {
       restoringKey.value = ''
+    }
+  }
+
+  const removeDisabledKey = async (apiKey: string) => {
+    const channel = options.channel.value
+    if (!channel || removingKey.value) return
+    removingKey.value = apiKey
+    try {
+      const id = channelId(channel)
+      switch (options.channelType.value) {
+        case 'chat':
+          await options.apiService.removeChatApiKey(id, apiKey)
+          break
+        case 'images':
+          await options.apiService.removeImagesApiKey(id, apiKey)
+          break
+        case 'vectors':
+          await options.apiService.removeVectorsApiKey(id, apiKey)
+          break
+        case 'gemini':
+          await options.apiService.removeGeminiApiKey(id, apiKey)
+          break
+        case 'responses':
+          await options.apiService.removeResponsesApiKey(id, apiKey)
+          break
+        default:
+          await options.apiService.removeApiKey(id, apiKey)
+      }
+      // 兼容拉黑记录与活跃列表同时存在的历史数据，表单内也一并移除
+      if (options.form.apiKeys.includes(apiKey)) {
+        options.form.apiKeys = options.form.apiKeys.filter(key => key !== apiKey)
+      }
+      if (options.onKeysChanged) {
+        await options.onKeysChanged()
+      } else {
+        localRemovedKeys.value = new Set([...localRemovedKeys.value, apiKey])
+      }
+    } catch (error) {
+      options.emitError(error instanceof Error ? error.message : 'Remove failed')
+    } finally {
+      removingKey.value = ''
     }
   }
 
@@ -226,10 +273,13 @@ export function useDisabledApiKeys(options: DisabledApiKeyOptions) {
   return {
     restoringKey,
     localRestoredKeys,
+    removingKey,
+    localRemovedKeys,
     disabledKeys,
     visibleDisabledKeys,
     resetRestoredKeys,
     restoreDisabledKey,
+    removeDisabledKey,
     restoringKeyModel,
     disabledKeyModels,
     visibleDisabledKeyModels,
