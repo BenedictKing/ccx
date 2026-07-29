@@ -60,9 +60,10 @@ func TestAddUpstream_PriorityPlacement(t *testing.T) {
 		}
 	})
 
-	t.Run("messages front 不改动未显式配置的 0 值渠道", func(t *testing.T) {
+	t.Run("messages front 归一化后的存量渠道一并后移", func(t *testing.T) {
 		initial := `{"upstream":[{"name":"legacy","baseUrl":"https://l.example.com","apiKeys":["k0"]},` + baseChannels + `],"responsesUpstream":[],"geminiUpstream":[],"chatUpstream":[],"imagesUpstream":[],"vectorsUpstream":[]}`
 		cm := newTestConfigManager(t, initial)
+		// 加载迁移已把 legacy（原 0 值）归一化为 max+1=3
 		if err := cm.AddUpstream(newChannel("c"), ChannelPlacementFront); err != nil {
 			t.Fatalf("AddUpstream 失败: %v", err)
 		}
@@ -71,8 +72,8 @@ func TestAddUpstream_PriorityPlacement(t *testing.T) {
 		if cfg.Upstream[0].Priority != 1 {
 			t.Fatalf("新渠道 priority 期望 1，得到 %d", cfg.Upstream[0].Priority)
 		}
-		if cfg.Upstream[1].Priority != 0 {
-			t.Fatalf("legacy 0 值渠道不应被后移，得到 %d", cfg.Upstream[1].Priority)
+		if cfg.Upstream[1].Priority != 4 {
+			t.Fatalf("legacy 应从 3 后移到 4，得到 %d", cfg.Upstream[1].Priority)
 		}
 		if cfg.Upstream[2].Priority != 2 || cfg.Upstream[3].Priority != 3 {
 			t.Fatalf("现有渠道 priority 应整体 +1: %d, %d", cfg.Upstream[2].Priority, cfg.Upstream[3].Priority)
@@ -133,6 +134,58 @@ func TestAddUpstream_PriorityPlacement(t *testing.T) {
 		}
 		if got := cm.GetConfig().Upstream[0].Priority; got != 1 {
 			t.Fatalf("显式 priority 应保留为 1，得到 %d", got)
+		}
+	})
+
+}
+
+// TestLoadConfigNormalizesZeroPriority 测试旧配置加载时自动为 0 值 priority 渠道分配优先级
+func TestLoadConfigNormalizesZeroPriority(t *testing.T) {
+	t.Run("混合配置：0 值渠道顺延到最大 priority 之后，显式顺序不变", func(t *testing.T) {
+		initial := `{"upstream":[` +
+			`{"name":"legacy","baseUrl":"https://l.example.com","apiKeys":["k0"]},` +
+			`{"name":"a","baseUrl":"https://a.example.com","apiKeys":["k1"],"priority":1},` +
+			`{"name":"b","baseUrl":"https://b.example.com","apiKeys":["k2"],"priority":2}` +
+			`],"responsesUpstream":[],"geminiUpstream":[],"chatUpstream":[],"imagesUpstream":[],"vectorsUpstream":[]}`
+		cm := newTestConfigManager(t, initial)
+
+		priorities := map[string]int{}
+		for _, ch := range cm.GetConfig().Upstream {
+			priorities[ch.Name] = ch.Priority
+		}
+		if priorities["a"] != 1 || priorities["b"] != 2 {
+			t.Fatalf("显式 priority 不应变化: a=%d b=%d", priorities["a"], priorities["b"])
+		}
+		if priorities["legacy"] != 3 {
+			t.Fatalf("0 值渠道应分配为 max+1=3，得到 %d", priorities["legacy"])
+		}
+	})
+
+	t.Run("全部未配置：按数组顺序分配 1..N", func(t *testing.T) {
+		initial := `{"upstream":[],"responsesUpstream":[],"geminiUpstream":[],"imagesUpstream":[],"vectorsUpstream":[],"chatUpstream":[` +
+			`{"name":"x","baseUrl":"https://x.example.com","apiKeys":["k1"]},` +
+			`{"name":"y","baseUrl":"https://y.example.com","apiKeys":["k2"]},` +
+			`{"name":"z","baseUrl":"https://z.example.com","apiKeys":["k3"]}` +
+			`]}`
+		cm := newTestConfigManager(t, initial)
+
+		priorities := map[string]int{}
+		for _, ch := range cm.GetConfig().ChatUpstream {
+			priorities[ch.Name] = ch.Priority
+		}
+		if priorities["x"] != 1 || priorities["y"] != 2 || priorities["z"] != 3 {
+			t.Fatalf("应按数组顺序分配 1..N: x=%d y=%d z=%d", priorities["x"], priorities["y"], priorities["z"])
+		}
+	})
+
+	t.Run("无 0 值渠道：不改动", func(t *testing.T) {
+		initial := `{"upstream":[` +
+			`{"name":"a","baseUrl":"https://a.example.com","apiKeys":["k1"],"priority":1},` +
+			`{"name":"b","baseUrl":"https://b.example.com","apiKeys":["k2"],"priority":2}` +
+			`],"responsesUpstream":[],"geminiUpstream":[],"chatUpstream":[],"imagesUpstream":[],"vectorsUpstream":[]}`
+		cm := newTestConfigManager(t, initial)
+		if cm.normalizeChannelPriorities() {
+			t.Fatal("无 0 值渠道时不应报告变更")
 		}
 	})
 }

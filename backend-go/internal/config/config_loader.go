@@ -137,6 +137,11 @@ func (cm *ConfigManager) loadConfig() error {
 	if cm.ensureOriginBackfill() {
 		needSaveDefaults = true
 	}
+	// 必须在 mergeManagedProviderAccounts 之后：merge 会合并/重排渠道数组，
+	// priority 归一化要基于最终数组分配
+	if cm.normalizeChannelPriorities() {
+		needSaveDefaults = true
+	}
 	if cm.migrateDisabledKeyRecoveryTimes(time.Now()) {
 		needSaveDefaults = true
 	}
@@ -254,6 +259,39 @@ func (cm *ConfigManager) applyConfigDefaults(rawJSON []byte) bool {
 	}
 
 	return needSave
+}
+
+// normalizeChannelPriorities 为存量未显式配置 priority（0 值）的渠道分配优先级。
+// 语义与 assignChannelPriority 的 "back" 一致：从当前最大值起按数组顺序顺延，
+// 显式排序的相对顺序不变；全部未配置时退化为按数组顺序分配 1..N（与旧的索引语义等价）。
+// 用于旧版本升级：避免 0 值渠道在调度与前端排序中插到显式 priority 渠道之前。
+func (cm *ConfigManager) normalizeChannelPriorities() bool {
+	changed := false
+	normalize := func(upstreams *[]UpstreamConfig, label string) {
+		channels := *upstreams
+		maxPriority := 0
+		for _, ch := range channels {
+			if ch.Priority > maxPriority {
+				maxPriority = ch.Priority
+			}
+		}
+		for i := range channels {
+			if channels[i].Priority > 0 {
+				continue
+			}
+			maxPriority++
+			channels[i].Priority = maxPriority
+			changed = true
+			log.Printf("[Config-Migration] %s 渠道 [%d] %s 未配置 priority，已分配为 %d", label, i, channels[i].Name, maxPriority)
+		}
+	}
+	normalize(&cm.config.Upstream, "Messages")
+	normalize(&cm.config.ResponsesUpstream, "Responses")
+	normalize(&cm.config.ChatUpstream, "Chat")
+	normalize(&cm.config.GeminiUpstream, "Gemini")
+	normalize(&cm.config.ImagesUpstream, "Images")
+	normalize(&cm.config.VectorsUpstream, "Vectors")
+	return changed
 }
 
 // migrateDisabledKeyRecoveryTimes 用错误消息中的上游重置时间升级旧禁用记录。

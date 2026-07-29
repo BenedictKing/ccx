@@ -535,7 +535,7 @@ func TestModelsHandler_CollectsTwoSuccessfulChannelsPerProtocol(t *testing.T) {
 			BaseURL:     server.URL,
 			APIKeys:     []string{fmt.Sprintf("sk-%d", idx)},
 			ServiceType: "openai",
-			Priority:    idx,
+			Priority:    idx + 1, // 显式 priority 从 1 开始；0 会在加载迁移中被归一化到队尾
 		})
 	}
 
