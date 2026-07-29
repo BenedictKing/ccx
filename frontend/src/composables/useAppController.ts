@@ -259,37 +259,6 @@ export function useAppController() {
     }
   }
 
-  // Fuzzy 模式管理
-  const loadFuzzyModeStatus = async () => {
-    systemStore.setFuzzyModeLoadError(false)
-    try {
-      const { fuzzyModeEnabled: enabled } = await api.getFuzzyMode()
-      preferencesStore.setFuzzyMode(enabled)
-    } catch (e) {
-      console.error('Failed to load fuzzy mode status:', e)
-      systemStore.setFuzzyModeLoadError(true)
-      // 加载失败时不使用默认值，保持 UI 显示未知状态
-      showToast(t('toast.loadFuzzyFailed'), 'warning')
-    }
-  }
-
-  const toggleFuzzyMode = async () => {
-    if (systemStore.fuzzyModeLoadError) {
-      showToast(t('toast.fuzzyUnknown'), 'warning')
-      return
-    }
-    systemStore.setFuzzyModeLoading(true)
-    try {
-      await api.setFuzzyMode(!preferencesStore.fuzzyModeEnabled)
-      preferencesStore.toggleFuzzyMode()
-      showToast(t('toast.fuzzyToggled', { state: preferencesStore.fuzzyModeEnabled ? t('common.enabled') : t('common.disabled') }), 'success')
-    } catch (e) {
-      showToast(t('toast.fuzzyToggleFailed', { message: e instanceof Error ? e.message : t('system.unknown') }), 'error')
-    } finally {
-      systemStore.setFuzzyModeLoading(false)
-    }
-  }
-
   // 新用户指引
   const showGuide = ref(false)
 
@@ -804,8 +773,6 @@ export function useAppController() {
     if (authenticated) {
       // 加载渠道数据
       await refreshChannels()
-      // 加载 Fuzzy 模式状态
-      await loadFuzzyModeStatus()
       // 启动自动刷新
       startAutoRefresh()
       // 初始化完成后根据最新刷新结果设置系统状态
@@ -893,7 +860,6 @@ export function useAppController() {
     deleteChannel,
     openAddChannelModal,
     addApiKey,
-    toggleFuzzyMode,
     showGuide,
     openGuide,
     circuitBreakerDialogOpen,

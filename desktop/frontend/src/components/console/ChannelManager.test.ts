@@ -213,7 +213,7 @@ describe('ChannelManager', () => {
     let statsRequests = 0
     apiGet.mockImplementation((path: string) => {
       if (!path.includes('/global/stats/history')) {
-        return Promise.resolve({ fuzzyModeEnabled: false })
+        return Promise.resolve({})
       }
       statsRequests += 1
       return statsRequests === 1 ? firstRequest.promise : Promise.resolve(createStatsResponse())

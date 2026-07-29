@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Alert } from '@/components/ui/alert'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Plus, Search, Layers, Archive, Loader2, ShieldCheck, ShieldOff, Zap, ChevronDown, BarChart3, X } from 'lucide-vue-next'
+import { Plus, Search, Layers, Archive, Loader2, Zap, ChevronDown, BarChart3, X } from 'lucide-vue-next'
 import { useConsoleChannels } from '@/composables/useConsoleChannels'
 import { useAdminApi } from '@/composables/useAdminApi'
 import { useDesktopActivity } from '@/composables/useDesktopActivity'
@@ -99,10 +99,6 @@ const capabilityChannel = ref<Channel | null>(null)
 const showCapabilityDialog = ref(false)
 const draggedIndex = ref<number | null>(null)
 
-// Fuzzy 模式
-const fuzzyEnabled = ref(false)
-const fuzzyLoading = ref(false)
-const fuzzyLoadError = ref(false)
 const showCbDialog = ref(false)
 
 // 用量统计
@@ -291,34 +287,6 @@ function handleToggleChart(channelId: number) {
 function handleKeyMetricsRefresh(duration: string) {
   if (expandedChannelId.value === null) return
   loadKeyMetrics(expandedChannelId.value, duration)
-}
-
-async function loadFuzzyMode() {
-  fuzzyLoadError.value = false
-  try {
-    const adminApi = useAdminApi()
-    const data = await adminApi.get<{ fuzzyModeEnabled: boolean }>('/api/settings/fuzzy-mode')
-    fuzzyEnabled.value = data.fuzzyModeEnabled
-  } catch {
-    fuzzyLoadError.value = true
-  }
-}
-
-async function toggleFuzzyMode() {
-  if (fuzzyLoadError.value) {
-    await loadFuzzyMode()
-    return
-  }
-  fuzzyLoading.value = true
-  try {
-    const adminApi = useAdminApi()
-    await adminApi.put('/api/settings/fuzzy-mode', { enabled: !fuzzyEnabled.value })
-    fuzzyEnabled.value = !fuzzyEnabled.value
-  } catch (e) {
-    actionError.value = e instanceof Error ? e.message : String(e)
-  } finally {
-    fuzzyLoading.value = false
-  }
 }
 
 function clearActionError() {
@@ -537,10 +505,9 @@ function onDragEnd() {
   draggedIndex.value = null
 }
 
-// 服务状态变化时自动加载 Fuzzy 模式和统计数据
+// 服务状态变化时自动加载统计数据
 watch([() => status.value.running, isConsoleChannelsActive], ([running, active]) => {
   if (running && active) {
-    loadFuzzyMode()
     if (showGlobalStats.value) {
       loadGlobalStats()
     }
@@ -608,20 +575,6 @@ onBeforeUnmount(() => {
           {{ t('app.actions.addChannel') }}
         </Button>
         <div class="flex-1" />
-        <Button
-          size="sm"
-          variant="outline"
-          class="h-7 text-xs"
-          :class="{ 'border-amber-500/40 text-amber-600 dark:text-amber-400': fuzzyEnabled }"
-          :disabled="fuzzyLoading"
-          :title="fuzzyLoadError ? t('toast.loadFuzzyFailed') : (fuzzyEnabled ? t('tooltip.fuzzyEnabled') : t('tooltip.fuzzyDisabled'))"
-          @click="toggleFuzzyMode"
-        >
-          <ShieldCheck v-if="fuzzyEnabled" class="h-3 w-3 mr-1" />
-          <ShieldOff v-else class="h-3 w-3 mr-1" />
-          Fuzzy
-          <Loader2 v-if="fuzzyLoading" class="h-3 w-3 ml-1 animate-spin" />
-        </Button>
         <Button size="sm" variant="outline" class="h-7 text-xs" @click="showCbDialog = true">
           <Zap class="h-3 w-3 mr-1" />
           TB

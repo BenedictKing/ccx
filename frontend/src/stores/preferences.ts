@@ -9,7 +9,6 @@ import type { SupportedLocale } from '@/i18n'
  *
  * 职责：
  * - 管理暗色模式偏好（light/dark/auto）
- * - 管理 Fuzzy 模式开关
  * - 管理全局统计面板展开状态
  * - 自动持久化到 localStorage
  */
@@ -18,9 +17,6 @@ export const usePreferencesStore = defineStore('preferences', () => {
 
   // 暗色模式偏好
   const darkModePreference = ref<'light' | 'dark' | 'auto'>('auto')
-
-  // Fuzzy 模式开关
-  const fuzzyModeEnabled = ref(true)
 
   // UI 语言（默认取运行时配置，persistedstate 有值时会自动覆盖）
   const uiLanguage = ref<SupportedLocale>(getRuntimeLocale())
@@ -51,20 +47,6 @@ export const usePreferencesStore = defineStore('preferences', () => {
     const currentIndex = modes.indexOf(darkModePreference.value)
     const nextIndex = (currentIndex + 1) % modes.length
     darkModePreference.value = modes[nextIndex]
-  }
-
-  /**
-   * 设置 Fuzzy 模式
-   */
-  function setFuzzyMode(enabled: boolean) {
-    fuzzyModeEnabled.value = enabled
-  }
-
-  /**
-   * 切换 Fuzzy 模式
-   */
-  function toggleFuzzyMode() {
-    fuzzyModeEnabled.value = !fuzzyModeEnabled.value
   }
 
   /**
@@ -107,7 +89,6 @@ export const usePreferencesStore = defineStore('preferences', () => {
   return {
     // 状态
     darkModePreference,
-    fuzzyModeEnabled,
     uiLanguage,
     showGlobalStats,
     hasSeenGuide,
@@ -116,8 +97,6 @@ export const usePreferencesStore = defineStore('preferences', () => {
     // 方法
     setDarkMode,
     toggleDarkMode,
-    setFuzzyMode,
-    toggleFuzzyMode,
     setUILanguage,
     initializeUILanguage,
     toggleGlobalStats,

@@ -325,28 +325,6 @@
           </div>
 
           <div class="action-bar-right">
-            <!-- Fuzzy 模式切换按钮 -->
-            <v-tooltip location="bottom" content-class="ccx-tooltip">
-              <template #activator="{ props }">
-                <v-btn
-                  v-bind="props"
-                  variant="tonal"
-                  size="large"
-                  :loading="systemStore.fuzzyModeLoading"
-                  :disabled="systemStore.fuzzyModeLoadError"
-                  :color="systemStore.fuzzyModeLoadError ? 'error' : (preferencesStore.fuzzyModeEnabled ? 'warning' : 'default')"
-                  class="action-btn"
-                  @click="toggleFuzzyMode"
-                >
-                  <v-icon start size="20">
-                    {{ systemStore.fuzzyModeLoadError ? 'mdi-alert-circle-outline' : (preferencesStore.fuzzyModeEnabled ? 'mdi-shield-refresh' : 'mdi-shield-off-outline') }}
-                  </v-icon>
-                  Fuzzy
-                </v-btn>
-              </template>
-              <span>{{ systemStore.fuzzyModeLoadError ? t('tooltip.loadFailedRefresh') : (preferencesStore.fuzzyModeEnabled ? t('tooltip.fuzzyEnabled') : t('tooltip.fuzzyDisabled')) }}</span>
-            </v-tooltip>
-
             <!-- 熔断器配置按钮 -->
             <v-tooltip location="bottom" content-class="ccx-tooltip">
               <template #activator="{ props }">
@@ -721,7 +699,6 @@ const {
   deleteChannel,
   openAddChannelModal,
   addApiKey,
-  toggleFuzzyMode,
   showGuide,
   openGuide,
   circuitBreakerDialogOpen,

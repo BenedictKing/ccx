@@ -8,7 +8,6 @@ import type { VersionInfo } from '@/services/version'
  * 职责：
  * - 管理系统运行状态（running/error/connecting）
  * - 管理版本信息和版本检查状态
- * - 管理 Fuzzy 模式加载状态
  */
 export const useSystemStore = defineStore('system', () => {
   // ===== 状态 =====
@@ -30,10 +29,6 @@ export const useSystemStore = defineStore('system', () => {
 
   // 版本检查加载状态
   const isCheckingVersion = ref(false)
-
-  // Fuzzy 模式加载状态
-  const fuzzyModeLoading = ref(false)
-  const fuzzyModeLoadError = ref(false)
 
   // 更新对话框
   const updateDialogOpen = ref(false)
@@ -70,20 +65,6 @@ export const useSystemStore = defineStore('system', () => {
     isCheckingVersion.value = checking
   }
 
-  /**
-   * 设置 Fuzzy 模式加载状态
-   */
-  function setFuzzyModeLoading(loading: boolean) {
-    fuzzyModeLoading.value = loading
-  }
-
-  /**
-   * 设置 Fuzzy 模式加载错误状态
-   */
-  function setFuzzyModeLoadError(error: boolean) {
-    fuzzyModeLoadError.value = error
-  }
-
   function setUpdateDialogOpen(open: boolean) {
     updateDialogOpen.value = open
   }
@@ -103,8 +84,6 @@ export const useSystemStore = defineStore('system', () => {
       status: 'checking',
     }
     isCheckingVersion.value = false
-    fuzzyModeLoading.value = false
-    fuzzyModeLoadError.value = false
     updateDialogOpen.value = false
   }
 
@@ -113,8 +92,6 @@ export const useSystemStore = defineStore('system', () => {
     systemStatus,
     versionInfo,
     isCheckingVersion,
-    fuzzyModeLoading,
-    fuzzyModeLoadError,
     updateDialogOpen,
 
     // 计算属性
@@ -124,8 +101,6 @@ export const useSystemStore = defineStore('system', () => {
     setVersionInfo,
     setCurrentVersion,
     setCheckingVersion,
-    setFuzzyModeLoading,
-    setFuzzyModeLoadError,
     setUpdateDialogOpen,
     resetSystemState,
   }
