@@ -625,98 +625,71 @@
                   </div>
 
                   <template v-if="row.kimiCredential.kimiCodeUsage">
-                    <div v-if="kimiPlanUsageRows(row.kimiCredential.kimiCodeUsage).length" class="kimi-plan-usage mb-3">
+                    <div v-if="buildKimiUsageSections(row.kimiCredential.kimiCodeUsage).length" class="kimi-plan-usage mb-3">
                       <div
-                        v-for="item in kimiPlanUsageRows(row.kimiCredential.kimiCodeUsage)"
-                        :key="item.label"
+                        v-for="section in buildKimiUsageSections(row.kimiCredential.kimiCodeUsage)"
+                        :key="section.key"
                         class="kimi-plan-usage-row"
                       >
-                        <span class="text-body-2 text-medium-emphasis">{{ item.label }}</span>
+                        <span class="text-body-2 text-medium-emphasis">{{ t(section.labelKey) }}</span>
+
                         <v-progress-linear
-                          :model-value="item.usedPercent"
-                          :color="kimiUsageColor(item.usedPercent)"
+                          v-if="section.kind === 'window'"
+                          :model-value="section.usedPercent"
+                          :color="kimiUsageColor(section.usedPercent)"
                           height="6"
                           rounded
                         />
+                        <div v-else-if="section.kind === 'subscription' || section.kind === 'gift'" class="kimi-balance-stack">
+                          <span
+                            class="kimi-balance-stack__kimi"
+                            :style="{ width: `${section.kimiUsedPercent}%` }"
+                          ></span>
+                          <span
+                            class="kimi-balance-stack__code"
+                            :style="{ width: `${section.codeUsedPercent}%` }"
+                          ></span>
+                        </div>
+                        <v-progress-linear
+                          v-else-if="section.kind === 'booster' && section.usedPercent !== undefined"
+                          :model-value="section.usedPercent"
+                          :color="kimiUsageColor(section.usedPercent)"
+                          height="6"
+                          rounded
+                        />
+                        <span v-else></span>
+
                         <span class="text-body-2 font-weight-medium text-no-wrap">
-                          {{ t('kimiConsoleToken.percentUsed', { percent: Math.round(item.usedPercent) }) }}
+                          <template v-if="section.kind === 'booster'">
+                            <template v-if="!section.wallet.allowTopup">{{ t('kimiConsoleToken.boosterWalletDisabled') }}</template>
+                            <template v-else>{{ kimiFormatMoney(section.wallet.moneyLeft) }} / {{ kimiFormatMoney(section.wallet.moneyTotal) }}</template>
+                          </template>
+                          <!-- Kimi 通用额度未消耗时省略 Kimi/Code 拆分，避免与“已用”重复 -->
+                          <template v-else-if="(section.kind === 'subscription' || section.kind === 'gift') && section.kimiUsedPercent >= 1">
+                            Kimi {{ Math.round(section.kimiUsedPercent) }}% · Code {{ Math.round(section.codeUsedPercent) }}% ·
+                            {{ t('kimiConsoleToken.percentUsed', { percent: Math.round(section.usedPercent) }) }}
+                          </template>
+                          <template v-else>
+                            {{ t('kimiConsoleToken.percentUsed', { percent: Math.round(section.usedPercent ?? 0) }) }}
+                          </template>
                         </span>
-                        <span
-                          class="text-caption text-disabled text-no-wrap"
-                          :title="kimiFormatDateTime(item.resetTime)"
-                        >
-                          {{ t('kimiConsoleToken.resetsIn', { duration: kimiFormatCountdown(item.resetTime) }) }}
+
+                        <span class="text-caption text-disabled text-no-wrap">
+                          <template v-if="section.kind === 'window'">
+                            <span :title="kimiFormatDateTime(section.resetTime)">
+                              {{ t('kimiConsoleToken.resetsIn', { duration: kimiFormatCountdown(section.resetTime) }) }}
+                            </span>
+                          </template>
+                          <template v-else-if="section.kind === 'subscription' || section.kind === 'gift'">
+                            {{ t('kimiConsoleToken.expiresAt') }} {{ kimiFormatExpireTime(section.balance.expireTime) }}
+                          </template>
+                          <template v-else-if="section.kind === 'booster' && section.wallet.allowTopup">
+                            {{ t('kimiConsoleToken.boosterWalletMonthlyUsed') }} {{ kimiFormatMoney(section.wallet.monthlyUsed) }}
+                          </template>
                         </span>
                       </div>
                     </div>
                     <div v-else class="text-caption text-disabled mb-3">{{ t('kimiConsoleToken.noUsageData') }}</div>
-
-                    <div v-if="row.kimiCredential.kimiCodeUsage.subscriptionBalance" class="kimi-plan-usage mb-3">
-                      <div class="kimi-plan-usage-row">
-                        <span class="text-body-2 text-medium-emphasis">{{ t('kimiConsoleToken.subscriptionBalance') }}</span>
-                        <div class="kimi-balance-stack">
-                          <span
-                            class="kimi-balance-stack__kimi"
-                            :style="{ width: `${getKimiBalanceUsage(row.kimiCredential.kimiCodeUsage.subscriptionBalance).kimiUsedPercent}%` }"
-                          />
-                          <span
-                            class="kimi-balance-stack__code"
-                            :style="{ width: `${getKimiBalanceUsage(row.kimiCredential.kimiCodeUsage.subscriptionBalance).codeUsedPercent}%` }"
-                          />
-                        </div>
-                        <span class="text-body-2 font-weight-medium text-no-wrap">
-                          Kimi {{ Math.round(getKimiBalanceUsage(row.kimiCredential.kimiCodeUsage.subscriptionBalance).kimiUsedPercent) }}% · Code {{ Math.round(getKimiBalanceUsage(row.kimiCredential.kimiCodeUsage.subscriptionBalance).codeUsedPercent) }}% · {{ t('kimiConsoleToken.percentUsed', { percent: Math.round(getKimiBalanceUsage(row.kimiCredential.kimiCodeUsage.subscriptionBalance).usedPercent) }) }}
-                        </span>
-                        <span class="text-caption text-disabled text-no-wrap">
-                          {{ t('kimiConsoleToken.expiresAt') }} {{ kimiFormatExpireTime(row.kimiCredential.kimiCodeUsage.subscriptionBalance.expireTime) }}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div v-if="row.kimiCredential.kimiCodeUsage.giftBalances?.length" class="kimi-plan-usage mb-3">
-                      <div
-                        v-for="(gift, idx) in row.kimiCredential.kimiCodeUsage.giftBalances"
-                        :key="`gift-${idx}`"
-                        class="kimi-plan-usage-row"
-                      >
-                        <span class="text-body-2 text-medium-emphasis">{{ t('kimiConsoleToken.giftBalance') }}</span>
-                        <div class="kimi-balance-stack">
-                          <span
-                            class="kimi-balance-stack__kimi"
-                            :style="{ width: `${getKimiBalanceUsage(gift).kimiUsedPercent}%` }"
-                          />
-                          <span
-                            class="kimi-balance-stack__code"
-                            :style="{ width: `${getKimiBalanceUsage(gift).codeUsedPercent}%` }"
-                          />
-                        </div>
-                        <span class="text-body-2 font-weight-medium text-no-wrap">
-                          Kimi {{ Math.round(getKimiBalanceUsage(gift).kimiUsedPercent) }}% · Code {{ Math.round(getKimiBalanceUsage(gift).codeUsedPercent) }}% · {{ t('kimiConsoleToken.percentUsed', { percent: Math.round(getKimiBalanceUsage(gift).usedPercent) }) }}
-                        </span>
-                        <span class="text-caption text-disabled text-no-wrap">
-                          {{ t('kimiConsoleToken.expiresAt') }} {{ kimiFormatExpireTime(gift.expireTime) }}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div v-if="row.kimiCredential.kimiCodeUsage.boosterWallets?.length" class="mb-3">
-                      <div
-                        v-for="wallet in row.kimiCredential.kimiCodeUsage.boosterWallets"
-                        :key="wallet.id"
-                        class="d-flex justify-space-between align-center text-body-2 mb-1"
-                      >
-                        <span class="text-medium-emphasis">{{ t('kimiConsoleToken.boosterWallet') }}</span>
-                        <span v-if="!wallet.allowTopup" class="text-caption text-disabled">
-                          {{ t('kimiConsoleToken.boosterWalletDisabled') }}
-                        </span>
-                        <span v-else class="font-weight-medium text-no-wrap">
-                          {{ kimiFormatMoney(wallet.moneyLeft) }} / {{ kimiFormatMoney(wallet.moneyTotal) }}
-                          <span class="text-caption text-disabled">
-                            · {{ t('kimiConsoleToken.boosterWalletMonthlyUsed') }} {{ kimiFormatMoney(wallet.monthlyUsed) }}
-                          </span>
-                        </span>
-                      </div>
-                    </div>
 
                     <div class="text-caption text-disabled mb-3">
                       {{ t('kimiConsoleToken.validatedAt') }} {{ kimiFormatDateTime(row.kimiCredential.kimiCodeUsage.validatedAt) }}
@@ -1329,9 +1302,7 @@ import type {
   DeepSeekCredentialBalance,
   DisabledKeyInfo,
   EndpointDetailItem,
-  KimiBoosterWallet,
   KimiCodeMoney,
-  KimiCodeUsageSnapshot,
   ManagedAccountCredential,
   MiMoTokenPlanQuota,
   VolcenginePlanUsage,
@@ -1342,7 +1313,7 @@ import { maskApiKey } from '../../utils/apiKeyMask'
 import { buildChannelApiKeyRows, type ChannelApiKeyRow } from '../../utils/channelApiKeys'
 import { getVolcenginePlanConsoleURL } from '../../utils/channelWebsite'
 import { quotaRemainingColorClass, quotaRemainingColorHex } from '../../utils/quotaColor'
-import { buildKimiUsageSections, getKimiBalanceUsage } from '../../utils/kimiPlanUsage'
+import { buildKimiUsageSections } from '../../utils/kimiPlanUsage'
 import { selectMiniMaxTokenPlanEndpoint, sha256KeyHash } from '../../utils/minimaxEndpointUsage'
 
 interface KeyModelsStatus {
@@ -2251,15 +2222,6 @@ const kimiDateTimeFormat = new Intl.DateTimeFormat(undefined, {
 })
 
 // 与 Kimi Code 官方 CLI 的 Plan usage 保持一致：5h limit（5 小时频限）+ Weekly limit（7 天频限），短窗口优先。
-const kimiPlanUsageRows = (usage: KimiCodeUsageSnapshot) =>
-  buildKimiUsageSections(usage)
-    .filter(section => section.kind === 'window')
-    .map(section => ({
-      label: t(section.labelKey),
-      usedPercent: section.usedPercent,
-      resetTime: section.resetTime,
-    }))
-
 // Kimi 传入的是"已用百分比"，进度条 color 属性需要 Vuetify 色名或 hex。
 const kimiUsageColor = (usedPercent: number) => {
   return quotaRemainingColorHex(100 - usedPercent)
@@ -2344,12 +2306,10 @@ const kimiUsageSummaryParts = (credential: ManagedAccountCredential): Volcengine
       return { labelKey: '', text: t('kimiConsoleToken.noUsageData'), colorClass: '' }
     }
     const remainingPercent = Math.max(0, Math.min(100, 100 - usedPercent))
-    const usageBreakdown = section.kind === 'subscription' || section.kind === 'gift'
-      ? `Kimi ${Math.round(section.kimiUsedPercent)}% / Code ${Math.round(section.codeUsedPercent)}% / `
-      : ''
+    // 摘要保持「标签 + 剩余%」的短格式，避免 Kimi/Code 拆分把行撑爆截断。
     return {
       labelKey: section.labelKey,
-      text: `${label} ${usageBreakdown}${t('kimiConsoleToken.percentRemaining', { percent: Math.round(remainingPercent) })}`,
+      text: `${label} ${t('kimiConsoleToken.percentRemaining', { percent: Math.round(remainingPercent) })}`,
       colorClass: quotaRemainingColorClass(remainingPercent),
     }
   })
