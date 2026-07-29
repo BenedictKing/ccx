@@ -27,9 +27,13 @@
 - **auto 模式 SLO 回归保护可配置** - SLO 回归自动降级改为开关控制
 - **模型清单展示改进** - 共有/协议专属模型少于 10 个时直接展开列出，其余默认两行、仅实际溢出时显示展开
 - **火山套餐 Key 保活 per-key 路由与共享探针** - `config.BaseURLsForKey` 让已绑定端点的 Key 只在自己端点探测，不参与渠道级 BaseURL 笛卡尔积；新增 `internal/upstreamprobe` 共享火山 Agent/Coding Plan 数据面探针（autopilot 验证与 healthcheck 保活共用，避免请求特征漂移）；`L1Response.RealCallVerified` 标记真实调用，火山 L1 成功后同周期跳过等价 L2 避免重复消耗额度；L2 探针副本覆盖绑定 BaseURL，recordFailure 归因到 Key 实际绑定端点
+- **渠道级实测上下文上限自学习** - 模型注册表登记的是模型公开窗口，个别渠道对某个模型的实际窗口更短（中转商自行截断、上游按套餐限制），长上下文请求会反复吃 400 `context_too_large`。新增按 渠道-Key-模型 维度记忆实测上限的数值型能力覆盖（`config.ContextLimitState`，复用 `ChannelCompatCache` 键空间/24h TTL/落盘，但独立于布尔型 `CompatTrait` 存储）：`ContextLimitFromError` 从 400/422 报错识别超限信号，上游明确声明窗口值时直接采信，仅表示「太长」时按被拒请求量的 7/8 反推保守上界，并排除 `max_tokens`/请求体过大/图片尺寸/配额等相邻错误避免误判；合成规则「宁小勿大」多次学习取最小值，只在遇到更严格证据时收紧，放宽只能靠 TTL 过期重学；`SmartRouter.buildChannelEntry` 取 `min(注册表窗口, 实测上限)` 让上下文硬约束按真实容量判断，路由发生在选定 Key 之前故取该渠道-模型在所有已知 Key 上的最小值。上下文上限按自身 `LearnedAt` 独立计算 TTL（不共用 `entry.DetectedAt`，否则 trait 命中刷新会让实测上限被无限续期）；无记忆时 fail-open，反推上界低于 4096 不采信。兼容性记忆单例上移为 `config.SharedChannelCompatCache`，供写入方 handlers 与读取方 autopilot 共享
 
 ### 修复
 
+- **兼容性自学习块位于 failover 判断之后导致生产环境从未生效** - `upstream_failover.go` 的弃用参数自适应与渠道兼容性自学习（developer role 降级、Codex 工具剥离等）两个学习块原本写在 `if shouldFailover` 分支之后。而错误分类以「大多数非 2xx 都 failover」为默认策略，未命中已知不可重试关键词的 400/422 会被判定为 `shouldFailover=true` 并提前 `continue`，导致这两个学习块在默认配置下几乎从未被执行到——只有极少数恰好命中窄关键词表的报错才能落到它们。现已移至 `shouldFailover` 判断之前，与上下文上限自学习块位置一致；新增用真实 `TryUpstreamWithAllKeys` 驱动的集成测试钉住「上游 422 → 学习 → 同 Key 重试成功」完整闭环
+- **422 兼容性学习分支不可达** - 兼容性自学习块声称覆盖 400/422，但被嵌套在外层 `resp.StatusCode == 400` 守卫内，422 分支实际永远不可达（部分上游用 422 表达请求结构不受支持）；改为与弃用参数块平级的兄弟块——弃用参数识别只针对 400，兼容性学习覆盖 400 与 422，二者条件不同不应嵌套
+- **Chat 入口 Gemini 上游响应被误判为空** - `handleSuccess` 的 `default` 分支承接 gemini 等没有专属 case 的透传上游类型，却统一使用只认识 OpenAI `choices[].message` 结构的 `IsChatResponseEmpty` 判空；对 Gemini 的 `candidates` 结构，`respMap["choices"]` 断言必然失败而被判定为空，导致所有合法 Gemini 响应都误触发 failover、最终以 503 收尾。改为按 `candidates` 字段（Gemini 专属、非 omitempty）区分 schema 后走 `IsGeminiResponseEmpty`；不用 `usageMetadata` 判断是因为该字段为 omitempty，缺省时会误判回 OpenAI 形态
 - **effort 注入形态误判与三处死代码** - 自动托管渠道被 `RuntimeUpstreamForAutoManagedProvider` 清空 `ReasoningParamStyle` 后，`effortInjectionStyle` 一律回落 `reasoning` 对象形式，导致 Claude messages 渠道被写入 `reasoning.effort`、chat 渠道被写成对象，上游均不识别而静默丢弃 effort；改为按渠道类型推导原生形态（messages→`thinking`，chat→`reasoning_effort`）。同时修复三处「代码存在但调用链不通」的死代码：`CapabilityFloor.EffortFloor` 从未被赋值致 `filterEffortFloor` 恒直接返回，改为在 `rankEligibleModels` 内按 `ReasoningEffortConfig.PerTaskClass` 推导；`resolveRelativeBenchmarkEvidence` 的 `targetEffort` 恒传空串致 `(domain, effort)` 精确匹配与置信度折算永不执行，新增 `ResolveDomainStrengthForEffort` 并在候选展开处按变体实际档位取证据；`extractClientEffort` 协议无关全字段扫描与按渠道分支的 `ExtractClientEffortExplicit` 对跨协议字段判定相反，导致手动意图 effort 被静默屏蔽而日志记录未钳位，删除前者统一走后者。另补齐 messages 分支的 `thinking.effort` 提取（此前 `type=enabled` 只返回 `enabled` 占位而非真实档位）
 - **精确模型命中绕过 effort 决策** - `ResolveModel` 的精确/等价模型命中路径直接返回，从未调用 `resolveEffortVariants`，导致请求模型能在渠道内精确匹配时（最常见路径）手动意图锁定档位与自动展开全部失效，仅跨模型替换才走 effort 逻辑；抽出 `resolveSingleProfileEffort` 在两处分支补齐，语义与排序路径一致（意图锁定优先，否则按配置展开取最低档）
 - **effort 钳位语义与 Gemini 档位提取** - 修正 effort 钳位语义并在 failover 时重置标记；Gemini effort 提取取真实档位而非占位值，`targetByUID` 写入条件统一；`ResolvedRouteTarget` 定义与 `upstream_failover` 旧 API 保留兼容 fallback
@@ -49,6 +53,7 @@
 
 ### 重构
 
+- **移除 Fuzzy 模式开关，统一为单一 failover 策略（BREAKING）** - Fuzzy 模式早已是唯一实际使用的默认值，Normal 模式的精确状态码分类分支已无存在意义，保留两套逻辑徒增维护成本。删除 `FuzzyModeEnabled` 配置字段、`GetFuzzyModeEnabled`/`SetFuzzyModeEnabled`、`GET/PUT /api/settings/fuzzy-mode` 接口及其配置迁移逻辑；`shouldRetryWithNextKeyNormal` 与 `classifyByStatusCode` 整体删除，`shouldRetryWithNextKeyFuzzy` 重命名为 `shouldRetryWithNextKey` 成为唯一实现；`HandleAllChannelsFailed`/`HandleAllKeysFailed` 不再接收 `fuzzyMode` 参数，统一返回通用 503；各协议 `handleSuccess` 的空响应拦截（`IsClaudeResponseEmpty` 等）不再受 `fuzzyMode` 门控而无条件生效；Web 与桌面前端一并移除工具栏开关、stores 状态、API 封装与 i18n key。**行为变化**：404/405/409-417/422/423/424/426/428/431/451 与 3xx 不再走「不 failover 直接透传上游原始状态码与错误体」路径，这类错误会消耗全部 Key/渠道后以通用 503 收尾；全部渠道失败时不再透传最后一个上游错误详情（`model_not_found` 等可归一化的模型路由错误仍保留精确状态码透传）
 - **订阅中心精简** - 移除分区标题、能力标签与手动添加入口，补齐快捷接入文案；赞助商置顶、new-api 置底，GitHub Copilot 卡移到倒数第二位
 - **移除渠道菜单的试用意图入口**
 - **清理火山套餐历史分支** - 移除 `volcenginePlanModelsHost` 常量与 `endpointFor` 的 `ark_stg` 分支
