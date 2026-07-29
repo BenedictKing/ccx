@@ -140,6 +140,14 @@ var builtinProviderTemplates = []ProviderTemplate{
 			},
 		},
 	},
+	newProviderTemplate(
+		"atlascloud",
+		"Atlas Cloud",
+		"Atlas Cloud OpenAI-compatible LLM API",
+		"official_api",
+		"first",
+		standardProviderRoutes("openai", atlasCloudCandidates(), atlasCloudCandidates()),
+	),
 	{
 		ProviderID:  "volcengine",
 		Aliases:     []string{"volc-ark"},
@@ -404,6 +412,12 @@ func deepseekClaudeCandidates() []ProviderCandidate {
 func deepseekOpenAICandidates() []ProviderCandidate {
 	return []ProviderCandidate{
 		{BaseURL: "https://api.deepseek.com", PlanTag: "", Region: "", Priority: 0},
+	}
+}
+
+func atlasCloudCandidates() []ProviderCandidate {
+	return []ProviderCandidate{
+		{BaseURL: "https://api.atlascloud.ai/v1", PlanTag: "payg", Region: "global", Priority: 0},
 	}
 }
 

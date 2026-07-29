@@ -113,6 +113,28 @@ func TestProviderTemplateDeepSeekRoutes(t *testing.T) {
 	}
 }
 
+func TestProviderTemplateAtlasCloudRoutes(t *testing.T) {
+	tmpl, ok := GetProviderTemplate("atlascloud")
+	if !ok {
+		t.Fatal("未找到 Atlas Cloud 模板")
+	}
+	routes := tmpl.AutoAddRoutes()
+	if len(routes) != 3 {
+		t.Fatalf("Atlas Cloud 应创建 messages/chat/responses 三条 route，实际 %d: %+v", len(routes), routes)
+	}
+	for _, route := range routes {
+		if route.ServiceType != "openai" {
+			t.Fatalf("Atlas Cloud %s route 应转换到 OpenAI Chat Completions: %+v", route.ChannelKind, route)
+		}
+		if len(route.Candidates) != 1 || route.Candidates[0].BaseURL != "https://api.atlascloud.ai/v1" {
+			t.Fatalf("Atlas Cloud %s route 的候选端点错误: %+v", route.ChannelKind, route.Candidates)
+		}
+	}
+	if got, found := InferProviderIDFromBaseURL("https://api.atlascloud.ai/v1/chat/completions"); !found || got != "atlascloud" {
+		t.Fatalf("Atlas Cloud URL 应识别为 atlascloud，实际 %q, %v", got, found)
+	}
+}
+
 func TestProviderTemplateGLMRoutes(t *testing.T) {
 	tmpl, ok := GetProviderTemplate("glm")
 	if !ok {
@@ -153,6 +175,7 @@ func TestInferProviderIDFromBaseURL(t *testing.T) {
 	}{
 		{baseURL: "https://api.deepseek.com", want: "deepseek", ok: true},
 		{baseURL: "https://api.deepseek.com/anthropic/v1", want: "deepseek", ok: true},
+		{baseURL: "https://api.atlascloud.ai/v1/chat/completions", want: "atlascloud", ok: true},
 		{baseURL: "https://ark.cn-beijing.volces.com/api/plan/v3", want: "volcengine", ok: true},
 		{baseURL: "https://open.bigmodel.cn/api/anthropic", want: "glm", ok: true},
 		{baseURL: "https://open.bigmodel.cn/api/anthropic/v1/messages", want: "glm", ok: true},
@@ -227,11 +250,11 @@ func TestProviderTemplateVolcenginePlanRoutes(t *testing.T) {
 
 func TestListAndGetProviderTemplate(t *testing.T) {
 	all := ListProviderTemplates()
-	if len(all) < 16 {
-		t.Errorf("内置 provider 模板应至少为 16 个，实际 %d", len(all))
+	if len(all) < 17 {
+		t.Errorf("内置 provider 模板应至少为 17 个，实际 %d", len(all))
 	}
 	for _, id := range []string{
-		"mimo", "deepseek", "kimi", "glm", "volcengine", "compshare", "sensenova", "minimax",
+		"mimo", "deepseek", "atlascloud", "kimi", "glm", "volcengine", "compshare", "sensenova", "minimax",
 		"dashscope", "opencode-zen", "tencent-lkeap", "qianfan", "xfyun", "openrouter", "modelscope", "originrouter",
 	} {
 		if _, ok := GetProviderTemplate(id); !ok {
