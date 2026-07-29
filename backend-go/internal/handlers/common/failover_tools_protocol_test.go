@@ -6,7 +6,7 @@ func TestShouldRetryWithNextKey_ResponsesToolsProtocolError(t *testing.T) {
 	body := []byte(`{"error":{"message":"Missing required parameter: 'tools[15].tools'.","type":"invalid_request_error","param":"tools[15].tools","code":"missing_required_parameter"}}`)
 
 	t.Run("fuzzy 模式允许 failover", func(t *testing.T) {
-		gotFailover, _ := ShouldRetryWithNextKey(400, body, true, "Responses")
+		gotFailover, _ := ShouldRetryWithNextKey(400, body, "Responses")
 		if !gotFailover {
 			t.Fatalf("tools 协议兼容 400 应允许 failover，当前被拦截")
 		}
@@ -14,7 +14,7 @@ func TestShouldRetryWithNextKey_ResponsesToolsProtocolError(t *testing.T) {
 
 	t.Run("仅返回 tools param 也允许 failover", func(t *testing.T) {
 		body := []byte(`{"error":{"message":"Invalid schema for function 'list_mcp_resources': None is not of type 'array'.","type":"invalid_request_error","param":"tools","code":"invalid_function_parameters"}}`)
-		gotFailover, _ := ShouldRetryWithNextKey(400, body, true, "Responses")
+		gotFailover, _ := ShouldRetryWithNextKey(400, body, "Responses")
 		if !gotFailover {
 			t.Fatalf("param=tools 的协议兼容 400 应允许 failover")
 		}
@@ -22,7 +22,7 @@ func TestShouldRetryWithNextKey_ResponsesToolsProtocolError(t *testing.T) {
 
 	t.Run("tools 点路径也允许 failover", func(t *testing.T) {
 		body := []byte(`{"error":{"message":"invalid schema: expected object","type":"invalid_request_error","param":"tools.0","code":"invalid_request_error"}}`)
-		gotFailover, _ := ShouldRetryWithNextKey(400, body, true, "Responses")
+		gotFailover, _ := ShouldRetryWithNextKey(400, body, "Responses")
 		if !gotFailover {
 			t.Fatalf("param=tools.0 的协议兼容 400 应允许 failover")
 		}

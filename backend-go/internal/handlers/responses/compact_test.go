@@ -83,9 +83,11 @@ func TestCompactHandler_SingleChannelFailureRecordsMetricsAndLogs(t *testing.T) 
 		Status:      "active",
 	}})
 
+	// 统一分类策略下，Key/渠道全部失败后返回通用 503（不再透传最后一个上游错误的具体状态码），
+	// 但渠道日志仍应精确记录每次尝试的真实结果（见下方 logs 断言）。
 	w := performCompactRequest(t, router, `{"model":"gpt-5","input":"hello"}`)
-	if w.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusUnauthorized, w.Body.String())
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusServiceUnavailable, w.Body.String())
 	}
 
 	metricsKey := metrics.GenerateMetricsIdentityKey(upstream.URL, "sk-test", "responses")
@@ -179,7 +181,10 @@ func TestCompactHandler_MultiChannelRespectsSupportedModels(t *testing.T) {
 	}
 }
 
-func TestCompactHandler_ReturnsSelectionErrorWhenNoChannelSupportsModel(t *testing.T) {
+// TestCompactHandler_NoChannelSupportsModelReturnsGenericUnavailable 验证无渠道支持目标模型时
+// （SelectChannel 直接报错、连一次上游尝试都没有发生）仍统一走通用 503，
+// 不透传调度器内部的选型错误细节。
+func TestCompactHandler_NoChannelSupportsModelReturnsGenericUnavailable(t *testing.T) {
 	router, _ := newCompactTestRouter(t, []config.UpstreamConfig{
 		{
 			Name:            "exclude-image-a",
@@ -203,8 +208,8 @@ func TestCompactHandler_ReturnsSelectionErrorWhenNoChannelSupportsModel(t *testi
 	if w.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want %d, body=%s", w.Code, http.StatusServiceUnavailable, w.Body.String())
 	}
-	if !strings.Contains(w.Body.String(), "没有 Responses 渠道支持模型") {
-		t.Fatalf("body = %s, want contains selection error", w.Body.String())
+	if !strings.Contains(w.Body.String(), "currently unavailable") {
+		t.Fatalf("body = %s, want generic service_unavailable message", w.Body.String())
 	}
 }
 

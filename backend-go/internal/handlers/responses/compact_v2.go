@@ -131,7 +131,7 @@ func tryLocalCompactV2WithKey(
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		respBody, _ := io.ReadAll(resp.Body)
 		respBody = utils.DecompressGzipIfNeeded(resp, respBody)
-		shouldFailover, _ := common.ShouldRetryWithNextKeyWithLogTag(resp.StatusCode, respBody, cfgManager.GetFuzzyModeEnabled(), "Responses", common.RequestLogTag(c))
+		shouldFailover, _ := common.ShouldRetryWithNextKeyWithLogTag(resp.StatusCode, respBody, "Responses", common.RequestLogTag(c))
 		return false, &compactError{status: resp.StatusCode, body: respBody, shouldFailover: shouldFailover}
 	}
 

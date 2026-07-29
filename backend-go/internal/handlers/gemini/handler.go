@@ -202,7 +202,7 @@ func handleMultiChannel(
 					channelScheduler.MarkURLSuccess(scheduler.ChannelKindGemini, channelIndex, url)
 				},
 				func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string, actualRequestBody []byte) (*types.Usage, error) {
-					return handleSuccess(c, resp, upstreamCopy.ServiceType, envCfg, startTime, geminiReq, model, isStream, cfgManager.GetFuzzyModeEnabled(), common.ResolveStreamPreflightTimeouts(upstreamCopy, metricsManager.GetCircuitBreakerConfig()))
+					return handleSuccess(c, resp, upstreamCopy.ServiceType, envCfg, startTime, geminiReq, model, isStream, common.ResolveStreamPreflightTimeouts(upstreamCopy, metricsManager.GetCircuitBreakerConfig()))
 				},
 				model,
 				"",
@@ -307,7 +307,7 @@ func handleSingleChannel(
 		nil,
 		nil,
 		func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string, actualRequestBody []byte) (*types.Usage, error) {
-			return handleSuccess(c, resp, upstreamCopy.ServiceType, envCfg, startTime, geminiReq, model, isStream, cfgManager.GetFuzzyModeEnabled(), common.ResolveStreamPreflightTimeouts(upstreamCopy, metricsManager.GetCircuitBreakerConfig()))
+			return handleSuccess(c, resp, upstreamCopy.ServiceType, envCfg, startTime, geminiReq, model, isStream, common.ResolveStreamPreflightTimeouts(upstreamCopy, metricsManager.GetCircuitBreakerConfig()))
 		},
 		model,
 		"",
@@ -580,7 +580,6 @@ func handleSuccess(
 	geminiReq *types.GeminiRequest,
 	model string,
 	isStream bool,
-	fuzzyMode bool,
 	timeouts common.StreamPreflightTimeouts,
 ) (*types.Usage, error) {
 	defer errutil.IgnoreDeferred(resp.Body.Close)
@@ -684,9 +683,9 @@ func handleSuccess(
 		return nil, common.PassthroughResponse(c, resp)
 	}
 
-	// 空响应拦截（仅 Fuzzy 模式）：上游 200 但 candidates 语义为空，
+	// 空响应拦截：上游 200 但 candidates 语义为空，
 	// Header 未发送，可安全 failover 到下一个 Key/BaseURL/渠道
-	if fuzzyMode && common.IsGeminiResponseEmpty(geminiResp) {
+	if common.IsGeminiResponseEmpty(geminiResp) {
 		common.RequestLogf(c, "[Gemini-EmptyResponse] 上游返回空响应（非流式，upstreamType=%s），触发 failover", upstreamType)
 		return nil, common.ErrEmptyNonStreamResponse
 	}

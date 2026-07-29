@@ -1446,10 +1446,6 @@ func main() {
 			})
 		}
 
-		// Fuzzy 模式设置
-		apiGroup.GET("/settings/fuzzy-mode", handlers.GetFuzzyMode(cfgManager))
-		apiGroup.PUT("/settings/fuzzy-mode", handlers.SetFuzzyMode(cfgManager))
-
 		// 熔断器运行时设置
 		apiGroup.GET("/settings/circuit-breaker", handlers.GetCircuitBreaker(messagesMetricsManager.GetCircuitBreakerConfig, envCfg))
 		apiGroup.PUT("/settings/circuit-breaker", handlers.SetCircuitBreaker(cfgManager))

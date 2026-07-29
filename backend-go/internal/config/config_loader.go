@@ -95,8 +95,7 @@ func (cm *ConfigManager) loadConfig() error {
 	cm.config = loaded
 	cm.config.hydrateManagedAccountCredentials()
 
-	// 兼容旧配置：检查 FuzzyModeEnabled 字段是否存在
-	// 如果不存在，默认设为 true（新功能默认启用）
+	// 兼容旧配置：缺失字段补齐默认值（thinkingCache 等）
 	needSaveDefaults := cm.applyConfigDefaults(data) || autopilotDecodeFallback
 	// Autopilot 智能路由配置：旧版本升级、缺失值补齐与校验归一化
 	if !autopilotDecodeFallback && cm.applyAutopilotDefaults(data) {
@@ -204,7 +203,6 @@ func (cm *ConfigManager) createDefaultConfig() error {
 		CurrentResponsesUpstream: 0,
 		GeminiUpstream:           []UpstreamConfig{},
 		VectorsUpstream:          []UpstreamConfig{},
-		FuzzyModeEnabled:         true, // 默认启用 Fuzzy 模式
 		ThinkingCache: ThinkingCacheConfig{
 			TTLHours: ThinkingCacheDefaultTTLHours,
 		},
@@ -225,17 +223,10 @@ func (cm *ConfigManager) createDefaultConfig() error {
 func (cm *ConfigManager) applyConfigDefaults(rawJSON []byte) bool {
 	needSave := false
 
-	// FuzzyModeEnabled 默认值处理：
-	// 由于 bool 零值是 false，无法区分"用户设为 false"和"字段不存在"
+	// 由于 bool 零值是 false，thinkingCache 等旧配置缺失字段无法区分"用户设为空"和"字段不存在"，
 	// 通过检查原始 JSON 是否包含该字段来判断
 	var rawMap map[string]json.RawMessage
 	if err := json.Unmarshal(rawJSON, &rawMap); err == nil {
-		if _, exists := rawMap["fuzzyModeEnabled"]; !exists {
-			// 字段不存在，设为默认值 true
-			cm.config.FuzzyModeEnabled = true
-			needSave = true
-			log.Printf("[Config-Migration] FuzzyModeEnabled 字段不存在，设为默认值 true")
-		}
 		if _, exists := rawMap["thinkingCache"]; !exists {
 			cm.config.ThinkingCache.TTLHours = ThinkingCacheDefaultTTLHours
 			needSave = true

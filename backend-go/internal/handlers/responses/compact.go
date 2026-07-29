@@ -114,7 +114,6 @@ func handleSingleChannelCompact(
 
 	// Key 轮转：尝试所有可用 key
 	failedKeys := make(map[string]bool)
-	var lastErr *compactError
 
 	for attempt := 0; attempt < len(upstream.APIKeys); attempt++ {
 		apiKey, err := cfgManager.GetNextResponsesAPIKey(upstream, failedKeys)
@@ -132,7 +131,6 @@ func handleSingleChannelCompact(
 		}
 
 		if compactErr != nil {
-			lastErr = compactErr
 			if compactErr.shouldFailover {
 				failedKeys[apiKey] = true
 				cfgManager.MarkKeyAsFailed(apiKey, "Responses")
@@ -148,22 +146,13 @@ func handleSingleChannelCompact(
 	}
 
 	// 所有 key 都失败
-	if cfgManager.GetFuzzyModeEnabled() {
-		c.JSON(503, gin.H{
-			"type": "error",
-			"error": gin.H{
-				"type":    "service_unavailable",
-				"message": "All upstream channels are currently unavailable",
-			},
-		})
-		return
-	}
-
-	if lastErr != nil {
-		c.Data(lastErr.status, "application/json", lastErr.body)
-	} else {
-		c.JSON(503, gin.H{"error": "所有 API 密钥都不可用"})
-	}
+	c.JSON(503, gin.H{
+		"type": "error",
+		"error": gin.H{
+			"type":    "service_unavailable",
+			"message": "All upstream channels are currently unavailable",
+		},
+	})
 }
 
 // handleMultiChannelCompact 多渠道 compact 请求（带故障转移和亲和性）
@@ -178,15 +167,12 @@ func handleMultiChannelCompact(
 ) {
 	failedChannels := make(map[int]bool)
 	maxAttempts := channelScheduler.GetActiveChannelCount(scheduler.ChannelKindResponses)
-	var lastErr *compactError
-	var selectionErr error
 	requestModel := extractCompactRequestModel(bodyBytes)
 	channelLogStore := channelScheduler.GetChannelLogStore(scheduler.ChannelKindResponses)
 
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		selection, err := channelScheduler.SelectChannel(c.Request.Context(), userID, failedChannels, scheduler.ChannelKindResponses, requestModel, c.Param("routePrefix"), c.GetHeader("X-Channel"))
 		if err != nil {
-			selectionErr = err
 			break
 		}
 
@@ -194,7 +180,7 @@ func handleMultiChannelCompact(
 		channelIndex := selection.ChannelIndex
 
 		// 每个渠道尝试所有 key
-		success, successKey, compactErr := tryCompactChannelWithAllKeys(c, upstream, channelIndex, requestModel, cfgManager, channelScheduler, channelLogStore, bodyBytes, envCfg, sessionManager)
+		success, successKey, _ := tryCompactChannelWithAllKeys(c, upstream, channelIndex, requestModel, cfgManager, channelScheduler, channelLogStore, bodyBytes, envCfg, sessionManager)
 		if success {
 			// 只有真正成功的请求才设置 Trace 亲和
 			if successKey != "" {
@@ -209,30 +195,16 @@ func handleMultiChannelCompact(
 		}
 
 		failedChannels[channelIndex] = true
-		if compactErr != nil {
-			lastErr = compactErr
-		}
 	}
 
 	// 所有渠道都失败
-	if cfgManager.GetFuzzyModeEnabled() {
-		c.JSON(503, gin.H{
-			"type": "error",
-			"error": gin.H{
-				"type":    "service_unavailable",
-				"message": "All upstream channels are currently unavailable",
-			},
-		})
-		return
-	}
-
-	if lastErr != nil {
-		c.Data(lastErr.status, "application/json", lastErr.body)
-	} else if selectionErr != nil {
-		c.JSON(503, gin.H{"error": selectionErr.Error()})
-	} else {
-		c.JSON(503, gin.H{"error": "所有 Responses 渠道都不可用"})
-	}
+	c.JSON(503, gin.H{
+		"type": "error",
+		"error": gin.H{
+			"type":    "service_unavailable",
+			"message": "All upstream channels are currently unavailable",
+		},
+	})
 }
 
 // tryCompactChannelWithAllKeys 尝试渠道的所有 key
@@ -376,7 +348,7 @@ func tryCompactWithKey(
 			return localSuccess, localErr
 		}
 
-		shouldFailover, _ := common.ShouldRetryWithNextKeyWithLogTag(resp.StatusCode, respBody, cfgManager.GetFuzzyModeEnabled(), "Responses", common.RequestLogTag(c))
+		shouldFailover, _ := common.ShouldRetryWithNextKeyWithLogTag(resp.StatusCode, respBody, "Responses", common.RequestLogTag(c))
 		return false, &compactError{status: resp.StatusCode, body: respBody, shouldFailover: shouldFailover}
 	}
 

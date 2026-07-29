@@ -31,7 +31,6 @@ func handleSuccess(
 	startTime time.Time,
 	originalReq *types.ResponsesRequest,
 	originalRequestJSON []byte,
-	fuzzyMode bool,
 	timeouts common.StreamPreflightTimeouts,
 ) (*types.Usage, error) {
 	defer errutil.IgnoreDeferred(resp.Body.Close)
@@ -91,9 +90,9 @@ func handleSuccess(
 		return nil, fmt.Errorf("%w: %v", common.ErrInvalidResponseBody, err)
 	}
 
-	// 空响应拦截（仅 Fuzzy 模式）：上游 200 但 output 语义为空，
+	// 空响应拦截：上游 200 但 output 语义为空，
 	// Header 未发送，可安全 failover 到下一个 Key/BaseURL/渠道
-	if fuzzyMode && common.IsResponsesResponseEmpty(responsesResp) {
+	if common.IsResponsesResponseEmpty(responsesResp) {
 		common.RequestLogf(c, "[Responses-EmptyResponse] 上游返回空响应（非流式，upstreamType=%s），触发 failover", upstreamType)
 		return nil, common.ErrEmptyNonStreamResponse
 	}

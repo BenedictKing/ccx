@@ -174,7 +174,7 @@ func handleMultiChannel(
 				},
 				func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string, actualRequestBody []byte) (*types.Usage, error) {
 					timeouts := common.ResolveStreamPreflightTimeouts(upstreamCopy, metricsManager.GetCircuitBreakerConfig())
-					return handleSuccess(c, resp, upstreamCopy.ServiceType, envCfg, startTime, model, isStream, cfgManager.GetFuzzyModeEnabled(), timeouts)
+					return handleSuccess(c, resp, upstreamCopy.ServiceType, envCfg, startTime, model, isStream, timeouts)
 				},
 				model,
 				"",
@@ -261,7 +261,7 @@ func handleSingleChannel(
 		nil,
 		func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string, actualRequestBody []byte) (*types.Usage, error) {
 			timeouts := common.ResolveStreamPreflightTimeouts(upstreamCopy, metricsManager.GetCircuitBreakerConfig())
-			return handleSuccess(c, resp, upstreamCopy.ServiceType, envCfg, startTime, model, isStream, cfgManager.GetFuzzyModeEnabled(), timeouts)
+			return handleSuccess(c, resp, upstreamCopy.ServiceType, envCfg, startTime, model, isStream, timeouts)
 		},
 		model,
 		"",

@@ -20,34 +20,29 @@ type FailoverError struct {
 // 返回: (shouldFailover bool, isQuotaRelated bool)
 //
 // apiType: 接口类型（Messages/Responses/Gemini），用于日志标签前缀
-// fuzzyMode: 启用时，所有非 2xx 错误都触发 failover（模糊处理错误类型）
 //
-// HTTP 状态码分类策略（非 fuzzy 模式）：
-//   - 4xx 客户端错误：部分应触发 failover（密钥/配额问题）
-//   - 5xx 服务端错误：应触发 failover（上游临时故障）
-//   - 2xx/3xx：不应触发 failover（成功或重定向）
+// 策略：大多数非 2xx 错误都尝试 failover（模糊处理错误类型，不依赖状态码语义精确分类），
+// 同时检查消息体中的配额相关关键词，确保 403 + "预扣费额度" 等情况能正确识别。
+// 但内容审核错误，以及 4xx 下的 invalid_request、schema 校验失败等不可重试错误不会重试。
 //
 // isQuotaRelated 标记用于调度器优先级调整：
 //   - true: 额度/配额相关，降低密钥优先级
 //   - false: 临时错误，不影响优先级
-func ShouldRetryWithNextKey(statusCode int, bodyBytes []byte, fuzzyMode bool, apiType string) (bool, bool) {
-	return ShouldRetryWithNextKeyWithLogTag(statusCode, bodyBytes, fuzzyMode, apiType, "")
+func ShouldRetryWithNextKey(statusCode int, bodyBytes []byte, apiType string) (bool, bool) {
+	return ShouldRetryWithNextKeyWithLogTag(statusCode, bodyBytes, apiType, "")
 }
 
-func ShouldRetryWithNextKeyWithLogTag(statusCode int, bodyBytes []byte, fuzzyMode bool, apiType string, logTag string) (bool, bool) {
-	LogWithTag(logTag, "[%s-Failover-Entry] ShouldRetryWithNextKey 入口: statusCode=%d, bodyLen=%d, fuzzyMode=%v",
-		apiType, statusCode, len(bodyBytes), fuzzyMode)
-	if fuzzyMode {
-		return shouldRetryWithNextKeyFuzzy(statusCode, bodyBytes, apiType, logTag)
-	}
-	return shouldRetryWithNextKeyNormal(statusCode, bodyBytes, apiType, logTag)
+func ShouldRetryWithNextKeyWithLogTag(statusCode int, bodyBytes []byte, apiType string, logTag string) (bool, bool) {
+	LogWithTag(logTag, "[%s-Failover-Entry] ShouldRetryWithNextKey 入口: statusCode=%d, bodyLen=%d",
+		apiType, statusCode, len(bodyBytes))
+	return shouldRetryWithNextKey(statusCode, bodyBytes, apiType, logTag)
 }
 
-// shouldRetryWithNextKeyFuzzy Fuzzy 模式：大多数非 2xx 错误都尝试 failover
-// 同时检查消息体中的配额相关关键词，确保 403 + "预扣费额度" 等情况能正确识别
-// 但对于内容审核错误，以及 4xx 下的 invalid_request、schema 校验失败等不可重试错误，即使在 Fuzzy 模式下也不应重试
-func shouldRetryWithNextKeyFuzzy(statusCode int, bodyBytes []byte, apiType string, logTag string) (bool, bool) {
-	LogWithTag(logTag, "[%s-Failover-Fuzzy] 进入 Fuzzy 模式处理: statusCode=%d, bodyLen=%d", apiType, statusCode, len(bodyBytes))
+// shouldRetryWithNextKey 大多数非 2xx 错误都尝试 failover（模糊处理错误类型，不依赖状态码语义精确分类）。
+// 同时检查消息体中的配额相关关键词，确保 403 + "预扣费额度" 等情况能正确识别。
+// 但对于内容审核错误，以及 4xx 下的 invalid_request、schema 校验失败等不可重试错误不会重试。
+func shouldRetryWithNextKey(statusCode int, bodyBytes []byte, apiType string, logTag string) (bool, bool) {
+	LogWithTag(logTag, "[%s-Failover] 处理错误分类: statusCode=%d, bodyLen=%d", apiType, statusCode, len(bodyBytes))
 	if statusCode >= 200 && statusCode < 300 {
 		return false, false
 	}
@@ -55,7 +50,7 @@ func shouldRetryWithNextKeyFuzzy(statusCode int, bodyBytes []byte, apiType strin
 	// 内容审核类错误（sensitive_words_detected 等）任何状态码都不应 failover
 	// 换渠道/换 Key 不会改变请求内容本身
 	if len(bodyBytes) > 0 && isContentModerationError(bodyBytes) {
-		LogWithTag(logTag, "[%s-Failover-Fuzzy] 检测到内容审核错误 (statusCode=%d)，不进行 failover, body=%s", apiType, statusCode, errorBodySummaryForLog(apiType, statusCode, bodyBytes))
+		LogWithTag(logTag, "[%s-Failover] 检测到内容审核错误 (statusCode=%d)，不进行 failover, body=%s", apiType, statusCode, errorBodySummaryForLog(apiType, statusCode, bodyBytes))
 		return false, false
 	}
 
@@ -70,18 +65,18 @@ func shouldRetryWithNextKeyFuzzy(statusCode int, bodyBytes []byte, apiType strin
 	// 仅对 4xx 客户端错误生效，5xx 服务端错误应始终允许 failover
 	if statusCode >= 400 && statusCode < 500 && len(bodyBytes) > 0 {
 		if bodyFailover {
-			LogWithTag(logTag, "[%s-Failover-Fuzzy] 消息体包含可重试业务错误，优先于 4xx 错误码处理", apiType)
+			LogWithTag(logTag, "[%s-Failover] 消息体包含可重试业务错误，优先于 4xx 错误码处理", apiType)
 			return true, bodyQuota
 		}
 		if isNonRetryableError(bodyBytes, apiType) {
-			LogWithTag(logTag, "[%s-Failover-Fuzzy] 检测到不可重试错误 (statusCode=%d)，不进行 failover, body=%s", apiType, statusCode, errorBodySummaryForLog(apiType, statusCode, bodyBytes))
+			LogWithTag(logTag, "[%s-Failover] 检测到不可重试错误 (statusCode=%d)，不进行 failover, body=%s", apiType, statusCode, errorBodySummaryForLog(apiType, statusCode, bodyBytes))
 			return false, false
 		}
 	}
 
 	// 状态码直接标记为配额相关
 	if statusCode == 402 || statusCode == 429 {
-		LogWithTag(logTag, "[%s-Failover-Fuzzy] 状态码 %d 直接标记为配额相关", apiType, statusCode)
+		LogWithTag(logTag, "[%s-Failover] 状态码 %d 直接标记为配额相关", apiType, statusCode)
 		return true, true
 	}
 
@@ -89,119 +84,13 @@ func shouldRetryWithNextKeyFuzzy(statusCode int, bodyBytes []byte, apiType strin
 	// 这样 403 + "预扣费额度" 消息 → isQuotaRelated=true
 	if bodyClassified {
 		if bodyQuota {
-			LogWithTag(logTag, "[%s-Failover-Fuzzy] 消息体包含配额相关关键词，标记为配额相关", apiType)
+			LogWithTag(logTag, "[%s-Failover] 消息体包含配额相关关键词，标记为配额相关", apiType)
 			return true, true
 		}
 	}
 
-	LogWithTag(logTag, "[%s-Failover-Fuzzy] Fuzzy 模式结果: shouldFailover=true, isQuotaRelated=false", apiType)
+	LogWithTag(logTag, "[%s-Failover] 结果: shouldFailover=true, isQuotaRelated=false", apiType)
 	return true, false
-}
-
-// shouldRetryWithNextKeyNormal 原有的精确错误分类逻辑
-func shouldRetryWithNextKeyNormal(statusCode int, bodyBytes []byte, apiType string, logTag string) (bool, bool) {
-	// 内容审核类错误（sensitive_words_detected 等）任何状态码都不应 failover
-	// 换渠道/换 Key 不会改变请求内容本身
-	if len(bodyBytes) > 0 && isContentModerationError(bodyBytes) {
-		LogWithTag(logTag, "[%s-Failover-Debug] 检测到内容审核错误 (statusCode=%d)，不进行 failover, body=%s", apiType, statusCode, errorBodySummaryForLog(apiType, statusCode, bodyBytes))
-		return false, false
-	}
-
-	bodyFailover, bodyQuota := false, false
-	bodyClassified := false
-	if len(bodyBytes) > 0 {
-		bodyFailover, bodyQuota = classifyByErrorMessageWithLogTag(bodyBytes, apiType, logTag)
-		bodyClassified = true
-	}
-
-	// 检查是否为参数校验类不可重试错误（invalid_request 等）
-	// 仅对 4xx 客户端错误生效，5xx 服务端错误应始终允许 failover
-	if statusCode >= 400 && statusCode < 500 && len(bodyBytes) > 0 {
-		if bodyFailover {
-			LogWithTag(logTag, "[%s-Failover-Debug] 消息体包含可重试业务错误，优先于 4xx 错误码处理", apiType)
-			return true, bodyQuota
-		}
-		if isNonRetryableError(bodyBytes, apiType) {
-			LogWithTag(logTag, "[%s-Failover-Debug] 检测到不可重试错误 (statusCode=%d)，不进行 failover, body=%s", apiType, statusCode, errorBodySummaryForLog(apiType, statusCode, bodyBytes))
-			return false, false
-		}
-	}
-
-	shouldFailover, isQuotaRelated := classifyByStatusCode(statusCode)
-
-	LogWithTag(logTag, "[%s-Failover-Debug] shouldRetryWithNextKeyNormal: statusCode=%d, bodyLen=%d, shouldFailover=%v, isQuotaRelated=%v",
-		apiType, statusCode, len(bodyBytes), shouldFailover, isQuotaRelated)
-
-	if shouldFailover {
-		// 如果状态码已标记为 quota 相关，直接返回
-		if isQuotaRelated {
-			return true, true
-		}
-		// 否则，仍检查消息体是否包含 quota 相关关键词
-		// 这样 403 + "预扣费额度" 消息 → isQuotaRelated=true
-		LogWithTag(logTag, "[%s-Failover-Debug] 调用 classifyByErrorMessage, body=%s", apiType, errorBodySummaryForLog(apiType, statusCode, bodyBytes))
-		if !bodyClassified {
-			_, bodyQuota = classifyByErrorMessageWithLogTag(bodyBytes, apiType, logTag)
-		}
-		LogWithTag(logTag, "[%s-Failover-Debug] classifyByErrorMessage 返回: msgQuota=%v", apiType, bodyQuota)
-		if bodyQuota {
-			return true, true
-		}
-		return true, false
-	}
-
-	// statusCode 不触发 failover 时，完全依赖消息体判断
-	if bodyClassified {
-		return bodyFailover, bodyQuota
-	}
-	return classifyByErrorMessageWithLogTag(bodyBytes, apiType, logTag)
-}
-
-// classifyByStatusCode 基于 HTTP 状态码分类
-func classifyByStatusCode(statusCode int) (bool, bool) {
-	switch {
-	// 认证/授权错误 (应 failover，非配额相关)
-	case statusCode == 401:
-		return true, false
-	case statusCode == 403:
-		return true, false
-
-	// 配额/计费错误 (应 failover，配额相关)
-	case statusCode == 402:
-		return true, true
-	case statusCode == 429:
-		return true, true
-
-	// 超时错误 (应 failover，非配额相关)
-	case statusCode == 408:
-		return true, false
-
-	// 需要检查消息体的状态码 (交给第二层判断)
-	case statusCode == 400:
-		return false, false
-
-	// 请求错误 (不应 failover，客户端问题)
-	case statusCode == 404, statusCode == 405, statusCode == 406,
-		statusCode == 409, statusCode == 410, statusCode == 411,
-		statusCode == 412, statusCode == 413, statusCode == 414,
-		statusCode == 415, statusCode == 416, statusCode == 417,
-		statusCode == 422, statusCode == 423, statusCode == 424,
-		statusCode == 426, statusCode == 428, statusCode == 431,
-		statusCode == 451:
-		return false, false
-
-	// 服务端错误 (应 failover，非配额相关)
-	case statusCode >= 500:
-		return true, false
-
-	// 其他 4xx (保守处理，不 failover)
-	case statusCode >= 400 && statusCode < 500:
-		return false, false
-
-	// 成功/重定向 (不应 failover)
-	default:
-		return false, false
-	}
 }
 
 // classifyByErrorMessage 基于错误消息内容分类
@@ -919,10 +808,10 @@ func isSchemaValidationMessage(msgLower string) bool {
 	return false
 }
 
-// handleFuzzyModelRoutingError 在 fuzzy 模式下处理可归一化的模型路由错误
+// handleModelRoutingError 处理可归一化的模型路由错误。
 // 如果最后失败的错误可以被归一化为非 503 状态码（如 model_not_found → 404），
 // 则透传该错误体和归一化后的状态码；否则返回 false，由调用方继续返回通用 503
-func handleFuzzyModelRoutingError(c *gin.Context, lastFailoverError *FailoverError) bool {
+func handleModelRoutingError(c *gin.Context, lastFailoverError *FailoverError) bool {
 	if lastFailoverError == nil {
 		return false
 	}
@@ -940,89 +829,36 @@ func handleFuzzyModelRoutingError(c *gin.Context, lastFailoverError *FailoverErr
 }
 
 // HandleAllChannelsFailed 处理所有渠道都失败的情况
-// fuzzyMode: 是否启用模糊模式（返回通用错误）
 // lastFailoverError: 最后一个故障转移错误
 // lastError: 最后一个错误
 // apiType: API 类型（用于错误消息）
-func HandleAllChannelsFailed(c *gin.Context, fuzzyMode bool, lastFailoverError *FailoverError, lastError error, apiType string) {
-	// Fuzzy 模式下默认返回通用错误，但保留明确的模型路由错误语义
-	if fuzzyMode {
-		if handleFuzzyModelRoutingError(c, lastFailoverError) {
-			return
-		}
-		c.JSON(503, gin.H{
-			"type": "error",
-			"error": gin.H{
-				"type":    "service_unavailable",
-				"message": "All upstream channels are currently unavailable",
-			},
-		})
+func HandleAllChannelsFailed(c *gin.Context, lastFailoverError *FailoverError, lastError error, apiType string) {
+	// 保留明确的模型路由错误语义，其余情况默认返回通用错误
+	if handleModelRoutingError(c, lastFailoverError) {
 		return
 	}
-
-	// 非 Fuzzy 模式：透传最后一个错误的详情
-	if lastFailoverError != nil {
-		status := normalizeUpstreamErrorStatus(lastFailoverError.Status, lastFailoverError.Body)
-		if status == 0 {
-			status = 503
-		}
-		var errBody map[string]interface{}
-		if err := json.Unmarshal(lastFailoverError.Body, &errBody); err == nil {
-			c.JSON(status, errBody)
-		} else {
-			c.JSON(status, gin.H{"error": string(lastFailoverError.Body)})
-		}
-	} else {
-		errMsg := "所有渠道都不可用"
-		if lastError != nil {
-			errMsg = lastError.Error()
-		}
-		c.JSON(503, gin.H{
-			"error":   "所有" + apiType + "渠道都不可用",
-			"details": errMsg,
-		})
-	}
+	c.JSON(503, gin.H{
+		"type": "error",
+		"error": gin.H{
+			"type":    "service_unavailable",
+			"message": "All upstream channels are currently unavailable",
+		},
+	})
 }
 
 // HandleAllKeysFailed 处理所有密钥都失败的情况（单渠道模式）
-func HandleAllKeysFailed(c *gin.Context, fuzzyMode bool, lastFailoverError *FailoverError, lastError error, apiType string) {
-	// Fuzzy 模式下默认返回通用错误，但保留明确的模型路由错误语义
-	if fuzzyMode {
-		if handleFuzzyModelRoutingError(c, lastFailoverError) {
-			return
-		}
-		c.JSON(503, gin.H{
-			"type": "error",
-			"error": gin.H{
-				"type":    "service_unavailable",
-				"message": "All upstream channels are currently unavailable",
-			},
-		})
+func HandleAllKeysFailed(c *gin.Context, lastFailoverError *FailoverError, lastError error, apiType string) {
+	// 保留明确的模型路由错误语义，其余情况默认返回通用错误
+	if handleModelRoutingError(c, lastFailoverError) {
 		return
 	}
-
-	// 非 Fuzzy 模式：透传最后一个错误的详情
-	if lastFailoverError != nil {
-		status := normalizeUpstreamErrorStatus(lastFailoverError.Status, lastFailoverError.Body)
-		if status == 0 {
-			status = 500
-		}
-		var errBody map[string]interface{}
-		if err := json.Unmarshal(lastFailoverError.Body, &errBody); err == nil {
-			c.JSON(status, errBody)
-		} else {
-			c.JSON(status, gin.H{"error": string(lastFailoverError.Body)})
-		}
-	} else {
-		errMsg := "未知错误"
-		if lastError != nil {
-			errMsg = lastError.Error()
-		}
-		c.JSON(500, gin.H{
-			"error":   "所有上游" + apiType + "API密钥都不可用",
-			"details": errMsg,
-		})
-	}
+	c.JSON(503, gin.H{
+		"type": "error",
+		"error": gin.H{
+			"type":    "service_unavailable",
+			"message": "All upstream channels are currently unavailable",
+		},
+	})
 }
 
 // getMapKeys 获取 map 的所有 key（用于调试日志）

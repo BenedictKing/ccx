@@ -33,7 +33,6 @@ func handleSuccess(
 	startTime time.Time,
 	model string,
 	isStream bool,
-	fuzzyMode bool,
 	timeouts common.StreamPreflightTimeouts,
 ) (*types.Usage, error) {
 	defer errutil.IgnoreDeferred(resp.Body.Close)
@@ -65,15 +64,13 @@ func handleSuccess(
 		if err := json.Unmarshal(bodyBytes, &claudeResp); err != nil {
 			return nil, fmt.Errorf("%w: %v", common.ErrInvalidResponseBody, err)
 		}
-		// 空响应拦截（仅 Fuzzy 模式）：在原生 Claude 结构上判空，避免
+		// 空响应拦截：在原生 Claude 结构上判空，避免
 		// convertClaudeResponseToChat 丢失 server_tool_use / redacted_thinking
 		// 等语义块导致的误判。Header 未发送，可安全 failover。
-		if fuzzyMode {
-			var claudeTyped types.ClaudeResponse
-			if err := json.Unmarshal(bodyBytes, &claudeTyped); err == nil && common.IsClaudeResponseEmpty(&claudeTyped) {
-				common.RequestLogf(c, "[Chat-EmptyResponse] 上游返回空响应（非流式，upstreamType=%s），触发 failover", upstreamType)
-				return nil, common.ErrEmptyNonStreamResponse
-			}
+		var claudeTyped types.ClaudeResponse
+		if err := json.Unmarshal(bodyBytes, &claudeTyped); err == nil && common.IsClaudeResponseEmpty(&claudeTyped) {
+			common.RequestLogf(c, "[Chat-EmptyResponse] 上游返回空响应（非流式，upstreamType=%s），触发 failover", upstreamType)
+			return nil, common.ErrEmptyNonStreamResponse
 		}
 		openaiResp := convertClaudeResponseToChat(claudeResp, model)
 		respBytes, err := json.Marshal(openaiResp)
@@ -98,13 +95,11 @@ func handleSuccess(
 	case "responses":
 		// 转换 Responses 响应为 OpenAI Chat 格式
 		chatRespBytes := converters.ConvertResponsesResponseToChatResponse(bodyBytes, model)
-		// 空响应拦截（仅 Fuzzy 模式）
-		if fuzzyMode {
-			var respMap map[string]interface{}
-			if err := json.Unmarshal(chatRespBytes, &respMap); err == nil && common.IsChatResponseEmpty(respMap) {
-				common.RequestLogf(c, "[Chat-EmptyResponse] 上游返回空响应（非流式，upstreamType=%s），触发 failover", upstreamType)
-				return nil, common.ErrEmptyNonStreamResponse
-			}
+		// 空响应拦截
+		var emptyCheckMap map[string]interface{}
+		if err := json.Unmarshal(chatRespBytes, &emptyCheckMap); err == nil && common.IsChatResponseEmpty(emptyCheckMap) {
+			common.RequestLogf(c, "[Chat-EmptyResponse] 上游返回空响应（非流式，upstreamType=%s），触发 failover", upstreamType)
+			return nil, common.ErrEmptyNonStreamResponse
 		}
 		c.Data(resp.StatusCode, "application/json", chatRespBytes)
 		// 提取 usage（Responses 格式：input_tokens / output_tokens）
@@ -129,7 +124,18 @@ func handleSuccess(
 			// JSON 不可解析：维持原 ErrInvalidResponseBody 语义
 			return nil, fmt.Errorf("%w: %v", common.ErrInvalidResponseBody, err)
 		}
-		if fuzzyMode && common.IsChatResponseEmpty(respMap) {
+		// default 分支承接 gemini 等没有专属 case 的透传上游类型。IsChatResponseEmpty
+		// 只认识 OpenAI 的 choices[].message 结构；直接套用到 Gemini 的 candidates 结构上，
+		// respMap["choices"] 断言必然失败、被判定为空，导致所有合法 Gemini 响应都误触发 failover。
+		// 因此按响应体是否具备 candidates 字段（Gemini 专属、非 omitempty）区分两种 schema；
+		// 不用 usageMetadata 判断，因为该字段是 omitempty，缺省时会误判成 OpenAI 形态。
+		if _, isGeminiShaped := respMap["candidates"]; isGeminiShaped {
+			var geminiResp types.GeminiResponse
+			if err := json.Unmarshal(bodyBytes, &geminiResp); err == nil && common.IsGeminiResponseEmpty(&geminiResp) {
+				common.RequestLogf(c, "[Chat-EmptyResponse] 上游返回空响应（非流式，upstreamType=%s），触发 failover", upstreamType)
+				return nil, common.ErrEmptyNonStreamResponse
+			}
+		} else if common.IsChatResponseEmpty(respMap) {
 			common.RequestLogf(c, "[Chat-EmptyResponse] 上游返回空响应（非流式，upstreamType=%s），触发 failover", upstreamType)
 			return nil, common.ErrEmptyNonStreamResponse
 		}
@@ -139,6 +145,14 @@ func handleSuccess(
 		if u, ok := respMap["usage"].(map[string]interface{}); ok {
 			promptTokens, _ := u["prompt_tokens"].(float64)
 			completionTokens, _ := u["completion_tokens"].(float64)
+			return &types.Usage{
+				InputTokens:  int(promptTokens),
+				OutputTokens: int(completionTokens),
+			}, nil
+		}
+		if u, ok := respMap["usageMetadata"].(map[string]interface{}); ok {
+			promptTokens, _ := u["promptTokenCount"].(float64)
+			completionTokens, _ := u["candidatesTokenCount"].(float64)
 			return &types.Usage{
 				InputTokens:  int(promptTokens),
 				OutputTokens: int(completionTokens),

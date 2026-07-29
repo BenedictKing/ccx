@@ -1004,9 +1004,6 @@ type Config struct {
 	AgentModelProfiles        map[string]AgentModelProfile       `json:"agentModelProfiles,omitempty"`
 	UpstreamModelCapabilities map[string]UpstreamModelCapability `json:"upstreamModelCapabilities,omitempty"`
 
-	// Fuzzy 模式：启用时模糊处理错误，所有非 2xx 错误都尝试 failover
-	FuzzyModeEnabled bool `json:"fuzzyModeEnabled"`
-
 	// 移除计费头中的 cch= 参数：兼容旧全局配置读取；新语义已下沉到渠道级字段
 	StripBillingHeader bool `json:"stripBillingHeader,omitempty"`
 
@@ -1367,36 +1364,6 @@ func (cm *ConfigManager) cleanupExpiredFailures() {
 			cm.mu.Unlock()
 		}
 	}
-}
-
-// ============== Fuzzy 模式相关方法 ==============
-
-// GetFuzzyModeEnabled 获取 Fuzzy 模式状态
-func (cm *ConfigManager) GetFuzzyModeEnabled() bool {
-	cm.mu.RLock()
-	defer cm.mu.RUnlock()
-	return cm.config.FuzzyModeEnabled
-}
-
-// SetFuzzyModeEnabled 设置 Fuzzy 模式状态
-func (cm *ConfigManager) SetFuzzyModeEnabled(enabled bool) error {
-	cm.mu.Lock()
-
-	cm.config.FuzzyModeEnabled = enabled
-
-	if err := cm.saveConfigLocked(cm.config); err != nil {
-		cm.mu.Unlock()
-		return err
-	}
-
-	status := "关闭"
-	if enabled {
-		status = "启用"
-	}
-	log.Printf("[Config-FuzzyMode] Fuzzy 模式已%s", status)
-
-	cm.fireConfigChangeCallbacks()
-	return nil
 }
 
 // ============== HistoricalImageTurnLimit 相关方法 ==============

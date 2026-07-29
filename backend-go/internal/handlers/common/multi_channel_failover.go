@@ -111,7 +111,7 @@ func HandleMultiChannelFailoverWithSelectionFilter(
 	}
 	if handleAllFailed == nil {
 		handleAllFailed = func(c *gin.Context, failoverErr *FailoverError, lastError error) {
-			HandleAllChannelsFailed(c, false, failoverErr, lastError, apiType)
+			HandleAllChannelsFailed(c, failoverErr, lastError, apiType)
 		}
 	}
 	requestStartedAt := time.Now()

@@ -201,7 +201,7 @@ func handleMultiChannel(
 					}
 					responsesReq.TransformerMetadata["codex_tool_compat_enabled"] = upstreamCopy.IsCodexToolCompatEnabled() || upstreamCopy.IsCodexNativeToolPassthroughEnabled()
 					timeouts := common.ResolveStreamPreflightTimeouts(upstreamCopy, metricsManager.GetCircuitBreakerConfig())
-					return handleSuccess(c, resp, provider, upstreamCopy, apiKey, upstream.ServiceType, envCfg, sessionManager, startTime, &responsesReq, actualRequestBody, cfgManager.GetFuzzyModeEnabled(), timeouts)
+					return handleSuccess(c, resp, provider, upstreamCopy, apiKey, upstream.ServiceType, envCfg, sessionManager, startTime, &responsesReq, actualRequestBody, timeouts)
 				},
 				responsesReq.Model,
 				"",
@@ -222,7 +222,7 @@ func handleMultiChannel(
 		},
 		nil,
 		func(ctx *gin.Context, failoverErr *common.FailoverError, lastError error) {
-			common.HandleAllChannelsFailed(ctx, cfgManager.GetFuzzyModeEnabled(), failoverErr, lastError, "Responses")
+			common.HandleAllChannelsFailed(ctx, failoverErr, lastError, "Responses")
 		},
 	)
 }
@@ -285,17 +285,13 @@ func handleSingleChannel(
 			return
 		}
 		if compactErr != nil {
-			if cfgManager.GetFuzzyModeEnabled() {
-				c.JSON(503, gin.H{
-					"type": "error",
-					"error": gin.H{
-						"type":    "service_unavailable",
-						"message": "All upstream channels are currently unavailable",
-					},
-				})
-				return
-			}
-			c.Data(compactErr.status, "application/json", compactErr.body)
+			c.JSON(503, gin.H{
+				"type": "error",
+				"error": gin.H{
+					"type":    "service_unavailable",
+					"message": "All upstream channels are currently unavailable",
+				},
+			})
 			return
 		}
 	}
@@ -334,7 +330,7 @@ func handleSingleChannel(
 			}
 			responsesReq.TransformerMetadata["codex_tool_compat_enabled"] = upstreamCopy.IsCodexToolCompatEnabled() || upstreamCopy.IsCodexNativeToolPassthroughEnabled()
 			timeouts := common.ResolveStreamPreflightTimeouts(upstreamCopy, metricsManager.GetCircuitBreakerConfig())
-			return handleSuccess(c, resp, provider, upstreamCopy, apiKey, upstream.ServiceType, envCfg, sessionManager, startTime, &responsesReq, actualRequestBody, cfgManager.GetFuzzyModeEnabled(), timeouts)
+			return handleSuccess(c, resp, provider, upstreamCopy, apiKey, upstream.ServiceType, envCfg, sessionManager, startTime, &responsesReq, actualRequestBody, timeouts)
 		},
 		responsesReq.Model,
 		"",
@@ -382,5 +378,5 @@ func handleSingleChannel(
 	}
 
 	common.RequestLogf(c, "[Responses-Error] 所有 Responses API密钥都失败了")
-	common.HandleAllKeysFailed(c, cfgManager.GetFuzzyModeEnabled(), lastFailoverError, lastError, "Responses")
+	common.HandleAllKeysFailed(c, lastFailoverError, lastError, "Responses")
 }

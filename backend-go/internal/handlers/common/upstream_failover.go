@@ -798,7 +798,7 @@ func TryUpstreamWithAllKeys(
 				// 记录错误响应头（用于诊断限流 header）
 				LogUpstreamResponseHeaders(c, resp, envCfg, apiType)
 
-				shouldFailover, isQuotaRelated := ShouldRetryWithNextKeyWithLogTag(resp.StatusCode, respBodyBytes, cfgManager.GetFuzzyModeEnabled(), apiType, RequestLogTag(c))
+				shouldFailover, isQuotaRelated := ShouldRetryWithNextKeyWithLogTag(resp.StatusCode, respBodyBytes, apiType, RequestLogTag(c))
 				isTemporarilyOverloaded := IsUpstreamTemporarilyOverloaded(respBodyBytes)
 				isAccountPoolUnavailable := IsUpstreamAccountPoolUnavailable(respBodyBytes)
 				// 火山账号级 429 (AccountRateLimitExceeded)：精确识别，仅冷却当前 scope
@@ -876,6 +876,65 @@ func TryUpstreamWithAllKeys(
 							signal.MaxInputTokens, signal.Source, signal.Evidence, estimatedInput) {
 							RequestLogf(c, "[%s-ContextLimit] 渠道 %s 模型 %s 实测上下文上限 %d tokens（来源 %s，本次请求约 %d tokens），已记忆并将在后续路由中规避",
 								apiType, upstream.Name, attemptModel, signal.MaxInputTokens, signal.Source, estimatedInput)
+						}
+					}
+				}
+
+				// 弃用参数自适应（被动侧）：上游以 400 明确拒绝某个采样参数时，
+				// 记忆该 渠道-Key-模型 组合并用同一 Key 立即重试（剥离在下一轮循环开头生效）。
+				// 仅当参数首次记录且请求体中确实存在该字段时重试，避免记忆已生效后死循环。
+				if resp.StatusCode == 400 && upstream.ChannelUID != "" && !c.Writer.Written() {
+					if param := DeprecatedParamFromError(respBodyBytes); param != "" {
+						keyHash := autopilot.KeyHashFromAPIKey(apiKey)
+						if _, present := StripDeprecatedParams(attemptBody, []string{param}); present &&
+							deprecatedParamCache.Record(upstream.ChannelUID, keyHash, attemptModel, param) {
+							retrySelection = selection
+							retryAPIKey = apiKey
+							metricsManager.RecordRequestFinalizeIgnored(currentBaseURL, apiKey, metricsServiceType, requestID)
+							channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
+							if probeKey := currentBaseURL + "|" + apiKey; probeAcquired[probeKey] {
+								metricsManager.ReleaseProbe(currentBaseURL, apiKey, metricsServiceType)
+								delete(probeAcquired, probeKey)
+							}
+							CompleteLog(channelLogStore, metricsKey, logRequestID, resp.StatusCode, false, string(respBodyBytes), isRetryAttempt)
+							RequestLogf(c, "[%s-DeprecatedParam] 渠道 %s 模型 %s 拒绝参数 %q，已记忆并剥离后同 Key 重试",
+								apiType, upstream.Name, attemptModel, param)
+							continue
+						}
+					}
+				}
+
+				// 渠道兼容性自学习（被动侧）：上游以 400/422 明确表示缺少某项协议能力时，
+				// 记忆该 渠道-Key-模型 组合并用同一 Key 立即重试（改写在下一轮循环开头注入）。
+				// 仅当结论首次记录时重试，避免记忆已生效后死循环。
+				//
+				// 位置在 shouldFailover 判断之前：本包的错误分类以"大多数非 2xx 都 failover"为
+				// 默认策略，未命中已知不可重试关键词的 400/422 会被判定为 shouldFailover=true
+				// 并在下面 continue，若放在其后，developer role 降级等结论将永远学不到。
+				// 与上面的弃用参数块是兄弟关系而非嵌套：弃用参数识别只针对 400，
+				// 兼容性学习同时覆盖 400 与 422（部分上游用 422 表达结构不受支持）。
+				if (resp.StatusCode == 400 || resp.StatusCode == 422) && upstream.ChannelUID != "" && !c.Writer.Written() {
+					signalCtx := CompatSignalContext{
+						HasDeveloperRole:      BodyHasDeveloperRole(attemptBody),
+						HasCodexClientTools:   kind == scheduler.ChannelKindResponses,
+						HasHistoricalThinking: BodyHasHistoricalThinking(attemptBody),
+					}
+					if signal := CompatTraitFromError(resp.StatusCode, respBodyBytes, signalCtx); signal != nil {
+						keyHash := autopilot.KeyHashFromAPIKey(apiKey)
+						if channelCompatCache.Record(upstream.ChannelUID, keyHash, attemptModel,
+							signal.Trait, signal.Enabled, config.CompatSourceErrorSignal, signal.Evidence) {
+							retrySelection = selection
+							retryAPIKey = apiKey
+							metricsManager.RecordRequestFinalizeIgnored(currentBaseURL, apiKey, metricsServiceType, requestID)
+							channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
+							if probeKey := currentBaseURL + "|" + apiKey; probeAcquired[probeKey] {
+								metricsManager.ReleaseProbe(currentBaseURL, apiKey, metricsServiceType)
+								delete(probeAcquired, probeKey)
+							}
+							CompleteLog(channelLogStore, metricsKey, logRequestID, resp.StatusCode, false, string(respBodyBytes), isRetryAttempt)
+							RequestLogf(c, "[%s-ChannelCompat] 渠道 %s 模型 %s 缺少能力 %s，已记忆并应用兼容改写后同 Key 重试",
+								apiType, upstream.Name, attemptModel, signal.Trait)
+							continue
 						}
 					}
 				}
@@ -963,63 +1022,6 @@ func TryUpstreamWithAllKeys(
 						return false, "", 0, lastFailoverError, nil, lastError
 					}
 					continue
-				}
-
-				// 弃用参数自适应（被动侧）：上游以 400 明确拒绝某个采样参数时，
-				// 记忆该 渠道-Key-模型 组合并用同一 Key 立即重试（剥离在下一轮循环开头生效）。
-				// 仅当参数首次记录且请求体中确实存在该字段时重试，避免记忆已生效后死循环。
-				if resp.StatusCode == 400 && upstream.ChannelUID != "" && !c.Writer.Written() {
-					if param := DeprecatedParamFromError(respBodyBytes); param != "" {
-						keyHash := autopilot.KeyHashFromAPIKey(apiKey)
-						if _, present := StripDeprecatedParams(attemptBody, []string{param}); present &&
-							deprecatedParamCache.Record(upstream.ChannelUID, keyHash, attemptModel, param) {
-							retrySelection = selection
-							retryAPIKey = apiKey
-							metricsManager.RecordRequestFinalizeIgnored(currentBaseURL, apiKey, metricsServiceType, requestID)
-							channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
-							if probeKey := currentBaseURL + "|" + apiKey; probeAcquired[probeKey] {
-								metricsManager.ReleaseProbe(currentBaseURL, apiKey, metricsServiceType)
-								delete(probeAcquired, probeKey)
-							}
-							CompleteLog(channelLogStore, metricsKey, logRequestID, resp.StatusCode, false, string(respBodyBytes), isRetryAttempt)
-							RequestLogf(c, "[%s-DeprecatedParam] 渠道 %s 模型 %s 拒绝参数 %q，已记忆并剥离后同 Key 重试",
-								apiType, upstream.Name, attemptModel, param)
-							continue
-						}
-					}
-				}
-
-				// 渠道兼容性自学习（被动侧）：上游以 400/422 明确表示缺少某项协议能力时，
-				// 记忆该 渠道-Key-模型 组合并用同一 Key 立即重试（改写在下一轮循环开头注入）。
-				// 仅当结论首次记录时重试，避免记忆已生效后死循环。
-				//
-				// 与上面的弃用参数块是兄弟关系而非嵌套：弃用参数识别只针对 400，
-				// 兼容性学习同时覆盖 400 与 422（部分上游用 422 表达结构不受支持），
-				// 嵌进 400 守卫里会让 422 分支永远不可达。
-				if (resp.StatusCode == 400 || resp.StatusCode == 422) && upstream.ChannelUID != "" && !c.Writer.Written() {
-					signalCtx := CompatSignalContext{
-						HasDeveloperRole:      BodyHasDeveloperRole(attemptBody),
-						HasCodexClientTools:   kind == scheduler.ChannelKindResponses,
-						HasHistoricalThinking: BodyHasHistoricalThinking(attemptBody),
-					}
-					if signal := CompatTraitFromError(resp.StatusCode, respBodyBytes, signalCtx); signal != nil {
-						keyHash := autopilot.KeyHashFromAPIKey(apiKey)
-						if channelCompatCache.Record(upstream.ChannelUID, keyHash, attemptModel,
-							signal.Trait, signal.Enabled, config.CompatSourceErrorSignal, signal.Evidence) {
-							retrySelection = selection
-							retryAPIKey = apiKey
-							metricsManager.RecordRequestFinalizeIgnored(currentBaseURL, apiKey, metricsServiceType, requestID)
-							channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
-							if probeKey := currentBaseURL + "|" + apiKey; probeAcquired[probeKey] {
-								metricsManager.ReleaseProbe(currentBaseURL, apiKey, metricsServiceType)
-								delete(probeAcquired, probeKey)
-							}
-							CompleteLog(channelLogStore, metricsKey, logRequestID, resp.StatusCode, false, string(respBodyBytes), isRetryAttempt)
-							RequestLogf(c, "[%s-ChannelCompat] 渠道 %s 模型 %s 缺少能力 %s，已记忆并应用兼容改写后同 Key 重试",
-								apiType, upstream.Name, attemptModel, signal.Trait)
-							continue
-						}
-					}
 				}
 
 				// 非 failover 错误，记录失败指标后返回（请求已处理）

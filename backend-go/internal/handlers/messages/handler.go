@@ -206,7 +206,7 @@ func handleMultiChannel(
 						timeouts := common.ResolveStreamPreflightTimeouts(upstreamCopy, metricsManager.GetCircuitBreakerConfig())
 						return common.HandleStreamResponse(c, resp, provider, envCfg, startTime, upstreamCopy, actualRequestBody, claudeReq.Model, timeouts)
 					}
-					return handleNormalResponse(c, resp, provider, envCfg, startTime, actualRequestBody, upstreamCopy, apiKey, cfgManager.GetFuzzyModeEnabled())
+					return handleNormalResponse(c, resp, provider, envCfg, startTime, actualRequestBody, upstreamCopy, apiKey)
 				},
 				claudeReq.Model,
 				"",
@@ -250,7 +250,7 @@ func handleMultiChannel(
 			}
 		},
 		func(ctx *gin.Context, failoverErr *common.FailoverError, lastError error) {
-			common.HandleAllChannelsFailed(ctx, cfgManager.GetFuzzyModeEnabled(), failoverErr, lastError, "Messages")
+			common.HandleAllChannelsFailed(ctx, failoverErr, lastError, "Messages")
 		},
 	)
 }
@@ -337,7 +337,7 @@ func handleSingleChannel(
 				timeouts := common.ResolveStreamPreflightTimeouts(upstreamCopy, metricsManager.GetCircuitBreakerConfig())
 				return common.HandleStreamResponse(c, resp, provider, envCfg, startTime, upstreamCopy, actualRequestBody, claudeReq.Model, timeouts)
 			}
-			return handleNormalResponse(c, resp, provider, envCfg, startTime, actualRequestBody, upstreamCopy, apiKey, cfgManager.GetFuzzyModeEnabled())
+			return handleNormalResponse(c, resp, provider, envCfg, startTime, actualRequestBody, upstreamCopy, apiKey)
 		},
 		claudeReq.Model,
 		"",
@@ -388,7 +388,7 @@ func handleSingleChannel(
 	}
 
 	common.RequestLogf(c, "[Messages-Error] 所有API密钥都失败了")
-	common.HandleAllKeysFailed(c, cfgManager.GetFuzzyModeEnabled(), lastFailoverError, lastError, "Messages")
+	common.HandleAllKeysFailed(c, lastFailoverError, lastError, "Messages")
 }
 
 // handleNormalResponse 处理非流式响应
@@ -401,7 +401,6 @@ func handleNormalResponse(
 	requestBody []byte,
 	upstream *config.UpstreamConfig,
 	apiKey string,
-	fuzzyMode bool,
 ) (*types.Usage, error) {
 	defer errutil.IgnoreDeferred(resp.Body.Close)
 
@@ -433,9 +432,9 @@ func handleNormalResponse(
 		return nil, fmt.Errorf("%w: %v", common.ErrInvalidResponseBody, err)
 	}
 
-	// 空响应拦截（仅 Fuzzy 模式）：上游 200 但 content 语义为空，
+	// 空响应拦截：上游 200 但 content 语义为空，
 	// Header 未发送，可安全 failover 到下一个 Key/BaseURL/渠道
-	if fuzzyMode && common.IsClaudeResponseEmpty(claudeResp) {
+	if common.IsClaudeResponseEmpty(claudeResp) {
 		common.RequestLogf(c, "[Messages-EmptyResponse] 上游返回空响应（非流式，Key: %s），触发 failover", utils.MaskAPIKey(apiKey))
 		return nil, common.ErrEmptyNonStreamResponse
 	}

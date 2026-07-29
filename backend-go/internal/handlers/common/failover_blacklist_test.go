@@ -486,7 +486,7 @@ func TestShouldRetryWithNextKey_MessageWinsOverInvalidRequestCode(t *testing.T) 
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotFailover, gotQuota := ShouldRetryWithNextKey(400, body, tt.fuzzyMode, "Messages")
+			gotFailover, gotQuota := ShouldRetryWithNextKey(400, body, "Messages")
 			if !gotFailover {
 				t.Fatalf("ShouldRetryWithNextKey(400, balance invalid_request, %v) failover = false, want true", tt.fuzzyMode)
 			}
@@ -535,7 +535,7 @@ func TestShouldRetryWithNextKey_SensitiveWordsDetected(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotFailover, gotQuota := ShouldRetryWithNextKey(tt.statusCode, body, tt.fuzzyMode, "Messages")
+			gotFailover, gotQuota := ShouldRetryWithNextKey(tt.statusCode, body, "Messages")
 			if gotFailover != tt.wantFailover {
 				t.Errorf("ShouldRetryWithNextKey(%d, sensitive_words_body, %v) failover = %v, want %v",
 					tt.statusCode, tt.fuzzyMode, gotFailover, tt.wantFailover)
@@ -702,28 +702,28 @@ func TestHandleAllFailedFuzzyMode_ModelNotFoundNormalizesTo404(t *testing.T) {
 		{
 			name: "all channels failed - model_not_found normalizes to 404",
 			handle: func(c *gin.Context) {
-				HandleAllChannelsFailed(c, true, &FailoverError{Status: http.StatusServiceUnavailable, Body: modelNotFoundBody}, nil, "Messages")
+				HandleAllChannelsFailed(c, &FailoverError{Status: http.StatusServiceUnavailable, Body: modelNotFoundBody}, nil, "Messages")
 			},
 			wantStatus: http.StatusNotFound,
 		},
 		{
 			name: "all keys failed - model_not_found normalizes to 404",
 			handle: func(c *gin.Context) {
-				HandleAllKeysFailed(c, true, &FailoverError{Status: http.StatusServiceUnavailable, Body: modelNotFoundBody}, nil, "Messages")
+				HandleAllKeysFailed(c, &FailoverError{Status: http.StatusServiceUnavailable, Body: modelNotFoundBody}, nil, "Messages")
 			},
 			wantStatus: http.StatusNotFound,
 		},
 		{
 			name: "all channels failed - 429 quota stays generic 503 in fuzzy mode",
 			handle: func(c *gin.Context) {
-				HandleAllChannelsFailed(c, true, &FailoverError{Status: http.StatusTooManyRequests, Body: quotaBody}, nil, "Messages")
+				HandleAllChannelsFailed(c, &FailoverError{Status: http.StatusTooManyRequests, Body: quotaBody}, nil, "Messages")
 			},
 			wantStatus: http.StatusServiceUnavailable,
 		},
 		{
 			name: "all keys failed - 429 quota stays generic 503 in fuzzy mode",
 			handle: func(c *gin.Context) {
-				HandleAllKeysFailed(c, true, &FailoverError{Status: http.StatusTooManyRequests, Body: quotaBody}, nil, "Messages")
+				HandleAllKeysFailed(c, &FailoverError{Status: http.StatusTooManyRequests, Body: quotaBody}, nil, "Messages")
 			},
 			wantStatus: http.StatusServiceUnavailable,
 		},
@@ -806,7 +806,7 @@ func TestShouldRetryWithNextKey_ModelNotFound(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotFailover, gotQuota := ShouldRetryWithNextKey(tt.statusCode, body, tt.fuzzyMode, "Messages")
+			gotFailover, gotQuota := ShouldRetryWithNextKey(tt.statusCode, body, "Messages")
 			if gotFailover != tt.wantFailover {
 				t.Errorf("ShouldRetryWithNextKey(%d, model_not_found_body, %v) failover = %v, want %v",
 					tt.statusCode, tt.fuzzyMode, gotFailover, tt.wantFailover)

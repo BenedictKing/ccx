@@ -12,7 +12,7 @@ func TestShouldRetryWithNextKey_403WithPredeductQuotaError(t *testing.T) {
 	// 使用生产环境的精确 JSON 格式
 	body := []byte(`{"error":{"type":"new_api_error","message":"预扣费额度失败, 用户剩余额度: ¥0.053950, 需要预扣费额度: ¥0.191160, 下次重置时间: 2025-01-01 00:00:00"},"type":"error"}`)
 
-	gotFailover, gotQuota := ShouldRetryWithNextKey(403, body, false, "Messages")
+	gotFailover, gotQuota := ShouldRetryWithNextKey(403, body, "Messages")
 
 	if !gotFailover {
 		t.Errorf("ShouldRetryWithNextKey(403, prededuct_error, false) failover = %v, want true", gotFailover)
@@ -105,7 +105,9 @@ func TestShouldRetryWithNextKey(t *testing.T) {
 					"message": "Bad request",
 				},
 			},
-			wantFailover: false,
+			// 未命中任何已知不可重试关键词的 400：统一分类策略下默认 failover（模糊处理，
+			// 不依赖状态码语义精确分类），与命中 invalid_request/schema 校验关键词的用例相反。
+			wantFailover: true,
 			wantQuota:    false,
 		},
 		{
@@ -145,12 +147,12 @@ func TestShouldRetryWithNextKey(t *testing.T) {
 			wantFailover: false,
 			wantQuota:    false,
 		},
-		// 404 不应 failover
+		// 404：统一分类策略下默认 failover（不再有精确状态码分类分支专门放行 404）
 		{
-			name:         "404 never failover",
+			name:         "404 defaults to failover",
 			statusCode:   404,
 			body:         map[string]interface{}{},
-			wantFailover: false,
+			wantFailover: true,
 			wantQuota:    false,
 		},
 		// 200 不应 failover
@@ -166,13 +168,12 @@ func TestShouldRetryWithNextKey(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			bodyBytes, _ := json.Marshal(tt.body)
-			// 测试非 Fuzzy 模式（精确错误分类）
-			gotFailover, gotQuota := ShouldRetryWithNextKey(tt.statusCode, bodyBytes, false, "Messages")
+			gotFailover, gotQuota := ShouldRetryWithNextKey(tt.statusCode, bodyBytes, "Messages")
 			if gotFailover != tt.wantFailover {
-				t.Errorf("shouldRetryWithNextKey(%d, ..., false) failover = %v, want %v", tt.statusCode, gotFailover, tt.wantFailover)
+				t.Errorf("shouldRetryWithNextKey(%d, ...) failover = %v, want %v", tt.statusCode, gotFailover, tt.wantFailover)
 			}
 			if gotQuota != tt.wantQuota {
-				t.Errorf("shouldRetryWithNextKey(%d, ..., false) quota = %v, want %v", tt.statusCode, gotQuota, tt.wantQuota)
+				t.Errorf("shouldRetryWithNextKey(%d, ...) quota = %v, want %v", tt.statusCode, gotQuota, tt.wantQuota)
 			}
 		})
 	}
@@ -183,15 +184,13 @@ func TestShouldRetryWithNextKey_TopLevelDetailAndAuthMessages(t *testing.T) {
 		name         string
 		statusCode   int
 		body         string
-		fuzzyMode    bool
 		wantFailover bool
 		wantQuota    bool
 	}{
 		{
-			name:         "top level detail not found remains non quota failover in fuzzy mode",
+			name:         "top level detail not found remains non quota failover",
 			statusCode:   404,
 			body:         `{"detail":"Not Found"}`,
-			fuzzyMode:    true,
 			wantFailover: true,
 			wantQuota:    false,
 		},
@@ -199,7 +198,6 @@ func TestShouldRetryWithNextKey_TopLevelDetailAndAuthMessages(t *testing.T) {
 			name:         "top level message chinese auth error",
 			statusCode:   401,
 			body:         `{"message":"身份验证失败。","type":"authentication_error"}`,
-			fuzzyMode:    false,
 			wantFailover: true,
 			wantQuota:    false,
 		},
@@ -207,7 +205,6 @@ func TestShouldRetryWithNextKey_TopLevelDetailAndAuthMessages(t *testing.T) {
 			name:         "top level detail chinese invalid token",
 			statusCode:   401,
 			body:         `{"detail":"无效的令牌","type":"authentication_error"}`,
-			fuzzyMode:    false,
 			wantFailover: true,
 			wantQuota:    false,
 		},
@@ -215,7 +212,6 @@ func TestShouldRetryWithNextKey_TopLevelDetailAndAuthMessages(t *testing.T) {
 			name:         "string error field auth message",
 			statusCode:   401,
 			body:         `{"error":"身份验证失败。"}`,
-			fuzzyMode:    false,
 			wantFailover: true,
 			wantQuota:    false,
 		},
@@ -223,20 +219,20 @@ func TestShouldRetryWithNextKey_TopLevelDetailAndAuthMessages(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotFailover, gotQuota := ShouldRetryWithNextKey(tt.statusCode, []byte(tt.body), tt.fuzzyMode, "Messages")
+			gotFailover, gotQuota := ShouldRetryWithNextKey(tt.statusCode, []byte(tt.body), "Messages")
 			if gotFailover != tt.wantFailover {
-				t.Fatalf("ShouldRetryWithNextKey(%d, %s, %v) failover = %v, want %v", tt.statusCode, tt.body, tt.fuzzyMode, gotFailover, tt.wantFailover)
+				t.Fatalf("ShouldRetryWithNextKey(%d, %s) failover = %v, want %v", tt.statusCode, tt.body, gotFailover, tt.wantFailover)
 			}
 			if gotQuota != tt.wantQuota {
-				t.Fatalf("ShouldRetryWithNextKey(%d, %s, %v) quota = %v, want %v", tt.statusCode, tt.body, tt.fuzzyMode, gotQuota, tt.wantQuota)
+				t.Fatalf("ShouldRetryWithNextKey(%d, %s) quota = %v, want %v", tt.statusCode, tt.body, gotQuota, tt.wantQuota)
 			}
 		})
 	}
 }
 
-// TestShouldRetryWithNextKeyFuzzyMode 测试 Fuzzy 模式下的错误分类
-// Fuzzy 模式：所有非 2xx 错误都触发 failover
-func TestShouldRetryWithNextKeyFuzzyMode(t *testing.T) {
+// TestShouldRetryWithNextKeyDefaultsToFailoverForUnknownStatusCodes 验证未命中消息体关键词时，
+// 大多数非 2xx 状态码默认触发 failover（模糊处理策略）。
+func TestShouldRetryWithNextKeyDefaultsToFailoverForUnknownStatusCodes(t *testing.T) {
 	tests := []struct {
 		name         string
 		statusCode   int
@@ -256,28 +252,28 @@ func TestShouldRetryWithNextKeyFuzzyMode(t *testing.T) {
 			wantFailover: false,
 			wantQuota:    false,
 		},
-		// 3xx 重定向在 Fuzzy 模式下触发 failover
+		// 3xx 重定向默认触发 failover
 		{
-			name:         "301 Redirect - failover in fuzzy mode",
+			name:         "301 Redirect - defaults to failover",
 			statusCode:   301,
 			wantFailover: true,
 			wantQuota:    false,
 		},
 		{
-			name:         "302 Found - failover in fuzzy mode",
+			name:         "302 Found - defaults to failover",
 			statusCode:   302,
 			wantFailover: true,
 			wantQuota:    false,
 		},
-		// 4xx 客户端错误在 Fuzzy 模式下都触发 failover
+		// 4xx 客户端错误默认都触发 failover
 		{
-			name:         "400 Bad Request - failover in fuzzy mode",
+			name:         "400 Bad Request - defaults to failover",
 			statusCode:   400,
 			wantFailover: true,
 			wantQuota:    false,
 		},
 		{
-			name:         "401 Unauthorized - failover in fuzzy mode",
+			name:         "401 Unauthorized - defaults to failover",
 			statusCode:   401,
 			wantFailover: true,
 			wantQuota:    false,
@@ -289,19 +285,19 @@ func TestShouldRetryWithNextKeyFuzzyMode(t *testing.T) {
 			wantQuota:    true, // 配额相关
 		},
 		{
-			name:         "403 Forbidden - failover in fuzzy mode",
+			name:         "403 Forbidden - defaults to failover",
 			statusCode:   403,
 			wantFailover: true,
 			wantQuota:    false,
 		},
 		{
-			name:         "404 Not Found - failover in fuzzy mode",
+			name:         "404 Not Found - defaults to failover",
 			statusCode:   404,
 			wantFailover: true,
 			wantQuota:    false,
 		},
 		{
-			name:         "422 Unprocessable Entity - failover in fuzzy mode",
+			name:         "422 Unprocessable Entity - defaults to failover",
 			statusCode:   422,
 			wantFailover: true,
 			wantQuota:    false,
@@ -312,21 +308,21 @@ func TestShouldRetryWithNextKeyFuzzyMode(t *testing.T) {
 			wantFailover: true,
 			wantQuota:    true, // 配额相关
 		},
-		// 5xx 服务端错误在 Fuzzy 模式下触发 failover
+		// 5xx 服务端错误默认触发 failover
 		{
-			name:         "500 Internal Server Error - failover in fuzzy mode",
+			name:         "500 Internal Server Error - defaults to failover",
 			statusCode:   500,
 			wantFailover: true,
 			wantQuota:    false,
 		},
 		{
-			name:         "502 Bad Gateway - failover in fuzzy mode",
+			name:         "502 Bad Gateway - defaults to failover",
 			statusCode:   502,
 			wantFailover: true,
 			wantQuota:    false,
 		},
 		{
-			name:         "503 Service Unavailable - failover in fuzzy mode",
+			name:         "503 Service Unavailable - defaults to failover",
 			statusCode:   503,
 			wantFailover: true,
 			wantQuota:    false,
@@ -335,8 +331,8 @@ func TestShouldRetryWithNextKeyFuzzyMode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// 测试 Fuzzy 模式（所有非 2xx 都 failover）
-			gotFailover, gotQuota := ShouldRetryWithNextKey(tt.statusCode, nil, true, "Messages")
+			// 未命中消息体关键词时，所有非 2xx 都 failover
+			gotFailover, gotQuota := ShouldRetryWithNextKey(tt.statusCode, nil, "Messages")
 			if gotFailover != tt.wantFailover {
 				t.Errorf("shouldRetryWithNextKey(%d, nil, true) failover = %v, want %v", tt.statusCode, gotFailover, tt.wantFailover)
 			}
@@ -347,9 +343,8 @@ func TestShouldRetryWithNextKeyFuzzyMode(t *testing.T) {
 	}
 }
 
-// TestShouldRetryWithNextKey_FuzzyMode_403WithQuotaMessage 测试 Fuzzy 模式下 403 + 预扣费消息
-// 验证修复：Fuzzy 模式下也会检查消息体中的配额相关关键词
-func TestShouldRetryWithNextKey_FuzzyMode_403WithQuotaMessage(t *testing.T) {
+// TestShouldRetryWithNextKey_403WithQuotaMessage 验证 403 状态码下会检查消息体中的配额相关关键词
+func TestShouldRetryWithNextKey_403WithQuotaMessage(t *testing.T) {
 	tests := []struct {
 		name         string
 		statusCode   int
@@ -358,35 +353,35 @@ func TestShouldRetryWithNextKey_FuzzyMode_403WithQuotaMessage(t *testing.T) {
 		wantQuota    bool
 	}{
 		{
-			name:         "403 with prededuct quota error in fuzzy mode",
+			name:         "403 with prededuct quota error",
 			statusCode:   403,
 			body:         []byte(`{"error":{"type":"new_api_error","message":"预扣费额度失败, 用户剩余额度: ¥0.053950, 需要预扣费额度: ¥0.191160"},"type":"error"}`),
 			wantFailover: true,
 			wantQuota:    true,
 		},
 		{
-			name:         "403 with insufficient balance in fuzzy mode",
+			name:         "403 with insufficient balance",
 			statusCode:   403,
 			body:         []byte(`{"error":{"message":"余额不足，请充值"}}`),
 			wantFailover: true,
 			wantQuota:    true,
 		},
 		{
-			name:         "403 without quota keywords in fuzzy mode",
+			name:         "403 without quota keywords",
 			statusCode:   403,
 			body:         []byte(`{"error":{"message":"Access denied"}}`),
 			wantFailover: true,
 			wantQuota:    false,
 		},
 		{
-			name:         "403 with empty body in fuzzy mode",
+			name:         "403 with empty body",
 			statusCode:   403,
 			body:         nil,
 			wantFailover: true,
 			wantQuota:    false,
 		},
 		{
-			name:         "500 with quota message in fuzzy mode",
+			name:         "500 with quota message",
 			statusCode:   500,
 			body:         []byte(`{"error":{"message":"Quota exceeded"}}`),
 			wantFailover: true,
@@ -396,7 +391,7 @@ func TestShouldRetryWithNextKey_FuzzyMode_403WithQuotaMessage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotFailover, gotQuota := ShouldRetryWithNextKey(tt.statusCode, tt.body, true, "Messages")
+			gotFailover, gotQuota := ShouldRetryWithNextKey(tt.statusCode, tt.body, "Messages")
 			if gotFailover != tt.wantFailover {
 				t.Errorf("ShouldRetryWithNextKey(%d, body, true) failover = %v, want %v", tt.statusCode, gotFailover, tt.wantFailover)
 			}
@@ -407,7 +402,7 @@ func TestShouldRetryWithNextKey_FuzzyMode_403WithQuotaMessage(t *testing.T) {
 	}
 }
 
-func TestShouldRetryWithNextKey_FuzzyMode_InvalidRequestShouldNotFailover(t *testing.T) {
+func TestShouldRetryWithNextKey_InvalidRequestShouldNotFailover(t *testing.T) {
 	tests := []struct {
 		name string
 		body []byte
@@ -432,7 +427,7 @@ func TestShouldRetryWithNextKey_FuzzyMode_InvalidRequestShouldNotFailover(t *tes
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotFailover, gotQuota := ShouldRetryWithNextKey(400, tt.body, true, "Messages")
+			gotFailover, gotQuota := ShouldRetryWithNextKey(400, tt.body, "Messages")
 			if gotFailover {
 				t.Errorf("ShouldRetryWithNextKey(400, invalid_request_body, true) failover = %v, want false", gotFailover)
 			}
@@ -446,53 +441,38 @@ func TestShouldRetryWithNextKey_FuzzyMode_InvalidRequestShouldNotFailover(t *tes
 func TestShouldRetryWithNextKey_ModelNameMismatchOverridesInvalidRequest(t *testing.T) {
 	body := []byte(`{"error":{"message":"The supported API model names are deepseek-v4-pro or deepseek-v4-flash, but you passed claude-sonnet-5.","type":"invalid_request_error","code":"invalid_request_error"}}`)
 
-	for _, fuzzyMode := range []bool{false, true} {
-		gotFailover, gotQuota := ShouldRetryWithNextKey(400, body, fuzzyMode, "Chat")
-		if !gotFailover {
-			t.Errorf("fuzzyMode=%v: 显式模型不支持错误应触发 failover", fuzzyMode)
-		}
-		if gotQuota {
-			t.Errorf("fuzzyMode=%v: 模型不支持错误不应标记为 quota", fuzzyMode)
-		}
+	gotFailover, gotQuota := ShouldRetryWithNextKey(400, body, "Chat")
+	if !gotFailover {
+		t.Error("显式模型不支持错误应触发 failover")
+	}
+	if gotQuota {
+		t.Error("模型不支持错误不应标记为 quota")
 	}
 }
 
 func TestShouldRetryWithNextKey_InvalidRequest5xxShouldFailover(t *testing.T) {
 	tests := []struct {
-		name      string
-		body      []byte
-		fuzzyMode bool
+		name string
+		body []byte
 	}{
 		{
-			name:      "invalid_request code - normal mode",
-			body:      []byte(`{"error":{"code":"invalid_request","message":"invalid request from upstream"}}`),
-			fuzzyMode: false,
+			name: "invalid_request code",
+			body: []byte(`{"error":{"code":"invalid_request","message":"invalid request from upstream"}}`),
 		},
 		{
-			name:      "invalid_request code - fuzzy mode",
-			body:      []byte(`{"error":{"code":"invalid_request","message":"invalid request from upstream"}}`),
-			fuzzyMode: true,
-		},
-		{
-			name:      "schema validation message - normal mode",
-			body:      []byte(`{"error":{"type":"upstream_error","upstream_error":{"message":"Schema validation failed: unsupported content type input_text"}}}`),
-			fuzzyMode: false,
-		},
-		{
-			name:      "schema validation message - fuzzy mode",
-			body:      []byte(`{"error":{"type":"upstream_error","upstream_error":{"message":"Schema validation failed: unsupported content type input_text"}}}`),
-			fuzzyMode: true,
+			name: "schema validation message",
+			body: []byte(`{"error":{"type":"upstream_error","upstream_error":{"message":"Schema validation failed: unsupported content type input_text"}}}`),
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotFailover, gotQuota := ShouldRetryWithNextKey(500, tt.body, tt.fuzzyMode, "Messages")
+			gotFailover, gotQuota := ShouldRetryWithNextKey(500, tt.body, "Messages")
 			if !gotFailover {
-				t.Errorf("ShouldRetryWithNextKey(500, invalid_request_body, %v) failover = %v, want true", tt.fuzzyMode, gotFailover)
+				t.Errorf("ShouldRetryWithNextKey(500, invalid_request_body) failover = %v, want true", gotFailover)
 			}
 			if gotQuota {
-				t.Errorf("ShouldRetryWithNextKey(500, invalid_request_body, %v) quota = %v, want false", tt.fuzzyMode, gotQuota)
+				t.Errorf("ShouldRetryWithNextKey(500, invalid_request_body) quota = %v, want false", gotQuota)
 			}
 		})
 	}
@@ -577,17 +557,19 @@ func TestShouldRetryWithNextKey_BusinessCodeOnlyErrors(t *testing.T) {
 			wantQuota:    false,
 		},
 		{
-			name:         "provider invalid parameter on 400 does not failover",
+			// InvalidParameter 不在已知不可重试错误码/关键词列表中：统一分类策略下默认 failover，
+			// 与本文件其他"未命中已知关键词的 4xx 默认 failover"用例一致。
+			name:         "provider invalid parameter on 400 defaults to failover",
 			statusCode:   400,
 			body:         `{"code":"InvalidParameter","message":"Role must be user or assistant and Content length must be greater than 0"}`,
-			wantFailover: false,
+			wantFailover: true,
 			wantQuota:    false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotFailover, gotQuota := ShouldRetryWithNextKey(tt.statusCode, []byte(tt.body), false, "Messages")
+			gotFailover, gotQuota := ShouldRetryWithNextKey(tt.statusCode, []byte(tt.body), "Messages")
 			if gotFailover != tt.wantFailover {
 				t.Errorf("ShouldRetryWithNextKey(%d, %s) failover = %v, want %v", tt.statusCode, tt.body, gotFailover, tt.wantFailover)
 			}
