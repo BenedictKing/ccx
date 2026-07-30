@@ -21,8 +21,7 @@
           size="small"
           variant="tonal"
           color="primary"
-          :loading="rediscovering"
-          :disabled="rediscovering"
+          :disabled="isDetecting"
           @click="rediscoverAll"
         >
           <v-icon start size="16">mdi-refresh</v-icon>
