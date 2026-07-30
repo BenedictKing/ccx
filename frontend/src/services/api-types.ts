@@ -301,6 +301,7 @@ export interface ChannelProtocolRoute {
   serviceType: string
   channelUid?: string
   status?: Channel['status']
+  apiKeys?: string[]
   supportedModels?: string[]
   modelInventoryKnown?: boolean
   discoveredModels?: string[]

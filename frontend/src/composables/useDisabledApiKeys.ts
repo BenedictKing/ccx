@@ -17,6 +17,11 @@ type DisabledApiKeyOptions = {
   onKeysChanged?: () => Promise<void>
 }
 
+type KeyRoute = {
+  kind: ChannelType
+  index: number
+}
+
 export function useDisabledApiKeys(options: DisabledApiKeyOptions) {
   const restoringKey = ref('')
   const localRestoredKeys = ref(new Set<string>())
@@ -30,6 +35,36 @@ export function useDisabledApiKeys(options: DisabledApiKeyOptions) {
 
   const keyModelKey = (apiKey: string, model: string) => `${apiKey}|${model}`
   const channelId = (channel: Channel) => channel.routeIndex ?? channel.index
+
+  const keyRoutes = (channel: Channel, apiKey: string): KeyRoute[] => {
+    const routes = (channel.protocolRoutes ?? []).filter(route => route.apiKeys?.includes(apiKey))
+    if (routes.length > 0) {
+      return routes.map(route => ({ kind: route.kind, index: route.index }))
+    }
+    return [{ kind: options.channelType.value, index: channelId(channel) }]
+  }
+
+  const suspendKeyAtRoute = (route: KeyRoute, apiKey: string): Promise<void> => {
+    switch (route.kind) {
+      case 'chat': return options.apiService.suspendChatApiKey(route.index, apiKey)
+      case 'images': return options.apiService.suspendImagesApiKey(route.index, apiKey)
+      case 'vectors': return options.apiService.suspendVectorsApiKey(route.index, apiKey)
+      case 'gemini': return options.apiService.suspendGeminiApiKey(route.index, apiKey)
+      case 'responses': return options.apiService.suspendResponsesApiKey(route.index, apiKey)
+      default: return options.apiService.suspendApiKey(route.index, apiKey)
+    }
+  }
+
+  const resumeKeyAtRoute = (route: KeyRoute, apiKey: string): Promise<void> => {
+    switch (route.kind) {
+      case 'chat': return options.apiService.resumeChatApiKey(route.index, apiKey)
+      case 'images': return options.apiService.resumeImagesApiKey(route.index, apiKey)
+      case 'vectors': return options.apiService.resumeVectorsApiKey(route.index, apiKey)
+      case 'gemini': return options.apiService.resumeGeminiApiKey(route.index, apiKey)
+      case 'responses': return options.apiService.resumeResponsesApiKey(route.index, apiKey)
+      default: return options.apiService.resumeApiKey(route.index, apiKey)
+    }
+  }
 
   const markKeySuspended = (apiKey: string) => {
     const configs = options.form.apiKeyConfigs ?? []
@@ -203,25 +238,8 @@ export function useDisabledApiKeys(options: DisabledApiKeyOptions) {
     if (!channel || suspendingKey.value) return
     suspendingKey.value = apiKey
     try {
-      const id = channelId(channel)
-      switch (options.channelType.value) {
-        case 'chat':
-          await options.apiService.suspendChatApiKey(id, apiKey)
-          break
-        case 'images':
-          await options.apiService.suspendImagesApiKey(id, apiKey)
-          break
-        case 'vectors':
-          await options.apiService.suspendVectorsApiKey(id, apiKey)
-          break
-        case 'gemini':
-          await options.apiService.suspendGeminiApiKey(id, apiKey)
-          break
-        case 'responses':
-          await options.apiService.suspendResponsesApiKey(id, apiKey)
-          break
-        default:
-          await options.apiService.suspendApiKey(id, apiKey)
+      for (const route of keyRoutes(channel, apiKey)) {
+        await suspendKeyAtRoute(route, apiKey)
       }
       markKeySuspended(apiKey)
       localSuspendedKeys.value = new Set([...localSuspendedKeys.value, apiKey])
@@ -239,25 +257,8 @@ export function useDisabledApiKeys(options: DisabledApiKeyOptions) {
     if (!channel || suspendingKey.value) return
     suspendingKey.value = apiKey
     try {
-      const id = channelId(channel)
-      switch (options.channelType.value) {
-        case 'chat':
-          await options.apiService.resumeChatApiKey(id, apiKey)
-          break
-        case 'images':
-          await options.apiService.resumeImagesApiKey(id, apiKey)
-          break
-        case 'vectors':
-          await options.apiService.resumeVectorsApiKey(id, apiKey)
-          break
-        case 'gemini':
-          await options.apiService.resumeGeminiApiKey(id, apiKey)
-          break
-        case 'responses':
-          await options.apiService.resumeResponsesApiKey(id, apiKey)
-          break
-        default:
-          await options.apiService.resumeApiKey(id, apiKey)
+      for (const route of keyRoutes(channel, apiKey)) {
+        await resumeKeyAtRoute(route, apiKey)
       }
       markKeyResumed(apiKey)
       localResumedKeys.value = new Set([...localResumedKeys.value, apiKey])

@@ -39,6 +39,12 @@ describe('buildUnifiedChannelsData account grouping', () => {
     expect(result.channels[0].protocolCapsules?.map(item => item.label)).toEqual(['CLAUDE', 'CHAT'])
     expect(result.channels[0].protocolRoutes?.map(item => item.kind)).toEqual(['messages', 'chat', 'responses', 'gemini'])
     expect(result.channels[0].protocolRoutes?.map(item => item.status)).toEqual([undefined, undefined, undefined, undefined])
+    expect(result.channels[0].protocolRoutes?.map(item => item.apiKeys)).toEqual([
+      ['sk-a'],
+      ['sk-a', 'sk-b'],
+      ['sk-b'],
+      ['sk-a'],
+    ])
   })
 
   it('聚合账号合并各协议凭证并按全部路由计算状态', () => {
@@ -94,7 +100,6 @@ describe('buildUnifiedChannelsData account grouping', () => {
       { kind: 'responses', index: 2, status: 'disabled' },
     ])
   })
-
 
   it('相同 provider 和名称下不同 accountUid 不应合并', () => {
     const data: Record<LlmChannelKind, ChannelsResponse> = {
@@ -280,7 +285,6 @@ describe('buildUnifiedChannelsData account grouping', () => {
     expect(merged.tpm).toBeCloseTo(10 / 15)
   })
 })
-
 
 describe('buildUnifiedReorderPayloads', () => {
   it('priority 使用统一列表全局位次而非各协议组内名次', () => {

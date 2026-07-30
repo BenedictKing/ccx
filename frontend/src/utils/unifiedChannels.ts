@@ -160,6 +160,7 @@ const buildProtocolRoutes = (channels: Partial<Record<LlmChannelKind, RoutedChan
       serviceType: channel.serviceType,
       channelUid: channel.channelUid,
       status: channel.status,
+      apiKeys: [...(channel.apiKeys ?? [])],
       supportedModels: channel.supportedModels == null ? undefined : [...channel.supportedModels],
     }]
   })
@@ -303,7 +304,6 @@ export const buildUnifiedRecentActivity = (
     }
   })
 }
-
 
 export interface UnifiedReorderPayload {
   order: number[]
