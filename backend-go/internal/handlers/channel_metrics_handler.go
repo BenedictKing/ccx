@@ -248,7 +248,7 @@ func GetResponsesChannelMetrics(metricsManager *metrics.MetricsManager) gin.Hand
 	return GetChannelMetrics(metricsManager)
 }
 
-// ResumeChannel 恢复熔断渠道（重置熔断状态、恢复拉黑 Key，保留历史统计）
+// ResumeChannel 恢复熔断渠道（重置熔断状态、恢复不可用 Key，保留历史统计）
 // isResponses 参数指定是 Messages 渠道还是 Responses 渠道
 func ResumeChannel(sch *scheduler.ChannelScheduler, cfgManager *config.ConfigManager, isResponses bool) gin.HandlerFunc {
 	kind := scheduler.ChannelKindMessages
@@ -971,7 +971,7 @@ func GetChatChannelKeyMetricsHistory(metricsManager *metrics.MetricsManager, cfg
 	return getChannelKeyMetricsHistoryWithKind(metricsManager, cfgManager, scheduler.ChannelKindChat, false, 366*24*time.Hour)
 }
 
-// ResumeChannelWithKind 恢复指定类型的熔断渠道（重置熔断状态、恢复拉黑 Key，保留历史统计）
+// ResumeChannelWithKind 恢复指定类型的熔断渠道（重置熔断状态、恢复不可用 Key，保留历史统计）
 func ResumeChannelWithKind(sch *scheduler.ChannelScheduler, cfgManager *config.ConfigManager, kind scheduler.ChannelKind) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id, err := strconv.Atoi(c.Param("id"))
@@ -1006,7 +1006,7 @@ func ResumeChannelWithKind(sch *scheduler.ChannelScheduler, cfgManager *config.C
 
 		message := "渠道已恢复，熔断状态已重置（历史统计保留）"
 		if restoredCount > 0 {
-			message = fmt.Sprintf("渠道已恢复，熔断状态已重置，同时恢复了 %d 个被拉黑的 Key", restoredCount)
+			message = fmt.Sprintf("渠道已恢复，熔断状态已重置，同时恢复了 %d 个不可用 Key", restoredCount)
 		}
 
 		c.JSON(200, gin.H{"success": true, "message": message, "restoredKeys": restoredCount})

@@ -223,7 +223,7 @@
   "orchestration.copyFailed": "Gagal menyalin konfigurasi channel",
   "orchestration.promotionSuccess": "Channel {name} menjadi prioritas tertinggi dan akan diprioritaskan selama 5 menit ke depan",
   "orchestration.resumeSuccess": "Channel dilanjutkan dan metrik direset",
-  "orchestration.resumeSuccessWithKeys": "Channel dilanjutkan, metrik direset, dan {count} key blacklist dipulihkan",
+  "orchestration.resumeSuccessWithKeys": "Channel dilanjutkan, metrik direset, dan {count} key yang tidak tersedia dipulihkan",
   "orchestration.deleteActiveGuard": "Tidak bisa dihapus: urutan failover harus menyisakan minimal satu channel aktif",
   "orchestration.pausedKeys": "{count} key dijeda",
   "orchestration.blacklistedKeys": "{count} key diblokir",

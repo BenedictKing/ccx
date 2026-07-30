@@ -223,7 +223,7 @@
   "orchestration.copyFailed": "Failed to copy channel config",
   "orchestration.promotionSuccess": "Channel {name} is now top priority and will be preferred for the next 5 minutes",
   "orchestration.resumeSuccess": "Channel resumed and metrics reset",
-  "orchestration.resumeSuccessWithKeys": "Channel resumed, metrics reset, and {count} blacklisted key(s) restored",
+  "orchestration.resumeSuccessWithKeys": "Channel resumed, metrics reset, and {count} unavailable key(s) restored",
   "orchestration.deleteActiveGuard": "Cannot delete: keep at least one active channel in the failover sequence",
   "orchestration.pausedKeys": "{count} key(s) paused",
   "orchestration.blacklistedKeys": "{count} key(s) blacklisted",

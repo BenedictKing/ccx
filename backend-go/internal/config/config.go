@@ -641,6 +641,14 @@ func IsAPIKeyConfigEffective(cfg APIKeyConfig) bool {
 	return false
 }
 
+// shouldPersistAPIKeyConfig 判断清除 Enabled 后是否仍需保留内部凭证或端点绑定。
+// CredentialUID/BaseURL 不属于管理视图字段，但不能随暂停状态一起删除。
+func shouldPersistAPIKeyConfig(cfg APIKeyConfig) bool {
+	return IsAPIKeyConfigEffective(cfg) ||
+		strings.TrimSpace(cfg.CredentialUID) != "" ||
+		strings.TrimSpace(cfg.BaseURL) != ""
+}
+
 // restoreAPIKeyConfig 将已保存的 key 配置合并回 configs 列表，或用默认值补齐。
 func restoreAPIKeyConfig(configs []APIKeyConfig, key string, saved *APIKeyConfig) []APIKeyConfig {
 	if saved != nil {
@@ -1834,7 +1842,7 @@ func (cm *ConfigManager) ResumeKey(apiType string, channelIndex int, apiKey stri
 			// 移除 Enabled 限制，恢复默认（活跃）行为
 			upstream.APIKeyConfigs[i].Enabled = nil
 			// 如果移除 Enabled 后配置无其他有效字段，清除整个配置项
-			if !IsAPIKeyConfigEffective(upstream.APIKeyConfigs[i]) {
+			if !shouldPersistAPIKeyConfig(upstream.APIKeyConfigs[i]) {
 				upstream.APIKeyConfigs = append(upstream.APIKeyConfigs[:i], upstream.APIKeyConfigs[i+1:]...)
 			}
 			found = true
@@ -1851,8 +1859,8 @@ func (cm *ConfigManager) ResumeKey(apiType string, channelIndex int, apiKey stri
 	return cm.saveConfigLocked(cm.config)
 }
 
-// RestoreAllKeys 恢复指定渠道所有被拉黑的 Key（持久化）
-// 返回恢复的 Key 数量
+// RestoreAllKeys 恢复指定渠道所有不可用的 Key（被拉黑或手动暂停，持久化）。
+// 返回实际恢复的唯一 Key 数量。
 func (cm *ConfigManager) RestoreAllKeys(apiType string, channelIndex int) (int, error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
@@ -1863,14 +1871,13 @@ func (cm *ConfigManager) RestoreAllKeys(apiType string, channelIndex int) (int, 
 	}
 
 	upstream := &(*upstreams)[channelIndex]
-	restoredCount := len(upstream.DisabledAPIKeys)
-	if restoredCount == 0 {
-		return 0, nil
-	}
+	disabledCount := len(upstream.DisabledAPIKeys)
+	restoredKeys := make(map[string]struct{}, disabledCount)
 
 	// 将所有被拉黑的 Key 移回活跃列表
-	savedConfigs := make(map[string]*APIKeyConfig, restoredCount)
+	savedConfigs := make(map[string]*APIKeyConfig, disabledCount)
 	for _, dk := range upstream.DisabledAPIKeys {
+		restoredKeys[dk.Key] = struct{}{}
 		if !slices.Contains(upstream.APIKeys, dk.Key) {
 			upstream.APIKeys = append(upstream.APIKeys, dk.Key)
 		}
@@ -1887,15 +1894,49 @@ func (cm *ConfigManager) RestoreAllKeys(apiType string, channelIndex int) (int, 
 		delete(cm.failedKeysCache, cacheKey)
 	}
 
-	for _, cfg := range savedConfigs {
-		upstream.APIKeyConfigs = restoreAPIKeyConfig(upstream.APIKeyConfigs, cfg.Key, cfg)
+	if disabledCount > 0 {
+		for _, cfg := range savedConfigs {
+			upstream.APIKeyConfigs = restoreAPIKeyConfig(upstream.APIKeyConfigs, cfg.Key, cfg)
+		}
+		upstream.APIKeyConfigs = normalizeAPIKeyConfigs(upstream.APIKeys, upstream.APIKeyConfigs)
+		upstream.DisabledAPIKeys = nil
 	}
-	upstream.APIKeyConfigs = normalizeAPIKeyConfigs(upstream.APIKeys, upstream.APIKeyConfigs)
 
-	log.Printf("[%s-Blacklist] 渠道 [%d] %s 的 %d 个 Key 已全部恢复", apiType, channelIndex, upstream.Name, restoredCount)
-	upstream.DisabledAPIKeys = nil
+	// 渠道级“恢复”同时解除手动暂停，避免渠道已 active 但仍残留 enabled=false。
+	activeKeys := make(map[string]struct{}, len(upstream.APIKeys))
+	for _, key := range upstream.APIKeys {
+		activeKeys[key] = struct{}{}
+	}
+	resumedCount := 0
+	for i := 0; i < len(upstream.APIKeyConfigs); {
+		cfg := &upstream.APIKeyConfigs[i]
+		_, active := activeKeys[cfg.Key]
+		if !active || cfg.Enabled == nil || *cfg.Enabled {
+			i++
+			continue
+		}
 
-	return restoredCount, cm.saveConfigLocked(cm.config)
+		cfg.Enabled = nil
+		restoredKeys[cfg.Key] = struct{}{}
+		resumedCount++
+		if !shouldPersistAPIKeyConfig(*cfg) {
+			upstream.APIKeyConfigs = append(upstream.APIKeyConfigs[:i], upstream.APIKeyConfigs[i+1:]...)
+			continue
+		}
+		i++
+	}
+
+	if len(restoredKeys) == 0 {
+		return 0, nil
+	}
+	if disabledCount > 0 {
+		log.Printf("[%s-Blacklist] 渠道 [%d] %s 的 %d 个被拉黑 Key 已全部恢复", apiType, channelIndex, upstream.Name, disabledCount)
+	}
+	if resumedCount > 0 {
+		log.Printf("[%s-Suspend] 渠道 [%d] %s 的 %d 个手动暂停 Key 已全部恢复", apiType, channelIndex, upstream.Name, resumedCount)
+	}
+
+	return len(restoredKeys), cm.saveConfigLocked(cm.config)
 }
 
 // RestoreDisabledKeys 恢复指定渠道中命中的被拉黑 Key，并返回实际恢复的 key 列表。

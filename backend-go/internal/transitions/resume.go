@@ -5,7 +5,7 @@ type ManualResumeResult struct {
 	RestoredCount int
 }
 
-// RestoreAllAndReset 收口“恢复全部 disabled keys + 重置渠道 breaker”的编排。
+// RestoreAllAndReset 收口“恢复全部不可用 keys + 重置渠道 breaker”的编排。
 func RestoreAllAndReset(
 	restoreAllKeys func() (int, error),
 	resetChannelRuntime func(),
