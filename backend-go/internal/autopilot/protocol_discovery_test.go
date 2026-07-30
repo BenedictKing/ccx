@@ -121,6 +121,53 @@ func TestPrioritizeProtocolProbeModelsCapsCandidateCount(t *testing.T) {
 	}
 }
 
+// TestParseModelsDeclaredEndpointTypes 验证解析 new-api 的 supported_endpoint_types
+// 并映射为 CCX 协议名。
+func TestParseModelsDeclaredEndpointTypes(t *testing.T) {
+	body := []byte(`{"data":[
+		{"id":"claude-sonnet-4-6-thinking","supported_endpoint_types":["anthropic","openai"]},
+		{"id":"gpt-5.5","supported_endpoint_types":["openai","openai-response"]},
+		{"id":"gemini-3-pro","supported_endpoint_types":["gemini"]},
+		{"id":"text-embed","supported_endpoint_types":["embeddings"]},
+		{"id":"no-field"}
+	]}`)
+	declared := parseModelsDeclaredEndpointTypes(body)
+
+	if got := strings.Join(declared["claude-sonnet-4-6-thinking"], ","); got != "messages,chat" {
+		t.Fatalf("anthropic+openai 应映射为 messages,chat, got=%q", got)
+	}
+	if got := strings.Join(declared["gpt-5.5"], ","); got != "chat,responses" {
+		t.Fatalf("openai+openai-response 应映射为 chat,responses, got=%q", got)
+	}
+	if got := strings.Join(declared["gemini-3-pro"], ","); got != "gemini" {
+		t.Fatalf("gemini 应映射为 gemini, got=%q", got)
+	}
+	// embeddings/jina-rerank 等不参与协议探测的枚举值应被忽略。
+	if _, ok := declared["text-embed"]; ok {
+		t.Fatalf("非探测协议的 endpoint type 不应产生条目: %v", declared["text-embed"])
+	}
+	if _, ok := declared["no-field"]; ok {
+		t.Fatal("未声明该字段的模型不应产生条目")
+	}
+}
+
+// TestPrioritizeProtocolProbeModelsPrefersDeclaredSupport 验证上游声明支持该协议的模型
+// 在截断前被优先排入探测队列，即使它的名字前缀不在优先级表里。
+func TestPrioritizeProtocolProbeModelsPrefersDeclaredSupport(t *testing.T) {
+	models := []string{"gpt-5.4", "weird-name-model", "gpt-5.6"}
+	declared := map[string][]string{"weird-name-model": {"messages"}}
+
+	got := prioritizeProtocolProbeModelsWithDeclared("messages", models, declared, 1)
+	if len(got) != 1 || got[0] != "weird-name-model" {
+		t.Fatalf("声明支持 messages 的模型应优先于名字前缀规则, got=%v", got)
+	}
+
+	// 无声明信息时退化为既有前缀排序行为。
+	if got := prioritizeProtocolProbeModelsWithDeclared("chat", models, nil, 1); got[0] != "gpt-5.4" {
+		t.Fatalf("无声明信息时应保持前缀优先级行为, got=%v", got)
+	}
+}
+
 // TestDiscoverEndpointProtocolsReusesSiblingModelsWhenListEmpty 验证 /v1/models 返回空清单时，
 // 复用同一 (identityBaseURL, keyHash) 兄弟协议渠道画像里的模型作为探测候选。
 // 同一 baseURL + Key 只有一份上游模型清单，兄弟渠道的已知清单描述的是同一个上游端点。

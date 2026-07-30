@@ -10,6 +10,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -134,7 +135,7 @@ func (r *AutoDiscoveryRunner) discoverEndpointProtocols(
 		if protocol == configuredProtocol && !usedSharedModels {
 			continue
 		}
-		probeModels := prioritizeProtocolProbeModels(protocol, models, protocolDiscoveryMaxModels)
+		probeModels := prioritizeProtocolProbeModelsWithDeclared(protocol, models, result.declaredEndpointTypes, protocolDiscoveryMaxModels)
 		attemptedCounts[protocol] = len(probeModels)
 		for _, model := range probeModels {
 			tasks = append(tasks, protocolProbeTask{protocol: protocol, model: model})
@@ -310,18 +311,36 @@ var protocolProbePreferredPrefixes = map[string][]string{
 // prioritizeProtocolProbeModels 按协议的前缀优先级表对候选模型排序，并截断到最多 limit 个，
 // 用于逐模型探测时限制单轮任务数量，避免模型数量过多造成探测风暴。
 func prioritizeProtocolProbeModels(protocol string, models []string, limit int) []string {
+	return prioritizeProtocolProbeModelsWithDeclared(protocol, models, nil, limit)
+}
+
+// prioritizeProtocolProbeModelsWithDeclared 在前缀优先级之上叠加上游声明的协议支持信息。
+//
+// declared 来自 new-api 的 supported_endpoint_types（模型 -> 协议集合）。它只抬高排序，
+// 不做过滤：上游存在少报（声明 ["openai"] 的模型实测也能走 /v1/messages），
+// 按它过滤会漏掉真实可用的模型。当模型数超过 limit 被截断时，这个提示能让确实声明
+// 支持该协议的模型不被名字前缀规则挤掉。
+func prioritizeProtocolProbeModelsWithDeclared(protocol string, models []string, declared map[string][]string, limit int) []string {
 	if len(models) == 0 {
 		return nil
 	}
 	prefixes := protocolProbePreferredPrefixes[protocol]
+	declaresProtocol := func(model string) bool {
+		return slices.Contains(declared[model], protocol)
+	}
 	rank := func(model string) int {
+		// 已声明支持该协议的模型整体排在未声明的模型之前。
+		base := 0
+		if len(declared) > 0 && !declaresProtocol(model) {
+			base = len(prefixes) + 1
+		}
 		lower := strings.ToLower(model)
 		for i, prefix := range prefixes {
 			if strings.HasPrefix(lower, prefix) {
-				return i
+				return base + i
 			}
 		}
-		return len(prefixes)
+		return base + len(prefixes)
 	}
 	ordered := append([]string(nil), models...)
 	sort.SliceStable(ordered, func(i, j int) bool {

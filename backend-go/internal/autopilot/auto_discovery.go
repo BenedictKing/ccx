@@ -59,6 +59,9 @@ type EndpointDiscoveryResult struct {
 	ProtocolDiscoveryError   map[string]string    `json:"protocolDiscoveryError,omitempty"`
 	apiKey                   string               `json:"-"`
 	credentialUID            string               `json:"-"`
+	// declaredEndpointTypes 是 new-api 系上游在 /v1/models 里声明的 模型 -> 协议集合。
+	// 仅在本轮发现内用于协议探测排序，不持久化：上游会少报，不能当作权威事实。
+	declaredEndpointTypes map[string][]string `json:"-"`
 }
 
 // DiscoveryTask 单渠道发现任务的运行时状态。
@@ -915,6 +918,7 @@ func (r *AutoDiscoveryRunner) probeEndpoint(ctx context.Context, client *http.Cl
 	result.ModelsCount = len(models)
 	result.Models = models
 	result.ProtocolOk = true
+	result.declaredEndpointTypes = parseModelsDeclaredEndpointTypes(body)
 	setModelDiscoveryMetadata(&result, ModelDiscoverySourceModelsAPI, "models API 返回实时模型清单")
 
 	return result
@@ -1045,6 +1049,63 @@ func filterExcludedDiscoveryModels(models []string, patterns []string) []string 
 		}
 	}
 	return filtered
+}
+
+// parseModelsDeclaredEndpointTypes 解析 new-api 系上游在 /v1/models 中声明的
+// supported_endpoint_types，返回 模型 -> 已声明协议集合。
+//
+// 该字段只作为协议探测的排序提示，不作为过滤依据：实测发现上游会少报。
+// 例如 ooioo.work 的 gpt-5.5 只声明 ["openai"]，但 POST /v1/messages 实际返回 200
+// （new-api 会把 OpenAI 模型跨协议转换成 Claude/Gemini 格式）。若当成白名单过滤，
+// 会漏掉这些确实可用的模型，因此仅用于把已声明的模型优先排到探测队列前面。
+func parseModelsDeclaredEndpointTypes(body []byte) map[string][]string {
+	var resp struct {
+		Data []struct {
+			ID                     string   `json:"id"`
+			SupportedEndpointTypes []string `json:"supported_endpoint_types"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil
+	}
+	declared := make(map[string][]string)
+	for _, m := range resp.Data {
+		if m.ID == "" || len(m.SupportedEndpointTypes) == 0 {
+			continue
+		}
+		protocols := make([]string, 0, len(m.SupportedEndpointTypes))
+		for _, endpointType := range m.SupportedEndpointTypes {
+			if protocol := protocolForEndpointType(endpointType); protocol != "" {
+				protocols = append(protocols, protocol)
+			}
+		}
+		if len(protocols) > 0 {
+			declared[m.ID] = protocols
+		}
+	}
+	if len(declared) == 0 {
+		return nil
+	}
+	return declared
+}
+
+// protocolForEndpointType 把 new-api 的 endpoint type 枚举映射为 CCX 协议名。
+// 枚举取值见 new-api constant/endpoint_type.go：openai / openai-response /
+// openai-response-compact / anthropic / gemini / jina-rerank / image-generation /
+// embeddings / openai-video；此处只关心参与协议探测的四种。
+func protocolForEndpointType(endpointType string) string {
+	switch strings.ToLower(strings.TrimSpace(endpointType)) {
+	case "openai":
+		return "chat"
+	case "openai-response", "openai-response-compact":
+		return "responses"
+	case "anthropic":
+		return "messages"
+	case "gemini":
+		return "gemini"
+	default:
+		return ""
+	}
 }
 
 // parseModelsResponse 解析 OpenAI /v1/models 响应体。
