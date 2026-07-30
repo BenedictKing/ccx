@@ -633,30 +633,16 @@
                       >
                         <span class="text-body-2 text-medium-emphasis">{{ t(section.labelKey) }}</span>
 
-                        <v-progress-linear
-                          v-if="section.kind === 'window'"
-                          :model-value="section.usedPercent"
-                          :color="kimiUsageColor(section.usedPercent)"
-                          height="6"
-                          rounded
-                        />
-                        <div v-else-if="section.kind === 'subscription' || section.kind === 'gift'" class="kimi-balance-stack">
+                        <!-- 所有用量行统一样式：同一轨道 + 按余量分档着色的填充条 -->
+                        <div v-if="section.usedPercent !== undefined" class="kimi-usage-bar">
                           <span
-                            class="kimi-balance-stack__kimi"
-                            :style="{ width: `${section.kimiUsedPercent}%` }"
-                          ></span>
-                          <span
-                            class="kimi-balance-stack__code"
-                            :style="{ width: `${section.codeUsedPercent}%` }"
+                            class="kimi-usage-bar__fill"
+                            :style="{
+                              width: `${section.usedPercent}%`,
+                              background: kimiUsageColor(section.usedPercent),
+                            }"
                           ></span>
                         </div>
-                        <v-progress-linear
-                          v-else-if="section.kind === 'booster' && section.usedPercent !== undefined"
-                          :model-value="section.usedPercent"
-                          :color="kimiUsageColor(section.usedPercent)"
-                          height="6"
-                          rounded
-                        />
                         <span v-else></span>
 
                         <span class="text-body-2 font-weight-medium text-no-wrap">
@@ -2612,24 +2598,17 @@ const getDisabledKeyLabel = (reason: string) => {
   gap: 12px;
 }
 
-.kimi-balance-stack {
-  display: flex;
+.kimi-usage-bar {
   height: 6px;
   overflow: hidden;
   border-radius: 999px;
   background: rgba(var(--v-theme-on-surface), 0.08);
 }
 
-.kimi-balance-stack__kimi {
-  background: #18181b;
-}
-
-.kimi-balance-stack__code {
-  background: #2684ff;
-}
-
-.v-theme--dark .kimi-balance-stack__kimi {
-  background: #f4f4f5;
+.kimi-usage-bar__fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
 }
 
 .compshare-usage-grid,
