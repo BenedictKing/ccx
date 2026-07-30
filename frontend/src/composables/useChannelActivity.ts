@@ -1,4 +1,4 @@
-import { computed, ref, watch, markRaw, type Ref } from 'vue'
+import { computed, watch, markRaw, type Ref } from 'vue'
 import type { ChannelRecentActivity, ActivitySegment } from '../services/api'
 import { expandSparseSegments } from '../services/api-helpers'
 
@@ -6,7 +6,7 @@ import { expandSparseSegments } from '../services/api-helpers'
  * Activity 可视化相关的状态和计算逻辑。
  * 从 ChannelOrchestration.vue 抽出，降低单文件行数。
  */
-export function useChannelActivity(recentActivity: Ref<ChannelRecentActivity[]>, activityTick?: Ref<number>) {
+export function useChannelActivity(recentActivity: Ref<ChannelRecentActivity[]>) {
   const activityKey = (channelIndex: number, routeKind?: string): string =>
     routeKind ? `${routeKind}:${channelIndex}` : String(channelIndex)
 
@@ -18,7 +18,33 @@ export function useChannelActivity(recentActivity: Ref<ChannelRecentActivity[]>,
     return map
   })
 
-  const maxRequestsHistory = ref(new Map<string, { max: number; updatedAt: number }>())
+  type IndexedActivitySegment = { index: number; segment: ActivitySegment }
+  type ActivityBar = { index: number; x: number; y: number; width: number; height: number; radius: number; g: number }
+
+  const getPopulatedSegments = (activity: ChannelRecentActivity): IndexedActivitySegment[] => {
+    const totalSegs = activity.totalSegs || 150
+    const result: IndexedActivitySegment[] = []
+
+    if (Array.isArray(activity.segments)) {
+      for (let index = 0; index < Math.min(activity.segments.length, totalSegs); index++) {
+        const segment = activity.segments[index]
+        if (segment?.requestCount > 0) result.push({ index, segment })
+      }
+      return result
+    }
+
+    for (const [rawIndex, segment] of Object.entries(activity.segments ?? {})) {
+      const index = Number(rawIndex)
+      if (Number.isInteger(index) && index >= 0 && index < totalSegs && segment?.requestCount > 0) {
+        result.push({ index, segment })
+      }
+    }
+    result.sort((a, b) => a.index - b.index)
+    return result
+  }
+
+  // 该 Map 只在 activity 数据更新时读写，无需交给 Vue 深度代理。
+  const maxRequestsHistory = new Map<string, { max: number; updatedAt: number }>()
   const DECAY_HALF_LIFE = 5 * 60 * 1000  // Half-life: 5 minutes
   const MIN_MAX_REQUESTS = 1  // Minimum baseline value to avoid division by zero
 
@@ -31,90 +57,59 @@ export function useChannelActivity(recentActivity: Ref<ChannelRecentActivity[]>,
   watch(activityMap, (newMap) => {
     const now = Date.now()
     for (const [channelIndex, activity] of newMap.entries()) {
-      const segments = expandSparseSegments(activity)
-      if (segments.length === 0) continue
+      const populatedSegments = getPopulatedSegments(activity)
+      if (populatedSegments.length === 0) continue
 
-      const currentMax = Math.max(...segments.map(s => s.requestCount), 0)
+      const currentMax = Math.max(...populatedSegments.map(({ segment }) => segment.requestCount), 0)
 
-      const record = maxRequestsHistory.value.get(channelIndex)
+      const record = maxRequestsHistory.get(channelIndex)
       if (!record) {
         if (currentMax > 0) {
-          maxRequestsHistory.value.set(channelIndex, { max: currentMax, updatedAt: now })
+          maxRequestsHistory.set(channelIndex, { max: currentMax, updatedAt: now })
         }
         continue
       }
 
       const decayedMax = getDecayedMax(record, now)
       if (currentMax >= decayedMax) {
-        maxRequestsHistory.value.set(channelIndex, { max: currentMax, updatedAt: now })
+        maxRequestsHistory.set(channelIndex, { max: currentMax, updatedAt: now })
       } else {
-        maxRequestsHistory.value.set(channelIndex, { max: decayedMax, updatedAt: now })
+        maxRequestsHistory.set(channelIndex, { max: decayedMax, updatedAt: now })
       }
     }
     // Clean up stale entries
-    for (const key of maxRequestsHistory.value.keys()) {
+    for (const key of maxRequestsHistory.keys()) {
       if (!newMap.has(key)) {
-        maxRequestsHistory.value.delete(key)
+        maxRequestsHistory.delete(key)
       }
     }
-  })
+  }, { immediate: true })
 
   const getChannelActivity = (channelIndex: number, routeKind?: string): ChannelRecentActivity | undefined => {
     return activityMap.value.get(activityKey(channelIndex, routeKind))
   }
 
-  type ActivityBar = { x: number; y: number; width: number; height: number; radius: number; g: number; v: 0 | 1 }
-
-  const activityBarsPersistentCache = new Map<string, { segments: ActivitySegment[], bars: ActivityBar[] }>()
+  const emptyActivityBars = markRaw<ActivityBar[]>([])
 
   const activityBarsCache = computed(() => {
     const cache = new Map<string, ActivityBar[]>()
-    void activityTick?.value
 
     for (const [channelIndex, activity] of activityMap.value.entries()) {
-      if (!activity) {
-        cache.set(channelIndex, [])
-        continue
-      }
-
-      const existing = activityBarsPersistentCache.get(channelIndex)
-      const segments = expandSparseSegments(activity, existing?.segments)
-      const numSegments = segments.length
-
-      if (numSegments === 0) {
-        cache.set(channelIndex, [])
-        continue
-      }
+      const numSegments = activity.totalSegs || 150
+      const populatedSegments = getPopulatedSegments(activity)
+      if (populatedSegments.length === 0) continue
 
       const barWidth = 150 / numSegments
       const barGap = barWidth * 0.2
       const actualBarWidth = barWidth - barGap
 
       const now = Date.now()
-      const record = maxRequestsHistory.value.get(channelIndex)
-      const currentMax = Math.max(...segments.map(s => s.requestCount), 1)
+      const record = maxRequestsHistory.get(channelIndex)
+      const currentMax = Math.max(...populatedSegments.map(({ segment }) => segment.requestCount), 1)
       const maxRequests = record ? Math.max(getDecayedMax(record, now), currentMax) : currentMax
 
-      let bars: ActivityBar[]
-      if (existing && existing.bars.length === numSegments) {
-        bars = existing.bars
-      } else {
-        bars = new Array(numSegments)
-        for (let i = 0; i < numSegments; i++) {
-          bars[i] = { x: 0, y: 0, width: 0, height: 0, radius: 0, g: 0, v: 0 }
-        }
-      }
-
-      for (let i = 0; i < numSegments; i++) {
-        const segment = segments[i]
+      const bars = populatedSegments.map(({ index, segment }) => {
         const requests = segment.requestCount
-
-        if (requests <= 0) {
-          bars[i].v = 0
-          bars[i].height = 0
-          continue
-        }
-
         const successCount = requests - segment.failureCount
         const successRate = (successCount / requests) * 100
         let g: number
@@ -129,37 +124,30 @@ export function useChannelActivity(recentActivity: Ref<ChannelRecentActivity[]>,
         const heightPercent = requests / maxRequests
         const height = Math.max(heightPercent * 85, 2)
 
-        bars[i].v = 1
-        bars[i].x = i * barWidth + barGap / 2
-        bars[i].y = 100 - height
-        bars[i].width = actualBarWidth
-        bars[i].height = height
-        bars[i].radius = Math.min(actualBarWidth / 2, 1.5)
-        bars[i].g = g
-      }
+        return {
+          index,
+          x: index * barWidth + barGap / 2,
+          y: 100 - height,
+          width: actualBarWidth,
+          height,
+          radius: Math.min(actualBarWidth / 2, 1.5),
+          g,
+        }
+      })
 
-      activityBarsPersistentCache.set(channelIndex, { segments, bars: markRaw(bars) })
-      cache.set(channelIndex, bars)
-    }
-
-    for (const key of activityBarsPersistentCache.keys()) {
-      if (!activityMap.value.has(key)) {
-        activityBarsPersistentCache.delete(key)
-      }
+      cache.set(channelIndex, markRaw(bars))
     }
 
     return cache
   })
 
   const getActivityBars = (channelIndex: number, routeKind?: string): ActivityBar[] => {
-    return activityBarsCache.value.get(activityKey(channelIndex, routeKind)) || []
+    return activityBarsCache.value.get(activityKey(channelIndex, routeKind)) || emptyActivityBars
   }
 
   const getActivityPath = (channelIndex: number, routeKind?: string): string => {
     const activity = getChannelActivity(channelIndex, routeKind)
     if (!activity) return ''
-    void activityTick?.value
-
     const segments = expandSparseSegments(activity)
     const numSegments = segments.length
     if (numSegments === 0) return ''
@@ -226,8 +214,6 @@ export function useChannelActivity(recentActivity: Ref<ChannelRecentActivity[]>,
   const _getActivityGradient = (channelIndex: number, routeKind?: string): string => {
     const activity = getChannelActivity(channelIndex, routeKind)
     if (!activity) return 'transparent'
-    void activityTick?.value
-
     const segments = expandSparseSegments(activity)
     const numSegments = segments.length
     if (numSegments === 0) return 'transparent'

@@ -110,19 +110,18 @@
               <!-- SVG activity waveform bar chart background -->
               <!-- Gradient 定义在组件顶部一次性渲染（见 .activity-gradient-defs），这里只绘制 rect 并引用共享 gradient -->
               <svg class="activity-chart-bg" preserveAspectRatio="none" viewBox="0 0 150 100">
-                <template v-for="(bar, i) in getActivityBars(getRouteIndex(element), getRouteKind(element))" :key="i">
-                  <rect
-                    v-if="bar.v"
-                    :x="bar.x"
-                    :y="bar.y"
-                    :width="bar.width"
-                    :height="bar.height"
-                    :fill="`url(#ccx-act-g${bar.g})`"
-                    :rx="bar.radius"
-                    :ry="bar.radius"
-                    class="activity-bar"
-                  />
-                </template>
+                <rect
+                  v-for="bar in getActivityBars(getRouteIndex(element), getRouteKind(element))"
+                  :key="bar.index"
+                  :x="bar.x"
+                  :y="bar.y"
+                  :width="bar.width"
+                  :height="bar.height"
+                  :fill="`url(#ccx-act-g${bar.g})`"
+                  :rx="bar.radius"
+                  :ry="bar.radius"
+                  class="activity-bar"
+                />
               </svg>
 
               <!-- Grid content container -->
@@ -719,7 +718,6 @@ import { buildUnifiedReorderPayloads, isLlmChannelKind, resolveChannelRecoveryRo
 import { sortChannelsByPriority } from '../utils/channelOrder'
 import { buildChannelMetricsLookup } from '../utils/channelMetricsLookup'
 import { useI18n } from '../i18n'
-import { useGlobalTick } from '../composables/useGlobalTick'
 import { useChannelActivity } from '../composables/useChannelActivity'
 import ChannelStatusBadge from './ChannelStatusBadge.vue'
 import ChannelHealthBadge from './ChannelHealthBadge.vue'
@@ -796,9 +794,6 @@ const openLogsDialog = (ch: Channel) => {
   logsProtocolRoutes.value = ch.protocolRoutes ?? []
   showLogsDialog.value = true
 }
-
-// Timestamp used to trigger activity view updates (updated every 2 seconds)
-const activityUpdateTick = ref(0)
 
 // Chart expansion state
 const expandedChannelKey = ref<string | null>(null)
@@ -1245,7 +1240,7 @@ const {
   formatRPM,
   formatTPM,
   hasActivityData,
-} = useChannelActivity(recentActivity, activityUpdateTick)
+} = useChannelActivity(recentActivity)
 
 // Refresh metrics
 const refreshMetrics = async () => {
@@ -1503,16 +1498,12 @@ const handleDeleteChannel = (channel: Channel) => {
   emit('delete', channel)
 }
 
-// 全局 tick 订阅（visibility hidden 时自动暂停）
-const activityTick = useGlobalTick(2000, 'ChannelOrch-activity')
-
 onMounted(() => {
   // 父组件已下发 dashboard 指标时不要再直拉：统一 LLM 视图下直拉只能拿到当前
   // tab 一种协议的指标，会覆盖掉父组件合并好的多协议数据
   if (!props.dashboardMetrics) {
     refreshMetrics()
   }
-  activityTick.onTick(() => { activityUpdateTick.value++ })
 })
 
 onUnmounted(() => {
