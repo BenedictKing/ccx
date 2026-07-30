@@ -8,6 +8,7 @@ import type {
   ChannelRecentActivity,
   ChannelsResponse,
 } from '@/services/api'
+import { freezeImmutableFields } from './channelMerge'
 
 export type LlmChannelKind = 'messages' | 'chat' | 'responses' | 'gemini'
 
@@ -202,7 +203,7 @@ const buildDisplayChannel = (group: ChannelGroup): Channel => {
   const primary = selectPrimary(group.channels)
   const credentials = mergeAccountCredentials(group.channels)
 
-  return {
+  return freezeImmutableFields({
     ...primary,
     ...credentials,
     index: primary.routeIndex,
@@ -215,7 +216,7 @@ const buildDisplayChannel = (group: ChannelGroup): Channel => {
     status: resolveGroupStatus(group.channels),
     protocolCapsules: buildProtocolCapsules(group.channels),
     protocolRoutes: buildProtocolRoutes(group.channels),
-  }
+  })
 }
 
 export const buildUnifiedChannelsData = (
@@ -243,7 +244,15 @@ export const buildUnifiedChannelsData = (
 export const withRouteKindMetrics = (
   kind: LlmChannelKind,
   metrics: ChannelMetrics[]
-): ChannelMetrics[] => metrics.map(metric => ({ ...metric, routeKind: kind }))
+): ChannelMetrics[] => {
+  let changed = false
+  const routedMetrics = metrics.map(metric => {
+    if (metric.routeKind === kind) return metric
+    changed = true
+    return { ...metric, routeKind: kind }
+  })
+  return changed ? routedMetrics : metrics
+}
 
 export const buildUnifiedRecentActivity = (
   channels: Channel[],

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import type { Channel, ChannelRecentActivity, ChannelsResponse } from '@/services/api'
-import { buildUnifiedChannelsData, buildUnifiedRecentActivity, buildUnifiedReorderPayloads, resolveChannelRecoveryRoutes, type LlmChannelKind } from './unifiedChannels'
+import type { Channel, ChannelMetrics, ChannelRecentActivity, ChannelsResponse } from '@/services/api'
+import { buildUnifiedChannelsData, buildUnifiedRecentActivity, buildUnifiedReorderPayloads, resolveChannelRecoveryRoutes, withRouteKindMetrics, type LlmChannelKind } from './unifiedChannels'
 
 const channel = (
   name: string,
@@ -23,6 +23,32 @@ const channel = (
 })
 
 const response = (channels: Channel[]): ChannelsResponse => ({ channels, current: -1 })
+
+describe('withRouteKindMetrics', () => {
+  const metric = (routeKind?: Channel['routeKind']): ChannelMetrics => ({
+    channelIndex: 1,
+    routeKind,
+    requestCount: 0,
+    successCount: 0,
+    failureCount: 0,
+    successRate: 0,
+    errorRate: 0,
+    consecutiveFailures: 0,
+    latency: 0,
+  })
+
+  it('routeKind 已存在时复用指标数组和对象引用', () => {
+    const metrics = [metric('messages')]
+    expect(withRouteKindMetrics('messages', metrics)).toBe(metrics)
+  })
+
+  it('仅为旧格式指标补充 routeKind', () => {
+    const metrics = [metric()]
+    const result = withRouteKindMetrics('chat', metrics)
+    expect(result).not.toBe(metrics)
+    expect(result[0]).toEqual({ ...metrics[0], routeKind: 'chat' })
+  })
+})
 
 describe('buildUnifiedChannelsData account grouping', () => {
   it('优先按 accountUid 聚合多协议渠道，不依赖 Key 指纹', () => {

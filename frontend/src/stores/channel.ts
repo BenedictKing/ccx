@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed, unref, watch } from 'vue'
+import { ref, shallowReactive, computed, unref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePreferencesStore } from '@/stores/preferences'
 import { api, type Channel, type ChannelPlacement, type ChannelsResponse, type ChannelMetrics, type ChannelDashboardResponse } from '@/services/api'
@@ -7,6 +7,7 @@ import { normalizeLocale } from '@/i18n/core'
 import { translate } from '@/i18n'
 import { registerGlobalTick } from '@/composables/useGlobalTick'
 import { mergeChannelsWithLocalData } from '@/utils/channelMerge'
+import { isStructurallyEqual, reuseUnchangedItemsByKey } from '@/utils/structuralSharing'
 import {
   buildUnifiedRecentActivity,
   buildUnifiedChannelsData,
@@ -87,7 +88,7 @@ export const useChannelStore = defineStore('channel', () => {
     recentActivity: ChannelDashboardResponse['recentActivity'] | undefined
   }
 
-  const dashboardCache = ref<Record<ApiTab, DashboardCache>>({
+  const createEmptyDashboardCache = (): Record<ApiTab, DashboardCache> => ({
     messages: {
       metrics: [],
       stats: undefined,
@@ -119,6 +120,11 @@ export const useChannelStore = defineStore('channel', () => {
       recentActivity: undefined
     }
   })
+
+  // Dashboard 仅按 tab 整体替换，内部大数组无需深度代理。
+  const dashboardCache = shallowReactive<Record<ApiTab, DashboardCache>>(createEmptyDashboardCache())
+  let unifiedMetricsCache: ChannelMetrics[] = []
+  let unifiedRecentActivityCache: NonNullable<ChannelDashboardResponse['recentActivity']> = []
 
   // 批量延迟测试加载状态
   const isPingingAll = ref(false)
@@ -157,24 +163,36 @@ export const useChannelStore = defineStore('channel', () => {
   // 根据当前 Tab 返回对应的 Dashboard 数据（独立缓存，避免切换闪烁）
   const currentDashboardMetrics = computed(() => {
     if (isLlmChannelKind(activeTab.value)) {
-      return LLM_CHANNEL_KINDS.flatMap(kind => withRouteKindMetrics(kind, dashboardCache.value[kind].metrics))
+      const nextMetrics = LLM_CHANNEL_KINDS.flatMap(kind => withRouteKindMetrics(kind, dashboardCache[kind].metrics))
+      unifiedMetricsCache = reuseUnchangedItemsByKey(
+        nextMetrics,
+        unifiedMetricsCache,
+        metric => `${metric.routeKind}:${metric.channelIndex}`,
+      )
+      return unifiedMetricsCache
     }
-    return dashboardCache.value[activeTab.value].metrics
+    return dashboardCache[activeTab.value].metrics
   })
-  const currentDashboardStats = computed(() => dashboardCache.value[activeTab.value].stats)
+  const currentDashboardStats = computed(() => dashboardCache[activeTab.value].stats)
   const currentDashboardRecentActivity = computed(() => {
     if (isLlmChannelKind(activeTab.value)) {
-      return buildUnifiedRecentActivity(
+      const nextActivity = buildUnifiedRecentActivity(
         unifiedLlmChannelsData.value.channels,
         {
-          messages: dashboardCache.value.messages.recentActivity,
-          chat: dashboardCache.value.chat.recentActivity,
-          responses: dashboardCache.value.responses.recentActivity,
-          gemini: dashboardCache.value.gemini.recentActivity,
+          messages: dashboardCache.messages.recentActivity,
+          chat: dashboardCache.chat.recentActivity,
+          responses: dashboardCache.responses.recentActivity,
+          gemini: dashboardCache.gemini.recentActivity,
         },
       )
+      unifiedRecentActivityCache = reuseUnchangedItemsByKey(
+        nextActivity,
+        unifiedRecentActivityCache,
+        activity => `${activity.routeKind}:${activity.channelIndex}`,
+      )
+      return unifiedRecentActivityCache
     }
-    return dashboardCache.value[activeTab.value].recentActivity
+    return dashboardCache[activeTab.value].recentActivity
   })
 
   // 活跃渠道数（仅 active 状态）
@@ -197,60 +215,69 @@ export const useChannelStore = defineStore('channel', () => {
 
   // ===== 操作方法 =====
 
+  const mergeDashboardChannels = (
+    current: ChannelsResponse,
+    incomingChannels: Channel[],
+  ): ChannelsResponse => {
+    const channels = mergeChannelsWithLocalData(incomingChannels, current.channels)
+    if (channels === current.channels) return current
+    return { channels, current: current.current }
+  }
+
   /**
    * 刷新渠道数据
    */
   const applyDashboard = (tab: ApiTab, dashboard: ChannelDashboardResponse) => {
-    const nextCache = {
-      metrics: dashboard.metrics,
-      stats: dashboard.stats,
-      recentActivity: dashboard.recentActivity,
-    }
+    const previousCache = dashboardCache[tab]
+    const routedMetrics = dashboard.metrics.map(metric => (
+      metric.routeKind === tab ? metric : { ...metric, routeKind: tab }
+    ))
+    const metrics = reuseUnchangedItemsByKey(
+      routedMetrics,
+      previousCache.metrics,
+      metric => `${metric.routeKind}:${metric.channelIndex}`,
+    )
+    const routedActivity = dashboard.recentActivity?.map(activity => (
+      activity.routeKind === tab ? activity : { ...activity, routeKind: tab }
+    ))
+    const recentActivity = routedActivity
+      ? reuseUnchangedItemsByKey(
+          routedActivity,
+          previousCache.recentActivity,
+          activity => `${activity.routeKind}:${activity.channelIndex}`,
+        )
+      : undefined
+    const stats = isStructurallyEqual(dashboard.stats, previousCache.stats)
+      ? previousCache.stats
+      : dashboard.stats
+    const nextCache = (
+      metrics === previousCache.metrics
+      && stats === previousCache.stats
+      && recentActivity === previousCache.recentActivity
+    ) ? previousCache : { metrics, stats, recentActivity }
 
     switch (tab) {
       case 'gemini':
-        geminiChannelsData.value = {
-          channels: mergeChannelsWithLocalData(dashboard.channels, geminiChannelsData.value.channels),
-          current: geminiChannelsData.value.current,
-        }
-        dashboardCache.value.gemini = nextCache
+        geminiChannelsData.value = mergeDashboardChannels(geminiChannelsData.value, dashboard.channels)
         break
       case 'chat':
-        chatChannelsData.value = {
-          channels: mergeChannelsWithLocalData(dashboard.channels, chatChannelsData.value.channels),
-          current: chatChannelsData.value.current,
-        }
-        dashboardCache.value.chat = nextCache
+        chatChannelsData.value = mergeDashboardChannels(chatChannelsData.value, dashboard.channels)
         break
       case 'images':
-        imagesChannelsData.value = {
-          channels: mergeChannelsWithLocalData(dashboard.channels, imagesChannelsData.value.channels),
-          current: imagesChannelsData.value.current,
-        }
-        dashboardCache.value.images = nextCache
+        imagesChannelsData.value = mergeDashboardChannels(imagesChannelsData.value, dashboard.channels)
         break
       case 'vectors':
-        vectorsChannelsData.value = {
-          channels: mergeChannelsWithLocalData(dashboard.channels, vectorsChannelsData.value.channels),
-          current: vectorsChannelsData.value.current,
-        }
-        dashboardCache.value.vectors = nextCache
+        vectorsChannelsData.value = mergeDashboardChannels(vectorsChannelsData.value, dashboard.channels)
         break
       case 'messages':
-        channelsData.value = {
-          channels: mergeChannelsWithLocalData(dashboard.channels, channelsData.value.channels),
-          current: channelsData.value.current,
-        }
-        dashboardCache.value.messages = nextCache
+        channelsData.value = mergeDashboardChannels(channelsData.value, dashboard.channels)
         break
       case 'responses':
-        responsesChannelsData.value = {
-          channels: mergeChannelsWithLocalData(dashboard.channels, responsesChannelsData.value.channels),
-          current: responsesChannelsData.value.current,
-        }
-        dashboardCache.value.responses = nextCache
+        responsesChannelsData.value = mergeDashboardChannels(responsesChannelsData.value, dashboard.channels)
         break
     }
+
+    if (nextCache !== previousCache) dashboardCache[tab] = nextCache
   }
 
   async function refreshChannels() {
@@ -660,38 +687,9 @@ export const useChannelStore = defineStore('channel', () => {
     }
 
     // 清空所有 tab 的独立缓存
-    dashboardCache.value = {
-      messages: {
-        metrics: [],
-        stats: undefined,
-        recentActivity: undefined
-      },
-      chat: {
-        metrics: [],
-        stats: undefined,
-        recentActivity: undefined
-      },
-      images: {
-        metrics: [],
-        stats: undefined,
-        recentActivity: undefined
-      },
-      vectors: {
-        metrics: [],
-        stats: undefined,
-        recentActivity: undefined
-      },
-      responses: {
-        metrics: [],
-        stats: undefined,
-        recentActivity: undefined
-      },
-      gemini: {
-        metrics: [],
-        stats: undefined,
-        recentActivity: undefined
-      }
-    }
+    Object.assign(dashboardCache, createEmptyDashboardCache())
+    unifiedMetricsCache = []
+    unifiedRecentActivityCache = []
 
     // 重置状态标志，避免注销后状态残留
     lastRefreshSuccess.value = true

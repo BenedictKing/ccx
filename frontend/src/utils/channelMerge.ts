@@ -1,16 +1,37 @@
 import type { Channel } from '@/services/api'
+import { reuseUnchangedItemsByKey } from './structuralSharing'
 
 /**
  * 渠道数据合并工具
  *
  * 职责：
  * 1. 将新拉取的 channels 与本地缓存的 latency 测试结果合并（5 分钟有效期内保留本地 latency）
- * 2. 冻结不可变字段（apiKeys/disabledApiKeys/modelMapping），避免 Vue 深度 Proxy 化
+ * 2. 冻结不可变配置集合，避免 Vue 深度 Proxy 化
  *
  * 抽离为独立模块便于单元测试，原闭包版本在 stores/channel.ts。
  */
 
 export const LATENCY_VALID_DURATION = 5 * 60 * 1000 // 5 分钟有效期
+
+const IMMUTABLE_CHANNEL_FIELDS = [
+  'baseUrls',
+  'apiKeys',
+  'apiKeyConfigs',
+  'disabledApiKeys',
+  'disabledKeyModels',
+  'historicalApiKeys',
+  'modelMapping',
+  'modelCapabilities',
+  'embeddingCapabilities',
+  'defaultCapability',
+  'reasoningMapping',
+  'customHeaders',
+  'supportedModels',
+  'noVisionModels',
+  'tags',
+  'protocolCapsules',
+  'protocolRoutes',
+] as const satisfies ReadonlyArray<keyof Channel>
 
 /**
  * 冻结单个 channel 的不可变字段。
@@ -18,17 +39,11 @@ export const LATENCY_VALID_DURATION = 5 * 60 * 1000 // 5 分钟有效期
  * 风险控制：编辑对话框提交时发送的是全新对象，不会修改这些冻结字段，安全。
  */
 export function freezeImmutableFields(ch: Channel): Channel {
-  if (Array.isArray(ch.apiKeys) && !Object.isFrozen(ch.apiKeys)) {
-    Object.freeze(ch.apiKeys)
-  }
-  if (Array.isArray(ch.apiKeyConfigs) && !Object.isFrozen(ch.apiKeyConfigs)) {
-    Object.freeze(ch.apiKeyConfigs)
-  }
-  if (Array.isArray(ch.disabledApiKeys) && !Object.isFrozen(ch.disabledApiKeys)) {
-    Object.freeze(ch.disabledApiKeys)
-  }
-  if (ch.modelMapping && typeof ch.modelMapping === 'object' && !Object.isFrozen(ch.modelMapping)) {
-    Object.freeze(ch.modelMapping)
+  for (const field of IMMUTABLE_CHANNEL_FIELDS) {
+    const value = ch[field]
+    if (value && typeof value === 'object' && !Object.isFrozen(value)) {
+      Object.freeze(value)
+    }
   }
   return ch
 }
@@ -60,7 +75,7 @@ export function mergeChannelsWithLocalData(
 
   const validSince = now - LATENCY_VALID_DURATION
 
-  return channels.map(newCh => {
+  const mergedChannels = channels.map(newCh => {
     const existingCh = existingByIndex.get(newCh.index)
     // 只有在 5 分钟有效期内才保留本地延迟测试结果
     if (existingCh?.latencyTestTime && existingCh.latencyTestTime > validSince) {
@@ -73,6 +88,8 @@ export function mergeChannelsWithLocalData(
     }
     return freezeImmutableFields(newCh)
   })
+
+  return reuseUnchangedItemsByKey(mergedChannels, existingChannels, channel => channel.index)
 }
 
 function deduplicateChannelsByIndex(channels: Channel[]): Channel[] {

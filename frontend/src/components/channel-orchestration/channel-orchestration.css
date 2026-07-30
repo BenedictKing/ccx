@@ -24,6 +24,7 @@
 .channel-item-wrapper {
   display: flex;
   flex-direction: column;
+  min-height: 64px;
 }
 
 .channel-row {
@@ -364,6 +365,8 @@
   border: 2px solid rgb(var(--v-theme-on-surface));
   box-shadow: 3px 3px 0 0 rgb(var(--v-theme-on-surface));
   transition: all 0.1s ease;
+  min-height: 60px;
+  box-sizing: border-box;
 }
 
 .inactive-channel-row:hover {

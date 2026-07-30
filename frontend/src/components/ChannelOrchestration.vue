@@ -95,11 +95,18 @@
         ghost-class="ghost"
         class="channel-list"
         :disabled="isSearchActive || !canReorderList"
+        @start="onDragStart"
+        @end="onDragEnd"
         @change="onDragChange"
       >
         <template #item="{ element, index }">
-          <div v-show="matchesSearch(element)" class="channel-item-wrapper">
+          <div
+            v-show="matchesSearch(element)"
+            v-near-viewport="getViewportKey('active', element)"
+            class="channel-item-wrapper"
+          >
             <div
+              v-if="shouldRenderViewportChannel('active', element, index)"
               class="channel-row"
               :class="[
                 getChannelRowClass(element),
@@ -535,7 +542,7 @@
           </div><!-- .channel-row -->
 
           <!-- Expanded chart area -->
-          <v-expand-transition>
+          <v-expand-transition v-if="shouldRenderViewportChannel('active', element, index)">
             <div v-if="expandedChannelKey === getChannelUiKey(element)" class="channel-chart-wrapper">
               <KeyTrendChart
                 :key="`chart-${getRouteKind(element)}-${getRouteIndex(element)}`"
@@ -572,13 +579,14 @@
 
       <div v-if="filteredInactiveChannels.length > 0" class="inactive-pool">
         <div
-          v-for="channel in filteredInactiveChannels"
+          v-for="(channel, index) in filteredInactiveChannels"
           :key="getChannelUiKey(channel)"
+          v-near-viewport="getViewportKey('inactive', channel)"
           class="inactive-channel-row"
           :class="{ 'has-open-menu': isChannelMenuOpen('inactive', channel) }"
         >
           <!-- Channel information -->
-          <div class="channel-info">
+          <div v-if="shouldRenderViewportChannel('inactive', channel, index)" class="channel-info">
             <div class="channel-info-main">
               <span
                 class="font-weight-medium channel-name-link"
@@ -608,7 +616,7 @@
           </div>
 
           <!-- API key count -->
-          <div class="channel-keys d-flex align-center ga-1">
+          <div v-if="shouldRenderViewportChannel('inactive', channel, index)" class="channel-keys d-flex align-center ga-1">
             <v-chip size="x-small" variant="outlined" color="grey" class="keys-chip" @click="$emit('edit', channel)">
               <v-icon start size="x-small">mdi-key</v-icon>
               {{ availableChannelApiKeyCount(channel) }}
@@ -631,7 +639,7 @@
           </div>
 
           <!-- Action buttons -->
-          <div class="channel-actions">
+          <div v-if="shouldRenderViewportChannel('inactive', channel, index)" class="channel-actions">
             <v-btn size="small" color="success" variant="tonal" @click="enableChannel(channel)">
               <v-icon start size="small">mdi-play-circle</v-icon>
               {{ t('orchestration.enable') }}
@@ -710,7 +718,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, defineAsyncComponent, nextTick } from 'vue'
+import { ref, shallowRef, computed, watch, onMounted, onUnmounted, defineAsyncComponent, nextTick, type ObjectDirective } from 'vue'
 import draggable from 'vuedraggable'
 import { api, type Channel, type ChannelKind, type ChannelMetrics, type ChannelProtocolRoute, type ChannelStatus, type TimeWindowStats, type ChannelRecentActivity, type SchedulerStatsResponse } from '../services/api'
 import { getChannelTypeApi } from '../utils/channelTypeApi'
@@ -756,9 +764,85 @@ const getRouteIndex = (channel: Channel): number => channel.routeIndex ?? channe
 const getChannelUiKey = (channel: Channel): string => channel.displayKey ?? `${getRouteKind(channel)}:${getRouteIndex(channel)}`
 const getCurrentChannelTypeApi = (channel?: Channel) => getChannelTypeApi(api, getRouteKind(channel))
 
+type ViewportChannelScope = 'active' | 'inactive'
+type ViewportChannelKey = `${ViewportChannelScope}:${string}`
+type ViewportObserver = {
+  observe: (_target: Element) => void
+  unobserve: (_target: Element) => void
+  disconnect: () => void
+}
+
+// Sortable 仍保留每个渠道的固定高度根节点；仅挂载视口附近的重型 Vuetify 子树。
+// 这样不改变拖拽索引和自动滚动语义，同时把常驻 DOM 控制在当前视口附近。
+const EAGER_ACTIVE_ROW_COUNT = 20
+const supportsViewportWindowing = typeof window !== 'undefined' && typeof window.IntersectionObserver !== 'undefined'
+const viewportWindowReady = ref(false)
+const nearViewportChannelKeys = shallowRef<Set<ViewportChannelKey>>(new Set())
+const viewportKeyByElement = new WeakMap<HTMLElement, ViewportChannelKey>()
+let viewportObserver: ViewportObserver | null = null
+
+const getViewportKey = (scope: ViewportChannelScope, channel: Channel): ViewportChannelKey =>
+  `${scope}:${getChannelUiKey(channel)}`
+
+const updateNearViewportKey = (key: ViewportChannelKey, visible: boolean) => {
+  const current = nearViewportChannelKeys.value
+  if (current.has(key) === visible) return
+
+  const next = new Set(current)
+  if (visible) next.add(key)
+  else next.delete(key)
+  nearViewportChannelKeys.value = next
+}
+
+const ensureViewportObserver = () => {
+  if (!supportsViewportWindowing || viewportObserver) return viewportObserver
+
+  viewportObserver = new window.IntersectionObserver((entries) => {
+    viewportWindowReady.value = true
+    const next = new Set(nearViewportChannelKeys.value)
+    let changed = false
+
+    for (const entry of entries) {
+      const key = viewportKeyByElement.get(entry.target as HTMLElement)
+      if (!key) continue
+
+      if (entry.isIntersecting) {
+        if (!next.has(key)) {
+          next.add(key)
+          changed = true
+        }
+      } else if (next.delete(key)) {
+        changed = true
+      }
+    }
+
+    if (changed) nearViewportChannelKeys.value = next
+  }, { rootMargin: '1200px 0px' })
+
+  return viewportObserver
+}
+
+const vNearViewport: ObjectDirective<HTMLElement, ViewportChannelKey> = {
+  mounted(element, binding) {
+    viewportKeyByElement.set(element, binding.value)
+    ensureViewportObserver()?.observe(element)
+  },
+  updated(element, binding) {
+    if (binding.value === binding.oldValue) return
+    if (binding.oldValue) updateNearViewportKey(binding.oldValue, false)
+    viewportKeyByElement.set(element, binding.value)
+  },
+  beforeUnmount(element) {
+    viewportObserver?.unobserve(element)
+    const key = viewportKeyByElement.get(element)
+    if (key) updateNearViewportKey(key, false)
+    viewportKeyByElement.delete(element)
+  },
+}
+
 // State
-const metrics = ref<ChannelMetrics[]>([])
-const recentActivity = ref<ChannelRecentActivity[]>([])
+const metrics = shallowRef<ChannelMetrics[]>([])
+const recentActivity = shallowRef<ChannelRecentActivity[]>([])
 
 // Search filtering
 const searchQuery = ref('')
@@ -776,7 +860,7 @@ const matchesSearch = (channel: Channel) => {
   )
 }
 
-const schedulerStats = ref<SchedulerStatsResponse | null>(null)
+const schedulerStats = shallowRef<SchedulerStatsResponse | null>(null)
 const isLoadingMetrics = ref(false)
 const isSavingOrder = ref(false)
 const showSchedulerDiagnoseDialog = ref(false)
@@ -797,6 +881,7 @@ const openLogsDialog = (ch: Channel) => {
 
 // Chart expansion state
 const expandedChannelKey = ref<string | null>(null)
+const draggingChannelKey = ref<string | null>(null)
 
 // tooltip 懒挂载：记录当前 hover/focus 的渠道，避免 100+ 渠道每行常驻 <v-tooltip> overlay 实例
 const hoveredMetricsChannel = ref<string | null>(null)
@@ -815,6 +900,25 @@ const getChannelMenuKey = (scope: ChannelMenuScope, channel: Channel): ChannelMe
 
 const isChannelMenuOpen = (scope: ChannelMenuScope, channel: Channel): boolean =>
   openChannelMenuKey.value === getChannelMenuKey(scope, channel)
+
+const shouldRenderViewportChannel = (
+  scope: ViewportChannelScope,
+  channel: Channel,
+  index: number,
+): boolean => {
+  if (!supportsViewportWindowing) return true
+  if (isSearchActive.value) return matchesSearch(channel)
+
+  const channelKey = getChannelUiKey(channel)
+  return (
+    (!viewportWindowReady.value && scope === 'active' && index < EAGER_ACTIVE_ROW_COUNT)
+    || nearViewportChannelKeys.value.has(getViewportKey(scope, channel))
+    || expandedChannelKey.value === channelKey
+    || draggingChannelKey.value === channelKey
+    || copiedChannelKey.value === channelKey
+    || isChannelMenuOpen(scope, channel)
+  )
+}
 
 const dispatchOverlayResize = () => {
   window.dispatchEvent(new Event('resize'))
@@ -1278,6 +1382,15 @@ const canReorderList = computed(() => {
   return activeChannels.value.every(ch => getRouteKind(ch) === props.channelType)
 })
 
+const onDragStart = (event: { oldIndex?: number }) => {
+  const channel = event.oldIndex === undefined ? undefined : activeChannels.value[event.oldIndex]
+  draggingChannelKey.value = channel ? getChannelUiKey(channel) : null
+}
+
+const onDragEnd = () => {
+  draggingChannelKey.value = null
+}
+
 // Drag change event - auto-save order
 const onDragChange = () => {
   syncActiveOrder()
@@ -1507,6 +1620,9 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  viewportObserver?.disconnect()
+  viewportObserver = null
+  nearViewportChannelKeys.value = new Set()
   if (copyTimeoutId) {
     clearTimeout(copyTimeoutId)
     copyTimeoutId = null
