@@ -262,6 +262,33 @@ func (s *ProfileStore) ListByService(serviceType string) []*KeyEndpointProfile {
 	return result
 }
 
+// ListByUpstreamIdentity 返回同一上游端点身份（identityBaseURL + keyHash）下的全部画像副本。
+//
+// 同一个 baseURL + Key 只对应一个真实上游端点：无论 CCX 侧把它拆成 messages / chat /
+// responses 几条协议渠道，GET /v1/models 打的都是同一个 URL 带同一个凭证，因此模型清单
+// 本身是共享的一份事实，只有"某模型在某协议下是否可用"才是协议维度的差异。
+// excludeChannelUID 用于排除调用方自己所属的渠道，只看兄弟渠道的证据。
+func (s *ProfileStore) ListByUpstreamIdentity(identityBaseURL, keyHash, excludeChannelUID string) []*KeyEndpointProfile {
+	if identityBaseURL == "" || keyHash == "" {
+		return nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var result []*KeyEndpointProfile
+	for _, p := range s.cache {
+		if p.IdentityBaseURL != identityBaseURL || p.KeyHash != keyHash {
+			continue
+		}
+		if excludeChannelUID != "" && p.ChannelUID == excludeChannelUID {
+			continue
+		}
+		cp := *p
+		result = append(result, &cp)
+	}
+	return result
+}
+
 // ListAll 返回全部 endpoint 画像副本。
 func (s *ProfileStore) ListAll() []*KeyEndpointProfile {
 	s.mu.RLock()

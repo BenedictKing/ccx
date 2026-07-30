@@ -3,6 +3,7 @@ package autopilot
 import (
 	"fmt"
 	"log"
+	"slices"
 	"strings"
 	"time"
 
@@ -109,9 +110,70 @@ func (r *AutoDiscoveryRunner) maybeEnableDiscoveredProtocolRoutes(
 				source.AccountUID, channel.Kind, channel.Upstream.ChannelUID, len(protocolEndpoints))
 		}
 	}
+
+	r.reconcileUnsupportedProtocolRoutes(source.AccountUID, discovered, cfgManager)
 	return nil
 }
 
+// reconcileUnsupportedProtocolRoutes 按本轮发现结论同步已有协议渠道的启用状态。
+//
+// 仅在至少有一个协议探测成功时调用（见调用点的 discovered 为空即返回），因此
+// "某协议 0 个可用模型"是可信结论而非整体不可达：上游确实不支持该协议，或该协议下
+// 没有任何可用模型，此时把渠道置为 disabled（备用池）使其退出调度，避免请求必然失败。
+//
+// 状态而非删除：保留渠道配置与画像，上游恢复支持后下一轮发现自动置回 active，完全可逆。
+// 只处理 autoManaged 且非用户手动 suspended 的渠道，不覆盖人工意图。
+func (r *AutoDiscoveryRunner) reconcileUnsupportedProtocolRoutes(
+	accountUID string,
+	discovered map[string]bool,
+	cfgManager *config.ConfigManager,
+) {
+	for _, channel := range cfgManager.GetAccountChannels(accountUID) {
+		if !channel.Upstream.AutoManaged || channel.Upstream.ProviderID != "" {
+			continue
+		}
+		// images/vectors 不参与协议探测，其状态不由本轮结论决定。
+		if !slices.Contains(discoverableProtocols, channel.Kind) {
+			continue
+		}
+		index, kind := findChannelIndexAndKind(cfgManager.GetConfig(), channel.Upstream.ChannelUID)
+		if index < 0 || kind == "" {
+			continue
+		}
+		switch {
+		case !discovered[channel.Kind] && channel.Upstream.Status == "active":
+			if err := setChannelStatusByKind(cfgManager, kind, index, "disabled"); err != nil {
+				log.Printf("[AutoDiscovery-RouteDisable] 渠道 %s 置为备用池失败: %v", channel.Upstream.ChannelUID, err)
+				continue
+			}
+			log.Printf("[AutoDiscovery-RouteDisable] %s 协议无可用模型，已置为备用池: account=%s uid=%s",
+				channel.Kind, accountUID, channel.Upstream.ChannelUID)
+		case discovered[channel.Kind] && channel.Upstream.Status == "disabled":
+			if err := setChannelStatusByKind(cfgManager, kind, index, "active"); err != nil {
+				log.Printf("[AutoDiscovery-RouteRestore] 渠道 %s 恢复启用失败: %v", channel.Upstream.ChannelUID, err)
+				continue
+			}
+			log.Printf("[AutoDiscovery-RouteRestore] %s 协议重新探测到可用模型，已恢复启用: account=%s uid=%s",
+				channel.Kind, accountUID, channel.Upstream.ChannelUID)
+		}
+	}
+}
+
+// setChannelStatusByKind 按渠道类型分派状态设置。
+func setChannelStatusByKind(cfgManager *config.ConfigManager, kind string, index int, status string) error {
+	switch kind {
+	case "messages":
+		return cfgManager.SetChannelStatus(index, status)
+	case "chat":
+		return cfgManager.SetChatChannelStatus(index, status)
+	case "responses":
+		return cfgManager.SetResponsesChannelStatus(index, status)
+	case "gemini":
+		return cfgManager.SetGeminiChannelStatus(index, status)
+	default:
+		return fmt.Errorf("不支持的渠道类型: %s", kind)
+	}
+}
 func discoveredProtocolKinds(endpoints []EndpointDiscoveryResult) map[string]bool {
 	discovered := make(map[string]bool, len(discoverableProtocols))
 	for _, endpoint := range endpoints {
