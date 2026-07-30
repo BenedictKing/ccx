@@ -11,7 +11,10 @@
         </div>
       </div>
       <div class="protocol-model-availability__actions">
-        <div v-if="isDetecting" class="protocol-model-availability__detecting text-caption text-medium-emphasis">
+        <div
+          v-if="isDetecting && !primaryDiscoveryRoute"
+          class="protocol-model-availability__detecting text-caption text-medium-emphasis"
+        >
           <v-progress-circular color="primary" indeterminate size="18" width="2" />
           <span>{{ t('channelEditor.protocolModels.detecting') }}</span>
         </div>
@@ -24,8 +27,16 @@
           :disabled="isDetecting"
           @click="rediscoverAll"
         >
-          <v-icon start size="16">mdi-refresh</v-icon>
-          {{ t('channelEditor.protocolModels.rediscoverAll') }}
+          <v-progress-circular
+            v-if="isDetecting"
+            class="protocol-model-availability__btn-spinner"
+            color="primary"
+            indeterminate
+            size="16"
+            width="2"
+          />
+          <v-icon v-else start size="16">mdi-refresh</v-icon>
+          {{ isDetecting ? t('channelEditor.protocolModels.detecting') : t('channelEditor.protocolModels.rediscoverAll') }}
         </v-btn>
       </div>
     </div>
@@ -534,6 +545,10 @@ const showIncompleteHint = computed(() => (
   align-items: center;
   gap: 6px;
   white-space: nowrap;
+}
+
+.protocol-model-availability__btn-spinner {
+  margin-inline-end: 8px;
 }
 
 @media (max-width: 600px) {
