@@ -18,7 +18,7 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
       "currency": "USD",
       "inputCacheMissPrice": 1,
       "outputPrice": 5,
-      "inputCacheHitPrice": 0.09999999999999999
+      "inputCacheHitPrice": 0.1
     }
   },
   "(?:^|[-/])claude-sonnet-4-5(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
@@ -216,7 +216,7 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
       "currency": "USD",
       "inputCacheMissPrice": 2,
       "outputPrice": 10,
-      "inputCacheHitPrice": 0.19999999999999998
+      "inputCacheHitPrice": 0.2
     }
   },
   "(?:^|[-/])claude-fable-5(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
@@ -968,7 +968,7 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
     "pricing": {
       "unit": "per_1m_tokens_usd",
       "currency": "USD",
-      "inputCacheMissPrice": 0.19999999999999998,
+      "inputCacheMissPrice": 0.2,
       "outputPrice": 1.25,
       "inputCacheHitPrice": 0.02
     },
@@ -999,7 +999,7 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
     "pricing": {
       "unit": "per_1m_tokens_usd",
       "currency": "USD",
-      "inputCacheMissPrice": 0.19999999999999998,
+      "inputCacheMissPrice": 0.2,
       "outputPrice": 1.25,
       "inputCacheHitPrice": 0.02
     },
@@ -1356,8 +1356,8 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
     "pricing": {
       "unit": "per_1m_tokens_usd",
       "currency": "USD",
-      "inputCacheMissPrice": 1.5999999999999999,
-      "outputPrice": 6.3999999999999995
+      "inputCacheMissPrice": 1.6,
+      "outputPrice": 6.4
     },
     "sources": [
       "https://www.alibabacloud.com/help/en/model-studio/models"
@@ -1943,7 +1943,7 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
     "pricing": {
       "unit": "per_1m_tokens_usd",
       "currency": "USD",
-      "inputCacheMissPrice": 0.39999999999999997,
+      "inputCacheMissPrice": 0.4,
       "outputPrice": 2,
       "inputCacheHitPrice": 0.08
     }
@@ -1973,7 +1973,7 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
       "currency": "USD",
       "inputCacheMissPrice": 1,
       "outputPrice": 3,
-      "inputCacheHitPrice": 0.19999999999999998
+      "inputCacheHitPrice": 0.2
     }
   },
   "(?:^|[-/])mimo-v2-flash(?=$|@)": {
@@ -2146,7 +2146,7 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
       "currency": "USD",
       "inputCacheMissPrice": 0.5,
       "outputPrice": 3,
-      "inputCacheHitPrice": 0.049999999999999996
+      "inputCacheHitPrice": 0.05
     },
     "sources": [
       "https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json"
@@ -2175,7 +2175,7 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
       "currency": "USD",
       "inputCacheMissPrice": 2,
       "outputPrice": 12,
-      "inputCacheHitPrice": 0.19999999999999998
+      "inputCacheHitPrice": 0.2
     },
     "sources": [
       "https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json"

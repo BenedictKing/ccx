@@ -186,6 +186,20 @@ test('LiteLLM preserves explicit zero prices', () => {
   assert.equal(info.pricing.inputCacheHitPrice, 0)
 })
 
+test('LiteLLM normalizes per-million prices to avoid float noise', () => {
+  const info = extractModelInfo({
+    source: {
+      input_cost_per_token: 2e-7,
+      output_cost_per_token: 6.4e-6,
+      cache_read_input_token_cost: 5e-8,
+    },
+  }, { source: 'canonical' }).canonical
+
+  assert.equal(info.pricing.inputCacheMissPrice, 0.2)
+  assert.equal(info.pricing.outputPrice, 6.4)
+  assert.equal(info.pricing.inputCacheHitPrice, 0.05)
+})
+
 test('benchmark merge creates a complete valid profile', () => {
   const registry = { benchmarkProfiles: [], upstreamCapabilities: [] }
   mergeDeepsweData(registry, {
