@@ -156,76 +156,29 @@ func TestCostPreferenceConfig_Validate_Normalization(t *testing.T) {
 		{"quality_first", "quality_first", "quality_first", 0.3, 1.5},
 		{"balanced", "balanced", "balanced", 1.0, 1.0},
 		{"cost_first", "cost_first", "cost_first", 2.0, 0.5},
-		{"custom 保留自定义值", "custom", "custom", 1.0, 1.0},
 		{"QUALITY_FIRST 大写", "QUALITY_FIRST", "quality_first", 0.3, 1.5},
 		{"空字符串回退 balanced", "", "balanced", 1.0, 1.0},
 		{"非法值回退 balanced", "invalid", "balanced", 1.0, 1.0},
+		{"custom 已下线，回退 balanced", "custom", "balanced", 1.0, 1.0},
 		{"带空格", "  cost_first  ", "cost_first", 2.0, 0.5},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := AutopilotRoutingConfig{
-				CostPreference: CostPreferenceConfig{
-					Mode: tt.inputMode,
-					Custom: CostPreferenceCustom{
-						SavingsMultiplier:         1.0,
-						ProviderQualityMultiplier: 1.0,
-					},
-				},
+				CostPreference: CostPreferenceConfig{Mode: tt.inputMode},
 			}
 			cfg.Validate()
 
 			if cfg.CostPreference.Mode != tt.expectedMode {
 				t.Errorf("Mode = %q, 期望 %q", cfg.CostPreference.Mode, tt.expectedMode)
 			}
-			if cfg.CostPreference.Custom.SavingsMultiplier != tt.expectedSavings {
-				t.Errorf("SavingsMultiplier = %f, 期望 %f",
-					cfg.CostPreference.Custom.SavingsMultiplier, tt.expectedSavings)
+			savings, quality := cfg.CostPreference.GetEffectiveMultipliers("")
+			if savings != tt.expectedSavings {
+				t.Errorf("savingsMultiplier = %f, 期望 %f", savings, tt.expectedSavings)
 			}
-			if cfg.CostPreference.Custom.ProviderQualityMultiplier != tt.expectedQuality {
-				t.Errorf("ProviderQualityMultiplier = %f, 期望 %f",
-					cfg.CostPreference.Custom.ProviderQualityMultiplier, tt.expectedQuality)
-			}
-		})
-	}
-}
-
-func TestCostPreferenceConfig_CustomClamping(t *testing.T) {
-	tests := []struct {
-		name            string
-		savings         float64
-		quality         float64
-		expectedSavings float64
-		expectedQuality float64
-	}{
-		{"正常范围", 1.5, 1.5, 1.5, 1.5},
-		{"低于下界钳制到 0", -0.5, -0.5, 0, 0},
-		{"高于上界钳制到 3.0", 5.0, 5.0, 3.0, 3.0},
-		{"零值保留", 0, 0, 0, 0},
-		{"边界值 3.0", 3.0, 3.0, 3.0, 3.0},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg := AutopilotRoutingConfig{
-				CostPreference: CostPreferenceConfig{
-					Mode: "custom",
-					Custom: CostPreferenceCustom{
-						SavingsMultiplier:         tt.savings,
-						ProviderQualityMultiplier: tt.quality,
-					},
-				},
-			}
-			cfg.Validate()
-
-			if cfg.CostPreference.Custom.SavingsMultiplier != tt.expectedSavings {
-				t.Errorf("SavingsMultiplier = %f, 期望 %f",
-					cfg.CostPreference.Custom.SavingsMultiplier, tt.expectedSavings)
-			}
-			if cfg.CostPreference.Custom.ProviderQualityMultiplier != tt.expectedQuality {
-				t.Errorf("ProviderQualityMultiplier = %f, 期望 %f",
-					cfg.CostPreference.Custom.ProviderQualityMultiplier, tt.expectedQuality)
+			if quality != tt.expectedQuality {
+				t.Errorf("providerQualityMultiplier = %f, 期望 %f", quality, tt.expectedQuality)
 			}
 		})
 	}
@@ -239,10 +192,6 @@ func TestCostPreferenceConfig_PerTaskClassNormalization(t *testing.T) {
 				"supervisor":  "QUALITY_FIRST",
 				"worker":      "COST_FIRST",
 				"lightweight": "invalid",
-			},
-			Custom: CostPreferenceCustom{
-				SavingsMultiplier:         1.0,
-				ProviderQualityMultiplier: 1.0,
 			},
 		},
 	}
@@ -269,10 +218,6 @@ func TestCostPreferenceConfig_GetEffectiveMultipliers(t *testing.T) {
 		PerTaskClass: map[string]string{
 			"supervisor": "quality_first",
 			"worker":     "cost_first",
-		},
-		Custom: CostPreferenceCustom{
-			SavingsMultiplier:         1.5,
-			ProviderQualityMultiplier: 1.2,
 		},
 	}
 
@@ -550,7 +495,7 @@ func TestNormalizeCostPreferenceMode(t *testing.T) {
 		{"QUALITY_FIRST", "quality_first"},
 		{"balanced", "balanced"},
 		{"cost_first", "cost_first"},
-		{"custom", "custom"},
+		{"custom", "balanced"},
 		{"", "balanced"},
 		{"invalid", "balanced"},
 		{"  cost_first  ", "cost_first"},

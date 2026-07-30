@@ -2198,7 +2198,7 @@ func CalcFamilyPreferenceScore(family ModelFamily, prefs []ModelFamily) float64 
 
 同一模型在不同供应商的价格差异显著（官方 opus vs AWS Bedrock vs kiro 中转），且质量与价格通常正相关。系统不应替用户决定"质量优先还是省钱优先"——这是用户的权利。
 
-#### 5.6.1 三档预设 + 自定义
+#### 5.6.1 三档预设
 
 ```json
 "costPreference": {
@@ -2207,10 +2207,6 @@ func CalcFamilyPreferenceScore(family ModelFamily, prefs []ModelFamily) float64 
     "supervisor": "quality_first",
     "worker": "cost_first",
     "lightweight": "cost_first"
-  },
-  "custom": {
-    "savingsMultiplier": 1.0,
-    "providerQualityMultiplier": 1.0
   }
 }
 ```
@@ -2220,7 +2216,8 @@ func CalcFamilyPreferenceScore(family ModelFamily, prefs []ModelFamily) float64 
 | `quality_first` | 0.3 | 1.5 | 质量优先：官方 opus 胜过便宜的 kiro，即使贵 3 倍 |
 | `balanced` | 1.0 | 1.0 | 默认：按各 TaskClass 原始权重 |
 | `cost_first` | 2.0 | 0.5 | 省钱优先：kiro 的 opus 在满足硬约束后优先胜出 |
-| `custom` | 用户自定义 | 用户自定义 | 高级用户微调，范围 0.0 ~ 3.0 |
+
+乘数是预设内建的常量，不对外暴露；非法或未知 mode 归一化回退 `balanced`。
 
 生效方式是权重乘数，不改公式结构：
 
@@ -3627,10 +3624,6 @@ P3：copilot / codex（验证+用量窗口提示，无余额）
         "supervisor": "quality_first",
         "worker": "cost_first",
         "lightweight": "cost_first"
-      },
-      "custom": {
-        "savingsMultiplier": 1.0,
-        "providerQualityMultiplier": 1.0
       }
     },
 

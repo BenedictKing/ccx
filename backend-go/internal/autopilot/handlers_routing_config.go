@@ -77,8 +77,7 @@ func handleUpdateRoutingConfig(deps *RoutingConfigDeps) gin.HandlerFunc {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "无效的 costPreference，可选值: quality_first/balanced/cost_first"})
 				return
 			}
-			cpConfig := config.CostPreferenceConfig{Mode: req.CostPreference}
-			if err := deps.CfgManager.SetCostPreference(cpConfig); err != nil {
+			if err := deps.CfgManager.SetCostPreferenceMode(req.CostPreference); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "保存价格偏向失败"})
 				return
 			}

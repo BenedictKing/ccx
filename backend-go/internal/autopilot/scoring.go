@@ -97,17 +97,6 @@ func ApplyCostPreference(weights ScoringWeights, mode CostPreferenceMode) Scorin
 	return out
 }
 
-// ApplyCustomCostPreference 用自定义乘数调整权重（§5.6.1 custom 模式）。
-// savingsMul 和 providerQualityMul 范围 [0.0, 3.0]，超出时钳制。
-func ApplyCustomCostPreference(weights ScoringWeights, savingsMul, providerQualityMul float64) ScoringWeights {
-	savingsMul = clampF(savingsMul, 0.0, 3.0)
-	providerQualityMul = clampF(providerQualityMul, 0.0, 3.0)
-	out := weights
-	out.WSavings *= savingsMul
-	out.WProviderQuality *= providerQualityMul
-	return out
-}
-
 // ── §5.5 派系偏好评分 ──
 
 // CalcFamilyPreferenceScore 计算模型派系偏好分（§5.5.2）。

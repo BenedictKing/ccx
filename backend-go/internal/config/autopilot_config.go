@@ -146,9 +146,9 @@ func (c AutopilotRoutingConfig) IsAFPCostRoutingEnabled() bool {
 // ── §9.1 子配置类型 ──
 
 // CostPreferenceConfig 用户价格偏向配置（§5.6）。
-// 三档预设 + 自定义：quality_first / balanced / cost_first / custom。
+// 三档预设：quality_first / balanced / cost_first。
 type CostPreferenceConfig struct {
-	// Mode 全局价格偏向模式："quality_first" | "balanced" | "cost_first" | "custom"。
+	// Mode 全局价格偏向模式："quality_first" | "balanced" | "cost_first"。
 	// 默认 "balanced"。
 	Mode string `json:"mode,omitempty"`
 
@@ -156,20 +156,6 @@ type CostPreferenceConfig struct {
 	// key 为 TaskClass 字符串（supervisor/worker/lightweight/vision/long_context/image_generation/embedding）。
 	// value 为该任务类别的价格偏向模式。
 	PerTaskClass map[string]string `json:"perTaskClass,omitempty"`
-
-	// Custom 自定义乘数（仅 Mode="custom" 时生效）。
-	Custom CostPreferenceCustom `json:"custom,omitempty"`
-}
-
-// CostPreferenceCustom 自定义价格偏向乘数（§5.6.1）。
-type CostPreferenceCustom struct {
-	// SavingsMultiplier 节省乘数，范围 0.0~3.0，默认 1.0。
-	// 值越大越倾向便宜渠道。
-	SavingsMultiplier float64 `json:"savingsMultiplier,omitempty"`
-
-	// ProviderQualityMultiplier 供应商质量乘数，范围 0.0~3.0，默认 1.0。
-	// 值越大越倾向高质量供应商。
-	ProviderQualityMultiplier float64 `json:"providerQualityMultiplier,omitempty"`
 }
 
 // ModelFamilyPreferenceConfig 模型派系偏好配置（§5.5.3）。
@@ -433,10 +419,6 @@ func DefaultAutopilotRoutingConfig() AutopilotRoutingConfig {
 
 		CostPreference: CostPreferenceConfig{
 			Mode: "balanced",
-			Custom: CostPreferenceCustom{
-				SavingsMultiplier:         1.0,
-				ProviderQualityMultiplier: 1.0,
-			},
 		},
 
 		ModelFamilyPreference: ModelFamilyPreferenceConfig{
@@ -716,42 +698,14 @@ func (c *CostPreferenceConfig) validate() {
 			c.PerTaskClass[k] = normalized
 		}
 	}
-
-	// 自定义乘数钳制
-	custom := &c.Custom
-	if custom.SavingsMultiplier < 0 {
-		custom.SavingsMultiplier = 0
-	} else if custom.SavingsMultiplier > 3.0 {
-		custom.SavingsMultiplier = 3.0
-	}
-	if custom.ProviderQualityMultiplier < 0 {
-		custom.ProviderQualityMultiplier = 0
-	} else if custom.ProviderQualityMultiplier > 3.0 {
-		custom.ProviderQualityMultiplier = 3.0
-	}
-
-	// 非 custom 模式时覆盖乘数（保持配置一致性）
-	switch c.Mode {
-	case "quality_first":
-		custom.SavingsMultiplier = 0.3
-		custom.ProviderQualityMultiplier = 1.5
-	case "balanced":
-		custom.SavingsMultiplier = 1.0
-		custom.ProviderQualityMultiplier = 1.0
-	case "cost_first":
-		custom.SavingsMultiplier = 2.0
-		custom.ProviderQualityMultiplier = 0.5
-	}
 }
 
 // normalizeCostPreferenceMode 归一化价格偏向模式。
 // 非法值回退到 "balanced"。
 func normalizeCostPreferenceMode(mode string) string {
-	switch strings.ToLower(strings.TrimSpace(mode)) {
-	case "quality_first", "balanced", "cost_first", "custom":
-		return strings.ToLower(strings.TrimSpace(mode))
-	case "":
-		return "balanced"
+	switch normalized := strings.ToLower(strings.TrimSpace(mode)); normalized {
+	case "quality_first", "balanced", "cost_first":
+		return normalized
 	default:
 		return "balanced"
 	}
@@ -888,15 +842,17 @@ func (cm *ConfigManager) GetAutopilotRouting() AutopilotRoutingConfig {
 	return cfg
 }
 
-// SetAutopilotCostPreference 更新价格偏向并持久化。
-func (cm *ConfigManager) SetCostPreference(cp CostPreferenceConfig) error {
+// SetCostPreferenceMode 更新全局价格偏向模式并持久化。
+// 只修改 Mode，保留已有的 PerTaskClass 覆盖。
+func (cm *ConfigManager) SetCostPreferenceMode(mode string) error {
+	normalized := normalizeCostPreferenceMode(mode)
 	cm.mu.Lock()
-	cm.config.AutopilotRouting.CostPreference = cp
+	cm.config.AutopilotRouting.CostPreference.Mode = normalized
 	if err := cm.saveConfigLocked(cm.config); err != nil {
 		cm.mu.Unlock()
 		return err
 	}
-	log.Printf("[Config-Autopilot] 价格偏向已更新: %s", cp.Mode)
+	log.Printf("[Config-Autopilot] 价格偏向已更新: %s", normalized)
 	cm.fireConfigChangeCallbacks()
 	return nil
 }
@@ -1000,8 +956,6 @@ func (c CostPreferenceConfig) GetEffectiveMultipliers(taskClass string) (float64
 		return 1.0, 1.0
 	case "cost_first":
 		return 2.0, 0.5
-	case "custom":
-		return c.Custom.SavingsMultiplier, c.Custom.ProviderQualityMultiplier
 	default:
 		return 1.0, 1.0
 	}

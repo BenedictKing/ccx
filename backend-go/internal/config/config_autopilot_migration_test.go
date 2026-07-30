@@ -93,7 +93,7 @@ func TestLoadConfigDoesNotPersistAutopilotEnvKillSwitch(t *testing.T) {
 		set  func() error
 	}{
 		{name: "cost preference", set: func() error {
-			return cm.SetCostPreference(CostPreferenceConfig{Mode: "quality_first"})
+			return cm.SetCostPreferenceMode("quality_first")
 		}},
 		{name: "A/B test", set: func() error { return cm.SetABTestEnabled(true) }},
 	}
