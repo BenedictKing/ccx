@@ -557,7 +557,8 @@ func (cm *ConfigManager) MoveResponsesAPIKeyToBottom(upstreamIndex int, apiKey s
 
 // ReorderResponsesUpstreams 重新排序 Responses 渠道优先级
 // order 是渠道索引数组，按新的优先级顺序排列（只更新传入的渠道，支持部分排序）
-func (cm *ConfigManager) ReorderResponsesUpstreams(order []int) error {
+// priorities 可选：与 order 平行的显式优先级值（统一 LLM 视图按全局位次提交），缺省按位次 1..N
+func (cm *ConfigManager) ReorderResponsesUpstreams(order []int, priorities ...[]int) error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -578,8 +579,12 @@ func (cm *ConfigManager) ReorderResponsesUpstreams(order []int) error {
 
 	// 更新传入渠道的优先级（未传入的渠道保持原优先级不变）
 	// 注意：priority 从 1 开始，0 保留为"未显式配置"语义（调度层回退为索引，前端排序落入兜底）
+	values, err := resolveReorderPriorities(order, priorities...)
+	if err != nil {
+		return err
+	}
 	for i, idx := range order {
-		cm.config.ResponsesUpstream[idx].Priority = i + 1
+		cm.config.ResponsesUpstream[idx].Priority = values[i]
 	}
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {

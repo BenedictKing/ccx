@@ -477,10 +477,10 @@ export class ApiService {
   // ============== 多渠道调度 API ==============
 
   // 重新排序渠道优先级
-  async reorderChannels(order: number[]): Promise<void> {
+  async reorderChannels(order: number[], priorities?: number[]): Promise<void> {
     await this.request('/messages/channels/reorder', {
       method: 'POST',
-      body: JSON.stringify({ order })
+      body: JSON.stringify(priorities ? { order, priorities } : { order })
     })
   }
 
@@ -525,10 +525,10 @@ export class ApiService {
   // ============== Responses 多渠道调度 API ==============
 
   // 重新排序 Responses 渠道优先级
-  async reorderResponsesChannels(order: number[]): Promise<void> {
+  async reorderResponsesChannels(order: number[], priorities?: number[]): Promise<void> {
     await this.request('/responses/channels/reorder', {
       method: 'POST',
-      body: JSON.stringify({ order })
+      body: JSON.stringify(priorities ? { order, priorities } : { order })
     })
   }
 
@@ -720,10 +720,10 @@ export class ApiService {
 
   // ============== Chat 多渠道调度 API ==============
 
-  async reorderChatChannels(order: number[]): Promise<void> {
+  async reorderChatChannels(order: number[], priorities?: number[]): Promise<void> {
     await this.request('/chat/channels/reorder', {
       method: 'POST',
-      body: JSON.stringify({ order })
+      body: JSON.stringify(priorities ? { order, priorities } : { order })
     })
   }
 
@@ -872,10 +872,10 @@ export class ApiService {
     })
   }
 
-  async reorderImagesChannels(order: number[]): Promise<void> {
+  async reorderImagesChannels(order: number[], priorities?: number[]): Promise<void> {
     await this.request('/images/channels/reorder', {
       method: 'POST',
-      body: JSON.stringify({ order })
+      body: JSON.stringify(priorities ? { order, priorities } : { order })
     })
   }
 
@@ -1022,10 +1022,10 @@ export class ApiService {
     })
   }
 
-  async reorderVectorsChannels(order: number[]): Promise<void> {
+  async reorderVectorsChannels(order: number[], priorities?: number[]): Promise<void> {
     await this.request('/vectors/channels/reorder', {
       method: 'POST',
-      body: JSON.stringify({ order })
+      body: JSON.stringify(priorities ? { order, priorities } : { order })
     })
   }
 
@@ -1174,10 +1174,10 @@ export class ApiService {
 
   // ============== Gemini 多渠道调度 API ==============
 
-  async reorderGeminiChannels(order: number[]): Promise<void> {
+  async reorderGeminiChannels(order: number[], priorities?: number[]): Promise<void> {
     await this.request('/gemini/channels/reorder', {
       method: 'POST',
-      body: JSON.stringify({ order })
+      body: JSON.stringify(priorities ? { order, priorities } : { order })
     })
   }
 

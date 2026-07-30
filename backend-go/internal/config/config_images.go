@@ -569,7 +569,8 @@ func (cm *ConfigManager) MoveImagesAPIKeyToBottom(upstreamIndex int, apiKey stri
 
 // ReorderImagesUpstreams 重新排序 Images 渠道优先级
 // order 是渠道索引数组，按新的优先级顺序排列（只更新传入的渠道，支持部分排序）
-func (cm *ConfigManager) ReorderImagesUpstreams(order []int) error {
+// priorities 可选：与 order 平行的显式优先级值，缺省按位次 1..N
+func (cm *ConfigManager) ReorderImagesUpstreams(order []int, priorities ...[]int) error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -588,8 +589,12 @@ func (cm *ConfigManager) ReorderImagesUpstreams(order []int) error {
 		seen[idx] = true
 	}
 
+	values, err := resolveReorderPriorities(order, priorities...)
+	if err != nil {
+		return err
+	}
 	for i, idx := range order {
-		cm.config.ImagesUpstream[idx].Priority = i + 1
+		cm.config.ImagesUpstream[idx].Priority = values[i]
 	}
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {

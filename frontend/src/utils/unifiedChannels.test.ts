@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { Channel, ChannelRecentActivity, ChannelsResponse } from '@/services/api'
-import { buildUnifiedChannelsData, buildUnifiedRecentActivity, resolveChannelRecoveryRoutes, type LlmChannelKind } from './unifiedChannels'
+import { buildUnifiedChannelsData, buildUnifiedRecentActivity, buildUnifiedReorderPayloads, resolveChannelRecoveryRoutes, type LlmChannelKind } from './unifiedChannels'
 
 const channel = (
   name: string,
@@ -278,5 +278,38 @@ describe('buildUnifiedChannelsData account grouping', () => {
     })
     expect(merged.rpm).toBeCloseTo(5 / 15)
     expect(merged.tpm).toBeCloseTo(10 / 15)
+  })
+})
+
+
+describe('buildUnifiedReorderPayloads', () => {
+  it('priority 使用统一列表全局位次而非各协议组内名次', () => {
+    const data: Record<LlmChannelKind, ChannelsResponse> = {
+      messages: response([
+        channel('a-claude', 'acct-a', 0, ['sk-a']),
+        channel('b-claude', 'acct-b', 1, ['sk-b']),
+      ]),
+      chat: response([]),
+      responses: response([]),
+      gemini: response([channel('g-gemini', 'acct-g', 0, ['sk-g'], { serviceType: 'gemini' })]),
+    }
+    const unified = buildUnifiedChannelsData(data).channels
+    const a = unified.find(c => c.protocolRoutes?.some(r => r.kind === 'messages' && r.index === 0))!
+    const b = unified.find(c => c.protocolRoutes?.some(r => r.kind === 'messages' && r.index === 1))!
+    const g = unified.find(c => c.protocolRoutes?.some(r => r.kind === 'gemini'))!
+
+    // 模拟拖拽后的统一列表顺序：a, g, b
+    const payloads = buildUnifiedReorderPayloads([a, g, b])
+
+    // messages：a 位次 1，b 位次 3（中间隔着 gemini 渠道）
+    expect(payloads.get('messages')).toEqual({ order: [0, 1], priorities: [1, 3] })
+    // gemini：g 位次 2。若按组内名次编号会得到 1，刷新后 min(priority) 会把 g 提到最前
+    expect(payloads.get('gemini')).toEqual({ order: [0], priorities: [2] })
+    expect(payloads.has('chat')).toBe(false)
+  })
+
+  it('无 protocolRoutes 的渠道不产生载荷', () => {
+    const payloads = buildUnifiedReorderPayloads([{ name: 'plain', index: 0 } as Channel])
+    expect(payloads.size).toBe(0)
   })
 })

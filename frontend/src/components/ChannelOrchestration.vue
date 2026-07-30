@@ -715,7 +715,7 @@ import { ref, computed, watch, onMounted, onUnmounted, defineAsyncComponent, nex
 import draggable from 'vuedraggable'
 import { api, type Channel, type ChannelKind, type ChannelMetrics, type ChannelProtocolRoute, type ChannelStatus, type TimeWindowStats, type ChannelRecentActivity, type SchedulerStatsResponse } from '../services/api'
 import { getChannelTypeApi } from '../utils/channelTypeApi'
-import { isLlmChannelKind, resolveChannelRecoveryRoutes } from '../utils/unifiedChannels'
+import { buildUnifiedReorderPayloads, isLlmChannelKind, resolveChannelRecoveryRoutes } from '../utils/unifiedChannels'
 import { sortChannelsByPriority } from '../utils/channelOrder'
 import { buildChannelMetricsLookup } from '../utils/channelMetricsLookup'
 import { useI18n } from '../i18n'
@@ -980,6 +980,9 @@ const isMultiChannelMode = computed(() => {
 // 初始化渠道编排列表 - 活跃与挂起渠道共同参与 failover 序列
 // 优化策略：仅在结构变化时重建数组，避免频繁重构导致子组件被销毁重建
 const initActiveChannels = () => {
+  // 排序保存期间跳过刷新重建：此时服务端 priority 处于中间态（各协议数组顺序提交），
+  // 若用旧/半成品 priority 重排，会把用户刚拖拽的顺序弹回
+  if (isSavingOrder.value) return
   const filteredActive = props.channels.filter(ch => ch.status !== 'disabled')
   const newActive = buildChannelOrder(filteredActive, lastKnownActiveOrder.value)
   lastKnownActiveOrder.value = newActive.map(getChannelUiKey)
@@ -1292,19 +1295,12 @@ const saveOrder = async () => {
   isSavingOrder.value = true
   try {
     if (isLlmChannelKind(props.channelType)) {
-      // 统一 LLM 视图：按协议类型分别提交排序，保证每个协议数组内的顺序与展示一致
-      const orderByKind = new Map<ChannelKind, number[]>()
-      for (const ch of activeChannels.value) {
-        for (const route of ch.protocolRoutes ?? []) {
-          if (!isLlmChannelKind(route.kind)) continue
-          const order = orderByKind.get(route.kind) ?? []
-          order.push(route.index)
-          orderByKind.set(route.kind, order)
-        }
-      }
-      for (const [kind, order] of orderByKind) {
-        if (order.length === 0) continue
-        await getChannelTypeApi(api, kind).reorder(order)
+      // 统一 LLM 视图：按协议类型分别提交排序，priority 使用统一列表全局位次，
+      // 保证跨协议分组刷新后仍按展示顺序还原（组内名次尺度不一会把顺序打乱）
+      const payloads = buildUnifiedReorderPayloads(activeChannels.value)
+      for (const [kind, payload] of payloads) {
+        if (payload.order.length === 0) continue
+        await getChannelTypeApi(api, kind).reorder(payload.order, payload.priorities)
       }
     } else {
       const order = activeChannels.value.map(getRouteIndex)
@@ -1316,6 +1312,8 @@ const saveOrder = async () => {
     const errorMessage = error instanceof Error ? error.message : t('addChannel.unknownError')
     emit('error', t('toast.operationFailed', { message: errorMessage }))
     // Reinitialize the list when save fails to restore the original order
+    // 先解除保存标记，否则 initActiveChannels 的保存期守卫会跳过本次恢复
+    isSavingOrder.value = false
     initActiveChannels()
   } finally {
     isSavingOrder.value = false

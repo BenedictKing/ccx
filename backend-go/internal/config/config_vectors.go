@@ -592,7 +592,8 @@ func (cm *ConfigManager) MoveVectorsAPIKeyToBottom(upstreamIndex int, apiKey str
 
 // ReorderVectorsUpstreams 重新排序 Vectors 渠道优先级
 // order 是渠道索引数组，按新的优先级顺序排列（只更新传入的渠道，支持部分排序）
-func (cm *ConfigManager) ReorderVectorsUpstreams(order []int) error {
+// priorities 可选：与 order 平行的显式优先级值，缺省按位次 1..N
+func (cm *ConfigManager) ReorderVectorsUpstreams(order []int, priorities ...[]int) error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -611,8 +612,12 @@ func (cm *ConfigManager) ReorderVectorsUpstreams(order []int) error {
 		seen[idx] = true
 	}
 
+	values, err := resolveReorderPriorities(order, priorities...)
+	if err != nil {
+		return err
+	}
 	for i, idx := range order {
-		cm.config.VectorsUpstream[idx].Priority = i + 1
+		cm.config.VectorsUpstream[idx].Priority = values[i]
 	}
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {

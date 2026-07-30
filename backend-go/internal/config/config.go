@@ -171,6 +171,30 @@ func resolvePlacement(placements []string) string {
 	return ""
 }
 
+// resolveReorderPriorities 计算重排序要写入的优先级值：
+// 缺省按位次 1..N；调用方传入显式值（统一 LLM 视图按全局位次提交，
+// 保证跨协议分组按最小 priority 还原顺序时尺度一致）时按显式值写入。
+func resolveReorderPriorities(order []int, priorities ...[]int) ([]int, error) {
+	values := make([]int, len(order))
+	if len(priorities) == 0 || priorities[0] == nil {
+		for i := range values {
+			values[i] = i + 1
+		}
+		return values, nil
+	}
+	explicit := priorities[0]
+	if len(explicit) != len(order) {
+		return nil, fmt.Errorf("优先级数组长度 (%d) 与排序数组长度 (%d) 不一致", len(explicit), len(order))
+	}
+	for i, p := range explicit {
+		if p <= 0 {
+			return nil, fmt.Errorf("无效的优先级值: %d", p)
+		}
+		values[i] = p
+	}
+	return values, nil
+}
+
 // APIKeyConfig 描述单个 API Key 的附加调度配置。
 type APIKeyConfig struct {
 	Key           string `json:"key,omitempty"`

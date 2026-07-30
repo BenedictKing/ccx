@@ -303,3 +303,31 @@ export const buildUnifiedRecentActivity = (
     }
   })
 }
+
+
+export interface UnifiedReorderPayload {
+  order: number[]
+  priorities: number[]
+}
+
+/**
+ * 统一 LLM 视图的排序提交载荷：按协议类型拆分 order，
+ * priorities 使用渠道在统一列表中的全局位次（而非各协议数组内名次）。
+ * 跨协议分组按 min(priority) 还原展示顺序，若各数组只按组内名次编号，
+ * 尺度不一（如 gemini 仅十几个渠道）会导致刷新后顺序被打乱、拖拽弹回。
+ */
+export const buildUnifiedReorderPayloads = (
+  channels: Channel[],
+): Map<LlmChannelKind, UnifiedReorderPayload> => {
+  const payloads = new Map<LlmChannelKind, UnifiedReorderPayload>()
+  channels.forEach((channel, position) => {
+    for (const route of channel.protocolRoutes ?? []) {
+      if (!isLlmChannelKind(route.kind)) continue
+      const payload = payloads.get(route.kind) ?? { order: [], priorities: [] }
+      payload.order.push(route.index)
+      payload.priorities.push(position + 1)
+      payloads.set(route.kind, payload)
+    }
+  })
+  return payloads
+}

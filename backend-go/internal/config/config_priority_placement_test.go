@@ -189,3 +189,51 @@ func TestLoadConfigNormalizesZeroPriority(t *testing.T) {
 		}
 	})
 }
+
+// TestReorderUpstreams_ExplicitPriorities 测试重排序写入显式优先级（统一 LLM 视图全局位次）
+func TestReorderUpstreams_ExplicitPriorities(t *testing.T) {
+	threeChannels := `{"upstream":[` +
+		`{"name":"a","baseUrl":"https://a.example.com","apiKeys":["k1"],"priority":1},` +
+		`{"name":"b","baseUrl":"https://b.example.com","apiKeys":["k2"],"priority":2},` +
+		`{"name":"c","baseUrl":"https://c.example.com","apiKeys":["k3"],"priority":3}` +
+		`],"responsesUpstream":[],"geminiUpstream":[],"chatUpstream":[],"imagesUpstream":[],"vectorsUpstream":[]}`
+
+	t.Run("缺省按位次 1..N", func(t *testing.T) {
+		cm := newTestConfigManager(t, threeChannels)
+		if err := cm.ReorderUpstreams([]int{2, 0}); err != nil {
+			t.Fatalf("ReorderUpstreams 失败: %v", err)
+		}
+		cfg := cm.GetConfig()
+		if cfg.Upstream[2].Priority != 1 || cfg.Upstream[0].Priority != 2 {
+			t.Fatalf("应按位次赋值: c=%d a=%d", cfg.Upstream[2].Priority, cfg.Upstream[0].Priority)
+		}
+		if cfg.Upstream[1].Priority != 2 {
+			t.Fatalf("未传入的渠道应保持不变: b=%d", cfg.Upstream[1].Priority)
+		}
+	})
+
+	t.Run("显式全局位次按值写入", func(t *testing.T) {
+		cm := newTestConfigManager(t, threeChannels)
+		if err := cm.ReorderUpstreams([]int{2, 0}, []int{5, 9}); err != nil {
+			t.Fatalf("ReorderUpstreams 失败: %v", err)
+		}
+		cfg := cm.GetConfig()
+		if cfg.Upstream[2].Priority != 5 || cfg.Upstream[0].Priority != 9 {
+			t.Fatalf("应按显式值赋值: c=%d a=%d", cfg.Upstream[2].Priority, cfg.Upstream[0].Priority)
+		}
+	})
+
+	t.Run("显式位次长度不一致报错", func(t *testing.T) {
+		cm := newTestConfigManager(t, threeChannels)
+		if err := cm.ReorderUpstreams([]int{2, 0}, []int{5}); err == nil {
+			t.Fatal("长度不一致应报错")
+		}
+	})
+
+	t.Run("显式位次包含非正数报错", func(t *testing.T) {
+		cm := newTestConfigManager(t, threeChannels)
+		if err := cm.ReorderUpstreams([]int{2, 0}, []int{5, 0}); err == nil {
+			t.Fatal("非正数优先级应报错")
+		}
+	})
+}

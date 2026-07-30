@@ -222,13 +222,14 @@ func MoveApiKeyToBottom(cfgManager *config.ConfigManager) gin.HandlerFunc {
 func ReorderChannels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req struct {
-			Order []int `json:"order"`
+			Order      []int `json:"order"`
+			Priorities []int `json:"priorities"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
 			return
 		}
-		if err := cfgManager.ReorderVectorsUpstreams(req.Order); err != nil {
+		if err := cfgManager.ReorderVectorsUpstreams(req.Order, req.Priorities); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}

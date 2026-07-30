@@ -547,7 +547,8 @@ func (cm *ConfigManager) MoveChatAPIKeyToBottom(upstreamIndex int, apiKey string
 
 // ReorderChatUpstreams 重新排序 Chat 渠道优先级
 // order 是渠道索引数组，按新的优先级顺序排列（只更新传入的渠道，支持部分排序）
-func (cm *ConfigManager) ReorderChatUpstreams(order []int) error {
+// priorities 可选：与 order 平行的显式优先级值（统一 LLM 视图按全局位次提交），缺省按位次 1..N
+func (cm *ConfigManager) ReorderChatUpstreams(order []int, priorities ...[]int) error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -566,8 +567,12 @@ func (cm *ConfigManager) ReorderChatUpstreams(order []int) error {
 		seen[idx] = true
 	}
 
+	values, err := resolveReorderPriorities(order, priorities...)
+	if err != nil {
+		return err
+	}
 	for i, idx := range order {
-		cm.config.ChatUpstream[idx].Priority = i + 1
+		cm.config.ChatUpstream[idx].Priority = values[i]
 	}
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
