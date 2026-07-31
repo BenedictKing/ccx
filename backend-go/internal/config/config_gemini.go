@@ -223,9 +223,9 @@ func (cm *ConfigManager) UpdateGeminiUpstream(index int, updates UpstreamUpdate)
 		upstream.Priority = *updates.Priority
 	}
 	if updates.Status != nil {
-		upstream.Status = *updates.Status
+		applyAdministrativeChannelStatus(upstream, strings.ToLower(*updates.Status))
 	}
-	if updates.PromotionUntil != nil {
+	if updates.PromotionUntil != nil && upstream.Status != "suspended" {
 		upstream.PromotionUntil = updates.PromotionUntil
 	}
 	if updates.LowQuality != nil {
@@ -605,11 +605,9 @@ func (cm *ConfigManager) SetGeminiChannelStatus(index int, status string) error 
 		return fmt.Errorf("无效的状态: %s (允许值: active, suspended, disabled)", status)
 	}
 
-	cm.config.GeminiUpstream[index].Status = status
+	promotionCleared := applyAdministrativeChannelStatus(&cm.config.GeminiUpstream[index], status)
 
-	// 暂停时清除促销期
-	if status == "suspended" && cm.config.GeminiUpstream[index].PromotionUntil != nil {
-		cm.config.GeminiUpstream[index].PromotionUntil = nil
+	if promotionCleared {
 		log.Printf("[Config-Status] 已清除 Gemini 渠道 [%d] %s 的促销期", index, cm.config.GeminiUpstream[index].Name)
 	}
 

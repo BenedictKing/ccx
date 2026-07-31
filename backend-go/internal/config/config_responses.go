@@ -228,9 +228,9 @@ func (cm *ConfigManager) UpdateResponsesUpstream(index int, updates UpstreamUpda
 		upstream.Priority = *updates.Priority
 	}
 	if updates.Status != nil {
-		upstream.Status = *updates.Status
+		applyAdministrativeChannelStatus(upstream, strings.ToLower(*updates.Status))
 	}
-	if updates.PromotionUntil != nil {
+	if updates.PromotionUntil != nil && upstream.Status != "suspended" {
 		upstream.PromotionUntil = updates.PromotionUntil
 	}
 	if updates.LowQuality != nil {
@@ -610,11 +610,9 @@ func (cm *ConfigManager) SetResponsesChannelStatus(index int, status string) err
 		return fmt.Errorf("无效的状态: %s (允许值: active, suspended, disabled)", status)
 	}
 
-	cm.config.ResponsesUpstream[index].Status = status
+	promotionCleared := applyAdministrativeChannelStatus(&cm.config.ResponsesUpstream[index], status)
 
-	// 暂停时清除促销期
-	if status == "suspended" && cm.config.ResponsesUpstream[index].PromotionUntil != nil {
-		cm.config.ResponsesUpstream[index].PromotionUntil = nil
+	if promotionCleared {
 		log.Printf("[Config-Status] 已清除 Responses 渠道 [%d] %s 的促销期", index, cm.config.ResponsesUpstream[index].Name)
 	}
 

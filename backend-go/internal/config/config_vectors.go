@@ -270,9 +270,9 @@ func (cm *ConfigManager) UpdateVectorsUpstream(index int, updates UpstreamUpdate
 		upstream.Priority = *updates.Priority
 	}
 	if updates.Status != nil {
-		upstream.Status = *updates.Status
+		applyAdministrativeChannelStatus(upstream, strings.ToLower(*updates.Status))
 	}
-	if updates.PromotionUntil != nil {
+	if updates.PromotionUntil != nil && upstream.Status != "suspended" {
 		upstream.PromotionUntil = updates.PromotionUntil
 	}
 	if updates.LowQuality != nil {
@@ -642,10 +642,9 @@ func (cm *ConfigManager) SetVectorsChannelStatus(index int, status string) error
 		return fmt.Errorf("无效的状态: %s (允许值: active, suspended, disabled)", status)
 	}
 
-	cm.config.VectorsUpstream[index].Status = status
+	promotionCleared := applyAdministrativeChannelStatus(&cm.config.VectorsUpstream[index], status)
 
-	if status == "suspended" && cm.config.VectorsUpstream[index].PromotionUntil != nil {
-		cm.config.VectorsUpstream[index].PromotionUntil = nil
+	if promotionCleared {
 		log.Printf("[Config-Status] 已清除 Vectors 渠道 [%d] %s 的促销期", index, cm.config.VectorsUpstream[index].Name)
 	}
 

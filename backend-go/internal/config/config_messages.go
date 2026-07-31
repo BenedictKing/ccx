@@ -223,9 +223,9 @@ func (cm *ConfigManager) UpdateUpstream(index int, updates UpstreamUpdate) (shou
 		upstream.Priority = *updates.Priority
 	}
 	if updates.Status != nil {
-		upstream.Status = *updates.Status
+		applyAdministrativeChannelStatus(upstream, strings.ToLower(*updates.Status))
 	}
-	if updates.PromotionUntil != nil {
+	if updates.PromotionUntil != nil && upstream.Status != "suspended" {
 		upstream.PromotionUntil = updates.PromotionUntil
 	}
 	if updates.LowQuality != nil {
@@ -606,11 +606,9 @@ func (cm *ConfigManager) SetChannelStatus(index int, status string) error {
 		return fmt.Errorf("无效的状态: %s (允许值: active, suspended, disabled)", status)
 	}
 
-	cm.config.Upstream[index].Status = status
+	promotionCleared := applyAdministrativeChannelStatus(&cm.config.Upstream[index], status)
 
-	// 暂停时清除促销期
-	if status == "suspended" && cm.config.Upstream[index].PromotionUntil != nil {
-		cm.config.Upstream[index].PromotionUntil = nil
+	if promotionCleared {
 		log.Printf("[Config-Status] 已清除渠道 [%d] %s 的促销期", index, cm.config.Upstream[index].Name)
 	}
 
@@ -749,6 +747,24 @@ func (cm *ConfigManager) DeprioritizeAPIKey(apiKey string) error {
 	}
 
 	return nil
+}
+
+// DeprioritizeAPIKeyForRoute 只调整指定物理协议池与渠道索引中的 Key 顺序。
+func (cm *ConfigManager) DeprioritizeAPIKeyForRoute(apiType string, channelIndex int, apiKey string) error {
+	switch strings.ToLower(strings.TrimSpace(apiType)) {
+	case "responses":
+		return cm.MoveResponsesAPIKeyToBottom(channelIndex, apiKey)
+	case "gemini":
+		return cm.MoveGeminiAPIKeyToBottom(channelIndex, apiKey)
+	case "chat":
+		return cm.MoveChatAPIKeyToBottom(channelIndex, apiKey)
+	case "images":
+		return cm.MoveImagesAPIKeyToBottom(channelIndex, apiKey)
+	case "vectors":
+		return cm.MoveVectorsAPIKeyToBottom(channelIndex, apiKey)
+	default:
+		return cm.MoveAPIKeyToBottom(channelIndex, apiKey)
+	}
 }
 
 // UpdateModelMapping 更新指定上游的单个模型映射

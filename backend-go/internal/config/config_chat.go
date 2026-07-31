@@ -223,9 +223,9 @@ func (cm *ConfigManager) UpdateChatUpstream(index int, updates UpstreamUpdate) (
 		upstream.Priority = *updates.Priority
 	}
 	if updates.Status != nil {
-		upstream.Status = *updates.Status
+		applyAdministrativeChannelStatus(upstream, strings.ToLower(*updates.Status))
 	}
-	if updates.PromotionUntil != nil {
+	if updates.PromotionUntil != nil && upstream.Status != "suspended" {
 		upstream.PromotionUntil = updates.PromotionUntil
 	}
 	if updates.LowQuality != nil {
@@ -597,10 +597,9 @@ func (cm *ConfigManager) SetChatChannelStatus(index int, status string) error {
 		return fmt.Errorf("无效的状态: %s (允许值: active, suspended, disabled)", status)
 	}
 
-	cm.config.ChatUpstream[index].Status = status
+	promotionCleared := applyAdministrativeChannelStatus(&cm.config.ChatUpstream[index], status)
 
-	if status == "suspended" && cm.config.ChatUpstream[index].PromotionUntil != nil {
-		cm.config.ChatUpstream[index].PromotionUntil = nil
+	if promotionCleared {
 		log.Printf("[Config-Status] 已清除 Chat 渠道 [%d] %s 的促销期", index, cm.config.ChatUpstream[index].Name)
 	}
 

@@ -100,6 +100,107 @@ func TestLoadConfigMergesPersistedProviderCredentialsWithoutLoss(t *testing.T) {
 	}
 }
 
+func TestMergeManagedProviderAccountsManualSuspensionWins(t *testing.T) {
+	cm := &ConfigManager{config: Config{
+		ManagedAccounts: []ManagedAccountConfig{
+			{AccountUID: "acct-old", ProviderID: "mimo", Name: "old"},
+			{AccountUID: "acct-new", ProviderID: "mimo", Name: "new"},
+		},
+		Upstream: []UpstreamConfig{
+			{AccountUID: "acct-old", ProviderID: "mimo", AutoManaged: true, Status: "active", APIKeys: []string{"sk-old"}},
+			{AccountUID: "acct-new", ProviderID: "mimo", AutoManaged: true, Status: "suspended", SuspensionSource: SuspensionSourceManual, APIKeys: []string{"sk-new"}},
+		},
+	}}
+	if !cm.mergeManagedProviderAccounts() {
+		t.Fatal("重复 provider 账号应触发合并")
+	}
+	got := cm.config.Upstream[0]
+	if got.Status != "suspended" || got.SuspensionSource != SuspensionSourceManual {
+		t.Fatalf("人工暂停被 active 路由覆盖: status=%q source=%q", got.Status, got.SuspensionSource)
+	}
+}
+
+func TestMergeManagedProviderAccountsPreservesUIDOnlyBindingWithRuntimeKey(t *testing.T) {
+	cm := &ConfigManager{config: Config{
+		ManagedAccounts: []ManagedAccountConfig{
+			{AccountUID: "acct-old", ProviderID: "mimo", Credentials: []ManagedAccountCredential{{CredentialUID: "cred-old", APIKey: "sk-old"}}},
+			{AccountUID: "acct-new", ProviderID: "mimo", Credentials: []ManagedAccountCredential{{CredentialUID: "cred-new", APIKey: "sk-new"}}},
+		},
+		Upstream: []UpstreamConfig{
+			{AccountUID: "acct-old", ProviderID: "mimo", AutoManaged: true, APIKeyConfigs: []APIKeyConfig{{CredentialUID: "cred-old"}}},
+			{AccountUID: "acct-new", ProviderID: "mimo", AutoManaged: true, APIKeys: []string{"sk-new"}, APIKeyConfigs: []APIKeyConfig{{Key: "sk-new", CredentialUID: "cred-new"}}},
+		},
+	}}
+	if !cm.mergeManagedProviderAccounts() {
+		t.Fatal("重复 provider 账号应触发合并")
+	}
+	foundOld := false
+	for _, keyConfig := range cm.config.Upstream[0].APIKeyConfigs {
+		if keyConfig.CredentialUID == "cred-old" {
+			foundOld = true
+		}
+	}
+	if !foundOld {
+		t.Fatalf("merge 丢失 UID-only legacy 绑定: %+v", cm.config.Upstream[0].APIKeyConfigs)
+	}
+	seen := map[string]string{}
+	for _, credential := range cm.config.ManagedAccounts[0].Credentials {
+		seen[credential.CredentialUID] = credential.APIKey
+	}
+	if seen["cred-old"] != "sk-old" {
+		t.Fatalf("merge/sync 丢失 cred-old: %+v", seen)
+	}
+}
+
+func TestSyncManagedAccountsPreservesUIDOnlyCredentialWithRuntimeKey(t *testing.T) {
+	cfg := Config{
+		ManagedAccounts: []ManagedAccountConfig{{
+			AccountUID: "acct", ProviderID: "mimo", Credentials: []ManagedAccountCredential{
+				{CredentialUID: "cred-old", APIKey: "sk-old"},
+				{CredentialUID: "cred-new", APIKey: "sk-new"},
+			},
+		}},
+		Upstream: []UpstreamConfig{{
+			AccountUID: "acct", ProviderID: "mimo", AutoManaged: true,
+			APIKeys: []string{"sk-new"},
+			APIKeyConfigs: []APIKeyConfig{
+				{Key: "sk-new", CredentialUID: "cred-new"},
+				{CredentialUID: "cred-old"},
+			},
+		}},
+	}
+	cfg.syncManagedAccountsFromChannels()
+	if len(cfg.ManagedAccounts) != 1 || len(cfg.ManagedAccounts[0].Credentials) != 2 {
+		t.Fatalf("UID-only legacy 凭证丢失: %+v", cfg.ManagedAccounts)
+	}
+	seen := map[string]string{}
+	for _, credential := range cfg.ManagedAccounts[0].Credentials {
+		seen[credential.CredentialUID] = credential.APIKey
+	}
+	if seen["cred-old"] != "sk-old" || seen["cred-new"] != "sk-new" {
+		t.Fatalf("凭证绑定异常: %+v", seen)
+	}
+}
+
+func TestHydrateManagedCredentialsRuntimeOnlyDoesNotReportModified(t *testing.T) {
+	cfg := Config{
+		ManagedAccounts: []ManagedAccountConfig{{
+			AccountUID: "acct", ProviderID: "mimo",
+			Credentials: []ManagedAccountCredential{{CredentialUID: "cred", APIKey: "sk-runtime"}},
+		}},
+		Upstream: []UpstreamConfig{{
+			AccountUID: "acct", ProviderID: "mimo", AutoManaged: true,
+			APIKeyConfigs: []APIKeyConfig{{CredentialUID: "cred"}},
+		}},
+	}
+	if cfg.hydrateManagedAccountCredentials() {
+		t.Fatal("纯运行时 Key 补水不应标记持久化结构已修改")
+	}
+	if len(cfg.Upstream[0].APIKeys) != 1 || cfg.Upstream[0].APIKeys[0] != "sk-runtime" || cfg.Upstream[0].APIKeyConfigs[0].Key != "sk-runtime" {
+		t.Fatalf("运行时补水失败: %+v", cfg.Upstream[0])
+	}
+}
+
 func TestUpdateAccountChannelsUpdatesAllRoutes(t *testing.T) {
 	cm := &ConfigManager{config: Config{
 		Upstream:     []UpstreamConfig{{AccountUID: "acct_test", ChannelUID: "ch_messages", ServiceType: "claude", ProviderID: "mimo", AutoManaged: true}},

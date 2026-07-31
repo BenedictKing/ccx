@@ -430,18 +430,67 @@ func GetChannelEffectiveState(upstream *UpstreamConfig) string {
 	return "active"
 }
 
-// applySingleKeyReplacementTransition 统一处理“单 key 更换”带来的自动激活与熔断重置判定。
+// applyChannelStatusTransition 统一维护渠道状态、暂停来源与促销期语义。
+// suspensionSource 仅在目标状态为 suspended 时生效。
+func applyChannelStatusTransition(upstream *UpstreamConfig, status, suspensionSource string) (promotionCleared bool) {
+	if upstream == nil {
+		return false
+	}
+	upstream.Status = status
+	if status == "suspended" {
+		upstream.SuspensionSource = suspensionSource
+		if upstream.PromotionUntil != nil {
+			upstream.PromotionUntil = nil
+			return true
+		}
+		return false
+	}
+	upstream.SuspensionSource = ""
+	return false
+}
+
+// applyAdministrativeChannelStatus 将管理接口的 suspended 明确记为人工暂停。
+func applyAdministrativeChannelStatus(upstream *UpstreamConfig, status string) (promotionCleared bool) {
+	source := ""
+	if status == "suspended" {
+		source = SuspensionSourceManual
+	}
+	return applyChannelStatusTransition(upstream, status, source)
+}
+
+// hasUsableChannelKeys 判断渠道是否至少有一个非空 Key 可用于调度。
+func hasUsableChannelKeys(upstream *UpstreamConfig) bool {
+	if upstream == nil {
+		return false
+	}
+	for _, key := range upstream.APIKeys {
+		if strings.TrimSpace(key) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// resumeAutoNoKeysChannel 只恢复由缺少 Key 自动暂停的渠道。
+func resumeAutoNoKeysChannel(upstream *UpstreamConfig) bool {
+	if upstream == nil || upstream.Status != "suspended" || upstream.SuspensionSource != SuspensionSourceAutoNoKeys || !hasUsableChannelKeys(upstream) {
+		return false
+	}
+	applyChannelStatusTransition(upstream, "active", "")
+	return true
+}
+
 func applySingleKeyReplacementTransition(upstream *UpstreamConfig, newKeys []string) (shouldResetMetrics bool) {
 	if upstream == nil {
 		return false
 	}
-	if len(upstream.APIKeys) == 1 && len(newKeys) == 1 && upstream.APIKeys[0] != newKeys[0] {
-		if upstream.Status == "suspended" {
-			upstream.Status = "active"
-		}
-		return true
+	newKeys = deduplicateStrings(newKeys)
+	singleKeyReplaced := len(upstream.APIKeys) == 1 && len(newKeys) == 1 && upstream.APIKeys[0] != newKeys[0]
+	autoRecovered := upstream.Status == "suspended" && upstream.SuspensionSource == SuspensionSourceAutoNoKeys && len(newKeys) > 0
+	if autoRecovered {
+		applyChannelStatusTransition(upstream, "active", "")
 	}
-	return false
+	return singleKeyReplaced || autoRecovered
 }
 
 // GetChannelPriority 获取渠道优先级（带默认值处理）

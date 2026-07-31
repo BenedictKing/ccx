@@ -541,7 +541,9 @@ func (cm *ConfigManager) mergeManagedProviderAccounts() bool {
 			channel.Name = targetName
 			channel.APIKeyConfigs = normalizeAPIKeyConfigs(channel.APIKeys, channel.APIKeyConfigs)
 			for j := range channel.APIKeyConfigs {
-				channel.APIKeyConfigs[j].CredentialUID = GenerateCredentialUID(uid, channel.APIKeyConfigs[j].Key)
+				if strings.TrimSpace(channel.APIKeyConfigs[j].Key) != "" {
+					channel.APIKeyConfigs[j].CredentialUID = GenerateCredentialUID(uid, channel.APIKeyConfigs[j].Key)
+				}
 			}
 
 			idx, exists := providerIndex[providerID]
@@ -560,19 +562,36 @@ func (cm *ConfigManager) mergeManagedProviderAccounts() bool {
 				providerHasCanonicalRoute[providerID] = true
 			}
 			configs := make(map[string]APIKeyConfig, len(merged.APIKeyConfigs)+len(channel.APIKeyConfigs))
-			for _, cfg := range merged.APIKeyConfigs {
-				configs[cfg.Key] = cfg
-			}
-			for _, cfg := range channel.APIKeyConfigs {
+			uidOnlyConfigs := make(map[string]APIKeyConfig)
+			collectConfig := func(cfg APIKeyConfig) {
+				if strings.TrimSpace(cfg.Key) == "" {
+					if cfg.CredentialUID != "" {
+						uidOnlyConfigs[cfg.CredentialUID] = cfg
+					}
+					return
+				}
 				cfg.CredentialUID = GenerateCredentialUID(uid, cfg.Key)
 				configs[cfg.Key] = cfg
+				delete(uidOnlyConfigs, cfg.CredentialUID)
+			}
+			for _, cfg := range merged.APIKeyConfigs {
+				collectConfig(cfg)
+			}
+			for _, cfg := range channel.APIKeyConfigs {
+				collectConfig(cfg)
 			}
 			merged.APIKeys = deduplicateStrings(append(merged.APIKeys, channel.APIKeys...))
-			merged.APIKeyConfigs = make([]APIKeyConfig, 0, len(merged.APIKeys))
+			merged.APIKeyConfigs = make([]APIKeyConfig, 0, len(merged.APIKeys)+len(uidOnlyConfigs))
 			for _, key := range merged.APIKeys {
 				cfg := configs[key]
 				cfg.Key = key
-				cfg.CredentialUID = GenerateCredentialUID(uid, key)
+				if strings.TrimSpace(key) != "" {
+					cfg.CredentialUID = GenerateCredentialUID(uid, key)
+					delete(uidOnlyConfigs, cfg.CredentialUID)
+				}
+				merged.APIKeyConfigs = append(merged.APIKeyConfigs, cfg)
+			}
+			for _, cfg := range uidOnlyConfigs {
 				merged.APIKeyConfigs = append(merged.APIKeyConfigs, cfg)
 			}
 			incomingBaseURLs := append([]string(nil), channel.BaseURLs...)
@@ -586,8 +605,13 @@ func (cm *ConfigManager) mergeManagedProviderAccounts() bool {
 			if len(merged.BaseURLs) > 0 {
 				merged.BaseURL = merged.BaseURLs[0]
 			}
-			if channel.Status == "active" {
-				merged.Status = "active"
+			// 合并状态时保持 status/source 成对一致；任一路由的人工暂停都优先于 active，
+			// 防止被合并进来的 active 路由覆盖 canonical 的人工暂停。
+			if (merged.Status == "suspended" && merged.SuspensionSource == SuspensionSourceManual) ||
+				(channel.Status == "suspended" && channel.SuspensionSource == SuspensionSourceManual) {
+				applyChannelStatusTransition(merged, "suspended", SuspensionSourceManual)
+			} else if channel.Status == "active" {
+				applyChannelStatusTransition(merged, "active", "")
 			}
 			// 兼容性种子随渠道一起合并：被合并掉的渠道若带有历史手工配置降级来的种子，
 			// 不合并就会连同渠道一起丢弃。已存在的种子优先（canonical 渠道的观察更可信）。
@@ -612,15 +636,44 @@ func (cm *ConfigManager) mergeManagedProviderAccounts() bool {
 	cm.config.VectorsUpstream = mergeKind(cm.config.VectorsUpstream, "vectors")
 	if updated {
 		accounts := cm.config.ManagedAccounts[:0]
+		mergedCredentials := make(map[string][]ManagedAccountCredential)
+		credentialSeen := make(map[string]map[string]bool)
 		for _, account := range cm.config.ManagedAccounts {
 			canonical := canonicalUID[account.ProviderID]
-			if canonical != "" && account.AccountUID != canonical {
+			if canonical == "" {
+				canonical = account.AccountUID
+			}
+			if credentialSeen[canonical] == nil {
+				credentialSeen[canonical] = make(map[string]bool)
+			}
+			for _, credential := range account.Credentials {
+				if credential.CredentialUID == "" || credentialSeen[canonical][credential.CredentialUID] {
+					continue
+				}
+				mergedCredentials[canonical] = append(mergedCredentials[canonical], credential)
+				credentialSeen[canonical][credential.CredentialUID] = true
+			}
+			if account.AccountUID != canonical {
 				continue
 			}
+			account.Credentials = mergedCredentials[canonical]
 			accounts = append(accounts, account)
 		}
 		cm.config.ManagedAccounts = accounts
-		cm.config.syncManagedAccountsFromChannels()
+		// 渠道带明文 Key 时按合并结果重建凭证池；持久化渠道只有 UID、Key 尚未补水时，
+		// 直接同步会清空已保留的账号凭证，因此只在至少存在运行时 Key 时执行。
+		hasRuntimeKeys := false
+		for _, channels := range [][]UpstreamConfig{cm.config.Upstream, cm.config.ChatUpstream, cm.config.ResponsesUpstream, cm.config.GeminiUpstream, cm.config.ImagesUpstream, cm.config.VectorsUpstream} {
+			for i := range channels {
+				if channels[i].AutoManaged && len(channels[i].APIKeys) > 0 {
+					hasRuntimeKeys = true
+					break
+				}
+			}
+		}
+		if hasRuntimeKeys {
+			cm.config.syncManagedAccountsFromChannels()
+		}
 		log.Printf("[Config-AccountMerge] 已按 provider 合并历史自动托管账号")
 	}
 	return updated
@@ -733,9 +786,7 @@ func applyAccountChannelChanges(cfg *Config, accountUID string, updates []Accoun
 			if len(channel.BaseURLs) > 0 {
 				channel.BaseURL = channel.BaseURLs[0]
 			}
-			if len(channel.APIKeys) > 0 && channel.Status == "suspended" {
-				channel.Status = "active"
-			}
+			resumeAutoNoKeysChannel(channel)
 			matched++
 		}
 	}
@@ -1013,19 +1064,29 @@ func (c *Config) syncManagedAccountsFromChannels() {
 				if uid == "" {
 					uid = channel.CredentialUIDForKey(apiKey)
 				}
-				if seen[uid] {
+				if uid == "" || seen[uid] {
 					return
 				}
 				credential := existingCredentials[channel.AccountUID][uid]
 				credential.CredentialUID = uid
-				credential.APIKey = apiKey
+				if apiKey != "" {
+					credential.APIKey = apiKey
+				}
 				account.Credentials = append(account.Credentials, credential)
 				seen[uid] = true
 			}
 			for _, apiKey := range channel.APIKeys {
 				addCredential(apiKey, nil)
 			}
+			// 持久化托管路由可能只有 CredentialUID；即使同一路由已混入新的运行时 Key，
+			// 这些 legacy 绑定仍属于账号凭证池，不能在同步时被清空。
+			for j := range channel.APIKeyConfigs {
+				if channel.APIKeyConfigs[j].Key == "" && channel.APIKeyConfigs[j].CredentialUID != "" {
+					addCredential("", &channel.APIKeyConfigs[j])
+				}
+			}
 			// 被余额/限额不足拉黑的托管 Key 仍属于该账号凭证池，
+			// 不能因暂时移出 APIKeys 就丢失其 Console token / AccessKey / 用量快照。
 			// 不能因暂时移出 APIKeys 就丢失其 Console token / AccessKey / 用量快照。
 			for _, dk := range channel.DisabledAPIKeys {
 				if dk.Key != "" {
@@ -1056,7 +1117,7 @@ func (c *Config) syncManagedAccountsFromChannels() {
 	}
 }
 
-func (c *Config) hydrateManagedAccountCredentials() {
+func (c *Config) hydrateManagedAccountCredentials() bool {
 	credentials := make(map[string]map[string]string, len(c.ManagedAccounts))
 	orderedUIDs := make(map[string][]string, len(c.ManagedAccounts))
 	for _, account := range c.ManagedAccounts {
@@ -1067,6 +1128,7 @@ func (c *Config) hydrateManagedAccountCredentials() {
 		}
 		credentials[account.AccountUID] = byUID
 	}
+	modified := false
 	visit := func(channels []UpstreamConfig) {
 		for i := range channels {
 			channel := &channels[i]
@@ -1081,14 +1143,20 @@ func (c *Config) hydrateManagedAccountCredentials() {
 				for _, credentialUID := range orderedUIDs[channel.AccountUID] {
 					channel.APIKeyConfigs = append(channel.APIKeyConfigs, APIKeyConfig{CredentialUID: credentialUID})
 				}
+				modified = true
 			}
+			previousKeys := append([]string(nil), channel.APIKeys...)
 			channel.APIKeys = channel.APIKeys[:0]
 			for j := range channel.APIKeyConfigs {
-				if apiKey := byUID[channel.APIKeyConfigs[j].CredentialUID]; apiKey != "" {
-					channel.APIKeyConfigs[j].Key = apiKey
+				if apiKey := strings.TrimSpace(byUID[channel.APIKeyConfigs[j].CredentialUID]); apiKey != "" {
+					if channel.APIKeyConfigs[j].Key != apiKey {
+						// 明文 Key 仅为运行时补水，保存时会再次剥离，不属于持久化结构迁移。
+						channel.APIKeyConfigs[j].Key = apiKey
+					}
 					channel.APIKeys = append(channel.APIKeys, apiKey)
 				}
 			}
+			_ = previousKeys // APIKeys 同样是运行时补水，不触发 load-save-strip 循环。
 		}
 	}
 	visit(c.Upstream)
@@ -1097,6 +1165,7 @@ func (c *Config) hydrateManagedAccountCredentials() {
 	visit(c.GeminiUpstream)
 	visit(c.ImagesUpstream)
 	visit(c.VectorsUpstream)
+	return modified
 }
 
 func (c *Config) stripManagedChannelSecrets() {

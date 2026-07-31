@@ -54,10 +54,11 @@ type UpstreamConfig struct {
 	// Images 响应兼容：当客户端请求 b64_json 而上游只返回 URL 时，下载并转换为 b64_json（默认 false）
 	ConvertImageURLToB64JSON bool `json:"convertImageUrlToB64Json,omitempty"`
 	// 多渠道调度相关字段
-	Priority       int        `json:"priority"`                 // 渠道优先级（数字越小优先级越高，默认按索引）
-	Status         string     `json:"status"`                   // 渠道状态：active（正常）, suspended（暂停）, disabled（备用池）
-	PromotionUntil *time.Time `json:"promotionUntil,omitempty"` // 促销期截止时间，在此期间内优先使用此渠道（忽略trace亲和）
-	LowQuality     bool       `json:"lowQuality,omitempty"`     // 低质量渠道标记：启用后强制本地估算 token，偏差>5%时使用本地值
+	Priority         int        `json:"priority"`                   // 渠道优先级（数字越小优先级越高，默认按索引）
+	Status           string     `json:"status"`                     // 渠道状态：active（正常）, suspended（暂停）, disabled（备用池）
+	SuspensionSource string     `json:"suspensionSource,omitempty"` // 暂停来源：manual（人工）, auto_no_keys（缺少可用 Key）
+	PromotionUntil   *time.Time `json:"promotionUntil,omitempty"`   // 促销期截止时间，在此期间内优先使用此渠道（忽略trace亲和）
+	LowQuality       bool       `json:"lowQuality,omitempty"`       // 低质量渠道标记：启用后强制本地估算 token，偏差>5%时使用本地值
 	// 自动拉黑开关
 	AutoBlacklistBalance *bool `json:"autoBlacklistBalance,omitempty"` // 余额不足时自动拉黑 Key（默认 true）
 	// Claude Messages metadata.user_id 规范化开关
@@ -136,6 +137,12 @@ type UpstreamConfig struct {
 
 // ChannelPlacementFront 表示新渠道放置到故障转移序列首位。
 const ChannelPlacementFront = "front"
+
+// 渠道暂停来源。只有 auto_no_keys 可在凭证恢复后自动激活。
+const (
+	SuspensionSourceManual     = "manual"
+	SuspensionSourceAutoNoKeys = "auto_no_keys"
+)
 
 // assignChannelPriority 为新增渠道分配 Priority（数字越小越优先，0 表示未显式配置）。
 // placement 为 "front" 时：已显式排序（Priority>0）的现有渠道整体后移一位，新渠道取 1；
@@ -578,21 +585,32 @@ func normalizeAPIKeyConfigs(apiKeys []string, configs []APIKeyConfig) []APIKeyCo
 	}
 
 	byKey := make(map[string]APIKeyConfig, len(configs))
+	uidOnly := make([]APIKeyConfig, 0)
+	uidOnlySeen := make(map[string]bool)
 	for _, cfg := range configs {
 		key := strings.TrimSpace(cfg.Key)
+		cfg.Name = strings.TrimSpace(cfg.Name)
+		cfg.QuotaGroup = strings.TrimSpace(cfg.QuotaGroup)
 		if key == "" {
+			if cfg.CredentialUID != "" && !uidOnlySeen[cfg.CredentialUID] {
+				cfg.Key = ""
+				uidOnly = append(uidOnly, cfg)
+				uidOnlySeen[cfg.CredentialUID] = true
+			}
 			continue
 		}
 		cfg.Key = key
-		cfg.Name = strings.TrimSpace(cfg.Name)
-		cfg.QuotaGroup = strings.TrimSpace(cfg.QuotaGroup)
 		byKey[key] = cfg
 	}
 
-	normalized := make([]APIKeyConfig, 0, len(keys))
+	normalized := make([]APIKeyConfig, 0, len(keys)+len(uidOnly))
+	boundUIDs := make(map[string]bool, len(configs))
 	for _, key := range keys {
 		if cfg, ok := byKey[key]; ok {
 			normalized = append(normalized, cfg)
+			if cfg.CredentialUID != "" {
+				boundUIDs[cfg.CredentialUID] = true
+			}
 		} else {
 			normalized = append(normalized, APIKeyConfig{Key: key})
 		}
@@ -601,6 +619,16 @@ func normalizeAPIKeyConfigs(apiKeys []string, configs []APIKeyConfig) []APIKeyCo
 	// 保留已知但不在 active APIKeys 中的 key 配置，避免 blacklist/restore 丢失 quota/rpm 语义。
 	for _, cfg := range byKey {
 		normalized = append(normalized, cfg)
+		if cfg.CredentialUID != "" {
+			boundUIDs[cfg.CredentialUID] = true
+		}
+	}
+	// 托管渠道持久化时会剥离明文 Key，仅留下 CredentialUID。运行时混入新 Key 后仍须
+	// 保留这些 legacy 绑定，后续补水/同步才能找回账号凭证池中的旧凭证。
+	for _, cfg := range uidOnly {
+		if !boundUIDs[cfg.CredentialUID] {
+			normalized = append(normalized, cfg)
+		}
 	}
 	return normalized
 }

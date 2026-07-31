@@ -93,7 +93,6 @@ func (cm *ConfigManager) loadConfig() error {
 		log.Printf("[Config-Migration] 警告: autopilot 配置无法解析，已回退到默认值: %v", err)
 	}
 	cm.config = loaded
-	cm.config.hydrateManagedAccountCredentials()
 
 	// 兼容旧配置：缺失字段补齐默认值（thinkingCache 等）
 	needSaveDefaults := cm.applyConfigDefaults(data) || autopilotDecodeFallback
@@ -132,6 +131,14 @@ func (cm *ConfigManager) loadConfig() error {
 		needSaveDefaults = true
 	}
 	if cm.ensureCredentialUIDs() {
+		needSaveDefaults = true
+	}
+	// AccountUID / CredentialUID 归一化及 provider 账号合并完成后再补水，
+	// 避免用旧 UID 查找凭证导致托管子路由持续无 Key。
+	if cm.config.hydrateManagedAccountCredentials() {
+		needSaveDefaults = true
+	}
+	if cm.recoverManagedChannelSuspensions() {
 		needSaveDefaults = true
 	}
 	if cm.ensureOriginBackfill() {
@@ -817,9 +824,13 @@ func (cm *ConfigManager) ensureCredentialUIDs() bool {
 			if !channel.AutoManaged || channel.AccountUID == "" {
 				continue
 			}
-			channel.APIKeyConfigs = normalizeAPIKeyConfigs(channel.APIKeys, channel.APIKeyConfigs)
+			// 持久化的托管渠道会剥离 Key，仅保留 CredentialUID。此时不能用空 Key
+			// 重新归一化，否则会丢失已有绑定并生成基于空字符串的伪 UID。
+			if len(channel.APIKeys) > 0 {
+				channel.APIKeyConfigs = normalizeAPIKeyConfigs(channel.APIKeys, channel.APIKeyConfigs)
+			}
 			for j := range channel.APIKeyConfigs {
-				if channel.APIKeyConfigs[j].CredentialUID == "" {
+				if channel.APIKeyConfigs[j].CredentialUID == "" && strings.TrimSpace(channel.APIKeyConfigs[j].Key) != "" {
 					channel.APIKeyConfigs[j].CredentialUID = GenerateCredentialUID(channel.AccountUID, channel.APIKeyConfigs[j].Key)
 					updated = true
 				}
@@ -976,104 +987,57 @@ func (cm *ConfigManager) migrateUpstreams(upstreams []UpstreamConfig, currentIdx
 // validateChannelKeys 自检渠道密钥配置
 // 没有配置 API key 的渠道，即使状态为 active 也应暂停
 // 返回 true 表示有配置被修改，需要保存
+// recoverManagedChannelSuspensions 恢复 provider 明确托管、来源为 auto_no_keys
+// 且已有可用凭证的渠道。空来源 legacy suspended 保持暂停，避免猜测人工意图。
+func (cm *ConfigManager) recoverManagedChannelSuspensions() bool {
+	modified := false
+	visit := func(channels []UpstreamConfig, kind string) {
+		for i := range channels {
+			channel := &channels[i]
+			// 空来源的 legacy suspended 可能是历史人工操作，不能猜测并自动恢复。
+			// 只有明确由缺少 Key 自动暂停的托管渠道才允许在补水后激活。
+			if !channel.AutoManaged || channel.ProviderID == "" || channel.AccountUID == "" {
+				continue
+			}
+			if resumeAutoNoKeysChannel(channel) {
+				modified = true
+				log.Printf("[Config-Rehydrate] %s 托管渠道 [%d] %s 凭证已恢复，自动激活", kind, i, channel.Name)
+			}
+		}
+	}
+	visit(cm.config.Upstream, "Messages")
+	visit(cm.config.ResponsesUpstream, "Responses")
+	visit(cm.config.GeminiUpstream, "Gemini")
+	visit(cm.config.ChatUpstream, "Chat")
+	visit(cm.config.ImagesUpstream, "Images")
+	visit(cm.config.VectorsUpstream, "Vectors")
+	return modified
+}
+
 func (cm *ConfigManager) validateChannelKeys() bool {
 	modified := false
-
-	// 检查 Messages 渠道
-	for i := range cm.config.Upstream {
-		upstream := &cm.config.Upstream[i]
-		status := upstream.Status
-		if status == "" {
-			status = "active"
-		}
-
-		// 如果是 active 状态但没有配置 key，自动设为 suspended
-		if status == "active" && len(upstream.APIKeys) == 0 {
-			upstream.Status = "suspended"
-			modified = true
-			log.Printf("[Config-Validate] 警告: Messages 渠道 [%d] %s 没有配置 API key，已自动暂停", i, upstream.Name)
-		}
-	}
-
-	// 检查 Responses 渠道
-	for i := range cm.config.ResponsesUpstream {
-		upstream := &cm.config.ResponsesUpstream[i]
-		status := upstream.Status
-		if status == "" {
-			status = "active"
-		}
-
-		// 如果是 active 状态但没有配置 key，自动设为 suspended
-		if status == "active" && len(upstream.APIKeys) == 0 {
-			upstream.Status = "suspended"
-			modified = true
-			log.Printf("[Config-Validate] 警告: Responses 渠道 [%d] %s 没有配置 API key，已自动暂停", i, upstream.Name)
+	validate := func(upstreams []UpstreamConfig, channelKind string) {
+		for i := range upstreams {
+			upstream := &upstreams[i]
+			status := upstream.Status
+			if status == "" {
+				status = "active"
+			}
+			// 仅本次 active -> suspended 转移标记为 auto_no_keys，
+			// 不改写已有 suspended 的人工来源或旧数据来源。
+			if status == "active" && !hasUsableChannelKeys(upstream) {
+				applyChannelStatusTransition(upstream, "suspended", SuspensionSourceAutoNoKeys)
+				modified = true
+				log.Printf("[Config-Validate] 警告: %s 渠道 [%d] %s 没有配置 API key，已自动暂停", channelKind, i, upstream.Name)
+			}
 		}
 	}
-
-	// 检查 Chat 渠道
-	for i := range cm.config.ChatUpstream {
-		upstream := &cm.config.ChatUpstream[i]
-		status := upstream.Status
-		if status == "" {
-			status = "active"
-		}
-
-		// 如果是 active 状态但没有配置 key，自动设为 suspended
-		if status == "active" && len(upstream.APIKeys) == 0 {
-			upstream.Status = "suspended"
-			modified = true
-			log.Printf("[Config-Validate] 警告: Chat 渠道 [%d] %s 没有配置 API key，已自动暂停", i, upstream.Name)
-		}
-	}
-
-	// 检查 Gemini 渠道
-	for i := range cm.config.GeminiUpstream {
-		upstream := &cm.config.GeminiUpstream[i]
-		status := upstream.Status
-		if status == "" {
-			status = "active"
-		}
-
-		// 如果是 active 状态但没有配置 key，自动设为 suspended
-		if status == "active" && len(upstream.APIKeys) == 0 {
-			upstream.Status = "suspended"
-			modified = true
-			log.Printf("[Config-Validate] 警告: Gemini 渠道 [%d] %s 没有配置 API key，已自动暂停", i, upstream.Name)
-		}
-	}
-
-	// 检查 Images 渠道
-	for i := range cm.config.ImagesUpstream {
-		upstream := &cm.config.ImagesUpstream[i]
-		status := upstream.Status
-		if status == "" {
-			status = "active"
-		}
-
-		// 如果是 active 状态但没有配置 key，自动设为 suspended
-		if status == "active" && len(upstream.APIKeys) == 0 {
-			upstream.Status = "suspended"
-			modified = true
-			log.Printf("[Config-Validate] 警告: Images 渠道 [%d] %s 没有配置 API key，已自动暂停", i, upstream.Name)
-		}
-	}
-
-	// 检查 Vectors 渠道
-	for i := range cm.config.VectorsUpstream {
-		upstream := &cm.config.VectorsUpstream[i]
-		status := upstream.Status
-		if status == "" {
-			status = "active"
-		}
-
-		if status == "active" && len(upstream.APIKeys) == 0 {
-			upstream.Status = "suspended"
-			modified = true
-			log.Printf("[Config-Validate] 警告: Vectors 渠道 [%d] %s 没有配置 API key，已自动暂停", i, upstream.Name)
-		}
-	}
-
+	validate(cm.config.Upstream, "Messages")
+	validate(cm.config.ResponsesUpstream, "Responses")
+	validate(cm.config.ChatUpstream, "Chat")
+	validate(cm.config.GeminiUpstream, "Gemini")
+	validate(cm.config.ImagesUpstream, "Images")
+	validate(cm.config.VectorsUpstream, "Vectors")
 	return modified
 }
 
