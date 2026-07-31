@@ -159,17 +159,18 @@ func ContextLimitFromError(statusCode int, bodyBytes []byte, estimatedInputToken
 
 // estimatedInputTokensForContextLimit 取本次请求的输入 token 估算量。
 //
-// 优先复用入口已挂到 context 的 RequestProfile：那是路由决策实际使用的同一份估算，
-// 用它反推上限才能与后续硬约束比较的口径一致。profile 缺失（未接线入口）时
-// 退化为对实际发送体重算一次；两者都拿不到则返回 0，调用方只采信上游明确声明的数值。
+// 优先复用入口已挂到 context 的 RequestProfile：EstTokens 是纯输入估算，不包含
+// 输出预留；ContextNeed 可能包含输出预留，反推上限时优先用前者避免低估。
+// profile 缺失（未接线入口）时退化为对实际发送体重算一次；两者都拿不到则返回 0，
+// 调用方只采信上游明确声明的数值。
 func estimatedInputTokensForContextLimit(c *gin.Context, attemptBody []byte) int {
 	if c != nil && c.Request != nil {
 		if profile, ok := autopilot.RequestProfileFromContext(c.Request.Context()); ok {
-			if profile.ContextNeed > 0 {
-				return profile.ContextNeed
-			}
 			if profile.EstTokens > 0 {
 				return profile.EstTokens
+			}
+			if profile.ContextNeed > 0 {
+				return profile.ContextNeed
 			}
 		}
 	}

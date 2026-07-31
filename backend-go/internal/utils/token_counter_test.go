@@ -73,11 +73,86 @@ func TestEstimateResponsesRequestTokens(t *testing.T) {
 				"model": "gpt-4",
 				"input": "Use the tool",
 				"tools": []interface{}{
-					map[string]interface{}{"name": "search"},
-					map[string]interface{}{"name": "compute"},
+					map[string]interface{}{
+						"name":        "search",
+						"description": "Search for information on the web",
+						"input_schema": map[string]interface{}{
+							"type": "object",
+							"properties": map[string]interface{}{
+								"query": map[string]interface{}{
+									"type":        "string",
+									"description": "Search query",
+								},
+							},
+							"required": []string{"query"},
+						},
+					},
+					map[string]interface{}{
+						"name":        "compute",
+						"description": "Compute mathematical expressions",
+						"input_schema": map[string]interface{}{
+							"type": "object",
+							"properties": map[string]interface{}{
+								"expression": map[string]interface{}{
+									"type":        "string",
+									"description": "Mathematical expression to compute",
+								},
+							},
+							"required": []string{"expression"},
+						},
+					},
 				},
 			},
-			minExpected: 300, // 2 tools * 150 = 300
+			minExpected: 50, // 不再是固定 150/tool，现在按实际内容估算
+		},
+		{
+			name: "with_reasoning_summary",
+			request: map[string]interface{}{
+				"model": "gpt-4",
+				"input": []interface{}{
+					map[string]interface{}{
+						"type":    "reasoning",
+						"summary": "I need to think step by step: first understand the problem, then reason through possible solutions, then pick the best one.",
+					},
+				},
+			},
+			minExpected: 20,
+		},
+		{
+			name: "with_encrypted_content",
+			request: map[string]interface{}{
+				"model": "gpt-4",
+				"input": []interface{}{
+					map[string]interface{}{
+						"type":              "compaction",
+						"encrypted_content": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
+					},
+				},
+			},
+			minExpected: 50, // encrypted 保守估算
+		},
+		{
+			name: "with_function_call_history",
+			request: map[string]interface{}{
+				"model": "gpt-4",
+				"input": []interface{}{
+					map[string]interface{}{
+						"type":    "message",
+						"role":    "user",
+						"content": "What's the weather in SF?",
+					},
+					map[string]interface{}{
+						"type":      "function_call",
+						"name":      "get_weather",
+						"arguments": `{"location":"San Francisco","unit":"celsius"}`,
+					},
+					map[string]interface{}{
+						"type":   "function_call_output",
+						"output": `{"condition":"Sunny","temperature":72,"humidity":45}`,
+					},
+				},
+			},
+			minExpected: 30,
 		},
 	}
 
@@ -140,6 +215,17 @@ func TestEstimateResponsesOutputTokens(t *testing.T) {
 							"text": "This is my reasoning process",
 						},
 					},
+				},
+			},
+			minExpected: 5,
+		},
+		{
+			name: "custom_tool_call",
+			output: []types.ResponsesItem{
+				{
+					Type:  "custom_tool_call",
+					Name:  "list_files",
+					Input: `{"path": "/home/user"}`,
 				},
 			},
 			minExpected: 5,
