@@ -85,6 +85,10 @@ https://github.com/QuantumNous/new-api/issues/5513
 
 发现协议/工具/用法变更：audio inputs/outputs、reasoning parameters、response item ID prefixes、realtime V3、multi-agent V2、memories/paginated history。请评估对 ccx Responses 渠道的影响。
 
+## [ ] Codex rust-v0.146.0 上游协议/工具变更评估
+
+发现协议/工具/用法变更：Responses item ID 强制分配、自定义 Provider 独立 Web Search、Responses Lite Code Mode 元数据。请评估对 ccx Responses 渠道的影响。
+
 ---
 
 ## [ ] 英伟达渠道导入
