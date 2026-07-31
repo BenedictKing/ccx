@@ -1343,7 +1343,7 @@ func (s *ChannelScheduler) selectFallbackChannelWithRouteRecord(
 			continue
 		}
 
-		failureRate := s.channelFailureRate(upstream, kind)
+		failureRate := s.channelFailureRate(upstream, ChannelKind(route.Kind))
 		if failureRate < bestFailureRate {
 			bestFailureRate = failureRate
 			bestChannel = ch
@@ -1494,11 +1494,12 @@ func (s *ChannelScheduler) findBestAvailableChannelPriorityWithRoutes(
 		}
 
 		route := normalizedChannelRoute(ch, kind)
+		routeKind := ChannelKind(route.Kind)
 		upstream := s.getUpstreamByRoute(route)
-		if !channelHasSelectableKey(upstream) || !s.channelIsRuntimeAvailable(upstream, kind, ch.Index) {
+		if !channelHasSelectableKey(upstream) || !s.channelIsRuntimeAvailable(upstream, routeKind, ch.Index) {
 			continue
 		}
-		if deferred, _, _, _ := s.channelRateLimitSoftDeferred(upstream, kind, ch.Index, model, time.Now()); deferred {
+		if deferred, _, _, _ := s.channelRateLimitSoftDeferred(upstream, routeKind, ch.Index, model, time.Now()); deferred {
 			continue
 		}
 
@@ -1552,13 +1553,17 @@ func (s *ChannelScheduler) buildSmartFilterFromProvider(
 	return func(ctx context.Context, channels []ChannelInfo) []ChannelInfo {
 		// SmartRouter 在评分、结果映射和硬约束阶段会多次读取同一渠道。
 		// 请求级缓存避免每次读取都通过 GetConfig 深拷贝整份配置。
-		upstreamCache := make(map[int]*config.UpstreamConfig, len(channels))
+		// 缓存键必须使用物理路由身份（Route.Key）：协议联邦下 messages[0]
+		// 与 chat[0] 同索引但属不同物理渠道，按 ch.Index 缓存会返回错误上游，
+		// 导致评分、可用性、disabled 检查和 trace UID 归因错配。
+		upstreamCache := make(map[ChannelRouteKey]*config.UpstreamConfig, len(channels))
 		upstreamFor := func(ch ChannelInfo) *config.UpstreamConfig {
-			if upstream, ok := upstreamCache[ch.Index]; ok {
+			routeKey := normalizedChannelRoute(ch, kind).Key()
+			if upstream, ok := upstreamCache[routeKey]; ok {
 				return upstream
 			}
 			upstream := s.getUpstreamByRoute(normalizedChannelRoute(ch, kind))
-			upstreamCache[ch.Index] = upstream
+			upstreamCache[routeKey] = upstream
 			return upstream
 		}
 		result, err := filter(channels, upstreamFor, func(ch ChannelInfo, upstream *config.UpstreamConfig) bool {
