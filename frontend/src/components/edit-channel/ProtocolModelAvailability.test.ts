@@ -342,6 +342,38 @@ describe('ProtocolModelAvailability', () => {
     expect(messages.text()).not.toContain('channelEditor.protocolModels.specificEmpty')
   })
 
+  it('多 Key 归组展示时不再出现"尚无自动发现结果"兜底文案', () => {
+    const wrapper = mount(ProtocolModelAvailability, {
+      props: {
+        routes: (['messages', 'chat', 'gemini'] as const).map((kind, index) => ({
+          kind,
+          index,
+          name: `metapi-${kind}`,
+          serviceType: kind === 'messages' ? 'claude' : kind === 'chat' ? 'openai' : 'gemini',
+          modelInventoryKnown: true,
+          discoveredModels: ['glm-5.2', `${kind}-only`],
+          modelBindings: [
+            { credentialUid: 'cred-a', keyMask: '***835z', models: ['glm-5.2', `${kind}-only`] },
+            { credentialUid: 'cred-b', keyMask: '***kLPU', models: ['glm-5.2', `${kind}-only`] },
+          ],
+        })),
+      },
+      global: {
+        stubs: {
+          VChip: passthroughStub,
+          VIcon: passthroughStub,
+        },
+      },
+    })
+
+    for (const kind of ['messages', 'chat', 'gemini']) {
+      const route = wrapper.get(`[data-kind="${kind}"]`)
+      expect(route.text()).toContain('channelEditor.protocolModels.consistent:2')
+      expect(route.text()).not.toContain('channelEditor.protocolModels.empty')
+      expect(route.text()).not.toContain('channelEditor.protocolModels.specificEmpty')
+    }
+  })
+
   it('展示模型清单的发现时间、来源和说明', () => {
     const wrapper = mount(ProtocolModelAvailability, {
       props: {

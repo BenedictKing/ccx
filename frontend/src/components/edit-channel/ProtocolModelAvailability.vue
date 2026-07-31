@@ -199,16 +199,16 @@
           </template>
         </div>
 
-        <ModelChipList
-          v-if="route.specificModels.length && !route.coverageGroups.length"
-          :models="route.specificModels"
-        />
-        <div v-else-if="!route.coverageGroups.length && route.hasInventory && sharedModels.length" class="text-caption text-medium-emphasis">
-          {{ t('channelEditor.protocolModels.specificEmpty') }}
-        </div>
-        <div v-else class="text-caption text-medium-emphasis">
-          {{ t('channelEditor.protocolModels.empty') }}
-        </div>
+        <!-- 已按 Key 归组展示过模型的行不再需要兜底文案，避免与上方清单同时出现。 -->
+        <template v-if="!route.coverageGroups.length">
+          <ModelChipList v-if="route.specificModels.length" :models="route.specificModels" />
+          <div v-else-if="route.hasInventory && sharedModels.length" class="text-caption text-medium-emphasis">
+            {{ t('channelEditor.protocolModels.specificEmpty') }}
+          </div>
+          <div v-else class="text-caption text-medium-emphasis">
+            {{ t('channelEditor.protocolModels.empty') }}
+          </div>
+        </template>
       </div>
     </div>
   </div>
