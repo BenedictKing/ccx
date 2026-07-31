@@ -231,3 +231,38 @@ func TestCandidatesForModel_FiltersKeysAboveGroupMultiplierLimit(t *testing.T) {
 		t.Fatalf("group multiplier guard should keep only safe and legacy keys, got %+v", cands)
 	}
 }
+
+// TestCandidatesForModelFiltered_ModelCircuit 验证渠道-模型级熔断只剔除受影响的
+// (Key, 模型) 组合，同 Key 的其他模型与未熔断的 Key 都不受影响。
+func TestCandidatesForModelFiltered_ModelCircuit(t *testing.T) {
+	up := &config.UpstreamConfig{
+		ChannelUID: "ch_test",
+		APIKeys:    []string{"k1", "k2"},
+	}
+
+	// k1 的 sonnet 熔断，k2 与其他模型不受影响。
+	circuitOpen := func(channelUID, apiKey, model string) bool {
+		return channelUID == "ch_test" && apiKey == "k1" && model == "claude-sonnet-5"
+	}
+
+	cands := CandidatesForModelFiltered(up, nil, "claude-sonnet-5", circuitOpen)
+	if len(cands) != 1 || cands[0].APIKey != "k2" {
+		t.Fatalf("熔断的 k1 应被剔除，期望只剩 k2, got %v", cands)
+	}
+
+	// 同渠道其他模型不受连累——这是本机制的核心保证。
+	if got := CandidatesForModelFiltered(up, nil, "claude-opus-5", circuitOpen); len(got) != 2 {
+		t.Fatalf("其他模型不应受影响，期望 2 个候选, got %d", len(got))
+	}
+
+	// nil checker 时行为与 CandidatesForModel 完全一致（fail-open）。
+	if got := CandidatesForModelFiltered(up, nil, "claude-sonnet-5", nil); len(got) != 2 {
+		t.Fatalf("nil checker 不应过滤, got %d", len(got))
+	}
+
+	// ChannelUID 为空的老渠道无法构造熔断键，不做该项过滤。
+	noUID := &config.UpstreamConfig{APIKeys: []string{"k1"}}
+	if got := CandidatesForModelFiltered(noUID, nil, "claude-sonnet-5", circuitOpen); len(got) != 1 {
+		t.Fatalf("无 ChannelUID 时应 fail-open, got %d", len(got))
+	}
+}

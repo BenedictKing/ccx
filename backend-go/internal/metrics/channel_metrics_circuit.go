@@ -208,6 +208,12 @@ func (m *MetricsManager) handleBreakerFailureLocked(metrics *KeyMetrics, failure
 		// 模型多样性门槛：失败能明确归因到单一模型时不熔断整个 Key，
 		// 避免单个模型故障（如某模型 503）殃及同 Key 下其他健康模型。
 		// 无法归因（模型名缺失）时不拦截，回退到原始阈值判定。
+		//
+		// 这里只负责"豁免 Key 级熔断"，被豁免掉的那一份惩罚由 ModelCircuitTracker
+		// （model_circuit.go）以 (channelUID, keyHash, model) 粒度承担——否则失败越
+		// 集中在单一模型，约束反而越彻底消失，调度器会无止境地反复首选故障组合。
+		// 模型级记账由 handler 侧完成：那里手上已有 channelUID/keyHash/attemptModel
+		// 三个键，无需从 metrics 内部反查。
 		if m.isSingleModelFailureLocked(metrics) {
 			return
 		}
@@ -272,6 +278,7 @@ func (m *MetricsManager) cleanupCircuitBreakers() {
 			m.recoverExpiredCircuitBreakers()
 		case <-cleanupTicker.C:
 			m.cleanupStaleKeys()
+			m.modelCircuit.Cleanup()
 		case <-m.stopCh:
 			return
 		}

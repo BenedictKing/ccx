@@ -267,6 +267,9 @@ func TryUpstreamWithAllKeys(
 	}
 	upstream = config.RuntimeUpstreamForAutoManagedProvider(upstream)
 
+	// 渠道-模型级熔断查询闭包：构造一次供本次请求的所有 Key 选择轮次复用。
+	modelCircuit := modelCircuitChecker(metricsManager)
+
 	tryOpts := tryUpstreamOptions{}
 	for _, opt := range opts {
 		if opt != nil {
@@ -410,7 +413,7 @@ func TryUpstreamWithAllKeys(
 				// 步骤 5+6: EndpointAttemptPolicy FilterKeys + SortKeys
 				// selectAttemptAPIKeyFiltered 在 keypool.CandidatesForModel 之后应用 policy 过滤/排序。
 				// nil policy 时回退到 selectAttemptAPIKey（行为不变）。
-				selection, apiKey, err = selectAttemptAPIKeyFiltered(channelScheduler, kind, channelIndex, upstream, currentBaseURL, failedKeys, failedQuotaGroups, redirectedModel, nextAPIKey, endpointPolicy, apiType, c)
+				selection, apiKey, err = selectAttemptAPIKeyFiltered(channelScheduler, kind, channelIndex, upstream, currentBaseURL, failedKeys, failedQuotaGroups, redirectedModel, nextAPIKey, endpointPolicy, apiType, c, modelCircuit)
 				if err != nil {
 					lastError = err
 					break // 当前 BaseURL 没有可用 Key，尝试下一个 BaseURL
@@ -745,6 +748,7 @@ func TryUpstreamWithAllKeys(
 				cfgManager.MarkKeyAsFailed(apiKey, apiType)
 				metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, metrics.FailureClassRetryable)
 				channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
+				recordModelCircuitFailure(c, metricsManager, upstream, apiKey, attemptModel, err.Error(), apiType)
 				if markURLFailure != nil {
 					markURLFailure(currentBaseURL)
 				}
@@ -952,6 +956,13 @@ func TryUpstreamWithAllKeys(
 					}
 					metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, failureClass)
 					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
+					// 仅 Retryable 计入模型级熔断：Quota 与 Overloaded（含账号级限流）
+					// 反映的是额度或瞬时负载，已由 cooldown / scope 冷却处理，
+					// 记到模型头上会让限流误伤该模型的可用性。
+					if failureClass == metrics.FailureClassRetryable {
+						recordModelCircuitFailure(c, metricsManager, upstream, apiKey, attemptModel,
+							errorBodySummaryForLog(apiType, resp.StatusCode, respBodyBytes), apiType)
+					}
 					if markURLFailure != nil {
 						markURLFailure(currentBaseURL)
 					}
@@ -1037,6 +1048,10 @@ func TryUpstreamWithAllKeys(
 				}
 				metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, metrics.FailureClassNonRetryable)
 				channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
+				// 不计入模型级熔断：本分支是 shouldFailover=false 的场景
+				// （invalid_request / bad_request / 内容审核），问题出在请求本身而非
+				// 渠道-模型健康度。换渠道换模型都不会让同一个畸形请求成功，
+				// 记账只会让反复发送此类请求的客户端把健康渠道打成熔断。
 				// 记录渠道日志
 				CompleteLog(channelLogStore, metricsKey, logRequestID, clientStatusCode, false, channelErrorInfo, isRetryAttempt)
 				c.Data(clientStatusCode, "application/json", respBodyBytes)
@@ -1102,6 +1117,8 @@ func TryUpstreamWithAllKeys(
 					cfgManager.MarkKeyAsFailed(apiKey, apiType)
 					metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, metrics.FailureClassRetryable)
 					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
+					// 空响应 / 无效响应体 / 首字超时 / 断流都是该渠道-模型确实不可用的表现。
+					recordModelCircuitFailure(c, metricsManager, upstream, apiKey, attemptModel, err.Error(), apiType)
 					if markURLFailure != nil {
 						markURLFailure(currentBaseURL)
 					}
@@ -1132,6 +1149,7 @@ func TryUpstreamWithAllKeys(
 					cfgManager.MarkKeyAsFailed(apiKey, apiType)
 					metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, metrics.FailureClassRetryable)
 					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
+					recordModelCircuitFailure(c, metricsManager, upstream, apiKey, attemptModel, err.Error(), apiType)
 					// 记录渠道日志
 					CompleteLog(channelLogStore, metricsKey, logRequestID, http.StatusOK, false, err.Error(), isRetryAttempt)
 					RequestLogf(c, "[%s-Key] 警告: 响应处理失败: %v", apiType, err)
@@ -1150,6 +1168,9 @@ func TryUpstreamWithAllKeys(
 			}
 			metricsManager.RecordRequestFinalizeSuccess(currentBaseURL, apiKey, metricsServiceType, requestID, usage)
 			channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
+			// 成功即解除该渠道-模型的失败累积；若这是熔断到期后放行的探针，
+			// 同时重置退避级别并回收状态条目。
+			recordModelCircuitSuccess(metricsManager, upstream, apiKey, attemptModel)
 
 			// Phase 2: 记录 system header 过滤成功，巩固当前过滤层级。
 			if kind == scheduler.ChannelKindMessages && upstream.ChannelUID != "" {
@@ -1351,9 +1372,10 @@ func selectAttemptAPIKeyFiltered(
 	policy *autopilot.EndpointAttemptPolicy,
 	apiType string,
 	c *gin.Context,
+	circuitOpen keypool.ModelCircuitChecker,
 ) (keypool.Selection, string, error) {
 	if policy == nil {
-		return selectAttemptAPIKey(channelScheduler, kind, channelIndex, upstream, failedKeys, failedQuotaGroups, model, fallback)
+		return selectAttemptAPIKey(channelScheduler, kind, channelIndex, upstream, failedKeys, failedQuotaGroups, model, fallback, circuitOpen)
 	}
 	if baseURL == "" {
 		baseURL = upstream.BaseURL
@@ -1361,7 +1383,7 @@ func selectAttemptAPIKeyFiltered(
 
 	if !keypool.HasEffectiveConfig(upstream) {
 		// 无 keypool 配置时：对 raw APIKeys 应用 policy filter/sort
-		effectiveFailedKeys := failedKeysWithPersistentRestrictions(upstream, failedKeys, model)
+		effectiveFailedKeys := failedKeysWithRestrictions(upstream, failedKeys, model, circuitOpen)
 		apiKeys := make([]string, 0, len(upstream.APIKeys))
 		for _, key := range upstream.APIKeys {
 			if key != "" && !effectiveFailedKeys[key] {
@@ -1400,7 +1422,7 @@ func selectAttemptAPIKeyFiltered(
 	}
 
 	// keypool 路径：获取候选 → FilterKeys → SortKeys → 选择
-	candidates := keypool.CandidatesForModel(upstream, failedKeys, model)
+	candidates := keypool.CandidatesForModelFiltered(upstream, failedKeys, model, circuitOpen)
 	if len(candidates) == 0 {
 		return keypool.Selection{}, "", fmt.Errorf("上游 %s 没有可用的API密钥", upstream.Name)
 	}
@@ -1545,12 +1567,12 @@ func callPolicySortKeys(policy *autopilot.EndpointAttemptPolicy, baseURL string,
 	return result, candidates
 }
 
-func selectAttemptAPIKey(channelScheduler *scheduler.ChannelScheduler, kind scheduler.ChannelKind, channelIndex int, upstream *config.UpstreamConfig, failedKeys map[string]bool, failedQuotaGroups map[string]bool, model string, fallback NextAPIKeyFunc) (keypool.Selection, string, error) {
+func selectAttemptAPIKey(channelScheduler *scheduler.ChannelScheduler, kind scheduler.ChannelKind, channelIndex int, upstream *config.UpstreamConfig, failedKeys map[string]bool, failedQuotaGroups map[string]bool, model string, fallback NextAPIKeyFunc, circuitOpen keypool.ModelCircuitChecker) (keypool.Selection, string, error) {
 	if !keypool.HasEffectiveConfig(upstream) {
 		if fallback == nil {
 			return keypool.Selection{}, "", fmt.Errorf("上游 %s 没有可用的API密钥", upstream.Name)
 		}
-		apiKey, err := fallback(upstream, failedKeysWithPersistentRestrictions(upstream, failedKeys, model))
+		apiKey, err := fallback(upstream, failedKeysWithRestrictions(upstream, failedKeys, model, circuitOpen))
 		if err != nil {
 			return keypool.Selection{}, "", err
 		}
@@ -1558,7 +1580,7 @@ func selectAttemptAPIKey(channelScheduler *scheduler.ChannelScheduler, kind sche
 	}
 
 	var deferred []keypool.Selection
-	for _, candidate := range keypool.CandidatesForModel(upstream, failedKeys, model) {
+	for _, candidate := range keypool.CandidatesForModelFiltered(upstream, failedKeys, model, circuitOpen) {
 		if candidate.QuotaGroup != "" && failedQuotaGroups[candidate.QuotaGroup] {
 			continue
 		}
@@ -1587,6 +1609,87 @@ func selectAttemptAPIKey(channelScheduler *scheduler.ChannelScheduler, kind sche
 	}
 
 	return keypool.Selection{}, "", fmt.Errorf("上游 %s 没有可用的API密钥", upstream.Name)
+}
+
+// recordModelCircuitFailure 记录一次渠道-模型级失败。
+//
+// 只在失败确实反映该渠道-模型健康度时调用。以下场景由调用方负责排除：
+// 配额/账号限流（已有 cooldown 与 scope 冷却机制）、内容审核（换渠道不改变请求内容）、
+// 客户端取消、以及 RecordRequestFinalizeIgnored 的中间态重试。
+func recordModelCircuitFailure(c *gin.Context, metricsManager *metrics.MetricsManager,
+	upstream *config.UpstreamConfig, apiKey, model, errSummary, apiType string) {
+	if metricsManager == nil || upstream == nil || upstream.ChannelUID == "" || model == "" {
+		return
+	}
+	tracker := metricsManager.ModelCircuit()
+	if tracker == nil {
+		return
+	}
+	if opened, until := tracker.RecordModelFailure(
+		upstream.ChannelUID, metrics.ModelCircuitKeyHash(apiKey), model, errSummary); opened {
+		RequestLogf(c, "[%s-ModelCircuit] 渠道 %s 模型 %s 持续失败，暂停调度至 %s",
+			apiType, upstream.Name, model, until.Format(time.RFC3339))
+	}
+}
+
+// recordModelCircuitSuccess 记录一次成功，解除该组合的失败累积。
+func recordModelCircuitSuccess(metricsManager *metrics.MetricsManager,
+	upstream *config.UpstreamConfig, apiKey, model string) {
+	if metricsManager == nil || upstream == nil || upstream.ChannelUID == "" || model == "" {
+		return
+	}
+	if tracker := metricsManager.ModelCircuit(); tracker != nil {
+		tracker.RecordModelSuccess(upstream.ChannelUID, metrics.ModelCircuitKeyHash(apiKey), model)
+	}
+}
+
+// modelCircuitChecker 构造 keypool 的渠道-模型级熔断查询闭包。
+//
+// 把 apiKey → keyHash 的换算放在这里，让 keypool 无需感知 autopilot 的哈希算法。
+// metricsManager 为 nil 时返回 nil（fail-open，不做该项过滤）。
+func modelCircuitChecker(metricsManager *metrics.MetricsManager) keypool.ModelCircuitChecker {
+	if metricsManager == nil {
+		return nil
+	}
+	tracker := metricsManager.ModelCircuit()
+	if tracker == nil {
+		return nil
+	}
+	return func(channelUID, apiKey, model string) bool {
+		return tracker.IsModelCircuitOpen(channelUID, metrics.ModelCircuitKeyHash(apiKey), model)
+	}
+}
+
+// failedKeysWithRestrictions 在持久化限制之外一并计入渠道-模型级运行时熔断。
+//
+// 无 keypool 配置的渠道走 raw APIKeys 路径，不经过 CandidatesForModelFiltered，
+// 熔断过滤必须在这里补上，否则手工填写多 Key 的老渠道拿不到该保护。
+func failedKeysWithRestrictions(upstream *config.UpstreamConfig, failedKeys map[string]bool, model string, circuitOpen keypool.ModelCircuitChecker) map[string]bool {
+	effective := failedKeysWithPersistentRestrictions(upstream, failedKeys, model)
+	if upstream == nil || model == "" || circuitOpen == nil || upstream.ChannelUID == "" {
+		return effective
+	}
+
+	var merged map[string]bool
+	for _, key := range upstream.APIKeys {
+		if key == "" || effective[key] {
+			continue
+		}
+		if !circuitOpen(upstream.ChannelUID, key, model) {
+			continue
+		}
+		if merged == nil {
+			merged = make(map[string]bool, len(effective)+1)
+			for k, v := range effective {
+				merged[k] = v
+			}
+		}
+		merged[key] = true
+	}
+	if merged == nil {
+		return effective
+	}
+	return merged
 }
 
 func failedKeysWithPersistentRestrictions(upstream *config.UpstreamConfig, failedKeys map[string]bool, model string) map[string]bool {

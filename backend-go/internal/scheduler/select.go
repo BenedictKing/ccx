@@ -309,6 +309,13 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 		trace.setStage("smart_filter", len(activeChannels))
 	}
 
+	// 渠道-模型级运行时熔断：剔除该模型在全部 Key 上都处于隔离期的渠道。
+	// 与 SmartFilter 同属自动过滤，位置同样在显式控制（X-Channel / ManualOverride /
+	// Promotion）之后——用户显式 pin 到故障渠道时应当照办并让真实错误返回，
+	// 由自动调度接管时才规避。同样 fail-open：全部熔断时保留原列表。
+	activeChannels = s.filterChannelsByModelCircuit(activeChannels, kind, model, trace)
+	trace.setStage("model_circuit_filter", len(activeChannels))
+
 	// 1. 检查 Trace 亲和性（促销渠道失败时或无促销渠道时）
 	if userID != "" {
 		compositeKey := traceAffinityKey(kind, affinityUserID, opts.ContextRequirement)
@@ -332,6 +339,17 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 					}
 					// 检查渠道是否健康且未处于运行态冷却
 					upstream := s.getUpstreamByIndex(preferredIdx, kind)
+					// 模型级熔断的亲和性防线：正常情况下熔断渠道已被
+					// filterChannelsByModelCircuit 从 activeChannels 剔除、走不到这里；
+					// 但该过滤 fail-open，全渠道熔断时会保留原列表。此时长会话的亲和性
+					// 会持续粘在故障组合上（本机制要解决的正是这种放大），故显式再判一次。
+					if s.channelModelCircuitOpen(upstream, kind, model) {
+						prefix := kindSchedulerLogPrefix(kind)
+						log.Printf("[%s-Affinity] 跳过亲和渠道 [%d] %s: 模型 %q 处于熔断隔离期 (user: %s)",
+							prefix, preferredIdx, ch.Name, model, maskUserID(userID))
+						trace.skipChannel(ch, "trace_affinity", "model_circuit_open", model)
+						continue
+					}
 					if upstream != nil && s.channelIsRuntimeAvailable(upstream, kind, preferredIdx) {
 						prefix := kindSchedulerLogPrefix(kind)
 						log.Printf("[%s-Affinity] Trace亲和选择渠道: [%d] %s (user: %s)", prefix, preferredIdx, upstream.Name, maskUserID(userID))
@@ -463,6 +481,65 @@ func (s *ChannelScheduler) channelAvailableForCandidateFilter(ch ChannelInfo, up
 		return false
 	}
 	return s.channelCircuitState(upstream, kind) != metrics.CircuitStateOpen
+}
+
+// channelModelCircuitOpen 判断渠道下该模型是否已在所有 Key 上熔断。
+// 供渠道级过滤与 Trace 亲和性复用，确保两条路径判定一致。
+func (s *ChannelScheduler) channelModelCircuitOpen(upstream *config.UpstreamConfig, kind ChannelKind, model string) bool {
+	if upstream == nil || model == "" || upstream.ChannelUID == "" {
+		return false
+	}
+	mm := s.getMetricsManager(kind)
+	if mm == nil {
+		return false
+	}
+	tracker := mm.ModelCircuit()
+	if tracker == nil {
+		return false
+	}
+	keyHashes := make([]string, 0, len(upstream.APIKeys))
+	for _, key := range upstream.APIKeys {
+		if key = strings.TrimSpace(key); key != "" {
+			keyHashes = append(keyHashes, metrics.ModelCircuitKeyHash(key))
+		}
+	}
+	return tracker.ChannelModelCircuitOpen(upstream.ChannelUID, keyHashes, model)
+}
+
+// filterChannelsByModelCircuit 排除该模型已在全部 Key 上熔断的渠道。
+//
+// 与 active_model_filter 的区别：后者读静态 supportedModels 配置，这里读运行时健康度。
+// 只有渠道下所有 Key 对该模型都处于隔离期才排除；任一 Key 可用时保留渠道，
+// 让 Key 级过滤（keypool.CandidatesForModelFiltered）去命中那把健康的 Key。
+//
+// fail-open：过滤后为空时返回原列表。全渠道同时熔断多半意味着上游或网络整体异常，
+// 此时应让请求带着真实的上游错误返回，而不是退化成"没有可用渠道"掩盖真正的故障原因。
+func (s *ChannelScheduler) filterChannelsByModelCircuit(channels []ChannelInfo, kind ChannelKind, model string, trace *SelectionTrace) []ChannelInfo {
+	if model == "" || len(channels) == 0 {
+		return channels
+	}
+
+	filtered := make([]ChannelInfo, 0, len(channels))
+	skipped := make([]ChannelInfo, 0)
+	for _, ch := range channels {
+		upstream := s.getUpstreamByIndex(ch.Index, kind)
+		if s.channelModelCircuitOpen(upstream, kind, model) {
+			skipped = append(skipped, ch)
+			continue
+		}
+		filtered = append(filtered, ch)
+	}
+
+	if len(filtered) == 0 {
+		return channels
+	}
+	for _, ch := range skipped {
+		prefix := kindSchedulerLogPrefix(kind)
+		log.Printf("[%s-ModelCircuit] 跳过渠道 [%d] %s: 模型 %q 在全部 Key 上处于熔断隔离期",
+			prefix, ch.Index, ch.Name, model)
+		trace.skipChannel(ch, "model_circuit_filter", "model_circuit_open", model)
+	}
+	return filtered
 }
 
 func (s *ChannelScheduler) filterChannelsByKeyAvailability(channels []ChannelInfo, kind ChannelKind, trace *SelectionTrace) []ChannelInfo {

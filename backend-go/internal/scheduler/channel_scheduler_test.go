@@ -1184,3 +1184,195 @@ func TestModelSupportResolverReceivesRequestContext(t *testing.T) {
 		t.Fatalf("请求级能力拒绝应在首次选渠前生效，选择 index=%d, want 1", result.ChannelIndex)
 	}
 }
+
+// TestModelCircuitFilterSkipsChannel 验证渠道-模型级熔断把故障渠道从候选中剔除，
+// 并且同渠道的其他模型不受影响——复现"某渠道 sonnet-5 持续 403 但 opus-5 可用"。
+func TestModelCircuitFilterSkipsChannel(t *testing.T) {
+	cfg := config.Config{
+		Upstream: []config.UpstreamConfig{
+			{
+				Name:       "broken-channel",
+				ChannelUID: "ch_broken",
+				BaseURL:    "https://broken.example.com",
+				APIKeys:    []string{"sk-broken"},
+				Status:     "active",
+				Priority:   1,
+			},
+			{
+				Name:       "backup-channel",
+				ChannelUID: "ch_backup",
+				BaseURL:    "https://backup.example.com",
+				APIKeys:    []string{"sk-backup"},
+				Status:     "active",
+				Priority:   2,
+			},
+		},
+	}
+
+	sched, cleanup := createTestScheduler(t, cfg)
+	defer cleanup()
+
+	const brokenModel = "claude-sonnet-5"
+	tracker := sched.messagesMetricsManager.ModelCircuit()
+	keyHash := metrics.ModelCircuitKeyHash("sk-broken")
+
+	// 5 分钟内 2 次失败 → 触发快速通道熔断。
+	tracker.RecordModelFailure("ch_broken", keyHash, brokenModel, "HTTP 403")
+	if opened, _ := tracker.RecordModelFailure("ch_broken", keyHash, brokenModel, "HTTP 403"); !opened {
+		t.Fatal("连续 2 次失败应触发熔断")
+	}
+
+	// 熔断模型应绕过高优先级的故障渠道。
+	result, err := sched.SelectChannel(context.Background(), "", map[int]bool{}, ChannelKindMessages, brokenModel, "", "")
+	if err != nil {
+		t.Fatalf("SelectChannel() error = %v", err)
+	}
+	if result.ChannelIndex != 1 {
+		t.Fatalf("熔断渠道应被跳过，期望 index=1, got %d", result.ChannelIndex)
+	}
+	if !traceHasCandidateSkip(result.Trace, 0, "model_circuit_filter", "model_circuit_open") {
+		t.Fatalf("trace 应记录 model_circuit_filter 跳过, candidates = %+v", result.Trace.Candidates)
+	}
+
+	// 同渠道其他模型仍走原优先级顺序。
+	healthy, err := sched.SelectChannel(context.Background(), "", map[int]bool{}, ChannelKindMessages, "claude-opus-5", "", "")
+	if err != nil {
+		t.Fatalf("SelectChannel() error = %v", err)
+	}
+	if healthy.ChannelIndex != 0 {
+		t.Fatalf("其他模型不应受连累，期望 index=0, got %d", healthy.ChannelIndex)
+	}
+}
+
+// TestModelCircuitFilterFailsOpen 全部渠道都熔断时必须保留候选列表。
+// 否则请求会退化成"没有可用渠道"，掩盖上游真实的故障原因。
+func TestModelCircuitFilterFailsOpen(t *testing.T) {
+	cfg := config.Config{
+		Upstream: []config.UpstreamConfig{
+			{
+				Name:       "only-channel",
+				ChannelUID: "ch_only",
+				BaseURL:    "https://only.example.com",
+				APIKeys:    []string{"sk-only"},
+				Status:     "active",
+				Priority:   1,
+			},
+		},
+	}
+
+	sched, cleanup := createTestScheduler(t, cfg)
+	defer cleanup()
+
+	const model = "claude-sonnet-5"
+	tracker := sched.messagesMetricsManager.ModelCircuit()
+	keyHash := metrics.ModelCircuitKeyHash("sk-only")
+	tracker.RecordModelFailure("ch_only", keyHash, model, "HTTP 403")
+	tracker.RecordModelFailure("ch_only", keyHash, model, "HTTP 403")
+
+	result, err := sched.SelectChannel(context.Background(), "", map[int]bool{}, ChannelKindMessages, model, "", "")
+	if err != nil {
+		t.Fatalf("唯一渠道熔断时应 fail-open 而非报错: %v", err)
+	}
+	if result.ChannelIndex != 0 {
+		t.Fatalf("fail-open 应保留唯一渠道, got index=%d", result.ChannelIndex)
+	}
+}
+
+// TestModelCircuitSkipsTraceAffinity 亲和渠道命中熔断组合时必须重选。
+// 长会话的亲和性会持续粘在故障渠道上，正是本机制要解决的放大路径。
+func TestModelCircuitSkipsTraceAffinity(t *testing.T) {
+	cfg := config.Config{
+		Upstream: []config.UpstreamConfig{
+			{
+				Name:       "affinity-channel",
+				ChannelUID: "ch_affinity",
+				BaseURL:    "https://affinity.example.com",
+				APIKeys:    []string{"sk-affinity"},
+				Status:     "active",
+				Priority:   1,
+			},
+			{
+				Name:       "other-channel",
+				ChannelUID: "ch_other",
+				BaseURL:    "https://other.example.com",
+				APIKeys:    []string{"sk-other"},
+				Status:     "active",
+				Priority:   2,
+			},
+		},
+	}
+
+	sched, cleanup := createTestScheduler(t, cfg)
+	defer cleanup()
+
+	const model = "claude-sonnet-5"
+	const userID = "affinity-user"
+	sched.SetTraceAffinity(userID, 0, ChannelKindMessages)
+
+	tracker := sched.messagesMetricsManager.ModelCircuit()
+	keyHash := metrics.ModelCircuitKeyHash("sk-affinity")
+	tracker.RecordModelFailure("ch_affinity", keyHash, model, "HTTP 403")
+	tracker.RecordModelFailure("ch_affinity", keyHash, model, "HTTP 403")
+
+	result, err := sched.SelectChannel(context.Background(), userID, map[int]bool{}, ChannelKindMessages, model, "", "")
+	if err != nil {
+		t.Fatalf("SelectChannel() error = %v", err)
+	}
+	if result.ChannelIndex != 1 {
+		t.Fatalf("亲和渠道已熔断，应重选到 index=1, got %d", result.ChannelIndex)
+	}
+}
+
+// TestChannelModelCircuitOpenHelper 直接覆盖 channelModelCircuitOpen。
+// 亲和性分支的防线依赖它：正常路径下熔断渠道已被 filterChannelsByModelCircuit 剔除，
+// 但该过滤 fail-open，全渠道熔断时亲和性仍需自行判定，否则长会话会粘住故障组合。
+func TestChannelModelCircuitOpenHelper(t *testing.T) {
+	cfg := config.Config{
+		Upstream: []config.UpstreamConfig{
+			{
+				Name:       "multi-key-channel",
+				ChannelUID: "ch_multi",
+				BaseURL:    "https://multi.example.com",
+				APIKeys:    []string{"sk-a", "sk-b"},
+				Status:     "active",
+				Priority:   1,
+			},
+		},
+	}
+
+	sched, cleanup := createTestScheduler(t, cfg)
+	defer cleanup()
+
+	const model = "claude-sonnet-5"
+	upstream := sched.getUpstreamByIndex(0, ChannelKindMessages)
+	tracker := sched.messagesMetricsManager.ModelCircuit()
+
+	openKey := func(key string) {
+		h := metrics.ModelCircuitKeyHash(key)
+		tracker.RecordModelFailure("ch_multi", h, model, "HTTP 403")
+		tracker.RecordModelFailure("ch_multi", h, model, "HTTP 403")
+	}
+
+	if sched.channelModelCircuitOpen(upstream, ChannelKindMessages, model) {
+		t.Fatal("无失败记录时不应判定为熔断")
+	}
+
+	openKey("sk-a")
+	if sched.channelModelCircuitOpen(upstream, ChannelKindMessages, model) {
+		t.Fatal("sk-b 仍健康时不应升级为渠道级熔断")
+	}
+
+	openKey("sk-b")
+	if !sched.channelModelCircuitOpen(upstream, ChannelKindMessages, model) {
+		t.Fatal("全部 Key 熔断后应判定为渠道级熔断")
+	}
+
+	// 其他模型不受连累。
+	if sched.channelModelCircuitOpen(upstream, ChannelKindMessages, "claude-opus-5") {
+		t.Fatal("其他模型不应被连累")
+	}
+	// model 为空（Images/Vectors 等入口）时不参与该机制。
+	if sched.channelModelCircuitOpen(upstream, ChannelKindMessages, "") {
+		t.Fatal("model 为空时不应判定熔断")
+	}
+}

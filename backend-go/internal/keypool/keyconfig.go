@@ -40,9 +40,24 @@ func HasEffectiveConfig(upstream *config.UpstreamConfig) bool {
 	return false
 }
 
+// ModelCircuitChecker 判断 (渠道, Key, 模型) 组合是否处于运行时熔断隔离期。
+//
+// 由调用方注入而非 keypool 直接依赖 metrics：keypool 位于 config 之上、metrics 之外，
+// 反向 import 会形成不必要的耦合。nil 时不做该项过滤（fail-open）。
+type ModelCircuitChecker func(channelUID, apiKey, model string) bool
+
 // CandidatesForModel 返回可用 key 列表，过滤 enabled=false、failedKeys 和模型白名单。
 // model 为空时不按模型过滤。
 func CandidatesForModel(upstream *config.UpstreamConfig, failedKeys map[string]bool, model string) []Candidate {
+	return CandidatesForModelFiltered(upstream, failedKeys, model, nil)
+}
+
+// CandidatesForModelFiltered 在 CandidatesForModel 的基础上追加渠道-模型级运行时熔断过滤。
+//
+// 与 (Key,模型) 持久化限制（IsKeyModelDisabledNow）互补：后者针对上游明确声明的
+// model_not_found 等结构化信号，限制期 1 小时并写盘；circuitOpen 覆盖的是无法结构化
+// 识别的持续失败（如网关返回 HTML 403），纯内存、短周期、自动恢复。
+func CandidatesForModelFiltered(upstream *config.UpstreamConfig, failedKeys map[string]bool, model string, circuitOpen ModelCircuitChecker) []Candidate {
 	if upstream == nil || len(upstream.APIKeys) == 0 {
 		return nil
 	}
@@ -82,6 +97,12 @@ func CandidatesForModel(upstream *config.UpstreamConfig, failedKeys map[string]b
 		// (Key, 模型) 组合级限制：model_not_found 等错误后，该组合在限制期内被跳过，
 		// 不影响该 Key 的其他模型，也不阻断 failover 到其他渠道。
 		if model != "" && upstream.IsKeyModelDisabledNow(key, model, now) {
+			continue
+		}
+		// 渠道-模型级运行时熔断：该组合正在持续失败时暂时跳过，
+		// 不影响同 Key 的其他模型，也不阻断 failover 到其他渠道。
+		if model != "" && circuitOpen != nil && upstream.ChannelUID != "" &&
+			circuitOpen(upstream.ChannelUID, key, model) {
 			continue
 		}
 		quotaGroup := strings.TrimSpace(cfg.QuotaGroup)
