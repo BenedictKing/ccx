@@ -368,7 +368,16 @@ export const useChannelStore = defineStore('channel', () => {
       if (options?.autoManaged && options.accountUid) {
         const original = options.originalChannel
         if (original && !original.providerId) {
-          await api.updateManagedAccount(options.accountUid, { name: channel.name, apiKeys: channel.apiKeys })
+          // 自定义托管账号：地址池按账号统一维护，随凭证一起提交；
+          // Provider 模板托管账号不发送 baseUrls，避免空数组或手工地址覆盖模板地址。
+          const baseUrls = channel.baseUrls?.length
+            ? [...channel.baseUrls]
+            : (channel.baseUrl ? [channel.baseUrl] : [])
+          await api.updateManagedAccount(options.accountUid, {
+            name: channel.name,
+            apiKeys: channel.apiKeys,
+            ...(baseUrls.length > 0 ? { baseUrls } : {}),
+          })
         } else if (original) {
           const originalKeys = new Set(original.apiKeys)
           const nextKeys = new Set(channel.apiKeys)

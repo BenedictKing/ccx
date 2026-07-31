@@ -1264,6 +1264,9 @@ func handleDeleteAccount(deps *AutoManagedDeps) gin.HandlerFunc {
 type updateAccountRequest struct {
 	Name    string   `json:"name"`
 	APIKeys []string `json:"apiKeys"`
+	// BaseURLs 可选：仅自定义自动托管账号支持手工维护地址池。
+	// 省略或为空时表示"不修改地址"，沿用渠道现有地址，保证旧客户端向后兼容。
+	BaseURLs []string `json:"baseUrls,omitempty"`
 }
 
 type updateAccountResponse struct {
@@ -1308,6 +1311,12 @@ func applyManagedAccountUpdate(ctx context.Context, deps *AutoManagedDeps, accou
 	var status int
 	var err error
 	if ok && providerID != "" {
+		// 官方 provider 托管渠道的地址由模板与自动发现统一管理，
+		// 故此处显式丢弃请求里的 baseUrls（而非报错），避免手工地址覆盖模板地址，同时保持 API 向后兼容。
+		if len(req.BaseURLs) > 0 {
+			log.Printf("[AutoManaged-Update] 忽略官方 provider 托管账号的手工 baseUrls account=%s provider=%s count=%d", accountUID, providerID, len(req.BaseURLs))
+			req.BaseURLs = nil
+		}
 		updates, status, err = planManagedAccountUpdates(ctx, accountUID, req, channels, tmpl, len(channels))
 	} else if providerID == "" {
 		updates, status, err = planCustomManagedAccountUpdates(accountUID, req, channels, len(channels))
@@ -1327,6 +1336,27 @@ func applyManagedAccountUpdate(ctx context.Context, deps *AutoManagedDeps, accou
 		}
 	}
 	return updateAccountResponse{AccountUID: accountUID, KeyCount: len(req.APIKeys), ChannelCount: len(channels), DiscoveryStarted: started}, http.StatusOK, nil
+}
+
+// canonicalizeBaseURLs 按 serviceType 规范化地址池：丢弃空值并按 canonical 形式去重，保持输入顺序。
+func canonicalizeBaseURLs(rawURLs []string, serviceType string) []string {
+	if len(rawURLs) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(rawURLs))
+	result := make([]string, 0, len(rawURLs))
+	for _, rawURL := range rawURLs {
+		canonical := utils.CanonicalBaseURL(rawURL, serviceType)
+		if canonical == "" {
+			continue
+		}
+		if _, exists := seen[canonical]; exists {
+			continue
+		}
+		seen[canonical] = struct{}{}
+		result = append(result, canonical)
+	}
+	return result
 }
 
 func planCustomManagedAccountUpdates(
@@ -1357,13 +1387,34 @@ func planCustomManagedAccountUpdates(
 		for _, keyConfig := range channel.APIKeyConfigs {
 			existing[keyConfig.Key] = keyConfig
 		}
+		// canonical 形式依赖 serviceType，因此按每条渠道各自规范化请求地址池。
 		baseURLs := channel.GetAllBaseURLs()
+		if len(req.BaseURLs) > 0 {
+			requested := canonicalizeBaseURLs(req.BaseURLs, channel.ServiceType)
+			if len(requested) == 0 {
+				return nil, http.StatusBadRequest, fmt.Errorf("baseUrls 全部无效，请填写至少一个合法的上游地址")
+			}
+			baseURLs = requested
+		}
+		inPool := make(map[string]struct{}, len(baseURLs))
+		for _, baseURL := range baseURLs {
+			inPool[baseURL] = struct{}{}
+		}
 		configs := make([]config.APIKeyConfig, 0, len(req.APIKeys))
 		for _, key := range req.APIKeys {
 			keyConfig, exists := existing[key]
 			if !exists {
+				// 新增 Key 沿用既有行为：绑定到地址池首个地址。
 				keyConfig = config.APIKeyConfig{Key: key}
 				if len(baseURLs) > 0 {
+					keyConfig.BaseURL = baseURLs[0]
+				}
+			} else if bound := utils.CanonicalBaseURL(keyConfig.BaseURL, channel.ServiceType); bound != "" {
+				// 已绑定地址仍在池内则保持不变（写 canonical 值以与 channel.BaseURLs 对齐）；
+				// 已被移出地址池则迁移到首个地址。BaseURL 为空表示未绑定，保持为空，运行时使用完整地址池。
+				if _, ok := inPool[bound]; ok {
+					keyConfig.BaseURL = bound
+				} else if len(baseURLs) > 0 {
 					keyConfig.BaseURL = baseURLs[0]
 				}
 			}
