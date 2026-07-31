@@ -85,9 +85,47 @@ https://github.com/QuantumNous/new-api/issues/5513
 
 发现协议/工具/用法变更：audio inputs/outputs、reasoning parameters、response item ID prefixes、realtime V3、multi-agent V2、memories/paginated history。请评估对 ccx Responses 渠道的影响。
 
-## [ ] Codex rust-v0.146.0 上游协议/工具变更评估
+## [x] Codex rust-v0.146.0 上游协议/工具变更评估（2026-08-01 完成）
 
-发现协议/工具/用法变更：Responses item ID 强制分配、自定义 Provider 独立 Web Search、Responses Lite Code Mode 元数据。请评估对 ccx Responses 渠道的影响。
+发现协议/工具/用法变更：Responses item ID 强制分配、自定义 Provider 独立 Web Search、Responses Lite Code Mode 元数据。评估结论见下，四项均为**观察项，当前无需改动代码**。
+
+### 1. Responses item ID 强制分配（#34645）
+
+上游行为：`features.item_ids` 退化为 no-op，客户端为所有 item 无条件分配 ID（含流式、fork 历史、compaction 结果、非 OpenAI provider）。发往上游前 `prepare_response_items_for_request` 只清掉**不带前缀**的 ID（`is_prefixed` = 存在非空 `prefix_suffix` 分隔），带前缀 ID（`msg_x` / `fc_x` / `ctc_x`）一律保留。此前 `store=false` 且 feature 关闭时会清掉全部 ID，现在不再清。
+
+CCX 现状（已实测验证）：
+- 透传分支 `normalizeResponsesInputForPassthrough` 不删 `input[].id`，`msg_`/`fc_`/`function_call_output` 的 ID 原样转发（实测确认）。
+- 非透传分支 `parseResponsesInput` → `responsesItemFromMap` 读取 `id` 到 `ResponsesItem.ID`，转 Chat/Claude/Gemini 时用 `call_id` 而非 `id`，不受影响。
+- 响应侧 `ResponsesPassthroughConverter.FromProviderResponse` 保留 `itemMap["id"]`；`chat_to_responses` / `claude_to_responses` 自造 `msg_`/`rs_`/`fc_`/`ts_`/`ctc_` 前缀 ID，格式与上游 `is_prefixed` 约定一致。
+
+潜在影响（低，均为观察项）：
+- 第三方 Responses 镜像若对 `input[].id` 做严格校验，可能因客户端现在总带 ID 而报 400。命中后走既有 `ChannelCompatCache` 三态自学习加 trait，不要加静态 bool 开关。
+- `EstimateResponsesRequestTokens` 不计 `item.ID`，历史变长后估算会系统性略低（每 item 约 3~6 token）。当前上下文硬约束留有余量，暂不调整。
+- `NormalizeResponsesItem` 对 legacy `tool_call` 走 `firstNonEmpty(item.CallID, item.ID)`，当 `call_id` 缺失而 `id` 存在时会把 item ID 当 call ID 用（实测：`ToolUse.ID=call_real` + `id=ctc_x` 时得到 `ctc_x`）。仅影响 legacy `tool_*` 兼容输入路径，Codex 0.146 发的是 `function_call`（带 `call_id`），不触发；如后续出现工具结果配对错乱再修 `firstNonEmpty` 顺序。
+
+### 2. 自定义 Provider 独立 Web Search（#34846）
+
+上游行为：新增 `supports_standalone_web_search` provider 配置（默认 false），开启后 Codex 启用独立 `web.run` 工具，把搜索请求发到自定义 provider 的 `/v1/alpha/search`（官方为 `/api/codex/alpha/search`），复用该 provider 的鉴权。
+
+CCX 现状：默认 false 且需用户在 `config.toml` 的 provider 块显式开启，Desktop 生成的 `[model_providers.ccx]` 不含该字段，因此**默认不触发**。CCX 未注册 `/v1/alpha/search` 路由；`isAPIPath` 覆盖 `/v1` 前缀，未知路径由 `NoRoute` 返回 JSON 404 而非 SPA 兜底，行为可预期。tools 侧 `web_search` 已在 `codex_tools.go` 与 `shouldDropResponsesToolObject` 中有处理路径。
+
+结论：不主动开启即无影响。若将来要支持，需要新增 `/v1/alpha/search` 代理入口并决定转发目标，属独立特性而非兼容性修复。
+
+### 3. Responses Lite Code Mode 元数据（#35271 / #35364）
+
+上游行为：Lite turn metadata 新增 `code_mode_tool_names`（保留键，禁止客户端覆盖，且不暴露给外部 MCP）。#35364 又把它从 `x-codex-turn-metadata` 直接头中移除，只保留在 `client_metadata["x-codex-turn-metadata"]` 里，避免头无界增长。
+
+CCX 现状：HTTP 透传分支不读也不删 `client_metadata`，整体转发；WebSocket 分支 `normalizeWebSocketResponseCreatePayload` 显式 `delete(req, "client_metadata")`。`ExtractAgentContext` 只读 `x-openai-subagent` / `x-codex-parent-thread-id` 两个键，对新增键无感。
+
+结论：无需改动。仅 WebSocket 桥接模式下 subagent 识别本就丢 `client_metadata`，是既有行为，与本次变更无关。
+
+### 4. Realtime session headers（#34681）
+
+上游行为：realtime WebSocket/WebRTC 会话建立时附加 Codex `session-id` / `thread-id` 头。
+
+CCX 现状：不代理 realtime 链路（`/v1/responses` 的 WS 是 Responses over WebSocket，非 realtime）。
+
+结论：无影响。
 
 ---
 
