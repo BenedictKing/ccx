@@ -1522,7 +1522,16 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
     },
     "sources": [
       "https://www.kimi.com/code/docs/kimi-code/models.html"
-    ]
+    ],
+    "paramConstraints": {
+      "fixedParams": [
+        "temperature",
+        "top_p",
+        "n",
+        "presence_penalty",
+        "frequency_penalty"
+      ]
+    }
   },
   "(?:^|[-/])k3\\[1m\\](?=$|@)": {
     "provider": "moonshot",
@@ -1602,7 +1611,16 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
     },
     "sources": [
       "https://www.kimi.com/code/docs/kimi-code/models.html"
-    ]
+    ],
+    "paramConstraints": {
+      "fixedParams": [
+        "temperature",
+        "top_p",
+        "n",
+        "presence_penalty",
+        "frequency_penalty"
+      ]
+    }
   },
   "(?:^|[-/])kimi-for-coding-highspeed(?=$|@)": {
     "provider": "moonshot",
@@ -1622,7 +1640,16 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
     },
     "sources": [
       "https://www.kimi.com/code/docs/kimi-code/models.html"
-    ]
+    ],
+    "paramConstraints": {
+      "fixedParams": [
+        "temperature",
+        "top_p",
+        "n",
+        "presence_penalty",
+        "frequency_penalty"
+      ]
+    }
   },
   "(?:^|[-/])kimi-k2\\.7(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
     "provider": "moonshot",

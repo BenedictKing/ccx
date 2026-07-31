@@ -1190,7 +1190,16 @@
       },
       "sources": [
         "https://www.kimi.com/code/docs/kimi-code/models.html"
-      ]
+      ],
+      "paramConstraints": {
+        "fixedParams": [
+          "temperature",
+          "top_p",
+          "n",
+          "presence_penalty",
+          "frequency_penalty"
+        ]
+      }
     },
     {
       "patterns": [
@@ -1247,7 +1256,16 @@
       },
       "sources": [
         "https://www.kimi.com/code/docs/kimi-code/models.html"
-      ]
+      ],
+      "paramConstraints": {
+        "fixedParams": [
+          "temperature",
+          "top_p",
+          "n",
+          "presence_penalty",
+          "frequency_penalty"
+        ]
+      }
     },
     {
       "patterns": [
@@ -1270,7 +1288,16 @@
       },
       "sources": [
         "https://www.kimi.com/code/docs/kimi-code/models.html"
-      ]
+      ],
+      "paramConstraints": {
+        "fixedParams": [
+          "temperature",
+          "top_p",
+          "n",
+          "presence_penalty",
+          "frequency_penalty"
+        ]
+      }
     },
     {
       "patterns": [
