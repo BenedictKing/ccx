@@ -67,6 +67,8 @@ type TryUpstreamOption func(*tryUpstreamOptions)
 type tryUpstreamOptions struct {
 	channelLogOptions []ChannelLogOption
 	endpointPolicy    *autopilot.EndpointAttemptPolicy // endpoint 级策略（nil 时不注入）
+	executionRoute    scheduler.ChannelRouteRef
+	executionModel    string // 联邦 sibling 的实际执行模型（为空时沿用请求模型）
 }
 
 // WithSelectionTrace 将调度器的选择摘要写入后续渠道请求日志。
@@ -91,6 +93,60 @@ func WithEndpointAttemptPolicy(policy *autopilot.EndpointAttemptPolicy) TryUpstr
 			return
 		}
 		opts.endpointPolicy = policy
+	}
+}
+
+// WithExecutionRoute 指定本次尝试实际使用的物理配置路由。
+// 未设置时保持兼容：默认使用 requestKind + channelIndex。
+func WithExecutionRoute(route scheduler.ChannelRouteRef) TryUpstreamOption {
+	return func(opts *tryUpstreamOptions) {
+		if opts == nil {
+			return
+		}
+		opts.executionRoute = route
+	}
+}
+
+// WithExecutionModel 指定本次尝试实际要发送给上游的模型。
+// 协议联邦候选（如 messages 请求走 chat sibling 的 kimi-k3）必须在构造上游请求
+// 与应用参数约束之前完成改写，避免上游收到不存在的请求模型。
+func WithExecutionModel(model string) TryUpstreamOption {
+	return func(opts *tryUpstreamOptions) {
+		if opts == nil {
+			return
+		}
+		opts.executionModel = model
+	}
+}
+
+func normalizeExecutionRoute(route scheduler.ChannelRouteRef, requestKind scheduler.ChannelKind, channelIndex int, upstream *config.UpstreamConfig) scheduler.ChannelRouteRef {
+	legacyDefault := route.IsZero()
+	if route.Kind == "" {
+		route.Kind = string(requestKind)
+	}
+	if legacyDefault {
+		route.Index = channelIndex
+	}
+	if route.ChannelUID == "" && upstream != nil {
+		route.ChannelUID = upstream.ChannelUID
+	}
+	return route
+}
+
+func ChannelAPIType(kind scheduler.ChannelKind) string {
+	switch kind {
+	case scheduler.ChannelKindResponses:
+		return "Responses"
+	case scheduler.ChannelKindGemini:
+		return "Gemini"
+	case scheduler.ChannelKindChat:
+		return "Chat"
+	case scheduler.ChannelKindImages:
+		return "Images"
+	case scheduler.ChannelKindVectors:
+		return "Vectors"
+	default:
+		return "Messages"
 	}
 }
 
@@ -267,18 +323,25 @@ func TryUpstreamWithAllKeys(
 	}
 	upstream = config.RuntimeUpstreamForAutoManagedProvider(upstream)
 
-	// 渠道-模型级熔断查询闭包：构造一次供本次请求的所有 Key 选择轮次复用。
-	// 键固定用原始 model，与 scheduler 侧过滤和记账侧保持一致。
-	modelCircuit := modelCircuitChecker(metricsManager, model)
-
 	tryOpts := tryUpstreamOptions{}
 	for _, opt := range opts {
 		if opt != nil {
 			opt(&tryOpts)
 		}
 	}
+	executionRoute := normalizeExecutionRoute(tryOpts.executionRoute, kind, channelIndex, upstream)
+	executionKind := scheduler.ChannelKind(executionRoute.Kind)
+	executionIndex := executionRoute.Index
+	executionAPIType := ChannelAPIType(executionKind)
+	if routedMetrics := channelScheduler.GetMetricsManagerForRoute(executionRoute); routedMetrics != nil {
+		metricsManager = routedMetrics
+	}
+	if routedLogStore := channelScheduler.GetChannelLogStoreForRoute(executionRoute); routedLogStore != nil {
+		channelLogStore = routedLogStore
+	}
+	modelCircuit := modelCircuitChecker(metricsManager, model)
 
-	metricsServiceType := scheduler.NormalizedMetricsServiceType(kind, upstream.ServiceType)
+	metricsServiceType := scheduler.NormalizedMetricsServiceType(executionKind, upstream.ServiceType)
 
 	var lastFailoverError *FailoverError
 	deprioritizeCandidates := make(map[string]bool)
@@ -298,6 +361,19 @@ func TryUpstreamWithAllKeys(
 		}
 	}()
 
+	// 协议联邦：调度器已按 sibling 执行协议解析出真实模型，先落到请求体，
+	// 后续的能力判断、参数约束与 provider 请求构造都以该模型为准。
+	if tryOpts.executionModel != "" && tryOpts.executionModel != model {
+		if rewritten, err := sjson.SetBytes(requestBody, "model", tryOpts.executionModel); err == nil {
+			requestBody = rewritten
+			RestoreRequestBody(c, requestBody)
+			c.Set("requestBodyBytes", requestBody)
+			RequestLogf(c, "[%s-Federation] 请求协议 %s 走执行协议 %s，模型改写: %s -> %s",
+				apiType, kind, executionKind, model, tryOpts.executionModel)
+		}
+		model = tryOpts.executionModel
+	}
+
 	// 先应用用户配置的模型映射。endpoint 级自动映射会在选定 Key 后再覆盖本次尝试的模型。
 	redirectedModel := config.RedirectModel(model, upstream)
 	capabilityRequestModel := model
@@ -315,24 +391,24 @@ func TryUpstreamWithAllKeys(
 	// Vision 能力检查：含图请求跳过不支持 vision 的渠道/模型
 	if kind != scheduler.ChannelKindImages && HasImageContent(c, requestBody) {
 		if upstream.NoVision {
-			RequestLogf(c, "[%s-Vision] 跳过不支持视觉的渠道 [%d] %s", apiType, channelIndex, upstream.Name)
+			RequestLogf(c, "[%s-Vision] 跳过不支持视觉的渠道 [%d] %s", apiType, executionIndex, upstream.Name)
 			return false, "", 0, nil, nil, fmt.Errorf("channel %s does not support vision", upstream.Name)
 		}
 		if isNoVisionModel(upstream, redirectedModel) {
 			if upstream.VisionFallbackModel != "" {
 				fallback := upstream.VisionFallbackModel
-				RequestLogf(c, "[%s-Vision] 模型 %s 不支持视觉，使用 fallback: %s (渠道 [%d] %s)", apiType, redirectedModel, fallback, channelIndex, upstream.Name)
+				RequestLogf(c, "[%s-Vision] 模型 %s 不支持视觉，使用 fallback: %s (渠道 [%d] %s)", apiType, redirectedModel, fallback, executionIndex, upstream.Name)
 				if replaced, err := sjson.SetBytes(requestBody, "model", fallback); err == nil {
 					requestBody = replaced
 				}
 				redirectedModel = fallback
 				capabilityRequestModel = fallback
-				if err := channelScheduler.ValidateUpstreamContext(kind, redirectedModel, upstream, contextRequirement); err != nil {
-					RequestLogf(c, "[%s-Vision] fallback 模型 %s 不满足上下文需求，跳过渠道 [%d] %s: %v", apiType, redirectedModel, channelIndex, upstream.Name, err)
+				if err := channelScheduler.ValidateUpstreamContext(executionKind, redirectedModel, upstream, contextRequirement); err != nil {
+					RequestLogf(c, "[%s-Vision] fallback 模型 %s 不满足上下文需求，跳过渠道 [%d] %s: %v", apiType, redirectedModel, executionIndex, upstream.Name, err)
 					return false, "", 0, nil, nil, err
 				}
 			} else {
-				RequestLogf(c, "[%s-Vision] 模型 %s 不支持视觉且无 fallback，跳过渠道 [%d] %s", apiType, redirectedModel, channelIndex, upstream.Name)
+				RequestLogf(c, "[%s-Vision] 模型 %s 不支持视觉且无 fallback，跳过渠道 [%d] %s", apiType, redirectedModel, executionIndex, upstream.Name)
 				return false, "", 0, nil, nil, fmt.Errorf("model %s does not support vision", redirectedModel)
 			}
 		}
@@ -414,7 +490,7 @@ func TryUpstreamWithAllKeys(
 				// 步骤 5+6: EndpointAttemptPolicy FilterKeys + SortKeys
 				// selectAttemptAPIKeyFiltered 在 keypool.CandidatesForModel 之后应用 policy 过滤/排序。
 				// nil policy 时回退到 selectAttemptAPIKey（行为不变）。
-				selection, apiKey, err = selectAttemptAPIKeyFiltered(channelScheduler, kind, channelIndex, upstream, currentBaseURL, failedKeys, failedQuotaGroups, redirectedModel, nextAPIKey, endpointPolicy, apiType, c, modelCircuit)
+				selection, apiKey, err = selectAttemptAPIKeyFiltered(channelScheduler, executionKind, executionIndex, upstream, currentBaseURL, failedKeys, failedQuotaGroups, redirectedModel, nextAPIKey, endpointPolicy, apiType, c, modelCircuit)
 				if err != nil {
 					lastError = err
 					break // 当前 BaseURL 没有可用 Key，尝试下一个 BaseURL
@@ -510,7 +586,7 @@ func TryUpstreamWithAllKeys(
 				}
 				if target != nil && target.Model != "" {
 					// Atomic rewrite: model + effort together
-					attemptBody, rewriteOk := atomicModelEffortRewrite(attemptBody, target, upstreamCopy, kind)
+					attemptBody, rewriteOk := atomicModelEffortRewrite(attemptBody, target, upstreamCopy, executionKind)
 					if rewriteOk {
 						attemptModel = target.Model
 						appliedMappedModel = target.Model
@@ -599,7 +675,7 @@ func TryUpstreamWithAllKeys(
 			if rateLimitMgr := channelScheduler.GetRateLimitManager(); rateLimitMgr != nil {
 				const maxRateLimitWait = 10 * time.Second
 				releases := make([]func(), 0, 2)
-				if limiter := rateLimitMgr.Get(apiType, channelIndex); limiter != nil {
+				if limiter := rateLimitMgr.Get(executionAPIType, executionIndex); limiter != nil {
 					release, rlErr := limiter.Acquire(c.Request.Context(), maxRateLimitWait, time.Now())
 					if rlErr != nil {
 						lastError = rlErr
@@ -610,7 +686,7 @@ func TryUpstreamWithAllKeys(
 					releases = append(releases, release)
 				}
 				if selection.LimiterScope != "" {
-					keyLimiter := rateLimitMgr.GetOrCreateScoped(apiType, channelIndex, selection.LimiterScope, keypool.ConfigForCandidate(*upstream, selection.Config))
+					keyLimiter := rateLimitMgr.GetOrCreateScoped(executionAPIType, executionIndex, selection.LimiterScope, keypool.ConfigForCandidate(*upstream, selection.Config))
 					release, rlErr := keyLimiter.Acquire(c.Request.Context(), maxRateLimitWait, time.Now())
 					if rlErr != nil {
 						lastError = rlErr
@@ -652,7 +728,7 @@ func TryUpstreamWithAllKeys(
 			}
 
 			// 记录请求开始
-			channelScheduler.RecordRequestStart(currentBaseURL, apiKey, metricsServiceType, kind)
+			channelScheduler.RecordRequestStart(currentBaseURL, apiKey, metricsServiceType, executionKind)
 
 			// 计算本次尝试的 metricsKey（与统计同源的身份指纹）
 			metricsKey := metrics.GenerateMetricsIdentityKey(currentBaseURL, apiKey, metricsServiceType)
@@ -691,7 +767,9 @@ func TryUpstreamWithAllKeys(
 			}
 
 			// 创建 pending 状态日志（附带代理上下文与会话标识，用于 subagent 观测）
-			logRequestID := CreatePendingLog(channelLogStore, metricsKey, channelIndex, upstream.Name, actualAttemptModel, actualOriginalModel, originalReasoningEffort, actualReasoningEffort, apiKey, currentBaseURL, apiType, operation, metrics.RequestSourceProxy, AgentContextFromGin(c), SessionIDFromGin(c), logOpts...)
+			// interfaceType 记录实际执行协议：联邦 sibling 必须归属到 chat/responses，
+			// 否则日志会把 chat 上的尝试错误地展示成 messages 渠道的尝试。
+			logRequestID := CreatePendingLog(channelLogStore, metricsKey, executionIndex, upstream.Name, actualAttemptModel, actualOriginalModel, originalReasoningEffort, actualReasoningEffort, apiKey, currentBaseURL, executionAPIType, operation, metrics.RequestSourceProxy, AgentContextFromGin(c), SessionIDFromGin(c), logOpts...)
 
 			// 向 Autopilot trace 追加一条 "started" endpoint 尝试摘要（fail-open）
 			attemptTraceUID, _ := c.Get("ccx.autopilot_trace_uid")
@@ -738,7 +816,7 @@ func TryUpstreamWithAllKeys(
 				if isClientSideError(err) {
 					// 客户端取消：不计入失败，不触发 failover
 					metricsManager.RecordRequestFinalizeClientCancel(currentBaseURL, apiKey, metricsServiceType, requestID)
-					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
+					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, executionKind)
 					// 完成日志记录（客户端取消）
 					CompleteLog(channelLogStore, metricsKey, logRequestID, 0, false, "client canceled", isRetryAttempt)
 					RequestLogf(c, "[%s-Cancel] 请求已取消（SendRequest 阶段）", apiType)
@@ -746,9 +824,9 @@ func TryUpstreamWithAllKeys(
 				}
 				// 真实渠道故障：计入失败，继续 failover
 				failedKeys[apiKey] = true
-				cfgManager.MarkKeyAsFailed(apiKey, apiType)
+				cfgManager.MarkKeyAsFailed(apiKey, executionAPIType)
 				metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, metrics.FailureClassRetryable)
-				channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
+				channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, executionKind)
 				recordModelCircuitFailure(c, metricsManager, upstream, apiKey, model, err.Error(), apiType)
 				if markURLFailure != nil {
 					markURLFailure(currentBaseURL)
@@ -777,11 +855,11 @@ func TryUpstreamWithAllKeys(
 			// 学习上游限流头：动态调整限速器状态（cooldown 等）
 			if rateLimitMgr := channelScheduler.GetRateLimitManager(); rateLimitMgr != nil {
 				now := time.Now()
-				if limiter := rateLimitMgr.Get(apiType, channelIndex); limiter != nil {
+				if limiter := rateLimitMgr.Get(executionAPIType, executionIndex); limiter != nil {
 					limiter.ApplyUpstreamHints(resp.Header, resp.StatusCode, now)
 				}
 				if selection.LimiterScope != "" {
-					if limiter := rateLimitMgr.GetScoped(apiType, channelIndex, selection.LimiterScope); limiter != nil {
+					if limiter := rateLimitMgr.GetScoped(executionAPIType, executionIndex, selection.LimiterScope); limiter != nil {
 						limiter.ApplyUpstreamHints(resp.Header, resp.StatusCode, now)
 					}
 				}
@@ -816,7 +894,7 @@ func TryUpstreamWithAllKeys(
 					signalReason = string(autopilot.RateLimitReasonAccountRateLimitExceeded)
 				}
 				ratelimit.NotifySignal(
-					signalEndpointUID, metricsKey, apiType, upstream.Name, isStream,
+					signalEndpointUID, metricsKey, executionAPIType, upstream.Name, isStream,
 					time.Since(attemptStartedAt).Milliseconds(),
 					resp.Header, resp.StatusCode, signalReason,
 				)
@@ -830,7 +908,7 @@ func TryUpstreamWithAllKeys(
 						if strings.EqualFold(apiType, "Vectors") {
 							blacklistMessage = errorBodySummaryForLog(apiType, resp.StatusCode, respBodyBytes)
 						}
-						if err := cfgManager.BlacklistKeyWithRecoverAt(apiType, channelIndex, apiKey, blResult.Reason, blacklistMessage, blResult.RecoverAt); err != nil {
+						if err := cfgManager.BlacklistKeyWithRecoverAt(executionAPIType, executionIndex, apiKey, blResult.Reason, blacklistMessage, blResult.RecoverAt); err != nil {
 							RequestLogf(c, "[%s-Blacklist] 拉黑 Key 失败: %v", apiType, err)
 						}
 					}
@@ -859,7 +937,7 @@ func TryUpstreamWithAllKeys(
 						// 上游明确声明该模型或其 Codex 图片工具不受支持：限制该 Key 对这个实际模型的路由。
 						// 仅限制 (Key, 模型) 组合（持久化+定时恢复），保留 failover 换渠道，不连累该 Key 其他模型。
 						summary := errorBodySummaryForLog(apiType, resp.StatusCode, respBodyBytes)
-						if err := cfgManager.DisableKeyModel(apiType, channelIndex, apiKey, actualAttemptModel, restrictionReason, summary); err != nil {
+						if err := cfgManager.DisableKeyModel(executionAPIType, executionIndex, apiKey, actualAttemptModel, restrictionReason, summary); err != nil {
 							RequestLogf(c, "[%s-KeyModel] 限制 (Key,模型) 组合失败: %v", apiType, err)
 						}
 					}
@@ -896,7 +974,7 @@ func TryUpstreamWithAllKeys(
 							retrySelection = selection
 							retryAPIKey = apiKey
 							metricsManager.RecordRequestFinalizeIgnored(currentBaseURL, apiKey, metricsServiceType, requestID)
-							channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
+							channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, executionKind)
 							if probeKey := currentBaseURL + "|" + apiKey; probeAcquired[probeKey] {
 								metricsManager.ReleaseProbe(currentBaseURL, apiKey, metricsServiceType)
 								delete(probeAcquired, probeKey)
@@ -931,7 +1009,7 @@ func TryUpstreamWithAllKeys(
 							retrySelection = selection
 							retryAPIKey = apiKey
 							metricsManager.RecordRequestFinalizeIgnored(currentBaseURL, apiKey, metricsServiceType, requestID)
-							channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
+							channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, executionKind)
 							if probeKey := currentBaseURL + "|" + apiKey; probeAcquired[probeKey] {
 								metricsManager.ReleaseProbe(currentBaseURL, apiKey, metricsServiceType)
 								delete(probeAcquired, probeKey)
@@ -947,7 +1025,7 @@ func TryUpstreamWithAllKeys(
 				if shouldFailover {
 					lastError = fmt.Errorf("上游错误: %d", resp.StatusCode)
 					failedKeys[apiKey] = true
-					cfgManager.MarkKeyAsFailed(apiKey, apiType)
+					cfgManager.MarkKeyAsFailed(apiKey, executionAPIType)
 					failureClass := metrics.FailureClassRetryable
 					if isQuotaRelated {
 						failureClass = metrics.FailureClassQuota
@@ -956,7 +1034,7 @@ func TryUpstreamWithAllKeys(
 						failureClass = metrics.FailureClassOverloaded
 					}
 					metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, failureClass)
-					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
+					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, executionKind)
 					// 仅 Retryable 计入模型级熔断：Quota 与 Overloaded（含账号级限流）
 					// 反映的是额度或瞬时负载，已由 cooldown / scope 冷却处理，
 					// 记到模型头上会让限流误伤该模型的可用性。
@@ -985,7 +1063,7 @@ func TryUpstreamWithAllKeys(
 					}
 					errorSummary := errorBodySummaryForLog(apiType, resp.StatusCode, respBodyBytes)
 					if errorSummary != "" {
-						RequestLogf(c, "[%s-Key] 上游错误详情摘要: channel=[%d] %s, key=%s, summary=%s", apiType, channelIndex, upstream.Name, utils.MaskAPIKey(apiKey), errorSummary)
+						RequestLogf(c, "[%s-Key] 上游错误详情摘要: channel=[%d] %s, key=%s, summary=%s", apiType, executionIndex, upstream.Name, utils.MaskAPIKey(apiKey), errorSummary)
 					}
 					RequestLogf(c, "[%s-Key] 警告: API密钥失败 (状态: %d)，尝试下一个密钥", apiType, resp.StatusCode)
 
@@ -1013,24 +1091,24 @@ func TryUpstreamWithAllKeys(
 					// 账号级 429 属可恢复临时限流，不永久 blacklist。
 					if isAccountRateLimited {
 						if selection.LimiterScope != "" {
-							channelScheduler.MarkLimiterScopeCooldown(kind, channelIndex, selection.LimiterScope, upstreamAccountRateLimitCooldown)
+							channelScheduler.MarkLimiterScopeCooldown(executionKind, executionIndex, selection.LimiterScope, upstreamAccountRateLimitCooldown)
 							RequestLogf(c, "[%s-AccountRateLimit] 渠道 [%d] %s key=%s 账号级限流，冷却 scope=%s %s，尝试同渠道下一个独立 key",
-								apiType, channelIndex, upstream.Name, utils.MaskAPIKey(apiKey), selection.LimiterScope, upstreamAccountRateLimitCooldown)
+								apiType, executionIndex, upstream.Name, utils.MaskAPIKey(apiKey), selection.LimiterScope, upstreamAccountRateLimitCooldown)
 							continue
 						}
-						channelScheduler.MarkChannelCooldown(kind, channelIndex, upstreamAccountRateLimitCooldown)
+						channelScheduler.MarkChannelCooldown(executionKind, executionIndex, upstreamAccountRateLimitCooldown)
 						RequestLogf(c, "[%s-AccountRateLimit] 渠道 [%d] %s 账号级限流且无 scope，冷却渠道 %s 并尝试下一个渠道",
-							apiType, channelIndex, upstream.Name, upstreamAccountRateLimitCooldown)
+							apiType, executionIndex, upstream.Name, upstreamAccountRateLimitCooldown)
 						return false, "", 0, lastFailoverError, nil, lastError
 					}
 					if isAccountPoolUnavailable {
-						channelScheduler.MarkChannelCooldown(kind, channelIndex, upstreamAccountPoolCooldown)
-						RequestLogf(c, "[%s-Channel] 渠道 [%d] %s 上游账号池不可用，冷却 %s 并尝试下一个渠道", apiType, channelIndex, upstream.Name, upstreamAccountPoolCooldown)
+						channelScheduler.MarkChannelCooldown(executionKind, executionIndex, upstreamAccountPoolCooldown)
+						RequestLogf(c, "[%s-Channel] 渠道 [%d] %s 上游账号池不可用，冷却 %s 并尝试下一个渠道", apiType, executionIndex, upstream.Name, upstreamAccountPoolCooldown)
 						return false, "", 0, lastFailoverError, nil, lastError
 					}
 					if isTemporarilyOverloaded {
-						channelScheduler.MarkChannelCooldown(kind, channelIndex, upstreamOverloadedCooldown)
-						RequestLogf(c, "[%s-Channel] 渠道 [%d] %s 上游临时过载，冷却 %s 并尝试下一个渠道", apiType, channelIndex, upstream.Name, upstreamOverloadedCooldown)
+						channelScheduler.MarkChannelCooldown(executionKind, executionIndex, upstreamOverloadedCooldown)
+						RequestLogf(c, "[%s-Channel] 渠道 [%d] %s 上游临时过载，冷却 %s 并尝试下一个渠道", apiType, executionIndex, upstream.Name, upstreamOverloadedCooldown)
 						return false, "", 0, lastFailoverError, nil, lastError
 					}
 					continue
@@ -1044,11 +1122,11 @@ func TryUpstreamWithAllKeys(
 					channelErrorInfo = errorSummary
 					if errorSummary != "" {
 						RequestLogf(c, "[Vectors-UpstreamError] channel=[%d] %s status=%d original_model=%q mapped_model=%q summary=%s",
-							channelIndex, upstream.Name, resp.StatusCode, model, actualAttemptModel, errorSummary)
+							executionIndex, upstream.Name, resp.StatusCode, model, actualAttemptModel, errorSummary)
 					}
 				}
 				metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, metrics.FailureClassNonRetryable)
-				channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
+				channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, executionKind)
 				// 不计入模型级熔断：本分支是 shouldFailover=false 的场景
 				// （invalid_request / bad_request / 内容审核），问题出在请求本身而非
 				// 渠道-模型健康度。换渠道换模型都不会让同一个畸形请求成功，
@@ -1061,7 +1139,7 @@ func TryUpstreamWithAllKeys(
 
 			// 成功响应（2xx）：通知 Discoverer（header/success 路径），reason 为空
 			ratelimit.NotifySignal(
-				signalEndpointUID, metricsKey, apiType, upstream.Name, isStream,
+				signalEndpointUID, metricsKey, executionAPIType, upstream.Name, isStream,
 				time.Since(attemptStartedAt).Milliseconds(),
 				resp.Header, resp.StatusCode, "",
 			)
@@ -1075,7 +1153,7 @@ func TryUpstreamWithAllKeys(
 
 			streamingUserID := ""
 			if isStream {
-				streamingUserID = trackStreamingConversation(c, channelScheduler, kind, model, channelIndex, upstream.Name)
+				streamingUserID = trackStreamingConversation(c, channelScheduler, kind, model, executionIndex, upstream.Name)
 				StartStreamTimeoutObservation(c, channelLogStore, metricsKey, logRequestID, time.Now())
 			}
 			usage, err = handleSuccess(c, resp, upstreamCopy, apiKey, attemptBody)
@@ -1091,7 +1169,7 @@ func TryUpstreamWithAllKeys(
 				if isClientSideError(err) {
 					// 客户端取消/断开：计入总请求数但不计入失败
 					metricsManager.RecordRequestFinalizeClientCancel(currentBaseURL, apiKey, metricsServiceType, requestID)
-					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
+					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, executionKind)
 					RequestLogf(c, "[%s-Cancel] 请求已取消，停止渠道 failover", apiType)
 					// 完成日志记录（客户端取消）
 					CompleteLog(channelLogStore, metricsKey, logRequestID, http.StatusOK, false, "client canceled", isRetryAttempt)
@@ -1104,7 +1182,7 @@ func TryUpstreamWithAllKeys(
 						retrySelection = selection
 						retryAPIKey = apiKey
 						metricsManager.RecordRequestFinalizeIgnored(currentBaseURL, apiKey, metricsServiceType, requestID)
-						channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
+						channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, executionKind)
 						if probeAcquired[retryKey] {
 							metricsManager.ReleaseProbe(currentBaseURL, apiKey, metricsServiceType)
 							delete(probeAcquired, retryKey)
@@ -1115,9 +1193,9 @@ func TryUpstreamWithAllKeys(
 						continue
 					}
 					failedKeys[apiKey] = true
-					cfgManager.MarkKeyAsFailed(apiKey, apiType)
+					cfgManager.MarkKeyAsFailed(apiKey, executionAPIType)
 					metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, metrics.FailureClassRetryable)
-					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
+					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, executionKind)
 					// 空响应 / 无效响应体 / 首字超时 / 断流都是该渠道-模型确实不可用的表现。
 					recordModelCircuitFailure(c, metricsManager, upstream, apiKey, model, err.Error(), apiType)
 					if markURLFailure != nil {
@@ -1132,13 +1210,13 @@ func TryUpstreamWithAllKeys(
 					failedKeys[apiKey] = true
 					isBalanceError := IsBalanceOrQuotaBlacklistReason(blErr.Reason)
 					if !isBalanceError || upstream.IsAutoBlacklistBalanceEnabled() {
-						if blacklistErr := cfgManager.BlacklistKey(apiType, channelIndex, apiKey, blErr.Reason, blErr.Message); blacklistErr != nil {
+						if blacklistErr := cfgManager.BlacklistKey(executionAPIType, executionIndex, apiKey, blErr.Reason, blErr.Message); blacklistErr != nil {
 							RequestLogf(c, "[%s-Blacklist] 拉黑 Key 失败: %v", apiType, blacklistErr)
 						}
 					}
-					cfgManager.MarkKeyAsFailed(apiKey, apiType)
+					cfgManager.MarkKeyAsFailed(apiKey, executionAPIType)
 					metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, metrics.FailureClassRetryable)
-					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
+					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, executionKind)
 					if markURLFailure != nil {
 						markURLFailure(currentBaseURL)
 					}
@@ -1147,9 +1225,9 @@ func TryUpstreamWithAllKeys(
 					continue
 				} else {
 					// 真实渠道故障：计入失败指标
-					cfgManager.MarkKeyAsFailed(apiKey, apiType)
+					cfgManager.MarkKeyAsFailed(apiKey, executionAPIType)
 					metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, metrics.FailureClassRetryable)
-					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
+					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, executionKind)
 					recordModelCircuitFailure(c, metricsManager, upstream, apiKey, model, err.Error(), apiType)
 					// 记录渠道日志
 					CompleteLog(channelLogStore, metricsKey, logRequestID, http.StatusOK, false, err.Error(), isRetryAttempt)
@@ -1168,7 +1246,7 @@ func TryUpstreamWithAllKeys(
 				notifyEndpointResultHook(endpointUID, true)
 			}
 			metricsManager.RecordRequestFinalizeSuccess(currentBaseURL, apiKey, metricsServiceType, requestID, usage)
-			channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
+			channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, executionKind)
 			// 成功即解除该渠道-模型的失败累积；若这是熔断到期后放行的探针，
 			// 同时重置退避级别并回收状态条目。
 			recordModelCircuitSuccess(metricsManager, upstream, apiKey, model)
@@ -1204,14 +1282,14 @@ func TryUpstreamWithAllKeys(
 				// 复制 bodyBytes 防止异步使用时被原始切片回收
 				bodyCopy := make([]byte, len(requestBody))
 				copy(bodyCopy, requestBody)
-				postSuccessfulProxyHook(string(kind), model, upstream.ChannelUID, http.StatusOK, latencyMs, bodyCopy)
+				postSuccessfulProxyHook(string(executionKind), model, upstream.ChannelUID, http.StatusOK, latencyMs, bodyCopy)
 			}
 
 			// Phase 4 Item 4: 用量画像记录（渠道推荐用）。
 			// 与上面的 A/B 测试回调同一时机（主响应已返回），纯观测性累积，不影响主请求路径。
 			if usagePatternRecorderHook != nil {
 				if proxyKeyMask := middleware.GetProxyKeyMask(c); proxyKeyMask != "" {
-					usagePatternRecorderHook(proxyKeyMask, string(kind), upstream.ChannelUID, model)
+					usagePatternRecorderHook(proxyKeyMask, string(executionKind), upstream.ChannelUID, model)
 				}
 			}
 
@@ -1896,26 +1974,37 @@ func atomicModelEffortRewrite(body []byte, target *autopilot.ResolvedRouteTarget
 //   - images / vectors 渠道不接受思考参数，返回空串表示"不注入"；
 //   - 其余渠道沿用渠道配置的 ReasoningParamStyle，缺省为 Responses 的 reasoning 对象形态。
 func effortInjectionStyle(kind scheduler.ChannelKind, upstream *config.UpstreamConfig) string {
+	// 不支持思考参数的物理路由始终禁用注入；Gemini 物理路由始终使用原生形态。
 	switch kind {
 	case scheduler.ChannelKindImages, scheduler.ChannelKindVectors:
 		return ""
 	case scheduler.ChannelKindGemini:
 		return config.ReasoningParamStyleGemini
 	}
-	if upstream != nil && strings.EqualFold(strings.TrimSpace(upstream.ServiceType), "gemini") {
+	serviceType := ""
+	if upstream != nil {
+		serviceType = strings.ToLower(strings.TrimSpace(upstream.ServiceType))
+	}
+	switch serviceType {
+	case "gemini":
 		return config.ReasoningParamStyleGemini
+	case "openai":
+		return "reasoning_effort"
+	case "responses", "copilot":
+		return "reasoning"
+	case "claude":
+		return "thinking"
 	}
 	if upstream != nil && upstream.ReasoningParamStyle != "" {
 		return upstream.ReasoningParamStyle
 	}
-	// ReasoningParamStyle 为空时（如自动托管渠道被 RuntimeUpstreamForAutoManagedProvider 清空），
-	// 按渠道类型推导原生形态，不能一律回退到 responses 的 reasoning 对象形式，
-	// 否则 Claude/Chat 上游收到不识别的字段会静默丢弃 effort。
+	// ServiceType 缺失时保留旧调用方的 kind 回退；route-aware 调用优先使用上游物理服务类型。
 	switch kind {
 	case scheduler.ChannelKindMessages:
 		return "thinking"
 	case scheduler.ChannelKindChat:
 		return "reasoning_effort"
+	default:
+		return "reasoning"
 	}
-	return "reasoning"
 }

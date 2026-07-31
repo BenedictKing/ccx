@@ -155,7 +155,7 @@ func handleMultiChannel(
 		agentRole,
 		func(selection *scheduler.SelectionResult) common.MultiChannelAttemptResult {
 			upstream := selection.Upstream
-			channelIndex := selection.ChannelIndex
+			executionRoute := selection.Route
 
 			if upstream == nil {
 				return common.MultiChannelAttemptResult{}
@@ -166,9 +166,9 @@ func handleMultiChannel(
 				return common.MultiChannelAttemptResult{}
 			}
 
-			metricsManager := channelScheduler.GetMessagesMetricsManager()
+			metricsManager := channelScheduler.GetMetricsManagerForRoute(executionRoute)
 			baseURLs := upstream.GetAllBaseURLs()
-			sortedURLResults := channelScheduler.GetSortedURLsForChannel(scheduler.ChannelKindMessages, channelIndex, baseURLs)
+			sortedURLResults := channelScheduler.GetSortedURLsForRoute(executionRoute, baseURLs)
 
 			handled, successKey, successBaseURLIdx, failoverErr, usage, lastErr := common.TryUpstreamWithAllKeys(
 				c,
@@ -184,22 +184,22 @@ func handleMultiChannel(
 				contextRequirement,
 				claudeReq.Stream,
 				func(upstream *config.UpstreamConfig, failedKeys map[string]bool) (string, error) {
-					return cfgManager.GetNextAPIKey(upstream, failedKeys, "Messages")
+					return cfgManager.GetNextAPIKey(upstream, failedKeys, common.ChannelAPIType(scheduler.ChannelKind(executionRoute.Kind)))
 				},
 				func(c *gin.Context, upstreamCopy *config.UpstreamConfig, apiKey string) (*http.Request, error) {
 					req, _, err := provider.ConvertToProviderRequest(c, upstreamCopy, apiKey)
 					return req, err
 				},
 				func(apiKey string) {
-					if err := cfgManager.DeprioritizeAPIKey(apiKey); err != nil {
+					if err := cfgManager.DeprioritizeAPIKeyForRoute(executionRoute.Kind, executionRoute.Index, apiKey); err != nil {
 						common.RequestLogf(c, "[Messages-Key] 警告: 密钥降级失败: %v", err)
 					}
 				},
 				func(url string) {
-					channelScheduler.MarkURLFailure(scheduler.ChannelKindMessages, channelIndex, url)
+					channelScheduler.MarkURLFailureForRoute(executionRoute, url)
 				},
 				func(url string) {
-					channelScheduler.MarkURLSuccess(scheduler.ChannelKindMessages, channelIndex, url)
+					channelScheduler.MarkURLSuccessForRoute(executionRoute, url)
 				},
 				func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string, actualRequestBody []byte) (*types.Usage, error) {
 					if claudeReq.Stream {
@@ -210,13 +210,16 @@ func handleMultiChannel(
 				},
 				claudeReq.Model,
 				"",
-				selection.ChannelIndex,
-				channelScheduler.GetChannelLogStore(scheduler.ChannelKindMessages),
+				executionRoute.Index,
+				channelScheduler.GetChannelLogStoreForRoute(executionRoute),
 				common.WithSelectionTrace(selection),
+				common.WithExecutionRoute(executionRoute),
+				common.WithExecutionModel(selection.ExecutionModel),
 			)
 
 			responseText, _ := c.Get("responseText")
 			return common.MultiChannelAttemptResult{
+				Route:             executionRoute,
 				Handled:           handled,
 				Attempted:         true,
 				SuccessKey:        successKey,

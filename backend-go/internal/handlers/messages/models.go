@@ -1297,7 +1297,12 @@ func selectChannelWithDisabledKeys(cfgManager *config.ConfigManager, failedChann
 	return &scheduler.SelectionResult{
 		Upstream:     &upstreamCopy,
 		ChannelIndex: selected.index,
-		Reason:       "disabled_key_fallback",
+		Route: scheduler.ChannelRouteRef{
+			Kind:       string(kind),
+			Index:      selected.index,
+			ChannelUID: upstreamCopy.ChannelUID,
+		},
+		Reason: "disabled_key_fallback",
 	}, nil
 }
 
