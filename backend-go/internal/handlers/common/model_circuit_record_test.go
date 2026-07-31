@@ -82,3 +82,37 @@ func TestRecordModelCircuitIgnoresMissingIdentity(t *testing.T) {
 		t.Fatalf("身份不全时不应产生熔断条目, TrackedCount = %d", got)
 	}
 }
+
+// TestModelCircuitKeyIsRequestModel 锁定熔断键为客户端请求的原始模型。
+//
+// 回归防护：记账侧曾用 attemptModel（autopilot 映射后的模型），而读侧用原始 model，
+// 导致 AutoManaged 渠道上写入的键永远查不到、熔断完全失效。这个不一致没有任何
+// 外部症状——熔断静默失效，看起来就像功能没生效。
+func TestModelCircuitKeyIsRequestModel(t *testing.T) {
+	mm := metrics.NewMetricsManagerWithConfig(20, 0.7)
+	upstream := &config.UpstreamConfig{Name: "auto-ch", ChannelUID: "ch_auto"}
+	c := newModelCircuitTestContext()
+
+	const requestModel = "claude-sonnet-5"  // 客户端请求的模型
+	const mappedModel = "claude-sonnet-4-5" // autopilot 映射后实际发给上游的模型
+	const apiKey = "sk-auto"
+
+	// 记账用原始模型（与实现约定一致）。
+	recordModelCircuitFailure(c, mm, upstream, apiKey, requestModel, "HTTP 403", "Messages")
+	recordModelCircuitFailure(c, mm, upstream, apiKey, requestModel, "HTTP 403", "Messages")
+
+	// 读侧闭包必须以原始模型命中，即使 keypool 传入的是映射后模型。
+	checker := modelCircuitChecker(mm, requestModel)
+	if checker == nil {
+		t.Fatal("checker 不应为 nil")
+	}
+	if !checker("ch_auto", apiKey, mappedModel) {
+		t.Fatal("读写键不一致：以原始模型记账后，查询未命中熔断状态")
+	}
+
+	// 另一个原始模型不应受影响。
+	otherChecker := modelCircuitChecker(mm, "claude-opus-5")
+	if otherChecker("ch_auto", apiKey, mappedModel) {
+		t.Fatal("其他请求模型不应命中熔断")
+	}
+}

@@ -305,3 +305,43 @@ func utf8ValidString(s string) bool {
 	}
 	return true
 }
+
+// TestModelCircuitProbeTimeoutPreventsPermanentOpen 探针资格必须能超时作废。
+//
+// 调用方并非在所有失败分支都记账（客户端取消、被忽略的中间态重试、不可 failover
+// 直接回客户端、SSE 流内拉黑都不记），探针请求若走了这些路径就永远不会裁决。
+// 没有超时兜底时该组合会永久停留在 open，永不恢复。
+func TestModelCircuitProbeTimeoutPreventsPermanentOpen(t *testing.T) {
+	base := time.Date(2026, 7, 31, 10, 0, 0, 0, time.UTC)
+	tracker := NewModelCircuitTracker("messages")
+
+	tracker.recordModelFailureAt(testChannelUID, testKeyHash, testModel, "err", base)
+	_, until := tracker.recordModelFailureAt(
+		testChannelUID, testKeyHash, testModel, "err", base.Add(time.Minute))
+
+	// 取得探针资格后不做任何裁决，模拟请求走了不记账的路径。
+	afterExpiry := until.Add(time.Second)
+	if tracker.isModelCircuitOpenAt(testChannelUID, testKeyHash, testModel, afterExpiry) {
+		t.Fatal("到期后应发放探针资格")
+	}
+
+	// 超时前仍隔离其他请求，避免一拥而上。
+	beforeTimeout := afterExpiry.Add(modelCircuitProbeTimeout - time.Second)
+	if !tracker.isModelCircuitOpenAt(testChannelUID, testKeyHash, testModel, beforeTimeout) {
+		t.Fatal("探针有效期内其余请求应继续被隔离")
+	}
+
+	// 渠道级判定先验：探针已超时作废，渠道级也必须视为可放行，
+	// 否则会出现"渠道级说熔断、Key 级已放行"的矛盾结论。
+	// 放在 Key 级查询之前，因为后者会重新发放探针并刷新计时。
+	afterTimeout := afterExpiry.Add(modelCircuitProbeTimeout + time.Second)
+	if tracker.channelModelCircuitOpenAt(
+		testChannelUID, []string{testKeyHash}, testModel, afterTimeout) {
+		t.Fatal("渠道级判定应与 Key 级一致地忽略已作废的探针")
+	}
+
+	// 超时后探针作废，重新放行，恢复能力不依赖调用方在所有分支记账。
+	if tracker.isModelCircuitOpenAt(testChannelUID, testKeyHash, testModel, afterTimeout) {
+		t.Fatal("探针超时未裁决应作废并重新放行，否则该组合永不恢复")
+	}
+}

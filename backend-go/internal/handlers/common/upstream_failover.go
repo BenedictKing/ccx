@@ -268,7 +268,8 @@ func TryUpstreamWithAllKeys(
 	upstream = config.RuntimeUpstreamForAutoManagedProvider(upstream)
 
 	// 渠道-模型级熔断查询闭包：构造一次供本次请求的所有 Key 选择轮次复用。
-	modelCircuit := modelCircuitChecker(metricsManager)
+	// 键固定用原始 model，与 scheduler 侧过滤和记账侧保持一致。
+	modelCircuit := modelCircuitChecker(metricsManager, model)
 
 	tryOpts := tryUpstreamOptions{}
 	for _, opt := range opts {
@@ -748,7 +749,7 @@ func TryUpstreamWithAllKeys(
 				cfgManager.MarkKeyAsFailed(apiKey, apiType)
 				metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, metrics.FailureClassRetryable)
 				channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
-				recordModelCircuitFailure(c, metricsManager, upstream, apiKey, attemptModel, err.Error(), apiType)
+				recordModelCircuitFailure(c, metricsManager, upstream, apiKey, model, err.Error(), apiType)
 				if markURLFailure != nil {
 					markURLFailure(currentBaseURL)
 				}
@@ -960,7 +961,7 @@ func TryUpstreamWithAllKeys(
 					// 反映的是额度或瞬时负载，已由 cooldown / scope 冷却处理，
 					// 记到模型头上会让限流误伤该模型的可用性。
 					if failureClass == metrics.FailureClassRetryable {
-						recordModelCircuitFailure(c, metricsManager, upstream, apiKey, attemptModel,
+						recordModelCircuitFailure(c, metricsManager, upstream, apiKey, model,
 							errorBodySummaryForLog(apiType, resp.StatusCode, respBodyBytes), apiType)
 					}
 					if markURLFailure != nil {
@@ -1118,7 +1119,7 @@ func TryUpstreamWithAllKeys(
 					metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, metrics.FailureClassRetryable)
 					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
 					// 空响应 / 无效响应体 / 首字超时 / 断流都是该渠道-模型确实不可用的表现。
-					recordModelCircuitFailure(c, metricsManager, upstream, apiKey, attemptModel, err.Error(), apiType)
+					recordModelCircuitFailure(c, metricsManager, upstream, apiKey, model, err.Error(), apiType)
 					if markURLFailure != nil {
 						markURLFailure(currentBaseURL)
 					}
@@ -1149,7 +1150,7 @@ func TryUpstreamWithAllKeys(
 					cfgManager.MarkKeyAsFailed(apiKey, apiType)
 					metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, metrics.FailureClassRetryable)
 					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
-					recordModelCircuitFailure(c, metricsManager, upstream, apiKey, attemptModel, err.Error(), apiType)
+					recordModelCircuitFailure(c, metricsManager, upstream, apiKey, model, err.Error(), apiType)
 					// 记录渠道日志
 					CompleteLog(channelLogStore, metricsKey, logRequestID, http.StatusOK, false, err.Error(), isRetryAttempt)
 					RequestLogf(c, "[%s-Key] 警告: 响应处理失败: %v", apiType, err)
@@ -1170,7 +1171,7 @@ func TryUpstreamWithAllKeys(
 			channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
 			// 成功即解除该渠道-模型的失败累积；若这是熔断到期后放行的探针，
 			// 同时重置退避级别并回收状态条目。
-			recordModelCircuitSuccess(metricsManager, upstream, apiKey, attemptModel)
+			recordModelCircuitSuccess(metricsManager, upstream, apiKey, model)
 
 			// Phase 2: 记录 system header 过滤成功，巩固当前过滤层级。
 			if kind == scheduler.ChannelKindMessages && upstream.ChannelUID != "" {
@@ -1616,6 +1617,10 @@ func selectAttemptAPIKey(channelScheduler *scheduler.ChannelScheduler, kind sche
 // 只在失败确实反映该渠道-模型健康度时调用。以下场景由调用方负责排除：
 // 配额/账号限流（已有 cooldown 与 scope 冷却机制）、内容审核（换渠道不改变请求内容）、
 // 客户端取消、以及 RecordRequestFinalizeIgnored 的中间态重试。
+//
+// model 必须传客户端请求的原始模型，不要改用 attemptModel / redirectedModel：
+// 读侧（scheduler 渠道级过滤、keypool Key 级过滤）都以原始模型为键，
+// 写读不一致会让熔断在 AutoManaged 渠道上完全失效。详见 modelCircuitChecker 的说明。
 func recordModelCircuitFailure(c *gin.Context, metricsManager *metrics.MetricsManager,
 	upstream *config.UpstreamConfig, apiKey, model, errSummary, apiType string) {
 	if metricsManager == nil || upstream == nil || upstream.ChannelUID == "" || model == "" {
@@ -1645,18 +1650,28 @@ func recordModelCircuitSuccess(metricsManager *metrics.MetricsManager,
 
 // modelCircuitChecker 构造 keypool 的渠道-模型级熔断查询闭包。
 //
-// 把 apiKey → keyHash 的换算放在这里，让 keypool 无需感知 autopilot 的哈希算法。
+// 把 apiKey → keyHash 的换算放在这里，让 keypool 无需感知哈希算法。
 // metricsManager 为 nil 时返回 nil（fail-open，不做该项过滤）。
-func modelCircuitChecker(metricsManager *metrics.MetricsManager) keypool.ModelCircuitChecker {
-	if metricsManager == nil {
+//
+// circuitModel 是熔断表的模型键，固定取客户端请求的原始模型，**不使用** keypool
+// 传入的模型参数。原因：熔断的读侧散布在三个层次，各自能拿到的最精确模型名不同——
+// scheduler 选渠道时只有原始 model（渠道级 RedirectModel 尚未应用），keypool 选 Key
+// 时有 redirectedModel，而记账发生在 autopilot 映射之后（attemptModel）。三者取值
+// 不一致会让写入的键永远查不到，AutoManaged 渠道上熔断将完全失效。原始 model 是唯一
+// 在三层都可得的标识，也贴合用户视角："这个渠道处理不了我请求的模型"。
+//
+// keypool 侧传入的 model 仍用于 per-key 白名单与 IsKeyModelDisabledNow 判定，
+// 那两个机制按重定向后的模型比较才正确，因此签名保留该参数。
+func modelCircuitChecker(metricsManager *metrics.MetricsManager, circuitModel string) keypool.ModelCircuitChecker {
+	if metricsManager == nil || circuitModel == "" {
 		return nil
 	}
 	tracker := metricsManager.ModelCircuit()
 	if tracker == nil {
 		return nil
 	}
-	return func(channelUID, apiKey, model string) bool {
-		return tracker.IsModelCircuitOpen(channelUID, metrics.ModelCircuitKeyHash(apiKey), model)
+	return func(channelUID, apiKey, _ string) bool {
+		return tracker.IsModelCircuitOpen(channelUID, metrics.ModelCircuitKeyHash(apiKey), circuitModel)
 	}
 }
 

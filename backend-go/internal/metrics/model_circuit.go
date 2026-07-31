@@ -39,6 +39,13 @@ const (
 	// 条目在无任何活动后的保留时长，超过则被后台清理回收。
 	modelCircuitStaleAfter = 2 * time.Hour
 
+	// 探针资格的有效期。发放探针后，若请求既没记成功也没记失败就结束了
+	// （客户端取消、被忽略的中间态重试、不可 failover 直接回客户端、SSE 流内拉黑
+	// 都是这样的路径），probeInFlight 会一直悬挂，该组合将永不恢复。
+	// 超过这个时长仍未裁决就视为探针作废，重新发放，使恢复能力不依赖调用方
+	// 在所有分支上都记账。取值需大于正常请求的最长耗时。
+	modelCircuitProbeTimeout = 10 * time.Minute
+
 	modelCircuitErrorMaxLen = 200
 )
 
@@ -55,8 +62,10 @@ type modelCircuitState struct {
 	backoffLevel  int
 	openUntil     time.Time
 	probeInFlight bool
-	lastError     string
-	lastActivity  time.Time
+	// probeStartedAt 为探针资格的发放时刻，用于超时作废（见 modelCircuitProbeTimeout）。
+	probeStartedAt time.Time
+	lastError      string
+	lastActivity   time.Time
 }
 
 // ModelCircuitTracker 维护渠道-模型级熔断状态。
@@ -183,6 +192,7 @@ func (t *ModelCircuitTracker) recordModelFailureAt(channelUID, keyHash, model, e
 	// half-open 放行的这一次就是验证性请求，失败即证明故障仍在。
 	if st.probeInFlight {
 		st.probeInFlight = false
+		st.probeStartedAt = time.Time{}
 		// 与阈值路径一致：先按当前级别取时长，再递增级别。
 		// 首次熔断用 base，探针每失败一次翻倍。
 		delay := modelCircuitBackoff(st.backoffLevel)
@@ -267,11 +277,13 @@ func (t *ModelCircuitTracker) isModelCircuitOpenAt(channelUID, keyHash, model st
 	if now.Before(st.openUntil) {
 		return true
 	}
-	// 已到期。已有探针在途时继续隔离其他请求；否则把探针资格交给当前调用者。
-	if st.probeInFlight {
+	// 已到期。已有探针在途时继续隔离其他请求，但超时未裁决的探针视为作废——
+	// 否则走了不记账路径的探针请求会让该组合永久停留在 open。
+	if st.probeInFlight && now.Sub(st.probeStartedAt) < modelCircuitProbeTimeout {
 		return true
 	}
 	st.probeInFlight = true
+	st.probeStartedAt = now
 	st.lastActivity = now
 	return false
 }
@@ -302,8 +314,11 @@ func (t *ModelCircuitTracker) channelModelCircuitOpenAt(channelUID string, keyHa
 		if st == nil || st.openUntil.IsZero() {
 			return false
 		}
-		// 已到期且无探针在途 → 该 Key 即将被放行，渠道整体不算熔断。
-		if !now.Before(st.openUntil) && !st.probeInFlight {
+		// 已到期且无有效探针在途 → 该 Key 即将被放行，渠道整体不算熔断。
+		// 超时作废的探针不算在途，判断口径与 isModelCircuitOpenAt 保持一致，
+		// 否则渠道级会认为仍在熔断而 Key 级已放行，两者结论矛盾。
+		probeActive := st.probeInFlight && now.Sub(st.probeStartedAt) < modelCircuitProbeTimeout
+		if !now.Before(st.openUntil) && !probeActive {
 			return false
 		}
 	}
