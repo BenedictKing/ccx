@@ -1376,3 +1376,57 @@ func TestChannelModelCircuitOpenHelper(t *testing.T) {
 		t.Fatal("model 为空时不应判定熔断")
 	}
 }
+
+// TestModelCircuitChannelLevelIgnoresUnusableKeys 渠道级排除只统计实际可用的 Key。
+//
+// 回归防护：曾用 upstream.APIKeys 全量算 keyHash，已 blacklist 的 Key 永远不会有
+// 失败记录，导致"是否全部熔断"永远为假——渠道有 3 把 Key、2 把已拉黑时，唯一在用的
+// 那把熔断后渠道仍被判为健康，请求继续被路由到故障渠道。
+func TestModelCircuitChannelLevelIgnoresUnusableKeys(t *testing.T) {
+	cfg := config.Config{
+		Upstream: []config.UpstreamConfig{
+			{
+				Name:       "partial-channel",
+				ChannelUID: "ch_partial",
+				BaseURL:    "https://partial.example.com",
+				APIKeys:    []string{"sk-live", "sk-dead1", "sk-dead2"},
+				DisabledAPIKeys: []config.DisabledKeyInfo{
+					{Key: "sk-dead1", Reason: "authentication_error"},
+					{Key: "sk-dead2", Reason: "authentication_error"},
+				},
+				Status:   "active",
+				Priority: 1,
+			},
+			{
+				Name:       "healthy-backup",
+				ChannelUID: "ch_backup",
+				BaseURL:    "https://backup.example.com",
+				APIKeys:    []string{"sk-backup"},
+				Status:     "active",
+				Priority:   2,
+			},
+		},
+	}
+
+	sched, cleanup := createTestScheduler(t, cfg)
+	defer cleanup()
+
+	const model = "claude-sonnet-5"
+	tracker := sched.messagesMetricsManager.ModelCircuit()
+	liveHash := metrics.ModelCircuitKeyHash("sk-live")
+	tracker.RecordModelFailure("ch_partial", liveHash, model, "HTTP 403")
+	tracker.RecordModelFailure("ch_partial", liveHash, model, "HTTP 403")
+
+	upstream := sched.getUpstreamByIndex(0, ChannelKindMessages)
+	if !sched.channelModelCircuitOpen(upstream, ChannelKindMessages, model) {
+		t.Fatal("唯一可用 Key 已熔断，渠道级应判定为熔断（被拉黑的 Key 不应参与统计）")
+	}
+
+	result, err := sched.SelectChannel(context.Background(), "", map[int]bool{}, ChannelKindMessages, model, "", "")
+	if err != nil {
+		t.Fatalf("SelectChannel() error = %v", err)
+	}
+	if result.ChannelIndex != 1 {
+		t.Fatalf("应规避故障渠道选备用渠道，got index=%d", result.ChannelIndex)
+	}
+}

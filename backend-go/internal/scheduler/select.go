@@ -497,9 +497,20 @@ func (s *ChannelScheduler) channelModelCircuitOpen(upstream *config.UpstreamConf
 	if tracker == nil {
 		return false
 	}
-	keyHashes := make([]string, 0, len(upstream.APIKeys))
-	for _, key := range upstream.APIKeys {
-		if key = strings.TrimSpace(key); key != "" {
+	// 只统计实际可用的 Key，不能用 upstream.APIKeys 全量：已 blacklist、
+	// enabled=false 或被 per-key 白名单排除的 Key 永远不会有失败记录，把它们算进
+	// "是否全部熔断"会让渠道级排除几乎永不触发——渠道有 5 把 Key、4 把已拉黑时，
+	// 唯一在用的那把熔断后仍会被判为渠道健康。
+	// CandidatesForModel 已封装全部可用性规则，这里传空 model 与 channelHasSelectableKey
+	// 保持一致（选渠道阶段尚未应用渠道级 RedirectModel，per-key 白名单交由请求路径精确执行）。
+	candidates := keypool.CandidatesForModel(upstream, nil, "")
+	if len(candidates) == 0 {
+		// 无可用 Key 时交由 key_availability_filter 处理，此处不重复判定。
+		return false
+	}
+	keyHashes := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		if key := strings.TrimSpace(candidate.APIKey); key != "" {
 			keyHashes = append(keyHashes, metrics.ModelCircuitKeyHash(key))
 		}
 	}
