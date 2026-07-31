@@ -1,5 +1,5 @@
 import { computed } from 'vue'
-import { buildExpectedRequestUrls } from '../utils/expectedRequestUrls'
+import { buildDiscoveryExpectedRequestUrls, buildExpectedRequestUrls } from '../utils/expectedRequestUrls'
 
 type ChannelType = 'messages' | 'chat' | 'responses' | 'gemini' | 'images' | 'vectors'
 type ServiceType = 'openai' | 'gemini' | 'claude' | 'responses' | 'copilot' | ''
@@ -28,12 +28,20 @@ export function useChannelEditorFormDerived(
 
   const expectedRequestUrls = computed(() => {
     if (!baseUrlsText.value || !form.serviceType) return []
+    const baseUrls = baseUrlsText.value.split('\n').map(url => url.trim()).filter(Boolean)
+    if (
+      channelType.value !== 'images' &&
+      channelType.value !== 'vectors' &&
+      form.serviceType !== 'copilot'
+    ) {
+      return baseUrls.flatMap(buildDiscoveryExpectedRequestUrls)
+    }
     return buildExpectedRequestUrls(
       channelType.value,
       form.serviceType,
       undefined,
-      baseUrlsText.value.split('\n').map(url => url.trim()).filter(Boolean),
-    )
+      baseUrls,
+    ).map(item => ({ ...item, protocol: channelType.value }))
   })
 
   const customHeadersArray = computed(() => {

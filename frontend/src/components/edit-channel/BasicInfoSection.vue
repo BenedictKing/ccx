@@ -72,10 +72,18 @@
         />
         <!-- 预期请求提示 -->
         <div v-show="expectedRequestUrls.length > 0 && !baseUrlHasError" class="base-url-hint">
-          <div v-for="(item, index) in expectedRequestUrls" :key="index" class="expected-request-item">
-            <span class="text-caption text-medium-emphasis">
-              {{ t('addChannel.expectedRequest') }} {{ item.expectedUrl }}
-            </span>
+          <div class="text-caption text-medium-emphasis mb-1">
+            {{ t('addChannel.expectedRequest') }}
+          </div>
+          <div class="expected-request-list">
+            <div
+              v-for="item in expectedRequestUrls"
+              :key="`${item.protocol}:${item.expectedUrl}`"
+              class="expected-request-row"
+            >
+              <span class="text-caption font-weight-medium">{{ expectedProtocolLabel(item.protocol) }}</span>
+              <span class="text-caption text-medium-emphasis expected-request-url">{{ item.expectedUrl }}</span>
+            </div>
           </div>
         </div>
       </v-col>
@@ -157,6 +165,8 @@
 import { useI18n } from '../../i18n'
 import type { ChannelWebsiteKind, ChannelWebsiteLink } from '../../utils/channelWebsite'
 
+type ChannelType = 'messages' | 'chat' | 'responses' | 'gemini' | 'images' | 'vectors'
+
 interface FormData {
   name: string
   serviceType: string
@@ -168,7 +178,7 @@ interface FormData {
 interface Props {
   form: FormData
   baseUrlsText: string
-  expectedRequestUrls: Array<{ expectedUrl: string }>
+  expectedRequestUrls: Array<{ protocol: ChannelType; expectedUrl: string }>
   baseUrlHasError: boolean
   serviceTypeOptions: Array<{ title: string; value: string }>
   hideServiceType?: boolean
@@ -195,6 +205,18 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+
+function expectedProtocolLabel(protocol: ChannelType): string {
+  const labels: Record<ChannelType, string> = {
+    messages: 'Messages',
+    chat: 'Chat',
+    responses: 'Responses',
+    gemini: 'Gemini',
+    images: 'Images',
+    vectors: 'Vectors',
+  }
+  return labels[protocol]
+}
 
 const updateField = (field: keyof FormData, value: unknown) => {
   emit('update:form', { [field]: value })
@@ -232,8 +254,33 @@ const websiteLinkIcon = (kind: ChannelWebsiteKind): string => (
   background: rgb(var(--v-theme-primary) / 6%);
 }
 
-.expected-request-item {
-  margin: 2px 0;
+.expected-request-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.expected-request-row {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+}
+
+.expected-request-url {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 600px) {
+  .expected-request-list {
+    gap: 6px;
+  }
+
+  .expected-request-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
 }
 
 .website-links {
