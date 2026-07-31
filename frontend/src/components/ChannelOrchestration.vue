@@ -148,7 +148,7 @@
               <ChannelStatusBadge
                 :status="element.status || 'active'"
                 :metrics="getChannelMetrics(element)"
-                :tripped="hasNoUsableChannelApiKeys(element)"
+                :tripped="isTrippedChannel(element)"
               />
               <!-- Health badge (§8.2) -->
               <ChannelHealthBadge :health="getChannelHealth(element) ?? null" />
@@ -722,7 +722,7 @@ import { ref, shallowRef, computed, watch, onMounted, onUnmounted, defineAsyncCo
 import draggable from 'vuedraggable'
 import { api, type Channel, type ChannelKind, type ChannelMetrics, type ChannelProtocolRoute, type ChannelStatus, type TimeWindowStats, type ChannelRecentActivity, type SchedulerStatsResponse } from '../services/api'
 import { getChannelTypeApi } from '../utils/channelTypeApi'
-import { buildUnifiedReorderPayloads, isLlmChannelKind, resolveChannelRecoveryRoutes } from '../utils/unifiedChannels'
+import { buildUnifiedReorderPayloads, isLlmChannelKind, normalizeChannelStatus, PartialRouteOperationError, physicalChannelStatuses, resolveChannelRecoveryRoutes, resolveChannelStatusMutationRoutes, routeHasOnlyDisabledKeys, summarizeSettledRouteOperations, type ChannelRecoveryRoute } from '../utils/unifiedChannels'
 import { sortChannelsByPriority } from '../utils/channelOrder'
 import { buildChannelMetricsLookup } from '../utils/channelMetricsLookup'
 import { useI18n } from '../i18n'
@@ -1071,7 +1071,7 @@ watch(inactiveChannels, (channels) => {
 // 3. Multiple active channels → multi-channel mode
 const isMultiChannelMode = computed(() => {
   const activeCount = props.channels.filter(
-    ch => ch.status === 'active' || ch.status === undefined || ch.status === ''
+    ch => physicalChannelStatuses(ch).some(status => status === 'active')
   ).length
   return activeCount > 1
 })
@@ -1469,15 +1469,28 @@ const setChannelStatusInternal = async (
   options: { refresh?: boolean } = {}
 ) => {
   const { refresh = true } = options
-  const routes = channel.protocolRoutes?.length
-    ? channel.protocolRoutes
-    : [{ kind: getRouteKind(channel), index: getRouteIndex(channel) }]
-  await Promise.all(routes.map(route => (
-    getChannelTypeApi(api, route.kind).setStatus(route.index, status)
-  )))
-  if (refresh) {
-    emit('refresh')
+  try {
+    const routes = resolveChannelStatusMutationRoutes(channel, status)
+    const summary = summarizeSettledRouteOperations(await Promise.allSettled(routes.map(route => (
+      getChannelTypeApi(api, route.kind).setStatus(route.index, route.status)
+    ))))
+    if (summary.failureCount > 0) throw new PartialRouteOperationError(summary)
+    return summary
+  } finally {
+    if (refresh) emit('refresh')
   }
+}
+
+const emitRouteOperationError = (error: unknown) => {
+  if (error instanceof PartialRouteOperationError && error.successCount > 0) {
+    emit('error', t('orchestration.partialFailure', {
+      success: error.successCount,
+      failed: error.failureCount,
+    }))
+    return
+  }
+  const errorMessage = error instanceof Error ? error.message : t('addChannel.unknownError')
+  emit('error', t('toast.operationFailed', { message: errorMessage }))
 }
 
 // Set channel status
@@ -1486,8 +1499,7 @@ const setChannelStatus = async (channel: Channel, status: ChannelStatus) => {
     await setChannelStatusInternal(channel, status)
   } catch (error) {
     console.error('Failed to set channel status:', error)
-    const errorMessage = error instanceof Error ? error.message : t('addChannel.unknownError')
-    emit('error', t('toast.operationFailed', { message: errorMessage }))
+    emitRouteOperationError(error)
   }
 }
 
@@ -1496,50 +1508,72 @@ const enableChannel = async (channel: Channel) => {
   await setChannelStatus(channel, 'active')
 }
 
+const shouldRecoverRouteRuntime = (channel: Channel, route: ChannelRecoveryRoute): boolean => {
+  const status = normalizeChannelStatus(route.status)
+  if (status === 'disabled') return false
+  if (status === 'suspended') return true
+  if (status !== 'active') return false
+
+  const routeMetrics = metricsLookup.value.get(route.index, route.kind)
+  if (routeMetrics?.circuitState === 'open') return true
+
+  const protocolRoute = channel.protocolRoutes?.find(item => (
+    item.kind === route.kind && item.index === route.index
+  ))
+  return protocolRoute ? routeHasOnlyDisabledKeys(protocolRoute) : hasOnlyDisabledChannelApiKeys(channel)
+}
+
 const resumeChannelInternal = async (
   channel: Channel,
   options: { refresh?: boolean, notify?: boolean } = {}
 ) => {
   const { refresh = true, notify = true } = options
 
-  let restoredKeys = 0
-  for (const route of resolveChannelRecoveryRoutes(channel)) {
-    const routeApi = getChannelTypeApi(api, route.kind)
-    const result = await routeApi.resume(route.index)
-    restoredKeys += result?.restoredKeys || 0
-    if (route.status === 'suspended') {
-      await routeApi.setStatus(route.index, 'active')
-    }
-  }
-  if (refresh) emit('refresh')
+  try {
+    const routes = resolveChannelRecoveryRoutes(channel).filter(route => shouldRecoverRouteRuntime(channel, route))
+    const summary = summarizeSettledRouteOperations(await Promise.allSettled(routes.map(async route => {
+      const routeApi = getChannelTypeApi(api, route.kind)
+      const result = await routeApi.resume(route.index)
+      if (normalizeChannelStatus(route.status) === 'suspended') {
+        await routeApi.setStatus(route.index, 'active')
+      }
+      return result?.restoredKeys || 0
+    })))
+    const restoredKeys = summary.fulfilled.reduce((total, count) => total + count, 0)
+    if (summary.failureCount > 0) throw new PartialRouteOperationError(summary)
 
-  if (notify) {
-    if (restoredKeys > 0) {
-      emit('success', t('orchestration.resumeSuccessWithKeys', { count: restoredKeys }))
-    } else {
-      emit('success', t('orchestration.resumeSuccess'))
+    if (notify) {
+      if (restoredKeys > 0) {
+        emit('success', t('orchestration.resumeSuccessWithKeys', { count: restoredKeys }))
+      } else {
+        emit('success', t('orchestration.resumeSuccess'))
+      }
     }
-  }
 
-  return { restoredKeys }
+    return { restoredKeys }
+  } finally {
+    if (refresh) emit('refresh')
+  }
 }
 
 const isTrippedChannel = (channel: Channel): boolean => {
-  const channelMetrics = getChannelMetrics(channel)
-  return channel.status === 'suspended'
-    || channelMetrics?.circuitState === 'open'
-    || hasNoUsableChannelApiKeys(channel)
+  const routes = resolveChannelRecoveryRoutes(channel)
+  if (routes.some(route => shouldRecoverRouteRuntime(channel, route))) return true
+  if (!channel.protocolRoutes?.length) return hasNoUsableChannelApiKeys(channel)
+  return channel.protocolRoutes.some(route => hasNoUsableChannelApiKeys({
+    apiKeys: route.apiKeys,
+    disabledApiKeys: route.disabledApiKeys,
+    apiKeyConfigs: route.apiKeyConfigs,
+  }))
 }
 
-// isRecoverableChannel 判定渠道是否应显示「恢复」主操作（一次点击恢复全部禁用 Key + 重置熔断）：
-//   - suspended 或熔断 open：原有恢复语义
-//   - active 但全部 Key 被拉黑/耗尽（可用数为 0 且禁用数 > 0）：无需先暂停即可直接恢复
-const isRecoverableChannel = (channel: Channel): boolean => {
-  const channelMetrics = getChannelMetrics(channel)
-  return channel.status === 'suspended'
-    || channelMetrics?.circuitState === 'open'
-    || hasOnlyDisabledChannelApiKeys(channel)
-}
+// isRecoverableChannel 判定渠道是否应显示「恢复」主操作：
+//   - 逐条检查物理路由；disabled 和健康 active 不恢复
+//   - suspended 需要运行态恢复并额外切回 active
+//   - active 仅在对应路由熔断或其 Key 全部被拉黑时恢复运行态
+const isRecoverableChannel = (channel: Channel): boolean => (
+  resolveChannelRecoveryRoutes(channel).some(route => shouldRecoverRouteRuntime(channel, route))
+)
 
 const getChannelRowClass = (channel: Channel) => {
   return {
@@ -1553,8 +1587,7 @@ const resumeChannel = async (channel: Channel) => {
     await resumeChannelInternal(channel)
   } catch (error) {
     console.error('Failed to resume channel:', error)
-    const errorMessage = error instanceof Error ? error.message : t('addChannel.unknownError')
-    emit('error', t('toast.operationFailed', { message: errorMessage }))
+    emitRouteOperationError(error)
   }
 }
 
@@ -1590,11 +1623,11 @@ const setPromotion = async (channel: Channel) => {
 const canDeleteChannel = (channel: Channel): boolean => {
   // Count the number of currently active channels
   const activeCount = activeChannels.value.filter(
-    ch => ch.status === 'active' || ch.status === undefined || ch.status === ''
+    ch => physicalChannelStatuses(ch).some(status => status === 'active')
   ).length
 
-  // Do not allow deletion if the target is an active channel and it is the last active one
-  const isActive = channel.status === 'active' || channel.status === undefined || channel.status === ''
+  // Do not allow deletion if the target has an active physical route and it is the last active one
+  const isActive = physicalChannelStatuses(channel).some(status => status === 'active')
   if (isActive && activeCount <= 1) {
     return false
   }

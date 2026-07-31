@@ -14,6 +14,7 @@ import {
   isLlmChannelKind,
   LLM_CHANNEL_KINDS,
   withRouteKindMetrics,
+  normalizeChannelStatus,
   type LlmChannelKind,
 } from '@/utils/unifiedChannels'
 
@@ -195,18 +196,26 @@ export const useChannelStore = defineStore('channel', () => {
     return dashboardCache[activeTab.value].recentActivity
   })
 
-  // 活跃渠道数（仅 active 状态）
+  // 活跃渠道数（任一物理协议路由 active 即视为逻辑渠道活跃）
   const activeChannelCount = computed(() => {
     const data = currentChannelsData.value
     if (!data.channels) return 0
-    return data.channels.filter(ch => ch.status === 'active' || ch.status === undefined || ch.status === '').length
+    return data.channels.filter(channel => {
+      const statuses = channel.protocolRoutes?.map(route => normalizeChannelStatus(route.status))
+      if (statuses?.length) return statuses.some(status => status === 'active')
+      return normalizeChannelStatus(channel.status) === 'active'
+    }).length
   })
 
   // 参与故障转移的渠道数（active + suspended）
   const failoverChannelCount = computed(() => {
     const data = currentChannelsData.value
     if (!data.channels) return 0
-    return data.channels.filter(ch => ch.status !== 'disabled').length
+    return data.channels.filter(channel => {
+      const statuses = channel.protocolRoutes?.map(route => normalizeChannelStatus(route.status))
+      if (statuses?.length) return statuses.some(status => status !== 'disabled')
+      return normalizeChannelStatus(channel.status) !== 'disabled'
+    }).length
   })
 
   // ===== 辅助方法 =====

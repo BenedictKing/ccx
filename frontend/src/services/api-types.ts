@@ -5,6 +5,7 @@ import type { OpenAIMessagesPreset } from '../generated/openaiMessagesPresets'
 
 // API 数据结构类型
 export type ChannelStatus = 'active' | 'suspended' | 'disabled'
+export type ChannelDisplayStatus = ChannelStatus | 'partial' | 'healthy' | 'error' | 'unknown' | ''
 
 // 新增渠道在故障转移序列中的放置位置：front（首位）| back（末尾，默认）
 export type ChannelPlacement = 'front' | 'back'
@@ -239,7 +240,7 @@ export interface Channel {
   stripImageGenerationTool?: boolean       // Responses/Chat 上游：移除 image_generation 工具（默认 true）
   convertImageUrlToB64Json?: boolean       // Images 上游：将仅返回 URL 的 b64_json 请求响应转换为 base64
   latency?: number
-  status?: ChannelStatus | 'healthy' | 'error' | 'unknown' | ''
+  status?: ChannelDisplayStatus
   index: number
   pinned?: boolean
   // 多渠道调度相关字段
@@ -280,7 +281,7 @@ export interface ChannelProtocolCapsule {
   serviceType: string
   channelUid?: string
   index: number
-  status?: ChannelStatus | 'healthy' | 'error' | 'unknown' | ''
+  status?: ChannelDisplayStatus
 }
 
 export interface ChannelModelBinding {
@@ -300,8 +301,10 @@ export interface ChannelProtocolRoute {
   name: string
   serviceType: string
   channelUid?: string
-  status?: Channel['status']
+  status?: ChannelDisplayStatus
   apiKeys?: string[]
+  apiKeyConfigs?: APIKeyConfig[]
+  disabledApiKeys?: DisabledKeyInfo[]
   supportedModels?: string[]
   modelInventoryKnown?: boolean
   discoveredModels?: string[]

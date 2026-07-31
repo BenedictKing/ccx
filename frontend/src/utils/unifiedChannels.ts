@@ -1,14 +1,17 @@
 import type {
   ActivitySegment,
   Channel,
+  ChannelDisplayStatus,
   ChannelKind,
   ChannelMetrics,
   ChannelProtocolCapsule,
   ChannelProtocolRoute,
   ChannelRecentActivity,
+  ChannelStatus,
   ChannelsResponse,
 } from '@/services/api'
 import { freezeImmutableFields } from './channelMerge'
+import { hasOnlyDisabledChannelApiKeys } from './channelApiKeys'
 
 export type LlmChannelKind = 'messages' | 'chat' | 'responses' | 'gemini'
 
@@ -61,7 +64,7 @@ export const protocolLabelForKind = (kind: ChannelKind): string => {
 export type ChannelRecoveryRoute = {
   kind: ChannelKind
   index: number
-  status?: Channel['status']
+  status?: ChannelProtocolRoute['status']
 }
 
 export const resolveChannelRecoveryRoutes = (channel: Channel): ChannelRecoveryRoute[] => {
@@ -77,6 +80,99 @@ export const resolveChannelRecoveryRoutes = (channel: Channel): ChannelRecoveryR
     index: channel.routeIndex ?? channel.index,
     status: channel.status,
   }]
+}
+
+export const physicalChannelStatuses = (channel: Channel): ChannelDisplayStatus[] => {
+  if (channel.protocolRoutes?.length) {
+    return channel.protocolRoutes.map(route => normalizeChannelStatus(route.status))
+  }
+  return [normalizeChannelStatus(channel.status)]
+}
+
+export const hasPhysicalChannelStatus = (channel: Channel, status: ChannelDisplayStatus): boolean => (
+  physicalChannelStatuses(channel).some(routeStatus => routeStatus === status)
+)
+
+export const routeHasOnlyDisabledKeys = (route: ChannelProtocolRoute): boolean => {
+  const apiKeys = route.apiKeys ?? []
+  const disabledApiKeys = route.disabledApiKeys ?? []
+  if (apiKeys.length === 0 && disabledApiKeys.length === 0) return false
+  return hasOnlyDisabledChannelApiKeys({
+    apiKeys,
+    disabledApiKeys,
+    apiKeyConfigs: route.apiKeyConfigs,
+  })
+}
+
+export const isTransportChannelStatus = (status: Channel['status']): status is ChannelStatus => (
+  status === 'active' || status === 'suspended' || status === 'disabled'
+)
+
+export type ChannelStatusMutationRoute = {
+  kind: ChannelKind
+  index: number
+  status: ChannelStatus
+}
+
+export const resolveChannelStatusMutationRoutes = (
+  channel: Channel,
+  status: Channel['status'],
+): ChannelStatusMutationRoute[] => {
+  if (!isTransportChannelStatus(status)) {
+    throw new Error(`Display-only channel status cannot be persisted: ${status || 'empty'}`)
+  }
+  const routes = channel.protocolRoutes?.length
+    ? channel.protocolRoutes
+    : [{
+        kind: channel.routeKind ?? 'messages',
+        index: channel.routeIndex ?? channel.index,
+        status: channel.status,
+      }]
+  const allRoutesDisabled = routes.every(route => normalizeChannelStatus(route.status) === 'disabled')
+  const mutableRoutes = status === 'disabled' || allRoutesDisabled
+    ? routes
+    : routes.filter(route => normalizeChannelStatus(route.status) !== 'disabled')
+  return mutableRoutes.map(route => ({ kind: route.kind, index: route.index, status }))
+}
+
+export type SettledRouteOperationSummary<T> = {
+  fulfilled: T[]
+  failures: unknown[]
+  successCount: number
+  failureCount: number
+  totalCount: number
+}
+
+export const summarizeSettledRouteOperations = <T>(
+  results: PromiseSettledResult<T>[],
+): SettledRouteOperationSummary<T> => {
+  const fulfilled = results.flatMap(result => result.status === 'fulfilled' ? [result.value] : [])
+  const failures = results.flatMap(result => result.status === 'rejected' ? [result.reason] : [])
+  return {
+    fulfilled,
+    failures,
+    successCount: fulfilled.length,
+    failureCount: failures.length,
+    totalCount: results.length,
+  }
+}
+
+export class PartialRouteOperationError extends Error {
+  readonly successCount: number
+  readonly failureCount: number
+  readonly totalCount: number
+  readonly cause: unknown
+
+  constructor(summary: SettledRouteOperationSummary<unknown>) {
+    const firstFailure = summary.failures[0]
+    const detail = firstFailure instanceof Error ? firstFailure.message : String(firstFailure ?? 'unknown error')
+    super(`Route operation failed for ${summary.failureCount}/${summary.totalCount} routes: ${detail}`)
+    this.name = 'PartialRouteOperationError'
+    this.successCount = summary.successCount
+    this.failureCount = summary.failureCount
+    this.totalCount = summary.totalCount
+    this.cause = firstFailure
+  }
 }
 
 const stripRouteSuffix = (name: string, kind: LlmChannelKind): string => {
@@ -162,6 +258,12 @@ const buildProtocolRoutes = (channels: Partial<Record<LlmChannelKind, RoutedChan
       channelUid: channel.channelUid,
       status: channel.status,
       apiKeys: [...(channel.apiKeys ?? [])],
+      apiKeyConfigs: channel.apiKeyConfigs == null
+        ? undefined
+        : channel.apiKeyConfigs.map(config => ({ ...config })),
+      disabledApiKeys: channel.disabledApiKeys == null
+        ? undefined
+        : channel.disabledApiKeys.map(item => ({ ...item })),
       supportedModels: channel.supportedModels == null ? undefined : [...channel.supportedModels],
     }]
   })
@@ -192,11 +294,14 @@ const mergeAccountCredentials = (channels: Partial<Record<LlmChannelKind, Routed
   }
 }
 
-const resolveGroupStatus = (channels: Partial<Record<LlmChannelKind, RoutedChannel>>): Channel['status'] => {
-  const statuses = Object.values(channels).map(channel => channel.status)
-  if (statuses.some(status => status === 'active' || status === 'healthy' || !status)) return 'active'
-  if (statuses.some(status => status === 'suspended')) return 'suspended'
-  return statuses[0]
+export const normalizeChannelStatus = (status: Channel['status']): ChannelDisplayStatus => {
+  if (!status || status === 'healthy') return 'active'
+  return status
+}
+
+const resolveGroupStatus = (channels: Partial<Record<LlmChannelKind, RoutedChannel>>): ChannelDisplayStatus => {
+  const statuses = Object.values(channels).map(channel => normalizeChannelStatus(channel.status))
+  return statuses.every(status => status === statuses[0]) ? statuses[0] : 'partial'
 }
 
 const buildDisplayChannel = (group: ChannelGroup): Channel => {
