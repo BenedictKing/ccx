@@ -41,16 +41,19 @@ type CandidateScore struct {
 
 // RoutingCandidate 路由候选渠道信息（已脱敏）。
 type RoutingCandidate struct {
-	ChannelUID    string `json:"channelUid"`
-	ChannelName   string `json:"channelName,omitempty"` // 渠道显示名
-	MetricsKey    string `json:"metricsKey,omitempty"`  // 已脱敏：不含 key 明文
-	KeyMask       string `json:"keyMask,omitempty"`     // 掩码后的 key，如 sk-***abc
-	OriginTier    string `json:"originTier,omitempty"`
-	ChannelKind   string `json:"channelKind,omitempty"`
-	HealthState   string `json:"healthState,omitempty"`
-	MappedModel   string `json:"mappedModel,omitempty"`
-	MappingSource string `json:"mappingSource,omitempty"`
-	MappingReason string `json:"mappingReason,omitempty"`
+	ChannelUID        string  `json:"channelUid"`
+	ChannelName       string  `json:"channelName,omitempty"` // 渠道显示名
+	MetricsKey        string  `json:"metricsKey,omitempty"`  // 已脱敏：不含 key 明文
+	KeyMask           string  `json:"keyMask,omitempty"`     // 掩码后的 key，如 sk-***abc
+	OriginTier        string  `json:"originTier,omitempty"`
+	ChannelKind       string  `json:"channelKind,omitempty"`
+	ExecutionKind     string  `json:"executionKind,omitempty"`
+	ProtocolFidelity  string  `json:"protocolFidelity,omitempty"`
+	ConversionPenalty float64 `json:"conversionPenalty,omitempty"`
+	HealthState       string  `json:"healthState,omitempty"`
+	MappedModel       string  `json:"mappedModel,omitempty"`
+	MappingSource     string  `json:"mappingSource,omitempty"`
+	MappingReason     string  `json:"mappingReason,omitempty"`
 
 	// 分数明细
 	TotalScore float64          `json:"totalScore"`

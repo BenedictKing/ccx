@@ -115,6 +115,10 @@ type AutopilotRoutingConfig struct {
 	// 主请求路径完全不变，影子请求在主响应返回后异步发起。
 	ABTest ABTestConfig `json:"abTest,omitempty"`
 
+	// ProtocolFederation 允许逻辑 Messages 请求在 Autopilot 默认路径中使用同一托管账号的兼容物理路由。
+	// 仅支持 messages -> chat/responses；显式路由、手动覆盖和促销路径不受影响。
+	ProtocolFederation ProtocolFederationConfig `json:"protocolFederation,omitempty"`
+
 	// FrontierRoutingEnabled 控制通用 Frontier/Ladder 是否影响选路。
 	// 默认 false；需要在 shadow 中验证阶梯确定性、硬能力零放宽、手动映射零回归后启用。
 	FrontierRoutingEnabled bool `json:"frontierRoutingEnabled,omitempty"`
@@ -147,6 +151,17 @@ func (c AutopilotRoutingConfig) IsAFPCostRoutingEnabled() bool {
 
 // CostPreferenceConfig 用户价格偏向配置（§5.6）。
 // 三档预设：quality_first / balanced / cost_first。
+// ProtocolFederationConfig 定义 Autopilot 的窄协议联邦边界。
+// RequestKinds/ExecutionKinds 是白名单，避免未来新增协议时意外扩面。
+type ProtocolFederationConfig struct {
+	Enabled            bool     `json:"enabled"`
+	RequestKinds       []string `json:"requestKinds,omitempty"`
+	ExecutionKinds     []string `json:"executionKinds,omitempty"`
+	RequireSameAccount bool     `json:"requireSameAccount"`
+	RequireAutoManaged bool     `json:"requireAutoManaged"`
+	ConversionPenalty  float64  `json:"conversionPenalty,omitempty"`
+}
+
 type CostPreferenceConfig struct {
 	// Mode 全局价格偏向模式："quality_first" | "balanced" | "cost_first"。
 	// 默认 "balanced"。
@@ -421,6 +436,15 @@ func DefaultAutopilotRoutingConfig() AutopilotRoutingConfig {
 			Mode: "balanced",
 		},
 
+		ProtocolFederation: ProtocolFederationConfig{
+			Enabled:            true,
+			RequestKinds:       []string{"messages"},
+			ExecutionKinds:     []string{"chat", "responses"},
+			RequireSameAccount: true,
+			RequireAutoManaged: true,
+			ConversionPenalty:  0.35,
+		},
+
 		ModelFamilyPreference: ModelFamilyPreferenceConfig{
 			Enabled: true,
 			Weight:  0.2,
@@ -620,9 +644,14 @@ func (c *AutopilotRoutingConfig) Validate() {
 		}
 	}
 
-	// 5. 禁用名单：去空白项、去重，避免无意义的重复配置
+	// 5. 禁用名单和协议联邦白名单：去空白项、去重，避免无意义的重复配置。
 	c.DisabledTaskClasses = dedupeNonEmptyStrings(c.DisabledTaskClasses)
 	c.DisabledChannelUIDs = dedupeNonEmptyStrings(c.DisabledChannelUIDs)
+	c.ProtocolFederation.RequestKinds = dedupeNonEmptyStrings(c.ProtocolFederation.RequestKinds)
+	c.ProtocolFederation.ExecutionKinds = dedupeNonEmptyStrings(c.ProtocolFederation.ExecutionKinds)
+	if c.ProtocolFederation.ConversionPenalty < 0 || c.ProtocolFederation.ConversionPenalty != c.ProtocolFederation.ConversionPenalty {
+		c.ProtocolFederation.ConversionPenalty = 0.35
+	}
 
 	// 6. 健康检测：连续探测恢复阈值兜底（旧配置文件可能没有该字段，反序列化后为 0）
 	if c.HealthCheck.ProbeRecoveryThreshold <= 0 {
@@ -1004,6 +1033,15 @@ func (c AutopilotRoutingConfig) deepCopy() AutopilotRoutingConfig {
 	if c.DisabledChannelUIDs != nil {
 		cp.DisabledChannelUIDs = make([]string, len(c.DisabledChannelUIDs))
 		copy(cp.DisabledChannelUIDs, c.DisabledChannelUIDs)
+	}
+
+	// ProtocolFederation 白名单：切片必须独立，否则 GetAutopilotRouting 的调用方
+	// 修改返回值会写穿共享配置。
+	if c.ProtocolFederation.RequestKinds != nil {
+		cp.ProtocolFederation.RequestKinds = append([]string(nil), c.ProtocolFederation.RequestKinds...)
+	}
+	if c.ProtocolFederation.ExecutionKinds != nil {
+		cp.ProtocolFederation.ExecutionKinds = append([]string(nil), c.ProtocolFederation.ExecutionKinds...)
 	}
 
 	// CostPreference.PerTaskClass

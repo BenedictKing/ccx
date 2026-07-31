@@ -539,17 +539,33 @@ func (r *SmartRouter) executeFilter(
 		if !candidateAvailable(ch, upstream) {
 			continue
 		}
-		modelResolution := r.resolveChannelModel(profile, upstream, upstreamModelCapabilities)
+		route := federatedRoute(ch, profile.ChannelKind)
+		executionKind := route.Kind
+		executionProfile := *profile
+		executionProfile.ChannelKind = executionKind
+		modelResolution := r.resolveChannelModel(&executionProfile, upstream, upstreamModelCapabilities)
+		if ch.ActualModel != "" {
+			modelResolution.ActualModel = ch.ActualModel
+			modelResolution.Supported = true
+			if normalizeRoutingModelID(ch.ActualModel) != normalizeRoutingModelID(profile.Model) {
+				modelResolution.MappedModel = ch.ActualModel
+				modelResolution.MappingSource = "protocol_federation"
+				modelResolution.MappingReason = "resolved for sibling execution protocol"
+			}
+		}
 		entry := r.buildChannelEntry(
 			ch,
 			upstream,
-			profile.ChannelKind,
+			executionKind,
 			modelResolution.ActualModel,
 			upstreamModelCapabilities,
 		)
+		entry.Route = route
 		entry.MappedModel = modelResolution.MappedModel
 		entry.MappingSource = modelResolution.MappingSource
 		entry.MappingReason = modelResolution.MappingReason
+		entry.ProtocolFidelity = ch.ProtocolFidelity
+		entry.ConversionPenalty = ch.ConversionPenalty
 		r.applyModelQualityTier(&entry)
 		entries = append(entries, entry)
 		costMap[entry.ChannelUID] = entry.EstimatedCost
@@ -573,6 +589,10 @@ func (r *SmartRouter) executeFilter(
 		e.ScoringCandidate.SavingsScore = savingsMap[e.ChannelUID]
 		applyDomainStrength(&e, scoringCtx.TaskDomain)
 		scored := ScoreCandidate(e.ScoringCandidate, scoringCtx)
+		if e.ProtocolFidelity == "converted" && e.ConversionPenalty > 0 {
+			scored.Score -= e.ConversionPenalty
+			scored.Penalty += e.ConversionPenalty
+		}
 		scoredEntries = append(scoredEntries, scoredChannelEntry{entry: e, scored: scored})
 	}
 
@@ -783,18 +803,20 @@ func (r *SmartRouter) executeFilter(
 		e := se.entry
 		sc := se.scored
 		candidate := RoutingCandidate{
-			ChannelUID:     e.ChannelUID,
-			ChannelName:    e.ChannelName,
-			MetricsKey:     SanitizeMetricsKey(e.MetricsKey),
-			KeyMask:        e.KeyMask,
-			OriginTier:     string(e.OriginTier),
-			ChannelKind:    e.ChannelKind,
-			HealthState:    string(e.HealthState),
-			MappedModel:    e.MappedModel,
-			MappingSource:  e.MappingSource,
-			MappingReason:  e.MappingReason,
-			TotalScore:     sc.Score,
-			DomainEvidence: sc.DomainEvidence,
+			ChannelUID:        e.ChannelUID,
+			ChannelName:       e.ChannelName,
+			ExecutionKind:     e.ChannelKind,
+			ProtocolFidelity:  e.ProtocolFidelity,
+			ConversionPenalty: e.ConversionPenalty,
+			MetricsKey:        SanitizeMetricsKey(e.MetricsKey),
+			KeyMask:           e.KeyMask,
+			OriginTier:        string(e.OriginTier),
+			HealthState:       string(e.HealthState),
+			MappedModel:       e.MappedModel,
+			MappingSource:     e.MappingSource,
+			MappingReason:     e.MappingReason,
+			TotalScore:        sc.Score,
+			DomainEvidence:    sc.DomainEvidence,
 			Scores: []CandidateScore{
 				{Dimension: "quality", Score: sc.QualityScore, Weight: weights.WQuality},
 				{Dimension: "stability", Score: sc.StabilityScore, Weight: weights.WStability},
@@ -825,12 +847,7 @@ func (r *SmartRouter) executeFilter(
 
 		// 匹配回 ChannelInfo：优先用上游配置的 ChannelUID，回退到 ch_%d 格式
 		for _, ch := range channels {
-			upstream := upstreamFor(ch)
-			matchUID := fmt.Sprintf("ch_%d", ch.Index)
-			if upstream != nil && upstream.ChannelUID != "" {
-				matchUID = upstream.ChannelUID
-			}
-			if matchUID == e.ChannelUID {
+			if federatedRoute(ch, profile.ChannelKind).Key() == e.Route.Key() {
 				result = append(result, ch)
 				break
 			}
@@ -861,12 +878,7 @@ func (r *SmartRouter) executeFilter(
 			} else {
 				// 保留未被过滤的渠道：匹配回 ChannelInfo
 				for _, ch := range channels {
-					upstream := upstreamFor(ch)
-					matchUID := fmt.Sprintf("ch_%d", ch.Index)
-					if upstream != nil && upstream.ChannelUID != "" {
-						matchUID = upstream.ChannelUID
-					}
-					if matchUID == se.entry.ChannelUID {
+					if federatedRoute(ch, profile.ChannelKind).Key() == se.entry.Route.Key() {
 						filteredResult = append(filteredResult, ch)
 						break
 					}
@@ -893,11 +905,11 @@ func (r *SmartRouter) executeFilter(
 			targetSurvived := false
 			for _, ch := range result {
 				upstream := upstreamFor(ch)
-				matchUID := fmt.Sprintf("ch_%d", ch.Index)
+				matchUID := fmt.Sprintf("%s:ch_%d", ch.Route.Kind, ch.Index)
 				if upstream != nil && upstream.ChannelUID != "" {
-					matchUID = upstream.ChannelUID
+					matchUID = ch.Route.Kind + ":" + upstream.ChannelUID
 				}
-				if matchUID == intentTargetUID {
+				if matchUID == intentTargetUID || (upstream != nil && upstream.ChannelUID == intentTargetUID) {
 					targetSurvived = true
 					break
 				}
@@ -994,11 +1006,31 @@ func (r *SmartRouter) executeFilter(
 	return result, nil
 }
 
+// federatedRoute 归一化候选的物理路由标识。
+// 旧调用方只填 Index（无 Route），此时按请求协议补齐 kind 与 index，
+// 使同一候选在评分、结果映射和硬约束阶段得到稳定且互不冲突的身份。
+func federatedRoute(ch scheduler.ChannelInfo, requestKind string) scheduler.ChannelRouteRef {
+	route := ch.Route
+	if route.Kind == "" {
+		route.Kind = requestKind
+		if route.Kind == "" {
+			route.Kind = string(scheduler.ChannelKindMessages)
+		}
+	}
+	if route.ChannelUID == "" && route.Index == 0 && ch.Index != 0 {
+		route.Index = ch.Index
+	}
+	return route
+}
+
 // channelScoreEntry 渠道评分输入条目。
 type channelScoreEntry struct {
 	ChannelUID          string
 	ChannelName         string // 渠道显示名（来自 upstream.Name）
 	ChannelKind         string
+	Route               scheduler.ChannelRouteRef
+	ProtocolFidelity    string
+	ConversionPenalty   float64
 	MetricsKey          string
 	KeyMask             string // 掩码后的 key，如 sk-***abc
 	MappedModel         string
@@ -1132,6 +1164,7 @@ func (r *SmartRouter) buildChannelEntry(
 		ChannelUID:    channelUID,
 		ChannelName:   upstream.Name,
 		ChannelKind:   channelKind,
+		Route:         ch.Route,
 		ChannelIndex:  ch.Index,
 		HealthState:   HealthStateUnknown,
 		OriginTier:    OriginTierUnknown, // 无画像时默认 unknown
