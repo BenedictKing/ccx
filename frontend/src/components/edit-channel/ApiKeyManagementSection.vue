@@ -196,6 +196,7 @@
               <v-list-item
                 rounded="lg"
                 variant="tonal"
+                prepend-gap="8"
                 :color="row.disabled ? 'warning' : duplicateKeyIndex === row.activeIndex ? 'error' : 'surface-variant'"
                 :class="{
                   'animate-pulse': duplicateKeyIndex === row.activeIndex,
