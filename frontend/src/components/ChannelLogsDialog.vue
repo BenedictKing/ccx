@@ -22,6 +22,36 @@
         <div v-else-if="!logs.length" class="text-center py-8 text-medium-emphasis">
           <v-icon size="40">mdi-format-list-bulleted</v-icon>
           <div class="text-caption mt-2">{{ t('channelLogs.empty') }}</div>
+
+          <!-- 熔断但无日志：交代熔断依据，避免呈现无来由的黑盒 -->
+          <v-alert
+            v-if="breakerEvidence"
+            type="warning"
+            variant="tonal"
+            density="compact"
+            class="text-start mx-auto mt-4 breaker-evidence-alert"
+          >
+            <div class="text-caption font-weight-medium">
+              {{ breakerEvidence.circuitState === 'open'
+                ? t('channelLogs.breakerOpenTitle')
+                : t('channelLogs.breakerHalfOpenTitle') }}
+            </div>
+            <div v-if="breakerEvidence.predatesRestart" class="text-caption mt-1">
+              {{ t('channelLogs.breakerPredatesRestart') }}
+            </div>
+            <div v-if="breakerEvidence.lastFailureAt" class="text-caption mt-1">
+              {{ t('channelLogs.breakerLastFailure', { time: formatFullTime(breakerEvidence.lastFailureAt) }) }}
+            </div>
+            <div v-if="breakerEvidence.nextRetryAt" class="text-caption mt-1">
+              {{ t('channelLogs.breakerNextRetry', { time: formatFullTime(breakerEvidence.nextRetryAt) }) }}
+            </div>
+            <div class="text-caption mt-1">
+              {{ t('channelLogs.breakerBackoff', {
+                level: breakerEvidence.backoffLevel,
+                failures: breakerEvidence.consecutiveFailures,
+              }) }}
+            </div>
+          </v-alert>
         </div>
 
         <!-- Log list -->
@@ -195,7 +225,7 @@
 
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted } from 'vue'
-import { api, type ChannelKind, type ChannelLogEntry, type ChannelProtocolRoute } from '../services/api'
+import { api, type ChannelBreakerEvidence, type ChannelKind, type ChannelLogEntry, type ChannelProtocolRoute } from '../services/api'
 import { useI18n } from '../i18n'
 import { useGlobalTick } from '../composables/useGlobalTick'
 import AutopilotTraceDetailDialog from './AutopilotTraceDetailDialog.vue'
@@ -214,6 +244,7 @@ const emit = defineEmits<{
 const { t } = useI18n()
 
 const logs = ref<ChannelLogEntry[]>([])
+const breakerEvidence = ref<ChannelBreakerEvidence | null>(null)
 const isLoading = ref(false)
 const autoRefresh = ref(true)
 const expandedIndex = ref<number | null>(null)
@@ -411,6 +442,13 @@ const formatTime = (ts: string): string => {
   return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 }
 
+// 熔断依据可能跨天（重启前的历史失败），需要带日期而非仅时刻
+const formatFullTime = (ts: string): string => {
+  const d = new Date(ts)
+  if (Number.isNaN(d.getTime())) return ts
+  return d.toLocaleString()
+}
+
 const fetchLogs = async () => {
   isLoading.value = true
   try {
@@ -431,6 +469,12 @@ const fetchLogs = async () => {
       .flatMap(result => result.status === 'fulfilled' ? (result.value.logs || []) : [])
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
       .slice(0, 50)
+    // 日志为空但渠道熔断时，后端会给出熔断成因依据；取最严重的一条展示
+    breakerEvidence.value = results
+      .flatMap(result => (result.status === 'fulfilled' && result.value.breakerEvidence)
+        ? [result.value.breakerEvidence]
+        : [])
+      .sort((a, b) => (a.circuitState === 'open' ? 0 : 1) - (b.circuitState === 'open' ? 0 : 1))[0] ?? null
     for (const result of results) {
       if (result.status === 'rejected') console.error('Failed to fetch channel route logs:', result.reason)
     }
@@ -613,6 +657,10 @@ onUnmounted(() => {
 
 .log-key-mask {
   white-space: nowrap;
+}
+
+.breaker-evidence-alert {
+  max-width: 420px;
 }
 
 .log-base-url {

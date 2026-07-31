@@ -763,9 +763,24 @@ export interface ChannelLogEntry {
   requestCorrelationId?: string
 }
 
+// 熔断成因依据：渠道日志是后端内存态，重启即清空，而熔断状态持久化恢复。
+// 日志为空且渠道非 closed 时后端返回该字段，用于解释熔断来源而非留下黑盒。
+export interface ChannelBreakerEvidence {
+  circuitState: 'open' | 'half_open' | 'closed'
+  lastFailureAt?: string
+  circuitBrokenAt?: string
+  nextRetryAt?: string
+  backoffLevel: number
+  consecutiveFailures: number
+  // true 表示熔断依据的最近失败早于本次进程启动，即日志已随重启清空
+  predatesRestart: boolean
+  processStartedAt: string
+}
+
 export interface ChannelLogsResponse {
   channelIndex: number
   logs: ChannelLogEntry[]
+  breakerEvidence?: ChannelBreakerEvidence
 }
 
 // ============== 渠道实时活跃度类型 ==============
