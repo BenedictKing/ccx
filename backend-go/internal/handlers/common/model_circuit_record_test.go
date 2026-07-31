@@ -116,3 +116,70 @@ func TestModelCircuitKeyIsRequestModel(t *testing.T) {
 		t.Fatal("其他请求模型不应命中熔断")
 	}
 }
+
+// TestRecordModelCircuitGlobalFailureBlocksAllModels 验证认证类失败进入 global 桶，
+// 熔断后同一渠道和 Key 的所有模型都不可调度。
+func TestRecordModelCircuitGlobalFailureBlocksAllModels(t *testing.T) {
+	mm := metrics.NewMetricsManagerWithConfig(20, 0.7)
+	upstream := &config.UpstreamConfig{Name: "ch", ChannelUID: "ch_uid"}
+	c := newModelCircuitTestContext()
+	const apiKey = "sk-auth-failed"
+
+	recordModelCircuitGlobal(c, mm, upstream, apiKey, "invalid_api_key", "Messages")
+	recordModelCircuitGlobal(c, mm, upstream, apiKey, "invalid_api_key", "Messages")
+
+	tracker := mm.ModelCircuit()
+	keyHash := metrics.ModelCircuitKeyHash(apiKey)
+	if !tracker.IsModelCircuitOpen("ch_uid", keyHash, "") {
+		t.Fatal("连续认证失败后 global 桶应处于熔断隔离期")
+	}
+	for _, model := range []string{"claude-sonnet-5", "claude-opus-5"} {
+		if tracker.IsAvailable("ch_uid", keyHash, model) {
+			t.Fatalf("global 桶熔断后模型 %s 不应可用", model)
+		}
+	}
+}
+
+// TestRecordModelCircuitGlobalIgnoresMissingIdentity 缺少渠道身份时不应创建 global 条目。
+func TestRecordModelCircuitGlobalIgnoresMissingIdentity(t *testing.T) {
+	mm := metrics.NewMetricsManagerWithConfig(20, 0.7)
+	c := newModelCircuitTestContext()
+	upstream := &config.UpstreamConfig{Name: "legacy"}
+
+	recordModelCircuitGlobal(c, mm, upstream, "sk-a", "invalid_api_key", "Messages")
+	recordModelCircuitGlobal(c, mm, upstream, "sk-a", "invalid_api_key", "Messages")
+
+	if got := mm.ModelCircuit().TrackedCount(); got != 0 {
+		t.Fatalf("缺少 ChannelUID 时不应产生 global 熔断条目, TrackedCount = %d", got)
+	}
+}
+
+// TestGlobalBlacklistFailureDoesNotAlsoOpenExactBucket 锁定错误 scope 路由：
+// 认证类错误只能累计 global 桶，不能同时污染当前模型的 exact 桶。
+func TestGlobalBlacklistFailureDoesNotAlsoOpenExactBucket(t *testing.T) {
+	mm := metrics.NewMetricsManagerWithConfig(20, 0.7)
+	upstream := &config.UpstreamConfig{Name: "ch", ChannelUID: "ch_uid"}
+	c := newModelCircuitTestContext()
+	const apiKey = "sk-auth-failed"
+	const model = "claude-sonnet-5"
+
+	blResult := ShouldBlacklistKey(http.StatusUnauthorized, []byte(`{"error":{"type":"authentication_error","message":"invalid api key"}}`))
+	if !blResult.ShouldBlacklist {
+		t.Fatal("测试前提不成立：认证错误应被识别为全局拉黑")
+	}
+	for range 2 {
+		recordModelCircuitGlobal(c, mm, upstream, apiKey, blResult.Reason, "Messages")
+		if !blResult.ShouldBlacklist {
+			recordModelCircuitFailure(c, mm, upstream, apiKey, model, blResult.Reason, "Messages")
+		}
+	}
+
+	tracker := mm.ModelCircuit()
+	keyHash := metrics.ModelCircuitKeyHash(apiKey)
+	if !tracker.IsModelCircuitOpen("ch_uid", keyHash, "") {
+		t.Fatal("认证错误应打开 global 桶")
+	}
+	if tracker.IsModelCircuitOpen("ch_uid", keyHash, model) {
+		t.Fatal("认证错误不应同时打开当前模型的 exact 桶")
+	}
+}

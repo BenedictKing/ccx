@@ -911,6 +911,8 @@ func TryUpstreamWithAllKeys(
 						if err := cfgManager.BlacklistKeyWithRecoverAt(executionAPIType, executionIndex, apiKey, blResult.Reason, blacklistMessage, blResult.RecoverAt); err != nil {
 							RequestLogf(c, "[%s-Blacklist] 拉黑 Key 失败: %v", apiType, err)
 						}
+						// 认证/权限/余额错误写入 global 桶：整把 Key 不可用，所有模型都受影响。
+						recordModelCircuitGlobal(c, metricsManager, upstream, apiKey, blResult.Reason, apiType)
 					}
 				} else if restrictionReason := keyModelRestrictionReason(respBodyBytes); actualAttemptModel != "" && restrictionReason != "" &&
 					(restrictionReason != "image_generation_not_enabled" || !upstream.IsStripImageGenerationToolEnabled()) {
@@ -1038,7 +1040,7 @@ func TryUpstreamWithAllKeys(
 					// 仅 Retryable 计入模型级熔断：Quota 与 Overloaded（含账号级限流）
 					// 反映的是额度或瞬时负载，已由 cooldown / scope 冷却处理，
 					// 记到模型头上会让限流误伤该模型的可用性。
-					if failureClass == metrics.FailureClassRetryable {
+					if failureClass == metrics.FailureClassRetryable && !blResult.ShouldBlacklist {
 						recordModelCircuitFailure(c, metricsManager, upstream, apiKey, model,
 							errorBodySummaryForLog(apiType, resp.StatusCode, respBodyBytes), apiType)
 					}
@@ -1688,6 +1690,23 @@ func selectAttemptAPIKey(channelScheduler *scheduler.ChannelScheduler, kind sche
 	}
 
 	return keypool.Selection{}, "", fmt.Errorf("上游 %s 没有可用的API密钥", upstream.Name)
+}
+
+// recordModelCircuitGlobal 将整把 Key 都不可用的失败记入 global 桶。
+func recordModelCircuitGlobal(c *gin.Context, metricsManager *metrics.MetricsManager,
+	upstream *config.UpstreamConfig, apiKey, errSummary, apiType string) {
+	if metricsManager == nil || upstream == nil || upstream.ChannelUID == "" {
+		return
+	}
+	tracker := metricsManager.ModelCircuit()
+	if tracker == nil {
+		return
+	}
+	if opened, until := tracker.RecordModelFailure(
+		upstream.ChannelUID, metrics.ModelCircuitKeyHash(apiKey), "", errSummary); opened {
+		RequestLogf(c, "[%s-ModelCircuit] 渠道 %s Key 持续失败，暂停全模型调度至 %s",
+			apiType, upstream.Name, until.Format(time.RFC3339))
+	}
 }
 
 // recordModelCircuitFailure 记录一次渠道-模型级失败。
