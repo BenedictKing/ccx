@@ -154,6 +154,63 @@ func realCallFetcher() L1Fetcher {
 	}
 }
 
+func failedRealCallFetcher(model string) L1Fetcher {
+	return func(ctx context.Context, req L1Request) (L1Response, error) {
+		return L1Response{
+			StatusCode:       http.StatusBadRequest,
+			Body:             []byte(`{"error":{"code":"UnsupportedModel"}}`),
+			RealCallVerified: true,
+			Model:            model,
+		}, nil
+	}
+}
+
+func failedRealCallNetworkFetcher(model string) L1Fetcher {
+	return func(ctx context.Context, req L1Request) (L1Response, error) {
+		return L1Response{RealCallVerified: true, Model: model}, context.DeadlineExceeded
+	}
+}
+
+func TestCheckChannel火山L1失败记录探针模型(t *testing.T) {
+	f := newL2Fixture("chat", config.UpstreamConfig{
+		Name:        "volc-agent-plan",
+		BaseURL:     "https://ark.cn-beijing.volces.com/api/plan/v3",
+		APIKeys:     []string{"ark-healthcheck-0001"},
+		Status:      "active",
+		ServiceType: "openai",
+	}, nil)
+	f.manager.RegisterL1Fetcher("chat", failedRealCallFetcher("auto"))
+
+	f.manager.checkChannel("chat", 0)
+
+	if len(f.recordFailureCalls) != 1 {
+		t.Fatalf("recordFailure 调用次数 = %d, 期望 1", len(f.recordFailureCalls))
+	}
+	if got := f.recordFailureCalls[0].model; got != "auto" {
+		t.Fatalf("recordFailure 模型 = %q, 期望 auto", got)
+	}
+}
+
+func TestCheckChannel火山L1网络错误仍记录探针模型(t *testing.T) {
+	f := newL2Fixture("chat", config.UpstreamConfig{
+		Name:        "volc-agent-plan",
+		BaseURL:     "https://ark.cn-beijing.volces.com/api/plan/v3",
+		APIKeys:     []string{"ark-healthcheck-0002"},
+		Status:      "active",
+		ServiceType: "openai",
+	}, nil)
+	f.manager.RegisterL1Fetcher("chat", failedRealCallNetworkFetcher("auto"))
+
+	f.manager.checkChannel("chat", 0)
+
+	if len(f.recordFailureCalls) != 1 {
+		t.Fatalf("recordFailure 调用次数 = %d, 期望 1", len(f.recordFailureCalls))
+	}
+	if got := f.recordFailureCalls[0].model; got != "auto" {
+		t.Fatalf("网络错误日志模型 = %q, 期望 auto", got)
+	}
+}
+
 // TestCheckChannel火山L1真实调用跳过L2 覆盖 L1/L2 去重：
 // 火山套餐 L1 已是真实推理调用（RealCallVerified=true），同周期不应再发等价 L2。
 func TestCheckChannel火山L1真实调用跳过L2(t *testing.T) {

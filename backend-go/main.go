@@ -137,11 +137,11 @@ func healthCheckL1Fetcher(handler gin.HandlerFunc) healthcheck.L1Fetcher {
 	fetcher := channelModelsHandlerFetcher(handler)
 	return func(ctx context.Context, req healthcheck.L1Request) (healthcheck.L1Response, error) {
 		if upstreamprobe.IsVolcenginePlanBaseURL(req.BaseURL) {
-			sc, body, err := upstreamprobe.VolcenginePlanL1Probe(ctx, req.ServiceType, req.BaseURL, req.APIKey, req.AuthHeader)
+			sc, body, model, err := upstreamprobe.VolcenginePlanL1Probe(ctx, req.ServiceType, req.BaseURL, req.APIKey, req.AuthHeader)
 			if err != nil {
-				return healthcheck.L1Response{}, err
+				return healthcheck.L1Response{RealCallVerified: true, Model: model}, err
 			}
-			return healthcheck.L1Response{StatusCode: sc, Body: body, RealCallVerified: true}, nil
+			return healthcheck.L1Response{StatusCode: sc, Body: body, RealCallVerified: true, Model: model}, nil
 		}
 		resp, err := fetcher(ctx, handlers.DiscoveryModelsFetchRequest{
 			ServiceType:        req.ServiceType,
@@ -909,7 +909,7 @@ func main() {
 				}
 			},
 			// 失败喂熔断：按渠道类型喂对应指标管理器，并写入渠道日志（保活验证失败此前对渠道日志不可见）
-			func(channelType string, channelIndex int, baseURL, apiKey, serviceType, detail string) {
+			func(channelType string, channelIndex int, baseURL, apiKey, serviceType, model, detail string) {
 				kind := scheduler.ChannelKind(channelType)
 				normalizedServiceType := scheduler.NormalizedMetricsServiceType(kind, serviceType)
 				channelScheduler.RecordFailure(baseURL, apiKey, normalizedServiceType, kind)
@@ -924,7 +924,7 @@ func main() {
 					channelScheduler.GetChannelLogStore(kind),
 					metricsKey,
 					channelIndex,
-					"", "", 0, 0, false,
+					model, "", 0, 0, false,
 					apiKey, baseURL, detail, channelType,
 					false,
 					metrics.RequestSourceHealthCheck,

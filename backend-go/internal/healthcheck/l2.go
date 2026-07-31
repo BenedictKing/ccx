@@ -102,7 +102,7 @@ func (m *Manager) checkKeyL2(
 		rec.Detail = summarizeDetail(statusCode, respBody, sendErr)
 		// 失败喂熔断：归因到该 Key 实际绑定的 BaseURL（历史未绑定 Key 回退到渠道首个地址，保持原口径）
 		if m.recordFailure != nil && len(keyBaseURLs) > 0 {
-			m.recordFailure(channelType, channelIndex, keyBaseURLs[0], apiKey, u.ServiceType, rec.Detail)
+			m.recordFailure(channelType, channelIndex, keyBaseURLs[0], apiKey, u.ServiceType, model, rec.Detail)
 		}
 	}
 

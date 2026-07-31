@@ -439,6 +439,9 @@ func TestCheckChannelL2错误喂熔断(t *testing.T) {
 	if f.recordFailureCalls[0].baseURL != srv.URL || f.recordFailureCalls[0].apiKey != "sk-l2-key-0008" {
 		t.Fatalf("recordFailure 回调参数错误: %+v", f.recordFailureCalls[0])
 	}
+	if f.recordFailureCalls[0].model != "test-model" {
+		t.Fatalf("recordFailure 模型 = %q, 期望 test-model", f.recordFailureCalls[0].model)
+	}
 	if len(f.blacklistCalls) != 0 {
 		t.Fatalf("500 不应拉黑: %d 次", len(f.blacklistCalls))
 	}

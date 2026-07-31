@@ -154,6 +154,7 @@ func (m *Manager) checkKeyL1(
 	var lastBody []byte
 	var lastErr error
 	var lastBaseURL string
+	var lastModel string
 	succeeded := false
 	authFailed := false
 
@@ -170,12 +171,13 @@ func (m *Manager) checkKeyL1(
 			InsecureSkipVerify: u.InsecureSkipVerify,
 		})
 		cancel()
+		if resp.RealCallVerified {
+			outcome.realCallVerified = true
+		}
+		lastModel = resp.Model
 		if err != nil {
 			lastErr = err
 			continue
-		}
-		if resp.RealCallVerified {
-			outcome.realCallVerified = true
 		}
 		statusCode, body := normalizeWrappedResponse(resp.StatusCode, resp.Body)
 		lastStatus = statusCode
@@ -218,7 +220,7 @@ func (m *Manager) checkKeyL1(
 		rec.Detail = summarizeDetail(lastStatus, lastBody, lastErr)
 		// 失败喂熔断
 		if m.recordFailure != nil && lastBaseURL != "" {
-			m.recordFailure(channelType, channelIndex, lastBaseURL, apiKey, u.ServiceType, rec.Detail)
+			m.recordFailure(channelType, channelIndex, lastBaseURL, apiKey, u.ServiceType, lastModel, rec.Detail)
 		}
 	}
 
