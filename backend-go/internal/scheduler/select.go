@@ -34,6 +34,167 @@ type softSkippedChannel struct {
 	scope    string
 }
 
+func channelRouteRef(kind ChannelKind, index int, upstream *config.UpstreamConfig) ChannelRouteRef {
+	route := ChannelRouteRef{Kind: string(kind), Index: index}
+	if upstream != nil {
+		route.ChannelUID = upstream.ChannelUID
+	}
+	return route
+}
+
+func normalizedChannelRoute(ch ChannelInfo, kind ChannelKind) ChannelRouteRef {
+	route := ch.Route
+	if route.Kind == "" {
+		route.Kind = string(kind)
+	}
+	if route.ChannelUID == "" && route.Index == 0 && ch.Index != 0 {
+		route.Index = ch.Index
+	}
+	return route
+}
+
+func channelInfoFailed(ch ChannelInfo, failedChannels map[int]bool, failedRoutes map[ChannelRouteKey]bool) bool {
+	if failedRoutes != nil {
+		return failedRoutes[ch.Route.Key()]
+	}
+	return failedChannels[ch.Index]
+}
+
+func stringListContains(values []string, target string) bool {
+	for _, value := range values {
+		if strings.EqualFold(strings.TrimSpace(value), target) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *ChannelScheduler) protocolFederationEnabled(requestKind ChannelKind) bool {
+	if s == nil || s.configManager == nil {
+		return false
+	}
+	cfg := s.configManager.GetAutopilotRouting()
+	federation := cfg.ProtocolFederation
+	return federation.Enabled && federation.RequireSameAccount && federation.RequireAutoManaged &&
+		stringListContains(federation.RequestKinds, string(requestKind))
+}
+
+func (s *ChannelScheduler) protocolFederationSiblings(accountUID string) []ChannelInfo {
+	if accountUID == "" || !s.protocolFederationEnabled(ChannelKindMessages) {
+		return nil
+	}
+	federation := s.configManager.GetAutopilotRouting().ProtocolFederation
+	cfg := s.configManager.GetConfig()
+	indexByUID := func(kind string, upstream config.UpstreamConfig) int {
+		var upstreams []config.UpstreamConfig
+		switch ChannelKind(kind) {
+		case ChannelKindChat:
+			upstreams = cfg.ChatUpstream
+		case ChannelKindResponses:
+			upstreams = cfg.ResponsesUpstream
+		default:
+			return -1
+		}
+		for i := range upstreams {
+			if upstream.ChannelUID != "" && upstreams[i].ChannelUID == upstream.ChannelUID {
+				return i
+			}
+		}
+		return -1
+	}
+	seen := make(map[ChannelRouteKey]struct{})
+	result := make([]ChannelInfo, 0, 2)
+	for _, sibling := range s.configManager.GetAccountChannels(accountUID) {
+		if !stringListContains(federation.ExecutionKinds, sibling.Kind) || !sibling.Upstream.AutoManaged {
+			continue
+		}
+		status := sibling.Upstream.Status
+		if status == "" {
+			status = "active"
+		}
+		if status != "active" || !channelHasSelectableKey(&sibling.Upstream) || sibling.Upstream.RoutePrefix != "" {
+			continue
+		}
+		index := indexByUID(sibling.Kind, sibling.Upstream)
+		if index < 0 {
+			continue
+		}
+		route := channelRouteRef(ChannelKind(sibling.Kind), index, &sibling.Upstream)
+		if _, ok := seen[route.Key()]; ok {
+			continue
+		}
+		seen[route.Key()] = struct{}{}
+		priority := sibling.Upstream.Priority
+		if priority == 0 {
+			priority = index
+		}
+		result = append(result, ChannelInfo{
+			Route:             route,
+			Index:             index,
+			Name:              sibling.Upstream.Name,
+			Priority:          priority,
+			Status:            status,
+			ProtocolFidelity:  "converted",
+			ConversionPenalty: federation.ConversionPenalty,
+		})
+	}
+	return result
+}
+
+// federateDefaultCandidates 在默认 Autopilot 路径上追加同账号托管 sibling 物理路由。
+// 每个 sibling 都按自身执行协议做模型解析、可用性、模型熔断与上下文校验，
+// 并按 ChannelRouteRef.Key() 去重，避免同一物理渠道重复进入候选集合。
+func (s *ChannelScheduler) federateDefaultCandidates(ctx context.Context, channels []ChannelInfo, model string, requirement *ContextRequirement, trace *SelectionTrace) []ChannelInfo {
+	if !s.protocolFederationEnabled(ChannelKindMessages) {
+		return channels
+	}
+	seen := make(map[ChannelRouteKey]struct{}, len(channels))
+	accountUIDs := make(map[string]struct{})
+	for i := range channels {
+		channels[i].ProtocolFidelity = "native"
+		seen[channels[i].Route.Key()] = struct{}{}
+		if upstream := s.getUpstreamByRoute(channels[i].Route); upstream != nil && upstream.AutoManaged && upstream.AccountUID != "" {
+			accountUIDs[upstream.AccountUID] = struct{}{}
+		}
+	}
+	for accountUID := range accountUIDs {
+		for _, sibling := range s.protocolFederationSiblings(accountUID) {
+			if _, ok := seen[sibling.Route.Key()]; ok {
+				continue
+			}
+			upstream := s.getUpstreamByRoute(sibling.Route)
+			kind := ChannelKind(sibling.Route.Kind)
+			if upstream == nil || !s.channelAvailableForCandidateFilter(sibling, upstream, kind) {
+				continue
+			}
+			actualModel := model
+			if s.modelSupportResolverFunc != nil {
+				supported, resolvedModel, _, _ := s.modelSupportResolverFunc(ctx, kind, upstream, model)
+				if !supported || resolvedModel == "" {
+					trace.skipChannel(sibling, "protocol_federation", "unsupported_model", model)
+					continue
+				}
+				actualModel = resolvedModel
+			} else if supported, reason := s.resolveModelSupport(ctx, kind, upstream, model); !supported {
+				trace.skipChannel(sibling, "protocol_federation", "unsupported_model", reason)
+				continue
+			}
+			sibling.ActualModel = actualModel
+			if s.channelModelCircuitOpenByRoute(upstream, sibling.Route, actualModel) {
+				trace.skipChannel(sibling, "protocol_federation", "model_circuit_open", actualModel)
+				continue
+			}
+			if err := s.ValidateUpstreamContext(kind, actualModel, upstream, requirement); err != nil {
+				trace.skipChannel(sibling, "protocol_federation", "context_window_exceeded", actualModel)
+				continue
+			}
+			seen[sibling.Route.Key()] = struct{}{}
+			channels = append(channels, sibling)
+		}
+	}
+	return channels
+}
+
 func (s *ChannelScheduler) SelectChannel(
 	ctx context.Context,
 	userID string,
@@ -68,6 +229,7 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 	if failedChannels == nil {
 		failedChannels = map[int]bool{}
 	}
+	failedRoutes := opts.FailedRoutes
 	kind := opts.Kind
 	model := opts.Model
 	routePrefix := opts.RoutePrefix
@@ -84,8 +246,29 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 		opts.SmartFilter, candidateSelectionObserver = s.buildSmartFilterFromProvider(ctx, kind, model)
 	}
 
+	var activeChannels []ChannelInfo
+	candidateCount := 0
 	finish := func(upstream *config.UpstreamConfig, channelIndex int, reason string) *SelectionResult {
-		result := s.selectionResultWithRecord(kind, upstream, channelIndex, reason, !opts.DryRun)
+		// 执行 kind/模型必须来自候选自身的物理路由，否则联邦 sibling 会被误记为请求协议。
+		executionKind := kind
+		executionModel := ""
+		if upstream != nil {
+			for _, ch := range activeChannels {
+				route := normalizedChannelRoute(ch, kind)
+				if route.Index != channelIndex {
+					continue
+				}
+				if upstream.ChannelUID != "" && route.ChannelUID != "" && route.ChannelUID != upstream.ChannelUID {
+					continue
+				}
+				executionKind = ChannelKind(route.Kind)
+				executionModel = ch.ActualModel
+				break
+			}
+		}
+		result := s.selectionResultWithRecord(executionKind, upstream, channelIndex, reason, !opts.DryRun)
+		result.CandidateCount = candidateCount
+		result.ExecutionModel = executionModel
 		if !opts.DryRun && candidateSelectionObserver != nil {
 			actualChannelUID := fmt.Sprintf("ch_%d", channelIndex)
 			if upstream != nil && upstream.ChannelUID != "" {
@@ -97,13 +280,13 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 		if upstream != nil {
 			channelName = upstream.Name
 		}
-		trace.selectChannel(channelIndex, channelName, reason)
+		trace.selectChannel(result.Route, channelName, reason)
 		result.Trace = trace
 		return result
 	}
 
 	// 获取活跃渠道列表（含模型过滤）
-	activeChannels := s.getActiveChannelsWithTrace(ctx, kind, model, trace)
+	activeChannels = s.getActiveChannelsWithTrace(ctx, kind, model, trace)
 	trace.setStage("active_model_filter", len(activeChannels))
 	if len(activeChannels) == 0 {
 		// 区分"无活跃渠道"和"无渠道支持该模型"
@@ -131,7 +314,7 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 		// 有前缀：仅选择匹配的渠道
 		var filtered []ChannelInfo
 		for _, ch := range activeChannels {
-			upstream := s.getUpstreamByIndex(ch.Index, kind)
+			upstream := s.getUpstreamByRoute(normalizedChannelRoute(ch, kind))
 			if upstream != nil && upstream.RoutePrefix == routePrefix {
 				filtered = append(filtered, ch)
 			} else {
@@ -152,7 +335,7 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 		// 无前缀：排除设了路由前缀的渠道（它们只能通过前缀访问）
 		var filtered []ChannelInfo
 		for _, ch := range activeChannels {
-			upstream := s.getUpstreamByIndex(ch.Index, kind)
+			upstream := s.getUpstreamByRoute(normalizedChannelRoute(ch, kind))
 			if upstream != nil && upstream.RoutePrefix == "" {
 				filtered = append(filtered, ch)
 			} else {
@@ -203,7 +386,7 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 	if opts.CandidateFilter != nil {
 		beforeFilter := append([]ChannelInfo(nil), activeChannels...)
 		activeChannels, err = opts.CandidateFilter(activeChannels, func(ch ChannelInfo) *config.UpstreamConfig {
-			return s.getUpstreamByIndex(ch.Index, kind)
+			return s.getUpstreamByRoute(normalizedChannelRoute(ch, kind))
 		}, func(ch ChannelInfo, upstream *config.UpstreamConfig) bool {
 			return s.channelAvailableForCandidateFilter(ch, upstream, kind)
 		})
@@ -222,11 +405,11 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 	if channelName != "" {
 		for _, ch := range activeChannels {
 			if ch.Name == channelName {
-				if failedChannels[ch.Index] {
+				if channelInfoFailed(ch, failedChannels, failedRoutes) {
 					trace.skipChannel(ch, "channel_pin", "failed_in_request", "")
 					return nil, traceErr(fmt.Errorf("指定渠道 %q 在本次请求中已失败", channelName))
 				}
-				upstream := s.getUpstreamByIndex(ch.Index, kind)
+				upstream := s.getUpstreamByRoute(normalizedChannelRoute(ch, kind))
 				if upstream == nil {
 					trace.skipChannel(ch, "channel_pin", "missing_upstream", "")
 					return nil, traceErr(fmt.Errorf("指定渠道 %q 配置异常", channelName))
@@ -248,7 +431,7 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 			prefix := kindSchedulerLogPrefix(kind)
 			orderedChannels := applyManualOverrideOrder(activeChannels, sequence)
 			for _, ch := range orderedChannels {
-				if failedChannels[ch.Index] {
+				if channelInfoFailed(ch, failedChannels, failedRoutes) {
 					trace.skipChannel(ch, "manual_override", "failed_in_request", "")
 					continue
 				}
@@ -256,7 +439,7 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 					trace.skipChannel(ch, "manual_override", "inactive_status", ch.Status)
 					continue
 				}
-				upstream := s.getUpstreamByIndex(ch.Index, kind)
+				upstream := s.getUpstreamByRoute(normalizedChannelRoute(ch, kind))
 				if upstream != nil && s.channelIsRuntimeAvailable(upstream, kind, ch.Index) {
 					log.Printf("[%s-Override] 按手动排序选择渠道: [%d] %s (user: %s, role=%s, sequenceHead=%s)", prefix, ch.Index, ch.Name, maskUserID(userID), schedulerAgentRoleForLog(opts.AgentRole), formatOverrideSequenceHead(sequence, 3))
 					// Idle 续期：对话活跃时延长 override TTL
@@ -277,7 +460,7 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 
 	// 1. 检查促销期渠道（手动覆盖之后，绕过健康检查）
 	promotedChannel := s.findPromotedChannel(activeChannels, kind)
-	if promotedChannel != nil && !failedChannels[promotedChannel.Index] {
+	if promotedChannel != nil && !channelInfoFailed(*promotedChannel, failedChannels, failedRoutes) {
 		// 促销渠道存在且未失败，直接使用（不检查健康状态，让用户设置的促销渠道有机会尝试）
 		upstream := s.getUpstreamByIndex(promotedChannel.Index, kind)
 		if channelHasSelectableKey(upstream) && !s.channelInRuntimeCooldown(kind, promotedChannel.Index) {
@@ -296,6 +479,12 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 		trace.skipChannel(*promotedChannel, "promotion", "failed_in_request", "")
 	}
 
+	// 仅默认 Autopilot 路径加入同账号托管 sibling；显式 X-Channel、手动覆盖和促销已在此前返回。
+	if kind == ChannelKindMessages && routePrefix == "" && channelName == "" && opts.SmartFilter != nil {
+		activeChannels = s.federateDefaultCandidates(ctx, activeChannels, model, opts.ContextRequirement, trace)
+		trace.setStage("protocol_federation", len(activeChannels))
+	}
+
 	// SmartFilter 注入点（设计 §4.6.3 / §4.6.5：显式控制之后、默认调度之前）。
 	// X-Channel / ManualOverride / Promotion 均在 SmartFilter 之前执行，
 	// 确保显式用户意图不受 SmartRouter 过滤影响。
@@ -308,6 +497,8 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 		// len(filtered)==0 时保留原列表，避免 SmartFilter bug 阻断全部调度
 		trace.setStage("smart_filter", len(activeChannels))
 	}
+	// 联邦后的去重物理候选数：failover 外壳用它作为 route-aware 的尝试上限。
+	candidateCount = len(activeChannels)
 
 	// 渠道-模型级运行时熔断：剔除该模型在全部 Key 上都处于隔离期的渠道。
 	// 与 SmartFilter 同属自动过滤，位置同样在显式控制（X-Channel / ManualOverride /
@@ -319,10 +510,11 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 	// 1. 检查 Trace 亲和性（促销渠道失败时或无促销渠道时）
 	if userID != "" {
 		compositeKey := traceAffinityKey(kind, affinityUserID, opts.ContextRequirement)
-		if preferredIdx, ok := s.traceAffinity.GetPreferredChannel(compositeKey); ok {
-			bestPriority := s.findBestAvailableChannelPriority(activeChannels, failedChannels, kind, model)
+		if preferredRoute, ok := s.traceAffinity.GetPreferredRoute(compositeKey, string(kind)); ok {
+			preferredIdx := preferredRoute.Index
+			bestPriority := s.findBestAvailableChannelPriorityWithRoutes(activeChannels, failedChannels, failedRoutes, kind, model)
 			for _, ch := range activeChannels {
-				if ch.Index == preferredIdx && !failedChannels[preferredIdx] {
+				if ch.Route.Matches(preferredRoute) && !channelInfoFailed(ch, failedChannels, failedRoutes) {
 					// 检查渠道状态：只有 active 状态才使用亲和性
 					if ch.Status != "active" {
 						prefix := kindSchedulerLogPrefix(kind)
@@ -338,12 +530,12 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 						continue
 					}
 					// 检查渠道是否健康且未处于运行态冷却
-					upstream := s.getUpstreamByIndex(preferredIdx, kind)
+					upstream := s.getUpstreamByRoute(ch.Route)
 					// 模型级熔断的亲和性防线：正常情况下熔断渠道已被
 					// filterChannelsByModelCircuit 从 activeChannels 剔除、走不到这里；
 					// 但该过滤 fail-open，全渠道熔断时会保留原列表。此时长会话的亲和性
 					// 会持续粘在故障组合上（本机制要解决的正是这种放大），故显式再判一次。
-					if s.channelModelCircuitOpen(upstream, kind, model) {
+					if s.channelModelCircuitOpenByRoute(upstream, ch.Route, model) {
 						prefix := kindSchedulerLogPrefix(kind)
 						log.Printf("[%s-Affinity] 跳过亲和渠道 [%d] %s: 模型 %q 处于熔断隔离期 (user: %s)",
 							prefix, preferredIdx, ch.Name, model, maskUserID(userID))
@@ -369,7 +561,7 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 	softSkipped := make([]softSkippedChannel, 0)
 	for _, ch := range activeChannels {
 		// 跳过本次请求已经失败的渠道
-		if failedChannels[ch.Index] {
+		if channelInfoFailed(ch, failedChannels, failedRoutes) {
 			trace.skipChannel(ch, "priority_order", "failed_in_request", "")
 			continue
 		}
@@ -382,17 +574,23 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 			continue
 		}
 
-		upstream := s.getUpstreamByIndex(ch.Index, kind)
+		route := normalizedChannelRoute(ch, kind)
+		executionKind := ChannelKind(route.Kind)
+		upstream := s.getUpstreamByRoute(route)
 		if !channelHasSelectableKey(upstream) {
 			trace.skipChannel(ch, "priority_order", "missing_upstream_or_keys", "")
 			continue
 		}
+		attemptModel := model
+		if ch.ActualModel != "" {
+			attemptModel = ch.ActualModel
+		}
 
-		// 跳过失败率过高的渠道（已熔断或即将熔断）
-		channelState := s.channelCircuitState(upstream, kind)
-		if channelState == metrics.CircuitStateOpen || !s.channelIsHealthy(upstream, kind) {
-			failureRate := s.channelFailureRate(upstream, kind)
-			prefix := kindSchedulerLogPrefix(kind)
+		// 跳过失败率过高的渠道（已熔断或即将熔断）；联邦 sibling 按其执行协议读运行态。
+		channelState := s.channelCircuitState(upstream, executionKind)
+		if channelState == metrics.CircuitStateOpen || !s.channelIsHealthy(upstream, executionKind) {
+			failureRate := s.channelFailureRate(upstream, executionKind)
+			prefix := kindSchedulerLogPrefix(executionKind)
 			if channelState == metrics.CircuitStateOpen {
 				log.Printf("[%s-Channel] 警告: 跳过 open 渠道: [%d] %s (失败率: %.1f%%)", prefix, ch.Index, ch.Name, failureRate*100)
 				trace.skipChannel(ch, "priority_order", "circuit_open", fmt.Sprintf("failureRate=%.1f%%", failureRate*100))
@@ -404,14 +602,14 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 		}
 
 		// 跳过运行态 cooldown 中的渠道（如 429 Retry-After 或上游账号池临时不可用）
-		if s.channelInRuntimeCooldown(kind, ch.Index) {
+		if s.channelInRuntimeCooldownByRoute(route) {
 			prefix := kindSchedulerLogPrefix(kind)
 			log.Printf("[%s-Channel] 跳过运行态 cooldown 中的渠道: [%d] %s", prefix, ch.Index, ch.Name)
 			trace.skipChannel(ch, "priority_order", "runtime_cooldown", "")
 			continue
 		}
 
-		if deferred, ratio, scope, cooldown := s.channelRateLimitSoftDeferred(upstream, kind, ch.Index, model, time.Now()); deferred {
+		if deferred, ratio, scope, cooldown := s.channelRateLimitSoftDeferred(upstream, executionKind, route.Index, attemptModel, time.Now()); deferred {
 			prefix := kindSchedulerLogPrefix(kind)
 			if cooldown {
 				log.Printf("[%s-RateLimit] 软跳过高水位渠道: [%d] %s scope=%s usage=%.0f%% cooldown (high=%.0f%%, recover<%.0f%%/%s)",
@@ -458,13 +656,13 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 	}
 
 	// 3. 所有健康渠道都失败，选择失败率最低的作为降级
-	result, err := s.selectFallbackChannelWithRecord(activeChannels, failedChannels, kind, !opts.DryRun)
+	result, err := s.selectFallbackChannelWithRouteRecord(activeChannels, failedChannels, failedRoutes, kind, !opts.DryRun)
 	if result != nil {
 		channelName := ""
 		if result.Upstream != nil {
 			channelName = result.Upstream.Name
 		}
-		trace.selectChannel(result.ChannelIndex, channelName, result.Reason)
+		trace.selectChannel(result.Route, channelName, result.Reason)
 		result.Trace = trace
 	}
 	if err != nil {
@@ -473,14 +671,18 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 	return result, err
 }
 
+// channelAvailableForCandidateFilter 判断候选在其自身执行协议下是否可用。
+// 联邦 sibling 的 cooldown/熔断必须按物理路由的 kind 读取，不能按请求协议判断。
 func (s *ChannelScheduler) channelAvailableForCandidateFilter(ch ChannelInfo, upstream *config.UpstreamConfig, kind ChannelKind) bool {
 	if ch.Status != "active" || !channelHasSelectableKey(upstream) {
 		return false
 	}
-	if s.channelInRuntimeCooldown(kind, ch.Index) {
+	route := normalizedChannelRoute(ch, kind)
+	executionKind := ChannelKind(route.Kind)
+	if s.channelInRuntimeCooldownByRoute(route) {
 		return false
 	}
-	return s.channelCircuitState(upstream, kind) != metrics.CircuitStateOpen
+	return s.channelCircuitState(upstream, executionKind) != metrics.CircuitStateOpen
 }
 
 // channelModelCircuitOpen 判断渠道下该模型是否已在所有 Key 上熔断。
@@ -533,8 +735,14 @@ func (s *ChannelScheduler) filterChannelsByModelCircuit(channels []ChannelInfo, 
 	filtered := make([]ChannelInfo, 0, len(channels))
 	skipped := make([]ChannelInfo, 0)
 	for _, ch := range channels {
-		upstream := s.getUpstreamByIndex(ch.Index, kind)
-		if s.channelModelCircuitOpen(upstream, kind, model) {
+		route := normalizedChannelRoute(ch, kind)
+		upstream := s.getUpstreamByRoute(route)
+		executionKind := ChannelKind(route.Kind)
+		actualModel := model
+		if ch.ActualModel != "" {
+			actualModel = ch.ActualModel
+		}
+		if s.channelModelCircuitOpen(upstream, executionKind, actualModel) {
 			skipped = append(skipped, ch)
 			continue
 		}
@@ -554,33 +762,17 @@ func (s *ChannelScheduler) filterChannelsByModelCircuit(channels []ChannelInfo, 
 }
 
 func (s *ChannelScheduler) filterChannelsByKeyAvailability(channels []ChannelInfo, kind ChannelKind, trace *SelectionTrace) []ChannelInfo {
-	cfg := s.configManager.GetConfig()
-	var upstreams []config.UpstreamConfig
-	switch kind {
-	case ChannelKindResponses:
-		upstreams = cfg.ResponsesUpstream
-	case ChannelKindGemini:
-		upstreams = cfg.GeminiUpstream
-	case ChannelKindChat:
-		upstreams = cfg.ChatUpstream
-	case ChannelKindImages:
-		upstreams = cfg.ImagesUpstream
-	case ChannelKindVectors:
-		upstreams = cfg.VectorsUpstream
-	default:
-		upstreams = cfg.Upstream
-	}
-
 	filtered := make([]ChannelInfo, 0, len(channels))
 	for _, ch := range channels {
-		if ch.Index < 0 || ch.Index >= len(upstreams) {
-			trace.skipChannel(ch, "key_availability_filter", "missing_upstream", "")
-			continue
-		}
-		upstream := &upstreams[ch.Index]
+		upstream := s.getUpstreamByRoute(normalizedChannelRoute(ch, kind))
 		if !channelHasSelectableKey(upstream) {
+			configured, disabled := 0, 0
+			if upstream != nil {
+				configured = len(upstream.APIKeys)
+				disabled = len(upstream.DisabledAPIKeys)
+			}
 			trace.skipChannel(ch, "key_availability_filter", "no_selectable_keys",
-				fmt.Sprintf("configured=%d disabled=%d", len(upstream.APIKeys), len(upstream.DisabledAPIKeys)))
+				fmt.Sprintf("configured=%d disabled=%d", configured, disabled))
 			continue
 		}
 		filtered = append(filtered, ch)
@@ -887,7 +1079,6 @@ func (s *ChannelScheduler) filterChannelsByContext(activeChannels []ChannelInfo,
 	}
 
 	unknownSafeWindow := cfg.ContextRouting.EffectiveUnknownSafeWindowTokens()
-	prefix := kindSchedulerLogPrefix(kind)
 	filtered := make([]ChannelInfo, 0, len(activeChannels))
 	outputFallback := make([]ChannelInfo, 0)
 	skipped := make([]string, 0)
@@ -901,75 +1092,59 @@ func (s *ChannelScheduler) filterChannelsByContext(activeChannels []ChannelInfo,
 	}
 
 	for _, ch := range activeChannels {
-		upstream := s.getUpstreamByIndex(ch.Index, kind)
+		route := normalizedChannelRoute(ch, kind)
+		executionKind := ChannelKind(route.Kind)
+		upstream := s.getUpstreamByRoute(route)
+		prefix := kindSchedulerLogPrefix(executionKind)
 		if upstream == nil {
 			trace.skipChannel(ch, "context_filter", "missing_upstream", "")
 			continue
 		}
-
-		resolved := config.ResolveUpstreamCapability(model, upstream, cfg.UpstreamModelCapabilities)
+		actualModel := model
+		if ch.ActualModel != "" {
+			actualModel = ch.ActualModel
+		}
+		resolved := config.ResolveUpstreamCapability(actualModel, upstream, cfg.UpstreamModelCapabilities)
 		capability := resolved.Capability
 		if capability.ContextWindowTokens > maxKnownWindow {
 			maxKnownWindow = capability.ContextWindowTokens
 		}
-
 		outputOverflow := requirement.ExplicitOutputMax && capability.MaxOutputTokens > 0 && requirement.OutputTokens > capability.MaxOutputTokens
 		if outputOverflow {
 			log.Printf("[%s-ContextFilter] 渠道 [%d] %s: 显式输出上限 %d 超过实际模型 %q 最大输出 %d，将作为可 clamp 的低优先级候选",
 				prefix, ch.Index, ch.Name, requirement.OutputTokens, resolved.ActualModel, capability.MaxOutputTokens)
 		}
-
 		if requirement.SkipWindowValidation {
 			appendCandidate(ch, outputOverflow)
 			continue
 		}
-
 		if capability.ContextWindowTokens > 0 {
 			if channelRequiredWindow > 0 && channelRequiredWindow > capability.ContextWindowTokens {
-				reason := fmt.Sprintf("[%d]%s actual=%s input=%d>%d totalBudget=%d", ch.Index, ch.Name, resolved.ActualModel, channelRequiredWindow, capability.ContextWindowTokens, requirement.RequiredTokens)
+				reason := fmt.Sprintf("[%s:%d]%s actual=%s input=%d>%d totalBudget=%d", route.Kind, ch.Index, ch.Name, resolved.ActualModel, channelRequiredWindow, capability.ContextWindowTokens, requirement.RequiredTokens)
 				skipped = append(skipped, reason)
 				trace.skipChannel(ch, "context_filter", "context_window_exceeded", fmt.Sprintf("actual=%s input=%d window=%d totalBudget=%d", resolved.ActualModel, channelRequiredWindow, capability.ContextWindowTokens, requirement.RequiredTokens))
-				log.Printf("[%s-ContextFilter] 跳过渠道 [%d] %s: input=%d, window=%d, totalBudget=%d, output=%d, actualModel=%q, source=%s",
-					prefix, ch.Index, ch.Name, channelRequiredWindow, capability.ContextWindowTokens, requirement.RequiredTokens, requirement.OutputTokens, resolved.ActualModel, resolved.Source)
 				continue
 			}
 			appendCandidate(ch, outputOverflow)
 			continue
 		}
-
 		if channelRequiredWindow <= 0 || upstream.AllowUnknownContext || channelRequiredWindow <= unknownSafeWindow {
 			appendCandidate(ch, outputOverflow)
 			continue
 		}
-
-		reason := fmt.Sprintf("[%d]%s actual=%s unknown input=%d totalBudget=%d", ch.Index, ch.Name, resolved.ActualModel, channelRequiredWindow, requirement.RequiredTokens)
-		skipped = append(skipped, reason)
+		skipped = append(skipped, fmt.Sprintf("[%s:%d]%s actual=%s unknown input=%d totalBudget=%d", route.Kind, ch.Index, ch.Name, resolved.ActualModel, channelRequiredWindow, requirement.RequiredTokens))
 		trace.skipChannel(ch, "context_filter", "unknown_context_window", fmt.Sprintf("actual=%s input=%d safeWindow=%d totalBudget=%d", resolved.ActualModel, channelRequiredWindow, unknownSafeWindow, requirement.RequiredTokens))
-		log.Printf("[%s-ContextFilter] 跳过未知上下文渠道 [%d] %s: input=%d 超过 unknownSafeWindow=%d, totalBudget=%d, output=%d, actualModel=%q",
-			prefix, ch.Index, ch.Name, channelRequiredWindow, unknownSafeWindow, requirement.RequiredTokens, requirement.OutputTokens, resolved.ActualModel)
 	}
-
 	if len(filtered) == 0 && len(outputFallback) > 0 {
-		log.Printf("[%s-ContextFilter] 没有完全满足显式输出上限 %d 的渠道，回退到可 clamp 的候选渠道", prefix, requirement.OutputTokens)
 		return outputFallback, nil
 	}
-	if len(outputFallback) > 0 {
-		filtered = append(filtered, outputFallback...)
-	}
-
+	filtered = append(filtered, outputFallback...)
 	if len(filtered) == 0 {
-		if channelRequiredWindow <= 0 && len(skipped) > 0 {
-			return nil, fmt.Errorf("没有 %s 渠道可满足当前显式输出预算 %d tokens（已过滤：%s）",
-				kindDisplayName(kind), requirement.OutputTokens, strings.Join(skipped, "; "))
-		}
 		if maxKnownWindow > 0 {
-			return nil, fmt.Errorf("没有 %s 渠道可承载当前上下文：输入估算 %d tokens，最大已知窗口 %d tokens（已过滤：%s）",
-				kindDisplayName(kind), channelRequiredWindow, maxKnownWindow, strings.Join(skipped, "; "))
+			return nil, fmt.Errorf("没有候选物理路由可承载当前上下文：输入估算 %d tokens，最大已知窗口 %d tokens（已过滤：%s）", channelRequiredWindow, maxKnownWindow, strings.Join(skipped, "; "))
 		}
-		return nil, fmt.Errorf("没有 %s 渠道可承载当前上下文：输入估算 %d tokens，所有候选渠道上下文能力未知或不足（已过滤：%s）",
-			kindDisplayName(kind), channelRequiredWindow, strings.Join(skipped, "; "))
+		return nil, fmt.Errorf("没有候选物理路由可承载当前上下文：输入估算 %d tokens（已过滤：%s）", channelRequiredWindow, strings.Join(skipped, "; "))
 	}
-
 	return filtered, nil
 }
 
@@ -1112,7 +1287,7 @@ func (s *ChannelScheduler) findPromotedChannel(activeChannels []ChannelInfo, kin
 		if ch.Status != "active" {
 			continue
 		}
-		upstream := s.getUpstreamByIndex(ch.Index, kind)
+		upstream := s.getUpstreamByRoute(normalizedChannelRoute(*ch, kind))
 		if upstream != nil {
 			if config.IsChannelInPromotion(upstream) {
 				prefix := kindSchedulerLogPrefix(kind)
@@ -1139,30 +1314,32 @@ func (s *ChannelScheduler) selectFallbackChannelWithRecord(
 	kind ChannelKind,
 	record bool,
 ) (*SelectionResult, error) {
+	return s.selectFallbackChannelWithRouteRecord(activeChannels, failedChannels, nil, kind, record)
+}
+
+func (s *ChannelScheduler) selectFallbackChannelWithRouteRecord(
+	activeChannels []ChannelInfo,
+	failedChannels map[int]bool,
+	failedRoutes map[ChannelRouteKey]bool,
+	kind ChannelKind,
+	record bool,
+) (*SelectionResult, error) {
 	var bestChannel *ChannelInfo
 	var bestUpstream *config.UpstreamConfig
-	bestFailureRate := float64(2) // 初始化为不可能的值
+	bestFailureRate := float64(2)
 
 	for i := range activeChannels {
 		ch := &activeChannels[i]
-		if failedChannels[ch.Index] {
-			continue
-		}
-		// 跳过非 active 状态的渠道
-		if ch.Status != "active" {
+		if channelInfoFailed(*ch, failedChannels, failedRoutes) || ch.Status != "active" {
 			continue
 		}
 
-		upstream := s.getUpstreamByIndex(ch.Index, kind)
+		route := normalizedChannelRoute(*ch, kind)
+		upstream := s.getUpstreamByRoute(route)
 		if !channelHasSelectableKey(upstream) {
 			continue
 		}
-
-		channelState := s.channelCircuitState(upstream, kind)
-		if channelState == metrics.CircuitStateOpen {
-			continue
-		}
-		if s.channelInRuntimeCooldown(kind, ch.Index) {
+		if s.channelCircuitState(upstream, ChannelKind(route.Kind)) == metrics.CircuitStateOpen || s.channelInRuntimeCooldownByRoute(route) {
 			continue
 		}
 
@@ -1178,7 +1355,7 @@ func (s *ChannelScheduler) selectFallbackChannelWithRecord(
 		prefix := kindSchedulerLogPrefix(kind)
 		log.Printf("[%s-Fallback] 警告: 降级选择渠道: [%d] %s (失败率: %.1f%%)",
 			prefix, bestChannel.Index, bestUpstream.Name, bestFailureRate*100)
-		return s.selectionResultWithRecord(kind, bestUpstream, bestChannel.Index, "fallback", record), nil
+		return s.selectionResultWithRecord(ChannelKind(bestChannel.Route.Kind), bestUpstream, bestChannel.Index, "fallback", record), nil
 	}
 
 	return nil, fmt.Errorf("所有渠道都不可用")
@@ -1187,11 +1364,15 @@ func (s *ChannelScheduler) selectFallbackChannelWithRecord(
 // ChannelInfo 渠道信息（用于排序）
 // Priority 约定为非负整数，数字越小优先级越高；0 表示未显式配置，将回退为渠道索引。
 type ChannelInfo struct {
-	Index       int    `json:"index"`
-	Name        string `json:"name"`
-	Priority    int    `json:"priority"`
-	Status      string `json:"status"`
-	CircuitOpen bool   `json:"circuitOpen,omitempty"`
+	Route             ChannelRouteRef `json:"route"`
+	Index             int             `json:"index"`
+	Name              string          `json:"name"`
+	Priority          int             `json:"priority"`
+	Status            string          `json:"status"`
+	CircuitOpen       bool            `json:"circuitOpen,omitempty"`
+	ActualModel       string          `json:"actualModel,omitempty"`
+	ProtocolFidelity  string          `json:"protocolFidelity,omitempty"`
+	ConversionPenalty float64         `json:"conversionPenalty,omitempty"`
 }
 
 // getActiveChannels 获取活跃渠道列表（按优先级排序）
@@ -1230,6 +1411,7 @@ func (s *ChannelScheduler) getActiveChannelsWithTrace(ctx context.Context, kind 
 			priority = i // 默认优先级为索引
 		}
 		ch := ChannelInfo{
+			Route:    channelRouteRef(kind, i, &upstream),
 			Index:    i,
 			Name:     upstream.Name,
 			Priority: priority,
@@ -1294,18 +1476,26 @@ func (s *ChannelScheduler) findBestAvailableChannelPriority(
 	kind ChannelKind,
 	model string,
 ) int {
+	return s.findBestAvailableChannelPriorityWithRoutes(activeChannels, failedChannels, nil, kind, model)
+}
+
+func (s *ChannelScheduler) findBestAvailableChannelPriorityWithRoutes(
+	activeChannels []ChannelInfo,
+	failedChannels map[int]bool,
+	failedRoutes map[ChannelRouteKey]bool,
+	kind ChannelKind,
+	model string,
+) int {
 	bestPriority := -1
 
 	for _, ch := range activeChannels {
-		if failedChannels[ch.Index] || ch.Status != "active" {
+		if channelInfoFailed(ch, failedChannels, failedRoutes) || ch.Status != "active" {
 			continue
 		}
 
-		upstream := s.getUpstreamByIndex(ch.Index, kind)
-		if !channelHasSelectableKey(upstream) {
-			continue
-		}
-		if !s.channelIsRuntimeAvailable(upstream, kind, ch.Index) {
+		route := normalizedChannelRoute(ch, kind)
+		upstream := s.getUpstreamByRoute(route)
+		if !channelHasSelectableKey(upstream) || !s.channelIsRuntimeAvailable(upstream, kind, ch.Index) {
 			continue
 		}
 		if deferred, _, _, _ := s.channelRateLimitSoftDeferred(upstream, kind, ch.Index, model, time.Now()); deferred {
@@ -1327,6 +1517,18 @@ func (s *ChannelScheduler) getUpstreamByIndex(index int, kind ChannelKind) *conf
 		return nil
 	}
 	return s.configManager.GetUpstreamByIndex(kindAPIType(kind), index)
+}
+
+func (s *ChannelScheduler) getUpstreamByRoute(route ChannelRouteRef) *config.UpstreamConfig {
+	return s.getUpstreamByIndex(route.Index, ChannelKind(route.Kind))
+}
+
+func (s *ChannelScheduler) channelInRuntimeCooldownByRoute(route ChannelRouteRef) bool {
+	return s.channelInRuntimeCooldown(ChannelKind(route.Kind), route.Index)
+}
+
+func (s *ChannelScheduler) channelModelCircuitOpenByRoute(upstream *config.UpstreamConfig, route ChannelRouteRef, model string) bool {
+	return s.channelModelCircuitOpen(upstream, ChannelKind(route.Kind), model)
 }
 
 // buildSmartFilterFromProvider 从全局 CandidateFilterProvider 构建 SmartFilter。
@@ -1355,7 +1557,7 @@ func (s *ChannelScheduler) buildSmartFilterFromProvider(
 			if upstream, ok := upstreamCache[ch.Index]; ok {
 				return upstream
 			}
-			upstream := s.getUpstreamByIndex(ch.Index, kind)
+			upstream := s.getUpstreamByRoute(normalizedChannelRoute(ch, kind))
 			upstreamCache[ch.Index] = upstream
 			return upstream
 		}

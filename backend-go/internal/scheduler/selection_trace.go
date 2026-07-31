@@ -29,18 +29,20 @@ type SelectionTraceStage struct {
 
 // SelectionTraceCandidate 记录单个候选渠道在某阶段被跳过的原因。
 type SelectionTraceCandidate struct {
-	ChannelIndex int    `json:"channelIndex"`
-	ChannelName  string `json:"channelName"`
-	Stage        string `json:"stage"`
-	Reason       string `json:"reason"`
-	Details      string `json:"details,omitempty"`
+	Route        ChannelRouteRef `json:"route"`
+	ChannelIndex int             `json:"channelIndex"`
+	ChannelName  string          `json:"channelName"`
+	Stage        string          `json:"stage"`
+	Reason       string          `json:"reason"`
+	Details      string          `json:"details,omitempty"`
 }
 
 // SelectionTraceSelection 记录最终选中的渠道。
 type SelectionTraceSelection struct {
-	ChannelIndex int    `json:"channelIndex"`
-	ChannelName  string `json:"channelName"`
-	Reason       string `json:"reason"`
+	Route        ChannelRouteRef `json:"route"`
+	ChannelIndex int             `json:"channelIndex"`
+	ChannelName  string          `json:"channelName"`
+	Reason       string          `json:"reason"`
 }
 
 // SelectionTraceError 在选择失败时保留已经执行的调度 trace。
@@ -101,6 +103,7 @@ func (t *SelectionTrace) skipChannel(ch ChannelInfo, stage, reason, details stri
 		return
 	}
 	t.Candidates = append(t.Candidates, SelectionTraceCandidate{
+		Route:        ch.Route,
 		ChannelIndex: ch.Index,
 		ChannelName:  ch.Name,
 		Stage:        stage,
@@ -109,12 +112,13 @@ func (t *SelectionTrace) skipChannel(ch ChannelInfo, stage, reason, details stri
 	})
 }
 
-func (t *SelectionTrace) selectChannel(channelIndex int, channelName, reason string) {
+func (t *SelectionTrace) selectChannel(route ChannelRouteRef, channelName, reason string) {
 	if t == nil {
 		return
 	}
 	t.Selected = &SelectionTraceSelection{
-		ChannelIndex: channelIndex,
+		Route:        route,
+		ChannelIndex: route.Index,
 		ChannelName:  channelName,
 		Reason:       reason,
 	}

@@ -75,6 +75,32 @@ func TestHandleMultiChannelFailoverRecordsOneTerminalOutcome(t *testing.T) {
 	}
 }
 
+func TestHandleMultiChannelFailoverRecordsFailedRouteWithoutLegacyIndexPollution(t *testing.T) {
+	cfg := config.Config{Upstream: []config.UpstreamConfig{
+		{Name: "first", ChannelUID: "ch_first", BaseURL: "https://first.example.com", APIKeys: []string{"sk-first"}, Status: "active"},
+		{Name: "second", ChannelUID: "ch_second", BaseURL: "https://second.example.com", APIKeys: []string{"sk-second"}, Status: "active"},
+	}}
+	env := newAffinityTestEnv(t, cfg)
+	defer env.cleanup()
+
+	var selected []scheduler.ChannelRouteRef
+	common.HandleMultiChannelFailover(
+		newTestGinContext(httptest.NewRecorder()), &config.EnvConfig{}, env.scheduler,
+		scheduler.ChannelKindMessages, "Messages", "user", "model", "",
+		func(selection *scheduler.SelectionResult) common.MultiChannelAttemptResult {
+			selected = append(selected, selection.Route)
+			if len(selected) == 1 {
+				return common.MultiChannelAttemptResult{Route: selection.Route, Attempted: true, LastError: errors.New("failed")}
+			}
+			return common.MultiChannelAttemptResult{Route: selection.Route, Handled: true, Attempted: true, SuccessKey: "sk-second"}
+		}, nil, nil,
+	)
+
+	if len(selected) != 2 || selected[0].Key() == selected[1].Key() {
+		t.Fatalf("selected routes = %+v, want two distinct routes", selected)
+	}
+}
+
 type affinityTestEnv struct {
 	scheduler *scheduler.ChannelScheduler
 	cleanup   func()

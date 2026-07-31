@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
+	"github.com/BenedictKing/ccx/internal/routingref"
 	"github.com/BenedictKing/ccx/internal/transitions"
 )
 
@@ -20,7 +21,10 @@ type ScheduledRecoveryResult struct {
 // SelectionResult 渠道选择结果
 type SelectionResult struct {
 	Upstream          *config.UpstreamConfig
+	Route             ChannelRouteRef
 	ChannelIndex      int
+	CandidateCount    int    // 本次选择路径实际可尝试的去重物理候选数
+	ExecutionModel    string // 联邦 sibling 的实际执行模型；为空表示沿用请求模型
 	Reason            string // 选择原因（用于日志）
 	Trace             *SelectionTrace
 	AutopilotTraceUID string // SmartRouter 请求级 trace；为空表示未介入
@@ -57,7 +61,8 @@ type CandidateFilterFunc func(
 // SelectionOptions 描述一次渠道选择所需的上下文。
 type SelectionOptions struct {
 	UserID             string
-	FailedChannels     map[int]bool
+	FailedChannels     map[int]bool // legacy: indexes within Kind
+	FailedRoutes       map[routingref.Key]bool
 	Kind               ChannelKind
 	Model              string
 	RoutePrefix        string
@@ -81,8 +86,10 @@ func (s *ChannelScheduler) selectionResultWithRecord(kind ChannelKind, upstream 
 	if record {
 		s.recordLastSelectedChannel(kind, channelIndex)
 	}
+	route := channelRouteRef(kind, channelIndex, upstream)
 	return &SelectionResult{
 		Upstream:     upstream,
+		Route:        route,
 		ChannelIndex: channelIndex,
 		Reason:       reason,
 	}
