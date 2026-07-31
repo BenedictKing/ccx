@@ -79,7 +79,9 @@ const (
 
 // RequestRecord 带时间戳的请求记录（扩展版，支持 Token、Cache 和失败分类数据）。
 type RequestRecord struct {
-	Model                    string
+	ChannelUID               string // 渠道稳定标识，breakerscope 三元组之一
+	RouteModel               string // 客户端原始请求模型，breakerscope 三元组之一；空为未知
+	Model                    string // 实际发给上游的模型（可被 autopilot 映射改写）
 	Timestamp                time.Time
 	ConnectLatencyMs         int64
 	FirstByteLatencyMs       int64
@@ -90,6 +92,18 @@ type RequestRecord struct {
 	CacheCreationInputTokens int64
 	CacheReadInputTokens     int64
 	ProxyKeyMask             string // 代理 Key 掩码（用于成本报表按用户分组，由 RecordRequestConnected 传入）
+}
+
+// recordRouteModel 返回 breaker 聚合使用的模型键。
+// RouteModel 非空优先；否则回退 Model（兼容旧记录和同步写入入口）。
+func recordRouteModel(record *RequestRecord) string {
+	if record == nil {
+		return ""
+	}
+	if record.RouteModel != "" {
+		return record.RouteModel
+	}
+	return record.Model
 }
 
 // KeyMetrics 单个 Key 的指标（绑定到 BaseURL + Key 组合）

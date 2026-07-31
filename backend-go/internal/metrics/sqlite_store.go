@@ -244,6 +244,30 @@ func initSchema(db *sql.DB) error {
 		log.Printf("[SQLite-Migration] schema 升级: v3 -> v4 (添加 proxy_key_mask 列)")
 	}
 
+	// v5: 添加 channel_uid 与 route_model 列（breaker 三元组身份）
+	{
+		var cv int
+		if err := db.QueryRow("PRAGMA user_version").Scan(&cv); err != nil {
+			return fmt.Errorf("读取 schema 版本失败: %w", err)
+		}
+		if cv < 5 {
+			v5Migrations := []string{
+				"ALTER TABLE request_records ADD COLUMN channel_uid TEXT NOT NULL DEFAULT ''",
+				"ALTER TABLE request_records ADD COLUMN route_model TEXT NOT NULL DEFAULT ''",
+				"PRAGMA user_version = 5",
+			}
+			for _, q := range v5Migrations {
+				if _, err := db.Exec(q); err != nil {
+					if strings.Contains(err.Error(), "duplicate column name") {
+						continue
+					}
+					return fmt.Errorf("migration v4->v5 failed: %w", err)
+				}
+			}
+			log.Printf("[SQLite-Migration] schema 升级: v4 -> v5 (添加 channel_uid 与 route_model 列)")
+		}
+	}
+
 	return nil
 }
 
@@ -683,7 +707,7 @@ func (s *SQLiteStore) batchInsertRecords(records []PersistentRecord) error {
 		}
 		_, err := stmt.Exec(
 			r.MetricsKey, r.BaseURL, r.KeyMask, r.Timestamp.Unix(), success, string(r.FailureClass),
-			r.InputTokens, r.OutputTokens, r.CacheCreationTokens, r.CacheReadTokens, r.APIType, r.Model, r.ProxyKeyMask,
+			r.InputTokens, r.OutputTokens, r.CacheCreationTokens, r.CacheReadTokens, r.APIType, r.Model, r.ProxyKeyMask, r.ChannelUID, r.RouteModel,
 		)
 		if err != nil {
 			return err
@@ -697,7 +721,7 @@ func (s *SQLiteStore) batchInsertRecords(records []PersistentRecord) error {
 func (s *SQLiteStore) LoadRecords(since time.Time, apiType string) ([]PersistentRecord, error) {
 	rows, err := s.db.Query(`
 		SELECT metrics_key, base_url, key_mask, timestamp, success, failure_class,
-		       input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, model, proxy_key_mask
+		       input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, model, proxy_key_mask, channel_uid, route_model
 		FROM request_records
 		WHERE timestamp >= ? AND api_type = ?
 		ORDER BY timestamp ASC
@@ -718,6 +742,7 @@ func (s *SQLiteStore) LoadRecords(since time.Time, apiType string) ([]Persistent
 		err := rows.Scan(
 			&r.MetricsKey, &r.BaseURL, &r.KeyMask, &ts, &success, &failureClass,
 			&r.InputTokens, &r.OutputTokens, &r.CacheCreationTokens, &r.CacheReadTokens, &r.Model, &r.ProxyKeyMask,
+			&r.ChannelUID, &r.RouteModel,
 		)
 		if err != nil {
 			return nil, err

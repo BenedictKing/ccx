@@ -430,7 +430,7 @@ func (s *ChannelScheduler) GetConversationChannelsByKind(kind ChannelKind) []Cha
 	for i := range channels {
 		upstream := s.getUpstreamByIndex(channels[i].Index, kind)
 		if upstream != nil {
-			channels[i].CircuitOpen = s.channelCircuitState(upstream, kind) == metrics.CircuitStateOpen
+			channels[i].CircuitOpen = s.channelCircuitState(upstream, kind, "") == metrics.CircuitStateOpen
 		}
 	}
 	return channels

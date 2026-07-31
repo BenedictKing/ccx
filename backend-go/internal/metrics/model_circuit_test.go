@@ -140,18 +140,21 @@ func TestChannelModelCircuitOpen(t *testing.T) {
 	}
 }
 
-// TestModelCircuitIgnoresEmptyKeys channelUID 或 model 缺失时不记账，
-// 避免把无法归因的失败攒到空键上。
+// TestModelCircuitIgnoresEmptyKeys 空 channelUID 不记账，空 model 计入全局桶。
 func TestModelCircuitIgnoresEmptyKeys(t *testing.T) {
 	tracker := NewModelCircuitTracker("messages")
 	now := time.Now()
 
+	// 空 channelUID 仍拒绝：无法归因的失败不记账。
 	tracker.recordModelFailureAt("", testKeyHash, testModel, "err", now)
-	tracker.recordModelFailureAt(testChannelUID, testKeyHash, "", "err", now)
 
-	if tracker.TrackedCount() != 0 {
-		t.Fatalf("空键不应产生条目, TrackedCount = %d", tracker.TrackedCount())
+	// 空 model = 全局桶，是合法条目。
+	tracker.recordModelFailureAt(testChannelUID, testKeyHash, "", "err", now)
+	if tracker.TrackedCount() != 1 {
+		// 全局桶条目 + 空 channelUID 被拒绝 = 只有 1 条
+		t.Fatalf("空 model（全局桶）应产生条目, TrackedCount = %d", tracker.TrackedCount())
 	}
+
 	if tracker.isModelCircuitOpenAt("", testKeyHash, testModel, now) {
 		t.Fatal("空 channelUID 应 fail-open")
 	}
@@ -300,5 +303,92 @@ func TestModelCircuitSuccessAfterExpiryRecovers(t *testing.T) {
 		testChannelUID, testKeyHash, testModel, "err", afterExpiry.Add(2*time.Minute))
 	if got := until3.Sub(afterExpiry.Add(2 * time.Minute)); got != modelCircuitBackoffBase {
 		t.Fatalf("确认恢复后退避应重置为 base, got %v", got)
+	}
+}
+
+// TestBreakerScopeIsAvailableChecksGlobalAndExact 验证调度放行唯一入口：
+// global 桶或 exact 桶任一 open 即不可用，两者都 closed 才可用。
+func TestBreakerScopeIsAvailableChecksGlobalAndExact(t *testing.T) {
+	base := time.Date(2026, 7, 31, 10, 0, 0, 0, time.UTC)
+	tracker := NewModelCircuitTracker("messages")
+
+	// 初始状态：全部可用。
+	if !tracker.isAvailableAt("ch", "kh", "sonnet", base) {
+		t.Fatal("无任何故障时 IsAvailable 应返回 true")
+	}
+
+	// global bucket open → 整把 Key 不可用。
+	tracker.recordModelFailureAt("ch", "kh", "", "auth_error", base)
+	tracker.recordModelFailureAt("ch", "kh", "", "auth_error", base.Add(time.Minute))
+	// 第二次失败在 base+1min，熔断 60s 后到 base+2min 到期，base+90s 仍在隔离期。
+	now := base.Add(90 * time.Second)
+	if tracker.isAvailableAt("ch", "kh", "sonnet", now) {
+		t.Fatal("global bucket open 时即使 exact 无记录也应不可用")
+	}
+	if tracker.isAvailableAt("ch", "kh", "opus", now) {
+		t.Fatal("global bucket open 时所有模型都应不可用")
+	}
+
+	// 不同 channel/key 不受影响。
+	if !tracker.isAvailableAt("ch2", "kh2", "sonnet", now) {
+		t.Fatal("不同 channel/key 不应被连累")
+	}
+}
+
+// TestBreakerScopeExactBucketOnlyAffectsTargetModel 验证 exact 桶只隔离指定模型，
+// 同 Key 的其他模型仍可用。
+func TestBreakerScopeExactBucketOnlyAffectsTargetModel(t *testing.T) {
+	base := time.Date(2026, 7, 31, 10, 0, 0, 0, time.UTC)
+	tracker := NewModelCircuitTracker("messages")
+
+	tracker.recordModelFailureAt("ch", "kh", "sonnet", "403", base)
+	tracker.recordModelFailureAt("ch", "kh", "sonnet", "403", base.Add(time.Minute))
+
+	now := base.Add(90 * time.Second)
+	if tracker.isAvailableAt("ch", "kh", "sonnet", now) {
+		t.Fatal("sonnet exact bucket open 时应不可用")
+	}
+	if !tracker.isAvailableAt("ch", "kh", "opus", now) {
+		t.Fatal("opus exact bucket 无记录时应可用（核心不变量：模型隔离）")
+	}
+}
+
+// TestBreakerScopeDeleteByChannelUID 验证渠道删除时清理所有关联条目。
+func TestBreakerScopeDeleteByChannelUID(t *testing.T) {
+	base := time.Date(2026, 7, 31, 10, 0, 0, 0, time.UTC)
+	tracker := NewModelCircuitTracker("messages")
+
+	tracker.recordModelFailureAt("ch_a", "kh", "sonnet", "e", base)
+	tracker.recordModelFailureAt("ch_a", "kh", "sonnet", "e", base.Add(time.Minute))
+	tracker.recordModelFailureAt("ch_a", "kh", "", "auth", base)
+	tracker.recordModelFailureAt("ch_a", "kh", "", "auth", base.Add(time.Minute))
+	tracker.recordModelFailureAt("ch_b", "kh", "sonnet", "e", base)
+	tracker.recordModelFailureAt("ch_b", "kh", "sonnet", "e", base.Add(time.Minute))
+
+	tracker.DeleteByChannelUID("ch_a")
+	if tracker.TrackedCount() != 1 {
+		t.Fatalf("删除 ch_a 后应只剩 ch_b 的条目, TrackedCount = %d", tracker.TrackedCount())
+	}
+	if !tracker.isModelCircuitOpenAt("ch_b", "kh", "sonnet", base.Add(90*time.Second)) {
+		t.Fatal("ch_b 的条目不应被删除")
+	}
+}
+
+// TestBreakerScopeDeleteByChannelUIDAndKeyHash 验证单 Key 删除。
+func TestBreakerScopeDeleteByChannelUIDAndKeyHash(t *testing.T) {
+	base := time.Date(2026, 7, 31, 10, 0, 0, 0, time.UTC)
+	tracker := NewModelCircuitTracker("messages")
+
+	tracker.recordModelFailureAt("ch", "ka", "sonnet", "e", base)
+	tracker.recordModelFailureAt("ch", "ka", "sonnet", "e", base.Add(time.Minute))
+	tracker.recordModelFailureAt("ch", "kb", "sonnet", "e", base)
+	tracker.recordModelFailureAt("ch", "kb", "sonnet", "e", base.Add(time.Minute))
+
+	tracker.DeleteByChannelUIDAndKeyHash("ch", "ka")
+	if tracker.TrackedCount() != 1 {
+		t.Fatalf("删除 ka 后应只剩 kb 的条目, TrackedCount = %d", tracker.TrackedCount())
+	}
+	if !tracker.isModelCircuitOpenAt("ch", "kb", "sonnet", base.Add(90*time.Second)) {
+		t.Fatal("kb 的条目不应被删除")
 	}
 }

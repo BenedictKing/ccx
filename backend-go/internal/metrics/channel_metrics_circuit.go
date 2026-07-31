@@ -30,7 +30,7 @@ func (m *MetricsManager) refreshBreakerWindowsLocked(metrics *KeyMetrics, now ti
 			if isBreakerRelevantFailure(record.Success, record.FailureClass) {
 				breakerRecords = append(breakerRecords, record.Success)
 				if !record.Success {
-					failureModels[record.Model] = struct{}{}
+					failureModels[recordRouteModel(&record)] = struct{}{}
 				}
 			}
 			if record.Success {

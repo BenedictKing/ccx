@@ -109,7 +109,7 @@ func (m *MetricsManager) ToResponseMultiURL(channelIndex int, baseURLs []string,
 	var totalResults []bool
 	var maxConsecutiveFailures int64
 	var maxHalfOpenSuccesses int
-	channelState := m.channelCircuitStateMultiURLLocked(baseURLs, activeKeys, serviceType, now)
+	channelState := m.channelCircuitStateMultiURLLocked(baseURLs, activeKeys, serviceType, "", now)
 
 	for _, metrics := range seenMetrics {
 		m.advanceCircuitStateIfDueLocked(metrics, now)

@@ -118,7 +118,7 @@ func (s channelBreakerSnapshot) failureRate() float64 {
 
 // channelBreakerSnapshotLocked 聚合当前渠道所有可用身份的健康窗口。
 // 非 breaker 相关的失败会打断“连续失败”序列，但不会进入失败率样本。
-func (m *MetricsManager) channelBreakerSnapshotLocked(baseURLs, activeKeys []string, serviceType string, now time.Time) channelBreakerSnapshot {
+func (m *MetricsManager) channelBreakerSnapshotLocked(baseURLs, activeKeys []string, serviceType, model string, now time.Time) channelBreakerSnapshot {
 	snapshot := channelBreakerSnapshot{
 		hasAvailableCandidate: m.hasAvailableIdentityCandidateLocked(baseURLs, activeKeys, serviceType),
 	}
@@ -143,6 +143,11 @@ func (m *MetricsManager) channelBreakerSnapshotLocked(baseURLs, activeKeys []str
 			if _, pending := pendingIndexes[idx]; pending || record.Timestamp.Before(cutoff) {
 				continue
 			}
+			// 模型作用域过滤：只统计当前 routeModel 的记录。
+			// 成功也过滤，避免其他模型成功稀释当前模型失败率。
+			if model != "" && recordRouteModel(&record) != model {
+				continue
+			}
 			normalizedClass := normalizeFailureClass(record.Success, record.FailureClass)
 			records = append(records, channelBreakerRecord{
 				timestamp: record.Timestamp,
@@ -152,8 +157,9 @@ func (m *MetricsManager) channelBreakerSnapshotLocked(baseURLs, activeKeys []str
 			})
 		}
 
-		// 保留对仅有派生窗口、没有历史时间戳的旧内存指标的兼容。
-		if len(metrics.requestHistory) == 0 {
+		// 仅有派生窗口、没有历史时间戳的旧内存指标只参与空模型聚合，
+		// 不注入具体模型窗口——旧记录没有 routeModel 可以归因。
+		if len(metrics.requestHistory) == 0 && model == "" {
 			for _, success := range legacyBreakerResults {
 				records = append(records, channelBreakerRecord{
 					timestamp: now,
@@ -224,7 +230,7 @@ func (m *MetricsManager) isChannelBreakerHealthyLocked(snapshot channelBreakerSn
 }
 
 // IsChannelHealthyMultiURL 判断多 BaseURL 聚合渠道是否健康。
-func (m *MetricsManager) IsChannelHealthyMultiURL(baseURLs []string, activeKeys []string, serviceType string) bool {
+func (m *MetricsManager) IsChannelHealthyMultiURL(baseURLs []string, activeKeys []string, serviceType, model string) bool {
 	if len(baseURLs) == 0 {
 		return false
 	}
@@ -235,12 +241,12 @@ func (m *MetricsManager) IsChannelHealthyMultiURL(baseURLs []string, activeKeys 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	snapshot := m.channelBreakerSnapshotLocked(baseURLs, activeKeys, serviceType, time.Now())
+	snapshot := m.channelBreakerSnapshotLocked(baseURLs, activeKeys, serviceType, model, time.Now())
 	return m.isChannelBreakerHealthyLocked(snapshot)
 }
 
 // CalculateChannelFailureRateMultiURL 计算多 BaseURL 聚合 breaker 失败率。
-func (m *MetricsManager) CalculateChannelFailureRateMultiURL(baseURLs []string, activeKeys []string, serviceType string) float64 {
+func (m *MetricsManager) CalculateChannelFailureRateMultiURL(baseURLs []string, activeKeys []string, serviceType, model string) float64 {
 	if len(baseURLs) == 0 || len(activeKeys) == 0 {
 		return 0
 	}
@@ -248,7 +254,7 @@ func (m *MetricsManager) CalculateChannelFailureRateMultiURL(baseURLs []string, 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	snapshot := m.channelBreakerSnapshotLocked(baseURLs, activeKeys, serviceType, time.Now())
+	snapshot := m.channelBreakerSnapshotLocked(baseURLs, activeKeys, serviceType, model, time.Now())
 	if len(snapshot.results) == 0 {
 		if snapshot.hasOpenState && !snapshot.hasAvailableCandidate {
 			return 1
@@ -947,15 +953,15 @@ func (m *MetricsManager) ReleaseProbe(baseURL, apiKey, serviceType string) {
 }
 
 // GetChannelCircuitStateMultiURL 获取多 BaseURL 聚合后的 channel breaker 状态。
-func (m *MetricsManager) GetChannelCircuitStateMultiURL(baseURLs []string, activeKeys []string, serviceType string) CircuitState {
+func (m *MetricsManager) GetChannelCircuitStateMultiURL(baseURLs []string, activeKeys []string, serviceType, model string) CircuitState {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	return m.channelCircuitStateMultiURLLocked(baseURLs, activeKeys, serviceType, time.Now())
+	return m.channelCircuitStateMultiURLLocked(baseURLs, activeKeys, serviceType, model, time.Now())
 }
 
-func (m *MetricsManager) channelCircuitStateMultiURLLocked(baseURLs []string, activeKeys []string, serviceType string, now time.Time) CircuitState {
-	snapshot := m.channelBreakerSnapshotLocked(baseURLs, activeKeys, serviceType, now)
+func (m *MetricsManager) channelCircuitStateMultiURLLocked(baseURLs []string, activeKeys []string, serviceType, model string, now time.Time) CircuitState {
+	snapshot := m.channelBreakerSnapshotLocked(baseURLs, activeKeys, serviceType, model, now)
 	if !m.isChannelBreakerHealthyLocked(snapshot) {
 		// 组合失败或聚合失败率达到阈值时，渠道级状态必须与健康判定一致，
 		// 否则调度器会在 fallback 阶段重新选回同一故障渠道。

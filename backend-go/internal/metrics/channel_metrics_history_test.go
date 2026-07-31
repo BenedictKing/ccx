@@ -20,10 +20,10 @@ func TestMultiURLHealthTreatsMissingKeyAsAvailableCandidate(t *testing.T) {
 	metrics.CircuitState = CircuitStateOpen
 	m.mu.Unlock()
 
-	if !m.IsChannelHealthyMultiURL([]string{baseURL}, []string{oldKey, newKey}, "openai") {
+	if !m.IsChannelHealthyMultiURL([]string{baseURL}, []string{oldKey, newKey}, "openai", "") {
 		t.Fatal("expected channel to remain healthy when a new key has no metrics yet")
 	}
-	if got := m.CalculateChannelFailureRateMultiURL([]string{baseURL}, []string{oldKey, newKey}, "openai"); got != 0 {
+	if got := m.CalculateChannelFailureRateMultiURL([]string{baseURL}, []string{oldKey, newKey}, "openai", ""); got != 0 {
 		t.Fatalf("expected failure rate 0 for missing-key candidate, got %v", got)
 	}
 }
@@ -56,10 +56,10 @@ func TestMultiURLCombinedFailuresOpenChannelBeforeAnySingleIdentity(t *testing.T
 		}
 	}
 
-	if got := m.GetChannelCircuitStateMultiURL(baseURLs, apiKeys, serviceType); got != CircuitStateOpen {
+	if got := m.GetChannelCircuitStateMultiURL(baseURLs, apiKeys, serviceType, ""); got != CircuitStateOpen {
 		t.Fatalf("combined channel state = %v, want open", got)
 	}
-	if m.IsChannelHealthyMultiURL(baseURLs, apiKeys, serviceType) {
+	if m.IsChannelHealthyMultiURL(baseURLs, apiKeys, serviceType, "") {
 		t.Fatal("combined failure should make the channel unhealthy")
 	}
 	if got := m.ToResponseMultiURL(0, baseURLs, apiKeys, serviceType, 0).CircuitState; got != "open" {
@@ -84,10 +84,10 @@ func TestMultiURLCombinedFailureRecoversAfterSuccess(t *testing.T) {
 	}
 	m.RecordSuccess(baseURLs[0], apiKeys[0], serviceType)
 
-	if got := m.GetChannelCircuitStateMultiURL(baseURLs, apiKeys, serviceType); got != CircuitStateClosed {
+	if got := m.GetChannelCircuitStateMultiURL(baseURLs, apiKeys, serviceType, ""); got != CircuitStateClosed {
 		t.Fatalf("channel state after success = %v, want closed", got)
 	}
-	if !m.IsChannelHealthyMultiURL(baseURLs, apiKeys, serviceType) {
+	if !m.IsChannelHealthyMultiURL(baseURLs, apiKeys, serviceType, "") {
 		t.Fatal("channel should recover after a successful request breaks the combined failure streak")
 	}
 }
@@ -107,16 +107,16 @@ func TestMultiURLCombinedFailureIgnoresPendingRequests(t *testing.T) {
 	requestA := m.RecordRequestConnectedAt(baseURL, "sk-a", serviceType, "test-model", startedAt)
 	requestB := m.RecordRequestConnectedAt(baseURL, "sk-b", serviceType, "test-model", startedAt.Add(time.Millisecond))
 
-	if got := m.CalculateChannelFailureRateMultiURL([]string{baseURL}, []string{"sk-a", "sk-b"}, serviceType); got != 0 {
+	if got := m.CalculateChannelFailureRateMultiURL([]string{baseURL}, []string{"sk-a", "sk-b"}, serviceType, ""); got != 0 {
 		t.Fatalf("pending request failure rate = %v, want 0", got)
 	}
-	if got := m.GetChannelCircuitStateMultiURL([]string{baseURL}, []string{"sk-a", "sk-b"}, serviceType); got != CircuitStateClosed {
+	if got := m.GetChannelCircuitStateMultiURL([]string{baseURL}, []string{"sk-a", "sk-b"}, serviceType, ""); got != CircuitStateClosed {
 		t.Fatalf("pending request channel state = %v, want closed", got)
 	}
 
 	m.RecordRequestFinalizeFailure(baseURL, "sk-a", serviceType, requestA)
 	m.RecordRequestFinalizeFailure(baseURL, "sk-b", serviceType, requestB)
-	if got := m.GetChannelCircuitStateMultiURL([]string{baseURL}, []string{"sk-a", "sk-b"}, serviceType); got != CircuitStateOpen {
+	if got := m.GetChannelCircuitStateMultiURL([]string{baseURL}, []string{"sk-a", "sk-b"}, serviceType, ""); got != CircuitStateOpen {
 		t.Fatalf("finalized combined failure channel state = %v, want open", got)
 	}
 }
@@ -141,10 +141,10 @@ func TestBreakerHealthWindowExpiresOldFailures(t *testing.T) {
 	metrics.ConsecutiveFailures = 1
 	m.mu.Unlock()
 
-	if !m.IsChannelHealthyMultiURL([]string{baseURL}, []string{apiKey}, serviceType) {
+	if !m.IsChannelHealthyMultiURL([]string{baseURL}, []string{apiKey}, serviceType, "") {
 		t.Fatal("expected channel to become healthy after breaker health window expires")
 	}
-	if got := m.CalculateChannelFailureRateMultiURL([]string{baseURL}, []string{apiKey}, serviceType); got != 0 {
+	if got := m.CalculateChannelFailureRateMultiURL([]string{baseURL}, []string{apiKey}, serviceType, ""); got != 0 {
 		t.Fatalf("expected expired breaker failure rate 0, got %v", got)
 	}
 	if got := m.GetKeyMetrics(baseURL, apiKey, serviceType).ConsecutiveFailures; got != 0 {
@@ -178,10 +178,10 @@ func TestBreakerHealthWindowKeepsRecentFailures(t *testing.T) {
 	m.refreshBreakerWindowsLocked(metrics, now)
 	m.mu.Unlock()
 
-	if m.IsChannelHealthyMultiURL([]string{baseURL}, []string{apiKey}, serviceType) {
+	if m.IsChannelHealthyMultiURL([]string{baseURL}, []string{apiKey}, serviceType, "") {
 		t.Fatal("expected channel to remain unhealthy while recent breaker failures are inside health window")
 	}
-	if got := m.CalculateChannelFailureRateMultiURL([]string{baseURL}, []string{apiKey}, serviceType); got != 0.8 {
+	if got := m.CalculateChannelFailureRateMultiURL([]string{baseURL}, []string{apiKey}, serviceType, ""); got != 0.8 {
 		t.Fatalf("expected recent breaker failure rate 0.8, got %v", got)
 	}
 }
@@ -367,5 +367,41 @@ func TestGetIdentityMetricsLocked_FindsEquivalentLegacyVariant(t *testing.T) {
 
 	if found != legacyMetrics {
 		t.Fatalf("expected identity lookup to find equivalent legacy metrics")
+	}
+}
+
+// TestMultiURLModelScopeSonnetFailureDoesNotBlockOpus 验证渠道聚合按模型过滤。
+// sonnet 失败后渠道对 opus 仍健康，这是三元组统一的核心不变量。
+func TestMultiURLModelScopeSonnetFailureDoesNotBlockOpus(t *testing.T) {
+	baseURL := "https://gorouter.example.com"
+	apiKey := "sk-test"
+	serviceType := "claude"
+
+	m := NewMetricsManagerWithConfig(20, 0.7)
+
+	// sonnet 连续失败 10 次
+	for i := 0; i < 10; i++ {
+		id := m.RecordRequestConnectedWithContext(baseURL, apiKey, serviceType, "ch_gorouter", "vendor-sonnet-v2", "claude-sonnet-5", "")
+		m.RecordRequestFinalizeFailureWithClass(baseURL, apiKey, serviceType, id, FailureClassRetryable)
+	}
+	// opus 成功 5 次
+	for i := 0; i < 5; i++ {
+		id := m.RecordRequestConnectedWithContext(baseURL, apiKey, serviceType, "ch_gorouter", "claude-opus-5", "claude-opus-5", "")
+		m.RecordRequestFinalizeSuccess(baseURL, apiKey, serviceType, id, nil)
+	}
+
+	// sonnet 查询应不健康
+	if m.IsChannelHealthyMultiURL([]string{baseURL}, []string{apiKey}, serviceType, "claude-sonnet-5") {
+		t.Fatal("sonnet 连续失败后渠道应对 sonnet 不健康")
+	}
+	// opus 查询应仍健康——核心不变量
+	if !m.IsChannelHealthyMultiURL([]string{baseURL}, []string{apiKey}, serviceType, "claude-opus-5") {
+		t.Fatal("opus 成功应盖过 sonnet 失败，对 opus 保持健康（核心不变量：模型隔离）")
+	}
+	// 无模型过滤时混合所有模型（15 条记录，10 失败 67% < 70% 阈值），
+	// 由于 opus 成功打断了连续失败序列，聚合判定为健康。
+	// 关键是不管聚合结果如何，model="" 查询不再代表任何具体模型的放行决定。
+	if !m.IsChannelHealthyMultiURL([]string{baseURL}, []string{apiKey}, serviceType, "") {
+		t.Fatal("无模型过滤时混合所有记录，成功打断失败序列后应判健康")
 	}
 }

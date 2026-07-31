@@ -11,11 +11,13 @@ import (
 
 // 渠道-模型级运行时熔断。
 //
-// 与 Key 级熔断（channel_metrics_circuit.go）的分工：Key 级熔断在失败能明确归因到
-// 单一模型时会主动豁免（isSingleModelFailureLocked），避免单个模型故障拖垮同 Key 下
-// 其他健康模型。但豁免之后该模型本身也就不再受任何约束，导致"某渠道的 sonnet-5 持续
-// 403、opus-5 正常"时调度器仍反复首选该组合。本文件补上被豁免掉的那一半惩罚：
-// 以 (channelUID, keyHash, model) 为粒度记账，只隔离出问题的模型。
+// 本文件是 CCX 唯一的 breaker 权威 store。所有参与请求放行与调度选择的熔断状态
+// 统一以 (channelUID, keyHash, model) 三元组为粒度，其中 model 可以为空，表示该
+// channel/key 的全局桶（认证失效、Key 整体不可用等）。
+//
+// 旧 KeyMetrics.CircuitState（channel_metrics_circuit.go）保留为模型无关的观测统计，
+// 但不再作为 scheduler/handler/autopilot 的放行权威——新调度查询必须通过本文件的
+// IsAvailable 同时检查 global + exact 两个 bucket。
 //
 // 状态是纯内存的，进程重启即清空。403/5xx 多为临时故障，不值得固化到 config.json；
 // 结构化的 model_not_found 仍由 ConfigManager.DisableKeyModel 走持久化黑名单。
@@ -41,6 +43,18 @@ const (
 
 	modelCircuitErrorMaxLen = 200
 )
+
+// BreakerScope 是熔断隔离的权威键。
+//
+// 所有调度放行、健康判定与渠道选择统一以本 scope 为查询粒度。
+// Model 为空表示该 channel/key 的全局桶（认证失效、Key 整体不可用等）。
+// 具体模型桶使用客户端原始 routeModel，不是 autopilot 映射后的实际模型：
+// scheduler 选渠道时尚未应用映射，原始模型是唯一三层可得的稳定标识。
+type BreakerScope struct {
+	ChannelUID string
+	KeyHash    string
+	Model      string // "" = 全局桶
+}
 
 // 编译期断言：条目回收阈值必须明显大于最大退避。
 //
@@ -170,7 +184,7 @@ func (t *ModelCircuitTracker) RecordModelFailure(channelUID, keyHash, model, err
 }
 
 func (t *ModelCircuitTracker) recordModelFailureAt(channelUID, keyHash, model, errSummary string, now time.Time) (bool, time.Time) {
-	if t == nil || channelUID == "" || model == "" {
+	if t == nil || channelUID == "" {
 		return false, time.Time{}
 	}
 
@@ -226,7 +240,7 @@ func (t *ModelCircuitTracker) RecordModelSuccess(channelUID, keyHash, model stri
 }
 
 func (t *ModelCircuitTracker) recordModelSuccessAt(channelUID, keyHash, model string, now time.Time) {
-	if t == nil || channelUID == "" || model == "" {
+	if t == nil || channelUID == "" {
 		return
 	}
 
@@ -276,7 +290,7 @@ func (t *ModelCircuitTracker) IsModelCircuitOpen(channelUID, keyHash, model stri
 }
 
 func (t *ModelCircuitTracker) isModelCircuitOpenAt(channelUID, keyHash, model string, now time.Time) bool {
-	if t == nil || channelUID == "" || model == "" {
+	if t == nil || channelUID == "" {
 		return false
 	}
 
@@ -354,3 +368,58 @@ func (t *ModelCircuitTracker) TrackedCount() int {
 	defer t.mu.Unlock()
 	return len(t.states)
 }
+
+// IsAvailable 判断该 channel/key 对指定 routeModel 是否可用。
+//
+// 同时检查 global 桶与 exact 桶，任一 open 即不可用。这是调度器和 handler 选 Key
+// 时唯一该调用的查询入口——不要单独调 IsModelCircuitOpen 而忽略 global 桶。
+func (t *ModelCircuitTracker) IsAvailable(channelUID, keyHash, routeModel string) bool {
+	return t.isAvailableAt(channelUID, keyHash, routeModel, time.Now())
+}
+
+func (t *ModelCircuitTracker) isAvailableAt(channelUID, keyHash, routeModel string, now time.Time) bool {
+	if t == nil || channelUID == "" {
+		return true // fail-open
+	}
+	// global bucket open → 整把 Key 不可用
+	if t.isModelCircuitOpenAt(channelUID, keyHash, "", now) {
+		return false
+	}
+	// exact bucket open → 该模型不可用
+	if routeModel != "" && t.isModelCircuitOpenAt(channelUID, keyHash, routeModel, now) {
+		return false
+	}
+	return true
+}
+
+// DeleteByChannelUID 删除指定渠道的全部 breaker 条目。
+// 用于删除渠道时清理，防止孤儿状态累积。
+func (t *ModelCircuitTracker) DeleteByChannelUID(channelUID string) {
+	if t == nil || channelUID == "" {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	for k := range t.states {
+		if k.channelUID == channelUID {
+			delete(t.states, k)
+		}
+	}
+}
+
+// DeleteByChannelUIDAndKeyHash 删除指定渠道下特定 Key 的全部 breaker 条目
+// （包括 global 桶与所有模型桶）。用于 Key 被拉黑、替换或删除时清理。
+func (t *ModelCircuitTracker) DeleteByChannelUIDAndKeyHash(channelUID, keyHash string) {
+	if t == nil || channelUID == "" || keyHash == "" {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	for k := range t.states {
+		if k.channelUID == channelUID && k.keyHash == keyHash {
+			delete(t.states, k)
+		}
+	}
+}
+
+// ChannelModelCircuitOpen 判断某渠道下该模型是否已在所有候选 Key 上熔断。
