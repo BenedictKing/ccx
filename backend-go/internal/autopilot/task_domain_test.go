@@ -26,6 +26,28 @@ func TestDomainStrength_ProfileOverride(t *testing.T) {
 	}
 }
 
+// canonicalDomainCeiling 从当前 registry 推导任务域的规范上界，
+// 避免测试锁死会随评测数据刷新变动的具体分值。
+func canonicalDomainCeiling(t *testing.T, model string, domain TaskDomain) float64 {
+	t.Helper()
+	mapping, ok := benchmarkDomainMappings[domain]
+	if !ok {
+		t.Fatalf("任务域 %q 缺少基准类别映射", domain)
+	}
+	resolved := config.ResolveModelBenchmarkProfile(model)
+	if !resolved.Known {
+		t.Fatalf("模型 %q 缺少内置基准档案", model)
+	}
+	score, found := resolved.Profile.CategoryScores[mapping.category]
+	if !found {
+		t.Fatalf("模型 %q 缺少 %q 类别分: %+v", model, mapping.category, resolved.Profile.CategoryScores)
+	}
+	if score <= 0 || score > 100 {
+		t.Fatalf("模型 %q 的 %q 类别分 = %v, want (0,100]", model, mapping.category, score)
+	}
+	return score / 100
+}
+
 func TestDomainStrength_SeedMatrixFallback(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -136,23 +158,27 @@ func TestResolveDomainStrength_CanonicalBenchmarkByVariant(t *testing.T) {
 	tests := []struct {
 		model  string
 		domain TaskDomain
-		want   float64
 	}{
-		{model: "claude-opus-4-8", domain: TaskDomainCoding, want: 0.691},
-		{model: "gpt-5.6-terra", domain: TaskDomainReasoning, want: 0.971},
-		{model: "gpt-5.6-sol", domain: TaskDomainReasoning, want: 0.971},
-		{model: "gpt-5.6-sol", domain: TaskDomainAgentic, want: 0.947},
+		{model: "claude-opus-4-8", domain: TaskDomainCoding},
+		{model: "gpt-5.6-terra", domain: TaskDomainReasoning},
+		{model: "gpt-5.6-sol", domain: TaskDomainReasoning},
+		{model: "gpt-5.6-sol", domain: TaskDomainAgentic},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.model+"/"+string(tt.domain), func(t *testing.T) {
+			// 期望值由当前 registry 推导，测试只锁定映射与折算链路。
+			want := canonicalDomainCeiling(t, tt.model, tt.domain)
 			profile := &ModelProfile{ModelID: tt.model, ModelFamily: InferModelFamily(tt.model, "")}
 			evidence := ResolveDomainStrength(profile, tt.domain)
 			if evidence.Source != "canonical_benchmark" {
 				t.Fatalf("Source = %q, want canonical_benchmark", evidence.Source)
 			}
-			if math.Abs(evidence.Score-tt.want) > 1e-9 {
-				t.Fatalf("Score = %v, want %v", evidence.Score, tt.want)
+			if math.Abs(evidence.Score-want) > 1e-9 {
+				t.Fatalf("Score = %v, want %v", evidence.Score, want)
+			}
+			if math.Abs(evidence.CanonicalCeiling-want) > 1e-9 {
+				t.Fatalf("CanonicalCeiling = %v, want %v", evidence.CanonicalCeiling, want)
 			}
 			if evidence.ProviderQualityFactor != 1 {
 				t.Fatalf("ProviderQualityFactor = %v, want 1 without endpoint evidence", evidence.ProviderQualityFactor)
@@ -169,6 +195,8 @@ func TestResolveDomainStrength_CanonicalBenchmarkByVariant(t *testing.T) {
 }
 
 func TestResolveDomainStrength_AppliesProviderQualityAsDownwardFactor(t *testing.T) {
+	// 规范上界随 registry 刷新变动，这里只验证折算公式本身。
+	ceiling := canonicalDomainCeiling(t, "gpt-5.6-sol", TaskDomainReasoning)
 	profile := &ModelProfile{
 		ModelID:                   "gpt-5.6-sol",
 		ModelFamily:               ModelFamilyOpenAI,
@@ -176,17 +204,17 @@ func TestResolveDomainStrength_AppliesProviderQualityAsDownwardFactor(t *testing
 		ProviderQualityConfidence: 0.75,
 	}
 	evidence := ResolveDomainStrength(profile, TaskDomainReasoning)
-	// factor = 1 - 0.75 * (1 - 0.8) = 0.85; effective = 0.971 * 0.85.
+	// factor = 1 - 0.75 * (1 - 0.8) = 0.85; effective = ceiling * 0.85.
 	if math.Abs(evidence.ProviderQualityFactor-0.85) > 1e-9 {
 		t.Fatalf("ProviderQualityFactor = %v, want 0.85", evidence.ProviderQualityFactor)
 	}
-	if math.Abs(evidence.Score-0.82535) > 1e-9 {
-		t.Fatalf("Score = %v, want 0.82535", evidence.Score)
+	if want := ceiling * 0.85; math.Abs(evidence.Score-want) > 1e-9 {
+		t.Fatalf("Score = %v, want %v", evidence.Score, want)
 	}
 
 	profile.ProviderQualityConfidence = 0.49
 	lowConfidence := ResolveDomainStrength(profile, TaskDomainReasoning)
-	if lowConfidence.ProviderQualityFactor != 1 || lowConfidence.Score != 0.971 {
+	if lowConfidence.ProviderQualityFactor != 1 || math.Abs(lowConfidence.Score-ceiling) > 1e-9 {
 		t.Fatalf("低置信度不应下调规范上界: %+v", lowConfidence)
 	}
 }
