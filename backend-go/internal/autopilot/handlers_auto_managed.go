@@ -2233,20 +2233,21 @@ func handleProviderAutoAdd(c *gin.Context, deps *AutoManagedDeps, requestKind st
 			item.keyConfigs[i].CredentialUID = config.GenerateCredentialUID(accountUID, item.keyConfigs[i].Key)
 		}
 		upstream := config.UpstreamConfig{
-			Name:          item.name,
-			AccountUID:    accountUID,
-			ChannelUID:    config.GenerateChannelUID(),
-			ServiceType:   item.route.ServiceType,
-			Status:        "active",
-			AutoManaged:   true,
-			AutoManagedAt: &now,
-			ProviderID:    tmpl.ProviderID,
-			OriginType:    tmpl.OriginType,
-			OriginTier:    tmpl.OriginTier,
-			BaseURL:       item.baseURLs[0],
-			BaseURLs:      item.baseURLs,
-			APIKeys:       append([]string(nil), req.APIKeys...),
-			APIKeyConfigs: item.keyConfigs,
+			Name:            item.name,
+			AccountUID:      accountUID,
+			ChannelUID:      config.GenerateChannelUID(),
+			ServiceType:     item.route.ServiceType,
+			Status:          "active",
+			AutoManaged:     true,
+			AutoManagedAt:   &now,
+			ProviderID:      tmpl.ProviderID,
+			OriginType:      tmpl.OriginType,
+			OriginTier:      tmpl.OriginTier,
+			BaseURL:         item.baseURLs[0],
+			BaseURLs:        item.baseURLs,
+			APIKeys:         append([]string(nil), req.APIKeys...),
+			APIKeyConfigs:   item.keyConfigs,
+			SupportedModels: append([]string(nil), item.route.SupportedModels...),
 		}
 		config.ApplyProviderUpstreamDefaults(tmpl.ProviderID, &upstream)
 		additions = append(additions, config.AccountChannelAddition{Kind: item.route.ChannelKind, Upstream: upstream, Placement: req.Placement})
@@ -2427,20 +2428,21 @@ func planProviderAccountRouteAdditions(
 			baseURLs = append(baseURLs, keyConfigs[i].BaseURL)
 		}
 		upstream := config.UpstreamConfig{
-			Name:          providerRouteName(baseName, route, len(allRoutes) > 1),
-			AccountUID:    accountUID,
-			ChannelUID:    config.GenerateChannelUID(),
-			ServiceType:   route.ServiceType,
-			Status:        "active",
-			AutoManaged:   true,
-			AutoManagedAt: &now,
-			ProviderID:    tmpl.ProviderID,
-			OriginType:    tmpl.OriginType,
-			OriginTier:    tmpl.OriginTier,
-			BaseURL:       baseURLs[0],
-			BaseURLs:      uniqueNonEmptyStrings(baseURLs),
-			APIKeys:       append([]string(nil), apiKeys...),
-			APIKeyConfigs: keyConfigs,
+			Name:            providerRouteName(baseName, route, len(allRoutes) > 1),
+			AccountUID:      accountUID,
+			ChannelUID:      config.GenerateChannelUID(),
+			ServiceType:     route.ServiceType,
+			Status:          "active",
+			AutoManaged:     true,
+			AutoManagedAt:   &now,
+			ProviderID:      tmpl.ProviderID,
+			OriginType:      tmpl.OriginType,
+			OriginTier:      tmpl.OriginTier,
+			BaseURL:         baseURLs[0],
+			BaseURLs:        uniqueNonEmptyStrings(baseURLs),
+			APIKeys:         append([]string(nil), apiKeys...),
+			APIKeyConfigs:   keyConfigs,
+			SupportedModels: append([]string(nil), route.SupportedModels...),
 		}
 		config.ApplyProviderUpstreamDefaults(tmpl.ProviderID, &upstream)
 		additions = append(additions, config.AccountChannelAddition{Kind: route.ChannelKind, Upstream: upstream})

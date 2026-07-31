@@ -42,6 +42,13 @@ type ProviderRoute struct {
 	ServiceType string              `json:"serviceType"`           // "claude" / "openai" / "responses"
 	Description string              `json:"description,omitempty"` // route 说明，仅展示/诊断
 	Candidates  []ProviderCandidate `json:"candidates"`            // 该 route 的候选 baseURL
+	// SupportedModels 限定该 route 端点实际接受的模型，语义与 UpstreamConfig.SupportedModels 一致
+	// （支持精确匹配、prefix* / *suffix / *contains*，以及 ! 前缀排除）。
+	//
+	// 仅在上游同一 baseURL 下不同协议端点的模型支持范围不一致时才需要填写：
+	// 例如 DeepSeek 的 /v1/responses 只接受 deepseek-v4-flash，而 /v1/chat/completions
+	// 同时接受 flash 与 pro。留空表示该 route 不额外限制模型。
+	SupportedModels []string `json:"supportedModels,omitempty"`
 }
 
 // KeyPrefixRule 按 API Key 前缀判别 plan 类型。
@@ -113,7 +120,7 @@ var builtinProviderTemplates = []ProviderTemplate{
 	{
 		ProviderID:  "deepseek",
 		DisplayName: "DeepSeek",
-		Description: "DeepSeek 官方 API（Claude Messages 与 OpenAI Chat 兼容；Responses 由 CCX 转换）",
+		Description: "DeepSeek 官方 API（Claude Messages、OpenAI Chat 与 Responses 三协议原生兼容；Responses 仅支持 deepseek-v4-flash）",
 		ChannelKind: "messages",
 		ServiceType: "claude",
 		OriginType:  "official_api",
@@ -134,9 +141,12 @@ var builtinProviderTemplates = []ProviderTemplate{
 			},
 			{
 				ChannelKind: "responses",
-				ServiceType: "openai",
-				Description: "Responses 请求转换到 OpenAI Chat Completions",
-				Candidates:  deepseekOpenAICandidates(),
+				ServiceType: "responses",
+				Description: "OpenAI Responses 原生入口（仅 deepseek-v4-flash；v4-pro 预计 2026-08 初支持）",
+				Candidates:  deepseekResponsesCandidates(),
+				// 上游对不支持的模型返回 400 而非忽略，因此在渠道层就限定为正向白名单：
+				// 未知新模型不会被误放进该端点，v4-pro 上线后在此追加即可。
+				SupportedModels: []string{"deepseek-v4-flash"},
 			},
 		},
 	},
@@ -404,6 +414,14 @@ func deepseekClaudeCandidates() []ProviderCandidate {
 func deepseekOpenAICandidates() []ProviderCandidate {
 	return []ProviderCandidate{
 		{BaseURL: "https://api.deepseek.com", PlanTag: "", Region: "", Priority: 0},
+	}
+}
+
+// deepseekResponsesCandidates DeepSeek 原生 Responses 入口。
+// 官方 base_url 为 https://api.deepseek.com，端点为标准 /v1/responses。
+func deepseekResponsesCandidates() []ProviderCandidate {
+	return []ProviderCandidate{
+		{BaseURL: "https://api.deepseek.com/v1/responses", PlanTag: "", Region: "", Priority: 0},
 	}
 }
 

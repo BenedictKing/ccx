@@ -3,6 +3,7 @@ package config
 import (
 	"bytes"
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -98,17 +99,27 @@ func TestProviderTemplateDeepSeekRoutes(t *testing.T) {
 		t.Fatalf("deepseek 应创建 messages/chat/responses 三条 route，实际 %d: %+v", len(routes), routes)
 	}
 	want := map[string]struct {
-		serviceType string
-		baseURL     string
+		serviceType     string
+		baseURL         string
+		supportedModels []string
 	}{
-		"messages":  {serviceType: "claude", baseURL: "https://api.deepseek.com/anthropic"},
-		"chat":      {serviceType: "openai", baseURL: "https://api.deepseek.com"},
-		"responses": {serviceType: "openai", baseURL: "https://api.deepseek.com"},
+		"messages": {serviceType: "claude", baseURL: "https://api.deepseek.com/anthropic"},
+		"chat":     {serviceType: "openai", baseURL: "https://api.deepseek.com"},
+		// Responses 走官方原生入口，且仅 deepseek-v4-flash 可用
+		"responses": {
+			serviceType:     "responses",
+			baseURL:         "https://api.deepseek.com/v1/responses",
+			supportedModels: []string{"deepseek-v4-flash"},
+		},
 	}
 	for _, route := range routes {
 		expect, found := want[route.ChannelKind]
 		if !found || route.ServiceType != expect.serviceType || len(route.Candidates) != 1 || route.Candidates[0].BaseURL != expect.baseURL {
 			t.Fatalf("DeepSeek route 不符合预期: %+v", route)
+		}
+		if !slices.Equal(route.SupportedModels, expect.supportedModels) {
+			t.Fatalf("DeepSeek route %s 模型白名单不符合预期: got %v, want %v",
+				route.ChannelKind, route.SupportedModels, expect.supportedModels)
 		}
 	}
 }
