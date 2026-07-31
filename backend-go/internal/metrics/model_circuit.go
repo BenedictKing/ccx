@@ -37,17 +37,18 @@ const (
 	modelCircuitBackoffMax  = 30 * time.Minute
 
 	// 条目在无任何活动后的保留时长，超过则被后台清理回收。
-	modelCircuitStaleAfter = 2 * time.Hour
-
-	// 探针资格的有效期。发放探针后，若请求既没记成功也没记失败就结束了
-	// （客户端取消、被忽略的中间态重试、不可 failover 直接回客户端、SSE 流内拉黑
-	// 都是这样的路径），probeInFlight 会一直悬挂，该组合将永不恢复。
-	// 超过这个时长仍未裁决就视为探针作废，重新发放，使恢复能力不依赖调用方
-	// 在所有分支上都记账。取值需大于正常请求的最长耗时。
-	modelCircuitProbeTimeout = 10 * time.Minute
+	modelCircuitStaleAfter = 6 * time.Hour
 
 	modelCircuitErrorMaxLen = 200
 )
+
+// 编译期断言：条目回收阈值必须明显大于最大退避。
+//
+// 只读判定不刷新 lastActivity，所以隔离生效期间该组合很可能完全没有活动——
+// 若 staleAfter 不够大，"因为隔离生效所以没人再请求它"会被误判成"长期无活动
+// 可以回收"，把学到的 backoffLevel 一并丢掉，反复抖动的组合每次都从 60s 重新
+// 起步，隔离再也升不上去。数组长度为负则编译失败。
+var _ [modelCircuitStaleAfter - 4*modelCircuitBackoffMax]struct{}
 
 type modelCircuitKey struct {
 	channelUID string
@@ -58,14 +59,11 @@ type modelCircuitKey struct {
 type modelCircuitState struct {
 	// failures 为升序的失败时间戳，最多 modelCircuitMaxFailures 条；
 	// 写入前会剔除超出慢速窗口的过期记录，一次成功则整体清空。
-	failures      []time.Time
-	backoffLevel  int
-	openUntil     time.Time
-	probeInFlight bool
-	// probeStartedAt 为探针资格的发放时刻，用于超时作废（见 modelCircuitProbeTimeout）。
-	probeStartedAt time.Time
-	lastError      string
-	lastActivity   time.Time
+	failures     []time.Time
+	backoffLevel int
+	openUntil    time.Time
+	lastError    string
+	lastActivity time.Time
 }
 
 // ModelCircuitTracker 维护渠道-模型级熔断状态。
@@ -188,17 +186,16 @@ func (t *ModelCircuitTracker) recordModelFailureAt(channelUID, keyHash, model, e
 	}
 	st.lastActivity = now
 	st.lastError = truncateModelCircuitError(errSummary)
-	// 探针失败：直接按退避级别 +1 重新 open，不再走阈值判定——
-	// half-open 放行的这一次就是验证性请求，失败即证明故障仍在。
-	if st.probeInFlight {
-		st.probeInFlight = false
-		st.probeStartedAt = time.Time{}
-		// 与阈值路径一致：先按当前级别取时长，再递增级别。
-		// 首次熔断用 base，探针每失败一次翻倍。
+
+	// 隔离期刚过后的首次失败：直接按退避级别递增重新熔断，不再累积阈值证据。
+	// 上一轮隔离已经证明该组合有问题，到期放行后立刻又失败即证明故障仍在，
+	// 没有理由再等第二次失败。openUntil 非零表示曾经熔断过（成功会清零）。
+	if !st.openUntil.IsZero() && !now.Before(st.openUntil) {
 		delay := modelCircuitBackoff(st.backoffLevel)
 		st.backoffLevel++
 		st.openUntil = now.Add(delay)
-		log.Printf("[%s-ModelCircuit] 渠道 %s 模型 %s 探针失败，重新熔断 %s（最近错误: %s）",
+		st.failures = nil
+		log.Printf("[%s-ModelCircuit] 渠道 %s 模型 %s 恢复后再次失败，熔断 %s（最近错误: %s）",
 			t.logPrefix, channelUID, model, delay, st.lastError)
 		return true, st.openUntil
 	}
@@ -224,11 +221,11 @@ func (t *ModelCircuitTracker) recordModelFailureAt(channelUID, keyHash, model, e
 }
 
 // RecordModelSuccess 记录一次成功，清空失败序列。
-//
-// 若这是 half-open 放行的探针请求，同时重置退避级别并删除整个条目——组合已确认恢复，
-// 没有必要继续占用内存。非探针的普通成功只清失败序列，保留 backoffLevel：
-// 反复"熔断→恢复→立刻又坏"的抖动组合应被越来越长地隔离，而不是每次从 60s 重新开始。
 func (t *ModelCircuitTracker) RecordModelSuccess(channelUID, keyHash, model string) {
+	t.recordModelSuccessAt(channelUID, keyHash, model, time.Now())
+}
+
+func (t *ModelCircuitTracker) recordModelSuccessAt(channelUID, keyHash, model string, now time.Time) {
 	if t == nil || channelUID == "" || model == "" {
 		return
 	}
@@ -242,22 +239,38 @@ func (t *ModelCircuitTracker) RecordModelSuccess(channelUID, keyHash, model stri
 	if st == nil {
 		return
 	}
-	if st.probeInFlight {
-		delete(t.states, k)
-		log.Printf("[%s-ModelCircuit] 渠道 %s 模型 %s 探针成功，解除熔断",
-			t.logPrefix, channelUID, model)
+	st.lastActivity = now
+	st.failures = nil
+
+	// 隔离期尚未到期时不得解除隔离。这类成功来自熔断前就已发出、此刻才返回的
+	// 请求（长流式尤其常见），它证明的是"那一次调用没问题"，不是"故障已恢复"。
+	// 若据此清零 openUntil，剩余隔离时间会被腰斩，流量立刻涌回未验证的组合。
+	if !st.openUntil.IsZero() && now.Before(st.openUntil) {
 		return
 	}
-	st.failures = nil
-	st.openUntil = time.Time{}
-	st.lastActivity = time.Now()
+
+	// 隔离已到期且这次成功证明组合可用：完全恢复并回收条目。
+	// 退避级别随条目一并清除，符合"确认恢复才重置"的意图。
+	delete(t.states, k)
+	if !st.openUntil.IsZero() {
+		log.Printf("[%s-ModelCircuit] 渠道 %s 模型 %s 恢复后请求成功，解除熔断",
+			t.logPrefix, channelUID, model)
+	}
 }
 
 // IsModelCircuitOpen 判断该渠道-模型-Key 组合当前是否处于熔断隔离期。
 //
-// 隔离到期时原子地放行一个探针：首个查询者拿到 false（获得探针资格），并发的其余
-// 查询者仍得到 true，避免刚恢复就被一拥而上的流量重新打死。探针结果由后续的
-// RecordModelSuccess / RecordModelFailure 裁决。
+// 纯只读：隔离到期即对所有请求放行，不做单探针门控。
+//
+// 为什么不做单探针门控：门控需要在"资格发放"与"结果裁决"之间维护一段跨请求状态，
+// 而本机制的查询点在候选枚举阶段（keypool 会遍历所有候选 Key），发放资格的 Key
+// 未必就是最终发出请求的那把；同一组合的完成回调也无法区分是探针还是熔断前就已
+// 发出、此刻才返回的旧请求。要正确关联需引入 lease token 并在每条退出路径显式
+// 释放（既有 Key 级熔断的 AcquireProbe/ReleaseProbe 就是这么做的）。
+//
+// 这里选择不付这个复杂度：到期后若上游仍坏，第一个失败会立即按递增退避重新熔断
+// （见 recordModelFailureAt 的"恢复后再次失败"分支），窗口内最多漏进几个请求，
+// 而它们本来也会 failover 到其他渠道，不构成实质伤害。
 func (t *ModelCircuitTracker) IsModelCircuitOpen(channelUID, keyHash, model string) bool {
 	return t.isModelCircuitOpenAt(channelUID, keyHash, model, time.Now())
 }
@@ -274,18 +287,7 @@ func (t *ModelCircuitTracker) isModelCircuitOpenAt(channelUID, keyHash, model st
 	if st == nil || st.openUntil.IsZero() {
 		return false
 	}
-	if now.Before(st.openUntil) {
-		return true
-	}
-	// 已到期。已有探针在途时继续隔离其他请求，但超时未裁决的探针视为作废——
-	// 否则走了不记账路径的探针请求会让该组合永久停留在 open。
-	if st.probeInFlight && now.Sub(st.probeStartedAt) < modelCircuitProbeTimeout {
-		return true
-	}
-	st.probeInFlight = true
-	st.probeStartedAt = now
-	st.lastActivity = now
-	return false
+	return now.Before(st.openUntil)
 }
 
 // ChannelModelCircuitOpen 判断某渠道下该模型是否已在所有候选 Key 上熔断。
@@ -314,11 +316,9 @@ func (t *ModelCircuitTracker) channelModelCircuitOpenAt(channelUID string, keyHa
 		if st == nil || st.openUntil.IsZero() {
 			return false
 		}
-		// 已到期且无有效探针在途 → 该 Key 即将被放行，渠道整体不算熔断。
-		// 超时作废的探针不算在途，判断口径与 isModelCircuitOpenAt 保持一致，
-		// 否则渠道级会认为仍在熔断而 Key 级已放行，两者结论矛盾。
-		probeActive := st.probeInFlight && now.Sub(st.probeStartedAt) < modelCircuitProbeTimeout
-		if !now.Before(st.openUntil) && !probeActive {
+		// 已到期 → 该 Key 即将被放行，渠道整体不算熔断。
+		// 口径与 isModelCircuitOpenAt 完全一致，避免"渠道级说熔断、Key 级已放行"的矛盾。
+		if !now.Before(st.openUntil) {
 			return false
 		}
 	}

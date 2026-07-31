@@ -96,67 +96,6 @@ func TestModelCircuitSuccessResetsFailures(t *testing.T) {
 	}
 }
 
-// TestModelCircuitProbeGating 熔断到期后只放行一个探针，
-// 并发请求不应一拥而上把刚恢复的上游重新打死。
-func TestModelCircuitProbeGating(t *testing.T) {
-	base := time.Date(2026, 7, 31, 10, 0, 0, 0, time.UTC)
-	tracker := NewModelCircuitTracker("messages")
-
-	tracker.recordModelFailureAt(testChannelUID, testKeyHash, testModel, "err", base)
-	opened, until := tracker.recordModelFailureAt(
-		testChannelUID, testKeyHash, testModel, "err", base.Add(time.Minute))
-	if !opened {
-		t.Fatal("5 分钟内 2 次失败应触发熔断")
-	}
-
-	// 隔离期内一律视为 open（第二次失败在 base+1min，熔断 60s，到 base+2min 才到期）。
-	if !tracker.isModelCircuitOpenAt(testChannelUID, testKeyHash, testModel, base.Add(90*time.Second)) {
-		t.Fatal("隔离期内应为 open")
-	}
-
-	// 到期后首个查询者获得探针资格。
-	afterExpiry := until.Add(time.Second)
-	if tracker.isModelCircuitOpenAt(testChannelUID, testKeyHash, testModel, afterExpiry) {
-		t.Fatal("到期后首个查询者应获得探针资格")
-	}
-	// 探针在途，其余查询者仍被隔离。
-	if !tracker.isModelCircuitOpenAt(testChannelUID, testKeyHash, testModel, afterExpiry) {
-		t.Fatal("探针在途时其余请求应继续被隔离")
-	}
-
-	// 探针成功 → 完全恢复，条目回收。
-	tracker.RecordModelSuccess(testChannelUID, testKeyHash, testModel)
-	if tracker.isModelCircuitOpenAt(testChannelUID, testKeyHash, testModel, afterExpiry) {
-		t.Fatal("探针成功后应完全恢复")
-	}
-	if tracker.TrackedCount() != 0 {
-		t.Fatalf("探针成功后应回收条目, TrackedCount = %d", tracker.TrackedCount())
-	}
-}
-
-// TestModelCircuitProbeFailureBacksOff 探针失败应直接翻倍退避，
-// 反复抖动的组合要被越来越长地隔离，而非每次从 base 重新开始。
-func TestModelCircuitProbeFailureBacksOff(t *testing.T) {
-	base := time.Date(2026, 7, 31, 10, 0, 0, 0, time.UTC)
-	tracker := NewModelCircuitTracker("messages")
-
-	tracker.recordModelFailureAt(testChannelUID, testKeyHash, testModel, "err", base)
-	_, until := tracker.recordModelFailureAt(
-		testChannelUID, testKeyHash, testModel, "err", base.Add(time.Minute))
-	if got := until.Sub(base.Add(time.Minute)); got != modelCircuitBackoffBase {
-		t.Fatalf("首次熔断时长 = %v, want %v", got, modelCircuitBackoffBase)
-	}
-
-	// 取得探针资格后失败 → 退避翻倍。
-	afterExpiry := until.Add(time.Second)
-	tracker.isModelCircuitOpenAt(testChannelUID, testKeyHash, testModel, afterExpiry)
-	_, until2 := tracker.recordModelFailureAt(
-		testChannelUID, testKeyHash, testModel, "err", afterExpiry)
-	if got := until2.Sub(afterExpiry); got != 2*modelCircuitBackoffBase {
-		t.Fatalf("探针失败后熔断时长 = %v, want %v", got, 2*modelCircuitBackoffBase)
-	}
-}
-
 // TestModelCircuitBackoffCap 退避有上限，不会无限增长。
 func TestModelCircuitBackoffCap(t *testing.T) {
 	if got := modelCircuitBackoff(100); got != modelCircuitBackoffMax {
@@ -198,27 +137,6 @@ func TestChannelModelCircuitOpen(t *testing.T) {
 	// 空 keyHashes 时 fail-open。
 	if tracker.channelModelCircuitOpenAt(testChannelUID, nil, testModel, now) {
 		t.Fatal("无 keyHash 可判断时应 fail-open")
-	}
-}
-
-// TestChannelModelCircuitOpenDoesNotConsumeProbe 渠道级判定不得消耗探针资格，
-// 否则调度阶段的多次查询会让真正发请求的 Key 级检查拿不到探针。
-func TestChannelModelCircuitOpenDoesNotConsumeProbe(t *testing.T) {
-	base := time.Date(2026, 7, 31, 10, 0, 0, 0, time.UTC)
-	tracker := NewModelCircuitTracker("messages")
-
-	tracker.recordModelFailureAt(testChannelUID, testKeyHash, testModel, "err", base)
-	_, until := tracker.recordModelFailureAt(
-		testChannelUID, testKeyHash, testModel, "err", base.Add(time.Minute))
-
-	afterExpiry := until.Add(time.Second)
-	// 到期后渠道级判定应返回 false（该 Key 即将放行），且不消耗探针。
-	if tracker.channelModelCircuitOpenAt(testChannelUID, []string{testKeyHash}, testModel, afterExpiry) {
-		t.Fatal("到期且无探针在途时渠道级不应视为熔断")
-	}
-	// 探针资格仍应完好，由 Key 级检查取得。
-	if tracker.isModelCircuitOpenAt(testChannelUID, testKeyHash, testModel, afterExpiry) {
-		t.Fatal("渠道级判定消耗了探针资格")
 	}
 }
 
@@ -306,12 +224,12 @@ func utf8ValidString(s string) bool {
 	return true
 }
 
-// TestModelCircuitProbeTimeoutPreventsPermanentOpen 探针资格必须能超时作废。
+// TestModelCircuitIsolationNotClearedByLateSuccess 隔离期内的成功不得提前解除隔离。
 //
-// 调用方并非在所有失败分支都记账（客户端取消、被忽略的中间态重试、不可 failover
-// 直接回客户端、SSE 流内拉黑都不记），探针请求若走了这些路径就永远不会裁决。
-// 没有超时兜底时该组合会永久停留在 open，永不恢复。
-func TestModelCircuitProbeTimeoutPreventsPermanentOpen(t *testing.T) {
+// 回归防护：熔断前就已发出、此刻才返回的请求（长流式尤其常见）会调 RecordModelSuccess，
+// 若据此清零 openUntil，剩余隔离时间被腰斩，流量立刻涌回未验证的组合。
+// 这类成功只证明"那一次调用没问题"，不证明"故障已恢复"。
+func TestModelCircuitIsolationNotClearedByLateSuccess(t *testing.T) {
 	base := time.Date(2026, 7, 31, 10, 0, 0, 0, time.UTC)
 	tracker := NewModelCircuitTracker("messages")
 
@@ -319,29 +237,68 @@ func TestModelCircuitProbeTimeoutPreventsPermanentOpen(t *testing.T) {
 	_, until := tracker.recordModelFailureAt(
 		testChannelUID, testKeyHash, testModel, "err", base.Add(time.Minute))
 
-	// 取得探针资格后不做任何裁决，模拟请求走了不记账的路径。
+	// 隔离期内（尚未到期）一个迟到的旧请求成功返回。
+	mid := base.Add(90 * time.Second)
+	if !mid.Before(until) {
+		t.Fatalf("测试前提错误: mid=%v 应早于 until=%v", mid, until)
+	}
+	tracker.recordModelSuccessAt(testChannelUID, testKeyHash, testModel, mid)
+
+	if !tracker.isModelCircuitOpenAt(testChannelUID, testKeyHash, testModel, mid) {
+		t.Fatalf("隔离期内的成功不应解除隔离，剩余 %v 被跳过", until.Sub(mid))
+	}
+	// 到期后正常放行。
+	if tracker.isModelCircuitOpenAt(testChannelUID, testKeyHash, testModel, until.Add(time.Second)) {
+		t.Fatal("到期后应放行")
+	}
+}
+
+// TestModelCircuitRecoveryThenFailureBacksOff 到期放行后若立即再失败，
+// 应按递增退避直接重新熔断，不必再等第二次失败累积证据。
+func TestModelCircuitRecoveryThenFailureBacksOff(t *testing.T) {
+	base := time.Date(2026, 7, 31, 10, 0, 0, 0, time.UTC)
+	tracker := NewModelCircuitTracker("messages")
+
+	tracker.recordModelFailureAt(testChannelUID, testKeyHash, testModel, "err", base)
+	_, until := tracker.recordModelFailureAt(
+		testChannelUID, testKeyHash, testModel, "err", base.Add(time.Minute))
+	if got := until.Sub(base.Add(time.Minute)); got != modelCircuitBackoffBase {
+		t.Fatalf("首次熔断时长 = %v, want %v", got, modelCircuitBackoffBase)
+	}
+
+	// 到期后第一个请求就失败 → 单次失败即重新熔断，退避翻倍。
 	afterExpiry := until.Add(time.Second)
-	if tracker.isModelCircuitOpenAt(testChannelUID, testKeyHash, testModel, afterExpiry) {
-		t.Fatal("到期后应发放探针资格")
+	opened, until2 := tracker.recordModelFailureAt(
+		testChannelUID, testKeyHash, testModel, "err", afterExpiry)
+	if !opened {
+		t.Fatal("恢复后立即失败应重新熔断，不必再累积第二次证据")
 	}
-
-	// 超时前仍隔离其他请求，避免一拥而上。
-	beforeTimeout := afterExpiry.Add(modelCircuitProbeTimeout - time.Second)
-	if !tracker.isModelCircuitOpenAt(testChannelUID, testKeyHash, testModel, beforeTimeout) {
-		t.Fatal("探针有效期内其余请求应继续被隔离")
+	if got := until2.Sub(afterExpiry); got != 2*modelCircuitBackoffBase {
+		t.Fatalf("重新熔断时长 = %v, want %v（退避应翻倍）", got, 2*modelCircuitBackoffBase)
 	}
+}
 
-	// 渠道级判定先验：探针已超时作废，渠道级也必须视为可放行，
-	// 否则会出现"渠道级说熔断、Key 级已放行"的矛盾结论。
-	// 放在 Key 级查询之前，因为后者会重新发放探针并刷新计时。
-	afterTimeout := afterExpiry.Add(modelCircuitProbeTimeout + time.Second)
-	if tracker.channelModelCircuitOpenAt(
-		testChannelUID, []string{testKeyHash}, testModel, afterTimeout) {
-		t.Fatal("渠道级判定应与 Key 级一致地忽略已作废的探针")
+// TestModelCircuitSuccessAfterExpiryRecovers 到期后成功应完全恢复并回收条目，
+// 退避级别随之清除。
+func TestModelCircuitSuccessAfterExpiryRecovers(t *testing.T) {
+	base := time.Date(2026, 7, 31, 10, 0, 0, 0, time.UTC)
+	tracker := NewModelCircuitTracker("messages")
+
+	tracker.recordModelFailureAt(testChannelUID, testKeyHash, testModel, "err", base)
+	_, until := tracker.recordModelFailureAt(
+		testChannelUID, testKeyHash, testModel, "err", base.Add(time.Minute))
+
+	afterExpiry := until.Add(time.Second)
+	tracker.recordModelSuccessAt(testChannelUID, testKeyHash, testModel, afterExpiry)
+
+	if tracker.TrackedCount() != 0 {
+		t.Fatalf("恢复后应回收条目, TrackedCount = %d", tracker.TrackedCount())
 	}
-
-	// 超时后探针作废，重新放行，恢复能力不依赖调用方在所有分支记账。
-	if tracker.isModelCircuitOpenAt(testChannelUID, testKeyHash, testModel, afterTimeout) {
-		t.Fatal("探针超时未裁决应作废并重新放行，否则该组合永不恢复")
+	// 退避已清除：下次触发从 base 重新起步。
+	tracker.recordModelFailureAt(testChannelUID, testKeyHash, testModel, "err", afterExpiry.Add(time.Minute))
+	_, until3 := tracker.recordModelFailureAt(
+		testChannelUID, testKeyHash, testModel, "err", afterExpiry.Add(2*time.Minute))
+	if got := until3.Sub(afterExpiry.Add(2 * time.Minute)); got != modelCircuitBackoffBase {
+		t.Fatalf("确认恢复后退避应重置为 base, got %v", got)
 	}
 }
