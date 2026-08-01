@@ -43,7 +43,7 @@ func EstimateTokens(text string) int {
 //   - OpenAI data URL：整个 url 值连同 ";base64," 一起被替换成 "<image>"，"base64" 特征消失，
 //     extractImageTokensAndStripBytes 直接短路，近乎零成本。
 //   - Anthropic：仅 source.data 被替换，"type":"base64" 仍残留，不短路、会再做一次 gjson 全量解析；
-//     但 data 已是占位符 "<image>"，imagePayloadFromBlock 跳过，必返回 0 图片 token，不重复计图。
+//     但 data 已是占位符 "<image>"，mediaPayloadFromBlock 跳过，必返回 0 图片 token，不重复计图。
 func EstimateMessagesTokens(messages interface{}) int {
 	if messages == nil {
 		return 0

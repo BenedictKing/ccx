@@ -263,13 +263,15 @@ func TestExtractImageTokensAndStripBytes(t *testing.T) {
 			wantValidCleaned: true,
 		},
 		{
-			name: "anthropic_document_not_counted_as_image",
+			name: "anthropic_document_attachment_fallback",
 			body: fmt.Sprintf(
 				`{"messages":[{"role":"user","metadata":"keep-doc","content":[{"type":"document","source":{"type":"base64","media_type":"application/pdf","data":"%s"}}]}]}`,
 				nonImageData),
-			wantTokens:       0, // type=document 应该不算图片 token
-			wantStripped:     false,
-			wantPreserved:    []string{"messages.0.metadata=keep-doc", "messages.0.content.0.source.data=" + nonImageData},
+			// type=document 自媒体泛化修复起按通用附件剥离并给固定保守估算，
+			// 防止 1MB+ PDF 被 base64-as-text 估成几十万 token 撞穿渠道窗口。
+			wantTokens:       attachmentTokenFallback,
+			wantStripped:     true,
+			wantPreserved:    []string{"messages.0.metadata=keep-doc"},
 			wantValidCleaned: true,
 		},
 		{
@@ -666,8 +668,8 @@ func TestDataURLPayload(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := dataURLPayload(tt.url) != ""; got != tt.wantHit {
-				t.Errorf("dataURLPayload(%q) hit=%v, want %v", tt.url, got, tt.wantHit)
+			if b, _ := imageDataURLPayload(tt.url); (b != "") != tt.wantHit {
+				t.Errorf("imageDataURLPayload(%q) hit=%v, want %v", tt.url, b != "", tt.wantHit)
 			}
 		})
 	}
@@ -759,16 +761,17 @@ func TestExtractImageTokensAndStripBytes_GeminiInlineData(t *testing.T) {
 	}
 }
 
-// Gemini 非图 inlineData（如 audio/pdf）不应被当作图片计 token。
-func TestExtractImageTokensAndStripBytes_GeminiNonImageIgnored(t *testing.T) {
+// Gemini 非图非音 inlineData（如 PDF）自媒体泛化修复起按通用附件剥离并给固定保守估算，
+// 不再保持原样——否则 1MB+ PDF 会被 base64-as-text 估成几十万 token 撞穿渠道窗口。
+func TestExtractImageTokensAndStripBytes_GeminiNonImageAttachment(t *testing.T) {
 	b64 := makePNG(512, 512)
 	body := `{"contents":[{"parts":[{"inlineData":{"mimeType":"application/pdf","data":"` + b64 + `"}}]}]}`
 	cleaned, tokens := extractImageTokensAndStripBytes([]byte(body))
-	if tokens != 0 {
-		t.Errorf("非图 inlineData 不应计 token, got %d", tokens)
+	if tokens != attachmentTokenFallback {
+		t.Errorf("PDF inlineData 应按附件固定估算, got %d, want %d", tokens, attachmentTokenFallback)
 	}
-	if !bytes.Equal(cleaned, []byte(body)) {
-		t.Errorf("非图 body 不应被改动")
+	if bytes.Contains(cleaned, []byte(b64)) {
+		t.Errorf("附件 base64 未被剥离: %s", string(cleaned))
 	}
 }
 

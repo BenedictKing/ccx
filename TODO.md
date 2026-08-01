@@ -95,9 +95,9 @@ CCX 现状：
 - `StreamSynthesizer` 已识别 `response.audio.delta` 和 `response.audio_transcript.delta`，但 `ResponsesItem` 没有专用音频字段，原生 Responses 透传仍是主要支持路径。
 - 请求体全局上限默认 50 MiB，覆盖请求级大小保护。
 
-已实测观察：1 MiB 音频 data URL 在 `EstimateResponsesRequestTokens` 中约估算为 391K tokens，而同等图片会走图片专用估算约 1.5K tokens。原因是图片剥离器明确跳过 audio，通用字符估算把 Base64 当文本计数。这会导致音频请求在 SmartRouter 上被严重高估，可能提前触发上下文硬约束或选不到渠道。
+已修复（2026-08-01）：媒体剥离泛化为图片+音频+附件三类。音频按真实时长 × 32 tokens/s 估算（WAV/FLAC 精确，MP3/M4A/WebM 头解析 + 码率回退），PDF 等附件固定保守值，1MiB payload 从约 391K tokens 降到几百~4K。见 `internal/utils/audio_tokens.go` 与 `image_tokens_gjson.go` 的 `mediaPayloadFromBlock`。后续若要 per-model 精确率，可在 `UpstreamModelCapability` 加 `audioInputTokensPerSecond` 数值能力。
 
-结论：当前 passthrough 发送链路可用，转换到 Chat 丢弃音频是目标协议限制；建议后续新增音频占位/按字节估算策略，但不在本次上游评估中直接改动，避免假设各上游音频 token 计费规则。
+结论：原生 Responses 透传可以保留 `input_audio`；转 Chat 路径会明确丢弃音频，因为目标协议不支持。~~发现一个实际观察项：1 MiB 音频 Base64 被估算为约 **391K tokens**，可能导致 SmartRouter 误判上下文超限~~ 已修复（2026-08-01）：音频/附件 token 估算重写为按真实时长 × 32 tokens/s，详见上方 0.145 评估第 1 节。
 
 ### 2. Reasoning parameters（#32206 / #32290）
 
