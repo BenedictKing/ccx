@@ -580,10 +580,12 @@ type rankedModelCandidate struct {
 	benchmarkKnown                 bool
 	benchmarkScore                 float64
 	benchmarkModel                 string
+	benchmarkLane                  string // benchmark 证据泳道（provisional/verified），frontier 置信区间加宽用
 	versionLineage                 string
 	versionNumbers                 []int
 	sameFamily                     bool
 	normalizedCandidateID          string
+	frontierNote                   string // frontier 选型命中或回退的可解释标记，非空时追加到 reasonSummary
 }
 
 func (candidate rankedModelCandidate) reasonSummary() string {
@@ -623,8 +625,12 @@ func (candidate rankedModelCandidate) reasonSummary() string {
 	if candidate.versionLineage != "" {
 		version = fmt.Sprintf("%s:%v", candidate.versionLineage, candidate.versionNumbers)
 	}
-	return fmt.Sprintf("family:%s, quality:%s, provider_quality_priority:%s, measured_quality:%s, benchmark:%s, version:%s, latency:%s, provider_cost_multiplier:%s, normalized_public_cost_usd:%s",
+	summary := fmt.Sprintf("family:%s, quality:%s, provider_quality_priority:%s, measured_quality:%s, benchmark:%s, version:%s, latency:%s, provider_cost_multiplier:%s, normalized_public_cost_usd:%s",
 		candidate.profile.ModelFamily, quality, providerQuality, measuredQuality, benchmark, version, latency, providerCost, publicCost)
+	if candidate.frontierNote != "" {
+		summary += ", " + candidate.frontierNote
+	}
+	return summary
 }
 
 // rankEligibleModels 在已经满足能力下界的候选中选择最佳模型。
@@ -692,6 +698,7 @@ func (r *ModelResolver) rankEligibleModels(
 				benchmarkKnown:               benchmark.Known && benchmark.Profile.OverallScore > 0,
 				benchmarkScore:               benchmark.Profile.OverallScore,
 				benchmarkModel:               benchmark.Profile.CanonicalModel,
+				benchmarkLane:                benchmark.Profile.Lane,
 				versionLineage:               modelVersionLineage(profile.ModelFamily, profile.ModelID),
 				versionNumbers:               modelVersionNumbers(profile.ModelFamily, profile.ModelID),
 				sameFamily:                   profile.ModelFamily == reqFamily,
@@ -720,13 +727,39 @@ func (r *ModelResolver) rankEligibleModels(
 		ranked[i].providerModelQualityComparable = qualityPriorityComplete[ranked[i].qualityRank]
 	}
 
+	// Frontier 选型：开启后在全部 model × effort 候选的 Pareto 前沿上按车道选择，
+	// 成本与质量并列成轴（替代下方 qualityRank 绝对主导的字典序链）。
+	// 证据不足时回退旧链并标注原因；开关关闭（默认）时行为完全不变。
+	frontierFallback := ""
+	if r.frontierRoutingEnabled() {
+		idx, note, ok := selectViaFrontier(ranked, floor, preferenceMode)
+		if ok {
+			best := ranked[idx]
+			best.frontierNote = note
+			return best
+		}
+		frontierFallback = note
+	}
+
 	best := ranked[0]
 	for i := 1; i < len(ranked); i++ {
 		if betterRankedModel(ranked[i], best, preferenceMode) {
 			best = ranked[i]
 		}
 	}
+	if frontierFallback != "" {
+		best.frontierNote = "frontier:fallback=" + frontierFallback
+	}
 	return best
+}
+
+// frontierRoutingEnabled 返回 Frontier/Ladder 是否参与模型级选优。
+// 由 frontierRoutingEnabled 独立控制，默认关闭（fail-open）。
+func (r *ModelResolver) frontierRoutingEnabled() bool {
+	if r == nil || r.cfgManager == nil {
+		return false
+	}
+	return r.cfgManager.GetAutopilotRouting().IsFrontierRoutingEnabled()
 }
 
 func (r *ModelResolver) modelCostPreferenceMode(taskClass TaskClass) CostPreferenceMode {

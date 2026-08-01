@@ -196,6 +196,8 @@ type ResolvedRouteTarget struct {
 
 **Frontier/CandidateLadder 的定位。** `FrontierPoint.Effort` 和 `ComputeFrontierForest` 已存在但无生产调用方。本轮**不启用** Frontier/CandidateLadder 路径：它适合多候选的 Pareto 分层场景，但联合决策的候选数仍在可控范围内（endpoint 数 × 档位数），直接在 `rankEligibleModels()` 内扩展比较链更简单、更可测。`FrontierPoint.Effort` 字段保留在数据结构中但不参与本轮排序，留待后续多模型多档位大规模候选场景再启用。
 
+> **后续更新（2026-08-01）**：Frontier/Ladder 已在 `rankEligibleModels()` 内接线，由 `frontierRoutingEnabled` 开关门控（默认关闭，fail-open 回退既有比较链）。候选点合成与三车道选择规则见 `backend-go/internal/autopilot/model_frontier_scoring.go`；effort 成本系数采用本节 §3.4 的灰度期保守默认值。
+
 ## 5. 决策落地：请求改写与协议适配
 
 ### 5.1 出口扩展

@@ -8,6 +8,10 @@ import (
 // ────────────────────────────────────────────────────────────────
 // Frontier 点：请求级能力—成本路由点。
 // 同一 model/version/effort/taskDomain 的多个 endpoint 不重复生成质量点。
+//
+// 生产入口：ModelResolver.rankEligibleModels（model_resolver.go），
+// 由 frontierRoutingEnabled 开关门控；候选点合成与车道选择规则见
+// model_frontier_scoring.go。
 // ────────────────────────────────────────────────────────────────
 
 // FrontierPoint 是请求级能力—成本路由点。
