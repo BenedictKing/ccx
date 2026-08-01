@@ -119,8 +119,8 @@ type AutopilotRoutingConfig struct {
 	// 仅支持 messages -> chat/responses；显式路由、手动覆盖和促销路径不受影响。
 	ProtocolFederation ProtocolFederationConfig `json:"protocolFederation,omitempty"`
 
-	// FrontierRoutingEnabled 控制通用 Frontier/Ladder 是否影响选路。
-	// 默认 false；需要在 shadow 中验证阶梯确定性、硬能力零放宽、手动映射零回归后启用。
+	// FrontierRoutingEnabled 已废弃，保留字段仅为 JSON 兼容。
+	// Frontier/Ladder 模型级选优默认启用，成本证据不足时 fail-open 回退既有比较链。
 	FrontierRoutingEnabled bool `json:"frontierRoutingEnabled,omitempty"`
 
 	// AutoSafetyDowngrade 控制 auto 模式是否因 SLO 回归自动降级到 assist。
@@ -132,12 +132,6 @@ type AutopilotRoutingConfig struct {
 	// AFP 成本路由默认开启，在 assist/auto 模式下始终生效。
 	// 仅对火山 Agent Plan 渠道生效；scope 非可比时自动回退 USD。
 	AFPCostRoutingEnabled bool `json:"afpCostRoutingEnabled,omitempty"`
-}
-
-// IsFrontierRoutingEnabled 返回 Frontier/Ladder 是否在生产中影响选路。
-// 由 FrontierRoutingEnabled 独立控制，不再受运行模式门控。
-func (c AutopilotRoutingConfig) IsFrontierRoutingEnabled() bool {
-	return c.FrontierRoutingEnabled
 }
 
 // IsAFPCostRoutingEnabled 返回 AFP 成本适配器是否参与可比树。

@@ -648,6 +648,43 @@ func (r *ModelResolver) rankEligibleModels(
 	channelKind string,
 	floor CapabilityFloor,
 ) rankedModelCandidate {
+	ranked := r.buildRankedCandidates(eligible, requestModel, channelUID, channelKind, floor)
+	preferenceMode := r.modelCostPreferenceMode(floor.TaskClass)
+
+	// Frontier 选型：在全部 model × effort 候选的 Pareto 前沿上按车道选择，
+	// 成本与质量并列成轴（替代下方 qualityRank 绝对主导的字典序链）。
+	// 成本证据不足时 fail-open 回退旧链并标注原因。
+	frontierFallback := ""
+	idx, note, frontierOK := selectViaFrontier(ranked, floor, preferenceMode)
+	if frontierOK {
+		best := ranked[idx]
+		best.frontierNote = note
+		return best
+	}
+	frontierFallback = note
+
+	best := ranked[0]
+	for i := 1; i < len(ranked); i++ {
+		if betterRankedModel(ranked[i], best, preferenceMode) {
+			best = ranked[i]
+		}
+	}
+	if frontierFallback != "" {
+		best.frontierNote = "frontier:fallback=" + frontierFallback
+	}
+	return best
+}
+
+// buildRankedCandidates 把 eligible 画像展开为 model × effort 排序候选，
+// 并补齐证据字段（质量/成本/基准/版本）与 EffortFloor、QualityBenefitCap 过滤。
+// 候选顺序保持输入顺序，排序决策由调用方完成。
+func (r *ModelResolver) buildRankedCandidates(
+	eligible []ModelProfile,
+	requestModel string,
+	channelUID string,
+	channelKind string,
+	floor CapabilityFloor,
+) []rankedModelCandidate {
 	reqFamily := InferModelFamily(requestModel, "")
 	upstream, global := r.modelRankingCapabilityContext(channelUID, channelKind)
 	// EffortFloor 由 ReasoningEffortConfig.PerTaskClass 按任务类推导。
@@ -709,7 +746,6 @@ func (r *ModelResolver) rankEligibleModels(
 
 	// EffortFloor 过滤：移除低于下界的已决定候选（fail-open）。
 	ranked = filterEffortFloor(ranked, floor)
-	preferenceMode := r.modelCostPreferenceMode(floor.TaskClass)
 	ranked = selectQualityBenefitBand(ranked, floor.QualityBenefitCap)
 	qualityPriorityComplete := make(map[int]bool)
 	qualityRankSeen := make(map[int]bool)
@@ -726,40 +762,7 @@ func (r *ModelResolver) rankEligibleModels(
 	for i := range ranked {
 		ranked[i].providerModelQualityComparable = qualityPriorityComplete[ranked[i].qualityRank]
 	}
-
-	// Frontier 选型：开启后在全部 model × effort 候选的 Pareto 前沿上按车道选择，
-	// 成本与质量并列成轴（替代下方 qualityRank 绝对主导的字典序链）。
-	// 证据不足时回退旧链并标注原因；开关关闭（默认）时行为完全不变。
-	frontierFallback := ""
-	if r.frontierRoutingEnabled() {
-		idx, note, ok := selectViaFrontier(ranked, floor, preferenceMode)
-		if ok {
-			best := ranked[idx]
-			best.frontierNote = note
-			return best
-		}
-		frontierFallback = note
-	}
-
-	best := ranked[0]
-	for i := 1; i < len(ranked); i++ {
-		if betterRankedModel(ranked[i], best, preferenceMode) {
-			best = ranked[i]
-		}
-	}
-	if frontierFallback != "" {
-		best.frontierNote = "frontier:fallback=" + frontierFallback
-	}
-	return best
-}
-
-// frontierRoutingEnabled 返回 Frontier/Ladder 是否参与模型级选优。
-// 由 frontierRoutingEnabled 独立控制，默认关闭（fail-open）。
-func (r *ModelResolver) frontierRoutingEnabled() bool {
-	if r == nil || r.cfgManager == nil {
-		return false
-	}
-	return r.cfgManager.GetAutopilotRouting().IsFrontierRoutingEnabled()
+	return ranked
 }
 
 func (r *ModelResolver) modelCostPreferenceMode(taskClass TaskClass) CostPreferenceMode {

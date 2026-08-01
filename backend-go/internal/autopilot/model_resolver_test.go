@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/BenedictKing/ccx/internal/config"
@@ -281,7 +282,7 @@ func TestRankEligibleModels_UsesBenchmarkInsteadOfModelIDForGPT56(t *testing.T) 
 	}
 }
 
-func TestRankEligibleModels_AppliesQualityFirstToCostLatencyTieBreak(t *testing.T) {
+func TestRankEligibleModels_FrontierRejectsEqualQualityCostPremium(t *testing.T) {
 	profiles := []ModelProfile{
 		makeModelProfile("model-cheap", ModelFamilyUnknown, QualityTierLow, 100_000,
 			true, false, true, true, 100),
@@ -300,15 +301,17 @@ func TestRankEligibleModels_AppliesQualityFirstToCostLatencyTieBreak(t *testing.
 
 	balanced := newTestResolverWithConfig(t, profiles, baseConfig)
 	if got := balanced.rankEligibleModels(profiles, "claude-fable-5", "ch_test", "messages", CapabilityFloor{}).profile.ModelID; got != "model-cheap" {
-		t.Fatalf("balanced 应先平衡公开成本，got %s", got)
+		t.Fatalf("balanced 应取更低公开成本，got %s", got)
 	}
 
+	// 两者质量信号完全相同（同档、无基准证据）：model-fast 被 model-cheap 支配而不在前沿上，
+	// quality_first 车道同样不会为等质量候选付 10 倍成本；延迟不是前沿维度，不再参与。
 	qualityConfig := baseConfig
 	qualityConfig.AutopilotRouting = config.DefaultAutopilotRoutingConfig()
 	qualityConfig.AutopilotRouting.CostPreference.Mode = "quality_first"
 	qualityFirst := newTestResolverWithConfig(t, profiles, qualityConfig)
-	if got := qualityFirst.rankEligibleModels(profiles, "claude-fable-5", "ch_test", "messages", CapabilityFloor{}).profile.ModelID; got != "model-fast" {
-		t.Fatalf("quality_first 应把成本放到延迟之后，got %s", got)
+	if got := qualityFirst.rankEligibleModels(profiles, "claude-fable-5", "ch_test", "messages", CapabilityFloor{}).profile.ModelID; got != "model-cheap" {
+		t.Fatalf("frontier quality_first 同样拒绝为等质量付 10 倍成本，got %s", got)
 	}
 }
 
@@ -449,7 +452,11 @@ func TestRankEligibleModels_PrefersMeasuredProviderQuality(t *testing.T) {
 	}
 }
 
-func TestRankEligibleModels_PrefersPremiumDomesticModelsOverDeepSeekV4Pro(t *testing.T) {
+func TestRankEligibleModels_DomesticModelsFrontierVsFallback(t *testing.T) {
+	// Frontier 默认启用后的两种路径：
+	// - kimi-k3 无公开定价 → 可比成本候选不足 → fail-open 回退旧链，qualityRank 主导，k3 胜
+	// - glm-5.2 与 deepseek-v4-pro 质量置信区间重叠但成本差约 4.4 倍，
+	//   balanced 车道溢价帽拒绝升级为重叠质量付费，便宜的 deepseek-v4-pro 胜
 	tests := []struct {
 		name      string
 		modelID   string
@@ -457,21 +464,24 @@ func TestRankEligibleModels_PrefersPremiumDomesticModelsOverDeepSeekV4Pro(t *tes
 		context   int
 		vision    bool
 		toolCalls bool
+		expected  string
 	}{
 		{
-			name:      "Kimi K3 alias",
+			name:      "Kimi K3 alias（无定价，回退旧链）",
 			modelID:   "kimi-k3",
 			family:    ModelFamilyKimi,
 			context:   262_144,
 			vision:    true,
 			toolCalls: true,
+			expected:  "kimi-k3",
 		},
 		{
-			name:      "GLM-5.2",
+			name:      "GLM-5.2（区间重叠，溢价帽选便宜者）",
 			modelID:   "glm-5.2",
 			family:    ModelFamilyGLM,
 			context:   1_048_576,
 			toolCalls: true,
+			expected:  "deepseek-v4-pro",
 		},
 	}
 
@@ -486,8 +496,8 @@ func TestRankEligibleModels_PrefersPremiumDomesticModelsOverDeepSeekV4Pro(t *tes
 			}
 
 			best := rankTestModels(eligible, "claude-opus-4-8", CapabilityFloor{MinQualityTier: QualityTierHigh})
-			if best.ModelID != tt.modelID {
-				t.Fatalf("expected premium %s to precede high deepseek-v4-pro, got %s", tt.modelID, best.ModelID)
+			if best.ModelID != tt.expected {
+				t.Fatalf("expected %s, got %s", tt.expected, best.ModelID)
 			}
 		})
 	}
@@ -521,7 +531,10 @@ func TestRankEligibleModels_PrefersLowerKnownCost(t *testing.T) {
 	}
 }
 
-func TestRankEligibleModels_PrefersProviderModelQualityBeforeRelativeCost(t *testing.T) {
+func TestRankEligibleModels_FrontierCostPremiumCapsProviderQualityOrder(t *testing.T) {
+	// compshare 质量顺序（glm-5.1 优先）证据仍在，但三者在 compshare 的成本
+	//  multiplier 为 6x/5x/1x，质量置信区间重叠；balanced 车道的溢价帽拒绝
+	// 为重叠质量付 5-6 倍成本，最便宜的 MiniMax-M2.7 在前沿上胜出。
 	eligible := []ModelProfile{
 		makeModelProfile("glm-5.1", ModelFamilyGLM, QualityTierHigh, 202800,
 			true, false, true, true, 0),
@@ -535,16 +548,18 @@ func TestRankEligibleModels_PrefersProviderModelQualityBeforeRelativeCost(t *tes
 	}}})
 
 	best := resolver.rankEligibleModels(eligible, "claude-sonnet-5", "ch_test", "messages", CapabilityFloor{})
-	if best.profile.ModelID != "glm-5.1" {
-		t.Fatalf("expected glm-5.1 quality to precede 6x vs 5x cost, got %s", best.profile.ModelID)
+	if best.profile.ModelID != "MiniMax-M2.7" {
+		t.Fatalf("expected MiniMax-M2.7 (premium cap rejects 5-6x cost for overlapping quality), got %s", best.profile.ModelID)
 	}
-	if !best.providerModelQualityKnown || !best.providerModelQualityComparable ||
-		best.providerModelQualityPriority != 2 || best.providerModelQualitySource != "provider_template:compshare" {
-		t.Fatalf("provider quality evidence = %+v, want compshare priority 2", best)
+	if !strings.Contains(best.frontierNote, "frontier:balanced") {
+		t.Fatalf("expected frontier balanced selection note, got %q", best.frontierNote)
 	}
 }
 
-func TestRankEligibleModels_UsesHigherVersionWithinUndeclaredFamily(t *testing.T) {
+func TestRankEligibleModels_FrontierBenchmarkOverridesVersion(t *testing.T) {
+	// k2.6 与 k2.7-code 同族同档同成本，但规范基准分 k2.7-code（54）低于 k2.6，
+	// 前沿等成本点按质量分取舍，k2.6 胜出；旧链的"未声明顺序时优先较高版本"
+	// 启发式不再主导。
 	eligible := []ModelProfile{
 		makeModelProfile("kimi-k2.6", ModelFamilyKimi, QualityTierHigh, 262144,
 			true, true, true, true, 0),
@@ -553,8 +568,8 @@ func TestRankEligibleModels_UsesHigherVersionWithinUndeclaredFamily(t *testing.T
 	}
 
 	best := rankTestModels(eligible, "claude-sonnet-5")
-	if best.ModelID != "kimi-k2.7-code" {
-		t.Fatalf("未声明同档能力顺序时应优先较高版本，got %s", best.ModelID)
+	if best.ModelID != "kimi-k2.6" {
+		t.Fatalf("等成本时应取基准分更高的 kimi-k2.6，got %s", best.ModelID)
 	}
 }
 
@@ -679,7 +694,7 @@ func TestResolveModel_FindsBestMatch(t *testing.T) {
 	}
 }
 
-func TestResolveModel_CompshareInventoryPrefersGLM52OverDeepSeekFallbacks(t *testing.T) {
+func TestResolveModel_CompshareInventoryFrontierByFloor(t *testing.T) {
 	profiles := []ModelProfile{
 		makeModelProfile("glm-5.2", ModelFamilyGLM, QualityTierPremium, 1048576,
 			true, false, true, true, 0),
@@ -699,18 +714,31 @@ func TestResolveModel_CompshareInventoryPrefersGLM52OverDeepSeekFallbacks(t *tes
 		AutoManaged: true,
 	}}})
 
-	floors := []CapabilityFloor{
-		{MinContextTokens: 39_561, MinQualityTier: QualityTierNormal},
+	// Frontier 默认启用后按能力下界分车道：
+	// - Normal 下界：全部候选可比较，balanced 前沿取最廉价可比点 deepseek-v4-flash（1x multiplier）
+	// - High 下界 + 收益帽 High：Normal 档被过滤后，glm-5.2 在 compshare 2x multiplier 下
+	//   同时是质量最高与成本最低的前沿点（glm-5.1 为 6x、kimi-k2.6 为 5x）
+	floors := []struct {
+		floor    CapabilityFloor
+		expected string
+	}{
 		{
-			MinContextTokens: 39_561, MinQualityTier: QualityTierHigh,
-			QualityBenefitCap: QualityTierHigh,
+			floor:    CapabilityFloor{MinContextTokens: 39_561, MinQualityTier: QualityTierNormal},
+			expected: "deepseek-v4-flash",
+		},
+		{
+			floor: CapabilityFloor{
+				MinContextTokens: 39_561, MinQualityTier: QualityTierHigh,
+				QualityBenefitCap: QualityTierHigh,
+			},
+			expected: "glm-5.2",
 		},
 	}
-	for _, floor := range floors {
+	for _, tt := range floors {
 		target, resolved, reason := resolver.ResolveModel(
-			"claude-sonnet-5", "ch_test", "messages", "metrics_test", floor)
-		if !resolved || target.Model != "glm-5.2" {
-			t.Fatalf("ResolveModel(%+v) = (%q, %v, %q), want glm-5.2", floor, target.Model, resolved, reason)
+			"claude-sonnet-5", "ch_test", "messages", "metrics_test", tt.floor)
+		if !resolved || target.Model != tt.expected {
+			t.Fatalf("ResolveModel(%+v) = (%q, %v, %q), want %s", tt.floor, target.Model, resolved, reason, tt.expected)
 		}
 	}
 }

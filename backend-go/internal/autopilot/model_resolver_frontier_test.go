@@ -28,23 +28,23 @@ func frontierIntegrationCandidates() []ModelProfile {
 	}
 }
 
-// newFrontierTestResolver 创建开启 frontierRoutingEnabled 的测试 resolver。
+// newFrontierTestResolver 创建带指定成本倾向车道的测试 resolver。
+// Frontier/Ladder 默认启用，无需开关。
 func newFrontierTestResolver(t *testing.T, profiles []ModelProfile, mode string) *ModelResolver {
 	t.Helper()
 	return newTestResolverWithConfig(t, profiles, config.Config{
 		AutopilotRouting: config.AutopilotRoutingConfig{
-			FrontierRoutingEnabled: true,
-			CostPreference:         config.CostPreferenceConfig{Mode: mode},
+			CostPreference: config.CostPreferenceConfig{Mode: mode},
 		},
 	})
 }
 
-// 开关关闭（默认）时保持旧链行为：qualityRank 绝对主导，premium 的 opus-5 胜出，
-// 哪怕它的成本是 sonnet-5 的 2.5 倍、glm-5.2 的 5 倍。
-func TestRankEligibleModels_FrontierDisabledKeepsLegacyPick(t *testing.T) {
+// 默认启用：即使无 cfgManager（balanced 默认车道），frontier 也直接参与选型——
+// opus 独占的高质量簇成本溢价值不回质量增益，被拒绝升簇，同簇同族的 sonnet-5 胜出。
+func TestRankEligibleModels_FrontierEnabledByDefault(t *testing.T) {
 	best := rankTestModels(frontierIntegrationCandidates(), "claude-sonnet-4-6")
-	if best.ModelID != "claude-opus-5" {
-		t.Fatalf("legacy chain should pick claude-opus-5, got %s", best.ModelID)
+	if best.ModelID != "claude-sonnet-5" {
+		t.Fatalf("default frontier should pick claude-sonnet-5, got %s", best.ModelID)
 	}
 }
 
@@ -87,7 +87,7 @@ func TestRankEligibleModels_FrontierQualityFirstTieBreaksByCost(t *testing.T) {
 	}
 }
 
-// 成本证据不足时 fail-open 回退旧链，结果与开关关闭完全一致，并标注回退原因。
+// 成本证据不足时 fail-open 回退旧链，结果与旧链直接计算一致，并标注回退原因。
 func TestRankEligibleModels_FrontierFallbackWithoutComparableCost(t *testing.T) {
 	eligible := []ModelProfile{
 		makeModelProfile("custom-beta", ModelFamilyClaude, QualityTierNormal, 100000,

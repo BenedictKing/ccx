@@ -10,9 +10,8 @@ import (
 // Frontier 选型：把 rankEligibleModels 的 model × effort 候选转换为
 // 能力—成本点，在 Pareto 前沿上按成本倾向车道选择。
 //
-// 生产入口：ModelResolver.rankEligibleModels（model_resolver.go）。
-// 仅在 frontierRoutingEnabled 开启且成本证据可比时生效；
-// 其余情况回退到既有字典序比较链（fail-open）。
+// 生产入口：ModelResolver.rankEligibleModels（model_resolver.go），默认启用。
+// 成本证据不可比（可比候选 < 2）时 fail-open 回退到既有字典序比较链。
 //
 // 设计要点（与 codexradar 等效率曲线同源）：
 //   - 全局比较：候选是全部 model × effort 组合，不先锁质量档再挑档；
@@ -263,7 +262,8 @@ func selectFrontierQualityFirst(forest FrontierForest, ranked []rankedModelCandi
 	return best, fmt.Sprintf("frontier:%s/tie_pool=%d/v=%s", CostPrefQualityFirst, len(tied), forest.Version)
 }
 
-// pickFrontierPoint 在一组前沿点中按 同族 > 成本最低 > 下标最小 选点（确定性）。
+// pickFrontierPoint 在一组前沿点中按 同族 > 成本最低 > 质量最高 > 下标最小 选点（确定性）。
+// 成本相同时取质量更高者——等价的免费质量不应放弃，同时保证结果与输入顺序无关。
 func pickFrontierPoint(points []FrontierPoint, ranked []rankedModelCandidate) int {
 	bestIdx := -1
 	var bestPoint FrontierPoint
@@ -284,6 +284,12 @@ func pickFrontierPoint(points []FrontierPoint, ranked []rankedModelCandidate) in
 		}
 		if p.Cost.Estimated != bestPoint.Cost.Estimated {
 			if p.Cost.Estimated < bestPoint.Cost.Estimated {
+				bestIdx, bestPoint = idx, p
+			}
+			continue
+		}
+		if p.QualityScore != bestPoint.QualityScore {
+			if p.QualityScore > bestPoint.QualityScore {
 				bestIdx, bestPoint = idx, p
 			}
 			continue

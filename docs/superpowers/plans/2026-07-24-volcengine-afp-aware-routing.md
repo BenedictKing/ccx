@@ -343,6 +343,8 @@ type CandidateLadder struct {
 1. dry-run 返回 observation→quality estimate→frontier point→cluster→ladder stage 的安全证据链、AFP 摘要、跨来源/跨 scope 未比较原因和排序影响，便于在不发真实请求时复核规则。
 2. 按上游 attempt 使用已报告 token 计算 `computedAFP`，并在 Trace/窗口指标中区分 `estimated`、`computed` 与 `usageUnavailable`；计量失败不影响响应，也不能记录为零消耗。
 3. 增加两个正交开关并默认关闭：`frontierRoutingEnabled` 控制通用 Frontier/Ladder 是否影响选路，`afpCostRoutingEnabled` 只控制 AFP 成本适配器是否参与可比树。任一关闭都不得让另一方以不完整证据改变路由。
+
+> **后续更新（2026-08-01）**：`frontierRoutingEnabled` 已废弃——Frontier/Ladder 选型默认启用（无开关、无 shadow），字段仅为 JSON 兼容保留；`afpCostRoutingEnabled` 维持原设计。下文 §7.2 上线顺序与 §7.3 回滚中涉及 `frontierRoutingEnabled=false` 的灰度/回滚步骤随之失效，Frontier 行为调整通过 `costPreference.mode`（balanced/quality_first/cost_first）进行。
 4. `shadow` 只记录建议；`assist/auto` 必须经过第 7 节的观察门槛后才能启用。切换开关、证据版本或活动 epoch 时使缓存失效，但不改写用户配置和在途请求快照。
 5. 管理端只展示只读活动状态、质量 cohort、Frontier 版本、缓存命中、会话迟滞和来源；不提供在线编辑官方倍率的入口，活动更新通过版本化代码/预设发布。
 
