@@ -1363,7 +1363,7 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
       "https://www.alibabacloud.com/help/en/model-studio/models"
     ]
   },
-  "(?:^|[-/])deepseek-v4-flash(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
+  "(?:^|[-/])deepseek-v4-flash(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{4,8})?(?=$|@)": {
     "provider": "deepseek",
     "displayName": "DeepSeek V4 Flash",
     "description": "Supports thinking and non-thinking modes. deepseek-chat is a deprecated compatibility alias for the non-thinking mode.",
