@@ -297,6 +297,79 @@ func TestHandleNewApiProvision_FullFlow_CreateNewKey(t *testing.T) {
 	}
 }
 
+// 真实 new-api 站点建 key 响应的明文不带 "sk-" 前缀。回归：此前明文直接写入渠道，
+// 调用 /v1/* 被上游以 401 Invalid token 拒绝，全部 key 被黑名单禁用、渠道挂起。
+// provision 必须把明文规范为带 "sk-" 前缀的可调用形式。
+func TestHandleNewApiProvision_UnprefixedKey_GetsSkPrefix(t *testing.T) {
+	var created []NewApiToken
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/user/self", func(w http.ResponseWriter, r *http.Request) {
+		writeEnvelope(w, true, NewApiUserSelf{ID: 7, Username: "bob", Quota: 50000, UsedQuota: 1000}, "")
+	})
+	mux.HandleFunc("/api/user/self/groups", func(w http.ResponseWriter, r *http.Request) {
+		writeEnvelope(w, true, map[string]NewApiGroupInfo{"default": {Desc: "默认", Ratio: 1.0}}, "")
+	})
+	mux.HandleFunc("/api/user/models", func(w http.ResponseWriter, r *http.Request) {
+		writeEnvelope(w, true, []string{"gpt-4o"}, "")
+	})
+	mux.HandleFunc("/api/token/", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			writeEnvelope(w, true, newApiTokenListData{Items: created}, "")
+		case http.MethodPost:
+			var req NewApiCreateTokenRequest
+			_ = json.NewDecoder(r.Body).Decode(&req)
+			tok := NewApiToken{ID: 101, Name: req.Name, Group: req.Group, Status: 1, Key: "rawkey-no-prefix"}
+			created = append(created, tok)
+			writeEnvelope(w, true, tok, "")
+		}
+	})
+	site := httptest.NewServer(mux)
+	t.Cleanup(site.Close)
+
+	store, err := NewSubscriptionStoreWithDB(newTestDB(t))
+	if err != nil {
+		t.Fatalf("创建 store 失败: %v", err)
+	}
+	cfgManager := setupNewApiTestConfigManager(t)
+	runner := NewAutoDiscoveryRunner(nil, nil)
+	router := setupNewApiRouter(t, &NewApiRouteDeps{Store: store, CfgManager: cfgManager, Runner: runner})
+
+	reqBody := NewApiProvisionRequest{
+		SubscriptionUID: "sub-newapi-unprefixed",
+		DisplayName:     "无前缀 key 站点",
+		BaseURL:         site.URL,
+		AccessToken:     "secret-provision-token",
+		ChannelKind:     "messages",
+		ChannelName:     "newapi-unprefixed-channel",
+	}
+	body, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest(http.MethodPost, "/api/subscriptions/newapi/provision", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("期望 201, got %d, body=%s", w.Code, w.Body.String())
+	}
+	var resp NewApiProvisionResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("响应解析失败: %v", err)
+	}
+	if resp.ProvisionedKey != "sk-rawkey-no-prefix" {
+		t.Fatalf("明文 key 未补齐 sk- 前缀: %q", resp.ProvisionedKey)
+	}
+	for _, ch := range cfgManager.GetConfig().Upstream {
+		if ch.Name == "newapi-unprefixed-channel" {
+			if len(ch.APIKeys) != 1 || ch.APIKeys[0] != "sk-rawkey-no-prefix" {
+				t.Fatalf("渠道 APIKeys 未补齐 sk- 前缀: %+v", ch.APIKeys)
+			}
+			return
+		}
+	}
+	t.Fatal("未找到新建渠道")
+}
+
 func TestHandleNewApiProvision_AutoCreatesOnlyEligibleGroupKeys(t *testing.T) {
 	var created []NewApiToken
 	var createdGroups []string
