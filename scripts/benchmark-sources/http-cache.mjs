@@ -232,3 +232,12 @@ export function getSimpleCache(key) {
 export function setSimpleCache(key, value) {
   setCacheEntry(key, { value })
 }
+
+/**
+ * 获取缓存条目是否存在
+ * @param {string} key
+ * @returns {boolean}
+ */
+export function hasCacheEntry(key) {
+  return getCacheEntry(key) != null
+}
