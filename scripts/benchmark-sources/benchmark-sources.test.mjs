@@ -19,6 +19,7 @@ import {
   toBenchmarkEvidence as toDradarEvidence,
   DRADAR_MODEL_MAP,
 } from './dradar.mjs'
+import { extractProfiles as extractBenchlmProfiles } from './benchlm.mjs'
 import { extractModelInfo, LITELLM_MODEL_MAP } from './litellm.mjs'
 import {
   extractLlmProfiles as extractAaLlm,
@@ -263,6 +264,38 @@ test('BenchLM zero comparable categories do not erase valid evidence metadata', 
   assert.equal(profile.comparableCategories, 1)
   assert.equal(profile.totalCategories, 8)
   assert.doesNotThrow(() => validateRegistry(registry))
+})
+
+test('BenchLM mapper can rebuild fresh profiles from raw models doc for DeepSeek variants', () => {
+  const rawDoc = {
+    items: [{
+      slug: 'deepseek-v4-flash-max',
+      url: 'https://benchlm.ai/models/deepseek-v4-flash-max',
+      displayScore: 78,
+      coverage: { trustedBenchmarkCount: 12 },
+      scores: {
+        displayCategoryScores: {
+          Coding: 81,
+          Knowledge: 75,
+        },
+      },
+    }],
+  }
+
+  const profiles = extractBenchlmProfiles(rawDoc, {
+    'deepseek-v4-flash-max': 'deepseek-v4-flash',
+  }, {
+    Coding: 'coding',
+    Knowledge: 'knowledge',
+  })
+
+  assert.equal(profiles['deepseek-v4-flash'].overallScore, 78)
+  assert.equal(profiles['deepseek-v4-flash'].categoryScores.coding, 81)
+  assert.equal(profiles['deepseek-v4-flash'].categoryScores.knowledge, 75)
+  assert.deepEqual(profiles['deepseek-v4-flash'].sources, [
+    'https://benchlm.ai/models/deepseek-v4-flash-max',
+    'https://benchlm.ai/methodology',
+  ])
 })
 
 test('visualization combines DeepSWE, BenchLM and CodexRadar sources', () => {
