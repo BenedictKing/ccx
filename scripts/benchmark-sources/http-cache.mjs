@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url'
 
 const root = dirname(dirname(dirname(fileURLToPath(import.meta.url))))
 const CACHE_DIR = join(root, '.cache')
-const CACHE_PATH = join(CACHE_DIR, 'benchmark-http-cache.json')
+export const CACHE_PATH = join(CACHE_DIR, 'benchmark-http-cache.json')
 
 /** @type {Object} 内存中的缓存 */
 let _cache = null

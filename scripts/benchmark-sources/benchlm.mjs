@@ -21,6 +21,7 @@
 
 import { fetchWithTimeout } from './http.mjs'
 import {
+  CACHE_PATH,
   cachedFetch,
   cacheAge,
   getSimpleCache,
@@ -156,7 +157,10 @@ export async function fetchBenchlmData(modelMap, categoryMap) {
     const rawDoc = getSimpleCache(RAW_DOC_KEY)
     const rawDocAge = cacheAge(`simple:${RAW_DOC_KEY}`)
     if (rawDoc && rawDocAge <= RAW_DOC_REFRESH_INTERVAL_MS) {
-      console.log(`[benchlm] ${MODELS_URL} → 304 Not Modified, rebuilding profiles from cached raw doc`)
+      console.log(
+        `[benchlm] ${MODELS_URL} → 304 Not Modified, rebuilding profiles from cached raw doc `
+        + `(cache=${CACHE_PATH}, key=${RAW_DOC_KEY}, ageMs=${rawDocAge})`,
+      )
       const profiles = extractProfiles(rawDoc, modelMap, categoryMap)
       setSimpleCache(EXTRACTED_PROFILES_KEY, profiles)
       return {
@@ -165,7 +169,10 @@ export async function fetchBenchlmData(modelMap, categoryMap) {
       }
     }
     // 原始文档缺失或超过 24h：主动全量拉取一次，避免长期被旧 extractedProfiles 锁死
-    console.log(`[benchlm] 304 Not Modified but raw doc missing/stale, refetching full models.json`)
+    console.log(
+      `[benchlm] 304 Not Modified but raw doc missing/stale, refetching full models.json `
+      + `(cache=${CACHE_PATH}, key=${RAW_DOC_KEY}, ageMs=${Number.isFinite(rawDocAge) ? rawDocAge : 'missing'}, maxAgeMs=${RAW_DOC_REFRESH_INTERVAL_MS})`,
+    )
     const { doc, generatedAt } = await fetchModelsDoc()
     return processFresh(doc, generatedAt, modelMap, categoryMap, true)
   }
