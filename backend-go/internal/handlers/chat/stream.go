@@ -115,10 +115,11 @@ func preflightChatStream(resp *http.Response, upstreamType string, timeouts comm
 	hasFirstContent := false
 
 	flushRemainder := func() {
-		if remainder != "" {
-			result.buffered = append(result.buffered, []byte(remainder)...)
-			remainder = ""
-		}
+		// FIX(fix/flush-remainder-dup): remainder 是缓冲区尾部的字节子串——chunk 已被整体
+		// append 进 result.buffered（含末尾不完整行），再 append remainder 会重复写入
+		// 同一段字节，导致下游 SSE 事件被截断拼接（如 data: {"id":"X","odata: ...）。
+		// 因此这里只重置 remainder，不再追加；buffered 已包含其全部内容。
+		remainder = ""
 	}
 
 	// 启动 goroutine 读取 body chunk。preflight 放行后继续由同一个 channel 驱动正常流式转发，避免丢 chunk。
