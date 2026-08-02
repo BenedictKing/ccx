@@ -2273,7 +2273,7 @@ export const builtinUpstreamModelCapabilities: Record<string, UpstreamModelCapab
 export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile> = {
   "(?:^|[-/])claude-opus-4[.-]8(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
     "canonicalModel": "claude-opus-4-8",
-    "overallScore": 77.41,
+    "overallScore": 77.42,
     "categoryScores": {
       "agentic": 83.2,
       "coding": 69.1,
@@ -2312,7 +2312,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-opus-4-8",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2328,7 +2328,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-opus-4-8",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2344,7 +2344,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-opus-4-8",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       }
     ],
     "sources": [
@@ -2353,7 +2353,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/methodology",
       "https://artificialanalysis.ai/models/claude-opus-4-8"
     ],
-    "verifiedAt": "2026-07-31",
+    "verifiedAt": "2026-08-02",
     "lane": "provisional",
     "sharedResults": 590,
     "comparableCategories": 5,
@@ -2392,7 +2392,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "sourceModel": "gpt-5.6-terra",
         "domain": "coding",
         "metric": "pass_at_1",
-        "rawValue": 0.6607142857142857,
+        "rawValue": 0.6428571428571429,
         "uncertainty": 0,
         "cohortPercentile": 0.75,
         "taskCount": 112,
@@ -2400,7 +2400,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "ultra",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deng.codexradar.com/",
-        "capturedAt": "2026-07-30"
+        "capturedAt": "2026-08-02"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2416,7 +2416,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-terra",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2432,7 +2432,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-terra",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2448,7 +2448,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-terra",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       }
     ],
     "sources": [
@@ -2458,7 +2458,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/methodology",
       "https://artificialanalysis.ai/models/gpt-5-6-terra"
     ],
-    "verifiedAt": "2026-07-31",
+    "verifiedAt": "2026-08-02",
     "lane": "provisional",
     "sharedResults": 590,
     "comparableCategories": 5,
@@ -2497,15 +2497,15 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "sourceModel": "gpt-5.6-sol",
         "domain": "coding",
         "metric": "pass_at_1",
-        "rawValue": 0.6875,
+        "rawValue": 0.7053571428571429,
         "uncertainty": 0,
         "cohortPercentile": 1,
         "taskCount": 112,
         "cohortSize": 4,
-        "effort": "xhigh",
+        "effort": "ultra",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deng.codexradar.com/",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-01"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2521,7 +2521,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-sol",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2537,7 +2537,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-sol",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2553,7 +2553,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-sol",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       }
     ],
     "sources": [
@@ -2563,7 +2563,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/methodology",
       "https://artificialanalysis.ai/models/gpt-5-6-sol"
     ],
-    "verifiedAt": "2026-07-31",
+    "verifiedAt": "2026-08-02",
     "lane": "provisional",
     "sharedResults": 590,
     "comparableCategories": 5,
@@ -2602,7 +2602,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "sourceModel": "gpt-5.6-luna",
         "domain": "coding",
         "metric": "pass_at_1",
-        "rawValue": 0.5446428571428571,
+        "rawValue": 0.5357142857142857,
         "uncertainty": 0,
         "cohortPercentile": 0.25,
         "taskCount": 112,
@@ -2610,7 +2610,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "max",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deng.codexradar.com/",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2626,7 +2626,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-luna",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2642,7 +2642,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-luna",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2658,7 +2658,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-luna",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       }
     ],
     "sources": [
@@ -2668,7 +2668,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/methodology",
       "https://artificialanalysis.ai/models/gpt-5-6-luna"
     ],
-    "verifiedAt": "2026-07-31",
+    "verifiedAt": "2026-08-02",
     "lane": "provisional",
     "sharedResults": 590,
     "comparableCategories": 5,
@@ -2707,15 +2707,15 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "sourceModel": "gpt-5.5",
         "domain": "coding",
         "metric": "pass_at_1",
-        "rawValue": 0.6071428571428571,
+        "rawValue": 0.6428571428571429,
         "uncertainty": 0,
-        "cohortPercentile": 0.5,
+        "cohortPercentile": 0.75,
         "taskCount": 112,
         "cohortSize": 4,
         "effort": "xhigh",
         "selectionBasis": "best_available_effort",
         "sourceUrl": "https://deng.codexradar.com/",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2731,7 +2731,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-5",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2747,7 +2747,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-5",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2763,7 +2763,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-5",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       }
     ],
     "sources": [
@@ -2773,7 +2773,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/methodology",
       "https://artificialanalysis.ai/models/gpt-5-5"
     ],
-    "verifiedAt": "2026-07-31",
+    "verifiedAt": "2026-08-02",
     "lane": "provisional",
     "sharedResults": 590,
     "comparableCategories": 5,
@@ -2820,7 +2820,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-4",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2836,7 +2836,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-4",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2852,7 +2852,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-4",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       }
     ],
     "sources": [
@@ -2861,7 +2861,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/methodology",
       "https://artificialanalysis.ai/models/gpt-5-4"
     ],
-    "verifiedAt": "2026-07-31",
+    "verifiedAt": "2026-08-02",
     "lane": "provisional",
     "sharedResults": 590,
     "comparableCategories": 5,
@@ -2869,7 +2869,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
   },
   "(?:^|[-/])claude-fable-5(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
     "canonicalModel": "claude-fable-5",
-    "overallScore": 82.72,
+    "overallScore": 82.73,
     "categoryScores": {
       "agentic": 92.9,
       "coding": 83.1,
@@ -2907,7 +2907,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-fable-5",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2923,7 +2923,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-fable-5",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       },
       {
         "benchmark": "artificial_analysis",
@@ -2939,7 +2939,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-fable-5",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       }
     ],
     "sources": [
@@ -2948,7 +2948,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/methodology",
       "https://artificialanalysis.ai/models/claude-fable-5"
     ],
-    "verifiedAt": "2026-07-31",
+    "verifiedAt": "2026-08-02",
     "lane": "provisional",
     "sharedResults": 590,
     "comparableCategories": 4,
@@ -2956,7 +2956,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
   },
   "(?:^|[-/])claude-sonnet-5(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
     "canonicalModel": "claude-sonnet-5",
-    "overallScore": 64.53,
+    "overallScore": 64.52,
     "categoryScores": {
       "agentic": 86.1,
       "coding": 61.4,
@@ -2994,7 +2994,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-sonnet-5",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3010,7 +3010,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-sonnet-5",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3026,7 +3026,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-sonnet-5",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       }
     ],
     "sources": [
@@ -3035,7 +3035,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/methodology",
       "https://artificialanalysis.ai/models/claude-sonnet-5"
     ],
-    "verifiedAt": "2026-07-31",
+    "verifiedAt": "2026-08-02",
     "lane": "provisional",
     "sharedResults": 590,
     "comparableCategories": 4,
@@ -3043,7 +3043,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
   },
   "(?:^|[-/])claude-sonnet-4-6(?:-thinking)?(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
     "canonicalModel": "claude-sonnet-4-6",
-    "overallScore": 64.28,
+    "overallScore": 64.27,
     "categoryScores": {
       "agentic": 54.6,
       "coding": 63.7,
@@ -3082,7 +3082,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-sonnet-4-6",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3098,7 +3098,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-sonnet-4-6",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3114,7 +3114,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-sonnet-4-6",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       }
     ],
     "sources": [
@@ -3123,7 +3123,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/methodology",
       "https://artificialanalysis.ai/models/claude-sonnet-4-6"
     ],
-    "verifiedAt": "2026-07-31",
+    "verifiedAt": "2026-08-02",
     "lane": "provisional",
     "sharedResults": 590,
     "comparableCategories": 5,
@@ -3169,7 +3169,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/glm-5-2",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3185,7 +3185,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/glm-5-2",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3201,7 +3201,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/glm-5-2",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       }
     ],
     "sources": [
@@ -3210,7 +3210,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/methodology",
       "https://artificialanalysis.ai/models/glm-5-2"
     ],
-    "verifiedAt": "2026-07-31",
+    "verifiedAt": "2026-08-02",
     "lane": "provisional",
     "sharedResults": 590,
     "comparableCategories": 4,
@@ -3256,7 +3256,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/glm-5-2",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3272,7 +3272,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/glm-5-2",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3288,7 +3288,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/glm-5-2",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       }
     ],
     "sources": [
@@ -3297,7 +3297,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/methodology",
       "https://artificialanalysis.ai/models/glm-5-2"
     ],
-    "verifiedAt": "2026-07-31",
+    "verifiedAt": "2026-08-02",
     "lane": "provisional",
     "sharedResults": 590,
     "comparableCategories": 4,
@@ -3341,7 +3341,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/kimi-k2-7-code",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3357,7 +3357,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/kimi-k2-7-code",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3373,7 +3373,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/kimi-k2-7-code",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       }
     ],
     "sources": [
@@ -3382,7 +3382,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/methodology",
       "https://artificialanalysis.ai/models/kimi-k2-7-code"
     ],
-    "verifiedAt": "2026-07-31",
+    "verifiedAt": "2026-08-02",
     "lane": "provisional",
     "sharedResults": 590,
     "comparableCategories": 3,
@@ -3426,7 +3426,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/kimi-k2-7-code",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3442,7 +3442,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/kimi-k2-7-code",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3458,7 +3458,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/kimi-k2-7-code",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       }
     ],
     "sources": [
@@ -3467,7 +3467,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/methodology",
       "https://artificialanalysis.ai/models/kimi-k2-7-code"
     ],
-    "verifiedAt": "2026-07-31",
+    "verifiedAt": "2026-08-02",
     "lane": "provisional",
     "sharedResults": 590,
     "comparableCategories": 3,
@@ -3511,7 +3511,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/kimi-k2-7-code",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3527,7 +3527,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/kimi-k2-7-code",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3543,7 +3543,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/kimi-k2-7-code",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       }
     ],
     "sources": [
@@ -3552,7 +3552,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/methodology",
       "https://artificialanalysis.ai/models/kimi-k2-7-code"
     ],
-    "verifiedAt": "2026-07-31",
+    "verifiedAt": "2026-08-02",
     "lane": "provisional",
     "sharedResults": 590,
     "comparableCategories": 3,
@@ -3599,7 +3599,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gemini-3-5-flash",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3615,7 +3615,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gemini-3-5-flash",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3631,7 +3631,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gemini-3-5-flash",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       }
     ],
     "sources": [
@@ -3640,7 +3640,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/methodology",
       "https://artificialanalysis.ai/models/gemini-3-5-flash"
     ],
-    "verifiedAt": "2026-07-31",
+    "verifiedAt": "2026-08-02",
     "lane": "provisional",
     "sharedResults": 590,
     "comparableCategories": 5,
@@ -3677,7 +3677,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
   },
   "(?:^|[-/])gpt-5\\.4-mini(?=$|@)": {
     "canonicalModel": "gpt-5.4-mini",
-    "overallScore": 55.84,
+    "overallScore": 55.82,
     "categoryScores": {
       "agentic": 55.3,
       "coding": 54.3,
@@ -3716,7 +3716,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-4-mini",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3732,7 +3732,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-4-mini",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3748,7 +3748,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-4-mini",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       }
     ],
     "sources": [
@@ -3757,7 +3757,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/methodology",
       "https://artificialanalysis.ai/models/gpt-5-4-mini"
     ],
-    "verifiedAt": "2026-07-31",
+    "verifiedAt": "2026-08-02",
     "lane": "provisional",
     "sharedResults": 590,
     "comparableCategories": 5,
@@ -3843,7 +3843,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
   },
   "(?:^|[-/])claude-haiku-4.5(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
     "canonicalModel": "claude-haiku-4.5",
-    "overallScore": 55.81,
+    "overallScore": 55.8,
     "categoryScores": {
       "coding": 49.2,
       "math": 29.3
@@ -3871,7 +3871,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/models/claude-haiku-4-5",
       "https://benchlm.ai/methodology"
     ],
-    "verifiedAt": "2026-07-31",
+    "verifiedAt": "2026-08-02",
     "lane": "provisional",
     "sharedResults": 8,
     "comparableCategories": 2,
@@ -3879,7 +3879,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
   },
   "(?:^|[-/])kimi-k3(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
     "canonicalModel": "kimi-k3",
-    "overallScore": 79.86,
+    "overallScore": 79.87,
     "categoryScores": {
       "agentic": 94.7,
       "coding": 64.4,
@@ -3917,7 +3917,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/kimi-k3",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3933,7 +3933,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/kimi-k3",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       },
       {
         "benchmark": "artificial_analysis",
@@ -3949,7 +3949,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/kimi-k3",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       }
     ],
     "sources": [
@@ -3958,7 +3958,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/methodology",
       "https://artificialanalysis.ai/models/kimi-k3"
     ],
-    "verifiedAt": "2026-07-31",
+    "verifiedAt": "2026-08-02",
     "lane": "provisional",
     "sharedResults": 590,
     "comparableCategories": 4,
@@ -4082,7 +4082,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/grok-4-5",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       },
       {
         "benchmark": "artificial_analysis",
@@ -4098,7 +4098,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/grok-4-5",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       },
       {
         "benchmark": "artificial_analysis",
@@ -4114,7 +4114,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/grok-4-5",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       }
     ],
     "sources": [
@@ -4123,7 +4123,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/methodology",
       "https://artificialanalysis.ai/models/grok-4-5"
     ],
-    "verifiedAt": "2026-07-31",
+    "verifiedAt": "2026-08-02",
     "lane": "provisional",
     "sharedResults": 590,
     "comparableCategories": 4,
@@ -4169,7 +4169,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/muse-spark-1-1",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       },
       {
         "benchmark": "artificial_analysis",
@@ -4185,7 +4185,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/muse-spark-1-1",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       },
       {
         "benchmark": "artificial_analysis",
@@ -4201,7 +4201,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/muse-spark-1-1",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       }
     ],
     "sources": [
@@ -4210,7 +4210,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/methodology",
       "https://artificialanalysis.ai/models/muse-spark-1-1"
     ],
-    "verifiedAt": "2026-07-31",
+    "verifiedAt": "2026-08-02",
     "lane": "provisional",
     "sharedResults": 590,
     "comparableCategories": 4,
@@ -4218,7 +4218,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
   },
   "(?:^|[-/])claude-opus-5(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)": {
     "canonicalModel": "claude-opus-5",
-    "overallScore": 82.78,
+    "overallScore": 82.79,
     "categoryScores": {
       "agentic": 84.5,
       "coding": 83.1,
@@ -4256,7 +4256,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-opus-5",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       },
       {
         "benchmark": "artificial_analysis",
@@ -4272,7 +4272,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-opus-5",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       },
       {
         "benchmark": "artificial_analysis",
@@ -4288,7 +4288,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
         "effort": "default",
         "selectionBasis": "composite_index",
         "sourceUrl": "https://artificialanalysis.ai/models/claude-opus-5",
-        "capturedAt": "2026-07-31"
+        "capturedAt": "2026-08-02"
       }
     ],
     "sources": [
@@ -4297,7 +4297,7 @@ export const builtinModelBenchmarkProfiles: Record<string, ModelBenchmarkProfile
       "https://benchlm.ai/methodology",
       "https://artificialanalysis.ai/models/claude-opus-5"
     ],
-    "verifiedAt": "2026-07-31",
+    "verifiedAt": "2026-08-02",
     "lane": "provisional",
     "sharedResults": 590,
     "comparableCategories": 4,
