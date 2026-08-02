@@ -356,6 +356,17 @@ test('opus-5 is mapped across every benchmark source', () => {
   assert.equal(ARTIFICIAL_ANALYSIS_MODEL_MAP['claude-opus-5'], 'claude-opus-5')
 })
 
+test('DeepSeek BenchLM variants fold into canonical flash and pro models', () => {
+  assert.equal(BENCHLM_MODEL_MAP['deepseek-v4-flash'], 'deepseek-v4-flash')
+  assert.equal(BENCHLM_MODEL_MAP['deepseek-v4-flash-base'], 'deepseek-v4-flash')
+  assert.equal(BENCHLM_MODEL_MAP['deepseek-v4-flash-high'], 'deepseek-v4-flash')
+  assert.equal(BENCHLM_MODEL_MAP['deepseek-v4-flash-max'], 'deepseek-v4-flash')
+  assert.equal(BENCHLM_MODEL_MAP['deepseek-v4-pro'], 'deepseek-v4-pro')
+  assert.equal(BENCHLM_MODEL_MAP['deepseek-v4-pro-base'], 'deepseek-v4-pro')
+  assert.equal(BENCHLM_MODEL_MAP['deepseek-v4-pro-high'], 'deepseek-v4-pro')
+  assert.equal(BENCHLM_MODEL_MAP['deepseek-v4-pro-max'], 'deepseek-v4-pro')
+})
+
 test('Artificial Analysis LLM extraction yields one evidence per composite index', () => {
   const models = [
     { slug: 'claude-opus-5', evaluations: {
