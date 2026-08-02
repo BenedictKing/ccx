@@ -38,29 +38,6 @@
           </v-btn-toggle>
         </div>
 
-        <!-- 故障转移位置选择（两种模式共用） -->
-        <div class="d-flex align-center justify-center ga-3 mb-4">
-          <span class="text-caption text-medium-emphasis">{{ t('addChannel.placementLabel') }}</span>
-          <v-btn-toggle
-            v-model="placement"
-            mandatory
-            :disabled="isCreatingChannel"
-            density="compact"
-            rounded="lg"
-            color="primary"
-            variant="outlined"
-          >
-            <v-btn value="back" size="small">
-              <v-icon start size="small">mdi-playlist-plus</v-icon>
-              {{ t('addChannel.placementBack') }}
-            </v-btn>
-            <v-btn value="front" size="small">
-              <v-icon start size="small">mdi-rocket-launch</v-icon>
-              {{ t('addChannel.placementFront') }}
-            </v-btn>
-          </v-btn-toggle>
-        </div>
-
         <!-- 快速添加模式 -->
         <QuickAddChannelForm
           v-if="quickAddMode"
@@ -191,6 +168,29 @@
           >
             {{ standardSubmitError }}
           </v-alert>
+        </div>
+
+        <!-- 故障转移位置选择（两种模式共用，位于 API Key 区域下方） -->
+        <div class="d-flex align-center justify-center ga-3 mt-4">
+          <span class="text-caption text-medium-emphasis">{{ t('addChannel.placementLabel') }}</span>
+          <v-btn-toggle
+            v-model="placement"
+            mandatory
+            :disabled="isCreatingChannel"
+            density="compact"
+            rounded="lg"
+            color="primary"
+            variant="outlined"
+          >
+            <v-btn value="back" size="small">
+              <v-icon start size="small">mdi-playlist-plus</v-icon>
+              {{ t('addChannel.placementBack') }}
+            </v-btn>
+            <v-btn value="front" size="small">
+              <v-icon start size="small">mdi-rocket-launch</v-icon>
+              {{ t('addChannel.placementFront') }}
+            </v-btn>
+          </v-btn-toggle>
         </div>
       </v-card-text>
 
