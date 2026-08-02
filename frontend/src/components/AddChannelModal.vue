@@ -44,7 +44,7 @@
           ref="quickAddFormRef"
           :channel-type="channelType"
           :existing-channels="existingCustomChannels"
-          :placement="placement"
+          v-model:placement="placement"
           @added="onQuickAddSuccess"
         />
 
@@ -132,6 +132,26 @@
                           {{ t('addChannel.count', { count: detectedApiKeys.length }) }}
                         </v-chip>
                       </div>
+
+                      <!-- 故障转移位置（与 desktop 一致：API Keys 下方开关） -->
+                      <div
+                        class="d-flex align-center ga-3 pa-3 rounded-lg placement-card"
+                        :class="{ 'placement-card-disabled': isCreatingChannel }"
+                        @click="togglePlacement"
+                      >
+                        <v-icon color="primary" size="20">mdi-arrow-down-to-line</v-icon>
+                        <div class="flex-grow-1">
+                          <div class="text-body-2 font-weight-medium">{{ t('addChannel.placementBack') }}</div>
+                        </div>
+                        <v-switch
+                          :model-value="placement === 'back'"
+                          readonly
+                          hide-details
+                          density="compact"
+                          color="primary"
+                          class="flex-grow-0 placement-switch"
+                        />
+                      </div>
                     </div>
                   </v-col>
                 </v-row>
@@ -168,29 +188,6 @@
           >
             {{ standardSubmitError }}
           </v-alert>
-        </div>
-
-        <!-- 故障转移位置选择（两种模式共用，位于 API Key 区域下方） -->
-        <div class="d-flex align-center justify-center ga-3 mt-4">
-          <span class="text-caption text-medium-emphasis">{{ t('addChannel.placementLabel') }}</span>
-          <v-btn-toggle
-            v-model="placement"
-            mandatory
-            :disabled="isCreatingChannel"
-            density="compact"
-            rounded="lg"
-            color="primary"
-            variant="outlined"
-          >
-            <v-btn value="back" size="small">
-              <v-icon start size="small">mdi-playlist-plus</v-icon>
-              {{ t('addChannel.placementBack') }}
-            </v-btn>
-            <v-btn value="front" size="small">
-              <v-icon start size="small">mdi-rocket-launch</v-icon>
-              {{ t('addChannel.placementFront') }}
-            </v-btn>
-          </v-btn-toggle>
         </div>
       </v-card-text>
 
@@ -290,6 +287,12 @@ const isMac = computed(() => typeof navigator !== 'undefined' && /Mac|iPod|iPhon
 const isCreatingChannel = computed(() =>
   quickAddMode.value ? Boolean(quickAddFormRef.value?.submitting) : standardSubmitting.value
 )
+
+// 切换故障转移位置（back=追加到末尾 / front=置顶优先），创建中禁止切换
+function togglePlacement() {
+  if (isCreatingChannel.value) return
+  placement.value = placement.value === 'back' ? 'front' : 'back'
+}
 
 const headerClasses = computed(() => {
   const isDark = theme.global.current.value.dark
@@ -617,6 +620,29 @@ onUnmounted(() => {
 
 .apikeys-card {
   border: 1px solid rgba(var(--v-theme-outline), 0.32);
+}
+
+.placement-card {
+  border: 1px solid rgba(var(--v-theme-outline), 0.32);
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.placement-card:hover {
+  border-color: rgba(var(--v-theme-primary), 0.4);
+  background-color: rgba(var(--v-theme-primary), 0.05);
+}
+
+.placement-card-disabled {
+  cursor: default;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.placement-switch {
+  pointer-events: none;
 }
 
 .shortcut-hint {

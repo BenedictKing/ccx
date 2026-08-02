@@ -139,6 +139,26 @@
       </div>
     </div>
 
+    <!-- 故障转移位置（与 desktop 一致：API Keys 下方开关） -->
+    <div
+      class="d-flex align-center ga-3 pa-3 rounded-lg placement-card"
+      :class="{ 'placement-card-disabled': submitting }"
+      @click="togglePlacement"
+    >
+      <v-icon color="primary" size="20">mdi-arrow-down-to-line</v-icon>
+      <div class="flex-grow-1">
+        <div class="text-body-2 font-weight-medium">{{ t('addChannel.placementBack') }}</div>
+      </div>
+      <v-switch
+        :model-value="placement === 'back'"
+        readonly
+        hide-details
+        density="compact"
+        color="primary"
+        class="flex-grow-0 placement-switch"
+      />
+    </div>
+
     <!-- 提交错误（provider 模式 key 无效等） -->
     <v-alert v-if="submitError" color="error" variant="tonal" density="comfortable" icon="mdi-alert-circle-outline">
       {{ submitError }}
@@ -193,6 +213,7 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   added: [channelId: number]
   close: []
+  'update:placement': [value: 'front' | 'back']
 }>()
 
 const { t } = useI18n()
@@ -261,6 +282,12 @@ function providerSupportsChannel(provider: ProviderTemplate, channelType: Channe
 
 function clearSubmitError() {
   submitError.value = ''
+}
+
+// 切换故障转移位置（back=追加到末尾 / front=置顶优先），提交中禁止切换
+function togglePlacement() {
+  if (submitting.value) return
+  emit('update:placement', props.placement === 'back' ? 'front' : 'back')
 }
 
 async function loadProviderTemplates() {
@@ -418,5 +445,28 @@ defineExpose({ handleSubmit, resetForm, isFormValid, submitting })
 
 .discovery-card {
   border-color: rgba(var(--v-theme-outline), 0.32);
+}
+
+.placement-card {
+  border: 1px solid rgba(var(--v-theme-outline), 0.32);
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.placement-card:hover {
+  border-color: rgba(var(--v-theme-primary), 0.4);
+  background-color: rgba(var(--v-theme-primary), 0.05);
+}
+
+.placement-card-disabled {
+  cursor: default;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.placement-switch {
+  pointer-events: none;
 }
 </style>
