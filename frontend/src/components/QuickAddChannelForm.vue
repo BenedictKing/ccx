@@ -145,7 +145,7 @@
       :class="{ 'placement-card-disabled': submitting }"
       @click="togglePlacement"
     >
-      <v-icon color="primary" size="20">mdi-arrow-down-to-line</v-icon>
+      <v-icon color="primary" size="20">mdi-playlist-plus</v-icon>
       <div class="flex-grow-1">
         <div class="text-body-2 font-weight-medium">{{ t('addChannel.placementBack') }}</div>
       </div>
