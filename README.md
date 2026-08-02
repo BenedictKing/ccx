@@ -249,6 +249,14 @@ Join the QQ group for discussion: **642217364**
   </tr>
   <tr>
     <td align="center" width="60">
+      <strong>Data</strong>
+    </td>
+    <td>
+      CCX benchmark visualizations and registry updates also use publicly available data from <a href="https://benchlm.ai/">BenchLM.ai</a>, <a href="https://deepswe.datacurve.ai/">DeepSWE</a>, and <a href="https://deng.codexradar.com/">CodexRadar</a>. Pricing and context metadata are additionally refreshed from <a href="https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json">LiteLLM model_prices_and_context_window.json</a>.
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="60">
       <a target="_blank" rel="noopener noreferrer nofollow" href="https://signpath.org/"><img src="https://signpath.org/assets/favicon-50x50.png" alt="SignPath Logo" style="max-width: 100%;padding-top: 6px;" width="50"></a>
     </td>
     <td>
