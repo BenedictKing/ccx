@@ -236,25 +236,38 @@ const submitting = ref(false)
 const submitError = ref('')
 
 // ---- Provider 模板状态 ----
-// '' 表示自定义模式（手填 baseURL）；非空表示选中某已知 provider（模板化添加）
+// '' 表示自定义模式（手填 baseURL）；非空表示选中某已知 provider（模板化添加）。
+// 模板加载完成后默认选中首个服务商（赞助商序第一位：火山）。
 const providerId = ref('')
 const providerTemplates = ref<ProviderTemplate[]>([])
 const providerTemplatesLoading = ref(true)
 
 // ---- Provider 模板计算属性 ----
-// 仅展示与当前渠道类型匹配的 provider；多 route provider 只要包含当前 tab 即可显示。
-const availableProviders = computed(() =>
-  providerTemplates.value.filter(p => providerSupportsChannel(p, props.channelType))
-)
+// 赞助商展示顺序与订阅中心/README 保持一致，排在服务商列表最前（无模板的赞助商自然跳过）
+const SPONSOR_PROVIDER_ORDER = ['volcengine', 'compshare', 'runapi']
+
+// 仅展示与当前渠道类型匹配的 provider；多 route provider 只要包含当前 tab 即可显示；
+// 赞助商模板置顶，其余保持后端返回顺序
+const availableProviders = computed(() => {
+  const matched = providerTemplates.value.filter(p => providerSupportsChannel(p, props.channelType))
+  const sponsorRank = (p: ProviderTemplate) => {
+    const idx = SPONSOR_PROVIDER_ORDER.indexOf(p.providerId)
+    return idx === -1 ? SPONSOR_PROVIDER_ORDER.length : idx
+  }
+  return [...matched].sort((a, b) => sponsorRank(a) - sponsorRank(b))
+})
+
+// 默认选中的服务商：当前渠道类型下排序后的第一个（即火山）；无可用模板时回退自定义模式
+const defaultProviderId = computed(() => availableProviders.value[0]?.providerId ?? '')
 
 // new-api 通用接入是独立流程（与订阅中心一致的两步接入弹窗），选中后不占用 provider 状态，直接打开弹窗
 const NEW_API_PROVIDER_VALUE = '__new_api__'
 
-// 选择项：首项为「自定义」（value=''），其次为 new-api 通用接入，其余为已知 provider
+// 选择项：赞助商/已知 provider 在前，其次 new-api 通用接入，「自定义」（value=''，手填地址）固定在最末
 const providerItems = computed(() => [
-  { title: t('autopilot.quickAdd.provider.custom'), value: '' },
+  ...availableProviders.value.map(p => ({ title: p.displayName, value: p.providerId })),
   { title: t('autopilot.quickAdd.provider.newApi'), value: NEW_API_PROVIDER_VALUE },
-  ...availableProviders.value.map(p => ({ title: p.displayName, value: p.providerId }))
+  { title: t('autopilot.quickAdd.provider.custom'), value: '' }
 ])
 
 const inferredProviderId = computed(() =>
@@ -337,6 +350,10 @@ async function loadProviderTemplates() {
     }
   } finally {
     providerTemplatesLoading.value = false
+    // 模板就绪后应用默认服务商（赞助商序第一位：火山）；用户已手动选择时不覆盖
+    if (providerId.value === '') {
+      providerId.value = defaultProviderId.value
+    }
   }
 }
 
@@ -435,7 +452,7 @@ async function handleSubmit() {
 }
 
 function resetForm() {
-  providerId.value = ''
+  providerId.value = defaultProviderId.value
   baseUrls.value = ['']
   apiKeys.value = ['']
   showKeys.value = [false]
