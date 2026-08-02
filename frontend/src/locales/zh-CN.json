@@ -1376,6 +1376,7 @@
   "autopilot.quickAdd.models": "个模型",
   "autopilot.quickAdd.provider.label": "服务商",
   "autopilot.quickAdd.provider.custom": "自定义（手填地址）",
+  "autopilot.quickAdd.provider.newApi": "new-api（通用接入）",
   "autopilot.badge.label": "自动托管",
   "autopilot.badge.tooltip": "自动托管中"
 }

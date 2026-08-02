@@ -123,6 +123,16 @@ const emit = defineEmits<{
   error: [message: string]
 }>()
 
+const props = withDefaults(
+  defineProps<{
+    /** 接入的目标渠道类型 */
+    channelKind?: 'messages' | 'chat' | 'responses' | 'gemini' | 'images' | 'vectors'
+  }>(),
+  {
+    channelKind: 'messages',
+  }
+)
+
 const dialogVisible = ref(false)
 const verifying = ref(false)
 const provisioning = ref(false)
@@ -209,7 +219,7 @@ async function handleProvision() {
       accessToken: form.value.accessToken,
       userId: form.value.userId || undefined,
       authTokenMode: form.value.authTokenMode || undefined,
-      channelKind: 'messages',
+      channelKind: props.channelKind,
       provisionAllEligibleGroups: true,
       maxGroupMultiplier: 1.0,
     })

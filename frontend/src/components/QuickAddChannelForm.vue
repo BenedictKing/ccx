@@ -173,6 +173,14 @@
         </div>
       </v-card-text>
     </v-card>
+
+    <!-- new-api 通用接入弹窗（与订阅中心同一流程） -->
+    <NewApiQuickAddDialog
+      ref="newApiDialogRef"
+      :channel-kind="channelType"
+      @created="onNewApiCreated"
+      @error="onNewApiError"
+    />
   </div>
 </template>
 
@@ -187,6 +195,8 @@ import {
   getProviderTemplates
 } from '../services/autopilot-api'
 import type { ProviderTemplate } from '../services/autopilot-api'
+import type { NewApiProvisionResponse } from '../services/api-types'
+import NewApiQuickAddDialog from './subscriptions/NewApiQuickAddDialog.vue'
 import {
   buildQuickAddChannelName,
   findExistingQuickAddChannel,
@@ -237,9 +247,13 @@ const availableProviders = computed(() =>
   providerTemplates.value.filter(p => providerSupportsChannel(p, props.channelType))
 )
 
-// 选择项：首项为「自定义」（value=''），其余为已知 provider
+// new-api 通用接入是独立流程（与订阅中心一致的两步接入弹窗），选中后不占用 provider 状态，直接打开弹窗
+const NEW_API_PROVIDER_VALUE = '__new_api__'
+
+// 选择项：首项为「自定义」（value=''），其次为 new-api 通用接入，其余为已知 provider
 const providerItems = computed(() => [
   { title: t('autopilot.quickAdd.provider.custom'), value: '' },
+  { title: t('autopilot.quickAdd.provider.newApi'), value: NEW_API_PROVIDER_VALUE },
   ...availableProviders.value.map(p => ({ title: p.displayName, value: p.providerId }))
 ])
 
@@ -250,9 +264,28 @@ const effectiveProviderId = computed(() => providerId.value || inferredProviderI
 const displayProviderId = computed({
   get: () => effectiveProviderId.value,
   set: value => {
+    if (value === NEW_API_PROVIDER_VALUE) {
+      openNewApiDialog()
+      return
+    }
     providerId.value = value ?? ''
   }
 })
+
+// ---- new-api 通用接入弹窗 ----
+const newApiDialogRef = ref<InstanceType<typeof NewApiQuickAddDialog> | null>(null)
+
+function openNewApiDialog() {
+  newApiDialogRef.value?.openDialog()
+}
+
+function onNewApiCreated(result: NewApiProvisionResponse) {
+  emit('added', result.channelIndex)
+}
+
+function onNewApiError(message: string) {
+  submitError.value = message
+}
 const selectedProvider = computed(() => availableProviders.value.find(p => p.providerId === effectiveProviderId.value))
 
 const isExplicitProviderMode = computed(() => providerId.value !== '')

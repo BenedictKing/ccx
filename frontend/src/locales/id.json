@@ -1375,6 +1375,7 @@
   "autopilot.quickAdd.models": "model",
   "autopilot.quickAdd.provider.label": "Penyedia",
   "autopilot.quickAdd.provider.custom": "Kustom (URL manual)",
+  "autopilot.quickAdd.provider.newApi": "new-api (umum)",
   "autopilot.badge.label": "Otomatis",
   "autopilot.badge.tooltip": "Channel dikelola otomatis"
 }
