@@ -1184,6 +1184,7 @@
   "subscription.newApi.provisionGroup": "接入分组",
   "subscription.newApi.provision": "接入",
   "subscription.newApi.provisionSuccess": "已自动创建合格分组的 Key 并创建渠道，密钥已写入渠道，不再明文展示。",
+  "subscription.newApi.provisionMergedSuccess": "已并入现有渠道「{name}」，新 Key 已写入，不再明文展示。",
   "subscription.newApi.discoveryStarted": "模型发现已启动。",
   "subscription.quickAccess": "快捷接入",
   "subscription.builtinProviders": "内置服务商",

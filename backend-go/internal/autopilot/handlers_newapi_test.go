@@ -370,6 +370,210 @@ func TestHandleNewApiProvision_UnprefixedKey_GetsSkPrefix(t *testing.T) {
 	t.Fatal("未找到新建渠道")
 }
 
+// 同站点已有渠道时，provision 应把 key 并入该渠道而非新建（多订阅/纯 key 整合为同一渠道）。
+func TestHandleNewApiProvision_MergesIntoExistingChannel(t *testing.T) {
+	site := mockNewApiSite(t, "", "", true)
+	store, err := NewSubscriptionStoreWithDB(newTestDB(t))
+	if err != nil {
+		t.Fatalf("创建 store 失败: %v", err)
+	}
+	cfgManager := setupNewApiTestConfigManager(t)
+	if err := cfgManager.AddUpstream(config.UpstreamConfig{
+		Name:          "existing-metapi",
+		ChannelUID:    "ch_existing001",
+		BaseURL:       site.URL,
+		APIKeys:       []string{"sk-plain-old"},
+		APIKeyConfigs: []config.APIKeyConfig{{Key: "sk-plain-old"}},
+		ServiceType:   "claude",
+		Status:        "active",
+	}); err != nil {
+		t.Fatalf("预置渠道失败: %v", err)
+	}
+	runner := NewAutoDiscoveryRunner(nil, nil)
+	router := setupNewApiRouter(t, &NewApiRouteDeps{Store: store, CfgManager: cfgManager, Runner: runner})
+
+	reqBody := NewApiProvisionRequest{
+		SubscriptionUID: "sub-merge-1",
+		DisplayName:     "同站点第二订阅",
+		BaseURL:         site.URL,
+		AccessToken:     "secret-provision-token",
+		ChannelKind:     "messages",
+		ChannelName:     "should-not-be-created",
+	}
+	body, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest(http.MethodPost, "/api/subscriptions/newapi/provision", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("期望 201, got %d, body=%s", w.Code, w.Body.String())
+	}
+	var resp NewApiProvisionResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("响应解析失败: %v", err)
+	}
+	if !resp.MergedChannel {
+		t.Fatalf("期望 mergedChannel=true: %+v", resp)
+	}
+	if resp.ChannelUID != "ch_existing001" || resp.ChannelName != "existing-metapi" || resp.ChannelIndex != 0 {
+		t.Fatalf("合并目标信息不匹配: %+v", resp)
+	}
+
+	// 不新增渠道；纯 key 保留、新 key 追加且带分组元数据
+	channels := cfgManager.GetConfig().Upstream
+	if len(channels) != 1 {
+		t.Fatalf("合并后渠道数应为 1: %+v", channels)
+	}
+	ch := channels[0]
+	if len(ch.APIKeys) != 2 || ch.APIKeys[0] != "sk-plain-old" || ch.APIKeys[1] != "sk-newly-created-key" {
+		t.Fatalf("合并后 APIKeys 不匹配: %+v", ch.APIKeys)
+	}
+	if len(ch.APIKeyConfigs) != 2 || ch.APIKeyConfigs[1].QuotaGroup != "default" || ch.APIKeyConfigs[1].Name != "new-api:default" {
+		t.Fatalf("合并后 APIKeyConfigs 不匹配: %+v", ch.APIKeyConfigs)
+	}
+	if !ch.AutoManaged {
+		t.Fatal("合并后渠道应为 autoManaged")
+	}
+
+	// 订阅链接到已有渠道
+	profile := store.Get("sub-merge-1")
+	if profile == nil {
+		t.Fatal("profile 未创建")
+	}
+	linked := false
+	for _, uid := range profile.LinkedChannelUIDs {
+		if uid == "ch_existing001" {
+			linked = true
+		}
+	}
+	if !linked {
+		t.Fatalf("订阅未链接到已有渠道: %+v", profile.LinkedChannelUIDs)
+	}
+}
+
+// 合并时已有渠道已含相同 key（含 apiKeyConfigs 中的记录）则不重复追加。
+func TestHandleNewApiProvision_MergeDeduplicatesKeys(t *testing.T) {
+	site := mockNewApiSite(t, "", "", true)
+	store, err := NewSubscriptionStoreWithDB(newTestDB(t))
+	if err != nil {
+		t.Fatalf("创建 store 失败: %v", err)
+	}
+	cfgManager := setupNewApiTestConfigManager(t)
+	if err := cfgManager.AddUpstream(config.UpstreamConfig{
+		Name:          "existing-dup",
+		ChannelUID:    "ch_dup001",
+		BaseURL:       site.URL,
+		APIKeys:       []string{"sk-newly-created-key"},
+		APIKeyConfigs: []config.APIKeyConfig{{Key: "sk-newly-created-key"}},
+		ServiceType:   "claude",
+		Status:        "active",
+	}); err != nil {
+		t.Fatalf("预置渠道失败: %v", err)
+	}
+	runner := NewAutoDiscoveryRunner(nil, nil)
+	router := setupNewApiRouter(t, &NewApiRouteDeps{Store: store, CfgManager: cfgManager, Runner: runner})
+
+	reqBody := NewApiProvisionRequest{
+		SubscriptionUID: "sub-merge-dup",
+		DisplayName:     "重复 key 合并",
+		BaseURL:         site.URL,
+		AccessToken:     "secret-provision-token",
+		ChannelKind:     "messages",
+	}
+	body, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest(http.MethodPost, "/api/subscriptions/newapi/provision", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("期望 201, got %d, body=%s", w.Code, w.Body.String())
+	}
+	ch := cfgManager.GetConfig().Upstream[0]
+	if len(ch.APIKeys) != 1 || ch.APIKeys[0] != "sk-newly-created-key" {
+		t.Fatalf("相同 key 被重复追加: %+v", ch.APIKeys)
+	}
+	if len(ch.APIKeyConfigs) != 1 {
+		t.Fatalf("相同 key 的配置被重复追加: %+v", ch.APIKeyConfigs)
+	}
+}
+
+// 同站点多个渠道命中时优先合并进 active 渠道，跳过 suspended。
+func TestHandleNewApiProvision_MergePrefersActiveChannel(t *testing.T) {
+	site := mockNewApiSite(t, "", "", true)
+	store, err := NewSubscriptionStoreWithDB(newTestDB(t))
+	if err != nil {
+		t.Fatalf("创建 store 失败: %v", err)
+	}
+	cfgManager := setupNewApiTestConfigManager(t)
+	if err := cfgManager.AddUpstream(config.UpstreamConfig{
+		Name:        "suspended-ch",
+		ChannelUID:  "ch_susp001",
+		BaseURL:     site.URL,
+		APIKeys:     []string{"sk-old-1"},
+		ServiceType: "claude",
+		Status:      "suspended",
+	}); err != nil {
+		t.Fatalf("预置挂起渠道失败: %v", err)
+	}
+	if err := cfgManager.AddUpstream(config.UpstreamConfig{
+		Name:        "active-ch",
+		ChannelUID:  "ch_active001",
+		BaseURL:     site.URL,
+		APIKeys:     []string{"sk-old-2"},
+		ServiceType: "claude",
+		Status:      "active",
+	}); err != nil {
+		t.Fatalf("预置活跃渠道失败: %v", err)
+	}
+	runner := NewAutoDiscoveryRunner(nil, nil)
+	router := setupNewApiRouter(t, &NewApiRouteDeps{Store: store, CfgManager: cfgManager, Runner: runner})
+
+	reqBody := NewApiProvisionRequest{
+		SubscriptionUID: "sub-merge-active",
+		DisplayName:     "优先合并活跃渠道",
+		BaseURL:         site.URL,
+		AccessToken:     "secret-provision-token",
+		ChannelKind:     "messages",
+	}
+	body, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest(http.MethodPost, "/api/subscriptions/newapi/provision", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("期望 201, got %d, body=%s", w.Code, w.Body.String())
+	}
+	var resp NewApiProvisionResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("响应解析失败: %v", err)
+	}
+	channels := cfgManager.GetConfig().Upstream
+	suspIdx, actIdx := -1, -1
+	for i, ch := range channels {
+		switch ch.Name {
+		case "suspended-ch":
+			suspIdx = i
+		case "active-ch":
+			actIdx = i
+		}
+	}
+	if suspIdx < 0 || actIdx < 0 {
+		t.Fatalf("预置渠道丢失: %+v", channels)
+	}
+	if resp.ChannelUID != "ch_active001" || resp.ChannelIndex != actIdx {
+		t.Fatalf("应合并进 active 渠道: %+v", resp)
+	}
+	if len(channels[suspIdx].APIKeys) != 1 || channels[suspIdx].APIKeys[0] != "sk-old-1" {
+		t.Fatalf("suspended 渠道不应被改动: %+v", channels[suspIdx].APIKeys)
+	}
+	if len(channels[actIdx].APIKeys) != 2 || channels[actIdx].APIKeys[1] != "sk-newly-created-key" {
+		t.Fatalf("active 渠道合并结果不匹配: %+v", channels[actIdx].APIKeys)
+	}
+}
+
 func TestHandleNewApiProvision_AutoCreatesOnlyEligibleGroupKeys(t *testing.T) {
 	var created []NewApiToken
 	var createdGroups []string

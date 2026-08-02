@@ -330,7 +330,11 @@ async function handleNewApiProvision() {
       provisionAllEligibleGroups: true,
       maxGroupMultiplier: 1.0,
     })
-    showSnackbar(t('subscription.newApi.provisionSuccess'), 'success')
+    if (result.mergedChannel) {
+      showSnackbar(t('subscription.newApi.provisionMergedSuccess', { name: result.channelName || '' }), 'success')
+    } else {
+      showSnackbar(t('subscription.newApi.provisionSuccess'), 'success')
+    }
     selectedProvider.value = ''
   } catch (e) {
     newApiError.value = e instanceof Error ? e.message : 'Unknown error'

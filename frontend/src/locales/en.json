@@ -1184,6 +1184,7 @@
   "subscription.newApi.provisionGroup": "Provision Group",
   "subscription.newApi.provision": "Provision",
   "subscription.newApi.provisionSuccess": "Eligible group keys were auto-created and the channel was provisioned. Keys are stored in the channel and will not be shown again.",
+  "subscription.newApi.provisionMergedSuccess": "Merged into existing channel \"{name}\". New keys are stored in the channel and will not be shown again.",
   "subscription.newApi.discoveryStarted": "Model discovery started.",
   "subscription.quickAccess": "Quick Access",
   "subscription.builtinProviders": "Built-in Providers",

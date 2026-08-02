@@ -3364,10 +3364,11 @@ type SubscriptionIntegration struct {
           GET /api/user/models       → 记录账号可用模型，供渠道 supportedModels 参考
 4. 建 key：POST /api/token/（按 ProvisionKeyName/Group/Models 模板）
    ├─ 已存在同名 ccx-autopilot key → 复用其 id，不重复创建（列表比对 name）
-   └─ 新建成功 → 回填 ProvisionedTokenID，取 data.key 作为渠道 apiKey
-5. 自动建渠道：用 baseURL + 新建 key 创建一个上游渠道
-   ├─ channelKind 由用户选择或按站点探测（messages/chat/responses/gemini）
-   ├─ status=unknown，autoManaged=true，OriginType=relay
+   └─ 新建成功 → 回填 ProvisionedTokenID，取 data.key（补齐 sk- 前缀）作为渠道 apiKey
+5. 写入渠道：同 baseURL+channelKind 已有渠道时并入该渠道（多 new-api 订阅与纯 key 整合为同一渠道），否则自动新建
+   ├─ 合并目标匹配：BaseURL/BaseURLs 规范化（去尾部 /，忽略大小写）相等；跳过带 providerId 的渠道；多个命中优先 active
+   ├─ 合并：保留已有纯 key 与配置，新 key 按字符串去重后追加，写入 quotaGroup/groupMultiplier 元数据
+   ├─ 新建：channelKind 由用户选择或按站点探测（messages/chat/responses/gemini），status=unknown，autoManaged=true，OriginType=relay
    ├─ 建立 SubscriptionUID → ChannelUID 链接（回填 LinkedChannelUID）
    └─ 触发 §8.4 的 Discovery + 能力测试标准流程
 6. 完成：订阅卡片显示余额、分组倍率、已绑定渠道、探测进度

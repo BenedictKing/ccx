@@ -1255,6 +1255,9 @@ export interface NewApiProvisionResponse {
   subscription: SubscriptionItem
   channelUid: string
   channelIndex: number
+  channelName?: string
+  /** true 表示同站点已有渠道，key 已并入而非新建 */
+  mergedChannel?: boolean
   provisionedKey: string
   provisionedTokenId: number
   reused: boolean

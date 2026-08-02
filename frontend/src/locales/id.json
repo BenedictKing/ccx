@@ -1184,6 +1184,7 @@
   "subscription.newApi.provisionGroup": "Grup Provisioning",
   "subscription.newApi.provision": "Provisioning",
   "subscription.newApi.provisionSuccess": "Kunci grup yang memenuhi syarat dibuat otomatis dan channel telah di-provisioning. Kunci tersimpan di channel dan tidak akan ditampilkan lagi.",
+  "subscription.newApi.provisionMergedSuccess": "Digabungkan ke channel \"{name}\" yang sudah ada. Kunci baru tersimpan di channel dan tidak akan ditampilkan lagi.",
   "subscription.newApi.discoveryStarted": "Penemuan model dimulai.",
   "subscription.quickAccess": "Akses Cepat",
   "subscription.builtinProviders": "Penyedia Bawaan",
