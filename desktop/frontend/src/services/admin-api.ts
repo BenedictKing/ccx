@@ -97,9 +97,22 @@ export interface DisabledKeyInfo {
 
 export interface APIKeyConfig {
   key: string
+  keyUid?: string
+  credentialUid?: string
   name?: string
   enabled?: boolean
   quotaGroup?: string
+  groupMultiplier?: number | null
+  maxGroupMultiplier?: number | null
+  multiplierSource?: 'manual' | 'new_api' | 'provider'
+  multiplierUpdatedAt?: string
+  multiplierExpiresAt?: string
+  multiplierSyncStatus?: 'manual' | 'fresh' | 'stale' | 'over_limit' | 'sync_error' | 'relink_required' | string
+  multiplierSyncError?: string
+  sourceSubscriptionUid?: string
+  sourceRemoteTokenId?: number
+  eligible?: boolean
+  ineligibleReason?: string
   rateLimitRpm?: number
   rateLimitWindowMinutes?: number
   rateLimitMaxConcurrent?: number
@@ -966,6 +979,36 @@ export interface ProfileChangelogResponse {
   total: number
 }
 
+// ============== 汇率与 NewAPI Key 状态类型 ==============
+
+export interface ExchangeRateQuote {
+  sourceAmount: number
+  sourceUnit: string
+  targetAmount: number
+  targetUnit: string
+  updatedAt?: string
+  note?: string
+}
+
+export interface ExchangeRateSnapshot {
+  version: number
+  usdUnitPrices: Record<string, number>
+  builtAt: string
+}
+
+export interface NewApiKeyStatus {
+  keyUid?: string
+  credentialUid?: string
+  group: string
+  remoteMultiplier: number
+  maxMultiplier?: number | null
+  status: string
+  reason?: string
+  eligible: boolean
+  updatedAt?: string
+  expiresAt?: string
+}
+
 // ============== 订阅中心（Subscription Center）==============
 
 export interface SubscriptionItem {
@@ -979,6 +1022,12 @@ export interface SubscriptionItem {
   balance?: number
   groupMultipliers?: Record<string, number>
   rechargeMultiplier?: number
+  paymentAmount?: number | null
+  paymentUnit?: string
+  creditAmount?: number | null
+  creditUnit?: string
+  version?: number
+  authTokenMode?: 'bearer' | 'raw_auth' | string
   linkedChannelUids?: string[]
   source?: string
   confidence?: number
