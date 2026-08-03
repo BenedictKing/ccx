@@ -716,10 +716,10 @@ describe('buildChannelPayload', () => {
   it('应完整保留 Key 服务端元数据、扩展字段及 nullable multiplier', () => {
     const metadata = {
       key: '  sk-preserved  ', keyUid: 'key-uid', credentialUid: 'credential-uid',
-      groupMultiplier: null, maxGroupMultiplier: 0, multiplierSource: 'subscription',
+      groupMultiplier: null, maxGroupMultiplier: 0, multiplierSource: 'new_api' as const,
       multiplierUpdatedAt: '2026-08-01T00:00:00Z', multiplierExpiresAt: '2026-09-01T00:00:00Z',
-      multiplierSyncStatus: 'failed', multiplierSyncError: 'timeout', sourceSubscriptionUid: 'sub-uid',
-      sourceRemoteTokenId: 'remote-token', eligible: false, ineligibleReason: 'expired', futureField: { nested: true },
+      multiplierSyncStatus: 'sync_error', multiplierSyncError: 'timeout', sourceSubscriptionUid: 'sub-uid',
+      sourceRemoteTokenId: 42, eligible: false, ineligibleReason: 'expired', futureField: { nested: true },
     }
     const result = buildChannelPayload({
       name: 'keys', serviceType: 'openai', baseUrl: 'https://api.example.com', baseUrls: [], website: '',

@@ -46,9 +46,9 @@ describe('channel API key state', () => {
   it('行模型保留完整 Key 配置元数据及未知扩展字段', () => {
     const config = {
       key: 'key-active', keyUid: 'uid', credentialUid: 'credential', groupMultiplier: null,
-      maxGroupMultiplier: 0, multiplierSource: 'remote', multiplierUpdatedAt: 'updated',
-      multiplierExpiresAt: 'expires', multiplierSyncStatus: 'ok', multiplierSyncError: '',
-      sourceSubscriptionUid: 'subscription', sourceRemoteTokenId: 'remote-token', eligible: false,
+      maxGroupMultiplier: 0, multiplierSource: 'new_api' as const, multiplierUpdatedAt: 'updated',
+      multiplierExpiresAt: 'expires', multiplierSyncStatus: 'fresh', multiplierSyncError: '',
+      sourceSubscriptionUid: 'subscription', sourceRemoteTokenId: 42, eligible: false,
       ineligibleReason: 'disabled', futureField: 42,
     }
 
