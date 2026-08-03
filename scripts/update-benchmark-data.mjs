@@ -73,12 +73,7 @@ const modelsArg = args.find(a => a.startsWith('--models='))
 const modelsArgIndex = args.indexOf('--models')
 const modelsValue = modelsArg?.split('=', 2)[1] ?? (modelsArgIndex >= 0 ? args[modelsArgIndex + 1] : '')
 const targetModels = modelsValue ? modelsValue.split(',').map(model => model.trim()).filter(Boolean) : null
-export const generatedArtifactPaths = [
-  join(root, 'backend-go/internal/config/generated_model_registry.go'),
-  join(root, 'frontend/src/generated/modelRegistry.ts'),
-  join(root, 'desktop/frontend/src/generated/model-registry.ts'),
-  ...presetArtifactPaths,
-]
+export const generatedArtifactPaths = [...presetArtifactPaths]
 
 /**
  * 加载注册表

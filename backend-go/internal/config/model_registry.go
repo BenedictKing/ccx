@@ -1,6 +1,7 @@
 package config
 
 import (
+	"log"
 	"regexp"
 	"sort"
 	"strings"
@@ -379,6 +380,8 @@ var (
 
 type upstreamCapabilitySnapshot struct {
 	store                 *presetstore.PresetStore
+	dataVersion           string
+	source                string
 	capabilities          map[string]UpstreamModelCapability
 	patternCache          map[string]*compiledBuiltinPattern
 	benchmarks            map[string]ModelBenchmarkProfile
@@ -432,17 +435,26 @@ func rebuildBuiltinSnapshotForStore(store *presetstore.PresetStore) {
 			rebuildBuiltinSnapshotForStore(store)
 		})
 	}
+
 	bundle := store.Get()
-	capabilities := generatedBuiltinUpstreamModelCapabilities()
-	if runtimeCapabilities := convertRuntimeCapabilities(bundle.ModelRegistry); len(runtimeCapabilities) > 0 {
-		capabilities = runtimeCapabilities
+	source := "presetstore"
+	capabilities := convertRuntimeCapabilities(bundle.ModelRegistry)
+	benchmarks := convertRuntimeBenchmarkProfiles(bundle.ModelRegistry)
+	if len(capabilities) == 0 || len(benchmarks) == 0 {
+		embedded := presetstore.EmbeddedBundle()
+		if len(capabilities) == 0 {
+			capabilities = convertRuntimeCapabilities(embedded.ModelRegistry)
+		}
+		if len(benchmarks) == 0 {
+			benchmarks = convertRuntimeBenchmarkProfiles(embedded.ModelRegistry)
+		}
+		source = "presetstore+embedded-fallback"
 	}
-	benchmarks := generatedBuiltinModelBenchmarkProfiles()
-	if runtimeBenchmarks := convertRuntimeBenchmarkProfiles(bundle.ModelRegistry); len(runtimeBenchmarks) > 0 {
-		benchmarks = runtimeBenchmarks
-	}
+
 	snapshot := upstreamCapabilitySnapshot{
 		store:                 store,
+		dataVersion:           bundle.DataVersion,
+		source:                source,
 		capabilities:          cloneCapabilitiesMap(capabilities),
 		patternCache:          buildPatternCache(precisionKeys(capabilities)),
 		benchmarks:            cloneBenchmarkProfilesMap(benchmarks),
@@ -451,6 +463,7 @@ func rebuildBuiltinSnapshotForStore(store *presetstore.PresetStore) {
 	builtinSnapshotMu.Lock()
 	builtinSnapshot = snapshot
 	builtinSnapshotMu.Unlock()
+	log.Printf("[ModelRegistry-Snapshot] source=%s dataVersion=%s capabilities=%d benchmarks=%d", source, bundle.DataVersion, len(capabilities), len(benchmarks))
 }
 
 func precisionKeys(m map[string]UpstreamModelCapability) []string {

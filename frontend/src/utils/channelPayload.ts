@@ -1,9 +1,7 @@
 import type { Channel, EmbeddingCapability, UpstreamModelCapability } from '../services/api'
 import { normalizeAdvancedChannelOptions } from './channelAdvancedOptions'
 import { deduplicateEquivalentBaseUrls } from './baseUrlSemantics'
-import { builtinUpstreamModelCapabilities } from '../generated/modelRegistry'
-
-let runtimeUpstreamModelCapabilities: Record<string, UpstreamModelCapability> | null = null
+let runtimeUpstreamModelCapabilities: Record<string, UpstreamModelCapability> = {}
 
 const DEFAULT_COPILOT_BASE_URL = 'https://api.githubcopilot.com'
 
@@ -242,13 +240,11 @@ function matchesModelPattern(pattern: string, model: string): boolean {
 }
 
 export function setRuntimeUpstreamModelCapabilities(capabilities: Record<string, UpstreamModelCapability> | null | undefined) {
-  runtimeUpstreamModelCapabilities = capabilities && Object.keys(capabilities).length > 0
-    ? capabilities
-    : null
+  runtimeUpstreamModelCapabilities = capabilities || {}
 }
 
 function getEffectiveUpstreamModelCapabilities(): Record<string, UpstreamModelCapability> {
-  return runtimeUpstreamModelCapabilities || builtinUpstreamModelCapabilities
+  return runtimeUpstreamModelCapabilities
 }
 
 export function resolveBuiltinUpstreamModelCapability(model: string): { capability: UpstreamModelCapability; pattern: string } | null {

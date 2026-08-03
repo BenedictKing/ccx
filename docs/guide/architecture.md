@@ -72,6 +72,21 @@ Client
 - 支持热重载与配置备份
 - 提供各渠道配置读写能力
 
+### Model Registry 数据分发
+
+`shared/model-registry/ccx_model_registry.json` 是模型能力、定价与 benchmark 的唯一权威源。生成流程将其同步为公开文档站和后端内嵌的 preset shard；运行时不再生成或依赖 Go/TypeScript 数据镜像。
+
+```text
+shared/model-registry/ccx_model_registry.json
+  -> docs/public/presets/model-registry.json
+  -> backend-go/internal/presetstore/embedded/model-registry.json
+  -> PresetStore 原子快照
+  -> 后端模型解析与 /api/presets
+  -> Web / Desktop runtime registry
+```
+
+后端启动时使用 embedded JSON，随后可由已校验磁盘缓存或文档站远程 preset 整包替换。`upstreamCapabilities` 与 `benchmarkProfiles` 随同一个 `PresetBundle` 原子发布，前端统一通过 `/api/presets` 获取当前生效版本，不直接请求文档站。
+
 ### `internal/handlers/`
 - 承载 Messages、Chat、Responses、Gemini、Images、Vectors 代理与管理接口
 - 处理模型查询、能力测试、日志查询、状态切换等管理请求

@@ -36,6 +36,13 @@ const runtimeBundle = {
         displayName: 'runtime-gpt-5',
       },
     ],
+    benchmarkProfiles: [
+      {
+        patterns: ['^gpt-5$'],
+        canonicalModel: 'gpt-5',
+        overallScore: 88,
+      },
+    ],
   },
   channelPresets: {
     schemaVersion: 3,
@@ -109,18 +116,19 @@ describe('useRuntimePresets', () => {
     const getPresets = api.getPresets as ReturnType<typeof vi.fn>
     getPresets.mockResolvedValue(runtimeBundle as never)
 
-    const { ensureLoaded, effectiveModelRegistry, effectiveChannelPresets } = useRuntimePresets()
+    const { ensureLoaded, effectiveModelRegistry, effectiveBenchmarkProfiles, effectiveChannelPresets } = useRuntimePresets()
     await ensureLoaded()
 
     expect(effectiveModelRegistry.value['^gpt-5$']?.displayName).toBe('runtime-gpt-5')
     expect(effectiveModelRegistry.value['^gpt-5@prod$']?.maxOutputTokens).toBe(24)
+    expect(effectiveBenchmarkProfiles.value['^gpt-5$']?.overallScore).toBe(88)
     expect(effectiveChannelPresets.value.openAIMessages['gpt-5.5']?.modelMapping).toEqual({ sonnet: 'runtime-gpt-5' })
     expect(effectiveChannelPresets.value.openAIChat.mimo?.visionFallbackModel).toBe('runtime-chat-fallback')
     expect(effectiveChannelPresets.value.claudeMessages.mimo?.modelMapping).toEqual({ sonnet: 'runtime-mimo' })
     expect(resolveBuiltinUpstreamModelCapability('gpt-5')?.capability.displayName).toBe('runtime-gpt-5')
   })
 
-  it('API 失败时应回退到 generated fallback', async () => {
+  it('API 失败时模型能力应保持为空而不是使用生成镜像', async () => {
     const getPresets = api.getPresets as ReturnType<typeof vi.fn>
     getPresets.mockRejectedValue(new Error('network error'))
 
@@ -129,7 +137,7 @@ describe('useRuntimePresets', () => {
 
     expect(subscriptionPreset.value.originTypes.some((item: { value: string }) => item.value === 'official_api')).toBe(true)
     expect(effectiveChannelPresets.value.openAIMessages['gpt-5.5']?.fastMode).toBe(true)
-    expect(resolveBuiltinUpstreamModelCapability('claude-sonnet-5')?.capability.displayName).toBe('Claude Sonnet 5')
+    expect(resolveBuiltinUpstreamModelCapability('claude-sonnet-5')).toBeNull()
   })
 
   it('显式注入运行时状态时应覆盖 generated channel presets', () => {
@@ -142,6 +150,7 @@ describe('useRuntimePresets', () => {
           displayName: 'runtime-gpt-5',
         },
       },
+      benchmarkProfiles: {},
       channelPresets: {
         schemaVersion: 3,
         claudeMessages: runtimeBundle.channelPresets.claudeMessages.providers,
