@@ -69,6 +69,34 @@ func TestMergeManagedProviderAccountsCombinesSameSiteKeysAndRoutes(t *testing.T)
 	}
 }
 
+func TestMergeChannelsByBaseURLRegardlessOfManagementMode(t *testing.T) {
+	cm := &ConfigManager{config: Config{
+		Upstream: []UpstreamConfig{{
+			AccountUID: "acct-messages", ChannelUID: "ch-messages", Name: "ai-prism-messages",
+			ServiceType: "responses", BaseURL: "https://ai.prism.uno/v1", APIKeys: []string{"sk-messages"},
+		}},
+		ResponsesUpstream: []UpstreamConfig{{
+			AccountUID: "acct-responses", ChannelUID: "ch-responses", Name: "ai-prism-responses",
+			ServiceType: "responses", BaseURL: "https://ai.prism.uno", APIKeys: []string{"sk-responses"},
+		}},
+		GeminiUpstream: []UpstreamConfig{{
+			AccountUID: "acct-gemini", ChannelUID: "ch-gemini", Name: "prism-gemini",
+			ServiceType: "gemini", BaseURL: "https://ai.prism.uno/v1beta", APIKeys: []string{"sk-gemini"},
+		}},
+	}}
+	if !cm.mergeManagedProviderAccounts() {
+		t.Fatal("普通渠道的同 BaseURL 站点应触发账号身份合并")
+	}
+	want := cm.config.GeminiUpstream[0].AccountUID
+	if want == "" || cm.config.Upstream[0].AccountUID != want || cm.config.ResponsesUpstream[0].AccountUID != want {
+		t.Fatalf("跨协议渠道未归并到同一 AccountUID: messages=%q responses=%q gemini=%q",
+			cm.config.Upstream[0].AccountUID, cm.config.ResponsesUpstream[0].AccountUID, cm.config.GeminiUpstream[0].AccountUID)
+	}
+	if len(cm.config.Upstream) != 1 || len(cm.config.ResponsesUpstream) != 1 || len(cm.config.GeminiUpstream) != 1 {
+		t.Fatal("不同协议渠道不应互相删除")
+	}
+}
+
 func TestMergeManagedProviderAccountsKeepsDifferentSitesSeparate(t *testing.T) {
 	cm := &ConfigManager{config: Config{
 		ManagedAccounts: []ManagedAccountConfig{
@@ -112,15 +140,13 @@ func TestMergeManagedProviderAccountsSiteBoundaries(t *testing.T) {
 	}
 }
 
-func TestMergeManagedProviderAccountsRequiresManagedURL(t *testing.T) {
+func TestMergeManagedProviderAccountsRequiresURL(t *testing.T) {
 	cm := &ConfigManager{config: Config{Upstream: []UpstreamConfig{
 		{AccountUID: "acct-a", ProviderID: "mimo", AutoManaged: true},
 		{AccountUID: "acct-b", ProviderID: "mimo", AutoManaged: true},
-		{AccountUID: "acct-manual-a", BaseURL: "https://api.example/v1"},
-		{AccountUID: "acct-manual-b", BaseURL: "https://api.example"},
 	}}}
 	if cm.mergeManagedProviderAccounts() {
-		t.Fatal("无 BaseURL 或手工渠道不应自动合并")
+		t.Fatal("无 BaseURL 的渠道不应自动合并")
 	}
 }
 

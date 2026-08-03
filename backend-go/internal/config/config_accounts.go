@@ -456,7 +456,7 @@ func (cm *ConfigManager) SetManagedAccountVolcenginePlanUsage(accountUID, creden
 	return fmt.Errorf("账号 %s 不存在", accountUID)
 }
 
-// mergeManagedProviderAccounts 将同一 BaseURL 站点的历史自动托管账号归并为一个凭证池。
+// mergeManagedProviderAccounts 将同一 BaseURL 站点的历史渠道归并到同一账号身份。
 // URL 身份跨协议统一默认版本后缀，同时保留租户路径、端口、查询参数和 # 语义。
 func (cm *ConfigManager) mergeManagedProviderAccounts() bool {
 	parent := make(map[string]string)
@@ -483,7 +483,7 @@ func (cm *ConfigManager) mergeManagedProviderAccounts() bool {
 	collectSites := func(channels []UpstreamConfig) {
 		for i := range channels {
 			channel := &channels[i]
-			if !channel.AutoManaged || channel.AccountUID == "" {
+			if channel.AccountUID == "" {
 				continue
 			}
 			findRoot(channel.AccountUID)
@@ -541,7 +541,7 @@ func (cm *ConfigManager) mergeManagedProviderAccounts() bool {
 	chooseChannelCanonical := func(channels []UpstreamConfig) {
 		for i := range channels {
 			channel := &channels[i]
-			if !channel.AutoManaged || channel.AccountUID == "" {
+			if channel.AccountUID == "" {
 				continue
 			}
 			root := findRoot(channel.AccountUID)
@@ -564,7 +564,7 @@ func (cm *ConfigManager) mergeManagedProviderAccounts() bool {
 	collectKinds := func(channels []UpstreamConfig, kind string) {
 		for i := range channels {
 			channel := &channels[i]
-			if !channel.AutoManaged || channel.AccountUID == "" {
+			if channel.AccountUID == "" {
 				continue
 			}
 			root := findRoot(channel.AccountUID)
@@ -591,7 +591,7 @@ func (cm *ConfigManager) mergeManagedProviderAccounts() bool {
 		groupHasCanonicalRoute := make(map[string]bool)
 		for i := range channels {
 			channel := channels[i]
-			if !channel.AutoManaged || channel.AccountUID == "" {
+			if channel.AccountUID == "" {
 				out = append(out, channel)
 				continue
 			}
@@ -752,7 +752,7 @@ func (cm *ConfigManager) mergeManagedProviderAccounts() bool {
 	if hasRuntimeKeys {
 		cm.config.syncManagedAccountsFromChannels()
 	}
-	log.Printf("[Config-AccountMerge] 已按 BaseURL 站点合并历史自动托管账号")
+	log.Printf("[Config-AccountMerge] 已按 BaseURL 站点合并历史渠道")
 	return true
 }
 

@@ -186,12 +186,13 @@ const apiKeyFingerprint = (channel: Channel): string => {
 }
 
 const logicalGroupKey = (kind: LlmChannelKind, channel: Channel): { key: string; name: string } => {
+  const accountGrouped = !!channel.accountUid
   const accountManaged = !!channel.accountUid && (!!channel.autoManaged || !!channel.providerId)
   const name = accountManaged || (channel.autoManaged && channel.providerId)
     ? stripRouteSuffix(channel.name, kind)
     : channel.name
 
-  if (accountManaged) {
+  if (accountGrouped) {
     return {
       key: `account:${channel.accountUid}`,
       name,

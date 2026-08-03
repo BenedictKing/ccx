@@ -314,6 +314,20 @@ describe('buildUnifiedChannelsData account grouping', () => {
     })
   })
 
+  it('按迁移后的 accountUid 聚合普通同站点渠道', () => {
+    const data: Record<LlmChannelKind, ChannelsResponse> = {
+      messages: response([channel('ai-prism-messages', 'acct-prism', 38, ['sk-messages'], { autoManaged: false, serviceType: 'responses' })]),
+      chat: response([]),
+      responses: response([channel('ai-prism-responses', 'acct-prism', 30, ['sk-responses'], { autoManaged: false, serviceType: 'responses' })]),
+      gemini: response([channel('prism-gemini', 'acct-prism', 9, ['sk-gemini'], { autoManaged: false, serviceType: 'gemini' })]),
+    }
+
+    const result = buildUnifiedChannelsData(data)
+    expect(result.channels).toHaveLength(1)
+    expect(result.channels[0].protocolRoutes?.map(item => item.kind)).toEqual(['messages', 'responses', 'gemini'])
+    expect(result.channels[0].apiKeys).toEqual(['sk-messages', 'sk-responses', 'sk-gemini'])
+  })
+
   it('协议标签只展示上游实际提供的 serviceType', () => {
     const data: Record<LlmChannelKind, ChannelsResponse> = {
       messages: response([channel('volcengine-claude', 'acct-volcengine', 0, ['ark-key'], {
