@@ -36,9 +36,10 @@ func newApiDefaults() presetstore.NewApiDefaults {
 // NewApiRouteDeps new-api 端点所需的依赖注入。
 // Verify 端点只需要 SubscriptionStore；Provision 端点额外需要 CfgManager + Runner 来建渠道并触发 Discovery。
 type NewApiRouteDeps struct {
-	Store      *SubscriptionStore
-	CfgManager *config.ConfigManager
-	Runner     *AutoDiscoveryRunner
+	Store       *SubscriptionStore
+	CfgManager  *config.ConfigManager
+	Runner      *AutoDiscoveryRunner
+	SyncService *NewApiSubscriptionSyncService
 }
 
 // NewAPI provision 是管理面低频操作。串行化可避免同一时刻重复创建同名远端 Key，
@@ -114,7 +115,7 @@ type NewApiProvisionResponse struct {
 	ChannelIndex       int                            `json:"channelIndex"`
 	ChannelName        string                         `json:"channelName,omitempty"`
 	MergedChannel      bool                           `json:"mergedChannel,omitempty"` // true 表示同站点已有渠道，key 已并入而非新建
-	ProvisionedKey     string                         `json:"provisionedKey"` // 明文 key，仅此次返回，前端必须立即转给渠道；后续只展示脱敏/不回显
+	ProvisionedKey     string                         `json:"provisionedKey"`          // 明文 key，仅此次返回，前端必须立即转给渠道；后续只展示脱敏/不回显
 	ProvisionedTokenID int                            `json:"provisionedTokenId"`
 	Reused             bool                           `json:"reused"` // true 表示全部 Key 都复用了已存在的同名 key
 	ProvisionedKeys    []NewApiProvisionedKeyResponse `json:"provisionedKeys,omitempty"`
@@ -663,6 +664,17 @@ func handleNewApiProvision(deps *NewApiRouteDeps) gin.HandlerFunc {
 		if fresh == nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "订阅已建但无法回读"})
 			return
+		}
+		if deps.SyncService != nil {
+			plaintextByToken := make(map[int64]string, len(provisioned))
+			for _, key := range provisioned {
+				plaintextByToken[int64(key.TokenID)] = key.Key
+			}
+			if err := deps.SyncService.ReconcileProvisioned(fresh, plaintextByToken); err != nil {
+				c.JSON(http.StatusConflict, gin.H{"error": "同步 key ownership 失败: " + err.Error()})
+				return
+			}
+			fresh = deps.Store.Get(req.SubscriptionUID)
 		}
 		legacyProvisionedKey := ""
 		if !req.ProvisionAllEligibleGroups {

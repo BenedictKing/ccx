@@ -1388,19 +1388,26 @@ func main() {
 				}
 			}
 
+			newApiSyncService := autopilot.NewNewApiSubscriptionSyncService(autopilot.NewApiSubscriptionSyncServiceDeps{
+				Store: autopilotManager.SubscriptionStore(), CfgManager: cfgManager, Runner: autoDiscoveryRunner,
+			})
+			newApiSyncService.SyncAllNewAPIAsync(context.Background())
+
 			// 订阅中心 API
-			autopilot.RegisterSubscriptionRoutes(apiGroup, autopilotManager.SubscriptionStore(), autopilotManager.SubscriptionRefreshWorker())
+			autopilot.RegisterSubscriptionRoutes(apiGroup, autopilotManager.SubscriptionStore(), autopilotManager.SubscriptionRefreshWorker(), newApiSyncService)
 			// §8.5.1：new-api 订阅集成 API（校验 + 完整 provision 流程）
 			autopilot.RegisterNewApiSubscriptionRoutes(apiGroup, &autopilot.NewApiRouteDeps{
-				Store:      autopilotManager.SubscriptionStore(),
-				CfgManager: cfgManager,
-				Runner:     autoDiscoveryRunner,
+				Store:       autopilotManager.SubscriptionStore(),
+				CfgManager:  cfgManager,
+				Runner:      autoDiscoveryRunner,
+				SyncService: newApiSyncService,
 			})
 			// new-api 多账号管理 API
 			autopilot.RegisterSubscriptionAccountRoutes(apiGroup, &autopilot.NewApiRouteDeps{
-				Store:      autopilotManager.SubscriptionStore(),
-				CfgManager: cfgManager,
-				Runner:     autoDiscoveryRunner,
+				Store:       autopilotManager.SubscriptionStore(),
+				CfgManager:  cfgManager,
+				Runner:      autoDiscoveryRunner,
+				SyncService: newApiSyncService,
 			})
 			// 本地 Runtime API
 			autopilot.RegisterLocalRuntimeRoutes(apiGroup, autopilotManager.LocalRuntimeStore())

@@ -78,6 +78,7 @@ func handleAddSubscriptionAccount(deps *NewApiRouteDeps) gin.HandlerFunc {
 			AccountUID:    fmt.Sprintf("acct_%d", time.Now().UnixNano()),
 			AccessToken:   req.AccessToken,
 			UserID:        derivedUserID,
+			AuthTokenMode: req.AuthTokenMode,
 			DisplayName:   req.DisplayName,
 			Balance:       float64(self.Quota),
 			Status:        "active",
@@ -88,6 +89,10 @@ func handleAddSubscriptionAccount(deps *NewApiRouteDeps) gin.HandlerFunc {
 		if err := deps.Store.AddAccount(uid, account); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
+		}
+
+		if deps.SyncService != nil {
+			_, _ = deps.SyncService.SyncNow(c.Request.Context(), uid)
 		}
 
 		c.JSON(http.StatusCreated, NewApiAccountItem{
@@ -212,6 +217,9 @@ func handleRefreshSubscriptionAccount(deps *NewApiRouteDeps) gin.HandlerFunc {
 		if fetchErr != nil {
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("刷新余额失败: %v", fetchErr)})
 			return
+		}
+		if deps.SyncService != nil {
+			_, _ = deps.SyncService.SyncNow(c.Request.Context(), uid)
 		}
 		c.JSON(http.StatusOK, NewApiAccountItem{AccountUID: account.AccountUID, UserID: account.UserID, DisplayName: account.DisplayName, Balance: account.Balance, Status: account.Status, AccessTokenMasked: maskAccessToken(account.AccessToken), LastCheckedAt: account.LastCheckedAt, CreatedAt: account.CreatedAt})
 	}

@@ -113,7 +113,11 @@ type SubscriptionsListResponse struct {
 // ─── 路由注册 ──────────────────────────────────────────────────────────────────
 
 // RegisterSubscriptionRoutes 注册订阅中心 CRUD + 渠道链接 API 到给定路由组。
-func RegisterSubscriptionRoutes(router gin.IRouter, store *SubscriptionStore, refreshWorker *SubscriptionRefreshWorker) {
+func RegisterSubscriptionRoutes(router gin.IRouter, store *SubscriptionStore, refreshWorker *SubscriptionRefreshWorker, syncServices ...*NewApiSubscriptionSyncService) {
+	var syncService *NewApiSubscriptionSyncService
+	if len(syncServices) > 0 {
+		syncService = syncServices[0]
+	}
 	group := router.Group("/subscriptions")
 	{
 		group.GET("", handleListSubscriptions(store))
@@ -123,7 +127,7 @@ func RegisterSubscriptionRoutes(router gin.IRouter, store *SubscriptionStore, re
 		group.DELETE("/:uid", handleDeleteSubscription(store))
 		group.POST("/:uid/link", handleLinkChannel(store))
 		group.POST("/:uid/unlink", handleUnlinkChannel(store))
-		group.POST("/:uid/refresh", handleRefreshSubscription(store, refreshWorker))
+		group.POST("/:uid/refresh", handleRefreshSubscription(store, refreshWorker, syncService))
 	}
 }
 
@@ -363,7 +367,11 @@ func handleUnlinkChannel(store *SubscriptionStore) gin.HandlerFunc {
 // handleRefreshSubscription POST /api/subscriptions/:uid/refresh
 // 手动触发指定订阅的余额刷新（不消耗全局每日预算）。
 // 需要 BillingAPIKey 非空且 Provider 在白名单内。
-func handleRefreshSubscription(store *SubscriptionStore, refreshWorker *SubscriptionRefreshWorker) gin.HandlerFunc {
+func handleRefreshSubscription(store *SubscriptionStore, refreshWorker *SubscriptionRefreshWorker, syncServices ...*NewApiSubscriptionSyncService) gin.HandlerFunc {
+	var syncService *NewApiSubscriptionSyncService
+	if len(syncServices) > 0 {
+		syncService = syncServices[0]
+	}
 	return func(c *gin.Context) {
 		uid := c.Param("uid")
 		if uid == "" {
@@ -374,6 +382,20 @@ func handleRefreshSubscription(store *SubscriptionStore, refreshWorker *Subscrip
 		profile := store.Get(uid)
 		if profile == nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "订阅不存在: " + uid})
+			return
+		}
+
+		if profile.Provider == "new_api" {
+			if syncService == nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "new-api 同步服务未就绪"})
+				return
+			}
+			result, err := syncService.SyncNow(c.Request.Context(), uid)
+			if err != nil {
+				c.JSON(http.StatusBadGateway, gin.H{"error": err.Error(), "refreshResult": result})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"subscription": toSubscriptionItem(store.Get(uid)), "refreshResult": result})
 			return
 		}
 
