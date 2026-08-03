@@ -39,8 +39,8 @@ func TestVolcenginePlanProbeModel(t *testing.T) {
 	if got := volcenginePlanProbeModel("https://ark.cn-beijing.volces.com/api/plan"); got != "deepseek-v4-flash" {
 		t.Fatalf("agent plan 探针模型 = %q, 期望 deepseek-v4-flash", got)
 	}
-	if got := volcenginePlanProbeModel("https://ark.cn-beijing.volces.com/api/coding"); got != "ark-code-latest" {
-		t.Fatalf("coding plan 探针模型 = %q, 期望 ark-code-latest", got)
+	if got := volcenginePlanProbeModel("https://ark.cn-beijing.volces.com/api/coding"); got != "deepseek-v4-flash" {
+		t.Fatalf("coding plan 探针模型 = %q, 期望 deepseek-v4-flash", got)
 	}
 }
 
@@ -130,11 +130,11 @@ func TestProbeVolcenginePlanCodingClaudeUsesArkCodeLatest(t *testing.T) {
 		t.Fatalf("期望成功: %+v", res)
 	}
 	// captureServer 收到的 path 会包含 /api/coding；模型应在 body 里
-	if !strings.Contains(srv.body, `"model":"ark-code-latest"`) {
-		t.Fatalf("coding plan 探针 body 缺少 ark-code-latest: %s", srv.body)
+	if !strings.Contains(srv.body, `"model":"deepseek-v4-flash"`) {
+		t.Fatalf("coding plan 探针 body 缺少 deepseek-v4-flash: %s", srv.body)
 	}
-	if res.Model != "ark-code-latest" {
-		t.Fatalf("探针结果模型 = %q, 期望 ark-code-latest", res.Model)
+	if res.Model != "deepseek-v4-flash" {
+		t.Fatalf("探针结果模型 = %q, 期望 deepseek-v4-flash", res.Model)
 	}
 }
 

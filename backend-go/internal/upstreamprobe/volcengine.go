@@ -69,11 +69,8 @@ func IsVolcenginePlanBaseURL(baseURL string) bool {
 }
 
 // volcenginePlanProbeModel 选择端点验证用的探针模型。
-// Agent Plan 固定使用 deepseek-v4-flash；Coding Plan 沿用 ark-code-latest 兼容模型名。
+// Agent Plan 与 Coding Plan 统一使用 deepseek-v4-flash。
 func volcenginePlanProbeModel(baseURL string) string {
-	if strings.Contains(strings.ToLower(baseURL), "/api/coding") {
-		return "ark-code-latest"
-	}
 	return "deepseek-v4-flash"
 }
 
