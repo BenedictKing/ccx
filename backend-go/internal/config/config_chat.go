@@ -97,6 +97,7 @@ func (cm *ConfigManager) AddChatUpstream(upstream UpstreamConfig, placements ...
 	applyDefaultBaseURL(&upstream)
 
 	upstream.ModelMapping, _ = sanitizeDeprecatedGrokModelMapping(upstream.ModelMapping)
+	stripAutoManagedExplicitOverrides(&upstream)
 	assignChannelPriority(cm.config.ChatUpstream, &upstream, resolvePlacement(placements))
 	cm.config.ChatUpstream = append([]UpstreamConfig{upstream}, cm.config.ChatUpstream...)
 
@@ -358,6 +359,8 @@ func (cm *ConfigManager) UpdateChatUpstream(index int, updates UpstreamUpdate) (
 		}
 		upstream.Tags = cleaned
 	}
+
+	stripAutoManagedExplicitOverrides(upstream)
 
 	// 检测配置是否真的发生了变化
 	if !cm.hasConfigChanged(originalConfig, cm.config) {
@@ -660,6 +663,9 @@ func (cm *ConfigManager) UpdateChatModelMapping(index int, sourcePattern, target
 	}
 
 	upstream := &cm.config.ChatUpstream[index]
+	if upstream.AutoManaged {
+		return fmt.Errorf("渠道 [%d] %s 为自动托管渠道，模型映射由 Autopilot 自动解析，不支持手工编辑", index, upstream.Name)
+	}
 
 	// 检查 sourcePattern 是否存在
 	if upstream.ModelMapping == nil {

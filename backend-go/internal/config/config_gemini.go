@@ -97,6 +97,7 @@ func (cm *ConfigManager) AddGeminiUpstream(upstream UpstreamConfig, placements .
 	applyDefaultBaseURL(&upstream)
 
 	upstream.ModelMapping, _ = sanitizeDeprecatedGrokModelMapping(upstream.ModelMapping)
+	stripAutoManagedExplicitOverrides(&upstream)
 	assignChannelPriority(cm.config.GeminiUpstream, &upstream, resolvePlacement(placements))
 	cm.config.GeminiUpstream = append([]UpstreamConfig{upstream}, cm.config.GeminiUpstream...)
 
@@ -359,6 +360,8 @@ func (cm *ConfigManager) UpdateGeminiUpstream(index int, updates UpstreamUpdate)
 		}
 		upstream.Tags = cleaned
 	}
+
+	stripAutoManagedExplicitOverrides(upstream)
 
 	// 检测配置是否真的发生了变化
 	if !cm.hasConfigChanged(originalConfig, cm.config) {
@@ -669,6 +672,9 @@ func (cm *ConfigManager) UpdateGeminiModelMapping(index int, sourcePattern, targ
 	}
 
 	upstream := &cm.config.GeminiUpstream[index]
+	if upstream.AutoManaged {
+		return fmt.Errorf("渠道 [%d] %s 为自动托管渠道，模型映射由 Autopilot 自动解析，不支持手工编辑", index, upstream.Name)
+	}
 
 	// 检查 sourcePattern 是否存在
 	if upstream.ModelMapping == nil {

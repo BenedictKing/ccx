@@ -97,6 +97,7 @@ func (cm *ConfigManager) AddResponsesUpstream(upstream UpstreamConfig, placement
 	applyDefaultBaseURL(&upstream)
 
 	upstream.ModelMapping, _ = sanitizeDeprecatedGrokModelMapping(upstream.ModelMapping)
+	stripAutoManagedExplicitOverrides(&upstream)
 	assignChannelPriority(cm.config.ResponsesUpstream, &upstream, resolvePlacement(placements))
 	cm.config.ResponsesUpstream = append([]UpstreamConfig{upstream}, cm.config.ResponsesUpstream...)
 
@@ -364,6 +365,8 @@ func (cm *ConfigManager) UpdateResponsesUpstream(index int, updates UpstreamUpda
 		}
 		upstream.Tags = cleaned
 	}
+
+	stripAutoManagedExplicitOverrides(upstream)
 
 	// 检测配置是否真的发生了变化
 	if !cm.hasConfigChanged(originalConfig, cm.config) {
@@ -674,6 +677,9 @@ func (cm *ConfigManager) UpdateResponsesModelMapping(index int, sourcePattern, t
 	}
 
 	upstream := &cm.config.ResponsesUpstream[index]
+	if upstream.AutoManaged {
+		return fmt.Errorf("渠道 [%d] %s 为自动托管渠道，模型映射由 Autopilot 自动解析，不支持手工编辑", index, upstream.Name)
+	}
 
 	// 检查 sourcePattern 是否存在
 	if upstream.ModelMapping == nil {

@@ -113,6 +113,28 @@ func TestUpdateModelMapping_RejectsAutoManagedChannel(t *testing.T) {
 	}
 }
 
+func TestRuntimeCleanupStripsAutoManagedWithoutProviderID(t *testing.T) {
+	upstream := &UpstreamConfig{
+		Name:             "managed-no-provider",
+		BaseURL:          "https://example.com",
+		ServiceType:      "claude",
+		AutoManaged:      true,
+		APIKeys:          []string{"sk-test"},
+		ModelMapping:     map[string]string{"sonnet": "gpt-5.4"},
+		ReasoningMapping: map[string]string{"sonnet": "high"},
+	}
+	runtime := RuntimeUpstreamForAutoManagedProvider(upstream)
+	if runtime == upstream {
+		t.Fatal("runtime cleanup should clone auto-managed upstream without providerId")
+	}
+	if len(runtime.ModelMapping) != 0 || len(runtime.ReasoningMapping) != 0 {
+		t.Fatalf("runtime cleanup should strip stale mapping without providerId, got %+v", runtime)
+	}
+	if len(upstream.ModelMapping) == 0 {
+		t.Fatal("original upstream must remain unchanged")
+	}
+}
+
 func TestAddUpstream_StripsDeprecatedGrokModelMapping(t *testing.T) {
 	cm := newTempConfigManager(t)
 

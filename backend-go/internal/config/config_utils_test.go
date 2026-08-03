@@ -189,6 +189,32 @@ func TestStripAutoManagedExplicitOverrides(t *testing.T) {
 	}
 }
 
+func TestRuntimeUpstreamForAutoManagedProviderStripsWithoutProviderID(t *testing.T) {
+	upstream := &UpstreamConfig{
+		AutoManaged:         true,
+		ProviderID:          "",
+		ServiceType:         "claude",
+		ModelMapping:        map[string]string{"opus": "gpt-5.4"},
+		ReasoningMapping:    map[string]string{"opus": "high"},
+		ReasoningParamStyle: "thinking",
+		FastMode:            true,
+	}
+
+	runtime := RuntimeUpstreamForAutoManagedProvider(upstream)
+	if runtime == upstream {
+		t.Fatal("autoManaged upstream without providerId should still return a sanitized clone")
+	}
+	if len(runtime.ModelMapping) != 0 || len(runtime.ReasoningMapping) != 0 || runtime.ReasoningParamStyle != "" || runtime.FastMode {
+		t.Fatalf("runtime should strip stale explicit overrides even without providerId: %#v", runtime)
+	}
+	if runtime.NormalizeSystemRoleToTopLevel {
+		t.Fatalf("no provider defaults should be applied when providerId is empty: %#v", runtime)
+	}
+	if len(upstream.ModelMapping) == 0 || upstream.ReasoningParamStyle != "thinking" {
+		t.Fatal("original upstream must remain unchanged")
+	}
+}
+
 func TestRuntimeUpstreamForAutoManagedProviderReappliesNativeDefaults(t *testing.T) {
 	upstream := &UpstreamConfig{
 		ProviderID:          "glm",

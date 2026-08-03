@@ -1101,6 +1101,7 @@ func (r *SmartRouter) resolveChannelModel(
 		return resolution
 	}
 
+	upstream = config.RuntimeUpstreamForAutoManagedProvider(upstream)
 	supported, _ := upstream.ExplainModelSupport(requestModel)
 	hasExplicitModelRules := len(upstream.SupportedModels) > 0
 	if supported && (!upstream.AutoManaged || hasExplicitModelRules) {

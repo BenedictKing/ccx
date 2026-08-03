@@ -733,13 +733,15 @@ func stripAutoManagedExplicitOverrides(upstream *UpstreamConfig) bool {
 // 模型选择和能力差异由 Autopilot 的 ModelResolver/EndpointAttemptPolicy 做 request-scoped 决策。
 // 因此这里屏蔽历史版本可能写入配置的旧兼容字段，再恢复 Provider 原生协议默认值。
 func RuntimeUpstreamForAutoManagedProvider(upstream *UpstreamConfig) *UpstreamConfig {
-	if upstream == nil || !upstream.AutoManaged || strings.TrimSpace(upstream.ProviderID) == "" {
+	if upstream == nil || !upstream.AutoManaged {
 		return upstream
 	}
 
 	runtime := upstream.Clone()
 	stripAutoManagedExplicitOverrides(runtime)
-	ApplyProviderUpstreamDefaults(runtime.ProviderID, runtime)
+	if strings.TrimSpace(runtime.ProviderID) != "" {
+		ApplyProviderUpstreamDefaults(runtime.ProviderID, runtime)
+	}
 	return runtime
 }
 
