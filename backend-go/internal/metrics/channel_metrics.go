@@ -92,6 +92,14 @@ type RequestRecord struct {
 	CacheCreationInputTokens int64
 	CacheReadInputTokens     int64
 	ProxyKeyMask             string // 代理 Key 掩码（用于成本报表按用户分组，由 RecordRequestConnected 传入）
+	KeyUID                   string
+	SubscriptionUID          string
+	ExchangeSnapshotVersion  uint64
+	ListCostUSD              float64
+	EffectiveCostUSD         float64
+	EffectiveCostMultiplier  float64
+	EffectiveCostAvailable   bool
+	EffectiveCostReason      string
 }
 
 // recordRouteModel 返回 breaker 聚合使用的模型键。

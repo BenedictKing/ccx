@@ -197,6 +197,44 @@ func (m *MetricsManager) recordRequestConnectedInternal(baseURL, apiKey, service
 	return requestID
 }
 
+// RequestCostContext 是在请求开始时固化的计费身份与汇率上下文。
+type RequestCostContext struct {
+	KeyUID                  string
+	SubscriptionUID         string
+	ExchangeSnapshotVersion uint64
+	ListCostUSD             float64
+	EffectiveCostMultiplier float64
+	EffectiveCostAvailable  bool
+	EffectiveCostReason     string
+}
+
+// RecordRequestConnectedWithCostContext 记录请求并固化本次计费上下文。
+func (m *MetricsManager) RecordRequestConnectedWithCostContext(baseURL, apiKey, serviceType, channelUID, actualModel, routeModel, proxyKeyMask string, cost RequestCostContext) uint64 {
+	requestID := m.recordRequestConnectedInternal(baseURL, apiKey, serviceType, channelUID, actualModel, routeModel, proxyKeyMask, time.Now())
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	metrics := m.findPendingRequestMetricsLocked(baseURL, apiKey, serviceType, requestID)
+	if metrics == nil {
+		return requestID
+	}
+	idx, ok := metrics.pendingHistoryIdx[requestID]
+	if !ok || idx < 0 || idx >= len(metrics.requestHistory) {
+		return requestID
+	}
+	record := &metrics.requestHistory[idx]
+	record.KeyUID = cost.KeyUID
+	record.SubscriptionUID = cost.SubscriptionUID
+	record.ExchangeSnapshotVersion = cost.ExchangeSnapshotVersion
+	record.ListCostUSD = cost.ListCostUSD
+	record.EffectiveCostMultiplier = cost.EffectiveCostMultiplier
+	record.EffectiveCostAvailable = cost.EffectiveCostAvailable
+	record.EffectiveCostReason = cost.EffectiveCostReason
+	if cost.EffectiveCostAvailable {
+		record.EffectiveCostUSD = ApplyEffectiveCostMultiplier(cost.ListCostUSD, cost.EffectiveCostMultiplier)
+	}
+	return requestID
+}
+
 // RecordRequestFinalizeSuccess 回写成功结果与 token（requestID 来自 RecordRequestConnected）。
 func (m *MetricsManager) RecordRequestFinalizeSuccess(baseURL, apiKey, serviceType string, requestID uint64, usage *types.Usage) {
 	m.RecordRequestFinalizeOutcome(baseURL, apiKey, serviceType, requestID, true, FailureClassNone, usage)
@@ -260,24 +298,37 @@ func (m *MetricsManager) RecordRequestFinalizeOutcome(baseURL, apiKey, serviceTy
 		record.OutputTokens = outputTokens
 		record.CacheCreationInputTokens = cacheCreationTokens
 		record.CacheReadInputTokens = cacheReadTokens
+		if record.ListCostUSD == 0 {
+			record.ListCostUSD, _ = CalculateTokenCostUSDWithStatus(record.Model, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens)
+		}
+		if record.EffectiveCostAvailable {
+			record.EffectiveCostUSD = ApplyEffectiveCostMultiplier(record.ListCostUSD, record.EffectiveCostMultiplier)
+		}
 
 		if m.store != nil {
 			m.store.AddRecord(PersistentRecord{
-				ChannelUID:          record.ChannelUID,
-				RouteModel:          record.RouteModel,
-				MetricsKey:          metrics.MetricsKey,
-				BaseURL:             metrics.BaseURL,
-				KeyMask:             metrics.KeyMask,
-				Timestamp:           record.Timestamp,
-				Success:             true,
-				FailureClass:        FailureClassNone,
-				InputTokens:         inputTokens,
-				OutputTokens:        outputTokens,
-				CacheCreationTokens: cacheCreationTokens,
-				CacheReadTokens:     cacheReadTokens,
-				APIType:             m.apiType,
-				Model:               record.Model,
-				ProxyKeyMask:        record.ProxyKeyMask,
+				ChannelUID:              record.ChannelUID,
+				RouteModel:              record.RouteModel,
+				MetricsKey:              metrics.MetricsKey,
+				BaseURL:                 metrics.BaseURL,
+				KeyMask:                 metrics.KeyMask,
+				Timestamp:               record.Timestamp,
+				Success:                 true,
+				FailureClass:            FailureClassNone,
+				InputTokens:             inputTokens,
+				OutputTokens:            outputTokens,
+				CacheCreationTokens:     cacheCreationTokens,
+				CacheReadTokens:         cacheReadTokens,
+				APIType:                 m.apiType,
+				Model:                   record.Model,
+				ProxyKeyMask:            record.ProxyKeyMask,
+				KeyUID:                  record.KeyUID,
+				SubscriptionUID:         record.SubscriptionUID,
+				ExchangeSnapshotVersion: record.ExchangeSnapshotVersion,
+				ListCostUSD:             record.ListCostUSD,
+				EffectiveCostUSD:        record.EffectiveCostUSD,
+				EffectiveCostAvailable:  record.EffectiveCostAvailable,
+				EffectiveCostReason:     record.EffectiveCostReason,
 			})
 		}
 		return

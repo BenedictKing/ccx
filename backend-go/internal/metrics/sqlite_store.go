@@ -268,6 +268,30 @@ func initSchema(db *sql.DB) error {
 		}
 	}
 
+	// v6: 固化请求级 effective USD 成本；旧行保持 NULL，禁止按当前配置重算。
+	var costVersion int
+	if err := db.QueryRow("PRAGMA user_version").Scan(&costVersion); err != nil {
+		return fmt.Errorf("读取 schema 版本失败: %w", err)
+	}
+	if costVersion < 6 {
+		migrations := []string{
+			"ALTER TABLE request_records ADD COLUMN key_uid TEXT",
+			"ALTER TABLE request_records ADD COLUMN subscription_uid TEXT",
+			"ALTER TABLE request_records ADD COLUMN exchange_snapshot_version INTEGER",
+			"ALTER TABLE request_records ADD COLUMN list_cost_usd REAL",
+			"ALTER TABLE request_records ADD COLUMN effective_cost_usd REAL",
+			"ALTER TABLE request_records ADD COLUMN effective_cost_available INTEGER",
+			"ALTER TABLE request_records ADD COLUMN effective_cost_reason TEXT",
+			"PRAGMA user_version = 6",
+		}
+		for _, q := range migrations {
+			if _, err := db.Exec(q); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+				return fmt.Errorf("migration v5->v6 failed: %w", err)
+			}
+		}
+		log.Printf("[SQLite-Migration] schema 升级: v5 -> v6 (固化 effective USD 成本)")
+	}
+
 	return nil
 }
 
@@ -682,38 +706,41 @@ func (s *SQLiteStore) batchInsertRecords(records []PersistentRecord) error {
 	if len(records) == 0 {
 		return nil
 	}
-
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
 	}
 	defer errutil.IgnoreDeferred(tx.Rollback)
-
 	stmt, err := tx.Prepare(`
 		INSERT INTO request_records
 		(metrics_key, base_url, key_mask, timestamp, success, failure_class,
-		 input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, api_type, model, proxy_key_mask)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, api_type, model, proxy_key_mask,
+		 channel_uid, route_model, key_uid, subscription_uid, exchange_snapshot_version,
+		 list_cost_usd, effective_cost_usd, effective_cost_available, effective_cost_reason)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return err
 	}
 	defer errutil.IgnoreDeferred(stmt.Close)
-
 	for _, r := range records {
-		success := 0
+		success, effectiveAvailable := 0, 0
 		if r.Success {
 			success = 1
 		}
+		if r.EffectiveCostAvailable {
+			effectiveAvailable = 1
+		}
 		_, err := stmt.Exec(
 			r.MetricsKey, r.BaseURL, r.KeyMask, r.Timestamp.Unix(), success, string(r.FailureClass),
-			r.InputTokens, r.OutputTokens, r.CacheCreationTokens, r.CacheReadTokens, r.APIType, r.Model, r.ProxyKeyMask, r.ChannelUID, r.RouteModel,
+			r.InputTokens, r.OutputTokens, r.CacheCreationTokens, r.CacheReadTokens, r.APIType, r.Model, r.ProxyKeyMask,
+			r.ChannelUID, r.RouteModel, r.KeyUID, r.SubscriptionUID, r.ExchangeSnapshotVersion,
+			r.ListCostUSD, r.EffectiveCostUSD, effectiveAvailable, r.EffectiveCostReason,
 		)
 		if err != nil {
 			return err
 		}
 	}
-
 	return tx.Commit()
 }
 
@@ -721,7 +748,9 @@ func (s *SQLiteStore) batchInsertRecords(records []PersistentRecord) error {
 func (s *SQLiteStore) LoadRecords(since time.Time, apiType string) ([]PersistentRecord, error) {
 	rows, err := s.db.Query(`
 		SELECT metrics_key, base_url, key_mask, timestamp, success, failure_class,
-		       input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, model, proxy_key_mask, channel_uid, route_model
+		       input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, model, proxy_key_mask, channel_uid, route_model,
+		       key_uid, subscription_uid, exchange_snapshot_version, list_cost_usd, effective_cost_usd,
+		       effective_cost_available, effective_cost_reason
 		FROM request_records
 		WHERE timestamp >= ? AND api_type = ?
 		ORDER BY timestamp ASC
@@ -730,31 +759,44 @@ func (s *SQLiteStore) LoadRecords(since time.Time, apiType string) ([]Persistent
 		return nil, err
 	}
 	defer errutil.IgnoreDeferred(rows.Close)
-
 	var records []PersistentRecord
 	for rows.Next() {
 		var r PersistentRecord
 		var ts int64
 		var success int
-
 		var failureClass string
-
+		var keyUID, subscriptionUID, effectiveReason sql.NullString
+		var version sql.NullInt64
+		var listCost, effectiveCost sql.NullFloat64
+		var effectiveAvailable sql.NullInt64
 		err := rows.Scan(
 			&r.MetricsKey, &r.BaseURL, &r.KeyMask, &ts, &success, &failureClass,
 			&r.InputTokens, &r.OutputTokens, &r.CacheCreationTokens, &r.CacheReadTokens, &r.Model, &r.ProxyKeyMask,
-			&r.ChannelUID, &r.RouteModel,
+			&r.ChannelUID, &r.RouteModel, &keyUID, &subscriptionUID, &version, &listCost, &effectiveCost,
+			&effectiveAvailable, &effectiveReason,
 		)
 		if err != nil {
 			return nil, err
 		}
-
 		r.Timestamp = time.Unix(ts, 0)
 		r.Success = success == 1
 		r.FailureClass = FailureClass(failureClass)
 		r.APIType = apiType
+		r.KeyUID = keyUID.String
+		r.SubscriptionUID = subscriptionUID.String
+		if version.Valid && version.Int64 > 0 {
+			r.ExchangeSnapshotVersion = uint64(version.Int64)
+		}
+		if listCost.Valid {
+			r.ListCostUSD = listCost.Float64
+		}
+		if effectiveCost.Valid {
+			r.EffectiveCostUSD = effectiveCost.Float64
+		}
+		r.EffectiveCostAvailable = effectiveAvailable.Valid && effectiveAvailable.Int64 == 1
+		r.EffectiveCostReason = effectiveReason.String
 		records = append(records, r)
 	}
-
 	return records, rows.Err()
 }
 
@@ -1233,13 +1275,17 @@ func (s *SQLiteStore) requeueRecords(records []PersistentRecord, logPrefix strin
 
 // CostReportRow 成本报表聚合行
 type CostReportRow struct {
-	GroupKey            string `json:"groupKey"`            // 分组键（user/model/channel/keyMask）
-	TotalRequests       int64  `json:"totalRequests"`       // 总请求数
-	SuccessCount        int64  `json:"successCount"`        // 成功数
-	InputTokens         int64  `json:"inputTokens"`         // 输入 Token
-	OutputTokens        int64  `json:"outputTokens"`        // 输出 Token
-	CacheCreationTokens int64  `json:"cacheCreationTokens"` // 缓存创建 Token
-	CacheReadTokens     int64  `json:"cacheReadTokens"`     // 缓存读取 Token
+	GroupKey                  string  `json:"groupKey"`
+	TotalRequests             int64   `json:"totalRequests"`
+	SuccessCount              int64   `json:"successCount"`
+	InputTokens               int64   `json:"inputTokens"`
+	OutputTokens              int64   `json:"outputTokens"`
+	CacheCreationTokens       int64   `json:"cacheCreationTokens"`
+	CacheReadTokens           int64   `json:"cacheReadTokens"`
+	ListCostUSD               float64 `json:"listCostUSD"`
+	EffectiveCostUSD          float64 `json:"effectiveCostUSD"`
+	EffectivePricedCount      int64   `json:"effectivePricedCount"`
+	EffectiveUnavailableCount int64   `json:"effectiveUnavailableCount"`
 }
 
 // QueryCostReport 按指定维度聚合成本数据。
@@ -1249,7 +1295,6 @@ func (s *SQLiteStore) QueryCostReport(apiType string, since time.Time, groupBy s
 	s.flushMu.Lock()
 	s.flushBufferLocked()
 	s.flushMu.Unlock()
-
 	var groupExpr string
 	switch groupBy {
 	case "user":
@@ -1261,33 +1306,28 @@ func (s *SQLiteStore) QueryCostReport(apiType string, since time.Time, groupBy s
 	default:
 		groupExpr = "proxy_key_mask"
 	}
-
 	query := fmt.Sprintf(`
-		SELECT
-			%s AS group_key,
-			COUNT(*) AS total,
-			SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) AS success_count,
-			SUM(input_tokens) AS input_tokens,
-			SUM(output_tokens) AS output_tokens,
-			SUM(cache_creation_tokens) AS cache_creation_tokens,
-			SUM(cache_read_tokens) AS cache_read_tokens
+		SELECT %s AS group_key,
+			COUNT(*), SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END),
+			SUM(input_tokens), SUM(output_tokens), SUM(cache_creation_tokens), SUM(cache_read_tokens),
+			COALESCE(SUM(list_cost_usd), 0), COALESCE(SUM(CASE WHEN effective_cost_available = 1 THEN effective_cost_usd ELSE 0 END), 0),
+			SUM(CASE WHEN effective_cost_available = 1 THEN 1 ELSE 0 END),
+			SUM(CASE WHEN effective_cost_available IS NULL OR effective_cost_available <> 1 THEN 1 ELSE 0 END)
 		FROM request_records
 		WHERE api_type = ? AND timestamp >= ?
-		GROUP BY group_key
-		HAVING group_key <> ''
-		ORDER BY total DESC
+		GROUP BY group_key HAVING group_key <> '' ORDER BY COUNT(*) DESC
 	`, groupExpr)
-
 	rows, err := s.db.Query(query, apiType, since.Unix())
 	if err != nil {
 		return nil, fmt.Errorf("查询成本报表失败: %w", err)
 	}
 	defer errutil.IgnoreDeferred(rows.Close)
-
 	var results []CostReportRow
 	for rows.Next() {
 		var row CostReportRow
-		if err := rows.Scan(&row.GroupKey, &row.TotalRequests, &row.SuccessCount, &row.InputTokens, &row.OutputTokens, &row.CacheCreationTokens, &row.CacheReadTokens); err != nil {
+		if err := rows.Scan(&row.GroupKey, &row.TotalRequests, &row.SuccessCount,
+			&row.InputTokens, &row.OutputTokens, &row.CacheCreationTokens, &row.CacheReadTokens,
+			&row.ListCostUSD, &row.EffectiveCostUSD, &row.EffectivePricedCount, &row.EffectiveUnavailableCount); err != nil {
 			return nil, fmt.Errorf("扫描成本报表结果失败: %w", err)
 		}
 		results = append(results, row)

@@ -543,6 +543,7 @@ func (m *Manager) WireSmartRouter() {
 	m.smartRouter.SetLocalRuntimeStore(m.localRuntimeStore)
 	m.smartRouter.SetModelResolver(m.modelResolver)
 	m.smartRouter.SetModelProfileStore(m.modelProfileStore)
+	m.smartRouter.SetSubscriptionStore(m.subscriptionStore)
 }
 
 // FastDecayScorer 返回内部 FastDecayScorer 引用（供 handler 层通知请求结果）。

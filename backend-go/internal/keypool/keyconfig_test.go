@@ -298,3 +298,14 @@ func TestCandidatesForModelFiltered_ModelCircuit(t *testing.T) {
 		t.Fatalf("无 ChannelUID 时应 fail-open, got %d", len(got))
 	}
 }
+
+func TestCandidatesForModel_CarriesKeyUID(t *testing.T) {
+	up := &config.UpstreamConfig{
+		APIKeys:       []string{"k1"},
+		APIKeyConfigs: []config.APIKeyConfig{{Key: "k1", KeyUID: "key-stable-1"}},
+	}
+	candidates := CandidatesForModel(up, nil, "")
+	if len(candidates) != 1 || candidates[0].KeyUID != "key-stable-1" {
+		t.Fatalf("expected stable KeyUID on candidate, got %+v", candidates)
+	}
+}

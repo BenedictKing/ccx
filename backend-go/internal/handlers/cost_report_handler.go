@@ -18,17 +18,19 @@ type CostReportDeps struct {
 
 // costReportRow 成本报表响应行
 type costReportRow struct {
-	GroupKey            string   `json:"groupKey"`
-	TotalRequests       int64    `json:"totalRequests"`
-	SuccessCount        int64    `json:"successCount"`
-	InputTokens         int64    `json:"inputTokens"`
-	OutputTokens        int64    `json:"outputTokens"`
-	CacheCreationTokens int64    `json:"cacheCreationTokens"`
-	CacheReadTokens     int64    `json:"cacheReadTokens"`
-	ListCostUSD         float64  `json:"listCostUSD"`
-	EffectiveCostUSD    float64  `json:"effectiveCostUSD"`
-	PricingComplete     bool     `json:"pricingComplete"`
-	UnpricedModels      []string `json:"unpricedModels,omitempty"`
+	GroupKey                  string   `json:"groupKey"`
+	TotalRequests             int64    `json:"totalRequests"`
+	SuccessCount              int64    `json:"successCount"`
+	InputTokens               int64    `json:"inputTokens"`
+	OutputTokens              int64    `json:"outputTokens"`
+	CacheCreationTokens       int64    `json:"cacheCreationTokens"`
+	CacheReadTokens           int64    `json:"cacheReadTokens"`
+	ListCostUSD               float64  `json:"listCostUSD"`
+	EffectiveCostUSD          float64  `json:"effectiveCostUSD"`
+	PricingComplete           bool     `json:"pricingComplete"`
+	EffectiveCostAvailable    bool     `json:"effectiveCostAvailable"`
+	EffectiveUnavailableCount int64    `json:"effectiveUnavailableCount"`
+	UnpricedModels            []string `json:"unpricedModels,omitempty"`
 }
 
 // GetCostReport 返回按维度聚合的成本报表。
@@ -43,7 +45,6 @@ func GetCostReport(deps *CostReportDeps) gin.HandlerFunc {
 		if groupBy != "user" && groupBy != "model" && groupBy != "key" {
 			groupBy = "user"
 		}
-
 		apiType := c.DefaultQuery("type", "messages")
 		mgr, ok := deps.MetricsManagers[apiType]
 		if !ok || mgr == nil {
@@ -55,70 +56,54 @@ func GetCostReport(deps *CostReportDeps) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "成本报表需要启用 SQLite 持久化存储"})
 			return
 		}
-
 		duration := parseCostReportDuration(c.DefaultQuery("duration", "7d"))
 		since := time.Now().Add(-duration)
-
 		rows, err := store.QueryCostReport(apiType, since, groupBy)
 		if err != nil {
 			log.Printf("[CostReport-Query] 查询失败: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "查询成本报表失败"})
 			return
 		}
-
 		result := make([]costReportRow, 0, len(rows))
 		for _, row := range rows {
 			cr := costReportRow{
-				GroupKey:            row.GroupKey,
-				TotalRequests:       row.TotalRequests,
-				SuccessCount:        row.SuccessCount,
-				InputTokens:         row.InputTokens,
-				OutputTokens:        row.OutputTokens,
-				CacheCreationTokens: row.CacheCreationTokens,
-				CacheReadTokens:     row.CacheReadTokens,
-				PricingComplete:     true,
+				GroupKey: row.GroupKey, TotalRequests: row.TotalRequests, SuccessCount: row.SuccessCount,
+				InputTokens: row.InputTokens, OutputTokens: row.OutputTokens,
+				CacheCreationTokens: row.CacheCreationTokens, CacheReadTokens: row.CacheReadTokens,
+				ListCostUSD: row.ListCostUSD, EffectiveCostUSD: row.EffectiveCostUSD,
+				EffectiveCostAvailable:    row.EffectiveUnavailableCount == 0 && row.EffectivePricedCount > 0,
+				EffectiveUnavailableCount: row.EffectiveUnavailableCount,
+				PricingComplete:           true,
 			}
-
-			// 按模型明细计算成本（需要逐模型定价）
-			modelBreakdowns, err := store.QueryModelCostBreakdown(apiType, since, groupBy, row.GroupKey)
-			if err != nil {
-				log.Printf("[CostReport-CostCalc] 查询模型明细失败 (groupKey=%s): %v", row.GroupKey, err)
-				// 成本计算失败不阻断报表，但不能把未知成本误报为零。
+			modelBreakdowns, breakdownErr := store.QueryModelCostBreakdown(apiType, since, groupBy, row.GroupKey)
+			if breakdownErr != nil {
+				log.Printf("[CostReport-Pricing] 查询模型明细失败 group=%s: %v", row.GroupKey, breakdownErr)
 				cr.PricingComplete = false
-				result = append(result, cr)
-				continue
-			}
-
-			unpricedModels := make(map[string]struct{})
-			for _, mb := range modelBreakdowns {
-				listCost, pricingComplete := metrics.CalculateTokenCostUSDWithStatus(mb.Model, mb.InputTokens, mb.OutputTokens, mb.CacheCreationTokens, mb.CacheReadTokens)
-				cr.ListCostUSD += listCost
-				if !pricingComplete {
-					cr.PricingComplete = false
-					unpricedModels[mb.Model] = struct{}{}
+			} else {
+				unpriced := make(map[string]struct{})
+				calculatedListCost := 0.0
+				for _, breakdown := range modelBreakdowns {
+					listCost, complete := metrics.CalculateTokenCostUSDWithStatus(breakdown.Model, breakdown.InputTokens, breakdown.OutputTokens, breakdown.CacheCreationTokens, breakdown.CacheReadTokens)
+					calculatedListCost += listCost
+					if !complete {
+						cr.PricingComplete = false
+						unpriced[breakdown.Model] = struct{}{}
+					}
 				}
-				// EffectiveCostMultiplier 由 autopilot 层管理；报表 handler 不反向依赖 autopilot，
-				// 暂时 EffectiveCostUSD == ListCostUSD。后续接入 autopilot.KeyEndpointProfile 后，
-				// 调用 metrics.ApplyEffectiveCostMultiplier(listCost, multiplier) 即可。
-				cr.EffectiveCostUSD += listCost
-			}
-			if len(unpricedModels) > 0 {
-				cr.UnpricedModels = make([]string, 0, len(unpricedModels))
-				for model := range unpricedModels {
+				// 旧记录没有固化 list_cost_usd；仅从当时的 token/model 明细补官方标价，
+				// 不使用当前订阅或汇率重算历史 effective cost。
+				if cr.ListCostUSD == 0 {
+					cr.ListCostUSD = calculatedListCost
+				}
+				for model := range unpriced {
 					cr.UnpricedModels = append(cr.UnpricedModels, model)
 				}
 				sort.Strings(cr.UnpricedModels)
 			}
-
 			result = append(result, cr)
 		}
-
-		c.JSON(http.StatusOK, gin.H{
-			"groupBy":  groupBy,
-			"apiType":  apiType,
-			"duration": c.DefaultQuery("duration", "7d"),
-			"rows":     result,
-		})
+		c.JSON(http.StatusOK, gin.H{"groupBy": groupBy, "apiType": apiType,
+			"duration": c.DefaultQuery("duration", "7d"), "rows": result})
 	}
 }
 

@@ -54,6 +54,7 @@ type SmartRouter struct {
 	localRuntimeStore *LocalRuntimeStore     // Phase 2: 本地运行时存储（nil = 不纳入本地候选）
 	modelResolver     *ModelResolver         // dry-run 自动模型映射预览（nil = 不扩展候选）
 	modelProfileStore *ModelProfileStore     // endpoint 模型质量/任务域覆盖（nil = 仅用规范基准与种子）
+	subscriptionStore *SubscriptionStore     // 订阅账务快照（nil = effective cost 不可用）
 	now               func() time.Time
 
 	// onCandidatesRanked Phase 4 Item 8: 候选排名回调（A/B 测试用）。
@@ -74,6 +75,13 @@ func NewSmartRouter(
 		traceStore:    traceStore,
 		configManager: configManager,
 		now:           time.Now,
+	}
+}
+
+// SetSubscriptionStore 注入订阅账务快照，用于统一 effective USD 成本解析。
+func (r *SmartRouter) SetSubscriptionStore(store *SubscriptionStore) {
+	if r != nil {
+		r.subscriptionStore = store
 	}
 }
 
@@ -1162,15 +1170,13 @@ func (r *SmartRouter) buildChannelEntry(
 		Route:         ch.Route,
 		ChannelIndex:  ch.Index,
 		HealthState:   HealthStateUnknown,
-		OriginTier:    OriginTierUnknown, // 无画像时默认 unknown
-		EstimatedCost: -1,                // 负数表示未知，避免被误判为免费渠道
+		OriginTier:    OriginTierUnknown,
+		EstimatedCost: -1,
 	}
 	actualModel := model
 	modelProvider := ""
 	var modelPricing *config.ModelPricing
 	if model != "" {
-		// model 已由 resolveChannelModel 收敛为实际发送模型；这里仍需保留渠道显式
-		// ModelMapping 的兼容路径，但动态映射场景不得回退匹配原请求模型能力。
 		resolved := config.ResolveMappedUpstreamCapability(model, config.RedirectModel(model, upstream), upstream, upstreamModelCapabilities)
 		actualModel = resolved.ActualModel
 		if resolved.Known {
@@ -1187,16 +1193,14 @@ func (r *SmartRouter) buildChannelEntry(
 	benchmark := config.ResolveModelBenchmarkProfile(actualModel)
 	entry.BenchmarkKnown = benchmark.Known && benchmark.Profile.OverallScore > 0
 	entry.BenchmarkScore = benchmark.Profile.OverallScore
-	// 实测上下文上限收紧：注册表登记的是模型公开窗口，个别渠道对某个模型的实际窗口更短
-	// （中转商截断、套餐限制）。这类事实由 failover 观测真实 400 学到，按 渠道-Key-模型 存储。
-	// 取 min(注册表窗口, 实测上限) 让上下文硬约束按真实容量判断。
 	if learned, ok := learnedContextLimit(channelUID, actualModel); ok {
 		if entry.ContextWindowTokens == 0 || learned < entry.ContextWindowTokens {
 			entry.ContextWindowTokens = learned
 		}
 	}
 	if modelPricing != nil {
-		multiplier := 1.0
+		listCost := metrics.CalculateTokenCostUSDWithPricing(modelPricing, 1_000_000, 1_000_000, 1_000_000, 1_000_000)
+		entry.EstimatedCost = listCost
 		pricingProviderID := strings.TrimSpace(upstream.ProviderID)
 		if pricingProviderID == "" {
 			pricingProviderID, _ = config.InferProviderIDFromBaseURL(upstream.BaseURL)
@@ -1209,11 +1213,46 @@ func (r *SmartRouter) buildChannelEntry(
 				}
 			}
 		}
-		if r.configManager != nil && pricingProviderID != "" {
-			multiplier = r.configManager.GetAutopilotRouting().CostOptimization.ProviderTimePricingMultiplier(pricingProviderID, r.currentTime())
+		timeMultiplier := 1.0
+		var graph *config.ExchangeRateGraph
+		if r.configManager != nil {
+			costConfig := r.configManager.GetAutopilotRouting().CostOptimization
+			if pricingProviderID != "" {
+				timeMultiplier = costConfig.ProviderTimePricingMultiplier(pricingProviderID, r.currentTime())
+			}
+			if len(costConfig.ExchangeRateQuotes) > 0 {
+				version := uint64(1)
+				if costConfig.ExchangeRateSnapshot != nil && costConfig.ExchangeRateSnapshot.Version > 0 {
+					version = costConfig.ExchangeRateSnapshot.Version
+				}
+				graph, _ = config.NewExchangeRateGraph(costConfig.ExchangeRateQuotes, version, r.currentTime())
+			}
 		}
-		// 使用各类 token 每百万的参考成本做候选间归一化，时段倍率统一作用于全部计费项。
-		entry.EstimatedCost = metrics.CalculateTokenCostUSDWithPricing(modelPricing, 1_000_000, 1_000_000, 1_000_000, 1_000_000) * multiplier
+		entry.EstimatedCost = listCost * timeMultiplier
+		// 只有订阅到账规则和汇率快照完整时，才用统一 effective USD 覆盖标价×分时倍率。
+		if graph != nil && r.subscriptionStore != nil {
+			for _, cfg := range config.NormalizeAPIKeyConfigsForView(*upstream) {
+				subscriptionUID := strings.TrimSpace(cfg.SourceSubscriptionUID)
+				if subscriptionUID == "" || cfg.GroupMultiplier == nil {
+					continue
+				}
+				subscription := r.subscriptionStore.Get(subscriptionUID)
+				if subscription == nil || subscription.PaymentAmount == nil || subscription.CreditAmount == nil {
+					continue
+				}
+				resolvedCost := ResolveEffectiveCostUSD(EffectiveCostInput{
+					Graph: graph, ListCostAmount: listCost, ListCostUnit: "USD",
+					GroupMultiplier: *cfg.GroupMultiplier, TimeMultiplier: timeMultiplier,
+					PaymentAmount: *subscription.PaymentAmount, PaymentUnit: subscription.PaymentUnit,
+					CreditAmount: *subscription.CreditAmount, CreditUnit: subscription.CreditUnit,
+					KeyUID: cfg.KeyUID, SubscriptionUID: subscriptionUID,
+				})
+				if resolvedCost.Available {
+					entry.EstimatedCost = resolvedCost.EffectiveCostUSD
+					break
+				}
+			}
+		}
 	}
 	modelFamily := InferModelFamily(actualModel, modelProvider)
 	visionDisabled := upstream.NoVision || containsString(upstream.NoVisionModels, actualModel)
@@ -1221,7 +1260,6 @@ func (r *SmartRouter) buildChannelEntry(
 		entry.SupportsVision = false
 	}
 
-	// 从 ProfileStore 读取画像
 	if r.profileStore != nil {
 		profiles := r.profileStore.ListActiveByChannel(channelUID)
 		matchingProfiles := make([]*KeyEndpointProfile, 0, len(profiles))
@@ -1231,7 +1269,6 @@ func (r *SmartRouter) buildChannelEntry(
 			}
 		}
 		if len(matchingProfiles) > 0 {
-			// 解引用指针切片
 			profileValues := make([]KeyEndpointProfile, len(matchingProfiles))
 			for i, p := range matchingProfiles {
 				profileValues[i] = *p
@@ -1241,45 +1278,27 @@ func (r *SmartRouter) buildChannelEntry(
 			entry.OriginTier = ChannelOriginTier(agg.OriginTier)
 			entry.MetricsKey = matchingProfiles[0].MetricsKey
 			entry.KeyMask = matchingProfiles[0].KeyMask
-			// 注册表与画像都是正向能力证据；手动禁用视觉始终优先。
 			if !visionDisabled {
 				entry.SupportsVision = entry.SupportsVision || agg.SupportsVision
 			}
 			entry.SupportsToolCalls = entry.SupportsToolCalls || agg.SupportsToolCalls
 			entry.SupportsReasoning = entry.SupportsReasoning || agg.SupportsReasoning
-
 			entry.ScoringCandidate = ScoringCandidate{
-				ChannelUID:                channelUID,
-				QualityTier:               agg.QualityTier,
-				StabilityTier:             agg.StabilityTier,
-				SpeedTier:                 agg.SpeedTier,
-				CostTier:                  agg.CostTier,
-				HealthState:               agg.HealthState,
-				ProviderQualityScore:      0.5,
-				ProviderQualityConfidence: 0.3,
-				ModelFamily:               modelFamily,
-				SavingsScore:              0.5,
-				DomainStrengthScore:       0.5,
+				ChannelUID: channelUID, QualityTier: agg.QualityTier, StabilityTier: agg.StabilityTier,
+				SpeedTier: agg.SpeedTier, CostTier: agg.CostTier, HealthState: agg.HealthState,
+				ProviderQualityScore: 0.5, ProviderQualityConfidence: 0.3,
+				ModelFamily: modelFamily, SavingsScore: 0.5, DomainStrengthScore: 0.5,
 			}
 			r.applyModelQualityTier(&entry)
 			r.attachDomainProfiles(&entry, modelProvider)
 			return entry
 		}
 	}
-
-	// 无画像：中性默认值，不惩罚
 	entry.ScoringCandidate = ScoringCandidate{
-		ChannelUID:                channelUID,
-		QualityTier:               QualityTierNormal,
-		StabilityTier:             StabilityTierNormal,
-		SpeedTier:                 SpeedTierNormal,
-		CostTier:                  CostTierNormal,
-		HealthState:               HealthStateUnknown,
-		ProviderQualityScore:      0.5,
-		ProviderQualityConfidence: 0.3,
-		ModelFamily:               modelFamily,
-		SavingsScore:              0.5,
-		DomainStrengthScore:       0.5,
+		ChannelUID: channelUID, QualityTier: QualityTierNormal, StabilityTier: StabilityTierNormal,
+		SpeedTier: SpeedTierNormal, CostTier: CostTierNormal, HealthState: HealthStateUnknown,
+		ProviderQualityScore: 0.5, ProviderQualityConfidence: 0.3,
+		ModelFamily: modelFamily, SavingsScore: 0.5, DomainStrengthScore: 0.5,
 	}
 	r.applyModelQualityTier(&entry)
 	r.attachDomainProfiles(&entry, modelProvider)

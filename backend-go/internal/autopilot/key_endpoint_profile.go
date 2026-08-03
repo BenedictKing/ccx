@@ -3,6 +3,8 @@ package autopilot
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"math"
+	"strings"
 	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
@@ -291,47 +293,130 @@ type KeyEndpointProfile struct {
 
 // ── USD 汇率解析（§Task #8 骨架，smart_router 在 Task #11 接入）──
 
-// EffectiveCostInput 描述一次成本换算所需的最小输入。
-// graph 必须通过 config.NewExchangeRateGraph 构造；PaymentUnit/CreditUnit 为空时视为 USD。
+// EffectiveCostInput 描述一次 effective USD 成本固化所需的输入。
+// ListCostAmount/ListCostUnit 是无歧义形式；兼容字段 ListCostUSD 在 CreditUnit 非 USD 时
+// 表示等量的 CreditUnit 名义金额，避免先换 USD 后又重复应用到账换算。
 type EffectiveCostInput struct {
-	Graph       *config.ExchangeRateGraph
-	PaymentUnit string
-	CreditUnit  string
+	Graph           *config.ExchangeRateGraph
+	ListCostUSD     float64
+	ListCostAmount  float64
+	ListCostUnit    string
+	GroupMultiplier float64
+	TimeMultiplier  float64
+	PaymentAmount   float64
+	PaymentUnit     string
+	CreditAmount    float64
+	CreditUnit      string
+	KeyUID          string
+	SubscriptionUID string
 }
 
-// EffectiveCostResult 是 ResolveExchangeTerms 的输出。
-// OK=false 时 Reason 描述失败原因，数值字段保持零值。
+// EffectiveCostResult 同时包含汇率中间量与最终 effective USD 成本。
+// Available=false 时调用方必须回退标价/非成本策略，不得把零值解释为免费。
 type EffectiveCostResult struct {
-	OK             bool
-	Reason         string
-	Version        uint64
-	PaymentUSDPrice float64 // 1 PaymentUnit 等于多少 USD
-	CreditUSDPrice  float64 // 1 CreditUnit 等于多少 USD
-	ExchangeFactor  float64 // PaymentUnit / CreditUnit 兑换比率（>0 即表示存在有效换算）
+	OK                  bool
+	Available           bool
+	Reason              string
+	Version             uint64
+	PaymentUSDPrice     float64
+	CreditUSDPrice      float64
+	ExchangeFactor      float64
+	ListCostInCreditUSD float64
+	EffectiveMultiplier float64
+	EffectiveCostUSD    float64
+	KeyUID              string
+	SubscriptionUID     string
 }
 
-// ResolveExchangeTerms 读取 graph 的 USD 单价快照并计算 Payment/Credit 之间的兑换因子。
-// 骨架实现：仅产出有效成本因子的中间数据，不参与真实调度。
+// ResolveExchangeTerms 读取同一 graph 快照中的 USD 单价并计算 Payment/Credit 兑换因子。
 func ResolveExchangeTerms(in EffectiveCostInput) EffectiveCostResult {
+	result := EffectiveCostResult{KeyUID: in.KeyUID, SubscriptionUID: in.SubscriptionUID}
 	if in.Graph == nil {
-		return EffectiveCostResult{Reason: "missing exchange rate graph"}
+		result.Reason = "missing exchange rate graph"
+		return result
 	}
 	payment, paymentOK, version := in.Graph.ResolveUSDPrice(in.PaymentUnit)
 	credit, creditOK, creditVersion := in.Graph.ResolveUSDPrice(in.CreditUnit)
+	result.Version = version
 	if version != creditVersion {
-		return EffectiveCostResult{Reason: "exchange rate version mismatch", Version: version}
+		result.Reason = "exchange rate version mismatch"
+		return result
 	}
 	if !paymentOK || !creditOK {
-		return EffectiveCostResult{Reason: "exchange rate unit not in graph", Version: version}
+		result.Reason = "exchange rate unit not in graph"
+		return result
 	}
-	if credit <= 0 {
-		return EffectiveCostResult{Reason: "credit unit price must be positive", Version: version}
+	if payment <= 0 || credit <= 0 || math.IsNaN(payment) || math.IsNaN(credit) || math.IsInf(payment, 0) || math.IsInf(credit, 0) {
+		result.Reason = "exchange rate unit price must be finite and positive"
+		return result
 	}
-	return EffectiveCostResult{
-		OK:              true,
-		Version:         version,
-		PaymentUSDPrice: payment,
-		CreditUSDPrice:  credit,
-		ExchangeFactor:  payment / credit,
+	result.OK = true
+	result.PaymentUSDPrice = payment
+	result.CreditUSDPrice = credit
+	result.ExchangeFactor = payment / credit
+	return result
+}
+
+// ResolveEffectiveCostUSD 是组合 G、T 与付款到账规则的唯一入口。
+func ResolveEffectiveCostUSD(in EffectiveCostInput) EffectiveCostResult {
+	result := ResolveExchangeTerms(in)
+	if !result.OK {
+		return result
 	}
+	if !finitePositive(in.GroupMultiplier) {
+		result.OK = false
+		result.Reason = "group multiplier must be finite and positive"
+		return result
+	}
+	if !finitePositive(in.TimeMultiplier) {
+		result.OK = false
+		result.Reason = "time multiplier must be finite and positive"
+		return result
+	}
+	if !finitePositive(in.PaymentAmount) || !finitePositive(in.CreditAmount) {
+		result.OK = false
+		result.Reason = "payment and credit amounts must be finite and positive"
+		return result
+	}
+
+	listAmount := in.ListCostAmount
+	listUnit := strings.TrimSpace(in.ListCostUnit)
+	if listAmount == 0 {
+		listAmount = in.ListCostUSD
+		if strings.EqualFold(strings.TrimSpace(in.CreditUnit), "USD") {
+			listUnit = "USD"
+		} else {
+			listUnit = strings.TrimSpace(in.CreditUnit)
+		}
+	}
+	if !finiteEffectiveCostNonNegative(listAmount) || listUnit == "" {
+		result.OK = false
+		result.Reason = "list cost amount/unit is missing or invalid"
+		return result
+	}
+	listUnitUSDPrice, ok, version := in.Graph.ResolveUSDPrice(listUnit)
+	if !ok || version != result.Version || !finitePositive(listUnitUSDPrice) {
+		result.OK = false
+		result.Reason = "list cost unit not in exchange rate graph"
+		return result
+	}
+	result.ListCostInCreditUSD = listAmount * listUnitUSDPrice
+	result.EffectiveMultiplier = in.GroupMultiplier * in.TimeMultiplier * in.PaymentAmount * result.PaymentUSDPrice /
+		(in.CreditAmount * result.CreditUSDPrice)
+	result.EffectiveCostUSD = result.ListCostInCreditUSD * result.EffectiveMultiplier
+	if !finiteEffectiveCostNonNegative(result.EffectiveCostUSD) || !finitePositive(result.EffectiveMultiplier) {
+		result.OK = false
+		result.Reason = "effective cost is not finite"
+		return result
+	}
+	result.Available = true
+	return result
+}
+
+func finitePositive(value float64) bool {
+	return value > 0 && !math.IsNaN(value) && !math.IsInf(value, 0)
+}
+
+func finiteEffectiveCostNonNegative(value float64) bool {
+	return value >= 0 && !math.IsNaN(value) && !math.IsInf(value, 0)
 }

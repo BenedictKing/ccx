@@ -13,6 +13,7 @@ import (
 
 type Candidate struct {
 	APIKey     string
+	KeyUID     string
 	Config     config.APIKeyConfig
 	Index      int
 	Scope      string
@@ -21,6 +22,7 @@ type Candidate struct {
 
 type Selection struct {
 	APIKey         string
+	KeyUID         string
 	CredentialID   string
 	CredentialName string
 	QuotaGroup     string
@@ -110,6 +112,7 @@ func CandidatesForModelFiltered(upstream *config.UpstreamConfig, failedKeys map[
 		scope := LimiterScopeFor(key, cfg)
 		out = append(out, Candidate{
 			APIKey:     key,
+			KeyUID:     strings.TrimSpace(cfg.KeyUID),
 			Config:     cfg,
 			Index:      i,
 			Scope:      scope,

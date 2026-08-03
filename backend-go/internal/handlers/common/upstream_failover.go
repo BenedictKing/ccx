@@ -284,6 +284,28 @@ func applyAdaptiveResponseHeaderTimeout(
 //   - successBaseURLIdx: 成功 BaseURL 的原始索引（用于指标记录）
 //   - failoverErr: 最后一次可故障转移的上游错误（用于多渠道聚合错误）
 //   - usage: usage 统计（可能为 nil）
+//
+// buildRequestCostContext 在请求开始时解析并固化 list/effective 成本输入。
+// 订阅到账资料不在 handler 层动态读取；当前仅固化可证明的 list cost 与 legacy G/T，
+// 完整订阅规则由统一 resolver 接入后标记 Available。
+func buildRequestCostContext(cfgManager *config.ConfigManager, upstream *config.UpstreamConfig, selection keypool.Selection, model string) metrics.RequestCostContext {
+	ctx := metrics.RequestCostContext{
+		KeyUID:              selection.KeyUID,
+		SubscriptionUID:     strings.TrimSpace(selection.Config.SourceSubscriptionUID),
+		EffectiveCostReason: "subscription payment/credit snapshot unavailable",
+	}
+	resolved := config.ResolveUpstreamCapability(model, upstream, nil)
+	ctx.ListCostUSD = metrics.CalculateTokenCostUSDWithPricing(resolved.Capability.Pricing, 0, 0, 0, 0)
+	// 实际 token 数在 finalize 时才可得；标价成本在那里按固化模型定价计算。
+	if cfgManager != nil {
+		costConfig := cfgManager.GetAutopilotRouting().CostOptimization
+		if costConfig.ExchangeRateSnapshot != nil {
+			ctx.ExchangeSnapshotVersion = costConfig.ExchangeRateSnapshot.Version
+		}
+	}
+	return ctx
+}
+
 func TryUpstreamWithAllKeys(
 	c *gin.Context,
 	envCfg *config.EnvConfig,
@@ -784,7 +806,8 @@ func TryUpstreamWithAllKeys(
 			}
 
 			// TCP 建连开始即计数：将活跃度统计提前到发起上游请求之前；同时关联 proxyKeyMask 用于成本报表持久化
-			requestID := metricsManager.RecordRequestConnectedWithContext(currentBaseURL, apiKey, metricsServiceType, upstream.ChannelUID, actualAttemptModel, model, proxyKeyMask)
+			costContext := buildRequestCostContext(cfgManager, upstream, selection, actualAttemptModel)
+			requestID := metricsManager.RecordRequestConnectedWithCostContext(currentBaseURL, apiKey, metricsServiceType, upstream.ChannelUID, actualAttemptModel, model, proxyKeyMask, costContext)
 
 			attemptStartedAt := time.Now()
 			var connectedOnce sync.Once
@@ -1667,6 +1690,7 @@ func selectAttemptAPIKey(channelScheduler *scheduler.ChannelScheduler, kind sche
 		}
 		selection := keypool.Selection{
 			APIKey:         candidate.APIKey,
+			KeyUID:         candidate.KeyUID,
 			CredentialID:   candidate.Scope,
 			CredentialName: candidate.Config.Name,
 			QuotaGroup:     candidate.QuotaGroup,
