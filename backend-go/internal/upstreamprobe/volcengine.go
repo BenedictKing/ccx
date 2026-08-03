@@ -69,12 +69,12 @@ func IsVolcenginePlanBaseURL(baseURL string) bool {
 }
 
 // volcenginePlanProbeModel 选择端点验证用的探针模型。
-// Agent Plan 使用上游 Auto 模式；Coding Plan 沿用 ark-code-latest 兼容模型名。
+// Agent Plan 固定使用 deepseek-v4-flash；Coding Plan 沿用 ark-code-latest 兼容模型名。
 func volcenginePlanProbeModel(baseURL string) string {
 	if strings.Contains(strings.ToLower(baseURL), "/api/coding") {
 		return "ark-code-latest"
 	}
-	return "auto"
+	return "deepseek-v4-flash"
 }
 
 // manifestServiceType 把渠道配置的 serviceType 归一化为 manifest 查找口径。

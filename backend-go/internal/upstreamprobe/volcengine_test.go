@@ -36,8 +36,8 @@ func TestIsVolcenginePlanBaseURL(t *testing.T) {
 }
 
 func TestVolcenginePlanProbeModel(t *testing.T) {
-	if got := volcenginePlanProbeModel("https://ark.cn-beijing.volces.com/api/plan"); got != "auto" {
-		t.Fatalf("agent plan 探针模型 = %q, 期望 auto", got)
+	if got := volcenginePlanProbeModel("https://ark.cn-beijing.volces.com/api/plan"); got != "deepseek-v4-flash" {
+		t.Fatalf("agent plan 探针模型 = %q, 期望 deepseek-v4-flash", got)
 	}
 	if got := volcenginePlanProbeModel("https://ark.cn-beijing.volces.com/api/coding"); got != "ark-code-latest" {
 		t.Fatalf("coding plan 探针模型 = %q, 期望 ark-code-latest", got)
@@ -105,11 +105,11 @@ func TestProbeVolcenginePlanClaudeSuccess(t *testing.T) {
 	if srv.method != http.MethodPost {
 		t.Fatalf("方法 = %q, 期望 POST", srv.method)
 	}
-	if !strings.Contains(srv.body, `"model":"auto"`) {
-		t.Fatalf("agent plan 探针 body 缺少 model=auto: %s", srv.body)
+	if !strings.Contains(srv.body, `"model":"deepseek-v4-flash"`) {
+		t.Fatalf("agent plan 探针 body 缺少 model=deepseek-v4-flash: %s", srv.body)
 	}
-	if res.Model != "auto" {
-		t.Fatalf("探针结果模型 = %q, 期望 auto", res.Model)
+	if res.Model != "deepseek-v4-flash" {
+		t.Fatalf("探针结果模型 = %q, 期望 deepseek-v4-flash", res.Model)
 	}
 	// Claude Code 特征
 	if srv.userAgent == "" || srv.xApp == "" {
@@ -225,8 +225,8 @@ func TestVolcenginePlanL1ProbeSuccessReturnsManifestModels(t *testing.T) {
 	if err != nil || sc != http.StatusOK {
 		t.Fatalf("成功应返回 200: sc=%d err=%v", sc, err)
 	}
-	if model != "auto" {
-		t.Fatalf("探针模型 = %q, 期望 auto", model)
+	if model != "deepseek-v4-flash" {
+		t.Fatalf("探针模型 = %q, 期望 deepseek-v4-flash", model)
 	}
 	// 内置 manifest 仅对官方 host 命中；本地 server 不命中，应返回空 data 列表而非臆造模型
 	if !strings.Contains(string(body), `"data":[]`) && !strings.Contains(string(body), `"data"`) {
@@ -242,8 +242,8 @@ func TestVolcenginePlanL1ProbeAuthFailedReturnsUpstreamStatus(t *testing.T) {
 	if err != nil || sc != 403 {
 		t.Fatalf("403 应原样返回上游状态: sc=%d err=%v", sc, err)
 	}
-	if model != "auto" {
-		t.Fatalf("失败探针模型 = %q, 期望 auto", model)
+	if model != "deepseek-v4-flash" {
+		t.Fatalf("失败探针模型 = %q, 期望 deepseek-v4-flash", model)
 	}
 	if !strings.Contains(string(body), "forbidden") {
 		t.Fatalf("body 应保留上游响应: %s", string(body))
@@ -261,7 +261,7 @@ func TestVolcenginePlanL1ProbeNetworkErrorPropagates(t *testing.T) {
 	if sc != 0 {
 		t.Fatalf("网络错误 sc 应为 0, got %d", sc)
 	}
-	if model != "auto" {
-		t.Fatalf("网络错误探针模型 = %q, 期望 auto", model)
+	if model != "deepseek-v4-flash" {
+		t.Fatalf("网络错误探针模型 = %q, 期望 deepseek-v4-flash", model)
 	}
 }
