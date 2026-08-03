@@ -43,6 +43,18 @@ describe('channel API key state', () => {
     expect(availableChannelApiKeyCount({ apiKeys: ['key-active'], disabledApiKeys: null })).toBe(1)
   })
 
+  it('行模型保留完整 Key 配置元数据及未知扩展字段', () => {
+    const config = {
+      key: 'key-active', keyUid: 'uid', credentialUid: 'credential', groupMultiplier: null,
+      maxGroupMultiplier: 0, multiplierSource: 'remote', multiplierUpdatedAt: 'updated',
+      multiplierExpiresAt: 'expires', multiplierSyncStatus: 'ok', multiplierSyncError: '',
+      sourceSubscriptionUid: 'subscription', sourceRemoteTokenId: 'remote-token', eligible: false,
+      ineligibleReason: 'disabled', futureField: 42,
+    }
+
+    expect(buildChannelApiKeyRows(['key-active'], [], [config])[0]).toMatchObject(config)
+  })
+
   it('可用 Key 数量排除手动暂停项', () => {
     const channel = {
       apiKeys: ['key-active', 'key-suspended'],

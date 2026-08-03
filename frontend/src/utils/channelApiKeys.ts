@@ -1,6 +1,6 @@
 import type { DisabledKeyInfo, APIKeyConfig } from '../services/api-types'
 
-export interface ChannelApiKeyRow {
+export interface ChannelApiKeyRow extends Omit<APIKeyConfig, 'key'> {
   key: string
   activeIndex: number
   disabled?: DisabledKeyInfo
@@ -17,9 +17,9 @@ export function buildChannelApiKeyRows(
   const disabledItems = disabledKeys ?? []
   const disabledByKey = new Map(disabledItems.filter(item => item.key).map(item => [item.key, item]))
 
-  const enabledByKey = new Map<string, boolean | undefined>()
+  const configByKey = new Map<string, APIKeyConfig>()
   for (const cfg of apiKeyConfigs ?? []) {
-    enabledByKey.set(cfg.key, cfg.enabled)
+    if (cfg.key) configByKey.set(cfg.key, cfg)
   }
 
   const seen = new Set<string>()
@@ -29,10 +29,10 @@ export function buildChannelApiKeyRows(
     if (!key || seen.has(key)) return
     seen.add(key)
     rows.push({
+      ...configByKey.get(key),
       key,
       activeIndex,
       disabled: disabledByKey.get(key),
-      enabled: enabledByKey.get(key),
     })
   })
 
@@ -40,10 +40,10 @@ export function buildChannelApiKeyRows(
     if (!disabled.key || seen.has(disabled.key)) continue
     seen.add(disabled.key)
     rows.push({
+      ...configByKey.get(disabled.key),
       key: disabled.key,
       activeIndex: -1,
       disabled,
-      enabled: enabledByKey.get(disabled.key),
     })
   }
 

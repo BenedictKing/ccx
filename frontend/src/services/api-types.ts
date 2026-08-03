@@ -96,6 +96,7 @@ export interface DisabledKeyModelInfo {
 }
 
 export interface APIKeyConfig {
+  /** 新建配置通常按 key 关联；服务端身份骨架可将 key 留空并仅返回 keyUid。 */
   key: string
   keyUid?: string
   credentialUid?: string
@@ -120,6 +121,19 @@ export interface APIKeyConfig {
   rateLimitAutoFromHeaders?: boolean
   weight?: number
   models?: string[]
+  groupMultiplier?: number | null
+  maxGroupMultiplier?: number | null
+  multiplierSource?: string
+  multiplierUpdatedAt?: string
+  multiplierExpiresAt?: string
+  multiplierSyncStatus?: string
+  multiplierSyncError?: string
+  sourceSubscriptionUid?: string
+  sourceRemoteTokenId?: string
+  eligible?: boolean
+  ineligibleReason?: string
+  /** 保留服务端未来扩展字段，整对象编辑时不得意外丢失。 */
+  [key: string]: unknown
 }
 
 export interface UpstreamModelCapability {

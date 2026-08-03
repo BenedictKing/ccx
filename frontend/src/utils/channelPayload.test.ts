@@ -713,6 +713,64 @@ describe('buildChannelPayload', () => {
       },
     ])).toBeNull()
   })
+  it('应完整保留 Key 服务端元数据、扩展字段及 nullable multiplier', () => {
+    const metadata = {
+      key: '  sk-preserved  ', keyUid: 'key-uid', credentialUid: 'credential-uid',
+      groupMultiplier: null, maxGroupMultiplier: 0, multiplierSource: 'subscription',
+      multiplierUpdatedAt: '2026-08-01T00:00:00Z', multiplierExpiresAt: '2026-09-01T00:00:00Z',
+      multiplierSyncStatus: 'failed', multiplierSyncError: 'timeout', sourceSubscriptionUid: 'sub-uid',
+      sourceRemoteTokenId: 'remote-token', eligible: false, ineligibleReason: 'expired', futureField: { nested: true },
+    }
+    const result = buildChannelPayload({
+      name: 'keys', serviceType: 'openai', baseUrl: 'https://api.example.com', baseUrls: [], website: '',
+      insecureSkipVerify: false, lowQuality: false, injectDummyThoughtSignature: false, stripThoughtSignature: false,
+      description: '', apiKeys: ['sk-preserved'], apiKeyConfigs: [metadata], modelMapping: {}, reasoningMapping: {},
+      reasoningParamStyle: 'reasoning', textVerbosity: '', fastMode: false, customHeaders: {}, proxyUrl: '',
+      routePrefix: '', supportedModels: [], autoBlacklistBalance: true, normalizeMetadataUserId: true,
+      normalizeSystemRoleToTopLevel: false, codexToolCompat: false, noVision: false, noVisionModels: [], visionFallbackModel: '',
+    })
+
+    expect(result.apiKeyConfigs).toEqual([{ ...metadata, key: 'sk-preserved' }])
+    expect(result.apiKeyConfigs?.[0]).toHaveProperty('groupMultiplier', null)
+    expect(result.apiKeyConfigs?.[0]).toHaveProperty('maxGroupMultiplier', 0)
+  })
+
+  it('删除 Key 时仅过滤目标配置，其他 Key 配置保持不变', () => {
+    const untouched = { key: 'key-b', keyUid: 'uid-b', groupMultiplier: null, unknownMetadata: 'keep' }
+    const result = buildChannelPayload({
+      name: 'keys', serviceType: 'openai', baseUrl: 'https://api.example.com', baseUrls: [], website: '',
+      insecureSkipVerify: false, lowQuality: false, injectDummyThoughtSignature: false, stripThoughtSignature: false,
+      description: '', apiKeys: ['key-b'], apiKeyConfigs: [
+        { key: 'key-a', keyUid: 'uid-a', groupMultiplier: 2 }, untouched,
+      ], modelMapping: {}, reasoningMapping: {}, reasoningParamStyle: 'reasoning', textVerbosity: '', fastMode: false,
+      customHeaders: {}, proxyUrl: '', routePrefix: '', supportedModels: [], autoBlacklistBalance: true,
+      normalizeMetadataUserId: true, normalizeSystemRoleToTopLevel: false, codexToolCompat: false,
+      noVision: false, noVisionModels: [], visionFallbackModel: '',
+    })
+
+    expect(result.apiKeyConfigs).toEqual([untouched])
+  })
+
+  it('应区分 multiplier 的 undefined、null 与 0，并保留 KeyUID-only 身份骨架', () => {
+    const result = buildChannelPayload({
+      name: 'keys', serviceType: 'openai', baseUrl: 'https://api.example.com', baseUrls: [], website: '',
+      insecureSkipVerify: false, lowQuality: false, injectDummyThoughtSignature: false, stripThoughtSignature: false,
+      description: '', apiKeys: ['key-a', 'key-b'], apiKeyConfigs: [
+        { key: 'key-a', groupMultiplier: undefined, maxGroupMultiplier: null },
+        { key: 'key-b', groupMultiplier: 0, maxGroupMultiplier: 0 },
+        { key: '', keyUid: 'uid-only', credentialUid: 'credential-only' },
+      ], modelMapping: {}, reasoningMapping: {}, reasoningParamStyle: 'reasoning', textVerbosity: '', fastMode: false,
+      customHeaders: {}, proxyUrl: '', routePrefix: '', supportedModels: [], autoBlacklistBalance: true,
+      normalizeMetadataUserId: true, normalizeSystemRoleToTopLevel: false, codexToolCompat: false,
+      noVision: false, noVisionModels: [], visionFallbackModel: '',
+    })
+
+    expect(result.apiKeyConfigs).toEqual([
+      { key: 'key-a', groupMultiplier: undefined, maxGroupMultiplier: null },
+      { key: 'key-b', groupMultiplier: 0, maxGroupMultiplier: 0 },
+      { key: '', keyUid: 'uid-only', credentialUid: 'credential-only' },
+    ])
+  })
 })
 
 describe('buildChannelPayload tags', () => {

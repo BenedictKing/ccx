@@ -477,14 +477,18 @@ export function buildChannelPayload(
   const processedApiKeys = form.apiKeys.map(key => key.trim()).filter(Boolean)
   const processedApiKeySet = new Set(processedApiKeys)
   const processedApiKeyConfigs = (form.apiKeyConfigs || [])
-    .filter(cfg => cfg?.key && processedApiKeySet.has(cfg.key.trim()))
-    .map(cfg => ({
-      ...cfg,
-      key: cfg.key.trim(),
-      name: cfg.name?.trim() || undefined,
-      quotaGroup: cfg.quotaGroup?.trim() || undefined,
-      models: Array.isArray(cfg.models) ? cfg.models.map(model => model.trim()).filter(Boolean) : undefined,
-    }))
+    .filter(cfg => {
+      const trimmedKey = typeof cfg?.key === 'string' ? cfg.key.trim() : ''
+      return trimmedKey ? processedApiKeySet.has(trimmedKey) : !!cfg?.keyUid
+    })
+    .map(cfg => {
+      const normalized = { ...cfg }
+      if (typeof cfg.key === 'string') normalized.key = cfg.key.trim()
+      if (typeof cfg.name === 'string') normalized.name = cfg.name.trim() || undefined
+      if (typeof cfg.quotaGroup === 'string') normalized.quotaGroup = cfg.quotaGroup.trim() || undefined
+      if (Array.isArray(cfg.models)) normalized.models = cfg.models.map(model => model.trim()).filter(Boolean)
+      return normalized
+    })
   const advancedOptions = normalizeAdvancedChannelOptions(form.serviceType, {
     reasoningMapping: form.reasoningMapping,
     reasoningParamStyle: form.reasoningParamStyle,
