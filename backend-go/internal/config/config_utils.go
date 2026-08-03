@@ -647,6 +647,86 @@ func ApplyProviderUpstreamDefaults(providerID string, upstream *UpstreamConfig) 
 	}
 }
 
+func stripAutoManagedExplicitOverrides(upstream *UpstreamConfig) bool {
+	if upstream == nil || !upstream.AutoManaged {
+		return false
+	}
+	changed := false
+	if len(upstream.ModelMapping) > 0 {
+		upstream.ModelMapping = nil
+		changed = true
+	}
+	if len(upstream.ReasoningMapping) > 0 {
+		upstream.ReasoningMapping = nil
+		changed = true
+	}
+	if upstream.ReasoningParamStyle != "" {
+		upstream.ReasoningParamStyle = ""
+		changed = true
+	}
+	if upstream.FastMode {
+		upstream.FastMode = false
+		changed = true
+	}
+	if len(upstream.CompatSeeds) > 0 {
+		upstream.CompatSeeds = nil
+		changed = true
+	}
+	if upstream.CodexToolCompat != nil {
+		upstream.CodexToolCompat = nil
+		changed = true
+	}
+	if upstream.StripCodexClientTools {
+		upstream.StripCodexClientTools = false
+		changed = true
+	}
+	if upstream.ConvertImageURLToB64JSON {
+		upstream.ConvertImageURLToB64JSON = false
+		changed = true
+	}
+	if upstream.NormalizeMetadataUserID != nil {
+		upstream.NormalizeMetadataUserID = nil
+		changed = true
+	}
+	if upstream.StripBillingHeader != nil {
+		upstream.StripBillingHeader = nil
+		changed = true
+	}
+	if upstream.NormalizeSystemRoleToTopLevel {
+		upstream.NormalizeSystemRoleToTopLevel = false
+		changed = true
+	}
+	if upstream.InjectDummyThoughtSignature {
+		upstream.InjectDummyThoughtSignature = false
+		changed = true
+	}
+	if upstream.StripThoughtSignature {
+		upstream.StripThoughtSignature = false
+		changed = true
+	}
+	if upstream.NoVision {
+		upstream.NoVision = false
+		changed = true
+	}
+	if len(upstream.NoVisionModels) > 0 {
+		upstream.NoVisionModels = nil
+		changed = true
+	}
+	if upstream.VisionFallbackModel != "" {
+		upstream.VisionFallbackModel = ""
+		changed = true
+	}
+	if upstream.HistoricalImageTurnLimit != 0 {
+		upstream.HistoricalImageTurnLimit = 0
+		changed = true
+	}
+	if upstream.CompactModel != "" {
+		upstream.CompactModel = ""
+		changed = true
+	}
+	return changed
+}
+
 // RuntimeUpstreamForAutoManagedProvider 返回自动托管 provider 渠道的运行时视图。
 //
 // 已知 provider 的自动托管渠道不再使用编辑渠道页里的手工兼容开关；
@@ -658,27 +738,7 @@ func RuntimeUpstreamForAutoManagedProvider(upstream *UpstreamConfig) *UpstreamCo
 	}
 
 	runtime := upstream.Clone()
-	runtime.ModelMapping = nil
-	runtime.ReasoningMapping = nil
-	runtime.ReasoningParamStyle = ""
-	runtime.FastMode = false
-	// 六个兼容性开关已从结构体移除，无需清理；自动托管渠道的兼容性完全由
-	// ApplyProviderUpstreamDefaults 重建已知厂商真相加运行时学习决定。
-	// 种子同样清空：不保留手工配置派生的历史提示。
-	runtime.CompatSeeds = nil
-	runtime.CodexToolCompat = nil
-	runtime.StripCodexClientTools = false
-	runtime.ConvertImageURLToB64JSON = false
-	runtime.NormalizeMetadataUserID = nil
-	runtime.StripBillingHeader = nil
-	runtime.NormalizeSystemRoleToTopLevel = false
-	runtime.InjectDummyThoughtSignature = false
-	runtime.StripThoughtSignature = false
-	runtime.NoVision = false
-	runtime.NoVisionModels = nil
-	runtime.VisionFallbackModel = ""
-	runtime.HistoricalImageTurnLimit = 0
-	runtime.CompactModel = ""
+	stripAutoManagedExplicitOverrides(runtime)
 	ApplyProviderUpstreamDefaults(runtime.ProviderID, runtime)
 	return runtime
 }

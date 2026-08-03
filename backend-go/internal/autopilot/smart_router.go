@@ -1033,6 +1033,8 @@ type channelScoreEntry struct {
 	EstimatedCost       float64
 	ChannelIndex        int
 	ModelID             string
+	BenchmarkScore      float64
+	BenchmarkKnown      bool
 	DomainProfiles      []ModelProfile
 	SupportsVision      bool // 渠道是否支持识图（模型注册表 + 画像聚合 + 手动配置覆盖）
 	SupportsToolCalls   bool // 渠道是否支持工具调用（模型注册表 + 画像聚合）
@@ -1181,6 +1183,9 @@ func (r *SmartRouter) buildChannelEntry(
 		}
 	}
 	entry.ModelID = actualModel
+	benchmark := config.ResolveModelBenchmarkProfile(actualModel)
+	entry.BenchmarkKnown = benchmark.Known && benchmark.Profile.OverallScore > 0
+	entry.BenchmarkScore = benchmark.Profile.OverallScore
 	// 实测上下文上限收紧：注册表登记的是模型公开窗口，个别渠道对某个模型的实际窗口更短
 	// （中转商截断、套餐限制）。这类事实由 failover 观测真实 400 学到，按 渠道-Key-模型 存储。
 	// 取 min(注册表窗口, 实测上限) 让上下文硬约束按真实容量判断。
@@ -1319,6 +1324,22 @@ func (r *SmartRouter) applyModelQualityTier(entry *channelScoreEntry) {
 	if quality != "" {
 		entry.ScoringCandidate.QualityTier = quality
 	}
+	applyPremiumBenchmarkEvidence(entry)
+}
+
+// applyPremiumBenchmarkEvidence 为最终判定为 premium 档的候选补充连续 benchmark 证据，
+// 供 ScoreCandidate 在同档内做 tie-break（如 gpt-5.6-sol 相对 gpt-5.4 的能力差异）。
+// 只在 QualityTier 已经是 premium 时生效，不跨档位比较、不影响 premium 之外的排序；
+// benchmark 未知时保持零值，评分侧回退到原有中性行为。
+func applyPremiumBenchmarkEvidence(entry *channelScoreEntry) {
+	if entry == nil || entry.ScoringCandidate.QualityTier != QualityTierPremium {
+		return
+	}
+	if !entry.BenchmarkKnown {
+		return
+	}
+	entry.ScoringCandidate.QualityBenchmarkKnown = true
+	entry.ScoringCandidate.QualityBenchmarkScore = entry.BenchmarkScore
 }
 
 func (r *SmartRouter) currentTime() time.Time {

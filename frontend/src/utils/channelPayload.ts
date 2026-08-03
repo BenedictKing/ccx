@@ -523,6 +523,9 @@ export function buildChannelPayload(
     ? form.normalizeMetadataUserId
     : options.channelType === 'messages' && form.normalizeMetadataUserId
 
+  const isManagedProviderChannel = form.baseUrl.trim() === '' && form.baseUrls.length === 0
+  const shouldStripExplicitMappingFields = isManagedProviderChannel && form.serviceType !== 'copilot'
+
   const channelData: Omit<Channel, 'index' | 'latency' | 'status'> = {
     name: form.name.trim(),
     serviceType: form.serviceType as 'openai' | 'gemini' | 'claude' | 'responses' | 'copilot',
@@ -534,11 +537,11 @@ export function buildChannelPayload(
     stripThoughtSignature: form.stripThoughtSignature,
     description: form.description.trim(),
     apiKeys: processedApiKeys,
-    modelMapping: cleanModelMapping,
+    modelMapping: shouldStripExplicitMappingFields ? {} : cleanModelMapping,
     modelCapabilities: modelCapabilities || {},
     defaultCapability: {},
     allowUnknownContext: false,
-    reasoningMapping: advancedOptions.reasoningMapping,
+    reasoningMapping: shouldStripExplicitMappingFields ? {} : advancedOptions.reasoningMapping,
     reasoningParamStyle: advancedOptions.reasoningParamStyle,
     textVerbosity: advancedOptions.textVerbosity,
     fastMode: advancedOptions.fastMode,

@@ -140,6 +140,55 @@ func TestRuntimeUpstreamForAutoManagedProviderLeavesManualChannelUntouched(t *te
 	}
 }
 
+func TestStripAutoManagedExplicitOverrides(t *testing.T) {
+	trueValue := true
+	upstream := &UpstreamConfig{
+		ProviderID:                    "glm",
+		AutoManaged:                   true,
+		ModelMapping:                  map[string]string{"sonnet": "glm-5.2"},
+		ReasoningMapping:              map[string]string{"sonnet": "high"},
+		ReasoningParamStyle:           "thinking",
+		FastMode:                      true,
+		CompatSeeds:                   map[string]CompatSeedEntry{"passback_reasoning_content": {Enabled: true}},
+		CodexToolCompat:               &trueValue,
+		StripCodexClientTools:         true,
+		ConvertImageURLToB64JSON:      true,
+		NormalizeMetadataUserID:       &trueValue,
+		StripBillingHeader:            &trueValue,
+		NormalizeSystemRoleToTopLevel: true,
+		InjectDummyThoughtSignature:   true,
+		StripThoughtSignature:         true,
+		NoVision:                      true,
+		NoVisionModels:                []string{"glm-5.2"},
+		VisionFallbackModel:           "glm-5.2-air",
+		HistoricalImageTurnLimit:      4,
+		CompactModel:                  "glm-5.2-mini",
+		SupportedModels:               []string{"glm-5.2"},
+	}
+
+	if !stripAutoManagedExplicitOverrides(upstream) {
+		t.Fatal("expected auto-managed explicit overrides to be stripped")
+	}
+	if len(upstream.ModelMapping) != 0 || len(upstream.ReasoningMapping) != 0 || upstream.ReasoningParamStyle != "" || upstream.FastMode {
+		t.Fatalf("model/reasoning overrides not stripped: %#v", upstream)
+	}
+	if len(upstream.CompatSeeds) != 0 || upstream.CodexToolCompat != nil || upstream.StripCodexClientTools || upstream.ConvertImageURLToB64JSON {
+		t.Fatalf("compat overrides not stripped: %#v", upstream)
+	}
+	if upstream.NormalizeMetadataUserID != nil || upstream.StripBillingHeader != nil || upstream.NormalizeSystemRoleToTopLevel || upstream.InjectDummyThoughtSignature || upstream.StripThoughtSignature {
+		t.Fatalf("request normalization overrides not stripped: %#v", upstream)
+	}
+	if upstream.NoVision || len(upstream.NoVisionModels) != 0 || upstream.VisionFallbackModel != "" || upstream.HistoricalImageTurnLimit != 0 || upstream.CompactModel != "" {
+		t.Fatalf("vision/compact overrides not stripped: %#v", upstream)
+	}
+	if len(upstream.SupportedModels) != 1 || upstream.SupportedModels[0] != "glm-5.2" {
+		t.Fatalf("supportedModels should remain intact: %#v", upstream)
+	}
+	if stripAutoManagedExplicitOverrides(upstream) {
+		t.Fatal("second strip should be idempotent")
+	}
+}
+
 func TestRuntimeUpstreamForAutoManagedProviderReappliesNativeDefaults(t *testing.T) {
 	upstream := &UpstreamConfig{
 		ProviderID:          "glm",
@@ -315,6 +364,57 @@ func TestSanitizeDeprecatedGrokModelMapping(t *testing.T) {
 			t.Fatalf("expected mapping unchanged, got %v", cleaned2)
 		}
 	})
+}
+
+func TestMigrateAutoManagedExplicitMappings(t *testing.T) {
+	cm := &ConfigManager{}
+	legacy := func(name string) UpstreamConfig {
+		trueValue := true
+		return UpstreamConfig{
+			Name:                  name,
+			ProviderID:            "glm",
+			AutoManaged:           true,
+			ModelMapping:          map[string]string{"sonnet": "glm-5.2"},
+			ReasoningMapping:      map[string]string{"sonnet": "high"},
+			ReasoningParamStyle:   "thinking",
+			FastMode:              true,
+			CodexToolCompat:       &trueValue,
+			StripCodexClientTools: true,
+			NoVisionModels:        []string{"glm-5.2"},
+			SupportedModels:       []string{"glm-5.2"},
+		}
+	}
+	manual := UpstreamConfig{
+		Name:            "manual",
+		ProviderID:      "",
+		AutoManaged:     false,
+		ModelMapping:    map[string]string{"sonnet": "manual-target"},
+		SupportedModels: []string{"manual-target"},
+	}
+	cm.config.Upstream = []UpstreamConfig{legacy("messages"), manual}
+	cm.config.ResponsesUpstream = []UpstreamConfig{legacy("responses")}
+	cm.config.GeminiUpstream = []UpstreamConfig{legacy("gemini")}
+	cm.config.ChatUpstream = []UpstreamConfig{legacy("chat")}
+	cm.config.ImagesUpstream = []UpstreamConfig{legacy("images")}
+	cm.config.VectorsUpstream = []UpstreamConfig{legacy("vectors")}
+
+	if !cm.migrateAutoManagedExplicitMappings() {
+		t.Fatal("expected auto-managed mapping migration to report changes")
+	}
+	for _, channels := range [][]UpstreamConfig{cm.config.Upstream[:1], cm.config.ResponsesUpstream, cm.config.GeminiUpstream, cm.config.ChatUpstream, cm.config.ImagesUpstream, cm.config.VectorsUpstream} {
+		if len(channels[0].ModelMapping) != 0 || len(channels[0].ReasoningMapping) != 0 || channels[0].ReasoningParamStyle != "" {
+			t.Fatalf("auto-managed mapping overrides not stripped: %#v", channels[0])
+		}
+		if len(channels[0].SupportedModels) != 1 || channels[0].SupportedModels[0] != "glm-5.2" {
+			t.Fatalf("supportedModels should remain intact after migration: %#v", channels[0])
+		}
+	}
+	if cm.config.Upstream[1].ModelMapping["sonnet"] != "manual-target" {
+		t.Fatalf("manual channel should remain untouched: %#v", cm.config.Upstream[1])
+	}
+	if cm.migrateAutoManagedExplicitMappings() {
+		t.Fatal("second migration should be idempotent")
+	}
 }
 
 func TestMigrateDeprecatedGrokModelMapping(t *testing.T) {

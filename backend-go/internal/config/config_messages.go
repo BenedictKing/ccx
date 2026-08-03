@@ -97,6 +97,7 @@ func (cm *ConfigManager) AddUpstream(upstream UpstreamConfig, placements ...stri
 	applyDefaultBaseURL(&upstream)
 
 	upstream.ModelMapping, _ = sanitizeDeprecatedGrokModelMapping(upstream.ModelMapping)
+	stripAutoManagedExplicitOverrides(&upstream)
 	assignChannelPriority(cm.config.Upstream, &upstream, resolvePlacement(placements))
 	cm.config.Upstream = append([]UpstreamConfig{upstream}, cm.config.Upstream...)
 
@@ -362,6 +363,11 @@ func (cm *ConfigManager) UpdateUpstream(index int, updates UpstreamUpdate) (shou
 		}
 		upstream.Tags = cleaned
 	}
+
+	// AutoManaged 渠道不再接受显式模型/推理映射与手工兼容开关：无论本次更新是否
+	// 直接改动这些字段，只要渠道当前是 AutoManaged 状态就统一清理，避免陈旧配置
+	// 通过其他字段的更新请求被间接保留下来。
+	stripAutoManagedExplicitOverrides(upstream)
 
 	// 检测配置是否真的发生了变化
 	if !cm.hasConfigChanged(originalConfig, cm.config) {
@@ -780,6 +786,13 @@ func (cm *ConfigManager) UpdateModelMapping(index int, sourcePattern, targetMode
 	}
 
 	upstream := &cm.config.Upstream[index]
+
+	// AutoManaged 渠道的模型选择完全由 Autopilot ModelResolver 决策，不再接受手工
+	// 显式映射；即使渠道当前残留旧映射，也拒绝写入新值，避免运行时忽略的状态被
+	// 误认为生效配置。
+	if upstream.AutoManaged {
+		return fmt.Errorf("渠道 [%d] %s 为自动托管渠道，模型映射由 Autopilot 自动解析，不支持手工编辑", index, upstream.Name)
+	}
 
 	// 检查 sourcePattern 是否存在
 	if upstream.ModelMapping == nil {

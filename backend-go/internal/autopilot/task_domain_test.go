@@ -76,7 +76,8 @@ func TestDomainStrength_SeedMatrixFallback(t *testing.T) {
 		{"gemini reasoning", ModelFamilyGemini, "gemini-2.5-pro", TaskDomainReasoning, 0.80},
 
 		// ── 国产 ──
-		{"deepseek v4 reasoning", ModelFamilyDeepSeek, "deepseek-v4-pro", TaskDomainReasoning, 0.85},
+		// deepseek-v4-pro 现已命中 canonical benchmark，种子回退用未收录 benchmark 的 v4 变体覆盖。
+		{"deepseek v4 reasoning", ModelFamilyDeepSeek, "deepseek-v4", TaskDomainReasoning, 0.85},
 		{"deepseek v4 coding", ModelFamilyDeepSeek, "deepseek-v4", TaskDomainCoding, 0.80},
 		{"deepseek v4 aesthetics", ModelFamilyDeepSeek, "deepseek-v4", TaskDomainAestheticsUI, 0.55},
 		{"deepseek v3 coding", ModelFamilyDeepSeek, "deepseek-v3", TaskDomainCoding, 0.75},

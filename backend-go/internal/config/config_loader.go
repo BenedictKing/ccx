@@ -121,6 +121,9 @@ func (cm *ConfigManager) loadConfig() error {
 	if cm.migrateDeprecatedGrokModelMapping() {
 		needSaveDefaults = true
 	}
+	if cm.migrateAutoManagedExplicitMappings() {
+		needSaveDefaults = true
+	}
 	if cm.ensureChannelUIDs() {
 		needSaveDefaults = true
 	}
@@ -671,6 +674,26 @@ func (cm *ConfigManager) migrateDeprecatedGrokModelMapping() bool {
 				updated = true
 				log.Printf("[Config-Migration] %s 渠道 [%d] %s 已清除过时的 grok modelMapping", channelName, i, channels[i].Name)
 			}
+		}
+	}
+	apply(cm.config.Upstream, "Messages")
+	apply(cm.config.ResponsesUpstream, "Responses")
+	apply(cm.config.GeminiUpstream, "Gemini")
+	apply(cm.config.ChatUpstream, "Chat")
+	apply(cm.config.ImagesUpstream, "Images")
+	apply(cm.config.VectorsUpstream, "Vectors")
+	return updated
+}
+
+func (cm *ConfigManager) migrateAutoManagedExplicitMappings() bool {
+	updated := false
+	apply := func(channels []UpstreamConfig, channelName string) {
+		for i := range channels {
+			if !stripAutoManagedExplicitOverrides(&channels[i]) {
+				continue
+			}
+			updated = true
+			log.Printf("[Config-Migration] %s 渠道 [%d] %s 已清理 AutoManaged 显式映射与手工兼容字段", channelName, i, channels[i].Name)
 		}
 	}
 	apply(cm.config.Upstream, "Messages")

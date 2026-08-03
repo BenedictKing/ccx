@@ -53,6 +53,65 @@ func glmPreviewProfile() ModelProfile {
 	}
 }
 
+func TestBuildPlanAutoManagedIgnoresStaleExplicitMapping(t *testing.T) {
+	cfg := modelPreviewConfig("shadow")
+	cfg.Upstream[0].SupportedModels = nil
+	cfg.Upstream[0].ModelMapping = map[string]string{"claude-sonnet-5": "legacy-manual-target"}
+	cfg.Upstream[0].ReasoningMapping = map[string]string{"claude-sonnet-5": "high"}
+	cfgManager, cleanup := createTestConfigManager(t, cfg)
+	defer cleanup()
+	store := newModelPreviewStore(t, glmPreviewProfile())
+	resolver := NewModelResolver(store, cfgManager)
+	router := NewSmartRouter(nil, nil, nil, cfgManager)
+	router.SetModelResolver(resolver)
+
+	profile := BuildRequestProfile(RequestProfileFeatures{
+		Model: "claude-sonnet-5", ChannelKind: "messages", Operation: "completion",
+		EstTokens: 20_000, ToolUseNeed: true, ReasoningNeed: true,
+	})
+	plan := router.BuildPlan(&profile)
+	if len(plan.Candidates) != 1 {
+		t.Fatalf("candidate count = %d, want 1: %+v", len(plan.Candidates), plan.Candidates)
+	}
+	candidate := plan.Candidates[0]
+	if candidate.MappedModel != "glm-5.2" || candidate.MappingSource != "auto_resolve_preview" {
+		t.Fatalf("candidate mapping = %+v, want auto-resolved glm-5.2", candidate)
+	}
+	if candidate.MappedModel == "legacy-manual-target" {
+		t.Fatalf("stale explicit mapping should not win for auto-managed channel: %+v", candidate)
+	}
+	if plan.SelectedModel != "glm-5.2" {
+		t.Fatalf("selected model = %q, want glm-5.2", plan.SelectedModel)
+	}
+}
+
+func TestBuildPlanPremiumBenchmarkTieBreak(t *testing.T) {
+	cfg := config.Config{
+		Upstream: []config.UpstreamConfig{
+			{Name: "gpt54-channel", ChannelUID: "ch_gpt54", BaseURL: "https://example.com", APIKeys: []string{"sk-54"}, Status: "active"},
+			{Name: "gpt56sol-channel", ChannelUID: "ch_gpt56sol", BaseURL: "https://example.com", APIKeys: []string{"sk-56"}, Status: "active"},
+		},
+		AutopilotRouting: config.AutopilotRoutingConfig{RoutingMode: "shadow"},
+	}
+	cfgManager, cleanup := createTestConfigManager(t, cfg)
+	defer cleanup()
+	router := NewSmartRouter(nil, nil, nil, cfgManager)
+
+	profile := BuildRequestProfile(RequestProfileFeatures{Model: "claude-fable-5", ChannelKind: "messages", Operation: "completion", EstTokens: 20_000})
+	entries := []channelScoreEntry{
+		router.buildChannelEntry(scheduler.ChannelInfo{Index: 0, Name: "gpt54-channel"}, &cfg.Upstream[0], "messages", "gpt-5.4", nil),
+		router.buildChannelEntry(scheduler.ChannelInfo{Index: 1, Name: "gpt56sol-channel"}, &cfg.Upstream[1], "messages", "gpt-5.6-sol", nil),
+	}
+	ctx := ScoringContext{TaskClass: profile.TaskClass, TaskDomain: profile.TaskDomain, TargetQualityTier: requestQualityTarget(&profile), QualityBenefitCap: requestQualityBenefitCap(&profile), Weights: DefaultTaskWeights()[profile.TaskClass]}
+	applyDomainStrength(&entries[0], ctx.TaskDomain)
+	applyDomainStrength(&entries[1], ctx.TaskDomain)
+	scored54 := ScoreCandidate(entries[0].ScoringCandidate, ctx)
+	scored56 := ScoreCandidate(entries[1].ScoringCandidate, ctx)
+	if scored56.Score <= scored54.Score {
+		t.Fatalf("premium benchmark tie-break should prefer gpt-5.6-sol over gpt-5.4: sol=%f 54=%f", scored56.Score, scored54.Score)
+	}
+}
+
 func TestBuildPlanPreviewsAutoResolvedModel(t *testing.T) {
 	cfgManager, cleanup := createTestConfigManager(t, modelPreviewConfig("shadow"))
 	defer cleanup()
