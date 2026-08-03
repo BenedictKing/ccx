@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"time"
 
+	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/presetstore"
 )
 
@@ -286,4 +287,51 @@ type KeyEndpointProfile struct {
 	// ── 元数据 ──
 	Source     string  `json:"source"`     // l1_passive | l2_probe | capability_test | manual
 	Confidence float64 `json:"confidence"` // 画像整体置信度
+}
+
+// ── USD 汇率解析（§Task #8 骨架，smart_router 在 Task #11 接入）──
+
+// EffectiveCostInput 描述一次成本换算所需的最小输入。
+// graph 必须通过 config.NewExchangeRateGraph 构造；PaymentUnit/CreditUnit 为空时视为 USD。
+type EffectiveCostInput struct {
+	Graph       *config.ExchangeRateGraph
+	PaymentUnit string
+	CreditUnit  string
+}
+
+// EffectiveCostResult 是 ResolveExchangeTerms 的输出。
+// OK=false 时 Reason 描述失败原因，数值字段保持零值。
+type EffectiveCostResult struct {
+	OK             bool
+	Reason         string
+	Version        uint64
+	PaymentUSDPrice float64 // 1 PaymentUnit 等于多少 USD
+	CreditUSDPrice  float64 // 1 CreditUnit 等于多少 USD
+	ExchangeFactor  float64 // PaymentUnit / CreditUnit 兑换比率（>0 即表示存在有效换算）
+}
+
+// ResolveExchangeTerms 读取 graph 的 USD 单价快照并计算 Payment/Credit 之间的兑换因子。
+// 骨架实现：仅产出有效成本因子的中间数据，不参与真实调度。
+func ResolveExchangeTerms(in EffectiveCostInput) EffectiveCostResult {
+	if in.Graph == nil {
+		return EffectiveCostResult{Reason: "missing exchange rate graph"}
+	}
+	payment, paymentOK, version := in.Graph.ResolveUSDPrice(in.PaymentUnit)
+	credit, creditOK, creditVersion := in.Graph.ResolveUSDPrice(in.CreditUnit)
+	if version != creditVersion {
+		return EffectiveCostResult{Reason: "exchange rate version mismatch", Version: version}
+	}
+	if !paymentOK || !creditOK {
+		return EffectiveCostResult{Reason: "exchange rate unit not in graph", Version: version}
+	}
+	if credit <= 0 {
+		return EffectiveCostResult{Reason: "credit unit price must be positive", Version: version}
+	}
+	return EffectiveCostResult{
+		OK:              true,
+		Version:         version,
+		PaymentUSDPrice: payment,
+		CreditUSDPrice:  credit,
+		ExchangeFactor:  payment / credit,
+	}
 }

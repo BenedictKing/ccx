@@ -596,15 +596,24 @@ func normalizeAPIKeyConfigs(apiKeys []string, configs []APIKeyConfig) []APIKeyCo
 	byKey := make(map[string]APIKeyConfig, len(configs))
 	uidOnly := make([]APIKeyConfig, 0)
 	uidOnlySeen := make(map[string]bool)
+	keyUIDOnly := make([]APIKeyConfig, 0)
+	keyUIDOnlySeen := make(map[string]bool)
 	for _, cfg := range configs {
 		key := strings.TrimSpace(cfg.Key)
 		cfg.Name = strings.TrimSpace(cfg.Name)
 		cfg.QuotaGroup = strings.TrimSpace(cfg.QuotaGroup)
+		cfg.KeyUID = strings.TrimSpace(cfg.KeyUID)
+		cfg.CredentialUID = strings.TrimSpace(cfg.CredentialUID)
 		if key == "" {
-			if cfg.CredentialUID != "" && !uidOnlySeen[cfg.CredentialUID] {
+			switch {
+			case cfg.CredentialUID != "" && !uidOnlySeen[cfg.CredentialUID]:
 				cfg.Key = ""
 				uidOnly = append(uidOnly, cfg)
 				uidOnlySeen[cfg.CredentialUID] = true
+			case cfg.KeyUID != "" && !keyUIDOnlySeen[cfg.KeyUID]:
+				cfg.Key = ""
+				keyUIDOnly = append(keyUIDOnly, cfg)
+				keyUIDOnlySeen[cfg.KeyUID] = true
 			}
 			continue
 		}
@@ -612,13 +621,17 @@ func normalizeAPIKeyConfigs(apiKeys []string, configs []APIKeyConfig) []APIKeyCo
 		byKey[key] = cfg
 	}
 
-	normalized := make([]APIKeyConfig, 0, len(keys)+len(uidOnly))
+	normalized := make([]APIKeyConfig, 0, len(keys)+len(uidOnly)+len(keyUIDOnly))
 	boundUIDs := make(map[string]bool, len(configs))
+	boundKeyUIDs := make(map[string]bool, len(configs))
 	for _, key := range keys {
 		if cfg, ok := byKey[key]; ok {
 			normalized = append(normalized, cfg)
 			if cfg.CredentialUID != "" {
 				boundUIDs[cfg.CredentialUID] = true
+			}
+			if cfg.KeyUID != "" {
+				boundKeyUIDs[cfg.KeyUID] = true
 			}
 		} else {
 			normalized = append(normalized, APIKeyConfig{Key: key})
@@ -631,15 +644,73 @@ func normalizeAPIKeyConfigs(apiKeys []string, configs []APIKeyConfig) []APIKeyCo
 		if cfg.CredentialUID != "" {
 			boundUIDs[cfg.CredentialUID] = true
 		}
+		if cfg.KeyUID != "" {
+			boundKeyUIDs[cfg.KeyUID] = true
+		}
 	}
-	// 托管渠道持久化时会剥离明文 Key，仅留下 CredentialUID。运行时混入新 Key 后仍须
+	// 托管渠道持久化时会剥离明文 Key，仅留下 CredentialUID/KeyUID。运行时混入新 Key 后仍须
 	// 保留这些 legacy 绑定，后续补水/同步才能找回账号凭证池中的旧凭证。
 	for _, cfg := range uidOnly {
 		if !boundUIDs[cfg.CredentialUID] {
 			normalized = append(normalized, cfg)
 		}
 	}
+	for _, cfg := range keyUIDOnly {
+		if !boundKeyUIDs[cfg.KeyUID] {
+			normalized = append(normalized, cfg)
+		}
+	}
 	return normalized
+}
+
+func mergeAndNormalizeAPIKeyConfigs(apiKeys []string, existing []APIKeyConfig, incoming []APIKeyConfig) []APIKeyConfig {
+	merged := make([]APIKeyConfig, 0, len(incoming))
+	for _, next := range incoming {
+		merged = append(merged, mergeAPIKeyConfig(findExistingAPIKeyConfig(existing, next), next))
+	}
+	return normalizeAPIKeyConfigs(apiKeys, merged)
+}
+
+func findExistingAPIKeyConfig(existing []APIKeyConfig, incoming APIKeyConfig) *APIKeyConfig {
+	incomingKeyUID := strings.TrimSpace(incoming.KeyUID)
+	incomingCredentialUID := strings.TrimSpace(incoming.CredentialUID)
+	incomingKey := strings.TrimSpace(incoming.Key)
+	for i := range existing {
+		candidate := &existing[i]
+		if incomingKeyUID != "" && strings.TrimSpace(candidate.KeyUID) == incomingKeyUID {
+			return candidate
+		}
+	}
+	for i := range existing {
+		candidate := &existing[i]
+		if incomingCredentialUID != "" && strings.TrimSpace(candidate.CredentialUID) == incomingCredentialUID {
+			return candidate
+		}
+	}
+	for i := range existing {
+		candidate := &existing[i]
+		if incomingKey != "" && strings.TrimSpace(candidate.Key) == incomingKey {
+			return candidate
+		}
+	}
+	return nil
+}
+
+func mergeAPIKeyConfig(existing *APIKeyConfig, incoming APIKeyConfig) APIKeyConfig {
+	if existing == nil {
+		return incoming
+	}
+	merged := incoming
+	if strings.TrimSpace(merged.KeyUID) == "" {
+		merged.KeyUID = existing.KeyUID
+	}
+	if strings.TrimSpace(merged.CredentialUID) == "" {
+		merged.CredentialUID = existing.CredentialUID
+	}
+	if strings.TrimSpace(merged.Key) == "" {
+		merged.Key = existing.Key
+	}
+	return merged
 }
 
 // NormalizeAPIKeyConfigsForView 按 apiKeys 顺序返回规范化后的 Key 附加配置。
@@ -660,7 +731,8 @@ func IsAPIKeyConfigEffective(cfg APIKeyConfig) bool {
 	if cfg.Enabled != nil {
 		return true
 	}
-	if strings.TrimSpace(cfg.Name) != "" || strings.TrimSpace(cfg.QuotaGroup) != "" {
+	if strings.TrimSpace(cfg.Name) != "" || strings.TrimSpace(cfg.QuotaGroup) != "" ||
+		strings.TrimSpace(cfg.KeyUID) != "" || strings.TrimSpace(cfg.CredentialUID) != "" {
 		return true
 	}
 	if cfg.GroupMultiplier != nil || cfg.MaxGroupMultiplier != nil ||

@@ -232,6 +232,38 @@ func TestCandidatesForModel_FiltersKeysAboveGroupMultiplierLimit(t *testing.T) {
 	}
 }
 
+func TestCandidatesForModel_FiltersConflictingStableIdentity(t *testing.T) {
+	up := &config.UpstreamConfig{
+		APIKeys: []string{"shared", "safe"},
+		APIKeyConfigs: []config.APIKeyConfig{
+			{Key: "shared", KeyUID: "kid-1", CredentialUID: "cred-1"},
+			{Key: "shared", KeyUID: "kid-2", CredentialUID: "cred-2"},
+			{Key: "safe", KeyUID: "kid-safe", CredentialUID: "cred-safe"},
+		},
+	}
+
+	cands := CandidatesForModel(up, nil, "")
+	if len(cands) != 1 || cands[0].APIKey != "safe" {
+		t.Fatalf("expected conflicting shared key to be filtered, got %+v", cands)
+	}
+}
+
+func TestCandidatesForModel_FiltersConflictingNewAPIOwnership(t *testing.T) {
+	one := 1.0
+	future := time.Now().Add(time.Hour)
+	up := &config.UpstreamConfig{
+		APIKeys: []string{"shared"},
+		APIKeyConfigs: []config.APIKeyConfig{
+			{Key: "shared", GroupMultiplier: &one, MaxGroupMultiplier: &one, MultiplierSource: "new_api", MultiplierSyncStatus: "fresh", MultiplierExpiresAt: &future, SourceSubscriptionUID: "sub-1", SourceRemoteTokenID: 1},
+			{Key: "shared", GroupMultiplier: &one, MaxGroupMultiplier: &one, MultiplierSource: "new_api", MultiplierSyncStatus: "fresh", MultiplierExpiresAt: &future, SourceSubscriptionUID: "sub-2", SourceRemoteTokenID: 2},
+		},
+	}
+
+	if cands := CandidatesForModel(up, nil, ""); len(cands) != 0 {
+		t.Fatalf("expected conflicting new-api ownership to be filtered, got %+v", cands)
+	}
+}
+
 // TestCandidatesForModelFiltered_ModelCircuit 验证渠道-模型级熔断只剔除受影响的
 // (Key, 模型) 组合，同 Key 的其他模型与未熔断的 Key 都不受影响。
 func TestCandidatesForModelFiltered_ModelCircuit(t *testing.T) {

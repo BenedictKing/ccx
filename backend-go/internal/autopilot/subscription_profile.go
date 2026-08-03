@@ -253,7 +253,10 @@ func (s *SubscriptionStore) Create(profile *SubscriptionProfile) error {
 		return fmt.Errorf("[SubscriptionStore-Create] subscription_uid 不能为空")
 	}
 	now := time.Now()
-	next := cloneSubscriptionProfile(profile)
+	next, err := cloneSubscriptionProfile(profile)
+	if err != nil {
+		return fmt.Errorf("[SubscriptionStore-Create] 克隆订阅画像失败: %w", err)
+	}
 	next.CreatedAt, next.UpdatedAt = now, now
 	if next.Version == 0 {
 		next.Version = 1
@@ -267,15 +270,24 @@ func (s *SubscriptionStore) Create(profile *SubscriptionProfile) error {
 		return err
 	}
 	s.cache[next.SubscriptionUID] = next
-	*profile = *cloneSubscriptionProfile(next)
+	cloned, cloneErr := cloneSubscriptionProfile(next)
+	if cloneErr != nil {
+		return fmt.Errorf("[SubscriptionStore-Create] 克隆新画像失败: %w", cloneErr)
+	}
+	*profile = *cloned
 	return nil
 }
 
-// Get 按 subscriptionUID 从内存缓存获取画像。不存在返回 nil。
+// Get 按 subscriptionUID 从内存缓存获取画像。不存在或克隆失败返回 nil。
 func (s *SubscriptionStore) Get(subscriptionUID string) *SubscriptionProfile {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return cloneSubscriptionProfile(s.cache[subscriptionUID])
+	cloned, err := cloneSubscriptionProfile(s.cache[subscriptionUID])
+	if err != nil {
+		log.Printf("[SubscriptionStore-Get] 克隆画像失败 uid=%s: %v", subscriptionUID, err)
+		return nil
+	}
+	return cloned
 }
 
 // Update 兼容整对象更新；新代码应使用 Patch 避免 last-writer-wins。
@@ -285,7 +297,11 @@ func (s *SubscriptionStore) Update(profile *SubscriptionProfile) error {
 	}
 	return s.Patch(profile.SubscriptionUID, nil, func(current *SubscriptionProfile) error {
 		createdAt, version := current.CreatedAt, current.Version
-		*current = *cloneSubscriptionProfile(profile)
+		cloned, err := cloneSubscriptionProfile(profile)
+		if err != nil {
+			return fmt.Errorf("[SubscriptionStore-Update] 克隆订阅画像失败: %w", err)
+		}
+		*current = *cloned
 		current.CreatedAt, current.Version = createdAt, version
 		return nil
 	})
@@ -305,7 +321,10 @@ func (s *SubscriptionStore) Patch(subscriptionUID string, expectedVersion *uint6
 	if expectedVersion != nil && existing.Version != *expectedVersion {
 		return fmt.Errorf("[SubscriptionStore-Patch] version 冲突: current=%d expected=%d", existing.Version, *expectedVersion)
 	}
-	next := cloneSubscriptionProfile(existing)
+	next, err := cloneSubscriptionProfile(existing)
+	if err != nil {
+		return fmt.Errorf("[SubscriptionStore-Patch] 克隆当前画像失败: %w", err)
+	}
 	if err := mutate(next); err != nil {
 		return err
 	}
@@ -336,8 +355,13 @@ func (s *SubscriptionStore) ListAll() []*SubscriptionProfile {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	result := make([]*SubscriptionProfile, 0, len(s.cache))
-	for _, profile := range s.cache {
-		result = append(result, cloneSubscriptionProfile(profile))
+	for uid, profile := range s.cache {
+		cloned, err := cloneSubscriptionProfile(profile)
+		if err != nil {
+			log.Printf("[SubscriptionStore-ListAll] 克隆画像失败 uid=%s: %v", uid, err)
+			continue
+		}
+		result = append(result, cloned)
 	}
 	return result
 }
@@ -399,19 +423,19 @@ func (s *SubscriptionStore) RemoveAccount(subscriptionUID, accountUID string) er
 	})
 }
 
-func cloneSubscriptionProfile(profile *SubscriptionProfile) *SubscriptionProfile {
+func cloneSubscriptionProfile(profile *SubscriptionProfile) (*SubscriptionProfile, error) {
 	if profile == nil {
-		return nil
+		return nil, nil
 	}
 	data, err := json.Marshal(profile)
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("marshal subscription profile: %w", err)
 	}
 	var cloned SubscriptionProfile
 	if err := json.Unmarshal(data, &cloned); err != nil {
-		return nil
+		return nil, fmt.Errorf("unmarshal subscription profile: %w", err)
 	}
-	return &cloned
+	return &cloned, nil
 }
 
 // persist 将单条订阅画像写入 SQLite（upsert）。

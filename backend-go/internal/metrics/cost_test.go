@@ -42,7 +42,8 @@ func TestPricingCoversTokenUsage(t *testing.T) {
 }
 
 func TestCalculateTokenCostUSD_CNYConversion(t *testing.T) {
-	// 直接验证 CNY 单位换算：1M input @ 2 CNY + 1M output @ 8 CNY = 10 CNY ≈ 1.3889 USD
+	// 直接验证 CNY 单位换算：1M input @ 2 CNY + 1M output @ 8 CNY = 10 CNY
+	// cnyToUSD = 1/6.8 → 10 CNY ≈ 1.4706 USD
 	pricing := &config.ModelPricing{
 		Unit:                "per_1m_tokens_cny",
 		Currency:            "CNY",
@@ -50,9 +51,12 @@ func TestCalculateTokenCostUSD_CNYConversion(t *testing.T) {
 		OutputPrice:         floatPtr(8),
 	}
 	cost := calcCostWithPricing(pricing, 1_000_000, 1_000_000, 0, 0)
-	// 10 CNY * (1/6.8) ≈ 1.4706 USD
-	if math.Abs(cost-(10.0*cnyToUSD)) > 0.0001 {
+	if math.Abs(cost-10.0*cnyToUSD) > 0.0001 {
 		t.Fatalf("expected %.4f USD, got %v", 10.0*cnyToUSD, cost)
+	}
+	// 显式锚定：7 CNY 必须等于 1 USD
+	if math.Abs(7.0*cnyToUSD-1.0) > 0.05 {
+		t.Fatalf("cnyToUSD=%v must map 7 CNY to 1 USD", cnyToUSD)
 	}
 }
 

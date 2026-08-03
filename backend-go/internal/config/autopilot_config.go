@@ -247,22 +247,23 @@ type ModelMappingRoutingConfig struct {
 
 // CostOptimizationConfig 成本优化配置。
 type CostOptimizationConfig struct {
-	Enabled                  bool    `json:"enabled,omitempty"`
-	ApplyAfterQualityFloor   bool    `json:"applyAfterQualityFloor,omitempty"`
-	RequireCostConfidence    float64 `json:"requireCostConfidence,omitempty"`
-	IncludeCachePricing      bool    `json:"includeCachePricing,omitempty"`
-	IncludeImageUnitPricing  bool    `json:"includeImageUnitPricing,omitempty"`
-	IncludeEmbeddingPricing  bool    `json:"includeEmbeddingPricing,omitempty"`
-	Currency                 string  `json:"currency,omitempty"`
-	ExchangeRateSource       string  `json:"exchangeRateSource,omitempty"`
-	PreferLowerEffectiveCost bool    `json:"preferLowerEffectiveCost,omitempty"`
-	SupervisorSavingsWeight  float64 `json:"supervisorSavingsWeight,omitempty"`
-	WorkerSavingsWeight      float64 `json:"workerSavingsWeight,omitempty"`
+	Enabled                       bool    `json:"enabled,omitempty"`
+	ApplyAfterQualityFloor        bool    `json:"applyAfterQualityFloor,omitempty"`
+	RequireCostConfidence         float64 `json:"requireCostConfidence,omitempty"`
+	IncludeCachePricing           bool    `json:"includeCachePricing,omitempty"`
+	IncludeImageUnitPricing       bool    `json:"includeImageUnitPricing,omitempty"`
+	IncludeEmbeddingPricing       bool    `json:"includeEmbeddingPricing,omitempty"`
+	Currency                      string  `json:"currency,omitempty"`
+	ExchangeRateSource            string  `json:"exchangeRateSource,omitempty"`
+	PreferLowerEffectiveCost      bool    `json:"preferLowerEffectiveCost,omitempty"`
+	SupervisorSavingsWeight       float64 `json:"supervisorSavingsWeight,omitempty"`
+	WorkerSavingsWeight           float64 `json:"workerSavingsWeight,omitempty"`
 	// ProviderTimePricing 描述官方 provider 的按时段计价规则，key 为 providerId。
 	// effectiveFrom 为空或尚未到达时不加价；基础模型价格始终保留在模型注册表中。
-	ProviderTimePricing  map[string]ProviderTimePricingConfig `json:"providerTimePricing,omitempty"`
-	ExchangeRateQuotes   []ExchangeRateQuote                  `json:"exchangeRateQuotes,omitempty"`
-	ExchangeRateSnapshot *ExchangeRateSnapshot                `json:"exchangeRateSnapshot,omitempty"`
+	ProviderTimePricing           map[string]ProviderTimePricingConfig `json:"providerTimePricing,omitempty"`
+	ExchangeRateQuotes            []ExchangeRateQuote                  `json:"exchangeRateQuotes,omitempty"`
+	ExchangeRateQuotesConfigured  bool                                 `json:"-"`
+	ExchangeRateSnapshot          *ExchangeRateSnapshot                `json:"exchangeRateSnapshot,omitempty"`
 }
 
 // ExchangeRateQuote 描述人工汇率报价：SourceAmount SourceUnit = TargetAmount TargetUnit。
@@ -654,7 +655,7 @@ func (c *AutopilotRoutingConfig) Validate() {
 
 	// 3. 成本偏好校验
 	c.CostPreference.validate()
-	if c.CostOptimization.ExchangeRateQuotes == nil {
+	if !c.CostOptimization.ExchangeRateQuotesConfigured && c.CostOptimization.ExchangeRateQuotes == nil {
 		c.CostOptimization.ExchangeRateQuotes = defaultExchangeRateQuotes()
 	}
 	c.CostOptimization.validateProviderTimePricing()

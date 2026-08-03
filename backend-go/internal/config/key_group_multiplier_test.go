@@ -3,51 +3,76 @@ package config
 import (
 	"math"
 	"testing"
+	"time"
 )
 
-func TestIsAPIKeyConfigGroupMultiplierAllowed(t *testing.T) {
-	one, two := 1.0, 2.0
+func TestEvaluateAPIKeyMultiplierEligibility(t *testing.T) {
+	now := time.Date(2026, 8, 4, 12, 0, 0, 0, time.UTC)
+	one := 1.0
+	two := 2.0
+	future := now.Add(time.Hour)
+	past := now.Add(-time.Hour)
+
 	tests := []struct {
-		name string
-		cfg  APIKeyConfig
-		want bool
+		name   string
+		cfg    APIKeyConfig
+		want   MultiplierEligibility
 	}{
-		{name: "legacy config", cfg: APIKeyConfig{}, want: true},
-		{name: "at limit", cfg: APIKeyConfig{GroupMultiplier: &one, MaxGroupMultiplier: &one}, want: true},
-		{name: "above limit", cfg: APIKeyConfig{GroupMultiplier: &two, MaxGroupMultiplier: &one}, want: false},
-		{name: "incomplete metadata", cfg: APIKeyConfig{GroupMultiplier: &one}, want: false},
-		{name: "invalid metadata", cfg: APIKeyConfig{GroupMultiplier: &one, MaxGroupMultiplier: ptrFloat64(math.NaN())}, want: false},
+		{name: "legacy config", cfg: APIKeyConfig{}, want: MultiplierEligibility{Eligible: true, Reason: MultiplierEligibilityReasonOK}},
+		{name: "missing multiplier", cfg: APIKeyConfig{MaxGroupMultiplier: &one}, want: MultiplierEligibility{Reason: MultiplierEligibilityReasonInvalidMultiplier}},
+		{name: "missing max", cfg: APIKeyConfig{GroupMultiplier: &one}, want: MultiplierEligibility{Reason: MultiplierEligibilityReasonInvalidMaxMultiplier}},
+		{name: "nan multiplier", cfg: APIKeyConfig{GroupMultiplier: ptrFloat64(math.NaN()), MaxGroupMultiplier: &one}, want: MultiplierEligibility{Reason: MultiplierEligibilityReasonInvalidMultiplier}},
+		{name: "nan max", cfg: APIKeyConfig{GroupMultiplier: &one, MaxGroupMultiplier: ptrFloat64(math.NaN())}, want: MultiplierEligibility{Reason: MultiplierEligibilityReasonInvalidMaxMultiplier}},
+		{name: "negative max", cfg: APIKeyConfig{GroupMultiplier: &one, MaxGroupMultiplier: ptrFloat64(-1)}, want: MultiplierEligibility{Reason: MultiplierEligibilityReasonInvalidMaxMultiplier}},
+		{name: "manual source", cfg: APIKeyConfig{GroupMultiplier: &one, MaxGroupMultiplier: &two, MultiplierSource: "manual"}, want: MultiplierEligibility{Eligible: true, Reason: MultiplierEligibilityReasonOK}},
+		{name: "provider source", cfg: APIKeyConfig{GroupMultiplier: &one, MaxGroupMultiplier: &two, MultiplierSource: "provider", MultiplierExpiresAt: &past}, want: MultiplierEligibility{Eligible: true, Reason: MultiplierEligibilityReasonOK}},
+		{name: "over group limit", cfg: APIKeyConfig{GroupMultiplier: &two, MaxGroupMultiplier: &one, MultiplierSource: "manual"}, want: MultiplierEligibility{Reason: MultiplierEligibilityReasonOverGroupLimit}},
+		{name: "fresh new api", cfg: APIKeyConfig{GroupMultiplier: &one, MaxGroupMultiplier: &two, MultiplierSource: "new_api", MultiplierSyncStatus: "fresh", SourceSubscriptionUID: "sub", SourceRemoteTokenID: 1, MultiplierExpiresAt: &future}, want: MultiplierEligibility{Eligible: true, Reason: MultiplierEligibilityReasonOK, Status: "fresh"}},
+		{name: "stale new api", cfg: APIKeyConfig{GroupMultiplier: &one, MaxGroupMultiplier: &two, MultiplierSource: "new_api", MultiplierSyncStatus: "stale", SourceSubscriptionUID: "sub", SourceRemoteTokenID: 1, MultiplierExpiresAt: &future}, want: MultiplierEligibility{Reason: MultiplierEligibilityReasonMultiplierStale, Status: "stale"}},
+		{name: "expired fresh new api", cfg: APIKeyConfig{GroupMultiplier: &one, MaxGroupMultiplier: &two, MultiplierSource: "new_api", MultiplierSyncStatus: "fresh", SourceSubscriptionUID: "sub", SourceRemoteTokenID: 1, MultiplierExpiresAt: &past}, want: MultiplierEligibility{Reason: MultiplierEligibilityReasonMultiplierStale, Status: "fresh"}},
+		{name: "missing ownership new api", cfg: APIKeyConfig{GroupMultiplier: &one, MaxGroupMultiplier: &two, MultiplierSource: "new_api", MultiplierSyncStatus: "fresh", SourceRemoteTokenID: 1, MultiplierExpiresAt: &future}, want: MultiplierEligibility{Reason: MultiplierEligibilityReasonRelinkRequired, Status: "fresh"}},
+		{name: "sync error new api", cfg: APIKeyConfig{GroupMultiplier: &one, MaxGroupMultiplier: &two, MultiplierSource: "new_api", MultiplierSyncStatus: "sync_error", SourceSubscriptionUID: "sub", SourceRemoteTokenID: 1}, want: MultiplierEligibility{Reason: MultiplierEligibilityReasonSyncError, Status: "sync_error"}},
+		{name: "relink new api", cfg: APIKeyConfig{GroupMultiplier: &one, MaxGroupMultiplier: &two, MultiplierSource: "new_api", MultiplierSyncStatus: "relink_required", SourceSubscriptionUID: "sub", SourceRemoteTokenID: 1}, want: MultiplierEligibility{Reason: MultiplierEligibilityReasonRelinkRequired, Status: "relink_required"}},
+		{name: "unknown source", cfg: APIKeyConfig{GroupMultiplier: &one, MaxGroupMultiplier: &two, MultiplierSource: "mystery"}, want: MultiplierEligibility{Reason: MultiplierEligibilityReasonUnknownSource}},
 	}
+
 	for _, tt := range tests {
-		if got := IsAPIKeyConfigGroupMultiplierAllowed(tt.cfg); got != tt.want {
-			t.Errorf("%s: got %v, want %v", tt.name, got, tt.want)
-		}
+		t.Run(tt.name, func(t *testing.T) {
+			got := EvaluateAPIKeyMultiplierEligibility(tt.cfg, now)
+			if got.Eligible != tt.want.Eligible || got.Reason != tt.want.Reason || got.Status != tt.want.Status {
+				t.Fatalf("got %+v, want %+v", got, tt.want)
+			}
+		})
 	}
 }
 
-func TestGetNextAPIKeySkipsKeysAboveGroupMultiplierLimit(t *testing.T) {
+func TestGetNextAPIKeySkipsKeysByUnifiedMultiplierEligibility(t *testing.T) {
 	safeRatio, unsafeRatio, limit := 1.0, 2.0, 1.0
 	cm := &ConfigManager{}
+	future := time.Now().Add(time.Hour)
 	upstream := &UpstreamConfig{
 		Name:    "newapi",
-		APIKeys: []string{"unsafe", "safe"},
+		APIKeys: []string{"unsafe", "fresh", "legacy", "stale"},
 		APIKeyConfigs: []APIKeyConfig{
-			{Key: "unsafe", GroupMultiplier: &unsafeRatio, MaxGroupMultiplier: &limit},
-			{Key: "safe", GroupMultiplier: &safeRatio, MaxGroupMultiplier: &limit},
+			{Key: "unsafe", GroupMultiplier: &unsafeRatio, MaxGroupMultiplier: &limit, MultiplierSource: "manual"},
+			{Key: "fresh", GroupMultiplier: &safeRatio, MaxGroupMultiplier: &limit, MultiplierSource: "new_api", MultiplierSyncStatus: "fresh", SourceSubscriptionUID: "sub", SourceRemoteTokenID: 1, MultiplierExpiresAt: &future},
+			{Key: "legacy"},
+			{Key: "stale", GroupMultiplier: &safeRatio, MaxGroupMultiplier: &limit, MultiplierSource: "new_api", MultiplierSyncStatus: "stale", SourceSubscriptionUID: "sub", SourceRemoteTokenID: 2, MultiplierExpiresAt: &future},
 		},
 	}
 
 	key, err := cm.GetNextAPIKey(upstream, nil, "Responses")
-	if err != nil || key != "safe" {
-		t.Fatalf("GetNextAPIKey() = %q, %v; want safe key", key, err)
+	if err != nil || key != "fresh" {
+		t.Fatalf("GetNextAPIKey() = %q, %v; want fresh key", key, err)
 	}
 
-	if _, err := cm.GetNextAPIKey(upstream, map[string]bool{"safe": true}, "Responses"); err == nil {
-		t.Fatal("GetNextAPIKey() must not fall back to an over-limit key")
+	key, err = cm.GetNextAPIKey(upstream, map[string]bool{"fresh": true}, "Responses")
+	if err != nil || key != "legacy" {
+		t.Fatalf("GetNextAPIKey() = %q, %v; want legacy key", key, err)
 	}
 }
 
-func TestGetAdminAPIKeySkipsDisabledKeyAboveGroupMultiplierLimit(t *testing.T) {
+func TestGetAdminAPIKeySkipsDisabledKeyByUnifiedMultiplierEligibility(t *testing.T) {
 	unsafeRatio, limit := 2.0, 1.0
 	cm := &ConfigManager{}
 	upstream := &UpstreamConfig{
@@ -58,6 +83,7 @@ func TestGetAdminAPIKeySkipsDisabledKeyAboveGroupMultiplierLimit(t *testing.T) {
 				Key:                "unsafe",
 				GroupMultiplier:    &unsafeRatio,
 				MaxGroupMultiplier: &limit,
+				MultiplierSource:   "manual",
 			},
 		}},
 	}

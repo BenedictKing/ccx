@@ -377,6 +377,7 @@ func (cm *ConfigManager) applyAutopilotDefaults(rawJSON []byte) bool {
 					needSave = true
 					log.Printf("[Config-Migration] 警告: autopilot 旧配置升级失败，已回退到默认值: %v", err)
 				} else {
+					markAutopilotPresence(&upgraded, rawAutopilot)
 					upgraded.SchemaVersion = currentAutopilotConfigSchemaVersion
 					cm.config.AutopilotRouting = upgraded
 					needSave = true
@@ -396,6 +397,24 @@ func (cm *ConfigManager) applyAutopilotDefaults(rawJSON []byte) bool {
 	}
 
 	return needSave
+}
+
+func markAutopilotPresence(cfg *AutopilotRoutingConfig, rawAutopilot json.RawMessage) {
+	if cfg == nil {
+		return
+	}
+	var root map[string]json.RawMessage
+	if err := json.Unmarshal(rawAutopilot, &root); err != nil {
+		return
+	}
+	if rawQuotes, ok := root["costOptimization"]; ok {
+		var costFields map[string]json.RawMessage
+		if err := json.Unmarshal(rawQuotes, &costFields); err == nil {
+			if _, exists := costFields["exchangeRateQuotes"]; exists {
+				cfg.CostOptimization.ExchangeRateQuotesConfigured = true
+			}
+		}
+	}
 }
 
 // overlayJSONStruct 将 JSON 中显式存在的字段覆盖到已填充默认值的结构体。

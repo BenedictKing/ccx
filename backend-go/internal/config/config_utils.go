@@ -771,7 +771,7 @@ func applyModelCapabilityUpdates(upstream *UpstreamConfig, updates UpstreamUpdat
 // 六类渠道 Update 函数共用，避免新增字段时遗漏其中某一处。
 func applyAPIKeyConfigUpdate(upstream *UpstreamConfig, updates UpstreamUpdate) {
 	if updates.APIKeyConfigs != nil {
-		upstream.APIKeyConfigs = normalizeAPIKeyConfigs(upstream.APIKeys, updates.APIKeyConfigs)
+		upstream.APIKeyConfigs = mergeAndNormalizeAPIKeyConfigs(upstream.APIKeys, upstream.APIKeyConfigs, updates.APIKeyConfigs)
 	} else if updates.APIKeys != nil {
 		upstream.APIKeyConfigs = normalizeAPIKeyConfigs(upstream.APIKeys, upstream.APIKeyConfigs)
 	}

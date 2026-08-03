@@ -62,6 +62,7 @@ func CandidatesForModelFiltered(upstream *config.UpstreamConfig, failedKeys map[
 		return nil
 	}
 
+	conflictingIdentities := conflictingAPIKeyIdentities(upstream.APIKeyConfigs)
 	configs := config.NormalizeAPIKeyConfigsForView(*upstream)
 	byKey := make(map[string]config.APIKeyConfig, len(configs))
 	for _, cfg := range configs {
@@ -73,7 +74,7 @@ func CandidatesForModelFiltered(upstream *config.UpstreamConfig, failedKeys map[
 	out := make([]Candidate, 0, len(upstream.APIKeys))
 	for i, key := range upstream.APIKeys {
 		key = strings.TrimSpace(key)
-		if key == "" || failedKeys[key] {
+		if key == "" || failedKeys[key] || conflictingIdentities[key] {
 			continue
 		}
 		if upstream.IsKeyDisabledNow(key, now) {
@@ -131,6 +132,47 @@ func CandidatesForModelFiltered(upstream *config.UpstreamConfig, failedKeys map[
 	}
 
 	return out
+}
+
+// conflictingAPIKeyIdentities 标记同一明文 Key 绑定到不同稳定身份或 new-api ownership 的配置。
+// 这类歧义不能由 map 的最后写入者静默决定，候选构建时必须 fail-closed，等待重新关联。
+func conflictingAPIKeyIdentities(configs []config.APIKeyConfig) map[string]bool {
+	type identity struct {
+		keyUID          string
+		credentialUID   string
+		subscriptionUID string
+		remoteTokenID   int64
+	}
+	seen := make(map[string]identity, len(configs))
+	conflicts := make(map[string]bool)
+	for _, cfg := range configs {
+		key := strings.TrimSpace(cfg.Key)
+		if key == "" {
+			continue
+		}
+		current := identity{
+			keyUID:          strings.TrimSpace(cfg.KeyUID),
+			credentialUID:   strings.TrimSpace(cfg.CredentialUID),
+			subscriptionUID: strings.TrimSpace(cfg.SourceSubscriptionUID),
+			remoteTokenID:   cfg.SourceRemoteTokenID,
+		}
+		previous, ok := seen[key]
+		if !ok {
+			seen[key] = current
+			continue
+		}
+		if identitiesConflict(previous.keyUID, current.keyUID) ||
+			identitiesConflict(previous.credentialUID, current.credentialUID) ||
+			identitiesConflict(previous.subscriptionUID, current.subscriptionUID) ||
+			(previous.remoteTokenID > 0 && current.remoteTokenID > 0 && previous.remoteTokenID != current.remoteTokenID) {
+			conflicts[key] = true
+		}
+	}
+	return conflicts
+}
+
+func identitiesConflict(left, right string) bool {
+	return left != "" && right != "" && left != right
 }
 
 // matchesModel 检查 model 是否在允许列表中（支持通配符 *）。
