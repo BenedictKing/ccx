@@ -367,6 +367,10 @@ test('DeepSeek BenchLM variants fold into canonical flash and pro models', () =>
   assert.equal(BENCHLM_MODEL_MAP['deepseek-v4-pro-max'], 'deepseek-v4-pro')
 })
 
+test('DeepSeek CodexRadar flash model is mapped', () => {
+  assert.equal(DRADAR_MODEL_MAP['deepseek-v4-flash'], 'deepseek-v4-flash')
+})
+
 test('Artificial Analysis LLM extraction yields one evidence per composite index', () => {
   const models = [
     { slug: 'claude-opus-5', evaluations: {
