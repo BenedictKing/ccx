@@ -8,7 +8,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -103,6 +105,17 @@ func (r *AutoDiscoveryRunner) discoverEndpointProtocols(
 	if len(models) == 0 {
 		models = normalizeProtocolModels(channel.SupportedModels)
 	}
+	// /v1/models 空响应兜底：同一 baseURL + Key 的兄弟协议渠道画像里已知的清单
+	// 描述的是同一个上游端点，可直接作为本轮协议探测的候选模型。
+	usedSharedModels := false
+	if len(models) == 0 {
+		if shared := r.sharedUpstreamModels(channel, baseURL, apiKey); len(shared) > 0 {
+			models = shared
+			usedSharedModels = true
+			log.Printf("[ProtocolDiscovery-SharedModels] 渠道 %s: models 清单为空，复用同上游兄弟渠道的 %d 个模型作为探测候选",
+				channel.ChannelUID, len(shared))
+		}
+	}
 
 	configuredProtocol := protocolForServiceType(channel.ServiceType)
 	if len(models) == 0 {
@@ -117,10 +130,12 @@ func (r *AutoDiscoveryRunner) discoverEndpointProtocols(
 	tasks := make([]protocolProbeTask, 0, len(discoverableProtocols)*len(models))
 	attemptedCounts := make(map[string]int, len(discoverableProtocols))
 	for _, protocol := range discoverableProtocols {
-		if protocol == configuredProtocol {
+		// 原生协议通常直接采信 models 清单，无需逐模型探测；但走兄弟渠道兜底时，
+		// 该清单并非本渠道实测所得，必须连原生协议一起探测，否则会保留空清单。
+		if protocol == configuredProtocol && !usedSharedModels {
 			continue
 		}
-		probeModels := prioritizeProtocolProbeModels(protocol, models, protocolDiscoveryMaxModels)
+		probeModels := prioritizeProtocolProbeModelsWithDeclared(protocol, models, result.declaredEndpointTypes, protocolDiscoveryMaxModels)
 		attemptedCounts[protocol] = len(probeModels)
 		for _, model := range probeModels {
 			tasks = append(tasks, protocolProbeTask{protocol: protocol, model: model})
@@ -199,6 +214,33 @@ func (r *AutoDiscoveryRunner) discoverEndpointProtocols(
 	}
 }
 
+// sharedUpstreamModels 返回同一上游端点（identityBaseURL + keyHash）在兄弟协议渠道画像中
+// 已知的模型清单并集。
+//
+// 存在意义：同一个 baseURL + Key 只有一份 /v1/models 清单，但中转站的该接口并不可靠——
+// 可能临时返回空 data 数组却仍是 HTTP 200。此时本渠道会得到 0 个模型，而兄弟渠道上一轮
+// 探到的清单仍是关于这个上游的有效事实，用它兜底可以避免协议探测因"没有候选模型"
+// 整体跳过，也避免把空清单当成"上游没有模型"。
+func (r *AutoDiscoveryRunner) sharedUpstreamModels(channel *config.UpstreamConfig, baseURL, apiKey string) []string {
+	if r == nil || r.store == nil || channel == nil {
+		return nil
+	}
+	canonical := utils.CanonicalBaseURL(baseURL, channel.ServiceType)
+	identityBaseURL := utils.MetricsIdentityBaseURL(canonical, channel.ServiceType)
+	siblings := r.store.ListByUpstreamIdentity(identityBaseURL, KeyHashFromAPIKey(apiKey), channel.ChannelUID)
+	if len(siblings) == 0 {
+		return nil
+	}
+	merged := make([]string, 0)
+	for _, sibling := range siblings {
+		merged = append(merged, sibling.AvailableModels...)
+		for _, models := range sibling.ProtocolModels {
+			merged = append(merged, models...)
+		}
+	}
+	return normalizeProtocolModels(merged)
+}
+
 func ensureConfiguredProtocolDiscovery(channel *config.UpstreamConfig, result *EndpointDiscoveryResult) {
 	if channel == nil || result == nil || !result.ProtocolOk {
 		return
@@ -209,6 +251,11 @@ func ensureConfiguredProtocolDiscovery(channel *config.UpstreamConfig, result *E
 		return
 	}
 	models := normalizeProtocolModels(result.Models)
+	// 本函数在协议探测前后各调用一次（探测前打底，写画像前兜底）。models 清单为空而
+	// 探测已为原生协议得出结论时不能回填空值，否则会把逐模型探测的结果覆盖掉。
+	if len(models) == 0 && len(result.ProtocolModels[protocol]) > 0 {
+		return
+	}
 	result.ProtocolModels[protocol] = models
 	discoveredAt := time.Now().UTC()
 	if result.ModelsDiscoveredAt != nil {
@@ -264,18 +311,36 @@ var protocolProbePreferredPrefixes = map[string][]string{
 // prioritizeProtocolProbeModels 按协议的前缀优先级表对候选模型排序，并截断到最多 limit 个，
 // 用于逐模型探测时限制单轮任务数量，避免模型数量过多造成探测风暴。
 func prioritizeProtocolProbeModels(protocol string, models []string, limit int) []string {
+	return prioritizeProtocolProbeModelsWithDeclared(protocol, models, nil, limit)
+}
+
+// prioritizeProtocolProbeModelsWithDeclared 在前缀优先级之上叠加上游声明的协议支持信息。
+//
+// declared 来自 new-api 的 supported_endpoint_types（模型 -> 协议集合）。它只抬高排序，
+// 不做过滤：上游存在少报（声明 ["openai"] 的模型实测也能走 /v1/messages），
+// 按它过滤会漏掉真实可用的模型。当模型数超过 limit 被截断时，这个提示能让确实声明
+// 支持该协议的模型不被名字前缀规则挤掉。
+func prioritizeProtocolProbeModelsWithDeclared(protocol string, models []string, declared map[string][]string, limit int) []string {
 	if len(models) == 0 {
 		return nil
 	}
 	prefixes := protocolProbePreferredPrefixes[protocol]
+	declaresProtocol := func(model string) bool {
+		return slices.Contains(declared[model], protocol)
+	}
 	rank := func(model string) int {
+		// 已声明支持该协议的模型整体排在未声明的模型之前。
+		base := 0
+		if len(declared) > 0 && !declaresProtocol(model) {
+			base = len(prefixes) + 1
+		}
 		lower := strings.ToLower(model)
 		for i, prefix := range prefixes {
 			if strings.HasPrefix(lower, prefix) {
-				return i
+				return base + i
 			}
 		}
-		return len(prefixes)
+		return base + len(prefixes)
 	}
 	ordered := append([]string(nil), models...)
 	sort.SliceStable(ordered, func(i, j int) bool {

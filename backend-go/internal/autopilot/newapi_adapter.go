@@ -344,11 +344,27 @@ type NewApiProvisionOptions struct {
 	Models []string // model_limits 白名单，空=不限制
 }
 
+// normalizeNewApiPlaintextKey 把 new-api 返回的令牌明文规范为可直接调用的 API Key。
+// new-api 的创建/列表接口返回的 key 不带 "sk-" 前缀，但其推理端点（/v1/*）按 "sk-<key>" 鉴权，
+// 缺前缀会被上游以 401 Invalid token 拒绝（进而触发 key 黑名单、渠道挂起）。已有前缀时保持不变。
+func normalizeNewApiPlaintextKey(key string) string {
+	if key == "" || strings.HasPrefix(key, "sk-") {
+		return key
+	}
+	return "sk-" + key
+}
+
 // ProvisionKey 建代理专用 key：先查重（同名则复用），不存在则新建。
-// 返回 (tokenID, keyPlainText, reused, error)。
+// 返回 (tokenID, keyPlainText, reused, error)；keyPlainText 已规范为带 "sk-" 前缀的可调用形式。
 // new-api 建 key 成功后部分 fork 直接在响应里带明文 key，部分需要再查列表；
 // 此处优先取创建响应的 data.key，为空则回退查列表按 name 取。
 func (a *NewApiAdapter) ProvisionKey(ctx context.Context, baseURL, accessToken, userID, authTokenMode string, opts NewApiProvisionOptions) (tokenID int, keyPlainText string, reused bool, err error) {
+	tokenID, keyPlainText, reused, err = a.provisionKey(ctx, baseURL, accessToken, userID, authTokenMode, opts)
+	return tokenID, normalizeNewApiPlaintextKey(keyPlainText), reused, err
+}
+
+// provisionKey 是 ProvisionKey 的具体实现，返回 new-api 原始形式的 key（可能不带 "sk-" 前缀）。
+func (a *NewApiAdapter) provisionKey(ctx context.Context, baseURL, accessToken, userID, authTokenMode string, opts NewApiProvisionOptions) (tokenID int, keyPlainText string, reused bool, err error) {
 	name := strings.TrimSpace(opts.Name)
 	if name == "" {
 		name = DefaultNewApiProvisionKeyName

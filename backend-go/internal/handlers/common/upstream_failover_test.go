@@ -72,6 +72,48 @@ func TestShouldNormalizeMetadataUserIDOnlyMessages(t *testing.T) {
 	}
 }
 
+func TestNormalizeExecutionRouteDefaultsAndOverrides(t *testing.T) {
+	upstream := &config.UpstreamConfig{ChannelUID: "ch-physical"}
+	legacy := normalizeExecutionRoute(scheduler.ChannelRouteRef{}, scheduler.ChannelKindMessages, 4, upstream)
+	if legacy.Kind != string(scheduler.ChannelKindMessages) || legacy.Index != 4 || legacy.ChannelUID != upstream.ChannelUID {
+		t.Fatalf("legacy route = %+v", legacy)
+	}
+
+	routed := normalizeExecutionRoute(scheduler.ChannelRouteRef{Kind: string(scheduler.ChannelKindResponses), Index: 2, ChannelUID: "ch-routed"}, scheduler.ChannelKindMessages, 4, upstream)
+	if routed.Kind != string(scheduler.ChannelKindResponses) || routed.Index != 2 || routed.ChannelUID != "ch-routed" {
+		t.Fatalf("explicit route = %+v", routed)
+	}
+}
+
+func TestChannelAPITypeUsesExecutionKind(t *testing.T) {
+	tests := map[scheduler.ChannelKind]string{
+		scheduler.ChannelKindMessages:  "Messages",
+		scheduler.ChannelKindChat:      "Chat",
+		scheduler.ChannelKindResponses: "Responses",
+	}
+	for kind, want := range tests {
+		if got := ChannelAPIType(kind); got != want {
+			t.Fatalf("ChannelAPIType(%q) = %q, want %q", kind, got, want)
+		}
+	}
+}
+
+func TestEffortInjectionStylePrefersPhysicalServiceType(t *testing.T) {
+	tests := []struct {
+		serviceType string
+		want        string
+	}{
+		{serviceType: "openai", want: "reasoning_effort"},
+		{serviceType: "responses", want: "reasoning"},
+		{serviceType: "claude", want: "thinking"},
+	}
+	for _, tt := range tests {
+		if got := effortInjectionStyle(scheduler.ChannelKindMessages, &config.UpstreamConfig{ServiceType: tt.serviceType}); got != tt.want {
+			t.Fatalf("serviceType=%q style=%q, want %q", tt.serviceType, got, tt.want)
+		}
+	}
+}
+
 func TestApplyAdaptiveResponseHeaderTimeoutHonorsModeAndOwnership(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
@@ -184,9 +226,9 @@ func TestPlainAPIKeySelectionSkipsDisabledModel(t *testing.T) {
 			var key string
 			var err error
 			if tt.policy == nil {
-				_, key, err = selectAttemptAPIKey(nil, scheduler.ChannelKindMessages, 0, upstream, map[string]bool{}, map[string]bool{}, "target-model", fallback)
+				_, key, err = selectAttemptAPIKey(nil, scheduler.ChannelKindMessages, 0, upstream, map[string]bool{}, map[string]bool{}, "target-model", fallback, nil)
 			} else {
-				_, key, err = selectAttemptAPIKeyFiltered(nil, scheduler.ChannelKindMessages, 0, upstream, upstream.BaseURL, map[string]bool{}, map[string]bool{}, "target-model", fallback, tt.policy, "Messages", nil)
+				_, key, err = selectAttemptAPIKeyFiltered(nil, scheduler.ChannelKindMessages, 0, upstream, upstream.BaseURL, map[string]bool{}, map[string]bool{}, "target-model", fallback, tt.policy, "Messages", nil, nil)
 			}
 			if err != nil {
 				t.Fatalf("select key error: %v", err)
@@ -231,9 +273,9 @@ func TestPlainAPIKeySelectionSkipsDisabledKey(t *testing.T) {
 			var key string
 			var err error
 			if tt.policy == nil {
-				_, key, err = selectAttemptAPIKey(nil, scheduler.ChannelKindMessages, 0, upstream, map[string]bool{}, map[string]bool{}, "target-model", fallback)
+				_, key, err = selectAttemptAPIKey(nil, scheduler.ChannelKindMessages, 0, upstream, map[string]bool{}, map[string]bool{}, "target-model", fallback, nil)
 			} else {
-				_, key, err = selectAttemptAPIKeyFiltered(nil, scheduler.ChannelKindMessages, 0, upstream, upstream.BaseURL, map[string]bool{}, map[string]bool{}, "target-model", fallback, tt.policy, "Messages", nil)
+				_, key, err = selectAttemptAPIKeyFiltered(nil, scheduler.ChannelKindMessages, 0, upstream, upstream.BaseURL, map[string]bool{}, map[string]bool{}, "target-model", fallback, tt.policy, "Messages", nil, nil)
 			}
 			if err != nil {
 				t.Fatalf("select key error: %v", err)
@@ -1622,6 +1664,7 @@ func TestSelectAttemptAPIKeyFilteredUsesBindingIdentity(t *testing.T) {
 		policy,
 		"Messages",
 		c,
+		nil,
 	)
 	if err != nil {
 		t.Fatal(err)

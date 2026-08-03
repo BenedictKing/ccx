@@ -328,8 +328,17 @@ func TestChannelMetricsHandlers_FallbackServiceTypeForLegacyConfig(t *testing.T)
 	}
 }
 
-func TestResumeChannel_RestoresBlacklistedKeys(t *testing.T) {
+func TestResumeChannel_RestoresUnavailableKeys(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+	paused := false
+	assertNoPausedKeys := func(t *testing.T, configs []config.APIKeyConfig) {
+		t.Helper()
+		for _, keyConfig := range configs {
+			if keyConfig.Enabled != nil && !*keyConfig.Enabled {
+				t.Fatalf("key %q remains manually paused", keyConfig.Key)
+			}
+		}
+	}
 
 	tests := []struct {
 		name        string
@@ -351,6 +360,9 @@ func TestResumeChannel_RestoresBlacklistedKeys(t *testing.T) {
 					BaseURL:     "https://example.com",
 					Status:      "suspended",
 					APIKeys:     []string{"sk-active"},
+					APIKeyConfigs: []config.APIKeyConfig{{
+						Key: "sk-active", Enabled: &paused,
+					}},
 					DisabledAPIKeys: []config.DisabledKeyInfo{{
 						Key:        "sk-disabled",
 						Reason:     "insufficient_balance",
@@ -364,6 +376,7 @@ func TestResumeChannel_RestoresBlacklistedKeys(t *testing.T) {
 				if len(got.Upstream[0].DisabledAPIKeys) != 0 {
 					t.Fatalf("disabledApiKeys=%v, want empty", got.Upstream[0].DisabledAPIKeys)
 				}
+				assertNoPausedKeys(t, got.Upstream[0].APIKeyConfigs)
 				foundActive := false
 				for _, key := range got.Upstream[0].APIKeys {
 					if key == "sk-disabled" {
@@ -396,6 +409,9 @@ func TestResumeChannel_RestoresBlacklistedKeys(t *testing.T) {
 					BaseURL:     "https://example.com",
 					Status:      "suspended",
 					APIKeys:     []string{"sk-active"},
+					APIKeyConfigs: []config.APIKeyConfig{{
+						Key: "sk-active", Enabled: &paused,
+					}},
 					DisabledAPIKeys: []config.DisabledKeyInfo{{
 						Key:        "sk-disabled",
 						Reason:     "insufficient_balance",
@@ -409,6 +425,7 @@ func TestResumeChannel_RestoresBlacklistedKeys(t *testing.T) {
 				if len(got.ResponsesUpstream[0].DisabledAPIKeys) != 0 {
 					t.Fatalf("disabledApiKeys=%v, want empty", got.ResponsesUpstream[0].DisabledAPIKeys)
 				}
+				assertNoPausedKeys(t, got.ResponsesUpstream[0].APIKeyConfigs)
 				foundActive := false
 				for _, key := range got.ResponsesUpstream[0].APIKeys {
 					if key == "sk-disabled" {
@@ -441,6 +458,9 @@ func TestResumeChannel_RestoresBlacklistedKeys(t *testing.T) {
 					BaseURL:     "https://example.com",
 					Status:      "suspended",
 					APIKeys:     []string{"sk-active"},
+					APIKeyConfigs: []config.APIKeyConfig{{
+						Key: "sk-active", Enabled: &paused,
+					}},
 					DisabledAPIKeys: []config.DisabledKeyInfo{{
 						Key:        "sk-disabled",
 						Reason:     "insufficient_balance",
@@ -454,6 +474,7 @@ func TestResumeChannel_RestoresBlacklistedKeys(t *testing.T) {
 				if len(got.ChatUpstream[0].DisabledAPIKeys) != 0 {
 					t.Fatalf("disabledApiKeys=%v, want empty", got.ChatUpstream[0].DisabledAPIKeys)
 				}
+				assertNoPausedKeys(t, got.ChatUpstream[0].APIKeyConfigs)
 				foundActive := false
 				for _, key := range got.ChatUpstream[0].APIKeys {
 					if key == "sk-disabled" {
@@ -486,6 +507,9 @@ func TestResumeChannel_RestoresBlacklistedKeys(t *testing.T) {
 					BaseURL:     "https://example.com",
 					Status:      "suspended",
 					APIKeys:     []string{"sk-active"},
+					APIKeyConfigs: []config.APIKeyConfig{{
+						Key: "sk-active", Enabled: &paused,
+					}},
 					DisabledAPIKeys: []config.DisabledKeyInfo{{
 						Key:        "sk-disabled",
 						Reason:     "insufficient_balance",
@@ -499,6 +523,7 @@ func TestResumeChannel_RestoresBlacklistedKeys(t *testing.T) {
 				if len(got.GeminiUpstream[0].DisabledAPIKeys) != 0 {
 					t.Fatalf("disabledApiKeys=%v, want empty", got.GeminiUpstream[0].DisabledAPIKeys)
 				}
+				assertNoPausedKeys(t, got.GeminiUpstream[0].APIKeyConfigs)
 				foundActive := false
 				for _, key := range got.GeminiUpstream[0].APIKeys {
 					if key == "sk-disabled" {
@@ -602,8 +627,8 @@ func TestResumeChannel_RestoresBlacklistedKeys(t *testing.T) {
 			if !resp.Success {
 				t.Fatalf("success=%v, want=true", resp.Success)
 			}
-			if resp.RestoredKeys != 1 {
-				t.Fatalf("restoredKeys=%d, want=1", resp.RestoredKeys)
+			if resp.RestoredKeys != 2 {
+				t.Fatalf("restoredKeys=%d, want=2", resp.RestoredKeys)
 			}
 
 			tt.checkResult(t, sch, cfgManager.GetConfig())

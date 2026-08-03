@@ -76,28 +76,7 @@
           <v-expansion-panel-text>
             <div v-if="ep.miniMaxTokenPlanUsage?.models.length && !ep.miniMaxTokenPlanUsageError" class="mb-3">
               <div class="text-caption font-weight-bold mb-1">{{ t('healthCenter.detail.tokenPlanUsage') }}</div>
-              <v-table density="compact">
-                <thead>
-                  <tr>
-                    <th>{{ t('healthCenter.detail.model') }}</th>
-                    <th>{{ t('healthCenter.detail.currentWindow') }}</th>
-                    <th>{{ t('healthCenter.detail.weeklyWindow') }}</th>
-                    <th>{{ t('healthCenter.detail.resetsIn') }}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="quota in ep.miniMaxTokenPlanUsage.models" :key="quota.modelName">
-                    <td class="font-weight-medium">{{ quota.modelName }}</td>
-                    <td :class="quotaColor(quota.currentIntervalRemainingPercent)">
-                      {{ formatQuota(quota.currentIntervalRemainingPercent, quota.currentIntervalUsageCount, quota.currentIntervalTotalCount) }}
-                    </td>
-                    <td :class="quotaColor(quota.currentWeeklyRemainingPercent)">
-                      {{ formatQuota(quota.currentWeeklyRemainingPercent, quota.currentWeeklyUsageCount, quota.currentWeeklyTotalCount) }}
-                    </td>
-                    <td>{{ formatRemainsTime(quota.remainsTimeMs) }}</td>
-                  </tr>
-                </tbody>
-              </v-table>
+              <UsageQuotaRows :items="minimaxQuotaItems(ep)" />
               <div class="text-caption text-medium-emphasis mt-1">
                 {{ t('healthCenter.detail.updatedAt') }}: {{ formatDateTime(ep.miniMaxTokenPlanUsage.fetchedAt) }}
               </div>
@@ -128,6 +107,8 @@ import { ref, onMounted, computed } from 'vue'
 import { useI18n } from '@/i18n'
 import { api } from '@/services/api'
 import type { HealthState, EndpointDetailItem } from '@/services/api-types'
+import { buildMinimaxQuotaItems } from '@/utils/minimaxEndpointUsage'
+import UsageQuotaRows from './UsageQuotaRows.vue'
 
 const props = defineProps<{ channelUid: string }>()
 const { t } = useI18n()
@@ -197,24 +178,9 @@ function rateColor(rate?: number): string {
   return 'text-error'
 }
 
-function formatQuota(remainingPercent: number, used: number, total: number): string {
-  const percent = Math.max(0, Math.min(100, remainingPercent)).toFixed(0)
-  return total > 0 ? `${percent}% (${used}/${total})` : `${percent}%`
-}
-
-function quotaColor(remainingPercent: number): string {
-  if (remainingPercent >= 50) return 'text-success'
-  if (remainingPercent >= 20) return 'text-warning'
-  return 'text-error'
-}
-
-function formatRemainsTime(milliseconds: number): string {
-  if (milliseconds <= 0) return t('healthCenter.detail.resetSoon')
-  const minutes = Math.floor(milliseconds / 60000)
-  const hours = Math.floor(minutes / 60)
-  const remainingMinutes = minutes % 60
-  return hours > 0 ? `${hours}h ${remainingMinutes}m` : `${remainingMinutes}m`
-}
+// 与编辑渠道共用同一映射，保证全局 MiniMax 用量展示一致。
+const minimaxQuotaItems = (ep: EndpointDetailItem) =>
+  ep.miniMaxTokenPlanUsage ? buildMinimaxQuotaItems(ep.miniMaxTokenPlanUsage, t) : []
 
 function formatDateTime(value: string): string {
   return new Date(value).toLocaleString()

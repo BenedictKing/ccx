@@ -142,6 +142,17 @@
             {{ t('channelCard.disabled') }}
           </v-chip>
           <v-chip
+            v-else-if="channel.status === 'partial'"
+            color="warning"
+            size="small"
+            variant="flat"
+            density="comfortable"
+            rounded="lg"
+          >
+            <v-icon start size="small">mdi-alert-circle</v-icon>
+            {{ t('status.partial') }}
+          </v-chip>
+          <v-chip
             v-else-if="channel.status === 'suspended'"
             color="warning"
             size="small"
@@ -479,6 +490,7 @@ const getServiceChipColor = () => {
 const getStatusColor = () => {
   const colorMap: Record<string, string> = {
     'healthy': 'success',
+    'partial': 'warning',
     'error': 'error',
     'unknown': 'warning'
   }
@@ -489,6 +501,7 @@ const getStatusColor = () => {
 const getStatusIcon = () => {
   const iconMap: Record<string, string> = {
     'healthy': 'mdi-check-circle',
+    'partial': 'mdi-alert-circle',
     'error': 'mdi-alert-circle',
     'unknown': 'mdi-help-circle'
   }
@@ -499,6 +512,7 @@ const getStatusIcon = () => {
 const getStatusText = () => {
   const status = props.channel.status || 'unknown'
   if (status === 'healthy') return t('channelCard.statusHealthy')
+  if (status === 'partial') return t('status.partial')
   if (status === 'error') return t('channelCard.statusError')
   return t('channelCard.notChecked')
 }
@@ -507,6 +521,7 @@ const getStatusText = () => {
 const getStatusTooltip = () => {
   const status = props.channel.status || 'unknown'
   if (status === 'healthy') return t('channelCard.tooltipHealthy')
+  if (status === 'partial') return t('status.partial')
   if (status === 'error') return t('channelCard.tooltipError')
   return t('channelCard.tooltipUnknown')
 }
@@ -772,6 +787,7 @@ const serviceStyle = computed(() => {
   background-color: rgba(0, 0, 0, 0.05);
 }
 .status-badge.status-healthy { color: rgb(var(--v-theme-success)); background-color: rgba(var(--v-theme-success), 0.12); }
+.status-badge.status-partial { color: rgb(var(--v-theme-warning)); background-color: rgba(var(--v-theme-warning), 0.12); }
 .status-badge.status-error { color: rgb(var(--v-theme-error)); background-color: rgba(var(--v-theme-error), 0.12); }
 .status-badge.status-unknown { color: rgb(var(--v-theme-secondary)); background-color: rgba(var(--v-theme-secondary), 0.12); }
 
@@ -879,6 +895,7 @@ const serviceStyle = computed(() => {
   background-color: rgba(255, 255, 255, 0.1);
 }
 .v-theme--dark .status-badge.status-healthy { color: #b6e3be; background-color: rgba(52, 211, 153, 0.2); }
+.v-theme--dark .status-badge.status-partial { color: #fcd34d; background-color: rgba(245, 158, 11, 0.2); }
 .v-theme--dark .status-badge.status-error { color: #f4b4b4; background-color: rgba(248, 113, 113, 0.22); }
 .v-theme--dark .status-badge.status-unknown { color: #cbd5e1; background-color: rgba(148, 163, 184, 0.2); }
 

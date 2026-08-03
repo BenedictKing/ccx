@@ -2198,7 +2198,7 @@ func CalcFamilyPreferenceScore(family ModelFamily, prefs []ModelFamily) float64 
 
 同一模型在不同供应商的价格差异显著（官方 opus vs AWS Bedrock vs kiro 中转），且质量与价格通常正相关。系统不应替用户决定"质量优先还是省钱优先"——这是用户的权利。
 
-#### 5.6.1 三档预设 + 自定义
+#### 5.6.1 三档预设
 
 ```json
 "costPreference": {
@@ -2207,10 +2207,6 @@ func CalcFamilyPreferenceScore(family ModelFamily, prefs []ModelFamily) float64 
     "supervisor": "quality_first",
     "worker": "cost_first",
     "lightweight": "cost_first"
-  },
-  "custom": {
-    "savingsMultiplier": 1.0,
-    "providerQualityMultiplier": 1.0
   }
 }
 ```
@@ -2220,7 +2216,8 @@ func CalcFamilyPreferenceScore(family ModelFamily, prefs []ModelFamily) float64 
 | `quality_first` | 0.3 | 1.5 | 质量优先：官方 opus 胜过便宜的 kiro，即使贵 3 倍 |
 | `balanced` | 1.0 | 1.0 | 默认：按各 TaskClass 原始权重 |
 | `cost_first` | 2.0 | 0.5 | 省钱优先：kiro 的 opus 在满足硬约束后优先胜出 |
-| `custom` | 用户自定义 | 用户自定义 | 高级用户微调，范围 0.0 ~ 3.0 |
+
+乘数是预设内建的常量，不对外暴露；非法或未知 mode 归一化回退 `balanced`。
 
 生效方式是权重乘数，不改公式结构：
 
@@ -3367,10 +3364,11 @@ type SubscriptionIntegration struct {
           GET /api/user/models       → 记录账号可用模型，供渠道 supportedModels 参考
 4. 建 key：POST /api/token/（按 ProvisionKeyName/Group/Models 模板）
    ├─ 已存在同名 ccx-autopilot key → 复用其 id，不重复创建（列表比对 name）
-   └─ 新建成功 → 回填 ProvisionedTokenID，取 data.key 作为渠道 apiKey
-5. 自动建渠道：用 baseURL + 新建 key 创建一个上游渠道
-   ├─ channelKind 由用户选择或按站点探测（messages/chat/responses/gemini）
-   ├─ status=unknown，autoManaged=true，OriginType=relay
+   └─ 新建成功 → 回填 ProvisionedTokenID，取 data.key（补齐 sk- 前缀）作为渠道 apiKey
+5. 写入渠道：同 baseURL+channelKind 已有渠道时并入该渠道（多 new-api 订阅与纯 key 整合为同一渠道），否则自动新建
+   ├─ 合并目标匹配：BaseURL/BaseURLs 规范化（去尾部 /，忽略大小写）相等；跳过带 providerId 的渠道；多个命中优先 active
+   ├─ 合并：保留已有纯 key 与配置，新 key 按字符串去重后追加，写入 quotaGroup/groupMultiplier 元数据
+   ├─ 新建：channelKind 由用户选择或按站点探测（messages/chat/responses/gemini），status=unknown，autoManaged=true，OriginType=relay
    ├─ 建立 SubscriptionUID → ChannelUID 链接（回填 LinkedChannelUID）
    └─ 触发 §8.4 的 Discovery + 能力测试标准流程
 6. 完成：订阅卡片显示余额、分组倍率、已绑定渠道、探测进度
@@ -3627,10 +3625,6 @@ P3：copilot / codex（验证+用量窗口提示，无余额）
         "supervisor": "quality_first",
         "worker": "cost_first",
         "lightweight": "cost_first"
-      },
-      "custom": {
-        "savingsMultiplier": 1.0,
-        "providerQualityMultiplier": 1.0
       }
     },
 

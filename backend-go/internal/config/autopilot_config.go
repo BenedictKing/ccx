@@ -115,8 +115,12 @@ type AutopilotRoutingConfig struct {
 	// 主请求路径完全不变，影子请求在主响应返回后异步发起。
 	ABTest ABTestConfig `json:"abTest,omitempty"`
 
-	// FrontierRoutingEnabled 控制通用 Frontier/Ladder 是否影响选路。
-	// 默认 false；需要在 shadow 中验证阶梯确定性、硬能力零放宽、手动映射零回归后启用。
+	// ProtocolFederation 允许逻辑 Messages 请求在 Autopilot 默认路径中使用同一托管账号的兼容物理路由。
+	// 仅支持 messages -> chat/responses；显式路由、手动覆盖和促销路径不受影响。
+	ProtocolFederation ProtocolFederationConfig `json:"protocolFederation,omitempty"`
+
+	// FrontierRoutingEnabled 已废弃，保留字段仅为 JSON 兼容。
+	// Frontier/Ladder 模型级选优默认启用，成本证据不足时 fail-open 回退既有比较链。
 	FrontierRoutingEnabled bool `json:"frontierRoutingEnabled,omitempty"`
 
 	// AutoSafetyDowngrade 控制 auto 模式是否因 SLO 回归自动降级到 assist。
@@ -130,12 +134,6 @@ type AutopilotRoutingConfig struct {
 	AFPCostRoutingEnabled bool `json:"afpCostRoutingEnabled,omitempty"`
 }
 
-// IsFrontierRoutingEnabled 返回 Frontier/Ladder 是否在生产中影响选路。
-// 由 FrontierRoutingEnabled 独立控制，不再受运行模式门控。
-func (c AutopilotRoutingConfig) IsFrontierRoutingEnabled() bool {
-	return c.FrontierRoutingEnabled
-}
-
 // IsAFPCostRoutingEnabled 返回 AFP 成本适配器是否参与可比树。
 // 始终开启。仅对火山 Agent Plan 渠道有效；
 // scope 非可比（非 Running/非托管）时自动回退 USD，无需额外开关。
@@ -146,9 +144,20 @@ func (c AutopilotRoutingConfig) IsAFPCostRoutingEnabled() bool {
 // ── §9.1 子配置类型 ──
 
 // CostPreferenceConfig 用户价格偏向配置（§5.6）。
-// 三档预设 + 自定义：quality_first / balanced / cost_first / custom。
+// 三档预设：quality_first / balanced / cost_first。
+// ProtocolFederationConfig 定义 Autopilot 的窄协议联邦边界。
+// RequestKinds/ExecutionKinds 是白名单，避免未来新增协议时意外扩面。
+type ProtocolFederationConfig struct {
+	Enabled            bool     `json:"enabled"`
+	RequestKinds       []string `json:"requestKinds,omitempty"`
+	ExecutionKinds     []string `json:"executionKinds,omitempty"`
+	RequireSameAccount bool     `json:"requireSameAccount"`
+	RequireAutoManaged bool     `json:"requireAutoManaged"`
+	ConversionPenalty  float64  `json:"conversionPenalty,omitempty"`
+}
+
 type CostPreferenceConfig struct {
-	// Mode 全局价格偏向模式："quality_first" | "balanced" | "cost_first" | "custom"。
+	// Mode 全局价格偏向模式："quality_first" | "balanced" | "cost_first"。
 	// 默认 "balanced"。
 	Mode string `json:"mode,omitempty"`
 
@@ -156,20 +165,6 @@ type CostPreferenceConfig struct {
 	// key 为 TaskClass 字符串（supervisor/worker/lightweight/vision/long_context/image_generation/embedding）。
 	// value 为该任务类别的价格偏向模式。
 	PerTaskClass map[string]string `json:"perTaskClass,omitempty"`
-
-	// Custom 自定义乘数（仅 Mode="custom" 时生效）。
-	Custom CostPreferenceCustom `json:"custom,omitempty"`
-}
-
-// CostPreferenceCustom 自定义价格偏向乘数（§5.6.1）。
-type CostPreferenceCustom struct {
-	// SavingsMultiplier 节省乘数，范围 0.0~3.0，默认 1.0。
-	// 值越大越倾向便宜渠道。
-	SavingsMultiplier float64 `json:"savingsMultiplier,omitempty"`
-
-	// ProviderQualityMultiplier 供应商质量乘数，范围 0.0~3.0，默认 1.0。
-	// 值越大越倾向高质量供应商。
-	ProviderQualityMultiplier float64 `json:"providerQualityMultiplier,omitempty"`
 }
 
 // ModelFamilyPreferenceConfig 模型派系偏好配置（§5.5.3）。
@@ -433,10 +428,15 @@ func DefaultAutopilotRoutingConfig() AutopilotRoutingConfig {
 
 		CostPreference: CostPreferenceConfig{
 			Mode: "balanced",
-			Custom: CostPreferenceCustom{
-				SavingsMultiplier:         1.0,
-				ProviderQualityMultiplier: 1.0,
-			},
+		},
+
+		ProtocolFederation: ProtocolFederationConfig{
+			Enabled:            true,
+			RequestKinds:       []string{"messages"},
+			ExecutionKinds:     []string{"chat", "responses"},
+			RequireSameAccount: true,
+			RequireAutoManaged: true,
+			ConversionPenalty:  0.35,
 		},
 
 		ModelFamilyPreference: ModelFamilyPreferenceConfig{
@@ -638,9 +638,14 @@ func (c *AutopilotRoutingConfig) Validate() {
 		}
 	}
 
-	// 5. 禁用名单：去空白项、去重，避免无意义的重复配置
+	// 5. 禁用名单和协议联邦白名单：去空白项、去重，避免无意义的重复配置。
 	c.DisabledTaskClasses = dedupeNonEmptyStrings(c.DisabledTaskClasses)
 	c.DisabledChannelUIDs = dedupeNonEmptyStrings(c.DisabledChannelUIDs)
+	c.ProtocolFederation.RequestKinds = dedupeNonEmptyStrings(c.ProtocolFederation.RequestKinds)
+	c.ProtocolFederation.ExecutionKinds = dedupeNonEmptyStrings(c.ProtocolFederation.ExecutionKinds)
+	if c.ProtocolFederation.ConversionPenalty < 0 || c.ProtocolFederation.ConversionPenalty != c.ProtocolFederation.ConversionPenalty {
+		c.ProtocolFederation.ConversionPenalty = 0.35
+	}
 
 	// 6. 健康检测：连续探测恢复阈值兜底（旧配置文件可能没有该字段，反序列化后为 0）
 	if c.HealthCheck.ProbeRecoveryThreshold <= 0 {
@@ -716,42 +721,14 @@ func (c *CostPreferenceConfig) validate() {
 			c.PerTaskClass[k] = normalized
 		}
 	}
-
-	// 自定义乘数钳制
-	custom := &c.Custom
-	if custom.SavingsMultiplier < 0 {
-		custom.SavingsMultiplier = 0
-	} else if custom.SavingsMultiplier > 3.0 {
-		custom.SavingsMultiplier = 3.0
-	}
-	if custom.ProviderQualityMultiplier < 0 {
-		custom.ProviderQualityMultiplier = 0
-	} else if custom.ProviderQualityMultiplier > 3.0 {
-		custom.ProviderQualityMultiplier = 3.0
-	}
-
-	// 非 custom 模式时覆盖乘数（保持配置一致性）
-	switch c.Mode {
-	case "quality_first":
-		custom.SavingsMultiplier = 0.3
-		custom.ProviderQualityMultiplier = 1.5
-	case "balanced":
-		custom.SavingsMultiplier = 1.0
-		custom.ProviderQualityMultiplier = 1.0
-	case "cost_first":
-		custom.SavingsMultiplier = 2.0
-		custom.ProviderQualityMultiplier = 0.5
-	}
 }
 
 // normalizeCostPreferenceMode 归一化价格偏向模式。
 // 非法值回退到 "balanced"。
 func normalizeCostPreferenceMode(mode string) string {
-	switch strings.ToLower(strings.TrimSpace(mode)) {
-	case "quality_first", "balanced", "cost_first", "custom":
-		return strings.ToLower(strings.TrimSpace(mode))
-	case "":
-		return "balanced"
+	switch normalized := strings.ToLower(strings.TrimSpace(mode)); normalized {
+	case "quality_first", "balanced", "cost_first":
+		return normalized
 	default:
 		return "balanced"
 	}
@@ -888,15 +865,17 @@ func (cm *ConfigManager) GetAutopilotRouting() AutopilotRoutingConfig {
 	return cfg
 }
 
-// SetAutopilotCostPreference 更新价格偏向并持久化。
-func (cm *ConfigManager) SetCostPreference(cp CostPreferenceConfig) error {
+// SetCostPreferenceMode 更新全局价格偏向模式并持久化。
+// 只修改 Mode，保留已有的 PerTaskClass 覆盖。
+func (cm *ConfigManager) SetCostPreferenceMode(mode string) error {
+	normalized := normalizeCostPreferenceMode(mode)
 	cm.mu.Lock()
-	cm.config.AutopilotRouting.CostPreference = cp
+	cm.config.AutopilotRouting.CostPreference.Mode = normalized
 	if err := cm.saveConfigLocked(cm.config); err != nil {
 		cm.mu.Unlock()
 		return err
 	}
-	log.Printf("[Config-Autopilot] 价格偏向已更新: %s", cp.Mode)
+	log.Printf("[Config-Autopilot] 价格偏向已更新: %s", normalized)
 	cm.fireConfigChangeCallbacks()
 	return nil
 }
@@ -1000,8 +979,6 @@ func (c CostPreferenceConfig) GetEffectiveMultipliers(taskClass string) (float64
 		return 1.0, 1.0
 	case "cost_first":
 		return 2.0, 0.5
-	case "custom":
-		return c.Custom.SavingsMultiplier, c.Custom.ProviderQualityMultiplier
 	default:
 		return 1.0, 1.0
 	}
@@ -1050,6 +1027,15 @@ func (c AutopilotRoutingConfig) deepCopy() AutopilotRoutingConfig {
 	if c.DisabledChannelUIDs != nil {
 		cp.DisabledChannelUIDs = make([]string, len(c.DisabledChannelUIDs))
 		copy(cp.DisabledChannelUIDs, c.DisabledChannelUIDs)
+	}
+
+	// ProtocolFederation 白名单：切片必须独立，否则 GetAutopilotRouting 的调用方
+	// 修改返回值会写穿共享配置。
+	if c.ProtocolFederation.RequestKinds != nil {
+		cp.ProtocolFederation.RequestKinds = append([]string(nil), c.ProtocolFederation.RequestKinds...)
+	}
+	if c.ProtocolFederation.ExecutionKinds != nil {
+		cp.ProtocolFederation.ExecutionKinds = append([]string(nil), c.ProtocolFederation.ExecutionKinds...)
 	}
 
 	// CostPreference.PerTaskClass

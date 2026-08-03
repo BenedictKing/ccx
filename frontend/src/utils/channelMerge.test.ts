@@ -36,6 +36,22 @@ describe('freezeImmutableFields', () => {
     expect(Object.isFrozen(ch.modelMapping)).toBe(true)
   })
 
+  it('冻结大型配置集合，避免被 Vue 深度代理化', () => {
+    const ch = makeChannel({
+      supportedModels: ['model-a'],
+      tags: ['fast'],
+      customHeaders: { 'x-test': '1' },
+      protocolRoutes: [{ kind: 'messages', index: 0, name: 'test', serviceType: 'claude' }],
+    })
+
+    freezeImmutableFields(ch)
+
+    expect(Object.isFrozen(ch.supportedModels)).toBe(true)
+    expect(Object.isFrozen(ch.tags)).toBe(true)
+    expect(Object.isFrozen(ch.customHeaders)).toBe(true)
+    expect(Object.isFrozen(ch.protocolRoutes)).toBe(true)
+  })
+
   it('未定义字段不抛错', () => {
     const ch = makeChannel()
     expect(() => freezeImmutableFields(ch)).not.toThrow()
@@ -138,5 +154,38 @@ describe('mergeChannelsWithLocalData', () => {
     const fresh = [makeChannel({ index: 99 })]
     const result = mergeChannelsWithLocalData(fresh, [], NOW)
     expect(result[0]).toBe(fresh[0])
+  })
+
+  it('服务端数据未变化时复用已有渠道和数组引用', () => {
+    const existing = [
+      freezeImmutableFields(makeChannel({ index: 0, supportedModels: ['model-a'] })),
+      freezeImmutableFields(makeChannel({ index: 1, name: 'second' })),
+    ]
+    const fresh = [
+      makeChannel({ index: 0, supportedModels: ['model-a'] }),
+      makeChannel({ index: 1, name: 'second' }),
+    ]
+
+    const result = mergeChannelsWithLocalData(fresh, existing, NOW)
+
+    expect(result).toBe(existing)
+    expect(result[0]).toBe(existing[0])
+  })
+
+  it('仅替换配置实际变化的渠道', () => {
+    const existing = [
+      freezeImmutableFields(makeChannel({ index: 0, name: 'first' })),
+      freezeImmutableFields(makeChannel({ index: 1, name: 'second' })),
+    ]
+    const fresh = [
+      makeChannel({ index: 0, name: 'first' }),
+      makeChannel({ index: 1, name: 'changed' }),
+    ]
+
+    const result = mergeChannelsWithLocalData(fresh, existing, NOW)
+
+    expect(result).not.toBe(existing)
+    expect(result[0]).toBe(existing[0])
+    expect(result[1]).toBe(fresh[1])
   })
 })

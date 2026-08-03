@@ -32,6 +32,8 @@ func (m *MetricsManager) recordSuccessWithUsageLocked(baseURL, apiKey, serviceTy
 
 	if m.store != nil {
 		m.store.AddRecord(PersistentRecord{
+			ChannelUID:          "",
+			RouteModel:          "",
 			MetricsKey:          metrics.MetricsKey,
 			BaseURL:             metrics.BaseURL,
 			KeyMask:             metrics.KeyMask,
@@ -71,6 +73,8 @@ func (m *MetricsManager) recordFailureLocked(baseURL, apiKey, serviceType string
 
 	if m.store != nil {
 		m.store.AddRecord(PersistentRecord{
+			ChannelUID:          "",
+			RouteModel:          "",
 			MetricsKey:          metrics.MetricsKey,
 			BaseURL:             metrics.BaseURL,
 			KeyMask:             metrics.KeyMask,
@@ -96,12 +100,21 @@ func (m *MetricsManager) RecordRequestConnected(baseURL, apiKey, serviceType str
 // 保持与 RecordRequestConnected 相同的行为，额外将 proxyKeyMask 存入 pending 记录，
 // 后续 RecordRequestFinalizeOutcome 会将其写入 PersistentRecord 持久化到 SQLite。
 func (m *MetricsManager) RecordRequestConnectedWithProxyKeyMask(baseURL, apiKey, serviceType, model, proxyKeyMask string) uint64 {
-	return m.recordRequestConnectedInternal(baseURL, apiKey, serviceType, model, proxyKeyMask, time.Now())
+	return m.recordRequestConnectedInternal(baseURL, apiKey, serviceType, "", model, model, proxyKeyMask, time.Now())
+}
+
+// RecordRequestConnectedWithContext 记录请求开始，携带完整 breaker 身份。
+//
+// channelUID 与 routeModel 是 breaker scope 三元组的两个维度，keyHash 在调用方计算。
+// actualModel 是实际发给上游的模型（可被 autopilot 映射改写），继续写入 RequestRecord.Model
+// 供成本报表与真实模型统计；routeModel 写入 RequestRecord.RouteModel 供 breaker 聚合窗口。
+func (m *MetricsManager) RecordRequestConnectedWithContext(baseURL, apiKey, serviceType, channelUID, actualModel, routeModel, proxyKeyMask string) uint64 {
+	return m.recordRequestConnectedInternal(baseURL, apiKey, serviceType, channelUID, actualModel, routeModel, proxyKeyMask, time.Now())
 }
 
 // RecordRequestConnectedAt 与 RecordRequestConnected 相同，但允许注入时间戳（用于测试）。
 func (m *MetricsManager) RecordRequestConnectedAt(baseURL, apiKey, serviceType string, model string, timestamp time.Time) uint64 {
-	return m.recordRequestConnectedInternal(baseURL, apiKey, serviceType, model, "", timestamp)
+	return m.recordRequestConnectedInternal(baseURL, apiKey, serviceType, "", model, model, "", timestamp)
 }
 
 // RecordRequestConnectionLatency 记录从发起上游请求到取得连接（httptrace.GotConn）的耗时。
@@ -154,7 +167,7 @@ func (m *MetricsManager) RecordRequestFirstByte(baseURL, apiKey, serviceType str
 	record.FirstByteLatencyMs = latencyMs
 }
 
-func (m *MetricsManager) recordRequestConnectedInternal(baseURL, apiKey, serviceType, model, proxyKeyMask string, timestamp time.Time) uint64 {
+func (m *MetricsManager) recordRequestConnectedInternal(baseURL, apiKey, serviceType, channelUID, actualModel, routeModel, proxyKeyMask string, timestamp time.Time) uint64 {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -169,10 +182,12 @@ func (m *MetricsManager) recordRequestConnectedInternal(baseURL, apiKey, service
 	}
 
 	metrics.requestHistory = append(metrics.requestHistory, RequestRecord{
+		ChannelUID:   channelUID,
+		RouteModel:   routeModel,
+		Model:        actualModel,
 		Timestamp:    timestamp,
 		Success:      true, // 先按成功计数；结束时会回写真实结果
 		FailureClass: FailureClassNone,
-		Model:        model,
 		ProxyKeyMask: proxyKeyMask,
 	})
 	metrics.pendingHistoryIdx[requestID] = len(metrics.requestHistory) - 1
@@ -248,6 +263,8 @@ func (m *MetricsManager) RecordRequestFinalizeOutcome(baseURL, apiKey, serviceTy
 
 		if m.store != nil {
 			m.store.AddRecord(PersistentRecord{
+				ChannelUID:          record.ChannelUID,
+				RouteModel:          record.RouteModel,
 				MetricsKey:          metrics.MetricsKey,
 				BaseURL:             metrics.BaseURL,
 				KeyMask:             metrics.KeyMask,

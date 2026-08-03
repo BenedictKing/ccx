@@ -54,10 +54,11 @@ type UpstreamConfig struct {
 	// Images 响应兼容：当客户端请求 b64_json 而上游只返回 URL 时，下载并转换为 b64_json（默认 false）
 	ConvertImageURLToB64JSON bool `json:"convertImageUrlToB64Json,omitempty"`
 	// 多渠道调度相关字段
-	Priority       int        `json:"priority"`                 // 渠道优先级（数字越小优先级越高，默认按索引）
-	Status         string     `json:"status"`                   // 渠道状态：active（正常）, suspended（暂停）, disabled（备用池）
-	PromotionUntil *time.Time `json:"promotionUntil,omitempty"` // 促销期截止时间，在此期间内优先使用此渠道（忽略trace亲和）
-	LowQuality     bool       `json:"lowQuality,omitempty"`     // 低质量渠道标记：启用后强制本地估算 token，偏差>5%时使用本地值
+	Priority         int        `json:"priority"`                   // 渠道优先级（数字越小优先级越高，默认按索引）
+	Status           string     `json:"status"`                     // 渠道状态：active（正常）, suspended（暂停）, disabled（备用池）
+	SuspensionSource string     `json:"suspensionSource,omitempty"` // 暂停来源：manual（人工）, auto_no_keys（缺少可用 Key）
+	PromotionUntil   *time.Time `json:"promotionUntil,omitempty"`   // 促销期截止时间，在此期间内优先使用此渠道（忽略trace亲和）
+	LowQuality       bool       `json:"lowQuality,omitempty"`       // 低质量渠道标记：启用后强制本地估算 token，偏差>5%时使用本地值
 	// 自动拉黑开关
 	AutoBlacklistBalance *bool `json:"autoBlacklistBalance,omitempty"` // 余额不足时自动拉黑 Key（默认 true）
 	// Claude Messages metadata.user_id 规范化开关
@@ -132,6 +133,73 @@ type UpstreamConfig struct {
 	Tags []string `json:"tags,omitempty"`
 	// 渠道级保活验证配置（可选，nil 时继承全局与 OriginTier 分档默认）
 	HealthCheck *ChannelHealthCheckConfig `json:"healthCheck,omitempty"`
+}
+
+// ChannelPlacementFront 表示新渠道放置到故障转移序列首位。
+const ChannelPlacementFront = "front"
+
+// 渠道暂停来源。只有 auto_no_keys 可在凭证恢复后自动激活。
+const (
+	SuspensionSourceManual     = "manual"
+	SuspensionSourceAutoNoKeys = "auto_no_keys"
+)
+
+// assignChannelPriority 为新增渠道分配 Priority（数字越小越优先，0 表示未显式配置）。
+// placement 为 "front" 时：已显式排序（Priority>0）的现有渠道整体后移一位，新渠道取 1；
+// 其他情况（含空串）：调用方显式指定的 Priority（>0）保持不变，
+// 否则取当前最大 Priority + 1，即追加到故障转移序列末尾。
+func assignChannelPriority(channels []UpstreamConfig, upstream *UpstreamConfig, placement string) {
+	if placement == ChannelPlacementFront {
+		for i := range channels {
+			if channels[i].Priority > 0 {
+				channels[i].Priority++
+			}
+		}
+		upstream.Priority = 1
+		return
+	}
+	if upstream.Priority > 0 {
+		return
+	}
+	maxPriority := 0
+	for _, ch := range channels {
+		if ch.Priority > maxPriority {
+			maxPriority = ch.Priority
+		}
+	}
+	upstream.Priority = maxPriority + 1
+}
+
+// resolvePlacement 从可变参数中提取 placement，缺省为空串（按 "back" 处理）。
+func resolvePlacement(placements []string) string {
+	if len(placements) > 0 {
+		return placements[0]
+	}
+	return ""
+}
+
+// resolveReorderPriorities 计算重排序要写入的优先级值：
+// 缺省按位次 1..N；调用方传入显式值（统一 LLM 视图按全局位次提交，
+// 保证跨协议分组按最小 priority 还原顺序时尺度一致）时按显式值写入。
+func resolveReorderPriorities(order []int, priorities ...[]int) ([]int, error) {
+	values := make([]int, len(order))
+	if len(priorities) == 0 || priorities[0] == nil {
+		for i := range values {
+			values[i] = i + 1
+		}
+		return values, nil
+	}
+	explicit := priorities[0]
+	if len(explicit) != len(order) {
+		return nil, fmt.Errorf("优先级数组长度 (%d) 与排序数组长度 (%d) 不一致", len(explicit), len(order))
+	}
+	for i, p := range explicit {
+		if p <= 0 {
+			return nil, fmt.Errorf("无效的优先级值: %d", p)
+		}
+		values[i] = p
+	}
+	return values, nil
 }
 
 // APIKeyConfig 描述单个 API Key 的附加调度配置。
@@ -517,21 +585,32 @@ func normalizeAPIKeyConfigs(apiKeys []string, configs []APIKeyConfig) []APIKeyCo
 	}
 
 	byKey := make(map[string]APIKeyConfig, len(configs))
+	uidOnly := make([]APIKeyConfig, 0)
+	uidOnlySeen := make(map[string]bool)
 	for _, cfg := range configs {
 		key := strings.TrimSpace(cfg.Key)
+		cfg.Name = strings.TrimSpace(cfg.Name)
+		cfg.QuotaGroup = strings.TrimSpace(cfg.QuotaGroup)
 		if key == "" {
+			if cfg.CredentialUID != "" && !uidOnlySeen[cfg.CredentialUID] {
+				cfg.Key = ""
+				uidOnly = append(uidOnly, cfg)
+				uidOnlySeen[cfg.CredentialUID] = true
+			}
 			continue
 		}
 		cfg.Key = key
-		cfg.Name = strings.TrimSpace(cfg.Name)
-		cfg.QuotaGroup = strings.TrimSpace(cfg.QuotaGroup)
 		byKey[key] = cfg
 	}
 
-	normalized := make([]APIKeyConfig, 0, len(keys))
+	normalized := make([]APIKeyConfig, 0, len(keys)+len(uidOnly))
+	boundUIDs := make(map[string]bool, len(configs))
 	for _, key := range keys {
 		if cfg, ok := byKey[key]; ok {
 			normalized = append(normalized, cfg)
+			if cfg.CredentialUID != "" {
+				boundUIDs[cfg.CredentialUID] = true
+			}
 		} else {
 			normalized = append(normalized, APIKeyConfig{Key: key})
 		}
@@ -540,6 +619,16 @@ func normalizeAPIKeyConfigs(apiKeys []string, configs []APIKeyConfig) []APIKeyCo
 	// 保留已知但不在 active APIKeys 中的 key 配置，避免 blacklist/restore 丢失 quota/rpm 语义。
 	for _, cfg := range byKey {
 		normalized = append(normalized, cfg)
+		if cfg.CredentialUID != "" {
+			boundUIDs[cfg.CredentialUID] = true
+		}
+	}
+	// 托管渠道持久化时会剥离明文 Key，仅留下 CredentialUID。运行时混入新 Key 后仍须
+	// 保留这些 legacy 绑定，后续补水/同步才能找回账号凭证池中的旧凭证。
+	for _, cfg := range uidOnly {
+		if !boundUIDs[cfg.CredentialUID] {
+			normalized = append(normalized, cfg)
+		}
 	}
 	return normalized
 }
@@ -578,6 +667,14 @@ func IsAPIKeyConfigEffective(cfg APIKeyConfig) bool {
 		return true
 	}
 	return false
+}
+
+// shouldPersistAPIKeyConfig 判断清除 Enabled 后是否仍需保留内部凭证或端点绑定。
+// CredentialUID/BaseURL 不属于管理视图字段，但不能随暂停状态一起删除。
+func shouldPersistAPIKeyConfig(cfg APIKeyConfig) bool {
+	return IsAPIKeyConfigEffective(cfg) ||
+		strings.TrimSpace(cfg.CredentialUID) != "" ||
+		strings.TrimSpace(cfg.BaseURL) != ""
 }
 
 // restoreAPIKeyConfig 将已保存的 key 配置合并回 configs 列表，或用默认值补齐。
@@ -1773,7 +1870,7 @@ func (cm *ConfigManager) ResumeKey(apiType string, channelIndex int, apiKey stri
 			// 移除 Enabled 限制，恢复默认（活跃）行为
 			upstream.APIKeyConfigs[i].Enabled = nil
 			// 如果移除 Enabled 后配置无其他有效字段，清除整个配置项
-			if !IsAPIKeyConfigEffective(upstream.APIKeyConfigs[i]) {
+			if !shouldPersistAPIKeyConfig(upstream.APIKeyConfigs[i]) {
 				upstream.APIKeyConfigs = append(upstream.APIKeyConfigs[:i], upstream.APIKeyConfigs[i+1:]...)
 			}
 			found = true
@@ -1790,8 +1887,8 @@ func (cm *ConfigManager) ResumeKey(apiType string, channelIndex int, apiKey stri
 	return cm.saveConfigLocked(cm.config)
 }
 
-// RestoreAllKeys 恢复指定渠道所有被拉黑的 Key（持久化）
-// 返回恢复的 Key 数量
+// RestoreAllKeys 恢复指定渠道所有不可用的 Key（被拉黑或手动暂停，持久化）。
+// 返回实际恢复的唯一 Key 数量。
 func (cm *ConfigManager) RestoreAllKeys(apiType string, channelIndex int) (int, error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
@@ -1802,14 +1899,13 @@ func (cm *ConfigManager) RestoreAllKeys(apiType string, channelIndex int) (int, 
 	}
 
 	upstream := &(*upstreams)[channelIndex]
-	restoredCount := len(upstream.DisabledAPIKeys)
-	if restoredCount == 0 {
-		return 0, nil
-	}
+	disabledCount := len(upstream.DisabledAPIKeys)
+	restoredKeys := make(map[string]struct{}, disabledCount)
 
 	// 将所有被拉黑的 Key 移回活跃列表
-	savedConfigs := make(map[string]*APIKeyConfig, restoredCount)
+	savedConfigs := make(map[string]*APIKeyConfig, disabledCount)
 	for _, dk := range upstream.DisabledAPIKeys {
+		restoredKeys[dk.Key] = struct{}{}
 		if !slices.Contains(upstream.APIKeys, dk.Key) {
 			upstream.APIKeys = append(upstream.APIKeys, dk.Key)
 		}
@@ -1826,15 +1922,49 @@ func (cm *ConfigManager) RestoreAllKeys(apiType string, channelIndex int) (int, 
 		delete(cm.failedKeysCache, cacheKey)
 	}
 
-	for _, cfg := range savedConfigs {
-		upstream.APIKeyConfigs = restoreAPIKeyConfig(upstream.APIKeyConfigs, cfg.Key, cfg)
+	if disabledCount > 0 {
+		for _, cfg := range savedConfigs {
+			upstream.APIKeyConfigs = restoreAPIKeyConfig(upstream.APIKeyConfigs, cfg.Key, cfg)
+		}
+		upstream.APIKeyConfigs = normalizeAPIKeyConfigs(upstream.APIKeys, upstream.APIKeyConfigs)
+		upstream.DisabledAPIKeys = nil
 	}
-	upstream.APIKeyConfigs = normalizeAPIKeyConfigs(upstream.APIKeys, upstream.APIKeyConfigs)
 
-	log.Printf("[%s-Blacklist] 渠道 [%d] %s 的 %d 个 Key 已全部恢复", apiType, channelIndex, upstream.Name, restoredCount)
-	upstream.DisabledAPIKeys = nil
+	// 渠道级“恢复”同时解除手动暂停，避免渠道已 active 但仍残留 enabled=false。
+	activeKeys := make(map[string]struct{}, len(upstream.APIKeys))
+	for _, key := range upstream.APIKeys {
+		activeKeys[key] = struct{}{}
+	}
+	resumedCount := 0
+	for i := 0; i < len(upstream.APIKeyConfigs); {
+		cfg := &upstream.APIKeyConfigs[i]
+		_, active := activeKeys[cfg.Key]
+		if !active || cfg.Enabled == nil || *cfg.Enabled {
+			i++
+			continue
+		}
 
-	return restoredCount, cm.saveConfigLocked(cm.config)
+		cfg.Enabled = nil
+		restoredKeys[cfg.Key] = struct{}{}
+		resumedCount++
+		if !shouldPersistAPIKeyConfig(*cfg) {
+			upstream.APIKeyConfigs = append(upstream.APIKeyConfigs[:i], upstream.APIKeyConfigs[i+1:]...)
+			continue
+		}
+		i++
+	}
+
+	if len(restoredKeys) == 0 {
+		return 0, nil
+	}
+	if disabledCount > 0 {
+		log.Printf("[%s-Blacklist] 渠道 [%d] %s 的 %d 个被拉黑 Key 已全部恢复", apiType, channelIndex, upstream.Name, disabledCount)
+	}
+	if resumedCount > 0 {
+		log.Printf("[%s-Suspend] 渠道 [%d] %s 的 %d 个手动暂停 Key 已全部恢复", apiType, channelIndex, upstream.Name, resumedCount)
+	}
+
+	return len(restoredKeys), cm.saveConfigLocked(cm.config)
 }
 
 // RestoreDisabledKeys 恢复指定渠道中命中的被拉黑 Key，并返回实际恢复的 key 列表。

@@ -16,10 +16,15 @@ import { getSimpleCache, setSimpleCache } from './http-cache.mjs'
 const REPO = 'BerriAI/litellm'
 const FILE_PATH = 'model_prices_and_context_window.json'
 
+/**
+ * litellm 的价格是 per-token 的极小浮点（如 5e-8），乘 1e6 后会留下
+ * 二进制浮点尾巴（0.05 -> 0.049999999999999996），导致每次生成都产生伪 diff。
+ * 用 12 位有效数字归一化：既消除尾巴，也不会像定点 round 那样把极小价格截成 0。
+ */
 function pricePerMillionOrNull(value) {
-  return typeof value === 'number' && Number.isFinite(value)
-    ? value * 1_000_000
-    : null
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null
+  const perMillion = value * 1_000_000
+  return perMillion === 0 ? 0 : Number(perMillion.toPrecision(12))
 }
 
 /**

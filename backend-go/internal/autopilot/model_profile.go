@@ -122,7 +122,7 @@ const (
 	ModelFamilyUnknown ModelFamily = "unknown" // 无法识别
 )
 
-// Provider → ModelFamily 映射表（从 generated_model_registry.go 提取）。
+// Provider → ModelFamily 映射表，与 model registry 的 provider 标识保持一致。
 // providerFamilyMap 是全局只读映射，init 时构建。
 var providerFamilyMap = map[string]ModelFamily{
 	"anthropic":      ModelFamilyClaude,

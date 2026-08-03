@@ -139,6 +139,9 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
 
   const { isAnySelectMenuOpen, suppressDialogEscapeUntil, onMenuUpdate } = useDialogMenuWorkaround()
   const isAutoManagedChannel = computed(() => isAutoManagedAccountChannel(props.channel))
+  // 自定义自动托管账号：无 providerId，地址池由用户手工维护；
+  // 有 providerId 的 Provider 模板托管渠道地址由模板与自动发现管理，不参与手工编辑。
+  const isCustomManagedChannel = computed(() => isAutoManagedChannel.value && !props.channel?.providerId)
   const sections = computed(() => {
     if (!isAutoManagedChannel.value) return allSections
     return allSections.filter(section => section.id === 'basic' || section.id === 'auth')
@@ -464,6 +467,14 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
       .filter(Boolean)
   }
 
+  // 托管账号提交用的地址池：复用 baseUrlsText -> form 的规范化去重结果，
+  // form.baseUrls 仅在多地址时填充，单地址场景回退到 form.baseUrl。
+  const managedAccountBaseUrls = () => {
+    if (form.baseUrls.length > 0) return [...form.baseUrls]
+    const single = form.baseUrl.trim()
+    return single ? [single] : []
+  }
+
   const draftModelMapping = () => {
     const mapping: Record<string, string> = {}
     modelMappingRows.value.forEach(row => {
@@ -727,7 +738,12 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
 
   const isFormValid = computed(() => {
     const hasValidName = isAutoManagedChannel.value || !!form.name.trim()
-    const hasValidBaseUrl = isAutoManagedChannel.value || form.serviceType === 'copilot' || (!!form.baseUrl.trim() && isValidUrl(form.baseUrl))
+    // copilot 与 Provider 模板托管渠道无需手工地址；自定义托管账号必须逐行校验地址池
+    const draftUrls = draftBaseUrls()
+    const hasValidBaseUrl = form.serviceType === 'copilot'
+      || (isCustomManagedChannel.value && draftUrls.length > 0 && draftUrls.every(isValidUrl))
+      || (isAutoManagedChannel.value && !isCustomManagedChannel.value)
+      || (!isAutoManagedChannel.value && !!form.baseUrl.trim() && isValidUrl(form.baseUrl))
     const hasValidApiKeys = form.serviceType === 'copilot' || hasConfigurableKeys.value
     const hasValidModelConfig = isAutoManagedChannel.value || (!modelCapabilitiesError.value && !embeddingCapabilitiesError.value)
     return (
@@ -782,11 +798,22 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
         rateLimitAutoFromHeaders: props.channel.rateLimitAutoFromHeaders,
       })
       payload.serviceType = props.channel.serviceType
-      payload.baseUrl = props.channel.baseUrl
-      if (props.channel.baseUrls?.length) {
-        payload.baseUrls = [...props.channel.baseUrls]
+      if (isCustomManagedChannel.value) {
+        // 自定义托管账号的地址池允许手工编辑：沿用表单规范化结果，baseUrl 取首个地址保持旧字段兼容
+        const managedUrls = managedAccountBaseUrls()
+        payload.baseUrl = managedUrls[0] || props.channel.baseUrl
+        if (managedUrls.length > 1) {
+          payload.baseUrls = managedUrls
+        } else {
+          delete payload.baseUrls
+        }
       } else {
-        delete payload.baseUrls
+        payload.baseUrl = props.channel.baseUrl
+        if (props.channel.baseUrls?.length) {
+          payload.baseUrls = [...props.channel.baseUrls]
+        } else {
+          delete payload.baseUrls
+        }
       }
       payload.insecureSkipVerify = !!props.channel.insecureSkipVerify
       if (props.channel.authHeader) {

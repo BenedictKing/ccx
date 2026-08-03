@@ -430,18 +430,67 @@ func GetChannelEffectiveState(upstream *UpstreamConfig) string {
 	return "active"
 }
 
-// applySingleKeyReplacementTransition 统一处理“单 key 更换”带来的自动激活与熔断重置判定。
+// applyChannelStatusTransition 统一维护渠道状态、暂停来源与促销期语义。
+// suspensionSource 仅在目标状态为 suspended 时生效。
+func applyChannelStatusTransition(upstream *UpstreamConfig, status, suspensionSource string) (promotionCleared bool) {
+	if upstream == nil {
+		return false
+	}
+	upstream.Status = status
+	if status == "suspended" {
+		upstream.SuspensionSource = suspensionSource
+		if upstream.PromotionUntil != nil {
+			upstream.PromotionUntil = nil
+			return true
+		}
+		return false
+	}
+	upstream.SuspensionSource = ""
+	return false
+}
+
+// applyAdministrativeChannelStatus 将管理接口的 suspended 明确记为人工暂停。
+func applyAdministrativeChannelStatus(upstream *UpstreamConfig, status string) (promotionCleared bool) {
+	source := ""
+	if status == "suspended" {
+		source = SuspensionSourceManual
+	}
+	return applyChannelStatusTransition(upstream, status, source)
+}
+
+// hasUsableChannelKeys 判断渠道是否至少有一个非空 Key 可用于调度。
+func hasUsableChannelKeys(upstream *UpstreamConfig) bool {
+	if upstream == nil {
+		return false
+	}
+	for _, key := range upstream.APIKeys {
+		if strings.TrimSpace(key) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// resumeAutoNoKeysChannel 只恢复由缺少 Key 自动暂停的渠道。
+func resumeAutoNoKeysChannel(upstream *UpstreamConfig) bool {
+	if upstream == nil || upstream.Status != "suspended" || upstream.SuspensionSource != SuspensionSourceAutoNoKeys || !hasUsableChannelKeys(upstream) {
+		return false
+	}
+	applyChannelStatusTransition(upstream, "active", "")
+	return true
+}
+
 func applySingleKeyReplacementTransition(upstream *UpstreamConfig, newKeys []string) (shouldResetMetrics bool) {
 	if upstream == nil {
 		return false
 	}
-	if len(upstream.APIKeys) == 1 && len(newKeys) == 1 && upstream.APIKeys[0] != newKeys[0] {
-		if upstream.Status == "suspended" {
-			upstream.Status = "active"
-		}
-		return true
+	newKeys = deduplicateStrings(newKeys)
+	singleKeyReplaced := len(upstream.APIKeys) == 1 && len(newKeys) == 1 && upstream.APIKeys[0] != newKeys[0]
+	autoRecovered := upstream.Status == "suspended" && upstream.SuspensionSource == SuspensionSourceAutoNoKeys && len(newKeys) > 0
+	if autoRecovered {
+		applyChannelStatusTransition(upstream, "active", "")
 	}
-	return false
+	return singleKeyReplaced || autoRecovered
 }
 
 // GetChannelPriority 获取渠道优先级（带默认值处理）
@@ -598,39 +647,101 @@ func ApplyProviderUpstreamDefaults(providerID string, upstream *UpstreamConfig) 
 	}
 }
 
+func stripAutoManagedExplicitOverrides(upstream *UpstreamConfig) bool {
+	if upstream == nil || !upstream.AutoManaged {
+		return false
+	}
+	changed := false
+	if len(upstream.ModelMapping) > 0 {
+		upstream.ModelMapping = nil
+		changed = true
+	}
+	if len(upstream.ReasoningMapping) > 0 {
+		upstream.ReasoningMapping = nil
+		changed = true
+	}
+	if upstream.ReasoningParamStyle != "" {
+		upstream.ReasoningParamStyle = ""
+		changed = true
+	}
+	if upstream.FastMode {
+		upstream.FastMode = false
+		changed = true
+	}
+	if len(upstream.CompatSeeds) > 0 {
+		upstream.CompatSeeds = nil
+		changed = true
+	}
+	if upstream.CodexToolCompat != nil {
+		upstream.CodexToolCompat = nil
+		changed = true
+	}
+	if upstream.StripCodexClientTools {
+		upstream.StripCodexClientTools = false
+		changed = true
+	}
+	if upstream.ConvertImageURLToB64JSON {
+		upstream.ConvertImageURLToB64JSON = false
+		changed = true
+	}
+	if upstream.NormalizeMetadataUserID != nil {
+		upstream.NormalizeMetadataUserID = nil
+		changed = true
+	}
+	if upstream.StripBillingHeader != nil {
+		upstream.StripBillingHeader = nil
+		changed = true
+	}
+	if upstream.NormalizeSystemRoleToTopLevel {
+		upstream.NormalizeSystemRoleToTopLevel = false
+		changed = true
+	}
+	if upstream.InjectDummyThoughtSignature {
+		upstream.InjectDummyThoughtSignature = false
+		changed = true
+	}
+	if upstream.StripThoughtSignature {
+		upstream.StripThoughtSignature = false
+		changed = true
+	}
+	if upstream.NoVision {
+		upstream.NoVision = false
+		changed = true
+	}
+	if len(upstream.NoVisionModels) > 0 {
+		upstream.NoVisionModels = nil
+		changed = true
+	}
+	if upstream.VisionFallbackModel != "" {
+		upstream.VisionFallbackModel = ""
+		changed = true
+	}
+	if upstream.HistoricalImageTurnLimit != 0 {
+		upstream.HistoricalImageTurnLimit = 0
+		changed = true
+	}
+	if upstream.CompactModel != "" {
+		upstream.CompactModel = ""
+		changed = true
+	}
+	return changed
+}
+
 // RuntimeUpstreamForAutoManagedProvider 返回自动托管 provider 渠道的运行时视图。
 //
 // 已知 provider 的自动托管渠道不再使用编辑渠道页里的手工兼容开关；
 // 模型选择和能力差异由 Autopilot 的 ModelResolver/EndpointAttemptPolicy 做 request-scoped 决策。
 // 因此这里屏蔽历史版本可能写入配置的旧兼容字段，再恢复 Provider 原生协议默认值。
 func RuntimeUpstreamForAutoManagedProvider(upstream *UpstreamConfig) *UpstreamConfig {
-	if upstream == nil || !upstream.AutoManaged || strings.TrimSpace(upstream.ProviderID) == "" {
+	if upstream == nil || !upstream.AutoManaged {
 		return upstream
 	}
 
 	runtime := upstream.Clone()
-	runtime.ModelMapping = nil
-	runtime.ReasoningMapping = nil
-	runtime.ReasoningParamStyle = ""
-	runtime.FastMode = false
-	// 六个兼容性开关已从结构体移除，无需清理；自动托管渠道的兼容性完全由
-	// ApplyProviderUpstreamDefaults 重建已知厂商真相加运行时学习决定。
-	// 种子同样清空：不保留手工配置派生的历史提示。
-	runtime.CompatSeeds = nil
-	runtime.CodexToolCompat = nil
-	runtime.StripCodexClientTools = false
-	runtime.ConvertImageURLToB64JSON = false
-	runtime.NormalizeMetadataUserID = nil
-	runtime.StripBillingHeader = nil
-	runtime.NormalizeSystemRoleToTopLevel = false
-	runtime.InjectDummyThoughtSignature = false
-	runtime.StripThoughtSignature = false
-	runtime.NoVision = false
-	runtime.NoVisionModels = nil
-	runtime.VisionFallbackModel = ""
-	runtime.HistoricalImageTurnLimit = 0
-	runtime.CompactModel = ""
-	ApplyProviderUpstreamDefaults(runtime.ProviderID, runtime)
+	stripAutoManagedExplicitOverrides(runtime)
+	if strings.TrimSpace(runtime.ProviderID) != "" {
+		ApplyProviderUpstreamDefaults(runtime.ProviderID, runtime)
+	}
 	return runtime
 }
 

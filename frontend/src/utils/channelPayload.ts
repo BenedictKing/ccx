@@ -1,9 +1,7 @@
 import type { Channel, EmbeddingCapability, UpstreamModelCapability } from '../services/api'
 import { normalizeAdvancedChannelOptions } from './channelAdvancedOptions'
 import { deduplicateEquivalentBaseUrls } from './baseUrlSemantics'
-import { builtinUpstreamModelCapabilities } from '../generated/modelRegistry'
-
-let runtimeUpstreamModelCapabilities: Record<string, UpstreamModelCapability> | null = null
+let runtimeUpstreamModelCapabilities: Record<string, UpstreamModelCapability> = {}
 
 const DEFAULT_COPILOT_BASE_URL = 'https://api.githubcopilot.com'
 
@@ -242,13 +240,11 @@ function matchesModelPattern(pattern: string, model: string): boolean {
 }
 
 export function setRuntimeUpstreamModelCapabilities(capabilities: Record<string, UpstreamModelCapability> | null | undefined) {
-  runtimeUpstreamModelCapabilities = capabilities && Object.keys(capabilities).length > 0
-    ? capabilities
-    : null
+  runtimeUpstreamModelCapabilities = capabilities || {}
 }
 
 function getEffectiveUpstreamModelCapabilities(): Record<string, UpstreamModelCapability> {
-  return runtimeUpstreamModelCapabilities || builtinUpstreamModelCapabilities
+  return runtimeUpstreamModelCapabilities
 }
 
 export function resolveBuiltinUpstreamModelCapability(model: string): { capability: UpstreamModelCapability; pattern: string } | null {
@@ -523,6 +519,9 @@ export function buildChannelPayload(
     ? form.normalizeMetadataUserId
     : options.channelType === 'messages' && form.normalizeMetadataUserId
 
+  const isManagedProviderChannel = form.baseUrl.trim() === '' && form.baseUrls.length === 0
+  const shouldStripExplicitMappingFields = isManagedProviderChannel && form.serviceType !== 'copilot'
+
   const channelData: Omit<Channel, 'index' | 'latency' | 'status'> = {
     name: form.name.trim(),
     serviceType: form.serviceType as 'openai' | 'gemini' | 'claude' | 'responses' | 'copilot',
@@ -534,11 +533,11 @@ export function buildChannelPayload(
     stripThoughtSignature: form.stripThoughtSignature,
     description: form.description.trim(),
     apiKeys: processedApiKeys,
-    modelMapping: cleanModelMapping,
+    modelMapping: shouldStripExplicitMappingFields ? {} : cleanModelMapping,
     modelCapabilities: modelCapabilities || {},
     defaultCapability: {},
     allowUnknownContext: false,
-    reasoningMapping: advancedOptions.reasoningMapping,
+    reasoningMapping: shouldStripExplicitMappingFields ? {} : advancedOptions.reasoningMapping,
     reasoningParamStyle: advancedOptions.reasoningParamStyle,
     textVerbosity: advancedOptions.textVerbosity,
     fastMode: advancedOptions.fastMode,

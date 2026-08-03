@@ -123,32 +123,6 @@ func TestApplyCostPreference(t *testing.T) {
 	}
 }
 
-// ── ApplyCustomCostPreference 测试 ──
-
-func TestApplyCustomCostPreference(t *testing.T) {
-	base := ScoringWeights{WSavings: 1.0, WProviderQuality: 1.0}
-
-	t.Run("正常范围", func(t *testing.T) {
-		got := ApplyCustomCostPreference(base, 1.5, 2.0)
-		if !floatEq(got.WSavings, 1.5) {
-			t.Errorf("WSavings = %v, want 1.5", got.WSavings)
-		}
-		if !floatEq(got.WProviderQuality, 2.0) {
-			t.Errorf("WProviderQuality = %v, want 2.0", got.WProviderQuality)
-		}
-	})
-
-	t.Run("超出范围钳制到 3.0", func(t *testing.T) {
-		got := ApplyCustomCostPreference(base, 5.0, -1.0)
-		if !floatEq(got.WSavings, 3.0) {
-			t.Errorf("WSavings = %v, want 3.0 (clamped)", got.WSavings)
-		}
-		if !floatEq(got.WProviderQuality, 0.0) {
-			t.Errorf("WProviderQuality = %v, want 0.0 (clamped)", got.WProviderQuality)
-		}
-	})
-}
-
 // ── ValidateWeightInvariants 测试 ──
 
 func TestValidateWeightInvariants(t *testing.T) {

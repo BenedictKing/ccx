@@ -43,7 +43,7 @@ func EstimateTokens(text string) int {
 //   - OpenAI data URL：整个 url 值连同 ";base64," 一起被替换成 "<image>"，"base64" 特征消失，
 //     extractImageTokensAndStripBytes 直接短路，近乎零成本。
 //   - Anthropic：仅 source.data 被替换，"type":"base64" 仍残留，不短路、会再做一次 gjson 全量解析；
-//     但 data 已是占位符 "<image>"，imagePayloadFromBlock 跳过，必返回 0 图片 token，不重复计图。
+//     但 data 已是占位符 "<image>"，mediaPayloadFromBlock 跳过，必返回 0 图片 token，不重复计图。
 func EstimateMessagesTokens(messages interface{}) int {
 	if messages == nil {
 		return 0
@@ -108,9 +108,9 @@ func EstimateRequestTokens(bodyBytes []byte) int {
 		total += EstimateMessagesTokens(messages)
 	}
 
-	// tools (每个工具约 100-200 tokens)
+	// tools (按实际 schema 估算)
 	if tools, ok := req["tools"].([]interface{}); ok {
-		total += len(tools) * 150
+		total += estimateToolsTokens(tools)
 	}
 
 	return total
@@ -206,78 +206,25 @@ func EstimateResponsesRequestTokens(bodyBytes []byte) int {
 		total += EstimateTokens(instructions)
 	}
 
-	// input 字段处理
+	// input 字段处理：先通过 ParseResponsesInput 归一化，再统一走 typed item 计数器
 	if input := req["input"]; input != nil {
-		total += estimateResponsesInputTokens(input)
+		// 直接解析 input，而非整个 request
+		items, err := types.ParseResponsesInput(input)
+		if err == nil && len(items) > 0 {
+			total += estimateResponsesItemsTokens(items, true)
+		} else {
+			// 归一化失败：退回到保守方案
+			data, _ := json.Marshal(input)
+			total += EstimateTokens(string(data))
+		}
 	}
 
-	// tools (每个工具约 100-200 tokens)
+	// tools (按实际 schema 估算)
 	if tools, ok := req["tools"].([]interface{}); ok {
-		total += len(tools) * 150
+		total += estimateToolsTokens(tools)
 	}
 
 	return total
-}
-
-// estimateResponsesInputTokens 估算 Responses input 字段的 token
-func estimateResponsesInputTokens(input interface{}) int {
-	switch v := input.(type) {
-	case string:
-		// 简单字符串输入
-		return EstimateTokens(v)
-	case []interface{}:
-		// 消息数组格式
-		total := 0
-		for _, item := range v {
-			if m, ok := item.(map[string]interface{}); ok {
-				// 每条消息额外开销约 4 tokens
-				total += 4
-
-				// 处理 content 字段
-				if content := m["content"]; content != nil {
-					total += estimateContentTokens(content)
-				}
-
-				// 处理 tool_use
-				if toolUse, ok := m["tool_use"].(map[string]interface{}); ok {
-					data, _ := json.Marshal(toolUse)
-					total += EstimateTokens(string(data))
-				}
-			}
-		}
-		return total
-	default:
-		// 其他情况序列化后估算
-		data, err := json.Marshal(input)
-		if err != nil {
-			return 0
-		}
-		return EstimateTokens(string(data))
-	}
-}
-
-// estimateContentTokens 估算 content 字段的 token
-func estimateContentTokens(content interface{}) int {
-	switch v := content.(type) {
-	case string:
-		return EstimateTokens(v)
-	case []interface{}:
-		total := 0
-		for _, block := range v {
-			if b, ok := block.(map[string]interface{}); ok {
-				if text, ok := b["text"].(string); ok {
-					total += EstimateTokens(text)
-				}
-			}
-		}
-		return total
-	default:
-		data, err := json.Marshal(content)
-		if err != nil {
-			return 0
-		}
-		return EstimateTokens(string(data))
-	}
 }
 
 // EstimateResponsesOutputTokens 从 Responses API 响应估算输出 token
@@ -289,50 +236,25 @@ func EstimateResponsesOutputTokens(output interface{}) int {
 
 	// 处理 []types.ResponsesItem 类型
 	if items, ok := output.([]types.ResponsesItem); ok {
-		total := 0
-		for _, item := range items {
-			total += estimateResponsesItemTokens(item)
-		}
-		return total
+		return estimateResponsesItemsTokens(items, false)
 	}
 
-	// 处理 []interface{} 类型
+	// 处理 []interface{} 类型：先归一化再走统一计数器
 	if arr, ok := output.([]interface{}); ok {
+		items, err := types.ParseResponsesInput(arr)
+		if err == nil && len(items) > 0 {
+			return estimateResponsesItemsTokens(items, false)
+		}
+		// 归一化失败：退回到保守方案
 		total := 0
 		for _, item := range arr {
 			if m, ok := item.(map[string]interface{}); ok {
-				// 处理 content 字段
 				if content := m["content"]; content != nil {
 					total += estimateContentTokens(content)
 				}
-
-				// 处理 tool_use
 				if toolUse, ok := m["tool_use"].(map[string]interface{}); ok {
 					data, _ := json.Marshal(toolUse)
 					total += EstimateTokens(string(data))
-				}
-
-				// 处理 function_call 类型
-				if m["type"] == "function_call" {
-					if args, ok := m["arguments"].(string); ok {
-						total += EstimateTokens(args)
-					}
-					if name, ok := m["name"].(string); ok {
-						total += EstimateTokens(name) + 2 // 函数名 + 开销
-					}
-				}
-
-				// 处理 reasoning 类型
-				if m["type"] == "reasoning" {
-					if summary, ok := m["summary"].([]interface{}); ok {
-						for _, s := range summary {
-							if sm, ok := s.(map[string]interface{}); ok {
-								if text, ok := sm["text"].(string); ok {
-									total += EstimateTokens(text)
-								}
-							}
-						}
-					}
 				}
 			}
 		}
@@ -347,27 +269,253 @@ func EstimateResponsesOutputTokens(output interface{}) int {
 	return EstimateTokens(string(data))
 }
 
+// ============== 内部辅助函数 ==============
+
+// estimateResponsesItemsTokens 估算 ResponsesItem 数组的 token
+// isRequest 表示是否用于 request side（会加 item framing）
+func estimateResponsesItemsTokens(items []types.ResponsesItem, isRequest bool) int {
+	total := 0
+	for _, item := range items {
+		total += estimateResponsesItemTokens(item, isRequest)
+	}
+	return total
+}
+
 // estimateResponsesItemTokens 估算单个 ResponsesItem 的 token 数
-func estimateResponsesItemTokens(item types.ResponsesItem) int {
+// 注意：通过 ParseResponsesInput/NormalizeResponsesItem 保证已知 item 字段唯一归属，无重复计数。
+// 不同时计 canonical 字段与 raw/marshal（除 unknown type fallback）。
+func estimateResponsesItemTokens(item types.ResponsesItem, isRequest bool) int {
 	total := 0
 
-	// 处理 content 字段
-	if item.Content != nil {
-		total += estimateContentTokens(item.Content)
+	// 结构开销（仅用于 request 路由估算，让不同表示开销一致）
+	itemOverhead := 0
+	if isRequest {
+		itemOverhead = 4
 	}
+	total += itemOverhead
 
-	// 处理 tool_use
-	if item.ToolUse != nil {
-		data, _ := json.Marshal(item.ToolUse)
+	// 按类型明确字段归属，优先计 canonical 字段而非整项 marshal
+	switch item.Type {
+	case "message", "text":
+		// message/text：计 Content
+		if item.Content != nil {
+			total += estimateContentTokens(item.Content)
+		}
+		// 不重复计 ToolUse（NormalizeResponsesItem 会把 tool_call/tool_use 统一为 function_call，
+		// 且清空 ToolUse/Content 避免重复）
+		if item.ToolUse != nil {
+			data, _ := json.Marshal(item.ToolUse)
+			total += EstimateTokens(string(data))
+		}
+
+	case "reasoning", "compaction":
+		// reasoning/compaction：计 Summary、EncryptedContent
+		if item.Summary != nil {
+			if s, ok := item.Summary.(string); ok {
+				total += EstimateTokens(s)
+			} else {
+				data, _ := json.Marshal(item.Summary)
+				total += EstimateTokens(string(data))
+			}
+		}
+		if item.EncryptedContent != "" {
+			total += estimateOpaqueStringTokens(item.EncryptedContent)
+		}
+		// 即使有 Content/ToolUse 也不计（避免与 legacy/双重表示重复）
+
+	case "function_call", "tool_call":
+		// function_call：计 Name、Arguments、CallID
+		if item.Name != "" {
+			total += EstimateTokens(item.Name) + 2 // 函数名 + 小开销
+		}
+		if item.Arguments != "" {
+			total += EstimateTokens(item.Arguments)
+		}
+		if item.CallID != "" {
+			total += EstimateTokens(item.CallID)
+		}
+		// 不重复计 Content/ToolUse（NormalizeResponsesItem 会清空它们）
+		if item.Content != nil {
+			// 但兼容：如果确实只有 Content 没有 Arguments，补计 Content
+			if item.Name == "" && item.Arguments == "" {
+				total += estimateContentTokens(item.Content)
+			}
+		}
+		if item.ToolUse != nil {
+			// 兼容：如果确实只有 ToolUse 没有 Name/Arguments，补计 ToolUse
+			if item.Name == "" && item.Arguments == "" {
+				data, _ := json.Marshal(item.ToolUse)
+				total += EstimateTokens(string(data))
+			}
+		}
+
+	case "function_call_output", "tool_result":
+		// function_call_output：计 Output、CallID
+		if item.Output != nil {
+			if s, ok := item.Output.(string); ok {
+				total += EstimateTokens(s)
+			} else {
+				data, _ := json.Marshal(item.Output)
+				total += EstimateTokens(string(data))
+			}
+		}
+		if item.CallID != "" {
+			total += EstimateTokens(item.CallID)
+		}
+		// 不重复计 Content
+
+	case "custom_tool_call", "custom_tool_result":
+		// custom_tool_call：计 Name、Input、Namespace、CallID
+		if item.Name != "" {
+			total += EstimateTokens(item.Name) + 2
+		}
+		if item.Input != "" {
+			total += EstimateTokens(item.Input)
+		}
+		if item.Namespace != "" {
+			total += EstimateTokens(item.Namespace)
+		}
+		if item.CallID != "" {
+			total += EstimateTokens(item.CallID)
+		}
+		// custom_tool_result：计 Output
+		if item.Output != nil {
+			if s, ok := item.Output.(string); ok {
+				total += EstimateTokens(s)
+			} else {
+				data, _ := json.Marshal(item.Output)
+				total += EstimateTokens(string(data))
+			}
+		}
+
+	case "tool_search_call", "tool_search_result":
+		// tool_search_call：计 Arguments、CallID
+		if item.Arguments != "" {
+			total += EstimateTokens(item.Arguments)
+		}
+		if item.CallID != "" {
+			total += EstimateTokens(item.CallID)
+		}
+		// tool_search_result：计 Tools
+		if len(item.Tools) > 0 {
+			total += estimateToolsTokens(item.Tools)
+		}
+
+	case "computer_call", "computer_call_output",
+		"local_shell_call", "local_shell_call_output",
+		"web_search_call", "web_search_call_output":
+		// computer/local_shell/web：计 Name、Arguments、Input、Output、CallID 等
+		if item.Name != "" {
+			total += EstimateTokens(item.Name) + 2
+		}
+		if item.Arguments != "" {
+			total += EstimateTokens(item.Arguments)
+		}
+		if item.Input != "" {
+			total += EstimateTokens(item.Input)
+		}
+		if item.Output != nil {
+			if s, ok := item.Output.(string); ok {
+				total += EstimateTokens(s)
+			} else {
+				data, _ := json.Marshal(item.Output)
+				total += EstimateTokens(string(data))
+			}
+		}
+		if item.CallID != "" {
+			total += EstimateTokens(item.CallID)
+		}
+		if item.Status != "" {
+			total += EstimateTokens(item.Status)
+		}
+		if item.Execution != "" {
+			total += EstimateTokens(item.Execution)
+		}
+
+	default:
+		// 未知类型：保守方案——整项 marshal（不与已知字段重复，前面已只加 itemOverhead）
+		data, _ := json.Marshal(item)
 		total += EstimateTokens(string(data))
 	}
 
-	// 如果是特殊类型且 content/tool_use 都为空，序列化整个结构估算
-	// 这处理 function_call、reasoning 等类型，其数据可能在其他字段中
-	if total == 0 && item.Type != "" && item.Type != "message" && item.Type != "text" {
-		data, _ := json.Marshal(item)
-		total = EstimateTokens(string(data))
-	}
+	// 不再用旧逻辑：旧逻辑先计 Content/ToolUse，total == 0 才整项 marshal。
+	// 现在明确：已知类型只计对应字段，未知类型整项 marshal。
 
 	return total
+}
+
+// estimateContentTokens 估算 content 字段的 token
+func estimateContentTokens(content interface{}) int {
+	if content == nil {
+		return 0
+	}
+	switch v := content.(type) {
+	case string:
+		return EstimateTokens(v)
+	case []interface{}:
+		total := 0
+		for _, block := range v {
+			if b, ok := block.(map[string]interface{}); ok {
+				hasText := false
+				if textVal, ok := b["text"].(string); ok {
+					total += EstimateTokens(textVal)
+					hasText = true
+				}
+				// 其他 block 类型整体估算（但图片已在外层剥离并单独计过）
+				if !hasText {
+					data, _ := json.Marshal(b)
+					total += EstimateTokens(string(data))
+				}
+			}
+		}
+		return total
+	case []types.ContentBlock:
+		total := 0
+		for _, block := range v {
+			if block.Text != "" {
+				total += EstimateTokens(block.Text)
+			}
+		}
+		return total
+	default:
+		data, err := json.Marshal(content)
+		if err != nil {
+			return 0
+		}
+		return EstimateTokens(string(data))
+	}
+}
+
+// estimateToolsTokens 估算工具 schema 的 token
+// 不再用固定 150 tokens/tool，按实际内容估算
+func estimateToolsTokens(tools []interface{}) int {
+	if len(tools) == 0 {
+		return 0
+	}
+	total := 0
+	for _, tool := range tools {
+		data, err := json.Marshal(tool)
+		if err != nil {
+			continue
+		}
+		total += EstimateTokens(string(data)) + 8 // schema + 小开销
+	}
+	return total
+}
+
+// estimateOpaqueStringTokens 估算 opaque/encrypted 字符串的 token
+// 加密/高熵内容不按普通英文比率低估，用更保守的算法
+func estimateOpaqueStringTokens(s string) int {
+	if s == "" {
+		return 0
+	}
+	// 保守策略：对非空白字符统一用 ~1.5 字符/token（不区分 CJK/英文）
+	nonSpace := 0
+	for _, r := range s {
+		if !unicode.IsSpace(r) {
+			nonSpace++
+		}
+	}
+	tokens := float64(nonSpace) / 1.5
+	return int(tokens + 0.5)
 }

@@ -11,7 +11,10 @@
         </div>
       </div>
       <div class="protocol-model-availability__actions">
-        <div v-if="isDetecting" class="protocol-model-availability__detecting text-caption text-medium-emphasis">
+        <div
+          v-if="isDetecting && !primaryDiscoveryRoute"
+          class="protocol-model-availability__detecting text-caption text-medium-emphasis"
+        >
           <v-progress-circular color="primary" indeterminate size="18" width="2" />
           <span>{{ t('channelEditor.protocolModels.detecting') }}</span>
         </div>
@@ -21,12 +24,19 @@
           size="small"
           variant="tonal"
           color="primary"
-          :loading="rediscovering"
-          :disabled="rediscovering"
+          :disabled="isDetecting"
           @click="rediscoverAll"
         >
-          <v-icon start size="16">mdi-refresh</v-icon>
-          {{ t('channelEditor.protocolModels.rediscoverAll') }}
+          <v-progress-circular
+            v-if="isDetecting"
+            class="protocol-model-availability__btn-spinner"
+            color="primary"
+            indeterminate
+            size="16"
+            width="2"
+          />
+          <v-icon v-else start size="16">mdi-refresh</v-icon>
+          {{ isDetecting ? t('channelEditor.protocolModels.detecting') : t('channelEditor.protocolModels.rediscoverAll') }}
         </v-btn>
       </div>
     </div>
@@ -189,16 +199,16 @@
           </template>
         </div>
 
-        <ModelChipList
-          v-if="route.specificModels.length && !route.coverageGroups.length"
-          :models="route.specificModels"
-        />
-        <div v-else-if="!route.coverageGroups.length && route.hasInventory && sharedModels.length" class="text-caption text-medium-emphasis">
-          {{ t('channelEditor.protocolModels.specificEmpty') }}
-        </div>
-        <div v-else class="text-caption text-medium-emphasis">
-          {{ t('channelEditor.protocolModels.empty') }}
-        </div>
+        <!-- 已按 Key 归组展示过模型的行不再需要兜底文案，避免与上方清单同时出现。 -->
+        <template v-if="!route.coverageGroups.length">
+          <ModelChipList v-if="route.specificModels.length" :models="route.specificModels" />
+          <div v-else-if="route.hasInventory && sharedModels.length" class="text-caption text-medium-emphasis">
+            {{ t('channelEditor.protocolModels.specificEmpty') }}
+          </div>
+          <div v-else class="text-caption text-medium-emphasis">
+            {{ t('channelEditor.protocolModels.empty') }}
+          </div>
+        </template>
       </div>
     </div>
   </div>
@@ -535,6 +545,10 @@ const showIncompleteHint = computed(() => (
   align-items: center;
   gap: 6px;
   white-space: nowrap;
+}
+
+.protocol-model-availability__btn-spinner {
+  margin-inline-end: 8px;
 }
 
 @media (max-width: 600px) {

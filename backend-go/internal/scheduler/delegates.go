@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"context"
 	"log"
 
 	"github.com/BenedictKing/ccx/internal/config"
@@ -41,9 +42,13 @@ func (s *ChannelScheduler) SetTraceAffinity(userID string, channelIndex int, kin
 
 // SetTraceAffinityForRequirement 设置带上下文桶隔离的 Trace 亲和。
 func (s *ChannelScheduler) SetTraceAffinityForRequirement(userID string, channelIndex int, kind ChannelKind, requirement *ContextRequirement) {
+	s.SetTraceAffinityRouteForRequirement(userID, ChannelRouteRef{Kind: string(kind), Index: channelIndex}, kind, requirement)
+}
+
+func (s *ChannelScheduler) SetTraceAffinityRouteForRequirement(userID string, route ChannelRouteRef, kind ChannelKind, requirement *ContextRequirement) {
 	if userID != "" {
 		compositeKey := traceAffinityKey(kind, userID, requirement)
-		s.traceAffinity.SetPreferredChannel(compositeKey, channelIndex)
+		s.traceAffinity.SetPreferredRoute(compositeKey, route)
 	}
 }
 
@@ -157,6 +162,14 @@ func (s *ChannelScheduler) GetChannelLogStore(kind ChannelKind) *metrics.Channel
 	default:
 		return s.messagesChannelLogStore
 	}
+}
+
+func (s *ChannelScheduler) GetMetricsManagerForRoute(route ChannelRouteRef) *metrics.MetricsManager {
+	return s.getMetricsManager(ChannelKind(route.Kind))
+}
+
+func (s *ChannelScheduler) GetChannelLogStoreForRoute(route ChannelRouteRef) *metrics.ChannelLogStore {
+	return s.GetChannelLogStore(ChannelKind(route.Kind))
 }
 
 // ResetChannelMetrics 重置渠道所有 Key 的熔断/失败状态（保留历史统计）
@@ -359,6 +372,28 @@ func (s *ChannelScheduler) GetActiveChannelCount(kind ChannelKind) int {
 	return len(s.getActiveChannels(kind, ""))
 }
 
+// GetFederatedCandidateCount 返回默认 Autopilot 路径可见的去重物理候选数。
+// 显式 X-Channel/单渠道调用方不会使用该计数。
+func (s *ChannelScheduler) GetFederatedCandidateCount(kind ChannelKind) int {
+	seen := make(map[ChannelRouteKey]struct{})
+	for _, ch := range s.getActiveChannelsWithTrace(context.Background(), kind, "", newSelectionTrace(SelectionOptions{Kind: kind})) {
+		seen[ch.Route.Key()] = struct{}{}
+	}
+	if !s.protocolFederationEnabled(kind) {
+		return len(seen)
+	}
+	cfg := s.configManager.GetConfig()
+	for _, upstream := range cfg.Upstream {
+		if upstream.AccountUID == "" || !upstream.AutoManaged {
+			continue
+		}
+		for _, sibling := range s.protocolFederationSiblings(upstream.AccountUID) {
+			seen[sibling.Route.Key()] = struct{}{}
+		}
+	}
+	return len(seen)
+}
+
 // GetFirstActiveChannelIndex 返回当前类型下第一个活跃渠道索引；无活跃渠道时回退到 0；无渠道时返回 -1。
 func (s *ChannelScheduler) GetFirstActiveChannelIndex(kind ChannelKind) int {
 	channels := s.getActiveChannels(kind, "")
@@ -395,7 +430,7 @@ func (s *ChannelScheduler) GetConversationChannelsByKind(kind ChannelKind) []Cha
 	for i := range channels {
 		upstream := s.getUpstreamByIndex(channels[i].Index, kind)
 		if upstream != nil {
-			channels[i].CircuitOpen = s.channelCircuitState(upstream, kind) == metrics.CircuitStateOpen
+			channels[i].CircuitOpen = s.channelCircuitState(upstream, kind, "") == metrics.CircuitStateOpen
 		}
 	}
 	return channels
@@ -439,6 +474,10 @@ func (s *ChannelScheduler) GetSortedURLsForChannel(
 	return s.urlManager.GetSortedURLs(urlManagerChannelKey(kind, channelIndex), urls)
 }
 
+func (s *ChannelScheduler) GetSortedURLsForRoute(route ChannelRouteRef, urls []string) []warmup.URLLatencyResult {
+	return s.GetSortedURLsForChannel(ChannelKind(route.Kind), route.Index, urls)
+}
+
 // MarkURLSuccess 标记 URL 成功
 func (s *ChannelScheduler) MarkURLSuccess(kind ChannelKind, channelIndex int, url string) {
 	if s.urlManager != nil {
@@ -446,11 +485,19 @@ func (s *ChannelScheduler) MarkURLSuccess(kind ChannelKind, channelIndex int, ur
 	}
 }
 
+func (s *ChannelScheduler) MarkURLSuccessForRoute(route ChannelRouteRef, url string) {
+	s.MarkURLSuccess(ChannelKind(route.Kind), route.Index, url)
+}
+
 // MarkURLFailure 标记 URL 失败，触发动态排序
 func (s *ChannelScheduler) MarkURLFailure(kind ChannelKind, channelIndex int, url string) {
 	if s.urlManager != nil {
 		s.urlManager.MarkFailure(urlManagerChannelKey(kind, channelIndex), url)
 	}
+}
+
+func (s *ChannelScheduler) MarkURLFailureForRoute(route ChannelRouteRef, url string) {
+	s.MarkURLFailure(ChannelKind(route.Kind), route.Index, url)
 }
 
 // InvalidateURLCache 使渠道 URL 状态失效

@@ -21,8 +21,11 @@
 
 import { fetchWithTimeout } from './http.mjs'
 import {
+  CACHE_PATH,
   cachedFetch,
+  cacheAge,
   getSimpleCache,
+  hasCacheEntry,
   setSimpleCache,
 } from './http-cache.mjs'
 
@@ -34,6 +37,8 @@ const TOTAL_CATEGORIES = 8
 
 const GENERATED_AT_KEY = 'benchlm:modelsGeneratedAt'
 const EXTRACTED_PROFILES_KEY = 'benchlm:extractedProfiles'
+const RAW_DOC_KEY = 'benchlm:rawModelsDoc'
+const RAW_DOC_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000
 
 const FETCH_HEADERS = {
   'User-Agent': 'ccx-benchmark-updater/1.0',
@@ -46,6 +51,25 @@ const FETCH_HEADERS = {
  */
 export function methodologyUrl() {
   return `${BASE_URL}/methodology`
+}
+
+function describeCacheAge(ageMs) {
+  return Number.isFinite(ageMs) ? String(ageMs) : 'missing'
+}
+
+function benchlmCacheSummary() {
+  const etagKey = `etag:${MODELS_URL}`
+  const keys = [
+    etagKey,
+    `simple:${GENERATED_AT_KEY}`,
+    `simple:${EXTRACTED_PROFILES_KEY}`,
+    `simple:${RAW_DOC_KEY}`,
+  ]
+  return keys.map(key => {
+    const present = hasCacheEntry(key)
+    const ageMs = describeCacheAge(cacheAge(key))
+    return `${key}=${present ? 'present' : 'missing'}@${ageMs}`
+  }).join(', ')
 }
 
 /**
@@ -150,16 +174,25 @@ export async function fetchBenchlmData(modelMap, categoryMap) {
   const { status, response } = await cachedFetch(MODELS_URL, { headers: FETCH_HEADERS })
 
   if (status === 304) {
-    const extracted = getSimpleCache(EXTRACTED_PROFILES_KEY)
-    if (extracted && Object.keys(extracted).length > 0) {
-      console.log(`[benchlm] ${MODELS_URL} → 304 Not Modified, using cached profiles`)
+    const rawDoc = getSimpleCache(RAW_DOC_KEY)
+    const rawDocAge = cacheAge(`simple:${RAW_DOC_KEY}`)
+    if (rawDoc && rawDocAge <= RAW_DOC_REFRESH_INTERVAL_MS) {
+      console.log(
+        `[benchlm] ${MODELS_URL} → 304 Not Modified, rebuilding profiles from cached raw doc `
+        + `(cache=${CACHE_PATH}, key=${RAW_DOC_KEY}, ageMs=${rawDocAge}; keys=${benchlmCacheSummary()})`,
+      )
+      const profiles = extractProfiles(rawDoc, modelMap, categoryMap)
+      setSimpleCache(EXTRACTED_PROFILES_KEY, profiles)
       return {
-        data: { ...extracted },
+        data: { ...profiles },
         unchanged: ['models.json unchanged (304 Not Modified)'],
       }
     }
-    // ETag 命中但提取缓存丢失（缓存文件部分损坏）：强制重新拉取
-    console.log(`[benchlm] 304 Not Modified but cached profiles missing, refetching`)
+    // 原始文档缺失或超过 24h：主动全量拉取一次，避免长期被旧 extractedProfiles 锁死
+    console.log(
+      `[benchlm] 304 Not Modified but raw doc missing/stale, refetching full models.json `
+      + `(cache=${CACHE_PATH}, key=${RAW_DOC_KEY}, ageMs=${Number.isFinite(rawDocAge) ? rawDocAge : 'missing'}, maxAgeMs=${RAW_DOC_REFRESH_INTERVAL_MS}; keys=${benchlmCacheSummary()})`,
+    )
     const { doc, generatedAt } = await fetchModelsDoc()
     return processFresh(doc, generatedAt, modelMap, categoryMap, true)
   }
@@ -197,6 +230,7 @@ function processFresh(doc, generatedAt, modelMap, categoryMap, from304Refetch) {
   const profiles = extractProfiles(doc, modelMap, categoryMap)
   setSimpleCache(GENERATED_AT_KEY, generatedAt)
   setSimpleCache(EXTRACTED_PROFILES_KEY, profiles)
+  setSimpleCache(RAW_DOC_KEY, doc)
 
   const label = from304Refetch ? 'refetched' : 'extracted'
   console.log(`[benchlm] ${label} data for ${Object.keys(profiles).length} models`)

@@ -53,7 +53,8 @@ func (cm *ConfigManager) GetCurrentGeminiUpstreamWithIndex() (*UpstreamConfig, i
 }
 
 // AddGeminiUpstream 添加 Gemini 上游
-func (cm *ConfigManager) AddGeminiUpstream(upstream UpstreamConfig) error {
+// placements 可选传 "front"（故障转移序列首位），缺省为追加到序列末尾（见 assignChannelPriority）
+func (cm *ConfigManager) AddGeminiUpstream(upstream UpstreamConfig, placements ...string) error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -96,6 +97,8 @@ func (cm *ConfigManager) AddGeminiUpstream(upstream UpstreamConfig) error {
 	applyDefaultBaseURL(&upstream)
 
 	upstream.ModelMapping, _ = sanitizeDeprecatedGrokModelMapping(upstream.ModelMapping)
+	stripAutoManagedExplicitOverrides(&upstream)
+	assignChannelPriority(cm.config.GeminiUpstream, &upstream, resolvePlacement(placements))
 	cm.config.GeminiUpstream = append([]UpstreamConfig{upstream}, cm.config.GeminiUpstream...)
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
@@ -221,9 +224,9 @@ func (cm *ConfigManager) UpdateGeminiUpstream(index int, updates UpstreamUpdate)
 		upstream.Priority = *updates.Priority
 	}
 	if updates.Status != nil {
-		upstream.Status = *updates.Status
+		applyAdministrativeChannelStatus(upstream, strings.ToLower(*updates.Status))
 	}
-	if updates.PromotionUntil != nil {
+	if updates.PromotionUntil != nil && upstream.Status != "suspended" {
 		upstream.PromotionUntil = updates.PromotionUntil
 	}
 	if updates.LowQuality != nil {
@@ -357,6 +360,8 @@ func (cm *ConfigManager) UpdateGeminiUpstream(index int, updates UpstreamUpdate)
 		}
 		upstream.Tags = cleaned
 	}
+
+	stripAutoManagedExplicitOverrides(upstream)
 
 	// 检测配置是否真的发生了变化
 	if !cm.hasConfigChanged(originalConfig, cm.config) {
@@ -550,7 +555,8 @@ func (cm *ConfigManager) MoveGeminiAPIKeyToBottom(upstreamIndex int, apiKey stri
 
 // ReorderGeminiUpstreams 重新排序 Gemini 渠道优先级
 // order 是渠道索引数组，按新的优先级顺序排列（只更新传入的渠道，支持部分排序）
-func (cm *ConfigManager) ReorderGeminiUpstreams(order []int) error {
+// priorities 可选：与 order 平行的显式优先级值（统一 LLM 视图按全局位次提交），缺省按位次 1..N
+func (cm *ConfigManager) ReorderGeminiUpstreams(order []int, priorities ...[]int) error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -570,9 +576,13 @@ func (cm *ConfigManager) ReorderGeminiUpstreams(order []int) error {
 	}
 
 	// 更新传入渠道的优先级（未传入的渠道保持原优先级不变）
-	// 注意：priority 从 1 开始，避免 omitempty 吞掉 0 值
+	// 注意：priority 从 1 开始，0 保留为"未显式配置"语义（调度层回退为索引，前端排序落入兜底）
+	values, err := resolveReorderPriorities(order, priorities...)
+	if err != nil {
+		return err
+	}
 	for i, idx := range order {
-		cm.config.GeminiUpstream[idx].Priority = i + 1
+		cm.config.GeminiUpstream[idx].Priority = values[i]
 	}
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
@@ -598,11 +608,9 @@ func (cm *ConfigManager) SetGeminiChannelStatus(index int, status string) error 
 		return fmt.Errorf("无效的状态: %s (允许值: active, suspended, disabled)", status)
 	}
 
-	cm.config.GeminiUpstream[index].Status = status
+	promotionCleared := applyAdministrativeChannelStatus(&cm.config.GeminiUpstream[index], status)
 
-	// 暂停时清除促销期
-	if status == "suspended" && cm.config.GeminiUpstream[index].PromotionUntil != nil {
-		cm.config.GeminiUpstream[index].PromotionUntil = nil
+	if promotionCleared {
 		log.Printf("[Config-Status] 已清除 Gemini 渠道 [%d] %s 的促销期", index, cm.config.GeminiUpstream[index].Name)
 	}
 
@@ -664,6 +672,9 @@ func (cm *ConfigManager) UpdateGeminiModelMapping(index int, sourcePattern, targ
 	}
 
 	upstream := &cm.config.GeminiUpstream[index]
+	if upstream.AutoManaged {
+		return fmt.Errorf("渠道 [%d] %s 为自动托管渠道，模型映射由 Autopilot 自动解析，不支持手工编辑", index, upstream.Name)
+	}
 
 	// 检查 sourcePattern 是否存在
 	if upstream.ModelMapping == nil {

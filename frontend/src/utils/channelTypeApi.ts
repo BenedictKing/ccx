@@ -5,7 +5,7 @@ export type ManagedChannelType = 'messages' | 'chat' | 'responses' | 'gemini' | 
 type ChannelTypeApi = {
   getMetrics: () => Promise<ChannelMetrics[]>
   getSchedulerStats: () => Promise<SchedulerStatsResponse>
-  reorder: (_order: number[]) => Promise<void>
+  reorder: (_order: number[], _priorities?: number[]) => Promise<void>
   setStatus: (_channelId: number, _status: ChannelStatus) => Promise<void>
   resume: (_channelId: number) => Promise<ResumeChannelResponse>
   promote: (_channelId: number, _durationSeconds: number) => Promise<void>
@@ -51,7 +51,7 @@ export const getChannelTypeApi = (api: ChannelApiSubset, channelType: ManagedCha
       return {
         getMetrics: () => api.getChatChannelMetrics(),
         getSchedulerStats: () => api.getSchedulerStats('chat'),
-        reorder: (order) => api.reorderChatChannels(order),
+        reorder: (order, priorities) => api.reorderChatChannels(order, priorities),
         setStatus: (channelId, status) => api.setChatChannelStatus(channelId, status),
         resume: (channelId) => api.resumeChatChannel(channelId),
         promote: (channelId, durationSeconds) => api.setChatChannelPromotion(channelId, durationSeconds)
@@ -60,7 +60,7 @@ export const getChannelTypeApi = (api: ChannelApiSubset, channelType: ManagedCha
       return {
         getMetrics: () => api.getGeminiChannelMetrics(),
         getSchedulerStats: () => api.getSchedulerStats('gemini'),
-        reorder: (order) => api.reorderGeminiChannels(order),
+        reorder: (order, priorities) => api.reorderGeminiChannels(order, priorities),
         setStatus: (channelId, status) => api.setGeminiChannelStatus(channelId, status),
         resume: (channelId) => api.resumeGeminiChannel(channelId),
         promote: (channelId, durationSeconds) => api.setGeminiChannelPromotion(channelId, durationSeconds)
@@ -69,7 +69,7 @@ export const getChannelTypeApi = (api: ChannelApiSubset, channelType: ManagedCha
       return {
         getMetrics: () => api.getImagesChannelMetrics(),
         getSchedulerStats: () => api.getSchedulerStats('images'),
-        reorder: (order) => api.reorderImagesChannels(order),
+        reorder: (order, priorities) => api.reorderImagesChannels(order, priorities),
         setStatus: (channelId, status) => api.setImagesChannelStatus(channelId, status),
         resume: (channelId) => api.resumeImagesChannel(channelId),
         promote: (channelId, durationSeconds) => api.setImagesChannelPromotion(channelId, durationSeconds)
@@ -78,7 +78,7 @@ export const getChannelTypeApi = (api: ChannelApiSubset, channelType: ManagedCha
       return {
         getMetrics: () => api.getVectorsChannelMetrics(),
         getSchedulerStats: () => api.getSchedulerStats('vectors'),
-        reorder: (order) => api.reorderVectorsChannels(order),
+        reorder: (order, priorities) => api.reorderVectorsChannels(order, priorities),
         setStatus: (channelId, status) => api.setVectorsChannelStatus(channelId, status),
         resume: (channelId) => api.resumeVectorsChannel(channelId),
         promote: (channelId, durationSeconds) => api.setVectorsChannelPromotion(channelId, durationSeconds)
@@ -87,7 +87,7 @@ export const getChannelTypeApi = (api: ChannelApiSubset, channelType: ManagedCha
       return {
         getMetrics: () => api.getResponsesChannelMetrics(),
         getSchedulerStats: () => api.getSchedulerStats('responses'),
-        reorder: (order) => api.reorderResponsesChannels(order),
+        reorder: (order, priorities) => api.reorderResponsesChannels(order, priorities),
         setStatus: (channelId, status) => api.setResponsesChannelStatus(channelId, status),
         resume: (channelId) => api.resumeResponsesChannel(channelId),
         promote: (channelId, durationSeconds) => api.setResponsesChannelPromotion(channelId, durationSeconds)
@@ -96,7 +96,7 @@ export const getChannelTypeApi = (api: ChannelApiSubset, channelType: ManagedCha
       return {
         getMetrics: () => api.getChannelMetrics(),
         getSchedulerStats: () => api.getSchedulerStats('messages'),
-        reorder: (order) => api.reorderChannels(order),
+        reorder: (order, priorities) => api.reorderChannels(order, priorities),
         setStatus: (channelId, status) => api.setChannelStatus(channelId, status),
         resume: (channelId) => api.resumeChannel(channelId),
         promote: (channelId, durationSeconds) => api.setChannelPromotion(channelId, durationSeconds)

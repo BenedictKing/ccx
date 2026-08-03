@@ -8,12 +8,19 @@ import (
 	"github.com/BenedictKing/ccx/internal/conversation"
 	"github.com/BenedictKing/ccx/internal/metrics"
 	"github.com/BenedictKing/ccx/internal/ratelimit"
+	"github.com/BenedictKing/ccx/internal/routingref"
 	"github.com/BenedictKing/ccx/internal/session"
 	"github.com/BenedictKing/ccx/internal/utils"
 	"github.com/BenedictKing/ccx/internal/warmup"
 )
 
 // ChannelScheduler 多渠道调度器
+// ChannelRouteRef identifies one physical configured channel route.
+type ChannelRouteRef = routingref.RouteRef
+
+// ChannelRouteKey is the stable comparable key for a physical route.
+type ChannelRouteKey = routingref.Key
+
 type ChannelScheduler struct {
 	mu                       sync.RWMutex
 	configManager            *config.ConfigManager

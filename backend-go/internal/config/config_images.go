@@ -67,7 +67,8 @@ func (cm *ConfigManager) GetCurrentImagesUpstreamWithIndex() (*UpstreamConfig, i
 }
 
 // AddImagesUpstream 添加 Images 上游
-func (cm *ConfigManager) AddImagesUpstream(upstream UpstreamConfig) error {
+// placements 可选传 "front"（故障转移序列首位），缺省为追加到序列末尾（见 assignChannelPriority）
+func (cm *ConfigManager) AddImagesUpstream(upstream UpstreamConfig, placements ...string) error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -115,6 +116,8 @@ func (cm *ConfigManager) AddImagesUpstream(upstream UpstreamConfig) error {
 	upstream.BaseURLs = deduplicateBaseURLs(upstream.BaseURLs, upstream.ServiceType)
 
 	upstream.ModelMapping, _ = sanitizeDeprecatedGrokModelMapping(upstream.ModelMapping)
+	stripAutoManagedExplicitOverrides(&upstream)
+	assignChannelPriority(cm.config.ImagesUpstream, &upstream, resolvePlacement(placements))
 	cm.config.ImagesUpstream = append([]UpstreamConfig{upstream}, cm.config.ImagesUpstream...)
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
@@ -245,9 +248,9 @@ func (cm *ConfigManager) UpdateImagesUpstream(index int, updates UpstreamUpdate)
 		upstream.Priority = *updates.Priority
 	}
 	if updates.Status != nil {
-		upstream.Status = *updates.Status
+		applyAdministrativeChannelStatus(upstream, strings.ToLower(*updates.Status))
 	}
-	if updates.PromotionUntil != nil {
+	if updates.PromotionUntil != nil && upstream.Status != "suspended" {
 		upstream.PromotionUntil = updates.PromotionUntil
 	}
 	if updates.LowQuality != nil {
@@ -378,6 +381,8 @@ func (cm *ConfigManager) UpdateImagesUpstream(index int, updates UpstreamUpdate)
 		}
 		upstream.Tags = cleaned
 	}
+
+	stripAutoManagedExplicitOverrides(upstream)
 
 	// 检测配置是否真的发生了变化
 	if !cm.hasConfigChanged(originalConfig, cm.config) {
@@ -567,7 +572,8 @@ func (cm *ConfigManager) MoveImagesAPIKeyToBottom(upstreamIndex int, apiKey stri
 
 // ReorderImagesUpstreams 重新排序 Images 渠道优先级
 // order 是渠道索引数组，按新的优先级顺序排列（只更新传入的渠道，支持部分排序）
-func (cm *ConfigManager) ReorderImagesUpstreams(order []int) error {
+// priorities 可选：与 order 平行的显式优先级值，缺省按位次 1..N
+func (cm *ConfigManager) ReorderImagesUpstreams(order []int, priorities ...[]int) error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -586,8 +592,12 @@ func (cm *ConfigManager) ReorderImagesUpstreams(order []int) error {
 		seen[idx] = true
 	}
 
+	values, err := resolveReorderPriorities(order, priorities...)
+	if err != nil {
+		return err
+	}
 	for i, idx := range order {
-		cm.config.ImagesUpstream[idx].Priority = i + 1
+		cm.config.ImagesUpstream[idx].Priority = values[i]
 	}
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
@@ -612,10 +622,9 @@ func (cm *ConfigManager) SetImagesChannelStatus(index int, status string) error 
 		return fmt.Errorf("无效的状态: %s (允许值: active, suspended, disabled)", status)
 	}
 
-	cm.config.ImagesUpstream[index].Status = status
+	promotionCleared := applyAdministrativeChannelStatus(&cm.config.ImagesUpstream[index], status)
 
-	if status == "suspended" && cm.config.ImagesUpstream[index].PromotionUntil != nil {
-		cm.config.ImagesUpstream[index].PromotionUntil = nil
+	if promotionCleared {
 		log.Printf("[Config-Status] 已清除 Images 渠道 [%d] %s 的促销期", index, cm.config.ImagesUpstream[index].Name)
 	}
 
@@ -676,6 +685,9 @@ func (cm *ConfigManager) UpdateImagesModelMapping(index int, sourcePattern, targ
 	}
 
 	upstream := &cm.config.ImagesUpstream[index]
+	if upstream.AutoManaged {
+		return fmt.Errorf("渠道 [%d] %s 为自动托管渠道，模型映射由 Autopilot 自动解析，不支持手工编辑", index, upstream.Name)
+	}
 
 	// 检查 sourcePattern 是否存在
 	if upstream.ModelMapping == nil {

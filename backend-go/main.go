@@ -137,11 +137,11 @@ func healthCheckL1Fetcher(handler gin.HandlerFunc) healthcheck.L1Fetcher {
 	fetcher := channelModelsHandlerFetcher(handler)
 	return func(ctx context.Context, req healthcheck.L1Request) (healthcheck.L1Response, error) {
 		if upstreamprobe.IsVolcenginePlanBaseURL(req.BaseURL) {
-			sc, body, err := upstreamprobe.VolcenginePlanL1Probe(ctx, req.ServiceType, req.BaseURL, req.APIKey, req.AuthHeader)
+			sc, body, model, err := upstreamprobe.VolcenginePlanL1Probe(ctx, req.ServiceType, req.BaseURL, req.APIKey, req.AuthHeader)
 			if err != nil {
-				return healthcheck.L1Response{}, err
+				return healthcheck.L1Response{RealCallVerified: true, Model: model}, err
 			}
-			return healthcheck.L1Response{StatusCode: sc, Body: body, RealCallVerified: true}, nil
+			return healthcheck.L1Response{StatusCode: sc, Body: body, RealCallVerified: true, Model: model}, nil
 		}
 		resp, err := fetcher(ctx, handlers.DiscoveryModelsFetchRequest{
 			ServiceType:        req.ServiceType,
@@ -909,7 +909,7 @@ func main() {
 				}
 			},
 			// 失败喂熔断：按渠道类型喂对应指标管理器，并写入渠道日志（保活验证失败此前对渠道日志不可见）
-			func(channelType string, channelIndex int, baseURL, apiKey, serviceType, detail string) {
+			func(channelType string, channelIndex int, baseURL, apiKey, serviceType, model, detail string) {
 				kind := scheduler.ChannelKind(channelType)
 				normalizedServiceType := scheduler.NormalizedMetricsServiceType(kind, serviceType)
 				channelScheduler.RecordFailure(baseURL, apiKey, normalizedServiceType, kind)
@@ -924,7 +924,7 @@ func main() {
 					channelScheduler.GetChannelLogStore(kind),
 					metricsKey,
 					channelIndex,
-					"", "", 0, 0, false,
+					model, "", 0, 0, false,
 					apiKey, baseURL, detail, channelType,
 					false,
 					metrics.RequestSourceHealthCheck,
@@ -1175,7 +1175,7 @@ func main() {
 		apiGroup.POST("/messages/channels/:id/models", messages.GetChannelModels(cfgManager))
 		registerChannelHealthRoutes("messages")
 		apiGroup.GET("/messages/models/stats/history", handlers.GetModelStatsHistory(messagesMetricsManager))
-		apiGroup.GET("/messages/channels/:id/logs", handlers.GetChannelLogs(channelScheduler.GetChannelLogStore(scheduler.ChannelKindMessages), cfgManager, scheduler.ChannelKindMessages))
+		apiGroup.GET("/messages/channels/:id/logs", handlers.GetChannelLogs(channelScheduler.GetChannelLogStore(scheduler.ChannelKindMessages), cfgManager, scheduler.ChannelKindMessages, channelScheduler.GetMessagesMetricsManager()))
 		apiGroup.GET("/messages/channels/:id/capability-snapshot", handlers.GetCapabilitySnapshot(cfgManager, "messages"))
 		apiGroup.POST("/messages/channels/:id/capability-test", handlers.TestChannelCapability(cfgManager, channelScheduler.GetChannelLogStore(scheduler.ChannelKindMessages), "messages"))
 		apiGroup.GET("/messages/channels/:id/capability-test/:jobId", handlers.GetCapabilityTestJobStatus(cfgManager, "messages"))
@@ -1213,7 +1213,7 @@ func main() {
 		apiGroup.POST("/responses/channels/:id/models", responses.GetChannelModels(cfgManager))
 		registerChannelHealthRoutes("responses")
 		apiGroup.GET("/responses/models/stats/history", handlers.GetModelStatsHistory(responsesMetricsManager))
-		apiGroup.GET("/responses/channels/:id/logs", handlers.GetChannelLogs(channelScheduler.GetChannelLogStore(scheduler.ChannelKindResponses), cfgManager, scheduler.ChannelKindResponses))
+		apiGroup.GET("/responses/channels/:id/logs", handlers.GetChannelLogs(channelScheduler.GetChannelLogStore(scheduler.ChannelKindResponses), cfgManager, scheduler.ChannelKindResponses, channelScheduler.GetResponsesMetricsManager()))
 		apiGroup.GET("/responses/channels/:id/capability-snapshot", handlers.GetCapabilitySnapshot(cfgManager, "responses"))
 		apiGroup.POST("/responses/channels/:id/capability-test", handlers.TestChannelCapability(cfgManager, channelScheduler.GetChannelLogStore(scheduler.ChannelKindResponses), "responses"))
 		apiGroup.GET("/responses/channels/:id/capability-test/:jobId", handlers.GetCapabilityTestJobStatus(cfgManager, "responses"))
@@ -1251,7 +1251,7 @@ func main() {
 		apiGroup.POST("/gemini/channels/:id/models", gemini.GetChannelModels(cfgManager))
 		registerChannelHealthRoutes("gemini")
 		apiGroup.GET("/gemini/models/stats/history", handlers.GetModelStatsHistory(geminiMetricsManager))
-		apiGroup.GET("/gemini/channels/:id/logs", handlers.GetChannelLogs(channelScheduler.GetChannelLogStore(scheduler.ChannelKindGemini), cfgManager, scheduler.ChannelKindGemini))
+		apiGroup.GET("/gemini/channels/:id/logs", handlers.GetChannelLogs(channelScheduler.GetChannelLogStore(scheduler.ChannelKindGemini), cfgManager, scheduler.ChannelKindGemini, channelScheduler.GetGeminiMetricsManager()))
 		apiGroup.GET("/gemini/channels/:id/capability-snapshot", handlers.GetCapabilitySnapshot(cfgManager, "gemini"))
 		apiGroup.POST("/gemini/channels/:id/capability-test", handlers.TestChannelCapability(cfgManager, channelScheduler.GetChannelLogStore(scheduler.ChannelKindGemini), "gemini"))
 		apiGroup.GET("/gemini/channels/:id/capability-test/:jobId", handlers.GetCapabilityTestJobStatus(cfgManager, "gemini"))
@@ -1289,7 +1289,7 @@ func main() {
 		apiGroup.POST("/chat/channels/:id/models", chat.GetChannelModels(cfgManager))
 		registerChannelHealthRoutes("chat")
 		apiGroup.GET("/chat/models/stats/history", handlers.GetModelStatsHistory(chatMetricsManager))
-		apiGroup.GET("/chat/channels/:id/logs", handlers.GetChannelLogs(channelScheduler.GetChannelLogStore(scheduler.ChannelKindChat), cfgManager, scheduler.ChannelKindChat))
+		apiGroup.GET("/chat/channels/:id/logs", handlers.GetChannelLogs(channelScheduler.GetChannelLogStore(scheduler.ChannelKindChat), cfgManager, scheduler.ChannelKindChat, channelScheduler.GetChatMetricsManager()))
 		apiGroup.GET("/chat/channels/:id/capability-snapshot", handlers.GetCapabilitySnapshot(cfgManager, "chat"))
 		apiGroup.POST("/chat/channels/:id/capability-test", handlers.TestChannelCapability(cfgManager, channelScheduler.GetChannelLogStore(scheduler.ChannelKindChat), "chat"))
 		apiGroup.GET("/chat/channels/:id/capability-test/:jobId", handlers.GetCapabilityTestJobStatus(cfgManager, "chat"))
@@ -1328,7 +1328,7 @@ func main() {
 		apiGroup.POST("/images/channels/:id/models", images.GetChannelModels(cfgManager))
 		registerChannelHealthRoutes("images")
 		apiGroup.GET("/images/models/stats/history", handlers.GetModelStatsHistory(imagesMetricsManager))
-		apiGroup.GET("/images/channels/:id/logs", handlers.GetChannelLogs(channelScheduler.GetChannelLogStore(scheduler.ChannelKindImages), cfgManager, scheduler.ChannelKindImages))
+		apiGroup.GET("/images/channels/:id/logs", handlers.GetChannelLogs(channelScheduler.GetChannelLogStore(scheduler.ChannelKindImages), cfgManager, scheduler.ChannelKindImages, channelScheduler.GetImagesMetricsManager()))
 
 		// Vectors 渠道管理
 		apiGroup.GET("/vectors/channels", vectors.GetUpstreams(cfgManager))
@@ -1360,7 +1360,7 @@ func main() {
 		apiGroup.POST("/vectors/channels/:id/models", vectors.GetChannelModels(cfgManager))
 		registerChannelHealthRoutes("vectors")
 		apiGroup.GET("/vectors/models/stats/history", handlers.GetModelStatsHistory(vectorsMetricsManager))
-		apiGroup.GET("/vectors/channels/:id/logs", handlers.GetChannelLogs(channelScheduler.GetChannelLogStore(scheduler.ChannelKindVectors), cfgManager, scheduler.ChannelKindVectors))
+		apiGroup.GET("/vectors/channels/:id/logs", handlers.GetChannelLogs(channelScheduler.GetChannelLogStore(scheduler.ChannelKindVectors), cfgManager, scheduler.ChannelKindVectors, channelScheduler.GetVectorsMetricsManager()))
 
 		// 健康中心 API（Phase 1 shadow/read-only）
 		if autopilotManager != nil {

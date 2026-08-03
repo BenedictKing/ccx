@@ -14,6 +14,7 @@ import (
 
 // MultiChannelAttemptResult 描述一次"选中渠道"的尝试结果（用于多渠道 failover 外壳复用）。
 type MultiChannelAttemptResult struct {
+	Route             scheduler.ChannelRouteRef
 	Handled           bool
 	Attempted         bool
 	SuccessKey        string
@@ -31,6 +32,7 @@ type TrySelectedChannelFunc func(selection *scheduler.SelectionResult) MultiChan
 type OnMultiChannelHandledFunc func(selection *scheduler.SelectionResult, result MultiChannelAttemptResult)
 
 type pendingRoutingAttempt struct {
+	route           scheduler.ChannelRouteRef
 	selection       *scheduler.SelectionResult
 	result          MultiChannelAttemptResult
 	duration        time.Duration
@@ -120,7 +122,9 @@ func HandleMultiChannelFailoverWithSelectionFilter(
 	correlationID := autopilot.GenerateRequestCorrelationID()
 	c.Set("ccx.request_correlation_id", correlationID)
 
-	failedChannels := make(map[int]bool)
+	// 该外壳是 route-aware 调用方：失败集合只按物理路由记录，避免不同 kind
+	// 的相同 index 相互污染。旧 SelectChannel/SelectionOptions 调用方仍可显式传 FailedChannels。
+	failedRoutes := make(map[scheduler.ChannelRouteKey]bool)
 	var lastError error
 	var lastFailoverError *FailoverError
 	hasImageContent := false
@@ -130,7 +134,13 @@ func HandleMultiChannelFailoverWithSelectionFilter(
 	}
 	EnsureAutopilotRequestProfile(c, kind, model, "", userID, requestBody)
 
+	// Same-kind candidates are already unique by physical route today. Keeping the bound
+	// separate from failedRoutes makes Phase 4 able to replace it with a deduplicated
+	// cross-kind candidate count without changing the attempt loop contract.
 	maxChannelAttempts := channelScheduler.GetActiveChannelCount(kind)
+	if kind == scheduler.ChannelKindMessages && c.Param("routePrefix") == "" && c.GetHeader("X-Channel") == "" {
+		maxChannelAttempts = channelScheduler.GetFederatedCandidateCount(kind)
+	}
 	var pendingOutcome *pendingRoutingAttempt
 
 	for channelAttempt := 0; channelAttempt < maxChannelAttempts; channelAttempt++ {
@@ -154,7 +164,7 @@ func HandleMultiChannelFailoverWithSelectionFilter(
 
 		selection, err := channelScheduler.SelectChannelWithOptions(c.Request.Context(), scheduler.SelectionOptions{
 			UserID:             userID,
-			FailedChannels:     failedChannels,
+			FailedRoutes:       failedRoutes,
 			Kind:               kind,
 			Model:              model,
 			RoutePrefix:        c.Param("routePrefix"),
@@ -167,6 +177,9 @@ func HandleMultiChannelFailoverWithSelectionFilter(
 		if err != nil {
 			lastError = err
 			break
+		}
+		if channelAttempt == 0 && selection.CandidateCount > 0 {
+			maxChannelAttempts = selection.CandidateCount
 		}
 
 		// 新渠道已经成功选出，上一渠道失败由“请求终态”降为“中间尝试失败”。
@@ -221,7 +234,7 @@ func HandleMultiChannelFailoverWithSelectionFilter(
 					if agentRole == "subagent" {
 						affinityUserID = userID + ":subagent"
 					}
-					channelScheduler.SetTraceAffinityForRequirement(affinityUserID, channelIndex, kind, contextRequirement)
+					channelScheduler.SetTraceAffinityRouteForRequirement(affinityUserID, selection.Route, kind, contextRequirement)
 				}
 				channelName := ""
 				if upstream != nil {
@@ -239,7 +252,7 @@ func HandleMultiChannelFailoverWithSelectionFilter(
 			return
 		}
 
-		failedChannels[channelIndex] = true
+		failedRoutes[selection.Route.Key()] = true
 
 		if result.FailoverError != nil {
 			lastFailoverError = result.FailoverError
@@ -256,6 +269,7 @@ func HandleMultiChannelFailoverWithSelectionFilter(
 			RequestLogf(c, "[%s-Failover] 警告: 渠道 [%d] %s 所有密钥都失败，尝试下一个渠道", apiType, channelIndex, upstream.Name)
 		}
 		pendingOutcome = &pendingRoutingAttempt{
+			route:           selection.Route,
 			selection:       selection,
 			result:          result,
 			duration:        attemptDuration,

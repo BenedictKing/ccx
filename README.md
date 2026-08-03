@@ -241,6 +241,22 @@ Join the QQ group for discussion: **642217364**
 <table>
   <tr>
     <td align="center" width="60">
+      <a target="_blank" rel="noopener noreferrer nofollow" href="https://artificialanalysis.ai/"><img src="docs/sponsors/artificial-analysis.png" alt="Artificial Analysis Logo" style="max-width: 100%;padding-top: 6px;" width="50"></a>
+    </td>
+    <td>
+      Benchmark data in this repository includes Artificial Analysis free API data. Attribution to <a href="https://artificialanalysis.ai/">artificialanalysis.ai</a> is required when using that data. Intelligence Index scores are currently interpreted against <strong>v4.1</strong>; Coding Index and Agentic Index are derived subsets of the same evaluation set and are not separately versioned.
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="60">
+      <strong>Data</strong>
+    </td>
+    <td>
+      CCX benchmark visualizations and registry updates also use publicly available data from <a href="https://benchlm.ai/">BenchLM.ai</a>, <a href="https://deepswe.datacurve.ai/">DeepSWE</a>, and <a href="https://deng.codexradar.com/">CodexRadar</a>. Pricing and context metadata are additionally refreshed from <a href="https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json">LiteLLM model_prices_and_context_window.json</a>.
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="60">
       <a target="_blank" rel="noopener noreferrer nofollow" href="https://signpath.org/"><img src="https://signpath.org/assets/favicon-50x50.png" alt="SignPath Logo" style="max-width: 100%;padding-top: 6px;" width="50"></a>
     </td>
     <td>

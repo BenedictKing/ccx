@@ -110,7 +110,6 @@ const costPreferenceItems = computed(() => [
   { value: 'quality_first', label: t('autopilot.costPreference.quality_first') },
   { value: 'balanced', label: t('autopilot.costPreference.balanced') },
   { value: 'cost_first', label: t('autopilot.costPreference.cost_first') },
-  { value: 'custom', label: t('autopilot.costPreference.custom') },
 ])
 
 // 检测是否有变更

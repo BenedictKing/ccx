@@ -53,7 +53,8 @@ func (cm *ConfigManager) GetCurrentUpstreamWithIndex() (*UpstreamConfig, int, er
 }
 
 // AddUpstream 添加上游
-func (cm *ConfigManager) AddUpstream(upstream UpstreamConfig) error {
+// placements 可选传 "front"（故障转移序列首位），缺省为追加到序列末尾（见 assignChannelPriority）
+func (cm *ConfigManager) AddUpstream(upstream UpstreamConfig, placements ...string) error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -96,6 +97,8 @@ func (cm *ConfigManager) AddUpstream(upstream UpstreamConfig) error {
 	applyDefaultBaseURL(&upstream)
 
 	upstream.ModelMapping, _ = sanitizeDeprecatedGrokModelMapping(upstream.ModelMapping)
+	stripAutoManagedExplicitOverrides(&upstream)
+	assignChannelPriority(cm.config.Upstream, &upstream, resolvePlacement(placements))
 	cm.config.Upstream = append([]UpstreamConfig{upstream}, cm.config.Upstream...)
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
@@ -221,9 +224,9 @@ func (cm *ConfigManager) UpdateUpstream(index int, updates UpstreamUpdate) (shou
 		upstream.Priority = *updates.Priority
 	}
 	if updates.Status != nil {
-		upstream.Status = *updates.Status
+		applyAdministrativeChannelStatus(upstream, strings.ToLower(*updates.Status))
 	}
-	if updates.PromotionUntil != nil {
+	if updates.PromotionUntil != nil && upstream.Status != "suspended" {
 		upstream.PromotionUntil = updates.PromotionUntil
 	}
 	if updates.LowQuality != nil {
@@ -360,6 +363,11 @@ func (cm *ConfigManager) UpdateUpstream(index int, updates UpstreamUpdate) (shou
 		}
 		upstream.Tags = cleaned
 	}
+
+	// AutoManaged 渠道不再接受显式模型/推理映射与手工兼容开关：无论本次更新是否
+	// 直接改动这些字段，只要渠道当前是 AutoManaged 状态就统一清理，避免陈旧配置
+	// 通过其他字段的更新请求被间接保留下来。
+	stripAutoManagedExplicitOverrides(upstream)
 
 	// 检测配置是否真的发生了变化
 	if !cm.hasConfigChanged(originalConfig, cm.config) {
@@ -550,7 +558,8 @@ func (cm *ConfigManager) MoveAPIKeyToBottom(upstreamIndex int, apiKey string) er
 
 // ReorderUpstreams 重新排序 Messages 渠道优先级
 // order 是渠道索引数组，按新的优先级顺序排列（只更新传入的渠道，支持部分排序）
-func (cm *ConfigManager) ReorderUpstreams(order []int) error {
+// priorities 可选：与 order 平行的显式优先级值（统一 LLM 视图按全局位次提交），缺省按位次 1..N
+func (cm *ConfigManager) ReorderUpstreams(order []int, priorities ...[]int) error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -571,9 +580,13 @@ func (cm *ConfigManager) ReorderUpstreams(order []int) error {
 	}
 
 	// 更新传入渠道的优先级（未传入的渠道保持原优先级不变）
-	// 注意：priority 从 1 开始，避免 omitempty 吞掉 0 值
+	// 注意：priority 从 1 开始，0 保留为"未显式配置"语义（调度层回退为索引，前端排序落入兜底）
+	values, err := resolveReorderPriorities(order, priorities...)
+	if err != nil {
+		return err
+	}
 	for i, idx := range order {
-		cm.config.Upstream[idx].Priority = i + 1
+		cm.config.Upstream[idx].Priority = values[i]
 	}
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
@@ -599,11 +612,9 @@ func (cm *ConfigManager) SetChannelStatus(index int, status string) error {
 		return fmt.Errorf("无效的状态: %s (允许值: active, suspended, disabled)", status)
 	}
 
-	cm.config.Upstream[index].Status = status
+	promotionCleared := applyAdministrativeChannelStatus(&cm.config.Upstream[index], status)
 
-	// 暂停时清除促销期
-	if status == "suspended" && cm.config.Upstream[index].PromotionUntil != nil {
-		cm.config.Upstream[index].PromotionUntil = nil
+	if promotionCleared {
 		log.Printf("[Config-Status] 已清除渠道 [%d] %s 的促销期", index, cm.config.Upstream[index].Name)
 	}
 
@@ -744,6 +755,24 @@ func (cm *ConfigManager) DeprioritizeAPIKey(apiKey string) error {
 	return nil
 }
 
+// DeprioritizeAPIKeyForRoute 只调整指定物理协议池与渠道索引中的 Key 顺序。
+func (cm *ConfigManager) DeprioritizeAPIKeyForRoute(apiType string, channelIndex int, apiKey string) error {
+	switch strings.ToLower(strings.TrimSpace(apiType)) {
+	case "responses":
+		return cm.MoveResponsesAPIKeyToBottom(channelIndex, apiKey)
+	case "gemini":
+		return cm.MoveGeminiAPIKeyToBottom(channelIndex, apiKey)
+	case "chat":
+		return cm.MoveChatAPIKeyToBottom(channelIndex, apiKey)
+	case "images":
+		return cm.MoveImagesAPIKeyToBottom(channelIndex, apiKey)
+	case "vectors":
+		return cm.MoveVectorsAPIKeyToBottom(channelIndex, apiKey)
+	default:
+		return cm.MoveAPIKeyToBottom(channelIndex, apiKey)
+	}
+}
+
 // UpdateModelMapping 更新指定上游的单个模型映射
 // sourcePattern: 源模型匹配模式（如 "claude-opus-4"）
 // targetModel: 目标模型名称
@@ -757,6 +786,13 @@ func (cm *ConfigManager) UpdateModelMapping(index int, sourcePattern, targetMode
 	}
 
 	upstream := &cm.config.Upstream[index]
+
+	// AutoManaged 渠道的模型选择完全由 Autopilot ModelResolver 决策，不再接受手工
+	// 显式映射；即使渠道当前残留旧映射，也拒绝写入新值，避免运行时忽略的状态被
+	// 误认为生效配置。
+	if upstream.AutoManaged {
+		return fmt.Errorf("渠道 [%d] %s 为自动托管渠道，模型映射由 Autopilot 自动解析，不支持手工编辑", index, upstream.Name)
+	}
 
 	// 检查 sourcePattern 是否存在
 	if upstream.ModelMapping == nil {

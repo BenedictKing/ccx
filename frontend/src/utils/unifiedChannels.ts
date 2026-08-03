@@ -1,13 +1,17 @@
 import type {
   ActivitySegment,
   Channel,
+  ChannelDisplayStatus,
   ChannelKind,
   ChannelMetrics,
   ChannelProtocolCapsule,
   ChannelProtocolRoute,
   ChannelRecentActivity,
+  ChannelStatus,
   ChannelsResponse,
 } from '@/services/api'
+import { freezeImmutableFields } from './channelMerge'
+import { hasOnlyDisabledChannelApiKeys } from './channelApiKeys'
 
 export type LlmChannelKind = 'messages' | 'chat' | 'responses' | 'gemini'
 
@@ -60,7 +64,7 @@ export const protocolLabelForKind = (kind: ChannelKind): string => {
 export type ChannelRecoveryRoute = {
   kind: ChannelKind
   index: number
-  status?: Channel['status']
+  status?: ChannelProtocolRoute['status']
 }
 
 export const resolveChannelRecoveryRoutes = (channel: Channel): ChannelRecoveryRoute[] => {
@@ -78,6 +82,99 @@ export const resolveChannelRecoveryRoutes = (channel: Channel): ChannelRecoveryR
   }]
 }
 
+export const physicalChannelStatuses = (channel: Channel): ChannelDisplayStatus[] => {
+  if (channel.protocolRoutes?.length) {
+    return channel.protocolRoutes.map(route => normalizeChannelStatus(route.status))
+  }
+  return [normalizeChannelStatus(channel.status)]
+}
+
+export const hasPhysicalChannelStatus = (channel: Channel, status: ChannelDisplayStatus): boolean => (
+  physicalChannelStatuses(channel).some(routeStatus => routeStatus === status)
+)
+
+export const routeHasOnlyDisabledKeys = (route: ChannelProtocolRoute): boolean => {
+  const apiKeys = route.apiKeys ?? []
+  const disabledApiKeys = route.disabledApiKeys ?? []
+  if (apiKeys.length === 0 && disabledApiKeys.length === 0) return false
+  return hasOnlyDisabledChannelApiKeys({
+    apiKeys,
+    disabledApiKeys,
+    apiKeyConfigs: route.apiKeyConfigs,
+  })
+}
+
+export const isTransportChannelStatus = (status: Channel['status']): status is ChannelStatus => (
+  status === 'active' || status === 'suspended' || status === 'disabled'
+)
+
+export type ChannelStatusMutationRoute = {
+  kind: ChannelKind
+  index: number
+  status: ChannelStatus
+}
+
+export const resolveChannelStatusMutationRoutes = (
+  channel: Channel,
+  status: Channel['status'],
+): ChannelStatusMutationRoute[] => {
+  if (!isTransportChannelStatus(status)) {
+    throw new Error(`Display-only channel status cannot be persisted: ${status || 'empty'}`)
+  }
+  const routes = channel.protocolRoutes?.length
+    ? channel.protocolRoutes
+    : [{
+        kind: channel.routeKind ?? 'messages',
+        index: channel.routeIndex ?? channel.index,
+        status: channel.status,
+      }]
+  const allRoutesDisabled = routes.every(route => normalizeChannelStatus(route.status) === 'disabled')
+  const mutableRoutes = status === 'disabled' || allRoutesDisabled
+    ? routes
+    : routes.filter(route => normalizeChannelStatus(route.status) !== 'disabled')
+  return mutableRoutes.map(route => ({ kind: route.kind, index: route.index, status }))
+}
+
+export type SettledRouteOperationSummary<T> = {
+  fulfilled: T[]
+  failures: unknown[]
+  successCount: number
+  failureCount: number
+  totalCount: number
+}
+
+export const summarizeSettledRouteOperations = <T>(
+  results: PromiseSettledResult<T>[],
+): SettledRouteOperationSummary<T> => {
+  const fulfilled = results.flatMap(result => result.status === 'fulfilled' ? [result.value] : [])
+  const failures = results.flatMap(result => result.status === 'rejected' ? [result.reason] : [])
+  return {
+    fulfilled,
+    failures,
+    successCount: fulfilled.length,
+    failureCount: failures.length,
+    totalCount: results.length,
+  }
+}
+
+export class PartialRouteOperationError extends Error {
+  readonly successCount: number
+  readonly failureCount: number
+  readonly totalCount: number
+  readonly cause: unknown
+
+  constructor(summary: SettledRouteOperationSummary<unknown>) {
+    const firstFailure = summary.failures[0]
+    const detail = firstFailure instanceof Error ? firstFailure.message : String(firstFailure ?? 'unknown error')
+    super(`Route operation failed for ${summary.failureCount}/${summary.totalCount} routes: ${detail}`)
+    this.name = 'PartialRouteOperationError'
+    this.successCount = summary.successCount
+    this.failureCount = summary.failureCount
+    this.totalCount = summary.totalCount
+    this.cause = firstFailure
+  }
+}
+
 const stripRouteSuffix = (name: string, kind: LlmChannelKind): string => {
   return name.replace(PROVIDER_ROUTE_SUFFIXES[kind], '')
 }
@@ -89,12 +186,13 @@ const apiKeyFingerprint = (channel: Channel): string => {
 }
 
 const logicalGroupKey = (kind: LlmChannelKind, channel: Channel): { key: string; name: string } => {
+  const accountGrouped = !!channel.accountUid
   const accountManaged = !!channel.accountUid && (!!channel.autoManaged || !!channel.providerId)
   const name = accountManaged || (channel.autoManaged && channel.providerId)
     ? stripRouteSuffix(channel.name, kind)
     : channel.name
 
-  if (accountManaged) {
+  if (accountGrouped) {
     return {
       key: `account:${channel.accountUid}`,
       name,
@@ -160,6 +258,13 @@ const buildProtocolRoutes = (channels: Partial<Record<LlmChannelKind, RoutedChan
       serviceType: channel.serviceType,
       channelUid: channel.channelUid,
       status: channel.status,
+      apiKeys: [...(channel.apiKeys ?? [])],
+      apiKeyConfigs: channel.apiKeyConfigs == null
+        ? undefined
+        : channel.apiKeyConfigs.map(config => ({ ...config })),
+      disabledApiKeys: channel.disabledApiKeys == null
+        ? undefined
+        : channel.disabledApiKeys.map(item => ({ ...item })),
       supportedModels: channel.supportedModels == null ? undefined : [...channel.supportedModels],
     }]
   })
@@ -190,18 +295,21 @@ const mergeAccountCredentials = (channels: Partial<Record<LlmChannelKind, Routed
   }
 }
 
-const resolveGroupStatus = (channels: Partial<Record<LlmChannelKind, RoutedChannel>>): Channel['status'] => {
-  const statuses = Object.values(channels).map(channel => channel.status)
-  if (statuses.some(status => status === 'active' || status === 'healthy' || !status)) return 'active'
-  if (statuses.some(status => status === 'suspended')) return 'suspended'
-  return statuses[0]
+export const normalizeChannelStatus = (status: Channel['status']): ChannelDisplayStatus => {
+  if (!status || status === 'healthy') return 'active'
+  return status
+}
+
+const resolveGroupStatus = (channels: Partial<Record<LlmChannelKind, RoutedChannel>>): ChannelDisplayStatus => {
+  const statuses = Object.values(channels).map(channel => normalizeChannelStatus(channel.status))
+  return statuses.every(status => status === statuses[0]) ? statuses[0] : 'partial'
 }
 
 const buildDisplayChannel = (group: ChannelGroup): Channel => {
   const primary = selectPrimary(group.channels)
   const credentials = mergeAccountCredentials(group.channels)
 
-  return {
+  return freezeImmutableFields({
     ...primary,
     ...credentials,
     index: primary.routeIndex,
@@ -214,7 +322,7 @@ const buildDisplayChannel = (group: ChannelGroup): Channel => {
     status: resolveGroupStatus(group.channels),
     protocolCapsules: buildProtocolCapsules(group.channels),
     protocolRoutes: buildProtocolRoutes(group.channels),
-  }
+  })
 }
 
 export const buildUnifiedChannelsData = (
@@ -242,7 +350,15 @@ export const buildUnifiedChannelsData = (
 export const withRouteKindMetrics = (
   kind: LlmChannelKind,
   metrics: ChannelMetrics[]
-): ChannelMetrics[] => metrics.map(metric => ({ ...metric, routeKind: kind }))
+): ChannelMetrics[] => {
+  let changed = false
+  const routedMetrics = metrics.map(metric => {
+    if (metric.routeKind === kind) return metric
+    changed = true
+    return { ...metric, routeKind: kind }
+  })
+  return changed ? routedMetrics : metrics
+}
 
 export const buildUnifiedRecentActivity = (
   channels: Channel[],
@@ -302,4 +418,31 @@ export const buildUnifiedRecentActivity = (
       tpm,
     }
   })
+}
+
+export interface UnifiedReorderPayload {
+  order: number[]
+  priorities: number[]
+}
+
+/**
+ * 统一 LLM 视图的排序提交载荷：按协议类型拆分 order，
+ * priorities 使用渠道在统一列表中的全局位次（而非各协议数组内名次）。
+ * 跨协议分组按 min(priority) 还原展示顺序，若各数组只按组内名次编号，
+ * 尺度不一（如 gemini 仅十几个渠道）会导致刷新后顺序被打乱、拖拽弹回。
+ */
+export const buildUnifiedReorderPayloads = (
+  channels: Channel[],
+): Map<LlmChannelKind, UnifiedReorderPayload> => {
+  const payloads = new Map<LlmChannelKind, UnifiedReorderPayload>()
+  channels.forEach((channel, position) => {
+    for (const route of channel.protocolRoutes ?? []) {
+      if (!isLlmChannelKind(route.kind)) continue
+      const payload = payloads.get(route.kind) ?? { order: [], priorities: [] }
+      payload.order.push(route.index)
+      payload.priorities.push(position + 1)
+      payloads.set(route.kind, payload)
+    }
+  })
+  return payloads
 }

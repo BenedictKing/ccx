@@ -580,10 +580,12 @@ type rankedModelCandidate struct {
 	benchmarkKnown                 bool
 	benchmarkScore                 float64
 	benchmarkModel                 string
+	benchmarkLane                  string // benchmark 证据泳道（provisional/verified），frontier 置信区间加宽用
 	versionLineage                 string
 	versionNumbers                 []int
 	sameFamily                     bool
 	normalizedCandidateID          string
+	frontierNote                   string // frontier 选型命中或回退的可解释标记，非空时追加到 reasonSummary
 }
 
 func (candidate rankedModelCandidate) reasonSummary() string {
@@ -623,8 +625,12 @@ func (candidate rankedModelCandidate) reasonSummary() string {
 	if candidate.versionLineage != "" {
 		version = fmt.Sprintf("%s:%v", candidate.versionLineage, candidate.versionNumbers)
 	}
-	return fmt.Sprintf("family:%s, quality:%s, provider_quality_priority:%s, measured_quality:%s, benchmark:%s, version:%s, latency:%s, provider_cost_multiplier:%s, normalized_public_cost_usd:%s",
+	summary := fmt.Sprintf("family:%s, quality:%s, provider_quality_priority:%s, measured_quality:%s, benchmark:%s, version:%s, latency:%s, provider_cost_multiplier:%s, normalized_public_cost_usd:%s",
 		candidate.profile.ModelFamily, quality, providerQuality, measuredQuality, benchmark, version, latency, providerCost, publicCost)
+	if candidate.frontierNote != "" {
+		summary += ", " + candidate.frontierNote
+	}
+	return summary
 }
 
 // rankEligibleModels 在已经满足能力下界的候选中选择最佳模型。
@@ -642,6 +648,43 @@ func (r *ModelResolver) rankEligibleModels(
 	channelKind string,
 	floor CapabilityFloor,
 ) rankedModelCandidate {
+	ranked := r.buildRankedCandidates(eligible, requestModel, channelUID, channelKind, floor)
+	preferenceMode := r.modelCostPreferenceMode(floor.TaskClass)
+
+	// Frontier 选型：在全部 model × effort 候选的 Pareto 前沿上按车道选择，
+	// 成本与质量并列成轴（替代下方 qualityRank 绝对主导的字典序链）。
+	// 成本证据不足时 fail-open 回退旧链并标注原因。
+	frontierFallback := ""
+	idx, note, frontierOK := selectViaFrontier(ranked, floor, preferenceMode)
+	if frontierOK {
+		best := ranked[idx]
+		best.frontierNote = note
+		return best
+	}
+	frontierFallback = note
+
+	best := ranked[0]
+	for i := 1; i < len(ranked); i++ {
+		if betterRankedModel(ranked[i], best, preferenceMode) {
+			best = ranked[i]
+		}
+	}
+	if frontierFallback != "" {
+		best.frontierNote = "frontier:fallback=" + frontierFallback
+	}
+	return best
+}
+
+// buildRankedCandidates 把 eligible 画像展开为 model × effort 排序候选，
+// 并补齐证据字段（质量/成本/基准/版本）与 EffortFloor、QualityBenefitCap 过滤。
+// 候选顺序保持输入顺序，排序决策由调用方完成。
+func (r *ModelResolver) buildRankedCandidates(
+	eligible []ModelProfile,
+	requestModel string,
+	channelUID string,
+	channelKind string,
+	floor CapabilityFloor,
+) []rankedModelCandidate {
 	reqFamily := InferModelFamily(requestModel, "")
 	upstream, global := r.modelRankingCapabilityContext(channelUID, channelKind)
 	// EffortFloor 由 ReasoningEffortConfig.PerTaskClass 按任务类推导。
@@ -692,6 +735,7 @@ func (r *ModelResolver) rankEligibleModels(
 				benchmarkKnown:               benchmark.Known && benchmark.Profile.OverallScore > 0,
 				benchmarkScore:               benchmark.Profile.OverallScore,
 				benchmarkModel:               benchmark.Profile.CanonicalModel,
+				benchmarkLane:                benchmark.Profile.Lane,
 				versionLineage:               modelVersionLineage(profile.ModelFamily, profile.ModelID),
 				versionNumbers:               modelVersionNumbers(profile.ModelFamily, profile.ModelID),
 				sameFamily:                   profile.ModelFamily == reqFamily,
@@ -702,7 +746,6 @@ func (r *ModelResolver) rankEligibleModels(
 
 	// EffortFloor 过滤：移除低于下界的已决定候选（fail-open）。
 	ranked = filterEffortFloor(ranked, floor)
-	preferenceMode := r.modelCostPreferenceMode(floor.TaskClass)
 	ranked = selectQualityBenefitBand(ranked, floor.QualityBenefitCap)
 	qualityPriorityComplete := make(map[int]bool)
 	qualityRankSeen := make(map[int]bool)
@@ -719,14 +762,7 @@ func (r *ModelResolver) rankEligibleModels(
 	for i := range ranked {
 		ranked[i].providerModelQualityComparable = qualityPriorityComplete[ranked[i].qualityRank]
 	}
-
-	best := ranked[0]
-	for i := 1; i < len(ranked); i++ {
-		if betterRankedModel(ranked[i], best, preferenceMode) {
-			best = ranked[i]
-		}
-	}
-	return best
+	return ranked
 }
 
 func (r *ModelResolver) modelCostPreferenceMode(taskClass TaskClass) CostPreferenceMode {

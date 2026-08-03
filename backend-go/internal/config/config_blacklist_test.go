@@ -66,6 +66,74 @@ func TestGetAdminAPIKeyReturnsErrorWhenNoKeysAvailable(t *testing.T) {
 	}
 }
 
+func TestRestoreAllKeysAlsoResumesManuallyPausedKeys(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "config.json")
+	initialConfig := `{
+		"upstream": [{
+			"name": "test-channel",
+			"baseUrl": "https://example.com",
+			"apiKeys": ["sk-paused", "sk-enabled"],
+			"apiKeyConfigs": [
+				{
+					"key": "sk-paused",
+					"credentialUid": "cred-paused",
+					"baseUrl": "https://key.example/v1",
+					"enabled": false
+				},
+				{"key": "sk-enabled", "enabled": true}
+			],
+			"serviceType": "claude"
+		}]
+	}`
+	if err := os.WriteFile(configPath, []byte(initialConfig), 0644); err != nil {
+		t.Fatalf("写入初始配置失败: %v", err)
+	}
+	cm, err := NewConfigManager(configPath, "")
+	if err != nil {
+		t.Fatalf("NewConfigManager() error = %v", err)
+	}
+	defer errutil.IgnoreDeferred(cm.Close)
+
+	restored, err := cm.RestoreAllKeys("Messages", 0)
+	if err != nil {
+		t.Fatalf("RestoreAllKeys() error = %v", err)
+	}
+	if restored != 1 {
+		t.Fatalf("restored = %d, want 1", restored)
+	}
+
+	got := cm.GetConfig().Upstream[0]
+	foundPaused := false
+	for _, cfg := range got.APIKeyConfigs {
+		switch cfg.Key {
+		case "sk-paused":
+			foundPaused = true
+			if cfg.Enabled != nil {
+				t.Fatalf("paused key enabled = %v, want nil", *cfg.Enabled)
+			}
+			if cfg.CredentialUID != "cred-paused" || cfg.BaseURL != "https://key.example/v1" {
+				t.Fatalf("paused key binding lost: credentialUid=%q baseUrl=%q", cfg.CredentialUID, cfg.BaseURL)
+			}
+		case "sk-enabled":
+			if cfg.Enabled == nil || !*cfg.Enabled {
+				t.Fatalf("enabled key state = %v, want true", cfg.Enabled)
+			}
+		}
+	}
+	if !foundPaused {
+		t.Fatal("paused key config missing after resume")
+	}
+
+	restored, err = cm.RestoreAllKeys("Messages", 0)
+	if err != nil {
+		t.Fatalf("second RestoreAllKeys() error = %v", err)
+	}
+	if restored != 0 {
+		t.Fatalf("second restored = %d, want 0", restored)
+	}
+}
+
 func TestGetNextAPIKeySkipsDisabledManagedCredential(t *testing.T) {
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "config.json")

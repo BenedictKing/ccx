@@ -870,6 +870,254 @@ func TestPlanCustomManagedAccountUpdatesRenamesAndSyncsCredentials(t *testing.T)
 	}
 }
 
+// newCustomManagedChannel 构造一条自定义自动托管渠道，用于地址池编辑链路的表驱动断言。
+func newCustomManagedChannel(kind, serviceType string, baseURLs []string, keyConfigs []config.APIKeyConfig) config.AccountChannel {
+	apiKeys := make([]string, 0, len(keyConfigs))
+	for _, keyConfig := range keyConfigs {
+		apiKeys = append(apiKeys, keyConfig.Key)
+	}
+	primary := ""
+	if len(baseURLs) > 0 {
+		primary = baseURLs[0]
+	}
+	return config.AccountChannel{Kind: kind, Upstream: config.UpstreamConfig{
+		AccountUID: "acct-custom", ChannelUID: "ch-" + kind, Name: "custom" + accountRouteSuffix(kind),
+		ServiceType: serviceType, AutoManaged: true, BaseURL: primary,
+		BaseURLs: append([]string(nil), baseURLs...), APIKeys: apiKeys,
+		APIKeyConfigs: append([]config.APIKeyConfig(nil), keyConfigs...),
+	}}
+}
+
+func TestPlanCustomManagedAccountUpdatesBaseURLPool(t *testing.T) {
+	const (
+		urlA = "https://a.example.com"
+		urlB = "https://b.example.com"
+		urlC = "https://c.example.com"
+	)
+	tests := []struct {
+		name string
+		// existingURLs / existingKeys 描述渠道现状，requestURLs 为请求里的 baseUrls（nil 表示未提供）
+		existingURLs []string
+		existingKeys []config.APIKeyConfig
+		apiKeys      []string
+		requestURLs  []string
+		wantStatus   int
+		wantErr      bool
+		wantBaseURLs []string
+		// wantBindings 与 apiKeys 顺序一致，空串表示该 Key 未绑定端点
+		wantBindings []string
+	}{
+		{
+			name:         "单地址扩为两地址",
+			existingURLs: []string{urlA},
+			existingKeys: []config.APIKeyConfig{{Key: "sk-1", BaseURL: urlA}},
+			apiKeys:      []string{"sk-1"},
+			requestURLs:  []string{urlA, urlB},
+			wantStatus:   http.StatusOK,
+			wantBaseURLs: []string{urlA, urlB},
+			wantBindings: []string{urlA},
+		},
+		{
+			name:         "两地址删除其中一个且保留有效绑定",
+			existingURLs: []string{urlA, urlB},
+			existingKeys: []config.APIKeyConfig{{Key: "sk-1", BaseURL: urlA}},
+			apiKeys:      []string{"sk-1"},
+			requestURLs:  []string{urlA},
+			wantStatus:   http.StatusOK,
+			wantBaseURLs: []string{urlA},
+			wantBindings: []string{urlA},
+		},
+		{
+			name:         "地址顺序变化改变首地址",
+			existingURLs: []string{urlA, urlB},
+			existingKeys: []config.APIKeyConfig{{Key: "sk-1", BaseURL: urlA}},
+			apiKeys:      []string{"sk-1"},
+			requestURLs:  []string{urlB, urlA},
+			wantStatus:   http.StatusOK,
+			wantBaseURLs: []string{urlB, urlA},
+			wantBindings: []string{urlA},
+		},
+		{
+			name:         "尾部斜杠与默认版本前缀等价地址去重",
+			existingURLs: []string{urlA},
+			existingKeys: []config.APIKeyConfig{{Key: "sk-1", BaseURL: urlA}},
+			apiKeys:      []string{"sk-1"},
+			requestURLs:  []string{urlA, urlA + "/", urlA + "/v1", "  " + urlB + "/  ", urlB},
+			wantStatus:   http.StatusOK,
+			wantBaseURLs: []string{urlA, urlB},
+			wantBindings: []string{urlA},
+		},
+		{
+			name:         "全部非法地址被拒绝",
+			existingURLs: []string{urlA},
+			existingKeys: []config.APIKeyConfig{{Key: "sk-1", BaseURL: urlA}},
+			apiKeys:      []string{"sk-1"},
+			requestURLs:  []string{"", "   ", "/"},
+			wantStatus:   http.StatusBadRequest,
+			wantErr:      true,
+		},
+		{
+			name:         "未提供地址时沿用渠道现有地址",
+			existingURLs: []string{urlA, urlB},
+			existingKeys: []config.APIKeyConfig{{Key: "sk-1", BaseURL: urlB}},
+			apiKeys:      []string{"sk-1"},
+			requestURLs:  nil,
+			wantStatus:   http.StatusOK,
+			wantBaseURLs: []string{urlA, urlB},
+			wantBindings: []string{urlB},
+		},
+		{
+			name:         "绑定指向已删除地址时迁移到新首地址",
+			existingURLs: []string{urlA, urlB},
+			existingKeys: []config.APIKeyConfig{{Key: "sk-1", BaseURL: urlB}},
+			apiKeys:      []string{"sk-1"},
+			requestURLs:  []string{urlA, urlC},
+			wantStatus:   http.StatusOK,
+			wantBaseURLs: []string{urlA, urlC},
+			wantBindings: []string{urlA},
+		},
+		{
+			name:         "原本未绑定的凭证保持未绑定",
+			existingURLs: []string{urlA},
+			existingKeys: []config.APIKeyConfig{{Key: "sk-1"}, {Key: "sk-2", BaseURL: urlA}},
+			apiKeys:      []string{"sk-1", "sk-2", "sk-new"},
+			requestURLs:  []string{urlB, urlA},
+			wantStatus:   http.StatusOK,
+			wantBaseURLs: []string{urlB, urlA},
+			// sk-1 未绑定保持为空；sk-2 绑定仍在池内保持不变；新增 sk-new 绑定首地址
+			wantBindings: []string{"", urlA, urlB},
+		},
+		{
+			name:         "非规范绑定被折叠为 canonical 形式",
+			existingURLs: []string{urlA},
+			existingKeys: []config.APIKeyConfig{{Key: "sk-1", BaseURL: urlA + "/v1/"}},
+			apiKeys:      []string{"sk-1"},
+			requestURLs:  []string{urlA, urlB},
+			wantStatus:   http.StatusOK,
+			wantBaseURLs: []string{urlA, urlB},
+			wantBindings: []string{urlA},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			channels := []config.AccountChannel{
+				newCustomManagedChannel("messages", "claude", tt.existingURLs, tt.existingKeys),
+			}
+			updates, status, err := planCustomManagedAccountUpdates("acct-custom", updateAccountRequest{
+				Name: "custom", APIKeys: tt.apiKeys, BaseURLs: tt.requestURLs,
+			}, channels, len(channels))
+			if status != tt.wantStatus || (err != nil) != tt.wantErr {
+				t.Fatalf("status=%d err=%v, want status=%d err=%v", status, err, tt.wantStatus, tt.wantErr)
+			}
+			if tt.wantErr {
+				if len(updates) != 0 {
+					t.Fatalf("非法输入不应产生渠道更新: %+v", updates)
+				}
+				return
+			}
+			if len(updates) != 1 {
+				t.Fatalf("updates=%+v, want 1", updates)
+			}
+			update := updates[0]
+			if strings.Join(update.BaseURLs, ",") != strings.Join(tt.wantBaseURLs, ",") {
+				t.Fatalf("BaseURLs=%v, want %v", update.BaseURLs, tt.wantBaseURLs)
+			}
+			if len(update.APIKeyConfig) != len(tt.wantBindings) {
+				t.Fatalf("APIKeyConfig=%+v, want %d 条", update.APIKeyConfig, len(tt.wantBindings))
+			}
+			for i, keyConfig := range update.APIKeyConfig {
+				if keyConfig.Key != tt.apiKeys[i] {
+					t.Fatalf("APIKeyConfig[%d].Key=%q, want %q", i, keyConfig.Key, tt.apiKeys[i])
+				}
+				if keyConfig.BaseURL != tt.wantBindings[i] {
+					t.Fatalf("APIKeyConfig[%d](%s).BaseURL=%q, want %q", i, keyConfig.Key, keyConfig.BaseURL, tt.wantBindings[i])
+				}
+				if keyConfig.CredentialUID == "" {
+					t.Fatalf("APIKeyConfig[%d] 缺少稳定 credentialUid: %+v", i, keyConfig)
+				}
+			}
+		})
+	}
+}
+
+func TestPlanCustomManagedAccountUpdatesSyncsBaseURLPoolAcrossProtocols(t *testing.T) {
+	const (
+		urlA = "https://a.example.com"
+		urlB = "https://b.example.com"
+	)
+	existingKeys := []config.APIKeyConfig{{Key: "sk-1", BaseURL: urlA}}
+	channels := []config.AccountChannel{
+		newCustomManagedChannel("messages", "claude", []string{urlA}, existingKeys),
+		newCustomManagedChannel("chat", "openai", []string{urlA}, existingKeys),
+		newCustomManagedChannel("responses", "responses", []string{urlA}, existingKeys),
+		newCustomManagedChannel("gemini", "gemini", []string{urlA}, existingKeys),
+		newCustomManagedChannel("images", "openai", []string{urlA}, existingKeys),
+		newCustomManagedChannel("vectors", "openai", []string{urlA}, existingKeys),
+	}
+	updates, status, err := planCustomManagedAccountUpdates("acct-custom", updateAccountRequest{
+		Name: "custom", APIKeys: []string{"sk-1"}, BaseURLs: []string{urlB + "/", urlA},
+	}, channels, len(channels))
+	if err != nil || status != http.StatusOK {
+		t.Fatalf("status=%d err=%v", status, err)
+	}
+	if len(updates) != len(channels) {
+		t.Fatalf("updates=%d, want %d", len(updates), len(channels))
+	}
+	wantPool := urlB + "," + urlA
+	for i, update := range updates {
+		if got := strings.Join(update.BaseURLs, ","); got != wantPool {
+			t.Fatalf("%s 渠道地址池=%q, want %q", channels[i].Kind, got, wantPool)
+		}
+		if len(update.APIKeyConfig) != 1 || update.APIKeyConfig[0].BaseURL != urlA {
+			t.Fatalf("%s 渠道凭证绑定=%+v, want %s", channels[i].Kind, update.APIKeyConfig, urlA)
+		}
+	}
+}
+
+func TestUpdateAccountIgnoresBaseURLsForProviderManagedAccount(t *testing.T) {
+	const templateBaseURL = "https://api.xiaomimimo.com/anthropic"
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.json")
+	data := `{
+  "managedAccounts": [{"accountUid":"acct_provider","providerId":"mimo","name":"mimo-main","credentials":[{"credentialUid":"cred_test","apiKey":"sk-existing"}]}],
+  "upstream": [{"accountUid":"acct_provider","channelUid":"ch_messages","providerId":"mimo","name":"mimo-main","serviceType":"claude","baseUrl":"` + templateBaseURL + `","apiKeyConfigs":[{"credentialUid":"cred_test","baseUrl":"` + templateBaseURL + `"}],"autoManaged":true,"status":"active"}],
+  "responsesUpstream": [], "geminiUpstream": [], "chatUpstream": [], "imagesUpstream": [], "vectorsUpstream": []
+}`
+	if err := os.WriteFile(configPath, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfgManager, err := config.NewConfigManager(configPath, filepath.Join(dir, "backups"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = cfgManager.Close() })
+
+	router := setupAutoManagedRouter(&AutoManagedDeps{CfgManager: cfgManager})
+	body := `{"name":"mimo-main","apiKeys":["sk-existing"],"baseUrls":["https://manual-pool.example.com"]}`
+	req := httptest.NewRequest(http.MethodPut, "/api/accounts/acct_provider", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("PUT /api/accounts status=%d body=%s", w.Code, w.Body.String())
+	}
+	channels := cfgManager.GetAccountChannels("acct_provider")
+	if len(channels) == 0 {
+		t.Fatalf("provider 托管账号渠道丢失")
+	}
+	for _, accountChannel := range channels {
+		channel := accountChannel.Upstream
+		if channel.BaseURL != templateBaseURL {
+			t.Fatalf("%s 渠道主地址被手工地址覆盖: %q", accountChannel.Kind, channel.BaseURL)
+		}
+		for _, baseURL := range channel.GetAllBaseURLs() {
+			if strings.Contains(baseURL, "manual-pool") {
+				t.Fatalf("%s 渠道地址池混入手工地址: %v", accountChannel.Kind, channel.GetAllBaseURLs())
+			}
+		}
+	}
+}
+
 func TestProviderRouteNameAndPrimaryResult(t *testing.T) {
 	base := "mimo-test"
 	tests := []struct {

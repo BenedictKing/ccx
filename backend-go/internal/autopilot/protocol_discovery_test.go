@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/BenedictKing/ccx/internal/config"
+	"github.com/BenedictKing/ccx/internal/utils"
 )
 
 // TestDiscoverEndpointProtocolsRecordsOnlyVerifiedModels 验证逐模型探测只把
@@ -116,5 +118,126 @@ func TestPrioritizeProtocolProbeModelsCapsCandidateCount(t *testing.T) {
 		if !strings.HasPrefix(model, "gpt-") {
 			t.Fatalf("chat 协议优先级前缀应优先选中 gpt- 模型, got=%v", got)
 		}
+	}
+}
+
+// TestParseModelsDeclaredEndpointTypes 验证解析 new-api 的 supported_endpoint_types
+// 并映射为 CCX 协议名。
+func TestParseModelsDeclaredEndpointTypes(t *testing.T) {
+	body := []byte(`{"data":[
+		{"id":"claude-sonnet-4-6-thinking","supported_endpoint_types":["anthropic","openai"]},
+		{"id":"gpt-5.5","supported_endpoint_types":["openai","openai-response"]},
+		{"id":"gemini-3-pro","supported_endpoint_types":["gemini"]},
+		{"id":"text-embed","supported_endpoint_types":["embeddings"]},
+		{"id":"no-field"}
+	]}`)
+	declared := parseModelsDeclaredEndpointTypes(body)
+
+	if got := strings.Join(declared["claude-sonnet-4-6-thinking"], ","); got != "messages,chat" {
+		t.Fatalf("anthropic+openai 应映射为 messages,chat, got=%q", got)
+	}
+	if got := strings.Join(declared["gpt-5.5"], ","); got != "chat,responses" {
+		t.Fatalf("openai+openai-response 应映射为 chat,responses, got=%q", got)
+	}
+	if got := strings.Join(declared["gemini-3-pro"], ","); got != "gemini" {
+		t.Fatalf("gemini 应映射为 gemini, got=%q", got)
+	}
+	// embeddings/jina-rerank 等不参与协议探测的枚举值应被忽略。
+	if _, ok := declared["text-embed"]; ok {
+		t.Fatalf("非探测协议的 endpoint type 不应产生条目: %v", declared["text-embed"])
+	}
+	if _, ok := declared["no-field"]; ok {
+		t.Fatal("未声明该字段的模型不应产生条目")
+	}
+}
+
+// TestPrioritizeProtocolProbeModelsPrefersDeclaredSupport 验证上游声明支持该协议的模型
+// 在截断前被优先排入探测队列，即使它的名字前缀不在优先级表里。
+func TestPrioritizeProtocolProbeModelsPrefersDeclaredSupport(t *testing.T) {
+	models := []string{"gpt-5.4", "weird-name-model", "gpt-5.6"}
+	declared := map[string][]string{"weird-name-model": {"messages"}}
+
+	got := prioritizeProtocolProbeModelsWithDeclared("messages", models, declared, 1)
+	if len(got) != 1 || got[0] != "weird-name-model" {
+		t.Fatalf("声明支持 messages 的模型应优先于名字前缀规则, got=%v", got)
+	}
+
+	// 无声明信息时退化为既有前缀排序行为。
+	if got := prioritizeProtocolProbeModelsWithDeclared("chat", models, nil, 1); got[0] != "gpt-5.4" {
+		t.Fatalf("无声明信息时应保持前缀优先级行为, got=%v", got)
+	}
+}
+
+// TestDiscoverEndpointProtocolsReusesSiblingModelsWhenListEmpty 验证 /v1/models 返回空清单时，
+// 复用同一 (identityBaseURL, keyHash) 兄弟协议渠道画像里的模型作为探测候选。
+// 同一 baseURL + Key 只有一份上游模型清单，兄弟渠道的已知清单描述的是同一个上游端点。
+func TestDiscoverEndpointProtocolsReusesSiblingModelsWhenListEmpty(t *testing.T) {
+	var mu sync.Mutex
+	probed := make(map[string][]string)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Model string `json:"model"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		mu.Lock()
+		probed[r.URL.Path] = append(probed[r.URL.Path], body.Model)
+		mu.Unlock()
+		// messages 与 chat 协议均支持 gpt-shared，responses 不支持。
+		if r.URL.Path == "/v1/responses" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+
+	store, err := NewProfileStore(filepath.Join(t.TempDir(), "profiles.db"))
+	if err != nil {
+		t.Fatalf("NewProfileStore 失败: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	// 兄弟渠道（chat）上一轮已探到模型，identityBaseURL + keyHash 与本渠道一致。
+	sibling := newTestProfile("ep-chat", "ch-chat", "openai", srv.URL)
+	sibling.KeyHash = KeyHashFromAPIKey("sk-test")
+	sibling.IdentityBaseURL = utils.MetricsIdentityBaseURL(srv.URL, "openai")
+	sibling.ProtocolModels = map[string][]string{"chat": {"gpt-shared"}}
+	if err := store.Upsert(sibling); err != nil {
+		t.Fatalf("Upsert 兄弟画像失败: %v", err)
+	}
+
+	runner := NewAutoDiscoveryRunner(store, nil)
+	runner.client = srv.Client()
+	// 本渠道 models API 返回空清单（HTTP 200 但 data 为空数组）。
+	result := EndpointDiscoveryResult{ProtocolOk: true, Models: nil}
+	channel := &config.UpstreamConfig{ServiceType: "claude", ChannelUID: "ch-claude"}
+
+	runner.discoverEndpointProtocols(context.Background(), channel, srv.URL, "sk-test", &result)
+
+	if got := strings.Join(result.ProtocolModels["messages"], ","); got != "gpt-shared" {
+		t.Fatalf("原生协议 messages 应复用兄弟渠道模型并实测通过, got=%q", got)
+	}
+	if len(result.ProtocolModels["responses"]) != 0 {
+		t.Fatalf("responses 探测失败不应记录模型, got=%v", result.ProtocolModels["responses"])
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(probed["/v1/messages"]) == 0 {
+		t.Fatal("走兄弟渠道兜底时原生协议也必须逐模型探测，不能直接采信非本渠道实测的清单")
+	}
+}
+
+// TestEnsureConfiguredProtocolDiscoveryKeepsProbedModels 验证空 models 清单不会覆盖
+// 逐模型探测已得出的原生协议结论（该函数在探测前后各调用一次）。
+func TestEnsureConfiguredProtocolDiscoveryKeepsProbedModels(t *testing.T) {
+	result := EndpointDiscoveryResult{
+		ProtocolOk:     true,
+		Models:         nil,
+		ProtocolModels: map[string][]string{"messages": {"gpt-shared"}},
+	}
+	ensureConfiguredProtocolDiscovery(&config.UpstreamConfig{ServiceType: "claude"}, &result)
+
+	if got := strings.Join(result.ProtocolModels["messages"], ","); got != "gpt-shared" {
+		t.Fatalf("空 models 清单不应覆盖已探测出的协议模型, got=%q", got)
 	}
 }

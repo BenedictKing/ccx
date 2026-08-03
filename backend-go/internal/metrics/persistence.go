@@ -74,6 +74,7 @@ type PersistentCircuitState struct {
 
 // PersistentRecord 持久化记录结构
 type PersistentRecord struct {
+	ChannelUID          string       // 渠道稳定标识（新增列，旧行为空）
 	MetricsKey          string       // hash(baseURL + apiKey)
 	BaseURL             string       // 上游 BaseURL
 	KeyMask             string       // 脱敏的 API Key
@@ -84,7 +85,8 @@ type PersistentRecord struct {
 	OutputTokens        int64        // 输出 Token 数
 	CacheCreationTokens int64        // 缓存创建 Token
 	CacheReadTokens     int64        // 缓存读取 Token
-	Model               string       // 请求模型
+	Model               string       // 实际请求模型（可被 autopilot 映射改写）
+	RouteModel          string       // 客户端原始请求模型（新增列，旧行为空；breaker 聚合键）
 	APIType             string       // "messages"、"responses"、"gemini" 或 "chat"
 	ProxyKeyMask        string       // 代理 Key 掩码（用于成本报表按用户分组，由 ProxyAuthMiddleware 写入）
 }

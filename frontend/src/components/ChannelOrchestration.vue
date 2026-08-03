@@ -95,11 +95,18 @@
         ghost-class="ghost"
         class="channel-list"
         :disabled="isSearchActive || !canReorderList"
+        @start="onDragStart"
+        @end="onDragEnd"
         @change="onDragChange"
       >
         <template #item="{ element, index }">
-          <div v-show="matchesSearch(element)" class="channel-item-wrapper">
+          <div
+            v-show="matchesSearch(element)"
+            v-near-viewport="getViewportKey('active', element)"
+            class="channel-item-wrapper"
+          >
             <div
+              v-if="shouldRenderViewportChannel('active', element, index)"
               class="channel-row"
               :class="[
                 getChannelRowClass(element),
@@ -110,19 +117,18 @@
               <!-- SVG activity waveform bar chart background -->
               <!-- Gradient 定义在组件顶部一次性渲染（见 .activity-gradient-defs），这里只绘制 rect 并引用共享 gradient -->
               <svg class="activity-chart-bg" preserveAspectRatio="none" viewBox="0 0 150 100">
-                <template v-for="(bar, i) in getActivityBars(getRouteIndex(element), getRouteKind(element))" :key="i">
-                  <rect
-                    v-if="bar.v"
-                    :x="bar.x"
-                    :y="bar.y"
-                    :width="bar.width"
-                    :height="bar.height"
-                    :fill="`url(#ccx-act-g${bar.g})`"
-                    :rx="bar.radius"
-                    :ry="bar.radius"
-                    class="activity-bar"
-                  />
-                </template>
+                <rect
+                  v-for="bar in getActivityBars(getRouteIndex(element), getRouteKind(element))"
+                  :key="bar.index"
+                  :x="bar.x"
+                  :y="bar.y"
+                  :width="bar.width"
+                  :height="bar.height"
+                  :fill="`url(#ccx-act-g${bar.g})`"
+                  :rx="bar.radius"
+                  :ry="bar.radius"
+                  class="activity-bar"
+                />
               </svg>
 
               <!-- Grid content container -->
@@ -142,7 +148,7 @@
               <ChannelStatusBadge
                 :status="element.status || 'active'"
                 :metrics="getChannelMetrics(element)"
-                :tripped="hasNoUsableChannelApiKeys(element)"
+                :tripped="isTrippedChannel(element)"
               />
               <!-- Health badge (§8.2) -->
               <ChannelHealthBadge :health="getChannelHealth(element) ?? null" />
@@ -536,7 +542,7 @@
           </div><!-- .channel-row -->
 
           <!-- Expanded chart area -->
-          <v-expand-transition>
+          <v-expand-transition v-if="shouldRenderViewportChannel('active', element, index)">
             <div v-if="expandedChannelKey === getChannelUiKey(element)" class="channel-chart-wrapper">
               <KeyTrendChart
                 :key="`chart-${getRouteKind(element)}-${getRouteIndex(element)}`"
@@ -573,13 +579,14 @@
 
       <div v-if="filteredInactiveChannels.length > 0" class="inactive-pool">
         <div
-          v-for="channel in filteredInactiveChannels"
+          v-for="(channel, index) in filteredInactiveChannels"
           :key="getChannelUiKey(channel)"
+          v-near-viewport="getViewportKey('inactive', channel)"
           class="inactive-channel-row"
           :class="{ 'has-open-menu': isChannelMenuOpen('inactive', channel) }"
         >
           <!-- Channel information -->
-          <div class="channel-info">
+          <div v-if="shouldRenderViewportChannel('inactive', channel, index)" class="channel-info">
             <div class="channel-info-main">
               <span
                 class="font-weight-medium channel-name-link"
@@ -609,7 +616,7 @@
           </div>
 
           <!-- API key count -->
-          <div class="channel-keys d-flex align-center ga-1">
+          <div v-if="shouldRenderViewportChannel('inactive', channel, index)" class="channel-keys d-flex align-center ga-1">
             <v-chip size="x-small" variant="outlined" color="grey" class="keys-chip" @click="$emit('edit', channel)">
               <v-icon start size="x-small">mdi-key</v-icon>
               {{ availableChannelApiKeyCount(channel) }}
@@ -632,7 +639,7 @@
           </div>
 
           <!-- Action buttons -->
-          <div class="channel-actions">
+          <div v-if="shouldRenderViewportChannel('inactive', channel, index)" class="channel-actions">
             <v-btn size="small" color="success" variant="tonal" @click="enableChannel(channel)">
               <v-icon start size="small">mdi-play-circle</v-icon>
               {{ t('orchestration.enable') }}
@@ -711,15 +718,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, defineAsyncComponent, nextTick } from 'vue'
+import { ref, shallowRef, computed, watch, onMounted, onUnmounted, defineAsyncComponent, nextTick, type ObjectDirective } from 'vue'
 import draggable from 'vuedraggable'
 import { api, type Channel, type ChannelKind, type ChannelMetrics, type ChannelProtocolRoute, type ChannelStatus, type TimeWindowStats, type ChannelRecentActivity, type SchedulerStatsResponse } from '../services/api'
 import { getChannelTypeApi } from '../utils/channelTypeApi'
-import { isLlmChannelKind, resolveChannelRecoveryRoutes } from '../utils/unifiedChannels'
+import { buildUnifiedReorderPayloads, isLlmChannelKind, normalizeChannelStatus, PartialRouteOperationError, physicalChannelStatuses, resolveChannelRecoveryRoutes, resolveChannelStatusMutationRoutes, routeHasOnlyDisabledKeys, summarizeSettledRouteOperations, type ChannelRecoveryRoute } from '../utils/unifiedChannels'
 import { sortChannelsByPriority } from '../utils/channelOrder'
 import { buildChannelMetricsLookup } from '../utils/channelMetricsLookup'
 import { useI18n } from '../i18n'
-import { useGlobalTick } from '../composables/useGlobalTick'
 import { useChannelActivity } from '../composables/useChannelActivity'
 import ChannelStatusBadge from './ChannelStatusBadge.vue'
 import ChannelHealthBadge from './ChannelHealthBadge.vue'
@@ -758,9 +764,85 @@ const getRouteIndex = (channel: Channel): number => channel.routeIndex ?? channe
 const getChannelUiKey = (channel: Channel): string => channel.displayKey ?? `${getRouteKind(channel)}:${getRouteIndex(channel)}`
 const getCurrentChannelTypeApi = (channel?: Channel) => getChannelTypeApi(api, getRouteKind(channel))
 
+type ViewportChannelScope = 'active' | 'inactive'
+type ViewportChannelKey = `${ViewportChannelScope}:${string}`
+type ViewportObserver = {
+  observe: (_target: Element) => void
+  unobserve: (_target: Element) => void
+  disconnect: () => void
+}
+
+// Sortable 仍保留每个渠道的固定高度根节点；仅挂载视口附近的重型 Vuetify 子树。
+// 这样不改变拖拽索引和自动滚动语义，同时把常驻 DOM 控制在当前视口附近。
+const EAGER_ACTIVE_ROW_COUNT = 20
+const supportsViewportWindowing = typeof window !== 'undefined' && typeof window.IntersectionObserver !== 'undefined'
+const viewportWindowReady = ref(false)
+const nearViewportChannelKeys = shallowRef<Set<ViewportChannelKey>>(new Set())
+const viewportKeyByElement = new WeakMap<HTMLElement, ViewportChannelKey>()
+let viewportObserver: ViewportObserver | null = null
+
+const getViewportKey = (scope: ViewportChannelScope, channel: Channel): ViewportChannelKey =>
+  `${scope}:${getChannelUiKey(channel)}`
+
+const updateNearViewportKey = (key: ViewportChannelKey, visible: boolean) => {
+  const current = nearViewportChannelKeys.value
+  if (current.has(key) === visible) return
+
+  const next = new Set(current)
+  if (visible) next.add(key)
+  else next.delete(key)
+  nearViewportChannelKeys.value = next
+}
+
+const ensureViewportObserver = () => {
+  if (!supportsViewportWindowing || viewportObserver) return viewportObserver
+
+  viewportObserver = new window.IntersectionObserver((entries) => {
+    viewportWindowReady.value = true
+    const next = new Set(nearViewportChannelKeys.value)
+    let changed = false
+
+    for (const entry of entries) {
+      const key = viewportKeyByElement.get(entry.target as HTMLElement)
+      if (!key) continue
+
+      if (entry.isIntersecting) {
+        if (!next.has(key)) {
+          next.add(key)
+          changed = true
+        }
+      } else if (next.delete(key)) {
+        changed = true
+      }
+    }
+
+    if (changed) nearViewportChannelKeys.value = next
+  }, { rootMargin: '1200px 0px' })
+
+  return viewportObserver
+}
+
+const vNearViewport: ObjectDirective<HTMLElement, ViewportChannelKey> = {
+  mounted(element, binding) {
+    viewportKeyByElement.set(element, binding.value)
+    ensureViewportObserver()?.observe(element)
+  },
+  updated(element, binding) {
+    if (binding.value === binding.oldValue) return
+    if (binding.oldValue) updateNearViewportKey(binding.oldValue, false)
+    viewportKeyByElement.set(element, binding.value)
+  },
+  beforeUnmount(element) {
+    viewportObserver?.unobserve(element)
+    const key = viewportKeyByElement.get(element)
+    if (key) updateNearViewportKey(key, false)
+    viewportKeyByElement.delete(element)
+  },
+}
+
 // State
-const metrics = ref<ChannelMetrics[]>([])
-const recentActivity = ref<ChannelRecentActivity[]>([])
+const metrics = shallowRef<ChannelMetrics[]>([])
+const recentActivity = shallowRef<ChannelRecentActivity[]>([])
 
 // Search filtering
 const searchQuery = ref('')
@@ -778,7 +860,7 @@ const matchesSearch = (channel: Channel) => {
   )
 }
 
-const schedulerStats = ref<SchedulerStatsResponse | null>(null)
+const schedulerStats = shallowRef<SchedulerStatsResponse | null>(null)
 const isLoadingMetrics = ref(false)
 const isSavingOrder = ref(false)
 const showSchedulerDiagnoseDialog = ref(false)
@@ -797,11 +879,9 @@ const openLogsDialog = (ch: Channel) => {
   showLogsDialog.value = true
 }
 
-// Timestamp used to trigger activity view updates (updated every 2 seconds)
-const activityUpdateTick = ref(0)
-
 // Chart expansion state
 const expandedChannelKey = ref<string | null>(null)
+const draggingChannelKey = ref<string | null>(null)
 
 // tooltip 懒挂载：记录当前 hover/focus 的渠道，避免 100+ 渠道每行常驻 <v-tooltip> overlay 实例
 const hoveredMetricsChannel = ref<string | null>(null)
@@ -820,6 +900,25 @@ const getChannelMenuKey = (scope: ChannelMenuScope, channel: Channel): ChannelMe
 
 const isChannelMenuOpen = (scope: ChannelMenuScope, channel: Channel): boolean =>
   openChannelMenuKey.value === getChannelMenuKey(scope, channel)
+
+const shouldRenderViewportChannel = (
+  scope: ViewportChannelScope,
+  channel: Channel,
+  index: number,
+): boolean => {
+  if (!supportsViewportWindowing) return true
+  if (isSearchActive.value) return matchesSearch(channel)
+
+  const channelKey = getChannelUiKey(channel)
+  return (
+    (!viewportWindowReady.value && scope === 'active' && index < EAGER_ACTIVE_ROW_COUNT)
+    || nearViewportChannelKeys.value.has(getViewportKey(scope, channel))
+    || expandedChannelKey.value === channelKey
+    || draggingChannelKey.value === channelKey
+    || copiedChannelKey.value === channelKey
+    || isChannelMenuOpen(scope, channel)
+  )
+}
 
 const dispatchOverlayResize = () => {
   window.dispatchEvent(new Event('resize'))
@@ -972,7 +1071,7 @@ watch(inactiveChannels, (channels) => {
 // 3. Multiple active channels → multi-channel mode
 const isMultiChannelMode = computed(() => {
   const activeCount = props.channels.filter(
-    ch => ch.status === 'active' || ch.status === undefined || ch.status === ''
+    ch => physicalChannelStatuses(ch).some(status => status === 'active')
   ).length
   return activeCount > 1
 })
@@ -980,6 +1079,9 @@ const isMultiChannelMode = computed(() => {
 // 初始化渠道编排列表 - 活跃与挂起渠道共同参与 failover 序列
 // 优化策略：仅在结构变化时重建数组，避免频繁重构导致子组件被销毁重建
 const initActiveChannels = () => {
+  // 排序保存期间跳过刷新重建：此时服务端 priority 处于中间态（各协议数组顺序提交），
+  // 若用旧/半成品 priority 重排，会把用户刚拖拽的顺序弹回
+  if (isSavingOrder.value) return
   const filteredActive = props.channels.filter(ch => ch.status !== 'disabled')
   const newActive = buildChannelOrder(filteredActive, lastKnownActiveOrder.value)
   lastKnownActiveOrder.value = newActive.map(getChannelUiKey)
@@ -1242,7 +1344,7 @@ const {
   formatRPM,
   formatTPM,
   hasActivityData,
-} = useChannelActivity(recentActivity, activityUpdateTick)
+} = useChannelActivity(recentActivity)
 
 // Refresh metrics
 const refreshMetrics = async () => {
@@ -1280,6 +1382,15 @@ const canReorderList = computed(() => {
   return activeChannels.value.every(ch => getRouteKind(ch) === props.channelType)
 })
 
+const onDragStart = (event: { oldIndex?: number }) => {
+  const channel = event.oldIndex === undefined ? undefined : activeChannels.value[event.oldIndex]
+  draggingChannelKey.value = channel ? getChannelUiKey(channel) : null
+}
+
+const onDragEnd = () => {
+  draggingChannelKey.value = null
+}
+
 // Drag change event - auto-save order
 const onDragChange = () => {
   syncActiveOrder()
@@ -1292,19 +1403,12 @@ const saveOrder = async () => {
   isSavingOrder.value = true
   try {
     if (isLlmChannelKind(props.channelType)) {
-      // 统一 LLM 视图：按协议类型分别提交排序，保证每个协议数组内的顺序与展示一致
-      const orderByKind = new Map<ChannelKind, number[]>()
-      for (const ch of activeChannels.value) {
-        for (const route of ch.protocolRoutes ?? []) {
-          if (!isLlmChannelKind(route.kind)) continue
-          const order = orderByKind.get(route.kind) ?? []
-          order.push(route.index)
-          orderByKind.set(route.kind, order)
-        }
-      }
-      for (const [kind, order] of orderByKind) {
-        if (order.length === 0) continue
-        await getChannelTypeApi(api, kind).reorder(order)
+      // 统一 LLM 视图：按协议类型分别提交排序，priority 使用统一列表全局位次，
+      // 保证跨协议分组刷新后仍按展示顺序还原（组内名次尺度不一会把顺序打乱）
+      const payloads = buildUnifiedReorderPayloads(activeChannels.value)
+      for (const [kind, payload] of payloads) {
+        if (payload.order.length === 0) continue
+        await getChannelTypeApi(api, kind).reorder(payload.order, payload.priorities)
       }
     } else {
       const order = activeChannels.value.map(getRouteIndex)
@@ -1316,6 +1420,8 @@ const saveOrder = async () => {
     const errorMessage = error instanceof Error ? error.message : t('addChannel.unknownError')
     emit('error', t('toast.operationFailed', { message: errorMessage }))
     // Reinitialize the list when save fails to restore the original order
+    // 先解除保存标记，否则 initActiveChannels 的保存期守卫会跳过本次恢复
+    isSavingOrder.value = false
     initActiveChannels()
   } finally {
     isSavingOrder.value = false
@@ -1363,15 +1469,28 @@ const setChannelStatusInternal = async (
   options: { refresh?: boolean } = {}
 ) => {
   const { refresh = true } = options
-  const routes = channel.protocolRoutes?.length
-    ? channel.protocolRoutes
-    : [{ kind: getRouteKind(channel), index: getRouteIndex(channel) }]
-  await Promise.all(routes.map(route => (
-    getChannelTypeApi(api, route.kind).setStatus(route.index, status)
-  )))
-  if (refresh) {
-    emit('refresh')
+  try {
+    const routes = resolveChannelStatusMutationRoutes(channel, status)
+    const summary = summarizeSettledRouteOperations(await Promise.allSettled(routes.map(route => (
+      getChannelTypeApi(api, route.kind).setStatus(route.index, route.status)
+    ))))
+    if (summary.failureCount > 0) throw new PartialRouteOperationError(summary)
+    return summary
+  } finally {
+    if (refresh) emit('refresh')
   }
+}
+
+const emitRouteOperationError = (error: unknown) => {
+  if (error instanceof PartialRouteOperationError && error.successCount > 0) {
+    emit('error', t('orchestration.partialFailure', {
+      success: error.successCount,
+      failed: error.failureCount,
+    }))
+    return
+  }
+  const errorMessage = error instanceof Error ? error.message : t('addChannel.unknownError')
+  emit('error', t('toast.operationFailed', { message: errorMessage }))
 }
 
 // Set channel status
@@ -1380,8 +1499,7 @@ const setChannelStatus = async (channel: Channel, status: ChannelStatus) => {
     await setChannelStatusInternal(channel, status)
   } catch (error) {
     console.error('Failed to set channel status:', error)
-    const errorMessage = error instanceof Error ? error.message : t('addChannel.unknownError')
-    emit('error', t('toast.operationFailed', { message: errorMessage }))
+    emitRouteOperationError(error)
   }
 }
 
@@ -1390,50 +1508,72 @@ const enableChannel = async (channel: Channel) => {
   await setChannelStatus(channel, 'active')
 }
 
+const shouldRecoverRouteRuntime = (channel: Channel, route: ChannelRecoveryRoute): boolean => {
+  const status = normalizeChannelStatus(route.status)
+  if (status === 'disabled') return false
+  if (status === 'suspended') return true
+  if (status !== 'active') return false
+
+  const routeMetrics = metricsLookup.value.get(route.index, route.kind)
+  if (routeMetrics?.circuitState === 'open') return true
+
+  const protocolRoute = channel.protocolRoutes?.find(item => (
+    item.kind === route.kind && item.index === route.index
+  ))
+  return protocolRoute ? routeHasOnlyDisabledKeys(protocolRoute) : hasOnlyDisabledChannelApiKeys(channel)
+}
+
 const resumeChannelInternal = async (
   channel: Channel,
   options: { refresh?: boolean, notify?: boolean } = {}
 ) => {
   const { refresh = true, notify = true } = options
 
-  let restoredKeys = 0
-  for (const route of resolveChannelRecoveryRoutes(channel)) {
-    const routeApi = getChannelTypeApi(api, route.kind)
-    const result = await routeApi.resume(route.index)
-    restoredKeys += result?.restoredKeys || 0
-    if (route.status === 'suspended') {
-      await routeApi.setStatus(route.index, 'active')
-    }
-  }
-  if (refresh) emit('refresh')
+  try {
+    const routes = resolveChannelRecoveryRoutes(channel).filter(route => shouldRecoverRouteRuntime(channel, route))
+    const summary = summarizeSettledRouteOperations(await Promise.allSettled(routes.map(async route => {
+      const routeApi = getChannelTypeApi(api, route.kind)
+      const result = await routeApi.resume(route.index)
+      if (normalizeChannelStatus(route.status) === 'suspended') {
+        await routeApi.setStatus(route.index, 'active')
+      }
+      return result?.restoredKeys || 0
+    })))
+    const restoredKeys = summary.fulfilled.reduce((total, count) => total + count, 0)
+    if (summary.failureCount > 0) throw new PartialRouteOperationError(summary)
 
-  if (notify) {
-    if (restoredKeys > 0) {
-      emit('success', t('orchestration.resumeSuccessWithKeys', { count: restoredKeys }))
-    } else {
-      emit('success', t('orchestration.resumeSuccess'))
+    if (notify) {
+      if (restoredKeys > 0) {
+        emit('success', t('orchestration.resumeSuccessWithKeys', { count: restoredKeys }))
+      } else {
+        emit('success', t('orchestration.resumeSuccess'))
+      }
     }
-  }
 
-  return { restoredKeys }
+    return { restoredKeys }
+  } finally {
+    if (refresh) emit('refresh')
+  }
 }
 
 const isTrippedChannel = (channel: Channel): boolean => {
-  const channelMetrics = getChannelMetrics(channel)
-  return channel.status === 'suspended'
-    || channelMetrics?.circuitState === 'open'
-    || hasNoUsableChannelApiKeys(channel)
+  const routes = resolveChannelRecoveryRoutes(channel)
+  if (routes.some(route => shouldRecoverRouteRuntime(channel, route))) return true
+  if (!channel.protocolRoutes?.length) return hasNoUsableChannelApiKeys(channel)
+  return channel.protocolRoutes.some(route => hasNoUsableChannelApiKeys({
+    apiKeys: route.apiKeys,
+    disabledApiKeys: route.disabledApiKeys,
+    apiKeyConfigs: route.apiKeyConfigs,
+  }))
 }
 
-// isRecoverableChannel 判定渠道是否应显示「恢复」主操作（一次点击恢复全部禁用 Key + 重置熔断）：
-//   - suspended 或熔断 open：原有恢复语义
-//   - active 但全部 Key 被拉黑/耗尽（可用数为 0 且禁用数 > 0）：无需先暂停即可直接恢复
-const isRecoverableChannel = (channel: Channel): boolean => {
-  const channelMetrics = getChannelMetrics(channel)
-  return channel.status === 'suspended'
-    || channelMetrics?.circuitState === 'open'
-    || hasOnlyDisabledChannelApiKeys(channel)
-}
+// isRecoverableChannel 判定渠道是否应显示「恢复」主操作：
+//   - 逐条检查物理路由；disabled 和健康 active 不恢复
+//   - suspended 需要运行态恢复并额外切回 active
+//   - active 仅在对应路由熔断或其 Key 全部被拉黑时恢复运行态
+const isRecoverableChannel = (channel: Channel): boolean => (
+  resolveChannelRecoveryRoutes(channel).some(route => shouldRecoverRouteRuntime(channel, route))
+)
 
 const getChannelRowClass = (channel: Channel) => {
   return {
@@ -1447,8 +1587,7 @@ const resumeChannel = async (channel: Channel) => {
     await resumeChannelInternal(channel)
   } catch (error) {
     console.error('Failed to resume channel:', error)
-    const errorMessage = error instanceof Error ? error.message : t('addChannel.unknownError')
-    emit('error', t('toast.operationFailed', { message: errorMessage }))
+    emitRouteOperationError(error)
   }
 }
 
@@ -1484,11 +1623,11 @@ const setPromotion = async (channel: Channel) => {
 const canDeleteChannel = (channel: Channel): boolean => {
   // Count the number of currently active channels
   const activeCount = activeChannels.value.filter(
-    ch => ch.status === 'active' || ch.status === undefined || ch.status === ''
+    ch => physicalChannelStatuses(ch).some(status => status === 'active')
   ).length
 
-  // Do not allow deletion if the target is an active channel and it is the last active one
-  const isActive = channel.status === 'active' || channel.status === undefined || channel.status === ''
+  // Do not allow deletion if the target has an active physical route and it is the last active one
+  const isActive = physicalChannelStatuses(channel).some(status => status === 'active')
   if (isActive && activeCount <= 1) {
     return false
   }
@@ -1505,19 +1644,18 @@ const handleDeleteChannel = (channel: Channel) => {
   emit('delete', channel)
 }
 
-// 全局 tick 订阅（visibility hidden 时自动暂停）
-const activityTick = useGlobalTick(2000, 'ChannelOrch-activity')
-
 onMounted(() => {
   // 父组件已下发 dashboard 指标时不要再直拉：统一 LLM 视图下直拉只能拿到当前
   // tab 一种协议的指标，会覆盖掉父组件合并好的多协议数据
   if (!props.dashboardMetrics) {
     refreshMetrics()
   }
-  activityTick.onTick(() => { activityUpdateTick.value++ })
 })
 
 onUnmounted(() => {
+  viewportObserver?.disconnect()
+  viewportObserver = null
+  nearViewportChannelKeys.value = new Set()
   if (copyTimeoutId) {
     clearTimeout(copyTimeoutId)
     copyTimeoutId = null

@@ -108,6 +108,9 @@ func TestProbeVolcenginePlanClaudeSuccess(t *testing.T) {
 	if !strings.Contains(srv.body, `"model":"auto"`) {
 		t.Fatalf("agent plan 探针 body 缺少 model=auto: %s", srv.body)
 	}
+	if res.Model != "auto" {
+		t.Fatalf("探针结果模型 = %q, 期望 auto", res.Model)
+	}
 	// Claude Code 特征
 	if srv.userAgent == "" || srv.xApp == "" {
 		t.Fatalf("Claude 探针应注入 Claude Code 特征头, UA=%q X-App=%q", srv.userAgent, srv.xApp)
@@ -129,6 +132,9 @@ func TestProbeVolcenginePlanCodingClaudeUsesArkCodeLatest(t *testing.T) {
 	// captureServer 收到的 path 会包含 /api/coding；模型应在 body 里
 	if !strings.Contains(srv.body, `"model":"ark-code-latest"`) {
 		t.Fatalf("coding plan 探针 body 缺少 ark-code-latest: %s", srv.body)
+	}
+	if res.Model != "ark-code-latest" {
+		t.Fatalf("探针结果模型 = %q, 期望 ark-code-latest", res.Model)
 	}
 }
 
@@ -215,9 +221,12 @@ func TestVolcenginePlanL1ProbeSuccessReturnsManifestModels(t *testing.T) {
 	srv := newCaptureServer(200, `{"id":"msg_1"}`)
 	defer srv.Close()
 
-	sc, body, err := VolcenginePlanL1Probe(context.Background(), "claude", srv.URL, "ark-key", "")
+	sc, body, model, err := VolcenginePlanL1Probe(context.Background(), "claude", srv.URL, "ark-key", "")
 	if err != nil || sc != http.StatusOK {
 		t.Fatalf("成功应返回 200: sc=%d err=%v", sc, err)
+	}
+	if model != "auto" {
+		t.Fatalf("探针模型 = %q, 期望 auto", model)
 	}
 	// 内置 manifest 仅对官方 host 命中；本地 server 不命中，应返回空 data 列表而非臆造模型
 	if !strings.Contains(string(body), `"data":[]`) && !strings.Contains(string(body), `"data"`) {
@@ -229,9 +238,12 @@ func TestVolcenginePlanL1ProbeAuthFailedReturnsUpstreamStatus(t *testing.T) {
 	srv := newCaptureServer(403, `{"error":"forbidden"}`)
 	defer srv.Close()
 
-	sc, body, err := VolcenginePlanL1Probe(context.Background(), "openai", srv.URL+"/v3", "ark-bad", "")
+	sc, body, model, err := VolcenginePlanL1Probe(context.Background(), "openai", srv.URL+"/v3", "ark-bad", "")
 	if err != nil || sc != 403 {
 		t.Fatalf("403 应原样返回上游状态: sc=%d err=%v", sc, err)
+	}
+	if model != "auto" {
+		t.Fatalf("失败探针模型 = %q, 期望 auto", model)
 	}
 	if !strings.Contains(string(body), "forbidden") {
 		t.Fatalf("body 应保留上游响应: %s", string(body))
@@ -242,11 +254,14 @@ func TestVolcenginePlanL1ProbeNetworkErrorPropagates(t *testing.T) {
 	srv := newCaptureServer(200, ``)
 	srv.Close()
 
-	sc, _, err := VolcenginePlanL1Probe(context.Background(), "claude", srv.URL, "ark-key", "")
+	sc, _, model, err := VolcenginePlanL1Probe(context.Background(), "claude", srv.URL, "ark-key", "")
 	if err == nil {
 		t.Fatalf("网络错误应向上传播 err, got sc=%d", sc)
 	}
 	if sc != 0 {
 		t.Fatalf("网络错误 sc 应为 0, got %d", sc)
+	}
+	if model != "auto" {
+		t.Fatalf("网络错误探针模型 = %q, 期望 auto", model)
 	}
 }

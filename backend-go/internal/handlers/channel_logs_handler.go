@@ -16,6 +16,7 @@ func GetChannelLogs(
 	channelLogStore *metrics.ChannelLogStore,
 	cfgManager *config.ConfigManager,
 	kind scheduler.ChannelKind,
+	metricsManager *metrics.MetricsManager,
 ) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		idStr := c.Param("id")
@@ -56,11 +57,21 @@ func GetChannelLogs(
 			logs = make([]*metrics.ChannelLog, 0)
 		}
 
-		c.JSON(200, gin.H{
+		body := gin.H{
 			"channelIndex": channelIndex,
 			"channelName":  upstream.Name,
 			"logs":         logs,
-		})
+		}
+		// 日志为空但渠道处于熔断态时补上成因依据：渠道日志是内存态，重启即清空，
+		// 而 breaker 状态持久化恢复，否则界面会呈现"无日志却熔断"的黑盒。
+		if len(logs) == 0 && metricsManager != nil {
+			if evidence := metricsManager.GetBreakerEvidenceByMetricsKeys(metricsKeys); evidence != nil &&
+				evidence.CircuitState != "closed" {
+				body["breakerEvidence"] = evidence
+			}
+		}
+
+		c.JSON(200, body)
 	}
 }
 

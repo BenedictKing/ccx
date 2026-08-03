@@ -53,7 +53,8 @@ func (cm *ConfigManager) GetCurrentChatUpstreamWithIndex() (*UpstreamConfig, int
 }
 
 // AddChatUpstream 添加 Chat 上游
-func (cm *ConfigManager) AddChatUpstream(upstream UpstreamConfig) error {
+// placements 可选传 "front"（故障转移序列首位），缺省为追加到序列末尾（见 assignChannelPriority）
+func (cm *ConfigManager) AddChatUpstream(upstream UpstreamConfig, placements ...string) error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -96,6 +97,8 @@ func (cm *ConfigManager) AddChatUpstream(upstream UpstreamConfig) error {
 	applyDefaultBaseURL(&upstream)
 
 	upstream.ModelMapping, _ = sanitizeDeprecatedGrokModelMapping(upstream.ModelMapping)
+	stripAutoManagedExplicitOverrides(&upstream)
+	assignChannelPriority(cm.config.ChatUpstream, &upstream, resolvePlacement(placements))
 	cm.config.ChatUpstream = append([]UpstreamConfig{upstream}, cm.config.ChatUpstream...)
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
@@ -221,9 +224,9 @@ func (cm *ConfigManager) UpdateChatUpstream(index int, updates UpstreamUpdate) (
 		upstream.Priority = *updates.Priority
 	}
 	if updates.Status != nil {
-		upstream.Status = *updates.Status
+		applyAdministrativeChannelStatus(upstream, strings.ToLower(*updates.Status))
 	}
-	if updates.PromotionUntil != nil {
+	if updates.PromotionUntil != nil && upstream.Status != "suspended" {
 		upstream.PromotionUntil = updates.PromotionUntil
 	}
 	if updates.LowQuality != nil {
@@ -356,6 +359,8 @@ func (cm *ConfigManager) UpdateChatUpstream(index int, updates UpstreamUpdate) (
 		}
 		upstream.Tags = cleaned
 	}
+
+	stripAutoManagedExplicitOverrides(upstream)
 
 	// 检测配置是否真的发生了变化
 	if !cm.hasConfigChanged(originalConfig, cm.config) {
@@ -545,7 +550,8 @@ func (cm *ConfigManager) MoveChatAPIKeyToBottom(upstreamIndex int, apiKey string
 
 // ReorderChatUpstreams 重新排序 Chat 渠道优先级
 // order 是渠道索引数组，按新的优先级顺序排列（只更新传入的渠道，支持部分排序）
-func (cm *ConfigManager) ReorderChatUpstreams(order []int) error {
+// priorities 可选：与 order 平行的显式优先级值（统一 LLM 视图按全局位次提交），缺省按位次 1..N
+func (cm *ConfigManager) ReorderChatUpstreams(order []int, priorities ...[]int) error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -564,8 +570,12 @@ func (cm *ConfigManager) ReorderChatUpstreams(order []int) error {
 		seen[idx] = true
 	}
 
+	values, err := resolveReorderPriorities(order, priorities...)
+	if err != nil {
+		return err
+	}
 	for i, idx := range order {
-		cm.config.ChatUpstream[idx].Priority = i + 1
+		cm.config.ChatUpstream[idx].Priority = values[i]
 	}
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
@@ -590,10 +600,9 @@ func (cm *ConfigManager) SetChatChannelStatus(index int, status string) error {
 		return fmt.Errorf("无效的状态: %s (允许值: active, suspended, disabled)", status)
 	}
 
-	cm.config.ChatUpstream[index].Status = status
+	promotionCleared := applyAdministrativeChannelStatus(&cm.config.ChatUpstream[index], status)
 
-	if status == "suspended" && cm.config.ChatUpstream[index].PromotionUntil != nil {
-		cm.config.ChatUpstream[index].PromotionUntil = nil
+	if promotionCleared {
 		log.Printf("[Config-Status] 已清除 Chat 渠道 [%d] %s 的促销期", index, cm.config.ChatUpstream[index].Name)
 	}
 
@@ -654,6 +663,9 @@ func (cm *ConfigManager) UpdateChatModelMapping(index int, sourcePattern, target
 	}
 
 	upstream := &cm.config.ChatUpstream[index]
+	if upstream.AutoManaged {
+		return fmt.Errorf("渠道 [%d] %s 为自动托管渠道，模型映射由 Autopilot 自动解析，不支持手工编辑", index, upstream.Name)
+	}
 
 	// 检查 sourcePattern 是否存在
 	if upstream.ModelMapping == nil {

@@ -79,7 +79,9 @@ const (
 
 // RequestRecord 带时间戳的请求记录（扩展版，支持 Token、Cache 和失败分类数据）。
 type RequestRecord struct {
-	Model                    string
+	ChannelUID               string // 渠道稳定标识，breakerscope 三元组之一
+	RouteModel               string // 客户端原始请求模型，breakerscope 三元组之一；空为未知
+	Model                    string // 实际发给上游的模型（可被 autopilot 映射改写）
 	Timestamp                time.Time
 	ConnectLatencyMs         int64
 	FirstByteLatencyMs       int64
@@ -90,6 +92,18 @@ type RequestRecord struct {
 	CacheCreationInputTokens int64
 	CacheReadInputTokens     int64
 	ProxyKeyMask             string // 代理 Key 掩码（用于成本报表按用户分组，由 RecordRequestConnected 传入）
+}
+
+// recordRouteModel 返回 breaker 聚合使用的模型键。
+// RouteModel 非空优先；否则回退 Model（兼容旧记录和同步写入入口）。
+func recordRouteModel(record *RequestRecord) string {
+	if record == nil {
+		return ""
+	}
+	if record.RouteModel != "" {
+		return record.RouteModel
+	}
+	return record.Model
 }
 
 // KeyMetrics 单个 Key 的指标（绑定到 BaseURL + Key 组合）
@@ -190,6 +204,17 @@ type MetricsManager struct {
 	// 持久化存储（可选）
 	store   PersistenceStore
 	apiType string // "messages"、"responses"、"gemini" 或 "chat"
+
+	// 渠道-模型级熔断（内存态，自带独立锁，见 model_circuit.go）
+	modelCircuit *ModelCircuitTracker
+}
+
+// ModelCircuit 返回渠道-模型级熔断追踪器。
+func (m *MetricsManager) ModelCircuit() *ModelCircuitTracker {
+	if m == nil {
+		return nil
+	}
+	return m.modelCircuit
 }
 
 // GetPersistenceStore 获取持久化存储（可能为 nil）
@@ -218,6 +243,7 @@ func NewMetricsManager() *MetricsManager {
 		streamInactivityTimeoutMs:    defaultStreamInactivityTimeoutMs,
 		streamToolCallIdleTimeoutMs:  defaultStreamToolCallIdleTimeoutMs,
 		stopCh:                       make(chan struct{}),
+		modelCircuit:                 NewModelCircuitTracker(""),
 	}
 	// 启动后台熔断恢复任务
 	go m.cleanupCircuitBreakers()
@@ -246,6 +272,7 @@ func NewMetricsManagerWithConfig(windowSize int, failureThreshold float64) *Metr
 		streamInactivityTimeoutMs:    defaultStreamInactivityTimeoutMs,
 		streamToolCallIdleTimeoutMs:  defaultStreamToolCallIdleTimeoutMs,
 		stopCh:                       make(chan struct{}),
+		modelCircuit:                 NewModelCircuitTracker(""),
 	}
 	// 启动后台熔断恢复任务
 	go m.cleanupCircuitBreakers()
@@ -276,6 +303,7 @@ func NewMetricsManagerWithPersistence(windowSize int, failureThreshold float64, 
 		stopCh:                       make(chan struct{}),
 		store:                        store,
 		apiType:                      apiType,
+		modelCircuit:                 NewModelCircuitTracker(apiType),
 	}
 
 	// 从持久化存储加载历史数据

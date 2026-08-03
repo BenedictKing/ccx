@@ -1,7 +1,6 @@
 package responses
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -225,7 +224,7 @@ func patchResponsesUsageWithContext(c *gin.Context, resp *types.ResponsesRespons
 	// 如果 usage 完全为空，进行完整估算
 	if resp.Usage.InputTokens == 0 && resp.Usage.OutputTokens == 0 && resp.Usage.TotalTokens == 0 {
 		estimatedInput := utils.EstimateResponsesRequestTokens(requestBody)
-		estimatedOutput := estimateResponsesOutputFromItems(resp.Output)
+		estimatedOutput := utils.EstimateResponsesOutputTokens(resp.Output)
 		resp.Usage.InputTokens = estimatedInput
 		resp.Usage.OutputTokens = estimatedOutput
 		resp.Usage.TotalTokens = calculateTotalTokensWithCache(
@@ -252,7 +251,7 @@ func patchResponsesUsageWithContext(c *gin.Context, resp *types.ResponsesRespons
 		patched = true
 	}
 	if needOutputPatch {
-		resp.Usage.OutputTokens = estimateResponsesOutputFromItems(resp.Output)
+		resp.Usage.OutputTokens = utils.EstimateResponsesOutputTokens(resp.Output)
 		patched = true
 	}
 
@@ -280,66 +279,3 @@ func patchResponsesUsageWithContext(c *gin.Context, resp *types.ResponsesRespons
 			resp.Usage.CacheTTL)
 	}
 }
-
-// estimateResponsesOutputFromItems 从 ResponsesItem 数组估算输出 token
-func estimateResponsesOutputFromItems(output []types.ResponsesItem) int {
-	if len(output) == 0 {
-		return 0
-	}
-
-	total := 0
-	for _, item := range output {
-		// 处理 content
-		if item.Content != nil {
-			switch v := item.Content.(type) {
-			case string:
-				total += utils.EstimateTokens(v)
-			case []interface{}:
-				for _, block := range v {
-					if b, ok := block.(map[string]interface{}); ok {
-						if text, ok := b["text"].(string); ok {
-							total += utils.EstimateTokens(text)
-						}
-					}
-				}
-			case []types.ContentBlock:
-				// 处理结构化 ContentBlock 数组
-				for _, block := range v {
-					if block.Text != "" {
-						total += utils.EstimateTokens(block.Text)
-					}
-				}
-			default:
-				// 回退：序列化后估算
-				data, _ := json.Marshal(v)
-				total += utils.EstimateTokens(string(data))
-			}
-		}
-
-		// 处理 tool_use
-		if item.ToolUse != nil {
-			if item.ToolUse.Name != "" {
-				total += utils.EstimateTokens(item.ToolUse.Name) + 2
-			}
-			if item.ToolUse.Input != nil {
-				data, _ := json.Marshal(item.ToolUse.Input)
-				total += utils.EstimateTokens(string(data))
-			}
-		}
-
-		// 处理 function_call 类型（item.Type == "function_call"）
-		if item.Type == "function_call" {
-			// 在转换后的响应中，function_call 的参数可能在 Content 中
-			if contentStr, ok := item.Content.(string); ok {
-				total += utils.EstimateTokens(contentStr)
-			}
-		}
-	}
-
-	return total
-}
-
-// handleStreamSuccess 处理流式响应
-//
-// 流程：预读取行 → 检测空响应
-//   - 空响应 → return nil, ErrEmptyStreamResponse（Header 未发送，可安全重试）

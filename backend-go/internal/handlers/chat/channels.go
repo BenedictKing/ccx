@@ -39,13 +39,16 @@ func GetUpstreams(cfgManager *config.ConfigManager) gin.HandlerFunc {
 // AddUpstream 添加 Chat 上游
 func AddUpstream(cfgManager *config.ConfigManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var upstream config.UpstreamConfig
-		if err := c.ShouldBindJSON(&upstream); err != nil {
+		var req struct {
+			config.UpstreamConfig
+			Placement string `json:"placement"` // 故障转移位置：front（首位）| back（末尾，默认）
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(400, gin.H{"error": err.Error()})
 			return
 		}
 
-		if err := cfgManager.AddChatUpstream(upstream); err != nil {
+		if err := cfgManager.AddChatUpstream(req.UpstreamConfig, req.Placement); err != nil {
 			c.JSON(500, gin.H{"error": err.Error()})
 			return
 		}
@@ -227,14 +230,15 @@ func MoveApiKeyToBottom(cfgManager *config.ConfigManager) gin.HandlerFunc {
 func ReorderChannels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req struct {
-			Order []int `json:"order"`
+			Order      []int `json:"order"`
+			Priorities []int `json:"priorities"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(400, gin.H{"error": "Invalid request body"})
 			return
 		}
 
-		if err := cfgManager.ReorderChatUpstreams(req.Order); err != nil {
+		if err := cfgManager.ReorderChatUpstreams(req.Order, req.Priorities); err != nil {
 			c.JSON(400, gin.H{"error": err.Error()})
 			return
 		}

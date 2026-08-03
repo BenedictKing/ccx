@@ -19,6 +19,7 @@ import {
   toBenchmarkEvidence as toDradarEvidence,
   DRADAR_MODEL_MAP,
 } from './dradar.mjs'
+import { extractProfiles as extractBenchlmProfiles } from './benchlm.mjs'
 import { extractModelInfo, LITELLM_MODEL_MAP } from './litellm.mjs'
 import {
   extractLlmProfiles as extractAaLlm,
@@ -186,6 +187,20 @@ test('LiteLLM preserves explicit zero prices', () => {
   assert.equal(info.pricing.inputCacheHitPrice, 0)
 })
 
+test('LiteLLM normalizes per-million prices to avoid float noise', () => {
+  const info = extractModelInfo({
+    source: {
+      input_cost_per_token: 2e-7,
+      output_cost_per_token: 6.4e-6,
+      cache_read_input_token_cost: 5e-8,
+    },
+  }, { source: 'canonical' }).canonical
+
+  assert.equal(info.pricing.inputCacheMissPrice, 0.2)
+  assert.equal(info.pricing.outputPrice, 6.4)
+  assert.equal(info.pricing.inputCacheHitPrice, 0.05)
+})
+
 test('benchmark merge creates a complete valid profile', () => {
   const registry = { benchmarkProfiles: [], upstreamCapabilities: [] }
   mergeDeepsweData(registry, {
@@ -251,6 +266,38 @@ test('BenchLM zero comparable categories do not erase valid evidence metadata', 
   assert.doesNotThrow(() => validateRegistry(registry))
 })
 
+test('BenchLM mapper can rebuild fresh profiles from raw models doc for DeepSeek variants', () => {
+  const rawDoc = {
+    items: [{
+      slug: 'deepseek-v4-flash-max',
+      url: 'https://benchlm.ai/models/deepseek-v4-flash-max',
+      displayScore: 78,
+      coverage: { trustedBenchmarkCount: 12 },
+      scores: {
+        displayCategoryScores: {
+          Coding: 81,
+          Knowledge: 75,
+        },
+      },
+    }],
+  }
+
+  const profiles = extractBenchlmProfiles(rawDoc, {
+    'deepseek-v4-flash-max': 'deepseek-v4-flash',
+  }, {
+    Coding: 'coding',
+    Knowledge: 'knowledge',
+  })
+
+  assert.equal(profiles['deepseek-v4-flash'].overallScore, 78)
+  assert.equal(profiles['deepseek-v4-flash'].categoryScores.coding, 81)
+  assert.equal(profiles['deepseek-v4-flash'].categoryScores.knowledge, 75)
+  assert.deepEqual(profiles['deepseek-v4-flash'].sources, [
+    'https://benchlm.ai/models/deepseek-v4-flash-max',
+    'https://benchlm.ai/methodology',
+  ])
+})
+
 test('visualization combines DeepSWE, BenchLM and CodexRadar sources', () => {
   const evidence = (benchmark, benchmarkVersion, rawValue) => ({
     benchmark,
@@ -307,6 +354,21 @@ test('opus-5 is mapped across every benchmark source', () => {
   assert.equal(DRADAR_MODEL_MAP['claude-opus-5'], 'claude-opus-5')
   assert.equal(LITELLM_MODEL_MAP['claude-opus-5'], 'claude-opus-5')
   assert.equal(ARTIFICIAL_ANALYSIS_MODEL_MAP['claude-opus-5'], 'claude-opus-5')
+})
+
+test('DeepSeek BenchLM variants fold into canonical flash and pro models', () => {
+  assert.equal(BENCHLM_MODEL_MAP['deepseek-v4-flash'], 'deepseek-v4-flash')
+  assert.equal(BENCHLM_MODEL_MAP['deepseek-v4-flash-base'], 'deepseek-v4-flash')
+  assert.equal(BENCHLM_MODEL_MAP['deepseek-v4-flash-high'], 'deepseek-v4-flash')
+  assert.equal(BENCHLM_MODEL_MAP['deepseek-v4-flash-max'], 'deepseek-v4-flash')
+  assert.equal(BENCHLM_MODEL_MAP['deepseek-v4-pro'], 'deepseek-v4-pro')
+  assert.equal(BENCHLM_MODEL_MAP['deepseek-v4-pro-base'], 'deepseek-v4-pro')
+  assert.equal(BENCHLM_MODEL_MAP['deepseek-v4-pro-high'], 'deepseek-v4-pro')
+  assert.equal(BENCHLM_MODEL_MAP['deepseek-v4-pro-max'], 'deepseek-v4-pro')
+})
+
+test('DeepSeek CodexRadar flash model is mapped', () => {
+  assert.equal(DRADAR_MODEL_MAP['deepseek-v4-flash'], 'deepseek-v4-flash')
 })
 
 test('Artificial Analysis LLM extraction yields one evidence per composite index', () => {

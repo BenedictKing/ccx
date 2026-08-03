@@ -20,6 +20,7 @@ import type {
   ChannelLogsResponse,
   ChannelMetrics,
   ChannelModelsRequest,
+  ChannelPlacement,
   ChannelSequenceEntry,
   ChannelsResponse,
   ChannelStatus,
@@ -192,10 +193,10 @@ export class ApiService {
     return this.request('/messages/channels')
   }
 
-  async addChannel(channel: Omit<Channel, 'index' | 'latency' | 'status'>): Promise<void> {
+  async addChannel(channel: Omit<Channel, 'index' | 'latency' | 'status'>, placement?: ChannelPlacement): Promise<void> {
     await this.request('/messages/channels', {
       method: 'POST',
-      body: JSON.stringify(channel)
+      body: JSON.stringify(placement ? { ...channel, placement } : channel)
     })
   }
 
@@ -366,10 +367,10 @@ export class ApiService {
     return this.request('/responses/channels')
   }
 
-  async addResponsesChannel(channel: Omit<Channel, 'index' | 'latency' | 'status'>): Promise<void> {
+  async addResponsesChannel(channel: Omit<Channel, 'index' | 'latency' | 'status'>, placement?: ChannelPlacement): Promise<void> {
     await this.request('/responses/channels', {
       method: 'POST',
-      body: JSON.stringify(channel)
+      body: JSON.stringify(placement ? { ...channel, placement } : channel)
     })
   }
 
@@ -476,10 +477,10 @@ export class ApiService {
   // ============== 多渠道调度 API ==============
 
   // 重新排序渠道优先级
-  async reorderChannels(order: number[]): Promise<void> {
+  async reorderChannels(order: number[], priorities?: number[]): Promise<void> {
     await this.request('/messages/channels/reorder', {
       method: 'POST',
-      body: JSON.stringify({ order })
+      body: JSON.stringify(priorities ? { order, priorities } : { order })
     })
   }
 
@@ -524,10 +525,10 @@ export class ApiService {
   // ============== Responses 多渠道调度 API ==============
 
   // 重新排序 Responses 渠道优先级
-  async reorderResponsesChannels(order: number[]): Promise<void> {
+  async reorderResponsesChannels(order: number[], priorities?: number[]): Promise<void> {
     await this.request('/responses/channels/reorder', {
       method: 'POST',
-      body: JSON.stringify({ order })
+      body: JSON.stringify(priorities ? { order, priorities } : { order })
     })
   }
 
@@ -644,10 +645,10 @@ export class ApiService {
     return this.request('/chat/channels')
   }
 
-  async addChatChannel(channel: Omit<Channel, 'index' | 'latency' | 'status'>): Promise<void> {
+  async addChatChannel(channel: Omit<Channel, 'index' | 'latency' | 'status'>, placement?: ChannelPlacement): Promise<void> {
     await this.request('/chat/channels', {
       method: 'POST',
-      body: JSON.stringify(channel)
+      body: JSON.stringify(placement ? { ...channel, placement } : channel)
     })
   }
 
@@ -719,10 +720,10 @@ export class ApiService {
 
   // ============== Chat 多渠道调度 API ==============
 
-  async reorderChatChannels(order: number[]): Promise<void> {
+  async reorderChatChannels(order: number[], priorities?: number[]): Promise<void> {
     await this.request('/chat/channels/reorder', {
       method: 'POST',
-      body: JSON.stringify({ order })
+      body: JSON.stringify(priorities ? { order, priorities } : { order })
     })
   }
 
@@ -798,10 +799,10 @@ export class ApiService {
     return this.request('/images/channels')
   }
 
-  async addImagesChannel(channel: Omit<Channel, 'index' | 'latency' | 'status'>): Promise<void> {
+  async addImagesChannel(channel: Omit<Channel, 'index' | 'latency' | 'status'>, placement?: ChannelPlacement): Promise<void> {
     await this.request('/images/channels', {
       method: 'POST',
-      body: JSON.stringify(channel)
+      body: JSON.stringify(placement ? { ...channel, placement } : channel)
     })
   }
 
@@ -871,10 +872,10 @@ export class ApiService {
     })
   }
 
-  async reorderImagesChannels(order: number[]): Promise<void> {
+  async reorderImagesChannels(order: number[], priorities?: number[]): Promise<void> {
     await this.request('/images/channels/reorder', {
       method: 'POST',
-      body: JSON.stringify({ order })
+      body: JSON.stringify(priorities ? { order, priorities } : { order })
     })
   }
 
@@ -948,10 +949,10 @@ export class ApiService {
     return this.request('/vectors/channels')
   }
 
-  async addVectorsChannel(channel: Omit<Channel, 'index' | 'latency' | 'status'>): Promise<void> {
+  async addVectorsChannel(channel: Omit<Channel, 'index' | 'latency' | 'status'>, placement?: ChannelPlacement): Promise<void> {
     await this.request('/vectors/channels', {
       method: 'POST',
-      body: JSON.stringify(channel)
+      body: JSON.stringify(placement ? { ...channel, placement } : channel)
     })
   }
 
@@ -1021,10 +1022,10 @@ export class ApiService {
     })
   }
 
-  async reorderVectorsChannels(order: number[]): Promise<void> {
+  async reorderVectorsChannels(order: number[], priorities?: number[]): Promise<void> {
     await this.request('/vectors/channels/reorder', {
       method: 'POST',
-      body: JSON.stringify({ order })
+      body: JSON.stringify(priorities ? { order, priorities } : { order })
     })
   }
 
@@ -1098,10 +1099,10 @@ export class ApiService {
     return this.request('/gemini/channels')
   }
 
-  async addGeminiChannel(channel: Omit<Channel, 'index' | 'latency' | 'status'>): Promise<void> {
+  async addGeminiChannel(channel: Omit<Channel, 'index' | 'latency' | 'status'>, placement?: ChannelPlacement): Promise<void> {
     await this.request('/gemini/channels', {
       method: 'POST',
-      body: JSON.stringify(channel)
+      body: JSON.stringify(placement ? { ...channel, placement } : channel)
     })
   }
 
@@ -1173,10 +1174,10 @@ export class ApiService {
 
   // ============== Gemini 多渠道调度 API ==============
 
-  async reorderGeminiChannels(order: number[]): Promise<void> {
+  async reorderGeminiChannels(order: number[], priorities?: number[]): Promise<void> {
     await this.request('/gemini/channels/reorder', {
       method: 'POST',
-      body: JSON.stringify({ order })
+      body: JSON.stringify(priorities ? { order, priorities } : { order })
     })
   }
 
@@ -1503,7 +1504,7 @@ export class ApiService {
   }
 
   /** 原子更新自动托管账号名称与凭证集合。 */
-  async updateManagedAccount(accountUid: string, data: { name: string; apiKeys: string[] }): Promise<UpdateManagedAccountResponse> {
+  async updateManagedAccount(accountUid: string, data: { name: string; apiKeys: string[]; baseUrls?: string[] }): Promise<UpdateManagedAccountResponse> {
     return this.request(`/accounts/${encodeURIComponent(accountUid)}`, {
       method: 'PUT',
       body: JSON.stringify(data),

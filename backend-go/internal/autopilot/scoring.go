@@ -97,17 +97,6 @@ func ApplyCostPreference(weights ScoringWeights, mode CostPreferenceMode) Scorin
 	return out
 }
 
-// ApplyCustomCostPreference 用自定义乘数调整权重（§5.6.1 custom 模式）。
-// savingsMul 和 providerQualityMul 范围 [0.0, 3.0]，超出时钳制。
-func ApplyCustomCostPreference(weights ScoringWeights, savingsMul, providerQualityMul float64) ScoringWeights {
-	savingsMul = clampF(savingsMul, 0.0, 3.0)
-	providerQualityMul = clampF(providerQualityMul, 0.0, 3.0)
-	out := weights
-	out.WSavings *= savingsMul
-	out.WProviderQuality *= providerQualityMul
-	return out
-}
-
 // ── §5.5 派系偏好评分 ──
 
 // CalcFamilyPreferenceScore 计算模型派系偏好分（§5.5.2）。
@@ -152,6 +141,14 @@ type ScoringCandidate struct {
 	// 调用方应使用 BuildDomainStrengthScore 预计算。
 	DomainStrengthScore float64
 	DomainEvidence      *DomainStrengthEvidence
+
+	// QualityBenchmarkKnown/QualityBenchmarkScore 是 premium 档内连续 benchmark tie-break 的输入。
+	// 仅在候选最终 QualityTier 为 premium 时生效，用于区分同为 premium 但能力差异明显的模型
+	// （如 gpt-5.6-sol 与 gpt-5.4），不改变跨档位的绝对排序。QualityBenchmarkScore 为
+	// config.ResolveModelBenchmarkProfile 返回的 OverallScore 原始值（0-100 量级）；
+	// 调用方应使用 applyPremiumBenchmarkEvidence 预计算，未知时保持零值不参与细分。
+	QualityBenchmarkKnown bool
+	QualityBenchmarkScore float64
 }
 
 // ScoringContext 是评分时的上下文信息（来自请求/策略）。
@@ -189,6 +186,11 @@ type ScoredCandidate struct {
 }
 
 // ── 评分公式 ──
+
+// premiumBenchmarkTieBreakWeight 是 premium 档内连续 benchmark 证据对 qualityScore 的最大加成。
+// 必须 < 1（qualityTierScore 相邻档位的最小间距），确保 benchmark 差异只能在同一档位内
+// 重排序，永远不足以让 premium 候选反超下一档，也不会让弱 benchmark 的 premium 候选跌到 high 档以下。
+const premiumBenchmarkTieBreakWeight = 0.5
 
 // tierScoreMap 将各 tier 映射为评分公式中的分数。
 // qualityScore: low=1, normal=2, high=3, premium=4
@@ -236,6 +238,14 @@ func ScoreCandidate(candidate ScoringCandidate, ctx ScoringContext) ScoredCandid
 			qualityRank = qualityTierRank(ctx.QualityBenefitCap)
 		}
 		qs = float64(qualityRank + 1)
+	}
+	// premium 同档连续 benchmark tie-break：qualityTierScore/绝对档位语义把同为 premium 的
+	// 候选压成同一个整数分（如 gpt-5.6-sol 与 gpt-5.4 都是 4）。benchmarkBonus 只在候选最终
+	// 判定为 premium 且有已知 benchmark 证据时生效，幅度 < 1 保证不会让 premium 候选越级
+	// 压过更高绝对档位（premium 本就是最高档，不存在越级问题），也不会打乱非 premium 候选
+	// 之间原有的整数档位排序。
+	if candidate.QualityTier == QualityTierPremium && candidate.QualityBenchmarkKnown {
+		qs += clampF(candidate.QualityBenchmarkScore/100.0, 0, 1) * premiumBenchmarkTieBreakWeight
 	}
 
 	// 2. stabilityScore: unstable=0, normal=1, stable=2

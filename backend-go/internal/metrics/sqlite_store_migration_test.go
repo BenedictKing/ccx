@@ -376,8 +376,8 @@ func TestMigrateMetricsKeysToIdentity_IgnoresConflictingMappingsWithoutLegacyRow
 	if err != nil {
 		t.Fatalf("schemaVersion() error = %v", err)
 	}
-	if version != 4 {
-		t.Fatalf("schemaVersion = %d, want 4", version)
+	if version != 5 {
+		t.Fatalf("schemaVersion = %d, want 5", version)
 	}
 }
 
@@ -478,8 +478,8 @@ func TestSchemaVersion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("schemaVersion() error = %v", err)
 	}
-	if version != 4 {
-		t.Fatalf("schemaVersion = %d, want 4", version)
+	if version != 5 {
+		t.Fatalf("schemaVersion = %d, want 5", version)
 	}
 }
 

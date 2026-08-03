@@ -36,6 +36,7 @@ export const DRADAR_MODEL_MAP = {
   'gemini-3-5-flash': 'gemini-3.5-flash',
   'gemini-3-1-pro': 'gemini-3.1-pro',
   'gemini-3-flash': 'gemini-3-flash',
+  'deepseek-v4-flash': 'deepseek-v4-flash',
 }
 
 const BASE_URL = 'https://api.codexradar.com'

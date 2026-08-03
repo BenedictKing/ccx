@@ -1,7 +1,7 @@
 import { ref, reactive, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useTheme } from 'vuetify'
-import { api, fetchHealth, ApiError, type Channel, type ChannelKind } from '../services/api'
+import { api, fetchHealth, ApiError, type Channel, type ChannelKind, type ChannelPlacement } from '../services/api'
 import { versionService } from '../services/version'
 import { useAuthStore } from '../stores/auth'
 import { useChannelStore } from '../stores/channel'
@@ -137,7 +137,7 @@ export function useAppController() {
 
   const saveChannel = async (
     channel: Omit<Channel, 'index' | 'latency' | 'status'>,
-    options?: { isQuickAdd?: boolean },
+    options?: { isQuickAdd?: boolean; placement?: ChannelPlacement },
     onComplete?: () => void,
   ) => {
     try {

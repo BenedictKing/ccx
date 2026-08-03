@@ -95,7 +95,7 @@ func TestGetChannelLogs_AfterChannelDeletion(t *testing.T) {
 
 	// 通过 API 查询 ch-b（index 现在是 0，因为 ch-a 被移除）
 	r := gin.New()
-	r.GET("/messages/channels/:id/logs", GetChannelLogs(logStore, cfgManager, scheduler.ChannelKindMessages))
+	r.GET("/messages/channels/:id/logs", GetChannelLogs(logStore, cfgManager, scheduler.ChannelKindMessages, nil))
 
 	req := httptest.NewRequest(http.MethodGet, "/messages/channels/0/logs", nil)
 	w := httptest.NewRecorder()
@@ -163,7 +163,7 @@ func TestGetChannelLogs_FiltersSharedMetricsKeyByChannelIndex(t *testing.T) {
 	logStore.Record(metricsKey, &metrics.ChannelLog{RequestID: "chat-log", ChannelIndex: 1, Model: "gpt-5.5", Timestamp: now})
 
 	r := gin.New()
-	r.GET("/responses/channels/:id/logs", GetChannelLogs(logStore, cfgManager, scheduler.ChannelKindResponses))
+	r.GET("/responses/channels/:id/logs", GetChannelLogs(logStore, cfgManager, scheduler.ChannelKindResponses, nil))
 
 	req := httptest.NewRequest(http.MethodGet, "/responses/channels/0/logs", nil)
 	w := httptest.NewRecorder()
@@ -255,7 +255,7 @@ func TestGetChannelLogs_FiltersSharedMetricsKeyByChannelNameAfterDeletion(t *tes
 	logStore.Record(metricsKey, &metrics.ChannelLog{RequestID: "remaining-b-old-index", ChannelIndex: 2, ChannelName: "RemainingB", Model: "gpt-5.6", Timestamp: now})
 
 	r := gin.New()
-	r.GET("/responses/channels/:id/logs", GetChannelLogs(logStore, cfgManager, scheduler.ChannelKindResponses))
+	r.GET("/responses/channels/:id/logs", GetChannelLogs(logStore, cfgManager, scheduler.ChannelKindResponses, nil))
 
 	req := httptest.NewRequest(http.MethodGet, "/responses/channels/0/logs", nil)
 	w := httptest.NewRecorder()
@@ -318,7 +318,7 @@ func TestGetChannelLogs_ExcludesDeletedChannelResidualAfterBecomingExclusive(t *
 	logStore.Record(metricsKey, &metrics.ChannelLog{RequestID: "remaining", ChannelIndex: 0, ChannelName: "Remaining", Model: "gpt-5.5", Timestamp: now})
 
 	r := gin.New()
-	r.GET("/responses/channels/:id/logs", GetChannelLogs(logStore, cfgManager, scheduler.ChannelKindResponses))
+	r.GET("/responses/channels/:id/logs", GetChannelLogs(logStore, cfgManager, scheduler.ChannelKindResponses, nil))
 
 	req := httptest.NewRequest(http.MethodGet, "/responses/channels/0/logs", nil)
 	w := httptest.NewRecorder()

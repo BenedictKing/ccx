@@ -135,6 +135,8 @@ func TestBuildChannelEntryAppliesProviderTimePricingAfterActivation(t *testing.T
 }
 
 func TestSmartRouterAppliesCanonicalBenchmarkToDomainScore(t *testing.T) {
+	// 期望值由当前 registry 推导，避免评测数据刷新导致断言失效。
+	want := canonicalDomainCeiling(t, "gpt-5.6-sol", TaskDomainReasoning)
 	router := NewSmartRouter(nil, nil, nil, nil)
 	entry := router.buildChannelEntry(
 		scheduler.ChannelInfo{Index: 0, Name: "sol", Status: "active"},
@@ -142,8 +144,8 @@ func TestSmartRouterAppliesCanonicalBenchmarkToDomainScore(t *testing.T) {
 	)
 	applyDomainStrength(&entry, TaskDomainReasoning)
 
-	if math.Abs(entry.ScoringCandidate.DomainStrengthScore-0.971) > 1e-9 {
-		t.Fatalf("DomainStrengthScore = %v, want 0.971", entry.ScoringCandidate.DomainStrengthScore)
+	if math.Abs(entry.ScoringCandidate.DomainStrengthScore-want) > 1e-9 {
+		t.Fatalf("DomainStrengthScore = %v, want %v", entry.ScoringCandidate.DomainStrengthScore, want)
 	}
 	if entry.ScoringCandidate.DomainEvidence == nil ||
 		entry.ScoringCandidate.DomainEvidence.Source != "canonical_benchmark" ||
@@ -152,7 +154,7 @@ func TestSmartRouterAppliesCanonicalBenchmarkToDomainScore(t *testing.T) {
 	}
 
 	scored := ScoreCandidate(entry.ScoringCandidate, ScoringContext{Weights: DefaultTaskWeights()[TaskClassWorker]})
-	if scored.DomainEvidence == nil || scored.DomainEvidence.CanonicalCeiling != 0.971 {
+	if scored.DomainEvidence == nil || math.Abs(scored.DomainEvidence.CanonicalCeiling-want) > 1e-9 {
 		t.Fatalf("scored DomainEvidence = %+v", scored.DomainEvidence)
 	}
 }
@@ -176,8 +178,9 @@ func TestSmartRouterPrefersEndpointDomainOverrideAndAppliesProviderFactor(t *tes
 		&config.UpstreamConfig{ChannelUID: "ch_sol"}, "responses", "gpt-5.6-sol", nil,
 	)
 	applyDomainStrength(&entry, TaskDomainReasoning)
-	if math.Abs(entry.ScoringCandidate.DomainStrengthScore-0.82535) > 1e-9 {
-		t.Fatalf("quality-adjusted DomainStrengthScore = %v, want 0.82535", entry.ScoringCandidate.DomainStrengthScore)
+	// factor = 1 - 0.75 * (1 - 0.8) = 0.85；上界随 registry 刷新动态推导。
+	if want := canonicalDomainCeiling(t, "gpt-5.6-sol", TaskDomainReasoning) * 0.85; math.Abs(entry.ScoringCandidate.DomainStrengthScore-want) > 1e-9 {
+		t.Fatalf("quality-adjusted DomainStrengthScore = %v, want %v", entry.ScoringCandidate.DomainStrengthScore, want)
 	}
 
 	profile.TaskDomainStrengths = map[TaskDomain]float64{TaskDomainReasoning: 0.97}

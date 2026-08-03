@@ -121,6 +121,45 @@ func CanonicalBaseURL(rawURL, serviceType string) string {
 	return normalized
 }
 
+// BaseURLSiteIdentities 返回跨协议可用于识别同一上游站点的 URL 身份集合。
+// 默认协议版本后缀视为等价；其他路径、端口、查询参数和 # 语义保持区分。
+func BaseURLSiteIdentities(rawURL string) []string {
+	serviceTypes := [...]string{"claude", "openai", "responses", "gemini"}
+	identities := make([]string, 0, len(serviceTypes))
+	seen := make(map[string]struct{}, len(serviceTypes))
+	for _, serviceType := range serviceTypes {
+		identity := normalizeBaseURLSiteIdentity(CanonicalBaseURL(rawURL, serviceType))
+		if identity == "" {
+			continue
+		}
+		if _, exists := seen[identity]; exists {
+			continue
+		}
+		seen[identity] = struct{}{}
+		identities = append(identities, identity)
+	}
+	return identities
+}
+
+func normalizeBaseURLSiteIdentity(rawURL string) string {
+	trimmed := strings.TrimSpace(rawURL)
+	hasHash := strings.HasSuffix(trimmed, "#")
+	parsed, err := url.Parse(strings.TrimSuffix(trimmed, "#"))
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return ""
+	}
+	parsed.Scheme = strings.ToLower(parsed.Scheme)
+	parsed.Host = strings.ToLower(parsed.Host)
+	parsed.Path = strings.TrimRight(parsed.Path, "/")
+	parsed.RawPath = ""
+	parsed.Fragment = ""
+	identity := strings.TrimRight(parsed.String(), "/")
+	if hasHash {
+		return identity + "#"
+	}
+	return identity
+}
+
 // MetricsIdentityBaseURL 返回用于指标归并的稳定 BaseURL 标识。
 // 规则：
 // 1. 保留 # 语义（避免与普通 URL 合并）

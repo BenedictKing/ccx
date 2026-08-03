@@ -489,13 +489,13 @@ func TestAggregateHealthState(t *testing.T) {
 			want: HealthStateHealthy,
 		},
 		{
-			name: "任一dead则channel为dead",
+			name: "混合healthy和dead降为degraded",
 			results: []DiagnosisResult{
 				{State: HealthStateHealthy},
 				{State: HealthStateHealthy},
 				{State: HealthStateDead},
 			},
-			want: HealthStateDead,
+			want: HealthStateDegraded,
 		},
 		{
 			name: "degraded和limited取limited",
@@ -513,12 +513,12 @@ func TestAggregateHealthState(t *testing.T) {
 			want: HealthStateDegraded,
 		},
 		{
-			name: "unknown和healthy取unknown",
+			name: "unknown和healthy取degraded",
 			results: []DiagnosisResult{
 				{State: HealthStateHealthy},
 				{State: HealthStateUnknown},
 			},
-			want: HealthStateUnknown,
+			want: HealthStateDegraded,
 		},
 	}
 

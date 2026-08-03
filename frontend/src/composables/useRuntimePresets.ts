@@ -1,6 +1,7 @@
 import { computed, ref } from 'vue'
 import { api } from '../services/api'
 import type {
+  ModelBenchmarkProfile,
   PresetBundle,
   RuntimeModelRegistryBundle,
   SubscriptionPreset,
@@ -10,7 +11,6 @@ import type {
 import { setRuntimeUpstreamModelCapabilities } from '../utils/channelPayload'
 import { claudeMessagesPresets as builtinClaudeMessagesPresets } from '../generated/claudeMessagesPresets'
 import { codexResponsesPresets as builtinCodexResponsesPresets } from '../generated/codexResponsesPresets'
-import { builtinUpstreamModelCapabilities } from '../generated/modelRegistry'
 import { openaiChatPresets as builtinOpenAIChatPresets } from '../generated/openaiChatPresets'
 import { openaiMessagesPresets as builtinOpenAIMessagesPresets } from '../generated/openaiMessagesPresets'
 
@@ -19,6 +19,7 @@ export type RuntimeOpenAIMessagesPreset = typeof builtinOpenAIMessagesPresets
 export type RuntimeOpenAIChatPreset = typeof builtinOpenAIChatPresets
 export type RuntimeCodexResponsesPreset = typeof builtinCodexResponsesPresets
 export type RuntimeModelRegistry = Record<string, UpstreamModelCapability>
+export type RuntimeBenchmarkProfiles = Record<string, ModelBenchmarkProfile>
 
 export interface RuntimeChannelPresetCollections {
   schemaVersion?: number
@@ -33,6 +34,7 @@ export interface RuntimePresetState {
   dataVersion?: string
   subscription: SubscriptionPreset
   modelRegistry: RuntimeModelRegistry
+  benchmarkProfiles: RuntimeBenchmarkProfiles
   channelPresets: RuntimeChannelPresetCollections
   builtinModelsManifests?: PresetBundle['builtinModelsManifests']
 }
@@ -62,7 +64,8 @@ const fallbackChannelPresets: RuntimeChannelPresetCollections = {
 
 const fallbackRuntimePresetState: RuntimePresetState = {
   subscription: fallbackSubscriptionPreset,
-  modelRegistry: builtinUpstreamModelCapabilities,
+  modelRegistry: {},
+  benchmarkProfiles: {},
   channelPresets: fallbackChannelPresets,
 }
 
@@ -109,7 +112,7 @@ function unwrapPresetCollection<T>(
 }
 
 function normalizeModelRegistry(modelRegistry?: PresetBundle['modelRegistry'] | null): RuntimeModelRegistry {
-  if (!modelRegistry) return builtinUpstreamModelCapabilities
+  if (!modelRegistry) return {}
 
   const registryBundle = modelRegistry as RuntimeModelRegistryBundle
   if (Array.isArray(registryBundle.upstreamCapabilities) && registryBundle.upstreamCapabilities.length > 0) {
@@ -127,16 +130,32 @@ function normalizeModelRegistry(modelRegistry?: PresetBundle['modelRegistry'] | 
         }
       }
     }
-    if (Object.keys(normalized).length > 0) {
-      return normalized
-    }
+    return normalized
   }
 
   if (isNonEmptyRecord(modelRegistry)) {
     return modelRegistry as Record<string, UpstreamModelCapability>
   }
 
-  return builtinUpstreamModelCapabilities
+  return {}
+}
+
+function normalizeBenchmarkProfiles(modelRegistry?: PresetBundle['modelRegistry'] | null): RuntimeBenchmarkProfiles {
+  const registryBundle = modelRegistry as RuntimeModelRegistryBundle | null | undefined
+  const profiles = registryBundle?.benchmarkProfiles
+  if (!Array.isArray(profiles)) return {}
+
+  const normalized: RuntimeBenchmarkProfiles = {}
+  for (const entry of profiles) {
+    const patterns = Array.isArray(entry.patterns) ? entry.patterns : []
+    const profile: ModelBenchmarkProfile = { ...entry }
+    delete (profile as ModelBenchmarkProfile & { patterns?: string[] }).patterns
+    for (const pattern of patterns) {
+      const trimmedPattern = pattern.trim()
+      if (trimmedPattern) normalized[trimmedPattern] = profile
+    }
+  }
+  return normalized
 }
 
 function normalizeBundle(bundle?: Partial<PresetBundle> | null): RuntimePresetState {
@@ -146,6 +165,7 @@ function normalizeBundle(bundle?: Partial<PresetBundle> | null): RuntimePresetSt
     dataVersion: bundle?.dataVersion,
     subscription: normalizeSubscriptionPreset(bundle?.subscription),
     modelRegistry: normalizeModelRegistry(bundle?.modelRegistry),
+    benchmarkProfiles: normalizeBenchmarkProfiles(bundle?.modelRegistry),
     channelPresets: {
       schemaVersion: runtimeChannelPresets?.schemaVersion ?? bundle?.schemaVersion,
       claudeMessages: unwrapPresetCollection(runtimeChannelPresets?.claudeMessages, builtinClaudeMessagesPresets),
@@ -221,6 +241,7 @@ export function useRuntimePresets() {
     runtimePresets: computed(() => state.value),
     subscriptionPreset: computed(() => state.value.subscription),
     effectiveModelRegistry: computed(() => state.value.modelRegistry),
+    effectiveBenchmarkProfiles: computed(() => state.value.benchmarkProfiles),
     effectiveChannelPresets: computed(() => state.value.channelPresets),
     loaded: computed(() => loaded.value),
     loading: computed(() => loading.value),

@@ -67,6 +67,14 @@ export const BENCHLM_MODEL_MAP = {
   'gpt-5-4-mini': 'gpt-5.4-mini',
   'grok-4-5': 'grok-4.5',
   'muse-spark-1-1': 'muse-spark-1.1',
+  'deepseek-v4-flash': 'deepseek-v4-flash',
+  'deepseek-v4-flash-base': 'deepseek-v4-flash',
+  'deepseek-v4-flash-high': 'deepseek-v4-flash',
+  'deepseek-v4-flash-max': 'deepseek-v4-flash',
+  'deepseek-v4-pro': 'deepseek-v4-pro',
+  'deepseek-v4-pro-base': 'deepseek-v4-pro',
+  'deepseek-v4-pro-high': 'deepseek-v4-pro',
+  'deepseek-v4-pro-max': 'deepseek-v4-pro',
 }
 
 /**

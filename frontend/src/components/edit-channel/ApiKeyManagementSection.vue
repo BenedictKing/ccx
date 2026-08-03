@@ -196,6 +196,7 @@
               <v-list-item
                 rounded="lg"
                 variant="tonal"
+                prepend-gap="8"
                 :color="row.disabled ? 'warning' : duplicateKeyIndex === row.activeIndex ? 'error' : 'surface-variant'"
                 :class="{
                   'animate-pulse': duplicateKeyIndex === row.activeIndex,
@@ -517,18 +518,10 @@
                   </div>
 
                   <div v-if="row.volcengineCredential.hasVolcengineAccessKey" class="mb-3">
-                    <div
+                    <UsageQuotaRows
                       v-if="hasVolcengineUsageData(row.volcengineCredential.volcenginePlanUsage)"
-                      class="volcengine-usage-grid"
-                    >
-                      <div
-                        v-for="win in volcengineUsageWindows(row.volcengineCredential.volcenginePlanUsage)"
-                        :key="win.labelKey"
-                      >
-                        <div class="text-caption text-medium-emphasis">{{ t(win.labelKey) }}</div>
-                        <div class="text-body-2 font-weight-medium" :class="win.colorClass">{{ win.text }}</div>
-                      </div>
-                    </div>
+                      :items="volcengineUsageItems(row.volcengineCredential.volcenginePlanUsage)"
+                    />
                     <div v-else class="text-caption text-disabled">
                       {{ row.volcengineCredential.volcenginePlanUsage?.error || t('volcengineAccessKey.noUsageData') }}
                     </div>
@@ -625,70 +618,11 @@
                   </div>
 
                   <template v-if="row.kimiCredential.kimiCodeUsage">
-                    <div v-if="buildKimiUsageSections(row.kimiCredential.kimiCodeUsage).length" class="kimi-plan-usage mb-3">
-                      <div
-                        v-for="section in buildKimiUsageSections(row.kimiCredential.kimiCodeUsage)"
-                        :key="section.key"
-                        class="kimi-plan-usage-row"
-                      >
-                        <span class="text-body-2 text-medium-emphasis">{{ t(section.labelKey) }}</span>
-
-                        <v-progress-linear
-                          v-if="section.kind === 'window'"
-                          :model-value="section.usedPercent"
-                          :color="kimiUsageColor(section.usedPercent)"
-                          height="6"
-                          rounded
-                        />
-                        <div v-else-if="section.kind === 'subscription' || section.kind === 'gift'" class="kimi-balance-stack">
-                          <span
-                            class="kimi-balance-stack__kimi"
-                            :style="{ width: `${section.kimiUsedPercent}%` }"
-                          ></span>
-                          <span
-                            class="kimi-balance-stack__code"
-                            :style="{ width: `${section.codeUsedPercent}%` }"
-                          ></span>
-                        </div>
-                        <v-progress-linear
-                          v-else-if="section.kind === 'booster' && section.usedPercent !== undefined"
-                          :model-value="section.usedPercent"
-                          :color="kimiUsageColor(section.usedPercent)"
-                          height="6"
-                          rounded
-                        />
-                        <span v-else></span>
-
-                        <span class="text-body-2 font-weight-medium text-no-wrap">
-                          <template v-if="section.kind === 'booster'">
-                            <template v-if="!section.wallet.allowTopup">{{ t('kimiConsoleToken.boosterWalletDisabled') }}</template>
-                            <template v-else>{{ kimiFormatMoney(section.wallet.moneyLeft) }} / {{ kimiFormatMoney(section.wallet.moneyTotal) }}</template>
-                          </template>
-                          <!-- Kimi 通用额度未消耗时省略 Kimi/Code 拆分，避免与“已用”重复 -->
-                          <template v-else-if="(section.kind === 'subscription' || section.kind === 'gift') && section.kimiUsedPercent >= 1">
-                            Kimi {{ Math.round(section.kimiUsedPercent) }}% · Code {{ Math.round(section.codeUsedPercent) }}% ·
-                            {{ t('kimiConsoleToken.percentUsed', { percent: Math.round(section.usedPercent) }) }}
-                          </template>
-                          <template v-else>
-                            {{ t('kimiConsoleToken.percentUsed', { percent: Math.round(section.usedPercent ?? 0) }) }}
-                          </template>
-                        </span>
-
-                        <span class="text-caption text-disabled text-no-wrap">
-                          <template v-if="section.kind === 'window'">
-                            <span :title="kimiFormatDateTime(section.resetTime)">
-                              {{ t('kimiConsoleToken.resetsIn', { duration: kimiFormatCountdown(section.resetTime) }) }}
-                            </span>
-                          </template>
-                          <template v-else-if="section.kind === 'subscription' || section.kind === 'gift'">
-                            {{ t('kimiConsoleToken.expiresAt') }} {{ kimiFormatExpireTime(section.balance.expireTime) }}
-                          </template>
-                          <template v-else-if="section.kind === 'booster' && section.wallet.allowTopup">
-                            {{ t('kimiConsoleToken.boosterWalletMonthlyUsed') }} {{ kimiFormatMoney(section.wallet.monthlyUsed) }}
-                          </template>
-                        </span>
-                      </div>
-                    </div>
+                    <UsageQuotaRows
+                      v-if="buildKimiUsageSections(row.kimiCredential.kimiCodeUsage).length"
+                      :items="kimiUsageItems(row.kimiCredential.kimiCodeUsage)"
+                      class="mb-3"
+                    />
                     <div v-else class="text-caption text-disabled mb-3">{{ t('kimiConsoleToken.noUsageData') }}</div>
 
                     <div class="text-caption text-disabled mb-3">
@@ -763,20 +697,11 @@
                         : t('mimoConsoleCookie.notConfigured') }}
                     </v-chip>
                   </div>
-                  <div v-if="row.mimoCredential.mimoTokenPlan" class="mimo-usage-grid mb-3">
-                    <div>
-                      <div class="text-caption text-medium-emphasis">{{ t('mimoConsoleCookie.currentRemaining') }}</div>
-                      <div class="text-body-2 font-weight-medium">{{ formatMiMoQuota(row.mimoCredential.mimoTokenPlan.currentUsage) }}</div>
-                    </div>
-                    <div>
-                      <div class="text-caption text-medium-emphasis">{{ t('mimoConsoleCookie.monthRemaining') }}</div>
-                      <div class="text-body-2 font-weight-medium">{{ formatMiMoQuota(row.mimoCredential.mimoTokenPlan.monthUsage) }}</div>
-                    </div>
-                    <div>
-                      <div class="text-caption text-medium-emphasis">{{ t('mimoConsoleCookie.expiresAt') }}</div>
-                      <div class="text-body-2 font-weight-medium">{{ row.mimoCredential.mimoTokenPlan.currentPeriodEnd }}</div>
-                    </div>
-                  </div>
+                  <UsageQuotaRows
+                    v-if="row.mimoCredential.mimoTokenPlan"
+                    :items="mimoUsageItems(row.mimoCredential.mimoTokenPlan)"
+                    class="mb-3"
+                  />
                   <div v-else class="text-caption text-disabled mb-3">{{ t('mimoConsoleCookie.noUsageData') }}</div>
                   <div v-if="mimoForms[row.mimoCredential.credentialUid]" class="d-flex flex-column ga-2">
                     <v-text-field
@@ -875,26 +800,10 @@
                   </div>
 
                   <template v-if="row.compshareCredential.compsharePlan">
-                    <div class="compshare-usage-grid mb-3">
-                      <div
-                        v-for="item in compshareUsageItems(row.compshareCredential.compsharePlan)"
-                        :key="item.label"
-                        class="compshare-usage-item"
-                      >
-                        <div class="text-caption text-medium-emphasis">{{ t(item.label) }}</div>
-                        <div class="text-body-2 font-weight-medium">{{ compshareFormatRemaining(item.window) }}</div>
-                        <v-progress-linear
-                          :model-value="compshareUsagePercent(item.window)"
-                          :color="compshareUsageColor(item.window)"
-                          height="4"
-                          rounded
-                          class="my-2"
-                        />
-                        <div class="text-caption text-disabled">
-                          {{ t('compshareConsoleCookie.nextReset') }} {{ compshareFormatEpoch(item.window.nextResetAt) }}
-                        </div>
-                      </div>
-                    </div>
+                    <UsageQuotaRows
+                      :items="compshareUsageQuotaItems(row.compshareCredential.compsharePlan)"
+                      class="mb-3"
+                    />
                     <div class="compshare-plan-meta mb-2">
                       <div>
                         <div class="text-caption text-medium-emphasis">{{ t('compshareConsoleCookie.concurrency') }}</div>
@@ -989,28 +898,7 @@
                     v-if="row.minimaxEndpoint.miniMaxTokenPlanUsage?.models.length && !row.minimaxEndpoint.miniMaxTokenPlanUsageError"
                     class="mb-2"
                   >
-                    <v-table density="compact">
-                      <thead>
-                        <tr>
-                          <th>{{ t('healthCenter.detail.model') }}</th>
-                          <th>{{ t('healthCenter.detail.currentWindow') }}</th>
-                          <th>{{ t('healthCenter.detail.weeklyWindow') }}</th>
-                          <th>{{ t('healthCenter.detail.resetsIn') }}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr v-for="quota in row.minimaxEndpoint.miniMaxTokenPlanUsage.models" :key="quota.modelName">
-                          <td class="font-weight-medium">{{ quota.modelName }}</td>
-                          <td :class="minimaxQuotaColor(quota.currentIntervalRemainingPercent)">
-                            {{ minimaxFormatQuota(quota.currentIntervalRemainingPercent, quota.currentIntervalUsageCount, quota.currentIntervalTotalCount) }}
-                          </td>
-                          <td :class="minimaxQuotaColor(quota.currentWeeklyRemainingPercent)">
-                            {{ minimaxFormatQuota(quota.currentWeeklyRemainingPercent, quota.currentWeeklyUsageCount, quota.currentWeeklyTotalCount) }}
-                          </td>
-                          <td>{{ minimaxFormatRemainsTime(quota.remainsTimeMs) }}</td>
-                        </tr>
-                      </tbody>
-                    </v-table>
+                    <UsageQuotaRows :items="minimaxQuotaItems(row.minimaxEndpoint)" />
                     <div class="text-caption text-disabled mt-2">
                       {{ t('healthCenter.detail.updatedAt') }}: {{ minimaxFormatDateTime(row.minimaxEndpoint.miniMaxTokenPlanUsage.fetchedAt) }}
                     </div>
@@ -1305,6 +1193,7 @@ import type {
   KimiCodeMoney,
   ManagedAccountCredential,
   MiMoTokenPlanQuota,
+  MiMoTokenPlanSnapshot,
   VolcenginePlanUsage,
   VolcenginePlanUsageWindow,
   APIKeyConfig,
@@ -1312,9 +1201,11 @@ import type {
 import { maskApiKey } from '../../utils/apiKeyMask'
 import { buildChannelApiKeyRows, type ChannelApiKeyRow } from '../../utils/channelApiKeys'
 import { getVolcenginePlanConsoleURL } from '../../utils/channelWebsite'
-import { quotaRemainingColorClass, quotaRemainingColorHex } from '../../utils/quotaColor'
+import { quotaRemainingColorClass } from '../../utils/quotaColor'
 import { buildKimiUsageSections } from '../../utils/kimiPlanUsage'
-import { selectMiniMaxTokenPlanEndpoint, sha256KeyHash } from '../../utils/minimaxEndpointUsage'
+import { buildMinimaxQuotaItems, selectMiniMaxTokenPlanEndpoint, sha256KeyHash } from '../../utils/minimaxEndpointUsage'
+import type { UsageQuotaItem } from '../../utils/usageQuotaItem'
+import UsageQuotaRows from '../UsageQuotaRows.vue'
 
 interface KeyModelsStatus {
   loading?: boolean
@@ -1836,10 +1727,15 @@ const compshareUsagePercent = (window: CompsharePlanUsageWindow) => {
   return Math.max(0, Math.min(100, (window.used / window.limit) * 100))
 }
 
-// Compshare 传入的是"已用百分比"，进度条 color 属性需要 Vuetify 色名或 hex。
-const compshareUsageColor = (window: CompsharePlanUsageWindow) => {
-  return quotaRemainingColorHex(100 - compshareUsagePercent(window))
-}
+// 明细行：三个时间窗映射为统一余量行，进度条百分比与着色由 UsageQuotaRows 统一处理。
+const compshareUsageQuotaItems = (plan: CompsharePlanSnapshot): UsageQuotaItem[] =>
+  compshareUsageItems(plan).map(item => ({
+    key: item.label,
+    label: t(item.label),
+    usedPercent: compshareUsagePercent(item.window),
+    value: compshareFormatRemaining(item.window),
+    caption: `${t('compshareConsoleCookie.nextReset')} ${compshareFormatEpoch(item.window.nextResetAt)}`,
+  }))
 
 const compshareFormatEpoch = (value?: number) =>
   value && value > 0 ? compshareDateTimeFormat.format(new Date(value * 1000)) : '-'
@@ -1885,23 +1781,9 @@ const mimoUsageSummary = (credential: ManagedAccountCredential): string => {
   return parts.join(' · ')
 }
 
-const minimaxFormatQuota = (remainingPercent: number, used: number, total: number) => {
-  const percent = Math.max(0, Math.min(100, remainingPercent)).toFixed(0)
-  return total > 0 ? `剩余 ${percent}% (${used}/${total})` : `剩余 ${percent}%`
-}
-
-// MiniMax 传入的是"剩余百分比"，:class 绑定表格单元格文字颜色，需要 scoped CSS 类名。
-const minimaxQuotaColor = (remainingPercent: number) => {
-  return quotaRemainingColorClass(remainingPercent)
-}
-
-const minimaxFormatRemainsTime = (milliseconds: number) => {
-  if (milliseconds <= 0) return t('healthCenter.detail.resetSoon')
-  const minutes = Math.floor(milliseconds / 60000)
-  const hours = Math.floor(minutes / 60)
-  const remainingMinutes = minutes % 60
-  return hours > 0 ? `${hours}h ${remainingMinutes}m` : `${remainingMinutes}m`
-}
+// 明细行：按模型拆当前/周窗口两行，与健康中心共用 buildMinimaxQuotaItems 映射。
+const minimaxQuotaItems = (endpoint: EndpointDetailItem): UsageQuotaItem[] =>
+  endpoint.miniMaxTokenPlanUsage ? buildMinimaxQuotaItems(endpoint.miniMaxTokenPlanUsage, t) : []
 
 const minimaxFormatDateTime = (value?: string) => {
   if (!value) return '-'
@@ -2013,12 +1895,36 @@ const formatMiMoQuota = (quota: MiMoTokenPlanQuota) => {
   return `剩余 ${remainingPercent}% · ${Intl.NumberFormat().format(remaining)} tokens`
 }
 
+// 明细行：当前/月度配额映射为统一余量行；当前周期行附带到期时间说明，月度额度为 0 时与摘要一致不展示。
+const mimoUsageItems = (plan: MiMoTokenPlanSnapshot): UsageQuotaItem[] => {
+  const items: UsageQuotaItem[] = [
+    {
+      key: 'current',
+      label: t('mimoConsoleCookie.currentRemaining'),
+      usedPercent: Math.max(0, Math.min(100, plan.currentUsage.usedPercent * 100)),
+      value: formatMiMoQuota(plan.currentUsage),
+      caption: plan.currentPeriodEnd ? `${t('mimoConsoleCookie.expiresAt')} ${plan.currentPeriodEnd}` : '',
+    },
+  ]
+  if (plan.monthUsage.limit > 0) {
+    items.push({
+      key: 'month',
+      label: t('mimoConsoleCookie.monthRemaining'),
+      usedPercent: Math.max(0, Math.min(100, plan.monthUsage.usedPercent * 100)),
+      value: formatMiMoQuota(plan.monthUsage),
+    })
+  }
+  return items
+}
+
 const planDisplayName = (plan?: string) => plan === 'agent_plan' ? 'Agent Plan' : 'Coding Plan'
 
 interface VolcengineUsageCell {
   labelKey: string
   text: string
   colorClass: string
+  /** 0-100 已用百分比，用于明细行进度条；无法换算时缺省（该行不显示进度条）。 */
+  usedPercent?: number
 }
 
 const numberFmt = new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 })
@@ -2031,6 +1937,7 @@ const hasVolcengineUsageData = (usage?: VolcenginePlanUsage) => {
 const volcengineUsageColor = quotaRemainingColorClass
 
 // 单窗口展示：Agent Plan 显示剩余%与已用/额度，Coding Plan 显示剩余%与已用%。
+// usedPercent 供明细行渲染进度条；仅有用量计数、无法换算百分比时不返回。
 const volcengineWindowCell = (labelKey: string, win?: VolcenginePlanUsageWindow): VolcengineUsageCell | null => {
   if (!win) return null
   if (typeof win.usedPercent === 'number' && Number.isFinite(win.usedPercent)) {
@@ -2040,6 +1947,7 @@ const volcengineWindowCell = (labelKey: string, win?: VolcenginePlanUsageWindow)
       labelKey,
       text: `${t('volcengineAccessKey.remaining')} ${remainingPercent.toFixed(1)}% · ${t('volcengineAccessKey.used')} ${usedPercent.toFixed(1)}%`,
       colorClass: volcengineUsageColor(remainingPercent),
+      usedPercent,
     }
   }
   if (win.quota && win.quota > 0) {
@@ -2049,6 +1957,7 @@ const volcengineWindowCell = (labelKey: string, win?: VolcenginePlanUsageWindow)
       labelKey,
       text: `${t('volcengineAccessKey.remaining')} ${remainingPercent.toFixed(1)}% · ${numberFmt.format(win.used)}/${numberFmt.format(win.quota)}`,
       colorClass: volcengineUsageColor(remainingPercent),
+      usedPercent: 100 - remainingPercent,
     }
   }
   return {
@@ -2067,6 +1976,15 @@ const volcengineUsageWindows = (usage?: VolcenginePlanUsage): VolcengineUsageCel
     volcengineWindowCell('volcengineAccessKey.monthlyWindow', usage.monthly),
   ].filter((cell): cell is VolcengineUsageCell => cell !== null)
 }
+
+// 明细行：复用摘要单元格的文本与百分比，交给统一的 UsageQuotaRows 渲染。
+const volcengineUsageItems = (usage?: VolcenginePlanUsage): UsageQuotaItem[] =>
+  volcengineUsageWindows(usage).map(cell => ({
+    key: cell.labelKey,
+    label: t(cell.labelKey),
+    usedPercent: cell.usedPercent,
+    value: cell.text,
+  }))
 
 // 折叠摘要按窗口拆分为独立片段，复用 volcengineUsageColor 的阈值高亮低余量窗口。
 const volcengineUsageSummaryParts = (credential: ManagedAccountCredential): VolcengineUsageCell[] => {
@@ -2222,10 +2140,34 @@ const kimiDateTimeFormat = new Intl.DateTimeFormat(undefined, {
 })
 
 // 与 Kimi Code 官方 CLI 的 Plan usage 保持一致：5h limit（5 小时频限）+ Weekly limit（7 天频限），短窗口优先。
-// Kimi 传入的是"已用百分比"，进度条 color 属性需要 Vuetify 色名或 hex。
-const kimiUsageColor = (usedPercent: number) => {
-  return quotaRemainingColorHex(100 - usedPercent)
-}
+// 明细行：把各用量区块（时间窗/订阅/赠送/加油包）映射为统一余量行，交给 UsageQuotaRows 渲染。
+const kimiUsageItems = (usage: Parameters<typeof buildKimiUsageSections>[0]): UsageQuotaItem[] =>
+  buildKimiUsageSections(usage).map(section => {
+    let value: string
+    if (section.kind === 'booster') {
+      value = section.wallet.allowTopup
+        ? `${kimiFormatMoney(section.wallet.moneyLeft)} / ${kimiFormatMoney(section.wallet.moneyTotal)}`
+        : t('kimiConsoleToken.boosterWalletDisabled')
+    } else if ((section.kind === 'subscription' || section.kind === 'gift') && section.kimiUsedPercent >= 1) {
+      // Kimi 通用额度未消耗时省略 Kimi/Code 拆分，避免与“已用”重复。
+      value = `Kimi ${Math.round(section.kimiUsedPercent)}% · Code ${Math.round(section.codeUsedPercent)}% · ${t('kimiConsoleToken.percentUsed', { percent: Math.round(section.usedPercent) })}`
+    } else {
+      value = t('kimiConsoleToken.percentUsed', { percent: Math.round(section.usedPercent ?? 0) })
+    }
+
+    let caption = ''
+    let captionTitle: string | undefined
+    if (section.kind === 'window') {
+      caption = t('kimiConsoleToken.resetsIn', { duration: kimiFormatCountdown(section.resetTime) })
+      captionTitle = kimiFormatDateTime(section.resetTime)
+    } else if (section.kind === 'subscription' || section.kind === 'gift') {
+      caption = `${t('kimiConsoleToken.expiresAt')} ${kimiFormatExpireTime(section.balance.expireTime)}`
+    } else if (section.kind === 'booster' && section.wallet.allowTopup) {
+      caption = `${t('kimiConsoleToken.boosterWalletMonthlyUsed')} ${kimiFormatMoney(section.wallet.monthlyUsed)}`
+    }
+
+    return { key: section.key, label: t(section.labelKey), usedPercent: section.usedPercent, value, caption, captionTitle }
+  })
 
 const kimiFormatExpireTime = (value?: string) => {
   if (!value) return ''
@@ -2587,60 +2529,10 @@ const getDisabledKeyLabel = (reason: string) => {
   gap: 12px;
 }
 
-.mimo-usage-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.volcengine-usage-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-  gap: 12px;
-}
-
-.kimi-plan-usage {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.kimi-plan-usage-row {
-  display: grid;
-  grid-template-columns: 110px minmax(120px, 1fr) auto auto;
-  align-items: center;
-  gap: 12px;
-}
-
-.kimi-balance-stack {
-  display: flex;
-  height: 6px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: rgba(var(--v-theme-on-surface), 0.08);
-}
-
-.kimi-balance-stack__kimi {
-  background: #18181b;
-}
-
-.kimi-balance-stack__code {
-  background: #2684ff;
-}
-
-.v-theme--dark .kimi-balance-stack__kimi {
-  background: #f4f4f5;
-}
-
-.compshare-usage-grid,
 .compshare-plan-meta {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
-}
-
-.compshare-usage-item {
-  min-width: 0;
 }
 
 @media (max-width: 700px) {
@@ -2648,19 +2540,6 @@ const getDisabledKeyLabel = (reason: string) => {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .mimo-usage-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .kimi-plan-usage-row {
-    grid-template-columns: 90px minmax(0, 1fr) auto;
-  }
-
-  .kimi-plan-usage-row > :last-child {
-    grid-column: 1 / -1;
-  }
-
-  .compshare-usage-grid,
   .compshare-plan-meta {
     grid-template-columns: minmax(0, 1fr);
   }

@@ -28,7 +28,12 @@ export const sortChannelsByPriority = (
   builtInOrder.forEach((key, rank) => originalRank.set(key, rank))
 
   const getRank = (ch: Channel): number =>
-    ch.priority ?? fallbackRank.get(getUiKey(ch)) ?? originalRank.get(getUiKey(ch)) ?? getRouteIndex(ch)
+    // priority 0 与缺失等价（后端语义：0 = 未显式配置，调度层回退为索引），
+    // 不能让 0 参与数值比较，否则未排序渠道会排到所有显式 priority 之前
+    (ch.priority && ch.priority > 0 ? ch.priority : undefined) ??
+    fallbackRank.get(getUiKey(ch)) ??
+    originalRank.get(getUiKey(ch)) ??
+    getRouteIndex(ch)
 
   return [...source].sort((a, b) => {
     const rankDiff = getRank(a) - getRank(b)

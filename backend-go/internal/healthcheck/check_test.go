@@ -306,6 +306,7 @@ type recordFailureCall struct {
 	baseURL      string
 	apiKey       string
 	serviceType  string
+	model        string
 	detail       string
 }
 
@@ -317,8 +318,8 @@ func newCheckKeyFixture() *checkKeyFixture {
 		func(channelType string, channelIndex int, apiKey, reason, message, recoverAt string) {
 			f.blacklistCalls = append(f.blacklistCalls, blacklistCall{channelType, channelIndex, apiKey, reason, message, recoverAt})
 		},
-		func(channelType string, channelIndex int, baseURL, apiKey, serviceType, detail string) {
-			f.recordFailureCalls = append(f.recordFailureCalls, recordFailureCall{channelType, channelIndex, baseURL, apiKey, serviceType, detail})
+		func(channelType string, channelIndex int, baseURL, apiKey, serviceType, model, detail string) {
+			f.recordFailureCalls = append(f.recordFailureCalls, recordFailureCall{channelType, channelIndex, baseURL, apiKey, serviceType, model, detail})
 		},
 		Options{},
 	)
@@ -437,6 +438,9 @@ func TestCheckKeyL1服务器错误喂熔断(t *testing.T) {
 	call := f.recordFailureCalls[0]
 	if call.baseURL != srv.URL || call.apiKey != "sk-key-1" {
 		t.Fatalf("recordFailure 回调参数错误: %+v", call)
+	}
+	if call.model != "" {
+		t.Fatalf("通用 L1 失败不应记录模型: %q", call.model)
 	}
 	if len(f.blacklistCalls) != 0 {
 		t.Fatalf("500 不应拉黑: %d 次", len(f.blacklistCalls))

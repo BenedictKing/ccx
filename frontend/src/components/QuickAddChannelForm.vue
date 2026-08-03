@@ -139,6 +139,26 @@
       </div>
     </div>
 
+    <!-- 故障转移位置（与 desktop 一致：API Keys 下方开关） -->
+    <div
+      class="d-flex align-center ga-3 pa-3 rounded-lg placement-card"
+      :class="{ 'placement-card-disabled': submitting }"
+      @click="togglePlacement"
+    >
+      <v-icon color="primary" size="20">mdi-playlist-plus</v-icon>
+      <div class="flex-grow-1">
+        <div class="text-body-2 font-weight-medium">{{ t('addChannel.placementBack') }}</div>
+      </div>
+      <v-switch
+        :model-value="placement === 'back'"
+        readonly
+        hide-details
+        density="compact"
+        color="primary"
+        class="flex-grow-0 placement-switch"
+      />
+    </div>
+
     <!-- 提交错误（provider 模式 key 无效等） -->
     <v-alert v-if="submitError" color="error" variant="tonal" density="comfortable" icon="mdi-alert-circle-outline">
       {{ submitError }}
@@ -153,6 +173,14 @@
         </div>
       </v-card-text>
     </v-card>
+
+    <!-- new-api 通用接入弹窗（与订阅中心同一流程） -->
+    <NewApiQuickAddDialog
+      ref="newApiDialogRef"
+      :channel-kind="channelType"
+      @created="onNewApiCreated"
+      @error="onNewApiError"
+    />
   </div>
 </template>
 
@@ -167,6 +195,8 @@ import {
   getProviderTemplates
 } from '../services/autopilot-api'
 import type { ProviderTemplate } from '../services/autopilot-api'
+import type { NewApiProvisionResponse } from '../services/api-types'
+import NewApiQuickAddDialog from './subscriptions/NewApiQuickAddDialog.vue'
 import {
   buildQuickAddChannelName,
   findExistingQuickAddChannel,
@@ -181,15 +211,19 @@ type ChannelType = 'messages' | 'chat' | 'responses' | 'gemini' | 'images' | 've
 interface Props {
   channelType: ChannelType
   existingChannels?: Channel[]
+  /** 新渠道故障转移位置：front（首位）| back（末尾，默认） */
+  placement?: 'front' | 'back'
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  existingChannels: () => []
+  existingChannels: () => [],
+  placement: 'back'
 })
 
 const emit = defineEmits<{
   added: [channelId: number]
   close: []
+  'update:placement': [value: 'front' | 'back']
 }>()
 
 const { t } = useI18n()
@@ -202,21 +236,38 @@ const submitting = ref(false)
 const submitError = ref('')
 
 // ---- Provider 模板状态 ----
-// '' 表示自定义模式（手填 baseURL）；非空表示选中某已知 provider（模板化添加）
+// '' 表示自定义模式（手填 baseURL）；非空表示选中某已知 provider（模板化添加）。
+// 模板加载完成后默认选中首个服务商（赞助商序第一位：火山）。
 const providerId = ref('')
 const providerTemplates = ref<ProviderTemplate[]>([])
 const providerTemplatesLoading = ref(true)
 
 // ---- Provider 模板计算属性 ----
-// 仅展示与当前渠道类型匹配的 provider；多 route provider 只要包含当前 tab 即可显示。
-const availableProviders = computed(() =>
-  providerTemplates.value.filter(p => providerSupportsChannel(p, props.channelType))
-)
+// 赞助商展示顺序与订阅中心/README 保持一致，排在服务商列表最前（无模板的赞助商自然跳过）
+const SPONSOR_PROVIDER_ORDER = ['volcengine', 'compshare', 'runapi']
 
-// 选择项：首项为「自定义」（value=''），其余为已知 provider
+// 仅展示与当前渠道类型匹配的 provider；多 route provider 只要包含当前 tab 即可显示；
+// 赞助商模板置顶，其余保持后端返回顺序
+const availableProviders = computed(() => {
+  const matched = providerTemplates.value.filter(p => providerSupportsChannel(p, props.channelType))
+  const sponsorRank = (p: ProviderTemplate) => {
+    const idx = SPONSOR_PROVIDER_ORDER.indexOf(p.providerId)
+    return idx === -1 ? SPONSOR_PROVIDER_ORDER.length : idx
+  }
+  return [...matched].sort((a, b) => sponsorRank(a) - sponsorRank(b))
+})
+
+// 默认选中的服务商：当前渠道类型下排序后的第一个（即火山）；无可用模板时回退自定义模式
+const defaultProviderId = computed(() => availableProviders.value[0]?.providerId ?? '')
+
+// new-api 通用接入是独立流程（与订阅中心一致的两步接入弹窗），选中后不占用 provider 状态，直接打开弹窗
+const NEW_API_PROVIDER_VALUE = '__new_api__'
+
+// 选择项：赞助商/已知 provider 在前，其次 new-api 通用接入，「自定义」（value=''，手填地址）固定在最末
 const providerItems = computed(() => [
-  { title: t('autopilot.quickAdd.provider.custom'), value: '' },
-  ...availableProviders.value.map(p => ({ title: p.displayName, value: p.providerId }))
+  ...availableProviders.value.map(p => ({ title: p.displayName, value: p.providerId })),
+  { title: t('autopilot.quickAdd.provider.newApi'), value: NEW_API_PROVIDER_VALUE },
+  { title: t('autopilot.quickAdd.provider.custom'), value: '' }
 ])
 
 const inferredProviderId = computed(() =>
@@ -226,9 +277,28 @@ const effectiveProviderId = computed(() => providerId.value || inferredProviderI
 const displayProviderId = computed({
   get: () => effectiveProviderId.value,
   set: value => {
+    if (value === NEW_API_PROVIDER_VALUE) {
+      openNewApiDialog()
+      return
+    }
     providerId.value = value ?? ''
   }
 })
+
+// ---- new-api 通用接入弹窗 ----
+const newApiDialogRef = ref<InstanceType<typeof NewApiQuickAddDialog> | null>(null)
+
+function openNewApiDialog() {
+  newApiDialogRef.value?.openDialog()
+}
+
+function onNewApiCreated(result: NewApiProvisionResponse) {
+  emit('added', result.channelIndex)
+}
+
+function onNewApiError(message: string) {
+  submitError.value = message
+}
 const selectedProvider = computed(() => availableProviders.value.find(p => p.providerId === effectiveProviderId.value))
 
 const isExplicitProviderMode = computed(() => providerId.value !== '')
@@ -260,6 +330,12 @@ function clearSubmitError() {
   submitError.value = ''
 }
 
+// 切换故障转移位置（back=追加到末尾 / front=置顶优先），提交中禁止切换
+function togglePlacement() {
+  if (submitting.value) return
+  emit('update:placement', props.placement === 'back' ? 'front' : 'back')
+}
+
 async function loadProviderTemplates() {
   providerTemplatesLoading.value = true
   try {
@@ -274,6 +350,10 @@ async function loadProviderTemplates() {
     }
   } finally {
     providerTemplatesLoading.value = false
+    // 模板就绪后应用默认服务商（赞助商序第一位：火山）；用户已手动选择时不覆盖
+    if (providerId.value === '') {
+      providerId.value = defaultProviderId.value
+    }
   }
 }
 
@@ -346,14 +426,16 @@ async function handleSubmit() {
       isProviderMode.value
         ? {
             providerId: effectiveProviderId.value,
-            apiKeys: filteredApiKeys
+            apiKeys: filteredApiKeys,
+            placement: props.placement
           }
         : {
             name: getGeneratedName(),
             baseUrls: filteredBaseUrls,
             apiKeys: filteredApiKeys,
             routes: routeDiscovery?.routes,
-            rateLimitHint: routeDiscovery?.rateLimitHint
+            rateLimitHint: routeDiscovery?.rateLimitHint,
+            placement: props.placement
           }
     )
 
@@ -370,7 +452,7 @@ async function handleSubmit() {
 }
 
 function resetForm() {
-  providerId.value = ''
+  providerId.value = defaultProviderId.value
   baseUrls.value = ['']
   apiKeys.value = ['']
   showKeys.value = [false]
@@ -413,5 +495,28 @@ defineExpose({ handleSubmit, resetForm, isFormValid, submitting })
 
 .discovery-card {
   border-color: rgba(var(--v-theme-outline), 0.32);
+}
+
+.placement-card {
+  border: 1px solid rgba(var(--v-theme-outline), 0.32);
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.placement-card:hover {
+  border-color: rgba(var(--v-theme-primary), 0.4);
+  background-color: rgba(var(--v-theme-primary), 0.05);
+}
+
+.placement-card-disabled {
+  cursor: default;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.placement-switch {
+  pointer-events: none;
 }
 </style>

@@ -179,4 +179,52 @@ describe('useDisabledApiKeys', () => {
 
     expect(form.apiKeyConfigs).toBeUndefined()
   })
+
+  it('聚合渠道恢复 Key 时覆盖拥有该 Key 的全部协议路由', async () => {
+    const resumeApiKey = vi.fn().mockResolvedValue(undefined)
+    const resumeChatApiKey = vi.fn().mockResolvedValue(undefined)
+    const resumeResponsesApiKey = vi.fn().mockResolvedValue(undefined)
+    const resumeGeminiApiKey = vi.fn().mockResolvedValue(undefined)
+    const form: TestForm = {
+      apiKeys: [activeKey],
+      apiKeyConfigs: [{ key: activeKey, enabled: false }],
+    }
+    const { channel, state } = createOptions({
+      resumeApiKey,
+      resumeChatApiKey,
+      resumeResponsesApiKey,
+      resumeGeminiApiKey,
+    }, form)
+    channel.value!.protocolRoutes = [
+      { kind: 'messages', index: 3, name: 'provider-claude', serviceType: 'claude', apiKeys: [activeKey] },
+      { kind: 'chat', index: 7, name: 'provider-chat', serviceType: 'openai', apiKeys: [activeKey] },
+      { kind: 'responses', index: 5, name: 'provider-codex', serviceType: 'responses', apiKeys: ['other-key'] },
+      { kind: 'gemini', index: 2, name: 'provider-gemini', serviceType: 'gemini', apiKeys: [activeKey] },
+    ]
+
+    await state.resumeKey(activeKey)
+
+    expect(resumeApiKey).toHaveBeenCalledWith(3, activeKey)
+    expect(resumeChatApiKey).toHaveBeenCalledWith(7, activeKey)
+    expect(resumeGeminiApiKey).toHaveBeenCalledWith(2, activeKey)
+    expect(resumeResponsesApiKey).not.toHaveBeenCalled()
+    expect(form.apiKeyConfigs).toBeUndefined()
+  })
+
+  it('聚合渠道暂停 Key 时覆盖拥有该 Key 的全部协议路由', async () => {
+    const suspendApiKey = vi.fn().mockResolvedValue(undefined)
+    const suspendChatApiKey = vi.fn().mockResolvedValue(undefined)
+    const form: TestForm = { apiKeys: [activeKey] }
+    const { channel, state } = createOptions({ suspendApiKey, suspendChatApiKey }, form)
+    channel.value!.protocolRoutes = [
+      { kind: 'messages', index: 3, name: 'provider-claude', serviceType: 'claude', apiKeys: [activeKey] },
+      { kind: 'chat', index: 7, name: 'provider-chat', serviceType: 'openai', apiKeys: [activeKey] },
+    ]
+
+    await state.suspendKey(activeKey)
+
+    expect(suspendApiKey).toHaveBeenCalledWith(3, activeKey)
+    expect(suspendChatApiKey).toHaveBeenCalledWith(7, activeKey)
+    expect(form.apiKeyConfigs).toEqual([{ key: activeKey, enabled: false }])
+  })
 })

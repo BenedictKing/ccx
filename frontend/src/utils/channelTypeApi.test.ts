@@ -118,7 +118,7 @@ describe('getChannelTypeApi', () => {
     expect(api[metricsMethod as keyof typeof api]).toHaveBeenCalledTimes(1)
     expect(api.getSchedulerStats).toHaveBeenCalledWith(type)
     expect(stats.multiChannelMode).toBe(true)
-    expect(api[reorderMethod as keyof typeof api]).toHaveBeenCalledWith([1, 2, 3])
+    expect(api[reorderMethod as keyof typeof api]).toHaveBeenCalledWith([1, 2, 3], undefined)
     expect(api[statusMethod as keyof typeof api]).toHaveBeenCalledWith(7, status)
     expect(api[resumeMethod as keyof typeof api]).toHaveBeenCalledWith(7)
     expect(api[promoteMethod as keyof typeof api]).toHaveBeenCalledWith(7, 300)

@@ -54,6 +54,8 @@ type L1Response struct {
 	// RealCallVerified 标记该次 L1 已对上游发起过真实推理调用（如火山套餐数据面探针）。
 	// 调度器据此跳过同周期等价 L2，避免重复消耗套餐额度；通用 /v1/models 拉取不置位。
 	RealCallVerified bool
+	// Model 仅供已发起真实推理调用的 L1 探针记录实际请求模型；通用模型列表探测留空。
+	Model string
 }
 
 // L1Fetcher 按渠道类型注册的 L1 模型列表拉取器（main.go 接线时注册六类）
@@ -70,8 +72,9 @@ type KeyHealthStore interface {
 type BlacklistFunc func(channelType string, channelIndex int, apiKey, reason, message, recoverAt string)
 
 // RecordFailureFunc 失败喂熔断回调（main.go 注入，内部调 scheduler.RecordFailure 并写渠道日志）
-// serviceType 为渠道配置的原始 ServiceType（未归一化），detail 为失败原因摘要（已截断）。
-type RecordFailureFunc func(channelType string, channelIndex int, baseURL, apiKey, serviceType, detail string)
+// serviceType 为渠道配置的原始 ServiceType（未归一化），model 仅在 L2 真实调用时有值，
+// detail 为失败原因摘要（已截断）。
+type RecordFailureFunc func(channelType string, channelIndex int, baseURL, apiKey, serviceType, model, detail string)
 
 // Options Manager 可选参数（零值使用默认值；测试可注入时钟与间隔）
 type Options struct {

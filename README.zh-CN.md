@@ -239,6 +239,22 @@ make dev
 <table>
   <tr>
     <td align="center" width="60">
+      <a target="_blank" rel="noopener noreferrer nofollow" href="https://artificialanalysis.ai/"><img src="docs/sponsors/artificial-analysis.png" alt="Artificial Analysis Logo" style="max-width: 100%;padding-top: 6px;" width="50"></a>
+    </td>
+    <td>
+      本仓库中的部分 benchmark 数据使用了 Artificial Analysis 免费 API。凡使用这些数据，需按要求归因到 <a href="https://artificialanalysis.ai/">artificialanalysis.ai</a>。其中 Intelligence Index 当前应按 <strong>v4.1</strong> 解读；Coding Index 与 Agentic Index 是同一组评测子集的派生指标，不单独做版本管理。
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="60">
+      <strong>数据源</strong>
+    </td>
+    <td>
+      CCX 的 benchmark 可视化与注册表更新还使用了 <a href="https://benchlm.ai/">BenchLM.ai</a>、<a href="https://deepswe.datacurve.ai/">DeepSWE</a>、<a href="https://deng.codexradar.com/">CodexRadar</a> 的公开数据；价格与上下文窗口元数据另外同步自 <a href="https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json">LiteLLM model_prices_and_context_window.json</a>。
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="60">
       <a target="_blank" rel="noopener noreferrer nofollow" href="https://signpath.org/"><img src="https://signpath.org/assets/favicon-50x50.png" alt="SignPath Logo" style="max-width: 100%;padding-top: 6px;" width="50"></a>
     </td>
     <td>

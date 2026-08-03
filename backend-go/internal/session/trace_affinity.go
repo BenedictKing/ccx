@@ -5,6 +5,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"github.com/BenedictKing/ccx/internal/routingref"
 )
 
 // affinityDebug 控制亲和性日志是否输出
@@ -13,7 +15,8 @@ var affinityDebug = os.Getenv("AFFINITY_DEBUG") == "true"
 
 // TraceAffinity 记录 trace 与渠道的亲和关系
 type TraceAffinity struct {
-	ChannelIndex int
+	Route        routingref.RouteRef
+	ChannelIndex int // legacy mirror of Route.Index
 	LastUsedAt   time.Time
 }
 
@@ -56,47 +59,67 @@ func NewTraceAffinityManagerWithTTL(ttl time.Duration) *TraceAffinityManager {
 	return mgr
 }
 
-// GetPreferredChannel 获取 user_id 偏好的渠道
-// 返回渠道索引和是否存在
-func (m *TraceAffinityManager) GetPreferredChannel(userID string) (int, bool) {
+// GetPreferredRoute 获取 user_id 偏好的物理渠道路由。
+// legacyKind 用于解码升级前只保存 ChannelIndex 的记录；亲和 key 的命名空间
+// 仍由调用方维护，不会因物理路由身份而改变。
+func (m *TraceAffinityManager) GetPreferredRoute(userID, legacyKind string) (routingref.RouteRef, bool) {
 	if userID == "" {
-		return -1, false
+		return routingref.RouteRef{}, false
 	}
 
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	affinity, exists := m.affinity[userID]
-	if !exists {
-		return -1, false
+	if !exists || time.Since(affinity.LastUsedAt) > m.ttl {
+		return routingref.RouteRef{}, false
 	}
 
-	// 检查是否过期
-	if time.Since(affinity.LastUsedAt) > m.ttl {
-		return -1, false
+	route := affinity.Route
+	if route.Kind == "" {
+		route.Kind = legacyKind
 	}
-
-	return affinity.ChannelIndex, true
+	if route.ChannelUID == "" && route.Index == 0 && affinity.ChannelIndex != 0 {
+		route.Index = affinity.ChannelIndex
+	}
+	return route, true
 }
 
-// SetPreferredChannel 设置 user_id 偏好的渠道
-func (m *TraceAffinityManager) SetPreferredChannel(userID string, channelIndex int) {
+// GetPreferredChannel 获取 user_id 偏好的渠道索引。
+// 这是旧 API；新代码应使用 GetPreferredRoute。
+func (m *TraceAffinityManager) GetPreferredChannel(userID string) (int, bool) {
+	route, ok := m.GetPreferredRoute(userID, "")
+	if !ok {
+		return -1, false
+	}
+	return route.Index, true
+}
+
+// SetPreferredRoute 设置 user_id 偏好的物理渠道路由。
+func (m *TraceAffinityManager) SetPreferredRoute(userID string, route routingref.RouteRef) {
 	if userID == "" {
 		return
 	}
 
 	var logType int // 0=无, 1=新建, 2=变更
-	var oldChannel int
+	var oldRoute routingref.RouteRef
 
 	m.mu.Lock()
 	oldAffinity, existed := m.affinity[userID]
-	if existed && oldAffinity.ChannelIndex != channelIndex {
-		logType, oldChannel = 2, oldAffinity.ChannelIndex
-	} else if !existed {
+	if existed {
+		oldRoute = oldAffinity.Route
+		if oldRoute.Kind == "" && oldRoute.ChannelUID == "" {
+			oldRoute.Index = oldAffinity.ChannelIndex
+		}
+		if oldRoute.Key() != route.Key() {
+			logType = 2
+		}
+	} else {
 		logType = 1
 	}
 	m.affinity[userID] = &TraceAffinity{
-		ChannelIndex: channelIndex,
+		Route:        route,
+		ChannelIndex: route.Index,
 		LastUsedAt:   time.Now(),
 	}
 	m.mu.Unlock()
@@ -104,11 +127,17 @@ func (m *TraceAffinityManager) SetPreferredChannel(userID string, channelIndex i
 	if affinityDebug {
 		switch logType {
 		case 2:
-			log.Printf("[Affinity-Set] 用户亲和变更: %s -> 渠道[%d] (原渠道[%d])", maskUserID(userID), channelIndex, oldChannel)
+			log.Printf("[Affinity-Set] 用户亲和变更: %s -> 路由[%s] (原路由[%s])", maskUserID(userID), route.Key().String(), oldRoute.Key().String())
 		case 1:
-			log.Printf("[Affinity-Set] 新建用户亲和: %s -> 渠道[%d]", maskUserID(userID), channelIndex)
+			log.Printf("[Affinity-Set] 新建用户亲和: %s -> 路由[%s]", maskUserID(userID), route.Key().String())
 		}
 	}
+}
+
+// SetPreferredChannel 设置 user_id 偏好的渠道。
+// 这是旧 API；记录会保留索引，调用方可在读取时提供逻辑 kind 解码。
+func (m *TraceAffinityManager) SetPreferredChannel(userID string, channelIndex int) {
+	m.SetPreferredRoute(userID, routingref.RouteRef{Index: channelIndex})
 }
 
 // UpdateLastUsed 更新最后使用时间（续期）
@@ -148,7 +177,7 @@ func (m *TraceAffinityManager) RemoveByChannel(channelIndex int) {
 	m.mu.Lock()
 	removed := 0
 	for userID, affinity := range m.affinity {
-		if affinity.ChannelIndex == channelIndex {
+		if affinity.ChannelIndex == channelIndex || affinity.Route.Index == channelIndex {
 			delete(m.affinity, userID)
 			removed++
 		}
@@ -157,6 +186,29 @@ func (m *TraceAffinityManager) RemoveByChannel(channelIndex int) {
 
 	if affinityDebug && removed > 0 {
 		log.Printf("[Affinity-RemoveByChannel] 渠道[%d]被移除，清理了 %d 条亲和记录", channelIndex, removed)
+	}
+}
+
+// RemoveByRoute removes affinity records for one physical route.
+func (m *TraceAffinityManager) RemoveByRoute(route routingref.RouteRef) {
+	key := route.Key()
+	m.mu.Lock()
+	removed := 0
+	for userID, affinity := range m.affinity {
+		stored := affinity.Route
+		if stored.Kind == "" && stored.ChannelUID == "" {
+			stored.Index = affinity.ChannelIndex
+			stored.Kind = route.Kind
+		}
+		if stored.Key() == key {
+			delete(m.affinity, userID)
+			removed++
+		}
+	}
+	m.mu.Unlock()
+
+	if affinityDebug && removed > 0 {
+		log.Printf("[Affinity-RemoveByRoute] 路由[%s]被移除，清理了 %d 条亲和记录", key.String(), removed)
 	}
 }
 

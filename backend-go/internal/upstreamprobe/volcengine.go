@@ -40,6 +40,7 @@ type Result struct {
 	OK         bool
 	StatusCode int
 	AuthFailed bool
+	Model      string
 	Body       []byte
 	Err        error
 }
@@ -105,20 +106,23 @@ func manifestServiceType(serviceType string) string {
 // serviceType 为渠道配置口径（claude/openai/messages），内部归一化分派。
 func ProbeVolcenginePlan(ctx context.Context, serviceType, baseURL, apiKey, authHeader string) Result {
 	model := volcenginePlanProbeModel(baseURL)
+	var result Result
 	switch strings.ToLower(strings.TrimSpace(serviceType)) {
 	case "claude", "messages":
 		body := []byte(`{"model":"` + model + `","max_tokens":1,"messages":[{"role":"user","content":"ping"}]}`)
 		body, sessionID := utils.EnsureClaudeCodeProbeBody(body)
-		return postJSONProbe(ctx, buildVersionedProbeURL(baseURL, "/messages"), apiKey, authHeader,
+		result = postJSONProbe(ctx, buildVersionedProbeURL(baseURL, "/messages"), apiKey, authHeader,
 			func(req *http.Request) {
 				utils.ApplyClaudeCodeProbeHeaders(req.Header, sessionID)
 			}, body)
 	case "openai":
 		body := []byte(`{"model":"` + model + `","messages":[{"role":"user","content":"ping"}],"max_tokens":1}`)
-		return postJSONProbe(ctx, buildVersionedProbeURL(baseURL, "/chat/completions"), apiKey, authHeader, nil, body)
+		result = postJSONProbe(ctx, buildVersionedProbeURL(baseURL, "/chat/completions"), apiKey, authHeader, nil, body)
 	default:
 		return Result{Err: errUnsupportedServiceType(serviceType)}
 	}
+	result.Model = model
+	return result
 }
 
 // VolcenginePlanL1Probe 执行火山套餐数据面探针并返回保活 L1 适配的响应。
@@ -128,20 +132,20 @@ func ProbeVolcenginePlan(ctx context.Context, serviceType, baseURL, apiKey, auth
 // 截断响应体，让现有错误分类逻辑处理。返回的 (statusCode, body, err) 直接对应 L1Response。
 //
 // 真实调用已完成：调用方应据此跳过同周期等价 L2，避免重复消耗套餐额度。
-func VolcenginePlanL1Probe(ctx context.Context, serviceType, baseURL, apiKey, authHeader string) (statusCode int, body []byte, err error) {
+func VolcenginePlanL1Probe(ctx context.Context, serviceType, baseURL, apiKey, authHeader string) (statusCode int, body []byte, model string, err error) {
 	res := ProbeVolcenginePlan(ctx, serviceType, baseURL, apiKey, authHeader)
 	if res.Err != nil {
-		return 0, nil, res.Err
+		return 0, nil, res.Model, res.Err
 	}
 	if res.OK {
 		manifest, ok := config.LookupBuiltinManifest(baseURL, manifestServiceType(serviceType))
 		if ok {
-			return http.StatusOK, buildModelsListJSON(manifest.ModelIDs), nil
+			return http.StatusOK, buildModelsListJSON(manifest.ModelIDs), res.Model, nil
 		}
 		// 命中官方套餐入口但无内置清单：视为可达但模型未知，返回空列表避免臆造模型。
-		return http.StatusOK, []byte(`{"data":[]}`), nil
+		return http.StatusOK, []byte(`{"data":[]}`), res.Model, nil
 	}
-	return res.StatusCode, res.Body, nil
+	return res.StatusCode, res.Body, res.Model, nil
 }
 
 // postJSONProbe 发送 JSON POST 探测并按火山严格策略分类结果（只接受 2xx 为成功）。

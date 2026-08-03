@@ -2,9 +2,12 @@ package common
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	"github.com/BenedictKing/ccx/internal/autopilot"
 	"github.com/BenedictKing/ccx/internal/config"
+	"github.com/gin-gonic/gin"
 )
 
 func TestContextLimitFromError(t *testing.T) {
@@ -109,5 +112,17 @@ func TestDeclaredContextLimitRejectsValueAboveRejectedAmount(t *testing.T) {
 
 	if got := declaredContextLimit(msg, 1_050_000); got != 0 {
 		t.Errorf("declaredContextLimit() = %d, want 0（不可信应放弃提取）", got)
+	}
+}
+
+func TestEstimatedInputTokensForContextLimitPrefersInputEstimate(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+	profile := autopilot.RequestProfile{EstTokens: 80_000, ContextNeed: 96_000}
+	req = req.WithContext(autopilot.ContextWithRequestProfile(req.Context(), profile))
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = req
+
+	if got := estimatedInputTokensForContextLimit(c, []byte(`{"messages":[]}`)); got != profile.EstTokens {
+		t.Fatalf("estimatedInputTokensForContextLimit() = %d, want %d", got, profile.EstTokens)
 	}
 }

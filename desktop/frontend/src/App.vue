@@ -18,6 +18,7 @@ import { useWailsEvents } from '@/composables/useWailsEvents'
 import { useSetup } from '@/composables/useSetup'
 import { useLanguage } from '@/composables/useLanguage'
 import { useTheme } from '@/composables/useTheme'
+import { ensureDesktopRuntimePresetsLoaded } from '@/composables/useRuntimePresets'
 import {
   setDesktopActiveTab,
   setDesktopConsoleSelection,
@@ -60,6 +61,15 @@ onMounted(() => {
   initTheme()
   void initializeLanguage()
   void checkSetup()
+  if (status.value.running) {
+    void ensureDesktopRuntimePresetsLoaded().catch(() => {})
+  }
+})
+
+watch(() => status.value.running, (running) => {
+  if (running) {
+    void ensureDesktopRuntimePresetsLoaded(true).catch(() => {})
+  }
 })
 
 // Setup 完成后跳转到目标标签页
