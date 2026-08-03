@@ -407,19 +407,33 @@ func formatPercent(f float64) string {
 }
 
 // AggregateHealthState 从多个 endpoint DiagnosisResult 聚合出 channel 级 HealthState。
-// 聚合策略与 channel_profile.go 的 AggregateChannelProfile 一致：取最差。
+// 聚合策略与 channel_profile.go 的 AggregateChannelProfile 一致：
+// 只要仍有 healthy/unknown endpoint，就不让单个 dead/misconfigured endpoint 直接把整条
+// 渠道判成终态不可用；mixed 场景统一降到 degraded。
 func AggregateHealthState(results []DiagnosisResult) HealthState {
 	if len(results) == 0 {
 		return HealthStateUnknown
 	}
-	worst := HealthStateHealthy
+	bestRank := healthStateRank(HealthStateDead)
 	worstRank := healthStateRank(HealthStateHealthy)
+	hasHealthyLike := false
 	for _, r := range results {
 		rank := healthStateRank(r.State)
+		if rank < bestRank {
+			bestRank = rank
+		}
 		if rank > worstRank {
 			worstRank = rank
-			worst = r.State
+		}
+		if r.State == HealthStateHealthy || r.State == HealthStateUnknown {
+			hasHealthyLike = true
 		}
 	}
-	return worst
+	if hasHealthyLike {
+		if worstRank > healthStateRank(HealthStateHealthy) {
+			return HealthStateDegraded
+		}
+		return rankToHealthState(bestRank)
+	}
+	return rankToHealthState(worstRank)
 }

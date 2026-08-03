@@ -27,7 +27,7 @@ type ChannelProfile struct {
 	UpdatedAt   time.Time `json:"updatedAt"`
 
 	// ── 聚合维度 ──
-	HealthState   HealthState   `json:"healthState"`   // 取最差：任一 endpoint dead → degraded
+	HealthState   HealthState   `json:"healthState"`   // 混合健康态按可用性保守降级：全坏才 dead/misconfigured，夹杂健康 endpoint 时最多 degraded
 	QualityTier   QualityTier   `json:"qualityTier"`   // 取最佳 endpoint 的质量
 	StabilityTier StabilityTier `json:"stabilityTier"` // 取中位数
 	SpeedTier     SpeedTier     `json:"speedTier"`     // 取中位数
@@ -180,17 +180,23 @@ func AggregateChannelProfile(channelUID string, channelID int, channelKind strin
 
 	bestQuality := -1
 	bestCost := 999
+	bestHealth := healthStateRank(HealthStateDead)
 	worstHealth := 0
+	hasHealthyLikeEndpoint := false
 
 	for _, ep := range endpoints {
 		// 健康统计
 		if ep.HealthState == HealthStateHealthy || ep.HealthState == HealthStateUnknown {
 			cp.HealthyEndpoints++
+			hasHealthyLikeEndpoint = true
 		}
 
 		rank := healthStateRank(ep.HealthState)
 		if rank > worstHealth {
 			worstHealth = rank
+		}
+		if rank < bestHealth {
+			bestHealth = rank
 		}
 
 		// QualityTier: 取最佳
@@ -243,10 +249,15 @@ func AggregateChannelProfile(channelUID string, channelID int, channelKind strin
 
 	// 赋值聚合结果
 	cp.HealthState = rankToHealthState(worstHealth)
-	if worstHealth > healthStateRank(HealthStateHealthy) && worstHealth < healthStateRank(HealthStateDead) {
-		// 只要有一个非 healthy/unknown endpoint，channel 降级为 degraded
-		if cp.HealthState == HealthStateHealthy {
+	if hasHealthyLikeEndpoint {
+		// 只要同渠道仍存在 healthy/unknown endpoint，就不让单个 dead/misconfigured endpoint
+		// 把整条渠道直接打成不可用；真正完全不可用的渠道会在 hasHealthyLikeEndpoint=false
+		// 时继续保留 worstHealth 终态。mixed 场景统一降到 degraded，既保守降权，又避免 -100
+		// 惩罚把仍可承接请求的渠道直接打穿。
+		if worstHealth > healthStateRank(HealthStateHealthy) {
 			cp.HealthState = HealthStateDegraded
+		} else {
+			cp.HealthState = rankToHealthState(bestHealth)
 		}
 	}
 	cp.QualityTier = rankToQualityTier(bestQuality)

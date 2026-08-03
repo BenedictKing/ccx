@@ -74,8 +74,8 @@ func TestRankEligibleModels_FrontierCostFirstPicksCheapest(t *testing.T) {
 	}
 }
 
-// quality_first 车道：opus-5 质量最高但与其区间重叠的候选均为质量并列，
-// 并列池中同族最低成本是 claude-sonnet-5——不为噪声级质量差异付 2.5 倍成本。
+// quality_first 车道：并列池里默认仍优先低成本；只有 premium 候选 benchmark 差距足够大时，
+// 才允许更强模型压过更便宜模型。当前示例 benchmark 差值不足阈值，因此 claude-sonnet-5 仍胜出。
 func TestRankEligibleModels_FrontierQualityFirstTieBreaksByCost(t *testing.T) {
 	resolver := newFrontierTestResolver(t, nil, "quality_first")
 	best := resolver.rankEligibleModels(frontierIntegrationCandidates(), "claude-sonnet-4-6", "ch_test", "messages", CapabilityFloor{})

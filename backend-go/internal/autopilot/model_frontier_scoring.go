@@ -23,6 +23,11 @@ const (
 	// frontierEvidenceVersion 标识能力—成本证据的合成规则版本。
 	frontierEvidenceVersion = "modelrank.v1"
 
+	// premiumFrontierBenchmarkMinDelta 是 quality_first 并列池内启用 premium benchmark 强比较的最小差值。
+	// 仅在同为 premium 且 benchmark 差距足够大时，才让质量证据压过成本；否则仍把它们视作噪声级
+	// 并列，由成本兜底，避免 1-2 分的小差异就把 compact/低成本模型完全挤掉。
+	premiumFrontierBenchmarkMinDelta = 5.0
+
 	// frontierQualityIntervalBase 是质量置信区间的基准半宽。
 	frontierQualityIntervalBase = 0.05
 	// frontierLowConfidenceFactor 是实测质量置信度不足时的区间加宽倍数。
@@ -255,11 +260,68 @@ func selectFrontierQualityFirst(forest FrontierForest, ranked []rankedModelCandi
 			tied = append(tied, p)
 		}
 	}
-	best := pickFrontierPoint(tied, ranked)
+	best := pickFrontierQualityFirstPoint(tied, ranked)
 	if best < 0 {
 		return -1, ""
 	}
 	return best, fmt.Sprintf("frontier:%s/tie_pool=%d/v=%s", CostPrefQualityFirst, len(tied), forest.Version)
+}
+
+// pickFrontierQualityFirstPoint 在 quality_first 的并列池里优先兑现 benchmark/quality 证据，
+// 避免 premium 档的高基准模型仅因成本更高就被 compact/旧代模型压掉；成本只在前述质量证据
+// 仍无法区分时才作为次级 tie-break。这样 quality_first 才真正体现"质量优先"。
+func pickFrontierQualityFirstPoint(points []FrontierPoint, ranked []rankedModelCandidate) int {
+	bestIdx := -1
+	var bestPoint FrontierPoint
+	for _, p := range points {
+		idx, err := strconv.Atoi(p.CandidateID)
+		if err != nil || idx < 0 || idx >= len(ranked) {
+			continue
+		}
+		if bestIdx < 0 {
+			bestIdx, bestPoint = idx, p
+			continue
+		}
+		cand, best := ranked[idx], ranked[bestIdx]
+		if cand.sameFamily != best.sameFamily {
+			if cand.sameFamily {
+				bestIdx, bestPoint = idx, p
+			}
+			continue
+		}
+		if cand.qualityRank == qualityTierRank(QualityTierPremium) && best.qualityRank == qualityTierRank(QualityTierPremium) &&
+			cand.benchmarkKnown && best.benchmarkKnown {
+			delta := cand.benchmarkScore - best.benchmarkScore
+			if math.Abs(delta) >= premiumFrontierBenchmarkMinDelta {
+				if delta > 0 {
+					bestIdx, bestPoint = idx, p
+				}
+				continue
+			}
+		}
+		if p.Cost.Estimated != bestPoint.Cost.Estimated {
+			if p.Cost.Estimated < bestPoint.Cost.Estimated {
+				bestIdx, bestPoint = idx, p
+			}
+			continue
+		}
+		if cand.measuredQualityScore != best.measuredQualityScore {
+			if cand.measuredQualityScore > best.measuredQualityScore {
+				bestIdx, bestPoint = idx, p
+			}
+			continue
+		}
+		if p.QualityScore != bestPoint.QualityScore {
+			if p.QualityScore > bestPoint.QualityScore {
+				bestIdx, bestPoint = idx, p
+			}
+			continue
+		}
+		if idx < bestIdx {
+			bestIdx, bestPoint = idx, p
+		}
+	}
+	return bestIdx
 }
 
 // pickFrontierPoint 在一组前沿点中按 同族 > 成本最低 > 质量最高 > 下标最小 选点（确定性）。

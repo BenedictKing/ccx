@@ -244,6 +244,34 @@ func TestCapClusterCostPremium(t *testing.T) {
 	})
 }
 
+func TestSelectFrontierQualityFirst_PrefersHigherBenchmarkBeforeCheapest(t *testing.T) {
+	// A 与 B 同为 premium，benchmark 差距足够大（>=5），quality_first 应先兑现质量证据，
+	// 允许更强模型压过更便宜模型。
+	a := makeFrontierCandidate("gpt-5.6-sol", 3, 0.55, 81.36, 20)
+	a.profile.ModelFamily = ModelFamilyOpenAI
+	b := makeFrontierCandidate("gpt-5.4-openai-compact", 3, 0.55, 73.24, 10)
+	b.profile.ModelFamily = ModelFamilyOpenAI
+	ranked := []rankedModelCandidate{a, b}
+	forest := FrontierForest{
+		ScopeID: frontierCostScopeUSD,
+		Version: frontierEvidenceVersion,
+		Clusters: []FrontierCluster{{
+			Index: 0,
+			Points: []FrontierPoint{
+				{CandidateID: "0", QualityScore: 0.84, QualityLow: 0.76, QualityHigh: 0.92, Cost: CostEvidence{Estimated: 20_000_000}},
+				{CandidateID: "1", QualityScore: 0.82, QualityLow: 0.74, QualityHigh: 0.90, Cost: CostEvidence{Estimated: 10_000_000}},
+			},
+		}},
+	}
+	idx, note := selectFrontierQualityFirst(forest, ranked)
+	if idx != 0 {
+		t.Fatalf("selectFrontierQualityFirst() = (%d, %q), want idx 0 (higher benchmark point)", idx, note)
+	}
+	if !strings.Contains(note, "tie_pool=2") {
+		t.Fatalf("note = %q, want tie_pool=2", note)
+	}
+}
+
 func TestSelectFrontierQualityFirst_TiePoolPrefersCheapest(t *testing.T) {
 	// A 仅比 B 高 0.02 质量（区间重叠），成本却是 8 倍：并列容差规则必须选 B；
 	// C 区间与 A 不重叠，不进并列池。
