@@ -468,16 +468,28 @@ export function buildChannelPayload(
   options: BuildChannelPayloadOptions = {}
 ): Omit<Channel, 'index' | 'latency' | 'status'> {
   const processedApiKeys = form.apiKeys.map(key => key.trim()).filter(Boolean)
-  const processedApiKeySet = new Set(processedApiKeys)
   const processedApiKeyConfigs = (form.apiKeyConfigs || [])
-    .filter(cfg => cfg?.key && processedApiKeySet.has(cfg.key.trim()))
-    .map(cfg => ({
-      ...cfg,
-      key: cfg.key.trim(),
-      name: cfg.name?.trim() || undefined,
-      quotaGroup: cfg.quotaGroup?.trim() || undefined,
-      models: Array.isArray(cfg.models) ? cfg.models.map(model => model.trim()).filter(Boolean) : undefined,
-    }))
+    .map(cfg => {
+      if (!cfg) return null
+      const trimmedKey = cfg.key.trim()
+      return {
+        ...cfg,
+        key: trimmedKey,
+        name: cfg.name === undefined ? undefined : cfg.name?.trim() || undefined,
+        quotaGroup: cfg.quotaGroup === undefined ? undefined : cfg.quotaGroup?.trim() || undefined,
+        models: Array.isArray(cfg.models)
+          ? cfg.models.map(model => model.trim()).filter(Boolean)
+          : cfg.models,
+      }
+    })
+    .filter((cfg): cfg is NonNullable<typeof cfg> => !!cfg)
+  const configKeySet = new Set(processedApiKeyConfigs.map(cfg => cfg.key).filter(Boolean))
+  const mergedApiKeys = processedApiKeys.slice()
+  for (const key of configKeySet) {
+    if (!mergedApiKeys.includes(key)) {
+      mergedApiKeys.push(key)
+    }
+  }
   const advancedOptions = normalizeAdvancedChannelOptions(form.serviceType, {
     reasoningMapping: form.reasoningMapping,
     reasoningParamStyle: form.reasoningParamStyle,
@@ -511,7 +523,7 @@ export function buildChannelPayload(
     injectDummyThoughtSignature: form.injectDummyThoughtSignature,
     stripThoughtSignature: form.stripThoughtSignature,
     description: form.description.trim(),
-    apiKeys: processedApiKeys,
+    apiKeys: mergedApiKeys,
     modelMapping: form.modelMapping,
     modelCapabilities: modelCapabilities || {},
     defaultCapability: {},

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import type { APIKeyConfig } from '@/services/admin-api'
 import {
   availableChannelApiKeyCount,
   buildChannelApiKeyRows,
@@ -38,5 +39,45 @@ describe('channel API key state', () => {
   it('兼容后端 JSON 中的 null 列表', () => {
     expect(buildChannelApiKeyRows(null, null)).toEqual([])
     expect(availableChannelApiKeyCount({ apiKeys: ['key-active'], disabledApiKeys: null })).toBe(1)
+  })
+
+  it('保留 keyUid-only skeleton 与未知扩展字段', () => {
+    const config: APIKeyConfig = {
+      key: 'key-skeleton',
+      keyUid: 'ku_1',
+      credentialUid: 'cred_1',
+      eligible: true,
+      extraField: 'keep-me',
+    }
+
+    const rows = buildChannelApiKeyRows([], [], [config])
+
+    expect(rows).toEqual([{
+      key: 'key-skeleton',
+      activeIndex: -1,
+      disabled: undefined,
+      config,
+    }])
+  })
+
+  it('删除目标 key 时保留其他 key 的 config 关联', () => {
+    const keepConfig: APIKeyConfig = {
+      key: 'key-keep',
+      keyUid: 'ku_keep',
+      credentialUid: 'cred_keep',
+      groupMultiplier: 0,
+    }
+    const removeConfig: APIKeyConfig = {
+      key: 'key-remove',
+      keyUid: 'ku_remove',
+      credentialUid: 'cred_remove',
+      extraField: 'drop-me',
+    }
+
+    const rows = buildChannelApiKeyRows(['key-keep'], [], [keepConfig, removeConfig])
+
+    expect(rows.map(row => row.key)).toEqual(['key-keep', 'key-remove'])
+    expect(rows[0].config).toBe(keepConfig)
+    expect(rows[1].config).toBe(removeConfig)
   })
 })

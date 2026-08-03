@@ -119,6 +119,7 @@ export interface APIKeyConfig {
   rateLimitAutoFromHeaders?: boolean
   weight?: number
   models?: string[]
+  [key: string]: unknown
 }
 
 export interface UpstreamModelCapability {
