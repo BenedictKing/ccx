@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"net/url"
 	"sort"
 	"strings"
 	"sync"
@@ -2582,36 +2581,14 @@ type existingAutoAddChannel struct {
 }
 
 var autoAddChannelKinds = []string{"messages", "chat", "responses", "gemini", "images", "vectors"}
-var autoAddURLServiceTypes = []string{"claude", "openai", "responses", "gemini"}
-
-func normalizeAutoAddURLIdentity(rawURL string) string {
-	trimmed := strings.TrimSpace(rawURL)
-	hasHash := strings.HasSuffix(trimmed, "#")
-	parsed, err := url.Parse(strings.TrimSuffix(trimmed, "#"))
-	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
-		return ""
-	}
-	parsed.Scheme = strings.ToLower(parsed.Scheme)
-	parsed.Host = strings.ToLower(parsed.Host)
-	parsed.Path = strings.TrimRight(parsed.Path, "/")
-	parsed.RawPath = ""
-	parsed.Fragment = ""
-	identity := strings.TrimRight(parsed.String(), "/")
-	if hasHash {
-		return identity + "#"
-	}
-	return identity
-}
 
 func equivalentAutoAddURLIdentities(rawURL string) map[string]struct{} {
-	identities := make(map[string]struct{}, len(autoAddURLServiceTypes))
-	for _, serviceType := range autoAddURLServiceTypes {
-		identity := normalizeAutoAddURLIdentity(utils.CanonicalBaseURL(rawURL, serviceType))
-		if identity != "" {
-			identities[identity] = struct{}{}
-		}
+	identities := utils.BaseURLSiteIdentities(rawURL)
+	result := make(map[string]struct{}, len(identities))
+	for _, identity := range identities {
+		result[identity] = struct{}{}
 	}
-	return identities
+	return result
 }
 
 func findExistingAutoAddChannels(cfg config.Config, baseURLs []string) []existingAutoAddChannel {

@@ -456,42 +456,125 @@ func (cm *ConfigManager) SetManagedAccountVolcenginePlanUsage(accountUID, creden
 	return fmt.Errorf("账号 %s 不存在", accountUID)
 }
 
-// mergeManagedProviderAccounts 将同一官方 provider 的历史自动托管账号归并为一个凭证池。
-// provider 模板已经描述完整协议 routes，因此账号身份应是 provider 级，而不是每个 Key 一份。
+// mergeManagedProviderAccounts 将同一 BaseURL 站点的历史自动托管账号归并为一个凭证池。
+// URL 身份跨协议统一默认版本后缀，同时保留租户路径、端口、查询参数和 # 语义。
 func (cm *ConfigManager) mergeManagedProviderAccounts() bool {
-	canonicalUID := make(map[string]string)
-	canonicalName := make(map[string]string)
-	providerAccounts := make(map[string]map[string]bool)
-	for _, account := range cm.config.ManagedAccounts {
-		if account.ProviderID == "" || account.AccountUID == "" {
-			continue
+	parent := make(map[string]string)
+	var findRoot func(string) string
+	findRoot = func(uid string) string {
+		root, exists := parent[uid]
+		if !exists {
+			parent[uid] = uid
+			return uid
 		}
-		// 保留最后创建的账号身份和名称，符合用户最近一次添加时看到的名称。
-		canonicalUID[account.ProviderID] = account.AccountUID
-		canonicalName[account.ProviderID] = account.Name
-		if providerAccounts[account.ProviderID] == nil {
-			providerAccounts[account.ProviderID] = make(map[string]bool)
+		if root != uid {
+			parent[uid] = findRoot(root)
 		}
-		providerAccounts[account.ProviderID][account.AccountUID] = true
+		return parent[uid]
+	}
+	union := func(left, right string) {
+		leftRoot, rightRoot := findRoot(left), findRoot(right)
+		if leftRoot != rightRoot {
+			parent[rightRoot] = leftRoot
+		}
 	}
 
-	updated := false
-	providerKinds := make(map[string]map[string]bool)
+	siteOwner := make(map[string]string)
+	collectSites := func(channels []UpstreamConfig) {
+		for i := range channels {
+			channel := &channels[i]
+			if !channel.AutoManaged || channel.AccountUID == "" {
+				continue
+			}
+			findRoot(channel.AccountUID)
+			identities := make(map[string]struct{})
+			collectURL := func(rawURL string) {
+				for _, identity := range utils.BaseURLSiteIdentities(rawURL) {
+					identities[identity] = struct{}{}
+				}
+			}
+			for _, baseURL := range channel.GetAllBaseURLs() {
+				collectURL(baseURL)
+			}
+			for _, keyConfig := range channel.APIKeyConfigs {
+				collectURL(keyConfig.BaseURL)
+			}
+			for identity := range identities {
+				if owner := siteOwner[identity]; owner != "" {
+					union(channel.AccountUID, owner)
+				} else {
+					siteOwner[identity] = channel.AccountUID
+				}
+			}
+		}
+	}
+	collectSites(cm.config.Upstream)
+	collectSites(cm.config.ChatUpstream)
+	collectSites(cm.config.ResponsesUpstream)
+	collectSites(cm.config.GeminiUpstream)
+	collectSites(cm.config.ImagesUpstream)
+	collectSites(cm.config.VectorsUpstream)
+
+	members := make(map[string]map[string]bool)
+	for uid := range parent {
+		root := findRoot(uid)
+		if members[root] == nil {
+			members[root] = make(map[string]bool)
+		}
+		members[root][uid] = true
+	}
+	canonicalUID := make(map[string]string)
+	canonicalName := make(map[string]string)
+	canonicalProvider := make(map[string]string)
+	for _, account := range cm.config.ManagedAccounts {
+		if account.AccountUID == "" {
+			continue
+		}
+		root := findRoot(account.AccountUID)
+		if len(members[root]) < 2 {
+			continue
+		}
+		canonicalUID[root] = account.AccountUID
+		canonicalName[root] = account.Name
+		canonicalProvider[root] = account.ProviderID
+	}
+	chooseChannelCanonical := func(channels []UpstreamConfig) {
+		for i := range channels {
+			channel := &channels[i]
+			if !channel.AutoManaged || channel.AccountUID == "" {
+				continue
+			}
+			root := findRoot(channel.AccountUID)
+			if len(members[root]) < 2 || canonicalUID[root] != "" {
+				continue
+			}
+			canonicalUID[root] = channel.AccountUID
+			canonicalName[root] = managedAccountName(channel.Name)
+			canonicalProvider[root] = channel.ProviderID
+		}
+	}
+	chooseChannelCanonical(cm.config.Upstream)
+	chooseChannelCanonical(cm.config.ChatUpstream)
+	chooseChannelCanonical(cm.config.ResponsesUpstream)
+	chooseChannelCanonical(cm.config.GeminiUpstream)
+	chooseChannelCanonical(cm.config.ImagesUpstream)
+	chooseChannelCanonical(cm.config.VectorsUpstream)
+
+	groupKinds := make(map[string]map[string]bool)
 	collectKinds := func(channels []UpstreamConfig, kind string) {
 		for i := range channels {
 			channel := &channels[i]
-			if channel.AutoManaged && channel.ProviderID != "" {
-				if providerKinds[channel.ProviderID] == nil {
-					providerKinds[channel.ProviderID] = make(map[string]bool)
-				}
-				providerKinds[channel.ProviderID][kind] = true
-				if providerAccounts[channel.ProviderID] == nil {
-					providerAccounts[channel.ProviderID] = make(map[string]bool)
-				}
-				if channel.AccountUID != "" {
-					providerAccounts[channel.ProviderID][channel.AccountUID] = true
-				}
+			if !channel.AutoManaged || channel.AccountUID == "" {
+				continue
 			}
+			root := findRoot(channel.AccountUID)
+			if len(members[root]) < 2 {
+				continue
+			}
+			if groupKinds[root] == nil {
+				groupKinds[root] = make(map[string]bool)
+			}
+			groupKinds[root][kind] = true
 		}
 	}
 	collectKinds(cm.config.Upstream, "messages")
@@ -501,44 +584,42 @@ func (cm *ConfigManager) mergeManagedProviderAccounts() bool {
 	collectKinds(cm.config.ImagesUpstream, "images")
 	collectKinds(cm.config.VectorsUpstream, "vectors")
 
+	updated := false
 	mergeKind := func(channels []UpstreamConfig, kind string) []UpstreamConfig {
 		out := make([]UpstreamConfig, 0, len(channels))
-		providerIndex := make(map[string]int)
-		providerHasCanonicalRoute := make(map[string]bool)
+		groupIndex := make(map[string]int)
+		groupHasCanonicalRoute := make(map[string]bool)
 		for i := range channels {
 			channel := channels[i]
-			if !channel.AutoManaged || channel.ProviderID == "" {
+			if !channel.AutoManaged || channel.AccountUID == "" {
 				out = append(out, channel)
 				continue
 			}
-			providerID := channel.ProviderID
-			if len(providerAccounts[providerID]) < 2 {
+			root := findRoot(channel.AccountUID)
+			if len(members[root]) < 2 {
 				out = append(out, channel)
 				continue
 			}
 			originalAccountUID := channel.AccountUID
-			uid := canonicalUID[providerID]
-			if uid == "" {
-				uid = channel.AccountUID
-				if uid == "" {
-					uid = GenerateAccountUID()
-				}
-				canonicalUID[providerID] = uid
-			}
-			baseName := canonicalName[providerID]
+			uid := canonicalUID[root]
+			baseName := canonicalName[root]
 			if baseName == "" {
 				baseName = managedAccountName(channel.Name)
-				canonicalName[providerID] = baseName
 			}
 			targetName := baseName
-			if len(providerKinds[providerID]) > 1 {
+			if len(groupKinds[root]) > 1 {
 				targetName += accountChannelSuffix(kind)
 			}
-			if channel.AccountUID != uid || channel.Name != targetName {
+			providerID := canonicalProvider[root]
+			if providerID == "" {
+				providerID = channel.ProviderID
+			}
+			if channel.AccountUID != uid || channel.Name != targetName || channel.ProviderID != providerID {
 				updated = true
 			}
 			channel.AccountUID = uid
 			channel.Name = targetName
+			channel.ProviderID = providerID
 			channel.APIKeyConfigs = normalizeAPIKeyConfigs(channel.APIKeys, channel.APIKeyConfigs)
 			for j := range channel.APIKeyConfigs {
 				if strings.TrimSpace(channel.APIKeyConfigs[j].Key) != "" {
@@ -546,20 +627,19 @@ func (cm *ConfigManager) mergeManagedProviderAccounts() bool {
 				}
 			}
 
-			idx, exists := providerIndex[providerID]
+			idx, exists := groupIndex[root]
 			if !exists {
-				providerIndex[providerID] = len(out)
-				providerHasCanonicalRoute[providerID] = originalAccountUID == uid
+				groupIndex[root] = len(out)
+				groupHasCanonicalRoute[root] = originalAccountUID == uid
 				out = append(out, channel)
 				continue
 			}
-
 			merged := &out[idx]
-			if originalAccountUID == uid && !providerHasCanonicalRoute[providerID] {
+			if originalAccountUID == uid && !groupHasCanonicalRoute[root] {
 				previous := *merged
 				*merged = channel
 				channel = previous
-				providerHasCanonicalRoute[providerID] = true
+				groupHasCanonicalRoute[root] = true
 			}
 			configs := make(map[string]APIKeyConfig, len(merged.APIKeyConfigs)+len(channel.APIKeyConfigs))
 			uidOnlyConfigs := make(map[string]APIKeyConfig)
@@ -605,16 +685,12 @@ func (cm *ConfigManager) mergeManagedProviderAccounts() bool {
 			if len(merged.BaseURLs) > 0 {
 				merged.BaseURL = merged.BaseURLs[0]
 			}
-			// 合并状态时保持 status/source 成对一致；任一路由的人工暂停都优先于 active，
-			// 防止被合并进来的 active 路由覆盖 canonical 的人工暂停。
 			if (merged.Status == "suspended" && merged.SuspensionSource == SuspensionSourceManual) ||
 				(channel.Status == "suspended" && channel.SuspensionSource == SuspensionSourceManual) {
 				applyChannelStatusTransition(merged, "suspended", SuspensionSourceManual)
 			} else if channel.Status == "active" {
 				applyChannelStatusTransition(merged, "active", "")
 			}
-			// 兼容性种子随渠道一起合并：被合并掉的渠道若带有历史手工配置降级来的种子，
-			// 不合并就会连同渠道一起丢弃。已存在的种子优先（canonical 渠道的观察更可信）。
 			for trait, entry := range channel.CompatSeeds {
 				if merged.CompatSeeds == nil {
 					merged.CompatSeeds = make(map[string]CompatSeedEntry, len(channel.CompatSeeds))
@@ -634,49 +710,50 @@ func (cm *ConfigManager) mergeManagedProviderAccounts() bool {
 	cm.config.GeminiUpstream = mergeKind(cm.config.GeminiUpstream, "gemini")
 	cm.config.ImagesUpstream = mergeKind(cm.config.ImagesUpstream, "images")
 	cm.config.VectorsUpstream = mergeKind(cm.config.VectorsUpstream, "vectors")
-	if updated {
-		accounts := cm.config.ManagedAccounts[:0]
-		mergedCredentials := make(map[string][]ManagedAccountCredential)
-		credentialSeen := make(map[string]map[string]bool)
-		for _, account := range cm.config.ManagedAccounts {
-			canonical := canonicalUID[account.ProviderID]
-			if canonical == "" {
-				canonical = account.AccountUID
-			}
-			if credentialSeen[canonical] == nil {
-				credentialSeen[canonical] = make(map[string]bool)
-			}
-			for _, credential := range account.Credentials {
-				if credential.CredentialUID == "" || credentialSeen[canonical][credential.CredentialUID] {
-					continue
-				}
-				mergedCredentials[canonical] = append(mergedCredentials[canonical], credential)
-				credentialSeen[canonical][credential.CredentialUID] = true
-			}
-			if account.AccountUID != canonical {
+	if !updated {
+		return false
+	}
+
+	accounts := cm.config.ManagedAccounts[:0]
+	mergedCredentials := make(map[string][]ManagedAccountCredential)
+	credentialSeen := make(map[string]map[string]bool)
+	for _, account := range cm.config.ManagedAccounts {
+		root := findRoot(account.AccountUID)
+		canonical := canonicalUID[root]
+		if canonical == "" {
+			canonical = account.AccountUID
+		}
+		if credentialSeen[canonical] == nil {
+			credentialSeen[canonical] = make(map[string]bool)
+		}
+		for _, credential := range account.Credentials {
+			if credential.CredentialUID == "" || credentialSeen[canonical][credential.CredentialUID] {
 				continue
 			}
-			account.Credentials = mergedCredentials[canonical]
-			accounts = append(accounts, account)
+			mergedCredentials[canonical] = append(mergedCredentials[canonical], credential)
+			credentialSeen[canonical][credential.CredentialUID] = true
 		}
-		cm.config.ManagedAccounts = accounts
-		// 渠道带明文 Key 时按合并结果重建凭证池；持久化渠道只有 UID、Key 尚未补水时，
-		// 直接同步会清空已保留的账号凭证，因此只在至少存在运行时 Key 时执行。
-		hasRuntimeKeys := false
-		for _, channels := range [][]UpstreamConfig{cm.config.Upstream, cm.config.ChatUpstream, cm.config.ResponsesUpstream, cm.config.GeminiUpstream, cm.config.ImagesUpstream, cm.config.VectorsUpstream} {
-			for i := range channels {
-				if channels[i].AutoManaged && len(channels[i].APIKeys) > 0 {
-					hasRuntimeKeys = true
-					break
-				}
+		if account.AccountUID != canonical {
+			continue
+		}
+		account.Credentials = mergedCredentials[canonical]
+		accounts = append(accounts, account)
+	}
+	cm.config.ManagedAccounts = accounts
+	hasRuntimeKeys := false
+	for _, channels := range [][]UpstreamConfig{cm.config.Upstream, cm.config.ChatUpstream, cm.config.ResponsesUpstream, cm.config.GeminiUpstream, cm.config.ImagesUpstream, cm.config.VectorsUpstream} {
+		for i := range channels {
+			if channels[i].AutoManaged && len(channels[i].APIKeys) > 0 {
+				hasRuntimeKeys = true
+				break
 			}
 		}
-		if hasRuntimeKeys {
-			cm.config.syncManagedAccountsFromChannels()
-		}
-		log.Printf("[Config-AccountMerge] 已按 provider 合并历史自动托管账号")
 	}
-	return updated
+	if hasRuntimeKeys {
+		cm.config.syncManagedAccountsFromChannels()
+	}
+	log.Printf("[Config-AccountMerge] 已按 BaseURL 站点合并历史自动托管账号")
+	return true
 }
 
 // UpdateAccountChannels 原子更新账号下所有协议渠道的 Key -> BaseURL 绑定。

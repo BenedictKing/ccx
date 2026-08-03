@@ -138,8 +138,8 @@ func TestMergeManagedProviderAccountsPreservesCompatSeeds(t *testing.T) {
 			{ProviderID: "mimo", AccountUID: "acct_2", Name: "MiMo"},
 		},
 		Upstream: []UpstreamConfig{
-			{Name: "mimo-1", ProviderID: "mimo", AccountUID: "acct_1", AutoManaged: true, APIKeys: []string{"sk-1"}},
-			{Name: "mimo-2", ProviderID: "mimo", AccountUID: "acct_2", AutoManaged: true, APIKeys: []string{"sk-2"}},
+			{Name: "mimo-1", ProviderID: "mimo", AccountUID: "acct_1", AutoManaged: true, BaseURL: "https://api.example/v1", APIKeys: []string{"sk-1"}},
+			{Name: "mimo-2", ProviderID: "mimo", AccountUID: "acct_2", AutoManaged: true, BaseURL: "https://api.example/v1", APIKeys: []string{"sk-2"}},
 		},
 	}}
 	// 只在"会被合并掉"的那条上放种子

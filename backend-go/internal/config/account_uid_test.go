@@ -34,38 +34,120 @@ func TestEnsureAccountUIDsGroupsLegacyProviderRoutes(t *testing.T) {
 	}
 }
 
-func TestMergeManagedProviderAccountsCombinesKeysAndRoutes(t *testing.T) {
+func TestMergeManagedProviderAccountsCombinesSameSiteKeysAndRoutes(t *testing.T) {
 	cm := &ConfigManager{config: Config{
 		ManagedAccounts: []ManagedAccountConfig{
-			{AccountUID: "acct-old", ProviderID: "mimo", Name: "mimo-old"},
-			{AccountUID: "acct-new", ProviderID: "mimo", Name: "mimo-new"},
+			{AccountUID: "acct-old", ProviderID: "legacy", Name: "old"},
+			{AccountUID: "acct-new", ProviderID: "mimo", Name: "new"},
 		},
 		Upstream: []UpstreamConfig{
-			{AccountUID: "acct-old", ChannelUID: "ch-msg-old", Name: "mimo-old-claude", ProviderID: "mimo", AutoManaged: true, ServiceType: "claude", APIKeys: []string{"sk-a"}, APIKeyConfigs: []APIKeyConfig{{Key: "sk-a", BaseURL: "https://a.example/anthropic"}}},
-			{AccountUID: "acct-new", ChannelUID: "ch-msg-new", Name: "mimo-new-claude", ProviderID: "mimo", AutoManaged: true, ServiceType: "claude", APIKeys: []string{"sk-b"}, APIKeyConfigs: []APIKeyConfig{{Key: "sk-b", BaseURL: "https://b.example/anthropic"}}},
+			{AccountUID: "acct-old", ChannelUID: "ch-msg-old", Name: "old", ProviderID: "legacy", AutoManaged: true, ServiceType: "claude", BaseURL: "HTTPS://API.EXAMPLE/v1/", APIKeys: []string{"sk-a"}},
+			{AccountUID: "acct-new", ChannelUID: "ch-msg-new", Name: "new", ProviderID: "mimo", AutoManaged: true, ServiceType: "claude", BaseURL: "https://api.example", APIKeys: []string{"sk-b"}},
 		},
-		ChatUpstream: []UpstreamConfig{
-			{AccountUID: "acct-old", ChannelUID: "ch-chat-old", Name: "mimo-old-chat", ProviderID: "mimo", AutoManaged: true, ServiceType: "openai", APIKeys: []string{"sk-a"}, APIKeyConfigs: []APIKeyConfig{{Key: "sk-a", BaseURL: "https://a.example/v1"}}},
-			{AccountUID: "acct-new", ChannelUID: "ch-chat-new", Name: "mimo-new-chat", ProviderID: "mimo", AutoManaged: true, ServiceType: "openai", APIKeys: []string{"sk-b"}, APIKeyConfigs: []APIKeyConfig{{Key: "sk-b", BaseURL: "https://b.example/v1"}}},
+		GeminiUpstream: []UpstreamConfig{
+			{AccountUID: "acct-old", ChannelUID: "ch-gemini-old", Name: "old", ProviderID: "legacy", AutoManaged: true, ServiceType: "gemini", BaseURL: "https://api.example/v1beta/", APIKeys: []string{"sk-a"}},
+			{AccountUID: "acct-new", ChannelUID: "ch-gemini-new", Name: "new", ProviderID: "mimo", AutoManaged: true, ServiceType: "gemini", BaseURL: "https://api.example", APIKeys: []string{"sk-b"}},
 		},
 	}}
 
 	if !cm.mergeManagedProviderAccounts() {
-		t.Fatal("重复 provider 账号应触发合并")
+		t.Fatal("同 BaseURL 站点账号应触发合并")
 	}
-	if len(cm.config.Upstream) != 1 || len(cm.config.ChatUpstream) != 1 {
-		t.Fatalf("每种协议应只保留一条 route: messages=%d chat=%d", len(cm.config.Upstream), len(cm.config.ChatUpstream))
+	if len(cm.config.Upstream) != 1 || len(cm.config.GeminiUpstream) != 1 {
+		t.Fatalf("每种协议应只保留一条 route: messages=%d gemini=%d", len(cm.config.Upstream), len(cm.config.GeminiUpstream))
 	}
-	for _, channel := range []UpstreamConfig{cm.config.Upstream[0], cm.config.ChatUpstream[0]} {
-		if channel.AccountUID != "acct-new" || len(channel.APIKeys) != 2 {
-			t.Fatalf("route 未归并到最近账号或 Key 未合并: %+v", channel)
+	for _, channel := range []UpstreamConfig{cm.config.Upstream[0], cm.config.GeminiUpstream[0]} {
+		if channel.AccountUID != "acct-new" || channel.ProviderID != "mimo" || len(channel.APIKeys) != 2 {
+			t.Fatalf("route 未归并到最近账号: %+v", channel)
 		}
 	}
-	if cm.config.Upstream[0].ChannelUID != "ch-msg-new" || cm.config.ChatUpstream[0].ChannelUID != "ch-chat-new" {
-		t.Fatalf("应保留最近账号的 route 身份")
+	if cm.config.Upstream[0].ChannelUID != "ch-msg-new" || cm.config.GeminiUpstream[0].ChannelUID != "ch-gemini-new" {
+		t.Fatal("应保留最近账号的 route 身份")
 	}
 	if len(cm.config.ManagedAccounts) != 1 || len(cm.config.ManagedAccounts[0].Credentials) != 2 {
 		t.Fatalf("账号凭证池未合并: %+v", cm.config.ManagedAccounts)
+	}
+}
+
+func TestMergeManagedProviderAccountsKeepsDifferentSitesSeparate(t *testing.T) {
+	cm := &ConfigManager{config: Config{
+		ManagedAccounts: []ManagedAccountConfig{
+			{AccountUID: "acct-a", ProviderID: "mimo"},
+			{AccountUID: "acct-b", ProviderID: "mimo"},
+		},
+		Upstream: []UpstreamConfig{
+			{AccountUID: "acct-a", ProviderID: "mimo", AutoManaged: true, BaseURL: "https://a.example/v1"},
+			{AccountUID: "acct-b", ProviderID: "mimo", AutoManaged: true, BaseURL: "https://b.example/v1"},
+		},
+	}}
+	if cm.mergeManagedProviderAccounts() {
+		t.Fatal("相同 provider 的不同站点不应合并")
+	}
+	if len(cm.config.Upstream) != 2 || len(cm.config.ManagedAccounts) != 2 {
+		t.Fatalf("不同站点被误合并: channels=%d accounts=%d", len(cm.config.Upstream), len(cm.config.ManagedAccounts))
+	}
+}
+
+func TestMergeManagedProviderAccountsSiteBoundaries(t *testing.T) {
+	tests := []struct {
+		name  string
+		left  string
+		right string
+	}{
+		{name: "different port", left: "https://api.example:8443/v1", right: "https://api.example/v1"},
+		{name: "different tenant path", left: "https://api.example/tenant-a/v1", right: "https://api.example/tenant-b/v1"},
+		{name: "different query", left: "https://api.example/v1?tenant=a", right: "https://api.example/v1?tenant=b"},
+		{name: "hash semantics", left: "https://api.example/v1#", right: "https://api.example/v1"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cm := &ConfigManager{config: Config{Upstream: []UpstreamConfig{
+				{AccountUID: "acct-a", AutoManaged: true, BaseURL: tt.left},
+				{AccountUID: "acct-b", AutoManaged: true, BaseURL: tt.right},
+			}}}
+			if cm.mergeManagedProviderAccounts() {
+				t.Fatalf("站点边界被误合并: %q / %q", tt.left, tt.right)
+			}
+		})
+	}
+}
+
+func TestMergeManagedProviderAccountsRequiresManagedURL(t *testing.T) {
+	cm := &ConfigManager{config: Config{Upstream: []UpstreamConfig{
+		{AccountUID: "acct-a", ProviderID: "mimo", AutoManaged: true},
+		{AccountUID: "acct-b", ProviderID: "mimo", AutoManaged: true},
+		{AccountUID: "acct-manual-a", BaseURL: "https://api.example/v1"},
+		{AccountUID: "acct-manual-b", BaseURL: "https://api.example"},
+	}}}
+	if cm.mergeManagedProviderAccounts() {
+		t.Fatal("无 BaseURL 或手工渠道不应自动合并")
+	}
+}
+
+func TestMergeManagedProviderAccountsIsIdempotent(t *testing.T) {
+	cm := &ConfigManager{config: Config{
+		ManagedAccounts: []ManagedAccountConfig{{AccountUID: "acct-old"}, {AccountUID: "acct-new"}},
+		Upstream: []UpstreamConfig{
+			{AccountUID: "acct-old", AutoManaged: true, BaseURL: "https://api.example/v1/", APIKeys: []string{"sk-old"}},
+			{AccountUID: "acct-new", AutoManaged: true, BaseURL: "https://api.example", APIKeys: []string{"sk-new"}},
+		},
+	}}
+	if !cm.mergeManagedProviderAccounts() {
+		t.Fatal("首次迁移应发生合并")
+	}
+	first, err := json.Marshal(cm.config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cm.mergeManagedProviderAccounts() {
+		t.Fatal("第二次迁移不应报告变更")
+	}
+	second, err := json.Marshal(cm.config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(first) != string(second) {
+		t.Fatal("站点合并迁移不幂等")
 	}
 }
 
@@ -78,8 +160,8 @@ func TestLoadConfigMergesPersistedProviderCredentialsWithoutLoss(t *testing.T) {
     {"accountUid":"acct-new","providerId":"mimo","name":"mimo-new","credentials":[{"credentialUid":"cred-new","apiKey":"sk-new"}]}
   ],
   "upstream": [
-    {"accountUid":"acct-old","channelUid":"ch-old","providerId":"mimo","name":"mimo-old","serviceType":"claude","autoManaged":true,"status":"active","baseUrl":"https://old.example/anthropic","apiKeyConfigs":[{"credentialUid":"cred-old","baseUrl":"https://old.example/anthropic"}]},
-    {"accountUid":"acct-new","channelUid":"ch-new","providerId":"mimo","name":"mimo-new","serviceType":"claude","autoManaged":true,"status":"active","baseUrl":"https://new.example/anthropic","apiKeyConfigs":[{"credentialUid":"cred-new","baseUrl":"https://new.example/anthropic"}]}
+    {"accountUid":"acct-old","channelUid":"ch-old","providerId":"mimo","name":"mimo-old","serviceType":"claude","autoManaged":true,"status":"active","baseUrl":"https://api.example/v1","apiKeyConfigs":[{"credentialUid":"cred-old","baseUrl":"https://api.example/v1"}]},
+    {"accountUid":"acct-new","channelUid":"ch-new","providerId":"mimo","name":"mimo-new","serviceType":"claude","autoManaged":true,"status":"active","baseUrl":"https://api.example","apiKeyConfigs":[{"credentialUid":"cred-new","baseUrl":"https://api.example"}]}
   ],
   "chatUpstream": [], "responsesUpstream": [], "geminiUpstream": [], "imagesUpstream": [], "vectorsUpstream": []
 }`
@@ -100,6 +182,61 @@ func TestLoadConfigMergesPersistedProviderCredentialsWithoutLoss(t *testing.T) {
 	}
 }
 
+func TestLoadConfigBaseURLMergeIsIdempotent(t *testing.T) {
+	dir := t.TempDir()
+	configPath := dir + "/config.json"
+	data := `{
+  "managedAccounts": [
+    {"accountUid":"acct-old","providerId":"legacy","name":"old","credentials":[{"credentialUid":"cred-old","apiKey":"sk-old"}]},
+    {"accountUid":"acct-new","providerId":"mimo","name":"new","credentials":[{"credentialUid":"cred-new","apiKey":"sk-new"}]}
+  ],
+  "upstream": [
+    {"accountUid":"acct-old","channelUid":"ch-old","providerId":"legacy","name":"old","serviceType":"claude","autoManaged":true,"status":"active","baseUrl":"HTTPS://API.EXAMPLE/v1/","apiKeyConfigs":[{"credentialUid":"cred-old","baseUrl":"HTTPS://API.EXAMPLE/v1/"}]},
+    {"accountUid":"acct-new","channelUid":"ch-new","providerId":"mimo","name":"new","serviceType":"claude","autoManaged":true,"status":"active","baseUrl":"https://api.example","apiKeyConfigs":[{"credentialUid":"cred-new","baseUrl":"https://api.example"}]}
+  ],
+  "chatUpstream": [], "responsesUpstream": [], "geminiUpstream": [], "imagesUpstream": [], "vectorsUpstream": []
+}`
+	if err := os.WriteFile(configPath, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cm, err := NewConfigManager(configPath, dir+"/backups")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cm.Close(); err != nil {
+		t.Fatal(err)
+	}
+	first, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var migrated Config
+	if err := json.Unmarshal(first, &migrated); err != nil {
+		t.Fatal(err)
+	}
+	if len(migrated.Upstream) != 1 || len(migrated.ManagedAccounts) != 1 {
+		t.Fatalf("升级未按 BaseURL 合并: channels=%d accounts=%d", len(migrated.Upstream), len(migrated.ManagedAccounts))
+	}
+	if migrated.Upstream[0].AccountUID != "acct-new" || migrated.Upstream[0].ProviderID != "mimo" {
+		t.Fatalf("升级未保留最近账号身份: %+v", migrated.Upstream[0])
+	}
+
+	cm, err = NewConfigManager(configPath, dir+"/backups-second")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cm.Close(); err != nil {
+		t.Fatal(err)
+	}
+	second, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(first) != string(second) {
+		t.Fatal("第二次加载再次改写了已迁移配置")
+	}
+}
+
 func TestMergeManagedProviderAccountsManualSuspensionWins(t *testing.T) {
 	cm := &ConfigManager{config: Config{
 		ManagedAccounts: []ManagedAccountConfig{
@@ -107,8 +244,8 @@ func TestMergeManagedProviderAccountsManualSuspensionWins(t *testing.T) {
 			{AccountUID: "acct-new", ProviderID: "mimo", Name: "new"},
 		},
 		Upstream: []UpstreamConfig{
-			{AccountUID: "acct-old", ProviderID: "mimo", AutoManaged: true, Status: "active", APIKeys: []string{"sk-old"}},
-			{AccountUID: "acct-new", ProviderID: "mimo", AutoManaged: true, Status: "suspended", SuspensionSource: SuspensionSourceManual, APIKeys: []string{"sk-new"}},
+			{AccountUID: "acct-old", ProviderID: "mimo", AutoManaged: true, BaseURL: "https://api.example/v1", Status: "active", APIKeys: []string{"sk-old"}},
+			{AccountUID: "acct-new", ProviderID: "mimo", AutoManaged: true, BaseURL: "https://api.example/v1", Status: "suspended", SuspensionSource: SuspensionSourceManual, APIKeys: []string{"sk-new"}},
 		},
 	}}
 	if !cm.mergeManagedProviderAccounts() {
@@ -127,8 +264,8 @@ func TestMergeManagedProviderAccountsPreservesUIDOnlyBindingWithRuntimeKey(t *te
 			{AccountUID: "acct-new", ProviderID: "mimo", Credentials: []ManagedAccountCredential{{CredentialUID: "cred-new", APIKey: "sk-new"}}},
 		},
 		Upstream: []UpstreamConfig{
-			{AccountUID: "acct-old", ProviderID: "mimo", AutoManaged: true, APIKeyConfigs: []APIKeyConfig{{CredentialUID: "cred-old"}}},
-			{AccountUID: "acct-new", ProviderID: "mimo", AutoManaged: true, APIKeys: []string{"sk-new"}, APIKeyConfigs: []APIKeyConfig{{Key: "sk-new", CredentialUID: "cred-new"}}},
+			{AccountUID: "acct-old", ProviderID: "mimo", AutoManaged: true, BaseURL: "https://api.example/v1", APIKeyConfigs: []APIKeyConfig{{CredentialUID: "cred-old"}}},
+			{AccountUID: "acct-new", ProviderID: "mimo", AutoManaged: true, BaseURL: "https://api.example", APIKeys: []string{"sk-new"}, APIKeyConfigs: []APIKeyConfig{{Key: "sk-new", CredentialUID: "cred-new"}}},
 		},
 	}}
 	if !cm.mergeManagedProviderAccounts() {
