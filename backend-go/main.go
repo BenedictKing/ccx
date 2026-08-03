@@ -1395,6 +1395,8 @@ func main() {
 
 			// 订阅中心 API
 			autopilot.RegisterSubscriptionRoutes(apiGroup, autopilotManager.SubscriptionStore(), autopilotManager.SubscriptionRefreshWorker(), newApiSyncService)
+			autopilot.RegisterKeyMultiplierRoutes(apiGroup, cfgManager)
+			autopilot.RegisterCostRoutes(apiGroup, cfgManager)
 			// §8.5.1：new-api 订阅集成 API（校验 + 完整 provision 流程）
 			autopilot.RegisterNewApiSubscriptionRoutes(apiGroup, &autopilot.NewApiRouteDeps{
 				Store:       autopilotManager.SubscriptionStore(),

@@ -2,6 +2,7 @@ package autopilot
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -9,6 +10,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+var errAccountMissing = errors.New("subscription account not found")
 
 // NewApiAccountCreateRequest POST /api/subscriptions/:uid/accounts 请求体。
 type NewApiAccountCreateRequest struct {
@@ -208,9 +211,21 @@ func handleRefreshSubscriptionAccount(deps *NewApiRouteDeps) gin.HandlerFunc {
 				account = current.Accounts[i]
 				return nil
 			}
-			return fmt.Errorf("account_uid=%s 不存在", accountUID)
+			return errAccountMissing
 		})
 		if patchErr != nil {
+			if errors.Is(patchErr, errAccountMissing) || strings.Contains(patchErr.Error(), "不存在") {
+				c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("account_uid=%s 不存在", accountUID)})
+				return
+			}
+			if strings.Contains(patchErr.Error(), "version 冲突") {
+				c.JSON(http.StatusConflict, gin.H{"error": patchErr.Error()})
+				return
+			}
+			if strings.Contains(patchErr.Error(), "subscription_uid") {
+				c.JSON(http.StatusNotFound, gin.H{"error": patchErr.Error()})
+				return
+			}
 			c.JSON(http.StatusInternalServerError, gin.H{"error": patchErr.Error()})
 			return
 		}

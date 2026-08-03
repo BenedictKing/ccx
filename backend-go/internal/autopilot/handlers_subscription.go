@@ -49,6 +49,9 @@ type SubscriptionUpdateRequest struct {
 	// Phase 4 Item 6：余额自动刷新
 	BillingAPIKey      *string `json:"billingApiKey,omitempty"`
 	AutoRefreshEnabled *bool   `json:"autoRefreshEnabled,omitempty"`
+
+	// ExpectedVersion 可选乐观锁；不传则与现有语义保持一致。
+	ExpectedVersion *uint64 `json:"expectedVersion,omitempty"`
 }
 
 // LinkRequest POST /api/subscriptions/:uid/link 请求体。
@@ -124,6 +127,7 @@ func RegisterSubscriptionRoutes(router gin.IRouter, store *SubscriptionStore, re
 		group.POST("", handleCreateSubscription(store))
 		group.GET("/:uid", handleGetSubscription(store))
 		group.PUT("/:uid", handleUpdateSubscription(store))
+		group.PATCH("/:uid/billing-terms", handlePatchBillingTerms(store))
 		group.DELETE("/:uid", handleDeleteSubscription(store))
 		group.POST("/:uid/link", handleLinkChannel(store))
 		group.POST("/:uid/unlink", handleUnlinkChannel(store))
@@ -232,7 +236,7 @@ func handleUpdateSubscription(store *SubscriptionStore) gin.HandlerFunc {
 			return
 		}
 
-		err := store.Patch(uid, nil, func(profile *SubscriptionProfile) error {
+		err := store.Patch(uid, req.ExpectedVersion, func(profile *SubscriptionProfile) error {
 			if req.DisplayName != nil {
 				profile.DisplayName = *req.DisplayName
 			}
@@ -279,6 +283,14 @@ func handleUpdateSubscription(store *SubscriptionStore) gin.HandlerFunc {
 			return nil
 		})
 		if err != nil {
+			if isSubscriptionVersionConflict(err) {
+				c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+				return
+			}
+			if isSubscriptionNotFound(err) {
+				c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+				return
+			}
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}

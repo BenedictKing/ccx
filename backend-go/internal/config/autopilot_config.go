@@ -247,23 +247,23 @@ type ModelMappingRoutingConfig struct {
 
 // CostOptimizationConfig 成本优化配置。
 type CostOptimizationConfig struct {
-	Enabled                       bool    `json:"enabled,omitempty"`
-	ApplyAfterQualityFloor        bool    `json:"applyAfterQualityFloor,omitempty"`
-	RequireCostConfidence         float64 `json:"requireCostConfidence,omitempty"`
-	IncludeCachePricing           bool    `json:"includeCachePricing,omitempty"`
-	IncludeImageUnitPricing       bool    `json:"includeImageUnitPricing,omitempty"`
-	IncludeEmbeddingPricing       bool    `json:"includeEmbeddingPricing,omitempty"`
-	Currency                      string  `json:"currency,omitempty"`
-	ExchangeRateSource            string  `json:"exchangeRateSource,omitempty"`
-	PreferLowerEffectiveCost      bool    `json:"preferLowerEffectiveCost,omitempty"`
-	SupervisorSavingsWeight       float64 `json:"supervisorSavingsWeight,omitempty"`
-	WorkerSavingsWeight           float64 `json:"workerSavingsWeight,omitempty"`
+	Enabled                  bool    `json:"enabled,omitempty"`
+	ApplyAfterQualityFloor   bool    `json:"applyAfterQualityFloor,omitempty"`
+	RequireCostConfidence    float64 `json:"requireCostConfidence,omitempty"`
+	IncludeCachePricing      bool    `json:"includeCachePricing,omitempty"`
+	IncludeImageUnitPricing  bool    `json:"includeImageUnitPricing,omitempty"`
+	IncludeEmbeddingPricing  bool    `json:"includeEmbeddingPricing,omitempty"`
+	Currency                 string  `json:"currency,omitempty"`
+	ExchangeRateSource       string  `json:"exchangeRateSource,omitempty"`
+	PreferLowerEffectiveCost bool    `json:"preferLowerEffectiveCost,omitempty"`
+	SupervisorSavingsWeight  float64 `json:"supervisorSavingsWeight,omitempty"`
+	WorkerSavingsWeight      float64 `json:"workerSavingsWeight,omitempty"`
 	// ProviderTimePricing 描述官方 provider 的按时段计价规则，key 为 providerId。
 	// effectiveFrom 为空或尚未到达时不加价；基础模型价格始终保留在模型注册表中。
-	ProviderTimePricing           map[string]ProviderTimePricingConfig `json:"providerTimePricing,omitempty"`
-	ExchangeRateQuotes            []ExchangeRateQuote                  `json:"exchangeRateQuotes,omitempty"`
-	ExchangeRateQuotesConfigured  bool                                 `json:"-"`
-	ExchangeRateSnapshot          *ExchangeRateSnapshot                `json:"exchangeRateSnapshot,omitempty"`
+	ProviderTimePricing          map[string]ProviderTimePricingConfig `json:"providerTimePricing,omitempty"`
+	ExchangeRateQuotes           []ExchangeRateQuote                  `json:"exchangeRateQuotes,omitempty"`
+	ExchangeRateQuotesConfigured bool                                 `json:"-"`
+	ExchangeRateSnapshot         *ExchangeRateSnapshot                `json:"exchangeRateSnapshot,omitempty"`
 }
 
 // ExchangeRateQuote 描述人工汇率报价：SourceAmount SourceUnit = TargetAmount TargetUnit。
@@ -941,6 +941,41 @@ func (cm *ConfigManager) SetABTestEnabled(enabled bool) error {
 	log.Printf("[Config-Autopilot] A/B 测试开关已更新: enabled=%v", enabled)
 	cm.fireConfigChangeCallbacks()
 	return nil
+}
+
+type ExchangeRateUpdateResult struct {
+	Quotes   []ExchangeRateQuote
+	Snapshot *ExchangeRateSnapshot
+	Source   string
+	Version  uint64
+}
+
+func (cm *ConfigManager) ApplyExchangeRateUpdate(quotes []ExchangeRateQuote, snapshot ExchangeRateSnapshot, explicitEmpty bool) (ExchangeRateUpdateResult, error) {
+	cm.mu.Lock()
+	previous := cm.config.AutopilotRouting.CostOptimization
+	cm.config.AutopilotRouting.CostOptimization.ExchangeRateQuotes = append([]ExchangeRateQuote(nil), quotes...)
+	cm.config.AutopilotRouting.CostOptimization.ExchangeRateQuotesConfigured = explicitEmpty || quotes != nil
+	snapshotCopy := snapshot
+	if snapshot.USDUnitPrices != nil {
+		snapshotCopy.USDUnitPrices = make(map[string]float64, len(snapshot.USDUnitPrices))
+		for unit, price := range snapshot.USDUnitPrices {
+			snapshotCopy.USDUnitPrices[unit] = price
+		}
+	}
+	cm.config.AutopilotRouting.CostOptimization.ExchangeRateSnapshot = &snapshotCopy
+	if err := cm.saveConfigLocked(cm.config); err != nil {
+		cm.config.AutopilotRouting.CostOptimization = previous
+		cm.mu.Unlock()
+		return ExchangeRateUpdateResult{}, err
+	}
+	cm.fireConfigChangeCallbacks()
+	resultSnapshot := snapshotCopy
+	return ExchangeRateUpdateResult{
+		Quotes:   append([]ExchangeRateQuote(nil), cm.config.AutopilotRouting.CostOptimization.ExchangeRateQuotes...),
+		Snapshot: &resultSnapshot,
+		Source:   strings.TrimSpace(cm.config.AutopilotRouting.CostOptimization.ExchangeRateSource),
+		Version:  snapshotCopy.Version,
+	}, nil
 }
 
 // GetEffectiveRoutingMode 获取智能路由生效模式。

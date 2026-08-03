@@ -168,6 +168,15 @@ func (g *ExchangeRateGraph) ReplaceQuotes(quotes []ExchangeRateQuote, now time.T
 	return nil
 }
 
+func (g *ExchangeRateGraph) NormalizedQuotes() []ExchangeRateQuote {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	if g.quotes == nil {
+		return nil
+	}
+	return append([]ExchangeRateQuote(nil), g.quotes...)
+}
+
 func cloneUSDUnitPrices(prices map[string]float64) map[string]float64 {
 	if prices == nil {
 		return nil
