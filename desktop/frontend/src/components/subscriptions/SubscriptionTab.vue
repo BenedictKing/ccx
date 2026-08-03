@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { Check, CheckCircle2, Copy, Loader2, ShieldCheck, Trash2, X } from 'lucide-vue-next'
+import { Check, CheckCircle2, Copy, Loader2, RefreshCw, Save, ShieldCheck, Trash2, X } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -11,7 +11,16 @@ import { buildBaseConfigs, maskKey, useCopilotAccounts } from '@/composables/use
 import { useLanguage } from '@/composables/useLanguage'
 import { GetProviderKeyAssets } from '@bindings/github.com/BenedictKing/ccx/desktop/desktopservice'
 import NewApiSubscriptionForm from '@/components/subscriptions/NewApiSubscriptionForm.vue'
-import type { Channel, ChannelsResponse, NewApiProvisionResponse } from '@/services/admin-api'
+import ExchangeRateManager from '@/components/subscriptions/ExchangeRateManager.vue'
+import { SUBSCRIPTIONS_PATH } from '@/services/admin-api'
+import type {
+  Channel,
+  ChannelsResponse,
+  NewApiKeyStatus,
+  NewApiProvisionResponse,
+  SubscriptionItem,
+  SubscriptionsListResponse,
+} from '@/services/admin-api'
 import type { ProviderKeyAsset } from '@/types'
 
 type CopilotTarget = 'messages' | 'chat' | 'responses' | 'gemini'
@@ -22,7 +31,7 @@ type CopilotKnownAccount = {
   name?: string
 }
 
-const { t } = useLanguage()
+const { t, tf } = useLanguage()
 const adminApi = useAdminApi()
 const { creating, error, createChannel } = useChannelPresets()
 const { verifyAccount, addAccount, removeAccount } = useCopilotAccounts()
@@ -49,6 +58,22 @@ const pendingRemoveKey = ref('')
 const savedTokenFailed = ref(false)
 const newApiError = ref('')
 const newApiSuccessMessage = ref('')
+const subscriptions = ref<SubscriptionItem[]>([])
+const subscriptionsLoading = ref(false)
+const selectedSubscriptionUid = ref('')
+const refreshingSubscriptionUid = ref('')
+const savingBillingUid = ref('')
+const subscriptionActionError = ref('')
+const subscriptionActionSuccess = ref('')
+const keyStatuses = ref<Record<string, NewApiKeyStatus[]>>({})
+const billingDraft = ref({ paymentAmount: '', paymentUnit: 'USD', creditAmount: '', creditUnit: 'USD' })
+
+const selectedManagedSubscription = computed(() => subscriptions.value.find(item => item.subscriptionUid === selectedSubscriptionUid.value) || null)
+const billingPreview = computed(() => {
+  const sub = selectedManagedSubscription.value
+  if (!sub?.paymentAmount || !sub.creditAmount || !sub.paymentUnit || !sub.creditUnit) return t('billingTerms.unconfigured')
+  return t('billingTerms.preview', { payment: sub.paymentAmount, paymentUnit: sub.paymentUnit, credit: sub.creditAmount, creditUnit: sub.creditUnit })
+})
 
 const {
   copilotOAuthLoading,
@@ -291,6 +316,75 @@ function handleNewApiCreated(result: NewApiProvisionResponse) {
   newApiSuccessMessage.value = result.discoveryStarted
     ? `${t('subscription.newApi.provisionSuccess')} ${t('subscription.newApi.discoveryStarted')}`
     : t('subscription.newApi.provisionSuccess')
+  void loadSubscriptions(result.subscription.subscriptionUid)
+}
+
+async function loadSubscriptions(selectUid?: string) {
+  subscriptionsLoading.value = true
+  subscriptionActionError.value = ''
+  try {
+    const result = await adminApi.get<SubscriptionsListResponse>(SUBSCRIPTIONS_PATH)
+    subscriptions.value = result.subscriptions
+    const desired = selectUid || selectedSubscriptionUid.value
+    selectedSubscriptionUid.value = result.subscriptions.some(item => item.subscriptionUid === desired)
+      ? desired
+      : result.subscriptions[0]?.subscriptionUid || ''
+  } catch (cause) {
+    subscriptionActionError.value = cause instanceof Error ? cause.message : String(cause)
+  } finally { subscriptionsLoading.value = false }
+}
+
+function editBillingTerms(subscription: SubscriptionItem) {
+  selectedSubscriptionUid.value = subscription.subscriptionUid
+  billingDraft.value = {
+    paymentAmount: subscription.paymentAmount == null ? '' : String(subscription.paymentAmount),
+    paymentUnit: subscription.paymentUnit || 'USD',
+    creditAmount: subscription.creditAmount == null ? '' : String(subscription.creditAmount),
+    creditUnit: subscription.creditUnit || subscription.currency || 'USD',
+  }
+}
+
+async function saveBillingTerms() {
+  const sub = selectedManagedSubscription.value
+  if (!sub) return
+  const payment = Number(billingDraft.value.paymentAmount)
+  const credit = Number(billingDraft.value.creditAmount)
+  if (!Number.isFinite(payment) || payment <= 0 || !Number.isFinite(credit) || credit <= 0) {
+    subscriptionActionError.value = t('billingTerms.invalidAmount')
+    return
+  }
+  savingBillingUid.value = sub.subscriptionUid
+  subscriptionActionError.value = ''; subscriptionActionSuccess.value = ''
+  try {
+    await adminApi.patchSubscriptionBillingTerms(sub.subscriptionUid, {
+      paymentAmount: payment, paymentUnit: billingDraft.value.paymentUnit,
+      creditAmount: credit, creditUnit: billingDraft.value.creditUnit,
+      expectedVersion: sub.version,
+    })
+    subscriptionActionSuccess.value = t('billingTerms.saved')
+    await loadSubscriptions(sub.subscriptionUid)
+  } catch (cause) { subscriptionActionError.value = cause instanceof Error ? cause.message : String(cause) }
+  finally { savingBillingUid.value = '' }
+}
+
+async function refreshManagedSubscription(subscription: SubscriptionItem) {
+  refreshingSubscriptionUid.value = subscription.subscriptionUid
+  subscriptionActionError.value = ''; subscriptionActionSuccess.value = ''
+  try {
+    const result = await adminApi.refreshSubscription(subscription.subscriptionUid)
+    if ('keys' in result.refreshResult) keyStatuses.value[subscription.subscriptionUid] = result.refreshResult.keys
+    subscriptionActionSuccess.value = t('subscription.management.refreshed')
+    await loadSubscriptions(subscription.subscriptionUid)
+  } catch (cause) {
+    const body = (cause as { body?: { refreshResult?: { keys?: NewApiKeyStatus[] } } })?.body
+    if (body?.refreshResult?.keys) keyStatuses.value[subscription.subscriptionUid] = body.refreshResult.keys
+    subscriptionActionError.value = cause instanceof Error ? cause.message : String(cause)
+  } finally { refreshingSubscriptionUid.value = '' }
+}
+
+function statusLabel(status: string) {
+  const key = `multiplier.status.${status}`
+  return tf(key, status)
 }
 
 function handleNewApiError(message: string) {
@@ -305,6 +399,7 @@ watch(latestAuthorizedCopilotToken, (token) => {
 onMounted(() => {
   void refreshSavedCopilotAsset()
   void refreshCopilotChannelStatus()
+  void loadSubscriptions()
 })
 </script>
 
@@ -569,6 +664,36 @@ onMounted(() => {
         <p v-else-if="newApiSuccessMessage" class="text-xs text-emerald-600">{{ newApiSuccessMessage }}</p>
 
         <NewApiSubscriptionForm @created="handleNewApiCreated" @error="handleNewApiError" />
+
+        <div class="border-t border-border pt-4 space-y-3">
+          <div class="flex items-center justify-between gap-3">
+            <div><h5 class="text-sm font-semibold">{{ t('subscription.management.title') }}</h5><p class="text-xs text-muted-foreground">{{ t('subscription.management.description') }}</p></div>
+            <Button size="sm" variant="outline" :disabled="subscriptionsLoading" @click="loadSubscriptions()"><Loader2 v-if="subscriptionsLoading" class="h-3.5 w-3.5 animate-spin" /><RefreshCw v-else class="h-3.5 w-3.5" />{{ t('common.refresh') }}</Button>
+          </div>
+          <div v-if="subscriptions.length" class="space-y-2">
+            <div v-for="subscription in subscriptions" :key="subscription.subscriptionUid" class="rounded-xl border border-border bg-background/60 p-3 space-y-2">
+              <div class="flex items-start justify-between gap-3">
+                <div><p class="text-sm font-semibold">{{ subscription.displayName }}</p><p class="text-xs text-muted-foreground">{{ subscription.subscriptionUid }} · {{ subscription.provider || '-' }}</p></div>
+                <div class="text-right"><p class="text-sm font-mono" :class="subscription.balance === 0 ? 'text-amber-600' : ''">{{ subscription.balance ?? 0 }} {{ subscription.currency || '' }}</p><p v-if="subscription.balance === 0" class="text-[10px] text-amber-600">{{ t('subscription.management.zeroBalance') }}</p></div>
+              </div>
+              <div class="rounded-lg bg-secondary/40 px-3 py-2 text-xs text-muted-foreground">{{ subscription.paymentAmount && subscription.creditAmount ? t('billingTerms.preview', { payment: subscription.paymentAmount, paymentUnit: subscription.paymentUnit || '', credit: subscription.creditAmount, creditUnit: subscription.creditUnit || '' }) : t('billingTerms.unconfigured') }}</div>
+              <div class="flex flex-wrap gap-2"><Button size="sm" variant="outline" @click="editBillingTerms(subscription)"><Save class="h-3.5 w-3.5" />{{ t('billingTerms.edit') }}</Button><Button size="sm" variant="outline" :disabled="refreshingSubscriptionUid === subscription.subscriptionUid" @click="refreshManagedSubscription(subscription)"><Loader2 v-if="refreshingSubscriptionUid === subscription.subscriptionUid" class="h-3.5 w-3.5 animate-spin" /><RefreshCw v-else class="h-3.5 w-3.5" />{{ t('subscription.management.refresh') }}</Button></div>
+              <div v-if="keyStatuses[subscription.subscriptionUid]?.length" class="space-y-1 border-t border-border/60 pt-2">
+                <div v-for="key in keyStatuses[subscription.subscriptionUid]" :key="key.keyUid || key.sourceRemoteTokenId" class="flex flex-wrap items-center justify-between gap-2 text-xs"><span>{{ key.name }} · {{ key.group }} × {{ key.groupMultiplier }}</span><span :title="key.reason" class="rounded border border-border px-1.5 py-0.5">{{ statusLabel(key.syncStatus) }}<span v-if="key.multiplierExpiresAt"> · {{ t('multiplier.ttl') }} {{ key.multiplierExpiresAt }}</span></span></div>
+              </div>
+            </div>
+          </div>
+          <p v-else-if="!subscriptionsLoading" class="rounded-lg border border-dashed p-3 text-xs text-muted-foreground">{{ t('subscription.management.empty') }}</p>
+
+          <div v-if="selectedManagedSubscription" class="grid gap-2 rounded-xl border border-border bg-card/40 p-3 sm:grid-cols-2">
+            <Input v-model="billingDraft.paymentAmount" type="number" min="0" step="any" :placeholder="t('billingTerms.paymentAmount')" /><Input v-model="billingDraft.paymentUnit" :placeholder="t('billingTerms.paymentUnit')" />
+            <Input v-model="billingDraft.creditAmount" type="number" min="0" step="any" :placeholder="t('billingTerms.creditAmount')" /><Input v-model="billingDraft.creditUnit" :placeholder="t('billingTerms.creditUnit')" />
+            <p class="text-xs text-muted-foreground sm:col-span-2">{{ billingPreview }}</p><Button size="sm" class="sm:col-span-2" :disabled="savingBillingUid === selectedManagedSubscription.subscriptionUid" @click="saveBillingTerms"><Loader2 v-if="savingBillingUid" class="h-3.5 w-3.5 animate-spin" /><Save v-else class="h-3.5 w-3.5" />{{ t('billingTerms.save') }}</Button>
+          </div>
+          <p v-if="subscriptionActionError" class="text-xs text-destructive">{{ subscriptionActionError }}</p><p v-if="subscriptionActionSuccess" class="text-xs text-emerald-600">{{ subscriptionActionSuccess }}</p>
+        </div>
+
+        <ExchangeRateManager />
       </section>
     </div>
   </div>

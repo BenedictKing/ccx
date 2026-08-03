@@ -39,14 +39,10 @@ describe('resolveInitialLocale', () => {
 })
 
 describe('JSON locale files', () => {
-  it('en and zh-CN have overlapping key sets', () => {
-    const enKeys = new Set(Object.keys(en))
-    const zhKeys = new Set(Object.keys(zhCN))
-    // zh-CN 的 preset keys 可能少于 en（故意留空 fallback 到 Go）
-    // 但所有 static keys 应一致
-    for (const key of zhKeys) {
-      expect(enKeys.has(key)).toBe(true)
-    }
+  it('en and zh-CN have identical key sets', () => {
+    const enKeys = [...Object.keys(en)].sort()
+    const zhKeys = [...Object.keys(zhCN)].sort()
+    expect(zhKeys).toEqual(enKeys)
   })
 
   it('includes known critical keys', () => {

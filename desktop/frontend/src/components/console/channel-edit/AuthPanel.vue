@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -16,7 +16,9 @@ import {
   Trash2,
 } from 'lucide-vue-next'
 import { useLanguage } from '@/composables/useLanguage'
+import { useAdminApi } from '@/composables/useAdminApi'
 import { maskApiKey } from '@/utils/api-key-mask'
+import type { APIKeyConfig, ChannelKind, KeyMultiplierResponse } from '@/services/admin-api'
 
 interface DisabledKeyInfo {
   key: string
@@ -43,6 +45,9 @@ const props = defineProps<{
   localRestoredKeys: Set<string>
   keyModelsStatus: Map<string, KeyModelsStatus>
   serviceType: string
+  channelKind: ChannelKind
+  channelUid?: string
+  apiKeyConfigs?: APIKeyConfig[]
   errors: { apiKeys?: string }
 }>()
 
@@ -57,6 +62,51 @@ const emit = defineEmits<{
 }>()
 
 const { t, tf } = useLanguage()
+const adminApi = useAdminApi()
+const multiplierDrafts = ref<Record<string, { groupMultiplier: string; maxGroupMultiplier: string }>>({})
+const multiplierResults = ref<Record<string, KeyMultiplierResponse>>({})
+const savingMultiplier = ref('')
+const multiplierError = ref('')
+
+watch(() => props.apiKeyConfigs, configs => {
+  const next: Record<string, { groupMultiplier: string; maxGroupMultiplier: string }> = {}
+  for (const config of configs || []) {
+    if (!config.keyUid) continue
+    next[config.keyUid] = {
+      groupMultiplier: config.groupMultiplier == null ? '' : String(config.groupMultiplier),
+      maxGroupMultiplier: config.maxGroupMultiplier == null ? '' : String(config.maxGroupMultiplier),
+    }
+  }
+  multiplierDrafts.value = next
+}, { immediate: true, deep: true })
+
+function keyConfig(key: string) { return props.apiKeyConfigs?.find(config => config.key === key) }
+function finiteNonNegative(value: string) { return value.trim() === '' || (Number.isFinite(Number(value)) && Number(value) >= 0) }
+async function saveMultiplier(config: APIKeyConfig) {
+  if (!props.channelUid || !config.keyUid) return
+  const draft = multiplierDrafts.value[config.keyUid]
+  if (!draft || !finiteNonNegative(draft.groupMultiplier) || !finiteNonNegative(draft.maxGroupMultiplier)) {
+    multiplierError.value = t('multiplier.invalid')
+    return
+  }
+  savingMultiplier.value = config.keyUid; multiplierError.value = ''
+  try {
+    const payload: { groupMultiplier?: number | null; maxGroupMultiplier?: number | null } = {
+      maxGroupMultiplier: draft.maxGroupMultiplier.trim() === '' ? null : Number(draft.maxGroupMultiplier),
+    }
+    if (config.multiplierSource !== 'new_api') payload.groupMultiplier = draft.groupMultiplier.trim() === '' ? null : Number(draft.groupMultiplier)
+    multiplierResults.value[config.keyUid] = await adminApi.patchKeyMultiplier(props.channelKind, props.channelUid, config.keyUid, payload)
+  } catch (cause) { multiplierError.value = cause instanceof Error ? cause.message : String(cause) }
+  finally { savingMultiplier.value = '' }
+}
+function multiplierStatus(config: APIKeyConfig) {
+  const result = config.keyUid ? multiplierResults.value[config.keyUid] : undefined
+  return result?.status || config.multiplierSyncStatus || (config.groupMultiplier != null || config.maxGroupMultiplier != null ? 'manual' : '')
+}
+function multiplierReason(config: APIKeyConfig) {
+  const result = config.keyUid ? multiplierResults.value[config.keyUid] : undefined
+  return result?.reason || config.ineligibleReason || config.multiplierSyncError || ''
+}
 
 function getKeyStatus(key: string) {
   return props.keyModelsStatus.get(key)
@@ -102,10 +152,9 @@ const visibleDisabledKeys = computed(() => {
     <p v-if="errors.apiKeys" class="text-[10px] text-destructive">{{ errors.apiKeys }}</p>
 
     <!-- API Keys 列表 -->
-    <div v-if="existingApiKeys.length" class="grid gap-2 max-h-[160px] overflow-y-auto pr-1">
+    <div v-if="existingApiKeys.length" class="grid gap-2 max-h-[300px] overflow-y-auto pr-1">
+      <div v-for="(key, index) in existingApiKeys" :key="`${index}-${key}`" class="space-y-2">
       <div
-        v-for="(key, index) in existingApiKeys"
-        :key="`${index}-${key}`"
         class="flex items-center justify-between gap-4 rounded-lg px-3 py-2 text-xs shadow-2xs transition-all group"
         :class="duplicateKeyIndex === index ? 'border-destructive/70 bg-destructive/10 animate-pulse' : 'border border-border/60 bg-background/60 hover:bg-background'"
       >
@@ -190,7 +239,30 @@ const visibleDisabledKeys = computed(() => {
           </Button>
         </div>
       </div>
+      <div v-if="keyConfig(key)?.keyUid" class="grid grid-cols-1 gap-2 rounded-lg border border-border/60 bg-secondary/20 p-2 sm:grid-cols-[1fr_1fr_auto]">
+        <div>
+          <label class="text-[10px] text-muted-foreground">{{ t('multiplier.group') }}</label>
+          <Input v-model="multiplierDrafts[keyConfig(key)!.keyUid!].groupMultiplier" type="number" min="0" step="any" class="h-8" :disabled="keyConfig(key)?.multiplierSource === 'new_api'" />
+        </div>
+        <div>
+          <label class="text-[10px] text-muted-foreground">{{ t('multiplier.max') }}</label>
+          <Input v-model="multiplierDrafts[keyConfig(key)!.keyUid!].maxGroupMultiplier" type="number" min="0" step="any" class="h-8" />
+        </div>
+        <Button type="button" size="sm" class="self-end" :disabled="savingMultiplier === keyConfig(key)?.keyUid" @click="saveMultiplier(keyConfig(key)!)">
+          <Loader2 v-if="savingMultiplier === keyConfig(key)?.keyUid" class="h-3.5 w-3.5 animate-spin" />
+          {{ t('multiplier.save') }}
+        </Button>
+        <div class="text-[10px] text-muted-foreground sm:col-span-3">
+          <span v-if="keyConfig(key)?.quotaGroup">{{ t('multiplier.groupName') }}: {{ keyConfig(key)?.quotaGroup }} · </span>
+          <span v-if="multiplierStatus(keyConfig(key)!)">{{ t('multiplier.statusLabel') }}: {{ tf(`multiplier.status.${multiplierStatus(keyConfig(key)!)}`, multiplierStatus(keyConfig(key)!)) }}</span>
+          <span v-if="keyConfig(key)?.eligible !== undefined"> · {{ keyConfig(key)?.eligible ? t('multiplier.eligible') : t('multiplier.ineligible') }}</span>
+          <span v-if="keyConfig(key)?.multiplierExpiresAt"> · {{ t('multiplier.ttl') }}: {{ keyConfig(key)?.multiplierExpiresAt }}</span>
+          <span v-if="multiplierReason(keyConfig(key)!)" :title="multiplierReason(keyConfig(key)!)"> · {{ t('multiplier.reason') }}: {{ multiplierReason(keyConfig(key)!) }}</span>
+        </div>
+      </div>
+      </div>
     </div>
+    <p v-if="multiplierError" class="text-[10px] text-destructive">{{ multiplierError }}</p>
 
     <!-- 添加新 API Key -->
     <div class="flex gap-2">

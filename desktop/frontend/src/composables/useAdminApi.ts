@@ -1,6 +1,23 @@
 import { ref } from 'vue'
 import { useStatus } from '@/composables/useStatus'
 import { GetAdminAccessKey } from '@bindings/github.com/BenedictKing/ccx/desktop/desktopservice'
+import {
+  EXCHANGE_RATES_PATH,
+  keyMultiplierPath,
+  subscriptionBillingTermsPath,
+  subscriptionRefreshPath,
+} from '@/services/admin-api'
+import type {
+  BillingTermsPatch,
+  BillingTermsResponse,
+  ChannelKind,
+  ExchangeRatesReplaceRequest,
+  ExchangeRatesReplaceResponse,
+  ExchangeRatesResponse,
+  KeyMultiplierPatch,
+  KeyMultiplierResponse,
+  SubscriptionRefreshResponse,
+} from '@/services/admin-api'
 
 /**
  * 统一封装 Desktop 前端对本地后端 /api/* 管理接口的 HTTP 调用。
@@ -136,6 +153,36 @@ export function useAdminApi() {
     /** 发送 DELETE 请求 */
     del<T = unknown>(path: string): Promise<T> {
       return request<T>('DELETE', path)
+    },
+
+    /** 使用原子端点更新单把 key 的倍率配置。 */
+    patchKeyMultiplier(
+      kind: ChannelKind,
+      channelUid: string,
+      keyUid: string,
+      patch: KeyMultiplierPatch,
+    ): Promise<KeyMultiplierResponse> {
+      return request<KeyMultiplierResponse>('PATCH', keyMultiplierPath(kind, channelUid, keyUid), patch)
+    },
+
+    /** 原子更新结构化到账条款。 */
+    patchSubscriptionBillingTerms(
+      uid: string,
+      patch: BillingTermsPatch,
+    ): Promise<BillingTermsResponse> {
+      return request<BillingTermsResponse>('PATCH', subscriptionBillingTermsPath(uid), patch)
+    },
+
+    getExchangeRates(): Promise<ExchangeRatesResponse> {
+      return request<ExchangeRatesResponse>('GET', EXCHANGE_RATES_PATH)
+    },
+
+    replaceExchangeRates(payload: ExchangeRatesReplaceRequest): Promise<ExchangeRatesReplaceResponse> {
+      return request<ExchangeRatesReplaceResponse>('PUT', EXCHANGE_RATES_PATH, payload)
+    },
+
+    refreshSubscription(uid: string): Promise<SubscriptionRefreshResponse> {
+      return request<SubscriptionRefreshResponse>('POST', subscriptionRefreshPath(uid))
     },
 
     /**

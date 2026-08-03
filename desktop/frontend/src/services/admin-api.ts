@@ -980,7 +980,44 @@ export interface ProfileChangelogResponse {
   total: number
 }
 
-// ============== 汇率与 NewAPI Key 状态类型 ==============
+// ============== 汇率、倍率与 NewAPI Key 状态类型 ==============
+
+export type ChannelKind = 'messages' | 'chat' | 'responses' | 'gemini' | 'images' | 'vectors'
+
+export interface KeyMultiplierPatch {
+  groupMultiplier?: number | null
+  maxGroupMultiplier?: number | null
+}
+
+export interface KeyMultiplierResponse {
+  keyUid: string
+  group: string
+  remoteMultiplier?: number | null
+  groupMultiplier?: number | null
+  maxMultiplier?: number | null
+  status: string
+  reason: string
+  eligible: boolean
+  updatedAt?: string
+  expiresAt?: string
+}
+
+export interface BillingTermsPatch {
+  paymentAmount: number | null
+  paymentUnit: string
+  creditAmount: number | null
+  creditUnit: string
+  expectedVersion?: number
+}
+
+export interface BillingTermsResponse {
+  paymentAmount?: number | null
+  paymentUnit?: string
+  creditAmount?: number | null
+  creditUnit?: string
+  version: number
+  preview: string
+}
 
 export interface ExchangeRateQuote {
   sourceAmount: number
@@ -997,17 +1034,57 @@ export interface ExchangeRateSnapshot {
   builtAt: string
 }
 
+export interface ExchangeRatesResponse {
+  quotes: ExchangeRateQuote[]
+  snapshot?: ExchangeRateSnapshot
+  source?: string
+}
+
+export interface ExchangeRatesReplaceRequest {
+  quotes: ExchangeRateQuote[]
+  expectedSnapshotVersion?: number
+}
+
+export interface ExchangeRatesReplaceResponse {
+  quotes: ExchangeRateQuote[]
+  snapshot: ExchangeRateSnapshot
+  source?: string
+  version: number
+}
+
 export interface NewApiKeyStatus {
   keyUid?: string
-  credentialUid?: string
+  name: string
   group: string
-  remoteMultiplier: number
-  maxMultiplier?: number | null
-  status: string
-  reason?: string
-  eligible: boolean
+  groupMultiplier: number
+  maxGroupMultiplier: number
+  sourceRemoteTokenId: number
+  syncStatus: string
+  multiplierExpiresAt?: string
   updatedAt?: string
-  expiresAt?: string
+  reason?: string
+}
+
+export interface NewApiSyncResult {
+  subscriptionUid: string
+  success: boolean
+  balance?: number
+  models?: string[]
+  modelsHash?: string
+  modelsHashChanged: boolean
+  keys: NewApiKeyStatus[]
+  discoveryTriggered: boolean
+  failedReason?: string
+}
+
+export interface SubscriptionRefreshResponse {
+  subscription: SubscriptionItem
+  refreshResult: NewApiSyncResult | {
+    success: boolean
+    balance?: number
+    currency?: string
+    errorMessage?: string
+  }
 }
 
 // ============== 订阅中心（Subscription Center）==============
@@ -1021,14 +1098,13 @@ export interface SubscriptionItem {
   billingMode?: string
   currency?: string
   balance?: number
-  groupMultipliers?: Record<string, number>
-  rechargeMultiplier?: number
   paymentAmount?: number | null
   paymentUnit?: string
   creditAmount?: number | null
   creditUnit?: string
-  version?: number
-  authTokenMode?: 'bearer' | 'raw_auth' | string
+  version: number
+  groupMultipliers?: Record<string, number>
+  rechargeMultiplier?: number
   linkedChannelUids?: string[]
   source?: string
   confidence?: number
@@ -1041,6 +1117,18 @@ export interface SubscriptionItem {
   autoRefreshSupported?: boolean
   lastBalanceRefreshAt?: string
   lastBalanceRefreshError?: string
+  baseUrl?: string
+  accessTokenMasked?: string
+  userId?: string
+  authTokenMode?: 'bearer' | 'raw_auth' | string
+  provisionKeyName?: string
+  provisionGroup?: string
+  provisionGroupRatio?: number | null
+  maxGroupMultiplier?: number | null
+  provisionModels?: string[]
+  provisionedTokenId?: number
+  provisionedKeys?: NewApiProvisionedKey[]
+  availableModels?: string[]
 }
 
 export interface SubscriptionsListResponse {
@@ -1057,6 +1145,10 @@ export interface SubscriptionCreateRequest {
   billingMode?: string
   currency?: string
   balance?: number
+  paymentAmount?: number | null
+  paymentUnit?: string
+  creditAmount?: number | null
+  creditUnit?: string
   groupMultipliers?: Record<string, number>
   rechargeMultiplier?: number
   notes?: string
@@ -1073,6 +1165,10 @@ export interface SubscriptionUpdateRequest {
   billingMode?: string
   currency?: string
   balance?: number
+  paymentAmount?: number | null
+  paymentUnit?: string
+  creditAmount?: number | null
+  creditUnit?: string
   groupMultipliers?: Record<string, number>
   rechargeMultiplier?: number
   notes?: string
@@ -1080,9 +1176,8 @@ export interface SubscriptionUpdateRequest {
   confidence?: number
   billingApiKey?: string
   autoRefreshEnabled?: boolean
+  expectedVersion?: number
 }
-
-// ============== new-api 订阅接入类型 ==============
 
 export interface NewApiVerifyRequest {
   baseUrl: string
@@ -1099,10 +1194,20 @@ export interface NewApiVerifyResponse {
   quota: number
   usedQuota: number
   groups: Record<string, number>
+  groupFetchError?: string
   availableModels: string[]
   suggestedOriginType: string
   suggestedOriginTier: string
   accessTokenMasked: string
+}
+
+export interface NewApiProvisionedKey {
+  name: string
+  group: string
+  groupMultiplier: number
+  tokenId: number
+  keyUid?: string
+  reused?: boolean
 }
 
 export interface NewApiProvisionRequest {
@@ -1110,12 +1215,14 @@ export interface NewApiProvisionRequest {
   displayName: string
   baseUrl: string
   accessToken: string
-  channelKind: string
+  channelKind: ChannelKind
   userId?: string
-  authTokenMode?: string
+  authTokenMode?: 'bearer' | 'raw_auth' | string
   channelName?: string
   provisionKeyName?: string
   provisionGroup?: string
+  provisionAllEligibleGroups?: boolean
+  maxGroupMultiplier?: number
   provisionModels?: string[]
   notes?: string
 }
@@ -1124,8 +1231,11 @@ export interface NewApiProvisionResponse {
   subscription: SubscriptionItem
   channelUid: string
   channelIndex: number
+  channelName?: string
+  mergedChannel?: boolean
   provisionedKey: string
   provisionedTokenId: number
+  provisionedKeys?: NewApiProvisionedKey[]
   reused: boolean
   discoveryStarted: boolean
 }
@@ -1407,6 +1517,11 @@ export const HEALTH_CENTER_EVENTS_WS_PATH = '/api/health-center/events'
 
 export const SUBSCRIPTIONS_PATH = '/api/subscriptions'
 export const subscriptionPath = (uid: string) => `/api/subscriptions/${encodeURIComponent(uid)}`
+export const subscriptionBillingTermsPath = (uid: string) => `${subscriptionPath(uid)}/billing-terms`
+export const subscriptionRefreshPath = (uid: string) => `${subscriptionPath(uid)}/refresh`
+export const keyMultiplierPath = (kind: ChannelKind, channelUid: string, keyUid: string) =>
+  `/api/${kind}/channels/${encodeURIComponent(channelUid)}/keys/${encodeURIComponent(keyUid)}/multiplier`
+export const EXCHANGE_RATES_PATH = '/api/autopilot/cost/exchange-rates'
 export const NEWAPI_VERIFY_PATH = '/api/subscriptions/newapi/verify'
 export const NEWAPI_PROVISION_PATH = '/api/subscriptions/newapi/provision'
 
