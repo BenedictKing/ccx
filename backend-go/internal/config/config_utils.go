@@ -801,6 +801,14 @@ func cloneAPIKeyConfig(cfg APIKeyConfig) APIKeyConfig {
 		v := *cfg.MaxGroupMultiplier
 		cfg.MaxGroupMultiplier = &v
 	}
+	if cfg.MultiplierUpdatedAt != nil {
+		v := *cfg.MultiplierUpdatedAt
+		cfg.MultiplierUpdatedAt = &v
+	}
+	if cfg.MultiplierExpiresAt != nil {
+		v := *cfg.MultiplierExpiresAt
+		cfg.MultiplierExpiresAt = &v
+	}
 	if cfg.RateLimitAutoFromHeaders != nil {
 		v := *cfg.RateLimitAutoFromHeaders
 		cfg.RateLimitAutoFromHeaders = &v

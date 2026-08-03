@@ -162,63 +162,58 @@ func handleDeleteSubscriptionAccount(deps *NewApiRouteDeps) gin.HandlerFunc {
 // handleRefreshSubscriptionAccount 刷新单个账号余额。
 func handleRefreshSubscriptionAccount(deps *NewApiRouteDeps) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		uid := c.Param("uid")
-		accountUID := c.Param("accountUid")
+		uid, accountUID := c.Param("uid"), c.Param("accountUid")
 		if uid == "" || accountUID == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "subscription uid 和 account uid 不能为空"})
 			return
 		}
-
 		profile := deps.Store.Get(uid)
 		if profile == nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("subscription_uid=%s 不存在", uid)})
 			return
 		}
-
-		var account *NewApiAccount
-		for i := range profile.Accounts {
-			if profile.Accounts[i].AccountUID == accountUID {
-				account = &profile.Accounts[i]
+		var account NewApiAccount
+		found := false
+		for _, candidate := range profile.Accounts {
+			if candidate.AccountUID == accountUID {
+				account, found = candidate, true
 				break
 			}
 		}
-		if account == nil {
+		if !found {
 			c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("account_uid=%s 不存在", accountUID)})
 			return
 		}
-
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
 		defer cancel()
-
 		adapter := &NewApiAdapter{}
-		balance, _, err := adapter.FetchBalance(ctx, profile.BaseURL, account.AccessToken, account.UserID, account.UserID)
-		if err != nil {
-			account.Status = "error"
-			account.LastCheckedAt = time.Now()
-			_ = deps.Store.Update(profile)
-			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("刷新余额失败: %v", err)})
-			return
-		}
-
-		account.Balance = balance
-		account.Status = "active"
-		account.LastCheckedAt = time.Now()
-
-		if err := deps.Store.Update(profile); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-
-		c.JSON(http.StatusOK, NewApiAccountItem{
-			AccountUID:        account.AccountUID,
-			UserID:            account.UserID,
-			DisplayName:       account.DisplayName,
-			Balance:           account.Balance,
-			Status:            account.Status,
-			AccessTokenMasked: maskAccessToken(account.AccessToken),
-			LastCheckedAt:     account.LastCheckedAt,
-			CreatedAt:         account.CreatedAt,
+		balance, _, fetchErr := adapter.FetchBalance(ctx, profile.BaseURL, account.AccessToken, account.UserID, account.AuthTokenMode)
+		now := time.Now()
+		patchErr := deps.Store.Patch(uid, nil, func(current *SubscriptionProfile) error {
+			for i := range current.Accounts {
+				if current.Accounts[i].AccountUID != accountUID {
+					continue
+				}
+				current.Accounts[i].LastCheckedAt = now
+				if fetchErr != nil {
+					current.Accounts[i].Status = "error"
+				} else {
+					current.Accounts[i].Balance, current.Accounts[i].Status = balance, "active"
+				}
+				account = current.Accounts[i]
+				return nil
+			}
+			return fmt.Errorf("account_uid=%s 不存在", accountUID)
 		})
+		if patchErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": patchErr.Error()})
+			return
+		}
+		if fetchErr != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("刷新余额失败: %v", fetchErr)})
+			return
+		}
+		c.JSON(http.StatusOK, NewApiAccountItem{AccountUID: account.AccountUID, UserID: account.UserID, DisplayName: account.DisplayName, Balance: account.Balance, Status: account.Status, AccessTokenMasked: maskAccessToken(account.AccessToken), LastCheckedAt: account.LastCheckedAt, CreatedAt: account.CreatedAt})
 	}
 }
 

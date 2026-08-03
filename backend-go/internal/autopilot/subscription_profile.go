@@ -19,9 +19,14 @@ type SubscriptionProfile struct {
 	OriginType      string `json:"originType"`
 	OriginTier      string `json:"originTier"`
 
-	BillingMode string  `json:"billingMode"` // official_api | token_plan | prepaid_credit | shared_free | unknown
-	Currency    string  `json:"currency,omitempty"`
-	Balance     float64 `json:"balance,omitempty"`
+	BillingMode   string   `json:"billingMode"` // official_api | token_plan | prepaid_credit | shared_free | unknown
+	Currency      string   `json:"currency,omitempty"`
+	Balance       float64  `json:"balance,omitempty"`
+	PaymentAmount *float64 `json:"paymentAmount,omitempty"`
+	PaymentUnit   string   `json:"paymentUnit,omitempty"`
+	CreditAmount  *float64 `json:"creditAmount,omitempty"`
+	CreditUnit    string   `json:"creditUnit,omitempty"`
+	Version       uint64   `json:"version"`
 
 	// 套餐默认成本倍率；channel/key 可继续覆盖。
 	GroupMultipliers   map[string]float64 `json:"groupMultipliers,omitempty"`
@@ -100,6 +105,7 @@ type NewApiProvisionedKey struct {
 	Group           string  `json:"group"`
 	GroupMultiplier float64 `json:"groupMultiplier"`
 	TokenID         int     `json:"tokenId"`
+	KeyUID          string  `json:"keyUid,omitempty"`
 }
 
 // NewApiAccount 描述 new-api 订阅下的单个账号。
@@ -108,6 +114,7 @@ type NewApiAccount struct {
 	AccountUID    string    `json:"accountUid"`
 	AccessToken   string    `json:"accessToken,omitempty"` // 敏感，API 响应中脱敏
 	UserID        string    `json:"userId,omitempty"`
+	AuthTokenMode string    `json:"authTokenMode,omitempty"`
 	DisplayName   string    `json:"displayName,omitempty"` // 用户备注名
 	Balance       float64   `json:"balance,omitempty"`
 	Status        string    `json:"status,omitempty"` // active | expired | error
@@ -242,91 +249,85 @@ func (s *SubscriptionStore) loadAll() error {
 
 // Create 创建一条订阅画像。SubscriptionUID 不能为空且不能已存在。
 func (s *SubscriptionStore) Create(profile *SubscriptionProfile) error {
-	if profile.SubscriptionUID == "" {
+	if profile == nil || profile.SubscriptionUID == "" {
 		return fmt.Errorf("[SubscriptionStore-Create] subscription_uid 不能为空")
 	}
-
-	s.mu.RLock()
-	_, exists := s.cache[profile.SubscriptionUID]
-	s.mu.RUnlock()
-	if exists {
-		return fmt.Errorf("[SubscriptionStore-Create] subscription_uid=%s 已存在", profile.SubscriptionUID)
-	}
-
 	now := time.Now()
-	profile.CreatedAt = now
-	profile.UpdatedAt = now
-
+	next := cloneSubscriptionProfile(profile)
+	next.CreatedAt, next.UpdatedAt = now, now
+	if next.Version == 0 {
+		next.Version = 1
+	}
 	s.mu.Lock()
-	s.cache[profile.SubscriptionUID] = profile
-	s.mu.Unlock()
-
-	return s.persist(profile)
+	defer s.mu.Unlock()
+	if _, exists := s.cache[next.SubscriptionUID]; exists {
+		return fmt.Errorf("[SubscriptionStore-Create] subscription_uid=%s 已存在", next.SubscriptionUID)
+	}
+	if err := s.persist(next); err != nil {
+		return err
+	}
+	s.cache[next.SubscriptionUID] = next
+	*profile = *cloneSubscriptionProfile(next)
+	return nil
 }
 
 // Get 按 subscriptionUID 从内存缓存获取画像。不存在返回 nil。
 func (s *SubscriptionStore) Get(subscriptionUID string) *SubscriptionProfile {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	p := s.cache[subscriptionUID]
-	if p == nil {
-		return nil
-	}
-	cp := *p
-	// map 需要深拷贝
-	if p.GroupMultipliers != nil {
-		cp.GroupMultipliers = make(map[string]float64, len(p.GroupMultipliers))
-		for k, v := range p.GroupMultipliers {
-			cp.GroupMultipliers[k] = v
-		}
-	}
-	if p.ProvisionGroupRatio != nil {
-		value := *p.ProvisionGroupRatio
-		cp.ProvisionGroupRatio = &value
-	}
-	if p.MaxGroupMultiplier != nil {
-		value := *p.MaxGroupMultiplier
-		cp.MaxGroupMultiplier = &value
-	}
-	if p.ProvisionedKeys != nil {
-		cp.ProvisionedKeys = append([]NewApiProvisionedKey(nil), p.ProvisionedKeys...)
-	}
-	if p.Accounts != nil {
-		cp.Accounts = append([]NewApiAccount(nil), p.Accounts...)
-	}
-	return &cp
+	return cloneSubscriptionProfile(s.cache[subscriptionUID])
 }
 
-// Update 更新一条已存在的订阅画像（按 SubscriptionUID 匹配）。
+// Update 兼容整对象更新；新代码应使用 Patch 避免 last-writer-wins。
 func (s *SubscriptionStore) Update(profile *SubscriptionProfile) error {
-	if profile.SubscriptionUID == "" {
+	if profile == nil || profile.SubscriptionUID == "" {
 		return fmt.Errorf("[SubscriptionStore-Update] subscription_uid 不能为空")
 	}
+	return s.Patch(profile.SubscriptionUID, nil, func(current *SubscriptionProfile) error {
+		createdAt, version := current.CreatedAt, current.Version
+		*current = *cloneSubscriptionProfile(profile)
+		current.CreatedAt, current.Version = createdAt, version
+		return nil
+	})
+}
 
-	s.mu.Lock()
-	existing, ok := s.cache[profile.SubscriptionUID]
-	if !ok {
-		s.mu.Unlock()
-		return fmt.Errorf("[SubscriptionStore-Update] subscription_uid=%s 不存在", profile.SubscriptionUID)
+// Patch 对单个订阅执行原子读改写。持久化成功后才发布新缓存。
+func (s *SubscriptionStore) Patch(subscriptionUID string, expectedVersion *uint64, mutate func(*SubscriptionProfile) error) error {
+	if subscriptionUID == "" || mutate == nil {
+		return fmt.Errorf("[SubscriptionStore-Patch] uid 和 mutate 不能为空")
 	}
-	// 保留创建时间
-	profile.CreatedAt = existing.CreatedAt
-	profile.UpdatedAt = time.Now()
-	s.cache[profile.SubscriptionUID] = profile
-	s.mu.Unlock()
-
-	return s.persist(profile)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	existing := s.cache[subscriptionUID]
+	if existing == nil {
+		return fmt.Errorf("[SubscriptionStore-Patch] subscription_uid=%s 不存在", subscriptionUID)
+	}
+	if expectedVersion != nil && existing.Version != *expectedVersion {
+		return fmt.Errorf("[SubscriptionStore-Patch] version 冲突: current=%d expected=%d", existing.Version, *expectedVersion)
+	}
+	next := cloneSubscriptionProfile(existing)
+	if err := mutate(next); err != nil {
+		return err
+	}
+	if next.SubscriptionUID != subscriptionUID {
+		return fmt.Errorf("[SubscriptionStore-Patch] subscription_uid 不可修改")
+	}
+	next.CreatedAt, next.UpdatedAt, next.Version = existing.CreatedAt, time.Now(), existing.Version+1
+	if err := s.persist(next); err != nil {
+		return err
+	}
+	s.cache[subscriptionUID] = next
+	return nil
 }
 
 // Delete 从内存和 SQLite 删除指定订阅画像。
 func (s *SubscriptionStore) Delete(subscriptionUID string) error {
 	s.mu.Lock()
-	delete(s.cache, subscriptionUID)
-	s.mu.Unlock()
-
+	defer s.mu.Unlock()
 	if _, err := s.db.Exec("DELETE FROM autopilot_subscriptions WHERE subscription_uid = ?", subscriptionUID); err != nil {
 		return fmt.Errorf("[SubscriptionStore-Delete] 删除失败 uid=%s: %w", subscriptionUID, err)
 	}
+	delete(s.cache, subscriptionUID)
 	return nil
 }
 
@@ -334,127 +335,83 @@ func (s *SubscriptionStore) Delete(subscriptionUID string) error {
 func (s *SubscriptionStore) ListAll() []*SubscriptionProfile {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-
 	result := make([]*SubscriptionProfile, 0, len(s.cache))
-	for _, p := range s.cache {
-		cp := *p
-		if p.GroupMultipliers != nil {
-			cp.GroupMultipliers = make(map[string]float64, len(p.GroupMultipliers))
-			for k, v := range p.GroupMultipliers {
-				cp.GroupMultipliers[k] = v
-			}
-		}
-		if p.ProvisionGroupRatio != nil {
-			value := *p.ProvisionGroupRatio
-			cp.ProvisionGroupRatio = &value
-		}
-		if p.MaxGroupMultiplier != nil {
-			value := *p.MaxGroupMultiplier
-			cp.MaxGroupMultiplier = &value
-		}
-		if p.ProvisionedKeys != nil {
-			cp.ProvisionedKeys = append([]NewApiProvisionedKey(nil), p.ProvisionedKeys...)
-		}
-		if p.Accounts != nil {
-			cp.Accounts = append([]NewApiAccount(nil), p.Accounts...)
-		}
-		result = append(result, &cp)
+	for _, profile := range s.cache {
+		result = append(result, cloneSubscriptionProfile(profile))
 	}
 	return result
 }
 
-// ── 渠道链接 ──
-
-// LinkChannel 将 channelUID 关联到指定订阅。幂等操作，已链接则跳过。
+// LinkChannel 将 channelUID 关联到指定订阅。
 func (s *SubscriptionStore) LinkChannel(subscriptionUID, channelUID string) error {
-	s.mu.Lock()
-	p, ok := s.cache[subscriptionUID]
-	if !ok {
-		s.mu.Unlock()
-		return fmt.Errorf("[SubscriptionStore-LinkChannel] subscription_uid=%s 不存在", subscriptionUID)
-	}
-
-	// 检查是否已链接
-	for _, uid := range p.LinkedChannelUIDs {
-		if uid == channelUID {
-			s.mu.Unlock()
-			return nil // 幂等
+	return s.Patch(subscriptionUID, nil, func(p *SubscriptionProfile) error {
+		for _, uid := range p.LinkedChannelUIDs {
+			if uid == channelUID {
+				return nil
+			}
 		}
-	}
-	p.LinkedChannelUIDs = append(p.LinkedChannelUIDs, channelUID)
-	p.UpdatedAt = time.Now()
-	s.mu.Unlock()
-
-	return s.persist(p)
+		p.LinkedChannelUIDs = append(p.LinkedChannelUIDs, channelUID)
+		return nil
+	})
 }
 
-// UnlinkChannel 从指定订阅解绑 channelUID。幂等操作，未链接则跳过。
+// UnlinkChannel 从指定订阅解绑 channelUID。
 func (s *SubscriptionStore) UnlinkChannel(subscriptionUID, channelUID string) error {
-	s.mu.Lock()
-	p, ok := s.cache[subscriptionUID]
-	if !ok {
-		s.mu.Unlock()
-		return fmt.Errorf("[SubscriptionStore-UnlinkChannel] subscription_uid=%s 不存在", subscriptionUID)
-	}
-
-	filtered := make([]string, 0, len(p.LinkedChannelUIDs))
-	found := false
-	for _, uid := range p.LinkedChannelUIDs {
-		if uid == channelUID {
-			found = true
-			continue
+	return s.Patch(subscriptionUID, nil, func(p *SubscriptionProfile) error {
+		filtered := make([]string, 0, len(p.LinkedChannelUIDs))
+		for _, uid := range p.LinkedChannelUIDs {
+			if uid != channelUID {
+				filtered = append(filtered, uid)
+			}
 		}
-		filtered = append(filtered, uid)
-	}
-	if !found {
-		s.mu.Unlock()
-		return nil // 幂等
-	}
-	p.LinkedChannelUIDs = filtered
-	p.UpdatedAt = time.Now()
-	s.mu.Unlock()
-
-	return s.persist(p)
+		p.LinkedChannelUIDs = filtered
+		return nil
+	})
 }
-
-// ── 内部辅助 ──
 
 // AddAccount 向指定订阅添加一个账号。
 func (s *SubscriptionStore) AddAccount(subscriptionUID string, account NewApiAccount) error {
-	s.mu.Lock()
-	p, ok := s.cache[subscriptionUID]
-	if !ok {
-		s.mu.Unlock()
-		return fmt.Errorf("[SubscriptionStore-AddAccount] subscription_uid=%s 不存在", subscriptionUID)
-	}
-	p.Accounts = append(p.Accounts, account)
-	p.UpdatedAt = time.Now()
-	s.mu.Unlock()
-	return s.persist(p)
+	return s.Patch(subscriptionUID, nil, func(p *SubscriptionProfile) error {
+		for _, existing := range p.Accounts {
+			if existing.AccountUID == account.AccountUID {
+				return fmt.Errorf("[SubscriptionStore-AddAccount] account_uid=%s 已存在", account.AccountUID)
+			}
+		}
+		p.Accounts = append(p.Accounts, account)
+		return nil
+	})
 }
 
 // RemoveAccount 从指定订阅删除一个账号。
 func (s *SubscriptionStore) RemoveAccount(subscriptionUID, accountUID string) error {
-	s.mu.Lock()
-	p, ok := s.cache[subscriptionUID]
-	if !ok {
-		s.mu.Unlock()
-		return fmt.Errorf("[SubscriptionStore-RemoveAccount] subscription_uid=%s 不存在", subscriptionUID)
-	}
-	filtered := make([]NewApiAccount, 0, len(p.Accounts))
-	for _, acc := range p.Accounts {
-		if acc.AccountUID != accountUID {
-			filtered = append(filtered, acc)
+	return s.Patch(subscriptionUID, nil, func(p *SubscriptionProfile) error {
+		filtered := make([]NewApiAccount, 0, len(p.Accounts))
+		for _, account := range p.Accounts {
+			if account.AccountUID != accountUID {
+				filtered = append(filtered, account)
+			}
 		}
+		if len(filtered) == len(p.Accounts) {
+			return fmt.Errorf("[SubscriptionStore-RemoveAccount] account_uid=%s 不存在", accountUID)
+		}
+		p.Accounts = filtered
+		return nil
+	})
+}
+
+func cloneSubscriptionProfile(profile *SubscriptionProfile) *SubscriptionProfile {
+	if profile == nil {
+		return nil
 	}
-	if len(filtered) == len(p.Accounts) {
-		s.mu.Unlock()
-		return fmt.Errorf("[SubscriptionStore-RemoveAccount] account_uid=%s 不存在", accountUID)
+	data, err := json.Marshal(profile)
+	if err != nil {
+		return nil
 	}
-	p.Accounts = filtered
-	p.UpdatedAt = time.Now()
-	s.mu.Unlock()
-	return s.persist(p)
+	var cloned SubscriptionProfile
+	if err := json.Unmarshal(data, &cloned); err != nil {
+		return nil
+	}
+	return &cloned
 }
 
 // persist 将单条订阅画像写入 SQLite（upsert）。

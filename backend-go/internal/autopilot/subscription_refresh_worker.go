@@ -301,34 +301,27 @@ func (w *SubscriptionRefreshWorker) fetchBalance(profile *SubscriptionProfile) S
 
 // applyResult 将查询结果回写到订阅画像。
 func (w *SubscriptionRefreshWorker) applyResult(result SubscriptionRefreshResult) {
-	profile := w.subStore.Get(result.SubscriptionUID)
-	if profile == nil {
-		return
-	}
-
-	now := result.FetchedAt
-	profile.LastBalanceRefreshAt = &now
-
-	if result.Success {
-		profile.LastBalanceRefreshError = ""
-		// 只有当 balance >= 0 时才更新（-1 表示"有效但无法获取具体余额"）
-		if result.Balance >= 0 {
-			profile.Balance = result.Balance
+	err := w.subStore.Patch(result.SubscriptionUID, nil, func(profile *SubscriptionProfile) error {
+		now := result.FetchedAt
+		profile.LastBalanceRefreshAt = &now
+		if result.Success {
+			profile.LastBalanceRefreshError = ""
+			if result.Balance >= 0 {
+				profile.Balance = result.Balance
+			}
+			if result.Currency != "" {
+				profile.Currency = result.Currency
+			}
+		} else {
+			profile.LastBalanceRefreshError = result.ErrorMessage
+			if !w.config.QuietLogs {
+				log.Printf("[SubscriptionRefreshWorker-Apply] 订阅=%s 刷新失败: %s", result.SubscriptionUID, result.ErrorMessage)
+			}
 		}
-		if result.Currency != "" {
-			profile.Currency = result.Currency
-		}
-	} else {
-		profile.LastBalanceRefreshError = result.ErrorMessage
-		if !w.config.QuietLogs {
-			log.Printf("[SubscriptionRefreshWorker-Apply] 订阅=%s 刷新失败: %s",
-				result.SubscriptionUID, result.ErrorMessage)
-		}
-	}
-
-	if err := w.subStore.Update(profile); err != nil {
-		log.Printf("[SubscriptionRefreshWorker-Apply] 回写订阅画像失败 uid=%s: %v",
-			result.SubscriptionUID, err)
+		return nil
+	})
+	if err != nil {
+		log.Printf("[SubscriptionRefreshWorker-Apply] 回写订阅画像失败 uid=%s: %v", result.SubscriptionUID, err)
 	}
 }
 

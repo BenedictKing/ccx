@@ -204,7 +204,9 @@ func resolveReorderPriorities(order []int, priorities ...[]int) ([]int, error) {
 
 // APIKeyConfig 描述单个 API Key 的附加调度配置。
 type APIKeyConfig struct {
-	Key           string `json:"key,omitempty"`
+	Key string `json:"key,omitempty"`
+	// KeyUID 是密钥生命周期内不可变的稳定身份，轮换明文 Key 时必须保留。
+	KeyUID        string `json:"keyUid,omitempty"`
 	CredentialUID string `json:"credentialUid,omitempty"`
 	Name          string `json:"name,omitempty"`
 	// BaseURL 该 Key 绑定的上游端点。非空时 failover 遍历仅在此 baseURL 上尝试该 Key，
@@ -215,14 +217,21 @@ type APIKeyConfig struct {
 	QuotaGroup string `json:"quotaGroup,omitempty"`
 	// GroupMultiplier 和 MaxGroupMultiplier 是自动接入的成本安全闸门。
 	// 两者同时存在时，调度只会使用倍率不超过上限的 Key；任一字段缺失则保持历史 Key 的兼容行为。
-	GroupMultiplier          *float64 `json:"groupMultiplier,omitempty"`
-	MaxGroupMultiplier       *float64 `json:"maxGroupMultiplier,omitempty"`
-	RateLimitRPM             int      `json:"rateLimitRpm,omitempty"`
-	RateLimitWindowMinutes   int      `json:"rateLimitWindowMinutes,omitempty"` // 滑动窗口时长（秒；JSON 字段名保留为兼容旧配置）
-	RateLimitMaxConcurrent   int      `json:"rateLimitMaxConcurrent,omitempty"`
-	RateLimitAutoFromHeaders *bool    `json:"rateLimitAutoFromHeaders,omitempty"`
-	Weight                   int      `json:"weight,omitempty"`
-	Models                   []string `json:"models,omitempty"`
+	GroupMultiplier          *float64   `json:"groupMultiplier,omitempty"`
+	MaxGroupMultiplier       *float64   `json:"maxGroupMultiplier,omitempty"`
+	MultiplierSource         string     `json:"multiplierSource,omitempty"` // manual | new_api | provider
+	MultiplierUpdatedAt      *time.Time `json:"multiplierUpdatedAt,omitempty"`
+	MultiplierExpiresAt      *time.Time `json:"multiplierExpiresAt,omitempty"`
+	MultiplierSyncStatus     string     `json:"multiplierSyncStatus,omitempty"` // fresh | stale | over_limit | sync_error | relink_required | manual
+	MultiplierSyncError      string     `json:"multiplierSyncError,omitempty"`
+	SourceSubscriptionUID    string     `json:"sourceSubscriptionUid,omitempty"`
+	SourceRemoteTokenID      int64      `json:"sourceRemoteTokenId,omitempty"`
+	RateLimitRPM             int        `json:"rateLimitRpm,omitempty"`
+	RateLimitWindowMinutes   int        `json:"rateLimitWindowMinutes,omitempty"` // 滑动窗口时长（秒；JSON 字段名保留为兼容旧配置）
+	RateLimitMaxConcurrent   int        `json:"rateLimitMaxConcurrent,omitempty"`
+	RateLimitAutoFromHeaders *bool      `json:"rateLimitAutoFromHeaders,omitempty"`
+	Weight                   int        `json:"weight,omitempty"`
+	Models                   []string   `json:"models,omitempty"`
 }
 
 // ManagedAccountConfig 是自动托管 provider 的账号级持久化根。
@@ -654,7 +663,10 @@ func IsAPIKeyConfigEffective(cfg APIKeyConfig) bool {
 	if strings.TrimSpace(cfg.Name) != "" || strings.TrimSpace(cfg.QuotaGroup) != "" {
 		return true
 	}
-	if cfg.GroupMultiplier != nil || cfg.MaxGroupMultiplier != nil {
+	if cfg.GroupMultiplier != nil || cfg.MaxGroupMultiplier != nil ||
+		strings.TrimSpace(cfg.MultiplierSource) != "" || strings.TrimSpace(cfg.MultiplierSyncStatus) != "" ||
+		cfg.MultiplierUpdatedAt != nil || cfg.MultiplierExpiresAt != nil || strings.TrimSpace(cfg.MultiplierSyncError) != "" ||
+		strings.TrimSpace(cfg.SourceSubscriptionUID) != "" || cfg.SourceRemoteTokenID != 0 {
 		return true
 	}
 	if cfg.RateLimitRPM > 0 || cfg.RateLimitWindowMinutes > 0 || cfg.RateLimitMaxConcurrent > 0 {
@@ -673,6 +685,7 @@ func IsAPIKeyConfigEffective(cfg APIKeyConfig) bool {
 // CredentialUID/BaseURL 不属于管理视图字段，但不能随暂停状态一起删除。
 func shouldPersistAPIKeyConfig(cfg APIKeyConfig) bool {
 	return IsAPIKeyConfigEffective(cfg) ||
+		strings.TrimSpace(cfg.KeyUID) != "" ||
 		strings.TrimSpace(cfg.CredentialUID) != "" ||
 		strings.TrimSpace(cfg.BaseURL) != ""
 }

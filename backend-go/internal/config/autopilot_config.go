@@ -260,7 +260,34 @@ type CostOptimizationConfig struct {
 	WorkerSavingsWeight      float64 `json:"workerSavingsWeight,omitempty"`
 	// ProviderTimePricing 描述官方 provider 的按时段计价规则，key 为 providerId。
 	// effectiveFrom 为空或尚未到达时不加价；基础模型价格始终保留在模型注册表中。
-	ProviderTimePricing map[string]ProviderTimePricingConfig `json:"providerTimePricing,omitempty"`
+	ProviderTimePricing  map[string]ProviderTimePricingConfig `json:"providerTimePricing,omitempty"`
+	ExchangeRateQuotes   []ExchangeRateQuote                  `json:"exchangeRateQuotes,omitempty"`
+	ExchangeRateSnapshot *ExchangeRateSnapshot                `json:"exchangeRateSnapshot,omitempty"`
+}
+
+// ExchangeRateQuote 描述人工汇率报价：SourceAmount SourceUnit = TargetAmount TargetUnit。
+type ExchangeRateQuote struct {
+	SourceAmount float64   `json:"sourceAmount"`
+	SourceUnit   string    `json:"sourceUnit"`
+	TargetAmount float64   `json:"targetAmount"`
+	TargetUnit   string    `json:"targetUnit"`
+	UpdatedAt    time.Time `json:"updatedAt"`
+	Note         string    `json:"note,omitempty"`
+}
+
+// ExchangeRateSnapshot 是从人工报价图解析出的 USD 单价原子快照。
+type ExchangeRateSnapshot struct {
+	Version       uint64             `json:"version"`
+	USDUnitPrices map[string]float64 `json:"usdUnitPrices"`
+	BuiltAt       time.Time          `json:"builtAt"`
+}
+
+func defaultExchangeRateQuotes() []ExchangeRateQuote {
+	now := time.Now().UTC()
+	return []ExchangeRateQuote{
+		{SourceAmount: 1, SourceUnit: "USD", TargetAmount: 7, TargetUnit: "CNY", UpdatedAt: now, Note: "default"},
+		{SourceAmount: 500, SourceUnit: "LDC", TargetAmount: 10, TargetUnit: "CNY", UpdatedAt: now, Note: "default"},
+	}
 }
 
 // ProviderTimePricingConfig 描述一个 provider 的生效时间、时区和每日高峰窗口。
@@ -502,6 +529,7 @@ func DefaultAutopilotRoutingConfig() AutopilotRoutingConfig {
 			PreferLowerEffectiveCost: true,
 			SupervisorSavingsWeight:  0.5,
 			WorkerSavingsWeight:      3,
+			ExchangeRateQuotes:       defaultExchangeRateQuotes(),
 			ProviderTimePricing: map[string]ProviderTimePricingConfig{
 				"deepseek": {
 					EffectiveFrom:  "2026-07-20T00:00:00+08:00",
@@ -626,6 +654,9 @@ func (c *AutopilotRoutingConfig) Validate() {
 
 	// 3. 成本偏好校验
 	c.CostPreference.validate()
+	if c.CostOptimization.ExchangeRateQuotes == nil {
+		c.CostOptimization.ExchangeRateQuotes = defaultExchangeRateQuotes()
+	}
 	c.CostOptimization.validateProviderTimePricing()
 
 	// 3. 派系偏好校验
@@ -1055,6 +1086,20 @@ func (c AutopilotRoutingConfig) deepCopy() AutopilotRoutingConfig {
 			}
 			cp.CostOptimization.ProviderTimePricing[providerID] = rule
 		}
+	}
+
+	if c.CostOptimization.ExchangeRateQuotes != nil {
+		cp.CostOptimization.ExchangeRateQuotes = append([]ExchangeRateQuote(nil), c.CostOptimization.ExchangeRateQuotes...)
+	}
+	if c.CostOptimization.ExchangeRateSnapshot != nil {
+		snapshot := *c.CostOptimization.ExchangeRateSnapshot
+		if snapshot.USDUnitPrices != nil {
+			snapshot.USDUnitPrices = make(map[string]float64, len(snapshot.USDUnitPrices))
+			for unit, price := range c.CostOptimization.ExchangeRateSnapshot.USDUnitPrices {
+				snapshot.USDUnitPrices[unit] = price
+			}
+		}
+		cp.CostOptimization.ExchangeRateSnapshot = &snapshot
 	}
 
 	// ModelFamilyPreference.GlobalOrder

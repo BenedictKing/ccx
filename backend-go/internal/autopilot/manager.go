@@ -1323,12 +1323,11 @@ func (m *Manager) updateSubscriptionCapabilities(profiles []*KeyEndpointProfile)
 		}
 
 		// 写入订阅画像
-		subProfile := m.subscriptionStore.Get(subUID)
-		if subProfile != nil {
-			subProfile.SharedCapability = shared
-			if err := m.subscriptionStore.Update(subProfile); err != nil {
-				log.Printf("[Autopilot-Worker] 警告: 更新订阅共享能力失败 uid=%s: %v", subUID, err)
-			}
+		if err := m.subscriptionStore.Patch(subUID, nil, func(profile *SubscriptionProfile) error {
+			profile.SharedCapability = shared
+			return nil
+		}); err != nil {
+			log.Printf("[Autopilot-Worker] 警告: 更新订阅共享能力失败 uid=%s: %v", subUID, err)
 		}
 
 		// 检测 drift 并写入 endpoint 画像

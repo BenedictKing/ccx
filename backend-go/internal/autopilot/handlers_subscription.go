@@ -228,55 +228,57 @@ func handleUpdateSubscription(store *SubscriptionStore) gin.HandlerFunc {
 			return
 		}
 
-		// 合并更新
-		if req.DisplayName != nil {
-			existing.DisplayName = *req.DisplayName
-		}
-		if req.Provider != nil {
-			existing.Provider = *req.Provider
-		}
-		if req.OriginType != nil {
-			existing.OriginType = *req.OriginType
-		}
-		if req.OriginTier != nil {
-			existing.OriginTier = *req.OriginTier
-		}
-		if req.BillingMode != nil {
-			existing.BillingMode = *req.BillingMode
-		}
-		if req.Currency != nil {
-			existing.Currency = *req.Currency
-		}
-		if req.Balance != nil {
-			existing.Balance = *req.Balance
-		}
-		if req.GroupMultipliers != nil {
-			existing.GroupMultipliers = req.GroupMultipliers
-		}
-		if req.RechargeMultiplier != nil {
-			existing.RechargeMultiplier = *req.RechargeMultiplier
-		}
-		if req.Notes != nil {
-			existing.Notes = *req.Notes
-		}
-		if req.Source != nil {
-			existing.Source = *req.Source
-		}
-		if req.Confidence != nil {
-			existing.Confidence = *req.Confidence
-		}
-		// Phase 4 Item 6：余额自动刷新字段
-		if req.BillingAPIKey != nil {
-			existing.BillingAPIKey = *req.BillingAPIKey
-		}
-		if req.AutoRefreshEnabled != nil {
-			existing.AutoRefreshEnabled = *req.AutoRefreshEnabled
-		}
-
-		if err := store.Update(existing); err != nil {
+		err := store.Patch(uid, nil, func(profile *SubscriptionProfile) error {
+			if req.DisplayName != nil {
+				profile.DisplayName = *req.DisplayName
+			}
+			if req.Provider != nil {
+				profile.Provider = *req.Provider
+			}
+			if req.OriginType != nil {
+				profile.OriginType = *req.OriginType
+			}
+			if req.OriginTier != nil {
+				profile.OriginTier = *req.OriginTier
+			}
+			if req.BillingMode != nil {
+				profile.BillingMode = *req.BillingMode
+			}
+			if req.Currency != nil {
+				profile.Currency = *req.Currency
+			}
+			if req.Balance != nil {
+				profile.Balance = *req.Balance
+			}
+			if req.GroupMultipliers != nil {
+				profile.GroupMultipliers = req.GroupMultipliers
+			}
+			if req.RechargeMultiplier != nil {
+				profile.RechargeMultiplier = *req.RechargeMultiplier
+			}
+			if req.Notes != nil {
+				profile.Notes = *req.Notes
+			}
+			if req.Source != nil {
+				profile.Source = *req.Source
+			}
+			if req.Confidence != nil {
+				profile.Confidence = *req.Confidence
+			}
+			// Phase 4 Item 6：余额自动刷新字段
+			if req.BillingAPIKey != nil {
+				profile.BillingAPIKey = *req.BillingAPIKey
+			}
+			if req.AutoRefreshEnabled != nil {
+				profile.AutoRefreshEnabled = *req.AutoRefreshEnabled
+			}
+			return nil
+		})
+		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+		existing = store.Get(uid)
 
 		c.JSON(http.StatusOK, toSubscriptionItem(existing))
 	}
