@@ -1153,17 +1153,88 @@ export interface ExchangeRateSnapshot {
   builtAt: string
 }
 
-export interface NewApiKeyStatus {
-  keyUid?: string
-  credentialUid?: string
+export interface ExchangeRatesResponse {
+  quotes: ExchangeRateQuote[]
+  snapshot?: ExchangeRateSnapshot
+  source?: string
+  version?: number
+}
+
+export interface ExchangeRatesReplaceRequest {
+  quotes: ExchangeRateQuote[]
+  expectedSnapshotVersion?: number
+}
+
+export interface KeyMultiplierPatch {
+  groupMultiplier?: number | null
+  maxGroupMultiplier?: number | null
+}
+
+export interface KeyMultiplierResponse {
+  keyUid: string
   group: string
-  remoteMultiplier: number
-  maxMultiplier?: number | null
+  remoteMultiplier?: number
+  groupMultiplier?: number
+  maxMultiplier?: number
   status: string
-  reason?: string
+  reason: string
   eligible: boolean
   updatedAt?: string
   expiresAt?: string
+}
+
+export interface BillingTermsPatch {
+  paymentAmount: number | null
+  paymentUnit: string
+  creditAmount: number | null
+  creditUnit: string
+  expectedVersion?: number
+}
+
+export interface BillingTermsResponse {
+  paymentAmount?: number
+  paymentUnit?: string
+  creditAmount?: number
+  creditUnit?: string
+  version: number
+  preview: string
+}
+
+export interface NewApiKeyStatus {
+  keyUid?: string
+  name: string
+  group: string
+  groupMultiplier: number
+  maxGroupMultiplier: number
+  sourceRemoteTokenId: number
+  syncStatus: string
+  reason?: string
+  multiplierExpiresAt?: string
+  updatedAt?: string
+}
+
+export interface NewApiSyncResult {
+  subscriptionUid: string
+  success: boolean
+  balance?: number
+  models?: string[]
+  modelsHash?: string
+  modelsHashChanged: boolean
+  keys: NewApiKeyStatus[]
+  discoveryTriggered: boolean
+  failedReason?: string
+}
+
+export interface BalanceRefreshResult {
+  success: boolean
+  balance: number
+  currency: string
+  errorMessage: string
+}
+
+export interface SubscriptionRefreshResponse {
+  subscription: SubscriptionItem
+  refreshResult: NewApiSyncResult | BalanceRefreshResult
 }
 
 // ============== 订阅中心类型 ==============
@@ -1183,7 +1254,7 @@ export interface SubscriptionItem {
   paymentUnit?: string
   creditAmount?: number | null
   creditUnit?: string
-  version?: number
+  version: number
   authTokenMode?: 'bearer' | 'raw_auth' | string
   linkedChannelUids?: string[]
   source?: string

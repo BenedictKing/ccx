@@ -7,6 +7,8 @@
           <th class="text-left">{{ t('subscription.field.name') }}</th>
           <th class="text-left">{{ t('subscription.field.balance') }}</th>
           <th class="text-left">{{ t('subscription.field.rechargeMultiplier') }}</th>
+          <th class="text-left">{{ t('subscription.billingTerms.title') }}</th>
+          <th class="text-left">{{ t('subscription.field.version') }}</th>
           <th class="text-left">{{ t('subscription.field.linkedChannels') }}</th>
           <th class="text-left">{{ t('subscription.field.source') }}</th>
           <th class="text-left" style="width: 160px;">{{ t('subscription.field.autoRefreshSection') }}</th>
@@ -37,7 +39,7 @@
 
           <!-- 余额 -->
           <td>
-            <span v-if="item.balance || item.currency">
+            <span v-if="item.balance !== undefined && item.balance !== null">
               {{ formatBalance(item.balance, item.currency) }}
             </span>
             <span v-else class="text-medium-emphasis">-</span>
@@ -52,6 +54,8 @@
           </td>
 
           <!-- 绑定渠道 -->
+          <td>{{ billingTermsPreview(item) }}</td>
+          <td>{{ item.version }}</td>
           <td>
             <div v-if="item.linkedChannelUids && item.linkedChannelUids.length > 0" class="d-flex flex-wrap ga-1">
               <v-chip
@@ -125,6 +129,7 @@
 <script setup lang="ts">
 import { useI18n } from '@/i18n'
 import type { SubscriptionItem } from '@/services/api-types'
+import { billingTermsPreview } from '@/utils/subscriptionBilling'
 
 defineProps<{
   subscriptions: SubscriptionItem[]

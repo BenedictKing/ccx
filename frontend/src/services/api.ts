@@ -79,6 +79,13 @@ import type {
   NewApiAccountCreateRequest,
   NewApiAccountItem,
   NewApiAccountListResponse,
+  BillingTermsPatch,
+  BillingTermsResponse,
+  ExchangeRatesReplaceRequest,
+  ExchangeRatesResponse,
+  KeyMultiplierPatch,
+  KeyMultiplierResponse,
+  SubscriptionRefreshResponse,
 } from './api-types'
 
 export * from './api-helpers'
@@ -1356,9 +1363,39 @@ export class ApiService {
     })
   }
 
-  async refreshSubscription(uid: string): Promise<{ subscription: SubscriptionItem; refreshResult: { success: boolean; balance: number; currency: string; errorMessage: string } }> {
+  async refreshSubscription(uid: string): Promise<SubscriptionRefreshResponse> {
     return this.request(`/subscriptions/${encodeURIComponent(uid)}/refresh`, {
       method: 'POST',
+    })
+  }
+
+  async patchSubscriptionBillingTerms(uid: string, data: BillingTermsPatch): Promise<BillingTermsResponse> {
+    return this.request(`/subscriptions/${encodeURIComponent(uid)}/billing-terms`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async getExchangeRates(): Promise<ExchangeRatesResponse> {
+    return this.request('/autopilot/cost/exchange-rates')
+  }
+
+  async replaceExchangeRates(data: ExchangeRatesReplaceRequest): Promise<ExchangeRatesResponse> {
+    return this.request('/autopilot/cost/exchange-rates', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async patchKeyMultiplier(
+    kind: 'messages' | 'chat' | 'responses' | 'gemini' | 'images' | 'vectors',
+    channelUid: string,
+    keyUid: string,
+    data: KeyMultiplierPatch,
+  ): Promise<KeyMultiplierResponse> {
+    return this.request(`/${kind}/channels/${encodeURIComponent(channelUid)}/keys/${encodeURIComponent(keyUid)}/multiplier`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
     })
   }
 

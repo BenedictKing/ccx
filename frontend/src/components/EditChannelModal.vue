@@ -82,6 +82,7 @@
                 :is-auto-managed="isAutoManagedChannel"
                 :channel-id="props.channel?.index"
                 :channel-uid="props.channel?.channelUid"
+                :channel-kind="props.channelType"
                 :dialog-open="props.show"
                 :proxy-url="form.proxyUrl"
                 :account-uid="props.channel?.accountUid"

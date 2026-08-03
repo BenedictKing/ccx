@@ -3,6 +3,17 @@ import type { DisabledKeyInfo, APIKeyConfig } from '../services/api-types'
 export interface ChannelApiKeyRow extends Omit<APIKeyConfig, 'key'> {
   key: string
   activeIndex: number
+  keyUid?: string
+  quotaGroup?: string
+  groupMultiplier?: number | null
+  maxGroupMultiplier?: number | null
+  multiplierSource?: 'manual' | 'new_api' | 'provider'
+  multiplierUpdatedAt?: string
+  multiplierExpiresAt?: string
+  multiplierSyncStatus?: string
+  multiplierSyncError?: string
+  eligible?: boolean
+  ineligibleReason?: string
   disabled?: DisabledKeyInfo
   /** undefined = 默认活跃，true = 显式启用，false = 手动暂停 */
   enabled?: boolean

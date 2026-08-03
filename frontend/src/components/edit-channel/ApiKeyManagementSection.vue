@@ -279,6 +279,21 @@
                   </div>
                   </div>
                 </v-list-item-title>
+                <v-list-item-subtitle v-if="row && (row.multiplierSource || row.groupMultiplier != null || row.maxGroupMultiplier != null)" class="mt-1">
+                  <div class="d-flex align-center ga-1 flex-wrap text-caption">
+                    <v-chip size="x-small" variant="tonal" :color="multiplierStatusColor(row.multiplierSyncStatus)">
+                      {{ row.multiplierSource || 'manual' }} · {{ multiplierStatusLabel(row.multiplierSyncStatus || 'manual') }}
+                    </v-chip>
+                    <span>{{ t('subscription.keyMultiplier.group') }}: {{ row.quotaGroup || '-' }}</span>
+                    <span>{{ t('subscription.keyMultiplier.value') }}: {{ row.groupMultiplier ?? '-' }}</span>
+                    <span>{{ t('subscription.keyMultiplier.max') }}: {{ row.maxGroupMultiplier ?? '-' }}</span>
+                    <span v-if="row.multiplierExpiresAt">TTL: {{ formatDisabledTime(row.multiplierExpiresAt) }}</span>
+                    <span :class="row.eligible === false ? 'text-error' : 'text-success'">
+                      {{ row.eligible === false ? (row.ineligibleReason || t('subscription.keyMultiplier.ineligible')) : t('subscription.keyMultiplier.eligible') }}
+                    </span>
+                    <v-btn v-if="row.keyUid && channelUid && channelKind" size="x-small" variant="text" @click="openMultiplierEditor(row)">{{ t('app.actions.edit') }}</v-btn>
+                  </div>
+                </v-list-item-subtitle>
                 <v-list-item-subtitle v-if="row.volcengineCredential" class="mt-1 text-caption">
                   <v-icon size="12" class="mr-1">mdi-chart-timeline-variant</v-icon>
                   <template v-for="(part, idx) in volcengineUsageSummaryParts(row.volcengineCredential)" :key="part.labelKey || idx">
@@ -1177,6 +1192,27 @@
         </div>
       </v-card-text>
     </v-card>
+
+    <v-dialog v-model="multiplierDialog" max-width="520">
+      <v-card>
+        <v-card-title>{{ t('subscription.keyMultiplier.title') }}</v-card-title>
+        <v-card-text>
+          <v-text-field
+            v-model="multiplierForm.groupMultiplier"
+            type="number"
+            min="0"
+            step="any"
+            :disabled="multiplierEditing?.multiplierSource === 'new_api'"
+            :label="t('subscription.keyMultiplier.value')"
+            clearable
+            variant="outlined"
+          />
+          <v-text-field v-model="multiplierForm.maxGroupMultiplier" type="number" min="0" step="any" :label="t('subscription.keyMultiplier.max')" clearable variant="outlined" />
+          <v-alert v-if="multiplierError" color="error" variant="tonal" density="compact">{{ multiplierError }}</v-alert>
+        </v-card-text>
+        <v-card-actions><v-spacer /><v-btn variant="text" @click="multiplierDialog = false">{{ t('app.actions.cancel') }}</v-btn><v-btn color="primary" :loading="multiplierSaving" @click="saveMultiplier">{{ t('app.actions.save') }}</v-btn></v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -1204,6 +1240,7 @@ import { getVolcenginePlanConsoleURL } from '../../utils/channelWebsite'
 import { quotaRemainingColorClass } from '../../utils/quotaColor'
 import { buildKimiUsageSections } from '../../utils/kimiPlanUsage'
 import { buildMinimaxQuotaItems, selectMiniMaxTokenPlanEndpoint, sha256KeyHash } from '../../utils/minimaxEndpointUsage'
+import { multiplierStatusLabel } from '../../utils/subscriptionBilling'
 import type { UsageQuotaItem } from '../../utils/usageQuotaItem'
 import UsageQuotaRows from '../UsageQuotaRows.vue'
 
@@ -1238,6 +1275,7 @@ interface Props {
   isAutoManaged?: boolean
   channelId?: number
   channelUid?: string
+  channelKind?: 'messages' | 'chat' | 'responses' | 'gemini' | 'images' | 'vectors'
   dialogOpen: boolean
   proxyUrl?: string
   accountUid?: string
@@ -1263,6 +1301,11 @@ const newApiKey = ref('')
 const apiKeyError = ref('')
 const duplicateKeyIndex = ref<number | null>(null)
 const copiedKey = ref('')
+const multiplierDialog = ref(false)
+const multiplierSaving = ref(false)
+const multiplierError = ref('')
+const multiplierEditing = ref<ChannelApiKeyRow | null>(null)
+const multiplierForm = ref<{ groupMultiplier: number | null; maxGroupMultiplier: number | null }>({ groupMultiplier: null, maxGroupMultiplier: null })
 const deepseekBalances = ref<DeepSeekCredentialBalance[]>([])
 const deepseekBalancesLoading = ref(false)
 const deepseekBalancesError = ref('')
@@ -1402,6 +1445,44 @@ const planRowTitle = (): string => {
 const hasConfigurableKeys = computed(() => props.serviceType === 'copilot' || keyRows.value.length > 0)
 
 const visibleDisabledKeyModels = computed(() => props.disabledKeyModels || [])
+
+const multiplierStatusColor = (status?: string) => status === 'fresh' || status === 'manual' ? 'success' : status === 'over_limit' || status === 'sync_error' || status === 'relink_required' ? 'error' : 'warning'
+
+const openMultiplierEditor = (row: ChannelApiKeyRow) => {
+  multiplierEditing.value = row
+  multiplierForm.value = {
+    groupMultiplier: row.groupMultiplier ?? null,
+    maxGroupMultiplier: row.maxGroupMultiplier ?? null,
+  }
+  multiplierError.value = ''
+  multiplierDialog.value = true
+}
+
+const saveMultiplier = async () => {
+  const row = multiplierEditing.value
+  if (!row?.keyUid || !props.channelUid || !props.channelKind) return
+  multiplierSaving.value = true
+  multiplierError.value = ''
+  try {
+    const body = row.multiplierSource === 'new_api'
+      ? { maxGroupMultiplier: multiplierForm.value.maxGroupMultiplier }
+      : { groupMultiplier: multiplierForm.value.groupMultiplier, maxGroupMultiplier: multiplierForm.value.maxGroupMultiplier }
+    const response = await apiService.patchKeyMultiplier(props.channelKind, props.channelUid, row.keyUid, body)
+    row.groupMultiplier = response.groupMultiplier ?? null
+    row.maxGroupMultiplier = response.maxMultiplier ?? null
+    row.multiplierSyncStatus = response.status
+    row.multiplierSyncError = response.reason
+    row.eligible = response.eligible
+    row.ineligibleReason = response.reason
+    row.multiplierUpdatedAt = response.updatedAt
+    row.multiplierExpiresAt = response.expiresAt
+    multiplierDialog.value = false
+  } catch (error) {
+    multiplierError.value = error instanceof Error ? error.message : String(error)
+  } finally {
+    multiplierSaving.value = false
+  }
+}
 
 const toggleCredentialKey = (key: string) => {
   expandedCredentialKey.value = expandedCredentialKey.value === key ? null : key

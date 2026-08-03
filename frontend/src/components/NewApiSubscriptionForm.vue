@@ -185,7 +185,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 import { useI18n } from '@/i18n'
 import { api } from '@/services/api'
 import type {
@@ -243,6 +243,8 @@ const channelKindOptions = computed(() => [
   { title: 'chat', value: 'chat' },
   { title: 'responses', value: 'responses' },
   { title: 'gemini', value: 'gemini' },
+  { title: 'images', value: 'images' },
+  { title: 'vectors', value: 'vectors' },
 ])
 
 const groupItems = computed(() => {
@@ -267,24 +269,6 @@ const canProvision = computed(
     eligibleGroupItems.value.length > 0
 )
 
-function slugifyDisplayName(name: string): string {
-  const base = name
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9一-龥]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-  return base || 'newapi'
-}
-
-watch(
-  () => verifyForm.value.displayName,
-  (name) => {
-    if (!verified.value && name) {
-      provisionForm.value.subscriptionUid = `newapi-${slugifyDisplayName(name)}`
-    }
-  }
-)
-
 async function handleVerify() {
   if (!canVerify.value) return
   verifying.value = true
@@ -305,11 +289,6 @@ async function handleVerify() {
     provisionForm.value.userId = verifyForm.value.userId || undefined
     provisionForm.value.authTokenMode = verifyForm.value.authTokenMode || undefined
     provisionForm.value.displayName = verifyForm.value.displayName || result.username
-    if (!provisionForm.value.subscriptionUid.trim()) {
-      provisionForm.value.subscriptionUid = `newapi-${slugifyDisplayName(
-        verifyForm.value.displayName || result.username
-      )}`
-    }
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Unknown error'
     emit('error', message)
