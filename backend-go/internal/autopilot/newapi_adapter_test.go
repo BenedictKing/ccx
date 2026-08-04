@@ -76,6 +76,9 @@ func TestNewApiAdapter_Verify_RawAuthMode(t *testing.T) {
 	if _, err := adapter.Verify(context.Background(), srv.URL, "test-token", "1", NewApiAuthModeRaw); err != nil {
 		t.Fatalf("Verify 失败: %v", err)
 	}
+	if _, err := adapter.Verify(context.Background(), srv.URL, "test-token", "1", NewApiAuthModeRawAuth); err != nil {
+		t.Fatalf("Verify(raw_auth) 失败: %v", err)
+	}
 }
 
 func TestNewApiAdapter_Verify_InvalidToken(t *testing.T) {

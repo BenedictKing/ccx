@@ -89,7 +89,8 @@ const DefaultNewApiProvisionKeyName = "ccx-autopilot"
 // NewApiAuthTokenMode 定义令牌注入 Authorization 头的方式。
 const (
 	NewApiAuthModeBearer = "bearer" // 默认：Authorization: Bearer <token>
-	NewApiAuthModeRaw    = "raw"    // fork 兼容：Authorization: <token>（不带 Bearer 前缀）
+	NewApiAuthModeRaw    = "raw"      // fork 兼容：Authorization: <token>（不带 Bearer 前缀）
+	NewApiAuthModeRawAuth = "raw_auth" // 前端统一值：等价于 raw
 )
 
 // NewApiAdapter 是 new-api 家族站点的订阅集成适配器。
@@ -107,7 +108,8 @@ func (a *NewApiAdapter) httpClient() *http.Client {
 
 // buildAuthHeader 按 authTokenMode 构造 Authorization 头值。
 func buildAuthHeader(accessToken, authTokenMode string) string {
-	if strings.EqualFold(strings.TrimSpace(authTokenMode), NewApiAuthModeRaw) {
+	mode := strings.TrimSpace(authTokenMode)
+	if strings.EqualFold(mode, NewApiAuthModeRaw) || strings.EqualFold(mode, NewApiAuthModeRawAuth) {
 		return accessToken
 	}
 	return "Bearer " + accessToken
