@@ -1160,6 +1160,100 @@ func newKeyModelTestConfigManager(t *testing.T) *ConfigManager {
 	return cm
 }
 
+func newGroupModelTestConfigManager(t *testing.T) *ConfigManager {
+	t.Helper()
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	initialConfig := `{
+		"upstream": [{
+			"name": "group-model-channel",
+			"baseUrl": "https://example.com",
+			"apiKeys": ["sk-a1", "sk-a2", "sk-b", "sk-single"],
+			"apiKeyConfigs": [
+				{"key": "sk-a1", "quotaGroup": "account-a"},
+				{"key": "sk-a2", "quotaGroup": "account-a"},
+				{"key": "sk-b", "quotaGroup": "account-b"},
+				{"key": "sk-single"}
+			],
+			"serviceType": "claude"
+		}]
+	}`
+	if err := os.WriteFile(configPath, []byte(initialConfig), 0600); err != nil {
+		t.Fatalf("写入初始配置失败: %v", err)
+	}
+	cm, err := NewConfigManager(configPath, "")
+	if err != nil {
+		t.Fatalf("NewConfigManager() error = %v", err)
+	}
+	t.Cleanup(func() { _ = cm.Close() })
+	return cm
+}
+
+func TestDisableAndRestoreGroupModel(t *testing.T) {
+	cm := newGroupModelTestConfigManager(t)
+
+	group, affected, err := cm.DisableGroupModel("Messages", 0, "sk-a1", "gpt-5.6", "质量异常")
+	if err != nil {
+		t.Fatalf("DisableGroupModel() error = %v", err)
+	}
+	if group != "account-a" || affected != 2 {
+		t.Fatalf("group=%q affected=%d, want account-a/2", group, affected)
+	}
+	cfg := cm.GetConfig()
+	if got := cfg.Upstream[0].DisabledGroupModels; len(got) != 1 || got[0].QuotaGroup != "account-a" || got[0].Model != "gpt-5.6" {
+		t.Fatalf("DisabledGroupModels = %+v", got)
+	}
+	if !cfg.Upstream[0].IsGroupModelDisabled("sk-a2", "account-a", "GPT-5.6") {
+		t.Fatal("same quota group should share the model ban")
+	}
+	if cfg.Upstream[0].IsGroupModelDisabled("sk-b", "account-b", "gpt-5.6") {
+		t.Fatal("other quota group must not inherit the model ban")
+	}
+
+	// 重复禁用保持幂等。
+	if _, _, err := cm.DisableGroupModel("Messages", 0, "sk-a2", "gpt-5.6", "质量异常"); err != nil {
+		t.Fatalf("second DisableGroupModel() error = %v", err)
+	}
+	if got := len(cm.GetConfig().Upstream[0].DisabledGroupModels); got != 1 {
+		t.Fatalf("duplicate disable created %d records, want 1", got)
+	}
+
+	group, affected, err = cm.RestoreGroupModel("Messages", 0, "", "account-a", "gpt-5.6")
+	if err != nil {
+		t.Fatalf("RestoreGroupModel() error = %v", err)
+	}
+	if group != "account-a" || affected != 2 {
+		t.Fatalf("restore group=%q affected=%d, want account-a/2", group, affected)
+	}
+	if got := len(cm.GetConfig().Upstream[0].DisabledGroupModels); got != 0 {
+		t.Fatalf("DisabledGroupModels len = %d, want 0", got)
+	}
+	// 重复恢复保持幂等。
+	if _, _, err := cm.RestoreGroupModel("Messages", 0, "", "account-a", "gpt-5.6"); err != nil {
+		t.Fatalf("second RestoreGroupModel() error = %v", err)
+	}
+}
+
+func TestDisableGroupModel_EmptyGroupTargetsSingleKey(t *testing.T) {
+	cm := newGroupModelTestConfigManager(t)
+	group, affected, err := cm.DisableGroupModel("Messages", 0, "sk-single", "gpt-5.6", "")
+	if err != nil {
+		t.Fatalf("DisableGroupModel() error = %v", err)
+	}
+	if group != "" || affected != 1 {
+		t.Fatalf("group=%q affected=%d, want empty/1", group, affected)
+	}
+	entry := cm.GetConfig().Upstream[0].DisabledGroupModels[0]
+	if entry.Key != "sk-single" || entry.QuotaGroup != "" {
+		t.Fatalf("single-key entry = %+v", entry)
+	}
+	if !cm.GetConfig().Upstream[0].IsGroupModelDisabled("sk-single", "", "gpt-5.6") {
+		t.Fatal("target key should be disabled")
+	}
+	if cm.GetConfig().Upstream[0].IsGroupModelDisabled("another-key", "", "gpt-5.6") {
+		t.Fatal("other empty-group key must stay enabled")
+	}
+}
+
 func TestDisableKeyModelAndIsKeyModelDisabled(t *testing.T) {
 	cm := newKeyModelTestConfigManager(t)
 

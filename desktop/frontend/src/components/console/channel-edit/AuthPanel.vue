@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   ArrowDown,
   ArrowUp,
+  Ban,
   CheckCircle2,
   Copy,
   Key,
@@ -18,7 +19,13 @@ import {
 import { useLanguage } from '@/composables/useLanguage'
 import { useAdminApi } from '@/composables/useAdminApi'
 import { maskApiKey } from '@/utils/api-key-mask'
-import type { APIKeyConfig, ChannelKind, KeyMultiplierResponse } from '@/services/admin-api'
+import type {
+  APIKeyConfig,
+  ChannelKind,
+  DisabledGroupModel,
+  GroupModelMutationResponse,
+  KeyMultiplierResponse,
+} from '@/services/admin-api'
 
 interface DisabledKeyInfo {
   key: string
@@ -40,6 +47,7 @@ const props = defineProps<{
   copiedKeyIndex: number | null
   duplicateKeyIndex: number | null
   disabledApiKeys: DisabledKeyInfo[]
+  disabledGroupModels: DisabledGroupModel[]
   historicalApiKeys: string[]
   restoringKey: string
   localRestoredKeys: Set<string>
@@ -48,6 +56,8 @@ const props = defineProps<{
   channelKind: ChannelKind
   channelUid?: string
   apiKeyConfigs?: APIKeyConfig[]
+  onDisableGroupModel: (payload: { apiKey: string; model: string; note?: string }) => Promise<GroupModelMutationResponse>
+  onRestoreGroupModel: (record: DisabledGroupModel) => Promise<GroupModelMutationResponse>
   errors: { apiKeys?: string }
 }>()
 
@@ -67,6 +77,10 @@ const multiplierDrafts = ref<Record<string, { groupMultiplier: string; maxGroupM
 const multiplierResults = ref<Record<string, KeyMultiplierResponse>>({})
 const savingMultiplier = ref('')
 const multiplierError = ref('')
+const groupModelDrafts = ref<Record<string, { model: string; note: string }>>({})
+const groupModelBusy = ref('')
+const groupModelError = ref('')
+const groupModelNotice = ref('')
 
 watch(() => props.apiKeyConfigs, configs => {
   const next: Record<string, { groupMultiplier: string; maxGroupMultiplier: string }> = {}
@@ -106,6 +120,31 @@ function multiplierStatus(config: APIKeyConfig) {
 function multiplierReason(config: APIKeyConfig) {
   const result = config.keyUid ? multiplierResults.value[config.keyUid] : undefined
   return result?.reason || config.ineligibleReason || config.multiplierSyncError || ''
+}
+
+function groupModelDraft(key: string) {
+  return groupModelDrafts.value[key] ||= { model: '', note: '' }
+}
+async function disableGroupModel(key: string) {
+  const draft = groupModelDraft(key)
+  const model = draft.model.trim()
+  if (!model) { groupModelError.value = t('groupModel.error.modelRequired'); return }
+  groupModelBusy.value = `disable:${key}`; groupModelError.value = ''; groupModelNotice.value = ''
+  try {
+    const result = await props.onDisableGroupModel({ apiKey: key, model, note: draft.note.trim() || undefined })
+    groupModelNotice.value = t('groupModel.disableSuccess', { group: result.quotaGroup, model: result.model, count: String(result.affectedKeyCount) })
+    groupModelDrafts.value[key] = { model: '', note: '' }
+  } catch (cause) { groupModelError.value = cause instanceof Error ? cause.message : String(cause) }
+  finally { groupModelBusy.value = '' }
+}
+async function restoreGroupModel(record: DisabledGroupModel) {
+  const token = `restore:${record.quotaGroup}:${record.model}`
+  groupModelBusy.value = token; groupModelError.value = ''; groupModelNotice.value = ''
+  try {
+    const result = await props.onRestoreGroupModel(record)
+    groupModelNotice.value = t('groupModel.restoreSuccess', { group: result.quotaGroup, model: result.model, count: String(result.affectedKeyCount) })
+  } catch (cause) { groupModelError.value = cause instanceof Error ? cause.message : String(cause) }
+  finally { groupModelBusy.value = '' }
 }
 
 function getKeyStatus(key: string) {
@@ -260,9 +299,27 @@ const visibleDisabledKeys = computed(() => {
           <span v-if="multiplierReason(keyConfig(key)!)" :title="multiplierReason(keyConfig(key)!)"> · {{ t('multiplier.reason') }}: {{ multiplierReason(keyConfig(key)!) }}</span>
         </div>
       </div>
+      <div v-if="keyConfig(key)?.quotaGroup" class="grid gap-2 rounded-lg border border-rose-500/20 bg-rose-500/5 p-2 sm:grid-cols-[1fr_1fr_auto]">
+        <div>
+          <label class="text-[10px] text-muted-foreground">{{ t('groupModel.model') }}</label>
+          <Input v-model="groupModelDraft(key).model" class="h-8 font-mono" :placeholder="t('groupModel.modelPlaceholder')" />
+        </div>
+        <div>
+          <label class="text-[10px] text-muted-foreground">{{ t('groupModel.note') }}</label>
+          <Input v-model="groupModelDraft(key).note" class="h-8" :placeholder="t('groupModel.notePlaceholder')" />
+        </div>
+        <Button type="button" size="sm" variant="outline" class="self-end border-rose-500/30 text-rose-700 dark:text-rose-300" :disabled="groupModelBusy === `disable:${key}`" @click="disableGroupModel(key)">
+          <Loader2 v-if="groupModelBusy === `disable:${key}`" class="h-3.5 w-3.5 animate-spin" />
+          <Ban v-else class="h-3.5 w-3.5" />
+          {{ t('groupModel.disable') }}
+        </Button>
+        <p class="text-[10px] text-muted-foreground sm:col-span-3">{{ t('groupModel.disableHint', { group: keyConfig(key)?.quotaGroup || '-' }) }}</p>
+      </div>
       </div>
     </div>
     <p v-if="multiplierError" class="text-[10px] text-destructive">{{ multiplierError }}</p>
+    <p v-if="groupModelError" class="text-[10px] text-destructive">{{ groupModelError }}</p>
+    <p v-if="groupModelNotice" class="text-[10px] text-emerald-700 dark:text-emerald-300">{{ groupModelNotice }}</p>
 
     <!-- 添加新 API Key -->
     <div class="flex gap-2">
@@ -287,7 +344,30 @@ const visibleDisabledKeys = computed(() => {
       </Button>
     </div>
 
-    <!-- Disabled Keys -->
+    <!-- 人工分组模型禁用，与自动临时 Key 限制分开呈现 -->
+    <div v-if="disabledGroupModels.length" class="space-y-2 rounded-lg border border-rose-500/20 bg-rose-500/5 p-3">
+      <div>
+        <div class="text-[10px] font-bold uppercase tracking-wider text-rose-700 dark:text-rose-300">{{ t('groupModel.disabledTitle') }} ({{ disabledGroupModels.length }})</div>
+        <p class="mt-1 text-[10px] text-muted-foreground">{{ t('groupModel.disabledHint') }}</p>
+      </div>
+      <div v-for="record in disabledGroupModels" :key="`${record.quotaGroup}:${record.model}`" class="flex items-center justify-between gap-3 rounded-md border border-rose-500/15 bg-background/50 p-2 text-xs">
+        <div class="min-w-0 space-y-1">
+          <div class="flex flex-wrap items-center gap-1.5">
+            <span class="rounded bg-rose-500/10 px-1.5 py-0.5 font-medium text-rose-700 dark:text-rose-300">{{ record.quotaGroup || t('groupModel.unknownGroup') }}</span>
+            <code class="break-all font-mono text-muted-foreground">{{ record.model }}</code>
+          </div>
+          <p v-if="record.note" class="text-[10px] text-muted-foreground">{{ record.note }}</p>
+          <p class="text-[10px] text-muted-foreground">{{ record.disabledAt }}</p>
+        </div>
+        <Button type="button" size="sm" variant="outline" :disabled="groupModelBusy === `restore:${record.quotaGroup}:${record.model}`" @click="restoreGroupModel(record)">
+          <Loader2 v-if="groupModelBusy === `restore:${record.quotaGroup}:${record.model}`" class="h-3 w-3 animate-spin" />
+          <RotateCcw v-else class="h-3 w-3" />
+          {{ t('groupModel.restore') }}
+        </Button>
+      </div>
+    </div>
+
+    <!-- 自动临时限制的 Key -->
     <div v-if="hasDisabledKeys && visibleDisabledKeys.length" class="space-y-2 border border-amber-500/20 bg-amber-500/10 p-3 rounded-lg">
       <div class="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300">
         {{ t('channelEditor.auth.disabledKeys.label') }} ({{ visibleDisabledKeys.length }})

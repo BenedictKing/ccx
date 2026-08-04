@@ -85,6 +85,7 @@ import type {
   ExchangeRatesResponse,
   KeyMultiplierPatch,
   KeyMultiplierResponse,
+  GroupModelPolicyResponse,
   SubscriptionRefreshResponse,
 } from './api-types'
 
@@ -258,6 +259,20 @@ export class ApiService {
     await this.request(`/messages/channels/${channelId}/keys/restore-model`, {
       method: 'POST',
       body: JSON.stringify({ apiKey, model })
+    })
+  }
+
+  async disableGroupModel(kind: 'messages' | 'chat' | 'responses' | 'gemini' | 'images' | 'vectors', channelId: number, apiKey: string, model: string, note?: string): Promise<GroupModelPolicyResponse> {
+    return this.request(`/${kind}/channels/${channelId}/keys/group-model/disable`, {
+      method: 'POST',
+      body: JSON.stringify({ apiKey, model, note: note?.trim() || undefined })
+    })
+  }
+
+  async restoreGroupModel(kind: 'messages' | 'chat' | 'responses' | 'gemini' | 'images' | 'vectors', channelId: number, model: string, options: { apiKey?: string; quotaGroup?: string }): Promise<GroupModelPolicyResponse> {
+    return this.request(`/${kind}/channels/${channelId}/keys/group-model/restore`, {
+      method: 'POST',
+      body: JSON.stringify({ model, apiKey: options.apiKey || undefined, quotaGroup: options.quotaGroup || undefined })
     })
   }
 

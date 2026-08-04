@@ -95,6 +95,22 @@ export interface DisabledKeyModelInfo {
   recoverAt: string   // 自动恢复时间（ISO8601）
 }
 
+// 人工设置的配额分组模型禁用，与 disabledKeyModels 的自动临时限制相互独立。
+export interface DisabledGroupModelInfo {
+  quotaGroup: string
+  key?: string
+  model: string
+  note?: string
+  disabledAt: string
+}
+
+export interface GroupModelPolicyResponse {
+  success: boolean
+  quotaGroup: string
+  model: string
+  affectedKeyCount: number
+}
+
 export interface APIKeyConfig {
   /** 新建配置通常按 key 关联；服务端身份骨架可将 key 留空并仅返回 keyUid。 */
   key: string
@@ -221,7 +237,8 @@ export interface Channel {
   apiKeys: string[]
   apiKeyConfigs?: APIKeyConfig[]
   disabledApiKeys?: DisabledKeyInfo[]  // 被拉黑的 API Key
-  disabledKeyModels?: DisabledKeyModelInfo[]  // 被限制的 (Key, 模型) 组合
+  disabledKeyModels?: DisabledKeyModelInfo[]  // 自动临时限制的 (Key, 模型) 组合
+  disabledGroupModels?: DisabledGroupModelInfo[]  // 人工禁用的 (配额分组, 模型) 组合
   historicalApiKeys?: string[]
   description?: string
   website?: string

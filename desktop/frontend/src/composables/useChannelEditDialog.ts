@@ -24,6 +24,7 @@ import type {
   ChannelDiscoveryResponse,
   ChannelDiscoveryTargetClient,
   CompatDiagnoseResult,
+  DisabledGroupModel,
   DisabledKeyInfo,
 } from '@/services/admin-api'
 import { useChannelEditSectionNav } from '@/composables/useChannelEditSectionNav'
@@ -74,6 +75,8 @@ const { t } = useLanguage()
   const copilotDefaultBaseUrl = 'https://api.githubcopilot.com'
   const defaultNormalizeMetadataUserId = () => props.channelType === 'messages'
   const disabledApiKeys = computed<DisabledKeyInfo[]>(() => props.channel?.disabledApiKeys ?? [])
+  const localDisabledGroupModels = ref<DisabledGroupModel[]>([])
+  const disabledGroupModels = computed(() => localDisabledGroupModels.value)
   const historicalApiKeys = computed(() => props.channel?.historicalApiKeys ?? [])
   const {
     restoringKey,
@@ -379,6 +382,7 @@ const { t } = useLanguage()
     keyModelsStatus.value.clear()
     resetTargetModelState()
     localRestoredKeys.value = new Set()
+    localDisabledGroupModels.value = []
     modelMappingRows.value = []
     modelCapabilityRows.value = []
     headerRows.value = []
@@ -423,6 +427,7 @@ const { t } = useLanguage()
     keyModelsStatus.value.clear()
     resetTargetModelState()
     localRestoredKeys.value = new Set()
+    localDisabledGroupModels.value = [...(ch.disabledGroupModels ?? [])]
     modelMappingRows.value = modelMappingFromChannel(ch)
     modelCapabilityRows.value = modelCapabilitiesToRows(ch.modelCapabilities || {}, () => ++rowId)
     form.embeddingCapabilityRows = embeddingCapabilitiesToRows(ch.embeddingCapabilities || {}, nextEmbeddingRowId)
@@ -966,6 +971,40 @@ const { t } = useLanguage()
     }
   })
 
+  function upsertDisabledGroupModel(record: DisabledGroupModel) {
+    localDisabledGroupModels.value = [
+      record,
+      ...localDisabledGroupModels.value.filter(item =>
+        item.quotaGroup !== record.quotaGroup || item.model !== record.model
+      ),
+    ]
+  }
+
+  async function handleGroupModelDisable(payload: { apiKey: string; model: string; note?: string }) {
+    if (!props.channel) throw new Error(t('groupModel.error.channelRequired'))
+    const result = await adminApi.disableGroupModel(props.channelType, props.channel.index, payload)
+    upsertDisabledGroupModel({
+      quotaGroup: result.quotaGroup,
+      key: payload.apiKey,
+      model: result.model,
+      note: payload.note,
+      disabledAt: new Date().toISOString(),
+    })
+    return result
+  }
+
+  async function handleGroupModelRestore(record: DisabledGroupModel) {
+    if (!props.channel) throw new Error(t('groupModel.error.channelRequired'))
+    const payload = record.quotaGroup
+      ? { quotaGroup: record.quotaGroup, model: record.model }
+      : { apiKey: record.key, model: record.model }
+    const result = await adminApi.restoreGroupModel(props.channelType, props.channel.index, payload)
+    localDisabledGroupModels.value = localDisabledGroupModels.value.filter(item =>
+      item.quotaGroup !== record.quotaGroup || item.model !== record.model
+    )
+    return result
+  }
+
   // ── 编辑头部动作：noVision toggle + Test Capability ──
 
   async function handleTestCapability() {
@@ -1121,6 +1160,7 @@ const { t } = useLanguage()
     reasoningEffortOptions,
     form,
     disabledApiKeys,
+    disabledGroupModels,
     historicalApiKeys,
     detectedBaseUrls,
     detectedApiKeys,
@@ -1191,6 +1231,8 @@ const { t } = useLanguage()
     addNewApiKeys,
     copyApiKey,
     handleDisabledKeyRestore,
+    handleGroupModelDisable,
+    handleGroupModelRestore,
     handleTestCapability,
     handleDiagnoseCompat,
     handleDiscoverChannelConfig,

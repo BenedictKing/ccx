@@ -71,11 +71,14 @@
                 :api-keys="form.apiKeys"
                 :disabled-keys="visibleDisabledKeys"
                 :disabled-key-models="visibleDisabledKeyModels"
+                :disabled-group-models="visibleDisabledGroupModels"
+                :model-options="targetModelOptions"
                 :api-key-configs="form.apiKeyConfigs"
                 :key-models-status="keyModelsStatus"
                 :is-editing="isEditing"
                 :restoring-key="restoringKey"
                 :restoring-key-model="restoringKeyModel"
+                :changing-group-model="changingGroupModel"
                 :removing-key="removingKey"
                 :suspending-key="suspendingKey"
                 :service-type="form.serviceType"
@@ -91,6 +94,8 @@
                 @update:proxy-url="form.proxyUrl = $event"
                 @restore-key="restoreDisabledKey"
                 @restore-key-model="restoreDisabledKeyModel"
+                @disable-group-model="disableGroupModel"
+                @restore-group-model="restoreDisabledGroupModel"
                 @remove-key="removeDisabledKey"
                 @suspend-key="suspendKey"
                 @resume-key="resumeKey"
@@ -614,6 +619,10 @@ const {
   restoringKeyModel,
   visibleDisabledKeyModels,
   restoreDisabledKeyModel,
+  changingGroupModel,
+  visibleDisabledGroupModels,
+  disableGroupModel,
+  restoreDisabledGroupModel,
   suspendingKey,
   suspendKey,
   resumeKey,

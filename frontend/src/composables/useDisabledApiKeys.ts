@@ -29,11 +29,15 @@ export function useDisabledApiKeys(options: DisabledApiKeyOptions) {
   const localRemovedKeys = ref(new Set<string>())
   const restoringKeyModel = ref('')
   const localRestoredKeyModels = ref(new Set<string>())
+  const changingGroupModel = ref('')
+  const localDisabledGroupModels = ref<Array<{ quotaGroup: string; key?: string; model: string; note?: string; disabledAt: string }>>([])
+  const localRestoredGroupModels = ref(new Set<string>())
   const suspendingKey = ref('')
   const localSuspendedKeys = ref(new Set<string>())
   const localResumedKeys = ref(new Set<string>())
 
   const keyModelKey = (apiKey: string, model: string) => `${apiKey}|${model}`
+  const groupModelKey = (quotaGroup: string, model: string) => `${quotaGroup}|${model}`
   const channelId = (channel: Channel) => channel.routeIndex ?? channel.index
 
   const keyRoutes = (channel: Channel, apiKey: string): KeyRoute[] => {
@@ -106,6 +110,13 @@ export function useDisabledApiKeys(options: DisabledApiKeyOptions) {
     )
   )
 
+  const visibleDisabledGroupModels = computed(() => {
+    const serverRecords = options.channel.value?.disabledGroupModels || []
+    return [...serverRecords, ...localDisabledGroupModels.value].filter(
+      record => !localRestoredGroupModels.value.has(groupModelKey(record.quotaGroup, record.model))
+    )
+  })
+
   const resetRestoredKeys = () => {
     localRestoredKeys.value = new Set<string>()
     restoringKey.value = ''
@@ -113,6 +124,9 @@ export function useDisabledApiKeys(options: DisabledApiKeyOptions) {
     removingKey.value = ''
     localRestoredKeyModels.value = new Set<string>()
     restoringKeyModel.value = ''
+    localDisabledGroupModels.value = []
+    localRestoredGroupModels.value = new Set<string>()
+    changingGroupModel.value = ''
     localSuspendedKeys.value = new Set<string>()
     localResumedKeys.value = new Set<string>()
     suspendingKey.value = ''
@@ -233,6 +247,54 @@ export function useDisabledApiKeys(options: DisabledApiKeyOptions) {
     }
   }
 
+  const disableGroupModel = async (apiKey: string, model: string, note?: string) => {
+    const channel = options.channel.value
+    const normalizedModel = model.trim()
+    if (!channel || !normalizedModel || changingGroupModel.value) return
+    changingGroupModel.value = keyModelKey(apiKey, normalizedModel)
+    try {
+      const result = await options.apiService.disableGroupModel(
+        options.channelType.value,
+        channelId(channel),
+        apiKey,
+        normalizedModel,
+        note,
+      )
+      localDisabledGroupModels.value = [
+        ...localDisabledGroupModels.value.filter(record => groupModelKey(record.quotaGroup, record.model) !== groupModelKey(result.quotaGroup, result.model)),
+        { quotaGroup: result.quotaGroup, key: apiKey, model: result.model, note: note?.trim() || undefined, disabledAt: new Date().toISOString() },
+      ]
+      localRestoredGroupModels.value.delete(groupModelKey(result.quotaGroup, result.model))
+      return result
+    } catch (error) {
+      options.emitError(error instanceof Error ? error.message : 'Disable failed')
+    } finally {
+      changingGroupModel.value = ''
+    }
+  }
+
+  const restoreDisabledGroupModel = async (record: { quotaGroup: string; key?: string; model: string }) => {
+    const channel = options.channel.value
+    const key = groupModelKey(record.quotaGroup, record.model)
+    if (!channel || changingGroupModel.value) return
+    changingGroupModel.value = key
+    try {
+      const result = await options.apiService.restoreGroupModel(
+        options.channelType.value,
+        channelId(channel),
+        record.model,
+        { quotaGroup: record.quotaGroup || undefined, apiKey: record.quotaGroup ? undefined : record.key },
+      )
+      localRestoredGroupModels.value = new Set([...localRestoredGroupModels.value, key])
+      localDisabledGroupModels.value = localDisabledGroupModels.value.filter(item => groupModelKey(item.quotaGroup, item.model) !== key)
+      return result
+    } catch (error) {
+      options.emitError(error instanceof Error ? error.message : 'Restore failed')
+    } finally {
+      changingGroupModel.value = ''
+    }
+  }
+
   const suspendKey = async (apiKey: string) => {
     const channel = options.channel.value
     if (!channel || suspendingKey.value) return
@@ -285,6 +347,10 @@ export function useDisabledApiKeys(options: DisabledApiKeyOptions) {
     disabledKeyModels,
     visibleDisabledKeyModels,
     restoreDisabledKeyModel,
+    changingGroupModel,
+    visibleDisabledGroupModels,
+    disableGroupModel,
+    restoreDisabledGroupModel,
     suspendingKey,
     suspendKey,
     resumeKey,

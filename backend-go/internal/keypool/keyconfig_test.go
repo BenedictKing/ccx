@@ -47,6 +47,42 @@ func TestCandidatesForModel_WildcardPattern(t *testing.T) {
 	}
 }
 
+func TestCandidatesForModel_GroupModelBan(t *testing.T) {
+	up := &config.UpstreamConfig{
+		APIKeys: []string{"group-a-1", "group-a-2", "group-b", "ungrouped"},
+		APIKeyConfigs: []config.APIKeyConfig{
+			{Key: "group-a-1", QuotaGroup: "account-a"},
+			{Key: "group-a-2", QuotaGroup: "account-a"},
+			{Key: "group-b", QuotaGroup: "account-b"},
+			{Key: "ungrouped"},
+		},
+		DisabledGroupModels: []config.DisabledGroupModelInfo{
+			{QuotaGroup: "account-a", Model: "gpt-5.6"},
+			{Key: "ungrouped", Model: "claude-opus-4-8"},
+		},
+	}
+
+	cands := CandidatesForModel(up, nil, "gpt-5.6")
+	if len(cands) != 2 || cands[0].APIKey != "group-b" || cands[1].APIKey != "ungrouped" {
+		t.Fatalf("want group-b and ungrouped for gpt-5.6, got %v", cands)
+	}
+
+	cands = CandidatesForModel(up, nil, "claude-opus-4-8")
+	if len(cands) != 3 {
+		t.Fatalf("want three grouped candidates for claude-opus-4-8, got %v", cands)
+	}
+	for _, cand := range cands {
+		if cand.APIKey == "ungrouped" {
+			t.Fatalf("ungrouped key should be excluded, got %v", cands)
+		}
+	}
+
+	cands = CandidatesForModel(up, nil, "other-model")
+	if len(cands) != 4 {
+		t.Fatalf("group ban must not affect other models, got %v", cands)
+	}
+}
+
 func TestCandidatesForModel_WeightOrdering(t *testing.T) {
 	up := &config.UpstreamConfig{
 		APIKeys: []string{"k1", "k2", "k3"},

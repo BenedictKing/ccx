@@ -180,6 +180,52 @@ describe('useDisabledApiKeys', () => {
     expect(form.apiKeyConfigs).toBeUndefined()
   })
 
+  it('人工禁用分组模型时调用统一 kind API 并立即显示记录', async () => {
+    const disableGroupModel = vi.fn().mockResolvedValue({
+      success: true,
+      quotaGroup: 'coding',
+      model: 'model-x',
+      affectedKeyCount: 2,
+    })
+    const form: TestForm = {
+      apiKeys: [activeKey, 'same-group-key'],
+      apiKeyConfigs: [
+        { key: activeKey, quotaGroup: 'coding' },
+        { key: 'same-group-key', quotaGroup: 'coding' },
+      ],
+    }
+    const { state } = createOptions({ disableGroupModel }, form)
+
+    const result = await state.disableGroupModel(activeKey, ' model-x ', 'manual')
+
+    expect(disableGroupModel).toHaveBeenCalledWith('messages', 3, activeKey, 'model-x', 'manual')
+    expect(result?.affectedKeyCount).toBe(2)
+    expect(state.visibleDisabledGroupModels.value).toEqual([
+      expect.objectContaining({ quotaGroup: 'coding', key: activeKey, model: 'model-x', note: 'manual' }),
+    ])
+  })
+
+  it('恢复分组模型优先按 quotaGroup 定位', async () => {
+    const restoreGroupModel = vi.fn().mockResolvedValue({ success: true, quotaGroup: 'coding', model: 'model-x', affectedKeyCount: 0 })
+    const { channel, state } = createOptions({ restoreGroupModel })
+    channel.value!.disabledGroupModels = [{ quotaGroup: 'coding', key: activeKey, model: 'model-x', disabledAt: new Date().toISOString() }]
+
+    await state.restoreDisabledGroupModel(channel.value!.disabledGroupModels[0])
+
+    expect(restoreGroupModel).toHaveBeenCalledWith('messages', 3, 'model-x', { quotaGroup: 'coding', apiKey: undefined })
+    expect(state.visibleDisabledGroupModels.value).toEqual([])
+  })
+
+  it('恢复空组记录时回退使用记录中的 key', async () => {
+    const restoreGroupModel = vi.fn().mockResolvedValue({ success: true, quotaGroup: '', model: 'model-x', affectedKeyCount: 1 })
+    const { channel, state } = createOptions({ restoreGroupModel })
+    channel.value!.disabledGroupModels = [{ quotaGroup: '', key: activeKey, model: 'model-x', disabledAt: new Date().toISOString() }]
+
+    await state.restoreDisabledGroupModel(channel.value!.disabledGroupModels[0])
+
+    expect(restoreGroupModel).toHaveBeenCalledWith('messages', 3, 'model-x', { quotaGroup: undefined, apiKey: activeKey })
+  })
+
   it('聚合渠道恢复 Key 时覆盖拥有该 Key 的全部协议路由', async () => {
     const resumeApiKey = vi.fn().mockResolvedValue(undefined)
     const resumeChatApiKey = vi.fn().mockResolvedValue(undefined)

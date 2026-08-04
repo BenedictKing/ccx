@@ -102,13 +102,17 @@ func CandidatesForModelFiltered(upstream *config.UpstreamConfig, failedKeys map[
 		if model != "" && upstream.IsKeyModelDisabledNow(key, model, now) {
 			continue
 		}
+		quotaGroup := strings.TrimSpace(cfg.QuotaGroup)
+		// 人工分组模型禁用：同渠道内非空 quotaGroup 动态共享；空分组仅匹配目标 Key。
+		if model != "" && upstream.IsGroupModelDisabled(key, quotaGroup, model) {
+			continue
+		}
 		// 渠道-模型级运行时熔断：该组合正在持续失败时暂时跳过，
 		// 不影响同 Key 的其他模型，也不阻断 failover 到其他渠道。
 		if model != "" && circuitOpen != nil && upstream.ChannelUID != "" &&
 			circuitOpen(upstream.ChannelUID, key, model) {
 			continue
 		}
-		quotaGroup := strings.TrimSpace(cfg.QuotaGroup)
 		scope := LimiterScopeFor(key, cfg)
 		out = append(out, Candidate{
 			APIKey:     key,

@@ -3,6 +3,8 @@ import { useStatus } from '@/composables/useStatus'
 import { GetAdminAccessKey } from '@bindings/github.com/BenedictKing/ccx/desktop/desktopservice'
 import {
   EXCHANGE_RATES_PATH,
+  groupModelDisablePath,
+  groupModelRestorePath,
   keyMultiplierPath,
   subscriptionBillingTermsPath,
   subscriptionRefreshPath,
@@ -14,6 +16,9 @@ import type {
   ExchangeRatesReplaceRequest,
   ExchangeRatesReplaceResponse,
   ExchangeRatesResponse,
+  GroupModelDisableRequest,
+  GroupModelMutationResponse,
+  GroupModelRestoreRequest,
   KeyMultiplierPatch,
   KeyMultiplierResponse,
   SubscriptionRefreshResponse,
@@ -153,6 +158,22 @@ export function useAdminApi() {
     /** 发送 DELETE 请求 */
     del<T = unknown>(path: string): Promise<T> {
       return request<T>('DELETE', path)
+    },
+
+    disableGroupModel(
+      kind: ChannelKind,
+      channelId: string | number,
+      payload: GroupModelDisableRequest,
+    ): Promise<GroupModelMutationResponse> {
+      return request<GroupModelMutationResponse>('POST', groupModelDisablePath(kind, channelId), payload)
+    },
+
+    restoreGroupModel(
+      kind: ChannelKind,
+      channelId: string | number,
+      payload: GroupModelRestoreRequest,
+    ): Promise<GroupModelMutationResponse> {
+      return request<GroupModelMutationResponse>('POST', groupModelRestorePath(kind, channelId), payload)
     },
 
     /** 使用原子端点更新单把 key 的倍率配置。 */

@@ -95,6 +95,33 @@ export interface DisabledKeyInfo {
   config?: APIKeyConfig
 }
 
+export interface DisabledGroupModel {
+  quotaGroup: string
+  key?: string
+  model: string
+  note?: string
+  disabledAt: string
+}
+
+export interface GroupModelDisableRequest {
+  apiKey: string
+  model: string
+  note?: string
+}
+
+export interface GroupModelRestoreRequest {
+  apiKey?: string
+  quotaGroup?: string
+  model: string
+}
+
+export interface GroupModelMutationResponse {
+  success: boolean
+  quotaGroup: string
+  model: string
+  affectedKeyCount: number
+}
+
 export interface APIKeyConfig {
   key: string
   keyUid?: string
@@ -209,6 +236,7 @@ export interface Channel {
   apiKeys: string[]
   apiKeyConfigs?: APIKeyConfig[]
   disabledApiKeys?: DisabledKeyInfo[]
+  disabledGroupModels?: DisabledGroupModel[]
   historicalApiKeys?: string[]
   description?: string
   website?: string
@@ -1519,6 +1547,10 @@ export const SUBSCRIPTIONS_PATH = '/api/subscriptions'
 export const subscriptionPath = (uid: string) => `/api/subscriptions/${encodeURIComponent(uid)}`
 export const subscriptionBillingTermsPath = (uid: string) => `${subscriptionPath(uid)}/billing-terms`
 export const subscriptionRefreshPath = (uid: string) => `${subscriptionPath(uid)}/refresh`
+export const groupModelDisablePath = (kind: ChannelKind, channelId: string | number) =>
+  `/api/${kind}/channels/${encodeURIComponent(String(channelId))}/keys/group-model/disable`
+export const groupModelRestorePath = (kind: ChannelKind, channelId: string | number) =>
+  `/api/${kind}/channels/${encodeURIComponent(String(channelId))}/keys/group-model/restore`
 export const keyMultiplierPath = (kind: ChannelKind, channelUid: string, keyUid: string) =>
   `/api/${kind}/channels/${encodeURIComponent(channelUid)}/keys/${encodeURIComponent(keyUid)}/multiplier`
 export const EXCHANGE_RATES_PATH = '/api/autopilot/cost/exchange-rates'

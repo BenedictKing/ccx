@@ -598,6 +598,10 @@ func (u *UpstreamConfig) Clone() *UpstreamConfig {
 		cloned.DisabledKeyModels = make([]DisabledKeyModelInfo, len(u.DisabledKeyModels))
 		copy(cloned.DisabledKeyModels, u.DisabledKeyModels)
 	}
+	if u.DisabledGroupModels != nil {
+		cloned.DisabledGroupModels = make([]DisabledGroupModelInfo, len(u.DisabledGroupModels))
+		copy(cloned.DisabledGroupModels, u.DisabledGroupModels)
+	}
 	if u.AutoBlacklistBalance != nil {
 		v := *u.AutoBlacklistBalance
 		cloned.AutoBlacklistBalance = &v

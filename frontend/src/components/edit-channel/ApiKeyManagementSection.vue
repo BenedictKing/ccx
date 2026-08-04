@@ -323,6 +323,25 @@
 
                 <template #append>
                   <div class="d-flex align-center ga-1" @click.stop>
+                    <v-tooltip
+                      v-if="!row.disabled"
+                      :text="t('channelCard.groupModelPolicy')"
+                      location="top"
+                      :open-delay="150"
+                    >
+                      <template #activator="{ props: tooltipProps }">
+                        <v-btn
+                          v-bind="tooltipProps"
+                          size="small"
+                          color="secondary"
+                          icon
+                          variant="text"
+                          @click="openGroupModelEditor(row)"
+                        >
+                          <v-icon size="small">mdi-tune-variant</v-icon>
+                        </v-btn>
+                      </template>
+                    </v-tooltip>
                     <v-btn
                       v-if="row.disabled"
                       size="small"
@@ -1148,7 +1167,44 @@
           </div>
         </v-alert>
 
-        <!-- 被限制的 (Key, 模型) 组合（仅编辑模式） -->
+        <!-- 人工配额分组模型策略，与自动临时限制分开呈现 -->
+        <div v-if="isEditing && visibleDisabledGroupModels.length" class="mt-4">
+          <div class="d-flex align-center ga-2 mb-2">
+            <v-icon size="small" color="secondary">mdi-tune-variant</v-icon>
+            <span class="text-body-2 font-weight-medium">{{ t('channelCard.disabledGroupModels') }}</span>
+            <v-chip size="x-small" color="secondary" variant="tonal">{{ visibleDisabledGroupModels.length }}</v-chip>
+          </div>
+          <v-list density="compact" class="rounded-lg group-model-policy-list">
+            <v-list-item
+              v-for="record in visibleDisabledGroupModels"
+              :key="record.quotaGroup + '|' + record.model"
+              class="px-3"
+            >
+              <template #prepend><v-icon size="small" color="secondary" class="mr-2">mdi-account-multiple-outline</v-icon></template>
+              <v-list-item-title class="d-flex align-center ga-2 flex-wrap text-caption">
+                <v-chip size="x-small" color="secondary" variant="tonal">{{ record.quotaGroup || t('channelCard.ungrouped') }}</v-chip>
+                <strong>{{ record.model }}</strong>
+              </v-list-item-title>
+              <v-list-item-subtitle class="text-caption">
+                {{ record.note || t('channelCard.groupModelManualNote') }} · {{ formatDisabledTime(record.disabledAt) }}
+              </v-list-item-subtitle>
+              <template #append>
+                <v-btn
+                  size="x-small"
+                  color="success"
+                  variant="tonal"
+                  :loading="changingGroupModel === (record.quotaGroup + '|' + record.model)"
+                  :disabled="!!changingGroupModel"
+                  @click="$emit('restore-group-model', record)"
+                >
+                  <v-icon start size="small">mdi-restore</v-icon>{{ t('channelCard.restoreGroupModel') }}
+                </v-btn>
+              </template>
+            </v-list-item>
+          </v-list>
+        </div>
+
+        <!-- 被限制的 (Key, 模型) 组合（仅编辑模式，自动临时限制） -->
         <div v-if="isEditing && visibleDisabledKeyModels.length" class="mt-4">
           <div class="d-flex align-center ga-2 mb-2">
             <v-icon size="small" color="warning">mdi-alert-circle-outline</v-icon>
@@ -1193,6 +1249,55 @@
       </v-card-text>
     </v-card>
 
+    <v-dialog v-model="groupModelDialog" max-width="520">
+      <v-card>
+        <v-card-title class="d-flex align-center ga-2">
+          <v-icon color="secondary">mdi-tune-variant</v-icon>
+          {{ t('channelCard.groupModelPolicy') }}
+        </v-card-title>
+        <v-card-text class="d-flex flex-column ga-3">
+          <div class="d-flex align-center ga-2 flex-wrap text-caption text-medium-emphasis">
+            <code>{{ groupModelEditing ? maskApiKey(groupModelEditing.key) : '' }}</code>
+            <v-chip size="x-small" color="secondary" variant="tonal">
+              {{ groupModelEditing?.quotaGroup || t('channelCard.ungrouped') }}
+            </v-chip>
+            <span>{{ t('channelCard.affectedGroupKeys', { count: groupModelAffectedCount }) }}</span>
+          </div>
+          <v-combobox
+            v-model="groupModelForm.model"
+            :items="modelOptions"
+            :label="t('channelCard.groupModelModel')"
+            :placeholder="t('channelCard.groupModelModelPlaceholder')"
+            variant="outlined"
+            density="compact"
+            clearable
+            autofocus
+          />
+          <v-text-field
+            v-model="groupModelForm.note"
+            :label="t('channelCard.groupModelNote')"
+            :placeholder="t('channelCard.groupModelNotePlaceholder')"
+            variant="outlined"
+            density="compact"
+            clearable
+          />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="groupModelDialog = false">{{ t('app.actions.cancel') }}</v-btn>
+          <v-btn
+            color="warning"
+            variant="tonal"
+            :loading="!!changingGroupModel"
+            :disabled="!groupModelForm.model.trim() || !!changingGroupModel"
+            @click="submitGroupModelDisable"
+          >
+            {{ t('channelCard.disableGroupModel') }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <v-dialog v-model="multiplierDialog" max-width="520">
       <v-card>
         <v-card-title>{{ t('subscription.keyMultiplier.title') }}</v-card-title>
@@ -1225,6 +1330,7 @@ import type {
   CompsharePlanUsageWindow,
   DeepSeekCredentialBalance,
   DisabledKeyInfo,
+  DisabledGroupModelInfo,
   EndpointDetailItem,
   KimiCodeMoney,
   ManagedAccountCredential,
@@ -1264,11 +1370,14 @@ interface Props {
   apiKeys: string[]
   disabledKeys: DisabledKeyInfo[]
   disabledKeyModels?: DisabledKeyModel[]
+  disabledGroupModels?: DisabledGroupModelInfo[]
+  modelOptions?: Array<{ title: string; value: string }>
   apiKeyConfigs?: APIKeyConfig[]
   keyModelsStatus: Map<string, KeyModelsStatus>
   isEditing: boolean
   restoringKey: string
   restoringKeyModel?: string
+  changingGroupModel?: string
   removingKey?: string
   suspendingKey?: string
   serviceType?: string
@@ -1289,6 +1398,8 @@ const emit = defineEmits<{
   'update:proxyUrl': [string]
   'restore-key': [string]
   'restore-key-model': [string, string]
+  'disable-group-model': [string, string, string?]
+  'restore-group-model': [DisabledGroupModelInfo]
   'remove-key': [string]
   'suspend-key': [string]
   'resume-key': [string]
@@ -1301,6 +1412,9 @@ const newApiKey = ref('')
 const apiKeyError = ref('')
 const duplicateKeyIndex = ref<number | null>(null)
 const copiedKey = ref('')
+const groupModelDialog = ref(false)
+const groupModelEditing = ref<ChannelApiKeyRow | null>(null)
+const groupModelForm = ref({ model: '', note: '' })
 const multiplierDialog = ref(false)
 const multiplierSaving = ref(false)
 const multiplierError = ref('')
@@ -1445,6 +1559,26 @@ const planRowTitle = (): string => {
 const hasConfigurableKeys = computed(() => props.serviceType === 'copilot' || keyRows.value.length > 0)
 
 const visibleDisabledKeyModels = computed(() => props.disabledKeyModels || [])
+const visibleDisabledGroupModels = computed(() => props.disabledGroupModels || [])
+const modelOptions = computed(() => props.modelOptions || [])
+const groupModelAffectedCount = computed(() => {
+  const group = groupModelEditing.value?.quotaGroup || ''
+  return keyRows.value.filter(row => (row.quotaGroup || '') === group && !row.disabled).length
+})
+
+const openGroupModelEditor = (row: ChannelApiKeyRow) => {
+  groupModelEditing.value = row
+  groupModelForm.value = { model: '', note: '' }
+  groupModelDialog.value = true
+}
+
+const submitGroupModelDisable = () => {
+  const row = groupModelEditing.value
+  const model = groupModelForm.value.model.trim()
+  if (!row || !model) return
+  emit('disable-group-model', row.key, model, groupModelForm.value.note.trim() || undefined)
+  groupModelDialog.value = false
+}
 
 const multiplierStatusColor = (status?: string) => status === 'fresh' || status === 'manual' ? 'success' : status === 'over_limit' || status === 'sync_error' || status === 'relink_required' ? 'error' : 'warning'
 

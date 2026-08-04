@@ -1453,5 +1453,19 @@
   "multiplier.status.over_limit": "超过上限",
   "multiplier.status.sync_error": "同步错误",
   "multiplier.status.relink_required": "需要重新关联",
-  "multiplier.status.remote_group_missing": "远端分组已消失"
+  "multiplier.status.remote_group_missing": "远端分组已消失",
+  "groupModel.model": "禁用模型",
+  "groupModel.modelPlaceholder": "例如 claude-sonnet-5",
+  "groupModel.note": "备注（可选）",
+  "groupModel.notePlaceholder": "记录人工禁用原因",
+  "groupModel.disable": "禁用整组模型",
+  "groupModel.disableHint": "这是人工长期禁用：将对分组 {group} 的全部 Key 生效，不属于自动临时限流。",
+  "groupModel.disabledTitle": "人工禁用的分组模型",
+  "groupModel.disabledHint": "这些规则会持续生效，直到管理员手动恢复；下方黄色区域仅展示自动临时 Key 限制。",
+  "groupModel.restore": "恢复整组模型",
+  "groupModel.unknownGroup": "未识别分组",
+  "groupModel.error.channelRequired": "请先保存渠道再管理分组模型。",
+  "groupModel.error.modelRequired": "请输入要禁用的模型。",
+  "groupModel.disableSuccess": "已禁用分组 {group} 的 {model}，影响 {count} 个 Key。",
+  "groupModel.restoreSuccess": "已恢复分组 {group} 的 {model}，影响 {count} 个 Key。"
 }

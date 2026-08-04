@@ -70,6 +70,7 @@ const {
   form,
   applyFormUpdates,
   disabledApiKeys,
+  disabledGroupModels,
   historicalApiKeys,
   detectedBaseUrls,
   detectedApiKeys,
@@ -140,6 +141,8 @@ const {
   addNewApiKeys,
   copyApiKey,
   handleDisabledKeyRestore,
+  handleGroupModelDisable,
+  handleGroupModelRestore,
   handleTestCapability,
   handleDiagnoseCompat,
   handleDiscoverChannelConfig,
@@ -254,6 +257,7 @@ const embeddingTargetModels = computed(() =>
                         :copied-key-index="copiedKeyIndex"
                         :duplicate-key-index="duplicateKeyIndex"
                         :disabled-api-keys="disabledApiKeys"
+                        :disabled-group-models="disabledGroupModels"
                         :historical-api-keys="historicalApiKeys"
                         :restoring-key="restoringKey"
                         :local-restored-keys="localRestoredKeys"
@@ -262,6 +266,8 @@ const embeddingTargetModels = computed(() =>
                         :channel-kind="channelType"
                         :channel-uid="channel?.channelUid"
                         :api-key-configs="channel?.apiKeyConfigs"
+                        :on-disable-group-model="handleGroupModelDisable"
+                        :on-restore-group-model="handleGroupModelRestore"
                         :errors="errors"
                         @update:new-api-keys-text="newApiKeysText = $event; clearDuplicateKeyHighlight()"
                         @add-new-api-keys="addNewApiKeys"

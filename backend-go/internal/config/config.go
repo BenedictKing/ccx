@@ -26,13 +26,14 @@ type UpstreamConfig struct {
 	BaseURL               string                             `json:"baseUrl"`
 	BaseURLs              []string                           `json:"baseUrls,omitempty"` // 多 BaseURL 支持（failover 模式）
 	APIKeys               []string                           `json:"apiKeys"`
-	APIKeyConfigs         []APIKeyConfig                     `json:"apiKeyConfigs,omitempty"`     // API Key 附加配置（限速、权重、配额组等），通过 Key 关联 APIKeys
-	HistoricalAPIKeys     []string                           `json:"historicalApiKeys,omitempty"` // 历史 API Key（用于统计聚合，换 Key 后保留旧 Key 的统计数据）
-	DisabledAPIKeys       []DisabledKeyInfo                  `json:"disabledApiKeys,omitempty"`   // 被禁用的 API Key（持久化；额度类可定时恢复）
-	DisabledKeyModels     []DisabledKeyModelInfo             `json:"disabledKeyModels,omitempty"` // 被限制的 (Key,模型) 组合（持久化，定时自动恢复）
-	ServiceType           string                             `json:"serviceType"`                 // gemini, openai, claude
-	AuthHeader            string                             `json:"authHeader,omitempty"`        // 认证头覆盖：auto(空)/bearer/x-api-key
-	ProviderID            string                             `json:"providerId,omitempty"`        // 来源 provider 模板 ID（如 mimo/deepseek），模板化添加时写入，用于回溯与预设引用
+	APIKeyConfigs         []APIKeyConfig                     `json:"apiKeyConfigs,omitempty"`       // API Key 附加配置（限速、权重、配额组等），通过 Key 关联 APIKeys
+	HistoricalAPIKeys     []string                           `json:"historicalApiKeys,omitempty"`   // 历史 API Key（用于统计聚合，换 Key 后保留旧 Key 的统计数据）
+	DisabledAPIKeys       []DisabledKeyInfo                  `json:"disabledApiKeys,omitempty"`     // 被禁用的 API Key（持久化；额度类可定时恢复）
+	DisabledKeyModels     []DisabledKeyModelInfo             `json:"disabledKeyModels,omitempty"`   // 被限制的 (Key,模型) 组合（持久化，定时自动恢复）
+	DisabledGroupModels   []DisabledGroupModelInfo           `json:"disabledGroupModels,omitempty"` // 人工禁用的 (配额组,模型) 组合（持久化，不自动恢复）
+	ServiceType           string                             `json:"serviceType"`                   // gemini, openai, claude
+	AuthHeader            string                             `json:"authHeader,omitempty"`          // 认证头覆盖：auto(空)/bearer/x-api-key
+	ProviderID            string                             `json:"providerId,omitempty"`          // 来源 provider 模板 ID（如 mimo/deepseek），模板化添加时写入，用于回溯与预设引用
 	Name                  string                             `json:"name,omitempty"`
 	Description           string                             `json:"description,omitempty"`
 	Website               string                             `json:"website,omitempty"`
@@ -426,6 +427,16 @@ type DisabledKeyModelInfo struct {
 	Message    string `json:"message"`    // 原始错误信息摘要
 	DisabledAt string `json:"disabledAt"` // RFC3339 时间戳
 	RecoverAt  string `json:"recoverAt"`  // RFC3339 自动恢复时间（默认 +1h）
+}
+
+// DisabledGroupModelInfo 记录人工禁用的配额组模型组合。
+// QuotaGroup 非空时，当前渠道内所有同组 Key 动态共享该限制；为空时仅限制 Key。
+type DisabledGroupModelInfo struct {
+	QuotaGroup string `json:"quotaGroup,omitempty"`
+	Key        string `json:"key,omitempty"`
+	Model      string `json:"model"`
+	Note       string `json:"note,omitempty"`
+	DisabledAt string `json:"disabledAt"`
 }
 
 // RateLimitWindowSeconds 返回限速器实际使用的窗口秒数。
@@ -846,6 +857,30 @@ func (u *UpstreamConfig) IsKeyModelDisabledNow(apiKey, model string, now time.Ti
 			return true // 无法解析恢复时间时保守视为仍受限
 		}
 		return now.Before(recoverAt)
+	}
+	return false
+}
+
+// IsGroupModelDisabled 判断人工分组模型限制是否作用于指定 Key。
+// 非空 quotaGroup 按当前分组动态生效；空分组只匹配记录中的目标 Key。
+func (u *UpstreamConfig) IsGroupModelDisabled(apiKey, quotaGroup, model string) bool {
+	apiKey = strings.TrimSpace(apiKey)
+	quotaGroup = strings.TrimSpace(quotaGroup)
+	model = strings.ToLower(strings.TrimSpace(model))
+	if apiKey == "" || model == "" || len(u.DisabledGroupModels) == 0 {
+		return false
+	}
+	for _, dm := range u.DisabledGroupModels {
+		if strings.ToLower(strings.TrimSpace(dm.Model)) != model {
+			continue
+		}
+		disabledGroup := strings.TrimSpace(dm.QuotaGroup)
+		if quotaGroup != "" && disabledGroup == quotaGroup {
+			return true
+		}
+		if quotaGroup == "" && disabledGroup == "" && strings.TrimSpace(dm.Key) == apiKey {
+			return true
+		}
 	}
 	return false
 }
@@ -2212,6 +2247,164 @@ func (cm *ConfigManager) RestoreKeyModel(apiType string, channelIndex int, apiKe
 	statelog.LogStateTransition(apiType+"-KeyModel", "key_model", utils.MaskAPIKey(apiKey)+"|"+model, "disabled", "active", "manual_restore", "channel="+upstream.Name)
 
 	return cm.saveConfigLocked(cm.config)
+}
+
+// DisableGroupModel 永久禁用目标 Key 当前所属配额组的模型。
+// 空配额组不会与其他空组 Key 合并，而是退化为单 Key 限制。
+func (cm *ConfigManager) DisableGroupModel(apiType string, channelIndex int, apiKey, model, note string) (string, int, error) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	upstreams := cm.getUpstreamSliceLocked(apiType)
+	if upstreams == nil || channelIndex < 0 || channelIndex >= len(*upstreams) {
+		return "", 0, fmt.Errorf("无效的渠道索引: %s[%d]", apiType, channelIndex)
+	}
+	apiKey = strings.TrimSpace(apiKey)
+	model = strings.TrimSpace(model)
+	note = strings.TrimSpace(note)
+	if apiKey == "" || model == "" {
+		return "", 0, fmt.Errorf("apiKey 和 model 不能为空")
+	}
+
+	upstream := &(*upstreams)[channelIndex]
+	quotaGroup, found := quotaGroupForAPIKey(upstream, apiKey)
+	if !found {
+		return "", 0, fmt.Errorf("API Key 不属于该渠道")
+	}
+	affectedKeyCount := countGroupModelAffectedKeys(upstream, apiKey, quotaGroup)
+
+	for i := range upstream.DisabledGroupModels {
+		dm := &upstream.DisabledGroupModels[i]
+		if !sameDisabledGroupModel(*dm, apiKey, quotaGroup, model) {
+			continue
+		}
+		if note == "" || dm.Note == note {
+			return quotaGroup, affectedKeyCount, nil
+		}
+		previous := upstream.Clone().DisabledGroupModels
+		dm.Note = note
+		if err := cm.saveConfigLocked(cm.config); err != nil {
+			upstream.DisabledGroupModels = previous
+			return "", 0, err
+		}
+		return quotaGroup, affectedKeyCount, nil
+	}
+
+	previous := upstream.Clone().DisabledGroupModels
+	entry := DisabledGroupModelInfo{
+		QuotaGroup: quotaGroup,
+		Model:      model,
+		Note:       note,
+		DisabledAt: time.Now().Format(time.RFC3339),
+	}
+	if quotaGroup == "" {
+		entry.Key = apiKey
+	}
+	upstream.DisabledGroupModels = append(upstream.DisabledGroupModels, entry)
+	if err := cm.saveConfigLocked(cm.config); err != nil {
+		upstream.DisabledGroupModels = previous
+		return "", 0, err
+	}
+	log.Printf("[%s-GroupModel] 已禁用模型 %s (配额组: %s, 影响 Key: %d, 渠道: %s)",
+		apiType, model, displayQuotaGroup(quotaGroup, apiKey), affectedKeyCount, upstream.Name)
+	return quotaGroup, affectedKeyCount, nil
+}
+
+// RestoreGroupModel 永久移除人工分组模型限制。quotaGroup 非空时可直接按组恢复，
+// 即使该组当前暂时没有成员；空组记录仍使用 apiKey 精确定位。
+func (cm *ConfigManager) RestoreGroupModel(apiType string, channelIndex int, apiKey, quotaGroup, model string) (string, int, error) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	upstreams := cm.getUpstreamSliceLocked(apiType)
+	if upstreams == nil || channelIndex < 0 || channelIndex >= len(*upstreams) {
+		return "", 0, fmt.Errorf("无效的渠道索引: %s[%d]", apiType, channelIndex)
+	}
+	apiKey = strings.TrimSpace(apiKey)
+	quotaGroup = strings.TrimSpace(quotaGroup)
+	model = strings.TrimSpace(model)
+	if model == "" || (apiKey == "" && quotaGroup == "") {
+		return "", 0, fmt.Errorf("model 以及 apiKey 或 quotaGroup 不能为空")
+	}
+
+	upstream := &(*upstreams)[channelIndex]
+	if quotaGroup == "" {
+		resolvedGroup, found := quotaGroupForAPIKey(upstream, apiKey)
+		if found {
+			quotaGroup = resolvedGroup
+		}
+	}
+	affectedKeyCount := countGroupModelAffectedKeys(upstream, apiKey, quotaGroup)
+	previous := upstream.Clone().DisabledGroupModels
+	next := make([]DisabledGroupModelInfo, 0, len(upstream.DisabledGroupModels))
+	removed := false
+	for _, dm := range upstream.DisabledGroupModels {
+		if sameDisabledGroupModel(dm, apiKey, quotaGroup, model) {
+			removed = true
+			continue
+		}
+		next = append(next, dm)
+	}
+	if !removed {
+		return quotaGroup, affectedKeyCount, nil
+	}
+	upstream.DisabledGroupModels = next
+	if err := cm.saveConfigLocked(cm.config); err != nil {
+		upstream.DisabledGroupModels = previous
+		return "", 0, err
+	}
+	log.Printf("[%s-GroupModel] 已恢复模型 %s (配额组: %s, 影响 Key: %d, 渠道: %s)",
+		apiType, model, displayQuotaGroup(quotaGroup, apiKey), affectedKeyCount, upstream.Name)
+	return quotaGroup, affectedKeyCount, nil
+}
+
+func quotaGroupForAPIKey(upstream *UpstreamConfig, apiKey string) (string, bool) {
+	apiKey = strings.TrimSpace(apiKey)
+	for _, key := range upstream.APIKeys {
+		if strings.TrimSpace(key) != apiKey {
+			continue
+		}
+		for _, cfg := range NormalizeAPIKeyConfigsForView(*upstream) {
+			if strings.TrimSpace(cfg.Key) == apiKey {
+				return strings.TrimSpace(cfg.QuotaGroup), true
+			}
+		}
+		return "", true
+	}
+	return "", false
+}
+
+func countGroupModelAffectedKeys(upstream *UpstreamConfig, apiKey, quotaGroup string) int {
+	if quotaGroup == "" {
+		if apiKey == "" {
+			return 0
+		}
+		return 1
+	}
+	count := 0
+	for _, cfg := range NormalizeAPIKeyConfigsForView(*upstream) {
+		if strings.TrimSpace(cfg.QuotaGroup) == quotaGroup && strings.TrimSpace(cfg.Key) != "" {
+			count++
+		}
+	}
+	return count
+}
+
+func sameDisabledGroupModel(dm DisabledGroupModelInfo, apiKey, quotaGroup, model string) bool {
+	if !strings.EqualFold(strings.TrimSpace(dm.Model), strings.TrimSpace(model)) {
+		return false
+	}
+	if quotaGroup != "" {
+		return strings.TrimSpace(dm.QuotaGroup) == quotaGroup
+	}
+	return strings.TrimSpace(dm.QuotaGroup) == "" && strings.TrimSpace(dm.Key) == apiKey
+}
+
+func displayQuotaGroup(quotaGroup, apiKey string) string {
+	if quotaGroup != "" {
+		return quotaGroup
+	}
+	return "单 Key " + utils.MaskAPIKey(apiKey)
 }
 
 // RestoreExpiredKeyModels 清理指定渠道下所有 RecoverAt 已到期的 (Key,模型) 限制条目。

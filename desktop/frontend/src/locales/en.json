@@ -1453,5 +1453,19 @@
   "multiplier.status.over_limit": "Over limit",
   "multiplier.status.sync_error": "Sync error",
   "multiplier.status.relink_required": "Relink required",
-  "multiplier.status.remote_group_missing": "Remote group missing"
+  "multiplier.status.remote_group_missing": "Remote group missing",
+  "groupModel.model": "Model to disable",
+  "groupModel.modelPlaceholder": "e.g. claude-sonnet-5",
+  "groupModel.note": "Note (optional)",
+  "groupModel.notePlaceholder": "Record why this was manually disabled",
+  "groupModel.disable": "Disable for group",
+  "groupModel.disableHint": "This is a persistent manual ban for every key in group {group}, not an automatic temporary throttle.",
+  "groupModel.disabledTitle": "Manually disabled group models",
+  "groupModel.disabledHint": "These rules remain active until an administrator restores them. The amber section below only lists automatic temporary key restrictions.",
+  "groupModel.restore": "Restore for group",
+  "groupModel.unknownGroup": "Unknown group",
+  "groupModel.error.channelRequired": "Save the channel before managing group models.",
+  "groupModel.error.modelRequired": "Enter a model to disable.",
+  "groupModel.disableSuccess": "Disabled {model} for group {group}; {count} keys affected.",
+  "groupModel.restoreSuccess": "Restored {model} for group {group}; {count} keys affected."
 }

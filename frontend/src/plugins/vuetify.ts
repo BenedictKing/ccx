@@ -261,6 +261,8 @@ import {
   mdiFileQuestionOutline,
   mdiLightningBoltOutline,
   mdiPlaylistPlus,
+  mdiTuneVariant,
+  mdiAccountMultipleOutline,
 } from '@mdi/js'
 
 // 图标名称到 SVG path 的映射 (使用 kebab-case)
@@ -394,6 +396,8 @@ const iconMap: Record<string, string> = {
   'shield-alert': mdiShieldAlert,
   'text': mdiText,
   'tune': mdiTune,
+  'tune-variant': mdiTuneVariant,
+  'account-multiple-outline': mdiAccountMultipleOutline,
   'image-sync': mdiImageSync,
   'image-outline': mdiImageOutline,
   'image-multiple': mdiImageMultiple,

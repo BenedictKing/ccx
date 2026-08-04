@@ -9,6 +9,8 @@ import {
 import {
   EXCHANGE_RATES_PATH,
   keyMultiplierPath,
+  groupModelDisablePath,
+  groupModelRestorePath,
   subscriptionBillingTermsPath,
   subscriptionRefreshPath,
 } from '@/services/admin-api'
@@ -16,6 +18,8 @@ import {
 describe('admin management API paths', () => {
   it('matches backend atomic endpoints', () => {
     expect(keyMultiplierPath('images', 'channel/a', 'key/b')).toBe('/api/images/channels/channel%2Fa/keys/key%2Fb/multiplier')
+    expect(groupModelDisablePath('messages', 3)).toBe('/api/messages/channels/3/keys/group-model/disable')
+    expect(groupModelRestorePath('responses', 'channel/a')).toBe('/api/responses/channels/channel%2Fa/keys/group-model/restore')
     expect(subscriptionBillingTermsPath('sub/a')).toBe('/api/subscriptions/sub%2Fa/billing-terms')
     expect(subscriptionRefreshPath('sub/a')).toBe('/api/subscriptions/sub%2Fa/refresh')
     expect(EXCHANGE_RATES_PATH).toBe('/api/autopilot/cost/exchange-rates')
