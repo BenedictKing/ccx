@@ -180,23 +180,8 @@ func TestPreflightChatStream_MalformedToolCallStillDetected(t *testing.T) {
 	}
 }
 
-// TestPreflightChatStream_FlushRemainder_NoByteDuplication 回归测试
-//
-// 覆盖本次 SSE 损坏 bug 的边界路径：chunk 以「不完整行」结尾。
-//
-// 修复前（flushRemainder 会 `append(result.buffered, []byte(remainder)...)`）：
-// remainder 是 result.buffered 尾部字节子串（chunk 已整体 append 进 buffered），
-// 放行时再 append remainder 会把同一段字节写入两遍，
-// 导致下游 SSE 事件被截断拼接（如 data: {"id":"X","odata: ...）。
-//
-// 修复后：buffered 已包含 remainder 全部字节，flushRemainder 只重置 remainder，
-// 不产生任何字节重复。
-//
-// 本测试写入分片 chunk（末尾只含不完整 SSE 行），随后关闭 writer 触发 EOF
-// （chunkChan 关闭 → flushRemainder），断言 result.buffered 与原始输入逐字节一致、
-// 无重复写入。
+// TestPreflightChatStream_FlushRemainder_NoByteDuplication 确保未完整的尾行不会被重复缓冲。
 func TestPreflightChatStream_FlushRemainder_NoByteDuplication(t *testing.T) {
-	// 复用现有 helper：启动 preflight goroutine，Scratch 超时配置
 	writer, resultCh := newPreflightPipe(t, "openai")
 
 	// 完整语义行 + 紧随其后的不完整行（无 \n\n 结尾），触发 remainder 非空
@@ -209,7 +194,7 @@ func TestPreflightChatStream_FlushRemainder_NoByteDuplication(t *testing.T) {
 	if _, err := writer.Write([]byte(chunkB)); err != nil {
 		t.Fatalf("write chunkB: %v", err)
 	}
-	// 关闭 writer → body EOF → chunkChan 关闭 → flushRemainder()
+	// 关闭 writer 触发 EOF，覆盖尾行清理路径。
 	_ = writer.Close()
 
 	result := waitForPreflight(t, resultCh, 300*time.Millisecond)

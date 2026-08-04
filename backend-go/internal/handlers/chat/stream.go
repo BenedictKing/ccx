@@ -114,11 +114,8 @@ func preflightChatStream(resp *http.Response, upstreamType string, timeouts comm
 	const maxPreflightBytes = 1024 * 1024
 	hasFirstContent := false
 
-	flushRemainder := func() {
-		// FIX(fix/flush-remainder-dup): remainder 是缓冲区尾部的字节子串——chunk 已被整体
-		// append 进 result.buffered（含末尾不完整行），再 append remainder 会重复写入
-		// 同一段字节，导致下游 SSE 事件被截断拼接（如 data: {"id":"X","odata: ...）。
-		// 因此这里只重置 remainder，不再追加；buffered 已包含其全部内容。
+	clearRemainder := func() {
+		// remainder 仅用于跨 chunk 解析；原始字节已完整保存在 buffered 中。
 		remainder = ""
 	}
 
@@ -193,24 +190,24 @@ func preflightChatStream(resp *http.Response, upstreamType string, timeouts comm
 		case chunk, chunkOk = <-chunkChan:
 			if !chunkOk {
 				// chunkChan 关闭：body 读取完成
-				flushRemainder()
+				clearRemainder()
 				return result, chunkChan, bodyErrChan, nil
 			}
 		case err := <-bodyErrChan:
-			flushRemainder()
+			clearRemainder()
 			return result, chunkChan, bodyErrChan, err
 		case <-firstContentChan:
 			// 阶段A超时：首个有效内容等待超时
 			if timeouts.FirstContentTimeoutMs > 0 {
-				flushRemainder()
+				clearRemainder()
 				return result, chunkChan, bodyErrChan, common.ErrStreamFirstContentTimeout
 			}
 			// 超时被禁用（0），保守放行
-			flushRemainder()
+			clearRemainder()
 			return result, chunkChan, bodyErrChan, nil
 		case <-inactivityChan:
 			// 阶段B超时：首字后断流
-			flushRemainder()
+			clearRemainder()
 			return result, chunkChan, bodyErrChan, common.ErrStreamStalled
 		}
 
@@ -230,7 +227,7 @@ func preflightChatStream(resp *http.Response, upstreamType string, timeouts comm
 			lineSet := []string{line}
 			if malformed, name := detectMalformedChatStreamLines(lineSet, upstreamType, tracker, chatTracker); malformed {
 				result.malformedToolName = name
-				flushRemainder()
+				clearRemainder()
 				break
 			}
 
@@ -244,7 +241,7 @@ func preflightChatStream(resp *http.Response, upstreamType string, timeouts comm
 				}
 				enterPhaseB()
 				if timeouts.InactivityTimeoutMs <= 0 && !hasPendingToolCall() {
-					flushRemainder()
+					clearRemainder()
 					return result, chunkChan, bodyErrChan, nil
 				}
 			}
@@ -258,7 +255,7 @@ func preflightChatStream(resp *http.Response, upstreamType string, timeouts comm
 						observer.MarkStreamActivity(time.Now())
 					}
 				}
-				flushRemainder()
+				clearRemainder()
 				return result, chunkChan, bodyErrChan, nil
 			}
 			if hasFirstContent && hasDataActivity && observer != nil {
@@ -279,7 +276,7 @@ func preflightChatStream(resp *http.Response, upstreamType string, timeouts comm
 		resetInactivityTimer()
 	}
 
-	flushRemainder()
+	clearRemainder()
 	return result, chunkChan, bodyErrChan, nil
 }
 
