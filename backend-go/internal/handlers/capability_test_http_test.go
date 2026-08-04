@@ -176,7 +176,7 @@ func TestCapabilityCacheHit_DoesNotBindExecutionLookupKey(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	configFile := filepath.Join(tmpDir, "config.json")
-	configJSON := `{"upstream":[{"name":"channel-a","serviceType":"claude","baseUrl":"https://example.com","apiKeys":["test"]},{"name":"channel-b","serviceType":"claude","baseUrl":"https://example.com","apiKeys":["test"]}]}`
+	configJSON := `{"upstream":[{"name":"channel-a","accountUid":"shared-account","serviceType":"claude","baseUrl":"https://example.com","apiKeys":["test"]},{"name":"channel-b","accountUid":"shared-account","serviceType":"claude","baseUrl":"https://example.com","apiKeys":["test"]}]}`
 	if err := os.WriteFile(configFile, []byte(configJSON), 0644); err != nil {
 		t.Fatalf("write config failed: %v", err)
 	}
@@ -789,7 +789,7 @@ func TestCapabilityPreviousJobReuse_ByIdentityAcrossChannels(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	configFile := filepath.Join(tmpDir, "config.json")
-	configJSON := `{"upstream":[{"name":"channel-a","serviceType":"claude","baseUrl":"https://example.com","apiKeys":["test"]},{"name":"channel-b","serviceType":"claude","baseUrl":"https://example.com","apiKeys":["test"]}]}`
+	configJSON := `{"upstream":[{"name":"channel-a","accountUid":"shared-account","serviceType":"claude","baseUrl":"https://example.com","apiKeys":["test"]},{"name":"channel-b","accountUid":"shared-account","serviceType":"claude","baseUrl":"https://example.com","apiKeys":["test"]}]}`
 	if err := os.WriteFile(configFile, []byte(configJSON), 0644); err != nil {
 		t.Fatalf("write config failed: %v", err)
 	}
@@ -858,7 +858,7 @@ func TestCapabilityPreviousJobReuse_IsolatedByModelMapping(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	configFile := filepath.Join(tmpDir, "config.json")
-	configJSON := `{"upstream":[{"name":"channel-a","serviceType":"claude","baseUrl":"https://example.com","apiKeys":["test"],"modelMapping":{"claude-sonnet-4-6":"old-target"}},{"name":"channel-b","serviceType":"claude","baseUrl":"https://example.com","apiKeys":["test"],"modelMapping":{"claude-sonnet-4-6":"new-target"}}]}`
+	configJSON := `{"upstream":[{"name":"channel-a","accountUid":"shared-account","serviceType":"claude","baseUrl":"https://example.com","apiKeys":["test"],"modelMapping":{"claude-sonnet-4-6":"old-target"}},{"name":"channel-b","accountUid":"shared-account","serviceType":"claude","baseUrl":"https://example.com","apiKeys":["test"],"modelMapping":{"claude-sonnet-4-6":"new-target"}}]}`
 	if err := os.WriteFile(configFile, []byte(configJSON), 0644); err != nil {
 		t.Fatalf("write config failed: %v", err)
 	}
@@ -930,7 +930,7 @@ func TestCapabilityRunningJobReuse_ByIdentityAcrossChannels(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	configFile := filepath.Join(tmpDir, "config.json")
-	configJSON := `{"upstream":[{"name":"channel-a","serviceType":"claude","baseUrl":"https://example.com","apiKeys":["test"]},{"name":"channel-b","serviceType":"claude","baseUrl":"https://example.com","apiKeys":["test"]}]}`
+	configJSON := `{"upstream":[{"name":"channel-a","accountUid":"shared-account","serviceType":"claude","baseUrl":"https://example.com","apiKeys":["test"]},{"name":"channel-b","accountUid":"shared-account","serviceType":"claude","baseUrl":"https://example.com","apiKeys":["test"]}]}`
 	if err := os.WriteFile(configFile, []byte(configJSON), 0644); err != nil {
 		t.Fatalf("write config failed: %v", err)
 	}

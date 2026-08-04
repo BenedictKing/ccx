@@ -814,6 +814,7 @@ func TestSelectChannelTraceAffinityStillRespectsSupportedModels(t *testing.T) {
 		ResponsesUpstream: []config.UpstreamConfig{
 			{
 				Name:            "LocalHostClaude",
+				AccountUID:      "shared-account",
 				BaseURL:         "http://127.0.0.1:3699",
 				APIKeys:         []string{"sk-local"},
 				Status:          "active",
@@ -823,6 +824,7 @@ func TestSelectChannelTraceAffinityStillRespectsSupportedModels(t *testing.T) {
 			},
 			{
 				Name:            "LocalHostOpenAIChat",
+				AccountUID:      "shared-account",
 				BaseURL:         "http://127.0.0.1:3699",
 				APIKeys:         []string{"sk-local"},
 				Status:          "active",

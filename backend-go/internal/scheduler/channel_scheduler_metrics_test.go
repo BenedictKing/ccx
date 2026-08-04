@@ -35,18 +35,20 @@ func TestDeleteChannelMetrics_SharedMetricsKeyPreserved(t *testing.T) {
 				cfg = config.Config{
 					Upstream: []config.UpstreamConfig{
 						{
-							Name:     "channel-A",
-							BaseURL:  sharedBaseURL,
-							APIKeys:  []string{sharedAPIKey, "sk-exclusive-A"},
-							Status:   "active",
-							Priority: 1,
+							Name:       "channel-A",
+							AccountUID: "shared-account",
+							BaseURL:    sharedBaseURL,
+							APIKeys:    []string{sharedAPIKey, "sk-exclusive-A"},
+							Status:     "active",
+							Priority:   1,
 						},
 						{
-							Name:     "channel-B",
-							BaseURL:  sharedBaseURL,
-							APIKeys:  []string{sharedAPIKey},
-							Status:   "active",
-							Priority: 2,
+							Name:       "channel-B",
+							AccountUID: "shared-account",
+							BaseURL:    sharedBaseURL,
+							APIKeys:    []string{sharedAPIKey},
+							Status:     "active",
+							Priority:   2,
 						},
 					},
 				}
@@ -54,18 +56,20 @@ func TestDeleteChannelMetrics_SharedMetricsKeyPreserved(t *testing.T) {
 				cfg = config.Config{
 					ResponsesUpstream: []config.UpstreamConfig{
 						{
-							Name:     "channel-A",
-							BaseURL:  sharedBaseURL,
-							APIKeys:  []string{sharedAPIKey, "sk-exclusive-A"},
-							Status:   "active",
-							Priority: 1,
+							Name:       "channel-A",
+							AccountUID: "shared-account",
+							BaseURL:    sharedBaseURL,
+							APIKeys:    []string{sharedAPIKey, "sk-exclusive-A"},
+							Status:     "active",
+							Priority:   1,
 						},
 						{
-							Name:     "channel-B",
-							BaseURL:  sharedBaseURL,
-							APIKeys:  []string{sharedAPIKey},
-							Status:   "active",
-							Priority: 2,
+							Name:       "channel-B",
+							AccountUID: "shared-account",
+							BaseURL:    sharedBaseURL,
+							APIKeys:    []string{sharedAPIKey},
+							Status:     "active",
+							Priority:   2,
 						},
 					},
 				}
@@ -73,18 +77,20 @@ func TestDeleteChannelMetrics_SharedMetricsKeyPreserved(t *testing.T) {
 				cfg = config.Config{
 					GeminiUpstream: []config.UpstreamConfig{
 						{
-							Name:     "channel-A",
-							BaseURL:  sharedBaseURL,
-							APIKeys:  []string{sharedAPIKey, "sk-exclusive-A"},
-							Status:   "active",
-							Priority: 1,
+							Name:       "channel-A",
+							AccountUID: "shared-account",
+							BaseURL:    sharedBaseURL,
+							APIKeys:    []string{sharedAPIKey, "sk-exclusive-A"},
+							Status:     "active",
+							Priority:   1,
 						},
 						{
-							Name:     "channel-B",
-							BaseURL:  sharedBaseURL,
-							APIKeys:  []string{sharedAPIKey},
-							Status:   "active",
-							Priority: 2,
+							Name:       "channel-B",
+							AccountUID: "shared-account",
+							BaseURL:    sharedBaseURL,
+							APIKeys:    []string{sharedAPIKey},
+							Status:     "active",
+							Priority:   2,
 						},
 					},
 				}

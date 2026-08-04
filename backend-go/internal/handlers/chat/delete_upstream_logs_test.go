@@ -19,8 +19,8 @@ func TestDeleteUpstream_PreservesRemainingChannelLogs(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
 	cfg := config.Config{ChatUpstream: []config.UpstreamConfig{
-		{Name: "channel-a", BaseURL: "https://shared.example.com", APIKeys: []string{"sk-a"}},
-		{Name: "channel-b", BaseURL: "https://shared.example.com", APIKeys: []string{"sk-b"}},
+		{Name: "channel-a", AccountUID: "shared-account", BaseURL: "https://shared.example.com", APIKeys: []string{"sk-a"}},
+		{Name: "channel-b", AccountUID: "shared-account", BaseURL: "https://shared.example.com", APIKeys: []string{"sk-b"}},
 	}}
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {

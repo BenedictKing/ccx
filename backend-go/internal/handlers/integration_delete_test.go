@@ -24,8 +24,8 @@ func TestGetChannelLogs_AfterChannelDeletion(t *testing.T) {
 	// ch-a 和 ch-b 共享 baseURL，但使用不同的 key（不同 metricsKey 桶）
 	cfg := config.Config{
 		Upstream: []config.UpstreamConfig{
-			{Name: "ch-a", BaseURL: "https://shared.example.com", APIKeys: []string{"sk-a"}},
-			{Name: "ch-b", BaseURL: "https://shared.example.com", APIKeys: []string{"sk-b"}},
+			{Name: "ch-a", AccountUID: "shared-account", BaseURL: "https://shared.example.com", APIKeys: []string{"sk-a"}},
+			{Name: "ch-b", AccountUID: "shared-account", BaseURL: "https://shared.example.com", APIKeys: []string{"sk-b"}},
 		},
 	}
 
@@ -127,12 +127,14 @@ func TestGetChannelLogs_FiltersSharedMetricsKeyByChannelIndex(t *testing.T) {
 		ResponsesUpstream: []config.UpstreamConfig{
 			{
 				Name:        "LocalHostClaude",
+				AccountUID:  "shared-account",
 				BaseURL:     "http://127.0.0.1:3699",
 				APIKeys:     []string{"sk-local"},
 				ServiceType: "responses",
 			},
 			{
 				Name:        "LocalHostOpenAIChat",
+				AccountUID:  "shared-account",
 				BaseURL:     "http://127.0.0.1:3699",
 				APIKeys:     []string{"sk-local"},
 				ServiceType: "responses",
@@ -218,12 +220,14 @@ func TestGetChannelLogs_FiltersSharedMetricsKeyByChannelNameAfterDeletion(t *tes
 		ResponsesUpstream: []config.UpstreamConfig{
 			{
 				Name:        "RemainingA",
+				AccountUID:  "shared-account",
 				BaseURL:     "http://127.0.0.1:3699",
 				APIKeys:     []string{"sk-local"},
 				ServiceType: "responses",
 			},
 			{
 				Name:        "RemainingB",
+				AccountUID:  "shared-account",
 				BaseURL:     "http://127.0.0.1:3699",
 				APIKeys:     []string{"sk-local"},
 				ServiceType: "responses",

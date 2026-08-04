@@ -40,14 +40,16 @@ func setupDeleteLogsConfigManager(t *testing.T, upstream []config.UpstreamConfig
 func TestDeleteUpstream_PreservesRemainingChannelLogs(t *testing.T) {
 	cm := setupDeleteLogsConfigManager(t, []config.UpstreamConfig{
 		{
-			Name:    "channel-a",
-			BaseURL: "https://shared.example.com",
-			APIKeys: []string{"sk-a"},
+			Name:       "channel-a",
+			AccountUID: "shared-account",
+			BaseURL:    "https://shared.example.com",
+			APIKeys:    []string{"sk-a"},
 		},
 		{
-			Name:    "channel-b",
-			BaseURL: "https://shared.example.com",
-			APIKeys: []string{"sk-b"},
+			Name:       "channel-b",
+			AccountUID: "shared-account",
+			BaseURL:    "https://shared.example.com",
+			APIKeys:    []string{"sk-b"},
 		},
 	})
 
