@@ -105,6 +105,7 @@ type ChannelPayload struct {
 	Website                       string            `json:"website,omitempty"`
 	ServiceType                   string            `json:"serviceType"`
 	AuthHeader                    string            `json:"authHeader,omitempty"`
+	ProviderID                    string            `json:"providerId,omitempty"`
 	BaseURL                       string            `json:"baseUrl"`
 	APIKeys                       []string          `json:"apiKeys"`
 	ProxyURL                      string            `json:"proxyUrl,omitempty"`
@@ -523,6 +524,7 @@ func BuildPayload(req CreateChannelRequest) (ChannelPayload, error) {
 		Website:     providerConsoleURLs[preset.ID],
 		BaseURL:     baseURL,
 		APIKeys:     []string{apiKey},
+		ProviderID:  preset.ID,
 		Priority:    1,
 		Status:      "active",
 	}
@@ -568,6 +570,7 @@ func buildGitHubCopilotPayload(req CreateChannelRequest) (ChannelPayload, error)
 		ServiceType: "copilot",
 		BaseURL:     baseURL,
 		APIKeys:     []string{apiKey},
+		ProviderID:  ProviderGitHubCopilot,
 		ProxyURL:    strings.TrimSpace(req.ProxyURL),
 		Priority:    1,
 		Status:      "active",

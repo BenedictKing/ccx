@@ -726,6 +726,7 @@
   "channelEditor.basic.name.label": "渠道名称",
   "channelEditor.basic.name.placeholder": "例如 OpenAI 生产环境",
   "channelEditor.basic.name.required": "渠道名称不能为空",
+  "channelEditor.basic.name.autoDerivedHint": "由首个 BaseURL 自动生成",
   "channelEditor.managed.providerLabel": "渠道提供商",
   "channelEditor.managed.officialChannel": "{provider} 官方渠道",
   "channelEditor.managed.officialBadge": "官方托管",

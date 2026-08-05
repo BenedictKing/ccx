@@ -71,16 +71,14 @@ function updateField<K extends keyof FormData>(key: K, value: FormData[K]) {
     <div class="grid gap-3 md:grid-cols-[minmax(0,8fr)_minmax(0,4fr)]">
       <div v-if="!managedAccount || !providerName" class="space-y-1.5">
         <Label class="text-xs font-semibold text-muted-foreground">
-          {{ t('channelEditor.basic.name.label') }} <span class="text-destructive">*</span>
+          {{ t('channelEditor.basic.name.label') }}
         </Label>
         <Input
           :model-value="form.name"
           class="h-9"
-          :placeholder="t('channelEditor.basic.name.placeholder')"
-          :class="{ 'border-destructive': errors.name }"
-          @update:model-value="(val) => updateField('name', val as string)"
+          readonly
         />
-        <p v-if="errors.name" class="text-[10px] text-destructive">{{ errors.name }}</p>
+        <p class="text-[10px] text-muted-foreground">{{ t('channelEditor.basic.name.autoDerivedHint') }}</p>
       </div>
       <div class="space-y-1.5">
         <Label class="text-xs font-semibold text-muted-foreground">

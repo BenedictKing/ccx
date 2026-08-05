@@ -19,20 +19,20 @@
     </div>
 
     <v-row>
-      <!-- 渠道名称 -->
+      <!-- 渠道名称（自动派生，只读） -->
       <v-col v-if="!managedAccount || !providerName" cols="12" :sm="hideServiceType ? 12 : 8">
         <v-text-field
           :model-value="form.name"
           :label="t('channelEditor.basic.name.label')"
-          :placeholder="t('channelEditor.basic.name.placeholder')"
           prepend-inner-icon="mdi-tag"
           variant="outlined"
           density="comfortable"
-          :rules="[rules.required]"
-          required
-          :error-messages="errors.name"
-          @update:model-value="updateField('name', $event)"
+          readonly
+          hide-details
         />
+        <div class="text-caption text-medium-emphasis mt-1">
+          {{ t('channelEditor.basic.name.autoDerivedHint') }}
+        </div>
       </v-col>
 
       <!-- 服务类型 -->

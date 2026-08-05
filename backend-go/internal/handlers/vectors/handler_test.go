@@ -1108,58 +1108,6 @@ func TestAddUpstreamRejectsUnsupportedServiceType(t *testing.T) {
 	}
 }
 
-func TestAddUpstreamReturnsConflictForDuplicateName(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	cfgManager := newVectorsTestConfigManager(t)
-	defer errutil.IgnoreDeferred(cfgManager.Close)
-
-	if err := cfgManager.AddVectorsUpstream(config.UpstreamConfig{
-		Name:        "dup-vectors",
-		ServiceType: "openai",
-		BaseURL:     "https://example.com",
-		APIKeys:     []string{"sk-existing"},
-	}); err != nil {
-		t.Fatalf("AddVectorsUpstream() error = %v", err)
-	}
-
-	r := gin.New()
-	r.POST("/api/vectors/channels", AddUpstream(cfgManager))
-
-	req := httptest.NewRequest(http.MethodPost, "/api/vectors/channels", strings.NewReader(`{"name":"dup-vectors","serviceType":"openai","baseUrl":"https://example.org","apiKeys":["sk-new"]}`))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusConflict {
-		t.Fatalf("expected 409, got %d, body=%s", w.Code, w.Body.String())
-	}
-	if !strings.Contains(w.Body.String(), "已存在") {
-		t.Fatalf("unexpected body: %s", w.Body.String())
-	}
-}
-
-func TestVectorsConfigErrorsAreTyped(t *testing.T) {
-	cfgManager := newVectorsTestConfigManager(t)
-	defer errutil.IgnoreDeferred(cfgManager.Close)
-
-	if _, err := config.NormalizeVectorsServiceTypeForProxy("gemini"); !errors.Is(err, config.ErrUnsupportedServiceType) {
-		t.Fatalf("NormalizeVectorsServiceTypeForProxy() error = %v, want ErrUnsupportedServiceType", err)
-	}
-
-	upstream := config.UpstreamConfig{
-		Name:        "dup-vectors",
-		ServiceType: "openai",
-		BaseURL:     "https://example.com",
-		APIKeys:     []string{"sk-existing"},
-	}
-	if err := cfgManager.AddVectorsUpstream(upstream); err != nil {
-		t.Fatalf("AddVectorsUpstream() error = %v", err)
-	}
-	if err := cfgManager.AddVectorsUpstream(upstream); !errors.Is(err, config.ErrDuplicateChannelName) {
-		t.Fatalf("AddVectorsUpstream() duplicate error = %v, want ErrDuplicateChannelName", err)
-	}
-}
-
 func TestVectorsConfigRejectsInvalidEmbeddingCapabilities(t *testing.T) {
 	cfgManager := newVectorsTestConfigManager(t)
 	defer errutil.IgnoreDeferred(cfgManager.Close)
@@ -1189,39 +1137,6 @@ func TestVectorsConfigRejectsInvalidEmbeddingCapabilities(t *testing.T) {
 	_, err := cfgManager.UpdateVectorsUpstream(0, config.UpstreamUpdate{EmbeddingCapabilities: invalid})
 	if !errors.Is(err, config.ErrInvalidEmbeddingCapability) {
 		t.Fatalf("UpdateVectorsUpstream() error = %v, want ErrInvalidEmbeddingCapability", err)
-	}
-}
-
-func TestUpdateUpstreamReturnsConflictForDuplicateName(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	cfgManager := newVectorsTestConfigManager(t)
-	defer errutil.IgnoreDeferred(cfgManager.Close)
-	sch := newVectorsTestScheduler(cfgManager, nil)
-
-	for _, name := range []string{"first-vectors", "second-vectors"} {
-		if err := cfgManager.AddVectorsUpstream(config.UpstreamConfig{
-			Name:        name,
-			ServiceType: "openai",
-			BaseURL:     "https://example.com",
-			APIKeys:     []string{"sk-" + strings.ReplaceAll(name, "-", "")},
-		}); err != nil {
-			t.Fatalf("AddVectorsUpstream(%s) error = %v", name, err)
-		}
-	}
-
-	r := gin.New()
-	r.PUT("/api/vectors/channels/:id", UpdateUpstream(cfgManager, sch))
-
-	req := httptest.NewRequest(http.MethodPut, "/api/vectors/channels/0", strings.NewReader(`{"name":"first-vectors"}`))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusConflict {
-		t.Fatalf("expected 409, got %d, body=%s", w.Code, w.Body.String())
-	}
-	if !strings.Contains(w.Body.String(), "已存在") {
-		t.Fatalf("unexpected body: %s", w.Body.String())
 	}
 }
 

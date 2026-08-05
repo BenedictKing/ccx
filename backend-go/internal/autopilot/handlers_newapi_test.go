@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/BenedictKing/ccx/internal/config"
@@ -416,8 +417,12 @@ func TestHandleNewApiProvision_MergesIntoExistingChannel(t *testing.T) {
 	if !resp.MergedChannel {
 		t.Fatalf("期望 mergedChannel=true: %+v", resp)
 	}
-	if resp.ChannelUID != "ch_existing001" || resp.ChannelName != "existing-metapi" || resp.ChannelIndex != 0 {
+	if resp.ChannelUID != "ch_existing001" || resp.ChannelIndex != 0 {
 		t.Fatalf("合并目标信息不匹配: %+v", resp)
+	}
+	// 渠道名称现由首个 baseURL 自动派生，不再保留预置名 existing-metapi
+	if !strings.HasPrefix(resp.ChannelName, "127-0-0-1-") {
+		t.Fatalf("合并目标名称未按 baseURL 派生: %s", resp.ChannelName)
 	}
 
 	// 不新增渠道；纯 key 保留、新 key 追加且带分组元数据
@@ -553,15 +558,19 @@ func TestHandleNewApiProvision_MergePrefersActiveChannel(t *testing.T) {
 	channels := cfgManager.GetConfig().Upstream
 	suspIdx, actIdx := -1, -1
 	for i, ch := range channels {
-		switch ch.Name {
-		case "suspended-ch":
+		switch ch.ChannelUID {
+		case "ch_susp001":
 			suspIdx = i
-		case "active-ch":
+		case "ch_active001":
 			actIdx = i
 		}
 	}
 	if suspIdx < 0 || actIdx < 0 {
 		t.Fatalf("预置渠道丢失: %+v", channels)
+	}
+	// 渠道名称现由首个 baseURL 自动派生，不再保留预置名
+	if !strings.HasPrefix(channels[suspIdx].Name, "127-0-0-1-") || !strings.HasPrefix(channels[actIdx].Name, "127-0-0-1-") {
+		t.Fatalf("渠道名称未按 baseURL 派生: susp=%s active=%s", channels[suspIdx].Name, channels[actIdx].Name)
 	}
 	if resp.ChannelUID != "ch_active001" || resp.ChannelIndex != actIdx {
 		t.Fatalf("应合并进 active 渠道: %+v", resp)
@@ -668,51 +677,6 @@ func TestHandleNewApiProvision_AutoCreatesOnlyEligibleGroupKeys(t *testing.T) {
 	}
 }
 
-func TestHandleNewApiProvision_ChannelNameConflictPreventsRemoteKeyCreation(t *testing.T) {
-	postCalls := 0
-	mux := http.NewServeMux()
-	mux.HandleFunc("/api/user/self", func(w http.ResponseWriter, r *http.Request) {
-		writeEnvelope(w, true, NewApiUserSelf{ID: 7}, "")
-	})
-	mux.HandleFunc("/api/user/self/groups", func(w http.ResponseWriter, r *http.Request) {
-		writeEnvelope(w, true, map[string]NewApiGroupInfo{"default": {Ratio: 1}}, "")
-	})
-	mux.HandleFunc("/api/token/", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost {
-			postCalls++
-		}
-		writeEnvelope(w, true, newApiTokenListData{}, "")
-	})
-	site := httptest.NewServer(mux)
-	t.Cleanup(site.Close)
-
-	store, _ := NewSubscriptionStoreWithDB(newTestDB(t))
-	cfgManager := setupNewApiTestConfigManager(t)
-	if err := cfgManager.AddUpstream(config.UpstreamConfig{Name: "already-exists", BaseURL: "https://example.com", APIKeys: []string{"sk-existing"}, ServiceType: "claude"}); err != nil {
-		t.Fatalf("预置渠道失败: %v", err)
-	}
-	router := setupNewApiRouter(t, &NewApiRouteDeps{Store: store, CfgManager: cfgManager})
-	requestBody, _ := json.Marshal(NewApiProvisionRequest{
-		SubscriptionUID:            "sub-channel-conflict",
-		DisplayName:                "冲突渠道",
-		BaseURL:                    site.URL,
-		AccessToken:                "token",
-		ChannelKind:                "messages",
-		ChannelName:                "already-exists",
-		ProvisionAllEligibleGroups: true,
-	})
-	req := httptest.NewRequest(http.MethodPost, "/api/subscriptions/newapi/provision", bytes.NewReader(requestBody))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	if w.Code != http.StatusConflict {
-		t.Fatalf("期望 409, got %d, body=%s", w.Code, w.Body.String())
-	}
-	if postCalls != 0 || store.Get("sub-channel-conflict") != nil {
-		t.Fatalf("渠道名冲突不得创建远端 key 或订阅: postCalls=%d", postCalls)
-	}
-}
 
 func TestHandleNewApiProvision_SecondGroupFailureRollsBackCreatedKey(t *testing.T) {
 	postCalls := 0

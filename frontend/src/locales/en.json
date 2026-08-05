@@ -726,6 +726,7 @@
   "channelEditor.basic.name.label": "Channel name",
   "channelEditor.basic.name.placeholder": "e.g. OpenAI Production",
   "channelEditor.basic.name.required": "Channel name is required",
+  "channelEditor.basic.name.autoDerivedHint": "Auto-generated from first BaseURL",
   "channelEditor.managed.providerLabel": "Channel provider",
   "channelEditor.managed.officialChannel": "Official {provider} channel",
   "channelEditor.managed.officialBadge": "Official managed",

@@ -121,8 +121,8 @@ func TestExportChannels_DefaultExcludesKeys(t *testing.T) {
 	if ch.Channel.ChannelUID != "" {
 		t.Errorf("ChannelUID should be empty (stripped for export), got %s", ch.Channel.ChannelUID)
 	}
-	if ch.Channel.Name != "Test Claude" {
-		t.Errorf("expected name 'Test Claude', got '%s'", ch.Channel.Name)
+	if ch.Channel.Name != "anthropic" {
+		t.Errorf("expected name 'anthropic' (derived from baseURL), got '%s'", ch.Channel.Name)
 	}
 	if ch.ChannelType != "messages" {
 		t.Errorf("expected channelType 'messages', got '%s'", ch.ChannelType)
@@ -281,8 +281,8 @@ func TestImportChannels_Preview(t *testing.T) {
 			{
 				ChannelType: "messages",
 				Channel: config.UpstreamConfig{
-					Name:    "Test Claude", // 与现有渠道同名
-					BaseURL: "https://another.example.com",
+					Name:    "Whatever", // 名称由 baseURL 派生，此处值被忽略
+					BaseURL: "https://api.anthropic.com", // 与现有渠道派生名相同（anthropic）
 				},
 			},
 		},
@@ -386,13 +386,13 @@ func TestImportChannelsConfirm_RegeneratesUID(t *testing.T) {
 	_ = json.Unmarshal(readW.Body.Bytes(), &exportPack)
 
 	for _, ch := range exportPack.Channels {
-		if ch.Channel.Name == "Imported Claude" {
+		if ch.Channel.Name == "imported-example" { // 名称由 baseURL 派生（imported.example.com -> imported-example）
 			// UID 在导出时被清除了，但我们可以验证渠道确实存在
 			t.Logf("Imported channel found: name=%s, type=%s", ch.Channel.Name, ch.ChannelType)
 			return
 		}
 	}
-	t.Error("imported channel 'Imported Claude' not found after import")
+	t.Error("imported channel 'imported-example' not found after import")
 }
 
 func TestImportChannelsConfirm_NameConflict(t *testing.T) {
@@ -404,8 +404,8 @@ func TestImportChannelsConfirm_NameConflict(t *testing.T) {
 			{
 				ChannelType: "messages",
 				Channel: config.UpstreamConfig{
-					Name:    "Test Claude", // 与现有渠道同名
-					BaseURL: "https://conflict.example.com",
+					Name:    "Test Claude",          // 名称被忽略，按 baseURL 派生为 anthropic
+					BaseURL: "https://api.anthropic.com", // 与现有渠道派生名冲突（anthropic）
 				},
 			},
 		},
@@ -452,8 +452,8 @@ func TestImportChannelsConfirm_SkipNaming(t *testing.T) {
 			{
 				ChannelType: "messages",
 				Channel: config.UpstreamConfig{
-					Name:    "Test Claude", // 与现有渠道同名
-					BaseURL: "https://conflict.example.com",
+					Name:    "Test Claude",          // 名称被忽略，按 baseURL 派生为 anthropic
+					BaseURL: "https://api.anthropic.com", // 与现有渠道派生名冲突（anthropic）
 				},
 			},
 		},
@@ -490,10 +490,10 @@ func TestImportChannelsConfirm_SkipNaming(t *testing.T) {
 		t.Fatalf("expected 1 imported, got %d", len(imported))
 	}
 
-	// 应自动重命名为 "Test Claude-import-1"
+	// 派生名冲突，落库时由 Add 自动追加序号消歧（anthropic -> anthropic-2）
 	name := imported[0].(string)
-	if name != "Test Claude-import-1 (messages)" {
-		t.Errorf("expected 'Test Claude-import-1 (messages)', got '%s'", name)
+	if name != "anthropic-import-1 (messages)" {
+		t.Errorf("expected 'anthropic-import-1 (messages)', got '%s'", name)
 	}
 }
 

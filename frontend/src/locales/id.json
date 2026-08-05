@@ -726,6 +726,7 @@
   "channelEditor.basic.name.label": "Nama channel",
   "channelEditor.basic.name.placeholder": "misal: OpenAI Produksi",
   "channelEditor.basic.name.required": "Nama channel wajib diisi",
+  "channelEditor.basic.name.autoDerivedHint": "Dibuat otomatis dari BaseURL pertama",
   "channelEditor.managed.providerLabel": "Penyedia channel",
   "channelEditor.managed.officialChannel": "Channel resmi {provider}",
   "channelEditor.managed.officialBadge": "Dikelola resmi",

@@ -483,6 +483,13 @@ const { t } = useLanguage()
     form.baseUrl = baseUrl
   }, { immediate: true })
 
+  // 渠道名称由首个 baseURL 自动派生（托管渠道保留原命名），编辑模式下 baseURL 顺序变化会同步换名
+  watch([() => form.baseUrlsText, isAutoManagedChannel], () => {
+    if (isAutoManagedChannel.value) return
+    const first = parseLines(form.baseUrlsText)[0] || form.baseUrl
+    form.name = extractChannelNamePrefix(first || '')
+  }, { immediate: true })
+
   // 新建 Messages 渠道时按 baseUrl 推断 stripBillingHeader 默认值：
   // 非官方 Anthropic 域名默认剔除，避免每次变化的 cch= nonce 打穿上游 prompt 缓存。
   // 编辑既有渠道或用户已手动切换开关时不覆盖。

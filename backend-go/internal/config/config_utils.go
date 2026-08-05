@@ -126,6 +126,81 @@ func applyDefaultBaseURL(upstream *UpstreamConfig) {
 	upstream.BaseURL = defaultCopilotBaseURL
 }
 
+// shouldAutoDeriveChannelName 判断渠道名称是否应由首个 baseURL 自动派生。
+// 以下渠道保留人工/模板命名，不参与派生：
+//   - AutoManaged：托管渠道保留 baseName+路由后缀 的命名
+//   - ProviderID != ""：模板化添加（桌面 preset / autopilot）携带来源标识，
+//     其 Name 由生成方按 preset/plan 语义命名，同时作为桌面端幂等覆盖身份，
+//     不能被 baseURL 派生覆盖。
+//
+// 注意不能用 AccountUID 判定：加载迁移会为所有渠道（含手动渠道）补齐 AccountUID。
+func shouldAutoDeriveChannelName(upstream *UpstreamConfig) bool {
+	return upstream != nil && !upstream.AutoManaged && strings.TrimSpace(upstream.ProviderID) == ""
+}
+
+// channelPrimaryBaseURL 返回渠道当前用于命名的首个 baseURL（优先 BaseURLs[0]，其次 BaseURL）。
+func channelPrimaryBaseURL(upstream *UpstreamConfig) string {
+	if upstream == nil {
+		return ""
+	}
+	if len(upstream.BaseURLs) > 0 {
+		return upstream.BaseURLs[0]
+	}
+	return upstream.BaseURL
+}
+
+// applyAutoDerivedChannelName 在首个 baseURL 发生变化时，将非托管渠道名称重置为派生值。
+// 新建渠道（oldFirst 为空）或用户调整 baseURL 顺序/首地址时触发；
+// 仅变更 AutoManaged 等状态但不改变首地址时保留原名称。
+func applyAutoDerivedChannelName(upstream *UpstreamConfig, oldFirst string) {
+	if !shouldAutoDeriveChannelName(upstream) {
+		return
+	}
+	newFirst := channelPrimaryBaseURL(upstream)
+	if strings.TrimSpace(newFirst) == "" {
+		return
+	}
+	// 仅在首个 baseURL 真正变化时改名，避免 new-api 合并等场景把已有手工名冲掉
+	if strings.TrimSpace(oldFirst) != "" && utils.CanonicalBaseURL(oldFirst, upstream.ServiceType) == utils.CanonicalBaseURL(newFirst, upstream.ServiceType) {
+		return
+	}
+	upstream.Name = utils.DeriveChannelNameFromBaseURL(newFirst)
+}
+
+// uniqueAutoDerivedChannelName 在目标渠道集合内为派生名消解冲突。
+// 同一站点（首 baseURL canonical 相同）的多协议/多渠道允许复用同一派生名（同站合一），
+// 便于用户识别；仅当同名渠道指向不同 baseURL 时才追加 -2/-3... 序号。
+// exclude 为当前渠道自身指针，避免与已存在的自身名称比较。
+func uniqueAutoDerivedChannelName(channels []UpstreamConfig, exclude *UpstreamConfig, base string, selfFirstBaseURL, serviceType string) string {
+	if base == "" {
+		return base
+	}
+	selfCanonical := utils.CanonicalBaseURL(selfFirstBaseURL, serviceType)
+	sameSite := func(ch *UpstreamConfig) bool {
+		if selfCanonical == "" {
+			return false
+		}
+		return utils.CanonicalBaseURL(channelPrimaryBaseURL(ch), ch.ServiceType) == selfCanonical
+	}
+	name := base
+	for i := 2; ; i++ {
+		conflict := false
+		for j := range channels {
+			if exclude != nil && &channels[j] == exclude {
+				continue
+			}
+			if channels[j].Name == name && !sameSite(&channels[j]) {
+				conflict = true
+				break
+			}
+		}
+		if !conflict {
+			return name
+		}
+		name = fmt.Sprintf("%s-%d", base, i)
+	}
+}
+
 // ConfigError 配置错误
 type ConfigError struct {
 	Message string

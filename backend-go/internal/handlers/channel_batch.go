@@ -8,8 +8,25 @@ import (
 	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
+	"github.com/BenedictKing/ccx/internal/utils"
 	"github.com/gin-gonic/gin"
 )
+
+// deriveImportChannelName 按渠道首个 baseURL 派生名称（与 ConfigManager.Add 的派生规则一致），
+// 用于导入预览/确认阶段预判冲突；无可用地址时回退到原名称或占位符。
+func deriveImportChannelName(ch config.UpstreamConfig) string {
+	first := ch.BaseURL
+	if len(ch.BaseURLs) > 0 {
+		first = ch.BaseURLs[0]
+	}
+	if strings.TrimSpace(first) != "" {
+		return utils.DeriveChannelNameFromBaseURL(first)
+	}
+	if name := strings.TrimSpace(ch.Name); name != "" {
+		return name
+	}
+	return "imported"
+}
 
 // ChannelPack 导出的渠道包格式。
 // 包含元数据和渠道列表，用于跨实例迁移或模板分享。
@@ -318,33 +335,28 @@ func ImportChannels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 			TotalCount: len(req.Pack.Channels),
 		}
 
-		for i, entry := range req.Pack.Channels {
+		for _, entry := range req.Pack.Channels {
 			if !isValidChannelType(entry.ChannelType) {
 				c.JSON(http.StatusBadRequest, gin.H{
 					"error":   "Invalid channelType",
-					"message": fmt.Sprintf("第 %d 条渠道类型无效: %s", i+1, entry.ChannelType),
+					"message": fmt.Sprintf("渠道类型无效: %s", entry.ChannelType),
 				})
 				return
 			}
 
-			if entry.Channel.Name == "" {
-				c.JSON(http.StatusBadRequest, gin.H{
-					"error":   "Missing channel name",
-					"message": fmt.Sprintf("第 %d 条渠道缺少名称", i+1),
-				})
-				return
-			}
+			// 名称由首个 baseURL 派生（与 Add 保持一致），用于预览判冲突
+			name := deriveImportChannelName(entry.Channel)
 
 			action := "create"
-			if existingNames[entry.ChannelType][entry.Channel.Name] {
+			if existingNames[entry.ChannelType][name] {
 				action = "name_conflict"
 				preview.Warnings = append(preview.Warnings,
-					fmt.Sprintf("渠道 '%s' (类型: %s) 与现有渠道同名", entry.Channel.Name, entry.ChannelType))
+					fmt.Sprintf("渠道 '%s' (类型: %s) 与现有渠道同名", name, entry.ChannelType))
 			}
 
 			preview.NewChannels = append(preview.NewChannels, ImportPreviewEntry{
 				ChannelType: entry.ChannelType,
-				Name:        entry.Channel.Name,
+				Name:        name,
 				Action:      action,
 			})
 		}
@@ -407,11 +419,8 @@ func ImportChannelsConfirm(cfgManager *config.ConfigManager) gin.HandlerFunc {
 			// 不复用原始 ChannelUID，强制重新生成
 			ch.ChannelUID = ""
 
-			// 名称冲突处理
-			name := ch.Name
-			if name == "" {
-				name = fmt.Sprintf("imported-%d", i+1)
-			}
+			// 名称冲突处理（以首个 baseURL 派生名为准，与 Add 的落库结果一致）
+			name := deriveImportChannelName(ch)
 			if existingNames[entry.ChannelType][name] || importedNames[entry.ChannelType][name] {
 				if req.SkipNaming {
 					// 自动重命名：追加 -import 后缀和序号

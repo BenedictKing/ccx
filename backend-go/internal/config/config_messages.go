@@ -58,13 +58,6 @@ func (cm *ConfigManager) AddUpstream(upstream UpstreamConfig, placements ...stri
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
-	// 检查 Name 是否已存在
-	for _, existing := range cm.config.Upstream {
-		if existing.Name == upstream.Name {
-			return fmt.Errorf("渠道名称 '%s' 已存在", upstream.Name)
-		}
-	}
-
 	// 新建渠道默认设为 active
 	if upstream.Status == "" {
 		upstream.Status = "active"
@@ -98,6 +91,10 @@ func (cm *ConfigManager) AddUpstream(upstream UpstreamConfig, placements ...stri
 
 	upstream.ModelMapping, _ = sanitizeDeprecatedGrokModelMapping(upstream.ModelMapping)
 	stripAutoManagedExplicitOverrides(&upstream)
+	applyAutoDerivedChannelName(&upstream, "")
+	if shouldAutoDeriveChannelName(&upstream) {
+		upstream.Name = uniqueAutoDerivedChannelName(cm.config.Upstream, nil, upstream.Name, channelPrimaryBaseURL(&upstream), upstream.ServiceType)
+	}
 	assignChannelPriority(cm.config.Upstream, &upstream, resolvePlacement(placements))
 	cm.config.Upstream = append([]UpstreamConfig{upstream}, cm.config.Upstream...)
 
@@ -129,9 +126,9 @@ func (cm *ConfigManager) UpdateUpstream(index int, updates UpstreamUpdate) (shou
 		serviceType = normalizeUpstreamServiceType(*updates.ServiceType, "claude")
 	}
 
-	if updates.Name != nil {
-		upstream.Name = *updates.Name
-	}
+	oldFirst := channelPrimaryBaseURL(upstream)
+
+	// 渠道名称不再接受手工修改：非托管渠道统一由首个 baseURL 自动派生（见保存前逻辑）。
 	if updates.BaseURL != nil {
 		upstream.BaseURL = utils.CanonicalBaseURL(*updates.BaseURL, serviceType)
 		if updates.BaseURLs == nil {
@@ -368,6 +365,7 @@ func (cm *ConfigManager) UpdateUpstream(index int, updates UpstreamUpdate) (shou
 	// 直接改动这些字段，只要渠道当前是 AutoManaged 状态就统一清理，避免陈旧配置
 	// 通过其他字段的更新请求被间接保留下来。
 	stripAutoManagedExplicitOverrides(upstream)
+	applyAutoDerivedChannelName(upstream, oldFirst)
 
 	// 检测配置是否真的发生了变化
 	if !cm.hasConfigChanged(originalConfig, cm.config) {

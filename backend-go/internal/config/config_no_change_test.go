@@ -44,10 +44,25 @@ func TestUpdateUpstream_NoChangeSkipsSave(t *testing.T) {
 	// 等待确保时间戳可以区分
 	time.Sleep(10 * time.Millisecond)
 
-	// 执行一个不改变配置的更新（只更新 name 为相同的值）
-	name := "test-channel"
+	// 渠道 name 由 baseURL 派生。首次更新会把旧名 test-channel 规范为 example 并落盘；
+	// 再次用相同字段更新则应为 no-change，不再触发保存。
+	desc := ""
+	if _, err = cm.UpdateUpstream(0, UpstreamUpdate{Description: &desc}); err != nil {
+		t.Fatalf("UpdateUpstream() error = %v", err)
+	}
+	time.Sleep(100 * time.Millisecond)
+
+	// 记录派生落盘后的文件时间作为基准
+	statAfterDerive, err := os.Stat(configPath)
+	if err != nil {
+		t.Fatalf("获取文件状态失败: %v", err)
+	}
+	initialModTime = statAfterDerive.ModTime()
+	time.Sleep(10 * time.Millisecond)
+
+	// 执行一个不改变配置的更新（描述与现有值相同）
 	_, err = cm.UpdateUpstream(0, UpstreamUpdate{
-		Name: &name,
+		Description: &desc,
 	})
 	if err != nil {
 		t.Fatalf("UpdateUpstream() error = %v", err)

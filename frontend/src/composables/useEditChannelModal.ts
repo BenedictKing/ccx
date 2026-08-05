@@ -20,6 +20,7 @@ import {
   resolveChannelWatcherAction,
   syncBaseUrlsFormState,
   filterValidSupportedModelPatterns,
+  extractChannelNamePrefix,
 } from '../utils/add-channel-modal-state'
 import { streamTimeoutPresets } from '../utils/streamTimeoutPresets'
 import { useI18n } from '../i18n'
@@ -227,17 +228,23 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
   // 多 BaseURL 文本输入（独立变量，保留用户输入的换行）
   const baseUrlsText = ref('')
 
-  // 监听 baseUrlsText 变化，同步到 form（去重等效 URL）
+  // 监听 baseUrlsText 变化，同步到 form（去重等效 URL），并自动派生渠道名称
   watch(baseUrlsText, val => {
     const { baseUrl, baseUrls } = syncBaseUrlsFormState(val, form.serviceType)
     form.baseUrl = baseUrl
     form.baseUrls = baseUrls
+    if (!isAutoManagedChannel.value) {
+      form.name = extractChannelNamePrefix(baseUrl || baseUrls[0] || '')
+    }
   })
 
   watch(() => form.serviceType, () => {
     const { baseUrl, baseUrls } = syncBaseUrlsFormState(baseUrlsText.value, form.serviceType)
     form.baseUrl = baseUrl
     form.baseUrls = baseUrls
+    if (!isAutoManagedChannel.value) {
+      form.name = extractChannelNamePrefix(baseUrl || baseUrls[0] || '')
+    }
   })
 
   // 新建 Messages 渠道时按 baseUrl 推断 stripBillingHeader 默认值：
@@ -737,8 +744,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
   const { headerClasses, avatarColor, headerIconStyle, subtitleClasses } = useChannelEditorHeaderState(theme)
 
   const isFormValid = computed(() => {
-    const hasValidName = isAutoManagedChannel.value || !!form.name.trim()
-    // copilot 与 Provider 模板托管渠道无需手工地址；自定义托管账号必须逐行校验地址池
+    // 渠道名称不再接受手工修改：由首个 baseURL 自动派生，无需校验用户输入
     const draftUrls = draftBaseUrls()
     const hasValidBaseUrl = form.serviceType === 'copilot'
       || (isCustomManagedChannel.value && draftUrls.length > 0 && draftUrls.every(isValidUrl))
@@ -747,7 +753,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     const hasValidApiKeys = form.serviceType === 'copilot' || hasConfigurableKeys.value
     const hasValidModelConfig = isAutoManagedChannel.value || (!modelCapabilitiesError.value && !embeddingCapabilitiesError.value)
     return (
-      hasValidName && !!form.serviceType && hasValidBaseUrl && hasValidApiKeys && hasValidModelConfig
+      !!form.serviceType && hasValidBaseUrl && hasValidApiKeys && hasValidModelConfig
     )
   })
 
@@ -950,7 +956,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
 
   const loadChannelData = (channel: Channel) => {
     resetTransientUiState()
-    form.name = channel.name
+    form.name = isAutoManagedChannel.value ? channel.name : extractChannelNamePrefix(channel.baseUrl || channel.baseUrls?.[0] || '')
     form.serviceType = props.channelType === 'images' || props.channelType === 'vectors' ? 'openai' : channel.serviceType
     form.authHeader = channel.authHeader || 'auto'
     form.baseUrl = channel.baseUrl

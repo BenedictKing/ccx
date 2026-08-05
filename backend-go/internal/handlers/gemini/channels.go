@@ -75,7 +75,7 @@ func UpdateUpstream(cfgManager *config.ConfigManager, sch *scheduler.ChannelSche
 		}
 
 		oldName := ""
-		if updates.Name != nil {
+		{
 			cfg := cfgManager.GetConfig()
 			if id >= 0 && id < len(cfg.GeminiUpstream) {
 				oldName = cfg.GeminiUpstream[id].Name
@@ -88,9 +88,17 @@ func UpdateUpstream(cfgManager *config.ConfigManager, sch *scheduler.ChannelSche
 			return
 		}
 
-		if updates.Name != nil && oldName != "" && oldName != *updates.Name {
+		// 名称由后端按首个 baseURL 派生：baseURL 顺序或首地址变化可能触发改名，需迁移日志归属
+		newName := ""
+		{
+			cfg := cfgManager.GetConfig()
+			if id >= 0 && id < len(cfg.GeminiUpstream) {
+				newName = cfg.GeminiUpstream[id].Name
+			}
+		}
+		if oldName != "" && newName != "" && oldName != newName {
 			if logStore := sch.GetChannelLogStore(scheduler.ChannelKindGemini); logStore != nil {
-				logStore.RenameChannel(oldName, *updates.Name)
+				logStore.RenameChannel(oldName, newName)
 			}
 		}
 

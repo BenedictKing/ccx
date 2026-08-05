@@ -75,16 +75,6 @@ func (cm *ConfigManager) AddVectorsUpstream(upstream UpstreamConfig, placements 
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
-	// 检查 Name 是否已存在
-	for _, existing := range cm.config.VectorsUpstream {
-		if existing.Name == upstream.Name {
-			return &ConfigError{
-				Message: fmt.Sprintf("渠道名称 '%s' 已存在", upstream.Name),
-				Cause:   ErrDuplicateChannelName,
-			}
-		}
-	}
-
 	// 新建渠道默认设为 active
 	if upstream.Status == "" {
 		upstream.Status = "active"
@@ -126,6 +116,10 @@ func (cm *ConfigManager) AddVectorsUpstream(upstream UpstreamConfig, placements 
 
 	upstream.ModelMapping, _ = sanitizeDeprecatedGrokModelMapping(upstream.ModelMapping)
 	stripAutoManagedExplicitOverrides(&upstream)
+	applyAutoDerivedChannelName(&upstream, "")
+	if shouldAutoDeriveChannelName(&upstream) {
+		upstream.Name = uniqueAutoDerivedChannelName(cm.config.VectorsUpstream, nil, upstream.Name, channelPrimaryBaseURL(&upstream), upstream.ServiceType)
+	}
 	assignChannelPriority(cm.config.VectorsUpstream, &upstream, resolvePlacement(placements))
 	cm.config.VectorsUpstream = append([]UpstreamConfig{upstream}, cm.config.VectorsUpstream...)
 
@@ -147,16 +141,6 @@ func (cm *ConfigManager) UpdateVectorsUpstream(index int, updates UpstreamUpdate
 		return false, fmt.Errorf("无效的 Vectors 上游索引: %d", index)
 	}
 
-	if updates.Name != nil {
-		for i, existing := range cm.config.VectorsUpstream {
-			if i != index && existing.Name == *updates.Name {
-				return false, &ConfigError{
-					Message: fmt.Sprintf("渠道名称 '%s' 已存在", *updates.Name),
-					Cause:   ErrDuplicateChannelName,
-				}
-			}
-		}
-	}
 	if err := ValidateEmbeddingCapabilities(updates.EmbeddingCapabilities); err != nil {
 		return false, err
 	}
@@ -177,9 +161,9 @@ func (cm *ConfigManager) UpdateVectorsUpstream(index int, updates UpstreamUpdate
 		}
 	}
 
-	if updates.Name != nil {
-		upstream.Name = *updates.Name
-	}
+	oldFirst := channelPrimaryBaseURL(upstream)
+
+	// 渠道名称不再接受手工修改：非托管渠道统一由首个 baseURL 自动派生（见保存前逻辑）。
 	if updates.BaseURL != nil {
 		upstream.BaseURL = utils.CanonicalBaseURL(*updates.BaseURL, serviceType)
 		if updates.BaseURLs == nil {
@@ -406,6 +390,7 @@ func (cm *ConfigManager) UpdateVectorsUpstream(index int, updates UpstreamUpdate
 	}
 
 	stripAutoManagedExplicitOverrides(upstream)
+	applyAutoDerivedChannelName(upstream, oldFirst)
 
 	// 检测配置是否真的发生了变化
 	if !cm.hasConfigChanged(originalConfig, cm.config) {

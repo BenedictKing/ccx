@@ -1,6 +1,8 @@
 import type { Channel, EmbeddingCapability, UpstreamModelCapability } from '../services/api'
 import { normalizeAdvancedChannelOptions } from './channelAdvancedOptions'
 import { deduplicateEquivalentBaseUrls } from './baseUrlSemantics'
+import { extractChannelNamePrefix } from './add-channel-modal-state'
+
 let runtimeUpstreamModelCapabilities: Record<string, UpstreamModelCapability> = {}
 
 const DEFAULT_COPILOT_BASE_URL = 'https://api.githubcopilot.com'
@@ -526,8 +528,13 @@ export function buildChannelPayload(
   const isManagedProviderChannel = form.baseUrl.trim() === '' && form.baseUrls.length === 0
   const shouldStripExplicitMappingFields = isManagedProviderChannel && form.serviceType !== 'copilot'
 
+  // 渠道名称不再接受手工修改：非托管渠道按首个 baseURL 自动派生；托管渠道沿用原名称。
+  const derivedChannelName = isManagedProviderChannel
+    ? form.name.trim()
+    : extractChannelNamePrefix(deduplicatedUrls[0] || form.baseUrl)
+
   const channelData: Omit<Channel, 'index' | 'latency' | 'status'> = {
-    name: form.name.trim(),
+    name: derivedChannelName,
     serviceType: form.serviceType as 'openai' | 'gemini' | 'claude' | 'responses' | 'copilot',
     baseUrl: deduplicatedUrls[0] || '',
     website: form.website.trim(),
