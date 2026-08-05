@@ -516,9 +516,11 @@ export const useChannelStore = defineStore('channel', () => {
   /**
    * 删除渠道
    */
-  async function deleteChannel(channelId: number, channelType: ApiTab = activeTab.value, accountUid?: string) {
+  async function deleteChannel(channelId: number, channelType: ApiTab = activeTab.value, accountUid?: string, logicalChannelUid?: string) {
     if (accountUid) {
       await api.deleteManagedAccount(accountUid)
+    } else if (logicalChannelUid) {
+      await api.deleteLogicalChannel(logicalChannelUid)
     } else if (channelType === 'chat') {
       await api.deleteChatChannel(channelId)
     } else if (channelType === 'vectors') {

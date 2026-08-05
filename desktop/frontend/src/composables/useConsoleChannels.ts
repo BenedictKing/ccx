@@ -11,6 +11,7 @@ import type {
   ChannelRecentActivity,
   SchedulerStatsResponse,
   PingResult,
+  DeleteLogicalChannelResponse,
 } from '@/services/admin-api'
 
 /**
@@ -86,9 +87,10 @@ const failoverChannelCount = computed(() => {
 async function doRefresh(tab: ChannelType) {
   const api = useAdminApi()
   try {
-    // 统一 dashboard 接口：GET /api/messages/channels/dashboard?type=<tab>
+    // 统一 dashboard 接口：GET /api/logical-channels/dashboard?kind=llm
+    // 后端已按 logical channel 聚合，一个站点多协议只返回一张卡片
     const dashboard = await api.get<ChannelDashboardResponse>(
-      `/api/messages/channels/dashboard?type=${tab}`
+      `/api/logical-channels/dashboard?kind=llm`
     )
     const existing = channelsByType.value[tab].channels
     channelsByType.value[tab] = {
@@ -138,6 +140,26 @@ async function saveChannel(
   channelType: ChannelType = activeTab.value,
 ) {
   activeTab.value = channelType
+  const api = useAdminApi()
+
+  // 若编辑的是逻辑渠道（有 logicalChannelUid），通过 logical-channels API 同步更新所有协议
+  if (editingIndex !== null) {
+    const existing = channelsByType.value[channelType].channels.find(ch => ch.index === editingIndex)
+    if (existing?.logicalChannelUid) {
+      await api.put(`/api/logical-channels/${encodeURIComponent(existing.logicalChannelUid)}`, {
+        common: {
+          name: payload.name,
+          description: payload.description,
+          website: payload.website,
+          baseUrls: payload.baseUrls ?? (payload.baseUrl ? [payload.baseUrl] : undefined),
+          tags: payload.tags,
+        },
+      })
+      await refreshChannels(channelType)
+      return { success: true, messageKey: 'channelEditor.toast.updated' }
+    }
+  }
+
   const typeApi = getChannelTypeApi(channelType)
   if (editingIndex !== null) {
     await typeApi.updateChannel(editingIndex, payload)
@@ -178,10 +200,15 @@ async function saveChannel(
   return { success: true, messageKey: 'channelEditor.toast.added' }
 }
 
-async function deleteChannel(channelId: number, channelType: ChannelType = activeTab.value) {
+async function deleteChannel(channelId: number, channelType: ChannelType = activeTab.value, logicalChannelUid?: string) {
   activeTab.value = channelType
-  const typeApi = getChannelTypeApi(channelType)
-  await typeApi.deleteChannel(channelId)
+  const api = useAdminApi()
+  if (logicalChannelUid) {
+    await api.del<DeleteLogicalChannelResponse>(`/api/logical-channels/${encodeURIComponent(logicalChannelUid)}`)
+  } else {
+    const typeApi = getChannelTypeApi(channelType)
+    await typeApi.deleteChannel(channelId)
+  }
   await refreshChannels(channelType)
 }
 

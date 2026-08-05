@@ -186,6 +186,15 @@ const apiKeyFingerprint = (channel: Channel): string => {
 }
 
 const logicalGroupKey = (kind: LlmChannelKind, channel: Channel): { key: string; name: string } => {
+  // 后端回填的 logicalChannelUid 是跨协议逻辑身份的第一优先级
+  const logicalUid = (channel.logicalChannelUid || '').trim()
+  if (logicalUid !== '') {
+    return {
+      key: `logical:${logicalUid}`,
+      name: channel.logicalName || channel.name,
+    }
+  }
+
   const accountGrouped = !!channel.accountUid
   const accountManaged = !!channel.accountUid && (!!channel.autoManaged || !!channel.providerId)
   const name = accountManaged || (channel.autoManaged && channel.providerId)

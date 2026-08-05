@@ -82,5 +82,8 @@ func BuildChannelView(up config.UpstreamConfig, index int) gin.H {
 		"rateLimitBurst":           up.RateLimitBurst,
 		"rateLimitMaxConcurrent":   up.RateLimitMaxConcurrent,
 		"rateLimitAutoFromHeaders": up.IsRateLimitAutoFromHeadersEnabled(),
+		// 逻辑渠道身份
+		"logicalChannelUid": up.LogicalChannelUID,
+		"logicalName":       up.LogicalName,
 	}
 }

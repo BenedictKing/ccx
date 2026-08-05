@@ -191,7 +191,8 @@ export function useAppController() {
       const channelId = typeof target === 'number' ? target : getChannelRouteIndex(target)
       const channelType = typeof target === 'number' ? channelStore.activeTab : getChannelRouteKind(target)
       const accountUid = typeof target === 'number' || !isAutoManagedAccountChannel(target) ? undefined : target.accountUid
-      const result = await channelStore.deleteChannel(channelId, channelType, accountUid)
+      const logicalChannelUid = typeof target !== 'number' ? target.logicalChannelUid : undefined
+      const result = await channelStore.deleteChannel(channelId, channelType, accountUid, logicalChannelUid)
       showToast(result.message, 'success')
     } catch (error) {
       handleAuthError(error)

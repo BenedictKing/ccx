@@ -223,6 +223,7 @@ export interface Channel {
   name: string
   accountUid?: string                // 自动托管账号稳定身份，同一 provider 的多协议渠道共享
   channelUid?: string                // 渠道稳定身份标识（创建后不因重排/改名/Key 变更而改变）
+  logicalChannelUid?: string         // 逻辑渠道 UID（同站点多协议渠道共享；后端 RebuildLogicalChannels 回填）
   providerId?: string                // 已知 provider 模板 ID（如 mimo/deepseek）
   routeKind?: ChannelKind            // 前端统一列表中真实所属的后端渠道类型
   routeIndex?: number                // 前端统一列表中真实后端渠道索引
@@ -2283,4 +2284,76 @@ export interface PresetBundle {
   modelRegistry?: Record<string, UpstreamModelCapability> | RuntimeModelRegistryBundle
   channelPresets?: ChannelPresetBundle
   builtinModelsManifests?: Record<string, unknown>
+}
+
+// ============== 逻辑渠道（Logical Channel）类型 ==============
+
+export interface LogicalChannelProtocol {
+  kind: string // messages / chat / responses / gemini / images / vectors
+  channelUid: string
+  serviceType: string // claude / openai / responses / gemini
+  enabled: boolean
+  status: string
+  priority: number
+  routePrefix: string
+}
+
+export type LogicalChannelKind = 'llm' | 'embeddings' | 'images'
+
+export interface LogicalChannel {
+  logicalChannelUid: string
+  accountUid?: string
+  providerId?: string
+  name: string
+  description?: string
+  website?: string
+  kind: LogicalChannelKind
+  baseUrls: string[]
+  siteIdentity: string
+  protocols: LogicalChannelProtocol[]
+  tags?: string[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface LogicalChannelsResponse {
+  logicalChannels: LogicalChannel[]
+}
+
+export interface CreateLogicalChannelProtocol {
+  kind: string
+  serviceType: string
+  apiKeys?: string[]
+  apiKeyConfigs?: APIKeyConfig[]
+  baseUrls?: string[]
+  baseUrl?: string
+  modelMapping?: Record<string, string>
+  reasoningMapping?: Record<string, string>
+  priority?: number
+  enabled?: boolean
+  status?: string
+  routePrefix?: string
+  supportedModels?: string[]
+  customHeaders?: Record<string, string>
+  proxyUrl?: string
+}
+
+export interface CreateLogicalChannelRequest {
+  name: string
+  description?: string
+  website?: string
+  providerId?: string
+  accountUid?: string
+  kind?: LogicalChannelKind
+  baseUrls?: string[]
+  apiKeys?: string[]
+  tags?: string[]
+  protocols: CreateLogicalChannelProtocol[]
+  placement?: string
+}
+
+export interface DeleteLogicalChannelResponse {
+  message: string
+  logicalChannelUid: string
+  removedChannels: string[]
 }

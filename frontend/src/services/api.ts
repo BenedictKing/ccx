@@ -87,6 +87,9 @@ import type {
   KeyMultiplierResponse,
   GroupModelPolicyResponse,
   SubscriptionRefreshResponse,
+  LogicalChannelsResponse,
+  CreateLogicalChannelRequest,
+  DeleteLogicalChannelResponse,
 } from './api-types'
 
 export * from './api-helpers'
@@ -1734,6 +1737,37 @@ export class ApiService {
     return this.request('/autopilot/ab-test/emergency-stop', {
       method: 'POST',
       body: JSON.stringify({ reason }),
+    })
+  }
+
+  // ============== 逻辑渠道（Logical Channel）API ==============
+
+  /** 获取逻辑渠道列表 */
+  async getLogicalChannels(kind?: string): Promise<LogicalChannelsResponse> {
+    const qs = kind ? `?kind=${kind}` : ''
+    return this.request(`/logical-channels${qs}`)
+  }
+
+  /** 创建逻辑渠道（一次创建多协议物理渠道） */
+  async createLogicalChannel(req: CreateLogicalChannelRequest): Promise<{ logicalChannelUid: string; channelUids: string[]; createdCount: number }> {
+    return this.request('/logical-channels', {
+      method: 'POST',
+      body: JSON.stringify(req),
+    })
+  }
+
+  /** 更新逻辑渠道 */
+  async updateLogicalChannel(uid: string, updates: Record<string, unknown>): Promise<void> {
+    await this.request(`/logical-channels/${encodeURIComponent(uid)}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    })
+  }
+
+  /** 删除逻辑渠道（一次删除旗下所有协议渠道） */
+  async deleteLogicalChannel(uid: string): Promise<DeleteLogicalChannelResponse> {
+    return this.request(`/logical-channels/${encodeURIComponent(uid)}`, {
+      method: 'DELETE',
     })
   }
 

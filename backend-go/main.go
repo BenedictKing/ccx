@@ -28,6 +28,7 @@ import (
 	"github.com/BenedictKing/ccx/internal/handlers/copilot"
 	"github.com/BenedictKing/ccx/internal/handlers/gemini"
 	"github.com/BenedictKing/ccx/internal/handlers/images"
+	"github.com/BenedictKing/ccx/internal/handlers/logicalchannels"
 	"github.com/BenedictKing/ccx/internal/handlers/messages"
 	"github.com/BenedictKing/ccx/internal/handlers/responses"
 	"github.com/BenedictKing/ccx/internal/handlers/vectors"
@@ -1373,6 +1374,9 @@ func main() {
 		registerChannelHealthRoutes("vectors")
 		apiGroup.GET("/vectors/models/stats/history", handlers.GetModelStatsHistory(vectorsMetricsManager))
 		apiGroup.GET("/vectors/channels/:id/logs", handlers.GetChannelLogs(channelScheduler.GetChannelLogStore(scheduler.ChannelKindVectors), cfgManager, scheduler.ChannelKindVectors, channelScheduler.GetVectorsMetricsManager()))
+
+		// 逻辑渠道管理 API（任务 #11）
+		logicalchannels.RegisterRoutes(apiGroup, cfgManager, channelScheduler)
 
 		// 健康中心 API（Phase 1 shadow/read-only）
 		if autopilotManager != nil {

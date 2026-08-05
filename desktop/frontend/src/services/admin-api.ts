@@ -297,12 +297,35 @@ export interface Channel {
   // 托管渠道身份（autopilot 自动托管渠道）
   accountUid?: string
   channelUid?: string
+  logicalChannelUid?: string // 逻辑渠道 UID：同站点多协议渠道共享
   providerId?: string
   autoManaged?: boolean
   autoManagedAt?: string
   originType?: string
   originTier?: string
   tags?: string[]
+  // 逻辑渠道聚合后的协议路由（后端 /api/logical-channels/dashboard 返回）
+  protocolRoutes?: ChannelProtocolRoute[]
+  protocolCapsules?: ChannelProtocolCapsule[]
+}
+
+export interface ChannelProtocolRoute {
+  kind: string
+  index: number
+  name: string
+  serviceType: string
+  channelUid: string
+  status: string
+  apiKeys: string[]
+}
+
+export interface ChannelProtocolCapsule {
+  kind: string
+  label: string
+  serviceType: string
+  channelUid: string
+  index: number
+  status: string
 }
 
 export interface ChannelsResponse {
@@ -1566,3 +1589,112 @@ export const AUTOPILOT_RECOMMENDATIONS_PATH = '/api/autopilot/recommendations'
 export const SMART_ROUTING_CONFIG_PATH = '/api/smart-routing/config'
 export const AUTOPILOT_TRACES_PATH = '/api/traces'
 export const AUTOPILOT_TRACE_STATS_PATH = '/api/traces/stats'
+
+// ============== 逻辑渠道（Logical Channel）类型 ==============
+
+export interface LogicalChannelProtocol {
+  kind: string // messages / chat / responses / gemini / images / vectors
+  channelUid: string
+  serviceType: string // claude / openai / responses / gemini
+  enabled: boolean
+  status: string
+  priority: number
+  routePrefix: string
+}
+
+export type LogicalChannelKind = 'llm' | 'embeddings' | 'images'
+
+export interface LogicalChannel {
+  logicalChannelUid: string
+  accountUid?: string
+  providerId?: string
+  name: string
+  description?: string
+  website?: string
+  kind: LogicalChannelKind
+  baseUrls: string[]
+  siteIdentity: string
+  protocols: LogicalChannelProtocol[]
+  tags?: string[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface LogicalChannelsResponse {
+  logicalChannels: LogicalChannel[]
+}
+
+export interface CreateLogicalChannelProtocol {
+  kind: string
+  serviceType: string
+  apiKeys?: string[]
+  apiKeyConfigs?: APIKeyConfig[]
+  baseUrls?: string[]
+  baseUrl?: string
+  modelMapping?: Record<string, string>
+  reasoningMapping?: Record<string, string>
+  priority?: number
+  enabled?: boolean
+  status?: string
+  routePrefix?: string
+  supportedModels?: string[]
+  customHeaders?: Record<string, string>
+  proxyUrl?: string
+}
+
+export interface CreateLogicalChannelRequest {
+  name: string
+  description?: string
+  website?: string
+  providerId?: string
+  accountUid?: string
+  kind?: LogicalChannelKind
+  baseUrls?: string[]
+  apiKeys?: string[]
+  tags?: string[]
+  protocols: CreateLogicalChannelProtocol[]
+  placement?: string
+}
+
+export interface UpdateLogicalChannelCommon {
+  name?: string
+  description?: string
+  website?: string
+  tags?: string[]
+  baseUrls?: string[]
+}
+
+export interface UpdateLogicalChannelProtocol {
+  kind: string
+  serviceType?: string
+  apiKeys?: string[]
+  apiKeyConfigs?: APIKeyConfig[]
+  baseUrls?: string[]
+  baseUrl?: string
+  modelMapping?: Record<string, string>
+  reasoningMapping?: Record<string, string>
+  priority?: number
+  enabled?: boolean
+  status?: string
+  routePrefix?: string
+  supportedModels?: string[]
+  customHeaders?: Record<string, string>
+  proxyUrl?: string
+}
+
+export interface UpdateLogicalChannelRequest {
+  common?: UpdateLogicalChannelCommon
+  protocols?: UpdateLogicalChannelProtocol[]
+  removals?: string[]
+  placement?: string
+}
+
+export interface DeleteLogicalChannelResponse {
+  message: string
+  logicalChannelUid: string
+  removedChannels: string[]
+}
+
+export const LOGICAL_CHANNELS_PATH = '/api/logical-channels'
+export const logicalChannelPath = (uid: string) => `/api/logical-channels/${encodeURIComponent(uid)}`
+export const LOGICAL_CHANNELS_DASHBOARD_PATH = '/api/logical-channels/dashboard'

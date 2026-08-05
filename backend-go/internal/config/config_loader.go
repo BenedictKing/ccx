@@ -180,6 +180,16 @@ func (cm *ConfigManager) loadConfig() error {
 		}
 	}
 
+	// 逻辑渠道回填：旧配置或 schema 升级时按归组规则重建 LogicalChannels。
+	// 必须在所有迁移完成、validateChannelKeys 之后，避免优先级/UID 变化导致归组视图错位。
+	if ensureLogicalBackfill(&cm.config) {
+		if err := cm.saveConfigLocked(cm.config); err != nil {
+			log.Printf("[Config-LogicalChannel] 警告: 保存逻辑渠道回填结果失败: %v", err)
+			cm.mu.Unlock()
+			return err
+		}
+	}
+
 	// 成功加载后通知回调（在锁内构造快照，释放锁后通知）
 	cm.fireConfigChangeCallbacks()
 	return nil

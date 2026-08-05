@@ -134,6 +134,13 @@ type UpstreamConfig struct {
 	Tags []string `json:"tags,omitempty"`
 	// 渠道级保活验证配置（可选，nil 时继承全局与 OriginTier 分档默认）
 	HealthCheck *ChannelHealthCheckConfig `json:"healthCheck,omitempty"`
+	// LogicalChannelUID 是该物理渠道所属逻辑渠道的稳定身份。
+	// 六个物理数组仍是运行时存储；本字段是非权威指针，加载旧配置时由 ConfigManager
+	// 自动回填，逻辑渠道 CRUD 也使用它保持各协议物理路由同步。空值表示旧数据。
+	LogicalChannelUID string `json:"logicalChannelUid,omitempty"`
+	// LogicalName 是该物理渠道所属逻辑渠道的用户可见名称。
+	// 跟随 LogicalChannel.Name 写入；旧数据加载后由归组回填统一刷新。空值表示旧数据。
+	LogicalName string `json:"logicalName,omitempty"`
 }
 
 // ChannelPlacementFront 表示新渠道放置到故障转移序列首位。
@@ -1240,6 +1247,14 @@ type Config struct {
 
 	// 渠道保活验证全局配置（可选，nil 使用默认值）
 	HealthCheck *GlobalHealthCheckConfig `json:"healthCheck,omitempty"`
+
+	// LogicalChannels 逻辑渠道列表（管理面聚合实体）。
+	// 运行时的物理渠道仍以六个 Upstream* 数组为准；本字段由 ConfigManager 在加载时
+	// 重建（按归组规则），由 /api/logical-channels 在事务内维护。空数组表示旧配置。
+	LogicalChannels []LogicalChannel `json:"logicalChannels,omitempty"`
+	// LogicalChannelSchemaVersion 逻辑渠道配置 schema 版本。
+	// 首次引入版本为 1；非 1 时 ConfigManager 会触发一次重建以保证字段完整。
+	LogicalChannelSchemaVersion int `json:"logicalChannelSchemaVersion,omitempty"`
 }
 
 // FailedKey 失败密钥记录
@@ -1379,6 +1394,24 @@ func (cm *ConfigManager) GetConfig() Config {
 	// 深拷贝 AutopilotRouting（map 字段需要独立分配）
 	cloned.AutopilotRouting = cm.config.AutopilotRouting.deepCopy()
 	applyAutopilotEnvOverrides(&cloned.AutopilotRouting)
+
+	// 深拷贝 LogicalChannels（独立切片 + 每个 entry 复制，避免外部修改串到内存）
+	if len(cm.config.LogicalChannels) > 0 {
+		cloned.LogicalChannels = make([]LogicalChannel, len(cm.config.LogicalChannels))
+		copy(cloned.LogicalChannels, cm.config.LogicalChannels)
+		for i := range cloned.LogicalChannels {
+			if len(cm.config.LogicalChannels[i].BaseURLs) > 0 {
+				cloned.LogicalChannels[i].BaseURLs = append([]string(nil), cm.config.LogicalChannels[i].BaseURLs...)
+			}
+			if len(cm.config.LogicalChannels[i].Protocols) > 0 {
+				cloned.LogicalChannels[i].Protocols = append([]LogicalChannelProtocol(nil), cm.config.LogicalChannels[i].Protocols...)
+			}
+			if len(cm.config.LogicalChannels[i].Tags) > 0 {
+				cloned.LogicalChannels[i].Tags = append([]string(nil), cm.config.LogicalChannels[i].Tags...)
+			}
+		}
+	}
+	cloned.LogicalChannelSchemaVersion = cm.config.LogicalChannelSchemaVersion
 
 	return cloned
 }

@@ -86,14 +86,18 @@ const isCircuitOpen = computed(() => props.metrics?.circuitState === 'open')
 const isTripped = computed(() => isSuspended.value || isCircuitOpen.value)
 
 const serviceTypeClass = computed(() => {
+  return protocolClass(props.channel.serviceType)
+})
+
+function protocolClass(serviceType: string) {
   const map: Record<string, string> = {
     openai: 'border-blue-500/25 bg-blue-500/10 text-blue-700 dark:text-blue-300',
     claude: 'border-orange-500/25 bg-orange-500/10 text-orange-700 dark:text-orange-300',
     gemini: 'border-purple-500/25 bg-purple-500/10 text-purple-700 dark:text-purple-300',
     responses: 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
   }
-  return map[props.channel.serviceType] || map.openai
-})
+  return map[serviceType] || map.openai
+}
 
 const statusConfig = computed(() => {
   if (isDisabled.value) {
@@ -300,7 +304,17 @@ function handleCardClick(event: MouseEvent) {
         >
           {{ channel.name }}
         </button>
-        <Badge class="shrink-0 border text-[10px] uppercase" :class="serviceTypeClass">
+        <template v-if="channel.protocolCapsules?.length">
+          <Badge
+            v-for="capsule in channel.protocolCapsules"
+            :key="capsule.kind"
+            class="shrink-0 border text-[10px] uppercase"
+            :class="protocolClass(capsule.serviceType)"
+          >
+            {{ capsule.kind }}
+          </Badge>
+        </template>
+        <Badge v-else class="shrink-0 border text-[10px] uppercase" :class="serviceTypeClass">
           {{ channel.serviceType }}
         </Badge>
         <button

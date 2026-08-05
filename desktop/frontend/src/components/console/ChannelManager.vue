@@ -349,7 +349,7 @@ async function handleDelete(channel: Channel) {
 
   actionLoading.value = true
   try {
-    await deleteChannel(channel.index, props.type)
+    await deleteChannel(channel.index, props.type, channel.logicalChannelUid)
   } catch (e) {
     actionError.value = e instanceof Error ? e.message : String(e)
   } finally {
