@@ -169,3 +169,73 @@ func TestAutoDocumentHardConstraintFailOpen(t *testing.T) {
 		t.Fatalf("fail-open result = %v, want all 2 candidates kept", result)
 	}
 }
+
+// stubLearnedDocumentUnsupported 用内存桩替换实测 document 不支持查询，避免测试依赖落盘的共享兼容性记忆。
+func stubLearnedDocumentUnsupported(t *testing.T, unsupported map[string]bool) {
+	t.Helper()
+	original := learnedDocumentUnsupportedLookup
+	learnedDocumentUnsupportedLookup = func(channelUID, model string) bool {
+		return unsupported[channelUID+"|"+model]
+	}
+	t.Cleanup(func() { learnedDocumentUnsupportedLookup = original })
+}
+
+// 注册表支持 + 实测拒绝 → 收紧为不支持（中转商剥离附件正是此类场景）。
+func TestLearnedDocumentUnsupportedOverridesRegistrySupport(t *testing.T) {
+	stubLearnedDocumentUnsupported(t, map[string]bool{"ch_relay|doc-model": true})
+
+	router := NewSmartRouter(nil, nil, nil, nil)
+	upstream := &config.UpstreamConfig{
+		ChannelUID: "ch_relay",
+		ModelCapabilities: map[string]config.UpstreamModelCapability{
+			"doc-model": {Capabilities: map[string]bool{"document": true}},
+		},
+	}
+	entry := router.buildChannelEntry(
+		scheduler.ChannelInfo{Index: 0, Name: "relay", Status: "active"},
+		upstream,
+		"messages",
+		"doc-model",
+		nil,
+	)
+
+	if entry.SupportsDocument {
+		t.Fatal("SupportsDocument = true, want false（实测拒绝应覆盖注册表支持）")
+	}
+	reasons := routingHardConstraintReasons(&RequestProfile{DocumentNeed: true}, &entry)
+	if len(reasons) != 1 || reasons[0] != "document_unsupported" {
+		t.Fatalf("routingHardConstraintReasons() = %v, want [document_unsupported]", reasons)
+	}
+
+	// 无文档需求的请求不受学习结论影响
+	if reasons := routingHardConstraintReasons(&RequestProfile{}, &entry); len(reasons) != 0 {
+		t.Errorf("无文档需求不应被过滤, got %v", reasons)
+	}
+}
+
+// 无学习记录 → 注册表结论不变（fail-open）。
+func TestNoLearnedDocumentUnsupportedKeepsRegistry(t *testing.T) {
+	stubLearnedDocumentUnsupported(t, nil)
+
+	router := NewSmartRouter(nil, nil, nil, nil)
+	upstream := &config.UpstreamConfig{
+		ChannelUID: "ch_fresh",
+		ModelCapabilities: map[string]config.UpstreamModelCapability{
+			"doc-model": {Capabilities: map[string]bool{"document": true}},
+		},
+	}
+	entry := router.buildChannelEntry(
+		scheduler.ChannelInfo{Index: 0, Name: "fresh", Status: "active"},
+		upstream,
+		"messages",
+		"doc-model",
+		nil,
+	)
+
+	if !entry.SupportsDocument {
+		t.Fatal("SupportsDocument = false, want true（无学习记录时注册表结论不应被改变）")
+	}
+	if reasons := routingHardConstraintReasons(&RequestProfile{DocumentNeed: true}, &entry); len(reasons) != 0 {
+		t.Errorf("fail-open: got %v", reasons)
+	}
+}

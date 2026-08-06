@@ -40,6 +40,10 @@ const (
 	TraitNormalizeNonstandardChatRoles CompatTrait = "normalize_nonstandard_chat_roles"
 	// TraitCodexNativeToolPassthrough 上游需要 Codex 原生工具转为 OpenAI function 格式
 	TraitCodexNativeToolPassthrough CompatTrait = "codex_native_tool_passthrough"
+	// TraitNoDocumentSupport 上游实测拒绝 document 内容块（PDF 等）。
+	// 与其他 trait 不同：没有对应的请求改写，不进入主动注入枚举与 AllCompatTraits，
+	// 仅供 SmartRouter 路由侧读取（选渠道阶段规避该组合）。
+	TraitNoDocumentSupport CompatTrait = "no_document_support"
 )
 
 // AllCompatTraits 全部可学习兼容项，供配置迁移与诊断遍历。
@@ -473,4 +477,41 @@ func (c *ChannelCompatCache) MinContextLimitForChannelModel(channelUID, model st
 		}
 	}
 	return minLimit, minLimit > 0
+}
+
+// IsDocumentUnsupportedForChannelModel 返回该渠道-模型是否有任一已知 Key 学到过
+// "不支持 document 块"（TraitNoDocumentSupport）。
+//
+// 用途与 MinContextLimitForChannelModel 相同：路由决策发生在选定具体 Key 之前，
+// 任一 Key 已知会拒绝 document 就按不支持处理，避免把 PDF 请求送进已知会 400 的组合。
+// 无学习记录 = false（fail-open，调用方沿用注册表能力结论）。
+func (c *ChannelCompatCache) IsDocumentUnsupportedForChannelModel(channelUID, model string) bool {
+	if channelUID == "" || model == "" {
+		return false
+	}
+
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	for key, entry := range c.cache {
+		if entry == nil {
+			continue
+		}
+		// 键比对规则同 MinContextLimitForChannelModel：SplitN 前两个冒号后精确比对，
+		// 容忍模型名本身含冒号，不能用 HasPrefix/HasSuffix。
+		parts := strings.SplitN(key, ":", 3)
+		if len(parts) != 3 {
+			continue
+		}
+		if parts[0] != channelUID || !strings.EqualFold(parts[2], model) {
+			continue
+		}
+		if time.Since(entry.DetectedAt) > channelCompatTTL {
+			continue
+		}
+		if state, ok := entry.Traits[TraitNoDocumentSupport]; ok && state.Enabled {
+			return true
+		}
+	}
+	return false
 }

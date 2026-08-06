@@ -1200,6 +1200,11 @@ func (r *SmartRouter) buildChannelEntry(
 			entry.ContextWindowTokens = learned
 		}
 	}
+	// 实测结论只收紧不放松：注册表说不支持保持不支持，注册表说支持但实测拒绝也收紧为不支持。
+	// 学到的规避经既有 document_unsupported 硬约束呈现，routingHardConstraintReasons 无需改动。
+	if learnedDocumentUnsupported(channelUID, actualModel) {
+		entry.SupportsDocument = false
+	}
 	if modelPricing != nil {
 		listCost := metrics.CalculateTokenCostUSDWithPricing(modelPricing, 1_000_000, 1_000_000, 1_000_000, 1_000_000)
 		entry.EstimatedCost = listCost

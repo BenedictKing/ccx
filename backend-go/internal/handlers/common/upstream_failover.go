@@ -1047,6 +1047,29 @@ func TryUpstreamWithAllKeys(
 					}
 				}
 
+				// document 能力自学习（被动侧）：请求携带 document 块且上游以 400/422 拒绝时，
+				// 记忆该 渠道-Key-模型 组合不支持 document，供 SmartRouter 在选渠道阶段规避。
+				// 与上下文上限同策略：只记录不做同 Key 重试（请求体没有可自动改写之处，
+				// 剥掉 document 等于改变用户意图）；位置在 shouldFailover 之前，
+				// 保证 invalid_request 类不可重试错误也能学到。
+				// 放在弃用参数/compat-signal 块之后：具体原因（参数、developer role 等）优先被
+				// 专属学习块截获，document 弱信号只兜住"通用 invalid_request"。
+				if (resp.StatusCode == 400 || resp.StatusCode == 422) && upstream.ChannelUID != "" {
+					if signal := DocumentUnsupportedFromError(resp.StatusCode, respBodyBytes, detectDocumentInBody(attemptBody)); signal != nil {
+						keyHash := autopilot.KeyHashFromAPIKey(apiKey)
+						summary := errorBodySummaryForLog(apiType, resp.StatusCode, respBodyBytes)
+						if channelCompatCache.Record(upstream.ChannelUID, keyHash, attemptModel,
+							config.TraitNoDocumentSupport, true, config.CompatSourceErrorSignal, summary) {
+							strength := "弱信号"
+							if signal.Strong {
+								strength = "强信号"
+							}
+							RequestLogf(c, "[%s-DocumentCompat] 渠道 %s 模型 %s 拒绝 document 块（%s），已记忆并将在后续路由中规避",
+								apiType, upstream.Name, attemptModel, strength)
+						}
+					}
+				}
+
 				if shouldFailover {
 					lastError = fmt.Errorf("上游错误: %d", resp.StatusCode)
 					failedKeys[apiKey] = true
