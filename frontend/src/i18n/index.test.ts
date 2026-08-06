@@ -125,15 +125,19 @@ describe('localized components', () => {
 })
 
 describe('channel naming constraints', () => {
-  it('所有新增渠道均自动命名，编辑时仅官方 provider 隐藏名称输入', () => {
+  it('所有渠道名称均自动派生，表单不再提供名称输入，名称统一在编辑弹窗头部展示', () => {
     const quickAdd = readFileSync(resolve(__dirname, '../components/QuickAddChannelForm.vue'), 'utf8')
     const addModal = readFileSync(resolve(__dirname, '../components/AddChannelModal.vue'), 'utf8')
     const basicInfo = readFileSync(resolve(__dirname, '../components/edit-channel/BasicInfoSection.vue'), 'utf8')
+    const header = readFileSync(resolve(__dirname, '../components/edit-channel/AddChannelHeader.vue'), 'utf8')
+    const editModal = readFileSync(resolve(__dirname, '../components/EditChannelModal.vue'), 'utf8')
 
     expect(quickAdd).not.toContain('v-model="channelName"')
     expect(addModal).not.toContain('v-model="channelName"')
-    expect(basicInfo).toContain('<v-col v-if="!managedAccount || !providerName"')
+    expect(basicInfo).not.toContain('channelEditor.basic.name.label')
     expect(basicInfo).not.toContain('channelEditor.basic.accountName')
+    expect(header).toContain('channelName')
+    expect(editModal).toContain(':channel-name="form.name"')
   })
 })
 

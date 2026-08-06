@@ -173,14 +173,14 @@ interface SponsorCard {
   hasTemplate: boolean
 }
 
-// 赞助商卡片：有内置模板则复用模板文案与添加按钮，否则退化为纯推广卡
+// 赞助商卡片：说明文案与 README 赞助商表格保持一致（走 locale），模板仅决定展示名与添加按钮形态
 const sponsorCards = computed<SponsorCard[]>(() =>
   sponsorOrder.map(sponsor => {
     const template = builtinProviders.value.find(item => item.providerId === sponsor.providerId)
     return {
       providerId: sponsor.providerId,
       displayName: template?.displayName || sponsor.displayName,
-      description: template?.description || t(`subscription.sponsors.${sponsor.providerId}.description`),
+      description: t(`subscription.sponsors.${sponsor.providerId}.description`),
       hasTemplate: !!template,
     }
   })
@@ -235,6 +235,10 @@ onMounted(async () => {
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+/* 赞助卡文案与 README 对齐后更长，双倍宽度下放宽到 6 行，避免截断活动信息 */
+.provider-card--sponsor .provider-card__desc {
+  -webkit-line-clamp: 6;
 }
 .cursor-pointer {
   cursor: pointer;

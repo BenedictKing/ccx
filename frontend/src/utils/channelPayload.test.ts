@@ -36,7 +36,8 @@ describe('buildChannelPayload', () => {
       historicalImageTurnLimit: 3
     })
 
-    expect(result.name).toBe('test-channel')
+    // 渠道名称由首个 baseURL 自动派生（api.example.com → example），不再使用手工传入值
+    expect(result.name).toBe('example')
     expect(result.baseUrl).toBe('https://api.example.com/v1#')
     expect(result.website).toBe('https://platform.openai.com')
     expect(result.description).toBe('desc')
