@@ -41,6 +41,7 @@ type NewApiSyncResult struct {
 	SubscriptionUID    string            `json:"subscriptionUid"`
 	Success            bool              `json:"success"`
 	Balance            float64           `json:"balance,omitempty"`
+	UsedQuota          int64             `json:"usedQuota,omitempty"`
 	Models             []string          `json:"models,omitempty"`
 	ModelsHash         string            `json:"modelsHash,omitempty"`
 	ModelsHashChanged  bool              `json:"modelsHashChanged"`
@@ -143,13 +144,14 @@ func (s *NewApiSubscriptionSyncService) SyncNow(ctx context.Context, uid string)
 	now := s.now()
 	oldHash := hashModelList(profile.AvailableModels)
 	newHash := hashModelList(models)
-	result.Balance, result.Models, result.ModelsHash = float64(self.Quota), models, newHash
+	result.Balance, result.UsedQuota, result.Models, result.ModelsHash = float64(self.Quota), self.UsedQuota, models, newHash
 	result.ModelsHashChanged = oldHash != "" && oldHash != newHash
 
 	statuses, desired := buildNewApiDesired(profile, groups, now)
 	result.Keys = statuses
 	if err := s.store.Patch(uid, nil, func(p *SubscriptionProfile) error {
 		p.Balance = result.Balance
+		p.UsedQuota = result.UsedQuota
 		p.GroupMultipliers = cloneRatios(groups)
 		p.AvailableModels = append([]string(nil), models...)
 		p.UserID, p.AuthTokenMode = userID, mode

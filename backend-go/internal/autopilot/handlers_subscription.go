@@ -74,6 +74,7 @@ type SubscriptionItem struct {
 	BillingMode        string             `json:"billingMode,omitempty"`
 	Currency           string             `json:"currency,omitempty"`
 	Balance            float64            `json:"balance,omitempty"`
+	UsedQuota          int64              `json:"usedQuota,omitempty"`
 	GroupMultipliers   map[string]float64 `json:"groupMultipliers,omitempty"`
 	RechargeMultiplier float64            `json:"rechargeMultiplier,omitempty"`
 	LinkedChannelUIDs  []string           `json:"linkedChannelUids,omitempty"`
@@ -468,6 +469,7 @@ func toSubscriptionItem(p *SubscriptionProfile) SubscriptionItem {
 		BillingMode:        p.BillingMode,
 		Currency:           p.Currency,
 		Balance:            p.Balance,
+		UsedQuota:          p.UsedQuota,
 		GroupMultipliers:   p.GroupMultipliers,
 		RechargeMultiplier: p.RechargeMultiplier,
 		LinkedChannelUIDs:  p.LinkedChannelUIDs,

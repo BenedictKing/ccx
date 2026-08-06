@@ -22,6 +22,7 @@ type SubscriptionProfile struct {
 	BillingMode   string   `json:"billingMode"` // official_api | token_plan | prepaid_credit | shared_free | unknown
 	Currency      string   `json:"currency,omitempty"`
 	Balance       float64  `json:"balance,omitempty"`
+	UsedQuota     int64    `json:"usedQuota,omitempty"`
 	PaymentAmount *float64 `json:"paymentAmount,omitempty"`
 	PaymentUnit   string   `json:"paymentUnit,omitempty"`
 	CreditAmount  *float64 `json:"creditAmount,omitempty"`

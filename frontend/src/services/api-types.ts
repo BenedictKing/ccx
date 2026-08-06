@@ -1235,6 +1235,7 @@ export interface NewApiSyncResult {
   subscriptionUid: string
   success: boolean
   balance?: number
+  usedQuota?: number
   models?: string[]
   modelsHash?: string
   modelsHashChanged: boolean
@@ -1266,6 +1267,7 @@ export interface SubscriptionItem {
   billingMode?: string
   currency?: string
   balance?: number
+  usedQuota?: number
   groupMultipliers?: Record<string, number>
   rechargeMultiplier?: number
   paymentAmount?: number | null
@@ -1273,7 +1275,10 @@ export interface SubscriptionItem {
   creditAmount?: number | null
   creditUnit?: string
   version: number
-  authTokenMode?: 'bearer' | 'raw_auth' | string
+  authTokenMode?: 'bearer' | 'raw' | 'raw_auth' | string
+  baseUrl?: string
+  accessTokenMasked?: string
+  userId?: string
   linkedChannelUids?: string[]
   source?: string
   confidence?: number
@@ -1337,6 +1342,10 @@ export interface SubscriptionUpdateRequest {
   // Phase 4 Item 6: 余额自动刷新
   billingApiKey?: string
   autoRefreshEnabled?: boolean
+  accessToken?: string
+  userId?: string
+  authTokenMode?: string
+  expectedVersion?: number
 }
 
 // ============== new-api 订阅集成类型（§8.5.1） ==============
@@ -1414,6 +1423,13 @@ export interface NewApiAccountCreateRequest {
   authTokenMode?: string
 }
 
+export interface NewApiCredentialsUpdateRequest {
+  accessToken?: string
+  userId?: string
+  authTokenMode?: string
+  expectedVersion?: number
+}
+
 export interface NewApiAccountItem {
   accountUid: string
   userId?: string
@@ -1422,6 +1438,8 @@ export interface NewApiAccountItem {
   status?: string
   accessTokenMasked?: string
   lastCheckedAt?: string
+  usedQuota?: number
+  authTokenMode?: string
   createdAt: string
 }
 
