@@ -5,8 +5,28 @@
     </v-avatar>
 
     <div class="flex-grow-1 modal-header-text">
-      <div class="modal-title">
+      <div class="modal-title d-flex align-center ga-2 flex-wrap">
         {{ isEditing ? editTitle : createTitle }}
+        <v-tooltip
+          v-if="channelName"
+          location="bottom"
+          :text="channelNameHint || t('channelEditor.basic.name.label')"
+          :open-delay="150"
+          content-class="key-tooltip"
+        >
+          <template #activator="{ props: tip }">
+            <v-chip
+              v-bind="tip"
+              size="small"
+              color="primary"
+              variant="tonal"
+              prepend-icon="mdi-tag"
+              class="channel-name-chip"
+            >
+              {{ channelName }}
+            </v-chip>
+          </template>
+        </v-tooltip>
       </div>
       <div class="modal-subtitle" :class="subtitleClasses">
         {{ isEditing ? editSubtitle : createSubtitle }}
@@ -35,11 +55,14 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from '../../i18n'
 
 interface Props {
   isEditing: boolean
   hideCapabilityActions?: boolean
   channelType?: 'messages' | 'chat' | 'responses' | 'gemini' | 'images' | 'vectors'
+  channelName?: string
+  channelNameHint?: string
   noVision?: boolean
   headerClasses?: string | Record<string, boolean> | Array<string | Record<string, boolean>>
   avatarColor?: string
@@ -55,6 +78,8 @@ interface Props {
 withDefaults(defineProps<Props>(), {
   channelType: 'messages',
   hideCapabilityActions: false,
+  channelName: '',
+  channelNameHint: '',
   noVision: false,
   avatarColor: 'primary',
 })
@@ -62,6 +87,8 @@ withDefaults(defineProps<Props>(), {
 defineEmits<{
   'toggle-no-vision': []
 }>()
+
+const { t } = useI18n()
 </script>
 
 <style scoped>
@@ -81,6 +108,16 @@ defineEmits<{
 .modal-subtitle {
   font-size: 0.8125rem;
   line-height: 1.5;
+}
+
+.channel-name-chip {
+  max-width: 320px;
+}
+
+.channel-name-chip :deep(.v-chip__content) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .header-capability-actions {

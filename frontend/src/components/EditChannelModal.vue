@@ -5,6 +5,8 @@
       <AddChannelHeader
         :is-editing="isEditing"
         :channel-type="props.channelType"
+        :channel-name="form.name"
+        :channel-name-hint="isAutoManagedChannel ? '' : t('channelEditor.basic.name.autoDerivedHint')"
         :hide-capability-actions="isAutoManagedChannel"
         :no-vision="form.noVision"
         :header-classes="headerClasses"
