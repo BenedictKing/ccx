@@ -1220,6 +1220,8 @@
   "subscription.newApi.lastRefreshedAt": "Last refreshed",
   "subscription.newApi.refreshBalance": "Refresh balance",
   "subscription.newApi.saveCredentials": "Save credentials",
+  "subscription.newApi.genericAutoManagedHint": "This channel is auto-managed but not yet linked to a new-api plan. Enter the new-api access token to verify and bind the account while preserving the channel and its existing keys.",
+  "subscription.newApi.bindAccount": "Link new-api plan",
   "subscription.manageInChannels": "Connected subscriptions can be managed centrally on the Channels page.",
   "cockpitOverview.title": "Operations Cockpit",
   "cockpitOverview.health": "Health Overview",

@@ -9,6 +9,7 @@ const apiMocks = vi.hoisted(() => ({
   getSubscription: vi.fn(),
   refreshSubscription: vi.fn(),
   updateNewApiCredentials: vi.fn(),
+  provisionNewApiSubscription: vi.fn(),
   getSubscriptionAccounts: vi.fn(),
   addSubscriptionAccount: vi.fn(),
   refreshSubscriptionAccount: vi.fn(),
@@ -32,8 +33,9 @@ const buttonStub = defineComponent({
   template: '<button :disabled="disabled" @click="$emit(\'click\')"><slot /></button>',
 })
 
-const mountPanel = () => mount(NewApiAccountPanel, {
-  props: { subscriptionUid: 'sub-main' },
+
+const mountPanel = (props: Record<string, unknown> = {}) => mount(NewApiAccountPanel, {
+  props: { subscriptionUid: 'sub-main', ...props },
   global: {
     stubs: {
       VCard: passthroughStub,
@@ -89,6 +91,40 @@ describe('NewApiAccountPanel', () => {
     expect(wrapper.text()).not.toContain('secret-token')
     const passwordInput = wrapper.find<HTMLInputElement>('input[type="password"]')
     expect(passwordInput.element.value).toBe('')
+  })
+
+  it('generic 渠道填写 token 后绑定已有渠道', async () => {
+    apiMocks.provisionNewApiSubscription = vi.fn().mockResolvedValue({
+      subscription: await apiMocks.getSubscription(),
+      channelUid: 'ch-existing',
+      channelIndex: 0,
+      provisionedKey: '',
+      provisionedTokenId: 1,
+      reused: true,
+      discoveryStarted: true,
+    })
+    const wrapper = mountPanel({
+      subscriptionUid: '',
+      channelName: 'Legacy relay',
+      baseUrl: 'https://relay.example.com',
+      channelUid: 'ch-existing',
+      channelKind: 'messages',
+      isGeneric: true,
+    })
+    await wrapper.find('input[type="password"]').setValue('new-api-access-token')
+    await wrapper.findAll('button').find(button => button.text().includes('subscription.newApi.bindAccount'))!.trigger('click')
+
+    await vi.waitFor(() => expect(apiMocks.provisionNewApiSubscription).toHaveBeenCalledWith({
+      subscriptionUid: 'newapi-ch-existing',
+      displayName: 'Legacy relay',
+      baseUrl: 'https://relay.example.com',
+      accessToken: 'new-api-access-token',
+      userId: undefined,
+      authTokenMode: 'bearer',
+      channelKind: 'messages',
+      channelName: 'Legacy relay',
+    }))
+    expect(wrapper.emitted('updated')).toBeTruthy()
   })
 
   it('输入新 token 后保存，并携带乐观锁版本', async () => {

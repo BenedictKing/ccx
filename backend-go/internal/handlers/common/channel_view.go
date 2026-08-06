@@ -1,6 +1,8 @@
 package common
 
 import (
+	"strings"
+
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/gin-gonic/gin"
 )
@@ -8,7 +10,7 @@ import (
 func BuildChannelView(up config.UpstreamConfig, index int) gin.H {
 	status := config.GetChannelStatus(&up)
 	priority := config.GetChannelPriority(&up, index)
-	return gin.H{
+	view := gin.H{
 		"index":                         index,
 		"name":                          up.Name,
 		"accountUid":                    up.AccountUID,
@@ -49,6 +51,7 @@ func BuildChannelView(up config.UpstreamConfig, index int) gin.H {
 		"disabledApiKeys":               up.DisabledAPIKeys,
 		"autoManaged":                   up.AutoManaged,
 		"autoManagedAt":                 up.AutoManagedAt,
+		"autoManagedKind":               up.AutoManagedKind,
 		"originType":                    up.OriginType,
 		"originTier":                    up.OriginTier,
 		"autoBlacklistBalance":          up.IsAutoBlacklistBalanceEnabled(),
@@ -62,28 +65,30 @@ func BuildChannelView(up config.UpstreamConfig, index int) gin.H {
 		"noVisionModels":                up.NoVisionModels,
 		"visionFallbackModel":           up.VisionFallbackModel,
 		"historicalImageTurnLimit":      up.HistoricalImageTurnLimit,
-		// Claude 协议兼容开关
 		"passbackReasoningContent":      up.IsPassbackReasoningContentEnabled(),
 		"passbackThinkingBlocks":        up.IsPassbackThinkingBlocksEnabled(),
 		"stripEmptyTextBlocks":          up.IsStripEmptyTextBlocksEnabled(),
 		"normalizeSystemRoleToTopLevel": up.NormalizeSystemRoleToTopLevel,
-		// Gemini 特定开关
-		"injectDummyThoughtSignature": up.InjectDummyThoughtSignature,
-		"stripThoughtSignature":       up.StripThoughtSignature,
-		// 超时配置
-		"requestTimeoutMs":            up.RequestTimeoutMs,
-		"responseHeaderTimeoutMs":     up.ResponseHeaderTimeoutMs,
-		"streamFirstContentTimeoutMs": up.StreamFirstContentTimeoutMs,
-		"streamInactivityTimeoutMs":   up.StreamInactivityTimeoutMs,
-		"streamToolCallIdleTimeoutMs": up.StreamToolCallIdleTimeoutMs,
-		// Rate Limit（渠道级限速）
-		"rateLimitRpm":             up.RateLimitRPM,
-		"rateLimitWindowMinutes":   up.RateLimitWindowMinutes,
-		"rateLimitBurst":           up.RateLimitBurst,
-		"rateLimitMaxConcurrent":   up.RateLimitMaxConcurrent,
-		"rateLimitAutoFromHeaders": up.IsRateLimitAutoFromHeadersEnabled(),
-		// 逻辑渠道身份
-		"logicalChannelUid": up.LogicalChannelUID,
-		"logicalName":       up.LogicalName,
+		"injectDummyThoughtSignature":   up.InjectDummyThoughtSignature,
+		"stripThoughtSignature":         up.StripThoughtSignature,
+		"requestTimeoutMs":              up.RequestTimeoutMs,
+		"responseHeaderTimeoutMs":       up.ResponseHeaderTimeoutMs,
+		"streamFirstContentTimeoutMs":   up.StreamFirstContentTimeoutMs,
+		"streamInactivityTimeoutMs":     up.StreamInactivityTimeoutMs,
+		"streamToolCallIdleTimeoutMs":   up.StreamToolCallIdleTimeoutMs,
+		"rateLimitRpm":                  up.RateLimitRPM,
+		"rateLimitWindowMinutes":        up.RateLimitWindowMinutes,
+		"rateLimitBurst":                up.RateLimitBurst,
+		"rateLimitMaxConcurrent":        up.RateLimitMaxConcurrent,
+		"rateLimitAutoFromHeaders":      up.IsRateLimitAutoFromHeadersEnabled(),
+		"logicalChannelUid":             up.LogicalChannelUID,
+		"logicalName":                   up.LogicalName,
 	}
+	for _, keyConfig := range up.APIKeyConfigs {
+		if uid := strings.TrimSpace(keyConfig.SourceSubscriptionUID); uid != "" {
+			view["subscriptionUid"] = uid
+			break
+		}
+	}
+	return view
 }

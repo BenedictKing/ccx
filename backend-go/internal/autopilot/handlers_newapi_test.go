@@ -440,6 +440,9 @@ func TestHandleNewApiProvision_MergesIntoExistingChannel(t *testing.T) {
 	if !ch.AutoManaged {
 		t.Fatal("合并后渠道应为 autoManaged")
 	}
+	if ch.AutoManagedKind != "new_api" {
+		t.Fatalf("合并后渠道应绑定 new_api kind，实际=%q", ch.AutoManagedKind)
+	}
 
 	// 订阅链接到已有渠道
 	profile := store.Get("sub-merge-1")
@@ -676,7 +679,6 @@ func TestHandleNewApiProvision_AutoCreatesOnlyEligibleGroupKeys(t *testing.T) {
 		}
 	}
 }
-
 
 func TestHandleNewApiProvision_SecondGroupFailureRollsBackCreatedKey(t *testing.T) {
 	postCalls := 0

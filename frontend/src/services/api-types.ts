@@ -301,6 +301,7 @@ export interface Channel {
   compactModel?: string                      // 本地 compact 时使用的上游模型名（不经过 modelMapping，为空则使用原始请求的模型）
   autoManaged?: boolean                      // 启用自动托管
   autoManagedAt?: string                     // 开始托管时间（ISO 格式）
+  autoManagedKind?: string                   // 托管子类型："" | "generic" | "new_api"
   originType?: string                        // 渠道来源类型
   originTier?: string                        // 渠道来源可信层级
   subscriptionUid?: string                   // 关联的订阅 UID（new-api 自动托管场景）

@@ -123,6 +123,9 @@ type UpstreamConfig struct {
 	// AutoManaged 自动托管标记
 	AutoManaged   bool       `json:"autoManaged,omitempty"`   // 渠道是否由自动托管流程创建
 	AutoManagedAt *time.Time `json:"autoManagedAt,omitempty"` // 自动托管设置时间
+	// AutoManagedKind 托管子类型，用于区分"已托管但未绑定上游套餐"和"已完成 new-api 绑定"等状态。
+	// "" | "generic" | "new_api"
+	AutoManagedKind string `json:"autoManagedKind,omitempty"`
 	// Autopilot 来源信任分类（设计 §3.2.1，仅用于隐私/治理展示和同分 tie-breaker，不参与质量推导）
 	// OriginType: official_api | official_token_plan | relay | community | local_runtime | unknown
 	// OriginTier: first | second | third | local | unknown
@@ -1181,8 +1184,9 @@ type UpstreamUpdate struct {
 	// 历史图片轮次限制（0=不限制，2-10=限制轮次）
 	HistoricalImageTurnLimit *int `json:"historicalImageTurnLimit"`
 	// 自动托管字段
-	AutoManaged   *bool      `json:"autoManaged"`
-	AutoManagedAt *time.Time `json:"autoManagedAt"`
+	AutoManaged     *bool      `json:"autoManaged"`
+	AutoManagedAt   *time.Time `json:"autoManagedAt"`
+	AutoManagedKind *string    `json:"autoManagedKind"`
 	// 用户自定义标签（nil=不修改，空切片=清空标签）
 	Tags []string `json:"tags"`
 }

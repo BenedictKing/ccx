@@ -135,7 +135,9 @@ func applyDefaultBaseURL(upstream *UpstreamConfig) {
 //
 // 注意不能用 AccountUID 判定：加载迁移会为所有渠道（含手动渠道）补齐 AccountUID。
 func shouldAutoDeriveChannelName(upstream *UpstreamConfig) bool {
-	return upstream != nil && !upstream.AutoManaged && strings.TrimSpace(upstream.ProviderID) == ""
+	return upstream != nil &&
+		(!upstream.AutoManaged || upstream.AutoManagedKind == "generic") &&
+		strings.TrimSpace(upstream.ProviderID) == ""
 }
 
 // channelPrimaryBaseURL 返回渠道当前用于命名的首个 baseURL（优先 BaseURLs[0]，其次 BaseURL）。
@@ -149,7 +151,7 @@ func channelPrimaryBaseURL(upstream *UpstreamConfig) string {
 	return upstream.BaseURL
 }
 
-// applyAutoDerivedChannelName 在首个 baseURL 发生变化时，将非托管渠道名称重置为派生值。
+// applyAutoDerivedChannelName 在首个 baseURL 发生变化时，将普通或 generic 托管渠道名称重置为派生值。
 // 新建渠道（oldFirst 为空）或用户调整 baseURL 顺序/首地址时触发；
 // 仅变更 AutoManaged 等状态但不改变首地址时保留原名称。
 func applyAutoDerivedChannelName(upstream *UpstreamConfig, oldFirst string) {
@@ -727,7 +729,7 @@ func ApplyProviderUpstreamDefaults(providerID string, upstream *UpstreamConfig) 
 }
 
 func stripAutoManagedExplicitOverrides(upstream *UpstreamConfig) bool {
-	if upstream == nil || !upstream.AutoManaged {
+	if upstream == nil || !upstream.AutoManaged || upstream.AutoManagedKind == "generic" {
 		return false
 	}
 	changed := false

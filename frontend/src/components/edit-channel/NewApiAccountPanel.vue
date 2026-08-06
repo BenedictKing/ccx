@@ -5,6 +5,63 @@
       {{ t('subscription.newApi.accountManagement') }}
     </div>
 
+    <template v-if="isGeneric && !subscription">
+      <v-alert color="info" variant="tonal" density="compact" class="mb-4">
+        {{ t('subscription.newApi.genericAutoManagedHint') }}
+      </v-alert>
+
+      <v-card variant="outlined" rounded="lg" class="mb-4">
+        <v-card-text>
+          <v-form @submit.prevent="bindNewApi">
+            <v-text-field
+              v-model="bindForm.accessToken"
+              :label="t('subscription.newApi.accessToken')"
+              variant="outlined"
+              density="compact"
+              type="password"
+              autocomplete="new-password"
+              required
+              class="mb-2"
+            />
+            <v-row dense>
+              <v-col cols="12" md="6">
+                <v-text-field
+                  v-model="bindForm.userId"
+                  :label="t('subscription.newApi.userId')"
+                  variant="outlined"
+                  density="compact"
+                />
+              </v-col>
+              <v-col cols="12" md="6">
+                <v-select
+                  v-model="bindForm.authTokenMode"
+                  :label="t('subscription.newApi.authTokenMode')"
+                  :items="authTokenModeOptions"
+                  variant="outlined"
+                  density="compact"
+                />
+              </v-col>
+            </v-row>
+            <v-alert v-if="bindError" color="error" variant="tonal" density="compact" class="mb-3">
+              {{ bindError }}
+            </v-alert>
+            <div class="d-flex justify-end">
+              <v-btn
+                color="primary"
+                :loading="binding"
+                :disabled="!canBindNewApi"
+                @click="bindNewApi"
+              >
+                <v-icon start size="small">mdi-check</v-icon>
+                {{ t('subscription.newApi.bindAccount') }}
+              </v-btn>
+            </div>
+          </v-form>
+        </v-card-text>
+      </v-card>
+    </template>
+
+    <template v-else>
     <v-card variant="outlined" rounded="lg" class="mb-4">
       <v-card-title class="d-flex align-center justify-space-between ga-3 pa-4 pb-2">
         <div class="d-flex align-center ga-2">
@@ -192,6 +249,7 @@
     <v-alert v-else color="info" variant="tonal" density="compact">
       {{ t('subscription.newApi.noAccounts') }}
     </v-alert>
+    </template>
   </div>
 </template>
 
@@ -202,7 +260,15 @@ import { api } from '@/services/api'
 import type { NewApiAccountItem, SubscriptionItem } from '@/services/api-types'
 
 const { t } = useI18n()
-const props = defineProps<{ subscriptionUid: string }>()
+const props = defineProps<{
+  subscriptionUid: string
+  channelName?: string
+  baseUrl?: string
+  channelUid?: string
+  channelKind?: string
+  isGeneric?: boolean
+  autoManagedKind?: string
+}>()
 const emit = defineEmits<{ updated: [] }>()
 
 const subscription = ref<SubscriptionItem | null>(null)
@@ -212,17 +278,28 @@ const refreshingPrimary = ref(false)
 const savingPrimary = ref(false)
 const primaryError = ref('')
 const loading = ref(false)
+const binding = ref(false)
 const adding = ref(false)
 const refreshing = ref('')
 const deleting = ref('')
 const addError = ref('')
+const bindError = ref('')
 
+const bindForm = ref({ accessToken: '', userId: '', authTokenMode: 'bearer' })
 const primaryForm = ref({ accessToken: '', userId: '', authTokenMode: 'bearer' })
 const addForm = ref({ accessToken: '', userId: '', displayName: '', authTokenMode: 'bearer' })
 const authTokenModeOptions = computed(() => [
   { title: 'Bearer', value: 'bearer' },
   { title: 'Raw', value: 'raw' },
 ])
+const canBindNewApi = computed(() => Boolean(
+  props.isGeneric &&
+  props.channelName?.trim() &&
+  props.baseUrl?.trim() &&
+  props.channelUid?.trim() &&
+  props.channelKind?.trim() &&
+  bindForm.value.accessToken.trim(),
+))
 
 const primaryCredentialsChanged = computed(() => {
   if (!subscription.value) return false
@@ -250,6 +327,32 @@ function formatQuota(value?: number) {
 function formatTime(value: string) {
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString()
+}
+
+async function bindNewApi() {
+  if (!canBindNewApi.value) return
+  binding.value = true
+  bindError.value = ''
+  try {
+    const response = await api.provisionNewApiSubscription({
+      subscriptionUid: `newapi-${props.channelUid}`,
+      displayName: props.channelName!.trim(),
+      baseUrl: props.baseUrl!.trim(),
+      accessToken: bindForm.value.accessToken.trim(),
+      userId: bindForm.value.userId.trim() || undefined,
+      authTokenMode: bindForm.value.authTokenMode,
+      channelKind: props.channelKind!,
+      channelName: props.channelName!.trim(),
+    })
+    subscription.value = response.subscription
+    syncPrimaryForm(response.subscription)
+    bindForm.value = { accessToken: '', userId: '', authTokenMode: 'bearer' }
+    emit('updated')
+  } catch (e) {
+    bindError.value = e instanceof Error ? e.message : 'Unknown error'
+  } finally {
+    binding.value = false
+  }
 }
 
 async function fetchPrimaryAccount() {

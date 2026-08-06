@@ -147,6 +147,9 @@ func (cm *ConfigManager) loadConfig() error {
 	if cm.ensureOriginBackfill() {
 		needSaveDefaults = true
 	}
+	if cm.ensureAutoManagedKind() {
+		needSaveDefaults = true
+	}
 	// 必须在 mergeManagedProviderAccounts 之后：merge 会合并/重排渠道数组，
 	// priority 归一化要基于最终数组分配
 	if cm.normalizeChannelPriorities() {
@@ -919,6 +922,60 @@ func (cm *ConfigManager) ensureOriginBackfill() bool {
 				updated = true
 				log.Printf("[Config-OriginBackfill] %s 渠道 [%d] %s 已补齐 originType/originTier 为 unknown", channelKind, i, channels[i].Name)
 			}
+		}
+	}
+	apply(cm.config.Upstream, "Messages")
+	apply(cm.config.ResponsesUpstream, "Responses")
+	apply(cm.config.GeminiUpstream, "Gemini")
+	apply(cm.config.ChatUpstream, "Chat")
+	apply(cm.config.ImagesUpstream, "Images")
+	apply(cm.config.VectorsUpstream, "Vectors")
+	return updated
+}
+
+// ensureAutoManagedKind 为历史渠道补齐托管子类型。
+// 具备 endpoint + key 的普通渠道升级为 generic；旧版 relay 托管渠道回填为 new_api。
+// 此迁移只修改本地配置，不联网探测上游类型。
+func (cm *ConfigManager) ensureAutoManagedKind() bool {
+	updated := false
+	now := time.Now()
+	apply := func(channels []UpstreamConfig, channelKind string) {
+		for i := range channels {
+			ch := &channels[i]
+			if strings.TrimSpace(ch.ProviderID) != "" || strings.TrimSpace(ch.AutoManagedKind) != "" {
+				continue
+			}
+
+			// 旧版 new-api 托管渠道没有保存 kind，但 relay 来源是稳定锚点，保留其身份。
+			if ch.AutoManaged && strings.EqualFold(strings.TrimSpace(ch.OriginType), "relay") {
+				ch.AutoManagedKind = "new_api"
+				updated = true
+				log.Printf("[Config-AutoManagedKind] %s 渠道 [%d] %s 已回填 kind=new_api", channelKind, i, ch.Name)
+				continue
+			}
+
+			// 只有同时具备 endpoint 和至少一把凭证的历史渠道才自动升级。
+			// APIKeyConfigs 可能是旧配置中唯一保存凭证的位置，因此两者都要检查。
+			hasKey := len(ch.APIKeys) > 0
+			if !hasKey {
+				for _, keyConfig := range ch.APIKeyConfigs {
+					if strings.TrimSpace(keyConfig.Key) != "" {
+						hasKey = true
+						break
+					}
+				}
+			}
+			if !ch.AutoManaged && (strings.TrimSpace(ch.BaseURL) == "" || !hasKey) {
+				continue
+			}
+
+			if !ch.AutoManaged {
+				ch.AutoManaged = true
+				ch.AutoManagedAt = &now
+			}
+			ch.AutoManagedKind = "generic"
+			updated = true
+			log.Printf("[Config-AutoManagedKind] %s 渠道 [%d] %s 已归类为 kind=generic", channelKind, i, ch.Name)
 		}
 	}
 	apply(cm.config.Upstream, "Messages")

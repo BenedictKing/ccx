@@ -345,6 +345,9 @@ func (cm *ConfigManager) UpdateResponsesUpstream(index int, updates UpstreamUpda
 	if updates.AutoManagedAt != nil {
 		upstream.AutoManagedAt = updates.AutoManagedAt
 	}
+	if updates.AutoManagedKind != nil {
+		upstream.AutoManagedKind = *updates.AutoManagedKind
+	}
 	if updates.Tags != nil {
 		// 去重并裁剪空白，空切片表示清空标签
 		seen := make(map[string]struct{}, len(updates.Tags))

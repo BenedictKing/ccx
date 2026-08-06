@@ -106,13 +106,19 @@
 
             <!-- new-api 账号管理 -->
             <section
-              v-if="isNewApiChannel"
+              v-if="isNewApiChannel || isGenericAutoManagedChannel"
               :ref="(el: any) => setSectionRef('accounts', el)"
               data-section-id="accounts"
               class="pa-6 scroll-mt-4"
             >
               <NewApiAccountPanel
                 :subscription-uid="props.channel?.subscriptionUid || ''"
+                :channel-name="props.channel?.name"
+                :base-url="props.channel?.baseUrl"
+                :channel-uid="props.channel?.channelUid"
+                :channel-kind="props.channelType"
+                :is-generic="isGenericAutoManagedChannel"
+                :auto-managed-kind="props.channel?.autoManagedKind"
                 @updated="handleAccountsUpdated"
               />
             </section>
@@ -653,13 +659,18 @@ const {
   t,
 } = useEditChannelModal(props, emit)
 
-// new-api 渠道判断：autoManaged + originType=relay + 无 providerId
+// generic 自动托管渠道：autoManaged=true、无 providerId，但尚未绑定 new-api
+const isGenericAutoManagedChannel = computed(() =>
+  !!props.channel?.autoManaged && !props.channel?.providerId && props.channel?.autoManagedKind !== 'new_api'
+)
+
+// new-api 绑定渠道：可通过 autoManagedKind 显式标记，或沿用 originType=relay 向后兼容
 const isNewApiChannel = computed(() =>
-  props.channel?.originType === 'relay' && props.channel?.autoManaged && !props.channel?.providerId
+  props.channel?.autoManagedKind === 'new_api' ||
+  (props.channel?.originType === 'relay' && props.channel?.autoManaged && !props.channel?.providerId)
 )
 const handleAccountsUpdated = () => {
-  // 账号更新后刷新渠道状态
-  console.log('[EditChannelModal] Accounts updated')
+  emit('updated')
 }
 </script>
 

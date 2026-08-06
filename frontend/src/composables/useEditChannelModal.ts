@@ -55,6 +55,7 @@ export type EditChannelModalEmits = {
   ]
   error: [message: string]
   success: [message: string]
+  updated: []
 }
 
 type EditChannelModalEmit = <K extends keyof EditChannelModalEmits>(event: K, ...args: EditChannelModalEmits[K]) => void

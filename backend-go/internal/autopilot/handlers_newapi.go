@@ -563,10 +563,12 @@ func handleNewApiProvision(deps *NewApiRouteDeps) gin.HandlerFunc {
 				})
 			}
 			autoManaged := true
+			newApiKind := "new_api"
 			updates := config.UpstreamUpdate{
-				APIKeys:       mergedKeys,
-				APIKeyConfigs: mergedConfigs,
-				AutoManaged:   &autoManaged,
+				APIKeys:         mergedKeys,
+				APIKeyConfigs:   mergedConfigs,
+				AutoManaged:     &autoManaged,
+				AutoManagedKind: &newApiKind,
 			}
 			if target.AutoManagedAt == nil {
 				updates.AutoManagedAt = &now
@@ -583,18 +585,19 @@ func handleNewApiProvision(deps *NewApiRouteDeps) gin.HandlerFunc {
 			serviceType := kindToDefaultServiceType(req.ChannelKind)
 			channelUID = config.GenerateChannelUID()
 			upstream := config.UpstreamConfig{
-				Name:          channelName,
-				ChannelUID:    channelUID,
-				BaseURL:       strings.TrimRight(req.BaseURL, "/"),
-				BaseURLs:      []string{strings.TrimRight(req.BaseURL, "/")},
-				APIKeys:       apiKeys,
-				APIKeyConfigs: apiKeyConfigs,
-				ServiceType:   serviceType,
-				Status:        "active",
-				AutoManaged:   true,
-				AutoManagedAt: &now,
-				OriginType:    "relay",
-				OriginTier:    "second",
+				Name:            channelName,
+				ChannelUID:      channelUID,
+				BaseURL:         strings.TrimRight(req.BaseURL, "/"),
+				BaseURLs:        []string{strings.TrimRight(req.BaseURL, "/")},
+				APIKeys:         apiKeys,
+				APIKeyConfigs:   apiKeyConfigs,
+				ServiceType:     serviceType,
+				Status:          "active",
+				AutoManaged:     true,
+				AutoManagedAt:   &now,
+				AutoManagedKind: "new_api",
+				OriginType:      "relay",
+				OriginTier:      "second",
 			}
 
 			switch req.ChannelKind {

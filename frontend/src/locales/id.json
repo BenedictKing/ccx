@@ -1220,6 +1220,8 @@
   "subscription.newApi.lastRefreshedAt": "Terakhir diperbarui",
   "subscription.newApi.refreshBalance": "Perbarui saldo",
   "subscription.newApi.saveCredentials": "Simpan kredensial",
+  "subscription.newApi.genericAutoManagedHint": "Kanal ini dikelola otomatis tetapi belum ditautkan ke paket new-api. Masukkan access token new-api untuk memverifikasi dan menautkan akun tanpa mengubah kanal dan key yang ada.",
+  "subscription.newApi.bindAccount": "Tautkan paket new-api",
   "subscription.manageInChannels": "Langganan yang terhubung dapat dikelola secara terpusat di halaman Channels.",
   "cockpitOverview.title": "Ringkasan Operasi",
   "cockpitOverview.health": "Ringkasan Kesehatan",

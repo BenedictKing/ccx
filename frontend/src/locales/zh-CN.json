@@ -1220,6 +1220,8 @@
   "subscription.newApi.lastRefreshedAt": "最近刷新",
   "subscription.newApi.refreshBalance": "刷新余额",
   "subscription.newApi.saveCredentials": "保存凭证",
+  "subscription.newApi.genericAutoManagedHint": "该渠道已自动托管，但尚未绑定 new-api 套餐。填写 new-api access token 后将验证账号、创建套餐绑定，并保留当前渠道与已有 Key。",
+  "subscription.newApi.bindAccount": "绑定 new-api 套餐",
   "subscription.manageInChannels": "已接入的订阅可在「渠道」页面统一管理。",
   "cockpitOverview.title": "驾驶舱总览",
   "cockpitOverview.health": "健康概览",

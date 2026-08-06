@@ -370,6 +370,7 @@
       :channel="dialogStore.editingChannel"
       :channel-type="editingChannelType"
       @save="saveChannel"
+      @updated="refreshChannels"
       @error="showErrorToast"
     />
 
