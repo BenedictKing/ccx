@@ -26,6 +26,7 @@ var developerRolePatterns = []*regexp.Regexp{
 	regexp.MustCompile("unknown variant [`\"']?developer"),
 	regexp.MustCompile("invalid value [`\"']?developer"),
 	regexp.MustCompile("[`\"']?developer[`\"']? is not (a )?valid"),
+	regexp.MustCompile("role[^a-z0-9]{1,4}[`\"']?developer[`\"']? is not allowed"),
 	regexp.MustCompile("unsupported role[^a-z]{0,4}developer"),
 }
 

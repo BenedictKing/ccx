@@ -10,6 +10,9 @@ import (
 // 真实上游报错样本：Codex 打到不支持 developer role 的 Chat 上游。
 const developerRoleErrorBody = `{"error":{"message":"Failed to deserialize the JSON body into the target type: messages[0].role: unknown variant ` + "`developer`" + `, expected one of ` + "`system`" + `, ` + "`user`" + `, ` + "`assistant`" + `, ` + "`tool`" + `, ` + "`latest_reminder`" + ` at line 1 column 18015","type":"invalid_request_error","param":null,"code":"invalid_request_error"}}`
 
+// Kimi Coding Chat 接口拒绝 developer role 时的真实报错样本。
+const kimiDeveloperRoleErrorBody = `{"error":{"message":"Invalid request: role 'developer' is not allowed","type":"invalid_request_error"}}`
+
 func TestCompatTraitFromError(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -36,9 +39,17 @@ func TestCompatTraitFromError(t *testing.T) {
 			wantHit:    true,
 		},
 		{
+			name:       "Kimi developer role not allowed 真实样本",
+			statusCode: http.StatusBadRequest,
+			body:       kimiDeveloperRoleErrorBody,
+			ctx:        CompatSignalContext{HasDeveloperRole: true},
+			wantTrait:  config.TraitDowngradeDeveloperRole,
+			wantHit:    true,
+		},
+		{
 			name:       "请求未带 developer role 时不学习",
 			statusCode: http.StatusBadRequest,
-			body:       developerRoleErrorBody,
+			body:       kimiDeveloperRoleErrorBody,
 			ctx:        CompatSignalContext{HasDeveloperRole: false},
 			wantHit:    false,
 		},
