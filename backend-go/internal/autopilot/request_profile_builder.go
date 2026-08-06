@@ -9,10 +9,12 @@ type RequestProfileFeatures struct {
 	AgentRole            string
 	AgentType            string
 	HasImage             bool
+	HasDocument          bool
 	EstTokens            int
 	Complexity           TaskComplexity
 	ContextNeed          int
 	VisionNeed           bool
+	DocumentNeed         bool
 	ImageGenNeed         bool
 	EmbeddingNeed        bool
 	ToolUseNeed          bool
@@ -46,11 +48,13 @@ func BuildRequestProfile(features RequestProfileFeatures) RequestProfile {
 		AgentRole:          features.AgentRole,
 		AgentType:          features.AgentType,
 		HasImage:           features.HasImage,
+		HasDocument:        features.HasDocument,
 		EstTokens:          features.EstTokens,
 		Complexity:         features.Complexity,
 		QualityNeed:        qualityNeed,
 		ContextNeed:        contextNeed,
 		VisionNeed:         features.VisionNeed || features.HasImage,
+		DocumentNeed:       features.DocumentNeed || features.HasDocument,
 		ImageGenNeed:       features.ImageGenNeed,
 		EmbeddingNeed:      features.EmbeddingNeed,
 		ToolUseNeed:        features.ToolUseNeed,

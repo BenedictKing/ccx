@@ -12,6 +12,7 @@ type RequestProfile struct {
 	AgentRole   string         // "main" | "subagent" | ""
 	AgentType   string         // "codex_subagent" | "claude_code_subagent" | ""
 	HasImage    bool           // 是否包含图片
+	HasDocument bool           // 是否包含文档附件（PDF 等）
 	EstTokens   int            // 估算输入 token 数（基于字符估算的保守上界）
 	Complexity  TaskComplexity // 不含正文的任务难度信号
 
@@ -20,6 +21,7 @@ type RequestProfile struct {
 	QualityTarget        QualityTier // 结合任务难度后的首选质量档
 	ContextNeed          int         // 估算输入 token 数；输出上限由 scheduler 独立校验
 	VisionNeed           bool        // 是否需要识图
+	DocumentNeed         bool        // 是否需要文档（PDF 等）理解
 	ImageGenNeed         bool        // 是否需要原生生图端点
 	EmbeddingNeed        bool        // 是否需要原生 embedding 端点
 	ToolUseNeed          bool        // 是否需要工具调用

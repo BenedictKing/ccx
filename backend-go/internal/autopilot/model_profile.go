@@ -324,6 +324,7 @@ type ModelProfile struct {
 	SpeedTier         SpeedTier   `json:"speedTier"`
 	ContextTokens     int         `json:"contextTokens"`
 	SupportsVision    bool        `json:"supportsVision"`
+	SupportsDocument  bool        `json:"supportsDocument"`
 	SupportsToolCalls bool        `json:"supportsToolCalls"`
 	SupportsReasoning bool        `json:"supportsReasoning"`
 
@@ -359,6 +360,7 @@ func applyUpstreamModelCapability(profile *ModelProfile, capability config.Upstr
 	}
 	profile.ContextTokens = capability.ContextWindowTokens
 	profile.SupportsVision = capability.Capabilities["vision"]
+	profile.SupportsDocument = capability.Capabilities["document"]
 	profile.SupportsToolCalls = capability.Capabilities["toolCalls"] ||
 		capability.Capabilities["tool_calls"] || capability.Capabilities["tools"]
 	profile.SupportsReasoning = capability.ThinkingMode != "" ||

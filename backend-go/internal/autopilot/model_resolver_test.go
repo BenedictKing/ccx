@@ -102,6 +102,7 @@ func TestBuildCapabilityFloorFromRequestProfile(t *testing.T) {
 		ContextNeed:   128000,
 		ReasoningNeed: true,
 		VisionNeed:    true,
+		DocumentNeed:  true,
 		ToolUseNeed:   true,
 		QualityNeed:   QualityTierHigh,
 	}
@@ -116,6 +117,9 @@ func TestBuildCapabilityFloorFromRequestProfile(t *testing.T) {
 	if !floor.NeedsVision {
 		t.Error("NeedsVision should be true")
 	}
+	if !floor.NeedsDocument {
+		t.Error("NeedsDocument should be true")
+	}
 	if !floor.NeedsToolCalls {
 		t.Error("NeedsToolCalls should be true")
 	}
@@ -129,7 +133,7 @@ func TestBuildCapabilityFloorFromRequestProfile(t *testing.T) {
 	// 空 profile 应生成零值 floor
 	empty := BuildCapabilityFloorFromRequestProfile(&RequestProfile{})
 	if empty.MinContextTokens != 0 || empty.NeedsReasoning || empty.NeedsVision ||
-		empty.NeedsToolCalls || empty.MinQualityTier != "" || empty.QualityBenefitCap != "" {
+		empty.NeedsDocument || empty.NeedsToolCalls || empty.MinQualityTier != "" || empty.QualityBenefitCap != "" {
 		t.Errorf("empty profile should produce zero-value floor, got %+v", empty)
 	}
 }
@@ -231,6 +235,20 @@ func TestFilterByCapabilityFloor_DropsUnderQualified(t *testing.T) {
 	}
 	if eligible[0].ModelID != "model-a" {
 		t.Errorf("expected model-a, got %s", eligible[0].ModelID)
+	}
+}
+
+func TestFilterByCapabilityFloor_DropsWithoutDocumentSupport(t *testing.T) {
+	withDoc := makeModelProfile("model-doc", ModelFamilyClaude, QualityTierPremium, 200000,
+		true, true, true, true, 100)
+	withDoc.SupportsDocument = true
+	withoutDoc := makeModelProfile("model-nodoc", ModelFamilyClaude, QualityTierPremium, 200000,
+		true, true, true, true, 100)
+
+	floor := CapabilityFloor{NeedsDocument: true}
+	eligible := filterByCapabilityFloor([]ModelProfile{withDoc, withoutDoc}, floor)
+	if len(eligible) != 1 || eligible[0].ModelID != "model-doc" {
+		t.Fatalf("expected only model-doc, got %+v", eligible)
 	}
 }
 

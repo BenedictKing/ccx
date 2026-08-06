@@ -35,6 +35,7 @@ func AttachAutopilotRequestProfile(
 	}
 
 	hasImage := c != nil && HasImageContent(c, bodyBytes)
+	hasDocument := c != nil && HasDocumentContent(c, bodyBytes)
 	estTokens := estimateAutopilotInputTokens(kind, bodyBytes)
 	req := decodeAutopilotRequest(bodyBytes)
 	explicitDomain := ""
@@ -50,10 +51,12 @@ func AttachAutopilotRequestProfile(
 		AgentRole:            agentRole,
 		AgentType:            agentType,
 		HasImage:             hasImage,
+		HasDocument:          hasDocument,
 		EstTokens:            estTokens,
 		Complexity:           promptAnalysis.Complexity,
 		ContextNeed:          estTokens,
 		VisionNeed:           hasImage,
+		DocumentNeed:         hasDocument,
 		ImageGenNeed:         kind == scheduler.ChannelKindImages,
 		EmbeddingNeed:        kind == scheduler.ChannelKindVectors,
 		ToolUseNeed:          autopilotRequestUsesTools(req),

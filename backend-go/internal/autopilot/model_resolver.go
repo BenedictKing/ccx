@@ -20,6 +20,7 @@ type CapabilityFloor struct {
 	MinContextTokens  int         // 最小上下文窗口（0=不限）
 	NeedsReasoning    bool        // 必须支持推理
 	NeedsVision       bool        // 必须支持视觉
+	NeedsDocument     bool        // 必须支持文档（PDF 等）
 	NeedsToolCalls    bool        // 必须支持工具调用
 	MinQualityTier    QualityTier // 目标质量档（无同档候选时允许降档）
 	QualityBenefitCap QualityTier // 简单/常规任务超过该档后不再自动获得质量排序收益
@@ -40,6 +41,7 @@ func BuildCapabilityFloorFromRequestProfile(profile *RequestProfile) CapabilityF
 		MinContextTokens:  profile.ContextNeed,
 		NeedsReasoning:    profile.ReasoningNeed,
 		NeedsVision:       profile.VisionNeed,
+		NeedsDocument:     profile.DocumentNeed,
 		NeedsToolCalls:    profile.ToolUseNeed,
 		MinQualityTier:    requestQualityTarget(profile),
 		QualityBenefitCap: requestQualityBenefitCap(profile),
@@ -536,6 +538,9 @@ func filterByCapabilityFloorInternal(profiles []ModelProfile, floor CapabilityFl
 			continue
 		}
 		if floor.NeedsVision && !p.SupportsVision {
+			continue
+		}
+		if floor.NeedsDocument && !p.SupportsDocument {
 			continue
 		}
 		if floor.NeedsToolCalls && !p.SupportsToolCalls {
@@ -1138,6 +1143,7 @@ func (r *ModelResolver) refreshAutoDiscoveryCapabilities(
 		oldQuality := profile.QualityTier
 		oldContext := profile.ContextTokens
 		oldVision := profile.SupportsVision
+		oldDocument := profile.SupportsDocument
 		oldTools := profile.SupportsToolCalls
 		oldReasoning := profile.SupportsReasoning
 		profile.ModelFamily = InferModelFamily(profile.ModelID, "")
@@ -1147,6 +1153,7 @@ func (r *ModelResolver) refreshAutoDiscoveryCapabilities(
 		}
 		if oldFamily != profile.ModelFamily || oldQuality != profile.QualityTier ||
 			oldContext != profile.ContextTokens || oldVision != profile.SupportsVision ||
+			oldDocument != profile.SupportsDocument ||
 			oldTools != profile.SupportsToolCalls || oldReasoning != profile.SupportsReasoning {
 			profile.UpdatedAt = time.Now()
 			_ = r.profileStore.Upsert(profile)

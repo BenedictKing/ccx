@@ -90,3 +90,29 @@ func TestRequestProfileContextStoresValueCopy(t *testing.T) {
 		t.Fatalf("stored profile mutated: got %q, want %q", second.Model, original.Model)
 	}
 }
+
+func TestBuildRequestProfileDocumentNeed(t *testing.T) {
+	// HasDocument 或显式 DocumentNeed 都应推导出 DocumentNeed
+	withDoc := BuildRequestProfile(RequestProfileFeatures{
+		Model: "claude-sonnet-5", ChannelKind: "messages", Operation: "completion", HasDocument: true,
+	})
+	if !withDoc.DocumentNeed || !withDoc.HasDocument {
+		t.Fatalf("HasDocument=true should produce DocumentNeed, got DocumentNeed=%v HasDocument=%v",
+			withDoc.DocumentNeed, withDoc.HasDocument)
+	}
+
+	explicit := BuildRequestProfile(RequestProfileFeatures{
+		Model: "claude-sonnet-5", ChannelKind: "messages", Operation: "completion", DocumentNeed: true,
+	})
+	if !explicit.DocumentNeed {
+		t.Fatal("explicit DocumentNeed=true should be preserved")
+	}
+
+	withoutDoc := BuildRequestProfile(RequestProfileFeatures{
+		Model: "claude-sonnet-5", ChannelKind: "messages", Operation: "completion",
+	})
+	if withoutDoc.DocumentNeed || withoutDoc.HasDocument {
+		t.Fatalf("no document should not produce DocumentNeed, got DocumentNeed=%v HasDocument=%v",
+			withoutDoc.DocumentNeed, withoutDoc.HasDocument)
+	}
+}

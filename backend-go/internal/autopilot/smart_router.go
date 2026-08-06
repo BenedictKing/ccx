@@ -1045,6 +1045,7 @@ type channelScoreEntry struct {
 	BenchmarkKnown      bool
 	DomainProfiles      []ModelProfile
 	SupportsVision      bool // 渠道是否支持识图（模型注册表 + 画像聚合 + 手动配置覆盖）
+	SupportsDocument    bool // 渠道是否支持文档（PDF 等，模型注册表来源，无画像聚合来源）
 	SupportsToolCalls   bool // 渠道是否支持工具调用（模型注册表 + 画像聚合）
 	SupportsReasoning   bool // 渠道是否支持推理（模型注册表 + 画像聚合）
 	ContextWindowTokens int  // 渠道上下文窗口大小（0 = 未知，来自模型能力注册表）
@@ -1185,6 +1186,7 @@ func (r *SmartRouter) buildChannelEntry(
 			modelPricing = capability.Pricing
 			entry.ContextWindowTokens = capability.ContextWindowTokens
 			entry.SupportsVision = capability.Capabilities["vision"]
+			entry.SupportsDocument = capability.Capabilities["document"]
 			entry.SupportsToolCalls = capability.Capabilities["toolCalls"]
 			entry.SupportsReasoning = capability.ThinkingMode != "" || len(capability.ReasoningEfforts) > 0
 		}
@@ -1638,6 +1640,7 @@ func applyDomainStrength(entry *channelScoreEntry, domain TaskDomain) {
 // 空列表表示该渠道满足所有硬约束。
 // 当前硬约束（逐批扩展）：
 //   - vision 请求但渠道不支持识图
+//   - document 请求但渠道不支持文档（PDF 等）
 //   - CapabilityFloor：请求需要推理但渠道不支持（画像数据可用时）
 //   - CapabilityFloor：请求需要工具调用但渠道不支持
 //   - CapabilityFloor：上下文窗口需求大于渠道容量
@@ -1647,6 +1650,11 @@ func routingHardConstraintReasons(profile *RequestProfile, entry *channelScoreEn
 	// 识图硬约束
 	if profile.VisionNeed && !entry.SupportsVision {
 		reasons = append(reasons, "vision_unsupported")
+	}
+
+	// 文档硬约束
+	if profile.DocumentNeed && !entry.SupportsDocument {
+		reasons = append(reasons, "document_unsupported")
 	}
 
 	// CapabilityFloor 三项硬约束（工具调用、推理、上下文窗口）

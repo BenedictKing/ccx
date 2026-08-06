@@ -31,10 +31,14 @@ type DryRunRequest struct {
 	AgentType string `json:"agentType"`
 	// HasImage 是否包含图片。
 	HasImage bool `json:"hasImage"`
+	// HasDocument 是否包含文档附件（PDF 等）。
+	HasDocument bool `json:"hasDocument"`
 	// EstTokens 估算输入 token 数。
 	EstTokens int `json:"estTokens"`
 	// VisionNeed 是否需要识图。
 	VisionNeed bool `json:"visionNeed"`
+	// DocumentNeed 是否需要文档（PDF 等）理解。
+	DocumentNeed bool `json:"documentNeed"`
 	// ImageGenNeed 是否需要原生生图端点。
 	ImageGenNeed bool `json:"imageGenNeed"`
 	// EmbeddingNeed 是否需要原生 embedding 端点。
@@ -94,8 +98,10 @@ func handleDryRunRoute(smartRouter *SmartRouter) gin.HandlerFunc {
 			AgentRole:     req.AgentRole,
 			AgentType:     req.AgentType,
 			HasImage:      req.HasImage,
+			HasDocument:   req.HasDocument,
 			EstTokens:     req.EstTokens,
 			VisionNeed:    req.VisionNeed,
+			DocumentNeed:  req.DocumentNeed,
 			ImageGenNeed:  req.ImageGenNeed,
 			EmbeddingNeed: req.EmbeddingNeed,
 			ToolUseNeed:   req.ToolUseNeed,

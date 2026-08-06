@@ -19,6 +19,7 @@
         "inputCacheHitPrice": 0.1
       },
       "capabilities": {
+        "document": true,
         "reasoning": true,
         "vision": true,
         "toolCalls": true
@@ -41,6 +42,7 @@
         "inputCacheHitPrice": 0.3
       },
       "capabilities": {
+        "document": true,
         "reasoning": true,
         "vision": true,
         "toolCalls": true,
@@ -69,6 +71,7 @@
         "inputCacheHitPrice": 0.5
       },
       "capabilities": {
+        "document": true,
         "reasoning": true,
         "vision": true,
         "toolCalls": true
@@ -97,6 +100,7 @@
         "inputCacheHitPrice": 0.3
       },
       "capabilities": {
+        "document": true,
         "reasoning": true,
         "vision": true,
         "toolCalls": true
@@ -125,6 +129,7 @@
         "inputCacheHitPrice": 0.5
       },
       "capabilities": {
+        "document": true,
         "reasoning": true,
         "vision": true,
         "toolCalls": true
@@ -154,6 +159,7 @@
         "inputCacheHitPrice": 0.5
       },
       "capabilities": {
+        "document": true,
         "reasoning": true,
         "vision": true,
         "toolCalls": true
@@ -183,6 +189,7 @@
         "inputCacheHitPrice": 0.5
       },
       "capabilities": {
+        "document": true,
         "reasoning": true,
         "vision": true,
         "toolCalls": true
@@ -212,6 +219,7 @@
         "inputCacheHitPrice": 0.5
       },
       "capabilities": {
+        "document": true,
         "reasoning": true,
         "vision": true,
         "toolCalls": true
@@ -241,6 +249,7 @@
         "inputCacheHitPrice": 0.2
       },
       "capabilities": {
+        "document": true,
         "reasoning": true,
         "vision": true,
         "toolCalls": true
@@ -270,6 +279,7 @@
         "inputCacheHitPrice": 1
       },
       "capabilities": {
+        "document": true,
         "reasoning": true,
         "vision": true,
         "toolCalls": true
@@ -290,7 +300,10 @@
         "high",
         "xhigh",
         "max"
-      ]
+      ],
+      "capabilities": {
+        "document": true
+      }
     },
     {
       "patterns": [
@@ -302,7 +315,10 @@
       "thinkingMode": "adaptive",
       "reasoningEfforts": [
         "max"
-      ]
+      ],
+      "capabilities": {
+        "document": true
+      }
     },
     {
       "patterns": [
@@ -597,6 +613,7 @@
         "max"
       ],
       "capabilities": {
+        "document": true,
         "vision": true,
         "toolCalls": true,
         "reasoning": true,
@@ -1251,6 +1268,7 @@
         "high"
       ],
       "capabilities": {
+        "document": false,
         "toolCalls": true,
         "contextCaching": true
       },
@@ -1283,6 +1301,7 @@
         "high"
       ],
       "capabilities": {
+        "document": false,
         "toolCalls": true,
         "contextCaching": true
       },
@@ -1800,6 +1819,7 @@
         "high"
       ],
       "capabilities": {
+        "document": true,
         "reasoning": true,
         "vision": true,
         "toolCalls": true,
@@ -1833,6 +1853,7 @@
         "high"
       ],
       "capabilities": {
+        "document": true,
         "reasoning": true,
         "vision": true,
         "toolCalls": true,
@@ -1865,6 +1886,7 @@
         "high"
       ],
       "capabilities": {
+        "document": true,
         "reasoning": true,
         "vision": true,
         "toolCalls": true,
@@ -1898,6 +1920,7 @@
         "high"
       ],
       "capabilities": {
+        "document": true,
         "reasoning": true,
         "vision": true,
         "toolCalls": true,
