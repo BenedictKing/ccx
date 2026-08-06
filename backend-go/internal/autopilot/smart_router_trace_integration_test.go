@@ -56,6 +56,43 @@ func TestBuildPlan_WritesDryRunTrace(t *testing.T) {
 	}
 }
 
+func TestBuildPlan_EmptyCandidatesWritesDryRunTrace(t *testing.T) {
+	cfgManager, cleanup := createTestConfigManager(t, config.Config{})
+	defer cleanup()
+
+	traceStore := createTestTraceStore(t)
+	smartRouter := &SmartRouter{
+		configManager: cfgManager,
+		traceStore:    traceStore,
+	}
+
+	plan := smartRouter.BuildPlan(testProfile())
+	if plan == nil {
+		t.Fatal("BuildPlan 应返回非 nil plan")
+	}
+	if len(plan.Candidates) != 0 {
+		t.Fatalf("len(plan.Candidates) = %d, want 0", len(plan.Candidates))
+	}
+
+	traces := traceStore.ListRecent(10)
+	if len(traces) != 1 {
+		t.Fatalf("len(traces) = %d, want 1", len(traces))
+	}
+	trace := traces[0]
+	if trace.SchemaVersion != 2 {
+		t.Errorf("trace.SchemaVersion = %d, want 2", trace.SchemaVersion)
+	}
+	if trace.Source != "dry_run" {
+		t.Errorf("trace.Source = %q, want dry_run", trace.Source)
+	}
+	if trace.Mode != RoutingModeDryRun || trace.TargetMode != RoutingModeDryRun || trace.EffectiveMode != RoutingModeDryRun {
+		t.Errorf("trace modes = (%q, %q, %q), want all dry_run", trace.Mode, trace.TargetMode, trace.EffectiveMode)
+	}
+	if trace.CandidatesBefore != 0 || trace.CandidatesAfter != 0 || len(trace.Candidates) != 0 {
+		t.Errorf("empty candidate trace = before:%d after:%d candidates:%d, want all 0", trace.CandidatesBefore, trace.CandidatesAfter, len(trace.Candidates))
+	}
+}
+
 // TestCandidateFilterWithReleaseController 验证 ReleaseController 集成。
 func TestCandidateFilterUsesAutopilotMode(t *testing.T) {
 	cfg := baseTestConfig()

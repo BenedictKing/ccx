@@ -396,7 +396,7 @@ func TestVerifyProviderKeys(t *testing.T) {
 				http.Error(w, "invalid body", http.StatusBadRequest)
 				return
 			}
-			if body.Model != "auto" || len(body.System) < 2 ||
+			if body.Model != "deepseek-v4-flash" || len(body.System) < 2 ||
 				!strings.HasPrefix(body.System[0].Text, "x-anthropic-billing-header") ||
 				!strings.HasPrefix(body.System[1].Text, "You are Claude Code,") {
 				http.Error(w, "Claude Code identity required", http.StatusForbidden)

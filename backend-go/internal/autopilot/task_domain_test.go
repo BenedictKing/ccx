@@ -390,11 +390,67 @@ func TestResolveRelativeBenchmarkEvidence_UnpinnedEffortSemantics(t *testing.T) 
 	})
 }
 
+func swapSyntheticDomainBenchmarkProfile(t *testing.T) string {
+	t.Helper()
+	store := presetstore.Default()
+	original := store.Get()
+	t.Cleanup(func() {
+		store.Swap(original)
+	})
+
+	const model = "synthetic-domain-benchmark"
+	store.Swap(&presetstore.PresetBundle{
+		SchemaVersion: original.SchemaVersion,
+		DataVersion:   "task-domain-score-test",
+		Subscription:  original.Subscription,
+		ModelRegistry: &presetstore.ModelRegistryPreset{
+			SchemaVersion: 1,
+			BenchmarkProfiles: []presetstore.ModelBenchmarkProfilePreset{{
+				Patterns:       []string{`(?:^|[-/])synthetic-domain-benchmark(?=$|@)`},
+				CanonicalModel: model,
+				CategoryScores: map[string]float64{
+					"coding":     55,
+					"multimodal": 90.2,
+				},
+				BenchmarkEvidence: []presetstore.ModelBenchmarkEvidencePreset{{
+					Benchmark:        "fixture-bench",
+					BenchmarkVersion: "v1",
+					SourceModel:      model,
+					Domain:           "coding",
+					Metric:           "pass_at_1",
+					RawValue:         0.99,
+					CohortPercentile: 1,
+					TaskCount:        100,
+					CohortSize:       10,
+					Effort:           "xhigh",
+					SelectionBasis:   "best_available_effort",
+					SourceURL:        "https://example.test/fixture",
+					CapturedAt:       "2026-07-26",
+				}},
+				Sources:              []string{"https://example.test/fixture"},
+				VerifiedAt:           "2026-07-26",
+				Lane:                 "provisional",
+				SharedResults:        1,
+				ComparableCategories: 5,
+				TotalCategories:      8,
+			}},
+		},
+	})
+	return model
+}
+
 func TestResolveDomainStrength_CategoryScoreWinsOverRelativeEvidence(t *testing.T) {
-	profile := &ModelProfile{ModelID: "gpt-5.6-sol", ModelFamily: ModelFamilyOpenAI}
+	model := swapSyntheticDomainBenchmarkProfile(t)
+	profile := &ModelProfile{ModelID: model, ModelFamily: ModelFamilyOpenAI}
 	evidence := ResolveDomainStrength(profile, TaskDomainCoding)
-	if evidence.Source != "canonical_benchmark" || math.Abs(evidence.Score-0.55) > 1e-9 {
-		t.Fatalf("evidence = %+v, want existing category score", evidence)
+	if evidence.Source != "canonical_benchmark" {
+		t.Fatalf("Source = %q, want canonical_benchmark over relative_benchmark", evidence.Source)
+	}
+	if math.Abs(evidence.Score-0.55) > 1e-9 || math.Abs(evidence.CanonicalCeiling-0.55) > 1e-9 {
+		t.Fatalf("category score evidence = %+v, want canonical score 0.55", evidence)
+	}
+	if evidence.BenchmarkCategory != "coding" || evidence.CanonicalModel != model {
+		t.Fatalf("category metadata = %+v", evidence)
 	}
 }
 
@@ -422,15 +478,19 @@ func TestResolveDomainStrength_OverrideAndFallbackPriority(t *testing.T) {
 }
 
 func TestResolveDomainStrength_MultimodalProxyHasLowerConfidence(t *testing.T) {
-	evidence := ResolveDomainStrength(&ModelProfile{
-		ModelID:     "claude-opus-4-8",
-		ModelFamily: ModelFamilyClaude,
-	}, TaskDomainAestheticsUI)
-	if evidence.Score != 0.902 {
-		t.Fatalf("Score = %v, want 0.902", evidence.Score)
+	model := swapSyntheticDomainBenchmarkProfile(t)
+	profile := &ModelProfile{ModelID: model, ModelFamily: ModelFamilyOpenAI}
+
+	coding := ResolveDomainStrength(profile, TaskDomainCoding)
+	multimodal := ResolveDomainStrength(profile, TaskDomainAestheticsUI)
+	if math.Abs(multimodal.Score-0.902) > 1e-9 {
+		t.Fatalf("Score = %v, want 0.902", multimodal.Score)
 	}
-	if evidence.EvidenceConfidence != 0.3125 {
-		t.Fatalf("EvidenceConfidence = %v, want 0.3125", evidence.EvidenceConfidence)
+	if math.Abs(multimodal.EvidenceConfidence-coding.EvidenceConfidence*0.5) > 1e-9 {
+		t.Fatalf("multimodal confidence = %v, want half of coding confidence %v", multimodal.EvidenceConfidence, coding.EvidenceConfidence)
+	}
+	if multimodal.BenchmarkCategory != "multimodal" {
+		t.Fatalf("BenchmarkCategory = %q, want multimodal", multimodal.BenchmarkCategory)
 	}
 }
 

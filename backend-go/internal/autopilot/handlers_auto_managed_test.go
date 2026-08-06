@@ -669,29 +669,73 @@ func TestCustomAutoAddAppendsKeyToEquivalentExistingBaseURL(t *testing.T) {
 	t.Cleanup(func() { _ = manager.Close() })
 
 	router := setupAutoManagedRouter(&AutoManagedDeps{CfgManager: manager})
-	req := httptest.NewRequest(http.MethodPost, "/api/messages/channels/auto-add", bytes.NewBufferString(
-		`{"name":"localhost-8990","baseUrls":["http://localhost:8990/"],"apiKeys":["sk-new"]}`,
-	))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
+	body := `{"name":"localhost-8990","baseUrls":["http://localhost:8990/"],"apiKeys":["sk-new","sk-old","sk-new"]}`
+	autoAdd := func() AutoAddResponse {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, "/api/messages/channels/auto-add", bytes.NewBufferString(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+		}
+		var response AutoAddResponse
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Fatal(err)
+		}
+		return response
+	}
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	first := autoAdd()
+	if first.AccountUID == "" || len(first.Channels) != 2 {
+		t.Fatalf("迁移响应应包含非空账号及两条路由: %+v", first)
 	}
-	var response AutoAddResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
-		t.Fatal(err)
+	firstRoutes := make(map[string]AutoAddChannelResult, len(first.Channels))
+	for _, route := range first.Channels {
+		firstRoutes[route.ChannelKind] = route
+		if route.AccountUID != first.AccountUID {
+			t.Fatalf("路由账号未统一: route=%+v accountUid=%q", route, first.AccountUID)
+		}
 	}
-	if len(response.Channels) != 1 || response.Channels[0].Name != "localhost-old-name" {
-		t.Fatalf("应返回已有渠道: %+v", response.Channels)
+	if firstRoutes["chat"].ChannelUID != "ch_existing" || firstRoutes["chat"].Name != "localhost-old-name-chat" || firstRoutes["messages"].ChannelUID == "" {
+		t.Fatalf("应保留原 chat 路由并补 messages 路由: %+v", first.Channels)
 	}
+
 	cfg := manager.GetConfig()
-	if len(cfg.Upstream) != 0 || len(cfg.ChatUpstream) != 1 {
-		t.Fatalf("重复请求不应创建新渠道: messages=%d chat=%d", len(cfg.Upstream), len(cfg.ChatUpstream))
+	if len(cfg.Upstream) != 1 || len(cfg.ChatUpstream) != 1 {
+		t.Fatalf("迁移后协议路由数量错误: messages=%d chat=%d", len(cfg.Upstream), len(cfg.ChatUpstream))
 	}
-	if got := strings.Join(cfg.ChatUpstream[0].APIKeys, ","); got != "sk-old,sk-new" {
-		t.Fatalf("已有渠道密钥=%q, want sk-old,sk-new", got)
+	if cfg.ChatUpstream[0].ChannelUID != "ch_existing" || cfg.ChatUpstream[0].Name != "localhost-old-name-chat" {
+		t.Fatalf("原 chat 路由不应被替换: %+v", cfg.ChatUpstream[0])
+	}
+	if cfg.Upstream[0].AccountUID == "" || cfg.Upstream[0].AccountUID != cfg.ChatUpstream[0].AccountUID || cfg.Upstream[0].AccountUID != first.AccountUID {
+		t.Fatalf("两路由应复用同一非空账号: messages=%q chat=%q response=%q", cfg.Upstream[0].AccountUID, cfg.ChatUpstream[0].AccountUID, first.AccountUID)
+	}
+	for kind, keys := range map[string][]string{
+		"messages": cfg.Upstream[0].APIKeys,
+		"chat":     cfg.ChatUpstream[0].APIKeys,
+	} {
+		if got := strings.Join(keys, ","); got != "sk-old,sk-new" {
+			t.Fatalf("%s 密钥=%q, want sk-old,sk-new", kind, got)
+		}
+	}
+
+	second := autoAdd()
+	if second.AccountUID != first.AccountUID || len(second.Channels) != 2 {
+		t.Fatalf("重复请求应保持账号与响应路由幂等: first=%+v second=%+v", first, second)
+	}
+	secondRoutes := make(map[string]AutoAddChannelResult, len(second.Channels))
+	for _, route := range second.Channels {
+		secondRoutes[route.ChannelKind] = route
+	}
+	for _, kind := range []string{"messages", "chat"} {
+		if secondRoutes[kind].ChannelUID != firstRoutes[kind].ChannelUID || secondRoutes[kind].AccountUID != firstRoutes[kind].AccountUID {
+			t.Fatalf("重复请求改变 %s 路由: first=%+v second=%+v", kind, firstRoutes[kind], secondRoutes[kind])
+		}
+	}
+	cfg = manager.GetConfig()
+	if len(cfg.Upstream) != 1 || len(cfg.ChatUpstream) != 1 || strings.Join(cfg.Upstream[0].APIKeys, ",") != "sk-old,sk-new" || strings.Join(cfg.ChatUpstream[0].APIKeys, ",") != "sk-old,sk-new" {
+		t.Fatalf("重复请求应保持 route/key 幂等: messages=%+v chat=%+v", cfg.Upstream, cfg.ChatUpstream)
 	}
 }
 
