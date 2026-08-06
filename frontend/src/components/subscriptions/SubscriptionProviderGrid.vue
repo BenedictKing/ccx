@@ -213,6 +213,12 @@ onMounted(async () => {
   flex: 1;
   transition: all 0.2s ease;
 }
+/* 前 3 个赞助卡（volcengine / compshare / runapi）双倍于普通卡片宽度，突出展示 */
+.provider-card--sponsor {
+  min-width: min(480px, 100%);
+  max-width: 600px;
+  flex: 2;
+}
 .provider-card:hover {
   border-color: rgb(var(--v-theme-primary));
   background-color: rgba(var(--v-theme-primary), 0.04);
