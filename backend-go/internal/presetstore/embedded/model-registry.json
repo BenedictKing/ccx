@@ -2067,7 +2067,7 @@
           "sourceModel": "gpt-5.6-terra",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.6785714285714286,
+          "rawValue": 0.6875,
           "uncertainty": 0,
           "cohortPercentile": 0.8,
           "taskCount": 112,
@@ -2075,7 +2075,7 @@
           "effort": "ultra",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-06"
+          "capturedAt": "2026-08-07"
         },
         {
           "benchmark": "artificial_analysis",
@@ -2175,12 +2175,12 @@
           "sourceModel": "gpt-5.6-sol",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.7232142857142857,
+          "rawValue": 0.7142857142857143,
           "uncertainty": 0,
           "cohortPercentile": 1,
           "taskCount": 112,
           "cohortSize": 5,
-          "effort": "ultra",
+          "effort": "max",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://deng.codexradar.com/",
           "capturedAt": "2026-08-07"
@@ -2277,7 +2277,7 @@
           "metric": "pass_at_1",
           "rawValue": 0.6517857142857143,
           "uncertainty": 0,
-          "cohortPercentile": 0.6,
+          "cohortPercentile": 0.4,
           "taskCount": 112,
           "cohortSize": 5,
           "effort": "max",
@@ -2383,7 +2383,7 @@
           "sourceModel": "gpt-5.5",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.6517857142857143,
+          "rawValue": 0.6607142857142857,
           "uncertainty": 0,
           "cohortPercentile": 0.6,
           "taskCount": 112,
@@ -2525,7 +2525,7 @@
           "metric": "agentic_index",
           "rawValue": 44.2,
           "uncertainty": 0,
-          "cohortPercentile": 0.9210084033613445,
+          "cohortPercentile": 0.9226890756302522,
           "cohortSize": 595,
           "taskCount": 9,
           "effort": "default",
@@ -3202,7 +3202,7 @@
           "metric": "agentic_index",
           "rawValue": 31.5,
           "uncertainty": 0,
-          "cohortPercentile": 0.7663865546218488,
+          "cohortPercentile": 0.7680672268907563,
           "cohortSize": 595,
           "taskCount": 9,
           "effort": "default",
@@ -3837,7 +3837,7 @@
           "sourceModel": "deepseek-v4-flash",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.5535714285714286,
+          "rawValue": 0.5446428571428571,
           "uncertainty": 0,
           "cohortPercentile": 0.2,
           "taskCount": 112,
@@ -3845,7 +3845,7 @@
           "effort": "max",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-06"
+          "capturedAt": "2026-08-07"
         }
       ]
     }
