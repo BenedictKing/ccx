@@ -113,10 +113,13 @@ button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); o
 .benchmark-chart .axis-line { stroke: var(--border); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .benchmark-chart .axis-text, .benchmark-chart .axis-title { fill: var(--muted); font-size: 11px; }
 .benchmark-chart .axis-title { font-size: 12px; }
-.benchmark-chart .trajectory { fill: none; stroke-width: 1.5; opacity: .42; vector-effect: non-scaling-stroke; transition: d 180ms ease; }
+.benchmark-chart .trajectory { fill: none; stroke-width: 1.5; opacity: .42; vector-effect: non-scaling-stroke; transition: d 180ms ease, opacity 120ms ease, stroke-width 120ms ease; }
+.benchmark-chart .trajectory.is-dim { opacity: .07; }
+.benchmark-chart .trajectory.is-highlight { opacity: .9; stroke-width: 2.5; }
 .benchmark-chart .frontier { fill: none; stroke: var(--frontier); stroke-width: 2.5; vector-effect: non-scaling-stroke; transition: d 180ms ease; }
-.benchmark-chart .point { stroke: var(--surface); stroke-width: 1.5; cursor: crosshair; vector-effect: non-scaling-stroke; transition: cx 180ms ease, cy 180ms ease; }
+.benchmark-chart .point { stroke: var(--surface); stroke-width: 1.5; cursor: crosshair; vector-effect: non-scaling-stroke; transition: cx 180ms ease, cy 180ms ease, opacity 120ms ease; }
 .benchmark-chart .point.is-pareto { stroke: var(--frontier); stroke-width: 2; }
+.benchmark-chart .point.is-dim { opacity: .12; }
 .benchmark-chart .label { fill: var(--foreground); font-size: 11px; font-weight: 500; }
 .benchmark-chart .label-link { stroke: var(--border); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .tooltip { position: absolute; z-index: 2; width: max-content; max-width: min(260px, calc(100% - 16px)); padding: 9px 11px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--foreground); box-shadow: 0 8px 22px rgb(0 0 0 / .14); pointer-events: none; opacity: 0; transform: translateY(3px); transition: opacity 100ms ease, transform 100ms ease; }
@@ -124,7 +127,9 @@ button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); o
 .tooltip strong { display: block; margin-bottom: 4px; font-weight: 500; }
 .tooltip-line { color: var(--muted); font-size: 12px; }
 .legend { display: flex; flex-wrap: wrap; gap: 7px 15px; min-height: 24px; margin: 4px 0 20px; color: var(--muted); font-size: 11px; }
-.legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.legend-item { display: inline-flex; align-items: center; gap: 6px; cursor: default; transition: opacity 120ms ease; }
+.legend-item.is-active { color: var(--foreground); }
+.legend-item.is-dim { opacity: .35; }
 .legend-line { width: 17px; height: 3px; border-radius: 2px; }
 .comparison-section { margin: 28px 0 22px; padding-top: 18px; border-top: 1px solid var(--border); }
 .comparison-heading { display: flex; align-items: end; justify-content: space-between; gap: 18px; }
@@ -396,7 +401,7 @@ function renderTrajectories(rows, g) {
   groups.forEach(points => {
     points.sort((a, b) => (effortRank.get(a.effort) ?? 99) - (effortRank.get(b.effort) ?? 99));
     if (points.length < 2) return;
-    container.append(svgNode('path', { class: 'trajectory', d: linePath(points, g.x, g.y), stroke: colors.get(points[0].model) }));
+    container.append(svgNode('path', { class: 'trajectory', d: linePath(points, g.x, g.y), stroke: colors.get(points[0].model), 'data-model': points[0].model }));
   });
 }
 
@@ -437,6 +442,7 @@ function renderPoints(rows, frontierKeys, g) {
     const circle = svgNode('circle', {
       class: 'point' + (isPareto ? ' is-pareto' : ''), cx: g.x(row.cost), cy: g.y(row.pass_rate),
       r: isPareto ? 5.5 : 4.5, fill: colors.get(row.model), 'aria-label': row.model + ' ' + (row.effort || 'default'),
+      'data-model': row.model,
     });
     circle.append(svgNode('title', {}, row.model + ' · ' + (row.effort || 'default') + ' · ' + (row.pass_rate * 100).toFixed(1) + '% · $' + row.cost.toFixed(3)));
     circle.addEventListener('mouseenter', () => showTooltip(row, g.x(row.cost), g.y(row.pass_rate)));
@@ -480,18 +486,34 @@ function renderLabels(frontier, g) {
   });
 }
 
+function applyModelHighlight(model) {
+  svg.querySelectorAll('[data-model]').forEach(node => {
+    const match = node.getAttribute('data-model') === model;
+    node.classList.toggle('is-dim', model != null && !match);
+    if (node.classList.contains('trajectory')) node.classList.toggle('is-highlight', model != null && match);
+  });
+  document.querySelectorAll('#legend .legend-item').forEach(item => {
+    const match = item.dataset.model === model;
+    item.classList.toggle('is-active', model != null && match);
+    item.classList.toggle('is-dim', model != null && !match);
+  });
+}
+
 function renderLegend(rows) {
   const legend = document.getElementById('legend');
   legend.replaceChildren();
   [...new Set(rows.map(row => row.model))].sort().forEach(model => {
     const item = document.createElement('span');
     item.className = 'legend-item';
+    item.dataset.model = model;
     const swatch = document.createElement('span');
     swatch.className = 'legend-line';
     swatch.style.background = colors.get(model);
     const label = document.createElement('span');
     label.textContent = model;
     item.append(swatch, label);
+    item.addEventListener('mouseenter', () => applyModelHighlight(model));
+    item.addEventListener('mouseleave', () => applyModelHighlight(null));
     legend.append(item);
   });
 }
