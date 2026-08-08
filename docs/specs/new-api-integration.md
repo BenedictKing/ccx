@@ -266,8 +266,92 @@ UpstreamConfig (channelUid, autoManagedKind=new_api)
     └─ remote_group_missing: 远端分组已删除
 ```
 
-## 8. 待补充
+## 8. 待补充项详解
 
-- 与 LogicalChannel 的归组逻辑如何交互
-- 多账号并发 provision 的锁粒度
-- 汇率图缺失时的降级策略
+### 8.1 与 LogicalChannel 归组逻辑的交互
+
+**当前实现**
+
+New-api provision 建渠道时（`handlers_newapi.go:591-605`），构造的 `UpstreamConfig` **只设置** `AutoManaged=true`、`AutoManagedKind="new_api"`、`ChannelUID`、`BaseURL/BaseURLs`，**未设置 `AccountUID`，也未设置 `LogicalChannelUID`/`LogicalName`**。合并路径（`updateChannelForKind` → `UpstreamUpdate`）同样只更新 `APIKeys/APIKeyConfigs/AutoManaged*`，不碰账号/逻辑身份字段。
+
+归组的真相来源是 `RebuildLogicalChannels`，它只在两处触发：`logical_channel.go:634`（`ReloadFromMemory`，仅测试用）和 `logical_channel.go:657`（`ensureLogicalBackfill`，仅 `config_loader.go:188` 配置加载时调用）。**Add/Update/Remove Upstream 系列方法在 `saveConfigLocked` 后都不调用 `RebuildLogicalChannels`**。因此 new-api provision 建/并渠道后，`cfg.LogicalChannels` 列表和新物理渠道的 `LogicalChannelUID` 字段在本进程生命周期内不会刷新，直到下一次进程重启走加载路径。
+
+`AccountUID` 与 `LogicalChannelUID` 的关系（`logical_channel.go:66-111、467-499`）：
+- `logicalChannelGroupKeyFrom` 用 `(accountUID, providerID, siteIdentity)` 三元组归组。
+- `shouldGroupLogical`：① 同 `accountUID` 直接合并（最高优先，`convergeLogicalByAccount` 还会强制把同账号收敛到单一 canonical 卡）；② 同 providerID + 同站点合并；③ 无 provider 无 account 的手工渠道 + 同站点合并。
+- New-api 渠道 `ProviderID` 为空、`AccountUID` 为空，只能靠**规则③（同站点手工渠道合并）**归组。而 provision 的 `findNewApiMergeTarget` 恰好用相同的“同站点 + 无 providerID”语义在物理层面提前合并，二者语义一致但**各算各的**。
+
+**缺口分析**
+
+1. **新建渠道后逻辑卡视图不刷新（主缺口）。** provision/add-account 只改物理数组，`LogicalChannels` 聚合列表与物理渠道的 `LogicalChannelUID` 字段直到进程重启才由 `ensureLogicalBackfill` 回填。运行期 `GET /api/logical-channels` 会返回陈旧列表——新接入的 new-api 渠道要么不出现在逻辑卡里，要么 `logicalChannelUid` 为空。
+
+2. **AccountUID 空导致多账号 new-api 无法归到同一逻辑卡。** 同一 new-api 订阅下 add-account 把多个账号的 key 并入同一 `LinkedChannelUIDs` 渠道，但**渠道 `AccountUID` 始终为空**。若同一订阅将不同 kind（messages/chat/responses）建到不同站点渠道，规则③（同站点）可能把它们拆成多张逻辑卡，而没有 `AccountUID` 作为跨站点/跨协议的强合并键——不像自动托管 provider 那样能靠 `AccountUID` 收敛。
+
+3. **合并目标选择口径与归组口径存在潜在分叉。** `findNewApiMergeTarget` 跳过任何带 `ProviderID` 的渠道，而 `shouldGroupLogical` 规则②允许同 provider 同站点合并。若同站点既有 new-api 渠道又有带 providerId 的模板渠道，provision 会新建独立渠道，但逻辑归组阶段规则可能有不同判断（虽然 new-api 渠道无 providerId 走规则③，不会与规则②渠道合并，当前行为一致，但两处口径独立维护，易随一方演进而漂移）。
+
+**建议方案**
+
+- **在物理渠道增删改后触发逻辑卡重建。** 最小改动：在 new-api provision/merge/add-account 完成、`LinkChannel` 之后，显式调用一次 `RebuildLogicalChannels`（需在 `ConfigManager` 暴露一个加锁的公开方法，如 `RebuildLogicalChannelsAndSave()`）。或在 `AddUpstream`/`UpdateXxxUpstream`/`AddChatUpstream` 等 `saveConfigLocked` 前统一插入 `RebuildLogicalChannels(&cm.config)`。
+- **给 new-api 渠道分配稳定 `AccountUID`。** provision 时按 `subscriptionUID`（或 `subscriptionUID + baseURL 站点`）派生一个稳定 `AccountUID` 写入 `UpstreamConfig.AccountUID`，让同订阅多协议/多站点渠道靠 `shouldGroupLogical` 规则①和 `convergeLogicalByAccount` 强制收敛到单张逻辑卡，与自动托管 provider 语义对齐。注意 `syncManagedAccountsFromChannels` 要求 `AutoManaged && AccountUID != "" && ProviderID != ""` 才建 ManagedAccount，new-api 渠道 `ProviderID` 为空不会误入托管账号池，是安全的。
+- **统一合并口径。** 将 `findNewApiMergeTarget` 的“同站点 + 无 providerId”判定抽取为与 `logicalChannelGroupKeyFrom`/`shouldGroupLogical` 共享的辅助函数，避免两处独立维护站点身份归一化逻辑（当前 `normalizeNewApiChannelURL` 仅做 `TrimRight("/")`，而归组用 `utils.BaseURLSiteIdentities`，归一化强度不同，是漂移隐患）。
+
+### 8.2 多账号并发 provision 锁粒度
+
+**当前实现**
+
+`newAPIProvisionMu` 是**进程级全局互斥锁**（`sync.Mutex`，非 per-subscription）。`handleNewApiProvision` 和 `handleAddSubscriptionAccount` 都对它 `Lock/defer Unlock`，且在**整个 handler 生命周期**持锁——包括 `VerifyWithFallback`、`FetchGroups`、`FetchModels`、`provisionNewApiGroupKeys`（对远端 new-api 站点建 key）、`Store.Create/AddAccount`、`AddUpstream`、`ReconcileProvisioned`，直至 handler 返回。ctx 超时为 30s。
+
+注释说明设计意图：串行化避免同一时刻重复创建同名远端 Key，配置管理器仍负责与其他来源的渠道名冲突检测。
+
+对比 sync service 用的是 per-UID 锁（`lockForUID`），设计上更细粒度。
+
+**缺口分析**
+
+1. **全局锁把所有账号 provision 串行化，含慢速网络 I/O。** 持锁跨越多个对远端 new-api 站点的 HTTP 往返（verify/groups/models/逐分组建 key）。两个**不同订阅、不同站点**的 provision 也会互相阻塞，最坏情况下第二个请求要等第一个的完整 30s 网络周期。多账号（add-account）与主 provision 共用同一把锁，批量接入多账号时吞吐受限。
+
+2. **锁粒度与 sync service 不一致。** 同一进程里 sync 用 per-UID 锁、provision 用全局锁，两套并发模型并存。provision 持全局锁期间，sync service 对**同一订阅**的 `SyncNow`（走 per-UID 锁）可与 provision 交错执行——provision 尚未 `Store.Create` 完成落库时 sync 读到的中间态、或 provision 已建远端 key 但未 reconcile 到渠道时 sync 的 reconcile，两者对同一渠道 `APIKeyConfigs` 的读改写不受同一把锁保护（provision 用 `newAPIProvisionMu`，sync 用 `lockForUID`，互不感知），存在竞态窗口。
+
+3. **锁未保护配置写入的读-改-写序列。** provision 内先 `findNewApiMergeTarget`（读 config）→ 后 `updateChannelForKind`（改 config）。`ConfigManager` 自身的 `cm.mu` 只保护单次 Add/Update 调用，跨调用的“查合并目标 + 写”序列靠 `newAPIProvisionMu` 全局串行化来保证——一旦未来放宽这把锁的粒度，`mergeIndex` 可能失效（代码有 `mergeIndex >= len(channels)` 的防御，但那只是越界检查，不能防止 index 指向了被重排后的另一个渠道）。
+
+**建议方案**
+
+- **改为 per-subscription（per-UID）锁，与 sync service 统一。** provision 的 key 冲突边界本质是“同一 new-api 站点 + 同一 key 名称”。可将锁键设为 `baseURL 站点身份`（而非 subscriptionUID，因为跨订阅但同站点才会撞远端同名 key），用与 sync 同款的 `map[string]*sync.Mutex` + 保护该 map 的 `sync.Mutex`。这样不同站点的 provision 可并发。若嫌站点键复杂，退而求其次用 subscriptionUID 作键（add-account 用其所属 subscriptionUID），可解决“不同订阅互相阻塞”，但保留同站点跨订阅撞名的小概率风险（此风险由远端 `FindTokenByName` 查重 + `provisionNewApiGroupKeys` 的 `newApiProvisionConflictError` 兜底）。
+- **让 provision 与 sync 共享同一把 per-UID 锁。** 把 `newAPIProvisionMu` 换成 `SyncService.lockForUID` 暴露的同一锁实例（或让 provision 也走 sync service 的锁），消除“同一订阅 provision 与 sync 并发”的竞态。
+- **缩小持锁范围。** 只在“查合并目标 + 建渠道/并渠道 + LinkChannel”这段配置读-改-写序列持锁；远端 HTTP（verify/groups/models）可移出锁外（这些是幂等只读或由远端查重兜底的建 key）。注意 `provisionNewApiGroupKeys` 建 key 部分仍需在锁内以防同名并发，需权衡。
+
+### 8.3 汇率图缺失时的降级策略
+
+**当前实现**
+
+SmartRouter 成本计算的三段降级（`smart_router.go:1217-1272`）：
+1. `entry.EstimatedCost = listCost`（标价），基础默认值 `-1`（表示无成本证据）。
+2. 若配置有 `ExchangeRateQuotes`，构建 `graph`，`entry.EstimatedCost = listCost * timeMultiplier`（分时倍率）。
+3. 若 `graph != nil && subscriptionStore != nil` 且订阅有 `PaymentAmount/CreditAmount`，调 `ResolveEffectiveCostUSD` 算 effective USD，仅当 `resolvedCost.Available` 才覆盖。
+
+**汇率图缺失/构建失败时的降级：**
+- 配置默认**永远有 quotes**：`defaultExchangeRateQuotes`（USD↔CNY、LDC↔CNY）在 `Validate` 里对未配置的情况兜底填充，所以 `len(ExchangeRateQuotes) > 0` 几乎总成立。
+- `NewExchangeRateGraph` 构建失败时 `graph, _ = ...` **丢弃 error**，`graph` 为 nil → 跳过 effective USD 分支 → 回退到 `listCost * timeMultiplier`（标价×分时）。
+- `ResolveExchangeTerms` 对 graph nil、单位不在图中、版本不匹配、单价非有限正数等都返回 `OK=false` + 具体 `Reason` 字符串，`Available=false`，调用方回退标价。
+- `EstimatedCost` 最终进 `NormalizeSavingsScore`；`c < 0`（无成本证据）得中性 0.5 分，不惩罚。
+
+**请求期路径（`upstream_failover.go:291`）** 与路由期不同：`buildRequestCostContext` **只固化 `ListCostUSD` + `ExchangeSnapshotVersion`**，`EffectiveCostReason` 硬编码为 `"subscription payment/credit snapshot unavailable"`，从不计算 effective cost（`EffectiveCostAvailable` 恒 false）。metrics 记录 `EffectiveCostMultiplier` 字段，但 `RequestCostContext` 构造处从不设置它，且 `CostProfile{}` 在非测试代码中从不构造，所以请求期 effective cost 恒不可用。
+
+**缺口分析**
+
+1. **无任何告警或日志（核心缺口）。** 汇率图构建失败在 `smart_router.go:1244` 被 `graph, _ =` 静默吞掉——没有 `log.Printf`。`ResolveEffectiveCostUSD` 计算出的 `Reason`（版本不匹配、单位缺失等诊断信息）在 SmartRouter 里**被完全丢弃**（只看 `Available`，不读 `Reason`）。运维无法感知 new-api key 的成本降级为标价，也无法诊断为何某订阅的 effective cost 一直不生效。
+
+2. **new-api key 的 effective cost 实际上很难生效。** effective USD 计算要求订阅同时有 `PaymentAmount` 和 `CreditAmount`。但 new-api provision 建 profile 时设 `Currency:"quota"`、`Balance`，**从不设置 `PaymentAmount/CreditAmount`**（这两个字段只能通过 `PATCH /subscriptions/:uid/billing-terms` 手工填）。因此绝大多数 new-api 订阅走的是 `listCost * timeMultiplier`——**注意：GroupMultiplier 在标价回退路径里根本没参与**。`GroupMultiplier`（new-api 的核心成本信号）只在 effective USD 分支才被使用。所以 **new-api key 未配 billing-terms 时，其分组倍率对路由成本零影响**，这是比“汇率缺失”更严重的隐性缺口。
+
+3. **`quote` 单位与 key 计价单位可能对不上。** new-api key 的 `GroupMultiplier` 是相对倍率，effective 计算用 `PaymentUnit/CreditUnit`（如 CNY/LDC）查图。若用户 billing-terms 填的单位不在默认图（USD/CNY/LDC）中，`ResolveExchangeTerms` 返回 `"exchange rate unit not in graph"`，静默回退——用户没有任何反馈知道要去补一条 quote。
+
+**建议方案**
+
+- **在图构建失败与 effective 不可用时补日志（低成本高收益）。** `smart_router.go:1244` 的 `graph, _ =` 改为捕获 error 并 `log.Printf("[SmartRouter-ExchangeRate] 汇率图构建失败，回退标价: %v", err)`（注意路由是热路径，应做去重/限频，如按 snapshot version 只记一次）。在 `!resolvedCost.Available && resolvedCost.Reason != ""` 时按 `subscriptionUID + Reason` 采样记日志，暴露 `"unit not in graph"` 等可诊断原因。
+- **暴露成本降级的可观测指标。** 请求期 `buildRequestCostContext` 已有 `EffectiveCostReason` 字段并持久化到 SQLite，`cost_report_handler.go` 也统计 `EffectiveUnavailableCount`。建议把 SmartRouter 路由期解析出的 `Reason` 也接入同一诊断链路（目前路由期 Reason 完全未落库），让 `/api/reports/cost` 能展示“多少 new-api 请求因汇率/billing-terms 缺失而无法算 effective cost”。
+- **修复标价回退路径丢失 GroupMultiplier 的问题。** 在 `graph == nil` 或 effective 不可用时，至少让 `entry.EstimatedCost = listCost * timeMultiplier * groupMultiplier`（从 `cfg.GroupMultiplier` 取，缺失按 1.0），使 new-api 的分组倍率在无 billing-terms 时仍能影响 SavingsScore。否则 new-api 的成本优势/劣势对自动路由不可见。
+- **provision 时给 new-api 订阅填默认 billing-terms 或提示。** 若 new-api quota 与某法币有确定换算（如平台按 CNY 充值得 quota），provision 可预填 `PaymentAmount/CreditAmount/PaymentUnit/CreditUnit`，或在 provision 响应里返回一个 warning 提示用户补 billing-terms + 对应汇率 quote，才能启用 effective cost 路由。
+
+### 8.4 补充发现
+
+- **`ExchangeRateQuotesConfigured` 语义**：区分“用户显式清空 quotes”与“旧配置没配 quotes”的机制。若用户显式传空数组清空 quotes，则 `len(ExchangeRateQuotes) == 0`，不建图，所有 key 回退标价——这是**唯一能真正让图缺失的路径**，且同样无日志。
+- **图版本一致性检查**依赖 `ResolveUSDPrice` 返回的 version 全等。构图时 version 取自 `ExchangeRateSnapshot.Version`（缺省 1），若 snapshot 与 quotes 不同步（如 quotes 更新但 snapshot 未重算），version 仍能自洽（同一次 `NewExchangeRateGraph` 内所有单位同 version），不会误判——此处设计正确，无缺口。

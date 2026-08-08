@@ -505,8 +505,112 @@
    [返回结果]
 ```
 
-## 16. 待补充
+## 16. 待补充项详解
 
-- LogicalChannel 级别的“健康/质量/成本/能力标签”字段持久化
-- 物理渠道非 CRUD 变更后的自动重建触发机制
-- 与 Autopilot SmartRouter 的候选渠道收集联动
+### 16.1 健康/质量/成本/能力标签字段持久化
+
+**当前实现**
+
+- `LogicalChannel` 结构体仅有通用 `Tags []string` 字段，没有区分健康、质量、成本、能力的专用标签字段。
+- 后端 dashboard 接口 `/api/logical-channels/dashboard` 通过 `primaryPhysicalChannel` 选取主物理路由，再调用 `common.BuildChannelView` 和 metrics manager 聚合指标，最后把 `tags` 原样返回。
+- 前端类型定义同样只有 `tags?: string[]`，没有健康/质量/成本/能力相关字段。
+- Autopilot 内部有完整的 `HealthState`、`QualityTier`、`CostTier`、`StabilityTier`、`SpeedTier` 等枚举，但这些是运行时画像/评分类型，未与 `LogicalChannel` 持久化字段打通。
+
+**缺口分析**
+
+- 缺少逻辑渠道级的“健康/质量/成本/能力”聚合标签持久化，导致：
+  - 前端无法在统一列表中直接展示逻辑渠道的综合健康/质量/成本/能力标签。
+  - dashboard 目前只能透传物理渠道的实时 metrics（successRate、circuitState 等），无法给出一个稳定的逻辑渠道级标签。
+  - Autopilot 评分时使用的是物理渠道/模型级画像，没有逻辑渠道级的归一化标签输入。
+- 若前端需要按这些维度筛选或展示，目前只能临时从物理渠道或 metrics 中计算，缺乏一致性和持久性。
+
+**建议方案**
+
+1. 在 `LogicalChannel` 中新增专用字段：
+   - `HealthTag string` / `HealthTags []string`
+   - `QualityTag string`
+   - `CostTag string`
+   - `CapabilityTags []string`（或 `Capabilities map[string]bool`）
+   - 并同步在 `LogicalChannelProtocol` 中保留对应物理协议的状态投影。
+2. 在 `RebuildLogicalChannels` 中根据组内物理渠道的 `Status`、Autopilot 画像、模型能力注册表等推导默认值。
+3. 在 `UpdateLogicalChannelInput.Common` / `CreateLogicalChannelInput` 中开放这些字段的读写，并在 handler 的 request/response body 中透传。
+4. 前端 `admin-api.ts` 的 `LogicalChannel` / `CreateLogicalChannelRequest` / `UpdateLogicalChannelCommon` 中补齐对应字段，dashboard 视图可直接渲染标签胶囊。
+5. 在 dashboard handler 中，优先使用 `lc.HealthTag`/`lc.QualityTag`/`lc.CostTag`/`lc.CapabilityTags` 覆盖或补充物理 metrics 的展示。
+
+### 16.2 物理渠道非 CRUD 变更后的自动重建触发机制
+
+**当前实现**
+
+- `RebuildLogicalChannels` 的调用点极少：
+  - 测试文件（不计入生产路径）。
+  - `ReloadFromMemory`（测试专用）。
+  - `ensureLogicalBackfill`（仅在 `config_loader.go:188` 的 `LoadConfig` 流程中调用）。
+- `ensureLogicalBackfill` 只在配置加载时触发，判断条件是：
+  - schema 版本不一致；
+  - 任意物理渠道缺少 `LogicalChannelUID`；
+  - 同账号物理渠道的 `LogicalChannelUID` 存在分歧。
+- 所有运行时的物理渠道变更函数都不会主动重建 LogicalChannels，例如：
+  - `UpdateUpstream`（`config_messages.go:111`）
+  - `SetChannelStatus` / `SetChatChannelStatus` / `SetResponsesChannelStatus` / `SetGeminiChannelStatus` / `SetImagesChannelStatus` / `SetVectorsChannelStatus`
+  - `SetChannelPromotion` 及对应协议的促销设置
+  - `ApplyAccountChannelChanges` / `UpdateAccountChannels`（`config_accounts.go:759-774`）
+  - `AddUpstream` / `RemoveUpstream`（`config_messages.go:57, 388`）
+  - 各协议对应的 `AddUpstream` / `DeleteUpstream`（chat/responses/gemini/images/vectors）
+  - `channel_batch.go` 中的批量导入
+
+**缺口分析**
+
+- 物理渠道变更后，`LogicalChannels` 中的 `Protocols`、`BaseURLs`、`Name`、`Status` 等字段可能立即失效，导致：
+  - `/api/logical-channels/dashboard` 返回的陈旧数据（如已删除的 protocol 仍在 protocols 列表中）。
+  - `LogicalChannel.Protocols[].Status` 与物理渠道 `Status` 不一致。
+  - 新增物理渠道（如批量导入、账号同步新增协议）不会自动被归组到现有 logical channel。
+  - `LogicalChannelUID` 写回物理渠道的机制只在加载时生效，运行时变更后不会同步。
+
+**建议方案**
+
+1. **统一收口**：在 `saveConfigLocked` 返回前（或所有物理渠道变更函数的末尾）调用 `RebuildLogicalChannels`，确保任何持久化写盘后 logical 视图与物理视图一致。
+   - 注意：需在 `saveConfigLocked` 内部加锁环境下调用，避免并发问题。
+2. **变更点枚举需补重建的入口**：
+   - `config_messages.go`: `AddUpstream`, `RemoveUpstream`, `UpdateUpstream`, `SetChannelStatus`, `SetChannelPromotion`
+   - `config_chat.go`: 对应 chat 协议的上述函数
+   - `config_responses.go`: 对应 responses 协议的上述函数
+   - `config_gemini.go`: 对应 gemini 协议的上述函数
+   - `config_images.go`: 对应 images 协议的上述函数
+   - `config_vectors.go`: 对应 vectors 协议的上述函数
+   - `config_accounts.go`: `ApplyAccountChannelChanges`, `UpdateAccountChannels`
+   - `channel_batch.go` 批量导入路径
+3. **避免过度重建**：`RebuildLogicalChannels` 本身是纯函数且幂等，可在 `saveConfigLocked` 中统一调用；但需评估性能影响，若配置较大可考虑按需触发（比较变更前后的关键字段）。
+4. **回调机制**：`RegisterOnConfigChange` 已有订阅者，但 `LogicalChannels` 是 `Config` 的一部分，重建后通过 `fireConfigChangeCallbacks` 通知即可，无需新增机制。
+
+### 16.3 与 Autopilot SmartRouter 的候选渠道收集联动
+
+**当前实现**
+
+- `SmartRouter.collectChannelEntries`（`smart_router.go:1726-1781`）直接从 `cfg.Upstream`、`cfg.ChatUpstream`、`cfg.ResponsesUpstream`、`cfg.GeminiUpstream`、`cfg.ImagesUpstream`、`cfg.VectorsUpstream` 六个物理数组中遍历，按 `Status` 和 `APIKeys` 过滤。
+- `executeFilter`（`smart_router.go:495`）接收的是 `scheduler.ChannelInfo` 列表及 `upstreamFor` 回调，由 scheduler 传入物理候选。
+- `buildChannelEntry`（`smart_router.go:1162`）基于单个 `UpstreamConfig` 构建 `channelScoreEntry`，评分维度包括 `HealthState`、`QualityTier`、`CostTier`、`ProviderQualityScore` 等，但全部来自模型画像、endpoint 画像、价格注册表，**未读取 `LogicalChannel` 的任何字段**。
+- 搜索整个 `internal/autopilot` 包，没有任何代码引用 `LogicalChannel` 或 `LogicalChannelUID`。
+
+**缺口分析**
+
+- SmartRouter 完全不感知 LogicalChannel，候选渠道收集发生在物理层，未经过逻辑渠道归组层。
+- 这意味着：
+  - 同一 LogicalChannel 下的多个协议/多个 BaseURL/多个 Key 会被当作独立候选分别评分，无法按“逻辑渠道”做统一策略（如优先/避开某个逻辑渠道）。
+  - LogicalChannel 上未来可能持久化的健康/质量/成本/能力标签无法参与 SmartRouter 评分。
+  - 用户从产品语义上认为是一张“渠道卡片”，但 Autopilot 的决策 trace 和候选排序仍以物理渠道为单位，前后端语义不一致。
+  - 多协议聚合场景（如 messages + chat + responses 同站）下，SmartRouter 无法利用 LogicalChannel 的统一身份做 tie-breaker 或策略约束。
+
+**建议方案**
+
+1. **候选收集阶段引入 LogicalChannel 映射**：
+   - 在 `collectChannelEntries` 和 `executeFilter` 中，为每个 `UpstreamConfig` 查找其所属 `LogicalChannel`（通过 `LogicalChannelUID`）。
+   - 在 `channelScoreEntry` / `RoutingCandidate` 中新增 `LogicalChannelUID`、`LogicalChannelName` 字段。
+2. **逻辑渠道级评分输入**：
+   - 将 LogicalChannel 的健康/质量/成本/能力标签作为 `ScoringCandidate` 的补充输入，或作为 fallback（当物理渠道画像缺失时）。
+   - 在 `buildChannelEntry` 中读取 LogicalChannel 的标签并映射到 `HealthState`、`QualityTier`、`CostTier` 等评分字段。
+3. **统一候选去重/归组**：
+   - 对于 dry-run / BuildPlan 场景，可选择在 LogicalChannel 维度聚合展示候选，而不是每个物理协议一条。
+   - 对于真实路由路径，仍保留物理候选粒度，但附加 `LogicalChannelUID` 到 trace，便于后续 shadow 对比和 dashboard 展示。
+4. **联动 dashboard 和健康中心**：
+   - 健康中心 `/api/health-center/channels` 返回的 `ChannelHealthItem` 可与 LogicalChannel 对齐，使 SmartRouter 的评分输入与前端展示共用同一聚合单位。
+5. **注意兼容性**：`LogicalChannel` 为空表示旧配置，SmartRouter 应回退到现有物理层行为，避免强依赖。

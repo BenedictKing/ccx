@@ -369,8 +369,69 @@ New-API              -             写          读           -             -
 | 读写一致 | 调度决策 | 基于当前 snapshot，允许短期不一致 |
 | 展示一致 | 前端 UI | 事件驱动刷新 + 轮询兜底 |
 
-## 10. 待补充
+## 10. 待补充项详解
 
-- LogicalChannel 归组算法的详细规则（等扫描结果）
-- 跨模块事件总线设计
-- 统一配置变更传播机制（已补骨架）
+### 10.1 跨模块事件总线设计
+
+**当前实现**
+
+后端事件传播机制分散，无统一总线：
+
+| 机制 | 位置 | 作用 | 局限 |
+|------|------|------|------|
+| 配置变更回调 | `config.ConfigManager.RegisterOnConfigChange` | 配置文件热重载后广播 Config 快照 | 粗粒度，接收方需自行 diff |
+| 预置数据变更回调 | `presetstore.PresetStore.RegisterOnChange` | PresetBundle 原子替换后通知 | 仅 model registry 消费 |
+| 上游信号回调 | `ratelimit.SetUpstreamSignalCallback` | 429/header 信号喂给 Autopilot | 单一回调点 |
+| Endpoint policy hook | `handlers/common.SetEndpointPolicyProviderHook` | Autopilot 注入每请求策略 | 运行时依赖注入 |
+| Endpoint 结果通知 hook | `handlers/common.SetNotifyEndpointResultHook` | 更新 FastDecayScorer | 单向通知 |
+| 画像变更 EventHub | `autopilot/event_hub.go` | ProfileChangeEvent fan-out | 仅 autopilot 内部，仅向前端广播 |
+| 状态转换日志 | `statelog/logging.go` | 统一日志格式 | 只写不广播 |
+| 前端事件 | 原生 `window.addEventListener` | 主题、快捷键、桌面端 auth | 无统一总线 |
+
+**缺口分析**
+
+1. **无统一事件总线**：新增跨模块响应需改多处 `main.go` 接线，易遗漏。
+2. **画像事件仅限前端展示**：后端调度/熔断/限速模块无法消费画像变更。
+3. **熔断状态迁移不可订阅**：前端健康中心无法实时展示熔断 open/closed，需轮询。
+4. **配置变更回调粗粒度**：接收方拿到整个 Config，需自行 diff，效率低且易错。
+5. **Key 拉黑/恢复无事件**：Scheduler/Healthcheck/前端无法实时感知 key 可用性变化。
+6. **PresetStore 变更通知范围窄**：仅 model registry 消费，scheduler/autopilot 未订阅。
+7. **事件无 schema/版本**：未来事件扩展易破坏前后端契约。
+8. **前端无事件总线**：组件间状态同步依赖 props/store，跨分支通信困难。
+
+**建议方案**
+
+1. **短期：扩展现有 `EventHub` 为后端统一总线**
+   - 将 `autopilot.EventHub` 升级为 `internal/eventbus`，支持泛型或统一 `Event` envelope。
+   - 保留现有 `ProfileChangeEvent` 兼容，新增 `CircuitStateEvent`、`ConfigChangeEvent`、`KeyStateEvent` 等。
+   - 订阅者可按 `EventType` 过滤，发布非阻塞、慢消费者丢弃。
+   - 关键状态事件（熔断、Key 拉黑）同时落盘到 `ProfileChangelogStore` 或新建 `StateTransitionStore`。
+
+2. **中期：统一配置变更传播**
+   - 将 `ConfigManager.RegisterOnConfigChange` 改造为基于事件总线：
+     - 发布 `ConfigReloadedEvent`（全量快照）+ 细粒度 `UpstreamChangedEvent` / `ChannelStatusChangedEvent`。
+     - 现有回调可保留为兼容层，内部转为订阅者。
+   - `PresetStore.RegisterOnChange` 同样接入总线，发布 `PresetBundleSwappedEvent`。
+
+3. **中期：熔断/Key 状态事件化**
+   - 在 `metrics/channel_metrics_circuit.go` 状态迁移点发布 `CircuitBreakerStateChangedEvent`。
+   - 在 `config.go` `BlacklistKey` / `RestoreKey` / `DisableKeyModel` 发布 `KeyStateChangedEvent`。
+   - 前端健康中心 WebSocket 不仅推送画像事件，也推送熔断/key 状态事件。
+
+4. **长期：事件 schema 与持久化**
+   - 定义统一 `Event` 结构：eventUID、eventType、subject、scope、from、to、cause、payload、createdAt。
+   - 引入轻量级 SQLite 事件日志表（类似 `profile_changelog`），支持按 subject/channel 查询历史。
+   - 如需高可用/多实例，可替换为 NATS / Redis Streams，但当前单进程架构下内存总线+SQLite 足够。
+
+5. **前端事件总线**
+   - 引入轻量 `mitt` 或基于 Vue 的 `provide/inject` 事件总线，统一桌面端 auth、版本检查、渠道刷新等跨组件通信。
+   - 后端 WebSocket 事件接入一个中央 `EventSource` composable，按类型分发给订阅组件。
+
+**应覆盖的事件类型**
+
+- 画像变更：`profile_updated`、`health_changed`、`discovery_completed`、`auto_mapping_applied`
+- 健康/熔断：`circuit_breaker_state_changed`、`key_blacklisted`、`key_restored`、`healthcheck_probe_failed`、`probe_recovered`
+- 配置变更：`config_reloaded`、`upstream_changed`、`logical_channel_rebuilt`、`preset_bundle_swapped`
+- 限速/学习：`rate_limit_discovered`、`rate_limit_applied`、`rate_limit_cooldown_triggered`
+- 请求/路由：`routing_decision_made`、`attempt_started`、`attempt_completed`、`attempt_failed`
+- 订阅/New-API：`subscription_synced`、`subscription_balance_changed`、`managed_account_keys_changed`

@@ -244,8 +244,102 @@ healthcheck 不直接依赖 provider 适配层，而是通过 `internal/upstream
             → filterChannelsByModelCircuit
 ```
 
-## 9. 待补充
+## 9. 待补充项详解
 
-- 火山 Coding Plan 与 Agent Plan 的模型清单 manifest 更新机制
-- L2 请求特征与 capability test 的 drift 检测
-- 稀疏 L2 预算在大盘紧张时的动态调整策略
+### 9.1 火山 Coding Plan 与 Agent Plan 的模型清单 manifest 更新机制
+
+**当前实现**
+
+- 火山方舟 `/api/plan`（Agent Plan）与 `/api/coding`（Coding Plan）的内置清单存在两个同源副本：
+  - 代码常量：`backend-go/internal/config/builtin_models_manifest.go` 中的 `volcengineAgentPlanModelIDs()` 与 `volcengineCodingPlanModelIDs()`。
+  - 预置 JSON：`shared/builtin-models-manifest/builtin-models-manifest.json`，通过 `scripts/generate-preset-manifest.mjs` 生成到 `backend-go/internal/presetstore/embedded/builtin-manifest.json`，并参与 `presetstore` 远程/缓存/embedded 三层更新。
+- 运行时 `config.LookupBuiltinManifest` 优先读取 `presetstore.Default().Get()` 中的运行时清单，fallback 到代码常量。
+- 当用户绑定火山 Access Key 后，自动发现流程通过 `autopilot/volcengine_coding_plan.go` 的 `FetchModels` 调用火山管控面 `ListArkAgentPlanModel` / `ListArkCodingPlanModel` 获取真实清单，覆盖内置兜底清单。
+- 预置更新链路：`PresetUpdater` 每 30 分钟拉取 `PresetUpdateURL` 的 index + shards，校验 schemaVersion、dataVersion、SHA256 后 Swap；`/api/presets/status` 暴露 source / dataVersion / lastSuccessAt。
+
+**缺口分析**
+
+- **代码常量副本与 JSON 副本未声明主从关系**：`builtin_models_manifest.go` 注释称“清单来源：火山方舟 Agent/Coding Plan 套餐概览(2026-07)”，但无版本戳、无生成时间、无与 `shared/builtin-models-manifest/builtin-models-manifest.json` 的一致性校验。
+- **没有自动从火山侧拉取并回填清单的机制**：清单更新依赖人工维护 `shared/builtin-models-manifest/builtin-models-manifest.json`，再运行 `make generate-preset-manifest`；火山新增/下线模型时无法自动感知。
+- **DisableProbe=true 导致未绑定 AK 的渠道长期依赖静态兜底**：若静态清单滞后，未绑定 AK 的火山渠道会暴露已不存在或缺失新模型的错误可用性。
+- **缺少 drift 告警**：没有将运行时 `FetchModels` 结果与内置清单做 diff 并上报“manifest drift”的接口或指标。
+
+**建议方案**
+
+1. **统一主从关系**：将 `shared/builtin-models-manifest/builtin-models-manifest.json` 设为唯一真相源；`builtin_models_manifest.go` 在测试构建期通过 `go:generate` 从 JSON 生成或仅保留最小 fallback，避免双副本。
+2. **增加清单版本元数据**：在 `BuiltinModelsManifest` 中新增 `SourceVersion` / `UpdatedAt` / `SourceURL` 字段，并在 `PresetIndex` 或 `/api/presets/status` 中暴露。
+3. **自动化清单刷新任务**：在 autopilot 的火山 plan 同步逻辑中，周期性对“已绑定 AK 且套餐状态 Running”的账号调用 `FetchModels`，将结果聚合后写入共享 JSON 或更新远程 preset shard，再触发 `generate-preset-manifest`。
+4. **Drift 检测与告警**：新增 `/api/presets/manifest-drift` 或监控指标，对同一 plan 对比内置清单与最近 `FetchModels` 结果，记录新增/缺失模型；超过阈值时打日志并推送到管理界面。
+5. **未绑定 AK 渠道的兜底置信度**：在 channel discovery 结果中标注 `ModelDiscoverySourceBuiltinFallback`，让前端或调度器在火山侧模型变化频繁时降低其优先级。
+
+### 9.2 L2 请求特征与 capability test 的 drift 检测
+
+**当前实现**
+
+- L2 真实调用与 capability test 共用同一套请求构建路径：
+  - 请求构建：`backend-go/internal/handlers/capability_test_request.go` 中的 `buildTestRequestWithModel`。
+  - 对外封装：`backend-go/internal/handlers/healthcheck_probe.go` 提供 `BuildHealthCheckL2Request` 与 `SendHealthCheckL2Stream`。
+- 探测模型列表硬编码在 `backend-go/internal/handlers/capability_probe_models.go` 中，前端副本在 `frontend/src/composables/useCapabilityTestManager.ts` 的 `capabilityPlaceholderModels`，双方注释互相提醒需同步。
+- 请求特征（提示词、max_tokens、stream、reasoning_effort、system instruction）全部在代码中写死：
+  - messages: 调用 `buildMessagesProbeBody` + `applyRequiredThinkingToCapabilityProbeBody`。
+  - chat / responses / gemini: 内联 JSON。
+- 没有显式版本字段或 schema 来描述“当前 L2 probe 特征集合”。
+
+**缺口分析**
+
+- **前后端硬编码模型列表同步风险高**：两个文件、两种语言，新增模型时容易遗漏前端或后端，导致首屏占位与真实探测不一致。
+- **请求特征无版本化**：上游对特定提示词/参数组合的行为可能变化（如 reasoning_effort 取值、system 角色要求、Gemini thinkingConfig），当前无法在 capability 结果或 key_health 记录中标记“本次探测使用的是哪一版 probe schema”。
+- **缺少与上游文档/行为的 drift 检测**：
+  - 没有将探测结果与已知模型能力（来自 presetstore model registry）做回归比对。
+  - 没有检测“某模型突然不再支持 streaming”或“某模型返回空流”的自动化告警。
+- **capability cache 只按 key+protocol+models+mappingHash 缓存**：未包含 probe schema 版本，若 probe 参数变化，旧缓存可能误导结果。
+
+**建议方案**
+
+1. **统一 probe schema 定义**：将模型列表、提示词、参数约束、协议头抽取到 `shared/capability-probe-schema.json`，由前后端与 L2 共同读取；前端在构建时生成 TypeScript 常量，后端通过 `go:embed` 读取。
+2. **引入 probe schema 版本**：在 `CapabilityTestResponse` / `KeyHealthRecord` / capability cache key 中加入 `probeSchemaVersion` 字段，确保参数升级后旧缓存失效。
+3. **建立 drift 检测器**：
+   - 在 capability test runner 中，将每个模型的探测结果（是否成功、是否支持 streaming、延迟、返回 token 数）与 model registry 中声明的 `Capabilities` / `ReasoningEfforts` 做比对。
+   - 若某模型连续 N 次出现“registry 声明支持 streaming 但探测失败”或“reasoning 参数被拒绝”，生成 `capability_drift` 事件写入日志/指标。
+4. **定期回归测试**：在 CI 或 nightly job 中对 mock 上游或沙箱 key 跑全协议 capability test，校验 `capabilityProbeModels` 中所有模型仍符合预期。
+5. **capability cache 失效策略**：cache key 加入 schema version 与模型 registry dataVersion，保证 preset 更新后自动重新探测。
+
+### 9.3 稀疏 L2 预算在大盘紧张时的动态调整策略
+
+**当前实现**
+
+- 预算字段定义在 `backend-go/internal/config/health_check.go`：
+  - `SparseL2MaxModels`：每 key 每周期最多探测模型数，默认 3。
+  - `SparseL2MaxCostAFP`：每 key 每周期 AFP 成本预算上限，默认 6.0。
+  - 支持全局配置与渠道级配置覆盖。
+- 模型选择逻辑在 `backend-go/internal/healthcheck/model_select.go`：
+  - 优先探测“最近失败”模型（不受成本预算限制）。
+  - 其次探测“无近期成功记录”模型。
+  - 最后按成本升序填充，直到 `maxModels` 或 `maxCostAFP`。
+  - 火山渠道使用 `ResolveVolcengineAFPCost(now, "agent_plan", ...)` 估算 AFP 成本；非火山渠道使用 USD 定价相对成本。
+- 调度并发控制：healthcheck `Manager` 使用 worker 池，`MaxConcurrency` 默认 4，按渠道去重；队列满时丢弃任务。
+- 静默期：`L2ModelQuietPeriod` 默认等于 Interval，近期成功模型跳过。
+
+**缺口分析**
+
+- **预算是静态配置**：`SparseL2MaxModels` / `SparseL2MaxCostAFP` 只在配置解析时确定，不随系统负载、上游错误率、可用余额或时间窗口变化。
+- **缺乏大盘负载感知**：
+  - 不读取 scheduler/model circuit 状态来决定是否收紧/放宽探测。
+  - 不感知火山套餐 AFP 余额（`VolcenginePlanUsage` 已Fetched，但 healthcheck 未使用）。
+  - 不感知当前 healthcheck worker 队列深度或整体并发压力。
+- **没有分时段/分套餐策略**：高峰时段仍按默认预算探测，可能加剧上游限流；低谷时段也没有自动扩容利用空闲窗口。
+- **成本单位不一致**：非火山渠道用 USD 相对成本与火山 AFP 共用 `CostAFP` 字段，命名有误导性，且 USD 成本未按真实汇率/AFP 换算，预算比较不具备物理意义。
+
+**建议方案**
+
+1. **引入动态预算调节器**：
+   - 在 `healthcheck.Manager` 中新增 `BudgetController`，根据以下信号实时调整有效预算：
+     - 当前 worker 队列深度 / 在飞任务数；
+     - 最近 N 分钟内 L2 失败率；
+     - 火山套餐 AFP 剩余余额（对 `IsVolcengineProvider` 渠道）；
+     - 时间窗口（如业务高峰自动降预算、低谷自动升预算）。
+2. **将动态预算写入 `ResolvedHealthCheckPolicy` 扩展字段**：新增 `EffectiveSparseL2MaxModels` / `EffectiveSparseL2MaxCostAFP`，由 `selectL2ProbeModels` 使用；原始字段保留作为上限。
+3. **AFP 余额联动**：对火山渠道，在 `checkKeyL2Sparse` 前查询该 key 对应套餐的 `VolcenginePlanUsage`，将 `SparseL2MaxCostAFP` 限制为剩余 AFP 的一定比例（如 5%），避免探测耗尽生产额度。
+4. **负载熔断式降级**：当整体 L2 失败率超过阈值或队列持续满载时，临时将 `SparseL2MaxModels` 降到 1 或关闭非失败模型的稀疏探测，仅保留“最近失败”恢复探测。
+5. **统一成本语义或拆分字段**：将非火山渠道的预算字段改名为 `SparseL2MaxCostUSDRelative` 或引入归一化成本指数；火山渠道保留 AFP，避免混合比较。
+6. **可观测性**：在 `KeyHealthRecord` 或日志中记录本次实际预算（`effectiveMaxModels` / `effectiveMaxCost`）及触发原因，便于复盘大盘紧张时的探测行为。
