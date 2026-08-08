@@ -227,6 +227,10 @@ func deepseekModelIDs() []string {
 // 当用户未绑定火山云 Access Key（无法调用管控面模型发现接口）时，
 // 用此清单让渠道立即可用；绑定 Access Key 后由 FetchModels 覆盖为真实清单。
 // 清单来源：火山方舟 Agent Plan 套餐概览(2026-07)，与 Coding Plan 略有差异。
+func VolcengineAgentPlanModelIDs() []string {
+	return volcengineAgentPlanModelIDs()
+}
+
 func volcengineAgentPlanModelIDs() []string {
 	return []string{
 		"doubao-seed-2.0-code",

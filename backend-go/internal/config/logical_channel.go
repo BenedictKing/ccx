@@ -146,46 +146,44 @@ func RebuildLogicalChannels(cfg *Config) {
 	if len(all) == 0 && len(cfg.LogicalChannels) == 0 {
 		return
 	}
-	// 2) 已有 logical 按 UID 索引
+	// 2) 已有 logical 按 UID 索引（先复制为副本，existingByUID 与 logicals 指向同一批副本，
+	// 保证第 4 步的 append 与第 7 步的物化作用于同一对象）。
+	logicals := make([]*LogicalChannel, 0, len(cfg.LogicalChannels))
 	existingByUID := make(map[string]*LogicalChannel, len(cfg.LogicalChannels))
+	usedUIDs := make(map[string]struct{}, len(cfg.LogicalChannels))
 	for i := range cfg.LogicalChannels {
-		l := &cfg.LogicalChannels[i]
-		if l.LogicalChannelUID == "" {
+		if cfg.LogicalChannels[i].LogicalChannelUID == "" {
 			continue
 		}
-		existingByUID[l.LogicalChannelUID] = l
-	}
-	usedUIDs := make(map[string]struct{}, len(existingByUID))
-	for uid := range existingByUID {
-		usedUIDs[uid] = struct{}{}
-	}
-	// 3) 保留已有 logical 顺序
-	logicals := make([]*LogicalChannel, 0, len(existingByUID))
-	for i := range cfg.LogicalChannels {
-		l := cfg.LogicalChannels[i]
-		if l.LogicalChannelUID == "" {
-			continue
-		}
-		copy := l
+		copy := cfg.LogicalChannels[i]
+		// 重置 protocols：第 4 步与 4.5 步按当前物理渠道重建，避免陈旧引用残留。
+		copy.Protocols = nil
 		logicals = append(logicals, &copy)
+		existingByUID[copy.LogicalChannelUID] = &copy
+		usedUIDs[copy.LogicalChannelUID] = struct{}{}
 	}
-	// 4) 已归入现有 logical 的物理渠道集合
-	attached := make(map[int]struct{})
-	for i, e := range all {
+	// 4) 按已回填的 LogicalChannelUID 把物理渠道归入对应 logical（protocols 重建）
+	for _, e := range all {
 		uid := strings.TrimSpace(e.channel.LogicalChannelUID)
 		if uid == "" {
 			continue
 		}
 		if l, ok := existingByUID[uid]; ok {
 			appendProtocolToLogical(l, e.slice, e.channel)
-			attached[i] = struct{}{}
 		}
 	}
+	// 4.5) 同一托管账号强制收敛到单一逻辑卡。
+	// 历史一次性缺陷曾给同账号的不同协议渠道分别回填了不同的 LogicalChannelUID，
+	// 而 attachLogicalToSlicesByIndex 仅在 UID 为空时回填，导致分歧被永久写死、
+	// 后续 Rebuild 在第 4 步按旧 UID 各归各，第 5 步的账号合并永远轮不到它们。
+	// 这里以 accountUid 为身份真相：把同账号的物理渠道重新归并到一张 canonical 卡，
+	// 并强制重指物理渠道的 LogicalChannelUID，孤儿卡在物化时随之消失。
+	convergeLogicalByAccount(cfg, all, logicals)
 	// 5) 剩余按归组键合并
 	groups := make(map[logicalChannelGroupKey][]physicalChannelEntry)
 	groupOrder := make([]logicalChannelGroupKey, 0)
-	for i, e := range all {
-		if _, ok := attached[i]; ok {
+	for _, e := range all {
+		if strings.TrimSpace(e.channel.LogicalChannelUID) != "" {
 			continue
 		}
 		k := logicalChannelGroupKeyFrom(e.channel)
@@ -223,9 +221,12 @@ func RebuildLogicalChannels(cfg *Config) {
 	for _, l := range logicals {
 		l.Protocols = dedupProtocols(l.Protocols)
 	}
-	// 7) 物化
+	// 7) 物化；跳过被 4.5 步清空 protocols 的孤儿卡（其渠道已并入 canonical 卡）
 	out := make([]LogicalChannel, 0, len(logicals))
 	for _, l := range logicals {
+		if len(l.Protocols) == 0 {
+			continue
+		}
 		out = append(out, *l)
 	}
 	cfg.LogicalChannels = out
@@ -459,6 +460,54 @@ func attachLogicalToEntries(l *LogicalChannel, members []physicalChannelEntry) {
 	}
 }
 
+// convergeLogicalByAccount 把同一托管账号的物理渠道收敛到单一 canonical 逻辑卡。
+// 遍历顺序即六类数组的固定顺序（messages → chat → …），因此同账号首个遇到的
+// logical 即 canonical，幂等稳定；该账号其余 logical 被清空 protocols（物化时剔除）。
+// 物理渠道的 LogicalChannelUID / LogicalName 被强制重指到 canonical，解除历史写死的分歧。
+func convergeLogicalByAccount(cfg *Config, all []physicalChannelEntry, logicals []*LogicalChannel) {
+	byUID := make(map[string]*LogicalChannel, len(logicals))
+	for _, l := range logicals {
+		byUID[l.LogicalChannelUID] = l
+	}
+	canonicalByAccount := make(map[string]*LogicalChannel)
+	for _, e := range all {
+		acc := strings.TrimSpace(e.channel.AccountUID)
+		if acc == "" {
+			continue
+		}
+		uid := strings.TrimSpace(e.channel.LogicalChannelUID)
+		l := byUID[uid]
+		if l == nil {
+			continue
+		}
+		canonical, ok := canonicalByAccount[acc]
+		if !ok {
+			canonicalByAccount[acc] = l
+			continue
+		}
+		if l == canonical {
+			continue
+		}
+		// 把 e 从 l 移到 canonical，并强制重指物理渠道身份
+		appendProtocolToLogical(canonical, e.slice, e.channel)
+		removeProtocolFromLogical(l, e.slice)
+		if up := findChannelInSlices(cfg, e.slice, e.channel.ChannelUID); up != nil {
+			up.LogicalChannelUID = canonical.LogicalChannelUID
+			up.LogicalName = canonical.Name
+		}
+	}
+}
+
+// removeProtocolFromLogical 移除 logical 中指定 kind 的协议引用。
+func removeProtocolFromLogical(l *LogicalChannel, slice string) {
+	for i := range l.Protocols {
+		if l.Protocols[i].Kind == slice {
+			l.Protocols = append(l.Protocols[:i], l.Protocols[i+1:]...)
+			return
+		}
+	}
+}
+
 // attachLogicalToSlicesByIndex 通过原始 slice + index 把 logical UID/Name 写回原 UpstreamConfig 元素。
 // 这是 RebuildLogicalChannels 写回物理渠道字段的唯一入口，避免副本写入丢失。
 func attachLogicalToSlicesByIndex(cfg *Config, l *LogicalChannel, members []physicalChannelEntry) {
@@ -585,9 +634,9 @@ func (cm *ConfigManager) ReloadFromMemory(cfg *Config) {
 	RebuildLogicalChannels(&cm.config)
 }
 
-// ensureLogicalBackfill 加载时调用：若 schema 版本非 1 或任意物理渠道缺少
-// LogicalChannelUID，则重建 LogicalChannels 并写回物理字段。
-// 返回 true 表示发生了写回（需要 saveConfigLocked）。
+// ensureLogicalBackfill 加载时调用：若 schema 版本非 1、任意物理渠道缺少
+// LogicalChannelUID，或存在同账号却被拆成多张逻辑卡的 UID 分歧，则重建
+// LogicalChannels 并写回物理字段。返回 true 表示发生了写回（需要 saveConfigLocked）。
 func ensureLogicalBackfill(cfg *Config) bool {
 	if cfg == nil {
 		return false
@@ -601,13 +650,37 @@ func ensureLogicalBackfill(cfg *Config) bool {
 				break
 			}
 		}
-		if !need {
+		if !need && !hasAccountUIDDivergence(all) {
 			return false
 		}
 	}
 	RebuildLogicalChannels(cfg)
 	log.Printf("[Config-LogicalChannel] 已重建逻辑渠道视图，共 %d 条", len(cfg.LogicalChannels))
 	return true
+}
+
+// hasAccountUIDDivergence 检测同一托管账号的物理渠道是否被回填了多个不同的
+// LogicalChannelUID（历史缺陷产物）。若存在，需要 Rebuild 触发 4.5 步收敛。
+func hasAccountUIDDivergence(all []physicalChannelEntry) bool {
+	uidByAccount := make(map[string]string)
+	for _, e := range all {
+		acc := strings.TrimSpace(e.channel.AccountUID)
+		if acc == "" {
+			continue
+		}
+		uid := strings.TrimSpace(e.channel.LogicalChannelUID)
+		if uid == "" {
+			continue
+		}
+		if prev, ok := uidByAccount[acc]; ok {
+			if prev != uid {
+				return true
+			}
+			continue
+		}
+		uidByAccount[acc] = uid
+	}
+	return false
 }
 
 var _ = log.Printf

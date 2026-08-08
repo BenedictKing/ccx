@@ -121,7 +121,7 @@ func TestProbeVolcenginePlanClaudeSuccess(t *testing.T) {
 }
 
 func TestProbeVolcenginePlanCodingClaudeUsesArkCodeLatest(t *testing.T) {
-	srv := newCaptureServer(200, `{"id":"msg_1"}`)
+	srv := newCaptureServer(200, `{\"id\":\"msg_1\"}`)
 	defer srv.Close()
 
 	// 用 coding 路径前缀触发模型选择（host 任意，探针内部只按 URL 子串选模型）
@@ -251,15 +251,18 @@ func TestVolcenginePlanL1ProbeAuthFailedReturnsUpstreamStatus(t *testing.T) {
 }
 
 func TestVolcenginePlanL1ProbeNetworkErrorPropagates(t *testing.T) {
-	srv := newCaptureServer(200, ``)
-	srv.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
 
-	sc, _, model, err := VolcenginePlanL1Probe(context.Background(), "claude", srv.URL, "ark-key", "")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer srv.Close()
+
+	status, body, model, err := VolcenginePlanL1Probe(ctx, "claude", srv.URL+"/api/plan", "ark-key-123", "")
 	if err == nil {
-		t.Fatalf("网络错误应向上传播 err, got sc=%d", sc)
+		t.Fatal("期望返回网络错误")
 	}
-	if sc != 0 {
-		t.Fatalf("网络错误 sc 应为 0, got %d", sc)
+	if status != 0 || body != nil {
+		t.Fatalf("status/body = %d/%v, 期望 0/nil", status, body)
 	}
 	if model != "deepseek-v4-flash" {
 		t.Fatalf("网络错误探针模型 = %q, 期望 deepseek-v4-flash", model)
