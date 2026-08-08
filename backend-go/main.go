@@ -138,7 +138,9 @@ func healthCheckL1Fetcher(handler gin.HandlerFunc) healthcheck.L1Fetcher {
 	fetcher := channelModelsHandlerFetcher(handler)
 	return func(ctx context.Context, req healthcheck.L1Request) (healthcheck.L1Response, error) {
 		if upstreamprobe.IsVolcenginePlanBaseURL(req.BaseURL) {
-			sc, body, model, err := upstreamprobe.VolcenginePlanL1Probe(ctx, req.ServiceType, req.BaseURL, req.APIKey, req.AuthHeader)
+			// 使用内置 manifest 模型清单作为候选，让 L1 探针动态选择最便宜可用模型
+			candidates := volcenginePlanCandidates(req.BaseURL, req.ServiceType)
+			sc, body, model, err := upstreamprobe.VolcenginePlanL1Probe(ctx, req.ServiceType, req.BaseURL, req.APIKey, req.AuthHeader, candidates)
 			if err != nil {
 				return healthcheck.L1Response{RealCallVerified: true, Model: model}, err
 			}
@@ -157,6 +159,28 @@ func healthCheckL1Fetcher(handler gin.HandlerFunc) healthcheck.L1Fetcher {
 			return healthcheck.L1Response{}, err
 		}
 		return healthcheck.L1Response{StatusCode: resp.StatusCode, Body: resp.Body}, nil
+	}
+}
+
+// volcenginePlanCandidates 返回火山套餐入口对应的内置候选模型清单。
+// 用于 healthcheck L1 动态选择探针模型；无 manifest 时返回 nil，由上游探针回退常量。
+func volcenginePlanCandidates(baseURL, serviceType string) []string {
+	manifest, ok := config.LookupBuiltinManifest(baseURL, volcengineManifestServiceType(serviceType))
+	if !ok {
+		return nil
+	}
+	return manifest.ModelIDs
+}
+
+// volcengineManifestServiceType 把 healthcheck serviceType 归一化为 manifest 查找口径。
+func volcengineManifestServiceType(serviceType string) string {
+	switch strings.ToLower(strings.TrimSpace(serviceType)) {
+	case "claude", "messages":
+		return "messages"
+	case "openai":
+		return "openai"
+	default:
+		return strings.ToLower(strings.TrimSpace(serviceType))
 	}
 }
 
@@ -934,6 +958,27 @@ func main() {
 			},
 			healthcheck.Options{},
 		)
+		healthCheckManager.SetModelCircuitLookup(func(channelType string) *metrics.ModelCircuitTracker {
+			var manager *metrics.MetricsManager
+			switch channelType {
+			case "messages":
+				manager = channelScheduler.GetMessagesMetricsManager()
+			case "chat":
+				manager = channelScheduler.GetChatMetricsManager()
+			case "responses":
+				manager = channelScheduler.GetResponsesMetricsManager()
+			case "gemini":
+				manager = channelScheduler.GetGeminiMetricsManager()
+			case "images":
+				manager = channelScheduler.GetImagesMetricsManager()
+			case "vectors":
+				manager = channelScheduler.GetVectorsMetricsManager()
+			}
+			if manager == nil {
+				return nil
+			}
+			return manager.ModelCircuit()
+		})
 		// 注册六类渠道的 L1 fetcher（复用各渠道 GetChannelModels handler 的薄包装）
 		healthCheckManager.RegisterL1Fetcher("messages", healthCheckL1Fetcher(messages.GetChannelModels(cfgManager)))
 		healthCheckManager.RegisterL1Fetcher("chat", healthCheckL1Fetcher(chat.GetChannelModels(cfgManager)))

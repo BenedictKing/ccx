@@ -47,6 +47,23 @@ func (m *Manager) checkKeyL2(
 		}
 	}
 
+	prevFailures := int64(0)
+	if r, ok := prev[keyMask]; ok {
+		prevFailures = r.ConsecutiveFailures
+	}
+	m.probeOneModel(channelType, channelIndex, channelID, u, apiKey, keyBaseURLs, model, CheckKindL2, prevFailures, policy)
+}
+
+// probeOneModel 对单个模型执行一次 L2 真实调用并写入 key_health。
+// checkKind 通常为 "l2" 或 "l2:<model>"；prevFailures 取自该 checkKind 的上次记录。
+func (m *Manager) probeOneModel(
+	channelType string, channelIndex int, channelID string,
+	u *config.UpstreamConfig, apiKey string, keyBaseURLs []string, model, checkKind string,
+	prevFailures int64,
+	policy config.ResolvedHealthCheckPolicy,
+) {
+	keyMask := utils.MaskAPIKey(apiKey)
+
 	// 按 key 裁剪渠道副本（能力测试请求构建取 APIKeys[0] 作为认证 key）。
 	// 同时覆盖 BaseURL/BaseURLs 为该 Key 绑定的端点，避免把其他凭证配置或跨套餐地址带入探针。
 	probeChannel := *u
@@ -62,7 +79,7 @@ func (m *Manager) checkKeyL2(
 		ChannelType: channelType,
 		ChannelID:   channelID,
 		KeyMask:     keyMask,
-		CheckKind:   CheckKindL2,
+		CheckKind:   checkKind,
 		LastCheckAt: start,
 	}
 
@@ -79,7 +96,6 @@ func (m *Manager) checkKeyL2(
 	cancel()
 
 	rec.LatencyMs = time.Since(start).Milliseconds()
-	prevFailures := prev[keyMask].ConsecutiveFailures
 
 	switch {
 	case success:
@@ -109,8 +125,46 @@ func (m *Manager) checkKeyL2(
 	if err := m.store.UpsertKeyHealth(rec); err != nil {
 		log.Printf("[HealthCheck] 写入 key 健康记录失败 (%s): %v", channelKey(channelType, channelID), err)
 	}
-	log.Printf("[HealthCheck] L2 验证完成: 渠道=%s, key=%s, 模型=%s, 结果=%s, 延迟=%dms",
-		channelKey(channelType, channelID), keyMask, model, rec.LastStatus, rec.LatencyMs)
+	log.Printf("[HealthCheck] L2 验证完成: 渠道=%s, key=%s, 模型=%s, check_kind=%s, 结果=%s, 延迟=%dms",
+		channelKey(channelType, channelID), keyMask, model, checkKind, rec.LastStatus, rec.LatencyMs)
+}
+
+// checkKeyL2Sparse 对已由 L1 做过真实调用的火山套餐 key 做预算受限的模型级探测。
+// 每个模型独立落 check_kind="l2:<model>"，避免模型状态互相覆盖。
+func (m *Manager) checkKeyL2Sparse(
+	channelType string, channelIndex int, channelID string,
+	u *config.UpstreamConfig, apiKey string, keyBaseURLs []string, l1Models []string,
+	policy config.ResolvedHealthCheckPolicy,
+	prevL2ByModel map[string]metrics.KeyHealthRecord,
+) {
+	if policy.SparseL2MaxModels <= 0 {
+		return
+	}
+
+	m.mu.Lock()
+	lookup := m.modelCircuitLookup
+	m.mu.Unlock()
+	var circuit *metrics.ModelCircuitTracker
+	if lookup != nil {
+		circuit = lookup(channelType)
+	}
+
+	keyHash := metrics.ModelCircuitKeyHash(apiKey)
+	models := m.selectL2ProbeModels(u.ChannelUID, keyHash, u, l1Models, circuit, prevL2ByModel, policy, m.now())
+	if len(models) == 0 {
+		log.Printf("[HealthCheck] 稀疏 L2 跳过: 渠道=%s, key=%s, 本周期无预算内待探测模型",
+			channelKey(channelType, channelID), utils.MaskAPIKey(apiKey))
+		return
+	}
+
+	for _, model := range models {
+		checkKind := l2ModelCheckKind(model)
+		prevFailures := int64(0)
+		if r, ok := prevL2ByModel[model]; ok {
+			prevFailures = r.ConsecutiveFailures
+		}
+		m.probeOneModel(channelType, channelIndex, channelID, u, apiKey, keyBaseURLs, model, checkKind, prevFailures, policy)
+	}
 }
 
 // selectCheapestModel 从 L1 模型列表中按模型注册表定价选 input+output 单价最低者。

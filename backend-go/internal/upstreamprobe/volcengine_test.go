@@ -36,11 +36,40 @@ func TestIsVolcenginePlanBaseURL(t *testing.T) {
 }
 
 func TestVolcenginePlanProbeModel(t *testing.T) {
-	if got := volcenginePlanProbeModel("https://ark.cn-beijing.volces.com/api/plan"); got != "deepseek-v4-flash" {
-		t.Fatalf("agent plan 探针模型 = %q, 期望 deepseek-v4-flash", got)
+	agentPlanURL := "https://ark.cn-beijing.volces.com/api/plan"
+	codingURL := "https://ark.cn-beijing.volces.com/api/coding"
+
+	// 无候选时回退常量
+	if got := volcenginePlanProbeModel(agentPlanURL, nil); got != "deepseek-v4-flash" {
+		t.Fatalf("无候选时探针模型 = %q, 期望 deepseek-v4-flash", got)
 	}
-	if got := volcenginePlanProbeModel("https://ark.cn-beijing.volces.com/api/coding"); got != "deepseek-v4-flash" {
-		t.Fatalf("coding plan 探针模型 = %q, 期望 deepseek-v4-flash", got)
+	// deepseek-v4-flash 存在时优先使用
+	if got := volcenginePlanProbeModel(agentPlanURL, []string{"kimi-k3", "deepseek-v4-flash", "glm-5.2"}); got != "deepseek-v4-flash" {
+		t.Fatalf("含 flash 时应优先 = %q, 期望 deepseek-v4-flash", got)
+	}
+	// Agent Plan 无 flash 时按 AFP 选最便宜（glm-5.2 当前有 ×0.25 活动，成本低于 pro）
+	if got := volcenginePlanProbeModel(agentPlanURL, []string{"kimi-k3", "deepseek-v4-pro", "glm-5.2"}); got != "glm-5.2" {
+		t.Fatalf("Agent Plan 最便宜模型 = %q, 期望 glm-5.2", got)
+	}
+	// Coding Plan 无 flash 时回退首个候选
+	if got := volcenginePlanProbeModel(codingURL, []string{"kimi-k3", "deepseek-v4-pro"}); got != "kimi-k3" {
+		t.Fatalf("Coding Plan 首个候选 = %q, 期望 kimi-k3", got)
+	}
+}
+
+func TestProbeVolcenginePlanWithModels(t *testing.T) {
+	srv := newCaptureServer(200, `{"id":"msg_1"}`)
+	defer srv.Close()
+
+	res := ProbeVolcenginePlanWithModels(context.Background(), "claude", srv.URL, "ark-key", "", []string{"kimi-k3"})
+	if !res.OK || res.Err != nil {
+		t.Fatalf("期望成功: %+v", res)
+	}
+	if res.Model != "kimi-k3" {
+		t.Fatalf("动态选择模型 = %q, 期望 kimi-k3", res.Model)
+	}
+	if !strings.Contains(srv.body, `"model":"kimi-k3"`) {
+		t.Fatalf("探针 body 应使用 kimi-k3: %s", srv.body)
 	}
 }
 
@@ -221,7 +250,7 @@ func TestVolcenginePlanL1ProbeSuccessReturnsManifestModels(t *testing.T) {
 	srv := newCaptureServer(200, `{"id":"msg_1"}`)
 	defer srv.Close()
 
-	sc, body, model, err := VolcenginePlanL1Probe(context.Background(), "claude", srv.URL, "ark-key", "")
+	sc, body, model, err := VolcenginePlanL1Probe(context.Background(), "claude", srv.URL, "ark-key", "", nil)
 	if err != nil || sc != http.StatusOK {
 		t.Fatalf("成功应返回 200: sc=%d err=%v", sc, err)
 	}
@@ -238,7 +267,7 @@ func TestVolcenginePlanL1ProbeAuthFailedReturnsUpstreamStatus(t *testing.T) {
 	srv := newCaptureServer(403, `{"error":"forbidden"}`)
 	defer srv.Close()
 
-	sc, body, model, err := VolcenginePlanL1Probe(context.Background(), "openai", srv.URL+"/v3", "ark-bad", "")
+	sc, body, model, err := VolcenginePlanL1Probe(context.Background(), "openai", srv.URL+"/v3", "ark-bad", "", nil)
 	if err != nil || sc != 403 {
 		t.Fatalf("403 应原样返回上游状态: sc=%d err=%v", sc, err)
 	}
@@ -257,7 +286,7 @@ func TestVolcenginePlanL1ProbeNetworkErrorPropagates(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	defer srv.Close()
 
-	status, body, model, err := VolcenginePlanL1Probe(ctx, "claude", srv.URL+"/api/plan", "ark-key-123", "")
+	status, body, model, err := VolcenginePlanL1Probe(ctx, "claude", srv.URL+"/api/plan", "ark-key-123", "", nil)
 	if err == nil {
 		t.Fatal("期望返回网络错误")
 	}

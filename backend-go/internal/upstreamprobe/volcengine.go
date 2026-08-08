@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -69,9 +70,48 @@ func IsVolcenginePlanBaseURL(baseURL string) bool {
 }
 
 // volcenginePlanProbeModel 选择端点验证用的探针模型。
-// Agent Plan 与 Coding Plan 统一使用 deepseek-v4-flash。
-func volcenginePlanProbeModel(baseURL string) string {
-	return "deepseek-v4-flash"
+//
+// 优先 deepseek-v4-flash（成本最低且当前默认）；若候选列表不包含它，
+// Agent Plan 按 AFP 成本选最便宜模型，Coding Plan 回退到首个候选。
+// candidates 为空时回退到常量 deepseek-v4-flash，保持历史行为。
+func volcenginePlanProbeModel(baseURL string, candidates []string) string {
+	if len(candidates) == 0 {
+		return "deepseek-v4-flash"
+	}
+	// 标准化并去重，保持原始顺序
+	seen := make(map[string]bool)
+	models := make([]string, 0, len(candidates))
+	for _, m := range candidates {
+		m = strings.TrimSpace(m)
+		if m == "" || seen[m] {
+			continue
+		}
+		seen[strings.ToLower(m)] = true
+		models = append(models, m)
+	}
+	if len(models) == 0 {
+		return "deepseek-v4-flash"
+	}
+	for _, m := range models {
+		if strings.EqualFold(m, "deepseek-v4-flash") {
+			return "deepseek-v4-flash"
+		}
+	}
+	if isVolcengineAgentPlanBaseURL(baseURL) {
+		return cheapestVolcengineAgentPlanModel(models)
+	}
+	return models[0]
+}
+
+// isVolcengineAgentPlanBaseURL 判断 baseURL 是否为 Agent Plan 入口。
+func isVolcengineAgentPlanBaseURL(baseURL string) bool {
+	target, err := url.Parse(strings.TrimSuffix(strings.TrimSpace(baseURL), "#"))
+	if err != nil || target.Hostname() == "" {
+		return false
+	}
+	path := strings.TrimRight(target.EscapedPath(), "/")
+	return strings.EqualFold(target.Hostname(), "ark.cn-beijing.volces.com") &&
+		(path == "/api/plan" || strings.HasPrefix(path, "/api/plan/"))
 }
 
 // manifestServiceType 把渠道配置的 serviceType 归一化为 manifest 查找口径。
@@ -87,22 +127,45 @@ func manifestServiceType(serviceType string) string {
 	}
 }
 
+// cheapestVolcengineAgentPlanModel 从候选中按 AFP 成本选最便宜的模型。
+// 使用固定小 token 估算（32k 输入 / 1k 输出）仅用于相对比较。
+func cheapestVolcengineAgentPlanModel(models []string) string {
+	if len(models) == 0 {
+		return "deepseek-v4-flash"
+	}
+	best := models[0]
+	bestCost := float64(1<<63 - 1)
+	now := time.Now()
+	for _, m := range models {
+		cost := volcengineAgentPlanProbeCost(now, m)
+		if cost < bestCost {
+			bestCost = cost
+			best = m
+		}
+	}
+	return best
+}
+
+// volcengineAgentPlanProbeCost 估算模型小 token 探针的 AFP 成本。
+// 非 Agent Plan 已知模型返回 MaxFloat64，使其不会被选中。
+func volcengineAgentPlanProbeCost(now time.Time, model string) float64 {
+	result := config.ResolveVolcengineAFPCost(now, "agent_plan", model, 32000, 1000)
+	if !result.Matched {
+		return math.MaxFloat64
+	}
+	return float64(result.TotalAFP)
+}
+
 // ProbeVolcenginePlan 对一个 (baseURL, apiKey) 发火山套餐数据面最小请求验证可用性。
-//
-// 探针行为固定为：
-//   - Claude/Messages 入口：POST {baseURL}/v1/messages，model=auto 或 ark-code-latest，
-//     注入 Claude Code system 身份、session metadata 与请求头。
-//   - OpenAI 兼容入口：POST {baseURL}/chat/completions（baseURL 已含 /v3 时直接拼），
-//     model 同上，不注入 Claude Code 特征。
-//
-// 判定规则：
-//   - 2xx：OK=true（真实最小调用成功）
-//   - 401/403：AuthFailed=true
-//   - 其他 4xx/5xx、网络错误：保留原状态，不推断 Key 无效
-//
-// serviceType 为渠道配置口径（claude/openai/messages），内部归一化分派。
+// 保持历史签名，内部委托到 ProbeVolcenginePlanWithModels 并回退内置清单。
 func ProbeVolcenginePlan(ctx context.Context, serviceType, baseURL, apiKey, authHeader string) Result {
-	model := volcenginePlanProbeModel(baseURL)
+	return ProbeVolcenginePlanWithModels(ctx, serviceType, baseURL, apiKey, authHeader, nil)
+}
+
+// ProbeVolcenginePlanWithModels 与 ProbeVolcenginePlan 相同，但允许调用方指定候选模型清单。
+// candidates 为空时按内置清单查找；仍未命中则回退 deepseek-v4-flash。
+func ProbeVolcenginePlanWithModels(ctx context.Context, serviceType, baseURL, apiKey, authHeader string, candidates []string) Result {
+	model := volcenginePlanProbeModel(baseURL, candidates)
 	var result Result
 	switch strings.ToLower(strings.TrimSpace(serviceType)) {
 	case "claude", "messages":
@@ -123,14 +186,9 @@ func ProbeVolcenginePlan(ctx context.Context, serviceType, baseURL, apiKey, auth
 }
 
 // VolcenginePlanL1Probe 执行火山套餐数据面探针并返回保活 L1 适配的响应。
-//
-// 成功时从内置 manifest 生成标准 OpenAI models 列表响应（{"data":[{"id":"..."}]}），
-// 复用 healthcheck 的 countModels/extractModelIDs 解析；失败时原样返回上游状态码与
-// 截断响应体，让现有错误分类逻辑处理。返回的 (statusCode, body, err) 直接对应 L1Response。
-//
-// 真实调用已完成：调用方应据此跳过同周期等价 L2，避免重复消耗套餐额度。
-func VolcenginePlanL1Probe(ctx context.Context, serviceType, baseURL, apiKey, authHeader string) (statusCode int, body []byte, model string, err error) {
-	res := ProbeVolcenginePlan(ctx, serviceType, baseURL, apiKey, authHeader)
+// candidates 允许调用方传入该 key 的真实模型清单；为空时按 baseURL 从内置清单查找。
+func VolcenginePlanL1Probe(ctx context.Context, serviceType, baseURL, apiKey, authHeader string, candidates []string) (statusCode int, body []byte, model string, err error) {
+	res := ProbeVolcenginePlanWithModels(ctx, serviceType, baseURL, apiKey, authHeader, candidates)
 	if res.Err != nil {
 		return 0, nil, res.Model, res.Err
 	}

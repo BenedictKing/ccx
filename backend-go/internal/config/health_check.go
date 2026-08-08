@@ -17,6 +17,12 @@ type GlobalHealthCheckConfig struct {
 	MaxConcurrency int `json:"maxConcurrency,omitempty"`
 	// TimeoutMs 单次验证超时（毫秒，0=10000）
 	TimeoutMs int64 `json:"timeoutMs,omitempty"`
+	// SparseL2MaxModels 每 key 每周期最多稀疏探测的模型数（0=关闭稀疏 L2）
+	SparseL2MaxModels int `json:"sparseL2MaxModels,omitempty"`
+	// SparseL2MaxCostAFP 每 key 每周期稀疏 L2 的 AFP 成本预算上限（0=不限制）
+	SparseL2MaxCostAFP float64 `json:"sparseL2MaxCostAFP,omitempty"`
+	// L2ModelQuietPeriodMinutes 模型近期成功后跳过探测的静默期（分钟，0=继承 Interval）
+	L2ModelQuietPeriodMinutes int `json:"l2ModelQuietPeriodMinutes,omitempty"`
 }
 
 // ChannelHealthCheckConfig 渠道级保活验证配置（所有字段可选，优先于全局配置与分档默认）
@@ -28,6 +34,12 @@ type ChannelHealthCheckConfig struct {
 	VerifyRealCall *bool `json:"verifyRealCall,omitempty"`
 	// VerifyModel 指定验活模型（空=自动选最便宜）
 	VerifyModel string `json:"verifyModel,omitempty"`
+	// SparseL2MaxModels 渠道级覆盖：每 key 每周期最多稀疏探测的模型数（0=关闭）
+	SparseL2MaxModels int `json:"sparseL2MaxModels,omitempty"`
+	// SparseL2MaxCostAFP 渠道级覆盖：每 key 每周期稀疏 L2 的 AFP 成本预算上限（0=不限制）
+	SparseL2MaxCostAFP float64 `json:"sparseL2MaxCostAFP,omitempty"`
+	// L2ModelQuietPeriodMinutes 渠道级覆盖：模型近期成功后跳过探测的静默期（分钟，0=继承 Interval）
+	L2ModelQuietPeriodMinutes int `json:"l2ModelQuietPeriodMinutes,omitempty"`
 }
 
 // ResolvedHealthCheckPolicy 合并后的最终保活验证策略，供调度器直接使用。
@@ -38,6 +50,13 @@ type ResolvedHealthCheckPolicy struct {
 	VerifyModel    string        // 验活模型（空=自动选最便宜）
 	MaxConcurrency int           // 最大并发验证数
 	Timeout        time.Duration // 单次验证超时
+
+	// SparseL2MaxModels 每 key 每周期最多稀疏探测的模型数（0=关闭）
+	SparseL2MaxModels int
+	// SparseL2MaxCostAFP 每 key 每周期稀疏 L2 的 AFP 成本预算上限（0=不限制）
+	SparseL2MaxCostAFP float64
+	// L2ModelQuietPeriod 模型近期成功后跳过探测的静默期
+	L2ModelQuietPeriod time.Duration
 }
 
 // healthCheckTierDefaults 按 OriginTier 返回分档默认（间隔、L2 默认开关）。
@@ -59,11 +78,13 @@ func (c *Config) ResolveHealthCheckPolicy(u *UpstreamConfig) ResolvedHealthCheck
 	tierInterval, tierVerifyRealCall := healthCheckTierDefaults(u.OriginTier)
 
 	policy := ResolvedHealthCheckPolicy{
-		Enabled:        true,
-		Interval:       tierInterval,
-		VerifyRealCall: tierVerifyRealCall,
-		MaxConcurrency: 4,
-		Timeout:        10 * time.Second,
+		Enabled:            true,
+		Interval:           tierInterval,
+		VerifyRealCall:     tierVerifyRealCall,
+		MaxConcurrency:     4,
+		Timeout:            10 * time.Second,
+		SparseL2MaxModels:  3,
+		SparseL2MaxCostAFP: 6.0,
 	}
 
 	if g := c.HealthCheck; g != nil {
@@ -82,6 +103,15 @@ func (c *Config) ResolveHealthCheckPolicy(u *UpstreamConfig) ResolvedHealthCheck
 		if g.TimeoutMs > 0 {
 			policy.Timeout = time.Duration(g.TimeoutMs) * time.Millisecond
 		}
+		if g.SparseL2MaxModels > 0 {
+			policy.SparseL2MaxModels = g.SparseL2MaxModels
+		}
+		if g.SparseL2MaxCostAFP > 0 {
+			policy.SparseL2MaxCostAFP = g.SparseL2MaxCostAFP
+		}
+		if g.L2ModelQuietPeriodMinutes > 0 {
+			policy.L2ModelQuietPeriod = time.Duration(g.L2ModelQuietPeriodMinutes) * time.Minute
+		}
 	}
 
 	if ch := u.HealthCheck; ch != nil {
@@ -95,10 +125,22 @@ func (c *Config) ResolveHealthCheckPolicy(u *UpstreamConfig) ResolvedHealthCheck
 			policy.VerifyRealCall = *ch.VerifyRealCall
 		}
 		policy.VerifyModel = ch.VerifyModel
+		if ch.SparseL2MaxModels > 0 {
+			policy.SparseL2MaxModels = ch.SparseL2MaxModels
+		}
+		if ch.SparseL2MaxCostAFP > 0 {
+			policy.SparseL2MaxCostAFP = ch.SparseL2MaxCostAFP
+		}
+		if ch.L2ModelQuietPeriodMinutes > 0 {
+			policy.L2ModelQuietPeriod = time.Duration(ch.L2ModelQuietPeriodMinutes) * time.Minute
+		}
 	}
 
 	if policy.Interval < MinHealthCheckInterval {
 		policy.Interval = MinHealthCheckInterval
+	}
+	if policy.L2ModelQuietPeriod <= 0 {
+		policy.L2ModelQuietPeriod = policy.Interval
 	}
 	return policy
 }

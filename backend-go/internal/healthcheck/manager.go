@@ -15,8 +15,9 @@ import (
 
 // 验证级别（key_health.check_kind），L2 由后续任务实现
 const (
-	CheckKindL1 = "l1"
-	CheckKindL2 = "l2"
+	CheckKindL1            = "l1"
+	CheckKindL2            = "l2"
+	CheckKindL2ModelPrefix = "l2:"
 )
 
 // 验证结果（key_health.last_status）
@@ -91,6 +92,9 @@ type Manager struct {
 	recordFailure RecordFailureFunc
 	fetchers      map[string]L1Fetcher
 
+	// modelCircuitLookup 按渠道类型返回模型级熔断追踪器；nil 时选择器退化为持久化记录+成本排序。
+	modelCircuitLookup func(channelType string) *metrics.ModelCircuitTracker
+
 	scanInterval time.Duration
 	stopTimeout  time.Duration
 	now          func() time.Time
@@ -142,6 +146,14 @@ func (m *Manager) RegisterL1Fetcher(channelType string, fetcher L1Fetcher) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.fetchers[channelType] = fetcher
+}
+
+// SetModelCircuitLookup 注入按渠道类型查询模型级熔断追踪器的函数。
+// nil 表示不读取内存熔断状态，选择器仍使用持久化 key_health 信号。
+func (m *Manager) SetModelCircuitLookup(lookup func(channelType string) *metrics.ModelCircuitTracker) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.modelCircuitLookup = lookup
 }
 
 // Start 启动调度循环与 worker 池（幂等）
@@ -345,6 +357,7 @@ func (m *Manager) checkChannel(channelType string, channelIndex int) {
 	// 上次验证记录（用于 consecutive_failures 递增/清零），按 check_kind 分开
 	prevL1 := make(map[string]metrics.KeyHealthRecord)
 	prevL2 := make(map[string]metrics.KeyHealthRecord)
+	prevL2ByModel := make(map[string]metrics.KeyHealthRecord)
 	if recs, err := m.store.GetKeyHealthForChannel(channelType, channelID); err == nil {
 		for _, r := range recs {
 			switch r.CheckKind {
@@ -352,6 +365,10 @@ func (m *Manager) checkChannel(channelType string, channelIndex int) {
 				prevL1[r.KeyMask] = r
 			case CheckKindL2:
 				prevL2[r.KeyMask] = r
+			default:
+				if model, ok := parseL2ModelCheckKind(r.CheckKind); ok {
+					prevL2ByModel[model] = r
+				}
 			}
 		}
 	}
@@ -362,9 +379,14 @@ func (m *Manager) checkChannel(channelType string, channelIndex int) {
 		// 不参与渠道级 BaseURL 笛卡尔积（避免混合套餐把 Agent Plan Key 误打到 Coding Plan 入口）。
 		keyBaseURLs := u.BaseURLsForKey(apiKey)
 		outcome := m.checkKeyL1(channelType, channelIndex, channelID, u, keyBaseURLs, apiKey, policy, prevL1, fetcher)
-		// 仅对 L1 成功的 key 做 L2；火山套餐 L1 已是真实调用，同周期跳过等价 L2 避免重复消耗额度。
-		if runL2 && outcome.ok && !outcome.realCallVerified {
-			m.checkKeyL2(channelType, channelIndex, channelID, u, apiKey, keyBaseURLs, outcome.models, policy, prevL2)
+		if !runL2 || !outcome.ok {
+			continue
 		}
+		if !outcome.realCallVerified {
+			m.checkKeyL2(channelType, channelIndex, channelID, u, apiKey, keyBaseURLs, outcome.models, policy, prevL2)
+			continue
+		}
+		// 火山套餐 L1 已完成一次最便宜模型的真实调用；其余模型按预算做稀疏探测。
+		m.checkKeyL2Sparse(channelType, channelIndex, channelID, u, apiKey, keyBaseURLs, outcome.models, policy, prevL2ByModel)
 	}
 }
