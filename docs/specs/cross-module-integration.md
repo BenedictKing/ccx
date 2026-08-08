@@ -274,9 +274,103 @@ Healthcheck          -             写          写           -             -
 New-API              -             写          读           -             -
 ```
 
-## 8. 待补充
+## 8. 配置变更传播机制
 
-- LogicalChannel 归组算法的详细规则
+### 8.1 配置变更入口
+
+| 配置类型 | 变更入口 | 影响模块 |
+|----------|----------|----------|
+| 物理渠道增删改 | `/api/{kind}/channels/*` | LogicalChannel, Scheduler, Healthcheck |
+| 逻辑渠道增删改 | `/api/logical-channels/*` | LogicalChannel, Frontend |
+| 订阅/账号变更 | `/api/subscriptions/*` | New-API, Autopilot |
+| 模型注册表 | `shared/model-registry/` | Autopilot, Benchmark Chart |
+| 路由配置 | `/api/autopilot/routing-config` | Autopilot |
+| 健康检查策略 | `/api/health-check/*` | Healthcheck |
+
+### 8.2 传播路径
+
+```text
+[Config Change]
+      │
+      ├─ 物理渠道变更 ──→ RebuildLogicalChannels ──→ Frontend 刷新
+      │                      │
+      │                      └─→ Scheduler 候选列表更新
+      │                      │
+      │                      └─→ Healthcheck 扫描列表更新
+      │
+      ├─ 订阅变更 ──→ NewApiSubscriptionSyncService.SyncNow
+      │                      │
+      │                      └─→ reconcileChannels
+      │                      │
+      │                      └─→ TriggerDiscovery
+      │                      │
+      │                      └─→ KeyEndpointProfile 更新
+      │
+      ├─ 模型注册表变更 ──→ PresetStore.Swap
+      │                      │
+      │                      └─→ ModelRegistry 重建
+      │                      │
+      │                      └─→ Autopilot 评分参数更新
+      │
+      └─ 路由配置变更 ──→ AutopilotRoutingConfig 热更新
+                             │
+                             └─→ SmartRouter 评分权重/开关更新
+```
+
+### 8.3 热更新与重启边界
+
+- `.config/config.json` 修改后自动热重载（文件监听）
+- `.env` 修改后需要重启服务
+- `PresetStore` 支持后台原子替换，无需重启
+- `LogicalChannel` 重建是内存操作，立即生效
+
+## 9. 状态版本与竞态处理策略
+
+### 9.1 版本控制点
+
+| 状态 | 版本字段 | 并发控制 |
+|------|----------|----------|
+| SubscriptionProfile | `Version` | `Patch` 乐观锁 |
+| APIKeyConfig | `MultiplierUpdatedAt` | 时间戳比较 |
+| KeyHealthRecord | `LastCheckAt` | UPSERT 覆盖 |
+| ModelProfile | `ProbeVersion` | 探测版本比较 |
+| LogicalChannel | 无显式版本 | 重建时全量替换 |
+
+### 9.2 竞态场景与处理
+
+1. **LogicalChannel 重建 vs 物理渠道变更**
+   - 场景：RebuildLogicalChannels 执行期间，物理渠道被增删
+   - 当前处理：重建是内存操作，基于当前 config snapshot；若变更发生在重建后，需下次重建生效
+   - 风险：短期展示不一致
+   - 建议：重建后触发事件通知前端刷新
+
+2. **New-API 同步 vs 渠道编辑**
+   - 场景：SyncService 正在 reconcileChannels，用户同时编辑渠道 key
+   - 当前处理：`newAPIProvisionMu` 串行化 provision；reconcile 基于 config snapshot
+   - 风险：reconcile 结果覆盖用户手动修改
+   - 建议：reconcile 前检查 `MultiplierUpdatedAt`，冲突时标记 `relink_required`
+
+3. **Healthcheck 探针 vs 真实请求**
+   - 场景：探针和真实请求同时失败，重复喂熔断器
+   - 当前处理：熔断器本身有滑动窗口去重
+   - 风险：无，熔断器设计允许重复失败计数
+
+4. **AutoDiscovery vs 手动渠道配置**
+   - 场景：Discovery 发现新模型，用户同时手动修改渠道配置
+   - 当前处理：Discovery 结果写入 `KeyEndpointProfile`，不直接改 `UpstreamConfig`
+   - 风险：无，Discovery 是画像层，不直接改配置层
+
+### 9.3 一致性保证级别
+
+| 级别 | 适用场景 | 实现方式 |
+|------|----------|----------|
+| 强一致 | 配置写入 | 单线程 config manager + 文件锁 |
+| 最终一致 | 画像/健康状态 | 异步 worker + 定期刷新 |
+| 读写一致 | 调度决策 | 基于当前 snapshot，允许短期不一致 |
+| 展示一致 | 前端 UI | 事件驱动刷新 + 轮询兜底 |
+
+## 10. 待补充
+
+- LogicalChannel 归组算法的详细规则（等扫描结果）
 - 跨模块事件总线设计
-- 状态版本与竞态处理策略
-- 统一配置变更传播机制
+- 统一配置变更传播机制（已补骨架）
