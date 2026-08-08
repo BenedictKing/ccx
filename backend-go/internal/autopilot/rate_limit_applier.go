@@ -12,9 +12,9 @@ import (
 //
 // 门控（设计 §7）：RateLimitDiscovery.Enabled && AutopilotRouting.IsAutopilotActive() && !KillSwitch。
 // shadow/off/kill switch 时只学习与展示画像，不写运行态 limiter；并按 lastApplied
-// 中保存的 limiterKey 全量清理已注入的 discovered RPM。
+// 中保存的 limiterKey 全量清理已注入的 discovered RPM/MaxConcurrent。
 //
-// 显式配置永远优先：ExplicitRPM=true 的 endpoint 永不被注入发现 RPM。
+// 显式配置永远优先：RPM 和 MaxConcurrent 分维度独立判断。
 //
 // 并发安全：mapping 更新、Apply、Clear 由内部 mutex 串行保护，可在 worker
 // 节奏与请求 goroutine 触发的通知之间安全调用。
@@ -29,9 +29,9 @@ type RateLimitApplier struct {
 	// 通过 SetEndpointMappings 替换整个映射表。
 	mappings map[string]EndpointLimiterMapping
 
-	// lastApplied 快照上次应用的发现 RPM，按 limiterKey 去重。
+	// lastApplied 快照上次应用的发现限额，按 limiterKey 去重。
 	// 多 endpoint 映射到同一 limiter 时只保存一条，保证清理时按 limiter 反查。
-	lastApplied map[string]int
+	lastApplied map[string]appliedLimits
 
 	quietLogs bool
 }
@@ -49,7 +49,7 @@ func NewRateLimitApplier(
 		limiterMgr:   limiterMgr,
 		configGetter: configGetter,
 		mappings:     make(map[string]EndpointLimiterMapping),
-		lastApplied:  make(map[string]int),
+		lastApplied:  make(map[string]appliedLimits),
 		quietLogs:    quietLogs,
 	}
 }
@@ -66,6 +66,13 @@ type EndpointLimiterMapping struct {
 	// ExplicitRPM 标记该 endpoint 的 RPM 是否来自用户显式配置。
 	// true 时跳过发现 RPM 注入（显式配置永远优先）。
 	ExplicitRPM bool
+	// ExplicitMaxConcurrent 标记最大并发是否来自用户显式配置。
+	ExplicitMaxConcurrent bool
+}
+
+type appliedLimits struct {
+	rpm           int
+	maxConcurrent int
 }
 
 // SetEndpointMappings 批量设置 endpoint → limiter 映射（并发安全）。
@@ -84,15 +91,15 @@ func (a *RateLimitApplier) SetEndpointMappings(mappings []EndpointLimiterMapping
 	}
 }
 
-// Apply 执行一次发现 RPM 的应用周期（并发安全）。
+// Apply 执行一次发现限额的应用周期（并发安全）。
 //
 // 行为：
 //  1. 任一依赖为 nil → no-op
 //  2. 门控不满足（Enabled=false / 非 active / KillSwitch）→ 全量清理
-//  3. 构造 desiredByLimiterKey：过滤低置信、RPM<=0、未知 mapping、ExplicitRPM=true；
-//     多 endpoint 映射到同一 limiter 时取满足门槛建议中的最小 RPM（确定性，与 map 遍历顺序无关）
+//  3. 构造 desiredByLimiterKey：RPM/MaxConcurrent 分别过滤低置信和显式配置；
+//     多 endpoint 映射到同一 limiter 时各维度取最小值
 //  4. scoped limiter 不存在时用 mapping 携带的配置 GetOrCreateScoped 创建
-//  5. SetDiscoveredRPM 返回 true 后才更新 lastApplied 和成功计数
+//  5. 将发现值写入 limiter，并清理不再建议的单个维度
 //  6. 本轮不再需要的旧 limiterKey 必须 ClearDiscoveredRPM 并从快照移除
 func (a *RateLimitApplier) Apply() {
 	if a == nil || a.discoverer == nil || a.limiterMgr == nil || a.configGetter == nil {
@@ -120,40 +127,35 @@ func (a *RateLimitApplier) Apply() {
 
 	// 构造 desiredByLimiterKey：多 endpoint → 同 limiter 取确定性最小 RPM
 	type desired struct {
-		rpm int
-		cfg ratelimit.Config
+		rpm           int
+		maxConcurrent int
+		cfg           ratelimit.Config
 	}
 	desiredByKey := make(map[string]desired, len(suggestions))
 	for endpointUID, s := range suggestions {
-		if s.Confidence < confidenceThreshold {
-			continue
-		}
-		if s.RPM <= 0 {
-			continue
-		}
 		m, ok := a.mappings[endpointUID]
 		if !ok || m.LimiterKey == "" {
 			continue
 		}
-		if m.ExplicitRPM {
-			continue // 显式配置永远优先
-		}
 		d, exists := desiredByKey[m.LimiterKey]
 		if !exists {
-			desiredByKey[m.LimiterKey] = desired{rpm: s.RPM, cfg: m.LimiterConfig}
-			continue
+			d.cfg = m.LimiterConfig
 		}
-		// 取最小值，保证结果与 map 遍历顺序无关
-		if s.RPM < d.rpm {
+		if !m.ExplicitRPM && s.RPM > 0 && s.Confidence >= confidenceThreshold && (d.rpm == 0 || s.RPM < d.rpm) {
 			d.rpm = s.RPM
 		}
-		// 同一 limiter 的 mapping 配置应一致；保留首次以稳定行为
-		desiredByKey[m.LimiterKey] = d
+		if !m.ExplicitMaxConcurrent && s.MaxConcurrent > 0 && s.ConcurrentConfidence >= confidenceThreshold &&
+			(d.maxConcurrent == 0 || s.MaxConcurrent < d.maxConcurrent) {
+			d.maxConcurrent = s.MaxConcurrent
+		}
+		if d.rpm > 0 || d.maxConcurrent > 0 {
+			desiredByKey[m.LimiterKey] = d
+		}
 	}
 
 	// 写 limiter + 更新 lastApplied
 	applied := 0
-	newApplied := make(map[string]int, len(desiredByKey))
+	newApplied := make(map[string]appliedLimits, len(desiredByKey))
 	for limiterKey, d := range desiredByKey {
 		apiType, channelIndex, scope := parseLimiterKey(limiterKey)
 		if apiType == "" {
@@ -168,14 +170,33 @@ func (a *RateLimitApplier) Apply() {
 		if l == nil {
 			continue
 		}
-		if l.SetDiscoveredRPM(d.rpm) {
-			newApplied[limiterKey] = d.rpm
-			applied++
-		} else {
-			// SetDiscoveredRPM 返回 false：值未变（已设为同值）或被显式覆盖
-			if prev, ok := a.lastApplied[limiterKey]; ok {
-				newApplied[limiterKey] = prev
+		changed := false
+		if d.rpm > 0 {
+			changed = l.SetDiscoveredRPM(d.rpm)
+		} else if l.HasDiscoveredRPM() {
+			l.ClearDiscoveredRPM()
+			changed = true
+		}
+		if d.maxConcurrent > 0 {
+			if l.SetDiscoveredMaxConcurrent(d.maxConcurrent) {
+				changed = true
 			}
+		} else if l.HasDiscoveredMaxConcurrent() {
+			l.ClearDiscoveredMaxConcurrent()
+			changed = true
+		}
+		if changed {
+			applied++
+		}
+		state := appliedLimits{}
+		if d.rpm > 0 && l.HasDiscoveredRPM() {
+			state.rpm = d.rpm
+		}
+		if d.maxConcurrent > 0 && l.HasDiscoveredMaxConcurrent() {
+			state.maxConcurrent = d.maxConcurrent
+		}
+		if state.rpm > 0 || state.maxConcurrent > 0 {
+			newApplied[limiterKey] = state
 		}
 	}
 
@@ -190,7 +211,7 @@ func (a *RateLimitApplier) Apply() {
 	a.lastApplied = newApplied
 
 	if applied > 0 && !a.quietLogs {
-		log.Printf("[RateLimitApplier-Apply] 应用发现 RPM: %d 个 limiter", applied)
+		log.Printf("[RateLimitApplier-Apply] 应用发现限额: %d 个 limiter", applied)
 	}
 }
 
@@ -219,6 +240,7 @@ func (a *RateLimitApplier) clearLimiterLocked(limiterKey string) {
 	}
 	if l != nil {
 		l.ClearDiscoveredRPM()
+		l.ClearDiscoveredMaxConcurrent()
 	}
 }
 
@@ -234,9 +256,9 @@ func (a *RateLimitApplier) clearAllLocked() {
 		a.clearLimiterLocked(limiterKey)
 		cleared++
 	}
-	a.lastApplied = make(map[string]int)
+	a.lastApplied = make(map[string]appliedLimits)
 	if cleared > 0 && !a.quietLogs {
-		log.Printf("[RateLimitApplier-Clear] 已清除 %d 个发现 RPM（开关关闭/kill switch/非 active）", cleared)
+		log.Printf("[RateLimitApplier-Clear] 已清除 %d 个发现限额（开关关闭/kill switch/非 active）", cleared)
 	}
 }
 

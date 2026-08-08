@@ -18,6 +18,17 @@ const (
 	SignalSourceSuccess RateLimitSignalSource = "success" // 成功响应（用于 AIMD 上调）
 )
 
+const (
+	latencyWarmupSamples              = 5
+	latencySlowStreakThreshold        = 3
+	latencyHealthyStreakTarget        = 10
+	latencySlowRatio                  = 3.0
+	latencySlowFloorMs          int64 = 15_000
+	latencyAbsoluteSlowMs       int64 = 60_000
+	latencyBaselineAlpha              = 0.10
+	latencyCongestionConfidence       = 0.70
+)
+
 // ── 429 信号原因 ──
 
 // RateLimitSignalReason 区分普通 429 与已确认账号级限流。
@@ -81,6 +92,20 @@ type endpointLearnState struct {
 	WindowSeconds int `json:"windowSeconds"`
 	// maxConcurrent 估算的最大并发。
 	MaxConcurrent int `json:"maxConcurrent,omitempty"`
+	// concurrentConfidence 并发建议的独立置信度，避免与 RPM header 置信度混用。
+	ConcurrentConfidence float64 `json:"concurrentConfidence,omitempty"`
+	// latencyBaselineMs 流式请求响应头 TTFB 的平滑基线。
+	LatencyBaselineMs float64 `json:"latencyBaselineMs,omitempty"`
+	// latencySampleCount 已纳入并发学习的流式成功样本数。
+	LatencySampleCount int `json:"latencySampleCount,omitempty"`
+	// consecutiveSlowLatency 连续显著慢于基线的样本数。
+	ConsecutiveSlowLatency int `json:"consecutiveSlowLatency,omitempty"`
+	// consecutiveHealthyLatency 并发受限后连续健康样本数。
+	ConsecutiveHealthyLatency int `json:"consecutiveHealthyLatency,omitempty"`
+	// lastConcurrencyAdjustmentAt 最近一次并发 AIMD 调整时间。
+	LastConcurrencyAdjustmentAt *time.Time `json:"lastConcurrencyAdjustmentAt,omitempty"`
+	// lastConcurrencyReason 最近一次并发调整的原因（用于去抖动）。
+	lastConcurrencyReason string `json:"-"`
 	// source 最近一次更新信号的来源。
 	Source RateLimitSource `json:"source"`
 	// confidence 当前置信度，0.0-1.0。
@@ -114,6 +139,8 @@ type RateLimitDiscovererConfig struct {
 	MinRPM int `json:"minRpm"`
 	// MaxAutoRPM 无明确 header 时的自动估算上限。默认 120。
 	MaxAutoRPM int `json:"maxAutoRpm"`
+	// MaxAutoConcurrent 自动并发建议上限。默认 8。
+	MaxAutoConcurrent int `json:"maxAutoConcurrent"`
 	// ConfidenceThreshold 建议被采纳的最低置信度阈值。默认 0.3。
 	ConfidenceThreshold float64 `json:"confidenceThreshold"`
 	// AIMDIncreaseInterval AIMD 上调最短间隔。默认 10 分钟。
@@ -136,6 +163,7 @@ func defaultDiscovererConfig() RateLimitDiscovererConfig {
 		PassiveAimdEnabled:     true,
 		MinRPM:                 1,
 		MaxAutoRPM:             120,
+		MaxAutoConcurrent:      8,
 		ConfidenceThreshold:    0.3,
 		AIMDIncreaseInterval:   10 * time.Minute,
 		AIMDIncreasePercent:    10,
@@ -166,6 +194,9 @@ func NewRateLimitDiscoverer(cfg RateLimitDiscovererConfig) *RateLimitDiscoverer 
 	if cfg.MaxAutoRPM <= 0 {
 		cfg.MaxAutoRPM = defaultDiscovererConfig().MaxAutoRPM
 	}
+	if cfg.MaxAutoConcurrent <= 0 {
+		cfg.MaxAutoConcurrent = defaultDiscovererConfig().MaxAutoConcurrent
+	}
 	if cfg.ConfidenceThreshold <= 0 {
 		cfg.ConfidenceThreshold = defaultDiscovererConfig().ConfidenceThreshold
 	}
@@ -195,20 +226,22 @@ func NewRateLimitDiscoverer(cfg RateLimitDiscovererConfig) *RateLimitDiscoverer 
 
 // SuggestedLimitResult 限速建议结果。
 type SuggestedLimitResult struct {
-	RPM        int             `json:"rpm"`
-	TPM        int             `json:"tpm,omitempty"`
-	RPD        int             `json:"rpd,omitempty"`
-	Confidence float64         `json:"confidence"`
-	Source     RateLimitSource `json:"source"`
+	RPM                  int             `json:"rpm"`
+	TPM                  int             `json:"tpm,omitempty"`
+	RPD                  int             `json:"rpd,omitempty"`
+	MaxConcurrent        int             `json:"maxConcurrent,omitempty"`
+	Confidence           float64         `json:"confidence"`
+	ConcurrentConfidence float64         `json:"concurrentConfidence,omitempty"`
+	Source               RateLimitSource `json:"source"`
 }
 
 // ── 公开方法 ──
 
-// Observe 累积一个限速信号。并发安全。
+// Observe 累积一个限速信号。并发安全。返回值表示运行态建议是否发生变化。
 // 推导规则按设计 §4.5.3：header 显式值优先 → 429 反推 → 被动 AIMD 收敛。
-func (d *RateLimitDiscoverer) Observe(endpointUID string, sig RateLimitSignal) {
+func (d *RateLimitDiscoverer) Observe(endpointUID string, sig RateLimitSignal) bool {
 	if endpointUID == "" {
-		return
+		return false
 	}
 
 	d.mu.Lock()
@@ -226,6 +259,11 @@ func (d *RateLimitDiscoverer) Observe(endpointUID string, sig RateLimitSignal) {
 	now := d.nowFunc()
 	state.ObserveCount++
 	state.UpdatedAt = now
+	previous := suggestedLimitFromState(state)
+
+	if (sig.Source == SignalSourceSuccess || sig.Source == SignalSourceHeader) && sig.IsStreaming && sig.LatencyMs > 0 {
+		d.observeStreamingLatency(state, sig.LatencyMs, now)
+	}
 
 	switch sig.Source {
 	case SignalSourceHeader:
@@ -235,6 +273,13 @@ func (d *RateLimitDiscoverer) Observe(endpointUID string, sig RateLimitSignal) {
 	case SignalSourceSuccess:
 		d.observeSuccess(state, sig, now)
 	}
+
+	current := suggestedLimitFromState(state)
+	return previous.RPM != current.RPM ||
+		previous.MaxConcurrent != current.MaxConcurrent ||
+		previous.Confidence != current.Confidence ||
+		previous.ConcurrentConfidence != current.ConcurrentConfidence ||
+		previous.Source != current.Source
 }
 
 // SeedProbeEstimate 用添加渠道时的主动探测结果初始化 endpoint 限速画像。
@@ -291,11 +336,13 @@ func suggestedLimitFromState(state *endpointLearnState) SuggestedLimitResult {
 		return SuggestedLimitResult{Source: RateLimitSourceUnknown}
 	}
 	return SuggestedLimitResult{
-		RPM:        state.EstimatedRPM,
-		TPM:        state.EstimatedTPM,
-		RPD:        state.EstimatedRPD,
-		Confidence: state.Confidence,
-		Source:     state.Source,
+		RPM:                  state.EstimatedRPM,
+		TPM:                  state.EstimatedTPM,
+		RPD:                  state.EstimatedRPD,
+		MaxConcurrent:        state.MaxConcurrent,
+		Confidence:           state.Confidence,
+		ConcurrentConfidence: state.ConcurrentConfidence,
+		Source:               state.Source,
 	}
 }
 
@@ -322,13 +369,7 @@ func (d *RateLimitDiscoverer) AllSuggestedLimits() map[string]SuggestedLimitResu
 		if state.ObserveCount == 0 {
 			continue
 		}
-		result[uid] = SuggestedLimitResult{
-			RPM:        state.EstimatedRPM,
-			TPM:        state.EstimatedTPM,
-			RPD:        state.EstimatedRPD,
-			Confidence: state.Confidence,
-			Source:     state.Source,
-		}
+		result[uid] = suggestedLimitFromState(state)
 	}
 	return result
 }
@@ -436,7 +477,6 @@ func (d *RateLimitDiscoverer) observe429(state *endpointLearnState, sig RateLimi
 	if !d.cfg.PassiveAimdEnabled {
 		return
 	}
-
 	currentRPM := state.EstimatedRPM
 	if currentRPM <= 0 {
 		// 还没有基线估算，用 MaxAutoRPM 的一半作为起点
@@ -458,6 +498,9 @@ func (d *RateLimitDiscoverer) observe429(state *endpointLearnState, sig RateLimi
 		newRPM = int(math.Floor(float64(currentRPM) * 0.7))
 		minConf = 0.5
 	}
+	if sig.IsStreaming {
+		d.reduceConcurrentOnCongestion(state, now, minConf, "429")
+	}
 	if newRPM < d.cfg.MinRPM {
 		newRPM = d.cfg.MinRPM
 	}
@@ -471,6 +514,104 @@ func (d *RateLimitDiscoverer) observe429(state *endpointLearnState, sig RateLimi
 	if !d.cfg.QuietLogs {
 		log.Printf("[RateLimitDiscover-429] endpoint=unknown 429 reason=%s retryAfter=%v rpm: %d -> %d confidence=%.2f",
 			sig.Reason, sig.HasRetryAfter, currentRPM, newRPM, state.Confidence)
+	}
+}
+
+// observeStreamingLatency 以流式响应头 TTFB 作为排队拥塞信号。
+// 只在相对基线连续显著变慢时降并发，避免把单次长上下文请求当作故障。
+func (d *RateLimitDiscoverer) observeStreamingLatency(state *endpointLearnState, latencyMs int64, now time.Time) {
+	if latencyMs <= 0 {
+		return
+	}
+
+	state.LatencySampleCount++
+	if state.LatencyBaselineMs <= 0 {
+		state.LatencyBaselineMs = float64(latencyMs)
+	} else if state.LatencySampleCount <= latencyWarmupSamples {
+		count := float64(state.LatencySampleCount)
+		state.LatencyBaselineMs = (state.LatencyBaselineMs*(count-1) + float64(latencyMs)) / count
+	}
+
+	if state.LatencySampleCount < latencyWarmupSamples || state.LatencyBaselineMs <= 0 {
+		return
+	}
+
+	threshold := math.Max(float64(latencySlowFloorMs), state.LatencyBaselineMs*latencySlowRatio)
+	slow := float64(latencyMs) >= threshold || latencyMs >= latencyAbsoluteSlowMs
+	if slow {
+		state.ConsecutiveSlowLatency++
+		state.ConsecutiveHealthyLatency = 0
+		if state.ConsecutiveSlowLatency >= latencySlowStreakThreshold {
+			d.reduceConcurrentOnCongestion(state, now, latencyCongestionConfidence, "slow_ttfb")
+			state.ConsecutiveSlowLatency = 0
+		}
+		return
+	}
+
+	state.ConsecutiveSlowLatency = 0
+	if latencyMs < int64(state.LatencyBaselineMs) {
+		state.LatencyBaselineMs = state.LatencyBaselineMs*(1-latencyBaselineAlpha) + float64(latencyMs)*latencyBaselineAlpha
+	} else {
+		// 正常样本只缓慢抬高基线，避免持续拥塞被快速吸收。
+		state.LatencyBaselineMs = state.LatencyBaselineMs*0.98 + float64(latencyMs)*0.02
+	}
+	if state.MaxConcurrent <= 0 {
+		return
+	}
+	state.ConsecutiveHealthyLatency++
+	if state.ConsecutiveHealthyLatency < latencyHealthyStreakTarget || state.LastConcurrencyAdjustmentAt == nil {
+		return
+	}
+	if now.Sub(*state.LastConcurrencyAdjustmentAt) < d.cfg.AIMDIncreaseInterval {
+		return
+	}
+	if state.MaxConcurrent < d.cfg.MaxAutoConcurrent {
+		state.MaxConcurrent++
+		state.ConcurrentConfidence = math.Max(state.ConcurrentConfidence, latencyCongestionConfidence)
+		state.LastConcurrencyAdjustmentAt = &now
+		state.ConsecutiveHealthyLatency = 0
+		if !d.cfg.QuietLogs {
+			log.Printf("[RateLimitDiscover-Latency] endpoint=unknown healthy recovery concurrent -> %d", state.MaxConcurrent)
+		}
+	}
+}
+
+func (d *RateLimitDiscoverer) reduceConcurrentOnCongestion(state *endpointLearnState, now time.Time, confidence float64, reason string) {
+	current := state.MaxConcurrent
+	if current <= 0 {
+		current = d.cfg.MaxAutoConcurrent
+	}
+	if current <= 1 {
+		state.MaxConcurrent = 1
+		if state.ConcurrentConfidence < confidence {
+			state.ConcurrentConfidence = confidence
+		}
+		return
+	}
+	// 同因连续降并发需要间隔保护，避免抖动；429 与慢 TTFB 互为独立信号，应即时响应。
+	if state.LastConcurrencyAdjustmentAt != nil &&
+		now.Sub(*state.LastConcurrencyAdjustmentAt) < d.cfg.AIMDIncreaseInterval/2 &&
+		state.lastConcurrencyReason == reason {
+		return
+	}
+
+	newConcurrent := int(math.Floor(float64(current) * 0.5))
+	if newConcurrent >= current {
+		newConcurrent = current - 1
+	}
+	if newConcurrent < 1 {
+		newConcurrent = 1
+	}
+	state.MaxConcurrent = newConcurrent
+	state.ConcurrentConfidence = math.Max(state.ConcurrentConfidence, confidence)
+	state.LastConcurrencyAdjustmentAt = &now
+	state.lastConcurrencyReason = reason
+	state.ConsecutiveHealthyLatency = 0
+	if state.Source == "" || state.Source == RateLimitSourceUnknown {
+		state.Source = RateLimitSourcePassiveAIMD
+	}
+	if !d.cfg.QuietLogs {
+		log.Printf("[RateLimitDiscover-Latency] endpoint=unknown congestion=%s concurrent: %d -> %d confidence=%.2f", reason, current, newConcurrent, state.ConcurrentConfidence)
 	}
 }
 
@@ -560,6 +701,9 @@ func (d *RateLimitDiscoverer) UpdateConfig(cfg RateLimitDiscovererConfig) {
 	if cfg.MaxAutoRPM <= 0 {
 		cfg.MaxAutoRPM = def.MaxAutoRPM
 	}
+	if cfg.MaxAutoConcurrent <= 0 {
+		cfg.MaxAutoConcurrent = def.MaxAutoConcurrent
+	}
 	if cfg.ConfidenceThreshold <= 0 {
 		cfg.ConfidenceThreshold = def.ConfidenceThreshold
 	}
@@ -582,6 +726,11 @@ func (d *RateLimitDiscoverer) UpdateConfig(cfg RateLimitDiscovererConfig) {
 	defer d.mu.Unlock()
 	// 保留 nowFunc，仅替换可调参数
 	d.cfg = cfg
+	for _, state := range d.states {
+		if state.MaxConcurrent > cfg.MaxAutoConcurrent {
+			state.MaxConcurrent = cfg.MaxAutoConcurrent
+		}
+	}
 }
 
 // ── 辅助函数 ──

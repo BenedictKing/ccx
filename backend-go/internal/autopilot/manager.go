@@ -290,9 +290,9 @@ func (m *Manager) ObserveRateLimitSignal(
 	headers http.Header,
 	statusCode int,
 	reason string,
-) {
+) bool {
 	if endpointUID == "" {
-		return
+		return false
 	}
 	now := time.Now()
 
@@ -330,11 +330,11 @@ func (m *Manager) ObserveRateLimitSignal(
 				signal.RetryAfterSeconds = secs
 			}
 		}
-		m.rateLimitDiscoverer.Observe(endpointUID, signal)
+		changed := m.rateLimitDiscoverer.Observe(endpointUID, signal)
 
 		// 时间桶：记录为失败 + 429
 		m.timeBucketStore.Record(endpointUID, channelID, metricsKey, false, latencyMs)
-		return
+		return changed
 	}
 
 	// 成功响应（2xx）：解析 header 中的限速信息
@@ -384,15 +384,16 @@ func (m *Manager) ObserveRateLimitSignal(
 			}
 		}
 
-		m.rateLimitDiscoverer.Observe(endpointUID, signal)
+		changed := m.rateLimitDiscoverer.Observe(endpointUID, signal)
 
 		// 时间桶：记录为成功
 		m.timeBucketStore.Record(endpointUID, channelID, metricsKey, true, latencyMs)
-		return
+		return changed
 	}
 
 	// 非 429 非 2xx：记录为失败但不喂限速信号（由健康诊断器处理）
 	m.timeBucketStore.Record(endpointUID, channelID, metricsKey, false, latencyMs)
+	return false
 }
 
 // StartWorker 启动后台聚合 worker。ctx 取消时退出循环。
@@ -912,6 +913,15 @@ func (m *Manager) collectAll() {
 					profile.SuggestedRPMTPM = suggested.TPM
 					profile.SuggestedRPMRPD = suggested.RPD
 				}
+				if suggested.MaxConcurrent > 0 {
+					profile.DiscoveredMaxConcurrent = suggested.MaxConcurrent
+					if suggested.ConcurrentConfidence > profile.RateLimitConfidence {
+						profile.RateLimitConfidence = suggested.ConcurrentConfidence
+					}
+					if profile.RateLimitSource == "" {
+						profile.RateLimitSource = string(suggested.Source)
+					}
+				}
 			}
 
 			// 质量趋势检测
@@ -1073,6 +1083,7 @@ func (m *Manager) buildEndpointLimiterMappings(inv endpointInventory) []Endpoint
 				scope = keypool.LimiterScopeFor(key, kcfg)
 			}
 			explicitRPM := kcfg.RateLimitRPM > 0 || upstream.RateLimitRPM > 0
+			explicitMaxConcurrent := kcfg.RateLimitMaxConcurrent > 0 || upstream.RateLimitMaxConcurrent > 0
 			limiterConfig := keypool.ConfigForCandidate(upstream, kcfg)
 			limiterKey := fmt.Sprintf("%s:%d", apiType, entry.ChannelID)
 			if scope != "" {
@@ -1080,10 +1091,11 @@ func (m *Manager) buildEndpointLimiterMappings(inv endpointInventory) []Endpoint
 			}
 			euid := GenerateEndpointUID(entry.ChannelUID, entry.BaseURL, KeyHashFromAPIKey(key))
 			mappings = append(mappings, EndpointLimiterMapping{
-				EndpointUID:   euid,
-				LimiterKey:    limiterKey,
-				LimiterConfig: limiterConfig,
-				ExplicitRPM:   explicitRPM,
+				EndpointUID:           euid,
+				LimiterKey:            limiterKey,
+				LimiterConfig:         limiterConfig,
+				ExplicitRPM:           explicitRPM,
+				ExplicitMaxConcurrent: explicitMaxConcurrent,
 			})
 		}
 	}

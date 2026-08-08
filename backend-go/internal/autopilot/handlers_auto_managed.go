@@ -2091,7 +2091,11 @@ func seedAutoAddRateLimitHint(
 		profile.CredentialUID = upstream.CredentialUIDForKey(probeAPIKey)
 		profile.MetricsKey = computeMetricsIdentityKey(baseURL, probeAPIKey, upstream.ServiceType)
 		profile.DiscoveredRPM = suggestion.RPM
+		profile.DiscoveredMaxConcurrent = suggestion.MaxConcurrent
 		profile.RateLimitConfidence = suggestion.Confidence
+		if suggestion.ConcurrentConfidence > profile.RateLimitConfidence {
+			profile.RateLimitConfidence = suggestion.ConcurrentConfidence
+		}
 		profile.RateLimitSource = string(suggestion.Source)
 		profile.SuggestedRPMSource = string(suggestion.Source)
 		profile.SuggestedRPMTPM = suggestion.TPM

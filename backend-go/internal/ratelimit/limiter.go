@@ -20,9 +20,11 @@ type ChannelLimiter struct {
 	maxRequests int
 	timestamps  []time.Time
 
-	// --- 并发信号量 ---
-	// maxConcurrent=0 表示不限并发。
-	sem chan struct{}
+	// --- 动态并发控制 ---
+	// 始终统计在途请求，使运行时从不限并发切换到有限并发时也能正确收敛。
+	maxConcurrent     int
+	activeRequests    int
+	concurrencyChange chan struct{}
 
 	// --- 动态 cooldown ---
 	// cooldownUntil 非零且在当前时间之后时，acquire 直接快速失败。
@@ -43,6 +45,11 @@ type ChannelLimiter struct {
 	// discoveredRPMSet 标记是否已设置（区分"0=未设置"与"建议值恰为 0"）。
 	discoveredRPM    int
 	discoveredRPMSet bool
+
+	// configuredMaxConcurrent/discoveredMaxConcurrent 与 RPM 使用相同优先级语义。
+	configuredMaxConcurrent    int
+	discoveredMaxConcurrent    int
+	discoveredMaxConcurrentSet bool
 }
 
 // Config 是 ChannelLimiter 的创建/更新配置。
@@ -69,15 +76,15 @@ var (
 // NewChannelLimiter 创建一个新的 ChannelLimiter。now 参数保留用于兼容性但不使用。
 func NewChannelLimiter(cfg Config, now time.Time) *ChannelLimiter {
 	l := &ChannelLimiter{
-		timestamps: make([]time.Time, 0),
+		timestamps:        make([]time.Time, 0),
+		concurrencyChange: make(chan struct{}),
 	}
 	l.applyConfig(cfg)
 	return l
 }
 
 // applyConfig 将配置应用到 limiter。
-// 仅更新配置态字段（configuredRPM/configuredWindow）与并发信号量；
-// 发现态（discoveredRPM）不被 cfg.RPM==0 清除，由 recomputeLocked 重算生效值。
+// 仅更新配置态字段；发现态不被零值配置清除，由 recomputeLocked 重算生效值。
 func (l *ChannelLimiter) applyConfig(cfg Config) {
 	l.configuredRPM = cfg.RPM
 	l.explicitRPM = cfg.RPM > 0
@@ -91,16 +98,12 @@ func (l *ChannelLimiter) applyConfig(cfg Config) {
 		// cfg.RPM==0：清除配置态窗口，但保留 discoveredRPM（recomputeLocked 会处理）
 		l.configuredWindow = 0
 	}
-	l.recomputeLocked()
-
 	if cfg.MaxConcurrent > 0 {
-		// 重新分配信号量：如果有变更需重建
-		if l.sem == nil || cap(l.sem) != cfg.MaxConcurrent {
-			l.sem = make(chan struct{}, cfg.MaxConcurrent)
-		}
+		l.configuredMaxConcurrent = cfg.MaxConcurrent
 	} else {
-		l.sem = nil
+		l.configuredMaxConcurrent = 0
 	}
+	l.recomputeLocked()
 }
 
 // recomputeLocked 根据 configuredRPM/discoveredRPM 重算 effective maxRequests/window。
@@ -124,6 +127,17 @@ func (l *ChannelLimiter) recomputeLocked() {
 	}
 	l.maxRequests = eff
 	l.window = win
+
+	effectiveConcurrent := 0
+	if l.configuredMaxConcurrent > 0 {
+		effectiveConcurrent = l.configuredMaxConcurrent
+	} else if l.discoveredMaxConcurrentSet && l.discoveredMaxConcurrent > 0 {
+		effectiveConcurrent = l.discoveredMaxConcurrent
+	}
+	if l.maxConcurrent != effectiveConcurrent {
+		l.maxConcurrent = effectiveConcurrent
+		l.notifyConcurrencyChangeLocked()
+	}
 }
 
 // UpdateConfig 热更新配置，不丢失运行态 cooldown、已生效 discovered RPM 和当前令牌。
@@ -140,7 +154,7 @@ func (l *ChannelLimiter) UpdateConfig(cfg Config) {
 }
 
 // configMatchesLocked 在持有 l.mu 时判断 cfg 是否已与 limiter 当前配置态一致。
-// 只比较配置态字段（configuredRPM/configuredWindow/MaxConcurrent），
+// 只比较配置态字段（configuredRPM/configuredWindow/configuredMaxConcurrent），
 // 不比较 effective maxRequests（否则 discovered 生效后会与 cfg.RPM 永远不匹配）。
 func (l *ChannelLimiter) configMatchesLocked(cfg Config) bool {
 	// 配置 RPM
@@ -159,15 +173,12 @@ func (l *ChannelLimiter) configMatchesLocked(cfg Config) bool {
 	if l.configuredWindow != wantWindow {
 		return false
 	}
-	// 并发信号量
-	if cfg.MaxConcurrent > 0 {
-		if l.sem == nil || cap(l.sem) != cfg.MaxConcurrent {
-			return false
-		}
-	} else {
-		if l.sem != nil {
-			return false
-		}
+	wantMaxConcurrent := cfg.MaxConcurrent
+	if wantMaxConcurrent < 0 {
+		wantMaxConcurrent = 0
+	}
+	if l.configuredMaxConcurrent != wantMaxConcurrent {
+		return false
 	}
 	return true
 }
@@ -293,7 +304,90 @@ func (l *ChannelLimiter) HasDiscoveredRPM() bool {
 	return l.discoveredRPMSet
 }
 
-// Acquire 尝试获取一个请求许可。返回 release 函数（必须在请求完成后调用以释放并发信号量）。
+// ── 显式并发与发现并发管理 ──
+
+// IsExplicitMaxConcurrent 返回最大并发是否由用户显式配置。
+func (l *ChannelLimiter) IsExplicitMaxConcurrent() bool {
+	if l == nil {
+		return false
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.configuredMaxConcurrent > 0
+}
+
+// GetMaxConcurrent 返回当前生效的最大并发；0 表示不限并发。
+func (l *ChannelLimiter) GetMaxConcurrent() int {
+	if l == nil {
+		return 0
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.maxConcurrent
+}
+
+// SetDiscoveredMaxConcurrent 应用 autopilot 发现的最大并发。
+// 显式配置优先；maxConcurrent<=0 表示清除发现值。
+func (l *ChannelLimiter) SetDiscoveredMaxConcurrent(maxConcurrent int) bool {
+	if l == nil {
+		return false
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if l.configuredMaxConcurrent > 0 {
+		return false
+	}
+	if maxConcurrent <= 0 {
+		if !l.discoveredMaxConcurrentSet {
+			return false
+		}
+		l.discoveredMaxConcurrent = 0
+		l.discoveredMaxConcurrentSet = false
+		l.recomputeLocked()
+		return true
+	}
+	if l.discoveredMaxConcurrentSet && l.discoveredMaxConcurrent == maxConcurrent {
+		return false
+	}
+	l.discoveredMaxConcurrent = maxConcurrent
+	l.discoveredMaxConcurrentSet = true
+	l.recomputeLocked()
+	return true
+}
+
+// ClearDiscoveredMaxConcurrent 清除发现并发，即使当前被显式配置遮蔽也会移除。
+func (l *ChannelLimiter) ClearDiscoveredMaxConcurrent() {
+	if l == nil {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.discoveredMaxConcurrent = 0
+	l.discoveredMaxConcurrentSet = false
+	l.recomputeLocked()
+}
+
+// HasDiscoveredMaxConcurrent 返回是否保存了发现并发值。
+func (l *ChannelLimiter) HasDiscoveredMaxConcurrent() bool {
+	if l == nil {
+		return false
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.discoveredMaxConcurrentSet
+}
+
+func (l *ChannelLimiter) notifyConcurrencyChangeLocked() {
+	if l.concurrencyChange == nil {
+		l.concurrencyChange = make(chan struct{})
+		return
+	}
+	close(l.concurrencyChange)
+	l.concurrencyChange = make(chan struct{})
+}
+
+// Acquire 尝试获取一个请求许可。返回 release 函数（必须在请求完成后调用以释放并发占用）。
 // maxWait 是最长排队等待时间；ctx 支持客户端断开取消。
 // 返回的 error 可能是 ErrInCooldown / ErrAcquireBusy / ErrWindowFull / context.Canceled。
 func (l *ChannelLimiter) Acquire(ctx context.Context, maxWait time.Duration, now time.Time) (release func(), err error) {
@@ -306,13 +400,13 @@ func (l *ChannelLimiter) Acquire(ctx context.Context, maxWait time.Duration, now
 		return released, ErrInCooldown
 	}
 
-	// 2. 获取令牌（等待期间不占用并发信号量，避免排队请求挤占并发槽位）
+	// 2. 获取令牌（等待期间不占用并发额度，避免排队请求挤占并发槽位）
 	if err := l.acquireToken(ctx, maxWait, now); err != nil {
 		return func() {}, err
 	}
 
-	// 3. 获取并发信号量（拿到令牌后才占槽，确保信号量反映真实在途请求数）
-	release, err = l.acquireSemaphore(ctx, maxWait)
+	// 3. 获取并发额度（拿到令牌后才占槽，确保计数反映真实在途请求数）
+	release, err = l.acquireConcurrency(ctx, maxWait)
 	if err != nil {
 		return func() {}, err
 	}
@@ -331,38 +425,42 @@ func (l *ChannelLimiter) tryCooldown(now time.Time) (release func(), ok bool) {
 	return func() {}, false
 }
 
-// acquireSemaphore 获取并发信号量，支持 ctx 取消和 maxWait 超时。
-func (l *ChannelLimiter) acquireSemaphore(ctx context.Context, maxWait time.Duration) (func(), error) {
-	if l.sem == nil {
-		return func() {}, nil
-	}
-
-	// 快速尝试（非阻塞）
-	select {
-	case l.sem <- struct{}{}:
-		return l.makeSemaphoreRelease(), nil
-	default:
-	}
-
-	// 需要等待
-	deadline := time.After(maxWait)
+// acquireConcurrency 获取动态并发额度，支持运行中升降上限、ctx 取消和超时。
+func (l *ChannelLimiter) acquireConcurrency(ctx context.Context, maxWait time.Duration) (func(), error) {
+	timer := time.NewTimer(maxWait)
+	defer timer.Stop()
 	for {
+		l.mu.Lock()
+		if l.maxConcurrent <= 0 || l.activeRequests < l.maxConcurrent {
+			l.activeRequests++
+			l.lastActivity = time.Now()
+			l.mu.Unlock()
+			return l.makeConcurrencyRelease(), nil
+		}
+		changed := l.concurrencyChange
+		l.mu.Unlock()
+
 		select {
 		case <-ctx.Done():
 			return func() {}, ctx.Err()
-		case <-deadline:
+		case <-timer.C:
 			return func() {}, ErrAcquireBusy
-		case l.sem <- struct{}{}:
-			return l.makeSemaphoreRelease(), nil
+		case <-changed:
 		}
 	}
 }
 
-func (l *ChannelLimiter) makeSemaphoreRelease() func() {
+func (l *ChannelLimiter) makeConcurrencyRelease() func() {
 	var once sync.Once
 	return func() {
 		once.Do(func() {
-			<-l.sem
+			l.mu.Lock()
+			if l.activeRequests > 0 {
+				l.activeRequests--
+			}
+			l.lastActivity = time.Now()
+			l.notifyConcurrencyChangeLocked()
+			l.mu.Unlock()
 		})
 	}
 }
@@ -453,16 +551,12 @@ func (l *ChannelLimiter) Status(now time.Time) LimiterStatus {
 	l.cleanOldTimestampsLocked(now)
 
 	inCooldown := !l.cooldownUntil.IsZero() && now.Before(l.cooldownUntil)
-	semUsed := 0
-	if l.sem != nil {
-		semUsed = len(l.sem)
-	}
 	l.lastActivity = now
 	return LimiterStatus{
 		WindowSize:      len(l.timestamps),
 		MaxRequests:     l.maxRequests,
-		MaxConcurrent:   cap(l.sem),
-		ActiveRequests:  semUsed,
+		MaxConcurrent:   l.maxConcurrent,
+		ActiveRequests:  l.activeRequests,
 		InCooldown:      inCooldown,
 		CooldownUntil:   l.cooldownUntil,
 		AutoFromHeaders: false, // 由 Manager 层设置

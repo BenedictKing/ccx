@@ -317,6 +317,131 @@ func TestParseLimiterKey(t *testing.T) {
 	}
 }
 
+func TestRateLimitApplier_AppliesDiscoveredMaxConcurrent(t *testing.T) {
+	cfg := config.DefaultAutopilotRoutingConfig()
+	cfg.RoutingMode = config.AutopilotModeAuto
+	cfg.RateLimitDiscovery.Enabled = true
+	cfg.RateLimitDiscovery.ConfidenceThreshold = 0.7
+
+	applier, discoverer, limiterMgr := newTestApplier(&cfg, true)
+	endpointUID := "ep-concurrent"
+	limiterKey := "messages:0"
+	limiterMgr.GetOrCreate("messages", 0, ratelimit.Config{})
+
+	applier.SetEndpointMappings([]EndpointLimiterMapping{
+		{EndpointUID: endpointUID, LimiterKey: limiterKey},
+	})
+
+	// 触发慢 TTFB 降并发：基线 1s，连续 3 次 5s
+	for i := 0; i < latencyWarmupSamples; i++ {
+		discoverer.Observe(endpointUID, RateLimitSignal{
+			Source:      SignalSourceSuccess,
+			IsStreaming: true,
+			LatencyMs:   1000,
+		})
+	}
+	for i := 0; i < latencySlowStreakThreshold; i++ {
+		discoverer.Observe(endpointUID, RateLimitSignal{
+			Source:      SignalSourceSuccess,
+			IsStreaming: true,
+			LatencyMs:   20000,
+		})
+	}
+
+	applier.Apply()
+
+	l := limiterMgr.Get("messages", 0)
+	if got := l.GetMaxConcurrent(); got != 4 {
+		t.Errorf("limiter MaxConcurrent = %d, want 4", got)
+	}
+	if !l.HasDiscoveredMaxConcurrent() {
+		t.Error("HasDiscoveredMaxConcurrent = false, want true")
+	}
+}
+
+func TestRateLimitApplier_ExplicitMaxConcurrentNotOverridden(t *testing.T) {
+	cfg := config.DefaultAutopilotRoutingConfig()
+	cfg.RoutingMode = config.AutopilotModeAuto
+	cfg.RateLimitDiscovery.Enabled = true
+	cfg.RateLimitDiscovery.ConfidenceThreshold = 0.7
+
+	applier, discoverer, limiterMgr := newTestApplier(&cfg, true)
+	endpointUID := "ep-explicit-concurrent"
+	limiterKey := "messages:0"
+	limiterMgr.GetOrCreate("messages", 0, ratelimit.Config{MaxConcurrent: 2})
+
+	applier.SetEndpointMappings([]EndpointLimiterMapping{
+		{EndpointUID: endpointUID, LimiterKey: limiterKey, ExplicitMaxConcurrent: true},
+	})
+
+	for i := 0; i < latencyWarmupSamples; i++ {
+		discoverer.Observe(endpointUID, RateLimitSignal{
+			Source:      SignalSourceSuccess,
+			IsStreaming: true,
+			LatencyMs:   1000,
+		})
+	}
+	for i := 0; i < latencySlowStreakThreshold; i++ {
+		discoverer.Observe(endpointUID, RateLimitSignal{
+			Source:      SignalSourceSuccess,
+			IsStreaming: true,
+			LatencyMs:   20000,
+		})
+	}
+
+	applier.Apply()
+
+	l := limiterMgr.Get("messages", 0)
+	if got := l.GetMaxConcurrent(); got != 2 {
+		t.Errorf("explicit MaxConcurrent should be preserved, got %d, want 2", got)
+	}
+	if l.HasDiscoveredMaxConcurrent() {
+		t.Error("HasDiscoveredMaxConcurrent = true for explicit maxConcurrent limiter")
+	}
+}
+
+func TestRateLimitApplier_RPMAndConcurrentIndependent(t *testing.T) {
+	cfg := config.DefaultAutopilotRoutingConfig()
+	cfg.RoutingMode = config.AutopilotModeAuto
+	cfg.RateLimitDiscovery.Enabled = true
+	cfg.RateLimitDiscovery.ConfidenceThreshold = 0.7
+
+	applier, discoverer, limiterMgr := newTestApplier(&cfg, true)
+	endpointUID := "ep-mixed"
+	limiterKey := "messages:0"
+	limiterMgr.GetOrCreate("messages", 0, ratelimit.Config{RPM: 60}) // 显式 RPM
+
+	applier.SetEndpointMappings([]EndpointLimiterMapping{
+		{EndpointUID: endpointUID, LimiterKey: limiterKey, ExplicitRPM: true, LimiterConfig: ratelimit.Config{RPM: 60}},
+	})
+
+	// 只有并发信号（无 header），触发降并发
+	for i := 0; i < latencyWarmupSamples; i++ {
+		discoverer.Observe(endpointUID, RateLimitSignal{
+			Source:      SignalSourceSuccess,
+			IsStreaming: true,
+			LatencyMs:   1000,
+		})
+	}
+	for i := 0; i < latencySlowStreakThreshold; i++ {
+		discoverer.Observe(endpointUID, RateLimitSignal{
+			Source:      SignalSourceSuccess,
+			IsStreaming: true,
+			LatencyMs:   20000,
+		})
+	}
+
+	applier.Apply()
+
+	l := limiterMgr.Get("messages", 0)
+	if got := l.GetRPM(); got != 60 {
+		t.Errorf("explicit RPM should be preserved, got %d, want 60", got)
+	}
+	if got := l.GetMaxConcurrent(); got != 4 {
+		t.Errorf("discovered MaxConcurrent should be applied, got %d, want 4", got)
+	}
+}
+
 // ── Apply 无映射时 no-op ──
 
 func TestRateLimitApplier_ApplyNoMappings(t *testing.T) {

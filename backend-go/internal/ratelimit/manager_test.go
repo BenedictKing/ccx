@@ -1,6 +1,7 @@
 package ratelimit
 
 import (
+	"context"
 	"testing"
 	"time"
 )
@@ -294,27 +295,77 @@ func TestManager_ReconcileChannelConfigsRemovesDisappearedIndex(t *testing.T) {
 	}
 }
 
-// TestChannelLimiter_UpdateConfigSkipsWhenUnchanged 验证 UpdateConfig 在配置不变时跳过 applyConfig，
-// 通过观察 sem 通道是否被重建判断。
+// TestChannelLimiter_UpdateConfigSkipsWhenUnchanged 验证 UpdateConfig 在配置不变时跳过 applyConfig。
 func TestChannelLimiter_UpdateConfigSkipsWhenUnchanged(t *testing.T) {
 	cfg := Config{RPM: 60, WindowSeconds: 60, MaxConcurrent: 5}
 	l := NewChannelLimiter(cfg, time.Now())
-	originalSem := l.sem
-
-	// 相同配置 → 不应重建 sem
-	l.UpdateConfig(cfg)
-	if l.sem != originalSem {
-		t.Error("sem channel rebuilt when config unchanged")
+	if l.GetMaxConcurrent() != 5 {
+		t.Fatalf("initial maxConcurrent = %d, want 5", l.GetMaxConcurrent())
 	}
 
-	// 改变 MaxConcurrent → 应重建 sem
+	// 相同配置 → 配置态不变，effective 值也不应抖动
+	l.UpdateConfig(cfg)
+	if l.GetMaxConcurrent() != 5 {
+		t.Errorf("maxConcurrent changed when config unchanged: got %d", l.GetMaxConcurrent())
+	}
+
+	// 改变 MaxConcurrent → 立即生效
 	newCfg := cfg
 	newCfg.MaxConcurrent = 10
 	l.UpdateConfig(newCfg)
-	if l.sem == originalSem {
-		t.Error("sem channel not rebuilt when MaxConcurrent changed")
+	if l.GetMaxConcurrent() != 10 {
+		t.Errorf("maxConcurrent = %d, want 10", l.GetMaxConcurrent())
 	}
-	if cap(l.sem) != 10 {
-		t.Errorf("new sem cap = %d, want 10", cap(l.sem))
+}
+
+// TestChannelLimiter_DynamicConcurrencyAdjust 验证运行时降低并发上限不会释放额外额度，
+// 已占用的并发额度仍按原规则释放，且释放后等待者能继续进入。
+func TestChannelLimiter_DynamicConcurrencyAdjust(t *testing.T) {
+	cfg := Config{RPM: 100, MaxConcurrent: 2}
+	l := NewChannelLimiter(cfg, time.Now())
+
+	rel1, err := l.Acquire(context.Background(), 50*time.Millisecond, time.Now())
+	if err != nil {
+		t.Fatalf("acquire 1 failed: %v", err)
 	}
+
+	rel2, err := l.Acquire(context.Background(), 50*time.Millisecond, time.Now())
+	if err != nil {
+		t.Fatalf("acquire 2 failed: %v", err)
+	}
+	// 不立即释放 rel2，模拟在途请求
+
+	// 等待者应在 2 槽占满时阻塞
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	defer cancel()
+	_, err = l.Acquire(ctx, 30*time.Millisecond, time.Now())
+	if err == nil {
+		t.Fatal("third acquire should block because concurrency full")
+	}
+
+	// 降低上限到 1，在途请求仍占 2 槽；已等待的请求不会因此获得额外额度
+	l.UpdateConfig(Config{RPM: 100, MaxConcurrent: 1})
+	if l.GetMaxConcurrent() != 1 {
+		t.Fatalf("maxConcurrent = %d, want 1", l.GetMaxConcurrent())
+	}
+	if st := l.Status(time.Now()); st.ActiveRequests != 2 {
+		t.Fatalf("activeRequests = %d, want 2 while in-flight", st.ActiveRequests)
+	}
+
+	// 释放一个后，上限 1 仍只允许 1 个在途；rel1 仍占用
+	rel2()
+	if st := l.Status(time.Now()); st.ActiveRequests != 1 {
+		t.Fatalf("activeRequests = %d, want 1 after first release", st.ActiveRequests)
+	}
+
+	// 再释放 rel1，等待者应能进入并占用唯一额度
+	rel1()
+	rel3, err := l.Acquire(context.Background(), 200*time.Millisecond, time.Now())
+	if err != nil {
+		t.Fatalf("acquire after release failed: %v", err)
+	}
+	if st := l.Status(time.Now()); st.ActiveRequests != 1 {
+		t.Fatalf("activeRequests = %d, want 1 after new acquire", st.ActiveRequests)
+	}
+	rel3()
 }

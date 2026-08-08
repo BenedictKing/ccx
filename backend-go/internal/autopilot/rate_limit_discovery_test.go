@@ -587,6 +587,202 @@ func TestRateLimitDiscoverer_SeedProbeEstimateDoesNotOverrideHeader(t *testing.T
 	}
 }
 
+func TestRateLimitDiscoverer_StreamingLatencyCongestion(t *testing.T) {
+	now := time.Date(2026, 7, 8, 10, 0, 0, 0, time.UTC)
+	uid := "ep-latency-001"
+
+	sd := NewRateLimitDiscoverer(defaultDiscovererConfig())
+	sd.nowFunc = fixedTime(now)
+
+	// 前 5 个样本建立基线：1000ms 左右
+	for i := 0; i < latencyWarmupSamples; i++ {
+		sd.Observe(uid, RateLimitSignal{
+			Source:      SignalSourceSuccess,
+			IsStreaming: true,
+			LatencyMs:   1000,
+			Timestamp:   now.Add(time.Duration(i) * time.Second),
+		})
+	}
+
+	result := sd.SuggestedLimit(uid)
+	if result.MaxConcurrent != 0 {
+		t.Fatalf("warmup should not produce maxConcurrent, got %d", result.MaxConcurrent)
+	}
+
+	// 连续 3 次显著变慢（>3 倍基线）触发降并发
+	for i := 0; i < latencySlowStreakThreshold; i++ {
+		sd.Observe(uid, RateLimitSignal{
+			Source:      SignalSourceSuccess,
+			IsStreaming: true,
+			LatencyMs:   20000,
+			Timestamp:   now.Add(time.Duration(latencyWarmupSamples+i) * time.Second),
+		})
+	}
+
+	result = sd.SuggestedLimit(uid)
+	if result.MaxConcurrent != 4 { // default 8 -> floor(8*0.5)=4
+		t.Errorf("after slow streak MaxConcurrent = %d, want 4", result.MaxConcurrent)
+	}
+	if result.ConcurrentConfidence < latencyCongestionConfidence {
+		t.Errorf("ConcurrentConfidence = %f, want >= %f", result.ConcurrentConfidence, latencyCongestionConfidence)
+	}
+
+	// 429 也会进一步降并发
+	sd.Observe(uid, RateLimitSignal{
+		Source:      SignalSource429,
+		IsStreaming: true,
+		Timestamp:   now.Add(20 * time.Second),
+	})
+	result = sd.SuggestedLimit(uid)
+	if result.MaxConcurrent != 2 { // 4 -> floor(4*0.5)=2
+		t.Errorf("after 429 MaxConcurrent = %d, want 2", result.MaxConcurrent)
+	}
+}
+
+func TestRateLimitDiscoverer_StreamingLatencyIgnoresSingleSpike(t *testing.T) {
+	now := time.Date(2026, 7, 8, 10, 0, 0, 0, time.UTC)
+	uid := "ep-latency-spike"
+
+	sd := NewRateLimitDiscoverer(defaultDiscovererConfig())
+	sd.nowFunc = fixedTime(now)
+
+	// 建立基线
+	for i := 0; i < latencyWarmupSamples; i++ {
+		sd.Observe(uid, RateLimitSignal{
+			Source:      SignalSourceSuccess,
+			IsStreaming: true,
+			LatencyMs:   1000,
+			Timestamp:   now.Add(time.Duration(i) * time.Second),
+		})
+	}
+
+	// 仅一次 60s 绝对慢请求，不应触发
+	sd.Observe(uid, RateLimitSignal{
+		Source:      SignalSourceSuccess,
+		IsStreaming: true,
+		LatencyMs:   latencyAbsoluteSlowMs,
+		Timestamp:   now.Add(10 * time.Second),
+	})
+
+	result := sd.SuggestedLimit(uid)
+	if result.MaxConcurrent != 0 {
+		t.Errorf("single spike should not reduce concurrency, got %d", result.MaxConcurrent)
+	}
+}
+
+func TestRateLimitDiscoverer_StreamingLatencyRecovery(t *testing.T) {
+	now := time.Date(2026, 7, 8, 10, 0, 0, 0, time.UTC)
+	uid := "ep-latency-recovery"
+
+	sd := NewRateLimitDiscoverer(defaultDiscovererConfig())
+	sd.nowFunc = fixedTime(now)
+
+	// 建立基线并触发一次降并发
+	for i := 0; i < latencyWarmupSamples; i++ {
+		sd.Observe(uid, RateLimitSignal{
+			Source:      SignalSourceSuccess,
+			IsStreaming: true,
+			LatencyMs:   1000,
+			Timestamp:   now.Add(time.Duration(i) * time.Second),
+		})
+	}
+	for i := 0; i < latencySlowStreakThreshold; i++ {
+		sd.Observe(uid, RateLimitSignal{
+			Source:      SignalSourceSuccess,
+			IsStreaming: true,
+			LatencyMs:   20000,
+			Timestamp:   now.Add(time.Duration(latencyWarmupSamples+i) * time.Second),
+		})
+	}
+	if got := sd.SuggestedLimit(uid).MaxConcurrent; got != 4 {
+		t.Fatalf("pre-recovery MaxConcurrent = %d, want 4", got)
+	}
+
+	// 连续健康样本，但间隔不足 AIMDIncreaseInterval，不应恢复
+	base := now.Add(time.Duration(latencyWarmupSamples+latencySlowStreakThreshold) * time.Second)
+	for i := 0; i < latencyHealthyStreakTarget; i++ {
+		sd.Observe(uid, RateLimitSignal{
+			Source:      SignalSourceSuccess,
+			IsStreaming: true,
+			LatencyMs:   800,
+			Timestamp:   base.Add(time.Duration(i) * time.Second),
+		})
+	}
+	if got := sd.SuggestedLimit(uid).MaxConcurrent; got != 4 {
+		t.Errorf("MaxConcurrent recovered too early = %d, want 4", got)
+	}
+
+	// 超过 AIMDIncreaseInterval 后再来健康样本，应 +1
+	future := base.Add(defaultDiscovererConfig().AIMDIncreaseInterval + time.Second)
+	sd.nowFunc = fixedTime(future)
+	for i := 0; i < latencyHealthyStreakTarget; i++ {
+		sd.Observe(uid, RateLimitSignal{
+			Source:      SignalSourceSuccess,
+			IsStreaming: true,
+			LatencyMs:   800,
+			Timestamp:   future.Add(time.Duration(i) * time.Second),
+		})
+	}
+	if got := sd.SuggestedLimit(uid).MaxConcurrent; got != 5 {
+		t.Errorf("after recovery MaxConcurrent = %d, want 5", got)
+	}
+}
+
+func TestRateLimitDiscoverer_NonStreamingLatencyIgnored(t *testing.T) {
+	now := time.Date(2026, 7, 8, 10, 0, 0, 0, time.UTC)
+	uid := "ep-nonstream"
+
+	sd := NewRateLimitDiscoverer(defaultDiscovererConfig())
+	sd.nowFunc = fixedTime(now)
+
+	for i := 0; i < latencyWarmupSamples+latencySlowStreakThreshold; i++ {
+		sd.Observe(uid, RateLimitSignal{
+			Source:      SignalSourceSuccess,
+			IsStreaming: false,
+			LatencyMs:   50000,
+			Timestamp:   now.Add(time.Duration(i) * time.Second),
+		})
+	}
+
+	if got := sd.SuggestedLimit(uid).MaxConcurrent; got != 0 {
+		t.Errorf("non-streaming latency should not affect concurrency, got %d", got)
+	}
+}
+
+func TestRateLimitDiscoverer_UpdateConfigCapsMaxConcurrent(t *testing.T) {
+	now := time.Date(2026, 7, 8, 10, 0, 0, 0, time.UTC)
+	uid := "ep-cap"
+
+	sd := NewRateLimitDiscoverer(defaultDiscovererConfig())
+	sd.nowFunc = fixedTime(now)
+
+	for i := 0; i < latencyWarmupSamples; i++ {
+		sd.Observe(uid, RateLimitSignal{
+			Source:      SignalSourceSuccess,
+			IsStreaming: true,
+			LatencyMs:   1000,
+			Timestamp:   now.Add(time.Duration(i) * time.Second),
+		})
+	}
+	for i := 0; i < latencySlowStreakThreshold; i++ {
+		sd.Observe(uid, RateLimitSignal{
+			Source:      SignalSourceSuccess,
+			IsStreaming: true,
+			LatencyMs:   20000,
+			Timestamp:   now.Add(time.Duration(latencyWarmupSamples+i) * time.Second),
+		})
+	}
+
+	// 热重载把 MaxAutoConcurrent 降到 2，已学习值应被裁切
+	cfg := defaultDiscovererConfig()
+	cfg.MaxAutoConcurrent = 2
+	sd.UpdateConfig(cfg)
+
+	if got := sd.SuggestedLimit(uid).MaxConcurrent; got != 2 {
+		t.Errorf("after cap MaxConcurrent = %d, want 2", got)
+	}
+}
+
 func TestRateLimitDiscoverer_StateCount(t *testing.T) {
 	d, now := newTestDiscoverer(t)
 
