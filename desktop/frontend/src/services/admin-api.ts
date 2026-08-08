@@ -301,6 +301,8 @@ export interface Channel {
   providerId?: string
   autoManaged?: boolean
   autoManagedAt?: string
+  autoManagedKind?: string
+  subscriptionUid?: string
   originType?: string
   originTier?: string
   tags?: string[]
@@ -1291,6 +1293,37 @@ export interface NewApiProvisionResponse {
   discoveryStarted: boolean
 }
 
+export interface NewApiAccountCreateRequest {
+  accessToken: string
+  userId?: string
+  displayName?: string
+  authTokenMode?: string
+}
+
+export interface NewApiCredentialsUpdateRequest {
+  accessToken?: string
+  userId?: string
+  authTokenMode?: string
+  expectedVersion?: number
+}
+
+export interface NewApiAccountItem {
+  accountUid: string
+  userId?: string
+  displayName?: string
+  balance?: number
+  status?: string
+  accessTokenMasked?: string
+  provisionedKeys?: NewApiProvisionedKey[]
+  lastSyncError?: string
+  lastCheckedAt?: string
+  createdAt: string
+}
+
+export interface NewApiAccountListResponse {
+  accounts: NewApiAccountItem[]
+}
+
 // ============== 驾驶舱（Cockpit）类型 ==============
 
 export interface CockpitHealthSummary {
@@ -1579,6 +1612,12 @@ export const keyMultiplierPath = (kind: ChannelKind, channelUid: string, keyUid:
 export const EXCHANGE_RATES_PATH = '/api/autopilot/cost/exchange-rates'
 export const NEWAPI_VERIFY_PATH = '/api/subscriptions/newapi/verify'
 export const NEWAPI_PROVISION_PATH = '/api/subscriptions/newapi/provision'
+export const subscriptionNewApiCredentialsPath = (uid: string) => `${subscriptionPath(uid)}/newapi-credentials`
+export const subscriptionAccountsPath = (uid: string) => `${subscriptionPath(uid)}/accounts`
+export const subscriptionAccountPath = (uid: string, accountUid: string) =>
+  `${subscriptionAccountsPath(uid)}/${encodeURIComponent(accountUid)}`
+export const subscriptionAccountRefreshPath = (uid: string, accountUid: string) =>
+  `${subscriptionAccountPath(uid, accountUid)}/refresh`
 
 export const COCKPIT_OVERVIEW_PATH = '/api/cockpit/overview'
 

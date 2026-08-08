@@ -8,6 +8,10 @@ import {
   keyMultiplierPath,
   subscriptionBillingTermsPath,
   subscriptionRefreshPath,
+  subscriptionNewApiCredentialsPath,
+  subscriptionAccountsPath,
+  subscriptionAccountPath,
+  subscriptionAccountRefreshPath,
 } from '@/services/admin-api'
 import type {
   BillingTermsPatch,
@@ -21,6 +25,11 @@ import type {
   GroupModelRestoreRequest,
   KeyMultiplierPatch,
   KeyMultiplierResponse,
+  NewApiAccountCreateRequest,
+  NewApiAccountItem,
+  NewApiAccountListResponse,
+  NewApiCredentialsUpdateRequest,
+  SubscriptionItem,
   SubscriptionRefreshResponse,
 } from '@/services/admin-api'
 
@@ -204,6 +213,26 @@ export function useAdminApi() {
 
     refreshSubscription(uid: string): Promise<SubscriptionRefreshResponse> {
       return request<SubscriptionRefreshResponse>('POST', subscriptionRefreshPath(uid))
+    },
+
+    getSubscriptionAccounts(uid: string): Promise<NewApiAccountListResponse> {
+      return request<NewApiAccountListResponse>('GET', subscriptionAccountsPath(uid))
+    },
+
+    addSubscriptionAccount(uid: string, payload: NewApiAccountCreateRequest): Promise<NewApiAccountItem> {
+      return request<NewApiAccountItem>('POST', subscriptionAccountsPath(uid), payload)
+    },
+
+    deleteSubscriptionAccount(uid: string, accountUid: string): Promise<void> {
+      return request<void>('DELETE', subscriptionAccountPath(uid, accountUid))
+    },
+
+    refreshSubscriptionAccount(uid: string, accountUid: string): Promise<NewApiAccountItem> {
+      return request<NewApiAccountItem>('POST', subscriptionAccountRefreshPath(uid, accountUid))
+    },
+
+    updateNewApiCredentials(uid: string, payload: NewApiCredentialsUpdateRequest): Promise<SubscriptionItem> {
+      return request<SubscriptionItem>('PATCH', subscriptionNewApiCredentialsPath(uid), payload)
     },
 
     /**

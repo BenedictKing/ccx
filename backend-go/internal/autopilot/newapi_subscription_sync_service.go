@@ -190,7 +190,198 @@ func (s *NewApiSubscriptionSyncService) SyncNow(ctx context.Context, uid string)
 			result.Success = false
 		}
 	}
+
+	// 额外账号：各自验证/拉分组/reconcile 自己的 ProvisionedKeys。单账号失败隔离，不影响主账号结果。
+	if len(profile.Accounts) > 0 {
+		accountKeys := s.syncAccounts(ctx, profile, now)
+		result.Keys = append(result.Keys, accountKeys...)
+	}
 	return result, nil
+}
+
+// syncAccounts 遍历订阅下的额外账号，分别同步其余额与各自 ProvisionedKeys 的分组倍率/渠道注入。
+// 任何单个账号失败只标记该账号，不返回错误，确保主账号与其他账号不受影响。
+func (s *NewApiSubscriptionSyncService) syncAccounts(ctx context.Context, profile *SubscriptionProfile, now time.Time) []NewApiKeyStatus {
+	all := make([]NewApiKeyStatus, 0)
+	for _, account := range profile.Accounts {
+		statuses, _ := s.syncOneAccount(ctx, profile, account, now)
+		all = append(all, statuses...)
+	}
+	return all
+}
+
+func (s *NewApiSubscriptionSyncService) syncOneAccount(ctx context.Context, profile *SubscriptionProfile, account NewApiAccount, now time.Time) ([]NewApiKeyStatus, error) {
+	mode := account.AuthTokenMode
+	if mode == "" {
+		mode = NewApiAuthModeBearer
+	}
+	markErr := func(err error) []NewApiKeyStatus {
+		// 失败：把该账号的 key 标记为 sync_error，并记录到账号上。
+		if s.cfgManager != nil {
+			s.markAccountKeys(profile, account, newApiSyncStatusSyncError, err.Error(), now)
+		}
+		_ = s.store.Patch(profile.SubscriptionUID, nil, func(p *SubscriptionProfile) error {
+			for i := range p.Accounts {
+				if p.Accounts[i].AccountUID == account.AccountUID {
+					p.Accounts[i].Status = "error"
+					p.Accounts[i].LastSyncError = err.Error()
+					p.Accounts[i].LastCheckedAt = now
+				}
+			}
+			return nil
+		})
+		return s.accountKeyStatuses(profile, account, newApiSyncStatusSyncError, err.Error(), now)
+	}
+
+	self, userID, err := s.adapter.VerifyWithFallback(ctx, profile.BaseURL, account.AccessToken, account.UserID, mode)
+	if err != nil {
+		return markErr(err), err
+	}
+	groups, err := s.adapter.FetchGroups(ctx, profile.BaseURL, account.AccessToken, userID, mode)
+	if err != nil {
+		return markErr(err), err
+	}
+	for _, ratio := range groups {
+		if !finiteNonNegative(ratio) {
+			return markErr(fmt.Errorf("分组返回非法倍率 %v", ratio)), fmt.Errorf("分组返回非法倍率")
+		}
+	}
+
+	statuses, desired := buildDesiredForKeys(profile.SubscriptionUID, account.ProvisionedKeys, groups, profile.MaxGroupMultiplier, now)
+
+	// 更新账号余额/状态/KeyUID/倍率。
+	_ = s.store.Patch(profile.SubscriptionUID, nil, func(p *SubscriptionProfile) error {
+		for i := range p.Accounts {
+			if p.Accounts[i].AccountUID != account.AccountUID {
+				continue
+			}
+			p.Accounts[i].Balance = float64(self.Quota)
+			p.Accounts[i].Status = "active"
+			p.Accounts[i].LastSyncError = ""
+			p.Accounts[i].LastCheckedAt = now
+			p.Accounts[i].UserID = userID
+			for ki := range p.Accounts[i].ProvisionedKeys {
+				p.Accounts[i].ProvisionedKeys[ki].KeyUID = StableKeyUID(profile.SubscriptionUID, int64(p.Accounts[i].ProvisionedKeys[ki].TokenID))
+				if ratio, ok := groups[p.Accounts[i].ProvisionedKeys[ki].Group]; ok && finiteNonNegative(ratio) {
+					p.Accounts[i].ProvisionedKeys[ki].GroupMultiplier = ratio
+				}
+			}
+		}
+		return nil
+	})
+
+	// 注入/更新渠道（只更新已存在的 key 元数据；新增 key 走添加账号流程的 ReconcileAccountProvisioned）。
+	if s.cfgManager != nil {
+		for _, uid := range profile.LinkedChannelUIDs {
+			kind, index, channel, ok := findNewApiChannel(s.cfgManager, uid)
+			if !ok {
+				continue
+			}
+			merged, conflict := reconcileNewApiConfigs(channel.APIKeyConfigs, desired, profile.SubscriptionUID)
+			if conflict {
+				continue
+			}
+			if !newApiConfigsEqual(channel.APIKeyConfigs, merged) {
+				_, _ = updateChannelForKind(s.cfgManager, kind, index, config.UpstreamUpdate{APIKeyConfigs: merged})
+			}
+		}
+	}
+	return statuses, nil
+}
+
+// markAccountKeys 把指定账号在渠道中的 key 标记为给定状态（故障隔离的最小单元）。
+func (s *NewApiSubscriptionSyncService) markAccountKeys(profile *SubscriptionProfile, account NewApiAccount, status, reason string, now time.Time) {
+	tokenIDs := make(map[int64]struct{}, len(account.ProvisionedKeys))
+	for _, k := range account.ProvisionedKeys {
+		tokenIDs[int64(k.TokenID)] = struct{}{}
+	}
+	for _, uid := range profile.LinkedChannelUIDs {
+		kind, index, channel, ok := findNewApiChannel(s.cfgManager, uid)
+		if !ok {
+			continue
+		}
+		updated := append([]config.APIKeyConfig(nil), channel.APIKeyConfigs...)
+		changed := false
+		for i := range updated {
+			cfg := &updated[i]
+			if cfg.SourceSubscriptionUID != profile.SubscriptionUID {
+				continue
+			}
+			if _, owned := tokenIDs[cfg.SourceRemoteTokenID]; !owned {
+				continue
+			}
+			if cfg.MultiplierSyncStatus != status || cfg.MultiplierSyncError != reason {
+				cfg.MultiplierSyncStatus, cfg.MultiplierSyncError = status, reason
+				changed = true
+			}
+		}
+		if changed {
+			_, _ = updateChannelForKind(s.cfgManager, kind, index, config.UpstreamUpdate{APIKeyConfigs: updated})
+		}
+	}
+}
+
+// RemoveAccountKeysFromChannels 在删除账号时，从订阅关联的所有渠道剔除该账号 tokenID 对应的 key 配置，
+// 同时从 APIKeys 列表移除对应明文 key。返回被移除的 tokenID 集合，供调用方回收远端 key。
+func (s *NewApiSubscriptionSyncService) RemoveAccountKeysFromChannels(profile *SubscriptionProfile, account NewApiAccount) map[int64]struct{} {
+	removed := make(map[int64]struct{}, len(account.ProvisionedKeys))
+	if s.cfgManager == nil {
+		return removed
+	}
+	tokenIDs := make(map[int64]struct{}, len(account.ProvisionedKeys))
+	for _, k := range account.ProvisionedKeys {
+		tokenIDs[int64(k.TokenID)] = struct{}{}
+	}
+	for _, uid := range profile.LinkedChannelUIDs {
+		kind, index, channel, ok := findNewApiChannel(s.cfgManager, uid)
+		if !ok {
+			continue
+		}
+		removedKeys := make(map[string]struct{})
+		keptConfigs := make([]config.APIKeyConfig, 0, len(channel.APIKeyConfigs))
+		for _, cfg := range channel.APIKeyConfigs {
+			if cfg.SourceSubscriptionUID == profile.SubscriptionUID {
+				if _, owned := tokenIDs[cfg.SourceRemoteTokenID]; owned {
+					removed[cfg.SourceRemoteTokenID] = struct{}{}
+					if cfg.Key != "" {
+						removedKeys[cfg.Key] = struct{}{}
+					}
+					continue
+				}
+			}
+			keptConfigs = append(keptConfigs, cfg)
+		}
+		keptKeys := make([]string, 0, len(channel.APIKeys))
+		for _, k := range channel.APIKeys {
+			if _, drop := removedKeys[k]; drop {
+				continue
+			}
+			keptKeys = append(keptKeys, k)
+		}
+		if len(keptConfigs) != len(channel.APIKeyConfigs) || len(keptKeys) != len(channel.APIKeys) {
+			_, _ = updateChannelForKind(s.cfgManager, kind, index, config.UpstreamUpdate{APIKeys: keptKeys, APIKeyConfigs: keptConfigs})
+		}
+	}
+	return removed
+}
+
+// accountKeyStatuses 生成指定账号 key 的状态条目。
+func (s *NewApiSubscriptionSyncService) accountKeyStatuses(profile *SubscriptionProfile, account NewApiAccount, status, reason string, now time.Time) []NewApiKeyStatus {
+	out := make([]NewApiKeyStatus, 0, len(account.ProvisionedKeys))
+	for _, k := range account.ProvisionedKeys {
+		out = append(out, NewApiKeyStatus{
+			KeyUID:              StableKeyUID(profile.SubscriptionUID, int64(k.TokenID)),
+			Name:                k.Name,
+			Group:               k.Group,
+			GroupMultiplier:     k.GroupMultiplier,
+			MaxGroupMultiplier:  derefFloat(profile.MaxGroupMultiplier),
+			SourceRemoteTokenID: int64(k.TokenID),
+			SyncStatus:          status,
+			Reason:              reason,
+			UpdatedAt:           now.UTC().Format(time.RFC3339),
+		})
+	}
+	return out
 }
 
 type newApiDesiredKey struct {
@@ -202,17 +393,24 @@ type newApiDesiredKey struct {
 }
 
 func buildNewApiDesired(profile *SubscriptionProfile, groups map[string]float64, now time.Time) ([]NewApiKeyStatus, []newApiDesiredKey) {
-	statuses := make([]NewApiKeyStatus, 0, len(profile.ProvisionedKeys))
-	desired := make([]newApiDesiredKey, 0, len(profile.ProvisionedKeys))
-	limit := derefFloat(profile.MaxGroupMultiplier)
-	for _, owned := range profile.ProvisionedKeys {
-		keyUID := StableKeyUID(profile.SubscriptionUID, int64(owned.TokenID))
+	return buildDesiredForKeys(profile.SubscriptionUID, profile.ProvisionedKeys, groups, profile.MaxGroupMultiplier, now)
+}
+
+// buildDesiredForKeys 为任意一组 ProvisionedKeys 构造同步期望与状态。
+// 主账号传 profile.ProvisionedKeys，额外账号传 account.ProvisionedKeys + 该账号自己的分组倍率；
+// 这样不同账号即使同名分组倍率不同也能各自正确取 ratio。
+func buildDesiredForKeys(subscriptionUID string, keys []NewApiProvisionedKey, groups map[string]float64, maxGroupMultiplier *float64, now time.Time) ([]NewApiKeyStatus, []newApiDesiredKey) {
+	statuses := make([]NewApiKeyStatus, 0, len(keys))
+	desired := make([]newApiDesiredKey, 0, len(keys))
+	limit := derefFloat(maxGroupMultiplier)
+	for _, owned := range keys {
+		keyUID := StableKeyUID(subscriptionUID, int64(owned.TokenID))
 		ratio, exists := groups[owned.Group]
 		status, reason := newApiSyncStatusFresh, ""
 		var expires *time.Time
 		if !exists {
 			ratio, status, reason = owned.GroupMultiplier, newApiSyncStatusRemoteMissing, "远端分组已消失"
-		} else if profile.MaxGroupMultiplier != nil && ratio > *profile.MaxGroupMultiplier {
+		} else if maxGroupMultiplier != nil && ratio > *maxGroupMultiplier {
 			status, reason = newApiSyncStatusOverLimit, fmt.Sprintf("远端倍率 %.4g 超过上限 %.4g", ratio, limit)
 		} else {
 			expiry := now.Add(newApiSyncTTL)
@@ -406,12 +604,9 @@ func cloneRatios(in map[string]float64) map[string]float64 {
 	return out
 }
 
-func (s *NewApiSubscriptionSyncService) ReconcileProvisioned(profile *SubscriptionProfile, plaintextByToken map[int64]string) error {
-	if profile == nil || s.cfgManager == nil {
-		return nil
-	}
-	now := s.now()
-	_, desired := buildNewApiDesired(profile, profile.GroupMultipliers, now)
+// injectProvisionedKeys 把一组 desired key 按 tokenID 注入 profile 关联的所有渠道。
+// 已存在的 config 更新元数据；缺失的按明文追加。明文 key ownership 冲突时报错。
+func (s *NewApiSubscriptionSyncService) injectProvisionedKeys(profile *SubscriptionProfile, desired []newApiDesiredKey, plaintextByToken map[int64]string) error {
 	for _, uid := range profile.LinkedChannelUIDs {
 		kind, index, channel, ok := findNewApiChannel(s.cfgManager, uid)
 		if !ok {
@@ -448,9 +643,55 @@ func (s *NewApiSubscriptionSyncService) ReconcileProvisioned(profile *Subscripti
 			return err
 		}
 	}
+	return nil
+}
+
+func (s *NewApiSubscriptionSyncService) ReconcileProvisioned(profile *SubscriptionProfile, plaintextByToken map[int64]string) error {
+	if profile == nil || s.cfgManager == nil {
+		return nil
+	}
+	now := s.now()
+	_, desired := buildNewApiDesired(profile, profile.GroupMultipliers, now)
+	if err := s.injectProvisionedKeys(profile, desired, plaintextByToken); err != nil {
+		return err
+	}
 	return s.store.Patch(profile.SubscriptionUID, nil, func(p *SubscriptionProfile) error {
 		for i := range p.ProvisionedKeys {
 			p.ProvisionedKeys[i].KeyUID = StableKeyUID(p.SubscriptionUID, int64(p.ProvisionedKeys[i].TokenID))
+		}
+		return nil
+	})
+}
+
+// ReconcileAccountProvisioned 把某个额外账号新建/复用的 key 注入关联渠道，并回填其 KeyUID。
+// 与主账号 ReconcileProvisioned 的区别在于数据源是 account.ProvisionedKeys + 该账号自己的分组倍率 groups。
+func (s *NewApiSubscriptionSyncService) ReconcileAccountProvisioned(profile *SubscriptionProfile, accountUID string, groups map[string]float64, plaintextByToken map[int64]string) error {
+	if profile == nil || s.cfgManager == nil {
+		return nil
+	}
+	var account *NewApiAccount
+	for i := range profile.Accounts {
+		if profile.Accounts[i].AccountUID == accountUID {
+			account = &profile.Accounts[i]
+			break
+		}
+	}
+	if account == nil {
+		return fmt.Errorf("account_uid=%s 不存在", accountUID)
+	}
+	now := s.now()
+	_, desired := buildDesiredForKeys(profile.SubscriptionUID, account.ProvisionedKeys, groups, profile.MaxGroupMultiplier, now)
+	if err := s.injectProvisionedKeys(profile, desired, plaintextByToken); err != nil {
+		return err
+	}
+	return s.store.Patch(profile.SubscriptionUID, nil, func(p *SubscriptionProfile) error {
+		for ai := range p.Accounts {
+			if p.Accounts[ai].AccountUID != accountUID {
+				continue
+			}
+			for ki := range p.Accounts[ai].ProvisionedKeys {
+				p.Accounts[ai].ProvisionedKeys[ki].KeyUID = StableKeyUID(p.SubscriptionUID, int64(p.Accounts[ai].ProvisionedKeys[ki].TokenID))
+			}
 		}
 		return nil
 	})

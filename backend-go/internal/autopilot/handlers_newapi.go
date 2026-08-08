@@ -161,12 +161,15 @@ func cleanupNewApiProvisionedKeys(ctx context.Context, adapter *NewApiAdapter, r
 	}
 }
 
+// provisionNewApiGroupKeys 为各分组创建/复用代理 Key。namePrefix 用于多账号场景给 key 名加账号前缀，
+// 避免与主账号或其他账号在同站点下的同名 key 被 FindTokenByName 误复用；主账号调用传空串保持旧命名。
 func provisionNewApiGroupKeys(
 	ctx context.Context,
 	adapter *NewApiAdapter,
 	req NewApiProvisionRequest,
 	userID string,
 	groups []newApiResolvedGroup,
+	namePrefix string,
 ) ([]newApiProvisionedKey, error) {
 	if len(groups) == 0 {
 		return nil, fmt.Errorf("没有可创建 key 的分组")
@@ -182,6 +185,7 @@ func provisionNewApiGroupKeys(
 		if name == "" {
 			name = defaultNewApiProvisionKeyNameForGroup(group.Name)
 		}
+		name = namePrefix + name
 		if previousGroup, exists := nameGroups[name]; exists && previousGroup != group.Name {
 			return nil, fmt.Errorf("分组 %q 与 %q 生成了相同的 key 名称 %q", previousGroup, group.Name, name)
 		}
@@ -432,7 +436,7 @@ func handleNewApiProvision(deps *NewApiRouteDeps) gin.HandlerFunc {
 
 		// 3) 为全部合格分组分别建/复用代理 Key。一个 Key 固定绑定一个上游分组，
 		// 不会因为同渠道的其他分组而越过用户设置的倍率上限。
-		provisioned, err := provisionNewApiGroupKeys(ctx, adapter, req, derivedUserID, resolvedGroups)
+		provisioned, err := provisionNewApiGroupKeys(ctx, adapter, req, derivedUserID, resolvedGroups, "")
 		if err != nil {
 			var conflict *newApiProvisionConflictError
 			if errors.As(err, &conflict) {

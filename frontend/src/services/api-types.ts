@@ -1438,6 +1438,10 @@ export interface NewApiAccountItem {
   balance?: number
   status?: string
   accessTokenMasked?: string
+  /** 该账号在远端自动接入的分组 key（明文不落库，仅元数据） */
+  provisionedKeys?: NewApiProvisionedKeyInfo[]
+  /** 最近一次分组/倍率同步失败原因 */
+  lastSyncError?: string
   lastCheckedAt?: string
   usedQuota?: number
   authTokenMode?: string

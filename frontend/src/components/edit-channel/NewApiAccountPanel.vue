@@ -234,6 +234,20 @@
                 · {{ t('subscription.newApi.accessToken') }}: {{ account.accessTokenMasked }}
               </template>
             </div>
+            <div v-if="account.provisionedKeys?.length" class="text-caption mt-1 d-flex flex-wrap ga-1">
+              <v-chip
+                v-for="key in account.provisionedKeys"
+                :key="key.tokenId"
+                size="x-small"
+                color="primary"
+                variant="tonal"
+              >
+                {{ key.group }} × {{ key.groupMultiplier }}
+              </v-chip>
+            </div>
+            <div v-if="account.lastSyncError" class="text-caption text-error mt-1">
+              {{ account.lastSyncError }}
+            </div>
           </div>
         </div>
         <div class="d-flex ga-2">
@@ -272,6 +286,10 @@ const props = defineProps<{
 const emit = defineEmits<{ updated: [] }>()
 
 const subscription = ref<SubscriptionItem | null>(null)
+// 绑定成功后本地回填 subscriptionUid：generic 渠道的 props.subscriptionUid 来自 channel.subscriptionUid，
+// 需后端回填并重新拉取才非空；绑定后先用 provision 响应里的 uid 让面板立即切到多账号视图并拉取账号。
+const localSubscriptionUid = ref('')
+const effectiveSubscriptionUid = computed(() => props.subscriptionUid || localSubscriptionUid.value)
 const accounts = ref<NewApiAccountItem[]>([])
 const loadingPrimary = ref(false)
 const refreshingPrimary = ref(false)
@@ -346,7 +364,9 @@ async function bindNewApi() {
     })
     subscription.value = response.subscription
     syncPrimaryForm(response.subscription)
+    localSubscriptionUid.value = response.subscription.subscriptionUid
     bindForm.value = { accessToken: '', userId: '', authTokenMode: 'bearer' }
+    await fetchAccounts()
     emit('updated')
   } catch (e) {
     bindError.value = e instanceof Error ? e.message : 'Unknown error'
@@ -356,11 +376,11 @@ async function bindNewApi() {
 }
 
 async function fetchPrimaryAccount() {
-  if (!props.subscriptionUid) return
+  if (!effectiveSubscriptionUid.value) return
   loadingPrimary.value = true
   primaryError.value = ''
   try {
-    const item = await api.getSubscription(props.subscriptionUid)
+    const item = await api.getSubscription(effectiveSubscriptionUid.value)
     subscription.value = item
     syncPrimaryForm(item)
   } catch (e) {
@@ -381,7 +401,7 @@ async function savePrimaryCredentials() {
       expectedVersion: subscription.value.version,
     }
     if (primaryForm.value.accessToken.trim()) payload.accessToken = primaryForm.value.accessToken.trim()
-    const item = await api.updateNewApiCredentials(props.subscriptionUid, payload)
+    const item = await api.updateNewApiCredentials(effectiveSubscriptionUid.value, payload)
     subscription.value = item
     syncPrimaryForm(item)
     emit('updated')
@@ -393,11 +413,11 @@ async function savePrimaryCredentials() {
 }
 
 async function refreshPrimaryAccount() {
-  if (!props.subscriptionUid) return
+  if (!effectiveSubscriptionUid.value) return
   refreshingPrimary.value = true
   primaryError.value = ''
   try {
-    const response = await api.refreshSubscription(props.subscriptionUid)
+    const response = await api.refreshSubscription(effectiveSubscriptionUid.value)
     subscription.value = response.subscription
     syncPrimaryForm(response.subscription)
     emit('updated')
@@ -409,10 +429,10 @@ async function refreshPrimaryAccount() {
 }
 
 async function fetchAccounts() {
-  if (!props.subscriptionUid) return
+  if (!effectiveSubscriptionUid.value) return
   loading.value = true
   try {
-    const resp = await api.getSubscriptionAccounts(props.subscriptionUid)
+    const resp = await api.getSubscriptionAccounts(effectiveSubscriptionUid.value)
     accounts.value = resp.accounts || []
   } catch (e) {
     console.error('Failed to fetch accounts:', e)
@@ -426,7 +446,7 @@ async function handleAddAccount() {
   adding.value = true
   addError.value = ''
   try {
-    await api.addSubscriptionAccount(props.subscriptionUid, {
+    await api.addSubscriptionAccount(effectiveSubscriptionUid.value, {
       accessToken: addForm.value.accessToken.trim(),
       userId: addForm.value.userId || undefined,
       displayName: addForm.value.displayName || undefined,
@@ -445,7 +465,7 @@ async function handleAddAccount() {
 async function refreshAccount(accountUid: string) {
   refreshing.value = accountUid
   try {
-    await api.refreshSubscriptionAccount(props.subscriptionUid, accountUid)
+    await api.refreshSubscriptionAccount(effectiveSubscriptionUid.value, accountUid)
     await fetchAccounts()
   } catch (e) {
     console.error('Failed to refresh account:', e)
@@ -457,7 +477,7 @@ async function refreshAccount(accountUid: string) {
 async function deleteAccount(accountUid: string) {
   deleting.value = accountUid
   try {
-    await api.deleteSubscriptionAccount(props.subscriptionUid, accountUid)
+    await api.deleteSubscriptionAccount(effectiveSubscriptionUid.value, accountUid)
     await fetchAccounts()
     emit('updated')
   } catch (e) {
@@ -472,6 +492,7 @@ watch(
   () => {
     subscription.value = null
     accounts.value = []
+    localSubscriptionUid.value = ''
     void Promise.all([fetchPrimaryAccount(), fetchAccounts()])
   },
   { immediate: true },

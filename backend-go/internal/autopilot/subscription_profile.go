@@ -119,6 +119,11 @@ type NewApiAccount struct {
 	DisplayName   string    `json:"displayName,omitempty"` // 用户备注名
 	Balance       float64   `json:"balance,omitempty"`
 	Status        string    `json:"status,omitempty"` // active | expired | error
+	// ProvisionedKeys 记录该账号在远端 new-api 站点自动接入的 Key（按 tokenID 唯一）。
+	// Key 明文只写渠道配置，不进订阅画像。多账号下与主账号 profile.ProvisionedKeys 共存，tokenID 站点级唯一故不撞号。
+	ProvisionedKeys []NewApiProvisionedKey `json:"provisionedKeys,omitempty"`
+	// LastSyncError 记录该账号最近一次分组/倍率同步失败原因，供前端展示。
+	LastSyncError string    `json:"lastSyncError,omitempty"`
 	LastCheckedAt time.Time `json:"lastCheckedAt,omitempty"`
 	CreatedAt     time.Time `json:"createdAt"`
 }

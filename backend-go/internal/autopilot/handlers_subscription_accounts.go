@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -32,14 +33,16 @@ type NewApiCredentialsUpdateRequest struct {
 
 // NewApiAccountItem 账号列表响应单条（脱敏）。
 type NewApiAccountItem struct {
-	AccountUID        string    `json:"accountUid"`
-	UserID            string    `json:"userId,omitempty"`
-	DisplayName       string    `json:"displayName,omitempty"`
-	Balance           float64   `json:"balance,omitempty"`
-	Status            string    `json:"status,omitempty"`
-	AccessTokenMasked string    `json:"accessTokenMasked,omitempty"`
-	LastCheckedAt     time.Time `json:"lastCheckedAt,omitempty"`
-	CreatedAt         time.Time `json:"createdAt"`
+	AccountUID        string                 `json:"accountUid"`
+	UserID            string                 `json:"userId,omitempty"`
+	DisplayName       string                 `json:"displayName,omitempty"`
+	Balance           float64                `json:"balance,omitempty"`
+	Status            string                 `json:"status,omitempty"`
+	AccessTokenMasked string                 `json:"accessTokenMasked,omitempty"`
+	ProvisionedKeys   []NewApiProvisionedKey `json:"provisionedKeys,omitempty"`
+	LastSyncError     string                 `json:"lastSyncError,omitempty"`
+	LastCheckedAt     time.Time              `json:"lastCheckedAt,omitempty"`
+	CreatedAt         time.Time              `json:"createdAt"`
 }
 
 // NewApiAccountListResponse GET /api/subscriptions/:uid/accounts 响应体。
@@ -47,7 +50,8 @@ type NewApiAccountListResponse struct {
 	Accounts []NewApiAccountItem `json:"accounts"`
 }
 
-// handleAddSubscriptionAccount 为已有 new-api 订阅添加新账号。
+// handleAddSubscriptionAccount 为已有 new-api 订阅添加新账号，并按订阅级倍率上限为其合格分组
+// 自动建代理 key 并入关联渠道，使多账号共同分担流量/额度。建 key 失败时回滚远端 key，不留下半成品账号。
 func handleAddSubscriptionAccount(deps *NewApiRouteDeps) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		uid := c.Param("uid")
@@ -76,7 +80,11 @@ func handleAddSubscriptionAccount(deps *NewApiRouteDeps) gin.HandlerFunc {
 			return
 		}
 
-		ctx, cancel := context.WithTimeout(c.Request.Context(), 20*time.Second)
+		// 与主 provision 串行化，避免并发建同名 key。
+		newAPIProvisionMu.Lock()
+		defer newAPIProvisionMu.Unlock()
+
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
 		defer cancel()
 
 		adapter := &NewApiAdapter{}
@@ -86,8 +94,110 @@ func handleAddSubscriptionAccount(deps *NewApiRouteDeps) gin.HandlerFunc {
 			return
 		}
 
+		accountUID := fmt.Sprintf("acct_%d", time.Now().UnixNano())
+
+		// 为该账号建 key：沿用订阅级倍率上限与模型白名单。建 key 失败即整个添加失败并回收已建 key。
+		var accountKeys []NewApiProvisionedKey
+		if deps.CfgManager != nil {
+			groups, gErr := adapter.FetchGroups(ctx, profile.BaseURL, req.AccessToken, derivedUserID, req.AuthTokenMode)
+			if gErr != nil {
+				c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("无法获取该账号分组倍率，已阻止建 key: %v", gErr)})
+				return
+			}
+			resolved, rErr := resolveNewApiProvisionGroups(groups, "", true, profile.MaxGroupMultiplier)
+			if rErr != nil {
+				c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "分组倍率校验失败: " + rErr.Error()})
+				return
+			}
+			provisionReq := NewApiProvisionRequest{
+				BaseURL:                    profile.BaseURL,
+				AccessToken:                req.AccessToken,
+				UserID:                     req.UserID,
+				AuthTokenMode:              req.AuthTokenMode,
+				ProvisionAllEligibleGroups: true,
+				ProvisionModels:            profile.ProvisionModels,
+			}
+			// key 名加账号前缀，避免与主账号/其他账号在同站点下的同名 key 被误复用。
+			namePrefix := accountUID + "-"
+			provisioned, pErr := provisionNewApiGroupKeys(ctx, adapter, provisionReq, derivedUserID, resolved, namePrefix)
+			if pErr != nil {
+				var conflict *newApiProvisionConflictError
+				if errors.As(pErr, &conflict) {
+					c.JSON(http.StatusConflict, gin.H{"error": "建 key 失败: " + conflict.Error()})
+					return
+				}
+				var keyConflict *NewApiProvisionKeyConflictError
+				if errors.As(pErr, &keyConflict) {
+					c.JSON(http.StatusConflict, gin.H{"error": "建 key 失败: " + keyConflict.Error()})
+					return
+				}
+				c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("建 key 失败: %v", pErr)})
+				return
+			}
+			accountKeys = make([]NewApiProvisionedKey, 0, len(provisioned))
+			plaintextByToken := make(map[int64]string, len(provisioned))
+			for _, key := range provisioned {
+				accountKeys = append(accountKeys, key.NewApiProvisionedKey)
+				plaintextByToken[int64(key.TokenID)] = key.Key
+			}
+
+			account := NewApiAccount{
+				AccountUID:      accountUID,
+				AccessToken:     req.AccessToken,
+				UserID:          derivedUserID,
+				AuthTokenMode:   req.AuthTokenMode,
+				DisplayName:     req.DisplayName,
+				Balance:         float64(self.Quota),
+				Status:          "active",
+				ProvisionedKeys: accountKeys,
+				LastCheckedAt:   time.Now(),
+				CreatedAt:       time.Now(),
+			}
+			if err := deps.Store.AddAccount(uid, account); err != nil {
+				cleanupNewApiProvisionedKeys(ctx, adapter, provisionReq, derivedUserID, provisioned)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+
+			// 把账号 key 明文注入关联渠道。失败时删除账号并回收远端 key。
+			if deps.SyncService != nil {
+				fresh := deps.Store.Get(uid)
+				if rErr := deps.SyncService.ReconcileAccountProvisioned(fresh, accountUID, groups, plaintextByToken); rErr != nil {
+					_ = deps.Store.RemoveAccount(uid, accountUID)
+					cleanupNewApiProvisionedKeys(ctx, adapter, provisionReq, derivedUserID, provisioned)
+					c.JSON(http.StatusConflict, gin.H{"error": "同步 key 到渠道失败: " + rErr.Error()})
+					return
+				}
+			}
+
+			if deps.Runner != nil {
+				for _, chUID := range profile.LinkedChannelUIDs {
+					_, _, channel, ok := findNewApiChannel(deps.CfgManager, chUID)
+					if !ok {
+						continue
+					}
+					ch := channel
+					deps.Runner.TriggerDiscovery(chUID, &ch, deps.CfgManager)
+				}
+			}
+
+			c.JSON(http.StatusCreated, NewApiAccountItem{
+				AccountUID:        account.AccountUID,
+				UserID:            account.UserID,
+				DisplayName:       account.DisplayName,
+				Balance:           account.Balance,
+				Status:            account.Status,
+				AccessTokenMasked: maskAccessToken(account.AccessToken),
+				ProvisionedKeys:   account.ProvisionedKeys,
+				LastCheckedAt:     account.LastCheckedAt,
+				CreatedAt:         account.CreatedAt,
+			})
+			return
+		}
+
+		// 无 CfgManager（仅 Store 注入，如部分测试）：退化为只登记账号不建 key。
 		account := NewApiAccount{
-			AccountUID:    fmt.Sprintf("acct_%d", time.Now().UnixNano()),
+			AccountUID:    accountUID,
 			AccessToken:   req.AccessToken,
 			UserID:        derivedUserID,
 			AuthTokenMode: req.AuthTokenMode,
@@ -97,16 +207,10 @@ func handleAddSubscriptionAccount(deps *NewApiRouteDeps) gin.HandlerFunc {
 			LastCheckedAt: time.Now(),
 			CreatedAt:     time.Now(),
 		}
-
 		if err := deps.Store.AddAccount(uid, account); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-
-		if deps.SyncService != nil {
-			_, _ = deps.SyncService.SyncNow(c.Request.Context(), uid)
-		}
-
 		c.JSON(http.StatusCreated, NewApiAccountItem{
 			AccountUID:        account.AccountUID,
 			UserID:            account.UserID,
@@ -144,6 +248,8 @@ func handleListSubscriptionAccounts(deps *NewApiRouteDeps) gin.HandlerFunc {
 				Balance:           acc.Balance,
 				Status:            acc.Status,
 				AccessTokenMasked: maskAccessToken(acc.AccessToken),
+				ProvisionedKeys:   acc.ProvisionedKeys,
+				LastSyncError:     acc.LastSyncError,
 				LastCheckedAt:     acc.LastCheckedAt,
 				CreatedAt:         acc.CreatedAt,
 			})
@@ -153,7 +259,8 @@ func handleListSubscriptionAccounts(deps *NewApiRouteDeps) gin.HandlerFunc {
 	}
 }
 
-// handleDeleteSubscriptionAccount 删除指定账号。
+// handleDeleteSubscriptionAccount 删除指定账号：先从关联渠道剔除该账号的 key，再 best-effort 回收远端 key，
+// 最后从订阅移除账号。渠道剔除失败不阻断删除，避免残留远端 key 阻塞账号移除。
 func handleDeleteSubscriptionAccount(deps *NewApiRouteDeps) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		uid := c.Param("uid")
@@ -163,6 +270,42 @@ func handleDeleteSubscriptionAccount(deps *NewApiRouteDeps) gin.HandlerFunc {
 			return
 		}
 
+		profile := deps.Store.Get(uid)
+		if profile == nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("subscription_uid=%s 不存在", uid)})
+			return
+		}
+		var account *NewApiAccount
+		for i := range profile.Accounts {
+			if profile.Accounts[i].AccountUID == accountUID {
+				account = &profile.Accounts[i]
+				break
+			}
+		}
+		if account == nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("account_uid=%s 不存在", accountUID)})
+			return
+		}
+
+		// 1) 从关联渠道剔除该账号的 key（返回被移除的 tokenID，供远端回收）。
+		var removedTokenIDs map[int64]struct{}
+		if deps.SyncService != nil {
+			removedTokenIDs = deps.SyncService.RemoveAccountKeysFromChannels(profile, *account)
+		}
+
+		// 2) best-effort 回收远端 key。失败仅记录日志，不阻断删除。
+		if len(removedTokenIDs) > 0 {
+			ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
+			defer cancel()
+			adapter := &NewApiAdapter{}
+			for tokenID := range removedTokenIDs {
+				if err := adapter.DeleteToken(ctx, profile.BaseURL, account.AccessToken, account.UserID, account.AuthTokenMode, int(tokenID)); err != nil {
+					log.Printf("[NewApi-Account] 回收远端 key 失败 account=%s tokenID=%d: %v", accountUID, tokenID, err)
+				}
+			}
+		}
+
+		// 3) 移除账号。
 		if err := deps.Store.RemoveAccount(uid, accountUID); err != nil {
 			if strings.Contains(err.Error(), "不存在") {
 				c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
@@ -245,7 +388,7 @@ func handleRefreshSubscriptionAccount(deps *NewApiRouteDeps) gin.HandlerFunc {
 		if deps.SyncService != nil {
 			_, _ = deps.SyncService.SyncNow(c.Request.Context(), uid)
 		}
-		c.JSON(http.StatusOK, NewApiAccountItem{AccountUID: account.AccountUID, UserID: account.UserID, DisplayName: account.DisplayName, Balance: account.Balance, Status: account.Status, AccessTokenMasked: maskAccessToken(account.AccessToken), LastCheckedAt: account.LastCheckedAt, CreatedAt: account.CreatedAt})
+		c.JSON(http.StatusOK, NewApiAccountItem{AccountUID: account.AccountUID, UserID: account.UserID, DisplayName: account.DisplayName, Balance: account.Balance, Status: account.Status, AccessTokenMasked: maskAccessToken(account.AccessToken), ProvisionedKeys: account.ProvisionedKeys, LastSyncError: account.LastSyncError, LastCheckedAt: account.LastCheckedAt, CreatedAt: account.CreatedAt})
 	}
 }
 

@@ -11,6 +11,7 @@ import { buildBaseConfigs, maskKey, useCopilotAccounts } from '@/composables/use
 import { useLanguage } from '@/composables/useLanguage'
 import { GetProviderKeyAssets } from '@bindings/github.com/BenedictKing/ccx/desktop/desktopservice'
 import NewApiSubscriptionForm from '@/components/subscriptions/NewApiSubscriptionForm.vue'
+import NewApiAccountPanel from '@/components/subscriptions/NewApiAccountPanel.vue'
 import ExchangeRateManager from '@/components/subscriptions/ExchangeRateManager.vue'
 import { SUBSCRIPTIONS_PATH } from '@/services/admin-api'
 import type {
@@ -681,6 +682,7 @@ onMounted(() => {
               <div v-if="keyStatuses[subscription.subscriptionUid]?.length" class="space-y-1 border-t border-border/60 pt-2">
                 <div v-for="key in keyStatuses[subscription.subscriptionUid]" :key="key.keyUid || key.sourceRemoteTokenId" class="flex flex-wrap items-center justify-between gap-2 text-xs"><span>{{ key.name }} · {{ key.group }} × {{ key.groupMultiplier }}</span><span :title="key.reason" class="rounded border border-border px-1.5 py-0.5">{{ statusLabel(key.syncStatus) }}<span v-if="key.multiplierExpiresAt"> · {{ t('multiplier.ttl') }} {{ key.multiplierExpiresAt }}</span></span></div>
               </div>
+              <NewApiAccountPanel :subscription="subscription" @updated="loadSubscriptions(subscription.subscriptionUid)" />
             </div>
           </div>
           <p v-else-if="!subscriptionsLoading" class="rounded-lg border border-dashed p-3 text-xs text-muted-foreground">{{ t('subscription.management.empty') }}</p>
