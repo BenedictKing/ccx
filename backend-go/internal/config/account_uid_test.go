@@ -409,9 +409,9 @@ func TestUpdateAccountChannelsUpdatesAllRoutes(t *testing.T) {
 	if cm.config.Upstream[0].Name != "mimo-renamed-claude" || cm.config.ChatUpstream[0].Name != "mimo-renamed-chat" {
 		t.Fatalf("账号重命名未同步全部协议 route")
 	}
-	removed, err := cm.DeleteAccountChannels("acct_test")
-	if err != nil || len(removed) != 2 {
-		t.Fatalf("DeleteAccountChannels removed=%v err=%v", removed, err)
+	removed, skipped, err := cm.DeleteAccountChannels("acct_test")
+	if err != nil || len(removed) != 2 || len(skipped) != 0 {
+		t.Fatalf("DeleteAccountChannels removed=%v skipped=%v err=%v", removed, skipped, err)
 	}
 	if len(cm.config.Upstream) != 0 || len(cm.config.ChatUpstream) != 0 || len(cm.config.ManagedAccounts) != 0 {
 		t.Fatalf("账号级删除未清理全部 route 或凭证源")
@@ -476,5 +476,48 @@ func TestApplyAccountChannelChangesKeepsMemoryOnSaveFailure(t *testing.T) {
 	}
 	if got := cm.GetConfig().Upstream[0].APIKeys; len(got) != 1 || got[0] != "sk-old" {
 		t.Fatalf("保存失败后内存配置被替换: %v", got)
+	}
+}
+
+// TestDeleteAccountChannelsSkipsNonManaged 验证级联删除只删除自动托管渠道，
+// 非托管渠道保留并解除账号关联。
+func TestDeleteAccountChannelsSkipsNonManaged(t *testing.T) {
+	cm := &ConfigManager{
+		config: Config{
+			Upstream: []UpstreamConfig{
+				{AccountUID: "acct_test", ChannelUID: "ch_managed", Name: "x-claude", AutoManaged: true, APIKeys: []string{"sk-a"}},
+				{AccountUID: "acct_test", ChannelUID: "ch_manual", Name: "x-manual", AutoManaged: false, APIKeys: []string{"sk-b"}},
+			},
+			ResponsesUpstream: []UpstreamConfig{
+				{AccountUID: "acct_test", ChannelUID: "ch_codex", Name: "x-codex", AutoManaged: false, APIKeys: []string{"sk-c"}},
+			},
+			ManagedAccounts: []ManagedAccountConfig{{AccountUID: "acct_test", Name: "x"}},
+		},
+		configFile: t.TempDir() + "/config.json",
+	}
+
+	removed, skipped, err := cm.DeleteAccountChannels("acct_test")
+	if err != nil {
+		t.Fatalf("DeleteAccountChannels 失败: %v", err)
+	}
+	if len(removed) != 1 || removed[0] != "ch_managed" {
+		t.Fatalf("removed=%v，期望仅删除 ch_managed", removed)
+	}
+	if len(skipped) != 2 {
+		t.Fatalf("skipped=%v，期望跳过 2 个非托管渠道", skipped)
+	}
+
+	cfg := cm.GetConfig()
+	if len(cfg.Upstream) != 1 || cfg.Upstream[0].ChannelUID != "ch_manual" {
+		t.Fatalf("非托管 messages 渠道应保留: %+v", cfg.Upstream)
+	}
+	if cfg.Upstream[0].AccountUID != "" {
+		t.Fatalf("保留的非托管渠道应解除账号关联，got accountUid=%q", cfg.Upstream[0].AccountUID)
+	}
+	if len(cfg.ResponsesUpstream) != 1 || cfg.ResponsesUpstream[0].AccountUID != "" {
+		t.Fatalf("非托管 responses 渠道应保留并解除关联: %+v", cfg.ResponsesUpstream)
+	}
+	if len(cfg.ManagedAccounts) != 0 {
+		t.Fatal("账号凭证源应被清理")
 	}
 }

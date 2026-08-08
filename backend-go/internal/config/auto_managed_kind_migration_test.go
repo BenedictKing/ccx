@@ -29,6 +29,12 @@ func TestAutoManagedKindMigration(t *testing.T) {
 			wantKind:    "generic",
 		},
 		{
+			name:        "disabledApiKeys 中的凭证同样触发升级",
+			channelJSON: `{"baseUrl":"https://relay.example.com","disabledApiKeys":[{"key":"sk-disabled"}],"name":"legacy-disabled"}`,
+			wantManaged: true,
+			wantKind:    "generic",
+		},
+		{
 			name:        "已有 provider 不参与 generic 迁移",
 			channelJSON: `{"baseUrl":"https://api.example.com","apiKeys":["sk-provider"],"providerId":"deepseek","name":"provider"}`,
 			wantManaged: false,

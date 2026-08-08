@@ -1117,7 +1117,7 @@
   "channelHealth.poolFree": "Free pool",
   "channelHealth.poolTemp": "Temp pool",
   "app.tabs.subscriptions": "Subscriptions",
-  "app.tabs.cockpitOverview": "Cockpit",
+  "app.tabs.cockpitOverview": "Overview",
   "app.tabs.autopilot": "Autopilot",
   "subscription.title": "Subscriptions",
   "subscription.add": "Add Subscription",

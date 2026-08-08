@@ -1232,13 +1232,8 @@ func handleDeleteAccount(deps *AutoManagedDeps) gin.HandlerFunc {
 			c.JSON(http.StatusNotFound, gin.H{"error": "账号不存在"})
 			return
 		}
-		for _, channel := range channels {
-			if !channel.Upstream.AutoManaged {
-				c.JSON(http.StatusConflict, gin.H{"error": "账号包含非自动托管渠道，拒绝级联删除"})
-				return
-			}
-		}
-		removed, err := deps.CfgManager.DeleteAccountChannels(accountUID)
+		// 只级联删除自动托管渠道；非托管渠道保留并解除账号关联，避免误删用户手工渠道。
+		removed, skipped, err := deps.CfgManager.DeleteAccountChannels(accountUID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -1255,8 +1250,13 @@ func handleDeleteAccount(deps *AutoManagedDeps) gin.HandlerFunc {
 				}
 			}
 		}
-		log.Printf("[AutoManaged-Delete] 已删除自动托管账号 account=%s channels=%d", accountUID, len(removed))
-		c.JSON(http.StatusOK, gin.H{"accountUid": accountUID, "deletedChannels": len(removed)})
+		log.Printf("[AutoManaged-Delete] 已删除自动托管账号 account=%s deletedChannels=%d skippedNonManaged=%d", accountUID, len(removed), len(skipped))
+		c.JSON(http.StatusOK, gin.H{
+			"accountUid":       accountUID,
+			"deletedChannels":  len(removed),
+			"skippedChannels":  skipped,
+			"skippedChannelNum": len(skipped),
+		})
 	}
 }
 

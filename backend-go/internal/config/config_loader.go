@@ -956,7 +956,8 @@ func (cm *ConfigManager) ensureAutoManagedKind() bool {
 
 			// 只有同时具备 endpoint 和至少一把凭证的历史渠道才自动升级。
 			// APIKeyConfigs 可能是旧配置中唯一保存凭证的位置，因此两者都要检查。
-			hasKey := len(ch.APIKeys) > 0
+			// DisabledAPIKeys 同样是凭证：key 被禁用（拉黑/欠费）的托管渠道不应被误判为非托管。
+			hasKey := len(ch.APIKeys) > 0 || len(ch.DisabledAPIKeys) > 0
 			if !hasKey {
 				for _, keyConfig := range ch.APIKeyConfigs {
 					if strings.TrimSpace(keyConfig.Key) != "" {

@@ -997,20 +997,27 @@ func configHasChannelUID(cfg *Config, channelUID string) bool {
 	return found
 }
 
-// DeleteAccountChannels 原子删除账号下全部协议渠道，返回被删除的 channelUid。
-func (cm *ConfigManager) DeleteAccountChannels(accountUID string) ([]string, error) {
+// DeleteAccountChannels 原子删除账号下全部自动托管协议渠道，返回被删除与跳过的 channelUid。
+// 非自动托管渠道不删除，仅解除账号关联（清空 AccountUID），避免误删用户手工渠道。
+func (cm *ConfigManager) DeleteAccountChannels(accountUID string) (removed []string, skipped []string, err error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
-	var removed []string
 	filter := func(channels []UpstreamConfig) []UpstreamConfig {
 		kept := channels[:0]
 		for _, channel := range channels {
-			if channel.AccountUID == accountUID {
-				removed = append(removed, channel.ChannelUID)
+			if channel.AccountUID != accountUID {
+				kept = append(kept, channel)
 				continue
 			}
-			kept = append(kept, channel)
+			if !channel.AutoManaged {
+				// 非托管渠道保留，但解除与该账号的关联。
+				channel.AccountUID = ""
+				skipped = append(skipped, channel.ChannelUID)
+				kept = append(kept, channel)
+				continue
+			}
+			removed = append(removed, channel.ChannelUID)
 		}
 		return kept
 	}
@@ -1020,8 +1027,8 @@ func (cm *ConfigManager) DeleteAccountChannels(accountUID string) ([]string, err
 	cm.config.GeminiUpstream = filter(cm.config.GeminiUpstream)
 	cm.config.ImagesUpstream = filter(cm.config.ImagesUpstream)
 	cm.config.VectorsUpstream = filter(cm.config.VectorsUpstream)
-	if len(removed) == 0 {
-		return nil, fmt.Errorf("账号 %s 不存在", accountUID)
+	if len(removed) == 0 && len(skipped) == 0 {
+		return nil, nil, fmt.Errorf("账号 %s 不存在", accountUID)
 	}
 	accounts := cm.config.ManagedAccounts[:0]
 	for _, account := range cm.config.ManagedAccounts {
@@ -1031,9 +1038,9 @@ func (cm *ConfigManager) DeleteAccountChannels(accountUID string) ([]string, err
 	}
 	cm.config.ManagedAccounts = accounts
 	if err := cm.saveConfigLocked(cm.config); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return removed, nil
+	return removed, skipped, nil
 }
 
 // RenameManagedAccount 原子重命名账号及其全部协议渠道。
