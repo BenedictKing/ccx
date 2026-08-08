@@ -59,13 +59,19 @@ Channels   (Claude/OpenAI/Gemini/...)
 
 | 文档 | 状态 | 备注 |
 |------|------|------|
-| autopilot.md | ✅ 骨架完成 | 覆盖核心结构体、流程、边界、新增功能 |
-| logical-channel.md | ⚠️ 骨架完成 | 归组算法细节待补充 |
+| autopilot.md | ✅ 完成 | 覆盖核心结构体、流程、边界、新增功能 |
+| logical-channel.md | ✅ 完成 | 覆盖归组算法、CRUD 原子性、前端聚合、测试 |
 | new-api-integration.md | ✅ 完成 | 覆盖数据模型、接口、同步、边界 |
 | healthcheck.md | ✅ 完成 | 覆盖 L1/L2、稀疏探针、恢复、凭证回填 |
 | benchmark-chart.md | ✅ 完成 | 明确前端缺失，数据链路已通 |
-| cross-module-integration.md | ✅ 骨架完成 | 交互边界、事件传播、状态一致性 |
+| cross-module-integration.md | ✅ 完成 | 覆盖交互边界、事件传播、配置传播、竞态处理 |
 
 ## 待补充
 
-<!-- 各子文档写完后，在此处补充关键设计决策清单和下一步改造方向 -->
+- LogicalChannel 级别的健康/质量/成本/能力标签字段持久化
+- 物理渠道非 CRUD 变更后的自动重建触发机制
+- LogicalChannel 与 Autopilot SmartRouter 候选渠道收集的联动
+- 跨模块事件总线设计
+- Benchmark Chart 前端页面落地
+- New-API 周期性自动余额刷新
+- AccessToken 加密存储
