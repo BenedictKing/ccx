@@ -68,6 +68,8 @@ export const ARTIFICIAL_ANALYSIS_MODEL_MAP = {
   'grok-4-5': 'grok-4.5',
   'muse-spark-1.1': 'muse-spark-1.1',
   'muse-spark-1-1': 'muse-spark-1.1',
+  'muse-spark-1.2': 'muse-spark-1.2',
+  'muse-spark-1-2': 'muse-spark-1.2',
 }
 
 /**

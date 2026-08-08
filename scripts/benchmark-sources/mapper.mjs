@@ -41,6 +41,7 @@ export const DEEPSWE_MODEL_MAP = {
   'gpt-5-4-openai-compact': 'gpt-5.4',
   'grok-4-5': 'grok-4.5',
   'muse-spark-1-1': 'muse-spark-1.1',
+  'muse-spark-1-2': 'muse-spark-1.2',
 }
 
 /**
@@ -67,6 +68,7 @@ export const BENCHLM_MODEL_MAP = {
   'gpt-5-4-mini': 'gpt-5.4-mini',
   'grok-4-5': 'grok-4.5',
   'muse-spark-1-1': 'muse-spark-1.1',
+  'muse-spark-1-2': 'muse-spark-1.2',
   'deepseek-v4-flash': 'deepseek-v4-flash',
   'deepseek-v4-flash-base': 'deepseek-v4-flash',
   'deepseek-v4-flash-high': 'deepseek-v4-flash',

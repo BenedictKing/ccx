@@ -561,12 +561,16 @@ export function validateRegistry(registry) {
     if (profile.patterns.some(pattern => typeof pattern !== 'string' || pattern.trim() === '')) {
       throw new Error(`${prefix} contains an empty pattern`)
     }
-    if ((!profile.categoryScores || Object.keys(profile.categoryScores).length === 0) &&
-        (!profile.benchmarkEvidence || profile.benchmarkEvidence.length === 0)) {
-      throw new Error(`${prefix} requires categoryScores or benchmarkEvidence`)
-    }
-    if (!Array.isArray(profile.sources) || profile.sources.length === 0) {
-      throw new Error(`${prefix} requires at least one source`)
+    // provisional lane 允许作为纯占位条目存在（已发布但尚未被任何榜单收录），
+    // 此时可以没有 categoryScores、benchmarkEvidence 和 sources。
+    if (profile.lane !== 'provisional') {
+      if ((!profile.categoryScores || Object.keys(profile.categoryScores).length === 0) &&
+          (!profile.benchmarkEvidence || profile.benchmarkEvidence.length === 0)) {
+        throw new Error(`${prefix} requires categoryScores or benchmarkEvidence`)
+      }
+      if (!Array.isArray(profile.sources) || profile.sources.length === 0) {
+        throw new Error(`${prefix} requires at least one source`)
+      }
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(profile.verifiedAt || '')) {
       throw new Error(`${prefix}.verifiedAt must use YYYY-MM-DD`)
