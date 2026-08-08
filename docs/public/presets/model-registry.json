@@ -3606,13 +3606,13 @@
         "(?:^|[-/])muse-spark-1.1(?=$|@)"
       ],
       "canonicalModel": "muse-spark-1.1",
-      "verifiedAt": "2026-08-07",
+      "verifiedAt": "2026-08-08",
       "lane": "provisional",
       "sources": [
         "https://deepswe.datacurve.ai/",
+        "https://artificialanalysis.ai/models/muse-spark-1-1",
         "https://benchlm.ai/models/muse-spark-1-1",
-        "https://benchlm.ai/methodology",
-        "https://artificialanalysis.ai/models/muse-spark-1-1"
+        "https://benchlm.ai/methodology"
       ],
       "sharedResults": 595,
       "comparableCategories": 4,
@@ -3690,6 +3690,19 @@
         "multimodal": 76.3,
         "knowledge": 93.5
       }
+    },
+    {
+      "patterns": [
+        "(?:^|[-/])muse-spark-1\\.2(?=$|@)"
+      ],
+      "canonicalModel": "muse-spark-1.2",
+      "verifiedAt": "2026-08-08",
+      "lane": "provisional",
+      "sources": [],
+      "sharedResults": 1,
+      "comparableCategories": 1,
+      "totalCategories": 1,
+      "benchmarkEvidence": []
     },
     {
       "patterns": [
