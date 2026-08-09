@@ -5,9 +5,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"math"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
@@ -21,7 +23,7 @@ const (
 	newApiSyncStatusStale          = "stale"
 	newApiSyncStatusRemoteMissing  = "remote_group_missing"
 	newApiSyncSourceNewAPI         = "new_api"
-	newApiSyncTTL                  = 15 * time.Minute
+	newApiSyncTTL                  = 35 * time.Minute
 )
 
 type NewApiKeyStatus struct {
@@ -64,15 +66,34 @@ type NewApiSubscriptionSyncService struct {
 	now        func() time.Time
 	locksMu    sync.Mutex
 	locks      map[string]*sync.Mutex
+
+	// 周期性自动刷新
+	cancel        func()
+	wg            sync.WaitGroup
+	ticker        *time.Ticker
+	sweeping      atomic.Bool
+	sem           chan struct{}
+	quietLogs     bool
+	enabled       func() bool
+	perUIDTimeout time.Duration
 }
 
 type NewApiSubscriptionSyncServiceDeps struct {
-	Store      *SubscriptionStore
-	CfgManager *config.ConfigManager
-	Runner     *AutoDiscoveryRunner
-	Adapter    NewApiSyncAdapter
-	Now        func() time.Time
+	Store         *SubscriptionStore
+	CfgManager    *config.ConfigManager
+	Runner        *AutoDiscoveryRunner
+	Adapter       NewApiSyncAdapter
+	Now           func() time.Time
+	QuietLogs     bool
+	Enabled       func() bool
+	PerUIDTimeout time.Duration
 }
+
+const (
+	newApiSyncDefaultInterval   = 30 * time.Minute
+	newApiSyncDefaultSemSize    = 4
+	newApiSyncDefaultUIDTimeout = 25 * time.Second
+)
 
 func NewNewApiSubscriptionSyncService(deps NewApiSubscriptionSyncServiceDeps) *NewApiSubscriptionSyncService {
 	if deps.Store == nil {
@@ -84,7 +105,102 @@ func NewNewApiSubscriptionSyncService(deps NewApiSubscriptionSyncServiceDeps) *N
 	if deps.Now == nil {
 		deps.Now = time.Now
 	}
-	return &NewApiSubscriptionSyncService{store: deps.Store, cfgManager: deps.CfgManager, runner: deps.Runner, adapter: deps.Adapter, now: deps.Now, locks: make(map[string]*sync.Mutex)}
+	if deps.Enabled == nil {
+		deps.Enabled = func() bool { return true }
+	}
+	if deps.PerUIDTimeout <= 0 {
+		deps.PerUIDTimeout = newApiSyncDefaultUIDTimeout
+	}
+	return &NewApiSubscriptionSyncService{
+		store:         deps.Store,
+		cfgManager:    deps.CfgManager,
+		runner:        deps.Runner,
+		adapter:       deps.Adapter,
+		now:           deps.Now,
+		locks:         make(map[string]*sync.Mutex),
+		sem:           make(chan struct{}, newApiSyncDefaultSemSize),
+		quietLogs:     deps.QuietLogs,
+		enabled:       deps.Enabled,
+		perUIDTimeout: deps.PerUIDTimeout,
+	}
+}
+
+// Start 启动周期性余额/倍率同步循环。
+func (s *NewApiSubscriptionSyncService) Start(ctx context.Context) {
+	ctx, s.cancel = context.WithCancel(ctx)
+	s.ticker = time.NewTicker(newApiSyncDefaultInterval)
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		if !s.quietLogs {
+			log.Printf("[NewApiSubscriptionSyncService-Start] 周期性同步已启动 (interval=%s, uidTimeout=%s, concurrency=%d)", newApiSyncDefaultInterval, s.perUIDTimeout, cap(s.sem))
+		}
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-s.ticker.C:
+				s.SweepAll(ctx)
+			}
+		}
+	}()
+}
+
+// Stop 优雅停止后台同步循环。
+func (s *NewApiSubscriptionSyncService) Stop() {
+	if s.cancel != nil {
+		s.cancel()
+	}
+	if s.ticker != nil {
+		s.ticker.Stop()
+	}
+	s.wg.Wait()
+	if !s.quietLogs {
+		log.Println("[NewApiSubscriptionSyncService-Stop] 周期性同步已停止")
+	}
+}
+
+// SweepAll 扫描所有 new_api 订阅并并发刷新。
+func (s *NewApiSubscriptionSyncService) SweepAll(ctx context.Context) {
+	if !s.enabled() {
+		if !s.quietLogs {
+			log.Println("[NewApiSubscriptionSyncService-Sweep] 全局开关关闭，跳过")
+		}
+		return
+	}
+	if !s.sweeping.CompareAndSwap(false, true) {
+		if !s.quietLogs {
+			log.Println("[NewApiSubscriptionSyncService-Sweep] 上一轮同步尚未结束，跳过重叠执行")
+		}
+		return
+	}
+	defer s.sweeping.Store(false)
+
+	all := s.store.ListAll()
+	var wg sync.WaitGroup
+	for _, profile := range all {
+		if profile.Provider != "new_api" {
+			continue
+		}
+		uid := profile.SubscriptionUID
+		wg.Add(1)
+		s.sem <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-s.sem }()
+			ctxUID, cancel := context.WithTimeout(ctx, s.perUIDTimeout)
+			defer cancel()
+			result, err := s.SyncNow(ctxUID, uid)
+			if !s.quietLogs {
+				if err != nil {
+					log.Printf("[NewApiSubscriptionSyncService-Sweep] uid=%s error=%v", uid, err)
+				} else {
+					log.Printf("[NewApiSubscriptionSyncService-Sweep] %s", result.LogSummary())
+				}
+			}
+		}()
+	}
+	wg.Wait()
 }
 
 func (s *NewApiSubscriptionSyncService) lockForUID(uid string) *sync.Mutex {

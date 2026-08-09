@@ -590,6 +590,7 @@ func main() {
 	var autopilotManager *autopilot.Manager
 	var autopilotDB *sql.DB // Phase B.1: 暴露给 StateEventStore 复用
 	var autoDiscoveryRunner *autopilot.AutoDiscoveryRunner
+	var newApiSyncService *autopilot.NewApiSubscriptionSyncService
 	{
 		autopilotStore, apErr := autopilot.NewProfileStore(paths.AutopilotDBPath)
 		if apErr != nil {
@@ -1486,10 +1487,13 @@ func main() {
 				}
 			}
 
-			newApiSyncService := autopilot.NewNewApiSubscriptionSyncService(autopilot.NewApiSubscriptionSyncServiceDeps{
+			newApiSyncService = autopilot.NewNewApiSubscriptionSyncService(autopilot.NewApiSubscriptionSyncServiceDeps{
 				Store: autopilotManager.SubscriptionStore(), CfgManager: cfgManager, Runner: autoDiscoveryRunner,
+				QuietLogs: envCfg.QuietPollingLogs,
+				Enabled:   func() bool { return cfgManager.GetAutopilotRouting().SubscriptionAutoRefresh.Enabled },
 			})
 			newApiSyncService.SyncAllNewAPIAsync(context.Background())
+			newApiSyncService.Start(context.Background())
 
 			// 订阅中心 API
 			autopilot.RegisterSubscriptionRoutes(apiGroup, autopilotManager.SubscriptionStore(), autopilotManager.SubscriptionRefreshWorker(), newApiSyncService)
@@ -1787,6 +1791,12 @@ func main() {
 		if autoDiscoveryRunner != nil {
 			autoDiscoveryRunner.Stop()
 			log.Println("[AutoDiscovery-Shutdown] 后台发现执行器已停止")
+		}
+
+		// 停止 new-api 订阅周期性余额/倍率同步。
+		if newApiSyncService != nil {
+			newApiSyncService.Stop()
+			log.Println("[NewApiSubscriptionSync-Shutdown] 周期性同步已停止")
 		}
 
 		// 关闭指标持久化存储
