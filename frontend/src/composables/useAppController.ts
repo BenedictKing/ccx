@@ -60,7 +60,7 @@ export function useAppController() {
     { value: 'messages', labelKey: 'app.tabs.channels', route: '/channels/messages', icon: 'mdi-server-network' },
     { value: 'images', labelKey: 'app.tabs.images', route: '/channels/images', icon: 'mdi-image-outline' },
     { value: 'vectors', labelKey: 'app.tabs.vectors', route: '/channels/vectors', icon: 'mdi-vector-point' },
-    { value: 'conversations', labelKey: 'app.tabs.conversations', route: '/conversations', icon: 'mdi-view-dashboard-outline' },
+    { value: 'conversations', labelKey: 'app.tabs.conversations', route: '/conversations', icon: 'mdi-radar' },
     { value: 'health', labelKey: 'app.tabs.healthCenter', route: '/health', icon: 'mdi-stethoscope' },
     { value: 'subscriptions', labelKey: 'app.tabs.subscriptions', route: '/subscriptions', icon: 'mdi-cash-multiple' },
     { value: 'cockpit', labelKey: 'app.tabs.cockpitOverview', route: '/cockpit', icon: 'mdi-view-dashboard-outline' },

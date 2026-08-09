@@ -90,6 +90,7 @@
               :key="tab.value"
               :active="route.path === tab.route"
               :to="tab.route"
+              :prepend-icon="tab.icon"
             >
               <v-list-item-title>{{ tab.label }}</v-list-item-title>
             </v-list-item>

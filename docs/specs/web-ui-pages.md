@@ -261,7 +261,7 @@ i18n key 依次为 `app.tabs.{channels,images,vectors,conversations,healthCenter
 |---|---|---|---|
 | ~~P1~~ ✅ | **Tab 清单漂移** → 已修复（2026-08-09 `d876784d`）：`apiTabOptions` 补 cost-report（icon `mdi-finance`），移动端下拉现 9 项可达 | `useAppController.apiTabOptions` | 已解决 |
 | ~~P2~~ ✅ | **硬编码中文未国际化** → 已修复：新增 `app.tabs.costReport` + 43 个 `costReport.*` key（三 locale 对齐），`CostReportView` 全页与桌面导航改用 `t()` | `App.vue`、`CostReportView.vue`、`locales/*` | 已解决 |
-| P3 | **导航 icon 重复**：conversations 与 cockpit 同用 `mdi-view-dashboard-outline` | `apiTabOptions` | 下拉辨识度低 |
+| ~~P3~~ ✅ | **导航 icon 重复** → 已修复（2026-08-09）：conversations 改用 `mdi-radar`，cockpit 保持 `mdi-view-dashboard-outline`；移动端下拉 `v-list-item` 补 `:prepend-icon="tab.icon"` 使图标渲染 | `apiTabOptions`, `App.vue` | 已解决 |
 | ~~P4~~ ✅ | **全局统计卡/操作栏路径黑名单不对称** → 已修复（2026-08-09 `d876784d`）：黑名单补 `/subscriptions` `/cockpit`，两页不再显示渠道统计卡与"添加渠道"操作栏（ego-browser 实测全 false 确认） | `App.vue` L240/263/310 | 已解决 |
 | ~~P5~~ ✅ | **健康数据轮询不一致** → 已修复（2026-08-09，Phase B.3 `1891c7d2`）：ChannelsView 与 HealthCenterView 均接入 `useEventStream` 事件驱动刷新（熔断/Key/渠道状态变更 400ms 去抖即时刷新），轮询降级为兜底，两视图刷新机制已统一 | `ChannelsView` vs `HealthCenterView` | 已解决 |
 | P6 | **确认体系分裂**：SubscriptionsView 用原生 `window.confirm`，而全站已有 `dialogStore.confirm`（Wails 兼容） | `SubscriptionsView.vue` `deleteItem` | 桌面端 iframe 下 confirm 可能失效 |
