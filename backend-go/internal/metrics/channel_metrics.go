@@ -5,8 +5,10 @@ import (
 	"encoding/hex"
 	"log"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/BenedictKing/ccx/internal/eventbus"
 	"github.com/BenedictKing/ccx/internal/types"
 	"github.com/BenedictKing/ccx/internal/utils"
 )
@@ -215,6 +217,9 @@ type MetricsManager struct {
 
 	// 渠道-模型级熔断（内存态，自带独立锁，见 model_circuit.go）
 	modelCircuit *ModelCircuitTracker
+
+	// 跨模块事件总线（Phase B.1，可选）。未注入时熔断迁移不发事件。
+	eventBus atomic.Pointer[eventbus.Bus]
 }
 
 // ModelCircuit 返回渠道-模型级熔断追踪器。
@@ -233,6 +238,15 @@ func (m *MetricsManager) GetPersistenceStore() PersistenceStore {
 // GetAPIType 获取 API 类型
 func (m *MetricsManager) GetAPIType() string {
 	return m.apiType
+}
+
+// SetEventBus 注入跨模块事件总线（Phase B.1）。可选依赖：未注入时熔断迁移不发事件，
+// 现有调度与查询行为不变。并发安全。
+func (m *MetricsManager) SetEventBus(bus *eventbus.Bus) {
+	if m == nil {
+		return
+	}
+	m.eventBus.Store(bus)
 }
 
 // NewMetricsManager 创建指标管理器

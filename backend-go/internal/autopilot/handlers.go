@@ -115,6 +115,10 @@ func RegisterRoutes(router gin.IRouter, mgr *Manager) {
 		// Phase 3A：画像变更事件（只读展示，不影响调度）
 		group.GET("/changelog", handleChangelog(mgr))
 		group.GET("/events", handleChangelogEvents(mgr))
+
+		// Phase B.1：跨模块状态事件（熔断 / Key 拉黑恢复）
+		group.GET("/state-events", handleStateEvents(mgr))
+		group.GET("/state-events/stream", handleStateEventsStream(mgr))
 	}
 }
 

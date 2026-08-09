@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"embed"
 	"encoding/json"
 	"flag"
@@ -22,6 +23,7 @@ import (
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/conversation"
 	"github.com/BenedictKing/ccx/internal/errutil"
+	"github.com/BenedictKing/ccx/internal/eventbus"
 	"github.com/BenedictKing/ccx/internal/handlers"
 	"github.com/BenedictKing/ccx/internal/handlers/chat"
 	"github.com/BenedictKing/ccx/internal/handlers/common"
@@ -586,6 +588,7 @@ func main() {
 
 	// 初始化 Autopilot 健康中心（Phase 1 shadow/read-only）
 	var autopilotManager *autopilot.Manager
+	var autopilotDB *sql.DB // Phase B.1: 暴露给 StateEventStore 复用
 	var autoDiscoveryRunner *autopilot.AutoDiscoveryRunner
 	{
 		autopilotStore, apErr := autopilot.NewProfileStore(paths.AutopilotDBPath)
@@ -609,6 +612,7 @@ func main() {
 				log.Printf("[Autopilot-Init] 警告: 初始化 Manager 失败: %v (健康中心将不可用)", mgrErr)
 			} else {
 				autopilotManager = mgr
+				autopilotDB = autopilotStore.DB() // Phase B.1: 复用 SQLite 连接
 
 				// Phase 2: 创建 TraceStore（内存环形 + 可选 SQLite 落盘）
 				traceStore, tsErr := autopilot.NewTraceStoreWithDB(autopilotStore.DB())
@@ -735,6 +739,36 @@ func main() {
 	channelScheduler.SetRateLimitManager(rateLimitManager)
 	log.Printf("[Scheduler-Init] 多渠道调度器已初始化 (失败率阈值: %.0f%%, 滑动窗口: %d, 连续失败阈值: %d)",
 		messagesMetricsManager.GetFailureThreshold()*100, messagesMetricsManager.GetWindowSize(), messagesMetricsManager.GetConsecutiveRetryableFailuresThreshold())
+
+	// Phase B.1：创建跨模块事件总线并注入 ConfigManager + 6 个 MetricsManager + autopilot Manager。
+	// 可选依赖：未注入时所有 publish no-op，系统行为不变。
+	{
+		stateEventBus := eventbus.NewBus()
+		cfgManager.SetEventBus(stateEventBus)
+		messagesMetricsManager.SetEventBus(stateEventBus)
+		responsesMetricsManager.SetEventBus(stateEventBus)
+		geminiMetricsManager.SetEventBus(stateEventBus)
+		chatMetricsManager.SetEventBus(stateEventBus)
+		imagesMetricsManager.SetEventBus(stateEventBus)
+		vectorsMetricsManager.SetEventBus(stateEventBus)
+		if autopilotManager != nil {
+			var stateStore *autopilot.StateEventStore
+			if autopilotDB != nil {
+				var storeErr error
+				stateStore, storeErr = autopilot.NewStateEventStoreWithDB(autopilotDB)
+				if storeErr != nil {
+					log.Printf("[EventBus] 警告: 初始化 StateEventStore 失败: %v", storeErr)
+					stateStore = nil
+				}
+			}
+			autopilotManager.WireEventBus(stateEventBus, stateStore)
+			if stateStore != nil {
+				log.Printf("[EventBus] 跨模块事件总线已注入 (config + 6 metrics + autopilot manager + StateEventStore)")
+			} else {
+				log.Printf("[EventBus] 跨模块事件总线已注入 (config + 6 metrics + autopilot manager)")
+			}
+		}
+	}
 
 	// 通过 CandidateFilter 回调注入 Autopilot SmartRouter 的渠道级过滤与重排逻辑。
 	// Kill Switch 启用时不注入 filter，恢复调度器默认行为。

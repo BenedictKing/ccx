@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
+	"github.com/BenedictKing/ccx/internal/eventbus"
 	"github.com/BenedictKing/ccx/internal/keypool"
 	"github.com/BenedictKing/ccx/internal/metrics"
 	"github.com/BenedictKing/ccx/internal/scheduler"
@@ -143,6 +144,11 @@ type Manager struct {
 	changelogStore *ProfileChangelogStore
 	eventHub       *EventHub
 
+	// Phase B.1：跨模块状态事件（熔断 / Key 拉黑恢复等）
+	eventBus        *eventbus.Bus
+	stateEventStore *StateEventStore
+	stateEventUnsub func()
+
 	// Phase 3B-2：模型画像存储（用于 ModelResolver 查询）
 	modelProfileStore *ModelProfileStore
 
@@ -244,6 +250,9 @@ func NewManager(
 
 		changelogStore: changelogStore,
 		eventHub:       NewEventHub(),
+
+		eventBus:        eventbus.NewBus(),
+		stateEventStore: nil, // 由 main.go 注入或 NewManagerWithStateStore 显式设置
 
 		modelProfileStore: modelProfileStore,
 		modelResolver:     NewModelResolver(modelProfileStore, cfgManager),
@@ -650,6 +659,38 @@ func (m *Manager) ChangelogStore() *ProfileChangelogStore {
 // EventHub 返回内部 EventHub 引用（供 WebSocket handler 订阅、AutoDiscoveryRunner 发布）。
 func (m *Manager) EventHub() *EventHub {
 	return m.eventHub
+}
+
+// EventBus 返回跨模块 eventbus.Bus（Phase B.1），可由 main.go 注入或 WireEventBus 创建。
+func (m *Manager) EventBus() *eventbus.Bus {
+	return m.eventBus
+}
+
+// StateEventStore 返回内部 StateEventStore 引用（供 API handler 读取历史）。
+func (m *Manager) StateEventStore() *StateEventStore {
+	return m.stateEventStore
+}
+
+// WireEventBus 注入 eventbus.Bus 并订阅 StateEventStore。
+// 应在 main.go 启动阶段调用（config + metrics 已注入之后）。
+func (m *Manager) WireEventBus(bus *eventbus.Bus, store *StateEventStore) {
+	if m == nil {
+		return
+	}
+	if bus != nil {
+		m.eventBus = bus
+	}
+	if store != nil {
+		m.stateEventStore = store
+		// 订阅全类型，持久化到 SQLite 供前端 /api/health-center/state-events 拉取。
+		ch, unsub := bus.Subscribe()
+		go func() {
+			for ev := range ch {
+				store.Record(ev)
+			}
+		}()
+		m.stateEventUnsub = unsub
+	}
 }
 
 // ModelProfileStore 返回内部 ModelProfileStore 引用（供 main.go 传入 AutoDiscoveryRunner）。

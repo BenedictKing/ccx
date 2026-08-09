@@ -6,8 +6,10 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/BenedictKing/ccx/internal/eventbus"
 	"github.com/BenedictKing/ccx/internal/statelog"
 	"github.com/BenedictKing/ccx/internal/utils"
 	"github.com/fsnotify/fsnotify"
@@ -1282,6 +1284,9 @@ type ConfigManager struct {
 	closeOnce             sync.Once     // 确保 Close 只执行一次
 	backgroundWG          sync.WaitGroup
 	configChangeCallbacks []func(Config)
+
+	// eventBus 跨模块事件总线（Phase B.1，可选）。未注入时 Key/config 事件不发。
+	eventBus atomic.Pointer[eventbus.Bus]
 }
 
 // failedKeyCacheKey 构造 FailedKeysCache 的复合键（apiType:apiKey）
@@ -1799,7 +1804,15 @@ func (cm *ConfigManager) BlacklistKeyWithRecoverAt(apiType string, channelIndex 
 		log.Printf("[%s-Blacklist] 警告: 渠道 %s 的所有 Key 都已被拉黑！", apiType, upstream.Name)
 	}
 
-	return cm.saveConfigLocked(cm.config)
+	if err := cm.saveConfigLocked(cm.config); err != nil {
+		return err
+	}
+	payload := map[string]any{}
+	if recoverAt != "" {
+		payload["recoverAt"] = recoverAt
+	}
+	cm.publishKeyEvent(eventbus.TypeKeyBlacklisted, upstream.ChannelUID, apiType, apiKey, reason, message, payload)
+	return nil
 }
 
 // ============== 熔断器运行时配置 ==============
@@ -1902,6 +1915,36 @@ func (cm *ConfigManager) RegisterOnConfigChange(fn func(Config)) {
 	cm.configChangeCallbacks = append(cm.configChangeCallbacks, fn)
 }
 
+// SetEventBus 注入跨模块事件总线（Phase B.1）。可选依赖：未注入时 Key/config 事件不发。
+// 并发安全。
+func (cm *ConfigManager) SetEventBus(bus *eventbus.Bus) {
+	if cm == nil {
+		return
+	}
+	cm.eventBus.Store(bus)
+}
+
+// publishKeyEvent 发布 Key 状态变更事件。bus 为 nil 时为空操作。
+// 调用方应在 saveConfigLocked 返回后调用，Subject 为 channelUID 便于前端分组。
+func (cm *ConfigManager) publishKeyEvent(evType, channelUID, channelKind, apiKey, reason, message string, payload map[string]any) {
+	bus := cm.eventBus.Load()
+	if bus == nil {
+		return
+	}
+	if payload == nil {
+		payload = map[string]any{}
+	}
+	payload["keyMask"] = utils.MaskAPIKey(apiKey)
+	bus.Publish(eventbus.Event{
+		Type:        evType,
+		Scope:       eventbus.ScopeConfig,
+		Subject:     channelUID,
+		ChannelKind: channelKind,
+		Cause:       reason,
+		Payload:     payload,
+	})
+}
+
 // fireConfigChangeCallbacks 在锁外通知所有已注册的回调
 // 调用方需已持有 cm.mu，本方法会在内部释放锁
 // fireConfigChangeCallbacks 在锁外异步通知所有已注册的回调
@@ -1964,7 +2007,11 @@ func (cm *ConfigManager) RestoreKey(apiType string, channelIndex int, apiKey str
 	log.Printf("[%s-Blacklist] Key %s 已恢复 (渠道: %s)", apiType, utils.MaskAPIKey(apiKey), upstream.Name)
 	statelog.LogStateTransition(apiType+"-Blacklist", "key", utils.MaskAPIKey(apiKey), "disabled", "active", "manual_restore", "channel="+upstream.Name)
 
-	return cm.saveConfigLocked(cm.config)
+	if err := cm.saveConfigLocked(cm.config); err != nil {
+		return err
+	}
+	cm.publishKeyEvent(eventbus.TypeKeyRestored, upstream.ChannelUID, apiType, apiKey, "manual_restore", "", nil)
+	return nil
 }
 
 // SuspendKey 手动暂停指定 API Key（设置 Enabled=false，不移出 APIKeys 列表）
@@ -1998,7 +2045,11 @@ func (cm *ConfigManager) SuspendKey(apiType string, channelIndex int, apiKey str
 	log.Printf("[%s-Suspend] Key %s 已手动暂停 (渠道: %s)", apiType, utils.MaskAPIKey(apiKey), upstream.Name)
 	statelog.LogStateTransition(apiType+"-Suspend", "key", utils.MaskAPIKey(apiKey), "active", "suspended", "manual_suspend", "channel="+upstream.Name)
 
-	return cm.saveConfigLocked(cm.config)
+	if err := cm.saveConfigLocked(cm.config); err != nil {
+		return err
+	}
+	cm.publishKeyEvent(eventbus.TypeKeyBlacklisted, upstream.ChannelUID, apiType, apiKey, "manual_suspend", "", nil)
+	return nil
 }
 
 // ResumeKey 手动恢复指定 API Key（移除 Enabled 限制，恢复为活跃状态）
@@ -2041,7 +2092,11 @@ func (cm *ConfigManager) ResumeKey(apiType string, channelIndex int, apiKey stri
 	log.Printf("[%s-Suspend] Key %s 已手动恢复 (渠道: %s)", apiType, utils.MaskAPIKey(apiKey), upstream.Name)
 	statelog.LogStateTransition(apiType+"-Suspend", "key", utils.MaskAPIKey(apiKey), "suspended", "active", "manual_resume", "channel="+upstream.Name)
 
-	return cm.saveConfigLocked(cm.config)
+	if err := cm.saveConfigLocked(cm.config); err != nil {
+		return err
+	}
+	cm.publishKeyEvent(eventbus.TypeKeyRestored, upstream.ChannelUID, apiType, apiKey, "manual_resume", "", nil)
+	return nil
 }
 
 // RestoreAllKeys 恢复指定渠道所有不可用的 Key（被拉黑或手动暂停，持久化）。
@@ -2240,7 +2295,11 @@ func (cm *ConfigManager) DisableKeyModel(apiType string, channelIndex int, apiKe
 		apiType, utils.MaskAPIKey(apiKey), model, reason, upstream.Name, recoverAt)
 	statelog.LogStateTransition(apiType+"-KeyModel", "key_model", utils.MaskAPIKey(apiKey)+"|"+model, "active", "disabled", reason, "channel="+upstream.Name)
 
-	return cm.saveConfigLocked(cm.config)
+	if err := cm.saveConfigLocked(cm.config); err != nil {
+		return err
+	}
+	cm.publishKeyEvent(eventbus.TypeKeyModelDisabled, upstream.ChannelUID, apiType, apiKey, reason, message, map[string]any{"model": model, "recoverAt": recoverAt})
+	return nil
 }
 
 // IsKeyModelDisabled 判断指定渠道下 (apiKey, model) 组合是否处于限制期内。
@@ -2283,7 +2342,11 @@ func (cm *ConfigManager) RestoreKeyModel(apiType string, channelIndex int, apiKe
 	log.Printf("[%s-KeyModel] (Key %s, 模型 %s) 限制已移除 (渠道: %s)", apiType, utils.MaskAPIKey(apiKey), model, upstream.Name)
 	statelog.LogStateTransition(apiType+"-KeyModel", "key_model", utils.MaskAPIKey(apiKey)+"|"+model, "disabled", "active", "manual_restore", "channel="+upstream.Name)
 
-	return cm.saveConfigLocked(cm.config)
+	if err := cm.saveConfigLocked(cm.config); err != nil {
+		return err
+	}
+	cm.publishKeyEvent(eventbus.TypeKeyModelRestored, upstream.ChannelUID, apiType, apiKey, "manual_restore", "", map[string]any{"model": model})
+	return nil
 }
 
 // DisableGroupModel 永久禁用目标 Key 当前所属配额组的模型。

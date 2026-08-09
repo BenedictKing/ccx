@@ -4,6 +4,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/BenedictKing/ccx/internal/eventbus"
 	"github.com/BenedictKing/ccx/internal/statelog"
 )
 
@@ -121,6 +122,7 @@ func (m *MetricsManager) persistCircuitStateLocked(metrics *KeyMetrics) {
 }
 
 func (m *MetricsManager) resetCircuitStateLocked(metrics *KeyMetrics, clearBreakerWindow bool) {
+	from := metrics.CircuitState
 	metrics.CircuitState = CircuitStateClosed
 	metrics.CircuitBrokenAt = nil
 	metrics.HalfOpenAt = nil
@@ -133,9 +135,11 @@ func (m *MetricsManager) resetCircuitStateLocked(metrics *KeyMetrics, clearBreak
 		metrics.breakerResults = make([]bool, 0, m.windowSize)
 	}
 	m.persistCircuitStateLocked(metrics)
+	m.publishCircuitEventLocked(metrics, from, CircuitStateClosed)
 }
 
 func (m *MetricsManager) moveCircuitToOpenLocked(metrics *KeyMetrics, now time.Time, escalate bool) {
+	from := metrics.CircuitState
 	if escalate {
 		metrics.BackoffLevel++
 	}
@@ -148,15 +152,48 @@ func (m *MetricsManager) moveCircuitToOpenLocked(metrics *KeyMetrics, now time.T
 	metrics.HalfOpenSuccesses = 0
 	metrics.ProbeInFlight = false
 	m.persistCircuitStateLocked(metrics)
+	m.publishCircuitEventLocked(metrics, from, CircuitStateOpen)
 }
 
 func (m *MetricsManager) moveCircuitToHalfOpenLocked(metrics *KeyMetrics, now time.Time) {
+	from := metrics.CircuitState
 	metrics.CircuitState = CircuitStateHalfOpen
 	metrics.HalfOpenAt = &now
 	metrics.NextRetryAt = nil
 	metrics.HalfOpenSuccesses = 0
 	metrics.ProbeInFlight = false
 	m.persistCircuitStateLocked(metrics)
+	m.publishCircuitEventLocked(metrics, from, CircuitStateHalfOpen)
+}
+
+// publishCircuitEventLocked 在持锁状态下发布熔断状态变更事件。
+// 发布是非阻塞且 nil 安全的；仅当状态真正发生变化时（from != to）才发。
+// 调用方在 lock 路径上，bus.Publish 内部不重入 m.mu，无死锁风险。
+func (m *MetricsManager) publishCircuitEventLocked(metrics *KeyMetrics, from, to CircuitState) {
+	if from == to {
+		return
+	}
+	bus := m.eventBus.Load()
+	if bus == nil || metrics == nil {
+		return
+	}
+	payload := map[string]any{
+		"baseUrl":      metrics.BaseURL,
+		"keyMask":      metrics.KeyMask,
+		"backoffLevel": metrics.BackoffLevel,
+	}
+	if metrics.NextRetryAt != nil {
+		payload["nextRetryAt"] = metrics.NextRetryAt.Unix()
+	}
+	bus.Publish(eventbus.Event{
+		Type:        eventbus.TypeCircuitBreakerStateChanged,
+		Scope:       eventbus.ScopeMetrics,
+		Subject:     metrics.MetricsKey,
+		ChannelKind: m.apiType,
+		From:        from.String(),
+		To:          to.String(),
+		Payload:     payload,
+	})
 }
 
 func (m *MetricsManager) advanceCircuitStateIfDueLocked(metrics *KeyMetrics, now time.Time) {
