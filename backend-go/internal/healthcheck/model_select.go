@@ -51,6 +51,7 @@ type probeModelCandidate struct {
 // 预算规则：
 //   - 最近失败的模型不受成本预算限制（必须验证）。
 //   - 其余模型按顺序加入，直到达到 maxModels 或 maxCostAFP。
+//   - 当可用模型较多且存在失败模型时，动态放宽数量与成本上限，避免失败模型独占周期后无剩余预算。
 //
 // circuit 为 nil 时仅使用持久化的 key_health 记录判断失败/成功。
 func (m *Manager) selectL2ProbeModels(
@@ -66,6 +67,8 @@ func (m *Manager) selectL2ProbeModels(
 	if policy.SparseL2MaxModels <= 0 || len(models) == 0 {
 		return nil
 	}
+
+	maxModels, maxCostAFP := effectiveSparseBudget(policy, len(models), recentlyFailedCount(models, prevL2ByModel, circuit, channelUID, keyHash, now, policy.L2ModelQuietPeriod), 0)
 
 	cfg := m.getConfig()
 	global := cfg.UpstreamModelCapabilities
@@ -115,7 +118,7 @@ func (m *Manager) selectL2ProbeModels(
 		}
 		canonicalSeen[strings.ToLower(model)] = true
 
-		prev, hasPrev := prevL2ByModel[model]
+		prev, hasPrev := prevL2ByModel[candidate.Model]
 		if hasPrev {
 			switch prev.LastStatus {
 			case StatusOK:
@@ -129,7 +132,7 @@ func (m *Manager) selectL2ProbeModels(
 
 		// 内存态熔断提供更快的失败信号
 		if !candidate.RecentlyFailed && circuit != nil && channelUID != "" && keyHash != "" {
-			candidate.RecentlyFailed = circuit.IsModelCircuitOpen(channelUID, keyHash, model)
+			candidate.RecentlyFailed = circuit.IsModelCircuitOpen(channelUID, keyHash, candidate.Model)
 		}
 
 		candidates = append(candidates, candidate)
@@ -150,19 +153,111 @@ func (m *Manager) selectL2ProbeModels(
 		return candidates[i].CostAFP < candidates[j].CostAFP
 	})
 
-	selected := make([]string, 0, policy.SparseL2MaxModels)
+	selected := make([]string, 0, maxModels)
 	var costSum float64
 	for _, c := range candidates {
-		if len(selected) >= policy.SparseL2MaxModels {
+		if len(selected) >= maxModels {
 			break
 		}
-		if !c.RecentlyFailed && policy.SparseL2MaxCostAFP > 0 && costSum+c.CostAFP > policy.SparseL2MaxCostAFP {
+		if !c.RecentlyFailed && maxCostAFP > 0 && costSum+c.CostAFP > maxCostAFP {
 			continue
 		}
 		selected = append(selected, c.Model)
 		costSum += c.CostAFP
 	}
 	return selected
+}
+
+// effectiveSparseBudget 根据模型总量、近期失败数量与负载动态计算稀疏 L2 预算上限。
+//
+// 规则：
+//   - 返回的 maxModels 下界始终为 policy.SparseL2MaxModels；上界为 policy 值 + f(modelCount)，
+//     其中 f = min(max(0, modelCount/3 - 1), 5)，即每 3 个可用模型额外放宽 1 个名额，最多放宽 5 个。
+//   - 返回的 maxCostAFP 下界为 policy.SparseL2MaxCostAFP；上界为 2x policy 值（0 表示无成本限制）。
+//   - 最近失败的模型不受成本预算限制，但预算上限的放宽会受失败数量约束：
+//     当最近失败模型数大于等于放宽后的名额时，不再额外加宽，避免失败模型独占周期。
+//   - loadRatio 预留接口：>1 时可按比例收缩上限；默认 0 表示不收缩（no-op）。
+func effectiveSparseBudget(
+	policy config.ResolvedHealthCheckPolicy,
+	modelCount int,
+	recentlyFailedCount int,
+	loadRatio float64,
+) (maxModels int, maxCostAFP float64) {
+	baseModels := policy.SparseL2MaxModels
+	if baseModels <= 0 {
+		return 0, policy.SparseL2MaxCostAFP
+	}
+
+	extra := 0
+	if modelCount > 0 {
+		extra = modelCount/3 - 1
+		if extra < 0 {
+			extra = 0
+		}
+		if extra > 5 {
+			extra = 5
+		}
+	}
+
+	maxModels = baseModels + extra
+	if recentlyFailedCount >= maxModels {
+		maxModels = baseModels
+	}
+
+	maxCostAFP = policy.SparseL2MaxCostAFP
+	if maxCostAFP > 0 {
+		maxCostAFP *= 2
+	}
+
+	if loadRatio > 1 {
+		scale := 1.0 / loadRatio
+		maxModels = int(float64(maxModels) * scale)
+		if maxModels < baseModels {
+			maxModels = baseModels
+		}
+		if maxCostAFP > 0 {
+			maxCostAFP *= scale
+		}
+	}
+
+	return maxModels, maxCostAFP
+}
+
+// recentlyFailedCount 统计候选模型中最近失败的模型数量，用于动态预算决策。
+// 逻辑与 selectL2ProbeModels 中的 RecentlyFailed 判定保持一致。
+func recentlyFailedCount(
+	models []string,
+	prevL2ByModel map[string]metrics.KeyHealthRecord,
+	circuit *metrics.ModelCircuitTracker,
+	channelUID string,
+	keyHash string,
+	now time.Time,
+	quietPeriod time.Duration,
+) int {
+	count := 0
+	seen := make(map[string]bool)
+	for _, model := range models {
+		model = strings.TrimSpace(model)
+		if model == "" || seen[strings.ToLower(model)] {
+			continue
+		}
+		seen[strings.ToLower(model)] = true
+
+		failed := false
+		if prev, ok := prevL2ByModel[model]; ok {
+			switch prev.LastStatus {
+			case StatusError, StatusAuthFailed:
+				failed = now.Sub(prev.LastCheckAt) <= quietPeriod
+			}
+		}
+		if !failed && circuit != nil && channelUID != "" && keyHash != "" {
+			failed = circuit.IsModelCircuitOpen(channelUID, keyHash, model)
+		}
+		if failed {
+			count++
+		}
+	}
+	return count
 }
 
 // volcengineProbeCost 估算火山 Agent Plan 模型小 token 探针的 AFP 成本。

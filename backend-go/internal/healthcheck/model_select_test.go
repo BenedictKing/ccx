@@ -8,6 +8,43 @@ import (
 	"github.com/BenedictKing/ccx/internal/metrics"
 )
 
+func TestEffectiveSparseBudget(t *testing.T) {
+	cases := []struct {
+		name                string
+		baseModels          int
+		baseCost            float64
+		modelCount          int
+		recentlyFailedCount int
+		loadRatio           float64
+		wantModels          int
+		wantCost            float64
+	}{
+		{"基线无放宽", 3, 6, 4, 0, 0, 3, 12},
+		{"模型多可放宽", 3, 6, 9, 0, 0, 5, 12},
+		{"失败过多不占宽", 3, 6, 9, 5, 0, 3, 12},
+		{"负载高收缩", 3, 6, 9, 0, 2, 3, 6},
+		{"无成本限制保持0", 3, 0, 9, 0, 0, 5, 0},
+		{"base为0关闭", 0, 6, 9, 0, 0, 0, 6},
+		{"max extra cap", 3, 6, 100, 0, 0, 8, 12},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			policy := config.ResolvedHealthCheckPolicy{
+				SparseL2MaxModels:  tc.baseModels,
+				SparseL2MaxCostAFP: tc.baseCost,
+			}
+			maxModels, maxCostAFP := effectiveSparseBudget(policy, tc.modelCount, tc.recentlyFailedCount, tc.loadRatio)
+			if maxModels != tc.wantModels {
+				t.Fatalf("maxModels = %d, want %d", maxModels, tc.wantModels)
+			}
+			if maxCostAFP != tc.wantCost {
+				t.Fatalf("maxCostAFP = %v, want %v", maxCostAFP, tc.wantCost)
+			}
+		})
+	}
+}
+
 func TestSelectL2ProbeModels成本预算与数量上限(t *testing.T) {
 	m := NewManager(func() config.Config { return config.Config{} }, newFakeKeyHealthStore(), nil, nil, Options{})
 	u := &config.UpstreamConfig{ProviderID: "volcengine"}
@@ -22,9 +59,9 @@ func TestSelectL2ProbeModels成本预算与数量上限(t *testing.T) {
 		[]string{"kimi-k3", "deepseek-v4-pro", "glm-5.2", "deepseek-v4-flash"},
 		nil, nil, policy, now)
 
-	// flash=2 AFP，glm=2 AFP（活动期），pro=5 AFP，k3=8 AFP；预算 6 允许前两个。
-	// 同成本时按输入顺序，glm 在 flash 前。
-	want := []string{"glm-5.2", "deepseek-v4-flash"}
+	// flash=2 AFP，glm=2 AFP（活动期），pro=5 AFP，k3=8 AFP；动态放宽后数量上限 3、成本上限 12，
+	// 因此选中 glm + flash + pro。
+	want := []string{"glm-5.2", "deepseek-v4-flash", "deepseek-v4-pro"}
 	if len(got) != len(want) {
 		t.Fatalf("选择结果 = %v，期望 %v", got, want)
 	}
