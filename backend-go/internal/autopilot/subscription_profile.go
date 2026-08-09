@@ -1,10 +1,21 @@
 package autopilot
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
+	"os"
+	"runtime"
+	"strings"
+
 	"github.com/BenedictKing/ccx/internal/errutil"
+	"golang.org/x/crypto/pbkdf2"
 	"log"
 	"sync"
 	"time"
@@ -101,6 +112,101 @@ type SubscriptionProfile struct {
 
 // NewApiProvisionedKey 是自动接入的单把 NewAPI Key 的非敏感元数据。
 // Key 明文仅保存在渠道配置中，绝不写入订阅画像或订阅 API 响应。
+
+// tokenEncryption 封装订阅级敏感字段（AccessToken 等）的对称加解密。
+// 设计目标：持久化层落库时加密，读库时透明解密；旧明文数据无加密标记时原样兼容。
+// 密钥来源：1) 环境变量 CCX_SECRET_KEY（推荐生产部署显式配置）；
+// 2) 未设置时按机器派生稳定密钥（由 os.Hostname + 固定 salt 经 PBKDF2 派生）。
+type tokenEncryption struct {
+	secretKey []byte // 32 字节 AES-256 密钥
+	salt      []byte
+}
+
+// encryptedTokenPrefix 标记已加密字符串的前缀，便于向后兼容旧明文。
+const encryptedTokenPrefix = "$enc$"
+
+// newTokenEncryption 从环境变量或机器派生创建 tokenEncryption。
+func newTokenEncryption() (*tokenEncryption, error) {
+	salt := []byte("ccx-autopilot-access-token-v1")
+	secretKey, err := deriveTokenEncryptionKey(salt)
+	if err != nil {
+		return nil, fmt.Errorf("[SubscriptionStore-TokenEncryption] 派生加密密钥失败: %w", err)
+	}
+	return &tokenEncryption{secretKey: secretKey, salt: salt}, nil
+}
+
+// deriveTokenEncryptionKey 优先读 CCX_SECRET_KEY，未设置则机器派生。
+func deriveTokenEncryptionKey(salt []byte) ([]byte, error) {
+	if envKey := strings.TrimSpace(os.Getenv("CCX_SECRET_KEY")); envKey != "" {
+		key := pbkdf2.Key([]byte(envKey), salt, 100000, 32, sha256.New)
+		return key, nil
+	}
+	hostname, err := os.Hostname()
+	if err != nil {
+		hostname = "ccx-default-host"
+	}
+	machineID := hostname + "|" + runtime.GOOS + "|" + runtime.GOARCH
+	key := pbkdf2.Key([]byte(machineID), salt, 10000, 32, sha256.New)
+	return key, nil
+}
+
+// encryptToken 对敏感明文加密并返回带前缀的密文字串；空字符串直接返回空。
+func (te *tokenEncryption) encryptToken(plaintext string) (string, error) {
+	if plaintext == "" {
+		return "", nil
+	}
+	if te == nil || len(te.secretKey) != 32 {
+		return "", fmt.Errorf("[SubscriptionStore-TokenEncryption] 加密密钥未初始化")
+	}
+	block, err := aes.NewCipher(te.secretKey)
+	if err != nil {
+		return "", fmt.Errorf("[SubscriptionStore-TokenEncryption] 创建 cipher 失败: %w", err)
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", fmt.Errorf("[SubscriptionStore-TokenEncryption] 创建 GCM 失败: %w", err)
+	}
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		return "", fmt.Errorf("[SubscriptionStore-TokenEncryption] 读取 nonce 失败: %w", err)
+	}
+	ciphertext := gcm.Seal(nonce, nonce, []byte(plaintext), nil)
+	return encryptedTokenPrefix + base64.StdEncoding.EncodeToString(ciphertext), nil
+}
+
+// decryptToken 解密带前缀的密文；无前缀时视为旧明文原样返回。
+func (te *tokenEncryption) decryptToken(value string) (string, error) {
+	if value == "" || !strings.HasPrefix(value, encryptedTokenPrefix) {
+		return value, nil
+	}
+	if te == nil || len(te.secretKey) != 32 {
+		return "", fmt.Errorf("[SubscriptionStore-TokenEncryption] 解密密钥未初始化")
+	}
+	encoded := strings.TrimPrefix(value, encryptedTokenPrefix)
+	ciphertext, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return "", fmt.Errorf("[SubscriptionStore-TokenEncryption] base64 解码失败: %w", err)
+	}
+	block, err := aes.NewCipher(te.secretKey)
+	if err != nil {
+		return "", fmt.Errorf("[SubscriptionStore-TokenEncryption] 创建 cipher 失败: %w", err)
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", fmt.Errorf("[SubscriptionStore-TokenEncryption] 创建 GCM 失败: %w", err)
+	}
+	nonceSize := gcm.NonceSize()
+	if len(ciphertext) < nonceSize {
+		return "", fmt.Errorf("[SubscriptionStore-TokenEncryption] 密文长度不足")
+	}
+	nonce, ciphertext := ciphertext[:nonceSize], ciphertext[nonceSize:]
+	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
+	if err != nil {
+		return "", fmt.Errorf("[SubscriptionStore-TokenEncryption] GCM 解密失败: %w", err)
+	}
+	return string(plaintext), nil
+}
+
 type NewApiProvisionedKey struct {
 	Name            string  `json:"name"`
 	Group           string  `json:"group"`
@@ -112,13 +218,13 @@ type NewApiProvisionedKey struct {
 // NewApiAccount 描述 new-api 订阅下的单个账号。
 // 用于多账号管理：一个 new-api 订阅可关联多个 accessToken（多个账号）。
 type NewApiAccount struct {
-	AccountUID    string    `json:"accountUid"`
-	AccessToken   string    `json:"accessToken,omitempty"` // 敏感，API 响应中脱敏
-	UserID        string    `json:"userId,omitempty"`
-	AuthTokenMode string    `json:"authTokenMode,omitempty"`
-	DisplayName   string    `json:"displayName,omitempty"` // 用户备注名
-	Balance       float64   `json:"balance,omitempty"`
-	Status        string    `json:"status,omitempty"` // active | expired | error
+	AccountUID    string  `json:"accountUid"`
+	AccessToken   string  `json:"accessToken,omitempty"` // 敏感，API 响应中脱敏
+	UserID        string  `json:"userId,omitempty"`
+	AuthTokenMode string  `json:"authTokenMode,omitempty"`
+	DisplayName   string  `json:"displayName,omitempty"` // 用户备注名
+	Balance       float64 `json:"balance,omitempty"`
+	Status        string  `json:"status,omitempty"` // active | expired | error
 	// ProvisionedKeys 记录该账号在远端 new-api 站点自动接入的 Key（按 tokenID 唯一）。
 	// Key 明文只写渠道配置，不进订阅画像。多账号下与主账号 profile.ProvisionedKeys 共存，tokenID 站点级唯一故不撞号。
 	ProvisionedKeys []NewApiProvisionedKey `json:"provisionedKeys,omitempty"`
@@ -156,12 +262,17 @@ type SharedCapability struct {
 
 // SubscriptionStore 管理 SubscriptionProfile 的内存缓存与 SQLite 持久化。
 // 复用 ProfileStore 的 SQLite 连接模式：接收 *sql.DB，自建表，JSON 列存本体。
+// SubscriptionStore 管理 SubscriptionProfile 的内存缓存与 SQLite 持久化。
+// 复用 ProfileStore 的 SQLite 连接模式：接收 *sql.DB，自建表，JSON 列存本体。
+// SubscriptionStore 管理 SubscriptionProfile 的内存缓存与 SQLite 持久化。
+// 复用 ProfileStore 的 SQLite 连接模式：接收 *sql.DB，自建表，JSON 列存本体。
 type SubscriptionStore struct {
 	db     *sql.DB
 	dbPath string // 自管连接时非空；外部传入时为空
 
-	cache map[string]*SubscriptionProfile // key = subscriptionUID
-	mu    sync.RWMutex
+	cache      map[string]*SubscriptionProfile // key = subscriptionUID
+	encryption *tokenEncryption                // 敏感字段（AccessToken）加解密
+	mu         sync.RWMutex
 }
 
 // NewSubscriptionStore 创建 SubscriptionStore，自行管理 SQLite 连接。
@@ -195,10 +306,16 @@ func newSubscriptionStoreFromDB(db *sql.DB, dbPath string) (*SubscriptionStore, 
 		return nil, fmt.Errorf("[SubscriptionStore-Init] 建表失败: %w", err)
 	}
 
+	encryption, err := newTokenEncryption()
+	if err != nil {
+		return nil, fmt.Errorf("[SubscriptionStore-Init] 初始化 token 加密失败: %w", err)
+	}
+
 	store := &SubscriptionStore{
-		db:     db,
-		dbPath: dbPath,
-		cache:  make(map[string]*SubscriptionProfile),
+		db:         db,
+		dbPath:     dbPath,
+		cache:      make(map[string]*SubscriptionProfile),
+		encryption: encryption,
 	}
 
 	if err := store.loadAll(); err != nil {
@@ -244,6 +361,10 @@ func (s *SubscriptionStore) loadAll() error {
 		var profile SubscriptionProfile
 		if err := json.Unmarshal([]byte(profileJSON), &profile); err != nil {
 			log.Printf("[SubscriptionStore-LoadAll] 反序列化失败 uid=%s: %v", uid, err)
+			continue
+		}
+		if err := s.decryptProfile(&profile); err != nil {
+			log.Printf("[SubscriptionStore-LoadAll] 解密敏感字段失败 uid=%s: %v", uid, err)
 			continue
 		}
 		s.cache[uid] = &profile
@@ -445,8 +566,24 @@ func cloneSubscriptionProfile(profile *SubscriptionProfile) (*SubscriptionProfil
 }
 
 // persist 将单条订阅画像写入 SQLite（upsert）。
+// 写库前对 AccessToken 及 Accounts[].AccessToken 加密；失败则阻止写入以避免明文落库。
+// persist 将单条订阅画像写入 SQLite（upsert）。
+// 写库前对 AccessToken 及 Accounts[].AccessToken 加密；失败则阻止写入以避免明文落库。
 func (s *SubscriptionStore) persist(profile *SubscriptionProfile) error {
-	profileJSON, err := json.Marshal(profile)
+	if profile == nil {
+		return fmt.Errorf("[SubscriptionStore-Persist] profile 不能为空")
+	}
+
+	// 加密敏感字段的临时副本，避免改变调用方持有的 profile 状态。
+	temp, err := cloneSubscriptionProfile(profile)
+	if err != nil {
+		return fmt.Errorf("[SubscriptionStore-Persist] 克隆失败 uid=%s: %w", profile.SubscriptionUID, err)
+	}
+	if err := s.encryptProfile(temp); err != nil {
+		return fmt.Errorf("[SubscriptionStore-Persist] 加密敏感字段失败 uid=%s: %w", profile.SubscriptionUID, err)
+	}
+
+	profileJSON, err := json.Marshal(temp)
 	if err != nil {
 		return fmt.Errorf("[SubscriptionStore-Persist] 序列化失败 uid=%s: %w", profile.SubscriptionUID, err)
 	}
@@ -462,6 +599,55 @@ ON CONFLICT(subscription_uid) DO UPDATE SET
 
 	if err != nil {
 		return fmt.Errorf("[SubscriptionStore-Persist] 写入失败 uid=%s: %w", profile.SubscriptionUID, err)
+	}
+	return nil
+}
+
+// encryptProfile 在写库前加密 SubscriptionProfile.AccessToken 与 Accounts[].AccessToken。
+func (s *SubscriptionStore) encryptProfile(profile *SubscriptionProfile) error {
+	if s == nil || s.encryption == nil {
+		return fmt.Errorf("[SubscriptionStore-TokenEncryption] 加密器未初始化")
+	}
+	if profile.AccessToken != "" {
+		encrypted, err := s.encryption.encryptToken(profile.AccessToken)
+		if err != nil {
+			return err
+		}
+		profile.AccessToken = encrypted
+	}
+	for i := range profile.Accounts {
+		if profile.Accounts[i].AccessToken != "" {
+			encrypted, err := s.encryption.encryptToken(profile.Accounts[i].AccessToken)
+			if err != nil {
+				return err
+			}
+			profile.Accounts[i].AccessToken = encrypted
+		}
+	}
+	return nil
+}
+
+// decryptProfile 在读库后解密 SubscriptionProfile.AccessToken 与 Accounts[].AccessToken。
+// 旧明文无前缀时原样保留。
+func (s *SubscriptionStore) decryptProfile(profile *SubscriptionProfile) error {
+	if s == nil || s.encryption == nil {
+		return nil
+	}
+	if profile.AccessToken != "" {
+		decrypted, err := s.encryption.decryptToken(profile.AccessToken)
+		if err != nil {
+			return err
+		}
+		profile.AccessToken = decrypted
+	}
+	for i := range profile.Accounts {
+		if profile.Accounts[i].AccessToken != "" {
+			decrypted, err := s.encryption.decryptToken(profile.Accounts[i].AccessToken)
+			if err != nil {
+				return err
+			}
+			profile.Accounts[i].AccessToken = decrypted
+		}
 	}
 	return nil
 }

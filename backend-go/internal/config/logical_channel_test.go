@@ -434,3 +434,111 @@ func TestUpdateLogicalChannel_RemoveAllProtocolsRejected(t *testing.T) {
 		t.Fatalf("期望拒绝删空，实际: %v", err)
 	}
 }
+
+// TestPhysicalChannelChange_RebuildsLogicalChannels 验证物理渠道 Add/Update 后
+// LogicalChannels 与每个物理渠道的 LogicalChannelUID 已同步刷新，无需重启。
+func TestPhysicalChannelChange_RebuildsLogicalChannels(t *testing.T) {
+	cm := newLogicalTestCM(t, nil)
+
+	// 1) 通过直接写 config + SaveConfig 模拟底层物理渠道新增。
+	// 使用同一 providerID 与同一站点，确保两条协议归入同一 logical。
+	providerID := "test-provider"
+	cm.mu.Lock()
+	cm.config.Upstream = []UpstreamConfig{{
+		ChannelUID:  "ch-add-m",
+		ProviderID:  providerID,
+		Name:        "addtest",
+		BaseURL:     "https://api.addtest.com/v1",
+		ServiceType: "claude",
+		APIKeys:     []string{"k1"},
+		Status:      "active",
+		Priority:    1,
+	}}
+	cm.config.ChatUpstream = []UpstreamConfig{{
+		ChannelUID:  "ch-add-c",
+		ProviderID:  providerID,
+		Name:        "addtest",
+		BaseURL:     "https://api.addtest.com/v1",
+		ServiceType: "openai",
+		APIKeys:     []string{"k1"},
+		Status:      "active",
+		Priority:    1,
+	}}
+	if err := cm.saveConfigLocked(cm.config); err != nil {
+		cm.mu.Unlock()
+		t.Fatalf("SaveConfig 失败: %v", err)
+	}
+	cm.mu.Unlock()
+
+	cfg := cm.GetConfig()
+	if len(cfg.LogicalChannels) != 1 {
+		t.Fatalf("写入两条同 provider 同站协议后期望 1 个 logical，实际 %d", len(cfg.LogicalChannels))
+	}
+	firstUID := cfg.LogicalChannels[0].LogicalChannelUID
+	if firstUID == "" {
+		t.Fatalf("logical UID 为空")
+	}
+	if cfg.Upstream[0].LogicalChannelUID != firstUID {
+		t.Fatalf("messages 物理渠道 LogicalChannelUID 未同步: got %s want %s",
+			cfg.Upstream[0].LogicalChannelUID, firstUID)
+	}
+	if cfg.ChatUpstream[0].LogicalChannelUID != firstUID {
+		t.Fatalf("chat 物理渠道 LogicalChannelUID 未同步: got %s want %s",
+			cfg.ChatUpstream[0].LogicalChannelUID, firstUID)
+	}
+	if len(cfg.LogicalChannels[0].Protocols) != 2 {
+		t.Fatalf("期望 2 个 protocols，实际 %d", len(cfg.LogicalChannels[0].Protocols))
+	}
+
+	// 2) 直接修改 config：把 messages 的 providerID 改为与 chat 不同，
+	// 使其从原 logical 拆分出来；然后保存，验证 Rebuild 刷新视图。
+	cm.mu.Lock()
+	cm.config.Upstream[0].ProviderID = "updated-provider"
+	if err := cm.saveConfigLocked(cm.config); err != nil {
+		cm.mu.Unlock()
+		t.Fatalf("SaveConfig 失败: %v", err)
+	}
+	cm.mu.Unlock()
+
+	cfg = cm.GetConfig()
+	if len(cfg.LogicalChannels) != 2 {
+		t.Fatalf("Update 后 messages provider 变化，应拆分为 2 个 logical，实际 %d", len(cfg.LogicalChannels))
+	}
+	var messagesLogical *LogicalChannel
+	for i := range cfg.LogicalChannels {
+		for _, p := range cfg.LogicalChannels[i].Protocols {
+			if p.Kind == "messages" {
+				messagesLogical = &cfg.LogicalChannels[i]
+				break
+			}
+		}
+		if messagesLogical != nil {
+			break
+		}
+	}
+	if messagesLogical == nil {
+		t.Fatalf("未找到 messages 对应的 logical")
+	}
+	if cfg.Upstream[0].LogicalChannelUID != messagesLogical.LogicalChannelUID {
+		t.Fatalf("Update 后 messages 物理渠道 LogicalChannelUID 未刷新: got %s want %s",
+			cfg.Upstream[0].LogicalChannelUID, messagesLogical.LogicalChannelUID)
+	}
+	if cfg.Upstream[0].LogicalName != messagesLogical.Name {
+		t.Fatalf("Update 后 messages 物理渠道 LogicalName 未刷新: got %s want %s",
+			cfg.Upstream[0].LogicalName, messagesLogical.Name)
+	}
+
+	// 3) 删除 messages 物理渠道，验证 logical 视图跟随刷新。
+	if _, err := cm.RemoveUpstream(0); err != nil {
+		t.Fatalf("RemoveUpstream 失败: %v", err)
+	}
+	cfg = cm.GetConfig()
+	if len(cfg.LogicalChannels) != 1 {
+		t.Fatalf("Remove 后期望只剩 chat 对应的 1 个 logical，实际 %d", len(cfg.LogicalChannels))
+	}
+	if len(cfg.LogicalChannels[0].Protocols) != 1 || cfg.LogicalChannels[0].Protocols[0].Kind != "chat" {
+		t.Fatalf("Remove 后 chat logical 协议不对: %+v", cfg.LogicalChannels[0].Protocols)
+	}
+}
+
+func stringPtr(s string) *string { return &s }

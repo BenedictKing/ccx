@@ -1241,11 +1241,24 @@ func (r *SmartRouter) buildChannelEntry(
 				if costConfig.ExchangeRateSnapshot != nil && costConfig.ExchangeRateSnapshot.Version > 0 {
 					version = costConfig.ExchangeRateSnapshot.Version
 				}
-				graph, _ = config.NewExchangeRateGraph(costConfig.ExchangeRateQuotes, version, r.currentTime())
+				var graphErr error
+				graph, graphErr = config.NewExchangeRateGraph(costConfig.ExchangeRateQuotes, version, r.currentTime())
+				if graphErr != nil {
+					r.logExchangeRateBuildErrorOnce(version, graphErr)
+				}
 			}
 		}
-		entry.EstimatedCost = listCost * timeMultiplier
-		// 只有订阅到账规则和汇率快照完整时，才用统一 effective USD 覆盖标价×分时倍率。
+		// 默认成本：标价 × 分时倍率；如 key 配置了分组倍率，则再叠加分组倍率影响。
+		// effective USD 可用时（下方 ResolveEffectiveCostUSD）会用更精确的实际到账成本覆盖它。
+		groupMultiplier := 1.0
+		for _, cfg := range config.NormalizeAPIKeyConfigsForView(*upstream) {
+			if cfg.GroupMultiplier != nil && *cfg.GroupMultiplier > 0 {
+				groupMultiplier = *cfg.GroupMultiplier
+				break
+			}
+		}
+		entry.EstimatedCost = listCost * timeMultiplier * groupMultiplier
+		// 只有订阅到账规则和汇率快照完整时，才用统一 effective USD 覆盖标价×分时倍率×分组倍率。
 		if graph != nil && r.subscriptionStore != nil {
 			for _, cfg := range config.NormalizeAPIKeyConfigsForView(*upstream) {
 				subscriptionUID := strings.TrimSpace(cfg.SourceSubscriptionUID)
@@ -1267,6 +1280,7 @@ func (r *SmartRouter) buildChannelEntry(
 					entry.EstimatedCost = resolvedCost.EffectiveCostUSD
 					break
 				}
+				r.logEffectiveCostMissingOnce(subscriptionUID, resolvedCost.Reason)
 			}
 		}
 	}
@@ -1376,6 +1390,51 @@ func applyPremiumBenchmarkEvidence(entry *channelScoreEntry) {
 	}
 	entry.ScoringCandidate.QualityBenchmarkKnown = true
 	entry.ScoringCandidate.QualityBenchmarkScore = entry.BenchmarkScore
+}
+
+// exchangeRateBuildErrorTracker 记录已报告的汇率图构建失败版本，避免热路径刷屏。
+type exchangeRateBuildErrorTracker struct {
+	mu      sync.Mutex
+	version uint64
+}
+
+var sharedExchangeRateBuildErrorTracker exchangeRateBuildErrorTracker
+
+// logExchangeRateBuildErrorOnce 按 ExchangeRateSnapshot.Version 只记录一次汇率图构建失败。
+func (r *SmartRouter) logExchangeRateBuildErrorOnce(version uint64, err error) {
+	sharedExchangeRateBuildErrorTracker.mu.Lock()
+	defer sharedExchangeRateBuildErrorTracker.mu.Unlock()
+	if sharedExchangeRateBuildErrorTracker.version == version {
+		return
+	}
+	sharedExchangeRateBuildErrorTracker.version = version
+	log.Printf("[SmartRouter-ExchangeRate] 汇率图构建失败，回退标价: %v", err)
+}
+
+// effectiveCostMissingTracker 按 subscriptionUID+Reason 采样记录 effective cost 不可用原因。
+type effectiveCostMissingTracker struct {
+	mu   sync.Mutex
+	seen map[string]struct{}
+}
+
+var sharedEffectiveCostMissingTracker effectiveCostMissingTracker
+
+// logEffectiveCostMissingOnce 在 effective cost 不可用时按 uid+reason 只记一次日志。
+func (r *SmartRouter) logEffectiveCostMissingOnce(subscriptionUID, reason string) {
+	if reason == "" {
+		return
+	}
+	key := subscriptionUID + "|" + reason
+	sharedEffectiveCostMissingTracker.mu.Lock()
+	defer sharedEffectiveCostMissingTracker.mu.Unlock()
+	if sharedEffectiveCostMissingTracker.seen == nil {
+		sharedEffectiveCostMissingTracker.seen = make(map[string]struct{})
+	}
+	if _, ok := sharedEffectiveCostMissingTracker.seen[key]; ok {
+		return
+	}
+	sharedEffectiveCostMissingTracker.seen[key] = struct{}{}
+	log.Printf("[SmartRouter-EffectiveCost] subscription=%s effective cost 不可用: %s", subscriptionUID, reason)
 }
 
 func (r *SmartRouter) currentTime() time.Time {

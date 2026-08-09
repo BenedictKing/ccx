@@ -134,6 +134,51 @@ func TestBuildChannelEntryAppliesProviderTimePricingAfterActivation(t *testing.T
 	}
 }
 
+func TestBuildChannelEntryGroupMultiplierFallback(t *testing.T) {
+	manager, cleanup := createTestConfigManager(t, config.Config{AutopilotRouting: config.DefaultAutopilotRoutingConfig()})
+	defer cleanup()
+	router := NewSmartRouter(nil, nil, nil, manager)
+
+	gm := 1.8
+	upstream := &config.UpstreamConfig{
+		ChannelUID: "ch_newapi",
+		ProviderID: "openai",
+		APIKeys:    []string{"sk-test"},
+		APIKeyConfigs: []config.APIKeyConfig{{
+			Key:             "sk-test",
+			GroupMultiplier: &gm,
+		}},
+	}
+	channel := scheduler.ChannelInfo{Index: 0, Name: "newapi", Status: "active"}
+
+	// 使用当前 embedded registry 中实际存在的 OpenAI 模型（gpt-4o 已移除）。
+	modelID := "gpt-5.2"
+	entry := router.buildChannelEntry(channel, upstream, "messages", modelID, nil)
+	if entry.EstimatedCost <= 0 {
+		t.Fatalf("estimated cost 应大于 0，got=%v", entry.EstimatedCost)
+	}
+
+	// 构造一个无 APIKeyConfig 的 upstream，验证 groupMultiplier=1 的默认行为。
+	upstreamNoMultiplier := &config.UpstreamConfig{
+		ChannelUID: "ch_newapi_no_mult",
+		ProviderID: "openai",
+		APIKeys:    []string{"sk-test2"},
+	}
+	entryNoMult := router.buildChannelEntry(channel, upstreamNoMultiplier, "messages", modelID, nil)
+	if entryNoMult.EstimatedCost <= 0 {
+		t.Fatalf("无 groupMultiplier 时 estimated cost 应大于 0，got=%v", entryNoMult.EstimatedCost)
+	}
+	if entry.EstimatedCost <= entryNoMult.EstimatedCost {
+		t.Fatalf("groupMultiplier=1.8 的 estimated cost(%v) 应大于无倍率的(%v)", entry.EstimatedCost, entryNoMult.EstimatedCost)
+	}
+
+	// 精确校验：标价 × 分组倍率 = 计算值。
+	want := entryNoMult.EstimatedCost * gm
+	if math.Abs(entry.EstimatedCost-want) > 1e-9 {
+		t.Fatalf("groupMultiplier=1.8 的 estimated cost=%v，want=%v (base=%v × %v)", entry.EstimatedCost, want, entryNoMult.EstimatedCost, gm)
+	}
+}
+
 func TestSmartRouterAppliesCanonicalBenchmarkToDomainScore(t *testing.T) {
 	// 期望值由当前 registry 推导，避免评测数据刷新导致断言失效。
 	want := canonicalDomainCeiling(t, "gpt-5.6-sol", TaskDomainReasoning)

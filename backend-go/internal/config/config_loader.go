@@ -1161,6 +1161,10 @@ func (cm *ConfigManager) saveConfigLocked(config Config) error {
 	config.CurrentResponsesUpstream = 0
 
 	config.syncManagedAccountsFromChannels()
+	// 任何物理渠道变更（Add/Update/Remove、状态/促销/批量导入等）持久化前，
+	// 统一重建 LogicalChannels 视图并回写 LogicalChannelUID / LogicalName。
+	// 在 deepCopy 之前执行，确保修改作用于调用方共享的 slice 并最终提交到 cm.config。
+	RebuildLogicalChannels(&config)
 	persisted := config.deepCopy()
 	persisted.stripManagedChannelSecrets()
 	data, err := json.MarshalIndent(persisted, "", "  ")

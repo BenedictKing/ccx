@@ -162,7 +162,10 @@ func RebuildLogicalChannels(cfg *Config) {
 		existingByUID[copy.LogicalChannelUID] = &copy
 		usedUIDs[copy.LogicalChannelUID] = struct{}{}
 	}
-	// 4) 按已回填的 LogicalChannelUID 把物理渠道归入对应 logical（protocols 重建）
+	// 4) 按已回填的 LogicalChannelUID 把物理渠道归入对应 logical（protocols 重建）。
+	// 但物理渠道的 LogicalChannelUID 只能作为候选：若其字段值对应的 logical 仍在
+	// existingByUID 中，则追加 protocol；否则视为未分组，进入第 5 步按最新归组键重建。
+	// 这保证物理渠道字段变更（providerID、site 等）后，旧的 UID 不会被固执沿用。
 	for _, e := range all {
 		uid := strings.TrimSpace(e.channel.LogicalChannelUID)
 		if uid == "" {
@@ -183,8 +186,19 @@ func RebuildLogicalChannels(cfg *Config) {
 	groups := make(map[logicalChannelGroupKey][]physicalChannelEntry)
 	groupOrder := make([]logicalChannelGroupKey, 0)
 	for _, e := range all {
-		if strings.TrimSpace(e.channel.LogicalChannelUID) != "" {
-			continue
+		uid := strings.TrimSpace(e.channel.LogicalChannelUID)
+		if uid != "" {
+			// 已按旧 UID 归入 existing logical 的，检查其归组键是否仍匹配。
+			// 若该 physical 的 (provider/site/account) 已不再属于该 logical，
+			// 则把它从原 logical 移出，重新归组。
+			if l, ok := existingByUID[uid]; ok {
+				lk := logicalChannelGroupKeyFromPhysical(l)
+				ek := logicalChannelGroupKeyFrom(e.channel)
+				if shouldGroupLogical(lk, ek) {
+					continue
+				}
+				removeProtocolFromLogical(l, e.slice)
+			}
 		}
 		k := logicalChannelGroupKeyFrom(e.channel)
 		if _, ok := groups[k]; !ok {
@@ -213,8 +227,13 @@ func RebuildLogicalChannels(cfg *Config) {
 		} else {
 			lc.Name = deriveLogicalName(k, members[0].channel.BaseURL)
 		}
-		// 写回物理渠道字段：通过 slice + index 写回原数组的元素（避免对副本的写入丢失）
-		attachLogicalToSlicesByIndex(cfg, lc, members)
+		// 写回物理渠道字段：强制刷新，确保物理字段与最新 logical 视图一致
+		for _, m := range members {
+			if up := findChannelInSlices(cfg, m.slice, m.channel.ChannelUID); up != nil {
+				up.LogicalChannelUID = lc.LogicalChannelUID
+				up.LogicalName = lc.Name
+			}
+		}
 		logicals = append(logicals, lc)
 	}
 	// 6) protocols 列表去重
@@ -596,6 +615,18 @@ func deriveLogicalName(groupKey logicalChannelGroupKey, baseURL string) string {
 		return groupKey.providerID + " · " + host
 	}
 	return host
+}
+
+// logicalChannelGroupKeyFromPhysical 从 LogicalChannel 反推其归组键，
+// 用于判断某条物理渠道是否仍应属于该 logical。
+func logicalChannelGroupKeyFromPhysical(l *LogicalChannel) logicalChannelGroupKey {
+	return logicalChannelGroupKey{
+		accountUID:  strings.TrimSpace(l.AccountUID),
+		providerID:  strings.TrimSpace(l.ProviderID),
+		siteIdent:   strings.TrimSpace(l.SiteIdentity),
+		hasAccount:  strings.TrimSpace(l.AccountUID) != "",
+		hasProvider: strings.TrimSpace(l.ProviderID) != "",
+	}
 }
 
 // FindLogicalChannelByUID 在 Config 中按 UID 查找（线性，O(N)）。

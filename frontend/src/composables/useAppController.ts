@@ -65,6 +65,7 @@ export function useAppController() {
     { value: 'subscriptions', labelKey: 'app.tabs.subscriptions', route: '/subscriptions', icon: 'mdi-cash-multiple' },
     { value: 'cockpit', labelKey: 'app.tabs.cockpitOverview', route: '/cockpit', icon: 'mdi-view-dashboard-outline' },
     { value: 'autopilot', labelKey: 'app.tabs.autopilot', route: '/autopilot', icon: 'mdi-steering' },
+    { value: 'cost-report', labelKey: 'app.tabs.costReport', route: '/cost-report', icon: 'mdi-finance' },
   ] as const
 
   const translatedApiTabOptions = computed(() => {

@@ -482,6 +482,15 @@
                     </template>
                     <v-list-item-title>{{ t('orchestration.copyConfig') }}</v-list-item-title>
                   </v-list-item>
+                  <v-list-item
+                    v-if="isCapabilityChannelKind(getRouteKind(element))"
+                    @click="$emit('capability-test', element)"
+                  >
+                    <template #prepend>
+                      <v-icon size="small" color="info">mdi-test-tube</v-icon>
+                    </template>
+                    <v-list-item-title>{{ t('orchestration.capabilityTest') }}</v-list-item-title>
+                  </v-list-item>
                   <v-list-item v-if="!isInPromotion(element)" @click="setPromotion(element)">
                     <template #prepend>
                       <v-icon size="small" color="info">mdi-rocket-launch</v-icon>
@@ -730,9 +739,12 @@ import { useChannelActivity } from '../composables/useChannelActivity'
 import ChannelStatusBadge from './ChannelStatusBadge.vue'
 import ChannelHealthBadge from './ChannelHealthBadge.vue'
 import { isManagedProviderChannel, isOfficialProviderChannel, providerDisplayName } from '../utils/providerDisplay'
+import { useCapabilityTestManager } from '../composables/useCapabilityTestManager'
 import { availableChannelApiKeyCount, disabledChannelApiKeyCount, hasNoUsableChannelApiKeys, hasOnlyDisabledChannelApiKeys, pausedChannelApiKeyCount } from '../utils/channelApiKeys'
 import { getChannelWebsiteLinks, type ChannelWebsiteKind } from '../utils/channelWebsite'
 import type { ChannelHealthItem } from '../services/api-types'
+import { useChannelStore } from '../stores/channel'
+import { useDialogStore } from '../stores/dialog'
 // Lazy-load chart components to reduce initial JS bundle size
 const KeyTrendChart = defineAsyncComponent(() => import('./KeyTrendChart.vue'))
 import ChannelLogsDialog from './ChannelLogsDialog.vue'
@@ -754,6 +766,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (_e: 'edit', _channel: Channel): void
   (_e: 'delete', _channel: Channel): void
+  (_e: 'capability-test', _channel: Channel): void
   (_e: 'refresh'): void
   (_e: 'error', _message: string): void
   (_e: 'success', _message: string): void
@@ -1209,6 +1222,14 @@ const get24hStats = (channel: Channel) => {
 }
 
 // Provider 托管渠道展示品牌友好名，后台仍保留原始保留名。
+const { isCapabilityChannelKind } = useCapabilityTestManager(
+  useChannelStore(),
+  useDialogStore(),
+  (_message, _type) => {},
+  t,
+  async () => {},
+)
+
 const getChannelDisplayName = (channel: Channel): string => {
   if (isManagedProviderChannel(channel)) {
     const provider = providerDisplayName(channel.providerId)

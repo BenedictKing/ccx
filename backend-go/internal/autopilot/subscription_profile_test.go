@@ -569,6 +569,163 @@ func TestSubscriptionStore_UpdatePreservesCreatedAt(t *testing.T) {
 	}
 }
 
+// ── AccessToken 加密测试 ───────────────────────────────────────────────────────
+
+func TestSubscriptionStore_AccessToken_EncryptedAtRest(t *testing.T) {
+	db := newSubTestDB(t)
+	store, err := NewSubscriptionStoreWithDB(db)
+	if err != nil {
+		t.Fatalf("NewSubscriptionStoreWithDB 失败: %v", err)
+	}
+
+	const plaintext = "sk-newapi-access-token-12345"
+	sub := newTestSubscription("sub-token-enc", "Token加密测试")
+	sub.Provider = "new_api"
+	sub.AccessToken = plaintext
+	if err := store.Create(sub); err != nil {
+		t.Fatalf("Create 失败: %v", err)
+	}
+
+	// 1) 读库时透明解密
+	got := store.Get("sub-token-enc")
+	if got == nil {
+		t.Fatal("Get 返回 nil")
+	}
+	if got.AccessToken != plaintext {
+		t.Errorf("AccessToken 未透明解密: got=%q want=%q", got.AccessToken, plaintext)
+	}
+
+	// 2) 直接查 SQLite，明文不应出现
+	var profileJSON string
+	err = db.QueryRow("SELECT profile_json FROM autopilot_subscriptions WHERE subscription_uid = ?", "sub-token-enc").Scan(&profileJSON)
+	if err != nil {
+		t.Fatalf("查询 profile_json 失败: %v", err)
+	}
+	if strings.Contains(profileJSON, plaintext) {
+		t.Errorf("SQLite 中仍包含明文 AccessToken: %s", profileJSON)
+	}
+	var parsed SubscriptionProfile
+	if err := json.Unmarshal([]byte(profileJSON), &parsed); err != nil {
+		t.Fatalf("反序列化失败: %v", err)
+	}
+	if !strings.HasPrefix(parsed.AccessToken, encryptedTokenPrefix) {
+		t.Errorf("落库 AccessToken 应带加密前缀 %q，实际=%q", encryptedTokenPrefix, parsed.AccessToken)
+	}
+}
+
+func TestSubscriptionStore_AccessToken_BackwardCompatiblePlaintext(t *testing.T) {
+	db := newSubTestDB(t)
+
+	// 先初始化 schema，再构造一条旧明文记录，模拟升级前已存在的数据。
+	const plaintext = "legacy-plain-token"
+	oldProfile := SubscriptionProfile{
+		SubscriptionUID: "sub-token-legacy",
+		DisplayName:     "旧明文兼容",
+		Provider:        "new_api",
+		Source:          "manual",
+		AccessToken:     plaintext,
+		CreatedAt:       time.Now(),
+		UpdatedAt:       time.Now(),
+	}
+	data, err := json.Marshal(oldProfile)
+	if err != nil {
+		t.Fatalf("marshal 旧记录失败: %v", err)
+	}
+
+	// 显式建表，避免 newSubTestDB 仅返回裸 *sql.DB。
+	if err := initSubscriptionStoreSchema(db); err != nil {
+		t.Fatalf("建表失败: %v", err)
+	}
+	_, err = db.Exec("INSERT INTO autopilot_subscriptions (subscription_uid, profile_json, created_at, updated_at) VALUES (?, ?, ?, ?)",
+		oldProfile.SubscriptionUID, string(data), time.Now().Format(time.RFC3339), time.Now().Format(time.RFC3339))
+	if err != nil {
+		t.Fatalf("插入旧明文记录失败: %v", err)
+	}
+
+	// 重新打开 store 触发 loadAll 解密（实际为兼容明文）。
+	store, err := NewSubscriptionStoreWithDB(db)
+	if err != nil {
+		t.Fatalf("NewSubscriptionStoreWithDB 失败: %v", err)
+	}
+
+	got := store.Get("sub-token-legacy")
+	if got == nil {
+		t.Fatal("Get 返回 nil")
+	}
+	if got.AccessToken != plaintext {
+		t.Errorf("旧明文 AccessToken 应原样返回: got=%q want=%q", got.AccessToken, plaintext)
+	}
+}
+
+func TestSubscriptionStore_AccessToken_ReloadWithSameKey(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "token-reload.db")
+
+	const plaintext = "reload-token-secret"
+	store1, err := NewSubscriptionStore(dbPath)
+	if err != nil {
+		t.Fatalf("NewSubscriptionStore 失败: %v", err)
+	}
+	sub := newTestSubscription("sub-reload", "重启解密测试")
+	sub.Provider = "new_api"
+	sub.AccessToken = plaintext
+	if err := store1.Create(sub); err != nil {
+		t.Fatalf("Create 失败: %v", err)
+	}
+	_ = store1.Close()
+
+	store2, err := NewSubscriptionStore(dbPath)
+	if err != nil {
+		t.Fatalf("重新打开失败: %v", err)
+	}
+	defer errutil.IgnoreDeferred(store2.Close)
+
+	got := store2.Get("sub-reload")
+	if got == nil {
+		t.Fatal("重启后 Get 返回 nil")
+	}
+	if got.AccessToken != plaintext {
+		t.Errorf("重启后 AccessToken 解密不一致: got=%q want=%q", got.AccessToken, plaintext)
+	}
+}
+
+func TestSubscriptionStore_AccountAccessToken_EncryptedAtRest(t *testing.T) {
+	db := newSubTestDB(t)
+	store, err := NewSubscriptionStoreWithDB(db)
+	if err != nil {
+		t.Fatalf("NewSubscriptionStoreWithDB 失败: %v", err)
+	}
+
+	const plaintext = "account-token-secret"
+	sub := newTestSubscription("sub-account-enc", "多账号Token加密")
+	sub.Provider = "new_api"
+	sub.Accounts = []NewApiAccount{{
+		AccountUID:  "acct_1",
+		AccessToken: plaintext,
+		CreatedAt:   time.Now(),
+	}}
+	if err := store.Create(sub); err != nil {
+		t.Fatalf("Create 失败: %v", err)
+	}
+
+	got := store.Get("sub-account-enc")
+	if got == nil || len(got.Accounts) != 1 {
+		t.Fatal("Get 返回异常")
+	}
+	if got.Accounts[0].AccessToken != plaintext {
+		t.Errorf("Accounts[].AccessToken 未透明解密: got=%q want=%q", got.Accounts[0].AccessToken, plaintext)
+	}
+
+	var profileJSON string
+	err = db.QueryRow("SELECT profile_json FROM autopilot_subscriptions WHERE subscription_uid = ?", "sub-account-enc").Scan(&profileJSON)
+	if err != nil {
+		t.Fatalf("查询失败: %v", err)
+	}
+	if strings.Contains(profileJSON, plaintext) {
+		t.Errorf("SQLite 中仍包含明文账号 AccessToken: %s", profileJSON)
+	}
+}
+
 // ── HTTP Handler 测试 ──────────────────────────────────────────────────────────
 
 // performRequest 发起 HTTP 请求并返回录制的响应。

@@ -4,7 +4,7 @@
     <div class="d-flex align-center justify-space-between mb-4">
       <div class="d-flex align-center">
         <v-icon size="28" class="mr-2" color="primary">mdi-cash-multiple</v-icon>
-        <span class="text-h5 font-weight-bold">成本报表</span>
+        <span class="text-h5 font-weight-bold">{{ t('costReport.title') }}</span>
       </div>
       <div class="d-flex ga-2">
         <v-btn
@@ -13,7 +13,7 @@
           :loading="loading"
           @click="fetchReport"
         >
-          刷新
+          {{ t('costReport.refresh') }}
         </v-btn>
         <v-btn
           variant="tonal"
@@ -21,7 +21,7 @@
           :disabled="rows.length === 0"
           @click="exportCSV"
         >
-          导出 CSV
+          {{ t('costReport.exportCsv') }}
         </v-btn>
       </div>
     </div>
@@ -31,7 +31,7 @@
       <v-card-text class="d-flex align-center ga-4 flex-wrap">
         <!-- groupBy selector -->
         <div class="d-flex align-center ga-1">
-          <span class="text-caption text-medium-emphasis mr-1">分组维度</span>
+          <span class="text-caption text-medium-emphasis mr-1">{{ t('costReport.groupByLabel') }}</span>
           <v-chip
             v-for="opt in groupByOptions"
             :key="opt.value"
@@ -46,7 +46,7 @@
 
         <!-- duration selector -->
         <div class="d-flex align-center ga-1">
-          <span class="text-caption text-medium-emphasis mr-1">时间范围</span>
+          <span class="text-caption text-medium-emphasis mr-1">{{ t('costReport.durationLabel') }}</span>
           <v-chip
             v-for="opt in durationOptions"
             :key="opt.value"
@@ -78,29 +78,29 @@
     <v-row class="mb-4">
       <v-col cols="6" sm="3">
         <v-card variant="outlined" class="pa-3 text-center">
-          <div class="text-caption text-medium-emphasis">总请求数</div>
+          <div class="text-caption text-medium-emphasis">{{ t('costReport.totalRequests') }}</div>
           <div class="text-h6 font-weight-bold">{{ formatNumber(totalRequests) }}</div>
         </v-card>
       </v-col>
       <v-col cols="6" sm="3">
         <v-card variant="outlined" class="pa-3 text-center">
-          <div class="text-caption text-medium-emphasis">成功率</div>
+          <div class="text-caption text-medium-emphasis">{{ t('costReport.successRate') }}</div>
           <div class="text-h6 font-weight-bold">{{ successRate }}%</div>
         </v-card>
       </v-col>
       <v-col cols="6" sm="3">
         <v-card variant="outlined" class="pa-3 text-center">
-          <div class="text-caption text-medium-emphasis">总输入 Token</div>
+          <div class="text-caption text-medium-emphasis">{{ t('costReport.totalInputTokens') }}</div>
           <div class="text-h6 font-weight-bold">{{ formatTokens(totalInputTokens) }}</div>
         </v-card>
       </v-col>
       <v-col cols="6" sm="3">
         <v-card variant="outlined" class="pa-3 text-center">
-          <div class="text-caption text-medium-emphasis">官方定价成本</div>
+          <div class="text-caption text-medium-emphasis">{{ t('costReport.totalListCost') }}</div>
           <div :class="['text-h6 font-weight-bold', { 'text-warning': !pricingComplete }]">
             {{ formatCost(totalListCostUSD, pricingComplete, 4) }}
           </div>
-          <div v-if="!pricingComplete" class="text-caption text-warning">含未配置定价模型</div>
+          <div v-if="!pricingComplete" class="text-caption text-warning">{{ t('costReport.incompletePricingHint') }}</div>
         </v-card>
       </v-col>
     </v-row>
@@ -113,8 +113,8 @@
     <!-- Empty state -->
     <div v-else-if="!loading && rows.length === 0" class="text-center py-12 text-medium-emphasis">
       <v-icon size="64" class="mb-4" color="grey">mdi-cash-multiple</v-icon>
-      <div class="text-body-1">暂无成本数据</div>
-      <div class="text-caption mt-1">需要启用 SQLite 持久化存储并有请求记录</div>
+      <div class="text-body-1">{{ t('costReport.emptyTitle') }}</div>
+      <div class="text-caption mt-1">{{ t('costReport.emptyHint') }}</div>
     </div>
 
     <!-- Data table -->
@@ -123,19 +123,19 @@
         <thead>
           <tr>
             <th class="text-left" style="min-width: 200px">{{ groupByLabel }}</th>
-            <th class="text-right">请求数</th>
-            <th class="text-right">成功率</th>
-            <th class="text-right">输入 Token</th>
-            <th class="text-right">输出 Token</th>
-            <th class="text-right">缓存创建</th>
-            <th class="text-right">缓存读取</th>
-            <th class="text-right">官方成本 (USD)</th>
+            <th class="text-right">{{ t('costReport.col.requests') }}</th>
+            <th class="text-right">{{ t('costReport.col.successRate') }}</th>
+            <th class="text-right">{{ t('costReport.col.inputTokens') }}</th>
+            <th class="text-right">{{ t('costReport.col.outputTokens') }}</th>
+            <th class="text-right">{{ t('costReport.col.cacheCreation') }}</th>
+            <th class="text-right">{{ t('costReport.col.cacheRead') }}</th>
+            <th class="text-right">{{ t('costReport.col.listCost') }}</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="row in rows" :key="row.groupKey">
             <td class="text-left">
-              <v-chip size="small" variant="tonal" color="primary">{{ row.groupKey || '(空)' }}</v-chip>
+              <v-chip size="small" variant="tonal" color="primary">{{ row.groupKey || t('costReport.emptyGroup') }}</v-chip>
             </td>
             <td class="text-right">{{ formatNumber(row.totalRequests) }}</td>
             <td class="text-right">
@@ -169,6 +169,9 @@
 import { ref, computed, onMounted } from 'vue'
 import { api } from '@/services/api'
 import type { CostReportRow } from '@/services/api-types'
+import { useI18n } from '@/i18n'
+
+const { t } = useI18n()
 
 const loading = ref(false)
 const rows = ref<CostReportRow[]>([])
@@ -177,9 +180,9 @@ const duration = ref('7d')
 const apiType = ref('messages')
 
 const groupByOptions = [
-  { label: '用户', value: 'user' },
-  { label: '模型', value: 'model' },
-  { label: 'Key', value: 'key' },
+  { label: t('costReport.groupBy.user'), value: 'user' },
+  { label: t('costReport.groupBy.model'), value: 'model' },
+  { label: t('costReport.groupBy.key'), value: 'key' },
 ]
 
 const durationOptions = [
@@ -191,16 +194,16 @@ const durationOptions = [
 ]
 
 const apiTypeOptions = [
-  { label: 'Messages', value: 'messages' },
-  { label: 'Responses', value: 'responses' },
-  { label: 'Chat', value: 'chat' },
-  { label: 'Gemini', value: 'gemini' },
-  { label: 'Images', value: 'images' },
-  { label: 'Vectors', value: 'vectors' },
+  { label: t('costReport.apiType.messages'), value: 'messages' },
+  { label: t('costReport.apiType.responses'), value: 'responses' },
+  { label: t('costReport.apiType.chat'), value: 'chat' },
+  { label: t('costReport.apiType.gemini'), value: 'gemini' },
+  { label: t('costReport.apiType.images'), value: 'images' },
+  { label: t('costReport.apiType.vectors'), value: 'vectors' },
 ]
 
 const groupByLabel = computed(() => {
-  return groupByOptions.find(o => o.value === groupBy.value)?.label || '分组'
+  return groupByOptions.find(o => o.value === groupBy.value)?.label || t('costReport.groupByLabel')
 })
 
 const totalRequests = computed(() => rows.value.reduce((s, r) => s + r.totalRequests, 0))
@@ -235,9 +238,9 @@ function formatCost(costUSD: number, complete: boolean, decimals = 6): string {
 
 function pricingHint(row: CostReportRow): string {
   if (row.unpricedModels?.length) {
-    return `以下模型缺少完整定价：${row.unpricedModels.join('、')}；显示金额为已知部分下界。`
+    return t('costReport.pricingHintModels', { models: row.unpricedModels.join(t('costReport.modelSeparator')) })
   }
-  return '定价信息不完整；显示金额为已知部分下界。'
+  return t('costReport.pricingHintGeneric')
 }
 
 async function fetchReport() {
@@ -246,7 +249,7 @@ async function fetchReport() {
     const resp = await api.getCostReport(groupBy.value, duration.value, apiType.value)
     rows.value = resp.rows || []
   } catch (e) {
-    console.error('[CostReport] 获取报表失败:', e)
+    console.error('[CostReport] failed to fetch report:', e)
     rows.value = []
   } finally {
     loading.value = false
@@ -257,14 +260,23 @@ function exportCSV() {
   if (rows.value.length === 0) return
 
   const headers = [
-    groupByLabel.value, '请求数', '成功数', '输入Token', '输出Token',
-    '缓存创建Token', '缓存读取Token', '官方成本USD（已知部分）', '定价状态', '未配置定价模型'
+    groupByLabel.value,
+    t('costReport.csv.requests'),
+    t('costReport.csv.successCount'),
+    t('costReport.csv.inputTokens'),
+    t('costReport.csv.outputTokens'),
+    t('costReport.csv.cacheCreationTokens'),
+    t('costReport.csv.cacheReadTokens'),
+    t('costReport.csv.listCostUsd'),
+    t('costReport.csv.pricingStatus'),
+    t('costReport.csv.unpricedModels'),
   ]
   const csvRows = rows.value.map(r => [
     r.groupKey, r.totalRequests, r.successCount,
     r.inputTokens, r.outputTokens, r.cacheCreationTokens,
     r.cacheReadTokens, r.listCostUSD.toFixed(6),
-    isPricingComplete(r) ? '完整' : '部分', r.unpricedModels?.join(' | ') || '',
+    isPricingComplete(r) ? t('costReport.pricingStatus.complete') : t('costReport.pricingStatus.partial'),
+    r.unpricedModels?.join(' | ') || '',
   ])
 
   const csv = [headers.join(','), ...csvRows.map(r => r.join(','))].join('\n')
