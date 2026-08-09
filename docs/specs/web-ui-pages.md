@@ -129,7 +129,7 @@ i18n key 依次为 `app.tabs.{channels,images,vectors,conversations,healthCenter
 - **标题/用途**：无自带标题，标题由 App.vue 顶部提供（渠道/Images/Vectors）。统一渠道编排列表（多 LLM 协议已合并，`:type` 实际区分为 messages / images / vectors 三类）。
 - **数据流**：
   - 渠道数据：`channelStore.currentChannelsData`（依赖 `activeTab`，由路由 `props.type` 驱动）+ `currentDashboardMetrics/Stats/RecentActivity`。
-  - 健康徽标：自带 `loadHealthData()` → `api.getHealthCenterChannels()`，构建 `healthMap`（`channelUid` 主键 + `kind:id` 兜底双写），用 `useGlobalTick(30_000)` 每 30s 轮询。
+  - 健康徽标：自带 `loadHealthData()` → `api.getHealthCenterChannels()`，构建 `healthMap`（`channelUid` 主键 + `kind:id` 兜底双写）。Phase B.3 起 `useEventStream` 订阅熔断/Key/渠道状态事件（400ms 去抖）即时刷新，`useGlobalTick(30_000)` 轮询降级为兜底。
   - 渠道列表本身由 App 级 5s 轮询刷新（见 §0.4）。
 - **主内容区块 / 子组件树**：
   ```
@@ -163,7 +163,7 @@ i18n key 依次为 `app.tabs.{channels,images,vectors,conversations,healthCenter
 
 - **文件**：`views/HealthCenterView.vue`（72 行）
 - **标题**：`mdi-stethoscope` + `healthCenter.title` + 刷新按钮。
-- **数据流**：`fetchAll()` = `Promise.all([api.getHealthCenterOverview(), api.getHealthCenterChannels()])`，仅 `onMounted` + 手动刷新按钮，**无自动轮询**（对比 ChannelsView 的 health 数据却 30s 轮询，不一致，见 P5）。
+- **数据流**：`fetchAll()` = `Promise.all([api.getHealthCenterOverview(), api.getHealthCenterChannels()])`。Phase B.3 起改为**事件驱动**：`onMounted` 首次加载 + `useEventStream` 订阅熔断/Key/渠道状态/`upstream_changed` 事件（400ms 去抖）即时刷新，保留手动刷新按钮（P5 已解决，与 ChannelsView 机制统一）。
 - **子组件树**：
   ```
   HealthCenterView
@@ -263,10 +263,10 @@ i18n key 依次为 `app.tabs.{channels,images,vectors,conversations,healthCenter
 | ~~P2~~ ✅ | **硬编码中文未国际化** → 已修复：新增 `app.tabs.costReport` + 43 个 `costReport.*` key（三 locale 对齐），`CostReportView` 全页与桌面导航改用 `t()` | `App.vue`、`CostReportView.vue`、`locales/*` | 已解决 |
 | P3 | **导航 icon 重复**：conversations 与 cockpit 同用 `mdi-view-dashboard-outline` | `apiTabOptions` | 下拉辨识度低 |
 | ~~P4~~ ✅ | **全局统计卡/操作栏路径黑名单不对称** → 已修复（2026-08-09 `d876784d`）：黑名单补 `/subscriptions` `/cockpit`，两页不再显示渠道统计卡与"添加渠道"操作栏（ego-browser 实测全 false 确认） | `App.vue` L240/263/310 | 已解决 |
-| P5 | **健康数据轮询不一致**：ChannelsView 的 healthMap 30s 轮询，HealthCenterView 仅手动刷新 | `ChannelsView` vs `HealthCenterView` | 健康中心数据易过期 |
+| ~~P5~~ ✅ | **健康数据轮询不一致** → 已修复（2026-08-09，Phase B.3 `1891c7d2`）：ChannelsView 与 HealthCenterView 均接入 `useEventStream` 事件驱动刷新（熔断/Key/渠道状态变更 400ms 去抖即时刷新），轮询降级为兜底，两视图刷新机制已统一 | `ChannelsView` vs `HealthCenterView` | 已解决 |
 | P6 | **确认体系分裂**：SubscriptionsView 用原生 `window.confirm`，而全站已有 `dialogStore.confirm`（Wails 兼容） | `SubscriptionsView.vue` `deleteItem` | 桌面端 iframe 下 confirm 可能失效 |
 | P7 | **提示体系分裂**：SubscriptionsView 自带本地 `v-snackbar`，与 App 全局 toast 并存 | `SubscriptionsView.vue` | 通知样式/位置不统一 |
-| P8 | **路由守卫空转**：`beforeEach` 对所有路由 `next()`，`requiresAuth` 实际由 App.vue 处理，存在语义冗余/误导 | `router/index.ts` L67 | 维护者易误以为有路由级鉴权 |
+| ~~P8~~ ✅ | **路由守卫空转** → 已修复（2026-08-09）：移除对所有路由一律 `next()` 的空转 `beforeEach`；鉴权实际由 App.vue 持久认证对话框承担，router/index.ts 已注释说明，`meta.requiresAuth` 仅作语义标注 | `router/index.ts` | 已解决 |
 | P9 | **空态覆盖不均**：Channels/CostReport/Cockpit 有专属空态；Health/Subscriptions/Autopilot 依赖子组件，无 View 级空态 | 各 View | 体验不一致 |
 | P10 | **i18n 命名重叠易混**：`app.tabs.conversations` 与 `app.tabs.cockpitOverview` 曾同为"驾驶舱"，指向不同页（**已于 2026-08-09 修复**：cockpitOverview 改为 Overview/总览/Ikhtisar） | locale JSON | 用户认知混淆（已解决） |
 

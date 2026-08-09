@@ -94,19 +94,16 @@ Channels   (Claude/OpenAI/Gemini/...)
 - ✅ **跨模块事件总线**（Phase B，提交 `267f82d6` / `10b99f1c` / `1891c7d2`）：B.1 `internal/eventbus` 叶子包 + 熔断/Key 状态事件 + `StateEventStore`（SQLite `state_events`）+ WS/REST 端点；B.2 config 写路径 `upstream_changed`/`config_reloaded`/`logical_channel_rebuilt` + preset `preset_bundle_swapped`；B.3 前端 mitt 总线 + `useEventStream` 统一 WS + 两视图事件驱动刷新（轮询降级为兜底）。总线为可选依赖、非阻塞、事件仅通知非真相源。详见 `cross-module-integration.md` §10.1。
 
 #### 中优先级（影响一致性/可观测性）
-- ~~**跨模块事件总线缺失**~~（已完成，见上）
+- **健康/质量/成本/能力标签字段持久化到 LogicalChannel**
+- **稀疏 L2 预算动态调整**：当前静态配置，不感知大盘负载
 
 #### 低优先级（功能扩展）
 - **Benchmark Chart 前端页面落地**：数据链路已通，需决策交互范围与 schema 扩展
 - **New-API 周期性自动余额刷新**：仅启动时同步 + 手动刷新
-- **健康/质量/成本/能力标签字段持久化到 LogicalChannel**
-- **稀疏 L2 预算动态调整**：当前静态配置，不感知大盘负载
 - **capability probe schema 版本化与 drift 检测**
 - **火山 manifest 自动刷新与 drift 告警**
 
 #### Web UI 遗留（见 web-ui-pages.md §9）
 - **P3** 导航 icon 重复（conversations 与 cockpit 同用 `mdi-view-dashboard-outline`）
-- **P5** 健康数据轮询不一致（ChannelsView 30s vs HealthCenterView 手动）
 - **P6/P7** 确认/提示体系分裂（SubscriptionsView 用原生 confirm + 本地 snackbar）
-- **P8** 路由守卫空转（beforeEach 无条件放行）
 - **P9** 空态覆盖不均
