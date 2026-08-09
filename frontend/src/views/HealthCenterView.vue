@@ -46,6 +46,7 @@ import HealthCenterStats from '@/components/HealthCenterStats.vue'
 import HealthChannelTable from '@/components/HealthChannelTable.vue'
 import ProfileChangelogTimeline from '@/components/ProfileChangelogTimeline.vue'
 import type { HealthCenterOverview, ChannelHealthItem } from '@/services/api-types'
+import { useEventStream } from '@/composables/useEventStream'
 
 const { t } = useI18n()
 
@@ -67,5 +68,25 @@ async function fetchAll() {
   }
 }
 
-onMounted(fetchAll)
+const eventStream = useEventStream()
+
+// 事件去抖：熔断/Key 状态可能短时高频迁移，合并多次触发为一次刷新
+let refreshTimer: ReturnType<typeof setTimeout> | null = null
+const scheduleRefresh = () => {
+  if (refreshTimer) return
+  refreshTimer = setTimeout(() => {
+    refreshTimer = null
+    void fetchAll()
+  }, 400)
+}
+
+onMounted(() => {
+  void fetchAll()
+  // 事件驱动即时刷新（本视图原本无轮询，事件为纯增量；失败时仍可手动刷新）
+  eventStream.on('circuit_breaker_state_changed', scheduleRefresh)
+  eventStream.on('key_blacklisted', scheduleRefresh)
+  eventStream.on('key_restored', scheduleRefresh)
+  eventStream.on('channel_status_changed', scheduleRefresh)
+  eventStream.on('upstream_changed', scheduleRefresh)
+})
 </script>

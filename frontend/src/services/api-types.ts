@@ -2166,6 +2166,47 @@ export interface ProfileChangelogResponse {
   total: number
 }
 
+// ============== 跨模块状态事件（Phase B） ==============
+
+/** 状态事件类型（对应 backend eventbus.Type* 常量） */
+export type StateEventType =
+  | 'circuit_breaker_state_changed'
+  | 'key_blacklisted'
+  | 'key_restored'
+  | 'key_model_disabled'
+  | 'key_model_restored'
+  | 'config_reloaded'
+  | 'upstream_changed'
+  | 'channel_status_changed'
+  | 'logical_channel_rebuilt'
+  | 'preset_bundle_swapped'
+
+/** 状态事件作用域（发布来源模块） */
+export type StateEventScope = 'metrics' | 'config' | 'preset'
+
+/** 跨模块状态事件 envelope（对应 backend eventbus.Event）。仅承载脱敏字段。 */
+export interface StateEvent {
+  uid: string
+  type: StateEventType
+  scope: StateEventScope
+  /** channelUID / metricsKey / logicalChannelUid 等 */
+  subject?: string
+  /** messages / chat / ...（可选） */
+  channelKind?: string
+  /** 状态迁移前值 */
+  from?: string
+  /** 状态迁移后值 */
+  to?: string
+  cause?: string
+  payload?: Record<string, unknown>
+  createdAt: string
+}
+
+export interface StateEventsResponse {
+  events: StateEvent[]
+  total: number
+}
+
 // ============== 成本报表（Phase 4 Item 2） ==============
 
 export interface CostReportRow {

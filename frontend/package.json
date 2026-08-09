@@ -18,6 +18,7 @@
   "dependencies": {
     "@mdi/js": "^7.4.47",
     "apexcharts": "^5.15.2",
+    "mitt": "^3.0.1",
     "pinia": "^3.0.4",
     "pinia-plugin-persistedstate": "^4.7.1",
     "vue": "3.5.38",

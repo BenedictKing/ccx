@@ -37,6 +37,7 @@ import type { ChannelHealthItem } from '@/services/api-types'
 import ChannelOrchestration from '@/components/ChannelOrchestration.vue'
 import { useI18n } from '@/i18n'
 import { useGlobalTick } from '@/composables/useGlobalTick'
+import { useEventStream } from '@/composables/useEventStream'
 
 // 接收路由参数
 const props = defineProps<{ type: string }>()
@@ -72,10 +73,26 @@ const loadHealthData = async () => {
 }
 
 const healthTick = useGlobalTick(30_000, 'ChannelsView-health')
+const eventStream = useEventStream()
+
+// 事件去抖：熔断/Key 状态可能短时高频迁移，合并多次触发为一次刷新
+let healthRefreshTimer: ReturnType<typeof setTimeout> | null = null
+const scheduleHealthRefresh = () => {
+  if (healthRefreshTimer) return
+  healthRefreshTimer = setTimeout(() => {
+    healthRefreshTimer = null
+    void loadHealthData()
+  }, 400)
+}
 
 onMounted(() => {
   void loadHealthData()
+  // 事件驱动即时刷新；30s 轮询降级为兜底（事件丢/断连时仍能对齐）
   healthTick.onTick(loadHealthData)
+  eventStream.on('circuit_breaker_state_changed', scheduleHealthRefresh)
+  eventStream.on('key_blacklisted', scheduleHealthRefresh)
+  eventStream.on('key_restored', scheduleHealthRefresh)
+  eventStream.on('channel_status_changed', scheduleHealthRefresh)
 })
 
 const emitAddChannel = () => {
