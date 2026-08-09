@@ -1252,9 +1252,9 @@ func handleDeleteAccount(deps *AutoManagedDeps) gin.HandlerFunc {
 		}
 		log.Printf("[AutoManaged-Delete] 已删除自动托管账号 account=%s deletedChannels=%d skippedNonManaged=%d", accountUID, len(removed), len(skipped))
 		c.JSON(http.StatusOK, gin.H{
-			"accountUid":       accountUID,
-			"deletedChannels":  len(removed),
-			"skippedChannels":  skipped,
+			"accountUid":        accountUID,
+			"deletedChannels":   len(removed),
+			"skippedChannels":   skipped,
 			"skippedChannelNum": len(skipped),
 		})
 	}

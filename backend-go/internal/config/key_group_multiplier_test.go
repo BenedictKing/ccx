@@ -14,9 +14,9 @@ func TestEvaluateAPIKeyMultiplierEligibility(t *testing.T) {
 	past := now.Add(-time.Hour)
 
 	tests := []struct {
-		name   string
-		cfg    APIKeyConfig
-		want   MultiplierEligibility
+		name string
+		cfg  APIKeyConfig
+		want MultiplierEligibility
 	}{
 		{name: "legacy config", cfg: APIKeyConfig{}, want: MultiplierEligibility{Eligible: true, Reason: MultiplierEligibilityReasonOK}},
 		{name: "missing multiplier", cfg: APIKeyConfig{MaxGroupMultiplier: &one}, want: MultiplierEligibility{Reason: MultiplierEligibilityReasonInvalidMultiplier}},

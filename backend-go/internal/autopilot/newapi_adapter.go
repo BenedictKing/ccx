@@ -88,8 +88,8 @@ const DefaultNewApiProvisionKeyName = "ccx-autopilot"
 
 // NewApiAuthTokenMode 定义令牌注入 Authorization 头的方式。
 const (
-	NewApiAuthModeBearer = "bearer" // 默认：Authorization: Bearer <token>
-	NewApiAuthModeRaw    = "raw"      // fork 兼容：Authorization: <token>（不带 Bearer 前缀）
+	NewApiAuthModeBearer  = "bearer"   // 默认：Authorization: Bearer <token>
+	NewApiAuthModeRaw     = "raw"      // fork 兼容：Authorization: <token>（不带 Bearer 前缀）
 	NewApiAuthModeRawAuth = "raw_auth" // 前端统一值：等价于 raw
 )
 
