@@ -678,6 +678,18 @@ func ListLogicalChannelsByKind(cfg *Config, kind LogicalChannelKind) []LogicalCh
 	return out
 }
 
+// RebuildLogicalChannelsAndPublish 调用 RebuildLogicalChannels 后发布 logical_channel_rebuilt 事件。
+// 内部 saveConfigLocked / loadConfig 等场景应使用此入口以触发 Phase B.2 事件。
+func (cm *ConfigManager) RebuildLogicalChannelsAndPublish() {
+	if cm == nil {
+		return
+	}
+	cm.mu.Lock()
+	RebuildLogicalChannels(&cm.config)
+	cm.mu.Unlock()
+	cm.publishLogicalChannelRebuilt()
+}
+
 // ReloadFromMemory 替换内存中 Config 并触发逻辑渠道回填。
 // 仅供测试使用，模拟从盘上加载后首次访问。
 func (cm *ConfigManager) ReloadFromMemory(cfg *Config) {

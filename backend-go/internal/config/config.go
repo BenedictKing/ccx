@@ -1945,6 +1945,94 @@ func (cm *ConfigManager) publishKeyEvent(evType, channelUID, channelKind, apiKey
 	})
 }
 
+// publishUpstreamChangeIfChanged（Phase B.2）比对 saveConfigLocked 落盘前后的 6 类渠道
+// slice 长度，任意变化发 upstream_changed；bus 为 nil 时为空操作。
+// 不深入字段：精细 diff 由前端按需拉 GET /api/health-center/channels 校验。
+func (cm *ConfigManager) publishUpstreamChangeIfChanged(before *Config) {
+	bus := cm.eventBus.Load()
+	if bus == nil || before == nil {
+		return
+	}
+	after := cm.config
+	changed := false
+	check := func(a, b []UpstreamConfig) bool {
+		if len(a) != len(b) {
+			return true
+		}
+		for i := range a {
+			if a[i].ChannelUID != b[i].ChannelUID || a[i].Status != b[i].Status {
+				return true
+			}
+		}
+		return false
+	}
+	if check(before.Upstream, after.Upstream) ||
+		check(before.ChatUpstream, after.ChatUpstream) ||
+		check(before.ResponsesUpstream, after.ResponsesUpstream) ||
+		check(before.GeminiUpstream, after.GeminiUpstream) ||
+		check(before.ImagesUpstream, after.ImagesUpstream) ||
+		check(before.VectorsUpstream, after.VectorsUpstream) {
+		changed = true
+	}
+	if !changed {
+		return
+	}
+	bus.Publish(eventbus.Event{
+		Type:    eventbus.TypeUpstreamChanged,
+		Scope:   eventbus.ScopeConfig,
+		Subject: "config",
+		Payload: map[string]any{
+			"messages":  len(after.Upstream),
+			"chat":      len(after.ChatUpstream),
+			"responses": len(after.ResponsesUpstream),
+			"gemini":    len(after.GeminiUpstream),
+			"images":    len(after.ImagesUpstream),
+			"vectors":   len(after.VectorsUpstream),
+		},
+	})
+}
+
+// publishConfigReloaded（Phase B.2）loadConfig 末尾发布 config_reloaded。
+func (cm *ConfigManager) publishConfigReloaded(before *Config) {
+	bus := cm.eventBus.Load()
+	if bus == nil {
+		return
+	}
+	payload := map[string]any{}
+	if before != nil {
+		payload["priorChannelCount"] = len(before.Upstream) + len(before.ChatUpstream) +
+			len(before.ResponsesUpstream) + len(before.GeminiUpstream) +
+			len(before.ImagesUpstream) + len(before.VectorsUpstream)
+	}
+	after := cm.config
+	payload["channelCount"] = len(after.Upstream) + len(after.ChatUpstream) +
+		len(after.ResponsesUpstream) + len(after.GeminiUpstream) +
+		len(after.ImagesUpstream) + len(after.VectorsUpstream)
+	payload["logicalChannelCount"] = len(after.LogicalChannels)
+	bus.Publish(eventbus.Event{
+		Type:    eventbus.TypeConfigReloaded,
+		Scope:   eventbus.ScopeConfig,
+		Subject: "config",
+		Payload: payload,
+	})
+}
+
+// publishLogicalChannelRebuilt（Phase B.2）由 RebuildLogicalChannels 末尾调用。
+func (cm *ConfigManager) publishLogicalChannelRebuilt() {
+	bus := cm.eventBus.Load()
+	if bus == nil {
+		return
+	}
+	bus.Publish(eventbus.Event{
+		Type:    eventbus.TypeLogicalChannelRebuilt,
+		Scope:   eventbus.ScopeConfig,
+		Subject: "config",
+		Payload: map[string]any{
+			"logicalChannelCount": len(cm.config.LogicalChannels),
+		},
+	})
+}
+
 // fireConfigChangeCallbacks 在锁外通知所有已注册的回调
 // 调用方需已持有 cm.mu，本方法会在内部释放锁
 // fireConfigChangeCallbacks 在锁外异步通知所有已注册的回调

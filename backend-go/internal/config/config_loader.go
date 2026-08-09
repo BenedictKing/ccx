@@ -92,6 +92,8 @@ func (cm *ConfigManager) loadConfig() error {
 		autopilotDecodeFallback = true
 		log.Printf("[Config-Migration] 警告: autopilot 配置无法解析，已回退到默认值: %v", err)
 	}
+	// Phase B.2：保存加载前快照用于事件 diff。
+	snapshot := cm.config
 	cm.config = loaded
 
 	// 兼容旧配置：缺失字段补齐默认值（thinkingCache 等）
@@ -195,6 +197,8 @@ func (cm *ConfigManager) loadConfig() error {
 
 	// 成功加载后通知回调（在锁内构造快照，释放锁后通知）
 	cm.fireConfigChangeCallbacks()
+	// Phase B.2：发布 config_reloaded 事件。
+	cm.publishConfigReloaded(&snapshot)
 	return nil
 }
 
@@ -1156,6 +1160,9 @@ func (cm *ConfigManager) saveConfigLocked(config Config) error {
 	// 备份当前配置
 	cm.backupConfig()
 
+	// 落盘前快照（用于 B.2 事件 diff）。
+	snapshotBeforeWrite := cm.config
+
 	// 清理已废弃字段，确保不会被序列化到 JSON
 	config.CurrentUpstream = 0
 	config.CurrentResponsesUpstream = 0
@@ -1165,6 +1172,8 @@ func (cm *ConfigManager) saveConfigLocked(config Config) error {
 	// 统一重建 LogicalChannels 视图并回写 LogicalChannelUID / LogicalName。
 	// 在 deepCopy 之前执行，确保修改作用于调用方共享的 slice 并最终提交到 cm.config。
 	RebuildLogicalChannels(&config)
+	// Phase B.2：落盘 + 提交到 cm.config 后，发布 logical_channel_rebuilt 事件。
+	defer cm.publishLogicalChannelRebuilt()
 	persisted := config.deepCopy()
 	persisted.stripManagedChannelSecrets()
 	data, err := json.MarshalIndent(persisted, "", "  ")
@@ -1176,6 +1185,7 @@ func (cm *ConfigManager) saveConfigLocked(config Config) error {
 		return err
 	}
 	cm.config = config
+	cm.publishUpstreamChangeIfChanged(&snapshotBeforeWrite)
 	return nil
 }
 

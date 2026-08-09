@@ -751,6 +751,7 @@ func main() {
 		chatMetricsManager.SetEventBus(stateEventBus)
 		imagesMetricsManager.SetEventBus(stateEventBus)
 		vectorsMetricsManager.SetEventBus(stateEventBus)
+		presetstore.Default().SetEventBus(stateEventBus)
 		if autopilotManager != nil {
 			var stateStore *autopilot.StateEventStore
 			if autopilotDB != nil {

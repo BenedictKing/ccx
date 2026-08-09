@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+
+	"github.com/BenedictKing/ccx/internal/eventbus"
 )
 
 // PresetStore 是运行时预置数据的并发安全存储。
@@ -17,6 +19,9 @@ type PresetStore struct {
 
 	mu        sync.Mutex
 	observers []func(*PresetBundle)
+
+	// eventBus 跨模块事件总线（Phase B.2，可选）。
+	eventBus atomic.Pointer[eventbus.Bus]
 }
 
 // NewPresetStore 用给定初始 bundle 构造存储；initial 为 nil 时回退到编译期内置。
@@ -58,6 +63,7 @@ func (s *PresetStore) Swap(next *PresetBundle) {
 	if err := Validate(cloned); err != nil {
 		panic(fmt.Sprintf("[presetstore] Swap bundle 校验失败: %v", err))
 	}
+	prior := s.current.Load()
 	s.current.Store(cloned)
 
 	s.mu.Lock()
@@ -67,6 +73,20 @@ func (s *PresetStore) Swap(next *PresetBundle) {
 
 	for _, cb := range observers {
 		cb(cloneBundle(cloned))
+	}
+
+	// Phase B.2：发布 preset_bundle_swapped 事件。
+	if bus := s.eventBus.Load(); bus != nil {
+		bus.Publish(eventbus.Event{
+			Type:    eventbus.TypePresetBundleSwapped,
+			Scope:   eventbus.ScopePreset,
+			Subject: "preset",
+			From:    prior.DataVersion,
+			To:      cloned.DataVersion,
+			Payload: map[string]any{
+				"schemaVersion": cloned.SchemaVersion,
+			},
+		})
 	}
 }
 
@@ -78,6 +98,14 @@ func (s *PresetStore) RegisterOnChange(cb func(*PresetBundle)) {
 	s.mu.Lock()
 	s.observers = append(s.observers, cb)
 	s.mu.Unlock()
+}
+
+// SetEventBus 注入跨模块事件总线（Phase B.2）。未注入时 Swap 不发 preset_bundle_swapped。
+func (s *PresetStore) SetEventBus(bus *eventbus.Bus) {
+	if s == nil {
+		return
+	}
+	s.eventBus.Store(bus)
 }
 
 func cloneBundle(src *PresetBundle) *PresetBundle {

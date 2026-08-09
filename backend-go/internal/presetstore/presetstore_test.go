@@ -4,6 +4,8 @@ import (
 	"math"
 	"sync"
 	"testing"
+
+	"github.com/BenedictKing/ccx/internal/eventbus"
 )
 
 // validBundle 返回一份通过校验的最小 bundle，供各用例按需改坏。
@@ -247,6 +249,42 @@ func TestStoreSwapAndObserver(t *testing.T) {
 	s.Swap(nil)
 	if s.DataVersion() != "2026.07.10-1" {
 		t.Errorf("nil Swap 后 DataVersion 应不变，得到 %q", s.DataVersion())
+	}
+}
+
+// TestStoreSwapPublishesEvent（Phase B.2）：Swap 注入 bus 后发布 preset_bundle_swapped 事件。
+func TestStoreSwapPublishesEvent(t *testing.T) {
+	bus := eventbus.NewBus()
+	ch, unsub := bus.Subscribe(eventbus.TypePresetBundleSwapped)
+	defer unsub()
+
+	s := NewPresetStore(nil) // 内置版本（DataVersion 通常为空）
+	s.SetEventBus(bus)
+
+	prior := s.DataVersion()
+	s.Swap(validBundle())
+
+	ev := <-ch
+	if ev.Type != eventbus.TypePresetBundleSwapped {
+		t.Errorf("Type=%s，期望 %s", ev.Type, eventbus.TypePresetBundleSwapped)
+	}
+	if ev.From != prior {
+		t.Errorf("From=%q，期望置换前版本 %q", ev.From, prior)
+	}
+	if ev.To != "2026.07.10-1" {
+		t.Errorf("To=%q，期望 2026.07.10-1", ev.To)
+	}
+	if ev.Scope != eventbus.ScopePreset {
+		t.Errorf("Scope=%s，期望 %s", ev.Scope, eventbus.ScopePreset)
+	}
+}
+
+// TestStoreSwapNilBusNoPanic（Phase B.2）：未注入 bus 时 Swap 不 panic 且行为不变。
+func TestStoreSwapNilBusNoPanic(t *testing.T) {
+	s := NewPresetStore(nil)
+	s.Swap(validBundle())
+	if s.DataVersion() != "2026.07.10-1" {
+		t.Errorf("无 bus 时 Swap 仍应生效，DataVersion=%q", s.DataVersion())
 	}
 }
 
