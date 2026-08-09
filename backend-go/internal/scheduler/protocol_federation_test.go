@@ -20,7 +20,6 @@ func federationTestConfig() config.Config {
 			{Name: "suspended", ChannelUID: "chat-suspended", AccountUID: "acct-a", AutoManaged: true, BaseURL: "https://suspended.example.com", APIKeys: []string{"suspended-key"}, Status: "suspended"},
 			{Name: "disabled", ChannelUID: "chat-disabled", AccountUID: "acct-a", AutoManaged: true, BaseURL: "https://disabled.example.com", APIKeys: []string{"disabled-key"}, Status: "disabled"},
 			{Name: "keyless", ChannelUID: "chat-keyless", AccountUID: "acct-a", AutoManaged: true, BaseURL: "https://keyless.example.com", Status: "active"},
-			{Name: "manual", ChannelUID: "chat-manual", AccountUID: "acct-a", BaseURL: "https://manual.example.com", APIKeys: []string{"manual-key"}, Status: "active"},
 		},
 		ResponsesUpstream: []config.UpstreamConfig{{
 			Name: "responses", ChannelUID: "responses-sib", AccountUID: "acct-a", AutoManaged: true,
@@ -31,6 +30,42 @@ func federationTestConfig() config.Config {
 			BaseURL: "https://gemini.example.com", APIKeys: []string{"gemini-key"}, Status: "active",
 		}},
 	}
+}
+
+// federationTestConfigWithManual 在 federationTestConfig 基础上追加一个显式手动渠道。
+// 显式 autoManaged=false 通过 JSON 保留，用于验证 protocol federation 不联邦化手动渠道。
+func federationTestConfigWithManual() config.Config {
+	cfg := federationTestConfig()
+	// manual 渠道的 autoManaged=false 需经 JSON 显式落盘才能被识别为"显式手动"，
+	// 此处先不放入 ChatUpstream，由 createTestSchedulerWithRawJSON 注入。
+	return cfg
+}
+
+// federationTestRawJSON 构造包含显式 autoManaged:false 手动渠道的 JSON。
+// 其余渠道与 federationTestConfig 保持一致。
+func federationTestRawJSON() string {
+	return `{
+  "autopilot": {},
+  "upstream": [
+    {"name":"native","channelUid":"msg","accountUid":"acct-a","autoManaged":true,"baseUrl":"https://messages.example.com","apiKeys":["msg-key"],"status":"active"}
+  ],
+  "chatUpstream": [
+    {"name":"k3-chat","channelUid":"chat-k3","accountUid":"acct-a","autoManaged":true,"baseUrl":"https://api.moonshot.cn","apiKeys":["chat-key"],"status":"active"},
+    {"name":"other-account","channelUid":"chat-other","accountUid":"acct-b","autoManaged":true,"baseUrl":"https://other.example.com","apiKeys":["other-key"],"status":"active"},
+    {"name":"suspended","channelUid":"chat-suspended","accountUid":"acct-a","autoManaged":true,"baseUrl":"https://suspended.example.com","apiKeys":["suspended-key"],"status":"suspended"},
+    {"name":"disabled","channelUid":"chat-disabled","accountUid":"acct-a","autoManaged":true,"baseUrl":"https://disabled.example.com","apiKeys":["disabled-key"],"status":"disabled"},
+    {"name":"keyless","channelUid":"chat-keyless","accountUid":"acct-a","autoManaged":true,"baseUrl":"https://keyless.example.com","status":"active"},
+    {"name":"manual","channelUid":"chat-manual","accountUid":"acct-a","autoManaged":false,"baseUrl":"https://manual.example.com","apiKeys":["manual-key"],"status":"active"}
+  ],
+  "responsesUpstream": [
+    {"name":"responses","channelUid":"responses-sib","accountUid":"acct-a","autoManaged":true,"baseUrl":"https://responses.example.com","apiKeys":["responses-key"],"status":"active"}
+  ],
+  "geminiUpstream": [
+    {"name":"gemini","channelUid":"gemini-sib","accountUid":"acct-a","autoManaged":true,"baseUrl":"https://gemini.example.com","apiKeys":["gemini-key"],"status":"active"}
+  ],
+  "imagesUpstream": [],
+  "vectorsUpstream": []
+}`
 }
 
 func federationSiblingUIDs(t *testing.T, s *ChannelScheduler, accountUID string) map[string]string {
@@ -47,7 +82,7 @@ func federationSiblingUIDs(t *testing.T, s *ChannelScheduler, accountUID string)
 }
 
 func TestProtocolFederationIncludesOnlyEligibleSiblings(t *testing.T) {
-	s, cleanup := createTestScheduler(t, federationTestConfig())
+	s, cleanup := createTestSchedulerWithRawJSON(t, federationTestRawJSON())
 	defer cleanup()
 
 	got := federationSiblingUIDs(t, s, "acct-a")
@@ -159,7 +194,7 @@ func TestProtocolFederationSelectsResponsesSibling(t *testing.T) {
 }
 
 func TestProtocolFederationFailsOverAcrossKindsWithoutIndexCollision(t *testing.T) {
-	s, cleanup := createTestScheduler(t, federationTestConfig())
+	s, cleanup := createTestSchedulerWithRawJSON(t, federationTestRawJSON())
 	defer cleanup()
 	s.SetModelSupportResolverProvider(newFederationResolver())
 

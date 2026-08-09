@@ -128,6 +128,10 @@ type UpstreamConfig struct {
 	// AutoManagedKind 托管子类型，用于区分"已托管但未绑定上游套餐"和"已完成 new-api 绑定"等状态。
 	// "" | "generic" | "new_api"
 	AutoManagedKind string `json:"autoManagedKind,omitempty"`
+	// autoManagedExplicitFalse 标记 JSON 中曾显式出现 "autoManaged":false 的渠道。
+	// 加载时短暂记录，用于区分"显式手动渠道"与"未设置 autoManaged 的历史渠道"，
+	// 避免 ensureAutoManagedKind 把前者误升级为 generic。不持久化。
+	autoManagedExplicitFalse bool `json:"-"`
 	// Autopilot 来源信任分类（设计 §3.2.1，仅用于隐私/治理展示和同分 tie-breaker，不参与质量推导）
 	// OriginType: official_api | official_token_plan | relay | community | local_runtime | unknown
 	// OriginTier: first | second | third | local | unknown

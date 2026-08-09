@@ -92,6 +92,8 @@ func (cm *ConfigManager) loadConfig() error {
 		autopilotDecodeFallback = true
 		log.Printf("[Config-Migration] 警告: autopilot 配置无法解析，已回退到默认值: %v", err)
 	}
+	// 记录显式 autoManaged=false 的渠道，避免 ensureAutoManagedKind 把手动渠道误升级为 generic。
+	markExplicitAutoManagedFalse(data, &loaded)
 	// Phase B.2：保存加载前快照用于事件 diff。
 	snapshot := cm.config
 	cm.config = loaded
@@ -200,6 +202,51 @@ func (cm *ConfigManager) loadConfig() error {
 	// Phase B.2：发布 config_reloaded 事件。
 	cm.publishConfigReloaded(&snapshot)
 	return nil
+}
+
+// markExplicitAutoManagedFalse 解析原始 JSON，标记显式 autoManaged=false 的渠道。
+// 区分"用户显式手动渠道"与"未设置 autoManaged 的历史渠道"，
+// 供 ensureAutoManagedKind 避免把前者误升级为 generic。
+func markExplicitAutoManagedFalse(rawJSON []byte, cfg *Config) {
+	var rawMap map[string]json.RawMessage
+	if err := json.Unmarshal(rawJSON, &rawMap); err != nil {
+		return
+	}
+	apply := func(raw json.RawMessage, channels *[]UpstreamConfig) {
+		var rawChannels []map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &rawChannels); err != nil {
+			return
+		}
+		for i := range *channels {
+			if i >= len(rawChannels) {
+				continue
+			}
+			if v, ok := rawChannels[i]["autoManaged"]; ok {
+				var b bool
+				if err := json.Unmarshal(v, &b); err == nil && !b {
+					(*channels)[i].autoManagedExplicitFalse = true
+				}
+			}
+		}
+	}
+	if raw, ok := rawMap["upstream"]; ok {
+		apply(raw, &cfg.Upstream)
+	}
+	if raw, ok := rawMap["responsesUpstream"]; ok {
+		apply(raw, &cfg.ResponsesUpstream)
+	}
+	if raw, ok := rawMap["geminiUpstream"]; ok {
+		apply(raw, &cfg.GeminiUpstream)
+	}
+	if raw, ok := rawMap["chatUpstream"]; ok {
+		apply(raw, &cfg.ChatUpstream)
+	}
+	if raw, ok := rawMap["imagesUpstream"]; ok {
+		apply(raw, &cfg.ImagesUpstream)
+	}
+	if raw, ok := rawMap["vectorsUpstream"]; ok {
+		apply(raw, &cfg.VectorsUpstream)
+	}
 }
 
 // decodeConfigWithDefaultAutopilot 仅忽略无法强类型解析的 autopilot 块。
@@ -970,6 +1017,13 @@ func (cm *ConfigManager) ensureAutoManagedKind() bool {
 					}
 				}
 			}
+			// 用户显式手动渠道（JSON 中曾出现 "autoManaged":false）不参与升级，
+			// 保持手动身份，避免 protocol federation 等逻辑误判为托管渠道。
+			// 该迁移只针对 autoManaged 字段缺失的历史渠道。
+			if !ch.AutoManaged && ch.autoManagedExplicitFalse {
+				continue
+			}
+
 			if !ch.AutoManaged && (strings.TrimSpace(ch.BaseURL) == "" || !hasKey) {
 				continue
 			}

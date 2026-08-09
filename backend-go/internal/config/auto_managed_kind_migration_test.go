@@ -51,6 +51,12 @@ func TestAutoManagedKindMigration(t *testing.T) {
 			wantKind:    "new_api",
 		},
 		{
+			name:        "显式 autoManaged=false 不升级为托管",
+			channelJSON: `{"baseUrl":"https://relay.example.com","apiKeys":["sk-old"],"autoManaged":false,"name":"manual"}`,
+			wantManaged: false,
+			wantKind:    "",
+		},
+		{
 			name:        "已有显式 kind 保持不变",
 			channelJSON: `{"baseUrl":"https://relay.example.com","apiKeys":["sk-managed"],"autoManaged":true,"autoManagedKind":"custom","name":"explicit"}`,
 			wantManaged: true,

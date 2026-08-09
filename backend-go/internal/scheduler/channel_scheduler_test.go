@@ -56,6 +56,51 @@ func createTestConfigManager(t *testing.T, cfg config.Config) (*config.ConfigMan
 	return cfgManager, cleanup
 }
 
+// createTestSchedulerWithRawJSON 使用原始 JSON 字符串创建调度器。
+// 用于需要显式保留 bool 零值（如 autoManaged:false）的测试场景。
+func createTestSchedulerWithRawJSON(t *testing.T, rawJSON string) (*ChannelScheduler, func()) {
+	t.Helper()
+
+	tmpDir, err := os.MkdirTemp("", "scheduler-test-*")
+	if err != nil {
+		t.Fatalf("创建临时目录失败: %v", err)
+	}
+	configFile := filepath.Join(tmpDir, "config.json")
+	if err := os.WriteFile(configFile, []byte(rawJSON), 0644); err != nil {
+		_ = os.RemoveAll(tmpDir)
+		t.Fatalf("写入配置文件失败: %v", err)
+	}
+	cfgManager, err := config.NewConfigManager(configFile, "")
+	if err != nil {
+		_ = os.RemoveAll(tmpDir)
+		t.Fatalf("创建配置管理器失败: %v", err)
+	}
+	cleanup := func() {
+		_ = cfgManager.Close()
+		_ = os.RemoveAll(tmpDir)
+	}
+
+	messagesMetrics := metrics.NewMetricsManager()
+	responsesMetrics := metrics.NewMetricsManager()
+	geminiMetrics := metrics.NewMetricsManager()
+	chatMetrics := metrics.NewMetricsManager()
+	imagesMetrics := metrics.NewMetricsManager()
+	traceAffinity := session.NewTraceAffinityManager()
+	urlManager := warmup.NewURLManager(30*time.Second, 3)
+
+	scheduler := NewChannelScheduler(cfgManager, messagesMetrics, responsesMetrics, geminiMetrics, chatMetrics, imagesMetrics, traceAffinity, urlManager)
+	scheduler.SetRateLimitManager(ratelimit.NewManager())
+
+	return scheduler, func() {
+		messagesMetrics.Stop()
+		responsesMetrics.Stop()
+		chatMetrics.Stop()
+		geminiMetrics.Stop()
+		imagesMetrics.Stop()
+		cleanup()
+	}
+}
+
 // createTestScheduler 创建测试用调度器
 func createTestScheduler(t *testing.T, cfg config.Config) (*ChannelScheduler, func()) {
 	t.Helper()
