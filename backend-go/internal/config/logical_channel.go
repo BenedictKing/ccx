@@ -50,6 +50,10 @@ type LogicalChannel struct {
 	SiteIdentity      string                   `json:"siteIdentity"` // 主 URL 的归一化站点身份
 	Protocols         []LogicalChannelProtocol `json:"protocols"`    // 多协议物理路由
 	Tags              []string                 `json:"tags,omitempty"`
+	HealthTag         string                   `json:"healthTag,omitempty"`
+	QualityTag        string                   `json:"qualityTag,omitempty"`
+	CostTag           string                   `json:"costTag,omitempty"`
+	CapabilityTags    []string                 `json:"capabilityTags,omitempty"`
 	CreatedAt         time.Time                `json:"createdAt"`
 	UpdatedAt         time.Time                `json:"updatedAt"`
 }
@@ -143,6 +147,16 @@ func generateLogicalChannelUID() string {
 
 // GenerateLogicalChannelUID 暴露给外部包使用的稳定 ID 生成器。
 func GenerateLogicalChannelUID() string { return generateLogicalChannelUID() }
+
+// logicalChannelTagDeriver 是外部包（如 autopilot）注入的逻辑渠道标签推导函数。
+// config 包本身不依赖 autopilot，通过 hook 方式把画像聚合结果转写为展示标签。
+var logicalChannelTagDeriver func(siblingChannelUIDs []string) (health, quality, cost string, capabilities []string, ok bool)
+
+// RegisterLogicalChannelTagDeriver 注册逻辑渠道标签推导函数。
+// 多次注册以最后一次为准；传 nil 可清空 hook。
+func RegisterLogicalChannelTagDeriver(fn func(siblingChannelUIDs []string) (health, quality, cost string, capabilities []string, ok bool)) {
+	logicalChannelTagDeriver = fn
+}
 
 // physicalChannelEntry 在归组时记录物理渠道所在的物理数组名（"messages"/"chat"/...）
 // 与原 channel 本身的元组，区别于 serviceType → kind 的推断。
@@ -261,6 +275,17 @@ func RebuildLogicalChannels(cfg *Config) {
 	// 6) protocols 列表去重
 	for _, l := range logicals {
 		l.Protocols = dedupProtocols(l.Protocols)
+	}
+	// 6.5) 推导派生标签（在 protocols 最终确定后，便于 hook 聚合兄弟渠道画像）
+	if logicalChannelTagDeriver != nil {
+		for _, l := range logicals {
+			if health, quality, cost, caps, ok := logicalChannelTagDeriver(l.SiblingChannelUIDs()); ok {
+				l.HealthTag = health
+				l.QualityTag = quality
+				l.CostTag = cost
+				l.CapabilityTags = caps
+			}
+		}
 	}
 	// 7) 物化；跳过被 4.5 步清空 protocols 的孤儿卡（其渠道已并入 canonical 卡）
 	out := make([]LogicalChannel, 0, len(logicals))

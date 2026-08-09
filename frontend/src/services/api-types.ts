@@ -2376,6 +2376,10 @@ export interface LogicalChannel {
   siteIdentity: string
   protocols: LogicalChannelProtocol[]
   tags?: string[]
+  healthTag?: string
+  qualityTag?: string
+  costTag?: string
+  capabilityTags?: string[]
   createdAt: string
   updatedAt: string
 }

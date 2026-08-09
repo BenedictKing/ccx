@@ -168,6 +168,9 @@ type Manager struct {
 	// Phase 4 Item 4：渠道推荐用量画像累积（纯内存，shadow 风格，不影响调度）
 	usagePatternAccumulator *UsagePatternAccumulator
 
+	// LogicalChannel 派生标签缓存，避免 profile 变化时循环重建。
+	tagState *logicalChannelTagState
+
 	cancel func()
 	wg     sync.WaitGroup
 }
@@ -259,7 +262,10 @@ func NewManager(
 
 		usagePatternAccumulator: NewUsagePatternAccumulator(defaultUsagePatternRetentionDays),
 		rateLimitApplyCh:        make(chan struct{}, 1),
+		tagState:                newLogicalChannelTagState(),
 	}
+	// 注册 LogicalChannel 派生标签 hook；必须在 tagState 初始化之后。
+	RegisterLogicalChannelTagDeriver(manager)
 	manager.providerQualityProbe = NewProviderQualityProbe(
 		store,
 		modelProfileStore,
@@ -1075,6 +1081,9 @@ func (m *Manager) collectAll() {
 
 	// ── 订阅级能力推导 + drift 检测（shadow，不修改调度）──
 	m.updateSubscriptionCapabilities(allProfiles)
+
+	// ── LogicalChannel 派生标签刷新：仅当标签实际变化时才 Rebuild，避免循环 ──
+	m.deriveAllLogicalChannelTags()
 
 	elapsed := time.Since(start)
 	if !m.cfg.QuietLogs {
