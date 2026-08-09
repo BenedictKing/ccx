@@ -137,6 +137,11 @@ type AutopilotRoutingConfig struct {
 	// 透传 LogicalChannelUID / LogicalChannelName。Phase A.1 仅用于回滚开关，
 	// 不影响评分。默认 true；设为 false 时旧消费者可继续忽略 logical channel 字段。
 	LogicalChannelIdentityEnabled *bool `json:"logicalChannelIdentityEnabled,omitempty"`
+
+	// LogicalChannelScoringEnabled 控制 SmartRouter 在物理渠道画像缺失时，是否
+	// fallback 到同一 LogicalChannel 下兄弟物理渠道的聚合画像作为评分输入（Phase A.2）。
+	// 默认 false（opt-in）：物理画像存在时永不被覆盖；旧配置行为保持不变。
+	LogicalChannelScoringEnabled *bool `json:"logicalChannelScoringEnabled,omitempty"`
 }
 
 // IsLogicalChannelIdentityEnabled 返回 LogicalChannel 身份透传是否启用。
@@ -146,6 +151,15 @@ func (c AutopilotRoutingConfig) IsLogicalChannelIdentityEnabled() bool {
 		return true
 	}
 	return *c.LogicalChannelIdentityEnabled
+}
+
+// IsLogicalChannelScoringEnabled 返回 LogicalChannel 兄弟渠道画像 fallback 是否启用。
+// 未配置时默认关闭（opt-in）。
+func (c AutopilotRoutingConfig) IsLogicalChannelScoringEnabled() bool {
+	if c.LogicalChannelScoringEnabled == nil {
+		return false
+	}
+	return *c.LogicalChannelScoringEnabled
 }
 
 // IsAFPCostRoutingEnabled 返回 AFP 成本适配器是否参与可比树。

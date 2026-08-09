@@ -54,6 +54,28 @@ type LogicalChannel struct {
 	UpdatedAt         time.Time                `json:"updatedAt"`
 }
 
+// SiblingChannelUIDs 返回该逻辑渠道下所有物理渠道 UID（含各协议）。
+// 供 autopilot 在物理画像缺失时聚合兄弟渠道画像作为 fallback。
+func (lc *LogicalChannel) SiblingChannelUIDs() []string {
+	if lc == nil {
+		return nil
+	}
+	out := make([]string, 0, len(lc.Protocols))
+	seen := make(map[string]struct{}, len(lc.Protocols))
+	for _, p := range lc.Protocols {
+		uid := strings.TrimSpace(p.ChannelUID)
+		if uid == "" {
+			continue
+		}
+		if _, ok := seen[uid]; ok {
+			continue
+		}
+		seen[uid] = struct{}{}
+		out = append(out, uid)
+	}
+	return out
+}
+
 // logicalChannelGroupKey 归组键。
 type logicalChannelGroupKey struct {
 	accountUID  string
@@ -663,6 +685,28 @@ func (cm *ConfigManager) ReloadFromMemory(cfg *Config) {
 	defer cm.mu.Unlock()
 	cm.config = *cfg
 	RebuildLogicalChannels(&cm.config)
+}
+
+// LogicalSiblingChannelUIDs 返回与给定物理渠道属于同一逻辑渠道的所有物理渠道 UID
+// （含自身），供 autopilot 在物理画像缺失时聚合兄弟渠道画像作为 fallback。
+// channelUID 为空、无对应逻辑渠道或旧配置时返回 nil（调用方回退到纯物理层行为）。
+// 读路径加读锁并返回副本，避免外部修改内存态。
+func (cm *ConfigManager) LogicalSiblingChannelUIDs(channelUID string) []string {
+	channelUID = strings.TrimSpace(channelUID)
+	if cm == nil || channelUID == "" {
+		return nil
+	}
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+	for i := range cm.config.LogicalChannels {
+		lc := &cm.config.LogicalChannels[i]
+		for _, p := range lc.Protocols {
+			if strings.TrimSpace(p.ChannelUID) == channelUID {
+				return lc.SiblingChannelUIDs()
+			}
+		}
+	}
+	return nil
 }
 
 // ensureLogicalBackfill 加载时调用：若 schema 版本非 1、任意物理渠道缺少

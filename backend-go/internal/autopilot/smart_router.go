@@ -1348,6 +1348,28 @@ func (r *SmartRouter) buildChannelEntry(
 			r.attachDomainProfiles(&entry, modelProvider)
 			return entry
 		}
+
+		// Phase A.2 fallback：本物理渠道无画像时，尝试聚合同一 LogicalChannel 下
+		// 兄弟物理渠道的画像。仅在开关开启且能找到兄弟画像时生效；物理画像存在的
+		// 分支已在上方 return，绝不会覆盖真实物理画像。
+		if agg, ok := r.aggregateSiblingChannelProfile(channelUID); ok {
+			entry.HealthState = agg.HealthState
+			entry.OriginTier = ChannelOriginTier(agg.OriginTier)
+			if !visionDisabled {
+				entry.SupportsVision = entry.SupportsVision || agg.SupportsVision
+			}
+			entry.SupportsToolCalls = entry.SupportsToolCalls || agg.SupportsToolCalls
+			entry.SupportsReasoning = entry.SupportsReasoning || agg.SupportsReasoning
+			entry.ScoringCandidate = ScoringCandidate{
+				ChannelUID: channelUID, QualityTier: agg.QualityTier, StabilityTier: agg.StabilityTier,
+				SpeedTier: agg.SpeedTier, CostTier: agg.CostTier, HealthState: agg.HealthState,
+				ProviderQualityScore: 0.5, ProviderQualityConfidence: 0.3,
+				ModelFamily: modelFamily, SavingsScore: 0.5, DomainStrengthScore: 0.5,
+			}
+			r.applyModelQualityTier(&entry)
+			r.attachDomainProfiles(&entry, modelProvider)
+			return entry
+		}
 	}
 	entry.ScoringCandidate = ScoringCandidate{
 		ChannelUID: channelUID, QualityTier: QualityTierNormal, StabilityTier: StabilityTierNormal,
@@ -1358,6 +1380,40 @@ func (r *SmartRouter) buildChannelEntry(
 	r.applyModelQualityTier(&entry)
 	r.attachDomainProfiles(&entry, modelProvider)
 	return entry
+}
+
+// aggregateSiblingChannelProfile 聚合同一 LogicalChannel 下兄弟物理渠道（跨协议）的画像，
+// 作为本物理渠道无画像时的评分 fallback（Phase A.2）。
+// 仅在 LogicalChannelScoringEnabled 开启、能定位逻辑渠道、且存在至少一个有画像的兄弟渠道时返回 ok=true。
+// 排除 channelUID 自身（其无画像才会走到这里）。
+func (r *SmartRouter) aggregateSiblingChannelProfile(channelUID string) (ChannelProfile, bool) {
+	if r == nil || r.profileStore == nil || r.configManager == nil {
+		return ChannelProfile{}, false
+	}
+	if !r.configManager.GetAutopilotRouting().IsLogicalChannelScoringEnabled() {
+		return ChannelProfile{}, false
+	}
+	siblings := r.configManager.LogicalSiblingChannelUIDs(channelUID)
+	if len(siblings) == 0 {
+		return ChannelProfile{}, false
+	}
+	endpoints := make([]KeyEndpointProfile, 0, len(siblings))
+	for _, siblingUID := range siblings {
+		if siblingUID == channelUID {
+			continue
+		}
+		for _, profile := range r.profileStore.ListActiveByChannel(siblingUID) {
+			if profile != nil {
+				endpoints = append(endpoints, *profile)
+			}
+		}
+	}
+	if len(endpoints) == 0 {
+		return ChannelProfile{}, false
+	}
+	// channelKind 用兄弟画像自身的 kind 聚合；这里只关心健康/质量/成本/能力维度，
+	// 与请求 kind 无关，因此传空字符串占位。
+	return AggregateChannelProfile(channelUID, 0, "", endpoints), true
 }
 
 // applyModelQualityTier 用实际映射模型的质量档覆盖渠道聚合档位。

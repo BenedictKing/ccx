@@ -695,6 +695,120 @@ func TestBuildPlan_IncludesLogicalChannelIdentity(t *testing.T) {
 
 func boolPtr(b bool) *bool { return &b }
 
+// TestBuildChannelEntry_FallbackToSiblingProfile 验证 Phase A.2：
+// messages 渠道无画像、开关开启时，从同一 LogicalChannel 的 chat 兄弟渠道画像 fallback。
+func TestBuildChannelEntry_FallbackToSiblingProfile(t *testing.T) {
+	cfg := config.Config{
+		Upstream: []config.UpstreamConfig{
+			{ChannelUID: "ch_msg", Name: "msg-channel", BaseURL: "https://same.example.com/v1", ServiceType: "claude", APIKeys: []string{"sk"}, SupportedModels: []string{"*"}, Status: "active", Priority: 1},
+		},
+		ChatUpstream: []config.UpstreamConfig{
+			{ChannelUID: "ch_chat", Name: "chat-channel", BaseURL: "https://same.example.com/v1", ServiceType: "openai", APIKeys: []string{"sk"}, SupportedModels: []string{"*"}, Status: "active", Priority: 1},
+		},
+		AutopilotRouting: config.DefaultAutopilotRoutingConfig(),
+	}
+	cfg.AutopilotRouting.LogicalChannelScoringEnabled = boolPtr(true)
+
+	cfgManager, cleanup := createTestConfigManager(t, cfg)
+	defer cleanup()
+
+	loaded := cfgManager.GetConfig()
+	if len(loaded.LogicalChannels) != 1 {
+		t.Fatalf("期望 1 个 logical channel，实际 %d", len(loaded.LogicalChannels))
+	}
+	msgUID := loaded.Upstream[0].ChannelUID
+	chatUID := loaded.ChatUpstream[0].ChannelUID
+
+	store := newTestProfileStore(t)
+	if store == nil {
+		t.Skip("ProfileStore 不可用")
+	}
+	// 只给 chat 兄弟渠道写画像：premium 质量、健康。
+	if err := store.Upsert(&KeyEndpointProfile{
+		EndpointUID: "ep_chat", ChannelUID: chatUID, ChannelKind: "chat",
+		BaseURL: "https://same.example.com/v1", HealthState: HealthStateHealthy,
+		QualityTier: QualityTierPremium, StabilityTier: StabilityTierStable,
+		SpeedTier: SpeedTierFast, CostTier: CostTierCheap, Confidence: 0.9,
+	}); err != nil {
+		t.Fatalf("Upsert chat 画像失败: %v", err)
+	}
+
+	smartRouter := &SmartRouter{configManager: cfgManager, profileStore: store}
+
+	// messages 渠道自身无画像，应 fallback 到 chat 兄弟画像
+	agg, ok := smartRouter.aggregateSiblingChannelProfile(msgUID)
+	if !ok {
+		t.Fatal("开关开启且兄弟渠道有画像时应返回 ok=true")
+	}
+	if agg.QualityTier != QualityTierPremium {
+		t.Errorf("fallback QualityTier 期望 premium，实际 %s", agg.QualityTier)
+	}
+	if agg.HealthState != HealthStateHealthy {
+		t.Errorf("fallback HealthState 期望 healthy，实际 %s", agg.HealthState)
+	}
+
+	// 开关关闭时不 fallback
+	off := cfgManager.GetConfig()
+	off.AutopilotRouting.LogicalChannelScoringEnabled = boolPtr(false)
+	cfgManager.ReloadFromMemory(&off)
+	if _, ok := smartRouter.aggregateSiblingChannelProfile(msgUID); ok {
+		t.Error("开关关闭时不应 fallback")
+	}
+}
+
+// TestInvariant_SiblingFallback_DoesNotOverridePhysicalProfile 验证：
+// 物理渠道自身有画像时，buildChannelEntry 使用物理画像，绝不走兄弟 fallback。
+func TestInvariant_SiblingFallback_DoesNotOverridePhysicalProfile(t *testing.T) {
+	cfg := config.Config{
+		Upstream: []config.UpstreamConfig{
+			{ChannelUID: "ch_msg", Name: "msg-channel", BaseURL: "https://same.example.com/v1", ServiceType: "claude", APIKeys: []string{"sk"}, SupportedModels: []string{"*"}, Status: "active", Priority: 1},
+		},
+		ChatUpstream: []config.UpstreamConfig{
+			{ChannelUID: "ch_chat", Name: "chat-channel", BaseURL: "https://same.example.com/v1", ServiceType: "openai", APIKeys: []string{"sk"}, SupportedModels: []string{"*"}, Status: "active", Priority: 1},
+		},
+		AutopilotRouting: config.DefaultAutopilotRoutingConfig(),
+	}
+	cfg.AutopilotRouting.LogicalChannelScoringEnabled = boolPtr(true)
+
+	cfgManager, cleanup := createTestConfigManager(t, cfg)
+	defer cleanup()
+
+	loaded := cfgManager.GetConfig()
+	msgUID := loaded.Upstream[0].ChannelUID
+	chatUID := loaded.ChatUpstream[0].ChannelUID
+
+	store := newTestProfileStore(t)
+	if store == nil {
+		t.Skip("ProfileStore 不可用")
+	}
+	// messages 自身有画像：low 质量；chat 兄弟：premium。物理优先，不应被 premium 覆盖。
+	if err := store.Upsert(&KeyEndpointProfile{
+		EndpointUID: "ep_msg", ChannelUID: msgUID, ChannelKind: "messages",
+		BaseURL: "https://same.example.com/v1", HealthState: HealthStateHealthy,
+		QualityTier: QualityTierLow, StabilityTier: StabilityTierNormal,
+		SpeedTier: SpeedTierNormal, CostTier: CostTierExpensive, Confidence: 0.9,
+	}); err != nil {
+		t.Fatalf("Upsert messages 画像失败: %v", err)
+	}
+	if err := store.Upsert(&KeyEndpointProfile{
+		EndpointUID: "ep_chat", ChannelUID: chatUID, ChannelKind: "chat",
+		BaseURL: "https://same.example.com/v1", HealthState: HealthStateHealthy,
+		QualityTier: QualityTierPremium, StabilityTier: StabilityTierStable,
+		SpeedTier: SpeedTierFast, CostTier: CostTierCheap, Confidence: 0.9,
+	}); err != nil {
+		t.Fatalf("Upsert chat 画像失败: %v", err)
+	}
+
+	smartRouter := &SmartRouter{configManager: cfgManager, profileStore: store}
+	ch := scheduler.ChannelInfo{Index: 0, Name: "msg-channel", Status: "active"}
+	entry := smartRouter.buildChannelEntry(ch, &loaded.Upstream[0], "messages", "claude-sonnet-4", loaded.UpstreamModelCapabilities)
+
+	// 物理画像 low 应保留（applyModelQualityTier 可能按模型注册表覆盖，但绝不会是 chat 兄弟的 premium）
+	if entry.ScoringCandidate.CostTier != CostTierExpensive {
+		t.Errorf("物理画像 CostTier=expensive 应保留，实际 %s（疑似被兄弟 fallback 覆盖）", entry.ScoringCandidate.CostTier)
+	}
+}
+
 // ── assist/auto 模式不变量测试 ──
 
 // TestInvariant_AssistMode_PermutationInvariant 验证：
