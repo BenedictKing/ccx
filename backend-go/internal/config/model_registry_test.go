@@ -892,17 +892,30 @@ func TestResolveModelBenchmarkProfile_DistinguishesGPT56Variants(t *testing.T) {
 	if !luna.Known || luna.Profile.CanonicalModel != "gpt-5.6-luna" {
 		t.Fatalf("Luna 应有独立基准证据: %+v", luna)
 	}
-	// 断言证据来源与顺序，不锁死 rawValue：具体分值随 registry 刷新变动。
-	if len(luna.Profile.BenchmarkEvidence) < 2 ||
-		luna.Profile.BenchmarkEvidence[0].Benchmark != "deepswe" ||
-		luna.Profile.BenchmarkEvidence[1].Benchmark != "codexradar" {
-		t.Fatalf("Luna benchmark evidence = %+v", luna.Profile.BenchmarkEvidence)
+	// 证据顺序随 registry 刷新脚本变动，不能假设固定下标；按 benchmark 名查找并校验元数据与取值范围。
+	deepswe := findLunaEvidence(luna.Profile.BenchmarkEvidence, "deepswe")
+	codexradar := findLunaEvidence(luna.Profile.BenchmarkEvidence, "codexradar")
+	if deepswe == nil || codexradar == nil {
+		t.Fatalf("Luna 缺少 deepswe/codexradar 证据: %+v", luna.Profile.BenchmarkEvidence)
 	}
-	for _, ev := range luna.Profile.BenchmarkEvidence[:2] {
+	for _, ev := range []ModelBenchmarkEvidence{*deepswe, *codexradar} {
+		if ev.Benchmark == "" || ev.Domain == "" || ev.Metric == "" || ev.SourceURL == "" || ev.CapturedAt == "" {
+			t.Fatalf("Luna %q 证据元数据不完整: %+v", ev.Benchmark, ev)
+		}
 		if ev.RawValue <= 0 || ev.RawValue > 1 {
 			t.Fatalf("Luna %q pass_at_1 = %v, want (0,1]", ev.Benchmark, ev.RawValue)
 		}
 	}
+}
+
+// findLunaEvidence 按 benchmark 名查找证据，返回 nil 表示不存在。
+func findLunaEvidence(evs []ModelBenchmarkEvidence, benchmark string) *ModelBenchmarkEvidence {
+	for i := range evs {
+		if evs[i].Benchmark == benchmark {
+			return &evs[i]
+		}
+	}
+	return nil
 }
 
 func TestResolveModelBenchmarkProfile_RuntimeRegistryOverride(t *testing.T) {
