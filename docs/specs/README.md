@@ -91,9 +91,10 @@ Channels   (Claude/OpenAI/Gemini/...)
 
 #### 已完成（2026-08-09）
 - ✅ **SmartRouter 感知 LogicalChannel**（Phase A，提交 `22028397` / `db380702` / `7ed94e4e`）：A.1 身份透传 + A.2 兄弟渠道 fallback 评分 + A.3 dry-run 候选聚合。真实路由仍以物理渠道为单位，改动可开关回退。详见 `logical-channel.md` §16.3。
+- ✅ **跨模块事件总线**（Phase B，提交 `267f82d6` / `10b99f1c` / `1891c7d2`）：B.1 `internal/eventbus` 叶子包 + 熔断/Key 状态事件 + `StateEventStore`（SQLite `state_events`）+ WS/REST 端点；B.2 config 写路径 `upstream_changed`/`config_reloaded`/`logical_channel_rebuilt` + preset `preset_bundle_swapped`；B.3 前端 mitt 总线 + `useEventStream` 统一 WS + 两视图事件驱动刷新（轮询降级为兜底）。总线为可选依赖、非阻塞、事件仅通知非真相源。详见 `cross-module-integration.md` §10.1。
 
 #### 中优先级（影响一致性/可观测性）
-- **跨模块事件总线缺失**：熔断/Key 状态/配置变更无法实时订阅，需轮询（架构级改动，多日）
+- ~~**跨模块事件总线缺失**~~（已完成，见上）
 
 #### 低优先级（功能扩展）
 - **Benchmark Chart 前端页面落地**：数据链路已通，需决策交互范围与 schema 扩展
