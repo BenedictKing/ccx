@@ -1,5 +1,4 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
 
 const routes = [
   {
@@ -63,15 +62,9 @@ const router = createRouter({
   routes
 })
 
-// 认证守卫（可选，认证逻辑已在 App.vue 中处理）
-router.beforeEach((to, from, next) => {
-  const authStore = useAuthStore()
-  if (to.meta.requiresAuth && !authStore.isAuthenticated) {
-    // 认证对话框已在 App.vue 中处理，无需重定向
-    next()
-  } else {
-    next()
-  }
-})
+// 鉴权说明：路由 meta.requiresAuth 仅作语义标注，鉴权不在路由层强制。
+// 实际门控由 App.vue 的持久认证对话框承担（未认证时 showAuthDialog 弹出、
+// 阻塞页面交互，直至认证成功）。因此这里不注册 beforeEach 守卫——
+// 此前的空转守卫（对所有路由一律 next()）易造成"有路由级鉴权"的误解，已移除（P8）。
 
 export default router
