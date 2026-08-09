@@ -34,7 +34,13 @@
       </v-card-title>
       <v-card-text>
         <v-alert v-if="loadError" color="error" variant="tonal" density="compact" class="mb-3">{{ loadError }}</v-alert>
-        <SubscriptionPlanTable :subscriptions="subscriptions" @edit="openBillingEditor" @refresh="refreshItem" @delete="deleteItem" />
+        <SubscriptionPlanTable v-if="!loading && subscriptions.length > 0" :subscriptions="subscriptions" @edit="openBillingEditor" @refresh="refreshItem" @delete="deleteItem" />
+        <EmptyState
+          v-else-if="!loading && subscriptions.length === 0"
+          icon="mdi-cash-multiple"
+          :title="t('subscription.empty.title')"
+          :description="t('subscription.empty.description')"
+        />
       </v-card-text>
     </v-card>
 
@@ -68,6 +74,7 @@ import SubscriptionProviderGrid from '@/components/subscriptions/SubscriptionPro
 import NewApiSubscriptionForm from '@/components/NewApiSubscriptionForm.vue'
 import SubscriptionPlanTable from '@/components/SubscriptionPlanTable.vue'
 import ExchangeRateManager from '@/components/subscriptions/ExchangeRateManager.vue'
+import EmptyState from '@/components/EmptyState.vue'
 import { autoAddChannel, extractAutoAddErrorMessage, getProviderTemplates, type ProviderTemplate } from '@/services/autopilot-api'
 import type { NewApiProvisionResponse, NewApiSyncResult, SubscriptionItem } from '@/services/api-types'
 import { billingTermsPatch, multiplierStatusLabel } from '@/utils/subscriptionBilling'

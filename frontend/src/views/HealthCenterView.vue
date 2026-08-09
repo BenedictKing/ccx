@@ -35,6 +35,16 @@
 
     <!-- Channel table -->
     <HealthChannelTable v-else-if="overview" :channels="channels" />
+
+    <!-- Empty state -->
+    <EmptyState
+      v-else-if="!loading && !overview"
+      icon="mdi-stethoscope"
+      :title="t('healthCenter.empty.title')"
+      :description="t('healthCenter.empty.description')"
+      :action-label="t('app.actions.refresh')"
+      @action="fetchAll"
+    />
   </div>
 </template>
 
@@ -45,6 +55,7 @@ import { api } from '@/services/api'
 import HealthCenterStats from '@/components/HealthCenterStats.vue'
 import HealthChannelTable from '@/components/HealthChannelTable.vue'
 import ProfileChangelogTimeline from '@/components/ProfileChangelogTimeline.vue'
+import EmptyState from '@/components/EmptyState.vue'
 import type { HealthCenterOverview, ChannelHealthItem } from '@/services/api-types'
 import { useEventStream } from '@/composables/useEventStream'
 

@@ -267,7 +267,7 @@ i18n key 依次为 `app.tabs.{channels,images,vectors,conversations,healthCenter
 | ~~P6~~ ✅ | **确认体系分裂**：SubscriptionsView 用原生 `window.confirm`，而全站已有 `dialogStore.confirm`（Wails 兼容） → 已修复：`deleteItem` 改用 `dialogStore.confirm`，移除本地 `v-snackbar` | `SubscriptionsView.vue` `deleteItem` | 桌面端 iframe 下 confirm 可能失效 | 已解决 |
 | ~~P7~~ ✅ | **提示体系分裂**：SubscriptionsView 自带本地 `v-snackbar`，与 App 全局 toast 并存 → 已修复：定义 `success`/`error` emits，统一通过父级 App 全局 toast 提示 | `SubscriptionsView.vue` | 通知样式/位置不统一 | 已解决 |
 | ~~P8~~ ✅ | **路由守卫空转** → 已修复（2026-08-09）：移除对所有路由一律 `next()` 的空转 `beforeEach`；鉴权实际由 App.vue 持久认证对话框承担，router/index.ts 已注释说明，`meta.requiresAuth` 仅作语义标注 | `router/index.ts` | 已解决 |
-| P9 | **空态覆盖不均**：Channels/CostReport/Cockpit 有专属空态；Health/Subscriptions/Autopilot 依赖子组件，无 View 级空态 | 各 View | 体验不一致 |
+| ~~P9~~ ✅ | **空态覆盖不均** → 已修复：新增 `EmptyState` 组件，补齐 Health/Subscriptions/Autopilot 三页 View 级空态与三 locale `*.empty.title/description` 文案 | `EmptyState.vue`、`HealthCenterView.vue`、`SubscriptionsView.vue`、`AutopilotView.vue`、`locales/*` | 体验不一致 | 已解决 |
 | P10 | **i18n 命名重叠易混**：`app.tabs.conversations` 与 `app.tabs.cockpitOverview` 曾同为"驾驶舱"，指向不同页（**已于 2026-08-09 修复**：cockpitOverview 改为 Overview/总览/Ikhtisar） | locale JSON | 用户认知混淆（已解决） |
 
 ### 已修复记录

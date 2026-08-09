@@ -51,6 +51,16 @@
       />
     </template>
 
+    <!-- 空态 -->
+    <EmptyState
+      v-else
+      icon="mdi-steering"
+      :title="t('autopilot.empty.title')"
+      :description="t('autopilot.empty.description')"
+      :action-label="t('app.actions.refresh')"
+      @action="fetchAll"
+    />
+
     <!-- Trace 详情对话框 -->
     <AutopilotTraceDetailDialog
       v-model="detailDialogOpen"
@@ -68,6 +78,7 @@ import AutopilotDiagnosePanel from '@/components/AutopilotDiagnosePanel.vue'
 import AutopilotTraceStats from '@/components/AutopilotTraceStats.vue'
 import AutopilotTraceTable from '@/components/AutopilotTraceTable.vue'
 import AutopilotTraceDetailDialog from '@/components/AutopilotTraceDetailDialog.vue'
+import EmptyState from '@/components/EmptyState.vue'
 import type {
   SmartRoutingConfig,
   AutopilotTraceStats as TraceStatsType,
