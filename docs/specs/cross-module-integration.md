@@ -1,6 +1,6 @@
 # 跨模块集成设计文档
 
-> 本文档描述 Autopilot、LogicalChannel、New-API 集成、Healthcheck、Benchmark Chart 五个子系统之间的交互边界、事件传播与状态一致性。
+> 本文档描述 Autopilot、LogicalChannel、New-API 集成、Healthcheck 四个子系统之间的交互边界、事件传播与状态一致性。
 
 ## 1. 总体关系图
 
@@ -51,7 +51,6 @@ Channels   (Claude/OpenAI/Gemini/...)
 | Autopilot | config, scheduler, metrics, ratelimit, keypool, handlers/common | main.go |
 | New-API Integration | autopilot, config, handlers | main.go, frontend |
 | Healthcheck | config, metrics, scheduler, upstreamprobe, handlers/common | main.go |
-| Benchmark Chart | presetstore, config, frontend | (无) |
 
 ## 3. 关键交互边界
 
@@ -85,13 +84,6 @@ Channels   (Claude/OpenAI/Gemini/...)
 - `NewApiSubscriptionSyncService` 与 `ProfileStore` 共享同一 `*sql.DB`
 - provision 后的渠道通过 `TriggerDiscovery` 纳入 autopilot 画像体系
 - key 的 `GroupMultiplier` 参与 SmartRouter 的成本评分
-
-### 3.5 Benchmark Chart 与 Autopilot
-
-- 共享 `model-registry` 数据源
-- benchmark profile 通过 `/api/presets` 分发给前端和 autopilot
-- autopilot 在 `model_frontier_scoring.go` 中使用 benchmark lane 调整置信区间
-- 前端目前**未消费** benchmark 数据进行可视化
 
 ## 4. 事件传播链
 
@@ -230,11 +222,10 @@ Channels   (Claude/OpenAI/Gemini/...)
 ## 6. 已知缺口与风险
 
 1. **LogicalChannel 归组逻辑未完全文档化**：分组键、冲突解决策略需补充
-2. **Benchmark Chart 前端缺失**：数据链路已通，但无 UI 消费
-3. **New-API 无周期性自动余额刷新**：仅启动时同步 + 手动刷新
-4. **AccessToken 明文落库**：与设计文档要求的加密存储不符
-5. **跨模块事件总线缺失**：画像变更、健康状态变更等事件通过回调/hook 传播，无统一事件总线
-6. **状态版本一致性**：LogicalChannel 重建与物理渠道变更之间的竞态未完全处理
+2. **New-API 无周期性自动余额刷新**：仅启动时同步 + 手动刷新
+3. **AccessToken 明文落库**：与设计文档要求的加密存储不符
+4. **跨模块事件总线缺失**：画像变更、健康状态变更等事件通过回调/hook 传播，无统一事件总线
+5. **状态版本一致性**：LogicalChannel 重建与物理渠道变更之间的竞态未完全处理
 
 ## 7. 布局示意图
 
@@ -283,7 +274,7 @@ New-API              -             写          读           -             -
 | 物理渠道增删改 | `/api/{kind}/channels/*` | LogicalChannel, Scheduler, Healthcheck |
 | 逻辑渠道增删改 | `/api/logical-channels/*` | LogicalChannel, Frontend |
 | 订阅/账号变更 | `/api/subscriptions/*` | New-API, Autopilot |
-| 模型注册表 | `shared/model-registry/` | Autopilot, Benchmark Chart |
+| 模型注册表 | `shared/model-registry/` | Autopilot |
 | 路由配置 | `/api/autopilot/routing-config` | Autopilot |
 | 健康检查策略 | `/api/health-check/*` | Healthcheck |
 

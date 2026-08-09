@@ -26,7 +26,6 @@
 |--------|--------|----------|----------|
 | 中（架构级） | **SmartRouter 感知 LogicalChannel** | 5–7 工作日 | `logical-channel.md` §16.3 |
 | 中（架构级） | **跨模块事件总线** | 5–7 工作日 | `cross-module-integration.md` §10.1 |
-| 低 | Benchmark Chart 前端页面落地 | 3–4 工作日 | `benchmark-chart.md` |
 | 低 | New-API 周期性自动余额刷新 | 1–2 工作日 | `new-api-integration.md` |
 | 低 | 健康/质量/成本/能力标签持久化到 LogicalChannel | 2–3 工作日 | `logical-channel.md` §16.4 |
 | 低 | 稀疏 L2 预算动态调整 | 2–3 工作日 | `healthcheck.md` |
@@ -230,22 +229,14 @@ type Event struct {
 
 ## 4. Phase C：中低优先级项跟进
 
-### 4.1 Benchmark Chart 前端页面落地
-
-- **范围**：把 `scripts/generate-benchmark-chart.mjs` 中的可视化逻辑迁移到 Web 管理台。
-- **输入**：`useRuntimePresets().effectiveBenchmarkProfiles`。
-- **输出**：一个独立 View（如 `/benchmarks`），支持模型对比、分类筛选、provisional/verified lane 高亮。
-- **依赖**：Phase A 完成后可利用 LogicalChannel 标签做渠道级 benchmark 聚合。
-- **工期**：3–4 工作日。
-
-### 4.2 New-API 周期性自动余额刷新
+### 4.1 New-API 周期性自动余额刷新
 
 - **现状**：`subscription_refresh_worker.go` 只在启动时同步 + 手动刷新。
 - **方案**：给 `NewApiSubscriptionSyncService` 增加定时 ticker（默认 30min），触发 `subscription_balance_fetcher` 拉取余额。
 - **风险**：避免与 manual refresh 并发，需加 `singleflight` 或 worker 锁。
 - **工期**：1–2 工作日。
 
-### 4.3 健康/质量/成本/能力标签持久化到 LogicalChannel
+### 4.2 健康/质量/成本/能力标签持久化到 LogicalChannel
 
 - **现状**：`LogicalChannel` 只有通用 `Tags []string`，没有专用标签字段。
 - **方案**：
@@ -255,7 +246,7 @@ type Event struct {
 - **依赖**：Phase A 的 `LogicalChannelResolver` 已建立，读取成本低。
 - **工期**：2–3 工作日。
 
-### 4.4 Healthcheck 其余低优项
+### 4.3 Healthcheck 其余低优项
 
 | 项 | 现状 | 方案 | 工期 |
 |----|------|------|------|
@@ -263,7 +254,7 @@ type Event struct {
 | capability probe schema 版本化 | 当前无 schema 版本 | 给 probe request/response 加 `schemaVersion` 字段，检测到 drift 记日志 | 2 工作日 |
 | 火山 manifest 自动刷新与 drift 告警 | 内置 manifest 静态 | 定时拉取火山远端 manifest，diff 后发布 drift 事件 | 2 工作日 |
 
-### 4.5 Web UI 遗留项
+### 4.4 Web UI 遗留项
 
 来自 `web-ui-pages.md` §9，不依赖架构级改造，可并行处理：
 
@@ -275,9 +266,9 @@ type Event struct {
 | P8 | 路由守卫空转 | 按需实现权限守卫或删除空 guard |
 | P9 | 空态覆盖不均 | 补全各 View 的 empty state 组件 |
 
-### 4.6 排期建议
+### 4.5 排期建议
 
-- 架构级 Phase A/B 完成后，优先落地 **4.3 标签持久化**（与 Phase A 强相关）。
+- 架构级 Phase A/B 完成后，优先落地 **4.2 标签持久化**（与 Phase A 强相关）。
 - 其余低优项按业务优先级逐个 PR，不阻塞主线。
 
 ## 5. 风险与回滚策略
@@ -320,7 +311,6 @@ type Event struct {
 
 ### 6.3 Phase C 验收
 
-- [ ] Benchmark Chart 前端页面可访问并渲染模型对比。
 - [ ] New-API 余额每 30min 自动刷新（可调）。
 - [ ] LogicalChannel 新增标签字段并在重建时正确推导。
 
@@ -337,7 +327,6 @@ type Event struct {
 
 > 来自 `docs/specs/README.md` §待排期
 
-- **Benchmark Chart 前端页面落地**：数据链路已通，需决策交互范围与 schema 扩展
 - **New-API 周期性自动余额刷新**：仅启动时同步 + 手动刷新
 - **健康/质量/成本/能力标签字段持久化到 LogicalChannel**
 - **稀疏 L2 预算动态调整**：当前静态配置，不感知大盘负载
