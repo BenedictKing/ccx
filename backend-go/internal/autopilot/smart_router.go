@@ -30,6 +30,18 @@ type RoutingPlanCandidate struct {
 	LogicalChannelName string   `json:"logicalChannelName,omitempty"`
 }
 
+// RoutingPlanLogicalGroup 是 dry-run 候选在 LogicalChannel 维度的聚合视图（Phase A.3）。
+// 仅用于诊断展示，不参与真实调度；组内成员沿用扁平候选列表的分数降序。
+type RoutingPlanLogicalGroup struct {
+	LogicalChannelUID  string   `json:"logicalChannelUid,omitempty"`
+	LogicalChannelName string   `json:"logicalChannelName,omitempty"`
+	ChannelUIDs        []string `json:"channelUids"`    // 组内物理候选 UID（分数降序）
+	BestChannelUID     string   `json:"bestChannelUid"` // 组内首个（最高分）候选
+	BestScore          float64  `json:"bestScore"`
+	SelectedCount      int      `json:"selectedCount"` // 组内通过硬约束的候选数
+	TotalCount         int      `json:"totalCount"`
+}
+
 // RoutingPlan 一次请求的路由计划（§4.6.1）。
 type RoutingPlan struct {
 	RequestProfile     *RequestProfile        `json:"requestProfile"`
@@ -40,6 +52,9 @@ type RoutingPlan struct {
 	SortReasons        []string               `json:"sortReasons,omitempty"`
 	Mode               RoutingMode            `json:"mode"`
 	Weights            ScoringWeights         `json:"weights"`
+	// LogicalGroups 是候选按 LogicalChannel 聚合的诊断视图（Phase A.3）。
+	// 仅在 LogicalChannelIdentityEnabled 开启且候选带 logical 身份时填充。
+	LogicalGroups []RoutingPlanLogicalGroup `json:"logicalGroups,omitempty"`
 }
 
 // SmartRouter 根据请求画像 + 渠道画像生成路由计划。
@@ -324,10 +339,64 @@ func (r *SmartRouter) BuildPlan(profile *RequestProfile) *RoutingPlan {
 		Mode:               RoutingModeDryRun,
 		Weights:            weights,
 	}
+	if r.isLogicalChannelIdentityEnabled() {
+		plan.LogicalGroups = groupCandidatesByLogical(candidates)
+	}
 
 	r.recordDryRunTrace(plan, len(entries), len(selectedCandidates))
 
 	return plan
+}
+
+// groupCandidatesByLogical 把 dry-run 扁平候选按 LogicalChannel 聚合为分组视图（Phase A.3）。
+// 分组键：LogicalChannelUID 非空则用它，否则回退到 ChannelUID（独立物理渠道成单例组）。
+// 组按首次出现顺序排列（= 输入候选的分数降序），确定性稳定。
+// 当没有任何候选带 LogicalChannelUID 时返回 nil（分组退化为纯单例，无展示价值）。
+func groupCandidatesByLogical(candidates []RoutingPlanCandidate) []RoutingPlanLogicalGroup {
+	if len(candidates) == 0 {
+		return nil
+	}
+	hasLogical := false
+	groups := make([]RoutingPlanLogicalGroup, 0, len(candidates))
+	indexByKey := make(map[string]int, len(candidates))
+	for _, c := range candidates {
+		key := c.LogicalChannelUID
+		if key == "" {
+			key = c.ChannelUID
+		} else {
+			hasLogical = true
+		}
+		if idx, ok := indexByKey[key]; ok {
+			g := &groups[idx]
+			g.ChannelUIDs = append(g.ChannelUIDs, c.ChannelUID)
+			g.TotalCount++
+			if c.Selected {
+				g.SelectedCount++
+			}
+			if g.LogicalChannelName == "" && c.LogicalChannelName != "" {
+				g.LogicalChannelName = c.LogicalChannelName
+			}
+			continue
+		}
+		indexByKey[key] = len(groups)
+		selected := 0
+		if c.Selected {
+			selected = 1
+		}
+		groups = append(groups, RoutingPlanLogicalGroup{
+			LogicalChannelUID:  c.LogicalChannelUID,
+			LogicalChannelName: c.LogicalChannelName,
+			ChannelUIDs:        []string{c.ChannelUID},
+			BestChannelUID:     c.ChannelUID,
+			BestScore:          c.Score,
+			SelectedCount:      selected,
+			TotalCount:         1,
+		})
+	}
+	if !hasLogical {
+		return nil
+	}
+	return groups
 }
 
 // recordDryRunTrace 将 BuildPlan 结果持久化为 schema v2 dry-run trace。

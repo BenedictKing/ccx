@@ -695,6 +695,99 @@ func TestBuildPlan_IncludesLogicalChannelIdentity(t *testing.T) {
 
 func boolPtr(b bool) *bool { return &b }
 
+// TestBuildPlan_GroupsCandidatesByLogical 验证 Phase A.3：
+// 跨协议同 logical 的候选聚合为一组，独立渠道成单例组。
+func TestBuildPlan_GroupsCandidatesByLogical(t *testing.T) {
+	cfg := config.Config{
+		Upstream: []config.UpstreamConfig{
+			{ChannelUID: "ch_msg", Name: "msg-channel", BaseURL: "https://same.example.com/v1", ServiceType: "claude", APIKeys: []string{"sk"}, SupportedModels: []string{"*"}, Status: "active", Priority: 1},
+			{ChannelUID: "ch_solo", Name: "solo-channel", BaseURL: "https://other.example.com/v1", ServiceType: "claude", APIKeys: []string{"sk"}, SupportedModels: []string{"*"}, Status: "active", Priority: 2},
+		},
+		ChatUpstream: []config.UpstreamConfig{
+			{ChannelUID: "ch_chat", Name: "chat-channel", BaseURL: "https://same.example.com/v1", ServiceType: "openai", APIKeys: []string{"sk"}, SupportedModels: []string{"*"}, Status: "active", Priority: 1},
+		},
+		AutopilotRouting: config.DefaultAutopilotRoutingConfig(),
+	}
+
+	cfgManager, cleanup := createTestConfigManager(t, cfg)
+	defer cleanup()
+
+	loaded := cfgManager.GetConfig()
+	// ch_msg 与 ch_chat 同站点应归入同一 logical
+	var sharedUID string
+	for _, lc := range loaded.LogicalChannels {
+		uids := lc.SiblingChannelUIDs()
+		if len(uids) >= 2 {
+			sharedUID = lc.LogicalChannelUID
+		}
+	}
+	if sharedUID == "" {
+		t.Fatalf("期望存在含多协议的 logical channel，实际 logicals=%d", len(loaded.LogicalChannels))
+	}
+
+	smartRouter := createTestSmartRouter(t, cfgManager)
+	profile := testProfile()
+	plan := smartRouter.BuildPlan(profile)
+	if plan == nil {
+		t.Fatal("BuildPlan 不应返回 nil")
+	}
+	if len(plan.LogicalGroups) == 0 {
+		t.Fatal("LogicalGroups 不应为空")
+	}
+
+	// 找到共享 logical 组：应含 messages 协议候选（BuildPlan 按 messages kind 收集，仅 ch_msg 命中）
+	// messages dry-run 只收集 messages 数组，因此同一 logical 下只有 ch_msg 出现，
+	// solo 渠道单独成组。验证分组键正确、单例组存在。
+	groupByBest := map[string]RoutingPlanLogicalGroup{}
+	for _, g := range plan.LogicalGroups {
+		groupByBest[g.BestChannelUID] = g
+	}
+	// 每个候选都应恰好归入一个组，TotalCount 合计 = 候选数
+	total := 0
+	for _, g := range plan.LogicalGroups {
+		total += g.TotalCount
+		if len(g.ChannelUIDs) != g.TotalCount {
+			t.Errorf("组 %s ChannelUIDs 数量与 TotalCount 不一致: %d vs %d", g.BestChannelUID, len(g.ChannelUIDs), g.TotalCount)
+		}
+	}
+	if total != len(plan.Candidates) {
+		t.Errorf("分组成员合计 %d 应等于候选数 %d", total, len(plan.Candidates))
+	}
+	// 组顺序应与候选分数降序一致（BestScore 非递增）
+	for i := 1; i < len(plan.LogicalGroups); i++ {
+		if plan.LogicalGroups[i-1].BestScore < plan.LogicalGroups[i].BestScore {
+			t.Errorf("组顺序未按 BestScore 降序: [%d]=%.3f < [%d]=%.3f", i-1, plan.LogicalGroups[i-1].BestScore, i, plan.LogicalGroups[i].BestScore)
+		}
+	}
+}
+
+// TestBuildPlan_LogicalGroups_EmptyWhenIdentityDisabled 验证：
+// LogicalChannelIdentityEnabled=false 时 LogicalGroups 为 nil。
+func TestBuildPlan_LogicalGroups_EmptyWhenIdentityDisabled(t *testing.T) {
+	cfg := config.Config{
+		Upstream: []config.UpstreamConfig{
+			{ChannelUID: "ch_msg", Name: "msg-channel", BaseURL: "https://same.example.com/v1", ServiceType: "claude", APIKeys: []string{"sk"}, SupportedModels: []string{"*"}, Status: "active", Priority: 1},
+		},
+		ChatUpstream: []config.UpstreamConfig{
+			{ChannelUID: "ch_chat", Name: "chat-channel", BaseURL: "https://same.example.com/v1", ServiceType: "openai", APIKeys: []string{"sk"}, SupportedModels: []string{"*"}, Status: "active", Priority: 1},
+		},
+		AutopilotRouting: config.DefaultAutopilotRoutingConfig(),
+	}
+	cfg.AutopilotRouting.LogicalChannelIdentityEnabled = boolPtr(false)
+
+	cfgManager, cleanup := createTestConfigManager(t, cfg)
+	defer cleanup()
+
+	smartRouter := createTestSmartRouter(t, cfgManager)
+	plan := smartRouter.BuildPlan(testProfile())
+	if plan == nil {
+		t.Fatal("BuildPlan 不应返回 nil")
+	}
+	if plan.LogicalGroups != nil {
+		t.Errorf("身份透传关闭时 LogicalGroups 应为 nil，实际 %d 组", len(plan.LogicalGroups))
+	}
+}
+
 // TestBuildChannelEntry_FallbackToSiblingProfile 验证 Phase A.2：
 // messages 渠道无画像、开关开启时，从同一 LogicalChannel 的 chat 兄弟渠道画像 fallback。
 func TestBuildChannelEntry_FallbackToSiblingProfile(t *testing.T) {

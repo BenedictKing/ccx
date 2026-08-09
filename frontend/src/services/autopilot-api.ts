@@ -177,6 +177,19 @@ export interface SmartRoutingDiagnosePlan {
   fallbackUsed: boolean
   sortReasons?: string[]
   mode: string
+  logicalGroups?: SmartRoutingDiagnoseLogicalGroup[]
+}
+
+// SmartRoutingDiagnoseLogicalGroup 是候选按 LogicalChannel 聚合的诊断视图（Phase A.3）。
+// 仅用于展示，不改变真实调度；后端在身份透传开启且候选带 logical 身份时填充。
+export interface SmartRoutingDiagnoseLogicalGroup {
+  logicalChannelUid?: string
+  logicalChannelName?: string
+  channelUids: string[]
+  bestChannelUid: string
+  bestScore: number
+  selectedCount: number
+  totalCount: number
 }
 
 export interface SmartRoutingDiagnoseResponse {
