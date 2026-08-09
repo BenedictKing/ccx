@@ -150,7 +150,7 @@ locale 键在 `frontend/src/locales/{zh-CN,en,id}.json`，前缀 `subscription.n
 
 1. **new_api 无周期性自动余额刷新**：`SubscriptionRefreshWorker.refreshAll`（`subscription_refresh_worker.go:220`）按 `IsAutoRefreshSupported` 白名单跳过 non-whitelisted provider，`builtinAutoRefreshProviders`（`subscription_balance_fetcher.go:235`）与预置 `shared/subscription-preset/subscription-preset.json:13` 的 `autoRefreshProviders` 均**不含 new_api**。new_api 仅靠启动 `SyncAllNewAPIAsync`（一次性）+ 手动刷新。这与设计文档 §8.5.1「定时刷新复用 SubscriptionAutoRefresh」（`docs/design/channel-autopilot.md:3384`）不一致——目前没有 new_api 的定时后台同步 worker。
 
-2. **AccessToken 明文落库**：`subscription_profile.go:66-69` 注释明确「允许序列化进 profile_json」，`persist`（行 448）直接 JSON 落 SQLite，无加密。设计文档 §8.5.1 反复强调「加密存储」（`channel-autopilot.md:3283/3310/3323/3390`）。这是与设计的实现级偏差（仅做了脱敏展示 `maskAccessToken`，未做静态加密）。
+2. ~~**AccessToken 明文落库**~~ ✅ **已修复**（2026-08-09，提交 `d876784d`）：`SubscriptionProfile.AccessToken` 与 `Accounts[].AccessToken` 落库前经 AES-256-GCM 加密（`encryptProfile`/`decryptProfile`），读库透明解密并向后兼容旧明文（无加密标记前缀时原样返回）。密钥优先读环境变量 `CCX_SECRET_KEY`，未设置则退回机器派生（hostname/GOOS/GOARCH/salt）。**注意**：机器派生密钥下若迁移数据目录到另一台机器且未设 `CCX_SECRET_KEY`，旧加密 token 将无法解密——生产部署应显式配置 `CCX_SECRET_KEY`。`BillingAPIKey` 暂未加密（可复用同一机制扩展）。
 
 3. **专项 spec 文档缺失**：`docs/specs/README.md:12` 引用 `./new-api-integration.md`，但该文件在 `docs/specs/` 下**不存在**（仅有 README.md）。文档索引存在悬空链接。
 
@@ -270,11 +270,13 @@ UpstreamConfig (channelUid, autoManagedKind=new_api)
 
 ### 8.1 与 LogicalChannel 归组逻辑的交互
 
+> **更新（2026-08-09，提交 `d876784d`）**：本节"主缺口①（逻辑卡视图不刷新）"已修复——`saveConfigLocked` 现在统一调用 `RebuildLogicalChannels`，provision/add-account 落盘后逻辑卡即时刷新，无需进程重启。下文缺口①保留作为背景记录，缺口②（AccountUID 空）仍待处理。
+
 **当前实现**
 
 New-api provision 建渠道时（`handlers_newapi.go:591-605`），构造的 `UpstreamConfig` **只设置** `AutoManaged=true`、`AutoManagedKind="new_api"`、`ChannelUID`、`BaseURL/BaseURLs`，**未设置 `AccountUID`，也未设置 `LogicalChannelUID`/`LogicalName`**。合并路径（`updateChannelForKind` → `UpstreamUpdate`）同样只更新 `APIKeys/APIKeyConfigs/AutoManaged*`，不碰账号/逻辑身份字段。
 
-归组的真相来源是 `RebuildLogicalChannels`，它只在两处触发：`logical_channel.go:634`（`ReloadFromMemory`，仅测试用）和 `logical_channel.go:657`（`ensureLogicalBackfill`，仅 `config_loader.go:188` 配置加载时调用）。**Add/Update/Remove Upstream 系列方法在 `saveConfigLocked` 后都不调用 `RebuildLogicalChannels`**。因此 new-api provision 建/并渠道后，`cfg.LogicalChannels` 列表和新物理渠道的 `LogicalChannelUID` 字段在本进程生命周期内不会刷新，直到下一次进程重启走加载路径。
+归组的真相来源是 `RebuildLogicalChannels`：除加载时的 `ensureLogicalBackfill` 外，现已在 `saveConfigLocked` 统一收口（见更新说明），运行期物理渠道变更后逻辑卡即时同步。`AccountUID` 回填仍是独立缺口。
 
 `AccountUID` 与 `LogicalChannelUID` 的关系（`logical_channel.go:66-111、467-499`）：
 - `logicalChannelGroupKeyFrom` 用 `(accountUID, providerID, siteIdentity)` 三元组归组。
@@ -320,6 +322,12 @@ New-api provision 建渠道时（`handlers_newapi.go:591-605`），构造的 `Up
 - **缩小持锁范围。** 只在“查合并目标 + 建渠道/并渠道 + LinkChannel”这段配置读-改-写序列持锁；远端 HTTP（verify/groups/models）可移出锁外（这些是幂等只读或由远端查重兜底的建 key）。注意 `provisionNewApiGroupKeys` 建 key 部分仍需在锁内以防同名并发，需权衡。
 
 ### 8.3 汇率图缺失时的降级策略
+
+> **更新（2026-08-09，提交 `d876784d`）**：本节两个核心缺口已修复：
+> - ✅ **标价回退路径丢失 GroupMultiplier**：回退分支（`graph==nil` 或 effective cost 不可用）现叠加 `groupMultiplier`（缺失按 1.0），使 new-api 分组倍率在无 billing-terms 时仍影响 SavingsScore。
+> - ✅ **汇率图构建失败静默吞错**：`NewExchangeRateGraph` 的 error 现被捕获并记日志（`[SmartRouter-ExchangeRate]`，按 snapshot version 去重防刷屏）；`effective cost 不可用` 原因按 subscriptionUID+Reason 采样记录。
+>
+> 下文保留原缺口分析作为背景。剩余待处理：new-api 无 billing-terms 时 effective USD 仍不可用（需引导用户填计费条款）、quote 单位不匹配无用户反馈。
 
 **当前实现**
 

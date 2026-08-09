@@ -72,23 +72,38 @@ Channels   (Claude/OpenAI/Gemini/...)
 
 ## 待补充
 
-所有文档的待补充项已补齐。以下是跨文档汇总的关键改造方向，供后续排期参考：
+所有文档的待补充项已补齐。以下是跨文档汇总的关键改造方向，供后续排期参考。
 
-### 高优先级（影响正确性/成本）
-- **new-api 标价回退路径丢失 GroupMultiplier**：`smart_router.go:1247` 回退只有 `listCost * timeMultiplier`，`GroupMultiplier` 未参与，导致 new-api 成本优势对路由不可见
-- **汇率图构建失败无日志**：`smart_router.go:1244` `graph, _ =` 静默吞错，运维无法感知成本降级
-- **AccessToken 明文落库**：`SubscriptionProfile.AccessToken` 直接 JSON 序列化进 SQLite，未加密
+### 已修复（2026-08-09）
 
-### 中优先级（影响一致性/可观测性）
-- **LogicalChannel 视图不刷新**：物理渠道变更后需进程重启才重建，建议 `saveConfigLocked` 统一收口
-- **SmartRouter 不感知 LogicalChannel**：候选收集在物理层，逻辑渠道标签无法参与评分
-- **CapabilityTestDialog 未接线**：组件已实现但无挂载/触发点
-- **跨模块事件总线缺失**：熔断/Key 状态/配置变更无法实时订阅，需轮询
+高优先级 3 项 + 中优先级 2 项 + Web UI 3 项，经 ultracode workflow 实现并对战验证，提交 `d876784d`：
 
-### 低优先级（功能扩展）
+- ✅ **new-api 标价回退路径丢失 GroupMultiplier**：已在回退分支叠加 `groupMultiplier`（`smart_router.go`）
+- ✅ **汇率图构建失败无日志**：已补日志（按 version 限频防刷屏）+ effective cost 不可用原因采样记录
+- ✅ **AccessToken 明文落库**：已 AES-256-GCM 加密落库，读库透明解密，向后兼容旧明文（注意：机器派生密钥依赖 hostname/GOOS/GOARCH，生产建议显式配置 `CCX_SECRET_KEY`）
+- ✅ **LogicalChannel 视图不刷新**：`saveConfigLocked` 在 deepCopy 前统一调用 `RebuildLogicalChannels`，物理渠道变更后逻辑卡立即同步；并增强归组（强制刷新 UID/Name、同账号收敛、分歧检测）
+- ✅ **CapabilityTestDialog 未接线**：已在 `App.vue` 装配 manager + 挂载对话框，`ChannelOrchestration` 渠道行菜单加"能力测试"入口
+- ✅ **Web UI P1** 移动端 cost-report 可达、`P2` 成本报表全页国际化、`P4` 黑名单补 `/subscriptions` `/cockpit`
+
+另修复基线测试 `TestResolveModelBenchmarkProfile_DistinguishesGPT56Variants`（Luna 证据顺序脆弱断言 → 按名查找，提交 `11879926`）。
+
+### 待排期
+
+#### 中优先级（影响一致性/可观测性）
+- **SmartRouter 不感知 LogicalChannel**：候选收集在物理层，逻辑渠道标签无法参与评分（架构级改动，多日）
+- **跨模块事件总线缺失**：熔断/Key 状态/配置变更无法实时订阅，需轮询（架构级改动，多日）
+
+#### 低优先级（功能扩展）
 - **Benchmark Chart 前端页面落地**：数据链路已通，需决策交互范围与 schema 扩展
 - **New-API 周期性自动余额刷新**：仅启动时同步 + 手动刷新
 - **健康/质量/成本/能力标签字段持久化到 LogicalChannel**
 - **稀疏 L2 预算动态调整**：当前静态配置，不感知大盘负载
 - **capability probe schema 版本化与 drift 检测**
 - **火山 manifest 自动刷新与 drift 告警**
+
+#### Web UI 遗留（见 web-ui-pages.md §9）
+- **P3** 导航 icon 重复（conversations 与 cockpit 同用 `mdi-view-dashboard-outline`）
+- **P5** 健康数据轮询不一致（ChannelsView 30s vs HealthCenterView 手动）
+- **P6/P7** 确认/提示体系分裂（SubscriptionsView 用原生 confirm + 本地 snackbar）
+- **P8** 路由守卫空转（beforeEach 无条件放行）
+- **P9** 空态覆盖不均

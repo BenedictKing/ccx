@@ -259,10 +259,10 @@ i18n key 依次为 `app.tabs.{channels,images,vectors,conversations,healthCenter
 
 | # | 问题 | 位置 | 影响 |
 |---|---|---|---|
-| P1 | **Tab 清单漂移**：移动端下拉 8 项、桌面平铺 9 项；`/cost-report` 移动端不可达 | `useAppController.apiTabOptions`(8) vs `App.vue` 桌面(9) | 移动端用户无法进入成本报表 |
-| P2 | **硬编码中文未国际化**：① 桌面导航"成本报表"（`app.tabs.costReport` key 在 en/zh-CN 均缺失）；② `CostReportView` 全页中文 | `App.vue` L134；`CostReportView.vue` 全文 | 切英文/印尼语时界面仍中文 |
+| ~~P1~~ ✅ | **Tab 清单漂移** → 已修复（2026-08-09 `d876784d`）：`apiTabOptions` 补 cost-report（icon `mdi-finance`），移动端下拉现 9 项可达 | `useAppController.apiTabOptions` | 已解决 |
+| ~~P2~~ ✅ | **硬编码中文未国际化** → 已修复：新增 `app.tabs.costReport` + 43 个 `costReport.*` key（三 locale 对齐），`CostReportView` 全页与桌面导航改用 `t()` | `App.vue`、`CostReportView.vue`、`locales/*` | 已解决 |
 | P3 | **导航 icon 重复**：conversations 与 cockpit 同用 `mdi-view-dashboard-outline` | `apiTabOptions` | 下拉辨识度低 |
-| P4 | **全局统计卡/操作栏路径黑名单不对称**：`/subscriptions`、`/cockpit` 未列入黑名单，却显示"添加渠道"按钮与渠道统计卡，语义不符（**ego-browser 实测确认**） | `App.vue` L240/263/310 | 非渠道页出现渠道操作 |
+| ~~P4~~ ✅ | **全局统计卡/操作栏路径黑名单不对称** → 已修复（2026-08-09 `d876784d`）：黑名单补 `/subscriptions` `/cockpit`，两页不再显示渠道统计卡与"添加渠道"操作栏（ego-browser 实测全 false 确认） | `App.vue` L240/263/310 | 已解决 |
 | P5 | **健康数据轮询不一致**：ChannelsView 的 healthMap 30s 轮询，HealthCenterView 仅手动刷新 | `ChannelsView` vs `HealthCenterView` | 健康中心数据易过期 |
 | P6 | **确认体系分裂**：SubscriptionsView 用原生 `window.confirm`，而全站已有 `dialogStore.confirm`（Wails 兼容） | `SubscriptionsView.vue` `deleteItem` | 桌面端 iframe 下 confirm 可能失效 |
 | P7 | **提示体系分裂**：SubscriptionsView 自带本地 `v-snackbar`，与 App 全局 toast 并存 | `SubscriptionsView.vue` | 通知样式/位置不统一 |
@@ -273,6 +273,11 @@ i18n key 依次为 `app.tabs.{channels,images,vectors,conversations,healthCenter
 ### 已修复记录
 
 - **P10（2026-08-09, commit c3b9d161）**：`/cockpit` 的 `app.tabs.cockpitOverview` 由"驾驶舱/Cockpit/Kokpit"改为"总览/Overview/Ikhtisar"，`/conversations` 的 `app.tabs.conversations` 保留"驾驶舱/Cockpit"，两个 tab 不再重名。已经 ego-browser 在运行实例（5688）验证生效。
+- **P1 / P2 / P4（2026-08-09, commit d876784d）**：
+  - P1 移动端 cost-report 可达（`apiTabOptions` 补项 + `mdi-finance` 图标注册）；ego-browser 实测移动端下拉 9 项含 "Cost Report"。
+  - P2 成本报表国际化（`app.tabs.costReport` + 43 个 `costReport.*` key ×3 locale，`CostReportView` 与导航改用 `t()`）；ego-browser 实测导航显示 "Cost Report" 而非硬编码中文。
+  - P4 黑名单补 `/subscriptions` `/cockpit`；ego-browser 实测两页全局区块全 false。
+- **CapabilityTestDialog 接线（2026-08-09, commit d876784d）**：见 [web-ui-dialogs.md §16.1](./web-ui-dialogs.md)。
 
 ### 关键文件路径清单
 

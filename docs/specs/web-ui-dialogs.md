@@ -274,24 +274,22 @@ SubscriptionsView ─ 内嵌 NewApiSubscriptionForm；billingDialog / syncDialog
 
 ## 16. 待补充项详解
 
-### 16.1 CapabilityTestDialog 接线缺口
+### 16.1 CapabilityTestDialog 接线
 
-**当前实现**
+**状态**：✅ **已修复**（2026-08-09，提交 `d876784d`）。
 
-- `CapabilityTestDialog.vue` 与 `useCapabilityTestManager.ts` 已实现完整功能，但 `src/` 内无任何导入/挂载点。
-- 能力测试的触发入口（`AddChannelHeader.vue` 头部的 vision 按钮区 `header-capability-actions`）目前只暴露 no-vision 切换，未见测试触发按钮。
+**修复方案**
 
-**缺口分析**
+- `App.vue` 引入 `CapabilityTestDialog` 与 `useCapabilityTestManager`，装配 manager 并挂载对话框，绑定 `model-value`、`channelName`、`capabilityJob`、`capabilityRpm` 等 props；`@capability-test` 从 router-view 透传给 `manager.testChannelCapability`。
+- `ChannelOrchestration.vue` 渠道行操作菜单新增「能力测试」项（仅对 messages/chat/responses/gemini 可测协议显示），点击 `$emit('capability-test', element)`。
+- 保留原有行为：打开能力测试会关闭 Add/Edit 弹窗（`useCapabilityTestManager.ts:515-520`）。
 
-- 组件已实现但未被使用，可能是功能开发完成后未接入主流程。
-- 用户无法从 UI 触发能力测试，只能通过后端 API 直接调用。
+**遗留观察项**
 
-**建议方案**
+- `ChannelOrchestration` 为获取 `isCapabilityChannelKind` 而实例化 `useCapabilityTestManager`，传入了空的 `showToast`/store stub；不影响功能，但 manager 副作用增强时需审视。
+- 接线已通过 type-check 与单元测试，但未做真实后端能力测试端到端验证。
 
-1. 在 `AddChannelHeader.vue` 的 `header-capability-actions` 区域添加能力测试触发按钮。
-2. 在 `EditChannelModal` 的 `redirect` 或 `advanced` 分区添加能力测试入口。
-3. 在 `ChannelOrchestration.vue` 的渠道行操作菜单中添加「能力测试」选项。
-4. 确保 `useCapabilityTestManager` 与 `dialogStore` 或 `useAppController` 集成，统一管理对话框状态。
+§7 顶部标题中的"（当前未接线）"标注在本次修复后应视为历史状态。
 
 ### 16.2 其他待补充
 
