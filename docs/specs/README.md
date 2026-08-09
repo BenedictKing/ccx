@@ -70,37 +70,11 @@ Channels   (Claude/OpenAI/Gemini/...)
 
 ## 待补充
 
-所有文档的待补充项已补齐。以下是跨文档汇总的关键改造方向，供后续排期参考。
-
-### 已修复（2026-08-09）
-
-高优先级 3 项 + 中优先级 2 项 + Web UI 3 项，经 ultracode workflow 实现并对战验证，提交 `d876784d`：
-
-- ✅ **new-api 标价回退路径丢失 GroupMultiplier**：已在回退分支叠加 `groupMultiplier`（`smart_router.go`）
-- ✅ **汇率图构建失败无日志**：已补日志（按 version 限频防刷屏）+ effective cost 不可用原因采样记录
-- ✅ **AccessToken 明文落库**：已 AES-256-GCM 加密落库，读库透明解密，向后兼容旧明文（注意：机器派生密钥依赖 hostname/GOOS/GOARCH，生产建议显式配置 `CCX_SECRET_KEY`）
-- ✅ **LogicalChannel 视图不刷新**：`saveConfigLocked` 在 deepCopy 前统一调用 `RebuildLogicalChannels`，物理渠道变更后逻辑卡立即同步；并增强归组（强制刷新 UID/Name、同账号收敛、分歧检测）
-- ✅ **CapabilityTestDialog 未接线**：已在 `App.vue` 装配 manager + 挂载对话框，`ChannelOrchestration` 渠道行菜单加"能力测试"入口
-- ✅ **Web UI P1** 移动端 cost-report 可达、`P2` 成本报表全页国际化、`P4` 黑名单补 `/subscriptions` `/cockpit`
-
-另修复基线测试 `TestResolveModelBenchmarkProfile_DistinguishesGPT56Variants`（Luna 证据顺序脆弱断言 → 按名查找，提交 `11879926`）。
+各专项文档已覆盖当前实现的完整设计。以下仅列跨文档的**待排期方向**；已落地的能力直接在对应专项文档中作为当前设计描述，不在此重复罗列。
 
 ### 待排期
 
-#### 已完成（2026-08-09）
-- ✅ **SmartRouter 感知 LogicalChannel**（Phase A，提交 `22028397` / `db380702` / `7ed94e4e`）：A.1 身份透传 + A.2 兄弟渠道 fallback 评分 + A.3 dry-run 候选聚合。真实路由仍以物理渠道为单位，改动可开关回退。详见 `logical-channel.md` §16.3。
-- ✅ **跨模块事件总线**（Phase B，提交 `267f82d6` / `10b99f1c` / `1891c7d2`）：B.1 `internal/eventbus` 叶子包 + 熔断/Key 状态事件 + `StateEventStore`（SQLite `state_events`）+ WS/REST 端点；B.2 config 写路径 `upstream_changed`/`config_reloaded`/`logical_channel_rebuilt` + preset `preset_bundle_swapped`；B.3 前端 mitt 总线 + `useEventStream` 统一 WS + 两视图事件驱动刷新（轮询降级为兜底）。总线为可选依赖、非阻塞、事件仅通知非真相源。详见 `cross-module-integration.md` §10.1。
-
-#### 已完成（2026-08-10）
-- ✅ **健康/质量/成本/能力标签持久化到 LogicalChannel**（提交 `a438d12b`）：config.LogicalChannel 新增 4 标签字段，autopilot 经 `RegisterLogicalChannelTagDeriver` 单向 hook 派生，仅值变化时重建避免循环。详见 `logical-channel.md` §16.1。
-- ✅ **稀疏 L2 预算动态调整**（提交 `27dc64d2`）：`effectiveSparseBudget` 按模型数/失败数/负载在静态 clamp 内动态放宽。详见 `healthcheck.md` §9.3。
-- ✅ **New-API 周期性自动余额刷新**（提交 `009894db`）：`Start/Stop/SweepAll` 30min ticker + sweep guard + 信号量 + per-uid 超时，TTL 提至 35min。
-- ✅ **capability probe schema 版本化与 drift 检测**（提交 `18f71d05`）：`capabilityProbeSchemaVersion` 并入缓存 key，`[Capability-Drift]` 观测日志。详见 `healthcheck.md` §9.2。
-- ✅ **火山 manifest drift 事件**（提交 `22d4a11c`）：控制面 `FetchModels` 与内置清单 diff 发 `manifest_drift`（观测，无下游自动回填）。详见 `healthcheck.md` §9.1。
-- ✅ **Web UI P3/P6/P7/P9**（提交 `e5074f99`/`50873dcc`/`a7c347e2`）：导航图标去重、SubscriptionsView 确认/提示统一、EmptyState 统一空态。
-- ✅ **scheduler 联邦回归修复**（提交 `1ab1ed7d`）：收窄 `ensureAutoManagedKind` 迁移条件，显式 `autoManaged=false` 手动渠道不再被联邦化。
-
-#### 待排期（低优先级 / 观测项后续）
-- **capability probe 统一 schema 定义**：`shared/capability-probe-schema.json` 前后端单一真相源（当前仍双副本硬编码模型列表）
-- **火山 manifest 自动回填**：`manifest_drift` 目前仅观测，无自动更新内置清单/告警的下游消费者
-- **capability_drift 上事件总线**：当前仅日志，未发 eventbus/指标
+- **capability probe 统一 schema 定义**：抽取 `shared/capability-probe-schema.json` 作为前后端单一真相源，替换当前前后端各一份硬编码模型列表（详见 `healthcheck.md` §9.2）。
+- **火山 manifest 自动回填**：`manifest_drift` 事件目前仅观测，尚无自动更新内置清单或告警的下游消费者（详见 `healthcheck.md` §9.1）。
+- **capability_drift 事件化**：能力探测漂移当前仅打 `[Capability-Drift]` 日志，未发布到事件总线或指标（详见 `healthcheck.md` §9.2）。
+- **稀疏 L2 成本语义拆分**：非火山渠道的 USD 相对成本与火山 AFP 共用 `CostAFP` 字段，命名有误导；AFP 余额联动与分时段策略亦未实现（详见 `healthcheck.md` §9.3）。

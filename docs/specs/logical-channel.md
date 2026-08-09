@@ -507,31 +507,18 @@
 
 ## 16. 待补充项详解
 
-### 16.1 健康/质量/成本/能力标签字段持久化
+### 16.1 健康/质量/成本/能力标签持久化
 
-**状态**：✅ **已实现**（2026-08-10，提交 `a438d12b`）。
+`config.LogicalChannel` 持有派生标签字段 `HealthTag` / `QualityTag` / `CostTag` string + `CapabilityTags []string`（均 json omitempty），由 autopilot 画像聚合派生、随逻辑渠道重建刷新：
 
-**已完成实现**
-
-- `config.LogicalChannel` 新增 `HealthTag` / `QualityTag` / `CostTag` string + `CapabilityTags []string`（均 json omitempty）。
-- config 包新增包级 hook `logicalChannelTagDeriver` + `RegisterLogicalChannelTagDeriver`，`RebuildLogicalChannels` 在 protocols 去重后对每个 logical channel 调用（传入 `SiblingChannelUIDs()`）；hook 未注册或返回 `ok=false` 时留空，向后兼容。
-- autopilot 新增 `logical_channel_tags.go`：`Manager` 初始化注册 deriver，通过 `ProfileStore` + `AggregateChannelProfile` 聚合兄弟物理渠道画像，把 `HealthState`/`QualityTier`/`CostTier` 与 `Supports*` 布尔映射为字符串标签——**tier 逻辑全部留在 autopilot 内，仅字符串跨界**，config 不 import autopilot（无包循环）。
-- `collectAll` 完成后调用 `deriveAllLogicalChannelTags()`，**仅当标签值实际变化时**才 `RebuildLogicalChannelsAndPublish()`，避免 profile→rebuild→event 重建循环。
-- 前端 `LogicalChannel` 接口扩展 `healthTag?`/`qualityTag?`/`costTag?`/`capabilityTags?`（服务端派生只读）。
-
-**原设计方案（供参考）**
-
-1. 在 `LogicalChannel` 中新增专用字段：`HealthTag` / `QualityTag` / `CostTag` / `CapabilityTags`。
-2. 在 `RebuildLogicalChannels` 中根据组内物理渠道状态推导默认值。
-3. 前端 `admin-api.ts` 补齐对应字段，dashboard 视图直接渲染标签胶囊。
+- config 包提供包级 hook `logicalChannelTagDeriver` + `RegisterLogicalChannelTagDeriver`；`RebuildLogicalChannels` 在 protocols 去重后对每个 logical channel 调用（传入 `SiblingChannelUIDs()`）。hook 未注册或返回 `ok=false` 时标签留空，向后兼容。
+- autopilot（`logical_channel_tags.go`）在 `Manager` 初始化时注册 deriver，通过 `ProfileStore` + `AggregateChannelProfile` 聚合兄弟物理渠道画像，把 `HealthState`/`QualityTier`/`CostTier` 与 `Supports*` 布尔映射为字符串标签。**tier/评分逻辑全部留在 autopilot 内，仅字符串跨界**——config 不 import autopilot，无包循环。
+- `collectAll` 完成后调用 `deriveAllLogicalChannelTags()`，**仅当标签值实际变化时**才 `RebuildLogicalChannelsAndPublish()`，避免 profile→rebuild→event 的重建循环。
+- 前端 `LogicalChannel` 接口暴露 `healthTag?`/`qualityTag?`/`costTag?`/`capabilityTags?`（服务端派生只读）。
 
 ### 16.2 物理渠道非 CRUD 变更后的自动重建触发机制
 
-**状态**：✅ **已修复**（2026-08-09，提交 `d876784d`）。
-
-**修复方案**
-
-在 `saveConfigLocked`（`config_loader.go:1155`）内、`deepCopy` 之前统一调用 `RebuildLogicalChannels(&config)`，确保任何持久化写盘后 logical 视图与物理视图一致。同时增强 `RebuildLogicalChannels`：
+`saveConfigLocked`（`config_loader.go`）在 `deepCopy` 之前统一调用 `RebuildLogicalChannels(&config)`，确保任何持久化写盘后 logical 视图与物理视图一致。`RebuildLogicalChannels` 的归组增强：
 1. 已有 logical 先复制副本并清空 protocols，避免陈旧数据。
 2. `convergeLogicalByAccount` 把同一托管账号的物理渠道强制收敛到单一 canonical logical。
 3. `hasAccountUIDDivergence` 检测同账号多 UID 分歧。
