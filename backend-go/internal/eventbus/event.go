@@ -26,6 +26,7 @@ const (
 	TypeChannelStatusChanged       = "channel_status_changed"
 	TypeLogicalChannelRebuilt      = "logical_channel_rebuilt"
 	TypePresetBundleSwapped        = "preset_bundle_swapped"
+	TypeManifestDrift              = "manifest_drift"
 )
 
 // 事件作用域常量（标识发布来源模块）。

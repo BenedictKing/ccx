@@ -743,8 +743,9 @@ func main() {
 
 	// Phase B.1：创建跨模块事件总线并注入 ConfigManager + 6 个 MetricsManager + autopilot Manager。
 	// 可选依赖：未注入时所有 publish no-op，系统行为不变。
+	var stateEventBus *eventbus.Bus
 	{
-		stateEventBus := eventbus.NewBus()
+		stateEventBus = eventbus.NewBus()
 		cfgManager.SetEventBus(stateEventBus)
 		messagesMetricsManager.SetEventBus(stateEventBus)
 		responsesMetricsManager.SetEventBus(stateEventBus)
@@ -1475,6 +1476,8 @@ func main() {
 			if mps := autopilotManager.ModelProfileStore(); mps != nil {
 				autoDiscoveryRunner.ModelProfileStore = mps
 			}
+			// 注入共享事件总线；事件为只读观测，不影响调度。
+			autoDiscoveryRunner.SetEventBus(stateEventBus)
 			// 后台 discovery 任务落盘 + 断点续传：复用 ProfileStore 的 SQLite 连接，
 			// 注入 taskStore 启用端点级 checkpoint；并在接受请求前恢复未完成 discovery。
 			if ps := autopilotManager.ProfileStore(); ps != nil && ps.DB() != nil {

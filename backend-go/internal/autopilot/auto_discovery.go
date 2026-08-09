@@ -17,6 +17,7 @@ import (
 
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/errutil"
+	"github.com/BenedictKing/ccx/internal/eventbus"
 	"github.com/BenedictKing/ccx/internal/httpclient"
 	"github.com/BenedictKing/ccx/internal/utils"
 )
@@ -101,6 +102,9 @@ type AutoDiscoveryRunner struct {
 
 	// Phase 3B-2：自动发现时同步写入模型画像（nil 时不写 model_profiles，不影响现有功能）
 	ModelProfileStore *ModelProfileStore
+
+	// eventBus 共享事件总线；nil 时不发布 manifest drift 等观测事件。
+	eventBus *eventbus.Bus
 }
 
 // NewAutoDiscoveryRunner 创建发现执行器。
@@ -127,6 +131,13 @@ func (r *AutoDiscoveryRunner) SetTaskStore(taskStore *DiscoveryTaskStore) {
 	r.mu.Unlock()
 	r.runnerCtx, r.runnerCancel = context.WithCancel(context.Background())
 	go r.gcLoop()
+}
+
+// SetEventBus 注入共享事件总线；nil 时所有事件发布自动变为空操作。
+func (r *AutoDiscoveryRunner) SetEventBus(bus *eventbus.Bus) {
+	r.mu.Lock()
+	r.eventBus = bus
+	r.mu.Unlock()
 }
 
 // gcLoop 周期性清理 done/failed 且 finished_at 超过 24h 的记录，不删 running。
@@ -816,7 +827,43 @@ func (r *AutoDiscoveryRunner) discoverVolcenginePlanEndpoint(
 	result.ModelsCount = len(models)
 	result.ProtocolOk = true
 	setModelDiscoveryMetadata(&result, ModelDiscoverySourceControlPlane, fmt.Sprintf("火山管控面 %s 模型清单", displayVolcenginePlan(plan.Plan)))
+	r.publishManifestDriftIfNeeded(channel.ChannelUID, channel, baseURL, models)
 	return result
+}
+
+// publishManifestDriftIfNeeded 在发现模型与内置兜底清单不一致时发布 manifest_drift 事件。
+// 仅当清单来自 control_plane 且成功获取到模型时比较；事件只读展示，不影响调度。
+func (r *AutoDiscoveryRunner) publishManifestDriftIfNeeded(channelUID string, channel *config.UpstreamConfig, baseURL string, discoveredModels []string) {
+	if r == nil || channel == nil {
+		return
+	}
+	r.mu.Lock()
+	bus := r.eventBus
+	r.mu.Unlock()
+	if bus == nil {
+		return
+	}
+	manifest, ok := lookupDiscoveryBuiltinManifest(channel, baseURL)
+	if !ok || len(manifest.ModelIDs) == 0 {
+		return
+	}
+	added, removed := diffModelLists(sortedCopy(manifest.ModelIDs), sortedCopy(discoveredModels))
+	if len(added) == 0 && len(removed) == 0 {
+		return
+	}
+	ev := eventbus.Event{
+		Type:    eventbus.TypeManifestDrift,
+		Scope:   eventbus.ScopeConfig,
+		Subject: channelUID,
+		Payload: map[string]any{
+			"added":   added,
+			"removed": removed,
+		},
+	}
+	ev.EnsureUID()
+	bus.Publish(ev)
+	log.Printf("[AutoDiscovery-ManifestDrift] channel=%s baseURL=%s added=%d removed=%d",
+		channelUID, baseURL, len(added), len(removed))
 }
 
 // applyVolcengineFallback 在无法通过火山管控面发现模型时，尝试命中内置兜底清单。
