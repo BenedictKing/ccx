@@ -252,6 +252,7 @@ func runCapabilityTestJob(jobID, channelKind string, channelID int, channel conf
 		RedirectTests:       redirectResults,
 		CompatibleProtocols: compatible,
 		TotalDuration:       totalDuration,
+		SchemaVersion:       capabilityProbeSchemaVersion,
 	}
 
 	// 编排器已在执行过程中通过 capabilityJobs.update 实时维护 job.Tests，
@@ -632,6 +633,7 @@ func executeModelTest(ctx context.Context, channel *config.UpstreamConfig, proto
 		log.Printf("[CapabilityTest-Codex] 渠道 %s 完成 codex-auto-review 图片工具探测 (实际模型: %s, 支持 Key: %d, 不支持 Key: %d, 不确定 Key: %d)",
 			channel.Name, modelResult.ActualModel, modelResult.CodexImageGeneration.SupportedKeys,
 			modelResult.CodexImageGeneration.UnsupportedKeys, modelResult.CodexImageGeneration.InconclusiveKeys)
+		logModelCapabilityDrift(modelResult, channel, protocol, model, cfgManager)
 		return modelResult
 	}
 
@@ -651,6 +653,7 @@ func executeModelTest(ctx context.Context, channel *config.UpstreamConfig, proto
 			updateCapabilityJobModelResult(job, protocol, model, CapabilityModelStatusFailed, modelResult)
 		})
 		log.Printf("[CapabilityTest-Model] 渠道 %s 构建 %s 测试请求失败 (模型: %s): %v", channel.Name, protocol, model, err)
+		logModelCapabilityDrift(modelResult, channel, protocol, model, cfgManager)
 		return modelResult
 	}
 
@@ -741,7 +744,36 @@ func executeModelTest(ctx context.Context, channel *config.UpstreamConfig, proto
 	})
 	log.Printf("[CapabilityTest-Model] 渠道 %s 的 %s 协议测试失败 (模型: %s, 耗时: %dms): %s",
 		channel.Name, protocol, model, modelResult.Latency, errMsg)
+	logModelCapabilityDrift(modelResult, channel, protocol, model, cfgManager)
 	return modelResult
+}
+
+// logModelCapabilityDrift 比较单模型探测结果与注册表声明的能力，
+// 当注册表声明支持但实际探测失败时输出观测日志（仅观测，不改变调度或探测结论）。
+func logModelCapabilityDrift(result ModelTestResult, channel *config.UpstreamConfig, protocol, model string, cfgManager *config.ConfigManager) {
+	if cfgManager == nil {
+		return
+	}
+	global := capabilityProbeGlobalCapabilities(cfgManager)
+	resolved := config.ResolveUpstreamCapability(model, channel, global)
+	if !resolved.Known {
+		return
+	}
+
+	driftFields := []string{}
+
+	// 协议级基本能力：探测成功是注册表声明支持该协议的必要条件。
+	// 注意：这里把"探测失败"视为与声明成功之间的漂移，不做细粒度字段匹配。
+	if !result.Success {
+		driftFields = append(driftFields, "probe_success")
+	}
+
+	if len(driftFields) == 0 {
+		return
+	}
+
+	log.Printf("[Capability-Drift] 渠道 %s 协议 %s 模型 %s (实际: %s) 探测结果与注册表声明不一致，字段: %s，来源: %s，匹配模式: %s",
+		channel.Name, protocol, model, result.ActualModel, strings.Join(driftFields, ","), resolved.Source, resolved.MatchedPattern)
 }
 
 func truncateCapabilityError(msg string) string {

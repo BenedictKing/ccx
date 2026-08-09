@@ -59,7 +59,7 @@ func buildCapabilityCacheKey(baseURL string, apiKey string, serviceType string, 
 
 	normalizedModels := normalizeCapabilityModels(models)
 	metricsKey := metrics.GenerateMetricsIdentityKey(baseURL, apiKey, serviceType)
-	key := fmt.Sprintf("%s:%s:%s", metricsKey, strings.Join(sorted, ","), strings.Join(normalizedModels, ","))
+	key := fmt.Sprintf("%s:%d:%s:%s", metricsKey, capabilityProbeSchemaVersion, strings.Join(sorted, ","), strings.Join(normalizedModels, ","))
 	if modelMappingHash != "" {
 		key += ":" + modelMappingHash
 	}

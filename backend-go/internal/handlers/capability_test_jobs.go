@@ -162,6 +162,7 @@ type CapabilityTestJob struct {
 	TargetProtocols     []string                      `json:"targetProtocols,omitempty"`
 	TimeoutMilliseconds int                           `json:"timeoutMilliseconds,omitempty"`
 	EffectiveRPM        int                           `json:"effectiveRPM,omitempty"`
+	SchemaVersion       int                           `json:"schemaVersion,omitempty"`
 	CancelFunc          context.CancelFunc            `json:"-"`
 }
 
@@ -240,6 +241,7 @@ func newCapabilityTestJobWithModels(channelID int, channelName, channelKind, sou
 		TargetProtocols:     append([]string(nil), protocols...),
 		TimeoutMilliseconds: int(timeout / time.Millisecond),
 		EffectiveRPM:        effectiveRPM,
+		SchemaVersion:       capabilityProbeSchemaVersion,
 	}
 
 	for _, protocol := range protocols {
@@ -286,7 +288,7 @@ func buildCapabilityExecutionLookupKey(identityKey, channelKind string, protocol
 	sortedProtocols := append([]string(nil), protocols...)
 	sort.Strings(sortedProtocols)
 	normalizedModels := normalizeCapabilityModels(models)
-	key := fmt.Sprintf("%s:%s:%s:%s", identityKey, channelKind, strings.Join(sortedProtocols, ","), strings.Join(normalizedModels, ","))
+	key := fmt.Sprintf("%s:%s:%d:%s:%s", identityKey, channelKind, capabilityProbeSchemaVersion, strings.Join(sortedProtocols, ","), strings.Join(normalizedModels, ","))
 	if modelMappingHash != "" {
 		key += ":" + modelMappingHash
 	}
@@ -714,6 +716,7 @@ func createCapabilityJobFromResponse(channelID int, channelName, channelKind, so
 		TargetProtocols:     append([]string(nil), protocols...),
 		TimeoutMilliseconds: int(timeout / time.Millisecond),
 		EffectiveRPM:        effectiveRPM,
+		SchemaVersion:       resp.SchemaVersion,
 	}
 	recomputeCapabilityJob(job)
 	return job

@@ -581,6 +581,7 @@ export interface CapabilityTestJob {
   cacheHit?: boolean
   targetProtocols?: string[]
   timeoutMilliseconds?: number
+  schemaVersion?: number
   snapshotUpdatedAt?: string
 }
 
@@ -643,6 +644,7 @@ export interface CapabilityTestResult {
   tests: ProtocolTestResult[]
   compatibleProtocols: string[]
   totalDuration: number
+  schemaVersion?: number
 }
 
 // 历史数据点（用于时间序列图表）

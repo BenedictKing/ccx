@@ -281,7 +281,7 @@ func TestImportChannels_Preview(t *testing.T) {
 			{
 				ChannelType: "messages",
 				Channel: config.UpstreamConfig{
-					Name:    "Whatever", // 名称由 baseURL 派生，此处值被忽略
+					Name:    "Whatever",                  // 名称由 baseURL 派生，此处值被忽略
 					BaseURL: "https://api.anthropic.com", // 与现有渠道派生名相同（anthropic）
 				},
 			},
@@ -404,7 +404,7 @@ func TestImportChannelsConfirm_NameConflict(t *testing.T) {
 			{
 				ChannelType: "messages",
 				Channel: config.UpstreamConfig{
-					Name:    "Test Claude",          // 名称被忽略，按 baseURL 派生为 anthropic
+					Name:    "Test Claude",               // 名称被忽略，按 baseURL 派生为 anthropic
 					BaseURL: "https://api.anthropic.com", // 与现有渠道派生名冲突（anthropic）
 				},
 			},
@@ -452,7 +452,7 @@ func TestImportChannelsConfirm_SkipNaming(t *testing.T) {
 			{
 				ChannelType: "messages",
 				Channel: config.UpstreamConfig{
-					Name:    "Test Claude",          // 名称被忽略，按 baseURL 派生为 anthropic
+					Name:    "Test Claude",               // 名称被忽略，按 baseURL 派生为 anthropic
 					BaseURL: "https://api.anthropic.com", // 与现有渠道派生名冲突（anthropic）
 				},
 			},

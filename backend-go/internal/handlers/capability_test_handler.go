@@ -62,6 +62,7 @@ type CapabilityTestResponse struct {
 	RedirectTests       []RedirectModelResult `json:"redirectTests,omitempty"`
 	CompatibleProtocols []string              `json:"compatibleProtocols"`
 	TotalDuration       int64                 `json:"totalDuration"` // 毫秒
+	SchemaVersion       int                   `json:"schemaVersion,omitempty"`
 }
 
 // ============== 主处理器 ==============

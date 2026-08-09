@@ -17,6 +17,11 @@ const (
 	capabilityProbeModelResponses    = "gpt-5.5,gpt-5.4,gpt-5.6-sol,gpt-5.6-terra,gpt-5.6-luna,gpt-5.4-mini,codex-auto-review"
 )
 
+// capabilityProbeSchemaVersion 能力探测特征集版本。
+// 当探测模型列表、prompts、参数约束或协议头发生变化时必须递增，
+// 以使缓存/执行键失效并避免新旧探测特征混用。
+const capabilityProbeSchemaVersion = 1
+
 var capabilityProbeModels = map[string]string{
 	"messages":  capabilityProbeModelMessages,
 	"chat":      capabilityProbeModelChat,
