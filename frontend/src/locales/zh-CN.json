@@ -1208,6 +1208,7 @@
   "subscription.sponsors.volcengine.description": "【专属活动优惠】19 元 Tokens 包！享字节自研豆包模型 + 满血版开源 SOTA 模型，覆盖文本、VLM、图像生成，全模态一站配齐：Seed-2.1、Seedream-5.0、GLM-5.2、DeepSeek 等，不止编程、更能解决 Agent 复杂长程任务。注册即领 2500 万 Tokens。",
   "subscription.addProviderSuccess": "已添加渠道「{name}」",
   "subscription.addProviderFailed": "添加失败：{message}",
+  "subscription.deleteSuccess": "已删除订阅「{name}」",
   "subscription.apiKeyLabel": "API Key",
   "subscription.apiKeyPlaceholder": "输入 API Key，系统将自动识别套餐与入口",
   "subscription.copilotDescription": "使用 GitHub Copilot 订阅作为上游，授权后即可调用。",

@@ -264,8 +264,8 @@ i18n key 依次为 `app.tabs.{channels,images,vectors,conversations,healthCenter
 | ~~P3~~ ✅ | **导航 icon 重复** → 已修复（2026-08-09）：conversations 改用 `mdi-radar`，cockpit 保持 `mdi-view-dashboard-outline`；移动端下拉 `v-list-item` 补 `:prepend-icon="tab.icon"` 使图标渲染 | `apiTabOptions`, `App.vue` | 已解决 |
 | ~~P4~~ ✅ | **全局统计卡/操作栏路径黑名单不对称** → 已修复（2026-08-09 `d876784d`）：黑名单补 `/subscriptions` `/cockpit`，两页不再显示渠道统计卡与"添加渠道"操作栏（ego-browser 实测全 false 确认） | `App.vue` L240/263/310 | 已解决 |
 | ~~P5~~ ✅ | **健康数据轮询不一致** → 已修复（2026-08-09，Phase B.3 `1891c7d2`）：ChannelsView 与 HealthCenterView 均接入 `useEventStream` 事件驱动刷新（熔断/Key/渠道状态变更 400ms 去抖即时刷新），轮询降级为兜底，两视图刷新机制已统一 | `ChannelsView` vs `HealthCenterView` | 已解决 |
-| P6 | **确认体系分裂**：SubscriptionsView 用原生 `window.confirm`，而全站已有 `dialogStore.confirm`（Wails 兼容） | `SubscriptionsView.vue` `deleteItem` | 桌面端 iframe 下 confirm 可能失效 |
-| P7 | **提示体系分裂**：SubscriptionsView 自带本地 `v-snackbar`，与 App 全局 toast 并存 | `SubscriptionsView.vue` | 通知样式/位置不统一 |
+| ~~P6~~ ✅ | **确认体系分裂**：SubscriptionsView 用原生 `window.confirm`，而全站已有 `dialogStore.confirm`（Wails 兼容） → 已修复：`deleteItem` 改用 `dialogStore.confirm`，移除本地 `v-snackbar` | `SubscriptionsView.vue` `deleteItem` | 桌面端 iframe 下 confirm 可能失效 | 已解决 |
+| ~~P7~~ ✅ | **提示体系分裂**：SubscriptionsView 自带本地 `v-snackbar`，与 App 全局 toast 并存 → 已修复：定义 `success`/`error` emits，统一通过父级 App 全局 toast 提示 | `SubscriptionsView.vue` | 通知样式/位置不统一 | 已解决 |
 | ~~P8~~ ✅ | **路由守卫空转** → 已修复（2026-08-09）：移除对所有路由一律 `next()` 的空转 `beforeEach`；鉴权实际由 App.vue 持久认证对话框承担，router/index.ts 已注释说明，`meta.requiresAuth` 仅作语义标注 | `router/index.ts` | 已解决 |
 | P9 | **空态覆盖不均**：Channels/CostReport/Cockpit 有专属空态；Health/Subscriptions/Autopilot 依赖子组件，无 View 级空态 | 各 View | 体验不一致 |
 | P10 | **i18n 命名重叠易混**：`app.tabs.conversations` 与 `app.tabs.cockpitOverview` 曾同为"驾驶舱"，指向不同页（**已于 2026-08-09 修复**：cockpitOverview 改为 Overview/总览/Ikhtisar） | locale JSON | 用户认知混淆（已解决） |

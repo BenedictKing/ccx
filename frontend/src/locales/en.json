@@ -1208,6 +1208,7 @@
   "subscription.sponsors.volcengine.description": "Dola Seed 2.0 is a full-modal general large model independently developed by ByteDance for the global market. Built on a unified multimodal architecture, it supports joint understanding and generation of text, images, audio, and video, with strong reasoning, long-task execution, tool integration, and coding capabilities — readily accessible via the ModelArk platform. Register via the link to get 500,000 tokens of free inference quota per model.",
   "subscription.addProviderSuccess": "Channel \"{name}\" added",
   "subscription.addProviderFailed": "Add failed: {message}",
+  "subscription.deleteSuccess": "Subscription \"{name}\" deleted",
   "subscription.apiKeyLabel": "API Key",
   "subscription.apiKeyPlaceholder": "Enter API Key — plan and endpoint are detected automatically",
   "subscription.copilotDescription": "Use your GitHub Copilot subscription as an upstream after authorization.",
