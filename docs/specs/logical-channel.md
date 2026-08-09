@@ -509,23 +509,17 @@
 
 ### 16.1 健康/质量/成本/能力标签字段持久化
 
-**状态**：待实现（低优先级）。
+**状态**：✅ **已实现**（2026-08-10，提交 `a438d12b`）。
 
-**当前实现**
+**已完成实现**
 
-- `LogicalChannel` 结构体仅有通用 `Tags []string` 字段，没有区分健康、质量、成本、能力的专用标签字段。
-- 后端 dashboard 接口 `/api/logical-channels/dashboard` 通过 `primaryPhysicalChannel` 选取主物理路由，再调用 `common.BuildChannelView` 和 metrics manager 聚合指标，最后把 `tags` 原样返回。
-- 前端类型定义同样只有 `tags?: string[]`，没有健康/质量/成本/能力相关字段。
-- Autopilot 内部有完整的 `HealthState`、`QualityTier`、`CostTier`、`StabilityTier`、`SpeedTier` 等枚举，但这些是运行时画像/评分类型，未与 `LogicalChannel` 持久化字段打通。
+- `config.LogicalChannel` 新增 `HealthTag` / `QualityTag` / `CostTag` string + `CapabilityTags []string`（均 json omitempty）。
+- config 包新增包级 hook `logicalChannelTagDeriver` + `RegisterLogicalChannelTagDeriver`，`RebuildLogicalChannels` 在 protocols 去重后对每个 logical channel 调用（传入 `SiblingChannelUIDs()`）；hook 未注册或返回 `ok=false` 时留空，向后兼容。
+- autopilot 新增 `logical_channel_tags.go`：`Manager` 初始化注册 deriver，通过 `ProfileStore` + `AggregateChannelProfile` 聚合兄弟物理渠道画像，把 `HealthState`/`QualityTier`/`CostTier` 与 `Supports*` 布尔映射为字符串标签——**tier 逻辑全部留在 autopilot 内，仅字符串跨界**，config 不 import autopilot（无包循环）。
+- `collectAll` 完成后调用 `deriveAllLogicalChannelTags()`，**仅当标签值实际变化时**才 `RebuildLogicalChannelsAndPublish()`，避免 profile→rebuild→event 重建循环。
+- 前端 `LogicalChannel` 接口扩展 `healthTag?`/`qualityTag?`/`costTag?`/`capabilityTags?`（服务端派生只读）。
 
-**缺口分析**
-
-- 缺少逻辑渠道级的“健康/质量/成本/能力”聚合标签持久化，导致：
-  - 前端无法在统一列表中直接展示逻辑渠道的综合健康/质量/成本/能力标签。
-  - dashboard 目前只能透传物理渠道的实时 metrics（successRate、circuitState 等），无法给出一个稳定的逻辑渠道级标签。
-  - Autopilot 评分时使用的是物理渠道/模型级画像，没有逻辑渠道级的归一化标签输入。
-
-**建议方案**
+**原设计方案（供参考）**
 
 1. 在 `LogicalChannel` 中新增专用字段：`HealthTag` / `QualityTag` / `CostTag` / `CapabilityTags`。
 2. 在 `RebuildLogicalChannels` 中根据组内物理渠道状态推导默认值。

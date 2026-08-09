@@ -91,16 +91,16 @@ Channels   (Claude/OpenAI/Gemini/...)
 - ✅ **SmartRouter 感知 LogicalChannel**（Phase A，提交 `22028397` / `db380702` / `7ed94e4e`）：A.1 身份透传 + A.2 兄弟渠道 fallback 评分 + A.3 dry-run 候选聚合。真实路由仍以物理渠道为单位，改动可开关回退。详见 `logical-channel.md` §16.3。
 - ✅ **跨模块事件总线**（Phase B，提交 `267f82d6` / `10b99f1c` / `1891c7d2`）：B.1 `internal/eventbus` 叶子包 + 熔断/Key 状态事件 + `StateEventStore`（SQLite `state_events`）+ WS/REST 端点；B.2 config 写路径 `upstream_changed`/`config_reloaded`/`logical_channel_rebuilt` + preset `preset_bundle_swapped`；B.3 前端 mitt 总线 + `useEventStream` 统一 WS + 两视图事件驱动刷新（轮询降级为兜底）。总线为可选依赖、非阻塞、事件仅通知非真相源。详见 `cross-module-integration.md` §10.1。
 
-#### 中优先级（影响一致性/可观测性）
-- **健康/质量/成本/能力标签字段持久化到 LogicalChannel**
-- **稀疏 L2 预算动态调整**：当前静态配置，不感知大盘负载
+#### 已完成（2026-08-10）
+- ✅ **健康/质量/成本/能力标签持久化到 LogicalChannel**（提交 `a438d12b`）：config.LogicalChannel 新增 4 标签字段，autopilot 经 `RegisterLogicalChannelTagDeriver` 单向 hook 派生，仅值变化时重建避免循环。详见 `logical-channel.md` §16.1。
+- ✅ **稀疏 L2 预算动态调整**（提交 `27dc64d2`）：`effectiveSparseBudget` 按模型数/失败数/负载在静态 clamp 内动态放宽。详见 `healthcheck.md` §9.3。
+- ✅ **New-API 周期性自动余额刷新**（提交 `009894db`）：`Start/Stop/SweepAll` 30min ticker + sweep guard + 信号量 + per-uid 超时，TTL 提至 35min。
+- ✅ **capability probe schema 版本化与 drift 检测**（提交 `18f71d05`）：`capabilityProbeSchemaVersion` 并入缓存 key，`[Capability-Drift]` 观测日志。详见 `healthcheck.md` §9.2。
+- ✅ **火山 manifest drift 事件**（提交 `22d4a11c`）：控制面 `FetchModels` 与内置清单 diff 发 `manifest_drift`（观测，无下游自动回填）。详见 `healthcheck.md` §9.1。
+- ✅ **Web UI P3/P6/P7/P9**（提交 `e5074f99`/`50873dcc`/`a7c347e2`）：导航图标去重、SubscriptionsView 确认/提示统一、EmptyState 统一空态。
+- ✅ **scheduler 联邦回归修复**（提交 `1ab1ed7d`）：收窄 `ensureAutoManagedKind` 迁移条件，显式 `autoManaged=false` 手动渠道不再被联邦化。
 
-#### 低优先级（功能扩展）
-- **New-API 周期性自动余额刷新**：仅启动时同步 + 手动刷新
-- **capability probe schema 版本化与 drift 检测**
-- **火山 manifest 自动刷新与 drift 告警**
-
-#### Web UI 遗留（见 web-ui-pages.md §9）
-- **P3** 导航 icon 重复（conversations 与 cockpit 同用 `mdi-view-dashboard-outline`）
-- **P6/P7** 确认/提示体系分裂（SubscriptionsView 用原生 confirm + 本地 snackbar）
-- **P9** 空态覆盖不均
+#### 待排期（低优先级 / 观测项后续）
+- **capability probe 统一 schema 定义**：`shared/capability-probe-schema.json` 前后端单一真相源（当前仍双副本硬编码模型列表）
+- **火山 manifest 自动回填**：`manifest_drift` 目前仅观测，无自动更新内置清单/告警的下游消费者
+- **capability_drift 上事件总线**：当前仅日志，未发 eventbus/指标

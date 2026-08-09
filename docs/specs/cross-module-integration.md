@@ -369,10 +369,11 @@ New-API              -             写          读           -             -
 > - **B.1 总线基础 + 熔断/Key 事件**：新增叶子包 `internal/eventbus`（统一 `Event` envelope + 非阻塞 `Bus`，缓冲 64、慢订阅者丢弃）。`MetricsManager`/`ConfigManager` 经 `SetEventBus` 可选注入（`atomic.Pointer`，nil-safe）。熔断三迁移点（`channel_metrics_circuit.go`）发 `circuit_breaker_state_changed`；`config.go` Key 方法发 `key_blacklisted`/`key_restored`/`key_model_disabled`/`key_model_restored`（key 用 `utils.MaskAPIKey` 脱敏）。新增 `StateEventStore`（环形内存 + SQLite `state_events` + 30 天清理，复用 `ProfileChangelogStore` 模式）与 `GET /api/health-center/state-events`（REST）+ `GET /api/health-center/state-events/stream`（WS）。
 > - **B.2 配置/preset 细粒度事件**：`saveConfigLocked` 比对 6 类渠道 slice 发 `upstream_changed`；`loadConfig` 末尾发 `config_reloaded`；`RebuildLogicalChannelsAndPublish` 发 `logical_channel_rebuilt`；`presetstore.Swap` 发 `preset_bundle_swapped`。`RegisterOnConfigChange` 回调兼容层完整保留（5 个 reconcile 未迁移，因其已是锁外异步投递，与事件订阅等价，迁移无功能收益仅增风险）。
 > - **B.3 前端事件总线**：引入 `mitt`；`composables/useEventStream.ts` 维护单例 WS 连接 `/state-events/stream`，按 Type 分发、引用计数管理生命周期、指数退避重连。`ChannelsView`/`HealthCenterView` 熔断/Key/渠道状态事件驱动即时刷新（400ms 去抖），`useGlobalTick` 轮询降级为兜底（未移除）。
+> - **后续增补事件（2026-08-10）**：`manifest_drift`（提交 `22d4a11c`，火山管控面清单与内置兜底 diff，`auto_discovery.go` 发布，Scope=config，Payload `added`/`removed`）。此外 capability probe 观测性漂移走 `[Capability-Drift]` 日志（提交 `18f71d05`，尚未上事件总线）。
 >
 > **守住的红线**：总线为可选依赖（未注入则 publish no-op，系统行为不变）；非阻塞发布不阻塞热路径；事件仅通知、非真相源——调度仍以 `GetConfig()`/`GetKeyCircuitState()` 为权威，前端保留轮询兜底。
 >
-> **未覆盖（留待后续）**：限速/学习事件（`rate_limit_*`）、请求/路由事件（`attempt_*`）、订阅/New-API 事件（`subscription_*`）、多实例总线（NATS/Redis Streams）、事件 schema 版本化。
+> **未覆盖（留待后续）**：限速/学习事件（`rate_limit_*`）、请求/路由事件（`attempt_*`）、订阅/New-API 事件（`subscription_*`）、多实例总线（NATS/Redis Streams）、事件 schema 版本化；`manifest_drift` 与 `capability_drift` 目前仅观测（无下游自动消费/回填）。
 
 **当前实现（改造前基线）**
 
@@ -430,9 +431,11 @@ New-API              -             写          读           -             -
 
 **应覆盖的事件类型**
 
+> 已实现（eventbus 常量，2026-08）：`circuit_breaker_state_changed`、`key_blacklisted`、`key_restored`、`key_model_disabled`、`key_model_restored`、`config_reloaded`、`upstream_changed`、`channel_status_changed`、`logical_channel_rebuilt`、`preset_bundle_swapped`、`manifest_drift`。以下为完整目标清单（未标注即待实现）。
+
 - 画像变更：`profile_updated`、`health_changed`、`discovery_completed`、`auto_mapping_applied`
-- 健康/熔断：`circuit_breaker_state_changed`、`key_blacklisted`、`key_restored`、`healthcheck_probe_failed`、`probe_recovered`
-- 配置变更：`config_reloaded`、`upstream_changed`、`logical_channel_rebuilt`、`preset_bundle_swapped`
+- 健康/熔断：`circuit_breaker_state_changed`✅、`key_blacklisted`✅、`key_restored`✅、`healthcheck_probe_failed`、`probe_recovered`
+- 配置变更：`config_reloaded`✅、`upstream_changed`✅、`logical_channel_rebuilt`✅、`preset_bundle_swapped`✅、`manifest_drift`✅
 - 限速/学习：`rate_limit_discovered`、`rate_limit_applied`、`rate_limit_cooldown_triggered`
 - 请求/路由：`routing_decision_made`、`attempt_started`、`attempt_completed`、`attempt_failed`
 - 订阅/New-API：`subscription_synced`、`subscription_balance_changed`、`managed_account_keys_changed`

@@ -229,6 +229,13 @@ type Event struct {
 
 ## 4. Phase C：中低优先级项跟进
 
+> **状态：✅ 全部完成（2026-08-10）**。下列子项均已实现并提交：
+> - 4.1 New-API 周期性自动余额刷新 → `009894db`
+> - 4.2 LogicalChannel 标签持久化 → `a438d12b`（改用 config↔autopilot 单向 deriver hook，非 LogicalChannelResolver）
+> - 4.3 稀疏 L2 预算动态调整 → `27dc64d2`；capability probe schema 版本化 → `18f71d05`；火山 manifest drift 事件 → `22d4a11c`
+> - 4.4 Web UI P3/P6/P7/P9 → `e5074f99`/`50873dcc`/`a7c347e2`；P5/P8 早前已核销
+> 详见 `docs/specs/README.md` 待排期区与各专项文档。以下为原始计划描述。
+
 ### 4.1 New-API 周期性自动余额刷新
 
 - **现状**：`subscription_refresh_worker.go` 只在启动时同步 + 手动刷新。

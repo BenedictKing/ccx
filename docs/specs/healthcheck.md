@@ -262,7 +262,7 @@ healthcheck 不直接依赖 provider 适配层，而是通过 `internal/upstream
 - **代码常量副本与 JSON 副本未声明主从关系**：`builtin_models_manifest.go` 注释称“清单来源：火山方舟 Agent/Coding Plan 套餐概览(2026-07)”，但无版本戳、无生成时间、无与 `shared/builtin-models-manifest/builtin-models-manifest.json` 的一致性校验。
 - **没有自动从火山侧拉取并回填清单的机制**：清单更新依赖人工维护 `shared/builtin-models-manifest/builtin-models-manifest.json`，再运行 `make generate-preset-manifest`；火山新增/下线模型时无法自动感知。
 - **DisableProbe=true 导致未绑定 AK 的渠道长期依赖静态兜底**：若静态清单滞后，未绑定 AK 的火山渠道会暴露已不存在或缺失新模型的错误可用性。
-- **缺少 drift 告警**：没有将运行时 `FetchModels` 结果与内置清单做 diff 并上报“manifest drift”的接口或指标。
+- ~~**缺少 drift 告警**~~ ✅ 已实现（2026-08-10，提交 `22d4a11c`）：`AutoDiscoveryRunner.publishManifestDriftIfNeeded`（`auto_discovery.go`）在火山管控面 `FetchModels` 成功后，将线上清单与 `LookupBuiltinManifest` 内置兜底清单做 `diffModelLists`，有增删时发布 `manifest_drift` 事件（Phase B eventbus，Scope=config，Payload 带 `added`/`removed`）并打 `[AutoDiscovery-ManifestDrift]` 日志。纯观测信号：非阻塞、bus 为 nil 时空操作、不改调度。**当前无下游消费者**（仅日志 + 事件流可查），自动回填内置清单仍是后续项。
 
 **建议方案**
 
@@ -273,6 +273,8 @@ healthcheck 不直接依赖 provider 适配层，而是通过 `internal/upstream
 5. **未绑定 AK 渠道的兜底置信度**：在 channel discovery 结果中标注 `ModelDiscoverySourceBuiltinFallback`，让前端或调度器在火山侧模型变化频繁时降低其优先级。
 
 ### 9.2 L2 请求特征与 capability test 的 drift 检测
+
+> **实现状态（2026-08-10，提交 `18f71d05`）**：probe schema 版本化与观测性 drift 检测已落地（建议方案第 2、3 条核心路径）。新增 `capabilityProbeSchemaVersion` 常量（`capability_probe_models.go`），`CapabilityTestResponse`/`CapabilityTestJob` 携带该版本；capability cache key 与 execution lookup key 纳入版本号，probe 参数升级后旧缓存自然失效。`executeModelTest` 完成后将探测结果与 `config.ResolveUpstreamCapability` 声明能力比对，命中"registry 声明支持但探测失败"等偏差时打 `[Capability-Drift]` 日志（纯观测，不改调度/探测结论）。**未覆盖**：`shared/capability-probe-schema.json` 统一定义（前后端仍双副本硬编码模型列表）、drift 事件写入 eventbus/指标、CI nightly 全协议回归。以下为改造前基线。
 
 **当前实现**
 
@@ -305,6 +307,8 @@ healthcheck 不直接依赖 provider 适配层，而是通过 `internal/upstream
 5. **capability cache 失效策略**：cache key 加入 schema version 与模型 registry dataVersion，保证 preset 更新后自动重新探测。
 
 ### 9.3 稀疏 L2 预算在大盘紧张时的动态调整策略
+
+> **实现状态（2026-08-10，提交 `27dc64d2`）**：动态调整已落地（建议方案第 1、2 条核心路径）。`model_select.go` 新增 `effectiveSparseBudget(policy, modelCount, recentlyFailedCount, loadRatio)`，在 `selectL2ProbeModels` 顶部（`SparseL2MaxModels<=0` 门控后）按模型数/近期失败数/负载比动态放宽数量与成本上限：数量上界 = policy 值 + min(max(0, modelCount/3-1), 5)，成本上界 = 2×policy；`loadRatio>1` 时按 `1/loadRatio` 收缩，默认 0 为 no-op。只在静态 clamp 内放宽、recentlyFailed 模型仍不受成本限制，保证恢复探测。原始配置字段保留作上限，未新增配置面。**未覆盖**：AFP 余额联动、成本单位拆分（USD/AFP 仍共用 `CostAFP`）、分时段策略。以下为改造前基线。
 
 **当前实现**
 
