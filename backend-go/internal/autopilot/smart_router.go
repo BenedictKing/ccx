@@ -19,13 +19,15 @@ import (
 // 匿名嵌入保持既有 channelUid/score 等 JSON 字段不变。
 type RoutingPlanCandidate struct {
 	ScoredCandidate
-	Selected      bool     `json:"selected"`
-	FilterReasons []string `json:"filterReasons,omitempty"`
-	MappedModel   string   `json:"mappedModel,omitempty"`
-	MappingSource string   `json:"mappingSource,omitempty"`
-	MappingReason string   `json:"mappingReason,omitempty"`
-	ChannelName   string   `json:"channelName,omitempty"`
-	KeyMask       string   `json:"keyMask,omitempty"`
+	Selected           bool     `json:"selected"`
+	FilterReasons      []string `json:"filterReasons,omitempty"`
+	MappedModel        string   `json:"mappedModel,omitempty"`
+	MappingSource      string   `json:"mappingSource,omitempty"`
+	MappingReason      string   `json:"mappingReason,omitempty"`
+	ChannelName        string   `json:"channelName,omitempty"`
+	KeyMask            string   `json:"keyMask,omitempty"`
+	LogicalChannelUID  string   `json:"logicalChannelUid,omitempty"`
+	LogicalChannelName string   `json:"logicalChannelName,omitempty"`
 }
 
 // RoutingPlan 一次请求的路由计划（§4.6.1）。
@@ -76,6 +78,14 @@ func NewSmartRouter(
 		configManager: configManager,
 		now:           time.Now,
 	}
+}
+
+// isLogicalChannelIdentityEnabled 返回是否应在候选/trace/dry-run 中透传 LogicalChannel 身份。
+func (r *SmartRouter) isLogicalChannelIdentityEnabled() bool {
+	if r == nil || r.configManager == nil {
+		return true
+	}
+	return r.configManager.GetAutopilotRouting().IsLogicalChannelIdentityEnabled()
 }
 
 // SetSubscriptionStore 注入订阅账务快照，用于统一 effective USD 成本解析。
@@ -258,14 +268,16 @@ func (r *SmartRouter) BuildPlan(profile *RequestProfile) *RoutingPlan {
 	for _, se := range scoredEntries {
 		reasons := routingHardConstraintReasons(profile, &se.entry)
 		candidate := RoutingPlanCandidate{
-			ScoredCandidate: se.scored,
-			Selected:        len(reasons) == 0,
-			FilterReasons:   reasons,
-			MappedModel:     se.entry.MappedModel,
-			MappingSource:   se.entry.MappingSource,
-			MappingReason:   se.entry.MappingReason,
-			ChannelName:     se.entry.ChannelName,
-			KeyMask:         se.entry.KeyMask,
+			ScoredCandidate:    se.scored,
+			Selected:           len(reasons) == 0,
+			FilterReasons:      reasons,
+			MappedModel:        se.entry.MappedModel,
+			MappingSource:      se.entry.MappingSource,
+			MappingReason:      se.entry.MappingReason,
+			ChannelName:        se.entry.ChannelName,
+			KeyMask:            se.entry.KeyMask,
+			LogicalChannelUID:  se.entry.LogicalChannelUID,
+			LogicalChannelName: se.entry.LogicalChannelName,
 		}
 		if candidate.Selected {
 			selectedCandidates = append(selectedCandidates, candidate)
@@ -327,15 +339,17 @@ func (r *SmartRouter) recordDryRunTrace(plan *RoutingPlan, candidatesBefore, can
 	traceCandidates := make([]RoutingCandidate, 0, len(plan.Candidates))
 	for _, candidate := range plan.Candidates {
 		traceCandidates = append(traceCandidates, RoutingCandidate{
-			ChannelUID:    candidate.ChannelUID,
-			ChannelName:   candidate.ChannelName,
-			KeyMask:       candidate.KeyMask,
-			MappedModel:   candidate.MappedModel,
-			MappingSource: candidate.MappingSource,
-			MappingReason: candidate.MappingReason,
-			TotalScore:    candidate.Score,
-			Selected:      candidate.Selected,
-			FilterReasons: candidate.FilterReasons,
+			ChannelUID:         candidate.ChannelUID,
+			ChannelName:        candidate.ChannelName,
+			KeyMask:            candidate.KeyMask,
+			MappedModel:        candidate.MappedModel,
+			MappingSource:      candidate.MappingSource,
+			MappingReason:      candidate.MappingReason,
+			TotalScore:         candidate.Score,
+			Selected:           candidate.Selected,
+			FilterReasons:      candidate.FilterReasons,
+			LogicalChannelUID:  candidate.LogicalChannelUID,
+			LogicalChannelName: candidate.LogicalChannelName,
 		})
 	}
 
@@ -812,20 +826,22 @@ func (r *SmartRouter) executeFilter(
 		e := se.entry
 		sc := se.scored
 		candidate := RoutingCandidate{
-			ChannelUID:        e.ChannelUID,
-			ChannelName:       e.ChannelName,
-			ExecutionKind:     e.ChannelKind,
-			ProtocolFidelity:  e.ProtocolFidelity,
-			ConversionPenalty: e.ConversionPenalty,
-			MetricsKey:        SanitizeMetricsKey(e.MetricsKey),
-			KeyMask:           e.KeyMask,
-			OriginTier:        string(e.OriginTier),
-			HealthState:       string(e.HealthState),
-			MappedModel:       e.MappedModel,
-			MappingSource:     e.MappingSource,
-			MappingReason:     e.MappingReason,
-			TotalScore:        sc.Score,
-			DomainEvidence:    sc.DomainEvidence,
+			ChannelUID:         e.ChannelUID,
+			ChannelName:        e.ChannelName,
+			ExecutionKind:      e.ChannelKind,
+			ProtocolFidelity:   e.ProtocolFidelity,
+			ConversionPenalty:  e.ConversionPenalty,
+			MetricsKey:         SanitizeMetricsKey(e.MetricsKey),
+			KeyMask:            e.KeyMask,
+			OriginTier:         string(e.OriginTier),
+			HealthState:        string(e.HealthState),
+			MappedModel:        e.MappedModel,
+			MappingSource:      e.MappingSource,
+			MappingReason:      e.MappingReason,
+			LogicalChannelUID:  e.LogicalChannelUID,
+			LogicalChannelName: e.LogicalChannelName,
+			TotalScore:         sc.Score,
+			DomainEvidence:     sc.DomainEvidence,
 			Scores: []CandidateScore{
 				{Dimension: "quality", Score: sc.QualityScore, Weight: weights.WQuality},
 				{Dimension: "stability", Score: sc.StabilityScore, Weight: weights.WStability},
@@ -1066,6 +1082,11 @@ type channelScoreEntry struct {
 	// CompshareDeduction 优云智算套餐单次减扣倍数（0 = 非 compshare 渠道，>0 = 减扣次数）。
 	// 来自 ProviderTemplate.ModelCostMultipliers；越低越省，全局可比。
 	CompshareDeduction float64
+
+	// LogicalChannelUID / LogicalChannelName 是所属逻辑渠道的稳定身份与显示名。
+	// 当前 Phase A.1 仅透传，不参与评分；旧配置或独立物理渠道为空。
+	LogicalChannelUID  string
+	LogicalChannelName string
 }
 
 type scoredChannelEntry struct {
@@ -1182,6 +1203,10 @@ func (r *SmartRouter) buildChannelEntry(
 		HealthState:   HealthStateUnknown,
 		OriginTier:    OriginTierUnknown,
 		EstimatedCost: -1,
+	}
+	if r.isLogicalChannelIdentityEnabled() {
+		entry.LogicalChannelUID = strings.TrimSpace(upstream.LogicalChannelUID)
+		entry.LogicalChannelName = strings.TrimSpace(upstream.LogicalName)
 	}
 	actualModel := model
 	modelProvider := ""

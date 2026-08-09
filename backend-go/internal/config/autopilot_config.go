@@ -132,6 +132,20 @@ type AutopilotRoutingConfig struct {
 	// AFP 成本路由默认开启，在 assist/auto 模式下始终生效。
 	// 仅对火山 Agent Plan 渠道生效；scope 非可比时自动回退 USD。
 	AFPCostRoutingEnabled bool `json:"afpCostRoutingEnabled,omitempty"`
+
+	// LogicalChannelIdentityEnabled 控制 SmartRouter 是否在候选/trace/dry-run 中
+	// 透传 LogicalChannelUID / LogicalChannelName。Phase A.1 仅用于回滚开关，
+	// 不影响评分。默认 true；设为 false 时旧消费者可继续忽略 logical channel 字段。
+	LogicalChannelIdentityEnabled *bool `json:"logicalChannelIdentityEnabled,omitempty"`
+}
+
+// IsLogicalChannelIdentityEnabled 返回 LogicalChannel 身份透传是否启用。
+// 未配置时默认启用。
+func (c AutopilotRoutingConfig) IsLogicalChannelIdentityEnabled() bool {
+	if c.LogicalChannelIdentityEnabled == nil {
+		return true
+	}
+	return *c.LogicalChannelIdentityEnabled
 }
 
 // IsAFPCostRoutingEnabled 返回 AFP 成本适配器是否参与可比树。
@@ -627,6 +641,9 @@ func DefaultAutopilotRoutingConfig() AutopilotRoutingConfig {
 			MaxShadowRequestsPerHour: 60,    // 默认每小时 60 次上限
 			ShadowCandidateCount:     1,     // 默认只对比排名第二的候选
 		},
+
+		// LogicalChannelIdentityEnabled 默认 nil，IsLogicalChannelIdentityEnabled() 返回 true。
+		// 不显式设值，避免在默认配置中多出一个布尔字段。
 	}
 }
 

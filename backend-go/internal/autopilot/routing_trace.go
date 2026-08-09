@@ -67,6 +67,10 @@ type RoutingCandidate struct {
 	// 被过滤的原因列表（非空表示该候选被过滤掉）
 	FilterReasons []string `json:"filterReasons,omitempty"`
 
+	// LogicalChannelUID / LogicalChannelName 是所属逻辑渠道身份（Phase A.1 透传）。
+	LogicalChannelUID  string `json:"logicalChannelUid,omitempty"`
+	LogicalChannelName string `json:"logicalChannelName,omitempty"`
+
 	// AFP 成本信息（仅火山 Agent Plan 渠道有值）
 	AFPEstimated    int64  `json:"afpEstimated,omitempty"`    // 估算 AFP
 	AFPPromotion    string `json:"afpPromotion,omitempty"`    // 活动 ID

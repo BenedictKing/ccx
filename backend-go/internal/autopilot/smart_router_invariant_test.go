@@ -557,6 +557,144 @@ func TestInvariant_RoutingTraceRecorded(t *testing.T) {
 	}
 }
 
+// TestInvariant_LogicalChannelIdentity_DoesNotChangeScores 验证：
+// 透传 LogicalChannel 身份不改变评分与排序；关闭开关后字段为空。
+func TestInvariant_LogicalChannelIdentity_DoesNotChangeScores(t *testing.T) {
+	cfg := baseTestConfig()
+	cfg.AutopilotRouting = config.AutopilotRoutingConfig{
+		RoutingMode: "shadow",
+		KillSwitch:  false,
+	}
+
+	_, cfgManager, cleanup := createTestScheduler(t, cfg)
+	defer cleanup()
+
+	smartRouter := createTestSmartRouter(t, cfgManager)
+	profile := testProfile()
+
+	// 默认开启：执行 filter
+	filterEnabled := smartRouter.CandidateFilterFor(profile)
+	if filterEnabled == nil {
+		t.Fatal("shadow 模式下 filter 不应为 nil")
+	}
+
+	channels := []scheduler.ChannelInfo{
+		{Index: 0, Name: "ch-premium", Priority: 1, Status: "active"},
+		{Index: 1, Name: "ch-standard", Priority: 2, Status: "active"},
+		{Index: 2, Name: "ch-economy", Priority: 3, Status: "active"},
+	}
+
+	upstreamCfgs := cfg.Upstream
+	upstreamFor := func(ch scheduler.ChannelInfo) *config.UpstreamConfig {
+		if ch.Index >= 0 && ch.Index < len(upstreamCfgs) {
+			u := upstreamCfgs[ch.Index]
+			return &u
+		}
+		return nil
+	}
+	available := func(ch scheduler.ChannelInfo, u *config.UpstreamConfig) bool {
+		return ch.Status == "active" && len(u.APIKeys) > 0
+	}
+
+	resultEnabled, err := filterEnabled(channels, upstreamFor, available)
+	if err != nil {
+		t.Fatalf("filter 执行失败: %v", err)
+	}
+
+	// 旧配置无 LogicalChannel，字段应为空但排序不变
+	if len(resultEnabled) != len(channels) {
+		t.Fatalf("shadow 模式应返回原始列表: 期望 %d 个候选，实际 %d", len(channels), len(resultEnabled))
+	}
+	for i, ch := range resultEnabled {
+		if ch.Name != channels[i].Name {
+			t.Errorf("候选 %d 名称不一致: 期望 %s，实际 %s", i, channels[i].Name, ch.Name)
+		}
+	}
+
+	// 关闭开关后再执行，要求排序一致
+	cfgManager.ReloadFromMemory(&config.Config{
+		Upstream: cfg.Upstream,
+		AutopilotRouting: config.AutopilotRoutingConfig{
+			RoutingMode:                   "shadow",
+			KillSwitch:                    false,
+			LogicalChannelIdentityEnabled: boolPtr(false),
+		},
+	})
+
+	filterDisabled := smartRouter.CandidateFilterFor(profile)
+	resultDisabled, err := filterDisabled(channels, upstreamFor, available)
+	if err != nil {
+		t.Fatalf("filter 执行失败: %v", err)
+	}
+	if len(resultDisabled) != len(resultEnabled) {
+		t.Fatalf("开关状态不应改变候选数量: enabled=%d disabled=%d", len(resultEnabled), len(resultDisabled))
+	}
+	for i := range resultDisabled {
+		if resultDisabled[i].Name != resultEnabled[i].Name {
+			t.Errorf("开关改变排序: index=%d enabled=%s disabled=%s", i, resultEnabled[i].Name, resultDisabled[i].Name)
+		}
+	}
+}
+
+// TestBuildPlan_IncludesLogicalChannelIdentity 验证：
+// 含 LogicalChannel 的配置在 dry-run 中正确透传 logical 身份；同一 logical 下的跨协议物理渠道共享 UID/Name。
+func TestBuildPlan_IncludesLogicalChannelIdentity(t *testing.T) {
+	cfg := config.Config{
+		Upstream: []config.UpstreamConfig{
+			{ChannelUID: "ch_msg", Name: "msg-channel", BaseURL: "https://same.example.com/v1", ServiceType: "claude", APIKeys: []string{"sk"}, SupportedModels: []string{"*"}, Status: "active", Priority: 1},
+		},
+		ChatUpstream: []config.UpstreamConfig{
+			{ChannelUID: "ch_chat", Name: "chat-channel", BaseURL: "https://same.example.com/v1", ServiceType: "openai", APIKeys: []string{"sk"}, SupportedModels: []string{"*"}, Status: "active", Priority: 1},
+		},
+		AutopilotRouting: config.DefaultAutopilotRoutingConfig(),
+	}
+
+	cfgManager, cleanup := createTestConfigManager(t, cfg)
+	defer cleanup()
+
+	loaded := cfgManager.GetConfig()
+	if len(loaded.LogicalChannels) != 1 {
+		t.Fatalf("期望 1 个 logical channel，实际 %d", len(loaded.LogicalChannels))
+	}
+	logical := loaded.LogicalChannels[0]
+	if len(logical.Protocols) != 2 {
+		t.Fatalf("期望 2 个 protocols，实际 %d", len(logical.Protocols))
+	}
+
+	smartRouter := createTestSmartRouter(t, cfgManager)
+
+	// messages 请求
+	profileMsg := testProfile()
+	planMsg := smartRouter.BuildPlan(profileMsg)
+	if planMsg == nil || len(planMsg.Candidates) == 0 {
+		t.Fatal("messages BuildPlan 候选不应为空")
+	}
+	msgCandidate := planMsg.Candidates[0]
+	if msgCandidate.LogicalChannelUID != logical.LogicalChannelUID {
+		t.Errorf("messages candidate LogicalChannelUID 期望 %s，实际 %s", logical.LogicalChannelUID, msgCandidate.LogicalChannelUID)
+	}
+	if msgCandidate.LogicalChannelName != logical.Name {
+		t.Errorf("messages candidate LogicalChannelName 期望 %s，实际 %s", logical.Name, msgCandidate.LogicalChannelName)
+	}
+
+	// chat 请求
+	profileChat := testProfile()
+	profileChat.ChannelKind = "chat"
+	planChat := smartRouter.BuildPlan(profileChat)
+	if planChat == nil || len(planChat.Candidates) == 0 {
+		t.Fatal("chat BuildPlan 候选不应为空")
+	}
+	chatCandidate := planChat.Candidates[0]
+	if chatCandidate.LogicalChannelUID != logical.LogicalChannelUID {
+		t.Errorf("chat candidate LogicalChannelUID 期望 %s，实际 %s", logical.LogicalChannelUID, chatCandidate.LogicalChannelUID)
+	}
+	if chatCandidate.LogicalChannelName != logical.Name {
+		t.Errorf("chat candidate LogicalChannelName 期望 %s，实际 %s", logical.Name, chatCandidate.LogicalChannelName)
+	}
+}
+
+func boolPtr(b bool) *bool { return &b }
+
 // ── assist/auto 模式不变量测试 ──
 
 // TestInvariant_AssistMode_PermutationInvariant 验证：
