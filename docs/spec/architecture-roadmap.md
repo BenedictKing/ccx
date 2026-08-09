@@ -53,6 +53,9 @@
 
 ## 2. Phase A：SmartRouter 感知 LogicalChannel
 
+> **状态：✅ 已完成（2026-08-09）**。A.1 身份透传（`22028397`）、A.2 兄弟渠道 fallback 评分（`db380702`）、A.3 dry-run 候选聚合（`7ed94e4e`）。
+> 实现与最初设计有一处偏差：A.2 未采用"标签持久化到 LogicalChannel + LogicalChannelResolver 接口"，改用**兄弟渠道画像 fallback**——因 `config` 包不能依赖 `autopilot`（反向包循环），运行时画像源 `ProfileStore` 在 autopilot 内。全部逻辑收敛在 autopilot 内，无跨包依赖与写回循环。标签持久化下沉到 Phase C §4.3。
+
 ### 2.1 目标
 
 让 `internal/autopilot` 的候选收集与评分过程识别物理渠道所属 `LogicalChannel`，并在评分、过滤、trace、dry-run 中暴露逻辑渠道身份，统一前后端对“渠道卡片”的语义。

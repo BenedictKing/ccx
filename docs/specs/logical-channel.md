@@ -548,24 +548,20 @@
 
 ### 16.3 与 Autopilot SmartRouter 的候选渠道收集联动
 
-**状态**：待实现（中优先级，架构级改动）。
+**状态**：✅ **已实现**（2026-08-09，Phase A.1/A.2/A.3，提交 `22028397` / `db380702` / `7ed94e4e`）。
 
-**当前实现**
+**已完成实现**
 
-- `SmartRouter.collectChannelEntries` 直接从六个物理数组遍历，按 `Status` 和 `APIKeys` 过滤。
-- `buildChannelEntry` 基于单个 `UpstreamConfig` 构建 `channelScoreEntry`，评分维度全部来自模型画像、endpoint 画像、价格注册表，**未读取 `LogicalChannel` 的任何字段**。
-- 整个 `internal/autopilot` 包没有任何代码引用 `LogicalChannel` 或 `LogicalChannelUID`。
+- **A.1 身份透传**（`22028397`）：`channelScoreEntry` / `RoutingCandidate` / `RoutingPlanCandidate` 新增 `LogicalChannelUID` / `LogicalChannelName`；`buildChannelEntry` 从 `upstream.LogicalChannelUID` / `LogicalName` 回填；`executeFilter`（真实路由 trace）与 `BuildPlan`（dry-run）均透传。受 `AutopilotRoutingConfig.LogicalChannelIdentityEnabled` 开关控制（默认 true）。
+- **A.2 兄弟渠道 fallback 评分**（`db380702`）：物理渠道无画像时，`aggregateSiblingChannelProfile` 聚合同一 LogicalChannel 下兄弟物理渠道（跨协议）的画像作为评分输入。新增 `ConfigManager.LogicalSiblingChannelUIDs` 与 `LogicalChannel.SiblingChannelUIDs`。受 `LogicalChannelScoringEnabled` 开关控制（默认 false，opt-in）；物理画像存在时**永不被覆盖**。
+- **A.3 dry-run 候选聚合**（`7ed94e4e`）：`RoutingPlan.LogicalGroups` 按 LogicalChannel 聚合 dry-run 候选（`groupCandidatesByLogical`，分数降序稳定分组）；前端补 `SmartRoutingDiagnoseLogicalGroup` 类型。**仅 dry-run 生效，`executeFilter` 真实路由不变**。
 
-**缺口分析**
+**设计原则**
 
-- SmartRouter 完全不感知 LogicalChannel，候选渠道收集发生在物理层。
-- 同一 LogicalChannel 下的多个协议/多个 BaseURL/多个 Key 会被当作独立候选分别评分。
-- 用户从产品语义上认为是一张“渠道卡片”，但 Autopilot 的决策 trace 和候选排序仍以物理渠道为单位，前后端语义不一致。
+- 真实路由（`executeFilter` / Scheduler）始终以物理渠道为单位，保证 failover 与调度行为不变；LogicalChannel 只在评分输入 fallback 与 dry-run 展示层生效。
+- 全部改动可通过开关回退到纯物理层行为；旧配置（无 LogicalChannel）逐字节兼容。
 
-**建议方案**
+**未采用：标签持久化到 LogicalChannel**
 
-1. 在 `collectChannelEntries` 和 `executeFilter` 中为每个 `UpstreamConfig` 查找其所属 `LogicalChannel`。
-2. 在 `channelScoreEntry` / `RoutingCandidate` 中新增 `LogicalChannelUID`、`LogicalChannelName` 字段。
-3. 将 LogicalChannel 的健康/质量/成本/能力标签作为 `ScoringCandidate` 的补充输入或 fallback。
-4. dry-run / BuildPlan 场景可在 LogicalChannel 维度聚合展示候选。
-5. 注意兼容性：`LogicalChannel` 为空表示旧配置，SmartRouter 应回退到现有物理层行为。
+因 `config` 包不能依赖 `autopilot`（反向包循环），健康/质量/成本标签的运行时数据源 `ProfileStore` 位于 autopilot 内。A.2 改用兄弟渠道 fallback（全部收敛在 autopilot 内），避免跨包依赖与配置写回循环。标签持久化仍列为低优先级（见 §16.1 与 roadmap Phase C）。
+

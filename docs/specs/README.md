@@ -89,8 +89,10 @@ Channels   (Claude/OpenAI/Gemini/...)
 
 ### 待排期
 
+#### 已完成（2026-08-09）
+- ✅ **SmartRouter 感知 LogicalChannel**（Phase A，提交 `22028397` / `db380702` / `7ed94e4e`）：A.1 身份透传 + A.2 兄弟渠道 fallback 评分 + A.3 dry-run 候选聚合。真实路由仍以物理渠道为单位，改动可开关回退。详见 `logical-channel.md` §16.3。
+
 #### 中优先级（影响一致性/可观测性）
-- **SmartRouter 不感知 LogicalChannel**：候选收集在物理层，逻辑渠道标签无法参与评分（架构级改动，多日）
 - **跨模块事件总线缺失**：熔断/Key 状态/配置变更无法实时订阅，需轮询（架构级改动，多日）
 
 #### 低优先级（功能扩展）
