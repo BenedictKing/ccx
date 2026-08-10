@@ -154,6 +154,37 @@ function stringArraysEqual(a, b) {
   return JSON.stringify(a || []) === JSON.stringify(b || [])
 }
 
+/**
+ * 归一化证据的浮点字段精度，消除上游重算产生的尾数 diff。
+ *
+ * registry 受版本管理，全精度浮点（如 rawValue=0.7053571428571429）会让上游
+ * 每次重算都产生亚千分位抖动，制造无意义 diff。统一舍入：
+ * - 比率型字段（rawValue 为 0-1 的 pass_at_1、cohortPercentile、uncertainty）→ 3 位小数（0.1% 精度）
+ * - 指数分型 rawValue（artificial_analysis 的 0-100 index）→ 1 位小数（0.1 分）
+ * - costUsd 已在 dradar 注入处单独舍入到 2 位小数（0.01 美元），此处不重复处理
+ *
+ * 必须在 evidenceListsEqual 比较与写回 registry 之前调用，否则新数据（全精度）
+ * 与已舍入的旧 registry 会因尾差被误判为"有变化"。
+ */
+function normalizeEvidencePrecision(evidence) {
+  if (!Array.isArray(evidence)) return evidence
+  const round = (v, digits) => {
+    if (typeof v !== 'number' || !Number.isFinite(v)) return v
+    const f = 10 ** digits
+    return Math.round(v * f) / f
+  }
+  for (const e of evidence) {
+    if (!e || typeof e !== 'object') continue
+    // rawValue：比率（<=1）按 3 位；指数分（>1，如 0-100）按 1 位
+    if (e.rawValue !== undefined) {
+      e.rawValue = e.rawValue <= 1 ? round(e.rawValue, 3) : round(e.rawValue, 1)
+    }
+    if (e.cohortPercentile !== undefined) e.cohortPercentile = round(e.cohortPercentile, 3)
+    if (e.uncertainty !== undefined) e.uncertainty = round(e.uncertainty, 3)
+  }
+  return evidence
+}
+
 function ensureEvidenceProfileMetadata(profile) {
   const evidence = profile.benchmarkEvidence || []
   const sourceURLs = evidence.map(item => item.sourceUrl).filter(Boolean)
@@ -196,10 +227,10 @@ export function mergeDeepsweData(registry, deepsweData, report, models = targetM
     }
 
     // 移除旧的 deepswe 证据，与新证据合并
-    const nextEvidence = [
+    const nextEvidence = normalizeEvidencePrecision([
       ...profile.benchmarkEvidence.filter(e => e.benchmark !== 'deepswe'),
       ...data.benchmarkEvidence,
-    ]
+    ])
 
     // 数据未变化（忽略 capturedAt）时跳过，不刷 verifiedAt，避免无效 diff
     if (idx >= 0 && evidenceListsEqual(nextEvidence, profile.benchmarkEvidence)) {
@@ -317,13 +348,13 @@ export function mergeDradarData(registry, dradarData, report, models = targetMod
     }
 
     // 移除当前及旧格式的 codexradar 证据，与新证据合并
-    const nextEvidence = [
+    const nextEvidence = normalizeEvidencePrecision([
       ...profile.benchmarkEvidence.filter(
         e => e.benchmark !== 'codexradar' &&
           !(e.benchmark === 'deepswe' && e.benchmarkVersion === 'codexradar')
       ),
       ...data.benchmarkEvidence,
-    ]
+    ])
 
     // 数据未变化（忽略 capturedAt）时跳过，不刷 verifiedAt，避免无效 diff
     if (idx >= 0 && evidenceListsEqual(nextEvidence, profile.benchmarkEvidence)) {
@@ -459,10 +490,10 @@ export function mergeArtificialAnalysisLlm(registry, aaLlmData, report, models =
     }
 
     // 移除旧的 AA 证据，与新证据合并
-    const nextEvidence = [
+    const nextEvidence = normalizeEvidencePrecision([
       ...profile.benchmarkEvidence.filter(e => e.benchmark !== 'artificial_analysis'),
       ...(data.benchmarkEvidence || []),
-    ]
+    ])
 
     // 合并 sources（保留其他来源，追加 AA model 页）
     let nextSources = profile.sources || []
