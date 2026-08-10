@@ -517,266 +517,261 @@ func handleNewApiProvision(deps *NewApiRouteDeps) gin.HandlerFunc {
 		}
 
 		// 4)~7) 建 profile + 写入渠道 + 关联订阅 + 触发 Discovery：
-	// 全程持有订阅 uid 的 per-UID 锁（与 sync service 共享），串行化对同一订阅的 store/渠道写。
-	// 抢到锁后先校验 uid 唯一性，挡住锁外 fast-path 与 Create 之间的并发同 uid 窗口。
-	var channelUID string
-	var resolvedChannelName string
-	var channelIndex int
-	var discoveryStarted bool
-	var fresh *SubscriptionProfile
-	committed := false
-	withNewAPIProvisionUIDLock(deps, req.SubscriptionUID, func() {
-		if deps.Store.Get(req.SubscriptionUID) != nil {
-			c.JSON(http.StatusConflict, gin.H{"error": fmt.Sprintf("subscriptionUid=%s 已存在", req.SubscriptionUID)})
-			return
-		}
-		now := time.Now()
-		defaults := newApiDefaults()
-		primaryKey := provisioned[0]
-		provisionGroupRatio := primaryKey.GroupMultiplier
-		maxGroupMultiplier := resolvedGroups[0].MaxMultiplier
-		profileKeys := make([]NewApiProvisionedKey, 0, len(provisioned))
-		apiKeys := make([]string, 0, len(provisioned))
-		apiKeyConfigs := make([]config.APIKeyConfig, 0, len(provisioned))
-		allReused := true
-		for _, key := range provisioned {
-			profileKeys = append(profileKeys, key.NewApiProvisionedKey)
-			apiKeys = append(apiKeys, key.Key)
-			ratio := key.GroupMultiplier
-			limit := maxGroupMultiplier
-			apiKeyConfigs = append(apiKeyConfigs, config.APIKeyConfig{
-				Key:                   key.Key,
-				Name:                  "new-api:" + key.Group,
-				QuotaGroup:            key.Group,
-				GroupMultiplier:       &ratio,
-				MaxGroupMultiplier:    &limit,
-				SourceSubscriptionUID: req.SubscriptionUID,
-			})
-			if !key.Reused {
-				allReused = false
-			}
-		}
-		profile := &SubscriptionProfile{
-			SubscriptionUID:    req.SubscriptionUID,
-			DisplayName:        req.DisplayName,
-			Provider:           "new_api",
-			OriginType:         defaults.OriginType,
-			OriginTier:         defaults.OriginTier,
-			BillingMode:        defaults.BillingMode,
-			Currency:           "quota",
-			Balance:            float64(self.Quota),
-			GroupMultipliers:   groups,
-			RechargeMultiplier: 1.0,
-			LinkedChannelUIDs:  []string{},
-			Source:             "newapi_provision",
-			Confidence:         0.95,
-			Notes:              req.Notes,
-			// §8.5.1
-			BaseURL:             req.BaseURL,
-			AccessToken:         req.AccessToken, // 持久化但不出 API 响应
-			UserID:              derivedUserID,
-			AuthTokenMode:       req.AuthTokenMode,
-			ProvisionKeyName:    primaryKey.Name,
-			ProvisionGroup:      primaryKey.Group,
-			ProvisionGroupRatio: &provisionGroupRatio,
-			MaxGroupMultiplier:  &maxGroupMultiplier,
-			ProvisionModels:     req.ProvisionModels,
-			ProvisionedTokenID:  primaryKey.TokenID,
-			ProvisionedKeys:     profileKeys,
-			AvailableModels:     models,
-			AutoRefreshEnabled:  false, // new-api 走 Verify，不直接接 SubscriptionBalanceFetcher
-			CreatedAt:           now,
-			UpdatedAt:           now,
-		}
-		if err := deps.Store.Create(profile); err != nil {
-			cleanupNewApiProvisionedKeys(ctx, adapter, req, derivedUserID, provisioned)
-			if strings.Contains(err.Error(), "已存在") {
-				c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
-			} else {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			}
-			return
-		}
-
-		// 5) 写入渠道：同站点已有渠道则并入，否则新建
-		var channelUID string
-		resolvedChannelName := channelName
-		channelIndex := -1
-		if mergeFound {
-			channels := getChannelSlice(deps.CfgManager.GetConfig(), req.ChannelKind)
-			if mergeIndex >= len(channels) {
-				_ = deps.Store.Delete(req.SubscriptionUID)
-				cleanupNewApiProvisionedKeys(ctx, adapter, req, derivedUserID, provisioned)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "合并目标渠道已失效"})
+		// 全程持有订阅 uid 的 per-UID 锁（与 sync service 共享），串行化对同一订阅的 store/渠道写。
+		// 抢到锁后先校验 uid 唯一性，挡住锁外 fast-path 与 Create 之间的并发同 uid 窗口。
+		withNewAPIProvisionUIDLock(deps, req.SubscriptionUID, func() {
+			if deps.Store.Get(req.SubscriptionUID) != nil {
+				c.JSON(http.StatusConflict, gin.H{"error": fmt.Sprintf("subscriptionUid=%s 已存在", req.SubscriptionUID)})
 				return
 			}
-			target := channels[mergeIndex]
-			channelUID = target.ChannelUID
-			if channelUID == "" {
-				channelUID = config.GenerateChannelUID()
-			}
-			resolvedChannelName = target.Name
-
-			// 已有纯 key 及其配置全部保留，新 key 按字符串去重后追加并补分组元数据
-			existingKeys := make(map[string]struct{}, len(target.APIKeys)+len(target.APIKeyConfigs)+len(provisioned))
-			mergedKeys := make([]string, 0, len(target.APIKeys)+len(provisioned))
-			for _, k := range target.APIKeys {
-				existingKeys[k] = struct{}{}
-				mergedKeys = append(mergedKeys, k)
-			}
-			mergedConfigs := append([]config.APIKeyConfig(nil), target.APIKeyConfigs...)
-			for _, kc := range target.APIKeyConfigs {
-				existingKeys[kc.Key] = struct{}{}
-			}
+			now := time.Now()
+			defaults := newApiDefaults()
+			primaryKey := provisioned[0]
+			provisionGroupRatio := primaryKey.GroupMultiplier
+			maxGroupMultiplier := resolvedGroups[0].MaxMultiplier
+			profileKeys := make([]NewApiProvisionedKey, 0, len(provisioned))
+			apiKeys := make([]string, 0, len(provisioned))
+			apiKeyConfigs := make([]config.APIKeyConfig, 0, len(provisioned))
+			allReused := true
 			for _, key := range provisioned {
-				if _, exists := existingKeys[key.Key]; exists {
-					continue
-				}
-				existingKeys[key.Key] = struct{}{}
-				mergedKeys = append(mergedKeys, key.Key)
+				profileKeys = append(profileKeys, key.NewApiProvisionedKey)
+				apiKeys = append(apiKeys, key.Key)
 				ratio := key.GroupMultiplier
 				limit := maxGroupMultiplier
-				mergedConfigs = append(mergedConfigs, config.APIKeyConfig{
-					Key:                key.Key,
-					Name:               "new-api:" + key.Group,
-					QuotaGroup:         key.Group,
-					GroupMultiplier:    &ratio,
-					MaxGroupMultiplier: &limit,
+				apiKeyConfigs = append(apiKeyConfigs, config.APIKeyConfig{
+					Key:                   key.Key,
+					Name:                  "new-api:" + key.Group,
+					QuotaGroup:            key.Group,
+					GroupMultiplier:       &ratio,
+					MaxGroupMultiplier:    &limit,
+					SourceSubscriptionUID: req.SubscriptionUID,
 				})
-			}
-			autoManaged := true
-			newApiKind := "new_api"
-			updates := config.UpstreamUpdate{
-				APIKeys:         mergedKeys,
-				APIKeyConfigs:   mergedConfigs,
-				AutoManaged:     &autoManaged,
-				AutoManagedKind: &newApiKind,
-			}
-			if target.AutoManagedAt == nil {
-				updates.AutoManagedAt = &now
-			}
-			if _, err = updateChannelForKind(deps.CfgManager, req.ChannelKind, mergeIndex, updates); err != nil {
-				_ = deps.Store.Delete(req.SubscriptionUID)
-				cleanupNewApiProvisionedKeys(ctx, adapter, req, derivedUserID, provisioned)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("合并进已有渠道失败: %v", err)})
-				return
-			}
-			channelIndex = mergeIndex
-		} else {
-			// 新建上游渠道
-			serviceType := kindToDefaultServiceType(req.ChannelKind)
-			channelUID = config.GenerateChannelUID()
-			upstream := config.UpstreamConfig{
-				Name:            channelName,
-				ChannelUID:      channelUID,
-				AccountUID:      StableAccountUID(req.SubscriptionUID),
-				BaseURL:         strings.TrimRight(req.BaseURL, "/"),
-				BaseURLs:        []string{strings.TrimRight(req.BaseURL, "/")},
-				APIKeys:         apiKeys,
-				APIKeyConfigs:   apiKeyConfigs,
-				ServiceType:     serviceType,
-				Status:          "active",
-				AutoManaged:     true,
-				AutoManagedAt:   &now,
-				AutoManagedKind: "new_api",
-				OriginType:      "relay",
-				OriginTier:      "second",
-			}
-
-			switch req.ChannelKind {
-			case "messages":
-				err = deps.CfgManager.AddUpstream(upstream)
-			case "chat":
-				err = deps.CfgManager.AddChatUpstream(upstream)
-			case "responses":
-				err = deps.CfgManager.AddResponsesUpstream(upstream)
-			case "gemini":
-				err = deps.CfgManager.AddGeminiUpstream(upstream)
-			case "images":
-				err = deps.CfgManager.AddImagesUpstream(upstream)
-			case "vectors":
-				err = deps.CfgManager.AddVectorsUpstream(upstream)
-			}
-			if err != nil {
-				// 渠道建失败：回滚 profile（最佳努力删除）
-				_ = deps.Store.Delete(req.SubscriptionUID)
-				cleanupNewApiProvisionedKeys(ctx, adapter, req, derivedUserID, provisioned)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("建渠道失败: %v", err)})
-				return
-			}
-
-			// 找到新建渠道的 index
-			for i, ch := range getChannelSlice(deps.CfgManager.GetConfig(), req.ChannelKind) {
-				if ch.Name == channelName {
-					channelIndex = i
-					break
+				if !key.Reused {
+					allReused = false
 				}
 			}
-			if channelIndex < 0 {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "渠道已建但无法定位"})
+			profile := &SubscriptionProfile{
+				SubscriptionUID:    req.SubscriptionUID,
+				DisplayName:        req.DisplayName,
+				Provider:           "new_api",
+				OriginType:         defaults.OriginType,
+				OriginTier:         defaults.OriginTier,
+				BillingMode:        defaults.BillingMode,
+				Currency:           "quota",
+				Balance:            float64(self.Quota),
+				GroupMultipliers:   groups,
+				RechargeMultiplier: 1.0,
+				LinkedChannelUIDs:  []string{},
+				Source:             "newapi_provision",
+				Confidence:         0.95,
+				Notes:              req.Notes,
+				// §8.5.1
+				BaseURL:             req.BaseURL,
+				AccessToken:         req.AccessToken, // 持久化但不出 API 响应
+				UserID:              derivedUserID,
+				AuthTokenMode:       req.AuthTokenMode,
+				ProvisionKeyName:    primaryKey.Name,
+				ProvisionGroup:      primaryKey.Group,
+				ProvisionGroupRatio: &provisionGroupRatio,
+				MaxGroupMultiplier:  &maxGroupMultiplier,
+				ProvisionModels:     req.ProvisionModels,
+				ProvisionedTokenID:  primaryKey.TokenID,
+				ProvisionedKeys:     profileKeys,
+				AvailableModels:     models,
+				AutoRefreshEnabled:  false, // new-api 走 Verify，不直接接 SubscriptionBalanceFetcher
+				CreatedAt:           now,
+				UpdatedAt:           now,
+			}
+			if err := deps.Store.Create(profile); err != nil {
+				cleanupNewApiProvisionedKeys(ctx, adapter, req, derivedUserID, provisioned)
+				if strings.Contains(err.Error(), "已存在") {
+					c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+				} else {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				}
 				return
 			}
-		}
 
-		// 6) 关联订阅
-		if err := deps.Store.LinkChannel(req.SubscriptionUID, channelUID); err != nil {
-			log.Printf("[NewApi-Provision] 关联渠道失败 subscription=%s channel=%s: %v", req.SubscriptionUID, channelUID, err)
-		}
+			// 5) 写入渠道：同站点已有渠道则并入，否则新建
+			var channelUID string
+			resolvedChannelName := channelName
+			channelIndex := -1
+			if mergeFound {
+				channels := getChannelSlice(deps.CfgManager.GetConfig(), req.ChannelKind)
+				if mergeIndex >= len(channels) {
+					_ = deps.Store.Delete(req.SubscriptionUID)
+					cleanupNewApiProvisionedKeys(ctx, adapter, req, derivedUserID, provisioned)
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "合并目标渠道已失效"})
+					return
+				}
+				target := channels[mergeIndex]
+				channelUID = target.ChannelUID
+				if channelUID == "" {
+					channelUID = config.GenerateChannelUID()
+				}
+				resolvedChannelName = target.Name
 
-		// 7) 触发 Discovery（best-effort）
-		discoveryStarted := false
-		if deps.Runner != nil {
-			channels := getChannelSlice(deps.CfgManager.GetConfig(), req.ChannelKind)
-			if channelIndex >= 0 && channelIndex < len(channels) {
-				ch := channels[channelIndex]
-				discoveryStarted = deps.Runner.TriggerDiscovery(channelUID, &ch, deps.CfgManager)
+				// 已有纯 key 及其配置全部保留，新 key 按字符串去重后追加并补分组元数据
+				existingKeys := make(map[string]struct{}, len(target.APIKeys)+len(target.APIKeyConfigs)+len(provisioned))
+				mergedKeys := make([]string, 0, len(target.APIKeys)+len(provisioned))
+				for _, k := range target.APIKeys {
+					existingKeys[k] = struct{}{}
+					mergedKeys = append(mergedKeys, k)
+				}
+				mergedConfigs := append([]config.APIKeyConfig(nil), target.APIKeyConfigs...)
+				for _, kc := range target.APIKeyConfigs {
+					existingKeys[kc.Key] = struct{}{}
+				}
+				for _, key := range provisioned {
+					if _, exists := existingKeys[key.Key]; exists {
+						continue
+					}
+					existingKeys[key.Key] = struct{}{}
+					mergedKeys = append(mergedKeys, key.Key)
+					ratio := key.GroupMultiplier
+					limit := maxGroupMultiplier
+					mergedConfigs = append(mergedConfigs, config.APIKeyConfig{
+						Key:                key.Key,
+						Name:               "new-api:" + key.Group,
+						QuotaGroup:         key.Group,
+						GroupMultiplier:    &ratio,
+						MaxGroupMultiplier: &limit,
+					})
+				}
+				autoManaged := true
+				newApiKind := "new_api"
+				updates := config.UpstreamUpdate{
+					APIKeys:         mergedKeys,
+					APIKeyConfigs:   mergedConfigs,
+					AutoManaged:     &autoManaged,
+					AutoManagedKind: &newApiKind,
+				}
+				if target.AutoManagedAt == nil {
+					updates.AutoManagedAt = &now
+				}
+				if _, err = updateChannelForKind(deps.CfgManager, req.ChannelKind, mergeIndex, updates); err != nil {
+					_ = deps.Store.Delete(req.SubscriptionUID)
+					cleanupNewApiProvisionedKeys(ctx, adapter, req, derivedUserID, provisioned)
+					c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("合并进已有渠道失败: %v", err)})
+					return
+				}
+				channelIndex = mergeIndex
+			} else {
+				// 新建上游渠道
+				serviceType := kindToDefaultServiceType(req.ChannelKind)
+				channelUID = config.GenerateChannelUID()
+				upstream := config.UpstreamConfig{
+					Name:            channelName,
+					ChannelUID:      channelUID,
+					AccountUID:      StableAccountUID(req.SubscriptionUID),
+					BaseURL:         strings.TrimRight(req.BaseURL, "/"),
+					BaseURLs:        []string{strings.TrimRight(req.BaseURL, "/")},
+					APIKeys:         apiKeys,
+					APIKeyConfigs:   apiKeyConfigs,
+					ServiceType:     serviceType,
+					Status:          "active",
+					AutoManaged:     true,
+					AutoManagedAt:   &now,
+					AutoManagedKind: "new_api",
+					OriginType:      "relay",
+					OriginTier:      "second",
+				}
+
+				switch req.ChannelKind {
+				case "messages":
+					err = deps.CfgManager.AddUpstream(upstream)
+				case "chat":
+					err = deps.CfgManager.AddChatUpstream(upstream)
+				case "responses":
+					err = deps.CfgManager.AddResponsesUpstream(upstream)
+				case "gemini":
+					err = deps.CfgManager.AddGeminiUpstream(upstream)
+				case "images":
+					err = deps.CfgManager.AddImagesUpstream(upstream)
+				case "vectors":
+					err = deps.CfgManager.AddVectorsUpstream(upstream)
+				}
+				if err != nil {
+					// 渠道建失败：回滚 profile（最佳努力删除）
+					_ = deps.Store.Delete(req.SubscriptionUID)
+					cleanupNewApiProvisionedKeys(ctx, adapter, req, derivedUserID, provisioned)
+					c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("建渠道失败: %v", err)})
+					return
+				}
+
+				// 找到新建渠道的 index
+				for i, ch := range getChannelSlice(deps.CfgManager.GetConfig(), req.ChannelKind) {
+					if ch.Name == channelName {
+						channelIndex = i
+						break
+					}
+				}
+				if channelIndex < 0 {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "渠道已建但无法定位"})
+					return
+				}
 			}
-		}
 
-		responseKeys := make([]NewApiProvisionedKeyResponse, 0, len(provisioned))
-		for _, key := range provisioned {
-			responseKeys = append(responseKeys, NewApiProvisionedKeyResponse{
-				Name:            key.Name,
-				Group:           key.Group,
-				GroupMultiplier: key.GroupMultiplier,
-				TokenID:         key.TokenID,
-				Reused:          key.Reused,
-			})
-		}
-		log.Printf("[NewApi-Provision] 完成 subscription=%s channelUID=%s merged=%v groups=%d maxRatio=%.4g allReused=%v discovery=%v",
-			req.SubscriptionUID, channelUID, mergeFound, len(provisioned), maxGroupMultiplier, allReused, discoveryStarted)
+			// 6) 关联订阅
+			if err := deps.Store.LinkChannel(req.SubscriptionUID, channelUID); err != nil {
+				log.Printf("[NewApi-Provision] 关联渠道失败 subscription=%s channel=%s: %v", req.SubscriptionUID, channelUID, err)
+			}
 
-		fresh := deps.Store.Get(req.SubscriptionUID)
-		if fresh == nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "订阅已建但无法回读"})
-			return
-		}
-		if deps.SyncService != nil {
-			plaintextByToken := make(map[int64]string, len(provisioned))
+			// 7) 触发 Discovery（best-effort）
+			discoveryStarted := false
+			if deps.Runner != nil {
+				channels := getChannelSlice(deps.CfgManager.GetConfig(), req.ChannelKind)
+				if channelIndex >= 0 && channelIndex < len(channels) {
+					ch := channels[channelIndex]
+					discoveryStarted = deps.Runner.TriggerDiscovery(channelUID, &ch, deps.CfgManager)
+				}
+			}
+
+			responseKeys := make([]NewApiProvisionedKeyResponse, 0, len(provisioned))
 			for _, key := range provisioned {
-				plaintextByToken[int64(key.TokenID)] = key.Key
+				responseKeys = append(responseKeys, NewApiProvisionedKeyResponse{
+					Name:            key.Name,
+					Group:           key.Group,
+					GroupMultiplier: key.GroupMultiplier,
+					TokenID:         key.TokenID,
+					Reused:          key.Reused,
+				})
 			}
-			if err := deps.SyncService.ReconcileProvisioned(fresh, plaintextByToken); err != nil {
-				c.JSON(http.StatusConflict, gin.H{"error": "同步 key ownership 失败: " + err.Error()})
+			log.Printf("[NewApi-Provision] 完成 subscription=%s channelUID=%s merged=%v groups=%d maxRatio=%.4g allReused=%v discovery=%v",
+				req.SubscriptionUID, channelUID, mergeFound, len(provisioned), maxGroupMultiplier, allReused, discoveryStarted)
+
+			fresh := deps.Store.Get(req.SubscriptionUID)
+			if fresh == nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "订阅已建但无法回读"})
 				return
 			}
-			fresh = deps.Store.Get(req.SubscriptionUID)
-		}
-		legacyProvisionedKey := ""
-		if !req.ProvisionAllEligibleGroups {
-			legacyProvisionedKey = primaryKey.Key
-		}
-		c.JSON(http.StatusCreated, NewApiProvisionResponse{
-			Subscription:       toSubscriptionItem(fresh),
-			ChannelUID:         channelUID,
-			ChannelIndex:       channelIndex,
-			ChannelName:        resolvedChannelName,
-			MergedChannel:      mergeFound,
-			ProvisionedKey:     legacyProvisionedKey,
-			ProvisionedTokenID: primaryKey.TokenID,
-			Reused:             allReused,
-			ProvisionedKeys:    responseKeys,
-			DiscoveryStarted:   discoveryStarted,
+			if deps.SyncService != nil {
+				plaintextByToken := make(map[int64]string, len(provisioned))
+				for _, key := range provisioned {
+					plaintextByToken[int64(key.TokenID)] = key.Key
+				}
+				if err := deps.SyncService.ReconcileProvisioned(fresh, plaintextByToken); err != nil {
+					c.JSON(http.StatusConflict, gin.H{"error": "同步 key ownership 失败: " + err.Error()})
+					return
+				}
+				fresh = deps.Store.Get(req.SubscriptionUID)
+			}
+			legacyProvisionedKey := ""
+			if !req.ProvisionAllEligibleGroups {
+				legacyProvisionedKey = primaryKey.Key
+			}
+			c.JSON(http.StatusCreated, NewApiProvisionResponse{
+				Subscription:       toSubscriptionItem(fresh),
+				ChannelUID:         channelUID,
+				ChannelIndex:       channelIndex,
+				ChannelName:        resolvedChannelName,
+				MergedChannel:      mergeFound,
+				ProvisionedKey:     legacyProvisionedKey,
+				ProvisionedTokenID: primaryKey.TokenID,
+				Reused:             allReused,
+				ProvisionedKeys:    responseKeys,
+				DiscoveryStarted:   discoveryStarted,
+			})
 		})
 	}
 }
