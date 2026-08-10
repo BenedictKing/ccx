@@ -613,12 +613,13 @@ health(40) > fastDecay(25) > successRate(20) > latency(10) > cost(5)
 
 #### 5.5.1 性价比 effort 选择
 
-提交：`0a1a5c30`（接入 codexradar 实测 cost）
+提交：`0a1a5c30`（接入 codexradar 实测 cost）；一致性门控见后续修复
 
-- `frontierCostFactorFor` 优先使用候选 effort 的实测 USD cost：`factor = measuredCostUSD / normalizedPublicCostUSD`
-- 当 `benchmark.Profile.BenchmarkEvidence` 中存在该 effort 的有效 `CostUSD` 时，用实测值替换 `frontierEffortCostFactor` 的推测系数
-- 同一 effort 多条证据取最小 cost（保守估计），避免异常高成本扭曲 frontier
-- 实测 cost 来源在 `CostEvidence.Source` 中标记为 `registry_pricing_x_measured_effort_cost`（或乘 provider 倍率后的变体）
+- **全有或全无门控（前提）**：`frontierUseMeasuredCost` 仅当**所有**可比候选（公开价已知）都带有效实测 cost 时才返回 true，整批启用实测校准；任一候选缺失实测 cost 则整体回退推测系数 `frontierEffortCostFactor`。这保证同一 Pareto 成本轴绝不混用两种尺度——实测 cost 是"每任务实际 USD"（量级 ~$1），公开价是"1M 输入+1M 输出假想价 × effort 系数"（量级 ~$10+），若只对部分候选用实测，轴上量级差 ~5×，会破坏支配/聚类并反转 anti-effort-inflation 防护。语义与 `frontierUseProviderMultiplier` 的轴内一致性门控一致。
+- **启用后**：`frontierCostFactorFor` 用候选 effort 的实测 USD cost 计算 `factor = measuredCostUSD / normalizedPublicCostUSD`，使成本轴值退化为实测 cost 本身
+- 当 `benchmark.Profile.BenchmarkEvidence` 中存在该 effort 的有效 `CostUSD` 时参与校准；同一 effort 多条证据取最小 cost（保守估计），避免异常高成本扭曲 frontier
+- **超注册表档位回退**：`measuredCostForEffort` 优先按候选 effort 精确命中实测 cost；未命中（如 codexradar 测了 ultra 但注册表该模型仅声明到 max）时回退该模型已测档位的最小成本作下界，避免校准静默失效
+- 实测 cost 来源在 `CostEvidence.Source` 中标记为 `registry_pricing_x_measured_effort_cost`（或乘 provider 倍率后的变体），仅在门控启用时设置
 - 效果：frontier 成本轴从"按档位系数猜测"演进为"以 codexradar 实测 cost 校准的性价比轴"，使 xhigh 等高效果档在成本相近时获得真实优势
 
 ### 5.6 其他近期功能
@@ -817,7 +818,7 @@ health(40) > fastDecay(25) > successRate(20) > latency(10) > cost(5)
    - 文件：`manager.go:1286`
 
 3. **AFP 成本系数已替换为实测校准**
-   - `frontierEffortCostFactor` 仍为 fallback 推测系数；当存在 codexradar 实测 cost 时，`frontierCostFactorFor` 用 `measuredCostUSD / normalizedPublicCostUSD` 替换推测值
+   - `frontierEffortCostFactor` 仍为 fallback 推测系数；`frontierUseMeasuredCost` 门控通过（所有可比候选均带实测 cost）时，`frontierCostFactorFor` 用 `measuredCostUSD / normalizedPublicCostUSD` 替换推测值，否则整体回退（轴内尺度一致，不混用）
    - 文件：`model_frontier_scoring.go:47`、`model_frontier_scoring.go:62`
 
 ### 8.2 边界与保守策略
