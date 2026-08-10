@@ -122,6 +122,19 @@ func RebuildChannels(cfg *Config) {
 	cfg.ChannelSchemaVersion = ChannelSchemaVersion
 }
 
+// GetChannelViews 按当前配置实时合成 ChannelView 列表与排序后的共享能力。
+// 与持久化镜像不同，本方法总是基于运行时权威（六数组）现算，不依赖 save 是否已执行。
+func (cm *ConfigManager) GetChannelViews() ([]ChannelView, []EndpointCapability) {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+	views, caps := BuildChannelViews(&cm.config)
+	sortedCaps := make([]EndpointCapability, 0, len(caps))
+	for _, uid := range sortedCapabilityUIDs(caps) {
+		sortedCaps = append(sortedCaps, caps[uid])
+	}
+	return views, sortedCaps
+}
+
 // mergeMemberIntoBuilder 把一个物理渠道并入 ChannelView 中间态。
 func mergeMemberIntoBuilder(b *channelViewBuilder, m channelViewMember, now time.Time, caps map[string]EndpointCapability) {
 	u := m.channel

@@ -82,7 +82,7 @@ EndpointCapability（跨账号共享，按 CapabilityUID 索引）
 - **Phase 1（已落地）**：只读 `ChannelView` + `EndpointCapability` 注册表；能力/凭证边界成型；不改 schema，可回退。
 - **Phase 2（进行中）**：
   - **2a（已落地）**：`Config` 新增 `Channels []ChannelView` + `ChannelCapabilities []EndpointCapability` + `ChannelSchemaVersion`，作为**非权威镜像**，落盘前由 `RebuildChannels` 从六数组合成（与 `RebuildLogicalChannels` 同一 save 路径）。六数组仍是运行时权威；镜像不含明文 key。前端可直接消费该新粒度。
-  - **2b（待做）**：前端 CRUD 从 `upstream` 逐步切到基于 `channels` 的读；写路径仍落到六数组。
+  - **2b（进行中）**：只读 API `GET /api/channels`、`GET /api/channels/:uid` 暴露实时合成的渠道视图与共享能力（`internal/handlers/channels`，基于 `ConfigManager.GetChannelViews`）；前端读逐步切换。写路径仍走既有 upstream/logical-channels 接口。
 - **Phase 3**：移除六个 `Upstream` 数组，仅保留 `Channels` + `ProtocolFacade`；scheduler/handlers/autopilot 全量改用 `Channel`。
 
 ## 7. 当前实现状态
@@ -92,6 +92,7 @@ EndpointCapability（跨账号共享，按 CapabilityUID 索引）
 - ✅ `channel_view_test.go`：多协议收敛、跨账号同分组共享、分组隔离、禁用 key 四项测试。
 - ✅ `endpoint_capability.go`：`EndpointCapabilityRegistry`（按 CapabilityUID 查询）+ `CapabilityProbeLedger`（每周期跨账号探测去重）+ `KeyEndpointCapabilityUIDs`。
 - ✅ Phase 2a：`Config.Channels` / `ChannelCapabilities` / `ChannelSchemaVersion` 非权威镜像，落盘前 `RebuildChannels` 合成（`config_loader.go` saveConfigLocked）；round-trip 与"不含明文 key/不改六数组"测试通过。
+- ✅ Phase 2b（后端读）：`GET /api/channels`、`GET /api/channels/:uid` 实时返回渠道视图 + 共享能力（`ConfigManager.GetChannelViews`）。
 - ⏳ 把 `CapabilityProbeLedger` 接入 autopilot 协议探测与 healthcheck：同站点同分组只探一次（需 app 级验证）。
 - ⏳ 拉黑/熔断按 key 跨协议。
-- ⏳ Phase 2b（前端读切换）/ Phase 3（移除六数组）。
+- ⏳ Phase 2b 前端读切换 / Phase 3（移除六数组）。

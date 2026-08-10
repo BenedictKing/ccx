@@ -85,3 +85,22 @@ func TestRebuildChannels_JSONRoundTripNoPlaintextKey(t *testing.T) {
 		t.Fatal("往返后应保留 KeyMask")
 	}
 }
+
+// TestGetChannelViews_RealtimeSynthesis 验证 ConfigManager.GetChannelViews 实时合成。
+func TestGetChannelViews_RealtimeSynthesis(t *testing.T) {
+	cm := &ConfigManager{config: Config{
+		ChatUpstream: []UpstreamConfig{
+			makeKeyChannel("chat", "ch_a", "acct_a", "https://relay.example.com", "openai", "sk-aaa", "vip", []string{"gpt-x"}),
+		},
+	}}
+	views, caps := cm.GetChannelViews()
+	if len(views) != 1 {
+		t.Fatalf("应实时合成 1 个渠道视图，实际 %d", len(views))
+	}
+	if len(caps) != 1 {
+		t.Fatalf("应有 1 份能力，实际 %d", len(caps))
+	}
+	if len(views[0].Keys) != 1 || len(views[0].Keys[0].Endpoints) != 1 {
+		t.Fatal("视图应含 1 key 1 endpoint")
+	}
+}
