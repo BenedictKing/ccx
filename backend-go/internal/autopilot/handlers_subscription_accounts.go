@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -80,9 +81,16 @@ func handleAddSubscriptionAccount(deps *NewApiRouteDeps) gin.HandlerFunc {
 			return
 		}
 
-		// 与主 provision 串行化，避免并发建同名 key。
-		newAPIProvisionMu.Lock()
-		defer newAPIProvisionMu.Unlock()
+		// 与主 provision 共用订阅 uid 锁：保证同一订阅的添加账号与 provision 串行。
+		// 慢速上游 HTTP 与 store 写在锁内完成（同 uid 串行化），避免与 provision 交叉。
+		var lock *sync.Mutex
+		if deps != nil && deps.SyncService != nil {
+			lock = deps.SyncService.LockForUID(uid)
+		} else {
+			lock = lockForKeyFrom(&newAPIProvisionUIDLocksMu, newAPIProvisionUIDLocks, uid)
+		}
+		lock.Lock()
+		defer lock.Unlock()
 
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
 		defer cancel()

@@ -2,6 +2,8 @@ package autopilot
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log"
@@ -42,9 +44,68 @@ type NewApiRouteDeps struct {
 	SyncService *NewApiSubscriptionSyncService
 }
 
-// NewAPI provision 是管理面低频操作。串行化可避免同一时刻重复创建同名远端 Key，
-// 配置管理器仍负责与其他来源的渠道名冲突检测。
-var newAPIProvisionMu sync.Mutex
+// NewAPI provision 是管理面低频操作。按 baseURL+user 的站点级锁串行化远端 key 的
+// 查重/创建（FindTokenByName + Create），避免同一上游账号并发创建同名 key；
+// 订阅画像与渠道写入则用与 sync service 共享的 per-订阅-UID 锁互斥（见 SyncNow）。
+// 锁实例常驻 map（基数 = 上游账号数 / 订阅数，有界），不会无限增长。
+var (
+	newAPIProvisionSiteLocksMu sync.Mutex
+	newAPIProvisionSiteLocks   = map[string]*sync.Mutex{}
+
+	newAPIProvisionUIDLocksMu sync.Mutex
+	newAPIProvisionUIDLocks   = map[string]*sync.Mutex{}
+)
+
+func lockForKeyFrom(locksMu *sync.Mutex, locks map[string]*sync.Mutex, key string) *sync.Mutex {
+	locksMu.Lock()
+	defer locksMu.Unlock()
+	if lock := locks[key]; lock != nil {
+		return lock
+	}
+	lock := &sync.Mutex{}
+	locks[key] = lock
+	return lock
+}
+
+// newAPIProvisionSiteKey 远端 key 查重/创建的互斥粒度：同一 new-api 站点 + 同一用户。
+// userID 在请求里可能缺省（由 verify 派生），此时退回 accessToken 区分账号。
+func newAPIProvisionSiteKey(baseURL, userID, accessToken string) string {
+	identity := strings.TrimSpace(userID)
+	if identity == "" {
+		identity = "tok:" + strings.TrimSpace(accessToken)
+	}
+	return normalizeNewApiChannelURL(baseURL) + "|" + identity
+}
+
+// withNewAPIProvisionUIDLock 在订阅 uid 的 per-UID 锁内执行 fn。
+// 优先复用 sync service 的锁 map，保证 provision 与 SyncNow 交叉互斥；
+// SyncService 缺失（部分测试场景）时退回到本包级 per-UID 锁。
+// uid 为空时不持锁直接执行。
+func withNewAPIProvisionUIDLock(deps *NewApiRouteDeps, uid string, fn func()) {
+	uid = strings.TrimSpace(uid)
+	if uid == "" {
+		fn()
+		return
+	}
+	if deps != nil && deps.SyncService != nil {
+		deps.SyncService.WithSubscriptionLock(uid, fn)
+		return
+	}
+	lock := lockForKeyFrom(&newAPIProvisionUIDLocksMu, newAPIProvisionUIDLocks, uid)
+	lock.Lock()
+	defer lock.Unlock()
+	fn()
+}
+
+// StableAccountUID 从 new-api 订阅 UID 派生稳定的托管账号身份。
+// 同订阅下的多协议渠道共享该 AccountUID，使 RebuildLogicalChannels 按账号归组时
+// 能把它们收敛到同一逻辑卡；重复 provision/同步后 AccountUID 保持不变。
+// 注意：config 层（config_accounts.go deriveNewApiAccountUID，AutoManaged 渠道回填）
+// 复制了同一段派生逻辑，两处算法必须保持一致。
+func StableAccountUID(subscriptionUID string) string {
+	sum := sha256.Sum256([]byte(fmt.Sprintf("newapi|account|%s", subscriptionUID)))
+	return "newapi_" + hex.EncodeToString(sum[:8])
+}
 
 // RegisterNewApiSubscriptionRoutes 注册 new-api 集成的两个核心端点：
 //
@@ -195,6 +256,10 @@ func provisionNewApiGroupKeys(
 
 	provisioned := make([]newApiProvisionedKey, 0, len(groups))
 	seenKeys := make(map[string]string, len(groups))
+	// 站点级锁只覆盖远端 key 的查重/创建窗口，不覆盖订阅画像与渠道写入。
+	siteLock := lockForKeyFrom(&newAPIProvisionSiteLocksMu, newAPIProvisionSiteLocks, newAPIProvisionSiteKey(req.BaseURL, userID, req.AccessToken))
+	siteLock.Lock()
+	defer siteLock.Unlock()
 	rollback := func(extra ...newApiProvisionedKey) {
 		keys := append([]newApiProvisionedKey(nil), provisioned...)
 		keys = append(keys, extra...)
@@ -379,10 +444,9 @@ func handleNewApiProvision(deps *NewApiRouteDeps) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("不支持的渠道类型: %s", req.ChannelKind)})
 			return
 		}
-		newAPIProvisionMu.Lock()
-		defer newAPIProvisionMu.Unlock()
 
 		// 提前校验 subscriptionUid 唯一性，避免白白在 new-api 侧建 key 后才发现 profile 冲突。
+		// Store.Create 原子兜底二次校验，并发同 uid 在临界区串行化。
 		if deps.Store.Get(req.SubscriptionUID) != nil {
 			c.JSON(http.StatusConflict, gin.H{"error": fmt.Sprintf("subscriptionUid=%s 已存在", req.SubscriptionUID)})
 			return
@@ -452,7 +516,20 @@ func handleNewApiProvision(deps *NewApiRouteDeps) gin.HandlerFunc {
 			return
 		}
 
-		// 4) 建 profile
+		// 4)~7) 建 profile + 写入渠道 + 关联订阅 + 触发 Discovery：
+	// 全程持有订阅 uid 的 per-UID 锁（与 sync service 共享），串行化对同一订阅的 store/渠道写。
+	// 抢到锁后先校验 uid 唯一性，挡住锁外 fast-path 与 Create 之间的并发同 uid 窗口。
+	var channelUID string
+	var resolvedChannelName string
+	var channelIndex int
+	var discoveryStarted bool
+	var fresh *SubscriptionProfile
+	committed := false
+	withNewAPIProvisionUIDLock(deps, req.SubscriptionUID, func() {
+		if deps.Store.Get(req.SubscriptionUID) != nil {
+			c.JSON(http.StatusConflict, gin.H{"error": fmt.Sprintf("subscriptionUid=%s 已存在", req.SubscriptionUID)})
+			return
+		}
 		now := time.Now()
 		defaults := newApiDefaults()
 		primaryKey := provisioned[0]
@@ -468,11 +545,12 @@ func handleNewApiProvision(deps *NewApiRouteDeps) gin.HandlerFunc {
 			ratio := key.GroupMultiplier
 			limit := maxGroupMultiplier
 			apiKeyConfigs = append(apiKeyConfigs, config.APIKeyConfig{
-				Key:                key.Key,
-				Name:               "new-api:" + key.Group,
-				QuotaGroup:         key.Group,
-				GroupMultiplier:    &ratio,
-				MaxGroupMultiplier: &limit,
+				Key:                   key.Key,
+				Name:                  "new-api:" + key.Group,
+				QuotaGroup:            key.Group,
+				GroupMultiplier:       &ratio,
+				MaxGroupMultiplier:    &limit,
+				SourceSubscriptionUID: req.SubscriptionUID,
 			})
 			if !key.Reused {
 				allReused = false
@@ -591,6 +669,7 @@ func handleNewApiProvision(deps *NewApiRouteDeps) gin.HandlerFunc {
 			upstream := config.UpstreamConfig{
 				Name:            channelName,
 				ChannelUID:      channelUID,
+				AccountUID:      StableAccountUID(req.SubscriptionUID),
 				BaseURL:         strings.TrimRight(req.BaseURL, "/"),
 				BaseURLs:        []string{strings.TrimRight(req.BaseURL, "/")},
 				APIKeys:         apiKeys,

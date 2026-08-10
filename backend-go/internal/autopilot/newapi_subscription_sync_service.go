@@ -214,6 +214,27 @@ func (s *NewApiSubscriptionSyncService) lockForUID(uid string) *sync.Mutex {
 	return lock
 }
 
+// WithSubscriptionLock 在 subscription uid 的 per-UID 锁内执行 fn。
+// 保证 provision 与 SyncNow 交叉互斥，避免同时修改同一订阅的渠道配置。
+func (s *NewApiSubscriptionSyncService) WithSubscriptionLock(uid string, fn func()) {
+	lock := s.lockForUID(uid)
+	lock.Lock()
+	defer lock.Unlock()
+	fn()
+}
+
+// WithSubscriptionLockHandle 返回 uid 的 per-UID 锁，供调用方按需手动 lock/unlock。
+// handleAddSubscriptionAccount 等场景需要在锁内做多次异步操作，不适合 callback 模式。
+func (s *NewApiSubscriptionSyncService) WithSubscriptionLockHandle(uid string) *sync.Mutex {
+	return s.lockForUID(uid)
+}
+
+// LockForUID 导出 lockForUID，供其他写路径（如添加订阅账号）复用同一把 per-UID 锁，
+// 保证与 provision / SyncNow 三者对同一订阅交叉互斥。返回的 Mutex 即可 Lock/Unlock。
+func (s *NewApiSubscriptionSyncService) LockForUID(uid string) *sync.Mutex {
+	return s.lockForUID(uid)
+}
+
 func (s *NewApiSubscriptionSyncService) SyncNow(ctx context.Context, uid string) (NewApiSyncResult, error) {
 	uid = strings.TrimSpace(uid)
 	result := NewApiSyncResult{SubscriptionUID: uid, Keys: []NewApiKeyStatus{}}
