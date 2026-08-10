@@ -368,6 +368,63 @@ func benchmarkEvidenceConfidence(profile config.ModelBenchmarkProfile) float64 {
 	return clampUnit(float64(profile.ComparableCategories) / float64(profile.TotalCategories))
 }
 
+// relativeBenchmarkQualityFloorRatio 是新鲜度闸门的质量地板比例。
+// 仅当一条更新证据的质量置信度不低于「全局最优质量 × 该比例」时，
+// 它的更新日期才允许淘汰更旧的证据；质量差距过大的新证据无权翻盘。
+const relativeBenchmarkQualityFloorRatio = 0.7
+
+// filterByRecencyGate 在同一比较集合（同 domain，必要时同 effort）内施加相对新鲜度闸门：
+// 更新的可靠证据会让更旧的次优证据出局，从而体现「更新更快的数据源应优先采信」。
+//
+// 规则：
+//  1. 以集合内最高质量置信度 bestQuality 为基准，质量地板 = bestQuality × relativeBenchmarkQualityFloorRatio。
+//  2. 在达到质量地板的证据中取最新 CapturedAt 作为 freshestViable。
+//  3. 凡是 CapturedAt 早于 freshestViable、且自身质量低于 bestQuality 的证据被淘汰；
+//     全局最优那条永远豁免，保证集合不会被打空。
+//
+// CapturedAt 为 ISO YYYY-MM-DD，字典序即时间序；空串视为最旧，自然沉底。
+// 单候选或全部同日期时闸门不生效，行为与旧逻辑完全一致（向后兼容）。
+func filterByRecencyGate(candidates []config.ModelBenchmarkEvidence) []config.ModelBenchmarkEvidence {
+	if len(candidates) <= 1 {
+		return candidates
+	}
+
+	bestQuality := 0.0
+	for _, candidate := range candidates {
+		if q := relativeBenchmarkEvidenceConfidence(candidate); q > bestQuality {
+			bestQuality = q
+		}
+	}
+	if bestQuality <= 0 {
+		return candidates
+	}
+
+	floor := bestQuality * relativeBenchmarkQualityFloorRatio
+	freshestViable := ""
+	for _, candidate := range candidates {
+		if relativeBenchmarkEvidenceConfidence(candidate) < floor {
+			continue
+		}
+		if candidate.CapturedAt > freshestViable {
+			freshestViable = candidate.CapturedAt
+		}
+	}
+	if freshestViable == "" {
+		return candidates
+	}
+
+	filtered := make([]config.ModelBenchmarkEvidence, 0, len(candidates))
+	for _, candidate := range candidates {
+		stale := candidate.CapturedAt < freshestViable
+		belowBest := relativeBenchmarkEvidenceConfidence(candidate) < bestQuality
+		if stale && belowBest {
+			continue
+		}
+		filtered = append(filtered, candidate)
+	}
+	return filtered
+}
+
 // resolveRelativeBenchmarkEvidence 将固定 cohort 内的 percentile 保守地折算到家族先验。
 // 该路径刻意不使用 raw Pass@1 作为能力绝对值；它仅说明同一 harness 下的相对位置。
 // targetEffort 为空时退化为纯 domain 匹配（与旧行为一致）。
@@ -389,6 +446,7 @@ func resolveRelativeBenchmarkEvidence(profile *ModelProfile, benchmark config.Mo
 	confidence := 0.0
 	effortMatched := false
 	if targetEffort != "" {
+		var candidates []config.ModelBenchmarkEvidence
 		for _, candidate := range benchmark.BenchmarkEvidence {
 			if !strings.EqualFold(candidate.Domain, string(domain)) {
 				continue
@@ -400,6 +458,9 @@ func resolveRelativeBenchmarkEvidence(profile *ModelProfile, benchmark config.Mo
 			if candidateEffort != targetEffort {
 				continue
 			}
+			candidates = append(candidates, candidate)
+		}
+		for _, candidate := range filterByRecencyGate(candidates) {
 			candidateConfidence := relativeBenchmarkEvidenceConfidence(candidate)
 			if candidateConfidence > confidence {
 				selected = candidate
@@ -413,10 +474,14 @@ func resolveRelativeBenchmarkEvidence(profile *ModelProfile, benchmark config.Mo
 	if !effortMatched {
 		domainConfidence := 0.0
 		var domainSelected config.ModelBenchmarkEvidence
+		var domainCandidates []config.ModelBenchmarkEvidence
 		for _, candidate := range benchmark.BenchmarkEvidence {
 			if !strings.EqualFold(candidate.Domain, string(domain)) {
 				continue
 			}
+			domainCandidates = append(domainCandidates, candidate)
+		}
+		for _, candidate := range filterByRecencyGate(domainCandidates) {
 			candidateConfidence := relativeBenchmarkEvidenceConfidence(candidate)
 			if candidateConfidence > domainConfidence {
 				domainSelected = candidate

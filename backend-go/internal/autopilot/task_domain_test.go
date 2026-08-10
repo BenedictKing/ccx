@@ -390,6 +390,145 @@ func TestResolveRelativeBenchmarkEvidence_UnpinnedEffortSemantics(t *testing.T) 
 	})
 }
 
+// ── 相对新鲜度闸门（filterByRecencyGate）──
+//
+// 同一比较集合内，更新且质量达标的数据源证据会让更旧的次优证据出局；
+// 质量差距过大的新证据无权翻盘（保留质量门槛）。
+
+// recencyEvidence 构造一条指定质量与新鲜度的 coding 域证据。
+// quality 由 taskCount/cohortSize 决定（uncertainty 取 0），CapturedAt 控制新旧。
+func recencyEvidence(capturedAt string, taskCount, cohortSize int) config.ModelBenchmarkEvidence {
+	return config.ModelBenchmarkEvidence{
+		Benchmark:        "fixture-bench",
+		BenchmarkVersion: "v1",
+		SourceModel:      "fixture-model",
+		Domain:           "coding",
+		Metric:           "pass_at_1",
+		CohortPercentile: 0.9,
+		TaskCount:        taskCount,
+		CohortSize:       cohortSize,
+		Effort:           "high",
+		SelectionBasis:   "best_available_effort",
+		SourceURL:        "https://example.test/fixture",
+		CapturedAt:       capturedAt,
+	}
+}
+
+func TestFilterByRecencyGate(t *testing.T) {
+	// quality(c)=clampUnit(task/100)*clampUnit(cohort/10)*clampUnit(1-0)
+	// deepswe 风格: task=111 cohort=19 → 1.0*1.0=1.0
+	// codexradar 风格: task=112 cohort=5 → 1.0*0.5=0.5
+	stale := recencyEvidence("2026-08-08", 111, 19)       // quality 1.0
+	freshWeak := recencyEvidence("2026-08-09", 112, 5)    // quality 0.5
+	freshStrong := recencyEvidence("2026-08-09", 111, 19) // quality 1.0
+
+	tests := []struct {
+		name       string
+		candidates []config.ModelBenchmarkEvidence
+		wantKept   []string // 期望保留的 CapturedAt（顺序无关）
+	}{
+		{
+			name:       "single candidate passthrough",
+			candidates: []config.ModelBenchmarkEvidence{stale},
+			wantKept:   []string{"2026-08-08"},
+		},
+		{
+			name:       "same date keeps all (no-op)",
+			candidates: []config.ModelBenchmarkEvidence{recencyEvidence("2026-08-08", 111, 19), recencyEvidence("2026-08-08", 112, 5)},
+			wantKept:   []string{"2026-08-08", "2026-08-08"},
+		},
+		{
+			name:       "fresh but low quality does not flip best",
+			candidates: []config.ModelBenchmarkEvidence{stale, freshWeak},
+			wantKept:   []string{"2026-08-08", "2026-08-09"}, // 0.5 < floor 0.7 → 闸门不触发,全保留
+		},
+		{
+			name:       "fresh strong evidence evicts stale non-best",
+			candidates: []config.ModelBenchmarkEvidence{recencyEvidence("2026-08-08", 112, 5), freshStrong},
+			wantKept:   []string{"2026-08-09"}, // 旧 0.5 < best 1.0 且非最新 → 淘汰
+		},
+		{
+			name:       "global best is exempt even when stale",
+			candidates: []config.ModelBenchmarkEvidence{stale, recencyEvidence("2026-08-10", 100, 6)},
+			wantKept:   []string{"2026-08-08", "2026-08-10"}, // best(08-08,q1.0)豁免;08-10 q0.6<floor0.7 不达地板
+		},
+		{
+			name:       "empty CapturedAt sinks as oldest",
+			candidates: []config.ModelBenchmarkEvidence{recencyEvidence("", 112, 5), freshStrong},
+			wantKept:   []string{"2026-08-09"}, // 空串最旧且非最优 → 淘汰
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := filterByRecencyGate(tt.candidates)
+			if len(got) != len(tt.wantKept) {
+				t.Fatalf("kept %d candidates, want %d (got=%v)", len(got), len(tt.wantKept), capturedAts(got))
+			}
+			want := map[string]int{}
+			for _, d := range tt.wantKept {
+				want[d]++
+			}
+			for _, e := range got {
+				want[e.CapturedAt]--
+			}
+			for d, n := range want {
+				if n != 0 {
+					t.Fatalf("CapturedAt %q count mismatch (residual %d); got=%v", d, n, capturedAts(got))
+				}
+			}
+		})
+	}
+}
+
+func capturedAts(list []config.ModelBenchmarkEvidence) []string {
+	out := make([]string, len(list))
+	for i, e := range list {
+		out[i] = e.CapturedAt
+	}
+	return out
+}
+
+// TestResolveRelativeBenchmarkEvidence_RecencyGate 验证闸门在选择层的端到端效果：
+// 同 domain 内更新且质量达标的证据被采信。
+func TestResolveRelativeBenchmarkEvidence_RecencyGate(t *testing.T) {
+	profile := &ModelProfile{ModelID: "fixture-model", ModelFamily: ModelFamilyOpenAI}
+
+	t.Run("fresher strong evidence wins over stale weak", func(t *testing.T) {
+		benchmark := config.ModelBenchmarkProfile{
+			CanonicalModel: "fixture-model",
+			BenchmarkEvidence: []config.ModelBenchmarkEvidence{
+				recencyEvidence("2026-08-08", 112, 5),  // 旧, quality 0.5
+				recencyEvidence("2026-08-09", 111, 19), // 新, quality 1.0
+			},
+		}
+		evidence, ok := resolveRelativeBenchmarkEvidence(profile, benchmark, TaskDomainCoding, EffortHigh)
+		if !ok {
+			t.Fatal("expected evidence to be resolved")
+		}
+		if evidence.BenchmarkVerifiedAt != "2026-08-09" {
+			t.Fatalf("BenchmarkVerifiedAt = %q, want 2026-08-09 (fresher strong evidence)", evidence.BenchmarkVerifiedAt)
+		}
+	})
+
+	t.Run("fresher but low-quality evidence does not flip best", func(t *testing.T) {
+		benchmark := config.ModelBenchmarkProfile{
+			CanonicalModel: "fixture-model",
+			BenchmarkEvidence: []config.ModelBenchmarkEvidence{
+				recencyEvidence("2026-08-08", 111, 19), // 旧, quality 1.0 (best)
+				recencyEvidence("2026-08-09", 112, 5),  // 新, quality 0.5 (< floor)
+			},
+		}
+		evidence, ok := resolveRelativeBenchmarkEvidence(profile, benchmark, TaskDomainCoding, EffortHigh)
+		if !ok {
+			t.Fatal("expected evidence to be resolved")
+		}
+		if evidence.BenchmarkVerifiedAt != "2026-08-08" {
+			t.Fatalf("BenchmarkVerifiedAt = %q, want 2026-08-08 (quality gate keeps best)", evidence.BenchmarkVerifiedAt)
+		}
+	})
+}
+
 func swapSyntheticDomainBenchmarkProfile(t *testing.T) string {
 	t.Helper()
 	store := presetstore.Default()
