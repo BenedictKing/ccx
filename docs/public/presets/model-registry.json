@@ -2012,10 +2012,10 @@
         }
       ],
       "sources": [
-        "https://deepswe.datacurve.ai/",
         "https://artificialanalysis.ai/models/claude-fable-5",
+        "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/claude-fable",
-        "https://benchlm.ai/methodology"
+        "https://deepswe.datacurve.ai/"
       ],
       "verifiedAt": "2026-08-10",
       "lane": "provisional",
@@ -2038,9 +2038,9 @@
       "verifiedAt": "2026-08-10",
       "lane": "provisional",
       "sources": [
-        "https://deepswe.datacurve.ai/",
+        "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/claude-haiku-4-5",
-        "https://benchlm.ai/methodology"
+        "https://deepswe.datacurve.ai/"
       ],
       "sharedResults": 8,
       "comparableCategories": 2,
@@ -2077,10 +2077,10 @@
       "verifiedAt": "2026-08-10",
       "lane": "provisional",
       "sources": [
-        "https://deepswe.datacurve.ai/",
         "https://artificialanalysis.ai/models/claude-opus-5",
+        "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/claude-opus-5",
-        "https://benchlm.ai/methodology"
+        "https://deepswe.datacurve.ai/"
       ],
       "sharedResults": 595,
       "comparableCategories": 4,
@@ -2239,10 +2239,10 @@
         }
       ],
       "sources": [
-        "https://deepswe.datacurve.ai/",
         "https://artificialanalysis.ai/models/claude-opus-4-8",
+        "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/claude-opus-4-8",
-        "https://benchlm.ai/methodology"
+        "https://deepswe.datacurve.ai/"
       ],
       "verifiedAt": "2026-08-10",
       "lane": "provisional",
@@ -2322,10 +2322,10 @@
         }
       ],
       "sources": [
-        "https://deepswe.datacurve.ai/",
         "https://artificialanalysis.ai/models/claude-sonnet-5",
+        "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/claude-sonnet-5",
-        "https://benchlm.ai/methodology"
+        "https://deepswe.datacurve.ai/"
       ],
       "verifiedAt": "2026-08-10",
       "lane": "provisional",
@@ -2412,10 +2412,10 @@
         }
       ],
       "sources": [
-        "https://deepswe.datacurve.ai/",
         "https://artificialanalysis.ai/models/claude-sonnet-4-6",
+        "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/claude-sonnet-4-6",
-        "https://benchlm.ai/methodology"
+        "https://deepswe.datacurve.ai/"
       ],
       "verifiedAt": "2026-08-10",
       "lane": "provisional",
@@ -2439,12 +2439,12 @@
       "verifiedAt": "2026-08-10",
       "lane": "provisional",
       "sources": [
-        "https://deng.codexradar.com/",
-        "https://benchlm.ai/models/deepseek-v4-flash-max",
         "https://benchlm.ai/methodology",
-        "https://benchlm.ai/models/deepseek-v4-flash-high",
+        "https://benchlm.ai/models/deepseek-v4-flash",
         "https://benchlm.ai/models/deepseek-v4-flash-base",
-        "https://benchlm.ai/models/deepseek-v4-flash"
+        "https://benchlm.ai/models/deepseek-v4-flash-high",
+        "https://benchlm.ai/models/deepseek-v4-flash-max",
+        "https://deng.codexradar.com/"
       ],
       "sharedResults": 24,
       "comparableCategories": 4,
@@ -2483,11 +2483,11 @@
       "verifiedAt": "2026-08-10",
       "lane": "provisional",
       "sources": [
-        "https://benchlm.ai/models/deepseek-v4-pro-max",
         "https://benchlm.ai/methodology",
-        "https://benchlm.ai/models/deepseek-v4-pro-high",
         "https://benchlm.ai/models/deepseek-v4-pro",
-        "https://benchlm.ai/models/deepseek-v4-pro-base"
+        "https://benchlm.ai/models/deepseek-v4-pro-base",
+        "https://benchlm.ai/models/deepseek-v4-pro-high",
+        "https://benchlm.ai/models/deepseek-v4-pro-max"
       ],
       "sharedResults": 24,
       "comparableCategories": 4,
@@ -2508,8 +2508,8 @@
       "verifiedAt": "2026-08-10",
       "lane": "provisional",
       "sources": [
-        "https://deepswe.datacurve.ai/",
-        "https://artificialanalysis.ai/models/gemini-3-6-flash"
+        "https://artificialanalysis.ai/models/gemini-3-6-flash",
+        "https://deepswe.datacurve.ai/"
       ],
       "sharedResults": 595,
       "comparableCategories": 3,
@@ -2589,10 +2589,10 @@
       "verifiedAt": "2026-08-10",
       "lane": "provisional",
       "sources": [
-        "https://deepswe.datacurve.ai/",
         "https://artificialanalysis.ai/models/gemini-3-5-flash",
+        "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/gemini-3-5-flash",
-        "https://benchlm.ai/methodology"
+        "https://deepswe.datacurve.ai/"
       ],
       "sharedResults": 595,
       "comparableCategories": 5,
@@ -2712,8 +2712,8 @@
       "verifiedAt": "2026-08-10",
       "lane": "provisional",
       "sources": [
-        "https://deepswe.datacurve.ai/",
-        "https://artificialanalysis.ai/models/gemini-3-flash"
+        "https://artificialanalysis.ai/models/gemini-3-flash",
+        "https://deepswe.datacurve.ai/"
       ],
       "sharedResults": 595,
       "comparableCategories": 3,
@@ -2858,10 +2858,10 @@
         }
       ],
       "sources": [
-        "https://deepswe.datacurve.ai/",
         "https://artificialanalysis.ai/models/glm-5-2",
+        "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/glm-5-2",
-        "https://benchlm.ai/methodology"
+        "https://deepswe.datacurve.ai/"
       ],
       "verifiedAt": "2026-08-10",
       "lane": "provisional",
@@ -2965,11 +2965,11 @@
         }
       ],
       "sources": [
-        "https://deepswe.datacurve.ai/",
-        "https://deng.codexradar.com/",
         "https://artificialanalysis.ai/models/gpt-5-6-luna",
+        "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/gpt-5-6-luna",
-        "https://benchlm.ai/methodology"
+        "https://deepswe.datacurve.ai/",
+        "https://deng.codexradar.com/"
       ],
       "verifiedAt": "2026-08-10",
       "lane": "provisional",
@@ -3053,7 +3053,7 @@
           "sourceModel": "gpt-5.6-sol",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.75,
+          "rawValue": 0.759,
           "uncertainty": 0,
           "cohortPercentile": 1,
           "taskCount": 112,
@@ -3082,11 +3082,11 @@
         }
       ],
       "sources": [
-        "https://deepswe.datacurve.ai/",
-        "https://deng.codexradar.com/",
         "https://artificialanalysis.ai/models/gpt-5-6-sol",
+        "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/gpt-5-6-sol",
-        "https://benchlm.ai/methodology"
+        "https://deepswe.datacurve.ai/",
+        "https://deng.codexradar.com/"
       ],
       "verifiedAt": "2026-08-10",
       "lane": "provisional",
@@ -3191,11 +3191,11 @@
         }
       ],
       "sources": [
-        "https://deepswe.datacurve.ai/",
-        "https://deng.codexradar.com/",
         "https://artificialanalysis.ai/models/gpt-5-6-terra",
+        "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/gpt-5-6-terra",
-        "https://benchlm.ai/methodology"
+        "https://deepswe.datacurve.ai/",
+        "https://deng.codexradar.com/"
       ],
       "verifiedAt": "2026-08-10",
       "lane": "provisional",
@@ -3272,7 +3272,7 @@
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://deng.codexradar.com/",
           "capturedAt": "2026-08-10",
-          "costUsd": 5.7
+          "costUsd": 5.69
         },
         {
           "benchmark": "deepswe",
@@ -3292,11 +3292,11 @@
         }
       ],
       "sources": [
-        "https://deepswe.datacurve.ai/",
-        "https://deng.codexradar.com/",
         "https://artificialanalysis.ai/models/gpt-5-5",
+        "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/gpt-5-5",
-        "https://benchlm.ai/methodology"
+        "https://deepswe.datacurve.ai/",
+        "https://deng.codexradar.com/"
       ],
       "verifiedAt": "2026-08-10",
       "lane": "provisional",
@@ -3384,10 +3384,10 @@
         }
       ],
       "sources": [
-        "https://deepswe.datacurve.ai/",
         "https://artificialanalysis.ai/models/gpt-5-4",
+        "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/gpt-5-4",
-        "https://benchlm.ai/methodology"
+        "https://deepswe.datacurve.ai/"
       ],
       "verifiedAt": "2026-08-10",
       "lane": "provisional",
@@ -3411,10 +3411,10 @@
       "verifiedAt": "2026-08-10",
       "lane": "provisional",
       "sources": [
-        "https://deepswe.datacurve.ai/",
         "https://artificialanalysis.ai/models/gpt-5-4-mini",
+        "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/gpt-5-4-mini",
-        "https://benchlm.ai/methodology"
+        "https://deepswe.datacurve.ai/"
       ],
       "sharedResults": 595,
       "comparableCategories": 5,
@@ -3502,10 +3502,10 @@
       "verifiedAt": "2026-08-10",
       "lane": "provisional",
       "sources": [
-        "https://deepswe.datacurve.ai/",
         "https://artificialanalysis.ai/models/grok-4-5",
+        "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/grok-4-5",
-        "https://benchlm.ai/methodology"
+        "https://deepswe.datacurve.ai/"
       ],
       "sharedResults": 595,
       "comparableCategories": 4,
@@ -3592,10 +3592,10 @@
       "verifiedAt": "2026-08-10",
       "lane": "provisional",
       "sources": [
-        "https://deepswe.datacurve.ai/",
         "https://artificialanalysis.ai/models/kimi-k3",
+        "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/kimi-3",
-        "https://benchlm.ai/methodology"
+        "https://deepswe.datacurve.ai/"
       ],
       "sharedResults": 595,
       "comparableCategories": 4,
@@ -3748,10 +3748,10 @@
         }
       ],
       "sources": [
-        "https://deepswe.datacurve.ai/",
         "https://artificialanalysis.ai/models/kimi-k2-7-code",
+        "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/kimi-k2-7-code",
-        "https://benchlm.ai/methodology"
+        "https://deepswe.datacurve.ai/"
       ],
       "verifiedAt": "2026-08-10",
       "lane": "provisional",
@@ -3772,10 +3772,10 @@
       "verifiedAt": "2026-08-10",
       "lane": "provisional",
       "sources": [
-        "https://deepswe.datacurve.ai/",
         "https://artificialanalysis.ai/models/muse-spark-1-2",
+        "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/muse-spark-1-2",
-        "https://benchlm.ai/methodology"
+        "https://deepswe.datacurve.ai/"
       ],
       "sharedResults": 595,
       "comparableCategories": 3,
@@ -3856,10 +3856,10 @@
       "verifiedAt": "2026-08-10",
       "lane": "provisional",
       "sources": [
-        "https://deepswe.datacurve.ai/",
         "https://artificialanalysis.ai/models/muse-spark-1-1",
+        "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/muse-spark-1-1",
-        "https://benchlm.ai/methodology"
+        "https://deepswe.datacurve.ai/"
       ],
       "sharedResults": 595,
       "comparableCategories": 4,

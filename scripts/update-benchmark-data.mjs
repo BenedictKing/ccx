@@ -92,6 +92,7 @@ function loadRegistry() {
  * 产生大段"删除+新增"的无意义 diff。这里统一按键排序，使顺序只由数据本身决定：
  * - benchmarkProfiles 按版本感知模型序（compareCanonicalModels：版本号降序、预发布后缀置后）
  * - benchmarkEvidence 按 (benchmark, domain, effort, metric) 字典序
+ * - sources 按字典序（同域名 URL 自然聚类；此前按各源 merge 追加序，随"本次跑了哪些源"漂移）
  */
 function sortRegistryDeterministic(registry) {
   if (Array.isArray(registry.benchmarkProfiles)) {
@@ -102,6 +103,9 @@ function sortRegistryDeterministic(registry) {
             [b.benchmark, b.domain, b.effort, b.metric].join(''),
           ),
         )
+      }
+      if (Array.isArray(profile?.sources)) {
+        profile.sources.sort((a, b) => String(a).localeCompare(String(b)))
       }
     }
     registry.benchmarkProfiles.sort((a, b) =>
@@ -178,8 +182,11 @@ function evidenceListsEqual(a, b) {
   return sortedA.every((item, i) => item === sortedB[i])
 }
 
+// 顺序无关比较：sources 在写出前会被 sortRegistryDeterministic 排成字典序，
+// 而 merge 时新构造的是追加序；顺序敏感比较会把纯顺序差误判为"有变化"刷无效 diff。
 function stringArraysEqual(a, b) {
-  return JSON.stringify(a || []) === JSON.stringify(b || [])
+  const sort = list => [...(list || [])].map(String).sort()
+  return JSON.stringify(sort(a)) === JSON.stringify(sort(b))
 }
 
 /**
