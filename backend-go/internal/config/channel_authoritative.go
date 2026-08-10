@@ -226,17 +226,41 @@ func ApplyAuthoritativeChannelsAsStruct(channels []ChannelV3) authoritativeArray
 // compareAuthoritativeRoundTrip 比对"从 ChannelsV3 重建的六数组"与 cfg 中直接读到的六数组
 // 是否逐字段一致。返回不一致时的诊断信息，完全一致返回 nil。
 func compareAuthoritativeRoundTrip(cfg *Config, rebuilt authoritativeArrays) error {
+	// 规范化比对：加载时六数组经过完整迁移集（含 ensureAutoManagedKind 等会回填
+	// AutoManagedKind/AutoManagedAt 的迁移），而落盘构建 ChannelsV3 的 persisted 副本只跑了
+	// 部分迁移。直接逐字段比对会把这些"加载期才回填/含时间戳"的字段误判为不一致而误报回退。
+	// 因此比对前对两边统一置空这些易变/加载期字段，只比对持久化权威字段。
+	// 深拷贝磁盘与重建数组，避免污染运行时数据。
+	want := Config{
+		Upstream:          cloneUpstreamSlice(cfg.Upstream),
+		ChatUpstream:      cloneUpstreamSlice(cfg.ChatUpstream),
+		ResponsesUpstream: cloneUpstreamSlice(cfg.ResponsesUpstream),
+		GeminiUpstream:    cloneUpstreamSlice(cfg.GeminiUpstream),
+		ImagesUpstream:    cloneUpstreamSlice(cfg.ImagesUpstream),
+		VectorsUpstream:   cloneUpstreamSlice(cfg.VectorsUpstream),
+	}
+	got := Config{
+		Upstream:          cloneUpstreamSlice(rebuilt.Upstream),
+		ChatUpstream:      cloneUpstreamSlice(rebuilt.Chat),
+		ResponsesUpstream: cloneUpstreamSlice(rebuilt.Responses),
+		GeminiUpstream:    cloneUpstreamSlice(rebuilt.Gemini),
+		ImagesUpstream:    cloneUpstreamSlice(rebuilt.Images),
+		VectorsUpstream:   cloneUpstreamSlice(rebuilt.Vectors),
+	}
+	stripeVolatileForAuthoritativeCompare(&want)
+	stripeVolatileForAuthoritativeCompare(&got)
+
 	pairs := []struct {
 		kind string
 		want []UpstreamConfig
 		got  []UpstreamConfig
 	}{
-		{"messages", cfg.Upstream, rebuilt.Upstream},
-		{"chat", cfg.ChatUpstream, rebuilt.Chat},
-		{"responses", cfg.ResponsesUpstream, rebuilt.Responses},
-		{"gemini", cfg.GeminiUpstream, rebuilt.Gemini},
-		{"images", cfg.ImagesUpstream, rebuilt.Images},
-		{"vectors", cfg.VectorsUpstream, rebuilt.Vectors},
+		{"messages", want.Upstream, got.Upstream},
+		{"chat", want.ChatUpstream, got.ChatUpstream},
+		{"responses", want.ResponsesUpstream, got.ResponsesUpstream},
+		{"gemini", want.GeminiUpstream, got.GeminiUpstream},
+		{"images", want.ImagesUpstream, got.ImagesUpstream},
+		{"vectors", want.VectorsUpstream, got.VectorsUpstream},
 	}
 	for _, p := range pairs {
 		if len(p.want) != len(p.got) {
@@ -251,6 +275,50 @@ func compareAuthoritativeRoundTrip(cfg *Config, rebuilt authoritativeArrays) err
 		}
 	}
 	return nil
+}
+
+// stripeVolatileForAuthoritativeCompare 置空比对时易变或加载期/重建期生成的字段。
+// 这些字段由迁移或归组逻辑在运行时/重建时产出（多为随机 ID 或时间戳），persisted 与
+// 重建结果天然不一致，不能作为权威一致性判据：
+// - AutoManagedAt：ensureAutoManagedKind 每次回填用 time.Now()；
+// - AutoManagedKind：persisted 未跑该迁移，加载期才回填；
+// - AccountUID / CredentialUID：加载期 ensureAccountUIDs/ensureCredentialUIDs 随机生成；
+// - LogicalChannelUID / LogicalName：RebuildLogicalChannels 归组时随机生成。
+// 只修改传入副本，不影响运行时数据。
+func stripeVolatileForAuthoritativeCompare(cfg *Config) {
+	strip := func(channels []UpstreamConfig) {
+		for i := range channels {
+			ch := &channels[i]
+			ch.AutoManagedAt = nil
+			ch.AutoManagedKind = ""
+			ch.AccountUID = ""
+			ch.LogicalChannelUID = ""
+			ch.LogicalName = ""
+			for j := range ch.APIKeyConfigs {
+				ch.APIKeyConfigs[j].CredentialUID = ""
+			}
+		}
+	}
+	strip(cfg.Upstream)
+	strip(cfg.ResponsesUpstream)
+	strip(cfg.GeminiUpstream)
+	strip(cfg.ChatUpstream)
+	strip(cfg.ImagesUpstream)
+	strip(cfg.VectorsUpstream)
+}
+
+// cloneUpstreamSlice 深拷贝渠道切片用于比对规范化，避免污染原数组。
+func cloneUpstreamSlice(in []UpstreamConfig) []UpstreamConfig {
+	if in == nil {
+		return nil
+	}
+	out := make([]UpstreamConfig, len(in))
+	for i := range in {
+		if c := in[i].Clone(); c != nil {
+			out[i] = *c
+		}
+	}
+	return out
 }
 
 func channelUIDSetFromV3(channels []ChannelV3) map[string]struct{} {

@@ -269,3 +269,51 @@ func withEnv(key, value string) func() {
 		}
 	}
 }
+
+// TestAuthoritativeLoad_MigratedChannelNoFalseRollback 回归 critical：带迁移历史的渠道
+// （AutoManagedKind 为空，加载时由 ensureAutoManagedKind 回填 new_api；AccountUID/CredentialUID/
+// LogicalChannelUID 为加载期随机生成）落盘后重载，不应误报"ChannelsV3 与六数组不一致"而回退，
+// 应正常应用 ChannelsV3 重建。
+func TestAuthoritativeLoad_MigratedChannelNoFalseRollback(t *testing.T) {
+	defer withEnv(channelAuthoritativeLoadEnv, "true")()
+
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "config.json")
+	trueVal := true
+	cm, err := NewConfigManager(configPath, "")
+	if err != nil {
+		t.Fatalf("NewConfigManager() error = %v", err)
+	}
+	// 历史渠道：AutoManagedKind 留空，加载期会被迁移回填；UID 字段加载期随机生成。
+	cm.config.Upstream = []UpstreamConfig{{
+		ChannelUID:      "ch_mig",
+		BaseURL:         "https://mig.example.com",
+		ServiceType:     "claude",
+		Status:          "active",
+		APIKeys:         []string{"sk-mig"},
+		APIKeyConfigs:   []APIKeyConfig{{Key: "sk-mig", Enabled: &trueVal}},
+		AutoManaged:     true,
+		OriginType:      "relay",
+		SupportedModels: []string{"m1"},
+	}}
+	if err := cm.SaveConfig(); err != nil {
+		t.Fatalf("SaveConfig() error = %v", err)
+	}
+	cm.CloseWatcher()
+
+	cm2, err := NewConfigManager(configPath, "")
+	if err != nil {
+		t.Fatalf("NewConfigManager() reload error = %v", err)
+	}
+	defer cm2.CloseWatcher()
+	got := cm2.GetConfig()
+	if len(got.Upstream) != 1 {
+		t.Fatalf("重载后渠道数应为 1，实际 %d", len(got.Upstream))
+	}
+	if got.Upstream[0].BaseURL != "https://mig.example.com" {
+		t.Errorf("应应用 ChannelsV3 重建保留 BaseURL，实际 %q", got.Upstream[0].BaseURL)
+	}
+	if len(got.Upstream[0].SupportedModels) != 1 || got.Upstream[0].SupportedModels[0] != "m1" {
+		t.Errorf("重建不应丢 SupportedModels，实际 %v", got.Upstream[0].SupportedModels)
+	}
+}
