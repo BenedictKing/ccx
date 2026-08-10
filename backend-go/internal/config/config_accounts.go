@@ -434,6 +434,32 @@ func (cm *ConfigManager) SetManagedAccountVolcenginePlan(accountUID, credentialU
 	return fmt.Errorf("账号 %s 不存在", accountUID)
 }
 
+// ResolveVolcenginePlanUsage 返回指定托管账号下火山套餐用量快照。
+// credentialUID 为空时返回该账号下第一个绑定了火山 Access Key 且有用量快照的凭证；
+// 未找到时返回 nil。返回的是深拷贝，调用方修改不影响内部状态。
+// 实现 healthcheck.ProbeUsageResolver 接口，供稀疏 L2 预算联动读取余额，避免包循环。
+func (cm *ConfigManager) ResolveVolcenginePlanUsage(accountUID, credentialUID string) *VolcenginePlanUsage {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+	for _, account := range cm.config.ManagedAccounts {
+		if account.AccountUID != accountUID {
+			continue
+		}
+		for _, credential := range account.Credentials {
+			if credential.VolcengineAccessKey == nil || credential.VolcengineAccessKey.Usage == nil {
+				continue
+			}
+			if credentialUID != "" && credential.CredentialUID != credentialUID {
+				continue
+			}
+			usage := *credential.VolcengineAccessKey.Usage
+			return &usage
+		}
+		return nil
+	}
+	return nil
+}
+
 // SetManagedAccountVolcenginePlanUsage 保存火山管控面查询到的套餐用量快照。
 func (cm *ConfigManager) SetManagedAccountVolcenginePlanUsage(accountUID, credentialUID string, usage *VolcenginePlanUsage) error {
 	cm.mu.Lock()
