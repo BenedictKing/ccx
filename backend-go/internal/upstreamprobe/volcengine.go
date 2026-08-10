@@ -46,6 +46,22 @@ type Result struct {
 	Err        error
 }
 
+// ProbeOptions 火山套餐数据面探针的附加请求选项。
+// 透传渠道级 proxyURL、customHeaders 与 insecureSkipVerify，使探针与真实请求路径一致。
+type ProbeOptions struct {
+	ProxyURL           string
+	CustomHeaders      map[string]string
+	InsecureSkipVerify bool
+}
+
+// probeOptionsFrom 把变长 opts 归一化为单一 ProbeOptions；空则返回零值。
+func probeOptionsFrom(opts []ProbeOptions) ProbeOptions {
+	if len(opts) > 0 {
+		return opts[0]
+	}
+	return ProbeOptions{}
+}
+
 // IsVolcenginePlanBaseURL 判断 baseURL 是否为火山方舟 Agent/Coding Plan 官方入口。
 //
 // 使用解析后的官方 hostname（ark.cn-beijing.volces.com）和精确 path 前缀
@@ -157,15 +173,16 @@ func volcengineAgentPlanProbeCost(now time.Time, model string) float64 {
 }
 
 // ProbeVolcenginePlan 对一个 (baseURL, apiKey) 发火山套餐数据面最小请求验证可用性。
-// 保持历史签名，内部委托到 ProbeVolcenginePlanWithModels 并回退内置清单。
-func ProbeVolcenginePlan(ctx context.Context, serviceType, baseURL, apiKey, authHeader string) Result {
-	return ProbeVolcenginePlanWithModels(ctx, serviceType, baseURL, apiKey, authHeader, nil)
+// 保持历史签名兼容，opts 透传渠道级网络与请求头配置；内部委托到 ProbeVolcenginePlanWithModels。
+func ProbeVolcenginePlan(ctx context.Context, serviceType, baseURL, apiKey, authHeader string, opts ...ProbeOptions) Result {
+	return ProbeVolcenginePlanWithModels(ctx, serviceType, baseURL, apiKey, authHeader, nil, opts...)
 }
 
 // ProbeVolcenginePlanWithModels 与 ProbeVolcenginePlan 相同，但允许调用方指定候选模型清单。
 // candidates 为空时按内置清单查找；仍未命中则回退 deepseek-v4-flash。
-func ProbeVolcenginePlanWithModels(ctx context.Context, serviceType, baseURL, apiKey, authHeader string, candidates []string) Result {
+func ProbeVolcenginePlanWithModels(ctx context.Context, serviceType, baseURL, apiKey, authHeader string, candidates []string, opts ...ProbeOptions) Result {
 	model := volcenginePlanProbeModel(baseURL, candidates)
+	options := probeOptionsFrom(opts)
 	var result Result
 	switch strings.ToLower(strings.TrimSpace(serviceType)) {
 	case "claude", "messages":
@@ -174,10 +191,10 @@ func ProbeVolcenginePlanWithModels(ctx context.Context, serviceType, baseURL, ap
 		result = postJSONProbe(ctx, buildVersionedProbeURL(baseURL, "/messages"), apiKey, authHeader,
 			func(req *http.Request) {
 				utils.ApplyClaudeCodeProbeHeaders(req.Header, sessionID)
-			}, body)
+			}, body, options)
 	case "openai":
 		body := []byte(`{"model":"` + model + `","messages":[{"role":"user","content":"ping"}],"max_tokens":1}`)
-		result = postJSONProbe(ctx, buildVersionedProbeURL(baseURL, "/chat/completions"), apiKey, authHeader, nil, body)
+		result = postJSONProbe(ctx, buildVersionedProbeURL(baseURL, "/chat/completions"), apiKey, authHeader, nil, body, options)
 	default:
 		return Result{Err: errUnsupportedServiceType(serviceType)}
 	}
@@ -187,8 +204,8 @@ func ProbeVolcenginePlanWithModels(ctx context.Context, serviceType, baseURL, ap
 
 // VolcenginePlanL1Probe 执行火山套餐数据面探针并返回保活 L1 适配的响应。
 // candidates 允许调用方传入该 key 的真实模型清单；为空时按 baseURL 从内置清单查找。
-func VolcenginePlanL1Probe(ctx context.Context, serviceType, baseURL, apiKey, authHeader string, candidates []string) (statusCode int, body []byte, model string, err error) {
-	res := ProbeVolcenginePlanWithModels(ctx, serviceType, baseURL, apiKey, authHeader, candidates)
+func VolcenginePlanL1Probe(ctx context.Context, serviceType, baseURL, apiKey, authHeader string, candidates []string, opts ...ProbeOptions) (statusCode int, body []byte, model string, err error) {
+	res := ProbeVolcenginePlanWithModels(ctx, serviceType, baseURL, apiKey, authHeader, candidates, opts...)
 	if res.Err != nil {
 		return 0, nil, res.Model, res.Err
 	}
@@ -204,7 +221,7 @@ func VolcenginePlanL1Probe(ctx context.Context, serviceType, baseURL, apiKey, au
 }
 
 // postJSONProbe 发送 JSON POST 探测并按火山严格策略分类结果（只接受 2xx 为成功）。
-func postJSONProbe(ctx context.Context, urlStr, apiKey, authHeader string, prepare func(*http.Request), body []byte) Result {
+func postJSONProbe(ctx context.Context, urlStr, apiKey, authHeader string, prepare func(*http.Request), body []byte, options ProbeOptions) Result {
 	reqCtx, cancel := context.WithTimeout(ctx, probeTimeout)
 	defer cancel()
 
@@ -217,8 +234,10 @@ func postJSONProbe(ctx context.Context, urlStr, apiKey, authHeader string, prepa
 		prepare(req)
 	}
 	utils.SetAuthenticationHeaderWithOverride(req.Header, apiKey, authHeader)
+	utils.ApplyCustomHeaders(req.Header, options.CustomHeaders)
 
-	client := httpclient.GetManager().GetStandardClient(probeTimeout, false)
+	proxyURL := options.ProxyURL
+	client := httpclient.GetManager().GetStandardClient(probeTimeout, options.InsecureSkipVerify, proxyURL)
 	resp, err := client.Do(req)
 	if err != nil {
 		return Result{Err: err}

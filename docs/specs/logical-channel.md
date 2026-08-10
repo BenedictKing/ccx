@@ -542,6 +542,57 @@
 - 真实路由（`executeFilter` / Scheduler）始终以物理渠道为单位，保证 failover 与调度行为不变；LogicalChannel 只在评分输入 fallback 与 dry-run 展示层生效。
 - 全部改动可通过开关回退到纯物理层行为；旧配置（无 LogicalChannel）逐字节兼容。
 
+## 17. 同物理端点多协议引用的运行时一致性
+
+### 17.1 问题本质
+
+`LogicalChannel` 是**管理面聚合视图**，运行时的 health / circuit / blacklist / 并发配额仍按**物理渠道**隔离。当同一物理端点被重复注册到多个 CCX 入口协议时，会出现：
+
+- L1 探针、熔断、拉黑、并发统计各跑各的；
+- 一个上游慢了/限流了，多个 CCX 渠道各自独立超时、各自独立熔断；
+- 用户配置一张逻辑卡，但后端行为仍是“多个独立渠道”。
+
+### 17.2 典型案例：火山 coding-plan
+
+火山方舟 `ark.cn-beijing.volces.com/api/coding` 同时兼容 Claude Messages、OpenAI Chat、Codex Responses 协议，因此常被 new-api 托管流程按 kind 后缀拆成：
+
+- `volcengine-claude`（`kind=messages`, `serviceType=claude`）
+- `volcengine-chat`（`kind=chat`, `serviceType=openai`）
+- `volcengine-codex`（`kind=responses`, `serviceType=openai`）
+
+这三个物理渠道**共享同一组 key 和同一 endpoint**，但 CCX 会：
+
+1. 对三个 `UpstreamConfig` 分别跑 L1 健康检查；
+2. 分别记 `key_health`、`circuit`、`blacklist`；
+3. 三个 scheduler 同时向同一 key 发请求，RPM 按渠道各自计算。
+
+此前还曾把该 endpoint 误注册为 `volcengine-gemini`：`serviceType=openai` 使保活 L1 命中火山套餐分支后被拐到 `/chat/completions` 探针，看似“健康”；但真实 Gemini 流量走 `generateContent` 到此端点必然失败。这就是“一个物理端点被错配为多个协议入口”的典型症状。
+
+### 17.3 当前已落地的一致性
+
+- `RebuildLogicalChannels` 保证同一 `AccountUID` / 同站的物理渠道在管理面聚合成一张 logical card（§3、§9）。
+- autopilot A.2 兄弟渠道 fallback 评分可跨协议借用画像（§16.3）。
+- 火山套餐 L1 探针复用 `internal/upstreamprobe`（`docs/specs/healthcheck.md` §4），避免请求特征漂移。
+
+### 17.4 仍未共享的运行时状态
+
+| 状态 | 当前归属 | 问题 |
+|---|---|---|
+| L1 健康检查 | 每个物理渠道独立 worker | 同一 key + endpoint 被探多次 |
+| Circuit breaker | 每个 kind 的 `MetricsManager` 独立 | 一个协议熔断，其他协议仍向同一 endpoint 发请求 |
+| Key 拉黑 | `DisabledAPIKeys` 挂在单个 `UpstreamConfig` | 拉黑 chat 不影响 claude/codex |
+| 并发/RPM 配额 | 各 scheduler 独立统计 | 容易把同一 key 的物理限速打满 |
+| 失败记忆缓存 | `failedKeysCache` key 含 `apiType` | 跨协议不共享 |
+
+### 17.5 待排期改造方向
+
+1. **L1 healthcheck 去重**：同一 `(siteIdentity, accountUID, keyMask)` 在同一周期内只探一次，结果同步到所有引用该物理端点的 protocol。
+2. **Circuit 按物理端点聚合**：`MetricsManager` 的 circuit key 从 `(kind, baseURL, key)` 提升到 `(siteIdentity, accountUID, key)`。
+3. **拉黑以 key 为粒度跨 protocol 生效**：`BlacklistKeyWithRecoverAt` 应作用于 key，再广播到同一 logical 下的所有 protocol 副本。
+4. **跨协议并发配额聚合**：对同一 account/key 的全局限流，避免多个 scheduler 各自冲刺同一上游 RPM。
+
+这些改造需要把 `LogicalChannel` 从“管理视图”提升为“运行时身份”，是独立的中长期重构，不在当前 LogicalChannel Phase A/B/C 的已落地范围内。
+
 **未采用：标签持久化到 LogicalChannel**
 
 因 `config` 包不能依赖 `autopilot`（反向包循环），健康/质量/成本标签的运行时数据源 `ProfileStore` 位于 autopilot 内。A.2 改用兄弟渠道 fallback（全部收敛在 autopilot 内），避免跨包依赖与配置写回循环。标签持久化仍列为低优先级（见 §16.1 与 roadmap Phase C）。

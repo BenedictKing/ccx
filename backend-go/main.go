@@ -142,7 +142,11 @@ func healthCheckL1Fetcher(handler gin.HandlerFunc) healthcheck.L1Fetcher {
 		if upstreamprobe.IsVolcenginePlanBaseURL(req.BaseURL) {
 			// 使用内置 manifest 模型清单作为候选，让 L1 探针动态选择最便宜可用模型
 			candidates := volcenginePlanCandidates(req.BaseURL, req.ServiceType)
-			sc, body, model, err := upstreamprobe.VolcenginePlanL1Probe(ctx, req.ServiceType, req.BaseURL, req.APIKey, req.AuthHeader, candidates)
+			sc, body, model, err := upstreamprobe.VolcenginePlanL1Probe(ctx, req.ServiceType, req.BaseURL, req.APIKey, req.AuthHeader, candidates, upstreamprobe.ProbeOptions{
+				ProxyURL:           req.ProxyURL,
+				CustomHeaders:      req.CustomHeaders,
+				InsecureSkipVerify: req.InsecureSkipVerify,
+			})
 			if err != nil {
 				return healthcheck.L1Response{RealCallVerified: true, Model: model}, err
 			}

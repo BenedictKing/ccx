@@ -321,7 +321,7 @@ func buildKimiCodeModelsURL(baseURL string) string {
 
 func verifyVolcenginePlanEndpoint(ctx context.Context, route config.ProviderRoute, baseURL, apiKey string) EndpointVerifyResult {
 	// 复用 internal/upstreamprobe 共享火山套餐数据面探针，避免与 healthcheck 保活请求特征漂移。
-	res := upstreamprobe.ProbeVolcenginePlan(ctx, route.ServiceType, baseURL, apiKey, "")
+	res := upstreamprobe.ProbeVolcenginePlan(ctx, route.ServiceType, baseURL, apiKey, "", upstreamprobe.ProbeOptions{})
 	switch {
 	case res.Err != nil:
 		return EndpointVerifyResult{Err: res.Err, Message: "请求失败: " + res.Err.Error()}
