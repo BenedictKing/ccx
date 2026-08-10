@@ -197,6 +197,10 @@ func (cm *ConfigManager) loadConfig() error {
 		}
 	}
 
+	// Phase 3b：若配置携带 ChannelsV3 权威形态，做一次一致性对账（非破坏：仅告警，
+	// 运行时仍以六数组为权威）。真正从 ChannelsV3 重建六数组留到 Phase 3c 消费者切换后。
+	reconcileAuthoritativeChannels(&cm.config)
+
 	// 成功加载后通知回调（在锁内构造快照，释放锁后通知）
 	cm.fireConfigChangeCallbacks()
 	// Phase B.2：发布 config_reloaded 事件。
@@ -1233,6 +1237,10 @@ func (cm *ConfigManager) saveConfigLocked(config Config) error {
 	defer cm.publishLogicalChannelRebuilt()
 	persisted := config.deepCopy()
 	persisted.stripManagedChannelSecrets()
+	// Phase 3b：脱敏后合成无损权威形态 ChannelsV3 并持久化（只落盘、不改运行时 cm.config）。
+	// 从已脱敏的 persisted 数组合成，保证 ChannelsV3 同样不含托管明文 key。
+	persisted.ChannelsV3 = BuildAuthoritativeChannels(&persisted)
+	persisted.ChannelAuthoritativeVersion = ChannelV3SchemaVersion
 	data, err := json.MarshalIndent(persisted, "", "  ")
 	if err != nil {
 		return err

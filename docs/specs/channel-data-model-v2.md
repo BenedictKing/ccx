@@ -97,6 +97,8 @@ EndpointCapability（跨账号共享，按 CapabilityUID 索引）
 - ✅ Phase 2a：`Config.Channels` / `ChannelCapabilities` / `ChannelSchemaVersion` 非权威镜像，落盘前 `RebuildChannels` 合成（`config_loader.go` saveConfigLocked）；round-trip 与"不含明文 key/不改六数组"测试通过。
 - ✅ Phase 2b（后端读）：`GET /api/channels`、`GET /api/channels/:uid` 实时返回渠道视图 + 共享能力（`ConfigManager.GetChannelViews`）。
 - ✅ Phase 3a（权威投影核心）：`channel_authoritative.go` 无损 `ChannelV3` + 双向投影 + round-trip/顺序恢复测试。
-- ⏳ 把 `CapabilityProbeLedger` 接入 autopilot 协议探测与 healthcheck：同站点同分组只探一次（需 app 级验证）。
-- ⏳ 拉黑/熔断按 key 跨协议。
-- ⏳ Phase 3b（权威落盘+load 重建，schema 门控）/ Phase 3c（消费者切换+删除数组，需 app 回归）。
+- ✅ Phase 3b（权威落盘）：save 落盘 `channelsV3`（脱敏后从数组合成）+ `channelAuthoritativeVersion`；load 时 `reconcileAuthoritativeChannels` 对账告警（非破坏，仍信任六数组）。
+- ✅ #8（拉黑跨协议）：`BlacklistKeyWithRecoverAt` 级联拉黑同 `AccountUID`/`LogicalChannelUID` 下持有相同明文 key 的其它协议渠道；不同账号同名 key 不误伤。测试覆盖级联与隔离。
+- ⏳ #8 熔断层：model-circuit 跨协议共享（metrics 层改键，需 app 验证）。
+- ⏳ 把 `CapabilityProbeLedger` 接入 autopilot 协议探测与 healthcheck。
+- ⏳ Phase 3c（从 ChannelsV3 重建六数组的硬翻转 + 消费者切换 + 删除数组，需 app 回归）。

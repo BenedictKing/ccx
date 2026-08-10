@@ -13,9 +13,13 @@ package config
 //   - 不做任何字段裁剪，UpstreamConfig 整体复制，保证 round-trip 逐字节一致。
 
 import (
+	"log"
 	"sort"
 	"strings"
 )
+
+// ChannelV3SchemaVersion 是 ChannelsV3 权威形态的 schema 版本。
+const ChannelV3SchemaVersion = 1
 
 // ChannelV3 是同账号/同站点多协议物理渠道的无损聚合权威形态。
 type ChannelV3 struct {
@@ -119,4 +123,50 @@ func authoritativeChannelName(u *UpstreamConfig) string {
 		return ln
 	}
 	return strings.TrimSpace(u.Name)
+}
+
+// reconcileAuthoritativeChannels 对账 ChannelsV3 与六数组是否一致（Phase 3b，非破坏）。
+//
+// 正常流程下 ChannelsV3 由 save 从同一份（已脱敏）六数组合成，二者按 ChannelUID 集合恒等。
+// 若外部手改 config.json 只改了数组未改 ChannelsV3（或反之）导致集合不一致，仅打印告警并
+// 信任六数组，绝不覆盖运行时数据。返回是否检测到分歧。
+func reconcileAuthoritativeChannels(cfg *Config) bool {
+	if cfg == nil || cfg.ChannelAuthoritativeVersion != ChannelV3SchemaVersion || len(cfg.ChannelsV3) == 0 {
+		return false
+	}
+	fromV3 := channelUIDSetFromV3(cfg.ChannelsV3)
+	fromArrays := channelUIDSetFromArrays(cfg)
+	if len(fromV3) != len(fromArrays) {
+		logChannelV3Divergence(len(fromArrays), len(fromV3))
+		return true
+	}
+	for uid := range fromArrays {
+		if _, ok := fromV3[uid]; !ok {
+			logChannelV3Divergence(len(fromArrays), len(fromV3))
+			return true
+		}
+	}
+	return false
+}
+
+func channelUIDSetFromV3(channels []ChannelV3) map[string]struct{} {
+	out := make(map[string]struct{})
+	for _, ch := range channels {
+		for _, m := range ch.Protocols {
+			out[m.Kind+":"+m.Upstream.ChannelUID] = struct{}{}
+		}
+	}
+	return out
+}
+
+func channelUIDSetFromArrays(cfg *Config) map[string]struct{} {
+	out := make(map[string]struct{})
+	for _, m := range collectPhysicalChannelsForView(cfg) {
+		out[m.kind+":"+m.channel.ChannelUID] = struct{}{}
+	}
+	return out
+}
+
+func logChannelV3Divergence(arrays, v3 int) {
+	log.Printf("[Channel-V3] 警告: ChannelsV3 权威形态与六数组不一致 (数组成员=%d, V3成员=%d)，本次信任六数组，将在下次保存时重建 ChannelsV3", arrays, v3)
 }

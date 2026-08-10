@@ -1274,6 +1274,13 @@ type Config struct {
 	ChannelCapabilities []EndpointCapability `json:"channelCapabilities,omitempty"`
 	// ChannelSchemaVersion Channels 镜像 schema 版本。
 	ChannelSchemaVersion int `json:"channelSchemaVersion,omitempty"`
+	// ChannelsV3 是"渠道多协议聚合"的**无损权威形态**（每协议成员携带完整 UpstreamConfig）。
+	// 落盘前由 BuildAuthoritativeChannels 从六数组合成（已脱敏），可通过 ApplyAuthoritativeChannels
+	// 无损还原六数组。Phase 3b 起持久化此形态作为权威候选；六数组仍是当前运行时权威，
+	// 直到 Phase 3c 把消费者切换完毕。详见 docs/specs/channel-data-model-v2.md。
+	ChannelsV3 []ChannelV3 `json:"channelsV3,omitempty"`
+	// ChannelAuthoritativeVersion ChannelsV3 权威形态 schema 版本。
+	ChannelAuthoritativeVersion int `json:"channelAuthoritativeVersion,omitempty"`
 }
 
 // FailedKey 失败密钥记录
@@ -1718,32 +1725,16 @@ func (cm *ConfigManager) SetOverrideTTLMinutes(minutes int) error {
 
 // ============== API Key 拉黑相关方法 ==============
 
-// BlacklistKey 将指定 Key 从活跃列表移到拉黑列表（持久化）
-// apiType: Messages/Responses/Gemini/Chat，用于定位 upstream slice
-// channelIndex: 渠道在 upstream slice 中的索引
-func (cm *ConfigManager) BlacklistKey(apiType string, channelIndex int, apiKey string, reason string, message string) error {
-	return cm.BlacklistKeyWithRecoverAt(apiType, channelIndex, apiKey, reason, message, "")
-}
-
-// BlacklistKeyWithRecoverAt 将指定 Key 禁用到上游明确给出的恢复时间。
-// recoverAt 必须为未来的 RFC3339 时间；为空、无效或已过期时沿用原因级默认策略。
-func (cm *ConfigManager) BlacklistKeyWithRecoverAt(apiType string, channelIndex int, apiKey string, reason string, message string, recoverAt string) error {
-	cm.mu.Lock()
-	defer cm.mu.Unlock()
-
-	upstreams := cm.getUpstreamSliceLocked(apiType)
-	if upstreams == nil || channelIndex < 0 || channelIndex >= len(*upstreams) {
-		return fmt.Errorf("无效的渠道索引: %s[%d]", apiType, channelIndex)
-	}
-
-	upstream := &(*upstreams)[channelIndex]
-
+// applyKeyBlacklistLocked 在单个 upstream 上执行拉黑变更（不落盘、不发事件）。
+// 返回是否实际发生变更（target 无此 key 且未被禁用时返回 false，保持原早退语义）。
+// apiType 仅用于日志标签。
+func applyKeyBlacklistLocked(upstream *UpstreamConfig, apiKey, reason, message, recoverAt, apiType string) bool {
 	wasActive := slices.Contains(upstream.APIKeys, apiKey)
 	wasDisabled := slices.ContainsFunc(upstream.DisabledAPIKeys, func(disabled DisabledKeyInfo) bool {
 		return disabled.Key == apiKey
 	})
 	if !wasActive && !wasDisabled {
-		return nil
+		return false
 	}
 
 	// 在移除活跃 Key 前保存附加配置；重复拉黑时沿用已有快照。
@@ -1800,7 +1791,6 @@ func (cm *ConfigManager) BlacklistKeyWithRecoverAt(apiType string, channelIndex 
 	}
 	upstream.DisabledAPIKeys = disabledKeys
 
-	// 同时添加到 HistoricalAPIKeys（保留统计数据）
 	if !slices.Contains(upstream.HistoricalAPIKeys, apiKey) {
 		upstream.HistoricalAPIKeys = append(upstream.HistoricalAPIKeys, apiKey)
 	}
@@ -1812,9 +1802,98 @@ func (cm *ConfigManager) BlacklistKeyWithRecoverAt(apiType string, channelIndex 
 	log.Printf("[%s-Blacklist] Key %s 禁用记录已更新 (原因: %s, 渠道: %s, 剩余Key: %d)",
 		apiType, utils.MaskAPIKey(apiKey), reason, upstream.Name, len(upstream.APIKeys))
 	statelog.LogStateTransition(apiType+"-Blacklist", "key", utils.MaskAPIKey(apiKey), fromState, "disabled", reason, "channel="+upstream.Name)
-
 	if len(upstream.APIKeys) == 0 {
 		log.Printf("[%s-Blacklist] 警告: 渠道 %s 的所有 Key 都已被拉黑！", apiType, upstream.Name)
+	}
+	return true
+}
+
+// keySibling 是与目标渠道共享同一凭证、需级联拉黑的兄弟物理渠道。
+type keySibling struct {
+	upstream *UpstreamConfig
+	apiType  string
+}
+
+// siblingUpstreamsForKeyLocked 返回与 target 属于同一逻辑渠道/账号、且当前持有 apiKey 的兄弟渠道。
+//
+// 语义：同一明文 key 是同一凭证，在一个协议入口鉴权失败/被拉黑，其在同账号其它协议入口
+// 同样不可用。仅按 LogicalChannelUID 或 AccountUID 判定同源，避免误伤同 key 的无关渠道。
+func (cm *ConfigManager) siblingUpstreamsForKeyLocked(target *UpstreamConfig, apiKey string) []keySibling {
+	logicalUID := strings.TrimSpace(target.LogicalChannelUID)
+	accountUID := strings.TrimSpace(target.AccountUID)
+	if logicalUID == "" && accountUID == "" {
+		return nil
+	}
+	groups := []struct {
+		apiType string
+		arr     *[]UpstreamConfig
+	}{
+		{"Messages", &cm.config.Upstream},
+		{"Chat", &cm.config.ChatUpstream},
+		{"Responses", &cm.config.ResponsesUpstream},
+		{"Gemini", &cm.config.GeminiUpstream},
+		{"Images", &cm.config.ImagesUpstream},
+		{"Vectors", &cm.config.VectorsUpstream},
+	}
+	out := make([]keySibling, 0)
+	for _, g := range groups {
+		for i := range *g.arr {
+			u := &(*g.arr)[i]
+			if u == target {
+				continue
+			}
+			sameLogical := logicalUID != "" && strings.TrimSpace(u.LogicalChannelUID) == logicalUID
+			sameAccount := accountUID != "" && strings.TrimSpace(u.AccountUID) == accountUID
+			if !sameLogical && !sameAccount {
+				continue
+			}
+			if !containsPlainKey(u, apiKey) {
+				continue
+			}
+			out = append(out, keySibling{upstream: u, apiType: g.apiType})
+		}
+	}
+	return out
+}
+
+// containsPlainKey 判断 upstream 是否正持有该明文 key（活跃或已禁用）。
+func containsPlainKey(u *UpstreamConfig, apiKey string) bool {
+	if slices.Contains(u.APIKeys, apiKey) {
+		return true
+	}
+	return slices.ContainsFunc(u.DisabledAPIKeys, func(d DisabledKeyInfo) bool { return d.Key == apiKey })
+}
+
+// BlacklistKey 将指定 Key 从活跃列表移到拉黑列表（持久化）
+// apiType: Messages/Responses/Gemini/Chat，用于定位 upstream slice
+// channelIndex: 渠道在 upstream slice 中的索引
+func (cm *ConfigManager) BlacklistKey(apiType string, channelIndex int, apiKey string, reason string, message string) error {
+	return cm.BlacklistKeyWithRecoverAt(apiType, channelIndex, apiKey, reason, message, "")
+}
+
+// BlacklistKeyWithRecoverAt 将指定 Key 禁用到上游明确给出的恢复时间。
+// recoverAt 必须为未来的 RFC3339 时间；为空、无效或已过期时沿用原因级默认策略。
+func (cm *ConfigManager) BlacklistKeyWithRecoverAt(apiType string, channelIndex int, apiKey string, reason string, message string, recoverAt string) error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	upstreams := cm.getUpstreamSliceLocked(apiType)
+	if upstreams == nil || channelIndex < 0 || channelIndex >= len(*upstreams) {
+		return fmt.Errorf("无效的渠道索引: %s[%d]", apiType, channelIndex)
+	}
+
+	upstream := &(*upstreams)[channelIndex]
+
+	if !applyKeyBlacklistLocked(upstream, apiKey, reason, message, recoverAt, apiType) {
+		return nil
+	}
+
+	// Phase 1/#8：同一明文 key 是同一凭证，级联拉黑同账号/同逻辑渠道下其它协议入口的相同 key。
+	siblings := cm.siblingUpstreamsForKeyLocked(upstream, apiKey)
+	for _, sib := range siblings {
+		if applyKeyBlacklistLocked(sib.upstream, apiKey, reason, message, recoverAt, sib.apiType) {
+			log.Printf("[%s-Blacklist] 级联拉黑同源渠道 %s 的相同 key %s", sib.apiType, sib.upstream.Name, utils.MaskAPIKey(apiKey))
+		}
 	}
 
 	if err := cm.saveConfigLocked(cm.config); err != nil {
@@ -1825,6 +1904,9 @@ func (cm *ConfigManager) BlacklistKeyWithRecoverAt(apiType string, channelIndex 
 		payload["recoverAt"] = recoverAt
 	}
 	cm.publishKeyEvent(eventbus.TypeKeyBlacklisted, upstream.ChannelUID, apiType, apiKey, reason, message, payload)
+	for _, sib := range siblings {
+		cm.publishKeyEvent(eventbus.TypeKeyBlacklisted, sib.upstream.ChannelUID, sib.apiType, apiKey, reason, message, payload)
+	}
 	return nil
 }
 
