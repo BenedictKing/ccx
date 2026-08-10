@@ -326,9 +326,12 @@ export function toBenchmarkEvidence(modelData, allModels, costData) {
     capturedAt: new Date().toISOString().split('T')[0],
   }
 
-  // 若该模型 x effort 有实测 cost，则以均值注入 evidence，供 frontier 成本轴校准
+  // 若该模型 x effort 有实测 cost，则以均值注入 evidence，供 frontier 成本轴校准。
+  // 舍入到 4 位小数（约 0.1 美分）：costUsd 进入 registry 受版本管理，
+  // 全精度浮点会让上游每次重算 mean 都产生亚美分抖动，制造无意义 diff。
+  // 4 位小数远低于任何路由决策阈值，不影响性价比比较。可视化用的原始 meanCost 不在此舍入。
   if (effortCost?.meanCost !== undefined && effortCost?.meanCost !== null && Number.isFinite(effortCost.meanCost)) {
-    evidence.costUsd = effortCost.meanCost
+    evidence.costUsd = Math.round(effortCost.meanCost * 1e4) / 1e4
   }
 
   return evidence
