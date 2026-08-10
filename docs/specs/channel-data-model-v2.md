@@ -88,6 +88,7 @@ EndpointCapability（跨账号共享，按 CapabilityUID 索引）
 - ✅ `channel_model.go`：读模型类型 + 身份工具。
 - ✅ `channel_view.go`：`BuildChannelViews` 合成 + 共享能力注册表。
 - ✅ `channel_view_test.go`：多协议收敛、跨账号同分组共享、分组隔离、禁用 key 四项测试。
-- ⏳ 健康检查协议探测按 `CapabilityUID` 去重。
+- ✅ `endpoint_capability.go`：`EndpointCapabilityRegistry`（按 CapabilityUID 查询）+ `CapabilityProbeLedger`（每周期跨账号探测去重）+ `KeyEndpointCapabilityUIDs`。
+- ⏳ 把 `CapabilityProbeLedger` 接入 autopilot 协议探测与 healthcheck：同站点同分组只探一次（需 app 级验证）。
 - ⏳ 拉黑/熔断按 key 跨协议。
 - ⏳ Phase 2 / Phase 3。
