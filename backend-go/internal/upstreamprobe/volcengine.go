@@ -6,9 +6,11 @@
 package upstreamprobe
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"math"
 	"net/http"
@@ -180,21 +182,26 @@ func ProbeVolcenginePlan(ctx context.Context, serviceType, baseURL, apiKey, auth
 
 // ProbeVolcenginePlanWithModels 与 ProbeVolcenginePlan 相同，但允许调用方指定候选模型清单。
 // candidates 为空时按内置清单查找；仍未命中则回退 deepseek-v4-flash。
+// 探针统一流式优先：按渠道的上游协议（serviceType）选择对应端点发 stream=true 最小请求，
+// 读到首个 SSE 事件即判活，避免推理模型非流式整段生成导致的高延迟误判超时。
 func ProbeVolcenginePlanWithModels(ctx context.Context, serviceType, baseURL, apiKey, authHeader string, candidates []string, opts ...ProbeOptions) Result {
 	model := volcenginePlanProbeModel(baseURL, candidates)
 	options := probeOptionsFrom(opts)
 	var result Result
 	switch strings.ToLower(strings.TrimSpace(serviceType)) {
 	case "claude", "messages":
-		body := []byte(`{"model":"` + model + `","max_tokens":1,"messages":[{"role":"user","content":"ping"}]}`)
+		body := []byte(`{"model":"` + model + `","max_tokens":1,"stream":true,"messages":[{"role":"user","content":"ping"}]}`)
 		body, sessionID := utils.EnsureClaudeCodeProbeBody(body)
 		result = postJSONProbe(ctx, buildVersionedProbeURL(baseURL, "/messages"), apiKey, authHeader,
 			func(req *http.Request) {
 				utils.ApplyClaudeCodeProbeHeaders(req.Header, sessionID)
 			}, body, options)
 	case "openai":
-		body := []byte(`{"model":"` + model + `","messages":[{"role":"user","content":"ping"}],"max_tokens":1}`)
+		body := []byte(`{"model":"` + model + `","messages":[{"role":"user","content":"ping"}],"max_tokens":1,"stream":true}`)
 		result = postJSONProbe(ctx, buildVersionedProbeURL(baseURL, "/chat/completions"), apiKey, authHeader, nil, body, options)
+	case "responses":
+		body := []byte(`{"model":"` + model + `","input":"ping","max_output_tokens":16,"stream":true}`)
+		result = postJSONProbe(ctx, buildVersionedProbeURL(baseURL, "/responses"), apiKey, authHeader, nil, body, options)
 	default:
 		return Result{Err: errUnsupportedServiceType(serviceType)}
 	}
@@ -220,7 +227,37 @@ func VolcenginePlanL1Probe(ctx context.Context, serviceType, baseURL, apiKey, au
 	return res.StatusCode, res.Body, res.Model, nil
 }
 
-// postJSONProbe 发送 JSON POST 探测并按火山严格策略分类结果（只接受 2xx 为成功）。
+// errEmptyProbeStream 上游接受了流式请求（2xx + SSE），但流结束都未返回任何 data 事件。
+var errEmptyProbeStream = errors.New("上游返回空 SSE 流")
+
+// probeSSEMaxScanBytes SSE 首事件扫描上限，防止异常上游无限冲刷事件流。
+const probeSSEMaxScanBytes = 256 * 1024
+
+// awaitFirstSSEEvent 等待 SSE 流的首个 data 事件：收到任意 data 行即判活。
+// 流自然结束（或扫描超限）仍无 data 事件返回 (false, nil)；读取出错返回 (false, err)。
+func awaitFirstSSEEvent(body io.Reader) (bool, error) {
+	reader := bufio.NewReader(body)
+	scanned := 0
+	for scanned < probeSSEMaxScanBytes {
+		line, err := reader.ReadString('\n')
+		scanned += len(line)
+		if strings.HasPrefix(line, "data:") {
+			return true, nil
+		}
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return false, nil
+			}
+			return false, err
+		}
+	}
+	return false, nil
+}
+
+// postJSONProbe 发送 JSON POST 探测并按火山严格策略分类结果：
+// 成功只接受真实 2xx——SSE 响应需读到首个 data 事件（流式探针判活口径）；
+// 上游忽略 stream 返回普通 JSON 时维持 2xx 即成功的历史口径；
+// 401/403 标记 AuthFailed；其他 4xx/5xx 与网络错误保留原状态。
 func postJSONProbe(ctx context.Context, urlStr, apiKey, authHeader string, prepare func(*http.Request), body []byte, options ProbeOptions) Result {
 	reqCtx, cancel := context.WithTimeout(ctx, probeTimeout)
 	defer cancel()
@@ -243,15 +280,27 @@ func postJSONProbe(ctx context.Context, urlStr, apiKey, authHeader string, prepa
 		return Result{Err: err}
 	}
 	defer errutil.IgnoreDeferred(resp.Body.Close)
-	bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, probeBodyLimit))
 
 	sc := resp.StatusCode
+	isSSE := strings.Contains(resp.Header.Get("Content-Type"), "text/event-stream")
 	switch {
+	case sc >= 200 && sc < 300 && isSSE:
+		ok, err := awaitFirstSSEEvent(resp.Body)
+		if err != nil {
+			return Result{StatusCode: sc, Err: err}
+		}
+		if !ok {
+			return Result{StatusCode: sc, Err: errEmptyProbeStream}
+		}
+		return Result{OK: true, StatusCode: sc}
 	case sc >= 200 && sc < 300:
+		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, probeBodyLimit))
 		return Result{OK: true, StatusCode: sc, Body: bodyBytes}
-	case sc == http.StatusUnauthorized || sc == http.StatusForbidden:
-		return Result{OK: false, StatusCode: sc, AuthFailed: true, Body: bodyBytes}
 	default:
+		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, probeBodyLimit))
+		if sc == http.StatusUnauthorized || sc == http.StatusForbidden {
+			return Result{OK: false, StatusCode: sc, AuthFailed: true, Body: bodyBytes}
+		}
 		return Result{OK: false, StatusCode: sc, Body: bodyBytes}
 	}
 }

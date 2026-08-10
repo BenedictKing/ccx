@@ -297,3 +297,85 @@ func TestVolcenginePlanL1ProbeNetworkErrorPropagates(t *testing.T) {
 		t.Fatalf("网络错误探针模型 = %q, 期望 deepseek-v4-flash", model)
 	}
 }
+
+// newSSECaptureServer 与 newCaptureServer 相同，但响应 Content-Type 为 text/event-stream。
+func newSSECaptureServer(respBody string) *captureServer {
+	c := &captureServer{}
+	c.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c.method = r.Method
+		c.path = r.URL.Path
+		if r.Body != nil {
+			b, _ := io.ReadAll(r.Body)
+			c.body = string(b)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(respBody))
+	}))
+	return c
+}
+
+func TestProbeVolcenginePlanStreamClaudeSuccess(t *testing.T) {
+	srv := newSSECaptureServer("event: message_start\ndata: {\"type\":\"message_start\"}\n\n")
+	defer srv.Close()
+
+	res := ProbeVolcenginePlan(context.Background(), "claude", srv.URL, "ark-key", "")
+	if !res.OK || res.Err != nil {
+		t.Fatalf("SSE 首事件应判活: %+v", res)
+	}
+	if !strings.Contains(srv.body, `"stream":true`) {
+		t.Fatalf("claude 探针应为流式: %s", srv.body)
+	}
+}
+
+func TestProbeVolcenginePlanStreamOpenAISuccess(t *testing.T) {
+	srv := newSSECaptureServer("data: {\"id\":\"chatcmpl-1\",\"choices\":[{\"delta\":{\"role\":\"assistant\"}}]}\n\n")
+	defer srv.Close()
+
+	res := ProbeVolcenginePlan(context.Background(), "openai", srv.URL+"/v3", "ark-key", "")
+	if !res.OK || res.Err != nil {
+		t.Fatalf("SSE 首事件应判活: %+v", res)
+	}
+	if !strings.HasSuffix(srv.path, "/chat/completions") {
+		t.Fatalf("openai 探针路径 = %q, 期望以 /chat/completions 结尾", srv.path)
+	}
+	if !strings.Contains(srv.body, `"stream":true`) {
+		t.Fatalf("openai 探针应为流式: %s", srv.body)
+	}
+}
+
+func TestProbeVolcenginePlanResponsesBranch(t *testing.T) {
+	srv := newSSECaptureServer("event: response.created\ndata: {\"type\":\"response.created\"}\n\n")
+	defer srv.Close()
+
+	res := ProbeVolcenginePlan(context.Background(), "responses", srv.URL+"/v3", "ark-key", "")
+	if !res.OK || res.Err != nil {
+		t.Fatalf("responses 探针应成功: %+v", res)
+	}
+	if !strings.HasSuffix(srv.path, "/responses") {
+		t.Fatalf("responses 探针路径 = %q, 期望以 /responses 结尾", srv.path)
+	}
+	if !strings.Contains(srv.body, `"stream":true`) {
+		t.Fatalf("responses 探针应为流式: %s", srv.body)
+	}
+}
+
+func TestProbeVolcenginePlanStreamDoneCountsAsAlive(t *testing.T) {
+	srv := newSSECaptureServer("data: [DONE]\n\n")
+	defer srv.Close()
+
+	res := ProbeVolcenginePlan(context.Background(), "openai", srv.URL+"/v3", "ark-key", "")
+	if !res.OK {
+		t.Fatalf("收到 [DONE] 事件应判活: %+v", res)
+	}
+}
+
+func TestProbeVolcenginePlanStreamEmptyFails(t *testing.T) {
+	srv := newSSECaptureServer("")
+	defer srv.Close()
+
+	res := ProbeVolcenginePlan(context.Background(), "openai", srv.URL+"/v3", "ark-key", "")
+	if res.OK || res.Err == nil {
+		t.Fatalf("空 SSE 流应判失败: %+v", res)
+	}
+}
