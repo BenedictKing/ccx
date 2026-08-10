@@ -8,10 +8,20 @@ import (
 	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
+	"github.com/BenedictKing/ccx/internal/eventbus"
 	"github.com/BenedictKing/ccx/internal/handlers/common"
 	"github.com/BenedictKing/ccx/internal/metrics"
 	"github.com/BenedictKing/ccx/internal/scheduler"
 )
+
+// capabilityTestEventBus 是能力测试漂移事件的共享事件总线；通过 SetCapabilityTestEventBus 注入。
+// 未注入时所有 drift 发布为空操作，保持现有行为不变。
+var capabilityTestEventBus *eventbus.Bus
+
+// SetCapabilityTestEventBus 注入跨模块事件总线，供 capability drift 事件发布。
+func SetCapabilityTestEventBus(bus *eventbus.Bus) {
+	capabilityTestEventBus = bus
+}
 
 // ============== 核心测试逻辑 ==============
 
@@ -774,6 +784,62 @@ func logModelCapabilityDrift(result ModelTestResult, channel *config.UpstreamCon
 
 	log.Printf("[Capability-Drift] 渠道 %s 协议 %s 模型 %s (实际: %s) 探测结果与注册表声明不一致，字段: %s，来源: %s，匹配模式: %s",
 		channel.Name, protocol, model, result.ActualModel, strings.Join(driftFields, ","), resolved.Source, resolved.MatchedPattern)
+
+	publishCapabilityDriftEvent(channel, protocol, model, result, resolved, driftFields)
+}
+
+// publishCapabilityDriftEvent 发布 capability_drift 状态事件。
+// 事件只读展示，不影响调度或探测结论；未注入总线时为空操作。
+func publishCapabilityDriftEvent(channel *config.UpstreamConfig, protocol, model string, result ModelTestResult, resolved config.ResolvedUpstreamCapability, driftFields []string) {
+	if capabilityTestEventBus == nil || channel == nil {
+		return
+	}
+
+	channelUID := channel.ChannelUID
+	if channelUID == "" {
+		channelUID = channel.Name
+	}
+
+	declared := map[string]any{
+		"source":         resolved.Source,
+		"matchedPattern": resolved.MatchedPattern,
+		"contextWindow":  resolved.Capability.ContextWindowTokens,
+		"maxOutput":      resolved.Capability.MaxOutputTokens,
+	}
+	if resolved.Capability.ThinkingMode != "" {
+		declared["thinkingMode"] = resolved.Capability.ThinkingMode
+	}
+	if len(resolved.Capability.ReasoningEfforts) > 0 {
+		declared["reasoningEfforts"] = resolved.Capability.ReasoningEfforts
+	}
+
+	actualError := ""
+	if result.Error != nil {
+		actualError = *result.Error
+	}
+
+	ev := eventbus.Event{
+		Type:        eventbus.TypeCapabilityDrift,
+		Scope:       eventbus.ScopeConfig,
+		Subject:     channelUID,
+		ChannelKind: serviceTypeToChannelKind(channel.ServiceType),
+		Payload: map[string]any{
+			"model":       model,
+			"actualModel": result.ActualModel,
+			"protocol":    protocol,
+			"channelName": channel.Name,
+			"declared":    declared,
+			"actual": map[string]any{
+				"success":            result.Success,
+				"streamingSupported": result.StreamingSupported,
+				"latencyMs":          result.Latency,
+				"error":              actualError,
+			},
+			"driftFields": driftFields,
+		},
+	}
+	ev.EnsureUID()
+	capabilityTestEventBus.Publish(ev)
 }
 
 func truncateCapabilityError(msg string) string {

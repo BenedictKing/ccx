@@ -2182,6 +2182,8 @@ export type StateEventType =
   | 'channel_status_changed'
   | 'logical_channel_rebuilt'
   | 'preset_bundle_swapped'
+  | 'manifest_drift'
+  | 'capability_drift'
 
 /** 状态事件作用域（发布来源模块） */
 export type StateEventScope = 'metrics' | 'config' | 'preset'
@@ -2207,6 +2209,44 @@ export interface StateEvent {
 export interface StateEventsResponse {
   events: StateEvent[]
   total: number
+}
+
+/** manifest_drift 事件 payload */
+export interface ManifestDriftPayload {
+  /** 新增模型 */
+  added?: string[]
+  /** 移除模型 */
+  removed?: string[]
+}
+
+/** capability_drift 事件 payload */
+export interface CapabilityDriftPayload {
+  /** 探测模型 */
+  model?: string
+  /** 经 model mapping 重定向后实际发往上游的模型 */
+  actualModel?: string
+  /** 探测协议 */
+  protocol?: string
+  /** 渠道可读名 */
+  channelName?: string
+  /** 注册表声明的能力 */
+  declared?: {
+    source?: string
+    matchedPattern?: string
+    contextWindow?: number
+    maxOutput?: number
+    thinkingMode?: string
+    reasoningEfforts?: string[]
+  }
+  /** 实际探测结果 */
+  actual?: {
+    success?: boolean
+    streamingSupported?: boolean
+    latencyMs?: number
+    error?: string
+  }
+  /** 漂移字段列表 */
+  driftFields?: string[]
 }
 
 // ============== 成本报表（Phase 4 Item 2） ==============

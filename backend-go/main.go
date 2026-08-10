@@ -754,6 +754,7 @@ func main() {
 		imagesMetricsManager.SetEventBus(stateEventBus)
 		vectorsMetricsManager.SetEventBus(stateEventBus)
 		presetstore.Default().SetEventBus(stateEventBus)
+		handlers.SetCapabilityTestEventBus(stateEventBus)
 		if autopilotManager != nil {
 			var stateStore *autopilot.StateEventStore
 			if autopilotDB != nil {
@@ -1025,6 +1026,8 @@ func main() {
 		healthCheckManager.RegisterL1Fetcher("gemini", healthCheckL1Fetcher(gemini.GetChannelModels(cfgManager)))
 		healthCheckManager.RegisterL1Fetcher("images", healthCheckL1Fetcher(images.GetChannelModels(cfgManager)))
 		healthCheckManager.RegisterL1Fetcher("vectors", healthCheckL1Fetcher(vectors.GetChannelModels(cfgManager)))
+		// 注入火山套餐 AFP 余额查询器，稀疏 L2 预算按剩余额度比例收紧，避免探测蚕食生产额度
+		healthCheckManager.SetProbeUsageResolver(cfgManager)
 		healthCheckManager.Start()
 	} else {
 		log.Printf("[HealthCheck-Init] 指标持久化不可用，渠道保活验证未启动")
