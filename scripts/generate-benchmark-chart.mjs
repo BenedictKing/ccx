@@ -259,7 +259,7 @@ tbody tr:hover { background: var(--accent-soft); }
 const RAW_ROWS = ${serializedRows};
 const COMPARISON_ROWS = ${serializedComparisons};
 const state = { metric: 'mean_cost', range: 'focus', source: 'all' };
-const effortRank = new Map([['low', 0], ['medium', 1], ['high', 2], ['xhigh', 3], ['max', 4]]);
+const effortRank = new Map([['off', -2], ['minimal', -1], ['low', 0], ['medium', 1], ['high', 2], ['xhigh', 3], ['max', 4], ['ultra', 5]]);
 const palette = Array.from({ length: 10 }, (_, index) => 'var(--series-' + (index + 1) + ')');
 const modelNames = [...new Set(RAW_ROWS.map(row => row.model))].sort();
 const colors = new Map(modelNames.map((model, index) => [model, palette[index % palette.length]]));

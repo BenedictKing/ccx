@@ -1,9 +1,14 @@
+// 与 Go 端 8 档规范轴一致：off/minimal/low/medium/high/xhigh/max/ultra。
+// 图表仅展示实际出现的档位；ultra 为最高投入档，不可省略，否则会被 (?? 99) 沉底而不可见。
 const EFFORT_ORDER = new Map([
+  ['off', -2],
+  ['minimal', -1],
   ['low', 0],
   ['medium', 1],
   ['high', 2],
   ['xhigh', 3],
   ['max', 4],
+  ['ultra', 5],
 ])
 
 function includesModel(model, models) {
