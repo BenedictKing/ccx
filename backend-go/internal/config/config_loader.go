@@ -197,17 +197,15 @@ func (cm *ConfigManager) loadConfig() error {
 		}
 	}
 
-	// Phase 3c 运行时权威反转：若配置携带 ChannelsV3 权威形态，从它重建运行时六数组。
-	// ChannelsV3 是脱敏持久化形式（不含托管明文 Key），重建后需 hydrateManagedAccountCredentials
-	// 从 ManagedAccounts 补 Key。reconcileAuthoritativeChannels 保留为旧配置兼容对账（无 ChannelsV3 时）。
+	// Phase 3b/3c：若配置携带 ChannelsV3 权威形态，做一次一致性对账。
+	// Phase 3c 加载翻转开关开启时，尝试从 ChannelsV3 重建六数组作为权威来源；
+	// 否则保持现状（仅告警）。
 	if applied, err := applyAuthoritativeChannelsAsLoadSource(&cm.config); err != nil {
 		cm.mu.Unlock()
 		return err
 	} else if !applied {
 		reconcileAuthoritativeChannels(&cm.config)
 	}
-	// 反转后：ChannelsV3 投影出的六数组缺 Key（六数组里的 Key 由 hydrate 补），需在翻转后再 hydrate 一次。
-	cm.config.hydrateManagedAccountCredentials()
 
 	// 成功加载后通知回调（在锁内构造快照，释放锁后通知）
 	cm.fireConfigChangeCallbacks()
