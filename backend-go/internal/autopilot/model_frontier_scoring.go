@@ -43,20 +43,34 @@ const (
 
 // frontierEffortCostFactor 是灰度期的 effort 成本系数（2026-07-26 联合路由计划 §3.4）。
 // 高档思考显著增加输出 token；等成本下高档位会支配低档位造成档位膨胀，
-// 因此用保守系数把档位差异折算进成本轴。待实测输出 token 统计积累后替换。
+// 因此用保守系数把档位差异折算进成本轴。按厂商成本序 ultra>max>xhigh 递增。
+// 待实测输出 token 统计积累后替换。
 var frontierEffortCostFactor = map[EffortLevel]float64{
 	EffortOff:     1.0,
 	EffortMinimal: 1.0,
 	EffortLow:     1.0,
 	EffortMedium:  1.2,
 	EffortHigh:    1.5,
+	EffortXhigh:   1.7,
 	EffortMax:     2.0,
+	EffortUltra:   2.3,
 }
 
 // frontierCostFactorFor 返回候选的 effort 成本系数；未决定或未识别的档位按 1.0 处理。
-func frontierCostFactorFor(candidate rankedModelCandidate) float64 {
+// useMeasured 为 true 且该候选存在实测 cost 时，用实测值相对公开成本的归一化比例
+// 替换推测系数，实现 frontier 成本轴的性价比感知。useMeasured 为 false 时强制走推测系数，
+// 由 buildFrontierPoints 的全有或全无门控保证同一批候选不混用两种成本尺度。
+func frontierCostFactorFor(candidate rankedModelCandidate, useMeasured bool) float64 {
 	if !candidate.effortDecided || candidate.effort == "" {
 		return 1.0
+	}
+	// 有实测 cost 且本批启用实测路径时：factor = measuredCostUSD / normalizedPublicCostUSD，fail-open 避免除零/负成本
+	if useMeasured && candidate.publicCostKnown && candidate.normalizedPublicCostUSD > 0 &&
+		candidate.measuredCostUSD > 0 && !math.IsNaN(candidate.measuredCostUSD) {
+		factor := candidate.measuredCostUSD / candidate.normalizedPublicCostUSD
+		if factor > 0 {
+			return factor
+		}
 	}
 	if factor, ok := frontierEffortCostFactor[candidate.effort]; ok {
 		return factor
@@ -116,11 +130,33 @@ func frontierUseProviderMultiplier(ranked []rankedModelCandidate) bool {
 	return seenCost
 }
 
+// frontierUseMeasuredCost 决定成本轴是否用实测 cost 校准。
+// 仅当所有可比（公开价已知且为正）候选都带有效实测 cost（>0 且非 NaN）时启用，
+// 保证实测路径在轴内语义一致；否则整体回退推测系数（frontierEffortCostFactor）。
+// 与 frontierUseProviderMultiplier 同源：宁可丢实测信息，不混用两种成本尺度——
+// 实测 cost（每任务约数美元）与公开价×effort 系数（2M-token 假想价）量级差数倍，
+// 混在同一 Pareto 成本轴会破坏支配与聚类，反转档位膨胀防护。
+func frontierUseMeasuredCost(ranked []rankedModelCandidate) bool {
+	seenCost := false
+	for i := range ranked {
+		c := &ranked[i]
+		if !c.publicCostKnown || c.normalizedPublicCostUSD <= 0 {
+			continue
+		}
+		seenCost = true
+		if c.measuredCostUSD <= 0 || math.IsNaN(c.measuredCostUSD) {
+			return false
+		}
+	}
+	return seenCost
+}
+
 // buildFrontierPoints 把候选转换为 FrontierPoint。
 // 公开价未知的候选被排除（成本轴不可比，由调用方决定是否回退旧链）。
 // CandidateID 编码候选在 ranked 中的下标，选择后按它映射回原候选。
 func buildFrontierPoints(ranked []rankedModelCandidate, floor CapabilityFloor) []FrontierPoint {
 	useProviderMultiplier := frontierUseProviderMultiplier(ranked)
+	useMeasuredCost := frontierUseMeasuredCost(ranked)
 	scope := frontierCostScopeUSD
 	source := "registry_pricing"
 	if useProviderMultiplier {
@@ -138,10 +174,19 @@ func buildFrontierPoints(ranked []rankedModelCandidate, floor CapabilityFloor) [
 		if useProviderMultiplier {
 			costUSD *= c.providerCostMultiplier
 		}
-		costUSD *= frontierCostFactorFor(c)
+		costUSD *= frontierCostFactorFor(c, useMeasuredCost)
 
 		score := frontierQualityScore(c)
 		half := frontierQualityHalfWidth(c)
+		// 成本来源标记：本批启用实测路径且该候选实测 cost 有效时提升 source 以支持可解释性
+		pointSource := source
+		if useMeasuredCost && c.measuredCostUSD > 0 && !math.IsNaN(c.measuredCostUSD) {
+			pointSource = "registry_pricing_x_measured_effort_cost"
+			if useProviderMultiplier {
+				pointSource = "registry_pricing_x_provider_multiplier_x_measured_effort_cost"
+			}
+		}
+
 		points = append(points, FrontierPoint{
 			CandidateID:    strconv.Itoa(i),
 			CanonicalModel: c.profile.ModelID,
@@ -156,7 +201,7 @@ func buildFrontierPoints(ranked []rankedModelCandidate, floor CapabilityFloor) [
 				ScopeID:    scope,
 				Estimated:  int64(math.Round(costUSD * 1e6)),
 				Confidence: CostConfidenceEstimated,
-				Source:     source,
+				Source:     pointSource,
 			},
 			EvidenceVersion: frontierEvidenceVersion,
 		})

@@ -214,7 +214,7 @@ var (
 	ErrInvalidTrafficPercent       = &IntentValidationError{Field: "trafficPercent", Message: "必须在 0-100 之间"}
 	ErrSessionPinRequiresSessionID = &IntentValidationError{Field: "sessionId", Message: "session_pin 类型必须指定 sessionId"}
 	ErrIntentNotFound              = &IntentValidationError{Field: "intentUid", Message: "意图不存在"}
-	ErrInvalidEffort               = &IntentValidationError{Field: "effort", Message: "必须是 off/minimal/low/medium/high/max 之一"}
+	ErrInvalidEffort               = &IntentValidationError{Field: "effort", Message: "必须是 off/minimal/low/medium/high/xhigh/max/ultra 之一"}
 )
 
 // IntentValidationError 意图校验错误。

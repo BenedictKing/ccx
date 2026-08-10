@@ -1422,3 +1422,32 @@ func TestEffortQualityBonus_AppliedToScore(t *testing.T) {
 			best.measuredQualityScore, baseScore, expectedBonus)
 	}
 }
+
+// TestMeasuredCostForEffort 覆盖 bestEffort 超注册表档位时的成本键回退。
+func TestMeasuredCostForEffort(t *testing.T) {
+	t.Run("候选 effort 精确命中", func(t *testing.T) {
+		costs := map[EffortLevel]float64{EffortHigh: 2.0, EffortMax: 3.5}
+		if got := measuredCostForEffort(costs, EffortHigh); got != 2.0 {
+			t.Fatalf("measuredCostForEffort() = %v, want 2.0", got)
+		}
+	})
+	t.Run("evidence 档位超注册表档位时回退最小成本", func(t *testing.T) {
+		// evidence 仅测了 ultra（注册表该模型只到 max，候选 effort 不含 ultra）；
+		// 候选 max 精确键缺失，应回退到该模型已测档位的最小成本（ultra 的下界）。
+		costs := map[EffortLevel]float64{EffortUltra: 2.0}
+		if got := measuredCostForEffort(costs, EffortMax); got != 2.0 {
+			t.Fatalf("measuredCostForEffort() = %v, want fallback min 2.0", got)
+		}
+	})
+	t.Run("多档实测时取最小成本下界", func(t *testing.T) {
+		costs := map[EffortLevel]float64{EffortUltra: 4.0, EffortMax: 2.5}
+		if got := measuredCostForEffort(costs, EffortHigh); got != 2.5 {
+			t.Fatalf("measuredCostForEffort() = %v, want min 2.5", got)
+		}
+	})
+	t.Run("无实测成本时返回 0", func(t *testing.T) {
+		if got := measuredCostForEffort(map[EffortLevel]float64{}, EffortMax); got != 0 {
+			t.Fatalf("measuredCostForEffort() = %v, want 0", got)
+		}
+	})
+}

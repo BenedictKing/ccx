@@ -89,26 +89,94 @@ func TestFrontierQualityHalfWidth(t *testing.T) {
 
 func TestFrontierCostFactorFor(t *testing.T) {
 	cases := []struct {
-		name     string
-		effort   EffortLevel
-		decided  bool
-		expected float64
+		name        string
+		cand        rankedModelCandidate
+		useMeasured bool
+		expected    float64
 	}{
-		{"未决定档位", EffortHigh, false, 1.0},
-		{"空档位", "", true, 1.0},
-		{"low", EffortLow, true, 1.0},
-		{"medium", EffortMedium, true, 1.2},
-		{"high", EffortHigh, true, 1.5},
-		{"max", EffortMax, true, 2.0},
-		{"未识别档位", EffortLevel("weird"), true, 1.0},
+		{"未决定档位", rankedModelCandidate{effort: EffortHigh, effortDecided: false}, true, 1.0},
+		{"空档位", rankedModelCandidate{effort: "", effortDecided: true}, true, 1.0},
+		{"low", rankedModelCandidate{effort: EffortLow, effortDecided: true}, true, 1.0},
+		{"medium", rankedModelCandidate{effort: EffortMedium, effortDecided: true}, true, 1.2},
+		{"high", rankedModelCandidate{effort: EffortHigh, effortDecided: true}, true, 1.5},
+		{"xhigh", rankedModelCandidate{effort: EffortXhigh, effortDecided: true}, true, 1.7},
+		{"max", rankedModelCandidate{effort: EffortMax, effortDecided: true}, true, 2.0},
+		{"ultra", rankedModelCandidate{effort: EffortUltra, effortDecided: true}, true, 2.3},
+		{"未识别档位", rankedModelCandidate{effort: EffortLevel("weird"), effortDecided: true}, true, 1.0},
+		{
+			name: "实测 cost 替换推测系数",
+			cand: rankedModelCandidate{
+				effort:                  EffortMax,
+				effortDecided:           true,
+				publicCostKnown:         true,
+				normalizedPublicCostUSD: 10,
+				measuredCostUSD:         25,
+			},
+			useMeasured: true,
+			expected:    2.5,
+		},
+		{
+			name: "本批未启用实测路径时忽略实测 cost",
+			cand: rankedModelCandidate{
+				effort:                  EffortMax,
+				effortDecided:           true,
+				publicCostKnown:         true,
+				normalizedPublicCostUSD: 10,
+				measuredCostUSD:         25,
+			},
+			useMeasured: false,
+			expected:    2.0,
+		},
+		{
+			name: "实测 cost 缺失时回退推测系数",
+			cand: rankedModelCandidate{
+				effort:                  EffortMax,
+				effortDecided:           true,
+				publicCostKnown:         true,
+				normalizedPublicCostUSD: 10,
+				measuredCostUSD:         0,
+			},
+			useMeasured: true,
+			expected:    2.0,
+		},
+		{
+			name: "公开价未知时不使用实测 cost",
+			cand: rankedModelCandidate{
+				effort:                  EffortMax,
+				effortDecided:           true,
+				publicCostKnown:         false,
+				normalizedPublicCostUSD: 0,
+				measuredCostUSD:         25,
+			},
+			useMeasured: true,
+			expected:    2.0,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			cand := rankedModelCandidate{effort: tc.effort, effortDecided: tc.decided}
-			if got := frontierCostFactorFor(cand); !almostEqual(got, tc.expected) {
+			if got := frontierCostFactorFor(tc.cand, tc.useMeasured); !almostEqual(got, tc.expected) {
 				t.Fatalf("frontierCostFactorFor() = %v, want %v", got, tc.expected)
 			}
 		})
+	}
+}
+
+// TestBuildFrontierPoints_MeasuredCostCalibration 验证实测 cost 校准成本轴且来源标记正确。
+func TestBuildFrontierPoints_MeasuredCostCalibration(t *testing.T) {
+	cand := makeFrontierCandidate("m", 2, 0.5, 80, 10)
+	cand.effort = EffortHigh
+	cand.effortDecided = true
+	cand.measuredCostUSD = 30
+	points := buildFrontierPoints([]rankedModelCandidate{cand}, CapabilityFloor{})
+	if len(points) != 1 {
+		t.Fatalf("points = %d, want 1", len(points))
+	}
+	// public cost 10 * measured factor 3.0 = 30
+	if points[0].Cost.Estimated != 30_000_000 {
+		t.Fatalf("Estimated = %v, want 30e6 micro-USD", points[0].Cost.Estimated)
+	}
+	if points[0].Cost.Source != "registry_pricing_x_measured_effort_cost" {
+		t.Fatalf("Source = %q, want registry_pricing_x_measured_effort_cost", points[0].Cost.Source)
 	}
 }
 
@@ -140,6 +208,97 @@ func TestFrontierUseProviderMultiplier(t *testing.T) {
 		ranked := []rankedModelCandidate{makeFrontierCandidate("a", 2, 0.5, 80, 0)}
 		if frontierUseProviderMultiplier(ranked) {
 			t.Fatal("expected false without cost evidence")
+		}
+	})
+}
+
+// TestFrontierUseMeasuredCost 验证实测 cost 校准的全有或全无门控。
+func TestFrontierUseMeasuredCost(t *testing.T) {
+	withMeasured := func(c rankedModelCandidate, cost float64) rankedModelCandidate {
+		c.measuredCostUSD = cost
+		return c
+	}
+	t.Run("全部候选带实测 cost 时启用", func(t *testing.T) {
+		ranked := []rankedModelCandidate{
+			withMeasured(makeFrontierCandidate("a", 2, 0.5, 80, 10), 2),
+			withMeasured(makeFrontierCandidate("b", 2, 0.5, 70, 20), 4),
+		}
+		if !frontierUseMeasuredCost(ranked) {
+			t.Fatal("expected measured cost axis")
+		}
+	})
+	t.Run("任一候选缺实测 cost 时整体回退推测系数", func(t *testing.T) {
+		ranked := []rankedModelCandidate{
+			withMeasured(makeFrontierCandidate("a", 2, 0.5, 80, 10), 2),
+			makeFrontierCandidate("b", 2, 0.5, 70, 20),
+		}
+		if frontierUseMeasuredCost(ranked) {
+			t.Fatal("expected fallback to inferred effort factor")
+		}
+	})
+	t.Run("实测 cost 非法时回退", func(t *testing.T) {
+		ranked := []rankedModelCandidate{
+			withMeasured(makeFrontierCandidate("a", 2, 0.5, 80, 10), math.NaN()),
+			withMeasured(makeFrontierCandidate("b", 2, 0.5, 70, 20), 4),
+		}
+		if frontierUseMeasuredCost(ranked) {
+			t.Fatal("expected fallback for NaN measured cost")
+		}
+	})
+	t.Run("公开价未知候选不参与门控", func(t *testing.T) {
+		ranked := []rankedModelCandidate{
+			withMeasured(makeFrontierCandidate("a", 2, 0.5, 80, 10), 2),
+			makeFrontierCandidate("no-public-cost", 2, 0.5, 70, 0),
+		}
+		if !frontierUseMeasuredCost(ranked) {
+			t.Fatal("expected measured cost axis ignoring cost-unknown candidate")
+		}
+	})
+}
+
+// TestBuildFrontierPoints_MeasuredCostAxisConsistency 验证同一批候选绝不混用两种成本尺度。
+func TestBuildFrontierPoints_MeasuredCostAxisConsistency(t *testing.T) {
+	// 全部候选带实测 cost：成本轴用实测值（measured/public），source 标记为 measured。
+	t.Run("全部实测时用实测校准", func(t *testing.T) {
+		a := makeFrontierCandidate("a", 2, 0.5, 80, 10)
+		a.effort, a.effortDecided = EffortHigh, true
+		a.measuredCostUSD = 30
+		b := makeFrontierCandidate("b", 2, 0.5, 70, 20)
+		b.effort, b.effortDecided = EffortHigh, true
+		b.measuredCostUSD = 50
+		points := buildFrontierPoints([]rankedModelCandidate{a, b}, CapabilityFloor{})
+		if len(points) != 2 {
+			t.Fatalf("points = %d, want 2", len(points))
+		}
+		// a: 10 * (30/10)=30; b: 20 * (50/20)=50
+		if points[0].Cost.Estimated != 30_000_000 || points[1].Cost.Estimated != 50_000_000 {
+			t.Fatalf("Estimated = (%v, %v), want (30e6, 50e6)", points[0].Cost.Estimated, points[1].Cost.Estimated)
+		}
+		for _, p := range points {
+			if p.Cost.Source != "registry_pricing_x_measured_effort_cost" {
+				t.Fatalf("Source = %q, want measured_effort_cost", p.Cost.Source)
+			}
+		}
+	})
+	// 部分候选缺实测 cost：整批回退推测系数，实测值不得渗入成本轴，source 不带 measured 标记。
+	t.Run("部分实测时整体回退推测系数", func(t *testing.T) {
+		a := makeFrontierCandidate("a", 2, 0.5, 80, 10)
+		a.effort, a.effortDecided = EffortHigh, true
+		a.measuredCostUSD = 30 // 有实测，但因 b 缺失而整批回退
+		b := makeFrontierCandidate("b", 2, 0.5, 70, 20)
+		b.effort, b.effortDecided = EffortHigh, true
+		points := buildFrontierPoints([]rankedModelCandidate{a, b}, CapabilityFloor{})
+		if len(points) != 2 {
+			t.Fatalf("points = %d, want 2", len(points))
+		}
+		// 两候选均按 high 推测系数 1.5：a=15, b=30；不得出现 a 的实测 30。
+		if points[0].Cost.Estimated != 15_000_000 || points[1].Cost.Estimated != 30_000_000 {
+			t.Fatalf("Estimated = (%v, %v), want (15e6, 30e6) inferred factors", points[0].Cost.Estimated, points[1].Cost.Estimated)
+		}
+		for _, p := range points {
+			if p.Cost.Source == "registry_pricing_x_measured_effort_cost" {
+				t.Fatalf("Source = %q, must not mark measured when axis fell back", p.Cost.Source)
+			}
 		}
 	})
 }

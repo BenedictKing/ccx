@@ -276,8 +276,10 @@ func TestManualRoutingIntent_ValidateEffort(t *testing.T) {
 		{name: "low 合法", effort: EffortLow, wantErr: nil},
 		{name: "medium 合法", effort: EffortMedium, wantErr: nil},
 		{name: "high 合法", effort: EffortHigh, wantErr: nil},
+		{name: "xhigh 合法", effort: EffortXhigh, wantErr: nil},
 		{name: "max 合法", effort: EffortMax, wantErr: nil},
-		{name: "未知档位必须被拒绝", effort: EffortLevel("ultra"), wantErr: ErrInvalidEffort},
+		{name: "ultra 合法", effort: EffortUltra, wantErr: nil},
+		{name: "未知档位必须被拒绝", effort: EffortLevel("turbo"), wantErr: ErrInvalidEffort},
 	}
 
 	for _, tt := range tests {

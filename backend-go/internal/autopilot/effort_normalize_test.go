@@ -18,7 +18,9 @@ func TestNormalizeEffortLevel(t *testing.T) {
 		{"low", "low", EffortLow},
 		{"medium", "medium", EffortMedium},
 		{"high", "high", EffortHigh},
+		{"xhigh", "xhigh", EffortXhigh},
 		{"max", "max", EffortMax},
+		{"ultra", "ultra", EffortUltra},
 
 		// 别名
 		{"none alias", "none", EffortOff},
@@ -26,14 +28,13 @@ func TestNormalizeEffortLevel(t *testing.T) {
 		{"min alias", "min", EffortMinimal},
 		{"med alias", "med", EffortMedium},
 		{"default alias", "default", EffortMedium},
-		{"xhigh alias", "xhigh", EffortMax},
-		{"ultra alias", "ultra", EffortMax},
 
 		// 大小写不敏感
 		{"uppercase OFF", "OFF", EffortOff},
 		{"mixed case High", "High", EffortHigh},
-		{"uppercase XHIGH", "XHIGH", EffortMax},
-		{"mixed Ultra", "Ultra", EffortMax},
+		{"uppercase XHIGH", "XHIGH", EffortXhigh},
+		{"uppercase MAX", "MAX", EffortMax},
+		{"mixed Ultra", "Ultra", EffortUltra},
 
 		// trim
 		{"trimmed medium", "  medium  ", EffortMedium},
@@ -68,9 +69,17 @@ func TestEffortLevelDistance(t *testing.T) {
 		{"adjacent up", EffortLow, EffortMedium, 1},
 		{"adjacent down", EffortHigh, EffortMedium, 1},
 		{"two apart", EffortOff, EffortLow, 2},
-		{"max distance", EffortOff, EffortMax, 5},
-		{"reversed max", EffortMax, EffortOff, 5},
+		{"max distance", EffortOff, EffortUltra, 7},
+		{"reversed max", EffortUltra, EffortOff, 7},
 		{"minimal to high", EffortMinimal, EffortHigh, 3},
+
+		// 8 档新轴的相邻/跨档距离
+		{"high to xhigh", EffortHigh, EffortXhigh, 1},
+		{"xhigh to max", EffortXhigh, EffortMax, 1},
+		{"max to ultra", EffortMax, EffortUltra, 1},
+		{"xhigh to ultra", EffortXhigh, EffortUltra, 2},
+		{"high to max", EffortHigh, EffortMax, 2},
+		{"high to ultra", EffortHigh, EffortUltra, 3},
 
 		// 无效输入
 		{"empty a", "", EffortMedium, -1},
@@ -106,6 +115,19 @@ func TestEffortLevelDistance(t *testing.T) {
 
 // ── EffortLevelOrdinal 测试 ──
 
+// TestNormalizeEffortLevel_NotFlattened 锁定 xhigh/max/ultra 归一化后各自独立、不再压平为同一档。
+func TestNormalizeEffortLevel_NotFlattened(t *testing.T) {
+	xhigh := NormalizeEffortLevel("xhigh")
+	max := NormalizeEffortLevel("max")
+	ultra := NormalizeEffortLevel("ultra")
+	if xhigh != EffortXhigh || max != EffortMax || ultra != EffortUltra {
+		t.Fatalf("normalize mismatch: xhigh=%q max=%q ultra=%q", xhigh, max, ultra)
+	}
+	if xhigh == max || max == ultra || xhigh == ultra {
+		t.Errorf("xhigh/max/ultra 归一化不应压平为同一档: xhigh=%q max=%q ultra=%q", xhigh, max, ultra)
+	}
+}
+
 func TestEffortLevelOrdinal(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -117,7 +139,9 @@ func TestEffortLevelOrdinal(t *testing.T) {
 		{"low", EffortLow, 2},
 		{"medium", EffortMedium, 3},
 		{"high", EffortHigh, 4},
-		{"max", EffortMax, 5},
+		{"xhigh", EffortXhigh, 5},
+		{"max", EffortMax, 6},
+		{"ultra", EffortUltra, 7},
 		{"empty string", "", -1},
 		{"unknown", EffortLevel("unknown"), -1},
 	}

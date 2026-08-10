@@ -636,14 +636,18 @@ func buildSeedKey(family ModelFamily, modelID string) seedDomainKey {
 // ── 思考等级质量加分（§5.8.2）──
 
 // effortBonusTable 定义各 EffortLevel 对质量分的加分值。
-// 设计文档 §5.8.2：off=0, minimal=+0.2, low=+0.4, medium=+0.6, high=+0.9, max=+1.0。
+// 设计文档 §5.8.2：off=0, minimal=+0.2, low=+0.4, medium=+0.6, high=+0.9, xhigh=+1.0。
+// 雷达站实测 xhigh 为效果最优档；max/ultra 投入更高但实测效果递减，
+// 故加分不随投入单调涨（体现"更贵不等于更好"）：max=+0.95, ultra=+0.9。
 var effortBonusTable = map[EffortLevel]float64{
 	EffortOff:     0.0,
 	EffortMinimal: 0.2,
 	EffortLow:     0.4,
 	EffortMedium:  0.6,
 	EffortHigh:    0.9,
-	EffortMax:     1.0,
+	EffortXhigh:   1.0,
+	EffortMax:     0.95,
+	EffortUltra:   0.9,
 }
 
 // EffortQualityBonus 返回指定思考等级对质量评分的加分值。
@@ -655,10 +659,11 @@ func EffortQualityBonus(level EffortLevel) float64 {
 	return 0.0
 }
 
-// AllEffortLevels 返回所有可用的 EffortLevel（按档位升序）。
+// AllEffortLevels 返回所有可用的 EffortLevel（按厂商投入/成本序升序）。
 func AllEffortLevels() []EffortLevel {
 	return []EffortLevel{
-		EffortOff, EffortMinimal, EffortLow, EffortMedium, EffortHigh, EffortMax,
+		EffortOff, EffortMinimal, EffortLow, EffortMedium, EffortHigh,
+		EffortXhigh, EffortMax, EffortUltra,
 	}
 }
 

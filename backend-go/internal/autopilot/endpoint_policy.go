@@ -628,6 +628,7 @@ func endpointCostScore(ct CostTier) float64 {
 }
 
 // effortLevelToScore 将 EffortLevel 映射为 0-100 数值分，供 trace 维度展示。
+// 按厂商投入/成本序递增：xhigh=88, max=95, ultra=100。
 func effortLevelToScore(e EffortLevel) float64 {
 	switch e {
 	case EffortOff:
@@ -640,7 +641,11 @@ func effortLevelToScore(e EffortLevel) float64 {
 		return 50
 	case EffortHigh:
 		return 75
+	case EffortXhigh:
+		return 88
 	case EffortMax:
+		return 95
+	case EffortUltra:
 		return 100
 	default:
 		return 50

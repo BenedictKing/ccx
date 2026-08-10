@@ -3,13 +3,16 @@ package autopilot
 import "strings"
 
 // effortOrdinal 定义 EffortLevel 到序数值的映射，用于计算距离。
+// 按厂商投入/成本序排列：off=0, minimal=1, low=2, medium=3, high=4, xhigh=5, max=6, ultra=7。
 var effortOrdinal = map[EffortLevel]int{
 	EffortOff:     0,
 	EffortMinimal: 1,
 	EffortLow:     2,
 	EffortMedium:  3,
 	EffortHigh:    4,
-	EffortMax:     5,
+	EffortXhigh:   5,
+	EffortMax:     6,
+	EffortUltra:   7,
 }
 
 // NormalizeEffortLevel 将供应商特定的 effort 名称标准化为规范 EffortLevel 枚举。
@@ -27,15 +30,19 @@ func NormalizeEffortLevel(raw string) EffortLevel {
 		return EffortMedium
 	case "high":
 		return EffortHigh
-	case "xhigh", "ultra", "max":
+	case "xhigh":
+		return EffortXhigh
+	case "max":
 		return EffortMax
+	case "ultra":
+		return EffortUltra
 	default:
 		return ""
 	}
 }
 
 // EffortLevelOrdinal 返回 EffortLevel 在序数轴上的索引值。
-// off=0, minimal=1, low=2, medium=3, high=4, max=5。
+// off=0, minimal=1, low=2, medium=3, high=4, xhigh=5, max=6, ultra=7。
 // 空串或无法识别的值返回 -1。
 func EffortLevelOrdinal(level EffortLevel) int {
 	if ord, ok := effortOrdinal[level]; ok {
@@ -45,7 +52,7 @@ func EffortLevelOrdinal(level EffortLevel) int {
 }
 
 // EffortLevelDistance 返回两个 EffortLevel 在序数轴上的绝对距离。
-// off=0, minimal=1, low=2, medium=3, high=4, max=5。
+// off=0, minimal=1, low=2, medium=3, high=4, xhigh=5, max=6, ultra=7。
 // 任一参数为空或无法识别时返回 -1（表示无法计算距离）。
 func EffortLevelDistance(a, b EffortLevel) int {
 	oa, okA := effortOrdinal[a]

@@ -2,6 +2,7 @@ package autopilot
 
 import (
 	"fmt"
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -586,6 +587,7 @@ type rankedModelCandidate struct {
 	benchmarkScore                 float64
 	benchmarkModel                 string
 	benchmarkLane                  string // benchmark 证据泳道（provisional/verified），frontier 置信区间加宽用
+	measuredCostUSD                float64
 	versionLineage                 string
 	versionNumbers                 []int
 	sameFamily                     bool
@@ -680,6 +682,24 @@ func (r *ModelResolver) rankEligibleModels(
 	return best
 }
 
+// measuredCostForEffort 返回该候选 effort 对应的实测成本。
+// 优先精确匹配候选 effort 档位；当 evidence 报告的档位超出注册表 SupportedEffortLevels
+// （例如 evidence 测了 ultra，但该模型只声明到 max）导致精确键缺失时，回退取该模型
+// 已测档位的最小成本，作为该模型成本下界参与 frontier 校准。这样既不伪造注册表未声明的
+// 档位，也避免 measuredCostUSD 恒 0 让校准静默失效。无任何实测成本时返回 0。
+func measuredCostForEffort(effortCostUSD map[EffortLevel]float64, effort EffortLevel) float64 {
+	if cost, ok := effortCostUSD[effort]; ok && cost > 0 {
+		return cost
+	}
+	minCost := 0.0
+	for _, cost := range effortCostUSD {
+		if cost > 0 && (minCost == 0 || cost < minCost) {
+			minCost = cost
+		}
+	}
+	return minCost
+}
+
 // buildRankedCandidates 把 eligible 画像展开为 model × effort 排序候选，
 // 并补齐证据字段（质量/成本/基准/版本）与 EffortFloor、QualityBenefitCap 过滤。
 // 候选顺序保持输入顺序，排序决策由调用方完成。
@@ -705,6 +725,18 @@ func (r *ModelResolver) buildRankedCandidates(
 		providerMultiplier, providerSource, providerKnown := providerModelCostMultiplier(profile.ModelID, upstream)
 		publicCostUSD, publicCostKnown := normalizedModelCostUSD(profile.ModelID, upstream, global)
 		benchmark := config.ResolveModelBenchmarkProfile(profile.ModelID)
+		// 收集该模型各 effort 的实测 cost，供 frontier 成本轴校准
+		effortCostUSD := make(map[EffortLevel]float64)
+		for _, ev := range benchmark.Profile.BenchmarkEvidence {
+			normalized := NormalizeEffortLevel(ev.Effort)
+			if normalized == "" || ev.CostUSD == nil || math.IsNaN(*ev.CostUSD) || *ev.CostUSD <= 0 {
+				continue
+			}
+			// 同一 effort 多条证据时取最小成本（保守估计）
+			if existing, ok := effortCostUSD[normalized]; !ok || *ev.CostUSD < existing {
+				effortCostUSD[normalized] = *ev.CostUSD
+			}
+		}
 		baseScore := measuredProviderQualityScore(profile)
 
 		effortLevels, effortDecided := r.resolveEffortVariants(profile, floor)
@@ -720,6 +752,9 @@ func (r *ModelResolver) buildRankedCandidates(
 			if floor.TaskDomain != "" {
 				domainScore = ResolveDomainStrengthForEffort(&profile, floor.TaskDomain, effort).Score
 			}
+			// 实测 cost 按候选 effort 精确取；未命中时回退该模型已测档位成本下界，
+			// 保证 frontier 校准在"evidence 档位超注册表档位"场景仍生效。
+			measuredCost := measuredCostForEffort(effortCostUSD, effort)
 			ranked = append(ranked, rankedModelCandidate{
 				profile:                      profile,
 				effort:                       effort,
@@ -741,6 +776,7 @@ func (r *ModelResolver) buildRankedCandidates(
 				benchmarkScore:               benchmark.Profile.OverallScore,
 				benchmarkModel:               benchmark.Profile.CanonicalModel,
 				benchmarkLane:                benchmark.Profile.Lane,
+				measuredCostUSD:              measuredCost,
 				versionLineage:               modelVersionLineage(profile.ModelFamily, profile.ModelID),
 				versionNumbers:               modelVersionNumbers(profile.ModelFamily, profile.ModelID),
 				sameFamily:                   profile.ModelFamily == reqFamily,

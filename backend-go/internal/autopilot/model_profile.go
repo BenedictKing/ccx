@@ -85,7 +85,9 @@ const (
 	EffortLow     EffortLevel = "low"     // 低思考
 	EffortMedium  EffortLevel = "medium"  // 中等思考
 	EffortHigh    EffortLevel = "high"    // 高思考
-	EffortMax     EffortLevel = "max"     // 最大思考
+	EffortXhigh   EffortLevel = "xhigh"   // 超高思考（实测最优档，成本高于 max）
+	EffortMax     EffortLevel = "max"     // 最大思考（厂商满档，成本高于 xhigh）
+	EffortUltra   EffortLevel = "ultra"   // 极致思考（厂商最高强度档，成本最高）
 )
 
 // ── ModelFamily 模型派系 ──

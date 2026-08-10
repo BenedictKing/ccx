@@ -203,7 +203,7 @@ func applyProviderQualityReasoningControl(body map[string]any, serviceType, mode
 }
 
 func lowestProviderQualityReasoningEffort(efforts []string) string {
-	for _, preferred := range []string{"none", "off", "minimal", "low", "medium", "high", "xhigh", "max"} {
+	for _, preferred := range []string{"none", "off", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"} {
 		for _, effort := range efforts {
 			if strings.EqualFold(strings.TrimSpace(effort), preferred) {
 				return preferred

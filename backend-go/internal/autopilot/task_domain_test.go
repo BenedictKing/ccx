@@ -829,7 +829,9 @@ func TestEffortQualityBonus_AllLevels(t *testing.T) {
 		{EffortLow, 0.4},
 		{EffortMedium, 0.6},
 		{EffortHigh, 0.9},
-		{EffortMax, 1.0},
+		{EffortXhigh, 1.0},
+		{EffortMax, 0.95},
+		{EffortUltra, 0.9},
 	}
 
 	for _, tt := range tests {
@@ -843,20 +845,31 @@ func TestEffortQualityBonus_AllLevels(t *testing.T) {
 }
 
 func TestEffortQualityBonus_InvalidLevel(t *testing.T) {
-	got := EffortQualityBonus(EffortLevel("ultra"))
+	got := EffortQualityBonus(EffortLevel("turbo"))
 	if got != 0.0 {
 		t.Errorf("EffortQualityBonus(invalid) = %v, want 0.0", got)
 	}
 }
 
 func TestEffortQualityBonus_Monotonic(t *testing.T) {
-	// bonus 应严格递增
+	// bonus 在实测效果最优的 xhigh 档之前严格递增；
+	// xhigh/max/ultra 实测效果递减，加分不随厂商投入单调涨，故只对 [off..xhigh] 段断言递增。
 	levels := AllEffortLevels()
-	for i := 1; i < len(levels); i++ {
+	xhighIdx := -1
+	for i, lv := range levels {
+		if lv == EffortXhigh {
+			xhighIdx = i
+			break
+		}
+	}
+	if xhighIdx < 0 {
+		t.Fatal("AllEffortLevels 缺少 EffortXhigh")
+	}
+	for i := 1; i <= xhighIdx; i++ {
 		prev := EffortQualityBonus(levels[i-1])
 		curr := EffortQualityBonus(levels[i])
 		if curr <= prev {
-			t.Errorf("EffortQualityBonus not monotonic: %s=%v >= %s=%v",
+			t.Errorf("EffortQualityBonus not monotonic up to xhigh: %s=%v >= %s=%v",
 				levels[i-1], prev, levels[i], curr)
 		}
 	}
@@ -927,8 +940,8 @@ func TestAllTaskDomains_Count(t *testing.T) {
 
 func TestAllEffortLevels_Count(t *testing.T) {
 	levels := AllEffortLevels()
-	if len(levels) != 6 {
-		t.Errorf("AllEffortLevels() returned %d levels, want 6", len(levels))
+	if len(levels) != 8 {
+		t.Errorf("AllEffortLevels() returned %d levels, want 8", len(levels))
 	}
 }
 
