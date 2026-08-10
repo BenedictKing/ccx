@@ -10,6 +10,12 @@ declare module '*.vue' {
 
 declare module 'vuetify/styles' {}
 
+declare module '*.json' {
+  const value: any
+  export default value
+}
+
+
 import type { SupportedLocale } from './i18n/messages'
 
 export {}

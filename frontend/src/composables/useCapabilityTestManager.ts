@@ -4,8 +4,12 @@ import { ref, watch } from "vue"
 import { api, type CapabilityTestJob, type CapabilityProtocolJobResult, type CapabilityModelJobResult, type CapabilitySnapshot, type Channel, type CapabilityTestJobStartResponse, ApiError } from "../services/api"
 import { useChannelStore } from '../stores/channel'
 import { useDialogStore } from '../stores/dialog'
+import capabilityProbeSchema from '../../../shared/capability-probe-schema.json'
 
-type CapabilityChannelKind = "messages" | "chat" | "responses" | "gemini"
+const capabilityBaseProtocolOrder = capabilityProbeSchema.baseProtocols as readonly ('messages' | 'chat' | 'responses' | 'gemini')[]
+type CapabilityBaseProtocol = typeof capabilityBaseProtocolOrder[number]
+type CapabilityChannelKind = CapabilityBaseProtocol
+type CapabilityCopyTargetProtocol = CapabilityBaseProtocol | 'images'
 
 export function useCapabilityTestManager(
   channelStore: ReturnType<typeof useChannelStore>,
@@ -28,19 +32,13 @@ const capabilityTestRpm = ref(30)
 const capabilityTestPreviousJobId = ref('') // 记录上一次的 jobId，用于复用成功结果
 const capabilityRetryPendingUntil = ref<Record<string, number>>({})
 
-type CapabilityChannelKind = 'messages' | 'chat' | 'responses' | 'gemini'
-
 const isCapabilityChannelKind = (tab: string): tab is CapabilityChannelKind => {
-  return tab === 'messages' || tab === 'chat' || tab === 'responses' || tab === 'gemini'
+  return capabilityBaseProtocolOrder.includes(tab as CapabilityBaseProtocol)
 }
 
+// 前端占位模型：取 schema 中的后端探测模型，并追加前端特有 images 占位列表（后端 capability 不支持 images）
 const capabilityPlaceholderModels: Record<string, string[]> = {
-  // ⚠️ 修改此处时必须同步修改后端 backend-go/internal/handlers/capability_probe_models.go
-  // 用于开始接口返回前的首屏占位
-  messages: ['claude-fable-5', 'claude-opus-4-8', 'claude-opus-4-7', 'claude-opus-4-6', 'claude-sonnet-4-6', 'claude-sonnet-4-5-20250929', 'claude-haiku-4-5-20251001'],
-  chat: ['gpt-5.5', 'gpt-5.4', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.4-mini', 'codex-auto-review'],
-  responses: ['gpt-5.5', 'gpt-5.4', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.4-mini', 'codex-auto-review'],
-  gemini: ['gemini-3.5-flash', 'gemini-3.1-pro-preview', 'gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite'],
+  ...capabilityProbeSchema.frontendPlaceholderModels,
   images: ['gpt-image-2', 'gpt-image-1', 'dall-e-3', 'dall-e-2']
 }
 
@@ -52,10 +50,6 @@ const getPlaceholderModelsForProtocol = (protocol: string): string[] => {
   }
   return capabilityPlaceholderModels[protocol] ?? []
 }
-
-const capabilityBaseProtocolOrder = ['messages', 'responses', 'chat', 'gemini'] as const
-type CapabilityBaseProtocol = typeof capabilityBaseProtocolOrder[number]
-type CapabilityCopyTargetProtocol = CapabilityBaseProtocol | 'images'
 
 const capabilityNativeServiceTypeByProtocol: Record<CapabilityCopyTargetProtocol, Channel['serviceType']> = {
   messages: 'claude',

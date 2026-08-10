@@ -329,6 +329,10 @@ import type {
 } from '../services/api'
 import { useI18n } from '../i18n'
 import CapabilityModelResults from './CapabilityModelResults.vue'
+import capabilityProbeSchema from '../../../shared/capability-probe-schema.json'
+
+const capabilityBaseProtocolOrder = capabilityProbeSchema.baseProtocols as readonly ('messages' | 'chat' | 'responses' | 'gemini')[]
+type CapabilityBaseProtocol = typeof capabilityBaseProtocolOrder[number]
 
 interface Props {
   modelValue: boolean
@@ -406,17 +410,18 @@ watch(state, (newState) => {
 
 const job = computed(() => props.capabilityJob)
 
-const knownBaseProtocols = ['messages', 'chat', 'responses', 'gemini'] as const
+// 基础协议列表从 shared/capability-probe-schema.json 读取，保证前后端单一真相源
+const knownBaseProtocols = capabilityBaseProtocolOrder
 
 // 复合协议检测：包含 "->" 的协议字符串（如 "messages->responses"）
 const isCompositeProtocol = (protocol: string): boolean => protocol.includes('->')
 
 // 基础协议校验：直接匹配已知协议，或从复合协议中提取 from 部分校验
 const isKnownProtocol = (protocol: string): boolean => {
-  if (knownBaseProtocols.includes(protocol as typeof knownBaseProtocols[number])) return true
+  if (knownBaseProtocols.includes(protocol as CapabilityBaseProtocol)) return true
   if (isCompositeProtocol(protocol)) {
     const from = protocol.split('->')[0]
-    return knownBaseProtocols.includes(from as typeof knownBaseProtocols[number])
+    return knownBaseProtocols.includes(from as CapabilityBaseProtocol)
   }
   return false
 }
@@ -487,8 +492,8 @@ const getSuccessfulProtocols = () => {
     .map(t => t.protocol)
 }
 
-// 协议排序：复合协议始终排在第一位，其余按固定顺序
-const baseProtocolOrder = ['messages', 'responses', 'chat', 'gemini']
+// 协议排序：复合协议始终排在第一位，其余按 schema 基础协议顺序
+const baseProtocolOrder = capabilityBaseProtocolOrder as readonly string[]
 
 const sortedTests = computed(() => {
   if (!job.value) return []
