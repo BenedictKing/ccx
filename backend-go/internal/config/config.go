@@ -1266,6 +1266,14 @@ type Config struct {
 	// LogicalChannelSchemaVersion 逻辑渠道配置 schema 版本。
 	// 首次引入版本为 1；非 1 时 ConfigManager 会触发一次重建以保证字段完整。
 	LogicalChannelSchemaVersion int `json:"logicalChannelSchemaVersion,omitempty"`
+	// Channels 是"渠道→key→endpoint→模型"粒度的非权威镜像（Channel Data Model v2）。
+	// 六个 Upstream* 数组仍是运行时权威；本字段由 RebuildChannels 在落盘前从数组合成，
+	// 供前端与后续阶段消费。不含明文 key（仅 KeyMask）。详见 docs/specs/channel-data-model-v2.md。
+	Channels []ChannelView `json:"channels,omitempty"`
+	// ChannelCapabilities 是跨账号共享的协议+模型认知（按 CapabilityUID 排序），与 Channels 同步重建。
+	ChannelCapabilities []EndpointCapability `json:"channelCapabilities,omitempty"`
+	// ChannelSchemaVersion Channels 镜像 schema 版本。
+	ChannelSchemaVersion int `json:"channelSchemaVersion,omitempty"`
 }
 
 // FailedKey 失败密钥记录

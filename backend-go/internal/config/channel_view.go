@@ -104,6 +104,24 @@ func BuildChannelViews(cfg *Config) ([]ChannelView, map[string]EndpointCapabilit
 	return out, capabilities
 }
 
+// RebuildChannels 把六个 Upstream 数组合成的 ChannelView 与共享能力写入 config 镜像字段。
+//
+// 与 RebuildLogicalChannels 同为落盘前的非权威投影：六个数组仍是运行时权威，
+// Channels/ChannelCapabilities 只是把新粒度（渠道→key→endpoint→模型 + 跨账号共享能力）
+// 持久化到 config.json，供前端与后续 Phase 3 消费。不含明文 key（仅 KeyMask）。
+func RebuildChannels(cfg *Config) {
+	if cfg == nil {
+		return
+	}
+	views, caps := BuildChannelViews(cfg)
+	cfg.Channels = views
+	cfg.ChannelCapabilities = make([]EndpointCapability, 0, len(caps))
+	for _, uid := range sortedCapabilityUIDs(caps) {
+		cfg.ChannelCapabilities = append(cfg.ChannelCapabilities, caps[uid])
+	}
+	cfg.ChannelSchemaVersion = ChannelSchemaVersion
+}
+
 // mergeMemberIntoBuilder 把一个物理渠道并入 ChannelView 中间态。
 func mergeMemberIntoBuilder(b *channelViewBuilder, m channelViewMember, now time.Time, caps map[string]EndpointCapability) {
 	u := m.channel

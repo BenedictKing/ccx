@@ -1226,6 +1226,9 @@ func (cm *ConfigManager) saveConfigLocked(config Config) error {
 	// 统一重建 LogicalChannels 视图并回写 LogicalChannelUID / LogicalName。
 	// 在 deepCopy 之前执行，确保修改作用于调用方共享的 slice 并最终提交到 cm.config。
 	RebuildLogicalChannels(&config)
+	// Channel Data Model v2：在逻辑渠道重建之后，合成非权威的 Channels 镜像
+	// （渠道→key→endpoint→模型 + 跨账号共享能力）。六个数组仍是运行时权威。
+	RebuildChannels(&config)
 	// Phase B.2：落盘 + 提交到 cm.config 后，发布 logical_channel_rebuilt 事件。
 	defer cm.publishLogicalChannelRebuilt()
 	persisted := config.deepCopy()
