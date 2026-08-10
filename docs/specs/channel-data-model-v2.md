@@ -84,6 +84,9 @@ EndpointCapability（跨账号共享，按 CapabilityUID 索引）
   - **2a（已落地）**：`Config` 新增 `Channels []ChannelView` + `ChannelCapabilities []EndpointCapability` + `ChannelSchemaVersion`，作为**非权威镜像**，落盘前由 `RebuildChannels` 从六数组合成（与 `RebuildLogicalChannels` 同一 save 路径）。六数组仍是运行时权威；镜像不含明文 key。前端可直接消费该新粒度。
   - **2b（进行中）**：只读 API `GET /api/channels`、`GET /api/channels/:uid` 暴露实时合成的渠道视图与共享能力（`internal/handlers/channels`，基于 `ConfigManager.GetChannelViews`）；前端读逐步切换。写路径仍走既有 upstream/logical-channels 接口。
 - **Phase 3**：移除六个 `Upstream` 数组，仅保留 `Channels` + `ProtocolFacade`；scheduler/handlers/autopilot 全量改用 `Channel`。
+  - **3a（已落地）**：无损权威形态 `ChannelV3`（每协议成员携带完整 `UpstreamConfig`）+ 双向投影 `BuildAuthoritativeChannels` / `ApplyAuthoritativeChannels`（`channel_authoritative.go`）。round-trip 逐字段无损、按 Index 恢复数组顺序，测试通过。这是"Channels 权威"的安全核心机制。
+  - **3b（待做，需 app 验证）**：把 `ChannelV3` 作为持久化权威（save 写 / load 时从它重建六数组），schema 版本门控，旧配置零影响。
+  - **3c（待做，需 app 验证）**：scheduler/handlers/metrics/autopilot 逐个从六数组切到 `ChannelV3`，最后删除数组字段。破坏性最大，必须边改边用 `make dev` 跑真实请求回归。
 
 ## 7. 当前实现状态
 
@@ -93,6 +96,7 @@ EndpointCapability（跨账号共享，按 CapabilityUID 索引）
 - ✅ `endpoint_capability.go`：`EndpointCapabilityRegistry`（按 CapabilityUID 查询）+ `CapabilityProbeLedger`（每周期跨账号探测去重）+ `KeyEndpointCapabilityUIDs`。
 - ✅ Phase 2a：`Config.Channels` / `ChannelCapabilities` / `ChannelSchemaVersion` 非权威镜像，落盘前 `RebuildChannels` 合成（`config_loader.go` saveConfigLocked）；round-trip 与"不含明文 key/不改六数组"测试通过。
 - ✅ Phase 2b（后端读）：`GET /api/channels`、`GET /api/channels/:uid` 实时返回渠道视图 + 共享能力（`ConfigManager.GetChannelViews`）。
+- ✅ Phase 3a（权威投影核心）：`channel_authoritative.go` 无损 `ChannelV3` + 双向投影 + round-trip/顺序恢复测试。
 - ⏳ 把 `CapabilityProbeLedger` 接入 autopilot 协议探测与 healthcheck：同站点同分组只探一次（需 app 级验证）。
 - ⏳ 拉黑/熔断按 key 跨协议。
-- ⏳ Phase 2b 前端读切换 / Phase 3（移除六数组）。
+- ⏳ Phase 3b（权威落盘+load 重建，schema 门控）/ Phase 3c（消费者切换+删除数组，需 app 回归）。
