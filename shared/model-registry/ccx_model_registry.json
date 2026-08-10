@@ -2025,8 +2025,8 @@
       "overallScore": 82.79,
       "categoryScores": {
         "agentic": 92.7,
-        "coding": 82.9,
-        "multimodal": 63.4,
+        "coding": 82.8,
+        "multimodal": 63.3,
         "knowledge": 70.9
       }
     },
@@ -2063,10 +2063,10 @@
           "capturedAt": "2026-08-10"
         }
       ],
-      "overallScore": 55.77,
+      "overallScore": 55.83,
       "categoryScores": {
-        "coding": 49.1,
-        "math": 29.2
+        "coding": 48.9,
+        "math": 29
       }
     },
     {
@@ -2151,11 +2151,11 @@
           "capturedAt": "2026-08-10"
         }
       ],
-      "overallScore": 82.6,
+      "overallScore": 82.59,
       "categoryScores": {
-        "agentic": 84.8,
-        "coding": 82.9,
-        "multimodal": 88.5,
+        "agentic": 84.7,
+        "coding": 82.8,
+        "multimodal": 88.4,
         "knowledge": 93.5
       }
     },
@@ -2164,13 +2164,13 @@
         "(?:^|[-/])claude-opus-4[.-]8(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)"
       ],
       "canonicalModel": "claude-opus-4-8",
-      "overallScore": 77.34,
+      "overallScore": 77.33,
       "categoryScores": {
         "agentic": 83,
-        "coding": 68.9,
-        "multimodal": 88,
+        "coding": 68.8,
+        "multimodal": 87.9,
         "knowledge": 87.7,
-        "math": 66.9
+        "math": 66.7
       },
       "benchmarkEvidence": [
         {
@@ -2332,10 +2332,10 @@
       "sharedResults": 595,
       "comparableCategories": 4,
       "totalCategories": 8,
-      "overallScore": 64.5,
+      "overallScore": 64.49,
       "categoryScores": {
         "agentic": 86.1,
-        "coding": 61.2,
+        "coding": 61.1,
         "multimodal": 76.1,
         "knowledge": 85.9
       }
@@ -2422,13 +2422,13 @@
       "sharedResults": 595,
       "comparableCategories": 5,
       "totalCategories": 8,
-      "overallScore": 64.25,
+      "overallScore": 64.24,
       "categoryScores": {
         "agentic": 54.2,
-        "coding": 63.5,
+        "coding": 63.3,
         "multimodal": 55.2,
         "knowledge": 76.9,
-        "math": 49.5
+        "math": 49.3
       }
     },
     {
@@ -2450,10 +2450,10 @@
       "comparableCategories": 4,
       "totalCategories": 8,
       "categoryScores": {
-        "agentic": 46.9,
-        "coding": 46.7,
+        "agentic": 46.7,
+        "coding": 46.5,
         "knowledge": 60.1,
-        "math": 81.6
+        "math": 81.4
       },
       "benchmarkEvidence": [
         {
@@ -2462,7 +2462,7 @@
           "sourceModel": "deepseek-v4-flash",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.527,
+          "rawValue": 0.554,
           "uncertainty": 0,
           "cohortPercentile": 0.2,
           "taskCount": 112,
@@ -2492,12 +2492,12 @@
       "sharedResults": 24,
       "comparableCategories": 4,
       "totalCategories": 8,
-      "overallScore": 60.01,
+      "overallScore": 60,
       "categoryScores": {
-        "agentic": 67.5,
-        "coding": 50.4,
+        "agentic": 67.4,
+        "coding": 50.2,
         "knowledge": 71.8,
-        "math": 82
+        "math": 81.8
       }
     },
     {
@@ -2669,7 +2669,7 @@
         "coding": 56.1,
         "multimodal": 83.4,
         "knowledge": 62.8,
-        "math": 56
+        "math": 55.8
       }
     },
     {
@@ -2870,8 +2870,8 @@
       "totalCategories": 8,
       "overallScore": 63.03,
       "categoryScores": {
-        "agentic": 81,
-        "coding": 50.3,
+        "agentic": 80.8,
+        "coding": 50.1,
         "knowledge": 82.5,
         "math": 81.4
       }
@@ -2936,9 +2936,9 @@
           "sourceModel": "gpt-5.6-luna",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.643,
+          "rawValue": 0.652,
           "uncertainty": 0,
-          "cohortPercentile": 0.4,
+          "cohortPercentile": 0.6,
           "taskCount": 112,
           "cohortSize": 5,
           "effort": "max",
@@ -2976,13 +2976,13 @@
       "sharedResults": 595,
       "comparableCategories": 5,
       "totalCategories": 8,
-      "overallScore": 66.86,
+      "overallScore": 66.87,
       "categoryScores": {
-        "agentic": 85,
-        "coding": 51.4,
+        "agentic": 84.8,
+        "coding": 51.2,
         "multimodal": 66,
         "knowledge": 81.3,
-        "math": 97.1
+        "math": 96.9
       }
     },
     {
@@ -2992,11 +2992,11 @@
       "canonicalModel": "gpt-5.6-sol",
       "overallScore": 81.48,
       "categoryScores": {
-        "agentic": 94.9,
-        "coding": 54.8,
+        "agentic": 94.7,
+        "coding": 54.6,
         "multimodal": 84.7,
         "knowledge": 83.3,
-        "math": 97.1
+        "math": 96.9
       },
       "benchmarkEvidence": [
         {
@@ -3053,7 +3053,7 @@
           "sourceModel": "gpt-5.6-sol",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.759,
+          "rawValue": 0.741,
           "uncertainty": 0,
           "cohortPercentile": 1,
           "taskCount": 112,
@@ -3062,7 +3062,7 @@
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://deng.codexradar.com/",
           "capturedAt": "2026-08-10",
-          "costUsd": 6.3
+          "costUsd": 6.28
         },
         {
           "benchmark": "deepswe",
@@ -3099,13 +3099,13 @@
         "(?:^|[-/])gpt-5\\.6-terra(?=$|@)"
       ],
       "canonicalModel": "gpt-5.6-terra",
-      "overallScore": 72.28,
+      "overallScore": 72.29,
       "categoryScores": {
-        "agentic": 91.6,
-        "coding": 52.6,
+        "agentic": 91.4,
+        "coding": 52.4,
         "multimodal": 75.3,
         "knowledge": 81.9,
-        "math": 97.1
+        "math": 96.9
       },
       "benchmarkEvidence": [
         {
@@ -3162,7 +3162,7 @@
           "sourceModel": "gpt-5.6-terra",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.696,
+          "rawValue": 0.679,
           "uncertainty": 0,
           "cohortPercentile": 0.8,
           "taskCount": 112,
@@ -3171,7 +3171,7 @@
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://deng.codexradar.com/",
           "capturedAt": "2026-08-10",
-          "costUsd": 9.22
+          "costUsd": 9.13
         },
         {
           "benchmark": "deepswe",
@@ -3272,7 +3272,7 @@
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://deng.codexradar.com/",
           "capturedAt": "2026-08-10",
-          "costUsd": 5.69
+          "costUsd": 5.73
         },
         {
           "benchmark": "deepswe",
@@ -3303,13 +3303,13 @@
       "sharedResults": 595,
       "comparableCategories": 5,
       "totalCategories": 8,
-      "overallScore": 72.29,
+      "overallScore": 72.31,
       "categoryScores": {
         "agentic": 85,
-        "coding": 43.9,
+        "coding": 43.7,
         "multimodal": 68.2,
         "knowledge": 79.3,
-        "math": 71.3
+        "math": 71.1
       }
     },
     {
@@ -3394,13 +3394,13 @@
       "sharedResults": 595,
       "comparableCategories": 5,
       "totalCategories": 8,
-      "overallScore": 73.2,
+      "overallScore": 73.19,
       "categoryScores": {
         "agentic": 74.7,
-        "coding": 42.2,
+        "coding": 42,
         "multimodal": 67.3,
         "knowledge": 77.3,
-        "math": 65.9
+        "math": 65.7
       }
     },
     {
@@ -3485,13 +3485,13 @@
           "capturedAt": "2026-08-10"
         }
       ],
-      "overallScore": 55.87,
+      "overallScore": 55.93,
       "categoryScores": {
         "agentic": 55,
         "coding": 54.1,
         "multimodal": 58.6,
         "knowledge": 60.3,
-        "math": 44.7
+        "math": 44.5
       }
     },
     {
@@ -3576,10 +3576,10 @@
           "capturedAt": "2026-08-10"
         }
       ],
-      "overallScore": 75.39,
+      "overallScore": 75.37,
       "categoryScores": {
-        "agentic": 84.5,
-        "coding": 54.8,
+        "agentic": 84.3,
+        "coding": 54.6,
         "multimodal": 68,
         "knowledge": 69.1
       }
@@ -3600,9 +3600,9 @@
       "sharedResults": 595,
       "comparableCategories": 4,
       "totalCategories": 8,
-      "overallScore": 79.9,
+      "overallScore": 79.89,
       "categoryScores": {
-        "agentic": 94.9,
+        "agentic": 94.7,
         "coding": 65.3,
         "multimodal": 87.9,
         "knowledge": 84.9
@@ -3846,7 +3846,7 @@
           "capturedAt": "2026-08-10"
         }
       ],
-      "overallScore": 60.25
+      "overallScore": 60.31
     },
     {
       "patterns": [
@@ -3930,10 +3930,10 @@
           "capturedAt": "2026-08-10"
         }
       ],
-      "overallScore": 76.15,
+      "overallScore": 76.14,
       "categoryScores": {
         "agentic": 83.9,
-        "coding": 49.2,
+        "coding": 49,
         "multimodal": 76.3,
         "knowledge": 93.5
       }
