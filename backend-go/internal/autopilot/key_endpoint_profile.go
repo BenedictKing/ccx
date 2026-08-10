@@ -181,6 +181,7 @@ type KeyEndpointProfile struct {
 	ChannelID       int       `json:"channelId"`       // 当前配置数组 index，仅用于展示/兼容
 	ChannelKind     string    `json:"channelKind"`     // messages | chat | responses | gemini | images | vectors
 	EndpointUID     string    `json:"endpointUid"`     // 稳定 endpoint ID = sha256(channelUID + baseURL + keyHash)
+	CapabilityUID   string    `json:"capabilityUid"`   // 跨账号共享能力身份（站点+分组+协议）
 	OriginType      string    `json:"originType"`      // official_api | official_token_plan | relay | community | local_runtime | unknown
 	OriginTier      string    `json:"originTier"`      // first | second | third | local | unknown
 	ServiceType     string    `json:"serviceType"`     // metrics identity 依赖 serviceType

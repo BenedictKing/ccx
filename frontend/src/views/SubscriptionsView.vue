@@ -34,7 +34,7 @@
       </v-card-title>
       <v-card-text>
         <v-alert v-if="loadError" color="error" variant="tonal" density="compact" class="mb-3">{{ loadError }}</v-alert>
-        <SubscriptionPlanTable v-if="!loading && subscriptions.length > 0" :subscriptions="subscriptions" @edit="openBillingEditor" @refresh="refreshItem" @delete="deleteItem" />
+        <SubscriptionPlanTable v-if="!loading && subscriptions.length > 0" :subscriptions="subscriptions" @edit="openBillingEditor" @refresh="refreshItem" @delete="deleteItem" @link="openLinkDialog" />
         <EmptyState
           v-else-if="!loading && subscriptions.length === 0"
           icon="mdi-cash-multiple"
@@ -61,6 +61,44 @@
       </v-card>
     </v-dialog>
 
+    <v-dialog v-model="linkDialog" max-width="560">
+      <v-card>
+        <v-card-title>{{ t('subscription.linkChannel.title') }}</v-card-title>
+        <v-card-text>
+          <div class="text-body-2 mb-3">{{ t('subscription.linkChannel.description', { name: linkItem?.displayName || '' }) }}</div>
+          <div v-if="linkableChannels.length === 0" class="text-body-2 text-medium-emphasis">{{ t('subscription.linkChannel.empty') }}</div>
+          <v-select
+            v-else
+            v-model="linkSelectedChannelUid"
+            :items="linkableChannels"
+            item-title="label"
+            item-value="channelUid"
+            :label="t('subscription.linkChannel.placeholder')"
+            variant="outlined"
+            density="compact"
+            :loading="linkChannelsLoading"
+            :disabled="linkChannelsLoading || linkSubmitting"
+          />
+          <v-alert v-if="linkError" color="error" variant="tonal" density="compact" class="mt-3">{{ linkError }}</v-alert>
+          <v-divider v-if="linkItem?.linkedChannelUids?.length" class="my-4" />
+          <div v-if="linkItem?.linkedChannelUids?.length" class="d-flex flex-column ga-2">
+            <div class="text-subtitle-2">{{ t('subscription.field.linkedChannels') }}</div>
+            <div v-for="ch in linkItem.linkedChannelUids" :key="ch" class="d-flex align-center justify-space-between">
+              <v-chip size="small" variant="outlined" color="primary">{{ ch }}</v-chip>
+              <v-btn size="small" variant="text" color="error" :loading="unlinkLoading === ch" @click="unlinkChannel(ch)">
+                <v-icon size="18" class="mr-1">mdi-link-off</v-icon>{{ t('subscription.unlinkChannel') }}
+              </v-btn>
+            </div>
+          </div>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" :disabled="linkSubmitting" @click="linkDialog = false">{{ t('app.actions.cancel') }}</v-btn>
+          <v-btn color="primary" :loading="linkSubmitting" :disabled="!linkSelectedChannelUid" @click="linkChannel">{{ t('subscription.linkChannel') }}</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <v-dialog v-model="syncDialog" max-width="760"><v-card><v-card-title>{{ t('subscription.sync.title') }}</v-card-title><v-card-text><v-table density="compact"><thead><tr><th>{{ t('subscription.sync.group') }}</th><th>{{ t('subscription.sync.multiplier') }}</th><th>{{ t('subscription.sync.status') }}</th><th>{{ t('subscription.sync.updated') }}</th><th>{{ t('subscription.sync.reason') }}</th></tr></thead><tbody><tr v-for="key in syncResult?.keys || []" :key="key.keyUid || key.sourceRemoteTokenId"><td>{{ key.group }}</td><td>{{ key.groupMultiplier }} / {{ key.maxGroupMultiplier }}</td><td><v-chip size="x-small" :color="key.syncStatus === 'fresh' ? 'success' : 'warning'">{{ multiplierStatusLabel(key.syncStatus) }}</v-chip></td><td>{{ formatSyncTimes(key.updatedAt, key.multiplierExpiresAt) }}</td><td>{{ key.reason || '-' }}</td></tr></tbody></v-table></v-card-text><v-card-actions><v-spacer /><v-btn @click="syncDialog = false">{{ t('app.actions.close') }}</v-btn></v-card-actions></v-card></v-dialog>
   </div>
 </template>
@@ -76,7 +114,7 @@ import SubscriptionPlanTable from '@/components/SubscriptionPlanTable.vue'
 import ExchangeRateManager from '@/components/subscriptions/ExchangeRateManager.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import { autoAddChannel, extractAutoAddErrorMessage, getProviderTemplates, type ProviderTemplate } from '@/services/autopilot-api'
-import type { NewApiProvisionResponse, NewApiSyncResult, SubscriptionItem } from '@/services/api-types'
+import type { Channel, NewApiProvisionResponse, NewApiSyncResult, SubscriptionItem } from '@/services/api-types'
 import { billingTermsPatch, multiplierStatusLabel } from '@/utils/subscriptionBilling'
 
 const { t } = useI18n()
@@ -100,6 +138,14 @@ const billingItem = ref<SubscriptionItem | null>(null)
 const billingForm = ref({ paymentAmount: null as number | null, paymentUnit: '', creditAmount: null as number | null, creditUnit: '' })
 const syncDialog = ref(false)
 const syncResult = ref<NewApiSyncResult | null>(null)
+const linkDialog = ref(false)
+const linkSubmitting = ref(false)
+const linkChannelsLoading = ref(false)
+const linkError = ref('')
+const linkItem = ref<SubscriptionItem | null>(null)
+const linkSelectedChannelUid = ref('')
+const linkableChannels = ref<{ channelUid: string; label: string }[]>([])
+const unlinkLoading = ref('')
 
 function handleProviderSelect(provider: string) { selectedProvider.value = provider; cancelProviderAdd() }
 async function handleProviderAdd(providerId: string) { selectedProvider.value = ''; addError.value = ''; const templates = await getProviderTemplates(); addProvider.value = templates.find(item => item.providerId === providerId) || null }
@@ -113,6 +159,73 @@ function resetBillingTerms() { billingForm.value = { paymentAmount: null, paymen
 async function refreshItem(item: SubscriptionItem) { try { const response = await api.refreshSubscription(item.subscriptionUid); const result = response.refreshResult as NewApiSyncResult; if (Array.isArray(result.keys)) { syncResult.value = result; syncDialog.value = true } if (result.success) { emit('success', t('subscription.refreshSuccess')) } else { emit('error', result.failedReason || t('subscription.refreshFailed')) } await loadSubscriptions() } catch (error) { emit('error', error instanceof Error ? error.message : String(error)) } }
 async function deleteItem(item: SubscriptionItem) { const confirmed = await dialogStore.confirm({ message: t('subscription.deleteConfirm', { name: item.displayName }) }); if (!confirmed) return; try { await api.deleteSubscription(item.subscriptionUid); emit('success', t('subscription.deleteSuccess', { name: item.displayName })); await loadSubscriptions() } catch (error) { emit('error', error instanceof Error ? error.message : String(error)) } }
 function formatSyncTimes(updated?: string, expires?: string) { return `${updated ? new Date(updated).toLocaleString() : '-'} / ${expires ? new Date(expires).toLocaleString() : '-'}` }
+
+function openLinkDialog(item: SubscriptionItem) {
+  linkItem.value = item
+  linkSelectedChannelUid.value = ''
+  linkError.value = ''
+  linkDialog.value = true
+  void loadLinkableChannels(item)
+}
+
+async function loadLinkableChannels(item: SubscriptionItem) {
+  linkChannelsLoading.value = true
+  linkableChannels.value = []
+  try {
+    const response = await api.getChannels()
+    const linked = new Set(item.linkedChannelUids || [])
+    linkableChannels.value = response.channels
+      .filter((ch: Channel) => ch.channelUid && !linked.has(ch.channelUid))
+      .map((ch: Channel) => ({
+        channelUid: ch.channelUid as string,
+        label: `${ch.name} (${ch.channelUid})`,
+      }))
+  } catch (error) {
+    linkError.value = error instanceof Error ? error.message : String(error)
+  } finally {
+    linkChannelsLoading.value = false
+  }
+}
+
+async function linkChannel() {
+  if (!linkItem.value || !linkSelectedChannelUid.value) return
+  linkSubmitting.value = true
+  linkError.value = ''
+  try {
+    await api.linkSubscriptionChannel(linkItem.value.subscriptionUid, linkSelectedChannelUid.value)
+    emit('success', t('subscription.linkSuccess', { channel: linkSelectedChannelUid.value, name: linkItem.value.displayName }))
+    linkDialog.value = false
+    await loadSubscriptions()
+  } catch (error) {
+    linkError.value = error instanceof Error ? error.message : String(error)
+  } finally {
+    linkSubmitting.value = false
+  }
+}
+
+async function unlinkChannel(channelUid: string) {
+  if (!linkItem.value) return
+  const confirmed = await dialogStore.confirm({ message: t('subscription.unlinkConfirm', { channel: channelUid }) })
+  if (!confirmed) return
+  unlinkLoading.value = channelUid
+  try {
+    await api.unlinkSubscriptionChannel(linkItem.value.subscriptionUid, channelUid)
+    emit('success', t('subscription.unlinkSuccess', { channel: channelUid, name: linkItem.value.displayName }))
+    await loadSubscriptions()
+    if (linkItem.value) {
+      const updated = subscriptions.value.find(s => s.subscriptionUid === linkItem.value?.subscriptionUid)
+      if (updated) {
+        linkItem.value = updated
+        void loadLinkableChannels(updated)
+      }
+    }
+  } catch (error) {
+    emit('error', error instanceof Error ? error.message : String(error))
+  } finally {
+    unlinkLoading.value = ''
+  }
+}
+
 onMounted(loadSubscriptions)
 </script>
 

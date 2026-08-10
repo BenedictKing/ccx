@@ -258,13 +258,14 @@ func (s *ChannelScheduler) restoreKeysForKind(
 				}
 			},
 			func(status string) error {
-				return s.setChannelStatusByKind(idx, kind, status)
+				return s.setChannelStatusByKind(idx, kind, status, "scheduled_recovery")
 			},
 			func() bool {
 				latest := s.getUpstreamByIndex(idx, kind)
 				return latest != nil && upstream.Status == "suspended" && len(upstream.APIKeys) == 0 && latest.Status == "suspended"
 			},
 			keysToRestore,
+			transitions.PublishChannelStatusEvent(s.eventBus.Load(), upstream.ChannelUID, upstream.Name, string(kind)),
 		)
 		if err != nil {
 			return nil, err

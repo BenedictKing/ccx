@@ -3,9 +3,12 @@ package scheduler
 import (
 	"context"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/conversation"
+	"github.com/BenedictKing/ccx/internal/eventbus"
 	"github.com/BenedictKing/ccx/internal/metrics"
 	"github.com/BenedictKing/ccx/internal/ratelimit"
 	"github.com/BenedictKing/ccx/internal/routingref"
@@ -48,6 +51,9 @@ type ChannelScheduler struct {
 	loadShedStopCh           chan struct{}
 	lastSelectedMu           sync.RWMutex
 	lastSelectedChannels     map[ChannelKind]int
+
+	// eventBus 跨模块事件总线（Phase B.1，可选）。未注入时渠道状态迁移不发事件。
+	eventBus atomic.Pointer[eventbus.Bus]
 }
 
 // ChannelKind 标识调度器所处理的渠道类型
@@ -122,6 +128,72 @@ func (s *ChannelScheduler) GetOverrideManager() *conversation.OverrideManager {
 // SetRateLimitManager 设置主动限速管理器
 func (s *ChannelScheduler) SetRateLimitManager(m *ratelimit.Manager) {
 	s.rateLimitManager = m
+}
+
+// SetEventBus 注入跨模块事件总线（Phase B.1）。可选依赖：未注入时 scheduler 不发渠道状态事件。
+// 并发安全；会把同一总线透传给已注入的各 MetricsManager（如果它们尚未设置）。
+func (s *ChannelScheduler) SetEventBus(bus *eventbus.Bus) {
+	if s == nil {
+		return
+	}
+	s.eventBus.Store(bus)
+	if s.messagesMetricsManager != nil {
+		s.messagesMetricsManager.SetEventBus(bus)
+	}
+	if s.responsesMetricsManager != nil {
+		s.responsesMetricsManager.SetEventBus(bus)
+	}
+	if s.geminiMetricsManager != nil {
+		s.geminiMetricsManager.SetEventBus(bus)
+	}
+	if s.chatMetricsManager != nil {
+		s.chatMetricsManager.SetEventBus(bus)
+	}
+	if s.imagesMetricsManager != nil {
+		s.imagesMetricsManager.SetEventBus(bus)
+	}
+	if s.vectorsMetricsManager != nil {
+		s.vectorsMetricsManager.SetEventBus(bus)
+	}
+}
+
+// publishChannelStatusEvent 发布渠道 administrative 状态变更事件。
+// bus 未注入、channelUID 为空或状态未变化时为空操作；发布非阻塞。
+func (s *ChannelScheduler) publishChannelStatusEvent(channelUID, channelName, kind, oldStatus, newStatus, reason string) {
+	if s == nil || channelUID == "" || oldStatus == newStatus {
+		return
+	}
+	bus := s.eventBus.Load()
+	if bus == nil {
+		return
+	}
+	if oldStatus == "" {
+		oldStatus = "active"
+	}
+	if newStatus == "" {
+		newStatus = "active"
+	}
+	now := time.Now().UTC()
+	bus.Publish(eventbus.Event{
+		UID:         "",
+		Type:        eventbus.TypeChannelStatusChanged,
+		Scope:       eventbus.ScopeConfig,
+		Subject:     channelUID,
+		ChannelKind: kind,
+		From:        oldStatus,
+		To:          newStatus,
+		Cause:       reason,
+		Payload: map[string]any{
+			"channelUID":  channelUID,
+			"channelName": channelName,
+			"kind":        kind,
+			"oldStatus":   oldStatus,
+			"newStatus":   newStatus,
+			"reason":      reason,
+			"timestamp":   now.Unix(),
+		},
+		CreatedAt: now,
+	})
 }
 
 // CandidateSelectionObserver 在本次 CandidateFilter 对应的真实渠道选定后回调。
@@ -233,19 +305,38 @@ func NormalizedMetricsServiceType(kind ChannelKind, configured string) string {
 	}
 }
 
-func (s *ChannelScheduler) setChannelStatusByKind(index int, kind ChannelKind, status string) error {
+func (s *ChannelScheduler) setChannelStatusByKind(index int, kind ChannelKind, status, reason string) error {
+	upstream := s.getUpstreamByIndex(index, kind)
+	oldStatus := ""
+	channelUID := ""
+	channelName := ""
+	if upstream != nil {
+		oldStatus = config.GetChannelStatus(upstream)
+		channelUID = upstream.ChannelUID
+		channelName = upstream.Name
+	}
+
+	var err error
 	switch kind {
 	case ChannelKindResponses:
-		return s.configManager.SetResponsesChannelStatus(index, status)
+		err = s.configManager.SetResponsesChannelStatus(index, status)
 	case ChannelKindGemini:
-		return s.configManager.SetGeminiChannelStatus(index, status)
+		err = s.configManager.SetGeminiChannelStatus(index, status)
 	case ChannelKindChat:
-		return s.configManager.SetChatChannelStatus(index, status)
+		err = s.configManager.SetChatChannelStatus(index, status)
 	case ChannelKindImages:
-		return s.configManager.SetImagesChannelStatus(index, status)
+		err = s.configManager.SetImagesChannelStatus(index, status)
 	case ChannelKindVectors:
-		return s.configManager.SetVectorsChannelStatus(index, status)
+		err = s.configManager.SetVectorsChannelStatus(index, status)
 	default:
-		return s.configManager.SetChannelStatus(index, status)
+		err = s.configManager.SetChannelStatus(index, status)
 	}
+	if err != nil {
+		return err
+	}
+
+	if channelUID != "" {
+		s.publishChannelStatusEvent(channelUID, channelName, string(kind), oldStatus, status, reason)
+	}
+	return nil
 }

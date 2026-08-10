@@ -12,7 +12,7 @@
           <th class="text-left">{{ t('subscription.field.linkedChannels') }}</th>
           <th class="text-left">{{ t('subscription.field.source') }}</th>
           <th class="text-left" style="width: 160px;">{{ t('subscription.field.autoRefreshSection') }}</th>
-          <th class="text-right" style="width: 100px;">{{ t('app.actions.edit') }}</th>
+          <th class="text-right" style="width: 160px;">{{ t('app.actions.edit') }}</th>
         </tr>
       </thead>
       <tbody>
@@ -113,6 +113,13 @@
                 </v-btn>
               </template>
             </v-tooltip>
+            <v-tooltip :text="t('subscription.linkChannel')" location="top">
+              <template #activator="{ props }">
+                <v-btn v-bind="props" icon size="small" variant="text" color="primary" @click="$emit('link', item)">
+                  <v-icon size="18">mdi-link</v-icon>
+                </v-btn>
+              </template>
+            </v-tooltip>
             <v-btn icon size="small" variant="text" @click="$emit('edit', item)">
               <v-icon size="18">mdi-pencil</v-icon>
             </v-btn>
@@ -139,6 +146,7 @@ defineEmits<{
   edit: [item: SubscriptionItem]
   delete: [item: SubscriptionItem]
   refresh: [item: SubscriptionItem]
+  link: [item: SubscriptionItem]
 }>()
 
 const { t } = useI18n()

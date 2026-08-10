@@ -3,12 +3,12 @@
 ## 1. 集成入口与接口定义
 
 ### 1.1 路由注册（后端装配）
-`backend-go/main.go:1454-1476` 在 autopilot 就绪后装配三组路由，全部挂在 `apiGroup`（`/api`）下：
+`backend-go/main.go:1505-1544` 在 autopilot 就绪后装配三组路由，全部挂在 `apiGroup`（`/api`）下：
 - `autopilot.RegisterSubscriptionRoutes` — 订阅中心 CRUD + link/unlink + refresh
 - `autopilot.RegisterNewApiSubscriptionRoutes` — new-api verify/provision
 - `autopilot.RegisterSubscriptionAccountRoutes` — 多账号 + 主账号凭证更新
 
-共享依赖 `NewApiSubscriptionSyncService`（`main.go:1454`），并在启动时 `newApiSyncService.SyncAllNewAPIAsync(context.Background())` 对所有 `provider=new_api` 订阅异步做一次同步。
+共享依赖 `NewApiSubscriptionSyncService`（`main.go:1504`）。启动时先调用 `newApiSyncService.SyncAllNewAPIAsync(context.Background())` 对所有 `provider=new_api` 订阅做一次全量同步（`newapi_subscription_sync_service.go`），随后 `newApiSyncService.Start(ctx)` 启动周期为 30 分钟的后台同步循环。路由注册位置与同步服务生命周期以 `main.go` 中符号为准，避免行号再次漂移。
 
 ### 1.2 核心端点（`internal/autopilot/handlers_newapi.go`）
 `RegisterNewApiSubscriptionRoutes`（行 53-61）：
@@ -93,10 +93,13 @@ UpstreamConfig (channelUid, autoManagedKind=new_api)
 `KeyUID = StableKeyUID(subscriptionUID, tokenID)`（`newapi_subscription_sync_service.go:585`，sha256 前 8 字节，前缀 `kuid_`）。tokenID 站点级唯一，主账号与多账号 key 共存不撞号。
 
 ### 3.5 同步服务（`internal/autopilot/newapi_subscription_sync_service.go`）
-`NewApiSubscriptionSyncService`（行 59），per-uid 锁（`lockForUID` 行 90）。
+
+`NewApiSubscriptionSyncService`（行 59）负责 new-api 订阅的周期性余额、分组倍率与可用模型同步，使用 per-uid 锁（`lockForUID` 行 90）。
+
+- 后台循环：`Start`（行 129）启动 30 分钟周期 ticker（`newApiSyncDefaultInterval` 行 93），tick 到达时调用 `SweepAll` 并发刷新所有 new-api 订阅。`Stop`（行 150）优雅停止循环。初始启动时还会通过 `SyncAllNewAPIAsync` 先做一次性全量同步。
 - `SyncNow`（行 101）：verify → FetchGroups（校验非负有限，`finiteNonNegative` 行 590）→ FetchModels → `Patch` 回写余额/分组/模型/KeyUID/ratio → `reconcileChannels`（行 430）把 desired key 元数据合并进关联渠道的 `APIKeyConfigs`（ownership 冲突→`relink_required`）→ 模型哈希变化触发 Discovery
 - `reconcileNewApiConfigs`（行 455）：按 `SourceRemoteTokenID`/`KeyUID` 匹配，跨订阅 ownership 冲突返回 conflict
-- `buildDesiredForKeys`（行 402）：计算每 key 的 syncStatus（`fresh`/`over_limit`/`remote_group_missing`）+ TTL（`newApiSyncTTL=15m` 行 24）
+- `buildDesiredForKeys`（行 402）：计算每 key 的 syncStatus（`fresh`/`over_limit`/`remote_group_missing`）+ TTL（`newApiSyncTTL=35m` 行 26）
 - `injectProvisionedKeys`（行 609）/`ReconcileProvisioned`（行 649）/`ReconcileAccountProvisioned`（行 668）：provision/加账号后把明文 key 注入渠道
 - `RemoveAccountKeysFromChannels`（行 326）：删账号时剔除渠道 key
 - 状态常量（行 17-24）：`fresh/over_limit/sync_error/relink_required/stale/remote_group_missing`
@@ -148,15 +151,15 @@ locale 键在 `frontend/src/locales/{zh-CN,en,id}.json`，前缀 `subscription.n
 
 ## 6. 可能缺失的边界处理与文档
 
-1. **new_api 无周期性自动余额刷新**：`SubscriptionRefreshWorker.refreshAll`（`subscription_refresh_worker.go:220`）按 `IsAutoRefreshSupported` 白名单跳过 non-whitelisted provider，`builtinAutoRefreshProviders`（`subscription_balance_fetcher.go:235`）与预置 `shared/subscription-preset/subscription-preset.json:13` 的 `autoRefreshProviders` 均**不含 new_api**。new_api 仅靠启动 `SyncAllNewAPIAsync`（一次性）+ 手动刷新。这与设计文档 §8.5.1「定时刷新复用 SubscriptionAutoRefresh」（`docs/design/channel-autopilot.md:3384`）不一致——目前没有 new_api 的定时后台同步 worker。
+1. **new_api 无周期性自动余额刷新**~~（旧声明，已修正）~~：`NewApiSubscriptionSyncService` 已提供 30 分钟周期的后台同步循环。启动时 `SyncAllNewAPIAsync` 做一次全量同步，随后 `Start` 启动 30 分钟 ticker 并调用 `SweepAll` 并发刷新每个 `provider=new_api` 订阅。`SubscriptionRefreshWorker.refreshAll` 仍按 `IsAutoRefreshSupported` 白名单跳过 new_api，但 new-api 的定期同步由专用 sync service 承担。
 
 2. ~~**AccessToken 明文落库**~~ ✅ **已修复**（2026-08-09，提交 `d876784d`）：`SubscriptionProfile.AccessToken` 与 `Accounts[].AccessToken` 落库前经 AES-256-GCM 加密（`encryptProfile`/`decryptProfile`），读库透明解密并向后兼容旧明文（无加密标记前缀时原样返回）。密钥优先读环境变量 `CCX_SECRET_KEY`，未设置则退回机器派生（hostname/GOOS/GOARCH/salt）。**注意**：机器派生密钥下若迁移数据目录到另一台机器且未设 `CCX_SECRET_KEY`，旧加密 token 将无法解密——生产部署应显式配置 `CCX_SECRET_KEY`。`BillingAPIKey` 暂未加密（可复用同一机制扩展）。
 
-3. **专项 spec 文档缺失**：`docs/specs/README.md:12` 引用 `./new-api-integration.md`，但该文件在 `docs/specs/` 下**不存在**（仅有 README.md）。文档索引存在悬空链接。
+3. ~~**专项 spec 文档缺失**~~ ✅ **已修正**：`docs/specs/new-api-integration.md` 已存在，`docs/specs/README.md:12` 索引链接有效，不再悬空。
 
 4. **link/unlink UI 缺失**：后端有 `POST /api/subscriptions/:uid/link|unlink`（`handlers_subscription.go:133-134`）与前端 `api.linkSubscriptionChannel/unlinkSubscriptionChannel`，但前端组件/视图无任何调用点（grep 仅命中定义）。手动关联/解绑渠道无 UI 入口。
 
-5. **`quota` 货币换算依赖手工汇率**：new-api `quota` 非 USD，effective 成本需 `ExchangeRateQuotes` + 订阅 `PaymentAmount/CreditAmount`（`smart_router.go:1249-1270`）齐备才生效；缺任一项则回退标价 USD 成本，new-api quota 无法参与真实成本排序（静默降级，无用户提示）。
+5. **`quota` 货币换算依赖手工汇率**：new-api `quota` 非 USD，effective 成本需 `ExchangeRateQuotes` + 订阅 `PaymentAmount/CreditAmount`（`smart_router.go:1356-1378`）齐备才生效；缺任一项则回退标价 USD 成本，new-api quota 无法参与真实成本排序（静默降级，无用户提示）。
 
 6. **`NewApiAccountItem.usedQuota` 前端类型有、后端不填**：`api-types.ts:1446` 定义了 `usedQuota`，但后端 `handlers_subscription_accounts.go` 构造 `NewApiAccountItem` 时（行 184/244/391）从不设置该字段——per-account 已用额度不可见。
 
@@ -323,22 +326,16 @@ New-api provision 建渠道时（`handlers_newapi.go:591-605`），构造的 `Up
 
 ### 8.3 汇率图缺失时的降级策略
 
-> **更新（2026-08-09，提交 `d876784d`）**：本节两个核心缺口已修复：
-> - ✅ **标价回退路径丢失 GroupMultiplier**：回退分支（`graph==nil` 或 effective cost 不可用）现叠加 `groupMultiplier`（缺失按 1.0），使 new-api 分组倍率在无 billing-terms 时仍影响 SavingsScore。
-> - ✅ **汇率图构建失败静默吞错**：`NewExchangeRateGraph` 的 error 现被捕获并记日志（`[SmartRouter-ExchangeRate]`，按 snapshot version 去重防刷屏）；`effective cost 不可用` 原因按 subscriptionUID+Reason 采样记录。
->
-> 下文保留原缺口分析作为背景。剩余待处理：new-api 无 billing-terms 时 effective USD 仍不可用（需引导用户填计费条款）、quote 单位不匹配无用户反馈。
-
 **当前实现**
 
-SmartRouter 成本计算的三段降级（`smart_router.go:1217-1272`）：
-1. `entry.EstimatedCost = listCost`（标价），基础默认值 `-1`（表示无成本证据）。
-2. 若配置有 `ExchangeRateQuotes`，构建 `graph`，`entry.EstimatedCost = listCost * timeMultiplier`（分时倍率）。
-3. 若 `graph != nil && subscriptionStore != nil` 且订阅有 `PaymentAmount/CreditAmount`，调 `ResolveEffectiveCostUSD` 算 effective USD，仅当 `resolvedCost.Available` 才覆盖。
+SmartRouter 成本计算的三段降级（`smart_router.go:1326-1380`）：
+1. 基础标价为 `listCost`，默认成本 `-1`（表示无成本证据）。
+2. 若配置有 `ExchangeRateQuotes`，构建 `graph`（构建失败时通过 `logExchangeRateBuildErrorOnce` 按 `ExchangeRateSnapshot.Version` 去重记录日志）；默认 `entry.EstimatedCost = listCost * timeMultiplier * groupMultiplier`，其中 `groupMultiplier` 取 `APIKeyConfigs` 中的 `GroupMultiplier`，缺失按 `1.0`。
+3. 若 `graph != nil && r.subscriptionStore != nil` 且订阅有 `PaymentAmount/CreditAmount`，调 `ResolveEffectiveCostUSD` 算 effective USD，仅当 `resolvedCost.Available` 才覆盖；否则通过 `logEffectiveCostMissingOnce` 按 `subscriptionUID + Reason` 去重记录不可用原因。
 
 **汇率图缺失/构建失败时的降级：**
 - 配置默认**永远有 quotes**：`defaultExchangeRateQuotes`（USD↔CNY、LDC↔CNY）在 `Validate` 里对未配置的情况兜底填充，所以 `len(ExchangeRateQuotes) > 0` 几乎总成立。
-- `NewExchangeRateGraph` 构建失败时 `graph, _ = ...` **丢弃 error**，`graph` 为 nil → 跳过 effective USD 分支 → 回退到 `listCost * timeMultiplier`（标价×分时）。
+- `NewExchangeRateGraph` 构建失败时 error 不再静默丢弃，而是由 `logExchangeRateBuildErrorOnce` 按 snapshot version 只记录一次，并回退到 `listCost * timeMultiplier * groupMultiplier`。
 - `ResolveExchangeTerms` 对 graph nil、单位不在图中、版本不匹配、单价非有限正数等都返回 `OK=false` + 具体 `Reason` 字符串，`Available=false`，调用方回退标价。
 - `EstimatedCost` 最终进 `NormalizeSavingsScore`；`c < 0`（无成本证据）得中性 0.5 分，不惩罚。
 
@@ -346,18 +343,15 @@ SmartRouter 成本计算的三段降级（`smart_router.go:1217-1272`）：
 
 **缺口分析**
 
-1. **无任何告警或日志（核心缺口）。** 汇率图构建失败在 `smart_router.go:1244` 被 `graph, _ =` 静默吞掉——没有 `log.Printf`。`ResolveEffectiveCostUSD` 计算出的 `Reason`（版本不匹配、单位缺失等诊断信息）在 SmartRouter 里**被完全丢弃**（只看 `Available`，不读 `Reason`）。运维无法感知 new-api key 的成本降级为标价，也无法诊断为何某订阅的 effective cost 一直不生效。
+1. **new-api 无 billing-terms 时 effective USD 仍不可用。** effective USD 计算要求订阅同时有 `PaymentAmount` 和 `CreditAmount`。new-api provision 建 profile 时设 `Currency:"quota"`、`Balance`，**从不设置 `PaymentAmount/CreditAmount`**（这两个字段只能通过 `PATCH /subscriptions/:uid/billing-terms` 手工填）。因此未补 billing-terms 的 new-api 订阅走 `listCost * timeMultiplier * groupMultiplier`；分组倍率已能影响 SavingsScore，但真实到账 USD 成本仍无法计算。
 
-2. **new-api key 的 effective cost 实际上很难生效。** effective USD 计算要求订阅同时有 `PaymentAmount` 和 `CreditAmount`。但 new-api provision 建 profile 时设 `Currency:"quota"`、`Balance`，**从不设置 `PaymentAmount/CreditAmount`**（这两个字段只能通过 `PATCH /subscriptions/:uid/billing-terms` 手工填）。因此绝大多数 new-api 订阅走的是 `listCost * timeMultiplier`——**注意：GroupMultiplier 在标价回退路径里根本没参与**。`GroupMultiplier`（new-api 的核心成本信号）只在 effective USD 分支才被使用。所以 **new-api key 未配 billing-terms 时，其分组倍率对路由成本零影响**，这是比“汇率缺失”更严重的隐性缺口。
-
-3. **`quote` 单位与 key 计价单位可能对不上。** new-api key 的 `GroupMultiplier` 是相对倍率，effective 计算用 `PaymentUnit/CreditUnit`（如 CNY/LDC）查图。若用户 billing-terms 填的单位不在默认图（USD/CNY/LDC）中，`ResolveExchangeTerms` 返回 `"exchange rate unit not in graph"`，静默回退——用户没有任何反馈知道要去补一条 quote。
+2. **`quote` 单位与 key 计价单位可能对不上。** new-api key 的 `GroupMultiplier` 是相对倍率，effective 计算用 `PaymentUnit/CreditUnit`（如 CNY/LDC）查图。若用户 billing-terms 填的单位不在默认图（USD/CNY/LDC）中，`ResolveExchangeTerms` 返回 `"exchange rate unit not in graph"`，静默回退——用户没有任何反馈知道要去补一条 quote。
 
 **建议方案**
 
-- **在图构建失败与 effective 不可用时补日志（低成本高收益）。** `smart_router.go:1244` 的 `graph, _ =` 改为捕获 error 并 `log.Printf("[SmartRouter-ExchangeRate] 汇率图构建失败，回退标价: %v", err)`（注意路由是热路径，应做去重/限频，如按 snapshot version 只记一次）。在 `!resolvedCost.Available && resolvedCost.Reason != ""` 时按 `subscriptionUID + Reason` 采样记日志，暴露 `"unit not in graph"` 等可诊断原因。
-- **暴露成本降级的可观测指标。** 请求期 `buildRequestCostContext` 已有 `EffectiveCostReason` 字段并持久化到 SQLite，`cost_report_handler.go` 也统计 `EffectiveUnavailableCount`。建议把 SmartRouter 路由期解析出的 `Reason` 也接入同一诊断链路（目前路由期 Reason 完全未落库），让 `/api/reports/cost` 能展示“多少 new-api 请求因汇率/billing-terms 缺失而无法算 effective cost”。
-- **修复标价回退路径丢失 GroupMultiplier 的问题。** 在 `graph == nil` 或 effective 不可用时，至少让 `entry.EstimatedCost = listCost * timeMultiplier * groupMultiplier`（从 `cfg.GroupMultiplier` 取，缺失按 1.0），使 new-api 的分组倍率在无 billing-terms 时仍能影响 SavingsScore。否则 new-api 的成本优势/劣势对自动路由不可见。
-- **provision 时给 new-api 订阅填默认 billing-terms 或提示。** 若 new-api quota 与某法币有确定换算（如平台按 CNY 充值得 quota），provision 可预填 `PaymentAmount/CreditAmount/PaymentUnit/CreditUnit`，或在 provision 响应里返回一个 warning 提示用户补 billing-terms + 对应汇率 quote，才能启用 effective cost 路由。
+- **引导用户补 billing-terms。** 在订阅详情/编辑处明确提示：只有填写 `PaymentAmount/CreditAmount/PaymentUnit/CreditUnit` 并保证单位在汇率图内，effective USD 成本路由才会生效。
+- **暴露成本降级的可观测指标。** 请求期 `buildRequestCostContext` 已有 `EffectiveCostReason` 字段并持久化到 SQLite，`cost_report_handler.go` 也统计 `EffectiveUnavailableCount`。建议把 SmartRouter 路由期解析出的 `Reason` 也接入同一诊断链路，让 `/api/reports/cost` 能展示“多少 new-api 请求因汇率/billing-terms 缺失而无法算 effective cost”。
+- **provision 时预填默认 billing-terms 或返回 warning。** 若 new-api quota 与某法币有确定换算（如平台按 CNY 充值得 quota），provision 可预填 `PaymentAmount/CreditAmount/PaymentUnit/CreditUnit`，或在 provision 响应里返回一个 warning 提示用户补 billing-terms + 对应汇率 quote，才能启用 effective cost 路由。
 
 ### 8.4 补充发现
 

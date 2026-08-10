@@ -1035,3 +1035,172 @@ func TestHandleNewApiProvision_MissingCfgManager(t *testing.T) {
 func bytesContains(haystack, needle []byte) bool {
 	return bytes.Contains(haystack, needle)
 }
+
+// -- provision 写渠道 AccountUID（收敛逻辑卡） --
+
+// provisionNewApiChannel 是 AccountUID 测试的便捷封装：对一个 mock 站点完成一次 provision，
+// 失败时直接 t.Fatal。
+func provisionNewApiChannel(t *testing.T, router *gin.Engine, reqBody NewApiProvisionRequest) NewApiProvisionResponse {
+	t.Helper()
+	body, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest(http.MethodPost, "/api/subscriptions/newapi/provision", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("provision 期望 201, got %d, body=%s", w.Code, w.Body.String())
+	}
+	var resp NewApiProvisionResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("响应解析失败: %v", err)
+	}
+	return resp
+}
+
+// findChannelByUIDInKind 在指定 kind 的渠道切片里按 ChannelUID 查找渠道。
+func findChannelByUIDInKind(cfg config.Config, kind, channelUID string) (config.UpstreamConfig, bool) {
+	for _, ch := range getChannelSlice(cfg, kind) {
+		if ch.ChannelUID == channelUID {
+			return ch, true
+		}
+	}
+	return config.UpstreamConfig{}, false
+}
+
+// 同一订阅 provision 出的渠道必须携带由订阅 UID 派生的稳定 AccountUID。
+func TestHandleNewApiProvision_SetsAccountUID(t *testing.T) {
+	site := mockNewApiSite(t, "", "", true)
+	store, err := NewSubscriptionStoreWithDB(newTestDB(t))
+	if err != nil {
+		t.Fatalf("创建 store 失败: %v", err)
+	}
+	cfgManager := setupNewApiTestConfigManager(t)
+	runner := NewAutoDiscoveryRunner(nil, nil)
+	router := setupNewApiRouter(t, &NewApiRouteDeps{Store: store, CfgManager: cfgManager, Runner: runner})
+
+	resp := provisionNewApiChannel(t, router, NewApiProvisionRequest{
+		SubscriptionUID: "sub-acct-1",
+		DisplayName:     "账号归属测试",
+		BaseURL:         site.URL,
+		AccessToken:     "secret-acct-token",
+		ChannelKind:     "messages",
+		ChannelName:     "acct-channel",
+	})
+
+	want := StableAccountUID("sub-acct-1")
+	if want == "" || !strings.HasPrefix(want, "newapi_") {
+		t.Fatalf("StableAccountUID 派生结果异常: %q", want)
+	}
+	ch, ok := findChannelByUIDInKind(cfgManager.GetConfig(), "messages", resp.ChannelUID)
+	if !ok {
+		t.Fatalf("未找到新建渠道: uid=%s", resp.ChannelUID)
+	}
+	if ch.AccountUID != want {
+		t.Fatalf("渠道 AccountUID 不匹配: got=%q want=%q", ch.AccountUID, want)
+	}
+}
+
+// 同订阅跨协议渠道共享同一派生 AccountUID 时，
+// RebuildLogicalChannels 应把它们收敛到同一张逻辑卡。
+// 生产 provision 对同一 subscriptionUID 只做一次（store 唯一约束），
+// 跨协议多卡由"同订阅派生同一 AccountUID"保证；这里直接构造两个携带该
+// AccountUID 的不同协议渠道，验证 config 层的账号归组收敛逻辑。
+func TestHandleNewApiProvision_CrossProtocolAccountUIDConverges(t *testing.T) {
+	cfgManager := setupNewApiTestConfigManager(t)
+	accountUID := StableAccountUID("sub-acct-cross")
+	site := mockNewApiSite(t, "", "", true)
+
+	msgUID := config.GenerateChannelUID()
+	if err := cfgManager.AddUpstream(config.UpstreamConfig{
+		Name:            "cross-messages",
+		ChannelUID:      msgUID,
+		AccountUID:      accountUID,
+		BaseURL:         site.URL,
+		ServiceType:     "claude",
+		Status:          "active",
+		AutoManaged:     true,
+		AutoManagedKind: "new_api",
+		APIKeys:         []string{"sk-cross"},
+	}); err != nil {
+		t.Fatalf("添加 messages 渠道失败: %v", err)
+	}
+	chatUID := config.GenerateChannelUID()
+	if err := cfgManager.AddChatUpstream(config.UpstreamConfig{
+		Name:            "cross-chat",
+		ChannelUID:      chatUID,
+		AccountUID:      accountUID,
+		BaseURL:         site.URL,
+		ServiceType:     "openai",
+		Status:          "active",
+		AutoManaged:     true,
+		AutoManagedKind: "new_api",
+		APIKeys:         []string{"sk-cross"},
+	}); err != nil {
+		t.Fatalf("添加 chat 渠道失败: %v", err)
+	}
+
+	// 触发逻辑渠道重建，验证同账号渠道归到同一张逻辑卡
+	cfg := cfgManager.GetConfig()
+	cfgManager.ReloadFromMemory(&cfg)
+	siblings := cfgManager.LogicalSiblingChannelUIDs(msgUID)
+	found := false
+	for _, uid := range siblings {
+		if uid == chatUID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("同账号 messages/chat 渠道未收敛到同一逻辑卡: siblings=%v chatUID=%s", siblings, chatUID)
+	}
+}
+
+// 不同订阅派生的 AccountUID 必须互不相同，避免跨订阅串账号。
+// 两个订阅用不同 baseURL，避免同站点合并路径把 B 并入 A 的渠道。
+func TestHandleNewApiProvision_DifferentSubscriptionsHaveDifferentAccountUIDs(t *testing.T) {
+	siteA := mockNewApiSite(t, "", "", true)
+	siteB := mockNewApiSite(t, "", "", true)
+	store, err := NewSubscriptionStoreWithDB(newTestDB(t))
+	if err != nil {
+		t.Fatalf("创建 store 失败: %v", err)
+	}
+	cfgManager := setupNewApiTestConfigManager(t)
+	runner := NewAutoDiscoveryRunner(nil, nil)
+	router := setupNewApiRouter(t, &NewApiRouteDeps{Store: store, CfgManager: cfgManager, Runner: runner})
+
+	respA := provisionNewApiChannel(t, router, NewApiProvisionRequest{
+		SubscriptionUID: "sub-acct-a",
+		DisplayName:     "订阅 A",
+		BaseURL:         siteA.URL,
+		AccessToken:     "secret-token-a",
+		ChannelKind:     "messages",
+		ChannelName:     "acct-channel-a",
+	})
+	respB := provisionNewApiChannel(t, router, NewApiProvisionRequest{
+		SubscriptionUID: "sub-acct-b",
+		DisplayName:     "订阅 B",
+		BaseURL:         siteB.URL,
+		AccessToken:     "secret-token-b",
+		ChannelKind:     "messages",
+		ChannelName:     "acct-channel-b",
+	})
+
+	cfg := cfgManager.GetConfig()
+	chA, ok := findChannelByUIDInKind(cfg, "messages", respA.ChannelUID)
+	if !ok {
+		t.Fatalf("未找到订阅 A 渠道: uid=%s", respA.ChannelUID)
+	}
+	chB, ok := findChannelByUIDInKind(cfg, "messages", respB.ChannelUID)
+	if !ok {
+		t.Fatalf("未找到订阅 B 渠道: uid=%s", respB.ChannelUID)
+	}
+	if chA.AccountUID != StableAccountUID("sub-acct-a") {
+		t.Fatalf("订阅 A AccountUID 不匹配: got=%q", chA.AccountUID)
+	}
+	if chB.AccountUID != StableAccountUID("sub-acct-b") {
+		t.Fatalf("订阅 B AccountUID 不匹配: got=%q", chB.AccountUID)
+	}
+	if chA.AccountUID == chB.AccountUID {
+		t.Fatalf("不同订阅 AccountUID 串号: %q", chA.AccountUID)
+	}
+}

@@ -101,6 +101,18 @@ func (r *AutoDiscoveryRunner) discoverEndpointProtocols(
 	}
 	ensureConfiguredProtocolDiscovery(channel, result)
 
+	// 按 CapabilityUID 周期去重：同站点同分组同协议在本发现周期内已探测过，则直接复用
+	// 已共享的能力认知，避免跨账号 key 重复发探测请求。凭证 auth 仍按 key 各自在 /models 阶段验证。
+	capUID := r.capabilityUIDForEndpoint(channel, baseURL)
+	if capUID != "" && r.capabilityProbeLedger != nil && !r.capabilityProbeLedger.ClaimProbe(capUID) {
+		if existing, ok := r.lookupExistingCapability(capUID); ok {
+			log.Printf("[ProtocolDiscovery-LedgerSkip] 渠道 %s: CapabilityUID=%s 本周期已探测，复用共享能力",
+				channel.ChannelUID, capUID)
+			r.applyExistingCapabilityToResult(existing, result)
+			return
+		}
+	}
+
 	models := normalizeProtocolModels(result.Models)
 	if len(models) == 0 {
 		models = normalizeProtocolModels(channel.SupportedModels)
@@ -211,6 +223,87 @@ func (r *AutoDiscoveryRunner) discoverEndpointProtocols(
 		} else {
 			result.ProtocolDiscoveryError[protocol] = fmt.Sprintf("%s 协议没有可用模型", protocol)
 		}
+	}
+}
+
+// capabilityUIDForEndpoint 根据渠道、baseURL 生成对应 CapabilityUID。
+// 同一 CapabilityUID 跨账号共享协议/模型探测结论。
+func (r *AutoDiscoveryRunner) capabilityUIDForEndpoint(channel *config.UpstreamConfig, baseURL string) string {
+	if channel == nil {
+		return ""
+	}
+	canonical := utils.CanonicalBaseURL(baseURL, channel.ServiceType)
+	identityBaseURL := utils.MetricsIdentityBaseURL(canonical, channel.ServiceType)
+	siteIdentity := config.SiteIdentityForBaseURL(baseURL)
+	groupIdentity := config.NormalizeGroupIdentity(quotaGroupForChannelKey(channel, ""))
+	protocol := protocolForServiceType(channel.ServiceType)
+	return config.GenerateCapabilityUID(siteIdentity, groupIdentity, identityBaseURL, protocol)
+}
+
+// quotaGroupForChannelKey 返回渠道在指定 key 下的配额组；key 为空时返回首个 key 的配额组。
+func quotaGroupForChannelKey(channel *config.UpstreamConfig, apiKey string) string {
+	if channel == nil {
+		return ""
+	}
+	for _, cfg := range config.NormalizeAPIKeyConfigsForView(*channel) {
+		if apiKey != "" && strings.TrimSpace(cfg.Key) != apiKey {
+			continue
+		}
+		return strings.TrimSpace(cfg.QuotaGroup)
+	}
+	return ""
+}
+
+// capabilityUIDForResult 返回 EndpointDiscoveryResult 对应的能力 UID（与 capabilityUIDForEndpoint 同语义）。
+func (r *AutoDiscoveryRunner) capabilityUIDForResult(channel *config.UpstreamConfig, result *EndpointDiscoveryResult) string {
+	if channel == nil || result == nil {
+		return ""
+	}
+	return r.capabilityUIDForEndpoint(channel, result.BaseURL)
+}
+
+// lookupExistingCapability 从能力台账或共享能力画像中查找已探测过的 CapabilityUID。
+// 复用逻辑只关注跨账号共享的协议/模型能力，不读取 key 级凭证状态。
+func (r *AutoDiscoveryRunner) lookupExistingCapability(capUID string) (config.EndpointCapability, bool) {
+	if r == nil || capUID == "" {
+		return config.EndpointCapability{}, false
+	}
+	// 优先从 ProfileStore 查找同能力（任意 key）的最新探测结论。
+	if r.store != nil {
+		if profile := r.store.GetByCapabilityUID(capUID); profile != nil && len(profile.ProtocolModels) > 0 {
+			return config.EndpointCapability{
+				CapabilityUID:   capUID,
+				IdentityBaseURL: profile.IdentityBaseURL,
+				Protocol:        profile.ServiceType,
+				Models:          profile.AvailableModels,
+			}, true
+		}
+	}
+	return config.EndpointCapability{}, false
+}
+
+// applyExistingCapabilityToResult 把已有能力认知写入协议探测结果，避免重复发请求。
+func (r *AutoDiscoveryRunner) applyExistingCapabilityToResult(cap config.EndpointCapability, result *EndpointDiscoveryResult) {
+	if cap.CapabilityUID == "" || result == nil {
+		return
+	}
+	ensureProtocolDiscoveryMaps(result)
+	discoveredAt := time.Now().UTC()
+	for _, protocol := range discoverableProtocols {
+		if protocol == cap.Protocol {
+			continue
+		}
+		if _, exists := result.ProtocolModels[protocol]; exists {
+			continue
+		}
+		result.ProtocolDiscoveryError[protocol] = "本周期已由同能力探测覆盖，无可用结论"
+	}
+	if cap.Protocol != "" {
+		result.ProtocolModels[cap.Protocol] = normalizeProtocolModels(cap.Models)
+		result.ProtocolDiscoveredAt[cap.Protocol] = discoveredAt
+		result.ProtocolDiscoverySource[cap.Protocol] = "capability_ledger_reuse"
+		result.ProtocolDiscoveryMessage[cap.Protocol] = fmt.Sprintf("本周期已由同能力 %s 探测覆盖，复用 %d 个模型", cap.CapabilityUID, len(cap.Models))
+		delete(result.ProtocolDiscoveryError, cap.Protocol)
 	}
 }
 

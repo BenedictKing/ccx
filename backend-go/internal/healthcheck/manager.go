@@ -13,6 +13,7 @@ import (
 	"github.com/BenedictKing/ccx/internal/metrics"
 )
 
+
 // 验证级别（key_health.check_kind），L2 由后续任务实现
 const (
 	CheckKindL1            = "l1"
@@ -85,6 +86,7 @@ type Options struct {
 }
 
 // Manager 渠道保活验证调度器
+// Manager 渠道保活验证调度器
 type Manager struct {
 	getConfig     func() config.Config
 	store         KeyHealthStore
@@ -109,6 +111,11 @@ type Manager struct {
 	tasks    chan checkTask
 	wg       sync.WaitGroup
 	inFlight map[string]struct{}
+
+	// capabilityProbeLedger 记录本扫描周期内已探测的能力（按 CapabilityUID），
+	// 同一扫描周期内跨账号 key 对同站点同分组协议/模型探测只执行一次，其余复用结论。
+	// 周期边界与 Manager.scan 每次调度时 Reset 对齐（由 loop 的 ticker 驱动）。
+	capabilityProbeLedger *config.CapabilityProbeLedger
 }
 
 // checkTask 验证任务：单渠道全 key L1 验证（渠道内 key 串行）
@@ -132,16 +139,17 @@ func NewManager(getConfig func() config.Config, store KeyHealthStore, blacklist 
 		now = time.Now
 	}
 	return &Manager{
-		getConfig:     getConfig,
-		store:         store,
-		blacklist:     blacklist,
-		recordFailure: recordFailure,
-		fetchers:      make(map[string]L1Fetcher),
-		scanInterval:  scanInterval,
-		stopTimeout:   stopTimeout,
-		now:           now,
-		tasks:         make(chan checkTask, taskQueueSize),
-		inFlight:      make(map[string]struct{}),
+		getConfig:             getConfig,
+		store:                 store,
+		blacklist:             blacklist,
+		recordFailure:         recordFailure,
+		fetchers:              make(map[string]L1Fetcher),
+		scanInterval:          scanInterval,
+		stopTimeout:           stopTimeout,
+		now:                   now,
+		tasks:                 make(chan checkTask, taskQueueSize),
+		inFlight:              make(map[string]struct{}),
+		capabilityProbeLedger: config.NewCapabilityProbeLedger(),
 	}
 }
 
@@ -261,10 +269,17 @@ func (m *Manager) worker() {
 	}
 }
 
-// scan 扫描六类渠道的到期渠道并提交 worker 池
+// scan 扫描六类渠道的到期渠道并提交 worker 池。
+// 每次 scan 开始处重置 CapabilityProbeLedger，标记新一轮探测周期；同一 CapabilityUID
+// 在本周期内由首个 key 探测后，其余 key（含跨账号）复用结论，但 auth/熔断/配额仍按 key 隔离。
 func (m *Manager) scan() {
 	cfg := m.getConfig()
 	now := m.now()
+
+	// 新扫描周期：重置能力探测台账。
+	if m.capabilityProbeLedger != nil {
+		m.capabilityProbeLedger.Reset()
+	}
 
 	records, err := m.store.GetAllKeyHealth()
 	if err != nil {

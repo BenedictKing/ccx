@@ -289,6 +289,28 @@ func (s *ProfileStore) ListByUpstreamIdentity(identityBaseURL, keyHash, excludeC
 	return result
 }
 
+// GetByCapabilityUID 按 CapabilityUID 查找任意 key 的活跃画像。用于协议探测去重时
+// 复用同站点同分组跨账号的共享能力结论（不读取凭证状态）。
+func (s *ProfileStore) GetByCapabilityUID(capUID string) *KeyEndpointProfile {
+	if s == nil || capUID == "" {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var best *KeyEndpointProfile
+	for _, profile := range s.cache {
+		if profile.CapabilityUID != capUID {
+			continue
+		}
+		// 取协议模型最多的最新画像作为代表。
+		if best == nil || len(profile.ProtocolModels) > len(best.ProtocolModels) ||
+			(len(profile.ProtocolModels) == len(best.ProtocolModels) && profile.UpdatedAt.After(best.UpdatedAt)) {
+			best = profile
+		}
+	}
+	return best
+}
+
 // ListAll 返回全部 endpoint 画像副本。
 func (s *ProfileStore) ListAll() []*KeyEndpointProfile {
 	s.mu.RLock()

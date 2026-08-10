@@ -105,6 +105,11 @@ type AutoDiscoveryRunner struct {
 
 	// eventBus 共享事件总线；nil 时不发布 manifest drift 等观测事件。
 	eventBus *eventbus.Bus
+
+	// capabilityProbeLedger 记录本发现周期内已探测的能力（按 CapabilityUID），
+	// 同一扫描周期内跨账号 key 对同站点同分组协议/模型探测只执行一次，其余复用结论。
+	// 周期边界与每次 runDiscovery/runDiscoveryLegacy 开始处 Reset 对齐。
+	capabilityProbeLedger *config.CapabilityProbeLedger
 }
 
 // NewAutoDiscoveryRunner 创建发现执行器。
@@ -112,11 +117,12 @@ type AutoDiscoveryRunner struct {
 // hub 可为 nil（不发布 Phase 3A 画像变更事件，向后兼容旧调用点）。
 func NewAutoDiscoveryRunner(store *ProfileStore, hub *EventHub) *AutoDiscoveryRunner {
 	return &AutoDiscoveryRunner{
-		tasks:   make(map[string]*DiscoveryTask),
-		store:   store,
-		hub:     hub,
-		timeout: 10 * time.Second,
-		gcStop:  make(chan struct{}),
+		tasks:                 make(map[string]*DiscoveryTask),
+		store:                 store,
+		hub:                   hub,
+		timeout:               10 * time.Second,
+		gcStop:                make(chan struct{}),
+		capabilityProbeLedger: config.NewCapabilityProbeLedger(),
 	}
 }
 
@@ -366,6 +372,11 @@ func (r *AutoDiscoveryRunner) runDiscovery(ctx context.Context, task *DiscoveryT
 		}
 	}()
 
+	// 每个发现周期重置能力探测台账，保证同一 CapabilityUID 在本周期内只探测一次。
+	if r.capabilityProbeLedger != nil {
+		r.capabilityProbeLedger.Reset()
+	}
+
 	r.mu.Lock()
 	store := r.taskStore
 	r.mu.Unlock()
@@ -436,6 +447,10 @@ func (r *AutoDiscoveryRunner) runDiscovery(ctx context.Context, task *DiscoveryT
 
 // runDiscoveryLegacy 无 taskStore 时的旧行为：collect 全部端点 → 一次性 writeProfiles。
 func (r *AutoDiscoveryRunner) runDiscoveryLegacy(ctx context.Context, task *DiscoveryTask, channel *config.UpstreamConfig, cfgManager *config.ConfigManager) {
+	// 无 taskStore 路径同样重置能力探测台账，保持与 checkpoint 路径周期语义一致。
+	if r.capabilityProbeLedger != nil {
+		r.capabilityProbeLedger.Reset()
+	}
 	endpoints := r.discoverEndpoints(ctx, channel, cfgManager)
 
 	failedCount := 0
@@ -1288,6 +1303,8 @@ func (r *AutoDiscoveryRunner) writeProfileForEndpoint(channelUID string, channel
 	profile.KeyHash = keyHash
 	profile.MetricsKey = metricsKey
 	profile.CredentialUID = ep.credentialUID
+	// 写入能力 UID，供跨账号共享能力认知与探测去重。
+	profile.CapabilityUID = r.capabilityUIDForResult(channel, &ep)
 	if profile.CredentialUID == "" {
 		profile.CredentialUID = channel.CredentialUIDForKey(apiKey)
 	}

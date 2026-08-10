@@ -136,9 +136,10 @@ func (m *MetricsManager) resetCircuitStateLocked(metrics *KeyMetrics, clearBreak
 	}
 	m.persistCircuitStateLocked(metrics)
 	m.publishCircuitEventLocked(metrics, from, CircuitStateClosed)
+	m.publishChannelStatusEventLocked(metrics, from, CircuitStateClosed, "probe_success")
 }
 
-func (m *MetricsManager) moveCircuitToOpenLocked(metrics *KeyMetrics, now time.Time, escalate bool) {
+func (m *MetricsManager) moveCircuitToOpenLocked(metrics *KeyMetrics, now time.Time, escalate bool, reason string) {
 	from := metrics.CircuitState
 	if escalate {
 		metrics.BackoffLevel++
@@ -153,6 +154,7 @@ func (m *MetricsManager) moveCircuitToOpenLocked(metrics *KeyMetrics, now time.T
 	metrics.ProbeInFlight = false
 	m.persistCircuitStateLocked(metrics)
 	m.publishCircuitEventLocked(metrics, from, CircuitStateOpen)
+	m.publishChannelStatusEventLocked(metrics, from, CircuitStateOpen, reason)
 }
 
 func (m *MetricsManager) moveCircuitToHalfOpenLocked(metrics *KeyMetrics, now time.Time) {
@@ -164,6 +166,49 @@ func (m *MetricsManager) moveCircuitToHalfOpenLocked(metrics *KeyMetrics, now ti
 	metrics.ProbeInFlight = false
 	m.persistCircuitStateLocked(metrics)
 	m.publishCircuitEventLocked(metrics, from, CircuitStateHalfOpen)
+	m.publishChannelStatusEventLocked(metrics, from, CircuitStateHalfOpen, "cooldown_expired")
+}
+
+// publishChannelStatusEventLocked 在持锁状态下发布渠道状态变更事件。
+// 与 circuit_breaker_state_changed 成对发布，供前端 HealthCenter 按统一契约消费。
+// channelUID/channelName 退化为 metricsKey/keyMask：metrics 层只有 (baseURL, key) 身份，
+// 前端可据此反查所属物理渠道；未注入总线或状态未变化时为空操作。
+func (m *MetricsManager) publishChannelStatusEventLocked(metrics *KeyMetrics, from, to CircuitState, reason string) {
+	if from == to {
+		return
+	}
+	bus := m.eventBus.Load()
+	if bus == nil || metrics == nil {
+		return
+	}
+	now := time.Now().UTC()
+	payload := map[string]any{
+		"channelUID":  metrics.MetricsKey,
+		"channelName": metrics.KeyMask,
+		"kind":        m.apiType,
+		"oldStatus":   from.String(),
+		"newStatus":   to.String(),
+		"reason":      reason,
+		"timestamp":   now.Unix(),
+	}
+	if metrics.BaseURL != "" {
+		payload["baseUrl"] = metrics.BaseURL
+	}
+	if metrics.NextRetryAt != nil {
+		payload["nextRetryAt"] = metrics.NextRetryAt.Unix()
+	}
+	bus.Publish(eventbus.Event{
+		UID:         "",
+		Type:        eventbus.TypeChannelStatusChanged,
+		Scope:       eventbus.ScopeMetrics,
+		Subject:     metrics.MetricsKey,
+		ChannelKind: m.apiType,
+		From:        from.String(),
+		To:          to.String(),
+		Cause:       reason,
+		Payload:     payload,
+		CreatedAt:   now,
+	})
 }
 
 // publishCircuitEventLocked 在持锁状态下发布熔断状态变更事件。
@@ -239,7 +284,7 @@ func (m *MetricsManager) handleBreakerFailureLocked(metrics *KeyMetrics, failure
 
 	switch metrics.CircuitState {
 	case CircuitStateHalfOpen:
-		m.moveCircuitToOpenLocked(metrics, now, true)
+		m.moveCircuitToOpenLocked(metrics, now, true, "half_open_probe_failed")
 		log.Printf("[Metrics-Circuit] Key [%s] (%s) half-open 探针失败，重新进入 open（失败率: %.1f%%）", metrics.KeyMask, metrics.BaseURL, m.calculateKeyBreakerFailureRateInternal(metrics)*100)
 	case CircuitStateClosed:
 		// 模型多样性门槛：失败能明确归因到单一模型时不熔断整个 Key，
@@ -255,13 +300,13 @@ func (m *MetricsManager) handleBreakerFailureLocked(metrics *KeyMetrics, failure
 			return
 		}
 		if failureClass.OpensCircuitImmediately() {
-			m.moveCircuitToOpenLocked(metrics, now, false)
+			m.moveCircuitToOpenLocked(metrics, now, false, "overloaded")
 			log.Printf("[Metrics-Circuit] Key [%s] (%s) 因上游临时过载进入熔断状态（失败率: %.1f%%）", metrics.KeyMask, metrics.BaseURL, m.calculateKeyBreakerFailureRateInternal(metrics)*100)
 			statelog.LogStateTransition("Metrics-Circuit", "key", metrics.KeyMask, "closed", "open", "overloaded", "baseURL="+metrics.BaseURL)
 			return
 		}
 		if m.isKeyCircuitBroken(metrics) {
-			m.moveCircuitToOpenLocked(metrics, now, false)
+			m.moveCircuitToOpenLocked(metrics, now, false, "breaker_threshold")
 			log.Printf("[Metrics-Circuit] Key [%s] (%s) 进入熔断状态（失败率: %.1f%%）", metrics.KeyMask, metrics.BaseURL, m.calculateKeyBreakerFailureRateInternal(metrics)*100)
 			statelog.LogStateTransition("Metrics-Circuit", "key", metrics.KeyMask, "closed", "open", "breaker_threshold", "baseURL="+metrics.BaseURL)
 		}
