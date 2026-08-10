@@ -197,9 +197,15 @@ func (cm *ConfigManager) loadConfig() error {
 		}
 	}
 
-	// Phase 3b：若配置携带 ChannelsV3 权威形态，做一次一致性对账（非破坏：仅告警，
-	// 运行时仍以六数组为权威）。真正从 ChannelsV3 重建六数组留到 Phase 3c 消费者切换后。
-	reconcileAuthoritativeChannels(&cm.config)
+	// Phase 3b/3c：若配置携带 ChannelsV3 权威形态，做一次一致性对账。
+	// Phase 3c 加载翻转开关开启时，尝试从 ChannelsV3 重建六数组作为权威来源；
+	// 否则保持现状（仅告警）。
+	if applied, err := applyAuthoritativeChannelsAsLoadSource(&cm.config); err != nil {
+		cm.mu.Unlock()
+		return err
+	} else if !applied {
+		reconcileAuthoritativeChannels(&cm.config)
+	}
 
 	// 成功加载后通知回调（在锁内构造快照，释放锁后通知）
 	cm.fireConfigChangeCallbacks()
@@ -344,6 +350,15 @@ func (cm *ConfigManager) applyConfigDefaults(rawJSON []byte) bool {
 // 显式排序的相对顺序不变；全部未配置时退化为按数组顺序分配 1..N（与旧的索引语义等价）。
 // 用于旧版本升级：避免 0 值渠道在调度与前端排序中插到显式 priority 渠道之前。
 func (cm *ConfigManager) normalizeChannelPriorities() bool {
+	return normalizeChannelPrioritiesConfig(&cm.config)
+}
+
+// normalizeChannelPrioritiesConfig 是 normalizeChannelPriorities 的自由函数版本，
+// 供 saveConfigLocked 在构建 ChannelsV3 前对副本执行归一化。
+func normalizeChannelPrioritiesConfig(cfg *Config) bool {
+	if cfg == nil {
+		return false
+	}
 	changed := false
 	normalize := func(upstreams *[]UpstreamConfig, label string) {
 		channels := *upstreams
@@ -363,12 +378,12 @@ func (cm *ConfigManager) normalizeChannelPriorities() bool {
 			log.Printf("[Config-Migration] %s 渠道 [%d] %s 未配置 priority，已分配为 %d", label, i, channels[i].Name, maxPriority)
 		}
 	}
-	normalize(&cm.config.Upstream, "Messages")
-	normalize(&cm.config.ResponsesUpstream, "Responses")
-	normalize(&cm.config.ChatUpstream, "Chat")
-	normalize(&cm.config.GeminiUpstream, "Gemini")
-	normalize(&cm.config.ImagesUpstream, "Images")
-	normalize(&cm.config.VectorsUpstream, "Vectors")
+	normalize(&cfg.Upstream, "Messages")
+	normalize(&cfg.ResponsesUpstream, "Responses")
+	normalize(&cfg.ChatUpstream, "Chat")
+	normalize(&cfg.GeminiUpstream, "Gemini")
+	normalize(&cfg.ImagesUpstream, "Images")
+	normalize(&cfg.VectorsUpstream, "Vectors")
 	return changed
 }
 
@@ -889,11 +904,18 @@ func (cm *ConfigManager) ensureAccountUIDs() bool {
 				continue
 			}
 			accountUID := ""
-			if groupKey := legacyManagedAccountGroupKey(channels[i]); groupKey != "" {
-				accountUID = managedGroups[groupKey]
-				if accountUID == "" {
-					accountUID = GenerateAccountUID()
-					managedGroups[groupKey] = accountUID
+			// new-api 自动托管渠道优先按订阅 UID 派生稳定账号身份，
+			// 使同订阅的多协议渠道能收敛到同一逻辑卡。
+			if strings.TrimSpace(channels[i].AutoManagedKind) == "new_api" {
+				accountUID = deriveNewApiAccountUIDForChannel(&channels[i])
+			}
+			if accountUID == "" {
+				if groupKey := legacyManagedAccountGroupKey(channels[i]); groupKey != "" {
+					accountUID = managedGroups[groupKey]
+					if accountUID == "" {
+						accountUID = GenerateAccountUID()
+						managedGroups[groupKey] = accountUID
+					}
 				}
 			}
 			if accountUID == "" {
@@ -927,6 +949,15 @@ func legacyManagedAccountGroupKey(channel UpstreamConfig) string {
 }
 
 func (cm *ConfigManager) ensureCredentialUIDs() bool {
+	return ensureCredentialUIDsConfig(&cm.config)
+}
+
+// ensureCredentialUIDsConfig 是 ensureCredentialUIDs 的自由函数版本，
+// 供 saveConfigLocked 在构建 ChannelsV3 前对副本执行回填。
+func ensureCredentialUIDsConfig(cfg *Config) bool {
+	if cfg == nil {
+		return false
+	}
 	updated := false
 	apply := func(channels []UpstreamConfig) {
 		for i := range channels {
@@ -947,12 +978,12 @@ func (cm *ConfigManager) ensureCredentialUIDs() bool {
 			}
 		}
 	}
-	apply(cm.config.Upstream)
-	apply(cm.config.ResponsesUpstream)
-	apply(cm.config.GeminiUpstream)
-	apply(cm.config.ChatUpstream)
-	apply(cm.config.ImagesUpstream)
-	apply(cm.config.VectorsUpstream)
+	apply(cfg.Upstream)
+	apply(cfg.ResponsesUpstream)
+	apply(cfg.GeminiUpstream)
+	apply(cfg.ChatUpstream)
+	apply(cfg.ImagesUpstream)
+	apply(cfg.VectorsUpstream)
 	return updated
 }
 
@@ -961,6 +992,15 @@ func (cm *ConfigManager) ensureCredentialUIDs() bool {
 // URL/名称的猜测推断，避免把未知来源误判为某个具体信任等级。
 // 已有非空值的渠道不会被覆盖。覆盖全部六类渠道。返回 true 表示有字段被补齐，需要持久化。
 func (cm *ConfigManager) ensureOriginBackfill() bool {
+	return ensureOriginBackfillConfig(&cm.config)
+}
+
+// ensureOriginBackfillConfig 是 ensureOriginBackfill 的自由函数版本，
+// 供 saveConfigLocked 在构建 ChannelsV3 前对副本执行回填。
+func ensureOriginBackfillConfig(cfg *Config) bool {
+	if cfg == nil {
+		return false
+	}
 	updated := false
 	apply := func(channels []UpstreamConfig, channelKind string) {
 		for i := range channels {
@@ -979,12 +1019,12 @@ func (cm *ConfigManager) ensureOriginBackfill() bool {
 			}
 		}
 	}
-	apply(cm.config.Upstream, "Messages")
-	apply(cm.config.ResponsesUpstream, "Responses")
-	apply(cm.config.GeminiUpstream, "Gemini")
-	apply(cm.config.ChatUpstream, "Chat")
-	apply(cm.config.ImagesUpstream, "Images")
-	apply(cm.config.VectorsUpstream, "Vectors")
+	apply(cfg.Upstream, "Messages")
+	apply(cfg.ResponsesUpstream, "Responses")
+	apply(cfg.GeminiUpstream, "Gemini")
+	apply(cfg.ChatUpstream, "Chat")
+	apply(cfg.ImagesUpstream, "Images")
+	apply(cfg.VectorsUpstream, "Vectors")
 	return updated
 }
 
@@ -1226,6 +1266,9 @@ func (cm *ConfigManager) saveConfigLocked(config Config) error {
 	config.CurrentResponsesUpstream = 0
 
 	config.syncManagedAccountsFromChannels()
+	// new-api 自动托管渠道在落盘前统一回填 AccountUID，确保同订阅的多协议
+	// 渠道共享稳定账号身份，RebuildLogicalChannels 能将其收敛到同一逻辑卡。
+	normalizeNewApiAccountUIDsConfig(&config)
 	// 任何物理渠道变更（Add/Update/Remove、状态/促销/批量导入等）持久化前，
 	// 统一重建 LogicalChannels 视图并回写 LogicalChannelUID / LogicalName。
 	// 在 deepCopy 之前执行，确保修改作用于调用方共享的 slice 并最终提交到 cm.config。
@@ -1237,6 +1280,11 @@ func (cm *ConfigManager) saveConfigLocked(config Config) error {
 	defer cm.publishLogicalChannelRebuilt()
 	persisted := config.deepCopy()
 	persisted.stripManagedChannelSecrets()
+	// Phase 3c：在构建 ChannelsV3 前，对 persisted 执行与加载时相同的幂等回填/归一化，
+	// 确保 ChannelsV3 与加载后的最终六数组形态一致，从而支持加载翻转安全启用。
+	normalizeChannelPrioritiesConfig(&persisted)
+	ensureOriginBackfillConfig(&persisted)
+	ensureCredentialUIDsConfig(&persisted)
 	// Phase 3b：脱敏后合成无损权威形态 ChannelsV3 并持久化（只落盘、不改运行时 cm.config）。
 	// 从已脱敏的 persisted 数组合成，保证 ChannelsV3 同样不含托管明文 key。
 	persisted.ChannelsV3 = BuildAuthoritativeChannels(&persisted)

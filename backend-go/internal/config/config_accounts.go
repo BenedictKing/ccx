@@ -1,6 +1,8 @@
 package config
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"strings"
@@ -1459,6 +1461,61 @@ func kimiRatioWindowReset(window *KimiCodeRatioWindow, now time.Time) bool {
 		return false
 	}
 	return now.After(rt) && window.Ratio < 1.0
+}
+
+// deriveNewApiAccountUID 从 new-api 订阅 UID 派生稳定的托管账号身份。
+// 与 autopilot/handlers_newapi.go 的 StableAccountUID 使用相同算法
+//（newapi_ + sha256("newapi|account|"+subscriptionUID)[:8]），避免跨包依赖。
+func deriveNewApiAccountUID(subscriptionUID string) string {
+	sum := sha256.Sum256([]byte(fmt.Sprintf("newapi|account|%s", subscriptionUID)))
+	return "newapi_" + hex.EncodeToString(sum[:8])
+}
+
+// deriveNewApiAccountUIDForChannel 从渠道的 APIKeyConfigs 中找一个非空的
+// SourceSubscriptionUID，派生稳定的 AccountUID。找不到时返回空字符串。
+func deriveNewApiAccountUIDForChannel(channel *UpstreamConfig) string {
+	if channel == nil {
+		return ""
+	}
+	for _, cfg := range channel.APIKeyConfigs {
+		uid := strings.TrimSpace(cfg.SourceSubscriptionUID)
+		if uid != "" {
+			return deriveNewApiAccountUID(uid)
+		}
+	}
+	return ""
+}
+
+// normalizeNewApiAccountUIDsConfig 对配置中全部 new-api 自动托管渠道回填 AccountUID。
+// 当 AutoManagedKind == "new_api" 且 AccountUID 为空时，从 APIKeyConfigs 中的
+// SourceSubscriptionUID 派生稳定的账号身份，使同订阅的多协议渠道能收敛到同一逻辑卡。
+func normalizeNewApiAccountUIDsConfig(cfg *Config) bool {
+	if cfg == nil {
+		return false
+	}
+	updated := false
+	apply := func(channels []UpstreamConfig) {
+		for i := range channels {
+			ch := &channels[i]
+			if strings.TrimSpace(ch.AccountUID) != "" {
+				continue
+			}
+			if strings.TrimSpace(ch.AutoManagedKind) != "new_api" {
+				continue
+			}
+			if uid := deriveNewApiAccountUIDForChannel(ch); uid != "" {
+				ch.AccountUID = uid
+				updated = true
+			}
+		}
+	}
+	apply(cfg.Upstream)
+	apply(cfg.ChatUpstream)
+	apply(cfg.ResponsesUpstream)
+	apply(cfg.GeminiUpstream)
+	apply(cfg.ImagesUpstream)
+	apply(cfg.VectorsUpstream)
+	return updated
 }
 
 // kindToAPIType 将账号渠道 kind 映射为 ConfigManager 使用的 apiType。

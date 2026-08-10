@@ -13,13 +13,37 @@ package config
 //   - 不做任何字段裁剪，UpstreamConfig 整体复制，保证 round-trip 逐字节一致。
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
 	"log"
+	"os"
 	"sort"
 	"strings"
 )
 
 // ChannelV3SchemaVersion 是 ChannelsV3 权威形态的 schema 版本。
 const ChannelV3SchemaVersion = 1
+
+// channelAuthoritativeLoadEnv 是 Phase 3c 加载翻转的开关：
+//   - 未设置 / false / 0：保持现状，仍从六数组加载（零影响、可回退）。
+//   - true / 1 / yes / on：若配置携带 ChannelsV3，则从 ChannelsV3 重建六数组作为权威来源。
+const channelAuthoritativeLoadEnv = "CCX_CHANNEL_AUTHORITATIVE_LOAD"
+
+// channelAuthoritativeStrictEnv 是 Phase 3c 严格模式开关：
+//   - 开启加载翻转时，若 ChannelsV3 重建出的六数组与磁盘六数组不一致，
+//     严格模式拒绝启动；非严格模式回退到磁盘六数组并告警（默认非严格）。
+const channelAuthoritativeStrictEnv = "CCX_CHANNEL_AUTHORITATIVE_STRICT"
+
+// channelAuthoritativeLoadEnabled 读取加载翻转开关。
+func channelAuthoritativeLoadEnabled() bool {
+	return isTruthyEnv(os.Getenv(channelAuthoritativeLoadEnv))
+}
+
+// channelAuthoritativeStrictEnabled 读取严格模式开关。
+func channelAuthoritativeStrictEnabled() bool {
+	return isTruthyEnv(os.Getenv(channelAuthoritativeStrictEnv))
+}
 
 // ChannelV3 是同账号/同站点多协议物理渠道的无损聚合权威形态。
 type ChannelV3 struct {
@@ -147,6 +171,86 @@ func reconcileAuthoritativeChannels(cfg *Config) bool {
 		}
 	}
 	return false
+}
+
+// applyAuthoritativeChannelsAsLoadSource 在加载阶段执行 Phase 3c 翻转：
+//   - 若开关关闭，或配置不含有效 ChannelsV3，直接返回 false，保持六数组不变。
+//   - 若开关开启，从 ChannelsV3 重建六数组，并与磁盘六数组逐字段比对。
+//     完全一致则把重建结果写回 cfg 的六个数组，返回 true。
+//     不一致时：严格模式返回 error 拒绝启动；非严格模式打印醒目告警并返回 false，
+//     保持磁盘六数组不变。
+func applyAuthoritativeChannelsAsLoadSource(cfg *Config) (applied bool, err error) {
+	if cfg == nil {
+		return false, nil
+	}
+	if !channelAuthoritativeLoadEnabled() {
+		return false, nil
+	}
+	if cfg.ChannelAuthoritativeVersion != ChannelV3SchemaVersion || len(cfg.ChannelsV3) == 0 {
+		return false, nil
+	}
+
+	rebuilt := ApplyAuthoritativeChannelsAsStruct(cfg.ChannelsV3)
+	if err := compareAuthoritativeRoundTrip(cfg, rebuilt); err != nil {
+		if channelAuthoritativeStrictEnabled() {
+			return false, fmt.Errorf("[Config-Load] ChannelsV3 与六数组不一致且严格模式开启，拒绝启动: %w", err)
+		}
+		log.Printf("[Config-Load] 警告: ChannelsV3 与六数组不一致，回退到磁盘六数组: %v", err)
+		return false, nil
+	}
+
+	cfg.Upstream, cfg.ChatUpstream, cfg.ResponsesUpstream, cfg.GeminiUpstream, cfg.ImagesUpstream, cfg.VectorsUpstream =
+		rebuilt.Upstream, rebuilt.Chat, rebuilt.Responses, rebuilt.Gemini, rebuilt.Images, rebuilt.Vectors
+	log.Printf("[Config-Load] 已从 ChannelsV3 重建六数组（渠道数: messages=%d chat=%d responses=%d gemini=%d images=%d vectors=%d）",
+		len(cfg.Upstream), len(cfg.ChatUpstream), len(cfg.ResponsesUpstream),
+		len(cfg.GeminiUpstream), len(cfg.ImagesUpstream), len(cfg.VectorsUpstream))
+	return true, nil
+}
+
+// authoritativeArrays 是 ApplyAuthoritativeChannels 返回的六数组命名元组。
+type authoritativeArrays struct {
+	Upstream        []UpstreamConfig
+	Chat            []UpstreamConfig
+	Responses       []UpstreamConfig
+	Gemini          []UpstreamConfig
+	Images          []UpstreamConfig
+	Vectors         []UpstreamConfig
+}
+
+// ApplyAuthoritativeChannelsAsStruct 与 ApplyAuthoritativeChannels 等价，但返回命名元组，便于比对。
+func ApplyAuthoritativeChannelsAsStruct(channels []ChannelV3) authoritativeArrays {
+	u, c, r, g, i, v := ApplyAuthoritativeChannels(channels)
+	return authoritativeArrays{Upstream: u, Chat: c, Responses: r, Gemini: g, Images: i, Vectors: v}
+}
+
+// compareAuthoritativeRoundTrip 比对"从 ChannelsV3 重建的六数组"与 cfg 中直接读到的六数组
+// 是否逐字段一致。返回不一致时的诊断信息，完全一致返回 nil。
+func compareAuthoritativeRoundTrip(cfg *Config, rebuilt authoritativeArrays) error {
+	pairs := []struct {
+		kind string
+		want []UpstreamConfig
+		got  []UpstreamConfig
+	}{
+		{"messages", cfg.Upstream, rebuilt.Upstream},
+		{"chat", cfg.ChatUpstream, rebuilt.Chat},
+		{"responses", cfg.ResponsesUpstream, rebuilt.Responses},
+		{"gemini", cfg.GeminiUpstream, rebuilt.Gemini},
+		{"images", cfg.ImagesUpstream, rebuilt.Images},
+		{"vectors", cfg.VectorsUpstream, rebuilt.Vectors},
+	}
+	for _, p := range pairs {
+		if len(p.want) != len(p.got) {
+			return fmt.Errorf("%s 数组长度不一致: 磁盘=%d 重建=%d", p.kind, len(p.want), len(p.got))
+		}
+		for i := range p.want {
+			wb, _ := json.Marshal(p.want[i])
+			gb, _ := json.Marshal(p.got[i])
+			if !bytes.Equal(wb, gb) {
+				return fmt.Errorf("%s[%d] 字段不一致\n磁盘:   %s\n重建: %s", p.kind, i, wb, gb)
+			}
+		}
+	}
+	return nil
 }
 
 func channelUIDSetFromV3(channels []ChannelV3) map[string]struct{} {
