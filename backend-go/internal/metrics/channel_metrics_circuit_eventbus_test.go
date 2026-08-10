@@ -81,9 +81,9 @@ func TestCircuitState_SameState_NoEvent(t *testing.T) {
 	mgr.SetEventBus(bus)
 
 	km := &KeyMetrics{
-		MetricsKey: "mk-1",
-		BaseURL:    "https://example.com",
-		KeyMask:    "sk-***ab",
+		MetricsKey:   "mk-1",
+		BaseURL:      "https://example.com",
+		KeyMask:      "sk-***ab",
 		CircuitState: CircuitStateClosed,
 	}
 	mgr.keyMetrics[km.MetricsKey] = km
@@ -109,9 +109,9 @@ func TestCircuitState_NilBus_NoPanic(t *testing.T) {
 	// 不调用 SetEventBus，bus 字段为零值 atomic.Pointer[Bus] = nil
 
 	km := &KeyMetrics{
-		MetricsKey:  "mk-1",
-		BaseURL:     "https://example.com",
-		KeyMask:     "sk-***ab",
+		MetricsKey:   "mk-1",
+		BaseURL:      "https://example.com",
+		KeyMask:      "sk-***ab",
 		CircuitState: CircuitStateClosed,
 	}
 	mgr.keyMetrics[km.MetricsKey] = km
