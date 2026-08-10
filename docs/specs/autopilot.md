@@ -15,7 +15,7 @@ Autopilot 是 CCX 的智能路由与渠道托管子系统，由 Manager + SmartR
          ▼
 ┌─────────────────┐
 │ RequestProfile  │  Model, Kind, HasImage, HasDocument, EstTokens,
-│   Builder       │  QualityNeed, ContextNeed, Effort, TaskClass, Domain
+│   Builder       │  QualityNeed, ContextNeed, Effort(off..ultra), TaskClass, Domain
 └────────┬────────┘
          │ context 传递
          ▼
@@ -70,7 +70,7 @@ Autopilot 是 CCX 的智能路由与渠道托管子系统，由 Manager + SmartR
 | `task_classifier.go` | 确定性 `Classify`，产出 `TaskClass` |
 | `task_complexity.go` | `InferTaskComplexity`：从 prompt 信号提取难度 |
 | `task_domain.go` | `InferTaskDomain`、域关键词表、域强度证据 |
-| `effort_normalize.go` | `EffortLevel` 归一化与档位距离计算 |
+| `effort_normalize.go` | `EffortLevel` 8 档归一化与档位距离计算 |
 
 ### 2.3 画像推导与健康
 
@@ -116,8 +116,8 @@ Autopilot 是 CCX 的智能路由与渠道托管子系统，由 Manager + SmartR
 
 | 文件 | 职责 |
 |---|---|
-| `model_resolver.go` | `ModelResolver`：手动映射 → 能力下界过滤 → 模型×effort 排序 |
-| `model_profile.go` | `ModelProfile`、模型族/质量档/能力字段 |
+| `model_resolver.go` | `ModelResolver`：手动映射 → 能力下界过滤 → 模型×effort 排序（8 档规范轴） |
+| `model_profile.go` | `ModelProfile`、模型族/质量档/能力字段、`EffortLevel` 8 档规范枚举 |
 | `model_profile_store.go` | `(channel, kind, metricsKey, model)` 维度的模型画像存储 |
 | `capability_floor.go` | `CapabilityFloor` 与 `MinQualityTierReasons` |
 | `model_frontier.go` | `ComputeFrontierForest`：Pareto 分层与微簇 |
@@ -228,7 +228,7 @@ Autopilot 是 CCX 的智能路由与渠道托管子系统，由 Manager + SmartR
 | `QualityNeed/QualityTarget` | 模型本身档、结合任务难度后的目标档 |
 | `ContextNeed` | 估算输入 token 数，作为上下文硬约束 |
 | `VisionNeed/DocumentNeed/ImageGenNeed/EmbeddingNeed/ToolUseNeed/ReasoningNeed` | 能力硬约束 |
-| `ClientEffort/ClientEffortExplicit` | 客户端显式声明的思考档位 |
+| `ClientEffort/ClientEffortExplicit` | 客户端显式声明的思考档位（`off/minimal/low/medium/high/xhigh/max/ultra`） |
 | `TaskClass/TaskDomain` | 分类与域推导结果 |
 | `SessionID/PromptHash` | 意图/session 匹配、确定性流量哈希 |
 | `IntentEffortPin` | 与 `EndpointPolicy` 共享的 effort 覆盖指针 |
@@ -599,14 +599,27 @@ health(40) > fastDecay(25) > successRate(20) > latency(10) > cost(5)
 提交：`afd94b8e`、`0a1a5c30`
 
 - `ModelResolver.rankEligibleModels` 默认走 `ComputeFrontierForest`
-- `buildRankedCandidates` 展开 `model × effort` 候选
-- 质量分以 benchmark 为主锚，带置信区间
-- 成本轴乘 effort 成本系数防止档位膨胀
+- `buildRankedCandidates` 展开 `model × effort` 候选；规范轴统一为 8 档：`off/minimal/low/medium/high/xhigh/max/ultra`
+- `xhigh/max/ultra` 不再压平，按厂商投入/成本序递增：`ultra > max > xhigh`
+- 质量分以 benchmark 为主锚，带置信区间；`task_domain.go:effortBonusTable` 体现效果序（非投入序）：
+  - `off=0, minimal=+0.2, low=+0.4, medium=+0.6, high=+0.9, xhigh=+1.0, max=+0.95, ultra=+0.9`
+  - 雷达站 `gpt-5.6-sol` 实测：xhigh 0.75 > max 0.714 > ultra 0.693，xhigh 为效果最优档
+- 成本轴乘 effort 成本系数防止档位膨胀；系数随投入递增，但可被实测 cost 校准（见 §5.5.1）
 - 三车道：
   - `balanced`：膝点 + 每 0.01 质量增益最多 2% 成本溢价帽
   - `cost_first`：最低成本簇
   - `quality_first`：并列容差取最低成本
 - 成本证据不足时 fail-open 回退旧链
+
+#### 5.5.1 性价比 effort 选择
+
+提交：`0a1a5c30`（接入 codexradar 实测 cost）
+
+- `frontierCostFactorFor` 优先使用候选 effort 的实测 USD cost：`factor = measuredCostUSD / normalizedPublicCostUSD`
+- 当 `benchmark.Profile.BenchmarkEvidence` 中存在该 effort 的有效 `CostUSD` 时，用实测值替换 `frontierEffortCostFactor` 的推测系数
+- 同一 effort 多条证据取最小 cost（保守估计），避免异常高成本扭曲 frontier
+- 实测 cost 来源在 `CostEvidence.Source` 中标记为 `registry_pricing_x_measured_effort_cost`（或乘 provider 倍率后的变体）
+- 效果：frontier 成本轴从"按档位系数猜测"演进为"以 codexradar 实测 cost 校准的性价比轴"，使 xhigh 等高效果档在成本相近时获得真实优势
 
 ### 5.6 其他近期功能
 
@@ -684,7 +697,7 @@ health(40) > fastDecay(25) > successRate(20) > latency(10) > cost(5)
       ▼
 ┌─────────────────┐
 │ RequestProfile  │  Model, Kind, HasImage, HasDocument, EstTokens,
-│   Builder       │  QualityNeed, ContextNeed, Effort, TaskClass, Domain
+│   Builder       │  QualityNeed, ContextNeed, Effort(off..ultra), TaskClass, Domain
 └────────┬────────┘
          │
          ▼
@@ -803,9 +816,9 @@ health(40) > fastDecay(25) > successRate(20) > latency(10) > cost(5)
    - `collectSignals` 中 `AuthFailureCount/DNSFailureCount/QuotaFailureCount` 等多数为 0，仅 `OverloadedCount` 来自熔断器
    - 文件：`manager.go:1286`
 
-3. **AFP 成本系数为灰度保守值**
-   - `frontierEffortCostFactor` 中 high=1.5、max=2.0 是占位，待实测输出 token 统计积累后替换
-   - 文件：`model_frontier_scoring.go:47`
+3. **AFP 成本系数已替换为实测校准**
+   - `frontierEffortCostFactor` 仍为 fallback 推测系数；当存在 codexradar 实测 cost 时，`frontierCostFactorFor` 用 `measuredCostUSD / normalizedPublicCostUSD` 替换推测值
+   - 文件：`model_frontier_scoring.go:47`、`model_frontier_scoring.go:62`
 
 ### 8.2 边界与保守策略
 
