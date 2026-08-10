@@ -537,7 +537,7 @@ function applyModelHighlight(model) {
 function renderLegend(rows) {
   const legend = document.getElementById('legend');
   legend.replaceChildren();
-  [...new Set(rows.map(row => row.model))].sort().forEach(model => {
+  [...new Set(rows.map(row => row.model))].sort(compareModels).forEach(model => {
     const item = document.createElement('span');
     item.className = 'legend-item';
     item.dataset.model = model;
