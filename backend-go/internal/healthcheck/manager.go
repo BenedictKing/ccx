@@ -95,6 +95,10 @@ type Manager struct {
 	// modelCircuitLookup 按渠道类型返回模型级熔断追踪器；nil 时选择器退化为持久化记录+成本排序。
 	modelCircuitLookup func(channelType string) *metrics.ModelCircuitTracker
 
+	// usageResolver 读取火山套餐 AFP 余额快照，用于稀疏 L2 预算联动。
+	// nil 时按静态预算处理，不放大也不缩小预算。
+	usageResolver ProbeUsageResolver
+
 	scanInterval time.Duration
 	stopTimeout  time.Duration
 	now          func() time.Time
@@ -154,6 +158,14 @@ func (m *Manager) SetModelCircuitLookup(lookup func(channelType string) *metrics
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.modelCircuitLookup = lookup
+}
+
+// SetProbeUsageResolver 注入火山套餐用量查询器（可选）。
+// 注入后稀疏 L2 预算会按剩余 AFP 的一定比例进行 clamp，避免探测蚕食生产额度。
+func (m *Manager) SetProbeUsageResolver(resolver ProbeUsageResolver) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.usageResolver = resolver
 }
 
 // Start 启动调度循环与 worker 池（幂等）

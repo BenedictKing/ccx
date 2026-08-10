@@ -31,11 +31,32 @@ func parseL2ModelCheckKind(kind string) (string, bool) {
 	return model, model != ""
 }
 
+// probeCostUnit 表示候选模型成本的物理单位。
+type probeCostUnit int
+
+const (
+	// probeCostUnitUnknown 表示无可用定价信息，该候选不应被排序选中。
+	probeCostUnitUnknown probeCostUnit = iota
+	// probeCostUnitAFP 火山 Agent Plan 的 AFP 计费单位。
+	probeCostUnitAFP
+	// probeCostUnitUSD 非火山渠道的 USD 相对成本（仅用于同渠道内相对比较）。
+	probeCostUnitUSD
+)
+
+// ProbeUsageResolver 是 healthcheck 包读取火山套餐 AFP 余额的最小抽象接口。
+// 由 main.go 注入 ConfigManager 方法或类似实现，避免 healthcheck 直接 import autopilot。
+type ProbeUsageResolver interface {
+	// ResolveVolcenginePlanUsage 返回指定账号/凭证最近一次获取的火山套餐用量快照。
+	// 未找到或快照无效时返回 nil。
+	ResolveVolcenginePlanUsage(accountUID, credentialUID string) *config.VolcenginePlanUsage
+}
+
 // probeModelCandidate 稀疏 L2 的待探测模型及其排序信号。
 type probeModelCandidate struct {
 	Model          string
-	CostAFP        float64 // 估算 AFP 成本；非火山渠道使用 USD 等价成本
-	RecentlyFailed bool    // 熔断中或上次 L2 失败
+	CostValue      float64       // 按 CostUnit 解释的数值
+	CostUnit       probeCostUnit // AFP/USD/unknown
+	RecentlyFailed bool          // 熔断中或上次 L2 失败
 	LastSuccessAt  time.Time
 	IsAlias        bool   // 是否为另一候选模型的别名
 	AliasOf        string // 别名指向的规范模型；非空时用于去重
@@ -52,6 +73,7 @@ type probeModelCandidate struct {
 //   - 最近失败的模型不受成本预算限制（必须验证）。
 //   - 其余模型按顺序加入，直到达到 maxModels 或 maxCostAFP。
 //   - 当可用模型较多且存在失败模型时，动态放宽数量与成本上限，避免失败模型独占周期后无剩余预算。
+//   - 火山 Agent Plan 渠道额外受剩余 AFP 余额比例限制，避免探测蚕食生产额度。
 //
 // circuit 为 nil 时仅使用持久化的 key_health 记录判断失败/成功。
 func (m *Manager) selectL2ProbeModels(
@@ -69,6 +91,10 @@ func (m *Manager) selectL2ProbeModels(
 	}
 
 	maxModels, maxCostAFP := effectiveSparseBudget(policy, len(models), recentlyFailedCount(models, prevL2ByModel, circuit, channelUID, keyHash, now, policy.L2ModelQuietPeriod), 0)
+	// 火山 Agent Plan 渠道：用剩余 AFP 余额比例进一步限制成本上限
+	if config.IsVolcengineProvider(u) {
+		maxCostAFP = m.clampCostByVolcengineBalance(u, maxCostAFP)
+	}
 
 	cfg := m.getConfig()
 	global := cfg.UpstreamModelCapabilities
@@ -88,7 +114,8 @@ func (m *Manager) selectL2ProbeModels(
 
 		candidate := probeModelCandidate{Model: model}
 		if isVolcengine {
-			candidate.CostAFP = volcengineProbeCost(now, model)
+			candidate.CostValue = volcengineProbeCost(now, model)
+			candidate.CostUnit = probeCostUnitAFP
 			// 标记别名，后续按规范模型去重
 			afpResult := config.ResolveVolcengineAFPCost(now, "agent_plan", model, probeEstInputTokens, probeEstOutputTokens)
 			if afpResult.IsAlias {
@@ -96,7 +123,8 @@ func (m *Manager) selectL2ProbeModels(
 				candidate.AliasOf = afpResult.AliasOf
 			}
 		} else {
-			candidate.CostAFP = usdProbeCost(model, u, global)
+			candidate.CostValue = usdProbeCost(model, u, global)
+			candidate.CostUnit = probeCostUnitUSD
 		}
 
 		// 别名去重：只保留规范模型；若规范模型不在列表中，则保留别名自身
@@ -149,23 +177,103 @@ func (m *Manager) selectL2ProbeModels(
 		if hiSuccess != hjSuccess {
 			return !hiSuccess // 无近期成功的更优先
 		}
-		// 最后按成本升序
-		return candidates[i].CostAFP < candidates[j].CostAFP
+		// 单位不同或任一未知时不按成本比较，保持原始顺序稳定（不跨单位排序）
+		if candidates[i].CostUnit != candidates[j].CostUnit {
+			return false
+		}
+		if candidates[i].CostUnit == probeCostUnitUnknown {
+			return false
+		}
+		// 最后按同单位成本升序
+		return candidates[i].CostValue < candidates[j].CostValue
 	})
 
 	selected := make([]string, 0, maxModels)
 	var costSum float64
+	var costUnit probeCostUnit = probeCostUnitUnknown
 	for _, c := range candidates {
 		if len(selected) >= maxModels {
 			break
 		}
-		if !c.RecentlyFailed && maxCostAFP > 0 && costSum+c.CostAFP > maxCostAFP {
-			continue
+		// 以首个有定价单位的候选确定本渠道的成本单位（同渠道内单位一致）。
+		// 失败模型即便不受预算限制，其成本也要计入 costSum，避免后续预算被高估。
+		if costUnit == probeCostUnitUnknown && c.CostUnit != probeCostUnitUnknown {
+			costUnit = c.CostUnit
+		}
+		// 非失败候选受成本预算限制；预算只在同单位内累计，避免 AFP/USD 混加
+		if !c.RecentlyFailed && maxCostAFP > 0 && c.CostUnit == costUnit && c.CostUnit != probeCostUnitUnknown {
+			if costSum+c.CostValue > maxCostAFP {
+				continue
+			}
 		}
 		selected = append(selected, c.Model)
-		costSum += c.CostAFP
+		if c.CostUnit == costUnit {
+			costSum += c.CostValue
+		}
 	}
 	return selected
+}
+
+// clampCostByVolcengineBalance 用剩余 AFP 余额比例限制稀疏 L2 成本上限。
+//
+// 规则：
+//   - 余额未知（无 resolver 或 snapshot 无效）时，直接返回原 maxCost，不放大预算。
+//   - 余额为零或负时，将 maxCost 限制为 0（关闭非失败模型的 AFP 探测）。
+//   - 否则 maxCost = min(maxCost, remainingAFP * defaultAFPBalanceReserveRatio)。
+//
+// 剩余 AFP 取 Agent Plan 用量快照中所有窗口 (Quota - Used) 的最小值，代表最紧张的窗口约束。
+func (m *Manager) clampCostByVolcengineBalance(u *config.UpstreamConfig, maxCost float64) float64 {
+	if maxCost <= 0 {
+		return 0
+	}
+	m.mu.Lock()
+	resolver := m.usageResolver
+	m.mu.Unlock()
+	if resolver == nil {
+		return maxCost
+	}
+	usage := resolver.ResolveVolcenginePlanUsage(u.AccountUID, "")
+	if usage == nil {
+		return maxCost
+	}
+	remaining := volcengineRemainingAFP(usage)
+	if remaining <= 0 {
+		return 0
+	}
+	const defaultAFPBalanceReserveRatio = 0.05
+	capped := remaining * defaultAFPBalanceReserveRatio
+	if capped < maxCost {
+		return capped
+	}
+	return maxCost
+}
+
+// volcengineRemainingAFP 计算火山套餐用量快照中各窗口剩余 AFP 的最小值。
+// 仅对 Quota > 0 的窗口计算；若全部窗口无 Quota，返回 MaxFloat64（表示未知）。
+func volcengineRemainingAFP(usage *config.VolcenginePlanUsage) float64 {
+	if usage == nil {
+		return 0
+	}
+	windows := []*config.VolcenginePlanUsageWindow{usage.FiveHour, usage.Daily, usage.Weekly, usage.Monthly}
+	minRemaining := math.MaxFloat64
+	hasQuota := false
+	for _, w := range windows {
+		if w == nil || w.Quota <= 0 {
+			continue
+		}
+		hasQuota = true
+		remaining := w.Quota - w.Used
+		if remaining < minRemaining {
+			minRemaining = remaining
+		}
+	}
+	if !hasQuota {
+		return math.MaxFloat64
+	}
+	if minRemaining < 0 {
+		return 0
+	}
+	return minRemaining
 }
 
 // effectiveSparseBudget 根据模型总量、近期失败数量与负载动态计算稀疏 L2 预算上限。
