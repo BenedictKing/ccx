@@ -2013,9 +2013,9 @@
       ],
       "sources": [
         "https://deepswe.datacurve.ai/",
+        "https://artificialanalysis.ai/models/claude-fable-5",
         "https://benchlm.ai/models/claude-fable",
-        "https://benchlm.ai/methodology",
-        "https://artificialanalysis.ai/models/claude-fable-5"
+        "https://benchlm.ai/methodology"
       ],
       "verifiedAt": "2026-08-10",
       "lane": "provisional",
@@ -2078,9 +2078,9 @@
       "lane": "provisional",
       "sources": [
         "https://deepswe.datacurve.ai/",
+        "https://artificialanalysis.ai/models/claude-opus-5",
         "https://benchlm.ai/models/claude-opus-5",
-        "https://benchlm.ai/methodology",
-        "https://artificialanalysis.ai/models/claude-opus-5"
+        "https://benchlm.ai/methodology"
       ],
       "sharedResults": 595,
       "comparableCategories": 4,
@@ -2240,9 +2240,9 @@
       ],
       "sources": [
         "https://deepswe.datacurve.ai/",
+        "https://artificialanalysis.ai/models/claude-opus-4-8",
         "https://benchlm.ai/models/claude-opus-4-8",
-        "https://benchlm.ai/methodology",
-        "https://artificialanalysis.ai/models/claude-opus-4-8"
+        "https://benchlm.ai/methodology"
       ],
       "verifiedAt": "2026-08-10",
       "lane": "provisional",
@@ -2323,9 +2323,9 @@
       ],
       "sources": [
         "https://deepswe.datacurve.ai/",
+        "https://artificialanalysis.ai/models/claude-sonnet-5",
         "https://benchlm.ai/models/claude-sonnet-5",
-        "https://benchlm.ai/methodology",
-        "https://artificialanalysis.ai/models/claude-sonnet-5"
+        "https://benchlm.ai/methodology"
       ],
       "verifiedAt": "2026-08-10",
       "lane": "provisional",
@@ -2413,9 +2413,9 @@
       ],
       "sources": [
         "https://deepswe.datacurve.ai/",
+        "https://artificialanalysis.ai/models/claude-sonnet-4-6",
         "https://benchlm.ai/models/claude-sonnet-4-6",
-        "https://benchlm.ai/methodology",
-        "https://artificialanalysis.ai/models/claude-sonnet-4-6"
+        "https://benchlm.ai/methodology"
       ],
       "verifiedAt": "2026-08-10",
       "lane": "provisional",
@@ -2590,9 +2590,9 @@
       "lane": "provisional",
       "sources": [
         "https://deepswe.datacurve.ai/",
+        "https://artificialanalysis.ai/models/gemini-3-5-flash",
         "https://benchlm.ai/models/gemini-3-5-flash",
-        "https://benchlm.ai/methodology",
-        "https://artificialanalysis.ai/models/gemini-3-5-flash"
+        "https://benchlm.ai/methodology"
       ],
       "sharedResults": 595,
       "comparableCategories": 5,
@@ -2859,9 +2859,9 @@
       ],
       "sources": [
         "https://deepswe.datacurve.ai/",
+        "https://artificialanalysis.ai/models/glm-5-2",
         "https://benchlm.ai/models/glm-5-2",
-        "https://benchlm.ai/methodology",
-        "https://artificialanalysis.ai/models/glm-5-2"
+        "https://benchlm.ai/methodology"
       ],
       "verifiedAt": "2026-08-10",
       "lane": "provisional",
@@ -2936,9 +2936,9 @@
           "sourceModel": "gpt-5.6-luna",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.652,
+          "rawValue": 0.643,
           "uncertainty": 0,
-          "cohortPercentile": 0.6,
+          "cohortPercentile": 0.4,
           "taskCount": 112,
           "cohortSize": 5,
           "effort": "max",
@@ -2967,9 +2967,9 @@
       "sources": [
         "https://deepswe.datacurve.ai/",
         "https://deng.codexradar.com/",
+        "https://artificialanalysis.ai/models/gpt-5-6-luna",
         "https://benchlm.ai/models/gpt-5-6-luna",
-        "https://benchlm.ai/methodology",
-        "https://artificialanalysis.ai/models/gpt-5-6-luna"
+        "https://benchlm.ai/methodology"
       ],
       "verifiedAt": "2026-08-10",
       "lane": "provisional",
@@ -3084,9 +3084,9 @@
       "sources": [
         "https://deepswe.datacurve.ai/",
         "https://deng.codexradar.com/",
+        "https://artificialanalysis.ai/models/gpt-5-6-sol",
         "https://benchlm.ai/models/gpt-5-6-sol",
-        "https://benchlm.ai/methodology",
-        "https://artificialanalysis.ai/models/gpt-5-6-sol"
+        "https://benchlm.ai/methodology"
       ],
       "verifiedAt": "2026-08-10",
       "lane": "provisional",
@@ -3162,7 +3162,7 @@
           "sourceModel": "gpt-5.6-terra",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.705,
+          "rawValue": 0.696,
           "uncertainty": 0,
           "cohortPercentile": 0.8,
           "taskCount": 112,
@@ -3171,7 +3171,7 @@
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://deng.codexradar.com/",
           "capturedAt": "2026-08-10",
-          "costUsd": 9.19
+          "costUsd": 9.22
         },
         {
           "benchmark": "deepswe",
@@ -3193,9 +3193,9 @@
       "sources": [
         "https://deepswe.datacurve.ai/",
         "https://deng.codexradar.com/",
+        "https://artificialanalysis.ai/models/gpt-5-6-terra",
         "https://benchlm.ai/models/gpt-5-6-terra",
-        "https://benchlm.ai/methodology",
-        "https://artificialanalysis.ai/models/gpt-5-6-terra"
+        "https://benchlm.ai/methodology"
       ],
       "verifiedAt": "2026-08-10",
       "lane": "provisional",
@@ -3294,9 +3294,9 @@
       "sources": [
         "https://deepswe.datacurve.ai/",
         "https://deng.codexradar.com/",
+        "https://artificialanalysis.ai/models/gpt-5-5",
         "https://benchlm.ai/models/gpt-5-5",
-        "https://benchlm.ai/methodology",
-        "https://artificialanalysis.ai/models/gpt-5-5"
+        "https://benchlm.ai/methodology"
       ],
       "verifiedAt": "2026-08-10",
       "lane": "provisional",
@@ -3385,9 +3385,9 @@
       ],
       "sources": [
         "https://deepswe.datacurve.ai/",
+        "https://artificialanalysis.ai/models/gpt-5-4",
         "https://benchlm.ai/models/gpt-5-4",
-        "https://benchlm.ai/methodology",
-        "https://artificialanalysis.ai/models/gpt-5-4"
+        "https://benchlm.ai/methodology"
       ],
       "verifiedAt": "2026-08-10",
       "lane": "provisional",
@@ -3412,9 +3412,9 @@
       "lane": "provisional",
       "sources": [
         "https://deepswe.datacurve.ai/",
+        "https://artificialanalysis.ai/models/gpt-5-4-mini",
         "https://benchlm.ai/models/gpt-5-4-mini",
-        "https://benchlm.ai/methodology",
-        "https://artificialanalysis.ai/models/gpt-5-4-mini"
+        "https://benchlm.ai/methodology"
       ],
       "sharedResults": 595,
       "comparableCategories": 5,
@@ -3503,9 +3503,9 @@
       "lane": "provisional",
       "sources": [
         "https://deepswe.datacurve.ai/",
+        "https://artificialanalysis.ai/models/grok-4-5",
         "https://benchlm.ai/models/grok-4-5",
-        "https://benchlm.ai/methodology",
-        "https://artificialanalysis.ai/models/grok-4-5"
+        "https://benchlm.ai/methodology"
       ],
       "sharedResults": 595,
       "comparableCategories": 4,
@@ -3593,9 +3593,9 @@
       "lane": "provisional",
       "sources": [
         "https://deepswe.datacurve.ai/",
+        "https://artificialanalysis.ai/models/kimi-k3",
         "https://benchlm.ai/models/kimi-3",
-        "https://benchlm.ai/methodology",
-        "https://artificialanalysis.ai/models/kimi-k3"
+        "https://benchlm.ai/methodology"
       ],
       "sharedResults": 595,
       "comparableCategories": 4,
@@ -3749,9 +3749,9 @@
       ],
       "sources": [
         "https://deepswe.datacurve.ai/",
+        "https://artificialanalysis.ai/models/kimi-k2-7-code",
         "https://benchlm.ai/models/kimi-k2-7-code",
-        "https://benchlm.ai/methodology",
-        "https://artificialanalysis.ai/models/kimi-k2-7-code"
+        "https://benchlm.ai/methodology"
       ],
       "verifiedAt": "2026-08-10",
       "lane": "provisional",
@@ -3773,9 +3773,9 @@
       "lane": "provisional",
       "sources": [
         "https://deepswe.datacurve.ai/",
+        "https://artificialanalysis.ai/models/muse-spark-1-2",
         "https://benchlm.ai/models/muse-spark-1-2",
-        "https://benchlm.ai/methodology",
-        "https://artificialanalysis.ai/models/muse-spark-1-2"
+        "https://benchlm.ai/methodology"
       ],
       "sharedResults": 595,
       "comparableCategories": 3,
@@ -3857,9 +3857,9 @@
       "lane": "provisional",
       "sources": [
         "https://deepswe.datacurve.ai/",
+        "https://artificialanalysis.ai/models/muse-spark-1-1",
         "https://benchlm.ai/models/muse-spark-1-1",
-        "https://benchlm.ai/methodology",
-        "https://artificialanalysis.ai/models/muse-spark-1-1"
+        "https://benchlm.ai/methodology"
       ],
       "sharedResults": 595,
       "comparableCategories": 4,
