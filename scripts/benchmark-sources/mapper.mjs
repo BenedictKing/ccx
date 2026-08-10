@@ -162,3 +162,53 @@ export function canonicalModelToPattern(canonical) {
   // 默认
   return `(?:^|[-/])${canonical}(?=$|@)`
 }
+
+/**
+ * 解析模型名的版本与后缀，用于跨家族一致的排序。
+ * 命名形态不一：claude-opus-5（版本在末位）、gpt-5.6-sol（版本居中）、muse-spark-1.2（带小数）。
+ * 提取首个数字段作为版本（主.次），并识别预发布后缀（preview/beta/alpha/rc 等）。
+ * 返回 { family, nums, suffix }：family 为版本号之前的家族名，nums 为版本数值数组，suffix 为版本后的小写尾部。
+ */
+function parseModelVersion(model) {
+  const s = String(model).toLowerCase()
+  const m = s.match(/\d+(?:\.\d+)*/)
+  if (!m) return { family: s, nums: [], suffix: '' }
+  const family = s.slice(0, m.index).replace(/[-/]+$/, '')
+  const nums = m[0].split('.').map(Number)
+  const suffix = s.slice(m.index + m[0].length).replace(/^[-/]+/, '')
+  return { family, nums, suffix }
+}
+
+// 预发布后缀权重：release(空) 最高，preview/beta/alpha/rc 等排在正式版之后。
+const PRERELEASE_TAGS = ['preview', 'beta', 'alpha', 'rc', 'pre', 'dev', 'nightly']
+
+function suffixRank(suffix) {
+  if (!suffix) return -1 // 无后缀（正式版）排最前
+  const idx = PRERELEASE_TAGS.findIndex(tag => suffix === tag || suffix.startsWith(tag + '-') || suffix.startsWith(tag + '.'))
+  return idx >= 0 ? idx : PRERELEASE_TAGS.length + 1 // 其他非版本后缀(如 sol/flash/code)不视为预发布
+}
+
+/**
+ * 版本感知的模型比较器：家族字典序 → 版本号降序 → 预发布后缀置后 → 其余后缀字典序。
+ * 用于 registry benchmarkProfiles 与图表图例，保证 opus-5 排在 opus-4.8 前、preview 排在正式版后。
+ */
+export function compareCanonicalModels(a, b) {
+  const pa = parseModelVersion(a)
+  const pb = parseModelVersion(b)
+  if (pa.family !== pb.family) return pa.family.localeCompare(pb.family)
+  // 版本号降序：逐段比较，缺段视为 0
+  const len = Math.max(pa.nums.length, pb.nums.length)
+  for (let i = 0; i < len; i++) {
+    const x = pa.nums[i] ?? 0
+    const y = pb.nums[i] ?? 0
+    if (x !== y) return y - x
+  }
+  // 同版本：正式版（无后缀/非预发布后缀）优先，预发布后缀排后
+  const ra = suffixRank(pa.suffix)
+  const rb = suffixRank(pb.suffix)
+  const aPre = ra >= 0 && ra < PRERELEASE_TAGS.length
+  const bPre = rb >= 0 && rb < PRERELEASE_TAGS.length
+  if (aPre !== bPre) return aPre ? 1 : -1 // preview 排后
+  if (aPre && bPre && ra !== rb) return ra - rb
+  return pa.suffix.localeCompare(pb.suffix)
+}

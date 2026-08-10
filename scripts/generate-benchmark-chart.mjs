@@ -261,7 +261,42 @@ const COMPARISON_ROWS = ${serializedComparisons};
 const state = { metric: 'mean_cost', range: 'focus', source: 'all' };
 const effortRank = new Map([['off', -2], ['minimal', -1], ['low', 0], ['medium', 1], ['high', 2], ['xhigh', 3], ['max', 4], ['ultra', 5]]);
 const palette = Array.from({ length: 10 }, (_, index) => 'var(--series-' + (index + 1) + ')');
-const modelNames = [...new Set(RAW_ROWS.map(row => row.model))].sort();
+// 版本感知模型排序：与 scripts/benchmark-sources/mapper.mjs 的 compareCanonicalModels 等价。
+// 版本号降序（opus-5 在 opus-4.8 前）、预发布后缀（preview/beta/...）排在正式版后。
+const PRERELEASE_TAGS = ['preview', 'beta', 'alpha', 'rc', 'pre', 'dev', 'nightly'];
+function parseModelVersion(model) {
+  const s = String(model).toLowerCase();
+  const m = s.match(/\\d+(?:\\.\\d+)*/);
+  if (!m) return { family: s, nums: [], suffix: '' };
+  const family = s.slice(0, m.index).replace(/[-/]+$/, '');
+  const nums = m[0].split('.').map(Number);
+  const suffix = s.slice(m.index + m[0].length).replace(/^[-/]+/, '');
+  return { family, nums, suffix };
+}
+function suffixRank(suffix) {
+  if (!suffix) return -1;
+  const idx = PRERELEASE_TAGS.findIndex(tag => suffix === tag || suffix.startsWith(tag + '-') || suffix.startsWith(tag + '.'));
+  return idx >= 0 ? idx : PRERELEASE_TAGS.length + 1;
+}
+function compareModels(a, b) {
+  const pa = parseModelVersion(a);
+  const pb = parseModelVersion(b);
+  if (pa.family !== pb.family) return pa.family.localeCompare(pb.family);
+  const len = Math.max(pa.nums.length, pb.nums.length);
+  for (let i = 0; i < len; i++) {
+    const x = pa.nums[i] ?? 0;
+    const y = pb.nums[i] ?? 0;
+    if (x !== y) return y - x;
+  }
+  const ra = suffixRank(pa.suffix);
+  const rb = suffixRank(pb.suffix);
+  const aPre = ra >= 0 && ra < PRERELEASE_TAGS.length;
+  const bPre = rb >= 0 && rb < PRERELEASE_TAGS.length;
+  if (aPre !== bPre) return aPre ? 1 : -1;
+  if (aPre && bPre && ra !== rb) return ra - rb;
+  return pa.suffix.localeCompare(pb.suffix);
+}
+const modelNames = [...new Set(RAW_ROWS.map(row => row.model))].sort(compareModels);
 const colors = new Map(modelNames.map((model, index) => [model, palette[index % palette.length]]));
 const svg = document.getElementById('chart');
 const shell = document.getElementById('chart-shell');

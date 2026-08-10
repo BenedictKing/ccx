@@ -37,6 +37,7 @@ import {
   BENCHLM_MODEL_MAP,
   BENCHLM_CATEGORY_MAP,
   canonicalModelToPattern,
+  compareCanonicalModels,
   deepsweModelToPattern,
 } from './benchmark-sources/mapper.mjs'
 import { fetchDeepsweDataset } from './benchmark-sources/deepswe.mjs'
@@ -84,10 +85,37 @@ function loadRegistry() {
 }
 
 /**
+ * 对 registry 做确定性排序，保证写出顺序稳定。
+ *
+ * benchmarkProfiles 与每条 profile 的 benchmarkEvidence 此前按"各源 merge/push 的先后"
+ * 排列，顺序取决于本次跑了哪些源、上游返回顺序，导致同样数据每次写出顺序不同、
+ * 产生大段"删除+新增"的无意义 diff。这里统一按键排序，使顺序只由数据本身决定：
+ * - benchmarkProfiles 按版本感知模型序（compareCanonicalModels：版本号降序、预发布后缀置后）
+ * - benchmarkEvidence 按 (benchmark, domain, effort, metric) 字典序
+ */
+function sortRegistryDeterministic(registry) {
+  if (Array.isArray(registry.benchmarkProfiles)) {
+    for (const profile of registry.benchmarkProfiles) {
+      if (Array.isArray(profile?.benchmarkEvidence)) {
+        profile.benchmarkEvidence.sort((a, b) =>
+          [a.benchmark, a.domain, a.effort, a.metric].join('').localeCompare(
+            [b.benchmark, b.domain, b.effort, b.metric].join(''),
+          ),
+        )
+      }
+    }
+    registry.benchmarkProfiles.sort((a, b) =>
+      compareCanonicalModels(a.canonicalModel, b.canonicalModel),
+    )
+  }
+  return registry
+}
+
+/**
  * 保存注册表
  */
 function serializeRegistry(registry) {
-  return JSON.stringify(registry, null, 2) + '\n'
+  return JSON.stringify(sortRegistryDeterministic(registry), null, 2) + '\n'
 }
 
 function atomicWrite(path, content) {
