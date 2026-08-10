@@ -74,7 +74,5 @@ Channels   (Claude/OpenAI/Gemini/...)
 
 ### 待排期
 
-- **capability probe 统一 schema 定义**：抽取 `shared/capability-probe-schema.json` 作为前后端单一真相源，替换当前前后端各一份硬编码模型列表（详见 `healthcheck.md` §9.2）。
-- **火山 manifest 自动回填**：`manifest_drift` 事件目前仅观测，尚无自动更新内置清单或告警的下游消费者（详见 `healthcheck.md` §9.1）。
-- **capability_drift 事件化**：能力探测漂移当前仅打 `[Capability-Drift]` 日志，未发布到事件总线或指标（详见 `healthcheck.md` §9.2）。
-- **稀疏 L2 成本语义拆分**：非火山渠道的 USD 相对成本与火山 AFP 共用 `CostAFP` 字段，命名有误导；AFP 余额联动与分时段策略亦未实现（详见 `healthcheck.md` §9.3）。
+- **火山 manifest 自动回填**：`manifest_drift` 已事件化并在前端健康中心告警，但仍无自动更新内置清单的下游消费者（周期性 `FetchModels` 聚合回写共享 JSON 未实现，详见 `healthcheck.md` §9.1）。
+- **稀疏 L2 分时段策略**：成本语义已拆分（`CostValue`+`CostUnit`）且 AFP 余额联动已落地，但高峰/低谷时间窗口自动降/升预算仍未实现（详见 `healthcheck.md` §9.3）。

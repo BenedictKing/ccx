@@ -265,7 +265,7 @@ healthcheck 不直接依赖 provider 适配层，而是通过 `internal/upstream
 **待排期缺口**
 
 - **代码常量副本与 JSON 副本未声明主从关系**：`builtin_models_manifest.go` 与 `shared/builtin-models-manifest/builtin-models-manifest.json` 双副本，无版本戳/生成时间/一致性校验。建议将 JSON 设为唯一真相源，代码侧 `go:generate` 或仅保留最小 fallback；并在 `BuiltinModelsManifest` 增 `SourceVersion`/`UpdatedAt`/`SourceURL` 元数据。
-- **manifest_drift 无自动消费**：目前仅日志 + 事件流可查，未自动回填内置清单或推送告警。后续可对"已绑定 AK 且 Running"账号周期性 `FetchModels` 聚合回写共享 JSON，或在管理界面呈现 drift。
+- **manifest_drift 部分消费已落地**：事件化 + StateEventStore 持久化 + 前端健康中心告警已实现；自动回填内置清单（周期性 `FetchModels` 聚合回写共享 JSON）仍未实现。
 - **未绑定 AK 渠道的兜底置信度**：可在 discovery 结果标注 `ModelDiscoverySourceBuiltinFallback`，让调度在火山侧模型频繁变化时降低其优先级。
 
 ### 9.2 L2 请求特征与 capability test 的 drift 检测
@@ -277,12 +277,11 @@ healthcheck 不直接依赖 provider 适配层，而是通过 `internal/upstream
   - 对外封装：`backend-go/internal/handlers/healthcheck_probe.go` 提供 `BuildHealthCheckL2Request` 与 `SendHealthCheckL2Stream`。
 - 请求特征（提示词、max_tokens、stream、reasoning_effort、system instruction）在代码中定义（messages 走 `buildMessagesProbeBody` + `applyRequiredThinkingToCapabilityProbeBody`，其余协议内联 JSON）。
 - **Probe schema 版本化**：`capability_probe_models.go` 定义 `capabilityProbeSchemaVersion` 常量（探针特征集版本，模型列表/提示词/参数约束/协议头任一变更时递增）。`CapabilityTestResponse` / `CapabilityTestJob` 携带该版本；cache key 与 execution lookup key 纳入版本号，probe 参数升级后旧缓存自然失效。
-- **Drift 观测**：`executeModelTest` 完成后将探测结果与 `config.ResolveUpstreamCapability` 声明能力比对，命中"registry 声明支持但探测失败"等偏差时打 `[Capability-Drift]` 日志（纯观测，不改调度/探测结论）。
+- **前后端统一 schema**：`shared/capability-probe-schema.json` 作为单一真相源，承载 `schemaVersion` / `baseProtocols` / `probeModels` / `frontendPlaceholderModels`。后端 `capability_probe_models.go` 经 `go:embed` 读取嵌入副本，前端 `useCapabilityTestManager.ts` 与 `CapabilityTestDialog.vue` 直接 import 该 JSON，消除前后端模型列表与基础协议双副本。
+- **Drift 观测与事件化**：`executeModelTest` 完成后将探测结果与 `config.ResolveUpstreamCapability` 声明能力比对，命中"registry 声明支持但探测失败"等偏差时打 `[Capability-Drift]` 日志，并经注入的共享 eventbus 发布 `capability_drift` 事件（Scope=config，Payload 含模型/声明能力/实际结果）。事件经 StateEventStore 持久化并由健康中心以告警展示；纯观测，不改调度/探测结论。
 
 **待排期缺口**
 
-- **前后端模型列表双副本**：`capability_probe_models.go` 与前端 `useCapabilityTestManager.ts` 的 `capabilityPlaceholderModels` 各一份硬编码，新增模型易遗漏一侧。建议抽取 `shared/capability-probe-schema.json` 作单一真相源，前端构建期生成 TS 常量、后端 `go:embed` 读取。
-- **capability_drift 未事件化**：目前仅日志，未发布到 eventbus/指标，也无"连续 N 次偏差"的聚合告警。
 - **无定期回归**：CI/nightly 未对 mock 上游或沙箱 key 跑全协议 capability test 校验 `capabilityProbeModels`。
 
 ### 9.3 稀疏 L2 预算在大盘紧张时的动态调整策略
@@ -291,11 +290,11 @@ healthcheck 不直接依赖 provider 适配层，而是通过 `internal/upstream
 
 - 预算字段定义在 `backend-go/internal/config/health_check.go`：`SparseL2MaxModels`（每 key 每周期最多探测模型数，默认 3）、`SparseL2MaxCostAFP`（每 key 每周期 AFP 成本预算上限，默认 6.0），支持全局与渠道级覆盖。这两个静态值作为动态调整的**下界/上限 clamp**。
 - **动态放宽**：`model_select.go` 的 `effectiveSparseBudget(policy, modelCount, recentlyFailedCount, loadRatio)` 在 `selectL2ProbeModels` 顶部（`SparseL2MaxModels<=0` 门控后）按模型数/近期失败数/负载比动态调整有效上限——数量上界 = policy 值 + `min(max(0, modelCount/3-1), 5)`，成本上界 = 2×policy；`loadRatio>1` 时按 `1/loadRatio` 收缩，默认 0 为 no-op。只在 clamp 内放宽，`recentlyFailed` 模型仍不受成本限制以保证恢复探测。
-- 模型选择顺序：最近失败（不受成本限制）→ 无近期成功记录 → 成本升序填充至有效 `maxModels`/`maxCostAFP`。火山渠道用 `ResolveVolcengineAFPCost` 估算 AFP 成本，非火山渠道用 USD 相对成本。
+- 模型选择顺序：最近失败（不受成本限制）→ 无近期成功记录 → 成本升序填充至有效 `maxModels`/`maxCostAFP`。
+- **成本语义拆分**：候选模型成本以 `CostValue`+`CostUnit`（`probeCostUnit`：AFP/USD）表示，火山渠道标 AFP（`ResolveVolcengineAFPCost`），非火山渠道标 USD 相对成本。排序与预算累加仅同单位比较/累计，杜绝 AFP 与 USD 混加；配置字段 `SparseL2MaxCostAFP` 保持不变（向后兼容）。
+- **AFP 余额联动**：`Manager` 经 `SetProbeUsageResolver` 注入余额查询器（`ProbeUsageResolver` 接口由 ConfigManager 实现，避免 healthcheck 直接 import autopilot）。`selectL2ProbeModels` 对火山渠道按剩余 AFP（各窗口 `Quota-Used` 最小值）的 5% 收紧成本上限；无 resolver / 快照为 nil / 无 Quota 时保持原上限不放大，余额为零时关闭非失败模型的 AFP 探测预算。
 - 调度并发：healthcheck `Manager` worker 池，`MaxConcurrency` 默认 4，按渠道去重，队列满丢弃。静默期 `L2ModelQuietPeriod` 默认等于 Interval。
 
 **待排期缺口**
 
-- **AFP 余额未联动**：`VolcenginePlanUsage` 已 fetch，但 `effectiveSparseBudget` 未将成本上限限制为剩余 AFP 的比例，探测理论上仍可能蚕食生产额度。
-- **成本单位混用**：非火山渠道的 USD 相对成本与火山 AFP 共用 `CostAFP` 字段，命名有误导、跨渠道比较无物理意义；建议拆分字段或引入归一化成本指数。
 - **无分时段策略**：高峰/低谷未按时间窗口自动降/升预算。

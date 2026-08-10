@@ -390,7 +390,7 @@ New-API              -             写          读           -             -
 **未覆盖（待排期）**
 
 - 事件族未补齐：限速/学习（`rate_limit_*`）、请求/路由（`attempt_*`）、订阅/New-API（`subscription_*`）。
-- `manifest_drift` 与 `capability_drift` 目前仅观测——前者无自动回填内置清单的消费者，后者仅 `[Capability-Drift]` 日志、未上总线。
+- `manifest_drift` 自动回填内置清单的消费者仍未实现（事件化 + 前端告警已落地）；`capability_drift` 已事件化并上总线、前端健康中心展示。
 - 多实例总线（NATS / Redis Streams）：当前单进程架构下内存总线 + SQLite 已足够。
 - 事件 schema 版本化。
 
