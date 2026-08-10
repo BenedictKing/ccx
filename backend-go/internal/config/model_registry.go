@@ -581,7 +581,14 @@ func cloneBenchmarkProfile(src ModelBenchmarkProfile) ModelBenchmarkProfile {
 		dst.Sources = append([]string(nil), src.Sources...)
 	}
 	if len(src.BenchmarkEvidence) > 0 {
-		dst.BenchmarkEvidence = append([]ModelBenchmarkEvidence(nil), src.BenchmarkEvidence...)
+		dst.BenchmarkEvidence = make([]ModelBenchmarkEvidence, len(src.BenchmarkEvidence))
+		for i, evidence := range src.BenchmarkEvidence {
+			dst.BenchmarkEvidence[i] = evidence
+			if evidence.CostUSD != nil {
+				v := *evidence.CostUSD
+				dst.BenchmarkEvidence[i].CostUSD = &v
+			}
+		}
 	}
 	return dst
 }
@@ -709,6 +716,7 @@ func convertRuntimeBenchmarkProfiles(preset *presetstore.ModelRegistryPreset) ma
 					SelectionBasis:   evidence.SelectionBasis,
 					SourceURL:        evidence.SourceURL,
 					CapturedAt:       evidence.CapturedAt,
+					CostUSD:          cloneFloatPointer(evidence.CostUSD),
 				}
 			}
 		}

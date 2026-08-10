@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"slices"
 	"strings"
 	"testing"
@@ -954,15 +955,26 @@ func TestResolveModelBenchmarkProfile_RuntimeRegistryOverride(t *testing.T) {
 
 func TestBuiltinModelBenchmarkProfiles_ReturnsDeepCopy(t *testing.T) {
 	profiles := BuiltinModelBenchmarkProfiles()
+	var foundPattern string
 	for pattern, profile := range profiles {
 		if profile.CanonicalModel != "gpt-5.6-sol" {
 			continue
 		}
+		foundPattern = pattern
 		profile.CategoryScores["coding"] = 1
 		profile.Sources[0] = "mutated"
 		profile.BenchmarkEvidence[0].SourceURL = "https://mutated.example/"
+		if profile.BenchmarkEvidence[0].CostUSD != nil {
+			*profile.BenchmarkEvidence[0].CostUSD = 9.99
+		} else {
+			v := 9.99
+			profile.BenchmarkEvidence[0].CostUSD = &v
+		}
 		profiles[pattern] = profile
 		break
+	}
+	if foundPattern == "" {
+		t.Fatal("未找到 gpt-5.6-sol benchmark profile")
 	}
 
 	resolved := ResolveModelBenchmarkProfile("gpt-5.6-sol")
@@ -974,5 +986,94 @@ func TestBuiltinModelBenchmarkProfiles_ReturnsDeepCopy(t *testing.T) {
 	}
 	if len(resolved.Profile.BenchmarkEvidence) == 0 || resolved.Profile.BenchmarkEvidence[0].SourceURL == "https://mutated.example/" {
 		t.Fatalf("BenchmarkEvidence 未深拷贝: %v", resolved.Profile.BenchmarkEvidence)
+	}
+	if len(resolved.Profile.BenchmarkEvidence) > 0 {
+		if resolved.Profile.BenchmarkEvidence[0].CostUSD != nil && *resolved.Profile.BenchmarkEvidence[0].CostUSD == 9.99 {
+			t.Fatalf("CostUSD 指针未深拷贝: %v", *resolved.Profile.BenchmarkEvidence[0].CostUSD)
+		}
+	}
+}
+
+func TestConvertRuntimeBenchmarkProfiles_CopiesCostUSD(t *testing.T) {
+	cost := 0.0042
+	preset := &presetstore.ModelRegistryPreset{
+		SchemaVersion: 1,
+		BenchmarkProfiles: []presetstore.ModelBenchmarkProfilePreset{{
+			Patterns:       []string{"gpt-test"},
+			CanonicalModel: "gpt-test",
+			BenchmarkEvidence: []presetstore.ModelBenchmarkEvidencePreset{{
+				Benchmark:        "codexradar",
+				BenchmarkVersion: "v1",
+				SourceModel:      "gpt-test",
+				Domain:           "coding",
+				Metric:           "pass_at_1",
+				RawValue:         0.75,
+				CohortPercentile: 0.8,
+				TaskCount:        100,
+				CohortSize:       10,
+				Effort:           "high",
+				SelectionBasis:   "best_available_effort",
+				SourceURL:        "https://deng.codexradar.com/",
+				CapturedAt:       "2026-08-10",
+				CostUSD:          &cost,
+			}},
+		}},
+	}
+
+	profiles := convertRuntimeBenchmarkProfiles(preset)
+	profile, ok := profiles["gpt-test"]
+	if !ok {
+		t.Fatal("未找到转换后的 benchmark profile")
+	}
+	if len(profile.BenchmarkEvidence) != 1 {
+		t.Fatalf("证据数量 = %d, want 1", len(profile.BenchmarkEvidence))
+	}
+	ev := profile.BenchmarkEvidence[0]
+	if ev.CostUSD == nil {
+		t.Fatal("CostUSD 未拷贝")
+	}
+	if *ev.CostUSD != cost {
+		t.Fatalf("CostUSD = %v, want %v", *ev.CostUSD, cost)
+	}
+	// 验证深拷贝：修改 preset 不影响运行时
+	cost = 0.9999
+	if *profile.BenchmarkEvidence[0].CostUSD != 0.0042 {
+		t.Fatalf("CostUSD 指针未隔离: %v", *profile.BenchmarkEvidence[0].CostUSD)
+	}
+}
+
+func TestModelBenchmarkEvidence_JSONDeserialization(t *testing.T) {
+	jsonIn := `{
+		"benchmark":"codexradar",
+		"benchmarkVersion":"v1",
+		"sourceModel":"gpt-test",
+		"domain":"coding",
+		"metric":"pass_at_1",
+		"rawValue":0.75,
+		"cohortPercentile":0.8,
+		"taskCount":100,
+		"cohortSize":10,
+		"effort":"high",
+		"selectionBasis":"best_available_effort",
+		"sourceUrl":"https://deng.codexradar.com/",
+		"capturedAt":"2026-08-10",
+		"costUsd":0.0042
+	}`
+	var ev ModelBenchmarkEvidence
+	if err := json.Unmarshal([]byte(jsonIn), &ev); err != nil {
+		t.Fatalf("反序列化失败: %v", err)
+	}
+	if ev.CostUSD == nil || *ev.CostUSD != 0.0042 {
+		t.Fatalf("costUsd 反序列化 = %v, want 0.0042", ev.CostUSD)
+	}
+
+	// 无 cost 字段时保持 nil
+	jsonNoCost := `{"benchmark":"x","benchmarkVersion":"v1","sourceModel":"m","domain":"coding","metric":"pass_at_1","rawValue":0.5,"cohortPercentile":0.5,"taskCount":1,"cohortSize":1,"effort":"medium","selectionBasis":"best","sourceUrl":"https://example.test/","capturedAt":"2026-08-10"}`
+	var ev2 ModelBenchmarkEvidence
+	if err := json.Unmarshal([]byte(jsonNoCost), &ev2); err != nil {
+		t.Fatalf("反序列化失败: %v", err)
+	}
+	if ev2.CostUSD != nil {
+		t.Fatalf("无 cost 时期望 nil, 得到 %v", *ev2.CostUSD)
 	}
 }

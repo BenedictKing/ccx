@@ -79,20 +79,21 @@ type ModelBenchmarkProfilePreset struct {
 }
 
 type ModelBenchmarkEvidencePreset struct {
-	Benchmark        string  `json:"benchmark"`
-	BenchmarkVersion string  `json:"benchmarkVersion"`
-	SourceModel      string  `json:"sourceModel"`
-	Domain           string  `json:"domain"`
-	Metric           string  `json:"metric"`
-	RawValue         float64 `json:"rawValue"`
-	Uncertainty      float64 `json:"uncertainty,omitempty"`
-	CohortPercentile float64 `json:"cohortPercentile"`
-	TaskCount        int     `json:"taskCount"`
-	CohortSize       int     `json:"cohortSize"`
-	Effort           string  `json:"effort"`
-	SelectionBasis   string  `json:"selectionBasis"`
-	SourceURL        string  `json:"sourceUrl"`
-	CapturedAt       string  `json:"capturedAt"`
+	Benchmark        string   `json:"benchmark"`
+	BenchmarkVersion string   `json:"benchmarkVersion"`
+	SourceModel      string   `json:"sourceModel"`
+	Domain           string   `json:"domain"`
+	Metric           string   `json:"metric"`
+	RawValue         float64  `json:"rawValue"`
+	Uncertainty      float64  `json:"uncertainty,omitempty"`
+	CohortPercentile float64  `json:"cohortPercentile"`
+	TaskCount        int      `json:"taskCount"`
+	CohortSize       int      `json:"cohortSize"`
+	Effort           string   `json:"effort"`
+	SelectionBasis   string   `json:"selectionBasis"`
+	SourceURL        string   `json:"sourceUrl"`
+	CapturedAt       string   `json:"capturedAt"`
+	CostUSD          *float64 `json:"costUsd,omitempty"`
 }
 
 type ModelPricingPreset struct {

@@ -16,6 +16,7 @@ import {
   extractTableCacheVersion,
   extractBestPerModel as extractDradarBest,
   extractLeaderboardFromTable,
+  extractCostData,
   toBenchmarkEvidence as toDradarEvidence,
   DRADAR_MODEL_MAP,
 } from './dradar.mjs'
@@ -157,6 +158,63 @@ test('CodexRadar leaderboard aggregation uses strict cell majority', () => {
     cells_passed: 2,
     pass_rate: 2 / 3,
   }])
+})
+
+test('dradar extractCostData aggregates mean and median cost per model x effort', () => {
+  const data = {
+    cells: {
+      'task-a|dradar-model|high': {
+        ran_by: [
+          { actual_cost_usd: 1.0, duration_sec: 10 },
+          { actual_cost_usd: 3.0, duration_sec: 20 },
+        ],
+      },
+      'task-b|dradar-model|high': {
+        ran_by: [{ actual_cost_usd: 2.0, duration_sec: 30 }],
+      },
+      'task-c|dradar-model|low': {
+        ran_by: [{ actual_cost_usd: 0.5, duration_sec: 5 }],
+      },
+      'task-d|unmapped|high': {
+        ran_by: [{ actual_cost_usd: 99, duration_sec: 1 }],
+      },
+      'task-e|dradar-model|high': { ran_by: [] }, // 无运行记录应被跳过
+    },
+  }
+  const cost = extractCostData(data, { 'dradar-model': 'canonical-model' })
+
+  // high 档聚合 3 次运行：costs [1,2,3] -> mean 2, median 2
+  assert.equal(cost['canonical-model'].high.nRuns, 3)
+  assert.equal(cost['canonical-model'].high.meanCost, 2)
+  assert.equal(cost['canonical-model'].high.medianCost, 2)
+  // low 档单次运行
+  assert.equal(cost['canonical-model'].low.meanCost, 0.5)
+  assert.equal(cost['canonical-model'].low.nRuns, 1)
+  // 未映射模型被忽略
+  assert.equal(Object.keys(cost).length, 1)
+})
+
+test('dradar toBenchmarkEvidence injects meanCost into costUsd when costData present', () => {
+  const modelData = {
+    deepsweModel: 'dradar-model',
+    canonicalModel: 'canonical-model',
+    passRate: 0.7,
+    cells: 100,
+    bestEffort: 'high',
+  }
+  const costData = { 'canonical-model': { high: { meanCost: 2.5, medianCost: 2.0, nRuns: 3 } } }
+
+  const withCost = toDradarEvidence(modelData, [{ passRate: 0.7 }], costData)
+  assert.equal(withCost.costUsd, 2.5)
+  assert.equal(withCost.effort, 'high')
+
+  // 缺 costData 时 costUsd 不注入（保持 undefined）
+  const withoutCost = toDradarEvidence(modelData, [{ passRate: 0.7 }])
+  assert.equal(withoutCost.costUsd, undefined)
+
+  // costData 存在但该 model x effort 无实测时同样不注入
+  const noEffortCost = toDradarEvidence(modelData, [{ passRate: 0.7 }], { 'canonical-model': {} })
+  assert.equal(noEffortCost.costUsd, undefined)
 })
 
 test('LiteLLM keeps missing capabilities unknown and maps function calling to toolCalls', () => {

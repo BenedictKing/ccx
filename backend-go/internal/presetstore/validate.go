@@ -250,6 +250,9 @@ func validateModelBenchmarkEvidence(evidence ModelBenchmarkEvidencePreset) error
 	if _, err := time.Parse("2006-01-02", evidence.CapturedAt); err != nil {
 		return fmt.Errorf("capturedAt 必须是 YYYY-MM-DD: %w", err)
 	}
+	if evidence.CostUSD != nil && math.IsNaN(*evidence.CostUSD) {
+		return fmt.Errorf("costUsd 不能为 NaN")
+	}
 	return nil
 }
 

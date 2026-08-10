@@ -531,20 +531,21 @@ type ModelBenchmarkProfile struct {
 // ModelBenchmarkEvidence 保存单个基准观测，避免将特定 harness 的原始指标误作通用能力分。
 // CohortPercentile 在固定 cohort 内从原始指标派生，供 Autopilot 做有界的相对软修正。
 type ModelBenchmarkEvidence struct {
-	Benchmark        string  `json:"benchmark"`
-	BenchmarkVersion string  `json:"benchmarkVersion"`
-	SourceModel      string  `json:"sourceModel"`
-	Domain           string  `json:"domain"`
-	Metric           string  `json:"metric"`
-	RawValue         float64 `json:"rawValue"`
-	Uncertainty      float64 `json:"uncertainty,omitempty"`
-	CohortPercentile float64 `json:"cohortPercentile"`
-	TaskCount        int     `json:"taskCount"`
-	CohortSize       int     `json:"cohortSize"`
-	Effort           string  `json:"effort"`
-	SelectionBasis   string  `json:"selectionBasis"`
-	SourceURL        string  `json:"sourceUrl"`
-	CapturedAt       string  `json:"capturedAt"`
+	Benchmark        string   `json:"benchmark"`
+	BenchmarkVersion string   `json:"benchmarkVersion"`
+	SourceModel      string   `json:"sourceModel"`
+	Domain           string   `json:"domain"`
+	Metric           string   `json:"metric"`
+	RawValue         float64  `json:"rawValue"`
+	Uncertainty      float64  `json:"uncertainty,omitempty"`
+	CohortPercentile float64  `json:"cohortPercentile"`
+	TaskCount        int      `json:"taskCount"`
+	CohortSize       int      `json:"cohortSize"`
+	Effort           string   `json:"effort"`
+	SelectionBasis   string   `json:"selectionBasis"`
+	SourceURL        string   `json:"sourceUrl"`
+	CapturedAt       string   `json:"capturedAt"`
+	CostUSD          *float64 `json:"costUsd,omitempty"`
 }
 
 type EmbeddingCapability struct {

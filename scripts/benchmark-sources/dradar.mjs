@@ -296,15 +296,20 @@ export function extractCostData(data, modelMap) {
  * 生成 benchmarkEvidence 对象
  * @param {Object} modelData - extractBestPerModel 的输出
  * @param {Array} allModels - 所有模型列表 (用于计算 percentile)
+ * @param {Object} costData - extractCostData 的输出 {canonicalModel: {effort: {meanCost, medianCost, nRuns}}}
  * @returns {Object} - benchmarkEvidence 条目
  */
-export function toBenchmarkEvidence(modelData, allModels) {
+export function toBenchmarkEvidence(modelData, allModels, costData) {
   // 计算 percentile
   const allRates = allModels.map(m => m.passRate).filter(rate => rate > 0)
   const atOrBelow = allRates.filter(rate => rate <= modelData.passRate).length
   const percentile = allRates.length > 0 ? atOrBelow / allRates.length : 0
 
-  return {
+  const effort = modelData.bestEffort || 'default'
+  const canonicalCost = costData?.[modelData.canonicalModel] || costData?.[modelData.deepsweModel]
+  const effortCost = canonicalCost?.[effort]
+
+  const evidence = {
     benchmark: 'codexradar',
     benchmarkVersion: 'v1',
     sourceModel: modelData.deepsweModel,
@@ -315,11 +320,18 @@ export function toBenchmarkEvidence(modelData, allModels) {
     cohortPercentile: percentile,
     taskCount: modelData.cells,
     cohortSize: allModels.length,
-    effort: modelData.bestEffort || 'default',
+    effort,
     selectionBasis: 'best_available_effort',
     sourceUrl: 'https://deng.codexradar.com/',
     capturedAt: new Date().toISOString().split('T')[0],
   }
+
+  // 若该模型 x effort 有实测 cost，则以均值注入 evidence，供 frontier 成本轴校准
+  if (effortCost?.meanCost !== undefined && effortCost?.meanCost !== null && Number.isFinite(effortCost.meanCost)) {
+    evidence.costUsd = effortCost.meanCost
+  }
+
+  return evidence
 }
 
 /**
@@ -341,7 +353,7 @@ export async function fetchDradarData(modelMap) {
     const result = {}
 
     for (const [canonical, modelData] of Object.entries(bestPerModel)) {
-      const evidence = toBenchmarkEvidence(modelData, Object.values(bestPerModel))
+      const evidence = toBenchmarkEvidence(modelData, Object.values(bestPerModel), costData)
 
       if (!result[canonical]) {
         result[canonical] = {

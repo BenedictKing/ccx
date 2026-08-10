@@ -334,8 +334,10 @@ export function mergeDradarData(registry, dradarData, report, models = targetMod
     profile.benchmarkEvidence = nextEvidence
     ensureEvidenceProfileMetadata(profile)
 
-    // 成本明细仅用于临时图表输入，不属于 ModelBenchmarkProfile 注册表结构
-    delete profile.costData
+    // costData 保留供可视化使用，实测 cost 已随 benchmarkEvidence 进入注册表
+    if (profile.costData) {
+      delete profile.costData
+    }
 
     // 更新 verifiedAt
     profile.verifiedAt = new Date().toISOString().split('T')[0]

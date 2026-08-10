@@ -8,6 +8,8 @@ import (
 	"github.com/BenedictKing/ccx/internal/eventbus"
 )
 
+func floatPtr(v float64) *float64 { return &v }
+
 // validBundle 返回一份通过校验的最小 bundle，供各用例按需改坏。
 func validBundle() *PresetBundle {
 	return &PresetBundle{
@@ -127,6 +129,7 @@ func TestValidateModelBenchmarkProfiles(t *testing.T) {
 		SelectionBasis:   "best_available_effort",
 		SourceURL:        "https://deepswe.datacurve.ai/",
 		CapturedAt:       "2026-07-18",
+		CostUSD:          floatPtr(0.0042),
 	}}
 	b.ModelRegistry = &ModelRegistryPreset{SchemaVersion: 1, BenchmarkProfiles: []ModelBenchmarkProfilePreset{evidenceOnly}}
 	if err := Validate(b); err != nil {
@@ -170,9 +173,18 @@ func TestValidateModelBenchmarkProfiles(t *testing.T) {
 			p.BenchmarkEvidence = append([]ModelBenchmarkEvidencePreset(nil), evidenceOnly.BenchmarkEvidence...)
 			p.BenchmarkEvidence[0].Uncertainty = math.Inf(1)
 		},
+		"证据成本为 NaN": func(p *ModelBenchmarkProfilePreset) {
+			p.BenchmarkEvidence = append([]ModelBenchmarkEvidencePreset(nil), evidenceOnly.BenchmarkEvidence...)
+			bad := math.NaN()
+			p.BenchmarkEvidence[0].CostUSD = &bad
+		},
 		"证据百分位越界": func(p *ModelBenchmarkProfilePreset) {
 			p.BenchmarkEvidence = append([]ModelBenchmarkEvidencePreset(nil), evidenceOnly.BenchmarkEvidence...)
 			p.BenchmarkEvidence[0].CohortPercentile = 1.01
+		},
+		"证据 costUsd 可选且通过": func(p *ModelBenchmarkProfilePreset) {
+			p.BenchmarkEvidence = append([]ModelBenchmarkEvidencePreset(nil), evidenceOnly.BenchmarkEvidence...)
+			p.BenchmarkEvidence[0].CostUSD = floatPtr(0.0042)
 		},
 	}
 	for name, corrupt := range tests {
@@ -185,6 +197,12 @@ func TestValidateModelBenchmarkProfiles(t *testing.T) {
 			corrupt(&profile)
 			candidate := validBundle()
 			candidate.ModelRegistry = &ModelRegistryPreset{SchemaVersion: 1, BenchmarkProfiles: []ModelBenchmarkProfilePreset{profile}}
+			if name == "证据 costUsd 可选且通过" {
+				if err := Validate(candidate); err != nil {
+					t.Fatalf("costUsd 可选的合法证据未通过校验: %v", err)
+				}
+				return
+			}
 			if err := Validate(candidate); err == nil {
 				t.Fatal("期望非法 benchmark profile 被拒绝")
 			}
