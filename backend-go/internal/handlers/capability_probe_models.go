@@ -1,43 +1,60 @@
 package handlers
 
 import (
+	_ "embed"
+	"encoding/json"
 	"fmt"
 	"strings"
 )
 
-// ⚠️ 修改此处时必须同步修改前端 frontend/src/App.vue 的 capabilityPlaceholderModels
-// 支持多个候选模型，用逗号分隔，按优先级从高到低排列
-// 测试时会按顺序分批启动，并汇总所有候选模型的结果
+// capabilityProbeSchema 是从 shared/capability-probe-schema.json 编译期嵌入的单一真相源。
+// 该文件在后端和前端之间共享，避免探测模型列表与基础协议的双副本硬编码。
+// 修改模型列表或基础协议时请编辑仓库根目录的 shared/capability-probe-schema.json，
+// 并同步 backend-go/internal/handlers/embedded/capability-probe-schema.json（可直接复制）。
+//
+//go:embed embedded/capability-probe-schema.json
+var capabilityProbeSchemaBytes []byte
+
+type capabilityProbeSchema struct {
+	SchemaVersion             int                 `json:"schemaVersion"`
+	BaseProtocols             []string            `json:"baseProtocols"`
+	ProbeModels               map[string][]string `json:"probeModels"`
+	FrontendPlaceholderModels map[string][]string `json:"frontendPlaceholderModels"`
+}
+
 const (
 	capabilityProbeModelClaudeFable5 = "claude-fable-5"
 	capabilityProbeModelClaudeOpus48 = "claude-opus-4-8"
-	capabilityProbeModelMessages     = capabilityProbeModelClaudeFable5 + "," + capabilityProbeModelClaudeOpus48 + ",claude-opus-4-7,claude-opus-4-6,claude-sonnet-4-6,claude-sonnet-4-5-20250929,claude-haiku-4-5-20251001"
-	capabilityProbeModelChat         = "gpt-5.5,gpt-5.4,gpt-5.6-sol,gpt-5.6-terra,gpt-5.6-luna,gpt-5.4-mini,codex-auto-review"
-	capabilityProbeModelGemini       = "gemini-3.5-flash,gemini-3.1-pro-preview,gemini-3-pro-preview,gemini-3-flash-preview,gemini-3.1-flash-lite"
-	capabilityProbeModelResponses    = "gpt-5.5,gpt-5.4,gpt-5.6-sol,gpt-5.6-terra,gpt-5.6-luna,gpt-5.4-mini,codex-auto-review"
 )
+
+var loadedCapabilityProbeSchema = loadCapabilityProbeSchema()
+
+func loadCapabilityProbeSchema() capabilityProbeSchema {
+	var schema capabilityProbeSchema
+	if err := json.Unmarshal(capabilityProbeSchemaBytes, &schema); err != nil {
+		panic(fmt.Sprintf("[CapabilityProbe] 内置 schema 解析失败: %v", err))
+	}
+	return schema
+}
 
 // capabilityProbeSchemaVersion 能力探测特征集版本。
 // 当探测模型列表、prompts、参数约束或协议头发生变化时必须递增，
 // 以使缓存/执行键失效并避免新旧探测特征混用。
-const capabilityProbeSchemaVersion = 1
+// 当前值从 shared/capability-probe-schema.json 的 schemaVersion 字段读取。
+var capabilityProbeSchemaVersion = loadedCapabilityProbeSchema.SchemaVersion
 
-var capabilityProbeModels = map[string]string{
-	"messages":  capabilityProbeModelMessages,
-	"chat":      capabilityProbeModelChat,
-	"gemini":    capabilityProbeModelGemini,
-	"responses": capabilityProbeModelResponses,
+// capabilityBaseProtocols 返回能力测试支持的基础协议列表（按 schema 定义顺序）。
+func capabilityBaseProtocols() []string {
+	return append([]string(nil), loadedCapabilityProbeSchema.BaseProtocols...)
 }
 
 // getCapabilityProbeModels 获取协议的候选模型列表（按优先级排序）
 func getCapabilityProbeModels(protocol string) ([]string, error) {
-	modelsStr, ok := capabilityProbeModels[protocol]
+	models, ok := loadedCapabilityProbeSchema.ProbeModels[protocol]
 	if !ok {
 		return nil, fmt.Errorf("unsupported protocol: %s", protocol)
 	}
 
-	// 按逗号分隔，去除空白
-	models := strings.Split(modelsStr, ",")
 	result := make([]string, 0, len(models))
 	for _, m := range models {
 		m = strings.TrimSpace(m)

@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "baseProtocols": ["messages", "chat", "responses", "gemini"],
+  "probeModels": {
+    "messages": ["claude-fable-5", "claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-4-6", "claude-sonnet-4-5-20250929", "claude-haiku-4-5-20251001"],
+    "chat": ["gpt-5.5", "gpt-5.4", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.4-mini", "codex-auto-review"],
+    "responses": ["gpt-5.5", "gpt-5.4", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.4-mini", "codex-auto-review"],
+    "gemini": ["gemini-3.5-flash", "gemini-3.1-pro-preview", "gemini-3-pro-preview", "gemini-3-flash-preview", "gemini-3.1-flash-lite"]
+  },
+  "frontendPlaceholderModels": {
+    "messages": ["claude-fable-5", "claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-4-6", "claude-sonnet-4-5-20250929", "claude-haiku-4-5-20251001"],
+    "chat": ["gpt-5.5", "gpt-5.4", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.4-mini", "codex-auto-review"],
+    "responses": ["gpt-5.5", "gpt-5.4", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.4-mini", "codex-auto-review"],
+    "gemini": ["gemini-3.5-flash", "gemini-3.1-pro-preview", "gemini-3-pro-preview", "gemini-3-flash-preview", "gemini-3.1-flash-lite"],
+    "images": ["gpt-image-2", "gpt-image-1", "dall-e-3", "dall-e-2"]
+  }
+}
