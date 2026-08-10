@@ -33,7 +33,6 @@ const buttonStub = defineComponent({
   template: '<button :disabled="disabled" @click="$emit(\'click\')"><slot /></button>',
 })
 
-
 const mountPanel = (props: Record<string, unknown> = {}) => mount(NewApiAccountPanel, {
   props: { subscriptionUid: 'sub-main', ...props },
   global: {

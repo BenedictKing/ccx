@@ -42,9 +42,9 @@
         <QuickAddChannelForm
           v-if="quickAddMode"
           ref="quickAddFormRef"
+          v-model:placement="placement"
           :channel-type="channelType"
           :existing-channels="existingCustomChannels"
-          v-model:placement="placement"
           @added="onQuickAddSuccess"
         />
 

@@ -92,11 +92,11 @@
                   {{ t(`autopilot.mode.${detail.effectiveMode}`) || detail.effectiveMode }}
                 </v-chip>
               </v-col>
-              <v-col cols="6" v-if="detail.bypassReason">
+              <v-col v-if="detail.bypassReason" cols="6">
                 <div class="text-caption text-medium-emphasis">{{ t('autopilot.traceDetail.bypassReason') }}</div>
                 <div class="text-body-2">{{ detail.bypassReason }}</div>
               </v-col>
-              <v-col cols="6" v-if="detail.requestCorrelationId">
+              <v-col v-if="detail.requestCorrelationId" cols="6">
                 <div class="text-caption text-medium-emphasis">{{ t('autopilot.traceDetail.correlationId') }}</div>
                 <div class="text-body-2"><code>{{ detail.requestCorrelationId }}</code></div>
               </v-col>
@@ -125,15 +125,15 @@
               </v-col>
             </v-row>
             <v-row dense class="mt-1">
-              <v-col cols="4" v-if="detail.agentRole">
+              <v-col v-if="detail.agentRole" cols="4">
                 <div class="text-caption text-medium-emphasis">Agent Role</div>
                 <div class="text-body-2">{{ detail.agentRole }}</div>
               </v-col>
-              <v-col cols="4" v-if="detail.manualIntentUid">
+              <v-col v-if="detail.manualIntentUid" cols="4">
                 <div class="text-caption text-medium-emphasis">Manual Intent</div>
                 <div class="text-body-2"><code>{{ detail.manualIntentUid }}</code></div>
               </v-col>
-              <v-col cols="4" v-if="detail.advisorDecisionUid">
+              <v-col v-if="detail.advisorDecisionUid" cols="4">
                 <div class="text-caption text-medium-emphasis">Advisor</div>
                 <div class="text-body-2"><code>{{ detail.advisorDecisionUid }}</code></div>
               </v-col>
