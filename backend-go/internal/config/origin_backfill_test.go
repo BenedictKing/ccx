@@ -163,14 +163,16 @@ func TestOriginBackfill_PersistedAfterBackfill(t *testing.T) {
 	if err := json.Unmarshal(data, &persisted); err != nil {
 		t.Fatalf("解析持久化配置失败: %v", err)
 	}
-	if len(persisted.Upstream) != 1 {
-		t.Fatalf("期望持久化 1 个 upstream，得到 %d", len(persisted.Upstream))
+	// 波 3 后落盘只含 ChannelsV3（六数组不再持久化），在权威形态的协议成员上断言。
+	if len(persisted.ChannelsV3) != 1 || len(persisted.ChannelsV3[0].Protocols) != 1 {
+		t.Fatalf("期望持久化 1 个单协议渠道，得到 %+v", persisted.ChannelsV3)
 	}
-	if persisted.Upstream[0].OriginType != "unknown" {
-		t.Fatalf("持久化文件中 OriginType 应为 unknown, got %q", persisted.Upstream[0].OriginType)
+	member := persisted.ChannelsV3[0].Protocols[0].Upstream
+	if member.OriginType != "unknown" {
+		t.Fatalf("持久化文件中 OriginType 应为 unknown, got %q", member.OriginType)
 	}
-	if persisted.Upstream[0].OriginTier != "unknown" {
-		t.Fatalf("持久化文件中 OriginTier 应为 unknown, got %q", persisted.Upstream[0].OriginTier)
+	if member.OriginTier != "unknown" {
+		t.Fatalf("持久化文件中 OriginTier 应为 unknown, got %q", member.OriginTier)
 	}
 }
 

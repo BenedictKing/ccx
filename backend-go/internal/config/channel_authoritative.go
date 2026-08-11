@@ -181,13 +181,19 @@ func applyAuthoritativeChannelsAsLoadSource(cfg *Config) (applied bool, err erro
 	}
 
 	rebuilt := ApplyAuthoritativeChannelsAsStruct(cfg.ChannelsV3)
-	// 严格模式：对账失败拒绝启动（配置可能被外部手改坏）。
-	if err := compareAuthoritativeRoundTrip(cfg, rebuilt); err != nil {
-		if channelAuthoritativeStrictEnabled() {
-			return false, fmt.Errorf("[Config-Load] ChannelsV3 与六数组不一致且严格模式开启，拒绝启动: %w", err)
+	// 纯 V3 落盘格式（波 3 起六数组不再持久化）：磁盘六数组全空是格式特征而非偏差，
+	// 跳过对账直接应用重建结果。仅当磁盘六数组非空（旧双写格式或被外部手改）才对账。
+	diskArraysEmpty := len(cfg.Upstream) == 0 && len(cfg.ChatUpstream) == 0 && len(cfg.ResponsesUpstream) == 0 &&
+		len(cfg.GeminiUpstream) == 0 && len(cfg.ImagesUpstream) == 0 && len(cfg.VectorsUpstream) == 0
+	if !diskArraysEmpty {
+		// 严格模式：对账失败拒绝启动（配置可能被外部手改坏）。
+		if err := compareAuthoritativeRoundTrip(cfg, rebuilt); err != nil {
+			if channelAuthoritativeStrictEnabled() {
+				return false, fmt.Errorf("[Config-Load] ChannelsV3 与六数组不一致且严格模式开启，拒绝启动: %w", err)
+			}
+			// 非严格模式：ChannelsV3 已是权威来源，记录诊断后仍以 ChannelsV3 覆盖六数组。
+			log.Printf("[Config-Load] 注意: ChannelsV3 与磁盘六数组有偏差，以 ChannelsV3 为权威覆盖: %v", err)
 		}
-		// 非严格模式：ChannelsV3 已是权威来源，记录诊断后仍以 ChannelsV3 覆盖六数组。
-		log.Printf("[Config-Load] 注意: ChannelsV3 与磁盘六数组有偏差，以 ChannelsV3 为权威覆盖: %v", err)
 	}
 
 	cfg.Upstream, cfg.ChatUpstream, cfg.ResponsesUpstream, cfg.GeminiUpstream, cfg.ImagesUpstream, cfg.VectorsUpstream =

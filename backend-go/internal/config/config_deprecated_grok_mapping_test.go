@@ -82,11 +82,23 @@ func TestLoadConfigMigratesDeprecatedGrokModelMapping(t *testing.T) {
 	if err := json.Unmarshal(persisted, &onDisk); err != nil {
 		t.Fatalf("解析持久化配置失败: %v", err)
 	}
-	if _, ok := onDisk.Upstream[0].ModelMapping["grok-4.1"]; ok {
-		t.Fatalf("expected legacy grok-4.1 mapping removed on disk, got %v", onDisk.Upstream[0].ModelMapping)
+	// 波 3 后落盘只含 ChannelsV3（六数组不再持久化），在权威形态的协议成员上断言。
+	var diskMessagesMapping, diskVectorsMapping map[string]string
+	for _, channel := range onDisk.ChannelsV3 {
+		for _, member := range channel.Protocols {
+			switch member.Kind {
+			case "messages":
+				diskMessagesMapping = member.Upstream.ModelMapping
+			case "vectors":
+				diskVectorsMapping = member.Upstream.ModelMapping
+			}
+		}
 	}
-	if onDisk.VectorsUpstream[0].ModelMapping["grok-4.1"] != "my-custom-target" {
-		t.Fatalf("expected custom grok-4.1 mapping preserved on disk, got %v", onDisk.VectorsUpstream[0].ModelMapping)
+	if _, ok := diskMessagesMapping["grok-4.1"]; ok {
+		t.Fatalf("expected legacy grok-4.1 mapping removed on disk, got %v", diskMessagesMapping)
+	}
+	if diskVectorsMapping["grok-4.1"] != "my-custom-target" {
+		t.Fatalf("expected custom grok-4.1 mapping preserved on disk, got %v", diskVectorsMapping)
 	}
 
 	// 二次加载应保持幂等，不再产生额外的迁移写盘。

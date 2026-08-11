@@ -98,6 +98,21 @@ func (cm *ConfigManager) loadConfig() error {
 	snapshot := cm.config
 	cm.config = loaded
 
+	// Phase 3c 波 3：纯 V3 落盘格式（六数组不再持久化）——加载后立即把 ChannelsV3 投影到
+	// 运行时六数组，后续迁移/自检/中途落盘都作用在真实渠道数据上。若等迁移跑完再翻转，
+	// 中途 save 会在六数组尚为空时重建出空 V3、并经 syncManagedAccountsFromChannels 清掉
+	// 托管凭证（数据丢失）。旧双写/仅六数组格式不在此处理：磁盘六数组非空，
+	// 保持既有"迁移后翻转/对账 + savedDuringLoad 豁免"语义。
+	pureV3Load := loaded.ChannelAuthoritativeVersion == ChannelV3SchemaVersion && len(loaded.ChannelsV3) > 0 &&
+		len(loaded.Upstream)+len(loaded.ChatUpstream)+len(loaded.ResponsesUpstream)+
+			len(loaded.GeminiUpstream)+len(loaded.ImagesUpstream)+len(loaded.VectorsUpstream) == 0
+	if pureV3Load {
+		rebuilt := ApplyAuthoritativeChannelsAsStruct(loaded.ChannelsV3)
+		cm.config.Upstream, cm.config.ChatUpstream, cm.config.ResponsesUpstream,
+			cm.config.GeminiUpstream, cm.config.ImagesUpstream, cm.config.VectorsUpstream =
+			rebuilt.Upstream, rebuilt.Chat, rebuilt.Responses, rebuilt.Gemini, rebuilt.Images, rebuilt.Vectors
+	}
+
 	// 兼容旧配置：缺失字段补齐默认值（thinkingCache 等）
 	needSaveDefaults := cm.applyConfigDefaults(data) || autopilotDecodeFallback
 	// Autopilot 智能路由配置：旧版本升级、缺失值补齐与校验归一化
@@ -213,9 +228,17 @@ func (cm *ConfigManager) loadConfig() error {
 	// Phase 3c 运行时权威反转：若配置携带 ChannelsV3 权威形态，从它重建运行时六数组。
 	// ChannelsV3 是脱敏持久化形式（不含托管明文 Key），重建后需 hydrateManagedAccountCredentials
 	// 从 ManagedAccounts 补 Key。reconcileAuthoritativeChannels 保留为旧配置兼容对账（无 ChannelsV3 时）。
-	if savedDuringLoad {
-		// 本次加载的迁移/自检/回填已落盘（V3 已同代重建写入文件），跳过本次翻转，
-		// 避免用改写前旧 V3 快照覆盖撤销迁移；下次启动即正常翻转。
+	//
+	// 豁免一（波 3 纯 V3）：pureV3Load 在加载入口已投影 V3→六数组，迁移直接作用于投影结果，
+	// 此处再翻转会用加载时的旧 V3 快照撤销刚完成的迁移——跳过。
+	// 豁免二（旧双写/仅六数组格式）：本次加载有迁移/自检落盘（savedDuringLoad）且磁盘六数组
+	// 非空时，内存 V3 是六数组改写前的旧快照，翻转覆盖会撤销刚落盘的迁移——跳过本次翻转，
+	// 信任磁盘形态（落盘文件已同代，下次启动正常翻转）。
+	diskArraysNonEmpty := len(cm.config.Upstream)+len(cm.config.ChatUpstream)+len(cm.config.ResponsesUpstream)+
+		len(cm.config.GeminiUpstream)+len(cm.config.ImagesUpstream)+len(cm.config.VectorsUpstream) > 0
+	if pureV3Load {
+		// 加载入口已投影，无需再次翻转。
+	} else if savedDuringLoad && diskArraysNonEmpty {
 		log.Printf("[Config-Load] 本次加载有迁移/自检落盘，跳过 ChannelsV3 翻转（落盘已同代，下次启动生效）")
 		reconcileAuthoritativeChannels(&cm.config)
 	} else if applied, err := applyAuthoritativeChannelsAsLoadSource(&cm.config); err != nil {
@@ -1463,6 +1486,10 @@ func (cm *ConfigManager) saveConfigLocked(config Config) error {
 	// 从已脱敏的 persisted 数组合成，保证 ChannelsV3 同样不含托管明文 key。
 	persisted.ChannelsV3 = BuildAuthoritativeChannels(&persisted)
 	persisted.ChannelAuthoritativeVersion = ChannelV3SchemaVersion
+	// Phase 3c 波 3：六数组不再落盘——运行时六数组是 ChannelsV3 的内存投影，
+	// 持久化只保留无损权威形态。读侧仍兼容旧格式（双写或仅六数组的旧文件照常读入）。
+	persisted.Upstream, persisted.ChatUpstream, persisted.ResponsesUpstream,
+		persisted.GeminiUpstream, persisted.ImagesUpstream, persisted.VectorsUpstream = nil, nil, nil, nil, nil, nil
 	data, err := json.MarshalIndent(persisted, "", "  ")
 	if err != nil {
 		return err

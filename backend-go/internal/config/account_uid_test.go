@@ -240,11 +240,12 @@ func TestLoadConfigBaseURLMergeIsIdempotent(t *testing.T) {
 	if err := json.Unmarshal(first, &migrated); err != nil {
 		t.Fatal(err)
 	}
-	if len(migrated.Upstream) != 1 || len(migrated.ManagedAccounts) != 1 {
-		t.Fatalf("升级未按 BaseURL 合并: channels=%d accounts=%d", len(migrated.Upstream), len(migrated.ManagedAccounts))
+	// 波 3 后落盘只含 ChannelsV3（六数组不再持久化），合并结果在权威形态上断言。
+	if len(migrated.ChannelsV3) != 1 || len(migrated.ManagedAccounts) != 1 {
+		t.Fatalf("升级未按 BaseURL 合并: channels=%d accounts=%d", len(migrated.ChannelsV3), len(migrated.ManagedAccounts))
 	}
-	if migrated.Upstream[0].AccountUID != "acct-new" || migrated.Upstream[0].ProviderID != "mimo" {
-		t.Fatalf("升级未保留最近账号身份: %+v", migrated.Upstream[0])
+	if migrated.ChannelsV3[0].AccountUID != "acct-new" || migrated.ChannelsV3[0].ProviderID != "mimo" {
+		t.Fatalf("升级未保留最近账号身份: %+v", migrated.ChannelsV3[0])
 	}
 
 	cm, err = NewConfigManager(configPath, dir+"/backups-second")
@@ -399,9 +400,14 @@ func TestUpdateAccountChannelsUpdatesAllRoutes(t *testing.T) {
 	if err := json.Unmarshal(data, &persisted); err != nil {
 		t.Fatalf("解析持久化配置失败: %v", err)
 	}
+	// 波 3 后落盘只含 ChannelsV3：模拟加载路径——先从 V3 重建六数组，再从账号凭证补水。
+	if _, err := applyAuthoritativeChannelsAsLoadSource(&persisted); err != nil {
+		t.Fatalf("从 ChannelsV3 重建六数组失败: %v", err)
+	}
 	persisted.hydrateManagedAccountCredentials()
-	if len(persisted.Upstream[0].APIKeys) != 2 || len(persisted.ChatUpstream[0].APIKeys) != 2 {
-		t.Fatalf("加载时未从账号凭证恢复 route 运行时 Key")
+	if len(persisted.Upstream) != 1 || len(persisted.ChatUpstream) != 1 ||
+		len(persisted.Upstream[0].APIKeys) != 2 || len(persisted.ChatUpstream[0].APIKeys) != 2 {
+		t.Fatalf("加载时未从账号凭证恢复 route 运行时 Key: %+v", persisted)
 	}
 	if err := cm.RenameManagedAccount("acct_test", "mimo-renamed"); err != nil {
 		t.Fatalf("RenameManagedAccount 失败: %v", err)

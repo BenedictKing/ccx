@@ -90,7 +90,7 @@ func TestMigrateVolcengineSurvivesAuthoritativeLoad(t *testing.T) {
 	}
 	cm.CloseWatcher()
 
-	// 确认落盘为迁移前形态（磁盘六数组与 V3 均 openai）。
+	// 确认落盘为迁移前形态（波 3 后落盘只含 ChannelsV3，其协议成员应为 openai）。
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		t.Fatalf("读取落盘配置失败: %v", err)
@@ -99,7 +99,8 @@ func TestMigrateVolcengineSurvivesAuthoritativeLoad(t *testing.T) {
 	if err := json.Unmarshal(data, &persisted); err != nil {
 		t.Fatalf("解析落盘配置失败: %v", err)
 	}
-	if len(persisted.ChannelsV3) == 0 || persisted.ResponsesUpstream[0].ServiceType != "openai" {
+	if len(persisted.ChannelsV3) == 0 || len(persisted.ChannelsV3[0].Protocols) == 0 ||
+		persisted.ChannelsV3[0].Protocols[0].Upstream.ServiceType != "openai" {
 		t.Fatalf("前置条件:落盘应为迁移前 openai 形态,V3 组数=%d", len(persisted.ChannelsV3))
 	}
 

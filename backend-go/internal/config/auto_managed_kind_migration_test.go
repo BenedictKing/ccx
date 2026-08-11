@@ -95,8 +95,12 @@ func TestAutoManagedKindMigration(t *testing.T) {
 			if err := json.Unmarshal(persisted, &cfg); err != nil {
 				t.Fatalf("解析迁移后配置失败: %v", err)
 			}
-			if cfg.Upstream[0].AutoManagedKind != tt.wantKind {
-				t.Fatalf("迁移结果未持久化: kind=%q", cfg.Upstream[0].AutoManagedKind)
+			// 波 3 后落盘只含 ChannelsV3（六数组不再持久化），迁移结果在权威形态上断言。
+			if len(cfg.ChannelsV3) != 1 || len(cfg.ChannelsV3[0].Protocols) != 1 {
+				t.Fatalf("迁移后应只有一个单协议渠道: %+v", cfg.ChannelsV3)
+			}
+			if got := cfg.ChannelsV3[0].Protocols[0].Upstream.AutoManagedKind; got != tt.wantKind {
+				t.Fatalf("迁移结果未持久化: kind=%q，期望 %q", got, tt.wantKind)
 			}
 		})
 	}

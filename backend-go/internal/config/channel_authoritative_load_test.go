@@ -355,7 +355,7 @@ func TestAuthoritativeLoad_ManagedKeySurvivesSaveReload(t *testing.T) {
 	}
 	cm.CloseWatcher()
 
-	// 落盘脱敏：磁盘六数组与 ChannelsV3 均不含明文 Key，Key 只在 managedAccounts.credentials。
+	// 落盘脱敏：波 3 后磁盘不再持久化六数组，ChannelsV3 也不含明文 Key，Key 只在 managedAccounts.credentials。
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		t.Fatalf("读取落盘配置失败: %v", err)
@@ -364,8 +364,11 @@ func TestAuthoritativeLoad_ManagedKeySurvivesSaveReload(t *testing.T) {
 	if err := json.Unmarshal(data, &persisted); err != nil {
 		t.Fatalf("解析落盘配置失败: %v", err)
 	}
-	if len(persisted.Upstream) != 1 || len(persisted.Upstream[0].APIKeys) != 0 {
-		t.Fatalf("磁盘六数组应已脱敏: %+v", persisted.Upstream)
+	if len(persisted.Upstream) != 0 {
+		t.Fatalf("波 3 后磁盘不应再持久化六数组: %+v", persisted.Upstream)
+	}
+	if len(persisted.ChannelsV3) != 1 {
+		t.Fatalf("落盘应含 1 个 ChannelsV3 渠道: %+v", persisted.ChannelsV3)
 	}
 	if strings.Contains(string(data), `"key":"sk-e"`) || strings.Contains(string(data), `"apiKeys":["sk-e"]`) {
 		t.Fatal("落盘 JSON 的渠道字段不应含明文 sk-e")
@@ -397,5 +400,157 @@ func TestAuthoritativeLoad_ManagedKeySurvivesSaveReload(t *testing.T) {
 	}
 	if len(got.Upstream[0].APIKeys) != 1 || got.Upstream[0].APIKeys[0] != "sk-e" {
 		t.Fatalf("重载后托管 Key 应完整恢复，实际 %+v", got.Upstream[0].APIKeys)
+	}
+}
+
+
+// sixArrayJSONKeys 是六数组在落盘 JSON 里的顶层字段名（波 3 后不应再出现）。
+var sixArrayJSONKeys = []string{"upstream", "chatUpstream", "responsesUpstream", "geminiUpstream", "imagesUpstream", "vectorsUpstream"}
+
+// TestAuthoritativeLoad_Wave3SaveOmitsSixArrays 波 3 落盘格式：save 后文件只含
+// channelsV3 权威形态，顶层不再有六个 Upstream 数组字段（omitempty + 置 nil）。
+func TestAuthoritativeLoad_Wave3SaveOmitsSixArrays(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "config.json")
+
+	cm, err := NewConfigManager(configPath, "")
+	if err != nil {
+		t.Fatalf("NewConfigManager() error = %v", err)
+	}
+	channel := makeKeyChannel("messages", "ch_w3", "acct_w3", "https://w3.example.com", "claude", "sk-w3", "g", []string{"m1"})
+	cm.config.Upstream = []UpstreamConfig{channel}
+	if err := cm.SaveConfig(); err != nil {
+		t.Fatalf("SaveConfig() error = %v", err)
+	}
+	cm.CloseWatcher()
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("读取落盘配置失败: %v", err)
+	}
+	var top map[string]json.RawMessage
+	if err := json.Unmarshal(data, &top); err != nil {
+		t.Fatalf("解析落盘配置失败: %v", err)
+	}
+	for _, key := range sixArrayJSONKeys {
+		if _, ok := top[key]; ok {
+			t.Fatalf("波 3 后落盘不应再含顶层 %q 字段", key)
+		}
+	}
+	if _, ok := top["channelsV3"]; !ok {
+		t.Fatal("落盘应含 channelsV3 权威形态")
+	}
+	if top["channelAuthoritativeVersion"] == nil {
+		t.Fatal("落盘应含 channelAuthoritativeVersion")
+	}
+}
+
+// TestAuthoritativeLoad_PureV3ReloadDoesNotWipeFile 回归：纯 V3 格式重载时，加载期
+// 迁移/归一化触发的中途落盘不得在六数组投影前运行——否则会以空六数组重建出空 V3、
+// 并清掉 ManagedAccounts 凭证（渠道与 Key 双双丢失）。加载入口已做纯 V3 提前投影，
+// 重载后磁盘文件必须保持渠道与凭证完整。
+func TestAuthoritativeLoad_PureV3ReloadDoesNotWipeFile(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "config.json")
+
+	cm, err := NewConfigManager(configPath, "")
+	if err != nil {
+		t.Fatalf("NewConfigManager() error = %v", err)
+	}
+	channel := makeKeyChannel("messages", "ch_nowipe", "acct_nowipe", "https://nw.example.com", "claude", "sk-nw", "g", []string{"m1"})
+	channel.AutoManaged = true
+	channel.ProviderID = "kimi"
+	cm.config.Upstream = []UpstreamConfig{channel}
+	if err := cm.SaveConfig(); err != nil {
+		t.Fatalf("SaveConfig() error = %v", err)
+	}
+	cm.CloseWatcher()
+
+	// 重载（autopilot 归一化等会触发中途落盘），然后检查磁盘文件未被清空。
+	cm2, err := NewConfigManager(configPath, "")
+	if err != nil {
+		t.Fatalf("NewConfigManager() reload error = %v", err)
+	}
+	defer cm2.CloseWatcher()
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("重载后读取落盘配置失败: %v", err)
+	}
+	var persisted Config
+	if err := json.Unmarshal(data, &persisted); err != nil {
+		t.Fatalf("重载后解析落盘配置失败: %v", err)
+	}
+	if len(persisted.ChannelsV3) != 1 || len(persisted.ChannelsV3[0].Protocols) != 1 {
+		t.Fatalf("重载后落盘 channelsV3 应仍为 1 个单协议渠道，实际 %+v", persisted.ChannelsV3)
+	}
+	foundCred := false
+	for _, account := range persisted.ManagedAccounts {
+		for _, credential := range account.Credentials {
+			if credential.APIKey == "sk-nw" {
+				foundCred = true
+			}
+		}
+	}
+	if !foundCred {
+		t.Fatalf("重载后落盘 ManagedAccounts 应仍持有 sk-nw 凭证: %+v", persisted.ManagedAccounts)
+	}
+	got := cm2.GetConfig()
+	if len(got.Upstream) != 1 || len(got.Upstream[0].APIKeys) != 1 || got.Upstream[0].APIKeys[0] != "sk-nw" {
+		t.Fatalf("重载后运行时渠道/Key 应完整: %+v", got.Upstream)
+	}
+}
+
+// TestAuthoritativeLoad_LegacyArraysOnlyConvertsToPureV3 旧仅六数组格式（无 V3）加载后：
+// 运行时渠道正常，且落盘被升级为纯 V3 格式（含 channelsV3、无顶层六数组字段）；
+// 再次重载（纯 V3 路径）渠道保持完整。
+func TestAuthoritativeLoad_LegacyArraysOnlyConvertsToPureV3(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "config.json")
+
+	legacy := `{"upstream":[{"channelUid":"ch_legacy","name":"legacy","baseUrl":"https://legacy.example.com","serviceType":"claude","apiKeys":["sk-l"],"status":"active"}],"responsesUpstream":[],"geminiUpstream":[],"chatUpstream":[],"imagesUpstream":[],"vectorsUpstream":[]}`
+	if err := os.WriteFile(configPath, []byte(legacy), 0600); err != nil {
+		t.Fatalf("写入旧格式配置失败: %v", err)
+	}
+
+	cm, err := NewConfigManager(configPath, "")
+	if err != nil {
+		t.Fatalf("NewConfigManager() error = %v", err)
+	}
+	if got := cm.GetConfig(); len(got.Upstream) != 1 || got.Upstream[0].ChannelUID != "ch_legacy" {
+		t.Fatalf("旧格式加载后运行时渠道应完整: %+v", got.Upstream)
+	}
+	cm.CloseWatcher()
+
+	// 落盘应已升级为纯 V3 格式。
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("读取升级后配置失败: %v", err)
+	}
+	var top map[string]json.RawMessage
+	if err := json.Unmarshal(data, &top); err != nil {
+		t.Fatalf("解析升级后配置失败: %v", err)
+	}
+	for _, key := range sixArrayJSONKeys {
+		if _, ok := top[key]; ok {
+			t.Fatalf("旧格式升级后落盘不应再含顶层 %q 字段", key)
+		}
+	}
+	if _, ok := top["channelsV3"]; !ok {
+		t.Fatal("旧格式升级后落盘应含 channelsV3")
+	}
+
+	// 再次重载（纯 V3 入口投影路径），渠道保持完整。
+	cm2, err := NewConfigManager(configPath, "")
+	if err != nil {
+		t.Fatalf("NewConfigManager() reload error = %v", err)
+	}
+	defer cm2.CloseWatcher()
+	got := cm2.GetConfig()
+	if len(got.Upstream) != 1 || got.Upstream[0].ChannelUID != "ch_legacy" {
+		t.Fatalf("纯 V3 重载后渠道应完整: %+v", got.Upstream)
+	}
+	if len(got.Upstream[0].APIKeys) != 1 || got.Upstream[0].APIKeys[0] != "sk-l" {
+		t.Fatalf("纯 V3 重载后 Key 应完整: %+v", got.Upstream[0].APIKeys)
 	}
 }

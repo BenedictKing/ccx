@@ -73,11 +73,16 @@ func TestBindManagedAccountCompshareConsoleAppliesKeyConcurrencyAcrossRoutes(t *
 		t.Fatal(err)
 	}
 	found := false
-	for _, keyConfig := range persisted.Upstream[0].APIKeyConfigs {
-		if keyConfig.CredentialUID == credentialA {
-			found = true
-			if keyConfig.RateLimitMaxConcurrent != 10 {
-				t.Fatalf("并发上限未持久化: %+v", keyConfig)
+	// 波 3 后落盘只含 ChannelsV3（六数组不再持久化），在权威形态的协议成员上断言。
+	for _, channel := range persisted.ChannelsV3 {
+		for _, member := range channel.Protocols {
+			for _, keyConfig := range member.Upstream.APIKeyConfigs {
+				if keyConfig.CredentialUID == credentialA {
+					found = true
+					if keyConfig.RateLimitMaxConcurrent != 10 {
+						t.Fatalf("并发上限未持久化: %+v", keyConfig)
+					}
+				}
 			}
 		}
 	}
