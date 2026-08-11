@@ -12,6 +12,7 @@
 | [new-api-integration.md](./new-api-integration.md) | New-API 多账号集成 | 账号/Key/凭证模型、verify/provision、渠道纳入调度 |
 | [healthcheck.md](./healthcheck.md) | 火山 Plan 健康探针 | L1/L2 探针、动态频率、稀疏模型、恢复、凭证回填 |
 | [channel-data-model-v2.md](./channel-data-model-v2.md) | 渠道粒度重构 | Channel→Key→Endpoint→Model、能力/凭证边界、new-api 分组共享、三步迁移 |
+| [public-key-routing.md](./public-key-routing.md) | 公开与临时 Key 优先消耗 | Key 级零成本、机会性消耗策略、FastDecay 回退、API/UI 与迁移 |
 | [web-ui-dialogs.md](./web-ui-dialogs.md) | Web 管理界面 | 所有对话框/弹窗布局、交互、状态流转、跳转关系 |
 | [web-ui-pages.md](./web-ui-pages.md) | Web 页面层 | 8 个 View 布局、导航信息架构、全局区块显隐、数据流、IA 问题 |
 | [cross-module-integration.md](./cross-module-integration.md) | 跨模块集成 | 路由决策链、事件传播、状态一致性边界 |
@@ -64,6 +65,7 @@ Channels   (Claude/OpenAI/Gemini/...)
 | autopilot.md | ✅ 完成 | 覆盖核心结构体、流程、边界、新增功能 |
 | logical-channel.md | ✅ 完成 | 覆盖归组算法、CRUD 原子性、前端聚合、待补充项详解 |
 | new-api-integration.md | ✅ 完成 | 覆盖数据模型、接口、同步、边界、待补充项详解 |
+| public-key-routing.md | 📝 提案 | 定义 Key 级零成本与机会性优先消耗，尚未实现 |
 | healthcheck.md | ✅ 完成 | 覆盖 L1/L2、稀疏探针、恢复、凭证回填、待补充项详解 |
 | web-ui-dialogs.md | ✅ 完成 | 覆盖所有对话框布局、交互、状态流转、跳转关系 |
 | web-ui-pages.md | ✅ 完成 | 覆盖 8 个 View、导航 IA、全局区块显隐、ego-browser 实测、IA 问题清单 |
