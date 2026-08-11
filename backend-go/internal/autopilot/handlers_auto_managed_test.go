@@ -2,11 +2,14 @@ package autopilot
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -40,7 +43,7 @@ func TestListAccountsMasksCredentials(t *testing.T) {
 		t.Fatalf("NewConfigManager 失败: %v", err)
 	}
 	t.Cleanup(func() { _ = cfgManager.Close() })
-	router := setupAutoManagedRouter(&AutoManagedDeps{CfgManager: cfgManager})
+	router := setupAutoManagedRouter(&AutoManagedDeps{CfgManager: cfgManager, SkipChannelKeyVerify: true})
 	req := httptest.NewRequest(http.MethodGet, "/api/accounts", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
@@ -336,7 +339,7 @@ func TestPatchAccountCredentialsRemovesByUID(t *testing.T) {
 		t.Fatalf("NewConfigManager 失败: %v", err)
 	}
 	t.Cleanup(func() { _ = cfgManager.Close() })
-	router := setupAutoManagedRouter(&AutoManagedDeps{CfgManager: cfgManager})
+	router := setupAutoManagedRouter(&AutoManagedDeps{CfgManager: cfgManager, SkipChannelKeyVerify: true})
 	req := httptest.NewRequest(http.MethodPatch, "/api/accounts/acct_test/credentials", bytes.NewBufferString(`{"removeCredentialUids":["cred_b"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -430,6 +433,54 @@ func TestAutoAddRequest_Validation(t *testing.T) {
 			}
 			t.Fatalf("期望验证失败: %s", tt.err)
 		})
+	}
+}
+
+func TestVerifyNewKeysForChannelsCoversAllKinds(t *testing.T) {
+	kinds := []string{"messages", "chat", "responses", "gemini", "images", "vectors"}
+	channels := make([]config.AccountChannel, 0, len(kinds))
+	for _, kind := range kinds {
+		channels = append(channels, config.AccountChannel{
+			Kind: kind,
+			Upstream: config.UpstreamConfig{
+				ChannelUID: "ch-" + kind,
+				BaseURL:    "https://example.com",
+				APIKeys:    []string{"sk-old"},
+			},
+		})
+	}
+	var verified []string
+	deps := &AutoManagedDeps{VerifyChannelKey: func(_ context.Context, kind string, _ config.UpstreamConfig, apiKey string) error {
+		verified = append(verified, kind+":"+apiKey)
+		return nil
+	}}
+	if err := verifyNewKeysForChannels(t.Context(), deps, channels, []string{"sk-old", "sk-new", "sk-new"}); err != nil {
+		t.Fatal(err)
+	}
+	want := make([]string, 0, len(kinds))
+	for _, kind := range kinds {
+		want = append(want, kind+":sk-new")
+	}
+	if !slices.Equal(verified, want) {
+		t.Fatalf("验证调用=%v, want %v", verified, want)
+	}
+}
+
+func TestVerifyNewKeysForChannelsRejectsBeforeMutation(t *testing.T) {
+	channels := []config.AccountChannel{{
+		Kind: "messages",
+		Upstream: config.UpstreamConfig{
+			ChannelUID: "ch-messages", BaseURL: "https://example.com", APIKeys: []string{"sk-old"},
+		},
+	}}
+	deps := &AutoManagedDeps{VerifyChannelKey: func(_ context.Context, _ string, _ config.UpstreamConfig, apiKey string) error {
+		return fmt.Errorf("key %s rejected", apiKey)
+	}}
+	if err := verifyNewKeysForChannels(t.Context(), deps, channels, []string{"sk-old", "sk-bad"}); err == nil {
+		t.Fatal("无效新 Key 应阻止后续配置变更")
+	}
+	if !slices.Equal(channels[0].Upstream.APIKeys, []string{"sk-old"}) {
+		t.Fatalf("验证失败不应改变渠道配置: %v", channels[0].Upstream.APIKeys)
 	}
 }
 
@@ -668,7 +719,17 @@ func TestCustomAutoAddAppendsKeyToEquivalentExistingBaseURL(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = manager.Close() })
 
-	router := setupAutoManagedRouter(&AutoManagedDeps{CfgManager: manager})
+	var resetCalls []string
+	router := setupAutoManagedRouter(&AutoManagedDeps{
+		CfgManager:           manager,
+		SkipChannelKeyVerify: true,
+		ResetChannelMetrics: func(kind string, index int) {
+			resetCalls = append(resetCalls, fmt.Sprintf("%s:%d", kind, index))
+			if got := manager.GetConfig().ChatUpstream[0].APIKeys; !slices.Contains(got, "sk-new") {
+				t.Fatalf("熔断恢复必须发生在新 Key 持久化之后: %v", got)
+			}
+		},
+	})
 	body := `{"name":"localhost-8990","baseUrls":["http://localhost:8990/"],"apiKeys":["sk-new","sk-old","sk-new"]}`
 	autoAdd := func() AutoAddResponse {
 		t.Helper()
@@ -720,6 +781,9 @@ func TestCustomAutoAddAppendsKeyToEquivalentExistingBaseURL(t *testing.T) {
 		}
 	}
 
+	if got := strings.Join(resetCalls, ","); got != "chat:0" {
+		t.Fatalf("首次追加应只恢复已有 chat 渠道一次: %q", got)
+	}
 	second := autoAdd()
 	if second.AccountUID != first.AccountUID || len(second.Channels) != 2 {
 		t.Fatalf("重复请求应保持账号与响应路由幂等: first=%+v second=%+v", first, second)
@@ -732,6 +796,9 @@ func TestCustomAutoAddAppendsKeyToEquivalentExistingBaseURL(t *testing.T) {
 		if secondRoutes[kind].ChannelUID != firstRoutes[kind].ChannelUID || secondRoutes[kind].AccountUID != firstRoutes[kind].AccountUID {
 			t.Fatalf("重复请求改变 %s 路由: first=%+v second=%+v", kind, firstRoutes[kind], secondRoutes[kind])
 		}
+	}
+	if got := strings.Join(resetCalls, ","); got != "chat:0" {
+		t.Fatalf("幂等追加不应再次恢复熔断: %q", got)
 	}
 	cfg = manager.GetConfig()
 	if len(cfg.Upstream) != 1 || len(cfg.ChatUpstream) != 1 || strings.Join(cfg.Upstream[0].APIKeys, ",") != "sk-old,sk-new" || strings.Join(cfg.ChatUpstream[0].APIKeys, ",") != "sk-old,sk-new" {
@@ -769,7 +836,7 @@ func TestCustomAutoAddAppendsKeyAndMissingRouteToManagedAccount(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = manager.Close() })
 
-	router := setupAutoManagedRouter(&AutoManagedDeps{CfgManager: manager})
+	router := setupAutoManagedRouter(&AutoManagedDeps{CfgManager: manager, SkipChannelKeyVerify: true})
 	body := `{
   "name":"localhost-8990",
   "baseUrls":["http://localhost:8990/v1"],
@@ -821,7 +888,7 @@ func TestCustomAutoAddCreatesAllDetectedRoutesWithProtocolModels(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = manager.Close() })
 
-	router := setupAutoManagedRouter(&AutoManagedDeps{CfgManager: manager})
+	router := setupAutoManagedRouter(&AutoManagedDeps{CfgManager: manager, SkipChannelKeyVerify: true})
 	body := `{
   "name":"fastaitoken-com-test",
   "baseUrls":["https://example.com/keys"],
@@ -1136,7 +1203,7 @@ func TestUpdateAccountIgnoresBaseURLsForProviderManagedAccount(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = cfgManager.Close() })
 
-	router := setupAutoManagedRouter(&AutoManagedDeps{CfgManager: cfgManager})
+	router := setupAutoManagedRouter(&AutoManagedDeps{CfgManager: cfgManager, SkipChannelKeyVerify: true})
 	body := `{"name":"mimo-main","apiKeys":["sk-existing"],"baseUrls":["https://manual-pool.example.com"]}`
 	req := httptest.NewRequest(http.MethodPut, "/api/accounts/acct_provider", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -1223,7 +1290,7 @@ func TestListManagedAccountsDoesNotExposeVolcengineSecret(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer errutil.IgnoreDeferred(manager.Close)
-	router := setupAutoManagedRouter(&AutoManagedDeps{CfgManager: manager})
+	router := setupAutoManagedRouter(&AutoManagedDeps{CfgManager: manager, SkipChannelKeyVerify: true})
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/accounts", nil))
 	if w.Code != http.StatusOK {
@@ -1549,7 +1616,7 @@ func TestProviderAutoAddReusesExistingAccount(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = cfgManager.Close() })
-	router := setupAutoManagedRouter(&AutoManagedDeps{CfgManager: cfgManager})
+	router := setupAutoManagedRouter(&AutoManagedDeps{CfgManager: cfgManager, SkipChannelKeyVerify: true})
 	req := httptest.NewRequest(http.MethodPost, "/api/messages/channels/auto-add", bytes.NewBufferString(`{"providerId":"mimo","apiKeys":["sk-existing"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()

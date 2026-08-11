@@ -267,6 +267,11 @@ func SetAuthenticationHeaderWithOverride(headers http.Header, apiKey, authHeader
 		headers.Del("x-api-key")
 		headers.Del("x-goog-api-key")
 		headers.Set("x-api-key", apiKey)
+	case "x-goog-api-key":
+		headers.Del("authorization")
+		headers.Del("x-api-key")
+		headers.Del("x-goog-api-key")
+		headers.Set("x-goog-api-key", apiKey)
 	default:
 		SetAuthenticationHeader(headers, apiKey)
 	}
@@ -275,7 +280,7 @@ func SetAuthenticationHeaderWithOverride(headers http.Header, apiKey, authHeader
 // HasAuthenticationHeaderOverride 判断是否配置了显式认证头覆盖。
 func HasAuthenticationHeaderOverride(authHeader string) bool {
 	switch strings.ToLower(strings.TrimSpace(authHeader)) {
-	case "bearer", "x-api-key":
+	case "bearer", "x-api-key", "x-goog-api-key":
 		return true
 	default:
 		return false

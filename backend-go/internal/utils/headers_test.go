@@ -143,6 +143,7 @@ func TestSetAuthenticationHeaderWithOverride(t *testing.T) {
 		apiKey            string
 		authHeader        string
 		wantXApiKey       string
+		wantXGoogAPIKey   string
 		wantAuthorization string
 		wantOverride      bool
 	}{
@@ -172,6 +173,13 @@ func TestSetAuthenticationHeaderWithOverride(t *testing.T) {
 			wantXApiKey:  "sk-1234567890abcdef",
 			wantOverride: true,
 		},
+		{
+			name:            "x-goog-api-key覆盖通用格式",
+			apiKey:          "gemini-key",
+			authHeader:      "x-goog-api-key",
+			wantXGoogAPIKey: "gemini-key",
+			wantOverride:    true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -186,11 +194,11 @@ func TestSetAuthenticationHeaderWithOverride(t *testing.T) {
 			if got := headers.Get("x-api-key"); got != tt.wantXApiKey {
 				t.Errorf("x-api-key = %v, want %v", got, tt.wantXApiKey)
 			}
+			if got := headers.Get("x-goog-api-key"); got != tt.wantXGoogAPIKey {
+				t.Errorf("x-goog-api-key = %v, want %v", got, tt.wantXGoogAPIKey)
+			}
 			if got := headers.Get("Authorization"); got != tt.wantAuthorization {
 				t.Errorf("Authorization = %v, want %v", got, tt.wantAuthorization)
-			}
-			if headers.Get("x-goog-api-key") != "" {
-				t.Errorf("x-goog-api-key should be empty, got %v", headers.Get("x-goog-api-key"))
 			}
 			if got := HasAuthenticationHeaderOverride(tt.authHeader); got != tt.wantOverride {
 				t.Errorf("HasAuthenticationHeaderOverride() = %v, want %v", got, tt.wantOverride)

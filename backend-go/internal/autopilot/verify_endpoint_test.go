@@ -210,6 +210,79 @@ func TestVerifyOpenAIChatEndpoint(t *testing.T) {
 	}
 }
 
+func TestVerifyChannelSpecificEndpoints(t *testing.T) {
+	var paths []string
+	var geminiKey string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.Path)
+		geminiKey = r.Header.Get("x-goog-api-key")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":{"status":"INVALID_ARGUMENT","message":"unknown model"}}`))
+	}))
+	defer server.Close()
+
+	for _, tc := range []struct {
+		name string
+		call func() EndpointVerifyResult
+		path string
+	}{
+		{"images", func() EndpointVerifyResult { return VerifyImagesEndpoint(t.Context(), server.URL, "sk-test", "") }, "/v1/images/generations"},
+		{"vectors", func() EndpointVerifyResult { return VerifyVectorsEndpoint(t.Context(), server.URL, "sk-test", "") }, "/v1/embeddings"},
+		{"gemini", func() EndpointVerifyResult { return VerifyGeminiEndpoint(t.Context(), server.URL, "gemini-test", "") }, "/v1beta/models/gemini-2.5-flash:generateContent"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			paths = nil
+			geminiKey = ""
+			if result := tc.call(); !result.OK {
+				t.Fatalf("HTTP 400 应表示鉴权通过: %+v", result)
+			}
+			if len(paths) != 1 || paths[0] != tc.path {
+				t.Fatalf("探测路径=%v, want %s", paths, tc.path)
+			}
+			if tc.name == "gemini" && geminiKey != "gemini-test" {
+				t.Fatalf("Gemini 认证头=%q", geminiKey)
+			}
+		})
+	}
+}
+
+func TestVerifyGeminiEndpointRejectsInvalidAPIKeyBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":{"status":"INVALID_ARGUMENT","message":"API key not valid. Please pass a valid API key.","details":[{"reason":"API_KEY_INVALID"}]}}`))
+	}))
+	defer server.Close()
+
+	result := VerifyGeminiEndpoint(t.Context(), server.URL, "invalid-key", "")
+	if result.OK || !result.AuthFailed {
+		t.Fatalf("无效 Gemini Key 不应通过验证: %+v", result)
+	}
+}
+
+func TestVerifyChannelKeyUsesBoundBaseURL(t *testing.T) {
+	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer bad.Close()
+	good := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer good.Close()
+
+	bound := config.UpstreamConfig{
+		BaseURL: bad.URL, BaseURLs: []string{bad.URL, good.URL},
+		APIKeys: []string{"sk-new"}, APIKeyConfigs: []config.APIKeyConfig{{Key: "sk-new", BaseURL: bad.URL}},
+	}
+	if err := verifyChannelKey(t.Context(), "chat", bound, "sk-new"); err == nil {
+		t.Fatal("绑定地址鉴权失败时，不应回退未绑定的其他地址")
+	}
+
+	unbound := config.UpstreamConfig{BaseURL: bad.URL, BaseURLs: []string{bad.URL, good.URL}}
+	if err := verifyChannelKey(t.Context(), "chat", unbound, "sk-new"); err == nil {
+		t.Fatal("未绑定 Key 必须通过地址池全部端点验证，避免保存后随机命中失败地址")
+	}
+}
+
 func TestVerifyClaudeEndpointNetworkError(t *testing.T) {
 	// 指向一个不可达地址，期望 Err 非空、OK=false
 	res := VerifyClaudeEndpoint(context.Background(), "http://127.0.0.1:1/anthropic", "sk-test", "")
