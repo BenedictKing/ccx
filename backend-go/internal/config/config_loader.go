@@ -169,6 +169,13 @@ func (cm *ConfigManager) loadConfig() error {
 	// 兼容旧格式：检测是否需要迁移
 	needMigration := cm.migrateOldFormat()
 
+	// savedDuringLoad 记录本次加载是否发生过迁移/自检/回填落盘。
+	// 发生时内存 ChannelsV3 是这些改写之前的旧快照（save 只写文件），
+	// 随后的加载翻转若用旧 V3 覆盖六数组，会把刚落盘的改写撤销——
+	// 此时落盘文件已同代（save 时 V3 从改写后六数组重建），本次信任磁盘形态，
+	// 翻转待下次启动生效。
+	savedDuringLoad := false
+
 	// 如果有默认值迁移或格式迁移，保存配置
 	if needSaveDefaults || needMigration {
 		if err := cm.saveConfigLocked(cm.config); err != nil {
@@ -176,6 +183,7 @@ func (cm *ConfigManager) loadConfig() error {
 			cm.mu.Unlock()
 			return err
 		}
+		savedDuringLoad = true
 		if needMigration {
 			log.Printf("[Config-Migration] 配置迁移完成")
 		}
@@ -188,6 +196,7 @@ func (cm *ConfigManager) loadConfig() error {
 			cm.mu.Unlock()
 			return err
 		}
+		savedDuringLoad = true
 	}
 
 	// 逻辑渠道回填：旧配置或 schema 升级时按归组规则重建 LogicalChannels。
@@ -198,12 +207,18 @@ func (cm *ConfigManager) loadConfig() error {
 			cm.mu.Unlock()
 			return err
 		}
+		savedDuringLoad = true
 	}
 
 	// Phase 3c 运行时权威反转：若配置携带 ChannelsV3 权威形态，从它重建运行时六数组。
 	// ChannelsV3 是脱敏持久化形式（不含托管明文 Key），重建后需 hydrateManagedAccountCredentials
 	// 从 ManagedAccounts 补 Key。reconcileAuthoritativeChannels 保留为旧配置兼容对账（无 ChannelsV3 时）。
-	if applied, err := applyAuthoritativeChannelsAsLoadSource(&cm.config); err != nil {
+	if savedDuringLoad {
+		// 本次加载的迁移/自检/回填已落盘（V3 已同代重建写入文件），跳过本次翻转，
+		// 避免用改写前旧 V3 快照覆盖撤销迁移；下次启动即正常翻转。
+		log.Printf("[Config-Load] 本次加载有迁移/自检落盘，跳过 ChannelsV3 翻转（落盘已同代，下次启动生效）")
+		reconcileAuthoritativeChannels(&cm.config)
+	} else if applied, err := applyAuthoritativeChannelsAsLoadSource(&cm.config); err != nil {
 		cm.mu.Unlock()
 		return err
 	} else if !applied {
