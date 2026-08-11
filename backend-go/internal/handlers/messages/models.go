@@ -921,6 +921,7 @@ func modelSortKey(id string) string {
 	// Kimi 系列排序（按能力从高到低）
 	kimiModels := map[string]string{
 		"k3":                        "100-k3",
+		"k3-256k":                   "100-k3-256k",
 		"kimi-for-coding":           "101-kimi-for-coding",
 		"kimi-for-coding-highspeed": "102-kimi-for-coding-highspeed",
 		"kimi-k2.7":                 "103-kimi-k2.7",
@@ -941,6 +942,9 @@ func modelSortKey(id string) string {
 	}
 	if strings.HasPrefix(lowerID, "k3[") {
 		return "100-k3-" + lowerID
+	}
+	if strings.HasPrefix(lowerID, "kimi-k3-256k") {
+		return "100-k3-256k-" + lowerID
 	}
 
 	// DeepSeek 系列排序

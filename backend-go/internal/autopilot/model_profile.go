@@ -206,7 +206,7 @@ func InferModelFamily(modelID, provider string) ModelFamily {
 
 	// 优先级 2：modelID 前缀匹配
 	lowerID := strings.ToLower(strings.TrimSpace(modelID))
-	if lowerID == "k3" || strings.HasPrefix(lowerID, "k3[") {
+	if lowerID == "k3" || lowerID == "k3-256k" || strings.HasPrefix(lowerID, "k3[") {
 		return ModelFamilyKimi
 	}
 	for _, rule := range modelIDPrefixRules {
@@ -264,7 +264,8 @@ func ModelProfileQualityTierFromFamily(family ModelFamily, modelID string) Quali
 
 	case ModelFamilyKimi:
 		if lowerID == "k3" || lowerID == "kimi-k3" ||
-			strings.HasPrefix(lowerID, "k3[") || strings.HasPrefix(lowerID, "kimi-k3[") {
+			strings.HasPrefix(lowerID, "k3[") || strings.HasPrefix(lowerID, "kimi-k3[") ||
+			lowerID == "k3-256k" || strings.HasPrefix(lowerID, "kimi-k3-256k") {
 			return QualityTierPremium
 		}
 		if strings.Contains(lowerID, "kimi-for-coding") {

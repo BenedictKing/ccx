@@ -1254,6 +1254,46 @@
     },
     {
       "patterns": [
+        "(?:^|[-/])k3-256k(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)",
+        "(?:^|[-/])kimi-k3-256k(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)"
+      ],
+      "provider": "moonshot",
+      "displayName": "Kimi K3 (256K)",
+      "description": "Kimi K3 (256K context window). Moonshot Kimi Code flagship coding model, half-price 256K variant.",
+      "contextWindowTokens": 262144,
+      "thinkingMode": "thinking",
+      "reasoningEfforts": [
+        "low",
+        "high",
+        "max"
+      ],
+      "capabilities": {
+        "toolCalls": true,
+        "contextCaching": true,
+        "vision": true
+      },
+      "pricing": {
+        "unit": "per_1m_tokens_usd",
+        "currency": "USD",
+        "inputCacheMissPrice": 0.15,
+        "outputPrice": 0.6
+      },
+      "sources": [
+        "https://www.kimi.com/code/docs/kimi-code/models.html",
+        "https://platform.kimi.com/docs/api/models-overview"
+      ],
+      "paramConstraints": {
+        "fixedParams": [
+          "temperature",
+          "top_p",
+          "n",
+          "presence_penalty",
+          "frequency_penalty"
+        ]
+      }
+    },
+    {
+      "patterns": [
         "(?:^|[-/])kimi-for-coding(?=$|@)"
       ],
       "provider": "moonshot",

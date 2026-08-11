@@ -328,6 +328,12 @@ func BuiltinAgentModelProfiles() map[string]AgentModelProfile {
 			MaxContextWindowTokens: 1048576,
 			ReasoningEfforts:       []string{"low", "high", "max"},
 		},
+		"k3-256k": {
+			DisplayName:            "Kimi K3 (256K)",
+			ContextWindowTokens:    262144,
+			MaxContextWindowTokens: 262144,
+			ReasoningEfforts:       []string{"low", "high", "max"},
+		},
 		"kimi-for-coding*": {
 			DisplayName:         "Kimi K2.7 Code",
 			ContextWindowTokens: 262144,
