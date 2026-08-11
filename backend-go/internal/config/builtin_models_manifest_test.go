@@ -226,6 +226,27 @@ func TestLookupBuiltinManifest_VolcengineAgentPlanIncludesKimiK3(t *testing.T) {
 	}
 }
 
+func TestLookupBuiltinManifest_VolcengineResponses(t *testing.T) {
+	for _, tt := range []struct {
+		baseURL    string
+		wantModels []string
+	}{
+		{baseURL: "https://ark.cn-beijing.volces.com/api/plan/v3", wantModels: volcengineAgentPlanModelIDs()},
+		{baseURL: "https://ark.cn-beijing.volces.com/api/coding/v3", wantModels: volcengineCodingPlanModelIDs()},
+	} {
+		manifest, found := LookupBuiltinManifest(tt.baseURL, "responses")
+		if !found {
+			t.Fatalf("火山套餐 responses 清单应存在: baseURL=%q", tt.baseURL)
+		}
+		if len(manifest.ModelIDs) != len(tt.wantModels) {
+			t.Fatalf("responses 清单模型数 = %d, 期望 %d (baseURL=%q)", len(manifest.ModelIDs), len(tt.wantModels), tt.baseURL)
+		}
+		if !manifest.DisableProbe {
+			t.Fatalf("火山套餐清单应 DisableProbe: %+v", manifest)
+		}
+	}
+}
+
 func TestResolveBuiltinModelsURL_DeepSeekUsesOfficialEndpoint(t *testing.T) {
 	tests := []struct {
 		baseURL     string

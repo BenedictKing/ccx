@@ -223,6 +223,14 @@ func TestProviderTemplateVolcenginePlanRoutes(t *testing.T) {
 		"responses": {"https://ark.cn-beijing.volces.com/api/plan/v3", "https://ark.cn-beijing.volces.com/api/coding/v3"},
 		"gemini":    {"https://ark.cn-beijing.volces.com/api/plan/v3", "https://ark.cn-beijing.volces.com/api/coding/v3"},
 	}
+	// 官方 /v3 入口原生支持 Responses API（Codex wire_api=responses），responses 路由应原生接入；
+	// gemini 无对应上游协议，维持 Chat Completions 转换。
+	wantServiceTypes := map[string]string{
+		"messages":  "claude",
+		"chat":      "openai",
+		"responses": "responses",
+		"gemini":    "openai",
+	}
 	for _, route := range tmpl.AutoAddRoutes() {
 		candidates := tmpl.CandidatesForRouteKey(route, "ark-test")
 		if len(candidates) != 2 {
@@ -232,6 +240,9 @@ func TestProviderTemplateVolcenginePlanRoutes(t *testing.T) {
 		if !exists || candidates[0].BaseURL != want[0] || candidates[1].BaseURL != want[1] {
 			t.Fatalf("route %s Base URL 错误: got=%q/%q want=%q/%q", route.ChannelKind,
 				candidates[0].BaseURL, candidates[1].BaseURL, want[0], want[1])
+		}
+		if st, ok := wantServiceTypes[route.ChannelKind]; !ok || route.ServiceType != st {
+			t.Fatalf("route %s ServiceType = %q, 期望 %q", route.ChannelKind, route.ServiceType, st)
 		}
 	}
 }

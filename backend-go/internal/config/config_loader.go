@@ -128,6 +128,9 @@ func (cm *ConfigManager) loadConfig() error {
 	if cm.migrateAutoManagedExplicitMappings() {
 		needSaveDefaults = true
 	}
+	if cm.migrateVolcengineResponsesServiceType() {
+		needSaveDefaults = true
+	}
 	if cm.ensureChannelUIDs() {
 		needSaveDefaults = true
 	}
@@ -805,6 +808,67 @@ func (cm *ConfigManager) migrateAutoManagedExplicitMappings() bool {
 	apply(cm.config.ImagesUpstream, "Images")
 	apply(cm.config.VectorsUpstream, "Vectors")
 	return updated
+}
+
+// migrateVolcengineResponsesServiceType 把火山方舟 Agent/Coding Plan 的存量
+// Responses 渠道从 Chat Completions 转换（serviceType=openai）翻转为原生
+// Responses API（serviceType=responses）。模板自 2026-08 起按官方推荐原生接入
+// （Codex wire_api=responses，/api/plan|/api/coding 的 /v3 入口均支持）。
+// 仅翻转命中火山官方套餐入口的 Responses 渠道，其他 provider 的 openai 渠道不受影响。幂等。
+func (cm *ConfigManager) migrateVolcengineResponsesServiceType() bool {
+	updated := false
+	for i := range cm.config.ResponsesUpstream {
+		u := &cm.config.ResponsesUpstream[i]
+		if u.ServiceType != "openai" {
+			continue
+		}
+		if !isVolcenginePlanChannel(u) {
+			continue
+		}
+		u.ServiceType = "responses"
+		updated = true
+		log.Printf("[Config-Migration] Responses 渠道 [%d] %s 已切换火山套餐原生 Responses API（serviceType: openai -> responses）", i, u.Name)
+	}
+	return updated
+}
+
+// isVolcenginePlanChannel 判断渠道是否指向火山方舟 Agent/Coding Plan 官方入口：
+// providerId 为 volcengine，或任一（含 Key 级）baseURL 命中官方 host 的 /api/plan|/api/coding 前缀。
+func isVolcenginePlanChannel(u *UpstreamConfig) bool {
+	if strings.EqualFold(strings.TrimSpace(u.ProviderID), "volcengine") {
+		return true
+	}
+	urls := append([]string{u.BaseURL}, u.BaseURLs...)
+	for _, kc := range u.APIKeyConfigs {
+		urls = append(urls, kc.BaseURL)
+	}
+	for _, raw := range urls {
+		if isVolcenginePlanBaseURLLocal(raw) {
+			return true
+		}
+	}
+	return false
+}
+
+// isVolcenginePlanBaseURLLocal 与 upstreamprobe.IsVolcenginePlanBaseURL 同口径；
+// config 包不能 import upstreamprobe（循环依赖），此处本地实现。
+func isVolcenginePlanBaseURLLocal(baseURL string) bool {
+	s := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(baseURL), "#"))
+	idx := strings.Index(s, "://")
+	if idx < 0 {
+		return false
+	}
+	s = s[idx+3:]
+	host := s
+	if i := strings.Index(host, "/"); i >= 0 {
+		host = host[:i]
+	}
+	if host != "ark.cn-beijing.volces.com" {
+		return false
+	}
+	path := strings.TrimRight(s[len(host):], "/")
+	return path == "/api/plan" || strings.HasPrefix(path, "/api/plan/") ||
+		path == "/api/coding" || strings.HasPrefix(path, "/api/coding/")
 }
 
 // migrateFableReasoningMapping 自动为现有渠道补齐 fable 推理强度映射。

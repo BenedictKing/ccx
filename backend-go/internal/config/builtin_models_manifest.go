@@ -201,6 +201,21 @@ var builtinModelsManifests = []BuiltinModelsManifest{
 		ModelIDs:       volcengineCodingPlanModelIDs(),
 		DisableProbe:   true,
 	},
+	// 火山套餐原生 Responses 入口（Codex wire_api=responses）：模型清单与 Chat API 一致。
+	{
+		BaseURLPattern: "ark.cn-beijing.volces.com/api/plan",
+		ServiceType:    "responses",
+		PlanHint:       "volcengine_plan_responses",
+		ModelIDs:       volcengineAgentPlanModelIDs(),
+		DisableProbe:   true,
+	},
+	{
+		BaseURLPattern: "ark.cn-beijing.volces.com/api/coding",
+		ServiceType:    "responses",
+		PlanHint:       "volcengine_coding_responses",
+		ModelIDs:       volcengineCodingPlanModelIDs(),
+		DisableProbe:   true,
+	},
 }
 
 func mimoModelIDs() []string {

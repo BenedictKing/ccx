@@ -178,8 +178,8 @@ var builtinProviderTemplates = []ProviderTemplate{
 			},
 			{
 				ChannelKind: "responses",
-				ServiceType: "openai",
-				Description: "Codex/Responses 请求转换到套餐 Chat Completions",
+				ServiceType: "responses",
+				Description: "Agent/Coding Plan 原生 Responses 入口（Codex wire_api=responses，官方推荐）",
 				Candidates:  volcenginePlanChatCandidates(),
 			},
 			{
