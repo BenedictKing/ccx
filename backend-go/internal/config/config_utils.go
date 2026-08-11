@@ -976,6 +976,7 @@ func cloneAPIKeyConfig(cfg APIKeyConfig) APIKeyConfig {
 	if cfg.Models != nil {
 		cfg.Models = append([]string(nil), cfg.Models...)
 	}
+	cfg.ConsumptionPolicy = NormalizeKeyConsumptionPolicy(cfg.ConsumptionPolicy)
 	return cfg
 }
 

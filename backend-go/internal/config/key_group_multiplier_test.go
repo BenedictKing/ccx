@@ -10,6 +10,7 @@ func TestEvaluateAPIKeyMultiplierEligibility(t *testing.T) {
 	now := time.Date(2026, 8, 4, 12, 0, 0, 0, time.UTC)
 	one := 1.0
 	two := 2.0
+	zero := 0.0
 	future := now.Add(time.Hour)
 	past := now.Add(-time.Hour)
 
@@ -34,6 +35,8 @@ func TestEvaluateAPIKeyMultiplierEligibility(t *testing.T) {
 		{name: "sync error new api", cfg: APIKeyConfig{GroupMultiplier: &one, MaxGroupMultiplier: &two, MultiplierSource: "new_api", MultiplierSyncStatus: "sync_error", SourceSubscriptionUID: "sub", SourceRemoteTokenID: 1}, want: MultiplierEligibility{Reason: MultiplierEligibilityReasonSyncError, Status: "sync_error"}},
 		{name: "relink new api", cfg: APIKeyConfig{GroupMultiplier: &one, MaxGroupMultiplier: &two, MultiplierSource: "new_api", MultiplierSyncStatus: "relink_required", SourceSubscriptionUID: "sub", SourceRemoteTokenID: 1}, want: MultiplierEligibility{Reason: MultiplierEligibilityReasonRelinkRequired, Status: "relink_required"}},
 		{name: "unknown source", cfg: APIKeyConfig{GroupMultiplier: &one, MaxGroupMultiplier: &two, MultiplierSource: "mystery"}, want: MultiplierEligibility{Reason: MultiplierEligibilityReasonUnknownSource}},
+		{name: "zero multiplier opportunistic", cfg: APIKeyConfig{GroupMultiplier: &zero, MaxGroupMultiplier: &zero, MultiplierSource: "manual", ConsumptionPolicy: KeyConsumptionOpportunistic}, want: MultiplierEligibility{Eligible: true, Reason: MultiplierEligibilityReasonOK}},
+		{name: "zero multiplier normal", cfg: APIKeyConfig{GroupMultiplier: &zero, MaxGroupMultiplier: &zero, MultiplierSource: "manual", ConsumptionPolicy: KeyConsumptionNormal}, want: MultiplierEligibility{Eligible: true, Reason: MultiplierEligibilityReasonOK}},
 	}
 
 	for _, tt := range tests {

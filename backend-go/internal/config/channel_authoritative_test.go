@@ -7,23 +7,43 @@ import (
 
 // TestAuthoritativeChannels_RoundTripLossless 验证六数组 → ChannelV3 → 六数组无损往返。
 func TestAuthoritativeChannels_RoundTripLossless(t *testing.T) {
-	mk := func(kind, uid, acct, base, svc, key string, priority int) UpstreamConfig {
+	mk := func(kind, uid, acct, base, svc, key string, priority int, policy KeyConsumptionPolicy) UpstreamConfig {
 		u := makeKeyChannel(kind, uid, acct, base, svc, key, "vip", []string{"m1", "m2"})
 		u.Priority = priority
 		u.ModelMapping = map[string]string{"a": "b"}
+		u.APIKeyConfigs = []APIKeyConfig{
+			{Key: key, KeyUID: "kid-" + uid, ConsumptionPolicy: policy},
+		}
 		return u
 	}
 	cfg := &Config{
 		Upstream: []UpstreamConfig{
-			mk("messages", "ch_c1", "acct_v", "https://ark.example.com/api/coding", "claude", "sk-a", 1),
-			mk("messages", "ch_c2", "acct_w", "https://other.example.com", "claude", "sk-b", 2),
+			mk("messages", "ch_c1", "acct_v", "https://ark.example.com/api/coding", "claude", "sk-a", 1, KeyConsumptionOpportunistic),
+			mk("messages", "ch_c2", "acct_w", "https://other.example.com", "claude", "sk-b", 2, KeyConsumptionNormal),
 		},
 		ChatUpstream: []UpstreamConfig{
-			mk("chat", "ch_ch1", "acct_v", "https://ark.example.com/api/coding", "openai", "sk-a", 1),
+			mk("chat", "ch_ch1", "acct_v", "https://ark.example.com/api/coding", "openai", "sk-a", 1, KeyConsumptionOpportunistic),
 		},
 		ResponsesUpstream: []UpstreamConfig{
-			mk("responses", "ch_r1", "acct_v", "https://ark.example.com/api/coding", "openai", "sk-a", 1),
+			mk("responses", "ch_r1", "acct_v", "https://ark.example.com/api/coding", "openai", "sk-a", 1, KeyConsumptionOpportunistic),
 		},
+	}
+
+	// 对 opportunistic 配置做一次 clone 模拟加载/落盘中的规范化，确保 round-trip 不丢。
+	for i := range cfg.Upstream {
+		for j := range cfg.Upstream[i].APIKeyConfigs {
+			cfg.Upstream[i].APIKeyConfigs[j].ConsumptionPolicy = NormalizeKeyConsumptionPolicy(cfg.Upstream[i].APIKeyConfigs[j].ConsumptionPolicy)
+		}
+	}
+	for i := range cfg.ChatUpstream {
+		for j := range cfg.ChatUpstream[i].APIKeyConfigs {
+			cfg.ChatUpstream[i].APIKeyConfigs[j].ConsumptionPolicy = NormalizeKeyConsumptionPolicy(cfg.ChatUpstream[i].APIKeyConfigs[j].ConsumptionPolicy)
+		}
+	}
+	for i := range cfg.ResponsesUpstream {
+		for j := range cfg.ResponsesUpstream[i].APIKeyConfigs {
+			cfg.ResponsesUpstream[i].APIKeyConfigs[j].ConsumptionPolicy = NormalizeKeyConsumptionPolicy(cfg.ResponsesUpstream[i].APIKeyConfigs[j].ConsumptionPolicy)
+		}
 	}
 
 	channels := BuildAuthoritativeChannels(cfg)
@@ -39,6 +59,16 @@ func TestAuthoritativeChannels_RoundTripLossless(t *testing.T) {
 	assertUpstreamsEqual(t, "responses", cfg.ResponsesUpstream, resp)
 	if len(gem) != 0 || len(img) != 0 || len(vec) != 0 {
 		t.Fatalf("空数组回投影仍应为空: gem=%d img=%d vec=%d", len(gem), len(img), len(vec))
+	}
+
+	// 验证 opportunistic 配置在 V3 往返中不丢失。
+	v0 := channels[0].Protocols[0].Upstream.APIKeyConfigs[0].ConsumptionPolicy
+	if v0 != KeyConsumptionOpportunistic {
+		t.Fatalf("V3 成员应保留 opportunistic，实际 %q", v0)
+	}
+	v1 := channels[1].Protocols[0].Upstream.APIKeyConfigs[0].ConsumptionPolicy
+	if v1 != KeyConsumptionNormal {
+		t.Fatalf("V3 成员应保留 normal，实际 %q", v1)
 	}
 }
 

@@ -220,6 +220,37 @@ func resolveReorderPriorities(order []int, priorities ...[]int) ([]int, error) {
 	return values, nil
 }
 
+// KeyConsumptionPolicy 描述 Key 的消耗策略，与成本倍率正交。
+type KeyConsumptionPolicy string
+
+const (
+	// KeyConsumptionNormal 常规 Key，保持历史行为。
+	KeyConsumptionNormal KeyConsumptionPolicy = "normal"
+	// KeyConsumptionOpportunistic 机会性 Key：优先消耗且易失效，启用快速衰减。
+	KeyConsumptionOpportunistic KeyConsumptionPolicy = "opportunistic"
+)
+
+// IsKeyConsumptionPolicyValid 判断给定值是否为已知的消耗策略。
+func IsKeyConsumptionPolicyValid(policy KeyConsumptionPolicy) bool {
+	switch policy {
+	case "", KeyConsumptionNormal, KeyConsumptionOpportunistic:
+		return true
+	default:
+		return false
+	}
+}
+
+// NormalizeKeyConsumptionPolicy 将空值或未知值规范化为 normal；已知值原样返回。
+func NormalizeKeyConsumptionPolicy(policy KeyConsumptionPolicy) KeyConsumptionPolicy {
+	if IsKeyConsumptionPolicyValid(policy) {
+		if policy == "" {
+			return KeyConsumptionNormal
+		}
+		return policy
+	}
+	return KeyConsumptionNormal
+}
+
 // APIKeyConfig 描述单个 API Key 的附加调度配置。
 type APIKeyConfig struct {
 	Key string `json:"key,omitempty"`
@@ -235,21 +266,23 @@ type APIKeyConfig struct {
 	QuotaGroup string `json:"quotaGroup,omitempty"`
 	// GroupMultiplier 和 MaxGroupMultiplier 是自动接入的成本安全闸门。
 	// 两者同时存在时，调度只会使用倍率不超过上限的 Key；任一字段缺失则保持历史 Key 的兼容行为。
-	GroupMultiplier          *float64   `json:"groupMultiplier,omitempty"`
-	MaxGroupMultiplier       *float64   `json:"maxGroupMultiplier,omitempty"`
-	MultiplierSource         string     `json:"multiplierSource,omitempty"` // manual | new_api | provider
-	MultiplierUpdatedAt      *time.Time `json:"multiplierUpdatedAt,omitempty"`
-	MultiplierExpiresAt      *time.Time `json:"multiplierExpiresAt,omitempty"`
-	MultiplierSyncStatus     string     `json:"multiplierSyncStatus,omitempty"` // fresh | stale | over_limit | sync_error | relink_required | manual
-	MultiplierSyncError      string     `json:"multiplierSyncError,omitempty"`
-	SourceSubscriptionUID    string     `json:"sourceSubscriptionUid,omitempty"`
-	SourceRemoteTokenID      int64      `json:"sourceRemoteTokenId,omitempty"`
-	RateLimitRPM             int        `json:"rateLimitRpm,omitempty"`
-	RateLimitWindowMinutes   int        `json:"rateLimitWindowMinutes,omitempty"` // 滑动窗口时长（秒；JSON 字段名保留为兼容旧配置）
-	RateLimitMaxConcurrent   int        `json:"rateLimitMaxConcurrent,omitempty"`
-	RateLimitAutoFromHeaders *bool      `json:"rateLimitAutoFromHeaders,omitempty"`
-	Weight                   int        `json:"weight,omitempty"`
-	Models                   []string   `json:"models,omitempty"`
+	GroupMultiplier    *float64 `json:"groupMultiplier,omitempty"`
+	MaxGroupMultiplier *float64 `json:"maxGroupMultiplier,omitempty"`
+	// ConsumptionPolicy Key 级消耗策略：normal（常规）或 opportunistic（机会性优先消耗）。
+	ConsumptionPolicy        KeyConsumptionPolicy `json:"consumptionPolicy,omitempty"`
+	MultiplierSource         string               `json:"multiplierSource,omitempty"` // manual | new_api | provider
+	MultiplierUpdatedAt      *time.Time           `json:"multiplierUpdatedAt,omitempty"`
+	MultiplierExpiresAt      *time.Time           `json:"multiplierExpiresAt,omitempty"`
+	MultiplierSyncStatus     string               `json:"multiplierSyncStatus,omitempty"` // fresh | stale | over_limit | sync_error | relink_required | manual
+	MultiplierSyncError      string               `json:"multiplierSyncError,omitempty"`
+	SourceSubscriptionUID    string               `json:"sourceSubscriptionUid,omitempty"`
+	SourceRemoteTokenID      int64                `json:"sourceRemoteTokenId,omitempty"`
+	RateLimitRPM             int                  `json:"rateLimitRpm,omitempty"`
+	RateLimitWindowMinutes   int                  `json:"rateLimitWindowMinutes,omitempty"` // 滑动窗口时长（秒；JSON 字段名保留为兼容旧配置）
+	RateLimitMaxConcurrent   int                  `json:"rateLimitMaxConcurrent,omitempty"`
+	RateLimitAutoFromHeaders *bool                `json:"rateLimitAutoFromHeaders,omitempty"`
+	Weight                   int                  `json:"weight,omitempty"`
+	Models                   []string             `json:"models,omitempty"`
 }
 
 // ManagedAccountConfig 是自动托管 provider 的账号级持久化根。
@@ -739,6 +772,10 @@ func mergeAPIKeyConfig(existing *APIKeyConfig, incoming APIKeyConfig) APIKeyConf
 	if strings.TrimSpace(merged.Key) == "" {
 		merged.Key = existing.Key
 	}
+	// 上游未显式携带 ConsumptionPolicy 时保留本地用户意图（new-api 同步、跨协议合并均适用）。
+	if merged.ConsumptionPolicy == "" {
+		merged.ConsumptionPolicy = existing.ConsumptionPolicy
+	}
 	return merged
 }
 
@@ -748,6 +785,7 @@ func NormalizeAPIKeyConfigsForView(upstream UpstreamConfig) []APIKeyConfig {
 	full := normalizeAPIKeyConfigs(upstream.APIKeys, upstream.APIKeyConfigs)
 	out := make([]APIKeyConfig, 0, len(full))
 	for _, cfg := range full {
+		cfg.ConsumptionPolicy = NormalizeKeyConsumptionPolicy(cfg.ConsumptionPolicy)
 		if IsAPIKeyConfigEffective(cfg) {
 			out = append(out, cfg)
 		}
@@ -779,12 +817,17 @@ func IsAPIKeyConfigEffective(cfg APIKeyConfig) bool {
 	if cfg.Weight > 0 || len(cfg.Models) > 0 {
 		return true
 	}
+	// 显式配置了非默认消耗策略时保留该配置条目。
+	if cfg.ConsumptionPolicy != "" && cfg.ConsumptionPolicy != KeyConsumptionNormal {
+		return true
+	}
 	return false
 }
 
 // shouldPersistAPIKeyConfig 判断清除 Enabled 后是否仍需保留内部凭证或端点绑定。
 // CredentialUID/BaseURL 不属于管理视图字段，但不能随暂停状态一起删除。
 func shouldPersistAPIKeyConfig(cfg APIKeyConfig) bool {
+	cfg.ConsumptionPolicy = NormalizeKeyConsumptionPolicy(cfg.ConsumptionPolicy)
 	return IsAPIKeyConfigEffective(cfg) ||
 		strings.TrimSpace(cfg.KeyUID) != "" ||
 		strings.TrimSpace(cfg.CredentialUID) != "" ||
