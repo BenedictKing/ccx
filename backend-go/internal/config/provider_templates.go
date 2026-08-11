@@ -300,6 +300,18 @@ var builtinProviderTemplates = []ProviderTemplate{
 		}),
 	),
 	newProviderTemplate(
+		"orcarouter",
+		"OrcaRouter",
+		"OrcaRouter 多模型聚合网关",
+		"relay",
+		"second",
+		standardProviderRoutes("openai", []ProviderCandidate{
+			{BaseURL: "https://api.orcarouter.ai/v1", PlanTag: "payg", Region: "global", Priority: 0},
+		}, []ProviderCandidate{
+			{BaseURL: "https://api.orcarouter.ai/v1", PlanTag: "payg", Region: "global", Priority: 0},
+		}),
+	),
+	newProviderTemplate(
 		"modelscope",
 		"ModelScope 魔搭",
 		"阿里 ModelScope 官方推理服务",

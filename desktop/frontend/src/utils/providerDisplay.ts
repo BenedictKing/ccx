@@ -21,6 +21,7 @@ const PROVIDER_BRAND_NAMES: Record<string, string> = {
   qianfan: '百度千帆',
   xfyun: '讯飞星辰',
   openrouter: 'OpenRouter',
+  orcarouter: 'OrcaRouter',
   modelscope: 'ModelScope 魔搭',
   originrouter: '极易云 OriginRouter'
 }

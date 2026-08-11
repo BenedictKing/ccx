@@ -244,6 +244,7 @@ func TestListAndGetProviderTemplate(t *testing.T) {
 	for _, id := range []string{
 		"mimo", "deepseek", "kimi", "glm", "volcengine", "compshare", "sensenova", "minimax",
 		"dashscope", "opencode-zen", "tencent-lkeap", "qianfan", "xfyun", "openrouter", "modelscope", "originrouter",
+		"orcarouter",
 	} {
 		if _, ok := GetProviderTemplate(id); !ok {
 			t.Errorf("缺少 provider 模板: %s", id)
