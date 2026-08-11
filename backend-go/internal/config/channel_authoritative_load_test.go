@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -275,9 +276,10 @@ func TestAuthoritativeLoad_IntegrationViaConfigManager(t *testing.T) {
 	defer cm2.CloseWatcher()
 
 	loaded := cm2.GetConfig()
-	// 非严格模式下，不一致时回退到磁盘六数组。
+	// 手改同时替换了磁盘六数组与 ChannelsV3 中的 BaseURL，两者仍一致，
+	// 加载应用 ChannelsV3 重建，结果为修改后的值。
 	if loaded.Upstream[0].BaseURL != "https://modified.example.com" {
-		t.Fatalf("非严格模式应回退到磁盘六数组，实际 BaseURL=%s", loaded.Upstream[0].BaseURL)
+		t.Fatalf("一致时应应用 ChannelsV3 重建结果，实际 BaseURL=%s", loaded.Upstream[0].BaseURL)
 	}
 }
 
@@ -339,5 +341,72 @@ func TestAuthoritativeLoad_MigratedChannelNoFalseRollback(t *testing.T) {
 	}
 	if len(got.Upstream[0].SupportedModels) != 1 || got.Upstream[0].SupportedModels[0] != "m1" {
 		t.Errorf("重建不应丢 SupportedModels，实际 %v", got.Upstream[0].SupportedModels)
+	}
+}
+
+// TestAuthoritativeLoad_ManagedKeySurvivesSaveReload 端到端验证波 1 + 方案 1（421ae7ac）联动：
+// 托管渠道（AutoManaged + AccountUID + ProviderID，满足 strip 条件）带 Key 落盘时，
+// syncManagedAccountCredentialsFromChannels 把 Key 注册到 ManagedAccounts 后 strip 脱敏；
+// 重载时 ChannelsV3 翻转重建六数组（无 Key），hydrateManagedAccountCredentials 再补回。
+// 最终 GetConfig 的运行时六数组 Key 必须完整。
+func TestAuthoritativeLoad_ManagedKeySurvivesSaveReload(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "config.json")
+
+	cm, err := NewConfigManager(configPath, "")
+	if err != nil {
+		t.Fatalf("NewConfigManager() error = %v", err)
+	}
+	channel := makeKeyChannel("messages", "ch_e2e", "acct_e", "https://e.example.com", "claude", "sk-e", "g", []string{"m1"})
+	channel.AutoManaged = true
+	channel.ProviderID = "kimi"
+	cm.config.Upstream = []UpstreamConfig{channel}
+	if err := cm.SaveConfig(); err != nil {
+		t.Fatalf("SaveConfig() error = %v", err)
+	}
+	cm.CloseWatcher()
+
+	// 落盘脱敏：磁盘六数组与 ChannelsV3 均不含明文 Key，Key 只在 managedAccounts.credentials。
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("读取落盘配置失败: %v", err)
+	}
+	var persisted Config
+	if err := json.Unmarshal(data, &persisted); err != nil {
+		t.Fatalf("解析落盘配置失败: %v", err)
+	}
+	if len(persisted.Upstream) != 1 || len(persisted.Upstream[0].APIKeys) != 0 {
+		t.Fatalf("磁盘六数组应已脱敏: %+v", persisted.Upstream)
+	}
+	if strings.Contains(string(data), `"key":"sk-e"`) || strings.Contains(string(data), `"apiKeys":["sk-e"]`) {
+		t.Fatal("落盘 JSON 的渠道字段不应含明文 sk-e")
+	}
+	foundCred := false
+	for _, account := range persisted.ManagedAccounts {
+		if account.AccountUID != "acct_e" {
+			continue
+		}
+		for _, credential := range account.Credentials {
+			if credential.APIKey == "sk-e" {
+				foundCred = true
+			}
+		}
+	}
+	if !foundCred {
+		t.Fatalf("ManagedAccounts 应持有 sk-e 凭证: %+v", persisted.ManagedAccounts)
+	}
+
+	// 重载：翻转重建 + hydrate 补 Key 后，运行时六数组 Key 完整。
+	cm2, err := NewConfigManager(configPath, "")
+	if err != nil {
+		t.Fatalf("NewConfigManager() reload error = %v", err)
+	}
+	defer cm2.CloseWatcher()
+	got := cm2.GetConfig()
+	if len(got.Upstream) != 1 {
+		t.Fatalf("重载后渠道数应为 1，实际 %d", len(got.Upstream))
+	}
+	if len(got.Upstream[0].APIKeys) != 1 || got.Upstream[0].APIKeys[0] != "sk-e" {
+		t.Fatalf("重载后托管 Key 应完整恢复，实际 %+v", got.Upstream[0].APIKeys)
 	}
 }

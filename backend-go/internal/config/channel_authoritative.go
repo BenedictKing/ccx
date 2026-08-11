@@ -281,7 +281,9 @@ func compareAuthoritativeRoundTrip(cfg *Config, rebuilt authoritativeArrays) err
 // - AutoManagedAt：ensureAutoManagedKind 每次回填用 time.Now()；
 // - AutoManagedKind：persisted 未跑该迁移，加载期才回填；
 // - AccountUID / CredentialUID：加载期 ensureAccountUIDs/ensureCredentialUIDs 随机生成；
-// - LogicalChannelUID / LogicalName：RebuildLogicalChannels 归组时随机生成。
+// - LogicalChannelUID / LogicalName：RebuildLogicalChannels 归组时随机生成；
+// - APIKeys / APIKeyConfigs[].Key：ChannelsV3 是脱敏权威形态（Key 只存 ManagedAccounts），
+//   加载期 hydrate 会先给磁盘六数组补 Key 而重建侧恒为空，Key 差异本就无法对账。
 // 只修改传入副本，不影响运行时数据。
 func stripeVolatileForAuthoritativeCompare(cfg *Config) {
 	strip := func(channels []UpstreamConfig) {
@@ -292,8 +294,10 @@ func stripeVolatileForAuthoritativeCompare(cfg *Config) {
 			ch.AccountUID = ""
 			ch.LogicalChannelUID = ""
 			ch.LogicalName = ""
+			ch.APIKeys = nil
 			for j := range ch.APIKeyConfigs {
 				ch.APIKeyConfigs[j].CredentialUID = ""
+				ch.APIKeyConfigs[j].Key = ""
 			}
 		}
 	}
