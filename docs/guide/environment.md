@@ -81,6 +81,12 @@ CORS_ORIGIN=*                          # CORS 允许的源
 # RESPONSE_HEADER_TIMEOUT=60           # 等待上游 HTTP 响应头超时（秒，30-120；调校台支持到 300 秒）
 # METRICS_WINDOW_SIZE=10               # 滑动窗口大小（最小 3，默认 10）
 # METRICS_FAILURE_THRESHOLD=0.5        # 失败率阈值（0-1，默认 0.5 即 50%）
+
+# 渠道权威形态（Phase 3c，调试/运维用，一般无需设置）
+# 配置携带 channelsV3 时，加载始终以它为权威重建运行时六数组
+# CCX_CHANNEL_AUTHORITATIVE_STRICT=false
+                                      # 严格模式：对账失败拒绝启动（默认非严格，记录诊断后以 channelsV3 覆盖）
+                                      # 历史变量 CCX_CHANNEL_AUTHORITATIVE_LOAD 已随运行时权威反转移除，设置无效
 ```
 
 #### 监听地址
