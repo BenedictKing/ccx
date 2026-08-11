@@ -20,7 +20,7 @@ import (
 // v1 = 现有 7 张表的建表语句本身（首次引入版本化时的基线，无需 ALTER）。
 // 后续新增/变更表结构时，在 ensureSchemaVersion 里追加 "if version < N { ... }" 迁移块，
 // 并将本常量递增。
-const autopilotSchemaVersion = 7
+const autopilotSchemaVersion = 8
 
 // ensureSchemaVersion 在任何 CREATE TABLE 之前执行一次版本检查/迁移。
 // 必须在 ProfileStore 打开 DB 后、调用 initProfileStoreSchema 之前调用——
@@ -160,6 +160,18 @@ func ensureSchemaVersion(db *sql.DB) error {
 		}
 		log.Printf("[Autopilot-SchemaMigration] schema 升级: v6 -> v7")
 		version = 7
+	}
+
+	// v7 -> v8: 路由 trace 增加最终实际模型与思考等级。
+	if version > 0 && version < 8 {
+		if err := ensureRoutingTraceOutcomeColumns(db); err != nil {
+			return fmt.Errorf("[Autopilot-SchemaMigration] v7->v8 迁移失败: %w", err)
+		}
+		if _, err := db.Exec("PRAGMA user_version = 8"); err != nil {
+			return fmt.Errorf("[Autopilot-SchemaMigration] 写入 v8 版本失败: %w", err)
+		}
+		log.Printf("[Autopilot-SchemaMigration] schema 升级: v7 -> v8")
+		version = 8
 	}
 
 	// version == 0：全新库，直接写入当前基线版本；version 属于 (0, autopilotSchemaVersion) 但
@@ -504,6 +516,8 @@ func ensureRoutingTraceOutcomeColumns(db *sql.DB) error {
 		"request_duration_ms":   "request_duration_ms INTEGER NOT NULL DEFAULT 0",
 		"first_byte_latency_ms": "first_byte_latency_ms INTEGER NOT NULL DEFAULT 0",
 		"completed_at":          "completed_at TEXT NOT NULL DEFAULT ''",
+		"actual_model":          "actual_model TEXT NOT NULL DEFAULT ''",
+		"actual_effort":         "actual_effort TEXT NOT NULL DEFAULT ''",
 	}
 	for column, definition := range wantColumns {
 		has, err := columnExists(db, table, column)

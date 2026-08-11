@@ -20,6 +20,8 @@ type RoutingOutcome struct {
 	StatusCode         int
 	RequestDurationMs  int64
 	FirstByteLatencyMs int64
+	ActualModel        string
+	ActualEffort       string
 	Outcome            string
 	CompletedAt        time.Time
 }
@@ -151,6 +153,8 @@ func (s *TraceStore) RecordOutcome(traceUID string, outcome RoutingOutcome) erro
 		trace.StatusCode = outcome.StatusCode
 		trace.RequestDurationMs = outcome.RequestDurationMs
 		trace.FirstByteLatencyMs = outcome.FirstByteLatencyMs
+		trace.ActualModel = outcome.ActualModel
+		trace.ActualEffort = outcome.ActualEffort
 		completedAt := outcome.CompletedAt.UTC()
 		trace.CompletedAt = &completedAt
 		snapshot = *trace
@@ -177,10 +181,12 @@ func (s *TraceStore) RecordOutcome(traceUID string, outcome RoutingOutcome) erro
 		if _, err := s.db.Exec(`
 UPDATE autopilot_routing_traces
 SET outcome_recorded = 1, outcome = ?, success = ?, channel_fallback = ?,
-    status_code = ?, request_duration_ms = ?, first_byte_latency_ms = ?, completed_at = ?
+    status_code = ?, request_duration_ms = ?, first_byte_latency_ms = ?,
+    actual_model = ?, actual_effort = ?, completed_at = ?
 WHERE trace_uid = ?`,
 			outcome.Outcome, boolInt(outcome.Success), boolInt(outcome.ChannelFallback),
 			outcome.StatusCode, outcome.RequestDurationMs, outcome.FirstByteLatencyMs,
+			outcome.ActualModel, outcome.ActualEffort,
 			outcome.CompletedAt.UTC().Format(time.RFC3339), traceUID,
 		); err != nil {
 			return fmt.Errorf("[TraceStore-Outcome] 回填 trace 失败 uid=%s: %w", traceUID, err)

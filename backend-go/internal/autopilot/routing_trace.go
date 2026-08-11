@@ -104,6 +104,8 @@ type RoutingDecisionTrace struct {
 	TaskClass      TaskClass  `json:"taskClass"`
 	TaskDomain     TaskDomain `json:"taskDomain,omitempty"`
 	RequestedModel string     `json:"requestedModel,omitempty"`
+	ActualModel    string     `json:"actualModel,omitempty"`
+	ActualEffort   string     `json:"actualEffort,omitempty"`
 	AgentRole      string     `json:"agentRole,omitempty"` // main | subagent
 
 	// 关联标识
@@ -344,6 +346,8 @@ CREATE TABLE IF NOT EXISTS autopilot_routing_traces (
     task_class      TEXT    NOT NULL,
     task_domain     TEXT    NOT NULL DEFAULT '',
     requested_model TEXT    NOT NULL DEFAULT '',
+    actual_model    TEXT    NOT NULL DEFAULT '',
+    actual_effort   TEXT    NOT NULL DEFAULT '',
     agent_role      TEXT    NOT NULL DEFAULT '',
     mode            TEXT    NOT NULL DEFAULT 'shadow',
     release_id      TEXT    NOT NULL DEFAULT 'legacy',
@@ -391,7 +395,7 @@ CREATE INDEX IF NOT EXISTS idx_routing_traces_persistence
 func (s *TraceStore) loadRecent() error {
 	rows, err := s.db.Query(`
 		SELECT trace_uid, request_kind, task_class, task_domain,
-		       requested_model, agent_role, mode,
+		       requested_model, actual_model, actual_effort, agent_role, mode,
 		       shadow_uid, actual_uid, match,
 		       selected_uid, fallback_used, duration_ms,
 		       prompt_hash, candidates_json,
@@ -439,7 +443,7 @@ func scanTraceRow(rows *sql.Rows) (*RoutingDecisionTrace, error) {
 
 	err := rows.Scan(
 		&t.TraceUID, &t.RequestKind, &t.TaskClass, &t.TaskDomain,
-		&t.RequestedModel, &t.AgentRole, &t.Mode,
+		&t.RequestedModel, &t.ActualModel, &t.ActualEffort, &t.AgentRole, &t.Mode,
 		&t.ShadowChannelUID, &t.ActualChannelUID, &matchInt,
 		&t.SelectedChannelUID, &fallbackInt, &t.DurationMs,
 		&t.PromptHash, &candidatesJSON,
@@ -706,7 +710,7 @@ func (s *TraceStore) persistTrace(t *RoutingDecisionTrace) error {
 INSERT INTO autopilot_routing_traces
     (trace_uid, schema_version, trace_revision, request_correlation_id,
      request_kind, task_class, task_domain,
-     requested_model, agent_role, mode,
+     requested_model, actual_model, actual_effort, agent_role, mode,
      release_id, policy_fingerprint, persistence_class,
      shadow_uid, actual_uid, match,
      selected_uid, fallback_used, duration_ms,
@@ -714,11 +718,13 @@ INSERT INTO autopilot_routing_traces
      outcome_recorded, outcome, success, channel_fallback,
      status_code, request_duration_ms, first_byte_latency_ms, completed_at,
      created_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(trace_uid) DO UPDATE SET
     schema_version  = excluded.schema_version,
     trace_revision  = excluded.trace_revision,
     request_correlation_id = excluded.request_correlation_id,
+    actual_model    = excluded.actual_model,
+    actual_effort   = excluded.actual_effort,
     release_id      = excluded.release_id,
     policy_fingerprint = excluded.policy_fingerprint,
     persistence_class = excluded.persistence_class,
@@ -745,6 +751,8 @@ ON CONFLICT(trace_uid) DO UPDATE SET
 		string(t.TaskClass),
 		string(t.TaskDomain),
 		t.RequestedModel,
+		t.ActualModel,
+		t.ActualEffort,
 		t.AgentRole,
 		string(t.Mode),
 		t.ReleaseID,
@@ -810,7 +818,7 @@ func (s *TraceStore) ListTraceSummary(limit int, mismatchOnly bool, release, coh
 
 	query := `
 SELECT trace_uid, schema_version, request_correlation_id, release_id, policy_fingerprint,
-       mode, request_kind, task_class, task_domain, requested_model,
+       mode, request_kind, task_class, task_domain, requested_model, actual_model, actual_effort,
        shadow_uid, actual_uid, match,
        outcome_recorded, outcome, success,
        request_duration_ms, completed_at, created_at,
@@ -852,7 +860,7 @@ WHERE 1=1`
 	for rows.Next() {
 		var uid, correlationID, releaseID, policyFp string
 		var schemaVer int
-		var modeStr, reqKind, taskClassStr, taskDomain, reqModel string
+		var modeStr, reqKind, taskClassStr, taskDomain, reqModel, actualModel, actualEffort string
 		var shadowUID, actualUID string
 		var matchInt int
 		var outcomeRecordedInt, successInt int
@@ -863,7 +871,7 @@ WHERE 1=1`
 
 		err := rows.Scan(
 			&uid, &schemaVer, &correlationID, &releaseID, &policyFp,
-			&modeStr, &reqKind, &taskClassStr, &taskDomain, &reqModel,
+			&modeStr, &reqKind, &taskClassStr, &taskDomain, &reqModel, &actualModel, &actualEffort,
 			&shadowUID, &actualUID, &matchInt,
 			&outcomeRecordedInt, &outcome, &successInt,
 			&reqDurationMs, &completedAt, &createdAt,
@@ -886,6 +894,8 @@ WHERE 1=1`
 			TaskClass:          TaskClass(taskClassStr),
 			TaskDomain:         TaskDomain(taskDomain),
 			RequestedModel:     reqModel,
+			ActualModel:        actualModel,
+			ActualEffort:       actualEffort,
 			ComparisonStatus:   ComputeComparisonStatus(shadowUID, actualUID, matchInt != 0),
 			RecommendedChannel: shadowUID,
 			ActualChannelUID:   actualUID,
@@ -926,7 +936,7 @@ func (s *TraceStore) GetTraceDetail(traceUID string) (*TraceDetailV2, error) {
 
 	var uid, correlationID, releaseID, policyFp string
 	var schemaVer int
-	var modeStr, reqKind, taskClassStr, taskDomain, reqModel, agentRole string
+	var modeStr, reqKind, taskClassStr, taskDomain, reqModel, actualModel, actualEffort, agentRole string
 	var shadowUID, actualUID string
 	var matchInt int
 	var fallbackUsedInt, durationMs int
@@ -944,7 +954,7 @@ func (s *TraceStore) GetTraceDetail(traceUID string) (*TraceDetailV2, error) {
 	err := s.db.QueryRowContext(ctx, `
 SELECT trace_uid, schema_version, trace_revision, request_correlation_id,
        release_id, policy_fingerprint, persistence_class,
-       request_kind, task_class, task_domain, requested_model, agent_role,
+       request_kind, task_class, task_domain, requested_model, actual_model, actual_effort, agent_role,
        mode, shadow_uid, actual_uid, match,
        selected_uid, fallback_used, duration_ms,
        prompt_hash, candidates_json, details_json,
@@ -955,7 +965,7 @@ FROM autopilot_routing_traces
 WHERE trace_uid = ?`, traceUID).Scan(
 		&uid, &schemaVer, &traceRevision, &correlationID,
 		&releaseID, &policyFp, &persistenceClassStr,
-		&reqKind, &taskClassStr, &taskDomain, &reqModel, &agentRole,
+		&reqKind, &taskClassStr, &taskDomain, &reqModel, &actualModel, &actualEffort, &agentRole,
 		&modeStr, &shadowUID, &actualUID, &matchInt,
 		&selectedUID, &fallbackUsedInt, &durationMs,
 		&promptHash, &candidatesJSON, &detailsJSON,
@@ -986,6 +996,8 @@ WHERE trace_uid = ?`, traceUID).Scan(
 				detail.StatusCode = statusCode
 				detail.RequestDurationMs = reqDurationMs
 				detail.FirstByteLatencyMs = firstByteMs
+				detail.ActualModel = actualModel
+				detail.ActualEffort = actualEffort
 				if completedAtTime != nil {
 					detail.CompletedAt = completedAtTime
 				}
@@ -1003,6 +1015,8 @@ WHERE trace_uid = ?`, traceUID).Scan(
 		TaskClass:          TaskClass(taskClassStr),
 		TaskDomain:         TaskDomain(taskDomain),
 		RequestedModel:     reqModel,
+		ActualModel:        actualModel,
+		ActualEffort:       actualEffort,
 		AgentRole:          agentRole,
 		Mode:               RoutingMode(modeStr),
 		ShadowChannelUID:   shadowUID,

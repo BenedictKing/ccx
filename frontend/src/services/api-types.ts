@@ -1720,6 +1720,8 @@ export interface TraceSummary {
   taskClass: string
   taskDomain?: string
   requestedModel?: string
+  actualModel?: string
+  actualEffort?: string
   comparisonStatus: ComparisonStatus
   recommendedChannelUid?: string
   actualChannelUid?: string
@@ -1745,6 +1747,8 @@ export interface EndpointAttemptSummary {
   status: string
   channelUid: string
   endpointLabel: string
+  actualModel?: string
+  actualEffort?: string
   result: string
   statusCode?: number
   durationMs?: number
@@ -1770,6 +1774,8 @@ export interface TraceDetailV2 {
   taskClass: string
   taskDomain?: string
   requestedModel?: string
+  actualModel?: string
+  actualEffort?: string
   agentRole?: string
   manualIntentUid?: string
   advisorDecisionUid?: string

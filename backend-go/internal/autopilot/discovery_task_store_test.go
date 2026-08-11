@@ -152,8 +152,8 @@ func TestEnsureSchemaVersion_V6ToV7_CreatesDiscoveryTasksTable(t *testing.T) {
 	if err := db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
 		t.Fatalf("读取版本失败: %v", err)
 	}
-	if version != 7 {
-		t.Fatalf("user_version=%d, want 7", version)
+	if version != autopilotSchemaVersion {
+		t.Fatalf("user_version=%d, want %d", version, autopilotSchemaVersion)
 	}
 	exists, err := tableExists(db, "autopilot_discovery_tasks")
 	if err != nil {
@@ -177,8 +177,8 @@ func TestEnsureSchemaVersion_FreshDB_ThenStoreCreatesTable(t *testing.T) {
 	}
 	var version int
 	_ = db.QueryRow("PRAGMA user_version").Scan(&version)
-	if version != 7 {
-		t.Fatalf("user_version=%d, want 7", version)
+	if version != autopilotSchemaVersion {
+		t.Fatalf("user_version=%d, want %d", version, autopilotSchemaVersion)
 	}
 
 	if _, err := NewDiscoveryTaskStoreWithDB(db); err != nil {

@@ -73,6 +73,8 @@ type TraceDetailV2 struct {
 	TaskClass            TaskClass                 `json:"taskClass"`
 	TaskDomain           TaskDomain                `json:"taskDomain,omitempty"`
 	RequestedModel       string                    `json:"requestedModel,omitempty"`
+	ActualModel          string                    `json:"actualModel,omitempty"`
+	ActualEffort         string                    `json:"actualEffort,omitempty"`
 	AgentRole            string                    `json:"agentRole,omitempty"`
 	ManualIntentUID      string                    `json:"manualIntentUid,omitempty"`
 	AdvisorDecisionUID   string                    `json:"advisorDecisionUid,omitempty"`
@@ -115,6 +117,8 @@ type TraceSummary struct {
 	TaskClass          TaskClass        `json:"taskClass"`
 	TaskDomain         TaskDomain       `json:"taskDomain,omitempty"`
 	RequestedModel     string           `json:"requestedModel,omitempty"`
+	ActualModel        string           `json:"actualModel,omitempty"`
+	ActualEffort       string           `json:"actualEffort,omitempty"`
 	ComparisonStatus   ComparisonStatus `json:"comparisonStatus"`
 	RecommendedChannel string           `json:"recommendedChannelUid,omitempty"`
 	ActualChannelUID   string           `json:"actualChannelUid,omitempty"`
@@ -148,6 +152,8 @@ type EndpointAttemptSummary struct {
 	Status        string `json:"status"` // "started" | "completed"
 	ChannelUID    string `json:"channelUid"`
 	EndpointLabel string `json:"endpointLabel"`
+	ActualModel   string `json:"actualModel,omitempty"`
+	ActualEffort  string `json:"actualEffort,omitempty"`
 	Result        string `json:"result"` // "success" | "upstream_error" | "cancelled" | "attempt_failed"
 	StatusCode    int    `json:"statusCode,omitempty"`
 	DurationMs    int64  `json:"durationMs,omitempty"`
@@ -372,6 +378,8 @@ func AdaptV1ToTraceSummary(trace *RoutingDecisionTrace) TraceSummary {
 		TaskClass:          trace.TaskClass,
 		TaskDomain:         trace.TaskDomain,
 		RequestedModel:     trace.RequestedModel,
+		ActualModel:        trace.ActualModel,
+		ActualEffort:       trace.ActualEffort,
 		ComparisonStatus:   comparison,
 		RecommendedChannel: trace.ShadowChannelUID,
 		ActualChannelUID:   trace.ActualChannelUID,
@@ -408,6 +416,8 @@ func AdaptV1ToTraceDetailV2(trace *RoutingDecisionTrace) *TraceDetailV2 {
 		TaskClass:           trace.TaskClass,
 		TaskDomain:          trace.TaskDomain,
 		RequestedModel:      trace.RequestedModel,
+		ActualModel:         trace.ActualModel,
+		ActualEffort:        trace.ActualEffort,
 		AgentRole:           trace.AgentRole,
 		ManualIntentUID:     trace.ManualIntentUID,
 		AdvisorDecisionUID:  trace.AdvisorDecisionUID,
@@ -505,6 +515,8 @@ func (t *RoutingDecisionTrace) ToTraceDetailV2(snapshot *RoutingReleaseSnapshot,
 		TaskClass:            t.TaskClass,
 		TaskDomain:           t.TaskDomain,
 		RequestedModel:       t.RequestedModel,
+		ActualModel:          t.ActualModel,
+		ActualEffort:         t.ActualEffort,
 		AgentRole:            t.AgentRole,
 		ManualIntentUID:      t.ManualIntentUID,
 		AdvisorDecisionUID:   t.AdvisorDecisionUID,
@@ -556,6 +568,8 @@ func (t *RoutingDecisionTrace) ToTraceSummary() TraceSummary {
 		TaskClass:          t.TaskClass,
 		TaskDomain:         t.TaskDomain,
 		RequestedModel:     t.RequestedModel,
+		ActualModel:        t.ActualModel,
+		ActualEffort:       t.ActualEffort,
 		ComparisonStatus:   comparison,
 		RecommendedChannel: t.ShadowChannelUID,
 		ActualChannelUID:   t.ActualChannelUID,

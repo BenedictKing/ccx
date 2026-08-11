@@ -238,6 +238,8 @@
                   <th class="text-caption">#</th>
                   <th class="text-caption">Channel</th>
                   <th class="text-caption">Endpoint</th>
+                  <th class="text-caption">Actual Model</th>
+                  <th class="text-caption">Effort</th>
                   <th class="text-caption">Result</th>
                   <th class="text-caption">Status</th>
                   <th class="text-caption">Duration</th>
@@ -248,6 +250,8 @@
                   <td class="text-caption">{{ att.attemptSeq }}</td>
                   <td class="text-caption">{{ att.channelUid }}</td>
                   <td class="text-caption">{{ att.endpointLabel }}</td>
+                  <td class="text-caption">{{ att.actualModel || '-' }}</td>
+                  <td class="text-caption">{{ att.actualEffort || '-' }}</td>
                   <td>
                     <v-chip size="x-small" :color="outcomeColor(att.result)" variant="tonal">{{ att.result }}</v-chip>
                   </td>
@@ -284,6 +288,14 @@
                   {{ detail.outcome }}
                 </v-chip>
                 <span v-else class="text-caption">-</span>
+              </v-col>
+              <v-col cols="4">
+                <div class="text-caption text-medium-emphasis">Actual Model</div>
+                <div class="text-body-2 text-truncate">{{ detail.actualModel || '-' }}</div>
+              </v-col>
+              <v-col cols="4">
+                <div class="text-caption text-medium-emphasis">Effort</div>
+                <div class="text-body-2">{{ detail.actualEffort || '-' }}</div>
               </v-col>
               <v-col cols="4">
                 <div class="text-caption text-medium-emphasis">{{ t('autopilot.traceDetail.statusCode') }}</div>

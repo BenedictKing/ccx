@@ -56,6 +56,48 @@ func recordReadinessOutcome(
 	}
 }
 
+func TestRecordOutcomePersistsActualModelAndEffort(t *testing.T) {
+	store := newRoutingReadinessTestStore(t)
+	now := time.Now().UTC()
+	store.Record(&RoutingDecisionTrace{
+		TraceUID:    "rt_actual_target",
+		RequestKind: "messages",
+		TaskClass:   TaskClassWorker,
+		Mode:        RoutingModeAuto,
+		CreatedAt:   now.Add(-time.Second),
+	})
+
+	if err := store.RecordOutcome("rt_actual_target", RoutingOutcome{
+		Terminal:        true,
+		Success:         true,
+		ChannelFallback: true,
+		ActualModel:     "claude-sonnet-5",
+		ActualEffort:    "high",
+		CompletedAt:     now,
+	}); err != nil {
+		t.Fatalf("RecordOutcome() error = %v", err)
+	}
+
+	var actualModel, actualEffort string
+	if err := store.db.QueryRow(`
+SELECT actual_model, actual_effort
+FROM autopilot_routing_traces
+WHERE trace_uid = ?`, "rt_actual_target").Scan(&actualModel, &actualEffort); err != nil {
+		t.Fatalf("查询实际路由目标失败: %v", err)
+	}
+	if actualModel != "claude-sonnet-5" || actualEffort != "high" {
+		t.Fatalf("actual target = %s/%s, want claude-sonnet-5/high", actualModel, actualEffort)
+	}
+
+	detail, err := store.GetTraceDetail("rt_actual_target")
+	if err != nil {
+		t.Fatalf("GetTraceDetail() error = %v", err)
+	}
+	if detail.ActualModel != actualModel || detail.ActualEffort != actualEffort {
+		t.Fatalf("detail actual target = %s/%s, want %s/%s", detail.ActualModel, detail.ActualEffort, actualModel, actualEffort)
+	}
+}
+
 func TestRecordOutcomeWritesUnbiasedWindowOnce(t *testing.T) {
 	store := newRoutingReadinessTestStore(t)
 	now := time.Date(2026, 7, 17, 8, 7, 0, 0, time.UTC)

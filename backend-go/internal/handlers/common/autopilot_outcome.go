@@ -11,7 +11,11 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-const autopilotFirstByteAtKey = "ccx.autopilot.first_byte_at"
+const (
+	autopilotFirstByteAtKey  = "ccx.autopilot.first_byte_at"
+	autopilotActualModelKey  = "ccx.autopilot.actual_model"
+	autopilotActualEffortKey = "ccx.autopilot.actual_effort"
+)
 
 var routingOutcomeRecorderHook func(traceUID string, outcome autopilot.RoutingOutcome)
 
@@ -51,11 +55,14 @@ func recordAttemptCompleted(c *gin.Context, attemptUID, channelUID string, resul
 	if uid == "" {
 		return
 	}
+	actualModel, actualEffort := autopilotTraceActualDetails(c)
 	recordEndpointAttempt(uid, autopilot.EndpointAttemptSummary{
 		AttemptUID:    attemptUID,
 		Status:        "completed",
 		ChannelUID:    channelUID,
 		EndpointLabel: autopilot.DeriveEndpointLabel(channelUID, 0),
+		ActualModel:   actualModel,
+		ActualEffort:  actualEffort,
 		Result:        result,
 		StatusCode:    statusCode,
 		DurationMs:    durationMs,
@@ -65,6 +72,8 @@ func recordAttemptCompleted(c *gin.Context, attemptUID, channelUID string, resul
 func resetAutopilotAttemptTelemetry(c *gin.Context) {
 	if c != nil {
 		c.Set(autopilotFirstByteAtKey, time.Time{})
+		c.Set(autopilotActualModelKey, "")
+		c.Set(autopilotActualEffortKey, "")
 	}
 }
 
@@ -72,6 +81,19 @@ func recordAutopilotFirstByte(c *gin.Context, at time.Time) {
 	if c != nil {
 		c.Set(autopilotFirstByteAtKey, at)
 	}
+}
+
+func autopilotTraceActualDetails(c *gin.Context) (model, effort string) {
+	if c == nil {
+		return "", ""
+	}
+	if value, ok := c.Get(autopilotActualModelKey); ok {
+		model, _ = value.(string)
+	}
+	if value, ok := c.Get(autopilotActualEffortKey); ok {
+		effort, _ = value.(string)
+	}
+	return model, effort
 }
 
 func autopilotFirstByteLatency(c *gin.Context, requestStartedAt time.Time) int64 {
@@ -122,6 +144,7 @@ func buildRoutingOutcome(
 		statusCode = http.StatusOK
 	}
 
+	actualModel, actualEffort := autopilotTraceActualDetails(c)
 	return autopilot.RoutingOutcome{
 		Terminal:           terminal,
 		Success:            success,
@@ -129,6 +152,8 @@ func buildRoutingOutcome(
 		StatusCode:         statusCode,
 		RequestDurationMs:  duration.Milliseconds(),
 		FirstByteLatencyMs: autopilotFirstByteLatency(c, requestStartedAt),
+		ActualModel:        actualModel,
+		ActualEffort:       actualEffort,
 		Outcome:            outcomeName,
 		CompletedAt:        time.Now().UTC(),
 	}

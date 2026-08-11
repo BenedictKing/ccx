@@ -744,6 +744,8 @@ func TryUpstreamWithAllKeys(
 			if actualAttemptModel == "" {
 				actualAttemptModel = attemptModel
 			}
+			c.Set(autopilotActualModelKey, actualAttemptModel)
+			c.Set(autopilotActualEffortKey, actualReasoningEffort)
 			actualOriginalModel := ""
 			if actualAttemptModel != model {
 				actualOriginalModel = model
