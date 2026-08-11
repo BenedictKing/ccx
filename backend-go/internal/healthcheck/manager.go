@@ -116,6 +116,12 @@ type Manager struct {
 	// 同一扫描周期内跨账号 key 对同站点同分组协议/模型探测只执行一次，其余复用结论。
 	// 周期边界与 Manager.scan 每次调度时 Reset 对齐（由 loop 的 ticker 驱动）。
 	capabilityProbeLedger *config.CapabilityProbeLedger
+
+	// l2Reuse 记录本扫描周期内 L2 成功结论（CapabilityUID -> 探测所用模型），
+	// 供同站点同分组的后续 key 复用；仅成功结论可复用，失败按 key 各自探测。
+	// 与 capabilityProbeLedger 同周期清空（scan 开始处）。独立小锁保护（多 worker 并发）。
+	l2ReuseMu sync.Mutex
+	l2Reuse   map[string]string
 }
 
 // checkTask 验证任务：单渠道全 key L1 验证（渠道内 key 串行）
@@ -150,6 +156,7 @@ func NewManager(getConfig func() config.Config, store KeyHealthStore, blacklist 
 		tasks:                 make(chan checkTask, taskQueueSize),
 		inFlight:              make(map[string]struct{}),
 		capabilityProbeLedger: config.NewCapabilityProbeLedger(),
+		l2Reuse:               make(map[string]string),
 	}
 }
 
@@ -276,10 +283,8 @@ func (m *Manager) scan() {
 	cfg := m.getConfig()
 	now := m.now()
 
-	// 新扫描周期：重置能力探测台账。
-	if m.capabilityProbeLedger != nil {
-		m.capabilityProbeLedger.Reset()
-	}
+	// 新扫描周期：重置能力探测台账与 L2 成功复用缓存。
+	m.resetProbeCycle()
 
 	records, err := m.store.GetAllKeyHealth()
 	if err != nil {
@@ -310,6 +315,17 @@ func (m *Manager) scan() {
 			m.submit(checkTask{channelType: channelType, channelIndex: idx})
 		}
 	}
+}
+
+// resetProbeCycle 开启新一轮探测周期：清空能力探测台账与 L2 成功复用缓存。
+// 由 scan 每次调度时调用；测试可用它模拟周期边界。
+func (m *Manager) resetProbeCycle() {
+	if m.capabilityProbeLedger != nil {
+		m.capabilityProbeLedger.Reset()
+	}
+	m.l2ReuseMu.Lock()
+	m.l2Reuse = make(map[string]string)
+	m.l2ReuseMu.Unlock()
 }
 
 // submit 提交任务（按渠道去重、队列满时丢弃，下轮扫描重试）

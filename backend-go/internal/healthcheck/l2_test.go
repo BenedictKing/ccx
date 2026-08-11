@@ -531,3 +531,132 @@ func TestCheckChannelL2连续失败递增与清零(t *testing.T) {
 		}
 	})
 }
+
+// l2RecordsByKey 按 KeyMask 索引本渠道全部 l2 记录（多 key 断言用）
+func l2RecordsByKey(t *testing.T, f *l2Fixture, channelType string) map[string]metrics.KeyHealthRecord {
+	t.Helper()
+	recs, err := f.store.GetKeyHealthForChannel(channelType, "0")
+	if err != nil {
+		t.Fatalf("读取记录失败: %v", err)
+	}
+	out := make(map[string]metrics.KeyHealthRecord)
+	for _, r := range recs {
+		if r.CheckKind == CheckKindL2 {
+			out[r.KeyMask] = r
+		}
+	}
+	return out
+}
+
+// TestCheckChannelL2跨Key能力去重：同站点同分组的多 key 共享一次 L2 真实调用；
+// 首个 key 探测成功后，其余 key 复用结论写 ok 记录（detail 标注 ledger-reused），
+// 各 key 的 L1 auth 校验不受影响。
+func TestCheckChannelL2跨Key能力去重(t *testing.T) {
+	capabilities := map[string]config.UpstreamModelCapability{"test-model": pricedCapability(1, 2)}
+	cap := &genCapture{}
+	srv := newL2Server(t, 200, `{"data":[{"id":"test-model"}]}`, 200, "", cap)
+	f := newL2Fixture("chat", config.UpstreamConfig{
+		Name:        "ch0",
+		BaseURL:     srv.URL,
+		APIKeys:     []string{"sk-ledger-key-a", "sk-ledger-key-b"},
+		Status:      "active",
+		ServiceType: "openai",
+		HealthCheck: &config.ChannelHealthCheckConfig{VerifyRealCall: boolPtr(true)},
+	}, capabilities)
+
+	f.manager.checkChannel("chat", 0)
+
+	if cap.count() != 1 {
+		t.Fatalf("同能力多 key 应只发 1 次 L2 真实调用, 实际 %d 次", cap.count())
+	}
+	recs := l2RecordsByKey(t, f, "chat")
+	if len(recs) != 2 {
+		t.Fatalf("两个 key 都应有 l2 记录: %+v", recs)
+	}
+	probed := recs[utils.MaskAPIKey("sk-ledger-key-a")]
+	reused := recs[utils.MaskAPIKey("sk-ledger-key-b")]
+	if probed.LastStatus != StatusOK || probed.Detail != "model=test-model" {
+		t.Fatalf("首个 key 应真实探测成功: %+v", probed)
+	}
+	if reused.LastStatus != StatusOK || reused.Detail != "model=test-model (capability-ledger-reused)" {
+		t.Fatalf("后续 key 应复用成功结论: %+v", reused)
+	}
+}
+
+// TestCheckChannelL2失败结论不复用：首个 key L2 失败时不写复用结论，
+// 后续同能力 key 各自发起真实调用（失败无法区分 key 级/站点级，不可共享）。
+func TestCheckChannelL2失败结论不复用(t *testing.T) {
+	capabilities := map[string]config.UpstreamModelCapability{"test-model": pricedCapability(1, 2)}
+	cap := &genCapture{}
+	srv := newL2Server(t, 200, `{"data":[{"id":"test-model"}]}`, 500, `{"error":"internal"}`, cap)
+	f := newL2Fixture("chat", config.UpstreamConfig{
+		Name:        "ch0",
+		BaseURL:     srv.URL,
+		APIKeys:     []string{"sk-ledger-key-c", "sk-ledger-key-d"},
+		Status:      "active",
+		ServiceType: "openai",
+		HealthCheck: &config.ChannelHealthCheckConfig{VerifyRealCall: boolPtr(true)},
+	}, capabilities)
+
+	f.manager.checkChannel("chat", 0)
+
+	if cap.count() != 2 {
+		t.Fatalf("失败结论不可复用, 两个 key 应各发 1 次 L2, 实际 %d 次", cap.count())
+	}
+	recs := l2RecordsByKey(t, f, "chat")
+	for _, mask := range []string{utils.MaskAPIKey("sk-ledger-key-c"), utils.MaskAPIKey("sk-ledger-key-d")} {
+		if recs[mask].LastStatus != StatusError {
+			t.Fatalf("key %s 应各自探测并失败: %+v", mask, recs[mask])
+		}
+	}
+}
+
+// TestCheckChannelL2新周期重新探测：扫描周期重置（resetProbeCycle）后，
+// 同能力 key 需重新发起真实调用，不复用上一周期结论。
+func TestCheckChannelL2新周期重新探测(t *testing.T) {
+	capabilities := map[string]config.UpstreamModelCapability{"test-model": pricedCapability(1, 2)}
+	cap := &genCapture{}
+	srv := newL2Server(t, 200, `{"data":[{"id":"test-model"}]}`, 200, "", cap)
+	f := newL2Fixture("chat", config.UpstreamConfig{
+		Name:        "ch0",
+		BaseURL:     srv.URL,
+		APIKeys:     []string{"sk-ledger-key-e", "sk-ledger-key-f"},
+		Status:      "active",
+		ServiceType: "openai",
+		HealthCheck: &config.ChannelHealthCheckConfig{VerifyRealCall: boolPtr(true)},
+	}, capabilities)
+
+	f.manager.checkChannel("chat", 0)
+	if cap.count() != 1 {
+		t.Fatalf("首周期应只发 1 次 L2, 实际 %d", cap.count())
+	}
+
+	// 模拟新扫描周期
+	f.manager.resetProbeCycle()
+
+	f.manager.checkChannel("chat", 0)
+	if cap.count() != 2 {
+		t.Fatalf("新周期应重新真实探测(再发 1 次), 累计 %d 次", cap.count())
+	}
+}
+
+// TestCheckChannelL2VerifyModel指定不参与去重：显式 VerifyModel 的渠道各自发起真实调用。
+func TestCheckChannelL2VerifyModel指定不参与去重(t *testing.T) {
+	capabilities := map[string]config.UpstreamModelCapability{"test-model": pricedCapability(1, 2)}
+	cap := &genCapture{}
+	srv := newL2Server(t, 200, `{"data":[{"id":"test-model"}]}`, 200, "", cap)
+	f := newL2Fixture("chat", config.UpstreamConfig{
+		Name:        "ch0",
+		BaseURL:     srv.URL,
+		APIKeys:     []string{"sk-ledger-key-g", "sk-ledger-key-h"},
+		Status:      "active",
+		ServiceType: "openai",
+		HealthCheck: &config.ChannelHealthCheckConfig{VerifyRealCall: boolPtr(true), VerifyModel: "designated-model"},
+	}, capabilities)
+
+	f.manager.checkChannel("chat", 0)
+
+	if cap.count() != 2 {
+		t.Fatalf("显式 VerifyModel 不参与去重, 两个 key 应各发 1 次 L2, 实际 %d 次", cap.count())
+	}
+}

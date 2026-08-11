@@ -132,6 +132,10 @@ type l1KeyOutcome struct {
 // checkKeyL1 单 key L1 流程：对每个 BaseURL 尝试拉 models，任一成功即 ok；
 // 401/403 → auth_failed（按 ShouldBlacklistKey 语义判断是否拉黑）；
 // 其他错误/超时/5xx → error（喂熔断）。每次结果都 UpsertKeyHealth。
+//
+// 注意：L1 有意不接 CapabilityProbeLedger 去重——L1 的请求同时承担凭证 auth 校验
+// （401/403 拉黑语义按 key 各自进行），跳过任一 key 的 L1 都会漏验其 auth；
+// 模型清单与 auth 同一请求无法拆开节省，去重无收益。去重只作用于 L2（见 checkKeyL2）。
 func (m *Manager) checkKeyL1(
 	channelType string, channelIndex int, channelID string,
 	u *config.UpstreamConfig, baseURLs []string, apiKey string,
