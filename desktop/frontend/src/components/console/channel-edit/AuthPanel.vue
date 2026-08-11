@@ -15,7 +15,9 @@ import {
   Plus,
   RotateCcw,
   Trash2,
+  Zap,
 } from 'lucide-vue-next'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useLanguage } from '@/composables/useLanguage'
 import { useAdminApi } from '@/composables/useAdminApi'
 import { maskApiKey } from '@/utils/api-key-mask'
@@ -24,6 +26,7 @@ import type {
   ChannelKind,
   DisabledGroupModel,
   GroupModelMutationResponse,
+  KeyMultiplierPatch,
   KeyMultiplierResponse,
 } from '@/services/admin-api'
 
@@ -73,7 +76,7 @@ const emit = defineEmits<{
 
 const { t, tf } = useLanguage()
 const adminApi = useAdminApi()
-const multiplierDrafts = ref<Record<string, { groupMultiplier: string; maxGroupMultiplier: string }>>({})
+const multiplierDrafts = ref<Record<string, { groupMultiplier: string; maxGroupMultiplier: string; consumptionPolicy: 'normal' | 'opportunistic' }>>({})
 const multiplierResults = ref<Record<string, KeyMultiplierResponse>>({})
 const savingMultiplier = ref('')
 const multiplierError = ref('')
@@ -83,12 +86,13 @@ const groupModelError = ref('')
 const groupModelNotice = ref('')
 
 watch(() => props.apiKeyConfigs, configs => {
-  const next: Record<string, { groupMultiplier: string; maxGroupMultiplier: string }> = {}
+  const next: Record<string, { groupMultiplier: string; maxGroupMultiplier: string; consumptionPolicy: 'normal' | 'opportunistic' }> = {}
   for (const config of configs || []) {
     if (!config.keyUid) continue
     next[config.keyUid] = {
       groupMultiplier: config.groupMultiplier == null ? '' : String(config.groupMultiplier),
       maxGroupMultiplier: config.maxGroupMultiplier == null ? '' : String(config.maxGroupMultiplier),
+      consumptionPolicy: config.consumptionPolicy === 'opportunistic' ? 'opportunistic' : 'normal',
     }
   }
   multiplierDrafts.value = next
@@ -105,8 +109,9 @@ async function saveMultiplier(config: APIKeyConfig) {
   }
   savingMultiplier.value = config.keyUid; multiplierError.value = ''
   try {
-    const payload: { groupMultiplier?: number | null; maxGroupMultiplier?: number | null } = {
+    const payload: KeyMultiplierPatch = {
       maxGroupMultiplier: draft.maxGroupMultiplier.trim() === '' ? null : Number(draft.maxGroupMultiplier),
+      consumptionPolicy: draft.consumptionPolicy,
     }
     if (config.multiplierSource !== 'new_api') payload.groupMultiplier = draft.groupMultiplier.trim() === '' ? null : Number(draft.groupMultiplier)
     multiplierResults.value[config.keyUid] = await adminApi.patchKeyMultiplier(props.channelKind, props.channelUid, config.keyUid, payload)
@@ -120,6 +125,19 @@ function multiplierStatus(config: APIKeyConfig) {
 function multiplierReason(config: APIKeyConfig) {
   const result = config.keyUid ? multiplierResults.value[config.keyUid] : undefined
   return result?.reason || config.ineligibleReason || config.multiplierSyncError || ''
+}
+
+function effectiveCostClassLabel(value?: string) {
+  if (!value) return ''
+  return `multiplier.effectiveCostClass.${value}`
+}
+
+function markAsOpportunistic(keyUid: string) {
+  const draft = multiplierDrafts.value[keyUid]
+  if (!draft) return
+  draft.groupMultiplier = '0'
+  draft.maxGroupMultiplier = '0'
+  draft.consumptionPolicy = 'opportunistic'
 }
 
 function groupModelDraft(key: string) {
@@ -278,7 +296,7 @@ const visibleDisabledKeys = computed(() => {
           </Button>
         </div>
       </div>
-      <div v-if="keyConfig(key)?.keyUid" class="grid grid-cols-1 gap-2 rounded-lg border border-border/60 bg-secondary/20 p-2 sm:grid-cols-[1fr_1fr_auto]">
+      <div v-if="keyConfig(key)?.keyUid" class="grid grid-cols-1 gap-2 rounded-lg border border-border/60 bg-secondary/20 p-2 sm:grid-cols-[1fr_1fr_1fr_auto]">
         <div>
           <label class="text-[10px] text-muted-foreground">{{ t('multiplier.group') }}</label>
           <Input v-model="multiplierDrafts[keyConfig(key)!.keyUid!].groupMultiplier" type="number" min="0" step="any" class="h-8" :disabled="keyConfig(key)?.multiplierSource === 'new_api'" />
@@ -287,17 +305,40 @@ const visibleDisabledKeys = computed(() => {
           <label class="text-[10px] text-muted-foreground">{{ t('multiplier.max') }}</label>
           <Input v-model="multiplierDrafts[keyConfig(key)!.keyUid!].maxGroupMultiplier" type="number" min="0" step="any" class="h-8" />
         </div>
-        <Button type="button" size="sm" class="self-end" :disabled="savingMultiplier === keyConfig(key)?.keyUid" @click="saveMultiplier(keyConfig(key)!)">
-          <Loader2 v-if="savingMultiplier === keyConfig(key)?.keyUid" class="h-3.5 w-3.5 animate-spin" />
-          {{ t('multiplier.save') }}
-        </Button>
-        <div class="text-[10px] text-muted-foreground sm:col-span-3">
+        <div>
+          <label class="text-[10px] text-muted-foreground">{{ t('multiplier.consumptionPolicy.label') }}</label>
+          <Select v-model="multiplierDrafts[keyConfig(key)!.keyUid!].consumptionPolicy">
+            <SelectTrigger class="h-8">
+              <SelectValue :placeholder="t('multiplier.consumptionPolicy.normal')" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="normal">{{ t('multiplier.consumptionPolicy.normal') }}</SelectItem>
+              <SelectItem value="opportunistic">{{ t('multiplier.consumptionPolicy.opportunistic') }}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div class="flex flex-col gap-1 self-end">
+          <Button type="button" size="sm" :disabled="savingMultiplier === keyConfig(key)?.keyUid" @click="saveMultiplier(keyConfig(key)!)">
+            <Loader2 v-if="savingMultiplier === keyConfig(key)?.keyUid" class="h-3.5 w-3.5 animate-spin" />
+            {{ t('multiplier.save') }}
+          </Button>
+          <Button type="button" size="sm" variant="outline" :disabled="!keyConfig(key)?.keyUid" @click="markAsOpportunistic(keyConfig(key)!.keyUid!)">
+            <Zap class="h-3 w-3 mr-1" />
+            {{ t('multiplier.markAsOpportunistic') }}
+          </Button>
+        </div>
+        <div class="text-[10px] text-muted-foreground sm:col-span-4">
           <span v-if="keyConfig(key)?.quotaGroup">{{ t('multiplier.groupName') }}: {{ keyConfig(key)?.quotaGroup }} · </span>
           <span v-if="multiplierStatus(keyConfig(key)!)">{{ t('multiplier.statusLabel') }}: {{ tf(`multiplier.status.${multiplierStatus(keyConfig(key)!)}`, multiplierStatus(keyConfig(key)!)) }}</span>
           <span v-if="keyConfig(key)?.eligible !== undefined"> · {{ keyConfig(key)?.eligible ? t('multiplier.eligible') : t('multiplier.ineligible') }}</span>
           <span v-if="keyConfig(key)?.multiplierExpiresAt"> · {{ t('multiplier.ttl') }}: {{ keyConfig(key)?.multiplierExpiresAt }}</span>
+          <span v-if="multiplierResults[keyConfig(key)!.keyUid!]?.consumptionPolicy"> · {{ t('multiplier.consumptionPolicy.label') }}: {{ t(`multiplier.consumptionPolicy.${multiplierResults[keyConfig(key)!.keyUid!].consumptionPolicy}`) }}</span>
+          <span v-if="multiplierResults[keyConfig(key)!.keyUid!]?.effectiveCostClass"> · {{ t('multiplier.effectiveCostClass.label') }}: {{ t(effectiveCostClassLabel(multiplierResults[keyConfig(key)!.keyUid!].effectiveCostClass)) }}</span>
           <span v-if="multiplierReason(keyConfig(key)!)" :title="multiplierReason(keyConfig(key)!)"> · {{ t('multiplier.reason') }}: {{ multiplierReason(keyConfig(key)!) }}</span>
         </div>
+        <p v-if="multiplierDrafts[keyConfig(key)!.keyUid!].consumptionPolicy === 'opportunistic'" class="text-[10px] text-amber-700 dark:text-amber-300 sm:col-span-4">
+          {{ t('multiplier.consumptionPolicy.opportunisticHint') }}
+        </p>
       </div>
       <div v-if="keyConfig(key)?.quotaGroup" class="grid gap-2 rounded-lg border border-rose-500/20 bg-rose-500/5 p-2 sm:grid-cols-[1fr_1fr_auto]">
         <div>

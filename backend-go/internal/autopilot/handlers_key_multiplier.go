@@ -36,22 +36,61 @@ func (o *OptionalFloat64) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (o OptionalFloat64) IsSet() bool {
+	return o.Present && o.Valid
+}
+
+func (o OptionalFloat64) IsCleared() bool {
+	return o.Present && !o.Valid
+}
+
 type keyMultiplierPatchRequest struct {
-	GroupMultiplier    OptionalFloat64 `json:"groupMultiplier"`
-	MaxGroupMultiplier OptionalFloat64 `json:"maxGroupMultiplier"`
+	GroupMultiplier    OptionalFloat64           `json:"groupMultiplier"`
+	MaxGroupMultiplier OptionalFloat64           `json:"maxGroupMultiplier"`
+	ConsumptionPolicy  OptionalConsumptionPolicy `json:"consumptionPolicy,omitempty"`
+}
+
+// OptionalConsumptionPolicy 支持 JSON 三态：缺失 / null / 具体值。
+type OptionalConsumptionPolicy struct {
+	Present bool
+	Valid   bool
+	Value   config.KeyConsumptionPolicy
+}
+
+func (o *OptionalConsumptionPolicy) UnmarshalJSON(data []byte) error {
+	o.Present = true
+	trimmed := strings.TrimSpace(string(data))
+	if trimmed == "null" {
+		o.Valid = false
+		o.Value = ""
+		return nil
+	}
+	var value string
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	policy := config.KeyConsumptionPolicy(strings.TrimSpace(value))
+	if policy != "" && !config.IsKeyConsumptionPolicyValid(policy) {
+		return fmt.Errorf("consumptionPolicy 必须是 normal 或 opportunistic")
+	}
+	o.Valid = true
+	o.Value = policy
+	return nil
 }
 
 type keyMultiplierResponse struct {
-	KeyUID           string     `json:"keyUid"`
-	Group            string     `json:"group"`
-	RemoteMultiplier *float64   `json:"remoteMultiplier,omitempty"`
-	GroupMultiplier  *float64   `json:"groupMultiplier,omitempty"`
-	MaxMultiplier    *float64   `json:"maxMultiplier,omitempty"`
-	Status           string     `json:"status"`
-	Reason           string     `json:"reason"`
-	Eligible         bool       `json:"eligible"`
-	UpdatedAt        *time.Time `json:"updatedAt,omitempty"`
-	ExpiresAt        *time.Time `json:"expiresAt,omitempty"`
+	KeyUID             string                      `json:"keyUid"`
+	Group              string                      `json:"group"`
+	RemoteMultiplier   *float64                    `json:"remoteMultiplier,omitempty"`
+	GroupMultiplier    *float64                    `json:"groupMultiplier,omitempty"`
+	MaxMultiplier      *float64                    `json:"maxMultiplier,omitempty"`
+	ConsumptionPolicy  config.KeyConsumptionPolicy `json:"consumptionPolicy,omitempty"`
+	EffectiveCostClass string                      `json:"effectiveCostClass,omitempty"`
+	Status             string                      `json:"status"`
+	Reason             string                      `json:"reason"`
+	Eligible           bool                        `json:"eligible"`
+	UpdatedAt          *time.Time                  `json:"updatedAt,omitempty"`
+	ExpiresAt          *time.Time                  `json:"expiresAt,omitempty"`
 }
 
 func RegisterKeyMultiplierRoutes(router gin.IRouter, cfgManager *config.ConfigManager) {
@@ -81,17 +120,23 @@ func handlePatchKeyMultiplier(cfgManager *config.ConfigManager) gin.HandlerFunc 
 			c.JSON(http.StatusBadRequest, gin.H{"error": "请求参数无效: " + err.Error()})
 			return
 		}
-		if !req.GroupMultiplier.Present && !req.MaxGroupMultiplier.Present {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "至少提供一个倍率字段"})
+		if !req.GroupMultiplier.Present && !req.MaxGroupMultiplier.Present && !req.ConsumptionPolicy.Present {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "至少提供一个字段"})
 			return
 		}
-		if req.GroupMultiplier.Present && req.GroupMultiplier.Valid && !isFiniteNonNegativeValue(req.GroupMultiplier.Value) {
+		if req.GroupMultiplier.IsSet() && !isFiniteNonNegativeValue(req.GroupMultiplier.Value) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "groupMultiplier 必须是有限且非负数"})
 			return
 		}
-		if req.MaxGroupMultiplier.Present && req.MaxGroupMultiplier.Valid && !isFiniteNonNegativeValue(req.MaxGroupMultiplier.Value) {
+		if req.MaxGroupMultiplier.IsSet() && !isFiniteNonNegativeValue(req.MaxGroupMultiplier.Value) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "maxGroupMultiplier 必须是有限且非负数"})
 			return
+		}
+		if req.ConsumptionPolicy.Present && req.ConsumptionPolicy.Valid {
+			if !config.IsKeyConsumptionPolicyValid(req.ConsumptionPolicy.Value) {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "consumptionPolicy 必须是 normal 或 opportunistic"})
+				return
+			}
 		}
 
 		channelIndex, upstream, err := findUpstreamByChannelUID(cfgManager, apiType, channelUID)
@@ -135,6 +180,23 @@ func handlePatchKeyMultiplier(cfgManager *config.ConfigManager) gin.HandlerFunc 
 			}
 			next.MultiplierUpdatedAt = &now
 		}
+		if req.ConsumptionPolicy.Present {
+			if req.ConsumptionPolicy.Valid {
+				next.ConsumptionPolicy = config.NormalizeKeyConsumptionPolicy(req.ConsumptionPolicy.Value)
+			} else {
+				next.ConsumptionPolicy = config.KeyConsumptionNormal
+			}
+		}
+
+		// 当 GroupMultiplier 被显式设置或当前非 nil 时，必须同时有 MaxGroupMultiplier；否则 400。
+		// 注意：0 是合法倍率，不能通过 Value > 0 判断“是否设置”。
+		groupWillBeSet := req.GroupMultiplier.IsSet()
+		if groupWillBeSet && next.MaxGroupMultiplier == nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "设置 groupMultiplier 时必须同时提供 maxGroupMultiplier"})
+			return
+		}
+		// 当只提供 maxGroupMultiplier 而未提供 groupMultiplier 且当前也无 groupMultiplier 时，同样无法构成合法配对。
+		// 但允许单独设置 maxGroupMultiplier 以收紧已有配对的上限；此情况 next.GroupMultiplier 非 nil 已在上一条处理。
 
 		if !isNewAPI {
 			next.MultiplierSource = "manual"
@@ -169,18 +231,40 @@ func handlePatchKeyMultiplier(cfgManager *config.ConfigManager) gin.HandlerFunc 
 
 func buildKeyMultiplierResponse(keyUID string, cfg config.APIKeyConfig, now time.Time) keyMultiplierResponse {
 	eligibility := config.EvaluateAPIKeyMultiplierEligibility(cfg, now)
+	effectiveCostClass := deriveEffectiveCostClass(cfg, eligibility.Eligible)
 	return keyMultiplierResponse{
-		KeyUID:           keyUID,
-		Group:            strings.TrimSpace(cfg.QuotaGroup),
-		RemoteMultiplier: remoteMultiplierForResponse(cfg),
-		GroupMultiplier:  cloneFloat64Ptr(cfg.GroupMultiplier),
-		MaxMultiplier:    cloneFloat64Ptr(cfg.MaxGroupMultiplier),
-		Status:           eligibility.Status,
-		Reason:           eligibility.Reason,
-		Eligible:         eligibility.Eligible,
-		UpdatedAt:        cloneTimePtr(cfg.MultiplierUpdatedAt),
-		ExpiresAt:        cloneTimePtr(cfg.MultiplierExpiresAt),
+		KeyUID:             keyUID,
+		Group:              strings.TrimSpace(cfg.QuotaGroup),
+		RemoteMultiplier:   remoteMultiplierForResponse(cfg),
+		GroupMultiplier:    cloneFloat64Ptr(cfg.GroupMultiplier),
+		MaxMultiplier:      cloneFloat64Ptr(cfg.MaxGroupMultiplier),
+		ConsumptionPolicy:  cfg.ConsumptionPolicy,
+		EffectiveCostClass: effectiveCostClass,
+		Status:             eligibility.Status,
+		Reason:             eligibility.Reason,
+		Eligible:           eligibility.Eligible,
+		UpdatedAt:          cloneTimePtr(cfg.MultiplierUpdatedAt),
+		ExpiresAt:          cloneTimePtr(cfg.MultiplierExpiresAt),
 	}
+}
+
+func deriveEffectiveCostClass(cfg config.APIKeyConfig, eligible bool) string {
+	if !eligible {
+		return ""
+	}
+	if cfg.GroupMultiplier == nil {
+		return "list"
+	}
+	if *cfg.GroupMultiplier == 0 {
+		return "zero"
+	}
+	if *cfg.GroupMultiplier < 1 {
+		return "discounted"
+	}
+	if *cfg.GroupMultiplier == 1 {
+		return "standard"
+	}
+	return "premium"
 }
 
 func remoteMultiplierForResponse(cfg config.APIKeyConfig) *float64 {

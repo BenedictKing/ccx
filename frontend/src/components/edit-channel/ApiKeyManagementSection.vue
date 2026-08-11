@@ -284,9 +284,18 @@
                     <v-chip size="x-small" variant="tonal" :color="multiplierStatusColor(row.multiplierSyncStatus)">
                       {{ row.multiplierSource || 'manual' }} · {{ multiplierStatusLabel(row.multiplierSyncStatus || 'manual') }}
                     </v-chip>
+                    <v-chip
+                      v-if="row.consumptionPolicy === 'opportunistic'"
+                      size="x-small"
+                      color="warning"
+                      variant="tonal"
+                    >
+                      {{ t('subscription.keyMultiplier.policyChip') }}
+                    </v-chip>
                     <span>{{ t('subscription.keyMultiplier.group') }}: {{ row.quotaGroup || '-' }}</span>
                     <span>{{ t('subscription.keyMultiplier.value') }}: {{ row.groupMultiplier ?? '-' }}</span>
                     <span>{{ t('subscription.keyMultiplier.max') }}: {{ row.maxGroupMultiplier ?? '-' }}</span>
+                    <span v-if="row.effectiveCostClass">{{ t('subscription.keyMultiplier.effectiveCostClass') }}: {{ row.effectiveCostClass }}</span>
                     <span v-if="row.multiplierExpiresAt">TTL: {{ formatDisabledTime(row.multiplierExpiresAt) }}</span>
                     <span :class="row.eligible === false ? 'text-error' : 'text-success'">
                       {{ row.eligible === false ? (row.ineligibleReason || t('subscription.keyMultiplier.ineligible')) : t('subscription.keyMultiplier.eligible') }}
@@ -1302,6 +1311,16 @@
       <v-card>
         <v-card-title>{{ t('subscription.keyMultiplier.title') }}</v-card-title>
         <v-card-text>
+          <v-select
+            v-model="multiplierForm.consumptionPolicy"
+            :items="consumptionPolicyOptions"
+            item-title="title"
+            item-value="value"
+            :label="t('subscription.keyMultiplier.policy')"
+            clearable
+            variant="outlined"
+            class="mb-4"
+          />
           <v-text-field
             v-model="multiplierForm.groupMultiplier"
             type="number"
@@ -1313,9 +1332,30 @@
             variant="outlined"
           />
           <v-text-field v-model="multiplierForm.maxGroupMultiplier" type="number" min="0" step="any" :label="t('subscription.keyMultiplier.max')" clearable variant="outlined" />
+          <v-alert
+            v-if="multiplierForm.consumptionPolicy === 'opportunistic'"
+            color="warning"
+            variant="tonal"
+            density="compact"
+            class="mt-3"
+          >
+            {{ t('subscription.keyMultiplier.policyHint') }}
+          </v-alert>
           <v-alert v-if="multiplierError" color="error" variant="tonal" density="compact">{{ multiplierError }}</v-alert>
         </v-card-text>
-        <v-card-actions><v-spacer /><v-btn variant="text" @click="multiplierDialog = false">{{ t('app.actions.cancel') }}</v-btn><v-btn color="primary" :loading="multiplierSaving" @click="saveMultiplier">{{ t('app.actions.save') }}</v-btn></v-card-actions>
+        <v-card-actions>
+          <v-btn
+            v-if="multiplierEditing?.multiplierSource !== 'new_api'"
+            variant="text"
+            color="warning"
+            @click="markAsPublicKey"
+          >
+            {{ t('subscription.keyMultiplier.markPublic') }}
+          </v-btn>
+          <v-spacer />
+          <v-btn variant="text" @click="multiplierDialog = false">{{ t('app.actions.cancel') }}</v-btn>
+          <v-btn color="primary" :loading="multiplierSaving" @click="saveMultiplier">{{ t('app.actions.save') }}</v-btn>
+        </v-card-actions>
       </v-card>
     </v-dialog>
   </div>
@@ -1419,7 +1459,12 @@ const multiplierDialog = ref(false)
 const multiplierSaving = ref(false)
 const multiplierError = ref('')
 const multiplierEditing = ref<ChannelApiKeyRow | null>(null)
-const multiplierForm = ref<{ groupMultiplier: number | null; maxGroupMultiplier: number | null }>({ groupMultiplier: null, maxGroupMultiplier: null })
+const multiplierForm = ref<{ groupMultiplier: number | null; maxGroupMultiplier: number | null; consumptionPolicy: 'normal' | 'opportunistic' | null }>({ groupMultiplier: null, maxGroupMultiplier: null, consumptionPolicy: null })
+
+const consumptionPolicyOptions = computed(() => [
+  { title: t('subscription.keyMultiplier.policyNormal'), value: 'normal' as const },
+  { title: t('subscription.keyMultiplier.policyOpportunistic'), value: 'opportunistic' as const },
+])
 const deepseekBalances = ref<DeepSeekCredentialBalance[]>([])
 const deepseekBalancesLoading = ref(false)
 const deepseekBalancesError = ref('')
@@ -1526,6 +1571,8 @@ const keyRows = computed(() => buildChannelApiKeyRows(props.apiKeys, props.disab
     compshareCredential,
     minimaxEndpoint,
     planCredential: volcengineCredential ?? kimiCredential ?? mimoCredential ?? compshareCredential,
+    consumptionPolicy: row.consumptionPolicy,
+    effectiveCostClass: row.effectiveCostClass,
   }
 }))
 
@@ -1584,12 +1631,22 @@ const multiplierStatusColor = (status?: string) => status === 'fresh' || status 
 
 const openMultiplierEditor = (row: ChannelApiKeyRow) => {
   multiplierEditing.value = row
+  const policy: 'normal' | 'opportunistic' | null = row.consumptionPolicy === 'opportunistic' ? 'opportunistic' : row.consumptionPolicy === 'normal' ? 'normal' : null
   multiplierForm.value = {
     groupMultiplier: row.groupMultiplier ?? null,
     maxGroupMultiplier: row.maxGroupMultiplier ?? null,
+    consumptionPolicy: policy,
   }
   multiplierError.value = ''
   multiplierDialog.value = true
+}
+
+const markAsPublicKey = () => {
+  multiplierForm.value = {
+    groupMultiplier: 0,
+    maxGroupMultiplier: 0,
+    consumptionPolicy: 'opportunistic',
+  }
 }
 
 const saveMultiplier = async () => {
@@ -1599,11 +1656,13 @@ const saveMultiplier = async () => {
   multiplierError.value = ''
   try {
     const body = row.multiplierSource === 'new_api'
-      ? { maxGroupMultiplier: multiplierForm.value.maxGroupMultiplier }
-      : { groupMultiplier: multiplierForm.value.groupMultiplier, maxGroupMultiplier: multiplierForm.value.maxGroupMultiplier }
+      ? { maxGroupMultiplier: multiplierForm.value.maxGroupMultiplier, consumptionPolicy: multiplierForm.value.consumptionPolicy }
+      : { groupMultiplier: multiplierForm.value.groupMultiplier, maxGroupMultiplier: multiplierForm.value.maxGroupMultiplier, consumptionPolicy: multiplierForm.value.consumptionPolicy }
     const response = await apiService.patchKeyMultiplier(props.channelKind, props.channelUid, row.keyUid, body)
     row.groupMultiplier = response.groupMultiplier ?? null
     row.maxGroupMultiplier = response.maxMultiplier ?? null
+    row.consumptionPolicy = response.consumptionPolicy ?? null
+    row.effectiveCostClass = response.effectiveCostClass ?? undefined
     row.multiplierSyncStatus = response.status
     row.multiplierSyncError = response.reason
     row.eligible = response.eligible

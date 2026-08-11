@@ -134,6 +134,10 @@ func (cm *ConfigManager) loadConfig() error {
 	if cm.migrateManualCompatSwitchesToSeeds(data) {
 		needSaveDefaults = true
 	}
+	// 规范化 Key 级消耗策略：空值/未知值降级为 normal，仅对已知变更记录一次日志。
+	if cm.normalizeAPIKeyConsumptionPolicies() {
+		needSaveDefaults = true
+	}
 	if cm.migrateFableModelMapping() {
 		needSaveDefaults = true
 	}
@@ -397,6 +401,44 @@ func (cm *ConfigManager) applyConfigDefaults(rawJSON []byte) bool {
 // 用于旧版本升级：避免 0 值渠道在调度与前端排序中插到显式 priority 渠道之前。
 func (cm *ConfigManager) normalizeChannelPriorities() bool {
 	return normalizeChannelPrioritiesConfig(&cm.config)
+}
+
+// normalizeAPIKeyConsumptionPolicies 在加载时为所有 Key 规范化 ConsumptionPolicy。
+// 空值视为 normal；未知值降级为 normal 并记录一次告警。返回 true 表示有字段被修改。
+func (cm *ConfigManager) normalizeAPIKeyConsumptionPolicies() bool {
+	return normalizeAPIKeyConsumptionPoliciesConfig(&cm.config)
+}
+
+func normalizeAPIKeyConsumptionPoliciesConfig(cfg *Config) bool {
+	if cfg == nil {
+		return false
+	}
+	changed := false
+	unknownLogged := make(map[string]bool)
+	apply := func(channels []UpstreamConfig, channelKind string) {
+		for i := range channels {
+			for j := range channels[i].APIKeyConfigs {
+				cfg := &channels[i].APIKeyConfigs[j]
+				normalized := NormalizeKeyConsumptionPolicy(cfg.ConsumptionPolicy)
+				if normalized != cfg.ConsumptionPolicy {
+					if cfg.ConsumptionPolicy != "" && !unknownLogged[string(cfg.ConsumptionPolicy)] {
+						unknownLogged[string(cfg.ConsumptionPolicy)] = true
+						log.Printf("[Config-ConsumptionPolicy] 警告: %s 渠道 [%d] Key %s 存在未知消耗策略 %q，已降级为 normal",
+							channelKind, i, utils.MaskAPIKey(cfg.Key), cfg.ConsumptionPolicy)
+					}
+					cfg.ConsumptionPolicy = normalized
+					changed = true
+				}
+			}
+		}
+	}
+	apply(cfg.Upstream, "Messages")
+	apply(cfg.ResponsesUpstream, "Responses")
+	apply(cfg.ChatUpstream, "Chat")
+	apply(cfg.GeminiUpstream, "Gemini")
+	apply(cfg.ImagesUpstream, "Images")
+	apply(cfg.VectorsUpstream, "Vectors")
+	return changed
 }
 
 // normalizeChannelPrioritiesConfig 是 normalizeChannelPriorities 的自由函数版本，

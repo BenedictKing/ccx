@@ -1495,5 +1495,12 @@
   "costReport.csv.unpricedModels": "未配置定价模型",
   "costReport.pricingStatus.complete": "完整",
   "costReport.pricingStatus.partial": "部分",
-  "costReport.modelSeparator": "、"
+  "costReport.modelSeparator": "、",
+  "subscription.keyMultiplier.policy": "消耗策略",
+  "subscription.keyMultiplier.policyNormal": "常规",
+  "subscription.keyMultiplier.policyOpportunistic": "优先消耗（公开或即将过期）",
+  "subscription.keyMultiplier.markPublic": "标记为公开/临时 Key",
+  "subscription.keyMultiplier.policyHint": "公开/临时 Key 可能被其他人耗尽或快速失效；系统会在失败时自动回退到稳定 Key。",
+  "subscription.keyMultiplier.policyChip": "公开/临时",
+  "subscription.keyMultiplier.effectiveCostClass": "成本等级"
 }

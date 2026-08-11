@@ -87,7 +87,7 @@ func TestApplyAPIKeyConfigUpdateMergesIdentityAcrossProtocols(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			upstream := &UpstreamConfig{
 				APIKeys:       []string{tt.key},
-				APIKeyConfigs: []APIKeyConfig{{Key: "old-" + tt.key, KeyUID: "kid-" + tt.name, CredentialUID: "cred-" + tt.name}},
+				APIKeyConfigs: []APIKeyConfig{{Key: "old-" + tt.key, KeyUID: "kid-" + tt.name, CredentialUID: "cred-" + tt.name, ConsumptionPolicy: KeyConsumptionOpportunistic}},
 			}
 			applyAPIKeyConfigUpdate(upstream, UpstreamUpdate{
 				APIKeyConfigs: []APIKeyConfig{{Key: tt.key, CredentialUID: "cred-" + tt.name}},
@@ -99,7 +99,27 @@ func TestApplyAPIKeyConfigUpdateMergesIdentityAcrossProtocols(t *testing.T) {
 			if got.KeyUID != "kid-"+tt.name || got.CredentialUID != "cred-"+tt.name || got.Key != tt.key {
 				t.Fatalf("identity merge failed: %+v", got)
 			}
+			if got.ConsumptionPolicy != KeyConsumptionOpportunistic {
+				t.Fatalf("expected ConsumptionPolicy preserved, got %q", got.ConsumptionPolicy)
+			}
 		})
+	}
+}
+
+func TestMergeAPIKeyConfigPreservesConsumptionPolicy(t *testing.T) {
+	existing := APIKeyConfig{Key: "k1", KeyUID: "kid-1", ConsumptionPolicy: KeyConsumptionOpportunistic}
+	// 上游同步未携带策略时应保留本地意图。
+	merged := mergeAPIKeyConfig(&existing,
+		APIKeyConfig{Key: "k1", KeyUID: "kid-1"})
+	if merged.ConsumptionPolicy != KeyConsumptionOpportunistic {
+		t.Fatalf("expected opportunistic preserved, got %q", merged.ConsumptionPolicy)
+	}
+	// 上游显式设置时应覆盖。
+	merged = mergeAPIKeyConfig(
+		&existing,
+		APIKeyConfig{Key: "k1", KeyUID: "kid-1", ConsumptionPolicy: KeyConsumptionNormal})
+	if merged.ConsumptionPolicy != KeyConsumptionNormal {
+		t.Fatalf("expected normal override, got %q", merged.ConsumptionPolicy)
 	}
 }
 
