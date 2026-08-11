@@ -130,6 +130,7 @@ export interface APIKeyConfig {
   enabled?: boolean
   quotaGroup?: string
   groupMultiplier?: number | null
+  consumptionPolicy?: 'normal' | 'opportunistic'
   maxGroupMultiplier?: number | null
   multiplierSource?: 'manual' | 'new_api' | 'provider'
   multiplierUpdatedAt?: string
@@ -1041,6 +1042,7 @@ export type ChannelKind = 'messages' | 'chat' | 'responses' | 'gemini' | 'images
 export interface KeyMultiplierPatch {
   groupMultiplier?: number | null
   maxGroupMultiplier?: number | null
+  consumptionPolicy?: 'normal' | 'opportunistic' | null
 }
 
 export interface KeyMultiplierResponse {
@@ -1049,6 +1051,8 @@ export interface KeyMultiplierResponse {
   remoteMultiplier?: number | null
   groupMultiplier?: number | null
   maxMultiplier?: number | null
+  consumptionPolicy?: 'normal' | 'opportunistic'
+  effectiveCostClass?: 'zero' | 'discounted' | 'standard' | 'premium' | 'unknown'
   status: string
   reason: string
   eligible: boolean

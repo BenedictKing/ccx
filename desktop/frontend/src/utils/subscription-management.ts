@@ -34,3 +34,8 @@ export function isValidExchangeRateQuote(quote: ExchangeRateQuote): boolean {
 }
 
 export const multiplierStatusI18nKey = (status: string) => `multiplier.status.${status}`
+
+export const consumptionPolicyI18nKey = (policy: 'normal' | 'opportunistic' | '' | null | undefined): string => {
+  if (!policy) return 'multiplier.consumptionPolicy.normal'
+  return `multiplier.consumptionPolicy.${policy}`
+}

@@ -5,6 +5,7 @@ import {
   isFiniteNonNegative,
   isValidExchangeRateQuote,
   multiplierStatusI18nKey,
+  consumptionPolicyI18nKey,
 } from './subscription-management'
 import {
   EXCHANGE_RATES_PATH,
@@ -50,5 +51,13 @@ describe('billing, exchange rate and status helpers', () => {
 
   it('maps backend status to i18n keys', () => {
     expect(multiplierStatusI18nKey('over_limit')).toBe('multiplier.status.over_limit')
+  })
+
+  it('maps consumption policy to i18n keys for all three states', () => {
+    expect(consumptionPolicyI18nKey(undefined)).toBe('multiplier.consumptionPolicy.normal')
+    expect(consumptionPolicyI18nKey(null)).toBe('multiplier.consumptionPolicy.normal')
+    expect(consumptionPolicyI18nKey('')).toBe('multiplier.consumptionPolicy.normal')
+    expect(consumptionPolicyI18nKey('normal')).toBe('multiplier.consumptionPolicy.normal')
+    expect(consumptionPolicyI18nKey('opportunistic')).toBe('multiplier.consumptionPolicy.opportunistic')
   })
 })

@@ -45,6 +45,7 @@ describe('buildChannelPayload', () => {
       credentialUid: 'cred_1',
       groupMultiplier: 0,
       maxGroupMultiplier: null,
+      consumptionPolicy: 'opportunistic',
       multiplierSource: 'new_api',
       multiplierUpdatedAt: '2026-08-01T00:00:00Z',
       multiplierExpiresAt: '',
@@ -150,5 +151,48 @@ describe('buildChannelPayload', () => {
 
     expect(result.apiKeys).toEqual(['key-keep', 'key-remove'])
     expect(result.apiKeyConfigs).toEqual([keep, remove])
+  })
+
+  it('consumptionPolicy 三态在 payload 中保留', () => {
+    const result = buildChannelPayload({
+      name: 'desktop-channel',
+      serviceType: 'openai',
+      authHeader: 'auto',
+      baseUrl: 'https://example.com',
+      baseUrls: ['https://example.com'],
+      website: '',
+      insecureSkipVerify: false,
+      lowQuality: false,
+      injectDummyThoughtSignature: false,
+      stripThoughtSignature: false,
+      description: '',
+      apiKeys: [],
+      apiKeyConfigs: [
+        { key: 'a', keyUid: 'ku_a', consumptionPolicy: 'normal' },
+        { key: 'b', keyUid: 'ku_b', consumptionPolicy: 'opportunistic' },
+        { key: 'c', keyUid: 'ku_c' },
+      ],
+      modelMapping: {},
+      modelCapabilitiesText: '',
+      reasoningMapping: {},
+      reasoningParamStyle: 'reasoning',
+      textVerbosity: '',
+      fastMode: false,
+      customHeaders: {},
+      proxyUrl: '',
+      routePrefix: '',
+      supportedModels: [],
+      autoBlacklistBalance: true,
+      normalizeMetadataUserId: true,
+      normalizeSystemRoleToTopLevel: false,
+      codexToolCompat: false,
+      noVision: false,
+      noVisionModels: [],
+      visionFallbackModel: ''
+    })
+
+    expect(result.apiKeyConfigs?.[0].consumptionPolicy).toBe('normal')
+    expect(result.apiKeyConfigs?.[1].consumptionPolicy).toBe('opportunistic')
+    expect(result.apiKeyConfigs?.[2].consumptionPolicy).toBeUndefined()
   })
 })
