@@ -1554,6 +1554,13 @@ func main() {
 				CfgManager:          cfgManager,
 				Runner:              autoDiscoveryRunner,
 				RateLimitDiscoverer: autopilotManager.RateLimitDiscoverer(),
+				ResetChannelMetrics: func(kind string, index int) {
+					switch scheduler.ChannelKind(kind) {
+					case scheduler.ChannelKindMessages, scheduler.ChannelKindChat, scheduler.ChannelKindResponses,
+						scheduler.ChannelKindGemini, scheduler.ChannelKindImages, scheduler.ChannelKindVectors:
+						channelScheduler.ResetChannelMetrics(index, scheduler.ChannelKind(kind))
+					}
+				},
 			})
 
 			// Phase 2 第三批：智能路由配置 API

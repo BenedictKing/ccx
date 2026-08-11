@@ -109,10 +109,130 @@ type AutoManagedDeps struct {
 	CfgManager             *config.ConfigManager
 	Runner                 *AutoDiscoveryRunner
 	RateLimitDiscoverer    *RateLimitDiscoverer
+	ResetChannelMetrics    func(kind string, index int)
+	VerifyChannelKey       func(ctx context.Context, kind string, upstream config.UpstreamConfig, apiKey string) error
+	SkipChannelKeyVerify   bool
 	MiMoConsoleClient      *MiMoConsoleClient
 	CompshareConsoleClient *CompshareConsoleClient
 	KimiConsoleClient      *KimiConsoleClient
 	DeepSeekClient         *DeepSeekClient
+}
+
+type existingChannelRef struct {
+	Kind       string
+	ChannelUID string
+}
+
+func verifyNewKeysForChannels(ctx context.Context, deps *AutoManagedDeps, channels []config.AccountChannel, desiredKeys []string) error {
+	if deps == nil {
+		return fmt.Errorf("自动托管依赖不可用")
+	}
+	if deps.SkipChannelKeyVerify {
+		return nil
+	}
+	verify := deps.VerifyChannelKey
+	if verify == nil {
+		verify = verifyChannelKey
+	}
+	for _, accountChannel := range channels {
+		existing := make(map[string]struct{}, len(accountChannel.Upstream.APIKeys))
+		for _, apiKey := range accountChannel.Upstream.APIKeys {
+			existing[apiKey] = struct{}{}
+		}
+		for _, apiKey := range uniqueNonEmptyStrings(desiredKeys) {
+			if _, ok := existing[apiKey]; ok {
+				continue
+			}
+			if err := verify(ctx, accountChannel.Kind, accountChannel.Upstream, apiKey); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func verifyAddedKeysForUpdates(ctx context.Context, deps *AutoManagedDeps, channels []config.AccountChannel, updates []config.AccountChannelUpdate) error {
+	if deps == nil {
+		return fmt.Errorf("自动托管依赖不可用")
+	}
+	if deps.SkipChannelKeyVerify {
+		return nil
+	}
+	verify := deps.VerifyChannelKey
+	if verify == nil {
+		verify = verifyChannelKey
+	}
+	byUID := make(map[string]config.AccountChannelUpdate, len(updates))
+	for _, update := range updates {
+		byUID[update.ChannelUID] = update
+	}
+	for _, accountChannel := range channels {
+		update, ok := byUID[accountChannel.Upstream.ChannelUID]
+		if !ok {
+			continue
+		}
+		existing := make(map[string]struct{}, len(accountChannel.Upstream.APIKeys))
+		for _, apiKey := range accountChannel.Upstream.APIKeys {
+			existing[apiKey] = struct{}{}
+		}
+		upstream := accountChannel.Upstream
+		upstream.APIKeys = append([]string(nil), update.APIKeys...)
+		upstream.APIKeyConfigs = append([]config.APIKeyConfig(nil), update.APIKeyConfig...)
+		upstream.BaseURLs = append([]string(nil), update.BaseURLs...)
+		if len(upstream.BaseURLs) > 0 {
+			upstream.BaseURL = upstream.BaseURLs[0]
+		}
+		for _, apiKey := range uniqueNonEmptyStrings(update.APIKeys) {
+			if _, ok := existing[apiKey]; ok {
+				continue
+			}
+			if err := verify(ctx, accountChannel.Kind, upstream, apiKey); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func channelsWithAddedKeys(channels []config.AccountChannel, desiredKeys []string) []existingChannelRef {
+	desired := uniqueNonEmptyStrings(desiredKeys)
+	refs := make([]existingChannelRef, 0, len(channels))
+	for _, accountChannel := range channels {
+		existing := make(map[string]struct{}, len(accountChannel.Upstream.APIKeys))
+		for _, apiKey := range accountChannel.Upstream.APIKeys {
+			existing[apiKey] = struct{}{}
+		}
+		added := false
+		for _, apiKey := range desired {
+			if _, ok := existing[apiKey]; !ok {
+				added = true
+				break
+			}
+		}
+		if added {
+			refs = append(refs, existingChannelRef{Kind: accountChannel.Kind, ChannelUID: accountChannel.Upstream.ChannelUID})
+		}
+	}
+	return refs
+}
+
+func resetChangedChannelMetrics(deps *AutoManagedDeps, refs []existingChannelRef) {
+	if deps == nil || deps.CfgManager == nil || deps.ResetChannelMetrics == nil {
+		return
+	}
+	cfg := deps.CfgManager.GetConfig()
+	seen := make(map[string]struct{}, len(refs))
+	for _, ref := range refs {
+		key := ref.Kind + "\x00" + ref.ChannelUID
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		index := findChannelIndexByUID(getChannelSlice(cfg, ref.Kind), ref.ChannelUID)
+		if index >= 0 {
+			deps.ResetChannelMetrics(ref.Kind, index)
+		}
+	}
 }
 
 // RegisterAutoManagedRoutes 注册自动托管 API 路由。
@@ -1325,9 +1445,16 @@ func applyManagedAccountUpdate(ctx context.Context, deps *AutoManagedDeps, accou
 	if err != nil {
 		return updateAccountResponse{}, status, err
 	}
+	if providerID == "" {
+		if err := verifyAddedKeysForUpdates(ctx, deps, channels, updates); err != nil {
+			return updateAccountResponse{}, http.StatusBadRequest, err
+		}
+	}
+	changed := channelsWithAddedKeys(channels, req.APIKeys)
 	if err := deps.CfgManager.UpdateAccountChannels(accountUID, updates); err != nil {
 		return updateAccountResponse{}, http.StatusInternalServerError, err
 	}
+	resetChangedChannelMetrics(deps, changed)
 	started := 0
 	for _, accountChannel := range channels {
 		if triggerDiscoveryForChannel(deps, accountChannel.Kind, accountChannel.Upstream.ChannelUID) {
@@ -1937,10 +2064,16 @@ func appendCredentialsToCustomAccount(
 		additions = append(additions, config.AccountChannelAddition{Kind: route.ChannelKind, Upstream: upstream, Placement: req.Placement})
 	}
 
+	if err := verifyAddedKeysForUpdates(c.Request.Context(), deps, channels, updates); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	changed := channelsWithAddedKeys(channels, desiredKeys)
 	if err := deps.CfgManager.ApplyAccountChannelChanges(accountUID, updates, additions); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("追加渠道密钥失败: %v", err)})
 		return
 	}
+	resetChangedChannelMetrics(deps, changed)
 	seedAutoAddRateLimitHint(deps, deps.CfgManager.GetAccountChannels(accountUID), req.RateLimitHint, req.APIKeys[0], baseURLs[0])
 	log.Printf("[AutoManaged-Add] 已向自定义账号追加凭证: account=%s keys=%d routesAdded=%d", accountUID, len(req.APIKeys), len(additions))
 	respondAutoAddAccountChannels(c, deps, requestKind, accountUID)
@@ -1963,12 +2096,22 @@ func appendCredentialsToLegacyChannels(
 	req AutoAddRequest,
 	matches []existingAutoAddChannel,
 ) {
+	desiredKeys := uniqueNonEmptyStrings(req.APIKeys)
+	channels := make([]config.AccountChannel, 0, len(matches))
+	for _, match := range matches {
+		channels = append(channels, config.AccountChannel{Kind: match.Kind, Upstream: match.Upstream})
+	}
+	if err := verifyNewKeysForChannels(c.Request.Context(), deps, channels, desiredKeys); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
 	for _, match := range matches {
 		existingKeys := make(map[string]bool, len(match.Upstream.APIKeys))
 		for _, apiKey := range match.Upstream.APIKeys {
 			existingKeys[apiKey] = true
 		}
-		for _, apiKey := range uniqueNonEmptyStrings(req.APIKeys) {
+		for _, apiKey := range desiredKeys {
 			if existingKeys[apiKey] {
 				continue
 			}
@@ -1977,6 +2120,7 @@ func appendCredentialsToLegacyChannels(
 				return
 			}
 			existingKeys[apiKey] = true
+			resetChangedChannelMetrics(deps, []existingChannelRef{{Kind: match.Kind, ChannelUID: match.Upstream.ChannelUID}})
 		}
 	}
 
@@ -2332,10 +2476,12 @@ func appendCredentialsToProviderAccount(c *gin.Context, deps *AutoManagedDeps, r
 		c.JSON(status, gin.H{"error": err.Error()})
 		return
 	}
+	changed := channelsWithAddedKeys(channels, desired)
 	if err := deps.CfgManager.ApplyAccountChannelChanges(accountUID, updates, additions); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	resetChangedChannelMetrics(deps, changed)
 	for _, addition := range additions {
 		log.Printf("[AutoManaged-Add] 已补齐 provider 账号渠道: provider=%s account=%s kind=%s serviceType=%s uid=%s",
 			tmpl.ProviderID, accountUID, addition.Kind, addition.Upstream.ServiceType, addition.Upstream.ChannelUID)

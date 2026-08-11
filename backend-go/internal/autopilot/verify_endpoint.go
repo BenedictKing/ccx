@@ -33,6 +33,10 @@ var minimalOpenAIChatProbeBody = []byte(`{"model":"probe","messages":[{"role":"u
 // minimalResponsesProbeBody 最小 OpenAI Responses 探测请求体。
 var minimalResponsesProbeBody = []byte(`{"model":"probe","input":"ping","max_output_tokens":1}`)
 
+var minimalImagesProbeBody = []byte(`{"model":"probe","prompt":"ping","size":"256x256"}`)
+
+var minimalVectorsProbeBody = []byte(`{"model":"probe","input":"ping"}`)
+
 var verifyVersionPattern = regexp.MustCompile(`/v\d+[a-z]*$`)
 
 // EndpointVerifyResult 端点验证结果。
@@ -71,6 +75,67 @@ func VerifyOpenAIChatEndpoint(ctx context.Context, baseURL, apiKey, authHeader s
 func VerifyResponsesEndpoint(ctx context.Context, baseURL, apiKey, authHeader string) EndpointVerifyResult {
 	url := buildResponsesProbeURL(baseURL)
 	return verifyJSONPostEndpoint(ctx, url, apiKey, authHeader, nil, minimalResponsesProbeBody)
+}
+
+// VerifyImagesEndpoint 对 OpenAI Images generations 端点发送最小请求验证可用性。
+func VerifyImagesEndpoint(ctx context.Context, baseURL, apiKey, authHeader string) EndpointVerifyResult {
+	return verifyJSONPostEndpoint(ctx, buildVersionedProbeURL(baseURL, "/images/generations"), apiKey, authHeader, nil, minimalImagesProbeBody)
+}
+
+// VerifyVectorsEndpoint 对 OpenAI Embeddings 端点发送最小请求验证可用性。
+func VerifyVectorsEndpoint(ctx context.Context, baseURL, apiKey, authHeader string) EndpointVerifyResult {
+	return verifyJSONPostEndpoint(ctx, buildVersionedProbeURL(baseURL, "/embeddings"), apiKey, authHeader, nil, minimalVectorsProbeBody)
+}
+
+// VerifyGeminiEndpoint 对 Gemini generateContent 端点发送最小请求验证可用性。
+func VerifyGeminiEndpoint(ctx context.Context, baseURL, apiKey, authHeader string) EndpointVerifyResult {
+	url := buildGeminiProbeURL(baseURL)
+	if !utils.HasAuthenticationHeaderOverride(authHeader) {
+		authHeader = "x-goog-api-key"
+	}
+	return verifyJSONPostEndpoint(ctx, url, apiKey, authHeader, nil, []byte(`{"contents":[{"role":"user","parts":[{"text":"ping"}]}],"generationConfig":{"maxOutputTokens":1}}`))
+}
+
+func verifyChannelKey(ctx context.Context, kind string, upstream config.UpstreamConfig, apiKey string) error {
+	baseURLs := upstream.BaseURLsForKey(apiKey)
+	if len(baseURLs) == 0 {
+		return fmt.Errorf("渠道 %s 没有可验证的上游地址", upstream.Name)
+	}
+	var diagnostics []string
+	for candidateIndex, baseURL := range baseURLs {
+		var result EndpointVerifyResult
+		switch kind {
+		case "messages":
+			result = VerifyClaudeEndpoint(ctx, baseURL, apiKey, upstream.AuthHeader)
+		case "responses":
+			result = VerifyResponsesEndpoint(ctx, baseURL, apiKey, upstream.AuthHeader)
+		case "gemini":
+			result = VerifyGeminiEndpoint(ctx, baseURL, apiKey, upstream.AuthHeader)
+		case "chat":
+			result = VerifyOpenAIChatEndpoint(ctx, baseURL, apiKey, upstream.AuthHeader)
+		case "images":
+			result = VerifyImagesEndpoint(ctx, baseURL, apiKey, upstream.AuthHeader)
+		case "vectors":
+			result = VerifyVectorsEndpoint(ctx, baseURL, apiKey, upstream.AuthHeader)
+		default:
+			return fmt.Errorf("不支持验证的渠道类型: %s", kind)
+		}
+		if !result.OK {
+			diagnostics = append(diagnostics, verifyCandidateDiagnostic(candidateIndex+1, result))
+		}
+	}
+	if len(diagnostics) == 0 {
+		return nil
+	}
+	return fmt.Errorf("key %s 验证失败（%s）", utils.MaskAPIKey(apiKey), strings.Join(diagnostics, "；"))
+}
+
+func buildGeminiProbeURL(baseURL string) string {
+	baseURL = strings.TrimSuffix(strings.TrimSuffix(baseURL, "#"), "/")
+	if verifyVersionPattern.MatchString(baseURL) {
+		return baseURL + "/models/gemini-2.5-flash:generateContent"
+	}
+	return baseURL + "/v1beta/models/gemini-2.5-flash:generateContent"
 }
 
 // VerifyKimiCodeModelsEndpoint 使用 Kimi Code 的模型列表接口验证 Key。
@@ -130,12 +195,14 @@ func verifyJSONPostEndpointWithPolicy(ctx context.Context, url, apiKey, authHead
 		return EndpointVerifyResult{Err: err, Message: "请求失败: " + err.Error()}
 	}
 	defer errutil.IgnoreDeferred(resp.Body.Close)
-	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+	responseBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 
 	sc := resp.StatusCode
 	switch {
 	case sc >= 200 && sc < 300:
 		return EndpointVerifyResult{OK: true, StatusCode: sc}
+	case strings.EqualFold(authHeader, "x-goog-api-key") && geminiAuthFailure(responseBody):
+		return EndpointVerifyResult{OK: false, StatusCode: sc, AuthFailed: true, Message: "鉴权失败"}
 	case acceptValidationError && (sc == http.StatusBadRequest || sc == http.StatusUnprocessableEntity):
 		// 占位模型/参数被拒，但服务可达且 key 有效
 		return EndpointVerifyResult{OK: true, StatusCode: sc, Message: "服务可达（探测参数被拒，鉴权通过）"}
@@ -144,6 +211,13 @@ func verifyJSONPostEndpointWithPolicy(ctx context.Context, url, apiKey, authHead
 	default:
 		return EndpointVerifyResult{OK: false, StatusCode: sc, Message: "端点不可用"}
 	}
+}
+
+func geminiAuthFailure(body []byte) bool {
+	upper := strings.ToUpper(string(body))
+	return strings.Contains(upper, "API_KEY_INVALID") ||
+		strings.Contains(upper, "API KEY NOT VALID") ||
+		strings.Contains(upper, "INVALID API KEY")
 }
 
 // buildClaudeProbeURL 按 claude provider 拼接规则构建 /messages 探测 URL。
