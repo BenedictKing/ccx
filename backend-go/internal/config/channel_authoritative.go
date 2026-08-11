@@ -25,20 +25,13 @@ import (
 // ChannelV3SchemaVersion 是 ChannelsV3 权威形态的 schema 版本。
 const ChannelV3SchemaVersion = 1
 
-// channelAuthoritativeLoadEnv 是 Phase 3c 加载翻转的开关：
-//   - 未设置 / false / 0：保持现状，仍从六数组加载（零影响、可回退）。
-//   - true / 1 / yes / on：若配置携带 ChannelsV3，则从 ChannelsV3 重建六数组作为权威来源。
-const channelAuthoritativeLoadEnv = "CCX_CHANNEL_AUTHORITATIVE_LOAD"
-
 // channelAuthoritativeStrictEnv 是 Phase 3c 严格模式开关：
-//   - 开启加载翻转时，若 ChannelsV3 重建出的六数组与磁盘六数组不一致，
-//     严格模式拒绝启动；非严格模式回退到磁盘六数组并告警（默认非严格）。
+//   - 加载时若 ChannelsV3 重建出的六数组与磁盘六数组不一致（对账失败），
+//     严格模式拒绝启动；非严格模式以 ChannelsV3 为权威覆盖（默认非严格）。
+//
+// 注意：CCX_CHANNEL_AUTHORITATIVE_LOAD 门控已于波 1（运行时权威反转）移除，
+// ChannelsV3 存在时始终应用，LOAD 变量不再有任何效果。
 const channelAuthoritativeStrictEnv = "CCX_CHANNEL_AUTHORITATIVE_STRICT"
-
-// channelAuthoritativeLoadEnabled 读取加载翻转开关。
-func channelAuthoritativeLoadEnabled() bool {
-	return isTruthyEnv(os.Getenv(channelAuthoritativeLoadEnv))
-}
 
 // channelAuthoritativeStrictEnabled 读取严格模式开关。
 func channelAuthoritativeStrictEnabled() bool {

@@ -11,7 +11,6 @@ import (
 // TestAuthoritativeLoad_RoundTripLossless 验证开关开启后，从 ChannelsV3 重建的六数组
 // 与 BuildAuthoritativeChannels 输入逐字段一致（round-trip）。
 func TestAuthoritativeLoad_RoundTripLossless(t *testing.T) {
-	defer withEnv(channelAuthoritativeLoadEnv, "true")()
 
 	mk := func(kind, uid, acct, base, svc, key string, priority int) UpstreamConfig {
 		u := makeKeyChannel(kind, uid, acct, base, svc, key, "vip", []string{"m1", "m2"})
@@ -57,7 +56,6 @@ func TestAuthoritativeLoad_RoundTripLossless(t *testing.T) {
 
 // TestAuthoritativeLoad_OrderRestored 验证乱序的 ChannelsV3 成员按 Index 恢复原始 failover 顺序。
 func TestAuthoritativeLoad_OrderRestored(t *testing.T) {
-	defer withEnv(channelAuthoritativeLoadEnv, "true")()
 
 	cfg := &Config{
 		Upstream: []UpstreamConfig{
@@ -98,7 +96,6 @@ func TestAuthoritativeLoad_OrderRestored(t *testing.T) {
 
 // TestAuthoritativeLoad_DivergenceStrictMode 验证不一致且严格模式开启时拒绝启动。
 func TestAuthoritativeLoad_DivergenceStrictMode(t *testing.T) {
-	defer withEnv(channelAuthoritativeLoadEnv, "true")()
 	defer withEnv(channelAuthoritativeStrictEnv, "true")()
 
 	cfg := &Config{
@@ -119,7 +116,6 @@ func TestAuthoritativeLoad_DivergenceStrictMode(t *testing.T) {
 // TestAuthoritativeLoad_DivergenceNonStrictMode 验证不一致且非严格模式时:ChannelsV3 仍是权威,
 // 记录诊断后覆盖磁盘六数组(而非回退)。
 func TestAuthoritativeLoad_DivergenceNonStrictMode(t *testing.T) {
-	defer withEnv(channelAuthoritativeLoadEnv, "true")()
 	// 严格模式默认关闭
 
 	original := []UpstreamConfig{
@@ -146,7 +142,6 @@ func TestAuthoritativeLoad_DivergenceNonStrictMode(t *testing.T) {
 
 // TestAuthoritativeLoad_OldConfigNoChannelsV3 验证不含 ChannelsV3 的旧配置零影响。
 func TestAuthoritativeLoad_OldConfigNoChannelsV3(t *testing.T) {
-	defer withEnv(channelAuthoritativeLoadEnv, "true")()
 
 	original := []UpstreamConfig{
 		makeKeyChannel("messages", "ch_a", "", "https://a.example.com", "claude", "sk-a", "g", nil),
@@ -161,13 +156,10 @@ func TestAuthoritativeLoad_OldConfigNoChannelsV3(t *testing.T) {
 	assertUpstreamsEqual(t, "messages", cfg.Upstream, original)
 }
 
-// TestAuthoritativeLoad_SwitchDisabled 验证开关关闭时行为不变。
-// TestAuthoritativeLoad_SwitchDisabled 验证运行时权威反转后,CCX_CHANNEL_AUTHORITATIVE_LOAD 不再门控
-// 加载翻转(反转后 ChannelsV3 是唯一权威,无旧行为可回退)。开关仅控制 strict 模式。
-// 本测试保留仅为兼容文档,实际验证 ChannelsV3 存在时始终应用。
-func TestAuthoritativeLoad_SwitchDisabled(t *testing.T) {
-	defer withEnv(channelAuthoritativeLoadEnv, "false")()
-
+// TestAuthoritativeLoad_LegacyLoadSwitchRemoved 验证运行时权威反转后
+// CCX_CHANNEL_AUTHORITATIVE_LOAD 门控已移除（常量与读取函数均已删除）：
+// ChannelsV3 存在时始终应用重建，无任何开关可回退到旧行为。
+func TestAuthoritativeLoad_LegacyLoadSwitchRemoved(t *testing.T) {
 	original := []UpstreamConfig{
 		makeKeyChannel("messages", "ch_a", "", "https://a.example.com", "claude", "sk-a", "g", nil),
 	}
@@ -191,7 +183,6 @@ func TestAuthoritativeLoad_SwitchDisabled(t *testing.T) {
 // TestAuthoritativeLoad_IntegrationAppliedWhenConsistent 验证当 ChannelsV3 与磁盘六数组
 // 完全一致时，加载翻转会成功应用 ChannelsV3。
 func TestAuthoritativeLoad_IntegrationAppliedWhenConsistent(t *testing.T) {
-	defer withEnv(channelAuthoritativeLoadEnv, "true")()
 
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "config.json")
@@ -241,7 +232,6 @@ func TestAuthoritativeLoad_IntegrationAppliedWhenConsistent(t *testing.T) {
 // TestAuthoritativeLoad_IntegrationViaConfigManager 验证通过 ConfigManager 加载时，
 // 开关开启且 ChannelsV3 与磁盘六数组不一致时，非严格模式回退到磁盘六数组。
 func TestAuthoritativeLoad_IntegrationViaConfigManager(t *testing.T) {
-	defer withEnv(channelAuthoritativeLoadEnv, "true")()
 
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "config.json")
@@ -301,7 +291,6 @@ func withEnv(key, value string) func() {
 // LogicalChannelUID 为加载期随机生成）落盘后重载，不应误报"ChannelsV3 与六数组不一致"而回退，
 // 应正常应用 ChannelsV3 重建。
 func TestAuthoritativeLoad_MigratedChannelNoFalseRollback(t *testing.T) {
-	defer withEnv(channelAuthoritativeLoadEnv, "true")()
 
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "config.json")
