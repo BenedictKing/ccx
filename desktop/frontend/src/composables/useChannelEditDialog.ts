@@ -147,6 +147,7 @@ const { t } = useLanguage()
 
   const form = reactive({
     name: '',
+    remark: '',
     description: '',
     serviceType: '' as 'openai' | 'claude' | 'gemini' | 'responses' | 'copilot' | '',
     authHeader: 'auto' as 'auto' | 'bearer' | 'x-api-key' | '',
@@ -325,6 +326,7 @@ const { t } = useLanguage()
     clearDuplicateKeyHighlight()
     randomSuffix.value = generateRandomString(6)
     form.name = ''
+    form.remark = ''
     form.description = ''
     form.serviceType = defaultServiceTypeForChannel()
     form.authHeader = 'auto'
@@ -399,6 +401,7 @@ const { t } = useLanguage()
 
   function populateFromChannel(ch: Channel) {
     form.name = ch.name || ''
+    form.remark = ch.remark || ''
     form.description = ch.description || ''
     form.serviceType = ch.serviceType || defaultServiceTypeForChannel()
     form.authHeader = ch.authHeader || 'auto'
@@ -767,6 +770,7 @@ const { t } = useLanguage()
       ? buildCurrentPayload()
       : buildChannelPayload({
           name: generatedChannelName.value,
+          remark: form.remark,
           serviceType: form.serviceType,
           authHeader: form.authHeader,
           baseUrl: submitBaseUrl.value,
@@ -1070,6 +1074,7 @@ const { t } = useLanguage()
 
     return buildChannelPayload({
       name: form.name,
+      remark: form.remark,
       serviceType: form.serviceType,
       authHeader: form.authHeader,
       baseUrl: form.baseUrl,

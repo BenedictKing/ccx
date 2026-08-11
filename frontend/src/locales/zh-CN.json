@@ -746,6 +746,8 @@
   "channelEditor.basic.website.placeholder": "https://openai.com",
   "channelEditor.basic.website.detectedPlans": "已识别套餐入口",
   "channelEditor.basic.website.providerConsole": "{provider}控制台",
+  "channelEditor.basic.remark.label": "渠道备注",
+  "channelEditor.basic.remark.hint": "最多 10 个字符",
   "channelEditor.basic.description.label": "描述",
   "channelEditor.basic.description.placeholder": "可选填，用于备注此节点供应商...",
   "channelEditor.basic.tags.label": "标签",

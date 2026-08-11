@@ -21,6 +21,22 @@
     <v-row>
       <!-- 渠道名称不再占用表单位置：由首个 BaseURL 自动派生，统一在对话框头部展示 -->
 
+      <!-- 渠道备注 -->
+      <v-col v-if="!hideMetadata" cols="12">
+        <v-text-field
+          :model-value="form.remark"
+          :label="t('channelEditor.basic.remark.label')"
+          :hint="t('channelEditor.basic.remark.hint')"
+          persistent-hint
+          prepend-inner-icon="mdi-text"
+          variant="outlined"
+          density="comfortable"
+          maxlength="10"
+          counter="10"
+          @update:model-value="updateField('remark', $event)"
+        />
+      </v-col>
+
       <!-- 服务类型 -->
       <v-col v-if="!hideServiceType" cols="12" sm="4">
         <v-select
@@ -155,6 +171,7 @@ type ChannelType = 'messages' | 'chat' | 'responses' | 'gemini' | 'images' | 've
 
 interface FormData {
   name: string
+  remark: string
   serviceType: string
   website: string
   description: string

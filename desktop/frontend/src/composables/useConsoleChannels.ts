@@ -149,6 +149,7 @@ async function saveChannel(
       await api.put(`/api/logical-channels/${encodeURIComponent(existing.logicalChannelUid)}`, {
         common: {
           name: payload.name,
+          remark: payload.remark,
           description: payload.description,
           website: payload.website,
           baseUrls: payload.baseUrls ?? (payload.baseUrl ? [payload.baseUrl] : undefined),

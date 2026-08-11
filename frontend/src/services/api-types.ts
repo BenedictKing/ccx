@@ -242,6 +242,7 @@ export interface Channel {
   disabledGroupModels?: DisabledGroupModelInfo[]  // 人工禁用的 (配额分组, 模型) 组合
   historicalApiKeys?: string[]
   description?: string
+  remark?: string
   website?: string
   insecureSkipVerify?: boolean
   modelMapping?: Record<string, string>
@@ -2417,6 +2418,7 @@ export interface LogicalChannel {
   accountUid?: string
   providerId?: string
   name: string
+  remark?: string
   description?: string
   website?: string
   kind: LogicalChannelKind
@@ -2456,6 +2458,7 @@ export interface CreateLogicalChannelProtocol {
 
 export interface CreateLogicalChannelRequest {
   name: string
+  remark?: string
   description?: string
   website?: string
   providerId?: string

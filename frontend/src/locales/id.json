@@ -746,6 +746,8 @@
   "channelEditor.basic.website.placeholder": "https://openai.com",
   "channelEditor.basic.website.detectedPlans": "Konsol paket yang terdeteksi",
   "channelEditor.basic.website.providerConsole": "Konsol {provider}",
+  "channelEditor.basic.remark.label": "Catatan kanal",
+  "channelEditor.basic.remark.hint": "Maksimal 10 karakter",
   "channelEditor.basic.description.label": "Deskripsi",
   "channelEditor.basic.description.placeholder": "Opsional: catatan tentang provider ini...",
   "channelEditor.basic.tags.label": "Tag",

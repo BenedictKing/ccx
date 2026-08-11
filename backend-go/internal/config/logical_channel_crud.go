@@ -6,14 +6,24 @@ import (
 	"log"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/BenedictKing/ccx/internal/utils"
 )
+
+// remarkMaxRunes 单条渠道备注允许的最大字符数（按 rune 计）。
+const remarkMaxRunes = 10
+
+// remarkRuneCount 计算字符串的字符数（兼容多字节字符）。
+func remarkRuneCount(s string) int {
+	return utf8.RuneCountInString(s)
+}
 
 // CreateLogicalChannelInput 新建逻辑渠道的入参。
 // 调用方负责收集并校验以下字段；CreateLogicalChannel 不会再做大幅度语义推断。
 type CreateLogicalChannelInput struct {
 	Name        string // 用户可见名（必填）
+	Remark      string
 	Description string
 	Website     string
 	ProviderID  string
@@ -49,6 +59,9 @@ type CreateLogicalChannelProtocol struct {
 func (cm *ConfigManager) CreateLogicalChannel(in CreateLogicalChannelInput) (*LogicalChannel, error) {
 	if strings.TrimSpace(in.Name) == "" {
 		return nil, fmt.Errorf("name 不能为空")
+	}
+	if remarkRuneCount(strings.TrimSpace(in.Remark)) > remarkMaxRunes {
+		return nil, fmt.Errorf("remark 不能超过 %d 个字符", remarkMaxRunes)
 	}
 	if len(in.BaseURLs) == 0 {
 		return nil, fmt.Errorf("baseUrls 至少需要一个")
@@ -93,6 +106,7 @@ func (cm *ConfigManager) CreateLogicalChannel(in CreateLogicalChannelInput) (*Lo
 		AccountUID:        strings.TrimSpace(in.AccountUID),
 		ProviderID:        strings.TrimSpace(in.ProviderID),
 		Name:              strings.TrimSpace(in.Name),
+		Remark:            in.Remark,
 		Description:       in.Description,
 		Website:           in.Website,
 		Kind:              in.Kind,
@@ -147,6 +161,7 @@ func (cm *ConfigManager) createPhysicalChannelForLogicalLocked(in CreateLogicalC
 		AccountUID:        strings.TrimSpace(in.AccountUID),
 		ProviderID:        strings.TrimSpace(in.ProviderID),
 		Name:              derivePhysicalNameForLogical(in.Name, p.Kind, in.ProviderID),
+		Remark:            strings.TrimSpace(in.Remark),
 		ServiceType:       normalizeServiceTypeForKind(p.Kind, p.ServiceType),
 		BaseURL:           baseURL,
 		BaseURLs:          baseURLs,
@@ -273,6 +288,7 @@ type UpdateLogicalChannelInput struct {
 // UpdateLogicalChannelCommon 跨协议共享字段。
 type UpdateLogicalChannelCommon struct {
 	Name        *string
+	Remark      *string
 	Description *string
 	Website     *string
 	Tags        *[]string
@@ -333,6 +349,13 @@ func (cm *ConfigManager) UpdateLogicalChannel(in UpdateLogicalChannelInput) (*Lo
 				}
 			}
 			logical.Name = newName
+		}
+		if in.Common.Remark != nil {
+			r := strings.TrimSpace(*in.Common.Remark)
+			if remarkRuneCount(r) > remarkMaxRunes {
+				return nil, fmt.Errorf("remark 不能超过 %d 个字符", remarkMaxRunes)
+			}
+			logical.Remark = r
 		}
 		if in.Common.Description != nil {
 			logical.Description = *in.Common.Description
@@ -416,6 +439,7 @@ func (cm *ConfigManager) UpdateLogicalChannel(in UpdateLogicalChannelInput) (*Lo
 			// 新增 protocol
 			up, err := cm.createPhysicalChannelForLogicalLocked(CreateLogicalChannelInput{
 				Name:       logical.Name,
+				Remark:     logical.Remark,
 				ProviderID: logical.ProviderID,
 				AccountUID: logical.AccountUID,
 				Kind:       logical.Kind,
@@ -618,6 +642,7 @@ func (cm *ConfigManager) updatePhysicalChannelForLogicalLocked(kind, channelUID 
 	// 同步 logical 级别的共享字段到每个物理渠道，确保名称/站点地址池一致
 	up.Name = logical.Name
 	up.LogicalName = logical.Name
+	up.Remark = logical.Remark
 	up.Website = logical.Website
 	up.Description = logical.Description
 	up.Tags = append([]string(nil), logical.Tags...)

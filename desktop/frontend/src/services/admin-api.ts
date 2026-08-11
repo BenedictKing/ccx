@@ -239,6 +239,7 @@ export interface Channel {
   disabledGroupModels?: DisabledGroupModel[]
   historicalApiKeys?: string[]
   description?: string
+  remark?: string
   website?: string
   insecureSkipVerify?: boolean
   modelMapping?: Record<string, string>
@@ -1648,6 +1649,7 @@ export interface LogicalChannel {
   accountUid?: string
   providerId?: string
   name: string
+  remark?: string
   description?: string
   website?: string
   kind: LogicalChannelKind
@@ -1683,6 +1685,7 @@ export interface CreateLogicalChannelProtocol {
 
 export interface CreateLogicalChannelRequest {
   name: string
+  remark?: string
   description?: string
   website?: string
   providerId?: string
@@ -1697,6 +1700,7 @@ export interface CreateLogicalChannelRequest {
 
 export interface UpdateLogicalChannelCommon {
   name?: string
+  remark?: string
   description?: string
   website?: string
   tags?: string[]

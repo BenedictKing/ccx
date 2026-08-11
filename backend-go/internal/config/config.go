@@ -37,6 +37,7 @@ type UpstreamConfig struct {
 	AuthHeader            string                             `json:"authHeader,omitempty"`          // 认证头覆盖：auto(空)/bearer/x-api-key
 	ProviderID            string                             `json:"providerId,omitempty"`          // 来源 provider 模板 ID（如 mimo/deepseek），模板化添加时写入，用于回溯与预设引用
 	Name                  string                             `json:"name,omitempty"`
+	Remark                string                             `json:"remark,omitempty"`
 	Description           string                             `json:"description,omitempty"`
 	Website               string                             `json:"website,omitempty"`
 	InsecureSkipVerify    bool                               `json:"insecureSkipVerify,omitempty"`
@@ -1134,6 +1135,7 @@ type UpstreamUpdate struct {
 	BaseURLs                 []string                           `json:"baseUrls"`
 	APIKeys                  []string                           `json:"apiKeys"`
 	APIKeyConfigs            []APIKeyConfig                     `json:"apiKeyConfigs"`
+	Remark                   *string                            `json:"remark"`
 	Description              *string                            `json:"description"`
 	Website                  *string                            `json:"website"`
 	InsecureSkipVerify       *bool                              `json:"insecureSkipVerify"`

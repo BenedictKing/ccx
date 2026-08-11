@@ -681,6 +681,8 @@
   "channelEditor.basic.serviceType.label": "上游类型",
   "channelEditor.basic.serviceType.placeholder": "选择上游类型",
   "channelEditor.basic.serviceType.required": "请选择上游类型",
+  "channelEditor.basic.remark.label": "渠道备注",
+  "channelEditor.basic.remark.hint": "最多 10 个字符",
   "channelEditor.basic.description.label": "描述",
   "channelEditor.nav.connection": "连接",
   "channelEditor.basic.baseUrl.label": "Base URL",

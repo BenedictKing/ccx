@@ -111,6 +111,9 @@ func (cm *ConfigManager) loadConfig() error {
 		cm.config.Upstream, cm.config.ChatUpstream, cm.config.ResponsesUpstream,
 			cm.config.GeminiUpstream, cm.config.ImagesUpstream, cm.config.VectorsUpstream =
 			rebuilt.Upstream, rebuilt.Chat, rebuilt.Responses, rebuilt.Gemini, rebuilt.Images, rebuilt.Vectors
+		// 新名称协议迁移必须在后续默认值迁移/自检可能触发的首轮 save 之前完成，
+		// 这样 Name/Remark 会随同 ChannelsV3 一次性持久化，不会只停留在内存。
+		migrateAllChannelNamesConfig(&cm.config)
 	}
 
 	// 兼容旧配置：缺失字段补齐默认值（thinkingCache 等）
@@ -1453,6 +1456,12 @@ func (cm *ConfigManager) saveConfigLocked(config Config) error {
 
 	// 落盘前快照（用于 B.2 事件 diff）。
 	snapshotBeforeWrite := cm.config
+
+	// 已有 ChannelsV3 的配置进入新名称协议；保存时统一重派生历史名称。
+	// 旧六数组首次迁移不在这里改写，避免兼容旧格式时改变其业务语义。
+	if len(config.ChannelsV3) > 0 {
+		migrateAllChannelNamesConfig(&config)
+	}
 
 	// 清理已废弃字段，确保不会被序列化到 JSON
 	config.CurrentUpstream = 0

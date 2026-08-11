@@ -127,17 +127,10 @@ func applyDefaultBaseURL(upstream *UpstreamConfig) {
 }
 
 // shouldAutoDeriveChannelName 判断渠道名称是否应由首个 baseURL 自动派生。
-// 以下渠道保留人工/模板命名，不参与派生：
-//   - AutoManaged：托管渠道保留 baseName+路由后缀 的命名
-//   - ProviderID != ""：模板化添加（桌面 preset / autopilot）携带来源标识，
-//     其 Name 由生成方按 preset/plan 语义命名，同时作为桌面端幂等覆盖身份，
-//     不能被 baseURL 派生覆盖。
-//
-// 注意不能用 AccountUID 判定：加载迁移会为所有渠道（含手动渠道）补齐 AccountUID。
+// 渠道名称统一由首地址生成，不再为托管渠道、模板渠道或历史自定义名称保留例外；
+// 用户自定义语义统一放入 Remark。
 func shouldAutoDeriveChannelName(upstream *UpstreamConfig) bool {
-	return upstream != nil &&
-		(!upstream.AutoManaged || upstream.AutoManagedKind == "generic") &&
-		strings.TrimSpace(upstream.ProviderID) == ""
+	return upstream != nil
 }
 
 // channelPrimaryBaseURL 返回渠道当前用于命名的首个 baseURL（优先 BaseURLs[0]，其次 BaseURL）。
@@ -201,6 +194,92 @@ func uniqueAutoDerivedChannelName(channels []UpstreamConfig, exclude *UpstreamCo
 		}
 		name = fmt.Sprintf("%s-%d", base, i)
 	}
+}
+
+// migrateAllChannelNamesConfig 把所有物理渠道名按首个 baseURL 重派生。
+// 旧 Name 若与派生值不同且 Remark 为空，则迁移到 Remark（截断到 10 字符）。
+// 幂等；返回 true 表示发生了写回。
+// migrateAllChannelNamesConfig 把所有物理渠道名按首个 baseURL 重派生。
+// 仅对采用新数据模型的存量配置执行一次：ChannelsV3 或 LogicalChannels 任一存在
+// 即认为是新数据形态，需要对历史自定义名做统一改写。旧格式测试/配置不会被打扰。
+// 旧 Name 若与派生值不同且 Remark 为空，则迁移到 Remark（截断到 10 字符）。
+// 幂等；返回 true 表示发生了写回。
+func migrateAllChannelNamesConfig(cfg *Config) bool {
+	if cfg == nil {
+		return false
+	}
+	if len(cfg.ChannelsV3) == 0 && len(cfg.LogicalChannels) == 0 {
+		return false
+	}
+	changed := false
+	changed = migrateAutoDeriveChannelNamesInSlice(&cfg.Upstream) || changed
+	changed = migrateAutoDeriveChannelNamesInSlice(&cfg.ChatUpstream) || changed
+	changed = migrateAutoDeriveChannelNamesInSlice(&cfg.ResponsesUpstream) || changed
+	changed = migrateAutoDeriveChannelNamesInSlice(&cfg.GeminiUpstream) || changed
+	changed = migrateAutoDeriveChannelNamesInSlice(&cfg.ImagesUpstream) || changed
+	changed = migrateAutoDeriveChannelNamesInSlice(&cfg.VectorsUpstream) || changed
+
+	if changed {
+		byUID := make(map[string]*UpstreamConfig)
+		visit := func(channels []UpstreamConfig) {
+			for i := range channels {
+				uid := strings.TrimSpace(channels[i].LogicalChannelUID)
+				if uid != "" {
+					byUID[uid] = &channels[i]
+				}
+			}
+		}
+		visit(cfg.Upstream)
+		visit(cfg.ChatUpstream)
+		visit(cfg.ResponsesUpstream)
+		visit(cfg.GeminiUpstream)
+		visit(cfg.ImagesUpstream)
+		visit(cfg.VectorsUpstream)
+		for i := range cfg.LogicalChannels {
+			if up := byUID[cfg.LogicalChannels[i].LogicalChannelUID]; up != nil {
+				cfg.LogicalChannels[i].Name = up.Name
+				if strings.TrimSpace(cfg.LogicalChannels[i].Remark) == "" {
+					cfg.LogicalChannels[i].Remark = up.Remark
+				}
+			}
+		}
+	}
+	return changed
+}
+
+// migrateAutoDeriveChannelNamesInSlice 对单个物理数组执行名称重派生。
+// 迭代顺序即切片顺序，与 uniqueAutoDerivedChannelName 的去重行为协同，
+// 结果对确定输入是确定的。
+func migrateAutoDeriveChannelNamesInSlice(channels *[]UpstreamConfig) bool {
+	if channels == nil || len(*channels) == 0 {
+		return false
+	}
+	changed := false
+	for i := range *channels {
+		up := &(*channels)[i]
+		if !shouldAutoDeriveChannelName(up) {
+			continue
+		}
+		newFirst := channelPrimaryBaseURL(up)
+		if strings.TrimSpace(newFirst) == "" {
+			continue
+		}
+		desired := utils.DeriveChannelNameFromBaseURL(newFirst)
+		resolved := uniqueAutoDerivedChannelName(*channels, up, desired, newFirst, up.ServiceType)
+		if up.Name == resolved {
+			continue
+		}
+		old := strings.TrimSpace(up.Name)
+		if old != "" && strings.TrimSpace(up.Remark) == "" {
+			if remarkRuneCount(old) > remarkMaxRunes {
+				old = string([]rune(old)[:remarkMaxRunes])
+			}
+			up.Remark = old
+		}
+		up.Name = resolved
+		changed = true
+	}
+	return changed
 }
 
 // ConfigError 配置错误

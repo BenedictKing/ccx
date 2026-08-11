@@ -681,6 +681,8 @@
   "channelEditor.basic.serviceType.label": "Upstream type",
   "channelEditor.basic.serviceType.placeholder": "Select upstream type",
   "channelEditor.basic.serviceType.required": "Please select an upstream type",
+  "channelEditor.basic.remark.label": "Channel remark",
+  "channelEditor.basic.remark.hint": "Up to 10 characters",
   "channelEditor.basic.description.label": "Description",
   "channelEditor.nav.connection": "Connection",
   "channelEditor.basic.baseUrl.label": "Base URL",

@@ -75,8 +75,8 @@ func TestUpdateUpstream_NameFollowsFirstBaseURL(t *testing.T) {
 	}
 }
 
-// TestUpdateUpstream_ManagedChannelNamePreserved 验证托管渠道（AutoManaged）名称不被派生覆盖。
-func TestUpdateUpstream_ManagedChannelNamePreserved(t *testing.T) {
+// TestUpdateUpstream_ManagedChannelNameFollowsBaseURL 验证托管渠道同样按首个 baseURL 派生名称。
+func TestUpdateUpstream_ManagedChannelNameFollowsBaseURL(t *testing.T) {
 	cm := newTestConfigManager(t, `{"upstream":[{"name":"mimo-claude","accountUid":"acct-1","providerId":"mimo","autoManaged":true,"channelUid":"ch-1","baseUrl":"https://api.mimo.com","apiKeys":["k1"],"serviceType":"claude"}]}`)
 
 	baseURL := "https://api.renamed-host.com"
@@ -85,8 +85,8 @@ func TestUpdateUpstream_ManagedChannelNamePreserved(t *testing.T) {
 	}
 
 	cfg := cm.GetConfig()
-	if got := cfg.Upstream[0].Name; got != "mimo-claude" {
-		t.Errorf("托管渠道 Name = %q, want %q（不应被 baseURL 派生覆盖）", got, "mimo-claude")
+	if got := cfg.Upstream[0].Name; got != "renamed-host" {
+		t.Errorf("托管渠道 Name = %q, want %q（应按首个 baseURL 派生）", got, "renamed-host")
 	}
 }
 

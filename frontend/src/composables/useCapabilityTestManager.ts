@@ -677,6 +677,7 @@ const handleCopyToTab = async (targetProtocol: string, serviceProtocol = targetP
     baseUrl: sourceChannel.baseUrl,
     baseUrls: sourceChannel.baseUrls,
     apiKeys: [...sourceChannel.apiKeys],
+    remark: sourceChannel.remark,
     description: sourceChannel.description,
     website: sourceChannel.website,
     proxyUrl: sourceChannel.proxyUrl,

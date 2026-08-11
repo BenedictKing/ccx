@@ -161,6 +161,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
 
   const form = reactive({
     name: '',
+    remark: '',
     serviceType: '' as 'openai' | 'gemini' | 'claude' | 'responses' | 'copilot' | '',
     authHeader: 'auto' as 'auto' | 'bearer' | 'x-api-key' | '',
     baseUrl: '',
@@ -886,6 +887,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
   const resetForm = () => {
     resetTransientUiState()
     form.name = ''
+    form.remark = ''
     form.serviceType = props.channelType === 'images' || props.channelType === 'vectors' ? 'openai' : ''
     form.authHeader = 'auto'
     form.baseUrl = ''
@@ -958,6 +960,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
   const loadChannelData = (channel: Channel) => {
     resetTransientUiState()
     form.name = isAutoManagedChannel.value ? channel.name : extractChannelNamePrefix(channel.baseUrl || channel.baseUrls?.[0] || '')
+    form.remark = channel.remark || ''
     form.serviceType = props.channelType === 'images' || props.channelType === 'vectors' ? 'openai' : channel.serviceType
     form.authHeader = channel.authHeader || 'auto'
     form.baseUrl = channel.baseUrl

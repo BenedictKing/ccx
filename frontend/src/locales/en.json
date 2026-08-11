@@ -746,6 +746,8 @@
   "channelEditor.basic.website.placeholder": "https://openai.com",
   "channelEditor.basic.website.detectedPlans": "Detected plan consoles",
   "channelEditor.basic.website.providerConsole": "{provider} console",
+  "channelEditor.basic.remark.label": "Channel remark",
+  "channelEditor.basic.remark.hint": "Up to 10 characters",
   "channelEditor.basic.description.label": "Description",
   "channelEditor.basic.description.placeholder": "Optional: note about this provider...",
   "channelEditor.basic.tags.label": "Tags",

@@ -699,9 +699,9 @@ func handleNewApiProvision(deps *NewApiRouteDeps) gin.HandlerFunc {
 					return
 				}
 
-				// 找到新建渠道的 index
+				// 名称会按首个 baseURL 自动派生，使用稳定 ChannelUID 定位新建渠道。
 				for i, ch := range getChannelSlice(deps.CfgManager.GetConfig(), req.ChannelKind) {
-					if ch.Name == channelName {
+					if ch.ChannelUID == channelUID {
 						channelIndex = i
 						break
 					}

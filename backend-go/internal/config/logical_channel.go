@@ -42,7 +42,8 @@ type LogicalChannel struct {
 	LogicalChannelUID string                   `json:"logicalChannelUid"`    // 稳定 ULID
 	AccountUID        string                   `json:"accountUid,omitempty"` // 可选：自动托管账号身份
 	ProviderID        string                   `json:"providerId,omitempty"` // 可选：来源 provider 模板 ID
-	Name              string                   `json:"name"`                 // 用户可见名称
+	Name              string                   `json:"name"`                 // 用户可见名称（按首个 BaseURL 自动派生，不允许手改）
+	Remark            string                   `json:"remark,omitempty"`     // 用户备注，最长 10 字符
 	Description       string                   `json:"description,omitempty"`
 	Website           string                   `json:"website,omitempty"`
 	Kind              LogicalChannelKind       `json:"kind"`         // llm / embeddings / images

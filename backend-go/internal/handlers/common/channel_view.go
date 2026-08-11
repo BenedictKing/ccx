@@ -23,6 +23,7 @@ func BuildChannelView(up config.UpstreamConfig, index int) gin.H {
 		"apiKeys":                       up.APIKeys,
 		"apiKeyConfigs":                 config.NormalizeAPIKeyConfigsForView(up),
 		"description":                   up.Description,
+		"remark":                        up.Remark,
 		"website":                       up.Website,
 		"insecureSkipVerify":            up.InsecureSkipVerify,
 		"modelMapping":                  up.ModelMapping,

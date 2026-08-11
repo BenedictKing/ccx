@@ -9,6 +9,7 @@ import { useLanguage } from '@/composables/useLanguage'
 
 interface FormData {
   name: string
+  remark: string
   serviceType: 'openai' | 'claude' | 'gemini' | 'responses' | 'copilot' | ''
   baseUrl: string
   baseUrlsText: string
@@ -96,6 +97,18 @@ function updateField<K extends keyof FormData>(key: K, value: FormData[K]) {
         </Select>
         <p v-if="errors.serviceType" class="text-[10px] text-destructive">{{ errors.serviceType }}</p>
       </div>
+    </div>
+
+    <div class="space-y-1.5">
+      <Label class="text-xs font-semibold text-muted-foreground">{{ t('channelEditor.basic.remark.label') }}</Label>
+      <Input
+        :model-value="form.remark"
+        class="h-9"
+        maxlength="10"
+        :placeholder="t('channelEditor.basic.remark.hint')"
+        @update:model-value="(val) => updateField('remark', val as string)"
+      />
+      <p class="text-[10px] leading-4 text-muted-foreground">{{ t('channelEditor.basic.remark.hint') }}</p>
     </div>
 
     <div v-if="form.serviceType !== 'copilot'" class="space-y-1.5">

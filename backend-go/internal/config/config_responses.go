@@ -149,6 +149,13 @@ func (cm *ConfigManager) UpdateResponsesUpstream(index int, updates UpstreamUpda
 		}
 		upstream.AuthHeader = authHeader
 	}
+	if updates.Remark != nil {
+		r := strings.TrimSpace(*updates.Remark)
+		if remarkRuneCount(r) > remarkMaxRunes {
+			return false, fmt.Errorf("remark 不能超过 %d 个字符", remarkMaxRunes)
+		}
+		upstream.Remark = r
+	}
 	if updates.Description != nil {
 		upstream.Description = *updates.Description
 	}

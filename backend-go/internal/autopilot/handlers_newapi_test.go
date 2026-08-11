@@ -280,7 +280,7 @@ func TestHandleNewApiProvision_FullFlow_CreateNewKey(t *testing.T) {
 	cfg := cfgManager.GetConfig()
 	found := false
 	for _, ch := range cfg.Upstream {
-		if ch.Name == "newapi-test-channel" {
+		if ch.ChannelUID == resp.ChannelUID {
 			found = true
 			if len(ch.APIKeys) != 1 || ch.APIKeys[0] != "sk-newly-created-key" {
 				t.Fatalf("渠道 APIKeys 不匹配: %+v", ch.APIKeys)
@@ -361,7 +361,7 @@ func TestHandleNewApiProvision_UnprefixedKey_GetsSkPrefix(t *testing.T) {
 		t.Fatalf("明文 key 未补齐 sk- 前缀: %q", resp.ProvisionedKey)
 	}
 	for _, ch := range cfgManager.GetConfig().Upstream {
-		if ch.Name == "newapi-unprefixed-channel" {
+		if ch.ChannelUID == resp.ChannelUID {
 			if len(ch.APIKeys) != 1 || ch.APIKeys[0] != "sk-rawkey-no-prefix" {
 				t.Fatalf("渠道 APIKeys 未补齐 sk- 前缀: %+v", ch.APIKeys)
 			}

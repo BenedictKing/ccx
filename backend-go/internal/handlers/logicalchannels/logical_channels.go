@@ -39,6 +39,7 @@ type ListResponse struct {
 // CreateRequestBody POST 入参。
 type CreateRequestBody struct {
 	Name        string                      `json:"name"`
+	Remark      string                      `json:"remark"`
 	Description string                      `json:"description"`
 	Website     string                      `json:"website"`
 	ProviderID  string                      `json:"providerId"`
@@ -81,6 +82,7 @@ type UpdateRequestBody struct {
 // UpdateRequestBodyCommon 跨协议共享字段更新。
 type UpdateRequestBodyCommon struct {
 	Name        *string   `json:"name"`
+	Remark      *string   `json:"remark"`
 	Description *string   `json:"description"`
 	Website     *string   `json:"website"`
 	Tags        *[]string `json:"tags"`
@@ -145,6 +147,7 @@ func (h *Handler) Dashboard(c *gin.Context) {
 		view["baseUrls"] = lc.BaseURLs
 		view["accountUid"] = lc.AccountUID
 		view["providerId"] = lc.ProviderID
+		view["remark"] = lc.Remark
 		view["tags"] = lc.Tags
 
 		// 协议路由胶囊
@@ -379,6 +382,7 @@ func (h *Handler) Create(c *gin.Context) {
 	}
 	in := config.CreateLogicalChannelInput{
 		Name:        body.Name,
+		Remark:      body.Remark,
 		Description: body.Description,
 		Website:     body.Website,
 		ProviderID:  body.ProviderID,
@@ -441,6 +445,7 @@ func (h *Handler) Update(c *gin.Context) {
 	if body.Common != nil {
 		in.Common = &config.UpdateLogicalChannelCommon{
 			Name:        body.Common.Name,
+			Remark:      body.Common.Remark,
 			Description: body.Common.Description,
 			Website:     body.Common.Website,
 			Tags:        body.Common.Tags,
