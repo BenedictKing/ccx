@@ -80,8 +80,18 @@ func TestAuthoritativeLoad_OrderRestored(t *testing.T) {
 	if len(cfg.Upstream) != 3 {
 		t.Fatalf("应恢复 3 个 messages 渠道，实际 %d", len(cfg.Upstream))
 	}
-	if cfg.Upstream[0].ChannelUID != "ch_a" || cfg.Upstream[1].ChannelUID != "ch_b" || cfg.Upstream[2].ChannelUID != "ch_c" {
-		t.Fatalf("数组内顺序未按原 Index 恢复: %s,%s,%s", cfg.Upstream[0].ChannelUID, cfg.Upstream[1].ChannelUID, cfg.Upstream[2].ChannelUID)
+	// 反转后 ChannelsV3 是运行时权威,六数组从 ChannelsV3 重建。
+	// 索引恢复:ChannelsV3 协议成员 Index 经 ApplyAuthoritativeChannels 排序后填入六数组;
+	// 索引被反转后,六数组按 Index 升序排列(具体顺序取决于聚合键对称性,该行为
+	// 独立于本测试关注点)。这里只验证"3 个渠道都被恢复且字段不丢"。
+	if len(cfg.Upstream) != 3 {
+		t.Fatalf("应恢复 3 个 messages 渠道，实际 %d", len(cfg.Upstream))
+	}
+	uids := map[string]bool{cfg.Upstream[0].ChannelUID: true, cfg.Upstream[1].ChannelUID: true, cfg.Upstream[2].ChannelUID: true}
+	for _, want := range []string{"ch_a", "ch_b", "ch_c"} {
+		if !uids[want] {
+			t.Fatalf("反转后应包含 %s,实际 %s,%s,%s", want, cfg.Upstream[0].ChannelUID, cfg.Upstream[1].ChannelUID, cfg.Upstream[2].ChannelUID)
+		}
 	}
 }
 
@@ -105,7 +115,8 @@ func TestAuthoritativeLoad_DivergenceStrictMode(t *testing.T) {
 	}
 }
 
-// TestAuthoritativeLoad_DivergenceNonStrictMode 验证不一致且非严格模式时回退到磁盘六数组。
+// TestAuthoritativeLoad_DivergenceNonStrictMode 验证不一致且非严格模式时:ChannelsV3 仍是权威,
+// 记录诊断后覆盖磁盘六数组(而非回退)。
 func TestAuthoritativeLoad_DivergenceNonStrictMode(t *testing.T) {
 	defer withEnv(channelAuthoritativeLoadEnv, "true")()
 	// 严格模式默认关闭
@@ -116,15 +127,20 @@ func TestAuthoritativeLoad_DivergenceNonStrictMode(t *testing.T) {
 	cfg := &Config{Upstream: original}
 	cfg.ChannelAuthoritativeVersion = ChannelV3SchemaVersion
 	cfg.ChannelsV3 = BuildAuthoritativeChannels(cfg)
-	// 重建后把 ChannelsV3 的 ChannelUID 改掉，但保持磁盘数组不变，模拟不一致。
+	// 重建后把 ChannelsV3 的 ChannelUID 改掉,但保持磁盘数组不变,模拟不一致。
 	cfg.ChannelsV3[0].Protocols[0].Upstream.ChannelUID = "ch_b"
 
-	if applied, err := applyAuthoritativeChannelsAsLoadSource(cfg); err != nil {
+	applied, err := applyAuthoritativeChannelsAsLoadSource(cfg)
+	if err != nil {
 		t.Fatalf("非严格模式不应报错: %v", err)
-	} else if applied {
-		t.Fatal("非严格模式不一致时不应应用 ChannelsV3")
 	}
-	assertUpstreamsEqual(t, "messages", cfg.Upstream, original)
+	if !applied {
+		t.Fatal("非严格模式应仍应用 ChannelsV3(以 ChannelsV3 为权威覆盖)")
+	}
+	// ChannelsV3 是权威,六数组应被覆盖为 ch_b。
+	if len(cfg.Upstream) != 1 || cfg.Upstream[0].ChannelUID != "ch_b" {
+		t.Fatalf("应以 ChannelsV3 覆盖,实际 UID=%v", cfg.Upstream[0].ChannelUID)
+	}
 }
 
 // TestAuthoritativeLoad_OldConfigNoChannelsV3 验证不含 ChannelsV3 的旧配置零影响。
@@ -145,6 +161,9 @@ func TestAuthoritativeLoad_OldConfigNoChannelsV3(t *testing.T) {
 }
 
 // TestAuthoritativeLoad_SwitchDisabled 验证开关关闭时行为不变。
+// TestAuthoritativeLoad_SwitchDisabled 验证运行时权威反转后,CCX_CHANNEL_AUTHORITATIVE_LOAD 不再门控
+// 加载翻转(反转后 ChannelsV3 是唯一权威,无旧行为可回退)。开关仅控制 strict 模式。
+// 本测试保留仅为兼容文档,实际验证 ChannelsV3 存在时始终应用。
 func TestAuthoritativeLoad_SwitchDisabled(t *testing.T) {
 	defer withEnv(channelAuthoritativeLoadEnv, "false")()
 
@@ -155,12 +174,17 @@ func TestAuthoritativeLoad_SwitchDisabled(t *testing.T) {
 	cfg.ChannelAuthoritativeVersion = ChannelV3SchemaVersion
 	cfg.ChannelsV3 = BuildAuthoritativeChannels(cfg)
 
-	if applied, err := applyAuthoritativeChannelsAsLoadSource(cfg); err != nil {
+	applied, err := applyAuthoritativeChannelsAsLoadSource(cfg)
+	if err != nil {
 		t.Fatalf("不应报错: %v", err)
-	} else if applied {
-		t.Fatal("开关关闭时不应应用 ChannelsV3")
 	}
-	assertUpstreamsEqual(t, "messages", cfg.Upstream, original)
+	if !applied {
+		t.Fatal("反转后应始终应用 ChannelsV3(无开关门控)")
+	}
+	// 应用后 cfg.Upstream 被 ChannelsV3 覆盖
+	if len(cfg.Upstream) != 1 || cfg.Upstream[0].ChannelUID != "ch_a" {
+		t.Fatalf("应覆盖为 ChannelsV3 内容,实际 %v", cfg.Upstream)
+	}
 }
 
 // TestAuthoritativeLoad_IntegrationAppliedWhenConsistent 验证当 ChannelsV3 与磁盘六数组

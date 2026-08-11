@@ -183,20 +183,18 @@ func applyAuthoritativeChannelsAsLoadSource(cfg *Config) (applied bool, err erro
 	if cfg == nil {
 		return false, nil
 	}
-	if !channelAuthoritativeLoadEnabled() {
-		return false, nil
-	}
 	if cfg.ChannelAuthoritativeVersion != ChannelV3SchemaVersion || len(cfg.ChannelsV3) == 0 {
 		return false, nil
 	}
 
 	rebuilt := ApplyAuthoritativeChannelsAsStruct(cfg.ChannelsV3)
+	// 严格模式：对账失败拒绝启动（配置可能被外部手改坏）。
 	if err := compareAuthoritativeRoundTrip(cfg, rebuilt); err != nil {
 		if channelAuthoritativeStrictEnabled() {
 			return false, fmt.Errorf("[Config-Load] ChannelsV3 与六数组不一致且严格模式开启，拒绝启动: %w", err)
 		}
-		log.Printf("[Config-Load] 警告: ChannelsV3 与六数组不一致，回退到磁盘六数组: %v", err)
-		return false, nil
+		// 非严格模式：ChannelsV3 已是权威来源，记录诊断后仍以 ChannelsV3 覆盖六数组。
+		log.Printf("[Config-Load] 注意: ChannelsV3 与磁盘六数组有偏差，以 ChannelsV3 为权威覆盖: %v", err)
 	}
 
 	cfg.Upstream, cfg.ChatUpstream, cfg.ResponsesUpstream, cfg.GeminiUpstream, cfg.ImagesUpstream, cfg.VectorsUpstream =
