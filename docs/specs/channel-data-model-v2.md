@@ -85,8 +85,10 @@ EndpointCapability（跨账号共享，按 CapabilityUID 索引）
   - **2b（进行中）**：只读 API `GET /api/channels`、`GET /api/channels/:uid` 暴露实时合成的渠道视图与共享能力（`internal/handlers/channels`，基于 `ConfigManager.GetChannelViews`）；前端读逐步切换。写路径仍走既有 upstream/logical-channels 接口。
 - **Phase 3**：移除六个 `Upstream` 数组，仅保留 `Channels` + `ProtocolFacade`；scheduler/handlers/autopilot 全量改用 `Channel`。
   - **3a（已落地）**：无损权威形态 `ChannelV3`（每协议成员携带完整 `UpstreamConfig`）+ 双向投影 `BuildAuthoritativeChannels` / `ApplyAuthoritativeChannels`（`channel_authoritative.go`）。round-trip 逐字段无损、按 Index 恢复数组顺序，测试通过。这是"Channels 权威"的安全核心机制。
-  - **3b（待做，需 app 验证）**：把 `ChannelV3` 作为持久化权威（save 写 / load 时从它重建六数组），schema 版本门控，旧配置零影响。
-  - **3c（待做，需 app 验证）**：scheduler/handlers/metrics/autopilot 逐个从六数组切到 `ChannelV3`，最后删除数组字段。破坏性最大，必须边改边用 `make dev` 跑真实请求回归。
+  - **3b（已落地）**：把 `ChannelV3` 作为持久化权威（save 写 / load 时从它重建六数组），schema 版本门控，旧配置零影响。
+  - **3c 波 1（已落地，app 已验证）**：运行时权威反转——加载后以 `ChannelsV3` 为唯一权威重建运行时六数组（无开关门控）；严格模式 `CCX_CHANNEL_AUTHORITATIVE_STRICT` 对账失败拒绝启动，非严格以 V3 覆盖；加载期迁移落盘当次跳过翻转（避免旧 V3 快照撤销迁移）。
+  - **3c 波 2（评估结论：免改）**：消费者无需逐文件切换——`GetConfig()` 返回的六数组已是 V3 运行时投影，读取语义不变；如需显式化可后续加 `UpstreamsForKind` 访问器。
+  - **3c 波 3（评估结论：不建议做）**：六数组字段 `json:"-"` 停落盘会让旧配置 unmarshal 直接丢渠道（需自定义 unmarshal 兼容层），且旧二进制读新格式配置丢渠道（回滚灾难需双写过渡期）；当前双写仅冗余、无安全问题，风险收益比不划算。
 
 ## 7. 当前实现状态
 
@@ -100,5 +102,7 @@ EndpointCapability（跨账号共享，按 CapabilityUID 索引）
 - ✅ Phase 3b（权威落盘）：save 落盘 `channelsV3`（脱敏后从数组合成）+ `channelAuthoritativeVersion`；load 时 `reconcileAuthoritativeChannels` 对账告警（非破坏，仍信任六数组）。
 - ✅ #8（拉黑跨协议）：`BlacklistKeyWithRecoverAt` 级联拉黑同 `AccountUID`/`LogicalChannelUID` 下持有相同明文 key 的其它协议渠道；不同账号同名 key 不误伤。测试覆盖级联与隔离。
 - ⏳ #8 熔断层：model-circuit 跨协议共享（metrics 层改键，需 app 验证）。
-- ⏳ 把 `CapabilityProbeLedger` 接入 autopilot 协议探测与 healthcheck。
-- ⏳ Phase 3c（从 ChannelsV3 重建六数组的硬翻转 + 消费者切换 + 删除数组，需 app 回归）。
+- ✅ `CapabilityProbeLedger` 已接入 autopilot 协议探测与 healthcheck L2（healthcheck 侧：同能力 key 每周期只真实探测一次，成功结论复用、失败各自再探；L1 因 auth 绑定不去重，稀疏 L2 因 per-key 预算口径不去重）。
+- ✅ Phase 3c 波 1（运行时权威反转）：加载后始终以 `ChannelsV3` 重建运行时六数组；托管 Key 经 `syncManagedAccountCredentialsFromChannels` + `hydrateManagedAccountCredentials` 闭环；对账忽略易变字段与 Key；加载期迁移落盘当次跳过翻转（回归测试覆盖）。app 回归通过（`make run` 实测 3399：297 渠道重建、管理 API/调度/保活正常）。
+- ❌ Phase 3c 波 2（消费者切换）：评估后免改（六数组已是 V3 投影）。
+- ❌ Phase 3c 波 3（删六数组字段）：评估后不建议（升级/回滚兼容性成本远超收益，详见 §6）。
