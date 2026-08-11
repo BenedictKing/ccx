@@ -123,6 +123,8 @@ export interface APIKeyConfig {
   groupMultiplier?: number | null
   maxGroupMultiplier?: number | null
   multiplierSource?: 'manual' | 'new_api' | 'provider'
+  consumptionPolicy?: 'normal' | 'opportunistic'
+  effectiveCostClass?: 'zero' | 'discounted' | 'standard' | 'premium' | 'unknown'
   multiplierUpdatedAt?: string
   multiplierExpiresAt?: string
   multiplierSyncStatus?: 'manual' | 'fresh' | 'stale' | 'over_limit' | 'sync_error' | 'relink_required' | string
@@ -1190,6 +1192,7 @@ export interface ExchangeRatesReplaceRequest {
 export interface KeyMultiplierPatch {
   groupMultiplier?: number | null
   maxGroupMultiplier?: number | null
+  consumptionPolicy?: 'normal' | 'opportunistic' | null
 }
 
 export interface KeyMultiplierResponse {
@@ -1198,6 +1201,8 @@ export interface KeyMultiplierResponse {
   remoteMultiplier?: number
   groupMultiplier?: number
   maxMultiplier?: number
+  consumptionPolicy?: 'normal' | 'opportunistic'
+  effectiveCostClass?: 'zero' | 'discounted' | 'standard' | 'premium' | 'unknown'
   status: string
   reason: string
   eligible: boolean
