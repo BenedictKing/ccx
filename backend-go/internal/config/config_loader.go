@@ -868,6 +868,95 @@ func GenerateCredentialUID(accountUID, apiKey string) string {
 	return "cred_" + hex.EncodeToString(sum[:8])
 }
 
+// syncManagedAccountCredentialsFromChannels 遍历六数组,把渠道里持有的 Key 同步到
+// ManagedAccounts.Credentials。Phase 3c 运行时权威反转要求:ChannelsV3 脱敏后,加载时
+// hydrateManagedAccountCredentials 必须从 ManagedAccounts.Credentials 补 Key——这要求
+// 渠道写入时把 Key 注册到对应账号的凭证列表,否则脱敏后重载即丢 Key。
+// 规则:
+// - 渠道有 AccountUID 且 APIKeyConfigs[].Key 非空 → 按 CredentialUID 注册(缺失则派生稳定 ID)
+// - 同一 Key 在多协议渠道下共享同一 AccountUID 时,凭证只注册一次(幂等)
+// - 已存在 CredentialUID 的凭证(APIKey 为空) → 补 APIKey
+// - 不同 CredentialUID 的 Key 并存(同一账号多凭证),不互相覆盖
+// 返回是否有新增/更新(供 saveConfigLocked 判断是否需要落盘)
+func syncManagedAccountCredentialsFromChannels(cfg *Config) bool {
+	if cfg == nil {
+		return false
+	}
+	// 先建索引:AccountUID → CredentialUID → 凭证下标
+	credIdx := make(map[string]map[string]int, len(cfg.ManagedAccounts))
+	acctIdx := make(map[string]int, len(cfg.ManagedAccounts))
+	for i := range cfg.ManagedAccounts {
+		acctIdx[cfg.ManagedAccounts[i].AccountUID] = i
+		byUID := make(map[string]int, len(cfg.ManagedAccounts[i].Credentials))
+		for j := range cfg.ManagedAccounts[i].Credentials {
+			byUID[cfg.ManagedAccounts[i].Credentials[j].CredentialUID] = j
+		}
+		credIdx[cfg.ManagedAccounts[i].AccountUID] = byUID
+	}
+
+	modified := false
+	visit := func(channels []UpstreamConfig) {
+		for i := range channels {
+			channel := &channels[i]
+			if !channel.AutoManaged || channel.AccountUID == "" || channel.ProviderID == "" {
+				continue
+			}
+			// 确保账号存在
+			ai, ok := acctIdx[channel.AccountUID]
+			if !ok {
+				cfg.ManagedAccounts = append(cfg.ManagedAccounts, ManagedAccountConfig{
+					AccountUID:  channel.AccountUID,
+					ProviderID:  channel.ProviderID,
+					Name:        managedAccountName(channel.Name),
+					Credentials: []ManagedAccountCredential{},
+				})
+				ai = len(cfg.ManagedAccounts) - 1
+				acctIdx[channel.AccountUID] = ai
+				credIdx[channel.AccountUID] = make(map[string]int)
+				modified = true
+			}
+			account := &cfg.ManagedAccounts[ai]
+			byUID := credIdx[channel.AccountUID]
+			for j := range channel.APIKeyConfigs {
+				keyConfig := &channel.APIKeyConfigs[j]
+				plainKey := strings.TrimSpace(keyConfig.Key)
+				if plainKey == "" {
+					continue
+				}
+				credentialUID := strings.TrimSpace(keyConfig.CredentialUID)
+				if credentialUID == "" {
+					// 没 CredentialUID 则派生稳定 ID(供 hydrate 找回)
+					credentialUID = GenerateCredentialUID(channel.AccountUID, plainKey)
+					keyConfig.CredentialUID = credentialUID
+					modified = true
+				}
+				if existing, exists := byUID[credentialUID]; exists {
+					// 已存在:补缺失的 APIKey
+					if account.Credentials[existing].APIKey == "" {
+						account.Credentials[existing].APIKey = plainKey
+						modified = true
+					}
+				} else {
+					// 新增凭证
+					account.Credentials = append(account.Credentials, ManagedAccountCredential{
+						CredentialUID: credentialUID,
+						APIKey:        plainKey,
+					})
+					byUID[credentialUID] = len(account.Credentials) - 1
+					modified = true
+				}
+			}
+		}
+	}
+	visit(cfg.Upstream)
+	visit(cfg.ChatUpstream)
+	visit(cfg.ResponsesUpstream)
+	visit(cfg.GeminiUpstream)
+	visit(cfg.ImagesUpstream)
+	visit(cfg.VectorsUpstream)
+	return modified
+}
+
 // ensureChannelUIDs 为所有缺失 ChannelUID 的渠道补齐稳定身份标识。
 // 已有 ChannelUID 的渠道不会被修改，保证渠道重排、改名、改 baseURL 后身份不变。
 // 覆盖全部六类渠道：Messages / Responses / Gemini / Chat / Images / Vectors。
@@ -1276,9 +1365,13 @@ func (cm *ConfigManager) saveConfigLocked(config Config) error {
 	// Channel Data Model v2：在逻辑渠道重建之后，合成非权威的 Channels 镜像
 	// （渠道→key→endpoint→模型 + 跨账号共享能力）。六个数组仍是运行时权威。
 	RebuildChannels(&config)
+	// 同步托管渠道 Key 到 ManagedAccounts.Credentials:Phase 3c 反转后,加载时
+	// hydrateManagedAccountCredentials 从这里补 Key,必须有源才不丢。幂等可重跑。
+	syncManagedAccountCredentialsFromChannels(&config)
 	// Phase B.2：落盘 + 提交到 cm.config 后，发布 logical_channel_rebuilt 事件。
 	defer cm.publishLogicalChannelRebuilt()
 	persisted := config.deepCopy()
+	syncManagedAccountCredentialsFromChannels(&persisted)
 	persisted.stripManagedChannelSecrets()
 	// Phase 3c：在构建 ChannelsV3 前，对 persisted 执行与加载时相同的幂等回填/归一化，
 	// 确保 ChannelsV3 与加载后的最终六数组形态一致，从而支持加载翻转安全启用。
