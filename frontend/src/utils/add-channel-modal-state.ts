@@ -172,8 +172,9 @@ export function extractChannelNamePrefix(url: string): string {
     const stemEnd = Math.max(1, labels.length - suffixCount)
     const stemLabels = labels.slice(0, stemEnd)
     const meaningfulLabels = fitChannelNamePrefix(dropGenericLeadingLabels(stemLabels))
-
-    return meaningfulLabels.join('-') || 'channel'
+    const prefix = meaningfulLabels.join('-')
+    if (!prefix) return 'channel'
+    return appendPort(prefix, parsed.port)
   } catch {
     return 'channel'
   }

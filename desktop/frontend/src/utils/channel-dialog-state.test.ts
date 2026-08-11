@@ -31,6 +31,11 @@ describe('extractChannelNamePrefix', () => {
     expect(extractChannelNamePrefix('not a url')).toBe('channel')
     expect(extractChannelNamePrefix('')).toBe('channel')
   })
+
+  it('多 label 域名带端口时应保留端口后缀', () => {
+    expect(extractChannelNamePrefix('https://api.example.com:8443/v1')).toBe('example-8443')
+    expect(extractChannelNamePrefix('https://api.us-east-1.openai.com:9443/v1')).toBe('us-east-1-openai-9443')
+  })
 })
 
 describe('syncBaseUrlsFormState', () => {
