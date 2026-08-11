@@ -161,6 +161,128 @@ func TestHandlePatchKeyMultiplier(t *testing.T) {
 	})
 }
 
+func TestHandlePatchKeyMultiplierConsumptionPolicy(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cfgManager := newTestConfigManager(t, config.Config{
+		Upstream: []config.UpstreamConfig{{
+			ChannelUID: "msg-1",
+			APIKeys:    []string{"plain-key"},
+			APIKeyConfigs: []config.APIKeyConfig{{
+				Key:    "plain-key",
+				KeyUID: "key-1",
+			}},
+		}},
+	})
+	router := gin.New()
+	RegisterKeyMultiplierRoutes(router, cfgManager)
+
+	assertPolicy := func(t *testing.T, expected config.KeyConsumptionPolicy, effectiveCostClass string) {
+		t.Helper()
+		var got keyMultiplierResponse
+		resp := performJSONRequest(t, router, http.MethodPatch, "/messages/channels/msg-1/keys/key-1/multiplier", map[string]any{"groupMultiplier": 0, "maxGroupMultiplier": 0, "consumptionPolicy": string(expected)})
+		if resp.Code != http.StatusOK {
+			t.Fatalf("status=%d body=%s", resp.Code, resp.Body.String())
+		}
+		decodeJSONResponse(t, resp, &got)
+		if got.ConsumptionPolicy != expected {
+			t.Fatalf("expected consumptionPolicy=%s, got %s", expected, got.ConsumptionPolicy)
+		}
+		if got.EffectiveCostClass != effectiveCostClass {
+			t.Fatalf("expected effectiveCostClass=%s, got %s", effectiveCostClass, got.EffectiveCostClass)
+		}
+		if !got.Eligible {
+			t.Fatalf("expected eligible, got %+v", got)
+		}
+	}
+
+	t.Run("set opportunistic", func(t *testing.T) {
+		assertPolicy(t, config.KeyConsumptionOpportunistic, "zero")
+	})
+
+	t.Run("set normal", func(t *testing.T) {
+		assertPolicy(t, config.KeyConsumptionNormal, "zero")
+	})
+
+	t.Run("null normalizes to normal", func(t *testing.T) {
+		// 先设置为 opportunistic
+		assertPolicy(t, config.KeyConsumptionOpportunistic, "zero")
+		resp := performJSONRequest(t, router, http.MethodPatch, "/messages/channels/msg-1/keys/key-1/multiplier", map[string]any{"consumptionPolicy": nil})
+		if resp.Code != http.StatusOK {
+			t.Fatalf("status=%d body=%s", resp.Code, resp.Body.String())
+		}
+		var got keyMultiplierResponse
+		decodeJSONResponse(t, resp, &got)
+		if got.ConsumptionPolicy != config.KeyConsumptionNormal {
+			t.Fatalf("expected normal after null, got %s", got.ConsumptionPolicy)
+		}
+	})
+
+	t.Run("unknown policy rejected", func(t *testing.T) {
+		resp := performJSONRequest(t, router, http.MethodPatch, "/messages/channels/msg-1/keys/key-1/multiplier", map[string]any{"consumptionPolicy": "unknown"})
+		if resp.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got status=%d body=%s", resp.Code, resp.Body.String())
+		}
+	})
+
+	t.Run("group without max rejected", func(t *testing.T) {
+		resp := performJSONRequest(t, router, http.MethodPatch, "/messages/channels/msg-1/keys/key-1/multiplier", map[string]any{"groupMultiplier": 0.5, "maxGroupMultiplier": nil})
+		if resp.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got status=%d body=%s", resp.Code, resp.Body.String())
+		}
+	})
+
+	t.Run("only consumption policy allowed without multiplier", func(t *testing.T) {
+		resp := performJSONRequest(t, router, http.MethodPatch, "/messages/channels/msg-1/keys/key-1/multiplier", map[string]any{"consumptionPolicy": "opportunistic"})
+		if resp.Code != http.StatusOK {
+			t.Fatalf("status=%d body=%s", resp.Code, resp.Body.String())
+		}
+		var got keyMultiplierResponse
+		decodeJSONResponse(t, resp, &got)
+		if got.ConsumptionPolicy != config.KeyConsumptionOpportunistic {
+			t.Fatalf("expected opportunistic, got %s", got.ConsumptionPolicy)
+		}
+	})
+
+	t.Run("new api allows consumption policy but not group multiplier", func(t *testing.T) {
+		future := time.Now().Add(time.Hour).UTC()
+		cfg := cfgManager.GetConfig()
+		cfg.Upstream[0].APIKeyConfigs[0] = config.APIKeyConfig{
+			Key:                   "plain-key",
+			KeyUID:                "key-1",
+			QuotaGroup:            "premium",
+			GroupMultiplier:       ptrFloat(1),
+			MaxGroupMultiplier:    ptrFloat(2),
+			MultiplierSource:      "new_api",
+			MultiplierSyncStatus:  "fresh",
+			SourceSubscriptionUID: "sub-1",
+			SourceRemoteTokenID:   123,
+			MultiplierExpiresAt:   &future,
+			ConsumptionPolicy:     config.KeyConsumptionNormal,
+		}
+		if _, err := cfgManager.UpdateUpstream(0, config.UpstreamUpdate{APIKeyConfigs: cfg.Upstream[0].APIKeyConfigs}); err != nil {
+			t.Fatalf("UpdateUpstream: %v", err)
+		}
+
+		resp := performJSONRequest(t, router, http.MethodPatch, "/messages/channels/msg-1/keys/key-1/multiplier", map[string]any{"groupMultiplier": 0.5, "maxGroupMultiplier": nil})
+		if resp.Code != http.StatusConflict {
+			t.Fatalf("expected 409, got status=%d body=%s", resp.Code, resp.Body.String())
+		}
+
+		resp = performJSONRequest(t, router, http.MethodPatch, "/messages/channels/msg-1/keys/key-1/multiplier", map[string]any{"consumptionPolicy": "opportunistic"})
+		if resp.Code != http.StatusOK {
+			t.Fatalf("status=%d body=%s", resp.Code, resp.Body.String())
+		}
+		var got keyMultiplierResponse
+		decodeJSONResponse(t, resp, &got)
+		if got.ConsumptionPolicy != config.KeyConsumptionOpportunistic {
+			t.Fatalf("expected opportunistic, got %s", got.ConsumptionPolicy)
+		}
+		if got.GroupMultiplier == nil || *got.GroupMultiplier != 1 {
+			t.Fatalf("expected new_api group multiplier preserved, got %+v", got.GroupMultiplier)
+		}
+	})
+}
+
 func newTestConfigManager(t *testing.T, cfg config.Config) *config.ConfigManager {
 	t.Helper()
 	dir := t.TempDir()

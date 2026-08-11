@@ -359,7 +359,21 @@ func ResolveExchangeTerms(in EffectiveCostInput) EffectiveCostResult {
 }
 
 // ResolveEffectiveCostUSD 是组合 G、T 与付款到账规则的唯一入口。
+// ResolveEffectiveCostUSD 是组合 G、T 与付款到账规则的唯一入口。
 func ResolveEffectiveCostUSD(in EffectiveCostInput) EffectiveCostResult {
+	// 显式零成本早退：用户已确认该 Key 边际成本为零，不依赖 billing terms/汇率图。
+	if finiteEffectiveCostNonNegative(in.GroupMultiplier) && in.GroupMultiplier == 0 {
+		return EffectiveCostResult{
+			OK:                  true,
+			Available:           true,
+			Reason:              "manual_zero_cost",
+			EffectiveMultiplier: 0,
+			EffectiveCostUSD:    0,
+			KeyUID:              in.KeyUID,
+			SubscriptionUID:     in.SubscriptionUID,
+		}
+	}
+
 	result := ResolveExchangeTerms(in)
 	if !result.OK {
 		return result

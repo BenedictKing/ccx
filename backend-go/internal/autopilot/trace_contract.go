@@ -146,17 +146,21 @@ type SchedulerStageSummary struct {
 
 // EndpointAttemptSummary 是一次上游尝试的安全摘要。
 // 不包含 BaseURL、API Key 或错误 body。
+// EndpointAttemptSummary 是一次上游尝试的安全摘要。
+// 不包含 BaseURL、API Key 或错误 body。
 type EndpointAttemptSummary struct {
-	AttemptUID    string `json:"attemptUid"`
-	AttemptSeq    int    `json:"attemptSeq"`
-	Status        string `json:"status"` // "started" | "completed"
-	ChannelUID    string `json:"channelUid"`
-	EndpointLabel string `json:"endpointLabel"`
-	ActualModel   string `json:"actualModel,omitempty"`
-	ActualEffort  string `json:"actualEffort,omitempty"`
-	Result        string `json:"result"` // "success" | "upstream_error" | "cancelled" | "attempt_failed"
-	StatusCode    int    `json:"statusCode,omitempty"`
-	DurationMs    int64  `json:"durationMs,omitempty"`
+	AttemptUID               string  `json:"attemptUid"`
+	AttemptSeq               int     `json:"attemptSeq"`
+	Status                   string  `json:"status"` // "started" | "completed"
+	ChannelUID               string  `json:"channelUid"`
+	EndpointLabel            string  `json:"endpointLabel"`
+	ActualModel              string  `json:"actualModel,omitempty"`
+	ActualEffort             string  `json:"actualEffort,omitempty"`
+	Result                   string  `json:"result"` // "success" | "upstream_error" | "cancelled" | "attempt_failed"
+	StatusCode               int     `json:"statusCode,omitempty"`
+	DurationMs               int64   `json:"durationMs,omitempty"`
+	ConsumptionPolicy        string  `json:"consumptionPolicy,omitempty"`        // normal | opportunistic
+	ConfiguredCostMultiplier float64 `json:"configuredCostMultiplier,omitempty"` // Key 配置的分组倍率，-1 表示未配置
 }
 
 // RoutingReleaseSnapshot 是一次决策到终态之间唯一允许读取的 release/policy/cohort 数据源。

@@ -1344,11 +1344,15 @@ func (r *SmartRouter) buildChannelEntry(
 		}
 		// 默认成本：标价 × 分时倍率；如 key 配置了分组倍率，则再叠加分组倍率影响。
 		// effective USD 可用时（下方 ResolveEffectiveCostUSD）会用更精确的实际到账成本覆盖它。
+		// Phase 1：取 view 中有效 Key 的最小倍率（含 0），不忽略零倍率；Key 级过滤在 Phase 2 细化。
 		groupMultiplier := 1.0
+		found := false
 		for _, cfg := range config.NormalizeAPIKeyConfigsForView(*upstream) {
-			if cfg.GroupMultiplier != nil && *cfg.GroupMultiplier > 0 {
-				groupMultiplier = *cfg.GroupMultiplier
-				break
+			if cfg.GroupMultiplier != nil {
+				if !found || *cfg.GroupMultiplier < groupMultiplier {
+					groupMultiplier = *cfg.GroupMultiplier
+					found = true
+				}
 			}
 		}
 		entry.EstimatedCost = listCost * timeMultiplier * groupMultiplier

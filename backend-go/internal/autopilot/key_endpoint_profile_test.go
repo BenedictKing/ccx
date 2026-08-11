@@ -81,6 +81,43 @@ func TestResolveEffectiveCostUSDUnavailableUnit(t *testing.T) {
 	}
 }
 
+func TestResolveEffectiveCostUSDZeroMultiplierEarlyReturn(t *testing.T) {
+	result := ResolveEffectiveCostUSD(EffectiveCostInput{
+		GroupMultiplier: 0,
+		KeyUID:          "key-zero",
+	})
+	if !result.Available {
+		t.Fatalf("expected zero multiplier available, got %+v", result)
+	}
+	if !result.OK {
+		t.Fatalf("expected zero multiplier OK, got %+v", result)
+	}
+	if result.Reason != "manual_zero_cost" {
+		t.Fatalf("expected reason manual_zero_cost, got %q", result.Reason)
+	}
+	if result.EffectiveCostUSD != 0 {
+		t.Fatalf("expected effective cost 0, got %v", result.EffectiveCostUSD)
+	}
+	if result.EffectiveMultiplier != 0 {
+		t.Fatalf("expected effective multiplier 0, got %v", result.EffectiveMultiplier)
+	}
+
+	// 即使提供无效汇率图和除数，零倍率仍应早退成功，不依赖 billing terms。
+	resultWithInvalid := ResolveEffectiveCostUSD(EffectiveCostInput{
+		Graph:           nil,
+		ListCostAmount:  -1,
+		ListCostUnit:    "",
+		GroupMultiplier: 0,
+		TimeMultiplier:  -1,
+		PaymentAmount:   -1,
+		CreditAmount:    -1,
+		KeyUID:          "key-zero",
+	})
+	if !resultWithInvalid.Available || resultWithInvalid.Reason != "manual_zero_cost" {
+		t.Fatalf("expected zero multiplier early return despite invalid terms, got %+v", resultWithInvalid)
+	}
+}
+
 func nearlyEqual(a, b float64) bool {
 	return math.Abs(a-b) <= 1e-9*math.Max(1, math.Max(math.Abs(a), math.Abs(b)))
 }
