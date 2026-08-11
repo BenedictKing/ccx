@@ -660,7 +660,8 @@ func (r *ModelResolver) rankEligibleModels(
 
 	// Frontier 选型：在全部 model × effort 候选的 Pareto 前沿上按车道选择，
 	// 成本与质量并列成轴（替代下方 qualityRank 绝对主导的字典序链）。
-	// 成本证据不足时 fail-open 回退旧链并标注原因。
+	// QualityBenefitCap 在 Frontier 内投影到动态 F0...Fn；成本证据不足时
+	// 才回退固定 QualityTier 分带与旧字典序链。
 	frontierFallback := ""
 	idx, note, frontierOK := selectViaFrontier(ranked, floor, preferenceMode)
 	if frontierOK {
@@ -669,6 +670,7 @@ func (r *ModelResolver) rankEligibleModels(
 		return best
 	}
 	frontierFallback = note
+	ranked = selectQualityBenefitBand(ranked, floor.QualityBenefitCap)
 
 	best := ranked[0]
 	for i := 1; i < len(ranked); i++ {
@@ -701,7 +703,7 @@ func measuredCostForEffort(effortCostUSD map[EffortLevel]float64, effort EffortL
 }
 
 // buildRankedCandidates 把 eligible 画像展开为 model × effort 排序候选，
-// 并补齐证据字段（质量/成本/基准/版本）与 EffortFloor、QualityBenefitCap 过滤。
+// 并补齐证据字段（质量/成本/基准/版本）与 EffortFloor 过滤。
 // 候选顺序保持输入顺序，排序决策由调用方完成。
 func (r *ModelResolver) buildRankedCandidates(
 	eligible []ModelProfile,
@@ -787,7 +789,6 @@ func (r *ModelResolver) buildRankedCandidates(
 
 	// EffortFloor 过滤：移除低于下界的已决定候选（fail-open）。
 	ranked = filterEffortFloor(ranked, floor)
-	ranked = selectQualityBenefitBand(ranked, floor.QualityBenefitCap)
 	qualityPriorityComplete := make(map[int]bool)
 	qualityRankSeen := make(map[int]bool)
 	for i := range ranked {

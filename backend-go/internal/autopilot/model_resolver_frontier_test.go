@@ -106,3 +106,53 @@ func TestRankEligibleModels_FrontierFallbackWithoutComparableCost(t *testing.T) 
 		t.Fatalf("frontierNote = %q, want fallback reason", best.frontierNote)
 	}
 }
+
+func TestBuildRankedCandidates_KeepsComparableModelsAcrossLegacyTiers(t *testing.T) {
+	profiles := []ModelProfile{
+		makeModelProfile("gpt-5.6-sol", ModelFamilyOpenAI, QualityTierPremium, 272000,
+			true, true, true, true, 0),
+		makeModelProfile("gpt-5.6-terra", ModelFamilyOpenAI, QualityTierPremium, 272000,
+			true, true, true, true, 0),
+		makeModelProfile("gpt-5.6-luna", ModelFamilyOpenAI, QualityTierPremium, 272000,
+			true, true, true, true, 0),
+		makeModelProfile("gpt-5.4-mini", ModelFamilyOpenAI, QualityTierNormal, 272000,
+			true, true, true, true, 0),
+	}
+	resolver := newFrontierTestResolver(t, profiles, "quality_first")
+	ranked := resolver.buildRankedCandidates(profiles, "claude-opus-4-8", "ch_test", "responses", CapabilityFloor{
+		QualityBenefitCap: QualityTierNormal,
+	})
+	if len(ranked) != len(profiles) {
+		t.Fatalf("Frontier candidates = %d, want all %d models before dynamic clustering", len(ranked), len(profiles))
+	}
+	seen := make(map[string]bool, len(ranked))
+	for _, candidate := range ranked {
+		seen[candidate.profile.ModelID] = true
+	}
+	for _, profile := range profiles {
+		if !seen[profile.ModelID] {
+			t.Fatalf("model %q was removed by legacy QualityTier before Frontier", profile.ModelID)
+		}
+	}
+}
+
+func TestRankEligibleModels_QualityBenefitCapUsesDynamicCluster(t *testing.T) {
+	profiles := []ModelProfile{
+		makeModelProfile("gpt-5.6-sol", ModelFamilyOpenAI, QualityTierPremium, 272000,
+			true, true, true, true, 0),
+		makeModelProfile("gpt-5.5-openai-compact", ModelFamilyOpenAI, QualityTierPremium, 272000,
+			true, true, true, true, 0),
+		makeModelProfile("gpt-5.5", ModelFamilyOpenAI, QualityTierPremium, 272000,
+			true, true, true, true, 0),
+	}
+	resolver := newFrontierTestResolver(t, profiles, "quality_first")
+	best := resolver.rankEligibleModels(profiles, "claude-opus-4-8", "ch_test", "responses", CapabilityFloor{
+		QualityBenefitCap: QualityTierNormal,
+	})
+	if best.profile.ModelID != "gpt-5.5" {
+		t.Fatalf("benefit-capped dynamic cluster selected %q, want stable adequate model gpt-5.5", best.profile.ModelID)
+	}
+	if !strings.Contains(best.frontierNote, "benefit_cap=normal") {
+		t.Fatalf("frontierNote = %q, want dynamic benefit cap marker", best.frontierNote)
+	}
+}

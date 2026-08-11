@@ -458,8 +458,10 @@ ContextFilter → CandidateFilter(SmartRouter) → X-Channel/ManualOverride/Prom
 `rankEligibleModels`：
 
 1. `buildRankedCandidates` 展开 `model × effort`
-2. **Frontier 选型**（默认启用，成本证据不足时 fail-open）
-3. 否则旧字典序链：
+2. **Frontier 选型**（默认启用，先保留所有满足硬能力的候选）：
+   - 按连续 benchmark、置信区间与可比成本生成动态 `F0...Fn`，簇数量由自然断点决定，不设固定上限
+   - `QualityBenefitCap` 只把兼容性的 `low/normal/high/premium` 请求目标投影到当前 `F0...Fn`，不写回模型永久等级
+3. 成本证据不足时 fail-open，才应用固定 `QualityTier` 分带并进入旧字典序链：
    - qualityRank → sameFamily → provider quality priority → cost/version/benchmark → measuredQuality → latency → anti-effort-inflation → model ID
 
 `resolveEffortVariants`（`model_resolver.go:315`）：

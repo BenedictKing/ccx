@@ -376,6 +376,44 @@ func TestSelectViaFrontier_EffortInflationGuard(t *testing.T) {
 	}
 }
 
+func TestQualityBenefitCapClusterIndex(t *testing.T) {
+	tests := []struct {
+		name         string
+		clusterCount int
+		cap          QualityTier
+		want         int
+	}{
+		{name: "单簇自然收敛", clusterCount: 1, cap: QualityTierHigh, want: 0},
+		{name: "四簇精确映射 normal", clusterCount: 4, cap: QualityTierNormal, want: 1},
+		{name: "四簇精确映射 high", clusterCount: 4, cap: QualityTierHigh, want: 2},
+		{name: "七簇保留动态细分 normal", clusterCount: 7, cap: QualityTierNormal, want: 2},
+		{name: "七簇保留动态细分 high", clusterCount: 7, cap: QualityTierHigh, want: 4},
+		{name: "七簇 premium 到最高簇", clusterCount: 7, cap: QualityTierPremium, want: 6},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := qualityBenefitCapClusterIndex(tt.clusterCount, tt.cap); got != tt.want {
+				t.Fatalf("qualityBenefitCapClusterIndex(%d, %q) = %d, want %d", tt.clusterCount, tt.cap, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPickBenefitCappedFrontierPoint_DoesNotUpgradeOnEqualCost(t *testing.T) {
+	stronger := makeFrontierCandidate("gpt-5.6-sol", 3, 0.8, 81.48, 35)
+	stronger.sameFamily = true
+	adequate := makeFrontierCandidate("gpt-5.5", 3, 0.7, 72.31, 35)
+	adequate.sameFamily = true
+	ranked := []rankedModelCandidate{stronger, adequate}
+	points := []FrontierPoint{
+		{CandidateID: "0", QualityScore: 0.82, Cost: CostEvidence{Estimated: 35_000_000}},
+		{CandidateID: "1", QualityScore: 0.75, Cost: CostEvidence{Estimated: 35_000_000}},
+	}
+	if got := pickBenefitCappedFrontierPoint(points, ranked); got != 1 {
+		t.Fatalf("pickBenefitCappedFrontierPoint() = %d, want stable adequate model idx 1", got)
+	}
+}
+
 func TestCapClusterCostPremium(t *testing.T) {
 	t.Run("质量增益不值回溢价时回退", func(t *testing.T) {
 		clusters := []FrontierCluster{

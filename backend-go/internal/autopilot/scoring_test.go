@@ -601,7 +601,10 @@ func TestScoreCandidate_ProviderQualityConfidenceThreshold(t *testing.T) {
 func TestScoreCandidate_QualityTracksTaskTarget(t *testing.T) {
 	weights := ScoringWeights{WQuality: 1}
 	low := ScoringCandidate{ChannelUID: "low", QualityTier: QualityTierLow}
-	premium := ScoringCandidate{ChannelUID: "premium", QualityTier: QualityTierPremium}
+	premium := ScoringCandidate{
+		ChannelUID: "premium", QualityTier: QualityTierPremium,
+		QualityBenchmarkKnown: true, QualityBenchmarkScore: 100,
+	}
 
 	lightweight := ScoringContext{
 		Weights:           weights,
@@ -609,7 +612,7 @@ func TestScoreCandidate_QualityTracksTaskTarget(t *testing.T) {
 		QualityBenefitCap: QualityTierLow,
 	}
 	if gotLow, gotPremium := ScoreCandidate(low, lightweight).Score, ScoreCandidate(premium, lightweight).Score; gotLow != gotPremium {
-		t.Fatalf("quality above the low floor should be saturated, low=%v premium=%v", gotLow, gotPremium)
+		t.Fatalf("quality and benchmark benefit above the low cap should be saturated, low=%v premium=%v", gotLow, gotPremium)
 	}
 
 	complex := ScoringContext{Weights: weights, TargetQualityTier: QualityTierPremium}

@@ -227,19 +227,39 @@ func selectViaFrontier(
 		return -1, "empty_frontier", false
 	}
 
-	if mode == CostPrefQualityFirst {
+	capActive := floor.QualityBenefitCap != "" && floor.QualityBenefitCap != QualityTierPremium
+	if mode == CostPrefQualityFirst && !capActive {
 		idx, note = selectFrontierQualityFirst(forest, ranked)
 	} else {
 		target := ladderTargetCluster(forest, mode)
 		if mode == CostPrefBalanced {
 			target = capClusterCostPremium(forest.Clusters, target)
 		}
-		idx, note = selectFrontierClusterPoint(forest, target, ranked, mode)
+		if capActive {
+			capTarget := qualityBenefitCapClusterIndex(len(forest.Clusters), floor.QualityBenefitCap)
+			if target > capTarget {
+				target = capTarget
+			}
+			idx, note = selectBenefitCappedFrontierPoint(forest, target, ranked, mode, floor.QualityBenefitCap)
+		} else {
+			idx, note = selectFrontierClusterPoint(forest, target, ranked, mode)
+		}
 	}
 	if idx < 0 {
 		return -1, "no_frontier_candidate", false
 	}
 	return idx, note, true
+}
+
+// qualityBenefitCapClusterIndex 将兼容性的四档请求目标投影到本次请求动态生成的 F0...Fn。
+// 它不改变模型的永久等级，也不限制簇数量；例如 7 个簇会映射为 F0/F2/F4/F6。
+func qualityBenefitCapClusterIndex(clusterCount int, cap QualityTier) int {
+	if clusterCount <= 1 {
+		return 0
+	}
+	maxIndex := clusterCount - 1
+	ratio := float64(qualityTierRank(cap)) / float64(qualityTierRank(QualityTierPremium))
+	return int(math.Round(float64(maxIndex) * ratio))
 }
 
 // ladderTargetCluster 复用 BuildCandidateLadder 的车道目标簇（Preferred[0]）。
@@ -279,6 +299,25 @@ func selectFrontierClusterPoint(
 		return -1, ""
 	}
 	return best, fmt.Sprintf("frontier:%s/cluster=%d/v=%s", mode, clusterIdx, forest.Version)
+}
+
+// selectBenefitCappedFrontierPoint 在达到请求收益上限后按同族、成本和稳定 ID 选点。
+// 同簇质量差异已被视为当前任务不再需要的额外收益，等成本时不重新升级到更强模型。
+func selectBenefitCappedFrontierPoint(
+	forest FrontierForest,
+	clusterIdx int,
+	ranked []rankedModelCandidate,
+	mode CostPreferenceMode,
+	cap QualityTier,
+) (int, string) {
+	if clusterIdx < 0 || clusterIdx >= len(forest.Clusters) {
+		return -1, ""
+	}
+	best := pickBenefitCappedFrontierPoint(forest.Clusters[clusterIdx].Points, ranked)
+	if best < 0 {
+		return -1, ""
+	}
+	return best, fmt.Sprintf("frontier:%s/cluster=%d/benefit_cap=%s/v=%s", mode, clusterIdx, cap, forest.Version)
 }
 
 // selectFrontierQualityFirst 实现 quality_first 的并列容差规则：
@@ -402,6 +441,39 @@ func pickFrontierPoint(points []FrontierPoint, ranked []rankedModelCandidate) in
 			continue
 		}
 		if idx < bestIdx {
+			bestIdx, bestPoint = idx, p
+		}
+	}
+	return bestIdx
+}
+
+func pickBenefitCappedFrontierPoint(points []FrontierPoint, ranked []rankedModelCandidate) int {
+	bestIdx := -1
+	var bestPoint FrontierPoint
+	for _, p := range points {
+		idx, err := strconv.Atoi(p.CandidateID)
+		if err != nil || idx < 0 || idx >= len(ranked) {
+			continue
+		}
+		if bestIdx < 0 {
+			bestIdx, bestPoint = idx, p
+			continue
+		}
+		if candSame, bestSame := ranked[idx].sameFamily, ranked[bestIdx].sameFamily; candSame != bestSame {
+			if candSame {
+				bestIdx, bestPoint = idx, p
+			}
+			continue
+		}
+		if p.Cost.Estimated != bestPoint.Cost.Estimated {
+			if p.Cost.Estimated < bestPoint.Cost.Estimated {
+				bestIdx, bestPoint = idx, p
+			}
+			continue
+		}
+		candidateID := ranked[idx].normalizedCandidateID
+		bestID := ranked[bestIdx].normalizedCandidateID
+		if candidateID < bestID || (candidateID == bestID && idx < bestIdx) {
 			bestIdx, bestPoint = idx, p
 		}
 	}

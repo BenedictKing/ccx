@@ -244,7 +244,9 @@ func ScoreCandidate(candidate ScoringCandidate, ctx ScoringContext) ScoredCandid
 	// 判定为 premium 且有已知 benchmark 证据时生效，幅度 < 1 保证不会让 premium 候选越级
 	// 压过更高绝对档位（premium 本就是最高档，不存在越级问题），也不会打乱非 premium 候选
 	// 之间原有的整数档位排序。
-	if candidate.QualityTier == QualityTierPremium && candidate.QualityBenchmarkKnown {
+	benchmarkBenefitAllowed := ctx.QualityBenefitCap == "" ||
+		qualityTierRank(candidate.QualityTier) <= qualityTierRank(ctx.QualityBenefitCap)
+	if candidate.QualityTier == QualityTierPremium && candidate.QualityBenchmarkKnown && benchmarkBenefitAllowed {
 		qs += clampF(candidate.QualityBenchmarkScore/100.0, 0, 1) * premiumBenchmarkTieBreakWeight
 	}
 
