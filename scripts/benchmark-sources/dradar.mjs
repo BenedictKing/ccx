@@ -17,7 +17,7 @@
  * dradar 使用点号: "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5"
  */
 import { fetchWithTimeout } from './http.mjs'
-import { cachedFetch, cacheResponseData, getSimpleCache, setSimpleCache } from './http-cache.mjs'
+import { cachedFetch, cacheResponseData, getCacheEntry, getSimpleCache, setSimpleCache } from './http-cache.mjs'
 
 export const DRADAR_MODEL_MAP = {
   'gpt-5.6-sol': 'gpt-5.6-sol',
@@ -41,26 +41,45 @@ export const DRADAR_MODEL_MAP = {
 
 const BASE_URL = 'https://api.codexradar.com'
 const SITE_URL = 'https://deng.codexradar.com/'
+const BENCHMARK = 'deep-swe'
 const TABLE_FETCH_TIMEOUT_MS = 45_000
 
 export function extractTableCacheVersion(html) {
-  const match = String(html).match(/TABLE_CACHE_VERSION\s*=\s*["']([^"']+)["']/)
-  if (!match?.[1]) throw new Error('TABLE_CACHE_VERSION not found on CodexRadar site')
-  return match[1]
+  const source = String(html)
+  const legacyMatch = source.match(/TABLE_CACHE_VERSION\s*=\s*["']([^"']+)["']/)
+  if (legacyMatch?.[1]) return legacyMatch[1]
+
+  const scriptMatch = source.match(/(?:src=["'][^"']*\/)?radar-report\.js\?[^"']*\bv=([^&"']+)/)
+  if (scriptMatch?.[1]) return decodeURIComponent(scriptMatch[1])
+
+  throw new Error('CodexRadar table cache version not found in inline config or radar-report.js URL')
 }
 
-async function fetchTableCacheVersion() {
+function describeError(error) {
+  const details = [error?.message]
+  if (error?.cause?.code) details.push(error.cause.code)
+  if (error?.cause?.message && error.cause.message !== error?.message) details.push(error.cause.message)
+  return details.filter(Boolean).join(': ') || String(error)
+}
+
+async function fetchTableCacheVersion(cachedVersion) {
   console.log(`[dradar] Fetching ${SITE_URL} for table cache version`)
-  const resp = await fetchWithTimeout(SITE_URL, {
-    headers: {
-      'User-Agent': 'ccx-benchmark-updater/1.0',
-      Accept: 'text/html',
-    },
-  })
-  if (!resp.ok) {
-    throw new Error(`HTTP ${resp.status} ${resp.statusText} for ${SITE_URL}`)
+  try {
+    const resp = await fetchWithTimeout(SITE_URL, {
+      headers: {
+        'User-Agent': 'ccx-benchmark-updater/1.0',
+        Accept: 'text/html',
+      },
+    })
+    if (!resp.ok) {
+      throw new Error(`HTTP ${resp.status} ${resp.statusText} for ${SITE_URL}`)
+    }
+    return extractTableCacheVersion(await resp.text())
+  } catch (error) {
+    if (!cachedVersion) throw error
+    console.warn(`[dradar] Failed to discover table cache version (${describeError(error)}); using cached version ${cachedVersion}`)
+    return cachedVersion
   }
-  return extractTableCacheVersion(await resp.text())
 }
 
 /**
@@ -68,7 +87,7 @@ async function fetchTableCacheVersion() {
  * @returns {Promise<Object>}
  */
 export async function fetchLeaderboard() {
-  const url = `${BASE_URL}/api/v1/leaderboard`
+  const url = `${BASE_URL}/api/v1/leaderboard?benchmark=${encodeURIComponent(BENCHMARK)}`
 
   console.log(`[dradar] Fetching ${url}`)
 
@@ -94,28 +113,38 @@ export async function fetchLeaderboard() {
  * @returns {Promise<Object>}
  */
 export async function fetchTable() {
-  const cacheVersion = await fetchTableCacheVersion()
   const cachedVersion = getSimpleCache('dradar:cacheVersion')
-  const url = `${BASE_URL}/api/v1/table?ui=${encodeURIComponent(cacheVersion)}`
+  const cacheVersion = await fetchTableCacheVersion(cachedVersion)
+  const url = `${BASE_URL}/api/v1/table?ui=${encodeURIComponent(cacheVersion)}&benchmark=${encodeURIComponent(BENCHMARK)}`
 
   // 如果 cacheVersion 与上次相同，使用条件请求（ETag）
   if (cachedVersion === cacheVersion) {
     console.log(`[dradar] Cache version unchanged (${cacheVersion}), trying conditional request`)
-    const result = await cachedFetch(url, {
-      headers: {
-        'User-Agent': 'ccx-benchmark-updater/1.0',
-        Accept: 'application/json',
-      },
-    }, TABLE_FETCH_TIMEOUT_MS)
+    try {
+      const result = await cachedFetch(url, {
+        headers: {
+          'User-Agent': 'ccx-benchmark-updater/1.0',
+          Accept: 'application/json',
+        },
+      }, TABLE_FETCH_TIMEOUT_MS)
 
-    if (result.cached) {
-      console.log(`[dradar] ${url} → 304 Not Modified, using cached data`)
-      return result.data
+      if (result.cached) {
+        console.log(`[dradar] ${url} → 304 Not Modified, using cached data`)
+        return result.data
+      }
+
+      const data = await result.response.json()
+      cacheResponseData(url, data)
+      return data
+    } catch (error) {
+      const cachedData = getCacheEntry(`etag:${url}`)?.data
+        || getCacheEntry(`etag:${BASE_URL}/api/v1/table?ui=${encodeURIComponent(cacheVersion)}`)?.data
+      if (cachedData) {
+        console.warn(`[dradar] Failed to refresh table (${describeError(error)}); using cached table data`)
+        return cachedData
+      }
+      throw error
     }
-
-    const data = await result.response.json()
-    cacheResponseData(url, data)
-    return data
   }
 
   console.log(`[dradar] Cache version changed: ${cachedVersion || '(none)'} → ${cacheVersion}`)
@@ -374,7 +403,7 @@ export async function fetchDradarData(modelMap) {
     console.log(`[dradar] Extracted data for ${Object.keys(result).length} models`)
     return result
   } catch (err) {
-    console.error(`[dradar] Failed to fetch data:`, err.message)
+    console.error(`[dradar] Failed to fetch data:`, describeError(err))
     throw err
   }
 }

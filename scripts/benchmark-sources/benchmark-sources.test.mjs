@@ -136,7 +136,15 @@ test('CodexRadar table cache version is read from the live page contract', () =>
     extractTableCacheVersion('var TABLE_CACHE_VERSION = "20260718-discrimination-toggle-2";'),
     '20260718-discrimination-toggle-2',
   )
-  assert.throws(() => extractTableCacheVersion('<html></html>'), /TABLE_CACHE_VERSION/)
+  assert.equal(
+    extractTableCacheVersion('<script src="/assets/radar-report.js?v=20260807-goldset-v1"></script>'),
+    '20260807-goldset-v1',
+  )
+  assert.equal(
+    extractTableCacheVersion('<script src="/assets/radar-report.js?lang=zh&v=release%2Dchoice%2Dv2"></script>'),
+    'release-choice-v2',
+  )
+  assert.throws(() => extractTableCacheVersion('<html></html>'), /table cache version/)
 })
 
 test('dradar cohort size is model count rather than graded run count', () => {
