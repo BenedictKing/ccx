@@ -296,11 +296,13 @@ export function extractImageArenaProfiles(models, imageMap) {
 export async function fetchArtificialAnalysisData(apiKey, modelMap, imageMap) {
   const { tier, version, models: llmModels, pages } = await fetchLanguageModelsFree(apiKey)
   const { profiles: llm, unmappedSlugs: unmappedLlmSlugs } = extractLlmProfiles(llmModels, modelMap, version)
-  console.log(`[artificial-analysis] Extracted LLM data for ${Object.keys(llm).length} models across ${pages} page(s)`)
+  const llmModelsMapped = Object.keys(llm).sort()
+  console.log(`[artificial-analysis] Extracted LLM data for ${llmModelsMapped.length} models across ${pages} page(s): ${llmModelsMapped.join(', ') || '(none)'}`)
 
   const { models: imageModels } = await fetchTextToImageArenaFree(apiKey)
   const { profiles: imageArena, unmappedSlugs: unmappedImageSlugs } = extractImageArenaProfiles(imageModels, imageMap)
-  console.log(`[artificial-analysis] Extracted image arena data for ${Object.keys(imageArena).length} models`)
+  const imageModelsMapped = Object.keys(imageArena).sort()
+  console.log(`[artificial-analysis] Extracted image arena data for ${imageModelsMapped.length} models: ${imageModelsMapped.join(', ') || '(none)'}`)
 
   return {
     llm,

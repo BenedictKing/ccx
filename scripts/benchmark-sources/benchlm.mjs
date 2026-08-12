@@ -233,6 +233,7 @@ function processFresh(doc, generatedAt, modelMap, categoryMap, from304Refetch) {
   setSimpleCache(RAW_DOC_KEY, doc)
 
   const label = from304Refetch ? 'refetched' : 'extracted'
-  console.log(`[benchlm] ${label} data for ${Object.keys(profiles).length} models`)
+  const models = Object.keys(profiles).sort()
+  console.log(`[benchlm] ${label} data for ${models.length} models: ${models.join(', ') || '(none)'}`)
   return { data: profiles, unchanged: [] }
 }

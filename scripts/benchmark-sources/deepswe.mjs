@@ -223,7 +223,8 @@ export async function fetchDeepsweDataset(modelMap) {
       fetchLeaderboard('v1').catch(() => null), // v1 是 frozen，可能不可用
     ])
     const profiles = buildDeepsweProfiles(v11Data, v1Data, modelMap)
-    console.log(`[deepswe] Extracted data for ${Object.keys(profiles).length} models`)
+    const models = Object.keys(profiles).sort()
+    console.log(`[deepswe] Extracted data for ${models.length} models: ${models.join(', ') || '(none)'}`)
     return { profiles, liveLeaderboard: v11Data }
   } catch (err) {
     console.error(`[deepswe] Failed to fetch data:`, err.message)

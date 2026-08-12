@@ -400,7 +400,8 @@ export async function fetchDradarData(modelMap) {
       result[canonical].efforts = modelData.efforts
     }
 
-    console.log(`[dradar] Extracted data for ${Object.keys(result).length} models`)
+    const models = Object.keys(result).sort()
+    console.log(`[dradar] Extracted data for ${models.length} models: ${models.join(', ') || '(none)'}`)
     return result
   } catch (err) {
     console.error(`[dradar] Failed to fetch data:`, describeError(err))

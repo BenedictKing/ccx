@@ -193,6 +193,7 @@ export async function fetchLitellmModelInfo(modelMap = LITELLM_MODEL_MAP, force 
     return { _unchanged: true }
   }
   const result = extractModelInfo(data, modelMap)
-  console.log(`[litellm] Extracted data for ${Object.keys(result).length} models`)
+  const models = Object.keys(result).sort()
+  console.log(`[litellm] Extracted data for ${models.length} models: ${models.join(', ') || '(none)'}`)
   return result
 }
