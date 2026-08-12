@@ -734,6 +734,13 @@ function saveAndGenerateAtomically(registry) {
 /**
  * 主函数
  */
+export function warnSourceFailures(errors, warn = console.warn) {
+  if (errors.length === 0) return
+
+  const failedSources = errors.map(item => item.source).join(', ')
+  warn(`[warning] benchmark sources failed (${failedSources}); continuing with successful sources`)
+}
+
 export async function main() {
   console.log('='.repeat(60))
 
@@ -880,10 +887,7 @@ export async function main() {
     }
   }
 
-  if (report.errors.length > 0) {
-    const failedSources = report.errors.map(item => item.source).join(', ')
-    throw new Error(`enabled sources failed (${failedSources}); registry was not changed`)
-  }
+  warnSourceFailures(report.errors)
 
   validateRegistry(registry)
 

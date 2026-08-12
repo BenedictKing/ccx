@@ -30,6 +30,7 @@ import {
 } from './artificialanalysis.mjs'
 import {
   generatedArtifactPaths,
+  warnSourceFailures,
   mergeBenchlmData,
   mergeDeepsweData,
   mergeLitellmData,
@@ -74,6 +75,20 @@ test('benchmark updater rolls preset artifacts into its generated output transac
   for (const artifactPath of presetArtifactPaths) {
     assert.ok(generatedArtifactPaths.includes(artifactPath), `${artifactPath} is not tracked`)
   }
+})
+
+test('benchmark updater warns but continues when optional sources fail', () => {
+  const warnings = []
+
+  assert.doesNotThrow(() => {
+    warnSourceFailures([
+      { source: 'dradar', error: 'fetch failed' },
+      { source: 'artificial-analysis', error: 'HTTP 401 Unauthorized' },
+    ], message => warnings.push(message))
+  })
+  assert.deepEqual(warnings, [
+    '[warning] benchmark sources failed (dradar, artificial-analysis); continuing with successful sources',
+  ])
 })
 
 test('canonical pattern generation accepts canonical and source model names', () => {
