@@ -11,6 +11,8 @@ describe('extractEditChannelPayloadFields', () => {
       groupMultiplier: null,
       maxGroupMultiplier: 0,
       multiplierSource: 'subscription',
+      consumptionPolicy: 'opportunistic' as const,
+      effectiveCostClass: 'zero' as const,
       multiplierUpdatedAt: 'updated',
       multiplierExpiresAt: 'expires',
       multiplierSyncStatus: 'ok',
@@ -27,5 +29,18 @@ describe('extractEditChannelPayloadFields', () => {
 
     expect(result.apiKeyConfigs).toBe(apiKeyConfigs)
     expect(result.apiKeyConfigs).toEqual(apiKeyConfigs)
+  })
+
+  it('保留 consumptionPolicy 三态与 effectiveCostClass', () => {
+    const configs = [
+      { key: 'key-a', consumptionPolicy: undefined },
+      { key: 'key-b', consumptionPolicy: 'normal' as const },
+      { key: 'key-c', consumptionPolicy: 'opportunistic' as const, effectiveCostClass: 'zero' as const },
+    ]
+    const channel = { name: 'channel', apiKeyConfigs: configs } as unknown as Channel
+
+    const result = extractEditChannelPayloadFields(channel)
+
+    expect(result.apiKeyConfigs).toEqual(configs)
   })
 })

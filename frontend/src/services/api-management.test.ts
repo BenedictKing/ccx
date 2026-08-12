@@ -17,6 +17,14 @@ describe('management api paths and payloads', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/messages/channels/channel%2F1/keys/key%201/multiplier', expect.objectContaining({ method: 'PATCH', body: '{"groupMultiplier":0,"maxGroupMultiplier":null}' }))
   })
 
+  it('patches key consumption policy as a tri-state field', async () => {
+    await new ApiService().patchKeyMultiplier('messages', 'ch/1', 'k/1', { consumptionPolicy: 'opportunistic' })
+    expect(fetchMock).toHaveBeenCalledWith('/api/messages/channels/ch%2F1/keys/k%2F1/multiplier', expect.objectContaining({
+      method: 'PATCH',
+      body: '{"consumptionPolicy":"opportunistic"}',
+    }))
+  })
+
   it('uses billing and exchange-rate endpoints with exact payloads', async () => {
     const api = new ApiService()
     await api.patchSubscriptionBillingTerms('sub/1', { paymentAmount: null, paymentUnit: '', creditAmount: null, creditUnit: '', expectedVersion: 2 })

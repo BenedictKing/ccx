@@ -46,13 +46,27 @@ describe('channel API key state', () => {
   it('行模型保留完整 Key 配置元数据及未知扩展字段', () => {
     const config = {
       key: 'key-active', keyUid: 'uid', credentialUid: 'credential', groupMultiplier: null,
-      maxGroupMultiplier: 0, multiplierSource: 'new_api' as const, multiplierUpdatedAt: 'updated',
+      maxGroupMultiplier: 0, multiplierSource: 'new_api' as const, consumptionPolicy: 'opportunistic' as const,
+      effectiveCostClass: 'zero' as const, multiplierUpdatedAt: 'updated',
       multiplierExpiresAt: 'expires', multiplierSyncStatus: 'fresh', multiplierSyncError: '',
       sourceSubscriptionUid: 'subscription', sourceRemoteTokenId: 42, eligible: false,
       ineligibleReason: 'disabled', futureField: 42,
     }
 
     expect(buildChannelApiKeyRows(['key-active'], [], [config])[0]).toMatchObject(config)
+  })
+
+  it('保留 consumptionPolicy 三态（undefined/normal/opportunistic）', () => {
+    const rows = buildChannelApiKeyRows(
+      ['key-a', 'key-b'],
+      [],
+      [
+        { key: 'key-a', consumptionPolicy: undefined },
+        { key: 'key-b', consumptionPolicy: 'normal' as const },
+      ],
+    )
+    expect(rows[0].consumptionPolicy).toBeUndefined()
+    expect(rows[1].consumptionPolicy).toBe('normal')
   })
 
   it('可用 Key 数量排除手动暂停项', () => {

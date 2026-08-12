@@ -736,6 +736,25 @@ describe('buildChannelPayload', () => {
     expect(result.apiKeyConfigs?.[0]).toHaveProperty('maxGroupMultiplier', 0)
   })
 
+  it('应保留 Key 的 consumptionPolicy 三态与 effectiveCostClass', () => {
+    const result = buildChannelPayload({
+      name: 'policy', serviceType: 'openai', baseUrl: 'https://api.example.com', baseUrls: [], website: '',
+      insecureSkipVerify: false, lowQuality: false, injectDummyThoughtSignature: false, stripThoughtSignature: false,
+      description: '', apiKeys: ['key-normal', 'key-opportunistic'], apiKeyConfigs: [
+        { key: 'key-normal', consumptionPolicy: undefined },
+        { key: 'key-opportunistic', consumptionPolicy: 'opportunistic', effectiveCostClass: 'zero' },
+      ], modelMapping: {}, reasoningMapping: {}, reasoningParamStyle: 'reasoning', textVerbosity: '', fastMode: false,
+      customHeaders: {}, proxyUrl: '', routePrefix: '', supportedModels: [], autoBlacklistBalance: true,
+      normalizeMetadataUserId: true, normalizeSystemRoleToTopLevel: false, codexToolCompat: false,
+      noVision: false, noVisionModels: [], visionFallbackModel: '',
+    })
+
+    expect(result.apiKeyConfigs).toEqual([
+      { key: 'key-normal', consumptionPolicy: undefined },
+      { key: 'key-opportunistic', consumptionPolicy: 'opportunistic', effectiveCostClass: 'zero' },
+    ])
+  })
+
   it('删除 Key 时仅过滤目标配置，其他 Key 配置保持不变', () => {
     const untouched = { key: 'key-b', keyUid: 'uid-b', groupMultiplier: null, unknownMetadata: 'keep' }
     const result = buildChannelPayload({

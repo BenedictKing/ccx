@@ -8,6 +8,8 @@ export interface ChannelApiKeyRow extends Omit<APIKeyConfig, 'key'> {
   groupMultiplier?: number | null
   maxGroupMultiplier?: number | null
   multiplierSource?: 'manual' | 'new_api' | 'provider'
+  consumptionPolicy?: 'normal' | 'opportunistic' | null
+  effectiveCostClass?: 'zero' | 'discounted' | 'standard' | 'premium' | 'unknown'
   multiplierUpdatedAt?: string
   multiplierExpiresAt?: string
   multiplierSyncStatus?: string
