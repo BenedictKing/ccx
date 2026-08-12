@@ -337,6 +337,7 @@
                       :text="t('channelCard.groupModelPolicy')"
                       location="top"
                       :open-delay="150"
+                      content-class="ccx-tooltip"
                     >
                       <template #activator="{ props: tooltipProps }">
                         <v-btn
