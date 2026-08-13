@@ -120,3 +120,41 @@ func TestBuildEndpointInventoryMatchesRuntimeReachability(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildEndpointInventoryIncludesKeyBoundURLOutsideBaseURLs(t *testing.T) {
+	channel := config.UpstreamConfig{
+		ChannelUID:      "ch-provider-route",
+		ServiceType:     "openai",
+		AutoManaged:     true,
+		AutoManagedKind: "generic",
+		BaseURLs:        []string{"https://api.example.com/coding"},
+		APIKeys:         []string{"sk-bound", "sk-unbound"},
+		APIKeyConfigs: []config.APIKeyConfig{
+			{Key: "sk-bound", BaseURL: "https://plan.example.com/coding/v1"},
+			{Key: "sk-unbound"},
+		},
+	}
+
+	inventory := buildEndpointInventory(config.Config{ResponsesUpstream: []config.UpstreamConfig{channel}})
+	if len(inventory.Entries) != 2 {
+		t.Fatalf("entries=%d, want 2: %#v", len(inventory.Entries), inventory.Entries)
+	}
+	var entry channelEntry
+	for _, candidate := range inventory.Entries {
+		if got := candidate.APIKeys; reflect.DeepEqual(got, []string{"sk-bound", "sk-unbound"}) {
+			entry = candidate
+			break
+		}
+	}
+	if entry.BaseURL == "" {
+		t.Fatalf("missing key-bound URL inventory entry: %#v", inventory.Entries)
+	}
+	if len(inventory.EndpointUIDs) != 3 || len(inventory.ModelProfileBindings) != 3 {
+		t.Fatalf("endpointUIDs=%d bindings=%d, want 3/3", len(inventory.EndpointUIDs), len(inventory.ModelProfileBindings))
+	}
+	metricsKey := computeMetricsIdentityKey(entry.BaseURL, "sk-bound", "openai")
+	bindingKey := modelProfileBindingKey(channel.ChannelUID, "responses", metricsKey)
+	if _, ok := inventory.ModelProfileBindings[bindingKey]; !ok {
+		t.Fatalf("missing model binding for key-bound URL: %s", bindingKey)
+	}
+}

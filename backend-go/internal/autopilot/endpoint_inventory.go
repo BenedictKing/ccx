@@ -78,6 +78,14 @@ func buildEndpointInventory(cfg config.Config) endpointInventory {
 			}
 
 			baseURLs := runtimeChannel.GetAllBaseURLs()
+			if runtimeChannel.AutoManaged {
+				for _, keyCfg := range runtimeChannel.APIKeyConfigs {
+					if boundBaseURL := runtimeChannel.BoundBaseURLForKey(keyCfg.Key); boundBaseURL != "" {
+						baseURLs = append(baseURLs, boundBaseURL)
+					}
+				}
+				baseURLs = deduplicateInventoryBaseURLs(baseURLs)
+			}
 			if len(baseURLs) == 0 || len(runtimeChannel.APIKeys) == 0 {
 				continue
 			}
@@ -134,4 +142,21 @@ func buildEndpointInventory(cfg config.Config) endpointInventory {
 	}
 
 	return inventory
+}
+
+func deduplicateInventoryBaseURLs(baseURLs []string) []string {
+	result := make([]string, 0, len(baseURLs))
+	seen := make(map[string]struct{}, len(baseURLs))
+	for _, baseURL := range baseURLs {
+		baseURL = strings.TrimSpace(baseURL)
+		if baseURL == "" {
+			continue
+		}
+		if _, ok := seen[baseURL]; ok {
+			continue
+		}
+		seen[baseURL] = struct{}{}
+		result = append(result, baseURL)
+	}
+	return result
 }
