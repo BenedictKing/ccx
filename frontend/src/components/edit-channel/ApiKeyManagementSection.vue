@@ -192,7 +192,7 @@
         <!-- 现有密钥列表（拉黑状态与 provider 用量均归并到对应 Key） -->
         <div v-if="keyRows.length" class="mb-4">
           <v-list density="compact" class="bg-transparent">
-            <div v-for="row in keyRows" :key="row.key" class="mb-2">
+            <div v-for="row in keyRows" :key="row.key" class="mb-2" :data-key-row="row.key">
               <v-list-item
                 rounded="lg"
                 variant="tonal"
