@@ -449,10 +449,12 @@ func managedAccountsForList(cfg config.Config) []config.ManagedAccountConfig {
 				continue
 			}
 
+			existingByUID := make(map[string]config.ManagedAccountCredential, len(accounts[index].Credentials))
+			for _, credential := range accounts[index].Credentials {
+				existingByUID[credential.CredentialUID] = credential
+			}
+
 			addCredential := func(apiKey string, keyConfig *config.APIKeyConfig) {
-				if apiKey == "" {
-					return
-				}
 				credentialUID := ""
 				if keyConfig != nil {
 					credentialUID = keyConfig.CredentialUID
@@ -460,21 +462,33 @@ func managedAccountsForList(cfg config.Config) []config.ManagedAccountConfig {
 				if credentialUID == "" {
 					credentialUID = channel.CredentialUIDForKey(apiKey)
 				}
+				if credentialUID == "" {
+					return
+				}
 				seen := credentialSeen[channel.AccountUID]
 				if seen[credentialUID] {
 					return
 				}
-				accounts[index].Credentials = append(accounts[index].Credentials, config.ManagedAccountCredential{
-					CredentialUID: credentialUID,
-					APIKey:        apiKey,
-				})
+				credential := existingByUID[credentialUID]
+				credential.CredentialUID = credentialUID
+				if apiKey != "" {
+					credential.APIKey = apiKey
+				}
+				accounts[index].Credentials = append(accounts[index].Credentials, credential)
 				seen[credentialUID] = true
 			}
 			for _, apiKey := range channel.APIKeys {
 				addCredential(apiKey, nil)
 			}
+			for j := range channel.APIKeyConfigs {
+				if channel.APIKeyConfigs[j].Key == "" && channel.APIKeyConfigs[j].CredentialUID != "" {
+					addCredential("", &channel.APIKeyConfigs[j])
+				}
+			}
 			for _, disabled := range channel.DisabledAPIKeys {
-				addCredential(disabled.Key, disabled.Config)
+				if disabled.Key != "" {
+					addCredential(disabled.Key, disabled.Config)
+				}
 			}
 		}
 	}
