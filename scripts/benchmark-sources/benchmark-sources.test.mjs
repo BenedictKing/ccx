@@ -28,6 +28,7 @@ import {
   ARTIFICIAL_ANALYSIS_MODEL_MAP,
   ARTIFICIAL_ANALYSIS_IMAGE_MODEL_MAP,
 } from './artificialanalysis.mjs'
+import { resolveProxyEnv } from './http.mjs'
 import {
   generatedArtifactPaths,
   warnSourceFailures,
@@ -61,6 +62,23 @@ function emptyReport() {
 function readJson(relativePath) {
   return JSON.parse(readFileSync(new URL(relativePath, import.meta.url), 'utf8'))
 }
+
+test('benchmark fetch resolves lowercase proxy env variables', () => {
+  const proxyEnv = resolveProxyEnv({
+    http_proxy: 'http://127.0.0.1:6785',
+    https_proxy: 'http://127.0.0.1:6785',
+  })
+
+  assert.equal(proxyEnv.http_proxy, 'http://127.0.0.1:6785')
+  assert.equal(proxyEnv.https_proxy, 'http://127.0.0.1:6785')
+})
+
+test('benchmark fetch uses ALL_PROXY as a fallback', () => {
+  const proxyEnv = resolveProxyEnv({ ALL_PROXY: 'socks5://127.0.0.1:6785' })
+
+  assert.equal(proxyEnv.http_proxy, 'socks5://127.0.0.1:6785')
+  assert.equal(proxyEnv.https_proxy, 'socks5://127.0.0.1:6785')
+})
 
 test('runtime and published preset registries stay synchronized with the shared source', () => {
   const source = readJson('../../shared/model-registry/ccx_model_registry.json')

@@ -13,6 +13,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import './http.mjs'
+
 const root = dirname(dirname(dirname(fileURLToPath(import.meta.url))))
 const CACHE_DIR = join(root, '.cache')
 export const CACHE_PATH = join(CACHE_DIR, 'benchmark-http-cache.json')
