@@ -79,8 +79,8 @@ func (s *ChannelScheduler) protocolFederationEnabled(requestKind ChannelKind) bo
 		stringListContains(federation.RequestKinds, string(requestKind))
 }
 
-func (s *ChannelScheduler) protocolFederationSiblings(accountUID string) []ChannelInfo {
-	if accountUID == "" || !s.protocolFederationEnabled(ChannelKindMessages) {
+func (s *ChannelScheduler) protocolFederationSiblings(accountUID string, requestKind ChannelKind) []ChannelInfo {
+	if accountUID == "" || !s.protocolFederationEnabled(requestKind) {
 		return nil
 	}
 	federation := s.configManager.GetAutopilotRouting().ProtocolFederation
@@ -144,8 +144,8 @@ func (s *ChannelScheduler) protocolFederationSiblings(accountUID string) []Chann
 // federateDefaultCandidates 在默认 Autopilot 路径上追加同账号托管 sibling 物理路由。
 // 每个 sibling 都按自身执行协议做模型解析、可用性、模型熔断与上下文校验，
 // 并按 ChannelRouteRef.Key() 去重，避免同一物理渠道重复进入候选集合。
-func (s *ChannelScheduler) federateDefaultCandidates(ctx context.Context, channels []ChannelInfo, model string, requirement *ContextRequirement, trace *SelectionTrace) []ChannelInfo {
-	if !s.protocolFederationEnabled(ChannelKindMessages) {
+func (s *ChannelScheduler) federateDefaultCandidates(ctx context.Context, requestKind ChannelKind, channels []ChannelInfo, model string, requirement *ContextRequirement, trace *SelectionTrace) []ChannelInfo {
+	if !s.protocolFederationEnabled(requestKind) {
 		return channels
 	}
 	seen := make(map[ChannelRouteKey]struct{}, len(channels))
@@ -158,7 +158,7 @@ func (s *ChannelScheduler) federateDefaultCandidates(ctx context.Context, channe
 		}
 	}
 	for accountUID := range accountUIDs {
-		for _, sibling := range s.protocolFederationSiblings(accountUID) {
+		for _, sibling := range s.protocolFederationSiblings(accountUID, requestKind) {
 			if _, ok := seen[sibling.Route.Key()]; ok {
 				continue
 			}
@@ -480,8 +480,8 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 	}
 
 	// 仅默认 Autopilot 路径加入同账号托管 sibling；显式 X-Channel、手动覆盖和促销已在此前返回。
-	if kind == ChannelKindMessages && routePrefix == "" && channelName == "" && opts.SmartFilter != nil {
-		activeChannels = s.federateDefaultCandidates(ctx, activeChannels, model, opts.ContextRequirement, trace)
+	if (kind == ChannelKindMessages || kind == ChannelKindResponses) && routePrefix == "" && channelName == "" && opts.SmartFilter != nil {
+		activeChannels = s.federateDefaultCandidates(ctx, kind, activeChannels, model, opts.ContextRequirement, trace)
 		trace.setStage("protocol_federation", len(activeChannels))
 	}
 

@@ -138,7 +138,7 @@ func HandleMultiChannelFailoverWithSelectionFilter(
 	// separate from failedRoutes makes Phase 4 able to replace it with a deduplicated
 	// cross-kind candidate count without changing the attempt loop contract.
 	maxChannelAttempts := channelScheduler.GetActiveChannelCount(kind)
-	if kind == scheduler.ChannelKindMessages && c.Param("routePrefix") == "" && c.GetHeader("X-Channel") == "" {
+	if (kind == scheduler.ChannelKindMessages || kind == scheduler.ChannelKindResponses) && c.Param("routePrefix") == "" && c.GetHeader("X-Channel") == "" {
 		maxChannelAttempts = channelScheduler.GetFederatedCandidateCount(kind)
 	}
 	var pendingOutcome *pendingRoutingAttempt

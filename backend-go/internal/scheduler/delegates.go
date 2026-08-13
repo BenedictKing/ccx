@@ -383,11 +383,18 @@ func (s *ChannelScheduler) GetFederatedCandidateCount(kind ChannelKind) int {
 		return len(seen)
 	}
 	cfg := s.configManager.GetConfig()
-	for _, upstream := range cfg.Upstream {
+	var nativeUpstreams []config.UpstreamConfig
+	switch kind {
+	case ChannelKindResponses:
+		nativeUpstreams = cfg.ResponsesUpstream
+	default:
+		nativeUpstreams = cfg.Upstream
+	}
+	for _, upstream := range nativeUpstreams {
 		if upstream.AccountUID == "" || !upstream.AutoManaged {
 			continue
 		}
-		for _, sibling := range s.protocolFederationSiblings(upstream.AccountUID) {
+		for _, sibling := range s.protocolFederationSiblings(upstream.AccountUID, kind) {
 			seen[sibling.Route.Key()] = struct{}{}
 		}
 	}

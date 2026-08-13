@@ -115,8 +115,8 @@ type AutopilotRoutingConfig struct {
 	// 主请求路径完全不变，影子请求在主响应返回后异步发起。
 	ABTest ABTestConfig `json:"abTest,omitempty"`
 
-	// ProtocolFederation 允许逻辑 Messages 请求在 Autopilot 默认路径中使用同一托管账号的兼容物理路由。
-	// 仅支持 messages -> chat/responses；显式路由、手动覆盖和促销路径不受影响。
+	// ProtocolFederation 允许逻辑 Messages/Responses 请求在 Autopilot 默认路径中使用同一托管账号的兼容物理路由。
+	// 支持 messages -> chat/responses 与 responses -> chat/responses；显式路由、手动覆盖和促销路径不受影响。
 	ProtocolFederation ProtocolFederationConfig `json:"protocolFederation,omitempty"`
 
 	// FrontierRoutingEnabled 已废弃，保留字段仅为 JSON 兼容。
@@ -175,6 +175,7 @@ func (c AutopilotRoutingConfig) IsAFPCostRoutingEnabled() bool {
 // 三档预设：quality_first / balanced / cost_first。
 // ProtocolFederationConfig 定义 Autopilot 的窄协议联邦边界。
 // RequestKinds/ExecutionKinds 是白名单，避免未来新增协议时意外扩面。
+// 默认 RequestKinds 包含 messages 与 responses，ExecutionKinds 包含 chat 与 responses。
 type ProtocolFederationConfig struct {
 	Enabled            bool     `json:"enabled"`
 	RequestKinds       []string `json:"requestKinds,omitempty"`
@@ -488,7 +489,7 @@ func DefaultAutopilotRoutingConfig() AutopilotRoutingConfig {
 
 		ProtocolFederation: ProtocolFederationConfig{
 			Enabled:            true,
-			RequestKinds:       []string{"messages"},
+			RequestKinds:       []string{"messages", "responses"},
 			ExecutionKinds:     []string{"chat", "responses"},
 			RequireSameAccount: true,
 			RequireAutoManaged: true,

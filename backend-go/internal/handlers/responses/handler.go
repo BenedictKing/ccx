@@ -110,7 +110,6 @@ func handleMultiChannel(
 	isCompactionV2 bool,
 ) {
 	provider := &providers.ResponsesProvider{SessionManager: sessionManager}
-	metricsManager := channelScheduler.GetResponsesMetricsManager()
 
 	cfg := cfgManager.GetConfig()
 	contextRequirement := common.BuildResponsesContextRequirement(bodyBytes, cfg.ContextRouting)
@@ -135,15 +134,17 @@ func handleMultiChannel(
 		agentRole,
 		func(selection *scheduler.SelectionResult) common.MultiChannelAttemptResult {
 			upstream := selection.Upstream
-			channelIndex := selection.ChannelIndex
+			executionRoute := selection.Route
 
 			if upstream == nil {
 				return common.MultiChannelAttemptResult{}
 			}
 
+			metricsManager := channelScheduler.GetMetricsManagerForRoute(executionRoute)
+
 			if isCompactionV2 && needsLocalCompact(upstream) {
-				success, successKey, compactErr := tryLocalCompactV2WithAllKeys(c, upstream, channelIndex, responsesReq.Model, cfgManager, channelScheduler, channelScheduler.GetChannelLogStore(scheduler.ChannelKindResponses), bodyBytes, envCfg, sessionManager)
-				result := common.MultiChannelAttemptResult{Attempted: true, SuccessKey: successKey}
+				success, successKey, compactErr := tryLocalCompactV2WithAllKeys(c, upstream, executionRoute.Index, responsesReq.Model, cfgManager, channelScheduler, channelScheduler.GetChannelLogStoreForRoute(executionRoute), bodyBytes, envCfg, sessionManager)
+				result := common.MultiChannelAttemptResult{Attempted: true, SuccessKey: successKey, Route: executionRoute}
 				if success {
 					result.Handled = true
 					return result
@@ -163,7 +164,7 @@ func handleMultiChannel(
 			}
 
 			baseURLs := upstream.GetAllBaseURLs()
-			sortedURLResults := channelScheduler.GetSortedURLsForChannel(scheduler.ChannelKindResponses, channelIndex, baseURLs)
+			sortedURLResults := channelScheduler.GetSortedURLsForRoute(executionRoute, baseURLs)
 
 			handled, successKey, successBaseURLIdx, failoverErr, usage, lastErr := common.TryUpstreamWithAllKeys(
 				c,
@@ -179,20 +180,22 @@ func handleMultiChannel(
 				contextRequirement,
 				responsesReq.Stream,
 				func(upstream *config.UpstreamConfig, failedKeys map[string]bool) (string, error) {
-					return cfgManager.GetNextResponsesAPIKey(upstream, failedKeys)
+					return cfgManager.GetNextAPIKey(upstream, failedKeys, common.ChannelAPIType(scheduler.ChannelKind(executionRoute.Kind)))
 				},
 				func(c *gin.Context, upstreamCopy *config.UpstreamConfig, apiKey string) (*http.Request, error) {
 					req, _, err := provider.ConvertToProviderRequest(c, upstreamCopy, apiKey)
 					return req, err
 				},
 				func(apiKey string) {
-					_ = cfgManager.DeprioritizeAPIKey(apiKey)
+					if err := cfgManager.DeprioritizeAPIKeyForRoute(executionRoute.Kind, executionRoute.Index, apiKey); err != nil {
+						common.RequestLogf(c, "[Responses-Key] 警告: 密钥降级失败: %v", err)
+					}
 				},
 				func(url string) {
-					channelScheduler.MarkURLFailure(scheduler.ChannelKindResponses, channelIndex, url)
+					channelScheduler.MarkURLFailureForRoute(executionRoute, url)
 				},
 				func(url string) {
-					channelScheduler.MarkURLSuccess(scheduler.ChannelKindResponses, channelIndex, url)
+					channelScheduler.MarkURLSuccessForRoute(executionRoute, url)
 				},
 				func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string, actualRequestBody []byte) (*types.Usage, error) {
 					// Inject codex_tool_compat_enabled for response remapping
@@ -205,12 +208,15 @@ func handleMultiChannel(
 				},
 				responsesReq.Model,
 				"",
-				selection.ChannelIndex,
-				channelScheduler.GetChannelLogStore(scheduler.ChannelKindResponses),
+				executionRoute.Index,
+				channelScheduler.GetChannelLogStoreForRoute(executionRoute),
 				common.WithSelectionTrace(selection),
+				common.WithExecutionRoute(executionRoute),
+				common.WithExecutionModel(selection.ExecutionModel),
 			)
 
 			return common.MultiChannelAttemptResult{
+				Route:             executionRoute,
 				Handled:           handled,
 				Attempted:         true,
 				SuccessKey:        successKey,

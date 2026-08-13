@@ -71,7 +71,7 @@ func federationTestRawJSON() string {
 func federationSiblingUIDs(t *testing.T, s *ChannelScheduler, accountUID string) map[string]string {
 	t.Helper()
 	got := make(map[string]string)
-	for _, ch := range s.protocolFederationSiblings(accountUID) {
+	for _, ch := range s.protocolFederationSiblings(accountUID, ChannelKindMessages) {
 		upstream := s.getUpstreamByRoute(ch.Route)
 		if upstream == nil {
 			t.Fatalf("sibling route has no upstream: %#v", ch.Route)
@@ -108,7 +108,7 @@ func TestProtocolFederationMarksConvertedFidelityAndPenalty(t *testing.T) {
 	s, cleanup := createTestScheduler(t, cfg)
 	defer cleanup()
 
-	for _, ch := range s.protocolFederationSiblings("acct-a") {
+	for _, ch := range s.protocolFederationSiblings("acct-a", ChannelKindMessages) {
 		if ch.ProtocolFidelity != "converted" || ch.ConversionPenalty != 0.5 {
 			t.Fatalf("sibling missing conversion metadata: %#v", ch)
 		}
@@ -121,10 +121,10 @@ func TestProtocolFederationFeatureOffKeepsMessagesOnly(t *testing.T) {
 	s, cleanup := createTestScheduler(t, cfg)
 	defer cleanup()
 
-	if got := s.protocolFederationSiblings("acct-a"); len(got) != 0 {
+	if got := s.protocolFederationSiblings("acct-a", ChannelKindMessages); len(got) != 0 {
 		t.Fatalf("feature-off siblings = %#v, want none", got)
 	}
-	native := s.federateDefaultCandidates(context.Background(), []ChannelInfo{{
+	native := s.federateDefaultCandidates(context.Background(), ChannelKindMessages, []ChannelInfo{{
 		Route: channelRouteRef(ChannelKindMessages, 0, &config.UpstreamConfig{ChannelUID: "msg"}), Index: 0, Status: "active",
 	}}, "claude-sonnet-5", nil, newSelectionTrace(SelectionOptions{Kind: ChannelKindMessages}))
 	if len(native) != 1 || native[0].Route.Kind != string(ChannelKindMessages) {
@@ -244,7 +244,7 @@ func TestProtocolFederationExcludesSiblingWithoutModelSupport(t *testing.T) {
 		return false, "", "test", "model unavailable on sibling protocol"
 	})
 
-	federated := s.federateDefaultCandidates(context.Background(), []ChannelInfo{{
+	federated := s.federateDefaultCandidates(context.Background(), ChannelKindMessages, []ChannelInfo{{
 		Route: channelRouteRef(ChannelKindMessages, 0, &config.UpstreamConfig{ChannelUID: "msg"}), Index: 0, Status: "active",
 	}}, "claude-sonnet-5", nil, newSelectionTrace(SelectionOptions{Kind: ChannelKindMessages}))
 	if len(federated) != 1 {
@@ -266,5 +266,80 @@ func TestProtocolFederationPreservesExplicitChannelPin(t *testing.T) {
 	}
 	if result.Reason != "channel_pin" || result.Route.Kind != string(ChannelKindMessages) {
 		t.Fatalf("explicit pin must win over federation: %#v", result)
+	}
+}
+
+func TestProtocolFederationIncludesResponsesSiblingsForResponsesRequest(t *testing.T) {
+	cfg := federationTestConfig()
+	s, cleanup := createTestScheduler(t, cfg)
+	defer cleanup()
+	s.SetModelSupportResolverProvider(newFederationResolver())
+
+	result, err := s.SelectChannelWithOptions(context.Background(), SelectionOptions{
+		Kind: ChannelKindResponses, Model: "gpt-5.4",
+		SmartFilter: pinKindFilter(ChannelKindChat),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Route.Kind != string(ChannelKindChat) || result.Upstream.ChannelUID != "chat-k3" {
+		t.Fatalf("selected route = %#v, want chat-k3 physical route", result.Route)
+	}
+	if result.ExecutionModel != "kimi-k3" {
+		t.Fatalf("ExecutionModel = %q, want kimi-k3", result.ExecutionModel)
+	}
+	if result.CandidateCount != 1 {
+		t.Fatalf("CandidateCount = %d, want 1", result.CandidateCount)
+	}
+}
+
+func TestProtocolFederationResponsesDoesNotFederateMessagesSiblings(t *testing.T) {
+	// 构造一个只有 messages 原生渠道、没有 responses 原生渠道的配置。
+	cfg := federationTestConfig()
+	cfg.ResponsesUpstream = nil
+	s, cleanup := createTestScheduler(t, cfg)
+	defer cleanup()
+	s.SetModelSupportResolverProvider(newFederationResolver())
+
+	// 没有 responses 原生渠道时，同账号的 messages sibling 不应被联邦进 responses 候选
+	//（ExecutionKinds 不含 messages）。
+	result, err := s.SelectChannelWithOptions(context.Background(), SelectionOptions{
+		Kind: ChannelKindResponses, Model: "gpt-5.4",
+	})
+	if err == nil {
+		t.Fatalf("expected no available responses candidate, got %#v", result)
+	}
+}
+
+func TestProtocolFederationResponsesModelRoutingExactOnlyOnChatSibling(t *testing.T) {
+	cfg := federationTestConfig()
+	// 禁用 responses 原生渠道，使唯一可选来源是同账号 chat sibling。
+	cfg.ResponsesUpstream[0].Status = "disabled"
+	s, cleanup := createTestScheduler(t, cfg)
+	defer cleanup()
+	// gpt-5.6-sol 在 chat kind 上是 exact-only，resolver 拒绝它；responses kind 才允许。
+	s.SetModelSupportResolverProvider(func(_ context.Context, kind ChannelKind, upstream *config.UpstreamConfig, model string) (bool, string, string, string) {
+		if kind == ChannelKindChat {
+			return false, "", "test", "exact_model_required"
+		}
+		return true, model, "test", ""
+	})
+
+	result, err := s.SelectChannelWithOptions(context.Background(), SelectionOptions{
+		Kind: ChannelKindResponses, Model: "gpt-5.6-sol",
+	})
+	if err == nil {
+		t.Fatalf("expected chat sibling rejected for exact model, got %#v", result)
+	}
+}
+
+func TestProtocolFederationGetFederatedCandidateCountResponses(t *testing.T) {
+	s, cleanup := createTestScheduler(t, federationTestConfig())
+	defer cleanup()
+	s.SetModelSupportResolverProvider(newFederationResolver())
+
+	// responses 原生 1 个 + 同账号 chat 1 个 = 2 个去重物理候选（messages sibling 不参与）。
+	if got := s.GetFederatedCandidateCount(ChannelKindResponses); got != 2 {
+		t.Fatalf("GetFederatedCandidateCount(responses) = %d, want 2", got)
 	}
 }
