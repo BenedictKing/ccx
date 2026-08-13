@@ -10,14 +10,14 @@ import {
 
 describe('extractChannelNamePrefix', () => {
   it('保留常见 API 域名的服务商主体', () => {
-    expect(extractChannelNamePrefix('https://api.openai.com/v1')).toBe('api-openai')
-    expect(extractChannelNamePrefix('https://www.anthropic.com')).toBe('anthropic')
+    expect(extractChannelNamePrefix('https://api.openai.com/v1')).toBe('api-openai-com')
+    expect(extractChannelNamePrefix('https://www.anthropic.com')).toBe('anthropic-com')
   })
 
   it('应为多级子域名保留可区分的前缀', () => {
-    expect(extractChannelNamePrefix('https://api.us-east-1.openai.com/v1')).toBe('api-us-east-1-openai')
-    expect(extractChannelNamePrefix('https://relay.team.example.com.cn/v1')).toBe('relay-team-example')
-    expect(extractChannelNamePrefix('https://worker.demo.pages.dev/v1')).toBe('worker-demo')
+    expect(extractChannelNamePrefix('https://api.us-east-1.openai.com/v1')).toBe('api-us-east-1-openai-com')
+    expect(extractChannelNamePrefix('https://relay.team.example.com.cn/v1')).toBe('relay-team-example-com-cn')
+    expect(extractChannelNamePrefix('https://worker.demo.pages.dev/v1')).toBe('worker-demo-pages-dev')
   })
 
   it('应为 IP 和本地域名生成稳定可读的前缀', () => {
@@ -33,8 +33,8 @@ describe('extractChannelNamePrefix', () => {
   })
 
   it('多 label 域名带端口时应保留端口后缀', () => {
-    expect(extractChannelNamePrefix('https://api.example.com:8443/v1')).toBe('api-example-8443')
-    expect(extractChannelNamePrefix('https://api.us-east-1.openai.com:9443/v1')).toBe('api-us-east-1-openai-9443')
+    expect(extractChannelNamePrefix('https://api.example.com:8443/v1')).toBe('api-example-com-8443')
+    expect(extractChannelNamePrefix('https://api.us-east-1.openai.com:9443/v1')).toBe('api-us-east-1-openai-com-9443')
   })
 })
 

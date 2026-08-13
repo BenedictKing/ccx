@@ -7,22 +7,9 @@ import (
 	"strings"
 )
 
-// multiPartPublicSuffixes 常见的多段公共后缀，用于从 hostname 中提取有辨识度的主名
-var multiPartPublicSuffixes = map[string]struct{}{
-	"ac.cn": {}, "com.cn": {}, "edu.cn": {}, "gov.cn": {}, "net.cn": {}, "org.cn": {},
-	"co.uk": {}, "org.uk": {}, "ac.uk": {}, "gov.uk": {},
-	"com.au": {}, "net.au": {}, "org.au": {},
-	"co.jp": {}, "ne.jp": {}, "or.jp": {},
-	"co.kr": {}, "or.kr": {},
-	"com.br": {}, "com.mx": {}, "com.sg": {}, "com.hk": {}, "com.tw": {}, "com.vn": {},
-	"co.id": {}, "co.in": {}, "co.nz": {},
-	"github.io": {}, "pages.dev": {}, "workers.dev": {}, "vercel.app": {},
-	"netlify.app": {}, "onrender.com": {}, "railway.app": {},
-}
-
 // genericHostPrefixes 主机前缀剥离白名单。
-// 规则要求只去掉 "www"，其他如 api/apis/openapi/gateway/proxy 均保留，
-// 使用户能把 api.example.com 与 www.example.com 区分开。
+// 规则要求只去掉 "www"，其余 hostname label（包括 api 与顶级域名）都保留，
+// 使 api.example.com -> api-example-com，www.example.com -> example-com。
 var genericHostPrefixes = map[string]struct{}{
 	"www": {},
 }
@@ -36,9 +23,9 @@ var (
 )
 
 // DeriveChannelNameFromBaseURL 根据首个 baseURL 派生渠道名称。
-// 规则：hostname 只去 www 前缀、剥离公共后缀、IPv4 点转横线、IPv6 加前缀，附加端口；
-// api/apis/openapi/gateway/proxy 等通用前缀保留，以区分 api.example.com 与 www.example.com。
-// 解析失败或无有效主机时回退 "channel"。与前端 extractChannelNamePrefix 保持一致。
+// 规则：hostname 只去 www 前缀，其余 label（含 api 与顶级域名）全部保留；
+// IPv4 点转横线、IPv6 加前缀，附加端口；解析失败或无有效主机时回退 "channel"。
+// 与前端 extractChannelNamePrefix 保持一致。
 func DeriveChannelNameFromBaseURL(rawURL string) string {
 	parsed, err := url.Parse(strings.TrimSpace(rawURL))
 	if err != nil {
@@ -72,12 +59,7 @@ func DeriveChannelNameFromBaseURL(rawURL string) string {
 		return appendChannelNamePort(labels[0], parsed.Port())
 	}
 
-	suffixCount := channelNamePublicSuffixLabelCount(labels)
-	stemEnd := len(labels) - suffixCount
-	if stemEnd < 1 {
-		stemEnd = 1
-	}
-	meaningful := fitChannelNamePrefix(dropGenericLeadingChannelNameLabels(labels[:stemEnd]))
+	meaningful := fitChannelNamePrefix(dropGenericLeadingChannelNameLabels(labels))
 	if len(meaningful) == 0 {
 		return "channel"
 	}
@@ -95,20 +77,6 @@ func appendChannelNamePort(prefix, port string) string {
 		return prefix
 	}
 	return prefix + "-" + port
-}
-
-func channelNamePublicSuffixLabelCount(labels []string) int {
-	maxCount := len(labels) - 1
-	if maxCount > 3 {
-		maxCount = 3
-	}
-	for count := maxCount; count >= 2; count-- {
-		suffix := strings.Join(labels[len(labels)-count:], ".")
-		if _, ok := multiPartPublicSuffixes[suffix]; ok {
-			return count
-		}
-	}
-	return 1
 }
 
 func dropGenericLeadingChannelNameLabels(labels []string) []string {

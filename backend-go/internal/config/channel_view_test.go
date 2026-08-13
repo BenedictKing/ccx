@@ -131,7 +131,7 @@ func TestBuildChannelViews_KeyEnabledReflectsDisabled(t *testing.T) {
 }
 
 // TestMigrateStaleChannelViewNames_ResetsOldDerivedName 验证旧派生规则写下的
-// vip-lyclaude-site-claude 在镜像里被改写为新规则派生值 vip-lyclaude，
+// vip-lyclaude-site-claude 在镜像里被改写为新规则派生值 vip-lyclaude-site，
 // 且旧名进 Remark，ChannelsV3 同步。
 func TestMigrateStaleChannelViewNames_ResetsOldDerivedName(t *testing.T) {
 	cfg := &Config{
@@ -152,14 +152,14 @@ func TestMigrateStaleChannelViewNames_ResetsOldDerivedName(t *testing.T) {
 		t.Fatalf("期望发生改名，实际未触发")
 	}
 
-	if got := cfg.Channels[0].Name; got != "vip-lyclaude" {
-		t.Errorf("Channels[0].Name = %q, want %q", got, "vip-lyclaude")
+	if got := cfg.Channels[0].Name; got != "vip-lyclaude-site" {
+		t.Errorf("Channels[0].Name = %q, want %q", got, "vip-lyclaude-site")
 	}
 	if got := cfg.Channels[0].Remark; got != "vip-lyclau" {
 		t.Errorf("Channels[0].Remark = %q, want %q (10 字符截断)", got, "vip-lyclau")
 	}
-	if got := cfg.ChannelsV3[0].Name; got != "vip-lyclaude" {
-		t.Errorf("ChannelsV3[0].Name = %q, want %q", got, "vip-lyclaude")
+	if got := cfg.ChannelsV3[0].Name; got != "vip-lyclaude-site" {
+		t.Errorf("ChannelsV3[0].Name = %q, want %q", got, "vip-lyclaude-site")
 	}
 }
 
@@ -169,12 +169,12 @@ func TestMigrateStaleChannelViewNames_KeepsAlreadyCorrect(t *testing.T) {
 	cfg := &Config{
 		ChannelsV3: []ChannelV3{{
 			ChannelUID: "lc_ok",
-			Name:       "api-openai",
+			Name:       "api-openai-com",
 		}},
 		Channels: []ChannelView{{
 			ChannelUID: "lc_ok",
 			BaseURLs:   []string{"https://api.openai.com/v1"},
-			Name:       "api-openai",
+			Name:       "api-openai-com",
 		}},
 	}
 
@@ -184,8 +184,8 @@ func TestMigrateStaleChannelViewNames_KeepsAlreadyCorrect(t *testing.T) {
 	if cfg.Channels[0].Remark != "" {
 		t.Errorf("Remark 仍应为空, got %q", cfg.Channels[0].Remark)
 	}
-	if cfg.ChannelsV3[0].Name != "api-openai" {
-		t.Errorf("ChannelsV3[0].Name 仍应为 api-openai, got %q", cfg.ChannelsV3[0].Name)
+	if cfg.ChannelsV3[0].Name != "api-openai-com" {
+		t.Errorf("ChannelsV3[0].Name 仍应为 api-openai-com, got %q", cfg.ChannelsV3[0].Name)
 	}
 }
 
@@ -210,8 +210,8 @@ func TestMigrateStaleChannelViewNames_PreservesExistingRemark(t *testing.T) {
 	if cfg.Channels[0].Remark != "人工备注" {
 		t.Errorf("Remark 不应被覆盖, got %q", cfg.Channels[0].Remark)
 	}
-	if cfg.Channels[0].Name != "vip-lyclaude" {
-		t.Errorf("Name 应改为 vip-lyclaude, got %q", cfg.Channels[0].Name)
+	if cfg.Channels[0].Name != "vip-lyclaude-site" {
+		t.Errorf("Name 应改为 vip-lyclaude-site, got %q", cfg.Channels[0].Name)
 	}
 }
 

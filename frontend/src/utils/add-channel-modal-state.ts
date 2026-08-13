@@ -52,43 +52,6 @@ export function syncBaseUrlsFormState(rawText: string, serviceType: ServiceType)
   }
 }
 
-const MULTI_PART_PUBLIC_SUFFIXES = new Set([
-  'ac.cn',
-  'com.cn',
-  'edu.cn',
-  'gov.cn',
-  'net.cn',
-  'org.cn',
-  'co.uk',
-  'org.uk',
-  'ac.uk',
-  'gov.uk',
-  'com.au',
-  'net.au',
-  'org.au',
-  'co.jp',
-  'ne.jp',
-  'or.jp',
-  'co.kr',
-  'or.kr',
-  'com.br',
-  'com.mx',
-  'com.sg',
-  'com.hk',
-  'com.tw',
-  'com.vn',
-  'co.id',
-  'co.in',
-  'co.nz',
-  'github.io',
-  'pages.dev',
-  'workers.dev',
-  'vercel.app',
-  'netlify.app',
-  'onrender.com',
-  'railway.app',
-])
-
 const GENERIC_HOST_PREFIXES = new Set(['www'])
 const MAX_CHANNEL_NAME_PREFIX_LENGTH = 40
 
@@ -111,19 +74,6 @@ function slugifyHostPart(value: string): string {
 
 function appendPort(prefix: string, port: string): string {
   return port ? `${prefix}-${port}` : prefix
-}
-
-function publicSuffixLabelCount(labels: string[]): number {
-  const maxSuffixLabels = Math.min(3, labels.length - 1)
-
-  for (let count = maxSuffixLabels; count >= 2; count--) {
-    const suffix = labels.slice(labels.length - count).join('.')
-    if (MULTI_PART_PUBLIC_SUFFIXES.has(suffix)) {
-      return count
-    }
-  }
-
-  return 1
 }
 
 function dropGenericLeadingLabels(labels: string[]): string[] {
@@ -168,10 +118,7 @@ export function extractChannelNamePrefix(url: string): string {
       return appendPort(labels[0], parsed.port)
     }
 
-    const suffixCount = publicSuffixLabelCount(labels)
-    const stemEnd = Math.max(1, labels.length - suffixCount)
-    const stemLabels = labels.slice(0, stemEnd)
-    const meaningfulLabels = fitChannelNamePrefix(dropGenericLeadingLabels(stemLabels))
+    const meaningfulLabels = fitChannelNamePrefix(dropGenericLeadingLabels(labels))
     const prefix = meaningfulLabels.join('-')
     if (!prefix) return 'channel'
     return appendPort(prefix, parsed.port)
