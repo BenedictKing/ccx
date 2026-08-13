@@ -860,13 +860,30 @@ export async function main() {
     console.log('[artificial-analysis] Set ARTIFICIAL_ANALYSIS_API_KEY to enable, or pass --skip-artificial-analysis to silence this message.')
     report.aaSkipped = true
   } else {
-    try {
-      console.log('\n--- Fetching Artificial Analysis data ---')
-      const aaResult = await fetchArtificialAnalysisData(
-        artificialAnalysisApiKey,
-        ARTIFICIAL_ANALYSIS_MODEL_MAP,
-        ARTIFICIAL_ANALYSIS_IMAGE_MODEL_MAP,
-      )
+    let aaResult = null
+    let aaError = null
+    const isTransient = (err) => /timed out|fetch failed|ECONNRESET|ETIMEDOUT|ENETUNREACH|EAI_AGAIN/i.test(err.message)
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        console.log(`\n--- Fetching Artificial Analysis data (attempt ${attempt}/2) ---`)
+        aaResult = await fetchArtificialAnalysisData(
+          artificialAnalysisApiKey,
+          ARTIFICIAL_ANALYSIS_MODEL_MAP,
+          ARTIFICIAL_ANALYSIS_IMAGE_MODEL_MAP,
+        )
+        aaError = null
+        break
+      } catch (err) {
+        aaError = err
+        if (attempt < 2 && isTransient(err)) {
+          console.warn(`[artificial-analysis] Attempt ${attempt} failed transiently: ${err.message}; retrying...`)
+        } else {
+          break
+        }
+      }
+    }
+
+    if (aaResult) {
       visualizationSources.artificialAnalysisProfiles = aaResult.llm
       visualizationSources.artificialAnalysisImageArena = aaResult.imageArena
       mergeArtificialAnalysisLlm(registry, aaResult.llm, report)
@@ -881,9 +898,9 @@ export async function main() {
       }
       logUnmapped('LLM', aaResult.unmappedLlmSlugs)
       logUnmapped('Image arena', aaResult.unmappedImageSlugs)
-    } catch (err) {
-      report.errors.push({ source: 'artificial-analysis', error: err.message })
-      console.error('[artificial-analysis] Failed:', err.message)
+    } else {
+      report.errors.push({ source: 'artificial-analysis', error: aaError.message })
+      console.error('[artificial-analysis] Failed:', aaError.message)
     }
   }
 

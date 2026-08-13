@@ -124,7 +124,7 @@ export async function fetchLanguageModelsFree(apiKey) {
   while (page <= 50) {
     const url = `${LANGUAGE_MODELS_FREE_URL}?page=${page}`
     console.log(`[artificial-analysis] Fetching ${url}`)
-    const result = await cachedFetch(url, { headers })
+    const result = await cachedFetch(url, { headers }, 60_000)
 
     let doc
     if (result.cached) {
@@ -239,7 +239,7 @@ export function extractLlmProfiles(models, modelMap, version) {
 export async function fetchTextToImageArenaFree(apiKey) {
   const headers = authHeaders(apiKey)
   console.log(`[artificial-analysis] Fetching ${TEXT_TO_IMAGE_FREE_URL}`)
-  const result = await cachedFetch(TEXT_TO_IMAGE_FREE_URL, { headers })
+  const result = await cachedFetch(TEXT_TO_IMAGE_FREE_URL, { headers }, 60_000)
 
   let doc
   if (result.cached) {
