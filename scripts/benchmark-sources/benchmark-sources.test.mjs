@@ -446,10 +446,27 @@ test('DeepSeek BenchLM variants fold into canonical flash and pro models', () =>
   assert.equal(BENCHLM_MODEL_MAP['deepseek-v4-pro-base'], 'deepseek-v4-pro')
   assert.equal(BENCHLM_MODEL_MAP['deepseek-v4-pro-high'], 'deepseek-v4-pro')
   assert.equal(BENCHLM_MODEL_MAP['deepseek-v4-pro-max'], 'deepseek-v4-pro')
+  // 日期后缀别名：部分渠道以 -MMDD 形式发布新版本
+  assert.equal(BENCHLM_MODEL_MAP['deepseek-v4-pro-0813'], 'deepseek-v4-pro')
 })
 
-test('DeepSeek CodexRadar flash model is mapped', () => {
+test('DeepSeek CodexRadar flash and pro models are mapped', () => {
   assert.equal(DRADAR_MODEL_MAP['deepseek-v4-flash'], 'deepseek-v4-flash')
+  assert.equal(DRADAR_MODEL_MAP['deepseek-v4-pro'], 'deepseek-v4-pro')
+})
+
+test('DeepSeek canonical model pattern supports dated suffixes', () => {
+  const pattern = canonicalModelToPattern('deepseek-v4-pro')
+  const ok = [
+    'deepseek-v4-pro',
+    'DeepSeek-V4-Pro-0813',
+    'deepseek-v4-pro-2026-08-13',
+    'deepseek-v4-pro-260813',
+    'deepseek-v4-pro-20260813',
+  ]
+  for (const model of ok) {
+    assert.match(model, new RegExp(pattern, 'i'), `${model} should match ${pattern}`)
+  }
 })
 
 test('Artificial Analysis LLM extraction yields one evidence per composite index', () => {

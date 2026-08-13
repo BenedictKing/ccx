@@ -77,6 +77,8 @@ export const BENCHLM_MODEL_MAP = {
   'deepseek-v4-pro-base': 'deepseek-v4-pro',
   'deepseek-v4-pro-high': 'deepseek-v4-pro',
   'deepseek-v4-pro-max': 'deepseek-v4-pro',
+  // DeepSeek 新版本发布后，部分榜单可能使用 -MMDD 日期后缀 slug
+  'deepseek-v4-pro-0813': 'deepseek-v4-pro',
 }
 
 /**
@@ -158,6 +160,10 @@ export function canonicalModelToPattern(canonical) {
     // 不在此生成器退化（这里只转义点号 + 追加日期快照后缀）。
     const escaped = canonical.replace(/\./g, '\\.')
     return `(?:^|[-/])${escaped}(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)`
+  }
+  if (canonical.startsWith('deepseek-')) {
+    // deepseek 渠道常以 -MMDD 发布版本别名，注册表已放宽到 -\d{4,8}
+    return `(?:^|[-/])${canonical}(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{4,8})?(?=$|@)`
   }
   // 默认
   return `(?:^|[-/])${canonical}(?=$|@)`
