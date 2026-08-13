@@ -111,3 +111,33 @@ func TestUniqueAutoDerivedChannelName(t *testing.T) {
 		t.Errorf("同站应复用派生名, got %q", got)
 	}
 }
+
+// TestMigrateAllChannelNamesConfig_SyncsAuthoritativeLogicalName 验证迁移后的物理名
+// 会同步到 LogicalName，避免 BuildAuthoritativeChannels 用旧逻辑名覆盖 ChannelsV3。
+func TestMigrateAllChannelNamesConfig_SyncsAuthoritativeLogicalName(t *testing.T) {
+	cfg := &Config{
+		ChannelsV3:      []ChannelV3{{ChannelUID: "lc_sync", Name: "legacy-name"}},
+		LogicalChannels: []LogicalChannel{{LogicalChannelUID: "lc_sync", Name: "legacy-name"}},
+		ResponsesUpstream: []UpstreamConfig{{
+			ChannelUID: "ch_sync", LogicalChannelUID: "lc_sync", LogicalName: "legacy-name",
+			Name: "legacy-name", BaseURL: "https://jiuuij.de5.net", ServiceType: "responses",
+		}},
+	}
+
+	if !migrateAllChannelNamesConfig(cfg) {
+		t.Fatalf("期望发生名称迁移")
+	}
+	if got := cfg.ResponsesUpstream[0].Name; got != "jiuuij-de5-net" {
+		t.Fatalf("物理 Name = %q, want jiuuij-de5-net", got)
+	}
+	if got := cfg.ResponsesUpstream[0].LogicalName; got != "jiuuij-de5-net" {
+		t.Fatalf("LogicalName = %q, want jiuuij-de5-net", got)
+	}
+	if got := cfg.LogicalChannels[0].Name; got != "jiuuij-de5-net" {
+		t.Fatalf("LogicalChannels.Name = %q, want jiuuij-de5-net", got)
+	}
+	channels := BuildAuthoritativeChannels(cfg)
+	if len(channels) != 1 || channels[0].Name != "jiuuij-de5-net" {
+		t.Fatalf("ChannelsV3 Name 未同步: %+v", channels)
+	}
+}

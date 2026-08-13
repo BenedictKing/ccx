@@ -307,7 +307,7 @@ func (m *Manager) scan() {
 			if len(keys) == 0 {
 				continue
 			}
-			channelID := strconv.Itoa(idx)
+			channelID := stableChannelID(u, idx)
 			if !channelDue(channelType, channelID, keys, l1ByChannel[channelKey(channelType, channelID)], policy.Interval, now) {
 				continue
 			}
@@ -395,7 +395,7 @@ func (m *Manager) checkChannel(channelType string, channelIndex int) {
 		return
 	}
 
-	channelID := strconv.Itoa(channelIndex)
+	channelID := stableChannelID(u, channelIndex)
 	// 上次验证记录（用于 consecutive_failures 递增/清零），按 check_kind 分开
 	prevL1 := make(map[string]metrics.KeyHealthRecord)
 	prevL2 := make(map[string]metrics.KeyHealthRecord)

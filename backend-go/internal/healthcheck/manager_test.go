@@ -25,7 +25,7 @@ func TestManager启动首扫从未验证渠道立即到期(t *testing.T) {
 	srv := newModelsServer(t, 200, `{"data":[{"id":"m1"},{"id":"m2"}]}`)
 	cfg := config.Config{
 		Upstream: []config.UpstreamConfig{
-			{Name: "ch0", BaseURL: srv.URL, APIKeys: []string{"sk-key-1"}, Status: "active"},
+			{Name: "ch0", ChannelUID: "ch_uid_0", BaseURL: srv.URL, APIKeys: []string{"sk-key-1"}, Status: "active"},
 			{Name: "ch1", BaseURL: srv.URL, APIKeys: []string{"sk-key-2"}, Status: "suspended"}, // 非 active 跳过
 		},
 		ChatUpstream: []config.UpstreamConfig{
@@ -44,11 +44,11 @@ func TestManager启动首扫从未验证渠道立即到期(t *testing.T) {
 	defer m.Stop()
 
 	waitForCondition(t, 2*time.Second, "ch0 的 L1 记录写入", func() bool {
-		recs, _ := store.GetKeyHealthForChannel("messages", "0")
+		recs, _ := store.GetKeyHealthForChannel("messages", "ch_uid_0")
 		return len(recs) == 1
 	})
 
-	recs, _ := store.GetKeyHealthForChannel("messages", "0")
+	recs, _ := store.GetKeyHealthForChannel("messages", "ch_uid_0")
 	rec := recs[0]
 	if rec.LastStatus != StatusOK || rec.ModelCount != 2 || rec.CheckKind != CheckKindL1 {
 		t.Fatalf("记录内容错误: %+v", rec)
@@ -69,13 +69,13 @@ func TestManager最近已验证渠道首扫不重复验证(t *testing.T) {
 	keyMask := utils.MaskAPIKey("sk-key-1")
 	cfg := config.Config{
 		Upstream: []config.UpstreamConfig{
-			{Name: "ch0", BaseURL: srv.URL, APIKeys: []string{"sk-key-1"}, Status: "active"},
+			{Name: "ch0", ChannelUID: "ch_uid_0", BaseURL: srv.URL, APIKeys: []string{"sk-key-1"}, Status: "active"},
 		},
 	}
 	store := newFakeKeyHealthStore()
 	// 预置最近的 L1 记录：间隔默认 6h，首扫不应到期
 	_ = store.UpsertKeyHealth(metrics.KeyHealthRecord{
-		ChannelType: "messages", ChannelID: "0", KeyMask: keyMask,
+		ChannelType: "messages", ChannelID: "ch_uid_0", KeyMask: keyMask,
 		CheckKind: CheckKindL1, LastCheckAt: time.Now(), LastStatus: StatusOK,
 	})
 
@@ -93,6 +93,34 @@ func TestManager最近已验证渠道首扫不重复验证(t *testing.T) {
 	if n := store.count(); n != 1 {
 		t.Fatalf("记录数 = %d, 期望 1（未到期不应重复验证）", n)
 	}
+}
+
+// TestManager数组重排后不复用旧下标记录 验证 key_health 以 ChannelUID 隔离，
+// 新渠道即使占用历史数组下标，也会在启动首扫立即验证。
+func TestManager数组重排后不复用旧下标记录(t *testing.T) {
+	srv := newModelsServer(t, 200, `{"data":[{"id":"m1"}]}`)
+	cfg := config.Config{
+		Upstream: []config.UpstreamConfig{{
+			Name: "new-channel", ChannelUID: "ch_new", BaseURL: srv.URL,
+			APIKeys: []string{"sk-same-key"}, Status: "active",
+		}},
+	}
+	store := newFakeKeyHealthStore()
+	// 模拟被删除的旧渠道占用 index=0，并留下未到期记录。
+	_ = store.UpsertKeyHealth(metrics.KeyHealthRecord{
+		ChannelType: "messages", ChannelID: "0", KeyMask: utils.MaskAPIKey("sk-same-key"),
+		CheckKind: CheckKindL1, LastCheckAt: time.Now(), LastStatus: StatusOK,
+	})
+
+	m := NewManager(func() config.Config { return cfg }, store, nil, nil, Options{ScanInterval: time.Hour})
+	m.RegisterL1Fetcher("messages", testWrappedFetcher())
+	m.Start()
+	defer m.Stop()
+
+	waitForCondition(t, 2*time.Second, "新 ChannelUID 的 L1 记录写入", func() bool {
+		recs, _ := store.GetKeyHealthForChannel("messages", "ch_new")
+		return len(recs) == 1
+	})
 }
 
 func TestManagerStop幂等(t *testing.T) {
@@ -121,13 +149,13 @@ func TestManagerTriggerChannelCheck(t *testing.T) {
 	keyMask := utils.MaskAPIKey("sk-key-1")
 	cfg := config.Config{
 		Upstream: []config.UpstreamConfig{
-			{Name: "ch0", BaseURL: srv.URL, APIKeys: []string{"sk-key-1"}, Status: "active"},
+			{Name: "ch0", ChannelUID: "ch_uid_0", BaseURL: srv.URL, APIKeys: []string{"sk-key-1"}, Status: "active"},
 		},
 	}
 	store := newFakeKeyHealthStore()
 	// 预置最近的 L1 记录：首扫未到期不提交，手动触发才执行验证
 	_ = store.UpsertKeyHealth(metrics.KeyHealthRecord{
-		ChannelType: "messages", ChannelID: "0", KeyMask: keyMask,
+		ChannelType: "messages", ChannelID: "ch_uid_0", KeyMask: keyMask,
 		CheckKind: CheckKindL1, LastCheckAt: time.Now(), LastStatus: StatusOK,
 	})
 	m := NewManager(
@@ -153,7 +181,7 @@ func TestManagerTriggerChannelCheck(t *testing.T) {
 	}
 	// 手动触发跳过到期判定，记录会被刷新（ModelCount 0 → 1）
 	waitForCondition(t, 2*time.Second, "触发后 L1 记录刷新", func() bool {
-		recs, _ := store.GetKeyHealthForChannel("messages", "0")
+		recs, _ := store.GetKeyHealthForChannel("messages", "ch_uid_0")
 		return len(recs) == 1 && recs[0].ModelCount == 1
 	})
 }
@@ -163,7 +191,7 @@ func TestManager重复触发去重(t *testing.T) {
 	srv := newModelsServer(t, 200, `{"data":[{"id":"m1"}]}`)
 	cfg := config.Config{
 		Upstream: []config.UpstreamConfig{
-			{Name: "ch0", BaseURL: srv.URL, APIKeys: []string{"sk-key-1"}, Status: "active"},
+			{Name: "ch0", ChannelUID: "ch_uid_0", BaseURL: srv.URL, APIKeys: []string{"sk-key-1"}, Status: "active"},
 		},
 	}
 	store := newFakeKeyHealthStore()

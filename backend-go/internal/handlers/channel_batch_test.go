@@ -386,13 +386,13 @@ func TestImportChannelsConfirm_RegeneratesUID(t *testing.T) {
 	_ = json.Unmarshal(readW.Body.Bytes(), &exportPack)
 
 	for _, ch := range exportPack.Channels {
-		if ch.Channel.Name == "imported-example" { // 名称由 baseURL 派生（imported.example.com -> imported-example）
+		if ch.Channel.Name == "imported-example-com" { // 名称由 baseURL 派生（imported.example.com -> imported-example-com）
 			// UID 在导出时被清除了，但我们可以验证渠道确实存在
 			t.Logf("Imported channel found: name=%s, type=%s", ch.Channel.Name, ch.ChannelType)
 			return
 		}
 	}
-	t.Error("imported channel 'imported-example' not found after import")
+	t.Error("imported channel 'imported-example-com' not found after import")
 }
 
 func TestImportChannelsConfirm_NameConflict(t *testing.T) {

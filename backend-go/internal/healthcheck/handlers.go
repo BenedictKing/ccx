@@ -45,8 +45,9 @@ func (m *Manager) ChannelHealth(channelType string, channelIndex int) *ChannelHe
 	if channelIndex < 0 || channelIndex >= len(upstreams) {
 		return nil
 	}
-	policy := cfg.ResolveHealthCheckPolicy(&upstreams[channelIndex])
-	channelID := strconv.Itoa(channelIndex)
+	upstream := &upstreams[channelIndex]
+	policy := cfg.ResolveHealthCheckPolicy(upstream)
+	channelID := stableChannelID(upstream, channelIndex)
 	records, err := m.store.GetKeyHealthForChannel(channelType, channelID)
 	if err != nil {
 		records = nil

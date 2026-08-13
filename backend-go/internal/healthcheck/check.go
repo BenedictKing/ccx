@@ -7,6 +7,7 @@ import (
 	"hash/fnv"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -21,6 +22,17 @@ const maxDetailLen = 200
 // channelKey 渠道标识（去重/记录分组用）
 func channelKey(channelType, channelID string) string {
 	return channelType + "/" + channelID
+}
+
+// stableChannelID 返回 key_health 使用的稳定渠道身份。
+// ChannelUID 在数组重排后保持不变；历史渠道缺 UID 时才兼容回退到数组下标。
+func stableChannelID(u *config.UpstreamConfig, channelIndex int) string {
+	if u != nil {
+		if uid := strings.TrimSpace(u.ChannelUID); uid != "" {
+			return uid
+		}
+	}
+	return strconv.Itoa(channelIndex)
 }
 
 // UpstreamsFor 按渠道类型取配置中的 upstream slice（导出供 main.go 接线复用）

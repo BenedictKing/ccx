@@ -235,14 +235,33 @@ func migrateAllChannelNamesConfig(cfg *Config) bool {
 		visit(cfg.GeminiUpstream)
 		visit(cfg.ImagesUpstream)
 		visit(cfg.VectorsUpstream)
+		logicalNameByUID := make(map[string]string, len(cfg.LogicalChannels))
 		for i := range cfg.LogicalChannels {
-			if up := byUID[cfg.LogicalChannels[i].LogicalChannelUID]; up != nil {
-				cfg.LogicalChannels[i].Name = up.Name
-				if strings.TrimSpace(cfg.LogicalChannels[i].Remark) == "" {
-					cfg.LogicalChannels[i].Remark = up.Remark
+			logical := &cfg.LogicalChannels[i]
+			if up := byUID[logical.LogicalChannelUID]; up != nil {
+				logical.Name = up.Name
+				if strings.TrimSpace(logical.Remark) == "" {
+					logical.Remark = up.Remark
+				}
+			}
+			logicalNameByUID[logical.LogicalChannelUID] = logical.Name
+		}
+		// LogicalName 会被 BuildAuthoritativeChannels 优先用作 ChannelsV3.Name；
+		// 必须与刚迁移的物理 Name 同步，否则保存时会把旧逻辑名重新写回权威镜像。
+		syncLogicalNames := func(channels []UpstreamConfig) {
+			for i := range channels {
+				uid := strings.TrimSpace(channels[i].LogicalChannelUID)
+				if name := strings.TrimSpace(logicalNameByUID[uid]); uid != "" && name != "" {
+					channels[i].LogicalName = name
 				}
 			}
 		}
+		syncLogicalNames(cfg.Upstream)
+		syncLogicalNames(cfg.ChatUpstream)
+		syncLogicalNames(cfg.ResponsesUpstream)
+		syncLogicalNames(cfg.GeminiUpstream)
+		syncLogicalNames(cfg.ImagesUpstream)
+		syncLogicalNames(cfg.VectorsUpstream)
 	}
 	return changed
 }
