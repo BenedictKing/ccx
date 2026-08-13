@@ -169,12 +169,12 @@ func TestMigrateStaleChannelViewNames_KeepsAlreadyCorrect(t *testing.T) {
 	cfg := &Config{
 		ChannelsV3: []ChannelV3{{
 			ChannelUID: "lc_ok",
-			Name:       "openai",
+			Name:       "api-openai",
 		}},
 		Channels: []ChannelView{{
 			ChannelUID: "lc_ok",
 			BaseURLs:   []string{"https://api.openai.com/v1"},
-			Name:       "openai",
+			Name:       "api-openai",
 		}},
 	}
 
@@ -184,8 +184,8 @@ func TestMigrateStaleChannelViewNames_KeepsAlreadyCorrect(t *testing.T) {
 	if cfg.Channels[0].Remark != "" {
 		t.Errorf("Remark 仍应为空, got %q", cfg.Channels[0].Remark)
 	}
-	if cfg.ChannelsV3[0].Name != "openai" {
-		t.Errorf("ChannelsV3[0].Name 仍应为 openai, got %q", cfg.ChannelsV3[0].Name)
+	if cfg.ChannelsV3[0].Name != "api-openai" {
+		t.Errorf("ChannelsV3[0].Name 仍应为 api-openai, got %q", cfg.ChannelsV3[0].Name)
 	}
 }
 

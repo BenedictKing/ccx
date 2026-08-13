@@ -121,8 +121,8 @@ func TestExportChannels_DefaultExcludesKeys(t *testing.T) {
 	if ch.Channel.ChannelUID != "" {
 		t.Errorf("ChannelUID should be empty (stripped for export), got %s", ch.Channel.ChannelUID)
 	}
-	if ch.Channel.Name != "anthropic" {
-		t.Errorf("expected name 'anthropic' (derived from baseURL), got '%s'", ch.Channel.Name)
+	if ch.Channel.Name != "api-anthropic" {
+		t.Errorf("expected name 'api-anthropic' (derived from baseURL), got '%s'", ch.Channel.Name)
 	}
 	if ch.ChannelType != "messages" {
 		t.Errorf("expected channelType 'messages', got '%s'", ch.ChannelType)
@@ -490,10 +490,10 @@ func TestImportChannelsConfirm_SkipNaming(t *testing.T) {
 		t.Fatalf("expected 1 imported, got %d", len(imported))
 	}
 
-	// 派生名冲突，落库时由 Add 自动追加序号消歧（anthropic -> anthropic-2）
+	// 派生名保留 api 前缀，冲突时由 Add 自动追加序号消歧（api-anthropic -> api-anthropic-2）
 	name := imported[0].(string)
-	if name != "anthropic-import-1 (messages)" {
-		t.Errorf("expected 'anthropic-import-1 (messages)', got '%s'", name)
+	if name != "api-anthropic-import-1 (messages)" {
+		t.Errorf("expected 'api-anthropic-import-1 (messages)', got '%s'", name)
 	}
 }
 

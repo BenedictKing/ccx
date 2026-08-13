@@ -89,7 +89,7 @@ const MULTI_PART_PUBLIC_SUFFIXES = new Set([
   'railway.app',
 ])
 
-const GENERIC_HOST_PREFIXES = new Set(['www', 'api', 'apis', 'openapi', 'gateway', 'proxy'])
+const GENERIC_HOST_PREFIXES = new Set(['www'])
 const MAX_CHANNEL_NAME_PREFIX_LENGTH = 40
 
 function isIPv4Address(hostname: string): boolean {
