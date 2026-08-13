@@ -92,6 +92,20 @@ function fitChannelNamePrefix(labels: string[]): string[] {
   return result
 }
 
+function channelNamePathParts(pathname: string): string[] {
+  const parts = pathname
+    .split('/')
+    .map(slugifyHostPart)
+    .filter(Boolean)
+
+  if (parts.length === 0) return []
+  if (/^v\d+[a-z]*$/.test(parts[parts.length - 1])) {
+    parts.pop()
+    if (parts.length === 1 && parts[0] === 'api') return []
+  }
+  return parts
+}
+
 export function extractChannelNamePrefix(url: string): string {
   try {
     const parsed = new URL(url.trim())
@@ -101,12 +115,15 @@ export function extractChannelNamePrefix(url: string): string {
       return 'channel'
     }
 
+    const pathParts = channelNamePathParts(parsed.pathname)
     if (isIPv4Address(hostname)) {
-      return appendPort(hostname.replace(/\./g, '-'), parsed.port)
+      const parts = fitChannelNamePrefix([hostname.replace(/\./g, '-'), ...pathParts])
+      return appendPort(parts.join('-'), parsed.port)
     }
 
     if (hostname.includes(':')) {
-      return slugifyHostPart(appendPort(`ipv6-${hostname}`, parsed.port)) || 'ipv6'
+      const parts = fitChannelNamePrefix([slugifyHostPart(`ipv6-${hostname}`), ...pathParts])
+      return appendPort(parts.filter(Boolean).join('-'), parsed.port) || 'ipv6'
     }
 
     const labels = hostname.split('.').map(slugifyHostPart).filter(Boolean)
@@ -114,11 +131,10 @@ export function extractChannelNamePrefix(url: string): string {
       return 'channel'
     }
 
-    if (labels.length === 1) {
-      return appendPort(labels[0], parsed.port)
-    }
-
-    const meaningfulLabels = fitChannelNamePrefix(dropGenericLeadingLabels(labels))
+    const meaningfulLabels = fitChannelNamePrefix([
+      ...dropGenericLeadingLabels(labels),
+      ...pathParts
+    ])
     const prefix = meaningfulLabels.join('-')
     if (!prefix) return 'channel'
     return appendPort(prefix, parsed.port)

@@ -32,6 +32,15 @@ describe('extractChannelNamePrefix', () => {
     expect(extractChannelNamePrefix('')).toBe('channel')
   })
 
+  it('应将完整非标准路径纳入名称并剥离版本尾段', () => {
+    expect(extractChannelNamePrefix('https://load103.diyai.diy/proxy/feishu-glm-46')).toBe(
+      'load103-diyai-diy-proxy-feishu-glm-46'
+    )
+    expect(extractChannelNamePrefix('https://host.com/tenant/a/v1')).toBe('host-com-tenant-a')
+    expect(extractChannelNamePrefix('https://host.com/api/v5')).toBe('host-com')
+    expect(extractChannelNamePrefix('https://host.com/api/tenant/v5')).toBe('host-com-api-tenant')
+  })
+
   it('多 label 域名带端口时应保留端口后缀', () => {
     expect(extractChannelNamePrefix('https://api.example.com:8443/v1')).toBe('api-example-com-8443')
     expect(extractChannelNamePrefix('https://api.us-east-1.openai.com:9443/v1')).toBe('api-us-east-1-openai-com-9443')

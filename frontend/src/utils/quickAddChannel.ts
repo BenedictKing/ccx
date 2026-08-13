@@ -1,5 +1,6 @@
 import type { Channel, ChannelDiscoveryKind, ChannelKind } from '@/services/api-types'
 import { canonicalBaseUrl, type ServiceType } from './baseUrlSemantics'
+import { extractChannelNamePrefix } from './add-channel-modal-state'
 import { isZhipuApiKey, parseQuickInput } from './quickInputParser'
 
 interface QuickAddProviderCandidate {
@@ -30,13 +31,8 @@ const DEFAULT_SERVICE_TYPES: Record<ChannelKind, Channel['serviceType']> = {
 }
 
 export function buildQuickAddChannelName(baseUrl: string, suffix: string): string {
-  try {
-    const url = new URL(baseUrl)
-    const hostname = url.hostname.replace(/^www\./i, '').replace(/\./g, '-') || 'channel'
-    return url.port ? `${hostname}-${url.port}` : hostname
-  } catch {
-    return `channel-${suffix}`
-  }
+  const name = extractChannelNamePrefix(baseUrl)
+  return name === 'channel' ? `channel-${suffix}` : name
 }
 
 export interface ExistingQuickAddChannelMatch {

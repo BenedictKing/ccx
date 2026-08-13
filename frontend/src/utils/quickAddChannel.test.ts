@@ -48,6 +48,14 @@ describe('buildQuickAddChannelName', () => {
     expect(buildQuickAddChannelName('https://api.www-example.com', 'abc123')).toBe('api-www-example-com')
   })
 
+  it('完整保留非标准多级路径并剥离版本尾段', () => {
+    expect(buildQuickAddChannelName('https://load103.diyai.diy/proxy/feishu-glm-46', 'abc123')).toBe(
+      'load103-diyai-diy-proxy-feishu-glm-46'
+    )
+    expect(buildQuickAddChannelName('https://host.com/tenant/a/v1', 'abc123')).toBe('host-com-tenant-a')
+    expect(buildQuickAddChannelName('https://host.com/api/v5', 'abc123')).toBe('host-com')
+  })
+
   it('无效地址回退到通用名称', () => {
     expect(buildQuickAddChannelName('not a url', 'abc123')).toBe('channel-abc123')
   })

@@ -17,9 +17,10 @@ var genericHostPrefixes = map[string]struct{}{
 const maxChannelNamePrefixLength = 40
 
 var (
-	reSlugNonAlphanumeric = regexp.MustCompile(`[^a-z0-9]+`)
-	reSlugLeadingTrailing = regexp.MustCompile(`^-+|-+$`)
-	reSlugRepeatedDash    = regexp.MustCompile(`-{2,}`)
+	reSlugNonAlphanumeric       = regexp.MustCompile(`[^a-z0-9]+`)
+	reSlugLeadingTrailing       = regexp.MustCompile(`^-+|-+$`)
+	reSlugRepeatedDash          = regexp.MustCompile(`-{2,}`)
+	reChannelNameVersionSegment = regexp.MustCompile(`^v\d+[a-z]*$`)
 )
 
 // DeriveChannelNameFromBaseURL 根据首个 baseURL 派生渠道名称。
@@ -37,33 +38,55 @@ func DeriveChannelNameFromBaseURL(rawURL string) string {
 	}
 
 	if ip := net.ParseIP(hostname); ip != nil {
-		if ip.To4() != nil {
-			return appendChannelNamePort(strings.ReplaceAll(hostname, ".", "-"), parsed.Port())
+		prefix := strings.ReplaceAll(hostname, ".", "-")
+		if ip.To4() == nil {
+			prefix = "ipv6-" + hostname
 		}
-		if slug := slugifyChannelNamePart(appendChannelNamePort("ipv6-"+hostname, parsed.Port())); slug != "" {
-			return slug
+		parts := append([]string{slugifyChannelNamePart(prefix)}, channelNamePathParts(parsed.Path)...)
+		parts = fitChannelNamePrefix(parts)
+		if len(parts) > 0 {
+			return appendChannelNamePort(strings.Join(parts, "-"), parsed.Port())
 		}
-		return "ipv6"
+		return "channel"
 	}
 
-	labels := make([]string, 0, 4)
+	parts := make([]string, 0, 6)
 	for _, part := range strings.Split(hostname, ".") {
 		if slug := slugifyChannelNamePart(part); slug != "" {
-			labels = append(labels, slug)
+			parts = append(parts, slug)
 		}
 	}
-	if len(labels) == 0 {
+	if len(parts) == 0 {
 		return "channel"
 	}
-	if len(labels) == 1 {
-		return appendChannelNamePort(labels[0], parsed.Port())
+	parts = dropGenericLeadingChannelNameLabels(parts)
+	parts = append(parts, channelNamePathParts(parsed.Path)...)
+	parts = fitChannelNamePrefix(parts)
+	if len(parts) == 0 {
+		return "channel"
 	}
+	return appendChannelNamePort(strings.Join(parts, "-"), parsed.Port())
+}
 
-	meaningful := fitChannelNamePrefix(dropGenericLeadingChannelNameLabels(labels))
-	if len(meaningful) == 0 {
-		return "channel"
+// channelNamePathParts 返回应进入自动名称的非标准路径段。
+// 尾部版本段（v1/v1beta 等）不参与命名；路径仅为 api/<版本> 时连 api 一并剥离。
+func channelNamePathParts(path string) []string {
+	parts := make([]string, 0, 4)
+	for _, part := range strings.Split(strings.Trim(path, "/"), "/") {
+		if slug := slugifyChannelNamePart(part); slug != "" {
+			parts = append(parts, slug)
+		}
 	}
-	return appendChannelNamePort(strings.Join(meaningful, "-"), parsed.Port())
+	if len(parts) == 0 {
+		return nil
+	}
+	if reChannelNameVersionSegment.MatchString(parts[len(parts)-1]) {
+		parts = parts[:len(parts)-1]
+		if len(parts) == 1 && parts[0] == "api" {
+			return nil
+		}
+	}
+	return parts
 }
 
 func slugifyChannelNamePart(value string) string {
