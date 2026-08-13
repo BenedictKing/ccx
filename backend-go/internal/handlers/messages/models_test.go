@@ -1113,32 +1113,16 @@ func findModelEntry(models []ModelEntry, id string) *ModelEntry {
 
 func contextWindowFromSharedRegistry(t *testing.T, modelID string) int {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "shared", "model-registry", "ccx_model_registry.json"))
-	if err != nil {
-		t.Fatalf("读取共享模型注册表失败: %v", err)
+	// 复用与生产相同的解析路径（共享注册表 + RE2 兼容编译），而不是在测试里
+	// 复刻 pattern 字面量，避免注册表后缀规则演进（如 -\d{6,8} 放宽到 -\d{4,8}）时误判。
+	resolved := config.ResolveUpstreamCapability(modelID, nil, nil)
+	if !resolved.Known {
+		t.Fatalf("共享模型注册表中缺少模型 %s", modelID)
 	}
-	var registry struct {
-		UpstreamCapabilities []struct {
-			Patterns            []string `json:"patterns"`
-			ContextWindowTokens int      `json:"contextWindowTokens"`
-		} `json:"upstreamCapabilities"`
+	if resolved.Capability.ContextWindowTokens == 0 {
+		t.Fatalf("共享模型注册表中 %s 缺少 contextWindowTokens", modelID)
 	}
-	if err := json.Unmarshal(data, &registry); err != nil {
-		t.Fatalf("解析共享模型注册表失败: %v", err)
-	}
-	for _, capability := range registry.UpstreamCapabilities {
-		for _, pattern := range capability.Patterns {
-			if pattern == "(?:^|[-/])"+modelID+"(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)" ||
-				pattern == "(?:^|[-/])"+modelID+"(?=$|@)" {
-				if capability.ContextWindowTokens == 0 {
-					t.Fatalf("共享模型注册表中 %s 缺少 contextWindowTokens", modelID)
-				}
-				return capability.ContextWindowTokens
-			}
-		}
-	}
-	t.Fatalf("共享模型注册表中缺少模型 %s", modelID)
-	return 0
+	return resolved.Capability.ContextWindowTokens
 }
 
 func sameStrings(a, b []string) bool {
