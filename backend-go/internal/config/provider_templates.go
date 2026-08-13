@@ -46,8 +46,8 @@ type ProviderRoute struct {
 	// （支持精确匹配、prefix* / *suffix / *contains*，以及 ! 前缀排除）。
 	//
 	// 仅在上游同一 baseURL 下不同协议端点的模型支持范围不一致时才需要填写：
-	// 例如 DeepSeek 的 /v1/responses 只接受 deepseek-v4-flash，而 /v1/chat/completions
-	// 同时接受 flash 与 pro。留空表示该 route 不额外限制模型。
+	// 例如同一 provider 的不同协议端点仅支持部分模型时，
+	// 需要用该字段避免把不支持的模型发送到对应 route。留空表示该 route 不额外限制模型。
 	SupportedModels []string `json:"supportedModels,omitempty"`
 }
 
@@ -120,7 +120,7 @@ var builtinProviderTemplates = []ProviderTemplate{
 	{
 		ProviderID:  "deepseek",
 		DisplayName: "DeepSeek",
-		Description: "DeepSeek 官方 API（Claude Messages、OpenAI Chat 与 Responses 三协议原生兼容；Responses 仅支持 deepseek-v4-flash）",
+		Description: "DeepSeek 官方 API（Claude Messages、OpenAI Chat 与 Responses 三协议原生兼容）",
 		ChannelKind: "messages",
 		ServiceType: "claude",
 		OriginType:  "official_api",
@@ -142,11 +142,11 @@ var builtinProviderTemplates = []ProviderTemplate{
 			{
 				ChannelKind: "responses",
 				ServiceType: "responses",
-				Description: "OpenAI Responses 原生入口（仅 deepseek-v4-flash；v4-pro 预计 2026-08 初支持）",
+				Description: "OpenAI Responses 原生入口（支持 deepseek-v4-flash 与 deepseek-v4-pro）",
 				Candidates:  deepseekResponsesCandidates(),
 				// 上游对不支持的模型返回 400 而非忽略，因此在渠道层就限定为正向白名单：
-				// 未知新模型不会被误放进该端点，v4-pro 上线后在此追加即可。
-				SupportedModels: []string{"deepseek-v4-flash"},
+				// 未知新模型不会被误放进该端点；确认上游支持后再追加白名单。
+				SupportedModels: []string{"deepseek-v4-flash", "deepseek-v4-pro"},
 			},
 		},
 	},

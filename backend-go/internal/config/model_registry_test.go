@@ -303,34 +303,61 @@ func TestResolveUpstreamCapability_GLM52RuntimeBuiltin(t *testing.T) {
 	}
 }
 
-func TestResolveUpstreamCapability_DeepSeekV4FlashDatedSuffixes(t *testing.T) {
+func TestResolveUpstreamCapability_DeepSeekV4DatedSuffixes(t *testing.T) {
 	// 部分渠道以日期后缀形式发布新模型（DeepSeek 惯用 -MMDD，如 deepseek-v3-0324），
 	// 这些变体必须归一到同一内置能力条目，否则定价/上下文窗口会丢失。
-	models := []string{
-		"deepseek-v4-flash",
-		"deepseek-v4-flash-0731",
-		"deepseek-v4-flash-2026-07-31",
-		"deepseek-v4-flash-250731",
-		"deepseek-v4-flash-20260731",
-		"deepseek-ai/deepseek-v4-flash-0731",
+	tests := []struct {
+		name                string
+		models              []string
+		inputCacheMissPrice float64
+		outputPrice         float64
+	}{
+		{
+			name: "flash",
+			models: []string{
+				"deepseek-v4-flash",
+				"deepseek-v4-flash-0731",
+				"deepseek-v4-flash-2026-07-31",
+				"deepseek-v4-flash-250731",
+				"deepseek-v4-flash-20260731",
+				"deepseek-ai/deepseek-v4-flash-0731",
+			},
+			inputCacheMissPrice: 1,
+			outputPrice:         2,
+		},
+		{
+			name: "pro",
+			models: []string{
+				"deepseek-v4-pro",
+				"DeepSeek-V4-Pro-0813",
+				"deepseek-v4-pro-2026-08-13",
+				"deepseek-v4-pro-260813",
+				"deepseek-v4-pro-20260813",
+				"deepseek-ai/DeepSeek-V4-Pro-0813",
+			},
+			inputCacheMissPrice: 3,
+			outputPrice:         6,
+		},
 	}
-	for _, model := range models {
-		resolved := ResolveUpstreamCapability(model, nil, nil)
-		if !resolved.Known || resolved.Source != "builtin" {
-			t.Fatalf("%s: resolved = %+v, want builtin known", model, resolved)
+	for _, tt := range tests {
+		for _, model := range tt.models {
+			resolved := ResolveUpstreamCapability(model, nil, nil)
+			if !resolved.Known || resolved.Source != "builtin" {
+				t.Fatalf("%s: resolved = %+v, want builtin known", model, resolved)
+			}
+			if resolved.Capability.Provider != "deepseek" {
+				t.Fatalf("%s: Provider = %q, want deepseek", model, resolved.Capability.Provider)
+			}
+			if resolved.Capability.ContextWindowTokens != 1000000 {
+				t.Fatalf("%s: ContextWindowTokens = %d, want 1000000", model, resolved.Capability.ContextWindowTokens)
+			}
+			pricing := resolved.Capability.Pricing
+			if pricing == nil {
+				t.Fatalf("%s: Pricing = nil, want deepseek-v4-%s pricing", model, tt.name)
+			}
+			assertFloatPointerValue(t, pricing.InputCacheMissPrice, tt.inputCacheMissPrice, model+" Pricing.InputCacheMissPrice")
+			assertFloatPointerValue(t, pricing.OutputPrice, tt.outputPrice, model+" Pricing.OutputPrice")
 		}
-		if resolved.Capability.Provider != "deepseek" {
-			t.Fatalf("%s: Provider = %q, want deepseek", model, resolved.Capability.Provider)
-		}
-		if resolved.Capability.ContextWindowTokens != 1000000 {
-			t.Fatalf("%s: ContextWindowTokens = %d, want 1000000", model, resolved.Capability.ContextWindowTokens)
-		}
-		pricing := resolved.Capability.Pricing
-		if pricing == nil {
-			t.Fatalf("%s: Pricing = nil, want deepseek-v4-flash pricing", model)
-		}
-		assertFloatPointerValue(t, pricing.InputCacheMissPrice, 1, model+" Pricing.InputCacheMissPrice")
-		assertFloatPointerValue(t, pricing.OutputPrice, 2, model+" Pricing.OutputPrice")
 	}
 }
 

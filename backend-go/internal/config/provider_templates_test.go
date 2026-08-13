@@ -105,11 +105,11 @@ func TestProviderTemplateDeepSeekRoutes(t *testing.T) {
 	}{
 		"messages": {serviceType: "claude", baseURL: "https://api.deepseek.com/anthropic"},
 		"chat":     {serviceType: "openai", baseURL: "https://api.deepseek.com"},
-		// Responses 走官方原生入口，且仅 deepseek-v4-flash 可用
+		// Responses 走官方原生入口，且支持 deepseek-v4-flash 与 deepseek-v4-pro。
 		"responses": {
 			serviceType:     "responses",
 			baseURL:         "https://api.deepseek.com/v1/responses",
-			supportedModels: []string{"deepseek-v4-flash"},
+			supportedModels: []string{"deepseek-v4-flash", "deepseek-v4-pro"},
 		},
 	}
 	for _, route := range routes {
