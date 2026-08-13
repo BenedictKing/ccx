@@ -206,12 +206,12 @@ func applyAuthoritativeChannelsAsLoadSource(cfg *Config) (applied bool, err erro
 
 // authoritativeArrays 是 ApplyAuthoritativeChannels 返回的六数组命名元组。
 type authoritativeArrays struct {
-	Upstream        []UpstreamConfig
-	Chat            []UpstreamConfig
-	Responses       []UpstreamConfig
-	Gemini          []UpstreamConfig
-	Images          []UpstreamConfig
-	Vectors         []UpstreamConfig
+	Upstream  []UpstreamConfig
+	Chat      []UpstreamConfig
+	Responses []UpstreamConfig
+	Gemini    []UpstreamConfig
+	Images    []UpstreamConfig
+	Vectors   []UpstreamConfig
 }
 
 // ApplyAuthoritativeChannelsAsStruct 与 ApplyAuthoritativeChannels 等价，但返回命名元组，便于比对。
@@ -277,12 +277,13 @@ func compareAuthoritativeRoundTrip(cfg *Config, rebuilt authoritativeArrays) err
 // stripeVolatileForAuthoritativeCompare 置空比对时易变或加载期/重建期生成的字段。
 // 这些字段由迁移或归组逻辑在运行时/重建时产出（多为随机 ID 或时间戳），persisted 与
 // 重建结果天然不一致，不能作为权威一致性判据：
-// - AutoManagedAt：ensureAutoManagedKind 每次回填用 time.Now()；
-// - AutoManagedKind：persisted 未跑该迁移，加载期才回填；
-// - AccountUID / CredentialUID：加载期 ensureAccountUIDs/ensureCredentialUIDs 随机生成；
-// - LogicalChannelUID / LogicalName：RebuildLogicalChannels 归组时随机生成；
-// - APIKeys / APIKeyConfigs[].Key：ChannelsV3 是脱敏权威形态（Key 只存 ManagedAccounts），
-//   加载期 hydrate 会先给磁盘六数组补 Key 而重建侧恒为空，Key 差异本就无法对账。
+//   - AutoManagedAt：ensureAutoManagedKind 每次回填用 time.Now()；
+//   - AutoManagedKind：persisted 未跑该迁移，加载期才回填；
+//   - AccountUID / CredentialUID：加载期 ensureAccountUIDs/ensureCredentialUIDs 随机生成；
+//   - LogicalChannelUID / LogicalName：RebuildLogicalChannels 归组时随机生成；
+//   - APIKeys / APIKeyConfigs[].Key：ChannelsV3 是脱敏权威形态（Key 只存 ManagedAccounts），
+//     加载期 hydrate 会先给磁盘六数组补 Key 而重建侧恒为空，Key 差异本就无法对账。
+//
 // 只修改传入副本，不影响运行时数据。
 func stripeVolatileForAuthoritativeCompare(cfg *Config) {
 	strip := func(channels []UpstreamConfig) {

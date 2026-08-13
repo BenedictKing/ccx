@@ -29,6 +29,7 @@ type ChannelView struct {
 	AccountUID   string                `json:"accountUid,omitempty"`   // 账号身份（可空）
 	ProviderID   string                `json:"providerId,omitempty"`   // provider 模板来源（可空）
 	Name         string                `json:"name,omitempty"`         // 用户可见名（取逻辑名或首个非派生物理名）
+	Remark       string                `json:"remark,omitempty"`       // 旧派生规则写下的历史名，新规则下不再使用；只读展示用
 	SiteIdentity string                `json:"siteIdentity,omitempty"` // 归一化站点身份
 	BaseURLs     []string              `json:"baseUrls,omitempty"`     // 站点级 baseURL 并集
 	Status       string                `json:"status,omitempty"`       // 聚合状态：active / partial / suspended / disabled

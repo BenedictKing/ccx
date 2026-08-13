@@ -129,3 +129,101 @@ func TestBuildChannelViews_KeyEnabledReflectsDisabled(t *testing.T) {
 	}
 	_ = time.Now
 }
+
+// TestMigrateStaleChannelViewNames_ResetsOldDerivedName 验证旧派生规则写下的
+// vip-lyclaude-site-claude 在镜像里被改写为新规则派生值 vip-lyclaude，
+// 且旧名进 Remark，ChannelsV3 同步。
+func TestMigrateStaleChannelViewNames_ResetsOldDerivedName(t *testing.T) {
+	cfg := &Config{
+		ChannelsV3: []ChannelV3{{
+			ChannelUID:   "lc_test",
+			SiteIdentity: "https://vip.lyclaude.site",
+			Name:         "vip-lyclaude-site-claude",
+		}},
+		Channels: []ChannelView{{
+			ChannelUID:   "lc_test",
+			SiteIdentity: "https://vip.lyclaude.site",
+			BaseURLs:     []string{"https://vip.lyclaude.site"},
+			Name:         "vip-lyclaude-site-claude",
+		}},
+	}
+
+	if !migrateStaleChannelViewNames(cfg) {
+		t.Fatalf("期望发生改名，实际未触发")
+	}
+
+	if got := cfg.Channels[0].Name; got != "vip-lyclaude" {
+		t.Errorf("Channels[0].Name = %q, want %q", got, "vip-lyclaude")
+	}
+	if got := cfg.Channels[0].Remark; got != "vip-lyclau" {
+		t.Errorf("Channels[0].Remark = %q, want %q (10 字符截断)", got, "vip-lyclau")
+	}
+	if got := cfg.ChannelsV3[0].Name; got != "vip-lyclaude" {
+		t.Errorf("ChannelsV3[0].Name = %q, want %q", got, "vip-lyclaude")
+	}
+}
+
+// TestMigrateStaleChannelViewNames_KeepsAlreadyCorrect 验证已经是新规则
+// 派生名时不做改动、不写 Remark、ChannelsV3 也不动。
+func TestMigrateStaleChannelViewNames_KeepsAlreadyCorrect(t *testing.T) {
+	cfg := &Config{
+		ChannelsV3: []ChannelV3{{
+			ChannelUID: "lc_ok",
+			Name:       "openai",
+		}},
+		Channels: []ChannelView{{
+			ChannelUID: "lc_ok",
+			BaseURLs:   []string{"https://api.openai.com/v1"},
+			Name:       "openai",
+		}},
+	}
+
+	if migrateStaleChannelViewNames(cfg) {
+		t.Fatalf("不应发生改名")
+	}
+	if cfg.Channels[0].Remark != "" {
+		t.Errorf("Remark 仍应为空, got %q", cfg.Channels[0].Remark)
+	}
+	if cfg.ChannelsV3[0].Name != "openai" {
+		t.Errorf("ChannelsV3[0].Name 仍应为 openai, got %q", cfg.ChannelsV3[0].Name)
+	}
+}
+
+// TestMigrateStaleChannelViewNames_PreservesExistingRemark 验证已有 Remark 时不被覆盖。
+func TestMigrateStaleChannelViewNames_PreservesExistingRemark(t *testing.T) {
+	cfg := &Config{
+		ChannelsV3: []ChannelV3{{
+			ChannelUID: "lc_remark",
+			Name:       "vip-lyclaude-site-claude",
+		}},
+		Channels: []ChannelView{{
+			ChannelUID: "lc_remark",
+			BaseURLs:   []string{"https://vip.lyclaude.site"},
+			Name:       "vip-lyclaude-site-claude",
+			Remark:     "人工备注",
+		}},
+	}
+
+	if !migrateStaleChannelViewNames(cfg) {
+		t.Fatalf("期望发生改名")
+	}
+	if cfg.Channels[0].Remark != "人工备注" {
+		t.Errorf("Remark 不应被覆盖, got %q", cfg.Channels[0].Remark)
+	}
+	if cfg.Channels[0].Name != "vip-lyclaude" {
+		t.Errorf("Name 应改为 vip-lyclaude, got %q", cfg.Channels[0].Name)
+	}
+}
+
+// TestMigrateStaleChannelViewNames_EmptyChannelsIsNoop 验证 Channels 为空时安全 no-op。
+func TestMigrateStaleChannelViewNames_EmptyChannelsIsNoop(t *testing.T) {
+	cfg := &Config{
+		ChannelsV3: []ChannelV3{{ChannelUID: "lc_x", Name: "vip-lyclaude-site-claude"}},
+	}
+	if migrateStaleChannelViewNames(cfg) {
+		t.Fatalf("Channels 为空应直接 return false")
+	}
+	if cfg.ChannelsV3[0].Name != "vip-lyclaude-site-claude" {
+		t.Errorf("ChannelsV3 不应被改动, got %q", cfg.ChannelsV3[0].Name)
+	}
+}

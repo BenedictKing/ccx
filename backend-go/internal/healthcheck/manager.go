@@ -13,7 +13,6 @@ import (
 	"github.com/BenedictKing/ccx/internal/metrics"
 )
 
-
 // 验证级别（key_health.check_kind），L2 由后续任务实现
 const (
 	CheckKindL1            = "l1"

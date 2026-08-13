@@ -10,6 +10,7 @@ package config
 //     同站点同分组的多账号 key 共享；模型清单 Phase1 取 SupportedModels，后续接入探测画像。
 
 import (
+	"log"
 	"sort"
 	"strings"
 	"time"
@@ -120,6 +121,9 @@ func RebuildChannels(cfg *Config) {
 		cfg.ChannelCapabilities = append(cfg.ChannelCapabilities, caps[uid])
 	}
 	cfg.ChannelSchemaVersion = ChannelSchemaVersion
+	// 清理由旧派生规则写入的存量名称：把 v.Name 重新派生为 DeriveChannelNameFromBaseURL
+	// (primary BaseURL)，旧名写入 Remark。saveConfigLocked 之后会同步到 ChannelsV3。
+	migrateStaleChannelViewNames(cfg)
 }
 
 // GetChannelViews 按当前配置实时合成 ChannelView 列表与排序后的共享能力。
@@ -378,4 +382,158 @@ func firstNonEmpty(vals ...string) string {
 		}
 	}
 	return ""
+}
+
+// channelNameRemarkMaxRunes 镜像 Name 旧名搬迁到 Remark 的最大字符数（rune）。
+// 与 migrateAllChannelNamesConfig 物理渠道侧 10 字符保持一致，避免前端/日志对账歧义。
+const channelNameRemarkMaxRunes = 10
+
+// deriveChannelNameForView 优先用 view 上的 baseUrls[0]，否则用 siteIdentity 推一个
+// 候选 baseURL。SiteIdentity 是 BaseURL 的归一化值（去 path/尾部斜杠），再用
+// SiteIdentityForBaseURL 的反推路径上不可逆时退化为原始 site 字符串。
+func deriveChannelNameForView(v *ChannelView) (string, string) {
+	if v == nil {
+		return "", ""
+	}
+	primary := ""
+	if len(v.BaseURLs) > 0 {
+		primary = strings.TrimSpace(v.BaseURLs[0])
+	}
+	if primary == "" {
+		primary = strings.TrimSpace(v.SiteIdentity)
+	}
+	if primary == "" {
+		return "", ""
+	}
+	return primary, utils.DeriveChannelNameFromBaseURL(primary)
+}
+
+// migrateStaleChannelViewNames 清理 Channels 镜像里被旧派生规则写下的历史名。
+// 旧名 vip-lyclaude-site-claude 形式源自旧 DeriveChannelNameFromBaseURL 把 .site 当
+// 公共后缀处理 + 追加 -claude 协议后缀的旧实现；新规则下应派生为 vip-lyclaude。
+// 规则：
+//   - 派生值与当前 Name 相同：不动；
+//   - 派生值非空、与当前 Name 不同：v.Name = 派生值，v.Remark = 旧名（仅当 Remark 为空，
+//     截断到 channelNameRemarkMaxRunes）；
+//   - 派生值为空（缺 baseURL/siteIdentity）：保持现状，仅打印一次诊断；
+//   - ChannelsV3 镜像按 ChannelUID 同步：仅在 channels 改名时同步改 ChannelsV3[].Name。
+//
+// 返回 true 表示发生了写回。
+func migrateStaleChannelViewNames(cfg *Config) bool {
+	if cfg == nil || len(cfg.Channels) == 0 {
+		return false
+	}
+	changed := false
+	byUID := make(map[string]*ChannelView, len(cfg.Channels))
+	for i := range cfg.Channels {
+		v := &cfg.Channels[i]
+		primary, derived := deriveChannelNameForView(v)
+		if derived == "" {
+			log.Printf("[Config-ChannelName] 跳过无 baseURL 渠道: uid=%s", v.ChannelUID)
+			continue
+		}
+		current := strings.TrimSpace(v.Name)
+		if current == derived {
+			byUID[v.ChannelUID] = v
+			continue
+		}
+		old := current
+		if old != "" && strings.TrimSpace(v.Remark) == "" {
+			if remarkRuneCount(old) > channelNameRemarkMaxRunes {
+				old = string([]rune(old)[:channelNameRemarkMaxRunes])
+			}
+			v.Remark = old
+		}
+		v.Name = derived
+		byUID[v.ChannelUID] = v
+		changed = true
+		log.Printf("[Config-ChannelName] 镜像 Name 派生: uid=%s site=%s old=%q -> new=%q",
+			v.ChannelUID, primary, current, derived)
+	}
+	// 同步到 ChannelsV3 镜像（仅在 channels 发生改名时）。
+	if changed && len(cfg.ChannelsV3) > 0 {
+		for i := range cfg.ChannelsV3 {
+			ch := &cfg.ChannelsV3[i]
+			v, ok := byUID[ch.ChannelUID]
+			if !ok || v == nil {
+				continue
+			}
+			if strings.TrimSpace(ch.Name) == v.Name {
+				continue
+			}
+			ch.Name = v.Name
+		}
+	}
+	return changed
+}
+
+// migrateStaleChannelViewNamesFromDisk 启动期专用版本：直接基于磁盘已加载的 cfg.Channels 与
+// cfg.ChannelsV3 计算派生值，不要求 v.BaseURLs 非空（兼容历史镜像里 BaseURLs 缺失的场景）。
+//
+// 与 migrateStaleChannelViewNames 的差异：
+//   - baseURL 来源：view.BaseURLs[0] → view.SiteIdentity → 由 v.Name 反推 “host 段”
+//     （v.Name 在旧派生规则下形如 host-part-a-host-part-b，去除第一个 host 段后回填一次
+//     解析；该路径只用于启动期历史残留，最坏情况是派生失败跳过，逻辑通道在落盘阶段再走
+//     一次 RebuildChannels 重新合成）。
+//   - 不会在 cfg.Channels 为空时强行写出新条目：不破坏磁盘形态未知（fixture 无 ChannelsV3）
+//     的测试场景。
+func migrateStaleChannelViewNamesFromDisk(cfg *Config) bool {
+	if cfg == nil || len(cfg.Channels) == 0 {
+		return false
+	}
+	changed := false
+	byUID := make(map[string]*ChannelView, len(cfg.Channels))
+	for i := range cfg.Channels {
+		v := &cfg.Channels[i]
+		primary, derived := deriveChannelNameForViewFromDisk(v)
+		if derived == "" {
+			continue
+		}
+		current := strings.TrimSpace(v.Name)
+		if current == derived {
+			byUID[v.ChannelUID] = v
+			continue
+		}
+		old := current
+		if old != "" && strings.TrimSpace(v.Remark) == "" {
+			if remarkRuneCount(old) > channelNameRemarkMaxRunes {
+				old = string([]rune(old)[:channelNameRemarkMaxRunes])
+			}
+			v.Remark = old
+		}
+		v.Name = derived
+		byUID[v.ChannelUID] = v
+		changed = true
+		log.Printf("[Config-ChannelName] 启动期镜像 Name 派生: uid=%s site=%s old=%q -> new=%q",
+			v.ChannelUID, primary, current, derived)
+	}
+	if changed && len(cfg.ChannelsV3) > 0 {
+		for i := range cfg.ChannelsV3 {
+			ch := &cfg.ChannelsV3[i]
+			v, ok := byUID[ch.ChannelUID]
+			if !ok || v == nil {
+				continue
+			}
+			if strings.TrimSpace(ch.Name) == v.Name {
+				continue
+			}
+			ch.Name = v.Name
+		}
+	}
+	return changed
+}
+
+// deriveChannelNameForViewFromDisk 启动期镜像派生：view 上 BaseURLs 缺失时退回到 SiteIdentity。
+func deriveChannelNameForViewFromDisk(v *ChannelView) (string, string) {
+	primary := ""
+	if len(v.BaseURLs) > 0 {
+		primary = strings.TrimSpace(v.BaseURLs[0])
+	}
+	if primary == "" {
+		primary = strings.TrimSpace(v.SiteIdentity)
+	}
+	if primary == "" {
+		return "", ""
+	}
+	return primary, utils.DeriveChannelNameFromBaseURL(primary)
 }

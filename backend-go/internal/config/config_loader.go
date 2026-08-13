@@ -257,6 +257,15 @@ func (cm *ConfigManager) loadConfig() error {
 	// 反转后：ChannelsV3 投影出的六数组缺 Key（六数组里的 Key 由 hydrate 补），需在翻转后再 hydrate 一次。
 	cm.config.hydrateManagedAccountCredentials()
 
+	// 启动期清理 channels/channelsV3 镜像：把被旧派生规则写下的历史名（如 vip-lyclaude-site-claude）
+	// 重写为新规则派生值。物理数组 + LogicalChannels 不动（migrateAllChannelNamesConfig 会无差别
+	// 覆盖用户写的手工名，仅在 baseURL 实际变化时由 applyAutoDerivedChannelName 触发，不适合
+	// 启动期全量跑）。
+	if migrateStaleChannelViewNamesFromDisk(&cm.config) {
+		needSaveDefaults = true
+		log.Printf("[Config-ChannelName] 启动期已修正 channels/channelsV3 镜像名称")
+	}
+
 	// 成功加载后通知回调（在锁内构造快照，释放锁后通知）
 	cm.fireConfigChangeCallbacks()
 	// Phase B.2：发布 config_reloaded 事件。

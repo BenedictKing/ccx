@@ -1465,7 +1465,7 @@ func kimiRatioWindowReset(window *KimiCodeRatioWindow, now time.Time) bool {
 
 // deriveNewApiAccountUID 从 new-api 订阅 UID 派生稳定的托管账号身份。
 // 与 autopilot/handlers_newapi.go 的 StableAccountUID 使用相同算法
-//（newapi_ + sha256("newapi|account|"+subscriptionUID)[:8]），避免跨包依赖。
+// （newapi_ + sha256("newapi|account|"+subscriptionUID)[:8]），避免跨包依赖。
 func deriveNewApiAccountUID(subscriptionUID string) string {
 	sum := sha256.Sum256([]byte(fmt.Sprintf("newapi|account|%s", subscriptionUID)))
 	return "newapi_" + hex.EncodeToString(sum[:8])

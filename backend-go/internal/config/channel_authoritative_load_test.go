@@ -403,7 +403,6 @@ func TestAuthoritativeLoad_ManagedKeySurvivesSaveReload(t *testing.T) {
 	}
 }
 
-
 // sixArrayJSONKeys 是六数组在落盘 JSON 里的顶层字段名（波 3 后不应再出现）。
 var sixArrayJSONKeys = []string{"upstream", "chatUpstream", "responsesUpstream", "geminiUpstream", "imagesUpstream", "vectorsUpstream"}
 
