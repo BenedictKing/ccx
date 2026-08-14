@@ -159,6 +159,7 @@ function deduplicateComparisonRows(rows) {
 
 /**
  * 生成图表输入：能力-成本散点展示有成本的来源，多源比较图展示所有 benchmark 来源。
+ * 统一将数值舍入到合理精度，避免全精度浮点造成 JSON 输出噪声。
  */
 export function buildBenchmarkVisualizationData({
   deepsweProfiles = {},
@@ -193,7 +194,32 @@ export function buildBenchmarkVisualizationData({
 
   return {
     generatedAt: new Date().toISOString(),
-    data,
-    comparisons,
+    data: data.map(normalizeCostRow),
+    comparisons: comparisons.map(normalizeComparisonRow),
+  }
+}
+
+/**
+ * 舍入成本行数值：
+ * - pass_rate: 3 位小数（0.1% 精度）
+ * - mean_cost/median_cost: 4 位小数（0.0001 美元精度，足够表达单任务成本差异）
+ */
+function normalizeCostRow(row) {
+  return {
+    ...row,
+    pass_rate: Math.round(row.pass_rate * 1000) / 1000,
+    mean_cost: row.mean_cost != null ? Math.round(row.mean_cost * 10000) / 10000 : null,
+    median_cost: row.median_cost != null ? Math.round(row.median_cost * 10000) / 10000 : null,
+  }
+}
+
+/**
+ * 舍入比较行数值：
+ * - score: 1 位小数（0.1 分精度）
+ */
+function normalizeComparisonRow(row) {
+  return {
+    ...row,
+    score: Math.round(row.score * 10) / 10,
   }
 }
