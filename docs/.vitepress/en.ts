@@ -37,6 +37,7 @@ export const enConfig: LocaleSpecificConfig<DefaultTheme.Config> = {
           text: 'Advanced',
           items: [
             { text: 'Architecture', link: '/en/guide/architecture' },
+            { text: 'Benchmark Dashboard', link: '/en/guide/benchmark' },
             { text: 'Development', link: '/en/guide/development' },
             { text: 'Release', link: '/en/guide/release' },
             { text: 'Contributing', link: '/en/guide/contributing' },

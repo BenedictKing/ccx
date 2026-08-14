@@ -18,6 +18,9 @@ hero:
       text: Provider Setup
       link: /en/providers/
     - theme: alt
+      text: Benchmark Dashboard
+      link: /en/guide/benchmark
+    - theme: alt
       text: GitHub
       link: https://github.com/BenedictKing/ccx
 features:

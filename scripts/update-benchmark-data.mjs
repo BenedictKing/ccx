@@ -27,7 +27,7 @@
  *   ARTIFICIAL_ANALYSIS_API_KEY  Artificial Analysis API key（缺失时自动跳过 AA，不报错）
  */
 
-import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execFileSync } from 'node:child_process'
@@ -55,8 +55,8 @@ import { saveCache } from './benchmark-sources/http-cache.mjs'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const registryPath = join(root, 'shared/model-registry/ccx_model_registry.json')
-const chartDataPath = '/tmp/benchmark-viz-data.json'
-const chartOutputPath = '/tmp/benchmark-chart.html'
+const chartDataPath = join(root, 'docs/public/benchmark/benchmark-viz-data.json')
+const chartOutputPath = join(root, 'docs/public/benchmark/benchmark-chart.html')
 
 // 命令行参数
 const args = process.argv.slice(2)
@@ -123,6 +123,7 @@ function serializeRegistry(registry) {
 }
 
 function atomicWrite(path, content) {
+  mkdirSync(dirname(path), { recursive: true })
   const tempPath = `${path}.tmp-${process.pid}-${Date.now()}`
   try {
     writeFileSync(tempPath, content, 'utf8')
@@ -696,7 +697,8 @@ function runCodeGeneration() {
 
 function generateBenchmarkChart(data) {
   atomicWrite(chartDataPath, JSON.stringify(data, null, 2) + '\n')
-  console.log('\n[chart] Generating multi-source benchmark chart...')
+  console.log(`\n[chart] Saving visualization data to ${chartDataPath}...`)
+  console.log('[chart] Generating multi-source benchmark chart...')
   execFileSync('node', [
     join(root, 'scripts/generate-benchmark-chart.mjs'),
     '--input', chartDataPath,

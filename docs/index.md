@@ -18,6 +18,9 @@ hero:
       text: 配置教程
       link: /providers/
     - theme: alt
+      text: Benchmark 图表
+      link: /guide/benchmark
+    - theme: alt
       text: GitHub
       link: https://github.com/BenedictKing/ccx
 features:
