@@ -94,6 +94,12 @@
 - 加载态：`submitting`、`fetchingModels`、`discoveringChannelConfig`、`managedModelsLoading`、`diagnosingCompat`。
 - 后端调用：`ApiService.discoverChannelConfig`、`diagnoseChannelCompat`、`getManagedAccounts`、`useTargetModelFetch` 拉取上游模型、`useDisabledApiKeys` 系列。保存走 `useAppController.saveChannel` → `channel store.saveChannel`。
 - 联动：`ProtocolModelAvailability @refreshed` → 重新拉账号模型 + `refreshEditingChannelAfterRediscovery`；`NewApiAccountPanel @updated → emit('updated')`。
+- `TransportConfigGroup` 中的 `routePrefix` 不是普通备注字段：
+  - 留空表示该渠道属于默认代理入口候选集。
+  - 填写 `kimi` 这类裸前缀值，表示该渠道仅通过 `/kimi/v1/messages`、`/kimi/v1/chat/completions`、`/kimi/v1/responses` 等前缀入口参与调度。
+  - 配置前缀后，该渠道不会再参与无前缀的默认入口调度。
+  - 多个渠道可以共享同一个 `routePrefix`，命中该前缀后仍继续按 scheduler 规则选渠，而不是直接固定到单一渠道。
+
 
 布局示意图：
 
@@ -198,6 +204,10 @@
 - 触发入口：`ChannelOrchestration.vue:54` 标题栏 mdi-routes 图标按钮。
 - props：`modelValue`、`channelType`；emit `update:modelValue`。
 - 字段：model、userId、routePrefix、channelName、failedChannels、agentRole、inputTokens/outputTokens/requiredTokens、hasImageContent/explicitOutputMax/skipWindowValidation。
+- `routePrefix` 字段语义：
+  - 留空表示模拟默认路由请求，即只看 `RoutePrefix == ""` 的渠道候选集。
+  - 填写 `foo` 这类裸前缀值表示模拟 `/:routePrefix/...` 入口请求，只看 `RoutePrefix == "foo"` 的渠道候选集。
+  - 诊断 trace 中的 `default_route_filter` / `route_prefix_filter` 分别对应上述两类过滤。
 - 操作：运行（`runDiagnose`）、清除（`clearResult`）。加载态 `isRunning`。
 - 后端调用：`api.diagnoseSchedulerSelection(channelType, payload)`。
 

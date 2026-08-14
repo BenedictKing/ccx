@@ -25,6 +25,18 @@ CCX 权威配置是六个并列数组：`upstream`（messages）、`chatUpstream
 - **ProtocolFacade**：CCX 入口协议（messages/chat/responses/gemini/images/vectors），决定请求从哪个路由进入。
 - **NewApiAccount**：new-api 渠道的账号侧信息（订阅、accessToken、余额、归属 key）。
 
+### 2.1 RoutePrefix 与路由入口语义
+
+`RoutePrefix` 是物理渠道 / 协议 facade 的**入口路由属性**，不是展示名称，也不是同一渠道的可选 URL 别名。
+
+- 默认请求（无前缀）只允许命中 `RoutePrefix == ""` 的渠道。
+- 带前缀请求只允许命中 `RoutePrefix` 与请求前缀**精确匹配**的渠道。
+- 默认请求不会在没有默认渠道时自动回退到带前缀渠道。
+- 带前缀请求也不会自动回退到 `RoutePrefix == ""` 的渠道。
+- 多个渠道可以共享同一个 `RoutePrefix`；前缀过滤只负责建立候选集，命中该前缀后仍继续按 scheduler 的模型支持、上下文、健康、亲和、优先级与 fallback 规则选渠。
+
+因此，`RoutePrefix` 表示“这个 facade 通过哪个代理入口参与调度”，而不是“给现有渠道附加一个可选访问别名”。
+
 两条边界必须分离：
 
 | 边界 | 归属键 | 跨账号共享 |

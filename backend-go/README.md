@@ -106,7 +106,7 @@ ccx --config ~/.config/ccx/config.json --statedir ~/.local/state/ccx --logdir ~/
 
 ## 代理入口概览
 
-> 说明：以下代理入口通常都支持 `/:routePrefix/...` 变体，便于为渠道添加自定义路径前缀。
+> 说明：下表中的代理入口同时提供默认路由与 `/:routePrefix/...` 前缀路由。默认路由只调度 `RoutePrefix == ""` 的渠道；带前缀路由只调度 `RoutePrefix` 与请求前缀精确匹配的渠道。`RoutePrefix` 是候选集隔离条件，不是同一渠道的可选 URL 别名。
 
 | 端点 | 方法 | 说明 |
 | --- | --- | --- |

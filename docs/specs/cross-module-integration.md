@@ -85,6 +85,22 @@ Channels   (Claude/OpenAI/Gemini/...)
 - provision 后的渠道通过 `TriggerDiscovery` 纳入 autopilot 画像体系
 - key 的 `GroupMultiplier` 参与 SmartRouter 的成本评分
 
+### 3.5 默认路由与前缀路由隔离
+
+- 代理入口在 `backend-go/main.go` 中成对注册默认路径与 `/:routePrefix/...` 路径，覆盖 `/v1/messages`、`/v1/messages/count_tokens`、`/v1/chat/completions`、`/v1/responses`、`/v1/models`、`/v1/models/:model`、`/v1beta/models/:model/generateContent`、`/v1/images/*`、`/v1/embeddings` 等代理入口。
+- 请求进入带前缀路径时，路径参数会作为 scheduler 的 `RoutePrefix` 参与选渠；无前缀路径则等价于空前缀。
+- `backend-go/internal/scheduler/select.go` 的 `SelectChannelWithOptions` 会在常规调度前先做前缀隔离：
+  - 非空前缀执行 `route_prefix_filter`，只保留 `RoutePrefix` 与请求前缀精确匹配的渠道。
+  - 空前缀执行 `default_route_filter`，排除所有设置了 `RoutePrefix` 的渠道。
+- 前缀隔离只建立候选集；过滤完成后，候选渠道仍继续经过模型支持、上下文窗口、Key 可用性、SmartFilter、健康、亲和、优先级与 fallback 等既有调度链路。
+- `/v1/models` 配置 fallback 由 `backend-go/internal/handlers/messages/models.go` 的 `isConfigFallbackEligible` 显式重复同样的规则，避免绕过 scheduler 后跨越默认/前缀边界。
+- 最小示例：
+  - A 渠道 `RoutePrefix=""`
+  - B 渠道 `RoutePrefix="foo"`
+  - `/v1/messages` 只能以 A 为候选
+  - `/foo/v1/messages` 只能以 B 为候选
+  - 如果 B、C 都配置 `foo`，则 B、C 进入同一候选集，再由 scheduler 继续选渠
+
 ## 4. 事件传播链
 
 ### 4.1 请求路由决策链
