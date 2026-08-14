@@ -795,7 +795,14 @@
       "sources": [
         "https://docs.z.ai/devpack/latest-model",
         "https://docs.z.ai/release-notes/new-released"
-      ]
+      ],
+      "pricing": {
+        "unit": "per_1m_tokens_usd",
+        "currency": "USD",
+        "inputCacheMissPrice": 1.4,
+        "outputPrice": 4.4,
+        "inputCacheHitPrice": 0.14
+      }
     },
     {
       "patterns": [
