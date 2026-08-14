@@ -206,7 +206,7 @@ export function extractLlmProfiles(models, modelMap, version) {
     const evidence = []
     for (const [domain, metric, key] of indices) {
       const raw = Number(ev[key])
-      if (!Number.isFinite(raw)) continue
+      if (!Number.isFinite(raw) || raw <= 0) continue
       evidence.push({
         benchmark: 'artificial_analysis',
         benchmarkVersion,
