@@ -13,10 +13,6 @@ CCX 会从多个公开 benchmark 来源汇总模型能力、成本与多来源�
 
 <BenchmarkUpdatedAt src="/ccx/benchmark/benchmark-viz-data.json" locale="zh" />
 
-## 交互图表
-
-> 若图表未显示，请先运行 benchmark 数据更新脚本，确保已生成 `docs/public/benchmark/benchmark-chart.html` 与 `docs/public/benchmark/benchmark-viz-data.json`。
-
 <iframe
   src="/ccx/benchmark/benchmark-chart.html"
   title="CCX Benchmark Chart"

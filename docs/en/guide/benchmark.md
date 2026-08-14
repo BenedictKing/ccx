@@ -13,10 +13,6 @@ CCX aggregates model capability, cost, and multi-source comparison data from sev
 
 <BenchmarkUpdatedAt src="/ccx/benchmark/benchmark-viz-data.json" locale="en" />
 
-## Interactive chart
-
-> If the chart does not load, run the benchmark data update script first so `docs/public/benchmark/benchmark-chart.html` and `docs/public/benchmark/benchmark-viz-data.json` are regenerated.
-
 <iframe
   src="/ccx/benchmark/benchmark-chart.html"
   title="CCX Benchmark Chart"
