@@ -38,7 +38,7 @@ CCX aggregates model capability, cost, and multi-source comparison data from sev
       <a target="_blank" rel="noopener noreferrer nofollow" href="https://artificialanalysis.ai/"><img src="/sponsors/artificial-analysis.png" alt="Artificial Analysis Logo" style="max-width: 100%;padding-top: 6px;" width="50"></a>
     </td>
     <td>
-      Benchmark data on this page includes Artificial Analysis free API data. Attribution to <a href="https://artificialanalysis.ai/">artificialanalysis.ai</a> is required when using that data. Intelligence Index scores are currently interpreted against <strong>v4.1</strong>; Coding Index and Agentic Index are derived subsets of the same evaluation set and are not separately versioned.
+      Benchmark data on this page includes Artificial Analysis free API data. Attribution to <a href="https://artificialanalysis.ai/">artificialanalysis.ai</a> is required when using that data. Intelligence Index scores are currently interpreted against <strong>v4.1.1</strong>; Coding Index and Agentic Index are derived subsets of the same evaluation set and are not separately versioned.
     </td>
   </tr>
   <tr>

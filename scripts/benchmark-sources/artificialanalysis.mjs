@@ -105,7 +105,8 @@ function today() {
   return new Date().toISOString().split('T')[0]
 }
 
-// AA intelligence_index 当前版本 v4.1，由 9 项 evaluation 复合而成（见 AA 方法文档）。
+// AA intelligence_index 当前版本 v4.1.1（2026-08-06 patch），由 9 项 evaluation 复合而成（见 AA 方法文档）。
+// 主要变更：τ³-Banking v1.0.1；HLE/AA-LCR/AA-Omniscience 评分模型统一为 GPT-5.6 Luna (medium)。
 // coding_index 与 agentic_index 为上述 evaluation 子集派生指标，不单独 version。
 // composite index 无任务级 raw data，taskCount 用 evaluation 数作代理，满足
 // ModelBenchmarkEvidence.taskCount>0 的 schema 约束与 presetstore 校验。
