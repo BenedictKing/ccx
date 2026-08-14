@@ -11,6 +11,8 @@ CCX aggregates model capability, cost, and multi-source comparison data from sev
 - The lower section compares raw scores for the same model across multiple benchmark sources.
 - Because benchmark task sets, scoring rules, and scales differ, **cross-source scores should not be treated as a strictly normalized ranking**.
 
+<BenchmarkUpdatedAt src="/ccx/benchmark/benchmark-viz-data.json" locale="en" />
+
 ## Interactive chart
 
 > If the chart does not load, run the benchmark data update script first so `docs/public/benchmark/benchmark-chart.html` and `docs/public/benchmark/benchmark-viz-data.json` are regenerated.

@@ -11,6 +11,8 @@ CCX 会从多个公开 benchmark 来源汇总模型能力、成本与多来源�
 - 下半部分展示同一模型在多来源 benchmark 中的原始分数，便于观察来源内相对位置。
 - 不同 benchmark 的任务集、评分方法与量纲并不完全一致，因此**跨来源分数不应被直接视为严格同标尺排序**。
 
+<BenchmarkUpdatedAt src="/ccx/benchmark/benchmark-viz-data.json" locale="zh" />
+
 ## 交互图表
 
 > 若图表未显示，请先运行 benchmark 数据更新脚本，确保已生成 `docs/public/benchmark/benchmark-chart.html` 与 `docs/public/benchmark/benchmark-viz-data.json`。

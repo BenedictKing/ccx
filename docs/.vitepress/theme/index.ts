@@ -2,6 +2,7 @@ import DefaultTheme from 'vitepress/theme'
 import { defineComponent, h } from 'vue'
 import { useData } from 'vitepress'
 import RecommendedDownload from './components/RecommendedDownload.vue'
+import BenchmarkUpdatedAt from './components/BenchmarkUpdatedAt.vue'
 import './custom.css'
 
 import type { Theme } from 'vitepress'
@@ -19,4 +20,7 @@ export default {
       })
     },
   }),
+  enhanceApp({ app }) {
+    app.component('BenchmarkUpdatedAt', BenchmarkUpdatedAt)
+  },
 } satisfies Theme
