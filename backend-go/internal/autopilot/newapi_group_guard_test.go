@@ -17,17 +17,27 @@ func TestResolveNewApiProvisionGroups_AllEligible(t *testing.T) {
 	}
 }
 
-func TestResolveNewApiProvisionGroups_PreservesLegacyDefaultGroup(t *testing.T) {
+func TestResolveNewApiProvisionGroups_EmptyRequestAutoSelectsAllEligible(t *testing.T) {
 	limit := 1.0
 	resolved, err := resolveNewApiProvisionGroups(map[string]float64{
-		"default": 1,
-		"cheap":   0.5,
+		"vip":     0.5,
+		"default": 1.2,
 	}, "", false, &limit)
 	if err != nil {
 		t.Fatalf("resolveNewApiProvisionGroups 返回错误: %v", err)
 	}
-	if len(resolved) != 1 || resolved[0].Name != "default" || resolved[0].Ratio != 1 {
-		t.Fatalf("旧调用的 default 分组语义丢失: %+v", resolved)
+	if len(resolved) != 1 || resolved[0].Name != "vip" {
+		t.Fatalf("空请求应按上游合格分组接入，实际: %+v", resolved)
+	}
+}
+
+func TestResolveNewApiProvisionGroups_EmptyRequestRejectsAllOverLimit(t *testing.T) {
+	limit := 1.0
+	if _, err := resolveNewApiProvisionGroups(map[string]float64{
+		"premium": 2.0,
+		"vip":     1.5,
+	}, "", false, &limit); err == nil {
+		t.Fatal("全部超限应返回错误")
 	}
 }
 

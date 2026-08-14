@@ -17,10 +17,13 @@ var errAccountMissing = errors.New("subscription account not found")
 
 // NewApiAccountCreateRequest POST /api/subscriptions/:uid/accounts 请求体。
 type NewApiAccountCreateRequest struct {
-	AccessToken   string `json:"accessToken" binding:"required"`
-	UserID        string `json:"userId,omitempty"`
-	DisplayName   string `json:"displayName,omitempty"`
-	AuthTokenMode string `json:"authTokenMode,omitempty"`
+	AccessToken                string   `json:"accessToken" binding:"required"`
+	UserID                     string   `json:"userId,omitempty"`
+	DisplayName                string   `json:"displayName,omitempty"`
+	AuthTokenMode              string   `json:"authTokenMode,omitempty"`
+	ProvisionModels            []string `json:"provisionModels,omitempty"`
+	MaxGroupMultiplier         *float64 `json:"maxGroupMultiplier,omitempty"`
+	ProvisionAllEligibleGroups bool     `json:"provisionAllEligibleGroups,omitempty"`
 }
 
 // NewApiCredentialsUpdateRequest PATCH /api/subscriptions/:uid/newapi-credentials 请求体。
@@ -112,10 +115,18 @@ func handleAddSubscriptionAccount(deps *NewApiRouteDeps) gin.HandlerFunc {
 				c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("无法获取该账号分组倍率，已阻止建 key: %v", gErr)})
 				return
 			}
-			resolved, rErr := resolveNewApiProvisionGroups(groups, "", true, profile.MaxGroupMultiplier)
+			maxGroupMultiplier := req.MaxGroupMultiplier
+			if maxGroupMultiplier == nil {
+				maxGroupMultiplier = profile.MaxGroupMultiplier
+			}
+			resolved, rErr := resolveNewApiProvisionGroups(groups, "", req.ProvisionAllEligibleGroups, maxGroupMultiplier)
 			if rErr != nil {
 				c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "分组倍率校验失败: " + rErr.Error()})
 				return
+			}
+			provisionModels := req.ProvisionModels
+			if len(provisionModels) == 0 {
+				provisionModels = profile.ProvisionModels
 			}
 			provisionReq := NewApiProvisionRequest{
 				BaseURL:                    profile.BaseURL,
@@ -123,7 +134,8 @@ func handleAddSubscriptionAccount(deps *NewApiRouteDeps) gin.HandlerFunc {
 				UserID:                     req.UserID,
 				AuthTokenMode:              req.AuthTokenMode,
 				ProvisionAllEligibleGroups: true,
-				ProvisionModels:            profile.ProvisionModels,
+				ProvisionModels:            provisionModels,
+				MaxGroupMultiplier:         maxGroupMultiplier,
 			}
 			// key 名加账号前缀，避免与主账号/其他账号在同站点下的同名 key 被误复用。
 			namePrefix := accountUID + "-"

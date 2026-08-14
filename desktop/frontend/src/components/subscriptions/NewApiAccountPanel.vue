@@ -7,7 +7,9 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useAdminApi } from '@/composables/useAdminApi'
 import { useLanguage } from '@/composables/useLanguage'
-import type { NewApiAccountItem, SubscriptionItem } from '@/services/admin-api'
+import type { NewApiAccountItem, NewApiVerifyResponse, SubscriptionItem } from '@/services/admin-api'
+import { NEWAPI_VERIFY_PATH } from '@/services/admin-api'
+import { eligibleNewApiGroups } from '@/utils/subscription-management'
 
 const props = defineProps<{ subscription: SubscriptionItem | null }>()
 const emit = defineEmits<{ updated: [] }>()
@@ -39,16 +41,44 @@ async function loadAccounts() {
   }
 }
 
+const MAX_GROUP_MULTIPLIER = 1
+
+function requireEligibleGroups(result: NewApiVerifyResponse) {
+  if (result.groupFetchError) {
+    throw new Error(`无法获取上游分组: ${result.groupFetchError}`)
+  }
+  const groups = eligibleNewApiGroups(result.groups, MAX_GROUP_MULTIPLIER)
+  if (groups.length === 0) {
+    throw new Error(`没有倍率不高于 ${MAX_GROUP_MULTIPLIER} 的可用分组`)
+  }
+  return groups
+}
+
 async function addAccount() {
   if (!props.subscription?.subscriptionUid || !addForm.value.accessToken.trim()) return
   adding.value = true
   error.value = ''
   try {
-    await adminApi.addSubscriptionAccount(props.subscription.subscriptionUid, {
-      accessToken: addForm.value.accessToken.trim(),
-      userId: addForm.value.userId.trim() || undefined,
+    const accessToken = addForm.value.accessToken.trim()
+    const userId = addForm.value.userId.trim() || undefined
+    const authTokenMode = addForm.value.authTokenMode
+    const verified = await adminApi.post<NewApiVerifyResponse>(NEWAPI_VERIFY_PATH, {
+      baseUrl: props.subscription.baseUrl,
+      accessToken,
+      userId,
+      authTokenMode,
       displayName: addForm.value.displayName.trim() || undefined,
-      authTokenMode: addForm.value.authTokenMode,
+      subscriptionUid: props.subscription.subscriptionUid,
+    })
+    requireEligibleGroups(verified)
+    await adminApi.addSubscriptionAccount(props.subscription.subscriptionUid, {
+      accessToken,
+      userId: String(verified.userId),
+      displayName: addForm.value.displayName.trim() || undefined,
+      authTokenMode,
+      provisionAllEligibleGroups: true,
+      maxGroupMultiplier: MAX_GROUP_MULTIPLIER,
+      provisionModels: verified.availableModels,
     })
     addForm.value = { accessToken: '', userId: '', displayName: '', authTokenMode: 'bearer' }
     await loadAccounts()

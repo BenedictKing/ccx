@@ -1303,6 +1303,9 @@ export interface NewApiAccountCreateRequest {
   userId?: string
   displayName?: string
   authTokenMode?: string
+  provisionModels?: string[]
+  maxGroupMultiplier?: number
+  provisionAllEligibleGroups?: boolean
 }
 
 export interface NewApiCredentialsUpdateRequest {

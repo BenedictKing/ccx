@@ -161,7 +161,7 @@ type NewApiProvisionRequest struct {
 	ProvisionKeyName string `json:"provisionKeyName,omitempty"`
 	ProvisionGroup   string `json:"provisionGroup,omitempty"`
 	// ProvisionAllEligibleGroups 明确启用“阈值内全部分组”的自动接入。
-	// 未设置时保留旧接口的 ProvisionGroup/默认 default 分组语义。
+	// 空分组请求同样按上游分组计划处理；单分组模式必须显式传 ProvisionGroup。
 	ProvisionAllEligibleGroups bool     `json:"provisionAllEligibleGroups,omitempty"`
 	ProvisionModels            []string `json:"provisionModels,omitempty"`
 	// MaxGroupMultiplier 限制自动建 Key 与调用允许使用的最高分组倍率；缺省时保守使用 1.0。

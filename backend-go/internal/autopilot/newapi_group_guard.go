@@ -43,13 +43,8 @@ func resolveNewApiProvisionGroups(groups map[string]float64, requested string, a
 		return []newApiResolvedGroup{group}, nil
 	}
 
-	if !allEligible {
-		group, err := resolveNewApiSingleProvisionGroup(groups, "default", maxMultiplier)
-		if err != nil {
-			return nil, err
-		}
-		return []newApiResolvedGroup{group}, nil
-	}
+	// 空分组请求统一按倍率阈值接入上游返回的全部合格分组。
+	// 不再猜测 default；单分组模式必须由调用方显式传 provisionGroup。
 
 	eligible := make([]string, 0, len(groups))
 	for name, ratio := range groups {

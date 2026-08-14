@@ -271,7 +271,8 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from '@/i18n'
 import { api } from '@/services/api'
-import type { NewApiAccountItem, SubscriptionItem } from '@/services/api-types'
+import type { NewApiAccountItem, NewApiVerifyResponse, SubscriptionItem } from '@/services/api-types'
+import { DEFAULT_NEWAPI_MAX_GROUP_MULTIPLIER, eligibleNewApiGroups } from '@/utils/newApiGroups'
 
 const { t } = useI18n()
 const props = defineProps<{
@@ -347,20 +348,47 @@ function formatTime(value: string) {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString()
 }
 
+function requireEligibleGroups(result: NewApiVerifyResponse) {
+  if (result.groupFetchError) {
+    throw new Error(`无法获取上游分组: ${result.groupFetchError}`)
+  }
+  const groups = eligibleNewApiGroups(result.groups, DEFAULT_NEWAPI_MAX_GROUP_MULTIPLIER)
+  if (groups.length === 0) {
+    throw new Error(`没有倍率不高于 ${DEFAULT_NEWAPI_MAX_GROUP_MULTIPLIER} 的可用分组`)
+  }
+  return groups
+}
+
 async function bindNewApi() {
   if (!canBindNewApi.value) return
   binding.value = true
   bindError.value = ''
   try {
+    const baseUrl = props.baseUrl!.trim()
+    const accessToken = bindForm.value.accessToken.trim()
+    const userId = bindForm.value.userId.trim() || undefined
+    const authTokenMode = bindForm.value.authTokenMode
+    const verified = await api.verifyNewApiSubscription({
+      baseUrl,
+      accessToken,
+      userId,
+      authTokenMode,
+      displayName: props.channelName!.trim(),
+      subscriptionUid: `newapi-${props.channelUid}`,
+    })
+    requireEligibleGroups(verified)
     const response = await api.provisionNewApiSubscription({
       subscriptionUid: `newapi-${props.channelUid}`,
       displayName: props.channelName!.trim(),
-      baseUrl: props.baseUrl!.trim(),
-      accessToken: bindForm.value.accessToken.trim(),
-      userId: bindForm.value.userId.trim() || undefined,
-      authTokenMode: bindForm.value.authTokenMode,
+      baseUrl,
+      accessToken,
+      userId: String(verified.userId),
+      authTokenMode,
       channelKind: props.channelKind!,
       channelName: props.channelName!.trim(),
+      provisionAllEligibleGroups: true,
+      maxGroupMultiplier: DEFAULT_NEWAPI_MAX_GROUP_MULTIPLIER,
+      provisionModels: verified.availableModels,
     })
     subscription.value = response.subscription
     syncPrimaryForm(response.subscription)
@@ -442,15 +470,30 @@ async function fetchAccounts() {
 }
 
 async function handleAddAccount() {
-  if (!addForm.value.accessToken.trim()) return
+  if (!addForm.value.accessToken.trim() || !subscription.value) return
   adding.value = true
   addError.value = ''
   try {
-    await api.addSubscriptionAccount(effectiveSubscriptionUid.value, {
-      accessToken: addForm.value.accessToken.trim(),
-      userId: addForm.value.userId || undefined,
+    const accessToken = addForm.value.accessToken.trim()
+    const userId = addForm.value.userId || undefined
+    const authTokenMode = addForm.value.authTokenMode || undefined
+    const verified = await api.verifyNewApiSubscription({
+      baseUrl: subscription.value.baseUrl || props.baseUrl || '',
+      accessToken,
+      userId,
+      authTokenMode,
       displayName: addForm.value.displayName || undefined,
-      authTokenMode: addForm.value.authTokenMode || undefined,
+      subscriptionUid: effectiveSubscriptionUid.value,
+    })
+    requireEligibleGroups(verified)
+    await api.addSubscriptionAccount(effectiveSubscriptionUid.value, {
+      accessToken,
+      userId: String(verified.userId),
+      displayName: addForm.value.displayName || undefined,
+      authTokenMode,
+      provisionAllEligibleGroups: true,
+      maxGroupMultiplier: DEFAULT_NEWAPI_MAX_GROUP_MULTIPLIER,
+      provisionModels: verified.availableModels,
     })
     addForm.value = { accessToken: '', userId: '', displayName: '', authTokenMode: 'bearer' }
     await fetchAccounts()
