@@ -292,6 +292,8 @@ func TestResolveUpstreamCapability_NewAugust2026Models(t *testing.T) {
 		inputPrice  float64
 		outputPrice float64
 	}{
+		{model: "grok-4.6", provider: "xai", context: 500000, vision: true, toolCalls: true, inputPrice: 2, outputPrice: 6},
+		{model: "xai/grok-4.6", provider: "xai", context: 500000, vision: true, toolCalls: true, inputPrice: 2, outputPrice: 6},
 		{model: "glm-5.3", provider: "zai", context: 1000000, maxOutput: 131072, toolCalls: true},
 		{model: "glm-5.3[1m]", provider: "zai", context: 1000000, maxOutput: 131072, toolCalls: true},
 		{model: "gemini-3.7-flash", provider: "google", context: 1048576, maxOutput: 65536, vision: true, toolCalls: true, inputPrice: 0.75, outputPrice: 3.75},
@@ -321,6 +323,41 @@ func TestResolveUpstreamCapability_NewAugust2026Models(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestResolveUpstreamCapability_Grok46PricingTiers(t *testing.T) {
+	resolved := ResolveUpstreamCapability("grok-4.6", nil, nil)
+	if !resolved.Known || resolved.Source != "builtin" {
+		t.Fatalf("resolved = %+v, want builtin capability", resolved)
+	}
+	capability := resolved.Capability
+	if capability.MaxOutputTokens != 0 {
+		t.Fatalf("MaxOutputTokens = %d, want 0 because xAI documents no text output limit", capability.MaxOutputTokens)
+	}
+	if capability.ThinkingMode != "adaptive" || !containsString(capability.ReasoningEfforts, "xhigh") {
+		t.Fatalf("thinkingMode=%q reasoningEfforts=%v, want adaptive with xhigh", capability.ThinkingMode, capability.ReasoningEfforts)
+	}
+	if !capability.Capabilities["structuredOutput"] || !capability.Capabilities["webSearch"] || !capability.Capabilities["codeExecution"] {
+		t.Fatalf("Capabilities = %v, want structured output, web search, and code execution", capability.Capabilities)
+	}
+	pricing := capability.Pricing
+	if pricing == nil || len(pricing.Tiers) != 2 {
+		t.Fatalf("Pricing = %+v, want two context tiers", pricing)
+	}
+	short := pricing.Tiers[0]
+	if short.InputTokensAbove != 0 || short.InputTokensUpTo != 199999 {
+		t.Fatalf("short tier bounds = (%d, %d), want (0, 199999)", short.InputTokensAbove, short.InputTokensUpTo)
+	}
+	assertFloatPointerValue(t, short.InputCacheHitPrice, 0.5, "Pricing.Tiers[0].InputCacheHitPrice")
+	assertFloatPointerValue(t, short.InputCacheMissPrice, 2, "Pricing.Tiers[0].InputCacheMissPrice")
+	assertFloatPointerValue(t, short.OutputPrice, 6, "Pricing.Tiers[0].OutputPrice")
+	long := pricing.Tiers[1]
+	if long.InputTokensAbove != 199999 || long.InputTokensUpTo != 500000 {
+		t.Fatalf("long tier bounds = (%d, %d), want (199999, 500000)", long.InputTokensAbove, long.InputTokensUpTo)
+	}
+	assertFloatPointerValue(t, long.InputCacheHitPrice, 1, "Pricing.Tiers[1].InputCacheHitPrice")
+	assertFloatPointerValue(t, long.InputCacheMissPrice, 4, "Pricing.Tiers[1].InputCacheMissPrice")
+	assertFloatPointerValue(t, long.OutputPrice, 12, "Pricing.Tiers[1].OutputPrice")
 }
 
 func TestResolveUpstreamCapability_GLM52RuntimeBuiltin(t *testing.T) {
