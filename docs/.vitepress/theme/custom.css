@@ -28,3 +28,8 @@
     max-width: 1040px;
   }
 }
+
+/* Benchmark 页：加宽 iframe 容器以更好展示图表 */
+.VPDoc.has-aside .content-container:has(iframe[src*="benchmark-chart"]) {
+  max-width: 1080px;
+}
