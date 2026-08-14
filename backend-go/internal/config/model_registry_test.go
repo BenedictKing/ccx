@@ -281,6 +281,48 @@ func TestResolveUpstreamCapability_KimiCodeModels(t *testing.T) {
 	}
 }
 
+func TestResolveUpstreamCapability_NewAugust2026Models(t *testing.T) {
+	tests := []struct {
+		model       string
+		provider    string
+		context     int
+		maxOutput   int
+		vision      bool
+		toolCalls   bool
+		inputPrice  float64
+		outputPrice float64
+	}{
+		{model: "glm-5.3", provider: "zai", context: 1000000, maxOutput: 131072, toolCalls: true},
+		{model: "glm-5.3[1m]", provider: "zai", context: 1000000, maxOutput: 131072, toolCalls: true},
+		{model: "gemini-3.7-flash", provider: "google", context: 1048576, maxOutput: 65536, vision: true, toolCalls: true, inputPrice: 0.75, outputPrice: 3.75},
+		{model: "qwen3.8-max", provider: "dashscope", context: 1000000, maxOutput: 131072, vision: true, toolCalls: true, inputPrice: 12, outputPrice: 36},
+		{model: "qwen3.8-max-preview", provider: "dashscope", context: 1000000, maxOutput: 131072, vision: true, toolCalls: true, inputPrice: 12, outputPrice: 36},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			resolved := ResolveUpstreamCapability(tt.model, nil, nil)
+			if !resolved.Known || resolved.Source != "builtin" {
+				t.Fatalf("resolved = %+v, want builtin capability", resolved)
+			}
+			capability := resolved.Capability
+			if capability.Provider != tt.provider || capability.ContextWindowTokens != tt.context || capability.MaxOutputTokens != tt.maxOutput {
+				t.Fatalf("capability = %+v, want provider=%s context=%d maxOutput=%d", capability, tt.provider, tt.context, tt.maxOutput)
+			}
+			if capability.Capabilities["vision"] != tt.vision || capability.Capabilities["toolCalls"] != tt.toolCalls {
+				t.Fatalf("Capabilities = %v, want vision=%v toolCalls=%v", capability.Capabilities, tt.vision, tt.toolCalls)
+			}
+			if tt.inputPrice > 0 {
+				if capability.Pricing == nil {
+					t.Fatal("Pricing = nil")
+				}
+				assertFloatPointerValue(t, capability.Pricing.InputCacheMissPrice, tt.inputPrice, "Pricing.InputCacheMissPrice")
+				assertFloatPointerValue(t, capability.Pricing.OutputPrice, tt.outputPrice, "Pricing.OutputPrice")
+			}
+		})
+	}
+}
+
 func TestResolveUpstreamCapability_GLM52RuntimeBuiltin(t *testing.T) {
 	resolved := ResolveUpstreamCapability("glm-5.2", nil, nil)
 	if !resolved.Known || resolved.Source != "builtin" {

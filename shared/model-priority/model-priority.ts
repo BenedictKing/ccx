@@ -39,6 +39,8 @@ const modelPriorityPatterns: RegExp[] = [
   /gpt-5/i,
 
   // Google Gemini
+  /gemini-3\.7-flash/i,
+  /gemini-3\.6-flash/i,
   /gemini-3\.5-flash/i,
   /gemini-3\.1-pro/i,
   /gemini-3\.1-flash-lite/i,
@@ -57,6 +59,7 @@ const modelPriorityPatterns: RegExp[] = [
   /grok-4/i,
 
   // 智谱 GLM
+  /glm-?5\.3/i,
   /glm-?5\.2/i,
   /glm-?5\.1/i,
   /glm-?5/i,
@@ -65,6 +68,7 @@ const modelPriorityPatterns: RegExp[] = [
   /glm-?4\.6/i,
 
   // 阿里 Qwen
+  /qwen-?3\.8-max/i,
   /qwen-?3\.7-max/i,
   /qwen-?3\.7-plus/i,
   /qwen-?3\.6-plus/i,

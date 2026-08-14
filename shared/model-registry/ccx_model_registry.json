@@ -773,6 +773,32 @@
     },
     {
       "patterns": [
+        "(?:^|[-/])glm-5\\.3(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)",
+        "(?:^|[-/])glm-5\\.3\\[1m\\](?=$|@)"
+      ],
+      "provider": "zai",
+      "displayName": "GLM-5.3",
+      "description": "Z.AI flagship coding model with 1M-context Coding Plan support and low/high/max thinking intensity. The [1m] suffix is the official long-context alias.",
+      "contextWindowTokens": 1000000,
+      "maxOutputTokens": 131072,
+      "thinkingMode": "thinking",
+      "reasoningEfforts": [
+        "low",
+        "high",
+        "max"
+      ],
+      "capabilities": {
+        "toolCalls": true,
+        "reasoning": true,
+        "vision": false
+      },
+      "sources": [
+        "https://docs.z.ai/devpack/latest-model",
+        "https://docs.z.ai/release-notes/new-released"
+      ]
+    },
+    {
+      "patterns": [
         "(?:^|[-/])glm-5\\.2(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)",
         "(?:^|[-/])glm-5p2(?=$|@)"
       ],
@@ -936,6 +962,44 @@
         "https://platform.stepfun.ai/docs/en/guides/models/step-3.7-flash",
         "https://platform.stepfun.ai/docs/en/guides/models/step-3.7-flash-quickstart",
         "https://platform.stepfun.ai/docs/en/api-reference/chat/chat-completion-create"
+      ]
+    },
+    {
+      "patterns": [
+        "(?:^|[-/])qwen3\\.8-max(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)",
+        "(?:^|[-/])qwen3\\.8-max-preview(?=$|@)"
+      ],
+      "provider": "dashscope",
+      "displayName": "Qwen3.8 Max",
+      "description": "Qwen flagship multimodal reasoning model. The deprecated qwen3.8-max-preview ID is automatically routed to qwen3.8-max by Model Studio.",
+      "contextWindowTokens": 1000000,
+      "maxOutputTokens": 131072,
+      "thinkingMode": "thinking",
+      "reasoningEfforts": [
+        "low",
+        "medium",
+        "high",
+        "max"
+      ],
+      "capabilities": {
+        "vision": true,
+        "reasoning": true,
+        "toolCalls": true,
+        "jsonOutput": true,
+        "webSearch": true,
+        "contextCaching": true
+      },
+      "pricing": {
+        "unit": "per_1m_tokens_cny",
+        "currency": "CNY",
+        "inputCacheHitPrice": 1.5,
+        "inputCacheMissPrice": 12,
+        "outputPrice": 36
+      },
+      "sources": [
+        "https://help.aliyun.com/en/model-studio/qwen3-8-max",
+        "https://help.aliyun.com/en/model-studio/text-generation-model/",
+        "https://help.aliyun.com/en/model-studio/model-pricing"
       ]
     },
     {
@@ -1942,6 +2006,47 @@
       },
       "sources": [
         "https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json"
+      ]
+    },
+    {
+      "patterns": [
+        "(?:^|[-/])gemini-3\\.7-flash(?=$|@)"
+      ],
+      "provider": "google",
+      "displayName": "Gemini 3.7 Flash",
+      "description": "Google GA multimodal agent model with thinking, structured output, function calling, code execution, and search/maps grounding.",
+      "contextWindowTokens": 1048576,
+      "maxOutputTokens": 65536,
+      "thinkingMode": "adaptive",
+      "reasoningEfforts": [
+        "minimal",
+        "low",
+        "medium",
+        "high"
+      ],
+      "capabilities": {
+        "document": true,
+        "reasoning": true,
+        "vision": true,
+        "audioInput": true,
+        "videoInput": true,
+        "toolCalls": true,
+        "parallelFunctionCalling": true,
+        "webSearch": true,
+        "codeExecution": true,
+        "structuredOutput": true,
+        "contextCaching": true
+      },
+      "pricing": {
+        "unit": "per_1m_tokens_usd",
+        "currency": "USD",
+        "inputCacheMissPrice": 0.75,
+        "outputPrice": 3.75,
+        "inputCacheHitPrice": 0.075
+      },
+      "sources": [
+        "https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-7-flash",
+        "https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing"
       ]
     },
     {

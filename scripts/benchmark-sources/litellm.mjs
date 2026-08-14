@@ -116,6 +116,7 @@ export const LITELLM_MODEL_MAP = {
   'gpt-5.3-codex': 'gpt-5.3-codex',
   'gpt-5.3-chat-latest': 'gpt-5.3-chat-latest',
   // GLM / Qwen / 其他国产（litellm 多用 provider 前缀 slug）
+  'zai/glm-5.3': 'glm-5.3',
   'fireworks_ai/glm-5p2': 'glm-5.2',
   'zai/glm-5.1': 'glm-5.1',
   'dashscope/qwen-coder': 'qwen3-coder',
@@ -128,6 +129,7 @@ export const LITELLM_MODEL_MAP = {
   // Gemini（litellm 对未 GA 的型号只提供 -preview 后缀 key，
   // 裸 gemini-3.1-pro / gemini-3-flash 在上游数据中不存在，映射左侧必须用真实 key）
   'gemini-3.5-flash': 'gemini-3.5-flash',
+  'gemini-3.7-flash': 'gemini-3.7-flash',
   'gemini-3.6-flash': 'gemini-3.6-flash',
   'gemini-3.1-pro-preview': 'gemini-3.1-pro',
   'gemini-3-flash-preview': 'gemini-3-flash',
