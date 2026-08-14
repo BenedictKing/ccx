@@ -15,7 +15,7 @@
 - `POST /api/subscriptions/newapi/verify` → `handleNewApiVerify`（行 310）— 校验令牌 + 预览账户/分组/模型，**不落库**
 - `POST /api/subscriptions/newapi/provision` → `handleNewApiProvision`（行 362）— 建 profile + 建 key + 建/并渠道 + 触发 Discovery
 
-依赖结构 `NewApiRouteDeps`（行 38-43）：`Store *SubscriptionStore`、`CfgManager *config.ConfigManager`、`Runner *AutoDiscoveryRunner`、`SyncService *NewApiSubscriptionSyncService`。provision 用 `newAPIProvisionMu sync.Mutex`（行 47）串行化避免并发建同名远端 key。
+依赖结构 `NewApiRouteDeps`（行 38-43）：`Store *SubscriptionStore`、`CfgManager *config.ConfigManager`、`Runner *AutoDiscoveryRunner`、`SyncService *NewApiSubscriptionSyncService`。provision 采用**站点级锁 + 订阅级锁**串行化远端 key 查重/创建与同订阅画像写入，避免并发建同名远端 key。
 
 ### 1.3 请求/响应结构（`handlers_newapi.go`）
 - `NewApiVerifyRequest`（行 66）：`baseUrl, accessToken, userId, authTokenMode, displayName, subscriptionUid`
@@ -41,7 +41,7 @@
 ### 2.1 后端（`internal/autopilot/handlers_subscription_accounts.go`）
 `RegisterSubscriptionAccountRoutes`（行 489）：
 - `PATCH /api/subscriptions/:uid/newapi-credentials` → `handleUpdateNewApiCredentials`（行 397）— 主账号凭证更新，指针字段区分“不改”与显式提交（`NewApiCredentialsUpdateRequest` 行 27），落库前 `VerifyWithFallback` 校验，支持 `expectedVersion` 乐观锁，落库后触发 `SyncNow`
-- `POST /api/subscriptions/:uid/accounts` → `handleAddSubscriptionAccount`（行 55）— 加账号并为其合格分组自动建 key（`namePrefix = accountUID + "-"` 行 121 避免同站同名复用冲突），失败回滚远端 key
+- `POST /api/subscriptions/:uid/accounts` → `handleAddSubscriptionAccount`（行 55）— **先 verify 拉账号/分组/模型，再按倍率阈值为全部合格分组自动建 key**（`namePrefix = accountUID + "-"` 行 121 避免同站同名复用冲突），失败回滚远端 key
 - `GET /api/subscriptions/:uid/accounts` → `handleListSubscriptionAccounts`（行 228，脱敏）
 - `DELETE /api/subscriptions/:uid/accounts/:accountUid` → `handleDeleteSubscriptionAccount`（行 264）— 先从渠道剔除 key，再 best-effort 回收远端 key，再移除账号
 - `POST /api/subscriptions/:uid/accounts/:accountUid/refresh` → `handleRefreshSubscriptionAccount`（行 323）
@@ -50,10 +50,10 @@
 
 ### 2.2 前端
 - 主/多账号面板：`frontend/src/components/edit-channel/NewApiAccountPanel.vue`
-  - `bindNewApi`（行 350）：generic 渠道绑定 new-api，`subscriptionUid: newapi-${channelUid}`（行 356）
+  - `bindNewApi`（行 350）：generic 渠道绑定 new-api，`subscriptionUid: newapi-${channelUid}`（行 356）；**先 verify，再按上游 `groups + availableModels` 调 `provisionAllEligibleGroups=true`**
   - `savePrimaryCredentials`（行 393）→ `api.updateNewApiCredentials`（带 `expectedVersion`）
   - `refreshPrimaryAccount`（行 415）→ `api.refreshSubscription`
-  - `handleAddAccount` / `refreshAccount` / `deleteAccount`（行 444/465/477）
+  - `handleAddAccount` / `refreshAccount` / `deleteAccount`（行 444/465/477）；其中 `handleAddAccount` 同样**先 verify，再显式传 `provisionAllEligibleGroups` / `maxGroupMultiplier` / `availableModels`**
   - `authTokenModeOptions`：Bearer/Raw（行 309）
 - 首次接入表单：`frontend/src/components/NewApiSubscriptionForm.vue`（两步 verify→provision）
 - 订阅中心入口：`frontend/src/views/SubscriptionsView.vue`（`selectedProvider==='new-api'` 行 23）+ `SubscriptionProviderGrid.vue`（行 116-122）
@@ -115,6 +115,12 @@ UpstreamConfig (channelUid, autoManagedKind=new_api)
 ### 4.2 分组安全闸门 `resolveNewApiProvisionGroups`（`newapi_group_guard.go:24`）
 `DefaultNewApiMaxGroupMultiplier=1.0`（行 12）。只为 `ratio <= maxMultiplier` 的合格分组建 key，一个 key 固定绑一个上游分组；`defaultNewApiProvisionKeyNameForGroup`（行 96）给 key 名加分组后缀。
 
+**当前统一语义**：
+- 所有入口都先 verify，获取上游 `groups` 与 `availableModels`。
+- 空分组请求不再猜 `default`；统一按“全部合格分组”路径处理。
+- 只有调用方**显式**传 `provisionGroup` 时才进入单分组模式。
+- `groupFetchError`、无合格分组、倍率阈值非法时均阻断，不创建任何部分 key。
+
 ### 4.3 调度期成本闸门 `IsAPIKeyGroupMultiplierAllowed`（`internal/config/key_group_multiplier.go:79`）
 `GetNextAPIKey`（`config.go:1447/1459`）与 keypool 选 key 时调用 `EvaluateAPIKeyMultiplierEligibility`（行 27）：`new_api` 源需 `SourceSubscriptionUID`+`SourceRemoteTokenID` 有效、status=`fresh` 且未过期，否则 `stale/over_limit/relink_required` 一律不参与调度。这是把 new-api 分组倍率纳入调度的核心闸门。
 
@@ -138,13 +144,24 @@ UpstreamConfig (channelUid, autoManagedKind=new_api)
   - 校验：`canVerify`（baseUrl+accessToken 非空，行 263）、`canProvision`（subscriptionUid+channelKind + `maxGroupMultiplierValid` + `eligibleGroupItems.length>0`，行 264）
   - 合格分组过滤：`eligibleNewApiGroups`（`utils/newApiGroups.ts:12`）与 `isValidNewApiGroupMultiplier`（行 8，非负有限），前端与后端 `resolveNewApiProvisionGroups` 语义一致
   - provision 固定发 `provisionAllEligibleGroups=true`（行 318）
+- 已有渠道绑定 / 追加账号（`NewApiAccountPanel.vue`）：
+  - **同样先 verify，再使用 verify 返回的 `groups` + `availableModels` 计算全部合格分组**
+  - 绑定主账号与追加账号都显式传 `provisionAllEligibleGroups=true`、`maxGroupMultiplier`（当前默认 1.0）与 `availableModels`
+  - `groupFetchError`、无合格组、verify 失败时均阻断提交，不允许 fallback 到 `default`
 - key 倍率编辑 `edit-channel/ApiKeyManagementSection.vue`：`openMultiplierEditor`（行 1585）→ `patchKeyMultiplier`（行 1604）；`new_api` 源 key 的 `groupMultiplier` 后端拒绝手改（`handlers_key_multiplier.go:114`），仅允许改 `maxGroupMultiplier`（行 1602 前端也据此限制）；状态色 `multiplierStatusColor`（行 1583）/`multiplierStatusLabel`（`utils/subscriptionBilling.ts:19`）
 
 ### 5.3 API 服务层（`frontend/src/services/api.ts`）
 `verifyNewApiSubscription`(1422) / `provisionNewApiSubscription`(1430) / `updateNewApiCredentials`(1439) / `getSubscriptionAccounts`(1446) / `addSubscriptionAccount`(1451) / `deleteSubscriptionAccount`(1459) / `refreshSubscriptionAccount`(1466) / `refreshSubscription`(1385) / `patchKeyMultiplier`(1409) / `linkSubscriptionChannel`(1371) / `unlinkSubscriptionChannel`(1378)。类型定义在 `api-types.ts`：`NewApiVerifyRequest/Response`(1354/1363)、`NewApiProvisionRequest/Response`(1376/1404)、`NewApiProvisionedKey(Info)`(1393/1400)、`NewApiAccountItem`(1434)、`NewApiCredentialsUpdateRequest`(1427)、`NewApiKeyStatus`(1222)、`NewApiSyncResult`(1235)、`APIKeyConfig`(114)。
 
-### 5.4 调用链路（provision 为例）
-`NewApiSubscriptionForm.handleProvision` → `api.provisionNewApiSubscription` → `POST /api/subscriptions/newapi/provision` → `handleNewApiProvision`（verify→FetchGroups→resolveGroups→provisionNewApiGroupKeys→建 profile→建/并渠道→LinkChannel→TriggerDiscovery→SyncService.ReconcileProvisioned）→ 返回 `NewApiProvisionResponse` → `emit('created')` → `SubscriptionsView.handleNewApiCreated` 刷新列表。
+### 5.4 调用链路（统一组计划）
+1. `verify`：输入 `baseUrl/accessToken/userId/authTokenMode`，后端拉 `GET /api/user/self`、`GET /api/user/self/groups`、`GET /api/user/models`，返回 `groups + availableModels`。
+2. `plan`：前端按统一倍率阈值（默认 1.0）用 `eligibleNewApiGroups` 计算全部合格分组；若 `groupFetchError`、无合格组或阈值非法，则直接阻断。
+3. `provision / add-account`：
+   - 新增订阅：`NewApiSubscriptionForm.handleProvision` → `api.provisionNewApiSubscription`
+   - generic 渠道绑定：`NewApiAccountPanel.bindNewApi` → 先 verify，再 `api.provisionNewApiSubscription`
+   - 追加账号：`NewApiAccountPanel.handleAddAccount` / Desktop 对应入口 → 先 verify，再 `api.addSubscriptionAccount`
+4. 所有入口都显式发送：`provisionAllEligibleGroups=true`、`maxGroupMultiplier`、`availableModels`；空请求不再由后端猜 `default`。
+5. 后端统一执行：`verify→FetchGroups→resolveGroups→provisionNewApiGroupKeys→建 profile/账号→建/并渠道→LinkChannel→TriggerDiscovery→SyncService.ReconcileProvisioned`，并返回实际接入的 key/group 列表。
 
 ### 5.5 i18n
 locale 键在 `frontend/src/locales/{zh-CN,en,id}.json`，前缀 `subscription.newApi.*`（zh-CN 行 1168-1224）与 `subscription.keyMultiplier.*`（行 1422-1427），`autopilot.quickAdd.provider.newApi`（行 1394）。
@@ -157,7 +174,7 @@ locale 键在 `frontend/src/locales/{zh-CN,en,id}.json`，前缀 `subscription.n
 
 3. ~~**专项 spec 文档缺失**~~ ✅ **已修正**：`docs/specs/new-api-integration.md` 已存在，`docs/specs/README.md:12` 索引链接有效，不再悬空。
 
-4. **link/unlink UI 缺失**：后端有 `POST /api/subscriptions/:uid/link|unlink`（`handlers_subscription.go:133-134`）与前端 `api.linkSubscriptionChannel/unlinkSubscriptionChannel`，但前端组件/视图无任何调用点（grep 仅命中定义）。手动关联/解绑渠道无 UI 入口。
+4. ~~`link/unlink UI 缺失`~~ ✅ **已修复**：订阅中心已提供绑定/解绑入口，调用 `POST /api/subscriptions/:uid/link|unlink` 与前端 `api.linkSubscriptionChannel/unlinkSubscriptionChannel`。
 
 5. **`quota` 货币换算依赖手工汇率**：new-api `quota` 非 USD，effective 成本需 `ExchangeRateQuotes` + 订阅 `PaymentAmount/CreditAmount`（`smart_router.go:1356-1378`）齐备才生效；缺任一项则回退标价 USD 成本，new-api quota 无法参与真实成本排序（静默降级，无用户提示）。
 

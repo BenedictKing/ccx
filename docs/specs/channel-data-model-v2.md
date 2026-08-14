@@ -59,6 +59,23 @@ EndpointCapability（跨账号共享，按 CapabilityUID 索引）
 
 关键函数（同文件）：`BuildChannelViews(cfg)`、`GenerateCapabilityUID`、`NormalizeGroupIdentity`、`ChannelKeyHash`、`SiteIdentityForBaseURL`。
 
+### 3.1 自动渠道名派生规则（展示层）
+
+自动渠道名用于 UI 展示与导入/编辑默认值，**不参与** `SiteIdentity`、`IdentityBaseURL`、`CapabilityUID` 或 metrics identity 的计算；身份与能力语义仍按 BaseURL 现有含路径规则执行。
+
+规则：
+- 只剥离 hostname 开头的 `www`；保留其他 host label、顶级域和端口。
+- 将完整**非标准** path 按段 slug 化后追加到 host 名称。
+- 剥离尾部标准版本路径：`/vN`、`/vNbeta` 等；若完整尾部为 `/api/vN`，则 `api/vN` 一并剥离。
+- 忽略 query/fragment；连续斜线、尾斜线按归一化后参与命名。
+
+示例：
+- `https://load103.diyai.diy/proxy/feishu-glm-46` → `load103-diyai-diy-proxy-feishu-glm-46`
+- `https://host.com/tenant/a/v1` → `host-com-tenant-a`
+- `https://host.com/api/v5` → `host-com`
+- `https://host.com/api/tenant/v5` → `host-com-api-tenant`
+- `https://host.com:8443/tenant/a/v1` → `host-com-tenant-a-8443`
+
 ## 4. 身份与共享规则
 
 - **归组**：`LogicalChannelUID` > `AccountUID` > `SiteIdentity` > 物理 `ChannelUID`。

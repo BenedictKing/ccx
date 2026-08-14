@@ -165,10 +165,10 @@
 - 触发入口：`EditChannelModal` 在 `isNewApiChannel || isGenericAutoManagedChannel` 时渲染。
 - props：`subscriptionUid`、`channelName?`、`baseUrl?`、`channelUid?`、`channelKind?`、`isGeneric?`、`autoManagedKind?`；emit `updated`。
 - 分支视图：
-  - generic 未绑定：`bindForm`（accessToken/userId/authTokenMode），`canBindNewApi` 校验，`bindNewApi` → `api.provisionNewApiSubscription`。
-  - 已绑定：主账号卡（quota/usedQuota/baseUrl、`primaryForm` 更新凭证 `savePrimaryCredentials`、刷新余额 `refreshPrimaryAccount`）、展开面板「添加账号」`addForm`、账号列表（刷新/删除）。
-- 校验/状态：`canBindNewApi`、`primaryCredentialsChanged`；loading：`binding`/`savingPrimary`/`refreshingPrimary`/`adding`/`refreshing`/`deleting`/`loadingPrimary`；错误：`bindError`/`primaryError`/`addError`。
-- 后端调用：`provisionNewApiSubscription`、`getSubscription`、`updateNewApiCredentials`、`refreshSubscription`、`getSubscriptionAccounts`、`addSubscriptionAccount`、`refreshSubscriptionAccount`、`deleteSubscriptionAccount`。
+  - generic 未绑定：`bindForm`（accessToken/userId/authTokenMode），`canBindNewApi` 校验；**先 `verifyNewApiSubscription` 获取 `groups + availableModels`，再按统一倍率阈值提交 `provisionAllEligibleGroups=true`**。
+  - 已绑定：主账号卡（quota/usedQuota/baseUrl、`primaryForm` 更新凭证 `savePrimaryCredentials`、刷新余额 `refreshPrimaryAccount`）、展开面板「添加账号」`addForm`；**追加账号同样先 verify，再显式传 `provisionAllEligibleGroups/maxGroupMultiplier/availableModels`**，账号列表（刷新/删除）。
+- 校验/状态：`canBindNewApi`、`primaryCredentialsChanged`；loading：`binding`/`savingPrimary`/`refreshingPrimary`/`adding`/`refreshing`/`deleting`/`loadingPrimary`；错误：`bindError`/`primaryError`/`addError`。`groupFetchError`、无合格组、verify 失败时阻断提交。
+- 后端调用：`verifyNewApiSubscription`、`provisionNewApiSubscription`、`getSubscription`、`updateNewApiCredentials`、`refreshSubscription`、`getSubscriptionAccounts`、`addSubscriptionAccount`、`refreshSubscriptionAccount`、`deleteSubscriptionAccount`。
 
 ## 6. ChannelLogsDialog（渠道请求日志）
 
@@ -181,11 +181,11 @@
 - 后端调用：`api.getChannelLogs(kind, index)`（对每条 protocolRoute `Promise.allSettled`，合并去重取前 50）。
 - 联动：日志 autopilotTrace chip → `openAutopilotTrace` 打开内嵌 `AutopilotTraceDetailDialog`。
 
-## 7. CapabilityTestDialog（能力测试结果，当前未接线）
+## 7. CapabilityTestDialog（能力测试结果）
 
 - 路径：`frontend/src/components/CapabilityTestDialog.vue`；管理器 `frontend/src/composables/useCapabilityTestManager.ts`
 - 用途：展示渠道多协议能力测试（messages/chat/responses/gemini + 复合协议 `a->b`）；移动端卡片 / 桌面端表格双布局，含 RPM 调节、协议级重测、单模型重试、复制到其他协议 tab。
-- 触发入口：**目前 `src/` 内无挂载/触发点**。管理器暴露 `testChannelCapability(target)` 但无调用方；对话框未在任何模板 import。
+- 触发入口：已在 `App.vue` 挂载并由 `ChannelOrchestration` 行操作菜单触发；管理器暴露 `testChannelCapability(target)`。
 - props（若接线）：`modelValue`、`channelName`、`currentTab`、`capabilityJob: CapabilityTestJob|null`、`capabilityRpm`；emits：`update:modelValue`、`update:capabilityRpm`、`copyToTab(target, service?)`、`cancel`、`retryModel(protocol, model)`、`testProtocol(protocol)`。
 - 状态机：`initializing/idle/pending/running/completed/cancelled/error`。
 - 子组件：`CapabilityModelResults`（模型徽章 + tooltip，点击重试）。
