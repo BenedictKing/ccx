@@ -43,8 +43,8 @@
           <v-form ref="formRef" class="content-area" @submit.prevent="handleSubmit">
             <!-- 基本信息 -->
             <section :ref="(el: any) => setSectionRef('basic', el)" data-section-id="basic" class="pa-6 scroll-mt-4">
-              <!-- hide-base-url 仅对 Provider 模板托管渠道生效：其地址由模板与自动发现维护；
-                   自定义自动托管账号需要手工维护 CDN 地址池，因此保留多行 Base URL 输入 -->
+              <!-- hide-base-url 对官方直连与 Provider 模板托管渠道生效：其地址由官方/模板固定；
+                   仅自定义手填地址的自动托管账号需要手工维护 CDN 地址池 -->
               <BasicInfoSection
                 :form="form"
                 :base-urls-text="baseUrlsText"
@@ -52,7 +52,7 @@
                 :base-url-has-error="baseUrlHasError"
                 :service-type-options="serviceTypeOptions"
                 :hide-service-type="isAutoManagedChannel"
-                :hide-base-url="isManagedProvider"
+                :hide-base-url="isManagedProvider || isOfficialManagedProvider"
                 :hide-metadata="isAutoManagedChannel"
                 :managed-account="isAutoManagedChannel"
                 :provider-name="managedProviderName"
