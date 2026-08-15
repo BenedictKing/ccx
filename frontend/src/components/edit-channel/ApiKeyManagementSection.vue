@@ -192,7 +192,21 @@
         <!-- 现有密钥列表（拉黑状态与 provider 用量均归并到对应 Key） -->
         <div v-if="keyRows.length" class="mb-4">
           <v-list density="compact" class="bg-transparent">
-            <div v-for="row in keyRows" :key="row.key" class="mb-2" :data-key-row="row.key">
+            <draggable
+              v-model="sortableKeyRows"
+              item-key="key"
+              handle=".key-drag-handle"
+              ghost-class="key-ghost"
+              draggable=".key-row-sortable"
+              class="key-sortable-list"
+              :disabled="!canReorderKeys"
+            >
+              <template #item="{ element: row }">
+                <div
+                  class="mb-2"
+                  :class="{ 'key-row-sortable': !row.disabled && canReorderKeys }"
+                  :data-key-row="row.key"
+                >
               <v-list-item
                 rounded="lg"
                 variant="tonal"
@@ -205,12 +219,22 @@
                 @click="(row.planCredential || row.minimaxEndpoint) && toggleCredentialKey(row.key)"
               >
                 <template #prepend>
-                  <v-icon
-                    size="small"
-                    :color="row.disabled ? 'warning' : duplicateKeyIndex === row.activeIndex ? 'error' : 'primary'"
-                  >
-                    {{ row.disabled ? 'mdi-key-alert' : duplicateKeyIndex === row.activeIndex ? 'mdi-alert' : 'mdi-key' }}
-                  </v-icon>
+                  <div class="d-flex align-center">
+                    <v-icon
+                      v-if="!row.disabled && canReorderKeys"
+                      size="small"
+                      color="grey"
+                      class="key-drag-handle mr-2"
+                    >
+                      mdi-drag-vertical
+                    </v-icon>
+                    <v-icon
+                      size="small"
+                      :color="row.disabled ? 'warning' : duplicateKeyIndex === row.activeIndex ? 'error' : 'primary'"
+                    >
+                      {{ row.disabled ? 'mdi-key-alert' : duplicateKeyIndex === row.activeIndex ? 'mdi-alert' : 'mdi-key' }}
+                    </v-icon>
+                  </div>
                 </template>
 
                 <v-list-item-title>
@@ -424,10 +448,10 @@
                         {{ expandedCredentialKey === row.key ? 'mdi-chevron-up' : 'mdi-chevron-down' }}
                       </v-icon>
                     </v-btn>
-                    <template v-if="!row.disabled && row.activeIndex >= 0">
-                  <!-- 置顶/置底：仅首尾密钥显示 -->
+                    <template v-if="!row.disabled && canReorderKeys">
+                  <!-- 置顶/置底：每个活跃 Key 均可使用 -->
                   <v-tooltip
-                    v-if="!isAutoManaged && row.activeIndex === apiKeys.length - 1 && apiKeys.length > 1"
+                    :disabled="isFirstActiveKey(row)"
                     :text="t('channelCard.moveTop')"
                     location="top"
                     :open-delay="150"
@@ -441,14 +465,15 @@
                         icon
                         variant="text"
                         rounded="md"
-                        @click="moveToTop(row.activeIndex)"
+                        :disabled="isFirstActiveKey(row)"
+                        @click="moveKeyToTop(row)"
                       >
-                        <v-icon size="small">mdi-arrow-up-bold</v-icon>
+                        <v-icon size="small">mdi-arrow-collapse-up</v-icon>
                       </v-btn>
                     </template>
                   </v-tooltip>
                   <v-tooltip
-                    v-if="!isAutoManaged && row.activeIndex === 0 && apiKeys.length > 1"
+                    :disabled="isLastActiveKey(row)"
                     :text="t('channelCard.moveBottom')"
                     location="top"
                     :open-delay="150"
@@ -462,9 +487,10 @@
                         icon
                         variant="text"
                         rounded="md"
-                        @click="moveToBottom(row.activeIndex)"
+                        :disabled="isLastActiveKey(row)"
+                        @click="moveKeyToBottom(row)"
                       >
-                        <v-icon size="small">mdi-arrow-down-bold</v-icon>
+                        <v-icon size="small">mdi-arrow-collapse-down</v-icon>
                       </v-btn>
                     </template>
                   </v-tooltip>
@@ -954,6 +980,8 @@
                 </div>
               </v-expand-transition>
             </div>
+              </template>
+            </draggable>
           </v-list>
         </div>
 
@@ -1384,6 +1412,7 @@ import type {
   VolcenginePlanUsageWindow,
   APIKeyConfig,
 } from '../../services/api-types'
+import draggable from 'vuedraggable'
 import { maskApiKey } from '../../utils/apiKeyMask'
 import { buildChannelApiKeyRows, type ChannelApiKeyRow } from '../../utils/channelApiKeys'
 import { getVolcenginePlanConsoleURL } from '../../utils/channelWebsite'
@@ -1439,6 +1468,7 @@ const props = defineProps<Props>()
 
 const emit = defineEmits<{
   'update:apiKeys': [string[]]
+  'update:apiKeyConfigs': [APIKeyConfig[]]
   'update:proxyUrl': [string]
   'restore-key': [string]
   'restore-key-model': [string, string]
@@ -1580,6 +1610,60 @@ const keyRows = computed(() => buildChannelApiKeyRows(props.apiKeys, props.disab
     effectiveCostClass: row.effectiveCostClass,
   }
 }))
+
+// 可排序的活跃 Key 行：拖拽与置顶/置底只作用于活跃 Key，拉黑 Key 固定展示在下方。
+const activeKeyRows = computed(() => keyRows.value.filter(row => !row.disabled))
+
+const sortableKeyRows = computed({
+  get: () => keyRows.value,
+  set: (newRows: ChannelApiKeyRow[]) => {
+    const activeKeys = newRows
+      .filter(row => row.activeIndex >= 0)
+      .map(row => row.key)
+    updateApiKeyOrder(activeKeys)
+  },
+})
+
+const canReorderKeys = computed(() => activeKeyRows.value.length > 1)
+
+const isFirstActiveKey = (row: ChannelApiKeyRow): boolean =>
+  activeKeyRows.value[0]?.key === row.key
+const isLastActiveKey = (row: ChannelApiKeyRow): boolean =>
+  activeKeyRows.value[activeKeyRows.value.length - 1]?.key === row.key
+
+// 统一更新 apiKeys 与 apiKeyConfigs 顺序，保证 Key 与配置项一一对应。
+function updateApiKeyOrder(newKeys: string[]) {
+  const oldKeys = props.apiKeys
+  if (newKeys.length !== oldKeys.length) return
+
+  const configByKey = new Map<string, APIKeyConfig>()
+  for (const cfg of props.apiKeyConfigs ?? []) {
+    if (cfg.key) configByKey.set(cfg.key, cfg)
+  }
+
+  emit('update:apiKeys', newKeys)
+
+  if (props.apiKeyConfigs !== undefined && props.apiKeyConfigs.length > 0) {
+    const reorderedConfigs = newKeys
+      .map(key => configByKey.get(key))
+      .filter((cfg): cfg is APIKeyConfig => !!cfg)
+    emit('update:apiKeyConfigs', reorderedConfigs)
+  }
+}
+
+const moveKeyToTop = (row: ChannelApiKeyRow) => {
+  if (!canReorderKeys.value || isFirstActiveKey(row)) return
+  const keys = props.apiKeys.filter(key => key !== row.key)
+  keys.unshift(row.key)
+  updateApiKeyOrder(keys)
+}
+
+const moveKeyToBottom = (row: ChannelApiKeyRow) => {
+  if (!canReorderKeys.value || isLastActiveKey(row)) return
+  const keys = props.apiKeys.filter(key => key !== row.key)
+  keys.push(row.key)
+  updateApiKeyOrder(keys)
+}
 
 watch(
   () => buildChannelApiKeyRows(props.apiKeys, props.disabledKeys).map(row => row.key),
@@ -2578,20 +2662,6 @@ const handleRemoveKey = (row: ChannelApiKeyRow) => {
   removeKey(row.activeIndex)
 }
 
-const moveToTop = (index: number) => {
-  const updated = [...props.apiKeys]
-  const [key] = updated.splice(index, 1)
-  updated.unshift(key)
-  emit('update:apiKeys', updated)
-}
-
-const moveToBottom = (index: number) => {
-  const updated = [...props.apiKeys]
-  const [key] = updated.splice(index, 1)
-  updated.push(key)
-  emit('update:apiKeys', updated)
-}
-
 const clearCopilotPollTimer = () => {
   if (copilotPollTimer !== null) {
     window.clearTimeout(copilotPollTimer)
@@ -2726,6 +2796,25 @@ const getDisabledKeyLabel = (reason: string) => {
 .section-title {
   font-size: 1.125rem;
   font-weight: 600;
+}
+
+.key-sortable-list {
+  min-height: 0;
+}
+
+.key-drag-handle {
+  cursor: grab;
+  opacity: 0.6;
+  transition: opacity 0.15s ease;
+}
+
+.key-drag-handle:hover {
+  opacity: 1;
+}
+
+.key-ghost {
+  opacity: 0.5;
+  background: rgba(var(--v-theme-primary), 0.08);
 }
 
 .animate-pulse {

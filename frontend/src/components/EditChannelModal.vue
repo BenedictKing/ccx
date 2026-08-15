@@ -93,6 +93,7 @@
                 :account-uid="props.channel?.accountUid"
                 :provider-id="props.channel?.providerId"
                 @update:api-keys="form.apiKeys = $event"
+                @update:api-key-configs="form.apiKeyConfigs = $event"
                 @update:proxy-url="form.proxyUrl = $event"
                 @restore-key="restoreDisabledKey"
                 @restore-key-model="restoreDisabledKeyModel"
