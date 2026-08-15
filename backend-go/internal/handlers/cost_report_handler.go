@@ -31,6 +31,11 @@ type costReportRow struct {
 	EffectiveCostAvailable    bool     `json:"effectiveCostAvailable"`
 	EffectiveUnavailableCount int64    `json:"effectiveUnavailableCount"`
 	UnpricedModels            []string `json:"unpricedModels,omitempty"`
+	// 成本 reason 分类计数
+	ZeroCostCount             int64 `json:"zeroCostCount"`
+	ConfiguredMultiplierCount int64 `json:"configuredMultiplierCount"`
+	SubscriptionCostCount     int64 `json:"subscriptionCostCount"`
+	UnpricedCostCount         int64 `json:"unpricedCostCount"`
 }
 
 // GetCostReport 返回按维度聚合的成本报表。
@@ -74,6 +79,10 @@ func GetCostReport(deps *CostReportDeps) gin.HandlerFunc {
 				EffectiveCostAvailable:    row.EffectiveUnavailableCount == 0 && row.EffectivePricedCount > 0,
 				EffectiveUnavailableCount: row.EffectiveUnavailableCount,
 				PricingComplete:           true,
+				ZeroCostCount:             row.ZeroCostCount,
+				ConfiguredMultiplierCount: row.ConfiguredMultiplierCount,
+				SubscriptionCostCount:     row.SubscriptionCostCount,
+				UnpricedCostCount:         row.UnpricedCostCount,
 			}
 			modelBreakdowns, breakdownErr := store.QueryModelCostBreakdown(apiType, since, groupBy, row.GroupKey)
 			if breakdownErr != nil {

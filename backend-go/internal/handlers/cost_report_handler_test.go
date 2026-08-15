@@ -166,6 +166,62 @@ func TestGetCostReport_ReportsIncompletePricing(t *testing.T) {
 	}
 }
 
+func TestGetCostReport_ReportsEffectiveCostReasonBreakdown(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	store := &testCostReportStore{
+		reportRows: []metrics.CostReportRow{{
+			GroupKey: "sk-aa****bb", TotalRequests: 10, SuccessCount: 10,
+			InputTokens: 1_000_000, OutputTokens: 500_000,
+			EffectivePricedCount:      10,
+			EffectiveUnavailableCount: 0,
+			ZeroCostCount:             3,
+			ConfiguredMultiplierCount: 4,
+			SubscriptionCostCount:     2,
+			UnpricedCostCount:         1,
+		}},
+		modelRows: []metrics.ModelCostBreakdownRow{
+			{Model: "claude-sonnet-4-8", InputTokens: 1_000_000, OutputTokens: 500_000},
+		},
+	}
+	deps := &CostReportDeps{MetricsManagers: map[string]*metrics.MetricsManager{
+		"messages": newTestMetricsManager(store),
+	}}
+
+	w := httptest.NewRecorder()
+	c, r := gin.CreateTestContext(w)
+	r.GET("/api/reports/cost", GetCostReport(deps))
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/reports/cost?type=messages", nil)
+	r.ServeHTTP(w, c.Request)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var response struct {
+		Rows []costReportRow `json:"rows"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	if len(response.Rows) != 1 {
+		t.Fatalf("expected one row, got %d", len(response.Rows))
+	}
+	row := response.Rows[0]
+	if row.ZeroCostCount != 3 {
+		t.Errorf("zeroCostCount = %d, want 3", row.ZeroCostCount)
+	}
+	if row.ConfiguredMultiplierCount != 4 {
+		t.Errorf("configuredMultiplierCount = %d, want 4", row.ConfiguredMultiplierCount)
+	}
+	if row.SubscriptionCostCount != 2 {
+		t.Errorf("subscriptionCostCount = %d, want 2", row.SubscriptionCostCount)
+	}
+	if row.UnpricedCostCount != 1 {
+		t.Errorf("unpricedCostCount = %d, want 1", row.UnpricedCostCount)
+	}
+}
+
 func TestGetCostReport_InvalidAPIType(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

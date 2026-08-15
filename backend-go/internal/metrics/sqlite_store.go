@@ -1286,6 +1286,11 @@ type CostReportRow struct {
 	EffectiveCostUSD          float64 `json:"effectiveCostUSD"`
 	EffectivePricedCount      int64   `json:"effectivePricedCount"`
 	EffectiveUnavailableCount int64   `json:"effectiveUnavailableCount"`
+	// 成本 reason 分类计数，用于区分已确认零成本与成本证据缺失。
+	ZeroCostCount        int64 `json:"zeroCostCount"`
+	ConfiguredMultiplierCount int64 `json:"configuredMultiplierCount"`
+	SubscriptionCostCount     int64 `json:"subscriptionCostCount"`
+	UnpricedCostCount         int64 `json:"unpricedCostCount"`
 }
 
 // QueryCostReport 按指定维度聚合成本数据。
@@ -1312,7 +1317,11 @@ func (s *SQLiteStore) QueryCostReport(apiType string, since time.Time, groupBy s
 			SUM(input_tokens), SUM(output_tokens), SUM(cache_creation_tokens), SUM(cache_read_tokens),
 			COALESCE(SUM(list_cost_usd), 0), COALESCE(SUM(CASE WHEN effective_cost_available = 1 THEN effective_cost_usd ELSE 0 END), 0),
 			SUM(CASE WHEN effective_cost_available = 1 THEN 1 ELSE 0 END),
-			SUM(CASE WHEN effective_cost_available IS NULL OR effective_cost_available <> 1 THEN 1 ELSE 0 END)
+			SUM(CASE WHEN effective_cost_available IS NULL OR effective_cost_available <> 1 THEN 1 ELSE 0 END),
+			SUM(CASE WHEN effective_cost_available = 1 AND effective_cost_reason = 'manual_zero_cost' THEN 1 ELSE 0 END),
+			SUM(CASE WHEN effective_cost_available = 1 AND effective_cost_reason = 'configured_group_multiplier' THEN 1 ELSE 0 END),
+			SUM(CASE WHEN effective_cost_available = 1 AND effective_cost_reason LIKE 'subscription_%%' THEN 1 ELSE 0 END),
+			SUM(CASE WHEN effective_cost_available = 1 AND effective_cost_reason NOT IN ('manual_zero_cost', 'configured_group_multiplier') AND effective_cost_reason NOT LIKE 'subscription_%%' THEN 1 ELSE 0 END)
 		FROM request_records
 		WHERE api_type = ? AND timestamp >= ?
 		GROUP BY group_key HAVING group_key <> '' ORDER BY COUNT(*) DESC
@@ -1327,7 +1336,8 @@ func (s *SQLiteStore) QueryCostReport(apiType string, since time.Time, groupBy s
 		var row CostReportRow
 		if err := rows.Scan(&row.GroupKey, &row.TotalRequests, &row.SuccessCount,
 			&row.InputTokens, &row.OutputTokens, &row.CacheCreationTokens, &row.CacheReadTokens,
-			&row.ListCostUSD, &row.EffectiveCostUSD, &row.EffectivePricedCount, &row.EffectiveUnavailableCount); err != nil {
+			&row.ListCostUSD, &row.EffectiveCostUSD, &row.EffectivePricedCount, &row.EffectiveUnavailableCount,
+			&row.ZeroCostCount, &row.ConfiguredMultiplierCount, &row.SubscriptionCostCount, &row.UnpricedCostCount); err != nil {
 			return nil, fmt.Errorf("扫描成本报表结果失败: %w", err)
 		}
 		results = append(results, row)
