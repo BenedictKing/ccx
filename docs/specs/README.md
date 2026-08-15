@@ -65,7 +65,7 @@ Channels   (Claude/OpenAI/Gemini/...)
 | autopilot.md | ✅ 完成 | 覆盖核心结构体、流程、边界、新增功能 |
 | logical-channel.md | ✅ 完成 | 覆盖归组算法、CRUD 原子性、前端聚合、待补充项详解 |
 | new-api-integration.md | ✅ 完成 | 覆盖数据模型、接口、同步、边界、待补充项详解 |
-| public-key-routing.md | 📝 提案 | 定义 Key 级零成本与机会性优先消耗，尚未实现 |
+| public-key-routing.md | ✅ 完成 | Key 级零成本与机会性优先消耗已落地，前后端已配套 |
 | healthcheck.md | ✅ 完成 | 覆盖 L1/L2、稀疏探针、恢复、凭证回填、待补充项详解 |
 | web-ui-dialogs.md | ✅ 完成 | 覆盖所有对话框布局、交互、状态流转、跳转关系 |
 | web-ui-pages.md | ✅ 完成 | 覆盖 8 个 View、导航 IA、全局区块显隐、ego-browser 实测、IA 问题清单 |
