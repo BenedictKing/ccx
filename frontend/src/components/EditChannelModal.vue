@@ -6,8 +6,8 @@
         :is-editing="isEditing"
         :channel-type="props.channelType"
         :channel-name="form.name"
-        :channel-name-hint="isAutoManagedChannel ? '' : t('channelEditor.basic.name.autoDerivedHint')"
-        :hide-capability-actions="isAutoManagedChannel"
+        :channel-name-hint="''"
+        :hide-capability-actions="true"
         :no-vision="form.noVision"
         :header-classes="headerClasses"
         :avatar-color="avatarColor"
@@ -19,9 +19,7 @@
           ? t(isOfficialManagedProvider
             ? 'channelEditor.managed.editSubtitle'
             : 'channelEditor.managed.providerEditSubtitle', { provider: managedProviderName })
-          : isAutoManagedChannel
-            ? t('channelEditor.managed.customEditSubtitle')
-            : t('addChannel.editSubtitle')"
+          : t('channelEditor.managed.customEditSubtitle')"
         :create-subtitle="t('addChannel.quickSubtitle')"
         :vision-tooltip="form.noVision ? t('channelCard.noVision') : t('channelCard.hasVision')"
         @toggle-no-vision="form.noVision = !form.noVision"
@@ -51,10 +49,10 @@
                 :expected-request-urls="expectedRequestUrls"
                 :base-url-has-error="baseUrlHasError"
                 :service-type-options="serviceTypeOptions"
-                :hide-service-type="isAutoManagedChannel"
+                :hide-service-type="true"
                 :hide-base-url="isManagedProvider || isOfficialManagedProvider"
-                :hide-metadata="isAutoManagedChannel"
-                :managed-account="isAutoManagedChannel"
+                :hide-metadata="true"
+                :managed-account="true"
                 :provider-name="managedProviderName"
                 :official-provider="isOfficialManagedProvider"
                 :website-links="managedProviderWebsiteLinks"
@@ -84,7 +82,6 @@
                 :removing-key="removingKey"
                 :suspending-key="suspendingKey"
                 :service-type="form.serviceType"
-                :is-auto-managed="isAutoManagedChannel"
                 :channel-id="props.channel?.index"
                 :channel-uid="props.channel?.channelUid"
                 :channel-kind="props.channelType"
@@ -126,7 +123,7 @@
             </section>
 
             <!-- 模型重定向（模型映射 + Vision 回退 + 模型过滤） -->
-            <section v-if="!isAutoManagedChannel" :ref="(el: any) => setSectionRef('redirect', el)" data-section-id="redirect" class="pa-6 scroll-mt-4">
+            <section :ref="(el: any) => setSectionRef('redirect', el)" data-section-id="redirect" class="pa-6 scroll-mt-4">
               <v-alert
                 v-if="supportsChannelDiscovery"
                 class="mb-4"
@@ -381,14 +378,14 @@
             </section>
 
             <!-- 高级选项 -->
-            <section v-if="!isAutoManagedChannel" :ref="(el: any) => setSectionRef('advanced', el)" data-section-id="advanced" class="pa-6 scroll-mt-4">
+            <section :ref="(el: any) => setSectionRef('advanced', el)" data-section-id="advanced" class="pa-6 scroll-mt-4">
               <AdvancedOptionsSection
                 :form="form"
                 :channel-type="props.channelType"
                 :supports-open-a-i-advanced-options="supportsOpenAIAdvancedOptions"
                 :reasoning-param-style-options="reasoningParamStyleOptions"
                 :text-verbosity-options="textVerbosityOptions"
-                :is-auto-managed="isAutoManagedChannel"
+                :is-auto-managed="true"
                 :diagnosing="diagnosingCompat"
                 :diagnose-result="diagnoseResult"
                 @update:form="updateForm"
@@ -398,7 +395,7 @@
             </section>
 
             <!-- 自定义参数（自定义请求头 + 流式超时） -->
-            <section v-if="!isAutoManagedChannel" :ref="(el: any) => setSectionRef('custom', el)" data-section-id="custom" class="pa-6 scroll-mt-4">
+            <section :ref="(el: any) => setSectionRef('custom', el)" data-section-id="custom" class="pa-6 scroll-mt-4">
               <CustomHeadersSection
                 :headers="customHeadersArray"
                 @update:headers="updateCustomHeaders"
@@ -583,7 +580,6 @@ const {
   supportsOpenAIAdvancedOptions,
   supportsReasoningMappingOptions,
   supportsChannelDiscovery,
-  isAutoManagedChannel,
   showModelMappingPresets,
   showMessagesOpenAIChannelPresets,
   showClaudeChannelPresets,

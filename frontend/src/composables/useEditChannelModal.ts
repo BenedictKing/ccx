@@ -20,7 +20,6 @@ import {
   resolveChannelWatcherAction,
   syncBaseUrlsFormState,
   filterValidSupportedModelPatterns,
-  extractChannelNamePrefix,
 } from '../utils/add-channel-modal-state'
 import { streamTimeoutPresets } from '../utils/streamTimeoutPresets'
 import { useI18n } from '../i18n'
@@ -35,7 +34,7 @@ import { useStreamTimeoutStrategy } from './useStreamTimeoutStrategy'
 import { useSupportedModelFilters } from './useSupportedModelFilters'
 import { useEditChannelOptions } from '../utils/editChannelOptions'
 import { defaultStripBillingHeader, isValidUrl, normalizeModelCapabilities } from '../utils/editChannelHelpers'
-import { isAutoManagedAccountChannel, isOfficialProviderChannel } from '../utils/providerDisplay'
+import { isOfficialProviderChannel } from '../utils/providerDisplay'
 import { getManagedProviderWebsiteLinks } from '../utils/channelWebsite'
 import { useChannelStore } from '../stores/channel'
 import { useDialogStore } from '../stores/dialog'
@@ -140,19 +139,13 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
   } = useEditChannelSectionNav(t)
 
   const { isAnySelectMenuOpen, suppressDialogEscapeUntil, onMenuUpdate } = useDialogMenuWorkaround()
-  const isAutoManagedChannel = computed(() => isAutoManagedAccountChannel(props.channel))
-  // 允许用户手工维护地址池的自动托管渠道：仅自定义手填地址（无 providerId 且非官方直连）。
-  const isEditableBaseUrlsChannel = computed(() => isAutoManagedChannel.value && !props.channel?.providerId && !isOfficialProviderChannel(props.channel))
-  const sections = computed(() => {
-    if (!isAutoManagedChannel.value) return allSections
-    return allSections.filter(section => section.id === 'basic' || section.id === 'auth')
-  })
+  // 所有渠道均为自动托管；仅自定义手填地址（无 providerId 且非官方直连）可编辑地址池。
+  const isEditableBaseUrlsChannel = computed(() => !props.channel?.providerId && !isOfficialProviderChannel(props.channel))
+  const sections = computed(() => allSections.filter(section => section.id === 'basic' || section.id === 'auth'))
 
   const supportsOpenAIAdvancedOptions = computed(() => props.channelType !== 'vectors' && supportsAdvancedChannelOptions(form.serviceType))
   const supportsReasoningMappingOptions = computed(() => props.channelType !== 'vectors' && supportsReasoningMapping(form.serviceType))
-  const supportsChannelDiscovery = computed(() => {
-    return !isAutoManagedChannel.value && props.channelType !== 'images' && props.channelType !== 'vectors'
-  })
+  const supportsChannelDiscovery = computed(() => false)
 
   // 模型优先级排序规则（索引越小优先级越高）
   // 表单数据：balanced 预设值作为渠道级默认回退值
@@ -229,23 +222,17 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
   // 多 BaseURL 文本输入（独立变量，保留用户输入的换行）
   const baseUrlsText = ref('')
 
-  // 监听 baseUrlsText 变化，同步到 form（去重等效 URL），并自动派生渠道名称
+  // 监听 baseUrlsText 变化，同步到 form（去重等效 URL）
   watch(baseUrlsText, val => {
     const { baseUrl, baseUrls } = syncBaseUrlsFormState(val, form.serviceType)
     form.baseUrl = baseUrl
     form.baseUrls = baseUrls
-    if (!isAutoManagedChannel.value) {
-      form.name = extractChannelNamePrefix(baseUrl || baseUrls[0] || '')
-    }
   })
 
   watch(() => form.serviceType, () => {
     const { baseUrl, baseUrls } = syncBaseUrlsFormState(baseUrlsText.value, form.serviceType)
     form.baseUrl = baseUrl
     form.baseUrls = baseUrls
-    if (!isAutoManagedChannel.value) {
-      form.name = extractChannelNamePrefix(baseUrl || baseUrls[0] || '')
-    }
   })
 
   // 新建 Messages 渠道时按 baseUrl 推断 stripBillingHeader 默认值：
@@ -749,10 +736,9 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     const draftUrls = draftBaseUrls()
     const hasValidBaseUrl = form.serviceType === 'copilot'
       || (isEditableBaseUrlsChannel.value && draftUrls.length > 0 && draftUrls.every(isValidUrl))
-      || (isAutoManagedChannel.value && !isEditableBaseUrlsChannel.value)
-      || (!isAutoManagedChannel.value && !!form.baseUrl.trim() && isValidUrl(form.baseUrl))
+      || !isEditableBaseUrlsChannel.value
     const hasValidApiKeys = form.serviceType === 'copilot' || hasConfigurableKeys.value
-    const hasValidModelConfig = isAutoManagedChannel.value || (!modelCapabilitiesError.value && !embeddingCapabilitiesError.value)
+    const hasValidModelConfig = !modelCapabilitiesError.value && !embeddingCapabilitiesError.value
     return (
       !!form.serviceType && hasValidBaseUrl && hasValidApiKeys && hasValidModelConfig
     )
@@ -760,110 +746,125 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
 
   const buildSubmitPayload = () => {
     const payload = buildChannelPayload(form, { channelType: props.channelType })
-    if (isAutoManagedChannel.value && props.channel) {
-      Object.assign(payload, {
-        // 官网地址允许 Provider 托管渠道编辑，其余元数据字段仍沿用模板值
-        website: form.website ?? '',
-        description: props.channel.description || '',
-        tags: [...(props.channel.tags || [])],
-        modelMapping: { ...(props.channel.modelMapping || {}) },
-        modelCapabilities: { ...(props.channel.modelCapabilities || {}) },
-        embeddingCapabilities: { ...(props.channel.embeddingCapabilities || {}) },
-        defaultCapability: { ...(props.channel.defaultCapability || {}) },
-        allowUnknownContext: !!props.channel.allowUnknownContext,
-        reasoningMapping: { ...(props.channel.reasoningMapping || {}) },
-        reasoningParamStyle: props.channel.reasoningParamStyle,
-        textVerbosity: props.channel.textVerbosity,
-        fastMode: !!props.channel.fastMode,
-        supportedModels: [...(props.channel.supportedModels || [])],
-        noVision: !!props.channel.noVision,
-        noVisionModels: [...(props.channel.noVisionModels || [])],
-        visionFallbackModel: props.channel.visionFallbackModel || '',
-        lowQuality: !!props.channel.lowQuality,
-        injectDummyThoughtSignature: !!props.channel.injectDummyThoughtSignature,
-        stripThoughtSignature: !!props.channel.stripThoughtSignature,
-        autoBlacklistBalance: props.channel.autoBlacklistBalance,
-        normalizeMetadataUserId: props.channel.normalizeMetadataUserId,
-        stripBillingHeader: props.channel.stripBillingHeader,
-        normalizeSystemRoleToTopLevel: props.channel.normalizeSystemRoleToTopLevel,
-        codexToolCompat: props.channel.codexToolCompat,
-        stripCodexClientTools: props.channel.stripCodexClientTools,
-        convertImageUrlToB64Json: props.channel.convertImageUrlToB64Json,
-        historicalImageTurnLimit: props.channel.historicalImageTurnLimit,
-        customHeaders: { ...(props.channel.customHeaders || {}) },
-        proxyUrl: props.channel.proxyUrl || '',
-        routePrefix: props.channel.routePrefix || '',
-        requestTimeoutMs: props.channel.requestTimeoutMs,
-        responseHeaderTimeoutMs: props.channel.responseHeaderTimeoutMs,
-        streamFirstContentTimeoutMs: props.channel.streamFirstContentTimeoutMs,
-        streamInactivityTimeoutMs: props.channel.streamInactivityTimeoutMs,
-        streamToolCallIdleTimeoutMs: props.channel.streamToolCallIdleTimeoutMs,
-        rateLimitRpm: props.channel.rateLimitRpm,
-        rateLimitWindowMinutes: props.channel.rateLimitWindowMinutes,
-        rateLimitBurst: props.channel.rateLimitBurst,
-        rateLimitMaxConcurrent: props.channel.rateLimitMaxConcurrent,
-        rateLimitAutoFromHeaders: props.channel.rateLimitAutoFromHeaders,
-      })
-      payload.serviceType = props.channel.serviceType
-      if (isEditableBaseUrlsChannel.value) {
-        // 可编辑地址池的托管渠道：沿用表单规范化结果，baseUrl 取首个地址保持旧字段兼容
-        const managedUrls = managedAccountBaseUrls()
-        payload.baseUrl = managedUrls[0] || props.channel.baseUrl
-        if (managedUrls.length > 1) {
-          payload.baseUrls = managedUrls
-        } else {
-          delete payload.baseUrls
-        }
-      } else {
-        payload.baseUrl = props.channel.baseUrl
-        if (props.channel.baseUrls?.length) {
-          payload.baseUrls = [...props.channel.baseUrls]
-        } else {
-          delete payload.baseUrls
-        }
+    if (!props.channel) {
+      applyVisionFallbackReasoning(payload)
+      // 清理未启用的流式超时字段
+      if (!form.streamFirstContentTimeoutEnabled) {
+        delete payload.streamFirstContentTimeoutMs
       }
-      payload.insecureSkipVerify = !!props.channel.insecureSkipVerify
-      if (props.channel.authHeader) {
-        payload.authHeader = props.channel.authHeader
-      } else {
-        delete payload.authHeader
+      if (!form.streamInactivityTimeoutEnabled) {
+        delete payload.streamInactivityTimeoutMs
+      }
+      if (!form.streamToolCallIdleTimeoutEnabled) {
+        delete payload.streamToolCallIdleTimeoutMs
       }
       return payload
     }
-    applyVisionFallbackReasoning(payload)
+
+    // 所有渠道均为自动托管：大量元数据字段沿用渠道当前值，避免前端误覆盖模板/学习结果。
+    Object.assign(payload, {
+      // 官网地址允许 Provider 托管渠道编辑，其余元数据字段仍沿用模板值
+      website: form.website ?? '',
+      description: props.channel.description || '',
+      tags: [...(props.channel.tags || [])],
+      modelMapping: { ...(props.channel.modelMapping || {}) },
+      modelCapabilities: { ...(props.channel.modelCapabilities || {}) },
+      embeddingCapabilities: { ...(props.channel.embeddingCapabilities || {}) },
+      defaultCapability: { ...(props.channel.defaultCapability || {}) },
+      allowUnknownContext: !!props.channel.allowUnknownContext,
+      reasoningMapping: { ...(props.channel.reasoningMapping || {}) },
+      reasoningParamStyle: props.channel.reasoningParamStyle,
+      textVerbosity: props.channel.textVerbosity,
+      fastMode: !!props.channel.fastMode,
+      supportedModels: [...(props.channel.supportedModels || [])],
+      noVision: !!props.channel.noVision,
+      noVisionModels: [...(props.channel.noVisionModels || [])],
+      visionFallbackModel: props.channel.visionFallbackModel || '',
+      lowQuality: !!props.channel.lowQuality,
+      injectDummyThoughtSignature: !!props.channel.injectDummyThoughtSignature,
+      stripThoughtSignature: !!props.channel.stripThoughtSignature,
+      autoBlacklistBalance: props.channel.autoBlacklistBalance,
+      normalizeMetadataUserId: props.channel.normalizeMetadataUserId,
+      stripBillingHeader: props.channel.stripBillingHeader,
+      normalizeSystemRoleToTopLevel: props.channel.normalizeSystemRoleToTopLevel,
+      codexToolCompat: props.channel.codexToolCompat,
+      stripCodexClientTools: props.channel.stripCodexClientTools,
+      convertImageUrlToB64Json: props.channel.convertImageUrlToB64Json,
+      historicalImageTurnLimit: props.channel.historicalImageTurnLimit,
+      customHeaders: { ...(props.channel.customHeaders || {}) },
+      proxyUrl: props.channel.proxyUrl || '',
+      routePrefix: props.channel.routePrefix || '',
+      requestTimeoutMs: props.channel.requestTimeoutMs,
+      responseHeaderTimeoutMs: props.channel.responseHeaderTimeoutMs,
+      streamFirstContentTimeoutMs: props.channel.streamFirstContentTimeoutMs,
+      streamInactivityTimeoutMs: props.channel.streamInactivityTimeoutMs,
+      streamToolCallIdleTimeoutMs: props.channel.streamToolCallIdleTimeoutMs,
+      rateLimitRpm: props.channel.rateLimitRpm,
+      rateLimitWindowMinutes: props.channel.rateLimitWindowMinutes,
+      rateLimitBurst: props.channel.rateLimitBurst,
+      rateLimitMaxConcurrent: props.channel.rateLimitMaxConcurrent,
+      rateLimitAutoFromHeaders: props.channel.rateLimitAutoFromHeaders,
+    })
+    payload.serviceType = props.channel.serviceType
+    if (isEditableBaseUrlsChannel.value) {
+      // 可编辑地址池的托管渠道：沿用表单规范化结果，baseUrl 取首个地址保持旧字段兼容
+      const managedUrls = managedAccountBaseUrls()
+      payload.baseUrl = managedUrls[0] || props.channel.baseUrl
+      if (managedUrls.length > 1) {
+        payload.baseUrls = managedUrls
+      } else {
+        delete payload.baseUrls
+      }
+    } else {
+      payload.baseUrl = props.channel.baseUrl
+      if (props.channel.baseUrls?.length) {
+        payload.baseUrls = [...props.channel.baseUrls]
+      } else {
+        delete payload.baseUrls
+      }
+    }
+    payload.insecureSkipVerify = !!props.channel.insecureSkipVerify
+    if (props.channel.authHeader) {
+      payload.authHeader = props.channel.authHeader
+    } else {
+      delete payload.authHeader
+    }
+
+    // 清理未启用的流式超时字段；编辑场景下若原有值且当前未启用，则显式置 0 清空。
     if (!form.streamFirstContentTimeoutEnabled) {
       delete payload.streamFirstContentTimeoutMs
-      if (isEditing.value && props.channel?.streamFirstContentTimeoutMs) {
+      if (props.channel.streamFirstContentTimeoutMs) {
         payload.streamFirstContentTimeoutMs = 0
       }
     }
     if (!form.streamInactivityTimeoutEnabled) {
       delete payload.streamInactivityTimeoutMs
-      if (isEditing.value && props.channel?.streamInactivityTimeoutMs) {
+      if (props.channel.streamInactivityTimeoutMs) {
         payload.streamInactivityTimeoutMs = 0
       }
     }
     if (!form.streamToolCallIdleTimeoutEnabled) {
       delete payload.streamToolCallIdleTimeoutMs
-      if (isEditing.value && props.channel?.streamToolCallIdleTimeoutMs) {
+      if (props.channel.streamToolCallIdleTimeoutMs) {
         payload.streamToolCallIdleTimeoutMs = 0
       }
     }
-    if (isEditing.value && props.channel?.requestTimeoutMs && !payload.requestTimeoutMs) {
+    if (props.channel.requestTimeoutMs && !payload.requestTimeoutMs) {
       payload.requestTimeoutMs = 0
     }
-    if (isEditing.value && props.channel?.responseHeaderTimeoutMs && !payload.responseHeaderTimeoutMs) {
+    if (props.channel.responseHeaderTimeoutMs && !payload.responseHeaderTimeoutMs) {
       payload.responseHeaderTimeoutMs = 0
     }
-    if (isEditing.value && props.channel?.rateLimitRpm && !payload.rateLimitRpm) {
+    if (props.channel.rateLimitRpm && !payload.rateLimitRpm) {
       payload.rateLimitRpm = 0
     }
-    if (isEditing.value && props.channel?.rateLimitWindowMinutes && !payload.rateLimitWindowMinutes) {
+    if (props.channel.rateLimitWindowMinutes && !payload.rateLimitWindowMinutes) {
       payload.rateLimitWindowMinutes = 0
     }
-    if (isEditing.value && props.channel?.rateLimitMaxConcurrent && !payload.rateLimitMaxConcurrent) {
+    if (props.channel.rateLimitMaxConcurrent && !payload.rateLimitMaxConcurrent) {
       payload.rateLimitMaxConcurrent = 0
     }
+
     return payload
   }
 
@@ -958,7 +959,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
 
   const loadChannelData = (channel: Channel) => {
     resetTransientUiState()
-    form.name = isAutoManagedChannel.value ? channel.name : extractChannelNamePrefix(channel.baseUrl || channel.baseUrls?.[0] || '')
+    form.name = channel.name
     form.remark = channel.remark || ''
     form.serviceType = props.channelType === 'images' || props.channelType === 'vectors' ? 'openai' : channel.serviceType
     form.authHeader = channel.authHeader || 'auto'
@@ -1202,21 +1203,17 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     let saveStarted = false
 
     try {
-      if (!isAutoManagedChannel.value) {
-        if (props.channelType === 'vectors') {
-          syncEmbeddingCapabilitiesFromMapping()
-        } else {
-          syncModelCapabilitiesFromMapping()
-        }
+      if (props.channelType === 'vectors') {
+        syncEmbeddingCapabilitiesFromMapping()
+      } else {
+        syncModelCapabilitiesFromMapping()
       }
 
       const { valid } = await formRef.value.validate()
       if (!valid) return
-      if (!isAutoManagedChannel.value && (modelCapabilitiesError.value || embeddingCapabilitiesError.value)) return
+      if (modelCapabilitiesError.value || embeddingCapabilitiesError.value) return
 
-      if (!isAutoManagedChannel.value) {
-        syncModelMappingToForm()
-      }
+      syncModelMappingToForm()
 
       const channelData = buildSubmitPayload()
 
@@ -1439,7 +1436,6 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     supportsOpenAIAdvancedOptions,
     supportsReasoningMappingOptions,
     supportsChannelDiscovery,
-    isAutoManagedChannel,
     showModelMappingPresets,
     showMessagesOpenAIChannelPresets,
     showClaudeChannelPresets,

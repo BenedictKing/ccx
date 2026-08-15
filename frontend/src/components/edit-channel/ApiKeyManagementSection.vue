@@ -1454,7 +1454,6 @@ interface Props {
   removingKey?: string
   suspendingKey?: string
   serviceType?: string
-  isAutoManaged?: boolean
   channelId?: number
   channelUid?: string
   channelKind?: 'messages' | 'chat' | 'responses' | 'gemini' | 'images' | 'vectors'
