@@ -238,6 +238,56 @@ export class ApiService {
     })
   }
 
+  // ============== 统一渠道 API（Channel Data Model v2 / ChannelUID 寻址）==============
+
+  /** 获取统一渠道视图（渠道→key→endpoint→模型 + 共享能力） */
+  async getChannelsV2(): Promise<{ schemaVersion: number; channels: Record<string, unknown>[]; capabilities: Record<string, unknown>[] }> {
+    return this.request('/channels')
+  }
+
+  /** 获取单个渠道视图 */
+  async getChannelV2(uid: string): Promise<{ channel: Record<string, unknown>; capabilities: Record<string, unknown>[] }> {
+    return this.request(`/channels/${uid}`)
+  }
+
+  /** 创建渠道（统一入口，通过 kind 字段指定协议） */
+  async addChannelV2(channel: { kind: string; name?: string; serviceType?: string; baseUrl?: string; baseUrls?: string[]; apiKeys?: string[]; placement?: string; status?: string }): Promise<void> {
+    await this.request('/channels', {
+      method: 'POST',
+      body: JSON.stringify(channel)
+    })
+  }
+
+  /** 更新渠道（按 ChannelUID 寻址） */
+  async updateChannelV2(uid: string, updates: Record<string, unknown>): Promise<void> {
+    await this.request(`/channels/${uid}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates)
+    })
+  }
+
+  /** 删除渠道（按 ChannelUID 寻址） */
+  async deleteChannelV2(uid: string): Promise<void> {
+    await this.request(`/channels/${uid}`, {
+      method: 'DELETE'
+    })
+  }
+
+  /** 添加 API Key（按 ChannelUID 寻址） */
+  async addChannelKeyV2(uid: string, apiKey: string): Promise<void> {
+    await this.request(`/channels/${uid}/keys`, {
+      method: 'POST',
+      body: JSON.stringify({ apiKey })
+    })
+  }
+
+  /** 删除 API Key（按 ChannelUID + keyHash 寻址） */
+  async removeChannelKeyV2(uid: string, keyHash: string): Promise<void> {
+    await this.request(`/channels/${uid}/keys/${encodeURIComponent(keyHash)}`, {
+      method: 'DELETE'
+    })
+  }
+
   async restoreApiKey(channelId: number, apiKey: string): Promise<void> {
     await this.request(`/messages/channels/${channelId}/keys/restore`, {
       method: 'POST',

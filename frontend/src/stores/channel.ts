@@ -82,6 +82,18 @@ export const useChannelStore = defineStore('channel', () => {
     current: -1
   })
 
+  /** 按照 kind 返回对应的 channels ref */
+  function getChannelsForType(kind: ApiTab) {
+    switch (kind) {
+      case 'chat': return chatChannelsData
+      case 'responses': return responsesChannelsData
+      case 'gemini': return geminiChannelsData
+      case 'images': return imagesChannelsData
+      case 'vectors': return vectorsChannelsData
+      default: return channelsData
+    }
+  }
+
   // Dashboard 数据缓存结构（每个 tab 独立缓存）
   interface DashboardCache {
     metrics: ChannelMetrics[]
@@ -330,6 +342,14 @@ export const useChannelStore = defineStore('channel', () => {
     channelId: number,
     patch: Partial<Channel>,
   ): Promise<void> {
+    // 优先使用统一 API（按 ChannelUID 寻址）
+    const channelsForType = getChannelsForType(channelType)
+    const channel = channelsForType.value.channels[channelId]
+    if (channel?.channelUid) {
+      await api.updateChannelV2(channel.channelUid, patch as Record<string, unknown>)
+      return
+    }
+    // 兜底：使用旧 API
     switch (channelType) {
       case 'chat':
         await api.updateChatChannel(channelId, patch)
@@ -400,36 +420,24 @@ export const useChannelStore = defineStore('channel', () => {
           })
         }
       } else if (isChat) {
-        await api.updateChatChannel(editingChannelIndex, channel)
+        await updateChannelByType('chat', editingChannelIndex, channel)
       } else if (isVectors) {
-        await api.updateVectorsChannel(editingChannelIndex, channel)
+        await updateChannelByType('vectors', editingChannelIndex, channel)
       } else if (isImages) {
-        await api.updateImagesChannel(editingChannelIndex, channel)
+        await updateChannelByType('images', editingChannelIndex, channel)
       } else if (isGemini) {
-        await api.updateGeminiChannel(editingChannelIndex, channel)
+        await updateChannelByType('gemini', editingChannelIndex, channel)
       } else if (isResponses) {
-        await api.updateResponsesChannel(editingChannelIndex, channel)
+        await updateChannelByType('responses', editingChannelIndex, channel)
       } else {
-        await api.updateChannel(editingChannelIndex, channel)
+        await updateChannelByType('messages', editingChannelIndex, channel)
       }
       return { success: true, message: t('store.channel.updated'), channelId: editingChannelIndex }
     } else {
-      // 添加新渠道：placement 优先取调用方（新增弹窗选择），缺省跟随全局偏好
+      // 添加新渠道：使用统一 API（按 kind 区分协议）
       const placement: ChannelPlacement =
         options?.placement ?? (unref(preferencesStore.newChannelPlacement) === 'bottom' ? 'back' : 'front')
-      if (isChat) {
-        await api.addChatChannel(channel, placement)
-      } else if (isVectors) {
-        await api.addVectorsChannel(channel, placement)
-      } else if (isImages) {
-        await api.addImagesChannel(channel, placement)
-      } else if (isGemini) {
-        await api.addGeminiChannel(channel, placement)
-      } else if (isResponses) {
-        await api.addResponsesChannel(channel, placement)
-      } else {
-        await api.addChannel(channel, placement)
-      }
+      await api.addChannelV2({ ...channel, kind: targetTab, placement })
 
       // 快速添加模式：根据用户偏好将新渠道放到队列顶部（含 5 分钟促销期）或末尾
       if (options?.isQuickAdd) {
@@ -521,18 +529,25 @@ export const useChannelStore = defineStore('channel', () => {
       await api.deleteManagedAccount(accountUid)
     } else if (logicalChannelUid) {
       await api.deleteLogicalChannel(logicalChannelUid)
-    } else if (channelType === 'chat') {
-      await api.deleteChatChannel(channelId)
-    } else if (channelType === 'vectors') {
-      await api.deleteVectorsChannel(channelId)
-    } else if (channelType === 'images') {
-      await api.deleteImagesChannel(channelId)
-    } else if (channelType === 'gemini') {
-      await api.deleteGeminiChannel(channelId)
-    } else if (channelType === 'responses') {
-      await api.deleteResponsesChannel(channelId)
     } else {
-      await api.deleteChannel(channelId)
+      // 优先使用统一 API（按 ChannelUID 寻址）
+      const channelsForType = getChannelsForType(channelType)
+      const channel = channelsForType.value.channels[channelId]
+      if (channel?.channelUid) {
+        await api.deleteChannelV2(channel.channelUid)
+      } else if (channelType === 'chat') {
+        await api.deleteChatChannel(channelId)
+      } else if (channelType === 'vectors') {
+        await api.deleteVectorsChannel(channelId)
+      } else if (channelType === 'images') {
+        await api.deleteImagesChannel(channelId)
+      } else if (channelType === 'gemini') {
+        await api.deleteGeminiChannel(channelId)
+      } else if (channelType === 'responses') {
+        await api.deleteResponsesChannel(channelId)
+      } else {
+        await api.deleteChannel(channelId)
+      }
     }
     await refreshChannels()
     return { success: true, message: t('store.channel.deleted') }
