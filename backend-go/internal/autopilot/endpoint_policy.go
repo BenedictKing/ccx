@@ -54,7 +54,7 @@ type EndpointCandidate struct {
 	Opportunistic            bool    `json:"opportunistic,omitempty"`
 	HardFiltered             bool    `json:"hardFiltered,omitempty"`
 	FastDecayFiltered        bool    `json:"fastDecayFiltered,omitempty"`
-	SortGroup                int     `json:"sortGroup,omitempty"`
+	UtilityScore             float64 `json:"utilityScore,omitempty"`
 	Weight                   int     `json:"weight,omitempty"`
 	OriginalIndex            int     `json:"originalIndex,omitempty"`
 
@@ -174,7 +174,7 @@ func classifyKeyBinding(deps EndpointPolicyDeps, req *RequestProfile, channelUID
 	profile := findProfileForBinding(deps.ProfileStore, channelUID, baseURL, apiKey)
 	if profile == nil {
 		decision.Candidate.Reason = "no_profile"
-		decision.Candidate.SortGroup = 3
+		decision.Candidate.UtilityScore = 0
 		return decision
 	}
 	cfg := findAPIKeyConfig(deps.APIKeyConfigs, apiKey)
@@ -197,7 +197,7 @@ func classifyKeyBinding(deps EndpointPolicyDeps, req *RequestProfile, channelUID
 			decision.HardEligible = false
 			decision.Candidate.HardFiltered = true
 			decision.Candidate.Reason = string(eligibility.Reason)
-			decision.Candidate.SortGroup = 4
+			decision.Candidate.UtilityScore = 0
 			return decision
 		}
 	}
@@ -205,14 +205,14 @@ func classifyKeyBinding(deps EndpointPolicyDeps, req *RequestProfile, channelUID
 		decision.HardEligible = false
 		decision.Candidate.HardFiltered = true
 		decision.Candidate.Reason = "model_ineligible"
-		decision.Candidate.SortGroup = 4
+		decision.Candidate.UtilityScore = 0
 		return decision
 	}
 	if profile.HealthState == HealthStateDead || profile.HealthState == HealthStateMisconfigured {
 		decision.HardEligible = false
 		decision.Candidate.HardFiltered = true
 		decision.Candidate.Reason = "health_ineligible"
-		decision.Candidate.SortGroup = 4
+		decision.Candidate.UtilityScore = 0
 		return decision
 	}
 	if deps.FastDecay != nil && decision.ConsumptionPolicy == config.KeyConsumptionOpportunistic {
@@ -222,14 +222,18 @@ func classifyKeyBinding(deps EndpointPolicyDeps, req *RequestProfile, channelUID
 			decision.Candidate.Reason = "opportunistic_decayed"
 		}
 	}
-	if decision.ConsumptionPolicy == config.KeyConsumptionOpportunistic {
-		decision.Candidate.SortGroup = 0
-		if !decision.FastDecayEligible {
-			decision.Candidate.SortGroup = 1
-		}
-	} else {
-		decision.Candidate.SortGroup = 2
+	// 效用分：healthScore × fastDecayScore × 策略倍数
+	// opportunistic ×1.5 → 严重降级后会自动输给健康 normal（边界 health×decay < 0.67）
+	hs := endpointHealthScore(profile.HealthState)
+	fs := 1.0
+	if deps.FastDecay != nil {
+		fs = deps.FastDecay.Score(profile.EndpointUID)
 	}
+	multiplier := 1.0
+	if decision.ConsumptionPolicy == config.KeyConsumptionOpportunistic {
+		multiplier = opportunisticUtilityMultiplier
+	}
+	decision.Candidate.UtilityScore = hs * fs * multiplier
 	return decision
 }
 
@@ -590,14 +594,8 @@ func scoreAndSortKeyBindings(deps EndpointPolicyDeps, req *RequestProfile, targe
 					right = d
 				}
 			}
-			if left.Candidate.SortGroup != right.Candidate.SortGroup {
-				return left.Candidate.SortGroup < right.Candidate.SortGroup
-			}
-			if left.Candidate.HealthScore != right.Candidate.HealthScore {
-				return left.Candidate.HealthScore > right.Candidate.HealthScore
-			}
-			if left.Candidate.FastDecayScore != right.Candidate.FastDecayScore {
-				return left.Candidate.FastDecayScore > right.Candidate.FastDecayScore
+			if left.Candidate.UtilityScore != right.Candidate.UtilityScore {
+				return left.Candidate.UtilityScore > right.Candidate.UtilityScore
 			}
 			if left.EffectiveCostUSD >= 0 && right.EffectiveCostUSD >= 0 && left.EffectiveCostUSD != right.EffectiveCostUSD {
 				return left.EffectiveCostUSD < right.EffectiveCostUSD
@@ -649,6 +647,10 @@ const (
 	// fastDecayFilterThreshold FastDecay 过滤阈值。
 	// 低于此值的 key 在 active 模式下被过滤。
 	fastDecayFilterThreshold = 0.15
+
+	// opportunisticUtilityMultiplier 机会性 key 在效用分中的偏好倍数。
+	// 1.5 表示机会性 key 获得 50% 的排序优势，但严重降级（health × decay < 0.67）时仍会输给健康 normal key。
+	opportunisticUtilityMultiplier = 1.5
 
 	// neutralEndpointScore 中性 endpoint 评分（无画像时的默认值）。
 	neutralEndpointScore = 50.0
