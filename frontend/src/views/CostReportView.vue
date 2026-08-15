@@ -130,6 +130,7 @@
             <th class="text-right">{{ t('costReport.col.cacheCreation') }}</th>
             <th class="text-right">{{ t('costReport.col.cacheRead') }}</th>
             <th class="text-right">{{ t('costReport.col.listCost') }}</th>
+            <th class="text-left">{{ t('costReport.col.costBreakdown') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -157,6 +158,46 @@
                 </template>
                 {{ pricingHint(row) }}
               </v-tooltip>
+            </td>
+            <td class="text-left">
+              <div class="d-flex ga-1 flex-wrap">
+                <v-chip
+                  v-if="(row.zeroCostCount || 0) > 0"
+                  size="x-small"
+                  variant="tonal"
+                  color="success"
+                  :title="t('costReport.costBreakdown.zeroCost')"
+                >
+                  {{ t('costReport.costBreakdown.zeroCost') }} {{ formatNumber(row.zeroCostCount || 0) }}
+                </v-chip>
+                <v-chip
+                  v-if="(row.configuredMultiplierCount || 0) > 0"
+                  size="x-small"
+                  variant="tonal"
+                  color="primary"
+                  :title="t('costReport.costBreakdown.configuredMultiplier')"
+                >
+                  {{ t('costReport.costBreakdown.configuredMultiplier') }} {{ formatNumber(row.configuredMultiplierCount || 0) }}
+                </v-chip>
+                <v-chip
+                  v-if="(row.subscriptionCostCount || 0) > 0"
+                  size="x-small"
+                  variant="tonal"
+                  color="info"
+                  :title="t('costReport.costBreakdown.subscription')"
+                >
+                  {{ t('costReport.costBreakdown.subscription') }} {{ formatNumber(row.subscriptionCostCount || 0) }}
+                </v-chip>
+                <v-chip
+                  v-if="(row.unpricedCostCount || 0) > 0"
+                  size="x-small"
+                  variant="tonal"
+                  color="warning"
+                  :title="t('costReport.costBreakdown.unpriced')"
+                >
+                  {{ t('costReport.costBreakdown.unpriced') }} {{ formatNumber(row.unpricedCostCount || 0) }}
+                </v-chip>
+              </div>
             </td>
           </tr>
         </tbody>
@@ -270,6 +311,10 @@ function exportCSV() {
     t('costReport.csv.listCostUsd'),
     t('costReport.csv.pricingStatus'),
     t('costReport.csv.unpricedModels'),
+    t('costReport.csv.zeroCostCount'),
+    t('costReport.csv.configuredMultiplierCount'),
+    t('costReport.csv.subscriptionCostCount'),
+    t('costReport.csv.unpricedCostCount'),
   ]
   const csvRows = rows.value.map(r => [
     r.groupKey, r.totalRequests, r.successCount,
@@ -277,6 +322,10 @@ function exportCSV() {
     r.cacheReadTokens, r.listCostUSD.toFixed(6),
     isPricingComplete(r) ? t('costReport.pricingStatus.complete') : t('costReport.pricingStatus.partial'),
     r.unpricedModels?.join(' | ') || '',
+    r.zeroCostCount || 0,
+    r.configuredMultiplierCount || 0,
+    r.subscriptionCostCount || 0,
+    r.unpricedCostCount || 0,
   ])
 
   const csv = [headers.join(','), ...csvRows.map(r => r.join(','))].join('\n')

@@ -2278,6 +2278,10 @@ export interface CostReportRow {
   effectiveCostUSD: number
   pricingComplete?: boolean
   unpricedModels?: string[]
+  zeroCostCount?: number
+  configuredMultiplierCount?: number
+  subscriptionCostCount?: number
+  unpricedCostCount?: number
 }
 
 export interface CostReportResponse {
