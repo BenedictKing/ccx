@@ -1306,7 +1306,7 @@ type CostReportRow struct {
 	EffectivePricedCount      int64   `json:"effectivePricedCount"`
 	EffectiveUnavailableCount int64   `json:"effectiveUnavailableCount"`
 	// 成本 reason 分类计数，用于区分已确认零成本与成本证据缺失。
-	ZeroCostCount        int64 `json:"zeroCostCount"`
+	ZeroCostCount             int64 `json:"zeroCostCount"`
 	ConfiguredMultiplierCount int64 `json:"configuredMultiplierCount"`
 	SubscriptionCostCount     int64 `json:"subscriptionCostCount"`
 	UnpricedCostCount         int64 `json:"unpricedCostCount"`
