@@ -326,6 +326,18 @@
                         <span>{{ formatStats(get24hStats(element)) }}</span>
                       </div>
 
+                      <template v-if="getChannelMetrics(element)?.consumptionPolicyDistribution">
+                        <div class="text-caption font-weight-bold mt-2 mb-1">{{ t('orchestration.policyStats') }}</div>
+                        <div
+                          v-for="(count, policy) in getChannelMetrics(element)?.consumptionPolicyDistribution"
+                          :key="policy"
+                          class="metrics-tooltip-row"
+                        >
+                          <span>{{ policy === 'opportunistic' ? t('orchestration.policyOpportunistic') : t('orchestration.policyNormal') }}:</span>
+                          <span>{{ formatTokens(Number(count)) }}</span>
+                        </div>
+                      </template>
+
                       <div class="text-caption font-weight-bold mt-2 mb-1">{{ t('orchestration.cacheStats') }}</div>
                       <div class="metrics-tooltip-row">
                         <span>{{ t('orchestration.minutes15') }}:</span>

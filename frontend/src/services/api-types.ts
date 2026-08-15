@@ -67,6 +67,8 @@ export interface ChannelMetrics {
   breakerFailureRate?: number
   lastSuccessAt?: string
   lastFailureAt?: string
+  // 最近 24 小时按 ConsumptionPolicy 聚合的请求分布
+  consumptionPolicyDistribution?: Record<string, number>
   // 分时段统计 (15m, 1h, 6h, 24h)
   timeWindows?: {
     '15m': TimeWindowStats

@@ -54,6 +54,9 @@ func (f *fakePersistenceStore) QueryCostReport(apiType string, since time.Time, 
 func (f *fakePersistenceStore) QueryModelCostBreakdown(apiType string, since time.Time, groupBy string, filterGroupKey string) ([]metrics.ModelCostBreakdownRow, error) {
 	return nil, nil
 }
+func (f *fakePersistenceStore) QueryConsumptionPolicyDistribution(apiType string, since time.Time) (metrics.ConsumptionPolicyDistribution, error) {
+	return nil, nil
+}
 func (f *fakePersistenceStore) Close() error { return nil }
 
 // findBucketWithRequests 从补零后的桶序列中挑出带请求数据的桶。

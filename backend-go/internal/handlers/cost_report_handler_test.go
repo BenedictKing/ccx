@@ -52,6 +52,9 @@ func (t *testCostReportStore) QueryCostReport(apiType string, since time.Time, g
 func (t *testCostReportStore) QueryModelCostBreakdown(apiType string, since time.Time, groupBy string, filterGroupKey string) ([]metrics.ModelCostBreakdownRow, error) {
 	return t.modelRows, t.modelRowsErr
 }
+func (t *testCostReportStore) QueryConsumptionPolicyDistribution(apiType string, since time.Time) (metrics.ConsumptionPolicyDistribution, error) {
+	return nil, nil
+}
 func (t *testCostReportStore) Close() error { return nil }
 
 func newTestMetricsManager(store metrics.PersistenceStore) *metrics.MetricsManager {

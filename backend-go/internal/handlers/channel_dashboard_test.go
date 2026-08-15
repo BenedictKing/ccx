@@ -104,6 +104,136 @@ func TestGetChannelDashboard_IncludesBreakerFields(t *testing.T) {
 	}
 }
 
+func TestGetChannelDashboard_IncludesConsumptionPolicyDistribution(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tmpDir := t.TempDir()
+	configFile := filepath.Join(tmpDir, "config.json")
+	cfg := config.Config{
+		Upstream: []config.UpstreamConfig{{
+			Name:       "msg-test",
+			ChannelUID: "ch_test_policy",
+			BaseURL:    "https://example.com",
+			APIKeys:    []string{"sk-public", "sk-private"},
+		}},
+	}
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		t.Fatalf("序列化配置失败: %v", err)
+	}
+	if err := os.WriteFile(configFile, data, 0644); err != nil {
+		t.Fatalf("写入配置文件失败: %v", err)
+	}
+
+	cfgManager, err := config.NewConfigManager(configFile, "")
+	if err != nil {
+		t.Fatalf("创建配置管理器失败: %v", err)
+	}
+	defer errutil.IgnoreDeferred(cfgManager.Close)
+
+	store, err := metrics.NewSQLiteStore(&metrics.SQLiteStoreConfig{
+		DBPath:        filepath.Join(tmpDir, "metrics.db"),
+		RetentionDays: 7,
+	})
+	if err != nil {
+		t.Fatalf("创建 SQLite store 失败: %v", err)
+	}
+
+	now := time.Now()
+	for i := 0; i < 3; i++ {
+		store.AddRecord(metrics.PersistentRecord{
+			ChannelUID:        "ch_test_policy",
+			MetricsKey:        "k1",
+			BaseURL:           "https://example.com",
+			KeyMask:           "sk-***pub",
+			Timestamp:         now,
+			Success:           true,
+			APIType:           "messages",
+			ConsumptionPolicy: "opportunistic",
+		})
+	}
+	for i := 0; i < 2; i++ {
+		store.AddRecord(metrics.PersistentRecord{
+			ChannelUID:        "ch_test_policy",
+			MetricsKey:        "k2",
+			BaseURL:           "https://example.com",
+			KeyMask:           "sk-***priv",
+			Timestamp:         now,
+			Success:           true,
+			APIType:           "messages",
+			ConsumptionPolicy: "normal",
+		})
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("关闭 SQLite store 失败: %v", err)
+	}
+	store, err = metrics.NewSQLiteStore(&metrics.SQLiteStoreConfig{
+		DBPath:        filepath.Join(tmpDir, "metrics.db"),
+		RetentionDays: 7,
+	})
+	if err != nil {
+		t.Fatalf("重新打开 SQLite store 失败: %v", err)
+	}
+	defer errutil.IgnoreDeferred(store.Close)
+
+	messagesMetrics := metrics.NewMetricsManagerWithPersistence(10, 0.5, store, "messages")
+	responsesMetrics := metrics.NewMetricsManager()
+	geminiMetrics := metrics.NewMetricsManager()
+	chatMetrics := metrics.NewMetricsManager()
+	imagesMetrics := metrics.NewMetricsManager()
+	defer messagesMetrics.Stop()
+	defer responsesMetrics.Stop()
+	defer geminiMetrics.Stop()
+	defer chatMetrics.Stop()
+	defer imagesMetrics.Stop()
+
+	traceAffinity := session.NewTraceAffinityManager()
+	defer traceAffinity.Stop()
+	urlManager := warmup.NewURLManager(30*time.Second, 3)
+	sch := scheduler.NewChannelScheduler(cfgManager, messagesMetrics, responsesMetrics, geminiMetrics, chatMetrics, imagesMetrics, traceAffinity, urlManager)
+
+	r := gin.New()
+	r.GET("/messages/channels/dashboard", GetChannelDashboard(cfgManager, sch))
+
+	req := httptest.NewRequest(http.MethodGet, "/messages/channels/dashboard?type=messages", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d, want=%d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp struct {
+		Channels []map[string]any `json:"channels"`
+		Metrics  []map[string]any `json:"metrics"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("解析响应失败: %v", err)
+	}
+	if len(resp.Channels) != 1 || len(resp.Metrics) != 1 {
+		t.Fatalf("channels=%d metrics=%d, want 1/1", len(resp.Channels), len(resp.Metrics))
+	}
+
+	assertDist := func(m map[string]any) {
+		raw, ok := m["consumptionPolicyDistribution"]
+		if !ok {
+			t.Fatalf("缺少 consumptionPolicyDistribution: %v", m)
+		}
+		dist, ok := raw.(map[string]any)
+		if !ok {
+			t.Fatalf("consumptionPolicyDistribution 类型错误: %T", raw)
+		}
+		if dist["opportunistic"] != float64(3) {
+			t.Errorf("opportunistic=%v, want 3", dist["opportunistic"])
+		}
+		if dist["normal"] != float64(2) {
+			t.Errorf("normal=%v, want 2", dist["normal"])
+		}
+	}
+	assertDist(resp.Channels[0])
+	assertDist(resp.Metrics[0])
+}
+
 func TestGetChannelDashboard_LLMReturnsAllProtocolDashboards(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

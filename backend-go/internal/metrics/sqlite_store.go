@@ -1292,6 +1292,43 @@ func (s *SQLiteStore) requeueRecords(records []PersistentRecord, logPrefix strin
 	log.Printf("%s 警告: 写入缓冲区已满，丢弃 %d 条记录", logPrefix, len(records))
 }
 
+// ConsumptionPolicyDistribution 按 channel_uid 聚合的 ConsumptionPolicy 分布。
+// 外层 map key 为 channel_uid，内层 map key 为 policy（空字符串表示未记录）。
+type ConsumptionPolicyDistribution map[string]map[string]int64
+
+// QueryConsumptionPolicyDistribution 按 api_type + channel_uid + consumption_policy 聚合请求数。
+// since 指定时间起点，通常取最近 24 小时。
+func (s *SQLiteStore) QueryConsumptionPolicyDistribution(apiType string, since time.Time) (ConsumptionPolicyDistribution, error) {
+	s.flushMu.Lock()
+	s.flushBufferLocked()
+	s.flushMu.Unlock()
+
+	rows, err := s.db.Query(`
+		SELECT channel_uid, COALESCE(consumption_policy, '') AS policy, COUNT(*)
+		FROM request_records
+		WHERE api_type = ? AND timestamp >= ? AND channel_uid <> ''
+		GROUP BY channel_uid, policy
+	`, apiType, since.Unix())
+	if err != nil {
+		return nil, fmt.Errorf("查询 ConsumptionPolicy 分布失败: %w", err)
+	}
+	defer errutil.IgnoreDeferred(rows.Close)
+
+	result := make(ConsumptionPolicyDistribution)
+	for rows.Next() {
+		var channelUID, policy string
+		var count int64
+		if err := rows.Scan(&channelUID, &policy, &count); err != nil {
+			return nil, fmt.Errorf("扫描 ConsumptionPolicy 分布失败: %w", err)
+		}
+		if result[channelUID] == nil {
+			result[channelUID] = make(map[string]int64)
+		}
+		result[channelUID][policy] = count
+	}
+	return result, rows.Err()
+}
+
 // CostReportRow 成本报表聚合行
 type CostReportRow struct {
 	GroupKey                  string  `json:"groupKey"`

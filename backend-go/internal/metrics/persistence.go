@@ -45,6 +45,9 @@ type PersistenceStore interface {
 	// QueryModelCostBreakdown 按维度筛选后再按 model 分组返回 token 明细（用于逐模型定价计算）
 	QueryModelCostBreakdown(apiType string, since time.Time, groupBy string, filterGroupKey string) ([]ModelCostBreakdownRow, error)
 
+	// QueryConsumptionPolicyDistribution 按 channel_uid + consumption_policy 聚合请求数。
+	QueryConsumptionPolicyDistribution(apiType string, since time.Time) (ConsumptionPolicyDistribution, error)
+
 	// Close 关闭存储（会先刷新缓冲区）
 	Close() error
 }

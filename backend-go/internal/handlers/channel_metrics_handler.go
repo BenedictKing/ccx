@@ -879,6 +879,29 @@ func buildChannelDashboard(cfg config.Config, sch *scheduler.ChannelScheduler, c
 	}
 
 	metricsResult := buildChannelMetricsResult(metricsManager, upstreams, kind, true)
+
+	// 按 ConsumptionPolicy 聚合最近 24 小时请求分布，附加到渠道视图与指标结果。
+	policyDistribution := make(metrics.ConsumptionPolicyDistribution)
+	if store := metricsManager.GetPersistenceStore(); store != nil {
+		if dist, err := store.QueryConsumptionPolicyDistribution(channelType, time.Now().Add(-24*time.Hour)); err == nil {
+			policyDistribution = dist
+		} else {
+			log.Printf("[ChannelDashboard-%s] 查询 ConsumptionPolicy 分布失败: %v", channelType, err)
+		}
+	}
+	for i := range channels {
+		uid := upstreams[i].ChannelUID
+		if uid == "" {
+			continue
+		}
+		if dist, ok := policyDistribution[uid]; ok && len(dist) > 0 {
+			channels[i]["consumptionPolicyDistribution"] = dist
+			if i < len(metricsResult) {
+				metricsResult[i]["consumptionPolicyDistribution"] = dist
+			}
+		}
+	}
+
 	stats := gin.H{
 		"multiChannelMode":                      sch.IsMultiChannelMode(kind),
 		"activeChannelCount":                    sch.GetActiveChannelCount(kind),
