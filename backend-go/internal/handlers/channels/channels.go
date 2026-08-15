@@ -94,27 +94,27 @@ func referencedCapabilities(v config.ChannelView, byUID map[string]config.Endpoi
 
 // CreateRequest 统一渠道创建请求体。
 type CreateRequest struct {
-	Kind                  string              `json:"kind"` // messages|chat|responses|gemini|images|vectors
-	Name                  string              `json:"name"`
-	ServiceType           string              `json:"serviceType"`
-	BaseURL               string              `json:"baseUrl"`
-	BaseURLs              []string            `json:"baseUrls"`
-	APIKeys               []string            `json:"apiKeys"`
-	APIKeyConfigs         []config.APIKeyConfig `json:"apiKeyConfigs"`
-	ModelMapping          map[string]string   `json:"modelMapping"`
-	ReasoningMapping      map[string]string   `json:"reasoningMapping"`
-	SupportedModels       []string            `json:"supportedModels"`
-	CustomHeaders         map[string]string   `json:"customHeaders"`
-	ProxyURL              string              `json:"proxyUrl"`
-	RoutePrefix           string              `json:"routePrefix"`
-	Status                string              `json:"status"`
-	Placement             string              `json:"placement"`
-	AuthHeader            string              `json:"authHeader"`
-	InsecureSkipVerify    bool                `json:"insecureSkipVerify"`
-	RequestTimeoutMs      int                 `json:"requestTimeoutMs"`
-	ResponseHeaderTimeoutMs int               `json:"responseHeaderTimeoutMs"`
-	NoVision              bool                `json:"noVision"`
-	FastMode              bool                `json:"fastMode"`
+	Kind                    string                `json:"kind"` // messages|chat|responses|gemini|images|vectors
+	Name                    string                `json:"name"`
+	ServiceType             string                `json:"serviceType"`
+	BaseURL                 string                `json:"baseUrl"`
+	BaseURLs                []string              `json:"baseUrls"`
+	APIKeys                 []string              `json:"apiKeys"`
+	APIKeyConfigs           []config.APIKeyConfig `json:"apiKeyConfigs"`
+	ModelMapping            map[string]string     `json:"modelMapping"`
+	ReasoningMapping        map[string]string     `json:"reasoningMapping"`
+	SupportedModels         []string              `json:"supportedModels"`
+	CustomHeaders           map[string]string     `json:"customHeaders"`
+	ProxyURL                string                `json:"proxyUrl"`
+	RoutePrefix             string                `json:"routePrefix"`
+	Status                  string                `json:"status"`
+	Placement               string                `json:"placement"`
+	AuthHeader              string                `json:"authHeader"`
+	InsecureSkipVerify      bool                  `json:"insecureSkipVerify"`
+	RequestTimeoutMs        int                   `json:"requestTimeoutMs"`
+	ResponseHeaderTimeoutMs int                   `json:"responseHeaderTimeoutMs"`
+	NoVision                bool                  `json:"noVision"`
+	FastMode                bool                  `json:"fastMode"`
 }
 
 // Create 创建渠道（统一入口，按 kind 路由到对应数组）。
@@ -164,40 +164,40 @@ func (h *Handler) Create(c *gin.Context) {
 
 // UpdateRequest 统一渠道更新请求体。
 type UpdateRequest struct {
-	Kind                  *string                            `json:"kind"`
-	Name                  *string                            `json:"name"`
-	ServiceType           *string                            `json:"serviceType"`
-	BaseURL               *string                            `json:"baseUrl"`
-	BaseURLs              []string                           `json:"baseUrls"`
-	APIKeys               []string                           `json:"apiKeys"`
-	APIKeyConfigs         []config.APIKeyConfig              `json:"apiKeyConfigs"`
-	ModelMapping          map[string]string                  `json:"modelMapping"`
-	ModelCapabilities     map[string]config.UpstreamModelCapability `json:"modelCapabilities"`
-	ReasoningMapping      map[string]string                  `json:"reasoningMapping"`
-	SupportedModels       []string                           `json:"supportedModels"`
-	CustomHeaders         map[string]string                  `json:"customHeaders"`
-	ProxyURL              *string                            `json:"proxyUrl"`
-	RoutePrefix           *string                            `json:"routePrefix"`
-	Status                *string                            `json:"status"`
-	Priority              *int                               `json:"priority"`
-	AuthHeader            *string                            `json:"authHeader"`
-	InsecureSkipVerify    *bool                              `json:"insecureSkipVerify"`
-	RequestTimeoutMs      *int                               `json:"requestTimeoutMs"`
-	ResponseHeaderTimeoutMs *int                             `json:"responseHeaderTimeoutMs"`
-	NoVision              *bool                              `json:"noVision"`
-	FastMode              *bool                              `json:"fastMode"`
-	Remark                *string                            `json:"remark"`
-	Description           *string                            `json:"description"`
-	Website               *string                            `json:"website"`
-	Tags                  []string                           `json:"tags"`
-	NoVisionModels        []string                           `json:"noVisionModels"`
-	VisionFallbackModel   *string                            `json:"visionFallbackModel"`
-	RateLimitRPM          *int                               `json:"rateLimitRpm"`
-	RateLimitBurst        *int                               `json:"rateLimitBurst"`
-	RateLimitMaxConcurrent *int                              `json:"rateLimitMaxConcurrent"`
-	ConvertImageURLToB64JSON *bool                           `json:"convertImageUrlToB64Json"`
-	StripCodexClientTools *bool                              `json:"stripCodexClientTools"`
-	CodexToolCompat       *bool                              `json:"codexToolCompat"`
+	Kind                     *string                                   `json:"kind"`
+	Name                     *string                                   `json:"name"`
+	ServiceType              *string                                   `json:"serviceType"`
+	BaseURL                  *string                                   `json:"baseUrl"`
+	BaseURLs                 []string                                  `json:"baseUrls"`
+	APIKeys                  []string                                  `json:"apiKeys"`
+	APIKeyConfigs            []config.APIKeyConfig                     `json:"apiKeyConfigs"`
+	ModelMapping             map[string]string                         `json:"modelMapping"`
+	ModelCapabilities        map[string]config.UpstreamModelCapability `json:"modelCapabilities"`
+	ReasoningMapping         map[string]string                         `json:"reasoningMapping"`
+	SupportedModels          []string                                  `json:"supportedModels"`
+	CustomHeaders            map[string]string                         `json:"customHeaders"`
+	ProxyURL                 *string                                   `json:"proxyUrl"`
+	RoutePrefix              *string                                   `json:"routePrefix"`
+	Status                   *string                                   `json:"status"`
+	Priority                 *int                                      `json:"priority"`
+	AuthHeader               *string                                   `json:"authHeader"`
+	InsecureSkipVerify       *bool                                     `json:"insecureSkipVerify"`
+	RequestTimeoutMs         *int                                      `json:"requestTimeoutMs"`
+	ResponseHeaderTimeoutMs  *int                                      `json:"responseHeaderTimeoutMs"`
+	NoVision                 *bool                                     `json:"noVision"`
+	FastMode                 *bool                                     `json:"fastMode"`
+	Remark                   *string                                   `json:"remark"`
+	Description              *string                                   `json:"description"`
+	Website                  *string                                   `json:"website"`
+	Tags                     []string                                  `json:"tags"`
+	NoVisionModels           []string                                  `json:"noVisionModels"`
+	VisionFallbackModel      *string                                   `json:"visionFallbackModel"`
+	RateLimitRPM             *int                                      `json:"rateLimitRpm"`
+	RateLimitBurst           *int                                      `json:"rateLimitBurst"`
+	RateLimitMaxConcurrent   *int                                      `json:"rateLimitMaxConcurrent"`
+	ConvertImageURLToB64JSON *bool                                     `json:"convertImageUrlToB64Json"`
+	StripCodexClientTools    *bool                                     `json:"stripCodexClientTools"`
+	CodexToolCompat          *bool                                     `json:"codexToolCompat"`
 }
 
 // Update 更新渠道（按 ChannelUID 寻址，内部按 kind 路由）。
