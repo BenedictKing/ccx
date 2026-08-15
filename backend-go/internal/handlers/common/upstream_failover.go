@@ -1588,6 +1588,20 @@ func selectAttemptAPIKeyFiltered(
 	// 步骤 6: SortKeys
 	sortedKeys, _ := callPolicySortKeyBindings(policy, upstream.ChannelUID, baseURL, filteredKeys, apiType, c)
 
+	// public-key-routing shadow 对比：同时计算忽略 opportunistic 的基线排序，
+	// 如果基线首选与实际首选不同，记录差异供后续 trace/metrics 分析（不影响本次调度）。
+	if policy != nil && policy.Mode == autopilot.RoutingModeAuto {
+		baselineKeys := callPolicySortKeyBindingsBaseline(policy, upstream.ChannelUID, baseURL, filteredKeys, apiType, c)
+		if len(baselineKeys) > 0 && len(sortedKeys) > 0 && baselineKeys[0] != sortedKeys[0] {
+			c.Set("ccx.public_key_routing_shadow_diff", map[string]string{
+				"actual":   sortedKeys[0],
+				"baseline": baselineKeys[0],
+			})
+			RequestLogf(c, "[%s-PublicKeyRouting-ShadowDiff] 实际首选 %s 与基线首选 %s 不同",
+				apiType, autopilot.MaskKey(sortedKeys[0]), autopilot.MaskKey(baselineKeys[0]))
+		}
+	}
+
 	// 构建 candidate 查找表
 	candidateMap := make(map[string]keypool.Candidate, len(candidates))
 	for _, cand := range candidates {
@@ -1671,6 +1685,27 @@ func callPolicySortKeyBindings(policy *autopilot.EndpointAttemptPolicy, channelU
 		return keys, nil
 	}
 	return result, candidates
+}
+
+// callPolicySortKeyBindingsBaseline 安全调用 policy.SortKeyBindingsBaseline，panic 时回退原列表。
+func callPolicySortKeyBindingsBaseline(policy *autopilot.EndpointAttemptPolicy, channelUID, baseURL string, keys []string, apiType string, c *gin.Context) []string {
+	if policy == nil || policy.SortKeyBindingsBaseline == nil {
+		return keys
+	}
+	result := keys
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				RequestLogf(c, "[%s-Autopilot-EndpointPolicy] SortKeyBindingsBaseline panic: %v，回退原列表", apiType, r)
+				result = keys
+			}
+		}()
+		result, _ = policy.SortKeyBindingsBaseline(channelUID, baseURL, keys)
+	}()
+	if len(result) == 0 {
+		return keys
+	}
+	return result
 }
 
 // callPolicyFilterKeys 安全调用 policy.FilterKeys，panic 时回退原列表。

@@ -102,6 +102,10 @@ type EndpointAttemptPolicy struct {
 	// SortKeyBindings 对当前渠道内的 endpoint binding 做排序。
 	SortKeyBindings func(channelUID, baseURL string, apiKeys []string) ([]string, []EndpointCandidate)
 
+	// SortKeyBindingsBaseline 对当前渠道内的 endpoint binding 按旧逻辑排序（忽略 opportunistic 偏好）。
+	// 用于 public-key-routing shadow 对比：与实际 SortKeyBindings 结果比较，记录差异但不影响调度。
+	SortKeyBindingsBaseline func(channelUID, baseURL string, apiKeys []string) ([]string, []EndpointCandidate)
+
 	// RequestModel 请求的目标模型（用于查找 endpoint 画像的 MappedModel）。
 	RequestModel string
 
@@ -156,7 +160,7 @@ type keyBindingDecision struct {
 	OriginalIndex            int
 }
 
-func classifyKeyBinding(deps EndpointPolicyDeps, req *RequestProfile, channelUID, baseURL, apiKey string, originalIndex int) keyBindingDecision {
+func classifyKeyBinding(deps EndpointPolicyDeps, req *RequestProfile, channelUID, baseURL, apiKey string, originalIndex int, enableOpportunistic bool) keyBindingDecision {
 	decision := keyBindingDecision{
 		Key:                      apiKey,
 		HardEligible:             true,
@@ -230,7 +234,7 @@ func classifyKeyBinding(deps EndpointPolicyDeps, req *RequestProfile, channelUID
 		fs = deps.FastDecay.Score(profile.EndpointUID)
 	}
 	multiplier := 1.0
-	if decision.ConsumptionPolicy == config.KeyConsumptionOpportunistic {
+	if enableOpportunistic && decision.ConsumptionPolicy == config.KeyConsumptionOpportunistic {
 		multiplier = opportunisticUtilityMultiplier
 	}
 	decision.Candidate.UtilityScore = hs * fs * multiplier
@@ -355,12 +359,16 @@ func buildShadowPolicy(deps EndpointPolicyDeps, req *RequestProfile) *EndpointAt
 		return filterKeyBindings(deps, req, channelUID, baseURL, apiKeys, false)
 	}
 	policy.SortKeyBindings = func(channelUID, baseURL string, apiKeys []string) ([]string, []EndpointCandidate) {
-		sorted, cands := scoreAndSortKeyBindings(deps, req, targetByUID, channelUID, baseURL, apiKeys, false)
+		sorted, cands := scoreAndSortKeyBindings(deps, req, targetByUID, channelUID, baseURL, apiKeys, false, true)
 		for _, cand := range cands {
 			if cand.MappedModel != "" && cand.EndpointUID != "" {
 				modelByUID[cand.EndpointUID] = cand.MappedModel
 			}
 		}
+		return sorted, cands
+	}
+	policy.SortKeyBindingsBaseline = func(channelUID, baseURL string, apiKeys []string) ([]string, []EndpointCandidate) {
+		sorted, cands := scoreAndSortKeyBindings(deps, req, targetByUID, channelUID, baseURL, apiKeys, false, false)
 		return sorted, cands
 	}
 
@@ -537,12 +545,16 @@ func buildActivePolicy(deps EndpointPolicyDeps, req *RequestProfile, enableFilte
 		return filterKeyBindings(deps, req, channelUID, baseURL, apiKeys, enableFilter)
 	}
 	policy.SortKeyBindings = func(channelUID, baseURL string, apiKeys []string) ([]string, []EndpointCandidate) {
-		sorted, cands := scoreAndSortKeyBindings(deps, req, targetByUID, channelUID, baseURL, apiKeys, true)
+		sorted, cands := scoreAndSortKeyBindings(deps, req, targetByUID, channelUID, baseURL, apiKeys, true, true)
 		for _, cand := range cands {
 			if cand.MappedModel != "" && cand.EndpointUID != "" {
 				modelByUID[cand.EndpointUID] = cand.MappedModel
 			}
 		}
+		return sorted, cands
+	}
+	policy.SortKeyBindingsBaseline = func(channelUID, baseURL string, apiKeys []string) ([]string, []EndpointCandidate) {
+		sorted, cands := scoreAndSortKeyBindings(deps, req, targetByUID, channelUID, baseURL, apiKeys, true, false)
 		return sorted, cands
 	}
 
@@ -561,7 +573,7 @@ func filterKeyBindings(deps EndpointPolicyDeps, req *RequestProfile, channelUID,
 	}
 	filtered := make([]string, 0, len(apiKeys))
 	for idx, key := range apiKeys {
-		decision := classifyKeyBinding(deps, req, channelUID, baseURL, key, idx)
+		decision := classifyKeyBinding(deps, req, channelUID, baseURL, key, idx, true)
 		if !decision.HardEligible {
 			continue
 		}
@@ -573,11 +585,11 @@ func filterKeyBindings(deps EndpointPolicyDeps, req *RequestProfile, channelUID,
 	return filtered
 }
 
-func scoreAndSortKeyBindings(deps EndpointPolicyDeps, req *RequestProfile, targetByUID map[string]*ResolvedRouteTarget, channelUID, baseURL string, apiKeys []string, active bool) ([]string, []EndpointCandidate) {
+func scoreAndSortKeyBindings(deps EndpointPolicyDeps, req *RequestProfile, targetByUID map[string]*ResolvedRouteTarget, channelUID, baseURL string, apiKeys []string, active bool, enableOpportunistic bool) ([]string, []EndpointCandidate) {
 	decisions := make([]keyBindingDecision, 0, len(apiKeys))
 	candidates := make([]EndpointCandidate, 0, len(apiKeys))
 	for idx, key := range apiKeys {
-		decision := classifyKeyBinding(deps, req, channelUID, baseURL, key, idx)
+		decision := classifyKeyBinding(deps, req, channelUID, baseURL, key, idx, enableOpportunistic)
 		decisions = append(decisions, decision)
 		candidates = append(candidates, decision.Candidate)
 		recordTargetByUID(decision.Candidate, targetByUID)

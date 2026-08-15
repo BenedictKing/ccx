@@ -1535,6 +1535,58 @@ func TestBindingSort_OpportunisticFirst(t *testing.T) {
 	}
 }
 
+func TestBindingSort_BaselineIgnoresOpportunistic(t *testing.T) {
+	store := newTestProfileStore(t)
+	const (
+		channelUID = "ch-baseline"
+		baseURL    = "https://api.example.com"
+		keyOpp     = "sk-opp-baseline"
+		keyNormal  = "sk-normal-baseline"
+	)
+
+	for _, entry := range []struct{ key, model string }{
+		{keyOpp, "m1"},
+		{keyNormal, "m1"},
+	} {
+		uid := GenerateEndpointUID(channelUID, baseURL, KeyHashFromAPIKey(entry.key))
+		if err := store.Upsert(&KeyEndpointProfile{
+			ChannelUID:      channelUID,
+			ChannelKind:     "messages",
+			EndpointUID:     uid,
+			BaseURL:         baseURL,
+			KeyHash:         KeyHashFromAPIKey(entry.key),
+			HealthState:     HealthStateHealthy,
+			AvailableModels: []string{entry.model},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	policy := BuildEndpointPolicy(
+		EndpointPolicyDeps{
+			ProfileStore: store,
+			APIKeyConfigs: []config.APIKeyConfig{
+				{Key: keyOpp, ConsumptionPolicy: config.KeyConsumptionOpportunistic},
+				{Key: keyNormal, ConsumptionPolicy: config.KeyConsumptionNormal},
+			},
+		},
+		&RequestProfile{Model: "m1", ChannelKind: "messages"},
+		RoutingModeAuto,
+	)
+
+	actual, _ := policy.SortKeyBindings(channelUID, baseURL, []string{keyNormal, keyOpp})
+	baseline, _ := policy.SortKeyBindingsBaseline(channelUID, baseURL, []string{keyNormal, keyOpp})
+	if len(actual) != 2 || len(baseline) != 2 {
+		t.Fatalf("expected 2 keys, got actual=%d baseline=%d", len(actual), len(baseline))
+	}
+	if actual[0] != keyOpp {
+		t.Errorf("actual sort should prefer opportunistic key, got %v", actual)
+	}
+	if baseline[0] != keyNormal {
+		t.Errorf("baseline sort should ignore opportunistic preference, got %v", baseline)
+	}
+}
+
 func TestBindingSort_DegradedOpportunisticStillFirst(t *testing.T) {
 	store := newTestProfileStore(t)
 	const (
