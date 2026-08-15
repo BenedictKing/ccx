@@ -145,8 +145,9 @@ func TestBuildChannelEntryGroupMultiplierFallback(t *testing.T) {
 		ProviderID: "openai",
 		APIKeys:    []string{"sk-test"},
 		APIKeyConfigs: []config.APIKeyConfig{{
-			Key:             "sk-test",
-			GroupMultiplier: &gm,
+			Key:                "sk-test",
+			GroupMultiplier:    &gm,
+			MaxGroupMultiplier: &gm,
 		}},
 	}
 	channel := scheduler.ChannelInfo{Index: 0, Name: "newapi", Status: "active"}

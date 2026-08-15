@@ -1485,6 +1485,224 @@ func BenchmarkScoreEndpoint_NilProfile(b *testing.B) {
 	}
 }
 
+// ── public-key-routing binding 排序测试 ──
+
+func TestBindingSort_OpportunisticFirst(t *testing.T) {
+	store := newTestProfileStore(t)
+	const (
+		channelUID = "ch-sort"
+		baseURL    = "https://api.example.com"
+		keyOpp     = "sk-opportunistic"
+		keyNormal  = "sk-normal"
+	)
+	for _, entry := range []struct {
+		key, model string
+	}{
+		{keyOpp, "m1"},
+		{keyNormal, "m1"},
+	} {
+		uid := GenerateEndpointUID(channelUID, baseURL, KeyHashFromAPIKey(entry.key))
+		if err := store.Upsert(&KeyEndpointProfile{
+			ChannelUID:      channelUID,
+			ChannelKind:     "messages",
+			EndpointUID:     uid,
+			BaseURL:         baseURL,
+			KeyHash:         KeyHashFromAPIKey(entry.key),
+			HealthState:     HealthStateHealthy,
+			AvailableModels: []string{entry.model},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	policy := BuildEndpointPolicy(
+		EndpointPolicyDeps{
+			ProfileStore: store,
+			APIKeyConfigs: []config.APIKeyConfig{
+				{Key: keyOpp, ConsumptionPolicy: config.KeyConsumptionOpportunistic},
+				{Key: keyNormal, ConsumptionPolicy: config.KeyConsumptionNormal},
+			},
+		},
+		&RequestProfile{Model: "m1", ChannelKind: "messages"},
+		RoutingModeAuto,
+	)
+	sorted, _ := policy.SortKeyBindings(channelUID, baseURL, []string{keyNormal, keyOpp})
+	if len(sorted) != 2 {
+		t.Fatalf("expected 2 keys, got %d", len(sorted))
+	}
+	if sorted[0] != keyOpp {
+		t.Errorf("opportunistic key 应排在 normal key 前面: got %v", sorted)
+	}
+}
+
+func TestBindingSort_DegradedOpportunisticStillFirst(t *testing.T) {
+	store := newTestProfileStore(t)
+	const (
+		channelUID = "ch-degraded"
+		baseURL    = "https://api.example.com"
+		keyOpp     = "sk-opp-degraded"
+		keyNormal  = "sk-normal-healthy"
+	)
+
+	uidOpp := GenerateEndpointUID(channelUID, baseURL, KeyHashFromAPIKey(keyOpp))
+	if err := store.Upsert(&KeyEndpointProfile{
+		ChannelUID:      channelUID,
+		ChannelKind:     "messages",
+		EndpointUID:     uidOpp,
+		BaseURL:         baseURL,
+		KeyHash:         KeyHashFromAPIKey(keyOpp),
+		HealthState:     HealthStateDegraded,
+		AvailableModels: []string{"m1"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	uidNormal := GenerateEndpointUID(channelUID, baseURL, KeyHashFromAPIKey(keyNormal))
+	if err := store.Upsert(&KeyEndpointProfile{
+		ChannelUID:      channelUID,
+		ChannelKind:     "messages",
+		EndpointUID:     uidNormal,
+		BaseURL:         baseURL,
+		KeyHash:         KeyHashFromAPIKey(keyNormal),
+		HealthState:     HealthStateHealthy,
+		AvailableModels: []string{"m1"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	policy := BuildEndpointPolicy(
+		EndpointPolicyDeps{
+			ProfileStore: store,
+			APIKeyConfigs: []config.APIKeyConfig{
+				{Key: keyOpp, ConsumptionPolicy: config.KeyConsumptionOpportunistic},
+				{Key: keyNormal, ConsumptionPolicy: config.KeyConsumptionNormal},
+			},
+		},
+		&RequestProfile{Model: "m1", ChannelKind: "messages"},
+		RoutingModeAuto,
+	)
+	sorted, _ := policy.SortKeyBindings(channelUID, baseURL, []string{keyNormal, keyOpp})
+	if len(sorted) != 2 {
+		t.Fatalf("expected 2 keys, got %d", len(sorted))
+	}
+	// 策略 B：degraded opportunistic 仍优先于 healthy normal
+	if sorted[0] != keyOpp {
+		t.Errorf("degraded opportunistic 应仍排在 normal 前面: got %v", sorted)
+	}
+}
+
+func TestBindingFilter_HardExcludedNotFailOpen(t *testing.T) {
+	store := newTestProfileStore(t)
+	const (
+		channelUID = "ch-hard"
+		baseURL    = "https://api.example.com"
+		keyDead    = "sk-dead"
+		keyGood    = "sk-good"
+	)
+
+	uidDead := GenerateEndpointUID(channelUID, baseURL, KeyHashFromAPIKey(keyDead))
+	if err := store.Upsert(&KeyEndpointProfile{
+		ChannelUID:      channelUID,
+		ChannelKind:     "messages",
+		EndpointUID:     uidDead,
+		BaseURL:         baseURL,
+		KeyHash:         KeyHashFromAPIKey(keyDead),
+		HealthState:     HealthStateDead,
+		AvailableModels: []string{"m1"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	uidGood := GenerateEndpointUID(channelUID, baseURL, KeyHashFromAPIKey(keyGood))
+	if err := store.Upsert(&KeyEndpointProfile{
+		ChannelUID:      channelUID,
+		ChannelKind:     "messages",
+		EndpointUID:     uidGood,
+		BaseURL:         baseURL,
+		KeyHash:         KeyHashFromAPIKey(keyGood),
+		HealthState:     HealthStateHealthy,
+		AvailableModels: []string{"m1"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	policy := BuildEndpointPolicy(
+		EndpointPolicyDeps{
+			ProfileStore: store,
+			APIKeyConfigs: []config.APIKeyConfig{
+				{Key: keyDead, ConsumptionPolicy: config.KeyConsumptionOpportunistic},
+				{Key: keyGood, ConsumptionPolicy: config.KeyConsumptionNormal},
+			},
+		},
+		&RequestProfile{Model: "m1", ChannelKind: "messages"},
+		RoutingModeAuto,
+	)
+
+	// FilterKeyBindings：dead key 应被硬过滤，只保留 good key
+	filtered := policy.FilterKeyBindings(channelUID, baseURL, []string{keyDead, keyGood})
+	if len(filtered) != 1 || filtered[0] != keyGood {
+		t.Fatalf("dead key 不应出现在过滤结果中: got %v", filtered)
+	}
+
+	// 仅 dead key：不应 fail-open 回全量
+	filteredOnly := policy.FilterKeyBindings(channelUID, baseURL, []string{keyDead})
+	if len(filteredOnly) != 0 {
+		t.Fatalf("仅 dead key 时不应 fail-open: got %v", filteredOnly)
+	}
+}
+
+func TestBindingSort_ZeroCostTieBreak(t *testing.T) {
+	store := newTestProfileStore(t)
+	const (
+		channelUID = "ch-cost"
+		baseURL    = "https://api.example.com"
+		keyZero    = "sk-zero"
+		keyPaid    = "sk-paid"
+	)
+	zero := 0.0
+	two := 2.0
+
+	for _, entry := range []struct {
+		key, model string
+	}{
+		{keyZero, "m1"},
+		{keyPaid, "m1"},
+	} {
+		uid := GenerateEndpointUID(channelUID, baseURL, KeyHashFromAPIKey(entry.key))
+		if err := store.Upsert(&KeyEndpointProfile{
+			ChannelUID:      channelUID,
+			ChannelKind:     "messages",
+			EndpointUID:     uid,
+			BaseURL:         baseURL,
+			KeyHash:         KeyHashFromAPIKey(entry.key),
+			HealthState:     HealthStateHealthy,
+			AvailableModels: []string{entry.model},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	policy := BuildEndpointPolicy(
+		EndpointPolicyDeps{
+			ProfileStore: store,
+			APIKeyConfigs: []config.APIKeyConfig{
+				{Key: keyZero, GroupMultiplier: &zero, MaxGroupMultiplier: &zero, ConsumptionPolicy: config.KeyConsumptionNormal},
+				{Key: keyPaid, GroupMultiplier: &two, MaxGroupMultiplier: &two, ConsumptionPolicy: config.KeyConsumptionNormal},
+			},
+		},
+		&RequestProfile{Model: "m1", ChannelKind: "messages"},
+		RoutingModeAuto,
+	)
+	sorted, _ := policy.SortKeyBindings(channelUID, baseURL, []string{keyPaid, keyZero})
+	if len(sorted) != 2 {
+		t.Fatalf("expected 2 keys, got %d", len(sorted))
+	}
+	// 同为 normal，零成本应排在非零成本前面
+	if sorted[0] != keyZero {
+		t.Errorf("zero cost 应排在 paid cost 前面: got %v", sorted)
+	}
+}
+
 func BenchmarkBuildEndpointPolicy_Shadow(b *testing.B) {
 	deps := EndpointPolicyDeps{}
 	req := &RequestProfile{Model: "m1", ChannelKind: "messages"}

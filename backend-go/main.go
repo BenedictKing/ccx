@@ -839,6 +839,7 @@ func main() {
 				TraceStore:    traceStore,
 				ModelResolver: autopilotManager.ModelResolver(),
 				GetRoutingCfg: func() config.AutopilotRoutingConfig { return cfgManager.GetAutopilotRouting() },
+				APIKeyConfigs: config.NormalizeAPIKeyConfigsForView(*upstream),
 			}
 			return autopilot.BuildEndpointPolicy(deps, &req, mode)
 		})

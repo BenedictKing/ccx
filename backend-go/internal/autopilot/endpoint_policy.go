@@ -46,6 +46,18 @@ type EndpointCandidate struct {
 	LatencyScore   float64 `json:"latencyScore"`
 	CostScore      float64 `json:"costScore"`
 
+	// ── public-key-routing 运行时明细 ──
+	ConsumptionPolicy        string  `json:"consumptionPolicy,omitempty"`
+	ConfiguredCostMultiplier float64 `json:"configuredCostMultiplier,omitempty"`
+	EffectiveCostUSD         float64 `json:"effectiveCostUsd,omitempty"`
+	EffectiveCostReason      string  `json:"effectiveCostReason,omitempty"`
+	Opportunistic            bool    `json:"opportunistic,omitempty"`
+	HardFiltered             bool    `json:"hardFiltered,omitempty"`
+	FastDecayFiltered        bool    `json:"fastDecayFiltered,omitempty"`
+	SortGroup                int     `json:"sortGroup,omitempty"`
+	Weight                   int     `json:"weight,omitempty"`
+	OriginalIndex            int     `json:"originalIndex,omitempty"`
+
 	// ── 来源信任等级（用于 tie-breaker）──
 	OriginTier ChannelOriginTier `json:"originTier"` // first | second | third | local | unknown
 }
@@ -128,6 +140,97 @@ type EndpointPolicyDeps struct {
 	TraceStore    *TraceStore                          // 路由决策追踪存储
 	ModelResolver *ModelResolver                       // Phase 3B-2: 自动模型映射器（nil 时不触发自动映射）
 	GetRoutingCfg func() config.AutopilotRoutingConfig // Phase 3B-2: 路由配置读取（用于 AutoResolve 门控）
+	APIKeyConfigs []config.APIKeyConfig                // 当前上游的 key 配置视图（按 Key 精确匹配）
+}
+
+type keyBindingDecision struct {
+	Key                      string
+	Candidate                EndpointCandidate
+	HardEligible             bool
+	FastDecayEligible        bool
+	ConsumptionPolicy        config.KeyConsumptionPolicy
+	ConfiguredCostMultiplier float64
+	EffectiveCostUSD         float64
+	EffectiveCostReason      string
+	Weight                   int
+	OriginalIndex            int
+}
+
+func classifyKeyBinding(deps EndpointPolicyDeps, req *RequestProfile, channelUID, baseURL, apiKey string, originalIndex int) keyBindingDecision {
+	decision := keyBindingDecision{
+		Key:                      apiKey,
+		HardEligible:             true,
+		FastDecayEligible:        true,
+		ConsumptionPolicy:        config.KeyConsumptionNormal,
+		ConfiguredCostMultiplier: -1,
+		EffectiveCostUSD:         -1,
+		EffectiveCostReason:      "unconfigured",
+		OriginalIndex:            originalIndex,
+	}
+	cand := scoreEndpointForBinding(deps.ProfileStore, deps.FastDecay, req.Model, channelUID, baseURL, apiKey, req, &deps)
+	cand.OriginalIndex = originalIndex
+	decision.Candidate = cand
+
+	profile := findProfileForBinding(deps.ProfileStore, channelUID, baseURL, apiKey)
+	if profile == nil {
+		decision.Candidate.Reason = "no_profile"
+		decision.Candidate.SortGroup = 3
+		return decision
+	}
+	cfg := findAPIKeyConfig(deps.APIKeyConfigs, apiKey)
+	if cfg != nil {
+		decision.ConsumptionPolicy = config.NormalizeKeyConsumptionPolicy(cfg.ConsumptionPolicy)
+		decision.Candidate.ConsumptionPolicy = string(decision.ConsumptionPolicy)
+		decision.Candidate.Opportunistic = decision.ConsumptionPolicy == config.KeyConsumptionOpportunistic
+		decision.Weight = cfg.Weight
+		decision.Candidate.Weight = cfg.Weight
+		if cfg.GroupMultiplier != nil {
+			decision.ConfiguredCostMultiplier = *cfg.GroupMultiplier
+			decision.Candidate.ConfiguredCostMultiplier = *cfg.GroupMultiplier
+			decision.EffectiveCostUSD = *cfg.GroupMultiplier
+			decision.EffectiveCostReason = "configured_group_multiplier"
+			decision.Candidate.EffectiveCostUSD = *cfg.GroupMultiplier
+			decision.Candidate.EffectiveCostReason = "configured_group_multiplier"
+		}
+		eligibility := config.EvaluateAPIKeyMultiplierEligibility(*cfg, time.Now())
+		if !eligibility.Eligible {
+			decision.HardEligible = false
+			decision.Candidate.HardFiltered = true
+			decision.Candidate.Reason = string(eligibility.Reason)
+			decision.Candidate.SortGroup = 4
+			return decision
+		}
+	}
+	if !profileSupportsRequestModel(profile, req.Model, req, &deps) {
+		decision.HardEligible = false
+		decision.Candidate.HardFiltered = true
+		decision.Candidate.Reason = "model_ineligible"
+		decision.Candidate.SortGroup = 4
+		return decision
+	}
+	if profile.HealthState == HealthStateDead || profile.HealthState == HealthStateMisconfigured {
+		decision.HardEligible = false
+		decision.Candidate.HardFiltered = true
+		decision.Candidate.Reason = "health_ineligible"
+		decision.Candidate.SortGroup = 4
+		return decision
+	}
+	if deps.FastDecay != nil && decision.ConsumptionPolicy == config.KeyConsumptionOpportunistic {
+		if deps.FastDecay.Score(profile.EndpointUID) < fastDecayFilterThreshold {
+			decision.FastDecayEligible = false
+			decision.Candidate.FastDecayFiltered = true
+			decision.Candidate.Reason = "opportunistic_decayed"
+		}
+	}
+	if decision.ConsumptionPolicy == config.KeyConsumptionOpportunistic {
+		decision.Candidate.SortGroup = 0
+		if !decision.FastDecayEligible {
+			decision.Candidate.SortGroup = 1
+		}
+	} else {
+		decision.Candidate.SortGroup = 2
+	}
+	return decision
 }
 
 // ── 构建入口 ──
@@ -140,6 +243,19 @@ type EndpointPolicyDeps struct {
 //   - shadow / dry_run → 计算评分 + 记录 trace，仅执行模型兼容硬约束
 //   - assist → 真实排序，仅执行模型兼容硬约束
 //   - auto → binding 级真实过滤（健康 / 衰减 / 模型能力）+ 排序，未知画像 fail-open
+func findAPIKeyConfig(configs []config.APIKeyConfig, apiKey string) *config.APIKeyConfig {
+	if apiKey == "" {
+		return nil
+	}
+	for i := range configs {
+		if configs[i].Key == apiKey {
+			cfg := configs[i]
+			return &cfg
+		}
+	}
+	return nil
+}
+
 func BuildEndpointPolicy(deps EndpointPolicyDeps, req *RequestProfile, mode RoutingMode) *EndpointAttemptPolicy {
 	if req == nil {
 		return nil
@@ -440,22 +556,13 @@ func filterKeyBindings(deps EndpointPolicyDeps, req *RequestProfile, channelUID,
 		return apiKeys
 	}
 	filtered := make([]string, 0, len(apiKeys))
-	for _, key := range apiKeys {
-		profile := findProfileForBinding(deps.ProfileStore, channelUID, baseURL, key)
-		if profile == nil {
-			filtered = append(filtered, key)
+	for idx, key := range apiKeys {
+		decision := classifyKeyBinding(deps, req, channelUID, baseURL, key, idx)
+		if !decision.HardEligible {
 			continue
 		}
-		if !profileSupportsRequestModel(profile, req.Model, req, &deps) {
+		if filterOperationalState && decision.ConsumptionPolicy == config.KeyConsumptionOpportunistic && !decision.FastDecayEligible {
 			continue
-		}
-		if filterOperationalState {
-			if profile.HealthState == HealthStateDead || profile.HealthState == HealthStateMisconfigured {
-				continue
-			}
-			if deps.FastDecay != nil && deps.FastDecay.Score(profile.EndpointUID) < fastDecayFilterThreshold {
-				continue
-			}
 		}
 		filtered = append(filtered, key)
 	}
@@ -463,15 +570,43 @@ func filterKeyBindings(deps EndpointPolicyDeps, req *RequestProfile, channelUID,
 }
 
 func scoreAndSortKeyBindings(deps EndpointPolicyDeps, req *RequestProfile, targetByUID map[string]*ResolvedRouteTarget, channelUID, baseURL string, apiKeys []string, active bool) ([]string, []EndpointCandidate) {
+	decisions := make([]keyBindingDecision, 0, len(apiKeys))
 	candidates := make([]EndpointCandidate, 0, len(apiKeys))
-	for _, key := range apiKeys {
-		cand := scoreEndpointForBinding(deps.ProfileStore, deps.FastDecay, req.Model, channelUID, baseURL, key, req, &deps)
-		candidates = append(candidates, cand)
-		recordTargetByUID(cand, targetByUID)
+	for idx, key := range apiKeys {
+		decision := classifyKeyBinding(deps, req, channelUID, baseURL, key, idx)
+		decisions = append(decisions, decision)
+		candidates = append(candidates, decision.Candidate)
+		recordTargetByUID(decision.Candidate, targetByUID)
 	}
 	sorted := append([]string(nil), apiKeys...)
 	if active {
-		sortEndpointsByScore(sorted, candidates)
+		sort.SliceStable(sorted, func(i, j int) bool {
+			var left, right keyBindingDecision
+			for _, d := range decisions {
+				if d.Key == sorted[i] && left.Key == "" {
+					left = d
+				}
+				if d.Key == sorted[j] && right.Key == "" {
+					right = d
+				}
+			}
+			if left.Candidate.SortGroup != right.Candidate.SortGroup {
+				return left.Candidate.SortGroup < right.Candidate.SortGroup
+			}
+			if left.Candidate.HealthScore != right.Candidate.HealthScore {
+				return left.Candidate.HealthScore > right.Candidate.HealthScore
+			}
+			if left.Candidate.FastDecayScore != right.Candidate.FastDecayScore {
+				return left.Candidate.FastDecayScore > right.Candidate.FastDecayScore
+			}
+			if left.EffectiveCostUSD >= 0 && right.EffectiveCostUSD >= 0 && left.EffectiveCostUSD != right.EffectiveCostUSD {
+				return left.EffectiveCostUSD < right.EffectiveCostUSD
+			}
+			if left.Weight != right.Weight {
+				return left.Weight > right.Weight
+			}
+			return left.OriginalIndex < right.OriginalIndex
+		})
 	}
 	return sorted, candidates
 }

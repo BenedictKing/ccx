@@ -1342,44 +1342,45 @@ func (r *SmartRouter) buildChannelEntry(
 				}
 			}
 		}
-		// 默认成本：标价 × 分时倍率；如 key 配置了分组倍率，则再叠加分组倍率影响。
-		// effective USD 可用时（下方 ResolveEffectiveCostUSD）会用更精确的实际到账成本覆盖它。
-		// Phase 1：取 view 中有效 Key 的最小倍率（含 0），不忽略零倍率；Key 级过滤在 Phase 2 细化。
-		groupMultiplier := 1.0
-		found := false
+		// 默认成本：请求可用 key 中的最小有效成本（保留 0 成本）。
+		entry.EstimatedCost = -1
 		for _, cfg := range config.NormalizeAPIKeyConfigsForView(*upstream) {
+			eligibility := config.EvaluateAPIKeyMultiplierEligibility(cfg, r.currentTime())
+			if !eligibility.Eligible {
+				continue
+			}
+			groupMultiplier := 1.0
 			if cfg.GroupMultiplier != nil {
-				if !found || *cfg.GroupMultiplier < groupMultiplier {
-					groupMultiplier = *cfg.GroupMultiplier
-					found = true
+				groupMultiplier = *cfg.GroupMultiplier
+			}
+			candidateCost := listCost * timeMultiplier * groupMultiplier
+			if graph != nil && r.subscriptionStore != nil {
+				subscriptionUID := strings.TrimSpace(cfg.SourceSubscriptionUID)
+				if subscriptionUID != "" {
+					subscription := r.subscriptionStore.Get(subscriptionUID)
+					if subscription != nil && subscription.PaymentAmount != nil && subscription.CreditAmount != nil {
+						resolvedCost := ResolveEffectiveCostUSD(EffectiveCostInput{
+							Graph: graph, ListCostAmount: listCost, ListCostUnit: "USD",
+							GroupMultiplier: groupMultiplier, TimeMultiplier: timeMultiplier,
+							PaymentAmount: *subscription.PaymentAmount, PaymentUnit: subscription.PaymentUnit,
+							CreditAmount: *subscription.CreditAmount, CreditUnit: subscription.CreditUnit,
+							KeyUID: cfg.KeyUID, SubscriptionUID: subscriptionUID,
+						})
+						if resolvedCost.Available {
+							candidateCost = resolvedCost.EffectiveCostUSD
+						} else {
+							r.logEffectiveCostMissingOnce(subscriptionUID, resolvedCost.Reason)
+						}
+					}
 				}
+			}
+			if entry.EstimatedCost < 0 || candidateCost < entry.EstimatedCost {
+				entry.EstimatedCost = candidateCost
 			}
 		}
-		entry.EstimatedCost = listCost * timeMultiplier * groupMultiplier
-		// 只有订阅到账规则和汇率快照完整时，才用统一 effective USD 覆盖标价×分时倍率×分组倍率。
-		if graph != nil && r.subscriptionStore != nil {
-			for _, cfg := range config.NormalizeAPIKeyConfigsForView(*upstream) {
-				subscriptionUID := strings.TrimSpace(cfg.SourceSubscriptionUID)
-				if subscriptionUID == "" || cfg.GroupMultiplier == nil {
-					continue
-				}
-				subscription := r.subscriptionStore.Get(subscriptionUID)
-				if subscription == nil || subscription.PaymentAmount == nil || subscription.CreditAmount == nil {
-					continue
-				}
-				resolvedCost := ResolveEffectiveCostUSD(EffectiveCostInput{
-					Graph: graph, ListCostAmount: listCost, ListCostUnit: "USD",
-					GroupMultiplier: *cfg.GroupMultiplier, TimeMultiplier: timeMultiplier,
-					PaymentAmount: *subscription.PaymentAmount, PaymentUnit: subscription.PaymentUnit,
-					CreditAmount: *subscription.CreditAmount, CreditUnit: subscription.CreditUnit,
-					KeyUID: cfg.KeyUID, SubscriptionUID: subscriptionUID,
-				})
-				if resolvedCost.Available {
-					entry.EstimatedCost = resolvedCost.EffectiveCostUSD
-					break
-				}
-				r.logEffectiveCostMissingOnce(subscriptionUID, resolvedCost.Reason)
-			}
+		// 无可用 key 时保持默认倍率 1.0，避免把无配置渠道错误排除
+		if entry.EstimatedCost < 0 {
+			entry.EstimatedCost = listCost * timeMultiplier
 		}
 	}
 	modelFamily := InferModelFamily(actualModel, modelProvider)
