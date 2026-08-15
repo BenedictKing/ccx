@@ -288,11 +288,12 @@ func applyAdaptiveResponseHeaderTimeout(
 // buildRequestCostContext 在请求开始时解析并固化 list/effective 成本输入。
 // 订阅到账资料不在 handler 层动态读取；当前仅固化可证明的 list cost 与 legacy G/T，
 // 完整订阅规则由统一 resolver 接入后标记 Available。
-func buildRequestCostContext(cfgManager *config.ConfigManager, upstream *config.UpstreamConfig, selection keypool.Selection, model string) metrics.RequestCostContext {
+func buildRequestCostContext(cfgManager *config.ConfigManager, upstream *config.UpstreamConfig, selection keypool.Selection, model string, consumptionPolicy string) metrics.RequestCostContext {
 	ctx := metrics.RequestCostContext{
 		KeyUID:              selection.KeyUID,
 		SubscriptionUID:     strings.TrimSpace(selection.Config.SourceSubscriptionUID),
 		EffectiveCostReason: "subscription payment/credit snapshot unavailable",
+		ConsumptionPolicy:   consumptionPolicy,
 	}
 	resolved := config.ResolveUpstreamCapability(model, upstream, nil)
 	ctx.ListCostUSD = metrics.CalculateTokenCostUSDWithPricing(resolved.Capability.Pricing, 0, 0, 0, 0)
@@ -795,19 +796,25 @@ func TryUpstreamWithAllKeys(
 			// 否则日志会把 chat 上的尝试错误地展示成 messages 渠道的尝试。
 			logRequestID := CreatePendingLog(channelLogStore, metricsKey, executionIndex, upstream.Name, actualAttemptModel, actualOriginalModel, originalReasoningEffort, actualReasoningEffort, apiKey, currentBaseURL, executionAPIType, operation, metrics.RequestSourceProxy, AgentContextFromGin(c), SessionIDFromGin(c), logOpts...)
 
+			// 计算当前 Key 的 ConsumptionPolicy，供 metrics 与 trace 共同使用。
+			consumptionPolicy := ""
+			if endpointPolicy != nil {
+				if _, cands := callPolicySortKeyBindings(endpointPolicy, upstream.ChannelUID, currentBaseURL, []string{apiKey}, apiType, c); len(cands) > 0 {
+					consumptionPolicy = cands[0].ConsumptionPolicy
+				}
+			}
+			c.Set("ccx.autopilot_consumption_policy", consumptionPolicy)
+
 			// 向 Autopilot trace 追加一条 "started" endpoint 尝试摘要（fail-open）
 			attemptTraceUID, _ := c.Get("ccx.autopilot_trace_uid")
 			if uid, ok := attemptTraceUID.(string); ok && uid != "" {
-				consumptionPolicy := ""
 				configuredCostMultiplier := -1.0
 				if endpointPolicy != nil {
 					if _, cands := callPolicySortKeyBindings(endpointPolicy, upstream.ChannelUID, currentBaseURL, []string{apiKey}, apiType, c); len(cands) > 0 {
-						consumptionPolicy = cands[0].ConsumptionPolicy
 						configuredCostMultiplier = cands[0].ConfiguredCostMultiplier
-						c.Set("ccx.autopilot_consumption_policy", consumptionPolicy)
-						c.Set("ccx.autopilot_configured_cost_multiplier", configuredCostMultiplier)
 					}
 				}
+				c.Set("ccx.autopilot_configured_cost_multiplier", configuredCostMultiplier)
 				recordEndpointAttempt(uid, autopilot.EndpointAttemptSummary{
 					AttemptUID:               logRequestID,
 					Status:                   "started",
@@ -820,7 +827,7 @@ func TryUpstreamWithAllKeys(
 			}
 
 			// TCP 建连开始即计数：将活跃度统计提前到发起上游请求之前；同时关联 proxyKeyMask 用于成本报表持久化
-			costContext := buildRequestCostContext(cfgManager, upstream, selection, actualAttemptModel)
+			costContext := buildRequestCostContext(cfgManager, upstream, selection, actualAttemptModel, consumptionPolicy)
 			requestID := metricsManager.RecordRequestConnectedWithCostContext(currentBaseURL, apiKey, metricsServiceType, upstream.ChannelUID, actualAttemptModel, model, proxyKeyMask, costContext)
 
 			attemptStartedAt := time.Now()

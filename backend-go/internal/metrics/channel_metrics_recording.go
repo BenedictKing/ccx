@@ -206,6 +206,7 @@ type RequestCostContext struct {
 	EffectiveCostMultiplier float64
 	EffectiveCostAvailable  bool
 	EffectiveCostReason     string
+	ConsumptionPolicy       string
 }
 
 // RecordRequestConnectedWithCostContext 记录请求并固化本次计费上下文。
@@ -229,6 +230,7 @@ func (m *MetricsManager) RecordRequestConnectedWithCostContext(baseURL, apiKey, 
 	record.EffectiveCostMultiplier = cost.EffectiveCostMultiplier
 	record.EffectiveCostAvailable = cost.EffectiveCostAvailable
 	record.EffectiveCostReason = cost.EffectiveCostReason
+	record.ConsumptionPolicy = cost.ConsumptionPolicy
 	if cost.EffectiveCostAvailable {
 		record.EffectiveCostUSD = ApplyEffectiveCostMultiplier(cost.ListCostUSD, cost.EffectiveCostMultiplier)
 	}
@@ -329,6 +331,7 @@ func (m *MetricsManager) RecordRequestFinalizeOutcome(baseURL, apiKey, serviceTy
 				EffectiveCostUSD:        record.EffectiveCostUSD,
 				EffectiveCostAvailable:  record.EffectiveCostAvailable,
 				EffectiveCostReason:     record.EffectiveCostReason,
+				ConsumptionPolicy:       record.ConsumptionPolicy,
 			})
 		}
 		return
@@ -358,6 +361,7 @@ func (m *MetricsManager) RecordRequestFinalizeOutcome(baseURL, apiKey, serviceTy
 			APIType:             m.apiType,
 			Model:               record.Model,
 			ProxyKeyMask:        record.ProxyKeyMask,
+			ConsumptionPolicy:   record.ConsumptionPolicy,
 		})
 	}
 }

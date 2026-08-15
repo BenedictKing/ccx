@@ -74,3 +74,58 @@ func TestQueryAggregatedHistoryWaitsForFlushAndFlushesBuffer(t *testing.T) {
 
 	store.flushMu.Lock()
 }
+
+func TestLoadRecords_RoundTripsConsumptionPolicy(t *testing.T) {
+	store, err := NewSQLiteStore(&SQLiteStoreConfig{
+		DBPath:        filepath.Join(t.TempDir(), "metrics.db"),
+		RetentionDays: 7,
+	})
+	if err != nil {
+		t.Fatalf("NewSQLiteStore() error = %v", err)
+	}
+	defer errutil.IgnoreDeferred(store.Close)
+
+	now := time.Now()
+	records := []PersistentRecord{
+		{
+			MetricsKey:        GenerateMetricsKey("https://example.com", "sk-public"),
+			BaseURL:           "https://example.com",
+			KeyMask:           "sk-***blic",
+			Timestamp:         now,
+			Success:           true,
+			APIType:           "messages",
+			ConsumptionPolicy: "opportunistic",
+		},
+		{
+			MetricsKey:        GenerateMetricsKey("https://example.com", "sk-private"),
+			BaseURL:           "https://example.com",
+			KeyMask:           "sk-***vate",
+			Timestamp:         now,
+			Success:           true,
+			APIType:           "messages",
+			ConsumptionPolicy: "normal",
+		},
+	}
+	for _, r := range records {
+		store.AddRecord(r)
+	}
+	store.flush()
+
+	loaded, err := store.LoadRecords(now.Add(-time.Hour), "messages")
+	if err != nil {
+		t.Fatalf("LoadRecords() error = %v", err)
+	}
+	if len(loaded) != 2 {
+		t.Fatalf("len(loaded) = %d, want 2", len(loaded))
+	}
+	byKey := make(map[string]string)
+	for _, r := range loaded {
+		byKey[r.KeyMask] = r.ConsumptionPolicy
+	}
+	if byKey["sk-***blic"] != "opportunistic" {
+		t.Errorf("public key consumptionPolicy = %q, want opportunistic", byKey["sk-***blic"])
+	}
+	if byKey["sk-***vate"] != "normal" {
+		t.Errorf("private key consumptionPolicy = %q, want normal", byKey["sk-***vate"])
+	}
+}

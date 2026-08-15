@@ -96,4 +96,5 @@ type PersistentRecord struct {
 	EffectiveCostUSD        float64
 	EffectiveCostAvailable  bool
 	EffectiveCostReason     string
+	ConsumptionPolicy       string
 }

@@ -292,6 +292,24 @@ func initSchema(db *sql.DB) error {
 		log.Printf("[SQLite-Migration] schema 升级: v5 -> v6 (固化 effective USD 成本)")
 	}
 
+	// v7: 记录 Key 级 ConsumptionPolicy，用于 opportunistic 消耗分析。
+	var policyVersion int
+	if err := db.QueryRow("PRAGMA user_version").Scan(&policyVersion); err != nil {
+		return fmt.Errorf("读取 schema 版本失败: %w", err)
+	}
+	if policyVersion < 7 {
+		migrations := []string{
+			"ALTER TABLE request_records ADD COLUMN consumption_policy TEXT NOT NULL DEFAULT ''",
+			"PRAGMA user_version = 7",
+		}
+		for _, q := range migrations {
+			if _, err := db.Exec(q); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+				return fmt.Errorf("migration v6->v7 failed: %w", err)
+			}
+		}
+		log.Printf("[SQLite-Migration] schema 升级: v6 -> v7 (添加 consumption_policy 列)")
+	}
+
 	return nil
 }
 
@@ -716,8 +734,8 @@ func (s *SQLiteStore) batchInsertRecords(records []PersistentRecord) error {
 		(metrics_key, base_url, key_mask, timestamp, success, failure_class,
 		 input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, api_type, model, proxy_key_mask,
 		 channel_uid, route_model, key_uid, subscription_uid, exchange_snapshot_version,
-		 list_cost_usd, effective_cost_usd, effective_cost_available, effective_cost_reason)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 list_cost_usd, effective_cost_usd, effective_cost_available, effective_cost_reason, consumption_policy)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return err
@@ -735,7 +753,7 @@ func (s *SQLiteStore) batchInsertRecords(records []PersistentRecord) error {
 			r.MetricsKey, r.BaseURL, r.KeyMask, r.Timestamp.Unix(), success, string(r.FailureClass),
 			r.InputTokens, r.OutputTokens, r.CacheCreationTokens, r.CacheReadTokens, r.APIType, r.Model, r.ProxyKeyMask,
 			r.ChannelUID, r.RouteModel, r.KeyUID, r.SubscriptionUID, r.ExchangeSnapshotVersion,
-			r.ListCostUSD, r.EffectiveCostUSD, effectiveAvailable, r.EffectiveCostReason,
+			r.ListCostUSD, r.EffectiveCostUSD, effectiveAvailable, r.EffectiveCostReason, r.ConsumptionPolicy,
 		)
 		if err != nil {
 			return err
@@ -750,7 +768,7 @@ func (s *SQLiteStore) LoadRecords(since time.Time, apiType string) ([]Persistent
 		SELECT metrics_key, base_url, key_mask, timestamp, success, failure_class,
 		       input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, model, proxy_key_mask, channel_uid, route_model,
 		       key_uid, subscription_uid, exchange_snapshot_version, list_cost_usd, effective_cost_usd,
-		       effective_cost_available, effective_cost_reason
+		       effective_cost_available, effective_cost_reason, consumption_policy
 		FROM request_records
 		WHERE timestamp >= ? AND api_type = ?
 		ORDER BY timestamp ASC
@@ -765,7 +783,7 @@ func (s *SQLiteStore) LoadRecords(since time.Time, apiType string) ([]Persistent
 		var ts int64
 		var success int
 		var failureClass string
-		var keyUID, subscriptionUID, effectiveReason sql.NullString
+		var keyUID, subscriptionUID, effectiveReason, consumptionPolicy sql.NullString
 		var version sql.NullInt64
 		var listCost, effectiveCost sql.NullFloat64
 		var effectiveAvailable sql.NullInt64
@@ -773,7 +791,7 @@ func (s *SQLiteStore) LoadRecords(since time.Time, apiType string) ([]Persistent
 			&r.MetricsKey, &r.BaseURL, &r.KeyMask, &ts, &success, &failureClass,
 			&r.InputTokens, &r.OutputTokens, &r.CacheCreationTokens, &r.CacheReadTokens, &r.Model, &r.ProxyKeyMask,
 			&r.ChannelUID, &r.RouteModel, &keyUID, &subscriptionUID, &version, &listCost, &effectiveCost,
-			&effectiveAvailable, &effectiveReason,
+			&effectiveAvailable, &effectiveReason, &consumptionPolicy,
 		)
 		if err != nil {
 			return nil, err
@@ -784,6 +802,7 @@ func (s *SQLiteStore) LoadRecords(since time.Time, apiType string) ([]Persistent
 		r.APIType = apiType
 		r.KeyUID = keyUID.String
 		r.SubscriptionUID = subscriptionUID.String
+		r.ConsumptionPolicy = consumptionPolicy.String
 		if version.Valid && version.Int64 > 0 {
 			r.ExchangeSnapshotVersion = uint64(version.Int64)
 		}

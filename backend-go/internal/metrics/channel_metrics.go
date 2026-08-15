@@ -102,6 +102,7 @@ type RequestRecord struct {
 	EffectiveCostMultiplier  float64
 	EffectiveCostAvailable   bool
 	EffectiveCostReason      string
+	ConsumptionPolicy        string
 }
 
 // recordRouteModel 返回 breaker 聚合使用的模型键。
