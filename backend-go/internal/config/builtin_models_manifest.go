@@ -248,13 +248,16 @@ func VolcengineAgentPlanModelIDs() []string {
 
 func volcengineAgentPlanModelIDs() []string {
 	return []string{
+		"doubao-seed-2.1-turbo",
 		"doubao-seed-2.0-code",
 		"doubao-seed-2.0-pro",
 		"doubao-seed-2.0-lite",
 		"doubao-seed-2.0-mini",
+		"doubao-seed-evolving",
 		"minimax-m2.7",
 		"minimax-m3",
 		"glm-5.2",
+		"glm-5.3",
 		"glm-latest",
 		"deepseek-v4-flash",
 		"deepseek-v4-pro",
@@ -269,6 +272,7 @@ func volcengineAgentPlanModelIDs() []string {
 // 清单来源：火山方舟 Coding Plan 套餐概览(2026-07)。
 func volcengineCodingPlanModelIDs() []string {
 	return []string{
+		"doubao-seed-2.1-turbo",
 		"doubao-seed-2.0-code",
 		"doubao-seed-2.0-pro",
 		"doubao-seed-2.0-lite",
@@ -276,6 +280,7 @@ func volcengineCodingPlanModelIDs() []string {
 		"minimax-m2.7",
 		"minimax-m3",
 		"glm-5.2",
+		"glm-5.3",
 		"deepseek-v4-flash",
 		"deepseek-v4-pro",
 		"kimi-k2.6",

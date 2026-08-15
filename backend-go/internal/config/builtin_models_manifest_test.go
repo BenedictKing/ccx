@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 func TestLookupBuiltinManifest_ExactHostMatch(t *testing.T) {
 	tests := []struct {
@@ -244,6 +247,46 @@ func TestLookupBuiltinManifest_VolcengineResponses(t *testing.T) {
 		if !manifest.DisableProbe {
 			t.Fatalf("火山套餐清单应 DisableProbe: %+v", manifest)
 		}
+	}
+}
+
+func TestLookupBuiltinManifest_VolcenginePlanModelIDs(t *testing.T) {
+	tests := []struct {
+		name         string
+		baseURL      string
+		serviceTypes []string
+		want         []string
+	}{
+		{
+			name:         "agent plan",
+			baseURL:      "https://ark.cn-beijing.volces.com/api/plan",
+			serviceTypes: []string{"messages", "openai", "responses"},
+			want:         volcengineAgentPlanModelIDs(),
+		},
+		{
+			name:         "coding plan",
+			baseURL:      "https://ark.cn-beijing.volces.com/api/coding",
+			serviceTypes: []string{"messages", "openai", "responses"},
+			want:         volcengineCodingPlanModelIDs(),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for _, serviceType := range tt.serviceTypes {
+				baseURL := tt.baseURL
+				if serviceType != "messages" {
+					baseURL += "/v3"
+				}
+				manifest, found := LookupBuiltinManifest(baseURL, serviceType)
+				if !found {
+					t.Fatalf("火山套餐清单应存在: baseURL=%q serviceType=%q", baseURL, serviceType)
+				}
+				if !slices.Equal(manifest.ModelIDs, tt.want) {
+					t.Fatalf("ModelIDs = %v, want %v", manifest.ModelIDs, tt.want)
+				}
+			}
+		})
 	}
 }
 

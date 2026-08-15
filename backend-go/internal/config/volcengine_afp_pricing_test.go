@@ -340,6 +340,17 @@ func TestResolveVolcengineAFPCost_UnknownModel(t *testing.T) {
 	}
 }
 
+func TestResolveVolcengineAFPCost_AutoIsUpstreamRoutingMode(t *testing.T) {
+	result := ResolveVolcengineAFPCost(cst(2026, 8, 15, 12, 0, 0), "agent_plan", "auto", 100_000, 10_000)
+
+	if result.Matched {
+		t.Fatal("auto is an upstream routing mode, not a statically priced model")
+	}
+	if result.Confidence != AFPCostConfidenceUnknown {
+		t.Fatalf("confidence = %v, want unknown", result.Confidence)
+	}
+}
+
 func TestResolveVolcengineAFPCost_UnsupportedPlan(t *testing.T) {
 	at := cst(2026, 7, 24, 12, 0, 0)
 	result := ResolveVolcengineAFPCost(at, "coding_plan", "glm-5.2", 100_000, 10_000)
@@ -349,6 +360,21 @@ func TestResolveVolcengineAFPCost_UnsupportedPlan(t *testing.T) {
 	}
 	if result.Confidence != AFPCostConfidenceUnknown {
 		t.Fatalf("confidence = %v, want unknown", result.Confidence)
+	}
+}
+
+func TestResolveVolcengineAFPCost_ExpiredPromotionsAtCurrentDate(t *testing.T) {
+	at := cst(2026, 8, 15, 12, 0, 0)
+	for _, model := range []string{"glm-5.2", "glm-latest", "deepseek-v4-pro", "kimi-k2.6", "kimi-k2.7-code"} {
+		t.Run(model, func(t *testing.T) {
+			result := ResolveVolcengineAFPCost(at, "agent_plan", model, 100_000, 10_000)
+			if !result.Matched {
+				t.Fatalf("expected %s to match AFP catalog: %+v", model, result)
+			}
+			if result.PromotionApplied {
+				t.Fatalf("promotion should be expired at %v: %+v", at, result)
+			}
+		})
 	}
 }
 

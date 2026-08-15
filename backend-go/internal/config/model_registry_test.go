@@ -299,6 +299,9 @@ func TestResolveUpstreamCapability_NewAugust2026Models(t *testing.T) {
 		{model: "gemini-3.7-flash", provider: "google", context: 1048576, maxOutput: 65536, vision: true, toolCalls: true, inputPrice: 0.75, outputPrice: 3.75},
 		{model: "qwen3.8-max", provider: "dashscope", context: 1000000, maxOutput: 131072, vision: true, toolCalls: true, inputPrice: 12, outputPrice: 36},
 		{model: "qwen3.8-max-preview", provider: "dashscope", context: 1000000, maxOutput: 131072, vision: true, toolCalls: true, inputPrice: 12, outputPrice: 36},
+		{model: "doubao-seed-2.1-turbo", provider: "volcengine", context: 256000, maxOutput: 256000, vision: true, toolCalls: true},
+		{model: "doubao-seed-evolving", provider: "volcengine", context: 1024000, maxOutput: 256000, toolCalls: true},
+		{model: "doubao-seed-2.0-mini", provider: "volcengine", context: 256000, maxOutput: 128000, vision: true, toolCalls: true},
 	}
 
 	for _, tt := range tests {
