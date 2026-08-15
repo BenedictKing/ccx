@@ -1,7 +1,8 @@
 # 公开与临时 Key 优先消耗设计
 
-> 状态：设计提案，尚未实现
+> 状态：已实现（运行时语义 + 前后端对接）
 > 范围：Key 级成本、消耗策略、EndpointPolicy、FastDecay、管理 API 与 Web UI
+> 关键提交：`4509aeda` feat(autopilot): 实现 public-key-routing 运行时语义
 
 ## 1. 背景与目标
 
