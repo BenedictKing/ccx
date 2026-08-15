@@ -72,13 +72,13 @@ func (cm *ConfigManager) GetCurrentVectorsUpstreamWithIndex() (*UpstreamConfig, 
 // AddVectorsUpstream 添加 Vectors 上游
 // placements 可选传 "front"（故障转移序列首位），缺省为追加到序列末尾（见 assignChannelPriority）
 func (cm *ConfigManager) AddVectorsUpstream(upstream UpstreamConfig, placements ...string) error {
-	return cm.addUpstreamCommon(channelKindRegistry[channelKindVectors], upstream, placements...)
+	return cm.addUpstreamCommon(ChannelKindRegistry[ChannelKindVectors], upstream, placements...)
 }
 
 // UpdateVectorsUpstream 更新 Vectors 上游
 // 返回值：shouldResetMetrics 表示是否需要重置渠道指标（熔断状态）
 func (cm *ConfigManager) UpdateVectorsUpstream(index int, updates UpstreamUpdate) (shouldResetMetrics bool, err error) {
-	return cm.updateUpstreamCommon(channelKindRegistry[channelKindVectors], index, updates)
+	return cm.updateUpstreamCommon(ChannelKindRegistry[ChannelKindVectors], index, updates)
 }
 
 // RemoveVectorsUpstream 删除 Vectors 上游

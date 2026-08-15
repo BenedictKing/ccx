@@ -55,13 +55,13 @@ func (cm *ConfigManager) GetCurrentUpstreamWithIndex() (*UpstreamConfig, int, er
 // AddUpstream 添加上游
 // placements 可选传 "front"（故障转移序列首位），缺省为追加到序列末尾（见 assignChannelPriority）
 func (cm *ConfigManager) AddUpstream(upstream UpstreamConfig, placements ...string) error {
-	return cm.addUpstreamCommon(channelKindRegistry[channelKindMessages], upstream, placements...)
+	return cm.addUpstreamCommon(ChannelKindRegistry[ChannelKindMessages], upstream, placements...)
 }
 
 // UpdateUpstream 更新上游
 // 返回值：shouldResetMetrics 表示是否需要重置渠道指标（熔断状态）
 func (cm *ConfigManager) UpdateUpstream(index int, updates UpstreamUpdate) (shouldResetMetrics bool, err error) {
-	return cm.updateUpstreamCommon(channelKindRegistry[channelKindMessages], index, updates)
+	return cm.updateUpstreamCommon(ChannelKindRegistry[ChannelKindMessages], index, updates)
 }
 
 // RemoveUpstream 删除上游

@@ -55,13 +55,13 @@ func (cm *ConfigManager) GetCurrentGeminiUpstreamWithIndex() (*UpstreamConfig, i
 // AddGeminiUpstream 添加 Gemini 上游
 // placements 可选传 "front"（故障转移序列首位），缺省为追加到序列末尾（见 assignChannelPriority）
 func (cm *ConfigManager) AddGeminiUpstream(upstream UpstreamConfig, placements ...string) error {
-	return cm.addUpstreamCommon(channelKindRegistry[channelKindGemini], upstream, placements...)
+	return cm.addUpstreamCommon(ChannelKindRegistry[ChannelKindGemini], upstream, placements...)
 }
 
 // UpdateGeminiUpstream 更新 Gemini 上游
 // 返回值：shouldResetMetrics 表示是否需要重置渠道指标（熔断状态）
 func (cm *ConfigManager) UpdateGeminiUpstream(index int, updates UpstreamUpdate) (shouldResetMetrics bool, err error) {
-	return cm.updateUpstreamCommon(channelKindRegistry[channelKindGemini], index, updates)
+	return cm.updateUpstreamCommon(ChannelKindRegistry[ChannelKindGemini], index, updates)
 }
 
 // RemoveGeminiUpstream 删除 Gemini 上游

@@ -69,13 +69,13 @@ func (cm *ConfigManager) GetCurrentImagesUpstreamWithIndex() (*UpstreamConfig, i
 // AddImagesUpstream 添加 Images 上游
 // placements 可选传 "front"（故障转移序列首位），缺省为追加到序列末尾（见 assignChannelPriority）
 func (cm *ConfigManager) AddImagesUpstream(upstream UpstreamConfig, placements ...string) error {
-	return cm.addUpstreamCommon(channelKindRegistry[channelKindImages], upstream, placements...)
+	return cm.addUpstreamCommon(ChannelKindRegistry[ChannelKindImages], upstream, placements...)
 }
 
 // UpdateImagesUpstream 更新 Images 上游
 // 返回值：shouldResetMetrics 表示是否需要重置渠道指标（熔断状态）
 func (cm *ConfigManager) UpdateImagesUpstream(index int, updates UpstreamUpdate) (shouldResetMetrics bool, err error) {
-	return cm.updateUpstreamCommon(channelKindRegistry[channelKindImages], index, updates)
+	return cm.updateUpstreamCommon(ChannelKindRegistry[ChannelKindImages], index, updates)
 }
 
 // RemoveImagesUpstream 删除 Images 上游

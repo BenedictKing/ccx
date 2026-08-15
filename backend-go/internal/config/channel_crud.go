@@ -8,22 +8,22 @@ import (
 	"github.com/BenedictKing/ccx/internal/utils"
 )
 
-// channelKind 是六类协议入口的标识，用于在通用 CRUD 方法中区分目标数组。
-type channelKind string
+// ChannelKind 是六类协议入口的标识，用于在通用 CRUD 方法中区分目标数组。
+type ChannelKind string
 
 const (
-	channelKindMessages  channelKind = "messages"
-	channelKindChat      channelKind = "chat"
-	channelKindResponses channelKind = "responses"
-	channelKindGemini    channelKind = "gemini"
-	channelKindImages    channelKind = "images"
-	channelKindVectors   channelKind = "vectors"
+	ChannelKindMessages  ChannelKind = "messages"
+	ChannelKindChat      ChannelKind = "chat"
+	ChannelKindResponses ChannelKind = "responses"
+	ChannelKindGemini    ChannelKind = "gemini"
+	ChannelKindImages    ChannelKind = "images"
+	ChannelKindVectors   ChannelKind = "vectors"
 )
 
-// channelKindConfig 描述每个协议 kind 在六数组权威模型下的配置差异。
+// ChannelKindConfig 描述每个协议 kind 在六数组权威模型下的配置差异。
 // 本结构用于把 ConfigManager 中六套重复的 Add*/Update*/Remove* 方法收敛为通用实现。
-type channelKindConfig struct {
-	Kind               channelKind
+type ChannelKindConfig struct {
+	Kind               ChannelKind
 	DefaultServiceType string
 	// ValidateServiceType 对最终 serviceType 做额外校验；nil 表示无额外限制。
 	ValidateServiceType func(string) error
@@ -37,35 +37,35 @@ type channelKindConfig struct {
 	UpdateCapabilityValidation func(UpstreamUpdate) error
 }
 
-// channelKindRegistry 六类协议 kind 的配置注册表。
+// ChannelKindRegistry 六类协议 kind 的配置注册表。
 // 注意：顺序影响日志输出，不影响业务语义。
-var channelKindRegistry = map[channelKind]channelKindConfig{
-	channelKindMessages: {
-		Kind:               channelKindMessages,
+var ChannelKindRegistry = map[ChannelKind]ChannelKindConfig{
+	ChannelKindMessages: {
+		Kind:               ChannelKindMessages,
 		DefaultServiceType: "claude",
 		SliceRef:           func(cfg *Config) *[]UpstreamConfig { return &cfg.Upstream },
 		Slice:              func(cfg Config) []UpstreamConfig { return cfg.Upstream },
 	},
-	channelKindChat: {
-		Kind:               channelKindChat,
+	ChannelKindChat: {
+		Kind:               ChannelKindChat,
 		DefaultServiceType: "openai",
 		SliceRef:           func(cfg *Config) *[]UpstreamConfig { return &cfg.ChatUpstream },
 		Slice:              func(cfg Config) []UpstreamConfig { return cfg.ChatUpstream },
 	},
-	channelKindResponses: {
-		Kind:               channelKindResponses,
+	ChannelKindResponses: {
+		Kind:               ChannelKindResponses,
 		DefaultServiceType: "responses",
 		SliceRef:           func(cfg *Config) *[]UpstreamConfig { return &cfg.ResponsesUpstream },
 		Slice:              func(cfg Config) []UpstreamConfig { return cfg.ResponsesUpstream },
 	},
-	channelKindGemini: {
-		Kind:               channelKindGemini,
+	ChannelKindGemini: {
+		Kind:               ChannelKindGemini,
 		DefaultServiceType: "gemini",
 		SliceRef:           func(cfg *Config) *[]UpstreamConfig { return &cfg.GeminiUpstream },
 		Slice:              func(cfg Config) []UpstreamConfig { return cfg.GeminiUpstream },
 	},
-	channelKindImages: {
-		Kind:               channelKindImages,
+	ChannelKindImages: {
+		Kind:               ChannelKindImages,
 		DefaultServiceType: "openai",
 		ValidateServiceType: func(st string) error {
 			if st != "openai" {
@@ -76,8 +76,8 @@ var channelKindRegistry = map[channelKind]channelKindConfig{
 		SliceRef: func(cfg *Config) *[]UpstreamConfig { return &cfg.ImagesUpstream },
 		Slice:    func(cfg Config) []UpstreamConfig { return cfg.ImagesUpstream },
 	},
-	channelKindVectors: {
-		Kind:               channelKindVectors,
+	ChannelKindVectors: {
+		Kind:               ChannelKindVectors,
 		DefaultServiceType: "openai",
 		ValidateServiceType: func(st string) error {
 			if st != "openai" {
@@ -99,30 +99,30 @@ var channelKindRegistry = map[channelKind]channelKindConfig{
 	},
 }
 
-// channelKindByName 按字符串 kind 返回注册表项，未知 kind 返回错误。
-func channelKindByName(kind string) (channelKindConfig, error) {
-	k := channelKind(strings.ToLower(strings.TrimSpace(kind)))
-	cfg, ok := channelKindRegistry[k]
+// ChannelKindByName 按字符串 kind 返回注册表项，未知 kind 返回错误。
+func ChannelKindByName(kind string) (ChannelKindConfig, error) {
+	k := ChannelKind(strings.ToLower(strings.TrimSpace(kind)))
+	cfg, ok := ChannelKindRegistry[k]
 	if !ok {
-		return channelKindConfig{}, fmt.Errorf("不支持的协议 kind: %s", kind)
+		return ChannelKindConfig{}, fmt.Errorf("不支持的协议 kind: %s", kind)
 	}
 	return cfg, nil
 }
 
-// channelKindLabel 返回 kind 的中文/日志标签。
-func (k channelKind) Label() string {
+// ChannelKindLabel 返回 kind 的中文/日志标签。
+func (k ChannelKind) Label() string {
 	switch k {
-	case channelKindMessages:
+	case ChannelKindMessages:
 		return "Messages"
-	case channelKindChat:
+	case ChannelKindChat:
 		return "Chat"
-	case channelKindResponses:
+	case ChannelKindResponses:
 		return "Responses"
-	case channelKindGemini:
+	case ChannelKindGemini:
 		return "Gemini"
-	case channelKindImages:
+	case ChannelKindImages:
 		return "Images"
-	case channelKindVectors:
+	case ChannelKindVectors:
 		return "Vectors"
 	default:
 		return string(k)
@@ -131,7 +131,7 @@ func (k channelKind) Label() string {
 
 // addUpstreamCommonLocked 是六类 Add*Upstream 方法的通用实现。
 // 调用方必须已持有 cm.mu 写锁。
-func (cm *ConfigManager) addUpstreamCommonLocked(k channelKindConfig, upstream UpstreamConfig, placements ...string) error {
+func (cm *ConfigManager) addUpstreamCommonLocked(k ChannelKindConfig, upstream UpstreamConfig, placements ...string) error {
 	if upstream.Status == "" {
 		upstream.Status = "active"
 	}
@@ -194,7 +194,7 @@ func (cm *ConfigManager) addUpstreamCommonLocked(k channelKindConfig, upstream U
 }
 
 // addUpstreamCommon 是 Add*Upstream 的公开薄封装，先加锁再调用通用实现。
-func (cm *ConfigManager) addUpstreamCommon(k channelKindConfig, upstream UpstreamConfig, placements ...string) error {
+func (cm *ConfigManager) addUpstreamCommon(k ChannelKindConfig, upstream UpstreamConfig, placements ...string) error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 	return cm.addUpstreamCommonLocked(k, upstream, placements...)
@@ -202,7 +202,7 @@ func (cm *ConfigManager) addUpstreamCommon(k channelKindConfig, upstream Upstrea
 
 // updateUpstreamCommonLocked 是六类 Update*Upstream 方法的通用实现。
 // 返回值 shouldResetMetrics 与旧方法语义一致。
-func (cm *ConfigManager) updateUpstreamCommonLocked(k channelKindConfig, index int, updates UpstreamUpdate) (bool, error) {
+func (cm *ConfigManager) updateUpstreamCommonLocked(k ChannelKindConfig, index int, updates UpstreamUpdate) (bool, error) {
 	slice := k.SliceRef(&cm.config)
 	if index < 0 || index >= len(*slice) {
 		return false, fmt.Errorf("无效的 %s 上游索引: %d", k.Kind.Label(), index)
@@ -266,7 +266,7 @@ func (cm *ConfigManager) updateUpstreamCommonLocked(k channelKindConfig, index i
 }
 
 // updateUpstreamCommon 是 Update*Upstream 的公开薄封装。
-func (cm *ConfigManager) updateUpstreamCommon(k channelKindConfig, index int, updates UpstreamUpdate) (bool, error) {
+func (cm *ConfigManager) updateUpstreamCommon(k ChannelKindConfig, index int, updates UpstreamUpdate) (bool, error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 	return cm.updateUpstreamCommonLocked(k, index, updates)
@@ -509,4 +509,182 @@ func applyUpstreamUpdateFields(upstream *UpstreamConfig, updates UpstreamUpdate)
 	}
 
 	return shouldResetMetrics, nil
+}
+
+// ChannelLocation 标识一个 UpstreamConfig 在六数组中的位置。
+type ChannelLocation struct {
+	Kind  ChannelKind
+	Index int
+}
+
+// FindUpstreamByUID 通过 ChannelUID 在所有六数组中查找物理渠道。
+// 返回位置、指针和是否找到。调用方必须持有至少读锁。
+func (cm *ConfigManager) FindUpstreamByUID(uid string) (ChannelLocation, *UpstreamConfig, bool) {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+	return cm.findUpstreamByUIDLocked(uid)
+}
+
+// findUpstreamByUIDLocked 锁内按 uid 查找，不限 kind。
+func (cm *ConfigManager) findUpstreamByUIDLocked(uid string) (ChannelLocation, *UpstreamConfig, bool) {
+	kinds := []ChannelKind{ChannelKindMessages, ChannelKindChat, ChannelKindResponses, ChannelKindGemini, ChannelKindImages, ChannelKindVectors}
+	for _, kind := range kinds {
+		k := ChannelKindRegistry[kind]
+		slice := k.Slice(cm.config)
+		for i := range slice {
+			if slice[i].ChannelUID == uid {
+				return ChannelLocation{Kind: kind, Index: i}, &slice[i], true
+			}
+		}
+	}
+	return ChannelLocation{}, nil, false
+}
+
+// removeUpstreamCommonLocked 是六类 Remove*Upstream 方法的通用实现。
+// clearFailedKeysLabel 用于 clearFailedKeysForUpstream 的标签。
+func (cm *ConfigManager) removeUpstreamCommonLocked(k ChannelKindConfig, index int, clearFailedKeysLabel string) (*UpstreamConfig, error) {
+	slice := k.SliceRef(&cm.config)
+	if index < 0 || index >= len(*slice) {
+		return nil, fmt.Errorf("无效的 %s 上游索引: %d", k.Kind.Label(), index)
+	}
+
+	removed := (*slice)[index]
+	*slice = append((*slice)[:index], (*slice)[index+1:]...)
+
+	cm.clearFailedKeysForUpstream(&removed, clearFailedKeysLabel)
+
+	if err := cm.saveConfigLocked(cm.config); err != nil {
+		return nil, err
+	}
+
+	log.Printf("[Config-Upstream] 已删除 %s 上游: %s", k.Kind.Label(), removed.Name)
+	return &removed, nil
+}
+
+// addChannelKeyCommonLocked 是六类 Add*APIKey 方法的通用实现。
+func (cm *ConfigManager) addChannelKeyCommonLocked(k ChannelKindConfig, index int, apiKey string) error {
+	slice := k.SliceRef(&cm.config)
+	if index < 0 || index >= len(*slice) {
+		return fmt.Errorf("无效的 %s 上游索引: %d", k.Kind.Label(), index)
+	}
+
+	upstream := &(*slice)[index]
+	for _, key := range upstream.APIKeys {
+		if key == apiKey {
+			return fmt.Errorf("API密钥已存在")
+		}
+	}
+
+	upstream.APIKeys = append(upstream.APIKeys, apiKey)
+
+	var newDisabledKeys []DisabledKeyInfo
+	for _, dk := range upstream.DisabledAPIKeys {
+		if dk.Key != apiKey {
+			newDisabledKeys = append(newDisabledKeys, dk)
+		}
+	}
+	upstream.DisabledAPIKeys = newDisabledKeys
+	removeDisabledKeyModelsForKey(upstream, apiKey)
+
+	var newHistoricalKeys []string
+	for _, hk := range upstream.HistoricalAPIKeys {
+		if hk != apiKey {
+			newHistoricalKeys = append(newHistoricalKeys, hk)
+		} else {
+			log.Printf("[%s-Key] 上游 [%d] %s: Key %s 已从历史列表恢复", k.Kind.Label(), index, upstream.Name, utils.MaskAPIKey(hk))
+		}
+	}
+	upstream.HistoricalAPIKeys = newHistoricalKeys
+
+	if err := cm.saveConfigLocked(cm.config); err != nil {
+		return err
+	}
+
+	log.Printf("[%s-Key] 已添加API密钥到上游 [%d] %s", k.Kind.Label(), index, upstream.Name)
+	return nil
+}
+
+// removeChannelKeyCommonLocked 是六类 Remove*APIKey 方法的通用实现。
+func (cm *ConfigManager) removeChannelKeyCommonLocked(k ChannelKindConfig, index int, apiKey string) error {
+	slice := k.SliceRef(&cm.config)
+	if index < 0 || index >= len(*slice) {
+		return fmt.Errorf("无效的 %s 上游索引: %d", k.Kind.Label(), index)
+	}
+
+	upstream := &(*slice)[index]
+	keys := upstream.APIKeys
+	found := false
+	for i, key := range keys {
+		if key == apiKey {
+			upstream.APIKeys = append(keys[:i], keys[i+1:]...)
+			found = true
+			break
+		}
+	}
+
+	if cm.removeDisabledKeyEntryLocked(upstream, string(k.Kind), apiKey) {
+		found = true
+	}
+
+	if !found {
+		return fmt.Errorf("API密钥不存在")
+	}
+
+	alreadyInHistory := false
+	for _, hk := range upstream.HistoricalAPIKeys {
+		if hk == apiKey {
+			alreadyInHistory = true
+			break
+		}
+	}
+	if !alreadyInHistory {
+		upstream.HistoricalAPIKeys = append(upstream.HistoricalAPIKeys, apiKey)
+		log.Printf("[%s-Key] 上游 [%d] %s: Key %s 已移入历史列表", k.Kind.Label(), index, upstream.Name, utils.MaskAPIKey(apiKey))
+	}
+
+	if err := cm.saveConfigLocked(cm.config); err != nil {
+		return err
+	}
+
+	log.Printf("[%s-Key] 已从 %s 上游 [%d] %s 删除API密钥", k.Kind.Label(), k.Kind.Label(), index, upstream.Name)
+	return nil
+}
+
+// ============== 公共包装函数（供外部 handler 使用）==============
+
+// AddUpstreamByKind 按 kind 字符串添加渠道，供统一 API 使用。
+func AddUpstreamByKind(cm *ConfigManager, k ChannelKindConfig, up UpstreamConfig, placement string) error {
+	return cm.addUpstreamCommon(k, up, placement)
+}
+
+// UpdateUpstreamByKind 按 ChannelLocation 更新渠道，供统一 API 使用。
+func UpdateUpstreamByKind(cm *ConfigManager, loc ChannelLocation, updates UpstreamUpdate) (bool, error) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+	k := ChannelKindRegistry[loc.Kind]
+	return cm.updateUpstreamCommonLocked(k, loc.Index, updates)
+}
+
+// RemoveUpstreamByKind 按 ChannelLocation 删除渠道，供统一 API 使用。
+func RemoveUpstreamByKind(cm *ConfigManager, loc ChannelLocation) (*UpstreamConfig, error) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+	k := ChannelKindRegistry[loc.Kind]
+	return cm.removeUpstreamCommonLocked(k, loc.Index, string(k.Kind))
+}
+
+// AddChannelKeyByKind 按 ChannelLocation 添加 key，供统一 API 使用。
+func AddChannelKeyByKind(cm *ConfigManager, loc ChannelLocation, apiKey string) error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+	k := ChannelKindRegistry[loc.Kind]
+	return cm.addChannelKeyCommonLocked(k, loc.Index, apiKey)
+}
+
+// RemoveChannelKeyByKind 按 ChannelLocation 删除 key，供统一 API 使用。
+func RemoveChannelKeyByKind(cm *ConfigManager, loc ChannelLocation, apiKey string) error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+	k := ChannelKindRegistry[loc.Kind]
+	return cm.removeChannelKeyCommonLocked(k, loc.Index, apiKey)
 }

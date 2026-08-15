@@ -1470,8 +1470,8 @@ func main() {
 		// 逻辑渠道管理 API（任务 #11）
 		logicalchannels.RegisterRoutes(apiGroup, cfgManager, channelScheduler)
 
-		// 渠道 v2 只读 API（Channel Data Model v2：渠道→key→endpoint→模型 + 跨账号共享能力）
-		channelsv2.RegisterRoutes(apiGroup, cfgManager)
+		// 渠道 v2 统一 API（Channel Data Model v2：渠道→key→endpoint→模型 + 跨账号共享能力 + 统一写端点）
+		channelsv2.RegisterRoutes(apiGroup, cfgManager, channelScheduler)
 
 		// 健康中心 API（Phase 1 shadow/read-only）
 		if autopilotManager != nil {
