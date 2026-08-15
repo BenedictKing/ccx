@@ -237,26 +237,7 @@ EffectiveMultiplier = GroupMultiplier
 
 `ConsumptionPolicy=opportunistic` 自动投影为 `PoolTagTemp`，进入 FastDecay。常规 Key 不因低倍率自动变成临时 Key：稳定免费服务与公开抢用 Key 的故障特征不同。
 
-### 6.2 状态更新
-
-沿用现有衰减参数：
-
-- 普通失败：`DecayFactor = 0.85 ^ consecutiveFail`；
-- 流式断流：`DecayFactor = 0.70 ^ consecutiveFail`；
-- 成功：`DecayFactor += 0.15`，上限 `1.0`；
-- 分数低于 `0.15` 时从当前机会性集合过滤。
-
-需修正现有接线边界：FastDecay 的记录和读取必须使用同一个完整 `EndpointUID(channelUID, baseURL, keyHash)`，不能一处省略 `channelUID`。
-
-### 6.3 回退规则
-
-现有 FilterKeys 的“过滤为空则回退全量”会重新放回已衰减失效的临时 Key。新规则按池回退：
-
-1. 过滤低分机会性 Key；
-2. 若仍有健康机会性 Key，优先使用；
-3. 若机会性集合为空，回退健康常规 Key；
-4. 只有所有常规 Key 也被软过滤时，才执行既有全量 fail-open；
-5. disabled、倍率不合格、明确鉴权失败等硬过滤项永不 fail-open。
+FastDecay 的记录和读取使用完整 `EndpointUID(channelUID, baseURL, keyHash)`，已在 `autopilot` 包统一。
 
 ### 6.4 失败分类
 
@@ -380,42 +361,51 @@ ccx_opportunistic_saved_cost_usd_total
 - Desktop 若共享 `APIKeyConfig` 契约，需要同步类型、编辑界面和 payload，不能只改 Web；
 - 回滚到不认识该字段的旧版本时 JSON 会忽略它，但旧版本不会执行优先消耗策略。该行为应在发布说明中明确。
 
-### 9.1 当前实现差距
+### 9.1 已实现的能力
 
-| 位置 | 当前行为 | 目标行为 |
+| 位置 | 实现文件 | 说明 |
 |---|---|---|
-| Key multiplier PATCH | 接受并保留 `0` | 保持，并可同时设置策略 |
-| `EvaluateAPIKeyMultiplierEligibility` | `0` 合法 | 保持 |
-| `SmartRouter.buildChannelEntry` | 仅取 `>0`，`0` 回退 `1` | 按可用 Key 聚合，保留 `0` |
-| `ResolveEffectiveCostUSD` | 要求倍率严格为正 | 倍率与结果允许非负 |
-| EndpointPolicy | 成本只看画像 `CostTier` | 加入 Key 策略和有效成本 |
-| FastDecay | 已有分数，但配置意图未持久化 | 从策略投影并统一 EndpointUID |
-| FilterKeys fail-open | 空集时恢复全部 Key | 优先回退常规池，硬失败不恢复 |
+| `APIKeyConfig` 与 `KeyConsumptionPolicy` | `backend-go/internal/config/config.go` | 新增字段与合法性校验 |
+| 配置加载规范化 | `backend-go/internal/config/config_loader.go` | 未知值降级为 `normal` 并告警 |
+| 配置合并保留策略 | `backend-go/internal/config/config_utils.go`、`api_key_config_merge_test.go` | new-api 同步不覆盖本地 `ConsumptionPolicy` |
+| 零倍率资格判断 | `backend-go/internal/config/key_group_multiplier_test.go` | `0` 合法且 eligible |
+| Key multiplier PATCH | `backend-go/internal/autopilot/handlers_key_multiplier.go`、`*_test.go` | 支持三态 `consumptionPolicy` 字段 |
+| EndpointPolicy 排序/过滤 | `backend-go/internal/autopilot/endpoint_policy.go`、`*_test.go` | opportunistic 优先，FastDecay 软过滤，常规池回退 |
+| SmartRouter 代表成本 | `backend-go/internal/autopilot/smart_router.go` | 按可用 Key 最小有效成本聚合，保留 `0` |
+| FastDecay 投影 | `backend-go/internal/autopilot/fast_decay.go` | `PoolTagTemp` 按 opportunistic 投影 |
+| Trace 字段 | `backend-go/internal/handlers/common/autopilot_outcome.go` | `consumptionPolicy`、`configuredCostMultiplier` 已补齐 |
+| Web UI | `frontend/src/components/edit-channel/ApiKeyManagementSection.vue`、`*_test.ts` | 消耗策略选择、快捷动作、chip 展示 |
+| Desktop UI | `desktop/frontend/src/components/console/channel-edit/AuthPanel.vue` | 消耗策略选择、标记为 opportunistic |
+| 公共类型 | `frontend/src/services/api-types.ts`、`desktop/frontend/src/services/admin-api.ts` | 类型已对齐 |
+
+### 9.2 仍需补充的运营能力
+
+- 成本报表中区分「已确认零成本」与「成本证据缺失」；
+- `ccx_opportunistic_*` 系列指标与事件（可选，尚未实现）；
+- shadow 对比报告作为默认启用前的最后验证。
 
 
 ## 10. 实施分期
 
-### Phase 1：语义闭环
+### Phase 1：语义闭环（已完成）
 
 - `APIKeyConfig` 增加 `ConsumptionPolicy` 并完成所有投影/合并；
 - 修复零倍率在 SmartRouter、effective cost、报表中的语义；
 - 扩展 PATCH API 与 Web/Desktop 类型；
-- Trace 先记录策略和建议，不改变 Key 顺序。
+- Trace 记录策略和建议。
 
-### Phase 2：主动排序
+### Phase 2：主动排序（已完成）
 
 - EndpointPolicy 在 active/auto 模式启用机会性优先；
 - keypool 使用同一排序 helper，避免不同请求路径语义分叉；
 - FastDecay 使用完整 EndpointUID，并按机会性/常规池回退；
-- 增加 UI 快捷动作与健康状态展示。
+- UI 快捷动作与健康状态展示已落地。
 
-### Phase 3：渠道成本聚合与运营闭环
+### Phase 3：渠道成本聚合与运营闭环（部分完成）
 
-- SmartRouter 按请求可用 Key 集合计算渠道代表成本；
-- 补齐成本报表、节省金额和事件告警；
-- 用 shadow 对比旧排序与新排序，确认错误率、首包延迟和稳定 Key 回退率无回归后全量启用。
-
-分期必须允许独立回滚：关闭主动排序时，成本修正与配置字段仍可保留；关闭 FastDecay 时，硬过滤和常规 failover 仍工作。
+- SmartRouter 按请求可用 Key 集合计算渠道代表成本（已完成）；
+- 补齐成本报表、节省金额和事件告警（待补充）；
+- shadow 对比验证后全量启用（建议执行）。
 
 ## 11. 测试与验收
 
@@ -478,10 +468,9 @@ private: multiplier=1, policy=normal
 - 失效处理：FastDecay + 既有禁用/熔断，并优先回退常规池；
 - API：扩展现有 Key multiplier PATCH，避免新增重复端点。
 
-### 12.3 实施前需确认
+### 12.3 后续可确认项
 
-1. **健康与策略的精确排序边界。** 本文推荐 healthy/degraded 等硬门槛优先于消耗意图；需用 shadow 数据确定 degraded 机会性 Key 是否仍应压过 healthy 常规 Key。
-2. **渠道代表成本。** `min(可用 Key cost)` 符合“先用最便宜 Key”，但可能让只有一个脆弱公开 Key 的渠道获得较高渠道分；可选方案是同时加入可用置信度惩罚，而不是改用平均成本。
-3. **恢复策略。** 网络失败可由成功或探测恢复；明确鉴权失败是否允许定期探测，应继续遵循现有 disabled-key reason 和 recoverAt 规则。
-4. **功能开关位置。** 建议纳入 `AutopilotRouting`，分别控制 shadow 记录与 active 排序，默认先 shadow 后 active。
+1. **健康与策略的精确排序边界。** 当前实现中 opportunistic 优先于 normal（策略 B），与文档早期「healthy/degraded 硬门槛优先」的推荐不同；是否切换为健康优先需 shadow 数据决定。
+2. **渠道代表成本置信度惩罚。** `min(可用 Key cost)` 可能让脆弱公开 Key 拉高渠道排名，可在后续加入可用 Key 数量/健康度惩罚。
+3. **成本报表与指标。** 前端已展示资格和策略，后端成本报表仍需明确区分「已确认零成本」与「成本证据缺失」。
 
