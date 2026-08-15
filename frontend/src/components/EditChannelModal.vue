@@ -101,6 +101,7 @@
                 @remove-key="removeDisabledKey"
                 @suspend-key="suspendKey"
                 @resume-key="resumeKey"
+                @ensure-models-loaded="ensureTargetModelsLoaded"
               />
             </section>
 

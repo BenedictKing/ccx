@@ -1276,6 +1276,9 @@
           <v-combobox
             v-model="groupModelForm.model"
             :items="modelOptions"
+            item-title="title"
+            item-value="value"
+            :return-object="false"
             :label="t('channelCard.groupModelModel')"
             :placeholder="t('channelCard.groupModelModelPlaceholder')"
             variant="outlined"
@@ -1444,6 +1447,7 @@ const emit = defineEmits<{
   'remove-key': [string]
   'suspend-key': [string]
   'resume-key': [string]
+  'ensure-models-loaded': []
 }>()
 
 const { t } = useI18n()
@@ -1617,6 +1621,7 @@ const groupModelAffectedCount = computed(() => {
 const openGroupModelEditor = (row: ChannelApiKeyRow) => {
   groupModelEditing.value = row
   groupModelForm.value = { model: '', note: '' }
+  emit('ensure-models-loaded')
   groupModelDialog.value = true
 }
 
