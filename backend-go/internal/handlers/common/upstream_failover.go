@@ -286,8 +286,8 @@ func applyAdaptiveResponseHeaderTimeout(
 //   - usage: usage 统计（可能为 nil）
 //
 // buildRequestCostContext 在请求开始时解析并固化 list/effective 成本输入。
-// 订阅到账资料不在 handler 层动态读取；当前仅固化可证明的 list cost 与 legacy G/T，
-// 完整订阅规则由统一 resolver 接入后标记 Available。
+// 渠道级「充值币种/金额 + 渠道币种/到账金额」四字段齐备时，用全局汇率图
+// 经 ResolveEffectiveCostUSD 计算有效成本并固化（覆盖订阅快照缺失场景）。
 func buildRequestCostContext(cfgManager *config.ConfigManager, upstream *config.UpstreamConfig, selection keypool.Selection, model string, consumptionPolicy string) metrics.RequestCostContext {
 	ctx := metrics.RequestCostContext{
 		KeyUID:              selection.KeyUID,
@@ -295,26 +295,64 @@ func buildRequestCostContext(cfgManager *config.ConfigManager, upstream *config.
 		EffectiveCostReason: "subscription payment/credit snapshot unavailable",
 		ConsumptionPolicy:   consumptionPolicy,
 	}
-	// 渠道级汇率（计价单位/USD）：>0 时注入，使 CNY 类标价按渠道汇率换算，覆盖全局硬编码默认。
-	if upstream.ExchangeRate != nil && *upstream.ExchangeRate > 0 {
-		ctx.ExchangeRate = *upstream.ExchangeRate
-	}
+
+	// 列表成本（标价）：渠道计价币种为 CNY 等非 USD 时按全局硬编码汇率折 USD，作为基准。
 	resolved := config.ResolveUpstreamCapability(model, upstream, nil)
-	ctx.ListCostUSD = metrics.CalculateTokenCostUSDWithPricingAndRate(resolved.Capability.Pricing, 0, 0, 0, 0, ctx.ExchangeRate)
-	// 渠道级充值倍率：>0 时启用有效成本（EffectiveCostUSD = ListCost × 倍率）。
-	// 乘法语义，区别于订阅中心 rechargeMultiplier 的除法。
-	if upstream.CostMultiplier != nil && *upstream.CostMultiplier > 0 {
+	ctx.ListCostUSD = metrics.CalculateTokenCostUSDWithPricing(resolved.Capability.Pricing, 0, 0, 0, 0)
+
+	// 构建全局汇率图（用于充值/渠道币种到 USD 的折算）。
+	var graph *config.ExchangeRateGraph
+	var snapshotVersion uint64
+	if cfgManager != nil {
+		costConfig := cfgManager.GetAutopilotRouting().CostOptimization
+		if costConfig.ExchangeRateSnapshot != nil {
+			snapshotVersion = costConfig.ExchangeRateSnapshot.Version
+			ctx.ExchangeSnapshotVersion = snapshotVersion
+		}
+		if len(costConfig.ExchangeRateQuotes) > 0 {
+			if snapshotVersion == 0 {
+				snapshotVersion = 1
+			}
+			if g, err := config.NewExchangeRateGraph(costConfig.ExchangeRateQuotes, snapshotVersion, time.Now()); err == nil {
+				graph = g
+			}
+		}
+	}
+
+	// 渠道级充值→到账换算：四字段齐备且金额为正时启用有效成本计算。
+	// EffectiveMultiplier = (PaymentAmount × 充值币价) / (CreditAmount × 渠道币价)，
+	// EffectiveCostUSD = ListCostUSD(折渠道币种) × EffectiveMultiplier（乘法语义）。
+	if graph != nil &&
+		upstream.ChannelPaymentAmount != nil && *upstream.ChannelPaymentAmount > 0 &&
+		upstream.ChannelCreditAmount != nil && *upstream.ChannelCreditAmount > 0 &&
+		strings.TrimSpace(upstream.ChannelPaymentCurrency) != "" &&
+		strings.TrimSpace(upstream.ChannelCreditCurrency) != "" {
+		res := autopilot.ResolveEffectiveCostUSD(autopilot.EffectiveCostInput{
+			Graph:            graph,
+			ListCostUSD:      ctx.ListCostUSD,
+			GroupMultiplier:  1.0,
+			TimeMultiplier:   1.0,
+			PaymentAmount:    *upstream.ChannelPaymentAmount,
+			PaymentUnit:      strings.TrimSpace(upstream.ChannelPaymentCurrency),
+			CreditAmount:     *upstream.ChannelCreditAmount,
+			CreditUnit:       strings.TrimSpace(upstream.ChannelCreditCurrency),
+			KeyUID:           selection.KeyUID,
+			SubscriptionUID:  ctx.SubscriptionUID,
+		})
+		if res.Available && res.EffectiveMultiplier > 0 {
+			ctx.EffectiveCostMultiplier = res.EffectiveMultiplier
+			ctx.EffectiveCostAvailable = true
+			ctx.EffectiveCostReason = "channel payment/credit conversion"
+		} else if res.Reason != "" {
+			ctx.EffectiveCostReason = "channel conversion unavailable: " + res.Reason
+		}
+	} else if upstream.CostMultiplier != nil && *upstream.CostMultiplier > 0 {
+		// 简化路径：仅配充值倍率（乘法）时直接生效，无需汇率图。
 		ctx.EffectiveCostMultiplier = *upstream.CostMultiplier
 		ctx.EffectiveCostAvailable = true
 		ctx.EffectiveCostReason = "channel cost multiplier"
 	}
 	// 实际 token 数在 finalize 时才可得；标价成本在那里按固化模型定价计算。
-	if cfgManager != nil {
-		costConfig := cfgManager.GetAutopilotRouting().CostOptimization
-		if costConfig.ExchangeRateSnapshot != nil {
-			ctx.ExchangeSnapshotVersion = costConfig.ExchangeRateSnapshot.Version
-		}
-	}
 	return ctx
 }
 

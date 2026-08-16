@@ -479,7 +479,7 @@ func applyUpstreamUpdateFields(upstream *UpstreamConfig, updates UpstreamUpdate)
 		v := *updates.RateLimitAutoFromHeaders
 		upstream.RateLimitAutoFromHeaders = &v
 	}
-	// 渠道级计费覆盖：<=0 视为清除（置 nil，不参与有效成本核算）
+	// 渠道级计费覆盖：倍率 <=0 视为清除（置 nil，不参与有效成本核算）
 	if updates.CostMultiplier != nil {
 		if *updates.CostMultiplier < 0 {
 			return false, fmt.Errorf("costMultiplier 不能为负数")
@@ -491,15 +491,33 @@ func applyUpstreamUpdateFields(upstream *UpstreamConfig, updates UpstreamUpdate)
 			upstream.CostMultiplier = &v
 		}
 	}
-	if updates.ExchangeRate != nil {
-		if *updates.ExchangeRate < 0 {
-			return false, fmt.Errorf("exchangeRate 不能为负数")
+	// 充值→渠道到账换算：金额 <=0 置 nil；币种 trim（空串表示清除该侧）
+	if updates.ChannelPaymentCurrency != nil {
+		upstream.ChannelPaymentCurrency = strings.TrimSpace(*updates.ChannelPaymentCurrency)
+	}
+	if updates.ChannelPaymentAmount != nil {
+		if *updates.ChannelPaymentAmount < 0 {
+			return false, fmt.Errorf("channelPaymentAmount 不能为负数")
 		}
-		if *updates.ExchangeRate == 0 {
-			upstream.ExchangeRate = nil
+		if *updates.ChannelPaymentAmount == 0 {
+			upstream.ChannelPaymentAmount = nil
 		} else {
-			v := *updates.ExchangeRate
-			upstream.ExchangeRate = &v
+			v := *updates.ChannelPaymentAmount
+			upstream.ChannelPaymentAmount = &v
+		}
+	}
+	if updates.ChannelCreditCurrency != nil {
+		upstream.ChannelCreditCurrency = strings.TrimSpace(*updates.ChannelCreditCurrency)
+	}
+	if updates.ChannelCreditAmount != nil {
+		if *updates.ChannelCreditAmount < 0 {
+			return false, fmt.Errorf("channelCreditAmount 不能为负数")
+		}
+		if *updates.ChannelCreditAmount == 0 {
+			upstream.ChannelCreditAmount = nil
+		} else {
+			v := *updates.ChannelCreditAmount
+			upstream.ChannelCreditAmount = &v
 		}
 	}
 	if updates.HistoricalImageTurnLimit != nil {

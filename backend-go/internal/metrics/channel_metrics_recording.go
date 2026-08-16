@@ -208,8 +208,6 @@ type RequestCostContext struct {
 	EffectiveCostAvailable  bool
 	EffectiveCostReason     string
 	ConsumptionPolicy       string
-	// ExchangeRate 渠道级「计价单位/USD」汇率（0=用全局默认 cnyToUSD）。
-	ExchangeRate float64
 }
 
 // RecordRequestConnectedWithCostContext 记录请求并固化本次计费上下文。
@@ -234,22 +232,20 @@ func (m *MetricsManager) RecordRequestConnectedWithCostContext(baseURL, apiKey, 
 	record.EffectiveCostAvailable = cost.EffectiveCostAvailable
 	record.EffectiveCostReason = cost.EffectiveCostReason
 	record.ConsumptionPolicy = cost.ConsumptionPolicy
-	record.ExchangeRate = cost.ExchangeRate
 	if cost.EffectiveCostAvailable {
 		record.EffectiveCostUSD = ApplyEffectiveCostMultiplier(cost.ListCostUSD, cost.EffectiveCostMultiplier)
 	}
 	return requestID
 }
 
-// calculateRecordListCost 计算一次请求的标价成本（USD）。
-// exchangeRate 为渠道级「计价单位/USD」汇率：>0 时用于 CNY 类标价换算，覆盖全局硬编码默认。
-func (m *MetricsManager) calculateRecordListCost(model string, exchangeRate float64, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens int64) (float64, bool) {
+// calculateRecordListCost 计算一次请求的标价成本（USD），用全局默认汇率换算 CNY 类标价。
+func (m *MetricsManager) calculateRecordListCost(model string, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens int64) (float64, bool) {
 	if model == "" || model == "unknown" {
 		return 0, false
 	}
 	resolved := config.ResolveUpstreamCapability(model, nil, nil)
 	pricing := resolved.Capability.Pricing
-	return CalculateTokenCostUSDWithPricingAndRate(pricing, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens, exchangeRate), pricing != nil
+	return CalculateTokenCostUSDWithPricing(pricing, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens), pricing != nil
 }
 
 // RecordRequestFinalizeSuccess 回写成功结果与 token（requestID 来自 RecordRequestConnected）。
@@ -316,7 +312,7 @@ func (m *MetricsManager) RecordRequestFinalizeOutcome(baseURL, apiKey, serviceTy
 		record.CacheCreationInputTokens = cacheCreationTokens
 		record.CacheReadInputTokens = cacheReadTokens
 		if record.ListCostUSD == 0 {
-			record.ListCostUSD, _ = m.calculateRecordListCost(record.Model, record.ExchangeRate, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens)
+			record.ListCostUSD, _ = m.calculateRecordListCost(record.Model, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens)
 		}
 		if record.EffectiveCostAvailable {
 			record.EffectiveCostUSD = ApplyEffectiveCostMultiplier(record.ListCostUSD, record.EffectiveCostMultiplier)
