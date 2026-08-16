@@ -44,7 +44,7 @@ func TestFrontierQualityScore(t *testing.T) {
 		{
 			name:     "benchmark 缺失时权重让渡",
 			cand:     makeFrontierCandidate("m2", 1, 0.6, 0, 10),
-			expected: 0.6*(1.0/3.0) + 0.4*0.6, // 0.44
+			expected: 0.8*(1.0/3.0) + 0.2*0.6, // balanced: 0.3867
 		},
 		{
 			name:     "clamp 到 1.0",
@@ -54,7 +54,7 @@ func TestFrontierQualityScore(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := frontierQualityScore(tc.cand); !almostEqual(got, tc.expected) {
+			if got := frontierQualityScore(tc.cand, CostPrefBalanced); !almostEqual(got, tc.expected) {
 				t.Fatalf("frontierQualityScore() = %v, want %v", got, tc.expected)
 			}
 		})
@@ -78,7 +78,7 @@ func TestFrontierQualityHalfWidth(t *testing.T) {
 			cand := makeFrontierCandidate("m", 2, 0.5, 80, 10)
 			cand.profile.ProviderQualityConfidence = tc.confidence
 			cand.benchmarkLane = tc.lane
-			if got := frontierQualityHalfWidth(cand); !almostEqual(got, tc.expected) {
+			if got := frontierQualityHalfWidth(cand, CostPrefBalanced, 0); !almostEqual(got, tc.expected) {
 				t.Fatalf("frontierQualityHalfWidth() = %v, want %v", got, tc.expected)
 			}
 		})
@@ -167,7 +167,7 @@ func TestBuildFrontierPoints_MeasuredCostCalibration(t *testing.T) {
 	cand.effort = EffortHigh
 	cand.effortDecided = true
 	cand.measuredCostUSD = 30
-	points := buildFrontierPoints([]rankedModelCandidate{cand}, CapabilityFloor{})
+	points := buildFrontierPoints([]rankedModelCandidate{cand}, CapabilityFloor{}, CostPrefBalanced)
 	if len(points) != 1 {
 		t.Fatalf("points = %d, want 1", len(points))
 	}
@@ -266,7 +266,7 @@ func TestBuildFrontierPoints_MeasuredCostAxisConsistency(t *testing.T) {
 		b := makeFrontierCandidate("b", 2, 0.5, 70, 20)
 		b.effort, b.effortDecided = EffortHigh, true
 		b.measuredCostUSD = 50
-		points := buildFrontierPoints([]rankedModelCandidate{a, b}, CapabilityFloor{})
+		points := buildFrontierPoints([]rankedModelCandidate{a, b}, CapabilityFloor{}, CostPrefBalanced)
 		if len(points) != 2 {
 			t.Fatalf("points = %d, want 2", len(points))
 		}
@@ -287,7 +287,7 @@ func TestBuildFrontierPoints_MeasuredCostAxisConsistency(t *testing.T) {
 		a.measuredCostUSD = 30 // 有实测，但因 b 缺失而整批回退
 		b := makeFrontierCandidate("b", 2, 0.5, 70, 20)
 		b.effort, b.effortDecided = EffortHigh, true
-		points := buildFrontierPoints([]rankedModelCandidate{a, b}, CapabilityFloor{})
+		points := buildFrontierPoints([]rankedModelCandidate{a, b}, CapabilityFloor{}, CostPrefBalanced)
 		if len(points) != 2 {
 			t.Fatalf("points = %d, want 2", len(points))
 		}
@@ -309,7 +309,7 @@ func TestBuildFrontierPoints(t *testing.T) {
 			makeFrontierCandidate("known", 2, 0.5, 80, 10),
 			makeFrontierCandidate("unknown", 2, 0.5, 80, 0),
 		}
-		points := buildFrontierPoints(ranked, CapabilityFloor{})
+		points := buildFrontierPoints(ranked, CapabilityFloor{}, CostPrefBalanced)
 		if len(points) != 1 || points[0].CanonicalModel != "known" {
 			t.Fatalf("buildFrontierPoints() = %+v, want only the cost-known candidate", points)
 		}
@@ -318,7 +318,7 @@ func TestBuildFrontierPoints(t *testing.T) {
 		cand := makeFrontierCandidate("m", 2, 0.5, 80, 10)
 		cand.effort = EffortMax
 		cand.effortDecided = true
-		points := buildFrontierPoints([]rankedModelCandidate{cand}, CapabilityFloor{})
+		points := buildFrontierPoints([]rankedModelCandidate{cand}, CapabilityFloor{}, CostPrefBalanced)
 		if len(points) != 1 || points[0].Cost.Estimated != 20_000_000 {
 			t.Fatalf("Estimated = %+v, want 20e6 micro-USD (10 USD x max factor 2.0)", points)
 		}
@@ -327,7 +327,7 @@ func TestBuildFrontierPoints(t *testing.T) {
 		cand := makeFrontierCandidate("m", 2, 0.5, 80, 10)
 		cand.providerCostKnown = true
 		cand.providerCostMultiplier = 3
-		points := buildFrontierPoints([]rankedModelCandidate{cand}, CapabilityFloor{})
+		points := buildFrontierPoints([]rankedModelCandidate{cand}, CapabilityFloor{}, CostPrefBalanced)
 		if len(points) != 1 || points[0].Cost.ScopeID != frontierCostScopeUSDProvider ||
 			points[0].Cost.Estimated != 30_000_000 {
 			t.Fatalf("point = %+v, want provider scope with 30e6 micro-USD", points)
@@ -338,7 +338,7 @@ func TestBuildFrontierPoints(t *testing.T) {
 			makeFrontierCandidate("skip", 2, 0.5, 80, 0),
 			makeFrontierCandidate("keep", 2, 0.5, 80, 10),
 		}
-		points := buildFrontierPoints(ranked, CapabilityFloor{})
+		points := buildFrontierPoints(ranked, CapabilityFloor{}, CostPrefBalanced)
 		if len(points) != 1 || points[0].CandidateID != "1" {
 			t.Fatalf("CandidateID = %+v, want \"1\"", points)
 		}
@@ -420,7 +420,7 @@ func TestCapClusterCostPremium(t *testing.T) {
 			{Index: 0, AvgQuality: 0.50, AvgCost: 10},
 			{Index: 1, AvgQuality: 0.52, AvgCost: 35}, // +0.02 质量，3.5 倍成本
 		}
-		if got := capClusterCostPremium(clusters, 1); got != 0 {
+		if got := capClusterCostPremium(clusters, 1, CostPrefBalanced, TaskClassWorker); got != 0 {
 			t.Fatalf("capClusterCostPremium() = %d, want 0", got)
 		}
 	})
@@ -429,13 +429,13 @@ func TestCapClusterCostPremium(t *testing.T) {
 			{Index: 0, AvgQuality: 0.50, AvgCost: 10},
 			{Index: 1, AvgQuality: 0.60, AvgCost: 11}, // +0.10 质量，仅 +10% 成本
 		}
-		if got := capClusterCostPremium(clusters, 1); got != 1 {
+		if got := capClusterCostPremium(clusters, 1, CostPrefBalanced, TaskClassWorker); got != 1 {
 			t.Fatalf("capClusterCostPremium() = %d, want 1", got)
 		}
 	})
 	t.Run("目标已是最便宜簇", func(t *testing.T) {
 		clusters := []FrontierCluster{{Index: 0, AvgQuality: 0.5, AvgCost: 10}}
-		if got := capClusterCostPremium(clusters, 0); got != 0 {
+		if got := capClusterCostPremium(clusters, 0, CostPrefBalanced, TaskClassWorker); got != 0 {
 			t.Fatalf("capClusterCostPremium() = %d, want 0", got)
 		}
 	})

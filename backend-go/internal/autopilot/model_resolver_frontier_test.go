@@ -74,13 +74,14 @@ func TestRankEligibleModels_FrontierCostFirstPicksCheapest(t *testing.T) {
 	}
 }
 
-// quality_first 车道：并列池里默认仍优先低成本；只有 premium 候选 benchmark 差距足够大时，
-// 才允许更强模型压过更便宜模型。当前示例 benchmark 差值不足阈值，因此 claude-sonnet-5 仍胜出。
-func TestRankEligibleModels_FrontierQualityFirstTieBreaksByCost(t *testing.T) {
+// quality_first 车道：显著 benchmark 优势（≥premiumFrontierBenchmarkMinDelta）直接兑现，
+// 不被低成本并列池吞掉。当前示例中 claude-opus-5(83.07) 显著高于 claude-sonnet-5(64.78)，
+// 因此 quality_first 应选择更强的 opus-5；只有差距不足阈值时才按成本 tie-break。
+func TestRankEligibleModels_FrontierQualityFirstRespectsBenchmarkDelta(t *testing.T) {
 	resolver := newFrontierTestResolver(t, nil, "quality_first")
 	best := resolver.rankEligibleModels(frontierIntegrationCandidates(), "claude-sonnet-4-6", "ch_test", "messages", CapabilityFloor{})
-	if best.profile.ModelID != "claude-sonnet-5" {
-		t.Fatalf("quality_first frontier should pick tied-but-cheaper claude-sonnet-5, got %s", best.profile.ModelID)
+	if best.profile.ModelID != "claude-opus-5" {
+		t.Fatalf("quality_first frontier should pick significantly stronger claude-opus-5, got %s", best.profile.ModelID)
 	}
 	if !strings.Contains(best.frontierNote, "tie_pool=") {
 		t.Fatalf("frontierNote = %q, want tie_pool marker", best.frontierNote)

@@ -35,10 +35,11 @@ const (
 	// frontierProvisionalLaneFactor 是基准证据处于 provisional 泳道时的区间加宽倍数。
 	frontierProvisionalLaneFactor = 1.5
 
-	// frontierMaxCostPremiumPerQuality 是 balanced 车道的成本溢价上限：
+	// frontierMaxCostPremiumPerQualityBase 是 balanced 车道的成本溢价上限基础值。
 	// 相对最便宜前沿簇，每 1.0 质量增益（0-1 刻度）最多接受 2.0 倍成本溢价，
 	// 即每 0.01 质量增益约 2% 溢价。防止膝点落在"质量略高但成本翻倍"的簇上。
-	frontierMaxCostPremiumPerQuality = 2.0
+	// 实际值会按 CostPreferenceMode 与 TaskClass 权重动态放大/收紧。
+	frontierMaxCostPremiumPerQualityBase = 2.0
 )
 
 // frontierEffortCostFactor 是灰度期的 effort 成本系数（2026-07-26 联合路由计划 §3.4）。
@@ -80,27 +81,61 @@ func frontierCostFactorFor(candidate rankedModelCandidate, useMeasured bool) flo
 
 // ── 质量分合成 ──
 
+// frontierQualityWeights 按成本偏好车道决定质量分中 benchmark / 档先验 / 实测的权重。
+var frontierQualityWeights = map[CostPreferenceMode]struct {
+	Benchmark float64
+	TierPrior float64
+	Measured  float64
+}{
+	CostPrefQualityFirst: {Benchmark: 0.6, TierPrior: 0.25, Measured: 0.15},
+	CostPrefBalanced:     {Benchmark: 0.5, TierPrior: 0.30, Measured: 0.20},
+	CostPrefCostFirst:    {Benchmark: 0.4, TierPrior: 0.35, Measured: 0.25},
+}
+
 // frontierQualityScore 把候选的质量信号合成为 0-1 单轴分数。
 // benchmark 为主锚（最接近独立能力测量），质量档为先验，实测质量为修正；
 // benchmark 缺失时权重让渡给档先验与实测。measuredQualityScore 在候选构建时
 // 已含 effort 加分与任务域修正（model_resolver.go），此处不重复计入。
-func frontierQualityScore(candidate rankedModelCandidate) float64 {
+// mode 决定 benchmark 与档先验的相对权重。
+func frontierQualityScore(candidate rankedModelCandidate, mode CostPreferenceMode) float64 {
+	weights, ok := frontierQualityWeights[mode]
+	if !ok {
+		weights = frontierQualityWeights[CostPrefBalanced]
+	}
 	tierPrior := float64(candidate.qualityRank) / 3.0
 	if candidate.benchmarkKnown && candidate.benchmarkScore > 0 {
-		return clampUnit(0.5*(candidate.benchmarkScore/100.0) + 0.3*tierPrior + 0.2*candidate.measuredQualityScore)
+		return clampUnit(weights.Benchmark*(candidate.benchmarkScore/100.0) +
+			weights.TierPrior*tierPrior +
+			weights.Measured*candidate.measuredQualityScore)
 	}
-	return clampUnit(0.6*tierPrior + 0.4*candidate.measuredQualityScore)
+	// benchmark 缺失时：档先验占主导，measured 修正。
+	measuredWeight := weights.Measured
+	tierWeight := 1.0 - measuredWeight
+	return clampUnit(tierWeight*tierPrior + measuredWeight*candidate.measuredQualityScore)
 }
 
 // frontierQualityHalfWidth 计算质量置信区间半宽：证据越弱区间越宽。
-// 区间重叠的候选互不支配（噪声级质量差异不压制），由 dominates 的区间规则消费。
-func frontierQualityHalfWidth(candidate rankedModelCandidate) float64 {
+// 当候选接近本轮最高 benchmark 时，缩窄置信区间，让质量领先者更锐利，
+// 避免显著质量优势被低成本候选的并列池吞掉。
+func frontierQualityHalfWidth(candidate rankedModelCandidate, mode CostPreferenceMode, maxBenchmark float64) float64 {
 	half := frontierQualityIntervalBase
 	if clampUnit(candidate.profile.ProviderQualityConfidence) < 0.5 {
 		half *= frontierLowConfidenceFactor
 	}
 	if candidate.benchmarkLane == "provisional" {
 		half *= frontierProvisionalLaneFactor
+	}
+	// quality_first 下整体缩窄区间，让质量证据更锐利；cost_first 下保持较宽。
+	switch mode {
+	case CostPrefQualityFirst:
+		half *= 0.85
+	case CostPrefCostFirst:
+		half *= 1.1
+	}
+	if candidate.benchmarkKnown && maxBenchmark > 0 {
+		if delta := maxBenchmark - candidate.benchmarkScore; delta < premiumFrontierBenchmarkMinDelta {
+			half *= 0.75
+		}
 	}
 	return half
 }
@@ -154,7 +189,7 @@ func frontierUseMeasuredCost(ranked []rankedModelCandidate) bool {
 // buildFrontierPoints 把候选转换为 FrontierPoint。
 // 公开价未知的候选被排除（成本轴不可比，由调用方决定是否回退旧链）。
 // CandidateID 编码候选在 ranked 中的下标，选择后按它映射回原候选。
-func buildFrontierPoints(ranked []rankedModelCandidate, floor CapabilityFloor) []FrontierPoint {
+func buildFrontierPoints(ranked []rankedModelCandidate, floor CapabilityFloor, mode CostPreferenceMode) []FrontierPoint {
 	useProviderMultiplier := frontierUseProviderMultiplier(ranked)
 	useMeasuredCost := frontierUseMeasuredCost(ranked)
 	scope := frontierCostScopeUSD
@@ -162,6 +197,14 @@ func buildFrontierPoints(ranked []rankedModelCandidate, floor CapabilityFloor) [
 	if useProviderMultiplier {
 		scope = frontierCostScopeUSDProvider
 		source = "registry_pricing_x_provider_multiplier"
+	}
+
+	// 先扫描本批最高 benchmark，用于缩窄显著落后的候选置信区间。
+	maxBenchmark := 0.0
+	for i := range ranked {
+		if ranked[i].benchmarkKnown && ranked[i].benchmarkScore > maxBenchmark {
+			maxBenchmark = ranked[i].benchmarkScore
+		}
 	}
 
 	points := make([]FrontierPoint, 0, len(ranked))
@@ -176,8 +219,8 @@ func buildFrontierPoints(ranked []rankedModelCandidate, floor CapabilityFloor) [
 		}
 		costUSD *= frontierCostFactorFor(c, useMeasuredCost)
 
-		score := frontierQualityScore(c)
-		half := frontierQualityHalfWidth(c)
+		score := frontierQualityScore(c, mode)
+		half := frontierQualityHalfWidth(c, mode, maxBenchmark)
 		// 成本来源标记：本批启用实测路径且该候选实测 cost 有效时提升 source 以支持可解释性
 		pointSource := source
 		if useMeasuredCost && c.measuredCostUSD > 0 && !math.IsNaN(c.measuredCostUSD) {
@@ -211,6 +254,36 @@ func buildFrontierPoints(ranked []rankedModelCandidate, floor CapabilityFloor) [
 
 // ── 前沿选择 ──
 
+// maxCostPremiumPerQuality 按成本偏好车道与任务类权重动态决定溢价上限。
+// quality_first / supervisor / long_context 允许更高溢价；cost_first / lightweight / embedding 更严格。
+func maxCostPremiumPerQuality(mode CostPreferenceMode, taskClass TaskClass) float64 {
+	base := frontierMaxCostPremiumPerQualityBase
+	switch mode {
+	case CostPrefQualityFirst:
+		base = 6.0
+	case CostPrefCostFirst:
+		base = 1.0
+	default:
+		base = frontierMaxCostPremiumPerQualityBase
+	}
+
+	// 按任务类权重做 0.9~1.2 的微调：重质量任务稍微放宽，重成本任务稍微收紧。
+	weights := DefaultTaskWeights()[taskClass]
+	denom := weights.WCost
+	if denom <= 0 {
+		denom = 1
+	}
+	ratio := (weights.WQuality + 1) / (denom + 1)
+	if ratio < 0.5 {
+		ratio = 0.5
+	}
+	if ratio > 2.0 {
+		ratio = 2.0
+	}
+	multiplier := 0.9 + 0.3*clampUnit((ratio-0.5)/1.5)
+	return base * multiplier
+}
+
 // selectViaFrontier 在候选的 Pareto 前沿上按成本倾向车道选择最佳候选。
 // 返回候选在 ranked 中的下标与可解释 note；ok=false 时 note 为回退原因。
 func selectViaFrontier(
@@ -218,7 +291,7 @@ func selectViaFrontier(
 	floor CapabilityFloor,
 	mode CostPreferenceMode,
 ) (idx int, note string, ok bool) {
-	points := buildFrontierPoints(ranked, floor)
+	points := buildFrontierPoints(ranked, floor, mode)
 	if len(points) < 2 {
 		return -1, "insufficient_comparable_cost", false
 	}
@@ -232,8 +305,8 @@ func selectViaFrontier(
 		idx, note = selectFrontierQualityFirst(forest, ranked)
 	} else {
 		target := ladderTargetCluster(forest, mode)
-		if mode == CostPrefBalanced {
-			target = capClusterCostPremium(forest.Clusters, target)
+		if mode == CostPrefBalanced || (capActive && mode != CostPrefCostFirst) {
+			target = capClusterCostPremium(forest.Clusters, target, mode, floor.TaskClass)
 		}
 		if capActive {
 			capTarget := qualityBenefitCapClusterIndex(len(forest.Clusters), floor.QualityBenefitCap)
@@ -273,10 +346,11 @@ func ladderTargetCluster(forest FrontierForest, mode CostPreferenceMode) int {
 
 // capClusterCostPremium 是 balanced 车道的溢价保险：从膝点向低成本方向回退，
 // 直到目标簇相对最便宜簇的成本溢价值回质量增益。
-func capClusterCostPremium(clusters []FrontierCluster, target int) int {
+func capClusterCostPremium(clusters []FrontierCluster, target int, mode CostPreferenceMode, taskClass TaskClass) int {
+	maxPremium := maxCostPremiumPerQuality(mode, taskClass)
 	for target > 0 {
 		gain := clusters[target].AvgQuality - clusters[0].AvgQuality
-		if gain > 0 && clusters[target].AvgCost <= clusters[0].AvgCost*(1+gain*frontierMaxCostPremiumPerQuality) {
+		if gain > 0 && clusters[target].AvgCost <= clusters[0].AvgCost*(1+gain*maxPremium) {
 			break
 		}
 		target--
@@ -352,7 +426,7 @@ func selectFrontierQualityFirst(forest FrontierForest, ranked []rankedModelCandi
 }
 
 // pickFrontierQualityFirstPoint 在 quality_first 的并列池里优先兑现 benchmark/quality 证据，
-// 避免 premium 档的高基准模型仅因成本更高就被 compact/旧代模型压掉；成本只在前述质量证据
+// 避免高 benchmark 模型仅因成本更高就被低成本模型压掉；成本只在前述质量证据
 // 仍无法区分时才作为次级 tie-break。这样 quality_first 才真正体现"质量优先"。
 func pickFrontierQualityFirstPoint(points []FrontierPoint, ranked []rankedModelCandidate) int {
 	bestIdx := -1
@@ -373,8 +447,8 @@ func pickFrontierQualityFirstPoint(points []FrontierPoint, ranked []rankedModelC
 			}
 			continue
 		}
-		if cand.qualityRank == qualityTierRank(QualityTierPremium) && best.qualityRank == qualityTierRank(QualityTierPremium) &&
-			cand.benchmarkKnown && best.benchmarkKnown {
+		// benchmark 是独立能力测量；差距足够大时直接兑现，不论是否同档。
+		if cand.benchmarkKnown && best.benchmarkKnown {
 			delta := cand.benchmarkScore - best.benchmarkScore
 			if math.Abs(delta) >= premiumFrontierBenchmarkMinDelta {
 				if delta > 0 {
@@ -382,6 +456,13 @@ func pickFrontierQualityFirstPoint(points []FrontierPoint, ranked []rankedModelC
 				}
 				continue
 			}
+		}
+		// 同档内 benchmark 差不足阈值时，回到 qualityRank、成本、实测质量、qualityScore 的兜底链。
+		if cand.qualityRank != best.qualityRank {
+			if cand.qualityRank > best.qualityRank {
+				bestIdx, bestPoint = idx, p
+			}
+			continue
 		}
 		if p.Cost.Estimated != bestPoint.Cost.Estimated {
 			if p.Cost.Estimated < bestPoint.Cost.Estimated {

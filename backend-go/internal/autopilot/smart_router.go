@@ -183,9 +183,10 @@ func (r *SmartRouter) BuildPlan(profile *RequestProfile) *RoutingPlan {
 	cfg := r.configManager.GetConfig()
 	autopilotCfg := cfg.AutopilotRouting
 
-	// 获取权重
+	// 获取权重，按 task class 解析生效的成本偏好模式（与 ModelResolver 一致）。
+	effectiveMode := autopilotCfg.CostPreference.GetEffectiveCostPreferenceMode(string(profile.TaskClass))
 	weights := DefaultTaskWeights()[profile.TaskClass]
-	weights = ApplyCostPreference(weights, CostPreferenceMode(autopilotCfg.CostPreference.Mode))
+	weights = ApplyCostPreference(weights, CostPreferenceMode(effectiveMode))
 
 	// 覆盖权重
 	for k, v := range autopilotCfg.WeightOverrides {
@@ -507,9 +508,10 @@ func (r *SmartRouter) candidateFilterFor(
 		return nil
 	}
 
-	// 获取权重
+	// 获取权重，按 task class 解析生效的成本偏好模式（与 ModelResolver 一致）。
+	effectiveMode := autopilotCfg.CostPreference.GetEffectiveCostPreferenceMode(string(profile.TaskClass))
 	weights := DefaultTaskWeights()[profile.TaskClass]
-	weights = ApplyCostPreference(weights, CostPreferenceMode(autopilotCfg.CostPreference.Mode))
+	weights = ApplyCostPreference(weights, CostPreferenceMode(effectiveMode))
 	for k, v := range autopilotCfg.WeightOverrides {
 		switch k {
 		case "wQuality":

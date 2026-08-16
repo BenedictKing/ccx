@@ -53,9 +53,9 @@ func TestDeriveStabilityTier(t *testing.T) {
 		want     StabilityTier
 	}{
 		{
-			name:  "数据不足 → unstable",
+			name:  "数据不足 → normal（避免健康渠道因样本少被打 0 分）",
 			stats: TimeWindowStats{RequestCount: 3, SuccessRate: 100},
-			want:  StabilityTierUnstable,
+			want:  StabilityTierNormal,
 		},
 		{
 			name: "高成功率低429 → stable",
@@ -735,8 +735,8 @@ func TestProfilerDeriveEndpointProfile_InsufficientData(t *testing.T) {
 	if profile.HealthState != HealthStateUnknown {
 		t.Errorf("HealthState = %q, want %q", profile.HealthState, HealthStateUnknown)
 	}
-	if profile.StabilityTier != StabilityTierUnstable {
-		t.Errorf("StabilityTier = %q, want %q", profile.StabilityTier, StabilityTierUnstable)
+	if profile.StabilityTier != StabilityTierNormal {
+		t.Errorf("StabilityTier = %q, want %q", profile.StabilityTier, StabilityTierNormal)
 	}
 }
 

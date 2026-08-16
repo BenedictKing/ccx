@@ -159,9 +159,10 @@ func (p *Profiler) DeriveEndpointProfile(
 // DeriveStabilityTier 根据最近 1 小时的成功率和 429 率推导 StabilityTier。
 // 遵循设计 §4.3 StabilityTier 推导规则。
 func DeriveStabilityTier(stats TimeWindowStats, snapshot KeyCircuitSnapshot) StabilityTier {
-	// 无足够数据时保持 unstable（保守策略）
+	// 数据不足时保守但不做最差假设；用 normal 占位，让调用方/评分侧通过置信度进一步降权，
+	// 避免把实际健康但样本少的渠道直接判为 unstable（打 0 分）。
 	if stats.RequestCount < 5 {
-		return StabilityTierUnstable
+		return StabilityTierNormal
 	}
 
 	successRate := stats.SuccessRate

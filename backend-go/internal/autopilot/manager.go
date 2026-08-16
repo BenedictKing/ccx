@@ -264,6 +264,14 @@ func NewManager(
 		rateLimitApplyCh:        make(chan struct{}, 1),
 		tagState:                newLogicalChannelTagState(),
 	}
+	// benchmark 数据热重载后输出模型选择报告，便于发现"更优模型未选中"问题。
+	// 使用 goroutine 避免阻塞 snapshot 重建；resolver 与 cfgManager 在 Manager 生命周期内有效。
+	config.RegisterModelRegistryReloadHook(func() {
+		go func(r *ModelResolver, cm *config.ConfigManager) {
+			report := GenerateBenchmarkSelectionReport(r, cm)
+			LogBenchmarkSelectionReport(report)
+		}(manager.modelResolver, cfgManager)
+	})
 	// 注册 LogicalChannel 派生标签 hook；必须在 tagState 初始化之后。
 	RegisterLogicalChannelTagDeriver(manager)
 	manager.providerQualityProbe = NewProviderQualityProbe(

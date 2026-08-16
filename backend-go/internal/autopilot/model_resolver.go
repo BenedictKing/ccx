@@ -837,10 +837,11 @@ func betterRankedModel(candidate, current rankedModelCandidate, preferenceMode C
 			return better
 		}
 	}
-	if better, decided := compareModelVersion(candidate, current); decided {
+	// benchmark 是独立能力测量，优先于版本号兜底；显著差异时直接决定。
+	if better, decided := compareModelBenchmark(candidate, current); decided {
 		return better
 	}
-	if better, decided := compareModelBenchmark(candidate, current); decided {
+	if better, decided := compareModelVersion(candidate, current); decided {
 		return better
 	}
 	if candidate.measuredQualityScore != current.measuredQualityScore {
@@ -928,6 +929,12 @@ func parseModelVersion(modelID string) (string, []int, bool) {
 }
 
 func compareModelVersion(candidate, current rankedModelCandidate) (better bool, decided bool) {
+	// benchmark 存在显著差异时，版本号兜底不应覆盖独立能力测量。
+	if candidate.benchmarkKnown && current.benchmarkKnown {
+		if math.Abs(candidate.benchmarkScore-current.benchmarkScore) >= premiumFrontierBenchmarkMinDelta {
+			return false, false
+		}
+	}
 	if candidate.profile.ModelFamily == "" || candidate.profile.ModelFamily != current.profile.ModelFamily ||
 		candidate.versionLineage == "" || candidate.versionLineage != current.versionLineage ||
 		len(candidate.versionNumbers) == 0 || len(current.versionNumbers) == 0 {
