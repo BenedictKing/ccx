@@ -10,6 +10,7 @@ const apiMocks = vi.hoisted(() => ({
   refreshSubscription: vi.fn(),
   updateNewApiCredentials: vi.fn(),
   provisionNewApiSubscription: vi.fn(),
+  verifyNewApiSubscription: vi.fn(),
   getSubscriptionAccounts: vi.fn(),
   addSubscriptionAccount: vi.fn(),
   refreshSubscriptionAccount: vi.fn(),
@@ -93,6 +94,11 @@ describe('NewApiAccountPanel', () => {
   })
 
   it('generic 渠道填写 token 后绑定已有渠道', async () => {
+    apiMocks.verifyNewApiSubscription.mockResolvedValue({
+      userId: 42,
+      groups: { default: 1 },
+      availableModels: ['gpt-4o'],
+    })
     apiMocks.provisionNewApiSubscription = vi.fn().mockResolvedValue({
       subscription: await apiMocks.getSubscription(),
       channelUid: 'ch-existing',
@@ -118,10 +124,13 @@ describe('NewApiAccountPanel', () => {
       displayName: 'Legacy relay',
       baseUrl: 'https://relay.example.com',
       accessToken: 'new-api-access-token',
-      userId: undefined,
+      userId: '42',
       authTokenMode: 'bearer',
       channelKind: 'messages',
       channelName: 'Legacy relay',
+      provisionAllEligibleGroups: true,
+      maxGroupMultiplier: 1,
+      provisionModels: ['gpt-4o'],
     }))
     expect(wrapper.emitted('updated')).toBeTruthy()
   })
