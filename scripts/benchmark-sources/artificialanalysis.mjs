@@ -70,6 +70,12 @@ export const ARTIFICIAL_ANALYSIS_MODEL_MAP = {
   'gemini-3-6-flash': 'gemini-3.6-flash',
   'grok-4.5': 'grok-4.5',
   'grok-4-5': 'grok-4.5',
+  'grok-4.6': 'grok-4.6',
+  'grok-4-6': 'grok-4.6',
+  'mimo-v2.5': 'mimo-v2.5',
+  'mimo-v2-5': 'mimo-v2.5',
+  'mimo-v2.5-pro': 'mimo-v2.5-pro',
+  'mimo-v2-5-pro': 'mimo-v2.5-pro',
   'muse-spark-1.1': 'muse-spark-1.1',
   'muse-spark-1-1': 'muse-spark-1.1',
   'muse-spark-1.2': 'muse-spark-1.2',
@@ -86,6 +92,13 @@ export const ARTIFICIAL_ANALYSIS_IMAGE_MODEL_MAP = {
   'agnes-image-2-0-flash': 'agnes-image-2.0-flash',
   'agnes-image-2.1-flash': 'agnes-image-2.1-flash',
   'agnes-image-2-1-flash': 'agnes-image-2.1-flash',
+  'gpt-image-2': 'gpt-image-2',
+  'nano-banana-2': 'nano-banana-2',
+  'seedream-5.0-pro': 'seedream-5.0-pro',
+  'seedream-5-0-pro': 'seedream-5.0-pro',
+  'seedream-4.0': 'seedream-4.0',
+  'seedream-4-0': 'seedream-4.0',
+  'bytedance-seed_seedream-4-0': 'seedream-4.0',
 }
 
 /**

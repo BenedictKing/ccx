@@ -14,6 +14,7 @@
 
 import { fetchWithTimeout } from './http.mjs'
 import { cachedFetch, cacheResponseData } from './http-cache.mjs'
+import { detectNewModelCandidates } from './mapper.mjs'
 
 const BASE_URL = 'https://deepswe.datacurve.ai'
 
@@ -225,6 +226,24 @@ export async function fetchDeepsweDataset(modelMap) {
     const profiles = buildDeepsweProfiles(v11Data, v1Data, modelMap)
     const models = Object.keys(profiles).sort()
     console.log(`[deepswe] Extracted data for ${models.length} models: ${models.join(', ') || '(none)'}`)
+
+    // 新模型检测：榜上出现同家族更高版本但未映射的模型名时告警，避免分数被静默丢弃
+    const unmapped = []
+    const seen = new Set()
+    for (const row of v11Data?.rows || []) {
+      if (row?.model && !modelMap[row.model] && !seen.has(row.model)) {
+        seen.add(row.model)
+        unmapped.push(row.model)
+      }
+    }
+    for (const candidate of detectNewModelCandidates(unmapped, modelMap)) {
+      console.warn(
+        `[deepswe] [NEW-MODEL] model "${candidate.name}" (family ${candidate.family}, v${candidate.version}) ` +
+        `exceeds mapped ${candidate.mappedBest} but is NOT in DEEPSWE_MODEL_MAP; ` +
+        `its scores are dropped — add the mapping (or register the model) to include it.`,
+      )
+    }
+
     return { profiles, liveLeaderboard: v11Data }
   } catch (err) {
     console.error(`[deepswe] Failed to fetch data:`, err.message)

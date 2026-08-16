@@ -266,10 +266,10 @@ const palette = Array.from({ length: 10 }, (_, index) => 'var(--series-' + (inde
 const PRERELEASE_TAGS = ['preview', 'beta', 'alpha', 'rc', 'pre', 'dev', 'nightly'];
 function parseModelVersion(model) {
   const s = String(model).toLowerCase();
-  const m = s.match(/\\d+(?:\\.\\d+)*/);
+  const m = s.match(/\\d+(?:[.-]\\d+)*/);
   if (!m) return { family: s, nums: [], suffix: '' };
   const family = s.slice(0, m.index).replace(/[-/]+$/, '');
-  const nums = m[0].split('.').map(Number);
+  const nums = m[0].split(/[.-]/).map(Number);
   const suffix = s.slice(m.index + m[0].length).replace(/^[-/]+/, '');
   return { family, nums, suffix };
 }

@@ -5,6 +5,7 @@ import test from 'node:test'
 import {
   canonicalModelToPattern,
   deepsweModelToPattern,
+  detectNewModelCandidates,
   DEEPSWE_MODEL_MAP,
   BENCHLM_MODEL_MAP,
 } from './mapper.mjs'
@@ -114,6 +115,50 @@ test('canonical pattern generation accepts canonical and source model names', ()
   assert.equal(canonicalModelToPattern('gpt-5.6-sol'), expected)
   assert.equal(deepsweModelToPattern('gpt-5-6-sol'), expected)
   assert.equal(deepsweModelToPattern('gpt-5.6-sol'), null)
+})
+
+test('new-model detection flags unmapped same-family higher versions only', () => {
+  const modelMap = {
+    'grok-4-5': 'grok-4.5',
+    'grok-4-6': 'grok-4.6',
+    'claude-opus-4-8': 'claude-opus-4-8',
+    'claude-opus-5': 'claude-opus-5',
+    'gpt-5-6-sol': 'gpt-5.6-sol',
+  }
+  const candidates = detectNewModelCandidates(
+    [
+      'grok-4-20-beta',        // 同家族更高版本 → 提示
+      'grok-4-3',              // 同家族更低版本 → 忽略
+      'grok-4-1-fast',         // 更低版本变体 → 忽略
+      'grok-code-fast-1',      // 家族不同 → 忽略
+      'claude-opus-4-6',       // 低于已映射 4.8 → 忽略
+      'claude-opus-5.5',       // 高于 5 → 提示
+      'gpt-6',                 // 高于 5.6 → 提示
+      'some-unrelated-model',  // 无家族 → 忽略
+    ],
+    modelMap,
+  )
+  assert.deepEqual(
+    candidates.map(c => c.name),
+    ['grok-4-20-beta', 'claude-opus-5.5', 'gpt-6'],
+  )
+  assert.equal(candidates[0].mappedBest, 'grok-4.6')
+  assert.equal(candidates[0].version, '4.20')
+})
+
+test('extractProfiles collects unmapped slugs for new-model detection', () => {
+  const doc = {
+    items: [
+      { slug: 'grok-4-5', displayScore: 75, scores: { displayCategoryScores: { coding: 50 } } },
+      { slug: 'grok-4-99', displayScore: 90, scores: { displayCategoryScores: {} } },
+    ],
+  }
+  const unmapped = []
+  const profiles = extractBenchlmProfiles(doc, BENCHLM_MODEL_MAP, { coding: 'coding' }, unmapped)
+  assert.ok(profiles['grok-4.5'])
+  assert.equal(profiles['grok-4.5'].overallScore, 75)
+  assert.deepEqual(unmapped, ['grok-4-99'])
+  assert.equal(detectNewModelCandidates(unmapped, BENCHLM_MODEL_MAP).length, 1)
 })
 
 test('DeepSWE percentile and cohort use one best row per model', () => {

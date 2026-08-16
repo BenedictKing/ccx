@@ -28,6 +28,7 @@ import {
   hasCacheEntry,
   setSimpleCache,
 } from './http-cache.mjs'
+import { detectNewModelCandidates } from './mapper.mjs'
 
 const BASE_URL = 'https://benchlm.ai'
 const MODELS_URL = `${BASE_URL}/data/models.json`
@@ -51,6 +52,22 @@ const FETCH_HEADERS = {
  */
 export function methodologyUrl() {
   return `${BASE_URL}/methodology`
+}
+
+/**
+ * 对未命中映射的 slug 做新模型检测并告警（同家族、版本高于已映射最大版本）。
+ * 提示维护者补 slug 映射或注册新模型，避免新模型分数被静默丢弃。
+ */
+function warnNewModelSlugs(unmappedSlugs, modelMap) {
+  if (!Array.isArray(unmappedSlugs) || unmappedSlugs.length === 0) return
+  const candidates = detectNewModelCandidates(unmappedSlugs, modelMap)
+  for (const c of candidates) {
+    console.warn(
+      `[benchlm] [NEW-MODEL] slug "${c.name}" (family ${c.family}, v${c.version}) ` +
+      `exceeds mapped ${c.mappedBest} but is NOT in BENCHLM_MODEL_MAP; ` +
+      `its scores are dropped — add the mapping (or register the model) to include it.`,
+    )
+  }
 }
 
 function describeCacheAge(ageMs) {
@@ -77,14 +94,18 @@ function benchlmCacheSummary() {
  * @param {Object} modelsDoc - models.json 解析结果
  * @param {Object} modelMap - benchlm slug -> CCX canonicalModel
  * @param {Object} categoryMap - benchlm 分类名 -> CCX 分类名
+ * @param {string[]} [unmappedSlugs] - 可选出参：收集未命中映射的 slug（供新模型检测）
  * @returns {Object} - {canonicalModel: {overallScore, categoryScores, counts, sources}}
  */
-export function extractProfiles(modelsDoc, modelMap, categoryMap) {
+export function extractProfiles(modelsDoc, modelMap, categoryMap, unmappedSlugs) {
   const result = {}
 
   for (const item of modelsDoc.items || []) {
     const canonical = modelMap[item.slug]
-    if (!canonical) continue
+    if (!canonical) {
+      if (unmappedSlugs && item.slug) unmappedSlugs.push(item.slug)
+      continue
+    }
 
     // overallScore 取顶层 displayScore（= leaderboard 公开分）。
     // 不用 scores.displayScore：那是 verified lane，对 estimated 模型（如 kimi）为 0。
@@ -181,7 +202,9 @@ export async function fetchBenchlmData(modelMap, categoryMap) {
         `[benchlm] ${MODELS_URL} → 304 Not Modified, rebuilding profiles from cached raw doc `
         + `(cache=${CACHE_PATH}, key=${RAW_DOC_KEY}, ageMs=${rawDocAge}; keys=${benchlmCacheSummary()})`,
       )
-      const profiles = extractProfiles(rawDoc, modelMap, categoryMap)
+      const unmapped = []
+      const profiles = extractProfiles(rawDoc, modelMap, categoryMap, unmapped)
+      warnNewModelSlugs(unmapped, modelMap)
       setSimpleCache(EXTRACTED_PROFILES_KEY, profiles)
       return {
         data: { ...profiles },
@@ -227,7 +250,9 @@ export async function fetchBenchlmData(modelMap, categoryMap) {
  * @param {boolean} from304Refetch - 是否为 304 回退拉取（影响日志）
  */
 function processFresh(doc, generatedAt, modelMap, categoryMap, from304Refetch) {
-  const profiles = extractProfiles(doc, modelMap, categoryMap)
+  const unmapped = []
+  const profiles = extractProfiles(doc, modelMap, categoryMap, unmapped)
+  warnNewModelSlugs(unmapped, modelMap)
   setSimpleCache(GENERATED_AT_KEY, generatedAt)
   setSimpleCache(EXTRACTED_PROFILES_KEY, profiles)
   setSimpleCache(RAW_DOC_KEY, doc)

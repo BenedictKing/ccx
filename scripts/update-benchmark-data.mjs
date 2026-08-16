@@ -942,11 +942,11 @@ export async function main() {
       mergeArtificialAnalysisLlm(registry, aaResult.llm, report)
       mergeArtificialAnalysisImageArena(registry, aaResult.imageArena, report)
 
-      // 首跑调参提示：列出未命中的 AA slug（前 20 个）
+      // 首跑调参提示：列出未命中的 AA slug（前 50 个；省略超过 50 才显示 and more）
       const logUnmapped = (label, slugs) => {
         if (!slugs || slugs.length === 0) return
-        const preview = slugs.slice(0, 20).join(', ')
-        const more = slugs.length > 20 ? ` ... and ${slugs.length - 20} more` : ''
+        const preview = slugs.slice(0, 50).join(', ')
+        const more = slugs.length > 50 ? ` ... and ${slugs.length - 50} more` : ''
         console.log(`[artificial-analysis] ${label} unmapped slugs (${slugs.length}): ${preview}${more}`)
       }
       logUnmapped('LLM', aaResult.unmappedLlmSlugs)

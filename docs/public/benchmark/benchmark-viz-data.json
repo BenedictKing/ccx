@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-16T12:41:51.709Z",
+  "generatedAt": "2026-08-16T14:17:06.986Z",
   "data": [
     {
       "model": "deepseek-v4-flash",
@@ -677,6 +677,42 @@
       "sourceModel": "grok-4-5"
     },
     {
+      "model": "grok-4.6",
+      "effort": "low",
+      "pass_rate": 0.416,
+      "mean_cost": 1.0424,
+      "median_cost": 0.7426,
+      "source": "DeepSWE v1.1",
+      "sourceModel": "grok-4-6"
+    },
+    {
+      "model": "grok-4.6",
+      "effort": "medium",
+      "pass_rate": 0.675,
+      "mean_cost": 3.449,
+      "median_cost": 2.9458,
+      "source": "DeepSWE v1.1",
+      "sourceModel": "grok-4-6"
+    },
+    {
+      "model": "grok-4.6",
+      "effort": "high",
+      "pass_rate": 0.652,
+      "mean_cost": 4.3849,
+      "median_cost": 3.6936,
+      "source": "DeepSWE v1.1",
+      "sourceModel": "grok-4-6"
+    },
+    {
+      "model": "grok-4.6",
+      "effort": "xhigh",
+      "pass_rate": 0.667,
+      "mean_cost": 5.4977,
+      "median_cost": 4.6394,
+      "source": "DeepSWE v1.1",
+      "sourceModel": "grok-4-6"
+    },
+    {
       "model": "kimi-k2.7-code",
       "effort": "default",
       "pass_rate": 0.305,
@@ -947,6 +983,21 @@
       "score": 85.2
     },
     {
+      "model": "grok-4.6",
+      "source": "Artificial Analysis",
+      "category": "agentic",
+      "metric": "agentic_index",
+      "score": 58.7,
+      "effort": "default"
+    },
+    {
+      "model": "grok-4.6",
+      "source": "BenchLM.ai",
+      "category": "agentic",
+      "metric": "category_score",
+      "score": 86.9
+    },
+    {
       "model": "kimi-k2.7-code",
       "source": "Artificial Analysis",
       "category": "agentic",
@@ -975,6 +1026,28 @@
       "category": "agentic",
       "metric": "category_score",
       "score": 94.9
+    },
+    {
+      "model": "mimo-v2.5",
+      "source": "BenchLM.ai",
+      "category": "agentic",
+      "metric": "category_score",
+      "score": 59.2
+    },
+    {
+      "model": "mimo-v2.5-pro",
+      "source": "Artificial Analysis",
+      "category": "agentic",
+      "metric": "agentic_index",
+      "score": 29.5,
+      "effort": "default"
+    },
+    {
+      "model": "mimo-v2.5-pro",
+      "source": "BenchLM.ai",
+      "category": "agentic",
+      "metric": "category_score",
+      "score": 63.1
     },
     {
       "model": "muse-spark-1.1",
@@ -1439,6 +1512,29 @@
       "effort": "high"
     },
     {
+      "model": "grok-4.6",
+      "source": "Artificial Analysis",
+      "category": "coding",
+      "metric": "coding_index",
+      "score": 76.8,
+      "effort": "default"
+    },
+    {
+      "model": "grok-4.6",
+      "source": "BenchLM.ai",
+      "category": "coding",
+      "metric": "category_score",
+      "score": 63.2
+    },
+    {
+      "model": "grok-4.6",
+      "source": "DeepSWE v1.1",
+      "category": "coding",
+      "metric": "pass_at_1",
+      "score": 67.5,
+      "effort": "medium"
+    },
+    {
       "model": "kimi-k2.7-code",
       "source": "Artificial Analysis",
       "category": "coding",
@@ -1485,6 +1581,35 @@
       "effort": "max"
     },
     {
+      "model": "mimo-v2-flash",
+      "source": "BenchLM.ai",
+      "category": "coding",
+      "metric": "category_score",
+      "score": 49.3
+    },
+    {
+      "model": "mimo-v2.5",
+      "source": "BenchLM.ai",
+      "category": "coding",
+      "metric": "category_score",
+      "score": 37
+    },
+    {
+      "model": "mimo-v2.5-pro",
+      "source": "Artificial Analysis",
+      "category": "coding",
+      "metric": "coding_index",
+      "score": 60.2,
+      "effort": "default"
+    },
+    {
+      "model": "mimo-v2.5-pro",
+      "source": "BenchLM.ai",
+      "category": "coding",
+      "metric": "category_score",
+      "score": 39
+    },
+    {
       "model": "muse-spark-1.1",
       "source": "Artificial Analysis",
       "category": "coding",
@@ -1529,6 +1654,34 @@
       "metric": "pass_at_1",
       "score": 54.9,
       "effort": "xhigh"
+    },
+    {
+      "model": "gpt-image-2",
+      "source": "Artificial Analysis Image Arena",
+      "category": "image_arena",
+      "metric": "elo",
+      "score": 1370
+    },
+    {
+      "model": "nano-banana-2",
+      "source": "Artificial Analysis Image Arena",
+      "category": "image_arena",
+      "metric": "elo",
+      "score": 1322
+    },
+    {
+      "model": "seedream-4.0",
+      "source": "Artificial Analysis Image Arena",
+      "category": "image_arena",
+      "metric": "elo",
+      "score": 1219
+    },
+    {
+      "model": "seedream-5.0-pro",
+      "source": "Artificial Analysis Image Arena",
+      "category": "image_arena",
+      "metric": "elo",
+      "score": 1282
     },
     {
       "model": "claude-fable-5",
@@ -1643,11 +1796,25 @@
       "score": 71.1
     },
     {
+      "model": "grok-4.6",
+      "source": "BenchLM.ai",
+      "category": "knowledge",
+      "metric": "category_score",
+      "score": 70.6
+    },
+    {
       "model": "kimi-k3",
       "source": "BenchLM.ai",
       "category": "knowledge",
       "metric": "category_score",
       "score": 84.8
+    },
+    {
+      "model": "mimo-v2.5-pro",
+      "source": "BenchLM.ai",
+      "category": "knowledge",
+      "metric": "category_score",
+      "score": 70.7
     },
     {
       "model": "muse-spark-1.1",
@@ -1844,6 +2011,13 @@
       "category": "multimodal",
       "metric": "category_score",
       "score": 87.9
+    },
+    {
+      "model": "mimo-v2.5",
+      "source": "BenchLM.ai",
+      "category": "multimodal",
+      "metric": "category_score",
+      "score": 62.9
     },
     {
       "model": "muse-spark-1.1",
@@ -2108,6 +2282,21 @@
       "score": 75.4
     },
     {
+      "model": "grok-4.6",
+      "source": "Artificial Analysis",
+      "category": "overall",
+      "metric": "intelligence_index",
+      "score": 60.9,
+      "effort": "default"
+    },
+    {
+      "model": "grok-4.6",
+      "source": "BenchLM.ai",
+      "category": "overall",
+      "metric": "score",
+      "score": 63.4
+    },
+    {
       "model": "kimi-k2.7-code",
       "source": "Artificial Analysis",
       "category": "overall",
@@ -2136,6 +2325,35 @@
       "category": "overall",
       "metric": "score",
       "score": 80.5
+    },
+    {
+      "model": "mimo-v2-flash",
+      "source": "BenchLM.ai",
+      "category": "overall",
+      "metric": "score",
+      "score": 53.3
+    },
+    {
+      "model": "mimo-v2.5",
+      "source": "BenchLM.ai",
+      "category": "overall",
+      "metric": "score",
+      "score": 59.2
+    },
+    {
+      "model": "mimo-v2.5-pro",
+      "source": "Artificial Analysis",
+      "category": "overall",
+      "metric": "intelligence_index",
+      "score": 42.9,
+      "effort": "default"
+    },
+    {
+      "model": "mimo-v2.5-pro",
+      "source": "BenchLM.ai",
+      "category": "overall",
+      "metric": "score",
+      "score": 69.2
     },
     {
       "model": "muse-spark-1.1",

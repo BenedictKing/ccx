@@ -42,6 +42,7 @@ export const DEEPSWE_MODEL_MAP = {
   'gpt-5-4-nano': 'gpt-5.4-nano',
   'gpt-5-4-openai-compact': 'gpt-5.4',
   'grok-4-5': 'grok-4.5',
+  'grok-4-6': 'grok-4.6',
   'muse-spark-1-1': 'muse-spark-1.1',
   'muse-spark-1-2': 'muse-spark-1.2',
 }
@@ -71,8 +72,12 @@ export const BENCHLM_MODEL_MAP = {
   'claude-haiku-4-5': 'claude-haiku-4.5',
   'gpt-5-4-mini': 'gpt-5.4-mini',
   'grok-4-5': 'grok-4.5',
+  'grok-4-6': 'grok-4.6',
   'muse-spark-1-1': 'muse-spark-1.1',
   'muse-spark-1-2': 'muse-spark-1.2',
+  'mimo-v2-5': 'mimo-v2.5',
+  'mimo-v2-5-pro': 'mimo-v2.5-pro',
+  'mimo-v2-flash': 'mimo-v2-flash',
   'deepseek-v4-flash': 'deepseek-v4-flash',
   'deepseek-v4-flash-base': 'deepseek-v4-flash',
   'deepseek-v4-flash-high': 'deepseek-v4-flash',
@@ -175,16 +180,18 @@ export function canonicalModelToPattern(canonical) {
 
 /**
  * 解析模型名的版本与后缀，用于跨家族一致的排序。
- * 命名形态不一：claude-opus-5（版本在末位）、gpt-5.6-sol（版本居中）、muse-spark-1.2（带小数）。
- * 提取首个数字段作为版本（主.次），并识别预发布后缀（preview/beta/alpha/rc 等）。
+ * 命名形态不一：claude-opus-5（版本在末位）、gpt-5.6-sol（版本居中）、muse-spark-1.2（带小数）、
+ * grok-4-6（数据源 slug 连字符分段）。
+ * 提取首个数字段作为版本（主.次，`.` 与 `-` 分隔的连续数字段等价），并识别预发布后缀
+ * （preview/beta/alpha/rc 等）。
  * 返回 { family, nums, suffix }：family 为版本号之前的家族名，nums 为版本数值数组，suffix 为版本后的小写尾部。
  */
 function parseModelVersion(model) {
   const s = String(model).toLowerCase()
-  const m = s.match(/\d+(?:\.\d+)*/)
+  const m = s.match(/\d+(?:[.-]\d+)*/)
   if (!m) return { family: s, nums: [], suffix: '' }
   const family = s.slice(0, m.index).replace(/[-/]+$/, '')
-  const nums = m[0].split('.').map(Number)
+  const nums = m[0].split(/[.-]/).map(Number)
   const suffix = s.slice(m.index + m[0].length).replace(/^[-/]+/, '')
   return { family, nums, suffix }
 }
@@ -221,4 +228,54 @@ export function compareCanonicalModels(a, b) {
   if (aPre !== bPre) return aPre ? 1 : -1 // preview 排后
   if (aPre && bPre && ra !== rb) return ra - rb
   return pa.suffix.localeCompare(pb.suffix)
+}
+
+/**
+ * 从数据源的未映射模型名中检测"疑似新模型"：
+ * 与某个已映射 canonical 同家族、且版本号高于该家族已映射的最大版本。
+ * （如榜单出现 grok-4-6 而映射表最高只有 grok-4.5。）
+ * 仅做家族+版本比较，不依赖 pattern，避免点号/连字符命名差异造成的漏报。
+ * @param {string[]} names - 数据源中的未映射模型名（slug）
+ * @param {Object} modelMap - 该源的 模型名 -> canonicalModel 映射
+ * @returns {Array<{name: string, family: string, version: string, mappedBest: string}>}
+ */
+export function detectNewModelCandidates(names, modelMap) {
+  // 家族 -> 已映射的最大版本（与代表性 canonical）
+  const familyBest = new Map()
+  for (const canonical of Object.values(modelMap)) {
+    const { family, nums } = parseModelVersion(canonical)
+    const prev = familyBest.get(family)
+    if (!prev || compareVersionArrays(nums, prev.nums) > 0) {
+      familyBest.set(family, { nums, canonical })
+    }
+  }
+
+  const seen = new Set()
+  const candidates = []
+  for (const name of names || []) {
+    if (typeof name !== 'string' || name.trim() === '') continue
+    const { family, nums } = parseModelVersion(name)
+    const best = familyBest.get(family)
+    if (!best || compareVersionArrays(nums, best.nums) <= 0) continue
+    if (seen.has(name)) continue
+    seen.add(name)
+    candidates.push({
+      name,
+      family,
+      version: nums.join('.'),
+      mappedBest: best.canonical,
+    })
+  }
+  return candidates
+}
+
+/** 逐段版本号比较（缺段视为 0），返回 >0 / 0 / <0 */
+function compareVersionArrays(a, b) {
+  const len = Math.max(a.length, b.length)
+  for (let i = 0; i < len; i++) {
+    const x = a[i] ?? 0
+    const y = b[i] ?? 0
+    if (x !== y) return x - y
+  }
+  return 0
 }
