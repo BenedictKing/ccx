@@ -22,13 +22,19 @@ func CalculateTokenCostUSDWithStatus(model string, inputTokens, outputTokens, ca
 	}
 	resolved := config.ResolveUpstreamCapability(model, nil, nil)
 	pricing := resolved.Capability.Pricing
-	return calcCostWithPricing(pricing, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens), pricingCoversTokenUsage(pricing, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens)
+	return calcCostWithPricing(pricing, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens, 0), pricingCoversTokenUsage(pricing, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens)
 }
 
 // CalculateTokenCostUSDWithPricing 使用已解析的模型价格估算成本。
 // 调用方可在渠道级模型注册表覆盖生效时避免再次按全局模型名解析。
 func CalculateTokenCostUSDWithPricing(pricing *config.ModelPricing, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens int64) float64 {
-	return calcCostWithPricing(pricing, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens)
+	return calcCostWithPricing(pricing, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens, 0)
+}
+
+// CalculateTokenCostUSDWithPricingAndRate 与上者相同，但允许注入渠道级汇率（渠道计价单位/USD），
+// 覆盖 CNY 换算的硬编码默认值 cnyToUSD。exchangeRate <= 0 时回落默认。
+func CalculateTokenCostUSDWithPricingAndRate(pricing *config.ModelPricing, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens int64, exchangeRate float64) float64 {
+	return calcCostWithPricing(pricing, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens, exchangeRate)
 }
 
 func pricingCoversTokenUsage(pricing *config.ModelPricing, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens int64) bool {
@@ -74,7 +80,8 @@ func priceOrFallback(price, fallback *float64) *float64 {
 }
 
 // calcCostWithPricing 根据给定价格估算 token 成本（USD）。
-func calcCostWithPricing(pricing *config.ModelPricing, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens int64) float64 {
+// exchangeRate 为渠道级「计价单位/USD」汇率：>0 时用于 CNY 类标价换算 USD，覆盖硬编码 cnyToUSD；<=0 用默认。
+func calcCostWithPricing(pricing *config.ModelPricing, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens int64, exchangeRate float64) float64 {
 	if pricing == nil {
 		return 0
 	}
@@ -99,7 +106,12 @@ func calcCostWithPricing(pricing *config.ModelPricing, inputTokens, outputTokens
 		float64(outputTokens)*outputPrice) / 1_000_000
 
 	if strings.EqualFold(pricing.Currency, "CNY") || strings.Contains(strings.ToLower(pricing.Unit), "cny") {
-		cost *= cnyToUSD
+		rate := cnyToUSD
+		if exchangeRate > 0 {
+			// 渠道汇率为「单位/USD」：1 USD = exchangeRate 单位 → 单价成本 / exchangeRate
+			rate = 1.0 / exchangeRate
+		}
+		cost *= rate
 	}
 	return cost
 }

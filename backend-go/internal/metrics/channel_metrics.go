@@ -103,6 +103,8 @@ type RequestRecord struct {
 	EffectiveCostAvailable   bool
 	EffectiveCostReason      string
 	ConsumptionPolicy        string
+	// ExchangeRate 渠道级「计价单位/USD」汇率（0=用全局默认 cnyToUSD），请求开始时固化。
+	ExchangeRate float64
 }
 
 // recordRouteModel 返回 breaker 聚合使用的模型键。

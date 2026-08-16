@@ -115,6 +115,14 @@ type UpstreamConfig struct {
 	RateLimitMaxConcurrent   int   `json:"rateLimitMaxConcurrent,omitempty"`   // 最大并发上游请求数（0=不限）
 	RateLimitAutoFromHeaders *bool `json:"rateLimitAutoFromHeaders,omitempty"` // 自动从上游响应头解析限流信息并动态调速（默认 false）
 
+	// 渠道级计费覆盖（均 nil=不参与有效成本核算，保持现状）
+	// CostMultiplier 充值倍率：EffectiveCostUSD = ListCostUSD × CostMultiplier（乘法）。
+	// 与订阅中心 rechargeMultiplier 的除法语义（groupMultiplier/rechargeMultiplier）刻意区分命名，避免混淆。
+	CostMultiplier *float64 `json:"costMultiplier,omitempty"` // 充值倍率（1=原价，0.5=五折，2=加价）
+	// ExchangeRate 渠道计价单位→USD 换算率（如 CNY=6.8、LDC=50）。用于 CNY 类标价换算 USD，
+	// 覆盖 metrics/cost.go 硬编码的 cnyToUSD；nil 时回落到该默认值。
+	ExchangeRate *float64 `json:"exchangeRate,omitempty"` // 渠道计价单位/USD 汇率
+
 	// Vision 能力配置
 	NoVision            bool     `json:"noVision,omitempty"`            // 整个渠道不支持图片输入
 	NoVisionModels      []string `json:"noVisionModels,omitempty"`      // 不支持图片输入的模型列表（匹配 modelMapping 后的实际模型名）
@@ -1228,6 +1236,10 @@ type UpstreamUpdate struct {
 	RateLimitBurst           *int  `json:"rateLimitBurst"`
 	RateLimitMaxConcurrent   *int  `json:"rateLimitMaxConcurrent"`
 	RateLimitAutoFromHeaders *bool `json:"rateLimitAutoFromHeaders"`
+
+	// 渠道级计费覆盖（nil=不修改）
+	CostMultiplier *float64 `json:"costMultiplier"` // 充值倍率（EffectiveCost = ListCost × 倍率）
+	ExchangeRate   *float64 `json:"exchangeRate"`   // 渠道计价单位/USD 汇率
 
 	// Vision 能力配置
 	NoVision            *bool    `json:"noVision"`

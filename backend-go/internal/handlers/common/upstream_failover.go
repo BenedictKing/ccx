@@ -295,8 +295,19 @@ func buildRequestCostContext(cfgManager *config.ConfigManager, upstream *config.
 		EffectiveCostReason: "subscription payment/credit snapshot unavailable",
 		ConsumptionPolicy:   consumptionPolicy,
 	}
+	// 渠道级汇率（计价单位/USD）：>0 时注入，使 CNY 类标价按渠道汇率换算，覆盖全局硬编码默认。
+	if upstream.ExchangeRate != nil && *upstream.ExchangeRate > 0 {
+		ctx.ExchangeRate = *upstream.ExchangeRate
+	}
 	resolved := config.ResolveUpstreamCapability(model, upstream, nil)
-	ctx.ListCostUSD = metrics.CalculateTokenCostUSDWithPricing(resolved.Capability.Pricing, 0, 0, 0, 0)
+	ctx.ListCostUSD = metrics.CalculateTokenCostUSDWithPricingAndRate(resolved.Capability.Pricing, 0, 0, 0, 0, ctx.ExchangeRate)
+	// 渠道级充值倍率：>0 时启用有效成本（EffectiveCostUSD = ListCost × 倍率）。
+	// 乘法语义，区别于订阅中心 rechargeMultiplier 的除法。
+	if upstream.CostMultiplier != nil && *upstream.CostMultiplier > 0 {
+		ctx.EffectiveCostMultiplier = *upstream.CostMultiplier
+		ctx.EffectiveCostAvailable = true
+		ctx.EffectiveCostReason = "channel cost multiplier"
+	}
 	// 实际 token 数在 finalize 时才可得；标价成本在那里按固化模型定价计算。
 	if cfgManager != nil {
 		costConfig := cfgManager.GetAutopilotRouting().CostOptimization

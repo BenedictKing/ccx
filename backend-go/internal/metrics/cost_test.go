@@ -50,7 +50,7 @@ func TestCalculateTokenCostUSD_CNYConversion(t *testing.T) {
 		InputCacheMissPrice: floatPtr(2),
 		OutputPrice:         floatPtr(8),
 	}
-	cost := calcCostWithPricing(pricing, 1_000_000, 1_000_000, 0, 0)
+	cost := calcCostWithPricing(pricing, 1_000_000, 1_000_000, 0, 0, 0)
 	if math.Abs(cost-10.0*cnyToUSD) > 0.0001 {
 		t.Fatalf("expected %.4f USD, got %v", 10.0*cnyToUSD, cost)
 	}
@@ -81,7 +81,7 @@ func TestCalculateTokenCostUSD_CachePricingFallback(t *testing.T) {
 		InputCacheMissPrice: floatPtr(1),
 		OutputPrice:         floatPtr(2),
 	}
-	cost := calcCostWithPricing(pricing, 0, 1_000_000, 1_000_000, 1_000_000)
+	cost := calcCostWithPricing(pricing, 0, 1_000_000, 1_000_000, 1_000_000, 0)
 	// cache create 1M @ 1 + cache read 1M @ 1 (fallback) + output 1M @ 2 = 4
 	if math.Abs(cost-4.0) > 0.0001 {
 		t.Fatalf("expected 4 USD, got %v", cost)
@@ -110,5 +110,29 @@ func TestApplyEffectiveCostMultiplier(t *testing.T) {
 				t.Fatalf("ApplyEffectiveCostMultiplier(%v, %v) = %v, want %v", tt.listCost, tt.multiplier, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestCalculateTokenCostUSD_ChannelExchangeRateOverride(t *testing.T) {
+	// 渠道级汇率覆盖：CNY 标价，1M input @ 2 CNY + 1M output @ 8 CNY = 10 CNY。
+	// 默认 cnyToUSD=1/6.8 → ≈1.4706 USD；注入渠道汇率 7.0（7 CNY=1 USD）→ 10/7 ≈ 1.4286 USD。
+	pricing := &config.ModelPricing{
+		Unit:                "per_1m_tokens_cny",
+		Currency:            "CNY",
+		InputCacheMissPrice: floatPtr(2),
+		OutputPrice:         floatPtr(8),
+	}
+	defaultCost := CalculateTokenCostUSDWithPricingAndRate(pricing, 1_000_000, 1_000_000, 0, 0, 0)
+	if math.Abs(defaultCost-10.0*cnyToUSD) > 0.0001 {
+		t.Fatalf("default rate: expected %.4f, got %v", 10.0*cnyToUSD, defaultCost)
+	}
+	overrideCost := CalculateTokenCostUSDWithPricingAndRate(pricing, 1_000_000, 1_000_000, 0, 0, 7.0)
+	if math.Abs(overrideCost-10.0/7.0) > 0.0001 {
+		t.Fatalf("override rate 7.0: expected %.4f, got %v", 10.0/7.0, overrideCost)
+	}
+	// USD 标价不受汇率影响
+	usd := &config.ModelPricing{Unit: "per_1m_tokens_usd", Currency: "USD", InputCacheMissPrice: floatPtr(1), OutputPrice: floatPtr(3)}
+	if got := CalculateTokenCostUSDWithPricingAndRate(usd, 1_000_000, 1_000_000, 0, 0, 7.0); math.Abs(got-4.0) > 0.0001 {
+		t.Fatalf("USD pricing must ignore exchangeRate, got %v", got)
 	}
 }

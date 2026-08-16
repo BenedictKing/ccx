@@ -479,6 +479,29 @@ func applyUpstreamUpdateFields(upstream *UpstreamConfig, updates UpstreamUpdate)
 		v := *updates.RateLimitAutoFromHeaders
 		upstream.RateLimitAutoFromHeaders = &v
 	}
+	// 渠道级计费覆盖：<=0 视为清除（置 nil，不参与有效成本核算）
+	if updates.CostMultiplier != nil {
+		if *updates.CostMultiplier < 0 {
+			return false, fmt.Errorf("costMultiplier 不能为负数")
+		}
+		if *updates.CostMultiplier == 0 {
+			upstream.CostMultiplier = nil
+		} else {
+			v := *updates.CostMultiplier
+			upstream.CostMultiplier = &v
+		}
+	}
+	if updates.ExchangeRate != nil {
+		if *updates.ExchangeRate < 0 {
+			return false, fmt.Errorf("exchangeRate 不能为负数")
+		}
+		if *updates.ExchangeRate == 0 {
+			upstream.ExchangeRate = nil
+		} else {
+			v := *updates.ExchangeRate
+			upstream.ExchangeRate = &v
+		}
+	}
 	if updates.HistoricalImageTurnLimit != nil {
 		upstream.HistoricalImageTurnLimit = NormalizeChannelHistoricalImageTurnLimit(*updates.HistoricalImageTurnLimit)
 	}
