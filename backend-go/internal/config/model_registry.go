@@ -382,31 +382,7 @@ var (
 	builtinSnapshotMu sync.RWMutex
 	builtinSnapshot   upstreamCapabilitySnapshot
 	builtinObservers  sync.Map
-
-	// modelRegistryReloadHooks 在 builtin snapshot 重建完成后按注册顺序调用。
-	// 注意：回调在持有 builtinRebuildMu 的上下文中同步执行，应保持轻量；
-	// 需要异步工作的 hook 应自行启动 goroutine。
-	modelRegistryReloadHooks   []func()
-	modelRegistryReloadHooksMu sync.Mutex
 )
-
-// RegisterModelRegistryReloadHook 注册一个 callback，在模型注册表/能力表/benchmark 数据
-// 每次热重载完成后调用。用于触发 benchmark 更新后的模型选择报告等辅助诊断。
-func RegisterModelRegistryReloadHook(hook func()) {
-	modelRegistryReloadHooksMu.Lock()
-	defer modelRegistryReloadHooksMu.Unlock()
-	modelRegistryReloadHooks = append(modelRegistryReloadHooks, hook)
-}
-
-func notifyModelRegistryReloadHooks() {
-	modelRegistryReloadHooksMu.Lock()
-	hooks := make([]func(), len(modelRegistryReloadHooks))
-	copy(hooks, modelRegistryReloadHooks)
-	modelRegistryReloadHooksMu.Unlock()
-	for _, h := range hooks {
-		h()
-	}
-}
 
 type upstreamCapabilitySnapshot struct {
 	store                 *presetstore.PresetStore
@@ -494,7 +470,6 @@ func rebuildBuiltinSnapshotForStore(store *presetstore.PresetStore) {
 	builtinSnapshot = snapshot
 	builtinSnapshotMu.Unlock()
 	log.Printf("[ModelRegistry-Snapshot] source=%s dataVersion=%s capabilities=%d benchmarks=%d", source, bundle.DataVersion, len(capabilities), len(benchmarks))
-	notifyModelRegistryReloadHooks()
 }
 
 func precisionKeys(m map[string]UpstreamModelCapability) []string {

@@ -58,8 +58,9 @@ var defaultBenchmarkReportScenarios = []benchmarkReportScenarioDef{
 	{"claude-opus-4-8 -> chat/worker/balanced", "claude-opus-4-8", "chat", TaskClassWorker, CostPrefBalanced},
 }
 
-// GenerateBenchmarkSelectionReport 在 benchmark 数据更新后生成一份典型场景模型选择报告。
+// GenerateBenchmarkSelectionReport 生成一份典型场景的模型选择报告。
 // resolver 用于解析每个渠道的实际模型；cfgManager 用于读取活跃 auto-managed 渠道。
+// 当前仅由 cmd/benchmark-report CLI 调用（主程序不再输出该报告）。
 func GenerateBenchmarkSelectionReport(resolver *ModelResolver, cfgManager *config.ConfigManager) *BenchmarkModelSelectionReport {
 	if resolver == nil || resolver.profileStore == nil || cfgManager == nil {
 		return nil
@@ -100,7 +101,7 @@ func GenerateBenchmarkSelectionReport(resolver *ModelResolver, cfgManager *confi
 }
 
 // LogBenchmarkSelectionReport 将报告以多行日志形式输出。
-// 已在 autopilot 包外被 cmd/benchmark-report 复用，输出格式与运行态后端一致。
+// 已在 autopilot 包外被 cmd/benchmark-report 复用。
 func LogBenchmarkSelectionReport(report *BenchmarkModelSelectionReport) {
 	if report == nil || len(report.Scenarios) == 0 {
 		return

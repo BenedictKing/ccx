@@ -1,15 +1,15 @@
 // 独立 CLI：根据当前 model-registry snapshot 与 config.json
-// 输出与运行中后端相同的 [BenchmarkSelectionReport] 模型选择报告。
+// 输出 [BenchmarkSelectionReport] 模型选择报告（主程序已不再输出该报告）。
 //
 // 用法：
-//   benchmark-report -config /path/to/config.json
+//
+//	benchmark-report -config /path/to/config.json
 //
 // 设计要点：
 //   - 不依赖运行中的 ccx 后端；用 in-memory SQLite 数据库作为 ModelProfileStore。
-//   - 复用 autopilot.GenerateBenchmarkSelectionReport + LogBenchmarkSelectionReport，
-//     输出格式与运行态后端字节级一致。
-//   - 候选画像从 presetstore 默认 snapshot 的 upstreamCapabilities / benchmarkProfiles
-//     合成（所有 ProbeSuccess=true、中性 ProviderQuality），注入 in-memory store。
+//   - 复用 autopilot.GenerateBenchmarkSelectionReport + LogBenchmarkSelectionReport。
+//   - 候选画像从 presetstore 默认 snapshot 的 benchmarkProfiles 合成
+//     （所有 ProbeSuccess=true、中性 ProviderQuality），注入 in-memory store。
 //   - 报告所需的 auto-managed 渠道列表由 GenerateBenchmarkSelectionReport 内部从
 //     cfgManager.GetConfig() 读取；CLI 仅负责合成候选画像。
 package main
@@ -132,9 +132,11 @@ func autopilotCollectAutoManagedChannels(cfg config.Config) []syntheticChannelIn
 	return out
 }
 
-// injectSyntheticProfiles 把 snapshot 中的 benchmarkProfiles.CanonicalModel + upstreamCapabilities
-// 的 patterns 展开成 ModelProfile，全部 ProbeSuccess=true、中性 ProviderQuality，
-// 写入 in-memory store。
+// injectSyntheticProfiles 把 snapshot 中 benchmarkProfiles 的 CanonicalModel 展开成
+// ModelProfile，全部 ProbeSuccess=true、中性 ProviderQuality，写入 in-memory store。
+//
+// 注意：不注入 upstreamCapabilities 的 patterns——它们是匹配用的正则表达式而非真实模型 ID，
+// 注入后会让 selected/mapped/better_options 输出不可读的正则串。
 //
 // 每个 auto-managed 渠道的 ChannelUID + ChannelKind 都被注入一份"指向同一全局候选池"的画像
 // 副本（metricsKey 全部用 synthetic）。这样 ListActiveByChannel(uid) 都能返回共享的全局候选，
@@ -159,11 +161,6 @@ func injectSyntheticProfiles(
 			continue
 		}
 		canonicalIDs[canonical] = struct{}{}
-	}
-	for _, cap := range bundle.ModelRegistry.UpstreamCapabilities {
-		for _, p := range cap.Patterns {
-			canonicalIDs[strings.TrimSpace(p)] = struct{}{}
-		}
 	}
 
 	ids := make([]string, 0, len(canonicalIDs))
