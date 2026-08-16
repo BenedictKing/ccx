@@ -684,7 +684,44 @@ func (r *ModelResolver) rankEligibleModels(
 	return best
 }
 
-// measuredCostForEffort 返回该候选 effort 对应的实测成本。
+// effortAwareBenchmarkScore 根据候选 effort 档位返回该档位对应的 benchmark 分数。
+// 当 BenchmarkEvidence 中存有该 effort 的 overall 实测数据时，用实测 rawValue 相对
+// default effort 的比值缩放 OverallScore；否则返回原始 OverallScore（不惩罚缺数据）。
+// effort 为空时视为 default，直接返回 OverallScore。
+func effortAwareBenchmarkScore(bp config.ModelBenchmarkProfile, effort EffortLevel) (float64, bool) {
+	if bp.OverallScore <= 0 {
+		return 0, false
+	}
+	if effort == "" || effort == "default" {
+		return bp.OverallScore, true
+	}
+
+	// 收集 default effort 的 overall rawValue 作为基准。
+	var defaultRaw float64
+	var effortRaw float64
+	for _, ev := range bp.BenchmarkEvidence {
+		if ev.Domain != "overall" || ev.RawValue <= 0 {
+			continue
+		}
+		norm := NormalizeEffortLevel(ev.Effort)
+		if norm == "" || norm == EffortOff {
+			defaultRaw = ev.RawValue
+		}
+		if norm == effort {
+			effortRaw = ev.RawValue
+		}
+	}
+	if defaultRaw <= 0 {
+		// 无 default 基准，直接返回 OverallScore。
+		return bp.OverallScore, true
+	}
+	if effortRaw > 0 {
+		// 按实测 raw 比值缩放 OverallScore，反映 effort 间真实智商差异。
+		ratio := effortRaw / defaultRaw
+		return bp.OverallScore * ratio, true
+	}
+	return bp.OverallScore, true
+}
 // 优先精确匹配候选 effort 档位；当 evidence 报告的档位超出注册表 SupportedEffortLevels
 // （例如 evidence 测了 ultra，但该模型只声明到 max）导致精确键缺失时，回退取该模型
 // 已测档位的最小成本，作为该模型成本下界参与 frontier 校准。这样既不伪造注册表未声明的
@@ -757,6 +794,8 @@ func (r *ModelResolver) buildRankedCandidates(
 			// 实测 cost 按候选 effort 精确取；未命中时回退该模型已测档位成本下界，
 			// 保证 frontier 校准在"evidence 档位超注册表档位"场景仍生效。
 			measuredCost := measuredCostForEffort(effortCostUSD, effort)
+			// benchmark 分按 effort 特定实测数据缩放，反映不同思考等级的真实智商差异。
+			effBenchScore, effBenchKnown := effortAwareBenchmarkScore(benchmark.Profile, effort)
 			ranked = append(ranked, rankedModelCandidate{
 				profile:                      profile,
 				effort:                       effort,
@@ -774,8 +813,8 @@ func (r *ModelResolver) buildRankedCandidates(
 				providerCostSource:           providerSource,
 				publicCostKnown:              publicCostKnown,
 				normalizedPublicCostUSD:      publicCostUSD,
-				benchmarkKnown:               benchmark.Known && benchmark.Profile.OverallScore > 0,
-				benchmarkScore:               benchmark.Profile.OverallScore,
+				benchmarkKnown:               effBenchKnown,
+				benchmarkScore:               effBenchScore,
 				benchmarkModel:               benchmark.Profile.CanonicalModel,
 				benchmarkLane:                benchmark.Profile.Lane,
 				measuredCostUSD:              measuredCost,
