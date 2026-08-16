@@ -965,7 +965,7 @@ export async function main() {
     console.log('\n--- Saving registry ---')
     saveAndGenerateAtomically(registry)
     console.log(`[save] Registry and generated artifacts updated atomically`)
-    // benchmark 数据落盘后输出模型选择报告，输出格式与后端热重载一致
+    // benchmark 数据落盘后输出模型选择报告（二进制由 make benchmark-update 负责构建）
     runBenchmarkReport()
   } else {
     console.log('\n--- DRY RUN: No changes saved ---')
