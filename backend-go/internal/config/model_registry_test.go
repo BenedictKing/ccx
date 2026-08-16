@@ -305,8 +305,8 @@ func TestResolveUpstreamCapability_NewAugust2026Models(t *testing.T) {
 		{model: "glm-5.2-200k", provider: "atomgit", context: 200000, maxOutput: 131072, toolCalls: true},
 		{model: "atomgit/glm-5.2-200k", provider: "atomgit", context: 200000, maxOutput: 131072, toolCalls: true},
 		{model: "grok-4.5", provider: "xai", context: 500000, maxOutput: 500000, vision: true, toolCalls: true, inputPrice: 2, outputPrice: 6},
-		{model: "muse-spark-1.1", context: 1048576, maxOutput: 131072, vision: true, toolCalls: true, inputPrice: 1.25, outputPrice: 4.25},
-		{model: "muse-spark-1.2", context: 1048576, maxOutput: 131072, vision: true, toolCalls: true, inputPrice: 1.25, outputPrice: 4.25},
+		{model: "muse-spark-1.1", provider: "meta", context: 1048576, maxOutput: 131072, vision: true, toolCalls: true, inputPrice: 1.25, outputPrice: 4.25},
+		{model: "muse-spark-1.2", provider: "meta", context: 1048576, maxOutput: 131072, vision: true, toolCalls: true, inputPrice: 1.25, outputPrice: 4.25},
 	}
 
 	for _, tt := range tests {

@@ -123,8 +123,8 @@ export const LITELLM_MODEL_MAP = {
   'dashscope/qwen-max': 'qwen3-max',
   'kimi-k2.7-code': 'kimi-k2.7-code',
   'moonshot/kimi-k2-thinking': 'kimi-k2-thinking',
-  // kimi-k3 在 litellm 仅有 Azure AI Foundry 托管 key，价格高于官方直连，仅作公开价参考
-  'azure_ai/FW-Kimi-K3': 'kimi-k3',
+  // kimi-k3 在 litellm 仅有 Azure AI Foundry 托管价（高于官方直连），故意不映射：
+  // 官方价 ¥2/¥20/¥100 手工维护在 registry，mergeLitellmData 会无条件覆盖 pricing。
   'xai/grok-4.5': 'grok-4.5',
   'meta/muse-spark-1.1': 'muse-spark-1.1',
   'meta/muse-spark-1.2': 'muse-spark-1.2',
