@@ -773,6 +773,21 @@
     },
     {
       "patterns": [
+        "(?:^|[-/])gpt-image-2(?:-\\d{4}-\\d{2}-\\d{2})?(?=$|@)"
+      ],
+      "provider": "openai",
+      "displayName": "GPT Image 2",
+      "description": "OpenAI image generation and editing model supporting text-to-image, image-to-image edits and variations via OpenAI-compatible /v1/images endpoints. Dated snapshot variants (e.g. gpt-image-2-2026-04-21) share the same pattern. Litellm lists per-pixel pricing of $5e-6 input / $1e-5 output.",
+      "capabilities": {
+        "imageGeneration": true
+      },
+      "sources": [
+        "https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json",
+        "https://artificialanalysis.ai/leaderboards/image-generation"
+      ]
+    },
+    {
+      "patterns": [
         "(?:^|[-/])glm-5\\.3(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)",
         "(?:^|[-/])glm-5\\.3\\[1m\\](?=$|@)"
       ],
@@ -1901,6 +1916,36 @@
     },
     {
       "patterns": [
+        "(?:^|[-/])seedream-5(?:[.-])0-pro(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)"
+      ],
+      "provider": "volcengine",
+      "displayName": "Seedream 5.0 Pro",
+      "description": "ByteDance Seedream flagship image generation model on Volcengine Ark, supporting high-resolution text-to-image and image editing via OpenAI-compatible /v1/images endpoints.",
+      "capabilities": {
+        "imageGeneration": true
+      },
+      "sources": [
+        "https://www.volcengine.com/docs/82379/1330310",
+        "https://artificialanalysis.ai/leaderboards/image-generation"
+      ]
+    },
+    {
+      "patterns": [
+        "(?:^|[-/])seedream-4(?:[.-])0(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)"
+      ],
+      "provider": "volcengine",
+      "displayName": "Seedream 4.0",
+      "description": "ByteDance Seedream 4.0 image generation model on Volcengine Ark, supporting 2K/4K text-to-image and editing via OpenAI-compatible /v1/images endpoints. Also distributed under the bytedance-seed/seedream-4.0 slug on aggregators.",
+      "capabilities": {
+        "imageGeneration": true
+      },
+      "sources": [
+        "https://www.volcengine.com/docs/82379/1330310",
+        "https://artificialanalysis.ai/leaderboards/image-generation"
+      ]
+    },
+    {
+      "patterns": [
         "(?:^|[-/])ernie-4\\.5(?=$|@)"
       ],
       "provider": "baidu",
@@ -2157,6 +2202,20 @@
       "sources": [
         "https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-7-flash",
         "https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing"
+      ]
+    },
+    {
+      "patterns": [
+        "(?:^|[-/])nano-banana-2(?=$|@)"
+      ],
+      "provider": "google",
+      "displayName": "Nano Banana 2",
+      "description": "Google Gemini-series image generation and editing model (Nano Banana successor), supporting text-to-image, multi-image composition and character consistency via the Gemini API and OpenAI-compatible gateways.",
+      "capabilities": {
+        "imageGeneration": true
+      },
+      "sources": [
+        "https://artificialanalysis.ai/leaderboards/image-generation"
       ]
     },
     {
@@ -3922,14 +3981,63 @@
       "verifiedAt": "2026-08-16",
       "lane": "provisional",
       "sources": [
+        "https://artificialanalysis.ai/models/grok-4-6",
         "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/grok-4-6",
         "https://deepswe.datacurve.ai/"
       ],
-      "sharedResults": 21,
+      "sharedResults": 608,
       "comparableCategories": 3,
       "totalCategories": 8,
       "benchmarkEvidence": [
+        {
+          "benchmark": "artificial_analysis",
+          "benchmarkVersion": "v4.1",
+          "sourceModel": "grok-4-6",
+          "domain": "agentic",
+          "metric": "agentic_index",
+          "rawValue": 58.7,
+          "uncertainty": 0,
+          "cohortPercentile": 0.987,
+          "cohortSize": 608,
+          "taskCount": 9,
+          "effort": "default",
+          "selectionBasis": "composite_index",
+          "sourceUrl": "https://artificialanalysis.ai/models/grok-4-6",
+          "capturedAt": "2026-08-16"
+        },
+        {
+          "benchmark": "artificial_analysis",
+          "benchmarkVersion": "v4.1",
+          "sourceModel": "grok-4-6",
+          "domain": "coding",
+          "metric": "coding_index",
+          "rawValue": 76.8,
+          "uncertainty": 0,
+          "cohortPercentile": 1,
+          "cohortSize": 608,
+          "taskCount": 9,
+          "effort": "default",
+          "selectionBasis": "composite_index",
+          "sourceUrl": "https://artificialanalysis.ai/models/grok-4-6",
+          "capturedAt": "2026-08-16"
+        },
+        {
+          "benchmark": "artificial_analysis",
+          "benchmarkVersion": "v4.1",
+          "sourceModel": "grok-4-6",
+          "domain": "overall",
+          "metric": "intelligence_index",
+          "rawValue": 60.9,
+          "uncertainty": 0,
+          "cohortPercentile": 0.993,
+          "cohortSize": 608,
+          "taskCount": 9,
+          "effort": "default",
+          "selectionBasis": "composite_index",
+          "sourceUrl": "https://artificialanalysis.ai/models/grok-4-6",
+          "capturedAt": "2026-08-16"
+        },
         {
           "benchmark": "deepswe",
           "benchmarkVersion": "v1.1",
@@ -4225,6 +4333,118 @@
     },
     {
       "patterns": [
+        "(?:^|[-/])mimo-v2.5(?=$|@)"
+      ],
+      "canonicalModel": "mimo-v2.5",
+      "verifiedAt": "2026-08-16",
+      "lane": "provisional",
+      "sources": [
+        "https://benchlm.ai/methodology",
+        "https://benchlm.ai/models/mimo-v2-5"
+      ],
+      "sharedResults": 8,
+      "comparableCategories": 3,
+      "totalCategories": 8,
+      "overallScore": 59.16,
+      "categoryScores": {
+        "agentic": 59.2,
+        "coding": 37,
+        "multimodal": 62.9
+      }
+    },
+    {
+      "patterns": [
+        "(?:^|[-/])mimo-v2.5-pro(?=$|@)"
+      ],
+      "canonicalModel": "mimo-v2.5-pro",
+      "verifiedAt": "2026-08-16",
+      "lane": "provisional",
+      "sources": [
+        "https://artificialanalysis.ai/models/mimo-v2-5-pro",
+        "https://benchlm.ai/methodology",
+        "https://benchlm.ai/models/mimo-v2-5-pro"
+      ],
+      "sharedResults": 608,
+      "comparableCategories": 3,
+      "totalCategories": 8,
+      "overallScore": 69.21,
+      "categoryScores": {
+        "agentic": 63.1,
+        "coding": 39,
+        "knowledge": 70.7
+      },
+      "benchmarkEvidence": [
+        {
+          "benchmark": "artificial_analysis",
+          "benchmarkVersion": "v4.1",
+          "sourceModel": "mimo-v2-5-pro",
+          "domain": "agentic",
+          "metric": "agentic_index",
+          "rawValue": 29.5,
+          "uncertainty": 0,
+          "cohortPercentile": 0.722,
+          "cohortSize": 608,
+          "taskCount": 9,
+          "effort": "default",
+          "selectionBasis": "composite_index",
+          "sourceUrl": "https://artificialanalysis.ai/models/mimo-v2-5-pro",
+          "capturedAt": "2026-08-16"
+        },
+        {
+          "benchmark": "artificial_analysis",
+          "benchmarkVersion": "v4.1",
+          "sourceModel": "mimo-v2-5-pro",
+          "domain": "coding",
+          "metric": "coding_index",
+          "rawValue": 60.2,
+          "uncertainty": 0,
+          "cohortPercentile": 0.99,
+          "cohortSize": 608,
+          "taskCount": 9,
+          "effort": "default",
+          "selectionBasis": "composite_index",
+          "sourceUrl": "https://artificialanalysis.ai/models/mimo-v2-5-pro",
+          "capturedAt": "2026-08-16"
+        },
+        {
+          "benchmark": "artificial_analysis",
+          "benchmarkVersion": "v4.1",
+          "sourceModel": "mimo-v2-5-pro",
+          "domain": "overall",
+          "metric": "intelligence_index",
+          "rawValue": 42.9,
+          "uncertainty": 0,
+          "cohortPercentile": 0.905,
+          "cohortSize": 608,
+          "taskCount": 9,
+          "effort": "default",
+          "selectionBasis": "composite_index",
+          "sourceUrl": "https://artificialanalysis.ai/models/mimo-v2-5-pro",
+          "capturedAt": "2026-08-16"
+        }
+      ]
+    },
+    {
+      "patterns": [
+        "(?:^|[-/])mimo-v2-flash(?=$|@)"
+      ],
+      "canonicalModel": "mimo-v2-flash",
+      "verifiedAt": "2026-08-16",
+      "lane": "provisional",
+      "sources": [
+        "https://benchlm.ai/methodology",
+        "https://benchlm.ai/models/mimo-v2-flash"
+      ],
+      "sharedResults": 1,
+      "comparableCategories": 1,
+      "totalCategories": 8,
+      "overallScore": 53.3,
+      "categoryScores": {
+        "coding": 49.3
+      }
+    },
+    {
+      "patterns": [
         "(?:^|[-/])muse-spark-1\\.2(?=$|@)"
       ],
       "canonicalModel": "muse-spark-1.2",
@@ -4403,5 +4623,58 @@
       }
     }
   ],
-  "imageArenaProfiles": []
+  "imageArenaProfiles": [
+    {
+      "patterns": [
+        "(?:^|[-/])gpt-image-2(?=$|@)"
+      ],
+      "canonicalModel": "gpt-image-2",
+      "lane": "provisional",
+      "elo": 1370,
+      "ci95": 10,
+      "sources": [
+        "https://artificialanalysis.ai/leaderboards/image-generation"
+      ],
+      "verifiedAt": "2026-08-16"
+    },
+    {
+      "patterns": [
+        "(?:^|[-/])nano-banana-2(?=$|@)"
+      ],
+      "canonicalModel": "nano-banana-2",
+      "lane": "provisional",
+      "elo": 1322,
+      "ci95": 9,
+      "sources": [
+        "https://artificialanalysis.ai/leaderboards/image-generation"
+      ],
+      "verifiedAt": "2026-08-16"
+    },
+    {
+      "patterns": [
+        "(?:^|[-/])seedream-5.0-pro(?=$|@)"
+      ],
+      "canonicalModel": "seedream-5.0-pro",
+      "lane": "provisional",
+      "elo": 1282,
+      "ci95": 9,
+      "sources": [
+        "https://artificialanalysis.ai/leaderboards/image-generation"
+      ],
+      "verifiedAt": "2026-08-16"
+    },
+    {
+      "patterns": [
+        "(?:^|[-/])seedream-4.0(?=$|@)"
+      ],
+      "canonicalModel": "seedream-4.0",
+      "lane": "provisional",
+      "elo": 1219,
+      "ci95": 12,
+      "sources": [
+        "https://artificialanalysis.ai/leaderboards/image-generation"
+      ],
+      "verifiedAt": "2026-08-16"
+    }
+  ]
 }
