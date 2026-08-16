@@ -122,311 +122,51 @@
               />
             </section>
 
-            <!-- 模型重定向（模型映射 + Vision 回退 + 模型过滤） -->
-            <section :ref="(el: any) => setSectionRef('redirect', el)" data-section-id="redirect" class="pa-6 scroll-mt-4">
-              <v-alert
-                v-if="supportsChannelDiscovery"
-                class="mb-4"
-                variant="tonal"
-                color="info"
-                density="comfortable"
-                rounded="lg"
-              >
-                <div class="d-flex align-center justify-space-between ga-3 flex-wrap">
-                  <div class="d-flex align-center ga-2">
-                    <v-icon color="info">mdi-auto-fix</v-icon>
-                    <div>
-                      <div class="text-subtitle-2 font-weight-medium">{{ t('channelDiscovery.title') }}</div>
-                      <div class="text-caption text-medium-emphasis">{{ t('channelDiscovery.hint') }}</div>
-                    </div>
-                  </div>
-                  <v-btn
-                    color="info"
-                    variant="tonal"
-                    size="small"
-                    :loading="discoveringChannelConfig"
-                    @click="handleDiscoverChannelConfig"
-                  >
-                    <v-icon start size="small">mdi-radar</v-icon>
-                    {{ t('channelDiscovery.button') }}
-                  </v-btn>
-                </div>
-
-                <v-alert v-if="channelDiscoveryError" class="mt-3" type="error" variant="tonal" density="compact">
-                  {{ channelDiscoveryError }}
-                </v-alert>
-
-                <v-alert
-                  v-if="discoveringChannelConfig && !channelDiscoveryResult"
-                  class="mt-3"
-                  type="info"
-                  variant="tonal"
-                  density="compact"
-                >
-                  {{ t('channelDiscovery.running') }}
-                </v-alert>
-
-                <div v-if="channelDiscoveryResult" class="mt-3 d-flex flex-column ga-3">
-                  <div class="d-flex align-center ga-2 flex-wrap">
-                    <v-chip size="small" color="primary" variant="tonal">
-                      {{ t('channelDiscovery.recommendedKind', { kind: channelDiscoveryResult.recommendation.channelKind || '-' }) }}
-                    </v-chip>
-                    <v-chip size="small" color="success" variant="tonal">
-                      {{ t('channelDiscovery.modelsFound', { count: channelDiscoveryResult.models.items.length }) }}
-                    </v-chip>
-                    <v-chip
-                      v-for="protocol in channelDiscoverySuccessfulProtocols"
-                      :key="protocol.protocol"
-                      size="small"
-                      color="success"
-                      variant="tonal"
-                    >
-                      {{ protocol.protocol }} {{ protocol.successModels?.length || 0 }}
-                    </v-chip>
-                  </div>
-
-                  <div v-if="channelDiscoveryModelMappingEntries.length" class="d-flex flex-column ga-1">
-                    <div class="text-caption font-weight-medium">{{ t('channelDiscovery.mapping') }}</div>
-                    <div class="d-flex align-center ga-1 flex-wrap">
-                      <v-chip
-                        v-for="[source, target] in channelDiscoveryModelMappingEntries"
-                        :key="source"
-                        size="small"
-                        color="primary"
-                        variant="tonal"
-                      >
-                        {{ source }} → {{ target }}
-                      </v-chip>
-                    </div>
-                  </div>
-
-                  <div v-if="channelDiscoveryReasoningEntries.length" class="d-flex flex-column ga-1">
-                    <div class="text-caption font-weight-medium">{{ t('channelDiscovery.reasoning') }}</div>
-                    <div class="d-flex align-center ga-1 flex-wrap">
-                      <v-chip
-                        v-for="[source, effort] in channelDiscoveryReasoningEntries"
-                        :key="source"
-                        size="small"
-                        color="secondary"
-                        variant="outlined"
-                      >
-                        {{ source }}={{ effort }}
-                      </v-chip>
-                    </div>
-                    <div class="text-caption text-medium-emphasis">{{ t('channelDiscovery.reasoningNote') }}</div>
-                  </div>
-
-                  <div v-if="channelDiscoveryCompatEntries.length" class="d-flex flex-column ga-1">
-                    <div class="text-caption font-weight-medium">{{ t('channelDiscovery.compat') }}</div>
-                    <div class="d-flex align-center ga-1 flex-wrap">
-                      <v-chip
-                        v-for="[key, value] in channelDiscoveryCompatEntries"
-                        :key="key"
-                        size="small"
-                        :color="value ? 'warning' : 'grey'"
-                        variant="tonal"
-                      >
-                        {{ key }}={{ value }}
-                      </v-chip>
-                    </div>
-                  </div>
-
-                  <div v-if="channelDiscoveryResult.models.warnings?.length" class="text-caption text-warning">
-                    {{ channelDiscoveryResult.models.warnings.join(' / ') }}
-                  </div>
-
-                  <div v-if="channelDiscoveryCapabilityEntries.length" class="d-flex flex-column ga-1">
-                    <div class="text-caption font-weight-medium">{{ t('channelDiscovery.capabilities') }}</div>
-                    <div class="d-flex align-center ga-1 flex-wrap">
-                      <v-tooltip
-                        v-for="capability in channelDiscoveryCapabilityEntries"
-                        :key="capability.key"
-                        :text="capability.detail"
-                        location="top"
-                        :open-delay="150"
-                      >
-                        <template #activator="{ props: tooltipProps }">
-                          <v-chip
-                            v-bind="tooltipProps"
-                            size="small"
-                            :color="capability.color"
-                            variant="tonal"
-                          >
-                            {{ capability.label }}={{ capability.text }}
-                          </v-chip>
-                        </template>
-                      </v-tooltip>
-                    </div>
-                  </div>
-
-                  <div class="d-flex justify-end">
-                    <v-btn
-                      color="primary"
-                      variant="elevated"
-                      size="small"
-                      :disabled="!channelDiscoveryResult"
-                      @click="applyChannelDiscoveryRecommendation"
-                    >
-                      <v-icon start size="small">mdi-check</v-icon>
-                      {{ t('channelDiscovery.apply') }}
-                    </v-btn>
-                  </div>
-                </div>
-              </v-alert>
-
-              <ModelMappingSection
-                v-if="form.serviceType"
-                :mapping-rows="modelMappingRows"
-                :source-model-options="sourceModelOptions"
-                :target-model-options="targetModelOptions"
-                :fetching-models="fetchingModels"
-                :source-mapping-error="sourceMappingError"
-                :fetch-models-error="fetchModelsError"
-                :model-mapping-hint="modelMappingHint"
-                :target-model-placeholder="targetModelPlaceholder"
-                :show-model-mapping-presets="showModelMappingPresets"
-                :show-messages-open-a-i-channel-presets="showMessagesOpenAIChannelPresets"
-                :show-claude-channel-presets="showClaudeChannelPresets"
-                :show-codex-responses-channel-presets="showCodexResponsesChannelPresets"
-                :supports-reasoning-mapping-options="supportsReasoningMappingOptions"
-                :reasoning-effort-options="reasoningEffortOptions"
-                @update:mapping-rows="modelMappingRows = ($event as any)"
-                @sync-upstream="syncUpstreamModels"
-                @apply-preset="applyPreset"
-                @menu-update="onMenuUpdate"
-                @target-edit-start="startMappingTargetEdit"
-                @target-edit-end="finishMappingTargetEdit"
-              >
-                <template #vision-fallback>
-                  <div v-if="hasNoVisionRows" class="mt-6">
-                    <v-row dense>
-                      <v-col cols="12" :md="supportsReasoningMappingOptions ? 8 : 12">
-                        <v-combobox
-                          v-model="form.visionFallbackModel"
-                          :label="t('addChannel.visionFallbackLabel')"
-                          :placeholder="t('addChannel.visionFallbackPlaceholder')"
-                          :hint="t('addChannel.visionFallbackHint')"
-                          :items="targetModelOptions"
-                          prepend-inner-icon="mdi-eye"
-                          persistent-hint
-                          clearable
-                          variant="outlined"
-                          density="comfortable"
-                          eager
-                          @focus="startMappingTargetEdit(); ensureTargetModelsLoaded()"
-                          @blur="finishMappingTargetEdit"
-                          @update:menu="onMenuUpdate"
-                        />
-                      </v-col>
-                      <v-col v-if="supportsReasoningMappingOptions" cols="12" md="4">
-                        <v-select
-                          v-model="form.visionFallbackReasoningEffort"
-                          :label="t('addChannel.visionFallbackReasoningLabel')"
-                          :items="reasoningEffortOptions"
-                          variant="outlined"
-                          density="comfortable"
-                          clearable
-                          persistent-hint
-                          :hint="t('addChannel.visionFallbackReasoningHint')"
-                          eager
-                          @update:menu="onMenuUpdate"
-                        />
-                      </v-col>
-                    </v-row>
-                  </div>
-                </template>
-              </ModelMappingSection>
-
-              <!-- 模型过滤 -->
-              <div class="mt-4">
-                <SupportedModelsFilter
-                  :model-value="form.supportedModels"
-                  :error="supportedModelsError"
-                  :common-filters="commonSupportedModelFilters"
-                  :selected-filters="Array.from(selectedSupportedModelSet)"
-                  @update:model-value="handleSupportedModelsChange($event as any)"
-                  @append-filter="appendSupportedModelFilter"
-                  @menu-update="onMenuUpdate"
-                />
-              </div>
-
-              <div v-if="props.channelType !== 'images' && props.channelType !== 'vectors'" class="mt-6">
-                <ModelCapabilitySection
-                  v-model:rows="form.modelCapabilityRows"
-                  :target-model-options="targetModelOptions"
-                  :mapped-target-models="mappedTargetModels"
-                  :fetching-models="fetchingModels"
-                  :fetch-models-error="fetchModelsError"
-                  :error="modelCapabilitiesError"
-                  @sync-upstream="syncUpstreamModels"
-                  @menu-update="onMenuUpdate"
-                />
-              </div>
-
-              <div v-if="props.channelType === 'vectors'" class="mt-6">
-                <EmbeddingCompatibilitySection
-                  v-model:rows="form.embeddingCapabilityRows"
-                  :target-model-options="targetModelOptions"
-                  :mapped-target-models="mappedTargetModels"
-                  :fetching-models="fetchingModels"
-                  :fetch-models-error="fetchModelsError"
-                  :error="embeddingCapabilitiesError"
-                  @sync-upstream="syncUpstreamModels"
-                  @menu-update="onMenuUpdate"
-                />
-              </div>
-            </section>
-
-            <!-- 高级选项 -->
-            <section :ref="(el: any) => setSectionRef('advanced', el)" data-section-id="advanced" class="pa-6 scroll-mt-4">
-              <AdvancedOptionsSection
-                :form="form"
-                :channel-type="props.channelType"
-                :supports-open-a-i-advanced-options="supportsOpenAIAdvancedOptions"
-                :reasoning-param-style-options="reasoningParamStyleOptions"
-                :text-verbosity-options="textVerbosityOptions"
-                :is-auto-managed="true"
-                :diagnosing="diagnosingCompat"
-                :diagnose-result="diagnoseResult"
-                @update:form="updateForm"
-                @menu-update="onMenuUpdate"
-                @diagnose="handleDiagnoseCompat"
-              />
-            </section>
-
-            <!-- 自定义参数（自定义请求头 + 流式超时） -->
+            <!-- 自定义参数（自定义请求头 + 充值倍率/汇率） -->
             <section :ref="(el: any) => setSectionRef('custom', el)" data-section-id="custom" class="pa-6 scroll-mt-4">
               <CustomHeadersSection
                 :headers="customHeadersArray"
                 @update:headers="updateCustomHeaders"
               />
 
+              <!-- 渠道级计费：充值倍率 + 汇率 -->
               <div class="mt-6">
-                <TransportConfigGroup :form="form" @update:field="(field, value) => updateForm({ [field]: value })" />
-              </div>
-
-              <div class="mt-6">
-                <StreamTimeoutSection
-                  :request-timeout-ms="form.requestTimeoutMs"
-                  :response-header-timeout-ms="form.responseHeaderTimeoutMs"
-                  :selected-strategy="selectedStreamTimeoutStrategy"
-                  :first-content-enabled="form.streamFirstContentTimeoutEnabled"
-                  :first-content-ms="form.streamFirstContentTimeoutMs"
-                  :inactivity-enabled="form.streamInactivityTimeoutEnabled"
-                  :inactivity-ms="form.streamInactivityTimeoutMs"
-                  :tool-call-idle-enabled="form.streamToolCallIdleTimeoutEnabled"
-                  :tool-call-idle-ms="form.streamToolCallIdleTimeoutMs"
-                  @update:request-timeout-ms="form.requestTimeoutMs = $event"
-                  @update:response-header-timeout-ms="form.responseHeaderTimeoutMs = $event"
-                  @apply-strategy="applyStreamTimeoutStrategy"
-                  @update:first-content-ms="form.streamFirstContentTimeoutMs = $event"
-                  @update:inactivity-ms="form.streamInactivityTimeoutMs = $event"
-                  @update:tool-call-idle-ms="form.streamToolCallIdleTimeoutMs = $event"
-                />
-              </div>
-
-              <div class="mt-6">
-                <RateLimitGroup :form="form" @update:field="(field, value) => updateForm({ [field]: value })" />
+                <div class="text-subtitle-2 font-weight-medium mb-1">{{ t('channelEditor.billing.title') }}</div>
+                <div class="text-caption text-medium-emphasis mb-3">{{ t('channelEditor.billing.hint') }}</div>
+                <v-row dense>
+                  <v-col cols="12" sm="6">
+                    <v-text-field
+                      :model-value="form.costMultiplier"
+                      :label="t('channelEditor.billing.costMultiplier.label')"
+                      :hint="t('channelEditor.billing.costMultiplier.hint')"
+                      persistent-hint
+                      prepend-inner-icon="mdi-multiplication"
+                      variant="outlined"
+                      density="comfortable"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      clearable
+                      @update:model-value="updateForm({ costMultiplier: $event })"
+                    />
+                  </v-col>
+                  <v-col cols="12" sm="6">
+                    <v-text-field
+                      :model-value="form.exchangeRate"
+                      :label="t('channelEditor.billing.exchangeRate.label')"
+                      :hint="t('channelEditor.billing.exchangeRate.hint')"
+                      persistent-hint
+                      prepend-inner-icon="mdi-currency-usd"
+                      variant="outlined"
+                      density="comfortable"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      clearable
+                      @update:model-value="updateForm({ exchangeRate: $event })"
+                    />
+                  </v-col>
+                </v-row>
               </div>
             </section>
           </v-form>
@@ -462,15 +202,7 @@ import AddChannelSidebarNav from './edit-channel/AddChannelSidebarNav.vue'
 import BasicInfoSection from './edit-channel/BasicInfoSection.vue'
 import ProtocolModelAvailability from './edit-channel/ProtocolModelAvailability.vue'
 import ApiKeyManagementSection from './edit-channel/ApiKeyManagementSection.vue'
-import ModelMappingSection from './edit-channel/ModelMappingSection.vue'
-import ModelCapabilitySection from './edit-channel/ModelCapabilitySection.vue'
-import EmbeddingCompatibilitySection from './edit-channel/EmbeddingCompatibilitySection.vue'
-import SupportedModelsFilter from './edit-channel/SupportedModelsFilter.vue'
 import CustomHeadersSection from './edit-channel/CustomHeadersSection.vue'
-import StreamTimeoutSection from './edit-channel/StreamTimeoutSection.vue'
-import AdvancedOptionsSection from './edit-channel/AdvancedOptionsSection.vue'
-import TransportConfigGroup from './edit-channel/TransportConfigGroup.vue'
-import RateLimitGroup from './edit-channel/RateLimitGroup.vue'
 import NewApiAccountPanel from './edit-channel/NewApiAccountPanel.vue'
 import { useEditChannelModal, type EditChannelModalEmits, type EditChannelModalProps } from '../composables/useEditChannelModal'
 import { ApiService } from '../services/api'
@@ -571,48 +303,19 @@ const {
   baseUrlHasError,
   onMenuUpdate,
   serviceTypeOptions,
-  sourceModelOptions,
-  modelMappingHint,
-  targetModelPlaceholder,
-  reasoningEffortOptions,
-  reasoningParamStyleOptions,
-  textVerbosityOptions,
-  supportsOpenAIAdvancedOptions,
-  supportsReasoningMappingOptions,
-  supportsChannelDiscovery,
-  showModelMappingPresets,
-  showMessagesOpenAIChannelPresets,
-  showClaudeChannelPresets,
-  showCodexResponsesChannelPresets,
   form,
   baseUrlsText,
-  modelMappingRows,
-  hasNoVisionRows,
-  mappedTargetModels,
-  sourceMappingError,
-  targetModelOptions,
-  fetchingModels,
-  fetchModelsError,
   keyModelsStatus,
   errors,
   rules,
   isEditing,
   isMac,
-  selectedStreamTimeoutStrategy,
-  applyStreamTimeoutStrategy,
-  commonSupportedModelFilters,
-  selectedSupportedModelSet,
-  supportedModelsError,
-  modelCapabilitiesError,
-  embeddingCapabilitiesError,
-  startMappingTargetEdit,
-  finishMappingTargetEdit,
+  targetModelOptions,
   headerClasses,
   avatarColor,
   headerIconStyle,
   subtitleClasses,
   isFormValid,
-  handleSupportedModelsChange,
   restoringKey,
   submitting,
   visibleDisabledKeys,
@@ -632,26 +335,10 @@ const {
   suspendingKey,
   suspendKey,
   resumeKey,
-  appendSupportedModelFilter,
   ensureTargetModelsLoaded,
   updateForm,
-  syncUpstreamModels,
-  discoveringChannelConfig,
-  channelDiscoveryResult,
-  channelDiscoveryError,
-  channelDiscoveryModelMappingEntries,
-  channelDiscoveryCompatEntries,
-  channelDiscoveryReasoningEntries,
-  channelDiscoverySuccessfulProtocols,
-  channelDiscoveryCapabilityEntries,
-  handleDiscoverChannelConfig,
-  applyChannelDiscoveryRecommendation,
-  applyPreset,
   handleSubmit,
   handleCancel,
-  diagnosingCompat,
-  diagnoseResult,
-  handleDiagnoseCompat,
   scrollToSection,
   setSectionRef,
   t,

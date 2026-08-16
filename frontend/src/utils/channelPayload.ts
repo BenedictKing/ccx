@@ -67,6 +67,8 @@ export interface ChannelFormLike {
   fastMode: boolean
   customHeaders: Record<string, string>
   proxyUrl: string
+  costMultiplier?: string | number | null
+  exchangeRate?: string | number | null
   requestTimeoutMs?: string | number | null
   responseHeaderTimeoutMs?: string | number | null
   streamFirstContentTimeoutMs?: string | number | null
@@ -605,6 +607,12 @@ export function buildChannelPayload(
   if (Number.isInteger(responseHeaderTimeoutMs) && responseHeaderTimeoutMs >= 1000 && responseHeaderTimeoutMs <= 300000) {
     channelData.responseHeaderTimeoutMs = responseHeaderTimeoutMs
   }
+
+  // 渠道级计费覆盖：>0 生效；留空/0 发 0 让后端清零（nil=不参与有效成本核算）
+  const costMultiplier = Number(form.costMultiplier)
+  channelData.costMultiplier = Number.isFinite(costMultiplier) && costMultiplier > 0 ? costMultiplier : 0
+  const exchangeRate = Number(form.exchangeRate)
+  channelData.exchangeRate = Number.isFinite(exchangeRate) && exchangeRate > 0 ? exchangeRate : 0
 
   const streamFirstContentTimeoutMs = Number(form.streamFirstContentTimeoutMs)
   if (Number.isInteger(streamFirstContentTimeoutMs) && streamFirstContentTimeoutMs > 0) {

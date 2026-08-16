@@ -265,6 +265,8 @@ import {
   mdiPlaylistPlus,
   mdiTuneVariant,
   mdiAccountMultipleOutline,
+  mdiMultiplication,
+  mdiCurrencyUsd,
 } from '@mdi/js'
 
 // 图标名称到 SVG path 的映射 (使用 kebab-case)
@@ -400,6 +402,8 @@ const iconMap: Record<string, string> = {
   'text': mdiText,
   'tune': mdiTune,
   'tune-variant': mdiTuneVariant,
+  'multiplication': mdiMultiplication,
+  'currency-usd': mdiCurrencyUsd,
   'account-multiple-outline': mdiAccountMultipleOutline,
   'image-sync': mdiImageSync,
   'image-outline': mdiImageOutline,

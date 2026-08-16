@@ -6,7 +6,7 @@ export const EDIT_CHANNEL_PAYLOAD_KEYS = [
   'lowQuality', 'injectDummyThoughtSignature', 'stripThoughtSignature', 'description',
   'apiKeys', 'apiKeyConfigs', 'modelMapping', 'modelCapabilities', 'embeddingCapabilities', 'defaultCapability', 'allowUnknownContext',
   'reasoningMapping', 'reasoningParamStyle', 'textVerbosity',
-  'fastMode', 'customHeaders', 'proxyUrl', 'authHeader', 'requestTimeoutMs', 'responseHeaderTimeoutMs', 'streamFirstContentTimeoutMs', 'streamInactivityTimeoutMs', 'streamToolCallIdleTimeoutMs', 'routePrefix', 'supportedModels',
+  'fastMode', 'customHeaders', 'proxyUrl', 'costMultiplier', 'exchangeRate', 'authHeader', 'requestTimeoutMs', 'responseHeaderTimeoutMs', 'streamFirstContentTimeoutMs', 'streamInactivityTimeoutMs', 'streamToolCallIdleTimeoutMs', 'routePrefix', 'supportedModels',
   'rateLimitRpm', 'rateLimitWindowMinutes', 'rateLimitMaxConcurrent', 'rateLimitAutoFromHeaders',
   'autoBlacklistBalance', 'normalizeMetadataUserId', 'stripBillingHeader', 'normalizeSystemRoleToTopLevel',
   'codexToolCompat', 'stripCodexClientTools', 'convertImageUrlToB64Json', 'tags',

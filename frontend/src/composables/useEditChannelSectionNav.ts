@@ -11,8 +11,6 @@ export function useEditChannelSectionNav(t: Translator) {
   const sections = [
     { id: 'basic', label: t('channelEditor.nav.basic') },
     { id: 'auth', label: t('channelEditor.nav.auth') },
-    { id: 'redirect', label: t('channelEditor.nav.redirect') },
-    { id: 'advanced', label: t('channelEditor.nav.advanced') },
     { id: 'custom', label: t('channelEditor.nav.custom') },
   ]
 

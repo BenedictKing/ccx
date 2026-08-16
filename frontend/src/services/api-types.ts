@@ -260,6 +260,8 @@ export interface Channel {
   fastMode?: boolean
   customHeaders?: Record<string, string>  // 自定义请求头
   proxyUrl?: string                        // HTTP/HTTPS/SOCKS5 代理 URL
+  costMultiplier?: number                  // 渠道级充值倍率（EffectiveCost = ListCost × 倍率，0/空=不参与）
+  exchangeRate?: number                    // 渠道计价单位/USD 汇率（如 CNY=6.8，0/空=用全局默认）
   requestTimeoutMs?: number                // 非流式上游请求超时时间（毫秒，0/空=继承全局）
   responseHeaderTimeoutMs?: number         // 等待上游 HTTP 响应头超时时间（毫秒，0/空=继承全局）
   streamFirstContentTimeoutMs?: number     // 流式首字等待超时（毫秒，0/空=继承全局）

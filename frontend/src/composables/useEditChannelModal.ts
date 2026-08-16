@@ -141,7 +141,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
   const { isAnySelectMenuOpen, suppressDialogEscapeUntil, onMenuUpdate } = useDialogMenuWorkaround()
   // 所有渠道均为自动托管；仅自定义手填地址（无 providerId 且非官方直连）可编辑地址池。
   const isEditableBaseUrlsChannel = computed(() => !props.channel?.providerId && !isOfficialProviderChannel(props.channel))
-  const sections = computed(() => allSections.filter(section => section.id === 'basic' || section.id === 'auth'))
+  const sections = computed(() => allSections.filter(section => section.id === 'basic' || section.id === 'auth' || section.id === 'custom'))
 
   const supportsOpenAIAdvancedOptions = computed(() => props.channelType !== 'vectors' && supportsAdvancedChannelOptions(form.serviceType))
   const supportsReasoningMappingOptions = computed(() => props.channelType !== 'vectors' && supportsReasoningMapping(form.serviceType))
@@ -181,6 +181,8 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     fastMode: false,
     customHeaders: {} as Record<string, string>,
     proxyUrl: '',
+    costMultiplier: null as string | number | null,
+    exchangeRate: null as string | number | null,
     requestTimeoutMs: null as string | number | null,
     responseHeaderTimeoutMs: null as string | number | null,
     streamFirstContentTimeoutEnabled: false,
@@ -732,15 +734,13 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
   const { headerClasses, avatarColor, headerIconStyle, subtitleClasses } = useChannelEditorHeaderState(theme)
 
   const isFormValid = computed(() => {
-    // 渠道名称不再接受手工修改：由首个 baseURL 自动派生，无需校验用户输入
     const draftUrls = draftBaseUrls()
     const hasValidBaseUrl = form.serviceType === 'copilot'
       || (isEditableBaseUrlsChannel.value && draftUrls.length > 0 && draftUrls.every(isValidUrl))
       || !isEditableBaseUrlsChannel.value
     const hasValidApiKeys = form.serviceType === 'copilot' || hasConfigurableKeys.value
-    const hasValidModelConfig = !modelCapabilitiesError.value && !embeddingCapabilitiesError.value
     return (
-      !!form.serviceType && hasValidBaseUrl && hasValidApiKeys && hasValidModelConfig
+      !!form.serviceType && hasValidBaseUrl && hasValidApiKeys
     )
   })
 
@@ -791,8 +791,13 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
       stripCodexClientTools: props.channel.stripCodexClientTools,
       convertImageUrlToB64Json: props.channel.convertImageUrlToB64Json,
       historicalImageTurnLimit: props.channel.historicalImageTurnLimit,
-      customHeaders: { ...(props.channel.customHeaders || {}) },
-      proxyUrl: props.channel.proxyUrl || '',
+      // 代理/自定义请求头/备注：取表单值（用户可编辑），而非沿用渠道旧值——
+      // 此前沿用旧值导致编辑保存后不生效（proxyUrl/customHeaders 保存丢失的根因）。
+      customHeaders: { ...form.customHeaders },
+      proxyUrl: form.proxyUrl.trim(),
+      remark: form.remark.trim(),
+      costMultiplier: form.costMultiplier,
+      exchangeRate: form.exchangeRate,
       routePrefix: props.channel.routePrefix || '',
       requestTimeoutMs: props.channel.requestTimeoutMs,
       responseHeaderTimeoutMs: props.channel.responseHeaderTimeoutMs,
@@ -918,6 +923,8 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     form.fastMode = false
     form.customHeaders = {}
     form.proxyUrl = ''
+    form.costMultiplier = null
+    form.exchangeRate = null
     form.requestTimeoutMs = null
     form.responseHeaderTimeoutMs = null
     form.streamFirstContentTimeoutEnabled = false
@@ -1009,6 +1016,8 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     form.fastMode = !!channel.fastMode
     form.customHeaders = { ...(channel.customHeaders || {}) }
     form.proxyUrl = channel.proxyUrl || ''
+    form.costMultiplier = channel.costMultiplier ?? null
+    form.exchangeRate = channel.exchangeRate ?? null
     form.requestTimeoutMs = channel.requestTimeoutMs || null
     form.responseHeaderTimeoutMs = channel.responseHeaderTimeoutMs || null
     form.streamFirstContentTimeoutEnabled = !!(channel.streamFirstContentTimeoutMs && channel.streamFirstContentTimeoutMs > 0)
