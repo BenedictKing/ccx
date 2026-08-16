@@ -346,6 +346,7 @@ describe('综合解析场景', () => {
     expect(parseQuickInput('https://openrouter.ai/api/v1 sk-key1234567890').detectedServiceType).toBe('openai')
     expect(parseQuickInput('https://api.kimi.com/coding/v1 sk-key1234567890').detectedServiceType).toBe('openai')
     expect(parseQuickInput('https://api.githubcopilot.com sk-key1234567890').detectedServiceType).toBe('copilot')
+    expect(parseQuickInput('https://api-ai.gitcode.com/v1 sk-key1234567890').detectedServiceType).toBe('openai')
   })
 
   it('应正确解析 URL + 多个 API Key', () => {

@@ -270,6 +270,7 @@ const detectServiceTypeAndCleanUrl = (
       'https://openrouter.ai/api/v1',
       'https://api-inference.modelscope.cn/v1',
       'https://api.easytransnote.com/coding/v1',
+      'https://api-ai.gitcode.com/v1',
     ])
     if (knownClaudeUrls.has(urlKey)) {
       return { serviceType: 'claude', cleanedUrl: cleanUrl }

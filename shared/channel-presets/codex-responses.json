@@ -181,6 +181,24 @@
       "baseUrl": "https://api.githubcopilot.com",
       "codexToolCompat": false,
       "stripCodexClientTools": false
+    },
+    "atomgit": {
+      "modelMapping": {
+        "codex": "glm-5.2-200k",
+        "gpt": "glm-5.2-200k",
+        "mini": "glm-5.2-200k"
+      },
+      "reasoningMapping": {
+        "codex": "high",
+        "gpt": "high",
+        "mini": "high"
+      },
+      "reasoningParamStyle": "thinking",
+      "serviceType": "openai",
+      "codexToolCompat": true,
+      "stripCodexClientTools": true,
+      "noVisionModels": ["glm-5.2-200k"],
+      "visionFallbackModel": ""
     }
   }
 }

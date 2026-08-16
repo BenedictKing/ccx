@@ -61,5 +61,6 @@ describe('quick input service type detection', () => {
     expect(parseQuickInput('https://maas-coding-api.cn-huabei-1.xf-yun.com/v1/responses sk-key1234567890').detectedServiceType).toBe('responses')
     expect(parseQuickInput('https://maas-api.cn-huabei-1.xf-yun.com/anthropic sk-key1234567890').detectedServiceType).toBe('claude')
     expect(parseQuickInput('https://maas-api.cn-huabei-1.xf-yun.com/v2 sk-key1234567890').detectedServiceType).toBe('openai')
+    expect(parseQuickInput('https://api-ai.gitcode.com/v1 sk-key1234567890').detectedServiceType).toBe('openai')
   })
 })

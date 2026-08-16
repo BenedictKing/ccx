@@ -21,6 +21,7 @@ export const providerConsoleLinks: Record<string, string> = {
   modelscope: 'https://modelscope.cn/my/myaccesstoken',
   openai: 'https://platform.openai.com',
   xfyun: 'https://console.xfyun.cn/',
+  atomgit: 'https://ai.atomgit.com/dashboard/coding-plan'
 }
 
 export const providerPromotionLinks: Record<string, string> = {

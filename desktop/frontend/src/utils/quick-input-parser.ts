@@ -267,6 +267,7 @@ const detectServiceTypeAndCleanUrl = (
       'https://api.easytransnote.com/coding/v1',
       'https://maas-coding-api.cn-huabei-1.xf-yun.com/v2',
       'https://maas-api.cn-huabei-1.xf-yun.com/v2',
+      'https://api-ai.gitcode.com/v1',
     ])
     if (knownClaudeUrls.has(urlKey)) {
       return { serviceType: 'claude', cleanedUrl: cleanUrl }

@@ -22,5 +22,6 @@ func generatedCodexResponsesTargetConfigs() map[string]channelTargetConfig {
 		"qianfan":        channelTargetConfig{ModelMapping: map[string]string{"codex": "qianfan-code-latest", "gpt": "qianfan-code-latest", "mini": "qianfan-code-latest"}},
 		"xfyun":          channelTargetConfig{ModelMapping: map[string]string{"codex": "astron-code-latest", "gpt": "astron-code-latest", "mini": "astron-code-latest"}, ServiceType: "responses"},
 		"github-copilot": channelTargetConfig{ServiceType: "copilot", CodexToolCompat: boolRef(false), StripCodexClientTools: boolRef(false)},
+		"atomgit":        channelTargetConfig{ModelMapping: map[string]string{"codex": "glm-5.2-200k", "gpt": "glm-5.2-200k", "mini": "glm-5.2-200k"}, ReasoningMapping: map[string]string{"codex": "high", "gpt": "high", "mini": "high"}, ServiceType: "openai", ReasoningParamStyle: "thinking", NoVisionModels: []string{"glm-5.2-200k"}, CodexToolCompat: boolRef(true), StripCodexClientTools: boolRef(true)},
 	}
 }

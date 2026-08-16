@@ -22,7 +22,8 @@ const PROVIDER_BRAND_NAMES: Record<string, string> = {
   xfyun: '讯飞星辰',
   openrouter: 'OpenRouter',
   modelscope: 'ModelScope 魔搭',
-  originrouter: '极易云 OriginRouter'
+  originrouter: '极易云 OriginRouter',
+  atomgit: 'AtomGit'
 }
 
 export const providerDisplayName = (providerId?: string): string => {

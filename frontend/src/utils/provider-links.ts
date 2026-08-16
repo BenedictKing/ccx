@@ -21,6 +21,7 @@ export const providerConsoleLinks: Record<string, string> = {
   openrouter: 'https://openrouter.ai/keys',
   modelscope: 'https://modelscope.cn/my/myaccesstoken',
   xfyun: 'https://console.xfyun.cn/',
+  atomgit: 'https://ai.atomgit.com/dashboard/coding-plan'
 }
 
 /** 推广 / 注册链接（带 aff 溯源，标记赞助商渠道） */

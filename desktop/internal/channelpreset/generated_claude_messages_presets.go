@@ -21,5 +21,6 @@ func generatedClaudeMessagesTargetConfigs() map[string]channelTargetConfig {
 		"qianfan":       channelTargetConfig{ModelMapping: map[string]string{"fable": "qianfan-code-latest", "haiku": "qianfan-code-latest", "opus": "qianfan-code-latest", "sonnet": "qianfan-code-latest"}, NormalizeSystemRoleToTopLevel: true},
 		"xfyun":         channelTargetConfig{ModelMapping: map[string]string{"fable": "astron-code-latest", "haiku": "astron-code-latest", "opus": "astron-code-latest", "sonnet": "astron-code-latest"}, NormalizeSystemRoleToTopLevel: true},
 		"tencent-lkeap": channelTargetConfig{NormalizeSystemRoleToTopLevel: true},
+		"atomgit":       channelTargetConfig{ModelMapping: map[string]string{"fable": "glm-5.2-200k", "haiku": "glm-5.2-200k", "opus": "glm-5.2-200k", "sonnet": "glm-5.2-200k"}, ReasoningMapping: map[string]string{"fable": "max", "haiku": "high", "opus": "max", "sonnet": "max"}, ServiceType: "openai", ReasoningParamStyle: "thinking", NormalizeSystemRoleToTopLevel: true, NoVisionModels: []string{"glm-5.2-200k"}},
 	}
 }

@@ -297,5 +297,26 @@ export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
     "noVisionModels": [],
     "visionFallbackModel": "",
     "serviceType": "copilot"
+  },
+  "atomgit": {
+    "modelMapping": {
+      "codex": "glm-5.2-200k",
+      "gpt": "glm-5.2-200k",
+      "mini": "glm-5.2-200k"
+    },
+    "reasoningMapping": {
+      "codex": "high",
+      "gpt": "high",
+      "mini": "high"
+    },
+    "reasoningParamStyle": "thinking",
+    "codexToolCompat": true,
+    "stripCodexClientTools": true,
+    "noVision": false,
+    "noVisionModels": [
+      "glm-5.2-200k"
+    ],
+    "visionFallbackModel": "",
+    "serviceType": "openai"
   }
 }
