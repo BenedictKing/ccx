@@ -3,33 +3,36 @@ package autopilot
 import (
 	"fmt"
 	"log"
+	"sort"
 	"strings"
 	"time"
-
-	"github.com/BenedictKing/ccx/internal/config"
 )
 
-// BenchmarkModelSelectionReport 记录一次 benchmark 更新后典型场景的模型选择结果。
+// BenchmarkModelSelectionReport 是渠道无关的基准选型报告：
+// 在调用方合成的全局候选池上，为每个典型场景跑一次与真实路由一致的
+// frontier 选型，回答"benchmark 数据下该选什么模型、什么思考强度"。
+// 报告不展示逐渠道映射；渠道实际可选范围取决于各自探测画像。
 type BenchmarkModelSelectionReport struct {
 	GeneratedAt time.Time
+	PoolSize    int
 	Scenarios   []BenchmarkReportScenario
 }
 
-// BenchmarkReportScenario 描述一个典型请求场景。
+// BenchmarkReportScenario 描述一个典型请求场景及其选择结果。
 type BenchmarkReportScenario struct {
-	Name           string
-	RequestModel   string
-	ChannelKind    string
-	TaskClass      TaskClass
-	CostPreference CostPreferenceMode
-	Rows           []BenchmarkReportChannelRow
+	Name             string
+	RequestModel     string
+	TaskClass        TaskClass
+	CostPreference   CostPreferenceMode
+	TaskDomain       TaskDomain
+	MinContextTokens int
+	Row              BenchmarkReportRow
 }
 
-// BenchmarkReportChannelRow 描述某个渠道在该场景下的选择结果。
-type BenchmarkReportChannelRow struct {
-	ChannelName    string
+// BenchmarkReportRow 描述该场景下的选择结果。
+type BenchmarkReportRow struct {
 	SelectedModel  string
-	MappedModel    string
+	Effort         string
 	BenchmarkScore float64
 	CostUSD        float64
 	QualityTier    string
@@ -41,160 +44,121 @@ type BenchmarkReportChannelRow struct {
 
 // benchmarkReportScenarioDef 是内部场景定义。
 type benchmarkReportScenarioDef struct {
-	Name           string
-	RequestModel   string
-	ChannelKind    string
-	TaskClass      TaskClass
-	CostPreference CostPreferenceMode
+	Name             string
+	RequestModel     string
+	TaskClass        TaskClass
+	CostPreference   CostPreferenceMode
+	TaskDomain       TaskDomain
+	MinContextTokens int
 }
 
-// defaultBenchmarkReportScenarios 是每次 benchmark 刷新后检查的典型场景。
+// defaultBenchmarkReportScenarios 覆盖 opus 类请求最关心的选型维度：
+// 默认干活、主代理、轻量省钱、长上下文两档门槛、编程域。
 var defaultBenchmarkReportScenarios = []benchmarkReportScenarioDef{
-	{"claude-opus-4-8 -> messages/worker/balanced", "claude-opus-4-8", "messages", TaskClassWorker, CostPrefBalanced},
-	{"claude-opus-4-8 -> messages/worker/quality_first", "claude-opus-4-8", "messages", TaskClassWorker, CostPrefQualityFirst},
-	{"claude-opus-4-8 -> messages/supervisor/quality_first", "claude-opus-4-8", "messages", TaskClassSupervisor, CostPrefQualityFirst},
-	{"claude-opus-4-8 -> messages/lightweight/cost_first", "claude-opus-4-8", "messages", TaskClassLightweight, CostPrefCostFirst},
-	{"claude-opus-4-8 -> responses/worker/balanced", "claude-opus-4-8", "responses", TaskClassWorker, CostPrefBalanced},
-	{"claude-opus-4-8 -> chat/worker/balanced", "claude-opus-4-8", "chat", TaskClassWorker, CostPrefBalanced},
+	{"worker/balanced（默认干活）", "claude-opus-4-8", TaskClassWorker, CostPrefBalanced, TaskDomainGeneral, 0},
+	{"supervisor/quality_first（主代理）", "claude-opus-4-8", TaskClassSupervisor, CostPrefQualityFirst, TaskDomainGeneral, 0},
+	{"lightweight/cost_first（轻量省钱）", "claude-opus-4-8", TaskClassLightweight, CostPrefCostFirst, TaskDomainGeneral, 0},
+	{"long_context/balanced ctx>=200k", "claude-opus-4-8", TaskClassLongContext, CostPrefBalanced, TaskDomainGeneral, 200_000},
+	{"long_context/balanced ctx>=1M", "claude-opus-4-8", TaskClassLongContext, CostPrefBalanced, TaskDomainGeneral, 1_000_000},
+	{"worker/balanced coding（编程）", "claude-opus-4-8", TaskClassWorker, CostPrefBalanced, TaskDomainCoding, 0},
 }
 
-// GenerateBenchmarkSelectionReport 生成一份典型场景的模型选择报告。
-// resolver 用于解析每个渠道的实际模型；cfgManager 用于读取活跃 auto-managed 渠道。
+// benchmarkReportMaxBetterOptions 限制更优候选列表长度，保持报告可读。
+const benchmarkReportMaxBetterOptions = 5
+
+// GenerateBenchmarkSelectionReport 在全局候选池上为每个典型场景生成选择结果。
+// poolUID 是合成候选池在 profileStore 中的 ChannelUID；候选为空时返回 nil。
 // 当前仅由 cmd/benchmark-report CLI 调用（主程序不再输出该报告）。
-func GenerateBenchmarkSelectionReport(resolver *ModelResolver, cfgManager *config.ConfigManager) *BenchmarkModelSelectionReport {
-	if resolver == nil || resolver.profileStore == nil || cfgManager == nil {
+func GenerateBenchmarkSelectionReport(resolver *ModelResolver, poolUID string) *BenchmarkModelSelectionReport {
+	if resolver == nil || resolver.profileStore == nil || poolUID == "" {
+		return nil
+	}
+
+	pool := filterProbedModelProfiles(resolver.profileStore.ListActiveByChannel(poolUID))
+	if len(pool) == 0 {
 		return nil
 	}
 
 	report := &BenchmarkModelSelectionReport{
 		GeneratedAt: time.Now().UTC(),
+		PoolSize:    len(pool),
 		Scenarios:   make([]BenchmarkReportScenario, 0, len(defaultBenchmarkReportScenarios)),
 	}
-
-	cfg := cfgManager.GetConfig()
-	channels := collectAutoManagedChannels(cfg)
-
 	for _, scenarioDef := range defaultBenchmarkReportScenarios {
-		scenario := BenchmarkReportScenario{
-			Name:           scenarioDef.Name,
-			RequestModel:   scenarioDef.RequestModel,
-			ChannelKind:    scenarioDef.ChannelKind,
-			TaskClass:      scenarioDef.TaskClass,
-			CostPreference: scenarioDef.CostPreference,
-			Rows:           make([]BenchmarkReportChannelRow, 0, len(channels)),
-		}
-
-		for _, ch := range channels {
-			if !channelKindMatches(ch.Kind, scenarioDef.ChannelKind) {
-				continue
-			}
-			row := buildBenchmarkReportChannelRow(resolver, ch, scenarioDef)
-			scenario.Rows = append(scenario.Rows, row)
-		}
-
-		if len(scenario.Rows) > 0 {
-			report.Scenarios = append(report.Scenarios, scenario)
-		}
+		report.Scenarios = append(report.Scenarios, BenchmarkReportScenario{
+			Name:             scenarioDef.Name,
+			RequestModel:     scenarioDef.RequestModel,
+			TaskClass:        scenarioDef.TaskClass,
+			CostPreference:   scenarioDef.CostPreference,
+			TaskDomain:       scenarioDef.TaskDomain,
+			MinContextTokens: scenarioDef.MinContextTokens,
+			Row:              buildBenchmarkReportRow(resolver, pool, poolUID, scenarioDef),
+		})
 	}
-
 	return report
 }
 
-// LogBenchmarkSelectionReport 将报告以多行日志形式输出。
+// LogBenchmarkSelectionReport 将报告以单行/场景形式输出。
 // 已在 autopilot 包外被 cmd/benchmark-report 复用。
 func LogBenchmarkSelectionReport(report *BenchmarkModelSelectionReport) {
 	if report == nil || len(report.Scenarios) == 0 {
 		return
 	}
 
-	log.Printf("[BenchmarkSelectionReport] generated_at=%s scenarios=%d", report.GeneratedAt.Format(time.RFC3339), len(report.Scenarios))
+	log.Printf("[BenchmarkSelectionReport] generated_at=%s pool=%d scenarios=%d", report.GeneratedAt.Format(time.RFC3339), report.PoolSize, len(report.Scenarios))
 	for _, scenario := range report.Scenarios {
-		log.Printf("[BenchmarkSelectionReport] scenario=%s request=%s kind=%s task=%s preference=%s", scenario.Name, scenario.RequestModel, scenario.ChannelKind, scenario.TaskClass, scenario.CostPreference)
-		for _, row := range scenario.Rows {
-			breakdownParts := make([]string, 0, len(row.ScoreBreakdown))
-			for k, v := range row.ScoreBreakdown {
-				breakdownParts = append(breakdownParts, fmt.Sprintf("%s=%.3f", k, v))
-			}
-			breakdown := strings.Join(breakdownParts, " ")
-			extra := ""
-			if row.Anomaly != "" {
-				extra = fmt.Sprintf(" ANOMALY=%s", row.Anomaly)
-			}
-			if len(row.BetterOptions) > 0 {
-				extra += fmt.Sprintf(" better_options=%v", row.BetterOptions)
-			}
-			log.Printf("[BenchmarkSelectionReport]   channel=%s selected=%s mapped=%s bench=%.2f cost=%.2f tier=%s note=%s %s%s",
-				row.ChannelName, row.SelectedModel, row.MappedModel, row.BenchmarkScore, row.CostUSD, row.QualityTier, row.FrontierNote, breakdown, extra)
-		}
-	}
-}
-
-// channelInfoForReport 是报告用的渠道最小信息。
-type channelInfoForReport struct {
-	Name       string
-	ChannelUID string
-	Kind       string
-}
-
-func collectAutoManagedChannels(cfg config.Config) []channelInfoForReport {
-	var result []channelInfoForReport
-	for _, upstream := range cfg.Upstream {
-		if !upstream.AutoManaged {
+		row := scenario.Row
+		if row.Anomaly == "no_eligible_after_floor" {
+			log.Printf("[BenchmarkSelectionReport] %-38s -> 无满足能力下界的候选", scenario.Name)
 			continue
 		}
-		if upstream.Status == "disabled" {
-			continue
+		effort := row.Effort
+		if effort == "" {
+			effort = "-"
 		}
-		if upstream.ChannelUID == "" {
-			continue
+		extra := ""
+		if row.Anomaly != "" {
+			extra = fmt.Sprintf(" ANOMALY=%s", row.Anomaly)
 		}
-		result = append(result, channelInfoForReport{Name: upstream.Name, ChannelUID: upstream.ChannelUID, Kind: "messages"})
+		if len(row.BetterOptions) > 0 {
+			extra += fmt.Sprintf(" better_options=%v", row.BetterOptions)
+		}
+		log.Printf("[BenchmarkSelectionReport] %-38s selected=%s effort=%s bench=%.2f cost=%.2f tier=%s note=%s %s%s",
+			scenario.Name, row.SelectedModel, effort, row.BenchmarkScore, row.CostUSD, row.QualityTier, row.FrontierNote, formatBreakdown(row.ScoreBreakdown), extra)
 	}
-	// responses/chat/gemini/images/vectors 渠道暂不逐一扫描，避免报告过长；
-	// 典型场景已覆盖 responses/chat。
-	return result
 }
 
-func channelKindMatches(upstreamKind, scenarioKind string) bool {
-	if upstreamKind == "" {
-		return scenarioKind == "messages"
+func formatBreakdown(breakdown map[string]float64) string {
+	keys := make([]string, 0, len(breakdown))
+	for k := range breakdown {
+		keys = append(keys, k)
 	}
-	return upstreamKind == scenarioKind
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, fmt.Sprintf("%s=%.3f", k, breakdown[k]))
+	}
+	return strings.Join(parts, " ")
 }
 
-func buildBenchmarkReportChannelRow(resolver *ModelResolver, ch channelInfoForReport, scenario benchmarkReportScenarioDef) BenchmarkReportChannelRow {
-	row := BenchmarkReportChannelRow{
-		ChannelName:    ch.Name,
-		ScoreBreakdown: make(map[string]float64),
-	}
+// buildBenchmarkReportRow 在全局候选池上按场景能力下界过滤后做一次 frontier 选型。
+// 上下文门槛在此生效（低于 MinContextTokens 的候选被硬过滤），与真实路由一致。
+func buildBenchmarkReportRow(resolver *ModelResolver, pool []ModelProfile, poolUID string, scenario benchmarkReportScenarioDef) BenchmarkReportRow {
+	row := BenchmarkReportRow{ScoreBreakdown: make(map[string]float64)}
 
-	// 构造能力下界，与真实请求尽量接近。
 	floor := CapabilityFloor{
-		MinContextTokens: 0,
+		MinContextTokens: scenario.MinContextTokens,
 		TaskClass:        scenario.TaskClass,
-		TaskDomain:       "general",
+		TaskDomain:       scenario.TaskDomain,
 	}
-
-	// 收集该渠道已探测成功的画像。
-	allProfiles := resolver.profileStore.ListActiveByChannel(ch.ChannelUID)
-	eligible := make([]ModelProfile, 0, len(allProfiles))
-	for _, p := range allProfiles {
-		if p.ChannelKind != scenario.ChannelKind {
-			continue
-		}
-		if !p.ProbeSuccess {
-			continue
-		}
-		eligible = append(eligible, p)
-	}
-
+	eligible := filterByCapabilityFloor(pool, floor)
 	if len(eligible) == 0 {
-		row.Anomaly = "no_eligible_profiles"
+		row.Anomaly = "no_eligible_after_floor"
 		return row
 	}
 
 	// 使用 frontier 选型（与真实路由一致），但强制传入场景指定的 cost preference。
-	ranked := resolver.buildRankedCandidates(eligible, scenario.RequestModel, ch.ChannelUID, scenario.ChannelKind, floor)
+	ranked := resolver.buildRankedCandidates(eligible, scenario.RequestModel, poolUID, "messages", floor)
 	idx, note, ok := selectViaFrontier(ranked, floor, scenario.CostPreference)
 	if !ok || idx < 0 || idx >= len(ranked) {
 		// frontier 失败时回退到旧字典序链。
@@ -204,35 +168,28 @@ func buildBenchmarkReportChannelRow(resolver *ModelResolver, ch channelInfoForRe
 				best = ranked[i]
 			}
 		}
-		row.SelectedModel = best.profile.ModelID
-		row.MappedModel = best.profile.ModelID
-		row.BenchmarkScore = best.benchmarkScore
-		row.CostUSD = best.normalizedPublicCostUSD
-		row.QualityTier = string(best.profile.QualityTier)
 		row.FrontierNote = "fallback:" + note
-		fillBreakdown(&row, best)
+		fillBenchmarkReportRow(&row, best)
 	} else {
-		best := ranked[idx]
-		row.SelectedModel = best.profile.ModelID
-		row.MappedModel = best.profile.ModelID
-		row.BenchmarkScore = best.benchmarkScore
-		row.CostUSD = best.normalizedPublicCostUSD
-		row.QualityTier = string(best.profile.QualityTier)
 		row.FrontierNote = note
-		fillBreakdown(&row, best)
+		fillBenchmarkReportRow(&row, ranked[idx])
 	}
 
 	row.BetterOptions = findBetterOptions(ranked, row.SelectedModel)
 	if len(row.BetterOptions) > 0 {
 		row.Anomaly = "missed_better_model"
 	}
-
 	return row
 }
 
-func fillBreakdown(row *BenchmarkReportChannelRow, best rankedModelCandidate) {
-	mode := CostPrefBalanced
-	row.ScoreBreakdown["quality_score"] = frontierQualityScore(best, mode)
+func fillBenchmarkReportRow(row *BenchmarkReportRow, best rankedModelCandidate) {
+	row.SelectedModel = best.profile.ModelID
+	row.Effort = string(best.effort)
+	row.BenchmarkScore = best.benchmarkScore
+	row.CostUSD = best.normalizedPublicCostUSD
+	row.QualityTier = string(best.profile.QualityTier)
+
+	row.ScoreBreakdown["quality_score"] = frontierQualityScore(best, CostPrefBalanced)
 	row.ScoreBreakdown["cost_usd"] = best.normalizedPublicCostUSD
 	if best.publicCostKnown && best.normalizedPublicCostUSD > 0 {
 		row.ScoreBreakdown["cost_score"] = 1.0 / best.normalizedPublicCostUSD
@@ -244,6 +201,8 @@ func fillBreakdown(row *BenchmarkReportChannelRow, best rankedModelCandidate) {
 	}
 }
 
+// findBetterOptions 列出"质量显著更高且成本可接受，或成本显著更低且质量不降"的候选。
+// 只保留有实测 benchmark 分的模型，按模型去重并限制条数，避免报告刷屏。
 func findBetterOptions(ranked []rankedModelCandidate, selectedModel string) []string {
 	var selected *rankedModelCandidate
 	for i := range ranked {
@@ -257,20 +216,29 @@ func findBetterOptions(ranked []rankedModelCandidate, selectedModel string) []st
 	}
 
 	var options []string
+	seen := map[string]bool{selectedModel: true}
 	selectedQ := frontierQualityScore(*selected, CostPrefBalanced)
 	for i := range ranked {
 		cand := ranked[i]
-		if cand.profile.ModelID == selectedModel {
+		if seen[cand.profile.ModelID] {
+			continue
+		}
+		if cand.benchmarkScore <= 0 {
 			continue
 		}
 		candQ := frontierQualityScore(cand, CostPrefBalanced)
 		// 更优定义：质量显著更高且成本可接受；或成本显著更低且质量不下降。
-		if candQ-selectedQ >= 0.05 && cand.normalizedPublicCostUSD <= selected.normalizedPublicCostUSD*1.25 {
-			options = append(options, fmt.Sprintf("%s(bench=%.2f,cost=%.2f)", cand.profile.ModelID, cand.benchmarkScore, cand.normalizedPublicCostUSD))
+		better := candQ-selectedQ >= 0.05 && cand.normalizedPublicCostUSD <= selected.normalizedPublicCostUSD*1.25
+		if !better {
+			better = selected.normalizedPublicCostUSD-cand.normalizedPublicCostUSD > 0.01 && candQ >= selectedQ*0.95
+		}
+		if !better {
 			continue
 		}
-		if selected.normalizedPublicCostUSD-cand.normalizedPublicCostUSD > 0.01 && candQ >= selectedQ*0.95 {
-			options = append(options, fmt.Sprintf("%s(bench=%.2f,cost=%.2f)", cand.profile.ModelID, cand.benchmarkScore, cand.normalizedPublicCostUSD))
+		seen[cand.profile.ModelID] = true
+		options = append(options, fmt.Sprintf("%s(bench=%.2f,cost=%.2f)", cand.profile.ModelID, cand.benchmarkScore, cand.normalizedPublicCostUSD))
+		if len(options) >= benchmarkReportMaxBetterOptions {
+			break
 		}
 	}
 	return options
