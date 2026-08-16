@@ -1294,8 +1294,8 @@
       ],
       "provider": "moonshot",
       "displayName": "Kimi K3",
-      "description": "Kimi K3 (256K context window). Moonshot Kimi Code flagship coding model.",
-      "contextWindowTokens": 262144,
+      "description": "Kimi K3 (1M context window; Moderato plan limited to 256K). Moonshot Kimi Code flagship coding model.",
+      "contextWindowTokens": 1048576,
       "thinkingMode": "thinking",
       "reasoningEfforts": [
         "low",
@@ -2308,7 +2308,7 @@
         "https://benchlm.ai/models/claude-fable",
         "https://deepswe.datacurve.ai/"
       ],
-      "verifiedAt": "2026-08-15",
+      "verifiedAt": "2026-08-16",
       "lane": "provisional",
       "sharedResults": 608,
       "comparableCategories": 4,
@@ -2326,7 +2326,7 @@
         "(?:^|[-/])claude-haiku-4.5(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)"
       ],
       "canonicalModel": "claude-haiku-4.5",
-      "verifiedAt": "2026-08-15",
+      "verifiedAt": "2026-08-16",
       "lane": "provisional",
       "sources": [
         "https://benchlm.ai/methodology",
@@ -2365,7 +2365,7 @@
         "(?:^|[-/])claude-opus-5(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)"
       ],
       "canonicalModel": "claude-opus-5",
-      "verifiedAt": "2026-08-15",
+      "verifiedAt": "2026-08-16",
       "lane": "provisional",
       "sources": [
         "https://artificialanalysis.ai/models/claude-opus-5",
@@ -2535,7 +2535,7 @@
         "https://benchlm.ai/models/claude-opus-4-8",
         "https://deepswe.datacurve.ai/"
       ],
-      "verifiedAt": "2026-08-15",
+      "verifiedAt": "2026-08-16",
       "lane": "provisional",
       "sharedResults": 608,
       "comparableCategories": 5,
@@ -2618,7 +2618,7 @@
         "https://benchlm.ai/models/claude-sonnet-5",
         "https://deepswe.datacurve.ai/"
       ],
-      "verifiedAt": "2026-08-15",
+      "verifiedAt": "2026-08-16",
       "lane": "provisional",
       "sharedResults": 608,
       "comparableCategories": 4,
@@ -2676,7 +2676,7 @@
         "https://benchlm.ai/models/claude-sonnet-4-6",
         "https://deepswe.datacurve.ai/"
       ],
-      "verifiedAt": "2026-08-15",
+      "verifiedAt": "2026-08-16",
       "lane": "provisional",
       "sharedResults": 608,
       "comparableCategories": 5,
@@ -2739,7 +2739,7 @@
         "(?:^|[-/])deepseek-v4-pro(?=$|@)"
       ],
       "canonicalModel": "deepseek-v4-pro",
-      "verifiedAt": "2026-08-15",
+      "verifiedAt": "2026-08-16",
       "lane": "provisional",
       "sources": [
         "https://benchlm.ai/methodology",
@@ -2781,7 +2781,7 @@
         "(?:^|[-/])gemini-3.7-flash(?=$|@)"
       ],
       "canonicalModel": "gemini-3.7-flash",
-      "verifiedAt": "2026-08-15",
+      "verifiedAt": "2026-08-16",
       "lane": "provisional",
       "sources": [
         "https://artificialanalysis.ai/models/gemini-3-7-flash",
@@ -2951,7 +2951,7 @@
         "(?:^|[-/])gemini-3.5-flash(?=$|@)"
       ],
       "canonicalModel": "gemini-3.5-flash",
-      "verifiedAt": "2026-08-15",
+      "verifiedAt": "2026-08-16",
       "lane": "provisional",
       "sources": [
         "https://artificialanalysis.ai/models/gemini-3-5-flash",
@@ -3196,7 +3196,7 @@
         "https://benchlm.ai/models/glm-5-2",
         "https://deepswe.datacurve.ai/"
       ],
-      "verifiedAt": "2026-08-15",
+      "verifiedAt": "2026-08-16",
       "lane": "provisional",
       "sharedResults": 608,
       "comparableCategories": 4,
@@ -3304,7 +3304,7 @@
         "https://deepswe.datacurve.ai/",
         "https://deng.codexradar.com/"
       ],
-      "verifiedAt": "2026-08-15",
+      "verifiedAt": "2026-08-16",
       "lane": "provisional",
       "sharedResults": 608,
       "comparableCategories": 5,
@@ -3421,7 +3421,7 @@
         "https://deepswe.datacurve.ai/",
         "https://deng.codexradar.com/"
       ],
-      "verifiedAt": "2026-08-15",
+      "verifiedAt": "2026-08-16",
       "lane": "provisional",
       "sharedResults": 608,
       "comparableCategories": 5,
@@ -3503,8 +3503,8 @@
           "effort": "max",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-15",
-          "costUsd": 3.65
+          "capturedAt": "2026-08-16",
+          "costUsd": 3.64
         },
         {
           "benchmark": "deepswe",
@@ -3530,7 +3530,7 @@
         "https://deepswe.datacurve.ai/",
         "https://deng.codexradar.com/"
       ],
-      "verifiedAt": "2026-08-15",
+      "verifiedAt": "2026-08-16",
       "lane": "provisional",
       "sharedResults": 608,
       "comparableCategories": 5,
@@ -3604,8 +3604,8 @@
           "effort": "xhigh",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-14",
-          "costUsd": 5.51
+          "capturedAt": "2026-08-16",
+          "costUsd": 5.52
         },
         {
           "benchmark": "deepswe",
@@ -3631,7 +3631,7 @@
         "https://deepswe.datacurve.ai/",
         "https://deng.codexradar.com/"
       ],
-      "verifiedAt": "2026-08-15",
+      "verifiedAt": "2026-08-16",
       "lane": "provisional",
       "sharedResults": 608,
       "comparableCategories": 5,
@@ -3722,7 +3722,7 @@
         "https://benchlm.ai/models/gpt-5-4",
         "https://deepswe.datacurve.ai/"
       ],
-      "verifiedAt": "2026-08-15",
+      "verifiedAt": "2026-08-16",
       "lane": "provisional",
       "sharedResults": 608,
       "comparableCategories": 5,
@@ -3741,7 +3741,7 @@
         "(?:^|[-/])gpt-5\\.4-mini(?=$|@)"
       ],
       "canonicalModel": "gpt-5.4-mini",
-      "verifiedAt": "2026-08-15",
+      "verifiedAt": "2026-08-16",
       "lane": "provisional",
       "sources": [
         "https://artificialanalysis.ai/models/gpt-5-4-mini",
@@ -3832,7 +3832,7 @@
         "(?:^|[-/])grok-4.5(?=$|@)"
       ],
       "canonicalModel": "grok-4.5",
-      "verifiedAt": "2026-08-15",
+      "verifiedAt": "2026-08-16",
       "lane": "provisional",
       "sources": [
         "https://artificialanalysis.ai/models/grok-4-5",
@@ -3921,7 +3921,7 @@
         "(?:^|[-/])kimi-k3(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)"
       ],
       "canonicalModel": "kimi-k3",
-      "verifiedAt": "2026-08-15",
+      "verifiedAt": "2026-08-16",
       "lane": "provisional",
       "sources": [
         "https://artificialanalysis.ai/models/kimi-k3",
@@ -4085,7 +4085,7 @@
         "https://benchlm.ai/models/kimi-k2-7-code",
         "https://deepswe.datacurve.ai/"
       ],
-      "verifiedAt": "2026-08-15",
+      "verifiedAt": "2026-08-16",
       "lane": "provisional",
       "sharedResults": 608,
       "comparableCategories": 3,
@@ -4101,7 +4101,7 @@
         "(?:^|[-/])muse-spark-1\\.2(?=$|@)"
       ],
       "canonicalModel": "muse-spark-1.2",
-      "verifiedAt": "2026-08-15",
+      "verifiedAt": "2026-08-16",
       "lane": "provisional",
       "sources": [
         "https://artificialanalysis.ai/models/muse-spark-1-2",
@@ -4190,7 +4190,7 @@
         "(?:^|[-/])muse-spark-1.1(?=$|@)"
       ],
       "canonicalModel": "muse-spark-1.1",
-      "verifiedAt": "2026-08-15",
+      "verifiedAt": "2026-08-16",
       "lane": "provisional",
       "sources": [
         "https://artificialanalysis.ai/models/muse-spark-1-1",

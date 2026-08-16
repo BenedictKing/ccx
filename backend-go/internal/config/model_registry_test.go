@@ -243,7 +243,7 @@ func TestResolveUpstreamCapability_KimiCodeModels(t *testing.T) {
 		displayName  string
 		wantThinking string
 	}{
-		{model: "k3", context: 262144, reasoning: []string{"low", "high", "max"}, displayName: "Kimi K3", wantThinking: "thinking"},
+		{model: "k3", context: 1048576, reasoning: []string{"low", "high", "max"}, displayName: "Kimi K3", wantThinking: "thinking"},
 		{model: "k3[1m]", context: 1048576, reasoning: []string{"low", "high", "max"}, displayName: "Kimi K3 (1M)", wantThinking: "thinking"},
 		// kimi-k3 是官方 API 模型 ID（非 Kimi Code CLI 的 k3/k3[1m] 别名），文档确认为 1M 上下文
 		// （platform.kimi.ai/docs/overview 等多处来源一致）；不是"256K 版 k3"的同义词。
@@ -997,7 +997,7 @@ func TestCurrentBuiltinSnapshot_IgnoresOlderCacheMissingK3(t *testing.T) {
 	if !resolved.Known || resolved.Source != "builtin" ||
 		!resolved.Capability.Capabilities["vision"] ||
 		!resolved.Capability.Capabilities["toolCalls"] ||
-		resolved.Capability.ContextWindowTokens != 262144 {
+		resolved.Capability.ContextWindowTokens != 1048576 {
 		t.Fatalf("resolved = %+v, want current embedded K3 capabilities", resolved)
 	}
 }

@@ -219,6 +219,27 @@
       },
       "tencent-lkeap": {
         "normalizeSystemRoleToTopLevel": true
+      },
+      "atomgit": {
+        "modelMapping": {
+          "fable": "glm-5.2-200k",
+          "haiku": "glm-5.2-200k",
+          "opus": "glm-5.2-200k",
+          "sonnet": "glm-5.2-200k"
+        },
+        "reasoningMapping": {
+          "fable": "max",
+          "haiku": "high",
+          "opus": "max",
+          "sonnet": "max"
+        },
+        "reasoningParamStyle": "thinking",
+        "serviceType": "openai",
+        "normalizeSystemRoleToTopLevel": true,
+        "noVisionModels": [
+          "glm-5.2-200k"
+        ],
+        "visionFallbackModel": ""
       }
     }
   },
@@ -304,6 +325,23 @@
           "gpt": "astron-code-latest",
           "mini": "astron-code-latest"
         }
+      },
+      "atomgit": {
+        "modelMapping": {
+          "gpt": "glm-5.2-200k",
+          "mini": "glm-5.2-200k",
+          "codex": "glm-5.2-200k"
+        },
+        "reasoningMapping": {
+          "gpt": "high",
+          "mini": "high",
+          "codex": "high"
+        },
+        "reasoningParamStyle": "thinking",
+        "noVisionModels": [
+          "glm-5.2-200k"
+        ],
+        "visionFallbackModel": ""
       }
     }
   },
@@ -507,6 +545,26 @@
         "baseUrl": "https://api.githubcopilot.com",
         "codexToolCompat": false,
         "stripCodexClientTools": false
+      },
+      "atomgit": {
+        "modelMapping": {
+          "codex": "glm-5.2-200k",
+          "gpt": "glm-5.2-200k",
+          "mini": "glm-5.2-200k"
+        },
+        "reasoningMapping": {
+          "codex": "high",
+          "gpt": "high",
+          "mini": "high"
+        },
+        "reasoningParamStyle": "thinking",
+        "serviceType": "openai",
+        "codexToolCompat": true,
+        "stripCodexClientTools": true,
+        "noVisionModels": [
+          "glm-5.2-200k"
+        ],
+        "visionFallbackModel": ""
       }
     }
   },
