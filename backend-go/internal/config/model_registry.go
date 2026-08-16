@@ -782,6 +782,20 @@ func ResolveMappedUpstreamCapability(requestModel, mappedModel string, upstream 
 }
 
 func resolveUpstreamCapabilityForModels(requestModel, actualModel string, upstream *UpstreamConfig, global map[string]UpstreamModelCapability, allowRequestModelFallback bool) ResolvedUpstreamCapability {
+	if resolved := resolveUpstreamCapabilityExact(requestModel, actualModel, upstream, global, allowRequestModelFallback); resolved.Known {
+		return resolved
+	}
+	// 命名习惯差异兜底：数字间的点号/连字符互换（如 claude-haiku-4.5 ↔ claude-haiku-4-5）。
+	// 下游别名常用点号形式而能力表 pattern 用连字符（或反之），精确匹配失败时按变体重试。
+	for _, variant := range digitDotDashVariants(actualModel) {
+		if resolved := resolveUpstreamCapabilityExact(requestModel, variant, upstream, global, false); resolved.Known {
+			return resolved
+		}
+	}
+	return ResolvedUpstreamCapability{RequestModel: requestModel, ActualModel: actualModel}
+}
+
+func resolveUpstreamCapabilityExact(requestModel, actualModel string, upstream *UpstreamConfig, global map[string]UpstreamModelCapability, allowRequestModelFallback bool) ResolvedUpstreamCapability {
 	if upstream != nil {
 		if capability, pattern, ok := resolveCapabilityForModelsAllowFallback(actualModel, requestModel, upstream.ModelCapabilities, allowRequestModelFallback); ok {
 			return ResolvedUpstreamCapability{Capability: capability, RequestModel: requestModel, ActualModel: actualModel, MatchedPattern: pattern, Source: "channel", Known: true}
@@ -798,6 +812,24 @@ func resolveUpstreamCapabilityForModels(requestModel, actualModel string, upstre
 		return ResolvedUpstreamCapability{Capability: upstream.DefaultCapability, RequestModel: requestModel, ActualModel: actualModel, Source: "channel_default", Known: true}
 	}
 	return ResolvedUpstreamCapability{RequestModel: requestModel, ActualModel: actualModel}
+}
+
+// digitBoundaryDotDash 分别匹配数字间的点号与连字符，用于生成命名变体。
+var (
+	digitBoundaryDot  = regexp.MustCompile(`(\d)\.(\d)`)
+	digitBoundaryDash = regexp.MustCompile(`(\d)-(\d)`)
+)
+
+// digitDotDashVariants 返回数字间点号与连字符互换后的去重变体（不含原串）。
+func digitDotDashVariants(model string) []string {
+	variants := make([]string, 0, 2)
+	if v := digitBoundaryDot.ReplaceAllString(model, "$1-$2"); v != model {
+		variants = append(variants, v)
+	}
+	if v := digitBoundaryDash.ReplaceAllString(model, "$1.$2"); v != model {
+		variants = append(variants, v)
+	}
+	return variants
 }
 
 func resolveCapabilityForModelsAllowFallback(actualModel, requestModel string, capabilities map[string]UpstreamModelCapability, allowRequestModelFallback bool) (UpstreamModelCapability, string, bool) {

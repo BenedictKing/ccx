@@ -437,18 +437,26 @@ export function mergeLitellmData(registry, litellmData, report, models = targetM
       continue
     }
 
-    // 查找现有的 upstreamCapability
-    const capIdx = registry.upstreamCapabilities.findIndex(c => {
-      const patterns = c.patterns || []
-      return patterns.some(p => {
-        // 检查 pattern 是否匹配 canonical 模型名
+    // 查找现有的 upstreamCapability：与 Go 端 resolvePatternValueFold 同序——
+    // 命中的 pattern 按长度降序（越具体越优先），等长取字典序较小者。
+    // 否则如 "kimi-k3" 会先命中数组靠前的宽泛条目 (?:^|[-/])k3(?=$|@)，
+    // 而 Go 端解析到更具体的 kimi-k3 条目，导致价格合到了 Go 永远读不到的条目上。
+    let capIdx = -1
+    let capPattern = ''
+    registry.upstreamCapabilities.forEach((c, idx) => {
+      for (const p of c.patterns || []) {
+        let matched = false
         try {
-          const regex = new RegExp(p, 'i')
-          return regex.test(canonical)
+          matched = new RegExp(p, 'i').test(canonical)
         } catch {
-          return false
+          // 非法 pattern 跳过
         }
-      })
+        if (!matched) continue
+        if (capPattern === '' || p.length > capPattern.length || (p.length === capPattern.length && p < capPattern)) {
+          capIdx = idx
+          capPattern = p
+        }
+      }
     })
 
     if (capIdx >= 0) {
@@ -715,33 +723,26 @@ function generateBenchmarkChart(data) {
 
 /**
  * 运行 benchmark-report Go CLI，输出模型选择报告。
- * 二进制查找顺序：backend-go/benchmark-report、PATH 上的 benchmark-report。
- * 找不到二进制时打印 warning 而不 fail。
+ * CLI 通过 go:embed 内嵌 registry 数据，因此必须在数据落盘/再生成之后现编译，
+ * 预编译二进制内嵌的是旧数据；go 工具链不可用时回退到已有二进制并告警。
  */
 function runBenchmarkReport() {
   if (skipBenchmarkReport) {
     console.log('\n[BenchmarkReport] --skip-benchmark-report set, skipping model selection report')
     return
   }
-  const candidates = [
-    join(root, 'backend-go/benchmark-report'),
-    join(root, 'backend-go/cmd/benchmark-report/benchmark-report'),
-  ]
-  let binary = candidates.find((p) => existsSync(p))
-  if (!binary) {
-    // PATH 上查找
-    try {
-      const which = execFileSync('which', ['benchmark-report'], { encoding: 'utf8' }).trim()
-      if (which && existsSync(which)) binary = which
-    } catch {
-      // which 失败，忽略
+  const binary = join(root, 'backend-go/benchmark-report')
+  try {
+    execFileSync('go', ['build', '-o', 'benchmark-report', './cmd/benchmark-report'], {
+      cwd: join(root, 'backend-go'),
+      stdio: 'pipe',
+    })
+  } catch (err) {
+    if (!existsSync(binary)) {
+      console.warn(`\n[BenchmarkReport] go build 失败且已有二进制不存在（${err.message}）；skipping model selection report`)
+      return
     }
-  }
-  if (!binary) {
-    console.warn(
-      '\n[BenchmarkReport] benchmark-report binary not found (build it with `cd backend-go && go build -o benchmark-report ./cmd/benchmark-report`); skipping model selection report',
-    )
-    return
+    console.warn(`\n[BenchmarkReport] go build 失败（${err.message}），回退到已有二进制（数据可能不是最新）`)
   }
   const cfgPath = configPath || join(root, 'backend-go/.config/config.json')
   if (!existsSync(cfgPath)) {

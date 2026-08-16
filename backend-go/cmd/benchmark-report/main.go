@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -169,7 +168,7 @@ func buildSyntheticProfile(modelID string, global map[string]config.UpstreamMode
 		Source:                    "synthetic_registry",
 	}
 
-	resolved := resolveSyntheticCapability(modelID, global)
+	resolved := config.ResolveUpstreamCapability(modelID, nil, global)
 	if !resolved.Known {
 		return profile
 	}
@@ -186,23 +185,4 @@ func buildSyntheticProfile(modelID string, global map[string]config.UpstreamMode
 	}
 	profile.SupportsEffortControl = len(profile.SupportedEffortLevels) > 0
 	return profile
-}
-
-// digitDotToDashPattern 匹配数字间的点号（如 4.5），用于规范 ID 与能力表命名差异的兜底。
-var digitDotToDashPattern = regexp.MustCompile(`(\d)\.(\d)`)
-
-// resolveSyntheticCapability 解析合成画像对应的能力表条目。
-// benchmarkProfiles 的 canonical ID 用点号版本（claude-haiku-4.5），而 upstreamCapabilities
-// 部分 pattern 用连字符版本（claude-haiku-4-5）；直接匹配失败时按数字间点号转连字符兜底一次。
-func resolveSyntheticCapability(modelID string, global map[string]config.UpstreamModelCapability) config.ResolvedUpstreamCapability {
-	resolved := config.ResolveUpstreamCapability(modelID, nil, global)
-	if resolved.Known {
-		return resolved
-	}
-	if variant := digitDotToDashPattern.ReplaceAllString(modelID, "$1-$2"); variant != modelID {
-		if r := config.ResolveUpstreamCapability(variant, nil, global); r.Known {
-			return r
-		}
-	}
-	return resolved
 }

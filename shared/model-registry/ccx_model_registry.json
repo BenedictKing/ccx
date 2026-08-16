@@ -1305,7 +1305,8 @@
       "capabilities": {
         "toolCalls": true,
         "contextCaching": true,
-        "vision": true
+        "vision": true,
+        "reasoning": true
       },
       "sources": [
         "https://www.kimi.com/code/docs/kimi-code/models.html"
@@ -1318,6 +1319,14 @@
           "presence_penalty",
           "frequency_penalty"
         ]
+      },
+      "maxOutputTokens": 131072,
+      "pricing": {
+        "unit": "per_1m_tokens_usd",
+        "currency": "USD",
+        "inputCacheMissPrice": 3.3,
+        "outputPrice": 16.5,
+        "inputCacheHitPrice": 0.33
       }
     },
     {
@@ -1338,7 +1347,8 @@
       "capabilities": {
         "toolCalls": true,
         "contextCaching": true,
-        "vision": true
+        "vision": true,
+        "reasoning": true
       },
       "sources": [
         "https://www.kimi.com/code/docs/kimi-code/models.html",
@@ -1352,6 +1362,14 @@
           "presence_penalty",
           "frequency_penalty"
         ]
+      },
+      "maxOutputTokens": 131072,
+      "pricing": {
+        "unit": "per_1m_tokens_usd",
+        "currency": "USD",
+        "inputCacheMissPrice": 3.3,
+        "outputPrice": 16.5,
+        "inputCacheHitPrice": 0.33
       }
     },
     {
@@ -2194,6 +2212,72 @@
         "https://docs.x.ai/developers/pricing",
         "https://x.ai/news/grok-4-6"
       ]
+    },
+    {
+      "patterns": [
+        "(?:^|[-/])grok-4\\.5(?=$|@)"
+      ],
+      "provider": "xai",
+      "displayName": "Grok 4.5",
+      "contextWindowTokens": 500000,
+      "maxOutputTokens": 500000,
+      "pricing": {
+        "unit": "per_1m_tokens_usd",
+        "currency": "USD",
+        "inputCacheMissPrice": 2,
+        "outputPrice": 6,
+        "inputCacheHitPrice": 0.3
+      },
+      "capabilities": {
+        "reasoning": true,
+        "vision": true,
+        "toolCalls": true,
+        "webSearch": true
+      }
+    },
+    {
+      "patterns": [
+        "(?:^|[-/])muse-spark-1\\.1(?=$|@)"
+      ],
+      "displayName": "Muse Spark 1.1",
+      "contextWindowTokens": 1048576,
+      "maxOutputTokens": 131072,
+      "pricing": {
+        "unit": "per_1m_tokens_usd",
+        "currency": "USD",
+        "inputCacheMissPrice": 1.25,
+        "outputPrice": 4.25,
+        "inputCacheHitPrice": 0.15
+      },
+      "capabilities": {
+        "reasoning": true,
+        "vision": true,
+        "toolCalls": true,
+        "parallelFunctionCalling": true,
+        "webSearch": true
+      }
+    },
+    {
+      "patterns": [
+        "(?:^|[-/])muse-spark-1\\.2(?=$|@)"
+      ],
+      "displayName": "Muse Spark 1.2",
+      "contextWindowTokens": 1048576,
+      "maxOutputTokens": 131072,
+      "pricing": {
+        "unit": "per_1m_tokens_usd",
+        "currency": "USD",
+        "inputCacheMissPrice": 1.25,
+        "outputPrice": 4.25,
+        "inputCacheHitPrice": 0.15
+      },
+      "capabilities": {
+        "reasoning": true,
+        "vision": true,
+        "toolCalls": true,
+        "parallelFunctionCalling": true,
+        "webSearch": true
+      }
     },
     {
       "patterns": [
@@ -3394,8 +3478,8 @@
           "effort": "max",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-15",
-          "costUsd": 8.82
+          "capturedAt": "2026-08-16",
+          "costUsd": 8.81
         },
         {
           "benchmark": "deepswe",

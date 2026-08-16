@@ -100,8 +100,6 @@ generate-preset-manifest:
 	@node scripts/generate-preset-manifest.mjs
 
 benchmark-update:
-	@echo "$(GREEN)🔨 构建 benchmark-report CLI...$(NC)"
-	@cd backend-go && go build -o benchmark-report ./cmd/benchmark-report
 	@node scripts/update-benchmark-data.mjs
 
 benchmark-update-dry:

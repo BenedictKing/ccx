@@ -485,13 +485,13 @@ func TestRankEligibleModels_DomesticModelsFrontierVsFallback(t *testing.T) {
 		expected  string
 	}{
 		{
-			name:      "Kimi K3 alias（无定价，回退旧链）",
-			modelID:   "kimi-k3",
-			family:    ModelFamilyKimi,
-			context:   262_144,
+			name:      "Claude Mythos 5（无定价，回退旧链）",
+			modelID:   "claude-mythos-5",
+			family:    ModelFamilyClaude,
+			context:   1_000_000,
 			vision:    true,
 			toolCalls: true,
-			expected:  "kimi-k3",
+			expected:  "claude-mythos-5",
 		},
 		{
 			name:      "GLM-5.2（区间重叠，溢价帽选便宜者）",

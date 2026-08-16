@@ -123,6 +123,11 @@ export const LITELLM_MODEL_MAP = {
   'dashscope/qwen-max': 'qwen3-max',
   'kimi-k2.7-code': 'kimi-k2.7-code',
   'moonshot/kimi-k2-thinking': 'kimi-k2-thinking',
+  // kimi-k3 在 litellm 仅有 Azure AI Foundry 托管 key，价格高于官方直连，仅作公开价参考
+  'azure_ai/FW-Kimi-K3': 'kimi-k3',
+  'xai/grok-4.5': 'grok-4.5',
+  'meta/muse-spark-1.1': 'muse-spark-1.1',
+  'meta/muse-spark-1.2': 'muse-spark-1.2',
   'minimax/MiniMax-M3': 'minimax-m3',
   'openrouter/xiaomi/mimo-v2.5': 'mimo-v2.5',
   'openrouter/xiaomi/mimo-v2.5-pro': 'mimo-v2.5-pro',
