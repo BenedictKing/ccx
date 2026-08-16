@@ -778,6 +778,109 @@ func TestTryUpstreamWithAllKeysLogsFinalRequestModelAndReasoningEffort(t *testin
 	}
 }
 
+// (Key,模型) 持久化限制复查：autopilot 自动映射的目标模型命中 DisabledKeyModels 时，
+// 发送前复查必须跳过该 Key 并 failover 到同渠道的下一个 Key，而不是照常发出请求。
+func TestTryUpstreamWithAllKeysSkipsKeyModelDisabledMappedModel(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	upstreamRequests := make(chan string, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			Model string `json:"model"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode upstream request: %v", err)
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		upstreamRequests <- request.Model
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer server.Close()
+
+	// sk-a 被限制调用映射后模型 glm-5.2（映射前模型 claude-opus-4-8 不在限制内，
+	// 选 Key 阶段查不出来）；sk-b 无限制。
+	cfgManager, channelScheduler, messagesMetrics, cleanup := newTestFailoverDependencies(t, config.UpstreamConfig{
+		Name:        "auto-mapped-keymodel-test",
+		ChannelUID:  "ch-auto-mapped-keymodel",
+		BaseURL:     server.URL,
+		APIKeys:     []string{"sk-a", "sk-b"},
+		Status:      "active",
+		ServiceType: "openai",
+		AutoManaged: true,
+		DisabledKeyModels: []config.DisabledKeyModelInfo{
+			{Key: "sk-a", Model: "glm-5.2", Reason: "model_not_found", RecoverAt: time.Now().Add(time.Hour).Format(time.RFC3339)},
+		},
+	})
+	defer cleanup()
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	originalBody := []byte(`{"model":"claude-opus-4-8","messages":[]}`)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", bytes.NewReader(originalBody))
+
+	cfg := cfgManager.GetConfig()
+	upstream := &cfg.Upstream[0]
+	policy := &autopilot.EndpointAttemptPolicy{
+		ResolvedTargetForBinding: func(channelUID, baseURL, apiKey string) *autopilot.ResolvedRouteTarget {
+			return &autopilot.ResolvedRouteTarget{Model: "glm-5.2"}
+		},
+	}
+
+	handled, successKey, _, failoverErr, _, lastErr := TryUpstreamWithAllKeys(
+		c,
+		config.NewEnvConfig(),
+		cfgManager,
+		channelScheduler,
+		scheduler.ChannelKindMessages,
+		"Messages",
+		messagesMetrics,
+		upstream,
+		[]warmup.URLLatencyResult{{URL: server.URL, OriginalIdx: 0}},
+		originalBody,
+		nil,
+		false,
+		func(upstream *config.UpstreamConfig, failedKeys map[string]bool) (string, error) {
+			return cfgManager.GetNextAPIKey(upstream, failedKeys, "Messages")
+		},
+		func(c *gin.Context, upstreamCopy *config.UpstreamConfig, apiKey string) (*http.Request, error) {
+			return http.NewRequestWithContext(c.Request.Context(), http.MethodPost, upstreamCopy.BaseURL, bytes.NewReader(GetEffectiveRequestBody(c, nil)))
+		},
+		func(string) {},
+		nil,
+		nil,
+		func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string, actualRequestBody []byte) (*types.Usage, error) {
+			_ = resp.Body.Close()
+			return nil, nil
+		},
+		"claude-opus-4-8",
+		"",
+		0,
+		channelScheduler.GetChannelLogStore(scheduler.ChannelKindMessages),
+		WithEndpointAttemptPolicy(policy),
+	)
+
+	if !handled || successKey != "sk-b" || failoverErr != nil || lastErr != nil {
+		t.Fatalf("unexpected failover result: handled=%v key=%q failoverErr=%v lastErr=%v", handled, successKey, failoverErr, lastErr)
+	}
+
+	// 受限的 sk-a 不得发出任何请求：上游只应收到 sk-b 的一次调用。
+	select {
+	case got := <-upstreamRequests:
+		if got != "glm-5.2" {
+			t.Fatalf("upstream request model = %q, want glm-5.2", got)
+		}
+	default:
+		t.Fatal("expected exactly one upstream request")
+	}
+	select {
+	case extra := <-upstreamRequests:
+		t.Fatalf("unexpected extra upstream request (restricted key was used?): model=%q", extra)
+	default:
+	}
+}
+
 func TestTryUpstreamWithAllKeysRetriesShortEmptyResponseOnSameKey(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

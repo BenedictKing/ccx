@@ -99,6 +99,8 @@ func CandidatesForModelFiltered(upstream *config.UpstreamConfig, failedKeys map[
 		}
 		// (Key, 模型) 组合级限制：model_not_found 等错误后，该组合在限制期内被跳过，
 		// 不影响该 Key 的其他模型，也不阻断 failover 到其他渠道。
+		// 注意此处按选 Key 阶段的重定向后模型检查；autopilot 自动映射的目标模型
+		// 由发送前的复查兜底（handlers/common 请求构建后的 KeyModel 复查块）。
 		if model != "" && upstream.IsKeyModelDisabledNow(key, model, now) {
 			continue
 		}

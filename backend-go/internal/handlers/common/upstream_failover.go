@@ -747,6 +747,23 @@ func TryUpstreamWithAllKeys(
 			}
 			c.Set(autopilotActualModelKey, actualAttemptModel)
 			c.Set(autopilotActualEffortKey, actualReasoningEffort)
+
+			// (Key,模型) 持久化限制复查：autopilot 映射在选 Key 之后才发生，
+			// 选 Key 阶段的 IsKeyModelDisabledNow 只能按映射前模型检查，
+			// 这里按实际发往上游的模型补查，保证 model_not_found 学习到的限制
+			// 在自动映射渠道上真正生效。命中即跳过本 Key，走正常 failover，
+			// 不重复计熔断、不写新黑名单（这是已知限制，不是新故障信号）。
+			if actualAttemptModel != "" && upstream.IsKeyModelDisabledNow(apiKey, actualAttemptModel, time.Now()) {
+				RequestLogf(c, "[%s-KeyModel] 跳过 (Key %s, 模型 %s)：处于限制期，尝试下一个 Key/渠道",
+					apiType, utils.MaskAPIKey(apiKey), actualAttemptModel)
+				failedKeys[apiKey] = true
+				if probeKey := currentBaseURL + "|" + apiKey; probeAcquired[probeKey] {
+					metricsManager.ReleaseProbe(currentBaseURL, apiKey, metricsServiceType)
+					delete(probeAcquired, probeKey)
+				}
+				continue
+			}
+
 			actualOriginalModel := ""
 			if actualAttemptModel != model {
 				actualOriginalModel = model
@@ -1862,6 +1879,9 @@ func recordModelCircuitSuccess(metricsManager *metrics.MetricsManager,
 //
 // keypool 侧传入的 model 仍用于 per-key 白名单与 IsKeyModelDisabledNow 判定，
 // 那两个机制按重定向后的模型比较才正确，因此签名保留该参数。
+// 注意 IsKeyModelDisabledNow 在此只能覆盖手动 RedirectModel 的场景；autopilot
+// 映射目标由发送前的复查兜底（见请求构建后的 KeyModel 复查块），两层合起来
+// 才保证持久化限制对自动映射渠道生效。
 func modelCircuitChecker(metricsManager *metrics.MetricsManager, circuitModel string) keypool.ModelCircuitChecker {
 	if metricsManager == nil || circuitModel == "" {
 		return nil
