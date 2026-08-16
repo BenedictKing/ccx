@@ -122,51 +122,96 @@
               />
             </section>
 
-            <!-- 自定义参数（自定义请求头 + 充值倍率/汇率） -->
+            <!-- 自定义参数（代理服务器 + 自定义请求头 + 充值倍率/汇率） -->
             <section :ref="(el: any) => setSectionRef('custom', el)" data-section-id="custom" class="pa-6 scroll-mt-4">
-              <CustomHeadersSection
-                :headers="customHeadersArray"
-                @update:headers="updateCustomHeaders"
+              <!-- 代理服务器 -->
+              <v-text-field
+                :model-value="form.proxyUrl"
+                :label="t('channelEditor.transport.proxyUrl.label')"
+                :placeholder="t('channelEditor.transport.proxyUrl.placeholder')"
+                :hint="t('channelEditor.transport.proxyUrl.hint')"
+                persistent-hint
+                prepend-inner-icon="mdi-vpn"
+                variant="outlined"
+                density="comfortable"
+                clearable
+                @update:model-value="updateForm({ proxyUrl: $event ?? '' })"
               />
 
-              <!-- 渠道级计费：充值倍率 + 汇率 -->
+              <div class="mt-6">
+                <CustomHeadersSection
+                  :headers="customHeadersArray"
+                  @update:headers="updateCustomHeaders"
+                />
+              </div>
+
+              <!-- 渠道级计费：充值币种/金额 + 渠道币种/到账金额 -->
               <div class="mt-6">
                 <div class="text-subtitle-2 font-weight-medium mb-1">{{ t('channelEditor.billing.title') }}</div>
                 <div class="text-caption text-medium-emphasis mb-3">{{ t('channelEditor.billing.hint') }}</div>
                 <v-row dense>
                   <v-col cols="12" sm="6">
                     <v-text-field
-                      :model-value="form.costMultiplier"
-                      :label="t('channelEditor.billing.costMultiplier.label')"
-                      :hint="t('channelEditor.billing.costMultiplier.hint')"
+                      :model-value="form.channelPaymentCurrency"
+                      :label="t('channelEditor.billing.paymentCurrency.label')"
+                      :hint="t('channelEditor.billing.paymentCurrency.hint')"
                       persistent-hint
-                      prepend-inner-icon="mdi-multiplication"
+                      prepend-inner-icon="mdi-cash"
                       variant="outlined"
                       density="comfortable"
-                      type="number"
-                      step="0.01"
-                      min="0"
+                      placeholder="LDC / CNY / USD"
                       clearable
-                      @update:model-value="updateForm({ costMultiplier: $event })"
+                      @update:model-value="updateForm({ channelPaymentCurrency: $event ?? '' })"
                     />
                   </v-col>
                   <v-col cols="12" sm="6">
                     <v-text-field
-                      :model-value="form.exchangeRate"
-                      :label="t('channelEditor.billing.exchangeRate.label')"
-                      :hint="t('channelEditor.billing.exchangeRate.hint')"
+                      :model-value="form.channelPaymentAmount"
+                      :label="t('channelEditor.billing.paymentAmount.label')"
+                      :hint="t('channelEditor.billing.paymentAmount.hint')"
                       persistent-hint
-                      prepend-inner-icon="mdi-currency-usd"
+                      prepend-inner-icon="mdi-cash-multiple"
                       variant="outlined"
                       density="comfortable"
                       type="number"
                       step="0.01"
                       min="0"
                       clearable
-                      @update:model-value="updateForm({ exchangeRate: $event })"
+                      @update:model-value="updateForm({ channelPaymentAmount: $event })"
+                    />
+                  </v-col>
+                  <v-col cols="12" sm="6">
+                    <v-text-field
+                      :model-value="form.channelCreditCurrency"
+                      :label="t('channelEditor.billing.creditCurrency.label')"
+                      :hint="t('channelEditor.billing.creditCurrency.hint')"
+                      persistent-hint
+                      prepend-inner-icon="mdi-currency-usd"
+                      variant="outlined"
+                      density="comfortable"
+                      placeholder="USD"
+                      clearable
+                      @update:model-value="updateForm({ channelCreditCurrency: $event ?? '' })"
+                    />
+                  </v-col>
+                  <v-col cols="12" sm="6">
+                    <v-text-field
+                      :model-value="form.channelCreditAmount"
+                      :label="t('channelEditor.billing.creditAmount.label')"
+                      :hint="t('channelEditor.billing.creditAmount.hint')"
+                      persistent-hint
+                      prepend-inner-icon="mdi-cash-check"
+                      variant="outlined"
+                      density="comfortable"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      clearable
+                      @update:model-value="updateForm({ channelCreditAmount: $event })"
                     />
                   </v-col>
                 </v-row>
+                <div class="text-caption text-medium-emphasis mt-1">{{ t('channelEditor.billing.example') }}</div>
               </div>
             </section>
           </v-form>

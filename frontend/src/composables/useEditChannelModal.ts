@@ -1,18 +1,12 @@
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useTheme } from 'vuetify'
-import type { Channel, ChannelDiscoveryRequest, ChannelDiscoveryResponse, ChannelDiscoveryTargetClient } from '../services/api'
+import type { Channel } from '../services/api'
 import { ApiService } from '../services/api'
-import { supportsAdvancedChannelOptions, supportsReasoningMapping } from '../utils/channelAdvancedOptions'
 import {
   buildChannelPayload,
-  createEmbeddingCapabilityRow,
-  createModelCapabilityRow,
   embeddingCapabilitiesToRows,
-  embeddingCapabilityRowsToRecord,
   modelCapabilitiesToRows,
-  modelCapabilityRowsToRecord,
   normalizeSelectableString,
-  resolveBuiltinUpstreamModelCapability,
   type EmbeddingCapabilityRow,
   type ModelCapabilityRow,
 } from '../utils/channelPayload'
@@ -27,11 +21,8 @@ import { useChannelEditorFormDerived } from './useChannelEditorFormDerived'
 import { useChannelEditorHeaderState } from './useChannelEditorHeaderState'
 import { useDialogMenuWorkaround } from './useDialogMenuWorkaround'
 import { useDisabledApiKeys } from './useDisabledApiKeys'
-import { useEditChannelPresets } from './useEditChannelPresets'
 import { useEditChannelSectionNav } from './useEditChannelSectionNav'
 import { useTargetModelFetch } from './useTargetModelFetch'
-import { useStreamTimeoutStrategy } from './useStreamTimeoutStrategy'
-import { useSupportedModelFilters } from './useSupportedModelFilters'
 import { useEditChannelOptions } from '../utils/editChannelOptions'
 import { defaultStripBillingHeader, isValidUrl, normalizeModelCapabilities } from '../utils/editChannelHelpers'
 import { isOfficialProviderChannel } from '../utils/providerDisplay'
@@ -60,45 +51,6 @@ export type EditChannelModalEmits = {
 type EditChannelModalEmit = <K extends keyof EditChannelModalEmits>(event: K, ...args: EditChannelModalEmits[K]) => void
 type ResolvedEditChannelModalProps = Readonly<EditChannelModalProps & { channelType: NonNullable<EditChannelModalProps['channelType']> }>
 
-type ChannelDiscoverySessionStatus = 'running' | 'success' | 'error'
-
-interface ChannelDiscoverySession {
-  ownerKey: string
-  requestKey: string
-  status: ChannelDiscoverySessionStatus
-  result: ChannelDiscoveryResponse | null
-  error: string
-  promise?: Promise<ChannelDiscoveryResponse>
-}
-
-const channelDiscoverySessions = new Map<string, ChannelDiscoverySession>()
-
-// 已完全收归运行时自动学习的兼容性字段，不再接受前端编辑，
-// 诊断（compat-diagnose）返回的建议中这些字段仅供只读参考，不写回表单。
-const RUNTIME_MANAGED_COMPAT_FIELDS = new Set([
-  'normalizeNonstandardChatRoles',
-  'codexNativeToolPassthrough',
-  'stripImageGenerationTool',
-  'stripEmptyTextBlocks',
-  'passbackReasoningContent',
-  'passbackThinkingBlocks',
-])
-
-function stableStringify(value: unknown): string {
-  if (Array.isArray(value)) {
-    return `[${value.map(item => stableStringify(item)).join(',')}]`
-  }
-  if (value && typeof value === 'object') {
-    const record = value as Record<string, unknown>
-    return `{${Object.keys(record)
-      .sort()
-      .filter(key => record[key] !== undefined)
-      .map(key => `${JSON.stringify(key)}:${stableStringify(record[key])}`)
-      .join(',')}}`
-  }
-  const serialized = JSON.stringify(value)
-  return serialized === undefined ? 'null' : serialized
-}
 
 export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: EditChannelModalEmit) {
   const { t } = useI18n()
@@ -143,12 +95,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
   const isEditableBaseUrlsChannel = computed(() => !props.channel?.providerId && !isOfficialProviderChannel(props.channel))
   const sections = computed(() => allSections.filter(section => section.id === 'basic' || section.id === 'auth' || section.id === 'custom'))
 
-  const supportsOpenAIAdvancedOptions = computed(() => props.channelType !== 'vectors' && supportsAdvancedChannelOptions(form.serviceType))
-  const supportsReasoningMappingOptions = computed(() => props.channelType !== 'vectors' && supportsReasoningMapping(form.serviceType))
-  const supportsChannelDiscovery = computed(() => false)
-
-  // 模型优先级排序规则（索引越小优先级越高）
-  // 表单数据：balanced 预设值作为渠道级默认回退值
+  // 流式超时默认值（form 初始化用）
   const defaultStreamTimeouts = { ...streamTimeoutPresets.balanced }
 
   const form = reactive({
@@ -182,7 +129,10 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     customHeaders: {} as Record<string, string>,
     proxyUrl: '',
     costMultiplier: null as string | number | null,
-    exchangeRate: null as string | number | null,
+    channelPaymentCurrency: '',
+    channelPaymentAmount: null as string | number | null,
+    channelCreditCurrency: '',
+    channelCreditAmount: null as string | number | null,
     requestTimeoutMs: null as string | number | null,
     responseHeaderTimeoutMs: null as string | number | null,
     streamFirstContentTimeoutEnabled: false,
@@ -249,44 +199,8 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     },
   )
 
-  // 模型映射行数据结构（改用数组存储，支持直接编辑）
-  interface ModelMappingRow {
-    id: number
-    source: string
-    target: string
-    reasoning: '' | 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
-    noVision: boolean
-  }
-
-  let rowIdCounter = 0
-  const modelMappingRows = ref<ModelMappingRow[]>([])
-  let capabilityRowIdCounter = 0
-  const nextCapabilityRowId = () => ++capabilityRowIdCounter
-  let embeddingCapabilityRowIdCounter = 0
-  const nextEmbeddingCapabilityRowId = () => ++embeddingCapabilityRowIdCounter
-
-  const incompleteMappedTargetSuffix = /[._:/-]$/
-  const isCompleteMappedTargetModel = (model: string) => !!model && !incompleteMappedTargetSuffix.test(model)
-  const hasNoVisionRows = computed(() => modelMappingRows.value.some(row => row.noVision && row.target.trim()))
-  const mappedTargetModels = computed(() => {
-    const seen = new Set<string>()
-    const models = [
-      ...modelMappingRows.value.map(row => normalizeSelectableString(row.target).trim()),
-      normalizeSelectableString(form.visionFallbackModel).trim(),
-    ]
-
-    return models.filter(model => {
-      const key = model.toLowerCase()
-      if (!isCompleteMappedTargetModel(model) || seen.has(key)) return false
-      seen.add(key)
-      return true
-    })
-  })
-  const isMappingTargetEditing = ref(false)
-  const hasPendingModelCapabilitySync = ref(false)
 
   function resetTransientUiState() {
-    sourceMappingError.value = ''
     resetRestoredKeys()
     errors.name = ''
     errors.serviceType = ''
@@ -294,9 +208,6 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     errors.website = ''
     formBaseUrlPreview.value = ''
   }
-
-  // 源模型名验证错误
-  const sourceMappingError = ref('')
 
   // 表单验证错误
   const errors = reactive({
@@ -361,102 +272,6 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
   const hasDisabledKeysAvailable = computed(() => visibleDisabledKeys.value.length > 0)
   const hasConfigurableKeys = computed(() => form.apiKeys.length > 0 || (isEditing.value && hasDisabledKeysAvailable.value))
 
-  const { selectedStreamTimeoutStrategy, applyStreamTimeoutStrategy } = useStreamTimeoutStrategy(form)
-
-  const {
-    commonSupportedModelFilters,
-    selectedSupportedModelSet,
-    supportedModelsError,
-    handleSupportedModelsChange,
-    appendSupportedModelFilter,
-  } = useSupportedModelFilters(form, t)
-
-  const modelCapabilitiesError = computed(() => {
-    return modelCapabilityRowsToRecord(form.modelCapabilityRows) === null
-      ? t('addChannel.modelCapabilitiesRowsInvalid')
-      : ''
-  })
-
-  const discoveringChannelConfig = ref(false)
-  const channelDiscoveryResult = ref<ChannelDiscoveryResponse | null>(null)
-  const channelDiscoveryError = ref('')
-  const channelDiscoveryModelMappingEntries = computed(() => {
-    const mapping = channelDiscoveryResult.value?.recommendation?.modelMapping ?? {}
-    return Object.entries(mapping)
-  })
-  const channelDiscoveryCompatEntries = computed(() => {
-    const compat = channelDiscoveryResult.value?.recommendation?.compat ?? {}
-    return Object.entries(compat).filter(([, value]) => value !== undefined)
-  })
-  const channelDiscoveryReasoningEntries = computed(() => {
-    const reasoning = channelDiscoveryResult.value?.recommendation?.reasoningMapping ?? {}
-    return Object.entries(reasoning)
-  })
-  const channelDiscoverySuccessfulProtocols = computed(() => {
-    return channelDiscoveryResult.value?.protocols.filter(protocol => protocol.success) ?? []
-  })
-  const channelDiscoveryCapabilityEntries = computed(() => {
-    const capabilities = channelDiscoveryResult.value?.capabilities
-    if (!capabilities) return []
-
-    const entries: Array<{ key: string; label: string; text: string; color: string; detail: string }> = []
-    if (capabilities.toolCalls?.tested) {
-      entries.push({
-        key: 'toolCalls',
-        label: t('channelDiscovery.capabilityToolCalls'),
-        text: capabilities.toolCalls.supported
-          ? t('channelDiscovery.capabilitySupported')
-          : t('channelDiscovery.capabilityUnsupported'),
-        color: capabilities.toolCalls.supported ? 'success' : 'warning',
-        detail: capabilities.toolCalls.evidence || capabilities.toolCalls.error || '',
-      })
-    }
-    if (capabilities.vision?.tested) {
-      entries.push({
-        key: 'vision',
-        label: t('channelDiscovery.capabilityVision'),
-        text: capabilities.vision.supported
-          ? t('channelDiscovery.capabilitySupported')
-          : t('channelDiscovery.capabilityUnsupported'),
-        color: capabilities.vision.supported ? 'success' : 'warning',
-        detail: capabilities.vision.evidence || capabilities.vision.error || '',
-      })
-    }
-    if (capabilities.imageGeneration?.tested) {
-      entries.push({
-        key: 'imageGeneration',
-        label: t('channelDiscovery.capabilityImageGeneration'),
-        text: capabilities.imageGeneration.supported
-          ? t('channelDiscovery.capabilitySupported')
-          : t('channelDiscovery.capabilityUnsupported'),
-        color: capabilities.imageGeneration.supported ? 'success' : 'warning',
-        detail: capabilities.imageGeneration.evidence || capabilities.imageGeneration.error || '',
-      })
-    }
-    if (capabilities.thinkingPassback?.tested) {
-      entries.push({
-        key: 'thinkingPassback',
-        label: t('channelDiscovery.capabilityThinkingPassback'),
-        text: capabilities.thinkingPassback.required
-          ? t('channelDiscovery.capabilityRequired')
-          : t('channelDiscovery.capabilityNotRequired'),
-        color: capabilities.thinkingPassback.required ? 'secondary' : 'success',
-        detail: capabilities.thinkingPassback.evidence || capabilities.thinkingPassback.error || '',
-      })
-    }
-    return entries
-  })
-
-  const discoveryTargetClients = (): ChannelDiscoveryTargetClient[] => {
-    if (props.channelType === 'responses') return ['codex']
-    if (props.channelType === 'messages') return ['claude-code']
-    return []
-  }
-
-  const firstDraftApiKey = () => {
-    return form.apiKeys.map(key => key.trim()).find(Boolean) || ''
-  }
-
   const draftBaseUrls = () => {
     return baseUrlsText.value
       .split('\n')
@@ -472,264 +287,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     return single ? [single] : []
   }
 
-  const draftModelMapping = () => {
-    const mapping: Record<string, string> = {}
-    modelMappingRows.value.forEach(row => {
-      if (row.source && row.target) {
-        mapping[row.source] = row.target
-      }
-    })
-    return mapping
-  }
 
-  const draftReasoningMapping = () => {
-    const reasoning: Record<string, string> = {}
-    modelMappingRows.value.forEach(row => {
-      if (row.source && row.target && row.reasoning) {
-        reasoning[row.source] = row.reasoning
-      }
-    })
-    return reasoning
-  }
-
-  const buildChannelDiscoveryRequest = (): ChannelDiscoveryRequest | null => {
-    if (!supportsChannelDiscovery.value) return null
-    const baseUrls = draftBaseUrls()
-    const apiKey = firstDraftApiKey()
-    if (baseUrls.length === 0 || !apiKey || !form.serviceType) return null
-
-    return {
-      channelKind: props.channelType as 'messages' | 'chat' | 'responses' | 'gemini',
-      serviceType: form.serviceType,
-      baseUrls,
-      apiKey,
-      authHeader: form.authHeader,
-      customHeaders: { ...form.customHeaders },
-      proxyUrl: form.proxyUrl,
-      insecureSkipVerify: form.insecureSkipVerify,
-      modelMapping: draftModelMapping(),
-      reasoningMapping: draftReasoningMapping(),
-      targetClients: discoveryTargetClients(),
-    }
-  }
-
-  const channelDiscoveryOwnerKey = () => `${props.channelType}:${props.channel?.index ?? 'new'}`
-  const channelDiscoveryRequestKey = (request: ChannelDiscoveryRequest) => stableStringify(request)
-
-  const isCurrentDiscoverySession = (session: ChannelDiscoverySession) => {
-    const request = buildChannelDiscoveryRequest()
-    return !!request
-      && session.ownerKey === channelDiscoveryOwnerKey()
-      && session.requestKey === channelDiscoveryRequestKey(request)
-  }
-
-  const syncChannelDiscoverySessionToState = (session: ChannelDiscoverySession) => {
-    if (!isCurrentDiscoverySession(session)) return
-    discoveringChannelConfig.value = session.status === 'running'
-    channelDiscoveryResult.value = session.result
-    channelDiscoveryError.value = session.error
-  }
-
-  const clearChannelDiscoveryState = () => {
-    discoveringChannelConfig.value = false
-    channelDiscoveryResult.value = null
-    channelDiscoveryError.value = ''
-  }
-
-  const restoreChannelDiscoverySession = () => {
-    const request = buildChannelDiscoveryRequest()
-    const session = request ? channelDiscoverySessions.get(channelDiscoveryOwnerKey()) : undefined
-    if (!request || !session || session.requestKey !== channelDiscoveryRequestKey(request)) {
-      clearChannelDiscoveryState()
-      return
-    }
-    syncChannelDiscoverySessionToState(session)
-    if (session.status === 'running' && session.promise) {
-      void session.promise
-        .then(() => syncChannelDiscoverySessionToState(session))
-        .catch(() => syncChannelDiscoverySessionToState(session))
-    }
-  }
-
-  const handleDiscoverChannelConfig = async () => {
-    if (!supportsChannelDiscovery.value) return
-    const baseUrls = draftBaseUrls()
-    if (baseUrls.length === 0) {
-      channelDiscoveryError.value = t('channelDiscovery.missingBaseUrl')
-      return
-    }
-    const apiKey = firstDraftApiKey()
-    if (!apiKey) {
-      channelDiscoveryError.value = t('channelDiscovery.missingApiKey')
-      return
-    }
-    if (!form.serviceType) {
-      channelDiscoveryError.value = t('channelDiscovery.missingServiceType')
-      return
-    }
-
-    syncModelMappingToForm()
-    const request = buildChannelDiscoveryRequest()
-    if (!request) return
-
-    const ownerKey = channelDiscoveryOwnerKey()
-    const requestKey = channelDiscoveryRequestKey(request)
-    const existing = channelDiscoverySessions.get(ownerKey)
-    if (existing?.status === 'running' && existing.requestKey === requestKey) {
-      syncChannelDiscoverySessionToState(existing)
-      return
-    }
-
-    const session: ChannelDiscoverySession = {
-      ownerKey,
-      requestKey,
-      status: 'running',
-      result: null,
-      error: '',
-    }
-    session.promise = apiService.discoverChannelConfig(request)
-      .then(result => {
-        session.status = 'success'
-        session.result = result
-        session.error = ''
-        return result
-      })
-      .catch(e => {
-        session.status = 'error'
-        session.result = null
-        session.error = e instanceof Error ? e.message : t('channelDiscovery.failed')
-        throw e
-      })
-      .finally(() => {
-        syncChannelDiscoverySessionToState(session)
-      })
-
-    channelDiscoverySessions.set(ownerKey, session)
-    syncChannelDiscoverySessionToState(session)
-    try {
-      await session.promise
-    } catch {
-      // 错误已写入 session，保持弹窗内联展示。
-    }
-  }
-
-  const applyChannelDiscoveryRecommendation = () => {
-    const recommendation = channelDiscoveryResult.value?.recommendation
-    if (!recommendation) return
-
-    if (recommendation.serviceType) {
-      updateForm({ serviceType: recommendation.serviceType })
-    }
-    if (recommendation.baseUrls?.length) {
-      baseUrlsText.value = recommendation.baseUrls.join('\n')
-    }
-    if (recommendation.urlRecommendation?.recommended) {
-      const current = recommendation.urlRecommendation.current
-      const recommended = recommendation.urlRecommendation.recommended
-      const nextLines = draftBaseUrls().map(line => (line === current ? recommended : line))
-      baseUrlsText.value = Array.from(new Set(nextLines.length ? nextLines : [recommended])).join('\n')
-    }
-
-    const mapping = recommendation.modelMapping ?? {}
-    const noVisionSet = new Set(recommendation.noVisionModels ?? [])
-    modelMappingRows.value = Object.entries(mapping).map(([source, target]) => ({
-      id: ++rowIdCounter,
-      source,
-      target,
-      reasoning: (recommendation.reasoningMapping?.[source] || '') as ModelMappingRow['reasoning'],
-      noVision: noVisionSet.has(target),
-    }))
-    form.modelMapping = { ...mapping }
-    form.reasoningMapping = { ...(recommendation.reasoningMapping || {}) } as typeof form.reasoningMapping
-    form.noVisionModels = [...noVisionSet]
-    form.visionFallbackModel = recommendation.visionFallbackModel || ''
-    form.visionFallbackReasoningEffort = ''
-    // discovery 不再生成 supportedModels 模式；apply 时始终清空，
-    // 避免历史错误配置残留（例如把 responses 渠道的源模型过滤留在 messages 渠道里）。
-    form.supportedModels = recommendation.supportedModels ? [...recommendation.supportedModels] : []
-    syncModelCapabilitiesFromMapping()
-    for (const [key, value] of Object.entries(recommendation.compat || {})) {
-      if (typeof value === 'boolean' && key in form) {
-        ;(form as Record<string, unknown>)[key] = value
-      }
-    }
-    emit('success', t('channelDiscovery.applied'))
-  }
-  const embeddingCapabilitiesError = computed(() => {
-    return props.channelType === 'vectors' && embeddingCapabilityRowsToRecord(form.embeddingCapabilityRows) === null
-      ? t('addChannel.embeddingCapabilitiesRowsInvalid')
-      : ''
-  })
-
-  const syncModelCapabilitiesFromMapping = () => {
-    if (props.channelType === 'vectors') return
-    const existingModels = new Set(
-      form.modelCapabilityRows
-        .map(row => normalizeSelectableString(row.model).trim().toLowerCase())
-        .filter(Boolean)
-    )
-    const rowsToAdd = mappedTargetModels.value
-      .filter(isCompleteMappedTargetModel)
-      .filter(model => !existingModels.has(model.toLowerCase()))
-      .map(model => {
-        const builtin = resolveBuiltinUpstreamModelCapability(model)
-        return createModelCapabilityRow(
-          nextCapabilityRowId(),
-          model,
-          builtin?.capability,
-          builtin ? 'builtin' : 'custom',
-          builtin?.pattern || '',
-        )
-      })
-    if (!rowsToAdd.length) return
-    form.modelCapabilityRows = [...form.modelCapabilityRows, ...rowsToAdd]
-  }
-
-  const syncEmbeddingCapabilitiesFromMapping = () => {
-    if (props.channelType !== 'vectors') return
-    const existingModels = new Set(
-      form.embeddingCapabilityRows
-        .map(row => normalizeSelectableString(row.model).trim().toLowerCase())
-        .filter(Boolean)
-    )
-    const rowsToAdd = mappedTargetModels.value
-      .filter(isCompleteMappedTargetModel)
-      .filter(model => !existingModels.has(model.toLowerCase()))
-      .map(model => createEmbeddingCapabilityRow(nextEmbeddingCapabilityRowId(), model))
-    if (!rowsToAdd.length) return
-    form.embeddingCapabilityRows = [...form.embeddingCapabilityRows, ...rowsToAdd]
-  }
-
-  const syncModelCapabilitiesFromMappingWhenIdle = () => {
-    if (isMappingTargetEditing.value) {
-      hasPendingModelCapabilitySync.value = true
-      return
-    }
-    hasPendingModelCapabilitySync.value = false
-    if (props.channelType === 'vectors') {
-      syncEmbeddingCapabilitiesFromMapping()
-    } else {
-      syncModelCapabilitiesFromMapping()
-    }
-  }
-
-  const startMappingTargetEdit = () => {
-    isMappingTargetEditing.value = true
-  }
-
-  const finishMappingTargetEdit = () => {
-    if (!isMappingTargetEditing.value) return
-    isMappingTargetEditing.value = false
-    if (!hasPendingModelCapabilitySync.value) return
-    hasPendingModelCapabilitySync.value = false
-    nextTick(() => {
-      if (props.channelType === 'vectors') {
-        syncEmbeddingCapabilitiesFromMapping()
-      } else {
-        syncModelCapabilitiesFromMapping()
-      }
-    })
-  }
 
   const { headerClasses, avatarColor, headerIconStyle, subtitleClasses } = useChannelEditorHeaderState(theme)
 
@@ -747,7 +305,6 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
   const buildSubmitPayload = () => {
     const payload = buildChannelPayload(form, { channelType: props.channelType })
     if (!props.channel) {
-      applyVisionFallbackReasoning(payload)
       // 清理未启用的流式超时字段
       if (!form.streamFirstContentTimeoutEnabled) {
         delete payload.streamFirstContentTimeoutMs
@@ -797,7 +354,10 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
       proxyUrl: form.proxyUrl.trim(),
       remark: form.remark.trim(),
       costMultiplier: form.costMultiplier,
-      exchangeRate: form.exchangeRate,
+      channelPaymentCurrency: form.channelPaymentCurrency,
+      channelPaymentAmount: form.channelPaymentAmount,
+      channelCreditCurrency: form.channelCreditCurrency,
+      channelCreditAmount: form.channelCreditAmount,
       routePrefix: props.channel.routePrefix || '',
       requestTimeoutMs: props.channel.requestTimeoutMs,
       responseHeaderTimeoutMs: props.channel.responseHeaderTimeoutMs,
@@ -873,20 +433,6 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     return payload
   }
 
-  const applyVisionFallbackReasoning = (payload: Partial<Channel>) => {
-    const fallbackModel = normalizeSelectableString(form.visionFallbackModel).trim()
-    if (!supportsReasoningMappingOptions.value || !fallbackModel) {
-      return
-    }
-
-    const reasoningMapping = { ...(payload.reasoningMapping || {}) }
-    if (form.visionFallbackReasoningEffort) {
-      reasoningMapping[fallbackModel] = form.visionFallbackReasoningEffort
-    } else if (!modelMappingRows.value.some(row => row.source === fallbackModel && row.reasoning)) {
-      delete reasoningMapping[fallbackModel]
-    }
-    payload.reasoningMapping = reasoningMapping
-  }
 
   // 表单操作
   const resetForm = () => {
@@ -915,16 +461,16 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     form.allowUnknownContext = false
     form.reasoningMapping = {}
 
-    // 清空模型映射行
-    modelMappingRows.value = []
-
     form.reasoningParamStyle = 'reasoning'
     form.textVerbosity = ''
     form.fastMode = false
     form.customHeaders = {}
     form.proxyUrl = ''
     form.costMultiplier = null
-    form.exchangeRate = null
+    form.channelPaymentCurrency = ''
+    form.channelPaymentAmount = null
+    form.channelCreditCurrency = ''
+    form.channelCreditAmount = null
     form.requestTimeoutMs = null
     form.responseHeaderTimeoutMs = null
     form.streamFirstContentTimeoutEnabled = false
@@ -939,7 +485,6 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     form.rateLimitAutoFromHeaders = true
     form.routePrefix = ''
     form.supportedModels = []
-    supportedModelsError.value = ''
     form.autoBlacklistBalance = true
     form.normalizeMetadataUserId = defaultNormalizeMetadataUserId()
     form.stripBillingHeader = false
@@ -1001,15 +546,14 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     form.modelCapabilitiesText = Object.keys(channel.modelCapabilities || {}).length > 0
       ? JSON.stringify(normalizeModelCapabilities(channel.modelCapabilities), null, 2)
       : ''
-    form.modelCapabilityRows = modelCapabilitiesToRows(channel.modelCapabilities || {}, nextCapabilityRowId)
-    form.embeddingCapabilityRows = embeddingCapabilitiesToRows(channel.embeddingCapabilities || {}, nextEmbeddingCapabilityRowId)
+    let capabilityRowId = 0
+    let embeddingCapabilityRowId = 0
+    form.modelCapabilityRows = modelCapabilitiesToRows(channel.modelCapabilities || {}, () => ++capabilityRowId)
+    form.embeddingCapabilityRows = embeddingCapabilitiesToRows(channel.embeddingCapabilities || {}, () => ++embeddingCapabilityRowId)
     form.defaultContextWindowTokens = channel.defaultCapability?.contextWindowTokens || null
     form.defaultMaxOutputTokens = channel.defaultCapability?.maxOutputTokens || null
     form.allowUnknownContext = !!channel.allowUnknownContext
     form.reasoningMapping = { ...(channel.reasoningMapping || {}) }
-
-    // 加载模型映射行
-    loadModelMappingRows(channel)
 
     form.reasoningParamStyle = channel.reasoningParamStyle || 'reasoning'
     form.textVerbosity = channel.textVerbosity || ''
@@ -1017,7 +561,10 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     form.customHeaders = { ...(channel.customHeaders || {}) }
     form.proxyUrl = channel.proxyUrl || ''
     form.costMultiplier = channel.costMultiplier ?? null
-    form.exchangeRate = channel.exchangeRate ?? null
+    form.channelPaymentCurrency = channel.channelPaymentCurrency ?? ''
+    form.channelPaymentAmount = channel.channelPaymentAmount ?? null
+    form.channelCreditCurrency = channel.channelCreditCurrency ?? ''
+    form.channelCreditAmount = channel.channelCreditAmount ?? null
     form.requestTimeoutMs = channel.requestTimeoutMs || null
     form.responseHeaderTimeoutMs = channel.responseHeaderTimeoutMs || null
     form.streamFirstContentTimeoutEnabled = !!(channel.streamFirstContentTimeoutMs && channel.streamFirstContentTimeoutMs > 0)
@@ -1033,7 +580,6 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     form.routePrefix = channel.routePrefix || ''
     const { validPatterns, hasInvalidPatterns } = filterValidSupportedModelPatterns(channel.supportedModels || [])
     form.supportedModels = validPatterns
-    supportedModelsError.value = hasInvalidPatterns ? t('addChannel.supportedModelsInvalidPattern') : ''
     form.autoBlacklistBalance = channel.autoBlacklistBalance ?? true
     form.normalizeMetadataUserId = channel.normalizeMetadataUserId ?? true
     form.stripBillingHeader = channel.stripBillingHeader ?? false
@@ -1131,66 +677,9 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
   } = useChannelEditorFormDerived(channelTypeRef, form, baseUrlsText)
 
   // 将 modelMappingRows 转换为 form.modelMapping 对象（保存时使用）
-  const syncModelMappingToForm = () => {
-    form.modelMapping = {}
-    form.reasoningMapping = {}
-    form.noVisionModels = []
-    const noVisionModels = new Set<string>()
-
-    modelMappingRows.value.forEach(row => {
-      if (row.source && row.target) {
-        form.modelMapping[row.source] = row.target
-        if (row.reasoning) {
-          form.reasoningMapping[row.source] = row.reasoning
-        }
-        if (row.noVision) {
-          noVisionModels.add(row.target)
-        }
-      }
-    })
-
-    form.noVisionModels = [...noVisionModels]
-  }
 
   // 从渠道数据初始化 modelMappingRows
-  const loadModelMappingRows = (channel: Channel) => {
-    const mapping = channel.modelMapping || {}
-    const reasoning = channel.reasoningMapping || {}
-    const noVisionSet = new Set(channel.noVisionModels || [])
 
-    modelMappingRows.value = Object.entries(mapping).map(([source, target]) => ({
-      id: ++rowIdCounter,
-      source,
-      target,
-      reasoning: (reasoning[source] || '') as ModelMappingRow['reasoning'],
-      noVision: noVisionSet.has(target)
-    }))
-  }
-
-  const syncModelMappingRowsFromForm = () => {
-    const noVisionSet = new Set(form.noVisionModels || [])
-
-    modelMappingRows.value = Object.entries(form.modelMapping || {}).map(([source, target]) => ({
-      id: ++rowIdCounter,
-      source,
-      target,
-      reasoning: (form.reasoningMapping[source] || '') as ModelMappingRow['reasoning'],
-      noVision: noVisionSet.has(target)
-    }))
-  }
-
-  const {
-    showModelMappingPresets,
-    showMessagesOpenAIChannelPresets,
-    showClaudeChannelPresets,
-    showCodexResponsesChannelPresets,
-    applyPreset,
-  } = useEditChannelPresets({
-    channelType: channelTypeRef,
-    form,
-    supportsOpenAIAdvancedOptions,
-    syncModelMappingRowsFromForm,
-  })
 
   // 辅助函数：更新表单字段
   const updateForm = (partial: Record<string, unknown>) => {
@@ -1200,10 +689,6 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     Object.assign(form, partial)
   }
 
-  // 辅助函数：同步上游模型
-  const syncUpstreamModels = () => {
-    fetchTargetModels()
-  }
 
   const handleSubmit = async () => {
     if (submitting.value || !formRef.value) return
@@ -1212,17 +697,8 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     let saveStarted = false
 
     try {
-      if (props.channelType === 'vectors') {
-        syncEmbeddingCapabilitiesFromMapping()
-      } else {
-        syncModelCapabilitiesFromMapping()
-      }
-
       const { valid } = await formRef.value.validate()
       if (!valid) return
-      if (modelCapabilitiesError.value || embeddingCapabilitiesError.value) return
-
-      syncModelMappingToForm()
 
       const channelData = buildSubmitPayload()
 
@@ -1243,51 +719,6 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     resetForm()
   }
 
-  const diagnosingCompat = ref(false)
-  const diagnoseResult = ref<{ type: 'success' | 'error'; message: string; appliedCount: number } | null>(null)
-  let diagnoseTimer: ReturnType<typeof setTimeout> | null = null
-
-  const handleDiagnoseCompat = async () => {
-    if (props.channel?.index === undefined || props.channel?.index === null) return
-    if (props.channelType === 'images' || props.channelType === 'vectors') return
-
-    diagnosingCompat.value = true
-    if (diagnoseTimer) { clearTimeout(diagnoseTimer); diagnoseTimer = null }
-    diagnoseResult.value = null
-    try {
-      const type = props.channelType as 'messages' | 'chat' | 'responses' | 'gemini'
-      const result = await apiService.diagnoseChannelCompat(type, props.channel.index)
-      const applied: string[] = []
-      for (const [key, val] of Object.entries(result.recommendations)) {
-        // 以下六项已完全收归运行时自动学习，不再是可编辑字段，诊断建议不写回表单
-        if (RUNTIME_MANAGED_COMPAT_FIELDS.has(key)) continue
-        if (val !== undefined && (form as Record<string, unknown>)[key] !== val) {
-          updateForm({ [key]: val })
-          applied.push(key)
-        }
-      }
-      if (result.urlRecommendations?.recommended) {
-        const current = result.urlRecommendations.current
-        const recommended = result.urlRecommendations.recommended
-        const lines = baseUrlsText.value.split('\n').map(line => line.trim()).filter(Boolean)
-        const nextLines = lines.length > 0
-          ? lines.map((line, index) => (index === 0 || line === current) ? recommended : line)
-          : [recommended]
-        baseUrlsText.value = Array.from(new Set(nextLines)).join('\n')
-        applied.push('baseUrl')
-      }
-      const message = applied.length
-        ? t('channelEditor.compat.diagnoseApplied', { count: applied.length })
-        : t('channelEditor.compat.diagnoseNoChange')
-      diagnoseResult.value = { type: 'success', message, appliedCount: applied.length }
-    } catch (e) {
-      diagnoseResult.value = { type: 'error', message: e instanceof Error ? e.message : t('channelEditor.compat.diagnoseFailed'), appliedCount: 0 }
-    } finally {
-      diagnosingCompat.value = false
-      diagnoseTimer = setTimeout(() => { diagnoseResult.value = null }, 5000)
-    }
-  }
-
   // 监听props变化
   watch(
     () => props.show,
@@ -1295,8 +726,6 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
       if (newShow) {
         dialogMode.value = props.channel ? 'edit' : 'create'
         resetRestoredKeys()
-        if (diagnoseTimer) { clearTimeout(diagnoseTimer); diagnoseTimer = null }
-        diagnoseResult.value = null
 
         if (dialogMode.value === 'edit' && props.channel) {
           // 编辑模式：使用完整表单
@@ -1305,7 +734,6 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
           // 添加模式：固定使用快速添加
           resetForm()
         }
-        restoreChannelDiscoverySession()
 
         // dialog 渲染完成后绑定滚动监听，同步左侧导航高亮
         nextTick(() => attachScrollListener())
@@ -1327,23 +755,12 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
       if (action === 'load-edit-channel' && newChannel) {
         dialogMode.value = 'edit'
         loadChannelData(newChannel)
-        restoreChannelDiscoverySession()
         return
       }
 
       if (action === 'reset-new-form') {
         dialogMode.value = 'create'
         resetForm()
-        restoreChannelDiscoverySession()
-      }
-    }
-  )
-
-  watch(
-    () => props.show ? stableStringify(buildChannelDiscoveryRequest()) : '',
-    () => {
-      if (props.show) {
-        restoreChannelDiscoverySession()
       }
     }
   )
@@ -1359,13 +776,6 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
       }, 200)
     },
     { immediate: true }
-  )
-
-  watch(
-    mappedTargetModels,
-    () => {
-      syncModelCapabilitiesFromMappingWhenIdle()
-    }
   )
 
   watch(
@@ -1424,9 +834,6 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     if (formBaseUrlPreviewTimer !== null) {
       window.clearTimeout(formBaseUrlPreviewTimer)
     }
-    if (diagnoseTimer !== null) {
-      window.clearTimeout(diagnoseTimer)
-    }
   })
 
   return {
@@ -1436,48 +843,19 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     baseUrlHasError,
     onMenuUpdate,
     serviceTypeOptions,
-    sourceModelOptions,
-    modelMappingHint,
-    targetModelPlaceholder,
-    reasoningEffortOptions,
-    reasoningParamStyleOptions,
-    textVerbosityOptions,
-    supportsOpenAIAdvancedOptions,
-    supportsReasoningMappingOptions,
-    supportsChannelDiscovery,
-    showModelMappingPresets,
-    showMessagesOpenAIChannelPresets,
-    showClaudeChannelPresets,
-    showCodexResponsesChannelPresets,
     form,
     baseUrlsText,
-    modelMappingRows,
-    hasNoVisionRows,
-    mappedTargetModels,
-    sourceMappingError,
     targetModelOptions,
-    fetchingModels,
-    fetchModelsError,
     keyModelsStatus,
     errors,
     rules,
     isEditing,
     isMac,
-    selectedStreamTimeoutStrategy,
-    applyStreamTimeoutStrategy,
-    commonSupportedModelFilters,
-    selectedSupportedModelSet,
-    supportedModelsError,
-    modelCapabilitiesError,
-    embeddingCapabilitiesError,
-    startMappingTargetEdit,
-    finishMappingTargetEdit,
     headerClasses,
     avatarColor,
     headerIconStyle,
     subtitleClasses,
     isFormValid,
-    handleSupportedModelsChange,
     restoringKey,
     submitting,
     visibleDisabledKeys,
@@ -1497,26 +875,10 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     suspendingKey,
     suspendKey,
     resumeKey,
-    appendSupportedModelFilter,
     ensureTargetModelsLoaded,
     updateForm,
-    syncUpstreamModels,
-    discoveringChannelConfig,
-    channelDiscoveryResult,
-    channelDiscoveryError,
-    channelDiscoveryModelMappingEntries,
-    channelDiscoveryCompatEntries,
-    channelDiscoveryReasoningEntries,
-    channelDiscoverySuccessfulProtocols,
-    channelDiscoveryCapabilityEntries,
-    handleDiscoverChannelConfig,
-    applyChannelDiscoveryRecommendation,
-    applyPreset,
     handleSubmit,
     handleCancel,
-    diagnosingCompat,
-    diagnoseResult,
-    handleDiagnoseCompat,
     scrollToSection,
     setSectionRef,
     t,

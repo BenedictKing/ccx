@@ -68,7 +68,10 @@ export interface ChannelFormLike {
   customHeaders: Record<string, string>
   proxyUrl: string
   costMultiplier?: string | number | null
-  exchangeRate?: string | number | null
+  channelPaymentCurrency?: string | null
+  channelPaymentAmount?: string | number | null
+  channelCreditCurrency?: string | null
+  channelCreditAmount?: string | number | null
   requestTimeoutMs?: string | number | null
   responseHeaderTimeoutMs?: string | number | null
   streamFirstContentTimeoutMs?: string | number | null
@@ -608,11 +611,16 @@ export function buildChannelPayload(
     channelData.responseHeaderTimeoutMs = responseHeaderTimeoutMs
   }
 
-  // 渠道级计费覆盖：>0 生效；留空/0 发 0 让后端清零（nil=不参与有效成本核算）
+  // 渠道级计费覆盖：倍率 >0 生效；留空/0 发 0 让后端清零
   const costMultiplier = Number(form.costMultiplier)
   channelData.costMultiplier = Number.isFinite(costMultiplier) && costMultiplier > 0 ? costMultiplier : 0
-  const exchangeRate = Number(form.exchangeRate)
-  channelData.exchangeRate = Number.isFinite(exchangeRate) && exchangeRate > 0 ? exchangeRate : 0
+  // 充值→渠道到账换算：币种 trim，金额 >0 生效（0/空发 0 清零）
+  channelData.channelPaymentCurrency = (form.channelPaymentCurrency || '').trim()
+  const channelPaymentAmount = Number(form.channelPaymentAmount)
+  channelData.channelPaymentAmount = Number.isFinite(channelPaymentAmount) && channelPaymentAmount > 0 ? channelPaymentAmount : 0
+  channelData.channelCreditCurrency = (form.channelCreditCurrency || '').trim()
+  const channelCreditAmount = Number(form.channelCreditAmount)
+  channelData.channelCreditAmount = Number.isFinite(channelCreditAmount) && channelCreditAmount > 0 ? channelCreditAmount : 0
 
   const streamFirstContentTimeoutMs = Number(form.streamFirstContentTimeoutMs)
   if (Number.isInteger(streamFirstContentTimeoutMs) && streamFirstContentTimeoutMs > 0) {

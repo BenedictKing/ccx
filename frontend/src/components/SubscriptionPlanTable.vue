@@ -6,7 +6,13 @@
           <th class="text-left">{{ t('subscription.field.originType') }}</th>
           <th class="text-left">{{ t('subscription.field.name') }}</th>
           <th class="text-left">{{ t('subscription.field.balance') }}</th>
-          <th class="text-left">{{ t('subscription.field.rechargeMultiplier') }}</th>
+          <th class="text-left">
+            <v-tooltip location="top" :text="t('subscription.field.rechargeMultiplierHint')">
+              <template #activator="{ props: tipProps }">
+                <span v-bind="tipProps">{{ t('subscription.field.rechargeMultiplier') }}</span>
+              </template>
+            </v-tooltip>
+          </th>
           <th class="text-left">{{ t('subscription.billingTerms.title') }}</th>
           <th class="text-left">{{ t('subscription.field.version') }}</th>
           <th class="text-left">{{ t('subscription.field.linkedChannels') }}</th>

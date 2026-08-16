@@ -220,6 +220,7 @@ import {
   mdiCashRemove,
   mdiCashMultiple,
   mdiCash,
+  mdiCashCheck,
   mdiWalletOutline,
   mdiFinance,
   mdiAccountSwitch,
@@ -267,6 +268,7 @@ import {
   mdiAccountMultipleOutline,
   mdiMultiplication,
   mdiCurrencyUsd,
+  mdiVpn,
 } from '@mdi/js'
 
 // 图标名称到 SVG path 的映射 (使用 kebab-case)
@@ -404,6 +406,7 @@ const iconMap: Record<string, string> = {
   'tune-variant': mdiTuneVariant,
   'multiplication': mdiMultiplication,
   'currency-usd': mdiCurrencyUsd,
+  'vpn': mdiVpn,
   'account-multiple-outline': mdiAccountMultipleOutline,
   'image-sync': mdiImageSync,
   'image-outline': mdiImageOutline,
@@ -514,6 +517,7 @@ const iconMap: Record<string, string> = {
   'cash-remove': mdiCashRemove,
   'cash-multiple': mdiCashMultiple,
   'cash': mdiCash,
+  'cash-check': mdiCashCheck,
   'wallet-outline': mdiWalletOutline,
 
   // 渠道配置
