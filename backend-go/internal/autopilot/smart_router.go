@@ -623,14 +623,26 @@ func (r *SmartRouter) executeFilter(
 	for _, ch := range channels {
 		upstream := upstreamFor(ch)
 		if upstream == nil {
+			trace.GlobalFilterReasons["candidate_pre_filter"] = append(
+				trace.GlobalFilterReasons["candidate_pre_filter"],
+				ch.Name+": missing_upstream",
+			)
 			continue
 		}
 		// P1.5：按 channel 禁用——命中的渠道对 autopilot 不存在，走和
 		// "候选不可用" 完全相同的跳过路径，不影响其他非 autopilot 选路径。
 		if disabledChannelUIDs[upstream.ChannelUID] {
+			trace.GlobalFilterReasons["candidate_pre_filter"] = append(
+				trace.GlobalFilterReasons["candidate_pre_filter"],
+				ch.Name+": disabled_channel",
+			)
 			continue
 		}
 		if !candidateAvailable(ch, upstream) {
+			trace.GlobalFilterReasons["candidate_pre_filter"] = append(
+				trace.GlobalFilterReasons["candidate_pre_filter"],
+				ch.Name+": candidate_unavailable",
+			)
 			continue
 		}
 		route := federatedRoute(ch, profile.ChannelKind)

@@ -222,6 +222,29 @@
               <strong>{{ t('autopilot.traceDetail.skipReasons') }}:</strong>
               {{ detail.schedulerDecision.skipReasons.join(', ') }}
             </div>
+            <template v-if="detail.schedulerDecision.skippedCandidates && detail.schedulerDecision.skippedCandidates.length > 0">
+              <div class="text-caption font-weight-bold mt-2 mb-1 text-medium-emphasis">
+                {{ t('autopilot.traceDetail.skippedCandidates') }}
+              </div>
+              <v-table density="compact">
+                <thead>
+                  <tr>
+                    <th class="text-caption">Stage</th>
+                    <th class="text-caption">Channel</th>
+                    <th class="text-caption">Reason</th>
+                    <th class="text-caption">Details</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(cand, ci) in detail.schedulerDecision.skippedCandidates" :key="ci">
+                    <td class="text-caption">{{ cand.stage }}</td>
+                    <td class="text-caption">{{ cand.channelName || cand.channelIndex }}</td>
+                    <td class="text-caption">{{ cand.reason }}</td>
+                    <td class="text-caption">{{ cand.details || '-' }}</td>
+                  </tr>
+                </tbody>
+              </v-table>
+            </template>
           </div>
 
           <!-- endpoint 尝试 -->

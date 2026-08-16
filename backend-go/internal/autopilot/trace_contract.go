@@ -129,19 +129,31 @@ type TraceSummary struct {
 }
 
 // SchedulerDecisionSummary 是 Scheduler 裁决的规范化摘要。
-// 不复制整个 SelectionTrace，只保留阶段计数、跳过原因代码和最终选择。
+// 不复制整个 SelectionTrace，只保留阶段计数、跳过原因代码、被滤渠道明细和最终选择。
 type SchedulerDecisionSummary struct {
-	Stages        []SchedulerStageSummary `json:"stages,omitempty"`
-	SkipReasons   []string                `json:"skipReasons,omitempty"`
-	SelectedUID   string                  `json:"selectedUid,omitempty"`
-	SelectedName  string                  `json:"selectedName,omitempty"`
-	SelectionCode string                  `json:"selectionCode,omitempty"`
+	Stages            []SchedulerStageSummary   `json:"stages,omitempty"`
+	SkipReasons       []string                  `json:"skipReasons,omitempty"`
+	SkippedCandidates []SkippedCandidateSummary `json:"skippedCandidates,omitempty"`
+	SelectedUID       string                    `json:"selectedUid,omitempty"`
+	SelectedName      string                    `json:"selectedName,omitempty"`
+	SelectionCode     string                    `json:"selectionCode,omitempty"`
 }
 
 // SchedulerStageSummary 记录一个过滤阶段的名称和通过候选数。
 type SchedulerStageSummary struct {
 	Name  string `json:"name"`
 	Count int    `json:"count"`
+}
+
+// SkippedCandidateSummary 记录 scheduler 阶段被过滤掉的一个渠道及原因。
+// Reason 是代码枚举（见 isSafeSkipReason 白名单），Details 仅含模型名/数字等诊断信息，
+// 不含 BaseURL、API Key 等敏感内容。
+type SkippedCandidateSummary struct {
+	ChannelIndex int    `json:"channelIndex"`
+	ChannelName  string `json:"channelName"`
+	Stage        string `json:"stage"`
+	Reason       string `json:"reason"`
+	Details      string `json:"details,omitempty"`
 }
 
 // EndpointAttemptSummary 是一次上游尝试的安全摘要。
@@ -322,10 +334,19 @@ func sanitizeSchedulerForPersistence(s *SchedulerDecisionSummary) *SchedulerDeci
 		}
 	}
 	s.SkipReasons = filtered
+	// SkippedCandidates 整条丢弃白名单外 reason 的条目，其余字段均为代码枚举/渠道名
+	skipped := make([]SkippedCandidateSummary, 0, len(s.SkippedCandidates))
+	for _, cand := range s.SkippedCandidates {
+		if isSafeSkipReason(cand.Reason) {
+			skipped = append(skipped, cand)
+		}
+	}
+	s.SkippedCandidates = skipped
 	return s
 }
 
 // isSafeSkipReason 判断跳过原因代码是否为已知安全值。
+// 与 scheduler/select.go 的 skipChannel 调用点保持一致，新增原因码需同步登记。
 func isSafeSkipReason(reason string) bool {
 	safeReasons := map[string]bool{
 		"unsupported_model":           true,
@@ -352,6 +373,24 @@ func isSafeSkipReason(reason string) bool {
 		"empty_stream":                true,
 		"key_binding":                 true,
 		"quota_exhausted":             true,
+		// scheduler/select.go 实际使用的阶段原因码
+		"disabled_status":           true,
+		"inactive_status":           true,
+		"missing_upstream":          true,
+		"missing_upstream_or_keys":  true,
+		"channel_name_mismatch":     true,
+		"runtime_unavailable":       true,
+		"better_priority_available": true,
+		"model_circuit_open":        true,
+		"unhealthy":                 true,
+		"runtime_cooldown":          true,
+		"vision_reserved_for_image": true,
+		"no_selectable_keys":        true,
+		"filtered_out":              true,
+		"context_window_exceeded":   true,
+		"unknown_context_window":    true,
+		"route_prefix_mismatch":     true,
+		"route_prefix_only":         true,
 	}
 	return safeReasons[reason]
 }
@@ -534,6 +573,7 @@ func (t *RoutingDecisionTrace) ToTraceDetailV2(snapshot *RoutingReleaseSnapshot,
 		EstimatedCost:        t.EstimatedCost,
 		CostConfidence:       t.CostConfidence,
 		FallbackUsed:         t.FallbackUsed,
+		SchedulerDecision:    t.SchedulerDecision,
 		Outcome:              t.Outcome,
 		Success:              t.Success,
 		ChannelFallback:      t.ChannelFallback,

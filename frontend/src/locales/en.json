@@ -1391,6 +1391,7 @@
   "autopilot.traceDetail.schedulerDecision": "Scheduler Decision",
   "autopilot.traceDetail.selected": "Selected",
   "autopilot.traceDetail.skipReasons": "Skip Reasons",
+  "autopilot.traceDetail.skippedCandidates": "Skipped Channels",
   "autopilot.traceDetail.attempts": "Endpoint Attempts",
   "autopilot.traceDetail.truncated": "Truncated",
   "autopilot.traceDetail.attemptsByResult": "By Result",

@@ -197,6 +197,7 @@ func HandleMultiChannelFailoverWithSelectionFilter(
 		// 将 Autopilot trace UID 写入 gin context，供 ChannelLog 关联
 		if selection.AutopilotTraceUID != "" {
 			c.Set("ccx.autopilot_trace_uid", selection.AutopilotTraceUID)
+			notifySchedulerDecision(selection)
 		}
 
 		if envCfg.ShouldLog("info") && upstream != nil {

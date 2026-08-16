@@ -1391,6 +1391,7 @@
   "autopilot.traceDetail.schedulerDecision": "调度器裁决",
   "autopilot.traceDetail.selected": "已选择",
   "autopilot.traceDetail.skipReasons": "跳过原因",
+  "autopilot.traceDetail.skippedCandidates": "被滤渠道明细",
   "autopilot.traceDetail.attempts": "上游尝试",
   "autopilot.traceDetail.truncated": "已截断",
   "autopilot.traceDetail.attemptsByResult": "按结果统计",

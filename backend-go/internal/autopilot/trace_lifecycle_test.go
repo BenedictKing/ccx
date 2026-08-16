@@ -66,6 +66,41 @@ func TestNormalizeSelectionTrace_FiltersUnsafeReasons(t *testing.T) {
 	}
 }
 
+func TestNormalizeSelectionTrace_SkippedCandidates(t *testing.T) {
+	trace := &scheduler.SelectionTrace{
+		Candidates: []scheduler.SelectionTraceCandidate{
+			{ChannelIndex: 6, ChannelName: "ai-muapi-cn", Stage: "active_model_filter", Reason: "unsupported_model", Details: "model=claude-opus-4-8"},
+			{ChannelIndex: 1, ChannelName: "vip-lyclaude-site", Stage: "active_model_filter", Reason: "disabled_status"},
+			{ChannelIndex: 9, ChannelName: "evil", Stage: "active_model_filter", Reason: "https://leaked.url/x", Details: "should be dropped"},
+		},
+		Selected: &scheduler.SelectionTraceSelection{
+			Route:       scheduler.ChannelRouteRef{Index: 3, ChannelUID: "uid-kimi"},
+			ChannelName: "kimi-official",
+			Reason:      "priority_order",
+		},
+	}
+
+	summary := NormalizeSelectionTrace(trace)
+	if summary == nil {
+		t.Fatal("非 nil 输入应返回摘要")
+	}
+	// 白名单外 reason 的明细整条丢弃
+	if len(summary.SkippedCandidates) != 2 {
+		t.Fatalf("SkippedCandidates = %d, want 2: %+v", len(summary.SkippedCandidates), summary.SkippedCandidates)
+	}
+	first := summary.SkippedCandidates[0]
+	if first.ChannelIndex != 6 || first.ChannelName != "ai-muapi-cn" || first.Stage != "active_model_filter" ||
+		first.Reason != "unsupported_model" || first.Details != "model=claude-opus-4-8" {
+		t.Errorf("首条明细不符合预期: %+v", first)
+	}
+	if summary.SelectedUID != "uid-kimi" {
+		t.Errorf("SelectedUID = %q, want uid-kimi", summary.SelectedUID)
+	}
+	if summary.SelectedName != "kimi-official" {
+		t.Errorf("SelectedName = %q, want kimi-official", summary.SelectedName)
+	}
+}
+
 // ── AttachSchedulerDecision 测试 ──
 
 func TestAttachSchedulerDecision(t *testing.T) {
@@ -101,6 +136,51 @@ func TestAttachSchedulerDecision_NilSafety(t *testing.T) {
 	// 不应 panic
 	store.AttachSchedulerDecision("", nil)
 	store.AttachSchedulerDecision("rt_missing", &SchedulerDecisionSummary{})
+}
+
+// TestAttachSchedulerDecision_PersistsDetailsJSON 验证已落盘记录的 details_json 被同步更新。
+func TestAttachSchedulerDecision_PersistsDetailsJSON(t *testing.T) {
+	store, _ := newTempTraceStore(t)
+	defer func() { _ = store.Close() }()
+
+	traceUID := GenerateTraceUIDv2()
+	trace := &RoutingDecisionTrace{
+		TraceUID:        traceUID,
+		SchemaVersion:   2,
+		Source:          "proxy",
+		RequestKind:     "messages",
+		TaskClass:       TaskClassSupervisor,
+		Mode:            RoutingModeShadow,
+		ManualIntentUID: "mi_attach_persist", // 必落盘类别
+		CreatedAt:       time.Now().UTC(),
+	}
+	store.Record(trace)
+
+	store.AttachSchedulerDecision(traceUID, &SchedulerDecisionSummary{
+		SelectedName:  "ch_a",
+		SelectionCode: "priority_order",
+		SkippedCandidates: []SkippedCandidateSummary{
+			{ChannelIndex: 6, ChannelName: "ch_b", Stage: "active_model_filter", Reason: "unsupported_model", Details: "model=x"},
+		},
+	})
+
+	// GetTraceDetail 以 SQLite details_json 为权威源，能读到即证明 UPDATE 生效
+	detail, err := store.GetTraceDetail(traceUID)
+	if err != nil {
+		t.Fatalf("GetTraceDetail 失败: %v", err)
+	}
+	if detail == nil || detail.SchedulerDecision == nil {
+		t.Fatal("落盘 details_json 应包含 SchedulerDecision")
+	}
+	if detail.SchedulerDecision.SelectedName != "ch_a" {
+		t.Errorf("SelectedName = %q, want ch_a", detail.SchedulerDecision.SelectedName)
+	}
+	if len(detail.SchedulerDecision.SkippedCandidates) != 1 {
+		t.Fatalf("SkippedCandidates = %d, want 1", len(detail.SchedulerDecision.SkippedCandidates))
+	}
+	if detail.SchedulerDecision.SkippedCandidates[0].Reason != "unsupported_model" {
+		t.Errorf("Reason = %q, want unsupported_model", detail.SchedulerDecision.SkippedCandidates[0].Reason)
+	}
 }
 
 // ── AppendEndpointAttempt 测试 ──

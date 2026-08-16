@@ -1391,6 +1391,7 @@
   "autopilot.traceDetail.schedulerDecision": "Keputusan Scheduler",
   "autopilot.traceDetail.selected": "Terpilih",
   "autopilot.traceDetail.skipReasons": "Alasan Dilewati",
+  "autopilot.traceDetail.skippedCandidates": "Channel Dilewati",
   "autopilot.traceDetail.attempts": "Percobaan Endpoint",
   "autopilot.traceDetail.truncated": "Dipotong",
   "autopilot.traceDetail.attemptsByResult": "Berdasarkan Hasil",

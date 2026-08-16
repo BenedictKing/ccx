@@ -1746,9 +1746,19 @@ export interface TraceSummary {
 export interface SchedulerDecisionSummary {
   stages?: { name: string; count: number }[]
   skipReasons?: string[]
+  skippedCandidates?: SkippedCandidateSummary[]
   selectedUid?: string
   selectedName?: string
   selectionCode?: string
+}
+
+/** scheduler 阶段被过滤渠道的明细 */
+export interface SkippedCandidateSummary {
+  channelIndex: number
+  channelName: string
+  stage: string
+  reason: string
+  details?: string
 }
 
 /** endpoint 尝试摘要 */

@@ -507,6 +507,49 @@ func TestToTraceDetailV2_NilSnapshot(t *testing.T) {
 	}
 }
 
+func TestToTraceDetailV2_IncludesSchedulerDecision(t *testing.T) {
+	trace := &RoutingDecisionTrace{
+		TraceUID:  "rt_sd",
+		CreatedAt: time.Now().UTC(),
+		SchedulerDecision: &SchedulerDecisionSummary{
+			SelectedName:  "ch_a",
+			SelectionCode: "priority_order",
+			SkippedCandidates: []SkippedCandidateSummary{
+				{ChannelIndex: 6, ChannelName: "ch_b", Stage: "active_model_filter", Reason: "unsupported_model"},
+			},
+		},
+	}
+
+	detail := trace.ToTraceDetailV2(nil, 1, PersistenceSampled)
+	if detail.SchedulerDecision == nil {
+		t.Fatal("TraceDetailV2 未映射 SchedulerDecision")
+	}
+	if detail.SchedulerDecision.SelectedName != "ch_a" {
+		t.Errorf("SelectedName = %q, want ch_a", detail.SchedulerDecision.SelectedName)
+	}
+	if len(detail.SchedulerDecision.SkippedCandidates) != 1 {
+		t.Fatalf("SkippedCandidates = %d, want 1", len(detail.SchedulerDecision.SkippedCandidates))
+	}
+}
+
+func TestSanitizeSchedulerForPersistence_FiltersSkippedCandidates(t *testing.T) {
+	s := &SchedulerDecisionSummary{
+		SkipReasons: []string{"unsupported_model", "https://evil.example/leak"},
+		SkippedCandidates: []SkippedCandidateSummary{
+			{ChannelIndex: 6, ChannelName: "ch_a", Stage: "active_model_filter", Reason: "unsupported_model"},
+			{ChannelIndex: 9, ChannelName: "ch_b", Stage: "active_model_filter", Reason: "https://evil.example/leak"},
+		},
+	}
+
+	out := sanitizeSchedulerForPersistence(s)
+	if len(out.SkipReasons) != 1 || out.SkipReasons[0] != "unsupported_model" {
+		t.Errorf("SkipReasons 过滤结果不符合预期: %v", out.SkipReasons)
+	}
+	if len(out.SkippedCandidates) != 1 || out.SkippedCandidates[0].ChannelName != "ch_a" {
+		t.Errorf("白名单外 reason 的明细应整条丢弃: %+v", out.SkippedCandidates)
+	}
+}
+
 func TestToTraceSummary(t *testing.T) {
 	trace := &RoutingDecisionTrace{
 		TraceUID:         "rt_test",

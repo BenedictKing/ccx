@@ -817,6 +817,10 @@ func main() {
 			common.SetAttemptRecorderHook(func(traceUID string, attempt autopilot.EndpointAttemptSummary) {
 				traceStore.AppendEndpointAttempt(traceUID, attempt)
 			})
+			// scheduler 裁决记录器：选择完成后把过滤阶段/跳过明细附加到 trace
+			common.SetSchedulerDecisionHook(func(traceUID string, trace *scheduler.SelectionTrace) {
+				traceStore.AttachSchedulerDecision(traceUID, autopilot.NormalizeSelectionTrace(trace))
+			})
 		}
 
 		// endpoint policy hook：为每个请求构建 EndpointAttemptPolicy

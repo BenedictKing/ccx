@@ -1,6 +1,8 @@
 package autopilot
 
 import (
+	"encoding/json"
+	"log"
 	"sync"
 
 	"github.com/BenedictKing/ccx/internal/scheduler"
@@ -29,12 +31,20 @@ func NormalizeSelectionTrace(trace *scheduler.SelectionTrace) *SchedulerDecision
 		})
 	}
 
-	// 跳过原因代码（去重，只保留安全代码）
+	// 跳过原因代码（去重，只保留安全代码）与被滤渠道明细
 	reasonSet := make(map[string]bool)
 	for _, cand := range trace.Candidates {
-		if cand.Reason != "" && isSafeSkipReason(cand.Reason) {
-			reasonSet[cand.Reason] = true
+		if cand.Reason == "" || !isSafeSkipReason(cand.Reason) {
+			continue
 		}
+		reasonSet[cand.Reason] = true
+		summary.SkippedCandidates = append(summary.SkippedCandidates, SkippedCandidateSummary{
+			ChannelIndex: cand.ChannelIndex,
+			ChannelName:  cand.ChannelName,
+			Stage:        cand.Stage,
+			Reason:       cand.Reason,
+			Details:      cand.Details,
+		})
 	}
 	for reason := range reasonSet {
 		summary.SkipReasons = append(summary.SkipReasons, reason)
@@ -42,6 +52,7 @@ func NormalizeSelectionTrace(trace *scheduler.SelectionTrace) *SchedulerDecision
 
 	// 最终选择
 	if trace.Selected != nil {
+		summary.SelectedUID = trace.Selected.Route.ChannelUID
 		summary.SelectedName = trace.Selected.ChannelName
 		summary.SelectionCode = trace.Selected.Reason
 	}
@@ -51,14 +62,19 @@ func NormalizeSelectionTrace(trace *scheduler.SelectionTrace) *SchedulerDecision
 
 // AttachSchedulerDecision 按 TraceUID 将规范化的 Scheduler 裁决附加到对应 trace。
 // 无论选择成功还是失败，均保留已知的硬约束阶段与原因。
+// 已落盘的记录同步 UPDATE details_json；未落盘（抽样中）的只更新内存与 in-flight，
+// 终态落盘时自然携带该字段，不破坏 1/10 抽样。
 func (s *TraceStore) AttachSchedulerDecision(traceUID string, decision *SchedulerDecisionSummary) {
 	if s == nil || traceUID == "" || decision == nil {
 		return
 	}
+	var updated *RoutingDecisionTrace
 	s.mu.Lock()
 	for i := len(s.records) - 1; i >= 0; i-- {
 		if s.records[i].TraceUID == traceUID {
 			s.records[i].SchedulerDecision = decision
+			cp := *s.records[i]
+			updated = &cp
 			break
 		}
 	}
@@ -70,6 +86,24 @@ func (s *TraceStore) AttachSchedulerDecision(traceUID string, decision *Schedule
 		trace.SchedulerDecision = decision
 	}
 	s.inflightMu.Unlock()
+
+	// 锁外更新已落盘行的 details_json；未落盘的 trace 影响 0 行，天然跳过
+	if updated == nil || s.db == nil {
+		return
+	}
+	detail := updated.ToTraceDetailV2(nil, updated.TraceRevision, PersistenceSampled)
+	SanitizeForPersistence(detail)
+	detailsJSON, err := json.Marshal(detail)
+	if err != nil {
+		return
+	}
+	if _, err := s.db.Exec(`
+UPDATE autopilot_routing_traces
+SET details_json = ?
+WHERE trace_uid = ?
+`, string(detailsJSON), traceUID); err != nil {
+		log.Printf("[TraceStore-AttachScheduler] 警告: 更新 details_json 失败 uid=%s: %v", traceUID, err)
+	}
 }
 
 // attemptSeqCounters 为每个 trace 维护单调递增的 attempt 序号。

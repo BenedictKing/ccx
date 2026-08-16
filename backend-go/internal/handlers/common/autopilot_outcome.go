@@ -31,6 +31,26 @@ func SetAttemptRecorderHook(hook func(traceUID string, attempt autopilot.Endpoin
 	attemptRecorderHook = hook
 }
 
+var schedulerDecisionHook func(traceUID string, trace *scheduler.SelectionTrace)
+
+// SetSchedulerDecisionHook 注入 scheduler 裁决记录器；nil 时保持原有请求路径。
+func SetSchedulerDecisionHook(hook func(traceUID string, trace *scheduler.SelectionTrace)) {
+	schedulerDecisionHook = hook
+}
+
+// notifySchedulerDecision 将本次选择的调度 trace 附加到对应 autopilot trace。
+// traceUID 为空或 hook 未注入时静默跳过（fail-open：不影响请求）。
+func notifySchedulerDecision(selection *scheduler.SelectionResult) {
+	if schedulerDecisionHook == nil || selection == nil || selection.AutopilotTraceUID == "" || selection.Trace == nil {
+		return
+	}
+	defer func() {
+		// 观测失败绝不影响代理请求
+		_ = recover()
+	}()
+	schedulerDecisionHook(selection.AutopilotTraceUID, selection.Trace)
+}
+
 // recordEndpointAttempt 向对应 trace 追加一条安全的 endpoint 尝试摘要。
 // traceUID 为空或 hook 未注入时静默跳过（fail-open：不影响请求）。
 func recordEndpointAttempt(traceUID string, attempt autopilot.EndpointAttemptSummary) {
