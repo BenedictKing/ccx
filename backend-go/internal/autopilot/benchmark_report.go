@@ -100,6 +100,7 @@ func GenerateBenchmarkSelectionReport(resolver *ModelResolver, cfgManager *confi
 }
 
 // LogBenchmarkSelectionReport 将报告以多行日志形式输出。
+// 已在 autopilot 包外被 cmd/benchmark-report 复用，输出格式与运行态后端一致。
 func LogBenchmarkSelectionReport(report *BenchmarkModelSelectionReport) {
 	if report == nil || len(report.Scenarios) == 0 {
 		return

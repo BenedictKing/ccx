@@ -67,6 +67,10 @@ const skipDradar = args.includes('--skip-dradar')
 const skipLitellm = args.includes('--skip-litellm')
 const forceLitellm = args.includes('--force-litellm')
 const skipArtificialAnalysis = args.includes('--skip-artificial-analysis')
+const skipBenchmarkReport = args.includes('--skip-benchmark-report')
+// --config <path>：传递给 benchmark-report CLI；默认 backend-go/.config/config.json
+const configArgIdx = args.indexOf('--config')
+const configPath = configArgIdx >= 0 ? args[configArgIdx + 1] : ''
 const artificialAnalysisApiKey = process.env.ARTIFICIAL_ANALYSIS_API_KEY || ''
 // 无 key 且未显式 skip 时自动跳过 AA（首个需 key 的源；保持现有工作流零破坏）
 const artificialAnalysisEnabled = !skipArtificialAnalysis && !!artificialAnalysisApiKey
@@ -709,6 +713,52 @@ function generateBenchmarkChart(data) {
   })
 }
 
+/**
+ * 运行 benchmark-report Go CLI，输出模型选择报告。
+ * 二进制查找顺序：backend-go/benchmark-report、PATH 上的 benchmark-report。
+ * 找不到二进制时打印 warning 而不 fail。
+ */
+function runBenchmarkReport() {
+  if (skipBenchmarkReport) {
+    console.log('\n[BenchmarkReport] --skip-benchmark-report set, skipping model selection report')
+    return
+  }
+  const candidates = [
+    join(root, 'backend-go/benchmark-report'),
+    join(root, 'backend-go/cmd/benchmark-report/benchmark-report'),
+  ]
+  let binary = candidates.find((p) => existsSync(p))
+  if (!binary) {
+    // PATH 上查找
+    try {
+      const which = execFileSync('which', ['benchmark-report'], { encoding: 'utf8' }).trim()
+      if (which && existsSync(which)) binary = which
+    } catch {
+      // which 失败，忽略
+    }
+  }
+  if (!binary) {
+    console.warn(
+      '\n[BenchmarkReport] benchmark-report binary not found (build it with `cd backend-go && go build -o benchmark-report ./cmd/benchmark-report`); skipping model selection report',
+    )
+    return
+  }
+  const cfgPath = configPath || join(root, 'backend-go/.config/config.json')
+  if (!existsSync(cfgPath)) {
+    console.warn(`\n[BenchmarkReport] config not found at ${cfgPath}; skipping model selection report`)
+    return
+  }
+  console.log('\n[BenchmarkReport] generating model selection report...')
+  try {
+    const stdout = execFileSync(binary, ['-config', cfgPath], { encoding: 'utf8' })
+    if (stdout && stdout.trim()) {
+      process.stdout.write(stdout)
+    }
+  } catch (err) {
+    console.warn(`\n[BenchmarkReport] benchmark-report failed: ${err.message}`)
+  }
+}
+
 function saveAndGenerateAtomically(registry) {
   const trackedPaths = [registryPath, ...generatedArtifactPaths]
   const snapshots = new Map(
@@ -915,6 +965,8 @@ export async function main() {
     console.log('\n--- Saving registry ---')
     saveAndGenerateAtomically(registry)
     console.log(`[save] Registry and generated artifacts updated atomically`)
+    // benchmark 数据落盘后输出模型选择报告，输出格式与后端热重载一致
+    runBenchmarkReport()
   } else {
     console.log('\n--- DRY RUN: No changes saved ---')
   }

@@ -254,6 +254,9 @@ refs/
 # 临时调查文档
 backend-go/cmd/
 !backend-go/cmd/stream_verify/
+!backend-go/cmd/benchmark-report/
+# CLI 编译产物
+backend-go/benchmark-report
 docs/claude-code-investigation-*.md
 
 !backend-go/frontend/
