@@ -196,6 +196,25 @@
     },
     "tencent-lkeap": {
       "normalizeSystemRoleToTopLevel": true
+    },
+    "atomgit": {
+      "modelMapping": {
+        "fable": "glm-5.2-200k",
+        "haiku": "glm-5.2-200k",
+        "opus": "glm-5.2-200k",
+        "sonnet": "glm-5.2-200k"
+      },
+      "reasoningMapping": {
+        "fable": "max",
+        "haiku": "high",
+        "opus": "max",
+        "sonnet": "max"
+      },
+      "reasoningParamStyle": "thinking",
+      "serviceType": "openai",
+      "normalizeSystemRoleToTopLevel": true,
+      "noVisionModels": ["glm-5.2-200k"],
+      "visionFallbackModel": ""
     }
   }
 }

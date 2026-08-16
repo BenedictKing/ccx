@@ -14,6 +14,7 @@ describe('providerDisplayName', () => {
     expect(providerDisplayName('opencode-zen')).toBe('OpenCode Zen / Go')
     expect(providerDisplayName('dashscope')).toBe('阿里云 DashScope')
     expect(providerDisplayName('tencent-lkeap')).toBe('腾讯云 TokenHub')
+    expect(providerDisplayName('atomgit')).toBe('AtomGit')
   })
 
   it('为未知 provider 生成可读名称', () => {

@@ -19,5 +19,6 @@ func generatedOpenAIChatTargetConfigs() map[string]channelTargetConfig {
 		"volc-ark":     channelTargetConfig{},
 		"qianfan":      channelTargetConfig{},
 		"xfyun":        channelTargetConfig{ModelMapping: map[string]string{"codex": "astron-code-latest", "gpt": "astron-code-latest", "mini": "astron-code-latest"}},
+		"atomgit":      channelTargetConfig{ModelMapping: map[string]string{"gpt": "glm-5.2-200k", "mini": "glm-5.2-200k", "codex": "glm-5.2-200k"}, ReasoningMapping: map[string]string{"gpt": "high", "mini": "high", "codex": "high"}, ReasoningParamStyle: "thinking", NoVisionModels: []string{"glm-5.2-200k"}},
 	}
 }

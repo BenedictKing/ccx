@@ -323,6 +323,31 @@ var builtinProviderTemplates = []ProviderTemplate{
 			{BaseURL: "https://api.easytransnote.com/coding/v1", PlanTag: "subscription", Region: "cn", Priority: 0},
 		}),
 	),
+	newProviderTemplate(
+		"atomgit",
+		"AtomGit",
+		"AtomGit AI Coding Plan（OpenAI Chat Completions 兼容，模型发现走 /v1/models）",
+		"official_token_plan",
+		"first",
+		[]ProviderRoute{
+			{
+				ChannelKind: "chat",
+				ServiceType: "openai",
+				Description: "OpenAI Chat Completions 兼容入口",
+				Candidates: []ProviderCandidate{
+					{BaseURL: "https://api-ai.gitcode.com/v1", PlanTag: "coding_plan", Region: "cn", Priority: 0},
+				},
+			},
+			{
+				ChannelKind: "responses",
+				ServiceType: "openai",
+				Description: "Responses 请求转换到 OpenAI Chat Completions",
+				Candidates: []ProviderCandidate{
+					{BaseURL: "https://api-ai.gitcode.com/v1", PlanTag: "coding_plan", Region: "cn", Priority: 0},
+				},
+			},
+		},
+	),
 }
 
 var zhipuAPIKeyPattern = regexp.MustCompile(`^[A-Za-z0-9]{20,}\.[A-Za-z0-9]{10,}$`)

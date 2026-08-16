@@ -66,6 +66,21 @@
         "gpt": "astron-code-latest",
         "mini": "astron-code-latest"
       }
+    },
+    "atomgit": {
+      "modelMapping": {
+        "gpt": "glm-5.2-200k",
+        "mini": "glm-5.2-200k",
+        "codex": "glm-5.2-200k"
+      },
+      "reasoningMapping": {
+        "gpt": "high",
+        "mini": "high",
+        "codex": "high"
+      },
+      "reasoningParamStyle": "thinking",
+      "noVisionModels": ["glm-5.2-200k"],
+      "visionFallbackModel": ""
     }
   }
 }

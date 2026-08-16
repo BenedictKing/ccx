@@ -201,5 +201,25 @@ export const openaiChatPresets: Record<string, OpenAIChatPreset> = {
     "noVision": false,
     "noVisionModels": [],
     "visionFallbackModel": ""
+  },
+  "atomgit": {
+    "modelMapping": {
+      "gpt": "glm-5.2-200k",
+      "mini": "glm-5.2-200k",
+      "codex": "glm-5.2-200k"
+    },
+    "reasoningMapping": {
+      "gpt": "high",
+      "mini": "high",
+      "codex": "high"
+    },
+    "reasoningParamStyle": "thinking",
+    "authHeader": "",
+    "normalizeSystemRoleToTopLevel": false,
+    "noVision": false,
+    "noVisionModels": [
+      "glm-5.2-200k"
+    ],
+    "visionFallbackModel": ""
   }
 }

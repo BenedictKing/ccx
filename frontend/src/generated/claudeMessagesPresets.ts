@@ -314,5 +314,28 @@ export const claudeMessagesPresets: Record<string, ClaudeMessagesPreset> = {
     "noVision": false,
     "noVisionModels": [],
     "visionFallbackModel": ""
+  },
+  "atomgit": {
+    "modelMapping": {
+      "fable": "glm-5.2-200k",
+      "haiku": "glm-5.2-200k",
+      "opus": "glm-5.2-200k",
+      "sonnet": "glm-5.2-200k"
+    },
+    "reasoningMapping": {
+      "fable": "max",
+      "haiku": "high",
+      "opus": "max",
+      "sonnet": "max"
+    },
+    "reasoningParamStyle": "thinking",
+    "authHeader": "",
+    "normalizeSystemRoleToTopLevel": true,
+    "noVision": false,
+    "noVisionModels": [
+      "glm-5.2-200k"
+    ],
+    "visionFallbackModel": "",
+    "serviceType": "openai"
   }
 }
