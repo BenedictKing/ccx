@@ -157,11 +157,7 @@ type CostProfile struct {
 	// 分组倍率：key 为模型组或通配符，例如 "*"、"claude-opus"、"gpt-5"、"gemini"。
 	GroupMultipliers map[string]float64 `json:"groupMultipliers,omitempty"`
 
-	// 充值倍率（乘法）：1.0=原价；0.5=五折（真实成本减半）；2.0=加价一倍。
-	// EffectiveCost = 官方价 × RechargeMultiplier。与渠道级 costMultiplier 语义一致。
-	RechargeMultiplier float64 `json:"rechargeMultiplier,omitempty"`
-
-	// 最终成本倍率 = 综合倍率（含组倍率、时间倍率、充值倍率等的乘积）
+	// 最终成本倍率 = 综合倍率（含组倍率、时间倍率、充值换算等的乘积）
 	EffectiveCostMultiplier float64 `json:"effectiveCostMultiplier,omitempty"`
 
 	// 基于模型注册表 Pricing x EffectiveCostMultiplier 的估算价格（每百万 token USD）。

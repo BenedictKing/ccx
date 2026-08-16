@@ -1162,7 +1162,6 @@ export interface SubscriptionItem {
   creditUnit?: string
   version: number
   groupMultipliers?: Record<string, number>
-  rechargeMultiplier?: number
   linkedChannelUids?: string[]
   source?: string
   confidence?: number
@@ -1208,7 +1207,6 @@ export interface SubscriptionCreateRequest {
   creditAmount?: number | null
   creditUnit?: string
   groupMultipliers?: Record<string, number>
-  rechargeMultiplier?: number
   notes?: string
   source?: string
   billingApiKey?: string
@@ -1228,7 +1226,6 @@ export interface SubscriptionUpdateRequest {
   creditAmount?: number | null
   creditUnit?: string
   groupMultipliers?: Record<string, number>
-  rechargeMultiplier?: number
   notes?: string
   source?: string
   confidence?: number

@@ -1285,7 +1285,6 @@ export interface SubscriptionItem {
   balance?: number
   usedQuota?: number
   groupMultipliers?: Record<string, number>
-  rechargeMultiplier?: number
   paymentAmount?: number | null
   paymentUnit?: string
   creditAmount?: number | null
@@ -1332,7 +1331,6 @@ export interface SubscriptionCreateRequest {
   currency?: string
   balance?: number
   groupMultipliers?: Record<string, number>
-  rechargeMultiplier?: number
   notes?: string
   source?: string
 
@@ -1350,7 +1348,6 @@ export interface SubscriptionUpdateRequest {
   currency?: string
   balance?: number
   groupMultipliers?: Record<string, number>
-  rechargeMultiplier?: number
   notes?: string
   source?: string
   confidence?: number

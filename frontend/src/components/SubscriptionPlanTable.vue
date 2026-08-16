@@ -6,13 +6,6 @@
           <th class="text-left">{{ t('subscription.field.originType') }}</th>
           <th class="text-left">{{ t('subscription.field.name') }}</th>
           <th class="text-left">{{ t('subscription.field.balance') }}</th>
-          <th class="text-left">
-            <v-tooltip location="top" :text="t('subscription.field.rechargeMultiplierHint')">
-              <template #activator="{ props: tipProps }">
-                <span v-bind="tipProps">{{ t('subscription.field.rechargeMultiplier') }}</span>
-              </template>
-            </v-tooltip>
-          </th>
           <th class="text-left">{{ t('subscription.billingTerms.title') }}</th>
           <th class="text-left">{{ t('subscription.field.version') }}</th>
           <th class="text-left">{{ t('subscription.field.linkedChannels') }}</th>
@@ -51,15 +44,7 @@
             <span v-else class="text-medium-emphasis">-</span>
           </td>
 
-          <!-- 充值倍率 -->
-          <td>
-            <span v-if="item.rechargeMultiplier && item.rechargeMultiplier !== 1">
-              x{{ item.rechargeMultiplier }}
-            </span>
-            <span v-else class="text-medium-emphasis">1.0</span>
-          </td>
-
-          <!-- 绑定渠道 -->
+          <!-- 充值到账（币种/金额） -->
           <td>{{ billingTermsPreview(item) }}</td>
           <td>{{ item.version }}</td>
           <td>

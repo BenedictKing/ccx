@@ -1162,8 +1162,6 @@
   "subscription.field.billingMode": "Billing Mode",
   "subscription.field.currency": "Currency",
   "subscription.field.balance": "Balance",
-  "subscription.field.rechargeMultiplier": "Recharge Multiplier",
-  "subscription.field.rechargeMultiplierHint": "Effective cost = list price × multiplier (1=original, 0.5=50% off, 2=2x surcharge)",
   "subscription.field.notes": "Notes",
   "subscription.field.source": "Source",
   "subscription.field.linkedChannels": "Linked Channels",

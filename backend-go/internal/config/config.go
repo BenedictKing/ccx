@@ -116,8 +116,7 @@ type UpstreamConfig struct {
 	RateLimitAutoFromHeaders *bool `json:"rateLimitAutoFromHeaders,omitempty"` // 自动从上游响应头解析限流信息并动态调速（默认 false）
 
 	// 渠道级计费覆盖（均留空=不参与有效成本核算，保持现状）
-	// CostMultiplier 充值倍率：EffectiveCostUSD = ListCostUSD × CostMultiplier（乘法）。
-	// 与订阅中心 RechargeMultiplier 同为乘法语义，此处为渠道级覆盖。
+	// CostMultiplier 充值倍率：EffectiveCostUSD = ListCostUSD × CostMultiplier（乘法），渠道级简化覆盖。
 	CostMultiplier *float64 `json:"costMultiplier,omitempty"` // 充值倍率（1=原价，0.5=五折，2=加价）
 	// 充值→渠道到账换算（覆盖全局汇率图，四者需同时配置才生效）：
 	// 用户以 ChannelPaymentCurrency 充值 ChannelPaymentAmount，渠道按 ChannelCreditCurrency 到账 ChannelCreditAmount。

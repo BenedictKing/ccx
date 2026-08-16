@@ -1162,8 +1162,6 @@
   "subscription.field.billingMode": "计费模式",
   "subscription.field.currency": "货币",
   "subscription.field.balance": "余额",
-  "subscription.field.rechargeMultiplier": "充值倍率",
-  "subscription.field.rechargeMultiplierHint": "有效成本 = 官方价 × 倍率（1=原价，0.5=五折，2=加价一倍）",
   "subscription.field.notes": "备注",
   "subscription.field.source": "来源",
   "subscription.field.linkedChannels": "绑定渠道",

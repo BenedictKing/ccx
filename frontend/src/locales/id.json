@@ -1162,8 +1162,6 @@
   "subscription.field.billingMode": "Mode Penagihan",
   "subscription.field.currency": "Mata Uang",
   "subscription.field.balance": "Saldo",
-  "subscription.field.rechargeMultiplier": "Penggali Isi Ulang",
-  "subscription.field.rechargeMultiplierHint": "Biaya efektif = harga resmi × pengali (1=harga asli, 0.5=diskon 50%, 2=biaya 2x)",
   "subscription.field.notes": "Catatan",
   "subscription.field.source": "Sumber",
   "subscription.field.linkedChannels": "Channel Terkait",

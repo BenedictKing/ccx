@@ -41,8 +41,7 @@ type SubscriptionProfile struct {
 	Version       uint64   `json:"version"`
 
 	// 套餐默认成本倍率；channel/key 可继续覆盖。
-	GroupMultipliers   map[string]float64 `json:"groupMultipliers,omitempty"`
-	RechargeMultiplier float64            `json:"rechargeMultiplier,omitempty"`
+	GroupMultipliers map[string]float64 `json:"groupMultipliers,omitempty"`
 
 	LinkedChannelUIDs []string `json:"linkedChannelUids,omitempty"`
 	Source            string   `json:"source"` // manual | imported | inferred

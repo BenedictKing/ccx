@@ -12,18 +12,17 @@ import (
 
 // SubscriptionCreateRequest POST /api/subscriptions 请求体。
 type SubscriptionCreateRequest struct {
-	SubscriptionUID    string             `json:"subscriptionUid" binding:"required"`
-	DisplayName        string             `json:"displayName" binding:"required"`
-	Provider           string             `json:"provider"`
-	OriginType         string             `json:"originType"`
-	OriginTier         string             `json:"originTier"`
-	BillingMode        string             `json:"billingMode"`
-	Currency           string             `json:"currency"`
-	Balance            float64            `json:"balance"`
-	GroupMultipliers   map[string]float64 `json:"groupMultipliers,omitempty"`
-	RechargeMultiplier float64            `json:"rechargeMultiplier"`
-	Notes              string             `json:"notes"`
-	Source             string             `json:"source"`
+	SubscriptionUID  string             `json:"subscriptionUid" binding:"required"`
+	DisplayName      string             `json:"displayName" binding:"required"`
+	Provider         string             `json:"provider"`
+	OriginType       string             `json:"originType"`
+	OriginTier       string             `json:"originTier"`
+	BillingMode      string             `json:"billingMode"`
+	Currency         string             `json:"currency"`
+	Balance          float64            `json:"balance"`
+	GroupMultipliers map[string]float64 `json:"groupMultipliers,omitempty"`
+	Notes            string             `json:"notes"`
+	Source           string             `json:"source"`
 
 	// Phase 4 Item 6：余额自动刷新
 	BillingAPIKey      string `json:"billingApiKey,omitempty"`
@@ -33,18 +32,17 @@ type SubscriptionCreateRequest struct {
 // SubscriptionUpdateRequest PUT /api/subscriptions/:uid 请求体。
 // 所有字段可选，仅更新非零值字段。
 type SubscriptionUpdateRequest struct {
-	DisplayName        *string            `json:"displayName,omitempty"`
-	Provider           *string            `json:"provider,omitempty"`
-	OriginType         *string            `json:"originType,omitempty"`
-	OriginTier         *string            `json:"originTier,omitempty"`
-	BillingMode        *string            `json:"billingMode,omitempty"`
-	Currency           *string            `json:"currency,omitempty"`
-	Balance            *float64           `json:"balance,omitempty"`
-	GroupMultipliers   map[string]float64 `json:"groupMultipliers,omitempty"`
-	RechargeMultiplier *float64           `json:"rechargeMultiplier,omitempty"`
-	Notes              *string            `json:"notes,omitempty"`
-	Source             *string            `json:"source,omitempty"`
-	Confidence         *float64           `json:"confidence,omitempty"`
+	DisplayName      *string            `json:"displayName,omitempty"`
+	Provider         *string            `json:"provider,omitempty"`
+	OriginType       *string            `json:"originType,omitempty"`
+	OriginTier       *string            `json:"originTier,omitempty"`
+	BillingMode      *string            `json:"billingMode,omitempty"`
+	Currency         *string            `json:"currency,omitempty"`
+	Balance          *float64           `json:"balance,omitempty"`
+	GroupMultipliers map[string]float64 `json:"groupMultipliers,omitempty"`
+	Notes            *string            `json:"notes,omitempty"`
+	Source           *string            `json:"source,omitempty"`
+	Confidence       *float64           `json:"confidence,omitempty"`
 
 	// Phase 4 Item 6：余额自动刷新
 	BillingAPIKey      *string `json:"billingApiKey,omitempty"`
@@ -66,24 +64,23 @@ type UnlinkRequest struct {
 
 // SubscriptionItem 订阅列表/详情响应单条。
 type SubscriptionItem struct {
-	SubscriptionUID    string             `json:"subscriptionUid"`
-	DisplayName        string             `json:"displayName"`
-	Provider           string             `json:"provider,omitempty"`
-	OriginType         string             `json:"originType,omitempty"`
-	OriginTier         string             `json:"originTier,omitempty"`
-	BillingMode        string             `json:"billingMode,omitempty"`
-	Currency           string             `json:"currency,omitempty"`
-	Balance            float64            `json:"balance,omitempty"`
-	UsedQuota          int64              `json:"usedQuota,omitempty"`
-	GroupMultipliers   map[string]float64 `json:"groupMultipliers,omitempty"`
-	RechargeMultiplier float64            `json:"rechargeMultiplier,omitempty"`
-	LinkedChannelUIDs  []string           `json:"linkedChannelUids,omitempty"`
-	Source             string             `json:"source,omitempty"`
-	Confidence         float64            `json:"confidence,omitempty"`
-	Notes              string             `json:"notes,omitempty"`
-	CreatedAt          string             `json:"createdAt"`
-	UpdatedAt          string             `json:"updatedAt"`
-	ArchivedAt         string             `json:"archivedAt,omitempty"`
+	SubscriptionUID   string             `json:"subscriptionUid"`
+	DisplayName       string             `json:"displayName"`
+	Provider          string             `json:"provider,omitempty"`
+	OriginType        string             `json:"originType,omitempty"`
+	OriginTier        string             `json:"originTier,omitempty"`
+	BillingMode       string             `json:"billingMode,omitempty"`
+	Currency          string             `json:"currency,omitempty"`
+	Balance           float64            `json:"balance,omitempty"`
+	UsedQuota         int64              `json:"usedQuota,omitempty"`
+	GroupMultipliers  map[string]float64 `json:"groupMultipliers,omitempty"`
+	LinkedChannelUIDs []string           `json:"linkedChannelUids,omitempty"`
+	Source            string             `json:"source,omitempty"`
+	Confidence        float64            `json:"confidence,omitempty"`
+	Notes             string             `json:"notes,omitempty"`
+	CreatedAt         string             `json:"createdAt"`
+	UpdatedAt         string             `json:"updatedAt"`
+	ArchivedAt        string             `json:"archivedAt,omitempty"`
 
 	// Phase 4 Item 6：余额自动刷新
 	BillingAPIKey           string `json:"billingApiKey,omitempty"`
@@ -164,18 +161,17 @@ func handleCreateSubscription(store *SubscriptionStore) gin.HandlerFunc {
 		}
 
 		profile := &SubscriptionProfile{
-			SubscriptionUID:    req.SubscriptionUID,
-			DisplayName:        req.DisplayName,
-			Provider:           req.Provider,
-			OriginType:         req.OriginType,
-			OriginTier:         req.OriginTier,
-			BillingMode:        req.BillingMode,
-			Currency:           req.Currency,
-			Balance:            req.Balance,
-			GroupMultipliers:   req.GroupMultipliers,
-			RechargeMultiplier: req.RechargeMultiplier,
-			Notes:              req.Notes,
-			Source:             req.Source,
+			SubscriptionUID:  req.SubscriptionUID,
+			DisplayName:      req.DisplayName,
+			Provider:         req.Provider,
+			OriginType:       req.OriginType,
+			OriginTier:       req.OriginTier,
+			BillingMode:      req.BillingMode,
+			Currency:         req.Currency,
+			Balance:          req.Balance,
+			GroupMultipliers: req.GroupMultipliers,
+			Notes:            req.Notes,
+			Source:           req.Source,
 			// Phase 4 Item 6
 			BillingAPIKey:      req.BillingAPIKey,
 			AutoRefreshEnabled: req.AutoRefreshEnabled,
@@ -261,9 +257,6 @@ func handleUpdateSubscription(store *SubscriptionStore) gin.HandlerFunc {
 			}
 			if req.GroupMultipliers != nil {
 				profile.GroupMultipliers = req.GroupMultipliers
-			}
-			if req.RechargeMultiplier != nil {
-				profile.RechargeMultiplier = *req.RechargeMultiplier
 			}
 			if req.Notes != nil {
 				profile.Notes = *req.Notes
@@ -461,23 +454,22 @@ func handleRefreshSubscription(store *SubscriptionStore, refreshWorker *Subscrip
 // toSubscriptionItem 将 SubscriptionProfile 转为 API 响应结构。
 func toSubscriptionItem(p *SubscriptionProfile) SubscriptionItem {
 	item := SubscriptionItem{
-		SubscriptionUID:    p.SubscriptionUID,
-		DisplayName:        p.DisplayName,
-		Provider:           p.Provider,
-		OriginType:         p.OriginType,
-		OriginTier:         p.OriginTier,
-		BillingMode:        p.BillingMode,
-		Currency:           p.Currency,
-		Balance:            p.Balance,
-		UsedQuota:          p.UsedQuota,
-		GroupMultipliers:   p.GroupMultipliers,
-		RechargeMultiplier: p.RechargeMultiplier,
-		LinkedChannelUIDs:  p.LinkedChannelUIDs,
-		Source:             p.Source,
-		Confidence:         p.Confidence,
-		Notes:              p.Notes,
-		CreatedAt:          p.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-		UpdatedAt:          p.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		SubscriptionUID:   p.SubscriptionUID,
+		DisplayName:       p.DisplayName,
+		Provider:          p.Provider,
+		OriginType:        p.OriginType,
+		OriginTier:        p.OriginTier,
+		BillingMode:       p.BillingMode,
+		Currency:          p.Currency,
+		Balance:           p.Balance,
+		UsedQuota:         p.UsedQuota,
+		GroupMultipliers:  p.GroupMultipliers,
+		LinkedChannelUIDs: p.LinkedChannelUIDs,
+		Source:            p.Source,
+		Confidence:        p.Confidence,
+		Notes:             p.Notes,
+		CreatedAt:         p.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		UpdatedAt:         p.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		// Phase 4 Item 6：余额自动刷新
 		BillingAPIKey:           p.BillingAPIKey,
 		AutoRefreshEnabled:      p.AutoRefreshEnabled,

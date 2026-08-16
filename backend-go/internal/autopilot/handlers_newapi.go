@@ -551,20 +551,19 @@ func handleNewApiProvision(deps *NewApiRouteDeps) gin.HandlerFunc {
 				}
 			}
 			profile := &SubscriptionProfile{
-				SubscriptionUID:    req.SubscriptionUID,
-				DisplayName:        req.DisplayName,
-				Provider:           "new_api",
-				OriginType:         defaults.OriginType,
-				OriginTier:         defaults.OriginTier,
-				BillingMode:        defaults.BillingMode,
-				Currency:           "quota",
-				Balance:            float64(self.Quota),
-				GroupMultipliers:   groups,
-				RechargeMultiplier: 1.0,
-				LinkedChannelUIDs:  []string{},
-				Source:             "newapi_provision",
-				Confidence:         0.95,
-				Notes:              req.Notes,
+				SubscriptionUID:   req.SubscriptionUID,
+				DisplayName:       req.DisplayName,
+				Provider:          "new_api",
+				OriginType:        defaults.OriginType,
+				OriginTier:        defaults.OriginTier,
+				BillingMode:       defaults.BillingMode,
+				Currency:          "quota",
+				Balance:           float64(self.Quota),
+				GroupMultipliers:  groups,
+				LinkedChannelUIDs: []string{},
+				Source:            "newapi_provision",
+				Confidence:        0.95,
+				Notes:             req.Notes,
 				// §8.5.1
 				BaseURL:             req.BaseURL,
 				AccessToken:         req.AccessToken, // 持久化但不出 API 响应
