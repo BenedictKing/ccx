@@ -302,6 +302,8 @@ func TestResolveUpstreamCapability_NewAugust2026Models(t *testing.T) {
 		{model: "doubao-seed-2.1-turbo", provider: "volcengine", context: 256000, maxOutput: 256000, vision: true, toolCalls: true},
 		{model: "doubao-seed-evolving", provider: "volcengine", context: 1024000, maxOutput: 256000, toolCalls: true},
 		{model: "doubao-seed-2.0-mini", provider: "volcengine", context: 256000, maxOutput: 128000, vision: true, toolCalls: true},
+		{model: "glm-5.2-200k", provider: "atomgit", context: 200000, maxOutput: 131072, toolCalls: true},
+		{model: "atomgit/glm-5.2-200k", provider: "atomgit", context: 200000, maxOutput: 131072, toolCalls: true},
 	}
 
 	for _, tt := range tests {
@@ -382,6 +384,51 @@ func TestResolveUpstreamCapability_GLM52RuntimeBuiltin(t *testing.T) {
 	}
 	if !resolved.Capability.Capabilities["streamingToolCalls"] {
 		t.Fatalf("Capabilities = %v, want streamingToolCalls", resolved.Capability.Capabilities)
+	}
+}
+
+func TestResolveUpstreamCapability_GLM52AtomGit200k(t *testing.T) {
+	// AtomGit 托管的 glm-5.2-200k 是 GLM-5.2 家族的 200K 上下文变体，provider 为 atomgit，
+	// 区别于 zai 官方 1M 条目；裸名、命名空间前缀与日期后缀变体都必须归一到该条目。
+	tests := []string{
+		"glm-5.2-200k",
+		"atomgit/glm-5.2-200k",
+		"glm-5.2-200k-0813",
+		"glm-5.2-200k-2026-08-13",
+		"glm-5.2-200k-260813",
+		"atomgit/GLM-5.2-200K-0813",
+	}
+	for _, model := range tests {
+		t.Run(model, func(t *testing.T) {
+			resolved := ResolveUpstreamCapability(model, nil, nil)
+			if !resolved.Known || resolved.Source != "builtin" {
+				t.Fatalf("resolved = %+v, want builtin known", resolved)
+			}
+			capability := resolved.Capability
+			if capability.Provider != "atomgit" {
+				t.Fatalf("Provider = %q, want atomgit", capability.Provider)
+			}
+			if capability.ContextWindowTokens != 200000 {
+				t.Fatalf("ContextWindowTokens = %d, want 200000", capability.ContextWindowTokens)
+			}
+			if capability.MaxOutputTokens != 131072 {
+				t.Fatalf("MaxOutputTokens = %d, want 131072", capability.MaxOutputTokens)
+			}
+			if !capability.Capabilities["reasoning"] || !capability.Capabilities["toolCalls"] {
+				t.Fatalf("Capabilities = %v, want reasoning and toolCalls", capability.Capabilities)
+			}
+		})
+	}
+}
+
+func TestResolveUpstreamCapability_GLM52BareNotAtomGit(t *testing.T) {
+	// 裸 glm-5.2（无 -200k 后缀）仍归 zai 官方 1M 条目，不能被 atomgit 200K 变体误吞。
+	resolved := ResolveUpstreamCapability("glm-5.2", nil, nil)
+	if !resolved.Known || resolved.Capability.Provider != "zai" {
+		t.Fatalf("resolved = %+v, want zai glm-5.2", resolved)
+	}
+	if resolved.Capability.ContextWindowTokens != 1048576 {
+		t.Fatalf("ContextWindowTokens = %d, want 1048576 for bare glm-5.2", resolved.Capability.ContextWindowTokens)
 	}
 }
 

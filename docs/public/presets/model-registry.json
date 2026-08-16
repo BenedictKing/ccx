@@ -846,6 +846,37 @@
     },
     {
       "patterns": [
+        "(?:^|[-/])glm-5\\.2-200k(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{4,8})?(?=$|@)"
+      ],
+      "provider": "atomgit",
+      "displayName": "GLM-5.2 200K (AtomGit)",
+      "description": "Zhipu GLM-5.2 served by AtomGit with the standard 200K-token context window. Capabilities mirror the GLM-5.2 family; AtomGit does not publish unified token pricing.",
+      "contextWindowTokens": 200000,
+      "maxOutputTokens": 131072,
+      "thinkingMode": "thinking",
+      "reasoningEfforts": [
+        "none",
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "capabilities": {
+        "toolCalls": true,
+        "streamingToolCalls": true,
+        "jsonMode": true,
+        "reasoning": true,
+        "vision": false
+      },
+      "sources": [
+        "https://z.ai/blog/glm-5.2",
+        "https://docs.bigmodel.cn/cn/guide/models/text/glm-5.2"
+      ]
+    },
+    {
+      "patterns": [
         "(?:^|[-/])glm-5\\.1(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)",
         "(?:^|[-/])glm-5p1(?=$|@)"
       ],
