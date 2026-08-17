@@ -246,15 +246,14 @@ const providerTemplatesLoading = ref(true)
 // 赞助商展示顺序与订阅中心/README 保持一致，排在服务商列表最前（无模板的赞助商自然跳过）
 const SPONSOR_PROVIDER_ORDER = ['volcengine', 'compshare', 'runapi']
 
-// 仅展示与当前渠道类型匹配的 provider；多 route provider 只要包含当前 tab 即可显示；
-// 赞助商模板置顶，其余保持后端返回顺序
+// 不按 channelKind 过滤：所有 provider 都对用户可见（与订阅中心对齐）；
+// 选中后由 handleSubmit 用 provider.channelKind 提交，保证多渠道自动建全
 const availableProviders = computed(() => {
-  const matched = providerTemplates.value.filter(p => providerSupportsChannel(p, props.channelType))
   const sponsorRank = (p: ProviderTemplate) => {
     const idx = SPONSOR_PROVIDER_ORDER.indexOf(p.providerId)
     return idx === -1 ? SPONSOR_PROVIDER_ORDER.length : idx
   }
-  return [...matched].sort((a, b) => sponsorRank(a) - sponsorRank(b))
+  return [...providerTemplates.value].sort((a, b) => sponsorRank(a) - sponsorRank(b))
 })
 
 // 默认选中的服务商：当前渠道类型下排序后的第一个（即火山）；无可用模板时回退自定义模式
@@ -321,11 +320,6 @@ const isFormValid = computed(() => {
 })
 
 // ---- 方法 ----
-function providerSupportsChannel(provider: ProviderTemplate, channelType: ChannelType): boolean {
-  if (provider.routes?.some(route => route.channelKind === channelType)) return true
-  return !provider.channelKind || provider.channelKind === channelType
-}
-
 function clearSubmitError() {
   submitError.value = ''
 }
@@ -420,7 +414,11 @@ async function handleSubmit() {
     apiKeys.value = [...filteredApiKeys]
     showKeys.value = filteredApiKeys.map(() => false)
     const routeDiscovery = isProviderMode.value ? null : await discoverCustomRoutes(filteredBaseUrls, filteredApiKeys)
-    const targetChannelType = routeDiscovery?.primaryKind ?? props.channelType
+    // provider 模式：用 provider.channelKind 提交（自动创建该 provider 支持的全部渠道），
+    // 避免当前 tab 与 provider 支持范围不匹配导致 400
+    const targetChannelType = isProviderMode.value
+      ? ((selectedProvider.value?.channelKind as ChannelType | undefined) ?? props.channelType)
+      : (routeDiscovery?.primaryKind ?? props.channelType)
     const result = await autoAddChannel(
       targetChannelType,
       isProviderMode.value
