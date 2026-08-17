@@ -15,6 +15,7 @@ describe('providerDisplayName', () => {
     expect(providerDisplayName('dashscope')).toBe('阿里云 DashScope')
     expect(providerDisplayName('tencent-lkeap')).toBe('腾讯云 TokenHub')
     expect(providerDisplayName('atomgit')).toBe('AtomGit')
+    expect(providerDisplayName('tokenrhythm')).toBe('基元律动')
   })
 
   it('为未知 provider 生成可读名称', () => {

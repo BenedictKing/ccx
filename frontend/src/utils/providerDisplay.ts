@@ -1,5 +1,9 @@
 import type { Channel } from '@/services/api'
 
+// 品牌名静态镜像：与后端 provider_templates.go 各 ProviderTemplate 的 DisplayName 保持一致。
+// providerDisplayName 是同步函数（渠道卡片渲染 / 编辑弹窗 computed 直接调用），
+// 不便走异步的 getProviderTemplates()，故在此维护一份静态兜底表。
+// 新增 provider 时必须同步注册，否则会退化为按 providerId 拼出的可读名（如 Tokenrhythm）。
 const PROVIDER_BRAND_NAMES: Record<string, string> = {
   mimo: 'MiMo',
   openai: 'OpenAI',
@@ -14,6 +18,7 @@ const PROVIDER_BRAND_NAMES: Record<string, string> = {
   compshare: '优云智算',
   sensenova: 'SenseNova',
   minimax: 'MiniMax',
+  tokenrhythm: '基元律动',
   dashscope: '阿里云 DashScope',
   'opencode-zen': 'OpenCode Zen / Go',
   'opencode-go': 'OpenCode Go',

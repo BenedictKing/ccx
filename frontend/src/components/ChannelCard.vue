@@ -717,8 +717,10 @@ const serviceStyle = computed(() => {
 }
 
 .channel-card:hover {
-  transform: translateY(-4px) scale(1.01);
-  box-shadow: 
+  /* 不做 translate/scale：位移会改变卡片自身 hitbox，
+     指针停在下边界时会陷入 hover/非 hover 振荡，表现为边框抖动。
+     悬停反馈仅用阴影加深 + 边框提亮，与暗色主题保持一致。 */
+  box-shadow:
     0 16px 32px rgba(0, 0, 0, 0.08),
     0 6px 18px rgba(0, 0, 0, 0.05);
   border-color: rgba(var(--card-accent-rgb, var(--v-theme-primary)), 0.45);
@@ -906,10 +908,6 @@ const serviceStyle = computed(() => {
 
 /* --- MOBILE RESPONSIVE --- */
 @media (max-width: 720px) {
-  .channel-card:hover {
-    transform: none;
-  }
-
   .card-header-gradient .v-card-title {
     flex-direction: column;
     align-items: flex-start !important;
