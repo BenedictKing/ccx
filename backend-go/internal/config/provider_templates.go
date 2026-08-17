@@ -437,7 +437,7 @@ func tokenrhythmProviderTemplate() ProviderTemplate {
 	return newProviderTemplate(
 		"tokenrhythm",
 		"基元律动",
-		"基元律动（tokenrhythm.studio）中转站：OpenAI Chat 兼容 / Anthropic Messages / Embeddings 一站接入，sk_ 鉴权",
+		"基元律动（Token Rhythm）源自 OpenSquilla 开源 Agent 框架，统一 sk_ 鉴权接入 OpenAI Chat 兼容、Anthropic Messages、Embeddings 三种接口；内置智能路由与模型聚合，主打 Agent 场景「All models, one mind」调度。",
 		"relay",
 		"second",
 		standardProviderRoutes("claude", []ProviderCandidate{
