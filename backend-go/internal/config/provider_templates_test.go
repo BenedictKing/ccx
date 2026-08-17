@@ -287,12 +287,12 @@ func TestProviderTemplateCompshareModelCostMultipliers(t *testing.T) {
 	}
 
 	want := map[string]float64{
-		"glm-5.2":                   2,
-		"glm-5.1":                   6,
-		"minimax-m2.7":              2,
-		"kimi-k2.6":                 5,
-		"deepseek-ai/deepseek-v3.2": 1,
-		"deepseek-v4-flash":         1,
+		"glm-5.2":                6,
+		"glm-5.1":                6,
+		"minimax-m2.7":           2,
+		"kimi-k2.6":              5,
+		"deepseek-v4-flash":      1,
+		"deepseek-v4-flash-0731": 1,
 	}
 	for modelID, expected := range want {
 		got, found := tmpl.ModelCostMultiplierForModel(strings.ToUpper(modelID))

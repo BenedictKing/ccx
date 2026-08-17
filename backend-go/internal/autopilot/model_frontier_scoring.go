@@ -491,6 +491,8 @@ func pickFrontierQualityFirstPoint(points []FrontierPoint, ranked []rankedModelC
 
 // pickFrontierPoint 在一组前沿点中按 同族 > 成本最低 > 质量最高 > 下标最小 选点（确定性）。
 // 成本相同时取质量更高者——等价的免费质量不应放弃，同时保证结果与输入顺序无关。
+// 成本与质量分完全并列时，同族同 lineage 取更新版本（如 deepseek-v4-flash-0731
+// 这类日期快照是更新的 checkpoint），再退回下标序。
 func pickFrontierPoint(points []FrontierPoint, ranked []rankedModelCandidate) int {
 	bestIdx := -1
 	var bestPoint FrontierPoint
@@ -517,6 +519,12 @@ func pickFrontierPoint(points []FrontierPoint, ranked []rankedModelCandidate) in
 		}
 		if p.QualityScore != bestPoint.QualityScore {
 			if p.QualityScore > bestPoint.QualityScore {
+				bestIdx, bestPoint = idx, p
+			}
+			continue
+		}
+		if better, decided := compareModelVersion(ranked[idx], ranked[bestIdx]); decided {
+			if better {
 				bestIdx, bestPoint = idx, p
 			}
 			continue

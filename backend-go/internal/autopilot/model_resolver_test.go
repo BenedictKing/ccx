@@ -536,9 +536,10 @@ func TestRankEligibleModels_PrefersLowerLatency(t *testing.T) {
 }
 
 func TestRankEligibleModels_PrefersLowerKnownCost(t *testing.T) {
+	// 官方现役 deepseek 模型对：v4-flash 公开价低于 v4-pro，低成本者胜出。
 	eligible := []ModelProfile{
-		makeModelProfile("deepseek-ai/DeepSeek-V3.2", ModelFamilyDeepSeek, QualityTierNormal, 163840,
-			true, false, false, true, 0),
+		makeModelProfile("deepseek-v4-pro", ModelFamilyDeepSeek, QualityTierNormal, 1000000,
+			true, false, true, true, 0),
 		makeModelProfile("deepseek-v4-flash", ModelFamilyDeepSeek, QualityTierNormal, 1000000,
 			true, false, true, true, 0),
 	}
@@ -551,7 +552,7 @@ func TestRankEligibleModels_PrefersLowerKnownCost(t *testing.T) {
 
 func TestRankEligibleModels_FrontierCostPremiumCapsProviderQualityOrder(t *testing.T) {
 	// compshare 质量顺序（glm-5.1 优先）证据仍在，但三者在 compshare 的成本
-	//  multiplier 为 6x/5x/1x，质量置信区间重叠；balanced 车道的溢价帽拒绝
+	//  multiplier 为 6x/5x/2x，质量置信区间重叠；balanced 车道的溢价帽拒绝
 	// 为重叠质量付 5-6 倍成本，最便宜的 MiniMax-M2.7 在前沿上胜出。
 	eligible := []ModelProfile{
 		makeModelProfile("glm-5.1", ModelFamilyGLM, QualityTierHigh, 202800,
@@ -599,11 +600,34 @@ func TestCompareModelVersionDoesNotCrossFamily(t *testing.T) {
 	}
 }
 
+func TestCompareModelVersionPrefersDatedSnapshot(t *testing.T) {
+	// 同族同 lineage 的日期快照（deepseek-v4-flash-0731）是更新的 checkpoint，
+	// 版本号兜底应优先于无快照的基础版（deepseek-v4-flash）。
+	dated := rankedModelCandidate{
+		profile:        ModelProfile{ModelFamily: ModelFamilyDeepSeek, ModelID: "deepseek-v4-flash-0731"},
+		versionLineage: modelVersionLineage(ModelFamilyDeepSeek, "deepseek-v4-flash-0731"),
+		versionNumbers: modelVersionNumbers(ModelFamilyDeepSeek, "deepseek-v4-flash-0731"),
+	}
+	base := rankedModelCandidate{
+		profile:        ModelProfile{ModelFamily: ModelFamilyDeepSeek, ModelID: "deepseek-v4-flash"},
+		versionLineage: modelVersionLineage(ModelFamilyDeepSeek, "deepseek-v4-flash"),
+		versionNumbers: modelVersionNumbers(ModelFamilyDeepSeek, "deepseek-v4-flash"),
+	}
+	if better, decided := compareModelVersion(dated, base); !decided || !better {
+		t.Fatalf("dated snapshot should win: better=%v decided=%v (numbers %v vs %v)", better, decided, dated.versionNumbers, base.versionNumbers)
+	}
+	if better, decided := compareModelVersion(base, dated); decided && better {
+		t.Fatal("base version should not beat dated snapshot")
+	}
+}
+
 func TestRankEligibleModels_PrefersProviderRelativeCostWhenQualityOrderIncomplete(t *testing.T) {
+	// MiniMax-M2.7(2x) 与 deepseek-v4-flash(1x) 同 Normal 档、跨族、均无质量优先级
+	// 证据；质量序不完整时由 provider 相对成本主导：1 次优于 2 次，flash 胜出。
 	eligible := []ModelProfile{
-		makeModelProfile("glm-5.2", ModelFamilyGLM, QualityTierHigh, 1048576,
+		makeModelProfile("MiniMax-M2.7", ModelFamilyMiniMax, QualityTierNormal, 204800,
 			true, false, true, true, 0),
-		makeModelProfile("glm-5.1", ModelFamilyGLM, QualityTierHigh, 202800,
+		makeModelProfile("deepseek-v4-flash", ModelFamilyDeepSeek, QualityTierNormal, 1000000,
 			true, false, true, true, 0),
 	}
 	resolver := newTestResolverWithConfig(t, eligible, config.Config{Upstream: []config.UpstreamConfig{{
@@ -613,19 +637,21 @@ func TestRankEligibleModels_PrefersProviderRelativeCostWhenQualityOrderIncomplet
 	orders := [][]ModelProfile{eligible, {eligible[1], eligible[0]}}
 	for _, order := range orders {
 		best := resolver.rankEligibleModels(order, "claude-sonnet-5", "ch_test", "messages", CapabilityFloor{})
-		if best.profile.ModelID != "glm-5.2" {
-			t.Fatalf("expected glm-5.2 (2 次优于 6 次 when quality tier metadata is incomplete), got %s", best.profile.ModelID)
+		if best.profile.ModelID != "deepseek-v4-flash" {
+			t.Fatalf("expected deepseek-v4-flash (1 次优于 2 次 when quality tier metadata is incomplete), got %s", best.profile.ModelID)
 		}
-		if !best.providerCostKnown || best.providerCostMultiplier != 2 || best.providerModelQualityComparable {
-			t.Fatalf("ranking evidence = %+v, want cost multiplier 2 with inactive quality priority", best)
+		if !best.providerCostKnown || best.providerCostMultiplier != 1 || best.providerModelQualityComparable {
+			t.Fatalf("ranking evidence = %+v, want cost multiplier 1 with inactive quality priority", best)
 		}
 	}
 }
 
-func TestRankEligibleModels_ProviderCostTieFallsBackToPublicPrice(t *testing.T) {
+func TestRankEligibleModels_UnknownProviderCostFallsBackToPublicPrice(t *testing.T) {
+	// deepseek-v4-flash 在 compshare 倍率表内（1x），deepseek-v4-pro 在表外无倍率
+	// 证据；成本证据不完整时回退公开价比较，flash 公开价更低而胜出。
 	eligible := []ModelProfile{
-		makeModelProfile("deepseek-ai/DeepSeek-V3.2", ModelFamilyDeepSeek, QualityTierNormal, 163840,
-			true, false, false, true, 0),
+		makeModelProfile("deepseek-v4-pro", ModelFamilyDeepSeek, QualityTierNormal, 1000000,
+			true, false, true, true, 0),
 		makeModelProfile("deepseek-v4-flash", ModelFamilyDeepSeek, QualityTierNormal, 1000000,
 			true, false, true, true, 0),
 	}
@@ -635,7 +661,7 @@ func TestRankEligibleModels_ProviderCostTieFallsBackToPublicPrice(t *testing.T) 
 
 	best := resolver.rankEligibleModels(eligible, "claude-sonnet-5", "ch_test", "messages", CapabilityFloor{})
 	if best.profile.ModelID != "deepseek-v4-flash" {
-		t.Fatalf("expected deepseek-v4-flash after equal 1x multipliers fall back to public price, got %s", best.profile.ModelID)
+		t.Fatalf("expected deepseek-v4-flash (表外模型回退公开价后 flash 更便宜), got %s", best.profile.ModelID)
 	}
 }
 
@@ -643,8 +669,8 @@ func TestProviderModelCostMultiplierInfersLegacyCompshareURL(t *testing.T) {
 	multiplier, source, found := providerModelCostMultiplier("GLM-5.2", &config.UpstreamConfig{
 		BaseURL: "https://cp.compshare.cn", ServiceType: "claude",
 	})
-	if !found || multiplier != 2 || source != "provider_template:compshare" {
-		t.Fatalf("providerModelCostMultiplier() = %v, %q, %v; want 2, compshare, true", multiplier, source, found)
+	if !found || multiplier != 6 || source != "provider_template:compshare" {
+		t.Fatalf("providerModelCostMultiplier() = %v, %q, %v; want 6, compshare, true", multiplier, source, found)
 	}
 }
 
@@ -722,9 +748,9 @@ func TestResolveModel_CompshareInventoryFrontierByFloor(t *testing.T) {
 			true, false, true, true, 0),
 		makeModelProfile("kimi-k2.6", ModelFamilyKimi, QualityTierHigh, 262144,
 			true, false, true, true, 0),
-		makeModelProfile("deepseek-ai/DeepSeek-V3.2", ModelFamilyDeepSeek, QualityTierNormal, 163840,
-			true, false, false, true, 0),
 		makeModelProfile("deepseek-v4-flash", ModelFamilyDeepSeek, QualityTierNormal, 1000000,
+			true, false, true, true, 0),
+		makeModelProfile("deepseek-v4-flash-0731", ModelFamilyDeepSeek, QualityTierNormal, 1000000,
 			true, false, true, true, 0),
 	}
 	resolver := newTestResolverWithConfig(t, profiles, config.Config{Upstream: []config.UpstreamConfig{{
@@ -733,23 +759,26 @@ func TestResolveModel_CompshareInventoryFrontierByFloor(t *testing.T) {
 	}}})
 
 	// Frontier 默认启用后按能力下界分车道：
-	// - Normal 下界：全部候选可比较，balanced 前沿取最廉价可比点 deepseek-v4-flash（1x multiplier）
-	// - High 下界 + 收益帽 High：Normal 档被过滤后，glm-5.2 在 compshare 2x multiplier 下
-	//   同时是质量最高与成本最低的前沿点（glm-5.1 为 6x、kimi-k2.6 为 5x）
+	// - Normal 下界：全部候选可比较，balanced 前沿最廉价可比点是同 1x 同公开价的
+	//   deepseek-v4-flash 对，日期快照 0731 为更新 checkpoint，优先胜出
+	//   （DeepSeek-V3.2 已从优云下架）
+	// - High 下界 + 收益帽 High：Normal 档被过滤后，glm-5.2 的 Premium 溢价被收益帽
+	//   截断，6x 与 glm-5.1 持平且高于 kimi-k2.6 的 5x，kimi-k2.6 以 High 档
+	//   最低倍率胜出
 	floors := []struct {
 		floor    CapabilityFloor
 		expected string
 	}{
 		{
 			floor:    CapabilityFloor{MinContextTokens: 39_561, MinQualityTier: QualityTierNormal},
-			expected: "deepseek-v4-flash",
+			expected: "deepseek-v4-flash-0731",
 		},
 		{
 			floor: CapabilityFloor{
 				MinContextTokens: 39_561, MinQualityTier: QualityTierHigh,
 				QualityBenefitCap: QualityTierHigh,
 			},
-			expected: "glm-5.2",
+			expected: "kimi-k2.6",
 		},
 	}
 	for _, tt := range floors {

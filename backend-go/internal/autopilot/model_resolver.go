@@ -1035,6 +1035,11 @@ func compareModelBenchmark(candidate, current rankedModelCandidate) (better bool
 // 不跨厂商比较，也不覆盖供应商声明或实测质量。
 var modelVersionPattern = regexp.MustCompile(`(?:^|[-/])([a-z]+)-?(\d+(?:[.-]\d+)*)`)
 
+// modelDatedSuffixPattern 匹配模型 ID 末尾的日期快照后缀（如 -0731、-20250929），
+// 与注册表 deepseek-v4-flash(?:-\d{4,8})? 的口径一致；快照日期追加为最低位版本号，
+// 使同 lineage 内带快照的更新 checkpoint（如 deepseek-v4-flash-0731）优先于基础版。
+var modelDatedSuffixPattern = regexp.MustCompile(`-\d{4,8}$`)
+
 func modelVersionLineage(family ModelFamily, modelID string) string {
 	prefix, numbers, ok := parseModelVersion(modelID)
 	if !ok || len(numbers) == 0 {
@@ -1055,12 +1060,13 @@ func modelVersionNumbers(family ModelFamily, modelID string) []int {
 }
 
 func parseModelVersion(modelID string) (string, []int, bool) {
-	match := modelVersionPattern.FindStringSubmatch(strings.ToLower(strings.TrimSpace(modelID)))
+	normalized := strings.ToLower(strings.TrimSpace(modelID))
+	match := modelVersionPattern.FindStringSubmatch(normalized)
 	if len(match) != 3 {
 		return "", nil, false
 	}
 	parts := strings.FieldsFunc(match[2], func(r rune) bool { return r == '.' || r == '-' })
-	numbers := make([]int, 0, len(parts))
+	numbers := make([]int, 0, len(parts)+1)
 	for _, part := range parts {
 		value, err := strconv.Atoi(part)
 		if err != nil {
@@ -1068,7 +1074,18 @@ func parseModelVersion(modelID string) (string, []int, bool) {
 		}
 		numbers = append(numbers, value)
 	}
-	return match[1], numbers, len(numbers) > 0
+	if len(numbers) == 0 {
+		return "", nil, false
+	}
+	// 版本串未覆盖 ID 末尾时，把日期快照后缀追加为最低位版本号
+	if loc := modelVersionPattern.FindStringIndex(normalized); loc != nil && loc[1] < len(normalized) {
+		if suffix := modelDatedSuffixPattern.FindString(normalized); suffix != "" {
+			if value, err := strconv.Atoi(suffix[1:]); err == nil {
+				numbers = append(numbers, value)
+			}
+		}
+	}
+	return match[1], numbers, true
 }
 
 func compareModelVersion(candidate, current rankedModelCandidate) (better bool, decided bool) {

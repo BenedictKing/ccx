@@ -414,14 +414,14 @@ func compshareProviderTemplate() ProviderTemplate {
 			{BaseURL: "https://cp.compshare.cn/v1", PlanTag: "subscription", Region: "cn", Priority: 0},
 		}),
 	)
-	// 优云智算控制台的套餐消耗次数；glm-5.2 当前为限时倍率。
+	// 优云智算控制台的套餐消耗次数；glm-5.2 当前为限时倍率，DeepSeek-V3.2 已下架。
 	tmpl.ModelCostMultipliers = map[string]float64{
-		"glm-5.2":                   2,
-		"glm-5.1":                   6,
-		"MiniMax-M2.7":              2,
-		"kimi-k2.6":                 5,
-		"deepseek-ai/DeepSeek-V3.2": 1,
-		"deepseek-v4-flash":         1,
+		"glm-5.2":                6,
+		"glm-5.1":                6,
+		"MiniMax-M2.7":           2,
+		"kimi-k2.6":              5,
+		"deepseek-v4-flash":      1,
+		"deepseek-v4-flash-0731": 1,
 	}
 	tmpl.ModelQualityPriorities = map[string]int{
 		"glm-5.1":   2,
