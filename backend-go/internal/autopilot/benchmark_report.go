@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -34,6 +35,9 @@ type BenchmarkReportRow struct {
 	SelectedModel  string
 	Effort         string
 	BenchmarkScore float64
+	// BenchmarkKnown 表示所选模型的 bench 分是否有实测证据；
+	// false 时质量分由质量档先验合成，日志中标注 bench_evidence=none。
+	BenchmarkKnown bool
 	CostUSD        float64
 	QualityTier    string
 	FrontierNote   string
@@ -48,6 +52,8 @@ type TopCandidateRow struct {
 	Model          string
 	Effort         string
 	BenchmarkScore float64
+	// BenchmarkKnown 为 false 时表格 bench 列渲染为 "-"，与选中项口径一致。
+	BenchmarkKnown bool
 	CostUSD        float64
 	QualityTier    string
 }
@@ -127,8 +133,11 @@ func LogBenchmarkSelectionReport(report *BenchmarkModelSelectionReport) {
 			effort = "-"
 		}
 		extra := ""
+		if !row.BenchmarkKnown {
+			extra = " bench_evidence=none"
+		}
 		if row.Anomaly != "" {
-			extra = fmt.Sprintf(" ANOMALY=%s", row.Anomaly)
+			extra += fmt.Sprintf(" ANOMALY=%s", row.Anomaly)
 		}
 		if len(row.BetterOptions) > 0 {
 			extra += fmt.Sprintf(" better_options=%v", row.BetterOptions)
@@ -159,11 +168,16 @@ func formatTopCandidatesTable(rows []TopCandidateRow) string {
 		if effort == "" {
 			effort = "-"
 		}
+		// 无实测 benchmark 证据时 bench 列渲染为 "-"，避免把档先验合成分误读为实测分。
+		bench := "-"
+		if r.BenchmarkKnown {
+			bench = fmt.Sprintf("%.2f", r.BenchmarkScore)
+		}
 		rendered = append(rendered, renderedRow{cells: []string{
 			fmt.Sprintf("%d", i+1),
 			r.Model,
 			effort,
-			fmt.Sprintf("%.2f", r.BenchmarkScore),
+			bench,
 			fmt.Sprintf("%.2f", r.CostUSD),
 			r.QualityTier,
 		}})
@@ -249,38 +263,45 @@ func buildBenchmarkReportRow(resolver *ModelResolver, pool []ModelProfile, poolU
 
 	// 使用 frontier 选型（与真实路由一致），但强制传入场景指定的 cost preference。
 	ranked := resolver.buildRankedCandidates(eligible, scenario.RequestModel, poolUID, "messages", floor)
+	if len(ranked) == 0 {
+		row.Anomaly = "no_eligible_after_floor"
+		return row
+	}
+	selectedIdx := -1
 	idx, note, ok := selectViaFrontier(ranked, floor, scenario.CostPreference)
 	if !ok || idx < 0 || idx >= len(ranked) {
 		// frontier 失败时回退到旧字典序链。
-		best := ranked[0]
+		bestIdx := 0
 		for i := 1; i < len(ranked); i++ {
-			if betterRankedModel(ranked[i], best, scenario.CostPreference) {
-				best = ranked[i]
+			if betterRankedModel(ranked[i], ranked[bestIdx], scenario.CostPreference) {
+				bestIdx = i
 			}
 		}
 		row.FrontierNote = "fallback:" + note
-		fillBenchmarkReportRow(&row, best)
+		selectedIdx = bestIdx
 	} else {
 		row.FrontierNote = note
-		fillBenchmarkReportRow(&row, ranked[idx])
+		selectedIdx = idx
 	}
+	fillBenchmarkReportRow(&row, ranked[selectedIdx], scenario.CostPreference)
 
-	row.BetterOptions = findBetterOptions(ranked, row.SelectedModel)
+	row.BetterOptions = findBetterOptions(ranked, row.SelectedModel, scenario.CostPreference)
 	if len(row.BetterOptions) > 0 {
 		row.Anomaly = "missed_better_model"
 	}
-	row.TopCandidates = buildTopCandidates(ranked, benchmarkReportTopN)
+	row.TopCandidates = buildTopCandidates(ranked, floor, scenario.CostPreference, selectedIdx, benchmarkReportTopN)
 	return row
 }
 
-func fillBenchmarkReportRow(row *BenchmarkReportRow, best rankedModelCandidate) {
+func fillBenchmarkReportRow(row *BenchmarkReportRow, best rankedModelCandidate, mode CostPreferenceMode) {
 	row.SelectedModel = best.profile.ModelID
 	row.Effort = string(best.effort)
 	row.BenchmarkScore = best.benchmarkScore
+	row.BenchmarkKnown = best.benchmarkKnown
 	row.CostUSD = best.normalizedPublicCostUSD
 	row.QualityTier = string(best.profile.QualityTier)
 
-	row.ScoreBreakdown["quality_score"] = frontierQualityScore(best, CostPrefBalanced)
+	row.ScoreBreakdown["quality_score"] = frontierQualityScore(best, mode)
 	row.ScoreBreakdown["cost_usd"] = best.normalizedPublicCostUSD
 	if best.publicCostKnown && best.normalizedPublicCostUSD > 0 {
 		row.ScoreBreakdown["cost_score"] = 1.0 / best.normalizedPublicCostUSD
@@ -292,9 +313,13 @@ func fillBenchmarkReportRow(row *BenchmarkReportRow, best rankedModelCandidate) 
 	}
 }
 
-// findBetterOptions 列出"质量显著更高且成本可接受，或成本显著更低且质量不降"的候选。
+// findBetterOptions 列出"更优"候选，判定口径随场景的成本偏好走：
+//   - quality_first：仅质量显著更高才算更优，更便宜但质量略低的候选不构成更优；
+//   - 其他车道：质量显著更高且成本可接受，或成本显著更低且质量不降（≥95%）。
+//
 // 只保留有实测 benchmark 分的模型，按模型去重并限制条数，避免报告刷屏。
-func findBetterOptions(ranked []rankedModelCandidate, selectedModel string) []string {
+// 输出排序与候选池顺序无关（池顺序来自 map 迭代，本身不确定）。
+func findBetterOptions(ranked []rankedModelCandidate, selectedModel string, mode CostPreferenceMode) []string {
 	var selected *rankedModelCandidate
 	for i := range ranked {
 		if ranked[i].profile.ModelID == selectedModel {
@@ -308,7 +333,7 @@ func findBetterOptions(ranked []rankedModelCandidate, selectedModel string) []st
 
 	var options []string
 	seen := map[string]bool{selectedModel: true}
-	selectedQ := frontierQualityScore(*selected, CostPrefBalanced)
+	selectedQ := frontierQualityScore(*selected, mode)
 	for i := range ranked {
 		cand := ranked[i]
 		if seen[cand.profile.ModelID] {
@@ -317,20 +342,26 @@ func findBetterOptions(ranked []rankedModelCandidate, selectedModel string) []st
 		if cand.benchmarkScore <= 0 {
 			continue
 		}
-		candQ := frontierQualityScore(cand, CostPrefBalanced)
-		// 更优定义：质量显著更高且成本可接受；或成本显著更低且质量不下降。
-		better := candQ-selectedQ >= 0.05 && cand.normalizedPublicCostUSD <= selected.normalizedPublicCostUSD*1.25
-		if !better {
-			better = selected.normalizedPublicCostUSD-cand.normalizedPublicCostUSD > 0.01 && candQ >= selectedQ*0.95
+		candQ := frontierQualityScore(cand, mode)
+		var better bool
+		if mode == CostPrefQualityFirst {
+			better = candQ-selectedQ >= 0.05
+		} else {
+			// 质量显著更高且成本可接受；或成本显著更低且质量不下降。
+			better = candQ-selectedQ >= 0.05 && cand.normalizedPublicCostUSD <= selected.normalizedPublicCostUSD*1.25
+			if !better {
+				better = selected.normalizedPublicCostUSD-cand.normalizedPublicCostUSD > 0.01 && candQ >= selectedQ*0.95
+			}
 		}
 		if !better {
 			continue
 		}
 		seen[cand.profile.ModelID] = true
 		options = append(options, fmt.Sprintf("%s(bench=%.2f,cost=%.2f)", cand.profile.ModelID, cand.benchmarkScore, cand.normalizedPublicCostUSD))
-		if len(options) >= benchmarkReportMaxBetterOptions {
-			break
-		}
+	}
+	sort.Strings(options)
+	if len(options) > benchmarkReportMaxBetterOptions {
+		options = options[:benchmarkReportMaxBetterOptions]
 	}
 	return options
 }
@@ -338,23 +369,23 @@ func findBetterOptions(ranked []rankedModelCandidate, selectedModel string) []st
 // benchmarkReportTopN 限制 Top 候选展示条数，保持报告可读。
 const benchmarkReportTopN = 5
 
-// buildTopCandidates 按 frontier 排名顺序取前 limit 条候选用于 Top 5 展示。
-// 跳过无实测 benchmark 分的候选（与 findBetterOptions 过滤一致），
-// 同模型去重仅保留排名最靠前的一条，limit<=0 返回 nil。
-func buildTopCandidates(ranked []rankedModelCandidate, limit int) []TopCandidateRow {
+// buildTopCandidates 按场景真实排名取前 limit 条候选用于 Top 5 展示：
+// 选中候选固定排第 1，其余按 scenarioCandidateOrder 的场景顺序
+// （frontier 阶梯：quality_first 高质量簇优先，cost_first 低成本簇优先，
+// balanced 膝点邻域按成本升序）。同模型去重仅保留排名最靠前的一条；
+// 无实测 benchmark 分的候选保留并标注 BenchmarkKnown=false，与选中项口径一致。
+// limit<=0 或候选为空时返回 nil。
+func buildTopCandidates(ranked []rankedModelCandidate, floor CapabilityFloor, mode CostPreferenceMode, selectedIdx, limit int) []TopCandidateRow {
 	if limit <= 0 || len(ranked) == 0 {
 		return nil
 	}
 	var rows []TopCandidateRow
 	seen := map[string]bool{}
-	for i := range ranked {
+	for _, idx := range scenarioCandidateOrder(ranked, floor, mode, selectedIdx) {
 		if len(rows) >= limit {
 			break
 		}
-		cand := ranked[i]
-		if cand.benchmarkScore <= 0 {
-			continue
-		}
+		cand := ranked[idx]
 		if seen[cand.profile.ModelID] {
 			continue
 		}
@@ -363,9 +394,52 @@ func buildTopCandidates(ranked []rankedModelCandidate, limit int) []TopCandidate
 			Model:          cand.profile.ModelID,
 			Effort:         string(cand.effort),
 			BenchmarkScore: cand.benchmarkScore,
+			BenchmarkKnown: cand.benchmarkKnown,
 			CostUSD:        cand.normalizedPublicCostUSD,
 			QualityTier:    string(cand.profile.QualityTier),
 		})
 	}
 	return rows
+}
+
+// scenarioCandidateOrder 产出该场景下的候选展示顺序（返回 ranked 下标序列）。
+// 选中候选固定为首；其余优先取 frontier 阶梯顺序（与选型同源的 Pareto 前沿，
+// 阶梯顺序本身随车道变化），阶梯未覆盖的候选（公开价未知等）按
+// betterRankedModel 字典序链排在尾部。顺序完全由候选内容决定，
+// 与 ranked 的输入顺序无关（输入顺序来自 map 迭代，每次运行随机）。
+func scenarioCandidateOrder(ranked []rankedModelCandidate, floor CapabilityFloor, mode CostPreferenceMode, selectedIdx int) []int {
+	order := make([]int, 0, len(ranked))
+	seen := make([]bool, len(ranked))
+	if selectedIdx >= 0 && selectedIdx < len(ranked) {
+		order = append(order, selectedIdx)
+		seen[selectedIdx] = true
+	}
+
+	if points := buildFrontierPoints(ranked, floor, mode); len(points) >= 2 {
+		forest := ComputeFrontierForest(points, points[0].Cost.ScopeID, frontierEvidenceVersion)
+		ladder := BuildCandidateLadder(forest, mode)
+		for _, stages := range [][]LadderStage{ladder.Preferred, ladder.Overflow} {
+			for _, stage := range stages {
+				for _, p := range stage.Points {
+					idx, err := strconv.Atoi(p.CandidateID)
+					if err != nil || idx < 0 || idx >= len(ranked) || seen[idx] {
+						continue
+					}
+					seen[idx] = true
+					order = append(order, idx)
+				}
+			}
+		}
+	}
+
+	var rest []int
+	for i := range ranked {
+		if !seen[i] {
+			rest = append(rest, i)
+		}
+	}
+	sort.SliceStable(rest, func(a, b int) bool {
+		return betterRankedModel(ranked[rest[a]], ranked[rest[b]], mode)
+	})
+	return append(order, rest...)
 }

@@ -81,10 +81,18 @@ func ComputeFrontierForest(points []FrontierPoint, scopeID string, version strin
 	ranked := paretoRank(points)
 	rank0 := filterByRank(ranked, 0)
 
-	// 步骤 2：按成本升序排列
+	// 步骤 2：按成本升序排列；同成本按 模型/effort/CandidateID 兜底，
+	// 保证输出顺序只由点内容决定，与输入顺序无关
+	// （调用方可能以任意顺序传入点，如 benchmark 报告的候选池来自 map 迭代）。
 	sort.Slice(rank0, func(i, j int) bool {
 		if rank0[i].Cost.Estimated != rank0[j].Cost.Estimated {
 			return rank0[i].Cost.Estimated < rank0[j].Cost.Estimated
+		}
+		if rank0[i].CanonicalModel != rank0[j].CanonicalModel {
+			return rank0[i].CanonicalModel < rank0[j].CanonicalModel
+		}
+		if rank0[i].Effort != rank0[j].Effort {
+			return rank0[i].Effort < rank0[j].Effort
 		}
 		return rank0[i].CandidateID < rank0[j].CandidateID
 	})
