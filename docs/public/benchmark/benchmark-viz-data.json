@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-16T14:17:06.986Z",
+  "generatedAt": "2026-08-16T22:06:58.164Z",
   "data": [
     {
       "model": "deepseek-v4-flash",
@@ -50,8 +50,8 @@
       "model": "deepseek-v4-pro",
       "effort": "max",
       "pass_rate": 0.558,
-      "mean_cost": 0.2468,
-      "median_cost": 0.2283,
+      "mean_cost": 0.2489,
+      "median_cost": 0.2289,
       "source": "CodexRadar",
       "sourceModel": "deepseek-v4-pro"
     },
@@ -95,7 +95,7 @@
       "model": "gpt-5.6-luna",
       "effort": "high",
       "pass_rate": 0.545,
-      "mean_cost": 0.2044,
+      "mean_cost": 0.2043,
       "median_cost": 0.1693,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-luna"
@@ -104,7 +104,7 @@
       "model": "gpt-5.6-luna",
       "effort": "xhigh",
       "pass_rate": 0.625,
-      "mean_cost": 0.3202,
+      "mean_cost": 0.3212,
       "median_cost": 0.2544,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-luna"
@@ -113,7 +113,7 @@
       "model": "gpt-5.6-luna",
       "effort": "max",
       "pass_rate": 0.616,
-      "mean_cost": 0.4774,
+      "mean_cost": 0.4754,
       "median_cost": 0.3832,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-luna"
@@ -122,7 +122,7 @@
       "model": "gpt-5.6-sol",
       "effort": "low",
       "pass_rate": 0.545,
-      "mean_cost": 2.0449,
+      "mean_cost": 2.0368,
       "median_cost": 1.425,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-sol"
@@ -140,7 +140,7 @@
       "model": "gpt-5.6-sol",
       "effort": "high",
       "pass_rate": 0.643,
-      "mean_cost": 4.4923,
+      "mean_cost": 4.4929,
       "median_cost": 3.5678,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-sol"
@@ -149,7 +149,7 @@
       "model": "gpt-5.6-sol",
       "effort": "xhigh",
       "pass_rate": 0.705,
-      "mean_cost": 6.1229,
+      "mean_cost": 6.1221,
       "median_cost": 4.6394,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-sol"
@@ -158,8 +158,8 @@
       "model": "gpt-5.6-sol",
       "effort": "max",
       "pass_rate": 0.723,
-      "mean_cost": 8.805,
-      "median_cost": 7.4,
+      "mean_cost": 8.7839,
+      "median_cost": 7.3208,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-sol"
     },
@@ -185,8 +185,8 @@
       "model": "gpt-5.6-terra",
       "effort": "medium",
       "pass_rate": 0.402,
-      "mean_cost": 0.6233,
-      "median_cost": 0.5424,
+      "mean_cost": 0.6237,
+      "median_cost": 0.5466,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-terra"
     },
@@ -194,7 +194,7 @@
       "model": "gpt-5.6-terra",
       "effort": "high",
       "pass_rate": 0.5,
-      "mean_cost": 1.0841,
+      "mean_cost": 1.0839,
       "median_cost": 0.9105,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-terra"
@@ -212,7 +212,7 @@
       "model": "gpt-5.6-terra",
       "effort": "max",
       "pass_rate": 0.661,
-      "mean_cost": 3.6445,
+      "mean_cost": 3.6444,
       "median_cost": 2.8329,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-terra"
