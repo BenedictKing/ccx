@@ -297,6 +297,8 @@ func TestResolveUpstreamCapability_NewAugust2026Models(t *testing.T) {
 		{model: "glm-5.3", provider: "zai", context: 1000000, maxOutput: 131072, toolCalls: true},
 		{model: "glm-5.3[1m]", provider: "zai", context: 1000000, maxOutput: 131072, toolCalls: true},
 		{model: "gemini-3.7-flash", provider: "google", context: 1048576, maxOutput: 65536, vision: true, toolCalls: true, inputPrice: 0.75, outputPrice: 3.75},
+		{model: "gemini-3.5-flash-lite", provider: "google", context: 1048576, maxOutput: 65536, vision: true, toolCalls: true, inputPrice: 0.3, outputPrice: 2.5},
+		{model: "google/gemini-3.5-flash-lite", provider: "google", context: 1048576, maxOutput: 65536, vision: true, toolCalls: true, inputPrice: 0.3, outputPrice: 2.5},
 		{model: "qwen3.8-max", provider: "dashscope", context: 1000000, maxOutput: 131072, vision: true, toolCalls: true, inputPrice: 12, outputPrice: 36},
 		{model: "qwen3.8-max-preview", provider: "dashscope", context: 1000000, maxOutput: 131072, vision: true, toolCalls: true, inputPrice: 12, outputPrice: 36},
 		{model: "doubao-seed-2.1-turbo", provider: "volcengine", context: 256000, maxOutput: 256000, vision: true, toolCalls: true},

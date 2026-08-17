@@ -2165,6 +2165,44 @@
     },
     {
       "patterns": [
+        "(?:^|[-/])gemini-3\\.5-flash-lite(?=$|@)"
+      ],
+      "provider": "google",
+      "displayName": "Gemini 3.5 Flash-Lite",
+      "description": "Google lightweight multimodal model; thinking on by default at minimal level, configurable via thinking_level.",
+      "contextWindowTokens": 1048576,
+      "maxOutputTokens": 65536,
+      "thinkingMode": "adaptive",
+      "reasoningEfforts": [
+        "minimal",
+        "low",
+        "medium",
+        "high"
+      ],
+      "capabilities": {
+        "document": true,
+        "reasoning": true,
+        "vision": true,
+        "audioInput": true,
+        "videoInput": true,
+        "toolCalls": true,
+        "parallelFunctionCalling": true,
+        "webSearch": true
+      },
+      "pricing": {
+        "unit": "per_1m_tokens_usd",
+        "currency": "USD",
+        "inputCacheMissPrice": 0.3,
+        "outputPrice": 2.5,
+        "inputCacheHitPrice": 0.03
+      },
+      "sources": [
+        "https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-3-6-flash-3-5-flash-lite-3-5-flash-cyber/",
+        "https://openrouter.ai/google/gemini-3.5-flash-lite"
+      ]
+    },
+    {
+      "patterns": [
         "(?:^|[-/])gemini-3\\.7-flash(?=$|@)"
       ],
       "provider": "google",
@@ -3420,11 +3458,11 @@
           "cohortPercentile": 0.5,
           "taskCount": 112,
           "cohortSize": 6,
-          "effort": "xhigh",
+          "effort": "max",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://deng.codexradar.com/",
           "capturedAt": "2026-08-17",
-          "costUsd": 0.32
+          "costUsd": 0.48
         },
         {
           "benchmark": "deepswe",
@@ -3541,7 +3579,7 @@
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://deng.codexradar.com/",
           "capturedAt": "2026-08-17",
-          "costUsd": 8.79
+          "costUsd": 8.8
         },
         {
           "benchmark": "deepswe",
