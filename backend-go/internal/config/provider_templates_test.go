@@ -249,11 +249,11 @@ func TestProviderTemplateVolcenginePlanRoutes(t *testing.T) {
 
 func TestListAndGetProviderTemplate(t *testing.T) {
 	all := ListProviderTemplates()
-	if len(all) < 16 {
-		t.Errorf("内置 provider 模板应至少为 16 个，实际 %d", len(all))
+	if len(all) < 17 {
+		t.Errorf("内置 provider 模板应至少为 17 个，实际 %d", len(all))
 	}
 	for _, id := range []string{
-		"mimo", "deepseek", "kimi", "glm", "volcengine", "compshare", "sensenova", "minimax",
+		"mimo", "deepseek", "kimi", "glm", "volcengine", "compshare", "tokenrhythm", "sensenova", "minimax",
 		"dashscope", "opencode-zen", "tencent-lkeap", "qianfan", "xfyun", "openrouter", "modelscope", "originrouter",
 	} {
 		if _, ok := GetProviderTemplate(id); !ok {

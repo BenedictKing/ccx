@@ -214,6 +214,7 @@ var builtinProviderTemplates = []ProviderTemplate{
 		Routes:      standardProviderRoutes("claude", glmClaudeCandidates(), glmOpenAICandidates()),
 	},
 	compshareProviderTemplate(),
+	tokenrhythmProviderTemplate(),
 	newProviderTemplate(
 		"sensenova",
 		"SenseNova",
@@ -428,6 +429,23 @@ func compshareProviderTemplate() ProviderTemplate {
 		"kimi-k2.6": 1,
 	}
 	return tmpl
+}
+
+// tokenrhythmProviderTemplate 描述 tokenrhythm.studio 中转站：OpenAI Chat 兼容 + Anthropic Messages
+// 原生入口，统一以 sk_ 开头密钥鉴权（详见 https://tokenrhythm.studio/docs/api-integration）。
+func tokenrhythmProviderTemplate() ProviderTemplate {
+	return newProviderTemplate(
+		"tokenrhythm",
+		"TokenRhythm 中转",
+		"tokenrhythm.studio 中转站：OpenAI Chat 兼容 / Anthropic Messages / Embeddings 一站接入，sk_ 鉴权",
+		"relay",
+		"second",
+		standardProviderRoutes("claude", []ProviderCandidate{
+			{BaseURL: "https://tokenrhythm.studio", PlanTag: "payg", Region: "global", Priority: 0},
+		}, []ProviderCandidate{
+			{BaseURL: "https://tokenrhythm.studio/v1", PlanTag: "payg", Region: "global", Priority: 0},
+		}),
+	)
 }
 
 func deepseekClaudeCandidates() []ProviderCandidate {
