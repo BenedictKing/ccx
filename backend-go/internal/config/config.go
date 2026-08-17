@@ -80,6 +80,11 @@ type UpstreamConfig struct {
 	// key 为 CompatTrait 字符串（跨包引用不方便用 CompatTrait 类型做 map key 的字面量，
 	// 用字符串保持和 CompatSeeds 一致的存储形态）。
 	LearnedCompatTraits map[string]bool `json:"-"`
+	// LearnedRejectedBetaTokens 运行时字段：本次请求应从 anthropic-beta header 中剥离的
+	// 被拒 token 名列表。仅 TraitUnsupportedBetaHeader trait 学到时由 failover 注入；
+	// provider 在构造请求时按 token 粒度剥离。与 LearnedCompatTraits 平行：前者是 bool 三态，
+	// 本字段承载 token 名集合（证据提取失败的 trait 不会学习，天然不存在"有 trait 无 token"）。
+	LearnedRejectedBetaTokens []string `json:"-"`
 	// CompatSeeds 历史手工兼容配置降级而来的一次性低置信度提示。
 	//
 	// 六个兼容性开关（developer role 降级、图片工具剥离、Codex 原生工具透传、空文本块剥离、
@@ -1141,6 +1146,28 @@ func (u *UpstreamConfig) IsStripEmptyTextBlocksEnabled() bool {
 // IsPassbackReasoningContentEnabled 检查是否将 thinking 转为 reasoning_content 回传。
 func (u *UpstreamConfig) IsPassbackReasoningContentEnabled() bool {
 	return resolveCompatSwitch(u.learnedCompatTrait(TraitPassbackReasoningContent), u.compatSeed(TraitPassbackReasoningContent), shouldPassbackReasoningContentByDefault(u))
+}
+
+// IsUnsupportedBetaHeaderEnabled 检查是否需要在 anthropic-beta header 中按 token 粒度
+// 剥离上游拒绝的 beta token。
+//
+// 无种子（不接 CompatSeeds）：anthropic-beta token 兼容性是协议级事实，由错误驱动学习
+// 自动收敛。改写动作在 providers/claude.go 的 stripUnsupportedBetaHeaderTokens 内执行，
+// 被拒 token 名从 u.LearnedRejectedBetaTokens 读取。
+func (u *UpstreamConfig) IsUnsupportedBetaHeaderEnabled() bool {
+	return resolveCompatSwitch(u.learnedCompatTrait(TraitUnsupportedBetaHeader), nil, false)
+}
+
+// SetLearnedRejectedBetaTokens 供 failover 注入本次请求应剥离的被拒 anthropic-beta token 名。
+// 只作用于当次请求所用的 upstream 副本，不落盘、不影响其他并发请求。
+func (u *UpstreamConfig) SetLearnedRejectedBetaTokens(tokens []string) {
+	u.LearnedRejectedBetaTokens = tokens
+}
+
+// GetLearnedRejectedBetaTokens 返回本次请求应剥离的被拒 anthropic-beta token 名。
+// 返回 nil 表示本次请求未学到任何被拒 token（fail-open）。
+func (u *UpstreamConfig) GetLearnedRejectedBetaTokens() []string {
+	return u.LearnedRejectedBetaTokens
 }
 
 // shouldPassbackReasoningContentByDefault 已知厂商真相：GLM 的 OpenAI 兼容协议要求把

@@ -205,6 +205,67 @@ func stripUnsupportedDeepSeekBetaHeaders(headers http.Header, upstream *config.U
 	}
 }
 
+// stripUnsupportedBetaHeaderTokens 按 learned trait 携带的被拒 token 名，从
+// Anthropic-Beta header 中按 token 粒度剥离。
+//
+// 与 stripUnsupportedDeepSeekBetaHeaders 的区别：
+//   - DeepSeek 特例基于"上游身份"的静态规则（只看 baseURL），剥固定 token。
+//   - 本函数基于"错误驱动自学习"（ChannelCompatCache 学到的被拒 token 名），
+//     从 u.LearnedRejectedBetaTokens 读被拒 token 名列表并剥离。
+//
+// 触发条件：上游以 400/422 拒绝某个 anthropic-beta token，并被 CompatTraitFromError
+// 识别为 TraitUnsupportedBetaHeader，failover 在构造请求前把 token 名注入到 upstream 副本上。
+// 无 token 名时剥空整个 header（保守兜底：trait 已表明上游不接受 anthropic-beta，
+// 但未提取出具体 token，整段剥掉避免再触发同样错误）。
+func stripUnsupportedBetaHeaderTokens(headers http.Header, upstream *config.UpstreamConfig) {
+	if headers == nil || !upstream.IsUnsupportedBetaHeaderEnabled() {
+		return
+	}
+
+	values := headers.Values("Anthropic-Beta")
+	if len(values) == 0 {
+		return
+	}
+
+	rejected := upstream.GetLearnedRejectedBetaTokens()
+	rejectedSet := make(map[string]struct{}, len(rejected))
+	for _, t := range rejected {
+		if t != "" {
+			rejectedSet[t] = struct{}{}
+		}
+	}
+
+	filteredValues := make([]string, 0, len(values))
+	for _, value := range values {
+		tokens := make([]string, 0)
+		for _, rawToken := range strings.Split(value, ",") {
+			token := strings.TrimSpace(rawToken)
+			if token == "" {
+				continue
+			}
+			// rejectedSet 为空 = Evidence 未提取到 token：剥空整个 header
+			if len(rejectedSet) > 0 {
+				if _, drop := rejectedSet[token]; drop {
+					continue
+				}
+			}
+			tokens = append(tokens, token)
+		}
+		// rejectedSet 为空：剥空整段（不允许进入 filteredValues）
+		if len(rejectedSet) == 0 {
+			continue
+		}
+		if len(tokens) > 0 {
+			filteredValues = append(filteredValues, strings.Join(tokens, ","))
+		}
+	}
+
+	headers.Del("Anthropic-Beta")
+	for _, value := range filteredValues {
+		headers.Add("Anthropic-Beta", value)
+	}
+}
+
 const (
 	legacyThinkingPlaceholder    = "(no prior reasoning recorded)"
 	missingAssistantResponseText = "[prior assistant response unavailable]"
@@ -847,6 +908,7 @@ func (p *ClaudeProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 	req.Header = utils.PrepareUpstreamHeaders(c, req.URL.Host)
 	utils.ApplyCustomHeaders(req.Header, upstream.CustomHeaders) // 先应用自定义头，后覆盖认证（不可被自定义头覆盖）
 	stripUnsupportedDeepSeekBetaHeaders(req.Header, upstream, bodyBytes)
+	stripUnsupportedBetaHeaderTokens(req.Header, upstream)
 	utils.SetAuthenticationHeaderWithOverride(req.Header, apiKey, upstream.AuthHeader)
 	utils.EnsureCompatibleUserAgent(req.Header, "claude")
 

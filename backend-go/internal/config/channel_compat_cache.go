@@ -44,6 +44,10 @@ const (
 	// 与其他 trait 不同：没有对应的请求改写，不进入主动注入枚举与 AllCompatTraits，
 	// 仅供 SmartRouter 路由侧读取（选渠道阶段规避该组合）。
 	TraitNoDocumentSupport CompatTrait = "no_document_support"
+	// TraitUnsupportedBetaHeader 上游拒绝某个 anthropic-beta token（如 context-1m-2025-08-07），
+	// 需在转发前从 anthropic-beta header 中按 token 粒度剥离。
+	// 学习条件：400/422 错误明确点名拒绝某 token + 请求侧确实携带 anthropic-beta header。
+	TraitUnsupportedBetaHeader CompatTrait = "unsupported_beta_header"
 )
 
 // AllCompatTraits 全部可学习兼容项，供配置迁移与诊断遍历。
@@ -57,6 +61,7 @@ func AllCompatTraits() []CompatTrait {
 		TraitStripEmptyTextBlocks,
 		TraitNormalizeNonstandardChatRoles,
 		TraitCodexNativeToolPassthrough,
+		TraitUnsupportedBetaHeader,
 	}
 }
 

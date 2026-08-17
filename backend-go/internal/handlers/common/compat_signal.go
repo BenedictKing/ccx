@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
 
 	"github.com/BenedictKing/ccx/internal/config"
@@ -64,6 +65,59 @@ var thinkingBlockCorroborations = []string{
 	"first block",
 }
 
+// betaHeaderPatterns 上游点名拒绝某个 anthropic-beta token 的报错特征。
+// 典型：{"error":{"message":"尚未验证或不支持的 anthropic-beta：context-1m-2025-08-07"}}
+// 英文：{"error":{"message":"anthropic-beta `context-1m-2025-08-07` is not enabled"}}
+//
+// 与其他 trait 不同：anthropic-beta 是 HTTP header 级标志，没有"请求体携带"语义。
+// 因此协证词必须明确表达"拒绝/不支持"，避免把上游主动暴露能力列表、
+// 推荐使用某个 token 等信息误判为"被拒"。
+var betaHeaderPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`anthropic-beta`),
+	regexp.MustCompile(`尚未验证或不支持的.*beta`),
+	regexp.MustCompile(`(?i)unsupported.*anthropic-beta|anthropic-beta.*unsupported`),
+	regexp.MustCompile(`(?i)beta header.*not (enabled|recognized|supported|allowed)`),
+}
+
+// betaHeaderCorroborations 协证特征：必须同时命中其一，才认定为"被拒 beta token"而非
+// 含"anthropic-beta"字样的其他信息（如上游主动告知可用 beta token 列表）。
+var betaHeaderCorroborations = []string{
+	"尚未验证或不支持",
+	"not enabled",
+	"not supported",
+	"not recognized",
+	"not allowed",
+	"unsupported",
+	"invalid",
+}
+
+// rejectedBetaTokenPattern 从上游错误文案中提取被拒 anthropic-beta token 名。
+// 覆盖常见格式：
+//
+//	中文：尚未验证或不支持的 anthropic-beta：context-1m-2025-08-07
+//	英文：anthropic-beta `context-1m-2025-08-07` is not enabled
+//	英文：unsupported anthropic-beta header: context-1m-2025-08-07
+//
+// 允许跨 "header:"/"named:" 等中介词（(?:\w+[\s:：]+)* 匹配 0 次或多次"单词+分隔符"序列）。
+// token 名必含至少一个 `-`，避免把 "header"/"configuration" 等通用词误提取为 token。
+var rejectedBetaTokenPattern = regexp.MustCompile(
+	`(?i)anthropic-beta[\s:：'"` + "`" + `「『]*\s*(?:\w+[\s:：]+)*([a-z0-9][a-z0-9_-]*-[a-z0-9_-]{2,40})`,
+)
+
+// ExtractRejectedBetaTokens 从上游错误文案中提取被拒的 anthropic-beta token 名。
+// 返回 nil 表示文案里没有可识别的 token；视为格式不符，调用方不学。
+// 只取首个匹配：上游一次只拒绝一个 token，多 token 场景拆成多次报错。
+func ExtractRejectedBetaTokens(evidence string) []string {
+	if evidence == "" {
+		return nil
+	}
+	m := rejectedBetaTokenPattern.FindStringSubmatch(evidence)
+	if len(m) < 2 {
+		return nil
+	}
+	return []string{m[1]}
+}
+
 // BodyHasDeveloperRole 判断原始请求体中是否存在 developer role。
 // 同时检查 Responses 协议的 input[] 与 Chat 协议的 messages[]：failover 层拿到的是入口原始 body
 // （Responses 请求为 input），而下游 Chat 请求体由 provider 转换后才产生 messages，两处都要覆盖。
@@ -103,6 +157,17 @@ func BodyHasHistoricalThinking(body []byte) bool {
 	return false
 }
 
+// HeaderHasAnthropicBeta 判定当前请求是否携带 anthropic-beta header。
+//
+// 与 BodyHas* 系列不同：anthropic-beta 是 HTTP header 级标志，body 判定不可靠。
+// 任何非空值都视为携带——provider 后续会在 token 粒度精确剥离被拒的子 token。
+func HeaderHasAnthropicBeta(c *gin.Context) bool {
+	if c == nil || c.Request == nil {
+		return false
+	}
+	return c.Request.Header.Get("anthropic-beta") != ""
+}
+
 // CompatSignal 一条识别出的兼容性信号。
 type CompatSignal struct {
 	Trait    config.CompatTrait
@@ -118,6 +183,9 @@ type CompatSignalContext struct {
 	HasCodexClientTools bool
 	// HasHistoricalThinking 请求确实携带历史 thinking / reasoning_content 块
 	HasHistoricalThinking bool
+	// HasAnthropicBetaHeader 请求确实携带 anthropic-beta HTTP header。
+	// anthropic-beta 是 header 级标志，body 判定不适用。
+	HasAnthropicBetaHeader bool
 }
 
 // CompatTraitFromError 从上游错误响应中识别兼容性信号。
@@ -169,6 +237,23 @@ func CompatTraitFromError(statusCode int, bodyBytes []byte, ctx CompatSignalCont
 			containsAny(lower, thinkingBlockCorroborations) {
 			return &CompatSignal{
 				Trait:    config.TraitPassbackThinkingBlocks,
+				Enabled:  true,
+				Evidence: msg,
+			}
+		}
+
+		// anthropic-beta token 拒绝：请求确实带 anthropic-beta header + 正则命中 + 佐证词命中，
+		// 且 Evidence 里能精确提取被拒 token（提取失败视为格式不符，不学——防误判）。
+		// 证据比 body 类 trait 更严格：佐证词必须明确表达"拒绝/不支持"，
+		// 避免把上游主动暴露能力列表（"available beta: prompt-caching-..."）误判为被拒。
+		if ctx.HasAnthropicBetaHeader &&
+			matchesAnyPattern(lower, betaHeaderPatterns) &&
+			containsAny(lower, betaHeaderCorroborations) {
+			if len(ExtractRejectedBetaTokens(msg)) == 0 {
+				continue
+			}
+			return &CompatSignal{
+				Trait:    config.TraitUnsupportedBetaHeader,
 				Enabled:  true,
 				Evidence: msg,
 			}

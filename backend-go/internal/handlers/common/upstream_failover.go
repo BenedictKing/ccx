@@ -328,16 +328,16 @@ func buildRequestCostContext(cfgManager *config.ConfigManager, upstream *config.
 		strings.TrimSpace(upstream.ChannelPaymentCurrency) != "" &&
 		strings.TrimSpace(upstream.ChannelCreditCurrency) != "" {
 		res := autopilot.ResolveEffectiveCostUSD(autopilot.EffectiveCostInput{
-			Graph:            graph,
-			ListCostUSD:      ctx.ListCostUSD,
-			GroupMultiplier:  1.0,
-			TimeMultiplier:   1.0,
-			PaymentAmount:    *upstream.ChannelPaymentAmount,
-			PaymentUnit:      strings.TrimSpace(upstream.ChannelPaymentCurrency),
-			CreditAmount:     *upstream.ChannelCreditAmount,
-			CreditUnit:       strings.TrimSpace(upstream.ChannelCreditCurrency),
-			KeyUID:           selection.KeyUID,
-			SubscriptionUID:  ctx.SubscriptionUID,
+			Graph:           graph,
+			ListCostUSD:     ctx.ListCostUSD,
+			GroupMultiplier: 1.0,
+			TimeMultiplier:  1.0,
+			PaymentAmount:   *upstream.ChannelPaymentAmount,
+			PaymentUnit:     strings.TrimSpace(upstream.ChannelPaymentCurrency),
+			CreditAmount:    *upstream.ChannelCreditAmount,
+			CreditUnit:      strings.TrimSpace(upstream.ChannelCreditCurrency),
+			KeyUID:          selection.KeyUID,
+			SubscriptionUID: ctx.SubscriptionUID,
 		})
 		if res.Available && res.EffectiveMultiplier > 0 {
 			ctx.EffectiveCostMultiplier = res.EffectiveMultiplier
@@ -718,11 +718,18 @@ func TryUpstreamWithAllKeys(
 					config.TraitStripEmptyTextBlocks,
 					config.TraitNormalizeNonstandardChatRoles,
 					config.TraitCodexNativeToolPassthrough,
+					config.TraitUnsupportedBetaHeader,
 				}
 				for _, trait := range learnedTraits {
 					if state, ok := channelCompatCache.Trait(upstream.ChannelUID, keyHash, attemptModel, trait); ok {
 						upstreamCopy.SetLearnedCompatTrait(trait, state.Enabled)
 						channelCompatCache.MarkApplied(upstream.ChannelUID, keyHash, attemptModel, trait)
+						// TraitUnsupportedBetaHeader 附带被拒 token 名列表，provider 按 token 粒度剥离
+						if trait == config.TraitUnsupportedBetaHeader && state.Enabled {
+							if tokens := ExtractRejectedBetaTokens(state.Evidence); len(tokens) > 0 {
+								upstreamCopy.SetLearnedRejectedBetaTokens(tokens)
+							}
+						}
 					}
 				}
 			}
@@ -1110,9 +1117,10 @@ func TryUpstreamWithAllKeys(
 				// 兼容性学习同时覆盖 400 与 422（部分上游用 422 表达结构不受支持）。
 				if (resp.StatusCode == 400 || resp.StatusCode == 422) && upstream.ChannelUID != "" && !c.Writer.Written() {
 					signalCtx := CompatSignalContext{
-						HasDeveloperRole:      BodyHasDeveloperRole(attemptBody),
-						HasCodexClientTools:   kind == scheduler.ChannelKindResponses,
-						HasHistoricalThinking: BodyHasHistoricalThinking(attemptBody),
+						HasDeveloperRole:       BodyHasDeveloperRole(attemptBody),
+						HasCodexClientTools:    kind == scheduler.ChannelKindResponses,
+						HasHistoricalThinking:  BodyHasHistoricalThinking(attemptBody),
+						HasAnthropicBetaHeader: HeaderHasAnthropicBeta(c),
 					}
 					if signal := CompatTraitFromError(resp.StatusCode, respBodyBytes, signalCtx); signal != nil {
 						keyHash := autopilot.KeyHashFromAPIKey(apiKey)

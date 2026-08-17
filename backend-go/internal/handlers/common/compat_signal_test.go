@@ -13,6 +13,12 @@ const developerRoleErrorBody = `{"error":{"message":"Failed to deserialize the J
 // Kimi Coding Chat 接口拒绝 developer role 时的真实报错样本。
 const kimiDeveloperRoleErrorBody = `{"error":{"message":"Invalid request: role 'developer' is not allowed","type":"invalid_request_error"}}`
 
+// tokenrhythm-studio 拒绝 1M context beta header 时的真实报错样本。
+const betaHeaderRejectErrorBody = `{"type":"error","error":{"type":"invalid_request_error","message":"尚未验证或不支持的 anthropic-beta：context-1m-2025-08-07"},"request_id":"trace_xxx"}`
+
+// 英文变体（上游可能给出更结构化文案）。
+const betaHeaderRejectErrorBodyEn = `{"error":{"message":"anthropic-beta ` + "`" + `context-1m-2025-08-07` + "`" + ` is not enabled for this API key"}}`
+
 func TestCompatTraitFromError(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -98,10 +104,62 @@ func TestCompatTraitFromError(t *testing.T) {
 			wantHit:    false,
 		},
 		{
-			name:       "500 不参与兼容性学习",
-			statusCode: http.StatusInternalServerError,
-			body:       developerRoleErrorBody,
-			ctx:        CompatSignalContext{HasDeveloperRole: true},
+			name:       "anthropic-beta token 被拒绝（中文真实样本）",
+			statusCode: http.StatusBadRequest,
+			body:       betaHeaderRejectErrorBody,
+			ctx:        CompatSignalContext{HasAnthropicBetaHeader: true},
+			wantTrait:  config.TraitUnsupportedBetaHeader,
+			wantHit:    true,
+		},
+		{
+			name:       "anthropic-beta token 被拒绝（英文变体）",
+			statusCode: http.StatusBadRequest,
+			body:       betaHeaderRejectErrorBodyEn,
+			ctx:        CompatSignalContext{HasAnthropicBetaHeader: true},
+			wantTrait:  config.TraitUnsupportedBetaHeader,
+			wantHit:    true,
+		},
+		{
+			name:       "未带 anthropic-beta header 时不学习",
+			statusCode: http.StatusBadRequest,
+			body:       betaHeaderRejectErrorBody,
+			ctx:        CompatSignalContext{HasAnthropicBetaHeader: false},
+			wantHit:    false,
+		},
+		{
+			name:       "协证词缺失时不学习（仅含 anthropic-beta 关键词）",
+			statusCode: http.StatusBadRequest,
+			body:       `{"error":{"message":"client should include anthropic-beta header for newer features"}}`,
+			ctx:        CompatSignalContext{HasAnthropicBetaHeader: true},
+			wantHit:    false,
+		},
+		{
+			name:       "协证词命中但 Evidence 无 token 名时不学习",
+			statusCode: http.StatusBadRequest,
+			body:       `{"error":{"message":"unsupported anthropic-beta configuration"}}`,
+			ctx:        CompatSignalContext{HasAnthropicBetaHeader: true},
+			wantHit:    false,
+		},
+		{
+			name:       "429 状态码不参与 anthropic-beta 学习",
+			statusCode: http.StatusTooManyRequests,
+			body:       betaHeaderRejectErrorBody,
+			ctx:        CompatSignalContext{HasAnthropicBetaHeader: true},
+			wantHit:    false,
+		},
+		{
+			name:       "422 状态码参与 anthropic-beta 学习",
+			statusCode: http.StatusUnprocessableEntity,
+			body:       betaHeaderRejectErrorBody,
+			ctx:        CompatSignalContext{HasAnthropicBetaHeader: true},
+			wantTrait:  config.TraitUnsupportedBetaHeader,
+			wantHit:    true,
+		},
+		{
+			name:       "非 JSON 错误体不崩溃且不学习",
+			statusCode: http.StatusBadRequest,
+			body:       `<html>502 Bad Gateway</html>`,
+			ctx:        CompatSignalContext{HasAnthropicBetaHeader: true},
 			wantHit:    false,
 		},
 	}

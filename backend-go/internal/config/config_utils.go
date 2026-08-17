@@ -751,6 +751,11 @@ func (u *UpstreamConfig) Clone() *UpstreamConfig {
 			cloned.LearnedCompatTraits[k] = v
 		}
 	}
+	// LearnedRejectedBetaTokens 同理：slice 浅拷贝共享底层数组会被并发写入截断/追加污染。
+	if u.LearnedRejectedBetaTokens != nil {
+		cloned.LearnedRejectedBetaTokens = make([]string, len(u.LearnedRejectedBetaTokens))
+		copy(cloned.LearnedRejectedBetaTokens, u.LearnedRejectedBetaTokens)
+	}
 	if u.PromotionUntil != nil {
 		t := *u.PromotionUntil
 		cloned.PromotionUntil = &t
