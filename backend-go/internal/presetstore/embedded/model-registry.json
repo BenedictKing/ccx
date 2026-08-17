@@ -1220,7 +1220,7 @@
       ],
       "provider": "deepseek",
       "displayName": "DeepSeek V4 Flash",
-      "description": "Supports thinking and non-thinking modes. deepseek-chat is a deprecated compatibility alias for the non-thinking mode.",
+      "description": "Supports thinking and non-thinking modes. deepseek-chat is a deprecated compatibility alias for the non-thinking mode. Off-peak (base) prices listed; peak hours (Beijing 09:00-12:00 & 14:00-18:00) double all prices.",
       "contextWindowTokens": 1000000,
       "maxOutputTokens": 384000,
       "thinkingMode": "thinking",
@@ -1238,9 +1238,9 @@
       "pricing": {
         "unit": "per_1m_tokens_cny",
         "currency": "CNY",
-        "inputCacheHitPrice": 0.02,
-        "inputCacheMissPrice": 1,
-        "outputPrice": 2
+        "inputCacheHitPrice": 0.05,
+        "inputCacheMissPrice": 1.5,
+        "outputPrice": 4.5
       },
       "sources": [
         "https://api-docs.deepseek.com/zh-cn/quick_start/pricing",
@@ -1254,7 +1254,7 @@
       ],
       "provider": "deepseek",
       "displayName": "DeepSeek V4 Pro",
-      "description": "Supports thinking and non-thinking modes. deepseek-reasoner is a deprecated compatibility alias for the thinking mode.",
+      "description": "Supports thinking and non-thinking modes. deepseek-reasoner is a deprecated compatibility alias for the thinking mode. Off-peak (base) prices listed; peak hours (Beijing 09:00-12:00 & 14:00-18:00) double all prices.",
       "contextWindowTokens": 1000000,
       "maxOutputTokens": 384000,
       "thinkingMode": "thinking",
@@ -1272,9 +1272,9 @@
       "pricing": {
         "unit": "per_1m_tokens_cny",
         "currency": "CNY",
-        "inputCacheHitPrice": 0.025,
-        "inputCacheMissPrice": 3,
-        "outputPrice": 6
+        "inputCacheHitPrice": 0.15,
+        "inputCacheMissPrice": 4.5,
+        "outputPrice": 13.5
       },
       "sources": [
         "https://api-docs.deepseek.com/zh-cn/quick_start/pricing",
@@ -3541,7 +3541,7 @@
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://deng.codexradar.com/",
           "capturedAt": "2026-08-16",
-          "costUsd": 8.81
+          "costUsd": 8.78
         },
         {
           "benchmark": "deepswe",

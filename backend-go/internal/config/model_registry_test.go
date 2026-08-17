@@ -454,8 +454,8 @@ func TestResolveUpstreamCapability_DeepSeekV4DatedSuffixes(t *testing.T) {
 				"deepseek-v4-flash-20260731",
 				"deepseek-ai/deepseek-v4-flash-0731",
 			},
-			inputCacheMissPrice: 1,
-			outputPrice:         2,
+			inputCacheMissPrice: 1.5,
+			outputPrice:         4.5,
 		},
 		{
 			name: "pro",
@@ -467,8 +467,8 @@ func TestResolveUpstreamCapability_DeepSeekV4DatedSuffixes(t *testing.T) {
 				"deepseek-v4-pro-20260813",
 				"deepseek-ai/DeepSeek-V4-Pro-0813",
 			},
-			inputCacheMissPrice: 3,
-			outputPrice:         6,
+			inputCacheMissPrice: 4.5,
+			outputPrice:         13.5,
 		},
 	}
 	for _, tt := range tests {
