@@ -3,6 +3,7 @@ import { ref, shallowReactive, computed, unref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePreferencesStore } from '@/stores/preferences'
 import { api, type Channel, type ChannelPlacement, type ChannelsResponse, type ChannelMetrics, type ChannelDashboardResponse } from '@/services/api'
+import { autoAddChannel, extractAutoAddErrorMessage } from '@/services/autopilot-api'
 import { normalizeLocale } from '@/i18n/core'
 import { translate } from '@/i18n'
 import { registerGlobalTick } from '@/composables/useGlobalTick'
@@ -522,6 +523,58 @@ export const useChannelStore = defineStore('channel', () => {
   }
 
   /**
+   * 通过 provider 模板快速添加渠道（订阅中心 / 渠道列表快速添加的共享入口）。
+   *
+   * 行为对齐渠道列表的快速添加：显式 `placement: 'front'`（默认置顶），autoAddChannel
+   * 返回后逐条按 kind 调 reorder + 5 分钟促销期，并 refreshChannels 让渠道列表实时更新。
+   * 失败抛错由调用方捕获并展示。
+   */
+  async function quickAddFromTemplate(
+    providerId: string,
+    apiKeys: string[],
+    options: { kind: ApiTab; placement?: ChannelPlacement; displayName?: string } = { kind: 'messages' }
+  ): Promise<{ success: boolean; message: string; quickAddMessage?: string }> {
+    const placement = options.placement ?? 'front'
+    const response = await autoAddChannel(options.kind, { providerId, apiKeys, placement })
+    await refreshChannels()
+    const created = response.channels ?? []
+    for (const ch of created) {
+      const tab = ch.channelKind as ApiTab
+      const data = getChannelsForType(tab).value
+      const others = (data.channels || [])
+        .filter(item => item.index !== ch.index && item.status !== 'disabled')
+        .sort((a, b) => (a.priority ?? a.index) - (b.priority ?? b.index))
+        .map(item => item.index)
+      const newOrder = [ch.index, ...others]
+      try {
+        if (tab === 'chat') await api.reorderChatChannels(newOrder)
+        else if (tab === 'vectors') await api.reorderVectorsChannels(newOrder)
+        else if (tab === 'images') await api.reorderImagesChannels(newOrder)
+        else if (tab === 'gemini') await api.reorderGeminiChannels(newOrder)
+        else if (tab === 'responses') await api.reorderResponsesChannels(newOrder)
+        else await api.reorderChannels(newOrder)
+        if (tab === 'chat') await api.setChatChannelPromotion(ch.index, 300)
+        else if (tab === 'vectors') await api.setVectorsChannelPromotion(ch.index, 300)
+        else if (tab === 'images') await api.setImagesChannelPromotion(ch.index, 300)
+        else if (tab === 'gemini') await api.setGeminiChannelPromotion(ch.index, 300)
+        else if (tab === 'responses') await api.setResponsesChannelPromotion(ch.index, 300)
+        else await api.setChannelPromotion(ch.index, 300)
+      } catch (err) {
+        // 单条 reorder/promotion 失败不影响其他渠道
+        console.warn('[Channel-QuickAdd] reorder/promotion 失败:', tab, ch.index, err)
+      }
+    }
+    const addedName = options.displayName || providerId
+    return created.length > 1
+      ? {
+          success: true,
+          message: t('store.channel.added'),
+          quickAddMessage: t('store.channel.quickAddPrioritized', { name: addedName })
+        }
+      : { success: true, message: t('store.channel.added') }
+  }
+
+  /**
    * 删除渠道
    */
   async function deleteChannel(channelId: number, channelType: ApiTab = activeTab.value, accountUid?: string, logicalChannelUid?: string) {
@@ -762,5 +815,6 @@ export const useChannelStore = defineStore('channel', () => {
     startAutoRefresh,
     stopAutoRefresh,
     clearChannels,
+    quickAddFromTemplate,
   }
 })

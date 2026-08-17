@@ -113,12 +113,14 @@ import NewApiSubscriptionForm from '@/components/NewApiSubscriptionForm.vue'
 import SubscriptionPlanTable from '@/components/SubscriptionPlanTable.vue'
 import ExchangeRateManager from '@/components/subscriptions/ExchangeRateManager.vue'
 import EmptyState from '@/components/EmptyState.vue'
-import { autoAddChannel, extractAutoAddErrorMessage, getProviderTemplates, type ProviderTemplate } from '@/services/autopilot-api'
+import { extractAutoAddErrorMessage, getProviderTemplates, type ProviderTemplate } from '@/services/autopilot-api'
 import type { Channel, NewApiProvisionResponse, NewApiSyncResult, SubscriptionItem } from '@/services/api-types'
+import { useChannelStore } from '@/stores/channel'
 import { billingTermsPatch, multiplierStatusLabel } from '@/utils/subscriptionBilling'
 
 const { t } = useI18n()
 const dialogStore = useDialogStore()
+const channelStore = useChannelStore()
 const emit = defineEmits<{
   success: [message: string]
   error: [message: string]
@@ -150,7 +152,27 @@ const unlinkLoading = ref('')
 function handleProviderSelect(provider: string) { selectedProvider.value = provider; cancelProviderAdd() }
 async function handleProviderAdd(providerId: string) { selectedProvider.value = ''; addError.value = ''; const templates = await getProviderTemplates(); addProvider.value = templates.find(item => item.providerId === providerId) || null }
 function cancelProviderAdd() { addProvider.value = null; addApiKey.value = ''; addError.value = '' }
-async function handleProviderAddSubmit() { const provider = addProvider.value; if (!provider || !addApiKey.value.trim()) return; addSubmitting.value = true; try { const kind = provider.channelKind || provider.routes?.[0]?.channelKind || 'messages'; await autoAddChannel(kind, { providerId: provider.providerId, apiKeys: [addApiKey.value.trim()] }); emit('success', t('subscription.addProviderSuccess', { name: provider.displayName })); cancelProviderAdd() } catch (error) { addError.value = extractAutoAddErrorMessage(error) } finally { addSubmitting.value = false } }
+async function handleProviderAddSubmit() {
+  const provider = addProvider.value
+  if (!provider || !addApiKey.value.trim()) return
+  addSubmitting.value = true
+  try {
+    const kind = (provider.channelKind || provider.routes?.[0]?.channelKind || 'messages') as 'messages' | 'chat' | 'responses' | 'gemini' | 'images' | 'vectors'
+    // 走 store 统一入口，自动获得 refreshChannels + reorder + 5 分钟促销期，与渠道列表快速添加行为一致
+    const result = await channelStore.quickAddFromTemplate(
+      provider.providerId,
+      [addApiKey.value.trim()],
+      { kind, placement: 'front', displayName: provider.displayName }
+    )
+    if (!result.success) throw new Error(result.message)
+    emit('success', result.quickAddMessage || t('subscription.addProviderSuccess', { name: provider.displayName }))
+    cancelProviderAdd()
+  } catch (error) {
+    addError.value = extractAutoAddErrorMessage(error)
+  } finally {
+    addSubmitting.value = false
+  }
+}
 function handleNewApiCreated(_result: NewApiProvisionResponse) { selectedProvider.value = ''; emit('success', t('subscription.newApi.provisionSuccess')); void loadSubscriptions() }
 async function loadSubscriptions() { loading.value = true; loadError.value = ''; try { subscriptions.value = (await api.getSubscriptions()).subscriptions } catch (error) { loadError.value = error instanceof Error ? error.message : String(error) } finally { loading.value = false } }
 function openBillingEditor(item: SubscriptionItem) { billingItem.value = item; billingForm.value = { paymentAmount: item.paymentAmount ?? null, paymentUnit: item.paymentUnit || '', creditAmount: item.creditAmount ?? null, creditUnit: item.creditUnit || '' }; billingError.value = ''; billingDialog.value = true }
