@@ -1647,6 +1647,7 @@ export interface DomainStrengthEvidence {
 export interface RoutingCandidate {
   channelUid: string
   channelName?: string
+  candidateKey?: string // (渠道, 模型) 粒度标识：channelUid|model
   metricsKey?: string
   keyMask?: string
   originTier?: string

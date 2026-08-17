@@ -10,6 +10,7 @@ import (
 
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/metrics"
+	"github.com/BenedictKing/ccx/internal/routingref"
 	"github.com/BenedictKing/ccx/internal/scheduler"
 )
 
@@ -24,6 +25,7 @@ type RoutingPlanCandidate struct {
 	MappedModel        string   `json:"mappedModel,omitempty"`
 	MappingSource      string   `json:"mappingSource,omitempty"`
 	MappingReason      string   `json:"mappingReason,omitempty"`
+	CandidateKey       string   `json:"candidateKey,omitempty"` // (渠道, 模型) 粒度标识：channelUID|model
 	ChannelName        string   `json:"channelName,omitempty"`
 	KeyMask            string   `json:"keyMask,omitempty"`
 	LogicalChannelUID  string   `json:"logicalChannelUid,omitempty"`
@@ -247,7 +249,11 @@ func (r *SmartRouter) BuildPlan(profile *RequestProfile) *RoutingPlan {
 
 	costs := make(map[string]float64, len(entries))
 	for _, e := range entries {
-		costs[e.ChannelUID] = e.EstimatedCost
+		savingsKey := e.CandidateKey
+		if savingsKey == "" {
+			savingsKey = e.ChannelUID
+		}
+		costs[savingsKey] = e.EstimatedCost
 	}
 	// AFP 路由与真实路径保持一致：开启时按渠道填充 AFP 成本并分组归一化。
 	afpEnabled := r.IsAFPCostRoutingEnabled()
@@ -272,7 +278,11 @@ func (r *SmartRouter) BuildPlan(profile *RequestProfile) *RoutingPlan {
 
 	scoredEntries := make([]scoredChannelEntry, 0, len(entries))
 	for _, e := range entries {
-		e.ScoringCandidate.SavingsScore = savingsMap[e.ChannelUID]
+		savingsKey := e.CandidateKey
+		if savingsKey == "" {
+			savingsKey = e.ChannelUID
+		}
+		e.ScoringCandidate.SavingsScore = savingsMap[savingsKey]
 		applyDomainStrength(&e, ctx.TaskDomain)
 		scored := ScoreCandidate(e.ScoringCandidate, ctx)
 		scoredEntries = append(scoredEntries, scoredChannelEntry{entry: e, scored: scored})
@@ -290,6 +300,7 @@ func (r *SmartRouter) BuildPlan(profile *RequestProfile) *RoutingPlan {
 			MappedModel:        se.entry.MappedModel,
 			MappingSource:      se.entry.MappingSource,
 			MappingReason:      se.entry.MappingReason,
+			CandidateKey:       se.entry.CandidateKey,
 			ChannelName:        se.entry.ChannelName,
 			KeyMask:            se.entry.KeyMask,
 			LogicalChannelUID:  se.entry.LogicalChannelUID,
@@ -649,32 +660,52 @@ func (r *SmartRouter) executeFilter(
 		executionKind := route.Kind
 		executionProfile := *profile
 		executionProfile.ChannelKind = executionKind
-		modelResolution := r.resolveChannelModel(&executionProfile, upstream, upstreamModelCapabilities)
+		channelUID := upstream.ChannelUID
+		if channelUID == "" {
+			channelUID = fmt.Sprintf("ch_%d", ch.Index)
+		}
+		modelResolutions := r.resolveChannelModels(&executionProfile, upstream, upstreamModelCapabilities)
+		// 协议联邦覆盖：ActualModel 非空时短路为单行，避免破坏 sibling execution protocol 路径。
 		if ch.ActualModel != "" {
-			modelResolution.ActualModel = ch.ActualModel
-			modelResolution.Supported = true
-			if normalizeRoutingModelID(ch.ActualModel) != normalizeRoutingModelID(profile.Model) {
-				modelResolution.MappedModel = ch.ActualModel
-				modelResolution.MappingSource = "protocol_federation"
-				modelResolution.MappingReason = "resolved for sibling execution protocol"
+			modelResolutions = []channelModelResolution{{
+				ActualModel:   ch.ActualModel,
+				Supported:     true,
+				CandidateKey:  routingCandidateKey(channelUID, ch.ActualModel),
+				MappedModel:   ch.ActualModel,
+				MappingSource: "protocol_federation",
+				MappingReason: "resolved for sibling execution protocol",
+			}}
+			if normalizeRoutingModelID(ch.ActualModel) == normalizeRoutingModelID(profile.Model) {
+				modelResolutions[0].MappedModel = ""
+				modelResolutions[0].MappingSource = ""
+				modelResolutions[0].MappingReason = ""
 			}
 		}
-		entry := r.buildChannelEntry(
-			ch,
-			upstream,
-			executionKind,
-			modelResolution.ActualModel,
-			upstreamModelCapabilities,
-		)
-		entry.Route = route
-		entry.MappedModel = modelResolution.MappedModel
-		entry.MappingSource = modelResolution.MappingSource
-		entry.MappingReason = modelResolution.MappingReason
-		entry.ProtocolFidelity = ch.ProtocolFidelity
-		entry.ConversionPenalty = ch.ConversionPenalty
-		r.applyModelQualityTier(&entry)
-		entries = append(entries, entry)
-		costMap[entry.ChannelUID] = entry.EstimatedCost
+		for _, modelResolution := range modelResolutions {
+			entry := r.buildChannelEntry(
+				ch,
+				upstream,
+				executionKind,
+				modelResolution.ActualModel,
+				upstreamModelCapabilities,
+			)
+			entry.Route = route
+			entry.CandidateKey = modelResolution.CandidateKey
+			if entry.CandidateKey == "" {
+				entry.CandidateKey = routingCandidateKey(channelUID, modelResolution.ActualModel)
+			}
+			// 同名承接（MappingSource 为空）时 MappedModel 保持空：映射质量档折算
+			// (applyModelQualityTier) 依赖 MappedModel 判空，填入请求模型名会把同名承接
+			// 误判为映射模型并抬高其质量档。模型名展示由 CandidateKey + 前端回退负责。
+			entry.MappedModel = modelResolution.MappedModel
+			entry.MappingSource = modelResolution.MappingSource
+			entry.MappingReason = modelResolution.MappingReason
+			entry.ProtocolFidelity = ch.ProtocolFidelity
+			entry.ConversionPenalty = ch.ConversionPenalty
+			r.applyModelQualityTier(&entry)
+			entries = append(entries, entry)
+			costMap[entry.CandidateKey] = entry.EstimatedCost
+		}
 	}
 	// AFP 路由：为火山 Agent Plan 渠道填充 AFP 成本（含折扣），开启时用分组归一化
 	// 替代扁平 USD 归一化，使 GLM-5.2 ×0.25 等折扣真正影响 SavingsScore。
@@ -692,7 +723,12 @@ func (r *SmartRouter) executeFilter(
 	// 评分；advisor 可能追加本地候选，因此统一在其后排序。
 	scoredEntries := make([]scoredChannelEntry, 0, len(entries))
 	for _, e := range entries {
-		e.ScoringCandidate.SavingsScore = savingsMap[e.ChannelUID]
+		// 按 (渠道, 模型) 粒度取 savings 分；CandidateKey 为空（本地候选等）回退渠道级。
+		savingsKey := e.CandidateKey
+		if savingsKey == "" {
+			savingsKey = e.ChannelUID
+		}
+		e.ScoringCandidate.SavingsScore = savingsMap[savingsKey]
 		applyDomainStrength(&e, scoringCtx.TaskDomain)
 		scored := ScoreCandidate(e.ScoringCandidate, scoringCtx)
 		if e.ProtocolFidelity == "converted" && e.ConversionPenalty > 0 {
@@ -905,12 +941,15 @@ func (r *SmartRouter) executeFilter(
 	// 从已排序的 scoredEntries 构建 trace 候选和结果列表
 	result := make([]scheduler.ChannelInfo, 0, len(scoredEntries))
 	candidates := make([]RoutingCandidate, 0, len(scoredEntries))
+	// 同一渠道可展开多个 (渠道, 模型) 行；result 是渠道级 failover 排序，须按路由键去重。
+	seenRouteKeys := make(map[routingref.Key]bool, len(scoredEntries))
 	for _, se := range scoredEntries {
 		e := se.entry
 		sc := se.scored
 		candidate := RoutingCandidate{
 			ChannelUID:         e.ChannelUID,
 			ChannelName:        e.ChannelName,
+			CandidateKey:       e.CandidateKey,
 			ExecutionKind:      e.ChannelKind,
 			ProtocolFidelity:   e.ProtocolFidelity,
 			ConversionPenalty:  e.ConversionPenalty,
@@ -953,11 +992,15 @@ func (r *SmartRouter) executeFilter(
 		}
 		candidates = append(candidates, candidate)
 
-		// 匹配回 ChannelInfo：优先用上游配置的 ChannelUID，回退到 ch_%d 格式
-		for _, ch := range channels {
-			if federatedRoute(ch, profile.ChannelKind).Key() == e.Route.Key() {
-				result = append(result, ch)
-				break
+		// 匹配回 ChannelInfo：优先用上游配置的 ChannelUID，回退到 ch_%d 格式。
+		// 按路由键去重：同渠道的多个模型行只贡献一个 failover 槽位（首个=最高分模型行）。
+		if !seenRouteKeys[e.Route.Key()] {
+			for _, ch := range channels {
+				if federatedRoute(ch, profile.ChannelKind).Key() == e.Route.Key() {
+					result = append(result, ch)
+					seenRouteKeys[e.Route.Key()] = true
+					break
+				}
 			}
 		}
 	}
@@ -966,6 +1009,7 @@ func (r *SmartRouter) executeFilter(
 	fallbackUsed := false
 	{
 		filteredResult := make([]scheduler.ChannelInfo, 0, len(scoredEntries))
+		seenFilteredRouteKeys := make(map[routingref.Key]bool, len(scoredEntries))
 		for i, se := range scoredEntries {
 			reasons := routingHardConstraintReasons(profile, &se.entry)
 
@@ -984,11 +1028,15 @@ func (r *SmartRouter) executeFilter(
 					buildFilterLabel(se.entry.ChannelName, se.entry.ChannelUID, se.entry.KeyMask)+": "+joinReasons(reasons),
 				)
 			} else {
-				// 保留未被过滤的渠道：匹配回 ChannelInfo
-				for _, ch := range channels {
-					if federatedRoute(ch, profile.ChannelKind).Key() == se.entry.Route.Key() {
-						filteredResult = append(filteredResult, ch)
-						break
+				// 保留未被过滤的渠道：匹配回 ChannelInfo。按路由键去重，
+				// 同渠道一个模型行通过即保留该渠道（取首个通过行=该渠道最高分存活模型）。
+				if !seenFilteredRouteKeys[se.entry.Route.Key()] {
+					for _, ch := range channels {
+						if federatedRoute(ch, profile.ChannelKind).Key() == se.entry.Route.Key() {
+							filteredResult = append(filteredResult, ch)
+							seenFilteredRouteKeys[se.entry.Route.Key()] = true
+							break
+						}
 					}
 				}
 			}
@@ -1144,6 +1192,7 @@ type channelScoreEntry struct {
 	MappedModel         string
 	MappingSource       string
 	MappingReason       string
+	CandidateKey        string // (渠道, 模型) 粒度标识：channelUID|model
 	OriginTier          ChannelOriginTier
 	HealthState         HealthState
 	EstimatedCost       float64
@@ -1200,6 +1249,7 @@ type channelModelResolution struct {
 	MappedModel   string
 	MappingSource string
 	MappingReason string
+	CandidateKey  string // (渠道, 模型) 粒度标识：channelUID|model
 	Supported     bool
 }
 
@@ -1259,6 +1309,132 @@ func (r *SmartRouter) resolveChannelModel(
 	}
 
 	return resolution
+}
+
+// routingCandidateFanoutLimit 单渠道按 (渠道, 模型) 展开候选行的上限，防 candidates_json 膨胀。
+const routingCandidateFanoutLimit = 8
+
+// routingCandidateKey 计算 (渠道, 模型) 粒度候选行的稳定标识。
+func routingCandidateKey(channelUID, model string) string {
+	return channelUID + "|" + normalizeRoutingModelID(model)
+}
+
+// resolveChannelModels 按 (渠道, 模型) 粒度枚举该渠道能服务请求模型的所有模型，
+// 每行独立评分 + 独立硬约束判定。分支镜像单数版 resolveChannelModel，但返回切片。
+// 同名承接渠道也补显示模型名（MappedModel 为空时用 ActualModel=请求模型名填充），
+// 保证每行模型名非空。枚举为空但渠道 supported 时回退到单数解析结果（fail-open）。
+func (r *SmartRouter) resolveChannelModels(
+	profile *RequestProfile,
+	upstream *config.UpstreamConfig,
+	upstreamModelCapabilities map[string]config.UpstreamModelCapability,
+) []channelModelResolution {
+	if profile == nil || upstream == nil {
+		return nil
+	}
+	channelUID := upstream.ChannelUID
+	requestModel := profile.Model
+	upstream = config.RuntimeUpstreamForAutoManagedProvider(upstream)
+	floor := BuildCapabilityFloorFromRequestProfile(profile)
+
+	// ── AutoManaged 渠道：枚举全部满足能力下界的已探测模型，按质量排序后截断 top N。
+	if upstream.AutoManaged && r.modelResolver != nil {
+		ranked := r.modelResolver.ResolveModelsAnyEndpointWithFloor(
+			requestModel, channelUID, profile.ChannelKind, floor, routingCandidateFanoutLimit,
+		)
+		// 精确/等价命中优先：请求模型或其等价模型在画像中时只产该行（与单数版短路一致）。
+		exactModel := ""
+		for _, candidate := range ranked {
+			if normalizeRoutingModelID(candidate.profile.ModelID) == normalizeRoutingModelID(requestModel) {
+				exactModel = candidate.profile.ModelID
+				break
+			}
+		}
+		// 非自适应入口禁止跨模型替代：无精确/等价命中且意图要求精确时，
+		// 交由单数版返回 Supported=false（该渠道不产生候选行）。
+		if exactModel == "" && !ClassifyModelRoutingIntent(profile.ChannelKind, requestModel).AllowsSubstitution() {
+			return nil
+		}
+		resolutions := make([]channelModelResolution, 0, len(ranked))
+		seen := make(map[string]bool, len(ranked))
+		for _, candidate := range ranked {
+			model := candidate.profile.ModelID
+			if exactModel != "" && model != exactModel {
+				// 有精确/等价命中时只保留该行。
+				continue
+			}
+			normalized := normalizeRoutingModelID(model)
+			if normalized == "" || seen[normalized] {
+				continue
+			}
+			seen[normalized] = true
+			res := channelModelResolution{
+				ActualModel:  model,
+				Supported:    true,
+				CandidateKey: routingCandidateKey(channelUID, model),
+			}
+			if normalized != normalizeRoutingModelID(requestModel) {
+				res.MappedModel = model
+				res.MappingSource = "auto_resolve"
+				res.MappingReason = candidate.reasonSummary()
+			}
+			// 同名承接（normalized == 请求模型）：MappedModel 留空，由调用方用请求模型名补显示。
+			resolutions = append(resolutions, res)
+		}
+		if len(resolutions) > 0 {
+			return resolutions
+		}
+	}
+
+	// ── 显式/白名单渠道：从 ModelMapping 值 + 请求模型 redirect 目标出发，
+	// 逐个过 ExplainModelSupport 应用 SupportedModels 增删。
+	seen := make(map[string]bool)
+	resolutions := make([]channelModelResolution, 0, 2)
+	addResolution := func(actualModel, source, reason string) {
+		if actualModel == "" {
+			return
+		}
+		if supported, _ := upstream.ExplainModelSupport(actualModel); !supported {
+			return
+		}
+		normalized := normalizeRoutingModelID(actualModel)
+		if normalized == "" || seen[normalized] {
+			return
+		}
+		seen[normalized] = true
+		res := channelModelResolution{
+			ActualModel:  actualModel,
+			Supported:    true,
+			CandidateKey: routingCandidateKey(channelUID, actualModel),
+		}
+		if normalized != normalizeRoutingModelID(requestModel) {
+			res.MappedModel = actualModel
+			res.MappingSource = source
+			res.MappingReason = reason
+		}
+		resolutions = append(resolutions, res)
+	}
+
+	if len(upstream.ModelMapping) > 0 {
+		for _, target := range upstream.ModelMapping {
+			addResolution(target, "explicit_mapping", "matched configured model mapping")
+		}
+	}
+	// 请求模型的 redirect 目标（无映射时为请求模型本身）。
+	if redirected, matched := config.RedirectModelWithMatch(requestModel, upstream); matched {
+		addResolution(redirected, "explicit_mapping", "matched configured model mapping")
+	} else if redirected != "" {
+		addResolution(redirected, "", "")
+	}
+
+	// fail-open：枚举为空但单数解析认为渠道 supported 时，回退到单模型行。
+	if len(resolutions) == 0 {
+		if single := r.resolveChannelModel(profile, upstream, upstreamModelCapabilities); single.Supported {
+			single.CandidateKey = routingCandidateKey(channelUID, single.ActualModel)
+			return []channelModelResolution{single}
+		}
+		return nil
+	}
+	return resolutions
 }
 
 // buildChannelEntry 从 ChannelInfo + UpstreamConfig 构建评分输入。
@@ -1730,27 +1906,35 @@ func normalizeSavingsScoreGrouped(entries []channelScoreEntry) map[string]float6
 		return result
 	}
 
-	// AFP 分组：scopeID -> (uid -> TotalAFP)
+	// AFP 分组：scopeID -> (候选键 -> TotalAFP)
 	afpGroups := make(map[string]map[string]float64)
-	// compshare 组：uid -> 减扣次数
+	// compshare 组：候选键 -> 减扣次数
 	compshareCosts := make(map[string]float64)
-	// USD 组：uid -> EstimatedCost
+	// USD 组：候选键 -> EstimatedCost
 	usdCosts := make(map[string]float64)
+
+	// 评分键：优先 (渠道, 模型) 粒度 CandidateKey，空（本地候选等）回退渠道级 ChannelUID。
+	key := func(e channelScoreEntry) string {
+		if e.CandidateKey != "" {
+			return e.CandidateKey
+		}
+		return e.ChannelUID
+	}
 
 	for _, e := range entries {
 		if e.CompshareDeduction > 0 {
-			compshareCosts[e.ChannelUID] = e.CompshareDeduction
+			compshareCosts[key(e)] = e.CompshareDeduction
 		} else if e.AFPCost != nil && e.AFPCost.Evidence.Unit == CostUnitAFP && e.AFPCost.Evidence.ScopeID != "" {
 			scopeID := e.AFPCost.Evidence.ScopeID
 			if afpGroups[scopeID] == nil {
 				afpGroups[scopeID] = make(map[string]float64)
 			}
-			afpGroups[scopeID][e.ChannelUID] = float64(e.AFPCost.Evidence.Estimated)
+			afpGroups[scopeID][key(e)] = float64(e.AFPCost.Evidence.Estimated)
 		} else if e.EstimatedCost >= 0 {
-			usdCosts[e.ChannelUID] = e.EstimatedCost
+			usdCosts[key(e)] = e.EstimatedCost
 		} else {
 			// 无成本证据：中性
-			result[e.ChannelUID] = 0.5
+			result[key(e)] = 0.5
 		}
 	}
 
@@ -1985,9 +2169,19 @@ func (r *SmartRouter) collectChannelEntries(profile *RequestProfile) []channelSc
 		if status != "active" || len(upstream.APIKeys) == 0 {
 			continue
 		}
-		modelResolution := r.resolveChannelModel(profile, &upstream, cfg.UpstreamModelCapabilities)
-		if model != "" && !modelResolution.Supported {
-			continue
+		modelResolutions := r.resolveChannelModels(profile, &upstream, cfg.UpstreamModelCapabilities)
+		if model != "" {
+			// 过滤掉不支持的行；全部不支持则跳过该渠道。
+			supported := modelResolutions[:0]
+			for _, mr := range modelResolutions {
+				if mr.Supported {
+					supported = append(supported, mr)
+				}
+			}
+			modelResolutions = supported
+			if len(modelResolutions) == 0 {
+				continue
+			}
 		}
 		ch := scheduler.ChannelInfo{
 			Index:    i,
@@ -1995,15 +2189,22 @@ func (r *SmartRouter) collectChannelEntries(profile *RequestProfile) []channelSc
 			Priority: upstream.Priority,
 			Status:   status,
 		}
-		entry := r.buildChannelEntry(ch, &upstream, channelKind, modelResolution.ActualModel, cfg.UpstreamModelCapabilities)
-		entry.MappedModel = modelResolution.MappedModel
-		entry.MappingSource = modelResolution.MappingSource
-		if entry.MappingSource == "auto_resolve" {
-			entry.MappingSource = "auto_resolve_preview"
+		for _, modelResolution := range modelResolutions {
+			entry := r.buildChannelEntry(ch, &upstream, channelKind, modelResolution.ActualModel, cfg.UpstreamModelCapabilities)
+			entry.CandidateKey = modelResolution.CandidateKey
+			if entry.CandidateKey == "" {
+				entry.CandidateKey = routingCandidateKey(upstream.ChannelUID, modelResolution.ActualModel)
+			}
+			// 同名承接（MappingSource 为空）时 MappedModel 保持空，避免映射质量档折算误判；见 executeFilter。
+			entry.MappedModel = modelResolution.MappedModel
+			entry.MappingSource = modelResolution.MappingSource
+			if entry.MappingSource == "auto_resolve" {
+				entry.MappingSource = "auto_resolve_preview"
+			}
+			entry.MappingReason = modelResolution.MappingReason
+			r.applyModelQualityTier(&entry)
+			entries = append(entries, entry)
 		}
-		entry.MappingReason = modelResolution.MappingReason
-		r.applyModelQualityTier(&entry)
-		entries = append(entries, entry)
 	}
 	return entries
 }

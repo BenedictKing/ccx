@@ -164,6 +164,7 @@ export interface SmartRoutingDiagnoseCandidate {
   savingsScore: number
   selected: boolean
   filterReasons?: string[]
+  candidateKey?: string // (渠道, 模型) 粒度标识：channelUid|model
   mappedModel?: string
   mappingSource?: string
   mappingReason?: string

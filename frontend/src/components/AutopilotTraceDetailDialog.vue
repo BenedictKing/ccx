@@ -154,6 +154,7 @@
               <thead>
                 <tr>
                   <th class="text-caption">Channel</th>
+                  <th class="text-caption">Model</th>
                   <th class="text-caption">Origin Tier</th>
                   <th class="text-caption">Score</th>
                   <th class="text-caption">Selected</th>
@@ -163,6 +164,7 @@
               <tbody>
                 <tr v-for="(cand, ci) in detail.candidates" :key="ci">
                   <td class="text-caption">{{ formatChannelDisplay(cand) }}</td>
+                  <td class="text-caption">{{ displayCandidateModel(cand) }}</td>
                   <td class="text-caption">{{ cand.originTier || '-' }}</td>
                   <td class="text-caption">{{ cand.totalScore.toFixed(3) }}</td>
                   <td>
@@ -420,18 +422,31 @@ function shortReleaseId(id?: string): string {
   return id.length > 12 ? id.slice(0, 12) + '...' : id
 }
 
-// 紧凑展示候选渠道：渠道名 (key掩码)  映射模型
-// 无渠道名时回退到 channelUid，无映射模型时省略模型部分。
+// 紧凑展示候选渠道：渠道名 (key掩码)。
+// 模型名单独成列（displayCandidateModel），不再拼进渠道名。
 function formatChannelDisplay(cand: RoutingCandidate): string {
   const name = cand.channelName || cand.channelUid
-  let left = name
   if (cand.keyMask) {
-    left += ` (${cand.keyMask})`
+    return `${name} (${cand.keyMask})`
   }
+  return name
+}
+
+// displayCandidateModel 返回该 (渠道, 模型) 行的承接模型名。
+// 显式/自动映射时 mappedModel 直接有值；同名承接时 mappedModel 为空，
+// 回退取 candidateKey（channelUid|model）的模型段，保证每行模型名非空。
+function displayCandidateModel(cand: RoutingCandidate): string {
   if (cand.mappedModel) {
-    return `${left} ${cand.mappedModel}`
+    return cand.mappedModel
   }
-  return left
+  const key = cand.candidateKey
+  if (key) {
+    const idx = key.indexOf('|')
+    if (idx >= 0 && idx < key.length - 1) {
+      return key.slice(idx + 1)
+    }
+  }
+  return '-'
 }
 
 function modeColor(mode?: string): string {

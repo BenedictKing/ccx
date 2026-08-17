@@ -41,10 +41,13 @@ type CandidateScore struct {
 
 // RoutingCandidate 路由候选渠道信息（已脱敏）。
 type RoutingCandidate struct {
-	ChannelUID        string  `json:"channelUid"`
-	ChannelName       string  `json:"channelName,omitempty"` // 渠道显示名
-	MetricsKey        string  `json:"metricsKey,omitempty"`  // 已脱敏：不含 key 明文
-	KeyMask           string  `json:"keyMask,omitempty"`     // 掩码后的 key，如 sk-***abc
+	ChannelUID  string `json:"channelUid"`
+	ChannelName string `json:"channelName,omitempty"` // 渠道显示名
+	// CandidateKey 标识 (渠道, 模型) 粒度的候选行（channelUID|model）。
+	// 同名承接时模型名取请求模型，保证每行模型名非空；旧 trace 行反序列化为空。
+	CandidateKey      string  `json:"candidateKey,omitempty"`
+	MetricsKey        string  `json:"metricsKey,omitempty"` // 已脱敏：不含 key 明文
+	KeyMask           string  `json:"keyMask,omitempty"`    // 掩码后的 key，如 sk-***abc
 	OriginTier        string  `json:"originTier,omitempty"`
 	ChannelKind       string  `json:"channelKind,omitempty"`
 	ExecutionKind     string  `json:"executionKind,omitempty"`

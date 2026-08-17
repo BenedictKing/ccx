@@ -193,7 +193,7 @@
             <tbody>
               <tr
                 v-for="candidate in candidates"
-                :key="candidate.channelUid"
+                :key="candidate.candidateKey || candidate.channelUid"
                 :class="{ 'text-medium-emphasis': !candidate.selected }"
               >
                 <td>

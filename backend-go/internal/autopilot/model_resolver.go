@@ -235,43 +235,76 @@ func (r *ModelResolver) ResolveModelAnyEndpointWithFloor(
 	return r.resolveModelAnyEndpoint(requestModel, channelUID, channelKind, floor)
 }
 
+// rankedModelByQuality 按 betterRankedModel 比较器对候选降序排序（模型粒度去重，
+// 同模型多 effort 变体保留最优者）。用于按质量从高到低展开 (渠道, 模型) 候选行。
+func (r *ModelResolver) rankedModelByQuality(
+	eligible []ModelProfile,
+	requestModel string,
+	channelUID string,
+	channelKind string,
+	floor CapabilityFloor,
+) []rankedModelCandidate {
+	if len(eligible) == 0 {
+		return nil
+	}
+	ranked := r.buildRankedCandidates(eligible, requestModel, channelUID, channelKind, floor)
+	preferenceMode := r.modelCostPreferenceMode(floor.TaskClass)
+	seen := make(map[string]bool, len(ranked))
+	result := make([]rankedModelCandidate, 0, len(ranked))
+	for _, candidate := range ranked {
+		normalized := normalizeRoutingModelID(candidate.profile.ModelID)
+		if normalized == "" || seen[normalized] {
+			continue
+		}
+		seen[normalized] = true
+		inserted := false
+		for i := range result {
+			if betterRankedModel(candidate, result[i], preferenceMode) {
+				result = append(result, rankedModelCandidate{})
+				copy(result[i+1:], result[i:])
+				result[i] = candidate
+				inserted = true
+				break
+			}
+		}
+		if !inserted {
+			result = append(result, candidate)
+		}
+	}
+	return result
+}
+
+// ResolveModelsAnyEndpointWithFloor 返回渠道内全部满足能力下界且按质量排序的模型。
+// 供路由决策详情按 (渠道, 模型) 展开候选行使用；与单数版不同，这里枚举不施加
+// MinQualityTier 目标质量过滤（低质量模型保留为低分行），质量排序交给评分环节。
+// 能力硬约束（上下文/推理/视觉/工具调用）仍在此过滤，与路由硬约束互补。
+func (r *ModelResolver) ResolveModelsAnyEndpointWithFloor(
+	requestModel string,
+	channelUID string,
+	channelKind string,
+	floor CapabilityFloor,
+	maxFanout int,
+) []rankedModelCandidate {
+	eligible, _ := r.capabilityFilteredModelsAnyEndpoint(channelUID, channelKind, floor)
+	if len(eligible) == 0 {
+		return nil
+	}
+	ranked := r.rankedModelByQuality(eligible, requestModel, channelUID, channelKind, floor)
+	if maxFanout > 0 && len(ranked) > maxFanout {
+		ranked = ranked[:maxFanout]
+	}
+	return ranked
+}
+
 func (r *ModelResolver) resolveModelAnyEndpoint(
 	requestModel string,
 	channelUID string,
 	channelKind string,
 	floor CapabilityFloor,
 ) (target ResolvedRouteTarget, found bool, reason string) {
-	if r.profileStore == nil {
-		return ResolvedRouteTarget{Model: requestModel, Reason: "model_profile_store_unavailable"}, false, "model_profile_store_unavailable"
-	}
-
-	candidates := make([]ModelProfile, 0)
-	all := r.profileStore.ListActiveByChannel(channelUID)
-	for _, p := range all {
-		if p.ChannelKind != channelKind {
-			continue
-		}
-		if !p.ProbeSuccess {
-			continue
-		}
-		candidates = append(candidates, p)
-	}
+	candidates, qualityFallback, reason := r.eligibleModelsAnyEndpoint(channelUID, channelKind, floor)
 	if len(candidates) == 0 {
-		return ResolvedRouteTarget{Model: requestModel, Reason: "no_probed_model_profiles"}, false, "no_probed_model_profiles"
-	}
-	candidates = r.refreshAutoDiscoveryCapabilities(candidates, channelUID, channelKind)
-
-	qualityFallback := false
-	if r.cfgManager != nil {
-		routingCfg := r.cfgManager.GetAutopilotRouting()
-		if routingCfg.ModelMapping.CapabilityFloorEnabled {
-			candidates, qualityFallback = filterByCapabilityFloorWithQualityFallback(candidates, floor)
-		}
-	} else {
-		candidates, qualityFallback = filterByCapabilityFloorWithQualityFallback(candidates, floor)
-	}
-	if len(candidates) == 0 {
-		return ResolvedRouteTarget{Model: requestModel, Reason: "no_capable_model"}, false, "no_capable_model"
+		return ResolvedRouteTarget{Model: requestModel, Reason: reason}, false, reason
 	}
 	if exact, found := findExactModelProfile(candidates, requestModel); found {
 		rsn := modelResolutionReason("found_exact_model_in_profile", qualityFallback)
@@ -296,6 +329,76 @@ func (r *ModelResolver) resolveModelAnyEndpoint(
 		EffortDecided: best.effortDecided,
 		Reason:        finalReason,
 	}, true, finalReason
+}
+
+// eligibleModelsAnyEndpoint 构建满足能力下界与目标质量档的候选模型列表（含 qualityFallback 标记与空集原因）。
+// 空集 reason 为 "model_profile_store_unavailable" / "no_probed_model_profiles" / "no_capable_model"。
+func (r *ModelResolver) eligibleModelsAnyEndpoint(
+	channelUID string,
+	channelKind string,
+	floor CapabilityFloor,
+) (candidates []ModelProfile, qualityFallback bool, reason string) {
+	candidates, reason = r.probedModelsAnyEndpoint(channelUID, channelKind)
+	if len(candidates) == 0 {
+		return nil, false, reason
+	}
+
+	if r.cfgManager != nil {
+		routingCfg := r.cfgManager.GetAutopilotRouting()
+		if routingCfg.ModelMapping.CapabilityFloorEnabled {
+			candidates, qualityFallback = filterByCapabilityFloorWithQualityFallback(candidates, floor)
+		}
+	} else {
+		candidates, qualityFallback = filterByCapabilityFloorWithQualityFallback(candidates, floor)
+	}
+	if len(candidates) == 0 {
+		return nil, qualityFallback, "no_capable_model"
+	}
+	return candidates, qualityFallback, ""
+}
+
+// capabilityFilteredModelsAnyEndpoint 仅按能力硬约束过滤（上下文/推理/视觉/工具调用），
+// 不施加目标质量档过滤。供 (渠道, 模型) 展开枚举使用：保留低质量模型供评分拉开差距。
+// 返回值同 eligibleModelsAnyEndpoint 的能力过滤结果（无 qualityFallback 概念）。
+func (r *ModelResolver) capabilityFilteredModelsAnyEndpoint(
+	channelUID string,
+	channelKind string,
+	floor CapabilityFloor,
+) (candidates []ModelProfile, reason string) {
+	candidates, reason = r.probedModelsAnyEndpoint(channelUID, channelKind)
+	if len(candidates) == 0 {
+		return nil, reason
+	}
+	// 仅按真实能力硬约束过滤，跳过质量档约束：低质量模型保留为低分行，由评分拉开差距。
+	candidates = filterByCapabilityFloorWithoutQuality(candidates, floor)
+	if len(candidates) == 0 {
+		return nil, "no_capable_model"
+	}
+	return candidates, ""
+}
+
+// probedModelsAnyEndpoint 收集渠道内已探测成功且协议匹配的模型画像（含自动发现能力刷新）。
+// 空集 reason 为 "model_profile_store_unavailable" / "no_probed_model_profiles"。
+func (r *ModelResolver) probedModelsAnyEndpoint(channelUID, channelKind string) ([]ModelProfile, string) {
+	if r.profileStore == nil {
+		return nil, "model_profile_store_unavailable"
+	}
+	all := r.profileStore.ListActiveByChannel(channelUID)
+	candidates := make([]ModelProfile, 0, len(all))
+	for _, p := range all {
+		if p.ChannelKind != channelKind {
+			continue
+		}
+		if !p.ProbeSuccess {
+			continue
+		}
+		candidates = append(candidates, p)
+	}
+	if len(candidates) == 0 {
+		return nil, "no_probed_model_profiles"
+	}
+	candidates = r.refreshAutoDiscoveryCapabilities(candidates, channelUID, channelKind)
+	return candidates, ""
 }
 
 // ── 过滤与排序 ──
@@ -722,6 +825,7 @@ func effortAwareBenchmarkScore(bp config.ModelBenchmarkProfile, effort EffortLev
 	}
 	return bp.OverallScore, true
 }
+
 // 优先精确匹配候选 effort 档位；当 evidence 报告的档位超出注册表 SupportedEffortLevels
 // （例如 evidence 测了 ultra，但该模型只声明到 max）导致精确键缺失时，回退取该模型
 // 已测档位的最小成本，作为该模型成本下界参与 frontier 校准。这样既不伪造注册表未声明的
