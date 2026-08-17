@@ -436,8 +436,8 @@ func compshareProviderTemplate() ProviderTemplate {
 func tokenrhythmProviderTemplate() ProviderTemplate {
 	return newProviderTemplate(
 		"tokenrhythm",
-		"TokenRhythm 中转",
-		"tokenrhythm.studio 中转站：OpenAI Chat 兼容 / Anthropic Messages / Embeddings 一站接入，sk_ 鉴权",
+		"基元律动",
+		"基元律动（tokenrhythm.studio）中转站：OpenAI Chat 兼容 / Anthropic Messages / Embeddings 一站接入，sk_ 鉴权",
 		"relay",
 		"second",
 		standardProviderRoutes("claude", []ProviderCandidate{
