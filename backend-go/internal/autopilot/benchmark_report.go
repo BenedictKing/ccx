@@ -39,7 +39,17 @@ type BenchmarkReportRow struct {
 	FrontierNote   string
 	ScoreBreakdown map[string]float64
 	BetterOptions  []string
+	TopCandidates  []TopCandidateRow
 	Anomaly        string
+}
+
+// TopCandidateRow 描述 frontier 排名中的一个候选，用于 Top 5 展示。
+type TopCandidateRow struct {
+	Model          string
+	Effort         string
+	BenchmarkScore float64
+	CostUSD        float64
+	QualityTier    string
 }
 
 // benchmarkReportScenarioDef 是内部场景定义。
@@ -125,7 +135,87 @@ func LogBenchmarkSelectionReport(report *BenchmarkModelSelectionReport) {
 		}
 		log.Printf("[BenchmarkSelectionReport] %-38s selected=%s effort=%s bench=%.2f cost=%.2f tier=%s note=%s %s%s",
 			scenario.Name, row.SelectedModel, effort, row.BenchmarkScore, row.CostUSD, row.QualityTier, row.FrontierNote, formatBreakdown(row.ScoreBreakdown), extra)
+		if table := formatTopCandidatesTable(row.TopCandidates); table != "" {
+			log.Printf("[BenchmarkSelectionReport] %-38s top5:\n%s", scenario.Name, table)
+		}
 	}
+}
+
+// formatTopCandidatesTable 将 Top 候选列表渲染为对齐的 ASCII 表格。
+// 列：# / model / effort / bench / cost / tier。列宽按内容自适应。
+// 空列表返回空串。
+func formatTopCandidatesTable(rows []TopCandidateRow) string {
+	if len(rows) == 0 {
+		return ""
+	}
+	headers := []string{"#", "model", "effort", "bench", "cost", "tier"}
+	// 预渲染每行的单元格字符串，便于计算列宽。
+	type renderedRow struct {
+		cells []string
+	}
+	rendered := make([]renderedRow, 0, len(rows))
+	for i, r := range rows {
+		effort := r.Effort
+		if effort == "" {
+			effort = "-"
+		}
+		rendered = append(rendered, renderedRow{cells: []string{
+			fmt.Sprintf("%d", i+1),
+			r.Model,
+			effort,
+			fmt.Sprintf("%.2f", r.BenchmarkScore),
+			fmt.Sprintf("%.2f", r.CostUSD),
+			r.QualityTier,
+		}})
+	}
+	// 计算每列最大宽度（含表头）。
+	widths := make([]int, len(headers))
+	for i, h := range headers {
+		widths[i] = len(h)
+	}
+	for _, rr := range rendered {
+		for i, c := range rr.cells {
+			if len(c) > widths[i] {
+				widths[i] = len(c)
+			}
+		}
+	}
+	// padRight 右补空格对齐到列宽。
+	padRight := func(s string, w int) string {
+		if len(s) >= w {
+			return s
+		}
+		return s + strings.Repeat(" ", w-len(s))
+	}
+	// 分隔线：+----+----+...
+	makeSep := func() string {
+		parts := make([]string, 0, len(widths))
+		for _, w := range widths {
+			parts = append(parts, strings.Repeat("-", w+2))
+		}
+		return "+" + strings.Join(parts, "+") + "+"
+	}
+	// 渲染一行：| cell | cell |...
+	renderLine := func(cells []string) string {
+		parts := make([]string, 0, len(cells))
+		for i, c := range cells {
+			parts = append(parts, " "+padRight(c, widths[i])+" ")
+		}
+		return "|" + strings.Join(parts, "|") + "|"
+	}
+	var b strings.Builder
+	b.WriteString(makeSep())
+	b.WriteByte('\n')
+	b.WriteString(renderLine(headers))
+	b.WriteByte('\n')
+	b.WriteString(makeSep())
+	b.WriteByte('\n')
+	for _, rr := range rendered {
+		b.WriteString(renderLine(rr.cells))
+		b.WriteByte('\n')
+	}
+	b.WriteString(makeSep())
+	return b.String()
 }
 
 func formatBreakdown(breakdown map[string]float64) string {
@@ -179,6 +269,7 @@ func buildBenchmarkReportRow(resolver *ModelResolver, pool []ModelProfile, poolU
 	if len(row.BetterOptions) > 0 {
 		row.Anomaly = "missed_better_model"
 	}
+	row.TopCandidates = buildTopCandidates(ranked, benchmarkReportTopN)
 	return row
 }
 
@@ -242,4 +333,39 @@ func findBetterOptions(ranked []rankedModelCandidate, selectedModel string) []st
 		}
 	}
 	return options
+}
+
+// benchmarkReportTopN 限制 Top 候选展示条数，保持报告可读。
+const benchmarkReportTopN = 5
+
+// buildTopCandidates 按 frontier 排名顺序取前 limit 条候选用于 Top 5 展示。
+// 跳过无实测 benchmark 分的候选（与 findBetterOptions 过滤一致），
+// 同模型去重仅保留排名最靠前的一条，limit<=0 返回 nil。
+func buildTopCandidates(ranked []rankedModelCandidate, limit int) []TopCandidateRow {
+	if limit <= 0 || len(ranked) == 0 {
+		return nil
+	}
+	var rows []TopCandidateRow
+	seen := map[string]bool{}
+	for i := range ranked {
+		if len(rows) >= limit {
+			break
+		}
+		cand := ranked[i]
+		if cand.benchmarkScore <= 0 {
+			continue
+		}
+		if seen[cand.profile.ModelID] {
+			continue
+		}
+		seen[cand.profile.ModelID] = true
+		rows = append(rows, TopCandidateRow{
+			Model:          cand.profile.ModelID,
+			Effort:         string(cand.effort),
+			BenchmarkScore: cand.benchmarkScore,
+			CostUSD:        cand.normalizedPublicCostUSD,
+			QualityTier:    string(cand.profile.QualityTier),
+		})
+	}
+	return rows
 }
