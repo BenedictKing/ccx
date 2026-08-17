@@ -26,6 +26,7 @@ import { extractModelInfo, LITELLM_MODEL_MAP } from './litellm.mjs'
 import {
   extractLlmProfiles as extractAaLlm,
   extractImageArenaProfiles as extractAaImage,
+  resolveArtificialAnalysisSlug,
   ARTIFICIAL_ANALYSIS_MODEL_MAP,
   ARTIFICIAL_ANALYSIS_IMAGE_MODEL_MAP,
 } from './artificialanalysis.mjs'
@@ -542,7 +543,7 @@ test('Artificial Analysis LLM extraction yields one evidence per composite index
     { slug: 'claude-opus-4-8', evaluations: { artificial_analysis_intelligence_index: 77 } },
     { slug: 'unmapped-foo', evaluations: { artificial_analysis_intelligence_index: 50 } },
   ]
-  const { profiles, unmappedSlugs } = extractAaLlm(models, ARTIFICIAL_ANALYSIS_MODEL_MAP, 4.1)
+  const { profiles, unmappedSlugs } = extractAaLlm(models, 4.1)
 
   assert.deepEqual(unmappedSlugs, ['unmapped-foo'])
   const evidence = profiles['claude-opus-5'].benchmarkEvidence
@@ -561,6 +562,64 @@ test('Artificial Analysis LLM extraction yields one evidence per composite index
   assert.equal(overall.rawValue, 92)
   assert.equal(overall.cohortPercentile, 1)
   assert.match(overall.sourceUrl, /^https:\/\/artificialanalysis\.ai\/models\/claude-opus-5$/)
+})
+
+test('Artificial Analysis slug resolver folds effort and non-reasoning variants into canonical', () => {
+  // 裸 slug：default 复合指数
+  assert.deepEqual(resolveArtificialAnalysisSlug('claude-opus-5'),
+    { canonical: 'claude-opus-5', effort: 'default', selectionBasis: 'composite_index' })
+  // effort 档位：xhigh/high/medium/low/minimal → best_available_effort
+  assert.deepEqual(resolveArtificialAnalysisSlug('claude-opus-5-xhigh'),
+    { canonical: 'claude-opus-5', effort: 'xhigh', selectionBasis: 'best_available_effort' })
+  assert.deepEqual(resolveArtificialAnalysisSlug('claude-sonnet-5-high'),
+    { canonical: 'claude-sonnet-5', effort: 'high', selectionBasis: 'best_available_effort' })
+  assert.deepEqual(resolveArtificialAnalysisSlug('gpt-5.6-luna-low'),
+    { canonical: 'gpt-5.6-luna', effort: 'low', selectionBasis: 'best_available_effort' })
+  // 点号基名归一（gpt-5.6-luna → gpt-5-6-luna 表项）
+  assert.deepEqual(resolveArtificialAnalysisSlug('gpt-5.6-sol-medium'),
+    { canonical: 'gpt-5.6-sol', effort: 'medium', selectionBasis: 'best_available_effort' })
+  // non-reasoning 变体：default 档 + non_reasoning，不污染 default 复合指数
+  assert.deepEqual(resolveArtificialAnalysisSlug('claude-sonnet-5-non-reasoning'),
+    { canonical: 'claude-sonnet-5', effort: 'default', selectionBasis: 'non_reasoning' })
+  // non-reasoning + low-effort 组合后缀
+  assert.deepEqual(resolveArtificialAnalysisSlug('claude-sonnet-4-6-non-reasoning-low-effort'),
+    { canonical: 'claude-sonnet-4-6', effort: 'default', selectionBasis: 'non_reasoning' })
+  // 剥离后基名仍不在映射表 → null（继续计入 unmappedSlugs）
+  assert.equal(resolveArtificialAnalysisSlug('gpt-5-2-medium'), null)
+  assert.equal(resolveArtificialAnalysisSlug('totally-unknown-xhigh'), null)
+})
+
+test('Artificial Analysis effort variants attach to canonical without clobbering default evidence', () => {
+  const models = [
+    { slug: 'claude-opus-5', evaluations: {
+      artificial_analysis_intelligence_index: 63,
+      artificial_analysis_coding_index: 78,
+      artificial_analysis_agentic_index: 59,
+    } },
+    { slug: 'claude-opus-5-xhigh', evaluations: {
+      artificial_analysis_intelligence_index: 71,
+      artificial_analysis_coding_index: 84,
+      artificial_analysis_agentic_index: 66,
+    } },
+  ]
+  const { profiles, unmappedSlugs } = extractAaLlm(models, 4.1)
+
+  assert.deepEqual(unmappedSlugs, [])
+  const evidence = profiles['claude-opus-5'].benchmarkEvidence
+  // 同一 canonical 下 default 与 xhigh 两档证据并存
+  assert.equal(evidence.length, 6)
+  const byKey = Object.fromEntries(evidence.map(e => [`${e.domain}:${e.effort}`, e]))
+  assert.equal(byKey['overall:default'].rawValue, 63)
+  assert.equal(byKey['overall:default'].selectionBasis, 'composite_index')
+  assert.equal(byKey['overall:xhigh'].rawValue, 71)
+  assert.equal(byKey['overall:xhigh'].selectionBasis, 'best_available_effort')
+  // xhigh 分更高 → cohortPercentile 不低于 default 档（对齐各自 rawValue，而非一律取 default 分）
+  assert.ok(byKey['overall:xhigh'].cohortPercentile >= byKey['overall:default'].cohortPercentile)
+  assert.equal(byKey['coding:xhigh'].rawValue, 84)
+  assert.equal(byKey['agentic:xhigh'].rawValue, 66)
+  // sourceModel/sourceUrl 保留各自真实 slug，便于回溯
+  assert.equal(byKey['overall:xhigh'].sourceModel, 'claude-opus-5-xhigh')
+  assert.match(byKey['overall:xhigh'].sourceUrl, /claude-opus-5-xhigh$/)
 })
 
 test('Artificial Analysis image arena extraction maps Elo', () => {

@@ -28,9 +28,10 @@ const FETCH_HEADERS = {
 }
 
 /**
- * Artificial Analysis LLM slug -> CCX canonicalModel 映射。
- * AA slug 命名（点号 vs 连字符）文档未完全明示，对含点号的 canonical 同时收录点号/连字符
- * 两种形式以最大化命中率；首跑 unmapped 日志会提示未命中的真实 slug，便于微调。
+ * Artificial Analysis LLM 基名（连字符形式）-> CCX canonicalModel 映射。
+ * 解析逻辑（resolveArtificialAnalysisSlug）先把 slug 的点号归一成连字符、剥离
+ * effort/non-reasoning 尾后缀，再查本表，因此点号 canonical（如 claude-haiku-4.5、
+ * gpt-5.5、glm-5.2）只需收录基名一条，无需重复维护点号/连字符两个变体。
  */
 export const ARTIFICIAL_ANALYSIS_MODEL_MAP = {
   'claude-opus-4-8': 'claude-opus-4-8',
@@ -39,47 +40,106 @@ export const ARTIFICIAL_ANALYSIS_MODEL_MAP = {
   'claude-sonnet-4-6': 'claude-sonnet-4-6',
   'claude-haiku-4-5': 'claude-haiku-4.5',
   'claude-fable-5': 'claude-fable-5',
-  'gpt-5.6-sol': 'gpt-5.6-sol',
   'gpt-5-6-sol': 'gpt-5.6-sol',
-  'gpt-5.6-terra': 'gpt-5.6-terra',
   'gpt-5-6-terra': 'gpt-5.6-terra',
-  'gpt-5.6-luna': 'gpt-5.6-luna',
   'gpt-5-6-luna': 'gpt-5.6-luna',
-  'gpt-5.5': 'gpt-5.5',
   'gpt-5-5': 'gpt-5.5',
-  'gpt-5.4': 'gpt-5.4',
   'gpt-5-4': 'gpt-5.4',
-  'gpt-5.4-mini': 'gpt-5.4-mini',
   'gpt-5-4-mini': 'gpt-5.4-mini',
-  'glm-5.3': 'glm-5.3',
   'glm-5-3': 'glm-5.3',
-  'glm-5.2': 'glm-5.2',
   'glm-5-2': 'glm-5.2',
-  'kimi-k2.7-code': 'kimi-k2.7-code',
   'kimi-k2-7-code': 'kimi-k2.7-code',
   'kimi-k3': 'kimi-k3',
-  'kimi-3': 'kimi-k3',
-  'gemini-3.1-pro': 'gemini-3.1-pro',
   'gemini-3-1-pro': 'gemini-3.1-pro',
   'gemini-3-flash': 'gemini-3-flash',
-  'gemini-3.5-flash': 'gemini-3.5-flash',
   'gemini-3-5-flash': 'gemini-3.5-flash',
-  'gemini-3.7-flash': 'gemini-3.7-flash',
   'gemini-3-7-flash': 'gemini-3.7-flash',
-  'gemini-3.6-flash': 'gemini-3.6-flash',
   'gemini-3-6-flash': 'gemini-3.6-flash',
-  'grok-4.5': 'grok-4.5',
   'grok-4-5': 'grok-4.5',
-  'grok-4.6': 'grok-4.6',
   'grok-4-6': 'grok-4.6',
-  'mimo-v2.5': 'mimo-v2.5',
   'mimo-v2-5': 'mimo-v2.5',
-  'mimo-v2.5-pro': 'mimo-v2.5-pro',
   'mimo-v2-5-pro': 'mimo-v2.5-pro',
-  'muse-spark-1.1': 'muse-spark-1.1',
   'muse-spark-1-1': 'muse-spark-1.1',
-  'muse-spark-1.2': 'muse-spark-1.2',
   'muse-spark-1-2': 'muse-spark-1.2',
+}
+
+// 点号 canonical（claude-haiku-4.5 / gpt-5.5 / glm-5.2 …）的 AA slug 一律用连字符。
+// 解析前统一把点号归一成连字符再查表，省的为每个点号 canonical 维护两条表项。
+const normalizeSlug = slug => slug.toLowerCase().replace(/\./g, '-')
+
+// 归一化后的基名 -> canonical 查找表（惰性构建，key 已是连字符形式）。
+let _normalizedMap = null
+function normalizedModelMap() {
+  if (!_normalizedMap) {
+    _normalizedMap = {}
+    for (const [key, canonical] of Object.entries(ARTIFICIAL_ANALYSIS_MODEL_MAP)) {
+      _normalizedMap[normalizeSlug(key)] = canonical
+    }
+  }
+  return _normalizedMap
+}
+
+// AA 对可调 reasoning 的模型按 effort 档位与 non-reasoning 变体单独跑分（如
+// claude-opus-5-xhigh / gpt-5.6-luna-non-reasoning），统一在基名后用连字符后缀表达。
+const EFFORT_SUFFIX_RE = /-(xhigh|high|medium|low|minimal)$/
+const NON_REASONING_SUFFIX_RE = /-non-reasoning(?:-[a-z]+-effort)?$/
+
+/**
+ * 解析 AA slug 的 effort / non-reasoning 尾后缀，返回剥离后的基名与推导出的 evidence 标记。
+ * - 纯 effort 档位（-xhigh…）→ effort=该档位，selectionBasis='best_available_effort'
+ * - non-reasoning（含 -low-effort 组合）→ effort='default'，selectionBasis='non_reasoning'
+ * - 无后缀 → effort='default'，selectionBasis='composite_index'
+ * @param {string} normalizedSlug 已归一（连字符、小写）
+ * @returns {{base:string, effort:string, selectionBasis:string}}
+ */
+function splitEffortSuffix(normalizedSlug) {
+  let base = normalizedSlug
+  let effort = 'default'
+  let selectionBasis = 'composite_index'
+
+  if (NON_REASONING_SUFFIX_RE.test(base)) {
+    base = base.replace(NON_REASONING_SUFFIX_RE, '')
+    selectionBasis = 'non_reasoning'
+  } else {
+    const m = base.match(EFFORT_SUFFIX_RE)
+    if (m) {
+      base = base.slice(0, -m[0].length)
+      effort = m[1]
+      selectionBasis = 'best_available_effort'
+    }
+  }
+  return { base, effort, selectionBasis }
+}
+
+/**
+ * 将 AA LLM slug 解析为 canonical + effort 档位。
+ * 先精确命中（含点/连字符归一），未命中再剥离 effort/non-reasoning 尾后缀查基名。
+ * @param {string} slug AA 原始 slug
+ * @returns {{canonical:string, effort:string, selectionBasis:string}|null}
+ */
+export function resolveArtificialAnalysisSlug(slug) {
+  if (!slug) return null
+  const normalized = normalizeSlug(slug)
+  const map = normalizedModelMap()
+
+  if (map[normalized]) {
+    return { canonical: map[normalized], effort: 'default', selectionBasis: 'composite_index' }
+  }
+
+  const { base, effort, selectionBasis } = splitEffortSuffix(normalized)
+  if (base !== normalized && map[base]) {
+    return { canonical: map[base], effort, selectionBasis }
+  }
+  return null
+}
+
+/**
+ * 将 AA LLM slug 转换为 CCX canonicalModel（不区分 effort 档位，仅返回基名 canonical）。
+ * @param {string} slug
+ * @returns {string|null}
+ */
+export function artificialAnalysisToCanonical(slug) {
+  return resolveArtificialAnalysisSlug(slug)?.canonical || null
 }
 
 /**
@@ -99,15 +159,6 @@ export const ARTIFICIAL_ANALYSIS_IMAGE_MODEL_MAP = {
   'seedream-4.0': 'seedream-4.0',
   'seedream-4-0': 'seedream-4.0',
   'bytedance-seed_seedream-4-0': 'seedream-4.0',
-}
-
-/**
- * 将 AA LLM slug 转换为 CCX canonicalModel
- * @param {string} slug
- * @returns {string|null}
- */
-export function artificialAnalysisToCanonical(slug) {
-  return ARTIFICIAL_ANALYSIS_MODEL_MAP[slug] || null
 }
 
 function authHeaders(apiKey) {
@@ -184,13 +235,15 @@ function cohortPercentile(score, allScores) {
 
 /**
  * 从 free 响应的 data[] 提取每个已映射模型的 benchmarkEvidence。
+ * slug 经 resolveArtificialAnalysisSlug 解析出 canonical + effort 档位：裸 slug 记
+ * default/composite_index，-xhigh 等档位记对应 effort/best_available_effort，
+ * -non-reasoning 变体记 default/non_reasoning，同一 canonical 下各档证据互不污染。
  * @param {Array} models 合并后的 data[]
- * @param {Object} modelMap AA slug -> CCX canonicalModel
  * @param {number|null} version intelligence_index_version（如 4.1）
  * @returns {{profiles:Object, unmappedSlugs:string[]}}
- *   profiles: {canonical: {benchmarkEvidence:[...], aaMeta:{slug, tier}}}
+ *   profiles: {canonical: {benchmarkEvidence:[...], aaMeta:{slug}}}
  */
-export function extractLlmProfiles(models, modelMap, version) {
+export function extractLlmProfiles(models, version) {
   const profiles = {}
   const unmappedSlugs = []
 
@@ -204,11 +257,12 @@ export function extractLlmProfiles(models, modelMap, version) {
 
   for (const item of models) {
     const slug = item.slug
-    const canonical = modelMap[slug]
-    if (!canonical) {
+    const resolved = resolveArtificialAnalysisSlug(slug)
+    if (!resolved) {
       if (slug) unmappedSlugs.push(slug)
       continue
     }
+    const { canonical, effort, selectionBasis } = resolved
 
     const ev = item.evaluations || {}
     const indices = [
@@ -232,8 +286,8 @@ export function extractLlmProfiles(models, modelMap, version) {
         cohortPercentile: cohortPercentile(raw, allScores),
         cohortSize,
         taskCount: INTELLIGENCE_INDEX_EVALUATION_COUNT,
-        effort: 'default',
-        selectionBasis: 'composite_index',
+        effort,
+        selectionBasis,
         sourceUrl: `https://artificialanalysis.ai/models/${slug}`,
         capturedAt,
       })
@@ -306,14 +360,15 @@ export function extractImageArenaProfiles(models, imageMap) {
 
 /**
  * 主函数：抓取 LLM + 图像 arena 数据。
+ * LLM slug 走 resolveArtificialAnalysisSlug（基名 + effort 剥离），不再依赖外部传映射表。
  * @param {string} apiKey
- * @param {Object} modelMap AA LLM slug -> canonical
+ * @param {Object} [_modelMap] 已废弃：LLM 映射改为内部解析，此参数仅为兼容旧调用签名而保留
  * @param {Object} imageMap AA image slug -> canonical
  * @returns {Promise<{llm:Object, imageArena:Object, tier:string, version:number|null, unmappedLlmSlugs:string[], unmappedImageSlugs:string[]}>}
  */
-export async function fetchArtificialAnalysisData(apiKey, modelMap, imageMap) {
+export async function fetchArtificialAnalysisData(apiKey, _modelMap, imageMap) {
   const { tier, version, models: llmModels, pages } = await fetchLanguageModelsFree(apiKey)
-  const { profiles: llm, unmappedSlugs: unmappedLlmSlugs } = extractLlmProfiles(llmModels, modelMap, version)
+  const { profiles: llm, unmappedSlugs: unmappedLlmSlugs } = extractLlmProfiles(llmModels, version)
   const llmModelsMapped = Object.keys(llm).sort()
   console.log(`[artificial-analysis] Extracted LLM data for ${llmModelsMapped.length} models across ${pages} page(s): ${llmModelsMapped.join(', ') || '(none)'}`)
 
