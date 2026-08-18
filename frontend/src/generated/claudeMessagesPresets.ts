@@ -253,10 +253,10 @@ export const claudeMessagesPresets: Record<string, ClaudeMessagesPreset> = {
   },
   "volc-ark": {
     "modelMapping": {
-      "fable": "glm-5.2",
+      "fable": "glm-5.3",
       "haiku": "deepseek-v4-flash",
-      "opus": "glm-5.2",
-      "sonnet": "glm-5.2"
+      "opus": "glm-5.3",
+      "sonnet": "glm-5.3"
     },
     "reasoningMapping": {
       "fable": "max",
@@ -270,7 +270,7 @@ export const claudeMessagesPresets: Record<string, ClaudeMessagesPreset> = {
     "normalizeSystemRoleToTopLevel": true,
     "noVision": false,
     "noVisionModels": [
-      "glm-5.2",
+      "glm-5.3",
       "deepseek-v4-flash"
     ],
     "visionFallbackModel": "minimax-m3"

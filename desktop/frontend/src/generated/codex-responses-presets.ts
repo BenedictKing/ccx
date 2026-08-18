@@ -239,7 +239,7 @@ export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
   "volc-ark": {
     "modelMapping": {
       "codex": "deepseek-v4-flash",
-      "gpt": "glm-5.2",
+      "gpt": "glm-5.3",
       "mini": "deepseek-v4-flash"
     },
     "reasoningMapping": {
@@ -253,7 +253,7 @@ export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
     "stripCodexClientTools": false,
     "noVision": false,
     "noVisionModels": [
-      "glm-5.2",
+      "glm-5.3",
       "deepseek-v4-flash"
     ],
     "visionFallbackModel": "minimax-m3"

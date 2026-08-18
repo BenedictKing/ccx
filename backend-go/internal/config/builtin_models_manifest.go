@@ -241,7 +241,8 @@ func deepseekModelIDs() []string {
 // volcengineAgentPlanModelIDs 火山方舟 Agent Plan(/api/plan) 入口的兜底文本模型清单。
 // 当用户未绑定火山云 Access Key（无法调用管控面模型发现接口）时，
 // 用此清单让渠道立即可用；绑定 Access Key 后由 FetchModels 覆盖为真实清单。
-// 清单来源：火山方舟 Agent Plan 套餐概览(2026-07)，与 Coding Plan 略有差异。
+// 清单来源：火山方舟 Agent Plan 套餐概览(2026-08)；minimax-m2.7/kimi-k2.6 已于 2026-08-18 下线，
+// glm-5.2 自 2026-08-18 起停止新用户服务并于 2026-08-31 下线路由至 glm-5.3，均已移除。
 func VolcengineAgentPlanModelIDs() []string {
 	return volcengineAgentPlanModelIDs()
 }
@@ -249,41 +250,30 @@ func VolcengineAgentPlanModelIDs() []string {
 func volcengineAgentPlanModelIDs() []string {
 	return []string{
 		"doubao-seed-2.1-turbo",
-		"doubao-seed-2.0-code",
-		"doubao-seed-2.0-pro",
 		"doubao-seed-2.0-lite",
 		"doubao-seed-2.0-mini",
 		"doubao-seed-evolving",
-		"minimax-m2.7",
 		"minimax-m3",
-		"glm-5.2",
 		"glm-5.3",
 		"glm-latest",
 		"deepseek-v4-flash",
 		"deepseek-v4-pro",
 		"kimi-k3",
-		"kimi-k2.6",
 		"kimi-k2.7-code",
 	}
 }
 
 // volcengineCodingPlanModelIDs 火山方舟 Coding Plan(/api/coding) 入口的兜底文本模型清单。
-// 与 Agent Plan 差异：Coding Plan 独有 doubao-seed-code，不含 doubao-seed-2.0-mini/glm-latest。
-// 清单来源：火山方舟 Coding Plan 套餐概览(2026-07)。
+// 与 Agent Plan 差异：Coding Plan 不含 doubao-seed-2.0-mini、doubao-seed-evolving、glm-latest、kimi-k3。
+// 清单来源：火山方舟 Coding Plan 套餐概览(2026-08)；下线的 minimax-m2.7/kimi-k2.6/glm-5.2 已移除。
 func volcengineCodingPlanModelIDs() []string {
 	return []string{
 		"doubao-seed-2.1-turbo",
-		"doubao-seed-2.0-code",
-		"doubao-seed-2.0-pro",
 		"doubao-seed-2.0-lite",
-		"doubao-seed-code",
-		"minimax-m2.7",
 		"minimax-m3",
-		"glm-5.2",
 		"glm-5.3",
 		"deepseek-v4-flash",
 		"deepseek-v4-pro",
-		"kimi-k2.6",
 		"kimi-k2.7-code",
 	}
 }

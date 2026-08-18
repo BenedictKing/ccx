@@ -146,7 +146,7 @@
     "volc-ark": {
       "modelMapping": {
         "codex": "deepseek-v4-flash",
-        "gpt": "glm-5.2",
+        "gpt": "glm-5.3",
         "mini": "deepseek-v4-flash"
       },
       "reasoningMapping": {
@@ -158,7 +158,7 @@
       "reasoningParamStyle": "reasoning",
       "codexToolCompat": false,
       "stripCodexClientTools": false,
-      "noVisionModels": ["glm-5.2", "deepseek-v4-flash"],
+      "noVisionModels": ["glm-5.3", "deepseek-v4-flash"],
       "visionFallbackModel": "minimax-m3"
     },
     "qianfan": {

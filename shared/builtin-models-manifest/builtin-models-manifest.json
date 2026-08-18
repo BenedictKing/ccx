@@ -171,20 +171,15 @@
       "planHint": "volcengine_plan_anthropic",
       "modelIds": [
         "doubao-seed-2.1-turbo",
-        "doubao-seed-2.0-code",
-        "doubao-seed-2.0-pro",
         "doubao-seed-2.0-lite",
         "doubao-seed-2.0-mini",
         "doubao-seed-evolving",
-        "minimax-m2.7",
         "minimax-m3",
-        "glm-5.2",
         "glm-5.3",
         "glm-latest",
         "deepseek-v4-flash",
         "deepseek-v4-pro",
         "kimi-k3",
-        "kimi-k2.6",
         "kimi-k2.7-code"
       ],
       "disableProbe": true
@@ -195,17 +190,11 @@
       "planHint": "volcengine_coding_anthropic",
       "modelIds": [
         "doubao-seed-2.1-turbo",
-        "doubao-seed-2.0-code",
-        "doubao-seed-2.0-pro",
         "doubao-seed-2.0-lite",
-        "doubao-seed-code",
-        "minimax-m2.7",
         "minimax-m3",
-        "glm-5.2",
         "glm-5.3",
         "deepseek-v4-flash",
         "deepseek-v4-pro",
-        "kimi-k2.6",
         "kimi-k2.7-code"
       ],
       "disableProbe": true
@@ -216,20 +205,15 @@
       "planHint": "volcengine_plan_openai",
       "modelIds": [
         "doubao-seed-2.1-turbo",
-        "doubao-seed-2.0-code",
-        "doubao-seed-2.0-pro",
         "doubao-seed-2.0-lite",
         "doubao-seed-2.0-mini",
         "doubao-seed-evolving",
-        "minimax-m2.7",
         "minimax-m3",
-        "glm-5.2",
         "glm-5.3",
         "glm-latest",
         "deepseek-v4-flash",
         "deepseek-v4-pro",
         "kimi-k3",
-        "kimi-k2.6",
         "kimi-k2.7-code"
       ],
       "disableProbe": true
@@ -240,17 +224,11 @@
       "planHint": "volcengine_coding_openai",
       "modelIds": [
         "doubao-seed-2.1-turbo",
-        "doubao-seed-2.0-code",
-        "doubao-seed-2.0-pro",
         "doubao-seed-2.0-lite",
-        "doubao-seed-code",
-        "minimax-m2.7",
         "minimax-m3",
-        "glm-5.2",
         "glm-5.3",
         "deepseek-v4-flash",
         "deepseek-v4-pro",
-        "kimi-k2.6",
         "kimi-k2.7-code"
       ],
       "disableProbe": true
@@ -261,20 +239,15 @@
       "planHint": "volcengine_plan_responses",
       "modelIds": [
         "doubao-seed-2.1-turbo",
-        "doubao-seed-2.0-code",
-        "doubao-seed-2.0-pro",
         "doubao-seed-2.0-lite",
         "doubao-seed-2.0-mini",
         "doubao-seed-evolving",
-        "minimax-m2.7",
         "minimax-m3",
-        "glm-5.2",
         "glm-5.3",
         "glm-latest",
         "deepseek-v4-flash",
         "deepseek-v4-pro",
         "kimi-k3",
-        "kimi-k2.6",
         "kimi-k2.7-code"
       ],
       "disableProbe": true
@@ -285,17 +258,11 @@
       "planHint": "volcengine_coding_responses",
       "modelIds": [
         "doubao-seed-2.1-turbo",
-        "doubao-seed-2.0-code",
-        "doubao-seed-2.0-pro",
         "doubao-seed-2.0-lite",
-        "doubao-seed-code",
-        "minimax-m2.7",
         "minimax-m3",
-        "glm-5.2",
         "glm-5.3",
         "deepseek-v4-flash",
         "deepseek-v4-pro",
-        "kimi-k2.6",
         "kimi-k2.7-code"
       ],
       "disableProbe": true
