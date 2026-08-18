@@ -3,6 +3,7 @@ package autopilot
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -54,6 +55,7 @@ type EndpointVerifyResult struct {
 //   - 2xx / 400 / 422：鉴权通过（400/422 通常是探测用的占位模型或参数被拒，但服务可达且 key 有效）→ OK=true
 //   - 401 / 403：服务可达但鉴权失败 → OK=false, AuthFailed=true
 //   - 其他 4xx/5xx：该 baseURL 不可用（换下一个候选）→ OK=false
+//     （例外：new-api 系对无渠道占位模型返回 503 + model_not_found，同样视为鉴权通过）
 //   - 网络错误：该 baseURL 不可用 → OK=false, Err!=nil
 //
 // baseURL 应为 Anthropic 兼容入口（如 https://api.xiaomimimo.com/anthropic），
@@ -208,9 +210,32 @@ func verifyJSONPostEndpointWithPolicy(ctx context.Context, url, apiKey, authHead
 		return EndpointVerifyResult{OK: true, StatusCode: sc, Message: "服务可达（探测参数被拒，鉴权通过）"}
 	case sc == http.StatusUnauthorized || sc == http.StatusForbidden:
 		return EndpointVerifyResult{OK: false, StatusCode: sc, AuthFailed: true, Message: "鉴权失败"}
+	case acceptValidationError && modelNotFoundErrorBody(responseBody):
+		// new-api/one-api 系网关对无渠道的占位模型返回 503 + model_not_found，
+		// 与 400/422 同属探测产物：鉴权已通过，不应误判为端点不可用
+		return EndpointVerifyResult{OK: true, StatusCode: sc, Message: "服务可达（探测模型无可用渠道，鉴权通过）"}
 	default:
 		return EndpointVerifyResult{OK: false, StatusCode: sc, Message: "端点不可用"}
 	}
+}
+
+// modelNotFoundErrorBody 判断错误响应是否为「鉴权已通过，但探测占位模型无可用渠道」。
+// new-api/one-api 在 token 鉴权通过后按模型选渠道，模型无渠道时返回
+// {"error":{"code":"model_not_found","message":"No available channel for model ..."}}（通常 503）。
+func modelNotFoundErrorBody(body []byte) bool {
+	var payload struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return false
+	}
+	if strings.EqualFold(payload.Error.Code, "model_not_found") {
+		return true
+	}
+	return strings.Contains(strings.ToLower(payload.Error.Message), "no available channel for model")
 }
 
 func geminiAuthFailure(body []byte) bool {

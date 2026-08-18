@@ -210,6 +210,38 @@ func TestVerifyOpenAIChatEndpoint(t *testing.T) {
 	}
 }
 
+func TestVerifyEndpointModelNotFound503(t *testing.T) {
+	// new-api 实测响应：占位模型无渠道时返回 503 + model_not_found（鉴权已通过）
+	const newAPIModelNotFoundBody = `{"error":{"code":"model_not_found","message":"No available channel for model probe under group default (distributor) (request id: xxx)","type":"new_api_error"}}`
+	cases := []struct {
+		name           string
+		statusCode     int
+		body           string
+		wantOK         bool
+		wantAuthFailed bool
+	}{
+		{"503 model_not_found 鉴权通过", http.StatusServiceUnavailable, newAPIModelNotFoundBody, true, false},
+		{"503 无渠道英文消息鉴权通过", http.StatusServiceUnavailable, `{"error":{"message":"No available channel for model probe"}}`, true, false},
+		{"503 普通错误体仍不可用", http.StatusServiceUnavailable, `{"error":{"message":"upstream overloaded"}}`, false, false},
+		{"503 空 body 仍不可用", http.StatusServiceUnavailable, ``, false, false},
+		{"401 即使 body 匹配也判鉴权失败", http.StatusUnauthorized, newAPIModelNotFoundBody, false, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(tc.statusCode)
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			defer srv.Close()
+
+			res := VerifyOpenAIChatEndpoint(t.Context(), srv.URL, "sk-test", "")
+			if res.OK != tc.wantOK || res.AuthFailed != tc.wantAuthFailed {
+				t.Fatalf("result = %+v, want ok=%v authFailed=%v", res, tc.wantOK, tc.wantAuthFailed)
+			}
+		})
+	}
+}
+
 func TestVerifyChannelSpecificEndpoints(t *testing.T) {
 	var paths []string
 	var geminiKey string
