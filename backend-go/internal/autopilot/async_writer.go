@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -54,12 +55,13 @@ type asyncWriter struct {
 	stopOnce sync.Once
 	done     chan struct{}
 
-	// 内部指标
-	droppedSamples  int64
-	droppedAll      int64
-	writeErrors     int64
-	writeSuccess    int64
-	totalWriteNanos int64
+	// 内部指标：请求 goroutine（enqueue）、后台 writer goroutine（flushBatch）
+	// 与指标读取方并发访问，全部使用原子操作。
+	droppedSamples  atomic.Int64
+	droppedAll      atomic.Int64
+	writeErrors     atomic.Int64
+	writeSuccess    atomic.Int64
+	totalWriteNanos atomic.Int64
 }
 
 // traceDB 是数据库操作的抽象接口。
@@ -117,9 +119,9 @@ func (w *asyncWriter) enqueue(uid string, data []byte, priority writePriority) {
 
 	// 无法入队：记录丢弃
 	if priority == prioritySample {
-		w.droppedSamples++
+		w.droppedSamples.Add(1)
 	} else {
-		w.droppedAll++
+		w.droppedAll.Add(1)
 	}
 }
 
@@ -129,11 +131,11 @@ func (w *asyncWriter) tryDropLowest() bool {
 	select {
 	case dropped := <-w.queue:
 		if dropped.priority == prioritySample {
-			w.droppedSamples++
+			w.droppedSamples.Add(1)
 			return true
 		}
 		// 不是 sample 级，放回（简单实现：直接丢弃）
-		w.droppedAll++
+		w.droppedAll.Add(1)
 		return true
 	default:
 		return false
@@ -210,23 +212,21 @@ func (w *asyncWriter) flushBatch(batch []writeItem) {
 
 	start := time.Now()
 	deadline := start.Add(writeBatchDeadline)
-	written := 0
 
 	for _, item := range batch {
 		if time.Now().After(deadline) {
 			break
 		}
 		if err := w.db.Exec(item.dataToSQL(), item.sqlArgs()...); err != nil {
-			w.writeErrors++
+			w.writeErrors.Add(1)
 			// 写入失败只记录计数，不阻塞
 		} else {
-			w.writeSuccess++
-			written++
+			w.writeSuccess.Add(1)
 		}
 	}
 
 	elapsed := time.Since(start)
-	w.totalWriteNanos += elapsed.Nanoseconds()
+	w.totalWriteNanos.Add(elapsed.Nanoseconds())
 }
 
 // dataToSQL 将 writeItem 转换为 SQL 语句。
@@ -262,7 +262,7 @@ func (w *asyncWriter) DroppedCount() int64 {
 	if w == nil {
 		return 0
 	}
-	return w.droppedSamples + w.droppedAll
+	return w.droppedSamples.Load() + w.droppedAll.Load()
 }
 
 // Metrics 返回 writer 内部指标快照。
@@ -270,17 +270,18 @@ func (w *asyncWriter) Metrics() WriterMetrics {
 	if w == nil {
 		return WriterMetrics{}
 	}
+	writeSuccess := w.writeSuccess.Load()
 	return WriterMetrics{
 		QueueDepth:     len(w.queue),
-		DroppedSamples: w.droppedSamples,
-		DroppedAll:     w.droppedAll,
-		WriteErrors:    w.writeErrors,
-		WriteSuccess:   w.writeSuccess,
+		DroppedSamples: w.droppedSamples.Load(),
+		DroppedAll:     w.droppedAll.Load(),
+		WriteErrors:    w.writeErrors.Load(),
+		WriteSuccess:   writeSuccess,
 		AvgWriteMs: func() float64 {
-			if w.writeSuccess == 0 {
+			if writeSuccess == 0 {
 				return 0
 			}
-			return float64(w.totalWriteNanos) / float64(w.writeSuccess) / 1e6
+			return float64(w.totalWriteNanos.Load()) / float64(writeSuccess) / 1e6
 		}(),
 	}
 }
