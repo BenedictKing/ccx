@@ -149,7 +149,7 @@ func injectSyntheticProfiles(store *autopilot.ModelProfileStore, bundle *presets
 // 上下文窗口、effort 档位与能力布尔（未命中能力表时保持零值，即"未知"）。
 func buildSyntheticProfile(modelID string, global map[string]config.UpstreamModelCapability, now time.Time) *autopilot.ModelProfile {
 	family := autopilot.InferModelFamily(modelID, "")
-	quality := autopilot.ModelProfileQualityTierFromFamily(family, modelID)
+	quality := autopilot.ModelProfileQualityTier(modelID, family)
 	profile := &autopilot.ModelProfile{
 		ChannelUID:                syntheticChannelUID,
 		ChannelID:                 syntheticChannelIndex,

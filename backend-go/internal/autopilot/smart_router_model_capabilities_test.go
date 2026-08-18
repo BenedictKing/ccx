@@ -97,8 +97,8 @@ func TestBuildChannelEntryUsesMappedModelQualityTier(t *testing.T) {
 	if k3Entry.ScoringCandidate.QualityTier != QualityTierPremium {
 		t.Fatalf("K3 quality tier = %q, want premium", k3Entry.ScoringCandidate.QualityTier)
 	}
-	if codingEntry.ScoringCandidate.QualityTier != QualityTierHigh {
-		t.Fatalf("kimi-for-coding quality tier = %q, want high", codingEntry.ScoringCandidate.QualityTier)
+	if codingEntry.ScoringCandidate.QualityTier != QualityTierNormal {
+		t.Fatalf("kimi-for-coding quality tier = %q, want normal", codingEntry.ScoringCandidate.QualityTier)
 	}
 }
 

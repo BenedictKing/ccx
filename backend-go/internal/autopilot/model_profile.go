@@ -1,6 +1,7 @@
 package autopilot
 
 import (
+	"sort"
 	"strings"
 	"time"
 
@@ -306,6 +307,141 @@ func ModelProfileQualityTierFromFamily(family ModelFamily, modelID string) Quali
 	default:
 		return QualityTierLow
 	}
+}
+
+// ── Benchmark 驱动的质量档推导 ──
+
+// 默认质量档边界，在注册表数据不足时作为回退。
+const (
+	defaultBenchmarkTierPremiumMin = 75.0
+	defaultBenchmarkTierHighMin    = 61.0
+	defaultBenchmarkTierNormalMin  = 55.0
+)
+
+// directBenchmarkScore 返回模型的直接实测 coding 分数（DeepSWE 等价 0-100 分）。
+// 只接受 deepswe / codexradar 的 pass_at_1 实测值，不含 calibrated 估计值；
+// 用于质量档边界计算，避免估计值污染分布形态。无直接证据时返回 -1。
+func directBenchmarkScore(modelID string) float64 {
+	benchmark := config.ResolveModelBenchmarkProfile(modelID)
+	if !benchmark.Known {
+		return -1
+	}
+	best := -1.0
+	for _, ev := range benchmark.Profile.BenchmarkEvidence {
+		if ev.Domain != "coding" || ev.Metric != "pass_at_1" {
+			continue
+		}
+		if ev.Benchmark != "deepswe" && ev.Benchmark != "codexradar" {
+			continue
+		}
+		if raw := ev.RawValue * 100; raw > best {
+			best = raw
+		}
+	}
+	return best
+}
+
+// normalizedCapabilityScore 把不同 benchmark 的 coding 证据归一化到 DeepSWE 等价的 0-100 分。
+// 优先级：deepswe > codexradar > artificial_analysis coding_index（线性校准）。
+// 无任何可用证据时返回 -1。
+func normalizedCapabilityScore(modelID string) float64 {
+	if score := directBenchmarkScore(modelID); score >= 0 {
+		return score
+	}
+	benchmark := config.ResolveModelBenchmarkProfile(modelID)
+	if !benchmark.Known {
+		return -1
+	}
+	bestAACoding := -1.0
+	for _, ev := range benchmark.Profile.BenchmarkEvidence {
+		if ev.Domain == "coding" && ev.Benchmark == "artificial_analysis" && ev.Metric == "coding_index" && ev.RawValue > bestAACoding {
+			bestAACoding = ev.RawValue
+		}
+	}
+	if bestAACoding >= 0 {
+		// 按重叠模型线性校准：deepswe ≈ 2.391 * aa_coding - 116.007
+		return 2.391*bestAACoding - 116.007
+	}
+	return -1
+}
+
+// computeQualityTierBoundaries 从注册表直接 benchmark 证据的分数分布自动划分质量档边界。
+// 算法：分数排序后自顶向下分段寻找最大间隙（自然断层）——premium 边界取顶部区域
+// （>= 60% 最高分）最大间隙的中点，high / normal 依次在低于上一档边界的分段中
+// 找最大间隙。calibrated 估计值不参与边界计算，避免污染分布形态。
+// 数据不足时回退默认边界。
+func computeQualityTierBoundaries() (premiumMin, highMin, normalMin float64) {
+	premiumMin, highMin, normalMin = defaultBenchmarkTierPremiumMin, defaultBenchmarkTierHighMin, defaultBenchmarkTierNormalMin
+	profiles := config.BuiltinModelBenchmarkProfiles()
+	scores := make([]float64, 0, len(profiles))
+	for _, bp := range profiles {
+		if score := directBenchmarkScore(bp.CanonicalModel); score >= 0 {
+			scores = append(scores, score)
+		}
+	}
+	if len(scores) < 4 {
+		return
+	}
+	sort.Float64s(scores)
+
+	// largestGapMid 返回 vals 中上界值 >= floor 的最大间隙的中点
+	largestGapMid := func(vals []float64, floor float64) (float64, bool) {
+		bestSize, bestMid := 0.0, 0.0
+		found := false
+		for i := 0; i+1 < len(vals); i++ {
+			if vals[i+1] < floor {
+				continue
+			}
+			if size := vals[i+1] - vals[i]; size > bestSize {
+				bestSize, bestMid, found = size, (vals[i]+vals[i+1])/2, true
+			}
+		}
+		return bestMid, found
+	}
+
+	if mid, ok := largestGapMid(scores, scores[len(scores)-1]*0.6); ok {
+		premiumMin = mid
+	}
+	if rest := filterBelow(scores, premiumMin); len(rest) >= 2 {
+		if mid, ok := largestGapMid(rest, premiumMin*0.5); ok {
+			highMin = mid
+		}
+	}
+	if rest := filterBelow(scores, highMin); len(rest) >= 2 {
+		if mid, ok := largestGapMid(rest, highMin*0.4); ok {
+			normalMin = mid
+		}
+	}
+	return
+}
+
+// filterBelow 返回 vals 中小于 cut 的元素（保持有序）。
+func filterBelow(vals []float64, cut float64) []float64 {
+	out := make([]float64, 0, len(vals))
+	for _, v := range vals {
+		if v < cut {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+// ModelProfileQualityTier 优先按归一化能力分推导质量档，无 benchmark 时回退到模型族规则。
+func ModelProfileQualityTier(modelID string, family ModelFamily) QualityTier {
+	if score := normalizedCapabilityScore(modelID); score >= 0 {
+		premiumMin, highMin, normalMin := computeQualityTierBoundaries()
+		switch {
+		case score >= premiumMin:
+			return QualityTierPremium
+		case score >= highMin:
+			return QualityTierHigh
+		case score >= normalMin:
+			return QualityTierNormal
+		default:
+			return QualityTierLow
+		}
+	}
+	return ModelProfileQualityTierFromFamily(family, modelID)
 }
 
 // ── ModelProfile ──

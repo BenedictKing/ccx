@@ -1342,7 +1342,7 @@ func (r *AutoDiscoveryRunner) writeProfileForEndpoint(channelUID string, channel
 		now := time.Now()
 		for _, modelID := range ep.Models {
 			family := InferModelFamily(modelID, "")
-			qualityTier := ModelProfileQualityTierFromFamily(family, modelID)
+			qualityTier := ModelProfileQualityTier(modelID, family)
 
 			modelProfile := &ModelProfile{
 				ChannelUID:   channelUID,

@@ -1702,7 +1702,7 @@ func (r *SmartRouter) applyModelQualityTier(entry *channelScoreEntry) {
 			if profile.Source == "auto_discovery" {
 				family := InferModelFamily(profile.ModelID, "")
 				if family != ModelFamilyUnknown {
-					profile.QualityTier = ModelProfileQualityTierFromFamily(family, profile.ModelID)
+					profile.QualityTier = ModelProfileQualityTier(profile.ModelID, family)
 				}
 			}
 			if quality == "" || qualityTierRank(profile.QualityTier) > qualityTierRank(quality) {
@@ -1713,7 +1713,7 @@ func (r *SmartRouter) applyModelQualityTier(entry *channelScoreEntry) {
 	if quality == "" && entry.MappedModel != "" {
 		modelFamily := entry.ScoringCandidate.ModelFamily
 		if modelFamily != ModelFamilyUnknown && modelFamily != "" {
-			quality = ModelProfileQualityTierFromFamily(modelFamily, entry.ModelID)
+			quality = ModelProfileQualityTier(entry.ModelID, modelFamily)
 		}
 	}
 	if quality != "" {

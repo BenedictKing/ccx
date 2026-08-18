@@ -288,12 +288,12 @@ func DeriveCostTierFromProfile(profile CostProfile) CostTier {
 
 // DeriveQualityTier 综合推导 QualityTier。
 // 遵循设计 §4.3 QualityTier 推导优先级：
-//   - 优先级 1：模型注册表中的模型族（ModelProfileQualityTierFromFamily）
+//   - 优先级 1：benchmark 归一化能力分（ModelProfileQualityTier）
 //   - 优先级 2：渠道级 LowQuality 标记（lowQuality=true → 最高 normal）
 //   - 优先级 3：可选 capability-test 探测质量（Phase 1 不实现）
 func DeriveQualityTier(family ModelFamily, modelID string, lowQuality bool) QualityTier {
-	// 优先级 1：从模型族推导
-	tier := ModelProfileQualityTierFromFamily(family, modelID)
+	// 优先级 1：benchmark 驱动推导，无证据时回退模型族
+	tier := ModelProfileQualityTier(modelID, family)
 
 	// 优先级 2：LowQuality 降级
 	if lowQuality && tier > QualityTierNormal {

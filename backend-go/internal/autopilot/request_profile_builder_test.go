@@ -24,7 +24,7 @@ func TestBuildRequestProfile(t *testing.T) {
 			name:      "明确的小型文本请求归类为 lightweight",
 			features:  RequestProfileFeatures{Model: "mimo-v2.5-pro", ChannelKind: "messages", Operation: "completion", EstTokens: 500, Complexity: TaskComplexityTrivial},
 			taskClass: TaskClassLightweight,
-			quality:   QualityTierHigh,
+			quality:   QualityTierNormal,
 			context:   500,
 		},
 		{
@@ -39,7 +39,7 @@ func TestBuildRequestProfile(t *testing.T) {
 			name:      "工具请求不允许降为 lightweight",
 			features:  RequestProfileFeatures{Model: "glm-5.2", ChannelKind: "chat", Operation: "completion", EstTokens: 500, ToolUseNeed: true},
 			taskClass: TaskClassSupervisor,
-			quality:   QualityTierPremium,
+			quality:   QualityTierHigh,
 			context:   500,
 		},
 		{

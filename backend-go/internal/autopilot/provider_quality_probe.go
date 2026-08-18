@@ -368,7 +368,7 @@ func (p *ProviderQualityProbe) newProviderQualityModelProfile(
 		ModelID:     modelID,
 		UpdatedAt:   now,
 		ModelFamily: family,
-		QualityTier: ModelProfileQualityTierFromFamily(family, modelID),
+		QualityTier: ModelProfileQualityTier(modelID, family),
 		Source:      "l3_probe",
 	}
 

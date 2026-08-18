@@ -828,7 +828,7 @@ func TestResolveModel_RecognizesDottedOpus48AndOpus5BeforeCapabilityFilter(t *te
 	}}})
 	floor := CapabilityFloor{
 		MinContextTokens: 200_000,
-		MinQualityTier:   QualityTierPremium,
+		MinQualityTier:   QualityTierHigh,
 		NeedsReasoning:   true,
 		NeedsVision:      true,
 		NeedsToolCalls:   true,
@@ -879,7 +879,7 @@ func TestResolveModel_RefreshesLegacyAutoDiscoveryCapabilities(t *testing.T) {
 		t.Fatalf("ResolveModel() = (%q, %v, %q), want refreshed glm-5.2 capabilities", target.Model, resolved, reason)
 	}
 	refreshed := store.Get("ch_test", "responses", "metrics_test", "glm-5.2")
-	if refreshed == nil || refreshed.QualityTier != QualityTierPremium ||
+	if refreshed == nil || refreshed.QualityTier != QualityTierHigh ||
 		refreshed.ContextTokens != 1048576 || !refreshed.SupportsReasoning || !refreshed.SupportsToolCalls {
 		t.Fatalf("旧自动发现画像未在内存中完成升级: %+v", refreshed)
 	}

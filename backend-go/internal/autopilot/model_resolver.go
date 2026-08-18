@@ -1351,7 +1351,7 @@ func (r *ModelResolver) refreshAutoDiscoveryCapabilities(
 		oldTools := profile.SupportsToolCalls
 		oldReasoning := profile.SupportsReasoning
 		profile.ModelFamily = InferModelFamily(profile.ModelID, "")
-		profile.QualityTier = ModelProfileQualityTierFromFamily(profile.ModelFamily, profile.ModelID)
+		profile.QualityTier = ModelProfileQualityTier(profile.ModelID, profile.ModelFamily)
 		if resolved := config.ResolveUpstreamCapability(profile.ModelID, upstream, global); resolved.Known {
 			applyUpstreamModelCapability(profile, resolved.Capability)
 		}

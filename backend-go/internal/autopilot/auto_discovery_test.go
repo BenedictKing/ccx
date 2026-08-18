@@ -168,8 +168,8 @@ func TestAutoDiscoveryWriteProfilesUsesUpstreamModelCapabilities(t *testing.T) {
 	if !got.SupportsToolCalls || !got.SupportsReasoning {
 		t.Fatalf("GLM-5.2 上游能力未写入模型画像: %+v", got)
 	}
-	if got.QualityTier != QualityTierPremium {
-		t.Fatalf("QualityTier = %q, want premium", got.QualityTier)
+	if got.QualityTier != QualityTierHigh {
+		t.Fatalf("QualityTier = %q, want high", got.QualityTier)
 	}
 }
 

@@ -38,7 +38,7 @@ func BuildRequestProfile(features RequestProfileFeatures) RequestProfile {
 	qualityNeed := QualityTierLow
 	if features.Model != "" {
 		family := InferModelFamily(features.Model, "")
-		qualityNeed = ModelProfileQualityTierFromFamily(family, features.Model)
+		qualityNeed = ModelProfileQualityTier(features.Model, family)
 	}
 
 	profile := RequestProfile{

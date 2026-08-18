@@ -287,9 +287,9 @@ func TestAttachAutopilotRequestProfileRoutesByCurrentTaskDifficulty(t *testing.T
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			body := `{"model":"claude-opus-4-8","messages":[{"role":"user","content":` + strconv.Quote(tt.prompt) + `}]}`
+			body := `{"model":"claude-opus-5","messages":[{"role":"user","content":` + strconv.Quote(tt.prompt) + `}]}`
 			c := newAutopilotProfileTestContext(t, "/v1/messages", body, nil)
-			profile := AttachAutopilotRequestProfile(c, scheduler.ChannelKindMessages, "claude-opus-4-8", "completion", "session-test", []byte(body), 0)
+			profile := AttachAutopilotRequestProfile(c, scheduler.ChannelKindMessages, "claude-opus-5", "completion", "session-test", []byte(body), 0)
 
 			if profile.Complexity != tt.wantComplexity || profile.TaskClass != tt.wantClass || profile.QualityTarget != tt.wantTarget {
 				t.Fatalf("profile = complexity:%q class:%q target:%q", profile.Complexity, profile.TaskClass, profile.QualityTarget)
