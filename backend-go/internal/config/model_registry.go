@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/BenedictKing/ccx/internal/presetstore"
 )
@@ -382,6 +383,8 @@ var (
 	builtinSnapshotMu sync.RWMutex
 	builtinSnapshot   upstreamCapabilitySnapshot
 	builtinObservers  sync.Map
+	// builtinGeneration 在每次快照重建发布时递增，供下游做"数据变了才重算"的缓存失效判断。
+	builtinGeneration atomic.Uint64
 )
 
 type upstreamCapabilitySnapshot struct {
@@ -469,7 +472,16 @@ func rebuildBuiltinSnapshotForStore(store *presetstore.PresetStore) {
 	builtinSnapshotMu.Lock()
 	builtinSnapshot = snapshot
 	builtinSnapshotMu.Unlock()
+	builtinGeneration.Add(1)
 	log.Printf("[ModelRegistry-Snapshot] source=%s dataVersion=%s capabilities=%d benchmarks=%d", source, bundle.DataVersion, len(capabilities), len(benchmarks))
+}
+
+// BuiltinSnapshotGeneration 返回内置能力/基准快照的世代号。
+// 每次快照重建（首次初始化、SetDefault 注入新 store 或 store 数据更新回调）时递增；
+// 下游派生数据（如 autopilot 质量档边界）以世代号做缓存键即可在数据更新后自动失效。
+func BuiltinSnapshotGeneration() uint64 {
+	currentBuiltinSnapshot()
+	return builtinGeneration.Load()
 }
 
 func precisionKeys(m map[string]UpstreamModelCapability) []string {

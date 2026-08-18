@@ -3,6 +3,7 @@ package autopilot
 import (
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
@@ -318,16 +319,12 @@ const (
 	defaultBenchmarkTierNormalMin  = 55.0
 )
 
-// directBenchmarkScore 返回模型的直接实测 coding 分数（DeepSWE 等价 0-100 分）。
+// directBenchmarkScoreFromEvidence 从证据列表提取直接实测 coding 分数（DeepSWE 等价 0-100 分）。
 // 只接受 deepswe / codexradar 的 pass_at_1 实测值，不含 calibrated 估计值；
 // 用于质量档边界计算，避免估计值污染分布形态。无直接证据时返回 -1。
-func directBenchmarkScore(modelID string) float64 {
-	benchmark := config.ResolveModelBenchmarkProfile(modelID)
-	if !benchmark.Known {
-		return -1
-	}
+func directBenchmarkScoreFromEvidence(evidence []config.ModelBenchmarkEvidence) float64 {
 	best := -1.0
-	for _, ev := range benchmark.Profile.BenchmarkEvidence {
+	for _, ev := range evidence {
 		if ev.Domain != "coding" || ev.Metric != "pass_at_1" {
 			continue
 		}
@@ -345,12 +342,12 @@ func directBenchmarkScore(modelID string) float64 {
 // 优先级：deepswe > codexradar > artificial_analysis coding_index（线性校准）。
 // 无任何可用证据时返回 -1。
 func normalizedCapabilityScore(modelID string) float64 {
-	if score := directBenchmarkScore(modelID); score >= 0 {
-		return score
-	}
 	benchmark := config.ResolveModelBenchmarkProfile(modelID)
 	if !benchmark.Known {
 		return -1
+	}
+	if score := directBenchmarkScoreFromEvidence(benchmark.Profile.BenchmarkEvidence); score >= 0 {
+		return score
 	}
 	bestAACoding := -1.0
 	for _, ev := range benchmark.Profile.BenchmarkEvidence {
@@ -359,23 +356,60 @@ func normalizedCapabilityScore(modelID string) float64 {
 		}
 	}
 	if bestAACoding >= 0 {
-		// 按重叠模型线性校准：deepswe ≈ 2.391 * aa_coding - 116.007
+		// 系数来自注册表中同时具有 deepswe/codexradar 实测分与 AA coding_index 的
+		// 重叠模型的最小二乘线性拟合；基准数据大改后需重算。
+		// deepswe ≈ 2.391 * aa_coding - 116.007
 		return 2.391*bestAACoding - 116.007
 	}
 	return -1
 }
 
-// computeQualityTierBoundaries 从注册表直接 benchmark 证据的分数分布自动划分质量档边界。
+// benchmarkTierBoundariesCache 缓存质量档边界，以注册表世代号做缓存键：
+// 基准数据不变时直接复用，避免热路径（每请求画像、渠道评分）重复深拷贝
+// 整个注册表并重算分布。
+var benchmarkTierBoundariesCache atomic.Pointer[benchmarkTierBoundaries]
+
+type benchmarkTierBoundaries struct {
+	generation uint64
+	premiumMin float64
+	highMin    float64
+	normalMin  float64
+}
+
+// computeQualityTierBoundaries 返回质量档边界（带世代缓存）。
+func computeQualityTierBoundaries() (premiumMin, highMin, normalMin float64) {
+	generation := config.BuiltinSnapshotGeneration()
+	if cached := benchmarkTierBoundariesCache.Load(); cached != nil && cached.generation == generation {
+		return cached.premiumMin, cached.highMin, cached.normalMin
+	}
+	premiumMin, highMin, normalMin = computeQualityTierBoundariesFromRegistry()
+	benchmarkTierBoundariesCache.Store(&benchmarkTierBoundaries{
+		generation: generation,
+		premiumMin: premiumMin,
+		highMin:    highMin,
+		normalMin:  normalMin,
+	})
+	return
+}
+
+// computeQualityTierBoundariesFromRegistry 从注册表直接 benchmark 证据的分数分布自动划分质量档边界。
 // 算法：分数排序后自顶向下分段寻找最大间隙（自然断层）——premium 边界取顶部区域
 // （>= 60% 最高分）最大间隙的中点，high / normal 依次在低于上一档边界的分段中
 // 找最大间隙。calibrated 估计值不参与边界计算，避免污染分布形态。
 // 数据不足时回退默认边界。
-func computeQualityTierBoundaries() (premiumMin, highMin, normalMin float64) {
+func computeQualityTierBoundariesFromRegistry() (premiumMin, highMin, normalMin float64) {
 	premiumMin, highMin, normalMin = defaultBenchmarkTierPremiumMin, defaultBenchmarkTierHighMin, defaultBenchmarkTierNormalMin
 	profiles := config.BuiltinModelBenchmarkProfiles()
 	scores := make([]float64, 0, len(profiles))
+	seen := make(map[string]struct{}, len(profiles))
 	for _, bp := range profiles {
-		if score := directBenchmarkScore(bp.CanonicalModel); score >= 0 {
+		// pattern 别名与 canonical 模型共享同一 CanonicalModel，按 canonical 去重，
+		// 每个模型只计一次直接实测分。
+		if _, ok := seen[bp.CanonicalModel]; ok {
+			continue
+		}
+		seen[bp.CanonicalModel] = struct{}{}
+		if score := directBenchmarkScoreFromEvidence(bp.BenchmarkEvidence); score >= 0 {
 			scores = append(scores, score)
 		}
 	}
