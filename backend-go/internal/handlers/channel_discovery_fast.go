@@ -166,11 +166,11 @@ func ChannelDiscoveryFast(cfgManager *config.ConfigManager) gin.HandlerFunc {
 					pacer := newDiscoveryProbePacer(fastDiscoveryRPM)
 					success, streaming := fastProbeProtocol(c.Request.Context(), probeChannel, proto, model, fastDiscoveryProbeTimeout, cfgManager, pacer)
 					results[idx] = DiscoveryProtocolResult{Protocol: proto, Success: success}
+					r := pacer.result()
+					rateLimitMu.Lock()
 					if success && streaming {
 						streamingSupported = true
 					}
-					r := pacer.result()
-					rateLimitMu.Lock()
 					if r.RateLimited {
 						anyRateLimited = true
 					}
