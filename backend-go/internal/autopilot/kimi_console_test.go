@@ -164,18 +164,44 @@ func TestNormalizeKimiConsoleTokenRejects(t *testing.T) {
 	}
 }
 
-func TestKimiConsoleClientRequiresCodingUsage(t *testing.T) {
+func TestKimiConsoleClientToleratesMissingCodingUsage(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == kimiUsagesPath {
 			_, _ = w.Write([]byte(`{"usages":[],"totalQuota":{"limit":"0","remaining":"0"}}`))
 			return
 		}
-		_, _ = w.Write([]byte(`{}`))
+		_, _ = w.Write([]byte(`{"ratelimitCode7d":{"ratio":0.4,"enabled":true,"resetTime":"2026-07-27T16:13:42Z"}}`))
 	}))
 	defer server.Close()
 
-	_, err := (&KimiConsoleClient{HTTPClient: server.Client(), BaseURL: server.URL}).Verify(context.Background(), "test-token")
-	if err == nil || !strings.Contains(err.Error(), "FEATURE_CODING") {
-		t.Fatalf("缺失 Coding 用量应失败: %v", err)
+	credential, err := (&KimiConsoleClient{HTTPClient: server.Client(), BaseURL: server.URL}).Verify(context.Background(), "test-token")
+	if err != nil {
+		t.Fatalf("缺少 FEATURE_CODING 不应再失败: %v", err)
+	}
+	usage := credential.Usage
+	if usage.WeeklyUsage.Limit != 0 || len(usage.RateLimits) != 0 {
+		t.Fatalf("缺少 FEATURE_CODING 时不应填充周额度: %+v", usage)
+	}
+	if usage.CodeSevenDay == nil || usage.CodeSevenDay.Ratio != 0.4 {
+		t.Fatalf("订阅频限解析错误: %+v", usage)
+	}
+}
+
+func TestKimiConsoleClientToleratesUsagesFailure(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == kimiUsagesPath {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		_, _ = w.Write([]byte(`{"ratelimitCode5h":{"ratio":0.1,"enabled":true,"resetTime":"2026-07-21T02:13:43Z"}}`))
+	}))
+	defer server.Close()
+
+	credential, err := (&KimiConsoleClient{HTTPClient: server.Client(), BaseURL: server.URL}).Verify(context.Background(), "test-token")
+	if err != nil {
+		t.Fatalf("GetUsages 失败不应影响绑定: %v", err)
+	}
+	if credential.Usage.CodeFiveHour == nil || credential.Usage.CodeFiveHour.Ratio != 0.1 {
+		t.Fatalf("订阅频限解析错误: %+v", credential.Usage)
 	}
 }

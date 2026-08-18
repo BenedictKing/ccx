@@ -127,26 +127,29 @@ func (client *KimiConsoleClient) Verify(ctx context.Context, rawAccessToken stri
 		return nil, err
 	}
 
-	var usages kimiUsagesResponse
-	if err := client.post(ctx, kimiUsagesPath, accessToken, map[string][]string{
-		"scope": {"FEATURE_CODING"},
-	}, &usages); err != nil {
-		return nil, fmt.Errorf("查询 Kimi Code 套餐用量失败: %w", err)
-	}
-
+	// GetSubscriptionStats 是 Kimi Web 端当前的额度数据源，必须成功。
 	var stats kimiSubscriptionStatsResponse
 	if err := client.post(ctx, kimiSubscriptionStatsPath, accessToken, struct{}{}, &stats); err != nil {
 		return nil, fmt.Errorf("查询 Kimi 订阅余额失败: %w", err)
 	}
-
-	snapshot, err := buildKimiCodeUsageSnapshot(usages, stats, client.now())
+	snapshot, err := buildKimiCodeUsageSnapshot(stats, client.now())
 	if err != nil {
 		return nil, err
+	}
+
+	// GetUsages 已从 Kimi Web 端下线，仅作可选增强：仍返回 FEATURE_CODING 时
+	// 补充精确周额度与频限窗口，调用失败或未返回该 scope 时直接忽略。
+	var usages kimiUsagesResponse
+	if err := client.post(ctx, kimiUsagesPath, accessToken, map[string][]string{
+		"scope": {"FEATURE_CODING"},
+	}, &usages); err == nil {
+		enrichKimiCodeUsageSnapshot(&snapshot, usages)
 	}
 	return &config.KimiConsoleCredential{AccessToken: accessToken, Usage: snapshot}, nil
 }
 
-func buildKimiCodeUsageSnapshot(usages kimiUsagesResponse, stats kimiSubscriptionStatsResponse, now time.Time) (config.KimiCodeUsageSnapshot, error) {
+// enrichKimiCodeUsageSnapshot 用 GetUsages 返回的精确额度窗口补充快照；缺失或格式异常时跳过。
+func enrichKimiCodeUsageSnapshot(snapshot *config.KimiCodeUsageSnapshot, usages kimiUsagesResponse) {
 	var codingUsage *kimiUsageResponse
 	for index := range usages.Usages {
 		if strings.EqualFold(strings.TrimSpace(usages.Usages[index].Scope), "FEATURE_CODING") {
@@ -155,41 +158,38 @@ func buildKimiCodeUsageSnapshot(usages kimiUsagesResponse, stats kimiSubscriptio
 		}
 	}
 	if codingUsage == nil {
-		return config.KimiCodeUsageSnapshot{}, fmt.Errorf("kimi 用量接口未返回 FEATURE_CODING")
+		return
 	}
-
 	weekly, err := kimiQuotaSnapshot(codingUsage.Detail)
 	if err != nil {
-		return config.KimiCodeUsageSnapshot{}, fmt.Errorf("解析 Kimi 周额度失败: %w", err)
+		return
 	}
-	total := weekly
+	snapshot.WeeklyUsage = weekly
+	snapshot.TotalQuota = weekly
 	if usages.TotalQuota.Limit != nil {
-		total, err = kimiQuotaSnapshot(usages.TotalQuota)
-		if err != nil {
-			return config.KimiCodeUsageSnapshot{}, fmt.Errorf("解析 Kimi 总额度失败: %w", err)
+		if total, err := kimiQuotaSnapshot(usages.TotalQuota); err == nil {
+			snapshot.TotalQuota = total
 		}
-	}
-
-	snapshot := config.KimiCodeUsageSnapshot{
-		WeeklyUsage: weekly,
-		TotalQuota:  total,
-		ValidatedAt: now,
 	}
 	for _, limit := range codingUsage.Limits {
 		windowSeconds, err := kimiWindowSeconds(limit.Window.Duration, limit.Window.TimeUnit)
 		if err != nil {
-			return config.KimiCodeUsageSnapshot{}, err
+			continue
 		}
 		usage, err := kimiQuotaSnapshot(limit.Detail)
 		if err != nil {
-			return config.KimiCodeUsageSnapshot{}, fmt.Errorf("解析 Kimi 频限窗口失败: %w", err)
+			continue
 		}
 		snapshot.RateLimits = append(snapshot.RateLimits, config.KimiCodeRateLimit{
 			WindowSeconds: windowSeconds,
 			Usage:         usage,
 		})
 	}
+}
 
+func buildKimiCodeUsageSnapshot(stats kimiSubscriptionStatsResponse, now time.Time) (config.KimiCodeUsageSnapshot, error) {
+	snapshot := config.KimiCodeUsageSnapshot{ValidatedAt: now}
+	var err error
 	snapshot.CodeFiveHour, err = kimiRatioSnapshot(stats.RateLimitCodeFiveHour)
 	if err != nil {
 		return config.KimiCodeUsageSnapshot{}, fmt.Errorf("解析 Kimi 5 小时频限失败: %w", err)
