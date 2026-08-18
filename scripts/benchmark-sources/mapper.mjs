@@ -77,7 +77,6 @@ export const BENCHLM_MODEL_MAP = {
   'muse-spark-1-2': 'muse-spark-1.2',
   'mimo-v2-5': 'mimo-v2.5',
   'mimo-v2-5-pro': 'mimo-v2.5-pro',
-  'mimo-v2-flash': 'mimo-v2-flash',
   'deepseek-v4-flash': 'deepseek-v4-flash',
   'deepseek-v4-flash-base': 'deepseek-v4-flash',
   'deepseek-v4-flash-high': 'deepseek-v4-flash',

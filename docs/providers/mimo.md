@@ -70,7 +70,6 @@ Base URL 按集群和协议分类，以 [订阅管理](https://platform.xiaomimi
 ```
 mimo-v2.5-pro
 mimo-v2.5
-mimo-v2-flash
 ```
 
 ### 模型映射（可选）
@@ -78,8 +77,7 @@ mimo-v2-flash
 ```json
 {
   "mimo-pro": "mimo-v2.5-pro",
-  "mimo": "mimo-v2.5",
-  "mimo-flash": "mimo-v2-flash"
+  "mimo": "mimo-v2.5"
 }
 ```
 
@@ -89,7 +87,6 @@ mimo-v2-flash
 |------|------|
 | `mimo-v2.5-pro` | 最新旗舰，1.02T 总参 / 42B 激活 |
 | `mimo-v2.5` | 310B 总参 / 15B 激活，原生多模态 |
-| `mimo-v2-flash` | 309B 总参 / 15B 激活，高速推理 |
 
 ## 注意事项
 
@@ -104,7 +101,6 @@ MiMo 各模型的视觉支持情况：
 |------|----------|
 | `MiMo-V2.5-Pro` | 不支持 |
 | `MiMo-V2.5` | 支持（原生多模态） |
-| `MiMo-V2-Flash` | 不支持 |
 
 ::: warning
 `MiMo-V2.5-Pro` 不支持图片输入。如果需要处理包含图片的请求，必须配置**视觉回退模型**。

@@ -34,8 +34,7 @@ MiMo models are available through [SiliconFlow](https://cloud.siliconflow.cn/) (
 ```json
 {
   "mimo-pro": "XiaomiMiMo/MiMo-V2.5-Pro",
-  "mimo": "XiaomiMiMo/MiMo-V2.5",
-  "mimo-flash": "XiaomiMiMo/MiMo-V2-Flash"
+  "mimo": "XiaomiMiMo/MiMo-V2.5"
 }
 ```
 
@@ -45,7 +44,6 @@ MiMo models are available through [SiliconFlow](https://cloud.siliconflow.cn/) (
 |-------|-------------|
 | `XiaomiMiMo/MiMo-V2.5-Pro` | Latest flagship, 1.02T total / 42B active |
 | `XiaomiMiMo/MiMo-V2.5` | 310B total / 15B active, native multimodal |
-| `XiaomiMiMo/MiMo-V2-Flash` | 309B total / 15B active, fast inference |
 
 ::: tip
 Model IDs on SiliconFlow use the format `Organization/ModelName`. Use the full identifier.

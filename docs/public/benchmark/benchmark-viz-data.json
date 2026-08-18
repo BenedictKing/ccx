@@ -1,21 +1,12 @@
 {
-  "generatedAt": "2026-08-17T09:41:56.705Z",
+  "generatedAt": "2026-08-18T06:24:17.129Z",
   "data": [
-    {
-      "model": "deepseek-v4-flash",
-      "effort": "off",
-      "pass_rate": 0.429,
-      "mean_cost": 0.0743,
-      "median_cost": 0.0683,
-      "source": "CodexRadar",
-      "sourceModel": "deepseek-v4-flash"
-    },
     {
       "model": "deepseek-v4-flash",
       "effort": "high",
       "pass_rate": 0.429,
-      "mean_cost": 0.0959,
-      "median_cost": 0.081,
+      "mean_cost": 0.0964,
+      "median_cost": 0.0815,
       "source": "CodexRadar",
       "sourceModel": "deepseek-v4-flash"
     },
@@ -27,15 +18,6 @@
       "median_cost": 0.0906,
       "source": "CodexRadar",
       "sourceModel": "deepseek-v4-flash"
-    },
-    {
-      "model": "deepseek-v4-pro",
-      "effort": "off",
-      "pass_rate": 0.479,
-      "mean_cost": 0.1417,
-      "median_cost": 0.134,
-      "source": "CodexRadar",
-      "sourceModel": "deepseek-v4-pro"
     },
     {
       "model": "deepseek-v4-pro",
@@ -59,8 +41,8 @@
       "model": "gpt-5.5",
       "effort": "high",
       "pass_rate": 0.643,
-      "mean_cost": 3.5866,
-      "median_cost": 3.018,
+      "mean_cost": 3.5814,
+      "median_cost": 3.0112,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.5"
     },
@@ -68,8 +50,8 @@
       "model": "gpt-5.5",
       "effort": "xhigh",
       "pass_rate": 0.679,
-      "mean_cost": 5.5168,
-      "median_cost": 4.6307,
+      "mean_cost": 5.5337,
+      "median_cost": 4.6709,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.5"
     },
@@ -77,17 +59,17 @@
       "model": "gpt-5.6-luna",
       "effort": "low",
       "pass_rate": 0.018,
-      "mean_cost": 0.0361,
-      "median_cost": 0.0274,
+      "mean_cost": 0.0362,
+      "median_cost": 0.0276,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-luna"
     },
     {
       "model": "gpt-5.6-luna",
       "effort": "medium",
-      "pass_rate": 0.179,
-      "mean_cost": 0.092,
-      "median_cost": 0.0724,
+      "pass_rate": 0.17,
+      "mean_cost": 0.0912,
+      "median_cost": 0.0718,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-luna"
     },
@@ -95,17 +77,17 @@
       "model": "gpt-5.6-luna",
       "effort": "high",
       "pass_rate": 0.536,
-      "mean_cost": 0.2047,
-      "median_cost": 0.169,
+      "mean_cost": 0.2053,
+      "median_cost": 0.1676,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-luna"
     },
     {
       "model": "gpt-5.6-luna",
       "effort": "xhigh",
-      "pass_rate": 0.607,
-      "mean_cost": 0.3202,
-      "median_cost": 0.2544,
+      "pass_rate": 0.598,
+      "mean_cost": 0.3203,
+      "median_cost": 0.2557,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-luna"
     },
@@ -113,8 +95,8 @@
       "model": "gpt-5.6-luna",
       "effort": "max",
       "pass_rate": 0.616,
-      "mean_cost": 0.4763,
-      "median_cost": 0.3888,
+      "mean_cost": 0.4788,
+      "median_cost": 0.3902,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-luna"
     },
@@ -122,7 +104,7 @@
       "model": "gpt-5.6-sol",
       "effort": "low",
       "pass_rate": 0.545,
-      "mean_cost": 2.0202,
+      "mean_cost": 2.0182,
       "median_cost": 1.425,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-sol"
@@ -131,8 +113,8 @@
       "model": "gpt-5.6-sol",
       "effort": "medium",
       "pass_rate": 0.616,
-      "mean_cost": 3.4545,
-      "median_cost": 2.5436,
+      "mean_cost": 3.4714,
+      "median_cost": 2.5266,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-sol"
     },
@@ -140,7 +122,7 @@
       "model": "gpt-5.6-sol",
       "effort": "high",
       "pass_rate": 0.643,
-      "mean_cost": 4.4903,
+      "mean_cost": 4.4887,
       "median_cost": 3.5617,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-sol"
@@ -148,18 +130,18 @@
     {
       "model": "gpt-5.6-sol",
       "effort": "xhigh",
-      "pass_rate": 0.696,
-      "mean_cost": 6.1287,
-      "median_cost": 4.6394,
+      "pass_rate": 0.705,
+      "mean_cost": 6.1369,
+      "median_cost": 4.6543,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-sol"
     },
     {
       "model": "gpt-5.6-sol",
       "effort": "max",
-      "pass_rate": 0.723,
-      "mean_cost": 8.7975,
-      "median_cost": 7.3208,
+      "pass_rate": 0.714,
+      "mean_cost": 8.7649,
+      "median_cost": 7.3079,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-sol"
     },
@@ -167,16 +149,16 @@
       "model": "gpt-5.6-sol",
       "effort": "ultra",
       "pass_rate": 0.723,
-      "mean_cost": 22.7578,
-      "median_cost": 18.5591,
+      "mean_cost": 22.7234,
+      "median_cost": 18.5672,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-sol"
     },
     {
       "model": "gpt-5.6-terra",
       "effort": "low",
-      "pass_rate": 0.295,
-      "mean_cost": 0.496,
+      "pass_rate": 0.286,
+      "mean_cost": 0.4956,
       "median_cost": 0.43,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-terra"
@@ -184,9 +166,9 @@
     {
       "model": "gpt-5.6-terra",
       "effort": "medium",
-      "pass_rate": 0.411,
-      "mean_cost": 0.6244,
-      "median_cost": 0.5475,
+      "pass_rate": 0.402,
+      "mean_cost": 0.6236,
+      "median_cost": 0.5404,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-terra"
     },
@@ -194,7 +176,7 @@
       "model": "gpt-5.6-terra",
       "effort": "high",
       "pass_rate": 0.491,
-      "mean_cost": 1.0835,
+      "mean_cost": 1.081,
       "median_cost": 0.9058,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-terra"
@@ -202,18 +184,18 @@
     {
       "model": "gpt-5.6-terra",
       "effort": "xhigh",
-      "pass_rate": 0.598,
-      "mean_cost": 1.7915,
-      "median_cost": 1.4927,
+      "pass_rate": 0.607,
+      "mean_cost": 1.7867,
+      "median_cost": 1.4878,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-terra"
     },
     {
       "model": "gpt-5.6-terra",
       "effort": "max",
-      "pass_rate": 0.661,
-      "mean_cost": 3.6461,
-      "median_cost": 2.8498,
+      "pass_rate": 0.67,
+      "mean_cost": 3.6352,
+      "median_cost": 2.8274,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-terra"
     },
@@ -221,8 +203,8 @@
       "model": "gpt-5.6-terra",
       "effort": "ultra",
       "pass_rate": 0.643,
-      "mean_cost": 9.5382,
-      "median_cost": 7.5551,
+      "mean_cost": 9.5234,
+      "median_cost": 7.5494,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-terra"
     },
@@ -825,14 +807,14 @@
       "source": "BenchLM.ai",
       "category": "agentic",
       "metric": "category_score",
-      "score": 85.1
+      "score": 85.2
     },
     {
       "model": "claude-sonnet-4-6",
       "source": "BenchLM.ai",
       "category": "agentic",
       "metric": "category_score",
-      "score": 55.4
+      "score": 55.5
     },
     {
       "model": "claude-sonnet-5",
@@ -908,7 +890,7 @@
       "source": "BenchLM.ai",
       "category": "agentic",
       "metric": "category_score",
-      "score": 85.5
+      "score": 85.7
     },
     {
       "model": "glm-5.2",
@@ -1163,7 +1145,7 @@
       "source": "BenchLM.ai",
       "category": "agentic",
       "metric": "category_score",
-      "score": 86.9
+      "score": 87
     },
     {
       "model": "kimi-k2.7-code",
@@ -1178,7 +1160,7 @@
       "source": "BenchLM.ai",
       "category": "agentic",
       "metric": "category_score",
-      "score": 62.3
+      "score": 62.5
     },
     {
       "model": "kimi-k3",
@@ -1513,6 +1495,13 @@
     },
     {
       "model": "gemini-3.7-flash",
+      "source": "BenchLM.ai",
+      "category": "coding",
+      "metric": "category_score",
+      "score": 59.7
+    },
+    {
+      "model": "gemini-3.7-flash",
       "source": "DeepSWE v1.1",
       "category": "coding",
       "metric": "pass_at_1",
@@ -1578,7 +1567,7 @@
       "source": "BenchLM.ai",
       "category": "coding",
       "metric": "category_score",
-      "score": 53.4
+      "score": 53.3
     },
     {
       "model": "gpt-5.4-mini",
@@ -1759,7 +1748,7 @@
       "category": "coding",
       "metric": "pass_at_1",
       "score": 72.3,
-      "effort": "max"
+      "effort": "ultra"
     },
     {
       "model": "gpt-5.6-sol",
@@ -1821,7 +1810,7 @@
       "source": "CodexRadar",
       "category": "coding",
       "metric": "pass_at_1",
-      "score": 66.1,
+      "score": 67,
       "effort": "max"
     },
     {
@@ -1868,7 +1857,7 @@
       "source": "BenchLM.ai",
       "category": "coding",
       "metric": "category_score",
-      "score": 63.2
+      "score": 63.1
     },
     {
       "model": "grok-4.6",
@@ -1891,7 +1880,7 @@
       "source": "BenchLM.ai",
       "category": "coding",
       "metric": "category_score",
-      "score": 61
+      "score": 60.9
     },
     {
       "model": "kimi-k2.7-code",
@@ -1922,7 +1911,7 @@
       "source": "BenchLM.ai",
       "category": "coding",
       "metric": "category_score",
-      "score": 64.1
+      "score": 64
     },
     {
       "model": "kimi-k3",
@@ -1931,13 +1920,6 @@
       "metric": "pass_at_1",
       "score": 68.5,
       "effort": "max"
-    },
-    {
-      "model": "mimo-v2-flash",
-      "source": "BenchLM.ai",
-      "category": "coding",
-      "metric": "category_score",
-      "score": 49.3
     },
     {
       "model": "mimo-v2.5",
@@ -2040,7 +2022,7 @@
       "source": "BenchLM.ai",
       "category": "knowledge",
       "metric": "category_score",
-      "score": 69.6
+      "score": 69.5
     },
     {
       "model": "claude-opus-4-8",
@@ -2089,7 +2071,7 @@
       "source": "BenchLM.ai",
       "category": "knowledge",
       "metric": "category_score",
-      "score": 67.4
+      "score": 69.2
     },
     {
       "model": "glm-5.2",
@@ -2152,7 +2134,7 @@
       "source": "BenchLM.ai",
       "category": "knowledge",
       "metric": "category_score",
-      "score": 70.6
+      "score": 70.5
     },
     {
       "model": "kimi-k3",
@@ -2885,13 +2867,6 @@
       "category": "overall",
       "metric": "score",
       "score": 80.5
-    },
-    {
-      "model": "mimo-v2-flash",
-      "source": "BenchLM.ai",
-      "category": "overall",
-      "metric": "score",
-      "score": 53.3
     },
     {
       "model": "mimo-v2.5",

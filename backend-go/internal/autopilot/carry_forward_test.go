@@ -75,7 +75,7 @@ func TestCarryForwardDiscoveryFields_CopiesDiscoveryFields(t *testing.T) {
 	old := newTestProfile("ep-1", "ch-1", "messages", "https://example.com")
 	old.AccountUID = "acct-1"
 	old.CredentialUID = "cred-1"
-	old.AvailableModels = []string{"mimo-v2-flash", "mimo-v2-pro"}
+	old.AvailableModels = []string{"mimo-v2.5", "mimo-v2-pro"}
 	old.ModelListHash = "models-hash"
 	old.ModelMapping = map[string]string{"mimo-v2": "mimo-v2-pro"}
 	old.MiniMaxTokenPlanUsage = &MiniMaxTokenPlanUsage{
@@ -110,7 +110,7 @@ func TestCarryForwardDiscoveryFields_CopiesDiscoveryFields(t *testing.T) {
 	current.AvailableModels[0] = "changed"
 	current.ModelMapping["mimo-v2"] = "changed"
 	current.MiniMaxTokenPlanUsage.Models[0].ModelName = "changed"
-	if old.AvailableModels[0] != "mimo-v2-flash" || old.ModelMapping["mimo-v2"] != "mimo-v2-pro" || old.MiniMaxTokenPlanUsage.Models[0].ModelName != "MiniMax-M3" {
+	if old.AvailableModels[0] != "mimo-v2.5" || old.ModelMapping["mimo-v2"] != "mimo-v2-pro" || old.MiniMaxTokenPlanUsage.Models[0].ModelName != "MiniMax-M3" {
 		t.Fatal("自动发现字段必须深拷贝，不能修改旧画像")
 	}
 }
