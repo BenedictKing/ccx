@@ -19,7 +19,51 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// waitForCapabilityJobsSettled 等待 job store 中所有 job 到达终态。
+// 触发 capability-test 的 HTTP 测试会通过 go runCapabilityTestJob 启动后台
+// goroutine，若不等其结束就进入下一个测试，泄漏的 goroutine 会与
+// resetCapabilityTestState 的全局重置并发访问。超时后放弃等待以保持
+// 原有行为（测试不因外部网络目标挂起而卡死）；手动构造的模拟态 job
+// 不会自发到达终态，等待时间不宜过长。
+func waitForCapabilityJobsSettled(timeout time.Duration) {
+	deadline := time.Now().Add(timeout)
+	for {
+		settled := func() bool {
+			capabilityJobs.RLock()
+			defer capabilityJobs.RUnlock()
+			for _, job := range capabilityJobs.jobs {
+				if job.Lifecycle != CapabilityLifecycleDone && job.Lifecycle != CapabilityLifecycleCancelled {
+					return false
+				}
+			}
+			return true
+		}()
+		if settled {
+			// 给刚到终态的 job goroutine 留出收尾窗口
+			time.Sleep(20 * time.Millisecond)
+			return
+		}
+		if time.Now().After(deadline) {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// waitForCapabilityJobTerminal 轮询 job store 直到指定 job 到达终态或超时。
+func waitForCapabilityJobTerminal(jobID string, timeout time.Duration) {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if job, ok := capabilityJobs.get(jobID); ok &&
+			(job.Lifecycle == CapabilityLifecycleDone || job.Lifecycle == CapabilityLifecycleCancelled) {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 func resetCapabilityTestState() {
+	waitForCapabilityJobsSettled(2 * time.Second)
 	capabilityJobs = &capabilityTestJobStore{jobs: make(map[string]*CapabilityTestJob), lookupKey: make(map[string]string)}
 	capabilitySnapshots = newCapabilitySnapshotStore()
 	capabilityTestDispatcherPool = newCapabilityTestDispatcherPool()
@@ -744,7 +788,9 @@ func TestResumedCancelledJob_ReturnsUpdatedState(t *testing.T) {
 	r := gin.New()
 	r.POST("/messages/channels/:id/capability-test", TestChannelCapability(cfgManager, nil, "messages"))
 
-	body := `{"targetProtocols":["messages"],"timeout":10000}`
+	// 单模型 + 短超时，让新 job 的后台 goroutine 快速到达终态，
+	// 避免其泄漏到后续测试（与 resetCapabilityTestState 的全局重置竞态）。
+	body := `{"targetProtocols":["messages"],"timeout":1000,"models":["claude-test-model"]}`
 	req := httptest.NewRequest(http.MethodPost, "/messages/channels/0/capability-test", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -781,6 +827,9 @@ func TestResumedCancelledJob_ReturnsUpdatedState(t *testing.T) {
 	if resp.Job.Outcome != CapabilityOutcomeUnknown {
 		t.Fatalf("job.outcome=%s, want unknown", resp.Job.Outcome)
 	}
+
+	// 等待新 job 的后台 goroutine 结束，避免泄漏到下一个测试
+	waitForCapabilityJobTerminal(resp.JobID, 5*time.Second)
 }
 
 func TestCapabilityPreviousJobReuse_ByIdentityAcrossChannels(t *testing.T) {
@@ -827,7 +876,9 @@ func TestCapabilityPreviousJobReuse_ByIdentityAcrossChannels(t *testing.T) {
 	r := gin.New()
 	r.POST("/messages/channels/:id/capability-test", TestChannelCapability(cfgManager, nil, "messages"))
 
-	body := `{"targetProtocols":["messages"],"timeout":10000,"previousJobId":"` + prevJob.JobID + `"}`
+	// 单模型限定为 prevJob 已成功的模型：断言跨渠道 identity 复用即可，
+	// 同时避免新 job 真实探测外部地址导致后台 goroutine 泄漏到后续测试。
+	body := `{"targetProtocols":["messages"],"timeout":1000,"models":["claude-opus-4-7"],"previousJobId":"` + prevJob.JobID + `"}`
 	req := httptest.NewRequest(http.MethodPost, "/messages/channels/1/capability-test", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -850,6 +901,8 @@ func TestCapabilityPreviousJobReuse_ByIdentityAcrossChannels(t *testing.T) {
 	if resp.Job.RunMode != CapabilityRunModeReusedPreviousResult {
 		t.Fatalf("runMode=%s, want reused_previous_results", resp.Job.RunMode)
 	}
+
+	waitForCapabilityJobTerminal(resp.Job.JobID, 5*time.Second)
 }
 
 func TestCapabilityPreviousJobReuse_IsolatedByModelMapping(t *testing.T) {
@@ -892,7 +945,9 @@ func TestCapabilityPreviousJobReuse_IsolatedByModelMapping(t *testing.T) {
 	r := gin.New()
 	r.POST("/messages/channels/:id/capability-test", TestChannelCapability(cfgManager, nil, "messages"))
 
-	body := `{"targetProtocols":["messages"],"timeout":10000,"previousJobId":"` + prevJob.JobID + `"}`
+	// 不同 modelMapping 必然不复用，新 job 会真实执行：限定单模型 + 短超时，
+	// 并在断言后等待终态，避免后台 goroutine 泄漏到后续测试。
+	body := `{"targetProtocols":["messages"],"timeout":1000,"models":["claude-sonnet-4-6"],"previousJobId":"` + prevJob.JobID + `"}`
 	req := httptest.NewRequest(http.MethodPost, "/messages/channels/1/capability-test", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -915,6 +970,8 @@ func TestCapabilityPreviousJobReuse_IsolatedByModelMapping(t *testing.T) {
 	if resp.Job.RunMode == CapabilityRunModeReusedPreviousResult {
 		t.Fatalf("runMode=%s, want not reused_previous_results", resp.Job.RunMode)
 	}
+
+	waitForCapabilityJobTerminal(resp.Job.JobID, 5*time.Second)
 }
 
 func TestCapabilityRunningJobReuse_ByIdentityAcrossChannels(t *testing.T) {
