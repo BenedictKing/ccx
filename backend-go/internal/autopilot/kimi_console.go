@@ -8,6 +8,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -375,19 +376,60 @@ func normalizeKimiConsoleToken(raw string) (string, error) {
 	if len(token) > maxKimiConsoleTokenBytes {
 		return "", fmt.Errorf("kimi 控制台令牌长度超过限制")
 	}
-	if strings.ContainsAny(token, "\r\n") {
-		return "", fmt.Errorf("kimi 控制台令牌不能包含换行符")
+
+	// 兼容 localStorage 中 JSON 形式的登录态，如 {"access_token":"..."}
+	if strings.HasPrefix(token, "{") {
+		var payload map[string]json.RawMessage
+		if err := json.Unmarshal([]byte(token), &payload); err == nil {
+			for _, key := range []string{"access_token", "accessToken", "token"} {
+				var value string
+				if rawValue, ok := payload[key]; ok && json.Unmarshal(rawValue, &value) == nil && strings.TrimSpace(value) != "" {
+					token = strings.TrimSpace(value)
+					break
+				}
+			}
+		}
 	}
+
+	// 兼容 Cookie 形式：access_token=xxx、access_token=xxx; Path=/... 或含多个条目的 Cookie 串
+	if strings.Contains(strings.ToLower(token), "access_token=") {
+		for _, segment := range strings.Split(token, ";") {
+			segment = strings.TrimSpace(segment)
+			if len(segment) >= len("access_token=") && strings.EqualFold(segment[:len("access_token=")], "access_token=") {
+				token = strings.TrimSpace(segment[len("access_token="):])
+				break
+			}
+		}
+	}
+
+	// 去掉成对引号（从 HAR / localStorage 复制时常见）
+	if len(token) >= 2 {
+		first, last := token[0], token[len(token)-1]
+		if (first == '"' && last == '"') || (first == '\'' && last == '\'') {
+			token = strings.TrimSpace(token[1 : len(token)-1])
+		}
+	}
+
+	// Cookie / localStorage 复制可能带 URL 编码
+	if strings.Contains(token, "%") {
+		if decoded, err := url.PathUnescape(token); err == nil {
+			token = decoded
+		}
+	}
+
 	if len(token) >= len("authorization:") && strings.EqualFold(token[:len("authorization:")], "authorization:") {
 		token = strings.TrimSpace(token[len("authorization:"):])
 	}
 	if len(token) >= len("bearer ") && strings.EqualFold(token[:len("bearer ")], "bearer ") {
 		token = strings.TrimSpace(token[len("bearer "):])
 	}
+	if strings.EqualFold(token, "bearer") {
+		token = ""
+	}
 	if token == "" {
 		return "", fmt.Errorf("kimi 控制台令牌不能为空")
 	}
-	if strings.ContainsAny(token, " \t") {
+	if strings.ContainsAny(token, " \t\r\n") {
 		return "", fmt.Errorf("kimi 控制台令牌格式无效")
 	}
 	return token, nil
@@ -434,6 +476,9 @@ func (client *KimiConsoleClient) post(ctx context.Context, path, accessToken str
 	}
 	if len(responseBody) > maxKimiConsoleResponseBytes {
 		return fmt.Errorf("响应超过大小限制")
+	}
+	if response.StatusCode == http.StatusUnauthorized {
+		return fmt.Errorf("HTTP 401（令牌无效或已过期，请从 kimi.com 登录态重新复制 access_token）")
 	}
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		return fmt.Errorf("HTTP %d", response.StatusCode)

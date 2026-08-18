@@ -887,7 +887,7 @@
   "compshareConsoleCookie.accountNotFound": "The managed CompShare account was not found",
   "kimiConsoleToken.title": "Kimi Code plan usage",
   "kimiConsoleToken.openConsole": "Open Kimi Code console",
-  "kimiConsoleToken.hint": "Paste the access_token from the kimi.com session (Bearer or the full Authorization value is accepted). The token stays in the local configuration and is not returned by the bind, refresh, or account-list APIs. Because the usage APIs do not identify API keys, make sure the login owns this Kimi Code key.",
+  "kimiConsoleToken.hint": "Paste the access_token from the kimi.com session (a raw token, Bearer / Authorization header, access_token= cookie string, or localStorage JSON is accepted). The token stays in the local configuration and is not returned by the bind, refresh, or account-list APIs. Because the usage APIs do not identify API keys, make sure the login owns this Kimi Code key.",
   "kimiConsoleToken.token": "Kimi session token",
   "kimiConsoleToken.tokenPlaceholder": "Bearer eyJ...",
   "kimiConsoleToken.configured": "Usage query linked",

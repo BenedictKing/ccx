@@ -123,6 +123,47 @@ func TestKimiConsoleClientRejectsInvalidToken(t *testing.T) {
 	}
 }
 
+func TestNormalizeKimiConsoleTokenFormats(t *testing.T) {
+	cases := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{"裸令牌", "tok", "tok"},
+		{"Bearer 前缀", "Bearer tok", "tok"},
+		{"Authorization 头", "Authorization: Bearer tok", "tok"},
+		{"小写前缀", "authorization: bearer tok", "tok"},
+		{"前后空白", "  tok  ", "tok"},
+		{"带引号", `"tok"`, "tok"},
+		{"带引号 Bearer", `"Bearer tok"`, "tok"},
+		{"Cookie 键值", "access_token=tok", "tok"},
+		{"Cookie 带属性", "access_token=tok; Path=/; HttpOnly", "tok"},
+		{"完整 Cookie 串", "device_id=1; access_token=tok; session_id=2", "tok"},
+		{"URL 编码", "access_token=tok%2B123", "tok+123"},
+		{"localStorage JSON", `{"access_token":"tok","refresh_token":"r"}`, "tok"},
+		{"localStorage JSON camelCase", `{"accessToken":"tok"}`, "tok"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := normalizeKimiConsoleToken(tc.raw)
+			if err != nil {
+				t.Fatalf("应解析成功: %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestNormalizeKimiConsoleTokenRejects(t *testing.T) {
+	for _, raw := range []string{"", "  ", "Bearer ", "access_token=", "token with spaces", "token\tvalue", "token\nvalue"} {
+		if _, err := normalizeKimiConsoleToken(raw); err == nil {
+			t.Fatalf("无效令牌应被拒绝: %q", raw)
+		}
+	}
+}
+
 func TestKimiConsoleClientRequiresCodingUsage(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == kimiUsagesPath {

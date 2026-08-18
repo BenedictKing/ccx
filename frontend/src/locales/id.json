@@ -887,7 +887,7 @@
   "compshareConsoleCookie.accountNotFound": "Akun CompShare terkelola tidak ditemukan",
   "kimiConsoleToken.title": "Penggunaan paket Kimi Code",
   "kimiConsoleToken.openConsole": "Buka konsol Kimi Code",
-  "kimiConsoleToken.hint": "Tempel access_token dari sesi kimi.com (format Bearer atau nilai Authorization lengkap didukung). Token disimpan di konfigurasi lokal dan tidak dikembalikan oleh API pengikatan, penyegaran, atau daftar akun. Karena API penggunaan tidak mengembalikan kepemilikan key, pastikan akun login memiliki key Kimi Code ini.",
+  "kimiConsoleToken.hint": "Tempel access_token dari sesi kimi.com (token mentah, header Bearer / Authorization, string cookie access_token=, atau JSON localStorage didukung). Token disimpan di konfigurasi lokal dan tidak dikembalikan oleh API pengikatan, penyegaran, atau daftar akun. Karena API penggunaan tidak mengembalikan kepemilikan key, pastikan akun login memiliki key Kimi Code ini.",
   "kimiConsoleToken.token": "Token sesi Kimi",
   "kimiConsoleToken.tokenPlaceholder": "Bearer eyJ...",
   "kimiConsoleToken.configured": "Kueri penggunaan terhubung",

@@ -887,7 +887,7 @@
   "compshareConsoleCookie.accountNotFound": "未找到对应的优云智算自动托管账号",
   "kimiConsoleToken.title": "Kimi Code 套餐用量",
   "kimiConsoleToken.openConsole": "打开 Kimi Code 控制台",
-  "kimiConsoleToken.hint": "粘贴 kimi.com 登录态中的 access_token（支持 Bearer 或完整 Authorization 值）。令牌仅保存在本地配置中，绑定、刷新与账号列表接口均不回显；用量接口不返回 Key 归属，请确认登录账号与当前 Kimi Code Key 一致。",
+  "kimiConsoleToken.hint": "粘贴 kimi.com 登录态中的 access_token（支持裸令牌、Bearer / Authorization 头、access_token= Cookie 串或 localStorage JSON）。令牌仅保存在本地配置中，绑定、刷新与账号列表接口均不回显；用量接口不返回 Key 归属，请确认登录账号与当前 Kimi Code Key 一致。",
   "kimiConsoleToken.token": "Kimi 会话令牌",
   "kimiConsoleToken.tokenPlaceholder": "Bearer eyJ...",
   "kimiConsoleToken.configured": "余量查询已绑定",
