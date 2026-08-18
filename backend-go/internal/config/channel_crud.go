@@ -406,6 +406,9 @@ func applyUpstreamUpdateFields(upstream *UpstreamConfig, updates UpstreamUpdate)
 	if updates.ProxyURL != nil {
 		upstream.ProxyURL = *updates.ProxyURL
 	}
+	if updates.LearnedClientFingerprint != nil {
+		upstream.LearnedClientFingerprint = *updates.LearnedClientFingerprint
+	}
 	if updates.RequestTimeoutMs != nil {
 		if err := validateRequestTimeoutMs(*updates.RequestTimeoutMs); err != nil {
 			return false, err

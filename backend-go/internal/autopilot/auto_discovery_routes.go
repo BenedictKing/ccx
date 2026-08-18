@@ -214,6 +214,7 @@ func discoveredProtocolUpstream(source *config.UpstreamConfig, protocol, baseNam
 		NormalizeMetadataUserID:     cloned.NormalizeMetadataUserID,
 		CustomHeaders:               cloned.CustomHeaders,
 		ProxyURL:                    cloned.ProxyURL,
+		LearnedClientFingerprint:    cloned.LearnedClientFingerprint,
 		RequestTimeoutMs:            cloned.RequestTimeoutMs,
 		ResponseHeaderTimeoutMs:     cloned.ResponseHeaderTimeoutMs,
 		StreamFirstContentTimeoutMs: cloned.StreamFirstContentTimeoutMs,

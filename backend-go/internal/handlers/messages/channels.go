@@ -343,6 +343,9 @@ type GetModelsRequest struct {
 	InsecureSkipVerify *bool             `json:"insecureSkipVerify"`
 	CustomHeaders      map[string]string `json:"customHeaders"`
 	AuthHeader         string            `json:"authHeader"`
+	// LearnedClientFingerprint 上游存在客户端指纹校验（保活 L1 等无渠道上下文的
+	// 调用方传入渠道学习到的标记），命中时请求带 Claude Code 客户端伪装头。
+	LearnedClientFingerprint bool `json:"learnedClientFingerprint,omitempty"`
 }
 
 // GetChannelModels 获取指定渠道的模型列表（支持临时 Key）
@@ -370,6 +373,7 @@ func GetChannelModels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 		var insecureSkipVerify bool
 		var proxyURL string
 		var authHeader string
+		var learnedClientFingerprint bool
 
 		if req.BaseURL != "" {
 			// 新增模式：使用临时 baseUrl
@@ -391,6 +395,7 @@ func GetChannelModels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 				proxyURL = req.ProxyURL
 			}
 			authHeader = req.AuthHeader
+			learnedClientFingerprint = req.LearnedClientFingerprint
 			log.Printf("[Messages-Models] 使用临时 baseUrl: %s", baseURL)
 		} else {
 			// 编辑模式：从配置中读取渠道信息
@@ -407,6 +412,7 @@ func GetChannelModels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 			insecureSkipVerify = channel.InsecureSkipVerify
 			proxyURL = channel.ProxyURL
 			authHeader = channel.AuthHeader
+			learnedClientFingerprint = channel.LearnedClientFingerprint || req.LearnedClientFingerprint
 			if req.BaseURL != "" {
 				if err := utils.ValidateBaseURL(req.BaseURL); err != nil {
 					log.Printf("[Messages-Models] SSRF 防护拦截: %v", err)
@@ -462,6 +468,10 @@ func GetChannelModels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 
 		var lastStatusCode int
 		var lastBody []byte
+		// Anthropic 风格端点（claude 系）或已学习客户端伪装标记的上游：
+		// 请求带 Claude Code 探针头，避免被上游客户端指纹校验拒绝。
+		useProbeHeaders := serviceType != "copilot" &&
+			(strings.EqualFold(strings.TrimSpace(serviceType), "claude") || learnedClientFingerprint)
 		for _, candidateURL := range candidateURLs {
 			httpReq, err := http.NewRequestWithContext(c.Request.Context(), "GET", candidateURL, nil)
 			if err != nil {
@@ -472,6 +482,9 @@ func GetChannelModels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 				copilot.ApplyRuntimeHeaders(httpReq.Header, copilotRuntimeToken)
 			} else {
 				utils.SetAuthenticationHeaderWithOverride(httpReq.Header, apiKey, authHeader)
+				if useProbeHeaders {
+					utils.ApplyClaudeCodeProbeHeaders(httpReq.Header, "")
+				}
 			}
 			httpReq.Header.Set("Content-Type", "application/json")
 			if serviceType == "copilot" {

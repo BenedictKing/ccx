@@ -5,14 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
-	"github.com/BenedictKing/ccx/internal/errutil"
 	"github.com/BenedictKing/ccx/internal/handlers/common"
 	"github.com/BenedictKing/ccx/internal/httpclient"
 	"github.com/BenedictKing/ccx/internal/utils"
@@ -128,6 +126,9 @@ type DiscoveryModelsFetchRequest struct {
 	CustomHeaders      map[string]string
 	ProxyURL           string
 	InsecureSkipVerify bool
+	// LearnedClientFingerprint 渠道学习到的客户端伪装标记（保活 L1 等调用方传入），
+	// 命中时 GetChannelModels 请求带 Claude Code 客户端伪装头。
+	LearnedClientFingerprint bool
 }
 
 type DiscoveryModelsFetchResponse struct {
@@ -1387,15 +1388,16 @@ func discoverTransientModelsForCandidate(ctx context.Context, channel *config.Up
 	}
 
 	resp, err := fetcher(ctx, DiscoveryModelsFetchRequest{
-		ChannelKind:        channelKind,
-		ServiceType:        channel.ServiceType,
-		BaseURL:            channel.BaseURL,
-		BaseURLs:           append([]string(nil), channel.BaseURLs...),
-		APIKey:             apiKey,
-		AuthHeader:         channel.AuthHeader,
-		CustomHeaders:      cloneStringMap(channel.CustomHeaders),
-		ProxyURL:           channel.ProxyURL,
-		InsecureSkipVerify: channel.InsecureSkipVerify,
+		ChannelKind:              channelKind,
+		ServiceType:              channel.ServiceType,
+		BaseURL:                  channel.BaseURL,
+		BaseURLs:                 append([]string(nil), channel.BaseURLs...),
+		APIKey:                   apiKey,
+		AuthHeader:               channel.AuthHeader,
+		CustomHeaders:            cloneStringMap(channel.CustomHeaders),
+		ProxyURL:                 channel.ProxyURL,
+		InsecureSkipVerify:       channel.InsecureSkipVerify,
+		LearnedClientFingerprint: channel.LearnedClientFingerprint,
 	})
 
 	result := DiscoveryModelsResult{
@@ -1460,31 +1462,23 @@ func discoverTransientModels(ctx context.Context, channel *config.UpstreamConfig
 		modelsURL = manifestURL
 	}
 	client := httpclient.GetManager().GetStandardClient(10*time.Second, channel.InsecureSkipVerify, channel.ProxyURL)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, modelsURL, nil)
+	// Anthropic 风格端点（messages/claude）首发即带 Claude Code 探针头，与 capability test
+	// 探测一致；其余风格裸发，命中客户端指纹风控时由 FetchUpstreamModels 带探针头重试。
+	useProbeHeaders := manifestServiceType == "messages" || channelKind == "messages" || channel.LearnedClientFingerprint
+	statusCode, body, _, err := utils.FetchUpstreamModels(ctx, client, modelsURL,
+		func(h http.Header) { utils.SetAuthenticationHeaderWithOverride(h, apiKey, channel.AuthHeader) },
+		channel.CustomHeaders, useProbeHeaders)
 	if err != nil {
 		return DiscoveryModelsResult{Source: "models_endpoint", URL: modelsURL, Warnings: []string{err.Error()}}
-	}
-	utils.SetAuthenticationHeaderWithOverride(req.Header, apiKey, channel.AuthHeader)
-	utils.ApplyCustomHeaders(req.Header, channel.CustomHeaders)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return DiscoveryModelsResult{Source: "models_endpoint", URL: modelsURL, Warnings: []string{err.Error()}}
-	}
-	defer errutil.IgnoreDeferred(resp.Body.Close)
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return DiscoveryModelsResult{Source: "models_endpoint", URL: modelsURL, StatusCode: resp.StatusCode, Warnings: []string{err.Error()}}
 	}
 
 	result := DiscoveryModelsResult{
 		Source:     "models_endpoint",
 		URL:        modelsURL,
-		StatusCode: resp.StatusCode,
+		StatusCode: statusCode,
 	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		result.Warnings = []string{fmt.Sprintf("models endpoint returned HTTP %d", resp.StatusCode)}
+	if statusCode < 200 || statusCode >= 300 {
+		result.Warnings = []string{fmt.Sprintf("models endpoint returned HTTP %d", statusCode)}
 		return result
 	}
 	result.Items = parseDiscoveryModels(body)

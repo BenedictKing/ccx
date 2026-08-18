@@ -46,6 +46,9 @@ type L1Request struct {
 	CustomHeaders      map[string]string
 	ProxyURL           string
 	InsecureSkipVerify bool
+	// LearnedClientFingerprint 渠道学习到的客户端伪装标记：
+	// 上游 models 端点存在客户端指纹校验时，L1 请求需带 Claude Code 伪装头。
+	LearnedClientFingerprint bool
 }
 
 // L1Response 包装后的模型列表响应（由各渠道 GetChannelModels handler 适配而来）

@@ -702,6 +702,45 @@ func TestCustomAutoAddResponseIncludesActualRoute(t *testing.T) {
 	}
 }
 
+func TestCustomAutoAddPersistsProxyURL(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.json")
+	data := `{
+  "upstream": [],
+  "chatUpstream": [],
+  "responsesUpstream": [], "geminiUpstream": [], "imagesUpstream": [], "vectorsUpstream": []
+}`
+	if err := os.WriteFile(configPath, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+	manager, err := config.NewConfigManager(configPath, filepath.Join(dir, "backups"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = manager.Close() })
+
+	router := setupAutoManagedRouter(&AutoManagedDeps{
+		CfgManager:           manager,
+		SkipChannelKeyVerify: true,
+	})
+	body := `{"name":"relay","baseUrls":["https://relay.example.com"],"apiKeys":["sk-relay"],"proxyUrl":"http://127.0.0.1:7890","routes":[{"channelKind":"chat"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/chat/channels/auto-add", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+
+	cfg := manager.GetConfig()
+	if len(cfg.ChatUpstream) != 1 {
+		t.Fatalf("chat channels = %d, want 1", len(cfg.ChatUpstream))
+	}
+	if got := cfg.ChatUpstream[0].ProxyURL; got != "http://127.0.0.1:7890" {
+		t.Fatalf("ProxyURL = %q, want http://127.0.0.1:7890", got)
+	}
+}
+
 func TestCustomAutoAddAppendsKeyToEquivalentExistingBaseURL(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "config.json")

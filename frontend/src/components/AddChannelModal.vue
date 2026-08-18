@@ -62,6 +62,18 @@
             @input="parseQuickInput"
           />
 
+          <!-- 代理 URL（可选）：境外上游直连不可达时经代理发现与访问 -->
+          <v-text-field
+            v-model="standardProxyUrl"
+            :label="t('addChannel.proxyUrlLabel')"
+            :placeholder="t('addChannel.proxyUrlPlaceholder')"
+            :hint="t('addChannel.proxyUrlHint')"
+            persistent-hint
+            variant="outlined"
+            density="compact"
+            prepend-inner-icon="mdi-proxy"
+          />
+
           <v-card variant="outlined" class="detection-status-card" rounded="lg">
             <v-card-text class="pa-4">
               <div class="d-flex flex-column ga-3">
@@ -265,6 +277,8 @@ const channelStore = useChannelStore()
 const preferencesStore = usePreferencesStore()
 
 const quickInput = ref('')
+// 标准模式代理 URL（可选）：发现/探活与渠道后续上游请求经代理访问
+const standardProxyUrl = ref('')
 const detectedBaseUrl = ref('')
 const detectedBaseUrls = ref<string[]>([])
 const detectedApiKeys = ref<string[]>([])
@@ -418,6 +432,7 @@ function expectedProtocolLabel(protocol: DiscoveryProtocol | ChannelType): strin
 
 function resetQuickState() {
   quickInput.value = ''
+  standardProxyUrl.value = ''
   detectedBaseUrl.value = ''
   detectedBaseUrls.value = []
   detectedApiKeys.value = []
@@ -453,7 +468,9 @@ async function handleQuickSubmit() {
   standardSubmitting.value = true
   standardSubmitError.value = ''
   try {
-    const routeDiscovery = await discoverFast(props.channelType, detectedBaseUrls.value, detectedApiKeys.value)
+    const routeDiscovery = await discoverFast(props.channelType, detectedBaseUrls.value, detectedApiKeys.value, {
+      proxyUrl: standardProxyUrl.value.trim() || undefined
+    })
     if (!routeDiscovery) {
       throw new Error(t('autopilot.quickAdd.discoveryFailed'))
     }
@@ -464,6 +481,7 @@ async function handleQuickSubmit() {
       apiKeys: detectedApiKeys.value,
       routes: routeDiscovery.routes,
       rateLimitHint: routeDiscovery.rateLimitHint,
+      proxyUrl: standardProxyUrl.value.trim() || undefined,
       placement: placement.value
     })
     const currentChannel = result.channels?.find(channel => channel.channelKind === targetChannelType)

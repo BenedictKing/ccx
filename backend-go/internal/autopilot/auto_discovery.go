@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"regexp"
@@ -16,7 +15,6 @@ import (
 	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
-	"github.com/BenedictKing/ccx/internal/errutil"
 	"github.com/BenedictKing/ccx/internal/eventbus"
 	"github.com/BenedictKing/ccx/internal/httpclient"
 	"github.com/BenedictKing/ccx/internal/utils"
@@ -60,6 +58,9 @@ type EndpointDiscoveryResult struct {
 	ProtocolDiscoveryError   map[string]string    `json:"protocolDiscoveryError,omitempty"`
 	apiKey                   string               `json:"-"`
 	credentialUID            string               `json:"-"`
+	// usedClientFingerprint 标记该端点裸请求被客户端指纹风控拒绝、
+	// 带 Claude Code 伪装头重试后成功；runDiscovery 据此学习渠道级标记。
+	usedClientFingerprint bool `json:"-"`
 	// declaredEndpointTypes 是 new-api 系上游在 /v1/models 里声明的 模型 -> 协议集合。
 	// 仅在本轮发现内用于协议探测排序，不持久化：上游会少报，不能当作权威事实。
 	declaredEndpointTypes map[string][]string `json:"-"`
@@ -413,6 +414,7 @@ func (r *AutoDiscoveryRunner) runDiscovery(ctx context.Context, task *DiscoveryT
 	if ctx.Err() == nil && cfgManager != nil {
 		// 探测完成后尝试自动写入 SupportedModels（安全守则：仅一致结果且用户未手动配置时写入）
 		r.maybeAutoWriteChannelConfig(task.ChannelUID, channel, endpoints, cfgManager)
+		r.maybeLearnClientFingerprint(task.ChannelUID, channel, endpoints, cfgManager)
 		if err := r.maybeEnableDiscoveredProtocolRoutes(channel, endpoints, cfgManager); err != nil {
 			status = DiscoveryStatusFailed
 			taskErr = fmt.Sprintf("自动启用已发现协议失败: %v", err)
@@ -931,41 +933,35 @@ func (r *AutoDiscoveryRunner) probeEndpoint(ctx context.Context, client *http.Cl
 	if manifestURL, ok := config.ResolveBuiltinModelsURL(baseURL, discoveryManifestServiceType(channel.ServiceType)); ok {
 		modelsURL = manifestURL
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, modelsURL, nil)
-	if err != nil {
-		result.ErrorMessage = fmt.Sprintf("构建请求失败: %v", err)
-		return result
-	}
 
-	// 设置认证头
-	if protocolForServiceType(channel.ServiceType) == "gemini" && !utils.HasAuthenticationHeaderOverride(channel.AuthHeader) {
-		utils.SetGeminiAuthenticationHeader(req.Header, apiKey)
-	} else {
-		utils.SetAuthenticationHeaderWithOverride(req.Header, apiKey, channel.AuthHeader)
+	// 设置认证头；Anthropic 风格端点首发即带 Claude Code 探针头（与 capability test 一致），
+	// 其余裸发——命中客户端指纹风控时由 FetchUpstreamModels 带探针头重试，
+	// 重试成功记 usedClientFingerprint，runDiscovery 据此学习渠道级标记。
+	applyAuth := func(h http.Header) {
+		if protocolForServiceType(channel.ServiceType) == "gemini" && !utils.HasAuthenticationHeaderOverride(channel.AuthHeader) {
+			utils.SetGeminiAuthenticationHeader(h, apiKey)
+		} else {
+			utils.SetAuthenticationHeaderWithOverride(h, apiKey, channel.AuthHeader)
+		}
 	}
-	utils.ApplyCustomHeaders(req.Header, channel.CustomHeaders)
-
-	resp, err := client.Do(req)
+	useProbeHeaders := protocolForServiceType(channel.ServiceType) == "messages" || channel.LearnedClientFingerprint
+	statusCode, body, learnedFingerprint, err := utils.FetchUpstreamModels(ctx, client, modelsURL, applyAuth, channel.CustomHeaders, useProbeHeaders)
 	if err != nil {
 		result.ErrorMessage = fmt.Sprintf("请求失败: %v", err)
 		return result
 	}
-	defer errutil.IgnoreDeferred(resp.Body.Close)
+	result.usedClientFingerprint = learnedFingerprint
 
-	if resp.StatusCode != http.StatusOK {
-		if hasManifest && resp.StatusCode != http.StatusUnauthorized && resp.StatusCode != http.StatusForbidden {
-			applyBuiltinFallbackModels(&result, manifest, fmt.Sprintf("models 端点返回 HTTP %d，已回退内置模型清单", resp.StatusCode))
+	if statusCode != http.StatusOK {
+		if hasManifest && statusCode != http.StatusUnauthorized && statusCode != http.StatusForbidden {
+			applyBuiltinFallbackModels(&result, manifest, fmt.Sprintf("models 端点返回 HTTP %d，已回退内置模型清单", statusCode))
 			return result
 		}
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		result.ErrorMessage = fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(body))
-		return result
-	}
-
-	// 解析 models 响应
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 512*1024))
-	if err != nil {
-		result.ErrorMessage = fmt.Sprintf("读取响应失败: %v", err)
+		truncated := body
+		if len(truncated) > 1024 {
+			truncated = truncated[:1024]
+		}
+		result.ErrorMessage = fmt.Sprintf("HTTP %d: %s", statusCode, string(truncated))
 		return result
 	}
 
@@ -1485,6 +1481,39 @@ func (r *AutoDiscoveryRunner) maybeAutoWriteChannelConfig(channelUID string, cha
 		ev.EventUID = GenerateChangeEventUID(channelUID, ev.EventType, now)
 		r.hub.Publish(ev)
 	}
+}
+
+// maybeLearnClientFingerprint 学习客户端伪装标记：任一端点裸请求被上游客户端指纹校验
+// 拒绝、带 Claude Code 伪装头重试成功时，把渠道标记为 LearnedClientFingerprint，
+// 后续该渠道的探测、拉模型、保活请求首发即带伪装头，不再裸试。
+// 与 SupportedModels 安全守则无关（单字段 PATCH、不覆盖用户配置），自动托管渠道也写。
+func (r *AutoDiscoveryRunner) maybeLearnClientFingerprint(channelUID string, channel *config.UpstreamConfig, endpoints []EndpointDiscoveryResult, cfgManager *config.ConfigManager) {
+	if cfgManager == nil || channel == nil || channel.LearnedClientFingerprint {
+		return
+	}
+	learned := false
+	for _, ep := range endpoints {
+		if ep.usedClientFingerprint {
+			learned = true
+			break
+		}
+	}
+	if !learned {
+		return
+	}
+	cfg := cfgManager.GetConfig()
+	index, kind := findChannelIndexAndKind(cfg, channelUID)
+	if index < 0 || kind == "" {
+		log.Printf("[AutoDiscovery-ConfigSkip] 渠道 %s: 在当前配置中未找到对应渠道，跳过学习客户端伪装标记", channelUID)
+		return
+	}
+	flag := true
+	if _, err := updateChannelByKind(cfgManager, kind, index, config.UpstreamUpdate{LearnedClientFingerprint: &flag}); err != nil {
+		log.Printf("[AutoDiscovery-ConfigWrite] 渠道 %s: 学习客户端伪装标记失败: %v", channelUID, err)
+		return
+	}
+	channel.LearnedClientFingerprint = true
+	log.Printf("[AutoDiscovery-ConfigWrite] 渠道 %s: 检测到上游客户端指纹校验，已学习客户端伪装标记", channelUID)
 }
 
 // modelsSetConsistent 检查所有 endpoint 的模型列表是否集合相等。

@@ -32,6 +32,9 @@ type AutoAddRequest struct {
 	Routes          []AutoAddRouteRequest `json:"routes,omitempty"`
 	RateLimitHint   *AutoAddRateLimitHint `json:"rateLimitHint,omitempty"`
 	SubscriptionUID string                `json:"subscriptionUid,omitempty"`
+	// ProxyURL 渠道级代理（HTTP/HTTPS/SOCKS5）：发现/探活与后续上游请求经代理访问，
+	// 用于添加直连不可达的境外上游。
+	ProxyURL string `json:"proxyUrl,omitempty"`
 	// Placement 故障转移位置："front"（首位）| 缺省末尾
 	Placement string `json:"placement,omitempty"`
 }
@@ -1967,6 +1970,7 @@ func handleCustomAutoAdd(c *gin.Context, deps *AutoManagedDeps, requestKind stri
 			BaseURLs:        append([]string(nil), baseURLs...),
 			APIKeys:         append([]string(nil), req.APIKeys...),
 			SupportedModels: append([]string(nil), route.SupportedModels...),
+			ProxyURL:        strings.TrimSpace(req.ProxyURL),
 		}, accountUID, baseName, route.ChannelKind, multiRoute, now)
 		additions = append(additions, config.AccountChannelAddition{Kind: route.ChannelKind, Upstream: upstream, Placement: req.Placement})
 	}

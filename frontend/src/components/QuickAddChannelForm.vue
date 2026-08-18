@@ -79,6 +79,21 @@
       </div>
     </div>
 
+    <!-- 代理 URL（可选）：境外上游直连不可达时经代理发现与访问 -->
+    <div v-if="!isExplicitProviderMode">
+      <v-text-field
+        v-model="proxyUrl"
+        :label="t('addChannel.proxyUrlLabel')"
+        :placeholder="t('addChannel.proxyUrlPlaceholder')"
+        :hint="t('addChannel.proxyUrlHint')"
+        persistent-hint
+        variant="outlined"
+        density="compact"
+        prepend-inner-icon="mdi-proxy"
+        class="mt-1"
+      />
+    </div>
+
     <div
       v-if="generatedChannelName"
       class="channel-name-preview d-flex align-center ga-3 pa-3 rounded-lg"
@@ -231,6 +246,7 @@ const { t } = useI18n()
 // ---- 表单状态 ----
 const baseUrls = ref<string[]>([''])
 const apiKeys = ref<string[]>([''])
+const proxyUrl = ref('')
 const showKeys = ref<boolean[]>([false])
 const submitting = ref(false)
 const submitError = ref('')
@@ -395,7 +411,7 @@ function getGeneratedName(): string {
 }
 
 async function discoverCustomRoutes(baseUrls: string[], apiKeys: string[]) {
-  const discovery = await discoverFast(props.channelType, baseUrls, apiKeys)
+  const discovery = await discoverFast(props.channelType, baseUrls, apiKeys, { proxyUrl: proxyUrl.value.trim() || undefined })
   if (!discovery) {
     throw new Error(t('autopilot.quickAdd.discoveryFailed'))
   }
@@ -433,6 +449,7 @@ async function handleSubmit() {
             apiKeys: filteredApiKeys,
             routes: routeDiscovery?.routes,
             rateLimitHint: routeDiscovery?.rateLimitHint,
+            proxyUrl: proxyUrl.value.trim() || undefined,
             placement: props.placement
           }
     )
@@ -453,6 +470,7 @@ function resetForm() {
   providerId.value = defaultProviderId.value
   baseUrls.value = ['']
   apiKeys.value = ['']
+  proxyUrl.value = ''
   showKeys.value = [false]
   submitting.value = false
   submitError.value = ''

@@ -102,6 +102,10 @@ type UpstreamConfig struct {
 	CustomHeaders map[string]string `json:"customHeaders,omitempty"` // 自定义请求头（覆盖或添加到上游请求）
 	// 渠道级代理
 	ProxyURL string `json:"proxyUrl,omitempty"` // HTTP/HTTPS/SOCKS5 代理地址
+	// LearnedClientFingerprint 由发现/探活流程自动学习：该上游的 models/探测端点存在
+	// 客户端指纹校验（裸请求 401/403，带 Claude Code 客户端伪装头可通过）。
+	// 学习后该渠道的探测、拉模型、保活请求首发即带客户端伪装头，不再裸试。
+	LearnedClientFingerprint bool `json:"learnedClientFingerprint,omitempty"`
 	// 渠道级请求超时
 	RequestTimeoutMs        int `json:"requestTimeoutMs,omitempty"`        // 非流式上游请求超时时间（毫秒，0=继承全局 REQUEST_TIMEOUT）
 	ResponseHeaderTimeoutMs int `json:"responseHeaderTimeoutMs,omitempty"` // 等待上游 HTTP 响应头超时（毫秒，0=继承全局 RESPONSE_HEADER_TIMEOUT）
@@ -1250,6 +1254,8 @@ type UpstreamUpdate struct {
 	CustomHeaders map[string]string `json:"customHeaders"`
 	// 渠道级代理
 	ProxyURL *string `json:"proxyUrl"`
+	// 客户端伪装学习标记（由发现流程回写；nil=不修改）
+	LearnedClientFingerprint *bool `json:"learnedClientFingerprint"`
 	// 渠道级请求超时
 	RequestTimeoutMs        *int `json:"requestTimeoutMs"`
 	ResponseHeaderTimeoutMs *int `json:"responseHeaderTimeoutMs"`

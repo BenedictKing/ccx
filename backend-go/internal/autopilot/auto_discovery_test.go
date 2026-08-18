@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -520,6 +521,103 @@ func TestProbeEndpoint_GeminiModels(t *testing.T) {
 	}
 	if got := strings.Join(result.Models, ","); got != "gemini-3.5-flash,gemini-3.1-pro-preview" {
 		t.Fatalf("models=%q", got)
+	}
+}
+
+func TestProbeEndpoint_ClaudeModelsUsesProbeHeaders(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("User-Agent"); got != utils.ClaudeCodeProbeUserAgent {
+			t.Errorf("User-Agent = %q, want %q", got, utils.ClaudeCodeProbeUserAgent)
+		}
+		if got := r.Header.Get("anthropic-version"); got != "2023-06-01" {
+			t.Errorf("anthropic-version = %q, want 2023-06-01", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[{"id":"claude-sonnet-4-6"}]}`))
+	}))
+	defer srv.Close()
+
+	runner := NewAutoDiscoveryRunner(nil, nil)
+	channel := &config.UpstreamConfig{
+		ServiceType: "claude",
+		BaseURL:     srv.URL,
+		APIKeys:     []string{"sk-test"},
+	}
+
+	result := runner.probeEndpoint(context.Background(), srv.Client(), channel, channel.BaseURL, "sk-test")
+	if !result.ProtocolOk || result.ModelsCount != 1 {
+		t.Fatalf("claude models probe failed: %+v", result)
+	}
+	if result.usedClientFingerprint {
+		t.Fatal("claude 风格带头是协议行为，不应记为学习")
+	}
+}
+
+func TestProbeEndpoint_ClientFingerprintRejectionLearned(t *testing.T) {
+	var requestCount int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if atomic.AddInt32(&requestCount, 1) == 1 {
+			if got := r.Header.Get("User-Agent"); got == utils.ClaudeCodeProbeUserAgent {
+				t.Errorf("首次请求应裸发（不带伪装头），User-Agent = %q", got)
+			}
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"error":{"message":"unauthorized client detected"},"type":"unauthorized_client_error"}`))
+			return
+		}
+		if got := r.Header.Get("User-Agent"); got != utils.ClaudeCodeProbeUserAgent {
+			t.Errorf("重试 User-Agent = %q, want %q", got, utils.ClaudeCodeProbeUserAgent)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[{"id":"gpt-5.4"}]}`))
+	}))
+	defer srv.Close()
+
+	runner := NewAutoDiscoveryRunner(nil, nil)
+	// openai/chat 风格首发裸请求，命中风控后带伪装头重试成功。
+	channel := &config.UpstreamConfig{
+		ServiceType: "openai",
+		BaseURL:     srv.URL,
+		APIKeys:     []string{"sk-test"},
+	}
+
+	result := runner.probeEndpoint(context.Background(), srv.Client(), channel, channel.BaseURL, "sk-test")
+	if !result.ProtocolOk || result.ModelsCount != 1 {
+		t.Fatalf("models probe failed: %+v", result)
+	}
+	if !result.usedClientFingerprint {
+		t.Fatal("风控重试成功应记 usedClientFingerprint=true")
+	}
+	if got := atomic.LoadInt32(&requestCount); got != 2 {
+		t.Fatalf("server received %d requests, want 2", got)
+	}
+}
+
+func TestProbeEndpoint_LearnedFingerprintSkipsBareRequest(t *testing.T) {
+	var requestCount int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&requestCount, 1)
+		if got := r.Header.Get("User-Agent"); got != utils.ClaudeCodeProbeUserAgent {
+			t.Errorf("已学习渠道应首发带伪装头，User-Agent = %q", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[{"id":"gpt-5.4"}]}`))
+	}))
+	defer srv.Close()
+
+	runner := NewAutoDiscoveryRunner(nil, nil)
+	channel := &config.UpstreamConfig{
+		ServiceType:              "openai",
+		BaseURL:                  srv.URL,
+		APIKeys:                  []string{"sk-test"},
+		LearnedClientFingerprint: true,
+	}
+
+	result := runner.probeEndpoint(context.Background(), srv.Client(), channel, channel.BaseURL, "sk-test")
+	if !result.ProtocolOk || result.ModelsCount != 1 {
+		t.Fatalf("models probe failed: %+v", result)
+	}
+	if got := atomic.LoadInt32(&requestCount); got != 1 {
+		t.Fatalf("server received %d requests, want 1", got)
 	}
 }
 

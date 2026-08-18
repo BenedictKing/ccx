@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/BenedictKing/ccx/internal/utils"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -61,6 +62,55 @@ func TestChannelDiscoveryFastRecommendsChatFromRealNIMModels(t *testing.T) {
 		t.Fatal("testedKeyHash is empty")
 	}
 	if strings.Contains(recorder.Body.String(), "sk-test-nim") {
+		t.Fatalf("response leaks plaintext api key: %s", recorder.Body.String())
+	}
+}
+
+// TestChannelDiscoveryFastPassesClientFingerprintRelay 验证：
+// 上游 /v1/models 存在客户端指纹校验（裸请求 401 unauthorized client）时，
+// claude 候选首发带 Claude Code 伪装头直接通过（AgentRouter 类中转站场景）。
+func TestChannelDiscoveryFastPassesClientFingerprintRelay(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/models":
+			if got := r.Header.Get("User-Agent"); got != utils.ClaudeCodeProbeUserAgent {
+				w.WriteHeader(http.StatusUnauthorized)
+				_, _ = w.Write([]byte(`{"error":{"message":"unauthorized client detected"},"type":"unauthorized_client_error"}`))
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"data":[{"id":"claude-sonnet-4-6"},{"id":"claude-opus-4-8"}]}`))
+		case "/v1/messages":
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = w.Write([]byte(`data: {"type":"message_start"}` + "\n\n" + `data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"ok"}}` + "\n\n"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer upstream.Close()
+
+	router := gin.New()
+	router.POST("/api/channel-discovery-fast", channelDiscoveryFastForTest())
+
+	body := []byte(`{"baseUrls":["` + upstream.URL + `"],"apiKeys":["sk-relay-test"]}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/channel-discovery-fast", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	var resp ChannelDiscoveryFastResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.PrimaryKind != "messages" {
+		t.Fatalf("primaryKind=%q, want messages", resp.PrimaryKind)
+	}
+	if strings.Contains(recorder.Body.String(), "sk-relay-test") {
 		t.Fatalf("response leaks plaintext api key: %s", recorder.Body.String())
 	}
 }

@@ -314,6 +314,7 @@ export interface Channel {
   autoManagedKind?: string                   // 托管子类型："" | "generic" | "new_api"
   originType?: string                        // 渠道来源类型
   originTier?: string                        // 渠道来源可信层级
+  learnedClientFingerprint?: boolean         // 已学习：上游 models 端点存在客户端指纹校验，探测/保活请求自动带 Claude Code 伪装头
   subscriptionUid?: string                   // 关联的订阅 UID（new-api 自动托管场景）
   rpm?: number                // 能力测试发送速率（仅影响能力测试）
   tags?: string[]             // 用户自定义标签（自由文本，与 PoolTag 完全独立）

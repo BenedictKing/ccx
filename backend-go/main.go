@@ -104,14 +104,15 @@ func buildChannelDiscoveryModelFetchers(cfgManager *config.ConfigManager) handle
 func channelModelsHandlerFetcher(handler gin.HandlerFunc) handlers.ChannelDiscoveryModelFetcher {
 	return func(ctx context.Context, req handlers.DiscoveryModelsFetchRequest) (handlers.DiscoveryModelsFetchResponse, error) {
 		body, err := json.Marshal(map[string]any{
-			"key":                req.APIKey,
-			"baseUrl":            req.BaseURL,
-			"baseUrls":           req.BaseURLs,
-			"serviceType":        req.ServiceType,
-			"proxyUrl":           req.ProxyURL,
-			"insecureSkipVerify": req.InsecureSkipVerify,
-			"customHeaders":      req.CustomHeaders,
-			"authHeader":         req.AuthHeader,
+			"key":                      req.APIKey,
+			"baseUrl":                  req.BaseURL,
+			"baseUrls":                 req.BaseURLs,
+			"serviceType":              req.ServiceType,
+			"proxyUrl":                 req.ProxyURL,
+			"insecureSkipVerify":       req.InsecureSkipVerify,
+			"customHeaders":            req.CustomHeaders,
+			"authHeader":               req.AuthHeader,
+			"learnedClientFingerprint": req.LearnedClientFingerprint,
 		})
 		if err != nil {
 			return handlers.DiscoveryModelsFetchResponse{}, err
@@ -154,13 +155,14 @@ func healthCheckL1Fetcher(handler gin.HandlerFunc) healthcheck.L1Fetcher {
 			return healthcheck.L1Response{StatusCode: sc, Body: body, RealCallVerified: true, Model: model}, nil
 		}
 		resp, err := fetcher(ctx, handlers.DiscoveryModelsFetchRequest{
-			ServiceType:        req.ServiceType,
-			BaseURL:            req.BaseURL,
-			APIKey:             req.APIKey,
-			AuthHeader:         req.AuthHeader,
-			CustomHeaders:      req.CustomHeaders,
-			ProxyURL:           req.ProxyURL,
-			InsecureSkipVerify: req.InsecureSkipVerify,
+			ServiceType:              req.ServiceType,
+			BaseURL:                  req.BaseURL,
+			APIKey:                   req.APIKey,
+			AuthHeader:               req.AuthHeader,
+			CustomHeaders:            req.CustomHeaders,
+			ProxyURL:                 req.ProxyURL,
+			InsecureSkipVerify:       req.InsecureSkipVerify,
+			LearnedClientFingerprint: req.LearnedClientFingerprint,
 		})
 		if err != nil {
 			return healthcheck.L1Response{}, err

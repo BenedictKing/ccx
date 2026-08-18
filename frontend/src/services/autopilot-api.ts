@@ -19,6 +19,8 @@ export interface AutoAddChannelRequest {
   routes?: AutoAddRouteRequest[]
   rateLimitHint?: DiscoveryRateLimitResult
   subscriptionUid?: string
+  /** 渠道级代理（HTTP/HTTPS/SOCKS5）：发现/探活与后续上游请求经代理访问 */
+  proxyUrl?: string
   /** 故障转移位置：front（首位）| back（末尾，默认） */
   placement?: ChannelPlacement
 }
@@ -281,7 +283,8 @@ export async function discoverAutoAddRoutes(
 export async function discoverFast(
   kind: ChannelKind,
   baseUrls: string[],
-  apiKeys: string[]
+  apiKeys: string[],
+  opts?: { proxyUrl?: string }
 ): Promise<AutoAddRouteDiscovery | null> {
   if (!supportsQuickAddProtocolDiscovery(kind)) {
     return { primaryKind: kind, routes: [{ channelKind: kind }] }
@@ -290,7 +293,8 @@ export async function discoverFast(
   if (baseUrls.length === 0 || nonEmptyKeys.length === 0) return null
 
   // 不传 channelKind，让后端根据真实探测结果决定协议；透传全部 key，后端按 (baseURL,key) 组合择优。
-  const fast = await api.discoverChannelConfigFast({ baseUrls, apiKeys: nonEmptyKeys })
+  const proxyUrl = opts?.proxyUrl?.trim() || undefined
+  const fast = await api.discoverChannelConfigFast({ baseUrls, apiKeys: nonEmptyKeys, proxyUrl })
   const primaryKind = normalizeDiscoveredChannelKind(fast.primaryKind)
   if (!primaryKind) return null
   return { primaryKind, routes: [{ channelKind: primaryKind }], rateLimitHint: fast.rateLimit }

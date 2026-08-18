@@ -266,5 +266,8 @@ docs/claude-code-investigation-*.md
 .planning/
 __pycache__/
 
+# ZCode 会话目录
+.zcode/
+
 .mcp.json
 store-msix/

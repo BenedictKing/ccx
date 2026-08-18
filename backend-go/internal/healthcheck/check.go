@@ -178,13 +178,14 @@ func (m *Manager) checkKeyL1(
 		lastBaseURL = baseURL
 		ctx, cancel := context.WithTimeout(context.Background(), policy.Timeout)
 		resp, err := fetcher(ctx, L1Request{
-			BaseURL:            baseURL,
-			APIKey:             apiKey,
-			ServiceType:        u.ServiceType,
-			AuthHeader:         u.AuthHeader,
-			CustomHeaders:      u.CustomHeaders,
-			ProxyURL:           u.ProxyURL,
-			InsecureSkipVerify: u.InsecureSkipVerify,
+			BaseURL:                  baseURL,
+			APIKey:                   apiKey,
+			ServiceType:              u.ServiceType,
+			AuthHeader:               u.AuthHeader,
+			CustomHeaders:            u.CustomHeaders,
+			ProxyURL:                 u.ProxyURL,
+			InsecureSkipVerify:       u.InsecureSkipVerify,
+			LearnedClientFingerprint: u.LearnedClientFingerprint,
 		})
 		cancel()
 		if resp.RealCallVerified {
