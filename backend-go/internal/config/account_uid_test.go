@@ -116,6 +116,42 @@ func TestMergeManagedProviderAccountsKeepsDifferentSitesSeparate(t *testing.T) {
 	}
 }
 
+// 手动渠道（非 AutoManaged）同站点同协议并存是合法形态（如 suspended + active），
+// 账号身份归并后渠道实体必须保留，否则配置热重载会静默吞掉手动渠道。
+func TestMergeManagedProviderAccountsKeepsManualChannelsSeparate(t *testing.T) {
+	cm := &ConfigManager{config: Config{
+		Upstream: []UpstreamConfig{
+			{AccountUID: "acct-a", ChannelUID: "ch_susp", Name: "suspended-ch", ServiceType: "claude", BaseURL: "https://api.example/v1", APIKeys: []string{"sk-old-1"}, Status: "suspended"},
+			{AccountUID: "acct-b", ChannelUID: "ch_active", Name: "active-ch", ServiceType: "claude", BaseURL: "https://api.example/v1", APIKeys: []string{"sk-old-2"}, Status: "active"},
+		},
+	}}
+	if !cm.mergeManagedProviderAccounts() {
+		t.Fatal("同站点账号身份应触发归并")
+	}
+	if len(cm.config.Upstream) != 2 {
+		t.Fatalf("手动渠道不应被实体合并: %d 条", len(cm.config.Upstream))
+	}
+	byUID := map[string]UpstreamConfig{}
+	for _, ch := range cm.config.Upstream {
+		byUID[ch.ChannelUID] = ch
+	}
+	if _, ok := byUID["ch_susp"]; !ok {
+		t.Fatal("suspended 手动渠道被吞掉")
+	}
+	if _, ok := byUID["ch_active"]; !ok {
+		t.Fatal("active 手动渠道被吞掉")
+	}
+	if byUID["ch_susp"].APIKeys[0] != "sk-old-1" || byUID["ch_active"].APIKeys[0] != "sk-old-2" {
+		t.Fatalf("手动渠道 Key 不应被合并: %+v / %+v", byUID["ch_susp"].APIKeys, byUID["ch_active"].APIKeys)
+	}
+	if byUID["ch_susp"].Status != "suspended" || byUID["ch_active"].Status != "active" {
+		t.Fatalf("手动渠道状态不应被改动: %s / %s", byUID["ch_susp"].Status, byUID["ch_active"].Status)
+	}
+	if uid := byUID["ch_susp"].AccountUID; uid == "" || byUID["ch_active"].AccountUID != uid {
+		t.Fatalf("同站点手动渠道应归并到同一 AccountUID: %q / %q", byUID["ch_susp"].AccountUID, byUID["ch_active"].AccountUID)
+	}
+}
+
 func TestMergeManagedProviderAccountsSiteBoundaries(t *testing.T) {
 	tests := []struct {
 		name  string

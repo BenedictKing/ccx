@@ -655,6 +655,14 @@ func (cm *ConfigManager) mergeManagedProviderAccounts() bool {
 				}
 			}
 
+			// 仅托管渠道按站点收敛为一条 route；手动渠道（同站点 suspended/active
+			// 并存等合法形态）只归并账号身份，保留渠道实体，否则配置热重载会
+			// 静默吞掉手动渠道。手动渠道也不占用合并槽位。
+			if !channel.AutoManaged {
+				out = append(out, channel)
+				continue
+			}
+
 			idx, exists := groupIndex[root]
 			if !exists {
 				groupIndex[root] = len(out)
