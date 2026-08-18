@@ -3188,8 +3188,8 @@
           "effort": "max",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-15",
-          "costUsd": 0.25
+          "capturedAt": "2026-08-18",
+          "costUsd": 0.33
         }
       ]
     },
@@ -4469,7 +4469,7 @@
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://deng.codexradar.com/",
           "capturedAt": "2026-08-18",
-          "costUsd": 22.72
+          "costUsd": 22.66
         },
         {
           "benchmark": "deepswe",
