@@ -603,8 +603,8 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     fetchModelsError.value = ''
     keyModelsStatus.value.clear()
 
-    // 如果有模型映射配置，主动预加载模型列表
-    if (channel.modelMapping && Object.keys(channel.modelMapping).length > 0) {
+    // 打开编辑即预加载各 Key 的上游模型列表，Key 行需展示每个 Key 的模型数
+    if (form.apiKeys.length > 0 || visibleDisabledKeys.value.length > 0) {
       nextTick(() => {
         fetchTargetModels()
       })
