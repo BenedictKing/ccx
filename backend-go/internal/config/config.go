@@ -1396,6 +1396,11 @@ type ConfigManager struct {
 	backgroundWG          sync.WaitGroup
 	configChangeCallbacks []func(Config)
 
+	// selfWriteSum 记录最后一次自身保存的文件摘要；watcher 重载前比对，
+	// 一致则跳过（内存已是最新，重载只会让迁移逻辑改写运行时状态）。
+	selfWriteMu  sync.Mutex
+	selfWriteSum string
+
 	// eventBus 跨模块事件总线（Phase B.1，可选）。未注入时 Key/config 事件不发。
 	eventBus atomic.Pointer[eventbus.Bus]
 }

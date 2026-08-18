@@ -1558,9 +1558,36 @@ func (cm *ConfigManager) saveConfigLocked(config Config) error {
 	if err := os.WriteFile(cm.configFile, data, 0600); err != nil { // 仅所有者可读写，保护敏感配置
 		return err
 	}
+	cm.recordSelfWrite(data)
 	cm.config = config
 	cm.publishUpstreamChangeIfChanged(&snapshotBeforeWrite)
 	return nil
+}
+
+// recordSelfWrite 记录自身保存的文件内容摘要，供 watcher 重载前过滤自写事件。
+func (cm *ConfigManager) recordSelfWrite(data []byte) {
+	sum := sha256.Sum256(data)
+	cm.selfWriteMu.Lock()
+	cm.selfWriteSum = string(sum[:])
+	cm.selfWriteMu.Unlock()
+}
+
+// skipReloadIfSelfWritten 判断配置文件当前内容是否与最后一次自写内容一致。
+// 一致说明文件变更来自自身保存（内存已是最新），跳过重载，避免迁移归一化
+// 逻辑在热重载窗口改写运行时状态。
+func (cm *ConfigManager) skipReloadIfSelfWritten() bool {
+	cm.selfWriteMu.Lock()
+	last := cm.selfWriteSum
+	cm.selfWriteMu.Unlock()
+	if last == "" {
+		return false
+	}
+	data, err := os.ReadFile(cm.configFile)
+	if err != nil {
+		return false
+	}
+	sum := sha256.Sum256(data)
+	return string(sum[:]) == last
 }
 
 // SaveConfig 保存配置
@@ -1700,6 +1727,11 @@ func (cm *ConfigManager) startWatcher() error {
 			case <-timerC:
 				timer = nil
 				timerC = nil
+				// 自身保存触发的文件变更直接跳过：内存已是最新，重载只会
+				// 让迁移归一化在热重载窗口改写运行时状态。
+				if cm.skipReloadIfSelfWritten() {
+					continue
+				}
 				if err := cm.loadConfig(); err != nil {
 					log.Printf("[Config-Watcher] 警告: 配置重载失败: %v", err)
 				} else {

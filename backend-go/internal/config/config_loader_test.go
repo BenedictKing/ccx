@@ -1,9 +1,12 @@
 package config
 
 import (
+	"bytes"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -109,5 +112,69 @@ func TestWatcherHandlesAtomicSave(t *testing.T) {
 	cfg := cm.GetConfig()
 	if len(cfg.Upstream) != 1 || cfg.Upstream[0].Name != "atomic-save" {
 		t.Fatalf("重载后的配置未更新，got %+v", cfg.Upstream)
+	}
+}
+
+// lockedLogBuffer 并发安全的日志缓冲：watcher 后台 goroutine 写日志与
+// 测试主 goroutine 读取断言之间存在并发。
+type lockedLogBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (l *lockedLogBuffer) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.buf.Write(p)
+}
+
+func (l *lockedLogBuffer) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.buf.String()
+}
+
+// TestWatcherSkipsSelfWrittenReload 自身保存不应触发 watcher 重载（内存已是最新），
+// 外部修改仍然正常重载。
+func TestWatcherSkipsSelfWrittenReload(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "config.json")
+	if err := os.WriteFile(configPath, []byte(`{}`), 0644); err != nil {
+		t.Fatalf("初始配置写入失败: %v", err)
+	}
+	cm, err := NewConfigManager(configPath, "")
+	if err != nil {
+		t.Fatalf("NewConfigManager() error = %v", err)
+	}
+	defer cm.CloseWatcher()
+
+	buf := &lockedLogBuffer{}
+	oldWriter := log.Writer()
+	log.SetOutput(buf)
+	t.Cleanup(func() { log.SetOutput(oldWriter) })
+
+	// 自写：走 saveConfigLocked 落盘，等待超过 debounce 窗口。
+	if err := cm.AddUpstream(UpstreamConfig{
+		Name: "self-write", BaseURL: "https://self.example", APIKeys: []string{"k1"}, ServiceType: "claude",
+	}); err != nil {
+		t.Fatalf("AddUpstream() error = %v", err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	if strings.Contains(buf.String(), "配置已重载") {
+		t.Fatalf("自身保存不应触发 watcher 重载: %s", buf.String())
+	}
+
+	// 外部修改：必须触发重载。
+	external := `{"upstream":[{"name":"external-edit","baseUrl":"https://ext.example","apiKeys":["k2"],"serviceType":"claude"}]}`
+	if err := os.WriteFile(configPath, []byte(external), 0644); err != nil {
+		t.Fatalf("外部修改写入失败: %v", err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	if !strings.Contains(buf.String(), "配置已重载") {
+		t.Fatalf("外部修改应触发重载: %s", buf.String())
+	}
+	cfg := cm.GetConfig()
+	if len(cfg.Upstream) != 1 || cfg.Upstream[0].Name != "external-edit" {
+		t.Fatalf("重载后的配置未更新, got %+v", cfg.Upstream)
 	}
 }
