@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -24,10 +25,11 @@ func TestWatcher_DebouncesRapidWrites(t *testing.T) {
 	}
 	defer cm.CloseWatcher()
 
-	callbackCount := 0
+	// 回调由 fireConfigChangeCallbacks 在独立 goroutine 中异步执行，计数需原子操作。
+	var callbackCount atomic.Int32
 	done := make(chan struct{}, 1)
 	cm.RegisterOnConfigChange(func(_ Config) {
-		callbackCount++
+		callbackCount.Add(1)
 		select {
 		case done <- struct{}{}:
 		default:
@@ -55,11 +57,12 @@ func TestWatcher_DebouncesRapidWrites(t *testing.T) {
 	// 再等待一段时间确保后续没有多次触发
 	time.Sleep(200 * time.Millisecond)
 
-	if callbackCount > 2 {
+	triggered := callbackCount.Load()
+	if triggered > 2 {
 		// 允许极端环境下 2 次（首批 + 末尾边界），但不应等于 5
-		t.Fatalf("callback 触发 %d 次，期望 1-2 次（debounce 合并失败）", callbackCount)
+		t.Fatalf("callback 触发 %d 次，期望 1-2 次（debounce 合并失败）", triggered)
 	}
-	if callbackCount == 0 {
+	if triggered == 0 {
 		t.Fatal("callback 未触发")
 	}
 }
