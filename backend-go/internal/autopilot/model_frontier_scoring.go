@@ -28,6 +28,11 @@ const (
 	// 并列，由成本兜底，避免 1-2 分的小差异就把 compact/低成本模型完全挤掉。
 	premiumFrontierBenchmarkMinDelta = 5.0
 
+	// frontierFamilyCostPremiumTolerance 是 quality_first 并列决胜中同族粘性允许的
+	// 成本溢价上限。同协议语义族候选仅在不贵于跨族候选该比例时凭族粘性胜出，
+	// 超出后回到成本比较，防止为噪声级质量并列支付无上限的家族溢价。
+	frontierFamilyCostPremiumTolerance = 0.25
+
 	// frontierQualityIntervalBase 是质量置信区间的基准半宽。
 	frontierQualityIntervalBase = 0.05
 	// frontierLowConfidenceFactor 是实测质量置信度不足时的区间加宽倍数。
@@ -395,8 +400,14 @@ func selectBenefitCappedFrontierPoint(
 }
 
 // selectFrontierQualityFirst 实现 quality_first 的并列容差规则：
-// 与最高质量点置信区间重叠的前沿点视为质量并列，并列中取成本最低者，
+// 与最高质量点质量并列的前沿点进入并列池，并列中按"质量证据优先、成本兜底"取优，
 // 避免为噪声级质量差异付出数倍成本。
+//
+// 并列判定（收紧后）：
+//   - top 具备实测 benchmark 证据时，无 benchmark 证据的候选不进并列池——
+//     档先验合成的宽置信区间不足以宣称与实测质量持平；
+//   - 候选质量上界必须触及 top 的点估计（而非仅触及 top 下界），
+//     防止宽区间候选蹭边缘挤进并列池。
 func selectFrontierQualityFirst(forest FrontierForest, ranked []rankedModelCandidate) (int, string) {
 	var all []FrontierPoint
 	for _, cluster := range forest.Clusters {
@@ -412,11 +423,21 @@ func selectFrontierQualityFirst(forest FrontierForest, ranked []rankedModelCandi
 			top = p
 		}
 	}
+	topIdx, topErr := strconv.Atoi(top.CandidateID)
+	topHasBench := topErr == nil && topIdx >= 0 && topIdx < len(ranked) && ranked[topIdx].benchmarkKnown
 	tied := make([]FrontierPoint, 0, len(all))
 	for _, p := range all {
-		if p.QualityHigh >= top.QualityLow {
-			tied = append(tied, p)
+		idx, err := strconv.Atoi(p.CandidateID)
+		if err != nil || idx < 0 || idx >= len(ranked) {
+			continue
 		}
+		if topHasBench && !ranked[idx].benchmarkKnown {
+			continue
+		}
+		if p.QualityHigh < top.QualityScore {
+			continue
+		}
+		tied = append(tied, p)
 	}
 	best := pickFrontierQualityFirstPoint(tied, ranked)
 	if best < 0 {
@@ -425,9 +446,9 @@ func selectFrontierQualityFirst(forest FrontierForest, ranked []rankedModelCandi
 	return best, fmt.Sprintf("frontier:%s/tie_pool=%d/v=%s", CostPrefQualityFirst, len(tied), forest.Version)
 }
 
-// pickFrontierQualityFirstPoint 在 quality_first 的并列池里优先兑现 benchmark/quality 证据，
-// 避免高 benchmark 模型仅因成本更高就被低成本模型压掉；成本只在前述质量证据
-// 仍无法区分时才作为次级 tie-break。这样 quality_first 才真正体现"质量优先"。
+// pickFrontierQualityFirstPoint 在 quality_first 的并列池里优先兑现 benchmark/quality 证据：
+// benchmark 差距足够大时直接兑现，质量档先验次之；此后成本主导——同族粘性只在
+// frontierFamilyCostPremiumTolerance 溢价内生效，不为噪声级质量并列支付无上限家族溢价。
 func pickFrontierQualityFirstPoint(points []FrontierPoint, ranked []rankedModelCandidate) int {
 	bestIdx := -1
 	var bestPoint FrontierPoint
@@ -441,12 +462,6 @@ func pickFrontierQualityFirstPoint(points []FrontierPoint, ranked []rankedModelC
 			continue
 		}
 		cand, best := ranked[idx], ranked[bestIdx]
-		if cand.sameFamily != best.sameFamily {
-			if cand.sameFamily {
-				bestIdx, bestPoint = idx, p
-			}
-			continue
-		}
 		// benchmark 是独立能力测量；差距足够大时直接兑现，不论是否同档。
 		if cand.benchmarkKnown && best.benchmarkKnown {
 			delta := cand.benchmarkScore - best.benchmarkScore
@@ -457,12 +472,24 @@ func pickFrontierQualityFirstPoint(points []FrontierPoint, ranked []rankedModelC
 				continue
 			}
 		}
-		// 同档内 benchmark 差不足阈值时，回到 qualityRank、成本、实测质量、qualityScore 的兜底链。
+		// benchmark 无法区分时，质量档先验次之。
 		if cand.qualityRank != best.qualityRank {
 			if cand.qualityRank > best.qualityRank {
 				bestIdx, bestPoint = idx, p
 			}
 			continue
+		}
+		// 同族粘性是有限溢价内的偏好：族一致性不得让成本无上限膨胀。
+		if cand.sameFamily != best.sameFamily {
+			candSticky := cand.sameFamily && float64(p.Cost.Estimated) <= float64(bestPoint.Cost.Estimated)*(1+frontierFamilyCostPremiumTolerance)
+			bestSticky := best.sameFamily && float64(bestPoint.Cost.Estimated) <= float64(p.Cost.Estimated)*(1+frontierFamilyCostPremiumTolerance)
+			if candSticky != bestSticky {
+				if candSticky {
+					bestIdx, bestPoint = idx, p
+				}
+				continue
+			}
+			// 双方都不满足（或都满足）粘性条件时，落入成本比较。
 		}
 		if p.Cost.Estimated != bestPoint.Cost.Estimated {
 			if p.Cost.Estimated < bestPoint.Cost.Estimated {

@@ -188,18 +188,8 @@ func clusterFrontierPoints(points []FrontierPoint) []FrontierCluster {
 		}}
 	}
 
-	// 计算相邻点间的能力差距
-	gaps := make([]float64, 0, len(points)-1)
-	for i := 1; i < len(points); i++ {
-		gap := math.Abs(points[i].QualityScore - points[i-1].QualityScore)
-		gaps = append(gaps, gap)
-	}
-
-	// 计算稳健阈值：中位数 + 1.5 * MAD
-	threshold := robustThreshold(gaps)
-	if threshold < minClusterGap {
-		threshold = minClusterGap
-	}
+	// 计算稳健断点阈值（见 clusterGapThreshold），再按阈值切分簇
+	threshold := clusterGapThreshold(points)
 
 	// 按阈值切分簇
 	clusters := []FrontierCluster{{Index: 0}}
@@ -237,6 +227,32 @@ func clusterFrontierPoints(points []FrontierPoint) []FrontierCluster {
 
 // minClusterGap 是簇间最小能力差距（保守默认值，样本过少时使用）。
 const minClusterGap = 0.08
+
+// maxClusterGap 是簇间断点阈值的绝对上限：相邻点质量差超过该值必然切簇。
+// 没有上限时，同模型 effort 邻对的微小 gap 与跨族质量锯齿会把中位数+MAD 推高，
+// 让真实的能力断点（如 bench 差 10+ 分）被并进同一巨簇，破坏车道阶梯语义。
+const maxClusterGap = 0.12
+
+// clusterGapThreshold 估计簇间断点阈值（中位数 + 1.5 * MAD）。
+// 估计样本剔除同 CanonicalModel 的相邻对：同一模型的 high/max 点质量分几乎相同，
+// 微小 gap 会把中位数与 MAD 拉低失真。最终阈值夹在 [minClusterGap, maxClusterGap]。
+func clusterGapThreshold(points []FrontierPoint) float64 {
+	estGaps := make([]float64, 0, len(points))
+	for i := 1; i < len(points); i++ {
+		if points[i].CanonicalModel == points[i-1].CanonicalModel {
+			continue
+		}
+		estGaps = append(estGaps, math.Abs(points[i].QualityScore-points[i-1].QualityScore))
+	}
+	threshold := robustThreshold(estGaps)
+	if threshold < minClusterGap {
+		return minClusterGap
+	}
+	if threshold > maxClusterGap {
+		return maxClusterGap
+	}
+	return threshold
+}
 
 // robustThreshold 计算中位数 + 1.5 * MAD 作为稳健阈值。
 func robustThreshold(values []float64) float64 {

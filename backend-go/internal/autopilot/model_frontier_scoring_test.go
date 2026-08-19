@@ -2,6 +2,7 @@ package autopilot
 
 import (
 	"math"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -511,4 +512,186 @@ func TestPickFrontierPoint_SameFamilyPreferred(t *testing.T) {
 	if got := pickFrontierPoint(points, ranked); got != 1 {
 		t.Fatalf("pickFrontierPoint() = %d, want 1 (same family over lower cost)", got)
 	}
+}
+
+// TestPickFrontierQualityFirstPoint 系列验证 quality_first 并列决胜链：
+// 质量证据（benchmark/档位）优先，同族粘性只在有限溢价内生效，其余由成本兜底。
+func TestPickFrontierQualityFirstPoint(t *testing.T) {
+	// 构造一个跨族候选（与 makeFrontierCandidate 默认 claude 族相对）。
+	crossFamily := func(c rankedModelCandidate) rankedModelCandidate {
+		c.profile.ModelFamily = ModelFamilyOpenAI
+		return c
+	}
+	cases := []struct {
+		name string
+		// ranked 与 points 按下标一一对应
+		ranked  []rankedModelCandidate
+		costs   []int64
+		wantIdx int
+	}{
+		{
+			name: "同族溢价超容忍上限时被更便宜跨族候选替代",
+			// 同族 30、跨族 17.77：溢价 69% > 25%，噪声级 bench 差（2.57 < 5）不值回溢价
+			ranked: []rankedModelCandidate{
+				func() rankedModelCandidate {
+					c := makeFrontierCandidate("claude-opus-5", 3, 0.5, 83.07, 30)
+					c.sameFamily = true
+					return c
+				}(),
+				func() rankedModelCandidate {
+					c := crossFamily(makeFrontierCandidate("kimi-k3", 3, 0.5, 80.50, 17.77))
+					c.sameFamily = false
+					return c
+				}(),
+			},
+			costs:   []int64{45_000_000, 26_660_000},
+			wantIdx: 1,
+		},
+		{
+			name: "同族溢价在容忍上限内保持族粘性",
+			ranked: []rankedModelCandidate{
+				func() rankedModelCandidate {
+					c := makeFrontierCandidate("claude-opus-5", 3, 0.5, 82, 11)
+					c.sameFamily = true
+					return c
+				}(),
+				func() rankedModelCandidate {
+					c := crossFamily(makeFrontierCandidate("kimi-k3", 3, 0.5, 80, 10))
+					c.sameFamily = false
+					return c
+				}(),
+			},
+			costs:   []int64{11_000_000, 10_000_000},
+			wantIdx: 0,
+		},
+		{
+			name: "benchmark 差距足够大时压过族粘性",
+			ranked: []rankedModelCandidate{
+				func() rankedModelCandidate {
+					c := makeFrontierCandidate("claude-opus-5", 3, 0.5, 73, 20)
+					c.sameFamily = true
+					return c
+				}(),
+				func() rankedModelCandidate {
+					c := crossFamily(makeFrontierCandidate("kimi-k3", 3, 0.5, 80.50, 10))
+					c.sameFamily = false
+					return c
+				}(),
+			},
+			costs:   []int64{20_000_000, 10_000_000},
+			wantIdx: 1,
+		},
+		{
+			name: "质量档先验压过族粘性（bench 均缺失）",
+			ranked: []rankedModelCandidate{
+				func() rankedModelCandidate {
+					c := crossFamily(makeFrontierCandidate("cross-premium", 3, 0.5, 0, 10))
+					c.sameFamily = false
+					return c
+				}(),
+				func() rankedModelCandidate {
+					c := makeFrontierCandidate("same-high", 2, 0.5, 0, 10)
+					c.sameFamily = true
+					return c
+				}(),
+			},
+			costs:   []int64{10_000_000, 10_000_000},
+			wantIdx: 0,
+		},
+		{
+			name: "同成本同证据时取更低下标（确定性）",
+			ranked: []rankedModelCandidate{
+				crossFamily(makeFrontierCandidate("a", 3, 0.5, 80, 10)),
+				crossFamily(makeFrontierCandidate("b", 3, 0.5, 80, 10)),
+			},
+			costs:   []int64{10_000_000, 10_000_000},
+			wantIdx: 0,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			points := make([]FrontierPoint, 0, len(tc.ranked))
+			for i, cost := range tc.costs {
+				points = append(points, FrontierPoint{
+					CandidateID: strconv.Itoa(i),
+					Cost:        CostEvidence{Estimated: cost},
+				})
+			}
+			if got := pickFrontierQualityFirstPoint(points, tc.ranked); got != tc.wantIdx {
+				t.Fatalf("pickFrontierQualityFirstPoint() = %d, want %d", got, tc.wantIdx)
+			}
+		})
+	}
+}
+
+// TestSelectFrontierQualityFirst_TightTiePool 验证并列池收紧规则：
+// 无 benchmark 证据的候选不与实测 top 并列；上界触及 top 点估计才可入池。
+func TestSelectFrontierQualityFirst_TightTiePool(t *testing.T) {
+	t.Run("无 bench 证据的宽区间候选不进并列池", func(t *testing.T) {
+		// a 为实测 top（bench 83）；b 无 bench 证据但区间宽，旧规则下上界可蹭到 a 的下界。
+		a := makeFrontierCandidate("top", 3, 0.5, 83, 30)
+		a.sameFamily = true
+		b := makeFrontierCandidate("no-bench", 2, 0.5, 0, 1)
+		b.sameFamily = false
+		ranked := []rankedModelCandidate{a, b}
+		forest := FrontierForest{
+			ScopeID: frontierCostScopeUSD,
+			Version: frontierEvidenceVersion,
+			Clusters: []FrontierCluster{{
+				Index: 0,
+				Points: []FrontierPoint{
+					{CandidateID: "0", QualityScore: 0.84, QualityLow: 0.75, QualityHigh: 0.93, Cost: CostEvidence{Estimated: 45_000_000}},
+					{CandidateID: "1", QualityScore: 0.66, QualityLow: 0.53, QualityHigh: 0.79, Cost: CostEvidence{Estimated: 1_320_000}},
+				},
+			}},
+		}
+		idx, note := selectFrontierQualityFirst(forest, ranked)
+		if idx != 0 {
+			t.Fatalf("selectFrontierQualityFirst() = (%d, %q), want idx 0 (measured top)", idx, note)
+		}
+		if !strings.Contains(note, "tie_pool=1") {
+			t.Fatalf("note = %q, want tie_pool=1 excluding no-bench candidate", note)
+		}
+	})
+	t.Run("上界未触及 top 点估计的候选不进并列池", func(t *testing.T) {
+		// b 有 bench 证据，但上界 0.83 < top 点估计 0.84，不得入池。
+		a := makeFrontierCandidate("top", 3, 0.5, 83, 30)
+		b := makeFrontierCandidate("near", 3, 0.5, 78, 10)
+		ranked := []rankedModelCandidate{a, b}
+		forest := FrontierForest{
+			ScopeID: frontierCostScopeUSD,
+			Version: frontierEvidenceVersion,
+			Clusters: []FrontierCluster{{
+				Index: 0,
+				Points: []FrontierPoint{
+					{CandidateID: "0", QualityScore: 0.84, QualityLow: 0.75, QualityHigh: 0.93, Cost: CostEvidence{Estimated: 80_000_000}},
+					{CandidateID: "1", QualityScore: 0.78, QualityLow: 0.73, QualityHigh: 0.83, Cost: CostEvidence{Estimated: 10_000_000}},
+				},
+			}},
+		}
+		idx, note := selectFrontierQualityFirst(forest, ranked)
+		if idx != 0 || !strings.Contains(note, "tie_pool=1") {
+			t.Fatalf("selectFrontierQualityFirst() = (%d, %q), want idx 0 with tie_pool=1", idx, note)
+		}
+	})
+	t.Run("上界触及 top 点估计的 bench 候选正常入池", func(t *testing.T) {
+		a := makeFrontierCandidate("top", 3, 0.5, 83, 30)
+		b := makeFrontierCandidate("near", 3, 0.5, 80, 10)
+		ranked := []rankedModelCandidate{a, b}
+		forest := FrontierForest{
+			ScopeID: frontierCostScopeUSD,
+			Version: frontierEvidenceVersion,
+			Clusters: []FrontierCluster{{
+				Index: 0,
+				Points: []FrontierPoint{
+					{CandidateID: "0", QualityScore: 0.84, QualityLow: 0.75, QualityHigh: 0.93, Cost: CostEvidence{Estimated: 80_000_000}},
+					{CandidateID: "1", QualityScore: 0.82, QualityLow: 0.73, QualityHigh: 0.91, Cost: CostEvidence{Estimated: 10_000_000}},
+				},
+			}},
+		}
+		idx, note := selectFrontierQualityFirst(forest, ranked)
+		if idx != 1 || !strings.Contains(note, "tie_pool=2") {
+			t.Fatalf("selectFrontierQualityFirst() = (%d, %q), want idx 1 with tie_pool=2", idx, note)
+		}
+	})
 }

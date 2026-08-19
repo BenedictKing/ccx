@@ -292,6 +292,78 @@ func TestRobustThreshold_MinGap(t *testing.T) {
 	_ = threshold
 }
 
+// TestClusterGapThreshold 验证断点阈值的去重估计与上下限夹逼。
+func TestClusterGapThreshold(t *testing.T) {
+	// mkPoint 构造带 CanonicalModel 的聚类测试点（testPoint 不设置该字段，
+	// 而去重估计依赖它区分同模型 effort 邻对）。
+	mkPoint := func(model, id string, q, c float64) FrontierPoint {
+		p := testPoint(id, q, q-0.05, q+0.05, c)
+		p.CanonicalModel = model
+		return p
+	}
+	t.Run("同模型 effort 邻对不参与阈值估计", func(t *testing.T) {
+		// 全量 gap 中位数会被同模型微小 gap 拉低失真；去重后仅剩跨模型 gap，
+		// 稳健阈值被绝对上限夹住，真实断点得以切开。
+		points := []FrontierPoint{
+			mkPoint("m1", "m1/high", 0.50, 10),
+			mkPoint("m1", "m1/max", 0.501, 12),
+			mkPoint("m2", "m2/high", 0.64, 20),
+			mkPoint("m2", "m2/max", 0.641, 24),
+			mkPoint("m3", "m3/high", 0.79, 30),
+		}
+		if got := clusterGapThreshold(points); got != maxClusterGap {
+			t.Fatalf("clusterGapThreshold() = %f, want capped at %f", got, maxClusterGap)
+		}
+	})
+	t.Run("稳健阈值低于 minClusterGap 时兜底", func(t *testing.T) {
+		points := []FrontierPoint{
+			mkPoint("a", "a/high", 0.50, 10),
+			mkPoint("a", "a/max", 0.501, 12),
+			mkPoint("b", "b/high", 0.55, 20),
+		}
+		// 去重后仅一个 0.049 的 gap：中位数+MAD=0.049 < 0.08 → 兜底。
+		if got := clusterGapThreshold(points); got != minClusterGap {
+			t.Fatalf("clusterGapThreshold() = %f, want floored to %f", got, minClusterGap)
+		}
+	})
+	t.Run("空样本兜底", func(t *testing.T) {
+		points := []FrontierPoint{mkPoint("only", "only/high", 0.5, 10)}
+		if got := clusterGapThreshold(points); got != minClusterGap {
+			t.Fatalf("clusterGapThreshold() = %f, want %f for single point", got, minClusterGap)
+		}
+	})
+}
+
+// TestClusterFrontierPoints_BreaksRealQualityGaps 验证真实能力断点不被巨簇吞掉：
+// 跨模型质量差 0.13-0.15（约 bench 13-15 分）必须切簇，
+// 即使旧的中位数+MAD 口径会把阈值推高到全部并成一簇。
+func TestClusterFrontierPoints_BreaksRealQualityGaps(t *testing.T) {
+	mkPoint := func(model, id string, q, c float64) FrontierPoint {
+		p := testPoint(id, q, q-0.05, q+0.05, c)
+		p.CanonicalModel = model
+		return p
+	}
+	points := []FrontierPoint{
+		mkPoint("m1", "m1/high", 0.50, 10),
+		mkPoint("m1", "m1/max", 0.501, 12),
+		mkPoint("m2", "m2/high", 0.64, 20),
+		mkPoint("m2", "m2/max", 0.641, 24),
+		mkPoint("m3", "m3/high", 0.79, 30),
+		mkPoint("m3", "m3/max", 0.791, 34),
+	}
+	clusters := clusterFrontierPoints(points)
+	if len(clusters) != 3 {
+		t.Fatalf("clusters = %d, want 3 (m1/m2/m3 各成一簇)", len(clusters))
+	}
+	for i, want := range []string{"m1", "m2", "m3"} {
+		for _, p := range clusters[i].Points {
+			if p.CanonicalModel != want {
+				t.Fatalf("cluster %d contains %q, want only %q model", i, p.CanonicalModel, want)
+			}
+		}
+	}
+}
+
 // ────────────────────────────────────────────────────────────────
 // 膝点检测测试
 // ────────────────────────────────────────────────────────────────
