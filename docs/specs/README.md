@@ -67,9 +67,12 @@ Channels   (Claude/OpenAI/Gemini/...)
 | new-api-integration.md | ✅ 完成 | 覆盖数据模型、接口、同步、边界、待补充项详解 |
 | public-key-routing.md | ✅ 完成 | Key 级零成本与机会性优先消耗已落地，前后端已配套 |
 | healthcheck.md | ✅ 完成 | 覆盖 L1/L2、稀疏探针、恢复、凭证回填、待补充项详解 |
+| channel-data-model-v2.md | ✅ 完成 | 覆盖 Channel→Key→Endpoint→Model 模型、Phase 2/3 落地状态、渠道级计费/指纹机制 |
 | web-ui-dialogs.md | ✅ 完成 | 覆盖所有对话框布局、交互、状态流转、跳转关系 |
 | web-ui-pages.md | ✅ 完成 | 覆盖 8 个 View、导航 IA、全局区块显隐、ego-browser 实测、IA 问题清单 |
 | cross-module-integration.md | ✅ 完成 | 覆盖交互边界、事件传播、配置传播、竞态处理、事件总线 |
+
+> `phase3c-handoff.md` 为 2026-08-11 的历史交接快照（任务已全部完成），不作为现状参考。
 
 ## 待补充
 

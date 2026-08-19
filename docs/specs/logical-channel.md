@@ -12,26 +12,29 @@
 
 ### 2.1 `LogicalChannel`
 
-文件：`backend-go/internal/config/logical_channel.go`（行 38-55）
+文件：`backend-go/internal/config/logical_channel.go`（行 41-60）
 
 | 字段 | JSON 名 | 含义 |
 |---|---|---|
 | `LogicalChannelUID` | `logicalChannelUid` | 稳定 ULID 风格 UID，`lc_` 前缀 |
 | `AccountUID` | `accountUid` | 可选托管账号身份 |
 | `ProviderID` | `providerId` | 可选来源 provider 模板 ID |
-| `Name` | `name` | 用户可见名称 |
+| `Name` | `name` | 用户可见名称；按首个 BaseURL 自动派生，不允许手改 |
 | `Description` | `description` | 描述 |
 | `Website` | `website` | 站点主页 |
+| `Remark` | `remark` | 用户备注，最长 10 字符 |
 | `Kind` | `kind` | `llm` / `embeddings` / `images` |
 | `BaseURLs` | `baseUrls` | 站点地址池（归一化后，去重保序） |
 | `SiteIdentity` | `siteIdentity` | 主 URL 的归一化站点身份 |
 | `Protocols` | `protocols` | 多协议物理路由引用 |
 | `Tags` | `tags` | 用户标签 |
+| `HealthTag`/`QualityTag`/`CostTag` | `healthTag` 等 | 派生标签（autopilot 注册 deriver 生成，见 §16.1） |
+| `CapabilityTags` | `capabilityTags` | 能力标签（同上） |
 | `CreatedAt` / `UpdatedAt` | `createdAt` / `updatedAt` | 时间戳 |
 
 ### 2.2 `LogicalChannelProtocol`
 
-文件：`backend-go/internal/config/logical_channel.go`（行 27-36）
+文件：`backend-go/internal/config/logical_channel.go`（行 28-36）
 
 | 字段 | 含义 |
 |---|---|
@@ -45,7 +48,7 @@
 
 ### 2.3 物理渠道上的反向引用
 
-文件：`backend-go/internal/config/config.go`（行 140-146）
+文件：`backend-go/internal/config/config.go`（行 168-174）
 
 - `UpstreamConfig.LogicalChannelUID`：物理渠道所属逻辑渠道稳定身份。
 - `UpstreamConfig.LogicalName`：物理渠道所属逻辑渠道的用户可见名称。
@@ -54,14 +57,14 @@
 
 ### 2.4 配置根结构
 
-文件：`backend-go/internal/config/config.go`（行 1255-1261）
+文件：`backend-go/internal/config/config.go`（行 1362-1365）
 
 - `Config.LogicalChannels []LogicalChannel`
 - `Config.LogicalChannelSchemaVersion int`（当前版本 `1`）
 
 ## 3. 归组算法 `RebuildLogicalChannels`
 
-文件：`backend-go/internal/config/logical_channel.go`（行 132-234）
+文件：`backend-go/internal/config/logical_channel.go`（行 177 起）
 
 ### 3.1 输入与前提
 
@@ -71,7 +74,7 @@
 
 ### 3.2 归组键 `logicalChannelGroupKey`
 
-文件：`backend-go/internal/config/logical_channel.go`（行 57-79）
+文件：`backend-go/internal/config/logical_channel.go`（类型行 85-91，构造函数 `logicalChannelGroupKeyFrom` 行 93-106）
 
 键字段：
 
@@ -102,7 +105,7 @@
 
 ### 3.4 可合并判定 `shouldGroupLogical`
 
-文件：`backend-go/internal/config/logical_channel.go`（行 92-111）
+文件：`backend-go/internal/config/logical_channel.go`（行 120）
 
 优先级顺序：
 
@@ -114,7 +117,7 @@
 
 ### 3.5 同账号强制收敛（历史缺陷修复）
 
-文件：`backend-go/internal/config/logical_channel.go`（行 463-499）
+文件：`backend-go/internal/config/logical_channel.go`（行 534 起）
 
 - 历史一次性缺陷曾给同账号不同协议渠道分别回填不同 `LogicalChannelUID`。
 - `convergeLogicalByAccount` 以 `AccountUID` 为身份真相，把同账号物理渠道归并到首个遇到的 logical（canonical），其余清空 protocols，物理渠道的 `LogicalChannelUID` / `LogicalName` 强制重指。
@@ -139,7 +142,7 @@
 
 ### 4.2 名称推导
 
-文件：`backend-go/internal/config/logical_channel.go`（行 355-377、574-599）
+文件：`backend-go/internal/config/logical_channel.go`（`deriveLogicalName` 行 641 起）
 
 - 优先取组内非自动派生的 `UpstreamConfig.Name`。
 - 自动派生格式判定：`... - chat`、`- codex`、`- gemini`、`- claude`、`- responses`。
@@ -169,7 +172,7 @@
 
 ## 6. 聚合规则
 
-当前 LogicalChannel 本身不直接存储“健康/质量/成本/能力标签”字段，聚合由前端和后端 dashboard 共同完成。
+LogicalChannel 持久化派生标签（`HealthTag`/`QualityTag`/`CostTag`/`CapabilityTags`，由 autopilot 注册的 deriver 随重建刷新，见 §16.1）；健康/质量/成本/能力的**具体数值聚合**仍由前端和后端 dashboard 共同完成。
 
 ### 6.1 后端 Dashboard 聚合
 
@@ -229,6 +232,7 @@
 - Removals：删除指定 kind 的 protocol，同时删除对应物理渠道；拒绝删到 0 个 protocol。
 - Protocols：已存在则更新物理渠道并替换 logical protocol entry；不存在则新增物理渠道。
 - 任意失败则恢复备份，保证事务性。
+- Key 顺序无显式 sort 字段：顺序即 `APIKeys`/`APIKeyConfigs` 的 slice 顺序（前端拖拽排序/置顶置底直接重排 slice，85f362ba）。
 
 ### 7.3 删除 `DeleteLogicalChannel`
 
@@ -244,7 +248,7 @@
 
 ### 8.1 触发时机
 
-文件：`backend-go/internal/config/config_loader.go`（行 186-194）
+文件：`backend-go/internal/config/config_loader.go`（调用点行 226）
 
 - 配置加载时：在所有迁移、校验完成后调用 `ensureLogicalBackfill`。
 - `ensureLogicalBackfill` 在以下任一条件触发 `RebuildLogicalChannels`：
@@ -262,11 +266,12 @@
 
 ### 9.1 账号身份合并
 
-文件：`backend-go/internal/config/config_accounts.go`（行 459-757）
+文件：`backend-go/internal/config/config_accounts.go`（行 487 起，约至 760）
 
 - `mergeManagedProviderAccounts` 在配置加载时按 BaseURL 站点把同一 provider 的历史渠道归并到同一 `AccountUID`。
 - 使用并查集按 `utils.BaseURLSiteIdentities` 找同站账号并合并。
 - 合并后同一账号在不同协议下的渠道共享 `AccountUID`、`ProviderID`，并按 kind 加后缀命名（如 `-claude`、`-chat`）。
+- **实体合并只对托管渠道执行**（`89b6033c`，`config_accounts.go:658`）：`channel.AutoManaged == true` 的渠道才按站点收敛为一条 route（key/baseURL 并集）；手动渠道（同站点 suspended/active 并存等合法形态）**只归并账号身份、保留渠道实体**，也不占用合并槽位——否则配置热重载会静默吞掉手动渠道。回归测试见 `account_uid_test.go`。
 
 ### 9.2 LogicalChannel 对多账号的处理
 
@@ -278,7 +283,7 @@
 
 ### 9.3 自动托管子类型
 
-文件：`backend-go/internal/config/config.go`（行 126-128）
+文件：`backend-go/internal/config/config.go`（行 150-152）
 
 - `UpstreamConfig.AutoManagedKind`：`""` | `"generic"` | `"new_api"`
 - 旧版 relay 托管渠道加载时回填为 `"new_api"`（`config_loader.go` 行 937-953）。
@@ -527,6 +532,8 @@
 
 **测试**：`TestPhysicalChannelChange_RebuildsLogicalChannels` 验证物理渠道 Add/Update/Remove 后 LogicalChannels 与 LogicalChannelUID/LogicalName 同步刷新。
 
+**watcher 自写跳过**（`4b292c56`）：`saveConfigLocked` 落盘后记录文件 sha256 摘要（`recordSelfWrite`，`config_loader.go:1567`）；watcher debounce 到期后 `skipReloadIfSelfWritten`（`:1575`）重读文件比对摘要，一致则跳过 `loadConfig`——内存已是最新，重载只会让迁移归一化在热重载窗口改写运行时状态（如 provision 耗时跨过 debounce 窗口时触发重载合并吞掉手动渠道，正是 `89b6033c` 修复的竞态）。外部修改照常重载。
+
 ### 16.3 与 Autopilot SmartRouter 的候选渠道收集联动
 
 **状态**：✅ **已实现**（2026-08-09，Phase A.1/A.2/A.3，提交 `22028397` / `db380702` / `7ed94e4e`）。
@@ -580,7 +587,7 @@
 |---|---|---|
 | L1 健康检查 | 每个物理渠道独立 worker | 同一 key + endpoint 被探多次 |
 | Circuit breaker | 每个 kind 的 `MetricsManager` 独立 | 一个协议熔断，其他协议仍向同一 endpoint 发请求 |
-| Key 拉黑 | `DisabledAPIKeys` 挂在单个 `UpstreamConfig` | 拉黑 chat 不影响 claude/codex |
+| ~~Key 拉黑~~ | ~~`DisabledAPIKeys` 挂在单个 `UpstreamConfig`~~ | ✅ 已跨协议：`BlacklistKeyWithRecoverAt`（`config.go:1978`）级联拉黑同 `AccountUID`/`LogicalChannelUID` 下持有相同明文 key 的其它协议渠道 |
 | 并发/RPM 配额 | 各 scheduler 独立统计 | 容易把同一 key 的物理限速打满 |
 | 失败记忆缓存 | `failedKeysCache` key 含 `apiType` | 跨协议不共享 |
 
@@ -588,12 +595,10 @@
 
 1. **L1 healthcheck 去重**：同一 `(siteIdentity, accountUID, keyMask)` 在同一周期内只探一次，结果同步到所有引用该物理端点的 protocol。
 2. **Circuit 按物理端点聚合**：`MetricsManager` 的 circuit key 从 `(kind, baseURL, key)` 提升到 `(siteIdentity, accountUID, key)`。
-3. **拉黑以 key 为粒度跨 protocol 生效**：`BlacklistKeyWithRecoverAt` 应作用于 key，再广播到同一 logical 下的所有 protocol 副本。
+3. ~~**拉黑以 key 为粒度跨 protocol 生效**~~：✅ 已实现（见 §17.4 表）。
 4. **跨协议并发配额聚合**：对同一 account/key 的全局限流，避免多个 scheduler 各自冲刺同一上游 RPM。
 
 这些改造需要把 `LogicalChannel` 从“管理视图”提升为“运行时身份”，是独立的中长期重构，不在当前 LogicalChannel Phase A/B/C 的已落地范围内。
 
-**未采用：标签持久化到 LogicalChannel**
-
-因 `config` 包不能依赖 `autopilot`（反向包循环），健康/质量/成本标签的运行时数据源 `ProfileStore` 位于 autopilot 内。A.2 改用兄弟渠道 fallback（全部收敛在 autopilot 内），避免跨包依赖与配置写回循环。标签持久化仍列为低优先级（见 §16.1 与 roadmap Phase C）。
+**关于标签持久化**：已实现（`205fe29d` 之前落地的 hook 机制，详见 §16.1）——config 包通过 `RegisterLogicalChannelTagDeriver` hook 接收 autopilot 派生的标签字符串，`config` 不 import `autopilot`，无包循环。
 

@@ -125,7 +125,7 @@ i18n key 依次为 `app.tabs.{channels,images,vectors,conversations,healthCenter
 
 ## 2. ChannelsView（`/channels/:type`）
 
-- **文件**：`views/ChannelsView.vue`（86 行，极薄壳）
+- **文件**：`views/ChannelsView.vue`（~102 行，极薄壳）
 - **标题/用途**：无自带标题，标题由 App.vue 顶部提供（渠道/Images/Vectors）。统一渠道编排列表（多 LLM 协议已合并，`:type` 实际区分为 messages / images / vectors 三类）。
 - **数据流**：
   - 渠道数据：`channelStore.currentChannelsData`（依赖 `activeTab`，由路由 `props.type` 驱动）+ `currentDashboardMetrics/Stats/RecentActivity`。
@@ -180,18 +180,18 @@ i18n key 依次为 `app.tabs.{channels,images,vectors,conversations,healthCenter
 
 ## 5. SubscriptionsView（`/subscriptions`）
 
-- **文件**：`views/SubscriptionsView.vue`（~120 行，内联弹窗与单行函数）
+- **文件**：`views/SubscriptionsView.vue`（~254 行，内联弹窗与轻函数）
 - **标题/用途**：导航 label `app.tabs.subscriptions`（订阅中心）。订阅提供商接入 + 订阅计划管理 + 汇率管理。
-- **数据流**：`api.getSubscriptions()`（`onMounted` + 手动刷新）；提供商模板 `getProviderTemplates()`、自动加渠道 `autoAddChannel()`（来自 `services/autopilot-api`）；计费条款 `api.patchSubscriptionBillingTerms()`；同步 `api.refreshSubscription()`；删除 `api.deleteSubscription()`（用 `dialogStore.confirm`）。无轮询。
+- **数据流**：`api.getSubscriptions()`（`onMounted` + 手动刷新）；提供商模板 `getProviderTemplates()`（来自 `services/autopilot-api`）；**provider 一键添加走 `channelStore.quickAddFromTemplate(providerId, keys, {kind, placement:'front', displayName})`**（`735b8703`，不再直接调 `autoAddChannel`——store 封装创建 + `refreshChannels` + 按 kind 置顶 + 5 分钟促销期，与渠道列表快速添加行为对齐）；计费条款 `api.patchSubscriptionBillingTerms()`（四字段 `paymentAmount/paymentUnit/creditAmount/creditUnit`）；同步 `api.refreshSubscription()`；删除 `api.deleteSubscription()`（用 `dialogStore.confirm`）。无轮询。
 - **子组件树**：
   ```
   SubscriptionsView
   ├─ SubscriptionProviderGrid (@select/@add)
   ├─ [内联] addProvider 卡 (v-expand-transition, apiKey 输入)
   ├─ [内联] selectedProvider 卡 (github-copilot=ComingSoon / new-api=NewApiSubscriptionForm)
-  ├─ SubscriptionPlanTable (@edit/@refresh/@delete)
+  ├─ SubscriptionPlanTable (@edit/@refresh/@delete/@link)
   ├─ ExchangeRateManager
-  └─ [内联弹窗] 计费条款编辑 / new-api 同步结果
+  └─ [内联弹窗] 计费条款编辑 / 订阅关联渠道(linkDialog) / new-api 同步结果
   ```
 - **空态**：`EmptyState` 组件，无订阅且非 loading 时由 `SubscriptionPlanTable` 外部兜底显示，文案走 `subscription.empty.*`。
 - **加载态**：`loading` 仅驱动刷新按钮 loading，无整页 spinner。
@@ -224,7 +224,7 @@ i18n key 依次为 `app.tabs.{channels,images,vectors,conversations,healthCenter
 
 ## 7. AutopilotView（`/autopilot`）
 
-- **文件**：`views/AutopilotView.vue`（141 行）
+- **文件**：`views/AutopilotView.vue`（~152 行）
 - **标题**：`mdi-steering` + `autopilot.title` + 刷新按钮。
 - **数据流**：`fetchAll()` = `Promise.all([api.getSmartRoutingConfig(), api.getAutopilotTraceStats(), api.getAutopilotTraces({limit:50})])`；`api.updateSmartRoutingConfig()` 保存；traces 可单独 `fetchTraces()` 刷新。仅 `onMounted` + 手动，**无轮询**。
 - **子组件树**：
@@ -242,7 +242,7 @@ i18n key 依次为 `app.tabs.{channels,images,vectors,conversations,healthCenter
 
 ## 8. CostReportView（`/cost-report`）
 
-- **文件**：`views/CostReportView.vue`（~289 行，已全量 i18n）
+- **文件**：`views/CostReportView.vue`（~350 行，已全量 i18n）
 - **标题**：`mdi-cash-multiple` + `t('costReport.title')` + 刷新/导出 CSV 按钮。
 - **数据流**：`api.getCostReport(groupBy, duration, apiType)`，`onMounted` + 每次筛选变更即重新拉取，无轮询。`exportCSV()` 前端拼 CSV Blob 下载（含 BOM）。
 - **主内容区块**（无独立区块组件，全内联）：
@@ -250,8 +250,9 @@ i18n key 依次为 `app.tabs.{channels,images,vectors,conversations,healthCenter
   CostReportView
   ├─ 筛选栏: groupBy chips + duration chips + apiType v-select
   ├─ 4 汇总卡: 总请求/成功率/总输入Token/官方定价成本
-  └─ 数据表: 按 groupKey 分组的请求/成功率/Token/缓存/成本
+  └─ 数据表: 按 groupKey 分组的请求/成功率/Token/缓存/成本 + 成本构成列
   ```
+- **成本构成列**（`47d6c205`）：每组渲染四类 chip——已确认零成本（`zeroCostCount`）/ 配置倍率（`configuredMultiplierCount`）/ 订阅到账（`subscriptionCostCount`）/ 无定价（`unpricedCostCount`），区分「已确认零成本」与「成本证据缺失」；CSV 导出含对应字段。
 - **空态**：`!loading && rows.length===0` 大图标 + `t('costReport.emptyTitle')` / `t('costReport.emptyHint')`。
 - **加载态**：`loading && rows.length===0` 居中 spinner。
 - 在黑名单 → 隐藏全局三块。

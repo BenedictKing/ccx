@@ -129,23 +129,15 @@ Enabled / Disabled / Cooldown
 
 ### 4.3 Key 排序键
 
-建议统一 `EndpointPolicy.SortKeyBindings` 与 keypool 的排序语义，使用稳定字典序：
+已实现（`47415362`，`EndpointPolicy.SortKeyBindings`，`endpoint_policy.go:606`）：`classifyKeyBinding` 计算**连续效用分** `UtilityScore = healthScore × fastDecayScore × opportunisticMultiplier`（opportunistic ×1.5；health×decay < 0.67 时自动输给健康 normal Key——「尽快消耗」不被很小的延迟差抵消，同时明显 degraded 的公开 Key 压不过 healthy 私有 Key），排序键为：
 
 ```text
-eligible                         降序
-consumptionClass                 opportunistic 优先
-healthClass                      healthy > degraded > unknown > limited > dead
-fastDecayScore                   降序
-effectiveCost                    升序
-existingEndpointScore            降序
-configuredWeight                 降序
-originalIndex                    升序
+utilityScore                      降序（连续效用分）
+effectiveCost                     升序
+configuredWeight                  降序
+originalIndex                     升序
 ```
 
-其中：
-
-- `consumptionClass` 是首要软偏好，确保“尽快消耗”不会被很小的延迟差抵消；
-- 健康硬过滤后仍保留健康等级排序，避免明显 degraded 的公开 Key 压过 healthy 私有 Key；
 - `originalIndex` 保证同分结果稳定，避免每次请求抖动；
 - assist/dry-run 模式只记录建议顺序，不修改真实请求顺序。
 
@@ -370,7 +362,7 @@ ccx_opportunistic_saved_cost_usd_total
 | 配置合并保留策略 | `backend-go/internal/config/config_utils.go`、`api_key_config_merge_test.go` | new-api 同步不覆盖本地 `ConsumptionPolicy` |
 | 零倍率资格判断 | `backend-go/internal/config/key_group_multiplier_test.go` | `0` 合法且 eligible |
 | Key multiplier PATCH | `backend-go/internal/autopilot/handlers_key_multiplier.go`、`*_test.go` | 支持三态 `consumptionPolicy` 字段 |
-| EndpointPolicy 排序/过滤 | `backend-go/internal/autopilot/endpoint_policy.go`、`*_test.go` | opportunistic 优先，FastDecay 软过滤，常规池回退 |
+| EndpointPolicy 排序/过滤 | `backend-go/internal/autopilot/endpoint_policy.go`、`*_test.go` | 连续效用分排序（`UtilityScore`，opportunistic ×1.5），FastDecay 软过滤，常规池回退 |
 | SmartRouter 代表成本 | `backend-go/internal/autopilot/smart_router.go` | 按可用 Key 最小有效成本聚合，保留 `0` |
 | FastDecay 投影 | `backend-go/internal/autopilot/fast_decay.go` | `PoolTagTemp` 按 opportunistic 投影 |
 | Trace 字段 | `backend-go/internal/handlers/common/autopilot_outcome.go` | `consumptionPolicy`、`configuredCostMultiplier` 已补齐 |
@@ -380,9 +372,9 @@ ccx_opportunistic_saved_cost_usd_total
 
 ### 9.2 仍需补充的运营能力
 
-- 成本报表中区分「已确认零成本」与「成本证据缺失」；
+- ~~成本报表中区分「已确认零成本」与「成本证据缺失」~~ ✅ 已实现（`47d6c205`）：后端输出 `zeroCostCount/configuredMultiplierCount/subscriptionCostCount/unpricedCostCount`，前端成本报表 chip 列 + CSV 字段；
 - `ccx_opportunistic_*` 系列指标与事件（可选，尚未实现）；
-- shadow 对比报告作为默认启用前的最后验证。
+- ~~shadow 对比报告~~ ✅ 已实现（`692d3235`）：auto 模式同时计算实际排序与忽略 opportunistic 的基线排序（`SortKeyBindingsBaseline`），首选不同时写 gin context `ccx.public_key_routing_shadow_diff` 并打 `[<apiType>-PublicKeyRouting-ShadowDiff]` 日志。
 
 
 ## 10. 实施分期
@@ -401,11 +393,11 @@ ccx_opportunistic_saved_cost_usd_total
 - FastDecay 使用完整 EndpointUID，并按机会性/常规池回退；
 - UI 快捷动作与健康状态展示已落地。
 
-### Phase 3：渠道成本聚合与运营闭环（部分完成）
+### Phase 3：渠道成本聚合与运营闭环（已完成）
 
 - SmartRouter 按请求可用 Key 集合计算渠道代表成本（已完成）；
-- 补齐成本报表、节省金额和事件告警（待补充）；
-- shadow 对比验证后全量启用（建议执行）。
+- 成本报表成本构成列与节省金额展示（已完成，`47d6c205`）；
+- shadow 基线对比（`SortKeyBindingsBaseline` + shadow diff 日志）已落地（`692d3235`），后续依据 shadow 数据决定是否调整效用分参数。
 
 ## 11. 测试与验收
 
@@ -470,7 +462,7 @@ private: multiplier=1, policy=normal
 
 ### 12.3 后续可确认项
 
-1. **健康与策略的精确排序边界。** 当前实现中 opportunistic 优先于 normal（策略 B），与文档早期「healthy/degraded 硬门槛优先」的推荐不同；是否切换为健康优先需 shadow 数据决定。
+1. ~~**健康与策略的精确排序边界。**~~ ✅ 已按折中方案落地（`47415362`）：不采用「healthy/degraded 硬门槛优先」，也不是无条件的策略 B，而是乘法效用分 `UtilityScore = healthScore × fastDecayScore × (opportunistic ×1.5)`——健康与机会性在连续分内互相制约，参数可依据 shadow 数据继续调整。
 2. **渠道代表成本置信度惩罚。** `min(可用 Key cost)` 可能让脆弱公开 Key 拉高渠道排名，可在后续加入可用 Key 数量/健康度惩罚。
-3. **成本报表与指标。** 前端已展示资格和策略，后端成本报表仍需明确区分「已确认零成本」与「成本证据缺失」。
+3. ~~**成本报表与指标。**~~ ✅ 前端已展示资格和策略，后端成本报表已区分「已确认零成本」与「成本证据缺失」（`47d6c205`）。
 

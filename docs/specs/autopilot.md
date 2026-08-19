@@ -48,7 +48,7 @@ Autopilot 是 CCX 的智能路由与渠道托管子系统，由 Manager + SmartR
 
 ## 2. 目录结构与文件职责
 
-`backend-go/internal/autopilot/` 共 217 个 `.go` 文件，约 77,868 行代码。按职责分组如下。
+`backend-go/internal/autopilot/` 共 224 个 `.go` 文件，约 84,323 行代码（2026-08-19 实测）。按职责分组如下。
 
 ### 2.1 核心管理/生命周期
 
@@ -57,7 +57,7 @@ Autopilot 是 CCX 的智能路由与渠道托管子系统，由 Manager + SmartR
 | `manager.go` | `Manager` 总控；启动 worker、组件持有、与 scheduler/main.go 接线 |
 | `profile_store.go` | `ProfileStore`：endpoint 画像的内存缓存 + SQLite 异步持久化 |
 | `schema_migration.go` | SQLite 画像库 schema 版本管理 |
-| `async_writer.go` | 有界异步 writer，供 TraceStore 等批量落盘 |
+| `async_writer.go` | 有界异步 writer，供 TraceStore 等批量落盘；指标计数（dropped/writeErrors 等）为 `atomic.Int64`，enqueue/flush/读取三方无锁并发安全 |
 
 ### 2.2 请求画像与分类
 
@@ -117,11 +117,12 @@ Autopilot 是 CCX 的智能路由与渠道托管子系统，由 Manager + SmartR
 | 文件 | 职责 |
 |---|---|
 | `model_resolver.go` | `ModelResolver`：手动映射 → 能力下界过滤 → 模型×effort 排序（8 档规范轴） |
-| `model_profile.go` | `ModelProfile`、模型族/质量档/能力字段、`EffortLevel` 8 档规范枚举 |
+| `model_profile.go` | `ModelProfile`、质量档（benchmark 优先 + 动态边界，见 §5.6）、能力字段、`EffortLevel` 8 档规范枚举 |
 | `model_profile_store.go` | `(channel, kind, metricsKey, model)` 维度的模型画像存储 |
 | `capability_floor.go` | `CapabilityFloor` 与 `MinQualityTierReasons` |
-| `model_frontier.go` | `ComputeFrontierForest`：Pareto 分层与微簇 |
-| `model_frontier_scoring.go` | 质量-成本点合成、三倾向车道选择 |
+| `model_frontier.go` | `ComputeFrontierForest`：Pareto 分层与微簇；同成本 tie-break 补模型名/effort/CandidateID |
+| `model_frontier_scoring.go` | 质量-成本点合成、三倾向车道选择（车道加权质量分与动态溢价帽，见 §5.10） |
+| `benchmark_report.go` | 渠道无关的 benchmark 场景选型报告生成与渲染（供 benchmark-report CLI，见 §2.13 与 §5.7） |
 | `model_routing_policy.go` | 模型替换意图策略 |
 | `origin_tiebreaker.go` | 渠道来源信任等级兜底 |
 
@@ -210,6 +211,14 @@ Autopilot 是 CCX 的智能路由与渠道托管子系统，由 Manager + SmartR
 | `handlers_events.go` | 事件订阅接口 |
 | `handlers_provider_quality.go` | provider quality 接口 |
 
+### 2.13 命令行工具（`backend-go/cmd/`）
+
+| 工具 | 用途 |
+|---|---|
+| `benchmark-report` | 独立的渠道无关 benchmark 场景选型报告 CLI，不依赖运行中的后端（详见 §5.7） |
+| `cc-sim` | 请求模拟 |
+| `stream_verify` | 流式响应验证 |
+
 ## 3. 核心结构体
 
 ### 3.1 请求画像 `RequestProfile`
@@ -267,6 +276,8 @@ Autopilot 是 CCX 的智能路由与渠道托管子系统，由 Manager + SmartR
 | 成本 | `CostProfile/EffectiveCostMultiplier` |
 | 订阅 | `UsageWindows/InheritedFromSubscription/MiniMaxTokenPlanUsage` |
 
+`StabilityTier` 推导注意样本下限：`DeriveStabilityTier`（`profiler.go:161`）在 `stats.RequestCount < 5` 时直接返回 `StabilityTierNormal`（避免新渠道因样本不足被误判 Unstable 而评分归零）；有样本时按 `classifyStabilityByRates`：stable 需 ≥95% 成功率且 429 率 <5%，normal 需 ≥80% 且 429 率 <20%。
+
 ### 3.4 渠道聚合画像 `ChannelProfile`
 
 `ChannelProfile`（`channel_profile.go:21`）由多 endpoint 聚合而成。
@@ -280,9 +291,10 @@ Autopilot 是 CCX 的智能路由与渠道托管子系统，由 Manager + SmartR
 
 ### 3.5 模型画像 `ModelProfile`
 
-`ModelProfile`（`model_profile.go:311`）锚定 `(ChannelUID, ChannelKind, MetricsKey, ModelID)`。
+`ModelProfile`（`model_profile.go:484`）锚定 `(ChannelUID, ChannelKind, MetricsKey, ModelID)`。
 
 - `ModelFamily/QualityTier/SpeedTier/ContextTokens`
+- `QualityTier` 不再单纯按模型族推导：`ModelProfileQualityTier`（`model_profile.go:464`）优先按 benchmark 归一化能力分评定，无 benchmark 证据才回退 `ModelProfileQualityTierFromFamily`（模型族推导，见 §5.6 的动态边界算法）
 - 能力：`SupportsVision/Document/ToolCalls/Reasoning`
 - `ProviderQualityScore/Confidence/Source/ProbeVersion`
 - `TaskDomainStrengths`
@@ -307,18 +319,19 @@ Autopilot 是 CCX 的智能路由与渠道托管子系统，由 Manager + SmartR
 
 `ScoringCandidate` / `ScoredCandidate`（`scoring.go:119/170`）：
 - 输入候选的各维度分 + 输出总分、分项明细
+- `ScoringCandidate` 另含 `QualityBenchmarkKnown/QualityBenchmarkScore`：仅当候选最终判定为 premium 且有实测 benchmark 分时由 `applyPremiumBenchmarkEvidence`（`smart_router.go:1729`）填充，供同档内 tie-break，不跨档、不影响 premium 之外的排序
 
 ### 3.8 Trace
 
-`RoutingDecisionTrace`（`routing_trace.go:78`）记录一次完整路由决策。
+`RoutingDecisionTrace`（`routing_trace.go:88`）记录一次完整路由决策。
 
 - `TraceUID/SchemaVersion/RequestCorrelationId`
 - `TaskClass/TaskDomain/RequestedModel/AgentRole`
-- `Candidates`（含 `CandidateScore` 明细、`FilterReasons`、`DomainEvidence`、AFP 成本）
+- `Candidates`（含 `CandidateKey`（`channelUID|model`，见 §5.8）、`CandidateScore` 明细、`FilterReasons`、`DomainEvidence`、AFP 成本）
 - `GlobalFilterReasons/SortReasons`
 - `SelectedChannelUID/SelectedMetricsKey/SelectedOriginTier`
 - `FallbackUsed/ShadowChannelUID/ActualChannelUID`
-- `SchedulerDecision`：调度器最终选择回填
+- `SchedulerDecision`：类型为 `SchedulerDecisionSummary`（`trace_contract.go:133`），含被滤渠道明细 `SkippedCandidates`（ChannelIndex/ChannelName/Stage/Reason/Details，见 §5.9）
 - `EndpointAttempts/AttemptsTotal/AttemptsByResult`
 
 ### 3.9 限速学习
@@ -407,7 +420,7 @@ Autopilot 是 CCX 的智能路由与渠道托管子系统，由 Manager + SmartR
 
 ### 4.4 调度器集成：渠道级过滤
 
-入口：`main.go:739` 通过 `channelScheduler.SetCandidateFilterProvider` 注册。
+入口：`main.go:788` 通过 `channelScheduler.SetCandidateFilterProvider` 注册。
 
 ```
 Scheduler 选渠链路：
@@ -416,18 +429,17 @@ ContextFilter → CandidateFilter(SmartRouter) → X-Channel/ManualOverride/Prom
 
 `SmartRouter.CandidateFilterForWithActual` → `candidateFilterFor` → `executeFilter`
 
-`executeFilter` 流程（`smart_router.go:494`）：
+`executeFilter` 流程（`smart_router.go:591`）：
 
 1. 构建 `RoutingDecisionTrace`
 2. 遍历 scheduler 传入的候选渠道
-   - 跳过 disabled channel
-   - 联邦路由：`federatedRoute(ch, profile.ChannelKind)`
-   - 解析模型映射：`resolveChannelModel`
-   - 构建 `channelScoreEntry`
-   - `applyModelQualityTier`
+   - 三个预过滤跳过点（missing_upstream/disabled_channel/candidate_unavailable）不再静默，写入 `trace.GlobalFilterReasons["candidate_pre_filter"]`
+   - 联邦路由：`federatedRoute(ch, profile.ChannelKind)`；`ch.ActualModel != ""` 时协议联邦短路为单候选行（MappingSource="protocol_federation"）
+   - 解析模型映射：`resolveChannelModels`（复数）——候选粒度为 **(渠道, 模型)** 行，单渠道上限 `routingCandidateFanoutLimit = 8`（见 §5.8）
+   - 每行独立构建 `channelScoreEntry` 并独立做硬约束判定；`applyModelQualityTier`（同名承接行 `MappedModel` 保持空，防映射质量档折算误判）
 3. 应用 AFP 成本（若启用）
-4. 归一化 `SavingsScore`（分组归一化用于 AFP）
-5. `ScoreCandidate` 对每个候选评分
+4. 归一化 `SavingsScore`：cost/savings 按 `CandidateKey`（`channelUID|model`）归一化，空则回退 ChannelUID
+5. `ScoreCandidate` 对每个候选行评分
 6. **Advisor hint**：
    - 仅 `lightweight/worker` 允许生效
    - `MinQualityTier` 作为硬约束
@@ -438,6 +450,7 @@ ContextFilter → CandidateFilter(SmartRouter) → X-Channel/ManualOverride/Prom
    - 命中后提升到首位
 8. 硬约束过滤 + fail-open
    - 全部过滤后回退到重排
+   - 结果按路由键做**渠道级去重**（`seenRouteKeys`）：同渠道多模型行只贡献一个 failover 槽位，取首个（最高分）存活模型行
 9. 持久化 trace
 10. 返回排序后的 `[]scheduler.ChannelInfo`
 
@@ -461,8 +474,9 @@ ContextFilter → CandidateFilter(SmartRouter) → X-Channel/ManualOverride/Prom
 2. **Frontier 选型**（默认启用，先保留所有满足硬能力的候选）：
    - 按连续 benchmark、置信区间与可比成本生成动态 `F0...Fn`，簇数量由自然断点决定，不设固定上限
    - `QualityBenefitCap` 只把兼容性的 `low/normal/high/premium` 请求目标投影到当前 `F0...Fn`，不写回模型永久等级
-3. 成本证据不足时 fail-open，才应用固定 `QualityTier` 分带并进入旧字典序链：
-   - qualityRank → sameFamily → provider quality priority → cost/version/benchmark → measuredQuality → latency → anti-effort-inflation → model ID
+3. 成本证据不足时 fail-open，才应用固定 `QualityTier` 分带并进入旧字典序链（`betterRankedModel`，`model_resolver.go:966`）：
+   - qualityRank → sameFamily → provider quality priority（双方可比时）→ 【cost_first 车道先比 cost】→ benchmark（`compareModelBenchmark`）→ version → measuredQuality → 【balanced 车道比 cost】→ latency → 【quality_first 车道比 cost】→ anti-effort-inflation → model ID
+   - benchmark 比较已提前于版本比较；成本比较位置随车道后移/前移
 
 `resolveEffortVariants`（`model_resolver.go:315`）：
 
@@ -473,7 +487,7 @@ ContextFilter → CandidateFilter(SmartRouter) → X-Channel/ManualOverride/Prom
 
 ### 4.6 Endpoint 级策略
 
-`EndpointPolicy` 由 `main.go:780` 的 hook 注入 `handlers/common`。
+`EndpointPolicy` 由 `main.go:829` 的 hook 注入 `handlers/common`。
 
 `BuildEndpointPolicy`（`endpoint_policy.go:143`）：
 
@@ -499,7 +513,7 @@ health(40) > fastDecay(25) > successRate(20) > latency(10) > cost(5)
 
 ### 4.7 健康诊断与画像刷新
 
-`Manager.runWorker`（`manager.go:796`）每 5 分钟执行 `collectAll`：
+`Manager.runWorker`（`manager.go:843`）每 5 分钟执行 `collectAll`（`manager.go:892`）：
 
 1. `refreshEndpointInventory`：刷新当前配置可达 endpoint 清单
 2. `buildEndpointLimiterMappings` + `RateLimitApplier.Apply`
@@ -521,7 +535,7 @@ health(40) > fastDecay(25) > successRate(20) > latency(10) > cost(5)
 ### 4.8 失败后学习/熔断/重试
 
 #### FastDecay
-- `FastDecayScorer.RecordResult(endpointUID, success)`（`main.go:804` hook）
+- `FastDecayScorer.RecordResult(endpointUID, success)`（`main.go:854` hook）
 - 普通失败：`DecayFactor = pow(0.85, consecutiveFail)`
 - 断流：`pow(0.70, consecutiveFail)`
 - 成功：`+0.15` 恢复
@@ -607,10 +621,10 @@ health(40) > fastDecay(25) > successRate(20) > latency(10) > cost(5)
   - `off=0, minimal=+0.2, low=+0.4, medium=+0.6, high=+0.9, xhigh=+1.0, max=+0.95, ultra=+0.9`
   - 雷达站 `gpt-5.6-sol` 实测：xhigh 0.75 > max 0.714 > ultra 0.693，xhigh 为效果最优档
 - 成本轴乘 effort 成本系数防止档位膨胀；系数随投入递增，但可被实测 cost 校准（见 §5.5.1）
-- 三车道：
-  - `balanced`：膝点 + 每 0.01 质量增益最多 2% 成本溢价帽
-  - `cost_first`：最低成本簇
-  - `quality_first`：并列容差取最低成本
+- 三车道（车道参数详见 §5.10）：
+  - `balanced`：膝点 + 每 0.01 质量增益的成本溢价帽（基础 2%，按 TaskClass 质量权重动态缩放 0.9~1.2 倍）
+  - `cost_first`：最低成本簇（溢价帽系数 1.0）
+  - `quality_first`：并列池按 sameFamily → benchmark 差 ≥5 直接兑现 → qualityRank → 成本最低 → measuredQuality → qualityScore 依次决胜（成本只剩兜底位）
 - 成本证据不足时 fail-open 回退旧链
 
 #### 5.5.1 性价比 effort 选择
@@ -624,7 +638,90 @@ health(40) > fastDecay(25) > successRate(20) > latency(10) > cost(5)
 - 实测 cost 来源在 `CostEvidence.Source` 中标记为 `registry_pricing_x_measured_effort_cost`（或乘 provider 倍率后的变体），仅在门控启用时设置
 - 效果：frontier 成本轴从"按档位系数猜测"演进为"以 codexradar 实测 cost 校准的性价比轴"，使 xhigh 等高效果档在成本相近时获得真实优势
 
-### 5.6 其他近期功能
+### 5.6 QualityTier 按 benchmark 分数分布动态评定
+
+提交：`231cbf5d`、`39027645`
+
+- **归一化能力分** `normalizedCapabilityScore`（`model_profile.go:344`）：直测证据（`directBenchmarkScoreFromEvidence`，`model_profile.go:325`）只接受 domain=coding、metric=pass_at_1、benchmark∈{deepswe, codexradar} 的 `RawValue*100` 最大值（calibrated 估计不参与）；无直测时用 artificial_analysis coding_index 线性校准：`deepswe ≈ 2.391 × aa_coding − 116.007`（系数来自重叠模型最小二乘拟合）。
+- **边界算法** `computeQualityTierBoundariesFromRegistry`（`model_profile.go:400`）：默认边界 premium≥75 / high≥61 / normal≥55；注册表直测分数（按 CanonicalModel 去重）不足 4 个时用默认；否则排序后自顶向下找最大间隙中点——premium 边界取「上界 ≥ 60% 最高分」区间的最大间隙中点，high 在低于 premium 的分段（floor=premiumMin×0.5）、normal 在低于 high 的分段（floor=highMin×0.4）依次找最大间隙。
+- **世代缓存**（`39027645`）：`benchmarkTierBoundariesCache`（`atomic.Pointer`，`model_profile.go:370`）以 `config.BuiltinSnapshotGeneration()` 为缓存键——内置快照每次重建发布时世代 +1，命中才免重算。热路径单次调用从 ~830µs/428 allocs 降至 ~15µs/8 allocs。
+- **消费方**：`Profiler.DeriveQualityTier`（benchmark 优先 → lowQuality 降级）、`BuildRequestProfile` 的 QualityNeed、auto_discovery、provider_quality_probe、`SmartRouter.applyModelQualityTier`。
+
+### 5.7 benchmark-report 独立 CLI
+
+提交：`a4bf60be`、`2fb72449`、`3d58615a`、`a3429e8f`、`179c9580`
+
+- 位置 `backend-go/cmd/benchmark-report/main.go`，用法 `benchmark-report -config <config.json>`（默认 `.config/config.json`）。不依赖运行中的后端：in-memory SQLite 作 ModelProfileStore + 合成渠道 `ch_synthetic_registry`。
+- 候选池由 presetstore 默认快照的 `BenchmarkProfiles` 按 CanonicalModel 去重合成（`Source="synthetic_registry"`，不注入 upstreamCapabilities 的正则 patterns 防正则串泄漏），再用 `config.BuiltinUpstreamModelCapabilities` 补齐上下文/effort/能力布尔。
+- 6 个固定场景（`benchmark_report.go:73`）：worker/balanced、supervisor/quality_first、lightweight/cost_first、long_context ctx≥200k、long_context ctx≥1M、worker/balanced coding。每场景跑一次与真实路由一致的 frontier 选型，失败回退 `betterRankedModel` 链并标注 `fallback:`。
+- 输出：`[BenchmarkSelectionReport]` 每场景一行 + Top 5 ASCII 表（`# / model / effort / bench / cost / tier`）。无实测证据时 bench 列渲染 `-` 且选中行带 `bench_evidence=none`。
+- Top 5 口径（`a3429e8f`，`scenarioCandidateOrder`）：选中项固定第 1，其余按 frontier 阶梯（Preferred+Overflow）排，阶梯未覆盖的按 `betterRankedModel` 排尾部，同模型去重，顺序与输入顺序无关。
+- 「更优」判定 `findBetterOptions`：quality_first 仅质量差 ≥0.05 算更优；其他车道为「质量高 ≥0.05 且 cost ≤ 1.25×」或「省 >$0.01 且质量 ≥95%」；只含有实测分的模型，上限 5 条。
+- 主程序不再输出该报告（`179c9580`）：manager/main 均无 `BenchmarkSelectionReport` 引用，避免 CLI 用正则抓输出被污染；数据刷新脚本 `scripts/update-benchmark-data.mjs` 的 `runBenchmarkReport()` 在刷新后现编译 CLI 并透传 stdout。
+
+### 5.8 路由候选按 (渠道, 模型) 展开
+
+提交：`78ed757f`
+
+- 候选粒度从渠道级变为 (渠道, 模型) 级：`RoutingCandidate`/`RoutingPlanCandidate`/`channelScoreEntry` 新增 `CandidateKey = channelUID + "|" + normalizeRoutingModelID(model)`（`smart_router.go:1318`）；单渠道候选行上限 `routingCandidateFanoutLimit = 8`。
+- AutoManaged 渠道走 `ResolveModelsAnyEndpointWithFloor`（能力过滤 + `betterRankedModel` 排序 + 截断 top8）；精确/等价命中只产该行；无精确命中且意图不允许替代（`AllowsSubstitution()` 为 false）→ 渠道不产候选行（保持 exact_model_required 不变量）。
+- 显式/白名单渠道从 `ModelMapping` 值 + redirect 目标枚举，逐个过 `ExplainModelSupport`；枚举为空但单数版认为 supported 时回退单模型行（fail-open）。
+- 同名承接（映射后模型名 == 请求模型名）的行 `MappedModel` 保持空——`applyModelQualityTier` 依赖 MappedModel 判空做映射质量档折算；模型名展示由前端经 CandidateKey 回退解析（`AutopilotTraceDetailDialog.vue` 加 Model 列）。
+- 返回 scheduler 的结果仍按路由键渠道级去重：同渠道一个模型行通过即保留该渠道（取最高分行），不重复占用 failover 槽位。`RoutingPlan`/`BuildPlan`（dry-run 诊断面板）同样消费 CandidateKey。
+
+### 5.9 scheduler 过滤明细接入路由 trace
+
+提交：`16dc0fda`
+
+- `SchedulerDecisionSummary.SkippedCandidates`（`trace_contract.go:136`）：ChannelIndex/ChannelName/Stage/Reason/Details，记录被调度器滤掉的渠道。
+- `NormalizeSelectionTrace`（`trace_lifecycle.go:19`）从 `scheduler.SelectionTrace.Candidates` 填充；Reason 必须过 `isSafeSkipReason` 白名单（约 40 个代码枚举如 unsupported_model/circuit_open/context_window_insufficient/route_prefix_mismatch），白名单外整条丢弃。
+- `AttachSchedulerDecision`（`trace_lifecycle.go:67`）：已落盘记录同步 UPDATE details_json；未落盘（1/10 抽样中）只更新内存，终态落盘自然携带。
+- `ToTraceDetailV2` 补上映 `schedulerDecision` 字段（此前 DTO 有字段但从不映射，前端区块永不显示）；前端 `AutopilotTraceDetailDialog.vue` 渲染被滤渠道明细表。
+- SmartRouter 侧三个候选预过滤跳过点（missing_upstream/disabled_channel/candidate_unavailable）写入 `trace.GlobalFilterReasons["candidate_pre_filter"]`。
+
+### 5.10 SmartRouter 评分修复与车道参数化
+
+提交：`455dc044`
+
+- **动态溢价帽**：`maxCostPremiumPerQuality`（`model_frontier_scoring.go:259`）按车道取基础值 quality_first=6.0、balanced=2.0、cost_first=1.0；再按 TaskClass 权重微调：`ratio=(WQuality+1)/(WCost+1)` 钳制 [0.5,2.0]，乘数 0.9~1.2。
+- **quality_first 并列池**改逐级决胜（sameFamily → benchmark 差 ≥5 直接兑现 → qualityRank → 成本最低 → measuredQuality → qualityScore），成本只剩兜底位，不再「并列取最低成本」。
+- **质量分按车道加权** `frontierQualityWeights`：quality_first {Benchmark 0.6, TierPrior 0.25, Measured 0.15}、balanced {0.5, 0.30, 0.20}、cost_first {0.4, 0.35, 0.25}；benchmark 缺失时权重让位给 tierPrior+measured。
+- **置信区间半宽随车道变化**：quality_first ×0.85、cost_first ×1.1；接近本批最高分（delta<5）再 ×0.75。
+- **SmartRouter 与 ModelResolver 车道一致**：两处均改用 `GetEffectiveCostPreferenceMode(taskClass)`（PerTaskClass 优先于全局 Mode）；`GetEffectiveMultipliers`：quality_first (savings 0.3, providerQuality 1.5)、balanced (1,1)、cost_first (2.0, 0.5)。
+- **稳定性评分偏差修复**：`DeriveStabilityTier` 样本 <5 时返回 Normal（见 §3.3），避免新渠道被误判 Unstable 打 0 分。
+- **premium 档内 benchmark tie-break**：`applyPremiumBenchmarkEvidence` 仅对最终判定 premium 且 BenchmarkKnown 的候选填充 `QualityBenchmarkKnown/QualityBenchmarkScore` 供同档决胜。
+
+### 5.11 effort-aware benchmark 分
+
+提交：`5e1b4bd9`
+
+- `effortAwareBenchmarkScore`（`model_resolver.go:794`）：`BenchmarkEvidence` 存在 domain=overall 且 effort 精确命中的实测 RawValue 时，用 `ratio = effortRaw / defaultRaw` 缩放 OverallScore（反映不同思考档位的真实智商差异）；effort 为空/default 或无 default 基准时直接返回 OverallScore（不惩罚缺数据）。
+- `buildRankedCandidates` 用它填充每个 model×effort 候选的 `benchmarkScore/benchmarkKnown`；域证据同步按候选 effort 精确取（`ResolveDomainStrengthForEffort`），不再恒走 domain-only 回退。
+
+### 5.12 Key 级模型黑名单在自动映射渠道生效
+
+提交：`a1eb2743`
+
+- 原缺陷：`DisableKeyModel` 以 autopilot 映射后的实际模型名写入黑名单，而 keypool 选 Key 阶段（`CandidatesForModelFiltered`）用映射前的请求模型名查询，自动映射渠道上持久化黑名单永不命中。
+- 修复：发送前（实际发往上游的模型确定后）复查 `IsKeyModelDisabledNow(apiKey, actualAttemptModel, now)`（`handlers/common/upstream_failover.go:750` 附近），命中则跳过本 Key 走正常 failover；不重复计熔断、不写新黑名单。
+- 两层关系：选 Key 阶段覆盖手动 RedirectModel 场景，autopilot 映射目标由发送前复查兜底。
+
+### 5.13 key 验证兼容 new-api 占位模型 503
+
+提交：`cd6f93d7`
+
+- `verifyJSONPostEndpointWithPolicy`（`verify_endpoint.go:213`）的 `acceptValidationError` 分支除 400/422 外，新增识别 503 + `modelNotFoundErrorBody`（`error.code` equals-fold `model_not_found`，或 message 含 `no available channel for model`），判定鉴权通过（OK=true，「服务可达（探测模型无可用渠道，鉴权通过）」）。
+- 背景：new-api/one-api 对无渠道占位模型返回 503，此前被误判「端点不可用」导致有效 key 无法添加。
+
+### 5.14 兼容性 trait 自学习：unsupported_beta_header
+
+提交：`205fe29d`
+
+- 动机：Claude Code 2.x 携带的 `anthropic-beta: context-1m-2025-08-07` 等 beta header 透传到部分 new-api 风格上游会被 400 拒绝。
+- 链路（跨模块）：`handlers/common/compat_signal.go` 检测请求带 `anthropic-beta` header 且上游拒绝 → `ExtractRejectedBetaTokens` 提取被拒 token → 以 trait `unsupported_beta_header`（`config/channel_compat_cache.go:44` 的 `CompatTrait` 枚举）写入 `UpstreamConfig.LearnedRejectedBetaTokens`（`config/config.go:87`，运行时字段不落盘）→ 下次请求 `upstream_failover.go:721` 注入 learnedTraits，`providers/claude.go:220` `stripUnsupportedBetaHeaderTokens` 按 token 粒度剥离（token 名必含 `-` 防误判）。
+- 与 §2.8 的 context_limit / document_capability 记忆同属共享兼容性缓存体系，但 trait 化后由 config 层统一承载。
+
+### 5.15 其他近期功能
 
 - **new-api raw_auth 认证模式**：`2020fc4f`
 - **有效 USD 成本链路**：`2755fd90`
@@ -633,6 +730,8 @@ health(40) > fastDecay(25) > successRate(20) > latency(10) > cost(5)
 - **同账号 Messages 跨协议调度**：`13ffd67b`
 - **上下文上限自学习**：`ef458440`
 - **手动意图支持锁定思考档位**：`00ff7454`
+- **Kimi 额度快照以 `GetSubscriptionStats` 为主数据源**：`59b6aa02`（`GetUsages` 已从 Kimi Web 下线，仅当仍返回 `FEATURE_CODING` 时作可选增强补充 WeeklyUsage/TotalQuota/RateLimits；恢复判定用其 `CodeFiveHour/CodeSevenDay` 比例窗口，绑定令牌不再因缺 `FEATURE_CODING` 失败）
+- **Kimi 控制台令牌解析兼容**：`87267d6f`（`normalizeKimiConsoleToken` 支持 Cookie `access_token=`、localStorage JSON、成对引号、URL 编码）
 
 ## 6. 与其他模块的交互点
 
@@ -640,8 +739,8 @@ health(40) > fastDecay(25) > successRate(20) > latency(10) > cost(5)
 
 | 交互 | 位置 |
 |---|---|
-| `SetCandidateFilterProvider` 注册 SmartRouter | `main.go:741` |
-| `SetModelSupportResolverProvider` 注册 AutoManaged 模型支持解析 | `main.go:884` |
+| `SetCandidateFilterProvider` 注册 SmartRouter | `main.go:788` |
+| `SetModelSupportResolverProvider` 注册 AutoManaged 模型支持解析 | `main.go:935` |
 | `CandidateFilterFunc` 类型契约 | `internal/scheduler/scheduler.go:55` |
 | `ChannelScheduler.channelAvailableForCandidateFilter` | `internal/scheduler/scheduler.go:674` |
 | `buildSmartFilterFromProvider` 包装 SmartFilter | `internal/scheduler/scheduler.go:1535` |
@@ -678,11 +777,11 @@ health(40) > fastDecay(25) > successRate(20) > latency(10) > cost(5)
 
 | Hook | 位置 | 用途 |
 |---|---|---|
-| `SetEndpointPolicyProviderHook` | `main.go:780` | 注入 `EndpointAttemptPolicy` |
-| `SetNotifyEndpointResultHook` | `main.go:804` | 通知 FastDecay |
-| `SetRoutingOutcomeRecorderHook` | `main.go:768` | 记录请求终态到 Trace |
-| `SetAttemptRecorderHook` | `main.go:774` | 记录每次 endpoint 尝试 |
-| `SetUsagePatternRecorderHook` | `main.go:835` | 记录用量画像 |
+| `SetEndpointPolicyProviderHook` | `main.go:829` | 注入 `EndpointAttemptPolicy` |
+| `SetNotifyEndpointResultHook` | `main.go:854` | 通知 FastDecay |
+| `SetRoutingOutcomeRecorderHook` | `main.go:813` | 记录请求终态到 Trace |
+| `SetAttemptRecorderHook` | `main.go:819` | 记录每次 endpoint 尝试 |
+| `SetUsagePatternRecorderHook` | `main.go:885` | 记录用量画像 |
 
 ### 6.8 兼容性记忆
 
@@ -770,9 +869,9 @@ health(40) > fastDecay(25) > successRate(20) > latency(10) > cost(5)
       │
       ▼
 [Frontier 选型 ComputeFrontierForest]
-      ├─ balanced: 膝点 + 每 0.01 质量增益 ≤2% 成本溢价
+      ├─ balanced: 膝点 + 动态溢价帽（基础 2%，按 TaskClass 缩放 0.9~1.2x）
       ├─ cost_first: 最低成本簇
-      └─ quality_first: 并列容差取最低成本
+      └─ quality_first: 并列池逐级决胜（sameFamily/benchmark/qualityRank，成本兜底）
       │
       ▼
 [成本证据不足?]
@@ -813,11 +912,11 @@ health(40) > fastDecay(25) > successRate(20) > latency(10) > cost(5)
 
 1. **用量画像的域推导缺信号**
    - `RecordUsagePattern` 注释说明：`channelKind/model` 未参与域推导，因为 `InferTaskDomain` 依赖 system prompt/工具集/文件扩展名，而代理层请求完成钩子上不可得
-   - 文件：`manager.go:607`
+   - 文件：`manager.go:615/624`
 
 2. **细粒度错误分类未逐条统计**
    - `collectSignals` 中 `AuthFailureCount/DNSFailureCount/QuotaFailureCount` 等多数为 0，仅 `OverloadedCount` 来自熔断器
-   - 文件：`manager.go:1286`
+   - 文件：`manager.go:1306`
 
 3. **AFP 成本系数已替换为实测校准**
    - `frontierEffortCostFactor` 仍为 fallback 推测系数；`frontierUseMeasuredCost` 门控通过（所有可比候选均带实测 cost）时，`frontierCostFactorFor` 用 `measuredCostUSD / normalizedPublicCostUSD` 替换推测值，否则整体回退（轴内尺度一致，不混用）

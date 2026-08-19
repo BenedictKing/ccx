@@ -71,6 +71,14 @@ EndpointCapability（跨账号共享，按 CapabilityUID 索引）
 
 关键函数（同文件）：`BuildChannelViews(cfg)`、`GenerateCapabilityUID`、`NormalizeGroupIdentity`、`ChannelKeyHash`、`SiteIdentityForBaseURL`。
 
+注意：渠道级计费与风控学习字段停留在 `UpstreamConfig` 层（`config/config.go`），**不进** ChannelView/ChannelKeyView 读模型：
+
+- `CostMultiplier *float64`：乘法简化路径（`EffectiveCostUSD = ListCostUSD × CostMultiplier`）
+- `ChannelPaymentCurrency/ChannelPaymentAmount/ChannelCreditCurrency/ChannelCreditAmount`：充值→到账四字段（四者同时配置且金额>0 才生效），按全局汇率图计算 `EffectiveMultiplier = (充值金额×充值币价)/(到账金额×渠道币价)`（`handlers/common/upstream_failover.go` `buildRequestCostContext`，复用 `autopilot.ResolveEffectiveCostUSD`）
+- `LearnedClientFingerprint bool`：上游 models 端点存在客户端指纹风控的学习标记（见 §8）
+
+另外 `ChannelView` 有 `Remark string`（旧派生规则写下的历史名，新规则下不再使用，只读展示用）。
+
 ### 3.1 自动渠道名派生规则（展示层）
 
 自动渠道名用于 UI 展示与导入/编辑默认值，**不参与** `SiteIdentity`、`IdentityBaseURL`、`CapabilityUID` 或 metrics identity 的计算；身份与能力语义仍按 BaseURL 现有含路径规则执行。
@@ -111,7 +119,7 @@ EndpointCapability（跨账号共享，按 CapabilityUID 索引）
 - **Phase 1（已落地）**：只读 `ChannelView` + `EndpointCapability` 注册表；能力/凭证边界成型；不改 schema，可回退。
 - **Phase 2（进行中）**：
   - **2a（已落地）**：`Config` 新增 `Channels []ChannelView` + `ChannelCapabilities []EndpointCapability` + `ChannelSchemaVersion`，作为**非权威镜像**，落盘前由 `RebuildChannels` 从六数组合成（与 `RebuildLogicalChannels` 同一 save 路径）。六数组仍是运行时权威；镜像不含明文 key。前端可直接消费该新粒度。
-  - **2b（进行中）**：只读 API `GET /api/channels`、`GET /api/channels/:uid` 暴露实时合成的渠道视图与共享能力（`internal/handlers/channels`，基于 `ConfigManager.GetChannelViews`）；前端读逐步切换。写路径仍走既有 upstream/logical-channels 接口。
+  - **2b（已落地并扩展为统一读写）**：`/api/channels` 起步为只读 API（`internal/handlers/channels`，基于 `ConfigManager.GetChannelViews`），自 `f3471a37` 起扩展为**统一读+写端点**（`channels.go` `RegisterRoutes`，注册点 `main.go:1481`）：`GET/POST /api/channels`、`GET/PUT/DELETE /api/channels/:uid`、`POST /api/channels/:uid/keys`、`DELETE /api/channels/:uid/keys/:keyHash`（按 `ChannelKeyHash` 前 16 位 hex 寻址），避免前端直接调用六套协议路由；Create/Update 经 `config.AddUpstreamByKind`/`UpdateUpstreamByKind` 落入六数组。
 - **Phase 3**：移除六个 `Upstream` 数组，仅保留 `Channels` + `ProtocolFacade`；scheduler/handlers/autopilot 全量改用 `Channel`。
   - **3a（已落地）**：无损权威形态 `ChannelV3`（每协议成员携带完整 `UpstreamConfig`）+ 双向投影 `BuildAuthoritativeChannels` / `ApplyAuthoritativeChannels`（`channel_authoritative.go`）。round-trip 逐字段无损、按 Index 恢复数组顺序，测试通过。这是"Channels 权威"的安全核心机制。
   - **3b（已落地）**：把 `ChannelV3` 作为持久化权威（save 写 / load 时从它重建六数组），schema 版本门控，旧配置零影响。
@@ -126,7 +134,7 @@ EndpointCapability（跨账号共享，按 CapabilityUID 索引）
 - ✅ `channel_view_test.go`：多协议收敛、跨账号同分组共享、分组隔离、禁用 key 四项测试。
 - ✅ `endpoint_capability.go`：`EndpointCapabilityRegistry`（按 CapabilityUID 查询）+ `CapabilityProbeLedger`（每周期跨账号探测去重）+ `KeyEndpointCapabilityUIDs`。
 - ✅ Phase 2a：`Config.Channels` / `ChannelCapabilities` / `ChannelSchemaVersion` 非权威镜像，落盘前 `RebuildChannels` 合成（`config_loader.go` saveConfigLocked）；round-trip 与"不含明文 key/不改六数组"测试通过。
-- ✅ Phase 2b（后端读）：`GET /api/channels`、`GET /api/channels/:uid` 实时返回渠道视图 + 共享能力（`ConfigManager.GetChannelViews`）。
+- ✅ Phase 2b（统一读写端点）：`GET/POST /api/channels`、`GET/PUT/DELETE /api/channels/:uid`、Key 级 `POST /api/channels/:uid/keys`、`DELETE /api/channels/:uid/keys/:keyHash`（`internal/handlers/channels`，`ConfigManager.GetChannelViews` + `AddUpstreamByKind`/`UpdateUpstreamByKind`）。
 - ✅ Phase 3a（权威投影核心）：`channel_authoritative.go` 无损 `ChannelV3` + 双向投影 + round-trip/顺序恢复测试。
 - ✅ Phase 3b（权威落盘）：save 落盘 `channelsV3`（脱敏后从数组合成）+ `channelAuthoritativeVersion`；load 时 `reconcileAuthoritativeChannels` 对账告警（非破坏，仍信任六数组）。
 - ✅ #8（拉黑跨协议）：`BlacklistKeyWithRecoverAt` 级联拉黑同 `AccountUID`/`LogicalChannelUID` 下持有相同明文 key 的其它协议渠道；不同账号同名 key 不误伤。测试覆盖级联与隔离。
@@ -135,3 +143,10 @@ EndpointCapability（跨账号共享，按 CapabilityUID 索引）
 - ✅ Phase 3c 波 1（运行时权威反转）：加载后始终以 `ChannelsV3` 重建运行时六数组；托管 Key 经 `syncManagedAccountCredentialsFromChannels` + `hydrateManagedAccountCredentials` 闭环；对账忽略易变字段与 Key；加载期迁移落盘当次跳过翻转（回归测试覆盖）。app 回归通过（`make run` 实测 3399：297 渠道重建、管理 API/调度/保活正常）。
 - ❌ Phase 3c 波 2（消费者切换）：评估后免改（六数组已是 V3 投影）。
 - ✅ Phase 3c 波 3（六数组停落盘）：save 只写 `channelsV3`（六数组置 nil + `omitempty`）；读侧兼容旧双写/仅六数组文件并在下次 save 自动转纯 V3；纯 V3 加载入口提前投影 V3→六数组（修复中途落盘以空数组重建空 V3、清托管凭证的回归）；专项测试覆盖落盘格式/重载不清文件/旧格式升级。回滚约束见 §6。
+
+## 8. 后续新增的渠道级机制
+
+- **渠道级计费覆盖链**（`4ab0b99e` → `49f28b3e`）：四字段模型 + `CostMultiplier` 简化路径接入 `buildRequestCostContext` 成本计算，汇率图来自 `AutopilotRouting.CostOptimization.ExchangeRateQuotes`；`UpstreamUpdate` 支持部分更新/0 清空/负值拒绝（`channel_crud.go` `applyUpstreamUpdateFields`）。4ab0b99e 引入的单字段 `ExchangeRate` 已被四字段模型替换删除。
+- **Discovery 客户端指纹风控适配**（`b49ec83c`）：部分 new-api 风格上游对 models 端点做客户端指纹校验（裸请求 401/403 且 body 含 `unauthorized client` 等特征）。统一拉取策略在 `utils.FetchUpstreamModels`：Anthropic 风格端点首发即带 Claude Code 探针头；其余首发裸请求、命中拦截特征带探针头重试一次；学习成功回写 `UpstreamConfig.LearnedClientFingerprint`（autopilot `maybeLearnClientFingerprint`）。学习后自动发现、渠道模型拉取 handler、六类 `GetChannelModels`、保活 L1 全链路首发即带伪装头。
+- **快速发现并发安全**（`1dcd66a6`）：渠道快速发现的 `streamingSupported` 共享 bool 写入移入 `rateLimitMu` 临界区（原为 4 协议探测 goroutine 裸写 data race）。
+- **(Key, 模型) 黑名单**：`DisabledKeyModels` 持久化于 `UpstreamConfig`，发送前复查兜底自动映射渠道（详见 `autopilot.md` §5.12）。

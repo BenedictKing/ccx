@@ -3,7 +3,7 @@
 ## 1. 集成入口与接口定义
 
 ### 1.1 路由注册（后端装配）
-`backend-go/main.go:1505-1544` 在 autopilot 就绪后装配三组路由，全部挂在 `apiGroup`（`/api`）下：
+`backend-go/main.go:1511-1531` 在 autopilot 就绪后装配三组路由，全部挂在 `apiGroup`（`/api`）下：
 - `autopilot.RegisterSubscriptionRoutes` — 订阅中心 CRUD + link/unlink + refresh
 - `autopilot.RegisterNewApiSubscriptionRoutes` — new-api verify/provision
 - `autopilot.RegisterSubscriptionAccountRoutes` — 多账号 + 主账号凭证更新
@@ -11,17 +11,17 @@
 共享依赖 `NewApiSubscriptionSyncService`（`main.go:1504`）。启动时先调用 `newApiSyncService.SyncAllNewAPIAsync(context.Background())` 对所有 `provider=new_api` 订阅做一次全量同步（`newapi_subscription_sync_service.go`），随后 `newApiSyncService.Start(ctx)` 启动周期为 30 分钟的后台同步循环。路由注册位置与同步服务生命周期以 `main.go` 中符号为准，避免行号再次漂移。
 
 ### 1.2 核心端点（`internal/autopilot/handlers_newapi.go`）
-`RegisterNewApiSubscriptionRoutes`（行 53-61）：
-- `POST /api/subscriptions/newapi/verify` → `handleNewApiVerify`（行 310）— 校验令牌 + 预览账户/分组/模型，**不落库**
-- `POST /api/subscriptions/newapi/provision` → `handleNewApiProvision`（行 362）— 建 profile + 建 key + 建/并渠道 + 触发 Discovery
+`RegisterNewApiSubscriptionRoutes`（行 110-114）：
+- `POST /api/subscriptions/newapi/verify` → `handleNewApiVerify`（行 375）— 校验令牌 + 预览账户/分组/模型，**不落库**
+- `POST /api/subscriptions/newapi/provision` → `handleNewApiProvision`（行 427）— 建 profile + 建 key + 建/并渠道 + 触发 Discovery
 
-依赖结构 `NewApiRouteDeps`（行 38-43）：`Store *SubscriptionStore`、`CfgManager *config.ConfigManager`、`Runner *AutoDiscoveryRunner`、`SyncService *NewApiSubscriptionSyncService`。provision 采用**站点级锁 + 订阅级锁**串行化远端 key 查重/创建与同订阅画像写入，避免并发建同名远端 key。
+依赖结构 `NewApiRouteDeps`（行 40）：`Store *SubscriptionStore`、`CfgManager *config.ConfigManager`、`Runner *AutoDiscoveryRunner`、`SyncService *NewApiSubscriptionSyncService`。provision 采用**站点级锁 + 订阅级锁**串行化远端 key 查重/创建与同订阅画像写入，避免并发建同名远端 key。
 
 ### 1.3 请求/响应结构（`handlers_newapi.go`）
-- `NewApiVerifyRequest`（行 66）：`baseUrl, accessToken, userId, authTokenMode, displayName, subscriptionUid`
-- `NewApiVerifyResponse`（行 76）：`username, userId, quota, usedQuota, groups(map[string]float64), groupFetchError, availableModels, suggestedOriginType/Tier, accessTokenMasked`
-- `NewApiProvisionRequest`（行 91）：`subscriptionUid, displayName, baseUrl, accessToken, userId, authTokenMode, channelKind(必填), channelName, provisionKeyName, provisionGroup, provisionAllEligibleGroups, provisionModels, maxGroupMultiplier(*float64), notes`
-- `NewApiProvisionResponse`（行 112）：`subscription, channelUid, channelIndex, channelName, mergedChannel, provisionedKey(仅此次返回明文), provisionedTokenId, reused, provisionedKeys[], discoveryStarted`
+- `NewApiVerifyRequest`（行 127）：`baseUrl, accessToken, userId, authTokenMode, displayName, subscriptionUid`
+- `NewApiVerifyResponse`（行 137）：`username, userId, quota, usedQuota, groups(map[string]float64), groupFetchError, availableModels, suggestedOriginType/Tier, accessTokenMasked`
+- `NewApiProvisionRequest`（行 152）：`subscriptionUid, displayName, baseUrl, accessToken, userId, authTokenMode, channelKind(必填), channelName, provisionKeyName, provisionGroup, provisionAllEligibleGroups, provisionModels, maxGroupMultiplier(*float64), notes`
+- `NewApiProvisionResponse`（行 173）：`subscription, channelUid, channelIndex, channelName, mergedChannel, provisionedKey(仅此次返回明文), provisionedTokenId, reused, provisionedKeys[], discoveryStarted`
 
 ### 1.4 上游适配器（`internal/autopilot/newapi_adapter.go`）
 `NewApiAdapter`（行 98），零值可用（默认 15s client），封装 new-api family 面板接口。`doRequest`（行 121）统一注入认证并解析 `{success,data,message}` 信封（`newApiEnvelope` 行 29）。认证头 `buildAuthHeader`（行 110）：`bearer`（默认 `Authorization: Bearer <token>`）/ `raw`/`raw_auth`（裸 token）；同时下发 `New-API-User` 与 `User-id`（fork 兼容，行 142-146）。
@@ -46,7 +46,7 @@
 - `DELETE /api/subscriptions/:uid/accounts/:accountUid` → `handleDeleteSubscriptionAccount`（行 264）— 先从渠道剔除 key，再 best-effort 回收远端 key，再移除账号
 - `POST /api/subscriptions/:uid/accounts/:accountUid/refresh` → `handleRefreshSubscriptionAccount`（行 323）
 
-多账号建 key 复用主流程 `provisionNewApiGroupKeys`（`handlers_newapi.go:166`），核心复用逻辑集中在此。
+多账号建 key 复用主流程 `provisionNewApiGroupKeys`（`handlers_newapi.go:227`），核心复用逻辑集中在此。
 
 ### 2.2 前端
 - 主/多账号面板：`frontend/src/components/edit-channel/NewApiAccountPanel.vue`
@@ -62,7 +62,7 @@
 ## 3. 数据模型：账号/key/凭证/渠道映射
 
 ### 3.1 订阅画像 `SubscriptionProfile`（`internal/autopilot/subscription_profile.go:15`）
-new-api 专用字段（行 62-94）：`Provider="new_api"`、`BaseURL`、`AccessToken`（敏感，明文序列化进 `profile_json`，API 响应脱敏）、`UserID`、`AuthTokenMode`、`ProvisionKeyName`、`ProvisionGroup`、`ProvisionGroupRatio`、`MaxGroupMultiplier`、`ProvisionModels`、`ProvisionedTokenID`、`ProvisionedKeys []NewApiProvisionedKey`、`AvailableModels`、`GroupMultipliers map[string]float64`、`Accounts []NewApiAccount`。
+new-api 专用字段（行 62-94）：`Provider="new_api"`、`BaseURL`、`AccessToken`（敏感，明文序列化进 `profile_json`，API 响应脱敏）、`UserID`、`AuthTokenMode`、`ProvisionKeyName`、`ProvisionGroup`、`ProvisionGroupRatio`、`MaxGroupMultiplier`、`ProvisionModels`、`ProvisionedTokenID`、`ProvisionedKeys []NewApiProvisionedKey`、`AvailableModels`、`GroupMultipliers map[string]float64`、`Accounts []NewApiAccount`。计费条款为四字段币种/金额模型 `PaymentAmount/PaymentUnit/CreditAmount/CreditUnit`（行 37-40；旧 `RechargeMultiplier` 单字段已移除，`a96098da`，旧 JSON 键加载时自动忽略）。
 
 - `NewApiProvisionedKey`（行 104）：`Name, Group, GroupMultiplier, TokenID, KeyUID`（**无明文 key**）
 - `NewApiAccount`（行 114）：`AccountUID, AccessToken, UserID, AuthTokenMode, DisplayName, Balance, Status, ProvisionedKeys[], LastSyncError, LastCheckedAt, CreatedAt`
@@ -97,20 +97,20 @@ UpstreamConfig (channelUid, autoManagedKind=new_api)
 `NewApiSubscriptionSyncService`（行 59）负责 new-api 订阅的周期性余额、分组倍率与可用模型同步，使用 per-uid 锁（`lockForUID` 行 90）。
 
 - 后台循环：`Start`（行 129）启动 30 分钟周期 ticker（`newApiSyncDefaultInterval` 行 93），tick 到达时调用 `SweepAll` 并发刷新所有 new-api 订阅。`Stop`（行 150）优雅停止循环。初始启动时还会通过 `SyncAllNewAPIAsync` 先做一次性全量同步。
-- `SyncNow`（行 101）：verify → FetchGroups（校验非负有限，`finiteNonNegative` 行 590）→ FetchModels → `Patch` 回写余额/分组/模型/KeyUID/ratio → `reconcileChannels`（行 430）把 desired key 元数据合并进关联渠道的 `APIKeyConfigs`（ownership 冲突→`relink_required`）→ 模型哈希变化触发 Discovery
-- `reconcileNewApiConfigs`（行 455）：按 `SourceRemoteTokenID`/`KeyUID` 匹配，跨订阅 ownership 冲突返回 conflict
-- `buildDesiredForKeys`（行 402）：计算每 key 的 syncStatus（`fresh`/`over_limit`/`remote_group_missing`）+ TTL（`newApiSyncTTL=35m` 行 26）
-- `injectProvisionedKeys`（行 609）/`ReconcileProvisioned`（行 649）/`ReconcileAccountProvisioned`（行 668）：provision/加账号后把明文 key 注入渠道
-- `RemoveAccountKeysFromChannels`（行 326）：删账号时剔除渠道 key
+- `SyncNow`（行 238）：verify → FetchGroups（校验非负有限，`finiteNonNegative`）→ FetchModels → `Patch` 回写余额/分组/模型/KeyUID/ratio → `reconcileChannels`（行 567）把 desired key 元数据合并进关联渠道的 `APIKeyConfigs`（ownership 冲突→`relink_required`）→ 模型哈希变化触发 Discovery
+- `reconcileNewApiConfigs`：按 `SourceRemoteTokenID`/`KeyUID` 匹配，跨订阅 ownership 冲突返回 conflict
+- `buildDesiredForKeys`：计算每 key 的 syncStatus（`fresh`/`over_limit`/`remote_group_missing`）+ TTL（`newApiSyncTTL=35m` 行 26）
+- `injectProvisionedKeys`（行 746）/`ReconcileProvisioned`（行 786）/`ReconcileAccountProvisioned`（行 805）：provision/加账号后把明文 key 注入渠道
+- `RemoveAccountKeysFromChannels`（行 463）：删账号时剔除渠道 key
 - 状态常量（行 17-24）：`fresh/over_limit/sync_error/relink_required/stale/remote_group_missing`
 
 ## 4. 与 autopilot/scheduler 的集成点
 
 ### 4.1 渠道纳入调度（provision 落地）
-`handleNewApiProvision`（`handlers_newapi.go:362`）第 5 步：
-- 同站点合并 `findNewApiMergeTarget`（行 252，规范化 baseURL 去尾 `/`、忽略大小写、跳过带 `providerId` 的渠道、优先 active），合并时保留已有纯 key、去重追加新 key、补 `AutoManagedKind="new_api"`
-- 否则新建，`kindToDefaultServiceType`（`handlers_auto_managed.go:2769`）推导 serviceType，`GenerateChannelUID` 生成稳定 UID
-- 第 6 步 `Store.LinkChannel`，第 7 步 `deps.Runner.TriggerDiscovery`（`auto_discovery.go:279`）
+`handleNewApiProvision`（`handlers_newapi.go:427`）第 5 步：
+- 同站点合并 `findNewApiMergeTarget`（行 317，规范化 baseURL 去尾 `/`、忽略大小写、跳过带 `providerId` 的渠道、优先 active），合并时保留已有纯 key、去重追加新 key、补 `AutoManagedKind="new_api"`
+- 否则新建，`kindToDefaultServiceType`（`handlers_auto_managed.go`）推导 serviceType，`GenerateChannelUID` 生成稳定 UID
+- 第 6 步 `Store.LinkChannel`，第 7 步 `deps.Runner.TriggerDiscovery`（`auto_discovery.go:297`）
 
 ### 4.2 分组安全闸门 `resolveNewApiProvisionGroups`（`newapi_group_guard.go:24`）
 `DefaultNewApiMaxGroupMultiplier=1.0`（行 12）。只为 `ratio <= maxMultiplier` 的合格分组建 key，一个 key 固定绑一个上游分组；`defaultNewApiProvisionKeyNameForGroup`（行 96）给 key 名加分组后缀。
@@ -125,13 +125,13 @@ UpstreamConfig (channelUid, autoManagedKind=new_api)
 `GetNextAPIKey`（`config.go:1447/1459`）与 keypool 选 key 时调用 `EvaluateAPIKeyMultiplierEligibility`（行 27）：`new_api` 源需 `SourceSubscriptionUID`+`SourceRemoteTokenID` 有效、status=`fresh` 且未过期，否则 `stale/over_limit/relink_required` 一律不参与调度。这是把 new-api 分组倍率纳入调度的核心闸门。
 
 ### 4.4 SmartRouter 候选过滤/成本评分
-`main.go:743` `SetCandidateFilterProvider` 注入 `SmartRouter.CandidateFilterForWithActual`（`smart_router.go:375`）。`buildChannelEntry`（行 1162）在有汇率图 + 订阅到账规则时，用带 `SourceSubscriptionUID` 且 `GroupMultiplier` 的 key 配置调用 `ResolveEffectiveCostUSD`（`key_endpoint_profile.go:361`）算真实 effective USD 成本，替代标价。`EffectiveMultiplier = GroupMultiplier × TimeMultiplier × PaymentAmount×PaymentUSDPrice / (CreditAmount×CreditUSDPrice)`（行 404）。
+`main.go:788` `SetCandidateFilterProvider` 注入 `SmartRouter.CandidateFilterForWithActual`。`buildChannelEntry` 在有汇率图 + 到账规则时，用带 `SourceSubscriptionUID` 且 `GroupMultiplier` 的 key 配置调用 `ResolveEffectiveCostUSD`（`key_endpoint_profile.go:360`）算真实 effective USD 成本，替代标价。`EffectiveMultiplier = GroupMultiplier × TimeMultiplier × PaymentAmount×PaymentUSDPrice / (CreditAmount×CreditUSDPrice)`（行 416）。到账规则有两条入口：**订阅级** billing-terms（`PaymentAmount/CreditAmount` 四字段）与**渠道级**计费四字段（`UpstreamConfig.ChannelPayment*/ChannelCredit*`，`49f28b3e`），后者使无订阅 billing-terms 的渠道也能算 effective cost。
 
 ### 4.5 Discovery/画像链路
-`TriggerDiscovery`→`runDiscovery`（`auto_discovery.go:342`）→`discoverEndpoints`（行 499）/`probeEndpoint`（行 835）拉 `/v1/models`，`parseModelsDeclaredEndpointTypes`（行 1061）解析 new-api 的 `supported_endpoint_types`（`protocolForEndpointType` 行 1096：openai→chat / anthropic→messages / gemini / openai-response→responses；仅作探测排序提示不做过滤），`discoverEndpointProtocols`（`protocol_discovery.go:92`）逐模型多协议实测，`writeProfileForEndpoint`（`auto_discovery.go:1182`）写 `KeyEndpointProfile`。`buildEndpointInventory`（`endpoint_inventory.go:53`）建 endpoint 清单供画像与限速。
+`TriggerDiscovery`→`runDiscovery`（`auto_discovery.go:360`）→`discoverEndpoints`（行 527）/`probeEndpoint`（行 899）拉 `/v1/models`（统一走 `utils.FetchUpstreamModels`：Anthropic 风格端点首发即带 Claude Code 探针头；其余裸发、命中客户端指纹风控特征时带探针头重试一次并回写 `LearnedClientFingerprint`，见 `cross-module-integration.md` §3.6），`parseModelsDeclaredEndpointTypes`（行 1119）解析 new-api 的 `supported_endpoint_types`（`protocolForEndpointType` 行 1154：openai→chat / anthropic→messages / gemini / openai-response→responses；仅作探测排序提示不做过滤），`discoverEndpointProtocols`（`protocol_discovery.go`）逐模型多协议实测，`writeProfileForEndpoint`（`auto_discovery.go:1237`）写 `KeyEndpointProfile`。`buildEndpointInventory`（`endpoint_inventory.go`）建 endpoint 清单供画像与限速。
 
 ### 4.6 余额刷新路径
-`handleRefreshSubscription`（`handlers_subscription.go:383`）对 `provider=="new_api"`（行 401）走 `syncService.SyncNow`，其他 provider 走 `SubscriptionRefreshWorker`（`subscription_refresh_worker.go`）。注意 `IsAutoRefreshSupported`（`subscription_balance_fetcher.go:244`）白名单只含 openai/anthropic/google，**不含 new_api**（见第 6 节）。
+`handleRefreshSubscription`（`handlers_subscription.go:376`）对 `provider=="new_api"` 走 `syncService.SyncNow`，其他 provider 走 `SubscriptionRefreshWorker`（`subscription_refresh_worker.go`）。注意 `IsAutoRefreshSupported`（`subscription_balance_fetcher.go`）白名单只含 openai/anthropic/google，**不含 new_api**（见第 6 节）。
 
 ## 5. 前端编辑弹窗字段/校验/API 调用链路
 
@@ -148,10 +148,10 @@ UpstreamConfig (channelUid, autoManagedKind=new_api)
   - **同样先 verify，再使用 verify 返回的 `groups` + `availableModels` 计算全部合格分组**
   - 绑定主账号与追加账号都显式传 `provisionAllEligibleGroups=true`、`maxGroupMultiplier`（当前默认 1.0）与 `availableModels`
   - `groupFetchError`、无合格组、verify 失败时均阻断提交，不允许 fallback 到 `default`
-- key 倍率编辑 `edit-channel/ApiKeyManagementSection.vue`：`openMultiplierEditor`（行 1585）→ `patchKeyMultiplier`（行 1604）；`new_api` 源 key 的 `groupMultiplier` 后端拒绝手改（`handlers_key_multiplier.go:114`），仅允许改 `maxGroupMultiplier`（行 1602 前端也据此限制）；状态色 `multiplierStatusColor`（行 1583）/`multiplierStatusLabel`（`utils/subscriptionBilling.ts:19`）
+- key 倍率编辑 `edit-channel/ApiKeyManagementSection.vue`：`openMultiplierEditor` → `patchKeyMultiplier`；`new_api` 源 key 的 `groupMultiplier` 后端拒绝手改（`handlers_key_multiplier.go:158`，409 Conflict「new_api key 的 groupMultiplier 由远端同步，不能手动修改」），仅允许改 `maxGroupMultiplier`（前端也据此限制）；状态色 `multiplierStatusColor`/`multiplierStatusLabel`（`utils/subscriptionBilling.ts`）
 
 ### 5.3 API 服务层（`frontend/src/services/api.ts`）
-`verifyNewApiSubscription`(1422) / `provisionNewApiSubscription`(1430) / `updateNewApiCredentials`(1439) / `getSubscriptionAccounts`(1446) / `addSubscriptionAccount`(1451) / `deleteSubscriptionAccount`(1459) / `refreshSubscriptionAccount`(1466) / `refreshSubscription`(1385) / `patchKeyMultiplier`(1409) / `linkSubscriptionChannel`(1371) / `unlinkSubscriptionChannel`(1378)。类型定义在 `api-types.ts`：`NewApiVerifyRequest/Response`(1354/1363)、`NewApiProvisionRequest/Response`(1376/1404)、`NewApiProvisionedKey(Info)`(1393/1400)、`NewApiAccountItem`(1434)、`NewApiCredentialsUpdateRequest`(1427)、`NewApiKeyStatus`(1222)、`NewApiSyncResult`(1235)、`APIKeyConfig`(114)。
+`verifyNewApiSubscription`(1472) / `provisionNewApiSubscription`(1480) / `updateNewApiCredentials`(1489) / `getSubscriptionAccounts`(1496) / `addSubscriptionAccount`(1501) / `deleteSubscriptionAccount`(1509) / `refreshSubscriptionAccount`(1516) / `refreshSubscription`(1435) / `patchKeyMultiplier`(1459) / `linkSubscriptionChannel`(1421) / `unlinkSubscriptionChannel`(1428)。类型定义在 `api-types.ts`：`NewApiVerifyRequest/Response`、`NewApiProvisionRequest/Response`、`NewApiProvisionedKey(Info)`、`NewApiAccountItem`、`NewApiCredentialsUpdateRequest`、`NewApiKeyStatus`、`NewApiSyncResult`、`APIKeyConfig`。
 
 ### 5.4 调用链路（统一组计划）
 1. `verify`：输入 `baseUrl/accessToken/userId/authTokenMode`，后端拉 `GET /api/user/self`、`GET /api/user/self/groups`、`GET /api/user/models`，返回 `groups + availableModels`。
@@ -181,6 +181,8 @@ locale 键在 `frontend/src/locales/{zh-CN,en,id}.json`，前缀 `subscription.n
 6. **`NewApiAccountItem.usedQuota` 前端类型有、后端不填**：`api-types.ts:1446` 定义了 `usedQuota`，但后端 `handlers_subscription_accounts.go` 构造 `NewApiAccountItem` 时（行 184/244/391）从不设置该字段——per-account 已用额度不可见。
 
 7. **合并渠道的 kind 冲突**：`findNewApiMergeTarget` 只按 baseURL+kind 匹配，若同站点用户先建了纯 key 渠道且 serviceType 与 new-api 推导不一致，合并后 `serviceType` 沿用旧渠道（不校验），可能与 new-api 分组语义错配（无显式告警）。
+
+8. ~~**new-api 占位模型 503 误判端点不可用**~~ ✅ **已修复**（2026-08-19，提交 `cd6f93d7`）：key 验证（`verify_endpoint.go` `verifyJSONPostEndpointWithPolicy`）在 `acceptValidationError` 分支除 400/422 外新增识别 503 + `{"error":{"code":"model_not_found"}}`（或 message 含 `no available channel for model`），判定鉴权通过——new-api/one-api 对无渠道占位模型返回 503，此前被误判「端点不可用」导致有效 key 无法添加。
 
 ## 7. 布局示意图
 
@@ -356,11 +358,16 @@ SmartRouter 成本计算的三段降级（`smart_router.go:1326-1380`）：
 - `ResolveExchangeTerms` 对 graph nil、单位不在图中、版本不匹配、单价非有限正数等都返回 `OK=false` + 具体 `Reason` 字符串，`Available=false`，调用方回退标价。
 - `EstimatedCost` 最终进 `NormalizeSavingsScore`；`c < 0`（无成本证据）得中性 0.5 分，不惩罚。
 
-**请求期路径（`upstream_failover.go:291`）** 与路由期不同：`buildRequestCostContext` **只固化 `ListCostUSD` + `ExchangeSnapshotVersion`**，`EffectiveCostReason` 硬编码为 `"subscription payment/credit snapshot unavailable"`，从不计算 effective cost（`EffectiveCostAvailable` 恒 false）。metrics 记录 `EffectiveCostMultiplier` 字段，但 `RequestCostContext` 构造处从不设置它，且 `CostProfile{}` 在非测试代码中从不构造，所以请求期 effective cost 恒不可用。
+**请求期路径（`upstream_failover.go:291` `buildRequestCostContext`）**（`49f28b3e` 后已支持渠道级 effective cost）：
+1. 列表成本按渠道计价币种折 USD（`ResolveUpstreamCapability` + `CalculateTokenCostUSDWithPricing`），只固化 `ListCostUSD` + `ExchangeSnapshotVersion`。
+2. 构建全局汇率图（quotes 来自 `CostOptimization.ExchangeRateQuotes`）。
+3. 渠道级「充值币种/金额 + 渠道币种/到账金额」四字段齐备且金额>0 时，调 `autopilot.ResolveEffectiveCostUSD` 计算 `EffectiveCostMultiplier = (Payment×充值币价)/(Credit×渠道币价)`，置 `EffectiveCostAvailable=true`、`EffectiveCostReason="channel payment/credit conversion"`。
+4. 四字段缺配但渠道配了 `CostMultiplier` 时走简化路径直取该倍率（reason `"channel cost multiplier"`）。
+5. 订阅级 billing-terms 仍未在请求期解析（reason 以 `"subscription payment/credit snapshot unavailable"` 起步）——订阅级补齐仍是路由期（§4.4）专属。
 
 **缺口分析**
 
-1. **new-api 无 billing-terms 时 effective USD 仍不可用。** effective USD 计算要求订阅同时有 `PaymentAmount` 和 `CreditAmount`。new-api provision 建 profile 时设 `Currency:"quota"`、`Balance`，**从不设置 `PaymentAmount/CreditAmount`**（这两个字段只能通过 `PATCH /subscriptions/:uid/billing-terms` 手工填）。因此未补 billing-terms 的 new-api 订阅走 `listCost * timeMultiplier * groupMultiplier`；分组倍率已能影响 SavingsScore，但真实到账 USD 成本仍无法计算。
+1. **new-api 无 billing-terms 且渠道未配四字段时 effective USD 不可用。** effective USD 计算要求订阅同时有 `PaymentAmount` 和 `CreditAmount`，或渠道配齐计费四字段。new-api provision 建 profile 时设 `Currency:"quota"`、`Balance`，**从不设置 `PaymentAmount/CreditAmount`**（只能通过 `PATCH /subscriptions/:uid/billing-terms` 手工填，四字段 `paymentAmount/paymentUnit/creditAmount/creditUnit`，充值倍率单字段模型已移除 `a96098da`）。未补齐的订阅/渠道走 `listCost * timeMultiplier * groupMultiplier`；分组倍率已能影响 SavingsScore，但真实到账 USD 成本仍无法计算。
 
 2. **`quote` 单位与 key 计价单位可能对不上。** new-api key 的 `GroupMultiplier` 是相对倍率，effective 计算用 `PaymentUnit/CreditUnit`（如 CNY/LDC）查图。若用户 billing-terms 填的单位不在默认图（USD/CNY/LDC）中，`ResolveExchangeTerms` 返回 `"exchange rate unit not in graph"`，静默回退——用户没有任何反馈知道要去补一条 quote。
 

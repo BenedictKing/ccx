@@ -64,12 +64,12 @@ Channels   (Claude/OpenAI/Gemini/...)
 
 | 交互点 | 位置 | 方向 |
 |--------|------|------|
-| `SetCandidateFilterProvider` | `main.go:741` | autopilot → scheduler |
-| `SetModelSupportResolverProvider` | `main.go:884` | autopilot → scheduler |
-| `SetEndpointPolicyProviderHook` | `main.go:780` | autopilot → handlers/common |
-| `SetNotifyEndpointResultHook` | `main.go:804` | handlers/common → autopilot |
-| `SetRoutingOutcomeRecorderHook` | `main.go:768` | handlers/common → autopilot |
-| `SetAttemptRecorderHook` | `main.go:774` | handlers/common → autopilot |
+| `SetCandidateFilterProvider` | `main.go:788` | autopilot → scheduler |
+| `SetModelSupportResolverProvider` | `main.go:935` | autopilot → scheduler |
+| `SetEndpointPolicyProviderHook` | `main.go:829` | autopilot → handlers/common |
+| `SetNotifyEndpointResultHook` | `main.go:854` | handlers/common → autopilot |
+| `SetRoutingOutcomeRecorderHook` | `main.go:813` | handlers/common → autopilot |
+| `SetAttemptRecorderHook` | `main.go:819` | handlers/common → autopilot |
 
 ### 3.3 Autopilot 与 Healthcheck
 
@@ -84,6 +84,15 @@ Channels   (Claude/OpenAI/Gemini/...)
 - `NewApiSubscriptionSyncService` 与 `ProfileStore` 共享同一 `*sql.DB`
 - provision 后的渠道通过 `TriggerDiscovery` 纳入 autopilot 画像体系
 - key 的 `GroupMultiplier` 参与 SmartRouter 的成本评分
+- 成本链同时支持**渠道级计费覆盖**：`UpstreamConfig` 的充值币种/金额 + 渠道币种/到账金额四字段（或简化 `CostMultiplier`），请求期经 `buildRequestCostContext` 按全局汇率图调 `autopilot.ResolveEffectiveCostUSD` 计算 `EffectiveMultiplier`（订阅级 PaymentAmount/CreditAmount 与渠道级四字段共用同一入口，`key_endpoint_profile.go`）
+
+### 3.6 上游客户端指纹风控适配
+
+部分 new-api 风格上游对 models 端点做客户端指纹校验（裸请求 401/403 且 body 含 `unauthorized client` 等特征，`utils.IsClientFingerprintRejection`）。统一策略在 `utils.FetchUpstreamModels`：
+
+- Anthropic 风格端点（messages/claude）首发即带 Claude Code 探针头（`utils.ApplyClaudeCodeProbeHeaders`：anthropic-version/beta、`User-Agent: ClaudeCodeProbeUserAgent`、`X-App: cli` 等；customHeaders 最后应用可覆盖）。
+- 其余端点首发裸请求，命中拦截特征时带探针头重试一次（重试 2xx 才认定学习成功，避免把 Key 无效误学为指纹拦截）。
+- 学习成功回写 `UpstreamConfig.LearnedClientFingerprint`（autopilot `maybeLearnClientFingerprint`，`updateChannelByKind` 单字段 PATCH）；此后自动发现、渠道模型拉取 handler、六类 `GetChannelModels`、保活 L1 全链路首发即带伪装头（healthcheck 只消费标记，见 `healthcheck.md` §2.2/§3.6）。
 
 ### 3.5 默认路由与前缀路由隔离
 
@@ -114,11 +123,11 @@ Channels   (Claude/OpenAI/Gemini/...)
    ▼
 [SmartRouter.CandidateFilterForWithActual]
    │
-   ├─ 收集候选渠道（LogicalChannel 层）
+   ├─ 收集候选渠道（LogicalChannel 层，候选按 (渠道, 模型) 展开）
    ├─ 解析模型映射
    ├─ 构建评分 entry
    ├─ Advisor hint / 人工意图
-   ├─ 硬约束过滤
+   ├─ 硬约束过滤（渠道级去重后返回）
    └─ 返回排序渠道
    │
    ▼
@@ -151,8 +160,10 @@ Channels   (Claude/OpenAI/Gemini/...)
    │
    ├─ 400/422 document → SharedChannelCompatCache
    ├─ 400/422 context → SharedChannelCompatCache
+   ├─ 400 beta header 被拒 → compat trait `unsupported_beta_header` → LearnedRejectedBetaTokens（下次按 token 剥离）
    ├─ 429/5xx → MetricsManager.RecordFailure
-   ├─ auth/permission → ShouldBlacklistKey → BlacklistKeyWithRecoverAt
+   ├─ auth/permission → ShouldBlacklistKey → BlacklistKeyWithRecoverAt（跨协议级联）
+   ├─ model_not_found → DisableKeyModel（自动映射渠道由发送前复查兜底）
    └─ TTFB 拥塞 → RateLimitDiscoverer.Observe
    │
    ▼
@@ -221,7 +232,8 @@ Channels   (Claude/OpenAI/Gemini/...)
 
 | 层级 | 状态来源 | 更新频率 |
 |------|----------|----------|
-| Key Multiplier | New-API Sync | 15min TTL |
+| Key Multiplier | New-API Sync | 35min TTL（`newApiSyncTTL`） |
+| Channel Billing | 渠道计费四字段 / CostMultiplier（用户编辑） | 配置保存时 |
 | Endpoint Cost | Profiler.DeriveEndpointProfile | 5min |
 | Channel Cost | AggregateChannelProfile | 5min |
 | Model Cost | ModelRegistry / AFP Pricing | 启动时 + 定期 |
@@ -324,7 +336,7 @@ New-API              -             写          读           -             -
 
 ### 8.3 热更新与重启边界
 
-- `.config/config.json` 修改后自动热重载（文件监听）
+- `.config/config.json` **外部修改**后自动热重载（文件监听）；**自身保存**触发的文件变更不再重载——`saveConfigLocked` 落盘后记录 sha256 摘要，watcher debounce 到期比对一致即跳过（`skipReloadIfSelfWritten`，`4b292c56`），避免迁移归一化在热重载窗口改写运行时状态
 - `.env` 修改后需要重启服务
 - `PresetStore` 支持后台原子替换，无需重启
 - `LogicalChannel` 重建是内存操作，立即生效
@@ -351,7 +363,7 @@ New-API              -             写          读           -             -
 
 2. **New-API 同步 vs 渠道编辑**
    - 场景：SyncService 正在 reconcileChannels，用户同时编辑渠道 key
-   - 当前处理：`newAPIProvisionMu` 串行化 provision；reconcile 基于 config snapshot
+   - 当前处理：`newAPIProvisionMu` 串行化 provision；reconcile 基于 config snapshot；站点归并的实体合并只作用于 AutoManaged 渠道、手动渠道仅归并账号身份（`89b6033c`），provision 耗时跨过 watcher debounce 窗口不再导致重载合并吞掉手动渠道（配合 §8.3 自写跳过）
    - 风险：reconcile 结果覆盖用户手动修改
    - 建议：reconcile 前检查 `MultiplierUpdatedAt`，冲突时标记 `relink_required`
 
@@ -396,6 +408,7 @@ New-API              -             写          读           -             -
 | `upstream_changed` / `config_reloaded` / `logical_channel_rebuilt` | `config_loader.go`（`saveConfigLocked` diff 6 类渠道 / `loadConfig` / `RebuildLogicalChannelsAndPublish`） | 配置写入与热重载 |
 | `preset_bundle_swapped` | `presetstore.Swap` | 预置数据原子替换 |
 | `manifest_drift` | `autopilot/auto_discovery.go` | 火山管控面清单与内置兜底 diff 有增删 |
+| `capability_drift` | `autopilot/subscription_capability.go`（聚合入口 `manager.go` `updateSubscriptionCapabilities`） | 订阅级共享能力与渠道声明 diff |
 
 **持久化与消费**
 
@@ -412,7 +425,7 @@ New-API              -             写          读           -             -
 
 **应覆盖的事件类型**
 
-> 已实现（eventbus 常量，2026-08）：`circuit_breaker_state_changed`、`key_blacklisted`、`key_restored`、`key_model_disabled`、`key_model_restored`、`config_reloaded`、`upstream_changed`、`channel_status_changed`、`logical_channel_rebuilt`、`preset_bundle_swapped`、`manifest_drift`。以下为完整目标清单（未标注即待实现）。
+> 已实现（eventbus 常量，2026-08）：`circuit_breaker_state_changed`、`key_blacklisted`、`key_restored`、`key_model_disabled`、`key_model_restored`、`config_reloaded`、`upstream_changed`、`channel_status_changed`、`logical_channel_rebuilt`、`preset_bundle_swapped`、`manifest_drift`、`capability_drift`。以下为完整目标清单（未标注即待实现）。
 
 - 画像变更：`profile_updated`、`health_changed`、`discovery_completed`、`auto_mapping_applied`
 - 健康/熔断：`circuit_breaker_state_changed`✅、`key_blacklisted`✅、`key_restored`✅、`healthcheck_probe_failed`、`probe_recovered`
