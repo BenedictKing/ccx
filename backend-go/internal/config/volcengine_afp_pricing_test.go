@@ -236,8 +236,8 @@ func TestResolveVolcengineAFPCost_GLM52_PromotionStartBoundary(t *testing.T) {
 }
 
 func TestResolveVolcengineAFPCost_GLMLatest_Alias(t *testing.T) {
-	// glm-latest 是 glm-5.2 的别名，应匹配同一规则
-	at := cst(2026, 7, 24, 12, 0, 0)
+	// glm-latest 是 glm-5.3 的别名，应匹配同一规则（无活动）
+	at := cst(2026, 8, 18, 12, 0, 0)
 	result := ResolveVolcengineAFPCost(at, "agent_plan", "glm-latest", 100_000, 10_000)
 
 	if !result.Matched {
@@ -246,12 +246,12 @@ func TestResolveVolcengineAFPCost_GLMLatest_Alias(t *testing.T) {
 	if !result.IsAlias {
 		t.Fatal("expected IsAlias=true")
 	}
-	if result.AliasOf != "glm-5.2" {
-		t.Fatalf("AliasOf = %q, want glm-5.2", result.AliasOf)
+	if result.AliasOf != "glm-5.3" {
+		t.Fatalf("AliasOf = %q, want glm-5.3", result.AliasOf)
 	}
-	// 结果应与 glm-5.2 完全一致
-	if result.TotalAFP != 14 {
-		t.Fatalf("TotalAFP = %d, want 14 (same as glm-5.2)", result.TotalAFP)
+	// 结果应与 glm-5.3 完全一致：45 + 5 = 50
+	if result.TotalAFP != 50 {
+		t.Fatalf("TotalAFP = %d, want 50 (same as glm-5.3)", result.TotalAFP)
 	}
 }
 
@@ -294,22 +294,16 @@ func TestResolveVolcengineAFPCost_DeepSeekV4Pro_ExpiredPromotion(t *testing.T) {
 	}
 }
 
-func TestResolveVolcengineAFPCost_KimiK26_ExpiredPromotion(t *testing.T) {
-	// kimi-k2.6: 基础 4.5/4.5，×0.4 活动已结束
-	at := cst(2026, 7, 24, 12, 0, 0)
+func TestResolveVolcengineAFPCost_KimiK26_Delisted(t *testing.T) {
+	// kimi-k2.6 已于 2026-08-18 下线，目录中不再收录
+	at := cst(2026, 8, 18, 12, 0, 0)
 	result := ResolveVolcengineAFPCost(at, "agent_plan", "kimi-k2.6", 100_000, 10_000)
 
-	if !result.Matched {
-		t.Fatal("expected matched")
+	if result.Matched {
+		t.Fatal("kimi-k2.6 已下线，不应匹配 AFP 目录")
 	}
-	if result.PromotionApplied {
-		t.Fatal("k2.6 promotion should be expired")
-	}
-	// 基础系数：4.5/4.5
-	// AFP = ceil(100000 × 4.5 / 10000) + ceil(10000 × 4.5 / 10000)
-	//     = 45 + 5 = 50
-	if result.TotalAFP != 50 {
-		t.Fatalf("TotalAFP = %d, want 50", result.TotalAFP)
+	if result.Confidence != AFPCostConfidenceUnknown {
+		t.Fatalf("confidence = %v, want unknown", result.Confidence)
 	}
 }
 
@@ -365,7 +359,7 @@ func TestResolveVolcengineAFPCost_UnsupportedPlan(t *testing.T) {
 
 func TestResolveVolcengineAFPCost_ExpiredPromotionsAtCurrentDate(t *testing.T) {
 	at := cst(2026, 8, 15, 12, 0, 0)
-	for _, model := range []string{"glm-5.2", "glm-latest", "deepseek-v4-pro", "kimi-k2.6", "kimi-k2.7-code"} {
+	for _, model := range []string{"glm-5.2", "glm-5.3", "glm-latest", "deepseek-v4-pro", "kimi-k2.7-code"} {
 		t.Run(model, func(t *testing.T) {
 			result := ResolveVolcengineAFPCost(at, "agent_plan", model, 100_000, 10_000)
 			if !result.Matched {
@@ -418,6 +412,44 @@ func TestResolveVolcengineAFPCost_PlanKeyExamples(t *testing.T) {
 			}
 			if result.TotalAFP != tt.expected {
 				t.Fatalf("%s: TotalAFP = %d, want %d (%s)", tt.model, result.TotalAFP, tt.expected, tt.desc)
+			}
+		})
+	}
+}
+
+// ────────────────────────────────────────────────────────────────
+// 2026-08 目录扩充模型验证（100k 输入 medium 段、10k 输出，无活动）
+// ────────────────────────────────────────────────────────────────
+
+func TestResolveVolcengineAFPCost_202608CatalogAdditions(t *testing.T) {
+	at := cst(2026, 8, 18, 12, 0, 0)
+	inputTokens := 100_000
+	outputTokens := 10_000
+
+	tests := []struct {
+		model    string
+		expected int64
+	}{
+		{"doubao-seed-2.0-mini", 4},   // 0.25: ceil(2.5) + ceil(0.25) = 3 + 1
+		{"doubao-seed-2.0-lite", 6},   // 0.5: 5 + 1
+		{"doubao-seed-2.1-turbo", 28}, // 2.5: 25 + ceil(2.5)
+		{"doubao-seed-evolving", 28},  // 2.5
+		{"minimax-m3", 28},            // 2.5
+		{"glm-5.3", 50},               // 4.5: 45 + 5
+		{"kimi-k2.7-code", 50},        // 4.5
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			result := ResolveVolcengineAFPCost(at, "agent_plan", tt.model, inputTokens, outputTokens)
+			if !result.Matched {
+				t.Fatalf("expected matched for %s", tt.model)
+			}
+			if result.PromotionApplied {
+				t.Fatalf("%s: 不应命中活动", tt.model)
+			}
+			if result.TotalAFP != tt.expected {
+				t.Fatalf("%s: TotalAFP = %d, want %d", tt.model, result.TotalAFP, tt.expected)
 			}
 		})
 	}

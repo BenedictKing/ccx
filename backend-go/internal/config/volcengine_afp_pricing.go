@@ -108,7 +108,7 @@ type VolcengineAFPModelRule struct {
 	Plan       string               // 套餐类型："agent_plan"
 	SourceURL  string               // 官方来源 URL
 	VerifiedAt time.Time            // 最后核验日期
-	ModelIDs   []string             // 精确模型 ID 列表（glm-latest 作为 glm-5.2 的显式别名）
+	ModelIDs   []string             // 精确模型 ID 列表（glm-latest 作为 glm-5.3 的显式别名）
 	InputBase  AFPScaledCoefficient // 基础输入系数
 	OutputBase AFPScaledCoefficient // 基础输出系数
 	Promotions []AFPPromotionRule   // 该模型的活动规则列表
@@ -183,25 +183,87 @@ type AFPCostResult struct {
 // ────────────────────────────────────────────────────────────────
 
 // agentPlanAFPRules 是编译期内置的火山 Agent Plan AFP 模型规则。
-// 来源：https://www.volcengine.com/docs/82379/2533565
-// 核验日期：2026-07-24
+// 基础系数来源：https://docs.volcengine.com/docs/82379/2516283 (套餐内 AFP 抵扣规则)
+// 活动倍率来源：https://www.volcengine.com/docs/82379/2533565
+// 核验日期：2026-08-18；minimax-m2.7/kimi-k2.6 已于 2026-08-18 下线移除，
+// glm-5.2 将于 2026-08-31 下线路由至 glm-5.3（系数一致，过渡期保留）。
 var agentPlanAFPRules = []VolcengineAFPModelRule{
+	{
+		RuleID:     "volc-agent-doubao-seed-2-0-mini",
+		Plan:       "agent_plan",
+		SourceURL:  "https://docs.volcengine.com/docs/82379/2516283",
+		VerifiedAt: time.Date(2026, 8, 18, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
+		ModelIDs:   []string{"doubao-seed-2.0-mini"},
+		InputBase:  NewAFPCoefficient(0.25),
+		OutputBase: NewAFPCoefficient(0.25),
+		Promotions: nil, // 无本轮活动
+	},
+	{
+		RuleID:     "volc-agent-doubao-seed-2-0-lite",
+		Plan:       "agent_plan",
+		SourceURL:  "https://docs.volcengine.com/docs/82379/2516283",
+		VerifiedAt: time.Date(2026, 8, 18, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
+		ModelIDs:   []string{"doubao-seed-2.0-lite"},
+		InputBase:  NewAFPCoefficient(0.5),
+		OutputBase: NewAFPCoefficient(0.5),
+		Promotions: nil, // 无本轮活动
+	},
 	{
 		RuleID:     "volc-agent-dsv4-flash",
 		Plan:       "agent_plan",
-		SourceURL:  "https://www.volcengine.com/docs/82379/2533565",
-		VerifiedAt: time.Date(2026, 7, 24, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
+		SourceURL:  "https://docs.volcengine.com/docs/82379/2516283",
+		VerifiedAt: time.Date(2026, 8, 18, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
 		ModelIDs:   []string{"deepseek-v4-flash"},
 		InputBase:  NewAFPCoefficient(0.5),
 		OutputBase: NewAFPCoefficient(0.5),
 		Promotions: nil, // 无本轮活动
 	},
 	{
+		RuleID:     "volc-agent-doubao-seed-2-1-turbo",
+		Plan:       "agent_plan",
+		SourceURL:  "https://docs.volcengine.com/docs/82379/2516283",
+		VerifiedAt: time.Date(2026, 8, 18, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
+		ModelIDs:   []string{"doubao-seed-2.1-turbo"},
+		InputBase:  NewAFPCoefficient(2.5),
+		OutputBase: NewAFPCoefficient(2.5),
+		Promotions: nil, // 无本轮活动
+	},
+	{
+		RuleID:     "volc-agent-doubao-seed-evolving",
+		Plan:       "agent_plan",
+		SourceURL:  "https://docs.volcengine.com/docs/82379/2516283",
+		VerifiedAt: time.Date(2026, 8, 18, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
+		ModelIDs:   []string{"doubao-seed-evolving"},
+		InputBase:  NewAFPCoefficient(2.5),
+		OutputBase: NewAFPCoefficient(2.5),
+		Promotions: nil, // 无本轮活动
+	},
+	{
+		RuleID:     "volc-agent-minimax-m3",
+		Plan:       "agent_plan",
+		SourceURL:  "https://docs.volcengine.com/docs/82379/2516283",
+		VerifiedAt: time.Date(2026, 8, 18, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
+		ModelIDs:   []string{"minimax-m3"},
+		InputBase:  NewAFPCoefficient(2.5),
+		OutputBase: NewAFPCoefficient(2.5),
+		Promotions: nil, // 无本轮活动
+	},
+	{
+		RuleID:     "volc-agent-glm53",
+		Plan:       "agent_plan",
+		SourceURL:  "https://docs.volcengine.com/docs/82379/2516283",
+		VerifiedAt: time.Date(2026, 8, 18, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
+		ModelIDs:   []string{"glm-5.3", "glm-latest"}, // glm-latest 是 glm-5.3 的显式别名
+		InputBase:  NewAFPCoefficient(4.5),
+		OutputBase: NewAFPCoefficient(4.5),
+		Promotions: nil, // 无本轮活动
+	},
+	{
 		RuleID:     "volc-agent-glm52",
 		Plan:       "agent_plan",
-		SourceURL:  "https://www.volcengine.com/docs/82379/2533565",
-		VerifiedAt: time.Date(2026, 7, 24, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
-		ModelIDs:   []string{"glm-5.2", "glm-latest"}, // glm-latest 是 glm-5.2 的显式别名
+		SourceURL:  "https://docs.volcengine.com/docs/82379/2516283",
+		VerifiedAt: time.Date(2026, 8, 18, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
+		ModelIDs:   []string{"glm-5.2"}, // 2026-08-31 下线后路由至 glm-5.3，系数一致
 		InputBase:  NewAFPCoefficient(4.5),
 		OutputBase: NewAFPCoefficient(4.5),
 		Promotions: []AFPPromotionRule{
@@ -217,50 +279,10 @@ var agentPlanAFPRules = []VolcengineAFPModelRule{
 		},
 	},
 	{
-		RuleID:     "volc-agent-dsv4-pro",
-		Plan:       "agent_plan",
-		SourceURL:  "https://www.volcengine.com/docs/82379/2533565",
-		VerifiedAt: time.Date(2026, 7, 24, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
-		ModelIDs:   []string{"deepseek-v4-pro"},
-		InputBase:  NewAFPCoefficient(5.5),
-		OutputBase: NewAFPCoefficient(5.5),
-		Promotions: []AFPPromotionRule{
-			{
-				PromotionID: "volc-agent-dsv4-pro-x04-2026q3",
-				// ×0.4 活动已于 2026-07-15 00:00:00 结束
-				StartsAt:   time.Date(2026, 6, 1, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
-				EndsAt:     time.Date(2026, 7, 15, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
-				Multiplier: NewAFPCoefficient(0.4),
-				SourceURL:  "https://www.volcengine.com/docs/82379/2533565",
-				VerifiedAt: time.Date(2026, 7, 24, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
-			},
-		},
-	},
-	{
-		RuleID:     "volc-agent-kimi-k26",
-		Plan:       "agent_plan",
-		SourceURL:  "https://www.volcengine.com/docs/82379/2533565",
-		VerifiedAt: time.Date(2026, 7, 24, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
-		ModelIDs:   []string{"kimi-k2.6"},
-		InputBase:  NewAFPCoefficient(4.5),
-		OutputBase: NewAFPCoefficient(4.5),
-		Promotions: []AFPPromotionRule{
-			{
-				PromotionID: "volc-agent-kimi-k26-x04-2026q3",
-				// ×0.4 活动已结束
-				StartsAt:   time.Date(2026, 6, 1, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
-				EndsAt:     time.Date(2026, 7, 15, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
-				Multiplier: NewAFPCoefficient(0.4),
-				SourceURL:  "https://www.volcengine.com/docs/82379/2533565",
-				VerifiedAt: time.Date(2026, 7, 24, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
-			},
-		},
-	},
-	{
 		RuleID:     "volc-agent-kimi-k27-code",
 		Plan:       "agent_plan",
-		SourceURL:  "https://www.volcengine.com/docs/82379/2533565",
-		VerifiedAt: time.Date(2026, 7, 24, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
+		SourceURL:  "https://docs.volcengine.com/docs/82379/2516283",
+		VerifiedAt: time.Date(2026, 8, 18, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
 		ModelIDs:   []string{"kimi-k2.7-code"},
 		InputBase:  NewAFPCoefficient(4.5),
 		OutputBase: NewAFPCoefficient(4.5),
@@ -277,10 +299,30 @@ var agentPlanAFPRules = []VolcengineAFPModelRule{
 		},
 	},
 	{
+		RuleID:     "volc-agent-dsv4-pro",
+		Plan:       "agent_plan",
+		SourceURL:  "https://docs.volcengine.com/docs/82379/2516283",
+		VerifiedAt: time.Date(2026, 8, 18, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
+		ModelIDs:   []string{"deepseek-v4-pro"},
+		InputBase:  NewAFPCoefficient(5.5),
+		OutputBase: NewAFPCoefficient(5.5),
+		Promotions: []AFPPromotionRule{
+			{
+				PromotionID: "volc-agent-dsv4-pro-x04-2026q3",
+				// ×0.4 活动已于 2026-07-15 00:00:00 结束
+				StartsAt:   time.Date(2026, 6, 1, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
+				EndsAt:     time.Date(2026, 7, 15, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
+				Multiplier: NewAFPCoefficient(0.4),
+				SourceURL:  "https://www.volcengine.com/docs/82379/2533565",
+				VerifiedAt: time.Date(2026, 7, 24, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
+			},
+		},
+	},
+	{
 		RuleID:     "volc-agent-kimi-k3",
 		Plan:       "agent_plan",
-		SourceURL:  "https://www.volcengine.com/docs/82379/2533565",
-		VerifiedAt: time.Date(2026, 7, 24, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
+		SourceURL:  "https://docs.volcengine.com/docs/82379/2516283",
+		VerifiedAt: time.Date(2026, 8, 18, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
 		ModelIDs:   []string{"kimi-k3"},
 		InputBase:  NewAFPCoefficient(10.0),
 		OutputBase: NewAFPCoefficient(10.0),

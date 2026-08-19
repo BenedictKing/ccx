@@ -129,14 +129,14 @@ func TestSelectL2ProbeModels别名去重(t *testing.T) {
 	now := time.Date(2026, 8, 8, 12, 0, 0, 0, time.FixedZone("CST", 8*3600))
 
 	got := m.selectL2ProbeModels("ch-volc", "keyhash", u,
-		[]string{"glm-5.2", "glm-latest", "deepseek-v4-flash"},
+		[]string{"glm-5.3", "glm-latest", "deepseek-v4-flash"},
 		nil, nil, policy, now)
 
 	seen := map[string]bool{}
 	for _, model := range got {
 		seen[model] = true
 	}
-	if seen["glm-5.2"] && seen["glm-latest"] {
+	if seen["glm-5.3"] && seen["glm-latest"] {
 		t.Fatalf("glm alias 不应重复探测: %v", got)
 	}
 }
