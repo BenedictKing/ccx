@@ -89,7 +89,7 @@
         persistent-hint
         variant="outlined"
         density="compact"
-        prepend-inner-icon="mdi-proxy"
+        prepend-inner-icon="mdi-vpn"
         class="mt-1"
       />
     </div>

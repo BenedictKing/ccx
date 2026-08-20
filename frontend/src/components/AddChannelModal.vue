@@ -71,7 +71,7 @@
             persistent-hint
             variant="outlined"
             density="compact"
-            prepend-inner-icon="mdi-proxy"
+            prepend-inner-icon="mdi-vpn"
           />
 
           <v-card variant="outlined" class="detection-status-card" rounded="lg">
