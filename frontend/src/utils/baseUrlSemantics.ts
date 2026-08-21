@@ -26,14 +26,13 @@ export function stripDashboardPathFromBaseUrl(rawUrl: string): string {
   const trimmed = rawUrl.trim()
   if (!trimmed) return ''
 
-  const hasHash = trimmed.endsWith('#')
-  const withoutHash = hasHash ? trimmed.slice(0, -1) : trimmed
+  if (trimmed.endsWith('#')) return trimmed
 
   try {
-    const parsed = new URL(withoutHash)
+    const parsed = new URL(trimmed)
     const path = parsed.pathname.toLowerCase()
     if (dashboardPathPrefixes.some(prefix => path === prefix || path.startsWith(prefix + '/'))) {
-      return parsed.origin + (hasHash ? '#' : '')
+      return parsed.origin
     }
   } catch {
     return trimmed
