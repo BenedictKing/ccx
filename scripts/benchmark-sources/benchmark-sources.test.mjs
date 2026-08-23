@@ -18,11 +18,12 @@ import {
   extractBestPerModel as extractDradarBest,
   extractLeaderboardFromTable,
   extractCostData,
+  collectUnmappedTableModels,
   toBenchmarkEvidence as toDradarEvidence,
   DRADAR_MODEL_MAP,
 } from './dradar.mjs'
 import { extractProfiles as extractBenchlmProfiles } from './benchlm.mjs'
-import { extractModelInfo, LITELLM_MODEL_MAP } from './litellm.mjs'
+import { extractModelInfo, collectUnmappedLitellmKeys, collectMissingMappedKeys, LITELLM_MODEL_MAP } from './litellm.mjs'
 import {
   extractLlmProfiles as extractAaLlm,
   extractImageArenaProfiles as extractAaImage,
@@ -147,18 +148,61 @@ test('new-model detection flags unmapped same-family higher versions only', () =
   assert.equal(candidates[0].version, '4.20')
 })
 
+test('new-model detection expands provider prefixes and underscore variants', () => {
+  const candidates = detectNewModelCandidates(
+    [
+      'zai/glm-6',                    // provider/ 前缀剥离后命中 glm 家族 → 提示
+      'openrouter/xiaomi/mimo-v3',    // 多级前缀逐段剥离后命中 → 提示
+      'google_grok-4-20',             // provider_ 前缀剥离后命中 → 提示
+      'zai/glm-4',                    // 前缀剥离后版本更低 → 忽略
+      'foo/grok-4-1',                 // 前缀剥离后版本更低 → 忽略
+    ],
+    BENCHLM_MODEL_MAP,
+  )
+  assert.deepEqual(
+    candidates.map(c => c.name),
+    ['zai/glm-6', 'openrouter/xiaomi/mimo-v3', 'google_grok-4-20'],
+  )
+  assert.equal(candidates[0].family, 'glm')
+  assert.equal(candidates[0].version, '6')
+  assert.equal(candidates[0].mappedBest, 'glm-5.3')
+})
+
+test('new-model detection rejects date snapshots, parameter sizes and legacy names', () => {
+  const candidates = detectNewModelCandidates(
+    [
+      'gpt-5-2025-08-07',      // 日期快照段值 > 50 → 忽略
+      'grok-4-0709',           // 日期快照 → 忽略
+      'mimo-v2-0206',          // 日期快照 → 忽略
+      'azure/gpt-35-turbo',    // 主版本 35 与 gpt-5.x 非同代 → 忽略
+      'claude-opus-41',        // 主版本 41 非同代 → 忽略
+      'qwen3-32b',             // 参数量段(32b) 落掉后与 mapped qwen3 等版本 → 忽略
+      'Qwen3-235B-A22B',       // 参数量段落掉后等版本 → 忽略
+      'Qwen3.5-397B-A22B',     // 参数量段落掉后 [3,5] > [3] → 提示
+      'gpt-7',                 // 主版本跳两代 → 忽略（安全网只覆盖同代与下一代）
+      'grok-4-20-beta',        // 同代更高版本 → 提示
+    ],
+    LITELLM_MODEL_MAP,
+  )
+  assert.deepEqual(
+    candidates.map(c => c.name),
+    ['Qwen3.5-397B-A22B', 'grok-4-20-beta'],
+  )
+  assert.equal(candidates[0].version, '3.5')
+})
+
 test('extractProfiles collects unmapped slugs for new-model detection', () => {
   const doc = {
     items: [
       { slug: 'grok-4-5', displayScore: 75, scores: { displayCategoryScores: { coding: 50 } } },
-      { slug: 'grok-4-99', displayScore: 90, scores: { displayCategoryScores: {} } },
+      { slug: 'grok-4-7', displayScore: 90, scores: { displayCategoryScores: {} } },
     ],
   }
   const unmapped = []
   const profiles = extractBenchlmProfiles(doc, BENCHLM_MODEL_MAP, { coding: 'coding' }, unmapped)
   assert.ok(profiles['grok-4.5'])
   assert.equal(profiles['grok-4.5'].overallScore, 75)
-  assert.deepEqual(unmapped, ['grok-4-99'])
+  assert.deepEqual(unmapped, ['grok-4-7'])
   assert.equal(detectNewModelCandidates(unmapped, BENCHLM_MODEL_MAP).length, 1)
 })
 
@@ -224,6 +268,21 @@ test('dradar cohort size is model count rather than graded run count', () => {
   assert.equal(evidence.cohortPercentile, 1)
   assert.equal(evidence.benchmark, 'codexradar')
   assert.equal(evidence.benchmarkVersion, 'v1')
+})
+
+test('dradar collectUnmappedTableModels dedupes unmapped models and feeds new-model detection', () => {
+  const table = {
+    cells: {
+      'task-a|gpt-5.6-sol|low': { n: 3, p: 2 },
+      'task-b|gpt-5.6-sol|high': { n: 3, p: 3 },
+      'task-c|gpt-5.7|high': { n: 3, p: 1 },
+      'task-d|gpt-5.7|low': { n: 3, p: 2 },
+      'task-e|unrelated-model|high': { n: 3, p: 1 },
+    },
+  }
+  const unmapped = collectUnmappedTableModels(table, DRADAR_MODEL_MAP)
+  assert.deepEqual(unmapped, ['gpt-5.7', 'unrelated-model'])
+  assert.deepEqual(detectNewModelCandidates(unmapped, DRADAR_MODEL_MAP).map(c => c.name), ['gpt-5.7'])
 })
 
 test('CodexRadar leaderboard aggregation uses strict cell majority', () => {
@@ -316,6 +375,23 @@ test('LiteLLM keeps missing capabilities unknown and maps function calling to to
   assert.equal(info.supports.vision, undefined)
   assert.equal(info.supports.reasoning, undefined)
   assert.equal(Object.hasOwn(info.supports, 'functionCalling'), false)
+})
+
+test('LiteLLM unmapped/missing key collectors feed new-model and stale-mapping detection', () => {
+  const data = {
+    'gpt-5.5': { max_input_tokens: 1 },
+    'zai/gpt-5.7': { max_input_tokens: 1 },
+    'some-unrelated-vendor/model-x': { max_input_tokens: 1 },
+  }
+  const modelMap = { 'gpt-5.5': 'gpt-5.5', 'claude-opus-5': 'claude-opus-5' }
+
+  assert.deepEqual(collectUnmappedLitellmKeys(data, modelMap), ['zai/gpt-5.7', 'some-unrelated-vendor/model-x'])
+  assert.deepEqual(
+    detectNewModelCandidates(collectUnmappedLitellmKeys(data, modelMap), modelMap).map(c => c.name),
+    ['zai/gpt-5.7'],
+  )
+  // 映射表里的 claude-opus-5 在上游数据中不存在 → 失效告警名单
+  assert.deepEqual(collectMissingMappedKeys(data, modelMap), ['claude-opus-5'])
 })
 
 test('LiteLLM preserves explicit zero prices', () => {
@@ -499,6 +575,17 @@ test('opus-5 is mapped across every benchmark source', () => {
   assert.equal(DRADAR_MODEL_MAP['claude-opus-5'], 'claude-opus-5')
   assert.equal(LITELLM_MODEL_MAP['claude-opus-5'], 'claude-opus-5')
   assert.equal(ARTIFICIAL_ANALYSIS_MODEL_MAP['claude-opus-5'], 'claude-opus-5')
+})
+
+test('grok-4.6 / kimi-k3 / glm-5.3 stay mapped in dradar and litellm (2026-08-20 audit regressions)', () => {
+  // dradar 榜用点号 glm-5.3 与短名 k3；曾因连字符键/缺别名静默丢分
+  assert.equal(DRADAR_MODEL_MAP['glm-5.3'], 'glm-5.3')
+  assert.equal(DRADAR_MODEL_MAP['k3'], 'kimi-k3')
+  assert.equal(DRADAR_MODEL_MAP['grok-4.6'], 'grok-4.6')
+  assert.equal(DRADAR_MODEL_MAP['dsh-deepseek-v4-pro'], 'deepseek-v4-pro')
+  // litellm：kimi-k2.7-code 裸 key 已从上游移除，grok-4.6 用 xai 官方 key
+  assert.equal(LITELLM_MODEL_MAP['cloudflare/@cf/moonshotai/kimi-k2.7-code'], 'kimi-k2.7-code')
+  assert.equal(LITELLM_MODEL_MAP['xai/grok-4.6'], 'grok-4.6')
 })
 
 test('DeepSeek BenchLM variants fold into canonical flash and pro models', () => {

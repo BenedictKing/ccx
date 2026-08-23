@@ -14,7 +14,7 @@
 
 import { fetchWithTimeout } from './http.mjs'
 import { cachedFetch, cacheResponseData } from './http-cache.mjs'
-import { detectNewModelCandidates } from './mapper.mjs'
+import { warnNewModelCandidates } from './mapper.mjs'
 
 const BASE_URL = 'https://deepswe.datacurve.ai'
 
@@ -236,13 +236,10 @@ export async function fetchDeepsweDataset(modelMap) {
         unmapped.push(row.model)
       }
     }
-    for (const candidate of detectNewModelCandidates(unmapped, modelMap)) {
-      console.warn(
-        `[deepswe] [NEW-MODEL] model "${candidate.name}" (family ${candidate.family}, v${candidate.version}) ` +
-        `exceeds mapped ${candidate.mappedBest} but is NOT in DEEPSWE_MODEL_MAP; ` +
-        `its scores are dropped — add the mapping (or register the model) to include it.`,
-      )
-    }
+    warnNewModelCandidates(unmapped, modelMap, {
+      source: 'deepswe',
+      mapName: 'DEEPSWE_MODEL_MAP',
+    })
 
     return { profiles, liveLeaderboard: v11Data }
   } catch (err) {

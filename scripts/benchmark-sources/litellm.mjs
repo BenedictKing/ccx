@@ -12,6 +12,7 @@
 
 import { execFileSync } from 'node:child_process'
 import { getSimpleCache, setSimpleCache } from './http-cache.mjs'
+import { warnNewModelCandidates } from './mapper.mjs'
 
 const REPO = 'BerriAI/litellm'
 const FILE_PATH = 'model_prices_and_context_window.json'
@@ -121,11 +122,13 @@ export const LITELLM_MODEL_MAP = {
   'zai/glm-5.1': 'glm-5.1',
   'dashscope/qwen-coder': 'qwen3-coder',
   'dashscope/qwen-max': 'qwen3-max',
-  'kimi-k2.7-code': 'kimi-k2.7-code',
   'moonshot/kimi-k2-thinking': 'kimi-k2-thinking',
+  // kimi-k2.7-code 的裸 key 已从上游移除，改用 Cloudflare 托管 key（定价与官方一致 0.95/4/0.19，ctx 256K）
+  'cloudflare/@cf/moonshotai/kimi-k2.7-code': 'kimi-k2.7-code',
   // kimi-k3 在 litellm 仅有 Azure AI Foundry 托管价（高于官方直连），故意不映射：
   // 官方价 ¥2/¥20/¥100 手工维护在 registry，mergeLitellmData 会无条件覆盖 pricing。
   'xai/grok-4.5': 'grok-4.5',
+  'xai/grok-4.6': 'grok-4.6',
   'meta/muse-spark-1.1': 'muse-spark-1.1',
   'meta/muse-spark-1.2': 'muse-spark-1.2',
   'minimax/MiniMax-M3': 'minimax-m3',
@@ -188,6 +191,26 @@ export function extractModelInfo(data, modelMap) {
 }
 
 /**
+ * 收集 litellm 数据中未被映射收录的模型 key（用于新模型检测）。
+ * @param {Object} data - litellm JSON 数据
+ * @param {Object} modelMap - litellm 模型名 -> CCX canonicalModel 映射
+ * @returns {string[]}
+ */
+export function collectUnmappedLitellmKeys(data, modelMap) {
+  return Object.keys(data || {}).filter(key => !modelMap[key])
+}
+
+/**
+ * 收集映射表中上游已不存在的 key（改名/下线会导致定价与上下文静默丢失）。
+ * @param {Object} data - litellm JSON 数据
+ * @param {Object} modelMap - litellm 模型名 -> CCX canonicalModel 映射
+ * @returns {string[]}
+ */
+export function collectMissingMappedKeys(data, modelMap) {
+  return Object.keys(modelMap).filter(key => !data?.[key])
+}
+
+/**
  * 主函数：抓取并转换 litellm 数据
  * @param {Object} modelMap - litellm 模型名 -> CCX canonicalModel 映射
  * @param {boolean} force - 忽略 SHA 缓存强制重新处理
@@ -202,5 +225,18 @@ export async function fetchLitellmModelInfo(modelMap = LITELLM_MODEL_MAP, force 
   const result = extractModelInfo(data, modelMap)
   const models = Object.keys(result).sort()
   console.log(`[litellm] Extracted data for ${models.length} models: ${models.join(', ') || '(none)'}`)
+
+  // 新模型检测：上游出现同家族更高版本但未映射的 key 时告警，避免定价/上下文被静默丢弃
+  warnNewModelCandidates(collectUnmappedLitellmKeys(data, modelMap), modelMap, {
+    source: 'litellm',
+    mapName: 'LITELLM_MODEL_MAP',
+    dropped: 'its pricing/context data are dropped',
+    // kimi-k3 故意不映射（见 LITELLM_MODEL_MAP 上方注释：官方价手工维护在 registry）
+    ignore: candidate => /(?:^|[-/])kimi-k3(?:[-/]|$)/.test(candidate.name.toLowerCase()),
+  })
+  // 映射 key 失效检测：上游改名/下线会让对应 canonical 的 litellm 数据静默丢失
+  for (const key of collectMissingMappedKeys(data, modelMap)) {
+    console.warn(`[litellm] [MAPPED-KEY-MISSING] mapped key "${key}" no longer exists upstream; update LITELLM_MODEL_MAP`)
+  }
   return result
 }

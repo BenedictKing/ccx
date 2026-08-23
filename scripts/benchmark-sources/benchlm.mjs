@@ -28,7 +28,7 @@ import {
   hasCacheEntry,
   setSimpleCache,
 } from './http-cache.mjs'
-import { detectNewModelCandidates } from './mapper.mjs'
+import { warnNewModelCandidates } from './mapper.mjs'
 
 const BASE_URL = 'https://benchlm.ai'
 const MODELS_URL = `${BASE_URL}/data/models.json`
@@ -60,14 +60,10 @@ export function methodologyUrl() {
  */
 function warnNewModelSlugs(unmappedSlugs, modelMap) {
   if (!Array.isArray(unmappedSlugs) || unmappedSlugs.length === 0) return
-  const candidates = detectNewModelCandidates(unmappedSlugs, modelMap)
-  for (const c of candidates) {
-    console.warn(
-      `[benchlm] [NEW-MODEL] slug "${c.name}" (family ${c.family}, v${c.version}) ` +
-      `exceeds mapped ${c.mappedBest} but is NOT in BENCHLM_MODEL_MAP; ` +
-      `its scores are dropped — add the mapping (or register the model) to include it.`,
-    )
-  }
+  warnNewModelCandidates(unmappedSlugs, modelMap, {
+    source: 'benchlm',
+    mapName: 'BENCHLM_MODEL_MAP',
+  })
 }
 
 function describeCacheAge(ageMs) {

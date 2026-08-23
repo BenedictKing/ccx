@@ -230,10 +230,61 @@ export function compareCanonicalModels(a, b) {
 }
 
 /**
+ * 解析候选名的版本与后缀（新模型检测专用）。
+ * 与 parseModelVersion 一致，但额外从版本尾部落掉后跟 'b' 的参数量段：
+ * `qwen3-32b` → [3]、`Qwen3.5-397B-A22B` → [3,5]，避免参数量被当作更高版本。
+ */
+function parseCandidateVersion(variant) {
+  // 先剔除 "NpMb" 形态的参数量段（fireworks 风格，如 qwen3-1p7b = 1.7B；glm-5p2 无 b 不受影响）
+  const s = String(variant).toLowerCase().replace(/\d+p\d+b/g, '')
+  const m = s.match(/\d+(?:[.-]\d+)*/)
+  if (!m) return { family: s, nums: [] }
+  const family = s.slice(0, m.index).replace(/[-/]+$/, '')
+  const parts = m[0].split(/[.-]/)
+  // 每段的结束偏移，用于识别后跟 'b' 的参数量段（32b / 235B）
+  let offset = m.index
+  const ends = []
+  for (const part of parts) {
+    offset += part.length
+    ends.push(offset)
+    offset += 1
+  }
+  const nums = parts.map(Number)
+  while (nums.length > 1 && s[ends[nums.length - 1]] === 'b') {
+    nums.pop()
+  }
+  return { family, nums }
+}
+
+// 正常模型版本段不会超过 50：更大的数值是日期/年份/参数量（gpt-5-2025-08-07、grok-4-0709、Qwen3-235B）
+const MAX_PLAUSIBLE_VERSION_SEGMENT = 50
+
+/**
+ * 展开一个数据源模型名的可比对变体：
+ * 原名 + 逐段剥掉 provider 前缀（`zai/glm-6` → `glm-6`、`google_seedream-6` → `seedream-6`），
+ * 每个形态再补一条下划线归一为连字符的变体（`gpt_image-3` → `gpt-image-3`）。
+ * 仅用于新模型检测的输入预处理；裸名不受影响。
+ */
+function expandNameVariants(name) {
+  const variants = new Set()
+  let current = name
+  while (true) {
+    variants.add(current)
+    variants.add(current.replace(/_/g, '-'))
+    const sepIndex = current.search(/[/_]/)
+    if (sepIndex < 0 || sepIndex === current.length - 1) break
+    current = current.slice(sepIndex + 1)
+  }
+  return [...variants]
+}
+
+/**
  * 从数据源的未映射模型名中检测"疑似新模型"：
  * 与某个已映射 canonical 同家族、且版本号高于该家族已映射的最大版本。
  * （如榜单出现 grok-4-6 而映射表最高只有 grok-4.5。）
  * 仅做家族+版本比较，不依赖 pattern，避免点号/连字符命名差异造成的漏报。
+ * 输入先经 expandNameVariants 展开，覆盖带 provider 前缀的源命名；
+ * 并排除日期/参数量/旧命名的伪高版本（详见各过滤条件）。
  * @param {string[]} names - 数据源中的未映射模型名（slug）
  * @param {Object} modelMap - 该源的 模型名 -> canonicalModel 映射
  * @returns {Array<{name: string, family: string, version: string, mappedBest: string}>}
@@ -253,17 +304,47 @@ export function detectNewModelCandidates(names, modelMap) {
   const candidates = []
   for (const name of names || []) {
     if (typeof name !== 'string' || name.trim() === '') continue
-    const { family, nums } = parseModelVersion(name)
-    const best = familyBest.get(family)
-    if (!best || compareVersionArrays(nums, best.nums) <= 0) continue
-    if (seen.has(name)) continue
-    seen.add(name)
-    candidates.push({
-      name,
-      family,
-      version: nums.join('.'),
-      mappedBest: best.canonical,
-    })
+    for (const variant of expandNameVariants(name)) {
+      const { family, nums } = parseCandidateVersion(variant)
+      const best = familyBest.get(family)
+      if (!best || compareVersionArrays(nums, best.nums) <= 0) continue
+      // 主版本须与已映射同代或仅高一代：排除 gpt-35-turbo / claude-opus-41 等旧命名与大跳号
+      if (nums[0] !== best.nums[0] && nums[0] !== best.nums[0] + 1) continue
+      // 版本段值超过 50 视为日期/参数量（gpt-5-2025-08-07、mimo-v2-0206）
+      if (nums.some(n => n > MAX_PLAUSIBLE_VERSION_SEGMENT)) continue
+      if (seen.has(name)) continue
+      seen.add(name)
+      candidates.push({
+        name,
+        family,
+        version: nums.join('.'),
+        mappedBest: best.canonical,
+      })
+      break // 一个名字命中即可，避免同前缀多形态重复计入
+    }
+  }
+  return candidates
+}
+
+/**
+ * 各数据源共用的 [NEW-MODEL] 告警：检测到同家族更高版本的未映射模型时 console.warn，
+ * 避免其分数/定价被静默丢弃。返回检测到的候选（便于测试断言）。
+ * @param {string[]} names - 数据源中的未映射模型名
+ * @param {Object} modelMap - 该源的 模型名 -> canonicalModel 映射
+ * @param {Object} [options]
+ * @param {string} [options.source] - 日志前缀（如 'dradar'）
+ * @param {string} [options.mapName] - 提示补充映射的表名（如 'DRADAR_MODEL_MAP'）
+ * @param {string} [options.dropped] - 丢弃内容描述（如 'its pricing data are dropped'）
+ * @param {(candidate: {name: string}) => boolean} [options.ignore] - 已知故意不映射的名字，跳过告警
+ */
+export function warnNewModelCandidates(names, modelMap, { source = 'unknown', mapName = 'MODEL_MAP', dropped = 'its scores are dropped', ignore } = {}) {
+  const candidates = detectNewModelCandidates(names, modelMap).filter(c => !ignore?.(c))
+  for (const candidate of candidates) {
+    console.warn(
+      `[${source}] [NEW-MODEL] "${candidate.name}" (family ${candidate.family}, v${candidate.version}) ` +
+      `exceeds mapped ${candidate.mappedBest} but is NOT in ${mapName}; ` +
+      `${dropped} — add the mapping (or register the model) to include it.`,
+    )
   }
   return candidates
 }

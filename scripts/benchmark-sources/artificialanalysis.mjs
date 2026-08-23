@@ -17,6 +17,7 @@
  */
 
 import { cachedFetch, cacheResponseData } from './http-cache.mjs'
+import { warnNewModelCandidates } from './mapper.mjs'
 
 const BASE_URL = 'https://artificialanalysis.ai/api/v2'
 const LANGUAGE_MODELS_FREE_URL = `${BASE_URL}/language/models/free`
@@ -371,11 +372,20 @@ export async function fetchArtificialAnalysisData(apiKey, _modelMap, imageMap) {
   const { profiles: llm, unmappedSlugs: unmappedLlmSlugs } = extractLlmProfiles(llmModels, version)
   const llmModelsMapped = Object.keys(llm).sort()
   console.log(`[artificial-analysis] Extracted LLM data for ${llmModelsMapped.length} models across ${pages} page(s): ${llmModelsMapped.join(', ') || '(none)'}`)
+  // 新模型检测：队列出现同家族更高版本但未映射的 slug 时告警，避免分数被静默丢弃
+  warnNewModelCandidates(unmappedLlmSlugs, ARTIFICIAL_ANALYSIS_MODEL_MAP, {
+    source: 'artificial-analysis',
+    mapName: 'ARTIFICIAL_ANALYSIS_MODEL_MAP',
+  })
 
   const { models: imageModels } = await fetchTextToImageArenaFree(apiKey)
   const { profiles: imageArena, unmappedSlugs: unmappedImageSlugs } = extractImageArenaProfiles(imageModels, imageMap)
   const imageModelsMapped = Object.keys(imageArena).sort()
   console.log(`[artificial-analysis] Extracted image arena data for ${imageModelsMapped.length} models: ${imageModelsMapped.join(', ') || '(none)'}`)
+  warnNewModelCandidates(unmappedImageSlugs, imageMap, {
+    source: 'artificial-analysis',
+    mapName: 'ARTIFICIAL_ANALYSIS_IMAGE_MODEL_MAP',
+  })
 
   return {
     llm,

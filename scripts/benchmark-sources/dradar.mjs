@@ -14,10 +14,12 @@
 
 /**
  * dradar 模型名 -> CCX canonicalModel 映射
- * dradar 使用点号: "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5"
+ * dradar 混用点号与连字符: "gpt-5.6-sol"（点）、"gpt-5-4"（连字符）、"glm-5.3"（点）；
+ * kimi-k3 在榜上用短名 "k3"；deepseek 变体带 "dsh-" 前缀。
  */
 import { fetchWithTimeout } from './http.mjs'
 import { cachedFetch, cacheResponseData, getCacheEntry, getSimpleCache, setSimpleCache } from './http-cache.mjs'
+import { warnNewModelCandidates } from './mapper.mjs'
 
 export const DRADAR_MODEL_MAP = {
   'gpt-5.6-sol': 'gpt-5.6-sol',
@@ -31,15 +33,25 @@ export const DRADAR_MODEL_MAP = {
   'claude-sonnet-5': 'claude-sonnet-5',
   'claude-sonnet-4-6': 'claude-sonnet-4-6',
   'claude-haiku-4-5': 'claude-haiku-4.5',
+  'glm-5.3': 'glm-5.3',
   'glm-5-3': 'glm-5.3',
+  'glm-5.2': 'glm-5.2',
   'glm-5-2': 'glm-5.2',
   'kimi-k2-7-code': 'kimi-k2.7-code',
+  'k3': 'kimi-k3',
+  'kimi-k3': 'kimi-k3',
   'gemini-3-7-flash': 'gemini-3.7-flash',
   'gemini-3-5-flash': 'gemini-3.5-flash',
   'gemini-3-1-pro': 'gemini-3.1-pro',
   'gemini-3-flash': 'gemini-3-flash',
+  'grok-4.5': 'grok-4.5',
+  'grok-4-5': 'grok-4.5',
+  'grok-4.6': 'grok-4.6',
+  'grok-4-6': 'grok-4.6',
   'deepseek-v4-flash': 'deepseek-v4-flash',
   'deepseek-v4-pro': 'deepseek-v4-pro',
+  'dsh-deepseek-v4-flash': 'deepseek-v4-flash',
+  'dsh-deepseek-v4-pro': 'deepseek-v4-pro',
 }
 
 const BASE_URL = 'https://api.codexradar.com'
@@ -169,6 +181,26 @@ export async function fetchTable() {
   const data = await resp.json()
   cacheResponseData(url, data)
   return data
+}
+
+/**
+ * 从 table cells 的 key（`task|model|effort`）收集未映射的 dradar 模型名（去重）。
+ * 用于新模型检测，避免榜上出现新模型时分数被静默丢弃。
+ * @param {Object} table - table JSON 数据
+ * @param {Object} modelMap - dradar 模型名 -> CCX canonicalModel 映射
+ * @returns {string[]}
+ */
+export function collectUnmappedTableModels(table, modelMap) {
+  const unmapped = []
+  const seen = new Set()
+  for (const key of Object.keys(table?.cells || {})) {
+    const model = key.split('|')[1]
+    if (model && !modelMap[model] && !seen.has(model)) {
+      seen.add(model)
+      unmapped.push(model)
+    }
+  }
+  return unmapped
 }
 
 /**
@@ -405,6 +437,12 @@ export async function fetchDradarData(modelMap) {
 
     const models = Object.keys(result).sort()
     console.log(`[dradar] Extracted data for ${models.length} models: ${models.join(', ') || '(none)'}`)
+
+    // 新模型检测：榜上出现同家族更高版本但未映射的模型名时告警，避免分数被静默丢弃
+    warnNewModelCandidates(collectUnmappedTableModels(table, modelMap), modelMap, {
+      source: 'dradar',
+      mapName: 'DRADAR_MODEL_MAP',
+    })
     return result
   } catch (err) {
     console.error(`[dradar] Failed to fetch data:`, describeError(err))
