@@ -6,6 +6,8 @@ import {
   canonicalModelToPattern,
   deepsweModelToPattern,
   detectNewModelCandidates,
+  matchesAnyRegistryPattern,
+  reportUnmappedAgainstRegistry,
   DEEPSWE_MODEL_MAP,
   BENCHLM_MODEL_MAP,
 } from './mapper.mjs'
@@ -168,8 +170,46 @@ test('new-model detection expands provider prefixes and underscore variants', ()
   assert.equal(candidates[0].mappedBest, 'glm-5.3')
 })
 
-test('new-model detection rejects date snapshots, parameter sizes and legacy names', () => {
-  const candidates = detectNewModelCandidates(
+test('registry reverse-lookup recognizes known models across naming variants', () => {
+  const patterns = [
+    canonicalModelToPattern('gpt-5.6-sol'),        // 点号 pattern
+    canonicalModelToPattern('claude-opus-5'),      // 含日期快照后缀
+    canonicalModelToPattern('deepseek-v4-pro'),    // 含 -MMDD 别名后缀
+  ]
+  assert.equal(matchesAnyRegistryPattern('gpt-5-6-sol', patterns), true)   // 连字符 slug
+  assert.equal(matchesAnyRegistryPattern('gpt-5.6-sol', patterns), true)   // 点号 slug
+  assert.equal(matchesAnyRegistryPattern('zai/gpt-5.6-sol', patterns), true) // provider 前缀
+  assert.equal(matchesAnyRegistryPattern('claude-opus-5-20260101', patterns), true) // 日期快照
+  assert.equal(matchesAnyRegistryPattern('deepseek-v4-pro-0813', patterns), true)  // 日期别名
+  assert.equal(matchesAnyRegistryPattern('claude-mythos-5', patterns), false)      // 全新家族
+  assert.equal(matchesAnyRegistryPattern('grok-4-20-beta', patterns), false)
+})
+
+test('reportUnmappedAgainstRegistry splits registered-but-unmapped from unrecognized models', () => {
+  const patterns = [
+    canonicalModelToPattern('claude-opus-5'),
+    canonicalModelToPattern('gpt-5.5'),
+    canonicalModelToPattern('claude-mythos-5'),
+  ]
+  // 三种状态：已注册但源映射表缺条目（UNMAPPED，丢分告警）、registry 认识的日期快照（同样 UNMAPPED）、
+  // 全新家族（UNRECOGNIZED，正向 NEW-MODEL 检测无基线，只有反向对照能暴露）
+  const { unmapped, unrecognized } = reportUnmappedAgainstRegistry('test-source', [
+    'claude-mythos-5',
+    'claude-opus-5-20260101',
+    'claude-mythos-6',
+    'grok-4-20-beta',
+  ], patterns, { mapName: 'TEST_MAP', maxListed: 10 })
+  assert.deepEqual(unmapped.sort(), ['claude-mythos-5', 'claude-opus-5-20260101'])
+  assert.deepEqual(unrecognized.sort(), ['claude-mythos-6', 'grok-4-20-beta'])
+
+  // 大清单按根家族聚合，claude 家族的 newest 代表应是版本最高的 mythos-6
+  const many = ['claude-3-5-haiku', 'claude-3-7-sonnet-thinking', 'claude-mythos-6']
+  for (let i = 0; i < 25; i++) many.push(`unknown-vendor-model-${i}`)
+  const aggregated = reportUnmappedAgainstRegistry('test-source', many, patterns, { maxListed: 5, maxFamilies: 3 })
+  assert.equal(aggregated.unrecognized.length, 28)
+})
+
+test('new-model detection rejects date snapshots, parameter sizes and legacy names', () => {  const candidates = detectNewModelCandidates(
     [
       'gpt-5-2025-08-07',      // 日期快照段值 > 50 → 忽略
       'grok-4-0709',           // 日期快照 → 忽略

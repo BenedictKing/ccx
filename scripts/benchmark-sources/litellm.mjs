@@ -214,20 +214,22 @@ export function collectMissingMappedKeys(data, modelMap) {
  * 主函数：抓取并转换 litellm 数据
  * @param {Object} modelMap - litellm 模型名 -> CCX canonicalModel 映射
  * @param {boolean} force - 忽略 SHA 缓存强制重新处理
- * @returns {Promise<Object>} - {canonicalModel: {contextWindowTokens, maxOutputTokens, pricing, supports}}
+ * @returns {Promise<{profiles: Object, unmappedKeys: string[], unchanged: boolean}|{unchanged: true}>}
+ *   profiles: {canonicalModel: {contextWindowTokens, maxOutputTokens, pricing, supports}}
  */
 export async function fetchLitellmModelInfo(modelMap = LITELLM_MODEL_MAP, force = false) {
   const data = await fetchLitellmData(force)
   if (data === null) {
     console.log(`[litellm] No changes detected, skipping processing`)
-    return { _unchanged: true }
+    return { unchanged: true }
   }
   const result = extractModelInfo(data, modelMap)
   const models = Object.keys(result).sort()
   console.log(`[litellm] Extracted data for ${models.length} models: ${models.join(', ') || '(none)'}`)
 
   // 新模型检测：上游出现同家族更高版本但未映射的 key 时告警，避免定价/上下文被静默丢弃
-  warnNewModelCandidates(collectUnmappedLitellmKeys(data, modelMap), modelMap, {
+  const unmappedKeys = collectUnmappedLitellmKeys(data, modelMap)
+  warnNewModelCandidates(unmappedKeys, modelMap, {
     source: 'litellm',
     mapName: 'LITELLM_MODEL_MAP',
     dropped: 'its pricing/context data are dropped',
@@ -238,5 +240,5 @@ export async function fetchLitellmModelInfo(modelMap = LITELLM_MODEL_MAP, force 
   for (const key of collectMissingMappedKeys(data, modelMap)) {
     console.warn(`[litellm] [MAPPED-KEY-MISSING] mapped key "${key}" no longer exists upstream; update LITELLM_MODEL_MAP`)
   }
-  return result
+  return { profiles: result, unmappedKeys }
 }

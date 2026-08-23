@@ -241,7 +241,7 @@ export async function fetchDeepsweDataset(modelMap) {
       mapName: 'DEEPSWE_MODEL_MAP',
     })
 
-    return { profiles, liveLeaderboard: v11Data }
+    return { profiles, liveLeaderboard: v11Data, unmapped }
   } catch (err) {
     console.error(`[deepswe] Failed to fetch data:`, err.message)
     throw err

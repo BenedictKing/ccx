@@ -29,6 +29,7 @@ help:
 	@echo "  make generate-preset-manifest - 生成预设清单"
 	@echo "  make benchmark-update         - 更新模型能力基准数据并生成多来源图表"
 	@echo "  make benchmark-update-dry     - 预览基准数据变更（不写入）"
+	@echo "  make benchmark-update ARGS='--force-litellm' - 透传更新脚本参数（如强制重拉 litellm）"
 	@echo "  make benchmark-chart          - 生成能力-成本边界曲线"
 	@echo ""
 	@echo "$(YELLOW)Benchmark 数据源参数:$(NC)"
@@ -100,10 +101,10 @@ generate-preset-manifest:
 	@node scripts/generate-preset-manifest.mjs
 
 benchmark-update:
-	@node scripts/update-benchmark-data.mjs
+	@node scripts/update-benchmark-data.mjs $(ARGS)
 
 benchmark-update-dry:
-	@node scripts/update-benchmark-data.mjs --dry-run
+	@node scripts/update-benchmark-data.mjs --dry-run $(ARGS)
 
 benchmark-chart:
 	@node scripts/generate-benchmark-chart.mjs

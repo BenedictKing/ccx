@@ -404,7 +404,8 @@ export function toBenchmarkEvidence(modelData, allModels, costData) {
 /**
  * 主函数：抓取并转换 dradar 数据
  * @param {Object} modelMap - dradar 模型名 -> CCX canonicalModel 映射
- * @returns {Promise<Object>} - {canonicalModel: {benchmarkEvidence, costData, efforts}}
+ * @returns {Promise<{profiles: Object, unmappedModels: string[]}>}
+ *   profiles: {canonicalModel: {benchmarkEvidence, costData, efforts}}
  */
 export async function fetchDradarData(modelMap) {
   try {
@@ -439,11 +440,12 @@ export async function fetchDradarData(modelMap) {
     console.log(`[dradar] Extracted data for ${models.length} models: ${models.join(', ') || '(none)'}`)
 
     // 新模型检测：榜上出现同家族更高版本但未映射的模型名时告警，避免分数被静默丢弃
-    warnNewModelCandidates(collectUnmappedTableModels(table, modelMap), modelMap, {
+    const unmapped = collectUnmappedTableModels(table, modelMap)
+    warnNewModelCandidates(unmapped, modelMap, {
       source: 'dradar',
       mapName: 'DRADAR_MODEL_MAP',
     })
-    return result
+    return { profiles: result, unmappedModels: unmapped }
   } catch (err) {
     console.error(`[dradar] Failed to fetch data:`, describeError(err))
     throw err

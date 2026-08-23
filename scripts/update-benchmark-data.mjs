@@ -39,6 +39,7 @@ import {
   canonicalModelToPattern,
   compareCanonicalModels,
   deepsweModelToPattern,
+  reportUnmappedAgainstRegistry,
 } from './benchmark-sources/mapper.mjs'
 import { fetchDeepsweDataset } from './benchmark-sources/deepswe.mjs'
 import { fetchBenchlmData } from './benchmark-sources/benchlm.mjs'
@@ -837,6 +838,10 @@ export async function main() {
     artificialAnalysisImageArena: {},
   }
 
+  // registry patterns 反向对照：各源未映射名单里连 registry 都不认识的一并列出，
+  // 覆盖 NEW-MODEL 检测的盲区（映射表完全没有的全新家族，如 claude-mythos-5）
+  const registryPatterns = (registry.upstreamCapabilities || []).flatMap(c => c.patterns || [])
+
   // 抓取 deepswe 数据
   if (!skipDeepswe) {
     try {
@@ -845,6 +850,7 @@ export async function main() {
       visualizationSources.deepsweProfiles = deepsweDataset.profiles
       visualizationSources.deepsweLeaderboard = deepsweDataset.liveLeaderboard
       mergeDeepsweData(registry, deepsweDataset.profiles, report)
+      reportUnmappedAgainstRegistry('deepswe', deepsweDataset.unmapped, registryPatterns, { mapName: 'DEEPSWE_MODEL_MAP' })
     } catch (err) {
       report.errors.push({ source: 'deepswe', error: err.message })
       console.error('[deepswe] Failed:', err.message)
@@ -868,6 +874,7 @@ export async function main() {
         console.log(`[benchlm] ${benchlmResult.unchanged[0]}, skipping merge`)
         report.benchlmUnchanged = benchlmResult.unchanged[0]
       }
+      reportUnmappedAgainstRegistry('benchlm', benchlmResult.unmapped, registryPatterns, { mapName: 'BENCHLM_MODEL_MAP' })
     } catch (err) {
       report.errors.push({ source: 'benchlm', error: err.message })
       console.error('[benchlm] Failed:', err.message)
@@ -879,8 +886,9 @@ export async function main() {
     try {
       console.log('\n--- Fetching dradar (codexradar) data ---')
       const dradarData = await fetchDradarData(DRADAR_MODEL_MAP)
-      visualizationSources.dradarProfiles = dradarData
-      mergeDradarData(registry, dradarData, report)
+      visualizationSources.dradarProfiles = dradarData.profiles
+      mergeDradarData(registry, dradarData.profiles, report)
+      reportUnmappedAgainstRegistry('dradar', dradarData.unmappedModels, registryPatterns, { mapName: 'DRADAR_MODEL_MAP' })
     } catch (err) {
       report.errors.push({ source: 'dradar', error: err.message })
       console.error('[dradar] Failed:', err.message)
@@ -892,8 +900,13 @@ export async function main() {
     try {
       console.log('\n--- Fetching litellm pricing/context data ---')
       const litellmData = await fetchLitellmModelInfo(LITELLM_MODEL_MAP, forceLitellm)
-      if (!litellmData._unchanged) {
-        mergeLitellmData(registry, litellmData, report)
+      if (!litellmData.unchanged) {
+        mergeLitellmData(registry, litellmData.profiles, report)
+        reportUnmappedAgainstRegistry('litellm', litellmData.unmappedKeys, registryPatterns, {
+          mapName: 'LITELLM_MODEL_MAP',
+          // litellm 映射表每 canonical 只精选一个 key，其余托管商 key 命中 registry 属设计使然，不算丢分
+          reportUnmapped: false,
+        })
       } else {
         console.log('[litellm] No changes, skipping merge')
         report.litellmUnchanged = true
@@ -942,15 +955,9 @@ export async function main() {
       mergeArtificialAnalysisLlm(registry, aaResult.llm, report)
       mergeArtificialAnalysisImageArena(registry, aaResult.imageArena, report)
 
-      // 首跑调参提示：列出未命中的 AA slug（前 50 个；省略超过 50 才显示 and more）
-      const logUnmapped = (label, slugs) => {
-        if (!slugs || slugs.length === 0) return
-        const preview = slugs.slice(0, 50).join(', ')
-        const more = slugs.length > 50 ? ` ... and ${slugs.length - 50} more` : ''
-        console.log(`[artificial-analysis] ${label} unmapped slugs (${slugs.length}): ${preview}${more}`)
-      }
-      logUnmapped('LLM', aaResult.unmappedLlmSlugs)
-      logUnmapped('Image arena', aaResult.unmappedImageSlugs)
+      // 反向对照：AA 未映射 slug 区分「已注册但缺映射」与「registry 也不认识」两类
+      reportUnmappedAgainstRegistry('artificial-analysis', aaResult.unmappedLlmSlugs, registryPatterns, { mapName: 'ARTIFICIAL_ANALYSIS_MODEL_MAP' })
+      reportUnmappedAgainstRegistry('artificial-analysis-image', aaResult.unmappedImageSlugs, registryPatterns, { mapName: 'ARTIFICIAL_ANALYSIS_IMAGE_MODEL_MAP' })
     } else {
       report.errors.push({ source: 'artificial-analysis', error: aaError.message })
       console.error('[artificial-analysis] Failed:', aaError.message)
@@ -977,7 +984,9 @@ export async function main() {
     modelMap: DEEPSWE_MODEL_MAP,
     models: targetModels,
   })
-  if (visualizationData.data.length > 0 || visualizationData.comparisons.length > 0) {
+  if (dryRun) {
+    console.log('\n[chart] DRY RUN: chart files not saved')
+  } else if (visualizationData.data.length > 0 || visualizationData.comparisons.length > 0) {
     generateBenchmarkChart(visualizationData)
   } else {
     console.log('\n[chart] No benchmark data available; chart generation skipped')

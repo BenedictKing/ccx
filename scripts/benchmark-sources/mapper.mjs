@@ -45,6 +45,9 @@ export const DEEPSWE_MODEL_MAP = {
   'grok-4-6': 'grok-4.6',
   'muse-spark-1-1': 'muse-spark-1.1',
   'muse-spark-1-2': 'muse-spark-1.2',
+  'deepseek-v4-flash': 'deepseek-v4-flash',
+  'deepseek-v4-pro': 'deepseek-v4-pro',
+  'qwen3-8-max': 'qwen3.8-max',
 }
 
 /**
@@ -66,7 +69,11 @@ export const BENCHLM_MODEL_MAP = {
   'glm-5-3': 'glm-5.3',
   'glm-5-2': 'glm-5.2',
   'kimi-k2-7-code': 'kimi-k2.7-code',
+  // 榜单 slug 是 kimi-k3（旧键 kimi-3 是 8/20 审计发现的键名错误，保留作别名）
+  'kimi-k3': 'kimi-k3',
   'kimi-3': 'kimi-k3',
+  'claude-mythos-5': 'claude-mythos-5',
+  'qwen3-8-max': 'qwen3.8-max',
   'gemini-3-7-flash': 'gemini-3.7-flash',
   'gemini-3-5-flash': 'gemini-3.5-flash',
   'claude-haiku-4-5': 'claude-haiku-4.5',
@@ -276,6 +283,93 @@ function expandNameVariants(name) {
     current = current.slice(sepIndex + 1)
   }
   return [...variants]
+}
+
+/**
+ * 判断数据源模型名是否被 registry 的任一 pattern 认识。
+ * registry patterns 用点号（gpt-5\.6），数据源名常用连字符（gpt-5-6），匹配前把
+ * 转义点号放宽为 [.-]；名字侧经 expandNameVariants 剥 provider 前缀并归一下划线。
+ * @param {string} name - 数据源模型名
+ * @param {string[]} patterns - registry.upstreamCapabilities 的全部 patterns
+ * @returns {boolean}
+ */
+export function matchesAnyRegistryPattern(name, patterns) {
+  for (const variant of expandNameVariants(String(name).toLowerCase())) {
+    for (const p of patterns || []) {
+      try {
+        if (new RegExp(p.replace(/\\\./g, '[.-]'), 'i').test(variant)) return true
+      } catch {
+        // 非法 pattern 跳过
+      }
+    }
+  }
+  return false
+}
+
+/**
+ * 反向对照报告：把数据源的未映射模型名与 registry patterns 全量对照，分两类输出：
+ * - [UNMAPPED] registry 认识、但该源映射表没收录——已注册模型的分数/定价正在丢，warn 级全列。
+ *   注意 litellm 的映射表是每 canonical 精选一个 key，其余托管商 key 命中 registry 属设计使然，
+ *   该源应传 reportUnmapped: false 关闭此段；
+ * - [UNRECOGNIZED] registry 也不认识——全新家族/新模型（如未来的 claude-mythos-6 之前的状态），
+ *   log 级；小清单全量列出，大清单按根家族聚合计数，每个家族展示版本号最高的代表名
+ *   （新代际分支会自然浮到代表位）。
+ * 与正向的映射表 NEW-MODEL 检测互补：全新家族没有映射基线，只能靠这里暴露。
+ * @param {string} source - 日志前缀（如 'benchlm'）
+ * @param {string[]} names - 数据源的未映射模型名
+ * @param {string[]} patterns - registry patterns
+ * @param {Object} [options]
+ * @param {string} [options.mapName] - 提示补充映射的表名（如 'BENCHLM_MODEL_MAP'）
+ * @param {boolean} [options.reportUnmapped] - 是否输出 UNMAPPED 段（分数源默认 true）
+ * @param {number} [options.maxListed] - 全量列出的阈值（默认 20）
+ * @param {number} [options.maxFamilies] - 聚合模式展示的家族数上限（默认 15）
+ * @returns {{unmapped: string[], unrecognized: string[]}}
+ */
+export function reportUnmappedAgainstRegistry(source, names, patterns, { mapName = 'MODEL_MAP', reportUnmapped = true, maxListed = 20, maxFamilies = 15 } = {}) {
+  const unique = [...new Set(names || [])]
+  const unmappedToRegistry = unique.filter(name => matchesAnyRegistryPattern(name, patterns))
+  const unrecognized = unique.filter(name => !matchesAnyRegistryPattern(name, patterns))
+
+  if (reportUnmapped && unmappedToRegistry.length > 0) {
+    console.warn(
+      `[${source}] [UNMAPPED] ${unmappedToRegistry.length} upstream model(s) match registry patterns ` +
+      `but are NOT in ${mapName} — registered models are losing data here: ${unmappedToRegistry.sort().join(', ')}`,
+    )
+  }
+
+  if (unrecognized.length > 0) {
+    if (unrecognized.length <= maxListed) {
+      console.log(`[${source}] [UNRECOGNIZED] ${unrecognized.length} upstream model(s) match no registry pattern: ${unrecognized.sort().join(', ')}`)
+    } else {
+      // 根家族（剥掉 provider 前缀后的家族名第一段）聚合；代表名取家族内版本最高者
+      // （版本段值超过 50 的日期/参数量形态不参与代表竞争，避免 newest 显示成日期快照）
+      const byRoot = new Map()
+      for (const name of unrecognized) {
+        const { family, nums } = parseCandidateVersion(name)
+        const root = family.split('/').pop().split('-')[0] || '(unparsed)'
+        const plausible = nums.length > 0 && nums.every(n => n <= MAX_PLAUSIBLE_VERSION_SEGMENT)
+        const prev = byRoot.get(root)
+        if (!prev) {
+          byRoot.set(root, { count: 1, newest: name, nums, plausible })
+        } else {
+          prev.count += 1
+          if (plausible && (!prev.plausible || compareVersionArrays(nums, prev.nums) > 0)) {
+            prev.newest = name
+            prev.nums = nums
+            prev.plausible = true
+          }
+        }
+      }
+      const families = [...byRoot.entries()].sort((a, b) => b[1].count - a[1].count)
+      const shown = families.slice(0, maxFamilies)
+        .map(([root, info]) => `${root} x${info.count} (newest: ${info.newest})`)
+        .join(', ')
+      const moreFamilies = families.length > maxFamilies ? ` ... and ${families.length - maxFamilies} more families` : ''
+      console.log(`[${source}] [UNRECOGNIZED] ${unrecognized.length} upstream models match no registry pattern, by root family: ${shown}${moreFamilies}`)
+    }
+  }
+
+  return { unmapped: unmappedToRegistry, unrecognized }
 }
 
 /**

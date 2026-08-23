@@ -182,8 +182,9 @@ async function fetchModelsDoc() {
  * 主函数：抓取 benchlm.ai 数据
  * @param {Object} modelMap - benchlm slug -> CCX canonicalModel 映射
  * @param {Object} categoryMap - benchlm 分类名 -> CCX 分类名映射
- * @returns {Promise<{data: Object, unchanged: string[]}>}
+ * @returns {Promise<{data: Object, unmapped: string[], unchanged: string[]}>}
  *   - data: {canonicalModel: {overallScore, categoryScores, counts, sources}}，未变更时为缓存 profiles
+ *   - unmapped: 未命中映射的 slug（供 registry 反向对照）
  *   - unchanged: 非空表示未变更（主脚本据此跳过 merge，但仍用 data 喂图表）
  */
 export async function fetchBenchlmData(modelMap, categoryMap) {
@@ -204,6 +205,7 @@ export async function fetchBenchlmData(modelMap, categoryMap) {
       setSimpleCache(EXTRACTED_PROFILES_KEY, profiles)
       return {
         data: { ...profiles },
+        unmapped,
         unchanged: ['models.json unchanged (304 Not Modified)'],
       }
     }
@@ -230,8 +232,13 @@ export async function fetchBenchlmData(modelMap, categoryMap) {
     const extracted = getSimpleCache(EXTRACTED_PROFILES_KEY)
     if (extracted && Object.keys(extracted).length > 0) {
       console.log(`[benchlm] generatedAt unchanged (${generatedAt}), using cached profiles`)
+      // 反向对照名单不随 profiles 缓存，从缓存的 raw doc 重算
+      const rawDoc = getSimpleCache(RAW_DOC_KEY)
+      const unmapped = []
+      if (rawDoc) extractProfiles(rawDoc, modelMap, categoryMap, unmapped)
       return {
         data: { ...extracted },
+        unmapped,
         unchanged: [`models.json unchanged (generatedAt ${generatedAt})`],
       }
     }
@@ -256,5 +263,5 @@ function processFresh(doc, generatedAt, modelMap, categoryMap, from304Refetch) {
   const label = from304Refetch ? 'refetched' : 'extracted'
   const models = Object.keys(profiles).sort()
   console.log(`[benchlm] ${label} data for ${models.length} models: ${models.join(', ') || '(none)'}`)
-  return { data: profiles, unchanged: [] }
+  return { data: profiles, unmapped, unchanged: [] }
 }
