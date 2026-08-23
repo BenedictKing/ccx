@@ -462,6 +462,15 @@ func pickFrontierQualityFirstPoint(points []FrontierPoint, ranked []rankedModelC
 			continue
 		}
 		cand, best := ranked[idx], ranked[bestIdx]
+		// 质量证据优先：实测 benchmark 已知与未知不对称时，已知者直接胜出——
+		// 避免零证据候选仅凭档位先验与低成本挤掉同档的强证据模型
+		// （如 benchlm 80 分的 kimi-k3 输给无 overall 分的 deepseek-v4-flash）。
+		if cand.benchmarkKnown != best.benchmarkKnown {
+			if cand.benchmarkKnown {
+				bestIdx, bestPoint = idx, p
+			}
+			continue
+		}
 		// benchmark 是独立能力测量；差距足够大时直接兑现，不论是否同档。
 		if cand.benchmarkKnown && best.benchmarkKnown {
 			delta := cand.benchmarkScore - best.benchmarkScore

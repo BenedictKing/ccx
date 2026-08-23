@@ -18,7 +18,7 @@ func TestBuildRequestProfile(t *testing.T) {
 			name:      "未知输入保守归类为 supervisor",
 			features:  RequestProfileFeatures{Model: "claude-sonnet-5", ChannelKind: "messages", Operation: "completion"},
 			taskClass: TaskClassSupervisor,
-			quality:   QualityTierHigh,
+			quality:   QualityTierNormal, // sonnet-5 直测 53.8 → normal 档
 		},
 		{
 			name:      "明确的小型文本请求归类为 lightweight",
@@ -31,7 +31,7 @@ func TestBuildRequestProfile(t *testing.T) {
 			name:       "图片请求强制 vision 能力",
 			features:   RequestProfileFeatures{Model: "claude-sonnet-5", ChannelKind: "messages", Operation: "completion", HasImage: true, EstTokens: 1000},
 			taskClass:  TaskClassVision,
-			quality:    QualityTierHigh,
+			quality:    QualityTierNormal, // sonnet-5 直测 53.8 → normal 档
 			context:    1000,
 			visionNeed: true,
 		},
@@ -39,7 +39,7 @@ func TestBuildRequestProfile(t *testing.T) {
 			name:      "工具请求不允许降为 lightweight",
 			features:  RequestProfileFeatures{Model: "glm-5.2", ChannelKind: "chat", Operation: "completion", EstTokens: 500, ToolUseNeed: true},
 			taskClass: TaskClassSupervisor,
-			quality:   QualityTierHigh,
+			quality:   QualityTierNormal, // glm-5.2 直测 43.8 → normal 档
 			context:   500,
 		},
 		{

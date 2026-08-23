@@ -485,13 +485,15 @@ func TestRankEligibleModels_DomesticModelsFrontierVsFallback(t *testing.T) {
 		expected  string
 	}{
 		{
-			name:      "Claude Mythos 5（无定价，回退旧链）",
-			modelID:   "claude-mythos-5",
+			// mythos-preview 仍无公开定价 → frontier 可比成本不足 → fail-open 回退旧链，
+			// qualityRank 主导（Claude 系兜底 premium）胜出 deepseek-v4-pro（high）
+			name:      "Claude Mythos Preview（无定价，回退旧链）",
+			modelID:   "claude-mythos-preview",
 			family:    ModelFamilyClaude,
 			context:   1_000_000,
 			vision:    true,
 			toolCalls: true,
-			expected:  "claude-mythos-5",
+			expected:  "claude-mythos-preview",
 		},
 		{
 			name:      "GLM-5.2（区间重叠，溢价帽选便宜者）",
@@ -879,7 +881,8 @@ func TestResolveModel_RefreshesLegacyAutoDiscoveryCapabilities(t *testing.T) {
 		t.Fatalf("ResolveModel() = (%q, %v, %q), want refreshed glm-5.2 capabilities", target.Model, resolved, reason)
 	}
 	refreshed := store.Get("ch_test", "responses", "metrics_test", "glm-5.2")
-	if refreshed == nil || refreshed.QualityTier != QualityTierHigh ||
+	// glm-5.2 的 deepswe coding 直测 43.8：premium/high 边界钳制后归 normal 档
+	if refreshed == nil || refreshed.QualityTier != QualityTierNormal ||
 		refreshed.ContextTokens != 1048576 || !refreshed.SupportsReasoning || !refreshed.SupportsToolCalls {
 		t.Fatalf("旧自动发现画像未在内存中完成升级: %+v", refreshed)
 	}

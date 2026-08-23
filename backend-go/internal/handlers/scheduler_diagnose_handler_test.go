@@ -183,7 +183,8 @@ func TestDiagnoseSchedulerSelectionAttachesAutopilotRequestProfile(t *testing.T)
 		}
 		if profile.Model != "gpt-5.6-sol" || profile.ChannelKind != "responses" ||
 			profile.AgentRole != "subagent" || profile.ContextNeed != 1234 ||
-			!profile.VisionNeed || profile.QualityNeed != autopilot.QualityTierPremium {
+			// gpt-5.6-sol 直测 72.7（< premium 线 75）→ high 档
+			!profile.VisionNeed || profile.QualityNeed != autopilot.QualityTierHigh {
 			t.Fatalf("unexpected diagnose request profile: %+v", profile)
 		}
 		profileChecked = true

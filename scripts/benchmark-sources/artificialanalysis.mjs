@@ -58,6 +58,9 @@ export const ARTIFICIAL_ANALYSIS_MODEL_MAP = {
   'gemini-3-6-flash': 'gemini-3.6-flash',
   'grok-4-5': 'grok-4.5',
   'grok-4-6': 'grok-4.6',
+  // deepseek 系：AA composite/coding 证据补充（overallScore 仍归 benchlm 所有）
+  'deepseek-v4-flash': 'deepseek-v4-flash',
+  'deepseek-v4-pro': 'deepseek-v4-pro',
   'mimo-v2-5': 'mimo-v2.5',
   'mimo-v2-5-pro': 'mimo-v2.5-pro',
   'muse-spark-1-1': 'muse-spark-1.1',

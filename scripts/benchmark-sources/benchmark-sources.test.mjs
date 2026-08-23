@@ -628,6 +628,13 @@ test('grok-4.6 / kimi-k3 / glm-5.3 stay mapped in dradar and litellm (2026-08-20
   assert.equal(LITELLM_MODEL_MAP['xai/grok-4.6'], 'grok-4.6')
 })
 
+test('benchlm dated deepseek variants and gemini-3-6-flash stay mapped (2026-08-23 regressions)', () => {
+  assert.equal(BENCHLM_MODEL_MAP['deepseek-v4-flash-0731'], 'deepseek-v4-flash')
+  assert.equal(BENCHLM_MODEL_MAP['gemini-3-6-flash'], 'gemini-3.6-flash')
+  assert.equal(ARTIFICIAL_ANALYSIS_MODEL_MAP['deepseek-v4-flash'], 'deepseek-v4-flash')
+  assert.equal(ARTIFICIAL_ANALYSIS_MODEL_MAP['deepseek-v4-pro'], 'deepseek-v4-pro')
+})
+
 test('DeepSeek BenchLM variants fold into canonical flash and pro models', () => {
   assert.equal(BENCHLM_MODEL_MAP['deepseek-v4-flash'], 'deepseek-v4-flash')
   assert.equal(BENCHLM_MODEL_MAP['deepseek-v4-flash-base'], 'deepseek-v4-flash')

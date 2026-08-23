@@ -292,8 +292,9 @@ func TestResolveUpstreamCapability_NewAugust2026Models(t *testing.T) {
 		inputPrice  float64
 		outputPrice float64
 	}{
-		{model: "grok-4.6", provider: "xai", context: 500000, vision: true, toolCalls: true, inputPrice: 2, outputPrice: 6},
-		{model: "xai/grok-4.6", provider: "xai", context: 500000, vision: true, toolCalls: true, inputPrice: 2, outputPrice: 6},
+		// xAI 官方不设独立输出上限；litellm 数据按 context 上限对齐为 500000
+		{model: "grok-4.6", provider: "xai", context: 500000, maxOutput: 500000, vision: true, toolCalls: true, inputPrice: 2, outputPrice: 6},
+		{model: "xai/grok-4.6", provider: "xai", context: 500000, maxOutput: 500000, vision: true, toolCalls: true, inputPrice: 2, outputPrice: 6},
 		{model: "glm-5.3", provider: "zai", context: 1000000, maxOutput: 131072, toolCalls: true},
 		{model: "glm-5.3[1m]", provider: "zai", context: 1000000, maxOutput: 131072, toolCalls: true},
 		{model: "gemini-3.7-flash", provider: "google", context: 1048576, maxOutput: 65536, vision: true, toolCalls: true, inputPrice: 0.75, outputPrice: 3.75},
@@ -341,8 +342,9 @@ func TestResolveUpstreamCapability_Grok46PricingTiers(t *testing.T) {
 		t.Fatalf("resolved = %+v, want builtin capability", resolved)
 	}
 	capability := resolved.Capability
-	if capability.MaxOutputTokens != 0 {
-		t.Fatalf("MaxOutputTokens = %d, want 0 because xAI documents no text output limit", capability.MaxOutputTokens)
+	// xAI 官方不设独立输出上限；litellm 数据按 context 上限对齐为 500000
+	if capability.MaxOutputTokens != 500000 {
+		t.Fatalf("MaxOutputTokens = %d, want 500000 (context-aligned)", capability.MaxOutputTokens)
 	}
 	if capability.ThinkingMode != "adaptive" || !containsString(capability.ReasoningEfforts, "xhigh") {
 		t.Fatalf("thinkingMode=%q reasoningEfforts=%v, want adaptive with xhigh", capability.ThinkingMode, capability.ReasoningEfforts)

@@ -150,8 +150,10 @@ func TestRankEligibleModels_QualityBenefitCapUsesDynamicCluster(t *testing.T) {
 	best := resolver.rankEligibleModels(profiles, "claude-opus-4-8", "ch_test", "responses", CapabilityFloor{
 		QualityBenefitCap: QualityTierNormal,
 	})
-	if best.profile.ModelID != "gpt-5.5" {
-		t.Fatalf("benefit-capped dynamic cluster selected %q, want stable adequate model gpt-5.5", best.profile.ModelID)
+	// 注册表快照演进后 sol($4/$20)比 gpt-5.5($5/$30)便宜且 bench 更高，
+	// cap 簇内按"便宜优先"应选 sol——cap 语义是不为超档质量付溢价，而非禁选高档
+	if best.profile.ModelID != "gpt-5.6-sol" {
+		t.Fatalf("benefit-capped dynamic cluster selected %q, want cheapest adequate model gpt-5.6-sol", best.profile.ModelID)
 	}
 	if !strings.Contains(best.frontierNote, "benefit_cap=normal") {
 		t.Fatalf("frontierNote = %q, want dynamic benefit cap marker", best.frontierNote)

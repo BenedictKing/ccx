@@ -94,6 +94,9 @@ export const BENCHLM_MODEL_MAP = {
   'deepseek-v4-pro-max': 'deepseek-v4-pro',
   // DeepSeek 新版本发布后，部分榜单可能使用 -MMDD 日期后缀 slug
   'deepseek-v4-pro-0813': 'deepseek-v4-pro',
+  'deepseek-v4-flash-0731': 'deepseek-v4-flash',
+  // gemini-3-6-flash 已注册但 benchlm 榜单缺映射（gemini-3-1-pro/3-flash 暂无分，不补）
+  'gemini-3-6-flash': 'gemini-3.6-flash',
 }
 
 /**

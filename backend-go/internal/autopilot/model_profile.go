@@ -1,6 +1,7 @@
 package autopilot
 
 import (
+	"math"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -104,6 +105,8 @@ const (
 	ModelFamilyOpenAI  ModelFamily = "openai"  // gpt-*, o*, codex-*，OpenAI / Amazon Bedrock
 	ModelFamilyGemini  ModelFamily = "gemini"  // gemini-*，Google
 	ModelFamilyMistral ModelFamily = "mistral" // mistral-*, mixtral-*，Mistral AI
+	ModelFamilyGrok    ModelFamily = "grok"    // grok-*，xAI
+	ModelFamilyMuse    ModelFamily = "muse"    // muse-spark-*，Meta
 
 	// ── 国产主流 ──
 	ModelFamilyDeepSeek  ModelFamily = "deepseek"  // DeepSeek V3/V4，DeepSeek
@@ -166,8 +169,11 @@ var modelIDPrefixRules = []struct {
 	{"gemini-", ModelFamilyGemini},
 	{"mistral-", ModelFamilyMistral},
 	{"mixtral-", ModelFamilyMistral},
+	{"grok-", ModelFamilyGrok},
+	{"muse-spark-", ModelFamilyMuse},
 	// 国产
 	{"deepseek-", ModelFamilyDeepSeek},
+	{"qwen3.", ModelFamilyQwen}, // 点号命名（qwen3.8-max），连字符 qwen3- 由下方 qwen- 兜底
 	{"qwen3-", ModelFamilyQwen},
 	{"qwen-", ModelFamilyQwen},
 	{"glm-", ModelFamilyGLM},
@@ -258,6 +264,14 @@ func ModelProfileQualityTierFromFamily(family ModelFamily, modelID string) Quali
 		}
 		return QualityTierNormal
 
+	case ModelFamilyGrok:
+		// Grok 系列一直是 xAI 旗舰线；无实测分时按高端兜底
+		return QualityTierPremium
+
+	case ModelFamilyMuse:
+		// Muse Spark 是 Meta 高端实验线；无实测分时按 high 兜底
+		return QualityTierHigh
+
 	case ModelFamilyDeepSeek:
 		if strings.Contains(lowerID, "v4-pro") {
 			return QualityTierHigh
@@ -312,10 +326,12 @@ func ModelProfileQualityTierFromFamily(family ModelFamily, modelID string) Quali
 
 // ── Benchmark 驱动的质量档推导 ──
 
-// 默认质量档边界，在注册表数据不足时作为回退。
+// 默认质量档边界，在注册表数据不足时作为回退，也是动态间隙推导的钳制下限
+// （动态分档只能比默认更严、不能更松）。high 下界锚定 Claude 在役旗舰的
+// deepswe 直测水平（opus-4-8 ≈ 59），避免 coding 直测偏低的旗舰掉出 high 档。
 const (
 	defaultBenchmarkTierPremiumMin = 75.0
-	defaultBenchmarkTierHighMin    = 61.0
+	defaultBenchmarkTierHighMin    = 58.0
 	defaultBenchmarkTierNormalMin  = 55.0
 )
 
@@ -446,6 +462,12 @@ func computeQualityTierBoundariesFromRegistry() (premiumMin, highMin, normalMin 
 			normalMin = mid
 		}
 	}
+	// 钳制：顶档（premium/high）边界不得低于默认下限，动态分档只能比默认更严、
+	// 不能更松。中部分数密集时最大间隙会塌到低段（曾把 premiumMin 拉到 49，让
+	// 53 分模型全部升入 premium），新模型入池即可引发档位集体漂移。
+	// normalMin 不钳：coding 直测偏低但整体不差的模型（glm-5.2 等）不应被打到 low。
+	premiumMin = math.Max(premiumMin, defaultBenchmarkTierPremiumMin)
+	highMin = math.Max(highMin, defaultBenchmarkTierHighMin)
 	return
 }
 

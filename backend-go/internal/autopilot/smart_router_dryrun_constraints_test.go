@@ -199,8 +199,9 @@ func TestDryRunUsesCanonicalRequestProfileBuilder(t *testing.T) {
 		t.Fatalf("response plan = %+v", response.Plan)
 	}
 	profile := response.Plan.RequestProfile
-	if profile.QualityNeed != QualityTierHigh || profile.ContextNeed != 1234 || !profile.VisionNeed {
-		t.Fatalf("request profile quality=%q context=%d vision=%v, want high/1234/true",
+	// glm-5.2 直测 43.8 → normal 档，请求画像 QualityNeed 随之从 high 回落
+	if profile.QualityNeed != QualityTierNormal || profile.ContextNeed != 1234 || !profile.VisionNeed {
+		t.Fatalf("request profile quality=%q context=%d vision=%v, want normal/1234/true",
 			profile.QualityNeed, profile.ContextNeed, profile.VisionNeed)
 	}
 	if profile.TaskClass != TaskClassVision {

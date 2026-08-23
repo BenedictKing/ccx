@@ -599,6 +599,24 @@ func TestPickFrontierQualityFirstPoint(t *testing.T) {
 			wantIdx: 0,
 		},
 		{
+			name: "质量证据优先：同档时 known 压过更便宜的 unknown",
+			ranked: []rankedModelCandidate{
+				crossFamily(makeFrontierCandidate("deepseek-v4-flash", 3, 0.5, 0, 1)),
+				crossFamily(makeFrontierCandidate("kimi-k3", 3, 0.5, 80, 18)),
+			},
+			costs:   []int64{1_000_000, 18_000_000},
+			wantIdx: 1,
+		},
+		{
+			name: "质量证据优先：known 在前时保持，不被便宜 unknown 反超",
+			ranked: []rankedModelCandidate{
+				crossFamily(makeFrontierCandidate("kimi-k3", 3, 0.5, 80, 18)),
+				crossFamily(makeFrontierCandidate("deepseek-v4-flash", 3, 0.5, 0, 1)),
+			},
+			costs:   []int64{18_000_000, 1_000_000},
+			wantIdx: 0,
+		},
+		{
 			name: "同成本同证据时取更低下标（确定性）",
 			ranked: []rankedModelCandidate{
 				crossFamily(makeFrontierCandidate("a", 3, 0.5, 80, 10)),

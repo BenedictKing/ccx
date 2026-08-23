@@ -264,8 +264,9 @@ func TestAttachAutopilotRequestProfileIgnoresHarnessOverheadForTaskDifficulty(t 
 	if profile.Complexity != autopilot.TaskComplexityRoutine || profile.TaskClass != autopilot.TaskClassWorker {
 		t.Fatalf("profile = complexity:%q class:%q, want routine/worker", profile.Complexity, profile.TaskClass)
 	}
-	if profile.QualityTarget != autopilot.QualityTierHigh {
-		t.Fatalf("QualityTarget = %q, want high", profile.QualityTarget)
+	// sonnet-5 直测 53.8 → normal 档
+	if profile.QualityTarget != autopilot.QualityTierNormal {
+		t.Fatalf("QualityTarget = %q, want normal", profile.QualityTarget)
 	}
 	if !profile.ToolUseNeed || !profile.ReasoningNeed {
 		t.Fatalf("能力下界丢失: tools=%v reasoning=%v", profile.ToolUseNeed, profile.ReasoningNeed)
@@ -282,7 +283,8 @@ func TestAttachAutopilotRequestProfileRoutesByCurrentTaskDifficulty(t *testing.T
 	}{
 		{name: "trivial", prompt: "hello", wantComplexity: autopilot.TaskComplexityTrivial, wantClass: autopilot.TaskClassLightweight, wantTarget: autopilot.QualityTierLow},
 		{name: "routine", prompt: "实现一个分页查询并补充单元测试", wantComplexity: autopilot.TaskComplexityRoutine, wantClass: autopilot.TaskClassWorker, wantTarget: autopilot.QualityTierNormal},
-		{name: "complex", prompt: "定位分布式调度的根因并重构整体架构", wantComplexity: autopilot.TaskComplexityComplex, wantClass: autopilot.TaskClassSupervisor, wantTarget: autopilot.QualityTierPremium},
+		// opus-5 直测 73.6（< premium 线 75）→ complex 任务 target high
+		{name: "complex", prompt: "定位分布式调度的根因并重构整体架构", wantComplexity: autopilot.TaskComplexityComplex, wantClass: autopilot.TaskClassSupervisor, wantTarget: autopilot.QualityTierHigh},
 	}
 
 	for _, tt := range tests {

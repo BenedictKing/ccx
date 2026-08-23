@@ -55,3 +55,36 @@ func TestComputeQualityTierBoundariesConcurrent(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+func TestComputeQualityTierBoundariesClampedToDefaults(t *testing.T) {
+	t.Cleanup(func() { benchmarkTierBoundariesCache.Store(nil) })
+	// 间隙推导的边界不得低于默认下限：中部分数密集时最大间隙会塌到低段
+	// （曾把 premiumMin 拉到 49，让 53 分模型全部升入 premium）。
+	premiumMin, highMin, _ := computeQualityTierBoundaries()
+	if premiumMin < defaultBenchmarkTierPremiumMin {
+		t.Fatalf("premiumMin=%.2f 低于默认下限 %.2f", premiumMin, defaultBenchmarkTierPremiumMin)
+	}
+	if highMin < defaultBenchmarkTierHighMin {
+		t.Fatalf("highMin=%.2f 低于默认下限 %.2f", highMin, defaultBenchmarkTierHighMin)
+	}
+}
+
+func TestInferModelFamilyDottedAndNewPrefixes(t *testing.T) {
+	cases := []struct {
+		id   string
+		want ModelFamily
+	}{
+		{"qwen3.8-max", ModelFamilyQwen}, // 点号命名走 qwen3. 前缀
+		{"qwen3-8-max", ModelFamilyQwen}, // 连字符命名不受影响
+		{"grok-4.5", ModelFamilyGrok},
+		{"grok-4.6", ModelFamilyGrok},
+		{"muse-spark-1.1", ModelFamilyMuse},
+		{"muse-spark-1-2", ModelFamilyMuse},
+		{"claude-opus-5", ModelFamilyClaude},
+	}
+	for _, tc := range cases {
+		if got := InferModelFamily(tc.id, ""); got != tc.want {
+			t.Errorf("InferModelFamily(%q) = %v, want %v", tc.id, got, tc.want)
+		}
+	}
+}
