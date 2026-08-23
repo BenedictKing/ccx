@@ -19,4 +19,10 @@ describe('base URL 路径语义', () => {
   it('未使用 # 时仍应清理明确的控制台路径', () => {
     expect(stripDashboardPathFromBaseUrl('https://example.com/console/token')).toBe('https://example.com')
   })
+
+  it('带 # 的完整路径 URL 不应与域名根 URL 去重合并', () => {
+    expect(
+      deduplicateEquivalentBaseUrls(['https://example.com#', 'https://example.com/token/v1#'], 'openai')
+    ).toEqual(['https://example.com#', 'https://example.com/token/v1#'])
+  })
 })
