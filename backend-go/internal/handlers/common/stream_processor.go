@@ -392,7 +392,8 @@ func HasResponsesSemanticContent(event string) bool {
 		case "response.function_call_arguments.delta", "response.function_call_arguments.done",
 			"response.custom_tool_call_input.delta", "response.custom_tool_call_input.done",
 			"response.reasoning_summary_part.added", "response.reasoning_summary_part.done",
-			"response.reasoning_summary_text.done":
+			"response.reasoning_summary_text.delta", "response.reasoning_summary_text.done",
+			"response.reasoning_text.delta", "response.reasoning_text.done":
 			return true
 		case "response.output_item.added", "response.output_item.done":
 			item, _ := data["item"].(map[string]interface{})

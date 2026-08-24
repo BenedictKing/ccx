@@ -200,7 +200,7 @@ func handleStreamSuccess(
 					)
 				}
 			} else {
-				eventsToCheck = []string{line + "\n"}
+				eventsToCheck = []string{converters.NormalizeOpenRouterReasoningSSELine(line) + "\n"}
 			}
 
 			for _, event := range eventsToCheck {

@@ -240,6 +240,7 @@ func firstUnknownResponsesEventType(event string) (string, bool) {
 		"response.function_call_arguments.delta": {}, "response.function_call_arguments.done": {},
 		"response.custom_tool_call_input.delta": {}, "response.custom_tool_call_input.done": {},
 		"response.reasoning_summary_text.delta": {}, "response.reasoning_summary_text.done": {}, "response.reasoning_summary_part.added": {}, "response.reasoning_summary_part.done": {},
+		"response.reasoning_text.delta": {}, "response.reasoning_text.done": {},
 		"response.output_json.delta": {}, "response.output_json.done": {}, "response.audio.delta": {}, "response.audio.done": {}, "response.audio_transcript.delta": {}, "response.audio_transcript.done": {},
 		"response.refusal.delta": {}, "response.refusal.done": {},
 		"response.output_item.added": {}, "response.output_item.done": {}, "response.completed": {},

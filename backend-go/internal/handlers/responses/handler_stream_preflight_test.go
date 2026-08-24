@@ -106,6 +106,27 @@ func TestHasResponsesSemanticContent(t *testing.T) {
 			t.Fatal("expected content_part.added output_text to be treated as semantic content")
 		}
 	})
+
+	t.Run("reasoning_text delta (OpenRouter non-standard)", func(t *testing.T) {
+		event := "event: response.reasoning_text.delta\ndata: {\"type\":\"response.reasoning_text.delta\",\"delta\":\"thinking...\",\"content_index\":0}\n\n"
+		if !common.HasResponsesSemanticContent(event) {
+			t.Fatal("expected reasoning_text.delta to be treated as semantic content")
+		}
+	})
+
+	t.Run("reasoning_text done (OpenRouter non-standard)", func(t *testing.T) {
+		event := "event: response.reasoning_text.done\ndata: {\"type\":\"response.reasoning_text.done\",\"content_index\":0}\n\n"
+		if !common.HasResponsesSemanticContent(event) {
+			t.Fatal("expected reasoning_text.done to be treated as semantic content")
+		}
+	})
+
+	t.Run("reasoning_summary_text delta (standard)", func(t *testing.T) {
+		event := "event: response.reasoning_summary_text.delta\ndata: {\"type\":\"response.reasoning_summary_text.delta\",\"delta\":\"thinking...\",\"summary_index\":0}\n\n"
+		if !common.HasResponsesSemanticContent(event) {
+			t.Fatal("expected reasoning_summary_text.delta to be treated as semantic content")
+		}
+	})
 }
 
 func TestExtractResponsesTextFromEventUnknownTypes(t *testing.T) {
@@ -246,6 +267,10 @@ func TestFirstUnknownResponsesEventType_AllowsStandardContentPartAndDoneEvents(t
 		"response.audio_transcript.done",
 		"response.function_call_arguments.delta",
 		"response.function_call_arguments.done",
+		"response.reasoning_text.delta",
+		"response.reasoning_text.done",
+		"response.reasoning_summary_text.delta",
+		"response.reasoning_summary_text.done",
 	}
 	for _, eventType := range eventTypes {
 		t.Run(eventType, func(t *testing.T) {
