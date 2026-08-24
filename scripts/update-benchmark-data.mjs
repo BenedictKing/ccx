@@ -24,7 +24,8 @@
  *   --models                    只更新指定模型 (逗号分隔)
  *
  * 环境变量：
- *   ARTIFICIAL_ANALYSIS_API_KEY  Artificial Analysis API key（缺失时自动跳过 AA，不报错）
+ *   ARTIFICIAL_ANALYSIS_API_KEY  Artificial Analysis API key（缺失时自动跳过 AA，不报错）；
+ *                                也可写入根目录 .env（已被 gitignore），脚本启动时自动加载
  */
 
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
@@ -72,6 +73,11 @@ const skipBenchmarkReport = args.includes('--skip-benchmark-report')
 // --config <path>：传递给 benchmark-report CLI；默认 backend-go/.config/config.json
 const configArgIdx = args.indexOf('--config')
 const configPath = configArgIdx >= 0 ? args[configArgIdx + 1] : ''
+// 支持从根目录 .env 读取 ARTIFICIAL_ANALYSIS_API_KEY（.env 已被 gitignore）。
+// loadEnvFile 不覆盖已存在的进程环境变量，显式传参仍优先；文件缺失时静默跳过。
+try {
+  process.loadEnvFile(join(root, '.env'))
+} catch { /* .env 不存在时忽略 */ }
 const artificialAnalysisApiKey = process.env.ARTIFICIAL_ANALYSIS_API_KEY || ''
 // 无 key 且未显式 skip 时自动跳过 AA（首个需 key 的源；保持现有工作流零破坏）
 const artificialAnalysisEnabled = !skipArtificialAnalysis && !!artificialAnalysisApiKey

@@ -34,6 +34,7 @@ help:
 	@echo ""
 	@echo "$(YELLOW)Benchmark 数据源参数:$(NC)"
 	@echo "  make benchmark-update ARTIFICIAL_ANALYSIS_API_KEY=xxx - 传入 Artificial Analysis API key"
+	@echo "  也可将 ARTIFICIAL_ANALYSIS_API_KEY=xxx 写入根目录 .env（已 gitignore），脚本自动加载"
 	@echo "  未传 key 时自动跳过 Artificial Analysis，其余源照常更新"
 
 install:
