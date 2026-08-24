@@ -2627,10 +2627,6 @@
       "verifiedAt": "2026-08-24",
       "lane": "provisional",
       "sources": [
-        "https://artificialanalysis.ai/models/claude-opus-5",
-        "https://artificialanalysis.ai/models/claude-opus-5-high",
-        "https://artificialanalysis.ai/models/claude-opus-5-low",
-        "https://artificialanalysis.ai/models/claude-opus-5-medium",
         "https://artificialanalysis.ai/models/claude-opus-5-xhigh",
         "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/claude-opus-5",
@@ -3132,7 +3128,6 @@
       "verifiedAt": "2026-08-24",
       "lane": "provisional",
       "sources": [
-        "https://artificialanalysis.ai/models/claude-opus-4-7",
         "https://artificialanalysis.ai/models/claude-opus-4-7-non-reasoning",
         "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/claude-opus-4-7",
@@ -3225,7 +3220,6 @@
       "lane": "provisional",
       "sources": [
         "https://artificialanalysis.ai/models/claude-opus-4-6",
-        "https://artificialanalysis.ai/models/claude-opus-4-6-adaptive",
         "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/claude-opus-4-6",
         "https://benchlm.ai/models/claude-opus-4-6-thinking"
@@ -3461,7 +3455,6 @@
       ],
       "sources": [
         "https://artificialanalysis.ai/models/claude-sonnet-5",
-        "https://artificialanalysis.ai/models/claude-sonnet-5-non-reasoning",
         "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/claude-sonnet-5",
         "https://deepswe.datacurve.ai/"
@@ -3536,7 +3529,6 @@
       ],
       "sources": [
         "https://artificialanalysis.ai/models/claude-sonnet-4-6",
-        "https://artificialanalysis.ai/models/claude-sonnet-4-6-non-reasoning-low-effort",
         "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/claude-sonnet-4-6",
         "https://deepswe.datacurve.ai/"
@@ -3563,7 +3555,6 @@
       "verifiedAt": "2026-08-24",
       "lane": "provisional",
       "sources": [
-        "https://artificialanalysis.ai/models/deepseek-v4-flash",
         "https://artificialanalysis.ai/models/deepseek-v4-flash-non-reasoning",
         "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/deepseek-v4-flash-0731",
@@ -3831,8 +3822,6 @@
       "lane": "provisional",
       "sources": [
         "https://artificialanalysis.ai/models/gemini-3-7-flash",
-        "https://artificialanalysis.ai/models/gemini-3-7-flash-low",
-        "https://artificialanalysis.ai/models/gemini-3-7-flash-medium",
         "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/gemini-3-7-flash",
         "https://deepswe.datacurve.ai/"
@@ -4140,8 +4129,6 @@
       "lane": "provisional",
       "sources": [
         "https://artificialanalysis.ai/models/gemini-3-5-flash",
-        "https://artificialanalysis.ai/models/gemini-3-5-flash-medium",
-        "https://artificialanalysis.ai/models/gemini-3-5-flash-minimal",
         "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/gemini-3-5-flash",
         "https://deepswe.datacurve.ai/"
@@ -4704,7 +4691,6 @@
         }
       ],
       "sources": [
-        "https://artificialanalysis.ai/models/glm-5-2",
         "https://artificialanalysis.ai/models/glm-5-2-non-reasoning",
         "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/glm-5-2",
@@ -5184,12 +5170,7 @@
         }
       ],
       "sources": [
-        "https://artificialanalysis.ai/models/gpt-5-6-luna",
-        "https://artificialanalysis.ai/models/gpt-5-6-luna-high",
         "https://artificialanalysis.ai/models/gpt-5-6-luna-low",
-        "https://artificialanalysis.ai/models/gpt-5-6-luna-medium",
-        "https://artificialanalysis.ai/models/gpt-5-6-luna-non-reasoning",
-        "https://artificialanalysis.ai/models/gpt-5-6-luna-xhigh",
         "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/gpt-5-6-luna",
         "https://deepswe.datacurve.ai/",
@@ -5695,12 +5676,7 @@
         }
       ],
       "sources": [
-        "https://artificialanalysis.ai/models/gpt-5-6-sol",
-        "https://artificialanalysis.ai/models/gpt-5-6-sol-high",
         "https://artificialanalysis.ai/models/gpt-5-6-sol-low",
-        "https://artificialanalysis.ai/models/gpt-5-6-sol-medium",
-        "https://artificialanalysis.ai/models/gpt-5-6-sol-non-reasoning",
-        "https://artificialanalysis.ai/models/gpt-5-6-sol-xhigh",
         "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/gpt-5-6-sol",
         "https://deepswe.datacurve.ai/",
@@ -6198,12 +6174,7 @@
         }
       ],
       "sources": [
-        "https://artificialanalysis.ai/models/gpt-5-6-terra",
-        "https://artificialanalysis.ai/models/gpt-5-6-terra-high",
-        "https://artificialanalysis.ai/models/gpt-5-6-terra-low",
         "https://artificialanalysis.ai/models/gpt-5-6-terra-medium",
-        "https://artificialanalysis.ai/models/gpt-5-6-terra-non-reasoning",
-        "https://artificialanalysis.ai/models/gpt-5-6-terra-xhigh",
         "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/gpt-5-6-terra",
         "https://deepswe.datacurve.ai/",
@@ -6562,10 +6533,6 @@
       ],
       "sources": [
         "https://artificialanalysis.ai/models/gpt-5-5",
-        "https://artificialanalysis.ai/models/gpt-5-5-high",
-        "https://artificialanalysis.ai/models/gpt-5-5-low",
-        "https://artificialanalysis.ai/models/gpt-5-5-medium",
-        "https://artificialanalysis.ai/models/gpt-5-5-non-reasoning",
         "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/gpt-5-5",
         "https://deepswe.datacurve.ai/",
@@ -6689,8 +6656,6 @@
         }
       ],
       "sources": [
-        "https://artificialanalysis.ai/models/gpt-5-4",
-        "https://artificialanalysis.ai/models/gpt-5-4-low",
         "https://artificialanalysis.ai/models/gpt-5-4-non-reasoning",
         "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/gpt-5-4",
@@ -6718,9 +6683,7 @@
       "verifiedAt": "2026-08-24",
       "lane": "provisional",
       "sources": [
-        "https://artificialanalysis.ai/models/gpt-5-4-mini",
         "https://artificialanalysis.ai/models/gpt-5-4-mini-medium",
-        "https://artificialanalysis.ai/models/gpt-5-4-mini-non-reasoning",
         "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/gpt-5-4-mini",
         "https://deepswe.datacurve.ai/"
@@ -7138,7 +7101,6 @@
       "verifiedAt": "2026-08-24",
       "lane": "provisional",
       "sources": [
-        "https://artificialanalysis.ai/models/kimi-k3",
         "https://artificialanalysis.ai/models/kimi-k3-low",
         "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/kimi-k3",
@@ -7438,7 +7400,6 @@
       "lane": "provisional",
       "sources": [
         "https://artificialanalysis.ai/models/mimo-v2-5-pro",
-        "https://artificialanalysis.ai/models/mimo-v2-5-pro-non-reasoning",
         "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/mimo-v2-5-pro"
       ],
