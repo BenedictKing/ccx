@@ -229,3 +229,30 @@ func TestFirstUnknownResponsesEventType_AllowsResponsesLifecycleAndErrorTypes(t 
 		})
 	}
 }
+
+// 标准 OpenAI 流中高频出现的 content_part 与 done 系事件不应被判为未知类型，
+// 否则空流诊断文案会被 seenUnknown 分支抢占（knownTypes 缺口回归测试）。
+func TestFirstUnknownResponsesEventType_AllowsStandardContentPartAndDoneEvents(t *testing.T) {
+	eventTypes := []string{
+		"response.content_part.added",
+		"response.content_part.delta",
+		"response.content_part.done",
+		"response.output_text.delta",
+		"response.output_text.done",
+		"response.output_json.done",
+		"response.refusal.delta",
+		"response.refusal.done",
+		"response.audio.done",
+		"response.audio_transcript.done",
+		"response.function_call_arguments.delta",
+		"response.function_call_arguments.done",
+	}
+	for _, eventType := range eventTypes {
+		t.Run(eventType, func(t *testing.T) {
+			event := "data: {\"type\":\"" + eventType + "\",\"output_index\":0}\n"
+			if got, ok := firstUnknownResponsesEventType(event); ok {
+				t.Fatalf("firstUnknownResponsesEventType() = %q, true; want known type", got)
+			}
+		})
+	}
+}

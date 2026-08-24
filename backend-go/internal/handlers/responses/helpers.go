@@ -235,10 +235,13 @@ func isCompactionV2UsageOnlyStream(isCompactionV2, seenCompleted, seenUsageOnly 
 func firstUnknownResponsesEventType(event string) (string, bool) {
 	knownTypes := map[string]struct{}{
 		"response.created": {}, "response.in_progress": {}, "response.incomplete": {},
-		"response.output_text.delta": {}, "response.function_call_arguments.delta": {}, "response.function_call_arguments.done": {},
+		"response.output_text.delta": {}, "response.output_text.done": {},
+		"response.content_part.added": {}, "response.content_part.delta": {}, "response.content_part.done": {},
+		"response.function_call_arguments.delta": {}, "response.function_call_arguments.done": {},
 		"response.custom_tool_call_input.delta": {}, "response.custom_tool_call_input.done": {},
 		"response.reasoning_summary_text.delta": {}, "response.reasoning_summary_text.done": {}, "response.reasoning_summary_part.added": {}, "response.reasoning_summary_part.done": {},
-		"response.output_json.delta": {}, "response.content_part.added": {}, "response.content_part.delta": {}, "response.content_part.done": {}, "response.audio.delta": {}, "response.audio_transcript.delta": {},
+		"response.output_json.delta": {}, "response.output_json.done": {}, "response.audio.delta": {}, "response.audio.done": {}, "response.audio_transcript.delta": {}, "response.audio_transcript.done": {},
+		"response.refusal.delta": {}, "response.refusal.done": {},
 		"response.output_item.added": {}, "response.output_item.done": {}, "response.completed": {},
 		"response.error": {}, "response.failed": {}, "error": {}, "keepalive": {},
 	}
