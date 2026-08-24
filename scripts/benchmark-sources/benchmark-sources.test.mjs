@@ -559,6 +559,42 @@ test('BenchLM mapper can rebuild fresh profiles from raw models doc for DeepSeek
   ])
 })
 
+test('BenchLM extractProfiles falls back to verified displayScore only when public score is null', () => {
+  const rawDoc = {
+    items: [
+      // 有 verified 实测但未排公开总榜（如 deepseek-v4-flash-0731）：回退 verified 分
+      {
+        slug: 'deepseek-v4-flash-0731',
+        displayScore: null,
+        scores: { displayScore: 59, displayCategoryScores: { coding: 53.4 } },
+      },
+      // estimated 模型：顶层有估计分、verified 为 0，不得回退
+      {
+        slug: 'kimi-k3',
+        displayScore: 80.16,
+        scores: { displayScore: 0, displayCategoryScores: {} },
+      },
+      // 顶层与 verified 均无效：保持无总体分
+      {
+        slug: 'muse-spark-1-1',
+        displayScore: null,
+        scores: { displayScore: 0, displayCategoryScores: {} },
+      },
+    ],
+  }
+
+  const profiles = extractBenchlmProfiles(rawDoc, {
+    'deepseek-v4-flash-0731': 'deepseek-v4-flash',
+    'kimi-k3': 'kimi-k3',
+    'muse-spark-1-1': 'muse-spark-1.1',
+  }, { coding: 'coding' })
+
+  assert.equal(profiles['deepseek-v4-flash'].overallScore, 59)
+  assert.equal(profiles['deepseek-v4-flash'].categoryScores.coding, 53.4)
+  assert.equal(profiles['kimi-k3'].overallScore, 80.16)
+  assert.equal(profiles['muse-spark-1.1'].overallScore, null)
+})
+
 test('visualization combines DeepSWE, BenchLM and CodexRadar sources', () => {
   const evidence = (benchmark, benchmarkVersion, rawValue) => ({
     benchmark,
@@ -633,6 +669,20 @@ test('benchlm dated deepseek variants and gemini-3-6-flash stay mapped (2026-08-
   assert.equal(BENCHLM_MODEL_MAP['gemini-3-6-flash'], 'gemini-3.6-flash')
   assert.equal(ARTIFICIAL_ANALYSIS_MODEL_MAP['deepseek-v4-flash'], 'deepseek-v4-flash')
   assert.equal(ARTIFICIAL_ANALYSIS_MODEL_MAP['deepseek-v4-pro'], 'deepseek-v4-pro')
+})
+
+test('five registered models map in benchlm and AA (2026-08-24 additions)', () => {
+  // registry 能力表已有条目，补分数映射让它们进入候选池
+  assert.equal(BENCHLM_MODEL_MAP['claude-opus-4-6'], 'claude-opus-4-6')
+  assert.equal(BENCHLM_MODEL_MAP['claude-opus-4-7'], 'claude-opus-4-7')
+  assert.equal(BENCHLM_MODEL_MAP['minimax-m2-7'], 'minimax-m2.7')
+  assert.equal(BENCHLM_MODEL_MAP['minimax-m3'], 'minimax-m3')
+  assert.equal(BENCHLM_MODEL_MAP['qwen3-7-max'], 'qwen3.7-max')
+  assert.equal(ARTIFICIAL_ANALYSIS_MODEL_MAP['claude-opus-4-6'], 'claude-opus-4-6')
+  assert.equal(ARTIFICIAL_ANALYSIS_MODEL_MAP['claude-opus-4-7'], 'claude-opus-4-7')
+  assert.equal(ARTIFICIAL_ANALYSIS_MODEL_MAP['minimax-m2-7'], 'minimax-m2.7')
+  assert.equal(ARTIFICIAL_ANALYSIS_MODEL_MAP['minimax-m3'], 'minimax-m3')
+  assert.equal(ARTIFICIAL_ANALYSIS_MODEL_MAP['qwen3-7-max'], 'qwen3.7-max')
 })
 
 test('DeepSeek BenchLM variants fold into canonical flash and pro models', () => {

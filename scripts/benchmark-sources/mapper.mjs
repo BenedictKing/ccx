@@ -56,6 +56,10 @@ export const DEEPSWE_MODEL_MAP = {
  */
 export const BENCHLM_MODEL_MAP = {
   'claude-opus-4-8': 'claude-opus-4-8',
+  'claude-opus-4-7': 'claude-opus-4-7',
+  'claude-opus-4-7-adaptive': 'claude-opus-4-7',
+  'claude-opus-4-6': 'claude-opus-4-6',
+  'claude-opus-4-6-thinking': 'claude-opus-4-6',
   'claude-opus-5': 'claude-opus-5',
   'gpt-5-6-terra': 'gpt-5.6-terra',
   'gpt-5-6-sol': 'gpt-5.6-sol',
@@ -95,8 +99,14 @@ export const BENCHLM_MODEL_MAP = {
   // DeepSeek 新版本发布后，部分榜单可能使用 -MMDD 日期后缀 slug
   'deepseek-v4-pro-0813': 'deepseek-v4-pro',
   'deepseek-v4-flash-0731': 'deepseek-v4-flash',
-  // gemini-3-6-flash 已注册但 benchlm 榜单缺映射（gemini-3-1-pro/3-flash 暂无分，不补）
+  // gemini-3-1-pro / gemini-3-flash 已在 benchlm 榜单有公开总分（55.96 / 59.6）
   'gemini-3-6-flash': 'gemini-3.6-flash',
+  'gemini-3-1-pro': 'gemini-3.1-pro',
+  'gemini-3-flash': 'gemini-3-flash',
+  'gemini-3-5-flash-lite': 'gemini-3.5-flash-lite',
+  'minimax-m2-7': 'minimax-m2.7',
+  'minimax-m3': 'minimax-m3',
+  'qwen3-7-max': 'qwen3.7-max',
 }
 
 /**

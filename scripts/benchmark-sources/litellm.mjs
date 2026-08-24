@@ -127,6 +127,9 @@ export const LITELLM_MODEL_MAP = {
   'cloudflare/@cf/moonshotai/kimi-k2.7-code': 'kimi-k2.7-code',
   // kimi-k3 在 litellm 仅有 Azure AI Foundry 托管价（高于官方直连），故意不映射：
   // 官方价 ¥2/¥20/¥100 手工维护在 registry，mergeLitellmData 会无条件覆盖 pricing。
+  // qwen3.7-max/qwen3.8-max 与 minimax-m2.7 同理：litellm 仅有国际站/托管价
+  // （dashscope/qwen3.7-max 为 $2.5/$7.5 USD，高于 registry 手工的国内价 12/36 CNY），
+  // 故意不映射，定价以 registry 手工维护为准。
   'xai/grok-4.5': 'grok-4.5',
   'xai/grok-4.6': 'grok-4.6',
   'meta/muse-spark-1.1': 'muse-spark-1.1',
@@ -137,6 +140,7 @@ export const LITELLM_MODEL_MAP = {
   // Gemini（litellm 对未 GA 的型号只提供 -preview 后缀 key，
   // 裸 gemini-3.1-pro / gemini-3-flash 在上游数据中不存在，映射左侧必须用真实 key）
   'gemini-3.5-flash': 'gemini-3.5-flash',
+  'gemini-3.5-flash-lite': 'gemini-3.5-flash-lite',
   'gemini-3.7-flash': 'gemini-3.7-flash',
   'gemini-3.6-flash': 'gemini-3.6-flash',
   'gemini-3.1-pro-preview': 'gemini-3.1-pro',

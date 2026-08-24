@@ -11,7 +11,7 @@
  * - 变更检测：ETag 条件请求（304 快速路径）+ generatedAt 时间戳双层检测
  *
  * 数据结构（每个 canonicalModel）：
- * - overallScore: 顶层 displayScore（= leaderboard score）
+ * - overallScore: 顶层 displayScore（= leaderboard score）；顶层缺失时回退 scores.displayScore（verified lane 实测分）
  * - categoryScores: {ccxCategory: score}（经 BENCHLM_CATEGORY_MAP 映射，跳过 null）
  * - counts: {sharedBenchmarkCount, comparableCategoryCount, totalCategoryCount}
  * - sources: [模型页 URL, methodology URL]
@@ -104,11 +104,18 @@ export function extractProfiles(modelsDoc, modelMap, categoryMap, unmappedSlugs)
     }
 
     // overallScore 取顶层 displayScore（= leaderboard 公开分）。
-    // 不用 scores.displayScore：那是 verified lane，对 estimated 模型（如 kimi）为 0。
-    // displayScore 为 0/null 视为无总体分，置 null 不覆盖已有值。
+    // 顶层为 null 时回退 scores.displayScore（verified lane 实测分）：仅覆盖"有 verified
+    // 实测但未排公开总榜"的情形（如 deepseek-v4-flash-0731 顶层 null、verified 59）；
+    // estimated 模型（如 kimi）顶层有估计分、verified 为 0，不会触发该回退。
+    // 两者均为 0/null 视为无总体分，置 null 不覆盖已有值。
     const rawScore = item.displayScore
+    const verifiedScore = item.scores?.displayScore
     const overallScore =
-      typeof rawScore === 'number' && rawScore > 0 ? rawScore : null
+      typeof rawScore === 'number' && rawScore > 0
+        ? rawScore
+        : typeof verifiedScore === 'number' && verifiedScore > 0
+          ? verifiedScore
+          : null
 
     const categoryScores = {}
     let comparableCategoryCount = 0
