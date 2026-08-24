@@ -68,6 +68,7 @@ export const ARTIFICIAL_ANALYSIS_MODEL_MAP = {
   'minimax-m2-7': 'minimax-m2.7',
   'minimax-m3': 'minimax-m3',
   'qwen3-7-max': 'qwen3.7-max',
+  'qwen3-8-max': 'qwen3.8-max',
   'mimo-v2-5': 'mimo-v2.5',
   'mimo-v2-5-pro': 'mimo-v2.5-pro',
   'muse-spark-1-1': 'muse-spark-1.1',
