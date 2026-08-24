@@ -169,9 +169,9 @@ func TestAutoDiscoveryWriteProfilesUsesUpstreamModelCapabilities(t *testing.T) {
 	if !got.SupportsToolCalls || !got.SupportsReasoning {
 		t.Fatalf("GLM-5.2 上游能力未写入模型画像: %+v", got)
 	}
-	// glm-5.2 的 deepswe coding 直测 43.8：premium/high 边界钳制后归 normal 档
-	if got.QualityTier != QualityTierNormal {
-		t.Fatalf("QualityTier = %q, want normal", got.QualityTier)
+	// glm-5.2 常规口径 22.2 → low 档（此前 high 靠 max 档成绩）
+	if got.QualityTier != QualityTierLow {
+		t.Fatalf("QualityTier = %q, want low", got.QualityTier)
 	}
 }
 

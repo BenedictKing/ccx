@@ -385,7 +385,7 @@ export function toBenchmarkEvidence(modelData, allModels, costData) {
     taskCount: modelData.cells,
     cohortSize: allModels.length,
     effort,
-    selectionBasis: 'best_available_effort',
+    selectionBasis: 'per_effort',
     sourceUrl: 'https://deng.codexradar.com/',
     capturedAt: new Date().toISOString().split('T')[0],
   }
@@ -421,7 +421,15 @@ export async function fetchDradarData(modelMap) {
     const result = {}
 
     for (const [canonical, modelData] of Object.entries(bestPerModel)) {
-      const evidence = toBenchmarkEvidence(modelData, Object.values(bestPerModel), costData)
+      // 每个已测 effort 档各生成一条 evidence：档位评定需要常规口径分数，
+      // 只存最佳档会把"开满思考强度"的成绩当成模型基础能力
+      const efforts = Object.entries(modelData.efforts || {})
+      const measured = efforts.length > 0 ? efforts : [[modelData.bestEffort || 'default', {
+        passRate: modelData.passRate,
+        graded: modelData.graded,
+        cells: modelData.cells,
+        cellsPassed: modelData.cellsPassed,
+      }]]
 
       if (!result[canonical]) {
         result[canonical] = {
@@ -431,9 +439,13 @@ export async function fetchDradarData(modelMap) {
         }
       }
 
-      result[canonical].benchmarkEvidence.push(evidence)
+      for (const [effort, cell] of measured) {
+        result[canonical].benchmarkEvidence.push(
+          toBenchmarkEvidence({ ...modelData, bestEffort: effort, passRate: cell.passRate }, Object.values(bestPerModel), costData),
+        )
+        result[canonical].efforts[effort] = cell
+      }
       result[canonical].costData = costData[canonical] || {}
-      result[canonical].efforts = modelData.efforts
     }
 
     const models = Object.keys(result).sort()

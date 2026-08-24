@@ -40,8 +40,8 @@ func federationRouterConfig() config.Config {
 			BaseURL: "https://messages.example.com", APIKeys: []string{"sk-native"}, Status: "active",
 		}},
 		ChatUpstream: []config.UpstreamConfig{{
-			Name: "k3-chat", ChannelUID: "ch_k3_chat", AccountUID: "acct-a", AutoManaged: true,
-			BaseURL: "https://api.moonshot.cn", APIKeys: []string{"sk-k3"}, Status: "active",
+			Name: "sol-chat", ChannelUID: "ch_k3_chat", AccountUID: "acct-a", AutoManaged: true,
+			BaseURL: "https://api.openai.com", APIKeys: []string{"sk-k3"}, Status: "active",
 		}},
 	}
 }
@@ -58,9 +58,9 @@ func federationChannels(penalty float64) []scheduler.ChannelInfo {
 		{
 			Route:             scheduler.ChannelRouteRef{Kind: "chat", Index: 0, ChannelUID: "ch_k3_chat"},
 			Index:             0,
-			Name:              "k3-chat",
+			Name:              "sol-chat",
 			Status:            "active",
-			ActualModel:       "kimi-k3",
+			ActualModel:       "gpt-5.6-sol",
 			ProtocolFidelity:  "converted",
 			ConversionPenalty: penalty,
 		},
@@ -145,7 +145,7 @@ func TestFederationTraceRecordsRequestAndExecutionKind(t *testing.T) {
 	if sibling.ProtocolFidelity != "converted" || sibling.ConversionPenalty != 0.35 {
 		t.Fatalf("fidelity/penalty not traced: %#v", sibling)
 	}
-	if sibling.MappedModel != "kimi-k3" || sibling.MappingSource == "" {
+	if sibling.MappedModel != "gpt-5.6-sol" || sibling.MappingSource == "" {
 		t.Fatalf("sibling execution model attribution missing: %#v", sibling)
 	}
 	for i := range trace.Candidates {
@@ -208,7 +208,7 @@ func TestFederationEntryUsesExecutionKindForProfileLookup(t *testing.T) {
 	processed := cfgManager.GetConfig()
 	sibling := federationChannels(0.35)[1]
 	upstream := processed.ChatUpstream[0]
-	entry := router.buildChannelEntry(sibling, &upstream, sibling.Route.Kind, "kimi-k3", processed.UpstreamModelCapabilities)
+	entry := router.buildChannelEntry(sibling, &upstream, sibling.Route.Kind, "gpt-5.6-sol", processed.UpstreamModelCapabilities)
 
 	if entry.ChannelKind != "chat" {
 		t.Fatalf("ChannelKind = %q, want chat", entry.ChannelKind)

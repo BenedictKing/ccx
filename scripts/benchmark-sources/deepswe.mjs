@@ -123,6 +123,60 @@ export function extractBestPerModel(data, modelMap) {
 }
 
 /**
+ * 从 leaderboard 数据中提取每个模型 × effort 档的全部记录（同档多 harness 取最佳）。
+ * 档位评定需要统一到常规 effort 口径，只存最佳档会把"开满思考强度"的成绩
+ * 当成模型基础能力（如 gpt-5.6-luna max=67.2 而 medium=11.3）。
+ * @param {Object} data - leaderboard JSON 数据
+ * @param {Object} modelMap - deepswe 模型名 -> CCX canonicalModel 映射
+ * @returns {Map<string, Array>} - canonicalModel -> 该模型各 effort 档记录
+ */
+export function extractAllEffortsPerModel(data, modelMap) {
+  const rows = data.rows || []
+  const bestPerKey = new Map()
+
+  for (const row of rows) {
+    const deepsweModel = row.model
+    const canonical = modelMap[deepsweModel]
+    if (!canonical) continue
+
+    const effort = row.reasoning_effort || 'default'
+    const key = `${canonical}|${effort}`
+    const score = row.pass_at_1 ?? row.pass_rate ?? 0
+    const existing = bestPerKey.get(key)
+
+    if (!existing || score > existing.score) {
+      bestPerKey.set(key, {
+        canonicalModel: canonical,
+        deepsweModel,
+        score,
+        passRate: row.pass_rate,
+        passAt1: row.pass_at_1,
+        passAt4: row.pass_at_4,
+        harness: row.harness,
+        reasoningEffort: effort,
+        nAttempted: row.n_attempted,
+        nTasks: row.n_tasks_attempted,
+        nTasksPassed: row.n_tasks_passed_any,
+        ciLo: row.ci_lo,
+        ciHi: row.ci_hi,
+        ciHalf: row.ci_half,
+        nRuns: row.n_runs,
+        source: row.source,
+      })
+    }
+  }
+
+  const byCanonical = new Map()
+  for (const entry of bestPerKey.values()) {
+    if (!byCanonical.has(entry.canonicalModel)) {
+      byCanonical.set(entry.canonicalModel, [])
+    }
+    byCanonical.get(entry.canonicalModel).push(entry)
+  }
+  return byCanonical
+}
+
+/**
  * 计算 cohort percentile
  * @param {Array} allRows - 所有 leaderboard rows
  * @param {number} score - 当前模型的分数
@@ -161,7 +215,7 @@ export function toBenchmarkEvidence(modelData, cohortModels, benchmarkVersion = 
     taskCount: modelData.nTasks,
     cohortSize: cohortModels.length,
     effort: modelData.reasoningEffort || 'default',
-    selectionBasis: 'best_available_effort',
+    selectionBasis: 'per_effort',
     sourceUrl: `${BASE_URL}/`,
     capturedAt: new Date().toISOString().split('T')[0],
   }
@@ -170,23 +224,29 @@ export function toBenchmarkEvidence(modelData, cohortModels, benchmarkVersion = 
 function buildDeepsweProfiles(v11Data, v1Data, modelMap) {
   const result = {}
 
-  // 处理 v1.1 (live leaderboard)
+  // 处理 v1.1 (live leaderboard)：保留全部 effort 档，每档一条 evidence
   if (v11Data?.rows) {
     const bestV11 = extractBestPerModel(v11Data, modelMap)
-    for (const model of bestV11) {
-      const evidence = toBenchmarkEvidence(model, bestV11, 'v1.1')
-      if (!result[model.canonicalModel]) {
-        result[model.canonicalModel] = { benchmarkEvidence: [], deepsweMeta: {} }
+    const allEfforts = extractAllEffortsPerModel(v11Data, modelMap)
+    for (const [canonical, entries] of allEfforts) {
+      if (!result[canonical]) {
+        result[canonical] = { benchmarkEvidence: [], deepsweMeta: {} }
       }
-      result[model.canonicalModel].benchmarkEvidence.push(evidence)
-      result[model.canonicalModel].deepsweMeta = {
-        deepsweModel: model.deepsweModel,
-        harness: model.harness,
-        reasoningEffort: model.reasoningEffort,
-        passAt4: model.passAt4,
-        ciLo: model.ciLo,
-        ciHi: model.ciHi,
-        nRuns: model.nRuns,
+      // cohort 与 meta 仍以各模型最佳档为基准（与既有口径一致）
+      const best = bestV11.find(m => m.canonicalModel === canonical)
+      for (const entry of entries) {
+        result[canonical].benchmarkEvidence.push(toBenchmarkEvidence(entry, bestV11, 'v1.1'))
+      }
+      if (best) {
+        result[canonical].deepsweMeta = {
+          deepsweModel: best.deepsweModel,
+          harness: best.harness,
+          reasoningEffort: best.reasoningEffort,
+          passAt4: best.passAt4,
+          ciLo: best.ciLo,
+          ciHi: best.ciHi,
+          nRuns: best.nRuns,
+        }
       }
     }
   }

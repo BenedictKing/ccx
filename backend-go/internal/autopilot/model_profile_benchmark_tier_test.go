@@ -56,16 +56,29 @@ func TestComputeQualityTierBoundariesConcurrent(t *testing.T) {
 	wg.Wait()
 }
 
-func TestComputeQualityTierBoundariesClampedToDefaults(t *testing.T) {
+func TestComputeQualityTierBoundariesWithinTopRegion(t *testing.T) {
 	t.Cleanup(func() { benchmarkTierBoundariesCache.Store(nil) })
-	// 间隙推导的边界不得低于默认下限：中部分数密集时最大间隙会塌到低段
-	// （曾把 premiumMin 拉到 49，让 53 分模型全部升入 premium）。
-	premiumMin, highMin, _ := computeQualityTierBoundaries()
-	if premiumMin < defaultBenchmarkTierPremiumMin {
-		t.Fatalf("premiumMin=%.2f 低于默认下限 %.2f", premiumMin, defaultBenchmarkTierPremiumMin)
+	// premium 断层必须在最高分下方 25% 量表区间内：60% 锚在分数集中分布时
+	// 会把中段空隙包进"顶部区域"，曾把 premiumMin 塌到 49、53 分模型全部
+	// 升入 premium。修复后的不变量：premium 边界不低于 0.75×最高分。
+	premiumMin, _, _ := computeQualityTierBoundaries()
+
+	maxScore := 0.0
+	seen := make(map[string]struct{})
+	for _, bp := range config.BuiltinModelBenchmarkProfiles() {
+		if _, ok := seen[bp.CanonicalModel]; ok {
+			continue
+		}
+		seen[bp.CanonicalModel] = struct{}{}
+		if score, _, ok := regularEffortBaselineScore(bp.BenchmarkEvidence); ok && score > maxScore {
+			maxScore = score
+		}
 	}
-	if highMin < defaultBenchmarkTierHighMin {
-		t.Fatalf("highMin=%.2f 低于默认下限 %.2f", highMin, defaultBenchmarkTierHighMin)
+	if maxScore <= 0 {
+		t.Skip("注册表无直测分数，使用默认边界")
+	}
+	if premiumMin < maxScore*0.75 {
+		t.Fatalf("premiumMin=%.2f 低于顶部区域下限 %.2f（75%% 最高分 %.2f）", premiumMin, maxScore*0.75, maxScore)
 	}
 }
 

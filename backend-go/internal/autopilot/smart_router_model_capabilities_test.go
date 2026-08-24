@@ -97,6 +97,7 @@ func TestBuildChannelEntryUsesMappedModelQualityTier(t *testing.T) {
 	if k3Entry.ScoringCandidate.QualityTier != QualityTierPremium {
 		t.Fatalf("K3 quality tier = %q, want premium", k3Entry.ScoringCandidate.QualityTier)
 	}
+	// kimi-for-coding 与 kimi-k2.7-code 共享 pattern，常规口径 30.5 → normal 档
 	if codingEntry.ScoringCandidate.QualityTier != QualityTierNormal {
 		t.Fatalf("kimi-for-coding quality tier = %q, want normal", codingEntry.ScoringCandidate.QualityTier)
 	}

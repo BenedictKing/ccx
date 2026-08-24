@@ -881,8 +881,8 @@ func TestResolveModel_RefreshesLegacyAutoDiscoveryCapabilities(t *testing.T) {
 		t.Fatalf("ResolveModel() = (%q, %v, %q), want refreshed glm-5.2 capabilities", target.Model, resolved, reason)
 	}
 	refreshed := store.Get("ch_test", "responses", "metrics_test", "glm-5.2")
-	// glm-5.2 的 deepswe coding 直测 43.8：premium/high 边界钳制后归 normal 档
-	if refreshed == nil || refreshed.QualityTier != QualityTierNormal ||
+	// glm-5.2 常规口径 22.2 → low 档
+	if refreshed == nil || refreshed.QualityTier != QualityTierLow ||
 		refreshed.ContextTokens != 1048576 || !refreshed.SupportsReasoning || !refreshed.SupportsToolCalls {
 		t.Fatalf("旧自动发现画像未在内存中完成升级: %+v", refreshed)
 	}

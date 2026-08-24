@@ -18,20 +18,20 @@ func TestBuildRequestProfile(t *testing.T) {
 			name:      "未知输入保守归类为 supervisor",
 			features:  RequestProfileFeatures{Model: "claude-sonnet-5", ChannelKind: "messages", Operation: "completion"},
 			taskClass: TaskClassSupervisor,
-			quality:   QualityTierNormal, // sonnet-5 直测 53.8 → normal 档
+			quality:   QualityTierNormal, // sonnet-5 常规口径 39.8
 		},
 		{
 			name:      "明确的小型文本请求归类为 lightweight",
 			features:  RequestProfileFeatures{Model: "mimo-v2.5-pro", ChannelKind: "messages", Operation: "completion", EstTokens: 500, Complexity: TaskComplexityTrivial},
 			taskClass: TaskClassLightweight,
-			quality:   QualityTierNormal,
+			quality:   QualityTierLow, // mimo-v2.5-pro 常规口径 27.9 → low
 			context:   500,
 		},
 		{
 			name:       "图片请求强制 vision 能力",
 			features:   RequestProfileFeatures{Model: "claude-sonnet-5", ChannelKind: "messages", Operation: "completion", HasImage: true, EstTokens: 1000},
 			taskClass:  TaskClassVision,
-			quality:    QualityTierNormal, // sonnet-5 直测 53.8 → normal 档
+			quality:    QualityTierNormal, // sonnet-5 常规口径 39.8
 			context:    1000,
 			visionNeed: true,
 		},
@@ -39,7 +39,7 @@ func TestBuildRequestProfile(t *testing.T) {
 			name:      "工具请求不允许降为 lightweight",
 			features:  RequestProfileFeatures{Model: "glm-5.2", ChannelKind: "chat", Operation: "completion", EstTokens: 500, ToolUseNeed: true},
 			taskClass: TaskClassSupervisor,
-			quality:   QualityTierNormal, // glm-5.2 直测 43.8 → normal 档
+			quality:   QualityTierLow, // glm-5.2 常规口径 22.2 → low 档
 			context:   500,
 		},
 		{
