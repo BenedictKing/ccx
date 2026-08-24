@@ -355,10 +355,7 @@ func (e *responsesFoldHTTPEmitter) emit(event map[string]interface{}) error {
 			return &common.ErrBlacklistKey{Reason: r, Message: m}
 		}
 		diagnostic := formatResponsesErrorDiagnostic(upstreamErr)
-		if isRetryableResponsesError(upstreamErr) {
-			return fmt.Errorf("%w: %s", common.ErrEmptyStreamResponse, diagnostic)
-		}
-		return fmt.Errorf("upstream Responses error: %s", diagnostic)
+		return fmt.Errorf("%w: %s", common.ErrEmptyStreamResponse, diagnostic)
 	}
 
 	e.preflightEvents = append(e.preflightEvents, eventString)
