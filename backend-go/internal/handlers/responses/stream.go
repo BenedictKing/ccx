@@ -420,7 +420,7 @@ func handleStreamSuccess(
 			}
 			eventsToProcess = events
 		} else {
-			eventsToProcess = []string{line + "\n"}
+			eventsToProcess = []string{converters.NormalizeOpenRouterReasoningSSELine(line) + "\n"}
 		}
 
 		for _, event := range eventsToProcess {
