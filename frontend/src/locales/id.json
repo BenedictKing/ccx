@@ -757,6 +757,8 @@
   "channelEditor.basic.tags.hint": "Tekan Enter untuk menambahkan tag untuk filter dan pengelompokan channel",
   "channelEditor.billing.title": "Penagihan",
   "channelEditor.billing.hint": "Atur cara isi ulang dikonversi ke kredit channel, untuk menurunkan biaya aktual dari harga upstream",
+  "channelEditor.billing.paymentGroup": "Isi ulang",
+  "channelEditor.billing.creditGroup": "Kredit channel",
   "channelEditor.billing.paymentCurrency.label": "Mata Uang Isi Ulang",
   "channelEditor.billing.paymentCurrency.hint": "Mata uang yang Anda bayar, mis. LDC, CNY, USD",
   "channelEditor.billing.paymentAmount.label": "Jumlah Isi Ulang",

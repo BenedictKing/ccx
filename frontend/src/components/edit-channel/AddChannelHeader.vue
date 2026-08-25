@@ -129,10 +129,11 @@ const { t } = useI18n()
   opacity: 0.85;
 }
 
-/* 头部身份块名称（颜色继承头部：浅色主题 text-white / 深色主题 text-high-emphasis） */
+/* 头部身份块名称：与创建态 modal-title 同字号字重，避免两态头部高度跳变 */
 .provider-header-name {
-  font-size: 1rem;
-  font-weight: 700;
+  font-size: 1.125rem;
+  font-weight: 600;
+  line-height: 1.3;
 }
 
 .header-capability-actions {

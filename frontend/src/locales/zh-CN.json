@@ -757,6 +757,8 @@
   "channelEditor.basic.tags.hint": "按 Enter 添加标签，用于渠道筛选和分组",
   "channelEditor.billing.title": "计费",
   "channelEditor.billing.hint": "配置充值与渠道到账的换算关系，用于将上游费用折算为实际成本",
+  "channelEditor.billing.paymentGroup": "充值",
+  "channelEditor.billing.creditGroup": "渠道到账",
   "channelEditor.billing.paymentCurrency.label": "充值币种",
   "channelEditor.billing.paymentCurrency.hint": "你充值时用的币种，如 LDC、CNY、USD",
   "channelEditor.billing.paymentAmount.label": "充值金额",

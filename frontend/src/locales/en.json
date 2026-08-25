@@ -757,6 +757,8 @@
   "channelEditor.basic.tags.hint": "Press Enter to add tags for filtering and grouping channels",
   "channelEditor.billing.title": "Billing",
   "channelEditor.billing.hint": "Configure how your top-up converts to channel credit, used to derive actual cost from upstream pricing",
+  "channelEditor.billing.paymentGroup": "Top-up",
+  "channelEditor.billing.creditGroup": "Channel credit",
   "channelEditor.billing.paymentCurrency.label": "Top-up Currency",
   "channelEditor.billing.paymentCurrency.hint": "Currency you pay in, e.g. LDC, CNY, USD",
   "channelEditor.billing.paymentAmount.label": "Top-up Amount",

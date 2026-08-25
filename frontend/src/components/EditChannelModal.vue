@@ -44,6 +44,10 @@
           <v-form ref="formRef" class="content-area" @submit.prevent="handleSubmit">
             <!-- 基本信息 -->
             <section :ref="(el: any) => setSectionRef('basic', el)" data-section-id="basic" class="pa-6 scroll-mt-4">
+              <header class="section-header">
+                <v-icon size="20" color="primary">mdi-information-outline</v-icon>
+                <h3 class="section-header-title">{{ t('channelEditor.nav.basic') }}</h3>
+              </header>
               <!-- hide-base-url 对官方直连与 Provider 模板托管渠道生效：其地址由官方/模板固定；
                    仅自定义手填地址的自动托管账号需要手工维护 CDN 地址池 -->
               <BasicInfoSection
@@ -69,6 +73,10 @@
 
             <!-- 身份认证 -->
             <section :ref="(el: any) => setSectionRef('auth', el)" data-section-id="auth" class="pa-6 scroll-mt-4">
+              <header class="section-header">
+                <v-icon size="20" color="primary">mdi-shield-key-outline</v-icon>
+                <h3 class="section-header-title">{{ t('channelEditor.nav.auth') }}</h3>
+              </header>
               <ApiKeyManagementSection
                 :api-keys="form.apiKeys"
                 :disabled-keys="visibleDisabledKeys"
@@ -126,6 +134,10 @@
 
             <!-- 自定义参数（代理服务器 + 自定义请求头 + 充值倍率/汇率） -->
             <section :ref="(el: any) => setSectionRef('custom', el)" data-section-id="custom" class="pa-6 scroll-mt-4">
+              <header class="section-header">
+                <v-icon size="20" color="primary">mdi-tune</v-icon>
+                <h3 class="section-header-title">{{ t('channelEditor.nav.custom') }}</h3>
+              </header>
               <!-- 代理服务器 -->
               <v-text-field
                 :model-value="form.proxyUrl"
@@ -151,6 +163,7 @@
               <div class="mt-6">
                 <div class="text-subtitle-2 font-weight-medium mb-1">{{ t('channelEditor.billing.title') }}</div>
                 <div class="text-caption text-medium-emphasis mb-3">{{ t('channelEditor.billing.hint') }}</div>
+                <div class="billing-group-label">{{ t('channelEditor.billing.paymentGroup') }}</div>
                 <v-row dense>
                   <v-col cols="12" sm="6">
                     <v-text-field
@@ -182,6 +195,9 @@
                       @update:model-value="updateForm({ channelPaymentAmount: $event })"
                     />
                   </v-col>
+                </v-row>
+                <div class="billing-group-label mt-4">{{ t('channelEditor.billing.creditGroup') }}</div>
+                <v-row dense>
                   <v-col cols="12" sm="6">
                     <v-text-field
                       :model-value="form.channelCreditCurrency"
@@ -221,7 +237,7 @@
       </v-card-text>
 
       <!-- 底部按钮 -->
-      <v-card-actions class="pa-6 pt-2">
+      <v-card-actions class="pa-6 pt-2 border-t">
         <v-spacer />
         <v-btn variant="outlined" :disabled="submitting" @click="handleCancel">
           {{ t('app.actions.cancel') }}<span class="shortcut-hint ml-2 text-xs opacity-50">Esc</span>

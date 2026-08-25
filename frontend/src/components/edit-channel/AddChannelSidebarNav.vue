@@ -11,7 +11,7 @@
       ]"
       @click="$emit('navigate', item.id)"
     >
-      <div v-if="activeSection === item.id" class="sidebar-nav-indicator" ></div>
+      <div v-if="activeSection === item.id" class="sidebar-nav-indicator"></div>
       <span class="sidebar-nav-label">{{ item.label }}</span>
     </button>
   </div>

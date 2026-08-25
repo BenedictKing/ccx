@@ -8,43 +8,6 @@
   min-height: 360px;
 }
 
-.base-url-hint {
-  min-height: 20px;
-  padding: 4px 12px 8px;
-  line-height: 1.5;
-}
-
-/* 高级选项中的右侧开关行 */
-.advanced-switch-row {
-  min-height: 56px;
-}
-
-.advanced-switch-row :deep(.v-selection-control) {
-  justify-content: flex-end;
-  margin-inline-start: 16px;
-}
-
-.channel-config-select {
-  flex: 0 0 220px;
-}
-
-.stream-timeout-strategy-toggle {
-  display: flex;
-  flex-wrap: wrap;
-  width: 100%;
-}
-
-.stream-timeout-strategy-toggle :deep(.v-btn) {
-  flex: 1 1 120px;
-  min-width: 0;
-}
-
-@media (max-width: 600px) {
-  .channel-config-select {
-    flex-basis: 100%;
-  }
-}
-
 /* 暗色模式彩色按钮：深色文字，保证对比度 */
 :deep(.v-theme--dark .v-btn.v-btn--variant-elevated.v-btn--color-primary),
 :deep(.v-theme--dark .v-btn.v-btn--variant-elevated.v-btn--color-secondary),
@@ -64,239 +27,13 @@
   background-color: rgba(52, 211, 153, 0.92) !important;
 }
 
-/* 超时配置 - Neo-Brutalism 风格（沿用调校台设计） */
-.timeout-control-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0;
-  margin-bottom: 16px;
-  border: 2px solid rgb(var(--v-theme-on-surface));
-  background: rgb(var(--v-theme-surface));
+/* 字段 hint 默认 60% 不透明度偏淡，加深一档保证扫读可读；错误信息保持 error 色 */
+.channel-editor-dialog :deep(.v-messages__message) {
+  color: rgba(var(--v-theme-on-surface), 0.72);
 }
 
-.v-theme--dark .timeout-control-grid {
-  border-color: rgba(255, 255, 255, 0.6);
-}
-
-.timeout-control {
-  padding: 12px 14px;
-  position: relative;
-  transition: opacity 0.2s ease;
-}
-
-.timeout-control--disabled {
-  opacity: 0.4;
-}
-
-.timeout-control:not(:last-child)::after {
-  content: '';
-  position: absolute;
-  right: 0;
-  top: 8px;
-  bottom: 8px;
-  width: 2px;
-  background: rgb(var(--v-theme-on-surface));
-  opacity: 0.18;
-}
-
-.v-theme--dark .timeout-control:not(:last-child)::after {
-  background: rgba(255, 255, 255, 0.6);
-}
-
-.timeout-control-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-  gap: 6px;
-}
-
-.timeout-label {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: rgb(var(--v-theme-on-surface) / 70%);
-  text-transform: uppercase;
-  letter-spacing: 0;
-  line-height: 1.3;
-}
-
-.timeout-value {
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  font-size: 0.8125rem;
-  font-weight: 700;
-  color: rgb(var(--v-theme-primary));
-  padding: 2px 8px;
-  border: 2px solid rgb(var(--v-theme-on-surface));
-  background: rgb(var(--v-theme-surface));
-  flex-shrink: 0;
-  min-width: 40px;
-  text-align: center;
-}
-
-.v-theme--dark .timeout-value {
-  border-color: rgba(255, 255, 255, 0.5);
-}
-
-.timeout-slider {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 100%;
-  height: 8px;
-  border-radius: 0;
-  border: 2px solid rgb(var(--v-theme-on-surface) / 20%);
-  background: rgb(var(--v-theme-on-surface) / 8%);
-  outline: none;
-  cursor: pointer;
-}
-
-.timeout-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 20px;
-  height: 20px;
-  border-radius: 0;
-  background: rgb(var(--v-theme-primary));
-  cursor: pointer;
-  border: 2px solid rgb(var(--v-theme-on-surface));
-  box-shadow: 2px 2px 0 0 rgb(var(--v-theme-on-surface));
-  transition: box-shadow 0.1s ease;
-}
-
-.timeout-slider::-webkit-slider-thumb:hover {
-  transform: translate(-1px, -1px);
-  box-shadow: 3px 3px 0 0 rgb(var(--v-theme-on-surface));
-}
-
-.timeout-slider::-moz-range-thumb {
-  width: 20px;
-  height: 20px;
-  border-radius: 0;
-  background: rgb(var(--v-theme-primary));
-  cursor: pointer;
-  border: 2px solid rgb(var(--v-theme-on-surface));
-  box-shadow: 2px 2px 0 0 rgb(var(--v-theme-on-surface));
-}
-
-.timeout-slider:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.v-theme--dark .timeout-slider {
-  border-color: rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.v-theme--dark .timeout-slider::-webkit-slider-thumb {
-  border-color: rgba(255, 255, 255, 0.6);
-  box-shadow: 2px 2px 0 0 rgba(255, 255, 255, 0.6);
-}
-
-.v-theme--dark .timeout-slider::-moz-range-thumb {
-  border-color: rgba(255, 255, 255, 0.6);
-  box-shadow: 2px 2px 0 0 rgba(255, 255, 255, 0.6);
-}
-
-.timeout-range {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.6875rem;
-  color: rgb(var(--v-theme-on-surface) / 50%);
-  margin-top: 4px;
-}
-
-@media (max-width: 768px) {
-  .timeout-control-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .timeout-control:not(:last-child)::after {
-    display: none;
-  }
-}
-
-/* 模型映射区域样式优化 */
-.uppercase-label {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  color: rgba(var(--v-theme-on-surface), 0.6);
-}
-
-.mapping-container {
-  background: rgba(var(--v-border-color), 0.03);
-  border: 1px solid rgba(var(--v-border-color), 0.08);
-}
-
-.add-mapping-row {
-  background: rgba(var(--v-theme-surface), 0.8);
-  border: 1px solid rgba(var(--v-border-color), 0.15);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
-}
-
-.mapping-item {
-  background: rgb(var(--v-theme-surface)) !important;
-  border: 1px solid rgba(var(--v-border-color), 0.12) !important;
-  transition: all 0.2s ease-in-out;
-}
-
-.mapping-item:hover {
-  border-color: rgba(var(--v-theme-primary), 0.3) !important;
-  box-shadow: 0 4px 12px rgba(var(--v-theme-primary), 0.04);
-}
-
-.mapping-item:hover .arrow-icon {
-  transform: translateX(2px);
-  opacity: 0.9;
-}
-
-.model-badge {
-  min-width: 130px;
-  max-width: 160px;
-  background: rgba(var(--v-border-color), 0.05);
-  border: 1px solid rgba(var(--v-border-color), 0.1);
-  height: 40px;
-}
-
-.badge-title {
-  font-size: 8px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  color: rgba(var(--v-theme-on-surface), 0.4);
-  line-height: 1;
-  margin-bottom: 2px;
-}
-
-.inner-label {
-  position: absolute;
-  top: -6px;
-  left: 10px;
-  background: rgb(var(--v-theme-surface));
-  padding: 0 4px;
-  z-index: 2;
-  font-size: 8px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  color: rgba(var(--v-theme-on-surface), 0.4);
-}
-
-.target-wrapper {
-  position: relative;
-}
-
-.model-name {
-  font-size: 13px;
-  font-weight: 600;
-  color: rgba(var(--v-theme-on-surface), 0.85);
-}
-
-.arrow-icon {
-  opacity: 0.5;
-  transition: transform 0.2s, opacity 0.2s;
-}
-
-.font-mono {
-  font-family: 'SF Mono', 'Fira Code', Monaco, Consolas, monospace !important;
+.channel-editor-dialog :deep(.v-text-field--error .v-messages__message) {
+  color: rgb(var(--v-theme-error));
 }
 
 /* 垂直导航布局 */
@@ -306,79 +43,48 @@
   min-height: 0;
 }
 
-.nav-sidebar {
-  width: 220px;
-  min-width: 220px;
-  flex-shrink: 0;
-  border-right: 1px solid rgba(var(--v-border-color), 0.12);
-  background: rgba(var(--v-theme-surface-variant), 0.3);
-  overflow-y: auto;
-  padding: 16px 8px;
-}
-
-.nav-sidebar-title {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: rgba(var(--v-theme-on-surface), 0.4);
-  padding: 0 12px 8px;
-}
-
-.nav-item {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  padding: 12px 12px;
-  border-radius: 8px;
-  font-size: 0.875rem;
-  font-weight: 500;
-  letter-spacing: normal;
-  text-transform: none;
-  color: rgba(var(--v-theme-on-surface), 0.7);
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease;
-  text-align: left;
-}
-
-.nav-item:hover {
-  background: rgba(var(--v-theme-primary), 0.06);
-  color: rgb(var(--v-theme-on-surface));
-}
-
-.nav-item--active {
-  background: rgba(var(--v-theme-primary), 0.1);
-  color: rgb(var(--v-theme-primary));
-  font-weight: 600;
-}
-
-.nav-item--active .nav-item-icon {
-  color: rgb(var(--v-theme-primary));
-}
-
-.nav-item-icon {
-  margin-right: 8px;
-  opacity: 0.7;
-}
-
-.nav-item--active .nav-item-icon {
-  opacity: 1;
-}
-
 .content-area {
   flex: 1;
   min-width: 0;
   overflow-y: auto;
 }
 
+/* 表单内容限宽：1200px 弹窗减侧栏后输入行近 1000px，全宽单列字段过松散 */
+.content-area > section {
+  max-width: 840px;
+}
+
+/* 分区小节标题：与左侧导航锚点一一对应 */
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.section-header-title {
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+/* 分区之间的分隔线，最后一个分区除外 */
+.content-area > section:not(:last-child) {
+  border-bottom: 1px solid rgba(var(--v-border-color), 0.12);
+}
+
+/* 计费分组的“充值 / 渠道到账”小标签 */
+.billing-group-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: rgba(var(--v-theme-on-surface), 0.55);
+  margin-bottom: 8px;
+}
+
 @media (max-width: 960px) {
   .content-row {
     flex-direction: column;
-  }
-
-  .nav-sidebar {
-    display: none;
   }
 }
