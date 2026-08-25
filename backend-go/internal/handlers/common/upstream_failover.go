@@ -697,6 +697,23 @@ func TryUpstreamWithAllKeys(
 				}
 			}
 
+			// 输出上限自学习（主动侧）：命中记忆时把最大输出 token 字段下调到该 渠道-Key-模型
+			// 组合的实测上限。注册表登记的是模型公开上限（如 Kimi K2.6 官方 262144），同一模型
+			// 在个别部署上更低（火山方舟 coding 端点 32768），只能由真实请求被拒后学到。
+			// 实测值只收紧不放宽：高于注册表上限时 clamp 不会改动任何字段。
+			if upstream.ChannelUID != "" {
+				keyHash := autopilot.KeyHashFromAPIKey(apiKey)
+				if state, ok := channelCompatCache.OutputLimit(upstream.ChannelUID, keyHash, attemptModel); ok && state.MaxOutputTokens > 0 {
+					if clamped, changed := clampMaxTokensInBody(attemptBody, kind, state.MaxOutputTokens); changed {
+						attemptBody = clamped
+						RestoreRequestBody(c, attemptBody)
+						c.Set("requestBodyBytes", attemptBody)
+						RequestLogf(c, "[%s-OutputLimit] 渠道 %s 模型 %s 按实测上限 %d 下调最大输出 token（来源 %s）",
+							apiType, upstream.Name, attemptModel, state.MaxOutputTokens, state.Source)
+					}
+				}
+			}
+
 			// 内容启发式兼容项（无上游报错信号）：首次遇到该组合时异步探测一次并记忆，
 			// 不阻塞当前请求，结论对后续请求生效。替代原先要用户手工点诊断按钮的做法。
 			maybeTriggerCompatProbe(upstream, apiKey, currentBaseURL, attemptModel)
@@ -1078,6 +1095,35 @@ func TryUpstreamWithAllKeys(
 							signal.MaxInputTokens, signal.Source, signal.Evidence, estimatedInput) {
 							RequestLogf(c, "[%s-ContextLimit] 渠道 %s 模型 %s 实测上下文上限 %d tokens（来源 %s，本次请求约 %d tokens），已记忆并将在后续路由中规避",
 								apiType, upstream.Name, attemptModel, signal.MaxInputTokens, signal.Source, estimatedInput)
+						}
+					}
+				}
+
+				// 输出上限自学习（被动侧）：上游 400/422 明确指出 max_tokens/max_output_tokens
+				// 超过其上限时，记忆该 渠道-Key-模型 组合的实测上限，并用同一 Key 以钳制后的值
+				// 立即重试。与上下文上限不同，这里做同 Key 重试：下调输出 token 是可自动改写的
+				// 方向（与模型注册表 clamp 的静默下调一致），请求内容本身没有被拒绝。
+				// 仅当首次学到更严格结论且请求体字段确实需要下调时重试，避免死循环。
+				if (resp.StatusCode == 400 || resp.StatusCode == 422) && upstream.ChannelUID != "" && !c.Writer.Written() {
+					if requested := maxOutputTokensInBody(attemptBody, kind); requested > 0 {
+						if signal := OutputLimitFromError(resp.StatusCode, respBodyBytes, requested); signal != nil {
+							if channelCompatCache.RecordOutputLimit(upstream.ChannelUID, keyHash, attemptModel,
+								signal.MaxOutputTokens, config.CompatSourceUpstreamDeclared, signal.Evidence, requested) {
+								if _, changed := clampMaxTokensInBody(attemptBody, kind, signal.MaxOutputTokens); changed {
+									retrySelection = selection
+									retryAPIKey = apiKey
+									metricsManager.RecordRequestFinalizeIgnored(currentBaseURL, apiKey, metricsServiceType, requestID)
+									channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, executionKind)
+									if probeKey := currentBaseURL + "|" + apiKey; probeAcquired[probeKey] {
+										metricsManager.ReleaseProbe(currentBaseURL, apiKey, metricsServiceType)
+										delete(probeAcquired, probeKey)
+									}
+									CompleteLog(channelLogStore, metricsKey, logRequestID, resp.StatusCode, false, string(respBodyBytes), isRetryAttempt)
+									RequestLogf(c, "[%s-OutputLimit] 渠道 %s 模型 %s 拒绝输出 token %d（上限 %d），已记忆并下调后同 Key 重试",
+										apiType, upstream.Name, attemptModel, requested, signal.MaxOutputTokens)
+									continue
+								}
+							}
 						}
 					}
 				}

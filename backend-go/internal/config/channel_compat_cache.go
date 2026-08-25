@@ -119,12 +119,32 @@ type ContextLimitState struct {
 	RejectedTokens int `json:"rejected_tokens"`
 }
 
+// OutputLimitState 该 渠道-Key-模型 组合实测的最大输出 token 上限。
+//
+// 存在意义与 ContextLimitState 同源：模型注册表登记的是"该模型公开的输出上限"，
+// 但同一模型在不同部署上的实际上限可能更低（如 Kimi K2.6 官方 262144，火山方舟
+// coding 端点硬限 32768）。只能由真实请求被拒后学到，且不外溢到同渠道其他 Key/模型。
+type OutputLimitState struct {
+	// MaxOutputTokens 该组合可接受的 max_tokens/max_output_tokens 上限（保守值，宁小勿大）
+	MaxOutputTokens int `json:"max_output_tokens"`
+	// Source 目前只有 CompatSourceUpstreamDeclared（上游报错明确写出上限值才可信）
+	Source string `json:"source"`
+	// Evidence 触发学习时的上游错误摘要（截断）
+	Evidence string `json:"evidence"`
+	// LearnedAt 独立于 ChannelCompatEntry.DetectedAt 计算 TTL，避免被 trait 命中无限续期
+	LearnedAt time.Time `json:"learned_at"`
+	// RejectedTokens 触发学习时请求里被拒的输出 token 值，仅用于事后追溯
+	RejectedTokens int `json:"rejected_tokens"`
+}
+
 // ChannelCompatEntry 记录单个 渠道-Key-模型 组合已学习到的全部兼容性事实。
 type ChannelCompatEntry struct {
 	Traits map[CompatTrait]CompatTraitState `json:"traits"`
 	// ContextLimit 实测上下文上限；nil 表示未学习过（不做任何限制）。
 	ContextLimit *ContextLimitState `json:"context_limit,omitempty"`
-	DetectedAt   time.Time          `json:"detected_at"` // 最近一次学习/命中时间
+	// OutputLimit 实测输出上限；nil 表示未学习过（不做任何限制）。
+	OutputLimit *OutputLimitState `json:"output_limit,omitempty"`
+	DetectedAt  time.Time         `json:"detected_at"` // 最近一次学习/命中时间
 }
 
 // ChannelCompatCache 按 渠道-Key-模型 记忆上游的兼容性能力事实。
@@ -187,8 +207,8 @@ func (c *ChannelCompatCache) load() error {
 		if entry == nil {
 			continue
 		}
-		// 只有 ContextLimit 没有 traits 的条目同样有效，不能因 Traits 为 nil 丢弃
-		if entry.Traits == nil && entry.ContextLimit == nil {
+		// 只有 ContextLimit/OutputLimit 没有 traits 的条目同样有效，不能因 Traits 为 nil 丢弃
+		if entry.Traits == nil && entry.ContextLimit == nil && entry.OutputLimit == nil {
 			continue
 		}
 		if entry.Traits == nil {
@@ -198,13 +218,16 @@ func (c *ChannelCompatCache) load() error {
 		if time.Since(entry.DetectedAt) > channelCompatTTL {
 			continue
 		}
-		// 上下文上限按自己的 LearnedAt 判定过期：trait 命中会刷新 DetectedAt，
+		// 上下文/输出上限按各自的 LearnedAt 判定过期：trait 命中会刷新 DetectedAt，
 		// 共用会让实测上限被无限续期，上游放宽窗口后永远学不回来。
 		if entry.ContextLimit != nil && time.Since(entry.ContextLimit.LearnedAt) > channelCompatTTL {
 			entry.ContextLimit = nil
-			if len(entry.Traits) == 0 {
-				continue
-			}
+		}
+		if entry.OutputLimit != nil && time.Since(entry.OutputLimit.LearnedAt) > channelCompatTTL {
+			entry.OutputLimit = nil
+		}
+		if len(entry.Traits) == 0 && entry.ContextLimit == nil && entry.OutputLimit == nil {
+			continue
 		}
 		c.cache[key] = entry
 	}
@@ -444,6 +467,77 @@ func (c *ChannelCompatCache) ContextLimit(channelUID, keyHash, model string) (Co
 		return ContextLimitState{}, false
 	}
 	return *entry.ContextLimit, true
+}
+
+// minLearnableOutputLimit 可学习输出上限的下界。
+// 上游报错反推出的值低于此值时不予采信：输出上限虽可比上下文小得多（4k/8k 常见），
+// 但几百以内的"上限"更可能来自误判的无关 400（如 temperature <= 2），学进去会让
+// 后续请求的输出预算被错误压扁。
+const minLearnableOutputLimit = 256
+
+// RecordOutputLimit 记录该 渠道-Key-模型 组合实测的最大输出 token 上限。
+// 返回是否写入了更严格的新结论（调用方据此决定是否同 Key 重试）。
+//
+// 合成规则与 RecordContextLimit 相同「宁小勿大」：只在遇到更严格的证据时收紧，
+// 放宽只能靠 TTL 到期后重新学习。来源目前只有 upstream_declared（上游报错里
+// 明确写出上限值），不接受由请求量反推的估算——输出上限是部署配置事实，
+// 反推值可能仍超限，只有自报数值可以安全采信。
+func (c *ChannelCompatCache) RecordOutputLimit(channelUID, keyHash, model string, limit int, source, evidence string, rejectedTokens int) bool {
+	if limit < minLearnableOutputLimit {
+		return false
+	}
+
+	c.mu.Lock()
+	key := GenerateCacheKey(channelUID, keyHash, model)
+	entry, ok := c.cache[key]
+	if !ok || time.Since(entry.DetectedAt) > channelCompatTTL {
+		entry = &ChannelCompatEntry{Traits: make(map[CompatTrait]CompatTraitState)}
+		c.cache[key] = entry
+	}
+	if entry.Traits == nil {
+		entry.Traits = make(map[CompatTrait]CompatTraitState)
+	}
+
+	// 已有更严格（或相等）的上限时覆盖没有意义，避免来回抖动
+	if entry.OutputLimit != nil &&
+		time.Since(entry.OutputLimit.LearnedAt) <= channelCompatTTL &&
+		entry.OutputLimit.MaxOutputTokens <= limit {
+		c.mu.Unlock()
+		return false
+	}
+
+	entry.OutputLimit = &OutputLimitState{
+		MaxOutputTokens: limit,
+		Source:          source,
+		Evidence:        truncateCompatEvidence(evidence),
+		LearnedAt:       time.Now(),
+		RejectedTokens:  rejectedTokens,
+	}
+	entry.DetectedAt = time.Now()
+	c.dirty = true
+	c.mu.Unlock()
+
+	// 锁外做 IO，避免阻塞并发请求路径
+	if err := c.Flush(); err != nil {
+		log.Printf("[ChannelCompat-Flush] 落盘渠道输出上限失败: %v", err)
+	}
+	return true
+}
+
+// OutputLimit 返回该组合实测的最大输出 token 上限；未学习过或已过期时第二个返回值为 false。
+// fail-open：无记忆时返回 false，调用方应沿用模型注册表上限，不做额外钳制。
+func (c *ChannelCompatCache) OutputLimit(channelUID, keyHash, model string) (OutputLimitState, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	entry, ok := c.cache[GenerateCacheKey(channelUID, keyHash, model)]
+	if !ok || entry.OutputLimit == nil {
+		return OutputLimitState{}, false
+	}
+	if time.Since(entry.OutputLimit.LearnedAt) > channelCompatTTL {
+		return OutputLimitState{}, false
+	}
+	return *entry.OutputLimit, true
 }
 
 // MinContextLimitForChannelModel 返回该渠道-模型在所有已知 Key 上实测到的最小上下文上限。

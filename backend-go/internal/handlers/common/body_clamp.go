@@ -25,6 +25,22 @@ func maxOutputTokenFields(kind scheduler.ChannelKind) []string {
 	}
 }
 
+// maxOutputTokensInBody 返回请求体中实际声明的最大输出 token。
+// 与 clampMaxTokensInBody 使用同一组字段与优先级，保证"读到多少就钳多少"；
+// 字段缺失或非正数值时返回 0。
+func maxOutputTokensInBody(bodyBytes []byte, kind scheduler.ChannelKind) int {
+	if len(bodyBytes) == 0 || !gjson.ValidBytes(bodyBytes) {
+		return 0
+	}
+	for _, field := range maxOutputTokenFields(kind) {
+		value := gjson.GetBytes(bodyBytes, field)
+		if value.Exists() && value.Type == gjson.Number && value.Int() > 0 {
+			return int(value.Int())
+		}
+	}
+	return 0
+}
+
 // clampMaxTokensInBody 在发往上游前，将请求体中的最大输出 token 字段下调到 maxOutput。
 // 仅当字段存在且取值大于 maxOutput 时才改写，其余情况原样返回 bodyBytes（不新增字段）。
 // 返回改写后的请求体与是否发生改写。

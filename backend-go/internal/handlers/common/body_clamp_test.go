@@ -7,6 +7,30 @@ import (
 	"github.com/tidwall/gjson"
 )
 
+func TestMaxOutputTokensInBody(t *testing.T) {
+	tests := []struct {
+		name string
+		kind scheduler.ChannelKind
+		body string
+		want int
+	}{
+		{name: "messages max_tokens", kind: scheduler.ChannelKindMessages, body: `{"max_tokens":64000}`, want: 64000},
+		{name: "chat 取优先级最高的字段", kind: scheduler.ChannelKindChat, body: `{"max_completion_tokens":32000,"max_tokens":64000}`, want: 32000},
+		{name: "gemini 嵌套字段", kind: scheduler.ChannelKindGemini, body: `{"generationConfig":{"maxOutputTokens":8192}}`, want: 8192},
+		{name: "字段缺失返回 0", kind: scheduler.ChannelKindMessages, body: `{"model":"kimi-k2.6"}`, want: 0},
+		{name: "非法 JSON 返回 0", kind: scheduler.ChannelKindMessages, body: `{`, want: 0},
+		{name: "images 无输出字段返回 0", kind: scheduler.ChannelKindImages, body: `{"max_tokens":64000}`, want: 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := maxOutputTokensInBody([]byte(tt.body), tt.kind); got != tt.want {
+				t.Fatalf("maxOutputTokensInBody = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestClampMaxTokensInBody(t *testing.T) {
 	tests := []struct {
 		name      string
