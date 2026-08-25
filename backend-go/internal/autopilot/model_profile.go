@@ -348,16 +348,21 @@ var effortQualityRatio = map[string]float64{
 }
 
 // regularEffortBaselineScore 从直测证据提取常规 effort 口径（medium/default）的 coding 分。
-// 规则：
-//   - 有 medium/default 实测 → 直接使用（证据最充分）；
-//   - 只有其他档 → 取最接近常规档的实测按平均比率折算；
-//   - 仅剩单一档证据（无论高档还是低档）时返回 singleEffortOnly=true——折算完全
-//     依赖全局平均曲线（低档-only 按平均比率上折会虚高，高档-only 下折会偏低），
-//     不足以支撑 premium（调用方应封顶 high）。
+// 证据按来源（deepswe / codexradar）分组，再按证据等级分层合成，升级仅作用于
+// 缺 medium 直测的模型（有直测的模型行为与旧算法一致）：
+//  1. 有 medium/default 实测 → 跨源取最大（与旧合并语义一致，证据最充分）；
+//  2. 曲线跨 medium（如 low+high）→ 相邻两档按 effort 序数线性插值，
+//     源间取最小（模型自身的 effort 曲线是对其中档水平的最好估计，但插值
+//     属估计值，源间分歧保守取低）；
+//  3. 全部在一侧或仅剩单点 → 跨源合并各档后按全局平均比率折算取最小值
+//     （保守：断崖曲线的高档成绩不会高估基础能力），仅剩单档时返回
+//     singleEffortOnly=true（折算完全依赖全局曲线，不足以支撑 premium，
+//     调用方应封顶 high）。
 //
 // 无直测证据时 ok=false。
 func regularEffortBaselineScore(evidence []config.ModelBenchmarkEvidence) (score float64, singleEffortOnly bool, ok bool) {
-	byEffort := map[string]float64{}
+	// 按来源收集各档原始分（百分制），同档多条证据取最大。
+	bySource := map[string]map[EffortLevel]float64{}
 	for _, ev := range evidence {
 		if ev.Domain != "coding" || ev.Metric != "pass_at_1" {
 			continue
@@ -365,38 +370,82 @@ func regularEffortBaselineScore(evidence []config.ModelBenchmarkEvidence) (score
 		if ev.Benchmark != "deepswe" && ev.Benchmark != "codexradar" {
 			continue
 		}
-		effort := strings.ToLower(strings.TrimSpace(ev.Effort))
-		if effort == "" {
-			effort = "default"
-		}
-		ratio, known := effortQualityRatio[effort]
-		if !known {
+		level := NormalizeEffortLevel(ev.Effort)
+		if level == "" {
 			continue
 		}
-		if raw := ev.RawValue * 100 / ratio; raw > byEffort[effort] {
-			byEffort[effort] = raw
+		efforts := bySource[ev.Benchmark]
+		if efforts == nil {
+			efforts = map[EffortLevel]float64{}
+			bySource[ev.Benchmark] = efforts
+		}
+		if raw := ev.RawValue * 100; raw > efforts[level] {
+			efforts[level] = raw
 		}
 	}
-	if len(byEffort) == 0 {
+	if len(bySource) == 0 {
 		return 0, false, false
 	}
-	// 同一档多个 benchmark 折算后聚合；优先实测常规口径
-	for _, regular := range []string{"medium", "default"} {
-		if s, hit := byEffort[regular]; hit {
-			return s, false, true
+
+	// 第 1 层：实测常规口径，跨源取最大（与旧合并语义一致）。
+	regularBest := -1.0
+	for _, efforts := range bySource {
+		if s, hit := efforts[EffortMedium]; hit && s > regularBest {
+			regularBest = s
 		}
 	}
-	// 无常规口径实测：各档折算到常规口径后取最小值（保守估计——
-	// 断崖曲线不会被高档成绩高估，平曲线模型的低档折算也接近真实水平）。
-	// 仅剩单一档（无论高低）时折算完全依赖全局平均曲线，标记 singleEffortOnly。
-	single := len(byEffort) == 1
+	if regularBest >= 0 {
+		return regularBest, false, true
+	}
+
+	// 第 2 层：跨 medium 的同源曲线插值，源间取最小。
+	straddleWorst := -1.0
+	for _, efforts := range bySource {
+		if s, hit := interpolatedMediumScore(efforts); hit && (straddleWorst < 0 || s < straddleWorst) {
+			straddleWorst = s
+		}
+	}
+	if straddleWorst >= 0 {
+		return straddleWorst, false, true
+	}
+
+	// 第 3 层：全部在一侧或单点，跨源合并后全局比率折算取最小。
+	pooled := map[EffortLevel]float64{}
+	for _, efforts := range bySource {
+		for level, raw := range efforts {
+			if raw > pooled[level] {
+				pooled[level] = raw
+			}
+		}
+	}
 	worst := -1.0
-	for _, s := range byEffort {
-		if s < worst || worst < 0 {
-			worst = s
+	for level, raw := range pooled {
+		deflated := raw / effortQualityRatio[string(level)]
+		if worst < 0 || deflated < worst {
+			worst = deflated
 		}
 	}
-	return worst, single, true
+	return worst, len(pooled) == 1, true
+}
+
+// interpolatedMediumScore 在单来源的 effort 曲线跨 medium 时，取相邻两档按序数线性插值。
+func interpolatedMediumScore(efforts map[EffortLevel]float64) (score float64, ok bool) {
+	levels := make([]EffortLevel, 0, len(efforts))
+	for level := range efforts {
+		levels = append(levels, level)
+	}
+	sort.Slice(levels, func(i, j int) bool {
+		return EffortLevelOrdinal(levels[i]) < EffortLevelOrdinal(levels[j])
+	})
+	regularOrd := EffortLevelOrdinal(EffortMedium)
+	for i := 0; i+1 < len(levels); i++ {
+		lo, hi := EffortLevelOrdinal(levels[i]), EffortLevelOrdinal(levels[i+1])
+		if lo < regularOrd && hi > regularOrd {
+			t := float64(regularOrd-lo) / float64(hi-lo)
+			return efforts[levels[i]] + (efforts[levels[i+1]]-efforts[levels[i]])*t, true
+		}
+	}
+	return 0, false
 }
 
 // directBenchmarkScoreFromEvidence 从证据列表提取直接实测 coding 分数（DeepSWE 等价 0-100 分）。

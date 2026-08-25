@@ -133,12 +133,53 @@ func TestRegularEffortBaselineScoreSingleEffortOnly(t *testing.T) {
 			singleWant: true, okWant: true, scoreWant: 0.90 * 100 / 1.975,
 		},
 		{
-			name: "low+high 双档取折算最小值且不算单一档",
+			name: "low+high 跨 medium 相邻两档线性插值",
 			evidence: []config.ModelBenchmarkEvidence{
 				ev("deepswe", "low", 0.50), ev("deepswe", "high", 0.80),
 			},
 			singleWant: false, okWant: true,
-			scoreWant: 0.80 * 100 / 1.413, // min(72.9, 56.6)
+			scoreWant: 65, // ranks 2,4 → t=0.5：(50+80)/2
+		},
+		{
+			name: "low+xhigh 跨 medium 插值按序数加权",
+			evidence: []config.ModelBenchmarkEvidence{
+				ev("deepswe", "low", 0.50), ev("deepswe", "xhigh", 0.80),
+			},
+			singleWant: false, okWant: true,
+			scoreWant: 50 + (80-50)/3.0, // ranks 2,5 → t=(3-2)/(5-2)=1/3
+		},
+		{
+			name: "high+max 同侧保留全局比率折算取最小",
+			evidence: []config.ModelBenchmarkEvidence{
+				ev("deepswe", "high", 0.80), ev("deepswe", "max", 0.90),
+			},
+			singleWant: false, okWant: true,
+			scoreWant: 0.90 * 100 / 1.975, // min(56.6, 45.6)
+		},
+		{
+			name: "强证据层胜出：跨档插值不被单点折算否决",
+			evidence: []config.ModelBenchmarkEvidence{
+				ev("deepswe", "low", 0.50), ev("deepswe", "high", 0.80), // 插值 65
+				ev("codexradar", "max", 0.90), // 单点折算 45.6（弱证据层）
+			},
+			singleWant: false, okWant: true,
+			scoreWant: 65,
+		},
+		{
+			name: "直测层胜出：medium 实测不被单侧折算否决",
+			evidence: []config.ModelBenchmarkEvidence{
+				ev("deepswe", "medium", 0.54), ev("codexradar", "high", 0.607), // 单侧折算 43.0
+			},
+			singleWant: false, okWant: true,
+			scoreWant: 54,
+		},
+		{
+			name: "同侧档跨源合并后折算取最小",
+			evidence: []config.ModelBenchmarkEvidence{
+				ev("deepswe", "max", 0.628), ev("codexradar", "high", 0.444), ev("codexradar", "max", 0.54),
+			},
+			singleWant: false, okWant: true,
+			scoreWant: math.Min(0.628*100/1.975, 0.444*100/1.413), // min(31.8, 31.4)
 		},
 		{
 			name:       "非 coding 或非 deepswe/codexradar 证据忽略",
