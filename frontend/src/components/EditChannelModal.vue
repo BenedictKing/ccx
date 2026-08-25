@@ -10,7 +10,6 @@
         :identity-name="headerIdentityName"
         :identity-label="managedIdentityName ? t('channelEditor.managed.providerLabel') : t('channelEditor.basic.name.label')"
         :identity-icon="managedIdentityName ? 'mdi-domain' : 'mdi-tag'"
-        :identity-badge="headerIdentityBadge"
         :hide-capability-actions="true"
         :no-vision="form.noVision"
         :header-classes="headerClasses"
@@ -395,12 +394,8 @@ const {
 // 托管渠道的头部身份名：友好名（如"Kimi 官方渠道"），非托管渠道为空串
 const managedIdentityName = computed(() => managedProviderChannelName(props.channel, t))
 
-// 头部身份块：编辑态下所有渠道统一使用——托管渠道用友好名+徽章，自定义渠道用渠道名
+// 头部身份块：编辑态下所有渠道统一使用——托管渠道用友好名，自定义渠道用渠道名
 const headerIdentityName = computed(() => (props.channel ? managedIdentityName.value || form.name : ''))
-const headerIdentityBadge = computed((): 'official' | 'managed' | '' => {
-  if (!managedIdentityName.value) return ''
-  return isOfficialManagedProvider.value ? 'official' : 'managed'
-})
 
 // generic 自动托管渠道：autoManaged=true、无 providerId，但尚未绑定 new-api
 const isGenericAutoManagedChannel = computed(() =>
