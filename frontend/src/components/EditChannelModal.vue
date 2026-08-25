@@ -43,7 +43,7 @@
           <!-- 右侧内容面板 -->
           <v-form ref="formRef" class="content-area" @submit.prevent="handleSubmit">
             <!-- 基本信息 -->
-            <section :ref="(el: any) => setSectionRef('basic', el)" data-section-id="basic" class="pa-6 scroll-mt-4">
+            <section :ref="(el: any) => setSectionRef('basic', el)" data-section-id="basic" class="px-6 py-4 scroll-mt-4">
               <header class="section-header">
                 <v-icon size="20" color="primary">mdi-information-outline</v-icon>
                 <h3 class="section-header-title">{{ t('channelEditor.nav.basic') }}</h3>
@@ -72,7 +72,7 @@
             </section>
 
             <!-- 身份认证 -->
-            <section :ref="(el: any) => setSectionRef('auth', el)" data-section-id="auth" class="pa-6 scroll-mt-4">
+            <section :ref="(el: any) => setSectionRef('auth', el)" data-section-id="auth" class="px-6 py-4 scroll-mt-4">
               <header class="section-header">
                 <v-icon size="20" color="primary">mdi-shield-key-outline</v-icon>
                 <h3 class="section-header-title">{{ t('channelEditor.nav.auth') }}</h3>
@@ -118,7 +118,7 @@
               v-if="isNewApiChannel || isGenericAutoManagedChannel"
               :ref="(el: any) => setSectionRef('accounts', el)"
               data-section-id="accounts"
-              class="pa-6 scroll-mt-4"
+              class="px-6 py-4 scroll-mt-4"
             >
               <NewApiAccountPanel
                 :subscription-uid="props.channel?.subscriptionUid || ''"
@@ -133,7 +133,7 @@
             </section>
 
             <!-- 自定义参数（代理服务器 + 自定义请求头 + 充值倍率/汇率） -->
-            <section :ref="(el: any) => setSectionRef('custom', el)" data-section-id="custom" class="pa-6 scroll-mt-4">
+            <section :ref="(el: any) => setSectionRef('custom', el)" data-section-id="custom" class="px-6 py-4 scroll-mt-4">
               <header class="section-header">
                 <v-icon size="20" color="primary">mdi-tune</v-icon>
                 <h3 class="section-header-title">{{ t('channelEditor.nav.custom') }}</h3>
