@@ -1,5 +1,5 @@
 <template>
-  <v-dialog :model-value="show" max-width="1200" persistent scrollable @update:model-value="$emit('update:show', $event)">
+  <v-dialog :model-value="show" max-width="1030" persistent scrollable @update:model-value="$emit('update:show', $event)">
     <v-card rounded="lg" class="add-channel-dialog channel-editor-dialog">
       <!-- 头部 -->
       <AddChannelHeader
