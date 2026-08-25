@@ -3,8 +3,8 @@
     <v-row>
       <!-- 渠道名称不再占用表单位置：由首个 BaseURL 自动派生，统一在对话框头部展示 -->
 
-      <!-- 渠道备注 -->
-      <v-col v-if="!hideMetadata" cols="12">
+      <!-- 渠道备注：与渠道名称解耦，名称派生自 baseURL 不可改，备注允许用户手填（≤10 字符） -->
+      <v-col v-if="!hideRemark" cols="12">
         <v-text-field
           :model-value="form.remark"
           :label="t('channelEditor.basic.remark.label')"
@@ -169,6 +169,7 @@ interface Props {
   hideServiceType?: boolean
   hideBaseUrl?: boolean
   hideMetadata?: boolean
+  hideRemark?: boolean
   managedAccount?: boolean
   providerName?: string
   websiteLinks?: ChannelWebsiteLink[]

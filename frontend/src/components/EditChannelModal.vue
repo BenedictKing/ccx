@@ -59,6 +59,7 @@
                 :hide-service-type="true"
                 :hide-base-url="isManagedProvider || isOfficialManagedProvider"
                 :hide-metadata="true"
+                :hide-remark="false"
                 :managed-account="true"
                 :provider-name="managedProviderName"
                 :website-links="managedProviderWebsiteLinks"
