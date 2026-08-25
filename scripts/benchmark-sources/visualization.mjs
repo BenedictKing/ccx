@@ -11,6 +11,25 @@ const EFFORT_ORDER = new Map([
   ['ultra', 5],
 ])
 
+const EFFORT_QUALITY_RATIO = new Map([
+  ['low', 0.686],
+  ['default', 1],
+  ['medium', 1],
+  ['high', 1.413],
+  ['xhigh', 1.627],
+  ['max', 1.975],
+  ['ultra', 1.975],
+])
+
+const DEFAULT_QUALITY_TIERS = {
+  scale: '0-100',
+  algorithm: 'regular-effort-coding-v1',
+  source: 'backend-autopilot',
+  premiumMin: 75,
+  highMin: 61,
+  normalMin: 55,
+}
+
 function includesModel(model, models) {
   return !models || models.includes(model)
 }
@@ -18,6 +37,74 @@ function includesModel(model, models) {
 function normalizedScore(value) {
   if (!Number.isFinite(value)) return null
   return value <= 1 ? value * 100 : value
+}
+
+function effortQualityScore(effort, passRate) {
+  const ratio = EFFORT_QUALITY_RATIO.get(String(effort || 'default').trim().toLowerCase())
+  return ratio ? passRate * 100 / ratio : null
+}
+
+function regularEffortBaselineScore(evidence = []) {
+  const byEffort = new Map()
+  for (const item of evidence) {
+    if (item?.domain !== 'coding' || item?.metric !== 'pass_at_1') continue
+    if (item.benchmark !== 'deepswe' && item.benchmark !== 'codexradar' && item.benchmarkVersion !== 'codexradar') continue
+    const effort = String(item.effort || 'default').trim().toLowerCase()
+    const ratio = EFFORT_QUALITY_RATIO.get(effort)
+    if (!ratio || !Number.isFinite(item.rawValue)) continue
+    const score = item.rawValue * 100 / ratio
+    if (score > (byEffort.get(effort) ?? -Infinity)) byEffort.set(effort, score)
+  }
+  if (!byEffort.size) return null
+  for (const effort of ['medium', 'default']) {
+    if (byEffort.has(effort)) return byEffort.get(effort)
+  }
+  return Math.min(...byEffort.values())
+}
+
+function largestGapMid(scores, floor) {
+  let bestSize = 0
+  let bestMid = null
+  for (let index = 0; index + 1 < scores.length; index++) {
+    if (scores[index] < floor || scores[index + 1] < floor) continue
+    const size = scores[index + 1] - scores[index]
+    if (size > bestSize) {
+      bestSize = size
+      bestMid = (scores[index] + scores[index + 1]) / 2
+    }
+  }
+  return bestMid
+}
+
+function deriveQualityMetadata(benchmarkProfiles = {}) {
+  const scores = []
+  const qualityScores = new Map()
+  const seen = new Set()
+  for (const [model, profile] of Object.entries(benchmarkProfiles || {})) {
+    const canonical = profile?.canonicalModel || model
+    if (seen.has(canonical)) continue
+    seen.add(canonical)
+    const score = regularEffortBaselineScore(profile?.benchmarkEvidence)
+    if (score == null) continue
+    qualityScores.set(canonical, score)
+    scores.push(score)
+  }
+  scores.sort((a, b) => a - b)
+  let { premiumMin, highMin, normalMin } = DEFAULT_QUALITY_TIERS
+  if (scores.length >= 4) {
+    const premium = largestGapMid(scores, scores.at(-1) * 0.75)
+    if (premium != null) premiumMin = premium
+    const belowPremium = scores.filter(score => score < premiumMin)
+    const high = largestGapMid(belowPremium, premiumMin * 0.5)
+    if (high != null) highMin = high
+    const belowHigh = scores.filter(score => score < highMin)
+    const normal = largestGapMid(belowHigh, highMin * 0.4)
+    if (normal != null) normalMin = normal
+  }
+  return {
+    qualityScores,
+    qualityTiers: { ...DEFAULT_QUALITY_TIERS, premiumMin, highMin, normalMin },
+  }
 }
 
 function sourceName(evidence) {
@@ -31,6 +118,39 @@ function sourceName(evidence) {
     return 'Artificial Analysis'
   }
   return [evidence.benchmark, evidence.benchmarkVersion].filter(Boolean).join(' ')
+}
+
+function extractRegistryCostRows(benchmarkProfiles = {}, models = null) {
+  const rows = []
+  for (const [model, profile] of Object.entries(benchmarkProfiles || {})) {
+    const canonical = profile?.canonicalModel || model
+    if (!includesModel(canonical, models)) continue
+    const bySource = new Map()
+    for (const evidence of profile?.benchmarkEvidence || []) {
+      if (evidence.domain !== 'coding' || evidence.metric !== 'pass_at_1') continue
+      if (evidence.benchmark !== 'deepswe' && evidence.benchmark !== 'codexradar' && evidence.benchmarkVersion !== 'codexradar') continue
+      if (!Number.isFinite(evidence.rawValue) || !Number.isFinite(evidence.costUsd)) continue
+      const source = sourceName(evidence)
+      const effort = String(evidence.effort || 'default').toLowerCase()
+      const key = `${source}|${effort}`
+      const candidate = {
+        model: canonical,
+        effort,
+        pass_rate: evidence.rawValue,
+        mean_cost: evidence.costUsd,
+        median_cost: evidence.costUsd,
+        source,
+        sourceModel: evidence.sourceModel || canonical,
+      }
+      const current = bySource.get(key)
+      if (!current || candidate.pass_rate > current.pass_rate ||
+          (candidate.pass_rate === current.pass_rate && candidate.mean_cost < current.mean_cost)) {
+        bySource.set(key, candidate)
+      }
+    }
+    rows.push(...bySource.values())
+  }
+  return rows
 }
 
 /**
@@ -170,10 +290,13 @@ export function buildBenchmarkVisualizationData({
   artificialAnalysisImageArena = {},
   modelMap = {},
   models = null,
+  benchmarkProfiles = {},
 } = {}) {
+  const { qualityScores, qualityTiers } = deriveQualityMetadata(benchmarkProfiles)
   const data = [
     ...extractDeepsweCostRows(deepsweLeaderboard, modelMap, models),
     ...extractDradarCostRows(dradarProfiles, models),
+    ...extractRegistryCostRows(benchmarkProfiles, models),
   ].sort((a, b) => (
     a.source.localeCompare(b.source) ||
     a.model.localeCompare(b.model) ||
@@ -194,7 +317,12 @@ export function buildBenchmarkVisualizationData({
 
   return {
     generatedAt: new Date().toISOString(),
-    data: data.map(normalizeCostRow),
+    qualityTiers,
+    data: data.map(row => normalizeCostRow({
+      ...row,
+      quality_score: effortQualityScore(row.effort, row.pass_rate),
+      model_quality_score: qualityScores.get(row.model) ?? null,
+    })),
     comparisons: comparisons.map(normalizeComparisonRow),
   }
 }
@@ -210,6 +338,8 @@ function normalizeCostRow(row) {
     pass_rate: Math.round(row.pass_rate * 1000) / 1000,
     mean_cost: row.mean_cost != null ? Math.round(row.mean_cost * 10000) / 10000 : null,
     median_cost: row.median_cost != null ? Math.round(row.median_cost * 10000) / 10000 : null,
+    quality_score: row.quality_score != null ? Math.round(row.quality_score * 10) / 10 : null,
+    model_quality_score: row.model_quality_score != null ? Math.round(row.model_quality_score * 10) / 10 : null,
   }
 }
 

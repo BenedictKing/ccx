@@ -987,6 +987,7 @@ export async function main() {
 
   const visualizationData = buildBenchmarkVisualizationData({
     ...visualizationSources,
+    benchmarkProfiles: registry.benchmarkProfiles || [],
     modelMap: DEEPSWE_MODEL_MAP,
     models: targetModels,
   })

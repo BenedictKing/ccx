@@ -16,9 +16,24 @@ function optionValue(args, name, fallback) {
 
 export function validateVisualizationData(raw) {
   if (!raw || !Array.isArray(raw.data)) throw new Error('输入文件缺少 data 数组')
+  const qualityTiers = raw.qualityTiers || {
+    scale: '0-100',
+    algorithm: 'regular-effort-coding-v1-fallback',
+    source: 'benchmark-chart',
+    premiumMin: 75,
+    highMin: 61,
+    normalMin: 55,
+  }
+  const boundaries = [qualityTiers.normalMin, qualityTiers.highMin, qualityTiers.premiumMin]
+  if (qualityTiers.scale !== '0-100' || boundaries.some(value => !Number.isFinite(value))
+      || boundaries.some(value => value < 0 || value > 100)
+      || boundaries.some((value, index) => index > 0 && value < boundaries[index - 1])) {
+    throw new Error('输入文件的 qualityTiers 无效')
+  }
   const rows = raw.data.filter(row => (
     row && typeof row.model === 'string' && typeof row.source === 'string'
       && Number.isFinite(row.pass_rate)
+      && Number.isFinite(row.quality_score)
       && (Number.isFinite(row.mean_cost) || Number.isFinite(row.median_cost))
   ))
   const comparisons = (Array.isArray(raw.comparisons) ? raw.comparisons : []).filter(row => (
@@ -28,12 +43,21 @@ export function validateVisualizationData(raw) {
   if (rows.length === 0 && comparisons.length === 0) {
     throw new Error('输入文件没有可绘制的 benchmark 数据')
   }
-  return { rows, comparisons }
+  return { rows, comparisons, qualityTiers }
 }
 
-export function renderBenchmarkChart(rows, comparisons = []) {
+export function renderBenchmarkChart(rows, comparisons = [], qualityTiers = null) {
+  const resolvedQualityTiers = qualityTiers || {
+    scale: '0-100',
+    algorithm: 'regular-effort-coding-v1-fallback',
+    source: 'benchmark-chart',
+    premiumMin: 75,
+    highMin: 61,
+    normalMin: 55,
+  }
   const serializedRows = JSON.stringify(rows).replaceAll('<', '\\u003c')
   const serializedComparisons = JSON.stringify(comparisons).replaceAll('<', '\\u003c')
+  const serializedQualityTiers = JSON.stringify(resolvedQualityTiers).replaceAll('<', '\\u003c')
   return `<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -51,6 +75,10 @@ export function renderBenchmarkChart(rows, comparisons = []) {
   --grid: #e7eae5;
   --accent: #176a4b;
   --accent-soft: #dceee5;
+  --tier-low: #f0f1ee;
+  --tier-normal: #e7eef5;
+  --tier-high: #e5f1ec;
+  --tier-premium: #f3ecdf;
   --frontier: #111713;
   --series-1: #1769aa;
   --series-2: #b44b27;
@@ -73,6 +101,10 @@ export function renderBenchmarkChart(rows, comparisons = []) {
     --grid: #2c302c;
     --accent: #58c899;
     --accent-soft: #233d31;
+    --tier-low: #212421;
+    --tier-normal: #202831;
+    --tier-high: #203129;
+    --tier-premium: #342f24;
     --frontier: #f4f6f2;
     --series-1: #62a9e4;
     --series-2: #ef845f;
@@ -110,6 +142,9 @@ button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); o
 .chart-shell { position: relative; width: 100%; margin-top: 18px; }
 .benchmark-chart { display: block; width: 100%; color: var(--foreground); }
 .benchmark-chart .grid-line { stroke: var(--grid); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.benchmark-chart .quality-band { pointer-events: none; }
+.benchmark-chart .quality-band-boundary { stroke: var(--border); stroke-width: 1; stroke-dasharray: 4 4; vector-effect: non-scaling-stroke; }
+.benchmark-chart .quality-band-label { fill: var(--muted); font-size: 10px; font-weight: 500; }
 .benchmark-chart .axis-line { stroke: var(--border); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .benchmark-chart .axis-text, .benchmark-chart .axis-title { fill: var(--muted); font-size: 11px; }
 .benchmark-chart .axis-title { font-size: 12px; }
@@ -131,6 +166,9 @@ button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); o
 .legend-item.is-active { color: var(--foreground); }
 .legend-item.is-dim { opacity: .35; }
 .legend-line { width: 17px; height: 3px; border-radius: 2px; }
+.quality-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 8px 0 0; color: var(--muted); font-size: 11px; }
+.quality-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.quality-swatch { width: 12px; height: 12px; border: 1px solid var(--border); border-radius: 3px; }
 .comparison-section { margin: 28px 0 22px; padding-top: 18px; border-top: 1px solid var(--border); }
 .comparison-heading { display: flex; align-items: end; justify-content: space-between; gap: 18px; }
 .section-note { max-width: 720px; margin: 5px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
@@ -151,9 +189,10 @@ th { color: var(--muted); font-size: 11px; font-weight: 500; }
 tbody tr:hover { background: var(--accent-soft); }
 .numeric { text-align: right; font-variant-numeric: tabular-nums; }
 .pareto-mark { color: var(--accent); font-weight: 500; }
-.col-model { width: 28%; }
-.col-effort { width: 12%; }
-.col-rate, .col-cost { width: 15%; }
+.col-model { width: 24%; }
+.col-effort { width: 10%; }
+.col-score { width: 10%; }
+.col-rate, .col-cost { width: 13%; }
 .col-pareto { width: 12%; }
 .col-source { width: 18%; }
 @media (prefers-reduced-motion: reduce) { * { transition-duration: 0s !important; } }
@@ -203,9 +242,10 @@ tbody tr:hover { background: var(--accent-soft); }
   </div>
   <section class="chart-shell" id="chart-shell">
     <svg class="benchmark-chart" id="chart" role="img" aria-labelledby="chart-title chart-description">
-      <title id="chart-title">模型 pass@1 与单任务成本散点图</title>
-      <desc id="chart-description">模型思考强度点由轨迹连接，深色折线表示成本与能力的 Pareto 前沿。</desc>
+      <title id="chart-title">模型常规 effort 等效分与单任务成本散点图</title>
+      <desc id="chart-description">背景色带表示后端自动质量档边界；模型按来源分别连接思考强度轨迹，深色折线表示成本与常规 effort 等效分数的 Pareto 前沿。</desc>
       <defs><clipPath id="plot-clip"><rect id="clip-rect"></rect></clipPath></defs>
+      <g id="quality-bands" clip-path="url(#plot-clip)" aria-label="自动质量档背景区域"></g>
       <g id="grid"></g>
       <g id="axes"></g>
       <g id="trajectories" clip-path="url(#plot-clip)"></g>
@@ -215,6 +255,7 @@ tbody tr:hover { background: var(--accent-soft); }
     </svg>
     <div class="tooltip" id="tooltip" role="status"></div>
   </section>
+  <div class="quality-legend" id="quality-legend" aria-label="自动质量档图例"></div>
   <div class="legend" id="legend" aria-label="模型图例"></div>
   <section class="comparison-section" id="comparison-section">
     <div class="comparison-heading">
@@ -248,7 +289,7 @@ tbody tr:hover { background: var(--accent-soft); }
     <table>
       <thead><tr>
         <th class="col-model">模型</th><th class="col-effort">强度</th>
-        <th class="col-rate numeric">pass@1</th><th class="col-cost numeric" id="cost-heading">平均成本</th>
+        <th class="col-score numeric">能力分</th><th class="col-rate numeric">pass@1</th><th class="col-cost numeric" id="cost-heading">平均成本</th>
         <th class="col-pareto">边界</th><th class="col-source">数据源</th>
       </tr></thead>
       <tbody id="table-body"></tbody>
@@ -258,9 +299,16 @@ tbody tr:hover { background: var(--accent-soft); }
 <script>
 const RAW_ROWS = ${serializedRows};
 const COMPARISON_ROWS = ${serializedComparisons};
+const QUALITY_TIERS = ${serializedQualityTiers};
 const state = { metric: 'mean_cost', range: 'focus', source: 'all' };
 const effortRank = new Map([['off', -2], ['minimal', -1], ['low', 0], ['medium', 1], ['high', 2], ['xhigh', 3], ['max', 4], ['ultra', 5]]);
 const palette = Array.from({ length: 10 }, (_, index) => 'var(--series-' + (index + 1) + ')');
+// 同族模型的展示排序覆盖：须在 compareModels 之前声明，否则顶层 sort 触发 TDZ。
+const modelOrderOverrides = new Map([
+  ['gpt-5.6-sol', 0],
+  ['gpt-5.6-terra', 1],
+  ['gpt-5.6-luna', 2],
+]);
 // 版本感知模型排序：与 scripts/benchmark-sources/mapper.mjs 的 compareCanonicalModels 等价。
 // 版本号降序（opus-5 在 opus-4.8 前）、预发布后缀（preview/beta/...）排在正式版后。
 const PRERELEASE_TAGS = ['preview', 'beta', 'alpha', 'rc', 'pre', 'dev', 'nightly'];
@@ -282,6 +330,13 @@ function compareModels(a, b) {
   const pa = parseModelVersion(a);
   const pb = parseModelVersion(b);
   if (pa.family !== pb.family) return pa.family.localeCompare(pb.family);
+  const overrideA = modelOrderOverrides.get(a);
+  const overrideB = modelOrderOverrides.get(b);
+  if (overrideA != null || overrideB != null) {
+    if (overrideA == null) return 1;
+    if (overrideB == null) return -1;
+    return overrideA - overrideB;
+  }
   const len = Math.max(pa.nums.length, pb.nums.length);
   for (let i = 0; i < len; i++) {
     const x = pa.nums[i] ?? 0;
@@ -297,7 +352,9 @@ function compareModels(a, b) {
   return pa.suffix.localeCompare(pb.suffix);
 }
 const modelNames = [...new Set(RAW_ROWS.map(row => row.model))].sort(compareModels);
-const colors = new Map(modelNames.map((model, index) => [model, palette[index % palette.length]]));
+const modelSeries = [...new Set(RAW_ROWS.map(row => row.model + '|' + row.source))]
+  .sort((a, b) => compareModels(a.split('|')[0], b.split('|')[0]) || a.split('|')[1].localeCompare(b.split('|')[1]));
+const colors = new Map(modelSeries.map((series, index) => [series, palette[index % palette.length]]));
 const svg = document.getElementById('chart');
 const shell = document.getElementById('chart-shell');
 const tooltip = document.getElementById('tooltip');
@@ -312,6 +369,12 @@ const categoryLabels = {
 };
 const comparisonState = { category: null };
 const ns = 'http://www.w3.org/2000/svg';
+const qualityBands = [
+  { key: 'low', label: 'Low', from: 0, to: () => QUALITY_TIERS.normalMin, color: 'var(--tier-low)' },
+  { key: 'normal', label: 'Normal', from: () => QUALITY_TIERS.normalMin, to: () => QUALITY_TIERS.highMin, color: 'var(--tier-normal)' },
+  { key: 'high', label: 'High', from: () => QUALITY_TIERS.highMin, to: () => QUALITY_TIERS.premiumMin, color: 'var(--tier-high)' },
+  { key: 'premium', label: 'Premium', from: () => QUALITY_TIERS.premiumMin, to: 100, color: 'var(--tier-premium)' },
+];
 let geometry = null;
 
 function svgNode(name, attributes, text) {
@@ -331,13 +394,13 @@ function quantile(values, q) {
 }
 
 function paretoFrontier(rows) {
-  const sorted = [...rows].sort((a, b) => a.cost - b.cost || b.pass_rate - a.pass_rate);
+  const sorted = [...rows].sort((a, b) => a.cost - b.cost || b.quality_score - a.quality_score);
   const frontier = [];
-  let bestRate = -Infinity;
+  let bestScore = -Infinity;
   sorted.forEach(row => {
-    if (row.pass_rate > bestRate + 1e-9) {
+    if (row.quality_score > bestScore + 1e-9) {
       frontier.push(row);
-      bestRate = row.pass_rate;
+      bestScore = row.quality_score;
     }
   });
   return frontier;
@@ -365,12 +428,12 @@ function ticks(minimum, maximum, count) {
 function currentRows() {
   return RAW_ROWS
     .filter(row => state.source === 'all' || row.source === state.source)
-    .filter(row => Number.isFinite(row.pass_rate) && Number.isFinite(row[state.metric]))
+    .filter(row => Number.isFinite(row.pass_rate) && Number.isFinite(row.quality_score) && Number.isFinite(row[state.metric]))
     .map(row => ({ ...row, cost: row[state.metric], key: [row.model, row.effort || 'default', row.source].join('|') }));
 }
 
 function linePath(rows, x, y) {
-  return rows.map((row, index) => (index ? 'L' : 'M') + x(row.cost).toFixed(2) + ',' + y(row.pass_rate).toFixed(2)).join(' ');
+  return rows.map((row, index) => (index ? 'L' : 'M') + x(row.cost).toFixed(2) + ',' + y(row.quality_score).toFixed(2)).join(' ');
 }
 
 function setGeometry(rows) {
@@ -383,11 +446,11 @@ function setGeometry(rows) {
   const focusMax = quantile(costs, .95);
   const visibleMax = state.range === 'focus' ? focusMax : Math.max(...costs);
   const xMax = niceMax(visibleMax * 1.04);
-  const rates = rows.filter(row => row.cost <= xMax).map(row => row.pass_rate);
-  const rateMin = Math.max(0, Math.min(...rates) - .04);
-  const rateMax = Math.min(1, Math.max(...rates) + .045);
-  const yMin = Math.floor(rateMin * 20) / 20;
-  const yMax = Math.max(yMin + .1, Math.ceil(rateMax * 20) / 20);
+  const scores = rows.filter(row => row.cost <= xMax).map(row => row.quality_score);
+  const scoreMin = Math.max(0, Math.min(...scores) - 4);
+  const scoreMax = Math.max(100, Math.max(...scores) + 4.5);
+  const yMin = Math.max(0, Math.floor(scoreMin));
+  const yMax = Math.max(yMin + 10, Math.ceil(scoreMax));
   const x = value => margin.left + value / xMax * plotWidth;
   const y = value => margin.top + (yMax - value) / (yMax - yMin) * plotHeight;
   svg.setAttribute('viewBox', '0 0 ' + width + ' ' + height);
@@ -415,13 +478,45 @@ function renderAxes(g) {
   ticks(g.yMin, g.yMax, 6).forEach(value => {
     const y = g.y(value);
     grid.append(svgNode('line', { class: 'grid-line', x1: g.margin.left, x2: right, y1: y, y2: y }));
-    axes.append(svgNode('text', { class: 'axis-text', x: g.margin.left - 9, y: y + 4, 'text-anchor': 'end' }, Math.round(value * 100) + '%'));
+    axes.append(svgNode('text', { class: 'axis-text', x: g.margin.left - 9, y: y + 4, 'text-anchor': 'end' }, String(Math.round(value))));
   });
   axes.append(svgNode('line', { class: 'axis-line', x1: g.margin.left, x2: right, y1: bottom, y2: bottom }));
   axes.append(svgNode('line', { class: 'axis-line', x1: g.margin.left, x2: g.margin.left, y1: g.margin.top, y2: bottom }));
   axes.append(svgNode('text', { class: 'axis-title', x: g.margin.left + g.plotWidth / 2, y: g.height - 13, 'text-anchor': 'middle' }, state.metric === 'mean_cost' ? '平均成本（USD / task）' : '中位成本（USD / task）'));
-  const yTitle = svgNode('text', { class: 'axis-title', x: -(g.margin.top + g.plotHeight / 2), y: 14, transform: 'rotate(-90)', 'text-anchor': 'middle' }, 'pass@1');
+  const yTitle = svgNode('text', { class: 'axis-title', x: -(g.margin.top + g.plotHeight / 2), y: 14, transform: 'rotate(-90)', 'text-anchor': 'middle' }, '常规 effort 等效分');
   axes.append(yTitle);
+}
+
+function renderQualityBands(g) {
+  const container = document.getElementById('quality-bands');
+  container.replaceChildren();
+  const bottom = g.margin.top + g.plotHeight;
+  const right = g.margin.left + g.plotWidth;
+  qualityBands.forEach(band => {
+    const from = typeof band.from === 'function' ? band.from() : band.from;
+    const to = typeof band.to === 'function' ? band.to() : band.to;
+    const visibleFrom = Math.max(g.yMin, from);
+    const visibleTo = Math.min(g.yMax, to);
+    if (visibleTo <= visibleFrom) return;
+    const yTop = g.y(visibleTo);
+    const height = g.y(visibleFrom) - yTop;
+    container.append(svgNode('rect', {
+      class: 'quality-band', x: g.margin.left, y: yTop, width: g.plotWidth, height,
+      fill: band.color, role: 'img', 'aria-label': band.label + ' 质量档',
+    }));
+  });
+  [QUALITY_TIERS.normalMin, QUALITY_TIERS.highMin, QUALITY_TIERS.premiumMin].forEach((value, index) => {
+    if (value < g.yMin || value > g.yMax) return;
+    const y = g.y(value);
+    const label = ['normal', 'high', 'premium'][index];
+    container.append(svgNode('line', {
+      class: 'quality-band-boundary', x1: g.margin.left, x2: right, y1: y, y2: y,
+    }));
+    container.append(svgNode('text', {
+      class: 'quality-band-label', x: g.margin.left + 8, y: y - 4,
+    }, label + ' ≥ ' + value.toFixed(1)));
+  });
+  container.append(svgNode('line', { x1: g.margin.left, x2: right, y1: bottom, y2: bottom, display: 'none' }));
 }
 
 function renderTrajectories(rows, g) {
@@ -436,7 +531,7 @@ function renderTrajectories(rows, g) {
   groups.forEach(points => {
     points.sort((a, b) => (effortRank.get(a.effort) ?? 99) - (effortRank.get(b.effort) ?? 99));
     if (points.length < 2) return;
-    container.append(svgNode('path', { class: 'trajectory', d: linePath(points, g.x, g.y), stroke: colors.get(points[0].model), 'data-model': points[0].model }));
+    container.append(svgNode('path', { class: 'trajectory', d: linePath(points, g.x, g.y), stroke: colors.get(points[0].model + '|' + points[0].source), 'data-model': points[0].model, 'data-source': points[0].source }));
   });
 }
 
@@ -444,6 +539,7 @@ function tooltipHtml(row) {
   const effort = row.effort || 'default';
   const costLabel = state.metric === 'mean_cost' ? '平均成本' : '中位成本';
   return '<strong>' + escapeHtml(row.model) + ' · ' + escapeHtml(effort) + '</strong>'
+    + '<div class="tooltip-line">能力分 ' + row.quality_score.toFixed(1) + '</div>'
     + '<div class="tooltip-line">pass@1 ' + (row.pass_rate * 100).toFixed(1) + '%</div>'
     + '<div class="tooltip-line">' + costLabel + ' $' + row.cost.toFixed(3) + '</div>'
     + '<div class="tooltip-line">' + escapeHtml(row.source) + '</div>';
@@ -475,12 +571,12 @@ function renderPoints(rows, frontierKeys, g) {
   rows.forEach(row => {
     const isPareto = frontierKeys.has(row.key);
     const circle = svgNode('circle', {
-      class: 'point' + (isPareto ? ' is-pareto' : ''), cx: g.x(row.cost), cy: g.y(row.pass_rate),
-      r: isPareto ? 5.5 : 4.5, fill: colors.get(row.model), 'aria-label': row.model + ' ' + (row.effort || 'default'),
-      'data-model': row.model,
+      class: 'point' + (isPareto ? ' is-pareto' : ''), cx: g.x(row.cost), cy: g.y(row.quality_score),
+      r: isPareto ? 5.5 : 4.5, fill: colors.get(row.model + '|' + row.source), 'aria-label': row.model + ' ' + (row.effort || 'default') + ' ' + row.source,
+      'data-model': row.model, 'data-source': row.source,
     });
-    circle.append(svgNode('title', {}, row.model + ' · ' + (row.effort || 'default') + ' · ' + (row.pass_rate * 100).toFixed(1) + '% · $' + row.cost.toFixed(3)));
-    circle.addEventListener('mouseenter', () => showTooltip(row, g.x(row.cost), g.y(row.pass_rate)));
+    circle.append(svgNode('title', {}, row.model + ' · ' + (row.effort || 'default') + ' · ' + row.quality_score.toFixed(1) + ' · $' + row.cost.toFixed(3)));
+    circle.addEventListener('mouseenter', () => showTooltip(row, g.x(row.cost), g.y(row.quality_score)));
     circle.addEventListener('mouseleave', () => tooltip.classList.remove('visible'));
     container.append(circle);
   });
@@ -492,9 +588,9 @@ function renderLabels(frontier, g) {
   const bestByModel = new Map();
   frontier.forEach(row => {
     const current = bestByModel.get(row.model);
-    if (!current || row.pass_rate > current.pass_rate) bestByModel.set(row.model, row);
+    if (!current || row.quality_score > current.quality_score) bestByModel.set(row.model, row);
   });
-  const labels = [...bestByModel.values()].map(row => ({ row, pointX: g.x(row.cost), pointY: g.y(row.pass_rate) }))
+  const labels = [...bestByModel.values()].map(row => ({ row, pointX: g.x(row.cost), pointY: g.y(row.quality_score) }))
     .sort((a, b) => a.pointY - b.pointY);
   const minGap = 17;
   labels.forEach((label, index) => {
@@ -509,7 +605,7 @@ function renderLabels(frontier, g) {
     labels[index].labelY = Math.min(labels[index].labelY, labels[index + 1].labelY - minGap);
   }
   labels.forEach(label => {
-    const labelText = label.row.model + (label.row.effort ? ' · ' + label.row.effort : '');
+    const labelText = label.row.model + ' · ' + label.row.source + (label.row.effort ? ' · ' + label.row.effort : '');
     const textWidth = Math.min(170, labelText.length * 6.2);
     const placeLeft = label.pointX > g.margin.left + g.plotWidth * .68;
     const textX = placeLeft
@@ -521,33 +617,54 @@ function renderLabels(frontier, g) {
   });
 }
 
-function applyModelHighlight(model) {
+function applyModelHighlight(series) {
   svg.querySelectorAll('[data-model]').forEach(node => {
-    const match = node.getAttribute('data-model') === model;
-    node.classList.toggle('is-dim', model != null && !match);
-    if (node.classList.contains('trajectory')) node.classList.toggle('is-highlight', model != null && match);
+    const match = series != null && (node.getAttribute('data-model') + '|' + node.getAttribute('data-source')) === series;
+    node.classList.toggle('is-dim', series != null && !match);
+    if (node.classList.contains('trajectory')) node.classList.toggle('is-highlight', series != null && match);
   });
   document.querySelectorAll('#legend .legend-item').forEach(item => {
-    const match = item.dataset.model === model;
-    item.classList.toggle('is-active', model != null && match);
-    item.classList.toggle('is-dim', model != null && !match);
+    const match = item.dataset.series === series;
+    item.classList.toggle('is-active', series != null && match);
+    item.classList.toggle('is-dim', series != null && !match);
+  });
+}
+
+function renderQualityLegend() {
+  const legend = document.getElementById('quality-legend');
+  legend.replaceChildren();
+  qualityBands.forEach(band => {
+    const from = typeof band.from === 'function' ? band.from() : band.from;
+    const to = typeof band.to === 'function' ? band.to() : band.to;
+    const item = document.createElement('span');
+    item.className = 'quality-legend-item';
+    const swatch = document.createElement('span');
+    swatch.className = 'quality-swatch';
+    swatch.style.background = band.color;
+    const label = document.createElement('span');
+    label.textContent = band.label + ' ' + (band.key === 'premium' ? '≥ ' + from.toFixed(1) : band.key === 'low' ? '< ' + to.toFixed(1) : from.toFixed(1) + '–' + to.toFixed(1));
+    item.append(swatch, label);
+    legend.append(item);
   });
 }
 
 function renderLegend(rows) {
   const legend = document.getElementById('legend');
   legend.replaceChildren();
-  [...new Set(rows.map(row => row.model))].sort(compareModels).forEach(model => {
+  const series = [...new Set(rows.map(row => row.model + '|' + row.source))]
+    .sort((a, b) => compareModels(a.split('|')[0], b.split('|')[0]) || a.split('|')[1].localeCompare(b.split('|')[1]));
+  series.forEach(value => {
+    const [model, source] = value.split('|');
     const item = document.createElement('span');
     item.className = 'legend-item';
-    item.dataset.model = model;
+    item.dataset.series = value;
     const swatch = document.createElement('span');
     swatch.className = 'legend-line';
-    swatch.style.background = colors.get(model);
+    swatch.style.background = colors.get(value);
     const label = document.createElement('span');
-    label.textContent = model;
+    label.textContent = model + ' · ' + source;
     item.append(swatch, label);
-    item.addEventListener('mouseenter', () => applyModelHighlight(model));
+    item.addEventListener('mouseenter', () => applyModelHighlight(value));
     item.addEventListener('mouseleave', () => applyModelHighlight(null));
     legend.append(item);
   });
@@ -556,15 +673,15 @@ function renderLegend(rows) {
 function renderTable(rows, frontierKeys) {
   const body = document.getElementById('table-body');
   body.replaceChildren();
-  [...rows].sort((a, b) => b.pass_rate - a.pass_rate || a.cost - b.cost).forEach(row => {
-    const cells = [row.model, row.effort || 'default', (row.pass_rate * 100).toFixed(1) + '%', '$' + row.cost.toFixed(3), frontierKeys.has(row.key) ? 'Pareto' : '', row.source];
+  [...rows].sort((a, b) => b.quality_score - a.quality_score || a.cost - b.cost).forEach(row => {
+    const cells = [row.model, row.effort || 'default', row.quality_score.toFixed(1), (row.pass_rate * 100).toFixed(1) + '%', '$' + row.cost.toFixed(3), frontierKeys.has(row.key) ? 'Pareto' : '', row.source];
     const tr = document.createElement('tr');
     cells.forEach((value, index) => {
       const td = document.createElement('td');
       td.textContent = value;
-      if (index === 2 || index === 3) td.className = 'numeric';
-      if (index === 4) td.className = 'col-pareto pareto-mark';
-      if (index === 5) td.className = 'col-source';
+      if (index === 2 || index === 3 || index === 4) td.className = 'numeric';
+      if (index === 5) td.className = 'col-pareto pareto-mark';
+      if (index === 6) td.className = 'col-source';
       tr.append(td);
     });
     body.append(tr);
@@ -581,11 +698,13 @@ function update() {
   const frontier = state.source === 'all' && sources.length > 1 ? [] : paretoFrontier(allRows);
   const visibleFrontier = frontier.filter(row => row.cost <= g.xMax + 1e-9);
   const frontierKeys = new Set(frontier.map(row => row.key));
+  renderQualityBands(g);
   renderAxes(g);
   renderTrajectories(visibleRows, g);
   document.getElementById('frontier').setAttribute('d', linePath(visibleFrontier, g.x, g.y));
   renderPoints(visibleRows, frontierKeys, g);
   renderLabels(visibleFrontier, g);
+  renderQualityLegend();
   renderLegend(visibleRows);
   renderTable(visibleRows, frontierKeys);
   const hidden = allRows.length - visibleRows.length;
@@ -771,8 +890,8 @@ async function main() {
   const input = resolve(optionValue(args, '--input', DEFAULT_INPUT))
   const output = resolve(optionValue(args, '--output', DEFAULT_OUTPUT))
   const raw = JSON.parse(await readFile(input, 'utf8'))
-  const { rows, comparisons } = validateVisualizationData(raw)
-  await writeFile(output, renderBenchmarkChart(rows, comparisons), 'utf8')
+  const { rows, comparisons, qualityTiers } = validateVisualizationData(raw)
+  await writeFile(output, renderBenchmarkChart(rows, comparisons, qualityTiers), 'utf8')
   console.log(`已生成 ${output}（${rows.length} 个成本点，${comparisons.length} 个多来源比较点）`)
 }
 

@@ -606,6 +606,9 @@ test('visualization combines DeepSWE, BenchLM and CodexRadar sources', () => {
   })
   const visualization = buildBenchmarkVisualizationData({
     modelMap: { source: 'model' },
+    benchmarkProfiles: { model: { canonicalModel: 'model', benchmarkEvidence: [
+      { benchmark: 'deepswe', benchmarkVersion: 'v1.1', domain: 'coding', metric: 'pass_at_1', rawValue: 0.7, effort: 'high' },
+    ] } },
     deepsweLeaderboard: { rows: [{
       model: 'source', reasoning_effort: 'high', pass_at_1: 0.7,
       mean_cost_usd: 2, median_cost_usd: 1.5,
@@ -625,8 +628,21 @@ test('visualization combines DeepSWE, BenchLM and CodexRadar sources', () => {
     ['BenchLM.ai', 'CodexRadar', 'DeepSWE v1.1'],
   )
   const validated = validateVisualizationData(visualization)
-  const html = renderBenchmarkChart(validated.rows, validated.comparisons)
+  const html = renderBenchmarkChart(validated.rows, validated.comparisons, validated.qualityTiers)
+  const deepsweHighRow = visualization.data.find(row => row.source === 'DeepSWE v1.1' && row.effort === 'high')
+  assert.equal(deepsweHighRow.quality_score, Math.round((0.7 * 100 / 1.413) * 10) / 10)
+  const registryVisualization = buildBenchmarkVisualizationData({
+    benchmarkProfiles: { model: { canonicalModel: 'model', benchmarkEvidence: [
+      { benchmark: 'codexradar', benchmarkVersion: 'codexradar', domain: 'coding', metric: 'pass_at_1', rawValue: 0.7, effort: 'ultra', costUsd: 1.25 },
+    ] } },
+  })
+  assert.equal(registryVisualization.data.length, 1)
+  assert.equal(registryVisualization.data[0].effort, 'ultra')
+  assert.ok(Number.isFinite(registryVisualization.data[0].quality_score))
+  assert.ok(visualization.qualityTiers.premiumMin >= visualization.qualityTiers.highMin)
+  assert.ok(visualization.qualityTiers.highMin >= visualization.qualityTiers.normalMin)
   assert.match(html, /多来源能力比较/)
+  assert.match(html, /quality-bands/)
   assert.match(html, /BenchLM\.ai/)
 })
 
@@ -1101,7 +1117,7 @@ test('visualization includes Artificial Analysis and image arena comparisons', (
   assert.ok(imgRow, 'comparisons should include image_arena rows')
   assert.equal(imgRow.score, 1180)
   const validated = validateVisualizationData(visualization)
-  const html = renderBenchmarkChart(validated.rows, validated.comparisons)
+  const html = renderBenchmarkChart(validated.rows, validated.comparisons, validated.qualityTiers)
   assert.match(html, /Artificial Analysis/)
   assert.match(html, /图像 Arena Elo/)
 })
