@@ -15,16 +15,7 @@
           content-class="key-tooltip"
         >
           <template #activator="{ props: tip }">
-            <v-chip
-              v-bind="tip"
-              size="small"
-              color="primary"
-              variant="tonal"
-              prepend-icon="mdi-tag"
-              class="channel-name-chip"
-            >
-              {{ channelName }}
-            </v-chip>
+            <span v-bind="tip" class="channel-name-text">{{ channelName }}</span>
           </template>
         </v-tooltip>
       </div>
@@ -110,14 +101,16 @@ const { t } = useI18n()
   line-height: 1.5;
 }
 
-.channel-name-chip {
+.channel-name-text {
   max-width: 320px;
-}
-
-.channel-name-chip :deep(.v-chip__content) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 0.875rem;
+  font-weight: 400;
+  /* 颜色继承头部（浅色主题 bg-primary 上为 text-white，深色主题 bg-surface 上为
+     text-high-emphasis），仅降低不透明度作次级展示，两种主题下均可读 */
+  opacity: 0.85;
 }
 
 .header-capability-actions {

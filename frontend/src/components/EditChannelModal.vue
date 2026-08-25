@@ -5,7 +5,7 @@
       <AddChannelHeader
         :is-editing="isEditing"
         :channel-type="props.channelType"
-        :channel-name="form.name"
+        :channel-name="isManagedProvider ? '' : form.name"
         :channel-name-hint="''"
         :hide-capability-actions="true"
         :no-vision="form.noVision"
