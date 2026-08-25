@@ -76,6 +76,7 @@ EndpointCapability（跨账号共享，按 CapabilityUID 索引）
 - `CostMultiplier *float64`：乘法简化路径（`EffectiveCostUSD = ListCostUSD × CostMultiplier`）
 - `ChannelPaymentCurrency/ChannelPaymentAmount/ChannelCreditCurrency/ChannelCreditAmount`：充值→到账四字段（四者同时配置且金额>0 才生效），按全局汇率图计算 `EffectiveMultiplier = (充值金额×充值币价)/(到账金额×渠道币价)`（`handlers/common/upstream_failover.go` `buildRequestCostContext`，复用 `autopilot.ResolveEffectiveCostUSD`）
 - `LearnedClientFingerprint bool`：上游 models 端点存在客户端指纹风控的学习标记（见 §8）
+- `ProxyURL string` / `ProxyPreferDirect bool`（876eaf7e）：渠道级出站代理；`ProxyPreferDirect` 配置了代理时先直连，直连失败（网络错误或命中回退条件）再回退代理（`httpclient/direct_first.go`）。管理 DTO 经 `channel_view.go` 透出 `proxyPreferDirect`，`UpstreamUpdate` 支持两字段部分更新（`ProxyPreferDirect *bool`，nil=不修改）
 
 另外 `ChannelView` 有 `Remark string`（旧派生规则写下的历史名，新规则下不再使用，只读展示用）。
 
@@ -150,3 +151,6 @@ EndpointCapability（跨账号共享，按 CapabilityUID 索引）
 - **Discovery 客户端指纹风控适配**（`b49ec83c`）：部分 new-api 风格上游对 models 端点做客户端指纹校验（裸请求 401/403 且 body 含 `unauthorized client` 等特征）。统一拉取策略在 `utils.FetchUpstreamModels`：Anthropic 风格端点首发即带 Claude Code 探针头；其余首发裸请求、命中拦截特征带探针头重试一次；学习成功回写 `UpstreamConfig.LearnedClientFingerprint`（autopilot `maybeLearnClientFingerprint`）。学习后自动发现、渠道模型拉取 handler、六类 `GetChannelModels`、保活 L1 全链路首发即带伪装头。
 - **快速发现并发安全**（`1dcd66a6`）：渠道快速发现的 `streamingSupported` 共享 bool 写入移入 `rateLimitMu` 临界区（原为 4 协议探测 goroutine 裸写 data race）。
 - **(Key, 模型) 黑名单**：`DisabledKeyModels` 持久化于 `UpstreamConfig`，发送前复查兜底自动映射渠道（详见 `autopilot.md` §5.12）。
+- **火山套餐渠道模型清单走管控面**（`158d9c12`）：messages/chat/responses 三类 `GetChannelModels`（如 `handlers/messages/channels.go:461`）命中 `volces.com/api/{coding,plan}` 时改走 `autopilot.FetchVolcenginePlanModelsForChannel` 拉管控面套餐清单（AK/SK 签名接口），无渠道上下文时经 `config.FindCredentialByAPIKey` 定位凭证。
+- **按渠道实测输出上限钳制 max_tokens**（`dd57a6d7`）：`ChannelCompatCache` 以「渠道-Key-模型」粒度记忆 400/422 自报输出上限（24h TTL、下界 256 不采信），发送前 `clampMaxTokensInBody` 按协议钳制 `max_tokens`/`max_completion_tokens`/`max_output_tokens` 并同 Key 钳制重试（详见 `autopilot.md` §5.16）。
+- **代理直连优先**（`876eaf7e`）：`ProxyPreferDirect` 字段与回退策略见 §3；httpclient 层 `direct_first.go` 实现直连失败/451/403 回退代理。

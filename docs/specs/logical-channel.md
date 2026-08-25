@@ -229,6 +229,7 @@ LogicalChannel 持久化派生标签（`HealthTag`/`QualityTag`/`CostTag`/`Capab
   - Website、Description
   - Tags
   - BaseURLs → 重写物理渠道的 `BaseURLs` 并把首个设为 `BaseURL`
+  - ProxyURL / ProxyPreferDirect（876eaf7e）：出站代理与直连优先开关，原子更新并同步到每个物理渠道（`logical_channel_crud.go` Create/Update/Append 各路径均透传）
 - Removals：删除指定 kind 的 protocol，同时删除对应物理渠道；拒绝删到 0 个 protocol。
 - Protocols：已存在则更新物理渠道并替换 logical protocol entry；不存在则新增物理渠道。
 - 任意失败则恢复备份，保证事务性。
@@ -405,6 +406,7 @@ LogicalChannel 持久化派生标签（`HealthTag`/`QualityTag`/`CostTag`/`Capab
 - 当前 `internal/scheduler` 不直接识别 `LogicalChannel`。
 - 调度器仍以物理渠道为候选，以 `(MetricsIdentityBaseURL, APIKey, serviceType)` 为 metrics key。
 - LogicalChannel 仅用于管理面聚合；运行时选择物理渠道后，其 metrics/log 清理通过 `ChannelScheduler.DeleteChannelMetrics` / `DeleteChannelLogs` 完成。
+- 请求发送路径上的渠道级兼容机制不影响本层：`ChannelCompatCache` 的输出上限钳制（dd57a6d7，`handlers/common/upstream_failover.go` 发送前钳制 max_tokens + 同 Key 钳制重试，详见 `autopilot.md` §5.16）发生在物理渠道与 Key 选定之后。
 
 ## 14. 关键测试覆盖
 

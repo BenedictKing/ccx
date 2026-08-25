@@ -48,7 +48,7 @@ Autopilot 是 CCX 的智能路由与渠道托管子系统，由 Manager + SmartR
 
 ## 2. 目录结构与文件职责
 
-`backend-go/internal/autopilot/` 共 224 个 `.go` 文件，约 84,323 行代码（2026-08-19 实测）。按职责分组如下。
+`backend-go/internal/autopilot/` 共 225 个 `.go` 文件，约 85,205 行代码（2026-08-26 实测）。按职责分组如下。
 
 ### 2.1 核心管理/生命周期
 
@@ -175,13 +175,13 @@ Autopilot 是 CCX 的智能路由与渠道托管子系统，由 Manager + SmartR
 | `subscription_capability.go` | 订阅级共享能力与 drift 检测 |
 | `subscription_refresh_worker.go` | 订阅余额自动刷新 |
 | `subscription_balance_fetcher.go` | 多提供商余额拉取接口 |
-| `newapi_adapter.go` | new-api 面板适配（校验、余额、分组、建 key） |
+| `newapi_adapter.go` | new-api 面板适配（校验、余额、分组、建 key；876eaf7e 起校验/provision/追加账号均支持透传 `proxyUrl`/`proxyPreferDirect` 出站代理） |
 | `newapi_subscription_sync_service.go` | new-api 订阅倍率/Key 同步与对账 |
 | `newapi_group_guard.go` | new-api 分组并发保护 |
 | `handlers_newapi.go` | new-api 订阅 provision 接口 |
 | `handlers_subscription.go` | 订阅 CRUD 接口 |
 | `handlers_subscription_accounts.go` | new-api 账号管理接口 |
-| `handlers_auto_managed.go` | 通用自动托管渠道的账号/凭证/发现接口（最大文件，2827 行） |
+| `handlers_auto_managed.go` | 通用自动托管渠道的账号/凭证/发现接口（最大文件，2994 行） |
 | `handlers_billing_terms.go` | 订阅计费条款接口 |
 | `handlers_exchange_rates.go` | 多跳汇率接口 |
 | `handlers_key_multiplier.go` | Key 倍率管理接口 |
@@ -191,7 +191,7 @@ Autopilot 是 CCX 的智能路由与渠道托管子系统，由 Manager + SmartR
 | `minimax_token_plan.go` | MiniMax token plan 用量 |
 | `mimo_console.go` | MiMo 控制台套餐抓取 |
 | `compshare_console.go` | Compshare 优云智算套餐抓取 |
-| `volcengine_coding_plan.go` | 火山方舟 coding plan 额度 |
+| `volcengine_coding_plan.go` | 火山方舟 coding plan 额度；158d9c12 起另提供 `FetchVolcenginePlanModelsForChannel`：从管控面 AK/SK 签名接口拉取套餐模型清单，供火山套餐渠道的 `GetChannelModels` 使用 |
 
 ### 2.12 HTTP 接口
 
@@ -291,10 +291,10 @@ Autopilot 是 CCX 的智能路由与渠道托管子系统，由 Manager + SmartR
 
 ### 3.5 模型画像 `ModelProfile`
 
-`ModelProfile`（`model_profile.go:484`）锚定 `(ChannelUID, ChannelKind, MetricsKey, ModelID)`。
+`ModelProfile`（`model_profile.go:583`）锚定 `(ChannelUID, ChannelKind, MetricsKey, ModelID)`。
 
 - `ModelFamily/QualityTier/SpeedTier/ContextTokens`
-- `QualityTier` 不再单纯按模型族推导：`ModelProfileQualityTier`（`model_profile.go:464`）优先按 benchmark 归一化能力分评定，无 benchmark 证据才回退 `ModelProfileQualityTierFromFamily`（模型族推导，见 §5.6 的动态边界算法）
+- `QualityTier` 不再单纯按模型族推导：`ModelProfileQualityTier`（`model_profile.go:562`）优先按 benchmark 归一化能力分评定，无 benchmark 证据才回退 `ModelProfileQualityTierFromFamily`（模型族推导，见 §5.6 的动态边界算法）
 - 能力：`SupportsVision/Document/ToolCalls/Reasoning`
 - `ProviderQualityScore/Confidence/Source/ProbeVersion`
 - `TaskDomainStrengths`
@@ -420,7 +420,7 @@ Autopilot 是 CCX 的智能路由与渠道托管子系统，由 Manager + SmartR
 
 ### 4.4 调度器集成：渠道级过滤
 
-入口：`main.go:788` 通过 `channelScheduler.SetCandidateFilterProvider` 注册。
+入口：`main.go:791` 通过 `channelScheduler.SetCandidateFilterProvider` 注册。
 
 ```
 Scheduler 选渠链路：
@@ -472,13 +472,13 @@ ContextFilter → CandidateFilter(SmartRouter) → X-Channel/ManualOverride/Prom
 
 1. `buildRankedCandidates` 展开 `model × effort`
 2. **Frontier 选型**（默认启用，先保留所有满足硬能力的候选）：
-   - 按连续 benchmark、置信区间与可比成本生成动态 `F0...Fn`，簇数量由自然断点决定，不设固定上限
+   - 按连续 benchmark、置信区间与可比成本生成动态 `F0...Fn`，簇数量由自然断点决定（相邻点断点阈值钳制在 `[minClusterGap 0.08, maxClusterGap 0.12]`，按模型去重后估计，见 `model_frontier.go:228-252`），不设固定上限
    - `QualityBenefitCap` 只把兼容性的 `low/normal/high/premium` 请求目标投影到当前 `F0...Fn`，不写回模型永久等级
 3. 成本证据不足时 fail-open，才应用固定 `QualityTier` 分带并进入旧字典序链（`betterRankedModel`，`model_resolver.go:966`）：
    - qualityRank → sameFamily → provider quality priority（双方可比时）→ 【cost_first 车道先比 cost】→ benchmark（`compareModelBenchmark`）→ version → measuredQuality → 【balanced 车道比 cost】→ latency → 【quality_first 车道比 cost】→ anti-effort-inflation → model ID
    - benchmark 比较已提前于版本比较；成本比较位置随车道后移/前移
 
-`resolveEffortVariants`（`model_resolver.go:315`）：
+`resolveEffortVariants`（`model_resolver.go:420`）：
 
 - 手动意图锁定 effort 优先
 - 全局 `ReasoningEffort.Enabled` 门控
@@ -487,9 +487,9 @@ ContextFilter → CandidateFilter(SmartRouter) → X-Channel/ManualOverride/Prom
 
 ### 4.6 Endpoint 级策略
 
-`EndpointPolicy` 由 `main.go:829` 的 hook 注入 `handlers/common`。
+`EndpointPolicy` 由 `main.go:832` 的 hook 注入 `handlers/common`。
 
-`BuildEndpointPolicy`（`endpoint_policy.go:143`）：
+`BuildEndpointPolicy`（`endpoint_policy.go:267`）：
 
 - `dry_run` → `buildShadowPolicy`：只记录 trace，不修改排序
 - 否则 `buildActivePolicy`：过滤+排序
@@ -503,7 +503,7 @@ ContextFilter → CandidateFilter(SmartRouter) → X-Channel/ManualOverride/Prom
 5. `FilterKeyBindings`：模型兼容性 + 健康/衰减硬过滤
 6. `SortKeyBindings`：评分排序
 
-评分链路（`endpoint_policy.go:497`）：
+评分链路（`endpoint_policy.go:504`）：
 
 ```
 health(40) > fastDecay(25) > successRate(20) > latency(10) > cost(5)
@@ -535,7 +535,7 @@ health(40) > fastDecay(25) > successRate(20) > latency(10) > cost(5)
 ### 4.8 失败后学习/熔断/重试
 
 #### FastDecay
-- `FastDecayScorer.RecordResult(endpointUID, success)`（`main.go:854` hook）
+- `FastDecayScorer.RecordResult(endpointUID, success)`（`main.go:857` hook）
 - 普通失败：`DecayFactor = pow(0.85, consecutiveFail)`
 - 断流：`pow(0.70, consecutiveFail)`
 - 成功：`+0.15` 恢复
@@ -563,6 +563,9 @@ health(40) > fastDecay(25) > successRate(20) > latency(10) > cost(5)
 #### 上下文失败学习
 - 类似 document，写入共享兼容性记忆
 - `learnedContextLimit` 返回保守最小值
+
+#### 输出上限失败学习
+- 见 §5.16（`dd57a6d7`）：400/422 自报输出上限 → 渠道-Key-模型 级记忆 + 发送前钳制 + 同 Key 钳制重试
 
 ### 4.9 重试
 
@@ -624,7 +627,7 @@ health(40) > fastDecay(25) > successRate(20) > latency(10) > cost(5)
 - 三车道（车道参数详见 §5.10）：
   - `balanced`：膝点 + 每 0.01 质量增益的成本溢价帽（基础 2%，按 TaskClass 质量权重动态缩放 0.9~1.2 倍）
   - `cost_first`：最低成本簇（溢价帽系数 1.0）
-  - `quality_first`：并列池按 sameFamily → benchmark 差 ≥5 直接兑现 → qualityRank → 成本最低 → measuredQuality → qualityScore 依次决胜（成本只剩兜底位）
+  - `quality_first`：并列池逐级决胜（benchmark 已知/未知不对称时已知者直接胜出 → benchmark 差 ≥`premiumFrontierBenchmarkMinDelta`(5.0) 直接兑现 → qualityRank → sameFamily 粘性（仅限 `frontierFamilyCostPremiumTolerance`=25% 溢价内）→ 成本兜底，见 `model_frontier_scoring.go:450-505`）
 - 成本证据不足时 fail-open 回退旧链
 
 #### 5.5.1 性价比 effort 选择
@@ -643,8 +646,8 @@ health(40) > fastDecay(25) > successRate(20) > latency(10) > cost(5)
 提交：`231cbf5d`、`39027645`
 
 - **归一化能力分** `normalizedCapabilityScoreWithEvidenceClass`（2026-08-24 起统一到常规 effort 口径）：直测证据只接受 domain=coding、metric=pass_at_1、benchmark∈{deepswe, codexradar}，且按 effort 档折算到 medium/default 口径——比率来自 deepswe 同模型 effort 曲线统计（low=0.686、high=1.413、xhigh=1.627、max=1.975）。有常规口径实测直接用；无常规口径时各档折算取最小值（保守）；仅有单一 xhigh/max 证据时 `singleHighEffortOnly=true`，档位封顶 high（等该模型补测常规口径）。动机：只存最佳档会把"开满思考强度"的成绩当模型基础能力（gpt-5.6-terra max=69.6 而 medium=35.1、luna max=67.2 而 medium=11.3）。为此 update 脚本的 deepswe/dradar 提取保留全部 effort 档 evidence（`selectionBasis=per_effort`）。无直测时用 artificial_analysis coding_index 线性校准：`deepswe ≈ 2.391 × aa_coding − 116.007`（系数来自重叠模型最小二乘拟合）。
-- **边界算法** `computeQualityTierBoundariesFromRegistry`（`model_profile.go:400`）：默认边界 premium≥75 / high≥61 / normal≥55；注册表直测分数（按 CanonicalModel 去重）不足 4 个时用默认；否则排序后自顶向下找最大间隙中点——premium 边界取最高分下方 25% 量表区间（两端 ≥ 0.75×最高分）内的最大间隙中点，high 在低于 premium 的分段（floor=premiumMin×0.5）、normal 在低于 high 的分段（floor=highMin×0.4）依次找最大间隙。间隙两端都必须落在目标区域内（只查上端会让低段跨区域间隙被误当顶部断层）。2026-08-23 修复：原 60% 锚假设分布铺满量表，池分数集中在 40-77 时 60% 锚把中段空隙包进顶部区域，premiumMin 一度塌到 49 使 53 分模型全部升入 premium、选型翻转。
-- **世代缓存**（`39027645`）：`benchmarkTierBoundariesCache`（`atomic.Pointer`，`model_profile.go:370`）以 `config.BuiltinSnapshotGeneration()` 为缓存键——内置快照每次重建发布时世代 +1，命中才免重算。热路径单次调用从 ~830µs/428 allocs 降至 ~15µs/8 allocs。
+- **边界算法** `computeQualityTierBoundariesFromRegistry`（`model_profile.go:491`）：默认边界 premium≥75 / high≥61 / normal≥55；注册表直测分数（按 CanonicalModel 去重）不足 4 个时用默认；否则排序后自顶向下找最大间隙中点——premium 边界取最高分下方 25% 量表区间（两端 ≥ 0.75×最高分）内的最大间隙中点，high 在低于 premium 的分段（floor=premiumMin×0.5）、normal 在低于 high 的分段（floor=highMin×0.4）依次找最大间隙。间隙两端都必须落在目标区域内（只查上端会让低段跨区域间隙被误当顶部断层）。2026-08-23 修复：原 60% 锚假设分布铺满量表，池分数集中在 40-77 时 60% 锚把中段空隙包进顶部区域，premiumMin 一度塌到 49 使 53 分模型全部升入 premium、选型翻转。
+- **世代缓存**（`39027645`）：`benchmarkTierBoundariesCache`（`atomic.Pointer`，`model_profile.go:461`）以 `config.BuiltinSnapshotGeneration()` 为缓存键——内置快照每次重建发布时世代 +1，命中才免重算。热路径单次调用从 ~830µs/428 allocs 降至 ~15µs/8 allocs。
 - **消费方**：`Profiler.DeriveQualityTier`（benchmark 优先 → lowQuality 降级）、`BuildRequestProfile` 的 QualityNeed、auto_discovery、provider_quality_probe、`SmartRouter.applyModelQualityTier`。
 
 ### 5.7 benchmark-report 独立 CLI
@@ -684,7 +687,7 @@ health(40) > fastDecay(25) > successRate(20) > latency(10) > cost(5)
 提交：`455dc044`
 
 - **动态溢价帽**：`maxCostPremiumPerQuality`（`model_frontier_scoring.go:259`）按车道取基础值 quality_first=6.0、balanced=2.0、cost_first=1.0；再按 TaskClass 权重微调：`ratio=(WQuality+1)/(WCost+1)` 钳制 [0.5,2.0]，乘数 0.9~1.2。
-- **quality_first 并列池**改逐级决胜（sameFamily → benchmark 差 ≥5 直接兑现 → qualityRank → 成本最低 → measuredQuality → qualityScore），成本只剩兜底位，不再「并列取最低成本」。
+- **quality_first 并列池**改逐级决胜（`pickFrontierQualityFirstPoint`，`model_frontier_scoring.go:450`）：benchmark 证据已知/未知不对称时已知者直接胜出（1468fa08，防零证据候选凭档位先验+低成本挤掉强证据模型）→ benchmark 差 ≥5.0 直接兑现 → qualityRank → sameFamily 粘性（仅限 25% 成本溢价内，`13c70e1c`，防同族溢价无上限膨胀）→ 成本兜底；不再「并列取最低成本」。
 - **质量分按车道加权** `frontierQualityWeights`：quality_first {Benchmark 0.6, TierPrior 0.25, Measured 0.15}、balanced {0.5, 0.30, 0.20}、cost_first {0.4, 0.35, 0.25}；benchmark 缺失时权重让位给 tierPrior+measured。
 - **置信区间半宽随车道变化**：quality_first ×0.85、cost_first ×1.1；接近本批最高分（delta<5）再 ×0.75。
 - **SmartRouter 与 ModelResolver 车道一致**：两处均改用 `GetEffectiveCostPreferenceMode(taskClass)`（PerTaskClass 优先于全局 Mode）；`GetEffectiveMultipliers`：quality_first (savings 0.3, providerQuality 1.5)、balanced (1,1)、cost_first (2.0, 0.5)。
@@ -733,14 +736,30 @@ health(40) > fastDecay(25) > successRate(20) > latency(10) > cost(5)
 - **Kimi 额度快照以 `GetSubscriptionStats` 为主数据源**：`59b6aa02`（`GetUsages` 已从 Kimi Web 下线，仅当仍返回 `FEATURE_CODING` 时作可选增强补充 WeeklyUsage/TotalQuota/RateLimits；恢复判定用其 `CodeFiveHour/CodeSevenDay` 比例窗口，绑定令牌不再因缺 `FEATURE_CODING` 失败）
 - **Kimi 控制台令牌解析兼容**：`87267d6f`（`normalizeKimiConsoleToken` 支持 Cookie `access_token=`、localStorage JSON、成对引号、URL 编码）
 
+### 5.16 输出上限自学习与 max_tokens 钳制
+
+提交：`dd57a6d7`（镜像 §5.15 的上下文上限自学习机制）
+
+- **信号提取**：`OutputLimitFromError`（`handlers/common/output_limit_signal.go:101`）从上游 400/422 错误体（Anthropic/OpenAI 两种格式的正则）提取上游自报的输出 token 上限。
+- **记忆**：`ChannelCompatCache.RecordOutputLimit`（`config/channel_compat_cache.go:485`）按「渠道-Key-模型」粒度记忆 `OutputLimitState`，24h TTL（`channelCompatTTL`）；下界 `minLearnableOutputLimit = 256`，低于此不采信（宁小勿大口径的防误判护栏）。
+- **钳制**：`clampMaxTokensInBody`（`handlers/common/body_clamp.go:47`）按入口协议钳制 `max_tokens`/`max_completion_tokens`/`max_output_tokens` 三种字段；发送前在 `upstream_failover.go` 主动钳制，学到上限后同 Key 以钳制值立即重试一次，后续请求发送前直接钳制。
+- 与 §2.8 的 context_limit / document_capability 记忆同属共享兼容性缓存体系，写入方在 `handlers/common`，autopilot 包本身不读取该状态。
+
+### 5.17 基准图表的常规 effort 等效分与质量档色带
+
+提交：`23baf19c`
+
+- `scripts/benchmark-sources/visualization.mjs:15-21` 把 §5.6 的 effort 折算比率（low=0.686/high=1.413/xhigh=1.627/max=1.975）引入图表生成，散点图按自动质量档渲染 Low/Normal/High/Premium 色带；`scripts/generate-benchmark-chart.mjs` 增加 `qualityTiers` 有效性校验。
+- 注意两侧口径的细微差异：scripts 版比率表含 `ultra` 键（=1.975），后端 `model_profile.go` 的 `effortQualityRatio` 无 `ultra`。
+
 ## 6. 与其他模块的交互点
 
 ### 6.1 scheduler
 
 | 交互 | 位置 |
 |---|---|
-| `SetCandidateFilterProvider` 注册 SmartRouter | `main.go:788` |
-| `SetModelSupportResolverProvider` 注册 AutoManaged 模型支持解析 | `main.go:935` |
+| `SetCandidateFilterProvider` 注册 SmartRouter | `main.go:791` |
+| `SetModelSupportResolverProvider` 注册 AutoManaged 模型支持解析 | `main.go:938` |
 | `CandidateFilterFunc` 类型契约 | `internal/scheduler/scheduler.go:55` |
 | `ChannelScheduler.channelAvailableForCandidateFilter` | `internal/scheduler/scheduler.go:674` |
 | `buildSmartFilterFromProvider` 包装 SmartFilter | `internal/scheduler/scheduler.go:1535` |
@@ -777,11 +796,11 @@ health(40) > fastDecay(25) > successRate(20) > latency(10) > cost(5)
 
 | Hook | 位置 | 用途 |
 |---|---|---|
-| `SetEndpointPolicyProviderHook` | `main.go:829` | 注入 `EndpointAttemptPolicy` |
-| `SetNotifyEndpointResultHook` | `main.go:854` | 通知 FastDecay |
-| `SetRoutingOutcomeRecorderHook` | `main.go:813` | 记录请求终态到 Trace |
-| `SetAttemptRecorderHook` | `main.go:819` | 记录每次 endpoint 尝试 |
-| `SetUsagePatternRecorderHook` | `main.go:885` | 记录用量画像 |
+| `SetEndpointPolicyProviderHook` | `main.go:832` | 注入 `EndpointAttemptPolicy` |
+| `SetNotifyEndpointResultHook` | `main.go:857` | 通知 FastDecay |
+| `SetRoutingOutcomeRecorderHook` | `main.go:816` | 记录请求终态到 Trace |
+| `SetAttemptRecorderHook` | `main.go:822` | 记录每次 endpoint 尝试 |
+| `SetUsagePatternRecorderHook` | `main.go:888` | 记录用量画像 |
 
 ### 6.8 兼容性记忆
 
@@ -835,7 +854,7 @@ health(40) > fastDecay(25) > successRate(20) > latency(10) > cost(5)
          ▼
 ┌─────────────────┐
 │  Trace Store    │  RoutingDecisionTrace v2
-│ + Learning Loop │  FastDecay / RateLimit / Document / Context
+│ + Learning Loop │  FastDecay / RateLimit / Document / Context / OutputLimit
 └─────────────────┘
 ```
 
@@ -871,7 +890,7 @@ health(40) > fastDecay(25) > successRate(20) > latency(10) > cost(5)
 [Frontier 选型 ComputeFrontierForest]
       ├─ balanced: 膝点 + 动态溢价帽（基础 2%，按 TaskClass 缩放 0.9~1.2x）
       ├─ cost_first: 最低成本簇
-      └─ quality_first: 并列池逐级决胜（sameFamily/benchmark/qualityRank，成本兜底）
+      └─ quality_first: 并列池逐级决胜（benchmark 证据优先/qualityRank/同族粘性限溢价，成本兜底）
       │
       ▼
 [成本证据不足?]
@@ -932,13 +951,17 @@ health(40) > fastDecay(25) > successRate(20) > latency(10) > cost(5)
    - 同渠道-模型取所有已知 key 的最小上下文上限
    - 原因：不同 key 套餐窗口不同，宁可放过大窗口 key
 
-3. **质量档降档**
+3. **输出上限学习**
+   - 渠道-Key-模型 粒度、24h TTL、下界 256 不采信（见 §5.16）
+   - 学到后同 Key 以钳制值立即重试，后续请求发送前直接钳制
+
+4. **质量档降档**
    - `filterByCapabilityFloorWithQualityFallback`：无更高档候选时才降档
 
-4. **ChannelProfile 健康聚合**
+5. **ChannelProfile 健康聚合**
    - 只要仍有 healthy/unknown endpoint，mixed 场景统一降到 `degraded`，不会直接判死
 
-5. **Advisor hint 生效范围**
+6. **Advisor hint 生效范围**
    - 仅 `lightweight/worker` 允许真实生效
    - `supervisor/vision/long_context` 受 `NeverDemoteTaskClasses` 保护
 

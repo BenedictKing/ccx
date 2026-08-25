@@ -160,6 +160,7 @@ Channels   (Claude/OpenAI/Gemini/...)
    │
    ├─ 400/422 document → SharedChannelCompatCache
    ├─ 400/422 context → SharedChannelCompatCache
+   ├─ 400/422 上游自报输出上限（dd57a6d7）→ RecordOutputLimit（渠道-Key-模型 级，24h TTL）→ 同 Key 以钳制值立即重试 + 后续发送前 clampMaxTokensInBody 主动钳制（详见 `autopilot.md` §5.16）
    ├─ 400 beta header 被拒 → compat trait `unsupported_beta_header` → LearnedRejectedBetaTokens（下次按 token 剥离）
    ├─ 429/5xx → MetricsManager.RecordFailure
    ├─ auth/permission → ShouldBlacklistKey → BlacklistKeyWithRecoverAt（跨协议级联）

@@ -129,7 +129,7 @@ Enabled / Disabled / Cooldown
 
 ### 4.3 Key 排序键
 
-已实现（`47415362`，`EndpointPolicy.SortKeyBindings`，`endpoint_policy.go:606`）：`classifyKeyBinding` 计算**连续效用分** `UtilityScore = healthScore × fastDecayScore × opportunisticMultiplier`（opportunistic ×1.5；health×decay < 0.67 时自动输给健康 normal Key——「尽快消耗」不被很小的延迟差抵消，同时明显 degraded 的公开 Key 压不过 healthy 私有 Key），排序键为：
+已实现（`47415362`，`EndpointPolicy.SortKeyBindings` 赋值于 `endpoint_policy.go:361`，`classifyKeyBinding` 在 `:163`）：`classifyKeyBinding` 计算**连续效用分** `UtilityScore = healthScore × fastDecayScore × opportunisticMultiplier`（opportunistic ×1.5；health×decay < 0.67 时自动输给健康 normal Key——「尽快消耗」不被很小的延迟差抵消，同时明显 degraded 的公开 Key 压不过 healthy 私有 Key），排序键为：
 
 ```text
 utilityScore                      降序（连续效用分）

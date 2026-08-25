@@ -43,7 +43,7 @@
 - 关键 props / emits：
   - props：`show: boolean`、`channelType?: ChannelType`（默认 `messages`）
   - emits：`update:show`、`save(channel, options?)`、`error(message)`、`autoAdded(channelId)`
-- 主要字段：模式切换 `v-btn-toggle`（`quickAddMode`）；标准模式 `quickInput` textarea + **代理 URL 输入框（可选，`standardProxyUrl`，占位 `http://127.0.0.1:7890 或 socks5://…`，随 `discoverFast`/`autoAddChannel` 透传 `proxyUrl`）** + 探测状态卡（检测到的 baseUrls/apiKeys/自动生成渠道名）；故障转移位置开关 `placement`（front/back）。
+- 主要字段：模式切换 `v-btn-toggle`（`quickAddMode`）；标准模式 `quickInput` textarea + **代理 URL 输入框（可选，`standardProxyUrl`，占位 `http://127.0.0.1:7890 或 socks5://…`，带 `mdi-vpn` 前置图标，随 `discoverFast`/`autoAddChannel` 透传 `proxyUrl`；876eaf7e 起另有 `standardProxyPreferDirect` 直连优先开关一并透传）** + 探测状态卡（检测到的 baseUrls/apiKeys/自动生成渠道名）；故障转移位置开关 `placement`（front/back）。
 - 操作按钮：取消（Esc）、创建渠道（⌘/Ctrl+Enter）。提交按 `handleSubmitByMode` 分派：快速模式委托子表单 `quickAddFormRef.handleSubmit()`，标准模式走 `handleQuickSubmit`。
 - 校验/状态：`isQuickFormValid`（copilot 仅需 baseUrls；其余需 baseUrls+apiKeys）；`standardSubmitting` 加载态、`standardSubmitError` 内联错误；重复渠道 `duplicateChannel` 提示。
 - 后端调用：`discoverFast`（快速协议探测）→ `autoAddChannel`（`autopilot-api.ts`）；copilot 走 `emit('save', …)` 交由 store。
@@ -81,9 +81,9 @@
   - props：`show`、`channel?: Channel|null`、`channelType?`
   - emits：`update:show`、`save(channel, options?, onComplete?)`、`error`、`success`、`updated`、`update:api-key-configs`
 - 分区（`useEditChannelSectionNav.ts`，侧导航固定三项：basic/auth/custom）：
-  1. basic（基础信息）— `BasicInfoSection`（多行 baseUrls（条件可编辑，见下）、官网 website + 快捷按钮；备注/serviceType/描述输入框已隐藏）+ `ProtocolModelAvailability`（协议模型清单/重新发现）
+  1. basic（基础信息）— `BasicInfoSection`（多行 baseUrls（条件可编辑，见下）、官网 website + 快捷按钮、渠道备注输入（12e52cf9 恢复，≤10 字符，与渠道名称解耦））+ `ProtocolModelAvailability`（协议模型清单/重新发现）
   2. auth（认证管理）— `ApiKeyManagementSection`（密钥增删、**拖拽排序与置顶/置底**、复制、暂停/恢复、拉黑恢复、**每 Key 模型数 chip**、分组模型策略、Key 倍率、provider 凭证如 volcengine/kimi/mimo/compshare/minimax、copilot OAuth）
-  3. custom（自定义参数）— 代理服务器 `form.proxyUrl`（v-text-field，clearable）+ `CustomHeadersSection` + **渠道计费四字段**（充值币种/充值金额/渠道币种/到账金额）
+  3. custom（自定义参数）— 代理服务器 `form.proxyUrl`（v-text-field，clearable，`mdi-vpn` 前置图标）+ **代理直连优先开关 `form.proxyPreferDirect`**（876eaf7e，仅填写代理后有意义）+ `CustomHeadersSection` + **渠道计费四字段**（充值币种/充值金额/渠道币种/到账金额）
   - accounts 区（仅 new-api / generic 托管，`EditChannelModal.vue:107` 的 `v-if`）仍在 DOM 中渲染 `NewApiAccountPanel`，但**不进侧导航**
   - redirect / advanced 分区已随 09c4996d「白名单字段精简」删除：`ModelMappingSection`、`ModelCapabilitySection`、`EmbeddingCompatibilitySection`、`SupportedModelsFilter`、`AdvancedOptionsSection`、`TransportConfigGroup`、`StreamTimeoutSection`、`RateLimitGroup` 共 8 个子组件整体移除
 - 编辑副标题按渠道来源三选一：官方直连 `managed.editSubtitle`（"{provider} 官方渠道 · 管理账号凭证"）、provider 模板 `providerEditSubtitle`、自定义托管 `customEditSubtitle`
@@ -92,12 +92,12 @@
 - 主要状态流转：
   - `watch(props.show)`：打开时 `dialogMode = channel ? 'edit' : 'create'`，编辑走 `loadChannelData(channel)`，新建走 `resetForm()`；`nextTick(attachScrollListener)` 绑定滚动高亮。
   - 编辑打开且渠道有任何 Key（含禁用 Key）即 `nextTick(fetchTargetModels())` 预拉上游模型（eee81e0b，恢复每 Key 模型数 chip 展示）；分组模型对话框打开时经 `ensure-models-loaded` 懒加载兜底。
-  - `baseUrlsText` watch → `syncBaseUrlsFormState` 去重 + `extractChannelNamePrefix` 自动派生渠道名。
+  - `baseUrlsText` watch → `syncBaseUrlsFormState` 去重 + `extractChannelNamePrefix` 自动派生渠道名。去重语义经 6cda4596/d300b2bb 修正：转义路径保留原样，带 `#` 的完整路径 URL 不与域名根条目去重合并（`utils/base-url-semantics.test.ts`）。
   - `handleSubmit`：`formRef.validate()` → `buildSubmitPayload` → `emit('save', …, onComplete)`。
 - 校验规则：`isFormValid` 只综合三项——serviceType 非空、baseUrls（仅 `isEditableBaseUrlsChannel` 时要求非空且逐行合法 URL）、apiKeys（copilot 免除）；模型能力错误不再参与。
 - 加载态：`submitting`、`fetchingModels`、`managedModelsLoading`、`keyModelsStatus`（每 Key 模型数探测状态 Map）。
 - 后端调用：`getManagedAccounts`、`useTargetModelFetch` 拉取上游模型、`useDisabledApiKeys` 系列。保存走 `useAppController.saveChannel` → `channel store.saveChannel`。
-- 保存白名单语义（09c4996d）：`buildSubmitPayload` 对其余全部元数据字段「沿用渠道当前值」，仅 `customHeaders/proxyUrl/remark/计费四字段/website/baseUrls(条件)` 取表单值——这也是 proxyUrl/customHeaders/remark 保存丢失 bug 的修复方式。
+- 保存白名单语义（09c4996d）：`buildSubmitPayload` 对其余全部元数据字段「沿用渠道当前值」，仅 `customHeaders/proxyUrl/proxyPreferDirect/remark/计费四字段/website/baseUrls(条件)` 取表单值——这也是 proxyUrl/customHeaders/remark 保存丢失 bug 的修复方式。
 - 联动：`ProtocolModelAvailability @refreshed` → 重新拉账号模型 + `refreshEditingChannelAfterRediscovery`；`NewApiAccountPanel @updated → emit('updated')`；`ApiKeyManagementSection @update:api-key-configs` 同步重排后的 Key 配置项。
 - `routePrefix` 已不可在编辑弹窗修改（TransportConfigGroup 已删），保存时仅沿用渠道当前值；其调度语义（默认路由 vs 前缀路由）见 §8 SchedulerDiagnoseDialog，仅调度诊断对话框可模拟。
 
@@ -106,18 +106,21 @@
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│ <AddChannelHeader> ✎ 编辑渠道 [名称chip] [👁 vision]        │
+│ [蓝底白字渠道身份块] v-avatar 图标 + identityLabel/       │
+│                      identityName（1af4ffd3/ed1b55fd；   │
+│                      托管徽章已移除）                     │
 ├────────────┬─────────────────────────────────────────────┤
 │ 侧栏导航    │ (右侧可滚动内容区 .content-area)              │
-│ • 基本信息  │  [basic]   BaseInfo(条件baseUrls/官网)        │
+│ • 基本信息  │  [basic]   BaseInfo(条件baseUrls/官网/备注)   │
 │            │            + ProtocolModelAvailability       │
 │ • 认证管理  │  [auth]    ApiKeyManagementSection           │
 │            │            (拖拽排序/模型数chip/倍率/OAuth)   │
-│ • 自定义    │  [custom]  代理 / CustomHeaders / 计费四字段  │
+│ • 自定义    │  [custom]  代理(+直连优先) / CustomHeaders /  │
+│            │            计费四字段                          │
 │            │  [accounts] NewApiAccountPanel(不进侧导航)   │
 ├────────────┴─────────────────────────────────────────────┤
 │                                   [取消 Esc] [保存 ⌘Enter] │
-└──────────────────────────────────────────────────────────┘  max-width 1200, scrollable
+└──────────────────────────────────────────────────────────┘  max-width 1030（9b187f8b 收窄）, scrollable
 ```
 
 ### 2.1 ApiKeyManagementSection 关键交互
@@ -132,7 +135,7 @@
 - 用途：模板化添加（选 provider + 输 key，系统判 plan/baseURL）；也支持自定义（手填 baseURL）。
 - 触发入口：由 `AddChannelModal` 在 `quickAddMode=true` 时渲染。
 - props / emits：props `channelType`、`existingChannels?`、`placement?`；emits `added(channelId)`、`close`、`update:placement`。`defineExpose({ handleSubmit, resetForm, isFormValid, submitting })` 供父组件调用。
-- 主要字段：provider `v-select`（赞助商 volcengine/compshare/runapi 置顶，末尾「new-api 通用接入」与「自定义」；**不按当前协议 tab 过滤**——任意 tab 下拉均显示全部 provider，fc7cc04f）、多 baseURL 输入（`recognizedBaseUrls` 识别提示）、多 apiKey 输入（显隐切换）、自定义模式**代理 URL 输入（可选，随 `discoverFast`/`autoAddChannel` 透传，provider 模式不传）**、故障转移开关、自动生成渠道名预览、重复渠道 alert、提交错误 alert、创建中进度卡。
+- 主要字段：provider `v-select`（赞助商 volcengine/compshare/runapi 置顶，末尾「new-api 通用接入」与「自定义」；**不按当前协议 tab 过滤**——任意 tab 下拉均显示全部 provider，fc7cc04f）、多 baseURL 输入（`recognizedBaseUrls` 识别提示）、多 apiKey 输入（显隐切换）、自定义模式**代理 URL 输入（可选，`mdi-vpn` 前置图标，随 `discoverFast`/`autoAddChannel` 透传，provider 模式不传）**、故障转移开关、自动生成渠道名预览、重复渠道 alert、提交错误 alert、创建中进度卡。
 - 校验/状态：`isQuickFormValid`（provider 模式仅需 key；自定义需 baseUrls+key）；`submitting`、`submitError`、`providerTemplatesLoading`。
 - 后端调用：`getProviderTemplates`、自定义模式 `discoverFast` → `autoAddChannel`；provider 模式直接 `autoAddChannel({providerId, apiKeys, kind: provider.channelKind})`（按 provider 自身声明的 channelKind 提交，自动创建该 provider 支持的全部渠道，避免 tab 与 provider 能力不匹配导致 400）。
 - 联动：选中 `__new_api__` → 打开 `NewApiQuickAddDialog`，其 `@created` → `emit('added', channelIndex)`。
@@ -146,7 +149,7 @@
   - 内联版：`SubscriptionsView.vue:25` provider 选择区直接内嵌 `NewApiSubscriptionForm`。
 - NewApiQuickAddDialog props/emits：emits `created(result)`、`error(message)`；内部 `dialogVisible`，`handleCreated` 关闭对话框并上抛。
 - NewApiSubscriptionForm 字段：
-  - step1 验证 `verifyForm`：baseUrl、accessToken(password)、userId、authTokenMode(bearer/raw)、displayName；验证后展示账户预览（username/quota/usedQuota/可用模型数/分组倍率 chips）。
+  - step1 验证 `verifyForm`：baseUrl、accessToken(password)、userId、authTokenMode(bearer/raw)、displayName、`proxyUrl`（可选）+ `proxyPreferDirect` 开关（876eaf7e，verify/provision 均透传）；验证后展示账户预览（username/quota/usedQuota/可用模型数/分组倍率 chips）。
   - step2 接入 `provisionForm`：subscriptionUid、channelKind(messages/chat/…)、channelName、`maxGroupMultiplier`(number)、notes；分组资格 alert（blockedGroupCount / eligibleGroupItems / groupFetchError / noEligibleGroups）。
 - 校验：`canVerify`（baseUrl+accessToken 非空）；`canProvision`（subscriptionUid + channelKind + `maxGroupMultiplierValid` + `eligibleGroupItems.length>0`）。
 - 加载态：`verifying`、`provisioning`。
@@ -178,8 +181,8 @@
 - 触发入口：`EditChannelModal` 在 `isNewApiChannel || isGenericAutoManagedChannel` 时渲染。
 - props：`subscriptionUid`、`channelName?`、`baseUrl?`、`channelUid?`、`channelKind?`、`isGeneric?`、`autoManagedKind?`；emit `updated`。
 - 分支视图：
-  - generic 未绑定：`bindForm`（accessToken/userId/authTokenMode），`canBindNewApi` 校验；**先 `verifyNewApiSubscription` 获取 `groups + availableModels`，再按统一倍率阈值提交 `provisionAllEligibleGroups=true`**。
-  - 已绑定：主账号卡（quota/usedQuota/baseUrl、`primaryForm` 更新凭证 `savePrimaryCredentials`、刷新余额 `refreshPrimaryAccount`）、展开面板「添加账号」`addForm`；**追加账号同样先 verify，再显式传 `provisionModels: verified.availableModels`**，账号列表（刷新/删除）。
+  - generic 未绑定：`bindForm`（accessToken/userId/authTokenMode/proxyUrl + proxyPreferDirect 开关，876eaf7e），`canBindNewApi` 校验；**先 `verifyNewApiSubscription` 获取 `groups + availableModels`，再按统一倍率阈值提交 `provisionAllEligibleGroups=true`**。
+  - 已绑定：主账号卡（quota/usedQuota/baseUrl、`primaryForm` 更新凭证（含代理两字段）`savePrimaryCredentials`、刷新余额 `refreshPrimaryAccount`）、展开面板「添加账号」`addForm`（同样含代理两字段）；**追加账号同样先 verify，再显式传 `provisionModels: verified.availableModels`**，账号列表（刷新/删除）。
 - 校验/状态：`canBindNewApi`、`primaryCredentialsChanged`；loading：`binding`/`savingPrimary`/`refreshingPrimary`/`adding`/`refreshing`/`deleting`/`loadingPrimary`；错误：`bindError`/`primaryError`/`addError`。`groupFetchError`、无合格组、verify 失败时阻断提交。
 - 后端调用：`verifyNewApiSubscription`、`provisionNewApiSubscription`、`getSubscription`、`updateNewApiCredentials`、`refreshSubscription`、`getSubscriptionAccounts`、`addSubscriptionAccount`、`refreshSubscriptionAccount`、`deleteSubscriptionAccount`。
 

@@ -33,7 +33,7 @@
 
 ### 2.2 L1 探针（`check.go:checkKeyL1`, line 151）
 - 目的：带单个 key 拉取上游模型列表，验证账号/凭证可达性。六类渠道通用（`messages/chat/responses/gemini/images/vectors`）。
-- 输入 `L1Request`（`manager.go:41`）：`BaseURL/APIKey/ServiceType/AuthHeader/CustomHeaders/ProxyURL/InsecureSkipVerify/LearnedClientFingerprint`。末者为上游 models 端点客户端指纹风控标记（`b49ec83c`）：为真时 L1 的 models 请求带 Claude Code 探针头（`check.go:188` 从 `UpstreamConfig.LearnedClientFingerprint` 传入）；标记由 discovery 学习回写，healthcheck 只消费（见 `cross-module-integration.md` §3.6）。
+- 输入 `L1Request`（`manager.go:41`）：`BaseURL/APIKey/ServiceType/AuthHeader/CustomHeaders/ProxyURL/ProxyPreferDirect/InsecureSkipVerify/LearnedClientFingerprint`。`ProxyPreferDirect`（876eaf7e）：配置代理时 L1 先直连、失败回退代理；火山探针客户端经 `httpclient.GetClient` 展开代理设置（`upstreamprobe/volcengine.go:278`）。`LearnedClientFingerprint` 为上游 models 端点客户端指纹风控标记（`b49ec83c`）：为真时 L1 的 models 请求带 Claude Code 探针头（`check.go:188` 从 `UpstreamConfig.LearnedClientFingerprint` 传入）；标记由 discovery 学习回写，healthcheck 只消费（见 `cross-module-integration.md` §3.6）。
 - 输出 `L1Response`（`manager.go:52`）：`StatusCode/Body/RealCallVerified/Model`。`RealCallVerified` 标记该次 L1 已发起过真实推理调用（火山探针置位，通用 `/v1/models` 不置位）。
 - 遍历 `baseURLs` 逐个尝试：
   - 200 → `succeeded`，`countModels` 统计模型数，`extractModelIDs` 抽取模型 ID（OpenAI `data[].id` 或 Gemini `models[].name`），`break`。
@@ -84,7 +84,7 @@
   2. 无近期成功记录的次之。
   3. 剩余按成本升序（火山用 `ResolveVolcengineAFPCost` AFP 成本，非火山用 USD 等价 `pricingCost`）。
 - 预算：`SparseL2MaxModels` 数量上限 + `SparseL2MaxCostAFP` AFP 成本上限；最近失败模型不受成本预算限制。
-- 别名去重：`ResolveVolcengineAFPCost` 返回 `IsAlias/AliasOf`（如 `glm-latest`→`glm-5.2`），规范模型在列表内时跳过别名。
+- 别名去重：`ResolveVolcengineAFPCost` 返回 `IsAlias/AliasOf`（如 `glm-latest` 是 `glm-5.3` 的显式别名，534ee04e；`glm-5.2` 保留至 8/31 下线），规范模型在列表内时跳过别名。
 - 静默期 `L2ModelQuietPeriod`：近期成功模型在该期内降级（不重复浪费）。
 - 内存熔断信号：注入 `modelCircuitLookup`（`manager.go:177`，`SetModelCircuitLookup`），`circuit.IsModelCircuitOpen` 提供更快的失败信号，把熔断中模型标记为 `RecentlyFailed` 优先探测恢复。
 
@@ -103,7 +103,7 @@
 
 ### 3.6 L1Fetcher 接线与火山分流（`main.go:141 healthCheckL1Fetcher`）
 - 命中 `IsVolcenginePlanBaseURL` → 走 `VolcenginePlanL1Probe`，用内置 manifest 候选动态选模型，返回 `RealCallVerified=true`。
-- 否则走 `channelModelsHandlerFetcher`（各渠道 `GetChannelModels` handler 的 httptest 包装，`main.go:104-135`），`RealCallVerified=false`；请求体透传 `learnedClientFingerprint`（`main.go:115`），六类 `GetChannelModels` 在渠道配置值或请求值为真时给 models 请求加 Claude Code 探针头（claude serviceType 默认带）。含义：L1 的 401/403 判定存在「客户端指纹风控」第三态背景，未学习指纹的渠道首次仍可能裸试被拒（由 discovery 学习后自动恢复）。
+- 否则走 `channelModelsHandlerFetcher`（各渠道 `GetChannelModels` handler 的 httptest 包装，`main.go:104-135`），`RealCallVerified=false`；请求体透传 `learnedClientFingerprint`（`main.go:115`），六类 `GetChannelModels` 在渠道配置值或请求值为真时给 models 请求加 Claude Code 探针头（claude serviceType 默认带）。含义：L1 的 401/403 判定存在「客户端指纹风控」第三态背景，未学习指纹的渠道首次仍可能裸试被拒（由 discovery 学习后自动恢复）。被包装的 `GetChannelModels` handler 本身对火山套餐已改走管控面套餐清单（158d9c12，见 §9.1 与 `autopilot.md` §2.11）。
 
 ## 4. 探针结果如何影响 scheduler 的选择/熔断/恢复
 
@@ -161,7 +161,7 @@ healthcheck 不直接依赖 provider 适配层，而是通过 `internal/upstream
 - **数据面探针**（推理 key 可用性）：`upstreamprobe.VolcenginePlanL1Probe` / `ProbeVolcenginePlan`。healthcheck L1（`main.go:143`）与 autopilot 新渠道验证（`autopilot/verify_endpoint.go:324 verifyVolcenginePlanEndpoint`）共用同一实现，避免请求特征漂移。请求走真实 `/messages` 或 `/chat/completions`，非管控面。
 - **管控面**（套餐识别/模型发现/用量，凭证回填）：`autopilot/volcengine_coding_plan.go volcenginePlanClient`（HMAC 签名），供用量刷新→`TryRestoreDisabledKeysByUsage` 恢复。
 - **内置 manifest**（`config/builtin_models_manifest.go`）：火山 Agent/Coding Plan 条目 `DisableProbe=true`（普通 key 无法用 `/v1/models` 探测），保活 L1 探针成功后用 `volcengineAgentPlanModelIDs`/`volcengineCodingPlanModelIDs` 生成模型清单。
-- **AFP 定价**（`config/volcengine_afp_pricing.go`）：`ResolveVolcengineAFPCost` 供稀疏 L2 选模型按成本排序，含输入分段（≤32k×0.67 / ≤128k×1 / >128k×2）与活动倍率、别名解析。
+- **AFP 定价**（`config/volcengine_afp_pricing.go`）：`ResolveVolcengineAFPCost` 供稀疏 L2 选模型按成本排序，含输入分段（≤32k×0.67 / ≤128k×1 / >128k×2）与活动倍率、别名解析。目录已同步至 2026-08 文档（534ee04e）：`glm-latest` 改指 `glm-5.3`，新增 doubao-seed-2.0-mini/lite、doubao-seed-2.1-turbo、minimax-m3 等基础系数，移除 kimi-k2.6 规则。
 
 ## 7. 关键状态流转
 
