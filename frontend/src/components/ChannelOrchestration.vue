@@ -750,7 +750,7 @@ import { useI18n } from '../i18n'
 import { useChannelActivity } from '../composables/useChannelActivity'
 import ChannelStatusBadge from './ChannelStatusBadge.vue'
 import ChannelHealthBadge from './ChannelHealthBadge.vue'
-import { isManagedProviderChannel, isOfficialProviderChannel, providerDisplayName } from '../utils/providerDisplay'
+import { managedProviderChannelName } from '../utils/providerDisplay'
 import { useCapabilityTestManager } from '../composables/useCapabilityTestManager'
 import { availableChannelApiKeyCount, disabledChannelApiKeyCount, hasNoUsableChannelApiKeys, hasOnlyDisabledChannelApiKeys, pausedChannelApiKeyCount } from '../utils/channelApiKeys'
 import { getChannelWebsiteLinks, type ChannelWebsiteKind } from '../utils/channelWebsite'
@@ -1243,16 +1243,7 @@ const { isCapabilityChannelKind } = useCapabilityTestManager(
 )
 
 const getChannelDisplayName = (channel: Channel): string => {
-  if (isManagedProviderChannel(channel)) {
-    const provider = providerDisplayName(channel.providerId)
-    if (provider) {
-      const key = isOfficialProviderChannel(channel)
-        ? 'channelEditor.managed.officialChannel'
-        : 'channelEditor.managed.providerChannel'
-      return t(key, { provider })
-    }
-  }
-  return channel.name
+  return managedProviderChannelName(channel, t) || channel.name
 }
 
 const getProtocolCapsules = (channel: Channel) => {

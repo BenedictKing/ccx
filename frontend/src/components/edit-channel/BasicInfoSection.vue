@@ -1,23 +1,5 @@
 <template>
   <div class="basic-info-section">
-    <div v-if="managedAccount && providerName" class="provider-identity mb-5">
-      <v-icon color="primary" size="22">mdi-domain</v-icon>
-      <div class="flex-grow-1">
-        <div class="text-caption text-medium-emphasis">{{ t('channelEditor.managed.providerLabel') }}</div>
-        <div class="text-body-1 font-weight-bold">
-          {{ t(officialProvider ? 'channelEditor.managed.officialChannel' : 'channelEditor.managed.providerChannel', { provider: providerName }) }}
-        </div>
-      </div>
-      <v-chip
-        :color="officialProvider ? 'success' : 'primary'"
-        variant="tonal"
-        size="small"
-        :prepend-icon="officialProvider ? 'mdi-check-decagram' : 'mdi-cog-sync'"
-      >
-        {{ t(officialProvider ? 'channelEditor.managed.officialBadge' : 'channelEditor.managed.managedBadge') }}
-      </v-chip>
-    </div>
-
     <v-row>
       <!-- 渠道名称不再占用表单位置：由首个 BaseURL 自动派生，统一在对话框头部展示 -->
 
@@ -189,7 +171,6 @@ interface Props {
   hideMetadata?: boolean
   managedAccount?: boolean
   providerName?: string
-  officialProvider?: boolean
   websiteLinks?: ChannelWebsiteLink[]
   errors: Record<string, string>
   rules: {
@@ -245,16 +226,6 @@ const websiteLinkIcon = (kind: ChannelWebsiteKind): string => (
   padding: 8px 12px;
   background: rgba(var(--v-theme-surface-variant), 0.3);
   border-radius: 4px;
-}
-
-.provider-identity {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 64px;
-  padding: 12px 16px;
-  border-inline-start: 3px solid rgb(var(--v-theme-primary));
-  background: rgb(var(--v-theme-primary) / 6%);
 }
 
 .expected-request-list {

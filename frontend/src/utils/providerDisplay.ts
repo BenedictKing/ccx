@@ -54,3 +54,19 @@ export const isOfficialProviderChannel = (channel?: Channel | null): boolean => 
 export const isAutoManagedAccountChannel = (channel?: Channel | null): boolean => {
   return !!channel?.accountUid && (!!channel.autoManaged || !!channel.providerId)
 }
+
+type TranslateFn = (key: string, params?: Record<string, string | number>) => string
+
+// 托管渠道友好展示名（如 "Kimi 官方渠道" / "Official Kimi channel"），
+// 渠道卡片与编辑弹窗头部共用；非托管渠道或无品牌名时返回空串。
+export const managedProviderChannelName = (channel: Channel | null | undefined, t: TranslateFn): string => {
+  if (!isManagedProviderChannel(channel)) return ''
+  const provider = providerDisplayName(channel?.providerId)
+  if (!provider) return ''
+  return t(
+    isOfficialProviderChannel(channel)
+      ? 'channelEditor.managed.officialChannel'
+      : 'channelEditor.managed.providerChannel',
+    { provider },
+  )
+}

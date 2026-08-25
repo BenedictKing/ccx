@@ -1,5 +1,22 @@
 <template>
-  <v-card-title class="d-flex align-center ga-3 pa-6" :class="headerClasses">
+  <!-- 编辑渠道：头部直接以身份块呈现（图标 + 标签 + 名称 + 可选徽章），取代蓝底标题栏 -->
+  <v-card-title v-if="identityName" class="d-flex align-center ga-3 pa-6 border-b">
+    <v-icon color="primary" size="22">{{ identityIcon }}</v-icon>
+    <div class="flex-grow-1">
+      <div class="text-caption text-medium-emphasis">{{ identityLabel || t('channelEditor.managed.providerLabel') }}</div>
+      <div class="provider-header-name">{{ identityName }}</div>
+    </div>
+    <v-chip
+      v-if="identityBadge"
+      :color="identityBadge === 'official' ? 'success' : 'primary'"
+      variant="tonal"
+      size="small"
+      :prepend-icon="identityBadge === 'official' ? 'mdi-check-decagram' : 'mdi-cog-sync'"
+    >
+      {{ t(identityBadge === 'official' ? 'channelEditor.managed.officialBadge' : 'channelEditor.managed.managedBadge') }}
+    </v-chip>
+  </v-card-title>
+  <v-card-title v-else class="d-flex align-center ga-3 pa-6" :class="headerClasses">
     <v-avatar :color="avatarColor" variant="flat" size="40">
       <v-icon :style="headerIconStyle" size="20">{{ isEditing ? 'mdi-pencil' : 'mdi-plus' }}</v-icon>
     </v-avatar>
@@ -54,6 +71,10 @@ interface Props {
   channelType?: 'messages' | 'chat' | 'responses' | 'gemini' | 'images' | 'vectors'
   channelName?: string
   channelNameHint?: string
+  identityName?: string
+  identityLabel?: string
+  identityIcon?: string
+  identityBadge?: 'official' | 'managed' | ''
   noVision?: boolean
   headerClasses?: string | Record<string, boolean> | Array<string | Record<string, boolean>>
   avatarColor?: string
@@ -71,6 +92,10 @@ withDefaults(defineProps<Props>(), {
   hideCapabilityActions: false,
   channelName: '',
   channelNameHint: '',
+  identityName: '',
+  identityLabel: '',
+  identityIcon: 'mdi-domain',
+  identityBadge: '',
   noVision: false,
   avatarColor: 'primary',
 })
@@ -111,6 +136,12 @@ const { t } = useI18n()
   /* 颜色继承头部（浅色主题 bg-primary 上为 text-white，深色主题 bg-surface 上为
      text-high-emphasis），仅降低不透明度作次级展示，两种主题下均可读 */
   opacity: 0.85;
+}
+
+/* 头部身份块名称（编辑态取代蓝底标题栏） */
+.provider-header-name {
+  font-size: 1rem;
+  font-weight: 700;
 }
 
 .header-capability-actions {

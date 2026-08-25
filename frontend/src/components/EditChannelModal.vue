@@ -7,6 +7,10 @@
         :channel-type="props.channelType"
         :channel-name="isManagedProvider ? '' : form.name"
         :channel-name-hint="''"
+        :identity-name="headerIdentityName"
+        :identity-label="managedIdentityName ? t('channelEditor.managed.providerLabel') : t('channelEditor.basic.name.label')"
+        :identity-icon="managedIdentityName ? 'mdi-domain' : 'mdi-tag'"
+        :identity-badge="headerIdentityBadge"
         :hide-capability-actions="true"
         :no-vision="form.noVision"
         :header-classes="headerClasses"
@@ -54,7 +58,6 @@
                 :hide-metadata="true"
                 :managed-account="true"
                 :provider-name="managedProviderName"
-                :official-provider="isOfficialManagedProvider"
                 :website-links="managedProviderWebsiteLinks"
                 :errors="errors"
                 :rules="rules"
@@ -254,7 +257,7 @@ import { ApiService } from '../services/api'
 import type { ManagedAccountChannel } from '../services/api-types'
 import { buildNativeProtocolModelRoutes, loadLegacyManagedModelAvailability } from '../utils/channelModelAvailability'
 import { getManagedProviderWebsiteLinks } from '../utils/channelWebsite'
-import { isManagedProviderChannel, isOfficialProviderChannel, providerDisplayName } from '../utils/providerDisplay'
+import { isManagedProviderChannel, isOfficialProviderChannel, managedProviderChannelName, providerDisplayName } from '../utils/providerDisplay'
 import { useChannelStore } from '../stores/channel'
 import { useDialogStore } from '../stores/dialog'
 
@@ -388,6 +391,16 @@ const {
   setSectionRef,
   t,
 } = useEditChannelModal(props, emit)
+
+// 托管渠道的头部身份名：友好名（如"Kimi 官方渠道"），非托管渠道为空串
+const managedIdentityName = computed(() => managedProviderChannelName(props.channel, t))
+
+// 头部身份块：编辑态下所有渠道统一使用——托管渠道用友好名+徽章，自定义渠道用渠道名
+const headerIdentityName = computed(() => (props.channel ? managedIdentityName.value || form.name : ''))
+const headerIdentityBadge = computed((): 'official' | 'managed' | '' => {
+  if (!managedIdentityName.value) return ''
+  return isOfficialManagedProvider.value ? 'official' : 'managed'
+})
 
 // generic 自动托管渠道：autoManaged=true、无 providerId，但尚未绑定 new-api
 const isGenericAutoManagedChannel = computed(() =>
