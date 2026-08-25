@@ -3641,7 +3641,7 @@
           "sourceModel": "deepseek-v4-flash",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.419,
+          "rawValue": 0.423,
           "uncertainty": 0,
           "cohortPercentile": 0,
           "taskCount": 222,
@@ -5498,7 +5498,7 @@
           "sourceModel": "gpt-5.6-sol",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.589,
+          "rawValue": 0.607,
           "uncertainty": 0,
           "cohortPercentile": 0.333,
           "taskCount": 112,
@@ -5507,7 +5507,7 @@
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
           "capturedAt": "2026-08-25",
-          "costUsd": 4.39
+          "costUsd": 4.33
         },
         {
           "benchmark": "codexradar",
@@ -5515,7 +5515,7 @@
           "sourceModel": "gpt-5.6-sol",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.571,
+          "rawValue": 0.554,
           "uncertainty": 0,
           "cohortPercentile": 0.222,
           "taskCount": 112,
@@ -5524,7 +5524,7 @@
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
           "capturedAt": "2026-08-25",
-          "costUsd": 2
+          "costUsd": 1.88
         },
         {
           "benchmark": "codexradar",
@@ -5534,7 +5534,7 @@
           "metric": "pass_at_1",
           "rawValue": 0.696,
           "uncertainty": 0,
-          "cohortPercentile": 0.778,
+          "cohortPercentile": 0.889,
           "taskCount": 112,
           "cohortSize": 9,
           "effort": "max",
@@ -5549,7 +5549,7 @@
           "sourceModel": "gpt-5.6-sol",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.598,
+          "rawValue": 0.607,
           "uncertainty": 0,
           "cohortPercentile": 0.333,
           "taskCount": 112,
@@ -5558,7 +5558,7 @@
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
           "capturedAt": "2026-08-25",
-          "costUsd": 3.36
+          "costUsd": 3.29
         },
         {
           "benchmark": "codexradar",
@@ -5568,14 +5568,14 @@
           "metric": "pass_at_1",
           "rawValue": 0.705,
           "uncertainty": 0,
-          "cohortPercentile": 0.889,
+          "cohortPercentile": 1,
           "taskCount": 112,
           "cohortSize": 9,
           "effort": "ultra",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
           "capturedAt": "2026-08-25",
-          "costUsd": 24.18
+          "costUsd": 24.17
         },
         {
           "benchmark": "codexradar",
@@ -5583,16 +5583,16 @@
           "sourceModel": "gpt-5.6-sol",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.696,
+          "rawValue": 0.705,
           "uncertainty": 0,
-          "cohortPercentile": 0.778,
+          "cohortPercentile": 1,
           "taskCount": 112,
           "cohortSize": 9,
           "effort": "xhigh",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
           "capturedAt": "2026-08-25",
-          "costUsd": 5.81
+          "costUsd": 5.76
         },
         {
           "benchmark": "deepswe",
@@ -5996,7 +5996,7 @@
           "sourceModel": "gpt-5.6-terra",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.5,
+          "rawValue": 0.509,
           "uncertainty": 0,
           "cohortPercentile": 0,
           "taskCount": 112,
@@ -6005,7 +6005,7 @@
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
           "capturedAt": "2026-08-25",
-          "costUsd": 1.06
+          "costUsd": 1.07
         },
         {
           "benchmark": "codexradar",
@@ -6013,7 +6013,7 @@
           "sourceModel": "gpt-5.6-terra",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.295,
+          "rawValue": 0.304,
           "uncertainty": 0,
           "cohortPercentile": 0,
           "taskCount": 112,
@@ -6022,7 +6022,7 @@
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
           "capturedAt": "2026-08-25",
-          "costUsd": 0.48
+          "costUsd": 0.49
         },
         {
           "benchmark": "codexradar",
@@ -6039,7 +6039,7 @@
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
           "capturedAt": "2026-08-25",
-          "costUsd": 3.48
+          "costUsd": 3.47
         },
         {
           "benchmark": "codexradar",
@@ -6446,8 +6446,8 @@
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-24",
-          "costUsd": 3.67
+          "capturedAt": "2026-08-25",
+          "costUsd": 3.68
         },
         {
           "benchmark": "codexradar",
@@ -6457,14 +6457,14 @@
           "metric": "pass_at_1",
           "rawValue": 0.679,
           "uncertainty": 0,
-          "cohortPercentile": 0.778,
+          "cohortPercentile": 0.889,
           "taskCount": 112,
           "cohortSize": 9,
           "effort": "xhigh",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-24",
-          "costUsd": 5.54
+          "capturedAt": "2026-08-25",
+          "costUsd": 5.56
         },
         {
           "benchmark": "deepswe",
@@ -7048,7 +7048,7 @@
           "sourceModel": "grok-4.6",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.553,
+          "rawValue": 0.552,
           "uncertainty": 0,
           "cohortPercentile": 0.222,
           "taskCount": 106,
@@ -7364,10 +7364,10 @@
           "sourceModel": "k3",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.639,
+          "rawValue": 0.561,
           "uncertainty": 0,
-          "cohortPercentile": 0.444,
-          "taskCount": 34,
+          "cohortPercentile": 0.222,
+          "taskCount": 46,
           "cohortSize": 9,
           "effort": "high",
           "selectionBasis": "per_effort",
@@ -7380,10 +7380,10 @@
           "sourceModel": "k3",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.688,
+          "rawValue": 0.632,
           "uncertainty": 0,
-          "cohortPercentile": 0.778,
-          "taskCount": 34,
+          "cohortPercentile": 0.444,
+          "taskCount": 46,
           "cohortSize": 9,
           "effort": "low",
           "selectionBasis": "per_effort",
@@ -7396,10 +7396,10 @@
           "sourceModel": "k3",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.735,
+          "rawValue": 0.652,
           "uncertainty": 0,
-          "cohortPercentile": 1,
-          "taskCount": 34,
+          "cohortPercentile": 0.778,
+          "taskCount": 46,
           "cohortSize": 9,
           "effort": "max",
           "selectionBasis": "per_effort",
