@@ -672,6 +672,17 @@ type ModelProfile struct {
 	Source string `json:"source"` // builtin_registry | auto_probe | capability_test | manual
 }
 
+// upstreamCapabilitySupportsReasoning 判断模型注册表能力是否支持推理。
+// capabilities.reasoning 与 thinkingMode/reasoningEfforts 任一命中即视为支持：
+// 部分模型（如 grok-4.5）会推理但不可控思考档位，只登记 capabilities.reasoning。
+// 路由硬约束（buildChannelEntry）与模型画像（applyUpstreamModelCapability）必须共用
+// 此口径，否则同一模型会在候选表被标"推理能力不满足"的同时被请求期解析选中。
+func upstreamCapabilitySupportsReasoning(capability config.UpstreamModelCapability) bool {
+	return capability.ThinkingMode != "" ||
+		capability.Capabilities["reasoning"] ||
+		len(capability.ReasoningEfforts) > 0
+}
+
 // applyUpstreamModelCapability 将模型注册表中的上游能力写入模型画像。
 // 该能力描述实际发送给供应商的模型，不应与下游客户端 AgentModelProfile 混用。
 func applyUpstreamModelCapability(profile *ModelProfile, capability config.UpstreamModelCapability) {
@@ -683,6 +694,5 @@ func applyUpstreamModelCapability(profile *ModelProfile, capability config.Upstr
 	profile.SupportsDocument = capability.Capabilities["document"]
 	profile.SupportsToolCalls = capability.Capabilities["toolCalls"] ||
 		capability.Capabilities["tool_calls"] || capability.Capabilities["tools"]
-	profile.SupportsReasoning = capability.ThinkingMode != "" ||
-		capability.Capabilities["reasoning"] || len(capability.ReasoningEfforts) > 0
+	profile.SupportsReasoning = upstreamCapabilitySupportsReasoning(capability)
 }

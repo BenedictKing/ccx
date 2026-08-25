@@ -1481,7 +1481,7 @@ func (r *SmartRouter) buildChannelEntry(
 			entry.SupportsVision = capability.Capabilities["vision"]
 			entry.SupportsDocument = capability.Capabilities["document"]
 			entry.SupportsToolCalls = capability.Capabilities["toolCalls"]
-			entry.SupportsReasoning = capability.ThinkingMode != "" || len(capability.ReasoningEfforts) > 0
+			entry.SupportsReasoning = upstreamCapabilitySupportsReasoning(capability)
 		}
 	}
 	entry.ModelID = actualModel

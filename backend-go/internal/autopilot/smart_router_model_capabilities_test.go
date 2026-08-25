@@ -242,6 +242,46 @@ func TestSmartRouterPrefersEndpointDomainOverrideAndAppliesProviderFactor(t *tes
 	}
 }
 
+// TestBuildChannelEntryReasoningMatchesModelProfileDerivation 锁定路由硬约束与
+// 请求期模型解析共用同一推理判定口径。grok-4.5 这类"会推理但不可控思考档位"
+// 的模型只登记 capabilities.reasoning；若 buildChannelEntry 漏读该标志，候选表会
+// 标注"推理能力不满足"，而 ModelResolver（画像派生）仍会在请求期选中该模型，
+// 造成 trace 结论与实际路由相反（2026-08-26 rt_76e98c24ba254a4d）。
+func TestBuildChannelEntryReasoningMatchesModelProfileDerivation(t *testing.T) {
+	capabilities := []config.UpstreamModelCapability{
+		{Capabilities: map[string]bool{"reasoning": true}},
+		{ThinkingMode: "adaptive"},
+		{ReasoningEfforts: []string{"low"}},
+		{},
+	}
+
+	router := NewSmartRouter(nil, nil, nil, nil)
+	upstream := &config.UpstreamConfig{ChannelUID: "ch_reasoning"}
+	channel := scheduler.ChannelInfo{Index: 0, Name: "reasoning", Status: "active"}
+	for _, capability := range capabilities {
+		upstream.ModelCapabilities = map[string]config.UpstreamModelCapability{"reasoning-model": capability}
+		entry := router.buildChannelEntry(channel, upstream, "messages", "reasoning-model", nil)
+
+		var profile ModelProfile
+		applyUpstreamModelCapability(&profile, capability)
+		if entry.SupportsReasoning != profile.SupportsReasoning {
+			t.Fatalf("buildChannelEntry reasoning=%v 与画像派生 %v 口径不一致: %+v",
+				entry.SupportsReasoning, profile.SupportsReasoning, capability)
+		}
+
+		wantReasons := 0
+		if !profile.SupportsReasoning {
+			wantReasons = 1
+		}
+		reasons := CapabilityFloorReasons(CandidateCapabilities{SupportsReasoning: entry.SupportsReasoning},
+			&RequestProfile{ReasoningNeed: true})
+		if len(reasons) != wantReasons {
+			t.Fatalf("reasoning=%v 时候选应与请求期解析一致通过/拒绝硬约束, got reasons=%v want len=%d",
+				entry.SupportsReasoning, reasons, wantReasons)
+		}
+	}
+}
+
 func TestBuildChannelEntryMergesRegistryAndEndpointCapabilities(t *testing.T) {
 	store, err := NewProfileStore(filepath.Join(t.TempDir(), "profiles.db"))
 	if err != nil {
