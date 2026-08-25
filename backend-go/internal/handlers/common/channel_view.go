@@ -47,6 +47,7 @@ func BuildChannelView(up config.UpstreamConfig, index int) gin.H {
 		"lowQuality":                    up.LowQuality,
 		"customHeaders":                 up.CustomHeaders,
 		"proxyUrl":                      up.ProxyURL,
+		"proxyPreferDirect":             up.ProxyPreferDirect,
 		"supportedModels":               up.SupportedModels,
 		"routePrefix":                   up.RoutePrefix,
 		"disabledApiKeys":               up.DisabledAPIKeys,

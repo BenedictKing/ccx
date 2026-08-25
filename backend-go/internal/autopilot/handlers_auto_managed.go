@@ -35,6 +35,8 @@ type AutoAddRequest struct {
 	// ProxyURL 渠道级代理（HTTP/HTTPS/SOCKS5）：发现/探活与后续上游请求经代理访问，
 	// 用于添加直连不可达的境外上游。
 	ProxyURL string `json:"proxyUrl,omitempty"`
+	// ProxyPreferDirect 直连优先：配置了代理时先直连，失败自动回退代理。
+	ProxyPreferDirect bool `json:"proxyPreferDirect,omitempty"`
 	// Placement 故障转移位置："front"（首位）| 缺省末尾
 	Placement string `json:"placement,omitempty"`
 }
@@ -1966,11 +1968,12 @@ func handleCustomAutoAdd(c *gin.Context, deps *AutoManagedDeps, requestKind stri
 	additions := make([]config.AccountChannelAddition, 0, len(routes))
 	for _, route := range routes {
 		upstream := buildCustomManagedProtocolRoute(config.UpstreamConfig{
-			BaseURL:         baseURLs[0],
-			BaseURLs:        append([]string(nil), baseURLs...),
-			APIKeys:         append([]string(nil), req.APIKeys...),
-			SupportedModels: append([]string(nil), route.SupportedModels...),
-			ProxyURL:        strings.TrimSpace(req.ProxyURL),
+			BaseURL:           baseURLs[0],
+			BaseURLs:          append([]string(nil), baseURLs...),
+			APIKeys:           append([]string(nil), req.APIKeys...),
+			SupportedModels:   append([]string(nil), route.SupportedModels...),
+			ProxyURL:          strings.TrimSpace(req.ProxyURL),
+			ProxyPreferDirect: req.ProxyPreferDirect,
 		}, accountUID, baseName, route.ChannelKind, multiRoute, now)
 		additions = append(additions, config.AccountChannelAddition{Kind: route.ChannelKind, Upstream: upstream, Placement: req.Placement})
 	}

@@ -35,11 +35,12 @@ func (p *ProviderQualityProbe) runSample(
 	reqCtx, cancel := context.WithTimeout(req.Context(), p.config.RequestTimeout)
 	defer cancel()
 	req = req.WithContext(reqCtx)
-	client := httpclient.GetManager().GetStandardClient(
-		p.config.RequestTimeout,
-		upstream.InsecureSkipVerify,
-		upstream.ProxyURL,
-	)
+	client := httpclient.GetManager().GetClient(httpclient.ClientOptions{
+		Timeout:           p.config.RequestTimeout,
+		Insecure:          upstream.InsecureSkipVerify,
+		ProxyURL:          upstream.ProxyURL,
+		ProxyPreferDirect: upstream.ProxyPreferDirect,
+	})
 
 	start := time.Now()
 	resp, err := client.Do(req)

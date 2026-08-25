@@ -115,7 +115,12 @@ func PingAllMultiBaseURLUpstreams(upstreams []config.UpstreamConfig, builder Pin
 }
 
 func pingBaseURL(upstream config.UpstreamConfig, baseURL string, timeout time.Duration, builder PingRequestBuilder) gin.H {
-	client := httpclient.GetManager().GetStandardClient(timeout, upstream.InsecureSkipVerify, upstream.ProxyURL)
+	client := httpclient.GetManager().GetClient(httpclient.ClientOptions{
+		Timeout:           timeout,
+		Insecure:          upstream.InsecureSkipVerify,
+		ProxyURL:          upstream.ProxyURL,
+		ProxyPreferDirect: upstream.ProxyPreferDirect,
+	})
 	req, err := builder(upstream, strings.TrimSuffix(baseURL, "/"))
 	if err != nil {
 		return gin.H{"success": false, "error": "req_creation_failed", "latency": 0, "status": "error"}

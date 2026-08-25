@@ -152,6 +152,16 @@
                 clearable
                 @update:model-value="updateForm({ proxyUrl: $event ?? '' })"
               />
+              <v-switch
+                :model-value="form.proxyPreferDirect"
+                :label="t('channelEditor.transport.proxyPreferDirect.label')"
+                :hint="t('channelEditor.transport.proxyPreferDirect.hint')"
+                persistent-hint
+                color="primary"
+                density="compact"
+                :disabled="!form.proxyUrl?.trim()"
+                @update:model-value="updateForm({ proxyPreferDirect: $event })"
+              />
 
               <div class="mt-6">
                 <CustomHeadersSection

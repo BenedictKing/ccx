@@ -54,21 +54,22 @@ type CreateRequestBody struct {
 
 // CreateRequestBodyProtocol POST 单协议入参。
 type CreateRequestBodyProtocol struct {
-	Kind             string                `json:"kind"`
-	ServiceType      string                `json:"serviceType"`
-	APIKeys          []string              `json:"apiKeys"`
-	APIKeyConfigs    []config.APIKeyConfig `json:"apiKeyConfigs"`
-	BaseURLs         []string              `json:"baseUrls"`
-	BaseURL          string                `json:"baseUrl"`
-	ModelMapping     map[string]string     `json:"modelMapping"`
-	ReasoningMapping map[string]string     `json:"reasoningMapping"`
-	Priority         int                   `json:"priority"`
-	Enabled          *bool                 `json:"enabled"`
-	Status           string                `json:"status"`
-	RoutePrefix      string                `json:"routePrefix"`
-	SupportedModels  []string              `json:"supportedModels"`
-	CustomHeaders    map[string]string     `json:"customHeaders"`
-	ProxyURL         string                `json:"proxyUrl"`
+	Kind              string                `json:"kind"`
+	ServiceType       string                `json:"serviceType"`
+	APIKeys           []string              `json:"apiKeys"`
+	APIKeyConfigs     []config.APIKeyConfig `json:"apiKeyConfigs"`
+	BaseURLs          []string              `json:"baseUrls"`
+	BaseURL           string                `json:"baseUrl"`
+	ModelMapping      map[string]string     `json:"modelMapping"`
+	ReasoningMapping  map[string]string     `json:"reasoningMapping"`
+	Priority          int                   `json:"priority"`
+	Enabled           *bool                 `json:"enabled"`
+	Status            string                `json:"status"`
+	RoutePrefix       string                `json:"routePrefix"`
+	SupportedModels   []string              `json:"supportedModels"`
+	CustomHeaders     map[string]string     `json:"customHeaders"`
+	ProxyURL          string                `json:"proxyUrl"`
+	ProxyPreferDirect bool                  `json:"proxyPreferDirect"`
 }
 
 // UpdateRequestBody PUT 入参。
@@ -91,21 +92,22 @@ type UpdateRequestBodyCommon struct {
 
 // UpdateRequestBodyProtocol 单协议更新/新增。
 type UpdateRequestBodyProtocol struct {
-	Kind             string                `json:"kind"`
-	ServiceType      string                `json:"serviceType"`
-	APIKeys          []string              `json:"apiKeys"`
-	APIKeyConfigs    []config.APIKeyConfig `json:"apiKeyConfigs"`
-	BaseURLs         []string              `json:"baseUrls"`
-	BaseURL          string                `json:"baseUrl"`
-	ModelMapping     map[string]string     `json:"modelMapping"`
-	ReasoningMapping map[string]string     `json:"reasoningMapping"`
-	Priority         int                   `json:"priority"`
-	Enabled          *bool                 `json:"enabled"`
-	Status           string                `json:"status"`
-	RoutePrefix      string                `json:"routePrefix"`
-	SupportedModels  []string              `json:"supportedModels"`
-	CustomHeaders    map[string]string     `json:"customHeaders"`
-	ProxyURL         string                `json:"proxyUrl"`
+	Kind              string                `json:"kind"`
+	ServiceType       string                `json:"serviceType"`
+	APIKeys           []string              `json:"apiKeys"`
+	APIKeyConfigs     []config.APIKeyConfig `json:"apiKeyConfigs"`
+	BaseURLs          []string              `json:"baseUrls"`
+	BaseURL           string                `json:"baseUrl"`
+	ModelMapping      map[string]string     `json:"modelMapping"`
+	ReasoningMapping  map[string]string     `json:"reasoningMapping"`
+	Priority          int                   `json:"priority"`
+	Enabled           *bool                 `json:"enabled"`
+	Status            string                `json:"status"`
+	RoutePrefix       string                `json:"routePrefix"`
+	SupportedModels   []string              `json:"supportedModels"`
+	CustomHeaders     map[string]string     `json:"customHeaders"`
+	ProxyURL          string                `json:"proxyUrl"`
+	ProxyPreferDirect bool                  `json:"proxyPreferDirect"`
 }
 
 // List GET /api/logical-channels?kind=llm
@@ -399,21 +401,22 @@ func (h *Handler) Create(c *gin.Context) {
 			keys = body.APIKeys
 		}
 		in.Protocols = append(in.Protocols, config.CreateLogicalChannelProtocol{
-			Kind:             strings.ToLower(strings.TrimSpace(p.Kind)),
-			ServiceType:      p.ServiceType,
-			APIKeys:          keys,
-			APIKeyConfigs:    p.APIKeyConfigs,
-			BaseURLs:         p.BaseURLs,
-			BaseURL:          p.BaseURL,
-			ModelMapping:     p.ModelMapping,
-			ReasoningMapping: p.ReasoningMapping,
-			Priority:         p.Priority,
-			Enabled:          p.Enabled,
-			Status:           p.Status,
-			RoutePrefix:      p.RoutePrefix,
-			SupportedModels:  p.SupportedModels,
-			CustomHeaders:    p.CustomHeaders,
-			ProxyURL:         p.ProxyURL,
+			Kind:              strings.ToLower(strings.TrimSpace(p.Kind)),
+			ServiceType:       p.ServiceType,
+			APIKeys:           keys,
+			APIKeyConfigs:     p.APIKeyConfigs,
+			BaseURLs:          p.BaseURLs,
+			BaseURL:           p.BaseURL,
+			ModelMapping:      p.ModelMapping,
+			ReasoningMapping:  p.ReasoningMapping,
+			Priority:          p.Priority,
+			Enabled:           p.Enabled,
+			Status:            p.Status,
+			RoutePrefix:       p.RoutePrefix,
+			SupportedModels:   p.SupportedModels,
+			CustomHeaders:     p.CustomHeaders,
+			ProxyURL:          p.ProxyURL,
+			ProxyPreferDirect: p.ProxyPreferDirect,
 		})
 	}
 	if in.Kind == "" {
@@ -454,21 +457,22 @@ func (h *Handler) Update(c *gin.Context) {
 	}
 	for _, p := range body.Protocols {
 		in.Protocols = append(in.Protocols, config.UpdateLogicalChannelProtocol{
-			Kind:             strings.ToLower(strings.TrimSpace(p.Kind)),
-			ServiceType:      p.ServiceType,
-			APIKeys:          p.APIKeys,
-			APIKeyConfigs:    p.APIKeyConfigs,
-			BaseURLs:         p.BaseURLs,
-			BaseURL:          p.BaseURL,
-			ModelMapping:     p.ModelMapping,
-			ReasoningMapping: p.ReasoningMapping,
-			Priority:         p.Priority,
-			Enabled:          p.Enabled,
-			Status:           p.Status,
-			RoutePrefix:      p.RoutePrefix,
-			SupportedModels:  p.SupportedModels,
-			CustomHeaders:    p.CustomHeaders,
-			ProxyURL:         p.ProxyURL,
+			Kind:              strings.ToLower(strings.TrimSpace(p.Kind)),
+			ServiceType:       p.ServiceType,
+			APIKeys:           p.APIKeys,
+			APIKeyConfigs:     p.APIKeyConfigs,
+			BaseURLs:          p.BaseURLs,
+			BaseURL:           p.BaseURL,
+			ModelMapping:      p.ModelMapping,
+			ReasoningMapping:  p.ReasoningMapping,
+			Priority:          p.Priority,
+			Enabled:           p.Enabled,
+			Status:            p.Status,
+			RoutePrefix:       p.RoutePrefix,
+			SupportedModels:   p.SupportedModels,
+			CustomHeaders:     p.CustomHeaders,
+			ProxyURL:          p.ProxyURL,
+			ProxyPreferDirect: p.ProxyPreferDirect,
 		})
 	}
 	logical, err := h.cm.UpdateLogicalChannel(in)

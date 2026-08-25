@@ -1076,7 +1076,12 @@ func requestModelsFromSelection(ctx context.Context, cfgManager *config.ConfigMa
 		candidateURLs = []string{buildModelsURL(upstream.BaseURL) + suffix}
 	}
 
-	client := httpclient.GetManager().GetStandardClient(modelsRequestTimeout, upstream.InsecureSkipVerify, upstream.ProxyURL)
+	client := httpclient.GetManager().GetClient(httpclient.ClientOptions{
+		Timeout:           modelsRequestTimeout,
+		Insecure:          upstream.InsecureSkipVerify,
+		ProxyURL:          upstream.ProxyURL,
+		ProxyPreferDirect: upstream.ProxyPreferDirect,
+	})
 
 	keyCandidates := selectModelsAPIKeyCandidates(cfgManager, upstream, channelType)
 	if len(keyCandidates) == 0 {

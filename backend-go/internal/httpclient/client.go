@@ -77,25 +77,7 @@ func (cm *ClientManager) getStandardClient(timeout time.Duration, responseHeader
 		}
 	}
 
-	transport := &http.Transport{
-		MaxIdleConns:          100,
-		MaxIdleConnsPerHost:   10,
-		IdleConnTimeout:       90 * time.Second,
-		DisableCompression:    false,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ResponseHeaderTimeout: responseHeaderTimeout,
-		ExpectContinueTimeout: 1 * time.Second,
-		ForceAttemptHTTP2:     true,
-	}
-
-	if insecure {
-		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-		envCfg := config.NewEnvConfig()
-		if envCfg.IsProduction() {
-			log.Printf("[HttpClient-Warn] 生产环境启用了 insecureSkipVerify，存在中间人攻击风险")
-		}
-	}
-
+	transport := buildTransport(false, responseHeaderTimeout, insecure)
 	applyProxy(transport, proxyAddr)
 
 	client := &http.Client{
@@ -107,6 +89,38 @@ func (cm *ClientManager) getStandardClient(timeout time.Duration, responseHeader
 		cm.clients[key] = client
 	}
 	return client
+}
+
+// buildTransport 构造标准/流式 transport；proxyAddr 经 applyProxy 注入（空=直连）。
+func buildTransport(stream bool, responseHeaderTimeout time.Duration, insecure bool) *http.Transport {
+	transport := &http.Transport{
+		MaxIdleConns:          100,
+		MaxIdleConnsPerHost:   10,
+		IdleConnTimeout:       90 * time.Second,
+		DisableCompression:    false,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ResponseHeaderTimeout: responseHeaderTimeout,
+		ExpectContinueTimeout: 1 * time.Second,
+		ForceAttemptHTTP2:     true,
+	}
+	if stream {
+		// 流式连接池更大，且禁用压缩
+		transport.MaxIdleConns = 200
+		transport.MaxIdleConnsPerHost = 20
+		transport.IdleConnTimeout = 120 * time.Second
+		transport.DisableCompression = true
+	}
+
+	if insecure {
+		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+		if !stream {
+			envCfg := config.NewEnvConfig()
+			if envCfg.IsProduction() {
+				log.Printf("[HttpClient-Warn] 生产环境启用了 insecureSkipVerify，存在中间人攻击风险")
+			}
+		}
+	}
+	return transport
 }
 
 // GetStreamClient 获取流式客户端（无超时，用于 SSE 流式响应）
@@ -141,21 +155,7 @@ func (cm *ClientManager) GetStreamClientWithResponseHeaderTimeout(responseHeader
 		return client
 	}
 
-	transport := &http.Transport{
-		MaxIdleConns:          200, // 流式连接池更大
-		MaxIdleConnsPerHost:   20,
-		IdleConnTimeout:       120 * time.Second,
-		DisableCompression:    true, // 流式响应禁用压缩
-		TLSHandshakeTimeout:   10 * time.Second,
-		ResponseHeaderTimeout: responseHeaderTimeout,
-		ExpectContinueTimeout: 1 * time.Second,
-		ForceAttemptHTTP2:     true,
-	}
-
-	if insecure {
-		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-	}
-
+	transport := buildTransport(true, responseHeaderTimeout, insecure)
 	applyProxy(transport, proxyAddr)
 
 	client := &http.Client{
@@ -227,4 +227,84 @@ func applyProxy(transport *http.Transport, proxyAddr string) {
 	default:
 		log.Printf("[HttpClient-Proxy] 警告: 不支持的代理协议: %s (地址: %s)", scheme, utils.RedactURLCredentials(proxyAddr))
 	}
+}
+
+// ClientOptions 描述一次上游请求客户端的全部可变参数（由渠道级配置展开而来）。
+type ClientOptions struct {
+	Stream                bool          // true=流式客户端（无整体超时、禁用压缩）
+	Timeout               time.Duration // 非流式整体超时（Stream=true 时忽略）
+	ResponseHeaderTimeout time.Duration // 等待响应头超时（0=继承全局配置）
+	Insecure              bool          // 跳过 TLS 证书验证
+	ProxyURL              string        // HTTP/HTTPS/SOCKS5 代理地址，空=直连
+	ProxyPreferDirect     bool          // 配置了代理时先直连，失败（网络错误/451/403）自动回退代理
+}
+
+// GetClient 按 ClientOptions 获取客户端。
+// ProxyPreferDirect=false 或 ProxyURL 为空时与 Get 系列方法行为完全一致（含缓存）。
+func (cm *ClientManager) GetClient(opts ClientOptions) *http.Client {
+	if !opts.ProxyPreferDirect || opts.ProxyURL == "" {
+		if opts.Stream {
+			return cm.GetStreamClientWithResponseHeaderTimeout(opts.ResponseHeaderTimeout, opts.Insecure, opts.ProxyURL)
+		}
+		return cm.GetStandardClientWithResponseHeaderTimeout(opts.Timeout, opts.ResponseHeaderTimeout, opts.Insecure, opts.ProxyURL)
+	}
+	return cm.getDirectFirstClient(opts)
+}
+
+// NewClient 与 GetClient 相同但不进入缓存（适用于表单临时代理等高变参数）。
+func (cm *ClientManager) NewClient(opts ClientOptions) *http.Client {
+	if !opts.ProxyPreferDirect || opts.ProxyURL == "" {
+		if opts.Stream {
+			return cm.GetStreamClientWithResponseHeaderTimeout(opts.ResponseHeaderTimeout, opts.Insecure, opts.ProxyURL)
+		}
+		return cm.NewStandardClient(opts.Timeout, opts.Insecure, opts.ProxyURL)
+	}
+	responseHeaderTimeout := normalizeResponseHeaderTimeout(opts.ResponseHeaderTimeout)
+	direct := buildTransport(opts.Stream, responseHeaderTimeout, opts.Insecure)
+	proxied := buildTransport(opts.Stream, responseHeaderTimeout, opts.Insecure)
+	applyProxy(proxied, opts.ProxyURL)
+	timeout := opts.Timeout
+	if opts.Stream {
+		timeout = 0 // 流式请求无整体超时
+	}
+	return &http.Client{
+		Transport: &directFirstRoundTripper{direct: direct, proxied: proxied, proxyURL: opts.ProxyURL},
+		Timeout:   timeout,
+	}
+}
+
+// getDirectFirstClient 构造直连优先客户端：direct/proxied 两个 transport 由
+// directFirstRoundTripper 编排，先直连、命中回退条件时改走代理。
+func (cm *ClientManager) getDirectFirstClient(opts ClientOptions) *http.Client {
+	responseHeaderTimeout := normalizeResponseHeaderTimeout(opts.ResponseHeaderTimeout)
+	key := fmt.Sprintf("df-%t-%d-%d-%t-%s", opts.Stream, opts.Timeout, responseHeaderTimeout, opts.Insecure, opts.ProxyURL)
+
+	cm.mu.RLock()
+	if client, ok := cm.clients[key]; ok {
+		cm.mu.RUnlock()
+		return client
+	}
+	cm.mu.RUnlock()
+
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	if client, ok := cm.clients[key]; ok {
+		return client
+	}
+
+	direct := buildTransport(opts.Stream, responseHeaderTimeout, opts.Insecure)
+	proxied := buildTransport(opts.Stream, responseHeaderTimeout, opts.Insecure)
+	applyProxy(proxied, opts.ProxyURL)
+
+	timeout := opts.Timeout
+	if opts.Stream {
+		timeout = 0 // 流式请求无整体超时
+	}
+	client := &http.Client{
+		Transport: &directFirstRoundTripper{direct: direct, proxied: proxied, proxyURL: opts.ProxyURL},
+		Timeout:   timeout,
+	}
+	cm.clients[key] = client
+	return client
 }

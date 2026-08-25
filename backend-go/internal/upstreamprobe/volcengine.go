@@ -52,6 +52,7 @@ type Result struct {
 // 透传渠道级 proxyURL、customHeaders 与 insecureSkipVerify，使探针与真实请求路径一致。
 type ProbeOptions struct {
 	ProxyURL           string
+	ProxyPreferDirect  bool
 	CustomHeaders      map[string]string
 	InsecureSkipVerify bool
 }
@@ -274,7 +275,12 @@ func postJSONProbe(ctx context.Context, urlStr, apiKey, authHeader string, prepa
 	utils.ApplyCustomHeaders(req.Header, options.CustomHeaders)
 
 	proxyURL := options.ProxyURL
-	client := httpclient.GetManager().GetStandardClient(probeTimeout, options.InsecureSkipVerify, proxyURL)
+	client := httpclient.GetManager().GetClient(httpclient.ClientOptions{
+		Timeout:           probeTimeout,
+		Insecure:          options.InsecureSkipVerify,
+		ProxyURL:          proxyURL,
+		ProxyPreferDirect: options.ProxyPreferDirect,
+	})
 	resp, err := client.Do(req)
 	if err != nil {
 		return Result{Err: err}

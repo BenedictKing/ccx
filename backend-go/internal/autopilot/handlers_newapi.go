@@ -131,6 +131,10 @@ type NewApiVerifyRequest struct {
 	AuthTokenMode   string `json:"authTokenMode,omitempty"`
 	DisplayName     string `json:"displayName,omitempty"`
 	SubscriptionUID string `json:"subscriptionUid,omitempty"`
+	// ProxyURL 可选代理（HTTP/HTTPS/SOCKS5），用于直连被地域封锁的站点。
+	ProxyURL string `json:"proxyUrl,omitempty"`
+	// ProxyPreferDirect 配置了代理时先直连，失败自动回退代理。
+	ProxyPreferDirect bool `json:"proxyPreferDirect,omitempty"`
 }
 
 // NewApiVerifyResponse POST /subscriptions/newapi/verify 响应体（不落库）。
@@ -167,6 +171,10 @@ type NewApiProvisionRequest struct {
 	// MaxGroupMultiplier 限制自动建 Key 与调用允许使用的最高分组倍率；缺省时保守使用 1.0。
 	MaxGroupMultiplier *float64 `json:"maxGroupMultiplier,omitempty"`
 	Notes              string   `json:"notes,omitempty"`
+	// ProxyURL 可选代理（HTTP/HTTPS/SOCKS5），绑定全流程经代理访问并写入所建渠道。
+	ProxyURL string `json:"proxyUrl,omitempty"`
+	// ProxyPreferDirect 配置了代理时先直连，失败自动回退代理；随 ProxyURL 一并写入渠道。
+	ProxyPreferDirect bool `json:"proxyPreferDirect,omitempty"`
 }
 
 // NewApiProvisionResponse POST /subscriptions/newapi/provision 响应体。
@@ -387,7 +395,7 @@ func handleNewApiVerify(deps *NewApiRouteDeps) gin.HandlerFunc {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 20*time.Second)
 		defer cancel()
 
-		adapter := &NewApiAdapter{}
+		adapter := NewApiAdapterForProxy(req.ProxyURL, req.ProxyPreferDirect)
 
 		// 1) 校验 + 取用户信息（支持 New-API-User header 缺失回退）
 		self, derivedUserID, err := adapter.VerifyWithFallback(ctx, req.BaseURL, req.AccessToken, req.UserID, req.AuthTokenMode)
@@ -474,7 +482,7 @@ func handleNewApiProvision(deps *NewApiRouteDeps) gin.HandlerFunc {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
 		defer cancel()
 
-		adapter := &NewApiAdapter{}
+		adapter := NewApiAdapterForProxy(req.ProxyURL, req.ProxyPreferDirect)
 
 		// 1) 校验 + 拉用户信息（支持 New-API-User header 缺失回退）
 		self, derivedUserID, err := adapter.VerifyWithFallback(ctx, req.BaseURL, req.AccessToken, req.UserID, req.AuthTokenMode)
@@ -569,6 +577,8 @@ func handleNewApiProvision(deps *NewApiRouteDeps) gin.HandlerFunc {
 				AccessToken:         req.AccessToken, // 持久化但不出 API 响应
 				UserID:              derivedUserID,
 				AuthTokenMode:       req.AuthTokenMode,
+				ProxyURL:            strings.TrimSpace(req.ProxyURL),
+				ProxyPreferDirect:   req.ProxyPreferDirect,
 				ProvisionKeyName:    primaryKey.Name,
 				ProvisionGroup:      primaryKey.Group,
 				ProvisionGroupRatio: &provisionGroupRatio,
@@ -645,6 +655,11 @@ func handleNewApiProvision(deps *NewApiRouteDeps) gin.HandlerFunc {
 					AutoManaged:     &autoManaged,
 					AutoManagedKind: &newApiKind,
 				}
+				// 绑定请求显式携带代理设置时，同步到合并目标渠道
+				if trimmedProxy := strings.TrimSpace(req.ProxyURL); trimmedProxy != "" {
+					updates.ProxyURL = &trimmedProxy
+					updates.ProxyPreferDirect = &req.ProxyPreferDirect
+				}
 				if target.AutoManagedAt == nil {
 					updates.AutoManagedAt = &now
 				}
@@ -660,20 +675,22 @@ func handleNewApiProvision(deps *NewApiRouteDeps) gin.HandlerFunc {
 				serviceType := kindToDefaultServiceType(req.ChannelKind)
 				channelUID = config.GenerateChannelUID()
 				upstream := config.UpstreamConfig{
-					Name:            channelName,
-					ChannelUID:      channelUID,
-					AccountUID:      StableAccountUID(req.SubscriptionUID),
-					BaseURL:         strings.TrimRight(req.BaseURL, "/"),
-					BaseURLs:        []string{strings.TrimRight(req.BaseURL, "/")},
-					APIKeys:         apiKeys,
-					APIKeyConfigs:   apiKeyConfigs,
-					ServiceType:     serviceType,
-					Status:          "active",
-					AutoManaged:     true,
-					AutoManagedAt:   &now,
-					AutoManagedKind: "new_api",
-					OriginType:      "relay",
-					OriginTier:      "second",
+					Name:              channelName,
+					ChannelUID:        channelUID,
+					AccountUID:        StableAccountUID(req.SubscriptionUID),
+					BaseURL:           strings.TrimRight(req.BaseURL, "/"),
+					BaseURLs:          []string{strings.TrimRight(req.BaseURL, "/")},
+					APIKeys:           apiKeys,
+					APIKeyConfigs:     apiKeyConfigs,
+					ServiceType:       serviceType,
+					Status:            "active",
+					AutoManaged:       true,
+					AutoManagedAt:     &now,
+					AutoManagedKind:   "new_api",
+					OriginType:        "relay",
+					OriginTier:        "second",
+					ProxyURL:          strings.TrimSpace(req.ProxyURL),
+					ProxyPreferDirect: req.ProxyPreferDirect,
 				}
 
 				switch req.ChannelKind {

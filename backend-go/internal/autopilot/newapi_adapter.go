@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/BenedictKing/ccx/internal/errutil"
+	"github.com/BenedictKing/ccx/internal/httpclient"
 	"io"
 	"net/http"
 	"strconv"
@@ -97,6 +98,21 @@ const (
 // 可注入 HTTPClient 便于测试；零值可用（默认 15s 超时 client）。
 type NewApiAdapter struct {
 	HTTPClient *http.Client
+}
+
+// NewApiAdapterForProxy 按可选代理设置构造适配器。
+// proxyURL 为空时返回零值适配器（默认 client）；非空时经 httpclient 管理器构造
+// 支持 http/https/socks5 代理、可选直连优先回退的 client。
+func NewApiAdapterForProxy(proxyURL string, preferDirect bool) *NewApiAdapter {
+	proxyURL = strings.TrimSpace(proxyURL)
+	if proxyURL == "" {
+		return &NewApiAdapter{}
+	}
+	return &NewApiAdapter{HTTPClient: httpclient.GetManager().GetClient(httpclient.ClientOptions{
+		Timeout:           15 * time.Second,
+		ProxyURL:          proxyURL,
+		ProxyPreferDirect: preferDirect,
+	})}
 }
 
 func (a *NewApiAdapter) httpClient() *http.Client {

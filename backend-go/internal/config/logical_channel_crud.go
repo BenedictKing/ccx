@@ -37,21 +37,22 @@ type CreateLogicalChannelInput struct {
 
 // CreateLogicalChannelProtocol 单个新建协议的入参。
 type CreateLogicalChannelProtocol struct {
-	Kind             string // messages / chat / responses / gemini / images / vectors
-	ServiceType      string // claude / openai / responses / gemini
-	APIKeys          []string
-	APIKeyConfigs    []APIKeyConfig
-	BaseURLs         []string // 可选；缺省时回填到主 BaseURL
-	BaseURL          string   // 可选；缺省时使用入参 BaseURLs[0]
-	ModelMapping     map[string]string
-	ReasoningMapping map[string]string
-	Priority         int
-	Enabled          *bool  // 缺省 active
-	Status           string // 缺省 active
-	RoutePrefix      string
-	SupportedModels  []string
-	CustomHeaders    map[string]string
-	ProxyURL         string
+	Kind              string // messages / chat / responses / gemini / images / vectors
+	ServiceType       string // claude / openai / responses / gemini
+	APIKeys           []string
+	APIKeyConfigs     []APIKeyConfig
+	BaseURLs          []string // 可选；缺省时回填到主 BaseURL
+	BaseURL           string   // 可选；缺省时使用入参 BaseURLs[0]
+	ModelMapping      map[string]string
+	ReasoningMapping  map[string]string
+	Priority          int
+	Enabled           *bool  // 缺省 active
+	Status            string // 缺省 active
+	RoutePrefix       string
+	SupportedModels   []string
+	CustomHeaders     map[string]string
+	ProxyURL          string
+	ProxyPreferDirect bool
 }
 
 // CreateLogicalChannel 在事务内创建一个逻辑渠道及一组物理渠道。
@@ -174,6 +175,7 @@ func (cm *ConfigManager) createPhysicalChannelForLogicalLocked(in CreateLogicalC
 		SupportedModels:   append([]string(nil), p.SupportedModels...),
 		CustomHeaders:     p.CustomHeaders,
 		ProxyURL:          p.ProxyURL,
+		ProxyPreferDirect: p.ProxyPreferDirect,
 		LogicalChannelUID: logicalUID,
 		LogicalName:       in.Name,
 		Status:            defaultChannelStatus(p.Status, p.Enabled),
@@ -297,21 +299,22 @@ type UpdateLogicalChannelCommon struct {
 
 // UpdateLogicalChannelProtocol 更新或新增单协议。
 type UpdateLogicalChannelProtocol struct {
-	Kind             string
-	ServiceType      string
-	APIKeys          []string
-	APIKeyConfigs    []APIKeyConfig
-	BaseURLs         []string
-	BaseURL          string
-	ModelMapping     map[string]string
-	ReasoningMapping map[string]string
-	Priority         int
-	Enabled          *bool
-	Status           string
-	RoutePrefix      string
-	SupportedModels  []string
-	CustomHeaders    map[string]string
-	ProxyURL         string
+	Kind              string
+	ServiceType       string
+	APIKeys           []string
+	APIKeyConfigs     []APIKeyConfig
+	BaseURLs          []string
+	BaseURL           string
+	ModelMapping      map[string]string
+	ReasoningMapping  map[string]string
+	Priority          int
+	Enabled           *bool
+	Status            string
+	RoutePrefix       string
+	SupportedModels   []string
+	CustomHeaders     map[string]string
+	ProxyURL          string
+	ProxyPreferDirect bool
 }
 
 // UpdateLogicalChannel 事务内更新逻辑渠道（含 protocols 的增删改）。
@@ -446,21 +449,22 @@ func (cm *ConfigManager) UpdateLogicalChannel(in UpdateLogicalChannelInput) (*Lo
 				BaseURLs:   logical.BaseURLs,
 				Tags:       logical.Tags,
 			}, CreateLogicalChannelProtocol{
-				Kind:             kind,
-				ServiceType:      p.ServiceType,
-				APIKeys:          p.APIKeys,
-				APIKeyConfigs:    p.APIKeyConfigs,
-				BaseURLs:         p.BaseURLs,
-				BaseURL:          p.BaseURL,
-				ModelMapping:     p.ModelMapping,
-				ReasoningMapping: p.ReasoningMapping,
-				Priority:         p.Priority,
-				Enabled:          p.Enabled,
-				Status:           p.Status,
-				RoutePrefix:      p.RoutePrefix,
-				SupportedModels:  p.SupportedModels,
-				CustomHeaders:    p.CustomHeaders,
-				ProxyURL:         p.ProxyURL,
+				Kind:              kind,
+				ServiceType:       p.ServiceType,
+				APIKeys:           p.APIKeys,
+				APIKeyConfigs:     p.APIKeyConfigs,
+				BaseURLs:          p.BaseURLs,
+				BaseURL:           p.BaseURL,
+				ModelMapping:      p.ModelMapping,
+				ReasoningMapping:  p.ReasoningMapping,
+				Priority:          p.Priority,
+				Enabled:           p.Enabled,
+				Status:            p.Status,
+				RoutePrefix:       p.RoutePrefix,
+				SupportedModels:   p.SupportedModels,
+				CustomHeaders:     p.CustomHeaders,
+				ProxyURL:          p.ProxyURL,
+				ProxyPreferDirect: p.ProxyPreferDirect,
 			}, logical.LogicalChannelUID)
 			if err != nil {
 				cm.restoreAllUpstreamSlicesLocked(backupSlices)
@@ -699,6 +703,9 @@ func (cm *ConfigManager) updatePhysicalChannelForLogicalLocked(kind, channelUID 
 	}
 	if p.ProxyURL != "" {
 		up.ProxyURL = p.ProxyURL
+	}
+	if p.ProxyPreferDirect {
+		up.ProxyPreferDirect = true
 	}
 	return nil
 }

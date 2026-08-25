@@ -106,6 +106,7 @@ type CreateRequest struct {
 	SupportedModels         []string              `json:"supportedModels"`
 	CustomHeaders           map[string]string     `json:"customHeaders"`
 	ProxyURL                string                `json:"proxyUrl"`
+	ProxyPreferDirect       bool                  `json:"proxyPreferDirect"`
 	RoutePrefix             string                `json:"routePrefix"`
 	Status                  string                `json:"status"`
 	Placement               string                `json:"placement"`
@@ -143,6 +144,7 @@ func (h *Handler) Create(c *gin.Context) {
 		SupportedModels:         req.SupportedModels,
 		CustomHeaders:           req.CustomHeaders,
 		ProxyURL:                req.ProxyURL,
+		ProxyPreferDirect:       req.ProxyPreferDirect,
 		RoutePrefix:             req.RoutePrefix,
 		Status:                  req.Status,
 		AuthHeader:              req.AuthHeader,
@@ -177,6 +179,7 @@ type UpdateRequest struct {
 	SupportedModels          []string                                  `json:"supportedModels"`
 	CustomHeaders            map[string]string                         `json:"customHeaders"`
 	ProxyURL                 *string                                   `json:"proxyUrl"`
+	ProxyPreferDirect        *bool                                     `json:"proxyPreferDirect"`
 	RoutePrefix              *string                                   `json:"routePrefix"`
 	Status                   *string                                   `json:"status"`
 	Priority                 *int                                      `json:"priority"`
@@ -228,6 +231,7 @@ func (h *Handler) Update(c *gin.Context) {
 		SupportedModels:          req.SupportedModels,
 		CustomHeaders:            req.CustomHeaders,
 		ProxyURL:                 req.ProxyURL,
+		ProxyPreferDirect:        req.ProxyPreferDirect,
 		RoutePrefix:              req.RoutePrefix,
 		Status:                   req.Status,
 		Priority:                 req.Priority,

@@ -128,6 +128,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     fastMode: false,
     customHeaders: {} as Record<string, string>,
     proxyUrl: '',
+    proxyPreferDirect: false,
     costMultiplier: null as string | number | null,
     channelPaymentCurrency: '',
     channelPaymentAmount: null as string | number | null,
@@ -352,6 +353,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
       // 此前沿用旧值导致编辑保存后不生效（proxyUrl/customHeaders 保存丢失的根因）。
       customHeaders: { ...form.customHeaders },
       proxyUrl: form.proxyUrl.trim(),
+      proxyPreferDirect: form.proxyPreferDirect,
       remark: form.remark.trim(),
       costMultiplier: form.costMultiplier,
       channelPaymentCurrency: form.channelPaymentCurrency,
@@ -466,6 +468,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     form.fastMode = false
     form.customHeaders = {}
     form.proxyUrl = ''
+    form.proxyPreferDirect = false
     form.costMultiplier = null
     form.channelPaymentCurrency = ''
     form.channelPaymentAmount = null
@@ -560,6 +563,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     form.fastMode = !!channel.fastMode
     form.customHeaders = { ...(channel.customHeaders || {}) }
     form.proxyUrl = channel.proxyUrl || ''
+    form.proxyPreferDirect = !!channel.proxyPreferDirect
     form.costMultiplier = channel.costMultiplier ?? null
     form.channelPaymentCurrency = channel.channelPaymentCurrency ?? ''
     form.channelPaymentAmount = channel.channelPaymentAmount ?? null

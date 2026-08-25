@@ -92,6 +92,15 @@
         prepend-inner-icon="mdi-vpn"
         class="mt-1"
       />
+      <v-switch
+        v-model="proxyPreferDirect"
+        :label="t('addChannel.proxyPreferDirectLabel')"
+        :hint="t('addChannel.proxyPreferDirectHint')"
+        persistent-hint
+        color="primary"
+        density="compact"
+        :disabled="!proxyUrl.trim()"
+      />
     </div>
 
     <div
@@ -247,6 +256,7 @@ const { t } = useI18n()
 const baseUrls = ref<string[]>([''])
 const apiKeys = ref<string[]>([''])
 const proxyUrl = ref('')
+const proxyPreferDirect = ref(false)
 const showKeys = ref<boolean[]>([false])
 const submitting = ref(false)
 const submitError = ref('')
@@ -411,7 +421,10 @@ function getGeneratedName(): string {
 }
 
 async function discoverCustomRoutes(baseUrls: string[], apiKeys: string[]) {
-  const discovery = await discoverFast(props.channelType, baseUrls, apiKeys, { proxyUrl: proxyUrl.value.trim() || undefined })
+  const discovery = await discoverFast(props.channelType, baseUrls, apiKeys, {
+    proxyUrl: proxyUrl.value.trim() || undefined,
+    proxyPreferDirect: proxyPreferDirect.value || undefined
+  })
   if (!discovery) {
     throw new Error(t('autopilot.quickAdd.discoveryFailed'))
   }
@@ -450,6 +463,7 @@ async function handleSubmit() {
             routes: routeDiscovery?.routes,
             rateLimitHint: routeDiscovery?.rateLimitHint,
             proxyUrl: proxyUrl.value.trim() || undefined,
+            proxyPreferDirect: proxyPreferDirect.value || undefined,
             placement: props.placement
           }
     )
@@ -471,6 +485,7 @@ function resetForm() {
   baseUrls.value = ['']
   apiKeys.value = ['']
   proxyUrl.value = ''
+  proxyPreferDirect.value = false
   showKeys.value = [false]
   submitting.value = false
   submitError.value = ''

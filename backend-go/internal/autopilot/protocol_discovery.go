@@ -481,7 +481,12 @@ func (r *AutoDiscoveryRunner) probeProtocolModel(
 
 	client := r.client
 	if client == nil {
-		client = httpclient.GetManager().GetStandardClient(protocolDiscoveryProbeTimeout, channel.InsecureSkipVerify, channel.ProxyURL)
+		client = httpclient.GetManager().GetClient(httpclient.ClientOptions{
+			Timeout:           protocolDiscoveryProbeTimeout,
+			Insecure:          channel.InsecureSkipVerify,
+			ProxyURL:          channel.ProxyURL,
+			ProxyPreferDirect: channel.ProxyPreferDirect,
+		})
 	}
 	resp, err := client.Do(req)
 	if err != nil {

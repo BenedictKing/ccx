@@ -40,7 +40,7 @@
 
 ### 2.1 后端（`internal/autopilot/handlers_subscription_accounts.go`）
 `RegisterSubscriptionAccountRoutes`（行 489）：
-- `PATCH /api/subscriptions/:uid/newapi-credentials` → `handleUpdateNewApiCredentials`（行 397）— 主账号凭证更新，指针字段区分“不改”与显式提交（`NewApiCredentialsUpdateRequest` 行 27），落库前 `VerifyWithFallback` 校验，支持 `expectedVersion` 乐观锁，落库后触发 `SyncNow`
+- `PATCH /api/subscriptions/:uid/newapi-credentials` → `handleUpdateNewApiCredentials`（行 397）— 主账号凭证更新，指针字段区分“不改”与显式提交（`NewApiCredentialsUpdateRequest` 行 27，含 `proxyUrl`/`proxyPreferDirect` 订阅级代理设置），落库前 `VerifyWithFallback` 按生效代理校验，支持 `expectedVersion` 乐观锁，落库后触发 `SyncNow`
 - `POST /api/subscriptions/:uid/accounts` → `handleAddSubscriptionAccount`（行 55）— **先 verify 拉账号/分组/模型，再按倍率阈值为全部合格分组自动建 key**（`namePrefix = accountUID + "-"` 行 121 避免同站同名复用冲突），失败回滚远端 key
 - `GET /api/subscriptions/:uid/accounts` → `handleListSubscriptionAccounts`（行 228，脱敏）
 - `DELETE /api/subscriptions/:uid/accounts/:accountUid` → `handleDeleteSubscriptionAccount`（行 264）— 先从渠道剔除 key，再 best-effort 回收远端 key，再移除账号
@@ -62,7 +62,7 @@
 ## 3. 数据模型：账号/key/凭证/渠道映射
 
 ### 3.1 订阅画像 `SubscriptionProfile`（`internal/autopilot/subscription_profile.go:15`）
-new-api 专用字段（行 62-94）：`Provider="new_api"`、`BaseURL`、`AccessToken`（敏感，明文序列化进 `profile_json`，API 响应脱敏）、`UserID`、`AuthTokenMode`、`ProvisionKeyName`、`ProvisionGroup`、`ProvisionGroupRatio`、`MaxGroupMultiplier`、`ProvisionModels`、`ProvisionedTokenID`、`ProvisionedKeys []NewApiProvisionedKey`、`AvailableModels`、`GroupMultipliers map[string]float64`、`Accounts []NewApiAccount`。计费条款为四字段币种/金额模型 `PaymentAmount/PaymentUnit/CreditAmount/CreditUnit`（行 37-40；旧 `RechargeMultiplier` 单字段已移除，`a96098da`，旧 JSON 键加载时自动忽略）。
+new-api 专用字段（行 62-94）：`Provider="new_api"`、`BaseURL`、`AccessToken`（敏感，明文序列化进 `profile_json`，API 响应脱敏）、`UserID`、`AuthTokenMode`、`ProxyURL`、`ProxyPreferDirect`（订阅级代理：绑定/同步经代理访问，直连优先开启时先直连、失败回退代理）、`ProvisionKeyName`、`ProvisionGroup`、`ProvisionGroupRatio`、`MaxGroupMultiplier`、`ProvisionModels`、`ProvisionedTokenID`、`ProvisionedKeys []NewApiProvisionedKey`、`AvailableModels`、`GroupMultipliers map[string]float64`、`Accounts []NewApiAccount`（账号级 `ProxyURL/ProxyPreferDirect` 为空时继承订阅级）。计费条款为四字段币种/金额模型 `PaymentAmount/PaymentUnit/CreditAmount/CreditUnit`（行 37-40；旧 `RechargeMultiplier` 单字段已移除，`a96098da`，旧 JSON 键加载时自动忽略）。
 
 - `NewApiProvisionedKey`（行 104）：`Name, Group, GroupMultiplier, TokenID, KeyUID`（**无明文 key**）
 - `NewApiAccount`（行 114）：`AccountUID, AccessToken, UserID, AuthTokenMode, DisplayName, Balance, Status, ProvisionedKeys[], LastSyncError, LastCheckedAt, CreatedAt`
@@ -140,7 +140,7 @@ UpstreamConfig (channelUid, autoManagedKind=new_api)
 
 ### 5.2 字段与校验
 - 首次接入 `NewApiSubscriptionForm.vue`：
-  - 表单字段：`baseUrl, accessToken(password), userId, authTokenMode, displayName`；provision 步 `subscriptionUid, channelKind, channelName, maxGroupMultiplier(number,min=0), notes`
+  - 表单字段：`baseUrl, accessToken(password), userId, authTokenMode, proxyUrl, proxyPreferDirect, displayName`；provision 步 `subscriptionUid, channelKind, channelName, maxGroupMultiplier(number,min=0), notes`（代理设置在 verify 步录入，provision 预填继承并写入所建渠道）
   - 校验：`canVerify`（baseUrl+accessToken 非空，行 263）、`canProvision`（subscriptionUid+channelKind + `maxGroupMultiplierValid` + `eligibleGroupItems.length>0`，行 264）
   - 合格分组过滤：`eligibleNewApiGroups`（`utils/newApiGroups.ts:12`）与 `isValidNewApiGroupMultiplier`（行 8，非负有限），前端与后端 `resolveNewApiProvisionGroups` 语义一致
   - provision 固定发 `provisionAllEligibleGroups=true`（行 318）

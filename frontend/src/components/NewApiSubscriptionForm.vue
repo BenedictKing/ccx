@@ -43,6 +43,26 @@
         :disabled="verified"
       />
       <v-text-field
+        v-model="verifyForm.proxyUrl"
+        :label="t('subscription.newApi.proxyUrl')"
+        :hint="t('subscription.newApi.proxyUrlHint')"
+        persistent-hint
+        variant="outlined"
+        density="compact"
+        class="mb-2"
+        :disabled="verified"
+      />
+      <v-switch
+        v-model="verifyForm.proxyPreferDirect"
+        :label="t('subscription.newApi.proxyPreferDirect')"
+        :hint="t('subscription.newApi.proxyPreferDirectHint')"
+        persistent-hint
+        color="primary"
+        density="compact"
+        class="mb-2"
+        :disabled="verified || !verifyForm.proxyUrl?.trim()"
+      />
+      <v-text-field
         v-model="verifyForm.displayName"
         :label="t('subscription.field.name')"
         variant="outlined"
@@ -219,6 +239,8 @@ const verifyForm = ref<NewApiVerifyRequest>({
   userId: '',
   authTokenMode: 'bearer',
   displayName: '',
+  proxyUrl: '',
+  proxyPreferDirect: false,
 })
 
 const provisionForm = ref<NewApiProvisionRequest>({
@@ -231,6 +253,8 @@ const provisionForm = ref<NewApiProvisionRequest>({
   authTokenMode: 'bearer',
   channelName: '',
   notes: '',
+  proxyUrl: '',
+  proxyPreferDirect: false,
 })
 
 const authTokenModeOptions = computed(() => [
@@ -279,6 +303,8 @@ async function handleVerify() {
       userId: verifyForm.value.userId || undefined,
       authTokenMode: verifyForm.value.authTokenMode || undefined,
       displayName: verifyForm.value.displayName || undefined,
+      proxyUrl: verifyForm.value.proxyUrl?.trim() || undefined,
+      proxyPreferDirect: verifyForm.value.proxyPreferDirect || undefined,
     })
     verifyResult.value = result
     verified.value = true
@@ -289,6 +315,8 @@ async function handleVerify() {
     provisionForm.value.userId = verifyForm.value.userId || undefined
     provisionForm.value.authTokenMode = verifyForm.value.authTokenMode || undefined
     provisionForm.value.displayName = verifyForm.value.displayName || result.username
+    provisionForm.value.proxyUrl = verifyForm.value.proxyUrl?.trim() || undefined
+    provisionForm.value.proxyPreferDirect = verifyForm.value.proxyPreferDirect
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Unknown error'
     emit('error', message)
@@ -318,6 +346,8 @@ async function handleProvision() {
       provisionAllEligibleGroups: true,
       maxGroupMultiplier: maxGroupMultiplier.value,
       notes: provisionForm.value.notes || undefined,
+      proxyUrl: provisionForm.value.proxyUrl?.trim() || undefined,
+      proxyPreferDirect: provisionForm.value.proxyPreferDirect || undefined,
     })
     emit('created', result)
   } catch (e) {

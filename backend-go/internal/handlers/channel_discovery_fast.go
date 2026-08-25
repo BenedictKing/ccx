@@ -38,6 +38,7 @@ type ChannelDiscoveryFastRequest struct {
 	AuthHeader         string            `json:"authHeader"`
 	CustomHeaders      map[string]string `json:"customHeaders"`
 	ProxyURL           string            `json:"proxyUrl"`
+	ProxyPreferDirect  bool              `json:"proxyPreferDirect"`
 	InsecureSkipVerify bool              `json:"insecureSkipVerify"`
 }
 
@@ -233,6 +234,7 @@ func buildFastTransientChannel(baseURL, apiKey string, req ChannelDiscoveryFastR
 		AuthHeader:         strings.TrimSpace(req.AuthHeader),
 		CustomHeaders:      cloneStringMap(req.CustomHeaders),
 		ProxyURL:           strings.TrimSpace(req.ProxyURL),
+		ProxyPreferDirect:  req.ProxyPreferDirect,
 		InsecureSkipVerify: req.InsecureSkipVerify,
 	}
 }

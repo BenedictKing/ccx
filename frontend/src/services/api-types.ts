@@ -260,6 +260,7 @@ export interface Channel {
   fastMode?: boolean
   customHeaders?: Record<string, string>  // 自定义请求头
   proxyUrl?: string                        // HTTP/HTTPS/SOCKS5 代理 URL
+  proxyPreferDirect?: boolean              // 直连优先：配代理时先直连，失败（网络错误/451/403）自动回退代理
   costMultiplier?: number                  // 渠道级充值倍率（EffectiveCost = ListCost × 倍率，0/空=不参与）
   channelPaymentCurrency?: string          // 充值币种（如 LDC/CNY/USD）
   channelPaymentAmount?: number            // 充值金额（0/空=不参与）
@@ -868,6 +869,7 @@ export interface ChannelModelsRequest {
   baseUrl?: string
   serviceType?: Channel['serviceType']
   proxyUrl?: string
+  proxyPreferDirect?: boolean
   insecureSkipVerify?: boolean
   customHeaders?: Record<string, string>
   authHeader?: ChannelAuthHeader | ''
@@ -961,6 +963,7 @@ export interface ChannelDiscoveryRequest {
   authHeader?: ChannelAuthHeader | ''
   customHeaders?: Record<string, string>
   proxyUrl?: string
+  proxyPreferDirect?: boolean
   insecureSkipVerify?: boolean
   modelMapping?: Record<string, string>
   reasoningMapping?: Record<string, string>
@@ -1060,6 +1063,7 @@ export interface ChannelDiscoveryFastRequest {
   authHeader?: ChannelAuthHeader | ''
   customHeaders?: Record<string, string>
   proxyUrl?: string
+  proxyPreferDirect?: boolean
   insecureSkipVerify?: boolean
 }
 
@@ -1315,6 +1319,10 @@ export interface SubscriptionItem {
   provisionGroupRatio?: number
   maxGroupMultiplier?: number
   provisionedKeys?: NewApiProvisionedKeyInfo[]
+
+  // 站点访问代理（地域封锁场景），绑定/同步经此代理
+  proxyUrl?: string
+  proxyPreferDirect?: boolean
 }
 
 export interface SubscriptionsListResponse {
@@ -1371,6 +1379,9 @@ export interface NewApiVerifyRequest {
   authTokenMode?: string
   displayName?: string
   subscriptionUid?: string
+  /** 站点访问代理（地域封锁场景） */
+  proxyUrl?: string
+  proxyPreferDirect?: boolean
 }
 
 export interface NewApiVerifyResponse {
@@ -1401,6 +1412,9 @@ export interface NewApiProvisionRequest {
   provisionModels?: string[]
   maxGroupMultiplier?: number
   notes?: string
+  /** 站点访问代理（地域封锁场景），绑定成功后写入渠道 */
+  proxyUrl?: string
+  proxyPreferDirect?: boolean
 }
 
 export interface NewApiProvisionedKeyInfo {
@@ -1438,12 +1452,17 @@ export interface NewApiAccountCreateRequest {
   provisionModels?: string[]
   maxGroupMultiplier?: number
   provisionAllEligibleGroups?: boolean
+  /** 账号级代理覆盖，空=继承订阅级代理设置 */
+  proxyUrl?: string
+  proxyPreferDirect?: boolean
 }
 
 export interface NewApiCredentialsUpdateRequest {
   accessToken?: string
   userId?: string
   authTokenMode?: string
+  proxyUrl?: string
+  proxyPreferDirect?: boolean
   expectedVersion?: number
 }
 
@@ -1462,6 +1481,9 @@ export interface NewApiAccountItem {
   usedQuota?: number
   authTokenMode?: string
   createdAt: string
+  /** 账号级代理设置（空表示继承订阅级） */
+  proxyUrl?: string
+  proxyPreferDirect?: boolean
 }
 
 export interface NewApiAccountListResponse {
@@ -2482,6 +2504,7 @@ export interface CreateLogicalChannelProtocol {
   supportedModels?: string[]
   customHeaders?: Record<string, string>
   proxyUrl?: string
+  proxyPreferDirect?: boolean
 }
 
 export interface CreateLogicalChannelRequest {

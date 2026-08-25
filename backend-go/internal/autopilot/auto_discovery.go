@@ -540,7 +540,12 @@ func (r *AutoDiscoveryRunner) discoverEndpoints(ctx context.Context, channel *co
 
 	client := r.client
 	if client == nil {
-		client = httpclient.GetManager().GetStandardClient(r.timeout, channel.InsecureSkipVerify, channel.ProxyURL)
+		client = httpclient.GetManager().GetClient(httpclient.ClientOptions{
+			Timeout:           r.timeout,
+			Insecure:          channel.InsecureSkipVerify,
+			ProxyURL:          channel.ProxyURL,
+			ProxyPreferDirect: channel.ProxyPreferDirect,
+		})
 	}
 
 	var results []EndpointDiscoveryResult
@@ -595,7 +600,12 @@ func (r *AutoDiscoveryRunner) discoverEndpointsWithCheckpoint(ctx context.Contex
 	}
 	client := r.client
 	if client == nil {
-		client = httpclient.GetManager().GetStandardClient(r.timeout, channel.InsecureSkipVerify, channel.ProxyURL)
+		client = httpclient.GetManager().GetClient(httpclient.ClientOptions{
+			Timeout:           r.timeout,
+			Insecure:          channel.InsecureSkipVerify,
+			ProxyURL:          channel.ProxyURL,
+			ProxyPreferDirect: channel.ProxyPreferDirect,
+		})
 	}
 
 	// 预计算已持久化且配置未变的端点 checkpoint，用于跳过重复探测。

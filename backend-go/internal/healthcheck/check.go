@@ -184,6 +184,7 @@ func (m *Manager) checkKeyL1(
 			AuthHeader:               u.AuthHeader,
 			CustomHeaders:            u.CustomHeaders,
 			ProxyURL:                 u.ProxyURL,
+			ProxyPreferDirect:        u.ProxyPreferDirect,
 			InsecureSkipVerify:       u.InsecureSkipVerify,
 			LearnedClientFingerprint: u.LearnedClientFingerprint,
 		})

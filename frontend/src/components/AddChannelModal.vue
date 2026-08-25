@@ -73,6 +73,15 @@
             density="compact"
             prepend-inner-icon="mdi-vpn"
           />
+          <v-switch
+            v-model="standardProxyPreferDirect"
+            :label="t('addChannel.proxyPreferDirectLabel')"
+            :hint="t('addChannel.proxyPreferDirectHint')"
+            persistent-hint
+            color="primary"
+            density="compact"
+            :disabled="!standardProxyUrl.trim()"
+          />
 
           <v-card variant="outlined" class="detection-status-card" rounded="lg">
             <v-card-text class="pa-4">
@@ -279,6 +288,8 @@ const preferencesStore = usePreferencesStore()
 const quickInput = ref('')
 // 标准模式代理 URL（可选）：发现/探活与渠道后续上游请求经代理访问
 const standardProxyUrl = ref('')
+// 直连优先：配置代理后先直连，失败自动回退代理
+const standardProxyPreferDirect = ref(false)
 const detectedBaseUrl = ref('')
 const detectedBaseUrls = ref<string[]>([])
 const detectedApiKeys = ref<string[]>([])
@@ -433,6 +444,7 @@ function expectedProtocolLabel(protocol: DiscoveryProtocol | ChannelType): strin
 function resetQuickState() {
   quickInput.value = ''
   standardProxyUrl.value = ''
+  standardProxyPreferDirect.value = false
   detectedBaseUrl.value = ''
   detectedBaseUrls.value = []
   detectedApiKeys.value = []
@@ -469,7 +481,8 @@ async function handleQuickSubmit() {
   standardSubmitError.value = ''
   try {
     const routeDiscovery = await discoverFast(props.channelType, detectedBaseUrls.value, detectedApiKeys.value, {
-      proxyUrl: standardProxyUrl.value.trim() || undefined
+      proxyUrl: standardProxyUrl.value.trim() || undefined,
+      proxyPreferDirect: standardProxyPreferDirect.value || undefined
     })
     if (!routeDiscovery) {
       throw new Error(t('autopilot.quickAdd.discoveryFailed'))
@@ -482,6 +495,7 @@ async function handleQuickSubmit() {
       routes: routeDiscovery.routes,
       rateLimitHint: routeDiscovery.rateLimitHint,
       proxyUrl: standardProxyUrl.value.trim() || undefined,
+      proxyPreferDirect: standardProxyPreferDirect.value || undefined,
       placement: placement.value
     })
     const currentChannel = result.channels?.find(channel => channel.channelKind === targetChannelType)

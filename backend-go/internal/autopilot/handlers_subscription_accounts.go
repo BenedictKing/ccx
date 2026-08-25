@@ -24,15 +24,29 @@ type NewApiAccountCreateRequest struct {
 	ProvisionModels            []string `json:"provisionModels,omitempty"`
 	MaxGroupMultiplier         *float64 `json:"maxGroupMultiplier,omitempty"`
 	ProvisionAllEligibleGroups bool     `json:"provisionAllEligibleGroups,omitempty"`
+	// ProxyURL 账号级代理覆盖，空=继承订阅级代理设置。
+	ProxyURL string `json:"proxyUrl,omitempty"`
+	// ProxyPreferDirect 直连优先，仅在代理生效时有意义。
+	ProxyPreferDirect bool `json:"proxyPreferDirect,omitempty"`
+}
+
+// resolveNewApiAccountProxy 解析账号生效的代理设置：账号级优先，缺省继承订阅级。
+func resolveNewApiAccountProxy(profile *SubscriptionProfile, account NewApiAccount) (string, bool) {
+	if trimmed := strings.TrimSpace(account.ProxyURL); trimmed != "" {
+		return trimmed, account.ProxyPreferDirect
+	}
+	return profile.ProxyURL, profile.ProxyPreferDirect
 }
 
 // NewApiCredentialsUpdateRequest PATCH /api/subscriptions/:uid/newapi-credentials 请求体。
 // 指针字段用于区分“不修改”与显式提交；accessToken 只接收不回显。
 type NewApiCredentialsUpdateRequest struct {
-	AccessToken     *string `json:"accessToken,omitempty"`
-	UserID          *string `json:"userId,omitempty"`
-	AuthTokenMode   *string `json:"authTokenMode,omitempty"`
-	ExpectedVersion *uint64 `json:"expectedVersion,omitempty"`
+	AccessToken       *string `json:"accessToken,omitempty"`
+	UserID            *string `json:"userId,omitempty"`
+	AuthTokenMode     *string `json:"authTokenMode,omitempty"`
+	ProxyURL          *string `json:"proxyUrl,omitempty"`
+	ProxyPreferDirect *bool   `json:"proxyPreferDirect,omitempty"`
+	ExpectedVersion   *uint64 `json:"expectedVersion,omitempty"`
 }
 
 // NewApiAccountItem 账号列表响应单条（脱敏）。
@@ -47,6 +61,9 @@ type NewApiAccountItem struct {
 	LastSyncError     string                 `json:"lastSyncError,omitempty"`
 	LastCheckedAt     time.Time              `json:"lastCheckedAt,omitempty"`
 	CreatedAt         time.Time              `json:"createdAt"`
+	// 账号级代理设置（非敏感配置，空表示继承订阅级）
+	ProxyURL          string `json:"proxyUrl,omitempty"`
+	ProxyPreferDirect bool   `json:"proxyPreferDirect,omitempty"`
 }
 
 // NewApiAccountListResponse GET /api/subscriptions/:uid/accounts 响应体。
@@ -98,7 +115,13 @@ func handleAddSubscriptionAccount(deps *NewApiRouteDeps) gin.HandlerFunc {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
 		defer cancel()
 
-		adapter := &NewApiAdapter{}
+		// 代理解析：请求显式携带优先，缺省继承订阅级设置
+		proxyURL := strings.TrimSpace(req.ProxyURL)
+		proxyPreferDirect := req.ProxyPreferDirect
+		if proxyURL == "" {
+			proxyURL, proxyPreferDirect = profile.ProxyURL, profile.ProxyPreferDirect
+		}
+		adapter := NewApiAdapterForProxy(proxyURL, proxyPreferDirect)
 		self, derivedUserID, err := adapter.VerifyWithFallback(ctx, profile.BaseURL, req.AccessToken, req.UserID, req.AuthTokenMode)
 		if err != nil {
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("账号验证失败: %v", err)})
@@ -162,16 +185,18 @@ func handleAddSubscriptionAccount(deps *NewApiRouteDeps) gin.HandlerFunc {
 			}
 
 			account := NewApiAccount{
-				AccountUID:      accountUID,
-				AccessToken:     req.AccessToken,
-				UserID:          derivedUserID,
-				AuthTokenMode:   req.AuthTokenMode,
-				DisplayName:     req.DisplayName,
-				Balance:         float64(self.Quota),
-				Status:          "active",
-				ProvisionedKeys: accountKeys,
-				LastCheckedAt:   time.Now(),
-				CreatedAt:       time.Now(),
+				AccountUID:        accountUID,
+				AccessToken:       req.AccessToken,
+				UserID:            derivedUserID,
+				AuthTokenMode:     req.AuthTokenMode,
+				ProxyURL:          strings.TrimSpace(req.ProxyURL),
+				ProxyPreferDirect: req.ProxyPreferDirect,
+				DisplayName:       req.DisplayName,
+				Balance:           float64(self.Quota),
+				Status:            "active",
+				ProvisionedKeys:   accountKeys,
+				LastCheckedAt:     time.Now(),
+				CreatedAt:         time.Now(),
 			}
 			if err := deps.Store.AddAccount(uid, account); err != nil {
 				cleanupNewApiProvisionedKeys(ctx, adapter, provisionReq, derivedUserID, provisioned)
@@ -211,6 +236,8 @@ func handleAddSubscriptionAccount(deps *NewApiRouteDeps) gin.HandlerFunc {
 				ProvisionedKeys:   account.ProvisionedKeys,
 				LastCheckedAt:     account.LastCheckedAt,
 				CreatedAt:         account.CreatedAt,
+				ProxyURL:          account.ProxyURL,
+				ProxyPreferDirect: account.ProxyPreferDirect,
 			})
 			return
 		}
@@ -240,6 +267,8 @@ func handleAddSubscriptionAccount(deps *NewApiRouteDeps) gin.HandlerFunc {
 			AccessTokenMasked: maskAccessToken(account.AccessToken),
 			LastCheckedAt:     account.LastCheckedAt,
 			CreatedAt:         account.CreatedAt,
+			ProxyURL:          account.ProxyURL,
+			ProxyPreferDirect: account.ProxyPreferDirect,
 		})
 	}
 }
@@ -272,6 +301,8 @@ func handleListSubscriptionAccounts(deps *NewApiRouteDeps) gin.HandlerFunc {
 				LastSyncError:     acc.LastSyncError,
 				LastCheckedAt:     acc.LastCheckedAt,
 				CreatedAt:         acc.CreatedAt,
+				ProxyURL:          acc.ProxyURL,
+				ProxyPreferDirect: acc.ProxyPreferDirect,
 			})
 		}
 
@@ -317,7 +348,7 @@ func handleDeleteSubscriptionAccount(deps *NewApiRouteDeps) gin.HandlerFunc {
 		if len(removedTokenIDs) > 0 {
 			ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
 			defer cancel()
-			adapter := &NewApiAdapter{}
+			adapter := NewApiAdapterForProxy(resolveNewApiAccountProxy(profile, *account))
 			for tokenID := range removedTokenIDs {
 				if err := adapter.DeleteToken(ctx, profile.BaseURL, account.AccessToken, account.UserID, account.AuthTokenMode, int(tokenID)); err != nil {
 					log.Printf("[NewApi-Account] 回收远端 key 失败 account=%s tokenID=%d: %v", accountUID, tokenID, err)
@@ -366,7 +397,7 @@ func handleRefreshSubscriptionAccount(deps *NewApiRouteDeps) gin.HandlerFunc {
 		}
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
 		defer cancel()
-		adapter := &NewApiAdapter{}
+		adapter := NewApiAdapterForProxy(resolveNewApiAccountProxy(profile, account))
 		balance, _, fetchErr := adapter.FetchBalance(ctx, profile.BaseURL, account.AccessToken, account.UserID, account.AuthTokenMode)
 		now := time.Now()
 		patchErr := deps.Store.Patch(uid, nil, func(current *SubscriptionProfile) error {
@@ -408,7 +439,7 @@ func handleRefreshSubscriptionAccount(deps *NewApiRouteDeps) gin.HandlerFunc {
 		if deps.SyncService != nil {
 			_, _ = deps.SyncService.SyncNow(c.Request.Context(), uid)
 		}
-		c.JSON(http.StatusOK, NewApiAccountItem{AccountUID: account.AccountUID, UserID: account.UserID, DisplayName: account.DisplayName, Balance: account.Balance, Status: account.Status, AccessTokenMasked: maskAccessToken(account.AccessToken), ProvisionedKeys: account.ProvisionedKeys, LastSyncError: account.LastSyncError, LastCheckedAt: account.LastCheckedAt, CreatedAt: account.CreatedAt})
+		c.JSON(http.StatusOK, NewApiAccountItem{AccountUID: account.AccountUID, UserID: account.UserID, DisplayName: account.DisplayName, Balance: account.Balance, Status: account.Status, AccessTokenMasked: maskAccessToken(account.AccessToken), ProvisionedKeys: account.ProvisionedKeys, LastSyncError: account.LastSyncError, LastCheckedAt: account.LastCheckedAt, CreatedAt: account.CreatedAt, ProxyURL: account.ProxyURL, ProxyPreferDirect: account.ProxyPreferDirect})
 	}
 }
 
@@ -468,7 +499,16 @@ func handleUpdateNewApiCredentials(deps *NewApiRouteDeps) gin.HandlerFunc {
 
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 20*time.Second)
 		defer cancel()
-		adapter := &NewApiAdapter{}
+		// 代理按生效值验证：请求显式提交优先，否则沿用订阅现有设置
+		proxyURL := profile.ProxyURL
+		if req.ProxyURL != nil {
+			proxyURL = strings.TrimSpace(*req.ProxyURL)
+		}
+		proxyPreferDirect := profile.ProxyPreferDirect
+		if req.ProxyPreferDirect != nil {
+			proxyPreferDirect = *req.ProxyPreferDirect
+		}
+		adapter := NewApiAdapterForProxy(proxyURL, proxyPreferDirect)
 		self, derivedUserID, err := adapter.VerifyWithFallback(ctx, profile.BaseURL, accessToken, userID, authTokenMode)
 		if err != nil {
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("主账号验证失败: %v", err)})
@@ -480,6 +520,12 @@ func handleUpdateNewApiCredentials(deps *NewApiRouteDeps) gin.HandlerFunc {
 			current.AccessToken = accessToken
 			current.UserID = derivedUserID
 			current.AuthTokenMode = authTokenMode
+			if req.ProxyURL != nil {
+				current.ProxyURL = strings.TrimSpace(*req.ProxyURL)
+			}
+			if req.ProxyPreferDirect != nil {
+				current.ProxyPreferDirect = *req.ProxyPreferDirect
+			}
 			current.Balance = float64(self.Quota)
 			current.UsedQuota = self.UsedQuota
 			current.LastBalanceRefreshAt = &now

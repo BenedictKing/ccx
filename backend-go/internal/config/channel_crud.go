@@ -406,6 +406,9 @@ func applyUpstreamUpdateFields(upstream *UpstreamConfig, updates UpstreamUpdate)
 	if updates.ProxyURL != nil {
 		upstream.ProxyURL = *updates.ProxyURL
 	}
+	if updates.ProxyPreferDirect != nil {
+		upstream.ProxyPreferDirect = *updates.ProxyPreferDirect
+	}
 	if updates.LearnedClientFingerprint != nil {
 		upstream.LearnedClientFingerprint = *updates.LearnedClientFingerprint
 	}

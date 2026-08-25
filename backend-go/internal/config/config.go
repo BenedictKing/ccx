@@ -102,6 +102,9 @@ type UpstreamConfig struct {
 	CustomHeaders map[string]string `json:"customHeaders,omitempty"` // 自定义请求头（覆盖或添加到上游请求）
 	// 渠道级代理
 	ProxyURL string `json:"proxyUrl,omitempty"` // HTTP/HTTPS/SOCKS5 代理地址
+	// ProxyPreferDirect 直连优先：配置了代理时先直连，直连失败（网络错误或命中回退
+	// 状态码 451/403，如上游地域封锁）时自动改用代理重放该请求。false=始终走代理（默认，旧行为）。
+	ProxyPreferDirect bool `json:"proxyPreferDirect,omitempty"`
 	// LearnedClientFingerprint 由发现/探活流程自动学习：该上游的 models/探测端点存在
 	// 客户端指纹校验（裸请求 401/403，带 Claude Code 客户端伪装头可通过）。
 	// 学习后该渠道的探测、拉模型、保活请求首发即带客户端伪装头，不再裸试。
@@ -1254,6 +1257,8 @@ type UpstreamUpdate struct {
 	CustomHeaders map[string]string `json:"customHeaders"`
 	// 渠道级代理
 	ProxyURL *string `json:"proxyUrl"`
+	// ProxyPreferDirect 直连优先（nil=不修改）；仅在配置了代理时有意义
+	ProxyPreferDirect *bool `json:"proxyPreferDirect"`
 	// 客户端伪装学习标记（由发现流程回写；nil=不修改）
 	LearnedClientFingerprint *bool `json:"learnedClientFingerprint"`
 	// 渠道级请求超时

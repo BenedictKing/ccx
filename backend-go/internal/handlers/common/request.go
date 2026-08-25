@@ -243,10 +243,22 @@ func SendRequestWithLifecycleTrace(req *http.Request, upstream *config.UpstreamC
 	globalResponseHeaderTimeout := config.GetRuntimeResponseHeaderTimeoutMs(envCfg.ResponseHeaderTimeout * 1000)
 	responseHeaderTimeout := time.Duration(upstream.GetEffectiveResponseHeaderTimeoutMs(globalResponseHeaderTimeout)) * time.Millisecond
 	if isStream {
-		client = clientManager.GetStreamClientWithResponseHeaderTimeout(responseHeaderTimeout, upstream.InsecureSkipVerify, upstream.ProxyURL)
+		client = clientManager.GetClient(httpclient.ClientOptions{
+			Stream:                true,
+			ResponseHeaderTimeout: responseHeaderTimeout,
+			Insecure:              upstream.InsecureSkipVerify,
+			ProxyURL:              upstream.ProxyURL,
+			ProxyPreferDirect:     upstream.ProxyPreferDirect,
+		})
 	} else {
 		timeout := time.Duration(upstream.GetEffectiveRequestTimeoutMs(globalRequestTimeout)) * time.Millisecond
-		client = clientManager.GetStandardClientWithResponseHeaderTimeout(timeout, responseHeaderTimeout, upstream.InsecureSkipVerify, upstream.ProxyURL)
+		client = clientManager.GetClient(httpclient.ClientOptions{
+			Timeout:               timeout,
+			ResponseHeaderTimeout: responseHeaderTimeout,
+			Insecure:              upstream.InsecureSkipVerify,
+			ProxyURL:              upstream.ProxyURL,
+			ProxyPreferDirect:     upstream.ProxyPreferDirect,
+		})
 	}
 
 	if upstream.InsecureSkipVerify && envCfg.EnableRequestLogs {

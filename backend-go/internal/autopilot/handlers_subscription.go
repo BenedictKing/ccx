@@ -103,6 +103,9 @@ type SubscriptionItem struct {
 	ProvisionedTokenID  int                    `json:"provisionedTokenId,omitempty"`
 	ProvisionedKeys     []NewApiProvisionedKey `json:"provisionedKeys,omitempty"`
 	AvailableModels     []string               `json:"availableModels,omitempty"`
+	// 站点访问代理（如地域封锁场景），非敏感配置可直接回显
+	ProxyURL          string `json:"proxyUrl,omitempty"`
+	ProxyPreferDirect bool   `json:"proxyPreferDirect,omitempty"`
 }
 
 // SubscriptionsListResponse GET /api/subscriptions 返回结构。
@@ -489,6 +492,8 @@ func toSubscriptionItem(p *SubscriptionProfile) SubscriptionItem {
 		ProvisionedTokenID:  p.ProvisionedTokenID,
 		ProvisionedKeys:     append([]NewApiProvisionedKey(nil), p.ProvisionedKeys...),
 		AvailableModels:     p.AvailableModels,
+		ProxyURL:            p.ProxyURL,
+		ProxyPreferDirect:   p.ProxyPreferDirect,
 	}
 	if p.ArchivedAt != nil {
 		item.ArchivedAt = p.ArchivedAt.Format("2006-01-02T15:04:05Z07:00")

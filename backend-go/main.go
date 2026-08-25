@@ -109,6 +109,7 @@ func channelModelsHandlerFetcher(handler gin.HandlerFunc) handlers.ChannelDiscov
 			"baseUrls":                 req.BaseURLs,
 			"serviceType":              req.ServiceType,
 			"proxyUrl":                 req.ProxyURL,
+			"proxyPreferDirect":        req.ProxyPreferDirect,
 			"insecureSkipVerify":       req.InsecureSkipVerify,
 			"customHeaders":            req.CustomHeaders,
 			"authHeader":               req.AuthHeader,
@@ -146,6 +147,7 @@ func healthCheckL1Fetcher(handler gin.HandlerFunc) healthcheck.L1Fetcher {
 			candidates := volcenginePlanCandidates(req.BaseURL, req.ServiceType)
 			sc, body, model, err := upstreamprobe.VolcenginePlanL1Probe(ctx, req.ServiceType, req.BaseURL, req.APIKey, req.AuthHeader, candidates, upstreamprobe.ProbeOptions{
 				ProxyURL:           req.ProxyURL,
+				ProxyPreferDirect:  req.ProxyPreferDirect,
 				CustomHeaders:      req.CustomHeaders,
 				InsecureSkipVerify: req.InsecureSkipVerify,
 			})
@@ -161,6 +163,7 @@ func healthCheckL1Fetcher(handler gin.HandlerFunc) healthcheck.L1Fetcher {
 			AuthHeader:               req.AuthHeader,
 			CustomHeaders:            req.CustomHeaders,
 			ProxyURL:                 req.ProxyURL,
+			ProxyPreferDirect:        req.ProxyPreferDirect,
 			InsecureSkipVerify:       req.InsecureSkipVerify,
 			LearnedClientFingerprint: req.LearnedClientFingerprint,
 		})

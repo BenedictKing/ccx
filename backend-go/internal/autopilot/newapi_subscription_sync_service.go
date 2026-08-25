@@ -125,6 +125,20 @@ func NewNewApiSubscriptionSyncService(deps NewApiSubscriptionSyncServiceDeps) *N
 	}
 }
 
+// adapterForProfile 返回该订阅适用的适配器：profile 未配置代理时用共享适配器（零开销），
+// 配置了代理时按订阅级代理设置（含直连优先回退）构造。
+func (s *NewApiSubscriptionSyncService) adapterForProfile(profile *SubscriptionProfile) NewApiSyncAdapter {
+	return s.adapterFor(profile.ProxyURL, profile.ProxyPreferDirect)
+}
+
+// adapterFor 按代理设置选择适配器；proxyURL 为空时回退到注入的共享适配器。
+func (s *NewApiSubscriptionSyncService) adapterFor(proxyURL string, preferDirect bool) NewApiSyncAdapter {
+	if strings.TrimSpace(proxyURL) == "" {
+		return s.adapter
+	}
+	return NewApiAdapterForProxy(proxyURL, preferDirect)
+}
+
 // Start 启动周期性余额/倍率同步循环。
 func (s *NewApiSubscriptionSyncService) Start(ctx context.Context) {
 	ctx, s.cancel = context.WithCancel(ctx)
@@ -259,12 +273,13 @@ func (s *NewApiSubscriptionSyncService) SyncNow(ctx context.Context, uid string)
 	if mode == "" {
 		mode = NewApiAuthModeBearer
 	}
+	adapter := s.adapterForProfile(profile)
 
-	self, userID, err := s.adapter.VerifyWithFallback(ctx, profile.BaseURL, profile.AccessToken, profile.UserID, mode)
+	self, userID, err := adapter.VerifyWithFallback(ctx, profile.BaseURL, profile.AccessToken, profile.UserID, mode)
 	if err != nil {
 		return s.handleRemoteFailure(profile, result, err)
 	}
-	groups, err := s.adapter.FetchGroups(ctx, profile.BaseURL, profile.AccessToken, userID, mode)
+	groups, err := adapter.FetchGroups(ctx, profile.BaseURL, profile.AccessToken, userID, mode)
 	if err != nil {
 		return s.handleRemoteFailure(profile, result, err)
 	}
@@ -274,7 +289,7 @@ func (s *NewApiSubscriptionSyncService) SyncNow(ctx context.Context, uid string)
 			return s.handleHardFailure(profile, result, newApiSyncStatusSyncError, err)
 		}
 	}
-	models, err := s.adapter.FetchModels(ctx, profile.BaseURL, profile.AccessToken, userID, mode)
+	models, err := adapter.FetchModels(ctx, profile.BaseURL, profile.AccessToken, userID, mode)
 	if err != nil {
 		return s.handleRemoteFailure(profile, result, err)
 	}
@@ -370,11 +385,14 @@ func (s *NewApiSubscriptionSyncService) syncOneAccount(ctx context.Context, prof
 		return s.accountKeyStatuses(profile, account, newApiSyncStatusSyncError, err.Error(), now)
 	}
 
-	self, userID, err := s.adapter.VerifyWithFallback(ctx, profile.BaseURL, account.AccessToken, account.UserID, mode)
+	// 账号级代理优先，缺省继承订阅级代理设置；无代理时回退注入的共享适配器
+	adapter := s.adapterFor(resolveNewApiAccountProxy(profile, account))
+
+	self, userID, err := adapter.VerifyWithFallback(ctx, profile.BaseURL, account.AccessToken, account.UserID, mode)
 	if err != nil {
 		return markErr(err), err
 	}
-	groups, err := s.adapter.FetchGroups(ctx, profile.BaseURL, account.AccessToken, userID, mode)
+	groups, err := adapter.FetchGroups(ctx, profile.BaseURL, account.AccessToken, userID, mode)
 	if err != nil {
 		return markErr(err), err
 	}

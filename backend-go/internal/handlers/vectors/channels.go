@@ -303,10 +303,12 @@ func buildModelsURL(baseURL string) string {
 }
 
 type GetModelsRequest struct {
-	Key                string            `json:"key"`
-	BaseURL            string            `json:"baseUrl"`
-	BaseURLs           []string          `json:"baseUrls"`
-	ProxyURL           string            `json:"proxyUrl"`
+	Key      string   `json:"key"`
+	BaseURL  string   `json:"baseUrl"`
+	BaseURLs []string `json:"baseUrls"`
+	ProxyURL string   `json:"proxyUrl"`
+	// ProxyPreferDirect 直连优先（nil=未指定，回退渠道配置）；仅在配置了代理时有意义
+	ProxyPreferDirect  *bool             `json:"proxyPreferDirect"`
 	InsecureSkipVerify *bool             `json:"insecureSkipVerify"`
 	CustomHeaders      map[string]string `json:"customHeaders"`
 	AuthHeader         string            `json:"authHeader"`
@@ -333,6 +335,7 @@ func GetChannelModels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 		channelName := "temporary channel"
 		insecureSkipVerify := false
 		proxyURL := req.ProxyURL
+		proxyPreferDirect := req.ProxyPreferDirect != nil && *req.ProxyPreferDirect
 		authHeader := req.AuthHeader
 		learnedClientFingerprint := req.LearnedClientFingerprint
 
@@ -358,6 +361,7 @@ func GetChannelModels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 			channelName = channel.Name
 			insecureSkipVerify = channel.InsecureSkipVerify
 			proxyURL = channel.ProxyURL
+			proxyPreferDirect = channel.ProxyPreferDirect
 			authHeader = channel.AuthHeader
 			learnedClientFingerprint = channel.LearnedClientFingerprint || req.LearnedClientFingerprint
 			if req.InsecureSkipVerify != nil {
@@ -365,6 +369,9 @@ func GetChannelModels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 			}
 			if req.ProxyURL != "" {
 				proxyURL = req.ProxyURL
+			}
+			if req.ProxyPreferDirect != nil {
+				proxyPreferDirect = *req.ProxyPreferDirect
 			}
 			if req.AuthHeader != "" {
 				authHeader = req.AuthHeader
@@ -378,9 +385,16 @@ func GetChannelModels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 		}
 
 		url := buildModelsURL(baseURL)
-		client := httpclient.GetManager().GetStandardClient(10*time.Second, insecureSkipVerify, proxyURL)
+		clientOpts := httpclient.ClientOptions{
+			Timeout:           10 * time.Second,
+			Insecure:          insecureSkipVerify,
+			ProxyURL:          proxyURL,
+			ProxyPreferDirect: proxyPreferDirect,
+		}
+		client := httpclient.GetManager().GetClient(clientOpts)
 		if req.BaseURL != "" && req.ProxyURL != "" {
-			client = httpclient.GetManager().NewStandardClient(10*time.Second, insecureSkipVerify, proxyURL)
+			// 新增模式下的临时代理参数高变，不进缓存
+			client = httpclient.GetManager().NewClient(clientOpts)
 		}
 
 		httpReq, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, url, nil)

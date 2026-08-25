@@ -336,11 +336,13 @@ func buildPingRequest(_ config.UpstreamConfig, baseURL string) (*http.Request, e
 
 // GetModelsRequest 获取模型列表的请求体
 type GetModelsRequest struct {
-	Key                string            `json:"key"`
-	BaseURL            string            `json:"baseUrl"`
-	BaseURLs           []string          `json:"baseUrls"`
-	ServiceType        string            `json:"serviceType"`
-	ProxyURL           string            `json:"proxyUrl"`
+	Key         string   `json:"key"`
+	BaseURL     string   `json:"baseUrl"`
+	BaseURLs    []string `json:"baseUrls"`
+	ServiceType string   `json:"serviceType"`
+	ProxyURL    string   `json:"proxyUrl"`
+	// ProxyPreferDirect 直连优先（nil=未指定，回退渠道配置）；仅在配置了代理时有意义
+	ProxyPreferDirect  *bool             `json:"proxyPreferDirect"`
 	InsecureSkipVerify *bool             `json:"insecureSkipVerify"`
 	CustomHeaders      map[string]string `json:"customHeaders"`
 	AuthHeader         string            `json:"authHeader"`
@@ -374,6 +376,7 @@ func GetChannelModels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 		var serviceType string
 		var insecureSkipVerify bool
 		var proxyURL string
+		var proxyPreferDirect bool
 		var authHeader string
 		var learnedClientFingerprint bool
 
@@ -396,6 +399,9 @@ func GetChannelModels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 			if req.ProxyURL != "" {
 				proxyURL = req.ProxyURL
 			}
+			if req.ProxyPreferDirect != nil {
+				proxyPreferDirect = *req.ProxyPreferDirect
+			}
 			authHeader = req.AuthHeader
 			learnedClientFingerprint = req.LearnedClientFingerprint
 			log.Printf("[Messages-Models] 使用临时 baseUrl: %s", baseURL)
@@ -413,6 +419,7 @@ func GetChannelModels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 			serviceType = channel.ServiceType
 			insecureSkipVerify = channel.InsecureSkipVerify
 			proxyURL = channel.ProxyURL
+			proxyPreferDirect = channel.ProxyPreferDirect
 			authHeader = channel.AuthHeader
 			learnedClientFingerprint = channel.LearnedClientFingerprint || req.LearnedClientFingerprint
 			if req.BaseURL != "" {
@@ -428,6 +435,9 @@ func GetChannelModels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 			}
 			if req.ProxyURL != "" {
 				proxyURL = req.ProxyURL
+			}
+			if req.ProxyPreferDirect != nil {
+				proxyPreferDirect = *req.ProxyPreferDirect
 			}
 			if req.AuthHeader != "" {
 				authHeader = req.AuthHeader
@@ -479,9 +489,16 @@ func GetChannelModels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 			candidateURLs = []string{targetBaseURL + "/models"}
 		}
 
-		client := httpclient.GetManager().GetStandardClient(10*time.Second, insecureSkipVerify, proxyURL)
+		clientOpts := httpclient.ClientOptions{
+			Timeout:           10 * time.Second,
+			Insecure:          insecureSkipVerify,
+			ProxyURL:          proxyURL,
+			ProxyPreferDirect: proxyPreferDirect,
+		}
+		client := httpclient.GetManager().GetClient(clientOpts)
 		if req.BaseURL != "" && req.ProxyURL != "" {
-			client = httpclient.GetManager().NewStandardClient(10*time.Second, insecureSkipVerify, proxyURL)
+			// 新增模式下的临时代理参数高变，不进缓存
+			client = httpclient.GetManager().NewClient(clientOpts)
 		}
 
 		var lastStatusCode int

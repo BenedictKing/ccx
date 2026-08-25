@@ -81,6 +81,10 @@ type SubscriptionProfile struct {
 	UserID string `json:"userId,omitempty"`
 	// AuthTokenMode: "bearer"(默认，Authorization: Bearer <token>) | "raw"（不带 Bearer 前缀，fork 兼容）
 	AuthTokenMode string `json:"authTokenMode,omitempty"`
+	// ProxyURL 站点级代理（HTTP/HTTPS/SOCKS5）：绑定/同步经代理访问，用于直连被地域封锁的站点。
+	ProxyURL string `json:"proxyUrl,omitempty"`
+	// ProxyPreferDirect 直连优先：配置了代理时先直连，失败（网络错误/451/403）自动回退代理。
+	ProxyPreferDirect bool `json:"proxyPreferDirect,omitempty"`
 	// ProvisionKeyName 自动建 key 的名称模板，默认 "ccx-autopilot"。
 	ProvisionKeyName string `json:"provisionKeyName,omitempty"`
 	// ProvisionGroup 建 key 时指定分组，空=默认分组。
@@ -217,13 +221,17 @@ type NewApiProvisionedKey struct {
 // NewApiAccount 描述 new-api 订阅下的单个账号。
 // 用于多账号管理：一个 new-api 订阅可关联多个 accessToken（多个账号）。
 type NewApiAccount struct {
-	AccountUID    string  `json:"accountUid"`
-	AccessToken   string  `json:"accessToken,omitempty"` // 敏感，API 响应中脱敏
-	UserID        string  `json:"userId,omitempty"`
-	AuthTokenMode string  `json:"authTokenMode,omitempty"`
-	DisplayName   string  `json:"displayName,omitempty"` // 用户备注名
-	Balance       float64 `json:"balance,omitempty"`
-	Status        string  `json:"status,omitempty"` // active | expired | error
+	AccountUID    string `json:"accountUid"`
+	AccessToken   string `json:"accessToken,omitempty"` // 敏感，API 响应中脱敏
+	UserID        string `json:"userId,omitempty"`
+	AuthTokenMode string `json:"authTokenMode,omitempty"`
+	// ProxyURL 账号级代理覆盖，空=继承订阅级 SubscriptionProfile.ProxyURL。
+	ProxyURL string `json:"proxyUrl,omitempty"`
+	// ProxyPreferDirect 直连优先，仅在 ProxyURL（含继承）生效时有意义。
+	ProxyPreferDirect bool    `json:"proxyPreferDirect,omitempty"`
+	DisplayName       string  `json:"displayName,omitempty"` // 用户备注名
+	Balance           float64 `json:"balance,omitempty"`
+	Status            string  `json:"status,omitempty"` // active | expired | error
 	// ProvisionedKeys 记录该账号在远端 new-api 站点自动接入的 Key（按 tokenID 唯一）。
 	// Key 明文只写渠道配置，不进订阅画像。多账号下与主账号 profile.ProvisionedKeys 共存，tokenID 站点级唯一故不撞号。
 	ProvisionedKeys []NewApiProvisionedKey `json:"provisionedKeys,omitempty"`

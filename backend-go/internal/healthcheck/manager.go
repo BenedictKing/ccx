@@ -45,6 +45,7 @@ type L1Request struct {
 	AuthHeader         string
 	CustomHeaders      map[string]string
 	ProxyURL           string
+	ProxyPreferDirect  bool
 	InsecureSkipVerify bool
 	// LearnedClientFingerprint 渠道学习到的客户端伪装标记：
 	// 上游 models 端点存在客户端指纹校验时，L1 请求需带 Claude Code 伪装头。

@@ -108,6 +108,7 @@ type ChannelDiscoveryRequest struct {
 	AuthHeader         string            `json:"authHeader"`
 	CustomHeaders      map[string]string `json:"customHeaders"`
 	ProxyURL           string            `json:"proxyUrl"`
+	ProxyPreferDirect  bool              `json:"proxyPreferDirect"`
 	InsecureSkipVerify bool              `json:"insecureSkipVerify"`
 	ModelMapping       map[string]string `json:"modelMapping"`
 	ReasoningMapping   map[string]string `json:"reasoningMapping"`
@@ -125,6 +126,7 @@ type DiscoveryModelsFetchRequest struct {
 	AuthHeader         string
 	CustomHeaders      map[string]string
 	ProxyURL           string
+	ProxyPreferDirect  bool
 	InsecureSkipVerify bool
 	// LearnedClientFingerprint 渠道学习到的客户端伪装标记（保活 L1 等调用方传入），
 	// 命中时 GetChannelModels 请求带 Claude Code 客户端伪装头。
@@ -337,6 +339,7 @@ func buildTransientDiscoveryChannel(req ChannelDiscoveryRequest) (*config.Upstre
 		AuthHeader:         strings.TrimSpace(req.AuthHeader),
 		CustomHeaders:      cloneStringMap(req.CustomHeaders),
 		ProxyURL:           strings.TrimSpace(req.ProxyURL),
+		ProxyPreferDirect:  req.ProxyPreferDirect,
 		InsecureSkipVerify: req.InsecureSkipVerify,
 		ModelMapping:       cloneStringMap(req.ModelMapping),
 		ReasoningMapping:   cloneStringMap(req.ReasoningMapping),
@@ -1396,6 +1399,7 @@ func discoverTransientModelsForCandidate(ctx context.Context, channel *config.Up
 		AuthHeader:               channel.AuthHeader,
 		CustomHeaders:            cloneStringMap(channel.CustomHeaders),
 		ProxyURL:                 channel.ProxyURL,
+		ProxyPreferDirect:        channel.ProxyPreferDirect,
 		InsecureSkipVerify:       channel.InsecureSkipVerify,
 		LearnedClientFingerprint: channel.LearnedClientFingerprint,
 	})
@@ -1461,7 +1465,12 @@ func discoverTransientModels(ctx context.Context, channel *config.UpstreamConfig
 	if manifestURL, ok := config.ResolveBuiltinModelsURL(baseURL, manifestServiceType); ok {
 		modelsURL = manifestURL
 	}
-	client := httpclient.GetManager().GetStandardClient(10*time.Second, channel.InsecureSkipVerify, channel.ProxyURL)
+	client := httpclient.GetManager().GetClient(httpclient.ClientOptions{
+		Timeout:           10 * time.Second,
+		Insecure:          channel.InsecureSkipVerify,
+		ProxyURL:          channel.ProxyURL,
+		ProxyPreferDirect: channel.ProxyPreferDirect,
+	})
 	// Anthropic 风格端点（messages/claude）首发即带 Claude Code 探针头，与 capability test
 	// 探测一致；其余风格裸发，命中客户端指纹风控时由 FetchUpstreamModels 带探针头重试。
 	useProbeHeaders := manifestServiceType == "messages" || channelKind == "messages" || channel.LearnedClientFingerprint

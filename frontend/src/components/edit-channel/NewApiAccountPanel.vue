@@ -42,6 +42,25 @@
                 />
               </v-col>
             </v-row>
+            <v-text-field
+              v-model="bindForm.proxyUrl"
+              :label="t('subscription.newApi.proxyUrl')"
+              :hint="t('subscription.newApi.proxyUrlHint')"
+              persistent-hint
+              variant="outlined"
+              density="compact"
+              class="mb-2"
+            />
+            <v-switch
+              v-model="bindForm.proxyPreferDirect"
+              :label="t('subscription.newApi.proxyPreferDirect')"
+              :hint="t('subscription.newApi.proxyPreferDirectHint')"
+              persistent-hint
+              color="primary"
+              density="compact"
+              class="mb-2"
+              :disabled="!bindForm.proxyUrl.trim()"
+            />
             <v-alert v-if="bindError" color="error" variant="tonal" density="compact" class="mb-3">
               {{ bindError }}
             </v-alert>
@@ -149,6 +168,25 @@
                 />
               </v-col>
             </v-row>
+            <v-text-field
+              v-model="primaryForm.proxyUrl"
+              :label="t('subscription.newApi.proxyUrl')"
+              :hint="t('subscription.newApi.proxyUrlHint')"
+              persistent-hint
+              variant="outlined"
+              density="compact"
+              class="mb-2"
+            />
+            <v-switch
+              v-model="primaryForm.proxyPreferDirect"
+              :label="t('subscription.newApi.proxyPreferDirect')"
+              :hint="t('subscription.newApi.proxyPreferDirectHint')"
+              persistent-hint
+              color="primary"
+              density="compact"
+              class="mb-2"
+              :disabled="!primaryForm.proxyUrl.trim()"
+            />
             <div class="d-flex justify-end">
               <v-btn
                 color="primary"
@@ -204,6 +242,25 @@
               variant="outlined"
               density="compact"
               class="mb-2"
+            />
+            <v-text-field
+              v-model="addForm.proxyUrl"
+              :label="t('subscription.newApi.proxyUrl')"
+              :hint="t('subscription.newApi.proxyUrlHint')"
+              persistent-hint
+              variant="outlined"
+              density="compact"
+              class="mb-2"
+            />
+            <v-switch
+              v-model="addForm.proxyPreferDirect"
+              :label="t('subscription.newApi.proxyPreferDirect')"
+              :hint="t('subscription.newApi.proxyPreferDirectHint')"
+              persistent-hint
+              color="primary"
+              density="compact"
+              class="mb-2"
+              :disabled="!addForm.proxyUrl.trim()"
             />
             <v-alert v-if="addError" color="error" variant="tonal" density="compact" class="mb-2">
               {{ addError }}
@@ -304,9 +361,9 @@ const deleting = ref('')
 const addError = ref('')
 const bindError = ref('')
 
-const bindForm = ref({ accessToken: '', userId: '', authTokenMode: 'bearer' })
-const primaryForm = ref({ accessToken: '', userId: '', authTokenMode: 'bearer' })
-const addForm = ref({ accessToken: '', userId: '', displayName: '', authTokenMode: 'bearer' })
+const bindForm = ref({ accessToken: '', userId: '', authTokenMode: 'bearer', proxyUrl: '', proxyPreferDirect: false })
+const primaryForm = ref({ accessToken: '', userId: '', authTokenMode: 'bearer', proxyUrl: '', proxyPreferDirect: false })
+const addForm = ref({ accessToken: '', userId: '', displayName: '', authTokenMode: 'bearer', proxyUrl: '', proxyPreferDirect: false })
 const authTokenModeOptions = computed(() => [
   { title: 'Bearer', value: 'bearer' },
   { title: 'Raw', value: 'raw' },
@@ -324,7 +381,9 @@ const primaryCredentialsChanged = computed(() => {
   if (!subscription.value) return false
   return Boolean(primaryForm.value.accessToken.trim()) ||
     primaryForm.value.userId.trim() !== (subscription.value.userId || '') ||
-    primaryForm.value.authTokenMode !== normalizeAuthTokenMode(subscription.value.authTokenMode)
+    primaryForm.value.authTokenMode !== normalizeAuthTokenMode(subscription.value.authTokenMode) ||
+    primaryForm.value.proxyUrl.trim() !== (subscription.value.proxyUrl || '') ||
+    primaryForm.value.proxyPreferDirect !== (subscription.value.proxyPreferDirect || false)
 })
 
 function normalizeAuthTokenMode(mode?: string) {
@@ -336,6 +395,8 @@ function syncPrimaryForm(item: SubscriptionItem) {
     accessToken: '',
     userId: item.userId || '',
     authTokenMode: normalizeAuthTokenMode(item.authTokenMode),
+    proxyUrl: item.proxyUrl || '',
+    proxyPreferDirect: item.proxyPreferDirect || false,
   }
 }
 
@@ -368,6 +429,8 @@ async function bindNewApi() {
     const accessToken = bindForm.value.accessToken.trim()
     const userId = bindForm.value.userId.trim() || undefined
     const authTokenMode = bindForm.value.authTokenMode
+    const proxyUrl = bindForm.value.proxyUrl.trim() || undefined
+    const proxyPreferDirect = bindForm.value.proxyPreferDirect || undefined
     const verified = await api.verifyNewApiSubscription({
       baseUrl,
       accessToken,
@@ -375,6 +438,8 @@ async function bindNewApi() {
       authTokenMode,
       displayName: props.channelName!.trim(),
       subscriptionUid: `newapi-${props.channelUid}`,
+      proxyUrl,
+      proxyPreferDirect,
     })
     requireEligibleGroups(verified)
     const response = await api.provisionNewApiSubscription({
@@ -389,11 +454,13 @@ async function bindNewApi() {
       provisionAllEligibleGroups: true,
       maxGroupMultiplier: DEFAULT_NEWAPI_MAX_GROUP_MULTIPLIER,
       provisionModels: verified.availableModels,
+      proxyUrl,
+      proxyPreferDirect,
     })
     subscription.value = response.subscription
     syncPrimaryForm(response.subscription)
     localSubscriptionUid.value = response.subscription.subscriptionUid
-    bindForm.value = { accessToken: '', userId: '', authTokenMode: 'bearer' }
+    bindForm.value = { accessToken: '', userId: '', authTokenMode: 'bearer', proxyUrl: '', proxyPreferDirect: false }
     await fetchAccounts()
     emit('updated')
   } catch (e) {
@@ -423,12 +490,17 @@ async function savePrimaryCredentials() {
   savingPrimary.value = true
   primaryError.value = ''
   try {
-    const payload: { accessToken?: string; userId?: string; authTokenMode?: string; expectedVersion?: number } = {
+    const payload: { accessToken?: string; userId?: string; authTokenMode?: string; proxyUrl?: string; proxyPreferDirect?: boolean; expectedVersion?: number } = {
       userId: primaryForm.value.userId.trim(),
       authTokenMode: primaryForm.value.authTokenMode,
       expectedVersion: subscription.value.version,
     }
     if (primaryForm.value.accessToken.trim()) payload.accessToken = primaryForm.value.accessToken.trim()
+    const proxyUrl = primaryForm.value.proxyUrl.trim()
+    if (proxyUrl !== (subscription.value.proxyUrl || '')) payload.proxyUrl = proxyUrl
+    if (primaryForm.value.proxyPreferDirect !== (subscription.value.proxyPreferDirect || false)) {
+      payload.proxyPreferDirect = primaryForm.value.proxyPreferDirect
+    }
     const item = await api.updateNewApiCredentials(effectiveSubscriptionUid.value, payload)
     subscription.value = item
     syncPrimaryForm(item)
@@ -477,6 +549,12 @@ async function handleAddAccount() {
     const accessToken = addForm.value.accessToken.trim()
     const userId = addForm.value.userId || undefined
     const authTokenMode = addForm.value.authTokenMode || undefined
+    // 账号级代理为空时继承订阅级代理设置（与后端 resolveNewApiAccountProxy 语义一致）
+    const accountProxyUrl = addForm.value.proxyUrl.trim()
+    const effectiveProxyUrl = accountProxyUrl || subscription.value.proxyUrl || ''
+    const effectivePreferDirect = accountProxyUrl
+      ? addForm.value.proxyPreferDirect
+      : (subscription.value.proxyPreferDirect ?? false)
     const verified = await api.verifyNewApiSubscription({
       baseUrl: subscription.value.baseUrl || props.baseUrl || '',
       accessToken,
@@ -484,6 +562,8 @@ async function handleAddAccount() {
       authTokenMode,
       displayName: addForm.value.displayName || undefined,
       subscriptionUid: effectiveSubscriptionUid.value,
+      proxyUrl: effectiveProxyUrl || undefined,
+      proxyPreferDirect: effectivePreferDirect || undefined,
     })
     requireEligibleGroups(verified)
     await api.addSubscriptionAccount(effectiveSubscriptionUid.value, {
@@ -494,8 +574,10 @@ async function handleAddAccount() {
       provisionAllEligibleGroups: true,
       maxGroupMultiplier: DEFAULT_NEWAPI_MAX_GROUP_MULTIPLIER,
       provisionModels: verified.availableModels,
+      proxyUrl: accountProxyUrl || undefined,
+      proxyPreferDirect: accountProxyUrl ? addForm.value.proxyPreferDirect || undefined : undefined,
     })
-    addForm.value = { accessToken: '', userId: '', displayName: '', authTokenMode: 'bearer' }
+    addForm.value = { accessToken: '', userId: '', displayName: '', authTokenMode: 'bearer', proxyUrl: '', proxyPreferDirect: false }
     await fetchAccounts()
     emit('updated')
   } catch (e) {
