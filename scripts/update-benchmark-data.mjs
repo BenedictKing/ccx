@@ -160,6 +160,46 @@ function findProfileIndex(profiles, canonicalModel) {
 }
 
 /**
+ * 合并已有 profile 时补齐 canonical pattern。
+ * 旧数据里部分 profile 的 pattern 是历史手工生成的（如 deepseek-v4-flash 不带
+ * 日期快照变体），导致 -MMDD 快照别名映射不到 benchmark 证据而静默丢分。
+ * 只有当 canonical pattern 覆盖了现有 patterns 全都匹配不了的别名时才追加，
+ * 避免给等价或更宽的手工 pattern（claude-opus-4[.-]8、kimi 多 pattern 合并等）加冗余。
+ * @param {Object} profile
+ */
+function ensureCanonicalPattern(profile) {
+  const canonical = canonicalModelToPattern(profile.canonicalModel)
+  if (!canonical) return
+  if (!Array.isArray(profile.patterns) || profile.patterns.length === 0) {
+    profile.patterns = [canonical]
+    return
+  }
+  const probes = [
+    profile.canonicalModel,
+    `${profile.canonicalModel}-0731`,
+    `${profile.canonicalModel}-20260713`,
+  ]
+  let canonicalAddsCoverage = false
+  for (const probe of probes) {
+    if (safeTest(canonical, probe) && !profile.patterns.some(p => safeTest(p, probe))) {
+      canonicalAddsCoverage = true
+      break
+    }
+  }
+  if (canonicalAddsCoverage) {
+    profile.patterns.unshift(canonical)
+  }
+}
+
+function safeTest(pattern, value) {
+  try {
+    return new RegExp(pattern).test(value)
+  } catch {
+    return false
+  }
+}
+
+/**
  * 创建新的 benchmarkProfile
  * @param {string} canonicalModel
  * @param {string} pattern
@@ -267,6 +307,7 @@ export function mergeDeepsweData(registry, deepsweData, report, models = targetM
           canonical,
           deepsweModelToPattern(data.deepsweMeta?.deepsweModel) || canonicalModelToPattern(canonical),
         )
+    ensureCanonicalPattern(profile)
 
     // 确保 benchmarkEvidence 存在
     if (!profile.benchmarkEvidence) {
@@ -321,6 +362,7 @@ export function mergeBenchlmData(registry, benchlmData, report, models = targetM
       continue
     }
     const profile = idx >= 0 ? registry.benchmarkProfiles[idx] : createProfile(canonical)
+    ensureCanonicalPattern(profile)
 
     // 更新 overallScore
     if (data.overallScore !== null && data.overallScore !== undefined) {
@@ -388,6 +430,7 @@ export function mergeDradarData(registry, dradarData, report, models = targetMod
 
     const idx = findProfileIndex(registry.benchmarkProfiles, canonical)
     const profile = idx >= 0 ? registry.benchmarkProfiles[idx] : createProfile(canonical)
+    ensureCanonicalPattern(profile)
 
     // 确保 benchmarkEvidence 存在
     if (!profile.benchmarkEvidence) {
@@ -539,6 +582,7 @@ export function mergeArtificialAnalysisLlm(registry, aaLlmData, report, models =
 
     const idx = findProfileIndex(registry.benchmarkProfiles, canonical)
     const profile = idx >= 0 ? registry.benchmarkProfiles[idx] : createProfile(canonical)
+    ensureCanonicalPattern(profile)
 
     if (!profile.benchmarkEvidence) {
       profile.benchmarkEvidence = []

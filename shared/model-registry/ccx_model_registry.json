@@ -3549,6 +3549,7 @@
     },
     {
       "patterns": [
+        "(?:^|[-/])deepseek-v4-flash(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{4,8})?(?=$|@)",
         "(?:^|[-/])deepseek-v4-flash(?=$|@)"
       ],
       "canonicalModel": "deepseek-v4-flash",
@@ -3690,6 +3691,7 @@
     },
     {
       "patterns": [
+        "(?:^|[-/])deepseek-v4-pro(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{4,8})?(?=$|@)",
         "(?:^|[-/])deepseek-v4-pro(?=$|@)"
       ],
       "canonicalModel": "deepseek-v4-pro",
