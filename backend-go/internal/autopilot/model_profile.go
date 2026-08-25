@@ -351,11 +351,12 @@ var effortQualityRatio = map[string]float64{
 // 规则：
 //   - 有 medium/default 实测 → 直接使用（证据最充分）；
 //   - 只有其他档 → 取最接近常规档的实测按平均比率折算；
-//   - 仅有单一高档（xhigh/max）证据时返回 singleHighOnly=true——折算高度依赖
-//     全局平均曲线，不足以支撑 premium（调用方应封顶 high）。
+//   - 仅剩单一档证据（无论高档还是低档）时返回 singleEffortOnly=true——折算完全
+//     依赖全局平均曲线（低档-only 按平均比率上折会虚高，高档-only 下折会偏低），
+//     不足以支撑 premium（调用方应封顶 high）。
 //
 // 无直测证据时 ok=false。
-func regularEffortBaselineScore(evidence []config.ModelBenchmarkEvidence) (score float64, singleHighOnly bool, ok bool) {
+func regularEffortBaselineScore(evidence []config.ModelBenchmarkEvidence) (score float64, singleEffortOnly bool, ok bool) {
 	byEffort := map[string]float64{}
 	for _, ev := range evidence {
 		if ev.Domain != "coding" || ev.Metric != "pass_at_1" {
@@ -386,15 +387,13 @@ func regularEffortBaselineScore(evidence []config.ModelBenchmarkEvidence) (score
 		}
 	}
 	// 无常规口径实测：各档折算到常规口径后取最小值（保守估计——
-	// 断崖曲线不会被高档成绩高估，平曲线模型的低档折算也接近真实水平）
+	// 断崖曲线不会被高档成绩高估，平曲线模型的低档折算也接近真实水平）。
+	// 仅剩单一档（无论高低）时折算完全依赖全局平均曲线，标记 singleEffortOnly。
 	single := len(byEffort) == 1
 	worst := -1.0
-	for effort, s := range byEffort {
+	for _, s := range byEffort {
 		if s < worst || worst < 0 {
 			worst = s
-		}
-		if effort != "xhigh" && effort != "max" {
-			single = false
 		}
 	}
 	return worst, single, true
@@ -424,15 +423,15 @@ func directBenchmarkScoreFromEvidence(evidence []config.ModelBenchmarkEvidence) 
 // 0-100 分，并统一到常规 effort 口径（medium/default）。
 // 优先级：直测常规口径分（regularEffortBaselineScore）> artificial_analysis
 // coding_index 线性校准。无任何可用证据时返回 -1。
-// singleHighEffortOnly 表示直测仅有单一高思考档（xhigh/max），证据不足以支撑
+// singleEffortOnly 表示直测仅剩单一非常规档（无论高低），证据不足以支撑
 // premium（调用方 ModelProfileQualityTier 据此封顶）。
 func normalizedCapabilityScoreWithEvidenceClass(modelID string) (float64, bool) {
 	benchmark := config.ResolveModelBenchmarkProfile(modelID)
 	if !benchmark.Known {
 		return -1, false
 	}
-	if score, singleHighOnly, ok := regularEffortBaselineScore(benchmark.Profile.BenchmarkEvidence); ok {
-		return score, singleHighOnly
+	if score, singleEffortOnly, ok := regularEffortBaselineScore(benchmark.Profile.BenchmarkEvidence); ok {
+		return score, singleEffortOnly
 	}
 	bestAACoding := -1.0
 	for _, ev := range benchmark.Profile.BenchmarkEvidence {
@@ -557,14 +556,14 @@ func filterBelow(vals []float64, cut float64) []float64 {
 }
 
 // ModelProfileQualityTier 优先按常规 effort 口径的归一化能力分推导质量档，
-// 无 benchmark 时回退到模型族规则。仅有单一高思考档（xhigh/max）直测证据时
+// 无 benchmark 时回退到模型族规则。仅剩单一非常规档（低档或高思考档）直测证据时
 // 封顶 high：全局平均曲线的折算不足以支撑 premium（等该模型补测常规口径）。
 func ModelProfileQualityTier(modelID string, family ModelFamily) QualityTier {
-	score, singleHighOnly := normalizedCapabilityScoreWithEvidenceClass(modelID)
+	score, singleEffortOnly := normalizedCapabilityScoreWithEvidenceClass(modelID)
 	if score >= 0 {
 		premiumMin, highMin, normalMin := computeQualityTierBoundaries()
 		switch {
-		case score >= premiumMin && !singleHighOnly:
+		case score >= premiumMin && !singleEffortOnly:
 			return QualityTierPremium
 		case score >= highMin:
 			return QualityTierHigh

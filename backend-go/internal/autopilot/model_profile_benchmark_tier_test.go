@@ -1,6 +1,7 @@
 package autopilot
 
 import (
+	"math"
 	"sync"
 	"testing"
 
@@ -99,5 +100,61 @@ func TestInferModelFamilyDottedAndNewPrefixes(t *testing.T) {
 		if got := InferModelFamily(tc.id, ""); got != tc.want {
 			t.Errorf("InferModelFamily(%q) = %v, want %v", tc.id, got, tc.want)
 		}
+	}
+}
+
+func TestRegularEffortBaselineScoreSingleEffortOnly(t *testing.T) {
+	ev := func(benchmark, effort string, raw float64) config.ModelBenchmarkEvidence {
+		return config.ModelBenchmarkEvidence{
+			Benchmark: benchmark, Domain: "coding", Metric: "pass_at_1",
+			Effort: effort, RawValue: raw,
+		}
+	}
+	tests := []struct {
+		name       string
+		evidence   []config.ModelBenchmarkEvidence
+		singleWant bool
+		okWant     bool
+		scoreWant  float64
+	}{
+		{
+			name:       "常规口径实测不算单一档",
+			evidence:   []config.ModelBenchmarkEvidence{ev("deepswe", "default", 0.60)},
+			singleWant: false, okWant: true, scoreWant: 60,
+		},
+		{
+			name:       "仅 low 档证据标记单一档（上折虚高需封顶）",
+			evidence:   []config.ModelBenchmarkEvidence{ev("deepswe", "low", 0.50)},
+			singleWant: true, okWant: true, scoreWant: 0.50 * 100 / 0.686,
+		},
+		{
+			name:       "仅 max 档证据标记单一档",
+			evidence:   []config.ModelBenchmarkEvidence{ev("codexradar", "max", 0.90)},
+			singleWant: true, okWant: true, scoreWant: 0.90 * 100 / 1.975,
+		},
+		{
+			name: "low+high 双档取折算最小值且不算单一档",
+			evidence: []config.ModelBenchmarkEvidence{
+				ev("deepswe", "low", 0.50), ev("deepswe", "high", 0.80),
+			},
+			singleWant: false, okWant: true,
+			scoreWant: 0.80 * 100 / 1.413, // min(72.9, 56.6)
+		},
+		{
+			name:       "非 coding 或非 deepswe/codexradar 证据忽略",
+			evidence:   []config.ModelBenchmarkEvidence{ev("artificial_analysis", "low", 0.50)},
+			singleWant: false, okWant: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			score, single, ok := regularEffortBaselineScore(tt.evidence)
+			if ok != tt.okWant || single != tt.singleWant {
+				t.Fatalf("single/ok = %v/%v, want %v/%v", single, ok, tt.singleWant, tt.okWant)
+			}
+			if tt.okWant && math.Abs(score-tt.scoreWant) > 1e-9 {
+				t.Fatalf("score = %v, want %v", score, tt.scoreWant)
+			}
+		})
 	}
 }
