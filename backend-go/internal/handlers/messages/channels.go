@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/BenedictKing/ccx/internal/autopilot"
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/copilot"
 	handlers "github.com/BenedictKing/ccx/internal/handlers"
@@ -369,6 +370,7 @@ func GetChannelModels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 		// 3. 获取 baseUrl（优先使用请求体中的临时 baseUrl，用于新增渠道场景）
 		var baseURL string
 		var channelName string
+		var channel *config.UpstreamConfig
 		var serviceType string
 		var insecureSkipVerify bool
 		var proxyURL string
@@ -405,7 +407,7 @@ func GetChannelModels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 				return
 			}
 
-			channel := cfg.Upstream[id]
+			channel = &cfg.Upstream[id]
 			baseURL = channel.BaseURL
 			channelName = channel.Name
 			serviceType = channel.ServiceType
@@ -443,6 +445,22 @@ func GetChannelModels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 		}
 
 		log.Printf("[Messages-Models] 请求模型列表: channel=%s, key=%s", channelName, utils.MaskAPIKey(apiKey))
+
+		// 火山套餐渠道的数据面 /models 不反映套餐清单（/api/coding 返回全量目录、
+		// /api/plan 无此接口），改走管控面套餐模型接口。
+		if volcengineModels, handled, err := autopilot.FetchVolcenginePlanModelsForChannel(c.Request.Context(), cfgManager, channel, baseURL, apiKey); handled {
+			if err != nil {
+				log.Printf("[Messages-Models] 火山套餐模型查询失败: channel=%s, key=%s, error=%v", channelName, utils.MaskAPIKey(apiKey), err)
+				c.JSON(http.StatusBadGateway, gin.H{"error": err.Error(), "statusCode": 502})
+				return
+			}
+			data := make([]gin.H, 0, len(volcengineModels))
+			for _, model := range volcengineModels {
+				data = append(data, gin.H{"id": model})
+			}
+			c.JSON(http.StatusOK, gin.H{"data": data})
+			return
+		}
 
 		// 5. 使用候选 URL 列表发起请求（messages 渠道自动尝试兼容路径）
 		candidateURLs := buildClaudeCompatibleModelsURLs(baseURL)

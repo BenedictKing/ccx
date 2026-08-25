@@ -389,3 +389,48 @@ func displayVolcenginePlan(plan string) string {
 	}
 	return "Coding Plan"
 }
+
+// FetchVolcenginePlanModelsForChannel 供管理端"拉取模型列表"入口使用。
+// 火山套餐渠道的数据面 /models 不反映套餐真实清单：/api/coding 返回账号可见的
+// 全量模型目录（含按量付费模型），/api/plan 无此接口直接 404，因此改走管控面
+// 套餐模型接口（ListArkCodingPlanModel / ListArkAgentPlanModel）。
+// channel 可为 nil（编辑对话框带临时 baseUrl 时后端无渠道上下文），此时按
+// API Key 在托管账号中定位凭证。
+// 返回 (模型列表, 是否命中火山套餐端点, 错误)：
+//   - baseURL 非火山套餐端点：未命中，调用方继续原数据面路径；
+//   - 命中且推理 Key 绑定了 Access Key：实时调用管控面返回真实套餐清单；
+//   - 命中但未绑定 Access Key（含新增渠道的临时 baseUrl 场景）：返回内置兜底
+//     清单，与自动发现的"未绑定回退内置清单"口径一致。
+func FetchVolcenginePlanModelsForChannel(ctx context.Context, cfgManager *config.ConfigManager, channel *config.UpstreamConfig, baseURL, apiKey string) ([]string, bool, error) {
+	return fetchVolcenginePlanModelsForChannel(ctx, cfgManager, channel, baseURL, apiKey, "", nil)
+}
+
+func fetchVolcenginePlanModelsForChannel(ctx context.Context, cfgManager *config.ConfigManager, channel *config.UpstreamConfig, baseURL, apiKey, endpoint string, httpClient *http.Client) ([]string, bool, error) {
+	plan := volcenginePlanFromBaseURL(baseURL)
+	if plan == "" {
+		return nil, false, nil
+	}
+	if cfgManager != nil {
+		accountUID, credentialUID := "", ""
+		if channel != nil && strings.TrimSpace(channel.AccountUID) != "" {
+			accountUID = channel.AccountUID
+			credentialUID = channel.CredentialUIDForKey(apiKey)
+		} else {
+			accountUID, credentialUID = cfgManager.FindCredentialByAPIKey(apiKey)
+		}
+		if accountUID != "" && credentialUID != "" {
+			if credential, ok := cfgManager.GetManagedAccountCredential(accountUID, credentialUID); ok && credential.VolcengineAccessKey != nil {
+				client := &volcenginePlanClient{Endpoint: endpoint, HTTPClient: httpClient}
+				models, err := client.FetchModels(ctx, credential.VolcengineAccessKey, plan)
+				if err != nil {
+					return nil, true, err
+				}
+				return models, true, nil
+			}
+		}
+	}
+	if plan == volcenginePlanAgent {
+		return config.VolcengineAgentPlanModelIDs(), true, nil
+	}
+	return config.VolcengineCodingPlanModelIDs(), true, nil
+}

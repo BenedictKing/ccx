@@ -289,3 +289,108 @@ func TestVolcengineAutoDiscoveryUsesControlPlaneModels(t *testing.T) {
 		t.Fatalf("套餐识别结果未持久化: %+v", credential)
 	}
 }
+
+func TestFetchVolcenginePlanModelsForChannel(t *testing.T) {
+	newManager := func(t *testing.T, withAccessKey bool) *config.ConfigManager {
+		t.Helper()
+		dir := t.TempDir()
+		configPath := filepath.Join(dir, "config.json")
+		accessKey := ""
+		if withAccessKey {
+			accessKey = `,"volcengineAccessKey":{"accessKeyId":"AKID","secretAccessKey":"SECRET"}`
+		}
+		data := `{
+  "managedAccounts":[{"accountUid":"acct_volc","providerId":"volcengine","name":"volc","credentials":[{"credentialUid":"cred_volc","apiKey":"ark-inference"` + accessKey + `}]}],
+  "upstream":[{"accountUid":"acct_volc","channelUid":"ch_volc","providerId":"volcengine","name":"volc","serviceType":"claude","autoManaged":true,"baseUrl":"https://ark.cn-beijing.volces.com/api/plan","apiKeyConfigs":[{"credentialUid":"cred_volc","key":"ark-inference","baseUrl":"https://ark.cn-beijing.volces.com/api/plan"}]}],"chatUpstream":[],"responsesUpstream":[],"geminiUpstream":[],"imagesUpstream":[],"vectorsUpstream":[]
+}`
+		if err := os.WriteFile(configPath, []byte(data), 0600); err != nil {
+			t.Fatal(err)
+		}
+		manager, err := config.NewConfigManager(configPath, filepath.Join(dir, "backups"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = manager.Close() })
+		return manager
+	}
+	planServer := func(t *testing.T, wantAction string) *httptest.Server {
+		t.Helper()
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if action := r.URL.Query().Get("Action"); action != wantAction {
+				t.Errorf("action=%s, want %s", action, wantAction)
+			}
+			_, _ = w.Write([]byte(`{"Result":{"Datas":[{"ModelID":"ark-code-latest"},{"ModelID":"doubao-seed-2-1-turbo"}]}}`))
+		}))
+		t.Cleanup(server.Close)
+		return server
+	}
+
+	tests := []struct {
+		name        string
+		baseURL     string
+		apiKey      string
+		withChannel bool
+		withAK      bool
+		wantHandled bool
+		wantModels  string
+		wantErr     bool
+	}{
+		{name: "非火山端点不接管", baseURL: "https://ark.cn-beijing.volces.com/api/v3", apiKey: "ark-inference", wantHandled: false},
+		{name: "coding 端点未绑 AK 回退内置清单", baseURL: "https://ark.cn-beijing.volces.com/api/coding/v3", apiKey: "ark-inference", withAK: false, wantHandled: true, wantModels: strings.Join(config.VolcengineCodingPlanModelIDs(), ",")},
+		{name: "agent 端点未绑 AK 回退内置清单", baseURL: "https://ark.cn-beijing.volces.com/api/plan/v3", apiKey: "ark-inference", withAK: false, wantHandled: true, wantModels: strings.Join(config.VolcengineAgentPlanModelIDs(), ",")},
+		{name: "coding 端点带渠道上下文走管控面", baseURL: "https://ark.cn-beijing.volces.com/api/coding/v1", apiKey: "ark-inference", withChannel: true, withAK: true, wantHandled: true, wantModels: "ark-code-latest,doubao-seed-2-1-turbo"},
+		{name: "agent 端点无渠道上下文按 Key 定位凭证", baseURL: "https://ark.cn-beijing.volces.com/api/plan/v3", apiKey: "ark-inference", withChannel: false, withAK: true, wantHandled: true, wantModels: "ark-code-latest,doubao-seed-2-1-turbo"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			manager := newManager(t, tt.withAK)
+			server := planServer(t, map[bool]string{true: "ListArkCodingPlanModel", false: "ListArkAgentPlanModel"}[strings.Contains(tt.baseURL, "/api/coding")])
+			channel := (*config.UpstreamConfig)(nil)
+			if tt.withChannel {
+				channel = &config.UpstreamConfig{AccountUID: "acct_volc", APIKeyConfigs: []config.APIKeyConfig{{Key: "ark-inference", CredentialUID: "cred_volc"}}}
+			}
+			models, handled, err := fetchVolcenginePlanModelsForChannel(context.Background(), manager, channel, tt.baseURL, tt.apiKey, server.URL, server.Client())
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("err=%v", err)
+			}
+			if handled != tt.wantHandled {
+				t.Fatalf("handled=%v, want %v", handled, tt.wantHandled)
+			}
+			if !tt.wantHandled {
+				return
+			}
+			if strings.Join(models, ",") != tt.wantModels {
+				t.Fatalf("models=%v, want %s", models, tt.wantModels)
+			}
+		})
+	}
+}
+
+func TestFetchVolcenginePlanModelsForChannelControlPlaneError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"ResponseMetadata":{"Error":{"Code":"InvalidCredential","Message":"Invalid credential"}}}`))
+	}))
+	defer server.Close()
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.json")
+	data := `{
+  "managedAccounts":[{"accountUid":"acct_volc","providerId":"volcengine","name":"volc","credentials":[{"credentialUid":"cred_volc","apiKey":"ark-inference","volcengineAccessKey":{"accessKeyId":"AKID","secretAccessKey":"SECRET"}}]}],
+  "upstream":[{"accountUid":"acct_volc","channelUid":"ch_volc","providerId":"volcengine","name":"volc","serviceType":"claude","autoManaged":true,"baseUrl":"https://ark.cn-beijing.volces.com/api/plan","apiKeyConfigs":[{"credentialUid":"cred_volc","key":"ark-inference","baseUrl":"https://ark.cn-beijing.volces.com/api/plan"}]}],"chatUpstream":[],"responsesUpstream":[],"geminiUpstream":[],"imagesUpstream":[],"vectorsUpstream":[]
+}`
+	if err := os.WriteFile(configPath, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+	manager, err := config.NewConfigManager(configPath, filepath.Join(dir, "backups"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer errutil.IgnoreDeferred(manager.Close)
+	models, handled, err := fetchVolcenginePlanModelsForChannel(context.Background(), manager, nil, "https://ark.cn-beijing.volces.com/api/coding/v3", "ark-inference", server.URL, server.Client())
+	if !handled || err == nil || models != nil {
+		t.Fatalf("handled=%v err=%v models=%v", handled, err, models)
+	}
+	if !strings.Contains(err.Error(), "InvalidCredential") {
+		t.Fatalf("错误应透传管控面错误码: %v", err)
+	}
+}

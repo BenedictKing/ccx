@@ -266,6 +266,11 @@ func volcengineAgentPlanModelIDs() []string {
 // volcengineCodingPlanModelIDs 火山方舟 Coding Plan(/api/coding) 入口的兜底文本模型清单。
 // 与 Agent Plan 差异：Coding Plan 不含 doubao-seed-2.0-mini、doubao-seed-evolving、glm-latest、kimi-k3。
 // 清单来源：火山方舟 Coding Plan 套餐概览(2026-08)；下线的 minimax-m2.7/kimi-k2.6/glm-5.2 已移除。
+// VolcengineCodingPlanModelIDs 火山方舟 Coding Plan(/api/coding) 入口的兜底文本模型清单，语义同 Agent Plan 版。
+func VolcengineCodingPlanModelIDs() []string {
+	return volcengineCodingPlanModelIDs()
+}
+
 func volcengineCodingPlanModelIDs() []string {
 	return []string{
 		"doubao-seed-2.1-turbo",

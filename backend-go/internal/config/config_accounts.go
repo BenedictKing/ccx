@@ -412,6 +412,24 @@ func (cm *ConfigManager) ClearManagedAccountVolcengineAccessKey(accountUID, cred
 	return fmt.Errorf("账号 %s 不存在", accountUID)
 }
 
+// FindCredentialByAPIKey 返回托管账号中持有该推理 Key 的账号与凭证身份，未找到时返回空字符串。
+// 用于无渠道上下文的管理端请求（如编辑对话框带临时 baseUrl 的模型列表拉取）。
+func (cm *ConfigManager) FindCredentialByAPIKey(apiKey string) (accountUID, credentialUID string) {
+	if strings.TrimSpace(apiKey) == "" {
+		return "", ""
+	}
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+	for _, account := range cm.config.ManagedAccounts {
+		for _, credential := range account.Credentials {
+			if credential.APIKey == apiKey {
+				return account.AccountUID, credential.CredentialUID
+			}
+		}
+	}
+	return "", ""
+}
+
 // SetManagedAccountVolcenginePlan 保存由火山管控面自动识别出的套餐信息。
 func (cm *ConfigManager) SetManagedAccountVolcenginePlan(accountUID, credentialUID, plan, tier, status string) error {
 	cm.mu.Lock()
