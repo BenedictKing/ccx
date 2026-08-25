@@ -18,7 +18,7 @@ export function validateVisualizationData(raw) {
   if (!raw || !Array.isArray(raw.data)) throw new Error('输入文件缺少 data 数组')
   const qualityTiers = raw.qualityTiers || {
     scale: '0-100',
-    algorithm: 'regular-effort-coding-v1-fallback',
+    algorithm: 'medium-aligned-coding-v1-fallback',
     source: 'benchmark-chart',
     premiumMin: 75,
     highMin: 61,
@@ -49,7 +49,7 @@ export function validateVisualizationData(raw) {
 export function renderBenchmarkChart(rows, comparisons = [], qualityTiers = null) {
   const resolvedQualityTiers = qualityTiers || {
     scale: '0-100',
-    algorithm: 'regular-effort-coding-v1-fallback',
+    algorithm: 'medium-aligned-coding-v1-fallback',
     source: 'benchmark-chart',
     premiumMin: 75,
     highMin: 61,
@@ -189,9 +189,9 @@ th { color: var(--muted); font-size: 11px; font-weight: 500; }
 tbody tr:hover { background: var(--accent-soft); }
 .numeric { text-align: right; font-variant-numeric: tabular-nums; }
 .pareto-mark { color: var(--accent); font-weight: 500; }
-.col-model { width: 24%; }
+.col-model { width: 22%; }
 .col-effort { width: 10%; }
-.col-score { width: 10%; }
+.col-score { width: 12%; }
 .col-rate, .col-cost { width: 13%; }
 .col-pareto { width: 12%; }
 .col-source { width: 18%; }
@@ -242,8 +242,8 @@ tbody tr:hover { background: var(--accent-soft); }
   </div>
   <section class="chart-shell" id="chart-shell">
     <svg class="benchmark-chart" id="chart" role="img" aria-labelledby="chart-title chart-description">
-      <title id="chart-title">模型常规 effort 等效分与单任务成本散点图</title>
-      <desc id="chart-description">背景色带表示后端自动质量档边界；模型按来源分别连接思考强度轨迹，深色折线表示成本与常规 effort 等效分数的 Pareto 前沿。</desc>
+      <title id="chart-title">模型 pass@1 与单任务成本散点图</title>
+      <desc id="chart-description">纵轴为各思考强度档的实测 pass@1，轨迹展示同一模型随 effort 升高的能力增益；背景色带为常规 effort 口径的自动质量档边界（与表格常规等效分同口径），深色折线表示成本与实测 pass@1 的 Pareto 前沿。</desc>
       <defs><clipPath id="plot-clip"><rect id="clip-rect"></rect></clipPath></defs>
       <g id="quality-bands" clip-path="url(#plot-clip)" aria-label="自动质量档背景区域"></g>
       <g id="grid"></g>
@@ -289,7 +289,7 @@ tbody tr:hover { background: var(--accent-soft); }
     <table>
       <thead><tr>
         <th class="col-model">模型</th><th class="col-effort">强度</th>
-        <th class="col-score numeric">能力分</th><th class="col-rate numeric">pass@1</th><th class="col-cost numeric" id="cost-heading">平均成本</th>
+        <th class="col-score numeric">常规等效分</th><th class="col-rate numeric">pass@1</th><th class="col-cost numeric" id="cost-heading">平均成本</th>
         <th class="col-pareto">边界</th><th class="col-source">数据源</th>
       </tr></thead>
       <tbody id="table-body"></tbody>
@@ -394,13 +394,13 @@ function quantile(values, q) {
 }
 
 function paretoFrontier(rows) {
-  const sorted = [...rows].sort((a, b) => a.cost - b.cost || b.quality_score - a.quality_score);
+  const sorted = [...rows].sort((a, b) => a.cost - b.cost || b.pass_rate - a.pass_rate);
   const frontier = [];
   let bestScore = -Infinity;
   sorted.forEach(row => {
-    if (row.quality_score > bestScore + 1e-9) {
+    if (row.pass_rate > bestScore + 1e-9) {
       frontier.push(row);
-      bestScore = row.quality_score;
+      bestScore = row.pass_rate;
     }
   });
   return frontier;
@@ -428,12 +428,12 @@ function ticks(minimum, maximum, count) {
 function currentRows() {
   return RAW_ROWS
     .filter(row => state.source === 'all' || row.source === state.source)
-    .filter(row => Number.isFinite(row.pass_rate) && Number.isFinite(row.quality_score) && Number.isFinite(row[state.metric]))
+    .filter(row => Number.isFinite(row.pass_rate) && Number.isFinite(row[state.metric]))
     .map(row => ({ ...row, cost: row[state.metric], key: [row.model, row.effort || 'default', row.source].join('|') }));
 }
 
 function linePath(rows, x, y) {
-  return rows.map((row, index) => (index ? 'L' : 'M') + x(row.cost).toFixed(2) + ',' + y(row.quality_score).toFixed(2)).join(' ');
+  return rows.map((row, index) => (index ? 'L' : 'M') + x(row.cost).toFixed(2) + ',' + y(row.pass_rate * 100).toFixed(2)).join(' ');
 }
 
 function setGeometry(rows) {
@@ -446,7 +446,7 @@ function setGeometry(rows) {
   const focusMax = quantile(costs, .95);
   const visibleMax = state.range === 'focus' ? focusMax : Math.max(...costs);
   const xMax = niceMax(visibleMax * 1.04);
-  const scores = rows.filter(row => row.cost <= xMax).map(row => row.quality_score);
+  const scores = rows.filter(row => row.cost <= xMax).map(row => row.pass_rate * 100);
   const scoreMin = Math.max(0, Math.min(...scores) - 4);
   const scoreMax = Math.max(100, Math.max(...scores) + 4.5);
   const yMin = Math.max(0, Math.floor(scoreMin));
@@ -483,7 +483,7 @@ function renderAxes(g) {
   axes.append(svgNode('line', { class: 'axis-line', x1: g.margin.left, x2: right, y1: bottom, y2: bottom }));
   axes.append(svgNode('line', { class: 'axis-line', x1: g.margin.left, x2: g.margin.left, y1: g.margin.top, y2: bottom }));
   axes.append(svgNode('text', { class: 'axis-title', x: g.margin.left + g.plotWidth / 2, y: g.height - 13, 'text-anchor': 'middle' }, state.metric === 'mean_cost' ? '平均成本（USD / task）' : '中位成本（USD / task）'));
-  const yTitle = svgNode('text', { class: 'axis-title', x: -(g.margin.top + g.plotHeight / 2), y: 14, transform: 'rotate(-90)', 'text-anchor': 'middle' }, '常规 effort 等效分');
+  const yTitle = svgNode('text', { class: 'axis-title', x: -(g.margin.top + g.plotHeight / 2), y: 14, transform: 'rotate(-90)', 'text-anchor': 'middle' }, 'pass@1（%）');
   axes.append(yTitle);
 }
 
@@ -539,8 +539,8 @@ function tooltipHtml(row) {
   const effort = row.effort || 'default';
   const costLabel = state.metric === 'mean_cost' ? '平均成本' : '中位成本';
   return '<strong>' + escapeHtml(row.model) + ' · ' + escapeHtml(effort) + '</strong>'
-    + '<div class="tooltip-line">能力分 ' + row.quality_score.toFixed(1) + '</div>'
     + '<div class="tooltip-line">pass@1 ' + (row.pass_rate * 100).toFixed(1) + '%</div>'
+    + '<div class="tooltip-line">常规等效分 ' + row.quality_score.toFixed(1) + '</div>'
     + '<div class="tooltip-line">' + costLabel + ' $' + row.cost.toFixed(3) + '</div>'
     + '<div class="tooltip-line">' + escapeHtml(row.source) + '</div>';
 }
@@ -571,12 +571,12 @@ function renderPoints(rows, frontierKeys, g) {
   rows.forEach(row => {
     const isPareto = frontierKeys.has(row.key);
     const circle = svgNode('circle', {
-      class: 'point' + (isPareto ? ' is-pareto' : ''), cx: g.x(row.cost), cy: g.y(row.quality_score),
+      class: 'point' + (isPareto ? ' is-pareto' : ''), cx: g.x(row.cost), cy: g.y(row.pass_rate * 100),
       r: isPareto ? 5.5 : 4.5, fill: colors.get(row.model + '|' + row.source), 'aria-label': row.model + ' ' + (row.effort || 'default') + ' ' + row.source,
       'data-model': row.model, 'data-source': row.source,
     });
-    circle.append(svgNode('title', {}, row.model + ' · ' + (row.effort || 'default') + ' · ' + row.quality_score.toFixed(1) + ' · $' + row.cost.toFixed(3)));
-    circle.addEventListener('mouseenter', () => showTooltip(row, g.x(row.cost), g.y(row.quality_score)));
+    circle.append(svgNode('title', {}, row.model + ' · ' + (row.effort || 'default') + ' · ' + (row.pass_rate * 100).toFixed(1) + ' · $' + row.cost.toFixed(3)));
+    circle.addEventListener('mouseenter', () => showTooltip(row, g.x(row.cost), g.y(row.pass_rate * 100)));
     circle.addEventListener('mouseleave', () => tooltip.classList.remove('visible'));
     container.append(circle);
   });
@@ -588,9 +588,9 @@ function renderLabels(frontier, g) {
   const bestByModel = new Map();
   frontier.forEach(row => {
     const current = bestByModel.get(row.model);
-    if (!current || row.quality_score > current.quality_score) bestByModel.set(row.model, row);
+    if (!current || row.pass_rate > current.pass_rate) bestByModel.set(row.model, row);
   });
-  const labels = [...bestByModel.values()].map(row => ({ row, pointX: g.x(row.cost), pointY: g.y(row.quality_score) }))
+  const labels = [...bestByModel.values()].map(row => ({ row, pointX: g.x(row.cost), pointY: g.y(row.pass_rate * 100) }))
     .sort((a, b) => a.pointY - b.pointY);
   const minGap = 17;
   labels.forEach((label, index) => {
@@ -633,6 +633,10 @@ function applyModelHighlight(series) {
 function renderQualityLegend() {
   const legend = document.getElementById('quality-legend');
   legend.replaceChildren();
+  const intro = document.createElement('span');
+  intro.className = 'quality-legend-item';
+  intro.textContent = '常规口径档位（按各模型常规等效分划分）：';
+  legend.append(intro);
   qualityBands.forEach(band => {
     const from = typeof band.from === 'function' ? band.from() : band.from;
     const to = typeof band.to === 'function' ? band.to() : band.to;

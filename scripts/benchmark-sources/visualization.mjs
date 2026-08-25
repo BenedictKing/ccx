@@ -11,19 +11,9 @@ const EFFORT_ORDER = new Map([
   ['ultra', 5],
 ])
 
-const EFFORT_QUALITY_RATIO = new Map([
-  ['low', 0.686],
-  ['default', 1],
-  ['medium', 1],
-  ['high', 1.413],
-  ['xhigh', 1.627],
-  ['max', 1.975],
-  ['ultra', 1.975],
-])
-
 const DEFAULT_QUALITY_TIERS = {
   scale: '0-100',
-  algorithm: 'regular-effort-coding-v1',
+  algorithm: 'medium-aligned-coding-v1',
   source: 'backend-autopilot',
   premiumMin: 75,
   highMin: 61,
@@ -39,27 +29,65 @@ function normalizedScore(value) {
   return value <= 1 ? value * 100 : value
 }
 
-function effortQualityScore(effort, passRate) {
-  const ratio = EFFORT_QUALITY_RATIO.get(String(effort || 'default').trim().toLowerCase())
-  return ratio ? passRate * 100 / ratio : null
+const REGULAR_EFFORT_RANK = 1
+
+function effortRankOf(effort) {
+  return EFFORT_ORDER.get(String(effort || 'default').trim().toLowerCase()) ?? REGULAR_EFFORT_RANK
+}
+
+/**
+ * 组内校准的常规 effort 等效分：只用同组（模型×来源）的实测 effort 轨迹，
+ * 不跨模型借用增益比率——不同模型的 effort 增益差异巨大（实测 low→medium
+ * 从 1.1x 到 2.0x 不等），全局比率会把低增益模型的 low 档点虚抬到超过
+ * 高能力模型。规则（输出恒在组内实测分数范围内）：
+ *   1. 有 medium/default 实测 → 直接用（证据最充分）；
+ *   2. 组内档位跨越 medium（如仅 low+high）→ 相邻两点线性插值；
+ *   3. 全部在一侧（如仅 high/xhigh 或单点）→ 取最接近 medium 的档位
+ *      原始分，距离并列时取低分（保守）。
+ */
+function mediumAlignedScore(points) {
+  const valid = points
+    .filter(point => Number.isFinite(point.passRate))
+    .map(point => ({ rank: effortRankOf(point.effort), score: point.passRate * 100 }))
+  if (!valid.length) return null
+  const regular = valid.filter(point => point.rank === REGULAR_EFFORT_RANK)
+  if (regular.length) return Math.max(...regular.map(point => point.score))
+  valid.sort((a, b) => a.rank - b.rank)
+  for (let index = 0; index + 1 < valid.length; index++) {
+    const lower = valid[index]
+    const upper = valid[index + 1]
+    if (lower.rank < REGULAR_EFFORT_RANK && upper.rank > REGULAR_EFFORT_RANK) {
+      const t = (REGULAR_EFFORT_RANK - lower.rank) / (upper.rank - lower.rank)
+      return lower.score + (upper.score - lower.score) * t
+    }
+  }
+  let best = null
+  for (const point of valid) {
+    const distance = Math.abs(point.rank - REGULAR_EFFORT_RANK)
+    const bestDistance = Math.abs(best?.rank - REGULAR_EFFORT_RANK)
+    if (best == null || distance < bestDistance
+        || (distance === bestDistance && point.score < best.score)) {
+      best = point
+    }
+  }
+  return best.score
 }
 
 function regularEffortBaselineScore(evidence = []) {
-  const byEffort = new Map()
+  const bySource = new Map()
   for (const item of evidence) {
     if (item?.domain !== 'coding' || item?.metric !== 'pass_at_1') continue
     if (item.benchmark !== 'deepswe' && item.benchmark !== 'codexradar' && item.benchmarkVersion !== 'codexradar') continue
-    const effort = String(item.effort || 'default').trim().toLowerCase()
-    const ratio = EFFORT_QUALITY_RATIO.get(effort)
-    if (!ratio || !Number.isFinite(item.rawValue)) continue
-    const score = item.rawValue * 100 / ratio
-    if (score > (byEffort.get(effort) ?? -Infinity)) byEffort.set(effort, score)
+    if (!Number.isFinite(item.rawValue)) continue
+    const source = sourceName(item)
+    if (!bySource.has(source)) bySource.set(source, [])
+    bySource.get(source).push({ effort: item.effort, passRate: item.rawValue })
   }
-  if (!byEffort.size) return null
-  for (const effort of ['medium', 'default']) {
-    if (byEffort.has(effort)) return byEffort.get(effort)
-  }
-  return Math.min(...byEffort.values())
+  // 各来源分别校准后取最小值（保守，量纲仍为原始分百分制）。
+  const scores = [...bySource.values()]
+    .map(points => mediumAlignedScore(points))
+    .filter(score => score != null)
+  return scores.length ? Math.min(...scores) : null
 }
 
 function largestGapMid(scores, floor) {
@@ -315,12 +343,23 @@ export function buildBenchmarkVisualizationData({
     a.source.localeCompare(b.source)
   ))
 
+  // 等效分按（模型×来源）组校准：同组各 effort 档共享同一常规等效能力分，
+  // 图表轨迹即"同一能力在不同 effort 档的成本"。
+  const groupScores = new Map()
+  for (const row of data) {
+    const key = `${row.model}|${row.source}`
+    if (!groupScores.has(key)) groupScores.set(key, [])
+    groupScores.get(key).push({ effort: row.effort, passRate: row.pass_rate })
+  }
+  const qualityScoreByGroup = new Map([...groupScores]
+    .map(([key, points]) => [key, mediumAlignedScore(points)]))
+
   return {
     generatedAt: new Date().toISOString(),
     qualityTiers,
     data: data.map(row => normalizeCostRow({
       ...row,
-      quality_score: effortQualityScore(row.effort, row.pass_rate),
+      quality_score: qualityScoreByGroup.get(`${row.model}|${row.source}`) ?? null,
       model_quality_score: qualityScores.get(row.model) ?? null,
     })),
     comparisons: comparisons.map(normalizeComparisonRow),

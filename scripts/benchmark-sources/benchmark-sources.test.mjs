@@ -630,7 +630,8 @@ test('visualization combines DeepSWE, BenchLM and CodexRadar sources', () => {
   const validated = validateVisualizationData(visualization)
   const html = renderBenchmarkChart(validated.rows, validated.comparisons, validated.qualityTiers)
   const deepsweHighRow = visualization.data.find(row => row.source === 'DeepSWE v1.1' && row.effort === 'high')
-  assert.equal(deepsweHighRow.quality_score, Math.round((0.7 * 100 / 1.413) * 10) / 10)
+  // 组内仅有 high 单点：一侧回退取该档原始分，不再按全局比率折算
+  assert.equal(deepsweHighRow.quality_score, 70)
   const registryVisualization = buildBenchmarkVisualizationData({
     benchmarkProfiles: { model: { canonicalModel: 'model', benchmarkEvidence: [
       { benchmark: 'codexradar', benchmarkVersion: 'codexradar', domain: 'coding', metric: 'pass_at_1', rawValue: 0.7, effort: 'ultra', costUsd: 1.25 },
@@ -638,12 +639,74 @@ test('visualization combines DeepSWE, BenchLM and CodexRadar sources', () => {
   })
   assert.equal(registryVisualization.data.length, 1)
   assert.equal(registryVisualization.data[0].effort, 'ultra')
-  assert.ok(Number.isFinite(registryVisualization.data[0].quality_score))
+  assert.equal(registryVisualization.data[0].quality_score, 70)
   assert.ok(visualization.qualityTiers.premiumMin >= visualization.qualityTiers.highMin)
   assert.ok(visualization.qualityTiers.highMin >= visualization.qualityTiers.normalMin)
   assert.match(html, /多来源能力比较/)
   assert.match(html, /quality-bands/)
   assert.match(html, /BenchLM\.ai/)
+})
+
+test('quality score calibration keeps low-gain models below stronger ones', () => {
+  const evidence = (rawValue, effort, costUsd) => ({
+    benchmark: 'deepswe',
+    benchmarkVersion: 'v1.1',
+    domain: 'coding',
+    metric: 'pass_at_1',
+    rawValue,
+    effort,
+    costUsd,
+  })
+  const visualization = buildBenchmarkVisualizationData({
+    benchmarkProfiles: {
+      // 低增益模型：low→medium 实测仅 +9.7%，全局比率法曾把 low 点虚抬到 86.9
+      'low-gain': { canonicalModel: 'low-gain', benchmarkEvidence: [
+        evidence(0.596, 'low', 3.7),
+        evidence(0.654, 'medium', 6),
+      ] },
+      // 高能力模型：仅有 medium 实测
+      strong: { canonicalModel: 'strong', benchmarkEvidence: [
+        evidence(0.689, 'medium', 3.2),
+      ] },
+      // 无 medium：low 与 high 跨越常规档，组内轨迹线性插值
+      interpolated: { canonicalModel: 'interpolated', benchmarkEvidence: [
+        evidence(0.545, 'low', 1),
+        evidence(0.665, 'high', 3),
+      ] },
+      // 无 medium：全部在常规档一侧，取最接近档位（high）原始分
+      'one-side': { canonicalModel: 'one-side', benchmarkEvidence: [
+        evidence(0.607, 'high', 5),
+        evidence(0.67, 'xhigh', 7),
+      ] },
+    },
+  })
+  const scoreOf = (model, effort) => visualization.data
+    .find(row => row.model === model && row.effort === effort)?.quality_score
+
+  // 同组共享 medium 实测等效分：low 点不再超过本组 medium 实测
+  assert.equal(scoreOf('low-gain', 'low'), 65.4)
+  assert.equal(scoreOf('low-gain', 'medium'), 65.4)
+  assert.equal(scoreOf('strong', 'medium'), 68.9)
+  assert.equal(scoreOf('interpolated', 'low'), 60.5)
+  assert.equal(scoreOf('one-side', 'high'), 60.7)
+
+  // 回归：低增益低能力模型的任意点不得高于高能力模型的等效分
+  const lowGainMax = Math.max(
+    ...visualization.data.filter(row => row.model === 'low-gain').map(row => row.quality_score),
+  )
+  assert.ok(lowGainMax < scoreOf('strong', 'medium'))
+
+  // 校准分恒在组内实测原始分范围内（百分制）
+  const rangeOf = (model) => {
+    const rates = visualization.data.filter(row => row.model === model).map(row => row.pass_rate * 100)
+    return [Math.min(...rates), Math.max(...rates)]
+  }
+  for (const model of ['low-gain', 'strong', 'interpolated', 'one-side']) {
+    const [min, max] = rangeOf(model)
+    for (const row of visualization.data.filter(r => r.model === model)) {
+      assert.ok(row.quality_score >= min - 1e-9 && row.quality_score <= max + 1e-9)
+    }
+  }
 })
 
 test('LiteLLM fills only unknown capabilities', () => {
