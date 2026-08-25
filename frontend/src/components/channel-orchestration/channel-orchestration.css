@@ -81,9 +81,11 @@
 }
 
 .channel-row:hover {
+  /* 不使用 transform 位移：向上位移会让行的下边界缩离指针，
+     指针停在下边界时陷入 hover/非 hover 振荡（剧烈抖动）。
+     浮起感改由加大 box-shadow 偏移表达，行本身不动，hitbox 稳定。 */
   background: rgba(var(--v-theme-primary), 0.08);
-  transform: translate(-2px, -2px);
-  box-shadow: 6px 6px 0 0 rgb(var(--v-theme-on-surface));
+  box-shadow: 7px 7px 0 0 rgb(var(--v-theme-on-surface));
   border: 2px solid rgb(var(--v-theme-on-surface));
 }
 
@@ -106,7 +108,7 @@
 }
 .v-theme--dark .channel-row:hover {
   background: rgba(var(--v-theme-primary), 0.12);
-  box-shadow: 6px 6px 0 0 rgba(255, 255, 255, 0.7);
+  box-shadow: 7px 7px 0 0 rgba(255, 255, 255, 0.7);
   border-color: rgba(255, 255, 255, 0.7);
 }
 
@@ -370,9 +372,9 @@
 }
 
 .inactive-channel-row:hover {
+  /* 同 .channel-row：去掉位移，避免下边界 hover 振荡抖动 */
   background: rgba(var(--v-theme-primary), 0.08);
-  transform: translate(-1px, -1px);
-  box-shadow: 4px 4px 0 0 rgb(var(--v-theme-on-surface));
+  box-shadow: 5px 5px 0 0 rgb(var(--v-theme-on-surface));
 }
 
 .inactive-channel-row:active {
@@ -388,7 +390,7 @@
 
 .v-theme--dark .inactive-channel-row:hover {
   background: rgba(var(--v-theme-primary), 0.12);
-  box-shadow: 4px 4px 0 0 rgba(255, 255, 255, 0.6);
+  box-shadow: 5px 5px 0 0 rgba(255, 255, 255, 0.6);
 }
 
 .inactive-channel-row .channel-info {
