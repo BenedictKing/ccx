@@ -5045,7 +5045,7 @@
           "metric": "pass_at_1",
           "rawValue": 0.652,
           "uncertainty": 0,
-          "cohortPercentile": 0.667,
+          "cohortPercentile": 0.778,
           "taskCount": 112,
           "cohortSize": 9,
           "effort": "max",
@@ -5170,7 +5170,12 @@
         }
       ],
       "sources": [
+        "https://artificialanalysis.ai/models/gpt-5-6-luna",
+        "https://artificialanalysis.ai/models/gpt-5-6-luna-high",
         "https://artificialanalysis.ai/models/gpt-5-6-luna-low",
+        "https://artificialanalysis.ai/models/gpt-5-6-luna-medium",
+        "https://artificialanalysis.ai/models/gpt-5-6-luna-non-reasoning",
+        "https://artificialanalysis.ai/models/gpt-5-6-luna-xhigh",
         "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/gpt-5-6-luna",
         "https://deepswe.datacurve.ai/",
@@ -5541,7 +5546,7 @@
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
           "capturedAt": "2026-08-25",
-          "costUsd": 8.7
+          "costUsd": 8.69
         },
         {
           "benchmark": "codexradar",
@@ -5558,7 +5563,7 @@
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
           "capturedAt": "2026-08-25",
-          "costUsd": 3.29
+          "costUsd": 3.27
         },
         {
           "benchmark": "codexradar",
@@ -5592,7 +5597,7 @@
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
           "capturedAt": "2026-08-25",
-          "costUsd": 5.76
+          "costUsd": 5.75
         },
         {
           "benchmark": "deepswe",
@@ -5676,7 +5681,12 @@
         }
       ],
       "sources": [
+        "https://artificialanalysis.ai/models/gpt-5-6-sol",
+        "https://artificialanalysis.ai/models/gpt-5-6-sol-high",
         "https://artificialanalysis.ai/models/gpt-5-6-sol-low",
+        "https://artificialanalysis.ai/models/gpt-5-6-sol-medium",
+        "https://artificialanalysis.ai/models/gpt-5-6-sol-non-reasoning",
+        "https://artificialanalysis.ai/models/gpt-5-6-sol-xhigh",
         "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/gpt-5-6-sol",
         "https://deepswe.datacurve.ai/",
@@ -6032,7 +6042,7 @@
           "metric": "pass_at_1",
           "rawValue": 0.643,
           "uncertainty": 0,
-          "cohortPercentile": 0.444,
+          "cohortPercentile": 0.556,
           "taskCount": 112,
           "cohortSize": 9,
           "effort": "max",
@@ -6066,7 +6076,7 @@
           "metric": "pass_at_1",
           "rawValue": 0.652,
           "uncertainty": 0,
-          "cohortPercentile": 0.667,
+          "cohortPercentile": 0.778,
           "taskCount": 112,
           "cohortSize": 9,
           "effort": "ultra",
@@ -6174,7 +6184,12 @@
         }
       ],
       "sources": [
+        "https://artificialanalysis.ai/models/gpt-5-6-terra",
+        "https://artificialanalysis.ai/models/gpt-5-6-terra-high",
+        "https://artificialanalysis.ai/models/gpt-5-6-terra-low",
         "https://artificialanalysis.ai/models/gpt-5-6-terra-medium",
+        "https://artificialanalysis.ai/models/gpt-5-6-terra-non-reasoning",
+        "https://artificialanalysis.ai/models/gpt-5-6-terra-xhigh",
         "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/gpt-5-6-terra",
         "https://deepswe.datacurve.ai/",
@@ -7245,6 +7260,7 @@
       "verifiedAt": "2026-08-25",
       "lane": "provisional",
       "sources": [
+        "https://artificialanalysis.ai/models/kimi-k3",
         "https://artificialanalysis.ai/models/kimi-k3-low",
         "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/kimi-k3",
@@ -7364,10 +7380,10 @@
           "sourceModel": "k3",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.561,
+          "rawValue": 0.545,
           "uncertainty": 0,
           "cohortPercentile": 0.222,
-          "taskCount": 46,
+          "taskCount": 47,
           "cohortSize": 9,
           "effort": "high",
           "selectionBasis": "per_effort",
@@ -7383,7 +7399,7 @@
           "rawValue": 0.632,
           "uncertainty": 0,
           "cohortPercentile": 0.444,
-          "taskCount": 46,
+          "taskCount": 47,
           "cohortSize": 9,
           "effort": "low",
           "selectionBasis": "per_effort",
@@ -7396,10 +7412,10 @@
           "sourceModel": "k3",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.652,
+          "rawValue": 0.638,
           "uncertainty": 0,
-          "cohortPercentile": 0.778,
-          "taskCount": 46,
+          "cohortPercentile": 0.556,
+          "taskCount": 47,
           "cohortSize": 9,
           "effort": "max",
           "selectionBasis": "per_effort",
