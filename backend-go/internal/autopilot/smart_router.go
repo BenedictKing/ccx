@@ -185,8 +185,12 @@ func (r *SmartRouter) BuildPlan(profile *RequestProfile) *RoutingPlan {
 	cfg := r.configManager.GetConfig()
 	autopilotCfg := cfg.AutopilotRouting
 
-	// 获取权重，按 task class 解析生效的成本偏好模式（与 ModelResolver 一致）。
-	effectiveMode := autopilotCfg.CostPreference.GetEffectiveCostPreferenceMode(string(profile.TaskClass))
+	// 获取权重，解析生效的成本偏好模式（与 ModelResolver 一致）：
+	// 请求头/场景预设 > PerTaskClass > 全局 Mode。
+	effectiveMode := effectiveCostPreferenceForProfile(profile)
+	if effectiveMode == "" {
+		effectiveMode = autopilotCfg.CostPreference.GetEffectiveCostPreferenceMode(string(profile.TaskClass))
+	}
 	weights := DefaultTaskWeights()[profile.TaskClass]
 	weights = ApplyCostPreference(weights, CostPreferenceMode(effectiveMode))
 
@@ -519,8 +523,12 @@ func (r *SmartRouter) candidateFilterFor(
 		return nil
 	}
 
-	// 获取权重，按 task class 解析生效的成本偏好模式（与 ModelResolver 一致）。
-	effectiveMode := autopilotCfg.CostPreference.GetEffectiveCostPreferenceMode(string(profile.TaskClass))
+	// 获取权重，解析生效的成本偏好模式（与 ModelResolver 一致）：
+	// 请求头/场景预设 > PerTaskClass > 全局 Mode。
+	effectiveMode := effectiveCostPreferenceForProfile(profile)
+	if effectiveMode == "" {
+		effectiveMode = autopilotCfg.CostPreference.GetEffectiveCostPreferenceMode(string(profile.TaskClass))
+	}
 	weights := DefaultTaskWeights()[profile.TaskClass]
 	weights = ApplyCostPreference(weights, CostPreferenceMode(effectiveMode))
 	for k, v := range autopilotCfg.WeightOverrides {
@@ -1013,9 +1021,11 @@ func (r *SmartRouter) executeFilter(
 		for i, se := range scoredEntries {
 			reasons := routingHardConstraintReasons(profile, &se.entry)
 
-			// advisor hint 的 MinQualityTier 约束（hint 真正 Applied 时才非零值）
+			// advisor hint 的 MinQualityTier 约束（hint 真正 Applied 时才非零值）；
+			// 行粒度为 (渠道, 模型)，与模型级过滤同样允许 effort 级实测分豁免
 			if advisorMinQualityTier != "" {
-				if advisorMinQualityReasons := MinQualityTierReasons(se.entry.ScoringCandidate.QualityTier, advisorMinQualityTier); len(advisorMinQualityReasons) > 0 {
+				if advisorMinQualityReasons := MinQualityTierReasons(se.entry.ScoringCandidate.QualityTier, advisorMinQualityTier); len(advisorMinQualityReasons) > 0 &&
+					!effortLevelQualityAdmission(se.entry.ModelID, advisorMinQualityTier) {
 					reasons = append(reasons, advisorMinQualityReasons...)
 				}
 			}

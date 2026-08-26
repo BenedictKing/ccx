@@ -28,17 +28,21 @@ type CapabilityFloor struct {
 	TaskClass         TaskClass   // 用于读取任务级 CostPreference
 	TaskDomain        TaskDomain  // 用于按 (domain, effort) 取任务域强度证据
 	EffortFloor       EffortLevel // 该请求的 effort 下界；空=不限
+	EffortCeil        EffortLevel // 该请求的 effort 上界（场景预设引入）；空=不限
 	PinnedEffort      EffortLevel // 手动意图精确锁定的 effort 档位；空=不锁定，由 Autopilot 选优
+	// CostPreferenceOverride 请求级生效价格偏好（请求头 X-Cost-Preference 或场景预设默认）；
+	// 空 = 沿用配置链（PerTaskClass > 全局 Mode）。
+	CostPreferenceOverride string
 }
 
 // BuildCapabilityFloorFromRequestProfile 从 RequestProfile 推导能力下界。
 // 复用 RequestProfile 已有的 QualityNeed/ContextNeed/VisionNeed/ToolUseNeed/ReasoningNeed，
-// 零额外计算。
+// 零额外计算。场景预设命中时同时注入 effort 区间（显式意图，不再被 PerTaskClass 下界覆盖）。
 func BuildCapabilityFloorFromRequestProfile(profile *RequestProfile) CapabilityFloor {
 	if profile == nil {
 		return CapabilityFloor{}
 	}
-	return CapabilityFloor{
+	floor := CapabilityFloor{
 		MinContextTokens:  profile.ContextNeed,
 		NeedsReasoning:    profile.ReasoningNeed,
 		NeedsVision:       profile.VisionNeed,
@@ -50,6 +54,27 @@ func BuildCapabilityFloorFromRequestProfile(profile *RequestProfile) CapabilityF
 		TaskDomain:        profile.TaskDomain,
 		PinnedEffort:      resolveIntentPinnedEffort(profile),
 	}
+	if profile.ScenarioPreset != nil {
+		floor.EffortFloor = profile.ScenarioPreset.EffortFloor
+		floor.EffortCeil = profile.ScenarioPreset.EffortCeil
+	}
+	floor.CostPreferenceOverride = effectiveCostPreferenceForProfile(profile)
+	return floor
+}
+
+// effectiveCostPreferenceForProfile 解析请求级生效价格偏好：
+// 请求头 X-Cost-Preference > 场景预设默认；空 = 沿用配置链（PerTaskClass > 全局 Mode）。
+func effectiveCostPreferenceForProfile(profile *RequestProfile) string {
+	if profile == nil {
+		return ""
+	}
+	if profile.CostPreferenceOverride != "" {
+		return profile.CostPreferenceOverride
+	}
+	if profile.ScenarioPreset != nil && profile.ScenarioPreset.CostPreference != "" {
+		return profile.ScenarioPreset.CostPreference
+	}
+	return ""
 }
 
 // resolveIntentPinnedEffort 解析手动意图对 effort 的锁定值，遵循优先级约束：
@@ -78,8 +103,15 @@ func requestQualityTarget(profile *RequestProfile) QualityTier {
 
 // requestQualityBenefitCap 只对难度已知且不复杂的任务设置软收益上限。
 // 未知或复杂任务继续按模型质量优先，保持保守路由；该上限从不淘汰候选。
+// 场景预设命中时以预设帽为准（显式意图优先于复杂度推导；无帽场景不设限）。
 func requestQualityBenefitCap(profile *RequestProfile) QualityTier {
 	if profile == nil {
+		return ""
+	}
+	if profile.ScenarioPreset != nil {
+		if profile.ScenarioPreset.HasBenefitCap {
+			return profile.ScenarioPreset.QualityBenefitCap
+		}
 		return ""
 	}
 	if profile.Complexity == TaskComplexityTrivial ||
@@ -248,7 +280,7 @@ func (r *ModelResolver) rankedModelByQuality(
 		return nil
 	}
 	ranked := r.buildRankedCandidates(eligible, requestModel, channelUID, channelKind, floor)
-	preferenceMode := r.modelCostPreferenceMode(floor.TaskClass)
+	preferenceMode := r.modelCostPreferenceMode(floor)
 	seen := make(map[string]bool, len(ranked))
 	result := make([]rankedModelCandidate, 0, len(ranked))
 	for _, candidate := range ranked {
@@ -569,22 +601,36 @@ func (r *ModelResolver) resolveEffortFloor(taskClass TaskClass) EffortLevel {
 }
 
 func filterEffortFloor(candidates []rankedModelCandidate, floor CapabilityFloor) []rankedModelCandidate {
-	if floor.EffortFloor == "" {
+	if floor.EffortFloor == "" && floor.EffortCeil == "" {
 		return candidates
 	}
-	floorOrdinal, ok := effortOrdinal[floor.EffortFloor]
-	if !ok {
+	var floorOrdinal, ceilOrdinal int
+	hasFloor := false
+	if floor.EffortFloor != "" {
+		if ord, ok := effortOrdinal[floor.EffortFloor]; ok {
+			floorOrdinal = ord
+			hasFloor = true
+		}
+	}
+	hasCeil := false
+	if floor.EffortCeil != "" {
+		if ord, ok := effortOrdinal[floor.EffortCeil]; ok {
+			ceilOrdinal = ord
+			hasCeil = true
+		}
+	}
+	if !hasFloor && !hasCeil {
 		return candidates
 	}
 	var filtered []rankedModelCandidate
 	for _, c := range candidates {
 		if !c.effortDecided {
-			// 未决定 effort 的候选不受 EffortFloor 约束。
+			// 未决定 effort 的候选不受 effort 区间约束。
 			filtered = append(filtered, c)
 			continue
 		}
 		candOrdinal, cok := effortOrdinal[c.effort]
-		if !cok || candOrdinal >= floorOrdinal {
+		if !cok || (!hasFloor || candOrdinal >= floorOrdinal) && (!hasCeil || candOrdinal <= ceilOrdinal) {
 			filtered = append(filtered, c)
 		}
 	}
@@ -650,12 +696,64 @@ func filterByCapabilityFloorInternal(profiles []ModelProfile, floor CapabilityFl
 		if floor.NeedsToolCalls && !p.SupportsToolCalls {
 			continue
 		}
-		if enforceQuality && qualityTierRank(p.QualityTier) < qualityTierRank(floor.MinQualityTier) {
+		if enforceQuality && qualityTierRank(p.QualityTier) < qualityTierRank(floor.MinQualityTier) &&
+			!effortLevelQualityAdmission(p.ModelID, floor.MinQualityTier) {
 			continue
 		}
 		eligible = append(eligible, p)
 	}
 	return eligible
+}
+
+// effortLevelQualityAdmission 判断模型是否凭任一已测 effort 档的实测分通过质量下限。
+// 背景：QualityTier 是模型级常规口径分（medium 对齐），压平了 effort 维度；部分模型
+// effort 档间差异极大（低常规档模型拉满 effort 后实测可达高档能力），仅按模型级档位
+// 过滤会把这类 (model, effort) 组合整体排除。口径：取 coding 域 deepswe/codexradar
+// pass@1 直测证据（与 regularEffortBaselineScore/档位边界同源同量纲，default 档按
+// medium 归一），任一档实测分（百分制）达到下限对应边界分即放行。放行后该模型在
+// 排序层仍按各 effort 档实际分数竞争，不会被虚抬。
+func effortLevelQualityAdmission(modelID string, min QualityTier) bool {
+	if min == "" || min == QualityTierLow {
+		return true
+	}
+	benchmark := config.ResolveModelBenchmarkProfile(modelID)
+	if !benchmark.Known {
+		return false
+	}
+	premiumMin, highMin, normalMin := computeQualityTierBoundaries()
+	var cutoff float64
+	switch min {
+	case QualityTierPremium:
+		cutoff = premiumMin
+	case QualityTierHigh:
+		cutoff = highMin
+	default:
+		cutoff = normalMin
+	}
+	if cutoff <= 0 {
+		return false
+	}
+	for _, ev := range benchmark.Profile.BenchmarkEvidence {
+		if ev.Domain != "coding" || ev.Metric != "pass_at_1" {
+			continue
+		}
+		if ev.Benchmark != "deepswe" && ev.Benchmark != "codexradar" {
+			continue
+		}
+		effort := NormalizeEffortLevel(ev.Effort)
+		if effort == "" || effort == EffortOff {
+			continue
+		}
+		// 只认非常规档（序数 > medium）的实测：default/medium 是常规口径本身，
+		// 已由模型级档位表达；豁免它会让 singleEffortOnly 封顶等保守判定失效。
+		if EffortLevelOrdinal(effort) <= EffortLevelOrdinal(EffortMedium) {
+			continue
+		}
+		if score := ev.RawValue * 100; score >= cutoff {
+			return true
+		}
+	}
+	return false
 }
 
 // modelResolutionReason 标记发生了质量降档，但不改变现有调用方的映射结果。
@@ -759,7 +857,7 @@ func (r *ModelResolver) rankEligibleModels(
 	floor CapabilityFloor,
 ) rankedModelCandidate {
 	ranked := r.buildRankedCandidates(eligible, requestModel, channelUID, channelKind, floor)
-	preferenceMode := r.modelCostPreferenceMode(floor.TaskClass)
+	preferenceMode := r.modelCostPreferenceMode(floor)
 
 	// Frontier 选型：在全部 model × effort 候选的 Pareto 前沿上按车道选择，
 	// 成本与质量并列成轴（替代下方 qualityRank 绝对主导的字典序链）。
@@ -950,11 +1048,17 @@ func (r *ModelResolver) buildRankedCandidates(
 	return ranked
 }
 
-func (r *ModelResolver) modelCostPreferenceMode(taskClass TaskClass) CostPreferenceMode {
+func (r *ModelResolver) modelCostPreferenceMode(floor CapabilityFloor) CostPreferenceMode {
+	if override := floor.CostPreferenceOverride; override != "" {
+		switch CostPreferenceMode(override) {
+		case CostPrefQualityFirst, CostPrefBalanced, CostPrefCostFirst:
+			return CostPreferenceMode(override)
+		}
+	}
 	if r == nil || r.cfgManager == nil {
 		return CostPrefBalanced
 	}
-	mode := CostPreferenceMode(r.cfgManager.GetAutopilotRouting().CostPreference.GetEffectiveCostPreferenceMode(string(taskClass)))
+	mode := CostPreferenceMode(r.cfgManager.GetAutopilotRouting().CostPreference.GetEffectiveCostPreferenceMode(string(floor.TaskClass)))
 	switch mode {
 	case CostPrefQualityFirst, CostPrefBalanced, CostPrefCostFirst:
 		return mode
