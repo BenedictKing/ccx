@@ -90,7 +90,8 @@ func handleDryRunRoute(smartRouter *SmartRouter) gin.HandlerFunc {
 		}
 
 		// 与真实协议入口复用同一画像构建器，保证质量档、上下文默认值、
-		// 图片能力需求和任务分类的推导语义一致。
+		// 图片能力需求和任务分类的推导语义一致。场景预设与请求级偏好头
+		// 同样走 ResolveScenarioPreset 的生效链（头 > 全局 scenario.mode）。
 		profile := BuildRequestProfile(RequestProfileFeatures{
 			Model:         req.Model,
 			ChannelKind:   req.ChannelKind,
@@ -107,6 +108,10 @@ func handleDryRunRoute(smartRouter *SmartRouter) gin.HandlerFunc {
 			ToolUseNeed:   req.ToolUseNeed,
 			ReasoningNeed: req.ReasoningNeed,
 			ContextNeed:   req.ContextNeed,
+			ScenarioCfg:   cfg.AutopilotRouting.Scenario,
+
+			RoutingScenarioHeader: c.GetHeader("X-Routing-Scenario"),
+			CostPreferenceHeader:  c.GetHeader("X-Cost-Preference"),
 		})
 
 		plan := smartRouter.BuildPlan(&profile)
