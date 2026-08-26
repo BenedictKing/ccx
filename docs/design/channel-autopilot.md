@@ -2289,6 +2289,59 @@ embedding:
 - 成本置信度低于阈值时只做展示，不参与强排序。
 - vectors 可用最近同模型/同维度请求均价作为 shadow 估算；images 不用 chat token 价格替代生图价格。
 
+### 5.6.4 场景预设 (Scenario Presets)
+
+场景预设把「质量下限 + 默认价格偏好 + effort 展开范围 + 质量收益帽」打包成用户可一键切换的组合，
+覆盖 §5.1 复杂度→质量目标的自动推导。切换来源有两级，生效链：
+
+```text
+请求头 X-Routing-Scenario / X-Cost-Preference  >  全局配置 scenario.mode  >  自动推断（auto）
+```
+
+#### 内置四场景
+
+| key | 语义 | MinQualityTier | 默认价格偏好 | effort 集 | 收益帽 |
+|-----|------|----------------|--------------|-----------|--------|
+| `daily_dev` | 日常开发 | normal | balanced | medium..不限 | high |
+| `hard_problem` | 难题攻坚 | high | quality_first | high..不限 | 无帽 |
+| `background` | 后台自动化 | normal | cost_first | low..不限 | high |
+| `batch_cheap` | 批量省钱 | normal | cost_first | low..medium | high |
+
+配置（`config.json` 的 `autopilot.scenario`）：
+
+```json
+"scenario": {
+  "mode": "daily_dev",
+  "overrides": {
+    "batch_cheap": { "minQualityTier": "low", "effortCeil": "low" }
+  },
+  "headerOverrideEnabled": true
+}
+```
+
+`overrides` 按场景 key 覆盖内置参数（空字段沿用默认；`qualityBenefitCap: "none"` 清除收益帽）；
+`headerOverrideEnabled: false` 禁止请求头覆盖。管理端 API：`GET/PUT /api/smart-routing/config`
+的 `scenario` 字段（PUT 校验枚举 `auto/daily_dev/hard_problem/background/batch_cheap`）。
+
+#### 生效语义
+
+- 场景命中时 `QualityTarget` 直接取预设 `MinQualityTier`，**跳过 QualityNeed 天花板钳制**
+  （显式用户意图优先于请求模型档位）；能力硬约束（vision/context/tools）不受影响。
+- effort 集约束注入 `CapabilityFloor.EffortFloor/EffortCeil`，超出区间的已决定候选被过滤
+  （全滤时 fail-open）。
+- 价格偏好解析链：请求头 `X-Cost-Preference`（非法值忽略，不回退 balanced）>
+  场景默认 > `perTaskClass` > 全局 `mode`。场景激活期间全局价格偏好不生效。
+- 两个请求头（连同 `X-Task-Domain`）在转发上游前被剥离，只用于网关内部判定。
+
+#### effort 级质量准入（全链路）
+
+部分模型 effort 档间差异极大（如 gpt-5.6-luna：medium 实测 14.3%，max 实测 65.2%），模型级
+常规口径档位（medium 对齐）会把这些 (model, effort) 组合整体排除。`MinQualityTier` 过滤因此引入
+effort 级实测豁免：取 coding 域 deepswe/codexradar `pass_at_1` 直测证据（与档位边界同源同量纲），
+**任一非常规档（序数 > medium）实测分达到下限对应边界分即放行该模型**，随后该模型在排序层
+仍按各 effort 档实际分数与实测成本参与 frontier 竞争，不会被虚抬。default/medium 档证据不参与
+豁免（那是常规口径本身，已由模型级档位表达），singleEffortOnly 封顶等保守判定保持有效。
+
 ### 5.7 任务域优势矩阵 (Task-Domain Strength)
 
 模型质量不是标量：不同模型的强项任务不同。典型例子：opus / fable / gemini / glm 的审美（前端 UI、视觉设计）明显好于 gpt，但 gpt 的代码审核能力堪比 fable。单一 QualityTier 无法表达这种"按任务域各有胜负"的差异，本章引入 TaskDomain 维度。
