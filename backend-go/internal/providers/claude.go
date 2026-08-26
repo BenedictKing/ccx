@@ -709,17 +709,24 @@ func claudeSystemToBlocks(content interface{}) []interface{} {
 }
 
 func NormalizeSystemRoleToTopLevel(bodyBytes []byte) []byte {
+	newBytes, _ := NormalizeSystemRoleToTopLevelWithChanged(bodyBytes)
+	return newBytes
+}
+
+// NormalizeSystemRoleToTopLevelWithChanged 与 NormalizeSystemRoleToTopLevel 相同，
+// 额外返回是否发生了实际改写，供调用方只在真正改写时打日志/刷新请求体。
+func NormalizeSystemRoleToTopLevelWithChanged(bodyBytes []byte) ([]byte, bool) {
 	decoder := json.NewDecoder(bytes.NewReader(bodyBytes))
 	decoder.UseNumber()
 
 	var data map[string]interface{}
 	if err := decoder.Decode(&data); err != nil {
-		return bodyBytes
+		return bodyBytes, false
 	}
 
 	messages, ok := data["messages"].([]interface{})
 	if !ok {
-		return bodyBytes
+		return bodyBytes, false
 	}
 
 	// 顶层原有 system 的 block 原样保留在最前，inline system 消息按出现顺序追加为新 block。
@@ -744,7 +751,7 @@ func NormalizeSystemRoleToTopLevel(bodyBytes []byte) []byte {
 	}
 
 	if !modified {
-		return bodyBytes
+		return bodyBytes, false
 	}
 
 	data["messages"] = filteredMessages
@@ -754,9 +761,9 @@ func NormalizeSystemRoleToTopLevel(bodyBytes []byte) []byte {
 
 	newBytes, err := utils.MarshalJSONNoEscape(data)
 	if err != nil {
-		return bodyBytes
+		return bodyBytes, false
 	}
-	return newBytes
+	return newBytes, true
 }
 
 // convertReasoningContentToThinking 将响应中的 reasoning_content 转为 Claude thinking 内容块

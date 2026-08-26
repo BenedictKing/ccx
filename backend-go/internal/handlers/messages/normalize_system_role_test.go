@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/BenedictKing/ccx/internal/config"
+	"github.com/BenedictKing/ccx/internal/handlers/common"
 )
 
 // collectClaudeSystemBlockText 从顶层 system（应为 block 数组）里按序拼出各 text block 的文本，
@@ -284,5 +285,137 @@ func TestMessagesHandler_AutoManagedCompshareNormalizesSystemRoles(t *testing.T)
 		if role, _ := message["role"].(string); role != wantRole {
 			t.Fatalf("messages[%d].role = %q, want %q; body=%s", i, role, wantRole, string(captured))
 		}
+	}
+}
+
+// TestMessagesHandler_AutoNormalizeSystemRoleByMappedModel 验证：渠道未开手动开关，
+// 但 ModelMapping 把上线模型重定向为非 claude 家族（deepseek-v4-flash）时，
+// 转发前自动把 messages 中的 system 角色抽回顶层 system 字段。
+func TestMessagesHandler_AutoNormalizeSystemRoleByMappedModel(t *testing.T) {
+	const reqBody = `{"model":"claude-sonnet-5","system":[{"type":"text","text":"base prompt"}],"messages":[{"role":"system","content":"you are helpful"},{"role":"user","content":[{"type":"text","text":"hello"}]}]}`
+
+	var captured []byte
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read upstream request: %v", err)
+		}
+		captured = body
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"id":"msg","type":"message","role":"assistant","content":[{"type":"text","text":"hi"}],"stop_reason":"end_turn","usage":{"input_tokens":1,"output_tokens":1}}`))
+	}))
+	defer upstream.Close()
+
+	router := newMessagesTestRouter(t, config.UpstreamConfig{
+		Name:         "auto-normalize-by-model",
+		BaseURL:      upstream.URL,
+		APIKeys:      []string{"sk-test"},
+		ServiceType:  "claude",
+		Status:       "active",
+		ModelMapping: map[string]string{"claude-sonnet-5": "deepseek-v4-flash"},
+	})
+
+	w := performMessagesHandlerRequest(t, router, reqBody)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", w.Code, w.Body.String())
+	}
+
+	var forwarded map[string]interface{}
+	if err := json.Unmarshal(captured, &forwarded); err != nil {
+		t.Fatalf("unmarshal upstream request: %v", err)
+	}
+	sysText := collectClaudeSystemBlockText(t, forwarded["system"], captured)
+	if !strings.Contains(sysText, "base prompt") || !strings.Contains(sysText, "you are helpful") {
+		t.Fatalf("top-level system missing parts after auto normalize: %q; body=%s", sysText, string(captured))
+	}
+	msgs, ok := forwarded["messages"].([]interface{})
+	if !ok {
+		t.Fatalf("messages shape invalid: %s", string(captured))
+	}
+	for _, raw := range msgs {
+		m, _ := raw.(map[string]interface{})
+		if role, _ := m["role"].(string); role == "system" {
+			t.Fatalf("system role should be auto-extracted for non-claude wire model; body=%s", string(captured))
+		}
+	}
+}
+
+// TestMessagesHandler_AutoNormalizeSystemRoleByConverterFingerprint 验证：渠道未开手动开关
+// 且模型为 claude 家族时首个请求保持原样；上游响应头携带 new-api 指纹被学习后，
+// 后续请求自动归一化 messages 中的 system 角色。
+func TestMessagesHandler_AutoNormalizeSystemRoleByConverterFingerprint(t *testing.T) {
+	restore := common.SwapConverterUpstreamCacheForTest(config.NewConverterUpstreamCache())
+	defer restore()
+
+	const reqBody = `{"model":"claude-sonnet-5","system":[{"type":"text","text":"base prompt"}],"messages":[{"role":"system","content":"you are helpful"},{"role":"user","content":[{"type":"text","text":"hello"}]}]}`
+
+	var captured [][]byte
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read upstream request: %v", err)
+		}
+		captured = append(captured, body)
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-New-Api-Version", "v1.0.0-rc.25")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"id":"msg","type":"message","role":"assistant","content":[{"type":"text","text":"hi"}],"stop_reason":"end_turn","usage":{"input_tokens":1,"output_tokens":1}}`))
+	}))
+	defer upstream.Close()
+
+	router := newMessagesTestRouter(t, config.UpstreamConfig{
+		Name:        "auto-normalize-by-fingerprint",
+		BaseURL:     upstream.URL,
+		APIKeys:     []string{"sk-test"},
+		ServiceType: "claude",
+		Status:      "active",
+		ChannelUID:  "ch-converter-fingerprint-test",
+	})
+
+	hasInlineSystemRole := func(body []byte) bool {
+		var parsed map[string]interface{}
+		if err := json.Unmarshal(body, &parsed); err != nil {
+			t.Fatalf("unmarshal upstream request: %v", err)
+		}
+		msgs, _ := parsed["messages"].([]interface{})
+		for _, raw := range msgs {
+			m, _ := raw.(map[string]interface{})
+			if role, _ := m["role"].(string); role == "system" {
+				return true
+			}
+		}
+		return false
+	}
+
+	// 第一次请求：指纹尚未学习，claude 模型不触发自动归一化，inline system 原样透传
+	w1 := performMessagesHandlerRequest(t, router, reqBody)
+	if w1.Code != http.StatusOK {
+		t.Fatalf("first request status = %d, body=%s", w1.Code, w1.Body.String())
+	}
+	if len(captured) != 1 {
+		t.Fatalf("expected 1 upstream call, got %d", len(captured))
+	}
+	if !hasInlineSystemRole(captured[0]) {
+		t.Fatalf("first request should keep inline system role (not yet learned); body=%s", string(captured[0]))
+	}
+
+	// 第二次请求：指纹已学习，自动归一化生效
+	w2 := performMessagesHandlerRequest(t, router, reqBody)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("second request status = %d, body=%s", w2.Code, w2.Body.String())
+	}
+	if len(captured) != 2 {
+		t.Fatalf("expected 2 upstream calls, got %d", len(captured))
+	}
+	if hasInlineSystemRole(captured[1]) {
+		t.Fatalf("second request should be auto-normalized after fingerprint learned; body=%s", string(captured[1]))
+	}
+	var second map[string]interface{}
+	if err := json.Unmarshal(captured[1], &second); err != nil {
+		t.Fatalf("unmarshal second upstream request: %v", err)
+	}
+	if sysText := collectClaudeSystemBlockText(t, second["system"], captured[1]); !strings.Contains(sysText, "you are helpful") {
+		t.Fatalf("second request top-level system missing extracted text: %q", sysText)
 	}
 }

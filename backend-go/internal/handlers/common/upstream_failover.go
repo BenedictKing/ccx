@@ -214,6 +214,65 @@ var deprecatedParamCache = config.NewDeprecatedParamCacheWithPersistence(config.
 // 记忆落盘到 .config/channel_compat.json，重启后免重学。
 var channelCompatCache = config.SharedChannelCompatCache()
 
+// converterUpstreamCache 按渠道记忆"上游是 new-api/one-api 系转换层"的事实（响应头指纹学习）。
+// 转换层会把 Anthropic Messages 请求转成 OpenAI 兼容格式，messages 中间的 system 角色
+// 会导致上下文截断，因此命中记忆的渠道自动把 system 角色抽回顶层 system 字段。
+// 记忆落盘到 .config/converter_upstreams.json，重启后免重学。
+var converterUpstreamCache = config.SharedConverterUpstreamCache()
+
+// SwapConverterUpstreamCacheForTest 临时替换包级转换层指纹缓存，返回还原函数。
+//
+// 仅供测试使用：全局实例带落盘，测试直接写它会在源码树里产生状态文件，
+// 且上一次运行的记忆会影响下一次运行的结果。
+func SwapConverterUpstreamCacheForTest(replacement *config.ConverterUpstreamCache) func() {
+	original := converterUpstreamCache
+	converterUpstreamCache = replacement
+	return func() { converterUpstreamCache = original }
+}
+
+// converterFingerprintHeaders 是 new-api/one-api 系转换层上游在响应头中携带的指纹。
+// 命中任意一个即认为该渠道是转换层上游。
+var converterFingerprintHeaders = []string{
+	"X-New-Api-Version",
+	"X-Oneapi-Request-Id",
+}
+
+// detectConverterFingerprint 返回响应头中命中的转换层指纹头名（小写）；未命中返回空串。
+func detectConverterFingerprint(header http.Header) string {
+	for _, name := range converterFingerprintHeaders {
+		if header.Get(name) != "" {
+			return strings.ToLower(name)
+		}
+	}
+	return ""
+}
+
+// shouldNormalizeSystemRoleForAttempt 判定当前 attempt 是否应把 messages 中的 system 角色
+// 抽回顶层 system 字段。触发条件（任一即可，返回的原因用于日志）：
+//  1. manual：渠道手动开关打开（强制开，保留为最终覆盖）；
+//  2. converter_fingerprint：渠道曾被识别为转换层上游（响应头指纹的渠道级学习记忆）；
+//  3. model_family:<family>：实际上线模型（override/mapping 后）非 claude 家族——
+//     messages 协议下发非 claude 模型必然经过协议转换，inline system 角色在转换中
+//     可能截断上下文。
+//
+// 未知家族的模型保守不触发（交由指纹学习兜底），避免对未识别端点做无谓改写。
+func shouldNormalizeSystemRoleForAttempt(upstream *config.UpstreamConfig, attemptModel string) (bool, string) {
+	if upstream == nil {
+		return false, ""
+	}
+	if upstream.NormalizeSystemRoleToTopLevel {
+		return true, "manual"
+	}
+	if converterUpstreamCache.IsConverter(upstream.ChannelUID) {
+		return true, "converter_fingerprint"
+	}
+	family := autopilot.InferModelFamily(attemptModel, "")
+	if family != autopilot.ModelFamilyClaude && family != autopilot.ModelFamilyUnknown {
+		return true, "model_family:" + string(family)
+	}
+	return false, ""
+}
+
 func shouldNormalizeMetadataUserID(kind scheduler.ChannelKind, upstream *config.UpstreamConfig) bool {
 	if upstream == nil {
 		return false
@@ -529,12 +588,6 @@ func TryUpstreamWithAllKeys(
 			if shouldNormalizeMetadataUserID(kind, upstream) {
 				attemptBody = NormalizeMetadataUserID(attemptBody)
 			}
-			// Claude Messages 入口：将 messages 中的 system 角色抽回顶层 system 字段。
-			// 在 provider 分发前统一处理，使所有上游类型（claude/openai/gemini/responses）均生效，
-			// 兼容 Opus 4.8 / Fable 5 等将 system 作为消息 role 发送、而旧上游仅支持 user/assistant 的情况。
-			if kind == scheduler.ChannelKindMessages && upstream.NormalizeSystemRoleToTopLevel {
-				attemptBody = providers.NormalizeSystemRoleToTopLevel(attemptBody)
-			}
 			// 发往上游前按实际模型能力 clamp 最大输出 token：
 			// 客户端/上游 subagent 可能发送超过模型上限的 max_tokens（如 Claude Code 默认 64000），
 			// 而部分平台（火山方舟 kimi 系列硬限 32768）会直接 400。此处静默下调到模型上限，
@@ -679,6 +732,24 @@ func TryUpstreamWithAllKeys(
 						}
 					} else {
 						c.Set("effortDecisionSource", "passthrough")
+					}
+				}
+			}
+
+			// Claude Messages 入口：将 messages 中的 system 角色抽回顶层 system 字段。
+			// 统一判定点放在 attemptModel 确定之后：手动开关为强制开；自动触发覆盖两类场景——
+			// (a) 上线模型经 override/mapping 后非 claude 家族（messages 协议发非 claude 模型
+			// 必然经过协议转换）；(b) 上游响应头曾命中 new-api/one-api 转换层指纹。
+			// 兼容 Opus 4.8 / Fable 5 等新客户端将 system 作为消息 role 发送、而转换层上游
+			// 遇到 inline system 会截断上下文的情况。归一化幂等，与 SystemHeaderFilter、
+			// 模型改写、参数约束等步骤正交。
+			if kind == scheduler.ChannelKindMessages {
+				if should, normReason := shouldNormalizeSystemRoleForAttempt(upstreamCopy, attemptModel); should {
+					if normalizedBody, normChanged := providers.NormalizeSystemRoleToTopLevelWithChanged(attemptBody); normChanged {
+						attemptBody = normalizedBody
+						RestoreRequestBody(c, attemptBody)
+						c.Set("requestBodyBytes", attemptBody)
+						RequestLogf(c, "[%s-Preprocess] 已将 messages 中的 system 角色抽回顶层 system 字段（原因: %s）", apiType, normReason)
 					}
 				}
 			}
@@ -995,6 +1066,17 @@ func TryUpstreamWithAllKeys(
 				if selection.LimiterScope != "" {
 					if limiter := rateLimitMgr.GetScoped(executionAPIType, executionIndex, selection.LimiterScope); limiter != nil {
 						limiter.ApplyUpstreamHints(resp.Header, resp.StatusCode, now)
+					}
+				}
+			}
+
+			// 转换层指纹学习：new-api/one-api 系中转在任何响应（含错误响应）头中携带指纹，
+			// 识别到即按渠道记忆，后续请求自动把 messages 中的 system 角色抽回顶层
+			// （见 attempt 内的统一归一化判定）。注意这是学习式机制，本次请求不追溯生效。
+			if kind == scheduler.ChannelKindMessages && upstream.ChannelUID != "" {
+				if fingerprint := detectConverterFingerprint(resp.Header); fingerprint != "" {
+					if converterUpstreamCache.Mark(upstream.ChannelUID, fingerprint) {
+						RequestLogf(c, "[%s-Preprocess] 渠道 %s 识别到转换层指纹(%s)，后续请求将自动归一化 system 角色", apiType, upstream.Name, fingerprint)
 					}
 				}
 			}
