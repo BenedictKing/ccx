@@ -828,6 +828,11 @@ func main() {
 			})
 		}
 
+		// 场景预设配置读取器：请求画像构建时解析 X-Routing-Scenario 头与全局场景模式
+		common.SetScenarioConfigProvider(func() config.ScenarioRoutingConfig {
+			return cfgManager.GetAutopilotRouting().Scenario
+		})
+
 		// endpoint policy hook：为每个请求构建 EndpointAttemptPolicy
 		common.SetEndpointPolicyProviderHook(func(c *gin.Context, model string, upstream *config.UpstreamConfig) *autopilot.EndpointAttemptPolicy {
 			autopilotCfg := cfgManager.GetAutopilotRouting()

@@ -212,6 +212,11 @@ func PrepareUpstreamHeaders(c *gin.Context, targetHost string) http.Header {
 	headers.Del("Via")
 	headers.Del("Forwarded")
 
+	// 移除网关内部路由语义头：这些头只用于本网关的 autopilot 判定，不属于上游协议
+	headers.Del("X-Task-Domain")
+	headers.Del("X-Routing-Scenario")
+	headers.Del("X-Cost-Preference")
+
 	// 移除 Accept-Encoding，让 Go 的 http.Client 自动处理 gzip 压缩/解压缩
 	// 这样可以避免在原始请求包含 Accept-Encoding 时 Go 不自动解压缩的问题
 	headers.Del("Accept-Encoding")

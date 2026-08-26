@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/BenedictKing/ccx/internal/autopilot"
+	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/scheduler"
 	"github.com/BenedictKing/ccx/internal/types"
 	"github.com/gin-gonic/gin"
@@ -297,4 +298,76 @@ func TestAttachAutopilotRequestProfileRoutesByCurrentTaskDifficulty(t *testing.T
 			}
 		})
 	}
+}
+
+func TestAttachAutopilotRequestProfileRoutingHeaders(t *testing.T) {
+	t.Run("scenario and cost preference headers", func(t *testing.T) {
+		body := `{"model":"gpt-5.6-luna","messages":[{"role":"user","content":"hello"}]}`
+		c := newAutopilotProfileTestContext(t, "/v1/messages", body, nil)
+		c.Request.Header.Set("X-Routing-Scenario", "daily_dev")
+		c.Request.Header.Set("X-Cost-Preference", "cost_first")
+
+		profile := AttachAutopilotRequestProfile(c, scheduler.ChannelKindMessages, "gpt-5.6-luna", "completion", "session-test", []byte(body), 0)
+		if profile.ScenarioPreset == nil || profile.ScenarioPreset.Key != "daily_dev" {
+			t.Fatalf("场景头未生效: %+v", profile.ScenarioPreset)
+		}
+		if profile.CostPreferenceOverride != "cost_first" {
+			t.Fatalf("价格偏好头未生效: %q", profile.CostPreferenceOverride)
+		}
+		// daily_dev 场景质量目标 normal 应跳过 luna(low) 的 QualityNeed 钳制
+		if profile.QualityTarget != autopilot.QualityTierNormal {
+			t.Fatalf("QualityTarget = %q, want normal", profile.QualityTarget)
+		}
+	})
+
+	t.Run("invalid headers ignored", func(t *testing.T) {
+		body := `{"model":"gpt-5.6-luna","messages":[{"role":"user","content":"hello"}]}`
+		c := newAutopilotProfileTestContext(t, "/v1/messages", body, nil)
+		c.Request.Header.Set("X-Routing-Scenario", "bogus-scenario")
+		c.Request.Header.Set("X-Cost-Preference", "garbage")
+
+		profile := AttachAutopilotRequestProfile(c, scheduler.ChannelKindMessages, "gpt-5.6-luna", "completion", "session-test", []byte(body), 0)
+		if profile.ScenarioPreset != nil {
+			t.Fatalf("非法场景头应被忽略: %+v", profile.ScenarioPreset)
+		}
+		if profile.CostPreferenceOverride != "" {
+			t.Fatalf("非法价格偏好头应被忽略: %q", profile.CostPreferenceOverride)
+		}
+	})
+
+	t.Run("header override disabled via provider", func(t *testing.T) {
+		disabled := false
+		SetScenarioConfigProvider(func() config.ScenarioRoutingConfig {
+			return config.ScenarioRoutingConfig{HeaderOverrideEnabled: &disabled}
+		})
+		t.Cleanup(func() { SetScenarioConfigProvider(nil) })
+
+		body := `{"model":"gpt-5.6-luna","messages":[{"role":"user","content":"hello"}]}`
+		c := newAutopilotProfileTestContext(t, "/v1/messages", body, nil)
+		c.Request.Header.Set("X-Routing-Scenario", "hard_problem")
+
+		profile := AttachAutopilotRequestProfile(c, scheduler.ChannelKindMessages, "gpt-5.6-luna", "completion", "session-test", []byte(body), 0)
+		if profile.ScenarioPreset != nil {
+			t.Fatalf("头覆盖被禁用时不应命中场景: %+v", profile.ScenarioPreset)
+		}
+	})
+
+	t.Run("global scenario via provider", func(t *testing.T) {
+		enabled := true
+		SetScenarioConfigProvider(func() config.ScenarioRoutingConfig {
+			return config.ScenarioRoutingConfig{Mode: "batch_cheap", HeaderOverrideEnabled: &enabled}
+		})
+		t.Cleanup(func() { SetScenarioConfigProvider(nil) })
+
+		body := `{"model":"gpt-5.6-luna","messages":[{"role":"user","content":"hello"}]}`
+		c := newAutopilotProfileTestContext(t, "/v1/messages", body, nil)
+
+		profile := AttachAutopilotRequestProfile(c, scheduler.ChannelKindMessages, "gpt-5.6-luna", "completion", "session-test", []byte(body), 0)
+		if profile.ScenarioPreset == nil || profile.ScenarioPreset.Key != "batch_cheap" {
+			t.Fatalf("全局场景未生效: %+v", profile.ScenarioPreset)
+		}
+		if profile.ScenarioPreset.EffortCeil != autopilot.EffortMedium {
+			t.Fatalf("batch_cheap 应有 medium 上限: %+v", profile.ScenarioPreset)
+		}
+	})
 }

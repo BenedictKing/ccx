@@ -7,10 +7,20 @@ import (
 	"strings"
 
 	"github.com/BenedictKing/ccx/internal/autopilot"
+	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/scheduler"
 	"github.com/BenedictKing/ccx/internal/utils"
 	"github.com/gin-gonic/gin"
 )
+
+// scenarioConfigProvider 返回全局场景配置快照。
+// 由 main.go 注入（configManager 热重载安全）；nil 时仅请求头声明的场景可生效。
+var scenarioConfigProvider func() config.ScenarioRoutingConfig
+
+// SetScenarioConfigProvider 注入全局场景配置读取器（main.go 启动时调用一次）。
+func SetScenarioConfigProvider(provider func() config.ScenarioRoutingConfig) {
+	scenarioConfigProvider = provider
+}
 
 // AttachAutopilotRequestProfile 从已校验的请求体提取脱敏特征，并绑定到请求 context。
 // channel 级 SmartRouter 与 endpoint policy 必须读取这一份画像，避免能力下界漂移。
@@ -38,9 +48,15 @@ func AttachAutopilotRequestProfile(
 	hasDocument := c != nil && HasDocumentContent(c, bodyBytes)
 	estTokens := estimateAutopilotInputTokens(kind, bodyBytes)
 	req := decodeAutopilotRequest(bodyBytes)
-	explicitDomain := ""
+	explicitDomain, routingScenarioHeader, costPreferenceHeader := "", "", ""
 	if c != nil {
 		explicitDomain = c.GetHeader("X-Task-Domain")
+		routingScenarioHeader = c.GetHeader("X-Routing-Scenario")
+		costPreferenceHeader = c.GetHeader("X-Cost-Preference")
+	}
+	var scenarioCfg config.ScenarioRoutingConfig
+	if scenarioConfigProvider != nil {
+		scenarioCfg = scenarioConfigProvider()
 	}
 	promptAnalysis := analyzeAutopilotPrompt(req, explicitDomain)
 	clientEffortRaw, clientEffortExplicit := ExtractClientEffortExplicit(bodyBytes, string(kind))
@@ -67,6 +83,9 @@ func AttachAutopilotRequestProfile(
 		DomainHints:          promptAnalysis.DomainHints,
 		ClientEffortRaw:      clientEffortRaw,
 		ClientEffortExplicit: clientEffortExplicit,
+		RoutingScenarioHeader: routingScenarioHeader,
+		CostPreferenceHeader:  costPreferenceHeader,
+		ScenarioCfg:           scenarioCfg,
 	})
 
 	if c != nil && c.Request != nil {

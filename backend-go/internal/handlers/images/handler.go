@@ -474,6 +474,10 @@ func prepareImagesUpstreamHeaders(c *gin.Context, targetHost string, contentType
 	headers.Del("Via")
 	headers.Del("Forwarded")
 	headers.Del("Accept-Encoding")
+	// 网关内部路由语义头，不透传上游
+	headers.Del("X-Task-Domain")
+	headers.Del("X-Routing-Scenario")
+	headers.Del("X-Cost-Preference")
 	if strings.TrimSpace(contentType) == "" {
 		headers.Del("Content-Type")
 	} else {

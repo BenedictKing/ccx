@@ -61,6 +61,10 @@ type AutopilotRoutingConfig struct {
 	// costPreference 用户价格偏向（§5.6）。
 	CostPreference CostPreferenceConfig `json:"costPreference,omitempty"`
 
+	// scenario 任务场景预设（日常开发/难题攻坚/后台自动化/批量省钱）。
+	// 非 auto 时覆盖复杂度→质量目标的推导、effort 展开范围与默认价格偏向。
+	Scenario ScenarioRoutingConfig `json:"scenario,omitempty"`
+
 	// modelFamilyPreference 模型派系偏好（§5.5.3）。
 	ModelFamilyPreference ModelFamilyPreferenceConfig `json:"modelFamilyPreference,omitempty"`
 
@@ -194,6 +198,41 @@ type CostPreferenceConfig struct {
 	// key 为 TaskClass 字符串（supervisor/worker/lightweight/vision/long_context/image_generation/embedding）。
 	// value 为该任务类别的价格偏向模式。
 	PerTaskClass map[string]string `json:"perTaskClass,omitempty"`
+}
+
+// ScenarioRoutingConfig 任务场景预设配置。
+// 场景预设把「质量下限 + 价格偏好 + effort 档范围」打包成用户可一键切换的组合，
+// 生效链：请求头 X-Routing-Scenario > 此处 Mode > 现有复杂度/TaskClass 自动推断。
+type ScenarioRoutingConfig struct {
+	// Mode 当前生效场景："auto"（默认，自动推断）|
+	// "daily_dev"（日常开发）| "hard_problem"（难题攻坚）|
+	// "background"（后台自动化）| "batch_cheap"（批量省钱）。
+	Mode string `json:"mode,omitempty"`
+
+	// Overrides 按场景 key 覆盖内置预设参数（可选；key 同 Mode 枚举除 auto 外）。
+	Overrides map[string]ScenarioPresetOverride `json:"overrides,omitempty"`
+
+	// HeaderOverrideEnabled 是否允许请求头 X-Routing-Scenario / X-Cost-Preference
+	// 按请求覆盖全局设置（默认 true）。
+	HeaderOverrideEnabled *bool `json:"headerOverrideEnabled,omitempty"`
+}
+
+// ScenarioPresetOverride 场景预设参数覆盖项。
+// 全部可选；未填字段沿用内置默认值。字段语义与 autopilot 内置预设一致。
+type ScenarioPresetOverride struct {
+	// MinQualityTier 场景质量档下限："low"|"normal"|"high"|"premium"。
+	MinQualityTier string `json:"minQualityTier,omitempty"`
+
+	// CostPreference 场景默认价格偏向："quality_first"|"balanced"|"cost_first"。
+	CostPreference string `json:"costPreference,omitempty"`
+
+	// EffortFloor / EffortCeil effort 档展开范围（含端点）：
+	// "low"|"medium"|"high"|"xhigh"|"max"|"ultra"。
+	EffortFloor string `json:"effortFloor,omitempty"`
+	EffortCeil  string `json:"effortCeil,omitempty"`
+
+	// QualityBenefitCap 质量收益帽：超过该档后质量不再加分；空串 = 无帽。
+	QualityBenefitCap string `json:"qualityBenefitCap,omitempty"`
 }
 
 // ModelFamilyPreferenceConfig 模型派系偏好配置（§5.5.3）。
@@ -687,6 +726,7 @@ func (c *AutopilotRoutingConfig) Validate() {
 
 	// 3. 成本偏好校验
 	c.CostPreference.validate()
+	c.Scenario.validate()
 	if !c.CostOptimization.ExchangeRateQuotesConfigured && c.CostOptimization.ExchangeRateQuotes == nil {
 		c.CostOptimization.ExchangeRateQuotes = defaultExchangeRateQuotes()
 	}
@@ -796,6 +836,47 @@ func normalizeCostPreferenceMode(mode string) string {
 	default:
 		return "balanced"
 	}
+}
+
+// ValidScenarioModes 场景模式合法枚举（供 API 校验与前端展示复用）。
+var ValidScenarioModes = []string{"auto", "daily_dev", "hard_problem", "background", "batch_cheap"}
+
+// NormalizeScenarioMode 归一化场景模式。非法值回退到 "auto"。
+func NormalizeScenarioMode(mode string) string {
+	normalized := strings.ToLower(strings.TrimSpace(mode))
+	for _, valid := range ValidScenarioModes {
+		if normalized == valid {
+			return normalized
+		}
+	}
+	return "auto"
+}
+
+// NormalizeCostPreferenceMode 归一化价格偏向模式。非法值回退到 "balanced"。
+func NormalizeCostPreferenceMode(mode string) string {
+	return normalizeCostPreferenceMode(mode)
+}
+
+// validate 归一化 ScenarioRoutingConfig。
+func (c *ScenarioRoutingConfig) validate() {
+	c.Mode = NormalizeScenarioMode(c.Mode)
+	if len(c.Overrides) == 0 {
+		return
+	}
+	normalized := make(map[string]ScenarioPresetOverride, len(c.Overrides))
+	for k, v := range c.Overrides {
+		key := NormalizeScenarioMode(k)
+		if key == "auto" {
+			continue
+		}
+		v.MinQualityTier = strings.ToLower(strings.TrimSpace(v.MinQualityTier))
+		v.CostPreference = normalizeCostPreferenceMode(v.CostPreference)
+		v.EffortFloor = strings.ToLower(strings.TrimSpace(v.EffortFloor))
+		v.EffortCeil = strings.ToLower(strings.TrimSpace(v.EffortCeil))
+		v.QualityBenefitCap = strings.ToLower(strings.TrimSpace(v.QualityBenefitCap))
+		normalized[key] = v
+	}
+	c.Overrides = normalized
 }
 
 func (c *CostOptimizationConfig) validateProviderTimePricing() {
@@ -940,6 +1021,21 @@ func (cm *ConfigManager) SetCostPreferenceMode(mode string) error {
 		return err
 	}
 	log.Printf("[Config-Autopilot] 价格偏向已更新: %s", normalized)
+	cm.fireConfigChangeCallbacks()
+	return nil
+}
+
+// SetScenarioMode 更新任务场景预设模式并持久化。
+// 只修改 Mode，保留已有的 Overrides 覆盖项。
+func (cm *ConfigManager) SetScenarioMode(mode string) error {
+	normalized := NormalizeScenarioMode(mode)
+	cm.mu.Lock()
+	cm.config.AutopilotRouting.Scenario.Mode = normalized
+	if err := cm.saveConfigLocked(cm.config); err != nil {
+		cm.mu.Unlock()
+		return err
+	}
+	log.Printf("[Config-Autopilot] 场景预设已更新: %s", normalized)
 	cm.fireConfigChangeCallbacks()
 	return nil
 }
@@ -1142,6 +1238,14 @@ func (c AutopilotRoutingConfig) deepCopy() AutopilotRoutingConfig {
 		cp.CostPreference.PerTaskClass = make(map[string]string, len(c.CostPreference.PerTaskClass))
 		for k, v := range c.CostPreference.PerTaskClass {
 			cp.CostPreference.PerTaskClass[k] = v
+		}
+	}
+
+	// Scenario.Overrides
+	if c.Scenario.Overrides != nil {
+		cp.Scenario.Overrides = make(map[string]ScenarioPresetOverride, len(c.Scenario.Overrides))
+		for k, v := range c.Scenario.Overrides {
+			cp.Scenario.Overrides[k] = v
 		}
 	}
 

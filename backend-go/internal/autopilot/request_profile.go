@@ -34,6 +34,14 @@ type RequestProfile struct {
 	TaskClass  TaskClass  // 分类结果：supervisor | worker | lightweight | vision | long_context | image_generation | embedding
 	TaskDomain TaskDomain // 域推导结果（由 InferTaskDomain 填充）
 
+	// ── 场景预设（请求头 X-Routing-Scenario > 全局 scenario.mode 解析）──
+	// 非 nil 时 QualityTarget 直接取预设 MinQualityTier（跳过 QualityNeed 钳制），
+	// effort 展开范围与质量收益帽同样按预设约束。
+	ScenarioPreset *ScenarioPreset `json:"-"`
+	// CostPreferenceOverride 请求头 X-Cost-Preference 声明的价格偏好；
+	// 仅合法枚举值非空，空 = 未声明（沿用场景默认或全局配置链）。
+	CostPreferenceOverride string
+
 	// ── 人工意图匹配扩展（由 handler/main.go 层注入）──
 	SessionID  string // 统一会话标识，用于 session_pin 匹配
 	PromptHash string // prompt SHA256 前 16 位，用于确定性流量分配
