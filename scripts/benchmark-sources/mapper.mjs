@@ -25,6 +25,7 @@ export const DEEPSWE_MODEL_MAP = {
   'claude-sonnet-4-6': 'claude-sonnet-4-6',
   'claude-sonnet-4-6-thinking': 'claude-sonnet-4-6',
   'glm-5-3': 'glm-5.3',
+  'glm-5-3-flash': 'glm-5.3-flash',
   'glm-5-2': 'glm-5.2',
   'kimi-k2-7-code': 'kimi-k2.7-code',
   'kimi-k2-7-code-highspeed': 'kimi-k2.7-code',
