@@ -831,6 +831,35 @@
     },
     {
       "patterns": [
+        "(?:^|[-/])glm-5\\.3-flash(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)",
+        "(?:^|[-/])glm-5\\.3-flash\\[1m\\](?=$|@)"
+      ],
+      "provider": "zai",
+      "displayName": "GLM-5.3-Flash",
+      "description": "GLM-5 series' first native multimodal model (320B total / 18B active, hybrid linear+sparse attention) with stronger-than-GLM-5.2 intelligence at flash-tier cost. Accepts image/video/file input and supports function calling, streaming tool calls and structured output; thinking is always on (cannot be disabled) with low/high/max effort levels. BigModel publishes no pay-as-you-go token pricing for it; the GLM Coding Plan bills via credit quotas. The [1m] suffix selects the full 1M-context alias.",
+      "contextWindowTokens": 1000000,
+      "maxOutputTokens": 131072,
+      "thinkingMode": "thinking",
+      "reasoningEfforts": [
+        "low",
+        "high",
+        "max"
+      ],
+      "capabilities": {
+        "toolCalls": true,
+        "streamingToolCalls": true,
+        "jsonMode": true,
+        "reasoning": true,
+        "vision": true
+      },
+      "sources": [
+        "https://docs.bigmodel.cn/cn/guide/models/vlm/glm-5.3-flash",
+        "https://docs.bigmodel.cn/cn/update/new-releases",
+        "https://docs.z.ai/devpack/latest-model"
+      ]
+    },
+    {
+      "patterns": [
         "(?:^|[-/])glm-5\\.2(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)",
         "(?:^|[-/])glm-5p2(?=$|@)"
       ],
