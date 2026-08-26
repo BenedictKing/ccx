@@ -2495,13 +2495,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.686,
           "uncertainty": 0.011,
-          "cohortPercentile": 0.8,
+          "cohortPercentile": 0.808,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         },
         {
           "benchmark": "deepswe",
@@ -2511,13 +2511,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.596,
           "uncertainty": 0.028,
-          "cohortPercentile": 0.56,
+          "cohortPercentile": 0.538,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "low",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         },
         {
           "benchmark": "deepswe",
@@ -2527,13 +2527,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.697,
           "uncertainty": 0.04,
-          "cohortPercentile": 0.88,
+          "cohortPercentile": 0.885,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "max",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         },
         {
           "benchmark": "deepswe",
@@ -2543,13 +2543,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.654,
           "uncertainty": 0.044,
-          "cohortPercentile": 0.6,
+          "cohortPercentile": 0.615,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "medium",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         },
         {
           "benchmark": "deepswe",
@@ -2559,13 +2559,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.699,
           "uncertainty": 0.032,
-          "cohortPercentile": 0.92,
+          "cohortPercentile": 0.923,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "xhigh",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         }
       ],
       "sources": [
@@ -2579,11 +2579,11 @@
       "sharedResults": 618,
       "comparableCategories": 4,
       "totalCategories": 8,
-      "overallScore": 82.88,
+      "overallScore": 83.01,
       "categoryScores": {
         "agentic": 92.4,
         "coding": 82.7,
-        "multimodal": 63.4,
+        "multimodal": 63.6,
         "knowledge": 69.4
       }
     },
@@ -2620,7 +2620,7 @@
           "capturedAt": "2026-08-24"
         }
       ],
-      "overallScore": 57.18,
+      "overallScore": 57.27,
       "categoryScores": {
         "coding": 54.2,
         "math": 29
@@ -2640,11 +2640,11 @@
       "sharedResults": 14,
       "comparableCategories": 4,
       "totalCategories": 8,
-      "overallScore": 83.13,
+      "overallScore": 83.26,
       "categoryScores": {
         "agentic": 97.7,
         "coding": 82.7,
-        "multimodal": 86.1,
+        "multimodal": 87.3,
         "knowledge": 93.9
       }
     },
@@ -2913,13 +2913,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.728,
           "uncertainty": 0.019,
-          "cohortPercentile": 0.96,
+          "cohortPercentile": 0.962,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         },
         {
           "benchmark": "deepswe",
@@ -2929,13 +2929,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.581,
           "uncertainty": 0.023,
-          "cohortPercentile": 0.52,
+          "cohortPercentile": 0.5,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "low",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         },
         {
           "benchmark": "deepswe",
@@ -2947,11 +2947,11 @@
           "uncertainty": 0.039,
           "cohortPercentile": 1,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "max",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         },
         {
           "benchmark": "deepswe",
@@ -2961,13 +2961,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.689,
           "uncertainty": 0.012,
-          "cohortPercentile": 0.8,
+          "cohortPercentile": 0.808,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "medium",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         },
         {
           "benchmark": "deepswe",
@@ -2977,20 +2977,20 @@
           "metric": "pass_at_1",
           "rawValue": 0.732,
           "uncertainty": 0.031,
-          "cohortPercentile": 0.96,
+          "cohortPercentile": 0.962,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "xhigh",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         }
       ],
-      "overallScore": 82.8,
+      "overallScore": 82.94,
       "categoryScores": {
         "agentic": 85,
         "coding": 82.7,
-        "multimodal": 88.5,
+        "multimodal": 88.7,
         "knowledge": 93.5
       }
     },
@@ -2999,7 +2999,7 @@
         "(?:^|[-/])claude-opus-4[.-]8(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)"
       ],
       "canonicalModel": "claude-opus-4-8",
-      "overallScore": 76.33,
+      "overallScore": 76.45,
       "categoryScores": {
         "agentic": 83.1,
         "coding": 78.3,
@@ -3064,13 +3064,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.518,
           "uncertainty": 0.046,
-          "cohortPercentile": 0.28,
+          "cohortPercentile": 0.269,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         },
         {
           "benchmark": "deepswe",
@@ -3080,13 +3080,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.408,
           "uncertainty": 0.015,
-          "cohortPercentile": 0.16,
+          "cohortPercentile": 0.154,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "low",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         },
         {
           "benchmark": "deepswe",
@@ -3096,13 +3096,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.59,
           "uncertainty": 0.018,
-          "cohortPercentile": 0.56,
+          "cohortPercentile": 0.538,
           "taskCount": 111,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "max",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         },
         {
           "benchmark": "deepswe",
@@ -3112,13 +3112,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.487,
           "uncertainty": 0.022,
-          "cohortPercentile": 0.24,
+          "cohortPercentile": 0.231,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "medium",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         },
         {
           "benchmark": "deepswe",
@@ -3128,13 +3128,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.544,
           "uncertainty": 0.037,
-          "cohortPercentile": 0.44,
+          "cohortPercentile": 0.423,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "xhigh",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         }
       ],
       "sources": [
@@ -3165,7 +3165,7 @@
       "sharedResults": 618,
       "comparableCategories": 5,
       "totalCategories": 8,
-      "overallScore": 72.29,
+      "overallScore": 72.41,
       "categoryScores": {
         "agentic": 70.4,
         "coding": 72.4,
@@ -3256,11 +3256,11 @@
       "sharedResults": 618,
       "comparableCategories": 5,
       "totalCategories": 8,
-      "overallScore": 67.92,
+      "overallScore": 68.12,
       "categoryScores": {
         "agentic": 65.5,
         "coding": 66.8,
-        "multimodal": 61.5,
+        "multimodal": 62.9,
         "knowledge": 82.7,
         "math": 59.6
       },
@@ -3409,13 +3409,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.482,
           "uncertainty": 0.045,
-          "cohortPercentile": 0.24,
+          "cohortPercentile": 0.231,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         },
         {
           "benchmark": "deepswe",
@@ -3425,13 +3425,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.305,
           "uncertainty": 0.011,
-          "cohortPercentile": 0.08,
+          "cohortPercentile": 0.077,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "low",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         },
         {
           "benchmark": "deepswe",
@@ -3441,13 +3441,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.538,
           "uncertainty": 0.042,
-          "cohortPercentile": 0.44,
+          "cohortPercentile": 0.423,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "max",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         },
         {
           "benchmark": "deepswe",
@@ -3457,13 +3457,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.398,
           "uncertainty": 0.031,
-          "cohortPercentile": 0.16,
+          "cohortPercentile": 0.154,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "medium",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         },
         {
           "benchmark": "deepswe",
@@ -3473,13 +3473,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.497,
           "uncertainty": 0.035,
-          "cohortPercentile": 0.24,
+          "cohortPercentile": 0.231,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "xhigh",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         }
       ],
       "sources": [
@@ -3493,11 +3493,11 @@
       "sharedResults": 618,
       "comparableCategories": 4,
       "totalCategories": 8,
-      "overallScore": 64.7,
+      "overallScore": 64.87,
       "categoryScores": {
         "agentic": 86.2,
         "coding": 68.7,
-        "multimodal": 76.1,
+        "multimodal": 77.3,
         "knowledge": 85.9
       }
     },
@@ -3547,13 +3547,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.299,
           "uncertainty": 0.041,
-          "cohortPercentile": 0.08,
+          "cohortPercentile": 0.077,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         }
       ],
       "sources": [
@@ -3567,11 +3567,11 @@
       "sharedResults": 618,
       "comparableCategories": 5,
       "totalCategories": 8,
-      "overallScore": 64.45,
+      "overallScore": 64.62,
       "categoryScores": {
         "agentic": 54.3,
         "coding": 67.1,
-        "multimodal": 55.2,
+        "multimodal": 56.5,
         "knowledge": 76.9,
         "math": 49.3
       }
@@ -3671,15 +3671,15 @@
           "sourceModel": "deepseek-v4-flash",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.423,
+          "rawValue": 0.422,
           "uncertainty": 0,
           "cohortPercentile": 0,
-          "taskCount": 222,
+          "taskCount": 223,
           "cohortSize": 9,
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-25",
+          "capturedAt": "2026-08-26",
           "costUsd": 0.11
         },
         {
@@ -3688,16 +3688,16 @@
           "sourceModel": "deepseek-v4-flash",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.527,
+          "rawValue": 0.525,
           "uncertainty": 0,
           "cohortPercentile": 0.111,
-          "taskCount": 222,
+          "taskCount": 223,
           "cohortSize": 9,
           "effort": "max",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-25",
-          "costUsd": 0.11
+          "capturedAt": "2026-08-26",
+          "costUsd": 0.14
         },
         {
           "benchmark": "deepswe",
@@ -3707,13 +3707,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.533,
           "uncertainty": 0.036,
-          "cohortPercentile": 0.36,
+          "cohortPercentile": 0.346,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "max",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         }
       ],
       "overallScore": 59
@@ -3736,7 +3736,7 @@
       "sharedResults": 618,
       "comparableCategories": 4,
       "totalCategories": 8,
-      "overallScore": 61.13,
+      "overallScore": 61,
       "categoryScores": {
         "agentic": 68.2,
         "coding": 57.6,
@@ -3834,13 +3834,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.628,
           "uncertainty": 0.063,
-          "cohortPercentile": 0.6,
+          "cohortPercentile": 0.577,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "max",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         }
       ]
     },
@@ -4013,13 +4013,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.653,
           "uncertainty": 0.018,
-          "cohortPercentile": 0.6,
+          "cohortPercentile": 0.615,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         },
         {
           "benchmark": "deepswe",
@@ -4029,13 +4029,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.538,
           "uncertainty": 0.026,
-          "cohortPercentile": 0.4,
+          "cohortPercentile": 0.385,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "low",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         },
         {
           "benchmark": "deepswe",
@@ -4045,13 +4045,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.655,
           "uncertainty": 0.031,
-          "cohortPercentile": 0.64,
+          "cohortPercentile": 0.654,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "medium",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         }
       ],
       "categoryScores": {
@@ -4060,7 +4060,7 @@
         "multimodal": 73.6,
         "knowledge": 69
       },
-      "overallScore": 61.2
+      "overallScore": 61.28
     },
     {
       "patterns": [
@@ -4135,16 +4135,16 @@
           "metric": "pass_at_1",
           "rawValue": 0.467,
           "uncertainty": 0.037,
-          "cohortPercentile": 0.24,
+          "cohortPercentile": 0.231,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         }
       ],
-      "overallScore": 75.36,
+      "overallScore": 75.5,
       "categoryScores": {
         "agentic": 82.1,
         "coding": 64.5,
@@ -4256,20 +4256,20 @@
           "metric": "pass_at_1",
           "rawValue": 0.361,
           "uncertainty": 0.04,
-          "cohortPercentile": 0.16,
+          "cohortPercentile": 0.154,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         }
       ],
-      "overallScore": 64.49,
+      "overallScore": 64.6,
       "categoryScores": {
         "agentic": 77.3,
         "coding": 58.1,
-        "multimodal": 83.4,
+        "multimodal": 84.6,
         "knowledge": 63.3,
         "math": 55.8
       }
@@ -4289,7 +4289,7 @@
       "sharedResults": 618,
       "comparableCategories": 4,
       "totalCategories": 8,
-      "overallScore": 65.16,
+      "overallScore": 65.3,
       "categoryScores": {
         "agentic": 50.9,
         "coding": 38.5,
@@ -4359,7 +4359,7 @@
         "https://benchlm.ai/models/gemini-3-1-pro",
         "https://deepswe.datacurve.ai/"
       ],
-      "sharedResults": 25,
+      "sharedResults": 26,
       "comparableCategories": 5,
       "totalCategories": 8,
       "benchmarkEvidence": [
@@ -4371,20 +4371,20 @@
           "metric": "pass_at_1",
           "rawValue": 0.117,
           "uncertainty": 0.015,
-          "cohortPercentile": 0.04,
+          "cohortPercentile": 0.038,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         }
       ],
-      "overallScore": 56.05,
+      "overallScore": 56.14,
       "categoryScores": {
         "agentic": 67.4,
         "coding": 63.8,
-        "multimodal": 80.6,
+        "multimodal": 81.8,
         "knowledge": 68.8,
         "math": 55
       }
@@ -4439,7 +4439,7 @@
           "capturedAt": "2026-08-24"
         }
       ],
-      "overallScore": 59.73,
+      "overallScore": 59.87,
       "categoryScores": {
         "math": 50.3
       }
@@ -4516,9 +4516,9 @@
           "sourceModel": "glm-5.3",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.545,
+          "rawValue": 0.518,
           "uncertainty": 0,
-          "cohortPercentile": 0.222,
+          "cohortPercentile": 0,
           "taskCount": 111,
           "cohortSize": 9,
           "effort": "high",
@@ -4533,7 +4533,7 @@
           "sourceModel": "glm-5.3",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.5,
+          "rawValue": 0.491,
           "uncertainty": 0,
           "cohortPercentile": 0,
           "taskCount": 111,
@@ -4550,7 +4550,7 @@
           "sourceModel": "glm-5.3",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.595,
+          "rawValue": 0.604,
           "uncertainty": 0,
           "cohortPercentile": 0.333,
           "taskCount": 111,
@@ -4569,21 +4569,53 @@
           "metric": "pass_at_1",
           "rawValue": 0.69,
           "uncertainty": 0.03,
-          "cohortPercentile": 0.84,
+          "cohortPercentile": 0.846,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "max",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         }
       ],
-      "overallScore": 62.64,
+      "overallScore": 62.72,
       "categoryScores": {
         "agentic": 86,
         "coding": 65.4,
         "knowledge": 64.6
       }
+    },
+    {
+      "patterns": [
+        "(?:^|[-/])glm-5\\.3-flash(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)"
+      ],
+      "canonicalModel": "glm-5.3-flash",
+      "verifiedAt": "2026-08-26",
+      "lane": "provisional",
+      "sources": [
+        "https://deepswe.datacurve.ai/"
+      ],
+      "sharedResults": 26,
+      "comparableCategories": 1,
+      "totalCategories": 1,
+      "benchmarkEvidence": [
+        {
+          "benchmark": "deepswe",
+          "benchmarkVersion": "v1.1",
+          "sourceModel": "glm-5-3-flash",
+          "domain": "coding",
+          "metric": "pass_at_1",
+          "rawValue": 0.634,
+          "uncertainty": 0.044,
+          "cohortPercentile": 0.615,
+          "taskCount": 113,
+          "cohortSize": 26,
+          "effort": "max",
+          "selectionBasis": "per_effort",
+          "sourceUrl": "https://deepswe.datacurve.ai/",
+          "capturedAt": "2026-08-26"
+        }
+      ]
     },
     {
       "patterns": [
@@ -4696,13 +4728,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.363,
           "uncertainty": 0.048,
-          "cohortPercentile": 0.16,
+          "cohortPercentile": 0.154,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         },
         {
           "benchmark": "deepswe",
@@ -4712,13 +4744,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.438,
           "uncertainty": 0.017,
-          "cohortPercentile": 0.2,
+          "cohortPercentile": 0.192,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "max",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         }
       ],
       "sources": [
@@ -4732,7 +4764,7 @@
       "sharedResults": 618,
       "comparableCategories": 4,
       "totalCategories": 8,
-      "overallScore": 63.13,
+      "overallScore": 63.26,
       "categoryScores": {
         "agentic": 80.8,
         "coding": 56.2,
@@ -5042,7 +5074,7 @@
           "metric": "pass_at_1",
           "rawValue": 0.527,
           "uncertainty": 0,
-          "cohortPercentile": 0,
+          "cohortPercentile": 0.111,
           "taskCount": 112,
           "cohortSize": 9,
           "effort": "high",
@@ -5076,14 +5108,14 @@
           "metric": "pass_at_1",
           "rawValue": 0.652,
           "uncertainty": 0,
-          "cohortPercentile": 0.667,
+          "cohortPercentile": 0.556,
           "taskCount": 112,
           "cohortSize": 9,
           "effort": "max",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
           "capturedAt": "2026-08-26",
-          "costUsd": 0.47
+          "costUsd": 0.48
         },
         {
           "benchmark": "codexradar",
@@ -5108,7 +5140,7 @@
           "sourceModel": "gpt-5.6-luna",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.58,
+          "rawValue": 0.571,
           "uncertainty": 0,
           "cohortPercentile": 0.222,
           "taskCount": 112,
@@ -5117,7 +5149,7 @@
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
           "capturedAt": "2026-08-26",
-          "costUsd": 0.31
+          "costUsd": 0.32
         },
         {
           "benchmark": "deepswe",
@@ -5127,13 +5159,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.442,
           "uncertainty": 0.029,
-          "cohortPercentile": 0.2,
+          "cohortPercentile": 0.192,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         },
         {
           "benchmark": "deepswe",
@@ -5145,11 +5177,11 @@
           "uncertainty": 0.008,
           "cohortPercentile": 0,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "low",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         },
         {
           "benchmark": "deepswe",
@@ -5159,13 +5191,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.672,
           "uncertainty": 0.04,
-          "cohortPercentile": 0.72,
+          "cohortPercentile": 0.731,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "max",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         },
         {
           "benchmark": "deepswe",
@@ -5177,11 +5209,11 @@
           "uncertainty": 0.008,
           "cohortPercentile": 0,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "medium",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         },
         {
           "benchmark": "deepswe",
@@ -5191,13 +5223,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.569,
           "uncertainty": 0.022,
-          "cohortPercentile": 0.48,
+          "cohortPercentile": 0.462,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "xhigh",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         }
       ],
       "sources": [
@@ -5212,12 +5244,12 @@
       "sharedResults": 618,
       "comparableCategories": 5,
       "totalCategories": 8,
-      "overallScore": 67.08,
+      "overallScore": 67.2,
       "categoryScores": {
         "agentic": 85,
         "coding": 57.5,
-        "multimodal": 66,
-        "knowledge": 81.6,
+        "multimodal": 67.4,
+        "knowledge": 81.5,
         "math": 96.9
       }
     },
@@ -5226,12 +5258,12 @@
         "(?:^|[-/])gpt-5\\.6-sol(?=$|@)"
       ],
       "canonicalModel": "gpt-5.6-sol",
-      "overallScore": 81.92,
+      "overallScore": 82.04,
       "categoryScores": {
         "agentic": 94.9,
         "coding": 61.5,
-        "multimodal": 84.7,
-        "knowledge": 83.6,
+        "multimodal": 86.1,
+        "knowledge": 83.5,
         "math": 96.9
       },
       "benchmarkEvidence": [
@@ -5529,7 +5561,7 @@
           "sourceModel": "gpt-5.6-sol",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.616,
+          "rawValue": 0.607,
           "uncertainty": 0,
           "cohortPercentile": 0.333,
           "taskCount": 112,
@@ -5538,7 +5570,7 @@
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
           "capturedAt": "2026-08-26",
-          "costUsd": 4.35
+          "costUsd": 4.28
         },
         {
           "benchmark": "codexradar",
@@ -5555,7 +5587,7 @@
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
           "capturedAt": "2026-08-26",
-          "costUsd": 1.87
+          "costUsd": 1.75
         },
         {
           "benchmark": "codexradar",
@@ -5572,7 +5604,7 @@
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
           "capturedAt": "2026-08-26",
-          "costUsd": 8.68
+          "costUsd": 8.61
         },
         {
           "benchmark": "codexradar",
@@ -5580,7 +5612,7 @@
           "sourceModel": "gpt-5.6-sol",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.607,
+          "rawValue": 0.616,
           "uncertainty": 0,
           "cohortPercentile": 0.333,
           "taskCount": 112,
@@ -5589,7 +5621,7 @@
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
           "capturedAt": "2026-08-26",
-          "costUsd": 3.26
+          "costUsd": 2.96
         },
         {
           "benchmark": "codexradar",
@@ -5606,7 +5638,7 @@
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
           "capturedAt": "2026-08-26",
-          "costUsd": 24.18
+          "costUsd": 24.03
         },
         {
           "benchmark": "codexradar",
@@ -5623,7 +5655,7 @@
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
           "capturedAt": "2026-08-26",
-          "costUsd": 5.75
+          "costUsd": 5.74
         },
         {
           "benchmark": "deepswe",
@@ -5633,13 +5665,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.694,
           "uncertainty": 0.014,
-          "cohortPercentile": 0.84,
+          "cohortPercentile": 0.846,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         },
         {
           "benchmark": "deepswe",
@@ -5649,13 +5681,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.454,
           "uncertainty": 0.024,
-          "cohortPercentile": 0.2,
+          "cohortPercentile": 0.192,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "low",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         },
         {
           "benchmark": "deepswe",
@@ -5665,13 +5697,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.727,
           "uncertainty": 0.028,
-          "cohortPercentile": 0.96,
+          "cohortPercentile": 0.962,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "max",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         },
         {
           "benchmark": "deepswe",
@@ -5681,13 +5713,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.611,
           "uncertainty": 0.016,
-          "cohortPercentile": 0.56,
+          "cohortPercentile": 0.538,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "medium",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         },
         {
           "benchmark": "deepswe",
@@ -5697,13 +5729,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.707,
           "uncertainty": 0.008,
-          "cohortPercentile": 0.92,
+          "cohortPercentile": 0.923,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "xhigh",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         }
       ],
       "sources": [
@@ -5724,11 +5756,11 @@
         "(?:^|[-/])gpt-5\\.6-terra(?=$|@)"
       ],
       "canonicalModel": "gpt-5.6-terra",
-      "overallScore": 72.69,
+      "overallScore": 72.8,
       "categoryScores": {
         "agentic": 91.6,
         "coding": 58.3,
-        "multimodal": 75.3,
+        "multimodal": 76.8,
         "knowledge": 82.2,
         "math": 96.9
       },
@@ -6027,7 +6059,7 @@
           "sourceModel": "gpt-5.6-terra",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.5,
+          "rawValue": 0.491,
           "uncertainty": 0,
           "cohortPercentile": 0,
           "taskCount": 112,
@@ -6036,7 +6068,7 @@
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
           "capturedAt": "2026-08-26",
-          "costUsd": 1.06
+          "costUsd": 1.07
         },
         {
           "benchmark": "codexradar",
@@ -6044,7 +6076,7 @@
           "sourceModel": "gpt-5.6-terra",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.286,
+          "rawValue": 0.277,
           "uncertainty": 0,
           "cohortPercentile": 0,
           "taskCount": 112,
@@ -6061,9 +6093,9 @@
           "sourceModel": "gpt-5.6-terra",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.652,
+          "rawValue": 0.643,
           "uncertainty": 0,
-          "cohortPercentile": 0.667,
+          "cohortPercentile": 0.444,
           "taskCount": 112,
           "cohortSize": 9,
           "effort": "max",
@@ -6078,7 +6110,7 @@
           "sourceModel": "gpt-5.6-terra",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.366,
+          "rawValue": 0.357,
           "uncertainty": 0,
           "cohortPercentile": 0,
           "taskCount": 112,
@@ -6095,16 +6127,16 @@
           "sourceModel": "gpt-5.6-terra",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.652,
+          "rawValue": 0.67,
           "uncertainty": 0,
-          "cohortPercentile": 0.667,
+          "cohortPercentile": 0.778,
           "taskCount": 112,
           "cohortSize": 9,
           "effort": "ultra",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
           "capturedAt": "2026-08-26",
-          "costUsd": 9.51
+          "costUsd": 9.55
         },
         {
           "benchmark": "codexradar",
@@ -6114,7 +6146,7 @@
           "metric": "pass_at_1",
           "rawValue": 0.598,
           "uncertainty": 0,
-          "cohortPercentile": 0.333,
+          "cohortPercentile": 0.222,
           "taskCount": 112,
           "cohortSize": 9,
           "effort": "xhigh",
@@ -6131,13 +6163,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.538,
           "uncertainty": 0.043,
-          "cohortPercentile": 0.4,
+          "cohortPercentile": 0.385,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         },
         {
           "benchmark": "deepswe",
@@ -6147,13 +6179,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.241,
           "uncertainty": 0.008,
-          "cohortPercentile": 0.04,
+          "cohortPercentile": 0.038,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "low",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         },
         {
           "benchmark": "deepswe",
@@ -6163,13 +6195,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.696,
           "uncertainty": 0.026,
-          "cohortPercentile": 0.88,
+          "cohortPercentile": 0.885,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "max",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         },
         {
           "benchmark": "deepswe",
@@ -6179,13 +6211,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.351,
           "uncertainty": 0.034,
-          "cohortPercentile": 0.12,
+          "cohortPercentile": 0.115,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "medium",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         },
         {
           "benchmark": "deepswe",
@@ -6195,13 +6227,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.602,
           "uncertainty": 0.021,
-          "cohortPercentile": 0.56,
+          "cohortPercentile": 0.538,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "xhigh",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         }
       ],
       "sources": [
@@ -6495,7 +6527,7 @@
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
           "capturedAt": "2026-08-26",
-          "costUsd": 5.55
+          "costUsd": 5.56
         },
         {
           "benchmark": "deepswe",
@@ -6505,13 +6537,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.644,
           "uncertainty": 0.031,
-          "cohortPercentile": 0.6,
+          "cohortPercentile": 0.615,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         },
         {
           "benchmark": "deepswe",
@@ -6521,13 +6553,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.27,
           "uncertainty": 0.023,
-          "cohortPercentile": 0.04,
+          "cohortPercentile": 0.038,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "low",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         },
         {
           "benchmark": "deepswe",
@@ -6537,13 +6569,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.54,
           "uncertainty": 0.026,
-          "cohortPercentile": 0.44,
+          "cohortPercentile": 0.423,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "medium",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         },
         {
           "benchmark": "deepswe",
@@ -6553,13 +6585,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.67,
           "uncertainty": 0.065,
-          "cohortPercentile": 0.68,
+          "cohortPercentile": 0.692,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "xhigh",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         }
       ],
       "sources": [
@@ -6574,11 +6606,11 @@
       "sharedResults": 618,
       "comparableCategories": 5,
       "totalCategories": 8,
-      "overallScore": 73.36,
+      "overallScore": 72.95,
       "categoryScores": {
         "agentic": 85,
         "coding": 48.4,
-        "multimodal": 68.2,
+        "multimodal": 68.4,
         "knowledge": 79.3,
         "math": 71.1
       }
@@ -6677,13 +6709,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.518,
           "uncertainty": 0.015,
-          "cohortPercentile": 0.28,
+          "cohortPercentile": 0.269,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "xhigh",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         }
       ],
       "sources": [
@@ -6697,7 +6729,7 @@
       "sharedResults": 618,
       "comparableCategories": 5,
       "totalCategories": 8,
-      "overallScore": 73.24,
+      "overallScore": 73.41,
       "categoryScores": {
         "agentic": 74.8,
         "coding": 46.4,
@@ -6820,11 +6852,11 @@
           "capturedAt": "2026-08-24"
         }
       ],
-      "overallScore": 56.77,
+      "overallScore": 56.84,
       "categoryScores": {
         "agentic": 55,
         "coding": 56.5,
-        "multimodal": 58.6,
+        "multimodal": 60.1,
         "knowledge": 60.2,
         "math": 44.5
       }
@@ -7045,10 +7077,10 @@
           "sourceModel": "grok-4.6",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.632,
+          "rawValue": 0.63,
           "uncertainty": 0,
           "cohortPercentile": 0.444,
-          "taskCount": 106,
+          "taskCount": 108,
           "cohortSize": 9,
           "effort": "high",
           "selectionBasis": "per_effort",
@@ -7062,10 +7094,10 @@
           "sourceModel": "grok-4.6",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.566,
+          "rawValue": 0.535,
           "uncertainty": 0,
-          "cohortPercentile": 0.222,
-          "taskCount": 106,
+          "cohortPercentile": 0.111,
+          "taskCount": 108,
           "cohortSize": 9,
           "effort": "low",
           "selectionBasis": "per_effort",
@@ -7082,7 +7114,7 @@
           "rawValue": 0.542,
           "uncertainty": 0,
           "cohortPercentile": 0.222,
-          "taskCount": 106,
+          "taskCount": 108,
           "cohortSize": 9,
           "effort": "medium",
           "selectionBasis": "per_effort",
@@ -7096,10 +7128,10 @@
           "sourceModel": "grok-4.6",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.577,
+          "rawValue": 0.604,
           "uncertainty": 0,
-          "cohortPercentile": 0.222,
-          "taskCount": 106,
+          "cohortPercentile": 0.333,
+          "taskCount": 108,
           "cohortSize": 9,
           "effort": "xhigh",
           "selectionBasis": "per_effort",
@@ -7115,13 +7147,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.652,
           "uncertainty": 0.015,
-          "cohortPercentile": 0.6,
+          "cohortPercentile": 0.615,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         },
         {
           "benchmark": "deepswe",
@@ -7131,13 +7163,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.416,
           "uncertainty": 0.023,
-          "cohortPercentile": 0.16,
+          "cohortPercentile": 0.154,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "low",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         },
         {
           "benchmark": "deepswe",
@@ -7147,13 +7179,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.675,
           "uncertainty": 0.023,
-          "cohortPercentile": 0.76,
+          "cohortPercentile": 0.769,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "medium",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         },
         {
           "benchmark": "deepswe",
@@ -7163,16 +7195,16 @@
           "metric": "pass_at_1",
           "rawValue": 0.667,
           "uncertainty": 0.022,
-          "cohortPercentile": 0.64,
+          "cohortPercentile": 0.654,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "xhigh",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         }
       ],
-      "overallScore": 63.22,
+      "overallScore": 63.3,
       "categoryScores": {
         "agentic": 86.4,
         "coding": 65.5,
@@ -7252,16 +7284,16 @@
           "metric": "pass_at_1",
           "rawValue": 0.538,
           "uncertainty": 0.023,
-          "cohortPercentile": 0.4,
+          "cohortPercentile": 0.385,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         }
       ],
-      "overallScore": 75.38,
+      "overallScore": 75.54,
       "categoryScores": {
         "agentic": 84.2,
         "coding": 60.9,
@@ -7285,7 +7317,7 @@
       "sharedResults": 618,
       "comparableCategories": 4,
       "totalCategories": 8,
-      "overallScore": 80.3,
+      "overallScore": 80.45,
       "categoryScores": {
         "agentic": 94.9,
         "coding": 69.5,
@@ -7395,10 +7427,10 @@
           "sourceModel": "k3",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.583,
+          "rawValue": 0.565,
           "uncertainty": 0,
           "cohortPercentile": 0.222,
-          "taskCount": 55,
+          "taskCount": 67,
           "cohortSize": 9,
           "effort": "high",
           "selectionBasis": "per_effort",
@@ -7411,10 +7443,10 @@
           "sourceModel": "k3",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.586,
+          "rawValue": 0.57,
           "uncertainty": 0,
           "cohortPercentile": 0.222,
-          "taskCount": 55,
+          "taskCount": 67,
           "cohortSize": 9,
           "effort": "low",
           "selectionBasis": "per_effort",
@@ -7427,10 +7459,10 @@
           "sourceModel": "k3",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.655,
+          "rawValue": 0.657,
           "uncertainty": 0,
-          "cohortPercentile": 0.778,
-          "taskCount": 55,
+          "cohortPercentile": 0.667,
+          "taskCount": 67,
           "cohortSize": 9,
           "effort": "max",
           "selectionBasis": "per_effort",
@@ -7445,13 +7477,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.685,
           "uncertainty": 0.045,
-          "cohortPercentile": 0.8,
+          "cohortPercentile": 0.808,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "max",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         }
       ]
     },
@@ -7519,13 +7551,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.305,
           "uncertainty": 0.005,
-          "cohortPercentile": 0.12,
+          "cohortPercentile": 0.115,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "default",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         }
       ],
       "sources": [
@@ -7539,7 +7571,7 @@
       "sharedResults": 618,
       "comparableCategories": 3,
       "totalCategories": 8,
-      "overallScore": 54.18,
+      "overallScore": 54.3,
       "categoryScores": {
         "agentic": 61,
         "coding": 64.6
@@ -7559,11 +7591,11 @@
       "sharedResults": 8,
       "comparableCategories": 3,
       "totalCategories": 8,
-      "overallScore": 59.28,
+      "overallScore": 59.36,
       "categoryScores": {
         "agentic": 58.2,
         "coding": 40.8,
-        "multimodal": 62.9
+        "multimodal": 64.1
       }
     },
     {
@@ -7581,7 +7613,7 @@
       "sharedResults": 618,
       "comparableCategories": 3,
       "totalCategories": 8,
-      "overallScore": 69.12,
+      "overallScore": 69.26,
       "categoryScores": {
         "agentic": 62,
         "coding": 43.3,
@@ -7669,11 +7701,11 @@
       "sharedResults": 618,
       "comparableCategories": 4,
       "totalCategories": 8,
-      "overallScore": 68.5,
+      "overallScore": 68.62,
       "categoryScores": {
         "agentic": 63.5,
         "coding": 59.9,
-        "multimodal": 47.2,
+        "multimodal": 47.4,
         "knowledge": 65.6
       },
       "benchmarkEvidence": [
@@ -7742,7 +7774,7 @@
       "sharedResults": 618,
       "comparableCategories": 3,
       "totalCategories": 8,
-      "overallScore": 62.98,
+      "overallScore": 63.12,
       "categoryScores": {
         "agentic": 45.1,
         "coding": 43
@@ -7871,16 +7903,16 @@
           "metric": "pass_at_1",
           "rawValue": 0.549,
           "uncertainty": 0.021,
-          "cohortPercentile": 0.48,
+          "cohortPercentile": 0.462,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "xhigh",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         }
       ],
-      "overallScore": 61.5,
+      "overallScore": 61.58,
       "categoryScores": {
         "agentic": 80.6,
         "coding": 64.6,
@@ -7960,20 +7992,20 @@
           "metric": "pass_at_1",
           "rawValue": 0.533,
           "uncertainty": 0.03,
-          "cohortPercentile": 0.36,
+          "cohortPercentile": 0.346,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "xhigh",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         }
       ],
-      "overallScore": 76.86,
+      "overallScore": 77,
       "categoryScores": {
         "agentic": 83.6,
         "coding": 54.9,
-        "multimodal": 76.3,
+        "multimodal": 77.5,
         "knowledge": 93.5
       }
     },
@@ -8051,20 +8083,20 @@
           "metric": "pass_at_1",
           "rawValue": 0.575,
           "uncertainty": 0.027,
-          "cohortPercentile": 0.52,
+          "cohortPercentile": 0.5,
           "taskCount": 113,
-          "cohortSize": 25,
+          "cohortSize": 26,
           "effort": "xhigh",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
-          "capturedAt": "2026-08-24"
+          "capturedAt": "2026-08-26"
         }
       ],
-      "overallScore": 79.04,
+      "overallScore": 79.18,
       "categoryScores": {
         "agentic": 85.6,
         "coding": 66.7,
-        "multimodal": 88.1,
+        "multimodal": 89.3,
         "knowledge": 67.2
       }
     },
@@ -8083,7 +8115,7 @@
       "sharedResults": 618,
       "comparableCategories": 4,
       "totalCategories": 8,
-      "overallScore": 71.48,
+      "overallScore": 71.63,
       "categoryScores": {
         "agentic": 64,
         "coding": 83.5,
