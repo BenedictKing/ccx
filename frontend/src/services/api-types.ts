@@ -1642,9 +1642,22 @@ export interface SmartRoutingCostPreference {
   mode: 'quality_first' | 'balanced' | 'cost_first' | 'custom'
 }
 
+export interface ScenarioPresetView {
+  key: string
+  minQualityTier: string
+  costPreference: string
+  effortFloor?: string
+  effortCeil?: string
+  qualityBenefitCap?: string
+}
+
+export type RoutingScenario = 'auto' | 'daily_dev' | 'hard_problem' | 'background' | 'batch_cheap'
+
 export interface SmartRoutingConfig {
   killSwitchActive: boolean
   costPreference: string
+  scenario?: RoutingScenario
+  scenarioPresets?: ScenarioPresetView[]
   l2ProbeEnabled?: boolean
 }
 

@@ -34,6 +34,38 @@
           </div>
         </div>
 
+        <!-- 场景模式选择 -->
+        <div class="mb-4">
+          <div class="text-caption text-medium-emphasis mb-2">
+            {{ t('autopilot.modePanel.scenario') }}
+          </div>
+          <v-select
+            v-model="localConfig.scenario"
+            :items="scenarioItems"
+            item-title="label"
+            item-value="value"
+            variant="outlined"
+            density="compact"
+            hide-details
+            :disabled="localConfig.killSwitchActive"
+            style="max-width: 300px;"
+          />
+          <div class="text-caption text-medium-emphasis mt-1">
+            {{ t(`autopilot.scenarioDesc.${localConfig.scenario ?? 'auto'}`) }}
+          </div>
+          <!-- 非 auto 场景显示预设参数摘要 -->
+          <div
+            v-if="localConfig.scenario && localConfig.scenario !== 'auto'"
+            class="text-caption text-medium-emphasis mt-2 scenario-summary"
+          >
+            <v-icon size="14" class="mr-1">mdi-tune-variant</v-icon>
+            {{ scenarioSummary }}
+          </div>
+          <div v-else class="text-caption text-medium-emphasis mt-2">
+            {{ t('autopilot.modePanel.scenarioHeaderHint') }}
+          </div>
+        </div>
+
         <!-- 价格偏好选择 -->
         <div class="mb-4">
           <div class="text-caption text-medium-emphasis mb-2">
@@ -47,11 +79,13 @@
             variant="outlined"
             density="compact"
             hide-details
-            :disabled="localConfig.killSwitchActive"
+            :disabled="localConfig.killSwitchActive || scenarioActive"
             style="max-width: 300px;"
           />
           <div class="text-caption text-medium-emphasis mt-1">
-            {{ t(`autopilot.costPreferenceDesc.${localConfig.costPreference}`) }}
+            {{ scenarioActive
+              ? t('autopilot.modePanel.costPreferenceFollowsScenario')
+              : t(`autopilot.costPreferenceDesc.${localConfig.costPreference}`) }}
           </div>
         </div>
 
@@ -82,7 +116,7 @@
 <script setup lang="ts">
 import { computed, reactive, watch } from 'vue'
 import { useI18n } from '@/i18n'
-import type { SmartRoutingConfig } from '@/services/api-types'
+import type { RoutingScenario, ScenarioPresetView, SmartRoutingConfig } from '@/services/api-types'
 
 const props = defineProps<{
   config: SmartRoutingConfig
@@ -102,8 +136,19 @@ const localConfig = reactive<SmartRoutingConfig>(cloneConfig(props.config))
 watch(() => props.config, (newCfg) => {
   localConfig.killSwitchActive = newCfg.killSwitchActive
   localConfig.costPreference = newCfg.costPreference
+  localConfig.scenario = newCfg.scenario ?? 'auto'
+  localConfig.scenarioPresets = newCfg.scenarioPresets
   localConfig.l2ProbeEnabled = newCfg.l2ProbeEnabled
 }, { deep: true })
+
+// 场景模式选项
+const scenarioItems = computed(() => ([
+  { value: 'auto', label: t('autopilot.scenario.auto') },
+  { value: 'daily_dev', label: t('autopilot.scenario.daily_dev') },
+  { value: 'hard_problem', label: t('autopilot.scenario.hard_problem') },
+  { value: 'background', label: t('autopilot.scenario.background') },
+  { value: 'batch_cheap', label: t('autopilot.scenario.batch_cheap') },
+] as { value: RoutingScenario; label: string }[]))
 
 // 价格偏好选项
 const costPreferenceItems = computed(() => [
@@ -112,9 +157,39 @@ const costPreferenceItems = computed(() => [
   { value: 'cost_first', label: t('autopilot.costPreference.cost_first') },
 ])
 
+// 当前是否命中具体场景（非 auto）
+const scenarioActive = computed(() => {
+  const s = localConfig.scenario ?? 'auto'
+  return s !== 'auto'
+})
+
+// 当前命中场景的预设参数（来自后端 scenarioPresets）
+const activePreset = computed<ScenarioPresetView | undefined>(() => {
+  const key = localConfig.scenario
+  if (!key || key === 'auto') return undefined
+  return (localConfig.scenarioPresets ?? []).find(p => p.key === key)
+})
+
+// 场景参数摘要：质量下限 · 价格偏好 · effort 区间
+const scenarioSummary = computed(() => {
+  const preset = activePreset.value
+  if (!preset) return ''
+  const parts: string[] = [
+    t(`autopilot.qualityTier.${preset.minQualityTier}`),
+    t(`autopilot.costPreference.${preset.costPreference}`),
+  ]
+  if (preset.effortFloor || preset.effortCeil) {
+    const floor = preset.effortFloor ?? 'low'
+    const ceil = preset.effortCeil ?? 'ultra'
+    parts.push(t('autopilot.effortRange', { floor, ceil }))
+  }
+  return parts.join(' · ')
+})
+
 // 检测是否有变更
 const hasChanges = computed(() => {
   return localConfig.costPreference !== props.config.costPreference
+    || (localConfig.scenario ?? 'auto') !== (props.config.scenario ?? 'auto')
 })
 
 // 保存配置
@@ -126,6 +201,7 @@ function saveConfig() {
 function resetConfig() {
   localConfig.killSwitchActive = props.config.killSwitchActive
   localConfig.costPreference = props.config.costPreference
+  localConfig.scenario = props.config.scenario ?? 'auto'
 }
 
 // 深拷贝配置（只拷贝前端需要的字段）
@@ -133,7 +209,17 @@ function cloneConfig(src: SmartRoutingConfig): SmartRoutingConfig {
   return {
     killSwitchActive: src.killSwitchActive,
     costPreference: src.costPreference,
+    scenario: src.scenario ?? 'auto',
+    scenarioPresets: src.scenarioPresets ? [...src.scenarioPresets] : undefined,
     l2ProbeEnabled: src.l2ProbeEnabled,
   }
 }
 </script>
+
+<style scoped>
+.scenario-summary {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1.4;
+}
+</style>
