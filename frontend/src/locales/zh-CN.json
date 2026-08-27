@@ -1204,6 +1204,7 @@
   "subscription.newApi.baseUrl": "new-api 地址",
   "subscription.newApi.accessToken": "访问令牌",
   "subscription.newApi.userId": "用户 ID（可选）",
+  "subscription.newApi.username": "用户名",
   "subscription.newApi.authTokenMode": "令牌模式",
   "subscription.newApi.proxyUrl": "代理 URL（可选）",
   "subscription.newApi.proxyUrlHint": "站点访问受限（如地域封锁）时，通过代理完成绑定与同步",

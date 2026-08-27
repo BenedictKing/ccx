@@ -79,6 +79,8 @@ type SubscriptionProfile struct {
 	AccessToken string `json:"accessToken,omitempty"`
 	// UserID 对应 New-API-User / User-id 请求头。
 	UserID string `json:"userId,omitempty"`
+	// Username 主账号的站点用户名，verify 时随 /api/user/self 一并取得，仅作展示。
+	Username string `json:"username,omitempty"`
 	// AuthTokenMode: "bearer"(默认，Authorization: Bearer <token>) | "raw"（不带 Bearer 前缀，fork 兼容）
 	AuthTokenMode string `json:"authTokenMode,omitempty"`
 	// ProxyURL 站点级代理（HTTP/HTTPS/SOCKS5）：绑定/同步经代理访问，用于直连被地域封锁的站点。

@@ -1299,6 +1299,7 @@ export interface SubscriptionItem {
   baseUrl?: string
   accessTokenMasked?: string
   userId?: string
+  username?: string
   linkedChannelUids?: string[]
   source?: string
   confidence?: number

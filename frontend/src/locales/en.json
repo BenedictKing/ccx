@@ -1204,6 +1204,7 @@
   "subscription.newApi.baseUrl": "new-api Base URL",
   "subscription.newApi.accessToken": "Access Token",
   "subscription.newApi.userId": "User ID (optional)",
+  "subscription.newApi.username": "Username",
   "subscription.newApi.authTokenMode": "Token Mode",
   "subscription.newApi.proxyUrl": "Proxy URL (optional)",
   "subscription.newApi.proxyUrlHint": "Use a proxy for binding and sync when the site is region-blocked.",

@@ -84,7 +84,7 @@
           @click="refreshPrimaryAccount"
         >
           <v-icon size="18">mdi-refresh</v-icon>
-          <v-tooltip activator="parent" location="top">{{ t('subscription.newApi.refreshBalance') }}</v-tooltip>
+          <v-tooltip activator="parent" location="top" content-class="ccx-tooltip">{{ t('subscription.newApi.refreshBalance') }}</v-tooltip>
         </v-btn>
       </v-card-title>
       <v-card-text class="pt-2">
@@ -95,6 +95,14 @@
 
         <template v-if="subscription">
           <div class="primary-summary mb-4">
+            <div class="summary-item">
+              <span class="text-caption text-medium-emphasis">{{ t('subscription.newApi.username') }}</span>
+              <strong>{{ subscription.username || '-' }}</strong>
+            </div>
+            <div class="summary-item">
+              <span class="text-caption text-medium-emphasis">{{ t('subscription.newApi.userId') }}</span>
+              <strong>{{ subscription.userId || '-' }}</strong>
+            </div>
             <div class="summary-item">
               <span class="text-caption text-medium-emphasis">{{ t('subscription.newApi.quota') }}</span>
               <strong>{{ formatQuota(subscription.balance) }}</strong>

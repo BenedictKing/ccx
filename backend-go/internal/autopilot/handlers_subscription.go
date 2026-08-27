@@ -94,6 +94,7 @@ type SubscriptionItem struct {
 	BaseURL             string                 `json:"baseUrl,omitempty"`
 	AccessTokenMasked   string                 `json:"accessTokenMasked,omitempty"`
 	UserID              string                 `json:"userId,omitempty"`
+	Username            string                 `json:"username,omitempty"`
 	AuthTokenMode       string                 `json:"authTokenMode,omitempty"`
 	ProvisionKeyName    string                 `json:"provisionKeyName,omitempty"`
 	ProvisionGroup      string                 `json:"provisionGroup,omitempty"`
@@ -483,6 +484,7 @@ func toSubscriptionItem(p *SubscriptionProfile) SubscriptionItem {
 		BaseURL:             p.BaseURL,
 		AccessTokenMasked:   maskAccessToken(p.AccessToken),
 		UserID:              p.UserID,
+		Username:            p.Username,
 		AuthTokenMode:       p.AuthTokenMode,
 		ProvisionKeyName:    p.ProvisionKeyName,
 		ProvisionGroup:      p.ProvisionGroup,

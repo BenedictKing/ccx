@@ -322,6 +322,10 @@ func (s *NewApiSubscriptionSyncService) SyncNow(ctx context.Context, uid string)
 		p.GroupMultipliers = cloneRatios(groups)
 		p.AvailableModels = append([]string(nil), models...)
 		p.UserID, p.AuthTokenMode = userID, mode
+		// 存量订阅未存用户名时顺带回填（verify 响应自带）
+		if p.Username == "" {
+			p.Username = self.Username
+		}
 		p.LastBalanceRefreshAt = timePtr(now)
 		p.LastBalanceRefreshError = ""
 		for i := range p.ProvisionedKeys {

@@ -576,6 +576,7 @@ func handleNewApiProvision(deps *NewApiRouteDeps) gin.HandlerFunc {
 				BaseURL:             req.BaseURL,
 				AccessToken:         req.AccessToken, // 持久化但不出 API 响应
 				UserID:              derivedUserID,
+				Username:            self.Username,
 				AuthTokenMode:       req.AuthTokenMode,
 				ProxyURL:            strings.TrimSpace(req.ProxyURL),
 				ProxyPreferDirect:   req.ProxyPreferDirect,
