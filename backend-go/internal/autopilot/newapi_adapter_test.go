@@ -486,6 +486,155 @@ func TestNewApiAdapter_ProvisionKey_CreateResponseMissingKey_FallbackToList(t *t
 	}
 }
 
+func TestNewApiAdapter_ProvisionKey_MaskedReuse_Revealed(t *testing.T) {
+	// 新版 new-api：列表返回掩码 key（中段 "*"），明文要走 POST /api/token/:id/key 揭示。
+	revealCalled := false
+	srv := newMockNewApiServer(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/token/":
+			writeEnvelope(w, true, map[string]interface{}{
+				"items": []NewApiToken{
+					{ID: 7, Key: "bV6R********Af6H", Name: "ccx-autopilot", Status: 1},
+				},
+			}, "")
+		case r.Method == http.MethodPost && r.URL.Path == "/api/token/7/key":
+			revealCalled = true
+			writeEnvelope(w, true, map[string]string{"key": "bV6RtpRealPlaintextAf6H"}, "")
+		default:
+			t.Fatalf("意外请求: %s %s", r.Method, r.URL.Path)
+		}
+	})
+
+	adapter := &NewApiAdapter{HTTPClient: srv.Client()}
+	tokenID, key, reused, err := adapter.ProvisionKey(context.Background(), srv.URL, "token", "1", "", NewApiProvisionOptions{})
+	if err != nil {
+		t.Fatalf("ProvisionKey 失败: %v", err)
+	}
+	if !reused || tokenID != 7 {
+		t.Fatalf("复用结果不符: reused=%v id=%d", reused, tokenID)
+	}
+	if key != "sk-bV6RtpRealPlaintextAf6H" {
+		t.Fatalf("掩码 key 应经揭示端点换回明文并补前缀, got=%s", key)
+	}
+	if !revealCalled {
+		t.Fatal("掩码 key 应触发揭示端点 POST /api/token/:id/key")
+	}
+}
+
+func TestNewApiAdapter_ProvisionKey_MaskedFallbackList_Revealed(t *testing.T) {
+	// seekai 实测形态：创建响应不带 data，回查列表只有掩码；两处都得靠揭示端点救回。
+	callCount := 0
+	srv := newMockNewApiServer(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/token/":
+			callCount++
+			if callCount == 1 {
+				writeEnvelope(w, true, map[string]interface{}{"items": []NewApiToken{}}, "")
+			} else {
+				writeEnvelope(w, true, map[string]interface{}{
+					"items": []NewApiToken{
+						{ID: 55, Key: "oxGA********x9Zk", Name: "ccx-autopilot", Group: "default", Status: 1},
+					},
+				}, "")
+			}
+		case r.Method == http.MethodPost && r.URL.Path == "/api/token/":
+			// 创建响应连 data 字段都没有
+			writeEnvelope(w, true, nil, "")
+		case r.Method == http.MethodPost && r.URL.Path == "/api/token/55/key":
+			writeEnvelope(w, true, map[string]string{"key": "oxGARealPlaintextx9Zk"}, "")
+		default:
+			t.Fatalf("意外请求: %s %s", r.Method, r.URL.Path)
+		}
+	})
+
+	adapter := &NewApiAdapter{HTTPClient: srv.Client()}
+	tokenID, key, reused, err := adapter.ProvisionKey(context.Background(), srv.URL, "token", "1", "", NewApiProvisionOptions{})
+	if err != nil {
+		t.Fatalf("ProvisionKey 失败: %v", err)
+	}
+	if reused || tokenID != 55 {
+		t.Fatalf("新建结果不符: reused=%v id=%d", reused, tokenID)
+	}
+	if key != "sk-oxGARealPlaintextx9Zk" {
+		t.Fatalf("掩码回查应经揭示端点换回明文, got=%s", key)
+	}
+}
+
+func TestNewApiAdapter_ProvisionKey_MaskedRevealUnavailable_Error(t *testing.T) {
+	// 掩码 + 揭示端点不可用 → 必须报错，绝不能把掩码串当明文返回。
+	srv := newMockNewApiServer(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/token/":
+			writeEnvelope(w, true, map[string]interface{}{
+				"items": []NewApiToken{
+					{ID: 7, Key: "bV6R********Af6H", Name: "ccx-autopilot", Status: 1},
+				},
+			}, "")
+		case r.Method == http.MethodPost && r.URL.Path == "/api/token/7/key":
+			http.Error(w, "not found", http.StatusNotFound)
+		default:
+			t.Fatalf("意外请求: %s %s", r.Method, r.URL.Path)
+		}
+	})
+
+	adapter := &NewApiAdapter{HTTPClient: srv.Client()}
+	_, key, _, err := adapter.ProvisionKey(context.Background(), srv.URL, "token", "1", "", NewApiProvisionOptions{})
+	if err == nil {
+		t.Fatal("掩码且揭示失败时必须报错")
+	}
+	if key != "" {
+		t.Fatalf("失败时不得返回任何 key, got=%s", key)
+	}
+}
+
+func TestNewApiAdapter_GetTokenKey(t *testing.T) {
+	t.Run("成功揭示", func(t *testing.T) {
+		srv := newMockNewApiServer(t, func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost || r.URL.Path != "/api/token/9/key" {
+				t.Fatalf("意外请求: %s %s", r.Method, r.URL.Path)
+			}
+			writeEnvelope(w, true, map[string]string{"key": "plain"}, "")
+		})
+		adapter := &NewApiAdapter{HTTPClient: srv.Client()}
+		key, err := adapter.GetTokenKey(context.Background(), srv.URL, "token", "1", "", 9)
+		if err != nil || key != "plain" {
+			t.Fatalf("揭示结果不符: key=%s err=%v", key, err)
+		}
+	})
+	t.Run("揭示响应仍是掩码则报错", func(t *testing.T) {
+		srv := newMockNewApiServer(t, func(w http.ResponseWriter, r *http.Request) {
+			writeEnvelope(w, true, map[string]string{"key": "still**masked"}, "")
+		})
+		adapter := &NewApiAdapter{HTTPClient: srv.Client()}
+		if _, err := adapter.GetTokenKey(context.Background(), srv.URL, "token", "1", "", 9); err == nil {
+			t.Fatal("揭示响应仍为掩码时必须报错")
+		}
+	})
+	t.Run("tokenID 非法", func(t *testing.T) {
+		adapter := &NewApiAdapter{}
+		if _, err := adapter.GetTokenKey(context.Background(), "https://x", "t", "1", "", 0); err == nil {
+			t.Fatal("tokenID<=0 必须报错")
+		}
+	})
+}
+
+func TestIsMaskedNewApiKey(t *testing.T) {
+	cases := []struct {
+		key  string
+		want bool
+	}{
+		{"bV6R********Af6H", true},
+		{"bV6R••••••••Af6H", true},
+		{"sk-real-plaintext-48-chars-long-key", false},
+		{"", false},
+	}
+	for _, c := range cases {
+		if got := IsMaskedNewApiKey(c.key); got != c.want {
+			t.Fatalf("IsMaskedNewApiKey(%q)=%v, want %v", c.key, got, c.want)
+		}
+	}
+}
+
 func TestNewApiAdapter_ProvisionKey_DefaultName(t *testing.T) {
 	srv := newMockNewApiServer(t, func(w http.ResponseWriter, r *http.Request) {
 		switch {

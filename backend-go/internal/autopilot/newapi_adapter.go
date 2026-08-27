@@ -372,12 +372,60 @@ func normalizeNewApiPlaintextKey(key string) string {
 	return "sk-" + key
 }
 
+// IsMaskedNewApiKey 判断 new-api 家族接口返回的 key 是否为掩码形态。
+// 新版 new-api 在列表/详情/创建响应中把 key 中段替换为 "*"（部分 fork 用 "•"），
+// 真实 OpenAI 风格 key 不含这两个字符，可安全作为掩码契约判据。
+func IsMaskedNewApiKey(key string) bool {
+	return strings.ContainsAny(key, "*•")
+}
+
+// GetTokenKey 调用密钥揭示端点取回令牌完整明文。对应 POST /api/token/:id/key。
+// 上游定义见 QuantumNous/new-api router/api-router.go（CriticalRateLimit，仅 POST，GET 不支持）。
+// data 形如 {"key":"<完整明文，不带 sk- 前缀>"}。
+func (a *NewApiAdapter) GetTokenKey(ctx context.Context, baseURL, accessToken, userID, authTokenMode string, tokenID int) (string, error) {
+	if tokenID <= 0 {
+		return "", fmt.Errorf("[NewApiAdapter-GetTokenKey] tokenID 必须大于 0")
+	}
+	var payload struct {
+		Key string `json:"key"`
+	}
+	path := "/api/token/" + strconv.Itoa(tokenID) + "/key"
+	if err := a.doRequest(ctx, http.MethodPost, baseURL, path, accessToken, userID, authTokenMode, nil, &payload); err != nil {
+		return "", fmt.Errorf("[NewApiAdapter-GetTokenKey] %w", err)
+	}
+	if payload.Key == "" {
+		return "", fmt.Errorf("[NewApiAdapter-GetTokenKey] 响应未包含 key 明文")
+	}
+	if IsMaskedNewApiKey(payload.Key) {
+		return "", fmt.Errorf("[NewApiAdapter-GetTokenKey] 揭示端点仍返回掩码 key")
+	}
+	return payload.Key, nil
+}
+
+// resolveMaskedPlaintextKey 在 provision 出口统一处理掩码 key：
+// 掩码形态经揭示端点换回明文；旧版站点明文直传（不含掩码字符）则原样返回。
+// 揭示失败返回错误——掩码串绝不能当明文入库（会导致该 key 必然 403 并污染黑名单）。
+func (a *NewApiAdapter) resolveMaskedPlaintextKey(ctx context.Context, baseURL, accessToken, userID, authTokenMode string, tokenID int, key string) (string, error) {
+	if !IsMaskedNewApiKey(key) {
+		return key, nil
+	}
+	revealed, err := a.GetTokenKey(ctx, baseURL, accessToken, userID, authTokenMode, tokenID)
+	if err != nil {
+		return "", fmt.Errorf("站点对 key 列表返回掩码且揭示接口不可用: %w；请删除站点侧同名 key 后重试，或手动填写 key", err)
+	}
+	return revealed, nil
+}
+
 // ProvisionKey 建代理专用 key：先查重（同名则复用），不存在则新建。
 // 返回 (tokenID, keyPlainText, reused, error)；keyPlainText 已规范为带 "sk-" 前缀的可调用形式。
 // new-api 建 key 成功后部分 fork 直接在响应里带明文 key，部分需要再查列表；
 // 此处优先取创建响应的 data.key，为空则回退查列表按 name 取。
+// 新版 new-api 三处都可能只回掩码 key（中段 "*"），出口统一经揭示端点换回明文。
 func (a *NewApiAdapter) ProvisionKey(ctx context.Context, baseURL, accessToken, userID, authTokenMode string, opts NewApiProvisionOptions) (tokenID int, keyPlainText string, reused bool, err error) {
 	tokenID, keyPlainText, reused, err = a.provisionKey(ctx, baseURL, accessToken, userID, authTokenMode, opts)
+	if err == nil {
+		keyPlainText, err = a.resolveMaskedPlaintextKey(ctx, baseURL, accessToken, userID, authTokenMode, tokenID, keyPlainText)
+	}
 	return tokenID, normalizeNewApiPlaintextKey(keyPlainText), reused, err
 }
 

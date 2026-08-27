@@ -301,6 +301,12 @@ func provisionNewApiGroupKeys(
 			rollback(current)
 			return nil, &newApiProvisionConflictError{err: fmt.Errorf("分组 %q 的同名 key=%s 未返回明文，无法直接绑定，请删除后重试或手动填 key", group.Name, names[i])}
 		}
+		// 兜底：掩码 key 绝不能当明文绑定（会导致必然 403 并污染黑名单）。
+		// 正常流程中适配器已通过揭示端点换回明文，此处拦截异常链路。
+		if IsMaskedNewApiKey(keyPlain) {
+			rollback(current)
+			return nil, &newApiProvisionConflictError{err: fmt.Errorf("分组 %q 的 key=%s 仍为掩码形态，已阻止绑定，请手动填写 key", group.Name, names[i])}
+		}
 		if previousGroup, exists := seenKeys[keyPlain]; exists && previousGroup != group.Name {
 			rollback(current)
 			return nil, fmt.Errorf("分组 %q 与 %q 返回相同的 key，已阻止绑定", previousGroup, group.Name)

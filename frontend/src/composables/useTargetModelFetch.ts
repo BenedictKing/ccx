@@ -106,8 +106,13 @@ export function useTargetModelFetch(options: TargetModelFetchOptions) {
     fetchModelsError.value = ''
 
     const modelsApiType = resolveModelsApiType()
+    // 带 baseUrl 的 override 会让后端走「新增模式」，丢失渠道的 serviceType/
+    // learnedClientFingerprint → 探测请求缺 Claude Code 伪装头，会被有客户端
+    // 指纹校验的上游 401 拒绝，UI 误报「上游 API Key 无效」。这里显式带上。
     const requestOverrides = {
       baseUrl: options.form.baseUrl || undefined,
+      serviceType: options.form.serviceType || undefined,
+      learnedClientFingerprint: options.channel.value?.learnedClientFingerprint || undefined,
       proxyUrl: options.form.proxyUrl || undefined,
       insecureSkipVerify: options.form.insecureSkipVerify || undefined,
       customHeaders: Object.keys(options.form.customHeaders).length > 0 ? { ...options.form.customHeaders } : undefined,

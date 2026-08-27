@@ -868,6 +868,9 @@ export interface ChannelModelsRequest {
   key: string
   baseUrl?: string
   serviceType?: Channel['serviceType']
+  // 已学习客户端指纹校验的上游：探测请求需带 Claude Code 伪装头，
+  // 否则编辑器 per-key 校验会被指纹拦截误报「上游 API Key 无效」。
+  learnedClientFingerprint?: boolean
   proxyUrl?: string
   proxyPreferDirect?: boolean
   insecureSkipVerify?: boolean
