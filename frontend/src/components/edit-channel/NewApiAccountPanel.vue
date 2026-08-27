@@ -234,44 +234,149 @@
       <div
         v-for="account in accounts"
         :key="account.accountUid"
-        class="account-item d-flex align-center justify-space-between pa-3 mb-2 rounded-lg"
+        class="account-item mb-2"
       >
-        <div class="d-flex align-center ga-3">
-          <v-icon :color="account.status === 'active' ? 'success' : 'error'">
-            {{ account.status === 'active' ? 'mdi-check-circle' : 'mdi-alert-circle' }}
-          </v-icon>
-          <div>
-            <div class="text-body-2 font-weight-medium">{{ account.displayName || account.accountUid }}</div>
-            <div class="text-caption text-medium-emphasis">
-              {{ t('subscription.newApi.quota') }}: {{ account.balance }}
-              <template v-if="account.accessTokenMasked">
-                · {{ t('subscription.newApi.accessToken') }}: {{ account.accessTokenMasked }}
-              </template>
-            </div>
-            <div v-if="account.provisionedKeys?.length" class="text-caption mt-1 d-flex flex-wrap ga-1">
-              <v-chip
-                v-for="key in account.provisionedKeys"
-                :key="key.tokenId"
-                size="x-small"
-                color="primary"
-                variant="tonal"
-              >
-                {{ key.group }} × {{ key.groupMultiplier }}
-              </v-chip>
-            </div>
-            <div v-if="account.lastSyncError" class="text-caption text-error mt-1">
-              {{ account.lastSyncError }}
+        <div
+          class="d-flex align-center justify-space-between pa-3 cursor-pointer"
+          :aria-expanded="expandedAccountUid === account.accountUid"
+          role="button"
+          tabindex="0"
+          @click="toggleAccount(account.accountUid)"
+          @keydown.enter.prevent="toggleAccount(account.accountUid)"
+        >
+          <div class="d-flex align-center ga-3 min-width-0">
+            <v-icon :color="account.status === 'active' ? 'success' : 'error'">
+              {{ account.status === 'active' ? 'mdi-check-circle' : 'mdi-alert-circle' }}
+            </v-icon>
+            <div class="min-width-0">
+              <div class="text-body-2 font-weight-medium">{{ account.displayName || account.accountUid }}</div>
+              <div class="text-caption text-medium-emphasis text-truncate">
+                {{ t('subscription.newApi.quota') }}: {{ account.balance }}
+                <template v-if="account.accessTokenMasked">
+                  · {{ account.accessTokenMasked }}
+                </template>
+                <template v-if="account.provisionedKeys?.length">
+                  · {{ t('subscription.newApi.provisionedKeysCount', { count: account.provisionedKeys.length }) }}
+                </template>
+              </div>
             </div>
           </div>
+          <div class="d-flex align-center ga-1" @click.stop>
+            <v-btn icon size="small" variant="text" color="primary" :loading="refreshing === account.accountUid" @click.stop="refreshAccount(account.accountUid)">
+              <v-icon size="18">mdi-refresh</v-icon>
+              <v-tooltip activator="parent" location="top" content-class="ccx-tooltip">{{ t('subscription.newApi.refreshBalance') }}</v-tooltip>
+            </v-btn>
+            <v-btn icon size="small" variant="text" color="error" :loading="deleting === account.accountUid" @click.stop="deleteAccount(account.accountUid)">
+              <v-icon size="18">mdi-delete</v-icon>
+              <v-tooltip activator="parent" location="top" content-class="ccx-tooltip">{{ t('app.actions.delete') }}</v-tooltip>
+            </v-btn>
+            <v-icon size="20" class="ml-1">{{ expandedAccountUid === account.accountUid ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
+          </div>
         </div>
-        <div class="d-flex ga-2">
-          <v-btn icon size="small" variant="text" color="primary" :loading="refreshing === account.accountUid" @click="refreshAccount(account.accountUid)">
-            <v-icon size="18">mdi-refresh</v-icon>
-          </v-btn>
-          <v-btn icon size="small" variant="text" color="error" :loading="deleting === account.accountUid" @click="deleteAccount(account.accountUid)">
-            <v-icon size="18">mdi-delete</v-icon>
-          </v-btn>
-        </div>
+
+        <v-expand-transition>
+          <div v-if="expandedAccountUid === account.accountUid" class="account-detail pa-3">
+            <div class="account-detail-grid mb-3">
+              <div class="summary-item">
+                <span class="text-caption text-medium-emphasis">{{ t('subscription.newApi.userId') }}</span>
+                <strong class="text-body-2">{{ account.userId || '-' }}</strong>
+              </div>
+              <div class="summary-item">
+                <span class="text-caption text-medium-emphasis">{{ t('subscription.newApi.status') }}</span>
+                <strong class="text-body-2">{{ account.status || '-' }}</strong>
+              </div>
+              <div class="summary-item">
+                <span class="text-caption text-medium-emphasis">{{ t('subscription.newApi.quota') }}</span>
+                <strong class="text-body-2">{{ formatQuota(account.balance) }}</strong>
+              </div>
+              <div class="summary-item">
+                <span class="text-caption text-medium-emphasis">{{ t('subscription.newApi.lastCheckedAt') }}</span>
+                <strong class="text-body-2">{{ account.lastCheckedAt ? formatTime(account.lastCheckedAt) : '-' }}</strong>
+              </div>
+              <div class="summary-item">
+                <span class="text-caption text-medium-emphasis">{{ t('subscription.newApi.createdAt') }}</span>
+                <strong class="text-body-2">{{ formatTime(account.createdAt) }}</strong>
+              </div>
+              <div class="summary-item">
+                <span class="text-caption text-medium-emphasis">{{ t('subscription.newApi.authTokenMode') }}</span>
+                <strong class="text-body-2">{{ authTokenModeLabel(account.authTokenMode) }}</strong>
+              </div>
+              <div class="summary-item summary-item--wide">
+                <span class="text-caption text-medium-emphasis">{{ t('subscription.newApi.accessToken') }}</span>
+                <code class="text-caption">{{ account.accessTokenMasked || '-' }}</code>
+              </div>
+            </div>
+
+            <div v-if="account.provisionedKeys?.length" class="mb-3">
+              <div class="text-caption text-medium-emphasis mb-1">{{ t('subscription.newApi.provisionedKeys') }}</div>
+              <div class="d-flex flex-wrap ga-1">
+                <v-chip
+                  v-for="key in account.provisionedKeys"
+                  :key="key.tokenId"
+                  size="x-small"
+                  color="primary"
+                  variant="tonal"
+                >
+                  {{ key.name }} · {{ key.group }} × {{ key.groupMultiplier }}
+                </v-chip>
+              </div>
+            </div>
+
+            <v-alert v-if="account.lastSyncError" color="warning" variant="tonal" density="compact" class="mb-3">
+              {{ account.lastSyncError }}
+            </v-alert>
+
+            <v-divider class="mb-3" />
+
+            <v-form @submit.prevent="saveAccountCredentials(account)">
+              <div class="text-caption text-medium-emphasis mb-2">{{ t('subscription.newApi.updateCredentials') }}</div>
+              <v-text-field
+                v-model="accountForm(account.accountUid).accessToken"
+                :label="t('subscription.newApi.accessToken')"
+                :placeholder="t('subscription.newApi.accessTokenKeepPlaceholder')"
+                variant="outlined"
+                density="compact"
+                type="password"
+                autocomplete="new-password"
+                class="mb-2"
+              />
+              <v-row dense>
+                <v-col cols="12" md="6">
+                  <v-text-field
+                    v-model="accountForm(account.accountUid).userId"
+                    :label="t('subscription.newApi.userId')"
+                    variant="outlined"
+                    density="compact"
+                  />
+                </v-col>
+                <v-col cols="12" md="6">
+                  <v-select
+                    v-model="accountForm(account.accountUid).authTokenMode"
+                    :label="t('subscription.newApi.authTokenMode')"
+                    :items="authTokenModeOptions"
+                    variant="outlined"
+                    density="compact"
+                  />
+                </v-col>
+              </v-row>
+              <v-alert v-if="accountErrors[account.accountUid]" color="error" variant="tonal" density="compact" class="mb-3">
+                {{ accountErrors[account.accountUid] }}
+              </v-alert>
+              <div class="d-flex justify-end">
+                <v-btn
+                  color="primary"
+                  variant="tonal"
+                  :loading="savingAccount === account.accountUid"
+                  :disabled="!accountCredentialsChanged(account)"
+                  @click="saveAccountCredentials(account)"
+                >
+                  <v-icon start size="small">mdi-check</v-icon>
+                  {{ t('subscription.newApi.saveCredentials') }}
+                </v-btn>
+              </div>
+            </v-form>
+          </div>
+        </v-expand-transition>
       </div>
     </div>
     <v-alert v-else color="info" variant="tonal" density="compact">
@@ -320,6 +425,11 @@ const refreshing = ref('')
 const deleting = ref('')
 const addError = ref('')
 const bindError = ref('')
+// 子账号展开详情 + 每账号独立的凭据表单/保存状态
+const expandedAccountUid = ref('')
+const accountForms = ref<Record<string, { accessToken: string; userId: string; authTokenMode: string }>>({})
+const accountErrors = ref<Record<string, string>>({})
+const savingAccount = ref('')
 
 const bindForm = ref({ accessToken: '', userId: '', authTokenMode: 'bearer' })
 const primaryForm = ref({ accessToken: '', userId: '', authTokenMode: 'bearer' })
@@ -565,12 +675,84 @@ async function deleteAccount(accountUid: string) {
   deleting.value = accountUid
   try {
     await api.deleteSubscriptionAccount(effectiveSubscriptionUid.value, accountUid)
+    if (expandedAccountUid.value === accountUid) expandedAccountUid.value = ''
+    delete accountForms.value[accountUid]
     await fetchAccounts()
     emit('updated')
   } catch (e) {
     console.error('Failed to delete account:', e)
   } finally {
     deleting.value = ''
+  }
+}
+
+function toggleAccount(accountUid: string) {
+  if (expandedAccountUid.value === accountUid) {
+    expandedAccountUid.value = ''
+    return
+  }
+  expandedAccountUid.value = accountUid
+  accountErrors.value[accountUid] = ''
+  // 展开时以账号当前值初始化表单基线（accessToken 永远留空=保持不变）
+  const account = accounts.value.find(a => a.accountUid === accountUid)
+  accountForms.value[accountUid] = {
+    accessToken: '',
+    userId: account?.userId || '',
+    authTokenMode: normalizeAuthTokenMode(account?.authTokenMode),
+  }
+}
+
+function accountForm(accountUid: string) {
+  if (!accountForms.value[accountUid]) {
+    const account = accounts.value.find(a => a.accountUid === accountUid)
+    accountForms.value[accountUid] = {
+      accessToken: '',
+      userId: account?.userId || '',
+      authTokenMode: normalizeAuthTokenMode(account?.authTokenMode),
+    }
+  }
+  return accountForms.value[accountUid]
+}
+
+function accountCredentialsChanged(account: NewApiAccountItem) {
+  const form = accountForms.value[account.accountUid]
+  if (!form) return false
+  return Boolean(form.accessToken.trim()) ||
+    form.userId.trim() !== (account.userId || '') ||
+    form.authTokenMode !== normalizeAuthTokenMode(account.authTokenMode)
+}
+
+function authTokenModeLabel(mode?: string) {
+  const normalized = normalizeAuthTokenMode(mode)
+  return normalized === 'raw' ? 'Raw' : 'Bearer'
+}
+
+async function saveAccountCredentials(account: NewApiAccountItem) {
+  if (!accountCredentialsChanged(account)) return
+  const form = accountForms.value[account.accountUid]
+  savingAccount.value = account.accountUid
+  accountErrors.value[account.accountUid] = ''
+  try {
+    const payload: { accessToken?: string; userId?: string; authTokenMode?: string } = {
+      userId: form.userId.trim(),
+      authTokenMode: form.authTokenMode,
+    }
+    if (form.accessToken.trim()) payload.accessToken = form.accessToken.trim()
+    const updated = await api.updateSubscriptionAccountCredentials(
+      effectiveSubscriptionUid.value,
+      account.accountUid,
+      payload,
+    )
+    const index = accounts.value.findIndex(a => a.accountUid === account.accountUid)
+    if (index >= 0) accounts.value[index] = updated
+    form.accessToken = ''
+    form.userId = updated.userId || ''
+    form.authTokenMode = normalizeAuthTokenMode(updated.authTokenMode)
+    emit('updated')
+  } catch (e) {
+    accountErrors.value[account.accountUid] = e instanceof Error ? e.message : 'Unknown error'
+  } finally {
+    savingAccount.value = ''
   }
 }
 
@@ -610,6 +792,22 @@ watch(
 .account-item {
   background-color: rgba(var(--v-theme-surface-variant), 0.5);
   border: 1px solid rgba(var(--v-theme-outline), 0.2);
+  overflow: hidden;
+}
+.cursor-pointer {
+  cursor: pointer;
+}
+.min-width-0 {
+  min-width: 0;
+}
+.account-detail {
+  border-top: 1px dashed rgba(var(--v-theme-outline), 0.35);
+  background-color: rgba(var(--v-theme-surface), 0.4);
+}
+.account-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
 }
 @media (max-width: 600px) {
   .primary-summary {

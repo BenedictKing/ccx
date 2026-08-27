@@ -1470,9 +1470,18 @@ export interface NewApiCredentialsUpdateRequest {
   expectedVersion?: number
 }
 
+/** 更新 new-api 子账号凭证；代理不在账号级维护（渠道"代理通道"是唯一事实源） */
+export interface NewApiAccountCredentialsUpdateRequest {
+  accessToken?: string
+  userId?: string
+  authTokenMode?: string
+}
+
 export interface NewApiAccountItem {
   accountUid: string
   userId?: string
+  /** 令牌注入 Authorization 头的方式（bearer/raw），非敏感 */
+  authTokenMode?: string
   displayName?: string
   balance?: number
   status?: string
@@ -1483,7 +1492,6 @@ export interface NewApiAccountItem {
   lastSyncError?: string
   lastCheckedAt?: string
   usedQuota?: number
-  authTokenMode?: string
   createdAt: string
   /** 账号级代理设置（空表示继承订阅级） */
   proxyUrl?: string

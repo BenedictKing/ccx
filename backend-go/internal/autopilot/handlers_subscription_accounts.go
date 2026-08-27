@@ -65,6 +65,7 @@ type NewApiCredentialsUpdateRequest struct {
 type NewApiAccountItem struct {
 	AccountUID        string                 `json:"accountUid"`
 	UserID            string                 `json:"userId,omitempty"`
+	AuthTokenMode     string                 `json:"authTokenMode,omitempty"`
 	DisplayName       string                 `json:"displayName,omitempty"`
 	Balance           float64                `json:"balance,omitempty"`
 	Status            string                 `json:"status,omitempty"`
@@ -245,6 +246,7 @@ func handleAddSubscriptionAccount(deps *NewApiRouteDeps) gin.HandlerFunc {
 			c.JSON(http.StatusCreated, NewApiAccountItem{
 				AccountUID:        account.AccountUID,
 				UserID:            account.UserID,
+				AuthTokenMode:     account.AuthTokenMode,
 				DisplayName:       account.DisplayName,
 				Balance:           account.Balance,
 				Status:            account.Status,
@@ -277,6 +279,7 @@ func handleAddSubscriptionAccount(deps *NewApiRouteDeps) gin.HandlerFunc {
 		c.JSON(http.StatusCreated, NewApiAccountItem{
 			AccountUID:        account.AccountUID,
 			UserID:            account.UserID,
+			AuthTokenMode:     account.AuthTokenMode,
 			DisplayName:       account.DisplayName,
 			Balance:           account.Balance,
 			Status:            account.Status,
@@ -309,6 +312,7 @@ func handleListSubscriptionAccounts(deps *NewApiRouteDeps) gin.HandlerFunc {
 			items = append(items, NewApiAccountItem{
 				AccountUID:        acc.AccountUID,
 				UserID:            acc.UserID,
+				AuthTokenMode:     acc.AuthTokenMode,
 				DisplayName:       acc.DisplayName,
 				Balance:           acc.Balance,
 				Status:            acc.Status,
@@ -460,6 +464,142 @@ func handleRefreshSubscriptionAccount(deps *NewApiRouteDeps) gin.HandlerFunc {
 }
 
 // RegisterSubscriptionAccountRoutes 注册 new-api 多账号管理路由。
+// NewApiAccountCredentialsUpdateRequest PATCH /accounts/:accountUid/credentials 请求体。
+// 代理不在账号级维护（渠道"代理通道"是唯一事实源），故无 proxy 字段。
+type NewApiAccountCredentialsUpdateRequest struct {
+	AccessToken   *string `json:"accessToken,omitempty"`
+	UserID        *string `json:"userId,omitempty"`
+	AuthTokenMode *string `json:"authTokenMode,omitempty"`
+}
+
+// handleUpdateSubscriptionAccountCredentials 更新子账号凭证，落库前先用新凭证组合
+// 调站点验证（对齐主账号 handleUpdateNewApiCredentials 语义），通过后回填余额。
+func handleUpdateSubscriptionAccountCredentials(deps *NewApiRouteDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		uid, accountUID := c.Param("uid"), c.Param("accountUid")
+		if uid == "" || accountUID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "subscription uid 和 account uid 不能为空"})
+			return
+		}
+		profile := deps.Store.Get(uid)
+		if profile == nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("subscription_uid=%s 不存在", uid)})
+			return
+		}
+		var account *NewApiAccount
+		for i := range profile.Accounts {
+			if profile.Accounts[i].AccountUID == accountUID {
+				account = &profile.Accounts[i]
+				break
+			}
+		}
+		if account == nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("account_uid=%s 不存在", accountUID)})
+			return
+		}
+
+		var req NewApiAccountCredentialsUpdateRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "请求参数无效: " + err.Error()})
+			return
+		}
+		if req.AccessToken == nil && req.UserID == nil && req.AuthTokenMode == nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "至少需要提交一个凭证字段"})
+			return
+		}
+
+		accessToken := account.AccessToken
+		if req.AccessToken != nil {
+			accessToken = strings.TrimSpace(*req.AccessToken)
+			if accessToken == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "accessToken 不能为空"})
+				return
+			}
+		}
+		userID := account.UserID
+		if req.UserID != nil {
+			userID = strings.TrimSpace(*req.UserID)
+		}
+		authTokenMode := account.AuthTokenMode
+		if req.AuthTokenMode != nil {
+			authTokenMode = strings.ToLower(strings.TrimSpace(*req.AuthTokenMode))
+		}
+		if authTokenMode == "" {
+			authTokenMode = NewApiAuthModeBearer
+		}
+		if authTokenMode != NewApiAuthModeBearer && authTokenMode != NewApiAuthModeRaw && authTokenMode != NewApiAuthModeRawAuth {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "authTokenMode 仅支持 bearer 或 raw"})
+			return
+		}
+
+		merged := *account
+		merged.AccessToken, merged.UserID, merged.AuthTokenMode = accessToken, userID, authTokenMode
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 20*time.Second)
+		defer cancel()
+		adapter := adapterForAccount(deps, profile, merged)
+		self, derivedUserID, err := adapter.VerifyWithFallback(ctx, profile.BaseURL, accessToken, userID, authTokenMode)
+		if err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("账号验证失败: %v", err)})
+			return
+		}
+
+		now := time.Now()
+		updated := merged
+		patchErr := deps.Store.Patch(uid, nil, func(current *SubscriptionProfile) error {
+			for i := range current.Accounts {
+				if current.Accounts[i].AccountUID != accountUID {
+					continue
+				}
+				current.Accounts[i].AccessToken = accessToken
+				current.Accounts[i].UserID = derivedUserID
+				current.Accounts[i].AuthTokenMode = authTokenMode
+				current.Accounts[i].Balance = float64(self.Quota)
+				current.Accounts[i].Status = "active"
+				current.Accounts[i].LastCheckedAt = now
+				updated = current.Accounts[i]
+				return nil
+			}
+			return errAccountMissing
+		})
+		if patchErr != nil {
+			if errors.Is(patchErr, errAccountMissing) || strings.Contains(patchErr.Error(), "不存在") {
+				c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("account_uid=%s 不存在", accountUID)})
+				return
+			}
+			if strings.Contains(patchErr.Error(), "version 冲突") {
+				c.JSON(http.StatusConflict, gin.H{"error": patchErr.Error()})
+				return
+			}
+			if strings.Contains(patchErr.Error(), "subscription_uid") {
+				c.JSON(http.StatusNotFound, gin.H{"error": patchErr.Error()})
+				return
+			}
+			c.JSON(http.StatusInternalServerError, gin.H{"error": patchErr.Error()})
+			return
+		}
+
+		// 凭证已通过校验；分组/倍率同步失败不回滚凭证，由账号快照 lastSyncError 展示。
+		if deps.SyncService != nil {
+			_, _ = deps.SyncService.SyncNow(c.Request.Context(), uid)
+		}
+		c.JSON(http.StatusOK, NewApiAccountItem{
+			AccountUID:        updated.AccountUID,
+			UserID:            updated.UserID,
+			AuthTokenMode:     updated.AuthTokenMode,
+			DisplayName:       updated.DisplayName,
+			Balance:           updated.Balance,
+			Status:            updated.Status,
+			AccessTokenMasked: maskAccessToken(updated.AccessToken),
+			ProvisionedKeys:   updated.ProvisionedKeys,
+			LastSyncError:     updated.LastSyncError,
+			LastCheckedAt:     updated.LastCheckedAt,
+			CreatedAt:         updated.CreatedAt,
+			ProxyURL:          updated.ProxyURL,
+			ProxyPreferDirect: updated.ProxyPreferDirect,
+		})
+	}
+}
+
 // handleUpdateNewApiCredentials 更新 new-api 主账号凭证，并在落库前验证新凭证组合。
 func handleUpdateNewApiCredentials(deps *NewApiRouteDeps) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -578,4 +718,5 @@ func RegisterSubscriptionAccountRoutes(router gin.IRouter, deps *NewApiRouteDeps
 	group.GET("", handleListSubscriptionAccounts(deps))
 	group.DELETE("/:accountUid", handleDeleteSubscriptionAccount(deps))
 	group.POST("/:accountUid/refresh", handleRefreshSubscriptionAccount(deps))
+	group.PATCH("/:accountUid/credentials", handleUpdateSubscriptionAccountCredentials(deps))
 }

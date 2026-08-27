@@ -77,6 +77,7 @@ import type {
   NewApiProvisionRequest,
   NewApiProvisionResponse,
   NewApiAccountCreateRequest,
+  NewApiAccountCredentialsUpdateRequest,
   NewApiCredentialsUpdateRequest,
   NewApiAccountItem,
   NewApiAccountListResponse,
@@ -1516,6 +1517,18 @@ export class ApiService {
   async refreshSubscriptionAccount(uid: string, accountUid: string): Promise<NewApiAccountItem> {
     return this.request(`/subscriptions/${encodeURIComponent(uid)}/accounts/${encodeURIComponent(accountUid)}/refresh`, {
       method: 'POST',
+    })
+  }
+
+  /** 更新 new-api 子账号凭证（落库前先经站点验证）；响应仅返回脱敏 token */
+  async updateSubscriptionAccountCredentials(
+    uid: string,
+    accountUid: string,
+    data: NewApiAccountCredentialsUpdateRequest,
+  ): Promise<NewApiAccountItem> {
+    return this.request(`/subscriptions/${encodeURIComponent(uid)}/accounts/${encodeURIComponent(accountUid)}/credentials`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
     })
   }
 
