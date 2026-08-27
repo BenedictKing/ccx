@@ -211,6 +211,7 @@
             <v-text-field
               v-model="addForm.displayName"
               :label="t('subscription.field.name')"
+              :placeholder="t('subscription.newApi.displayNameAutoPlaceholder')"
               variant="outlined"
               density="compact"
               class="mb-2"
@@ -532,7 +533,8 @@ async function handleAddAccount() {
     await api.addSubscriptionAccount(effectiveSubscriptionUid.value, {
       accessToken,
       userId: String(verified.userId),
-      displayName: addForm.value.displayName || undefined,
+      // 显示名称留空时采用站点用户名
+      displayName: addForm.value.displayName.trim() || verified.username || undefined,
       authTokenMode,
       provisionAllEligibleGroups: true,
       maxGroupMultiplier: DEFAULT_NEWAPI_MAX_GROUP_MULTIPLIER,
