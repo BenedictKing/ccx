@@ -248,6 +248,11 @@ func (cm *ConfigManager) updateUpstreamCommonLocked(k ChannelKindConfig, index i
 	if err != nil {
 		return false, err
 	}
+	if updates.Remark != nil {
+		// 统一列表(Dashboard)展示的是逻辑渠道层备注；单卡保存不同步整组的话，
+		// 用户删除/修改的备注会被逻辑层与兄弟卡的残留值顶回（“删不掉”根因）。
+		cm.syncRemarkAcrossLogicalGroupLocked(upstream, strings.TrimSpace(*updates.Remark))
+	}
 
 	stripAutoManagedExplicitOverrides(upstream)
 	applyAutoDerivedChannelName(upstream, oldFirst)
@@ -734,4 +739,33 @@ func RemoveChannelKeyByKind(cm *ConfigManager, loc ChannelLocation, apiKey strin
 	defer cm.mu.Unlock()
 	k := ChannelKindRegistry[loc.Kind]
 	return cm.removeChannelKeyCommonLocked(k, loc.Index, apiKey)
+}
+
+// syncRemarkAcrossLogicalGroupLocked 把单卡备注变更同步到同组逻辑渠道及全部兄弟物理卡。
+// 统一列表展示逻辑层 lc.Remark，物理卡各自也存有一份；三处只有全部一致，
+// 用户的删除/修改才对所有入口同时生效。
+func (cm *ConfigManager) syncRemarkAcrossLogicalGroupLocked(upstream *UpstreamConfig, remark string) {
+	uid := strings.TrimSpace(upstream.LogicalChannelUID)
+	if uid == "" {
+		return
+	}
+	for i := range cm.config.LogicalChannels {
+		if cm.config.LogicalChannels[i].LogicalChannelUID == uid {
+			cm.config.LogicalChannels[i].Remark = remark
+			break
+		}
+	}
+	sync := func(channels []UpstreamConfig) {
+		for i := range channels {
+			if strings.TrimSpace(channels[i].LogicalChannelUID) == uid && &channels[i] != upstream {
+				channels[i].Remark = remark
+			}
+		}
+	}
+	sync(cm.config.Upstream)
+	sync(cm.config.ChatUpstream)
+	sync(cm.config.ResponsesUpstream)
+	sync(cm.config.GeminiUpstream)
+	sync(cm.config.ImagesUpstream)
+	sync(cm.config.VectorsUpstream)
 }
