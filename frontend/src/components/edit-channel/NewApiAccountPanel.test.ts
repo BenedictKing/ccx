@@ -5,20 +5,36 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import NewApiAccountPanel from './NewApiAccountPanel.vue'
 
-const apiMocks = vi.hoisted(() => ({
-  getSubscription: vi.fn(),
-  refreshSubscription: vi.fn(),
-  updateNewApiCredentials: vi.fn(),
-  updateSubscriptionAccountCredentials: vi.fn(),
-  provisionNewApiSubscription: vi.fn(),
-  verifyNewApiSubscription: vi.fn(),
-  getSubscriptionAccounts: vi.fn(),
-  addSubscriptionAccount: vi.fn(),
-  refreshSubscriptionAccount: vi.fn(),
-  deleteSubscriptionAccount: vi.fn(),
-}))
+const { apiMocks, ApiErrorStub } = vi.hoisted(() => {
+  class ApiErrorStub extends Error {
+    constructor(
+      message: string,
+      readonly status: number,
+      readonly details?: unknown,
+    ) {
+      super(message)
+      this.name = 'ApiError'
+    }
+  }
+  return {
+    ApiErrorStub,
+    apiMocks: {
+      getSubscription: vi.fn(),
+      refreshSubscription: vi.fn(),
+      updateNewApiCredentials: vi.fn(),
+      updateSubscriptionAccountCredentials: vi.fn(),
+      provisionNewApiSubscription: vi.fn(),
+      verifyNewApiSubscription: vi.fn(),
+      getSubscriptionAccounts: vi.fn(),
+      addSubscriptionAccount: vi.fn(),
+      refreshSubscriptionAccount: vi.fn(),
+      deleteSubscriptionAccount: vi.fn(),
+    },
+  }
+})
 
-vi.mock('../../services/api', () => ({ api: apiMocks }))
+vi.mock('../../services/api', () => ({ api: apiMocks, ApiError: ApiErrorStub }))
+
 vi.mock('../../i18n', () => ({
   useI18n: () => ({ t: (key: string) => key }),
 }))
@@ -155,6 +171,41 @@ describe('NewApiAccountPanel', () => {
       authTokenMode: 'bearer',
       expectedVersion: 2,
     }))
+  })
+
+  it('new_api 渠道缺失 subscriptionUid 时按 channelUid 兜底拉取订阅', async () => {
+    const wrapper = mountPanel({
+      subscriptionUid: '',
+      channelUid: 'ch-1',
+      channelKind: 'messages',
+      isGeneric: false,
+      autoManagedKind: 'new_api',
+    })
+    await vi.waitFor(() => expect(apiMocks.getSubscription).toHaveBeenCalledWith('newapi-ch-1'))
+    await nextTick()
+    expect(wrapper.text()).toContain('50,000')
+    expect(wrapper.text()).toContain('****oken')
+  })
+
+  it('订阅不存在时给出提示，添加账号不再静默无响应', async () => {
+    apiMocks.getSubscription.mockRejectedValue(new ApiErrorStub('subscription not found', 404))
+    const wrapper = mountPanel({
+      subscriptionUid: '',
+      channelUid: 'ch-1',
+      channelKind: 'messages',
+      isGeneric: false,
+      autoManagedKind: 'new_api',
+    })
+    await vi.waitFor(() => expect(apiMocks.getSubscription).toHaveBeenCalledWith('newapi-ch-1'))
+    await nextTick()
+    expect(wrapper.text()).toContain('subscription.newApi.subscriptionNotFound')
+
+    // 填写 token 点添加：因主账号订阅未就绪给出反馈，且不发起校验请求
+    await wrapper.find('input[type="password"]').setValue('some-access-token')
+    await wrapper.findAll('button').find(button => button.text().includes('app.actions.add'))!.trigger('click')
+    await nextTick()
+    expect(apiMocks.verifyNewApiSubscription).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('subscription.newApi.subscriptionNotFound')
   })
 
   it('点击账号行展开详情，更新子账号凭证走独立端点', async () => {

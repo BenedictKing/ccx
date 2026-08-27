@@ -175,8 +175,16 @@
                 {{ t('subscription.newApi.saveCredentials') }}
               </v-btn>
             </div>
-          </v-form>
+            </v-form>
         </template>
+        <v-alert
+          v-else-if="!loadingPrimary && !primaryError"
+          color="info"
+          variant="tonal"
+          density="compact"
+        >
+          {{ t('subscription.newApi.primaryAccountUnavailable') }}
+        </v-alert>
       </v-card-text>
     </v-card>
 
@@ -389,7 +397,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from '@/i18n'
-import { api } from '@/services/api'
+import { api, ApiError } from '@/services/api'
 import type { NewApiAccountItem, NewApiVerifyResponse, SubscriptionItem } from '@/services/api-types'
 import { DEFAULT_NEWAPI_MAX_GROUP_MULTIPLIER, eligibleNewApiGroups } from '@/utils/newApiGroups'
 
@@ -412,7 +420,16 @@ const subscription = ref<SubscriptionItem | null>(null)
 // 绑定成功后本地回填 subscriptionUid：generic 渠道的 props.subscriptionUid 来自 channel.subscriptionUid，
 // 需后端回填并重新拉取才非空；绑定后先用 provision 响应里的 uid 让面板立即切到多账号视图并拉取账号。
 const localSubscriptionUid = ref('')
-const effectiveSubscriptionUid = computed(() => props.subscriptionUid || localSubscriptionUid.value)
+// new_api 托管渠道按约定订阅 UID=newapi-{channelUid}；key 配置的 sourceSubscriptionUid 丢失时
+// （如编辑换 key 切断关联），仍能凭 channelUid 直连订阅，面板不瘫痪。
+const isManagedNewApiChannel = computed(() =>
+  !props.isGeneric && props.autoManagedKind === 'new_api' && !!props.channelUid?.trim(),
+)
+const effectiveSubscriptionUid = computed(() =>
+  props.subscriptionUid ||
+  localSubscriptionUid.value ||
+  (isManagedNewApiChannel.value ? `newapi-${props.channelUid!.trim()}` : ''),
+)
 const accounts = ref<NewApiAccountItem[]>([])
 const loadingPrimary = ref(false)
 const refreshingPrimary = ref(false)
@@ -560,7 +577,9 @@ async function fetchPrimaryAccount() {
     subscription.value = item
     syncPrimaryForm(item)
   } catch (e) {
-    primaryError.value = e instanceof Error ? e.message : 'Unknown error'
+    primaryError.value = e instanceof ApiError && e.status === 404
+      ? t('subscription.newApi.subscriptionNotFound')
+      : e instanceof Error ? e.message : 'Unknown error'
   } finally {
     loadingPrimary.value = false
   }
@@ -619,7 +638,12 @@ async function fetchAccounts() {
 }
 
 async function handleAddAccount() {
-  if (!addForm.value.accessToken.trim() || !subscription.value) return
+  if (!subscription.value) {
+    // 主账号订阅信息未就绪（未关联或加载失败）时给出反馈，而不是静默无响应
+    addError.value = primaryError.value || t('subscription.newApi.subscriptionUnavailable')
+    return
+  }
+  if (!addForm.value.accessToken.trim()) return
   adding.value = true
   addError.value = ''
   try {
@@ -757,7 +781,7 @@ async function saveAccountCredentials(account: NewApiAccountItem) {
 }
 
 watch(
-  () => props.subscriptionUid,
+  () => [props.subscriptionUid, props.channelUid, props.autoManagedKind, props.isGeneric],
   () => {
     subscription.value = null
     accounts.value = []

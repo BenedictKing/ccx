@@ -796,6 +796,17 @@ func mergeAPIKeyConfig(existing *APIKeyConfig, incoming APIKeyConfig) APIKeyConf
 	if strings.TrimSpace(merged.Key) == "" {
 		merged.Key = existing.Key
 	}
+	// SourceSubscriptionUID/SourceRemoteTokenID 是 new_api 同步写入的托管身份字段，
+	// 客户端表单不携带；existing 由同步管理（MultiplierSource=new_api）时缺省回填，
+	// 避免编辑保存切断渠道与订阅的关联。非托管 key 的显式清空（脱离同步管理）不受影响。
+	if strings.EqualFold(strings.TrimSpace(existing.MultiplierSource), "new_api") {
+		if strings.TrimSpace(merged.SourceSubscriptionUID) == "" {
+			merged.SourceSubscriptionUID = existing.SourceSubscriptionUID
+		}
+		if merged.SourceRemoteTokenID == 0 {
+			merged.SourceRemoteTokenID = existing.SourceRemoteTokenID
+		}
+	}
 	// 上游未显式携带 ConsumptionPolicy 时保留本地用户意图（new-api 同步、跨协议合并均适用）。
 	if merged.ConsumptionPolicy == "" {
 		merged.ConsumptionPolicy = existing.ConsumptionPolicy

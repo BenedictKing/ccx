@@ -55,6 +55,30 @@ func TestMergeAndNormalizeAPIKeyConfigsPreservesServerIdentityFields(t *testing.
 	}
 }
 
+func TestMergeAndNormalizeAPIKeyConfigsPreservesNewApiManagedIdentity(t *testing.T) {
+	existing := []APIKeyConfig{{Key: "old-key", CredentialUID: "cred-1", MultiplierSource: "new_api", SourceSubscriptionUID: "newapi-ch-1", SourceRemoteTokenID: 42}}
+	incoming := []APIKeyConfig{{Key: "new-key", CredentialUID: "cred-1"}}
+	got := mergeAndNormalizeAPIKeyConfigs([]string{"new-key"}, existing, incoming)
+	if len(got) != 1 {
+		t.Fatalf("expected 1 config, got %d", len(got))
+	}
+	if got[0].SourceSubscriptionUID != "newapi-ch-1" || got[0].SourceRemoteTokenID != 42 {
+		t.Fatalf("expected new_api managed identity preserved, got %+v", got[0])
+	}
+}
+
+func TestMergeAndNormalizeAPIKeyConfigsKeepsExplicitIdentityClearForUnmanagedKey(t *testing.T) {
+	existing := []APIKeyConfig{{Key: "k", MultiplierSource: "manual", SourceSubscriptionUID: "newapi-ch-1", SourceRemoteTokenID: 42}}
+	incoming := []APIKeyConfig{{Key: "k", MultiplierSource: "manual"}}
+	got := mergeAndNormalizeAPIKeyConfigs([]string{"k"}, existing, incoming)
+	if len(got) != 1 {
+		t.Fatalf("expected 1 config, got %d", len(got))
+	}
+	if got[0].SourceSubscriptionUID != "" || got[0].SourceRemoteTokenID != 0 {
+		t.Fatalf("expected explicit identity clear respected for unmanaged key, got %+v", got[0])
+	}
+}
+
 func TestMergeAndNormalizeAPIKeyConfigsMatchesByKeyUIDBeforeCredentialOrKey(t *testing.T) {
 	existing := []APIKeyConfig{
 		{Key: "old-a", KeyUID: "kid-1", CredentialUID: "cred-shared", QuotaGroup: "group-a"},
