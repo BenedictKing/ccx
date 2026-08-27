@@ -42,25 +42,9 @@
                 />
               </v-col>
             </v-row>
-            <v-text-field
-              v-model="bindForm.proxyUrl"
-              :label="t('subscription.newApi.proxyUrl')"
-              :hint="t('subscription.newApi.proxyUrlHint')"
-              persistent-hint
-              variant="outlined"
-              density="compact"
-              class="mb-2"
-            />
-            <v-switch
-              v-model="bindForm.proxyPreferDirect"
-              :label="t('subscription.newApi.proxyPreferDirect')"
-              :hint="t('subscription.newApi.proxyPreferDirectHint')"
-              persistent-hint
-              color="primary"
-              density="compact"
-              class="mb-2"
-              :disabled="!bindForm.proxyUrl.trim()"
-            />
+            <div class="text-caption text-medium-emphasis mb-2">
+              {{ channelProxyHint }}
+            </div>
             <v-alert v-if="bindError" color="error" variant="tonal" density="compact" class="mb-3">
               {{ bindError }}
             </v-alert>
@@ -168,25 +152,9 @@
                 />
               </v-col>
             </v-row>
-            <v-text-field
-              v-model="primaryForm.proxyUrl"
-              :label="t('subscription.newApi.proxyUrl')"
-              :hint="t('subscription.newApi.proxyUrlHint')"
-              persistent-hint
-              variant="outlined"
-              density="compact"
-              class="mb-2"
-            />
-            <v-switch
-              v-model="primaryForm.proxyPreferDirect"
-              :label="t('subscription.newApi.proxyPreferDirect')"
-              :hint="t('subscription.newApi.proxyPreferDirectHint')"
-              persistent-hint
-              color="primary"
-              density="compact"
-              class="mb-2"
-              :disabled="!primaryForm.proxyUrl.trim()"
-            />
+            <div class="text-caption text-medium-emphasis mb-2">
+              {{ channelProxyHint }}
+            </div>
             <div class="d-flex justify-end">
               <v-btn
                 color="primary"
@@ -243,25 +211,9 @@
               density="compact"
               class="mb-2"
             />
-            <v-text-field
-              v-model="addForm.proxyUrl"
-              :label="t('subscription.newApi.proxyUrl')"
-              :hint="t('subscription.newApi.proxyUrlHint')"
-              persistent-hint
-              variant="outlined"
-              density="compact"
-              class="mb-2"
-            />
-            <v-switch
-              v-model="addForm.proxyPreferDirect"
-              :label="t('subscription.newApi.proxyPreferDirect')"
-              :hint="t('subscription.newApi.proxyPreferDirectHint')"
-              persistent-hint
-              color="primary"
-              density="compact"
-              class="mb-2"
-              :disabled="!addForm.proxyUrl.trim()"
-            />
+            <div class="text-caption text-medium-emphasis mb-2">
+              {{ channelProxyHint }}
+            </div>
             <v-alert v-if="addError" color="error" variant="tonal" density="compact" class="mb-2">
               {{ addError }}
             </v-alert>
@@ -340,6 +292,9 @@ const props = defineProps<{
   channelKind?: string
   isGeneric?: boolean
   autoManagedKind?: string
+  /** 渠道"代理通道"设置：绑定/校验/同步统一复用，本面板不再单独配置代理 */
+  channelProxyUrl?: string
+  channelProxyPreferDirect?: boolean
 }>()
 const emit = defineEmits<{ updated: [] }>()
 
@@ -361,9 +316,23 @@ const deleting = ref('')
 const addError = ref('')
 const bindError = ref('')
 
-const bindForm = ref({ accessToken: '', userId: '', authTokenMode: 'bearer', proxyUrl: '', proxyPreferDirect: false })
-const primaryForm = ref({ accessToken: '', userId: '', authTokenMode: 'bearer', proxyUrl: '', proxyPreferDirect: false })
-const addForm = ref({ accessToken: '', userId: '', displayName: '', authTokenMode: 'bearer', proxyUrl: '', proxyPreferDirect: false })
+const bindForm = ref({ accessToken: '', userId: '', authTokenMode: 'bearer' })
+const primaryForm = ref({ accessToken: '', userId: '', authTokenMode: 'bearer' })
+const addForm = ref({ accessToken: '', userId: '', displayName: '', authTokenMode: 'bearer' })
+const effectiveChannelProxyUrl = computed(() => props.channelProxyUrl?.trim() || '')
+// 渠道代理通道是唯一代理设置：绑定/校验/同步均复用，未配置时直连
+const channelProxy = computed(() =>
+  effectiveChannelProxyUrl.value
+    ? { proxyUrl: effectiveChannelProxyUrl.value, proxyPreferDirect: props.channelProxyPreferDirect || false }
+    : undefined,
+)
+const channelProxyHint = computed(() => {
+  const key = effectiveChannelProxyUrl.value
+    ? 'subscription.newApi.proxyInheritedHint'
+    : 'subscription.newApi.proxyDirectHint'
+  const base = t(key)
+  return effectiveChannelProxyUrl.value ? `${base}（${effectiveChannelProxyUrl.value}）` : base
+})
 const authTokenModeOptions = computed(() => [
   { title: 'Bearer', value: 'bearer' },
   { title: 'Raw', value: 'raw' },
@@ -381,9 +350,7 @@ const primaryCredentialsChanged = computed(() => {
   if (!subscription.value) return false
   return Boolean(primaryForm.value.accessToken.trim()) ||
     primaryForm.value.userId.trim() !== (subscription.value.userId || '') ||
-    primaryForm.value.authTokenMode !== normalizeAuthTokenMode(subscription.value.authTokenMode) ||
-    primaryForm.value.proxyUrl.trim() !== (subscription.value.proxyUrl || '') ||
-    primaryForm.value.proxyPreferDirect !== (subscription.value.proxyPreferDirect || false)
+    primaryForm.value.authTokenMode !== normalizeAuthTokenMode(subscription.value.authTokenMode)
 })
 
 function normalizeAuthTokenMode(mode?: string) {
@@ -395,8 +362,6 @@ function syncPrimaryForm(item: SubscriptionItem) {
     accessToken: '',
     userId: item.userId || '',
     authTokenMode: normalizeAuthTokenMode(item.authTokenMode),
-    proxyUrl: item.proxyUrl || '',
-    proxyPreferDirect: item.proxyPreferDirect || false,
   }
 }
 
@@ -429,8 +394,9 @@ async function bindNewApi() {
     const accessToken = bindForm.value.accessToken.trim()
     const userId = bindForm.value.userId.trim() || undefined
     const authTokenMode = bindForm.value.authTokenMode
-    const proxyUrl = bindForm.value.proxyUrl.trim() || undefined
-    const proxyPreferDirect = bindForm.value.proxyPreferDirect || undefined
+    // 代理沿用渠道"代理通道"设置，不在绑定表单单独配置
+    const proxyUrl = channelProxy.value?.proxyUrl || undefined
+    const proxyPreferDirect = channelProxy.value?.proxyPreferDirect || undefined
     const verified = await api.verifyNewApiSubscription({
       baseUrl,
       accessToken,
@@ -460,7 +426,7 @@ async function bindNewApi() {
     subscription.value = response.subscription
     syncPrimaryForm(response.subscription)
     localSubscriptionUid.value = response.subscription.subscriptionUid
-    bindForm.value = { accessToken: '', userId: '', authTokenMode: 'bearer', proxyUrl: '', proxyPreferDirect: false }
+    bindForm.value = { accessToken: '', userId: '', authTokenMode: 'bearer' }
     await fetchAccounts()
     emit('updated')
   } catch (e) {
@@ -490,17 +456,13 @@ async function savePrimaryCredentials() {
   savingPrimary.value = true
   primaryError.value = ''
   try {
-    const payload: { accessToken?: string; userId?: string; authTokenMode?: string; proxyUrl?: string; proxyPreferDirect?: boolean; expectedVersion?: number } = {
+    const payload: { accessToken?: string; userId?: string; authTokenMode?: string; expectedVersion?: number } = {
       userId: primaryForm.value.userId.trim(),
       authTokenMode: primaryForm.value.authTokenMode,
       expectedVersion: subscription.value.version,
     }
     if (primaryForm.value.accessToken.trim()) payload.accessToken = primaryForm.value.accessToken.trim()
-    const proxyUrl = primaryForm.value.proxyUrl.trim()
-    if (proxyUrl !== (subscription.value.proxyUrl || '')) payload.proxyUrl = proxyUrl
-    if (primaryForm.value.proxyPreferDirect !== (subscription.value.proxyPreferDirect || false)) {
-      payload.proxyPreferDirect = primaryForm.value.proxyPreferDirect
-    }
+    // 代理设置不在凭证表单维护：渠道"代理通道"是唯一事实源，管理面已自动跟随
     const item = await api.updateNewApiCredentials(effectiveSubscriptionUid.value, payload)
     subscription.value = item
     syncPrimaryForm(item)
@@ -549,12 +511,9 @@ async function handleAddAccount() {
     const accessToken = addForm.value.accessToken.trim()
     const userId = addForm.value.userId || undefined
     const authTokenMode = addForm.value.authTokenMode || undefined
-    // 账号级代理为空时继承订阅级代理设置（与后端 resolveNewApiAccountProxy 语义一致）
-    const accountProxyUrl = addForm.value.proxyUrl.trim()
-    const effectiveProxyUrl = accountProxyUrl || subscription.value.proxyUrl || ''
-    const effectivePreferDirect = accountProxyUrl
-      ? addForm.value.proxyPreferDirect
-      : (subscription.value.proxyPreferDirect ?? false)
+    // 代理沿用渠道"代理通道"设置（未配置时直连），账号级不再单独覆盖
+    const proxyUrl = channelProxy.value?.proxyUrl || undefined
+    const proxyPreferDirect = channelProxy.value?.proxyPreferDirect || undefined
     const verified = await api.verifyNewApiSubscription({
       baseUrl: subscription.value.baseUrl || props.baseUrl || '',
       accessToken,
@@ -562,8 +521,8 @@ async function handleAddAccount() {
       authTokenMode,
       displayName: addForm.value.displayName || undefined,
       subscriptionUid: effectiveSubscriptionUid.value,
-      proxyUrl: effectiveProxyUrl || undefined,
-      proxyPreferDirect: effectivePreferDirect || undefined,
+      proxyUrl,
+      proxyPreferDirect,
     })
     requireEligibleGroups(verified)
     await api.addSubscriptionAccount(effectiveSubscriptionUid.value, {
@@ -574,10 +533,8 @@ async function handleAddAccount() {
       provisionAllEligibleGroups: true,
       maxGroupMultiplier: DEFAULT_NEWAPI_MAX_GROUP_MULTIPLIER,
       provisionModels: verified.availableModels,
-      proxyUrl: accountProxyUrl || undefined,
-      proxyPreferDirect: accountProxyUrl ? addForm.value.proxyPreferDirect || undefined : undefined,
     })
-    addForm.value = { accessToken: '', userId: '', displayName: '', authTokenMode: 'bearer', proxyUrl: '', proxyPreferDirect: false }
+    addForm.value = { accessToken: '', userId: '', displayName: '', authTokenMode: 'bearer' }
     await fetchAccounts()
     emit('updated')
   } catch (e) {

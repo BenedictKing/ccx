@@ -129,6 +129,8 @@
                 :channel-kind="props.channelType"
                 :is-generic="isGenericAutoManagedChannel"
                 :auto-managed-kind="props.channel?.autoManagedKind"
+                :channel-proxy-url="form.proxyUrl"
+                :channel-proxy-prefer-direct="form.proxyPreferDirect"
                 @updated="handleAccountsUpdated"
               />
             </section>

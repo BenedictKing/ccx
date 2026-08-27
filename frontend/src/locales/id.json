@@ -1209,6 +1209,8 @@
   "subscription.newApi.proxyUrlHint": "Gunakan proxy untuk binding dan sinkronisasi saat situs dibatasi wilayah.",
   "subscription.newApi.proxyPreferDirect": "Prioritaskan koneksi langsung",
   "subscription.newApi.proxyPreferDirectHint": "Coba koneksi langsung dulu; kembali ke proxy saat kesalahan jaringan atau HTTP 451/403.",
+  "subscription.newApi.proxyInheritedHint": "Binding, verifikasi dan sinkronisasi memakai proxy kanal yang dikonfigurasi di Parameter Kustom di bawah.",
+  "subscription.newApi.proxyDirectHint": "Proxy kanal belum dikonfigurasi: binding dan verifikasi langsung. Atur proxy kanal di Parameter Kustom jika situs dibatasi.",
   "subscription.newApi.verify": "Verifikasi",
   "subscription.newApi.reVerify": "Verifikasi Ulang",
   "subscription.newApi.accountPreview": "Pratinjau Akun",

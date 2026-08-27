@@ -30,12 +30,24 @@ type NewApiAccountCreateRequest struct {
 	ProxyPreferDirect bool `json:"proxyPreferDirect,omitempty"`
 }
 
-// resolveNewApiAccountProxy 解析账号生效的代理设置：账号级优先，缺省继承订阅级。
-func resolveNewApiAccountProxy(profile *SubscriptionProfile, account NewApiAccount) (string, bool) {
+// resolveNewApiAccountProxy 解析账号生效的代理设置：账号级优先，缺省继承调用方
+// 传入的生效值（渠道级"代理通道"优先，回退订阅级）。
+func resolveNewApiAccountProxy(account NewApiAccount, fallbackURL string, fallbackDirect bool) (string, bool) {
 	if trimmed := strings.TrimSpace(account.ProxyURL); trimmed != "" {
 		return trimmed, account.ProxyPreferDirect
 	}
-	return profile.ProxyURL, profile.ProxyPreferDirect
+	return fallbackURL, fallbackDirect
+}
+
+// adapterForAccount 按账号生效代理构造适配器：账号级覆盖优先，
+// 缺省继承渠道级"代理通道"，关联渠道均未配置时回退订阅级。
+func adapterForAccount(deps *NewApiRouteDeps, profile *SubscriptionProfile, account NewApiAccount) *NewApiAdapter {
+	fallbackURL, fallbackDirect := profile.ProxyURL, profile.ProxyPreferDirect
+	if deps != nil && deps.SyncService != nil {
+		fallbackURL, fallbackDirect = deps.SyncService.effectiveProxyFor(profile)
+	}
+	proxyURL, preferDirect := resolveNewApiAccountProxy(account, fallbackURL, fallbackDirect)
+	return NewApiAdapterForProxy(proxyURL, preferDirect)
 }
 
 // NewApiCredentialsUpdateRequest PATCH /api/subscriptions/:uid/newapi-credentials 请求体。
@@ -115,11 +127,15 @@ func handleAddSubscriptionAccount(deps *NewApiRouteDeps) gin.HandlerFunc {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
 		defer cancel()
 
-		// 代理解析：请求显式携带优先，缺省继承订阅级设置
+		// 代理解析：请求显式携带优先，缺省继承渠道级代理通道（回退订阅级设置）
 		proxyURL := strings.TrimSpace(req.ProxyURL)
 		proxyPreferDirect := req.ProxyPreferDirect
 		if proxyURL == "" {
-			proxyURL, proxyPreferDirect = profile.ProxyURL, profile.ProxyPreferDirect
+			if deps != nil && deps.SyncService != nil {
+				proxyURL, proxyPreferDirect = deps.SyncService.effectiveProxyFor(profile)
+			} else {
+				proxyURL, proxyPreferDirect = profile.ProxyURL, profile.ProxyPreferDirect
+			}
 		}
 		adapter := NewApiAdapterForProxy(proxyURL, proxyPreferDirect)
 		self, derivedUserID, err := adapter.VerifyWithFallback(ctx, profile.BaseURL, req.AccessToken, req.UserID, req.AuthTokenMode)
@@ -348,7 +364,7 @@ func handleDeleteSubscriptionAccount(deps *NewApiRouteDeps) gin.HandlerFunc {
 		if len(removedTokenIDs) > 0 {
 			ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
 			defer cancel()
-			adapter := NewApiAdapterForProxy(resolveNewApiAccountProxy(profile, *account))
+			adapter := adapterForAccount(deps, profile, *account)
 			for tokenID := range removedTokenIDs {
 				if err := adapter.DeleteToken(ctx, profile.BaseURL, account.AccessToken, account.UserID, account.AuthTokenMode, int(tokenID)); err != nil {
 					log.Printf("[NewApi-Account] 回收远端 key 失败 account=%s tokenID=%d: %v", accountUID, tokenID, err)
@@ -397,7 +413,7 @@ func handleRefreshSubscriptionAccount(deps *NewApiRouteDeps) gin.HandlerFunc {
 		}
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
 		defer cancel()
-		adapter := NewApiAdapterForProxy(resolveNewApiAccountProxy(profile, account))
+		adapter := adapterForAccount(deps, profile, account)
 		balance, _, fetchErr := adapter.FetchBalance(ctx, profile.BaseURL, account.AccessToken, account.UserID, account.AuthTokenMode)
 		now := time.Now()
 		patchErr := deps.Store.Patch(uid, nil, func(current *SubscriptionProfile) error {

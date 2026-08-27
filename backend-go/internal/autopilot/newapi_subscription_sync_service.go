@@ -125,10 +125,11 @@ func NewNewApiSubscriptionSyncService(deps NewApiSubscriptionSyncServiceDeps) *N
 	}
 }
 
-// adapterForProfile 返回该订阅适用的适配器：profile 未配置代理时用共享适配器（零开销），
-// 配置了代理时按订阅级代理设置（含直连优先回退）构造。
+// adapterForProfile 返回该订阅适用的适配器：生效代理为空时用共享适配器（零开销），
+// 配置了代理时按代理设置（含直连优先回退）构造。
 func (s *NewApiSubscriptionSyncService) adapterForProfile(profile *SubscriptionProfile) NewApiSyncAdapter {
-	return s.adapterFor(profile.ProxyURL, profile.ProxyPreferDirect)
+	proxyURL, preferDirect := s.effectiveProxyFor(profile)
+	return s.adapterFor(proxyURL, preferDirect)
 }
 
 // adapterFor 按代理设置选择适配器；proxyURL 为空时回退到注入的共享适配器。
@@ -137,6 +138,20 @@ func (s *NewApiSubscriptionSyncService) adapterFor(proxyURL string, preferDirect
 		return s.adapter
 	}
 	return NewApiAdapterForProxy(proxyURL, preferDirect)
+}
+
+// effectiveProxyFor 返回订阅管理面访问（同步/余额刷新/账号校验）生效的代理设置：
+// 渠道的"代理通道"是唯一事实源（绑定后管理面应跟随渠道配置），关联渠道均未配置时
+// 回退订阅级存量设置。
+func (s *NewApiSubscriptionSyncService) effectiveProxyFor(profile *SubscriptionProfile) (string, bool) {
+	if s.cfgManager != nil {
+		for _, uid := range profile.LinkedChannelUIDs {
+			if _, _, channel, ok := findNewApiChannel(s.cfgManager, uid); ok && strings.TrimSpace(channel.ProxyURL) != "" {
+				return channel.ProxyURL, channel.ProxyPreferDirect
+			}
+		}
+	}
+	return profile.ProxyURL, profile.ProxyPreferDirect
 }
 
 // Start 启动周期性余额/倍率同步循环。
@@ -385,8 +400,9 @@ func (s *NewApiSubscriptionSyncService) syncOneAccount(ctx context.Context, prof
 		return s.accountKeyStatuses(profile, account, newApiSyncStatusSyncError, err.Error(), now)
 	}
 
-	// 账号级代理优先，缺省继承订阅级代理设置；无代理时回退注入的共享适配器
-	adapter := s.adapterFor(resolveNewApiAccountProxy(profile, account))
+	// 账号级代理优先，缺省继承渠道/订阅级生效代理；无代理时回退注入的共享适配器
+	fallbackProxy, fallbackPreferDirect := s.effectiveProxyFor(profile)
+	adapter := s.adapterFor(resolveNewApiAccountProxy(account, fallbackProxy, fallbackPreferDirect))
 
 	self, userID, err := adapter.VerifyWithFallback(ctx, profile.BaseURL, account.AccessToken, account.UserID, mode)
 	if err != nil {
