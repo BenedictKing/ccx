@@ -240,9 +240,9 @@ func migrateAllChannelNamesConfig(cfg *Config) bool {
 			logical := &cfg.LogicalChannels[i]
 			if up := byUID[logical.LogicalChannelUID]; up != nil {
 				logical.Name = up.Name
-				if strings.TrimSpace(logical.Remark) == "" {
-					logical.Remark = up.Remark
-				}
+				// 注意：不要把 up.Remark 回填到 logical.Remark。Remark 已是纯用户字段，
+				// “历史名档案”语义废弃；回填会把用户删除的备注从物理渠道残留值
+				// （旧迁移写入的截断旧名）反复复活。
 			}
 			logicalNameByUID[logical.LogicalChannelUID] = logical.Name
 		}
