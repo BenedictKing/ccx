@@ -1215,7 +1215,6 @@
   "subscription.newApi.verify": "验证",
   "subscription.newApi.reVerify": "重新验证",
   "subscription.newApi.accountPreview": "账户预览",
-  "subscription.newApi.username": "用户名",
   "subscription.newApi.quota": "额度",
   "subscription.newApi.usedQuota": "已用额度",
   "subscription.newApi.availableModels": "可用模型数",

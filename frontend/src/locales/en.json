@@ -1215,7 +1215,6 @@
   "subscription.newApi.verify": "Verify",
   "subscription.newApi.reVerify": "Re-verify",
   "subscription.newApi.accountPreview": "Account Preview",
-  "subscription.newApi.username": "Username",
   "subscription.newApi.quota": "Quota",
   "subscription.newApi.usedQuota": "Used Quota",
   "subscription.newApi.availableModels": "Available Models",
