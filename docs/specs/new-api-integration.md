@@ -102,9 +102,9 @@ UpstreamConfig (channelUid, autoManagedKind=new_api)
 
 - 后台循环：`Start`（行 158）启动 30 分钟周期 ticker（`newApiSyncDefaultInterval` 行 93），tick 到达时调用 `SweepAll` 并发刷新所有 new-api 订阅。`Stop` 优雅停止循环。初始启动时还会通过 `SyncAllNewAPIAsync` 先做一次性全量同步。
 - `SyncNow`（行 267）：verify → FetchGroups（校验非负有限，`finiteNonNegative`）→ FetchModels → `Patch` 回写余额/分组/模型/KeyUID/ratio → `reconcileChannels`（行 605）把 desired key 元数据合并进关联渠道的 `APIKeyConfigs`（ownership 冲突→`relink_required`）→ 模型哈希变化触发 Discovery
-- `reconcileNewApiConfigs`（行 630）：按 `SourceRemoteTokenID`/`KeyUID` 匹配，跨订阅 ownership 冲突返回 conflict。**注意匹配维度只有这两个字段**——key 配置丢失关联后（两个字段皆空）常规同步无法自愈；仅 provision/加账号路径的 `injectProvisionedKeys` 支持按明文 key 匹配补写（787db651 的前端兜底即为此缺口的前端侧缓解）
+- `reconcileNewApiConfigs`（行 630）：按 `SourceRemoteTokenID`/`KeyUID` 匹配，跨订阅 ownership 冲突返回 conflict。匹配维度只有这两个字段——渠道 key 被误删后常规 reconcile 无法找回，由 `healMissingProvisionedKeys`（行 857）自愈：SyncNow/syncOneAccount 在 reconcile 后检查关联渠道是否缺失 desired key，缺失时按 tokenID 分页拉远端 token 列表（`ListTokens`），掩码 key 经揭示端点（`GetTokenKey`）换回明文并规范 `sk-` 前缀，再走 `injectProvisionedKeys` 重建 config；远端 token 也已删除的项跳过，绝不注入空 key（测试 fake 未实现 `newApiTokenHealer` 接口时自愈自动跳过）
 - `buildDesiredForKeys`：计算每 key 的 syncStatus（`fresh`/`over_limit`/`remote_group_missing`）+ TTL（`newApiSyncTTL=35m` 行 26）
-- `injectProvisionedKeys`（行 784）/`ReconcileProvisioned`（行 824）/`ReconcileAccountProvisioned`（行 843）：provision/加账号后把明文 key 注入渠道
+- `injectProvisionedKeys`（行 789）/`ReconcileProvisioned`（行 962）/`ReconcileAccountProvisioned`（行 981）：provision/加账号/自愈后把明文 key 注入渠道；注入的明文同时并入渠道 `APIKeys`（调度与 keypool 候选只遍历 `APIKeys`，仅写 configs 的 key 不参与调用）
 - `RemoveAccountKeysFromChannels`（行 501）：删账号时剔除渠道 key
 - 状态常量（行 17-24）：`fresh/over_limit/sync_error/relink_required/stale/remote_group_missing`
 
@@ -188,7 +188,7 @@ locale 键在 `frontend/src/locales/{zh-CN,en,id}.json`，前缀 `subscription.n
 
 8. ~~**new-api 占位模型 503 误判端点不可用**~~ ✅ **已修复**（2026-08-19，提交 `cd6f93d7`）：key 验证（`verify_endpoint.go` `verifyJSONPostEndpointWithPolicy`）在 `acceptValidationError` 分支除 400/422 外新增识别 503 + `{"error":{"code":"model_not_found"}}`（或 message 含 `no available channel for model`），判定鉴权通过——new-api/one-api 对无渠道占位模型返回 503，此前被误判「端点不可用」导致有效 key 无法添加。
 
-9. ~~**编辑换 key 切断渠道与订阅的关联**~~ ✅ **已修复**（2026-08-27，提交 `787db651`）：前端编辑保存时表单提交的 `apiKeyConfigs` 不含 `sourceSubscriptionUid`（且无 `keyUid` 的身份骨架条目会被 `channelPayload.ts` 的 filter 剔除），后端合并后旧 config 的 `SourceSubscriptionUID`/`SourceRemoteTokenID` 全部丢失 → `BuildChannelView` 不再暴露 `subscriptionUid` → 编辑渠道对话框主账号面板空白、添加账号静默无响应；且 `reconcileNewApiConfigs` 只按 tokenID/KeyUID 匹配，常规同步无法自愈。修复三件套：`mergeAPIKeyConfig` 对 `MultiplierSource=new_api` 的既有 key 回填托管身份字段（止血）；前端按 `newapi-${channelUid}` 兜底推导订阅 UID（恢复）；订阅 404/未就绪给出提示而非静默。
+9. ~~**编辑换 key 切断渠道与订阅的关联**~~ ✅ **已修复**（2026-08-27，提交 `787db651`；2026-08-28 补自愈）：前端编辑保存时表单提交的 `apiKeyConfigs` 不含 `sourceSubscriptionUid`（且无 `keyUid` 的身份骨架条目会被 `channelPayload.ts` 的 filter 剔除），后端合并后旧 config 的 `SourceSubscriptionUID`/`SourceRemoteTokenID` 全部丢失 → `BuildChannelView` 不再暴露 `subscriptionUid` → 编辑渠道对话框主账号面板空白、添加账号静默无响应；且 `reconcileNewApiConfigs` 只按 tokenID/KeyUID 匹配，常规同步无法自愈。修复：`mergeAPIKeyConfig` 对 `MultiplierSource=new_api` 的既有 key 回填托管身份字段（止血）；前端按 `newapi-${channelUid}` 兜底推导订阅 UID（恢复）；订阅 404/未就绪给出提示而非静默。后续补齐：渠道侧误删的自动接入 key 由 `healMissingProvisionedKeys` 在每次同步时按 tokenID 从远端取回明文自愈重建；`injectProvisionedKeys` 注入的明文同时并入渠道 `APIKeys`（此前仅写 configs、新 key 实际不可调度）。
 
 ## 7. 布局示意图
 

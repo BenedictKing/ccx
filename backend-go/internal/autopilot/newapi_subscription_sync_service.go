@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -346,6 +347,8 @@ func (s *NewApiSubscriptionSyncService) SyncNow(ctx context.Context, uid string)
 	if conflict {
 		return s.handleHardFailure(profile, result, newApiSyncStatusRelinkRequired, fmt.Errorf("key ownership 冲突，需要重新关联"))
 	}
+	// 常规同步只更新已存在 config；渠道侧被误删的自动接入 key 在此自愈找回。
+	s.healMissingProvisionedKeys(ctx, profile, adapter, profile.BaseURL, profile.AccessToken, userID, mode, desired)
 
 	if result.ModelsHashChanged && s.runner != nil && s.cfgManager != nil {
 		for _, channel := range changedChannels {
@@ -460,6 +463,8 @@ func (s *NewApiSubscriptionSyncService) syncOneAccount(ctx context.Context, prof
 				_, _ = updateChannelForKind(s.cfgManager, kind, index, config.UpstreamUpdate{APIKeyConfigs: merged})
 			}
 		}
+		// 账号侧被误删的自动接入 key 同样自愈找回（凭证走该账号自己的 accessToken）。
+		s.healMissingProvisionedKeys(ctx, profile, adapter, profile.BaseURL, account.AccessToken, userID, mode, desired)
 	}
 	return statuses, nil
 }
@@ -814,11 +819,144 @@ func (s *NewApiSubscriptionSyncService) injectProvisionedKeys(profile *Subscript
 			cfg.MultiplierUpdatedAt, cfg.MultiplierExpiresAt = timePtr(d.updatedAt), d.expiresAt
 			cfg.MultiplierSyncStatus, cfg.MultiplierSyncError = d.status, d.reason
 		}
-		if _, err := updateChannelForKind(s.cfgManager, kind, index, config.UpstreamUpdate{APIKeyConfigs: configs}); err != nil {
+		// 注入的明文 key 须并入渠道 APIKeys：调度与 keypool 候选只遍历 APIKeys，
+		// 仅写 configs 的 key 不参与调用（此前添加账号/自愈注入的 key 实际不可调度）。
+		mergedKeys := append([]string(nil), channel.APIKeys...)
+		known := make(map[string]struct{}, len(mergedKeys))
+		for _, k := range mergedKeys {
+			known[k] = struct{}{}
+		}
+		for _, d := range desired {
+			key := plaintextByToken[d.tokenID]
+			if key == "" {
+				continue
+			}
+			if _, exists := known[key]; !exists {
+				known[key] = struct{}{}
+				mergedKeys = append(mergedKeys, key)
+			}
+		}
+		if _, err := updateChannelForKind(s.cfgManager, kind, index, config.UpstreamUpdate{APIKeys: mergedKeys, APIKeyConfigs: configs}); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// newApiTokenHealer 是自愈所需的远端 token 能力；*NewApiAdapter 天然满足。
+// 测试 fake 未实现时自愈自动跳过，不破坏既有 mock。
+type newApiTokenHealer interface {
+	ListTokens(ctx context.Context, baseURL, accessToken, userID, authTokenMode string, page, size int) ([]NewApiToken, error)
+	GetTokenKey(ctx context.Context, baseURL, accessToken, userID, authTokenMode string, tokenID int) (string, error)
+}
+
+// healMissingProvisionedKeys 补齐订阅期望、但关联渠道缺失的自动接入 key：
+// 用户误删渠道 key 后，常规同步只更新已存在 config、无法找回；此处按 desired 的
+// tokenID 从远端 token 列表取回明文（掩码经揭示端点换回），经 injectProvisionedKeys
+// 重建 config 并入 APIKeys。远端 token 也已删除的项跳过，绝不注入空 key。
+func (s *NewApiSubscriptionSyncService) healMissingProvisionedKeys(ctx context.Context, profile *SubscriptionProfile, adapter NewApiSyncAdapter, baseURL, accessToken, userID, authTokenMode string, desired []newApiDesiredKey) {
+	if s.cfgManager == nil || len(profile.LinkedChannelUIDs) == 0 || len(desired) == 0 {
+		return
+	}
+	healer, ok := adapter.(newApiTokenHealer)
+	if !ok {
+		return
+	}
+
+	// 任一关联渠道缺失即触发补齐（injectProvisionedKeys 会写所有关联渠道）。
+	missing := make([]newApiDesiredKey, 0, len(desired))
+	for _, uid := range profile.LinkedChannelUIDs {
+		_, _, channel, found := findNewApiChannel(s.cfgManager, uid)
+		if !found {
+			continue
+		}
+		byToken := make(map[int64]struct{})
+		byUID := make(map[string]struct{})
+		for _, cfg := range channel.APIKeyConfigs {
+			if cfg.SourceRemoteTokenID > 0 {
+				byToken[int64(cfg.SourceRemoteTokenID)] = struct{}{}
+			}
+			if cfg.KeyUID != "" {
+				byUID[cfg.KeyUID] = struct{}{}
+			}
+		}
+		for _, d := range desired {
+			if _, has := byToken[d.tokenID]; has {
+				continue
+			}
+			if _, has := byUID[d.keyUID]; has {
+				continue
+			}
+			missing = append(missing, d)
+		}
+		break
+	}
+	if len(missing) == 0 {
+		return
+	}
+
+	need := make(map[int64]struct{}, len(missing))
+	for _, d := range missing {
+		need[d.tokenID] = struct{}{}
+	}
+	remote := make(map[int64]string, len(missing))
+	const pageSize = 100
+	for page := 1; len(need) > 0; page++ {
+		tokens, err := healer.ListTokens(ctx, baseURL, accessToken, userID, authTokenMode, page, pageSize)
+		if err != nil {
+			log.Printf("[NewApi-Sync] 自愈拉取远端 token 列表失败 subscription=%s: %v", profile.SubscriptionUID, err)
+			return
+		}
+		if len(tokens) == 0 {
+			break
+		}
+		for i := range tokens {
+			id := int64(tokens[i].ID)
+			if _, wanted := need[id]; !wanted {
+				continue
+			}
+			key := tokens[i].Key
+			if IsMaskedNewApiKey(key) {
+				revealed, rErr := healer.GetTokenKey(ctx, baseURL, accessToken, userID, authTokenMode, tokens[i].ID)
+				if rErr != nil {
+					log.Printf("[NewApi-Sync] 自愈揭示 key 明文失败 subscription=%s token=%d: %v", profile.SubscriptionUID, tokens[i].ID, rErr)
+					continue
+				}
+				key = revealed
+			}
+			remote[id] = normalizeNewApiPlaintextKey(key)
+			delete(need, id)
+		}
+		if len(tokens) < pageSize {
+			break
+		}
+	}
+	if len(remote) == 0 {
+		return
+	}
+
+	healed := make([]newApiDesiredKey, 0, len(remote))
+	plaintextByToken := make(map[int64]string, len(remote))
+	for _, d := range desired {
+		if key, found := remote[d.tokenID]; found {
+			healed = append(healed, d)
+			plaintextByToken[d.tokenID] = key
+		}
+	}
+	if err := s.injectProvisionedKeys(profile, healed, plaintextByToken); err != nil {
+		log.Printf("[NewApi-Sync] 自愈注入渠道失败 subscription=%s: %v", profile.SubscriptionUID, err)
+		return
+	}
+	log.Printf("[NewApi-Sync] 自愈找回自动接入 key subscription=%s count=%d tokens=%v", profile.SubscriptionUID, len(healed), needKeys(remote))
+}
+
+func needKeys(remote map[int64]string) []int64 {
+	out := make([]int64, 0, len(remote))
+	for id := range remote {
+		out = append(out, id)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
 }
 
 func (s *NewApiSubscriptionSyncService) ReconcileProvisioned(profile *SubscriptionProfile, plaintextByToken map[int64]string) error {
