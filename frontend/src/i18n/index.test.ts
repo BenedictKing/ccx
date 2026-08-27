@@ -137,7 +137,8 @@ describe('channel naming constraints', () => {
     expect(basicInfo).not.toContain('channelEditor.basic.name.label')
     expect(basicInfo).not.toContain('channelEditor.basic.accountName')
     expect(header).toContain('channelName')
-    expect(editModal).toContain(':channel-name="form.name"')
+    // 托管 provider 隐藏自动派生名称，普通渠道仍消费 form.name
+    expect(editModal).toContain(':channel-name="isManagedProvider ? \'\' : form.name"')
   })
 })
 
