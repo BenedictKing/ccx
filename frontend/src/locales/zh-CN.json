@@ -1209,7 +1209,6 @@
   "subscription.newApi.proxyUrlHint": "站点访问受限（如地域封锁）时，通过代理完成绑定与同步",
   "subscription.newApi.proxyPreferDirect": "直连优先",
   "subscription.newApi.proxyPreferDirectHint": "先尝试直连，失败（网络错误或 HTTP 451/403）时自动回退代理",
-  "subscription.newApi.displayNameAutoPlaceholder": "留空自动使用站点用户名",
   "subscription.newApi.proxyInheritedHint": "绑定、校验与同步统一沿用下方「自定义参数」中渠道的代理通道设置",
   "subscription.newApi.proxyDirectHint": "渠道未配置代理通道，绑定与校验将直连；如站点受限请在「自定义参数」配置代理通道",
   "subscription.newApi.verify": "验证",

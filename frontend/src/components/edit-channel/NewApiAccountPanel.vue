@@ -208,14 +208,6 @@
                 />
               </v-col>
             </v-row>
-            <v-text-field
-              v-model="addForm.displayName"
-              :label="t('subscription.field.name')"
-              :placeholder="t('subscription.newApi.displayNameAutoPlaceholder')"
-              variant="outlined"
-              density="compact"
-              class="mb-2"
-            />
             <div class="text-caption text-medium-emphasis mb-2">
               {{ channelProxyHint }}
             </div>
@@ -323,7 +315,7 @@ const bindError = ref('')
 
 const bindForm = ref({ accessToken: '', userId: '', authTokenMode: 'bearer' })
 const primaryForm = ref({ accessToken: '', userId: '', authTokenMode: 'bearer' })
-const addForm = ref({ accessToken: '', userId: '', displayName: '', authTokenMode: 'bearer' })
+const addForm = ref({ accessToken: '', userId: '', authTokenMode: 'bearer' })
 const effectiveChannelProxyUrl = computed(() => props.channelProxyUrl?.trim() || '')
 // 渠道代理通道是唯一代理设置：绑定/校验/同步均复用，未配置时直连
 const channelProxy = computed(() =>
@@ -524,7 +516,6 @@ async function handleAddAccount() {
       accessToken,
       userId,
       authTokenMode,
-      displayName: addForm.value.displayName || undefined,
       subscriptionUid: effectiveSubscriptionUid.value,
       proxyUrl,
       proxyPreferDirect,
@@ -533,14 +524,14 @@ async function handleAddAccount() {
     await api.addSubscriptionAccount(effectiveSubscriptionUid.value, {
       accessToken,
       userId: String(verified.userId),
-      // 显示名称留空时采用站点用户名
-      displayName: addForm.value.displayName.trim() || verified.username || undefined,
+      // 名称不可自定义：固定采用站点用户名
+      displayName: verified.username || undefined,
       authTokenMode,
       provisionAllEligibleGroups: true,
       maxGroupMultiplier: DEFAULT_NEWAPI_MAX_GROUP_MULTIPLIER,
       provisionModels: verified.availableModels,
     })
-    addForm.value = { accessToken: '', userId: '', displayName: '', authTokenMode: 'bearer' }
+    addForm.value = { accessToken: '', userId: '', authTokenMode: 'bearer' }
     await fetchAccounts()
     emit('updated')
   } catch (e) {

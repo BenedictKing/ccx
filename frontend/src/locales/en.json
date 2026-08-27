@@ -1209,7 +1209,6 @@
   "subscription.newApi.proxyUrlHint": "Use a proxy for binding and sync when the site is region-blocked.",
   "subscription.newApi.proxyPreferDirect": "Prefer direct connection",
   "subscription.newApi.proxyPreferDirectHint": "Try direct connection first; fall back to the proxy on network errors or HTTP 451/403.",
-  "subscription.newApi.displayNameAutoPlaceholder": "Leave empty to use the site username",
   "subscription.newApi.proxyInheritedHint": "Binding, verification and sync reuse the channel proxy URL configured under Custom Parameters below.",
   "subscription.newApi.proxyDirectHint": "No channel proxy configured: binding and verification go direct. Configure a channel proxy under Custom Parameters if the site is restricted.",
   "subscription.newApi.verify": "Verify",
