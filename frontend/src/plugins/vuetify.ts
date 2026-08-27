@@ -247,6 +247,7 @@ import {
   mdiClockAlert,
   mdiSteering,
   mdiConnection,
+  mdiLanConnect,
   mdiDomain,
   mdiCheckDecagram,
   mdiCheckDecagramOutline,
@@ -544,6 +545,7 @@ const iconMap: Record<string, string> = {
   'clock-alert': mdiClockAlert,
   'steering': mdiSteering,
   'connection': mdiConnection,
+  'lan-connect': mdiLanConnect,
 }
 
 // 自定义 SVG iconset - 处理 mdi-xxx 字符串格式

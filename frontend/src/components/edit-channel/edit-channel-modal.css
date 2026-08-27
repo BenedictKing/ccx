@@ -91,7 +91,7 @@
   margin-top: 12px;
   padding: 10px 16px;
   border: 1px solid rgba(var(--v-theme-on-surface), 0.18);
-  border-radius: 10px;
+  border-radius: 0 !important; /* 复古像素主题全局强制直角 */
   transition: background-color 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
 }
 
