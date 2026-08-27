@@ -189,24 +189,28 @@
               class="mb-2"
               required
             />
-            <v-text-field
-              v-model="addForm.userId"
-              :label="t('subscription.newApi.userId')"
-              variant="outlined"
-              density="compact"
-              class="mb-2"
-            />
+            <v-row dense>
+              <v-col cols="12" md="6">
+                <v-text-field
+                  v-model="addForm.userId"
+                  :label="t('subscription.newApi.userId')"
+                  variant="outlined"
+                  density="compact"
+                />
+              </v-col>
+              <v-col cols="12" md="6">
+                <v-select
+                  v-model="addForm.authTokenMode"
+                  :label="t('subscription.newApi.authTokenMode')"
+                  :items="authTokenModeOptions"
+                  variant="outlined"
+                  density="compact"
+                />
+              </v-col>
+            </v-row>
             <v-text-field
               v-model="addForm.displayName"
               :label="t('subscription.field.name')"
-              variant="outlined"
-              density="compact"
-              class="mb-2"
-            />
-            <v-select
-              v-model="addForm.authTokenMode"
-              :label="t('subscription.newApi.authTokenMode')"
-              :items="authTokenModeOptions"
               variant="outlined"
               density="compact"
               class="mb-2"
