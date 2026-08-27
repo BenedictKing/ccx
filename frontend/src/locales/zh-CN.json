@@ -1254,7 +1254,7 @@
   "subscription.newApi.advancedOptions": "高级选项",
   "subscription.newApi.accountManagement": "账号管理",
   "subscription.newApi.addAccount": "添加账号",
-  "subscription.newApi.noAccounts": "暂无账号，请先添加。",
+  "subscription.newApi.noAccounts": "当前仅使用主账号提供服务；如需多账号分组隔离，可展开上方「添加账号」补充。",
   "subscription.newApi.primaryAccount": "主账号设置",
   "subscription.newApi.accessTokenKeepPlaceholder": "留空则保持当前令牌不变",
   "subscription.newApi.lastRefreshedAt": "最近刷新",

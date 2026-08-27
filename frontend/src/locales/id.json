@@ -1254,7 +1254,7 @@
   "subscription.newApi.advancedOptions": "Opsi lanjutan",
   "subscription.newApi.accountManagement": "Manajemen akun",
   "subscription.newApi.addAccount": "Tambah akun",
-  "subscription.newApi.noAccounts": "Belum ada akun, tambahkan dulu.",
+  "subscription.newApi.noAccounts": "Hanya akun utama yang melayani trafik. Buka \"Tambah Akun\" di atas bila perlu akun tambahan untuk isolasi per grup.",
   "subscription.newApi.primaryAccount": "Pengaturan akun utama",
   "subscription.newApi.accessTokenKeepPlaceholder": "Kosongkan untuk mempertahankan token saat ini",
   "subscription.newApi.lastRefreshedAt": "Terakhir diperbarui",

@@ -1254,7 +1254,7 @@
   "subscription.newApi.advancedOptions": "Advanced options",
   "subscription.newApi.accountManagement": "Account management",
   "subscription.newApi.addAccount": "Add account",
-  "subscription.newApi.noAccounts": "No accounts yet, add one first.",
+  "subscription.newApi.noAccounts": "Only the primary account is serving traffic. Expand \"Add Account\" above if you need extra accounts for per-group isolation.",
   "subscription.newApi.primaryAccount": "Primary account settings",
   "subscription.newApi.accessTokenKeepPlaceholder": "Leave blank to keep the current token",
   "subscription.newApi.lastRefreshedAt": "Last refreshed",
