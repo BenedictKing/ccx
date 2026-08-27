@@ -83,6 +83,40 @@
   margin-bottom: 8px;
 }
 
+/* 直连优先设置行：卡片化开关，开启时以主题色点亮，未配置代理时整体弱化 */
+.proxy-direct-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 10px 16px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.18);
+  border-radius: 10px;
+  transition: background-color 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
+}
+
+.proxy-direct-row--on:not(.proxy-direct-row--disabled) {
+  background-color: rgba(var(--v-theme-primary), 0.06);
+  border-color: rgba(var(--v-theme-primary), 0.32);
+}
+
+.proxy-direct-row--disabled {
+  opacity: 0.55;
+}
+
+.proxy-direct-row-icon {
+  flex: none;
+  color: rgba(var(--v-theme-on-surface), 0.45);
+}
+
+.proxy-direct-row--on:not(.proxy-direct-row--disabled) .proxy-direct-row-icon {
+  color: rgb(var(--v-theme-primary));
+}
+
+.proxy-direct-row-switch {
+  flex: none;
+}
+
 @media (max-width: 960px) {
   .content-row {
     flex-direction: column;

@@ -154,16 +154,29 @@
                 clearable
                 @update:model-value="updateForm({ proxyUrl: $event ?? '' })"
               />
-              <v-switch
-                :model-value="form.proxyPreferDirect"
-                :label="t('channelEditor.transport.proxyPreferDirect.label')"
-                :hint="t('channelEditor.transport.proxyPreferDirect.hint')"
-                persistent-hint
-                color="primary"
-                density="compact"
-                :disabled="!form.proxyUrl?.trim()"
-                @update:model-value="updateForm({ proxyPreferDirect: $event })"
-              />
+              <!-- 直连优先：卡片式设置行，开启时主题色点亮 -->
+              <div
+                class="proxy-direct-row"
+                :class="{
+                  'proxy-direct-row--on': form.proxyPreferDirect,
+                  'proxy-direct-row--disabled': !form.proxyUrl?.trim(),
+                }"
+              >
+                <v-icon size="20" class="proxy-direct-row-icon">mdi-lan-connect</v-icon>
+                <div class="flex-grow-1">
+                  <div class="text-body-2 font-weight-medium">{{ t('channelEditor.transport.proxyPreferDirect.label') }}</div>
+                  <div class="text-caption text-medium-emphasis">{{ t('channelEditor.transport.proxyPreferDirect.hint') }}</div>
+                </div>
+                <v-switch
+                  :model-value="form.proxyPreferDirect"
+                  color="primary"
+                  density="compact"
+                  hide-details
+                  class="proxy-direct-row-switch"
+                  :disabled="!form.proxyUrl?.trim()"
+                  @update:model-value="updateForm({ proxyPreferDirect: $event })"
+                />
+              </div>
 
               <div class="mt-6">
                 <CustomHeadersSection
