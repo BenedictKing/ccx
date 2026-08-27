@@ -24,6 +24,8 @@ type AccountChannelUpdate struct {
 	APIKeys      []string
 	APIKeyConfig []APIKeyConfig
 	BaseURLs     []string
+	// Remark 可选：nil 表示不修改备注；非 nil（含空串）为显式设置，并整组同步到逻辑渠道。
+	Remark *string
 }
 
 // AccountChannelAddition 描述账号事务中需要新增的一条协议渠道。
@@ -824,7 +826,34 @@ func (cm *ConfigManager) ApplyAccountChannelChanges(accountUID string, updates [
 	if err := applyAccountChannelChanges(&next, accountUID, updates, additions); err != nil {
 		return err
 	}
+	// 显式备注变更（Remark 非 nil）整组同步到逻辑渠道；统一列表展示的是 lc.Remark。
+	for i := range updates {
+		if updates[i].Remark == nil {
+			continue
+		}
+		first := firstAccountChannelLocked(&next, accountUID)
+		if first != nil {
+			cm.syncRemarkAcrossLogicalGroupLocked(first, strings.TrimSpace(*updates[i].Remark))
+		}
+		break
+	}
 	return cm.saveConfigLocked(next)
+}
+
+// firstAccountChannelLocked 返回账号下第一张物理卡（六数组顺序），锁内使用。
+func firstAccountChannelLocked(cfg *Config, accountUID string) *UpstreamConfig {
+	slices := []*[]UpstreamConfig{
+		&cfg.Upstream, &cfg.ChatUpstream, &cfg.ResponsesUpstream,
+		&cfg.GeminiUpstream, &cfg.ImagesUpstream, &cfg.VectorsUpstream,
+	}
+	for _, s := range slices {
+		for i := range *s {
+			if (*s)[i].AccountUID == accountUID {
+				return &(*s)[i]
+			}
+		}
+	}
+	return nil
 }
 
 func applyAccountChannelChanges(cfg *Config, accountUID string, updates []AccountChannelUpdate, additions []AccountChannelAddition) error {
@@ -916,6 +945,10 @@ func applyAccountChannelChanges(cfg *Config, accountUID string, updates []Accoun
 			channel.BaseURLs = deduplicateBaseURLs(update.BaseURLs, channel.ServiceType)
 			if len(channel.BaseURLs) > 0 {
 				channel.BaseURL = channel.BaseURLs[0]
+			}
+			if update.Remark != nil {
+				r := strings.TrimSpace(*update.Remark)
+				channel.Remark = r
 			}
 			resumeAutoNoKeysChannel(channel)
 			matched++

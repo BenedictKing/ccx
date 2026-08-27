@@ -420,6 +420,13 @@ export const useChannelStore = defineStore('channel', () => {
             website: (channel.website ?? '').trim(),
           })
         }
+        // 备注同样是跨协议共享字段，账号接口（PUT /accounts）不承载 remark；
+        // 变化时经单卡更新下发，由后端整组同步到逻辑渠道与兄弟卡。
+        if (original && (channel.remark ?? '').trim() !== (original.remark ?? '').trim()) {
+          await updateChannelByType(targetTab, editingChannelIndex, {
+            remark: (channel.remark ?? '').trim(),
+          })
+        }
       } else if (isChat) {
         await updateChannelByType('chat', editingChannelIndex, channel)
       } else if (isVectors) {

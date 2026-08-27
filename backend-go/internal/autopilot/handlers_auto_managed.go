@@ -1405,6 +1405,8 @@ type updateAccountRequest struct {
 	// BaseURLs 可选：仅自定义自动托管账号支持手工维护地址池。
 	// 省略或为空时表示"不修改地址"，沿用渠道现有地址，保证旧客户端向后兼容。
 	BaseURLs []string `json:"baseUrls,omitempty"`
+	// Remark 可选指针：省略（nil）表示不修改备注；传空串为显式清空。
+	Remark *string `json:"remark,omitempty"`
 }
 
 type updateAccountResponse struct {
@@ -1574,6 +1576,7 @@ func planCustomManagedAccountUpdates(
 			APIKeys:      append([]string(nil), req.APIKeys...),
 			APIKeyConfig: configs,
 			BaseURLs:     append([]string(nil), baseURLs...),
+			Remark:       req.Remark,
 		})
 	}
 	return updates, http.StatusOK, nil
@@ -1646,6 +1649,7 @@ func planManagedAccountUpdates(
 		updates = append(updates, config.AccountChannelUpdate{
 			ChannelUID: channel.ChannelUID, Name: providerRouteName(baseName, route, totalRouteCount > 1),
 			APIKeys: append([]string(nil), req.APIKeys...), APIKeyConfig: configs, BaseURLs: uniqueNonEmptyStrings(baseURLs),
+			Remark: req.Remark,
 		})
 	}
 	return updates, http.StatusOK, nil

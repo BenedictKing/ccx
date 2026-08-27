@@ -156,7 +156,28 @@
 
             <!-- Channel name and description -->
             <div class="channel-name">
+              <!-- 备注非空时悬停渠道名称显示 -->
+              <v-tooltip
+                v-if="element.remark?.trim()"
+                :text="element.remark"
+                location="top"
+                :open-delay="150"
+                content-class="ccx-tooltip"
+              >
+                <template #activator="{ props: tooltipProps }">
+                  <span
+                    v-bind="tooltipProps"
+                    class="font-weight-medium channel-name-link cursor-help"
+                    tabindex="0"
+                    role="button"
+                    @click.stop="$emit('edit', element)"
+                    @keydown.enter.stop="$emit('edit', element)"
+                    @keydown.space.stop="$emit('edit', element)"
+                  >{{ getChannelDisplayName(element) }}</span>
+                </template>
+              </v-tooltip>
               <span
+                v-else
                 class="font-weight-medium channel-name-link"
                 tabindex="0"
                 role="button"
@@ -609,7 +630,27 @@
           <!-- Channel information -->
           <div v-if="shouldRenderViewportChannel('inactive', channel, index)" class="channel-info">
             <div class="channel-info-main">
+              <v-tooltip
+                v-if="channel.remark?.trim()"
+                :text="channel.remark"
+                location="top"
+                :open-delay="150"
+                content-class="ccx-tooltip"
+              >
+                <template #activator="{ props: tooltipProps }">
+                  <span
+                    v-bind="tooltipProps"
+                    class="font-weight-medium channel-name-link cursor-help"
+                    tabindex="0"
+                    role="button"
+                    @click="$emit('edit', channel)"
+                    @keydown.enter="$emit('edit', channel)"
+                    @keydown.space.prevent="$emit('edit', channel)"
+                  >{{ getChannelDisplayName(channel) }}</span>
+                </template>
+              </v-tooltip>
               <span
+                v-else
                 class="font-weight-medium channel-name-link"
                 tabindex="0"
                 role="button"
