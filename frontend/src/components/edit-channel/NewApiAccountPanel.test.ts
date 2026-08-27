@@ -99,17 +99,24 @@ describe('NewApiAccountPanel', () => {
     apiMocks.getSubscriptionAccounts.mockResolvedValue({ accounts: [] })
   })
 
-  it('展示主账号余额和脱敏 token，不回填明文 token', async () => {
+  it('主账号作为列表首行展示余额和脱敏 token，展开后表单不回填明文 token', async () => {
     const wrapper = mountPanel()
     await vi.waitFor(() => expect(apiMocks.getSubscription).toHaveBeenCalledWith('sub-main'))
     await nextTick()
 
+    // 主账号默认在账号列表中：行内展示余额与脱敏 token
     expect(wrapper.text()).toContain('50,000')
-    expect(wrapper.text()).toContain('1,000')
     expect(wrapper.text()).toContain('****oken')
-    expect(wrapper.text()).not.toContain('secret-token')
+    expect(wrapper.text()).toContain('subscription.newApi.primaryBadge')
+
+    // 展开主账号行：详情含已用额度，更新凭证表单的 token 输入框留空
+    await wrapper.find('[role="button"][aria-expanded="false"]').trigger('click')
+    await nextTick()
+    expect(wrapper.find('[aria-expanded="true"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('1,000')
     const passwordInput = wrapper.find<HTMLInputElement>('input[type="password"]')
     expect(passwordInput.element.value).toBe('')
+    expect(wrapper.text()).toContain('subscription.newApi.updateCredentials')
   })
 
   it('generic 渠道填写 token 后绑定已有渠道', async () => {
@@ -162,6 +169,9 @@ describe('NewApiAccountPanel', () => {
     })
     const wrapper = mountPanel()
     await vi.waitFor(() => expect(apiMocks.getSubscription).toHaveBeenCalled())
+    // 展开主账号行后填写并保存凭证
+    await wrapper.find('[role="button"][aria-expanded="false"]').trigger('click')
+    await nextTick()
     await wrapper.find('input[type="password"]').setValue('token-new1')
     await wrapper.findAll('button').find(button => button.text().includes('subscription.newApi.saveCredentials'))!.trigger('click')
 
@@ -232,10 +242,12 @@ describe('NewApiAccountPanel', () => {
     await vi.waitFor(() => expect(apiMocks.getSubscriptionAccounts).toHaveBeenCalledWith('sub-main'))
     await nextTick()
 
-    // 点击行头展开详情
-    await wrapper.find('[role="button"][aria-expanded="false"]').trigger('click')
+    // 主账号行已默认展开定位之外，按 displayName 定位子账号行并展开详情
+    const secondRow = wrapper.findAll('[role="button"]').find(row => row.text().includes('second'))
+    expect(secondRow).toBeTruthy()
+    await secondRow!.trigger('click')
     await nextTick()
-    expect(wrapper.find('[aria-expanded="true"]').exists()).toBe(true)
+    expect(secondRow!.attributes('aria-expanded')).toBe('true')
     expect(wrapper.text()).toContain('****cc81')
     expect(wrapper.text()).toContain('subscription.newApi.updateCredentials')
 

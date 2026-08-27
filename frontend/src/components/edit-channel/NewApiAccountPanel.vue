@@ -65,72 +65,121 @@
     </template>
 
     <template v-else>
-    <v-card variant="outlined" rounded="lg" class="mb-4">
-      <v-card-title class="d-flex align-center justify-space-between ga-3 pa-4 pb-2">
-        <div class="d-flex align-center ga-2">
-          <v-icon color="primary">mdi-account-multiple-outline</v-icon>
-          <span class="text-subtitle-1 font-weight-bold">{{ t('subscription.newApi.primaryAccount') }}</span>
-          <v-chip v-if="subscription?.accessTokenMasked" size="x-small" color="success" variant="tonal">
-            {{ subscription.accessTokenMasked }}
-          </v-chip>
-        </div>
-        <v-btn
-          icon
-          size="small"
-          variant="text"
-          color="primary"
-          :loading="refreshingPrimary"
-          :aria-label="t('subscription.newApi.refreshBalance')"
-          @click="refreshPrimaryAccount"
-        >
-          <v-icon size="18">mdi-refresh</v-icon>
-          <v-tooltip activator="parent" location="top" content-class="ccx-tooltip">{{ t('subscription.newApi.refreshBalance') }}</v-tooltip>
-        </v-btn>
-      </v-card-title>
-      <v-card-text class="pt-2">
-        <v-progress-linear v-if="loadingPrimary" indeterminate color="primary" class="mb-3" />
-        <v-alert v-if="primaryError" color="error" variant="tonal" density="compact" class="mb-3">
-          {{ primaryError }}
-        </v-alert>
+    <v-progress-linear v-if="loadingPrimary" indeterminate color="primary" class="mb-3" />
+    <v-alert v-if="primaryError" color="error" variant="tonal" density="compact" class="mb-3">
+      {{ primaryError }}
+    </v-alert>
+    <v-alert
+      v-else-if="!loadingPrimary && !subscription"
+      color="info"
+      variant="tonal"
+      density="compact"
+      class="mb-3"
+    >
+      {{ t('subscription.newApi.primaryAccountUnavailable') }}
+    </v-alert>
 
-        <template v-if="subscription">
-          <div class="primary-summary mb-4">
+    <!-- 主账号默认作为账号列表首行展示，与子账号交互一致（展开详情 + 更新凭证） -->
+    <div v-if="subscription" class="account-item mb-2">
+      <div
+        class="d-flex align-center justify-space-between pa-3 cursor-pointer"
+        :aria-expanded="expandedPrimary"
+        role="button"
+        tabindex="0"
+        @click="togglePrimary"
+        @keydown.enter.prevent="togglePrimary"
+      >
+        <div class="d-flex align-center ga-3 min-width-0">
+          <v-icon :color="subscription.lastBalanceRefreshError ? 'warning' : 'success'">
+            {{ subscription.lastBalanceRefreshError ? 'mdi-alert-circle' : 'mdi-check-circle' }}
+          </v-icon>
+          <div class="min-width-0">
+            <div class="d-flex align-center ga-2 min-width-0">
+              <span class="text-body-2 font-weight-medium text-truncate">{{ subscription.username || subscription.displayName || '-' }}</span>
+              <v-chip size="x-small" color="primary" variant="tonal" class="flex-grow-0">
+                {{ t('subscription.newApi.primaryBadge') }}
+              </v-chip>
+            </div>
+            <div class="text-caption text-medium-emphasis text-truncate">
+              {{ t('subscription.newApi.quota') }}: {{ formatQuota(subscription.balance) }}
+              <template v-if="subscription.accessTokenMasked">
+                · {{ subscription.accessTokenMasked }}
+              </template>
+              <template v-if="subscription.provisionedKeys?.length">
+                · {{ t('subscription.newApi.provisionedKeysCount', { count: subscription.provisionedKeys.length }) }}
+              </template>
+            </div>
+          </div>
+        </div>
+        <div class="d-flex align-center ga-1" @click.stop>
+          <v-btn icon size="small" variant="text" color="primary" :loading="refreshingPrimary" @click.stop="refreshPrimaryAccount">
+            <v-icon size="18">mdi-refresh</v-icon>
+            <v-tooltip activator="parent" location="top" content-class="ccx-tooltip">{{ t('subscription.newApi.refreshBalance') }}</v-tooltip>
+          </v-btn>
+          <v-icon size="20" class="ml-1">{{ expandedPrimary ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
+        </div>
+      </div>
+
+      <v-expand-transition>
+        <div v-if="expandedPrimary" class="account-detail pa-3">
+          <div class="account-detail-grid mb-3">
             <div class="summary-item">
               <span class="text-caption text-medium-emphasis">{{ t('subscription.newApi.username') }}</span>
-              <strong>{{ subscription.username || '-' }}</strong>
+              <strong class="text-body-2">{{ subscription.username || '-' }}</strong>
             </div>
             <div class="summary-item">
               <span class="text-caption text-medium-emphasis">{{ t('subscription.newApi.userId') }}</span>
-              <strong>{{ subscription.userId || '-' }}</strong>
+              <strong class="text-body-2">{{ subscription.userId || '-' }}</strong>
             </div>
             <div class="summary-item">
               <span class="text-caption text-medium-emphasis">{{ t('subscription.newApi.quota') }}</span>
-              <strong>{{ formatQuota(subscription.balance) }}</strong>
+              <strong class="text-body-2">{{ formatQuota(subscription.balance) }}</strong>
             </div>
             <div class="summary-item">
               <span class="text-caption text-medium-emphasis">{{ t('subscription.newApi.usedQuota') }}</span>
-              <strong>{{ formatQuota(subscription.usedQuota) }}</strong>
+              <strong class="text-body-2">{{ formatQuota(subscription.usedQuota) }}</strong>
+            </div>
+            <div class="summary-item">
+              <span class="text-caption text-medium-emphasis">{{ t('subscription.newApi.lastRefreshedAt') }}</span>
+              <strong class="text-body-2">{{ subscription.lastBalanceRefreshAt ? formatTime(subscription.lastBalanceRefreshAt) : '-' }}</strong>
+            </div>
+            <div class="summary-item">
+              <span class="text-caption text-medium-emphasis">{{ t('subscription.newApi.authTokenMode') }}</span>
+              <strong class="text-body-2">{{ authTokenModeLabel(subscription.authTokenMode) }}</strong>
             </div>
             <div class="summary-item summary-item--wide">
               <span class="text-caption text-medium-emphasis">{{ t('subscription.newApi.baseUrl') }}</span>
               <code class="text-caption">{{ subscription.baseUrl || '-' }}</code>
             </div>
+            <div class="summary-item summary-item--wide">
+              <span class="text-caption text-medium-emphasis">{{ t('subscription.newApi.accessToken') }}</span>
+              <code class="text-caption">{{ subscription.accessTokenMasked || '-' }}</code>
+            </div>
           </div>
 
-          <div v-if="subscription.lastBalanceRefreshAt" class="text-caption text-medium-emphasis mb-3">
-            {{ t('subscription.newApi.lastRefreshedAt') }}: {{ formatTime(subscription.lastBalanceRefreshAt) }}
+          <div v-if="subscription.provisionedKeys?.length" class="mb-3">
+            <div class="text-caption text-medium-emphasis mb-1">{{ t('subscription.newApi.provisionedKeys') }}</div>
+            <div class="d-flex flex-wrap ga-1">
+              <v-chip
+                v-for="key in subscription.provisionedKeys"
+                :key="key.tokenId"
+                size="x-small"
+                color="primary"
+                variant="tonal"
+              >
+                {{ key.name }} · {{ key.group }} × {{ key.groupMultiplier }}
+              </v-chip>
+            </div>
           </div>
-          <v-alert
-            v-if="subscription.lastBalanceRefreshError"
-            color="warning"
-            variant="tonal"
-            density="compact"
-            class="mb-3"
-          >
+
+          <v-alert v-if="subscription.lastBalanceRefreshError" color="warning" variant="tonal" density="compact" class="mb-3">
             {{ subscription.lastBalanceRefreshError }}
           </v-alert>
 
+          <v-divider class="mb-3" />
+
           <v-form @submit.prevent="savePrimaryCredentials">
+            <div class="text-caption text-medium-emphasis mb-2">{{ t('subscription.newApi.updateCredentials') }}</div>
             <v-text-field
               v-model="primaryForm.accessToken"
               :label="t('subscription.newApi.accessToken')"
@@ -175,18 +224,11 @@
                 {{ t('subscription.newApi.saveCredentials') }}
               </v-btn>
             </div>
-            </v-form>
-        </template>
-        <v-alert
-          v-else-if="!loadingPrimary && !primaryError"
-          color="info"
-          variant="tonal"
-          density="compact"
-        >
-          {{ t('subscription.newApi.primaryAccountUnavailable') }}
-        </v-alert>
-      </v-card-text>
-    </v-card>
+          </v-form>
+        </div>
+      </v-expand-transition>
+    </div>
+
 
     <v-expansion-panels variant="accordion" class="mb-4">
       <v-expansion-panel>
@@ -447,6 +489,8 @@ const expandedAccountUid = ref('')
 const accountForms = ref<Record<string, { accessToken: string; userId: string; authTokenMode: string }>>({})
 const accountErrors = ref<Record<string, string>>({})
 const savingAccount = ref('')
+// 主账号行的展开状态（详情 + 更新凭证表单）
+const expandedPrimary = ref(false)
 
 const bindForm = ref({ accessToken: '', userId: '', authTokenMode: 'bearer' })
 const primaryForm = ref({ accessToken: '', userId: '', authTokenMode: 'bearer' })
@@ -710,6 +754,12 @@ async function deleteAccount(accountUid: string) {
   }
 }
 
+function togglePrimary() {
+  expandedPrimary.value = !expandedPrimary.value
+  // 展开时以订阅当前值重置表单基线（accessToken 永远留空=保持不变）
+  if (expandedPrimary.value && subscription.value) syncPrimaryForm(subscription.value)
+}
+
 function toggleAccount(accountUid: string) {
   if (expandedAccountUid.value === accountUid) {
     expandedAccountUid.value = ''
@@ -786,6 +836,7 @@ watch(
     subscription.value = null
     accounts.value = []
     localSubscriptionUid.value = ''
+    expandedPrimary.value = false
     void Promise.all([fetchPrimaryAccount(), fetchAccounts()])
   },
   { immediate: true },
@@ -795,11 +846,6 @@ watch(
 <style scoped>
 .newapi-account-panel {
   padding: 16px;
-}
-.primary-summary {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
 }
 .summary-item {
   display: flex;
@@ -834,9 +880,6 @@ watch(
   gap: 12px;
 }
 @media (max-width: 600px) {
-  .primary-summary {
-    grid-template-columns: minmax(0, 1fr);
-  }
   .summary-item--wide {
     grid-column: auto;
   }
