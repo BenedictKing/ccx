@@ -22,7 +22,15 @@
           </div>
           <div class="d-flex align-center ga-2">
             <div>
-              <div class="text-h6 font-weight-bold channel-title">
+              <!-- 渠道备注非空时悬停标题显示 -->
+              <v-tooltip v-if="channel.remark?.trim()" :text="channel.remark" location="bottom" :open-delay="150" content-class="ccx-tooltip">
+                <template #activator="{ props: tooltipProps }">
+                  <div class="text-h6 font-weight-bold channel-title cursor-help" v-bind="tooltipProps">
+                    {{ channel.name }}
+                  </div>
+                </template>
+              </v-tooltip>
+              <div v-else class="text-h6 font-weight-bold channel-title">
                 {{ channel.name }}
               </div>
               <div class="text-caption text-high-emphasis opacity-80">
