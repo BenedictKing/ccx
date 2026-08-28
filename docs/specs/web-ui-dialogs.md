@@ -140,6 +140,26 @@
 - 后端调用：`getProviderTemplates`、自定义模式 `discoverFast` → `autoAddChannel`；provider 模式直接 `autoAddChannel({providerId, apiKeys, kind: provider.channelKind})`（按 provider 自身声明的 channelKind 提交，自动创建该 provider 支持的全部渠道，避免 tab 与 provider 能力不匹配导致 400）。
 - 联动：选中 `__new_api__` → 打开 `NewApiQuickAddDialog`，其 `@created` → `emit('added', channelIndex)`。
 
+布局示意图（内嵌表单，承载于 AddChannelModal 快速模式，自身非对话框）：
+
+```
+┌──────────────────────────────────────────────────────┐
+│ [shape] 服务商                              [select▼] │ ← 模板加载中 loading+disabled
+│ (i) 服务商描述 alert（选中有描述时）                    │
+│ [web] Base URL                           [+ 添加地址] │ ← 显式服务商模式隐藏本组与代理组
+│ ┌ 多行地址输入（每行尾 [×] 删除）─────────────────┐    │
+│ │ ↳ 将识别为 {url}                                │    │
+│ [vpn] 代理 URL（可选）      直连优先 [switch·未填禁用] │
+│ [tag] 渠道名称: **自动名** 〔自动生成 chip〕            │
+│ (⧉) 该 Base URL 已添加为渠道… alert（重复检测）        │
+│ [key] API Keys                           [+ 添加密钥] │
+│ ┌ 密码行 [👁 显隐切换] [×] ─────────────────────┐     │
+│ ┌ [playlist-plus] 添加到末尾 [switch]（整卡可点）┐     │ ← 故障转移位置
+│ [!] 提交错误 alert（v-if submitError）                 │
+│ (◌ 探测中... 进度卡，v-if submitting)                  │
+└──────────────────────────────────────────────────────┘  无底部按钮，提交由父级「创建渠道」触发
+```
+
 ## 4. NewApiSubscriptionForm + NewApiQuickAddDialog（new-api 两步接入）
 
 - 路径：`frontend/src/components/NewApiSubscriptionForm.vue`、`frontend/src/components/subscriptions/NewApiQuickAddDialog.vue`
@@ -189,6 +209,46 @@
 - 校验/状态：`canBindNewApi`；loading：`binding`/`refreshingPrimary`/`deletingPrimary`/`adding`/`refreshing`/`deleting`/`loadingPrimary`；错误：`bindError`/`primaryError`/`addError`；展开态：`expandedPrimary`/`expandedAccountUid`。`groupFetchError`、无合格组、verify 失败时阻断提交。
 - 后端调用：`verifyNewApiSubscription`、`provisionNewApiSubscription`、`getSubscription`、`refreshSubscription`、`getSubscriptionAccounts`、`addSubscriptionAccount`、`refreshSubscriptionAccount`、`deleteSubscriptionAccount`、`deleteSubscriptionPrimaryAccount`。
 
+布局示意图（EditChannelModal accounts 区，内嵌面板）：
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ [account-multiple/warning] 账号管理                       │
+├─ generic 未绑定分支 ─────────────────────────────────────┤
+│ (i) genericAutoManagedHint alert                         │
+│ ┌ 绑定表单卡 ────────────────────────────────┐           │
+│ │ 访问令牌 [password·必填]                     │           │
+│ │ 用户 ID（可选）        │ 令牌模式 [Bearer/Raw]│           │
+│ │ (caption) 绑定/校验/同步沿用渠道「代理通道」   │           │
+│ │ (alert bindError)                  [绑定]   │           │
+│ └───────────────────────────────────────┘              │
+├─ 已绑定分支（账号平权）──────────────────────────────────┤
+│ (◌ loadingPrimary 进度条 │ primaryError alert │           │
+│  (i) 未关联提示 / 主账号已删除引导 alert——互斥)          │
+│ ┌ 账号行·主账号（点击展开/收起）──────────────────┐       │
+│ │ ✔ AI-Chef 〔主账号 chip〕       [⟳刷新][🗑删除][▴]│       │
+│ │    额度: 129,381,693 · sk-****KQZ · 2 把 Key     │       │
+│ │ ┌ 展开·详情 grid 3 列 ────────────────────┐      │       │
+│ │ │ 用户名│用户 ID│额度│已用│最近刷新│令牌模式 │      │       │
+│ │ │ new-api 地址(wide)│访问令牌(wide·掩码)     │      │       │
+│ │ │ 〔自动接入 Key chips: name · group × 倍率〕│      │       │
+│ │ │ (⚠ 最近刷新错误 alert)                   │      │       │
+│ │ └───────────────────────────────────┘             │       │
+│ ┌ 账号行·子账号 v-for（同构；状态图标依 status）───┐       │
+│ │ ✔ second                     [⟳刷新][🗑删除][▾]  │       │
+│ │ ┌ 展开·详情 grid（用户 ID/状态/额度/最近检查/     │      │       │
+│ │ │ 创建时间/令牌模式/访问令牌 + Key chips）┐        │       │
+│ ┌ ▸ 添加账号（accordion 展开面板）────────────────┐       │
+│ │ 访问令牌 [password·必填]                          │       │
+│ │ 用户 ID（可选）        │ 令牌模式 [Bearer/Raw]    │       │
+│ │ (caption 代理提示) (alert addError)               │       │
+│ │                                        [添加]    │       │
+│ └───────────────────────────────────────┘              │
+│ (i) 暂无其他账号 alert（accounts 为空时）                 │
+└─────────────────────────────────────────────────────────┘
+  主/子账号展开均为纯详情；换凭证 = 删除后重新添加（新账号自动提升主账号）
+```
+
 ## 6. ChannelLogsDialog（渠道请求日志）
 
 - 路径：`frontend/src/components/ChannelLogsDialog.vue`
@@ -200,6 +260,27 @@
 - 后端调用：`api.getChannelLogs(kind, index)`（对每条 protocolRoute `Promise.allSettled`，合并去重取前 50）。
 - 联动：日志 autopilotTrace chip → `openAutopilotTrace` 打开内嵌 `AutopilotTraceDetailDialog`。
 
+布局示意图：
+
+```
+┌───────────────────────────────────────────────────────────┐
+│ 渠道日志 - {channel}                                 [×]   │ ← max-width 800，内部滚动
+├───────────────────────────────────────────────────────────┤
+│ (加载态: 居中 ◌)                                           │
+│ (空态: [format-list-bulleted] 暂无日志记录                  │
+│       + (⚠) 熔断依据 alert: open/half-open·失败说明·       │
+│         最近失败时间·下次探测·退避层级)                      │
+│ 日志列表 v-list（3s 轮询；失败行浅红底；点击行展开错误详情）：│
+│ ┌───────────────────────────────────────────────────┐     │
+│ │ [200] 23:14:02 ·messages·MAIN·chat·〔能力测试〕     │     │
+│ │ gpt-5.6→gpt-5.6 ·reasoning(high→high) ·sk-F9M***   │     │
+│ │ ·seekai.cc ·重试1 ·12ms(连3/首字8/总12)             │     │
+│ │ 〔调度〕〔决策 tr_… chip → AutopilotTraceDetail〕[⧉] │     │
+│ │ ┌ 展开: errorInfo 文本 ──────────────────┐         │     │
+│ └───────────────────────────────────────────────────┘     │
+└───────────────────────────────────────────────────────────┘  Esc 关闭；无底部按钮
+```
+
 ## 7. CapabilityTestDialog（能力测试结果）
 
 - 路径：`frontend/src/components/CapabilityTestDialog.vue`；管理器 `frontend/src/composables/useCapabilityTestManager.ts`
@@ -209,6 +290,29 @@
 - 状态机：`initializing/idle/pending/running/completed/cancelled/error`。
 - 子组件：`CapabilityModelResults`（模型徽章 + tooltip，点击重试）。
 - 后端调用（管理器）：`startChannelCapabilityTest`、`getChannelCapabilitySnapshot`、`getChannelCapabilityTestStatus`（轮询）、`cancelCapabilityTest`、`retryCapabilityTestModel`。
+
+布局示意图：
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│ [test-tube/success] 能力测试 - {channel}                 [×]  │ ← max-width 960 scrollable
+├──────────────────────────────────────────────────────────────┤
+│ initializing: 居中 ◌ 正在测试协议兼容性...                     │
+│ error: 红色 tonal alert errorMessage                          │
+│ 状态条(左): 〔runMode chip〕〔部分可用/已取消 chip〕            │
+│   〔messages〕〔chat〕〔responses〕… 彩色协议 chip             │
+│   ⏱ 测试 RPM [1-60 number] · {done}/{total} 已完成 · 快照时间 │
+│ 状态条(右): [取消测试/取消中... error-tonal]（pending/running） │
+│ 桌面表格 v-table（移动端=每协议一张卡,主体 CapabilityModelResults）：│
+│ │ 协议   │ 状态 │ 成功数/总数 │ 延迟(ms) │ 流式        │ 操作 ││
+│ │ messages│ ✔   │ 12/12      │ 842     │ ✓支持流式  │〔当前 Tab〕│
+│ │ chat    │ …   │ 9/12       │ …       │ ✗不支持    │[开始测试]  │
+│ │         │     │            │         │            │[复制到此Tab]│
+│ │ responses│ ✗  │ 0/12  ⚠tooltip │ …  │ ✓支持流式  │[{p}转换 ×n]││
+│ │  ↳ 模型行(colspan=6): CapabilityModelResults 模型徽章+tooltip│
+│ │     点击徽章重试单模型                                        │
+└──────────────────────────────────────────────────────────────┘  动作全在状态条与行内，无底部按钮区
+```
 
 ## 8. SchedulerDiagnoseDialog（调度诊断）
 
@@ -224,6 +328,28 @@
 - 操作：运行（`runDiagnose`）、清除（`clearResult`）。加载态 `isRunning`。
 - 后端调用：`api.diagnoseSchedulerSelection(channelType, payload)`。
 
+布局示意图：
+
+```
+┌──────────────────────────────────────────────────────┐
+│ 调度诊断                                       [×]   │ ← max-width 820
+├──────────────────────────────────────────────────────┤
+│ ┌ 表单（v-row 两列为主）──────────────────────┐      │
+│ │ 模型          │ 用户 ID                     │      │
+│ │ 路由前缀      │ 指定渠道                     │      │
+│ │ 失败渠道      │ 代理角色 [select]            │      │
+│ │ 输入 tokens   │ 输出 tokens  │ 总预算 tokens  │      │
+│ │ [×]含图 [×]显式输出上限 [×]跳过窗口校验       │      │
+│ └─────────────────────────────────────────┘          │
+│ [▶ 运行 routes] [清空]（运行中禁用）                   │
+│ ── 结果（v-if result && hasTraceDetails）──           │
+│ (error alert) / 〔✔ 选中 {index}:{name}〕〔reason〕    │
+│ 摘要: `code 块`                                       │
+│ 阶段: 〔阶段名: 次数〕〔…〕outlined chips              │
+│ 候选跳过表: │ 渠道 │ 阶段 │ 原因 │ 详情 │ v-table      │
+└──────────────────────────────────────────────────────┘  Esc 关闭；运行/清空在表单下方
+```
+
 ## 9. AutopilotTraceDetailDialog（路由 Trace 详情）
 
 - 路径：`frontend/src/components/AutopilotTraceDetailDialog.vue`
@@ -234,6 +360,35 @@
 - 候选表含 Model 列（78ed757f 路由候选按 (渠道, 模型) 展开，同名承接行经 CandidateKey 回退解析模型名）；scheduler 裁决区含**被滤渠道明细表**（16dc0fda：ChannelIndex/ChannelName/Stage/Reason/Details，来自 `schedulerDecision.skippedCandidates`）。
 - 后端调用：`api.getAutopilotTraceDetail(traceUid)`。
 
+布局示意图：
+
+```
+┌────────────────────────────────────────────────────────────┐
+│ [chart-timeline-variant/info] 路由决策详情             [×]  │ ← max-width 900，内部滚动
+├────────────────────────────────────────────────────────────┤
+│ loading ◌ / notFound（重试钮）/ fetchError（重试钮）         │
+│ (i) 「历史记录(v1 schema)，部分字段不可用」alert（旧记录）    │
+│ ── 身份与发布快照（v-row 双列字段）──                        │
+│ Trace UID(code)│创建时间│发布批次(code)│分桶│目标模式 chip│   │
+│ 实际模式 chip│跳过原因│请求关联 ID(code)                     │
+│ ── 请求画像 ──                                              │
+│ 类型 chip│任务类别 chip│模型                                │
+│ Agent Role│Manual Intent│Advisor（条件行,code 呈现）         │
+│ ── 候选渠道（after/before）── v-table compact               │
+│ │Channel│Model│Origin Tier│Score│Selected✓/−│Filter Reasons││
+│ 全局过滤原因（stage: 原因列表）· 排序原因（ul）               │
+│ ── 调度器裁决 ──                                            │
+│ stages 表（│Stage│Count│）→ 已选择: uid(code)                │
+│ 跳过原因: 列表 → 被滤渠道明细表（│Stage│Channel│Reason│Details│）
+│ ── 上游尝试（超限标「已截断: N」warning）── v-table          │
+│ │#│Channel│Endpoint│Actual Model│Effort│Result chip│Status│Duration│
+│ 按结果统计: res: n …                                        │
+│ ── 请求终态（v-row 三列）──                                  │
+│ 比较 chip(一致/不一致/未比较)│结果 chip│Actual Model│Effort│  │
+│ 状态码│耗时│首字节│Fail-open(⚠/−)                            │
+└────────────────────────────────────────────────────────────┘
+```
+
 ## 10. UpdateDialog（OTA 版本检查）
 
 - 路径：`frontend/src/components/UpdateDialog.vue`
@@ -241,6 +396,23 @@
 - props：`modelValue`；emit `update:modelValue`。
 - 字段/内容：当前版本、最新版本 chip、状态 alert（error/hasUpdate/upToDate）。
 - 操作：检查更新（`handleCheck` 派发 `ccx-check-version` 事件）、下载（`releaseUrl` 外链）。
+
+布局示意图：
+
+```
+┌────────────────────────────────────┐
+│ [update] 系统更新              [×] │ ← max-width 520
+├────────────────────────────────────┤
+│ (检查中: 居中 ◌ 正在检查更新...)    │
+│ 当前版本 〔v1.2.3〕outlined chip    │
+│ 最新版本 〔v1.3.0〕chip(有更新时 success) │
+│ (alert 三选一: 失败 error / 有更新  │
+│  info「前往 GitHub Releases 下载」/ │
+│  已最新 success)                    │
+├────────────────────────────────────┤
+│ [检查更新 outlined]      [下载更新↗] │ ← 下载仅 releaseUrl 存在时渲染
+└────────────────────────────────────┘  Esc 关闭
+```
 
 ## 11. UserGuideDialog（新用户 4 步引导）
 
@@ -250,12 +422,64 @@
 - 内容：4 步（欢迎/协议切换示意/添加渠道示意/渠道列表示意）。
 - 状态：`step`，`watch(modelValue)` 打开归零；键盘 Esc 关闭、Enter 下一步/完成。
 
+布局示意图：
+
+```
+┌─────────────────────────────────────────────────────┐
+│ [help-circle] 新用户指引     第 n / 4 步        [×] │ ← max-width 760 scrollable
+├─────────────────────────────────────────────────────┤
+│ ● ○ ○ ○   ← 步骤进度点（可点击跳步）                 │
+│ Step1 欢迎使用 CCX: 正文 + 有序列表 3 项             │
+│       （选协议标签→添加渠道填密钥→客户端指向网关）    │
+│ Step2 顶部切换协议: 自绘协议标签示意条                │
+│       （Claude 高亮/OpenAI Chat/Images/Codex/Gemini/Cockpit）│
+│ Step3 添加渠道: 真实 [添加渠道 primary] 按钮示意+说明 │
+│ Step4 看懂渠道列表: 自绘双行渠道示意                  │
+│       （⠿优先级·状态徽章·名称·15m·99%·🔑数·操作图标） │
+│       + 5 项点击说明列表（✎名称/📈图表/🕘日志/⟳恢复/⠿拖拽）│
+├─────────────────────────────────────────────────────┤
+│ [← 上一步 outlined](step>0)     [下一步 → / ✓ 知道了] │ ← Enter 下一页/完成
+└─────────────────────────────────────────────────────┘
+```
+
 ## 12. AutopilotModePanel / AutopilotDiagnosePanel（内嵌面板，非弹窗）
 
 - 路径：`frontend/src/components/AutopilotModePanel.vue`、`AutopilotDiagnosePanel.vue`
 - 触发入口：均由 `AutopilotView.vue` 直接内嵌渲染。
 - AutopilotModePanel：props `config: SmartRoutingConfig`、`saving`；emit `update:config`。字段：killSwitch(只读开关+警告 alert)、costPreference(select)。
 - AutopilotDiagnosePanel：无 props；本地 `form`（model/channelKind/agentRole/estTokens/toolUseNeed/reasoningNeed/hasImage）。结果：mode/taskClass/candidates 表（候选行为 (渠道, 模型) 粒度并展示 CandidateKey/模型名，78ed757f）。
+
+布局示意图（两面板均为内嵌 outlined 卡，由 AutopilotView 堆叠渲染）：
+
+```
+AutopilotModePanel:
+┌──────────────────────────────────────────┐
+│ [steering/primary] 全局策略               │
+│ (⚠ KillSwitch 激活 error alert)           │
+│ 急停开关 [switch·只读·error 色] + hint     │
+│ 场景模式 [select·停用时禁用] + 描述 caption│
+│   (非 auto 场景追加: 预设参数摘要)         │
+│ 价格偏好 [select·条件禁用] + 描述 caption  │
+│                     [保存配置][重置]       │ ← 无改动均禁用
+└──────────────────────────────────────────┘
+
+AutopilotDiagnosePanel:
+┌────────────────────────────────────────────────────────┐
+│ [radar/primary] 智能路由诊断                             │
+│ (i) 说明 alert（不发送真实上游请求…）                     │
+│ 请求协议[sel]│请求模型[combo]│代理角色[sel]│估算Token[num]│
+│ 需要工具[sw] 需要推理[sw] 包含图片[sw]（功能未启用禁用）   │
+│ 快速测试: 〔预设模型 tonal 钮 ×n〕        [▶ 开始诊断]    │
+│ (error alert 条件)                                       │
+│ ── 结果 ── (⚠ 无 plan: 「当前配置未生成路由计划」)        │
+│ 〔当前模式〕〔任务分类〕〔质量下界〕〔候选数〕〔通过约束〕  │
+│ 〔已触发 Fail-open(warning)〕chips                        │
+│ ┌ 推荐结果卡(tonal primary): 渠道 → 模型〔映射来源〕──┐  │
+│ │ mappingReason caption                              │  │
+│ 候选表: │★推荐│渠道│实际模型│映射来源 chip│得分│硬约束│   │
+│ 排序原因: 〔outlined chips ×n〕                          │
+└────────────────────────────────────────────────────────┘
+```
 
 ## 13. 内联对话框（App.vue / 子区块 / 视图）
 
@@ -265,6 +489,62 @@
 - 认证登录（`App.vue:18`）+ 自动认证 overlay（`App.vue:4`）：`showAuthDialog` computed。
 - 分组模型策略 / Key 倍率（`ApiKeyManagementSection.vue:1290`/`:1342`）：`openGroupModelEditor`/`submitGroupModelDisable`；`openMultiplierEditor`/`saveMultiplier`。
 - 计费条款 / 订阅关联渠道 / 同步结果（`SubscriptionsView.vue:49`/`:64`/`:102`）：`billingDialog`（四字段 paymentAmount/paymentUnit/creditAmount/creditUnit，a96098da 统一币种/金额模型）、`linkDialog`（v-select 选 `linkableChannels` + 已关联 channelUid chips 逐个解绑 `unlinkChannel`，入口 SubscriptionPlanTable 行操作）、`syncDialog`。
+
+布局示意图（按出现顺序，宽度标注在图右下）：
+
+```
+认证登录（persistent 500）:            自动认证 overlay（persistent,black scrim）:
+┌────────────────────────────┐        ┌──────────────────┐
+│    🔐 API Proxy - CCX      │        │      ◌ 64px       │
+│ (error alert authError)    │        │  正在验证访问权限  │
+│ 管理访问密钥 [password]     │        │ 使用保存的访问密钥… │
+│ [访问管理界面 ⏎ block]      │        └──────────────────┘
+│ ── divider ──              │
+│ (i) 安全提示: 5 条 li       │
+└────────────────────────────┘  提交钮在表单内,无 actions
+
+熔断器配置（640）:                     添加 API 密钥（500）:
+┌───────────────────────────────┐     ┌──────────────────────┐
+│ 调校台（修改立即生效）          │     │ [key-plus] 添加API密钥│
+│ ┌滑动窗口│失败率阈值│连续失败┐ │     │ API密钥 [password]    │
+│ │ 3-100  │0.01-1   │1-100  │ │     │  placeholder 输入API密钥│
+│ ┌非流式超时1-300s│响应头1-300s┐│     ├──────────────────────┤
+│ ┌首字5-300s│断流1-180s│工具30-300s┐ [取消 Esc] [添加 ⏎]│
+│ 预设: [温和][均衡][激进][自定义]│     └──────────────────────┘
+├───────────────────────────────┤
+│            [取消 Esc][确认 ⌘⏎]│     通用确认（persistent 420）:
+└───────────────────────────────┘     ┌──────────────────────┐
+  三组原生 range 滑块+当前值+刻度      │ [alert-circle 动态色] │
+                                      │ 请确认                │
+分组模型策略（520）:                   │ {confirmDialogMessage}│
+┌────────────────────────────┐        ├──────────────────────┤
+│ [tune-variant] 分组模型策略 │        │[取消 Esc][确认 ⌘⏎]   │
+│ sk-xx*** 〔分组 chip〕同组 n │        └──────────────────────┘  文案/色可覆盖
+│ 模型 [combobox·autofocus]   │
+│ 备注（可选）[text]           │       Key 倍率（520）:
+│      [取消][禁用模型 warning]│       ┌────────────────────────┐
+└────────────────────────────┘        │ Key 倍率设置            │
+                                      │ 消耗策略 [select·clearable]│
+billingDialog 到账规则（560）:         │ 分组倍率 [num·new_api 禁用]│
+┌────────────────────────────┐        │ 倍率上限 [num]           │
+│ 到账规则 {displayName}      │        │ (⚠ opportunistic 提示)   │
+│ 支付金额│支付单位│到账金额│到账单位│  │ (error alert)            │
+│ (error alert·409 版本冲突)   │        ├────────────────────────┤
+├────────────────────────────┤        │[标记公开/临时][取消][保存]│
+│[重置规则 error][取消][保存] │        └────────────────────────┘
+└────────────────────────────┘         左下「标记公开/临时」仅非 new_api 来源
+
+linkDialog 绑定渠道（560）:            syncDialog 同步结果（760）:
+┌────────────────────────────┐        ┌──────────────────────────────┐
+│ 绑定渠道                    │        │ new-api 同步结果              │
+│ 选择要绑定到订阅「{name}」…  │        │ │分组│倍率/上限│状态│更新/过期│说明│
+│ 选择渠道 [select]（空:暂无） │        │ │default│1/1│〔fresh〕│…│…│
+│ (error alert)               │        ├──────────────────────────────┤
+│ ── 绑定渠道 ──              │        │                      [关闭]  │
+│ 〔uid chip〕[解绑 mdi-link-off]│      └──────────────────────────────┘
+│      [取消][绑定渠道]       │          状态 chip fresh=success 其余 warning
+└────────────────────────────┘
+```
 
 ## 14. 对话框跳转/联动关系图
 
