@@ -224,7 +224,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted } from 'vue'
+import { ref, watch, onUnmounted } from 'vue'
 import { api, type ChannelBreakerEvidence, type ChannelKind, type ChannelLogEntry, type ChannelProtocolRoute } from '../services/api'
 import { useI18n } from '../i18n'
 import { useGlobalTick } from '../composables/useGlobalTick'
@@ -523,22 +523,11 @@ watch(() => props.modelValue, (open) => {
   }
 }, { immediate: true })
 
-// 键盘监听
-const handleKeydown = (e: KeyboardEvent) => {
-  if (!props.modelValue) return
-  if (e.key === 'Escape') {
-    emit('update:modelValue', false)
-  }
-}
-
-onMounted(() => {
-  window.addEventListener('keydown', handleKeydown)
-})
+// Esc 关闭由 Vuetify 原生按 overlay 栈处理（仅关最上层，内嵌 Trace 详情对话框同开时不连环关闭）
 
 onUnmounted(() => {
   stopPolling()
   if (copyLogResetTimer) clearTimeout(copyLogResetTimer)
-  window.removeEventListener('keydown', handleKeydown)
 })
 </script>
 

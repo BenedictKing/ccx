@@ -6,7 +6,7 @@
         {{ t('subscription.newApi.connect') }}
       </v-card-title>
       <v-card-text>
-        <NewApiSubscriptionForm @created="handleCreated" @error="emit('error', $event)" />
+        <NewApiSubscriptionForm ref="subscriptionFormRef" @created="handleCreated" @error="emit('error', $event)" />
       </v-card-text>
       <v-card-actions>
         <v-spacer />
@@ -19,6 +19,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useI18n } from '@/i18n'
+import { useDialogHotkeys } from '@/composables/useDialogHotkeys'
 import NewApiSubscriptionForm from '@/components/NewApiSubscriptionForm.vue'
 import type { NewApiProvisionResponse } from '@/services/api-types'
 
@@ -29,6 +30,13 @@ const emit = defineEmits<{
 }>()
 
 const dialogVisible = ref(false)
+const subscriptionFormRef = ref<InstanceType<typeof NewApiSubscriptionForm> | null>(null)
+
+// persistent 对话框默认快捷键：Esc 取消关闭；⌘/Ctrl+Enter 触发表单当前步骤（验证/接入）
+useDialogHotkeys(dialogVisible, {
+  esc: () => closeDialog(),
+  confirm: () => subscriptionFormRef.value?.requestPrimaryAction(),
+})
 
 function openDialog() {
   dialogVisible.value = true

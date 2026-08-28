@@ -322,7 +322,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import type {
   CapabilityTestJob,
   CapabilityProtocolJobResult
@@ -657,21 +657,7 @@ const handleRetryModel = (protocol: string, model: string) => {
   emit('retryModel', protocol, model)
 }
 
-// 键盘监听
-const handleKeydown = (e: KeyboardEvent) => {
-  if (!props.modelValue) return
-  if (e.key === 'Escape') {
-    emit('update:modelValue', false)
-  }
-}
-
-onMounted(() => {
-  window.addEventListener('keydown', handleKeydown)
-})
-
-onUnmounted(() => {
-  window.removeEventListener('keydown', handleKeydown)
-})
+// Esc 关闭由 Vuetify 原生按 overlay 栈处理（仅关最上层）
 
 defineExpose({ setError })
 </script>

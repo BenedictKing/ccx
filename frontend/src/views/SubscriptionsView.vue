@@ -106,6 +106,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useI18n } from '@/i18n'
+import { useDialogHotkeys } from '@/composables/useDialogHotkeys'
 import { api, ApiError } from '@/services/api'
 import { useDialogStore } from '@/stores/dialog'
 import SubscriptionProviderGrid from '@/components/subscriptions/SubscriptionProviderGrid.vue'
@@ -224,6 +225,18 @@ async function linkChannel() {
     linkSubmitting.value = false
   }
 }
+
+// 到账规则 / 绑定渠道对话框默认快捷键（Esc 取消走 Vuetify 原生，仅关本层）
+useDialogHotkeys(billingDialog, {
+  confirm: () => {
+    if (!billingSaving.value) void saveBillingTerms()
+  },
+})
+useDialogHotkeys(linkDialog, {
+  confirm: () => {
+    if (!linkSubmitting.value) void linkChannel()
+  },
+})
 
 async function unlinkChannel(channelUid: string) {
   if (!linkItem.value) return

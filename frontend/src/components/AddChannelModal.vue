@@ -235,7 +235,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { useDialogHotkeys } from '@/composables/useDialogHotkeys'
 import { useTheme } from 'vuetify'
 import type { Channel, ChannelPlacement } from '../services/api'
 import {
@@ -530,20 +531,13 @@ function handleCancel() {
   quickAddFormRef.value?.resetForm()
 }
 
-function handleKeydown(event: KeyboardEvent) {
-  if (!props.show) return
-
-  if (event.key === 'Escape') {
-    event.preventDefault()
-    handleCancel()
-    return
-  }
-
-  if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && !event.shiftKey) {
-    event.preventDefault()
-    handleSubmitByMode()
-  }
-}
+useDialogHotkeys(
+  () => props.show,
+  {
+    esc: () => handleCancel(),
+    confirm: () => handleSubmitByMode(),
+  },
+)
 
 watch(
   () => props.show,
@@ -564,13 +558,6 @@ watch(
   { immediate: true }
 )
 
-onMounted(() => {
-  document.addEventListener('keydown', handleKeydown)
-})
-
-onUnmounted(() => {
-  document.removeEventListener('keydown', handleKeydown)
-})
 </script>
 
 <style scoped>

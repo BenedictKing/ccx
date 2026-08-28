@@ -270,14 +270,24 @@
                       <v-icon start size="12">mdi-loading</v-icon>
                       {{ t('addChannel.checking') }}
                     </v-chip>
-                    <v-chip
+                    <v-tooltip
                       v-else-if="keyModelsStatus.get(row.key)?.success"
-                      size="x-small"
-                      color="success"
-                      variant="tonal"
+                      :text="t('addChannel.modelsCountTooltip')"
+                      location="top"
+                      max-width="300"
+                      content-class="key-tooltip"
                     >
-                      {{ t('addChannel.modelsCount', { statusCode: keyModelsStatus.get(row.key)?.statusCode ?? 'OK', count: keyModelsStatus.get(row.key)?.modelCount ?? 0 }) }}
-                    </v-chip>
+                      <template #activator="{ props: tooltipProps }">
+                        <v-chip
+                          v-bind="tooltipProps"
+                          size="x-small"
+                          color="success"
+                          variant="tonal"
+                        >
+                          {{ t('addChannel.modelsCount', { statusCode: keyModelsStatus.get(row.key)?.statusCode ?? 'OK', count: keyModelsStatus.get(row.key)?.modelCount ?? 0 }) }}
+                        </v-chip>
+                      </template>
+                    </v-tooltip>
                     <v-tooltip
                       v-else-if="keyModelsStatus.get(row.key)?.error"
                       :text="keyModelsStatus.get(row.key)?.error"
@@ -1400,6 +1410,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onBeforeUnmount, watch } from 'vue'
+import { useDialogHotkeys } from '../../composables/useDialogHotkeys'
 import { useI18n } from '../../i18n'
 import { ApiError, ApiService } from '../../services/api'
 import type {
@@ -1770,6 +1781,17 @@ const saveMultiplier = async () => {
     multiplierSaving.value = false
   }
 }
+
+// 分组模型策略 / Key 倍率内联对话框默认快捷键（Esc 取消走 Vuetify 原生，仅关本层）
+useDialogHotkeys(groupModelDialog, {
+  confirm: () => submitGroupModelDisable(),
+})
+useDialogHotkeys(multiplierDialog, {
+  confirm: () => {
+    if (multiplierSaving.value) return
+    void saveMultiplier()
+  },
+})
 
 const toggleCredentialKey = (key: string) => {
   expandedCredentialKey.value = expandedCredentialKey.value === key ? null : key

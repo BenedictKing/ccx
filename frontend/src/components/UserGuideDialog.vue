@@ -149,9 +149,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 import ChannelStatusBadge from './ChannelStatusBadge.vue'
+import { useDialogHotkeys } from '@/composables/useDialogHotkeys'
 import { useI18n } from '../i18n'
 import type { ChannelStatus } from '../services/api'
 
@@ -194,33 +195,16 @@ function close() {
   emit('update:modelValue', false)
 }
 
-// 键盘快捷键：ESC 关闭，Enter 下一步/完成
-const handleKeydown = (event: KeyboardEvent) => {
-  if (!props.modelValue) return
-
-  if (event.key === 'Escape') {
-    event.preventDefault()
-    close()
-    return
-  }
-
-  if (event.key === 'Enter' && !event.metaKey && !event.ctrlKey && !event.shiftKey) {
-    event.preventDefault()
-    if (step.value < STEP_COUNT - 1) {
-      next()
-    } else {
-      close()
-    }
-  }
-}
-
-onMounted(() => {
-  document.addEventListener('keydown', handleKeydown)
-})
-
-onUnmounted(() => {
-  document.removeEventListener('keydown', handleKeydown)
-})
+// 键盘快捷键：Enter 下一步/完成（经全局对话框快捷键栈，仅栈顶时生效；Esc 关闭由 Vuetify 原生处理）
+useDialogHotkeys(
+  () => props.modelValue,
+  {
+    plainEnter: () => {
+      if (step.value < STEP_COUNT - 1) next()
+      else close()
+    },
+  },
+)
 </script>
 
 <style scoped>

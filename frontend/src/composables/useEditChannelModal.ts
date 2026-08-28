@@ -1,7 +1,8 @@
-import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, reactive, computed, watch, onUnmounted, nextTick } from 'vue'
 import { useTheme } from 'vuetify'
 import type { Channel } from '../services/api'
 import { ApiService } from '../services/api'
+import { useDialogHotkeys } from '@/composables/useDialogHotkeys'
 import {
   buildChannelPayload,
   embeddingCapabilitiesToRows,
@@ -801,39 +802,20 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     }
   )
 
-  // ESC键监听 & Cmd/Ctrl+Enter 确认
-  const handleKeydown = (event: Event) => {
-    const keyboardEvent = event as KeyboardEvent
-    if (!props.show) return
-
-    if (keyboardEvent.key === 'Escape') {
-      if (submitting.value) {
-        keyboardEvent.preventDefault()
-        return
-      }
-      if (isAnySelectMenuOpen.value || Date.now() < suppressDialogEscapeUntil.value) {
-        keyboardEvent.preventDefault()
-        keyboardEvent.stopPropagation()
-        return
-      }
-      keyboardEvent.preventDefault()
-      handleCancel()
-      return
-    }
-
-    // Cmd/Ctrl+Enter 确认提交
-    if (keyboardEvent.key === 'Enter' && (keyboardEvent.metaKey || keyboardEvent.ctrlKey) && !keyboardEvent.shiftKey) {
-      keyboardEvent.preventDefault()
-      handleSubmit()
-    }
-  }
-
-  onMounted(() => {
-    document.addEventListener('keydown', handleKeydown)
-  })
+  // ESC 取消 & Cmd/Ctrl+Enter 确认（经全局对话框快捷键栈，仅栈顶时生效）
+  useDialogHotkeys(
+    () => props.show,
+    {
+      esc: () => {
+        if (submitting.value) return false
+        if (isAnySelectMenuOpen.value || Date.now() < suppressDialogEscapeUntil.value) return false
+        handleCancel()
+      },
+      confirm: () => handleSubmit(),
+    },
+  )
 
   onUnmounted(() => {
-    document.removeEventListener('keydown', handleKeydown)
     detachScrollListener()
     if (formBaseUrlPreviewTimer !== null) {
       window.clearTimeout(formBaseUrlPreviewTimer)

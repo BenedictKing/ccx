@@ -11,6 +11,7 @@ import { useSystemStore } from '../stores/system'
 import { useI18n } from '../i18n'
 import type { SupportedLocale } from '../i18n'
 import { useAppTheme } from './useTheme'
+import { useDialogHotkeys } from './useDialogHotkeys'
 import { useToasts } from './useToasts'
 import { streamTimeoutPresets as sharedStreamPresets } from '../utils/streamTimeoutPresets'
 import { isAutoManagedAccountChannel } from '../utils/providerDisplay'
@@ -420,56 +421,31 @@ export function useAppController() {
   // 平台检测
   const isMac = computed(() => typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform))
 
-  // 调校台弹窗键盘快捷键
-  const handleCircuitBreakerKeydown = (event: KeyboardEvent) => {
-    if (!circuitBreakerDialogOpen.value) return
-
-    if (event.key === 'Escape') {
-      event.preventDefault()
+  // 调校台弹窗键盘快捷键（经全局对话框快捷键栈，仅栈顶时生效）
+  useDialogHotkeys(circuitBreakerDialogOpen, {
+    esc: () => {
       circuitBreakerDialogOpen.value = false
-      return
-    }
+    },
+    confirm: () => saveCircuitBreaker(),
+  })
 
-    // Cmd/Ctrl+Enter 确认提交
-    if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && !event.shiftKey) {
-      event.preventDefault()
-      saveCircuitBreaker()
-    }
-  }
-
-  // 添加API密钥弹窗键盘快捷键
-  const handleAddKeyKeydown = (event: KeyboardEvent) => {
-    if (!dialogStore.showAddKeyModal) return
-
-    if (event.key === 'Escape') {
-      event.preventDefault()
-      dialogStore.closeAddKeyModal()
-      return
-    }
-
-    // Enter 确认添加
-    if (event.key === 'Enter' && !event.metaKey && !event.ctrlKey && !event.shiftKey) {
-      event.preventDefault()
-      addApiKey()
-    }
-  }
+  // 添加API密钥弹窗键盘快捷键（Enter 确认添加）
+  useDialogHotkeys(
+    () => dialogStore.showAddKeyModal,
+    {
+      esc: () => dialogStore.closeAddKeyModal(),
+      plainEnter: () => addApiKey(),
+    },
+  )
 
   // 通用确认弹窗键盘快捷键
-  const handleConfirmKeydown = (event: KeyboardEvent) => {
-    if (!dialogStore.showConfirmDialog) return
-
-    if (event.key === 'Escape') {
-      event.preventDefault()
-      dialogStore.resolveConfirm(false)
-      return
-    }
-
-    // Cmd/Ctrl+Enter 确认
-    if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && !event.shiftKey) {
-      event.preventDefault()
-      dialogStore.resolveConfirm(true)
-    }
-  }
+  useDialogHotkeys(
+    () => dialogStore.showConfirmDialog,
+    {
+      esc: () => dialogStore.resolveConfirm(false),
+      confirm: () => dialogStore.resolveConfirm(true),
+    },
+  )
 
   // 主题管理
   const toggleDarkMode = () => {
@@ -719,13 +695,6 @@ export function useAppController() {
   }
   mediaQuery?.addEventListener('change', handlePref)
 
-  // 注册弹窗键盘快捷键（setup 阶段注册，onUnmounted 清理）
-  if (typeof window !== 'undefined') {
-    window.addEventListener('keydown', handleCircuitBreakerKeydown)
-    window.addEventListener('keydown', handleAddKeyKeydown)
-    window.addEventListener('keydown', handleConfirmKeydown)
-  }
-
   // 初始化
   onMounted(async () => {
     // 初始化复古像素主题
@@ -846,11 +815,6 @@ export function useAppController() {
   onUnmounted(() => {
     channelStore.stopAutoRefresh()
     mediaQuery?.removeEventListener('change', handlePref)
-    if (typeof window !== 'undefined') {
-      window.removeEventListener('keydown', handleCircuitBreakerKeydown)
-      window.removeEventListener('keydown', handleAddKeyKeydown)
-      window.removeEventListener('keydown', handleConfirmKeydown)
-    }
   })
 
   return {

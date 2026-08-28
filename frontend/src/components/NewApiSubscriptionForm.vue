@@ -357,4 +357,15 @@ async function handleProvision() {
     provisioning.value = false
   }
 }
+
+/** 当前步骤的主操作（供承载对话框的 ⌘/Ctrl+Enter 快捷键接线）：未验证→验证，已验证→接入 */
+function requestPrimaryAction() {
+  if (verified.value) {
+    if (canProvision.value && !provisioning.value) void handleProvision()
+  } else if (canVerify.value && !verifying.value) {
+    void handleVerify()
+  }
+}
+
+defineExpose({ requestPrimaryAction })
 </script>
