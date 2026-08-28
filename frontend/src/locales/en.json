@@ -105,6 +105,7 @@
   "app.actions.cancel": "Cancel",
   "app.actions.add": "Add",
   "app.actions.save": "Save",
+  "app.actions.edit": "Edit",
   "app.actions.saveAnyway": "Save anyway",
   "app.actions.confirm": "Confirm",
   "app.actions.delete": "Delete",

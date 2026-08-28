@@ -105,6 +105,7 @@
   "app.actions.cancel": "取消",
   "app.actions.add": "添加",
   "app.actions.save": "保存",
+  "app.actions.edit": "编辑",
   "app.actions.saveAnyway": "仍要保存",
   "app.actions.confirm": "确认",
   "app.actions.delete": "删除",

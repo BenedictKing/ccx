@@ -105,6 +105,7 @@
   "app.actions.cancel": "Batal",
   "app.actions.add": "Tambah",
   "app.actions.save": "Simpan",
+  "app.actions.edit": "Ubah",
   "app.actions.saveAnyway": "Tetap simpan",
   "app.actions.confirm": "Konfirmasi",
   "app.actions.delete": "Hapus",

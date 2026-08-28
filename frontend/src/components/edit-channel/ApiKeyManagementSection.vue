@@ -327,7 +327,7 @@
                     </span>
                     </template>
                     <!-- 倍率编辑入口对未设置倍率的 key 同样可见（否则首次设置无入口） -->
-                    <v-btn v-if="row.keyUid && channelUid && channelKind" size="x-small" variant="text" @click="openMultiplierEditor(row)">
+                    <v-btn v-if="row.keyUid && channelUid && channelKind" size="x-small" variant="tonal" color="secondary" prepend-icon="mdi-scale-balance" @click="openMultiplierEditor(row)">
                       {{ (row.multiplierSource || row.groupMultiplier != null || row.maxGroupMultiplier != null) ? t('app.actions.edit') : t('subscription.keyMultiplier.title') }}
                     </v-btn>
                   </div>
