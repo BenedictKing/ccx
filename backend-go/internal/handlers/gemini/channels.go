@@ -526,7 +526,7 @@ func GetChannelModels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 			} else {
 				log.Printf("[Gemini-Models] 响应无 models 字段，透传原始响应")
 			}
-			c.Data(http.StatusOK, "application/json", body)
+			c.Data(http.StatusOK, "application/json", common.InjectUpstreamStatusCode(body, http.StatusOK))
 			return
 		}
 
@@ -537,7 +537,7 @@ func GetChannelModels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 		}
 		if err := json.Unmarshal(body, &geminiResp); err != nil {
 			log.Printf("[Gemini-Models] 响应结构解析失败，透传原始响应: %v", err)
-			c.Data(http.StatusOK, "application/json", body)
+			c.Data(http.StatusOK, "application/json", common.InjectUpstreamStatusCode(body, http.StatusOK))
 			return
 		}
 
@@ -556,11 +556,12 @@ func GetChannelModels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 		}
 
 		converted, err := json.Marshal(map[string]any{
-			"object": "list",
-			"data":   entries,
+			"object":     "list",
+			"data":       entries,
+			"statusCode": http.StatusOK,
 		})
 		if err != nil {
-			c.Data(http.StatusOK, "application/json", body)
+			c.Data(http.StatusOK, "application/json", common.InjectUpstreamStatusCode(body, http.StatusOK))
 			return
 		}
 		c.Data(http.StatusOK, "application/json", converted)

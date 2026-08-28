@@ -394,3 +394,68 @@ func TestFetchVolcenginePlanModelsForChannelControlPlaneError(t *testing.T) {
 		t.Fatalf("错误应透传管控面错误码: %v", err)
 	}
 }
+
+// TestVolcengineAutoDiscoveryFiltersNonChatModels 验证管控面套餐权益清单里的非对话模型
+// （embedding/seedance/seedream/tts 命名族）按内置清单 ExcludeModelPatterns 被过滤，
+// kimi-k3 等对话模型保留，过滤数量写入发现说明。
+func TestVolcengineAutoDiscoveryFiltersNonChatModels(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Query().Get("Action") {
+		case "GetPersonalPlan":
+			_, _ = w.Write([]byte(`{"Result":{"PlanType":"Large","Status":"Running"}}`))
+		case "ListArkAgentPlanModel":
+			_, _ = w.Write([]byte(`{"Result":{"Datas":[
+				{"ModelID":"kimi-k3"},
+				{"ModelID":"doubao-seed-2.1-turbo"},
+				{"ModelID":"doubao-seedance-1-5-pro-250528"},
+				{"ModelID":"doubao-seedream-4-0-250828"},
+				{"ModelID":"doubao-embedding-vision-250615"},
+				{"ModelID":"doubao-tts-1"}
+			]}}`))
+		default:
+			w.WriteHeader(http.StatusBadRequest)
+		}
+	}))
+	defer server.Close()
+
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.json")
+	data := `{
+  "managedAccounts":[{"accountUid":"acct_volc","providerId":"volcengine","name":"volc","credentials":[{"credentialUid":"cred_volc","apiKey":"ark-inference","volcengineAccessKey":{"accessKeyId":"AKID","secretAccessKey":"SECRET"}}]}],
+  "upstream":[{"accountUid":"acct_volc","channelUid":"ch_volc","providerId":"volcengine","name":"volc","serviceType":"claude","autoManaged":true,"baseUrl":"https://ark.cn-beijing.volces.com/api/plan","apiKeyConfigs":[{"credentialUid":"cred_volc","key":"ark-inference","baseUrl":"https://ark.cn-beijing.volces.com/api/plan"}]}],
+  "chatUpstream":[],"responsesUpstream":[],"geminiUpstream":[],"imagesUpstream":[],"vectorsUpstream":[]
+}`
+	if err := os.WriteFile(configPath, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+	manager, err := config.NewConfigManager(configPath, filepath.Join(dir, "backups"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer errutil.IgnoreDeferred(manager.Close)
+	channels := manager.GetAccountChannels("acct_volc")
+	if len(channels) != 1 {
+		t.Fatalf("channels=%d", len(channels))
+	}
+
+	runner := NewAutoDiscoveryRunner(nil, nil)
+	runner.volcengineControlPlaneEndpoint = server.URL
+	result := runner.discoverVolcenginePlanEndpoint(context.Background(), server.Client(), &channels[0].Upstream,
+		"https://ark.cn-beijing.volces.com/api/plan", "ark-inference", manager)
+
+	if !result.ProtocolOk {
+		t.Fatalf("发现应成功: %+v", result)
+	}
+	if got := strings.Join(result.Models, ","); got != "doubao-seed-2.1-turbo,kimi-k3" {
+		t.Fatalf("非对话模型应被过滤、对话模型保留, got=%q", got)
+	}
+	if result.ModelsCount != 2 {
+		t.Fatalf("ModelsCount = %d, want 2", result.ModelsCount)
+	}
+	if !strings.Contains(result.ModelDiscoveryMessage, "已过滤 4 个非对话模型") {
+		t.Fatalf("发现说明应含过滤数量, got=%q", result.ModelDiscoveryMessage)
+	}
+	if result.ModelDiscoverySource != ModelDiscoverySourceControlPlane {
+		t.Fatalf("来源应为管控面, got=%q", result.ModelDiscoverySource)
+	}
+}

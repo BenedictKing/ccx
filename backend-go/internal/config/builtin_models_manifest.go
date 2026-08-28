@@ -173,48 +173,56 @@ var builtinModelsManifests = []BuiltinModelsManifest{
 	// 套餐模型发现依赖火山云管控面签名接口，普通推理 Key 无法通过 /v1/models 探测；
 	// 未绑定 Access Key 时用此清单兜底，让渠道立即可用。DisableProbe=true。
 	// BaseURLPattern 用 host+path 前缀（不含版本段），以同时匹配 openai 入口的 /v3 后缀。
+	// ExcludeModelPatterns 过滤管控面权益清单里的非对话模型（embedding/视频/绘图/语音族），
+	// 避免它们进入画像成为对话协议的调度候选。
 	{
-		BaseURLPattern: "ark.cn-beijing.volces.com/api/plan",
-		ServiceType:    "messages",
-		PlanHint:       "volcengine_plan_anthropic",
-		ModelIDs:       volcengineAgentPlanModelIDs(),
-		DisableProbe:   true,
+		BaseURLPattern:       "ark.cn-beijing.volces.com/api/plan",
+		ServiceType:          "messages",
+		PlanHint:             "volcengine_plan_anthropic",
+		ModelIDs:             volcengineAgentPlanModelIDs(),
+		ExcludeModelPatterns: volcengineExcludeModelPatterns(),
+		DisableProbe:         true,
 	},
 	{
-		BaseURLPattern: "ark.cn-beijing.volces.com/api/coding",
-		ServiceType:    "messages",
-		PlanHint:       "volcengine_coding_anthropic",
-		ModelIDs:       volcengineCodingPlanModelIDs(),
-		DisableProbe:   true,
+		BaseURLPattern:       "ark.cn-beijing.volces.com/api/coding",
+		ServiceType:          "messages",
+		PlanHint:             "volcengine_coding_anthropic",
+		ModelIDs:             volcengineCodingPlanModelIDs(),
+		ExcludeModelPatterns: volcengineExcludeModelPatterns(),
+		DisableProbe:         true,
 	},
 	{
-		BaseURLPattern: "ark.cn-beijing.volces.com/api/plan",
-		ServiceType:    "openai",
-		PlanHint:       "volcengine_plan_openai",
-		ModelIDs:       volcengineAgentPlanModelIDs(),
-		DisableProbe:   true,
+		BaseURLPattern:       "ark.cn-beijing.volces.com/api/plan",
+		ServiceType:          "openai",
+		PlanHint:             "volcengine_plan_openai",
+		ModelIDs:             volcengineAgentPlanModelIDs(),
+		ExcludeModelPatterns: volcengineExcludeModelPatterns(),
+		DisableProbe:         true,
 	},
 	{
-		BaseURLPattern: "ark.cn-beijing.volces.com/api/coding",
-		ServiceType:    "openai",
-		PlanHint:       "volcengine_coding_openai",
-		ModelIDs:       volcengineCodingPlanModelIDs(),
-		DisableProbe:   true,
+		BaseURLPattern:       "ark.cn-beijing.volces.com/api/coding",
+		ServiceType:          "openai",
+		PlanHint:             "volcengine_coding_openai",
+		ModelIDs:             volcengineCodingPlanModelIDs(),
+		ExcludeModelPatterns: volcengineExcludeModelPatterns(),
+		DisableProbe:         true,
 	},
 	// 火山套餐原生 Responses 入口（Codex wire_api=responses）：模型清单与 Chat API 一致。
 	{
-		BaseURLPattern: "ark.cn-beijing.volces.com/api/plan",
-		ServiceType:    "responses",
-		PlanHint:       "volcengine_plan_responses",
-		ModelIDs:       volcengineAgentPlanModelIDs(),
-		DisableProbe:   true,
+		BaseURLPattern:       "ark.cn-beijing.volces.com/api/plan",
+		ServiceType:          "responses",
+		PlanHint:             "volcengine_plan_responses",
+		ModelIDs:             volcengineAgentPlanModelIDs(),
+		ExcludeModelPatterns: volcengineExcludeModelPatterns(),
+		DisableProbe:         true,
 	},
 	{
-		BaseURLPattern: "ark.cn-beijing.volces.com/api/coding",
-		ServiceType:    "responses",
-		PlanHint:       "volcengine_coding_responses",
-		ModelIDs:       volcengineCodingPlanModelIDs(),
-		DisableProbe:   true,
+		BaseURLPattern:       "ark.cn-beijing.volces.com/api/coding",
+		ServiceType:          "responses",
+		PlanHint:             "volcengine_coding_responses",
+		ModelIDs:             volcengineCodingPlanModelIDs(),
+		ExcludeModelPatterns: volcengineExcludeModelPatterns(),
+		DisableProbe:         true,
 	},
 }
 
@@ -286,6 +294,21 @@ func volcengineCodingPlanModelIDs() []string {
 func mimoExcludeModelPatterns() []string {
 	return []string{
 		`^mimo-v2\.5-(?:asr|tts(?:-.+)?)$`,
+	}
+}
+
+// volcengineExcludeModelPatterns 剔除火山管控面套餐权益清单里明确非对话的模型命名族。
+// 管控面返回的是套餐全量权益（含 embedding/视频 seedance/绘图 seedream/语音 tts/asr 等），
+// 原样进入画像会成为对话协议的调度候选（调用必失败）；分段边界匹配避免误伤
+// doubao-seed-code 这类对话模型（seed 不等于 seedance/seedream）。
+// VolcengineExcludeModelPatterns 供发现层复用同一组排除规则。
+func VolcengineExcludeModelPatterns() []string {
+	return volcengineExcludeModelPatterns()
+}
+
+func volcengineExcludeModelPatterns() []string {
+	return []string{
+		`(?:^|[-_/])(?:embedding|seedance|seedream|tts|asr|ocr)(?:[-_.]|$)`,
 	}
 }
 

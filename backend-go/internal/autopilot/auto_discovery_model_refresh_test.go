@@ -41,10 +41,31 @@ func setupRefreshConfigManager(t *testing.T, channelUID, accountUID, baseURL str
 	return cfgManager
 }
 
+// TestModelInventoryTTLConstants 锁定模型清单的分层 TTL 语义：
+// 清单层 24h（管控面/models API 是单次只读调用，可频繁刷新），
+// 实测层 7d（逐模型 POST 探测真实消耗上游额度，TTL 内复用存量结论），
+// 服务启动 5 分钟后先跑一轮扫描再进入 6h 周期（dev 频繁重启下也能生效）。
+func TestModelInventoryTTLConstants(t *testing.T) {
+	if modelListStaleTTL != 24*time.Hour {
+		t.Fatalf("modelListStaleTTL = %v, want 24h", modelListStaleTTL)
+	}
+	if protocolProbeStaleTTL != 7*24*time.Hour {
+		t.Fatalf("protocolProbeStaleTTL = %v, want 7*24h", protocolProbeStaleTTL)
+	}
+	if modelListRefreshInitialDelay != 5*time.Minute {
+		t.Fatalf("modelListRefreshInitialDelay = %v, want 5m", modelListRefreshInitialDelay)
+	}
+	if modelListRefreshScanInterval != 6*time.Hour {
+		t.Fatalf("modelListRefreshScanInterval = %v, want 6h", modelListRefreshScanInterval)
+	}
+}
+
 func TestChannelModelsStale(t *testing.T) {
 	now := time.Now()
 	stale := now.Add(-8 * 24 * time.Hour)
 	fresh := now.Add(-1 * time.Hour)
+	// 清单层 TTL 为 24h：25 小时前的清单应判过期（7 天 TTL 时代不会）。
+	pastListTTL := now.Add(-25 * time.Hour)
 
 	tests := []struct {
 		name    string
@@ -63,6 +84,12 @@ func TestChannelModelsStale(t *testing.T) {
 			profile: &KeyEndpointProfile{EndpointUID: "ep-fresh", ChannelUID: "ch-stale", ServiceType: "claude",
 				AvailableModels: []string{"m1"}, ModelsDiscoveredAt: &fresh},
 			want: false,
+		},
+		{
+			name: "超过清单层 24h TTL 即过期",
+			profile: &KeyEndpointProfile{EndpointUID: "ep-25h", ChannelUID: "ch-stale", ServiceType: "claude",
+				AvailableModels: []string{"m1"}, ModelsDiscoveredAt: &pastListTTL},
+			want: true,
 		},
 		{
 			name: "全部端点过期",

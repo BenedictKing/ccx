@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { mount } from '@vue/test-utils'
-import { defineComponent } from 'vue'
-import { describe, expect, it, vi } from 'vitest'
+import { defineComponent, nextTick } from 'vue'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { ChannelProtocolRoute } from '../../services/api'
 import ProtocolModelAvailability from './ProtocolModelAvailability.vue'
@@ -27,12 +27,27 @@ const passthroughStub = defineComponent({
   template: '<span><slot /></span>',
 })
 
+// v-tooltip 需要渲染 activator 插槽里的内容（来源标签 chip 在 tooltip 内部）。
+const tooltipStub = defineComponent({
+  template: '<span><slot name="activator" :props="{}" /><slot /></span>',
+})
+
+const baseStubs = {
+  VChip: passthroughStub,
+  VIcon: passthroughStub,
+  VTooltip: tooltipStub,
+}
+
 const buttonStub = defineComponent({
   emits: ['click'],
   template: '<button @click="$emit(\'click\')"><slot /></button>',
 })
 
 describe('ProtocolModelAvailability', () => {
+  beforeEach(() => {
+    autopilotMocks.autoDiscoverChannel.mockReset()
+    autopilotMocks.getChannelAutoStatus.mockReset()
+  })
   it('按协议分组展示各自的可用模型', () => {
     const wrapper = mount(ProtocolModelAvailability, {
       props: {
@@ -52,10 +67,7 @@ describe('ProtocolModelAvailability', () => {
         ],
       },
       global: {
-        stubs: {
-          VChip: passthroughStub,
-          VIcon: passthroughStub,
-        },
+        stubs: baseStubs,
       },
     })
 
@@ -85,10 +97,7 @@ describe('ProtocolModelAvailability', () => {
     const wrapper = mount(ProtocolModelAvailability, {
       props: { routes },
       global: {
-        stubs: {
-          VChip: passthroughStub,
-          VIcon: passthroughStub,
-        },
+        stubs: baseStubs,
       },
     })
 
@@ -124,10 +133,7 @@ describe('ProtocolModelAvailability', () => {
         ],
       },
       global: {
-        stubs: {
-          VChip: passthroughStub,
-          VIcon: passthroughStub,
-        },
+        stubs: baseStubs,
       },
     })
 
@@ -156,10 +162,7 @@ describe('ProtocolModelAvailability', () => {
         ],
       },
       global: {
-        stubs: {
-          VChip: passthroughStub,
-          VIcon: passthroughStub,
-        },
+        stubs: baseStubs,
       },
     })
 
@@ -173,10 +176,7 @@ describe('ProtocolModelAvailability', () => {
         routes: [{ kind: 'gemini', index: 0, name: 'gemini', serviceType: 'gemini' }],
       },
       global: {
-        stubs: {
-          VChip: passthroughStub,
-          VIcon: passthroughStub,
-        },
+        stubs: baseStubs,
       },
     })
 
@@ -195,10 +195,7 @@ describe('ProtocolModelAvailability', () => {
         }],
       },
       global: {
-        stubs: {
-          VChip: passthroughStub,
-          VIcon: passthroughStub,
-        },
+        stubs: baseStubs,
       },
     })
 
@@ -222,10 +219,7 @@ describe('ProtocolModelAvailability', () => {
         }],
       },
       global: {
-        stubs: {
-          VChip: passthroughStub,
-          VIcon: passthroughStub,
-        },
+        stubs: baseStubs,
       },
     })
 
@@ -257,10 +251,7 @@ describe('ProtocolModelAvailability', () => {
         }],
       },
       global: {
-        stubs: {
-          VChip: passthroughStub,
-          VIcon: passthroughStub,
-        },
+        stubs: baseStubs,
       },
     })
 
@@ -297,10 +288,7 @@ describe('ProtocolModelAvailability', () => {
         }],
       },
       global: {
-        stubs: {
-          VChip: passthroughStub,
-          VIcon: passthroughStub,
-        },
+        stubs: baseStubs,
       },
     })
 
@@ -330,10 +318,7 @@ describe('ProtocolModelAvailability', () => {
         }],
       },
       global: {
-        stubs: {
-          VChip: passthroughStub,
-          VIcon: passthroughStub,
-        },
+        stubs: baseStubs,
       },
     })
 
@@ -359,10 +344,7 @@ describe('ProtocolModelAvailability', () => {
         })),
       },
       global: {
-        stubs: {
-          VChip: passthroughStub,
-          VIcon: passthroughStub,
-        },
+        stubs: baseStubs,
       },
     })
 
@@ -387,10 +369,7 @@ describe('ProtocolModelAvailability', () => {
         }],
       },
       global: {
-        stubs: {
-          VChip: passthroughStub,
-          VIcon: passthroughStub,
-        },
+        stubs: baseStubs,
       },
     })
 
@@ -423,10 +402,9 @@ describe('ProtocolModelAvailability', () => {
       },
       global: {
         stubs: {
+          ...baseStubs,
           VAlert: passthroughStub,
           VBtn: buttonStub,
-          VChip: passthroughStub,
-          VIcon: passthroughStub,
           VProgressCircular: passthroughStub,
         },
       },
@@ -440,5 +418,269 @@ describe('ProtocolModelAvailability', () => {
     await vi.waitFor(() => {
       expect(autopilotMocks.autoDiscoverChannel).toHaveBeenCalledWith('responses', 'ch-responses')
     })
+  })
+})
+
+describe('整组重新发现（triggered 契约）', () => {
+  const freshTimestamp = () => new Date().toISOString()
+
+  const mountWithRoutes = (routes: ChannelProtocolRoute[]) => mount(ProtocolModelAvailability, {
+    props: { routes },
+    global: {
+      stubs: {
+        ...baseStubs,
+        VAlert: passthroughStub,
+        VBtn: buttonStub,
+        VProgressCircular: passthroughStub,
+      },
+    },
+  })
+
+  it('响应带 triggered 时并行轮询全部兄弟上游，全部完成后统一刷新', async () => {
+    autopilotMocks.autoDiscoverChannel.mockResolvedValue({
+      channelUid: 'ch-msg',
+      discoveryStarted: true,
+      triggered: [
+        { kind: 'messages', channelUid: 'ch-msg' },
+        { kind: 'chat', channelUid: 'ch-chat' },
+      ],
+    })
+    autopilotMocks.getChannelAutoStatus.mockResolvedValue({
+      autoManaged: true,
+      discovery: { status: 'done' },
+    })
+    const wrapper = mountWithRoutes([
+      {
+        kind: 'messages', index: 0, channelUid: 'ch-msg', name: 'ch', serviceType: 'claude',
+        modelInventoryKnown: true, discoveredModels: ['m1'], modelsDiscoveredAt: freshTimestamp(),
+      },
+      {
+        kind: 'chat', index: 1, channelUid: 'ch-chat', name: 'ch', serviceType: 'openai',
+        modelInventoryKnown: true, discoveredModels: ['m1'], modelsDiscoveredAt: freshTimestamp(),
+      },
+    ])
+
+    await wrapper.get('.protocol-model-availability__rediscover-all').trigger('click')
+    await vi.waitFor(() => {
+      expect(wrapper.emitted('refreshed')).toHaveLength(1)
+    })
+    expect(autopilotMocks.getChannelAutoStatus).toHaveBeenCalledWith('messages', 'ch-msg')
+    expect(autopilotMocks.getChannelAutoStatus).toHaveBeenCalledWith('chat', 'ch-chat')
+  })
+
+  it('旧后端无 triggered 字段时回退为只轮询主路由', async () => {
+    autopilotMocks.autoDiscoverChannel.mockResolvedValue({
+      channelUid: 'ch-msg-fb',
+      discoveryStarted: true,
+    })
+    autopilotMocks.getChannelAutoStatus.mockResolvedValue({
+      autoManaged: true,
+      discovery: { status: 'done' },
+    })
+    const wrapper = mountWithRoutes([
+      {
+        kind: 'messages', index: 0, channelUid: 'ch-msg-fb', name: 'ch', serviceType: 'claude',
+        modelInventoryKnown: true, discoveredModels: ['m1'], modelsDiscoveredAt: freshTimestamp(),
+      },
+      {
+        kind: 'chat', index: 1, channelUid: 'ch-chat-fb', name: 'ch', serviceType: 'openai',
+        modelInventoryKnown: true, discoveredModels: ['m1'], modelsDiscoveredAt: freshTimestamp(),
+      },
+    ])
+
+    await wrapper.get('.protocol-model-availability__rediscover-all').trigger('click')
+    await vi.waitFor(() => {
+      expect(wrapper.emitted('refreshed')).toHaveLength(1)
+    })
+    expect(autopilotMocks.getChannelAutoStatus).toHaveBeenCalledWith('messages', 'ch-msg-fb')
+    expect(autopilotMocks.getChannelAutoStatus).not.toHaveBeenCalledWith('chat', 'ch-chat-fb')
+  })
+
+  it('整组轮询中任一协议失败时在错误区展示该协议，其余继续等待', async () => {
+    autopilotMocks.autoDiscoverChannel.mockResolvedValue({
+      channelUid: 'ch-msg-f',
+      discoveryStarted: true,
+      triggered: [
+        { kind: 'messages', channelUid: 'ch-msg-f' },
+        { kind: 'chat', channelUid: 'ch-chat-f' },
+      ],
+    })
+    autopilotMocks.getChannelAutoStatus.mockImplementation((kind: string, channelUid: string) => Promise.resolve({
+      autoManaged: true,
+      discovery: channelUid === 'ch-chat-f'
+        ? { status: 'failed', error: 'upstream boom' }
+        : { status: 'done' },
+    }))
+    const wrapper = mountWithRoutes([
+      {
+        kind: 'messages', index: 0, channelUid: 'ch-msg-f', name: 'ch', serviceType: 'claude',
+        modelInventoryKnown: true, discoveredModels: ['m1'], modelsDiscoveredAt: freshTimestamp(),
+      },
+      {
+        kind: 'chat', index: 1, channelUid: 'ch-chat-f', name: 'ch', serviceType: 'openai',
+        modelInventoryKnown: true, discoveredModels: ['m1'], modelsDiscoveredAt: freshTimestamp(),
+      },
+    ])
+
+    await wrapper.get('.protocol-model-availability__rediscover-all').trigger('click')
+    await vi.waitFor(() => {
+      expect(wrapper.text()).toContain('channelEditor.protocolModels.rediscoverProtocolFailed')
+    })
+    // 失败的兄弟协议完成轮询后才展示错误，且不做整体刷新。
+    expect(autopilotMocks.getChannelAutoStatus).toHaveBeenCalledWith('messages', 'ch-msg-f')
+    expect(wrapper.emitted('refreshed')).toBeUndefined()
+  })
+})
+
+describe('查看时静默自愈', () => {
+  it('缺失或超过 24h 的发现时间触发后台刷新，新鲜路由不触发', async () => {
+    autopilotMocks.autoDiscoverChannel.mockResolvedValue({ channelUid: 'x', discoveryStarted: true })
+    autopilotMocks.getChannelAutoStatus.mockResolvedValue({
+      autoManaged: true,
+      discovery: { status: 'done' },
+    })
+    const wrapper = mount(ProtocolModelAvailability, {
+      props: {
+        routes: [
+          {
+            kind: 'messages', index: 0, channelUid: 'ch-heal-stale', name: 'ch', serviceType: 'claude',
+            modelInventoryKnown: true, discoveredModels: ['m1'],
+            modelsDiscoveredAt: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(),
+          },
+          {
+            kind: 'chat', index: 1, channelUid: 'ch-heal-fresh', name: 'ch', serviceType: 'openai',
+            modelInventoryKnown: true, discoveredModels: ['m1'],
+            modelsDiscoveredAt: new Date().toISOString(),
+          },
+          {
+            kind: 'responses', index: 2, channelUid: 'ch-heal-missing', name: 'ch', serviceType: 'responses',
+            modelInventoryKnown: true, discoveredModels: ['m1'],
+          },
+          {
+            kind: 'gemini', index: 3, channelUid: 'ch-heal-invalid', name: 'ch', serviceType: 'gemini',
+            modelInventoryKnown: true, discoveredModels: ['m1'],
+            modelsDiscoveredAt: 'not-a-date',
+          },
+        ],
+      },
+      global: { stubs: baseStubs },
+    })
+
+    await vi.waitFor(() => {
+      expect(autopilotMocks.autoDiscoverChannel).toHaveBeenCalledWith('messages', 'ch-heal-stale')
+      expect(autopilotMocks.autoDiscoverChannel).toHaveBeenCalledWith('responses', 'ch-heal-missing')
+      expect(autopilotMocks.autoDiscoverChannel).toHaveBeenCalledWith('gemini', 'ch-heal-invalid')
+    })
+    expect(autopilotMocks.autoDiscoverChannel).not.toHaveBeenCalledWith('chat', 'ch-heal-fresh')
+    // 多条陈旧路由完成后只统一刷新一次。
+    await vi.waitFor(() => {
+      expect(wrapper.emitted('refreshed')).toHaveLength(1)
+    })
+  })
+
+  it('自愈进行中展示轻量状态，缺时间戳路由显示自动更新文案', async () => {
+    autopilotMocks.autoDiscoverChannel.mockResolvedValue({ channelUid: 'x', discoveryStarted: true })
+    // 首次调用是挂载时的状态查询（done，不进入「自动检测中」），后续为自愈轮询（running）。
+    let statusCalls = 0
+    autopilotMocks.getChannelAutoStatus.mockImplementation(() => Promise.resolve({
+      autoManaged: true,
+      discovery: statusCalls++ === 0 ? { status: 'done' } : { status: 'running' },
+    }))
+    const wrapper = mount(ProtocolModelAvailability, {
+      props: {
+        routes: [{
+          kind: 'messages', index: 0, channelUid: 'ch-heal-ui', name: 'ch', serviceType: 'claude',
+          modelInventoryKnown: true, discoveredModels: ['m1'],
+        }],
+      },
+      global: { stubs: baseStubs },
+    })
+    await nextTick()
+
+    expect(wrapper.text()).toContain('channelEditor.protocolModels.autoRefreshing')
+    expect(wrapper.get('[data-kind="messages"]').text())
+      .toContain('channelEditor.protocolModels.discoveryUpdating')
+    wrapper.unmount()
+  })
+
+  it('自愈触发失败时静默保留旧数据并显示中性的发现时间未知', async () => {
+    autopilotMocks.autoDiscoverChannel.mockRejectedValue(new Error('network down'))
+    autopilotMocks.getChannelAutoStatus.mockResolvedValue({
+      autoManaged: true,
+      discovery: { status: 'done' },
+    })
+    const wrapper = mount(ProtocolModelAvailability, {
+      props: {
+        routes: [{
+          kind: 'messages', index: 0, channelUid: 'ch-heal-fail', name: 'ch', serviceType: 'claude',
+          modelInventoryKnown: true, discoveredModels: ['m1'],
+        }],
+      },
+      global: { stubs: baseStubs },
+    })
+
+    await vi.waitFor(() => {
+      expect(wrapper.get('[data-kind="messages"]').text())
+        .toContain('channelEditor.protocolModels.discoveryTimeUnknown')
+    })
+    expect(wrapper.get('[data-kind="messages"]').text()).toContain('m1')
+    expect(wrapper.emitted('refreshed')).toBeUndefined()
+  })
+
+  it('同一路由 1 小时内不重复触发自愈（模块级冷却）', async () => {
+    autopilotMocks.autoDiscoverChannel.mockResolvedValue({ channelUid: 'x', discoveryStarted: true })
+    autopilotMocks.getChannelAutoStatus.mockResolvedValue({
+      autoManaged: true,
+      discovery: { status: 'done' },
+    })
+    const staleRoute: ChannelProtocolRoute = {
+      kind: 'messages', index: 0, channelUid: 'ch-heal-cooldown', name: 'ch', serviceType: 'claude',
+      modelInventoryKnown: true, discoveredModels: ['m1'],
+    }
+    const first = mount(ProtocolModelAvailability, {
+      props: { routes: [staleRoute] },
+      global: { stubs: baseStubs },
+    })
+    await vi.waitFor(() => {
+      expect(autopilotMocks.autoDiscoverChannel).toHaveBeenCalledWith('messages', 'ch-heal-cooldown')
+    })
+    first.unmount()
+
+    autopilotMocks.autoDiscoverChannel.mockClear()
+    const second = mount(ProtocolModelAvailability, {
+      props: { routes: [staleRoute] },
+      global: { stubs: baseStubs },
+    })
+    await nextTick()
+    await new Promise(resolve => setTimeout(resolve, 20))
+    expect(autopilotMocks.autoDiscoverChannel).not.toHaveBeenCalled()
+    second.unmount()
+  })
+})
+
+describe('滚动别名展示', () => {
+  it('滚动别名排在具体版本之后并带别名徽标', () => {
+    const wrapper = mount(ProtocolModelAvailability, {
+      props: {
+        routes: [{
+          kind: 'messages', index: 0, name: 'alias-test', serviceType: 'claude',
+          modelInventoryKnown: true,
+          discoveredModels: ['zeta-model', 'alpha-latest', 'beta-evolving', 'a-model'],
+        }],
+      },
+      global: { stubs: baseStubs },
+    })
+
+    const chips = wrapper.get('[data-kind="messages"]').findAll('.model-chip-list__model')
+    const texts = chips.map(chip => chip.text())
+    expect(texts).toHaveLength(4)
+    expect(texts[0]).toContain('a-model')
+    expect(texts[1]).toContain('zeta-model')
+    expect(texts[2]).toContain('alpha-latest')
+    expect(texts[3]).toContain('beta-evolving')
+    expect(texts[0]).not.toContain('channelEditor.protocolModels.aliasBadge')
+    expect(texts[1]).not.toContain('channelEditor.protocolModels.aliasBadge')
+    expect(texts[2]).toContain('channelEditor.protocolModels.aliasBadge')
+    expect(texts[3]).toContain('channelEditor.protocolModels.aliasBadge')
   })
 })

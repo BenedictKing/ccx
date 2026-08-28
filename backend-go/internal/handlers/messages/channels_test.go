@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/BenedictKing/ccx/internal/config"
@@ -83,7 +84,7 @@ func TestGetChannelModels_ChannelNotFound(t *testing.T) {
 	}
 }
 
-// TestGetChannelModels_UpstreamReturns200 上游返回 200 时透传响应
+// TestGetChannelModels_UpstreamReturns200 上游返回 200 时透传响应（注入真实状态码）
 func TestGetChannelModels_UpstreamReturns200(t *testing.T) {
 	// 启动 mock 上游
 	mockResp := `{"object":"list","data":[{"id":"gpt-4","object":"model"}]}`
@@ -106,7 +107,24 @@ func TestGetChannelModels_UpstreamReturns200(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Errorf("期望 200，实际 %d，body: %s", w.Code, w.Body.String())
 	}
-	if w.Body.String() != mockResp {
+	assertModelsBodyWithStatusCode(t, w, mockResp)
+}
+
+// assertModelsBodyWithStatusCode 断言成功响应 = 上游原始清单 + 注入的上游真实状态码。
+func assertModelsBodyWithStatusCode(t *testing.T, w *httptest.ResponseRecorder, mockResp string) {
+	t.Helper()
+	var gotBody, wantBody map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &gotBody); err != nil {
+		t.Fatalf("响应应为合法 JSON: %v", err)
+	}
+	if err := json.Unmarshal([]byte(mockResp), &wantBody); err != nil {
+		t.Fatalf("mock 响应解析失败: %v", err)
+	}
+	if gotBody["statusCode"] != float64(http.StatusOK) {
+		t.Errorf("statusCode = %v, 期望注入 %d", gotBody["statusCode"], http.StatusOK)
+	}
+	delete(gotBody, "statusCode")
+	if !reflect.DeepEqual(gotBody, wantBody) {
 		t.Errorf("响应体不匹配，实际: %s", w.Body.String())
 	}
 }
@@ -158,9 +176,7 @@ func TestGetChannelModels_TempBaseURL(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Errorf("期望 200，实际 %d，body: %s", w.Code, w.Body.String())
 	}
-	if w.Body.String() != mockResp {
-		t.Errorf("响应体不匹配，实际: %s", w.Body.String())
-	}
+	assertModelsBodyWithStatusCode(t, w, mockResp)
 }
 
 // TestGetChannelModels_InvalidBody 请求体非 JSON 时返回 400

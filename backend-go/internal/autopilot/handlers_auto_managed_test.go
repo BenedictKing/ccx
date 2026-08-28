@@ -2040,6 +2040,70 @@ func TestAutoDiscoverHandler_InvalidKind(t *testing.T) {
 	}
 }
 
+// TestAutoDiscoverHandler_TriggersLogicalSiblings 验证「重新发现」按整组触发：
+// 主渠道触发成功后，同一逻辑渠道下的兄弟协议上游也被幂等触发，
+// 响应 triggered 字段列出主渠道 + 全部兄弟（前端据此逐个轮询）。
+func TestAutoDiscoverHandler_TriggersLogicalSiblings(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[{"id":"model-a"}]}`))
+	}))
+	defer server.Close()
+
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.json")
+	data := fmt.Sprintf(`{
+  "managedAccounts": [{"accountUid":"acct_grp","providerId":"test","name":"grp","credentials":[{"credentialUid":"cred_grp","apiKey":"sk-grp"}]}],
+  "upstream": [{"accountUid":"acct_grp","channelUid":"ch_grp_messages","providerId":"test","name":"grp-claude","serviceType":"claude","baseUrl":%q,"apiKeyConfigs":[{"credentialUid":"cred_grp","baseUrl":%q}],"autoManaged":true,"status":"active"}],
+  "chatUpstream": [{"accountUid":"acct_grp","channelUid":"ch_grp_chat","providerId":"test","name":"grp-chat","serviceType":"openai","baseUrl":%q,"apiKeyConfigs":[{"credentialUid":"cred_grp","baseUrl":%q}],"autoManaged":true,"status":"active"}],
+  "responsesUpstream": [], "geminiUpstream": [], "imagesUpstream": [], "vectorsUpstream": []
+}`, server.URL, server.URL, server.URL, server.URL)
+	if err := os.WriteFile(configPath, []byte(data), 0600); err != nil {
+		t.Fatalf("写测试配置失败: %v", err)
+	}
+	cfgManager, err := config.NewConfigManager(configPath, filepath.Join(dir, "backups"))
+	if err != nil {
+		t.Fatalf("NewConfigManager 失败: %v", err)
+	}
+	t.Cleanup(func() { _ = cfgManager.Close() })
+
+	runner := NewAutoDiscoveryRunner(nil, nil)
+	router := setupAutoManagedRouter(&AutoManagedDeps{CfgManager: cfgManager, Runner: runner, SkipChannelKeyVerify: true})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/messages/channels/0/auto-discover", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("auto-discover status=%d body=%s", w.Code, w.Body.String())
+	}
+
+	var response struct {
+		ChannelUID       string `json:"channelUid"`
+		DiscoveryStarted bool   `json:"discoveryStarted"`
+		Triggered        []struct {
+			Kind       string `json:"kind"`
+			ChannelUID string `json:"channelUid"`
+		} `json:"triggered"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("解析响应失败: %v", err)
+	}
+	if response.ChannelUID != "ch_grp_messages" || !response.DiscoveryStarted {
+		t.Fatalf("主渠道响应错误: %s", w.Body.String())
+	}
+	triggered := make(map[string]string, len(response.Triggered))
+	for _, item := range response.Triggered {
+		triggered[item.ChannelUID] = item.Kind
+	}
+	if len(triggered) != 2 || triggered["ch_grp_messages"] != "messages" || triggered["ch_grp_chat"] != "chat" {
+		t.Fatalf("triggered 应包含主渠道与兄弟协议上游: %s", w.Body.String())
+	}
+	// 兄弟渠道的发现任务确实已启动（而非仅出现在响应里）。
+	if task := runner.GetTask("ch_grp_chat"); task == nil {
+		t.Fatal("兄弟渠道 ch_grp_chat 应已被触发发现")
+	}
+}
+
 func TestAutoStatusHandler_InvalidKind(t *testing.T) {
 	deps := &AutoManagedDeps{
 		CfgManager: nil,

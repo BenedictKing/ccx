@@ -862,6 +862,8 @@ export interface ModelEntry {
 export interface ModelsResponse {
   object: string
   data: ModelEntry[]
+  /** 上游真实状态码（新契约字段）；旧后端无此字段，调用方按 200 兜底 */
+  statusCode?: number
 }
 
 export interface ChannelModelsRequest {

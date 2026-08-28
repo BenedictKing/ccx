@@ -2918,9 +2918,33 @@ func handleAutoDiscover(deps *AutoManagedDeps) gin.HandlerFunc {
 
 		log.Printf("[AutoManaged-Discover] 重新触发发现: kind=%s id=%d uid=%s", kind, id, channel.ChannelUID)
 
+		// 「重新发现」的语义是刷新整个逻辑渠道：对同一逻辑渠道下的兄弟协议上游
+		// 幂等联动触发（started=false 表示已在运行，不算错误），否则用户点一次按钮
+		// 只有本条协议上游被刷新，chat/responses 等兄弟上游的清单会永久滞留。
+		triggered := []gin.H{{"kind": kind, "channelUid": channel.ChannelUID}}
+		currentCfg := deps.CfgManager.GetConfig()
+		for _, siblingUID := range deps.CfgManager.LogicalSiblingChannelUIDs(channel.ChannelUID) {
+			if siblingUID == channel.ChannelUID {
+				continue
+			}
+			siblingIndex, siblingKind := findChannelIndexAndKind(currentCfg, siblingUID)
+			siblingChannels := getChannelSlice(currentCfg, siblingKind)
+			if siblingIndex < 0 || siblingIndex >= len(siblingChannels) {
+				continue
+			}
+			sibling := siblingChannels[siblingIndex]
+			if _, err := deps.Runner.TriggerDiscoveryWithStatus(siblingUID, &sibling, deps.CfgManager); err != nil {
+				// 兄弟触发失败只记日志，不影响主渠道响应。
+				log.Printf("[AutoManaged-Discover] 兄弟渠道 %s 触发发现失败: %v", siblingUID, err)
+				continue
+			}
+			triggered = append(triggered, gin.H{"kind": siblingKind, "channelUid": siblingUID})
+		}
+
 		c.JSON(http.StatusOK, gin.H{
 			"channelUid":       channel.ChannelUID,
 			"discoveryStarted": true,
+			"triggered":        triggered,
 		})
 	}
 }

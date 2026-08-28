@@ -18,6 +18,13 @@
           <v-progress-circular color="primary" indeterminate size="18" width="2" />
           <span>{{ t('channelEditor.protocolModels.detecting') }}</span>
         </div>
+        <div
+          v-if="isAutoRefreshing && !isDetecting"
+          class="protocol-model-availability__detecting text-caption text-medium-emphasis"
+        >
+          <v-progress-circular color="primary" indeterminate size="18" width="2" />
+          <span>{{ t('channelEditor.protocolModels.autoRefreshing') }}</span>
+        </div>
         <v-btn
           v-if="primaryDiscoveryRoute"
           class="protocol-model-availability__rediscover-all"
@@ -104,11 +111,22 @@
         <div v-if="route.hasInventory" class="protocol-model-route__discovery-meta">
           <span class="text-caption text-medium-emphasis">
             {{ t('channelEditor.protocolModels.lastDiscovered') }}
-            {{ route.discoveryTime || t('channelEditor.protocolModels.discoveryTimeUnknown') }}
+            {{ route.discoveryTime || (route.autoRefreshState === 'refreshing'
+              ? t('channelEditor.protocolModels.discoveryUpdating')
+              : t('channelEditor.protocolModels.discoveryTimeUnknown')) }}
           </span>
-          <v-chip size="x-small" variant="tonal" color="secondary">
-            {{ route.discoverySourceLabel }}
-          </v-chip>
+          <v-tooltip
+            :disabled="!route.discoverySourceHint"
+            :text="route.discoverySourceHint"
+            location="top"
+            max-width="320"
+          >
+            <template #activator="{ props: tooltipProps }">
+              <v-chip v-bind="tooltipProps" size="x-small" variant="tonal" color="secondary">
+                {{ route.discoverySourceLabel }}
+              </v-chip>
+            </template>
+          </v-tooltip>
           <span v-if="route.modelDiscoveryMessage" class="text-caption text-medium-emphasis">
             {{ route.modelDiscoveryMessage }}
           </span>
@@ -214,6 +232,11 @@
   </div>
 </template>
 
+<script lang="ts">
+// 模块级冷却表（跨组件实例共享）：同一上游 1 小时内不重复触发查看时静默刷新，防止探测风暴。
+const autoRefreshCooldown = new Map<string, number>()
+</script>
+
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 
@@ -289,10 +312,17 @@ const { t } = useI18n()
 
 const REDISCOVER_POLL_INTERVAL_MS = 1500
 const REDISCOVER_POLL_TIMEOUT_MS = 5 * 60 * 1000
+// 查看时静默自愈：modelsDiscoveredAt 缺失/无法解析或距今超过 24 小时视为陈旧。
+const AUTO_REFRESH_STALE_MS = 24 * 60 * 60 * 1000
+const AUTO_REFRESH_COOLDOWN_MS = 60 * 60 * 1000
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 const rediscovering = ref(false)
 const rediscoverError = ref('')
+// 静默自愈进行中的路由（`${kind}:${channelUid}`），驱动「模型清单更新中…」轻量状态。
+const autoRefreshInflight = ref<Set<string>>(new Set())
+// 自愈触发/轮询失败的路由：静默保留旧数据，时间戳位置回退为中性的「发现时间未知」。
+const autoRefreshFailed = ref<Set<string>>(new Set())
 let pollingGeneration = 0
 
 const primaryDiscoveryRoute = computed(() => (
@@ -302,25 +332,40 @@ const primaryDiscoveryRoute = computed(() => (
 
 const isDetecting = computed(() => props.loading || rediscovering.value)
 
-const pollDiscovery = async (route: ChannelProtocolRoute, generation: number) => {
-  const channelUid = route.channelUid
-  if (!channelUid) return
+const isAutoRefreshing = computed(() => autoRefreshInflight.value.size > 0)
+
+const protocolLabel = (kind: string) => {
+  const definition = protocolDefinitions[kind as ChannelKind]
+  return definition ? t(definition.labelKey) : kind
+}
+
+// 轮询直至发现结束；返回 true 表示完成，false 表示该轮已被取代（卸载/新一轮触发）。
+const waitForDiscovery = async (kind: string, channelUid: string, generation: number): Promise<boolean> => {
   const deadline = Date.now() + REDISCOVER_POLL_TIMEOUT_MS
   for (;;) {
-    const status = await getChannelAutoStatus(route.kind, channelUid)
-    if (generation !== pollingGeneration) return
+    const status = await getChannelAutoStatus(kind, channelUid)
+    if (generation !== pollingGeneration) return false
     const discovery = status.discovery
     if (discovery?.status === 'failed') {
       throw new Error(discovery.error || t('channelEditor.protocolModels.rediscoverFailed'))
     }
     if (!discovery || (discovery.status !== 'pending' && discovery.status !== 'running')) {
-      emit('refreshed')
-      return
+      return true
     }
     if (Date.now() >= deadline) {
       throw new Error(t('channelEditor.protocolModels.rediscoverTimedOut'))
     }
     await sleep(REDISCOVER_POLL_INTERVAL_MS)
+  }
+}
+
+// 触发发现；409 表示任务已在运行，返回 undefined 并直接进入轮询等待，不算错误。
+const triggerDiscovery = async (kind: string, channelUid: string) => {
+  try {
+    return await autoDiscoverChannel(kind, channelUid)
+  } catch (err) {
+    if ((err as { status?: number }).status === 409) return undefined
+    throw err
   }
 }
 
@@ -333,14 +378,30 @@ const rediscoverAll = async () => {
   rediscoverError.value = ''
 
   try {
-    try {
-      await autoDiscoverChannel(route.kind, channelUid)
-    } catch (err) {
-      // 409 表示发现任务已在运行，直接进入轮询等待，不算错误。
-      const status = (err as { status?: number }).status
-      if (status !== 409) throw err
+    const response = await triggerDiscovery(route.kind, channelUid)
+    // 新契约返回 triggered（主渠道 + 兄弟协议上游），逐个并行轮询，全部完成才刷新；
+    // 旧后端无该字段（或 409 已在运行）时回退为只轮询主路由。
+    const targets: { kind: string; channelUid: string }[] = response?.triggered?.length
+      ? response.triggered
+      : [{ kind: route.kind, channelUid }]
+    const results = await Promise.allSettled(
+      targets.map(target => waitForDiscovery(target.kind, target.channelUid, generation)),
+    )
+    if (generation !== pollingGeneration) return
+    const failures: { target: { kind: string; channelUid: string }; reason: unknown }[] = []
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') failures.push({ target: targets[index], reason: result.reason })
+    })
+    if (failures.length) {
+      rediscoverError.value = failures
+        .map(failure => t('channelEditor.protocolModels.rediscoverProtocolFailed', {
+          protocol: protocolLabel(failure.target.kind),
+          error: failure.reason instanceof Error ? failure.reason.message : String(failure.reason),
+        }))
+        .join('；')
+      return
     }
-    await pollDiscovery(route, generation)
+    emit('refreshed')
   } catch (err) {
     if (generation === pollingGeneration) {
       rediscoverError.value = err instanceof Error ? err.message : t('channelEditor.protocolModels.rediscoverFailed')
@@ -366,7 +427,9 @@ watch(
       if (generation !== pollingGeneration) return
       if (status.discovery?.status !== 'pending' && status.discovery?.status !== 'running') return
       rediscovering.value = true
-      await pollDiscovery(route, generation)
+      if (await waitForDiscovery(route.kind, route.channelUid, generation)) {
+        emit('refreshed')
+      }
     } catch {
       // 初始状态查询失败不阻断模型清单展示，用户仍可手动重新发现。
     } finally {
@@ -379,6 +442,66 @@ watch(
 onBeforeUnmount(() => {
   pollingGeneration++
 })
+
+// 陈旧判定：configured 且有 channelUid 的路由，modelsDiscoveredAt 缺失/无法解析或超过 24h。
+const isRouteInventoryStale = (route: ChannelProtocolRoute) => {
+  if (route.configured === false || !route.channelUid) return false
+  const discoveredAt = route.modelsDiscoveredAt
+  if (!discoveredAt) return true
+  const timestamp = new Date(discoveredAt).getTime()
+  return Number.isNaN(timestamp) || Date.now() - timestamp > AUTO_REFRESH_STALE_MS
+}
+
+// 查看时静默自愈：陈旧路由后台静默触发发现（409 视为已在运行，直接转轮询），
+// 全部结束后统一 emit('refreshed') 一次；失败静默保留旧数据，不做任何告警。
+const runAutoRefresh = async (staleRoutes: ChannelProtocolRoute[]) => {
+  const generation = pollingGeneration
+  const now = Date.now()
+  const targets = staleRoutes.filter((route) => {
+    const key = `${route.kind}:${route.channelUid}`
+    const lastTriggeredAt = autoRefreshCooldown.get(key)
+    if (lastTriggeredAt !== undefined && now - lastTriggeredAt < AUTO_REFRESH_COOLDOWN_MS) return false
+    autoRefreshCooldown.set(key, now)
+    return true
+  })
+  if (!targets.length) return
+  for (const route of targets) {
+    const key = `${route.kind}:${route.channelUid}`
+    autoRefreshInflight.value.add(key)
+    autoRefreshFailed.value.delete(key)
+  }
+
+  const results = await Promise.allSettled(targets.map(async (route) => {
+    await triggerDiscovery(route.kind, route.channelUid!)
+    return waitForDiscovery(route.kind, route.channelUid!, generation)
+  }))
+
+  let anyRefreshed = false
+  results.forEach((result, index) => {
+    const key = `${targets[index].kind}:${targets[index].channelUid}`
+    autoRefreshInflight.value.delete(key)
+    if (generation !== pollingGeneration) return
+    if (result.status === 'fulfilled' && result.value) {
+      anyRefreshed = true
+    } else if (result.status === 'rejected') {
+      autoRefreshFailed.value.add(key)
+    }
+  })
+  if (generation === pollingGeneration && anyRefreshed) emit('refreshed')
+}
+
+watch(
+  () => (props.routes ?? [])
+    .filter(isRouteInventoryStale)
+    .map(route => `${route.kind}:${route.channelUid}`)
+    .sort()
+    .join('|'),
+  (staleKeys, previousKeys) => {
+    if (!staleKeys || staleKeys === previousKeys) return
+    void runAutoRefresh((props.routes ?? []).filter(isRouteInventoryStale))
+  },
+  { immediate: true },
+)
 
 const discoverySourceKey: Record<string, string> = {
   control_plane: 'channelEditor.protocolModels.source.controlPlane',
@@ -395,6 +518,18 @@ const discoverySourceKey: Record<string, string> = {
 const discoverySourceLabel = (source?: string) => {
   const key = source ? discoverySourceKey[source] : undefined
   return t(key ?? 'channelEditor.protocolModels.source.unknown')
+}
+
+// 来源口径释义（tooltip）：仅三种主要来源提供说明，其余来源不打扰用户。
+const discoverySourceHintKey: Record<string, string> = {
+  control_plane: 'channelEditor.protocolModels.sourceHint.controlPlane',
+  models_api: 'channelEditor.protocolModels.sourceHint.modelsApi',
+  protocol_model_probe: 'channelEditor.protocolModels.sourceHint.protocolModelProbe',
+}
+
+const discoverySourceHint = (source?: string) => {
+  const key = source ? discoverySourceHintKey[source] : undefined
+  return key ? t(key) : ''
 }
 
 const discoveryDateTimeFormat = new Intl.DateTimeFormat(undefined, {
@@ -472,6 +607,12 @@ const baseNormalizedRoutes = computed(() => (props.routes ?? []).map((route) => 
     hasInventory: hasDiscoveredInventory || models.length > 0,
     discoveryTime: formatDiscoveryTime(route.modelsDiscoveredAt),
     discoverySourceLabel: discoverySourceLabel(route.modelDiscoverySource),
+    discoverySourceHint: discoverySourceHint(route.modelDiscoverySource),
+    autoRefreshState: (
+      autoRefreshInflight.value.has(`${route.kind}:${route.channelUid}`) ? 'refreshing'
+        : autoRefreshFailed.value.has(`${route.kind}:${route.channelUid}`) ? 'failed'
+          : ''
+    ) as 'refreshing' | 'failed' | '',
   }
 }))
 

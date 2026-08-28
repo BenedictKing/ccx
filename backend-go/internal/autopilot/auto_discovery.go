@@ -176,9 +176,19 @@ func (r *AutoDiscoveryRunner) gcLoop() {
 // 模型清单刷新节奏。上游会随时上下架模型（火山套餐 2026-08-18 下线 kimi-k2.6 即为实例），
 // 端点画像的模型清单不是一次性数据；checkpoint 机制又会让未变更端点永久跳过重探测。
 // 定期扫描画像，对清单整体过期的自动托管渠道重新触发发现，复用既有发现管线幂等刷新。
+//
+// TTL 分两层：
+//   - 清单层 modelListStaleTTL=24h：管控面/models API 清单是单次只读调用，
+//     刷新代价可忽略，套餐上下线频繁的场景清单至多滞后一天；
+//   - 实测层 protocolProbeStaleTTL=7d：跨协议逐模型 POST 探测真实消耗上游额度，
+//     TTL 内存量实测结论直接复用（见 discoverEndpointProtocols），不为"看起来更新鲜"付出额度成本。
 const (
 	modelListRefreshScanInterval = 6 * time.Hour
-	modelListStaleTTL            = 7 * 24 * time.Hour
+	// modelListRefreshInitialDelay 是服务启动后首轮扫描的延迟。
+	// 不能用 6h ticker 首 tick：dev 热重载频繁重启下首 tick 永远到不了。
+	modelListRefreshInitialDelay = 5 * time.Minute
+	modelListStaleTTL            = 24 * time.Hour
+	protocolProbeStaleTTL        = 7 * 24 * time.Hour
 )
 
 // StartModelRefreshLoop 启动模型清单定期刷新循环。
@@ -198,6 +208,17 @@ func (r *AutoDiscoveryRunner) StartModelRefreshLoop(cfgManager *config.ConfigMan
 }
 
 func (r *AutoDiscoveryRunner) modelRefreshLoop(cfgManager *config.ConfigManager) {
+	// 启动后先用短延迟跑一轮扫描，再进入 6h 周期：
+	// 直接等 6h ticker 首 tick 在 dev 频繁重启下永不触发，过期清单无法自动收敛。
+	initial := time.NewTimer(modelListRefreshInitialDelay)
+	select {
+	case <-r.parentContext().Done():
+		initial.Stop()
+		return
+	case <-initial.C:
+		r.refreshStaleModelLists(cfgManager)
+	}
+
 	ticker := time.NewTicker(modelListRefreshScanInterval)
 	defer ticker.Stop()
 	for {
@@ -233,6 +254,8 @@ func (r *AutoDiscoveryRunner) refreshStaleModelLists(cfgManager *config.ConfigMa
 			}
 			if started {
 				log.Printf("[AutoDiscovery-ModelRefresh] 渠道 %s 模型清单已过期，重新触发发现", ch.ChannelUID)
+			} else {
+				log.Printf("[AutoDiscovery-ModelRefresh] 渠道 %s 发现任务已在运行，跳过本次刷新", ch.ChannelUID)
 			}
 		}
 	}
@@ -937,10 +960,22 @@ func (r *AutoDiscoveryRunner) discoverVolcenginePlanEndpoint(
 	if err := cfgManager.SetManagedAccountVolcenginePlan(channel.AccountUID, credentialUID, plan.Plan, plan.Tier, plan.Status); err != nil {
 		log.Printf("[AutoDiscovery-Volcengine] 保存套餐识别结果失败 credential=%s: %v", credentialUID, err)
 	}
-	result.Models = models
-	result.ModelsCount = len(models)
+	// 管控面返回的是套餐权益清单，含 embedding/seedance/seedream 等非对话模型，
+	// 原样采信会让它们成为对话协议的调度候选（调用必失败）。按内置清单的
+	// ExcludeModelPatterns 剔除明确非对话命名族，剔除数量写入发现说明保持可观测。
+	filtered := models
+	filterNote := ""
+	if manifest, ok := lookupDiscoveryBuiltinManifest(channel, baseURL); ok {
+		filtered = filterExcludedDiscoveryModels(models, manifest.ExcludeModelPatterns)
+		if removed := len(models) - len(filtered); removed > 0 {
+			filterNote = fmt.Sprintf("，已过滤 %d 个非对话模型", removed)
+		}
+	}
+	result.Models = filtered
+	result.ModelsCount = len(filtered)
 	result.ProtocolOk = true
-	setModelDiscoveryMetadata(&result, ModelDiscoverySourceControlPlane, fmt.Sprintf("火山管控面 %s 模型清单", displayVolcenginePlan(plan.Plan)))
+	setModelDiscoveryMetadata(&result, ModelDiscoverySourceControlPlane, fmt.Sprintf("火山管控面 %s 模型清单%s", displayVolcenginePlan(plan.Plan), filterNote))
+	// drift 对比基于过滤前的原始清单：被剔除的非对话模型是预期差异，不应产生永久 drift 噪音。
 	r.publishManifestDriftIfNeeded(channel.ChannelUID, channel, baseURL, models)
 	return result
 }

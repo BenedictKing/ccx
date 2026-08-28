@@ -139,12 +139,26 @@ func (r *AutoDiscoveryRunner) discoverEndpointProtocols(
 		return
 	}
 
+	// 实测层 TTL 复用：逐模型 POST 探测真实消耗上游额度，存量画像中
+	// protocolProbeStaleTTL 内的非原生协议实测结论本轮直接复用（交集收敛到当前 key 级清单），
+	// 不满足条件或交集为空的协议仍走下面的逐模型探测。原生协议由 ensureConfiguredProtocolDiscovery 采信，不参与复用。
+	reusedProtocols := r.reusableProtocolProbeResults(channel, baseURL, apiKey, models, configuredProtocol, time.Now())
+
 	tasks := make([]protocolProbeTask, 0, len(discoverableProtocols)*len(models))
 	attemptedCounts := make(map[string]int, len(discoverableProtocols))
 	for _, protocol := range discoverableProtocols {
 		// 原生协议通常直接采信 models 清单，无需逐模型探测；但走兄弟渠道兜底时，
 		// 该清单并非本渠道实测所得，必须连原生协议一起探测，否则会保留空清单。
 		if protocol == configuredProtocol && !usedSharedModels {
+			continue
+		}
+		if reused, ok := reusedProtocols[protocol]; ok {
+			// 复用存量实测结论：如实保留存量实测时间/来源/说明，不刷新成 now。
+			result.ProtocolModels[protocol] = reused.models
+			result.ProtocolDiscoveredAt[protocol] = reused.discoveredAt
+			result.ProtocolDiscoverySource[protocol] = reused.source
+			result.ProtocolDiscoveryMessage[protocol] = reused.message
+			delete(result.ProtocolDiscoveryError, protocol)
 			continue
 		}
 		probeModels := prioritizeProtocolProbeModelsWithDeclared(protocol, models, result.declaredEndpointTypes, protocolDiscoveryMaxModels)
@@ -224,6 +238,76 @@ func (r *AutoDiscoveryRunner) discoverEndpointProtocols(
 			result.ProtocolDiscoveryError[protocol] = fmt.Sprintf("%s 协议没有可用模型", protocol)
 		}
 	}
+}
+
+// protocolProbeReuse 是一份可复用的存量协议实测结论（来自端点画像）。
+type protocolProbeReuse struct {
+	models       []string
+	discoveredAt time.Time
+	source       string
+	message      string
+}
+
+// reusableProtocolProbeResults 返回存量画像中仍在 protocolProbeStaleTTL 内、可直接复用的
+// 非原生协议实测结论（协议 -> 结论）。复用清单取 存量实测 ∩ 当前 key 级清单：
+// 清单层（24h TTL）本轮刚刷新过，交集顺带剔除已下线模型；交集为空说明存量结论
+// 与当前现实脱节，该协议不落条目（视为需要重探，由调用方走逐模型探测）。
+// 存量画像可能来自旧版本（map 字段为 nil），逐项防御；画像缺失或 store 为 nil 时返回 nil。
+func (r *AutoDiscoveryRunner) reusableProtocolProbeResults(channel *config.UpstreamConfig, baseURL, apiKey string, currentModels []string, configuredProtocol string, now time.Time) map[string]protocolProbeReuse {
+	if r == nil || r.store == nil || channel == nil || len(currentModels) == 0 {
+		return nil
+	}
+	endpointUID := GenerateEndpointUID(channel.ChannelUID, utils.CanonicalBaseURL(baseURL, channel.ServiceType), KeyHashFromAPIKey(apiKey))
+	profile := r.store.Get(endpointUID)
+	if profile == nil || len(profile.ProtocolModels) == 0 || len(profile.ProtocolDiscoveredAt) == 0 {
+		return nil
+	}
+	reused := make(map[string]protocolProbeReuse)
+	for _, protocol := range discoverableProtocols {
+		if protocol == configuredProtocol {
+			continue
+		}
+		stored := normalizeProtocolModels(profile.ProtocolModels[protocol])
+		if len(stored) == 0 {
+			continue
+		}
+		probedAt, ok := profile.ProtocolDiscoveredAt[protocol]
+		if !ok || probedAt.IsZero() || now.Sub(probedAt) > protocolProbeStaleTTL {
+			continue
+		}
+		intersection := intersectProtocolModels(stored, currentModels)
+		if len(intersection) == 0 {
+			continue
+		}
+		reused[protocol] = protocolProbeReuse{
+			models:       intersection,
+			discoveredAt: probedAt,
+			source:       profile.ProtocolDiscoverySource[protocol],
+			message:      profile.ProtocolDiscoveryMessage[protocol],
+		}
+	}
+	if len(reused) == 0 {
+		return nil
+	}
+	return reused
+}
+
+// intersectProtocolModels 返回两个模型清单的交集（normalize 后排序去重）。
+func intersectProtocolModels(a, b []string) []string {
+	if len(a) == 0 || len(b) == 0 {
+		return nil
+	}
+	inB := make(map[string]struct{}, len(b))
+	for _, model := range b {
+		inB[model] = struct{}{}
+	}
+	intersection := make([]string, 0, min(len(a), len(b)))
+	for _, model := range a {
+		if _, ok := inB[model]; ok {
+			intersection = append(intersection, model)
+		}
+	}
+	return normalizeProtocolModels(intersection)
 }
 
 // capabilityUIDForEndpoint 根据渠道、baseURL 生成对应 CapabilityUID。

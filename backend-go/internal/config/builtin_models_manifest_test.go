@@ -1,6 +1,7 @@
 package config
 
 import (
+	"regexp"
 	"slices"
 	"testing"
 )
@@ -373,6 +374,72 @@ func TestLookupBuiltinManifest_KimiCodeUsesPerKeyModelsEndpoint(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestLookupBuiltinManifest_VolcengineExcludeModelPatterns(t *testing.T) {
+	volcengineEntries := []struct {
+		baseURL     string
+		serviceType string
+	}{
+		{"https://ark.cn-beijing.volces.com/api/plan", "messages"},
+		{"https://ark.cn-beijing.volces.com/api/coding", "messages"},
+		{"https://ark.cn-beijing.volces.com/api/plan/v3", "openai"},
+		{"https://ark.cn-beijing.volces.com/api/coding/v3", "openai"},
+		{"https://ark.cn-beijing.volces.com/api/plan/v3", "responses"},
+		{"https://ark.cn-beijing.volces.com/api/coding/v3", "responses"},
+	}
+	for _, tt := range volcengineEntries {
+		manifest, found := LookupBuiltinManifest(tt.baseURL, tt.serviceType)
+		if !found {
+			t.Fatalf("火山套餐清单应存在: baseURL=%q serviceType=%q", tt.baseURL, tt.serviceType)
+		}
+		if len(manifest.ExcludeModelPatterns) == 0 {
+			t.Fatalf("火山套餐清单应配置 excludeModelPatterns: baseURL=%q serviceType=%q", tt.baseURL, tt.serviceType)
+		}
+	}
+
+	// 规则行为：剔除明确的非对话命名族，不误伤对话模型（seed-code 不是 seedance/seedream）。
+	rules := make([]*regexp.Regexp, 0)
+	for _, pattern := range volcengineExcludeModelPatterns() {
+		rule, err := regexp.Compile(pattern)
+		if err != nil {
+			t.Fatalf("排除正则 %q 编译失败: %v", pattern, err)
+		}
+		rules = append(rules, rule)
+	}
+	matches := func(modelID string) bool {
+		for _, rule := range rules {
+			if rule.MatchString(modelID) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, modelID := range []string{
+		"doubao-seedance-1-5-pro-250528",
+		"doubao-seedream-4-0-250828",
+		"doubao-embedding-vision-250615",
+		"doubao-tts-1",
+		"text-embedding-3-large",
+	} {
+		if !matches(modelID) {
+			t.Errorf("非对话模型 %q 应被排除规则命中", modelID)
+		}
+	}
+	for _, modelID := range []string{
+		"kimi-k3",
+		"kimi-k2.7-code",
+		"doubao-seed-2.1-turbo",
+		"doubao-seed-code",
+		"doubao-seed-evolving",
+		"deepseek-v4-pro",
+		"glm-5.3",
+		"minimax-m3",
+	} {
+		if matches(modelID) {
+			t.Errorf("对话模型 %q 不应被排除规则命中", modelID)
+		}
 	}
 }
 

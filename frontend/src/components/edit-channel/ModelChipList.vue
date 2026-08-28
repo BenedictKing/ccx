@@ -7,7 +7,7 @@
     >
       <div ref="modelsRef" class="model-chip-list__models">
         <v-chip
-          v-for="model in models"
+          v-for="model in orderedModels"
           :key="model"
           size="small"
           variant="outlined"
@@ -15,6 +15,9 @@
           class="model-chip-list__model"
         >
           {{ model }}
+          <span v-if="isRollingAlias(model)" class="model-chip-list__alias-badge">
+            {{ t('channelEditor.protocolModels.aliasBadge') }}
+          </span>
         </v-chip>
       </div>
     </div>
@@ -37,7 +40,7 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 
 import { useI18n } from '../../i18n'
 
@@ -49,6 +52,23 @@ const props = withDefaults(defineProps<{
 })
 
 const { t } = useI18n()
+
+// 滚动别名（-latest 后缀或含 -evolving）排在同组具体版本之后并附「别名」徽标，计数不变。
+const isRollingAlias = (model: string) => /-latest$/i.test(model) || /-evolving/i.test(model)
+
+const orderedModels = computed(() => {
+  const concrete: string[] = []
+  const aliases: string[] = []
+  for (const model of props.models) {
+    if (isRollingAlias(model)) {
+      aliases.push(model)
+    } else {
+      concrete.push(model)
+    }
+  }
+  return [...concrete, ...aliases]
+})
+
 const expanded = ref(false)
 const hasOverflow = ref(false)
 const viewportRef = ref<HTMLElement | null>(null)
@@ -116,6 +136,16 @@ onBeforeUnmount(() => observer?.disconnect())
   overflow-wrap: anywhere;
   white-space: normal;
   line-height: 1.35;
+}
+
+.model-chip-list__alias-badge {
+  margin-inline-start: 4px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: rgba(var(--v-theme-on-surface), 0.1);
+  font-size: 0.62rem;
+  line-height: 1.4;
+  opacity: 0.75;
 }
 
 .model-chip-list__toggle {

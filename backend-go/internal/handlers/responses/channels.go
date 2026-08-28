@@ -506,7 +506,7 @@ func GetChannelModels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 			for _, model := range volcengineModels {
 				data = append(data, gin.H{"id": model})
 			}
-			c.JSON(http.StatusOK, gin.H{"data": data})
+			c.JSON(http.StatusOK, gin.H{"data": data, "statusCode": http.StatusOK})
 			return
 		}
 
@@ -606,6 +606,10 @@ func GetChannelModels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 			return
 		}
 
+		if resp.StatusCode == http.StatusOK {
+			// 透传上游响应体时注入真实状态码，供前端展示（不再硬编码 200）。
+			body = common.InjectUpstreamStatusCode(body, resp.StatusCode)
+		}
 		c.Data(resp.StatusCode, "application/json", body)
 	}
 }

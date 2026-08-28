@@ -429,6 +429,10 @@ func GetChannelModels(cfgManager *config.ConfigManager) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Upstream API key is invalid", "statusCode": http.StatusUnauthorized, "details": string(body)})
 			return
 		}
+		if resp.StatusCode == http.StatusOK {
+			// 透传上游响应体时注入真实状态码，供前端展示（不再硬编码 200）。
+			body = common.InjectUpstreamStatusCode(body, resp.StatusCode)
+		}
 		c.Data(resp.StatusCode, "application/json", body)
 	}
 }

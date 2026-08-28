@@ -336,6 +336,19 @@ export async function getChannelAutoStatus(kind: string, channelId: number | str
   return response.json()
 }
 
+/** auto-discover 触发结果：本次覆盖的单个协议上游 */
+export interface AutoDiscoverTriggeredChannel {
+  kind: string
+  channelUid: string
+}
+
+/** auto-discover 响应；triggered 为新契约字段（主渠道 + 兄弟协议上游），旧后端无此字段 */
+export interface AutoDiscoverChannelResponse {
+  channelUid: string
+  discoveryStarted: boolean
+  triggered?: AutoDiscoverTriggeredChannel[]
+}
+
 /**
  * 重新触发渠道自动发现（托管渠道）
  * POST /api/{kind}/channels/{id}/auto-discover
@@ -344,7 +357,7 @@ export async function getChannelAutoStatus(kind: string, channelId: number | str
 export async function autoDiscoverChannel(
   kind: string,
   channelId: number | string,
-): Promise<{ channelUid: string; discoveryStarted: boolean }> {
+): Promise<AutoDiscoverChannelResponse> {
   const url = `${API_BASE}/${kind}/channels/${channelId}/auto-discover`
   const response = await fetch(url, {
     method: 'POST',

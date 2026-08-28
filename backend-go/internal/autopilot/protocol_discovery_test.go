@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/utils"
@@ -239,5 +240,158 @@ func TestEnsureConfiguredProtocolDiscoveryKeepsProbedModels(t *testing.T) {
 
 	if got := strings.Join(result.ProtocolModels["messages"], ","); got != "gpt-shared" {
 		t.Fatalf("空 models 清单不应覆盖已探测出的协议模型, got=%q", got)
+	}
+}
+
+// TestDiscoverEndpointProtocolsReusesFreshStoredProbe 验证存量画像中 protocolProbeStaleTTL 内的
+// 非原生协议实测结论被直接复用：不发探测请求，清单取 存量∩当前 key 级清单，
+// 且如实保留存量实测时间/来源/说明（不刷新为当前时间）。
+func TestDiscoverEndpointProtocolsReusesFreshStoredProbe(t *testing.T) {
+	var mu sync.Mutex
+	probedPaths := make(map[string]int)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		probedPaths[r.URL.Path]++
+		mu.Unlock()
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+
+	store, err := NewProfileStore(filepath.Join(t.TempDir(), "profiles.db"))
+	if err != nil {
+		t.Fatalf("NewProfileStore 失败: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	// responses 是原生协议（采信清单，不逐模型探测）；chat 是非原生协议，走复用判定。
+	channel := &config.UpstreamConfig{ServiceType: "responses", ChannelUID: "ch-reuse"}
+	apiKey := "sk-test"
+	endpointUID := GenerateEndpointUID(channel.ChannelUID, utils.CanonicalBaseURL(srv.URL, channel.ServiceType), KeyHashFromAPIKey(apiKey))
+	storedAt := time.Now().Add(-2 * time.Hour).UTC()
+	profile := newTestProfile(endpointUID, channel.ChannelUID, "responses", srv.URL)
+	profile.ProtocolModels = map[string][]string{"chat": {"gpt-supported", "gpt-removed"}}
+	profile.ProtocolDiscoveredAt = map[string]time.Time{"chat": storedAt}
+	profile.ProtocolDiscoverySource = map[string]string{"chat": "protocol_model_probe"}
+	profile.ProtocolDiscoveryMessage = map[string]string{"chat": "存量实测说明"}
+	if err := store.Upsert(profile); err != nil {
+		t.Fatalf("Upsert 存量画像失败: %v", err)
+	}
+
+	runner := NewAutoDiscoveryRunner(store, nil)
+	runner.client = srv.Client()
+	// 当前清单里 gpt-removed 已下线、gpt-new 新上线。
+	result := EndpointDiscoveryResult{ProtocolOk: true, Models: []string{"gpt-supported", "gpt-new"}}
+
+	runner.discoverEndpointProtocols(context.Background(), channel, srv.URL, apiKey, &result)
+
+	if got := strings.Join(result.ProtocolModels["chat"], ","); got != "gpt-supported" {
+		t.Fatalf("chat 应复用 存量∩当前清单 的交集, got=%q", got)
+	}
+	if !result.ProtocolDiscoveredAt["chat"].Equal(storedAt) {
+		t.Fatalf("复用应保留存量实测时间 %v, got=%v", storedAt, result.ProtocolDiscoveredAt["chat"])
+	}
+	if result.ProtocolDiscoverySource["chat"] != "protocol_model_probe" {
+		t.Fatalf("复用应保留存量来源, got=%q", result.ProtocolDiscoverySource["chat"])
+	}
+	if result.ProtocolDiscoveryMessage["chat"] != "存量实测说明" {
+		t.Fatalf("复用应保留存量说明, got=%q", result.ProtocolDiscoveryMessage["chat"])
+	}
+	// 原生协议 responses 仍由 ensureConfiguredProtocolDiscovery 采信完整清单，不受复用影响。
+	if got := strings.Join(result.ProtocolModels["responses"], ","); got != "gpt-new,gpt-supported" {
+		t.Fatalf("原生协议 responses 应采信完整清单, got=%q", got)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if probedPaths["/v1/chat/completions"] != 0 {
+		t.Fatalf("chat 在 TTL 内应跳过逐模型探测, 实际探测 %d 次", probedPaths["/v1/chat/completions"])
+	}
+}
+
+// TestDiscoverEndpointProtocolsReprobesWhenStoredProbeNotReusable 表驱动覆盖存量实测
+// 不可复用的情形——超过 TTL、与当前清单无交集、旧画像 map 字段缺失——均回退逐模型探测。
+func TestDiscoverEndpointProtocolsReprobesWhenStoredProbeNotReusable(t *testing.T) {
+	freshAt := time.Now().Add(-1 * time.Hour).UTC()
+	staleAt := time.Now().Add(-(protocolProbeStaleTTL + time.Hour)).UTC()
+	tests := []struct {
+		name    string
+		prepare func(p *KeyEndpointProfile)
+	}{
+		{
+			name: "存量实测超过 7 天 TTL",
+			prepare: func(p *KeyEndpointProfile) {
+				p.ProtocolModels = map[string][]string{"chat": {"gpt-a"}}
+				p.ProtocolDiscoveredAt = map[string]time.Time{"chat": staleAt}
+			},
+		},
+		{
+			name: "存量与当前清单无交集",
+			prepare: func(p *KeyEndpointProfile) {
+				p.ProtocolModels = map[string][]string{"chat": {"gpt-old"}}
+				p.ProtocolDiscoveredAt = map[string]time.Time{"chat": freshAt}
+			},
+		},
+		{
+			name: "旧版本画像无协议 map 字段",
+			prepare: func(p *KeyEndpointProfile) {
+				p.ProtocolModels = nil
+				p.ProtocolDiscoveredAt = nil
+			},
+		},
+		{
+			name: "有实测模型但缺实测时间戳",
+			prepare: func(p *KeyEndpointProfile) {
+				p.ProtocolModels = map[string][]string{"chat": {"gpt-a"}}
+				p.ProtocolDiscoveredAt = nil
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var mu sync.Mutex
+			chatProbes := 0
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/v1/chat/completions" {
+					mu.Lock()
+					chatProbes++
+					mu.Unlock()
+				}
+				_, _ = w.Write([]byte(`{"ok":true}`))
+			}))
+			defer srv.Close()
+
+			store, err := NewProfileStore(filepath.Join(t.TempDir(), "profiles.db"))
+			if err != nil {
+				t.Fatalf("NewProfileStore 失败: %v", err)
+			}
+			defer func() { _ = store.Close() }()
+
+			channel := &config.UpstreamConfig{ServiceType: "responses", ChannelUID: "ch-reprobe"}
+			apiKey := "sk-test"
+			endpointUID := GenerateEndpointUID(channel.ChannelUID, utils.CanonicalBaseURL(srv.URL, channel.ServiceType), KeyHashFromAPIKey(apiKey))
+			profile := newTestProfile(endpointUID, channel.ChannelUID, "responses", srv.URL)
+			tt.prepare(profile)
+			if err := store.Upsert(profile); err != nil {
+				t.Fatalf("Upsert 存量画像失败: %v", err)
+			}
+
+			runner := NewAutoDiscoveryRunner(store, nil)
+			runner.client = srv.Client()
+			result := EndpointDiscoveryResult{ProtocolOk: true, Models: []string{"gpt-a"}}
+
+			runner.discoverEndpointProtocols(context.Background(), channel, srv.URL, apiKey, &result)
+
+			mu.Lock()
+			defer mu.Unlock()
+			if chatProbes == 0 {
+				t.Fatal("存量实测不可复用时应回退逐模型探测")
+			}
+			// 探测成功（200）后 chat 采信本轮实测结果与新鲜时间戳。
+			if got := strings.Join(result.ProtocolModels["chat"], ","); got != "gpt-a" {
+				t.Fatalf("chat 应采信本轮探测结果, got=%q", got)
+			}
+			if time.Since(result.ProtocolDiscoveredAt["chat"]) > time.Minute {
+				t.Fatalf("重探后实测时间应为当前时间, got=%v", result.ProtocolDiscoveredAt["chat"])
+			}
+		})
 	}
 }

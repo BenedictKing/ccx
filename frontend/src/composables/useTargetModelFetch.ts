@@ -135,7 +135,7 @@ export function useTargetModelFetch(options: TargetModelFetchOptions) {
       try {
         const id = options.channel.value?.index ?? 0
         const request = { key: apiKey, ...requestOverrides, baseUrl: boundBaseUrlForKey(apiKey) || requestOverrides.baseUrl }
-        let response: { data: { id: string }[] }
+        let response: { data: { id: string }[]; statusCode?: number }
 
         switch (modelsApiType) {
           case 'messages':
@@ -161,7 +161,8 @@ export function useTargetModelFetch(options: TargetModelFetchOptions) {
         keyModelsStatus.value.set(apiKey, {
           loading: false,
           success: true,
-          statusCode: 200,
+          // 优先展示上游真实状态码（新契约），旧后端无该字段时按 200 兜底
+          statusCode: response.statusCode ?? 200,
           modelCount: response.data.length,
         })
         return response.data
