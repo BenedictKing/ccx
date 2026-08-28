@@ -270,6 +270,7 @@ import {
   mdiMultiplication,
   mdiCurrencyUsd,
   mdiVpn,
+  mdiScaleBalance,
 } from '@mdi/js'
 
 // 图标名称到 SVG path 的映射 (使用 kebab-case)
@@ -546,6 +547,7 @@ const iconMap: Record<string, string> = {
   'steering': mdiSteering,
   'connection': mdiConnection,
   'lan-connect': mdiLanConnect,
+  'scale-balance': mdiScaleBalance,
 }
 
 // 自定义 SVG iconset - 处理 mdi-xxx 字符串格式
