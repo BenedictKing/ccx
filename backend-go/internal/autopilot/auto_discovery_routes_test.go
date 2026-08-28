@@ -138,7 +138,9 @@ func TestReconcileUnsupportedProtocolRoutesDisablesAndRestores(t *testing.T) {
 	}
 
 	// chat 探到模型、messages 一个都没有：messages 下掉，chat 保持启用。
-	runner.reconcileUnsupportedProtocolRoutes("acct_custom", map[string]bool{"chat": true}, cfgManager)
+	// 两个协议本轮都有探测证据（原生采信或逐模型探测均会写 ProtocolDiscoveredAt）。
+	probed := map[string]bool{"chat": true, "messages": true}
+	runner.reconcileUnsupportedProtocolRoutes("acct_custom", map[string]bool{"chat": true}, probed, cfgManager)
 	if got := statusOf("messages"); got != "disabled" {
 		t.Fatalf("messages 无可用模型应置为备用池, got=%q", got)
 	}
@@ -152,9 +154,56 @@ func TestReconcileUnsupportedProtocolRoutesDisablesAndRestores(t *testing.T) {
 	}
 
 	// 下一轮重新探到 messages 模型：自动恢复。
-	runner.reconcileUnsupportedProtocolRoutes("acct_custom", map[string]bool{"chat": true, "messages": true}, cfgManager)
+	runner.reconcileUnsupportedProtocolRoutes("acct_custom", map[string]bool{"chat": true, "messages": true}, probed, cfgManager)
 	if got := statusOf("messages"); got != "active" {
 		t.Fatalf("重新探到模型应恢复启用, got=%q", got)
+	}
+}
+
+// TestReconcileUnsupportedProtocolRoutesSkipsUnprobedProtocols 验证本轮没有探测证据的
+// 协议（典型场景：该协议已由原生兄弟渠道覆盖，本渠道发现时跳过探测）不被改写启用状态——
+// 兄弟渠道的状态由它自己的发现 run 决定，本渠道的结果无权代判。
+func TestReconcileUnsupportedProtocolRoutesSkipsUnprobedProtocols(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.json")
+	data := `{
+  "managedAccounts": [],
+  "upstream": [{"accountUid":"acct_custom","channelUid":"ch_messages","name":"custom-endpoint-messages","serviceType":"claude","baseUrl":"https://example.com","baseUrls":["https://example.com"],"apiKeys":["sk-test"],"apiKeyConfigs":[{"key":"sk-test","credentialUid":"cred_test","baseUrl":"https://example.com"}],"autoManaged":true,"status":"active"}],
+  "chatUpstream": [{"accountUid":"acct_custom","channelUid":"ch_chat","name":"custom-endpoint-chat","serviceType":"openai","baseUrl":"https://example.com","baseUrls":["https://example.com"],"apiKeys":["sk-test"],"apiKeyConfigs":[{"key":"sk-test","credentialUid":"cred_test","baseUrl":"https://example.com"}],"autoManaged":true,"status":"active"}],
+  "responsesUpstream": [], "geminiUpstream": [], "imagesUpstream": [], "vectorsUpstream": []
+}`
+	if err := os.WriteFile(configPath, []byte(data), 0600); err != nil {
+		t.Fatalf("写测试配置失败: %v", err)
+	}
+	cfgManager, err := config.NewConfigManager(configPath, filepath.Join(dir, "backups"))
+	if err != nil {
+		t.Fatalf("NewConfigManager 失败: %v", err)
+	}
+	t.Cleanup(func() { _ = cfgManager.Close() })
+
+	store, err := NewProfileStoreWithDB(newTestDB(t))
+	if err != nil {
+		t.Fatalf("NewProfileStoreWithDB 失败: %v", err)
+	}
+	runner := NewAutoDiscoveryRunner(store, nil)
+
+	statusOf := func(kind string) string {
+		for _, channel := range cfgManager.GetAccountChannels("acct_custom") {
+			if channel.Kind == kind {
+				return channel.Upstream.Status
+			}
+		}
+		return ""
+	}
+
+	// messages 渠道的发现 run：chat 因原生兄弟存在而跳过探测（discovered/probed 都不含 chat）。
+	// 若按旧语义只看 discovered，chat 会被误置为备用池；现在应保持 active 不动。
+	runner.reconcileUnsupportedProtocolRoutes("acct_custom", map[string]bool{"messages": true}, map[string]bool{"messages": true}, cfgManager)
+	if got := statusOf("chat"); got != "active" {
+		t.Fatalf("chat 本轮无探测证据，不应被兄弟渠道的发现结论改写, got=%q", got)
+	}
+	if got := statusOf("messages"); got != "active" {
+		t.Fatalf("messages 有可用模型应保持启用, got=%q", got)
 	}
 }
 
@@ -182,7 +231,8 @@ func TestReconcileUnsupportedProtocolRoutesKeepsManualSuspend(t *testing.T) {
 		t.Fatalf("NewProfileStoreWithDB 失败: %v", err)
 	}
 	runner := NewAutoDiscoveryRunner(store, nil)
-	runner.reconcileUnsupportedProtocolRoutes("acct_custom", map[string]bool{"chat": true}, cfgManager)
+	// suspended 渠道即使本轮有探测证据也不被改写。
+	runner.reconcileUnsupportedProtocolRoutes("acct_custom", map[string]bool{"chat": true}, map[string]bool{"chat": true, "messages": true}, cfgManager)
 
 	for _, channel := range cfgManager.GetAccountChannels("acct_custom") {
 		if channel.Kind == "messages" && channel.Upstream.Status != "suspended" {

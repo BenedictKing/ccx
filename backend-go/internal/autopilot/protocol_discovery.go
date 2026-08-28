@@ -89,17 +89,26 @@ func protocolProbeMessage(protocol string, summary protocolProbeSummary, attempt
 // discoverEndpointProtocols 对每个非原生协议的候选模型逐个探测，只把探测成功的模型
 // 写入该协议的 ProtocolModels，从而反映"渠道-key-模型-协议"四元组的真实可用性，
 // 而不是用单个代表模型的探测结果代表全部模型。
+//
+// 同逻辑渠道组内已存在协议 P 的原生兄弟上游时，兄弟渠道自己的画像是 P 的权威清单，
+// 本渠道不再对 P 逐模型探测（节约上游额度），也不再携带 ProtocolModels[P]，
+// 避免同一物理端点按两个 channelUID 各存一份口径互不知晓的数据（双口径）。
 func (r *AutoDiscoveryRunner) discoverEndpointProtocols(
 	ctx context.Context,
 	channel *config.UpstreamConfig,
 	baseURL string,
 	apiKey string,
 	result *EndpointDiscoveryResult,
+	cfgManager *config.ConfigManager,
 ) {
 	if channel == nil || result == nil || !result.ProtocolOk {
 		return
 	}
 	ensureConfiguredProtocolDiscovery(channel, result)
+
+	// 原生兄弟协议集合：同逻辑渠道组内其他渠道的原生协议 -> 兄弟渠道 UID。
+	// cfgManager 为 nil、渠道未加入逻辑渠道组或组内无其他渠道时为 nil，行为与改动前一致。
+	siblingProtocols := nativeSiblingProtocols(cfgManager, channel)
 
 	// 按 CapabilityUID 周期去重：同站点同分组同协议在本发现周期内已探测过，则直接复用
 	// 已共享的能力认知，避免跨账号 key 重复发探测请求。凭证 auth 仍按 key 各自在 /models 阶段验证。
@@ -109,6 +118,12 @@ func (r *AutoDiscoveryRunner) discoverEndpointProtocols(
 			log.Printf("[ProtocolDiscovery-LedgerSkip] 渠道 %s: CapabilityUID=%s 本周期已探测，复用共享能力",
 				channel.ChannelUID, capUID)
 			r.applyExistingCapabilityToResult(existing, result)
+			// 兄弟渠道覆盖的协议同样不携带条目：applyExistingCapabilityToResult 只会写
+			// 本渠道原生协议族的能力条目，但会给其余协议留下"无可用结论"的错误文案，
+			// 这里统一改写为兄弟渠道权威清单说明。
+			for protocol, siblingUID := range siblingProtocols {
+				markProtocolCoveredBySibling(result, protocol, siblingUID)
+			}
 			return
 		}
 	}
@@ -132,9 +147,14 @@ func (r *AutoDiscoveryRunner) discoverEndpointProtocols(
 	configuredProtocol := protocolForServiceType(channel.ServiceType)
 	if len(models) == 0 {
 		for _, protocol := range discoverableProtocols {
-			if protocol != configuredProtocol {
-				result.ProtocolDiscoveryError[protocol] = "没有可用于协议探测的模型"
+			if protocol == configuredProtocol {
+				continue
 			}
+			if siblingUID, ok := siblingProtocols[protocol]; ok {
+				markProtocolCoveredBySibling(result, protocol, siblingUID)
+				continue
+			}
+			result.ProtocolDiscoveryError[protocol] = "没有可用于协议探测的模型"
 		}
 		return
 	}
@@ -150,6 +170,13 @@ func (r *AutoDiscoveryRunner) discoverEndpointProtocols(
 		// 原生协议通常直接采信 models 清单，无需逐模型探测；但走兄弟渠道兜底时，
 		// 该清单并非本渠道实测所得，必须连原生协议一起探测，否则会保留空清单。
 		if protocol == configuredProtocol && !usedSharedModels {
+			continue
+		}
+		if siblingUID, ok := siblingProtocols[protocol]; ok {
+			// 有原生兄弟渠道的协议不再探测、也不复用存量实测：兄弟渠道自己的画像
+			// 是权威清单。同时清掉本渠道画像里历史遗留的同协议双口径数据
+			// （writeProfileForEndpoint 按本 result 整体覆盖协议级 map）。
+			markProtocolCoveredBySibling(result, protocol, siblingUID)
 			continue
 		}
 		if reused, ok := reusedProtocols[protocol]; ok {
@@ -240,6 +267,54 @@ func (r *AutoDiscoveryRunner) discoverEndpointProtocols(
 	}
 }
 
+// nativeSiblingProtocols 返回同一逻辑渠道组内兄弟渠道（不含自身）提供的原生协议集合：
+// 协议 -> 兄弟渠道 UID。兄弟渠道自己的画像是该协议的权威清单，本渠道无需再做跨协议实测。
+// cfgManager 为 nil、渠道未加入逻辑渠道组或组内无其他渠道时返回 nil（行为与改动前一致）。
+func nativeSiblingProtocols(cfgManager *config.ConfigManager, channel *config.UpstreamConfig) map[string]string {
+	if cfgManager == nil || channel == nil || strings.TrimSpace(channel.ChannelUID) == "" {
+		return nil
+	}
+	siblingUIDs := cfgManager.LogicalSiblingChannelUIDs(channel.ChannelUID)
+	if len(siblingUIDs) == 0 {
+		return nil
+	}
+	selfProtocol := protocolForServiceType(channel.ServiceType)
+	cfg := cfgManager.GetConfig()
+	protocols := make(map[string]string, len(siblingUIDs))
+	for _, uid := range siblingUIDs {
+		if uid == channel.ChannelUID {
+			continue
+		}
+		sibling := findChannelByUID(cfg, uid)
+		if sibling == nil {
+			continue
+		}
+		protocol := protocolForServiceType(sibling.ServiceType)
+		// 与本渠道同协议的"兄弟"（异常数据）不排除：原生协议采信/探测由本渠道自己负责。
+		if protocol == "" || protocol == selfProtocol {
+			continue
+		}
+		if _, exists := protocols[protocol]; !exists {
+			protocols[protocol] = uid
+		}
+	}
+	if len(protocols) == 0 {
+		return nil
+	}
+	return protocols
+}
+
+// markProtocolCoveredBySibling 标记协议已由原生兄弟渠道提供权威清单：
+// 删除本渠道该协议的模型/时间/来源/错误条目（画像整体覆盖写入时随之清除历史双口径数据），
+// 只留下一条说明，便于排查"为什么这个协议没有实测数据"。
+func markProtocolCoveredBySibling(result *EndpointDiscoveryResult, protocol, siblingUID string) {
+	delete(result.ProtocolModels, protocol)
+	delete(result.ProtocolDiscoveredAt, protocol)
+	delete(result.ProtocolDiscoverySource, protocol)
+	delete(result.ProtocolDiscoveryError, protocol)
+	result.ProtocolDiscoveryMessage[protocol] = fmt.Sprintf("已由原生兄弟渠道 %s 提供权威清单，本渠道不再逐模型探测", siblingUID)
+}
+
 // protocolProbeReuse 是一份可复用的存量协议实测结论（来自端点画像）。
 type protocolProbeReuse struct {
 	models       []string
@@ -253,6 +328,7 @@ type protocolProbeReuse struct {
 // 清单层（24h TTL）本轮刚刷新过，交集顺带剔除已下线模型；交集为空说明存量结论
 // 与当前现实脱节，该协议不落条目（视为需要重探，由调用方走逐模型探测）。
 // 存量画像可能来自旧版本（map 字段为 nil），逐项防御；画像缺失或 store 为 nil 时返回 nil。
+// 有原生兄弟渠道的协议由调用方先行跳过（兄弟画像是权威），不会走到本函数的复用结论。
 func (r *AutoDiscoveryRunner) reusableProtocolProbeResults(channel *config.UpstreamConfig, baseURL, apiKey string, currentModels []string, configuredProtocol string, now time.Time) map[string]protocolProbeReuse {
 	if r == nil || r.store == nil || channel == nil || len(currentModels) == 0 {
 		return nil

@@ -194,7 +194,8 @@ export function useChannelTargetModels(options: ChannelTargetModelsOptions) {
           options.keyModelsStatus.value.set(key, {
             loading: false,
             success: true,
-            statusCode: 200,
+            // 优先使用后端透传的上游真实状态码（旧后端无此字段时回退 200）
+            statusCode: Array.isArray(resp) ? 200 : (resp?.statusCode ?? 200),
             modelCount: list.length,
           })
           return list

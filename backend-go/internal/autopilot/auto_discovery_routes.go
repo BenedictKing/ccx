@@ -111,7 +111,7 @@ func (r *AutoDiscoveryRunner) maybeEnableDiscoveredProtocolRoutes(
 		}
 	}
 
-	r.reconcileUnsupportedProtocolRoutes(source.AccountUID, discovered, cfgManager)
+	r.reconcileUnsupportedProtocolRoutes(source.AccountUID, discovered, probedProtocolKinds(endpoints), cfgManager)
 	return nil
 }
 
@@ -121,11 +121,17 @@ func (r *AutoDiscoveryRunner) maybeEnableDiscoveredProtocolRoutes(
 // "某协议 0 个可用模型"是可信结论而非整体不可达：上游确实不支持该协议，或该协议下
 // 没有任何可用模型，此时把渠道置为 disabled（备用池）使其退出调度，避免请求必然失败。
 //
+// 只处理 probed 中本轮取得过证据的协议（原生采信/逐模型探测/TTL 复用都会写
+// ProtocolDiscoveredAt）：有原生兄弟渠道覆盖的协议本轮不再探测（见
+// discoverEndpointProtocols 的兄弟跳过），其启用状态由兄弟渠道自己的发现结论决定，
+// 本渠道的结果无权改写——否则每个渠道只"发现"自己的原生协议，会互相把兄弟置为备用池。
+//
 // 状态而非删除：保留渠道配置与画像，上游恢复支持后下一轮发现自动置回 active，完全可逆。
 // 只处理 autoManaged 且非用户手动 suspended 的渠道，不覆盖人工意图。
 func (r *AutoDiscoveryRunner) reconcileUnsupportedProtocolRoutes(
 	accountUID string,
 	discovered map[string]bool,
+	probed map[string]bool,
 	cfgManager *config.ConfigManager,
 ) {
 	for _, channel := range cfgManager.GetAccountChannels(accountUID) {
@@ -134,6 +140,10 @@ func (r *AutoDiscoveryRunner) reconcileUnsupportedProtocolRoutes(
 		}
 		// images/vectors 不参与协议探测，其状态不由本轮结论决定。
 		if !slices.Contains(discoverableProtocols, channel.Kind) {
+			continue
+		}
+		// 本轮无该协议证据（如已由原生兄弟渠道覆盖而跳过探测）：交给兄弟自己的发现结论。
+		if !probed[channel.Kind] {
 			continue
 		}
 		index, kind := findChannelIndexAndKind(cfgManager.GetConfig(), channel.Upstream.ChannelUID)
@@ -187,6 +197,23 @@ func discoveredProtocolKinds(endpoints []EndpointDiscoveryResult) map[string]boo
 		}
 	}
 	return discovered
+}
+
+// probedProtocolKinds 返回本轮发现中真正取得过证据的协议集合：原生协议采信、
+// 逐模型探测（含全部失败）与 TTL 复用都会写入 ProtocolDiscoveredAt；
+// 因原生兄弟渠道覆盖而跳过的协议不写入，天然不在集合中。
+// reconcileUnsupportedProtocolRoutes 据此只对本轮有证据的协议变更渠道启用状态。
+func probedProtocolKinds(endpoints []EndpointDiscoveryResult) map[string]bool {
+	probed := make(map[string]bool, len(discoverableProtocols))
+	for _, endpoint := range endpoints {
+		if !endpoint.ProtocolOk {
+			continue
+		}
+		for protocol := range endpoint.ProtocolDiscoveredAt {
+			probed[protocol] = true
+		}
+	}
+	return probed
 }
 
 func managedCustomAccountName(channel config.AccountChannel) string {

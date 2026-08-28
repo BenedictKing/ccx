@@ -1,7 +1,7 @@
 # 渠道模型清单一致性与发现链路 设计文档
 
 > 范围:渠道「上游协议与模型」展示、自动发现(AutoDiscovery)、Key 级模型徽章三条链路的口径梳理与一致性改造。
-> 状态:P0/P1 已落地(2026-08-28),P2 画像归一随 channel-data-model-v2 推进。
+> 状态:已全部落地(P0/P1 于 2026-08-28,P2 画像收敛于 2026-08-29);存储层归并随 channel-data-model-v2 推进。
 > 证据来源:`backend-go/.config/autopilot.db` 画像实测、`backend-go/logs/app.log` 发现日志、相关代码锚点见 §7。
 
 ## 1. 背景与问题现象
@@ -167,9 +167,11 @@ Key 徽章 14/20 对火山渠道同样走管控面套餐接口(`GetChannelModels
 - 来源标签 tooltip 释义:`control_plane`=套餐权益清单(可能多于端点实时可见)、`models_api`=端点实时清单、`protocol_model_probe`=逐模型实测。
 - 别名归类展示(修 R8 的展示侧):识别 `-latest`、`-evolving`、`ark-code-latest` 这类滚动别名,在协议分区中折叠为「别名」徽标附着在目标家族下(如 `KIMI-LATEST → kimi 家族`),计数仍计入总数但视觉上不再与具体版本平铺;旧画像(未经 P0-5 过滤)中残留的非对话模型同样在前端折叠隐藏,作为数据修正生效前的兜底。
 
-### 5.3 P2:结构收敛
+### 5.3 P2:结构收敛(已落地,2026-08-29)
 
-**P2-1 同站多协议画像归一(修 R7)**:以 `identityBaseURL + keyHash` 为纽带,消除「messages 上游跨协议探测结果」与「chat 上游自身画像」双口径并存;方向与 `channel-data-model-v2.md` 一致,随 v2 推进落地。
+**P2-1 同站多协议画像收敛(修 R7)**:同一逻辑渠道组内已存在协议 P 的原生兄弟上游时,本渠道不再对 P 逐模型探测、不再携带 `ProtocolModels[P]`(兄弟画像为权威);无原生兄弟时行为不变(协议联邦自动发现仍依赖跨协议探测)。配套修复 `reconcileUnsupportedProtocolRoutes`:以 `ProtocolDiscoveredAt` 为「本轮有证据」门槛,只对本轮探测过的协议变更兄弟渠道启用状态,消除了跳过探测后误 disable 兄弟的隐患。实现见 `protocol_discovery.go` 的 `nativeSiblingProtocols`/`markProtocolCoveredBySibling`。
+
+完整的「以 identityBaseURL+keyHash 归并存储」仍随 channel-data-model-v2 推进;本次收敛后双口径不再产生(存量旧条目随各渠道下次发现整体覆盖自然清除)。
 
 ### 5.4 设计权衡与边界
 
@@ -177,7 +179,7 @@ Key 徽章 14/20 对火山渠道同样走管控面套餐接口(`GetChannelModels
 - **过滤用排除式而非白名单式**:P0-5 只剔除「确定不是对话模型」的命名族,不做与内置清单的交集——否则 `KIMI-K3` 这类管控面新上线、内置清单尚未收录的对话模型会被误杀。新对话模型的正规回流通道是 `manifest_drift` 事件 → 人工/自动更新内置清单(自动回填目前未实现,见 `README.md` 待排期);过滤后 drift 对比应基于过滤前清单,避免永久性 drift 噪音。
 - **覆盖范围**:P0-2 后台 loop 维持只扫 `AutoManaged` 渠道(非托管渠道不做跨协议实测,自动刷新的信息增量小);非托管渠道由 P0-3 查看触发兜底,仅刷清单层,无探测风暴风险。
 - **失败语义**:刷新失败一律静默保留旧数据——过期数据优于无数据;失败原因进日志和 `ProtocolDiscoveryError`,不上 UI。
-- **桌面端**:`desktop/frontend` 的认证面板是平行实现,P0-3 的查看触发需在桌面端对齐,或后续收敛为后端统一触发点。
+- **桌面端**:`desktop/frontend` 没有「上游协议与模型」区块,P0-1/P0-3 不适用;仅有的平行实现是认证面板 Key 徽章,已同步改用后端透传的真实状态码(`useChannelTargetModels.ts`,2026-08-29)。
 
 ## 6. 验收标准
 

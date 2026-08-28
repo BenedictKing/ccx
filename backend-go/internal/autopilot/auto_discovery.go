@@ -684,7 +684,7 @@ func (r *AutoDiscoveryRunner) discoverEndpoints(ctx context.Context, channel *co
 			result.apiKey = key
 			result.credentialUID = r.resolveDiscoveryCredentialUID(channel, cfgManager, key)
 			if result.ProtocolOk && channel.AutoManaged {
-				r.discoverEndpointProtocols(ctx, channel, baseURL, key, &result)
+				r.discoverEndpointProtocols(ctx, channel, baseURL, key, &result, cfgManager)
 			}
 			logEndpointDiscovery(channel.ChannelUID, result)
 			results = append(results, result)
@@ -793,7 +793,7 @@ func (r *AutoDiscoveryRunner) discoverEndpointsWithCheckpoint(ctx context.Contex
 			result.apiKey = key
 			result.credentialUID = r.resolveDiscoveryCredentialUID(channel, cfgManager, key)
 			if result.ProtocolOk && channel.AutoManaged {
-				r.discoverEndpointProtocols(ctx, channel, baseURL, key, &result)
+				r.discoverEndpointProtocols(ctx, channel, baseURL, key, &result, cfgManager)
 			}
 			logEndpointDiscovery(channel.ChannelUID, result)
 			results = append(results, result)

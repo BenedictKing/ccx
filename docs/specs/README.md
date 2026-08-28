@@ -72,7 +72,7 @@ Channels   (Claude/OpenAI/Gemini/...)
 | web-ui-dialogs.md | ✅ 完成 | 覆盖所有对话框布局、交互、状态流转、跳转关系 |
 | web-ui-pages.md | ✅ 完成 | 覆盖 8 个 View、导航 IA、全局区块显隐、ego-browser 实测、IA 问题清单 |
 | cross-module-integration.md | ✅ 完成 | 覆盖交互边界、事件传播、配置传播、竞态处理、事件总线 |
-| model-inventory-consistency.md | ✅ P0/P1 已落地 | 2026-08-28 落地:整组重新发现、后台自动保鲜(首 tick 5min/清单 24h/实测 7d)、查看静默自愈、火山非对话模型过滤;P2 画像归一待 v2 |
+| model-inventory-consistency.md | ✅ 完成 | P0/P1/P2 全部落地(2026-08-29):自动保鲜、整组发现、查看自愈、清单净化、画像双口径收敛;存储归并随 v2 |
 
 > `phase3c-handoff.md` 为 2026-08-11 的历史交接快照（任务已全部完成），不作为现状参考。
 

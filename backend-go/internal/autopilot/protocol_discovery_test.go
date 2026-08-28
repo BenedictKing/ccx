@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -53,7 +54,7 @@ func TestDiscoverEndpointProtocolsRecordsOnlyVerifiedModels(t *testing.T) {
 	// chat 是非原生协议，走逐模型探测路径。
 	channel := &config.UpstreamConfig{ServiceType: "responses"}
 
-	runner.discoverEndpointProtocols(context.Background(), channel, srv.URL, "sk-test", &result)
+	runner.discoverEndpointProtocols(context.Background(), channel, srv.URL, "sk-test", &result, nil)
 
 	if got := strings.Join(result.ProtocolModels["responses"], ","); got != "gpt-supported,gpt-unsupported" {
 		t.Fatalf("原生协议 responses 应沿用完整 models 清单，got=%q", got)
@@ -97,7 +98,7 @@ func TestDiscoverEndpointProtocolsRateLimitedNotCountedAsFailure(t *testing.T) {
 	}
 	channel := &config.UpstreamConfig{ServiceType: "responses"}
 
-	runner.discoverEndpointProtocols(context.Background(), channel, srv.URL, "sk-test", &result)
+	runner.discoverEndpointProtocols(context.Background(), channel, srv.URL, "sk-test", &result, nil)
 
 	if _, ok := result.ProtocolModels["chat"]; ok {
 		t.Fatalf("限流不应产生任何已验证模型，got=%v", result.ProtocolModels["chat"])
@@ -213,7 +214,7 @@ func TestDiscoverEndpointProtocolsReusesSiblingModelsWhenListEmpty(t *testing.T)
 	result := EndpointDiscoveryResult{ProtocolOk: true, Models: nil}
 	channel := &config.UpstreamConfig{ServiceType: "claude", ChannelUID: "ch-claude"}
 
-	runner.discoverEndpointProtocols(context.Background(), channel, srv.URL, "sk-test", &result)
+	runner.discoverEndpointProtocols(context.Background(), channel, srv.URL, "sk-test", &result, nil)
 
 	if got := strings.Join(result.ProtocolModels["messages"], ","); got != "gpt-shared" {
 		t.Fatalf("原生协议 messages 应复用兄弟渠道模型并实测通过, got=%q", got)
@@ -282,7 +283,7 @@ func TestDiscoverEndpointProtocolsReusesFreshStoredProbe(t *testing.T) {
 	// 当前清单里 gpt-removed 已下线、gpt-new 新上线。
 	result := EndpointDiscoveryResult{ProtocolOk: true, Models: []string{"gpt-supported", "gpt-new"}}
 
-	runner.discoverEndpointProtocols(context.Background(), channel, srv.URL, apiKey, &result)
+	runner.discoverEndpointProtocols(context.Background(), channel, srv.URL, apiKey, &result, nil)
 
 	if got := strings.Join(result.ProtocolModels["chat"], ","); got != "gpt-supported" {
 		t.Fatalf("chat 应复用 存量∩当前清单 的交集, got=%q", got)
@@ -378,7 +379,7 @@ func TestDiscoverEndpointProtocolsReprobesWhenStoredProbeNotReusable(t *testing.
 			runner.client = srv.Client()
 			result := EndpointDiscoveryResult{ProtocolOk: true, Models: []string{"gpt-a"}}
 
-			runner.discoverEndpointProtocols(context.Background(), channel, srv.URL, apiKey, &result)
+			runner.discoverEndpointProtocols(context.Background(), channel, srv.URL, apiKey, &result, nil)
 
 			mu.Lock()
 			defer mu.Unlock()
@@ -391,6 +392,133 @@ func TestDiscoverEndpointProtocolsReprobesWhenStoredProbeNotReusable(t *testing.
 			}
 			if time.Since(result.ProtocolDiscoveredAt["chat"]) > time.Minute {
 				t.Fatalf("重探后实测时间应为当前时间, got=%v", result.ProtocolDiscoveredAt["chat"])
+			}
+		})
+	}
+}
+
+// TestDiscoverEndpointProtocolsSkipsProtocolsWithNativeSibling 表驱动验证：同逻辑渠道组内
+// 已存在某协议的原生兄弟上游时，本渠道不再对该协议逐模型探测（含 TTL 内的存量实测复用），
+// result 不携带该协议条目（画像整体覆盖写入时清掉历史双口径数据），只留下兄弟渠道说明；
+// 组内无原生兄弟时行为与改动前一致。
+func TestDiscoverEndpointProtocolsSkipsProtocolsWithNativeSibling(t *testing.T) {
+	freshAt := time.Now().Add(-1 * time.Hour).UTC()
+	tests := []struct {
+		name            string
+		withChatSibling bool   // 配置里是否带同账号的 chat 原生兄弟渠道
+		withStoredProbe bool   // 存量画像是否带 TTL 内的 chat 实测结论（复用路径同样应被跳过）
+		wantChatProbed  bool   // 是否期望本渠道实际探测 chat 协议
+		wantChatModels  string // 无兄弟时 chat 应采信的本轮实测模型
+	}{
+		{name: "有原生兄弟且有新鲜存量实测_不复用不探测", withChatSibling: true, withStoredProbe: true},
+		{name: "有原生兄弟且无存量_不探测", withChatSibling: true},
+		{name: "组内无兄弟_保持逐模型探测", wantChatProbed: true, wantChatModels: "gpt-a"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var mu sync.Mutex
+			probedPaths := make(map[string]int)
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				mu.Lock()
+				probedPaths[r.URL.Path]++
+				mu.Unlock()
+				switch r.URL.Path {
+				case "/v1/chat/completions", "/v1/responses":
+					_, _ = w.Write([]byte(`{"ok":true}`))
+				default:
+					w.WriteHeader(http.StatusNotFound)
+				}
+			}))
+			defer srv.Close()
+
+			chatUpstream := ""
+			if tt.withChatSibling {
+				chatUpstream = `{"accountUid":"acct_sib","channelUid":"ch_chat","name":"site-chat","serviceType":"openai","baseUrl":"` + srv.URL + `","baseUrls":["` + srv.URL + `"],"apiKeys":["sk-test"],"apiKeyConfigs":[{"key":"sk-test","credentialUid":"cred_chat","baseUrl":"` + srv.URL + `"}],"autoManaged":true,"status":"active"}`
+			}
+			dir := t.TempDir()
+			configPath := filepath.Join(dir, "config.json")
+			data := `{
+  "managedAccounts": [],
+  "upstream": [{"accountUid":"acct_sib","channelUid":"ch_msg","name":"site-messages","serviceType":"claude","baseUrl":"` + srv.URL + `","baseUrls":["` + srv.URL + `"],"apiKeys":["sk-test"],"apiKeyConfigs":[{"key":"sk-test","credentialUid":"cred_msg","baseUrl":"` + srv.URL + `"}],"autoManaged":true,"status":"active"}],
+  "chatUpstream": [` + chatUpstream + `],
+  "responsesUpstream": [], "geminiUpstream": [], "imagesUpstream": [], "vectorsUpstream": []
+}`
+			if err := os.WriteFile(configPath, []byte(data), 0600); err != nil {
+				t.Fatalf("写测试配置失败: %v", err)
+			}
+			cfgManager, err := config.NewConfigManager(configPath, filepath.Join(dir, "backups"))
+			if err != nil {
+				t.Fatalf("NewConfigManager 失败: %v", err)
+			}
+			t.Cleanup(func() { _ = cfgManager.Close() })
+
+			store, err := NewProfileStore(filepath.Join(t.TempDir(), "profiles.db"))
+			if err != nil {
+				t.Fatalf("NewProfileStore 失败: %v", err)
+			}
+			defer func() { _ = store.Close() }()
+
+			channel := cfgManager.GetConfig().Upstream[0]
+			apiKey := "sk-test"
+			if tt.withStoredProbe {
+				// 存量画像带 TTL 内的 chat 实测：没有兄弟时本应被复用（见
+				// TestDiscoverEndpointProtocolsReusesFreshStoredProbe），有兄弟时必须跳过。
+				endpointUID := GenerateEndpointUID(channel.ChannelUID, utils.CanonicalBaseURL(srv.URL, channel.ServiceType), KeyHashFromAPIKey(apiKey))
+				profile := newTestProfile(endpointUID, channel.ChannelUID, "claude", srv.URL)
+				profile.ProtocolModels = map[string][]string{"chat": {"gpt-a"}}
+				profile.ProtocolDiscoveredAt = map[string]time.Time{"chat": freshAt}
+				profile.ProtocolDiscoverySource = map[string]string{"chat": "protocol_model_probe"}
+				profile.ProtocolDiscoveryMessage = map[string]string{"chat": "存量实测说明"}
+				if err := store.Upsert(profile); err != nil {
+					t.Fatalf("Upsert 存量画像失败: %v", err)
+				}
+			}
+
+			runner := NewAutoDiscoveryRunner(store, nil)
+			runner.client = srv.Client()
+			result := EndpointDiscoveryResult{ProtocolOk: true, Models: []string{"gpt-a"}}
+
+			runner.discoverEndpointProtocols(context.Background(), &channel, srv.URL, apiKey, &result, cfgManager)
+
+			mu.Lock()
+			chatProbes := probedPaths["/v1/chat/completions"]
+			responsesProbes := probedPaths["/v1/responses"]
+			mu.Unlock()
+
+			if tt.withChatSibling {
+				if chatProbes != 0 {
+					t.Fatalf("chat 已有原生兄弟渠道，不应再逐模型探测, 实际探测 %d 次", chatProbes)
+				}
+				if _, ok := result.ProtocolModels["chat"]; ok {
+					t.Fatalf("chat 应由兄弟渠道提供权威清单，本渠道不携带条目, got=%v", result.ProtocolModels["chat"])
+				}
+				if _, ok := result.ProtocolDiscoveredAt["chat"]; ok {
+					t.Fatal("兄弟覆盖的协议不应设置探测时间")
+				}
+				if _, ok := result.ProtocolDiscoveryError["chat"]; ok {
+					t.Fatal("兄弟覆盖的协议不应记录探测错误")
+				}
+				if msg := result.ProtocolDiscoveryMessage["chat"]; !strings.Contains(msg, "ch_chat") {
+					t.Fatalf("应说明由兄弟渠道提供权威清单, got=%q", msg)
+				}
+			} else {
+				if chatProbes == 0 {
+					t.Fatal("组内无兄弟时 chat 应保持逐模型探测")
+				}
+				if got := strings.Join(result.ProtocolModels["chat"], ","); got != tt.wantChatModels {
+					t.Fatalf("组内无兄弟时 chat 应采信本轮实测结果, got=%q", got)
+				}
+			}
+			// 无兄弟的 responses 协议在两种情形下都照常探测。
+			if responsesProbes == 0 {
+				t.Fatal("无原生兄弟的 responses 协议应照常逐模型探测")
+			}
+			if got := strings.Join(result.ProtocolModels["responses"], ","); got != "gpt-a" {
+				t.Fatalf("responses 应采信本轮实测结果, got=%q", got)
+			}
+			// 原生协议 messages 始终由清单采信。
+			if got := strings.Join(result.ProtocolModels["messages"], ","); got != "gpt-a" {
+				t.Fatalf("原生协议 messages 应采信完整清单, got=%q", got)
 			}
 		})
 	}
