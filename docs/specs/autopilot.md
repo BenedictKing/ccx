@@ -764,6 +764,8 @@ health(40) > fastDecay(25) > successRate(20) > latency(10) > cost(5)
 
 ### 5.19 倍率编辑对托管账号手工 key 可用（credentialUid 兜底）
 
+提交：`e205d9c6`（入口可见性修复见 `bb736eef`）
+
 - 原缺陷：`KeyUID` 仅 new-api 订阅同步路径（`StableKeyUID`）生成，托管账号手工 key 只有 `CredentialUID`，导致 `findAPIKeyConfigByKeyUID` 无法定位、前端 `ApiKeyManagementSection` 的倍率编辑按钮又因嵌在「已设置倍率才渲染」的 subtitle 块内而无首次配置入口（鸡生蛋）。
 - 修复：`findAPIKeyConfigByKeyUID` 兜底匹配 `CredentialUID`（托管渠道加载期 `ensureCredentialUIDs` 必回填）；前端 `buildChannelApiKeyRows` 以 `keyUid ?? credentialUid` 回填行 `keyUid`；倍率编辑按钮对可编辑 key（有 keyUid/channelUid/channelKind）始终可见，未设置倍率时不渲染空 chips。
 - 效果：免费/签到类渠道的 key 可在编辑弹窗一键「标记为公开/临时 Key」（`groupMultiplier=0` 显式零成本 `manual_zero_cost` + `opportunistic` 消耗策略），成本报表归入「已确认零成本」，调度零成本优先。
