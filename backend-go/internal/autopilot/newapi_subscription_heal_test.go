@@ -17,7 +17,7 @@ type healFakeAdapter struct {
 }
 
 func (f *healFakeAdapter) VerifyWithFallback(context.Context, string, string, string, string) (*NewApiUserSelf, string, error) {
-	return &NewApiUserSelf{}, "1", nil
+	return &NewApiUserSelf{ID: 7, Username: "bob", Quota: 50000, UsedQuota: 1000}, "1", nil
 }
 
 func (f *healFakeAdapter) FetchGroups(context.Context, string, string, string, string) (map[string]float64, error) {
@@ -153,6 +153,43 @@ func TestHealMissingProvisionedKeysSkipsRemoteDeleted(t *testing.T) {
 		if cfg.Key == "" {
 			t.Fatalf("不应注入空 key config: %+v", cfg)
 		}
+	}
+}
+
+// 主账号已删除（无订阅级凭证）：SyncNow 不报错，仅同步各子账号。
+func TestSyncNowWithoutPrimaryCredentialStillSyncsAccounts(t *testing.T) {
+	store, err := NewSubscriptionStoreWithDB(newTestDB(t))
+	if err != nil {
+		t.Fatalf("创建 store 失败: %v", err)
+	}
+	profile := &SubscriptionProfile{
+		SubscriptionUID: "newapi-ch-noprimary",
+		Provider:        "new_api",
+		BaseURL:         "https://new-api.example.com",
+		Accounts: []NewApiAccount{{
+			AccountUID:  "acct_sub_1",
+			AccessToken: "sub-token",
+			Status:      "active",
+			ProvisionedKeys: []NewApiProvisionedKey{
+				{Name: "ccx-sub", Group: "default", GroupMultiplier: 1, TokenID: 21},
+			},
+		}},
+	}
+	if err := store.Create(profile); err != nil {
+		t.Fatalf("创建订阅失败: %v", err)
+	}
+	svc := &NewApiSubscriptionSyncService{store: store, adapter: &healFakeAdapter{}, now: time.Now}
+
+	result, err := svc.SyncNow(context.Background(), "newapi-ch-noprimary")
+	if err != nil {
+		t.Fatalf("无主凭证不应报错: %v", err)
+	}
+	if len(result.Keys) != 1 || result.Keys[0].KeyUID != StableKeyUID("newapi-ch-noprimary", 21) {
+		t.Fatalf("子账号 key 状态应被同步: %+v", result.Keys)
+	}
+	updated := store.Get("newapi-ch-noprimary")
+	if len(updated.Accounts) != 1 || updated.Accounts[0].Status != "active" || updated.Accounts[0].Balance != 50000 {
+		t.Fatalf("子账号余额/状态未更新: %+v", updated.Accounts)
 	}
 }
 

@@ -29,6 +29,7 @@ const { apiMocks, ApiErrorStub } = vi.hoisted(() => {
       addSubscriptionAccount: vi.fn(),
       refreshSubscriptionAccount: vi.fn(),
       deleteSubscriptionAccount: vi.fn(),
+      deleteSubscriptionPrimaryAccount: vi.fn(),
     },
   }
 })
@@ -48,7 +49,8 @@ const inputStub = defineComponent({
 const buttonStub = defineComponent({
   props: ['disabled'],
   emits: ['click'],
-  template: '<button :disabled="disabled" @click="$emit(\'click\')"><slot /></button>',
+  // 透传原生事件，供父组件 .stop 修饰符访问 event
+  template: '<button :disabled="disabled" @click="$emit(\'click\', $event)"><slot /></button>',
 })
 
 const mountPanel = (props: Record<string, unknown> = {}) => mount(NewApiAccountPanel, {
@@ -99,7 +101,7 @@ describe('NewApiAccountPanel', () => {
     apiMocks.getSubscriptionAccounts.mockResolvedValue({ accounts: [] })
   })
 
-  it('主账号作为列表首行展示余额和脱敏 token，展开后表单不回填明文 token', async () => {
+  it('主账号作为列表首行展示余额和脱敏 token，展开仅详情无凭证表单', async () => {
     const wrapper = mountPanel()
     await vi.waitFor(() => expect(apiMocks.getSubscription).toHaveBeenCalledWith('sub-main'))
     await nextTick()
@@ -109,14 +111,12 @@ describe('NewApiAccountPanel', () => {
     expect(wrapper.text()).toContain('****oken')
     expect(wrapper.text()).toContain('subscription.newApi.primaryBadge')
 
-    // 展开主账号行：详情含已用额度，更新凭证表单的 token 输入框留空
+    // 展开主账号行：详情含已用额度；账号平权后不再有更新凭证表单
     await wrapper.find('[role="button"][aria-expanded="false"]').trigger('click')
     await nextTick()
     expect(wrapper.find('[aria-expanded="true"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('1,000')
-    const passwordInput = wrapper.find<HTMLInputElement>('input[type="password"]')
-    expect(passwordInput.element.value).toBe('')
-    expect(wrapper.text()).toContain('subscription.newApi.updateCredentials')
+    expect(wrapper.text()).not.toContain('subscription.newApi.updateCredentials')
   })
 
   it('generic 渠道填写 token 后绑定已有渠道', async () => {
@@ -161,26 +161,33 @@ describe('NewApiAccountPanel', () => {
     expect(wrapper.emitted('updated')).toBeTruthy()
   })
 
-  it('输入新 token 后保存，并携带乐观锁版本', async () => {
-    apiMocks.updateNewApiCredentials.mockResolvedValue({
+  it('主账号可删除：删除后提示重新添加成为新主账号', async () => {
+    apiMocks.deleteSubscriptionPrimaryAccount.mockResolvedValue(undefined)
+    apiMocks.getSubscriptionAccounts.mockResolvedValue({ accounts: [] })
+    const wrapper = mountPanel()
+    await vi.waitFor(() => expect(apiMocks.getSubscription).toHaveBeenCalledWith('sub-main'))
+    await nextTick()
+
+    // 主账号行上的删除按钮触发删除，成功后重拉订阅与账号列表
+    const deleteBtn = wrapper.findAll('button').find(button => button.text().includes('subscription.newApi.deletePrimaryAccount'))
+    expect(deleteBtn).toBeTruthy()
+    await deleteBtn!.trigger('click')
+
+    await vi.waitFor(() => expect(apiMocks.deleteSubscriptionPrimaryAccount).toHaveBeenCalledWith('sub-main'))
+    await vi.waitFor(() => expect(wrapper.emitted('updated')).toBeTruthy())
+  })
+
+  it('订阅无主凭证时显示重新添加提示，主账号行不渲染', async () => {
+    apiMocks.getSubscription.mockResolvedValue({
       ...(await apiMocks.getSubscription()),
-      version: 3,
-      accessTokenMasked: '****new1',
+      accessTokenMasked: '',
     })
     const wrapper = mountPanel()
     await vi.waitFor(() => expect(apiMocks.getSubscription).toHaveBeenCalled())
-    // 展开主账号行后填写并保存凭证
-    await wrapper.find('[role="button"][aria-expanded="false"]').trigger('click')
     await nextTick()
-    await wrapper.find('input[type="password"]').setValue('token-new1')
-    await wrapper.findAll('button').find(button => button.text().includes('subscription.newApi.saveCredentials'))!.trigger('click')
 
-    await vi.waitFor(() => expect(apiMocks.updateNewApiCredentials).toHaveBeenCalledWith('sub-main', {
-      accessToken: 'token-new1',
-      userId: '7',
-      authTokenMode: 'bearer',
-      expectedVersion: 2,
-    }))
+    expect(wrapper.text()).toContain('subscription.newApi.primaryAccountRemoved')
+    expect(wrapper.text()).not.toContain('subscription.newApi.primaryBadge')
   })
 
   it('new_api 渠道缺失 subscriptionUid 时按 channelUid 兜底拉取订阅', async () => {
@@ -248,25 +255,14 @@ describe('NewApiAccountPanel', () => {
     await secondRow!.trigger('click')
     await nextTick()
     expect(secondRow!.attributes('aria-expanded')).toBe('true')
+    // 展开仅展示详情（掩码 token/Key chips）；账号平权后不再有更新凭证表单
     expect(wrapper.text()).toContain('****cc81')
-    expect(wrapper.text()).toContain('subscription.newApi.updateCredentials')
+    expect(wrapper.text()).not.toContain('subscription.newApi.updateCredentials')
 
-    // 表单基线来自账号当前值；填新 token 后保存
-    const inputs = wrapper.findAll<HTMLInputElement>('input[type="password"]')
-    const accountTokenInput = inputs[inputs.length - 1]
-    await accountTokenInput.setValue('token-acct-new')
-    // 面板内有主账号/子账号两个同文案保存按钮，取展开区（最后一个）
-    const saveButtons = wrapper.findAll('button').filter(button => button.text().includes('subscription.newApi.saveCredentials'))
-    await saveButtons[saveButtons.length - 1]!.trigger('click')
-
-    await vi.waitFor(() => expect(apiMocks.updateSubscriptionAccountCredentials).toHaveBeenCalledWith('sub-main', 'acct_sub_1', {
-      accessToken: 'token-acct-new',
-      userId: '8',
-      authTokenMode: 'raw',
-    }))
-    // 保存成功后明文不回填
-    await vi.waitFor(() => expect(accountTokenInput.element.value).toBe(''))
-    expect(wrapper.text()).toContain('****new8')
-    expect(wrapper.emitted('updated')).toBeTruthy()
+    // 子账号删除按钮走独立端点
+    const deleteButtons = wrapper.findAll('button').filter(button => button.text().includes('app.actions.delete'))
+    apiMocks.deleteSubscriptionAccount.mockResolvedValue(undefined)
+    await deleteButtons[deleteButtons.length - 1]!.trigger('click')
+    await vi.waitFor(() => expect(apiMocks.deleteSubscriptionAccount).toHaveBeenCalledWith('sub-main', 'acct_sub_1'))
   })
 })

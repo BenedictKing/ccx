@@ -180,13 +180,14 @@
 - 用途：管理 new-api 主账号凭证 + 多子账号（余额、密钥掩码、分组倍率 chips）；generic 未绑定时提供绑定表单。
 - 触发入口：`EditChannelModal` 在 `isNewApiChannel || isGenericAutoManagedChannel` 时渲染。
 - props：`subscriptionUid`、`channelName?`、`baseUrl?`、`channelUid?`、`channelKind?`、`isGeneric?`、`autoManagedKind?`、`channelProxyUrl?`、`channelProxyPreferDirect?`（代理以渠道「代理通道」为唯一事实源，面板仅继承展示 `channelProxyHint`，表单不再单独配置代理）；emit `updated`。
-- 订阅 UID 解析：`effectiveSubscriptionUid`（行 470）= `props.subscriptionUid || localSubscriptionUid || 兜底`；兜底仅在非 generic 且 `autoManagedKind==='new_api'` 时按约定推导 `newapi-${channelUid}`（行 467，787db651）——key 配置 `sourceSubscriptionUid` 丢失（编辑换 key 切断关联）时面板不瘫痪。watch 依赖 `[subscriptionUid, channelUid, autoManagedKind, isGeneric]` 重置并重拉。
+- 订阅 UID 解析：`effectiveSubscriptionUid`（行 382）= `props.subscriptionUid || localSubscriptionUid || 兜底`；兜底仅在非 generic 且 `autoManagedKind==='new_api'` 时按约定推导 `newapi-${channelUid}`（行 379，787db651）——key 配置 `sourceSubscriptionUid` 丢失（编辑换 key 切断关联）时面板不瘫痪。watch 依赖 `[subscriptionUid, channelUid, autoManagedKind, isGeneric]` 重置并重拉。
 - 分支视图：
   - generic 未绑定：`bindForm`（accessToken/userId/authTokenMode），`canBindNewApi` 校验；**先 `verifyNewApiSubscription` 获取 `groups + availableModels`，再按统一倍率阈值提交 `provisionAllEligibleGroups=true`**。
-  - 已绑定（40d8b990 起主账号并入列表）：账号列表首行=主账号行（站点用户名 +「主账号」徽章 + 余额/脱敏 token/Key 数；点击展开详情 grid：用户名/用户 ID/余额/已用/最近刷新/令牌模式/站点/脱敏 token + 自动接入 Key chips + 最近刷新错误 alert + 更新凭证表单 `primaryForm`→`savePrimaryCredentials`；行上刷新按钮 `refreshingPrimary`→`refreshPrimaryAccount`；主账号不可删除故无删除按钮），其后为子账号行 v-for（`accounts`，62d2d46d 起同样支持展开详情 + 独立更新凭证 `accountForms(accountUid)`→`saveAccountCredentials`，行操作刷新/删除），再后为展开面板「添加账号」`addForm`；**追加账号同样先 verify，再显式传 `provisionModels: verified.availableModels`**。
-  - 空态/错误（787db651）：列表上方 `primaryError`（GET 订阅 404 时显示 `subscriptionNotFound` 文案）或 `primaryAccountUnavailable` 提示；`handleAddAccount` 在主账号订阅未就绪时置 `addError`（`subscriptionUnavailable`）而非静默返回。
-- 校验/状态：`canBindNewApi`、`primaryCredentialsChanged`、`accountCredentialsChanged`；loading：`binding`/`savingPrimary`/`refreshingPrimary`/`adding`/`refreshing`/`deleting`/`loadingPrimary`/`savingAccount`；错误：`bindError`/`primaryError`/`addError`/`accountErrors`；展开态：`expandedPrimary`/`expandedAccountUid`。`groupFetchError`、无合格组、verify 失败时阻断提交。
-- 后端调用：`verifyNewApiSubscription`、`provisionNewApiSubscription`、`getSubscription`、`updateNewApiCredentials`、`refreshSubscription`、`getSubscriptionAccounts`、`addSubscriptionAccount`、`refreshSubscriptionAccount`、`deleteSubscriptionAccount`、`updateSubscriptionAccountCredentials`。
+  - 已绑定（40d8b990 起主账号并入列表；2026-08-28 账号平权）：账号列表首行=主账号行（站点用户名 +「主账号」徽章 + 余额/脱敏 token/Key 数；展开仅详情 grid：用户名/用户 ID/余额/已用/最近刷新/令牌模式/站点/脱敏 token + 自动接入 Key chips + 最近刷新错误 alert；行操作=刷新 `refreshPrimaryAccount` 与**删除 `deletePrimaryAccount`（行 540）→ `api.deleteSubscriptionPrimaryAccount`**，删除会清空订阅凭证并移除其自动接入 key），其后为子账号行 v-for（`accounts`，展开详情+chips，行操作刷新/删除），再后为展开面板「添加账号」`addForm`；**追加账号同样先 verify，再显式传 `provisionModels: verified.availableModels`**，订阅无主凭证时新账号由后端自动提升为主账号。
+  - 空态/错误（787db651）：列表上方 `primaryError`（GET 订阅 404 时显示 `subscriptionNotFound` 文案）或 `primaryAccountUnavailable` 提示；订阅存在但无主凭证（`accessTokenMasked` 空）显示 `primaryAccountRemoved` 引导重新添加，主账号行不渲染；`handleAddAccount` 在主账号订阅未就绪时置 `addError`（`subscriptionUnavailable`）而非静默返回。
+  - **更新凭证表单已移除**（2026-08-28 账号平权）：主/子账号展开均为纯详情，换凭证统一走「删除 + 重新添加」；`primaryForm`/`accountForms`/`savePrimaryCredentials`/`saveAccountCredentials` 等已删除，后端 PATCH credentials 端点保留但面板不再调用。
+- 校验/状态：`canBindNewApi`；loading：`binding`/`refreshingPrimary`/`deletingPrimary`/`adding`/`refreshing`/`deleting`/`loadingPrimary`；错误：`bindError`/`primaryError`/`addError`；展开态：`expandedPrimary`/`expandedAccountUid`。`groupFetchError`、无合格组、verify 失败时阻断提交。
+- 后端调用：`verifyNewApiSubscription`、`provisionNewApiSubscription`、`getSubscription`、`refreshSubscription`、`getSubscriptionAccounts`、`addSubscriptionAccount`、`refreshSubscriptionAccount`、`deleteSubscriptionAccount`、`deleteSubscriptionPrimaryAccount`。
 
 ## 6. ChannelLogsDialog（渠道请求日志）
 

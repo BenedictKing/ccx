@@ -232,6 +232,42 @@ func handleAddSubscriptionAccount(deps *NewApiRouteDeps) gin.HandlerFunc {
 				}
 			}
 
+			// 无主账号凭证的订阅（主账号被删除后）：首个添加的账号提升为主账号
+			// （从 Accounts 移除、凭证迁移到订阅级），使「删除 + 重新添加」成为
+			// 更换主凭证的完整路径。失败时回滚账号与远端 key。
+			if strings.TrimSpace(profile.AccessToken) == "" {
+				promotedAt := time.Now()
+				if pErr := deps.Store.Patch(uid, nil, func(p *SubscriptionProfile) error {
+					p.AccessToken = req.AccessToken
+					p.UserID = derivedUserID
+					p.Username = self.Username
+					if strings.TrimSpace(req.AuthTokenMode) != "" {
+						p.AuthTokenMode = req.AuthTokenMode
+					}
+					p.ProvisionedKeys = append([]NewApiProvisionedKey(nil), accountKeys...)
+					if len(accountKeys) > 0 {
+						p.ProvisionedTokenID = accountKeys[0].TokenID
+					}
+					p.Balance = float64(self.Quota)
+					p.UsedQuota = self.UsedQuota
+					p.LastBalanceRefreshAt = &promotedAt
+					p.LastBalanceRefreshError = ""
+					kept := p.Accounts[:0]
+					for _, a := range p.Accounts {
+						if a.AccountUID != accountUID {
+							kept = append(kept, a)
+						}
+					}
+					p.Accounts = kept
+					return nil
+				}); pErr != nil {
+					_ = deps.Store.RemoveAccount(uid, accountUID)
+					cleanupNewApiProvisionedKeys(ctx, adapter, provisionReq, derivedUserID, provisioned)
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "提升主账号失败: " + pErr.Error()})
+					return
+				}
+			}
+
 			if deps.Runner != nil {
 				for _, chUID := range profile.LinkedChannelUIDs {
 					_, _, channel, ok := findNewApiChannel(deps.CfgManager, chUID)
@@ -327,6 +363,69 @@ func handleListSubscriptionAccounts(deps *NewApiRouteDeps) gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusOK, NewApiAccountListResponse{Accounts: items})
+	}
+}
+
+// handleDeletePrimaryAccount 删除主账号：账号平权模型下「删除主账号」＝清空订阅级凭证
+// 与用户信息、把主账号自动接入 key 从关联渠道剔除并 best-effort 回收远端 key。
+// 订阅本体（baseUrl/分组/计费/渠道关联）保留；此后添加账号会把新凭证提升为主账号，
+// 「删除 + 重新添加」即更换主凭证的完整路径。
+func handleDeletePrimaryAccount(deps *NewApiRouteDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		uid := c.Param("uid")
+		if uid == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "subscription uid 不能为空"})
+			return
+		}
+		profile := deps.Store.Get(uid)
+		if profile == nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("subscription_uid=%s 不存在", uid)})
+			return
+		}
+		if profile.Provider != "new_api" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "仅 new_api 类型订阅支持删除主账号"})
+			return
+		}
+		if strings.TrimSpace(profile.AccessToken) == "" {
+			c.JSON(http.StatusConflict, gin.H{"error": "订阅当前没有主账号"})
+			return
+		}
+
+		// 1) 从关联渠道剔除主账号的 key（复用账号剔除：仅读取 ProvisionedKeys）。
+		var removedTokenIDs map[int64]struct{}
+		if deps.SyncService != nil {
+			removedTokenIDs = deps.SyncService.RemoveAccountKeysFromChannels(profile, NewApiAccount{
+				ProvisionedKeys: profile.ProvisionedKeys,
+			})
+		}
+
+		// 2) best-effort 回收远端 key（凭证仍有效时执行；失败仅记录日志，不阻断删除）。
+		if len(removedTokenIDs) > 0 {
+			ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
+			defer cancel()
+			adapter := adapterForAccount(deps, profile, NewApiAccount{})
+			for tokenID := range removedTokenIDs {
+				if err := adapter.DeleteToken(ctx, profile.BaseURL, profile.AccessToken, profile.UserID, profile.AuthTokenMode, int(tokenID)); err != nil {
+					log.Printf("[NewApi-Account] 回收远端 key 失败 primary tokenID=%d: %v", tokenID, err)
+				}
+			}
+		}
+
+		// 3) 清空订阅级凭证与主账号信息；订阅本体保留。
+		if err := deps.Store.Patch(uid, nil, func(p *SubscriptionProfile) error {
+			p.AccessToken, p.UserID, p.Username, p.AuthTokenMode = "", "", "", ""
+			p.ProvisionedKeys = nil
+			p.ProvisionedTokenID = 0
+			p.Balance, p.UsedQuota = 0, 0
+			p.LastBalanceRefreshAt = nil
+			p.LastBalanceRefreshError = ""
+			return nil
+		}); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"success": true})
 	}
 }
 
@@ -716,6 +815,7 @@ func RegisterSubscriptionAccountRoutes(router gin.IRouter, deps *NewApiRouteDeps
 	group := router.Group("/subscriptions/:uid/accounts")
 	group.POST("", handleAddSubscriptionAccount(deps))
 	group.GET("", handleListSubscriptionAccounts(deps))
+	group.DELETE("/primary", handleDeletePrimaryAccount(deps))
 	group.DELETE("/:accountUid", handleDeleteSubscriptionAccount(deps))
 	group.POST("/:accountUid/refresh", handleRefreshSubscriptionAccount(deps))
 	group.PATCH("/:accountUid/credentials", handleUpdateSubscriptionAccountCredentials(deps))

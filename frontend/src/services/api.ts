@@ -1513,6 +1513,13 @@ export class ApiService {
     })
   }
 
+  /** 删除 new-api 订阅的主账号（清空订阅凭证并剔除其自动接入 key；订阅本体保留） */
+  async deleteSubscriptionPrimaryAccount(uid: string): Promise<void> {
+    await this.request(`/subscriptions/${encodeURIComponent(uid)}/accounts/primary`, {
+      method: 'DELETE',
+    })
+  }
+
   /** 刷新 new-api 账号余额 */
   async refreshSubscriptionAccount(uid: string, accountUid: string): Promise<NewApiAccountItem> {
     return this.request(`/subscriptions/${encodeURIComponent(uid)}/accounts/${encodeURIComponent(accountUid)}/refresh`, {

@@ -111,6 +111,102 @@ func TestHandleUpdateNewApiCredentials_InvalidTokenDoesNotPersist(t *testing.T) 
 	}
 }
 
+// 账号平权：删除主账号＝清空订阅级凭证与自动接入 key，订阅本体（baseUrl/渠道关联）保留。
+func TestHandleDeletePrimaryAccount_ClearsCredentialKeepsSubscription(t *testing.T) {
+	store, err := NewSubscriptionStoreWithDB(newTestDB(t))
+	if err != nil {
+		t.Fatalf("创建 store 失败: %v", err)
+	}
+	profile := &SubscriptionProfile{
+		SubscriptionUID: "sub-del",
+		Provider:        "new_api",
+		BaseURL:         "https://new-api.example.com",
+		AccessToken:     "primary-secret",
+		UserID:          "7",
+		Username:        "bob",
+		AuthTokenMode:   NewApiAuthModeBearer,
+		LinkedChannelUIDs: []string{"ch-1"},
+		ProvisionedKeys: []NewApiProvisionedKey{{Name: "ccx-default", Group: "default", TokenID: 11}},
+		Source:          "newapi_provision",
+	}
+	if err := store.Create(profile); err != nil {
+		t.Fatalf("创建订阅失败: %v", err)
+	}
+
+	router := setupSubscriptionAccountRouter(t, &NewApiRouteDeps{Store: store})
+	request := httptest.NewRequest(http.MethodDelete, "/api/subscriptions/sub-del/accounts/primary", nil)
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("状态码=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+
+	updated := store.Get("sub-del")
+	if updated.AccessToken != "" || updated.UserID != "" || updated.Username != "" || updated.AuthTokenMode != "" {
+		t.Fatalf("主账号凭证未清空: %+v", updated)
+	}
+	if len(updated.ProvisionedKeys) != 0 || updated.ProvisionedTokenID != 0 {
+		t.Fatalf("自动接入 key 元数据未清空: %+v", updated.ProvisionedKeys)
+	}
+	if updated.BaseURL == "" || len(updated.LinkedChannelUIDs) != 1 {
+		t.Fatalf("订阅本体应保留: baseURL=%q linked=%v", updated.BaseURL, updated.LinkedChannelUIDs)
+	}
+
+	// 再次删除：已无主账号 → 409
+	request2 := httptest.NewRequest(http.MethodDelete, "/api/subscriptions/sub-del/accounts/primary", nil)
+	recorder2 := httptest.NewRecorder()
+	router.ServeHTTP(recorder2, request2)
+	if recorder2.Code != http.StatusConflict {
+		t.Fatalf("重复删除状态码=%d 期望=409", recorder2.Code)
+	}
+}
+
+// 无主账号凭证的订阅：添加账号后自动提升为主账号（Accounts 不再保留该条目）。
+func TestHandleAddSubscriptionAccount_PromotesToPrimaryWhenAbsent(t *testing.T) {
+	site := mockNewApiSite(t, "", "", true)
+	store, err := NewSubscriptionStoreWithDB(newTestDB(t))
+	if err != nil {
+		t.Fatalf("创建 store 失败: %v", err)
+	}
+	profile := &SubscriptionProfile{
+		SubscriptionUID: "sub-promote",
+		Provider:        "new_api",
+		BaseURL:         site.URL,
+		Source:          "newapi_provision",
+	}
+	if err := store.Create(profile); err != nil {
+		t.Fatalf("创建订阅失败: %v", err)
+	}
+
+	router := setupSubscriptionAccountRouter(t, &NewApiRouteDeps{Store: store, CfgManager: setupNewApiTestConfigManager(t)})
+	payload, _ := json.Marshal(NewApiAccountCreateRequest{
+		AccessToken:                "new-primary-token",
+		AuthTokenMode:              NewApiAuthModeBearer,
+		ProvisionAllEligibleGroups: true,
+	})
+	request := httptest.NewRequest(http.MethodPost, "/api/subscriptions/sub-promote/accounts", bytes.NewReader(payload))
+	request.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("状态码=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+
+	updated := store.Get("sub-promote")
+	if updated.AccessToken != "new-primary-token" {
+		t.Fatalf("新账号未提升为主账号凭证, got=%q", updated.AccessToken)
+	}
+	if updated.Username != "bob" || updated.UserID != "7" {
+		t.Fatalf("主账号用户信息未回填: username=%q userId=%q", updated.Username, updated.UserID)
+	}
+	if len(updated.Accounts) != 0 {
+		t.Fatalf("提升后 Accounts 不应保留该条目: %+v", updated.Accounts)
+	}
+	if len(updated.ProvisionedKeys) == 0 {
+		t.Fatal("主账号 ProvisionedKeys 未回填")
+	}
+}
+
 func stringPtr(value string) *string {
 	return &value
 }

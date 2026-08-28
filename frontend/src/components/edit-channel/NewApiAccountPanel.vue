@@ -78,9 +78,18 @@
     >
       {{ t('subscription.newApi.primaryAccountUnavailable') }}
     </v-alert>
+    <v-alert
+      v-else-if="!loadingPrimary && subscription && !subscription.accessTokenMasked"
+      color="info"
+      variant="tonal"
+      density="compact"
+      class="mb-3"
+    >
+      {{ t('subscription.newApi.primaryAccountRemoved') }}
+    </v-alert>
 
-    <!-- 主账号默认作为账号列表首行展示，与子账号交互一致（展开详情 + 更新凭证） -->
-    <div v-if="subscription" class="account-item mb-2">
+    <!-- 主账号默认作为账号列表首行展示；账号平权：主账号同样可删除，换凭证=删除后重新添加 -->
+    <div v-if="subscription && subscription.accessTokenMasked" class="account-item mb-2">
       <div
         class="d-flex align-center justify-space-between pa-3 cursor-pointer"
         :aria-expanded="expandedPrimary"
@@ -115,6 +124,10 @@
           <v-btn icon size="small" variant="text" color="primary" :loading="refreshingPrimary" @click.stop="refreshPrimaryAccount">
             <v-icon size="18">mdi-refresh</v-icon>
             <v-tooltip activator="parent" location="top" content-class="ccx-tooltip">{{ t('subscription.newApi.refreshBalance') }}</v-tooltip>
+          </v-btn>
+          <v-btn icon size="small" variant="text" color="error" :loading="deletingPrimary" @click.stop="deletePrimaryAccount">
+            <v-icon size="18">mdi-delete</v-icon>
+            <v-tooltip activator="parent" location="top" content-class="ccx-tooltip">{{ t('subscription.newApi.deletePrimaryAccount') }}</v-tooltip>
           </v-btn>
           <v-icon size="20" class="ml-1">{{ expandedPrimary ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
         </div>
@@ -175,60 +188,9 @@
           <v-alert v-if="subscription.lastBalanceRefreshError" color="warning" variant="tonal" density="compact" class="mb-3">
             {{ subscription.lastBalanceRefreshError }}
           </v-alert>
-
-          <v-divider class="mb-3" />
-
-          <v-form @submit.prevent="savePrimaryCredentials">
-            <div class="text-caption text-medium-emphasis mb-2">{{ t('subscription.newApi.updateCredentials') }}</div>
-            <v-text-field
-              v-model="primaryForm.accessToken"
-              :label="t('subscription.newApi.accessToken')"
-              :placeholder="t('subscription.newApi.accessTokenKeepPlaceholder')"
-              variant="outlined"
-              density="compact"
-              type="password"
-              autocomplete="new-password"
-              class="mb-2"
-            />
-            <v-row dense>
-              <v-col cols="12" md="6">
-                <v-text-field
-                  v-model="primaryForm.userId"
-                  :label="t('subscription.newApi.userId')"
-                  variant="outlined"
-                  density="compact"
-                />
-              </v-col>
-              <v-col cols="12" md="6">
-                <v-select
-                  v-model="primaryForm.authTokenMode"
-                  :label="t('subscription.newApi.authTokenMode')"
-                  :items="authTokenModeOptions"
-                  variant="outlined"
-                  density="compact"
-                />
-              </v-col>
-            </v-row>
-            <div class="text-caption text-medium-emphasis mb-2">
-              {{ channelProxyHint }}
-            </div>
-            <div class="d-flex justify-end">
-              <v-btn
-                color="primary"
-                variant="tonal"
-                :loading="savingPrimary"
-                :disabled="!primaryCredentialsChanged"
-                @click="savePrimaryCredentials"
-              >
-                <v-icon start size="small">mdi-check</v-icon>
-                {{ t('subscription.newApi.saveCredentials') }}
-              </v-btn>
-            </div>
-          </v-form>
         </div>
       </v-expand-transition>
     </div>
-
 
     <v-expansion-panels variant="accordion" class="mb-4">
       <v-expansion-panel>
@@ -375,56 +337,6 @@
             <v-alert v-if="account.lastSyncError" color="warning" variant="tonal" density="compact" class="mb-3">
               {{ account.lastSyncError }}
             </v-alert>
-
-            <v-divider class="mb-3" />
-
-            <v-form @submit.prevent="saveAccountCredentials(account)">
-              <div class="text-caption text-medium-emphasis mb-2">{{ t('subscription.newApi.updateCredentials') }}</div>
-              <v-text-field
-                v-model="accountForm(account.accountUid).accessToken"
-                :label="t('subscription.newApi.accessToken')"
-                :placeholder="t('subscription.newApi.accessTokenKeepPlaceholder')"
-                variant="outlined"
-                density="compact"
-                type="password"
-                autocomplete="new-password"
-                class="mb-2"
-              />
-              <v-row dense>
-                <v-col cols="12" md="6">
-                  <v-text-field
-                    v-model="accountForm(account.accountUid).userId"
-                    :label="t('subscription.newApi.userId')"
-                    variant="outlined"
-                    density="compact"
-                  />
-                </v-col>
-                <v-col cols="12" md="6">
-                  <v-select
-                    v-model="accountForm(account.accountUid).authTokenMode"
-                    :label="t('subscription.newApi.authTokenMode')"
-                    :items="authTokenModeOptions"
-                    variant="outlined"
-                    density="compact"
-                  />
-                </v-col>
-              </v-row>
-              <v-alert v-if="accountErrors[account.accountUid]" color="error" variant="tonal" density="compact" class="mb-3">
-                {{ accountErrors[account.accountUid] }}
-              </v-alert>
-              <div class="d-flex justify-end">
-                <v-btn
-                  color="primary"
-                  variant="tonal"
-                  :loading="savingAccount === account.accountUid"
-                  :disabled="!accountCredentialsChanged(account)"
-                  @click="saveAccountCredentials(account)"
-                >
-                  <v-icon start size="small">mdi-check</v-icon>
-                  {{ t('subscription.newApi.saveCredentials') }}
-                </v-btn>
-              </div>
-            </v-form>
           </div>
         </v-expand-transition>
       </div>
@@ -475,25 +387,21 @@ const effectiveSubscriptionUid = computed(() =>
 const accounts = ref<NewApiAccountItem[]>([])
 const loadingPrimary = ref(false)
 const refreshingPrimary = ref(false)
-const savingPrimary = ref(false)
 const primaryError = ref('')
 const loading = ref(false)
 const binding = ref(false)
 const adding = ref(false)
 const refreshing = ref('')
 const deleting = ref('')
+const deletingPrimary = ref(false)
 const addError = ref('')
 const bindError = ref('')
-// 子账号展开详情 + 每账号独立的凭据表单/保存状态
+// 子账号展开详情状态
 const expandedAccountUid = ref('')
-const accountForms = ref<Record<string, { accessToken: string; userId: string; authTokenMode: string }>>({})
-const accountErrors = ref<Record<string, string>>({})
-const savingAccount = ref('')
-// 主账号行的展开状态（详情 + 更新凭证表单）
+// 主账号行的展开状态（详情）
 const expandedPrimary = ref(false)
 
 const bindForm = ref({ accessToken: '', userId: '', authTokenMode: 'bearer' })
-const primaryForm = ref({ accessToken: '', userId: '', authTokenMode: 'bearer' })
 const addForm = ref({ accessToken: '', userId: '', authTokenMode: 'bearer' })
 const effectiveChannelProxyUrl = computed(() => props.channelProxyUrl?.trim() || '')
 // 渠道代理通道是唯一代理设置：绑定/校验/同步均复用，未配置时直连
@@ -522,23 +430,8 @@ const canBindNewApi = computed(() => Boolean(
   bindForm.value.accessToken.trim(),
 ))
 
-const primaryCredentialsChanged = computed(() => {
-  if (!subscription.value) return false
-  return Boolean(primaryForm.value.accessToken.trim()) ||
-    primaryForm.value.userId.trim() !== (subscription.value.userId || '') ||
-    primaryForm.value.authTokenMode !== normalizeAuthTokenMode(subscription.value.authTokenMode)
-})
-
 function normalizeAuthTokenMode(mode?: string) {
   return mode === 'raw_auth' ? 'raw' : mode || 'bearer'
-}
-
-function syncPrimaryForm(item: SubscriptionItem) {
-  primaryForm.value = {
-    accessToken: '',
-    userId: item.userId || '',
-    authTokenMode: normalizeAuthTokenMode(item.authTokenMode),
-  }
 }
 
 function formatQuota(value?: number) {
@@ -600,7 +493,6 @@ async function bindNewApi() {
       proxyPreferDirect,
     })
     subscription.value = response.subscription
-    syncPrimaryForm(response.subscription)
     localSubscriptionUid.value = response.subscription.subscriptionUid
     bindForm.value = { accessToken: '', userId: '', authTokenMode: 'bearer' }
     await fetchAccounts()
@@ -619,36 +511,12 @@ async function fetchPrimaryAccount() {
   try {
     const item = await api.getSubscription(effectiveSubscriptionUid.value)
     subscription.value = item
-    syncPrimaryForm(item)
   } catch (e) {
     primaryError.value = e instanceof ApiError && e.status === 404
       ? t('subscription.newApi.subscriptionNotFound')
       : e instanceof Error ? e.message : 'Unknown error'
   } finally {
     loadingPrimary.value = false
-  }
-}
-
-async function savePrimaryCredentials() {
-  if (!subscription.value || !primaryCredentialsChanged.value) return
-  savingPrimary.value = true
-  primaryError.value = ''
-  try {
-    const payload: { accessToken?: string; userId?: string; authTokenMode?: string; expectedVersion?: number } = {
-      userId: primaryForm.value.userId.trim(),
-      authTokenMode: primaryForm.value.authTokenMode,
-      expectedVersion: subscription.value.version,
-    }
-    if (primaryForm.value.accessToken.trim()) payload.accessToken = primaryForm.value.accessToken.trim()
-    // 代理设置不在凭证表单维护：渠道"代理通道"是唯一事实源，管理面已自动跟随
-    const item = await api.updateNewApiCredentials(effectiveSubscriptionUid.value, payload)
-    subscription.value = item
-    syncPrimaryForm(item)
-    emit('updated')
-  } catch (e) {
-    primaryError.value = e instanceof Error ? e.message : 'Unknown error'
-  } finally {
-    savingPrimary.value = false
   }
 }
 
@@ -659,12 +527,30 @@ async function refreshPrimaryAccount() {
   try {
     const response = await api.refreshSubscription(effectiveSubscriptionUid.value)
     subscription.value = response.subscription
-    syncPrimaryForm(response.subscription)
     emit('updated')
   } catch (e) {
     primaryError.value = e instanceof Error ? e.message : 'Unknown error'
   } finally {
     refreshingPrimary.value = false
+  }
+}
+
+// 账号平权：主账号同样可删除（清空订阅凭证并剔除其自动接入 key）；
+// 换主凭证 = 删除后经「添加账号」重新提供，新账号会自动提升为主账号。
+async function deletePrimaryAccount() {
+  if (!effectiveSubscriptionUid.value || !subscription.value?.accessTokenMasked) return
+  deletingPrimary.value = true
+  primaryError.value = ''
+  try {
+    await api.deleteSubscriptionPrimaryAccount(effectiveSubscriptionUid.value)
+    expandedPrimary.value = false
+    await fetchPrimaryAccount()
+    await fetchAccounts()
+    emit('updated')
+  } catch (e) {
+    primaryError.value = e instanceof Error ? e.message : 'Unknown error'
+  } finally {
+    deletingPrimary.value = false
   }
 }
 
@@ -744,7 +630,6 @@ async function deleteAccount(accountUid: string) {
   try {
     await api.deleteSubscriptionAccount(effectiveSubscriptionUid.value, accountUid)
     if (expandedAccountUid.value === accountUid) expandedAccountUid.value = ''
-    delete accountForms.value[accountUid]
     await fetchAccounts()
     emit('updated')
   } catch (e) {
@@ -756,78 +641,15 @@ async function deleteAccount(accountUid: string) {
 
 function togglePrimary() {
   expandedPrimary.value = !expandedPrimary.value
-  // 展开时以订阅当前值重置表单基线（accessToken 永远留空=保持不变）
-  if (expandedPrimary.value && subscription.value) syncPrimaryForm(subscription.value)
 }
 
 function toggleAccount(accountUid: string) {
-  if (expandedAccountUid.value === accountUid) {
-    expandedAccountUid.value = ''
-    return
-  }
-  expandedAccountUid.value = accountUid
-  accountErrors.value[accountUid] = ''
-  // 展开时以账号当前值初始化表单基线（accessToken 永远留空=保持不变）
-  const account = accounts.value.find(a => a.accountUid === accountUid)
-  accountForms.value[accountUid] = {
-    accessToken: '',
-    userId: account?.userId || '',
-    authTokenMode: normalizeAuthTokenMode(account?.authTokenMode),
-  }
-}
-
-function accountForm(accountUid: string) {
-  if (!accountForms.value[accountUid]) {
-    const account = accounts.value.find(a => a.accountUid === accountUid)
-    accountForms.value[accountUid] = {
-      accessToken: '',
-      userId: account?.userId || '',
-      authTokenMode: normalizeAuthTokenMode(account?.authTokenMode),
-    }
-  }
-  return accountForms.value[accountUid]
-}
-
-function accountCredentialsChanged(account: NewApiAccountItem) {
-  const form = accountForms.value[account.accountUid]
-  if (!form) return false
-  return Boolean(form.accessToken.trim()) ||
-    form.userId.trim() !== (account.userId || '') ||
-    form.authTokenMode !== normalizeAuthTokenMode(account.authTokenMode)
+  expandedAccountUid.value = expandedAccountUid.value === accountUid ? '' : accountUid
 }
 
 function authTokenModeLabel(mode?: string) {
   const normalized = normalizeAuthTokenMode(mode)
   return normalized === 'raw' ? 'Raw' : 'Bearer'
-}
-
-async function saveAccountCredentials(account: NewApiAccountItem) {
-  if (!accountCredentialsChanged(account)) return
-  const form = accountForms.value[account.accountUid]
-  savingAccount.value = account.accountUid
-  accountErrors.value[account.accountUid] = ''
-  try {
-    const payload: { accessToken?: string; userId?: string; authTokenMode?: string } = {
-      userId: form.userId.trim(),
-      authTokenMode: form.authTokenMode,
-    }
-    if (form.accessToken.trim()) payload.accessToken = form.accessToken.trim()
-    const updated = await api.updateSubscriptionAccountCredentials(
-      effectiveSubscriptionUid.value,
-      account.accountUid,
-      payload,
-    )
-    const index = accounts.value.findIndex(a => a.accountUid === account.accountUid)
-    if (index >= 0) accounts.value[index] = updated
-    form.accessToken = ''
-    form.userId = updated.userId || ''
-    form.authTokenMode = normalizeAuthTokenMode(updated.authTokenMode)
-    emit('updated')
-  } catch (e) {
-    accountErrors.value[account.accountUid] = e instanceof Error ? e.message : 'Unknown error'
-  } finally {
-    savingAccount.value = ''
-  }
 }
 
 watch(

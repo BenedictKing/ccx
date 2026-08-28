@@ -236,6 +236,9 @@ func (s *NewApiSubscriptionSyncService) SweepAll(ctx context.Context) {
 func (s *NewApiSubscriptionSyncService) lockForUID(uid string) *sync.Mutex {
 	s.locksMu.Lock()
 	defer s.locksMu.Unlock()
+	if s.locks == nil {
+		s.locks = make(map[string]*sync.Mutex)
+	}
 	if lock := s.locks[uid]; lock != nil {
 		return lock
 	}
@@ -282,8 +285,15 @@ func (s *NewApiSubscriptionSyncService) SyncNow(ctx context.Context, uid string)
 	if profile.Provider != "new_api" {
 		return result, fmt.Errorf("provider=%s 不是 new_api", profile.Provider)
 	}
-	if strings.TrimSpace(profile.BaseURL) == "" || strings.TrimSpace(profile.AccessToken) == "" {
-		return result, fmt.Errorf("new_api 订阅缺少 baseUrl 或 accessToken")
+	if strings.TrimSpace(profile.BaseURL) == "" {
+		return result, fmt.Errorf("new_api 订阅缺少 baseUrl")
+	}
+	// 主账号已删除（账号平权模型）：跳过站点级同步，仅同步各子账号，不视为失败。
+	if strings.TrimSpace(profile.AccessToken) == "" {
+		if len(profile.Accounts) > 0 {
+			result.Keys = s.syncAccounts(ctx, profile, s.now())
+		}
+		return result, nil
 	}
 	mode := profile.AuthTokenMode
 	if mode == "" {

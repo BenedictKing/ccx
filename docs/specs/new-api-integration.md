@@ -45,7 +45,10 @@
 - `GET /api/subscriptions/:uid/accounts` → `handleListSubscriptionAccounts`（行 296，脱敏；仅返回额外账号，主账号经 `GET /subscriptions/:uid` 单独拉取、前端组装进列表首行）
 - `DELETE /api/subscriptions/:uid/accounts/:accountUid` → `handleDeleteSubscriptionAccount`（行 335）— 先从渠道剔除 key，再 best-effort 回收远端 key，再移除账号
 - `POST /api/subscriptions/:uid/accounts/:accountUid/refresh` → `handleRefreshSubscriptionAccount`（行 394）
-- `PATCH /api/subscriptions/:uid/accounts/:accountUid/credentials` → `handleUpdateSubscriptionAccountCredentials`（行 477，62d2d46d）— 子账号独立更新凭证（accessToken 留空=保持不变），支持 userId/authTokenMode
+- `PATCH /api/subscriptions/:uid/accounts/:accountUid/credentials` → `handleUpdateSubscriptionAccountCredentials`（行 477，62d2d46d）— 子账号独立更新凭证（accessToken 留空=保持不变），支持 userId/authTokenMode。**账号平权后（2026-08-28）编辑面板已不再调用**（换凭证统一为删除+重新添加），端点保留供外部调用
+- `DELETE /api/subscriptions/:uid/accounts/primary` → `handleDeletePrimaryAccount`（行 373）— 账号平权：删除主账号＝清空订阅级凭证（AccessToken/UserID/Username/AuthTokenMode）与 ProvisionedKeys、剔除其自动接入 key（best-effort 回收远端），订阅本体（baseUrl/分组/计费/渠道关联）保留；无主账号时 409
+
+**账号平权模型（2026-08-28）**：主账号与子账号在 UI 平权——主账号行同样可删除；换主凭证的完整路径=删除主账号 → 「添加账号」输入新令牌。`handleAddSubscriptionAccount` 在订阅无主凭证时（行 235）自动把新账号提升为主账号（回填凭证/用户名/余额并从 Accounts 移除该条目，避免既主又子）；`SyncNow` 无主凭证时（`newapi_subscription_sync_service.go:291`）跳过站点级同步、仅同步子账号，不视为失败。
 
 多账号建 key 复用主流程 `provisionNewApiGroupKeys`（`handlers_newapi.go:227`），核心复用逻辑集中在此。
 
@@ -53,7 +56,7 @@
 - 主/多账号面板：`frontend/src/components/edit-channel/NewApiAccountPanel.vue`
   - 订阅 UID 解析 `effectiveSubscriptionUid`（行 470，787db651）：`props.subscriptionUid || localSubscriptionUid`，仍为空且非 generic、`autoManagedKind==='new_api'` 时按约定兜底 `newapi-${channelUid}`——渠道 key 配置 `sourceSubscriptionUid` 丢失（编辑换 key 切断关联、`BuildChannelView` 不再暴露 `subscriptionUid`）时面板仍可直连订阅
   - `bindNewApi`（行 564）：generic 渠道绑定 new-api，`subscriptionUid: newapi-${channelUid}`；**先 verify，再按上游 `groups + availableModels` 调 `provisionAllEligibleGroups=true`**
-  - `savePrimaryCredentials`（行 632）→ `api.updateNewApiCredentials`（带 `expectedVersion`）；`refreshPrimaryAccount`（行 655）→ `api.refreshSubscription`
+  - `savePrimaryCredentials`（行 632）→ `api.updateNewApiCredentials`（带 `expectedVersion`）；`refreshPrimaryAccount`（行 655）→ `api.refreshSubscription`。**账号平权（2026-08-28）后面板已移除更新凭证表单**：`savePrimaryCredentials` 与子账号 `saveAccountCredentials` 不再存在，换凭证统一走「删除 + 重新添加」；新增 `deletePrimaryAccount` → `api.deleteSubscriptionPrimaryAccount`
   - `handleAddAccount`（行 684）：主账号订阅未就绪时置 `addError`（`subscriptionUnavailable`，787db651）而非静默返回；就绪时同样**先 verify，再显式传 `provisionAllEligibleGroups` / `maxGroupMultiplier` / `availableModels`**；`refreshAccount` / `deleteAccount` / `saveAccountCredentials`（行 730/742/804）为子账号行操作（62d2d46d：展开详情 + 独立更新凭证）
   - UI 结构（40d8b990）：主账号默认作为账号列表首行（「主账号」徽章，展开=详情+更新凭证，无删除按钮），与子账号行同构；详见 `web-ui-dialogs.md` §5
   - `authTokenModeOptions`：Bearer/Raw（行 512）
