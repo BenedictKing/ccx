@@ -316,9 +316,18 @@ func patchAPIKeyConfigAt(configs []config.APIKeyConfig, index int, next config.A
 	return patched
 }
 
+// findAPIKeyConfigByKeyUID 按 KeyUID 定位 key 配置；托管账号的手工 key 没有 KeyUID
+// （KeyUID 仅 new-api 同步路径生成），但其 CredentialUID 在加载期由
+// ensureCredentialUIDs 稳定回填，故兜底按 CredentialUID 匹配。
 func findAPIKeyConfigByKeyUID(upstream config.UpstreamConfig, keyUID string) (int, config.APIKeyConfig, error) {
+	keyUID = strings.TrimSpace(keyUID)
 	for i, cfg := range upstream.APIKeyConfigs {
-		if strings.TrimSpace(cfg.KeyUID) == keyUID {
+		if keyUID != "" && strings.TrimSpace(cfg.KeyUID) == keyUID {
+			return i, cfg, nil
+		}
+	}
+	for i, cfg := range upstream.APIKeyConfigs {
+		if cred := strings.TrimSpace(cfg.CredentialUID); keyUID != "" && cred != "" && cred == keyUID {
 			return i, cfg, nil
 		}
 	}

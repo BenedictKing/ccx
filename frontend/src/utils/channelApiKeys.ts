@@ -41,9 +41,12 @@ export function buildChannelApiKeyRows(
   activeKeys.forEach((key, activeIndex) => {
     if (!key || seen.has(key)) return
     seen.add(key)
+    const cfg = configByKey.get(key)
     rows.push({
-      ...configByKey.get(key),
+      ...cfg,
       key,
+      // 托管账号 key 无 keyUid（仅 new-api 同步路径生成），以 credentialUid 兜底定位
+      keyUid: cfg?.keyUid ?? cfg?.credentialUid,
       activeIndex,
       disabled: disabledByKey.get(key),
     })
@@ -52,9 +55,11 @@ export function buildChannelApiKeyRows(
   for (const disabled of disabledItems) {
     if (!disabled.key || seen.has(disabled.key)) continue
     seen.add(disabled.key)
+    const cfg = configByKey.get(disabled.key)
     rows.push({
-      ...configByKey.get(disabled.key),
+      ...cfg,
       key: disabled.key,
+      keyUid: cfg?.keyUid ?? cfg?.credentialUid,
       activeIndex: -1,
       disabled,
     })

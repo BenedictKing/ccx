@@ -315,3 +315,50 @@ func performRawJSON(router http.Handler, method, path string, payload []byte) *h
 	router.ServeHTTP(resp, req)
 	return resp
 }
+
+// 托管账号手工 key 无 KeyUID（仅 new-api 同步路径生成），
+// findAPIKeyConfigByKeyUID 应兜底按 CredentialUID 定位，使倍率编辑对自定义托管渠道可用。
+func TestHandlePatchKeyMultiplierByCredentialUID(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cfgManager := newTestConfigManager(t, config.Config{
+		Upstream: []config.UpstreamConfig{{
+			ChannelUID: "msg-cred",
+			AccountUID: "acct_custom",
+			APIKeys:    []string{"sk-free"},
+			APIKeyConfigs: []config.APIKeyConfig{{
+				Key:           "sk-free",
+				CredentialUID: "cred-free",
+			}},
+		}},
+	})
+	router := gin.New()
+	RegisterKeyMultiplierRoutes(router, cfgManager)
+
+	// 用 credentialUid 定位并标记为零成本（免费签到额度场景）
+	resp := performJSONRequest(t, router, http.MethodPatch, "/messages/channels/msg-cred/keys/cred-free/multiplier", map[string]any{
+		"groupMultiplier": 0, "maxGroupMultiplier": 0, "consumptionPolicy": "opportunistic",
+	})
+	if resp.Code != http.StatusOK {
+		t.Fatalf("credentialUid 兜底定位失败: status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	var got keyMultiplierResponse
+	decodeJSONResponse(t, resp, &got)
+	if got.GroupMultiplier == nil || *got.GroupMultiplier != 0 || got.EffectiveCostClass != "zero" || !got.Eligible {
+		t.Fatalf("应标记为可调度零成本: %+v", got)
+	}
+
+	// 持久化验证
+	channels := cfgManager.GetConfig().Upstream
+	if len(channels) != 1 || len(channels[0].APIKeyConfigs) != 1 ||
+		channels[0].APIKeyConfigs[0].GroupMultiplier == nil || *channels[0].APIKeyConfigs[0].GroupMultiplier != 0 {
+		t.Fatalf("倍率未持久化: %+v", channels)
+	}
+
+	// 未知标识仍 404（credentialUid 兜底不放松错误匹配）
+	resp = performJSONRequest(t, router, http.MethodPatch, "/messages/channels/msg-cred/keys/cred-missing/multiplier", map[string]any{
+		"groupMultiplier": 0, "maxGroupMultiplier": 0,
+	})
+	if resp.Code != http.StatusNotFound {
+		t.Fatalf("未知 credentialUid 应 404: status=%d body=%s", resp.Code, resp.Body.String())
+	}
+}

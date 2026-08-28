@@ -752,6 +752,22 @@ health(40) > fastDecay(25) > successRate(20) > latency(10) > cost(5)
 - `scripts/benchmark-sources/visualization.mjs:15-21` 把 §5.6 的 effort 折算比率（low=0.686/high=1.413/xhigh=1.627/max=1.975）引入图表生成，散点图按自动质量档渲染 Low/Normal/High/Premium 色带；`scripts/generate-benchmark-chart.mjs` 增加 `qualityTiers` 有效性校验。
 - 注意两侧口径的细微差异：scripts 版比率表含 `ultra` 键（=1.975），后端 `model_profile.go` 的 `effortQualityRatio` 无 `ultra`。
 
+### 5.18 新增 key 验证的鉴权/非鉴权失败分类与降级放行
+
+提交：`36387ca6`
+
+- 动机：部分上游（如签到送额度的中转站）对占位模型 `probe` 的推理探测请求挂起直至 12s 超时，此前 `verifyChannelKey` 任一候选失败即整体 400，且不区分 401/403 与超时/网络/5xx，导致有效 key 无法添加。
+- `verifyChannelKey` 改为任一候选 OK 即通过（对齐 `verifyProviderRouteKeys` 的首个命中语义）；全部失败时返回结构化 `KeyVerifyError{AuthFailed, Probe, Diagnostics}`——所有候选均 401/403 才标记 `AuthFailed=true`。
+- `verifyAddedKeysForUpdates` / `verifyNewKeysForChannels` 返回 `(warnings, error)`：`AuthFailed=false` 的失败降级为 warning（key 正常保存，响应带 `warnings` 字段，保活 L1/L2 后续把关）；鉴权失败与未知错误仍硬阻断。auto-add 两条追加路径（`appendCredentialsToCustomAccount` / `appendCredentialsToLegacyChannels`）同步降级。
+- `updateAccountRequest` 新增 `skipVerify`；账号更新类 400 错误经 `respondAccountUpdateError` 附加 `verifyFailure`/`authFailed` 标识，前端据此弹「仍要保存」确认框后带 `skipVerify` 重发。
+- 探测方式随错误/警告消息透传（接口路径 + 占位模型 + max_tokens），解决验证过程不透明问题。
+
+### 5.19 倍率编辑对托管账号手工 key 可用（credentialUid 兜底）
+
+- 原缺陷：`KeyUID` 仅 new-api 订阅同步路径（`StableKeyUID`）生成，托管账号手工 key 只有 `CredentialUID`，导致 `findAPIKeyConfigByKeyUID` 无法定位、前端 `ApiKeyManagementSection` 的倍率编辑按钮又因嵌在「已设置倍率才渲染」的 subtitle 块内而无首次配置入口（鸡生蛋）。
+- 修复：`findAPIKeyConfigByKeyUID` 兜底匹配 `CredentialUID`（托管渠道加载期 `ensureCredentialUIDs` 必回填）；前端 `buildChannelApiKeyRows` 以 `keyUid ?? credentialUid` 回填行 `keyUid`；倍率编辑按钮对可编辑 key（有 keyUid/channelUid/channelKind）始终可见，未设置倍率时不渲染空 chips。
+- 效果：免费/签到类渠道的 key 可在编辑弹窗一键「标记为公开/临时 Key」（`groupMultiplier=0` 显式零成本 `manual_zero_cost` + `opportunistic` 消耗策略），成本报表归入「已确认零成本」，调度零成本优先。
+
 ## 6. 与其他模块的交互点
 
 ### 6.1 scheduler

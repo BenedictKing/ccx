@@ -176,4 +176,18 @@ describe('hasNoUsableChannelApiKeys', () => {
     expect(hasNoUsableChannelApiKeys({ apiKeys: [], disabledApiKeys: [] })).toBe(false)
     expect(hasNoUsableChannelApiKeys({ apiKeys: null, disabledApiKeys: null })).toBe(false)
   })
+
+  it('托管账号 key 无 keyUid 时以 credentialUid 兜底（倍率编辑定位依赖）', () => {
+    const rows = buildChannelApiKeyRows(
+      ['key-managed', 'key-newapi', 'key-plain'],
+      [],
+      [
+        { key: 'key-managed', credentialUid: 'cred-managed' },
+        { key: 'key-newapi', keyUid: 'ku-1', credentialUid: 'cred-newapi' },
+      ],
+    )
+    expect(rows[0].keyUid).toBe('cred-managed')
+    expect(rows[1].keyUid).toBe('ku-1') // keyUid 优先，不被 credentialUid 覆盖
+    expect(rows[2].keyUid).toBeUndefined()
+  })
 })
