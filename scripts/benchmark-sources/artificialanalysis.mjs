@@ -53,6 +53,7 @@ export const ARTIFICIAL_ANALYSIS_MODEL_MAP = {
   'glm-5-3': 'glm-5.3',
   'glm-5-2': 'glm-5.2',
   'kimi-k2-7-code': 'kimi-k2.7-code',
+  'kimi-k2-6': 'kimi-k2.6',
   'kimi-k3': 'kimi-k3',
   'gemini-3-1-pro': 'gemini-3.1-pro',
   'gemini-3-flash': 'gemini-3-flash',
