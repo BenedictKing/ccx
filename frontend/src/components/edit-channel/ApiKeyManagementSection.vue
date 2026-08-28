@@ -303,8 +303,9 @@
                   </div>
                   </div>
                 </v-list-item-title>
-                <v-list-item-subtitle v-if="row && (row.multiplierSource || row.groupMultiplier != null || row.maxGroupMultiplier != null)" class="mt-1">
+                <v-list-item-subtitle v-if="row && (row.multiplierSource || row.groupMultiplier != null || row.maxGroupMultiplier != null || (row.keyUid && channelUid && channelKind))" class="mt-1">
                   <div class="d-flex align-center ga-1 flex-wrap text-caption">
+                    <template v-if="row.multiplierSource || row.groupMultiplier != null || row.maxGroupMultiplier != null">
                     <v-chip size="x-small" variant="tonal" :color="multiplierStatusColor(row.multiplierSyncStatus)">
                       {{ row.multiplierSource || 'manual' }} · {{ multiplierStatusLabel(row.multiplierSyncStatus || 'manual') }}
                     </v-chip>
@@ -324,7 +325,11 @@
                     <span :class="row.eligible === false ? 'text-error' : 'text-success'">
                       {{ row.eligible === false ? (row.ineligibleReason || t('subscription.keyMultiplier.ineligible')) : t('subscription.keyMultiplier.eligible') }}
                     </span>
-                    <v-btn v-if="row.keyUid && channelUid && channelKind" size="x-small" variant="text" @click="openMultiplierEditor(row)">{{ t('app.actions.edit') }}</v-btn>
+                    </template>
+                    <!-- 倍率编辑入口对未设置倍率的 key 同样可见（否则首次设置无入口） -->
+                    <v-btn v-if="row.keyUid && channelUid && channelKind" size="x-small" variant="text" @click="openMultiplierEditor(row)">
+                      {{ (row.multiplierSource || row.groupMultiplier != null || row.maxGroupMultiplier != null) ? t('app.actions.edit') : t('subscription.keyMultiplier.title') }}
+                    </v-btn>
                   </div>
                 </v-list-item-subtitle>
                 <v-list-item-subtitle v-if="row.volcengineCredential" class="mt-1 text-caption">
