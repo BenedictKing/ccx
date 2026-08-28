@@ -98,12 +98,57 @@ func VerifyGeminiEndpoint(ctx context.Context, baseURL, apiKey, authHeader strin
 	return verifyJSONPostEndpoint(ctx, url, apiKey, authHeader, nil, []byte(`{"contents":[{"role":"user","parts":[{"text":"ping"}]}],"generationConfig":{"maxOutputTokens":1}}`))
 }
 
+// KeyVerifyError 新增 key 验证失败的结构化错误。
+// AuthFailed 为 true 表示所有候选端点均返回 401/403（key 确定无效，应硬阻断保存）；
+// 为 false 表示失败含超时/网络/5xx 等非鉴权因素——探测未通过不能证明 key 无效
+// （部分上游对占位模型推理请求挂起直至超时，但 GET /v1/models 可正常鉴权），
+// 调用方可据此降级为警告放行。
+type KeyVerifyError struct {
+	MaskedKey   string
+	AuthFailed  bool
+	Probe       string   // 探测方式说明，如 "POST /v1/messages（占位模型 probe，max_tokens=1）"
+	Diagnostics []string // 逐候选诊断
+}
+
+func (e *KeyVerifyError) Error() string {
+	summary := strings.Join(e.Diagnostics, "；")
+	if e.AuthFailed {
+		return fmt.Sprintf("key %s 鉴权失败：所有候选端点均返回 401/403（验证方式：%s；%s）", e.MaskedKey, e.Probe, summary)
+	}
+	return fmt.Sprintf("key %s 验证失败（验证方式：%s；%s）", e.MaskedKey, e.Probe, summary)
+}
+
+// channelKeyProbeDesc 描述各渠道类型新增 key 验证使用的最小推理探测请求。
+func channelKeyProbeDesc(kind string) string {
+	switch kind {
+	case "messages":
+		return "POST /v1/messages（占位模型 probe，max_tokens=1）"
+	case "responses":
+		return "POST /v1/responses（占位模型 probe，max_output_tokens=1）"
+	case "gemini":
+		return "POST /v1beta/models/gemini-2.5-flash:generateContent（maxOutputTokens=1）"
+	case "chat":
+		return "POST /v1/chat/completions（占位模型 probe，max_tokens=1）"
+	case "images":
+		return "POST /v1/images/generations（占位模型 probe）"
+	case "vectors":
+		return "POST /v1/embeddings（占位模型 probe）"
+	default:
+		return kind
+	}
+}
+
+// verifyChannelKey 探测新增 key 在渠道候选地址上的可用性。
+// 策略：任一候选地址探测通过即整体通过；全部失败时按失败类型分类——
+// 全部为 401/403 视为 key 无效（AuthFailed=true），其余情况（超时/网络/5xx 等）
+// 只说明探测未通过，不能证明 key 无效（AuthFailed=false，由调用方降级或阻断）。
 func verifyChannelKey(ctx context.Context, kind string, upstream config.UpstreamConfig, apiKey string) error {
 	baseURLs := upstream.BaseURLsForKey(apiKey)
 	if len(baseURLs) == 0 {
 		return fmt.Errorf("渠道 %s 没有可验证的上游地址", upstream.Name)
 	}
 	var diagnostics []string
+	authFailedCount := 0
 	for candidateIndex, baseURL := range baseURLs {
 		var result EndpointVerifyResult
 		switch kind {
@@ -122,14 +167,20 @@ func verifyChannelKey(ctx context.Context, kind string, upstream config.Upstream
 		default:
 			return fmt.Errorf("不支持验证的渠道类型: %s", kind)
 		}
-		if !result.OK {
-			diagnostics = append(diagnostics, verifyCandidateDiagnostic(candidateIndex+1, result))
+		if result.OK {
+			return nil
 		}
+		if result.AuthFailed {
+			authFailedCount++
+		}
+		diagnostics = append(diagnostics, verifyCandidateDiagnostic(candidateIndex+1, result))
 	}
-	if len(diagnostics) == 0 {
-		return nil
+	return &KeyVerifyError{
+		MaskedKey:   utils.MaskAPIKey(apiKey),
+		AuthFailed:  authFailedCount == len(baseURLs),
+		Probe:       channelKeyProbeDesc(kind),
+		Diagnostics: diagnostics,
 	}
-	return fmt.Errorf("key %s 验证失败（%s）", utils.MaskAPIKey(apiKey), strings.Join(diagnostics, "；"))
 }
 
 func buildGeminiProbeURL(baseURL string) string {

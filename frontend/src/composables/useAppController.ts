@@ -138,7 +138,7 @@ export function useAppController() {
 
   const saveChannel = async (
     channel: Omit<Channel, 'index' | 'latency' | 'status'>,
-    options?: { isQuickAdd?: boolean; placement?: ChannelPlacement },
+    options?: { isQuickAdd?: boolean; placement?: ChannelPlacement; skipVerify?: boolean },
     onComplete?: () => void,
   ) => {
     try {
@@ -158,12 +158,35 @@ export function useAppController() {
       if (result.quickAddMessage) {
         showToast(result.quickAddMessage, 'info')
       }
+      // 新增 Key 探测被降级放行时展示警告（非鉴权类失败，key 已保存但连通性未确认）
+      if (result.warnings) {
+        for (const warning of result.warnings) {
+          showToast(warning, 'warning')
+        }
+      }
       dialogStore.closeAddChannelModal()
       dialogStore.closeEditChannelModal()
       await refreshChannels()
 
       return result
     } catch (error) {
+      // 新增 Key 验证失败（如鉴权失败 401/403）：提供"仍要保存"兜底入口，确认后跳过验证重试。
+      // onComplete 由外层 finally 统一执行，递归重试时不再透传，避免重复触发。
+      if (
+        !options?.skipVerify &&
+        error instanceof ApiError &&
+        (error.details as { verifyFailure?: unknown } | null)?.verifyFailure === true
+      ) {
+        const saveAnyway = await dialogStore.confirm({
+          message: t('toast.verifyFailureSaveAnyway', { error: error.message }),
+          confirmText: t('app.actions.saveAnyway'),
+          color: 'warning',
+        })
+        if (saveAnyway) {
+          return await saveChannel(channel, { ...options, skipVerify: true })
+        }
+        return undefined
+      }
       handleAuthError(error)
       return undefined
     } finally {

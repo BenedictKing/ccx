@@ -1637,8 +1637,8 @@ export class ApiService {
     })
   }
 
-  /** 原子更新自动托管账号名称与凭证集合。 */
-  async updateManagedAccount(accountUid: string, data: { name: string; apiKeys: string[]; baseUrls?: string[] }): Promise<UpdateManagedAccountResponse> {
+  /** 原子更新自动托管账号名称与凭证集合。skipVerify 用于验证失败弹窗中用户确认"仍要保存"后的重试。 */
+  async updateManagedAccount(accountUid: string, data: { name: string; apiKeys: string[]; baseUrls?: string[]; skipVerify?: boolean }): Promise<UpdateManagedAccountResponse> {
     return this.request(`/accounts/${encodeURIComponent(accountUid)}`, {
       method: 'PUT',
       body: JSON.stringify(data),

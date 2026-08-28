@@ -454,7 +454,7 @@ func TestVerifyNewKeysForChannelsCoversAllKinds(t *testing.T) {
 		verified = append(verified, kind+":"+apiKey)
 		return nil
 	}}
-	if err := verifyNewKeysForChannels(t.Context(), deps, channels, []string{"sk-old", "sk-new", "sk-new"}); err != nil {
+	if _, err := verifyNewKeysForChannels(t.Context(), deps, channels, []string{"sk-old", "sk-new", "sk-new"}); err != nil {
 		t.Fatal(err)
 	}
 	want := make([]string, 0, len(kinds))
@@ -476,7 +476,7 @@ func TestVerifyNewKeysForChannelsRejectsBeforeMutation(t *testing.T) {
 	deps := &AutoManagedDeps{VerifyChannelKey: func(_ context.Context, _ string, _ config.UpstreamConfig, apiKey string) error {
 		return fmt.Errorf("key %s rejected", apiKey)
 	}}
-	if err := verifyNewKeysForChannels(t.Context(), deps, channels, []string{"sk-old", "sk-bad"}); err == nil {
+	if _, err := verifyNewKeysForChannels(t.Context(), deps, channels, []string{"sk-old", "sk-bad"}); err == nil {
 		t.Fatal("无效新 Key 应阻止后续配置变更")
 	}
 	if !slices.Equal(channels[0].Upstream.APIKeys, []string{"sk-old"}) {
@@ -1265,6 +1265,133 @@ func TestUpdateAccountIgnoresBaseURLsForProviderManagedAccount(t *testing.T) {
 				t.Fatalf("%s 渠道地址池混入手工地址: %v", accountChannel.Kind, channel.GetAllBaseURLs())
 			}
 		}
+	}
+}
+
+// 自定义托管账号更新：新增 key 探测的非鉴权失败应降级为警告放行，
+// 鉴权失败仍阻断并携带 verifyFailure 标识，skipVerify 显式跳过验证。
+func TestUpdateManagedAccountKeyVerifyDegradation(t *testing.T) {
+	newCustomAccountManager := func(t *testing.T) *config.ConfigManager {
+		t.Helper()
+		dir := t.TempDir()
+		configPath := filepath.Join(dir, "config.json")
+		data := `{
+  "upstream": [{"accountUid":"acct_custom","channelUid":"ch_custom","name":"custom-claude","serviceType":"claude","baseUrl":"https://upstream.example.com","apiKeys":["sk-old"],"autoManaged":true,"status":"active"}],
+  "chatUpstream": [], "responsesUpstream": [], "geminiUpstream": [], "imagesUpstream": [], "vectorsUpstream": []
+}`
+		if err := os.WriteFile(configPath, []byte(data), 0600); err != nil {
+			t.Fatal(err)
+		}
+		manager, err := config.NewConfigManager(configPath, filepath.Join(dir, "backups"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = manager.Close() })
+		return manager
+	}
+	putAccount := func(t *testing.T, router *gin.Engine, body string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPut, "/api/accounts/acct_custom", bytes.NewBufferString(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		return w
+	}
+
+	t.Run("非鉴权失败降级为警告", func(t *testing.T) {
+		manager := newCustomAccountManager(t)
+		router := setupAutoManagedRouter(&AutoManagedDeps{
+			CfgManager: manager,
+			VerifyChannelKey: func(_ context.Context, _ string, _ config.UpstreamConfig, _ string) error {
+				return &KeyVerifyError{MaskedKey: "sk-***", AuthFailed: false, Probe: "POST /v1/messages（占位模型 probe，max_tokens=1）", Diagnostics: []string{"候选 1: context deadline exceeded"}}
+			},
+		})
+		w := putAccount(t, router, `{"name":"custom","apiKeys":["sk-old","sk-new"]}`)
+		if w.Code != http.StatusOK {
+			t.Fatalf("非鉴权失败应降级放行: status=%d body=%s", w.Code, w.Body.String())
+		}
+		var resp struct {
+			Warnings []string `json:"warnings"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatal(err)
+		}
+		if len(resp.Warnings) != 1 || !strings.Contains(resp.Warnings[0], "验证未通过") {
+			t.Fatalf("响应应携带降级警告: %+v", resp)
+		}
+		channels := manager.GetAccountChannels("acct_custom")
+		if len(channels) == 0 || strings.Join(channels[0].Upstream.APIKeys, ",") != "sk-old,sk-new" {
+			t.Fatalf("降级放行后 key 应已保存: %+v", channels)
+		}
+	})
+
+	t.Run("鉴权失败阻断并带结构化标识", func(t *testing.T) {
+		manager := newCustomAccountManager(t)
+		router := setupAutoManagedRouter(&AutoManagedDeps{
+			CfgManager: manager,
+			VerifyChannelKey: func(_ context.Context, _ string, _ config.UpstreamConfig, _ string) error {
+				return &KeyVerifyError{MaskedKey: "sk-***", AuthFailed: true, Probe: "POST /v1/messages（占位模型 probe，max_tokens=1）", Diagnostics: []string{"候选 1: HTTP 401"}}
+			},
+		})
+		w := putAccount(t, router, `{"name":"custom","apiKeys":["sk-old","sk-new"]}`)
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("鉴权失败应阻断: status=%d body=%s", w.Code, w.Body.String())
+		}
+		var resp map[string]any
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatal(err)
+		}
+		if resp["verifyFailure"] != true || resp["authFailed"] != true {
+			t.Fatalf("错误响应应携带 verifyFailure/authFailed 标识: %v", resp)
+		}
+	})
+
+	t.Run("skipVerify 跳过验证", func(t *testing.T) {
+		manager := newCustomAccountManager(t)
+		called := false
+		router := setupAutoManagedRouter(&AutoManagedDeps{
+			CfgManager: manager,
+			VerifyChannelKey: func(_ context.Context, _ string, _ config.UpstreamConfig, _ string) error {
+				called = true
+				return &KeyVerifyError{MaskedKey: "sk-***", AuthFailed: true}
+			},
+		})
+		w := putAccount(t, router, `{"name":"custom","apiKeys":["sk-old","sk-new"],"skipVerify":true}`)
+		if w.Code != http.StatusOK {
+			t.Fatalf("skipVerify 应跳过验证: status=%d body=%s", w.Code, w.Body.String())
+		}
+		if called {
+			t.Fatal("skipVerify 为 true 时不应调用验证")
+		}
+	})
+}
+
+func TestVerifyAddedKeysForUpdatesDegradesNonAuthFailure(t *testing.T) {
+	channels := []config.AccountChannel{{
+		Kind: "messages",
+		Upstream: config.UpstreamConfig{
+			ChannelUID: "ch-messages", BaseURL: "https://example.com", APIKeys: []string{"sk-old"},
+		},
+	}}
+	updates := []config.AccountChannelUpdate{{
+		ChannelUID: "ch-messages", APIKeys: []string{"sk-old", "sk-new"}, BaseURLs: []string{"https://example.com"},
+	}}
+	deps := &AutoManagedDeps{VerifyChannelKey: func(_ context.Context, _ string, _ config.UpstreamConfig, _ string) error {
+		return &KeyVerifyError{MaskedKey: "sk-***", AuthFailed: false, Diagnostics: []string{"候选 1: 请求超时"}}
+	}}
+	warnings, err := verifyAddedKeysForUpdates(t.Context(), deps, channels, updates)
+	if err != nil {
+		t.Fatalf("非鉴权失败应降级为警告而非阻断: %v", err)
+	}
+	if len(warnings) != 1 || !strings.Contains(warnings[0], "验证未通过") {
+		t.Fatalf("应返回降级警告: %v", warnings)
+	}
+
+	deps.VerifyChannelKey = func(_ context.Context, _ string, _ config.UpstreamConfig, _ string) error {
+		return &KeyVerifyError{MaskedKey: "sk-***", AuthFailed: true, Diagnostics: []string{"候选 1: HTTP 401"}}
+	}
+	if _, err := verifyAddedKeysForUpdates(t.Context(), deps, channels, updates); err == nil {
+		t.Fatal("鉴权失败应阻断保存")
 	}
 }
 

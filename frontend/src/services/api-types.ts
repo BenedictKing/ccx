@@ -1958,6 +1958,8 @@ export interface UpdateManagedAccountResponse {
   keyCount: number
   channelCount: number
   discoveryStarted: number
+  /** 降级放行的验证警告：非鉴权类探测失败，key 已保存但连通性未确认。 */
+  warnings?: string[]
 }
 
 export interface ManagedAccountCredential {

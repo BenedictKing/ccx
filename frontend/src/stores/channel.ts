@@ -375,8 +375,8 @@ export const useChannelStore = defineStore('channel', () => {
   async function saveChannel(
     channel: Omit<Channel, 'index' | 'latency' | 'status'>,
     editingChannelIndex: number | null,
-    options?: { isQuickAdd?: boolean; placement?: ChannelPlacement; channelType?: ApiTab; autoManaged?: boolean; accountUid?: string; originalChannel?: Channel }
-  ): Promise<{ success: boolean; message: string; quickAddMessage?: string; channelId?: number }> {
+    options?: { isQuickAdd?: boolean; placement?: ChannelPlacement; channelType?: ApiTab; autoManaged?: boolean; accountUid?: string; originalChannel?: Channel; skipVerify?: boolean }
+  ): Promise<{ success: boolean; message: string; quickAddMessage?: string; channelId?: number; warnings?: string[] }> {
     const targetTab = options?.channelType ?? activeTab.value
     const isResponses = targetTab === 'responses'
     const isGemini = targetTab === 'gemini'
@@ -386,6 +386,7 @@ export const useChannelStore = defineStore('channel', () => {
 
     if (editingChannelIndex !== null) {
       // 更新现有渠道
+      let accountWarnings: string[] | undefined
       if (options?.autoManaged && options.accountUid) {
         const original = options.originalChannel
         if (original && !original.providerId) {
@@ -394,11 +395,13 @@ export const useChannelStore = defineStore('channel', () => {
           const baseUrls = channel.baseUrls?.length
             ? [...channel.baseUrls]
             : (channel.baseUrl ? [channel.baseUrl] : [])
-          await api.updateManagedAccount(options.accountUid, {
+          const accountResp = await api.updateManagedAccount(options.accountUid, {
             name: channel.name,
             apiKeys: channel.apiKeys,
             ...(baseUrls.length > 0 ? { baseUrls } : {}),
+            ...(options.skipVerify ? { skipVerify: true } : {}),
           })
+          accountWarnings = accountResp.warnings
         } else if (original) {
           const originalKeys = new Set(original.apiKeys)
           const nextKeys = new Set(channel.apiKeys)
@@ -440,7 +443,7 @@ export const useChannelStore = defineStore('channel', () => {
       } else {
         await updateChannelByType('messages', editingChannelIndex, channel)
       }
-      return { success: true, message: t('store.channel.updated'), channelId: editingChannelIndex }
+      return { success: true, message: t('store.channel.updated'), channelId: editingChannelIndex, ...(accountWarnings?.length ? { warnings: accountWarnings } : {}) }
     } else {
       // 添加新渠道：使用统一 API（按 kind 区分协议）
       const placement: ChannelPlacement =

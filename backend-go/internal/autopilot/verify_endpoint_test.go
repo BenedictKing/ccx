@@ -3,6 +3,7 @@ package autopilot
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -309,10 +310,62 @@ func TestVerifyChannelKeyUsesBoundBaseURL(t *testing.T) {
 		t.Fatal("绑定地址鉴权失败时，不应回退未绑定的其他地址")
 	}
 
+	// 未绑定 Key 时验证地址池采用「任一候选通过即放行」策略（与 verifyProviderRouteKeys 对齐），
+	// 避免个别候选超时/抽风阻断保存；全部失败时再按鉴权/非鉴权分类。
 	unbound := config.UpstreamConfig{BaseURL: bad.URL, BaseURLs: []string{bad.URL, good.URL}}
-	if err := verifyChannelKey(t.Context(), "chat", unbound, "sk-new"); err == nil {
-		t.Fatal("未绑定 Key 必须通过地址池全部端点验证，避免保存后随机命中失败地址")
+	if err := verifyChannelKey(t.Context(), "chat", unbound, "sk-new"); err != nil {
+		t.Fatalf("地址池中存在可用候选时应验证通过: %v", err)
 	}
+}
+
+func TestVerifyChannelKeyFailureClassification(t *testing.T) {
+	authSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer authSrv.Close()
+	authSrv2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer authSrv2.Close()
+
+	t.Run("全部候选鉴权失败标记 AuthFailed", func(t *testing.T) {
+		upstream := config.UpstreamConfig{BaseURL: authSrv.URL, BaseURLs: []string{authSrv.URL, authSrv2.URL}}
+		err := verifyChannelKey(t.Context(), "chat", upstream, "sk-bad")
+		var kvErr *KeyVerifyError
+		if !errors.As(err, &kvErr) {
+			t.Fatalf("应返回 *KeyVerifyError: %v", err)
+		}
+		if !kvErr.AuthFailed {
+			t.Fatalf("全部候选 401/403 时 AuthFailed 应为 true: %+v", kvErr)
+		}
+		if !strings.Contains(kvErr.Error(), "POST /v1/chat/completions") {
+			t.Fatalf("错误消息应注明探测方式: %v", kvErr)
+		}
+	})
+
+	t.Run("含非鉴权失败不标记 AuthFailed", func(t *testing.T) {
+		// 一个候选 401，另一个不可达（连接拒绝）：key 未必无效，仅探测未通过
+		upstream := config.UpstreamConfig{BaseURL: authSrv.URL, BaseURLs: []string{authSrv.URL, "http://127.0.0.1:1"}}
+		err := verifyChannelKey(t.Context(), "chat", upstream, "sk-maybe")
+		var kvErr *KeyVerifyError
+		if !errors.As(err, &kvErr) {
+			t.Fatalf("应返回 *KeyVerifyError: %v", err)
+		}
+		if kvErr.AuthFailed {
+			t.Fatalf("混合失败不应判定为纯鉴权失败: %+v", kvErr)
+		}
+	})
+
+	t.Run("任一候选通过即放行", func(t *testing.T) {
+		okSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer okSrv.Close()
+		upstream := config.UpstreamConfig{BaseURL: "http://127.0.0.1:1", BaseURLs: []string{"http://127.0.0.1:1", okSrv.URL}}
+		if err := verifyChannelKey(t.Context(), "chat", upstream, "sk-new"); err != nil {
+			t.Fatalf("存在可用候选时应通过: %v", err)
+		}
+	})
 }
 
 func TestVerifyClaudeEndpointNetworkError(t *testing.T) {

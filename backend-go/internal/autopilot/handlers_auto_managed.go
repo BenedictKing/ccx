@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -128,17 +129,31 @@ type existingChannelRef struct {
 	ChannelUID string
 }
 
-func verifyNewKeysForChannels(ctx context.Context, deps *AutoManagedDeps, channels []config.AccountChannel, desiredKeys []string) error {
+// degradeKeyVerifyFailure 判定新增 key 验证失败是否可降级为警告。
+// 仅 *KeyVerifyError 且 AuthFailed=false（超时/网络/5xx 等非鉴权失败）可降级；
+// 鉴权失败（401/403）与其他未知错误仍硬阻断。
+func degradeKeyVerifyFailure(err error) (*KeyVerifyError, bool) {
+	var kvErr *KeyVerifyError
+	if errors.As(err, &kvErr) && !kvErr.AuthFailed {
+		return kvErr, true
+	}
+	return nil, false
+}
+
+// verifyNewKeysForChannels 探测渠道新增 key。非鉴权类失败降级为警告返回，
+// 仅鉴权失败或未知错误阻断保存；warnings 供调用方透传给用户。
+func verifyNewKeysForChannels(ctx context.Context, deps *AutoManagedDeps, channels []config.AccountChannel, desiredKeys []string) ([]string, error) {
 	if deps == nil {
-		return fmt.Errorf("自动托管依赖不可用")
+		return nil, fmt.Errorf("自动托管依赖不可用")
 	}
 	if deps.SkipChannelKeyVerify {
-		return nil
+		return nil, nil
 	}
 	verify := deps.VerifyChannelKey
 	if verify == nil {
 		verify = verifyChannelKey
 	}
+	var warnings []string
 	for _, accountChannel := range channels {
 		existing := make(map[string]struct{}, len(accountChannel.Upstream.APIKeys))
 		for _, apiKey := range accountChannel.Upstream.APIKeys {
@@ -149,24 +164,32 @@ func verifyNewKeysForChannels(ctx context.Context, deps *AutoManagedDeps, channe
 				continue
 			}
 			if err := verify(ctx, accountChannel.Kind, accountChannel.Upstream, apiKey); err != nil {
-				return err
+				if kvErr, ok := degradeKeyVerifyFailure(err); ok {
+					warning := fmt.Sprintf("key %s 已保存，但连通性验证未通过：%s。该 key 可能仍可用于实际调用，保活验证将持续检查", kvErr.MaskedKey, kvErr.Error())
+					log.Printf("[AutoManaged-Verify] 降级放行: %s", warning)
+					warnings = append(warnings, warning)
+					continue
+				}
+				return warnings, err
 			}
 		}
 	}
-	return nil
+	return warnings, nil
 }
 
-func verifyAddedKeysForUpdates(ctx context.Context, deps *AutoManagedDeps, channels []config.AccountChannel, updates []config.AccountChannelUpdate) error {
+// verifyAddedKeysForUpdates 探测账号更新中新增 key。降级策略同 verifyNewKeysForChannels。
+func verifyAddedKeysForUpdates(ctx context.Context, deps *AutoManagedDeps, channels []config.AccountChannel, updates []config.AccountChannelUpdate) ([]string, error) {
 	if deps == nil {
-		return fmt.Errorf("自动托管依赖不可用")
+		return nil, fmt.Errorf("自动托管依赖不可用")
 	}
 	if deps.SkipChannelKeyVerify {
-		return nil
+		return nil, nil
 	}
 	verify := deps.VerifyChannelKey
 	if verify == nil {
 		verify = verifyChannelKey
 	}
+	var warnings []string
 	byUID := make(map[string]config.AccountChannelUpdate, len(updates))
 	for _, update := range updates {
 		byUID[update.ChannelUID] = update
@@ -192,11 +215,17 @@ func verifyAddedKeysForUpdates(ctx context.Context, deps *AutoManagedDeps, chann
 				continue
 			}
 			if err := verify(ctx, accountChannel.Kind, upstream, apiKey); err != nil {
-				return err
+				if kvErr, ok := degradeKeyVerifyFailure(err); ok {
+					warning := fmt.Sprintf("key %s 已保存，但连通性验证未通过：%s。该 key 可能仍可用于实际调用，保活验证将持续检查", kvErr.MaskedKey, kvErr.Error())
+					log.Printf("[AutoManaged-Verify] 降级放行: %s", warning)
+					warnings = append(warnings, warning)
+					continue
+				}
+				return warnings, err
 			}
 		}
 	}
-	return nil
+	return warnings, nil
 }
 
 func channelsWithAddedKeys(channels []config.AccountChannel, desiredKeys []string) []existingChannelRef {
@@ -1407,6 +1436,9 @@ type updateAccountRequest struct {
 	BaseURLs []string `json:"baseUrls,omitempty"`
 	// Remark 可选指针：省略（nil）表示不修改备注；传空串为显式清空。
 	Remark *string `json:"remark,omitempty"`
+	// SkipVerify 为 true 时跳过新增 key 的上游连通性验证，
+	// 用于验证失败弹窗中用户确认"仍要保存"后的重试。
+	SkipVerify bool `json:"skipVerify,omitempty"`
 }
 
 type updateAccountResponse struct {
@@ -1414,6 +1446,20 @@ type updateAccountResponse struct {
 	KeyCount         int    `json:"keyCount"`
 	ChannelCount     int    `json:"channelCount"`
 	DiscoveryStarted int    `json:"discoveryStarted"`
+	// Warnings 携带降级放行的验证警告（非鉴权类探测失败，key 已保存但连通性未确认）。
+	Warnings []string `json:"warnings,omitempty"`
+}
+
+// respondAccountUpdateError 输出账号更新错误；新增 key 验证失败时附加结构化标识，
+// 供前端识别并给出"仍要保存"入口。
+func respondAccountUpdateError(c *gin.Context, status int, err error) {
+	payload := gin.H{"error": err.Error()}
+	var kvErr *KeyVerifyError
+	if errors.As(err, &kvErr) {
+		payload["verifyFailure"] = true
+		payload["authFailed"] = kvErr.AuthFailed
+	}
+	c.JSON(status, payload)
 }
 
 // handleUpdateAccount 在账号范围原子替换凭证集合，并只为新增 Key 探测各协议 route。
@@ -1426,7 +1472,7 @@ func handleUpdateAccount(deps *AutoManagedDeps) gin.HandlerFunc {
 		}
 		response, status, err := applyManagedAccountUpdate(c.Request.Context(), deps, strings.TrimSpace(c.Param("accountUid")), req)
 		if err != nil {
-			c.JSON(status, gin.H{"error": err.Error()})
+			respondAccountUpdateError(c, status, err)
 			return
 		}
 		c.JSON(http.StatusOK, response)
@@ -1466,10 +1512,13 @@ func applyManagedAccountUpdate(ctx context.Context, deps *AutoManagedDeps, accou
 	if err != nil {
 		return updateAccountResponse{}, status, err
 	}
-	if providerID == "" {
-		if err := verifyAddedKeysForUpdates(ctx, deps, channels, updates); err != nil {
+	var verifyWarnings []string
+	if providerID == "" && !req.SkipVerify {
+		warnings, err := verifyAddedKeysForUpdates(ctx, deps, channels, updates)
+		if err != nil {
 			return updateAccountResponse{}, http.StatusBadRequest, err
 		}
+		verifyWarnings = warnings
 	}
 	changed := channelsWithAddedKeys(channels, req.APIKeys)
 	if err := deps.CfgManager.UpdateAccountChannels(accountUID, updates); err != nil {
@@ -1482,7 +1531,7 @@ func applyManagedAccountUpdate(ctx context.Context, deps *AutoManagedDeps, accou
 			started++
 		}
 	}
-	return updateAccountResponse{AccountUID: accountUID, KeyCount: len(req.APIKeys), ChannelCount: len(channels), DiscoveryStarted: started}, http.StatusOK, nil
+	return updateAccountResponse{AccountUID: accountUID, KeyCount: len(req.APIKeys), ChannelCount: len(channels), DiscoveryStarted: started, Warnings: verifyWarnings}, http.StatusOK, nil
 }
 
 // canonicalizeBaseURLs 按 serviceType 规范化地址池：丢弃空值并按 canonical 形式去重，保持输入顺序。
@@ -1678,7 +1727,7 @@ func handleAddAccountCredentials(deps *AutoManagedDeps) gin.HandlerFunc {
 		desired = append(desired, req.APIKeys...)
 		response, status, err := applyManagedAccountUpdate(c.Request.Context(), deps, accountUID, updateAccountRequest{APIKeys: desired})
 		if err != nil {
-			c.JSON(status, gin.H{"error": err.Error()})
+			respondAccountUpdateError(c, status, err)
 			return
 		}
 		c.JSON(http.StatusCreated, response)
@@ -1729,7 +1778,7 @@ func handlePatchAccountCredentials(deps *AutoManagedDeps) gin.HandlerFunc {
 		}
 		response, status, err := applyManagedAccountUpdate(c.Request.Context(), deps, accountUID, updateAccountRequest{APIKeys: desired})
 		if err != nil {
-			c.JSON(status, gin.H{"error": err.Error()})
+			respondAccountUpdateError(c, status, err)
 			return
 		}
 		cleanupRemovedCredentialProfiles(deps, accountUID, channels, removedKeys)
@@ -1794,7 +1843,7 @@ func handleDeleteAccountCredential(deps *AutoManagedDeps) gin.HandlerFunc {
 		}
 		response, status, err := applyManagedAccountUpdate(c.Request.Context(), deps, accountUID, updateAccountRequest{APIKeys: desired})
 		if err != nil {
-			c.JSON(status, gin.H{"error": err.Error()})
+			respondAccountUpdateError(c, status, err)
 			return
 		}
 		cleanupRemovedCredentialProfiles(deps, accountUID, channels, map[string]string{credentialUID: removeKey})
@@ -2089,8 +2138,8 @@ func appendCredentialsToCustomAccount(
 		additions = append(additions, config.AccountChannelAddition{Kind: route.ChannelKind, Upstream: upstream, Placement: req.Placement})
 	}
 
-	if err := verifyAddedKeysForUpdates(c.Request.Context(), deps, channels, updates); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	if _, err := verifyAddedKeysForUpdates(c.Request.Context(), deps, channels, updates); err != nil {
+		respondAccountUpdateError(c, http.StatusBadRequest, err)
 		return
 	}
 	changed := channelsWithAddedKeys(channels, desiredKeys)
@@ -2126,8 +2175,8 @@ func appendCredentialsToLegacyChannels(
 	for _, match := range matches {
 		channels = append(channels, config.AccountChannel{Kind: match.Kind, Upstream: match.Upstream})
 	}
-	if err := verifyNewKeysForChannels(c.Request.Context(), deps, channels, desiredKeys); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	if _, err := verifyNewKeysForChannels(c.Request.Context(), deps, channels, desiredKeys); err != nil {
+		respondAccountUpdateError(c, http.StatusBadRequest, err)
 		return
 	}
 
