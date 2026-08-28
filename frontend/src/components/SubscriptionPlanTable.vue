@@ -11,7 +11,7 @@
           <th class="text-left">{{ t('subscription.field.linkedChannels') }}</th>
           <th class="text-left">{{ t('subscription.field.source') }}</th>
           <th class="text-left" style="width: 160px;">{{ t('subscription.field.autoRefreshSection') }}</th>
-          <th class="text-right" style="width: 160px;">{{ t('app.actions.edit') }}</th>
+          <th class="text-right" style="width: 160px;">{{ t('app.actions.actions') }}</th>
         </tr>
       </thead>
       <tbody>

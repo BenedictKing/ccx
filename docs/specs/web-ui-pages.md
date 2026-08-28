@@ -350,8 +350,8 @@ i18n key 依次为 `app.tabs.{channels,images,vectors,conversations,healthCenter
 │ 💡 渠道推荐(3 列卡,success): 〔domain chip〕近期使用 n 次        │
 │    当前主用: code(分数) → 推荐尝试: code(分数) │ 综合分差 +δ     │
 │    (空: 暂无推荐…)                                              │
-│ ⚠ 待办事项 v-table: │Channel│Kind chip│Endpoint│Health chip│Action│
-│    (空: 暂无待办事项。;列头硬编码英文,未 i18n)                   │
+│ ⚠ 待办事项 v-table: │渠道│类型 chip│Endpoint│健康 chip│建议操作│  │
+│    (空: 暂无待办事项。)                                         │
 │ (加载 ◌ / 页面空态: 暂无数据,请先配置渠道和订阅。)               │
 └──────────────────────────────────────────────────────────────┘
 ```

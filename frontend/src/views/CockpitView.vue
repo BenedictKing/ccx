@@ -263,11 +263,11 @@
       <v-table v-else density="compact" hover class="mb-4">
         <thead>
           <tr>
-            <th class="text-left">Channel</th>
-            <th class="text-left">Kind</th>
-            <th class="text-left">Endpoint</th>
-            <th class="text-left">Health</th>
-            <th class="text-left">Action</th>
+            <th class="text-left">{{ t('cockpitOverview.todo.col.channel') }}</th>
+            <th class="text-left">{{ t('cockpitOverview.todo.col.kind') }}</th>
+            <th class="text-left">{{ t('cockpitOverview.todo.col.endpoint') }}</th>
+            <th class="text-left">{{ t('cockpitOverview.todo.col.health') }}</th>
+            <th class="text-left">{{ t('cockpitOverview.todo.col.action') }}</th>
           </tr>
         </thead>
         <tbody>
