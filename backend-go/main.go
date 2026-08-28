@@ -1511,8 +1511,9 @@ func main() {
 				if err != nil {
 					log.Printf("[Autopilot-DiscoveryTaskStore] 初始化失败，降级为纯内存 discovery: %v", err)
 				} else {
-					autoDiscoveryRunner.SetTaskStore(discoveryTaskStore)
-					autoDiscoveryRunner.ResumeIncompleteDiscoveries(cfgManager)
+				autoDiscoveryRunner.SetTaskStore(discoveryTaskStore)
+				autoDiscoveryRunner.ResumeIncompleteDiscoveries(cfgManager)
+				autoDiscoveryRunner.StartModelRefreshLoop(cfgManager)
 				}
 			}
 

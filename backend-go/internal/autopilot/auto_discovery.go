@@ -173,6 +173,93 @@ func (r *AutoDiscoveryRunner) gcLoop() {
 	}
 }
 
+// 模型清单刷新节奏。上游会随时上下架模型（火山套餐 2026-08-18 下线 kimi-k2.6 即为实例），
+// 端点画像的模型清单不是一次性数据；checkpoint 机制又会让未变更端点永久跳过重探测。
+// 定期扫描画像，对清单整体过期的自动托管渠道重新触发发现，复用既有发现管线幂等刷新。
+const (
+	modelListRefreshScanInterval = 6 * time.Hour
+	modelListStaleTTL            = 7 * 24 * time.Hour
+)
+
+// StartModelRefreshLoop 启动模型清单定期刷新循环。
+// 依赖 SetTaskStore 建立的 root context 生命周期；未注入 taskStore 时为 no-op，
+// 保持纯内存场景（现有测试）行为不变。
+func (r *AutoDiscoveryRunner) StartModelRefreshLoop(cfgManager *config.ConfigManager) {
+	if r == nil || cfgManager == nil {
+		return
+	}
+	r.mu.Lock()
+	hasCtx := r.runnerCtx != nil
+	r.mu.Unlock()
+	if !hasCtx {
+		return
+	}
+	go r.modelRefreshLoop(cfgManager)
+}
+
+func (r *AutoDiscoveryRunner) modelRefreshLoop(cfgManager *config.ConfigManager) {
+	ticker := time.NewTicker(modelListRefreshScanInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-r.parentContext().Done():
+			return
+		case <-ticker.C:
+			r.refreshStaleModelLists(cfgManager)
+		}
+	}
+}
+
+// refreshStaleModelLists 对画像模型清单整体超过 TTL 的自动托管渠道重新触发发现。
+// 只处理已有画像的渠道：从未发现的渠道由添加流程负责首发现；
+// 渠道已有 running 任务时 TriggerDiscoveryWithStatus 会幂等拒绝，不会重复探测。
+func (r *AutoDiscoveryRunner) refreshStaleModelLists(cfgManager *config.ConfigManager) {
+	if r == nil || cfgManager == nil {
+		return
+	}
+	cfg := cfgManager.GetConfig()
+	now := time.Now()
+	for kind := range validChannelKinds {
+		channels := getChannelSlice(cfg, kind)
+		for i := range channels {
+			ch := &channels[i]
+			if !ch.AutoManaged || !r.channelModelsStale(ch.ChannelUID, now) {
+				continue
+			}
+			started, err := r.TriggerDiscoveryWithStatus(ch.ChannelUID, ch, cfgManager)
+			if err != nil {
+				log.Printf("[AutoDiscovery-ModelRefresh] 渠道 %s 触发发现失败: %v", ch.ChannelUID, err)
+				continue
+			}
+			if started {
+				log.Printf("[AutoDiscovery-ModelRefresh] 渠道 %s 模型清单已过期，重新触发发现", ch.ChannelUID)
+			}
+		}
+	}
+}
+
+// channelModelsStale 判断渠道画像的模型清单是否整体过期：
+// 存在任一端点的清单仍在 TTL 内即视为不过期（部分端点刷新过即可继续用）。
+// ModelsDiscoveredAt 缺失（旧版本画像）同样计入过期，借定期刷新补齐。
+func (r *AutoDiscoveryRunner) channelModelsStale(channelUID string, now time.Time) bool {
+	r.mu.Lock()
+	store := r.store
+	r.mu.Unlock()
+	if store == nil {
+		return false
+	}
+	profiles := store.ListByChannel(channelUID)
+	if len(profiles) == 0 {
+		return false
+	}
+	for _, p := range profiles {
+		if p.ModelsDiscoveredAt != nil && now.Sub(*p.ModelsDiscoveredAt) <= modelListStaleTTL {
+			return false
+		}
+	}
+	return true
+}
+
 // Stop 取消未完成任务并停止 GC 定时器。
 // 已持久化的 running 状态与 checkpoint 保留，供下次启动续传。
 func (r *AutoDiscoveryRunner) Stop() {
