@@ -249,12 +249,13 @@ locale 键在 `frontend/src/locales/{zh-CN,en,id}.json`，前缀 `subscription.n
 
 ```text
 SubscriptionProfile (subscriptionUid)
-  ├── AccessToken (主账号)
+  ├── AccessToken (主账号；账号平权：DELETE accounts/primary 清空，
+  │                无主凭证时添加账号自动提升为新主账号)
   ├── GroupMultipliers {group: ratio}
   ├── ProvisionedKeys[]
   │     ├── Name, Group, TokenID, KeyUID
   │     └── ...
-  └── Accounts[]
+  └── Accounts[]  (子账号；提升为主账号的条目会从列表移除)
         ├── AccountUID
         ├── AccessToken
         ├── ProvisionedKeys[]
@@ -263,6 +264,7 @@ SubscriptionProfile (subscriptionUid)
         └── ...
 
 UpstreamConfig (channelUid, autoManagedKind=new_api)
+  ├── APIKeys[]  (调度池；注入的明文 key 一并并入)
   └── APIKeyConfigs[]
         ├── Key (明文)
         ├── KeyUID = StableKeyUID(subscriptionUID, tokenID)
@@ -277,6 +279,8 @@ UpstreamConfig (channelUid, autoManagedKind=new_api)
 ```text
 [SyncNow]
     │
+    ├─ 主账号凭证为空（账号平权，已删除）→ 仅 syncAccounts，不视为失败
+    │
     ├─ Verify ──→ 余额/账号信息
     ├─ FetchGroups ──→ GroupMultipliers
     ├─ FetchModels ──→ AvailableModels
@@ -287,6 +291,12 @@ UpstreamConfig (channelUid, autoManagedKind=new_api)
     ├─ 按 SourceRemoteTokenID / KeyUID 匹配
     ├─ ownership 冲突 → relink_required
     └─ 合并 desired key 元数据进 APIKeyConfigs
+    │
+    ▼
+[healMissingProvisionedKeys]
+    ├─ 渠道缺失 desired key → 按 tokenID 拉远端列表
+    │   └─ 掩码经揭示端点换明文 → injectProvisionedKeys 重建
+    └─ 远端 token 也已删除 → 跳过，不注入空 key
     │
     ▼
 [状态计算]
