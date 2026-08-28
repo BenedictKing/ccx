@@ -408,12 +408,12 @@
                           color="success"
                           variant="tonal"
                           rounded="lg"
+                          icon
                           :loading="suspendingKey === row.key"
                           :disabled="!!suspendingKey"
                           @click="$emit('resume-key', row.key)"
                         >
-                          <v-icon start size="small">mdi-play</v-icon>
-                          {{ t('channelCard.resumeKey') }}
+                          <v-icon size="small">mdi-play</v-icon>
                         </v-btn>
                       </template>
                     </v-tooltip>
@@ -431,12 +431,12 @@
                           color="warning"
                           variant="tonal"
                           rounded="lg"
+                          icon
                           :loading="suspendingKey === row.key"
                           :disabled="!!suspendingKey"
                           @click="$emit('suspend-key', row.key)"
                         >
-                          <v-icon start size="small">mdi-pause</v-icon>
-                          {{ t('channelCard.suspendKey') }}
+                          <v-icon size="small">mdi-pause</v-icon>
                         </v-btn>
                       </template>
                     </v-tooltip>
