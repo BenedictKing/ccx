@@ -39,27 +39,27 @@
 ## 2. 多账号建 key、主账号凭证管理（前后端位置）
 
 ### 2.1 后端（`internal/autopilot/handlers_subscription_accounts.go`）
-`RegisterSubscriptionAccountRoutes`（行 711）：
-- `PATCH /api/subscriptions/:uid/newapi-credentials` → `handleUpdateNewApiCredentials`（行 604）— 主账号凭证更新，指针字段区分“不改”与显式提交（`NewApiCredentialsUpdateRequest`，含 `proxyUrl`/`proxyPreferDirect` 订阅级代理设置），落库前 `VerifyWithFallback` 按生效代理校验，支持 `expectedVersion` 乐观锁，落库后触发 `SyncNow`
+`RegisterSubscriptionAccountRoutes`（行 810）：
+- `PATCH /api/subscriptions/:uid/newapi-credentials` → `handleUpdateNewApiCredentials`（行 703）— 主账号凭证更新，指针字段区分“不改”与显式提交（`NewApiCredentialsUpdateRequest`，含 `proxyUrl`/`proxyPreferDirect` 订阅级代理设置），落库前 `VerifyWithFallback` 按生效代理校验，支持 `expectedVersion` 乐观锁，落库后触发 `SyncNow`
 - `POST /api/subscriptions/:uid/accounts` → `handleAddSubscriptionAccount`（行 89）— **先 verify 拉账号/分组/模型，再按倍率阈值为全部合格分组自动建 key**（`namePrefix = accountUID + “-”` 避免同站同名复用冲突），失败回滚远端 key
-- `GET /api/subscriptions/:uid/accounts` → `handleListSubscriptionAccounts`（行 296，脱敏；仅返回额外账号，主账号经 `GET /subscriptions/:uid` 单独拉取、前端组装进列表首行）
-- `DELETE /api/subscriptions/:uid/accounts/:accountUid` → `handleDeleteSubscriptionAccount`（行 335）— 先从渠道剔除 key，再 best-effort 回收远端 key，再移除账号
-- `POST /api/subscriptions/:uid/accounts/:accountUid/refresh` → `handleRefreshSubscriptionAccount`（行 394）
-- `PATCH /api/subscriptions/:uid/accounts/:accountUid/credentials` → `handleUpdateSubscriptionAccountCredentials`（行 477，62d2d46d）— 子账号独立更新凭证（accessToken 留空=保持不变），支持 userId/authTokenMode。**账号平权后（2026-08-28）编辑面板已不再调用**（换凭证统一为删除+重新添加），端点保留供外部调用
+- `GET /api/subscriptions/:uid/accounts` → `handleListSubscriptionAccounts`（行 332，脱敏；仅返回额外账号，主账号经 `GET /subscriptions/:uid` 单独拉取、前端组装进列表首行）
 - `DELETE /api/subscriptions/:uid/accounts/primary` → `handleDeletePrimaryAccount`（行 373）— 账号平权：删除主账号＝清空订阅级凭证（AccessToken/UserID/Username/AuthTokenMode）与 ProvisionedKeys、剔除其自动接入 key（best-effort 回收远端），订阅本体（baseUrl/分组/计费/渠道关联）保留；无主账号时 409
+- `DELETE /api/subscriptions/:uid/accounts/:accountUid` → `handleDeleteSubscriptionAccount`（行 434）— 先从渠道剔除 key，再 best-effort 回收远端 key，再移除账号
+- `POST /api/subscriptions/:uid/accounts/:accountUid/refresh` → `handleRefreshSubscriptionAccount`（行 493）
+- `PATCH /api/subscriptions/:uid/accounts/:accountUid/credentials` → `handleUpdateSubscriptionAccountCredentials`（行 576，62d2d46d）— 子账号独立更新凭证（accessToken 留空=保持不变），支持 userId/authTokenMode。**账号平权后（2026-08-28）编辑面板已不再调用**（换凭证统一为删除+重新添加），端点保留供外部调用
 
-**账号平权模型（2026-08-28）**：主账号与子账号在 UI 平权——主账号行同样可删除；换主凭证的完整路径=删除主账号 → 「添加账号」输入新令牌。`handleAddSubscriptionAccount` 在订阅无主凭证时（行 235）自动把新账号提升为主账号（回填凭证/用户名/余额并从 Accounts 移除该条目，避免既主又子）；`SyncNow` 无主凭证时（`newapi_subscription_sync_service.go:291`）跳过站点级同步、仅同步子账号，不视为失败。
+**账号平权模型（2026-08-28）**：主账号与子账号在 UI 平权——主账号行同样可删除；换主凭证的完整路径=删除主账号 → 「添加账号」输入新令牌。`handleAddSubscriptionAccount` 在订阅无主凭证时（行 235）自动把新账号提升为主账号（回填凭证/用户名/余额并从 Accounts 移除该条目，避免既主又子）；`SyncNow` 无主凭证时（`newapi_subscription_sync_service.go:291` 起）跳过站点级同步、仅同步子账号，不视为失败。
 
 多账号建 key 复用主流程 `provisionNewApiGroupKeys`（`handlers_newapi.go:227`），核心复用逻辑集中在此。
 
 ### 2.2 前端
 - 主/多账号面板：`frontend/src/components/edit-channel/NewApiAccountPanel.vue`
-  - 订阅 UID 解析 `effectiveSubscriptionUid`（行 470，787db651）：`props.subscriptionUid || localSubscriptionUid`，仍为空且非 generic、`autoManagedKind==='new_api'` 时按约定兜底 `newapi-${channelUid}`——渠道 key 配置 `sourceSubscriptionUid` 丢失（编辑换 key 切断关联、`BuildChannelView` 不再暴露 `subscriptionUid`）时面板仍可直连订阅
-  - `bindNewApi`（行 564）：generic 渠道绑定 new-api，`subscriptionUid: newapi-${channelUid}`；**先 verify，再按上游 `groups + availableModels` 调 `provisionAllEligibleGroups=true`**
-  - `savePrimaryCredentials`（行 632）→ `api.updateNewApiCredentials`（带 `expectedVersion`）；`refreshPrimaryAccount`（行 655）→ `api.refreshSubscription`。**账号平权（2026-08-28）后面板已移除更新凭证表单**：`savePrimaryCredentials` 与子账号 `saveAccountCredentials` 不再存在，换凭证统一走「删除 + 重新添加」；新增 `deletePrimaryAccount` → `api.deleteSubscriptionPrimaryAccount`
-  - `handleAddAccount`（行 684）：主账号订阅未就绪时置 `addError`（`subscriptionUnavailable`，787db651）而非静默返回；就绪时同样**先 verify，再显式传 `provisionAllEligibleGroups` / `maxGroupMultiplier` / `availableModels`**；`refreshAccount` / `deleteAccount` / `saveAccountCredentials`（行 730/742/804）为子账号行操作（62d2d46d：展开详情 + 独立更新凭证）
-  - UI 结构（40d8b990）：主账号默认作为账号列表首行（「主账号」徽章，展开=详情+更新凭证，无删除按钮），与子账号行同构；详见 `web-ui-dialogs.md` §5
-  - `authTokenModeOptions`：Bearer/Raw（行 512）
+  - 订阅 UID 解析 `effectiveSubscriptionUid`（行 382，787db651）：`props.subscriptionUid || localSubscriptionUid`，仍为空且非 generic、`autoManagedKind==='new_api'` 时按约定兜底 `newapi-${channelUid}`——渠道 key 配置 `sourceSubscriptionUid` 丢失（编辑换 key 切断关联、`BuildChannelView` 不再暴露 `subscriptionUid`）时面板仍可直连订阅
+  - `bindNewApi`（行 457）：generic 渠道绑定 new-api，`subscriptionUid: newapi-${channelUid}`；**先 verify，再按上游 `groups + availableModels` 调 `provisionAllEligibleGroups=true`**
+  - `refreshPrimaryAccount`（行 523）→ `api.refreshSubscription`；`deletePrimaryAccount`（行 540）→ `api.deleteSubscriptionPrimaryAccount`（账号平权：主账号可删，换凭证=删除+重新添加，后端自动提升新主账号）
+  - `handleAddAccount`（行 570）：主账号订阅未就绪时置 `addError`（`subscriptionUnavailable`，787db651）而非静默返回；就绪时同样**先 verify，再显式传 `provisionAllEligibleGroups` / `maxGroupMultiplier` / `availableModels`**；`refreshAccount` / `deleteAccount`（行 616/628）为子账号行操作
+  - UI 结构（40d8b990）：主账号默认作为账号列表首行（「主账号」徽章，展开=纯详情，行操作刷新/删除），与子账号行同构；详见 `web-ui-dialogs.md` §5
+  - `authTokenModeOptions`：Bearer/Raw（行 420）
 - 首次接入表单：`frontend/src/components/NewApiSubscriptionForm.vue`（两步 verify→provision）
 - 订阅中心入口：`frontend/src/views/SubscriptionsView.vue`（`selectedProvider==='new-api'` 行 23）+ `SubscriptionProviderGrid.vue`（行 116-122）
 - 快速添加入口：`frontend/src/components/QuickAddChannelForm.vue`（`NEW_API_PROVIDER_VALUE='__new_api__'` 行 264）+ `subscriptions/NewApiQuickAddDialog.vue`
@@ -95,7 +95,7 @@ UpstreamConfig (channelUid, autoManagedKind=new_api)
         + QuotaGroup / GroupMultiplier / MaxGroupMultiplier
         + MultiplierSource=new_api / SyncStatus / ExpiresAt)
 ```
-`KeyUID = StableKeyUID(subscriptionUID, tokenID)`（`newapi_subscription_sync_service.go:760`，sha256 前 8 字节，前缀 `kuid_`）。tokenID 站点级唯一，主账号与多账号 key 共存不撞号。
+`KeyUID = StableKeyUID(subscriptionUID, tokenID)`（`newapi_subscription_sync_service.go:775`，sha256 前 8 字节，前缀 `kuid_`）。tokenID 站点级唯一，主账号与多账号 key 共存不撞号。
 
 渠道编辑保存时 `mergeAPIKeyConfig`（`config.go:785`，787db651）对 `MultiplierSource=new_api` 的既有 key 回填 `SourceSubscriptionUID`/`SourceRemoteTokenID`（客户端表单不携带这两个托管身份字段）——此前不回填，编辑换 key 会切断渠道与订阅的关联，且 `BuildChannelView` 的 `subscriptionUid` 正是从 `APIKeyConfigs[].SourceSubscriptionUID` 暴露的，关联一断前端账号面板即拿不到订阅 UID。非托管 key 的显式清空（`handlers_key_multiplier.go` 脱离同步管理场景）不受回填影响。
 
@@ -103,12 +103,12 @@ UpstreamConfig (channelUid, autoManagedKind=new_api)
 
 `NewApiSubscriptionSyncService`（行 59）负责 new-api 订阅的周期性余额、分组倍率与可用模型同步，使用 per-uid 锁（`lockForUID`）。
 
-- 后台循环：`Start`（行 158）启动 30 分钟周期 ticker（`newApiSyncDefaultInterval` 行 93），tick 到达时调用 `SweepAll` 并发刷新所有 new-api 订阅。`Stop` 优雅停止循环。初始启动时还会通过 `SyncAllNewAPIAsync` 先做一次性全量同步。
-- `SyncNow`（行 267）：verify → FetchGroups（校验非负有限，`finiteNonNegative`）→ FetchModels → `Patch` 回写余额/分组/模型/KeyUID/ratio → `reconcileChannels`（行 605）把 desired key 元数据合并进关联渠道的 `APIKeyConfigs`（ownership 冲突→`relink_required`）→ 模型哈希变化触发 Discovery
-- `reconcileNewApiConfigs`（行 630）：按 `SourceRemoteTokenID`/`KeyUID` 匹配，跨订阅 ownership 冲突返回 conflict。匹配维度只有这两个字段——渠道 key 被误删后常规 reconcile 无法找回，由 `healMissingProvisionedKeys`（行 857）自愈：SyncNow/syncOneAccount 在 reconcile 后检查关联渠道是否缺失 desired key，缺失时按 tokenID 分页拉远端 token 列表（`ListTokens`），掩码 key 经揭示端点（`GetTokenKey`）换回明文并规范 `sk-` 前缀，再走 `injectProvisionedKeys` 重建 config；远端 token 也已删除的项跳过，绝不注入空 key（测试 fake 未实现 `newApiTokenHealer` 接口时自愈自动跳过）
+- 后台循环：`Start`（行 159）启动 30 分钟周期 ticker（`newApiSyncDefaultInterval` 行 93），tick 到达时调用 `SweepAll` 并发刷新所有 new-api 订阅。`Stop` 优雅停止循环。初始启动时还会通过 `SyncAllNewAPIAsync` 先做一次性全量同步。
+- `SyncNow`（行 271）：verify → FetchGroups（校验非负有限，`finiteNonNegative`）→ FetchModels → `Patch` 回写余额/分组/模型/KeyUID/ratio → `reconcileChannels`（行 620）把 desired key 元数据合并进关联渠道的 `APIKeyConfigs`（ownership 冲突→`relink_required`）→ 模型哈希变化触发 Discovery；主账号凭证为空时（行 291，账号平权）跳过站点级同步仅同步子账号
+- `reconcileNewApiConfigs`（行 645）：按 `SourceRemoteTokenID`/`KeyUID` 匹配，跨订阅 ownership 冲突返回 conflict。匹配维度只有这两个字段——渠道 key 被误删后常规 reconcile 无法找回，由 `healMissingProvisionedKeys`（行 867）自愈：SyncNow/syncOneAccount 在 reconcile 后检查关联渠道是否缺失 desired key，缺失时按 tokenID 分页拉远端 token 列表（`ListTokens`），掩码 key 经揭示端点（`GetTokenKey`）换回明文并规范 `sk-` 前缀，再走 `injectProvisionedKeys` 重建 config；远端 token 也已删除的项跳过，绝不注入空 key（测试 fake 未实现 `newApiTokenHealer` 接口时自愈自动跳过）
 - `buildDesiredForKeys`：计算每 key 的 syncStatus（`fresh`/`over_limit`/`remote_group_missing`）+ TTL（`newApiSyncTTL=35m` 行 26）
-- `injectProvisionedKeys`（行 789）/`ReconcileProvisioned`（行 962）/`ReconcileAccountProvisioned`（行 981）：provision/加账号/自愈后把明文 key 注入渠道；注入的明文同时并入渠道 `APIKeys`（调度与 keypool 候选只遍历 `APIKeys`，仅写 configs 的 key 不参与调用）
-- `RemoveAccountKeysFromChannels`（行 501）：删账号时剔除渠道 key
+- `injectProvisionedKeys`（行 799）/`ReconcileProvisioned`（行 972）/`ReconcileAccountProvisioned`（行 991）：provision/加账号/自愈后把明文 key 注入渠道；注入的明文同时并入渠道 `APIKeys`（调度与 keypool 候选只遍历 `APIKeys`，仅写 configs 的 key 不参与调用）
+- `RemoveAccountKeysFromChannels`（行 516）：删账号/删主账号时剔除渠道 key
 - 状态常量（行 17-24）：`fresh/over_limit/sync_error/relink_required/stale/remote_group_missing`
 
 ## 4. 与 autopilot/scheduler 的集成点
@@ -158,7 +158,7 @@ UpstreamConfig (channelUid, autoManagedKind=new_api)
 - key 倍率编辑 `edit-channel/ApiKeyManagementSection.vue`：`openMultiplierEditor` → `patchKeyMultiplier`；`new_api` 源 key 的 `groupMultiplier` 后端拒绝手改（`handlers_key_multiplier.go:158`，409 Conflict「new_api key 的 groupMultiplier 由远端同步，不能手动修改」），仅允许改 `maxGroupMultiplier`（前端也据此限制）；状态色 `multiplierStatusColor`/`multiplierStatusLabel`（`utils/subscriptionBilling.ts`）
 
 ### 5.3 API 服务层（`frontend/src/services/api.ts`）
-`verifyNewApiSubscription`(1473) / `provisionNewApiSubscription`(1481) / `updateNewApiCredentials`(1490) / `getSubscriptionAccounts`(1497) / `addSubscriptionAccount`(1502) / `deleteSubscriptionAccount`(1510) / `refreshSubscriptionAccount`(1517) / `updateSubscriptionAccountCredentials`(1524，62d2d46d) / `refreshSubscription`(1436) / `patchKeyMultiplier`(1460) / `linkSubscriptionChannel`(1422) / `unlinkSubscriptionChannel`(1429)。类型定义在 `api-types.ts`：`NewApiVerifyRequest/Response`、`NewApiProvisionRequest/Response`、`NewApiProvisionedKey(Info)`、`NewApiAccountItem`、`NewApiCredentialsUpdateRequest`、`NewApiKeyStatus`、`NewApiSyncResult`、`APIKeyConfig`。
+`verifyNewApiSubscription`(1473) / `provisionNewApiSubscription`(1481) / `updateNewApiCredentials`(1490) / `getSubscriptionAccounts`(1497) / `addSubscriptionAccount`(1502) / `deleteSubscriptionAccount`(1510) / `deleteSubscriptionPrimaryAccount`(1517，账号平权) / `refreshSubscriptionAccount`(1524) / `updateSubscriptionAccountCredentials`(1531，62d2d46d，面板已不再调用) / `refreshSubscription`(1436) / `patchKeyMultiplier`(1460) / `linkSubscriptionChannel`(1422) / `unlinkSubscriptionChannel`(1429)。类型定义在 `api-types.ts`：`NewApiVerifyRequest/Response`、`NewApiProvisionRequest/Response`、`NewApiProvisionedKey(Info)`、`NewApiAccountItem`、`NewApiCredentialsUpdateRequest`、`NewApiKeyStatus`、`NewApiSyncResult`、`APIKeyConfig`。
 
 ### 5.4 调用链路（统一组计划）
 1. `verify`：输入 `baseUrl/accessToken/userId/authTokenMode`，后端拉 `GET /api/user/self`、`GET /api/user/self/groups`、`GET /api/user/models`，返回 `groups + availableModels`。
@@ -171,7 +171,7 @@ UpstreamConfig (channelUid, autoManagedKind=new_api)
 5. 后端统一执行：`verify→FetchGroups→resolveGroups→provisionNewApiGroupKeys→建 profile/账号→建/并渠道→LinkChannel→TriggerDiscovery→SyncService.ReconcileProvisioned`，并返回实际接入的 key/group 列表。
 
 ### 5.5 i18n
-locale 键在 `frontend/src/locales/{zh-CN,en,id}.json`，前缀 `subscription.newApi.*`（zh-CN 行 1201-1273，含 787db651 新增的 `primaryBadge`/`primaryAccountUnavailable`/`subscriptionNotFound`/`subscriptionUnavailable`）与 `subscription.keyMultiplier.*`（行 1492-1567），`autopilot.quickAdd.provider.newApi`（行 1464）。
+locale 键在 `frontend/src/locales/{zh-CN,en,id}.json`，前缀 `subscription.newApi.*`（zh-CN 行 1201-1275，含 787db651 新增的 `primaryBadge`/`primaryAccountUnavailable`/`subscriptionNotFound`/`subscriptionUnavailable` 与账号平权新增的 `deletePrimaryAccount`/`primaryAccountRemoved`）与 `subscription.keyMultiplier.*`（行 1494-1569），`autopilot.quickAdd.provider.newApi`（行 1466）。
 
 ## 6. 可能缺失的边界处理与文档
 
