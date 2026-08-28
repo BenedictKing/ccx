@@ -23,6 +23,7 @@ type StreamTimeoutObserver struct {
 	lastStreamActivityAt   time.Time
 	lastToolCallActivityAt time.Time
 	toolCallPending        bool
+	sawToolCall            bool
 	maxStreamIdleMs        int64
 	maxToolCallIdleMs      int64
 }
@@ -163,6 +164,19 @@ func (o *StreamTimeoutObserver) markToolCallActivityLocked(now time.Time) {
 	}
 	o.lastToolCallActivityAt = now
 	o.toolCallPending = true
+	// 流中出现过工具调用块的事实标记，供强制 tool_choice 负信号学习读取
+	// （MaybeLearnForcedToolChoiceMiss）；仅 messages/responses 流式路径会触发。
+	o.sawToolCall = true
+}
+
+// SawToolCall 返回本次流式中是否出现过任何工具调用块。
+func (o *StreamTimeoutObserver) SawToolCall() bool {
+	if o == nil {
+		return false
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.sawToolCall
 }
 
 func (o *StreamTimeoutObserver) markToolCallCompleteLocked(now time.Time) {

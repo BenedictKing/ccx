@@ -33,6 +33,7 @@ type ModelTestResult struct {
 	Latency              int64                             `json:"latency"` // 毫秒
 	StreamingSupported   bool                              `json:"streamingSupported"`
 	CodexImageGeneration *CodexImageGenerationProbeSummary `json:"codexImageGeneration,omitempty"`
+	ToolCalls            *ToolCallProbeSummary             `json:"toolCalls,omitempty"` // 工具调用探针结论（基础测试成功后附加执行）
 	Error                *string                           `json:"error,omitempty"`
 	StartedAt            string                            `json:"startedAt,omitempty"`
 	TestedAt             string                            `json:"testedAt"`

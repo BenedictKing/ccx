@@ -299,7 +299,7 @@ func fastProbeProtocol(ctx context.Context, channel *config.UpstreamConfig, prot
 		if err := pacer.waitForNext(ctx); err != nil {
 			return false, false
 		}
-		result := executeModelTest(ctx, probeChannel, protocol, model, timeout, "", cfgManager, -1, protocol, probeChannel.APIKeys[0], nil)
+		result := executeModelTest(ctx, probeChannel, protocol, model, timeout, "", cfgManager, -1, protocol, probeChannel.APIKeys[0], nil, false)
 		if !isDiscoveryRateLimited(result) {
 			return result.Success, result.StreamingSupported
 		}

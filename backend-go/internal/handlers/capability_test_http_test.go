@@ -427,7 +427,7 @@ func TestExecuteModelTest_RecordsCapabilityLogOnSuccess(t *testing.T) {
 
 	cfg := cfgManager.GetConfig()
 	metricsKey := metrics.GenerateMetricsIdentityKey(server.URL, "test-key", "claude")
-	result := executeModelTest(context.Background(), &cfg.Upstream[0], "messages", "claude-test", 5*time.Second, job.JobID, cfgManager, 0, "messages", "test-key", store)
+	result := executeModelTest(context.Background(), &cfg.Upstream[0], "messages", "claude-test", 5*time.Second, job.JobID, cfgManager, 0, "messages", "test-key", store, false)
 	if !result.Success {
 		t.Fatalf("result.Success=false, want true")
 	}
@@ -489,7 +489,7 @@ func TestExecuteModelTest_SuccessfulStreamDoesNotLogRawResponseBody(t *testing.T
 	defer errutil.IgnoreDeferred(cfgManager.Close)
 
 	cfg := cfgManager.GetConfig()
-	result := executeModelTest(context.Background(), &cfg.Upstream[0], "responses", "gpt-test", 5*time.Second, job.JobID, cfgManager, 0, "responses", "test-key", nil)
+	result := executeModelTest(context.Background(), &cfg.Upstream[0], "responses", "gpt-test", 5*time.Second, job.JobID, cfgManager, 0, "responses", "test-key", nil, false)
 	if !result.Success {
 		t.Fatalf("result.Success=false, want true, error=%v, logs=%s", result.Error, logBuf.String())
 	}
@@ -542,7 +542,7 @@ func TestExecuteModelTest_NativeProtocolDoesNotExposeActualModel(t *testing.T) {
 	defer errutil.IgnoreDeferred(cfgManager.Close)
 
 	cfg := cfgManager.GetConfig()
-	result := executeModelTest(context.Background(), &cfg.Upstream[0], "messages", "claude-test", 5*time.Second, job.JobID, cfgManager, 0, "messages", "test-key", nil)
+	result := executeModelTest(context.Background(), &cfg.Upstream[0], "messages", "claude-test", 5*time.Second, job.JobID, cfgManager, 0, "messages", "test-key", nil, false)
 	if !result.Success {
 		t.Fatalf("result.Success=false, want true")
 	}
@@ -598,7 +598,7 @@ func TestExecuteModelTest_RecordsCapabilityLogOnFailure(t *testing.T) {
 
 	cfg := cfgManager.GetConfig()
 	metricsKey := metrics.GenerateMetricsIdentityKey(server.URL, "test-key", "claude")
-	result := executeModelTest(context.Background(), &cfg.Upstream[0], "messages", "claude-test", 5*time.Second, job.JobID, cfgManager, 0, "messages", "test-key", store)
+	result := executeModelTest(context.Background(), &cfg.Upstream[0], "messages", "claude-test", 5*time.Second, job.JobID, cfgManager, 0, "messages", "test-key", store, false)
 	if result.Success {
 		t.Fatalf("result.Success=true, want false")
 	}
@@ -660,7 +660,7 @@ func TestExecuteModelTest_TruncatesLargeFailureBody(t *testing.T) {
 	defer errutil.IgnoreDeferred(cfgManager.Close)
 
 	cfg := cfgManager.GetConfig()
-	result := executeModelTest(context.Background(), &cfg.Upstream[0], "messages", "claude-test", 5*time.Second, job.JobID, cfgManager, 0, "messages", "test-key", store)
+	result := executeModelTest(context.Background(), &cfg.Upstream[0], "messages", "claude-test", 5*time.Second, job.JobID, cfgManager, 0, "messages", "test-key", store, false)
 	if result.Success {
 		t.Fatalf("result.Success=true, want false")
 	}
@@ -719,7 +719,7 @@ func TestExecuteModelTest_RespectsAutoBlacklistBalance(t *testing.T) {
 		t.Fatalf("upstream count=%d, want 1", len(cfg.Upstream))
 	}
 
-	result := executeModelTest(context.Background(), &cfg.Upstream[0], "messages", "claude-test", 5*time.Second, job.JobID, cfgManager, 0, "messages", "test-key", nil)
+	result := executeModelTest(context.Background(), &cfg.Upstream[0], "messages", "claude-test", 5*time.Second, job.JobID, cfgManager, 0, "messages", "test-key", nil, false)
 	if result.Success {
 		t.Fatalf("result.Success=true, want false")
 	}

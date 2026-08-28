@@ -284,7 +284,7 @@ func RetryCapabilityTestModel(cfgManager *config.ConfigManager, channelLogStore 
 
 func executeRetryModelTest(ctx context.Context, channel *config.UpstreamConfig, protocol, model string, timeout time.Duration, jobID string, cfgManager *config.ConfigManager, channelID int, channelKind, apiKey string, channelLogStore *metrics.ChannelLogStore) ModelTestResult {
 	if !strings.Contains(protocol, "->") {
-		return executeModelTest(ctx, channel, protocol, model, timeout, jobID, cfgManager, channelID, channelKind, apiKey, channelLogStore)
+		return executeModelTest(ctx, channel, protocol, model, timeout, jobID, cfgManager, channelID, channelKind, apiKey, channelLogStore, true)
 	}
 
 	parts := strings.SplitN(protocol, "->", 2)

@@ -1293,6 +1293,22 @@ func TryUpstreamWithAllKeys(
 					}
 				}
 
+				// 工具调用能力自学习（被动侧·错误路径）：请求携带 tools 且上游以 400/422
+				// 点名拒绝工具能力时，记忆该 渠道-Key-模型 组合不支持工具调用，供 SmartRouter
+				// 在选渠道阶段规避。与 document 同策略：只记录不做同 Key 重试（剥掉 tools
+				// 等于改变用户意图）；只认点名强信号，不做通用 invalid_request 弱信号归因
+				// ——带 tools 的请求在 agent 流量中占比极高，弱信号误杀风险远大于 document。
+				if (resp.StatusCode == 400 || resp.StatusCode == 422) && upstream.ChannelUID != "" {
+					if signal := ToolUnsupportedFromError(resp.StatusCode, respBodyBytes, BodyHasTools(attemptBody)); signal != nil {
+						keyHash := autopilot.KeyHashFromAPIKey(apiKey)
+						if channelCompatCache.Record(upstream.ChannelUID, keyHash, attemptModel,
+							config.TraitNoToolCallSupport, true, config.CompatSourceErrorSignal, signal.Evidence) {
+							RequestLogf(c, "[%s-ToolCallCompat] 渠道 %s 模型 %s 拒绝工具调用（%s），已记忆并将在后续路由中规避",
+								apiType, upstream.Name, attemptModel, signal.Evidence)
+						}
+					}
+				}
+
 				if shouldFailover {
 					lastError = fmt.Errorf("上游错误: %d", resp.StatusCode)
 					failedKeys[apiKey] = true
@@ -1430,6 +1446,14 @@ func TryUpstreamWithAllKeys(
 			usage, err = handleSuccess(c, resp, upstreamCopy, apiKey, attemptBody)
 			if isStream {
 				FinishStreamTimeoutObservation(c)
+				// 工具调用能力自学习（被动侧·成功路径）：强制 tool_choice 的请求 2xx
+				// 完成但流式全程零工具调用块，说明上游不会执行工具（假模型/剥离 tools）。
+				// 仅 messages/responses：只有这两条流式路径接了工具活动标记，
+				// 其他协议 sawToolCall=false 无法区分"没调用"与"没观测"，不得学习。
+				if executionKind == scheduler.ChannelKindMessages || executionKind == scheduler.ChannelKindResponses {
+					MaybeLearnForcedToolChoiceMiss(c, upstream, apiKey, attemptModel, attemptBody,
+						GetStreamTimeoutObserver(c).SawToolCall())
+				}
 			}
 			if err != nil {
 				if isStream && streamingUserID != "" {

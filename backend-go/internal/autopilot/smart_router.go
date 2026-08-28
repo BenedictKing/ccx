@@ -1508,6 +1508,11 @@ func (r *SmartRouter) buildChannelEntry(
 	if learnedDocumentUnsupported(channelUID, actualModel) {
 		entry.SupportsDocument = false
 	}
+	// 工具调用同款：能力测试探针/运行期负信号实测不能执行工具调用的渠道×模型，
+	// 带工具请求经工具硬约束自动规避（docs/specs/tool-call-capability.md）。
+	if learnedToolCallUnsupported(channelUID, actualModel) {
+		entry.SupportsToolCalls = false
+	}
 	if modelPricing != nil {
 		listCost := metrics.CalculateTokenCostUSDWithPricing(modelPricing, 1_000_000, 1_000_000, 1_000_000, 1_000_000)
 		entry.EstimatedCost = listCost

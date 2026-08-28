@@ -490,7 +490,7 @@ func runRoundRobinTests(ctx context.Context, channel *config.UpstreamConfig, pro
 		}
 
 		// executeModelTest（单模型测试）
-		modelResult := executeModelTest(globalCtx, channel, item.protocol, item.model, perModelTimeout, jobID, cfgManager, channelID, channelKind, apiKey, channelLogStore)
+		modelResult := executeModelTest(globalCtx, channel, item.protocol, item.model, perModelTimeout, jobID, cfgManager, channelID, channelKind, apiKey, channelLogStore, true)
 		result := results[item.protocol]
 		result.ModelResults[item.index] = modelResult
 		protocolEndTime[item.protocol] = time.Now() // 每次模型完成时更新协议结束时间
@@ -627,7 +627,9 @@ func runRoundRobinTests(ctx context.Context, channel *config.UpstreamConfig, pro
 
 // executeModelTest 单模型测试（不调用 AcquireSendSlot，由编排器负责限流）
 // 原生协议测试直接用原始模型名发请求，不走 ModelMapping 重定向
-func executeModelTest(ctx context.Context, channel *config.UpstreamConfig, protocol, model string, timeout time.Duration, jobID string, cfgManager *config.ConfigManager, channelID int, channelKind, apiKey string, channelLogStore *metrics.ChannelLogStore) ModelTestResult {
+// executeModelTest 执行单个模型的基础协议测试。probeToolCalls 控制成功后是否附加
+// 工具调用探针（能力测试路径为 true；渠道发现复用本函数，保持原请求量传 false）。
+func executeModelTest(ctx context.Context, channel *config.UpstreamConfig, protocol, model string, timeout time.Duration, jobID string, cfgManager *config.ConfigManager, channelID int, channelKind, apiKey string, channelLogStore *metrics.ChannelLogStore, probeToolCalls bool) ModelTestResult {
 	if shouldProbeCodexImageGeneration(protocol, model) {
 		modelResult := executeCodexImageGenerationCapabilityTest(ctx, channel, model, timeout, cfgManager, channelID, channelKind)
 		status := CapabilityModelStatusFailed
@@ -731,6 +733,21 @@ func executeModelTest(ctx context.Context, channel *config.UpstreamConfig, proto
 		modelResult.Success = true
 		modelResult.StreamingSupported = streamingSupported
 		recordCapabilityTestLog(true, statusCode, "")
+
+		// 工具调用探针（docs/specs/tool-call-capability.md §4.2）：基础测试成功说明
+		// 模型可用，再验"是否真的执行工具调用"。结论只附加展示与落库学习，
+		// 不回改 modelResult.Success——模型对无工具流量仍然可用。
+		if probeToolCalls {
+			actualModel := config.RedirectModel(model, channel)
+			toolSummary := runCapabilityToolCallProbe(reqCtx, channel, protocol, actualModel, apiKey)
+			if toolSummary.Tested {
+				modelResult.ToolCalls = &toolSummary
+				recordToolCallProbeResult(channel, apiKey, actualModel, toolSummary)
+				log.Printf("[CapabilityTest-ToolCall] 渠道 %s 模型 %s 工具调用探针完成 (支持: %v, %s)",
+					channel.Name, actualModel, toolSummary.Supported, toolSummary.Evidence)
+			}
+		}
+
 		capabilityJobs.update(jobID, func(job *CapabilityTestJob) {
 			updateCapabilityJobModelResult(job, protocol, model, CapabilityModelStatusSuccess, modelResult)
 		})

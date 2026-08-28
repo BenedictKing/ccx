@@ -17,6 +17,7 @@
 | [web-ui-pages.md](./web-ui-pages.md) | Web 页面层 | 8 个 View 布局、导航信息架构、全局区块显隐、数据流、IA 问题 |
 | [cross-module-integration.md](./cross-module-integration.md) | 跨模块集成 | 路由决策链、事件传播、状态一致性边界 |
 | [model-inventory-consistency.md](./model-inventory-consistency.md) | 模型清单一致性 | 三条模型数链路口径、协议视图聚合、火山案例复盘、自动保鲜改造(用户无感) |
+| [tool-call-capability.md](./tool-call-capability.md) | 工具调用能力实测 | seekai 假渠道复盘、能力测试工具探针、运行期负信号学习、硬约束收紧 |
 
 ## 总览关系图
 

@@ -44,6 +44,10 @@ const (
 	// 与其他 trait 不同：没有对应的请求改写，不进入主动注入枚举与 AllCompatTraits，
 	// 仅供 SmartRouter 路由侧读取（选渠道阶段规避该组合）。
 	TraitNoDocumentSupport CompatTrait = "no_document_support"
+	// TraitNoToolCallSupport 上游实测不能执行工具调用（能力测试探针/运行期负信号学得）。
+	// 与 TraitNoDocumentSupport 同类：没有对应的请求改写（剥掉 tools 等于改变用户意图），
+	// 不进入 AllCompatTraits，仅供 SmartRouter 路由侧读取（带工具请求规避该渠道×模型）。
+	TraitNoToolCallSupport CompatTrait = "no_tool_call_support"
 	// TraitUnsupportedBetaHeader 上游拒绝某个 anthropic-beta token（如 context-1m-2025-08-07），
 	// 需在转发前从 anthropic-beta header 中按 token 粒度剥离。
 	// 学习条件：400/422 错误明确点名拒绝某 token + 请求侧确实携带 anthropic-beta header。
@@ -65,10 +69,12 @@ func AllCompatTraits() []CompatTrait {
 	}
 }
 
-// 学习来源。error_signal 来自上游明确报错（强证据）；probe 来自主动探测（弱证据）。
+// 学习来源。error_signal 来自上游明确报错（强证据）；probe 来自主动探测（弱证据）；
+// runtime_signal 来自运行期行为观测（如强制 tool_choice 请求 2xx 但零工具调用）。
 const (
-	CompatSourceErrorSignal = "error_signal"
-	CompatSourceProbe       = "probe"
+	CompatSourceErrorSignal   = "error_signal"
+	CompatSourceProbe         = "probe"
+	CompatSourceRuntimeSignal = "runtime_signal"
 )
 
 // compatEvidenceMaxLen 证据摘要落盘上限，避免上游长错误体把状态文件撑大。
@@ -609,6 +615,44 @@ func (c *ChannelCompatCache) IsDocumentUnsupportedForChannelModel(channelUID, mo
 			continue
 		}
 		if state, ok := entry.Traits[TraitNoDocumentSupport]; ok && state.Enabled {
+			return true
+		}
+	}
+	return false
+}
+
+// IsToolCallUnsupportedForChannelModel 返回该渠道-模型是否有任一已知 Key 学到过
+// "不能执行工具调用"（TraitNoToolCallSupport）。
+//
+// 写入方是能力测试工具探针与运行期负信号（强制 tool_choice 请求 2xx 但全程无工具调用、
+// 错误文案点名 tools），读取方是 SmartRouter（带工具请求规避该渠道×模型）。
+// 口径与 IsDocumentUnsupportedForChannelModel 一致：路由决策发生在选定具体 Key 之前，
+// 任一 Key 已知不支持就按不支持处理。无学习记录 = false（fail-open）。
+func (c *ChannelCompatCache) IsToolCallUnsupportedForChannelModel(channelUID, model string) bool {
+	if channelUID == "" || model == "" {
+		return false
+	}
+
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	for key, entry := range c.cache {
+		if entry == nil {
+			continue
+		}
+		// 键比对规则同 IsDocumentUnsupportedForChannelModel：SplitN 前两个冒号后精确比对，
+		// 容忍模型名本身含冒号，不能用 HasPrefix/HasSuffix。
+		parts := strings.SplitN(key, ":", 3)
+		if len(parts) != 3 {
+			continue
+		}
+		if parts[0] != channelUID || !strings.EqualFold(parts[2], model) {
+			continue
+		}
+		if time.Since(entry.DetectedAt) > channelCompatTTL {
+			continue
+		}
+		if state, ok := entry.Traits[TraitNoToolCallSupport]; ok && state.Enabled {
 			return true
 		}
 	}

@@ -1610,7 +1610,7 @@ func runDiscoveryProtocolProbe(ctx context.Context, channel *config.UpstreamConf
 					result.Error = err.Error()
 					return result
 				}
-				modelResult = executeModelTest(ctx, probeChannel, protocol, probeModel, timeout, "", cfgManager, -1, protocol, probeChannel.APIKeys[0], nil)
+				modelResult = executeModelTest(ctx, probeChannel, protocol, probeModel, timeout, "", cfgManager, -1, protocol, probeChannel.APIKeys[0], nil, false)
 				if !isDiscoveryRateLimited(modelResult) {
 					break
 				}
