@@ -572,6 +572,7 @@ SubscriptionsView ─ 内嵌 NewApiSubscriptionForm；billingDialog / syncDialog
 
 - 状态管理：`dialogStore`（`stores/dialog.ts`）持有 `showAddChannelModal`/`showEditChannelModal`/`editingChannel`/`showAddKeyModal`/确认对话框状态 + `confirm()` Promise 化封装。
 - 快捷键：对话框普遍 Esc 关闭、⌘/Ctrl+Enter 提交。
+- 多级对话框：对话框之上再展开新对话框时（如 EditChannelModal → 分组模型策略/Key 倍率、ChannelLogsDialog → AutopilotTraceDetailDialog），新对话框必须自带默认确认/取消快捷键（Esc 取消、⌘/Ctrl+Enter 确认），不得要求用户先关闭上层再操作底层；快捷键只作用于最上层对话框——全局 keydown 监听（`window`/`document`）须先确认自身处于栈顶（不存在更上层已打开的对话框）才响应，禁止一次按键同时关闭或提交多层对话框。
 - 后端交互统一经 `services/api.ts` 与 `services/autopilot-api.ts`。
 - 校验模式：本地 computed 校验 + Vuetify `formRef.validate()` 规则 + 内联 error alert。
 
