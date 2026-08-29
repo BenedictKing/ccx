@@ -801,10 +801,12 @@ test('compareCanonicalModels orders decimal marketing versions like grok 4.20 (2
   // 单数字次版本不受影响
   assert.ok(compareCanonicalModels('gpt-5.6', 'gpt-5.4') < 0)
   assert.ok(compareCanonicalModels('claude-opus-4.8', 'claude-opus-4.7') < 0)
-  // 回归不变量：现有 registry 全部 canonical 的排序与旧整数语义完全一致
-  //（引入小数比较只为 grok-4.20 这类多位营销版本，不得扰动任何存量顺序）
+  // 回归不变量：除 grok-4.20（新旧语义唯一刻意分歧者）外，其余全部 canonical
+  // 的排序与旧整数语义完全一致——引入小数比较不得扰动任何存量顺序
   const registry = readJson('../../shared/model-registry/ccx_model_registry.json')
-  const canonicals = registry.benchmarkProfiles.map(p => p.canonicalModel)
+  const canonicals = registry.benchmarkProfiles
+    .map(p => p.canonicalModel)
+    .filter(model => model !== 'grok-4.20')
   const oldIntegerCompare = (a, b) => {
     const parse = s => {
       const m = String(s).toLowerCase().match(/\d+(?:[.-]\d+)*/)
