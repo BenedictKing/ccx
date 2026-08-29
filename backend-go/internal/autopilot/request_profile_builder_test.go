@@ -24,7 +24,7 @@ func TestBuildRequestProfile(t *testing.T) {
 			name:      "明确的小型文本请求归类为 lightweight",
 			features:  RequestProfileFeatures{Model: "mimo-v2.5-pro", ChannelKind: "messages", Operation: "completion", EstTokens: 500, Complexity: TaskComplexityTrivial},
 			taskClass: TaskClassLightweight,
-			quality:   QualityTierLow, // mimo-v2.5-pro 常规口径 27.9 → low
+			quality:   QualityTierNormal, // mimo-v2.5-pro 校准 27.9 ≥ normalMin 27.0（2026-08-29 漂移，见 profiler_test）
 			context:   500,
 		},
 		{

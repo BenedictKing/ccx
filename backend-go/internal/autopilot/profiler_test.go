@@ -530,12 +530,14 @@ func TestDeriveQualityTier(t *testing.T) {
 			modelID: "glm-5.1",
 			want:    QualityTierHigh,
 		},
-		{
-			name:    "mimo-v2.5-pro（直测 27.9 < normalMin）→ low",
-			family:  ModelFamilyMiMo,
-			modelID: "mimo-v2.5-pro",
-			want:    QualityTierLow,
-		},
+	{
+		name:    "mimo-v2.5-pro（校准 27.9 ≥ normalMin 27.0）→ normal",
+		family:  ModelFamilyMiMo,
+		modelID: "mimo-v2.5-pro",
+		// 2026-08-29 基准刷新：deepseek-v4-flash 常规口径 26.99→28.51 填补低段断层，
+		// normalMin 28.74→27.03，校准分 27.93 随之从 low 翻入 normal（边界随数据分布浮动）
+		want:    QualityTierNormal,
+	},
 		{
 			name:    "deepseek-v4-pro（常规口径 31.1）→ normal",
 			family:  ModelFamilyDeepSeek,
