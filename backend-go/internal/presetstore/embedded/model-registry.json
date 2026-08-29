@@ -2331,6 +2331,51 @@
     },
     {
       "patterns": [
+        "(?:^|[-/])grok-4\\.20(?:-beta)?(?=$|@)"
+      ],
+      "provider": "xai",
+      "displayName": "Grok 4.20",
+      "description": "xAI high-performance model combining the lowest hallucination rate with strict prompt adherence and agentic tool calling. Context pricing doubles for requests exceeding 200K tokens.",
+      "contextWindowTokens": 1000000,
+      "capabilities": {
+        "reasoning": true,
+        "vision": true,
+        "toolCalls": true,
+        "structuredOutput": true
+      },
+      "pricing": {
+        "unit": "per_1m_tokens_usd",
+        "currency": "USD",
+        "inputCacheHitPrice": 0.2,
+        "inputCacheMissPrice": 1.25,
+        "outputPrice": 2.5,
+        "tiers": [
+          {
+            "label": "short_context",
+            "inputTokensUpTo": 199999,
+            "inputCacheHitPrice": 0.2,
+            "inputCacheMissPrice": 1.25,
+            "outputPrice": 2.5
+          },
+          {
+            "label": "long_context",
+            "inputTokensAbove": 199999,
+            "inputTokensUpTo": 1000000,
+            "inputCacheHitPrice": 0.4,
+            "inputCacheMissPrice": 2.5,
+            "outputPrice": 5
+          }
+        ]
+      },
+      "sources": [
+        "https://docs.x.ai/developers/models/grok-4.20",
+        "https://docs.x.ai/developers/pricing",
+        "https://benchlm.ai/models/grok-4-20-beta",
+        "https://artificialanalysis.ai/models/grok-4-20"
+      ]
+    },
+    {
+      "patterns": [
         "(?:^|[-/])grok-4\\.5(?=$|@)"
       ],
       "provider": "xai",

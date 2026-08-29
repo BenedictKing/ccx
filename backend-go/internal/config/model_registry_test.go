@@ -311,6 +311,9 @@ func TestResolveUpstreamCapability_NewAugust2026Models(t *testing.T) {
 		{model: "glm-5.2-200k", provider: "atomgit", context: 200000, maxOutput: 131072, toolCalls: true},
 		{model: "atomgit/glm-5.2-200k", provider: "atomgit", context: 200000, maxOutput: 131072, toolCalls: true},
 		{model: "grok-4.5", provider: "xai", context: 500000, maxOutput: 500000, vision: true, toolCalls: true, inputPrice: 2, outputPrice: 6},
+		// grok-4.20（官方 1M 上下文，2026-03 发布、4 月 GA）；未设独立输出上限
+		{model: "grok-4.20", provider: "xai", context: 1000000, maxOutput: 0, vision: true, toolCalls: true, inputPrice: 1.25, outputPrice: 2.5},
+		{model: "grok-4-20-beta", provider: "xai", context: 1000000, maxOutput: 0, vision: true, toolCalls: true, inputPrice: 1.25, outputPrice: 2.5},
 		{model: "muse-spark-1.1", provider: "meta", context: 1048576, maxOutput: 131072, vision: true, toolCalls: true, inputPrice: 1.25, outputPrice: 4.25},
 		{model: "muse-spark-1.2", provider: "meta", context: 1048576, maxOutput: 131072, vision: true, toolCalls: true, inputPrice: 1.25, outputPrice: 4.25},
 	}
@@ -373,6 +376,42 @@ func TestResolveUpstreamCapability_Grok46PricingTiers(t *testing.T) {
 	assertFloatPointerValue(t, long.InputCacheHitPrice, 1, "Pricing.Tiers[1].InputCacheHitPrice")
 	assertFloatPointerValue(t, long.InputCacheMissPrice, 4, "Pricing.Tiers[1].InputCacheMissPrice")
 	assertFloatPointerValue(t, long.OutputPrice, 12, "Pricing.Tiers[1].OutputPrice")
+}
+
+func TestResolveUpstreamCapability_Grok420PricingTiers(t *testing.T) {
+	// 官方定价：短上下文 $1.25/$0.20/$2.50，≥200K 全档翻倍（docs.x.ai/developers/pricing）
+	resolved := ResolveUpstreamCapability("grok-4.20", nil, nil)
+	if !resolved.Known || resolved.Source != "builtin" {
+		t.Fatalf("resolved = %+v, want builtin capability", resolved)
+	}
+	capability := resolved.Capability
+	if capability.ContextWindowTokens != 1000000 {
+		t.Fatalf("ContextWindowTokens = %d, want 1000000", capability.ContextWindowTokens)
+	}
+	if !capability.Capabilities["reasoning"] || !capability.Capabilities["structuredOutput"] {
+		t.Fatalf("Capabilities = %v, want reasoning and structuredOutput", capability.Capabilities)
+	}
+	if capability.Capabilities["webSearch"] {
+		t.Fatalf("Capabilities = %v, official model page does not list web search for grok-4.20", capability.Capabilities)
+	}
+	pricing := capability.Pricing
+	if pricing == nil || len(pricing.Tiers) != 2 {
+		t.Fatalf("Pricing = %+v, want two context tiers", pricing)
+	}
+	short := pricing.Tiers[0]
+	if short.InputTokensAbove != 0 || short.InputTokensUpTo != 199999 {
+		t.Fatalf("short tier bounds = (%d, %d), want (0, 199999)", short.InputTokensAbove, short.InputTokensUpTo)
+	}
+	assertFloatPointerValue(t, short.InputCacheHitPrice, 0.2, "Pricing.Tiers[0].InputCacheHitPrice")
+	assertFloatPointerValue(t, short.InputCacheMissPrice, 1.25, "Pricing.Tiers[0].InputCacheMissPrice")
+	assertFloatPointerValue(t, short.OutputPrice, 2.5, "Pricing.Tiers[0].OutputPrice")
+	long := pricing.Tiers[1]
+	if long.InputTokensAbove != 199999 || long.InputTokensUpTo != 1000000 {
+		t.Fatalf("long tier bounds = (%d, %d), want (199999, 1000000)", long.InputTokensAbove, long.InputTokensUpTo)
+	}
+	assertFloatPointerValue(t, long.InputCacheHitPrice, 0.4, "Pricing.Tiers[1].InputCacheHitPrice")
+	assertFloatPointerValue(t, long.InputCacheMissPrice, 2.5, "Pricing.Tiers[1].InputCacheMissPrice")
+	assertFloatPointerValue(t, long.OutputPrice, 5, "Pricing.Tiers[1].OutputPrice")
 }
 
 func TestResolveUpstreamCapability_GLM52RuntimeBuiltin(t *testing.T) {

@@ -88,6 +88,9 @@ export const BENCHLM_MODEL_MAP = {
   'gpt-5-4-mini': 'gpt-5.4-mini',
   'grok-4-5': 'grok-4.5',
   'grok-4-6': 'grok-4.6',
+  // benchlm 只收录 beta 榜单 slug（2026-03-10 发布）；官方已 GA，canonical 不带 beta。
+  // grok-4-20-multi-agent-beta 是多 agent 专用子形态（无总分），故意不映射。
+  'grok-4-20-beta': 'grok-4.20',
   'muse-spark-1-1': 'muse-spark-1.1',
   'muse-spark-1-2': 'muse-spark-1.2',
   'mimo-v2-5': 'mimo-v2.5',
@@ -222,6 +225,21 @@ function parseModelVersion(model) {
 // 预发布后缀权重：release(空) 最高，preview/beta/alpha/rc 等排在正式版之后。
 const PRERELEASE_TAGS = ['preview', 'beta', 'alpha', 'rc', 'pre', 'dev', 'nightly']
 
+/**
+ * 次版本段的十进制比较：本仓库 canonical 的版本号一律是十进制营销小数
+ * （grok-4.20 即 4.2，介于 4.3 与 4.1 之间），"20" 不是整数 20。
+ * 位数不同时右补零对齐（"20" vs "3" → "20" vs "30"），位数相同则与整数比较等价；
+ * 主版本段仍是普通整数（未来的 gpt-12 > gpt-5 不受影响）。
+ */
+function compareDecimalSegment(x, y) {
+  const sx = String(x)
+  const sy = String(y)
+  const len = Math.max(sx.length, sy.length)
+  const px = sx.padEnd(len, '0')
+  const py = sy.padEnd(len, '0')
+  return px < py ? -1 : px > py ? 1 : 0
+}
+
 function suffixRank(suffix) {
   if (!suffix) return -1 // 无后缀（正式版）排最前
   const idx = PRERELEASE_TAGS.findIndex(tag => suffix === tag || suffix.startsWith(tag + '-') || suffix.startsWith(tag + '.'))
@@ -230,18 +248,20 @@ function suffixRank(suffix) {
 
 /**
  * 版本感知的模型比较器：家族字典序 → 版本号降序 → 预发布后缀置后 → 其余后缀字典序。
- * 用于 registry benchmarkProfiles 与图表图例，保证 opus-5 排在 opus-4.8 前、preview 排在正式版后。
+ * 用于 registry benchmarkProfiles 与图表图例，保证 opus-5 排在 opus-4.8 前、preview 排在正式版后、
+ * grok-4.20（=4.2）排在 4.3 与 4.1 之间。
  */
 export function compareCanonicalModels(a, b) {
   const pa = parseModelVersion(a)
   const pb = parseModelVersion(b)
   if (pa.family !== pb.family) return pa.family.localeCompare(pb.family)
-  // 版本号降序：逐段比较，缺段视为 0
+  // 版本号降序：主版本段整数比较，次版本段十进制比较，缺段视为 0
   const len = Math.max(pa.nums.length, pb.nums.length)
   for (let i = 0; i < len; i++) {
     const x = pa.nums[i] ?? 0
     const y = pb.nums[i] ?? 0
-    if (x !== y) return y - x
+    if (x === y) continue
+    return i === 0 ? y - x : -compareDecimalSegment(x, y)
   }
   // 同版本：正式版（无后缀/非预发布后缀）优先，预发布后缀排后
   const ra = suffixRank(pa.suffix)
@@ -460,13 +480,14 @@ export function warnNewModelCandidates(names, modelMap, { source = 'unknown', ma
   return candidates
 }
 
-/** 逐段版本号比较（缺段视为 0），返回 >0 / 0 / <0 */
+/** 逐段版本号比较（缺段视为 0），返回 >0 / 0 / <0；次版本段与 compareCanonicalModels 一致按十进制比较 */
 function compareVersionArrays(a, b) {
   const len = Math.max(a.length, b.length)
   for (let i = 0; i < len; i++) {
     const x = a[i] ?? 0
     const y = b[i] ?? 0
-    if (x !== y) return x - y
+    if (x === y) continue
+    return i === 0 ? x - y : compareDecimalSegment(x, y)
   }
   return 0
 }

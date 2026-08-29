@@ -63,6 +63,9 @@ export const ARTIFICIAL_ANALYSIS_MODEL_MAP = {
   'gemini-3-6-flash': 'gemini-3.6-flash',
   'grok-4-5': 'grok-4.5',
   'grok-4-6': 'grok-4.6',
+  // AA v2 GA slug（2026-04-07）；-non-reasoning 变体经 splitEffortSuffix 折进同一 canonical，
+  // grok-4-20-0309 旧快照（定价 $2/$6 已过期）故意不映射
+  'grok-4-20': 'grok-4.20',
   // deepseek 系：AA composite/coding 证据补充（overallScore 仍归 benchlm 所有）
   'deepseek-v4-flash': 'deepseek-v4-flash',
   'deepseek-v4-pro': 'deepseek-v4-pro',

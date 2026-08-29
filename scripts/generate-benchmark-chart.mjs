@@ -326,6 +326,12 @@ function suffixRank(suffix) {
   const idx = PRERELEASE_TAGS.findIndex(tag => suffix === tag || suffix.startsWith(tag + '-') || suffix.startsWith(tag + '.'));
   return idx >= 0 ? idx : PRERELEASE_TAGS.length + 1;
 }
+// 次版本段的十进制比较（grok-4.20 = 4.2 < 4.3）：位数不同右补零对齐，主版本段仍是整数。
+function compareDecimalSegment(x, y) {
+  const px = String(x).padEnd(Math.max(String(x).length, String(y).length), '0');
+  const py = String(y).padEnd(Math.max(String(x).length, String(y).length), '0');
+  return px < py ? -1 : px > py ? 1 : 0;
+}
 function compareModels(a, b) {
   const pa = parseModelVersion(a);
   const pb = parseModelVersion(b);
@@ -341,7 +347,8 @@ function compareModels(a, b) {
   for (let i = 0; i < len; i++) {
     const x = pa.nums[i] ?? 0;
     const y = pb.nums[i] ?? 0;
-    if (x !== y) return y - x;
+    if (x === y) continue;
+    return i === 0 ? y - x : -compareDecimalSegment(x, y);
   }
   const ra = suffixRank(pa.suffix);
   const rb = suffixRank(pb.suffix);

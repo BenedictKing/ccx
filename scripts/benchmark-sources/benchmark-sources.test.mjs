@@ -4,6 +4,7 @@ import test from 'node:test'
 
 import {
   canonicalModelToPattern,
+  compareCanonicalModels,
   deepsweModelToPattern,
   detectNewModelCandidates,
   matchesAnyRegistryPattern,
@@ -131,8 +132,9 @@ test('new-model detection flags unmapped same-family higher versions only', () =
   }
   const candidates = detectNewModelCandidates(
     [
-      'grok-4-20-beta',        // 同家族更高版本 → 提示
+      'grok-4-7',              // 同家族更高版本 → 提示
       'grok-4-3',              // 同家族更低版本 → 忽略
+      'grok-4-20-beta',        // 十进制营销版本 4.20 = 4.2 < 4.6 → 忽略
       'grok-4-1-fast',         // 更低版本变体 → 忽略
       'grok-code-fast-1',      // 家族不同 → 忽略
       'claude-opus-4-6',       // 低于已映射 4.8 → 忽略
@@ -144,10 +146,10 @@ test('new-model detection flags unmapped same-family higher versions only', () =
   )
   assert.deepEqual(
     candidates.map(c => c.name),
-    ['grok-4-20-beta', 'claude-opus-5.5', 'gpt-6'],
+    ['grok-4-7', 'claude-opus-5.5', 'gpt-6'],
   )
   assert.equal(candidates[0].mappedBest, 'grok-4.6')
-  assert.equal(candidates[0].version, '4.20')
+  assert.equal(candidates[0].version, '4.7')
 })
 
 test('new-model detection expands provider prefixes and underscore variants', () => {
@@ -155,7 +157,7 @@ test('new-model detection expands provider prefixes and underscore variants', ()
     [
       'zai/glm-6',                    // provider/ 前缀剥离后命中 glm 家族 → 提示
       'openrouter/xiaomi/mimo-v3',    // 多级前缀逐段剥离后命中 → 提示
-      'google_grok-4-20',             // provider_ 前缀剥离后命中 → 提示
+      'google_grok-4-7',              // provider_ 前缀剥离后命中 → 提示
       'zai/glm-4',                    // 前缀剥离后版本更低 → 忽略
       'foo/grok-4-1',                 // 前缀剥离后版本更低 → 忽略
     ],
@@ -163,7 +165,7 @@ test('new-model detection expands provider prefixes and underscore variants', ()
   )
   assert.deepEqual(
     candidates.map(c => c.name),
-    ['zai/glm-6', 'openrouter/xiaomi/mimo-v3', 'google_grok-4-20'],
+    ['zai/glm-6', 'openrouter/xiaomi/mimo-v3', 'google_grok-4-7'],
   )
   assert.equal(candidates[0].family, 'glm')
   assert.equal(candidates[0].version, '6')
@@ -175,14 +177,20 @@ test('registry reverse-lookup recognizes known models across naming variants', (
     canonicalModelToPattern('gpt-5.6-sol'),        // 点号 pattern
     canonicalModelToPattern('claude-opus-5'),      // 含日期快照后缀
     canonicalModelToPattern('deepseek-v4-pro'),    // 含 -MMDD 别名后缀
+    // grok-4.20 手工注册的 pattern：beta 后缀兼容 + 点号/连字符双形态
+    '(?:^|[-/])grok-4\\.20(?:-beta)?(?=$|@)',
   ]
   assert.equal(matchesAnyRegistryPattern('gpt-5-6-sol', patterns), true)   // 连字符 slug
   assert.equal(matchesAnyRegistryPattern('gpt-5.6-sol', patterns), true)   // 点号 slug
   assert.equal(matchesAnyRegistryPattern('zai/gpt-5.6-sol', patterns), true) // provider 前缀
   assert.equal(matchesAnyRegistryPattern('claude-opus-5-20260101', patterns), true) // 日期快照
   assert.equal(matchesAnyRegistryPattern('deepseek-v4-pro-0813', patterns), true)  // 日期别名
+  assert.equal(matchesAnyRegistryPattern('grok-4-20', patterns), true)     // 连字符 beta 前形态
+  assert.equal(matchesAnyRegistryPattern('grok-4.20', patterns), true)     // 点号形态
+  assert.equal(matchesAnyRegistryPattern('grok-4-20-beta', patterns), true) // beta 后缀
+  assert.equal(matchesAnyRegistryPattern('grok-4-20-0309', patterns), false) // 日期快照不匹配
   assert.equal(matchesAnyRegistryPattern('claude-mythos-5', patterns), false)      // 全新家族
-  assert.equal(matchesAnyRegistryPattern('grok-4-20-beta', patterns), false)
+  assert.equal(matchesAnyRegistryPattern('grok-5', patterns), false)
 })
 
 test('reportUnmappedAgainstRegistry splits registered-but-unmapped from unrecognized models', () => {
@@ -197,10 +205,10 @@ test('reportUnmappedAgainstRegistry splits registered-but-unmapped from unrecogn
     'claude-mythos-5',
     'claude-opus-5-20260101',
     'claude-mythos-6',
-    'grok-4-20-beta',
+    'grok-5',
   ], patterns, { mapName: 'TEST_MAP', maxListed: 10 })
   assert.deepEqual(unmapped.sort(), ['claude-mythos-5', 'claude-opus-5-20260101'])
-  assert.deepEqual(unrecognized.sort(), ['claude-mythos-6', 'grok-4-20-beta'])
+  assert.deepEqual(unrecognized.sort(), ['claude-mythos-6', 'grok-5'])
 
   // 大清单按根家族聚合，claude 家族的 newest 代表应是版本最高的 mythos-6
   const many = ['claude-3-5-haiku', 'claude-3-7-sonnet-thinking', 'claude-mythos-6']
@@ -220,13 +228,14 @@ test('new-model detection rejects date snapshots, parameter sizes and legacy nam
       'Qwen3-235B-A22B',       // 参数量段落掉后等版本 → 忽略
       'Qwen3.5-397B-A22B',     // 参数量段落掉后 [3,5] > [3] → 提示
       'gpt-7',                 // 主版本跳两代 → 忽略（安全网只覆盖同代与下一代）
-      'grok-4-20-beta',        // 同代更高版本 → 提示
+      'grok-4-7',              // 同代更高版本 → 提示
+      'grok-4-20-beta',        // 十进制 4.20 = 4.2 < 4.6 → 忽略（营销版本非整数）
     ],
     LITELLM_MODEL_MAP,
   )
   assert.deepEqual(
     candidates.map(c => c.name),
-    ['Qwen3.5-397B-A22B', 'grok-4-20-beta'],
+    ['Qwen3.5-397B-A22B', 'grok-4-7'],
   )
   assert.equal(candidates[0].version, '3.5')
 })
@@ -782,6 +791,60 @@ test('deepswe glm-5.3-flash stays mapped (2026-08-26 release-day regression)', (
 
 test('benchlm glm-5.3-flash stays mapped (2026-08-29 audit)', () => {
   assert.equal(BENCHLM_MODEL_MAP['glm-5-3-flash'], 'glm-5.3-flash')
+})
+
+test('compareCanonicalModels orders decimal marketing versions like grok 4.20 (2026-08-29 registration)', () => {
+  // 十进制语义：grok-4.20 = 4.2，落在 4.3 与 4.1 之间；主版本仍是整数比较
+  const grokSeries = ['grok-4.1', 'grok-4.20', 'grok-4.3', 'grok-4.5', 'grok-4.6', 'grok-5']
+  assert.deepEqual([...grokSeries].sort(compareCanonicalModels),
+    ['grok-5', 'grok-4.6', 'grok-4.5', 'grok-4.3', 'grok-4.20', 'grok-4.1'])
+  // 单数字次版本不受影响
+  assert.ok(compareCanonicalModels('gpt-5.6', 'gpt-5.4') < 0)
+  assert.ok(compareCanonicalModels('claude-opus-4.8', 'claude-opus-4.7') < 0)
+  // 回归不变量：现有 registry 全部 canonical 的排序与旧整数语义完全一致
+  //（引入小数比较只为 grok-4.20 这类多位营销版本，不得扰动任何存量顺序）
+  const registry = readJson('../../shared/model-registry/ccx_model_registry.json')
+  const canonicals = registry.benchmarkProfiles.map(p => p.canonicalModel)
+  const oldIntegerCompare = (a, b) => {
+    const parse = s => {
+      const m = String(s).toLowerCase().match(/\d+(?:[.-]\d+)*/)
+      return m ? { family: s.slice(0, m.index).replace(/[-/]+$/, ''), nums: m[0].split(/[.-]/).map(Number) } : { family: s, nums: [] }
+    }
+    const pa = parse(a)
+    const pb = parse(b)
+    if (pa.family !== pb.family) return pa.family.localeCompare(pb.family)
+    const len = Math.max(pa.nums.length, pb.nums.length)
+    for (let i = 0; i < len; i++) {
+      const x = pa.nums[i] ?? 0
+      const y = pb.nums[i] ?? 0
+      if (x !== y) return y - x
+    }
+    return 0
+  }
+  assert.deepEqual(
+    [...canonicals].sort(compareCanonicalModels),
+    [...canonicals].sort(oldIntegerCompare),
+  )
+})
+
+test('grok 4.20 stays mapped in benchlm and AA (2026-08-29 registration)', () => {
+  // benchlm 榜单 slug 带 beta；AA v2 GA slug 无 beta
+  assert.equal(BENCHLM_MODEL_MAP['grok-4-20-beta'], 'grok-4.20')
+  assert.equal(ARTIFICIAL_ANALYSIS_MODEL_MAP['grok-4-20'], 'grok-4.20')
+  // non-reasoning 变体折进同一 canonical，不污染 default 复合指数
+  assert.deepEqual(resolveArtificialAnalysisSlug('grok-4-20-non-reasoning'),
+    { canonical: 'grok-4.20', effort: 'default', selectionBasis: 'non_reasoning' })
+  // 0309 旧快照（$2/$6 定价已过期）与 multi-agent 子形态故意不映射
+  assert.equal(resolveArtificialAnalysisSlug('grok-4-20-0309'), null)
+  assert.equal(resolveArtificialAnalysisSlug('grok-4-20-0309-non-reasoning'), null)
+  assert.equal(BENCHLM_MODEL_MAP['grok-4-20-multi-agent-beta'], undefined)
+  // registry 能力条目 pattern：beta 后缀兼容 + 点号/连字符双形态
+  const registry = readJson('../../shared/model-registry/ccx_model_registry.json')
+  const entry = registry.upstreamCapabilities.find(e => e.displayName === 'Grok 4.20')
+  assert.ok(entry, 'Grok 4.20 capability entry missing')
+  assert.ok(matchesAnyRegistryPattern('grok-4-20-beta', entry.patterns))
+  assert.ok(matchesAnyRegistryPattern('grok-4.20', entry.patterns))
+  assert.equal(entry.contextWindowTokens, 1000000)
 })
 
 test('benchlm dated deepseek variants and gemini-3-6-flash stay mapped (2026-08-23 regressions)', () => {
