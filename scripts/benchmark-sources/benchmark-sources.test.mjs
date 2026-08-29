@@ -743,6 +743,14 @@ test('grok-4.6 / kimi-k3 / glm-5.3 stay mapped in dradar and litellm (2026-08-20
   assert.equal(LITELLM_MODEL_MAP['xai/grok-4.6'], 'grok-4.6')
 })
 
+test('newly published dradar model variants stay mapped (2026-08-29 audit)', () => {
+  // CodexRadar 原始名与 registry canonical 可能混用点号、连字符或实验前缀。
+  assert.equal(DRADAR_MODEL_MAP['gemini-3.7-flash'], 'gemini-3.7-flash')
+  assert.equal(DRADAR_MODEL_MAP['glm-5.3-flash'], 'glm-5.3-flash')
+  assert.equal(DRADAR_MODEL_MAP['glm-5-3-flash'], 'glm-5.3-flash')
+  assert.equal(DRADAR_MODEL_MAP['dsh-deepseek-v4-flash-vision-exp'], 'deepseek-v4-flash')
+})
+
 test('deepswe glm-5.3-flash stays mapped (2026-08-26 release-day regression)', () => {
   // deepswe UI 渲染成点号 glm-5.3-flash，API 数据 slug 是连字符 glm-5-3-flash；
   // 映射键必须以 API 原始 slug 为准

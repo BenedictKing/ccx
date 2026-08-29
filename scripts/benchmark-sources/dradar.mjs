@@ -34,6 +34,8 @@ export const DRADAR_MODEL_MAP = {
   'claude-sonnet-4-6': 'claude-sonnet-4-6',
   'claude-haiku-4-5': 'claude-haiku-4.5',
   'glm-5.3': 'glm-5.3',
+  'glm-5.3-flash': 'glm-5.3-flash',
+  'glm-5-3-flash': 'glm-5.3-flash',
   'glm-5-3': 'glm-5.3',
   'glm-5.2': 'glm-5.2',
   'glm-5-2': 'glm-5.2',
@@ -41,6 +43,7 @@ export const DRADAR_MODEL_MAP = {
   'k3': 'kimi-k3',
   'kimi-k3': 'kimi-k3',
   'gemini-3-7-flash': 'gemini-3.7-flash',
+  'gemini-3.7-flash': 'gemini-3.7-flash',
   'gemini-3-5-flash': 'gemini-3.5-flash',
   'gemini-3-1-pro': 'gemini-3.1-pro',
   'gemini-3-flash': 'gemini-3-flash',
@@ -51,6 +54,7 @@ export const DRADAR_MODEL_MAP = {
   'deepseek-v4-flash': 'deepseek-v4-flash',
   'deepseek-v4-pro': 'deepseek-v4-pro',
   'dsh-deepseek-v4-flash': 'deepseek-v4-flash',
+  'dsh-deepseek-v4-flash-vision-exp': 'deepseek-v4-flash',
   'dsh-deepseek-v4-pro': 'deepseek-v4-pro',
 }
 
