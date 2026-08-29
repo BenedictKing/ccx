@@ -309,6 +309,19 @@ function deduplicateComparisonRows(rows) {
  * 生成图表输入：能力-成本散点展示有成本的来源，多源比较图展示所有 benchmark 来源。
  * 统一将数值舍入到合理精度，避免全精度浮点造成 JSON 输出噪声。
  */
+/**
+ * 成本行按 (model|effort|source) 去重：live 源（deepswe 榜单 / dradar 聚合）优先，
+ * registry 证据行只是 live 源缺席时的回填（成本已舍入到 2 位小数），两者并存会让
+ * 同一点出现成对行——轨迹折线来回抖、表格重复、Pareto 前沿吃到重复点。
+ */
+function preferLiveCostRows(liveRows, registryRows) {
+  const liveKeys = new Set(liveRows.map(row => `${row.model}|${row.effort}|${row.source}`))
+  return [
+    ...liveRows,
+    ...registryRows.filter(row => !liveKeys.has(`${row.model}|${row.effort}|${row.source}`)),
+  ]
+}
+
 export function buildBenchmarkVisualizationData({
   deepsweProfiles = {},
   deepsweLeaderboard = null,
@@ -321,11 +334,10 @@ export function buildBenchmarkVisualizationData({
   benchmarkProfiles = {},
 } = {}) {
   const { qualityScores, qualityTiers } = deriveQualityMetadata(benchmarkProfiles)
-  const data = [
+  const data = preferLiveCostRows([
     ...extractDeepsweCostRows(deepsweLeaderboard, modelMap, models),
     ...extractDradarCostRows(dradarProfiles, models),
-    ...extractRegistryCostRows(benchmarkProfiles, models),
-  ].sort((a, b) => (
+  ], extractRegistryCostRows(benchmarkProfiles, models)).sort((a, b) => (
     a.source.localeCompare(b.source) ||
     a.model.localeCompare(b.model) ||
     (EFFORT_ORDER.get(a.effort) ?? 99) - (EFFORT_ORDER.get(b.effort) ?? 99)

@@ -647,6 +647,29 @@ test('visualization combines DeepSWE, BenchLM and CodexRadar sources', () => {
   assert.match(html, /BenchLM\.ai/)
 })
 
+test('visualization dedupes cost rows preferring live sources over registry backfill', () => {
+  const visualization = buildBenchmarkVisualizationData({
+    // live dradar：精确成本 0.1219（4 位小数）
+    dradarProfiles: { 'deepseek-v4-flash': {
+      efforts: { high: { passRate: 0.422 } },
+      costData: { high: { meanCost: 0.1219, medianCost: 0.1219 } },
+    } },
+    // registry 回填：同 (model|effort|CodexRadar) 的舍入成本行，应被 live 行压掉
+    benchmarkProfiles: { 'deepseek-v4-flash': { canonicalModel: 'deepseek-v4-flash', benchmarkEvidence: [
+      { benchmark: 'codexradar', benchmarkVersion: 'v1', domain: 'coding', metric: 'pass_at_1', rawValue: 0.422, effort: 'high', costUsd: 0.12 },
+      // registry 独有 effort（live 缺席）→ 回填保留
+      { benchmark: 'codexradar', benchmarkVersion: 'v1', domain: 'coding', metric: 'pass_at_1', rawValue: 0.5, effort: 'low', costUsd: 0.3 },
+    ] } },
+  })
+
+  assert.equal(visualization.data.length, 2)
+  const highRow = visualization.data.find(row => row.effort === 'high')
+  assert.equal(highRow.source, 'CodexRadar')
+  assert.equal(highRow.mean_cost, 0.1219)
+  const lowRow = visualization.data.find(row => row.effort === 'low')
+  assert.equal(lowRow.mean_cost, 0.3)
+})
+
 test('quality score calibration keeps low-gain models below stronger ones', () => {
   const evidence = (rawValue, effort, costUsd) => ({
     benchmark: 'deepswe',
