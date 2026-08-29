@@ -684,6 +684,7 @@ func (p *ResponsesProvider) HandleStreamResponse(body io.ReadCloser) (<-chan str
 		latestCacheCreation5mTokens := 0
 		latestCacheCreation1hTokens := 0
 		latestCacheTTL := ""
+		latestModel := "" // 上游 response.created/completed 自报的模型名（识别厂商侧隐式重定向）
 		stopReason := "end_turn"
 		emittedAnyConvertedEvent := false
 		unknownEventTypes := map[string]int{}
@@ -697,7 +698,7 @@ func (p *ResponsesProvider) HandleStreamResponse(body io.ReadCloser) (<-chan str
 
 		ensureMessageStart := func() {
 			if !messageStartSent {
-				eventChan <- buildMessageStartEvent("responses")
+				eventChan <- buildMessageStartEvent(firstNonEmpty(latestModel, "responses"))
 				messageStartSent = true
 				emittedAnyConvertedEvent = true
 			}
@@ -898,6 +899,13 @@ func (p *ResponsesProvider) HandleStreamResponse(body io.ReadCloser) (<-chan str
 					currentToolArgs.Reset()
 					currentToolIndex = -1
 				}
+			case "response.created", "response.in_progress":
+				// 上游自报模型名（厂商隐式重定向观测）：仅提取记录，不改变流转
+				if response, _ := data["response"].(map[string]interface{}); response != nil {
+					if model, _ := response["model"].(string); model != "" {
+						latestModel = model
+					}
+				}
 			case "response.failed", "response.error", "error":
 				// 上游以 200 + SSE 形式返回错误体（new-api 等常见）。转成 Claude error 事件，
 				// 让下游识别拉黑条件并给出精确诊断，而非被笼统判为空流。
@@ -908,6 +916,9 @@ func (p *ResponsesProvider) HandleStreamResponse(body io.ReadCloser) (<-chan str
 				}
 			case "response.completed", "response.incomplete":
 				response, _ := data["response"].(map[string]interface{})
+				if model, _ := response["model"].(string); model != "" {
+					latestModel = model
+				}
 				usage, _ := response["usage"].(map[string]interface{})
 				if v, ok := usage["input_tokens"].(float64); ok {
 					latestInputTokens = int(v)

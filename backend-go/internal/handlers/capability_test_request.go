@@ -433,27 +433,27 @@ func getCapabilityStreamProvider(protocol string) providers.Provider {
 
 // ============== 流式响应检测 ==============
 
-func sendAndCheckStream(ctx context.Context, channel *config.UpstreamConfig, req *http.Request, protocol string) (bool, bool, int, []byte, error) {
+func sendAndCheckStream(ctx context.Context, channel *config.UpstreamConfig, req *http.Request, protocol string) (bool, bool, int, []byte, string, error) {
 	envCfg := config.NewEnvConfig()
 	targetProtocol := targetProtocolForCapabilityProtocol(protocol)
 	apiType := channelKindToApiType(targetProtocol)
 	resp, err := common.SendRequest(req, channel, envCfg, true, apiType)
 	if err != nil {
-		return false, false, 0, nil, err
+		return false, false, 0, nil, "", err
 	}
 	defer errutil.IgnoreDeferred(resp.Body.Close)
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		common.LogUpstreamResponse(nil, resp, bodyBytes, envCfg, apiType)
-		return false, false, resp.StatusCode, bodyBytes, fmt.Errorf("HTTP %d", resp.StatusCode)
+		return false, false, resp.StatusCode, bodyBytes, "", fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 
 	common.LogUpstreamResponseHeaders(nil, resp, envCfg, apiType)
 
 	provider := getCapabilityStreamProvider(targetProtocol)
 	if provider == nil {
-		return false, false, resp.StatusCode, nil, fmt.Errorf("unsupported protocol provider: %s", protocol)
+		return false, false, resp.StatusCode, nil, "", fmt.Errorf("unsupported protocol provider: %s", protocol)
 	}
 
 	responseLogBuffer := common.NewLimitedLogBuffer(common.MaxUpstreamResponseLogBytes)
@@ -467,7 +467,7 @@ func sendAndCheckStream(ctx context.Context, channel *config.UpstreamConfig, req
 	eventChan, errChan, err := provider.HandleStreamResponse(io.NopCloser(bodyReader))
 	if err != nil {
 		logFailureResponseBody()
-		return false, false, resp.StatusCode, nil, err
+		return false, false, resp.StatusCode, nil, "", err
 	}
 
 	type streamResult struct {
@@ -495,38 +495,41 @@ func sendAndCheckStream(ctx context.Context, channel *config.UpstreamConfig, req
 	case result = <-doneCh:
 	case <-readCtx.Done():
 		logFailureResponseBody()
-		return false, false, resp.StatusCode, nil, fmt.Errorf("流式响应读取超时")
+		return false, false, resp.StatusCode, nil, "", fmt.Errorf("流式响应读取超时")
 	}
 
 	if result.err != nil {
 		logFailureResponseBody()
-		return false, false, resp.StatusCode, nil, result.err
+		return false, false, resp.StatusCode, nil, "", result.err
 	}
 
 	if result.preflight == nil {
 		logFailureResponseBody()
-		return false, false, resp.StatusCode, nil, fmt.Errorf("流式响应预检失败")
+		return false, false, resp.StatusCode, nil, "", fmt.Errorf("流式响应预检失败")
 	}
 
 	if result.preflight.IsEmpty {
 		logFailureResponseBody()
 		if result.preflight.Diagnostic != "" {
-			return false, false, 0, nil, fmt.Errorf("上游返回空响应 (%s)", result.preflight.Diagnostic)
+			return false, false, 0, nil, "", fmt.Errorf("上游返回空响应 (%s)", result.preflight.Diagnostic)
 		}
-		return false, false, 0, nil, common.ErrEmptyStreamResponse
+		return false, false, 0, nil, "", common.ErrEmptyStreamResponse
 	}
 
 	if isTimedOutPreflightResult(result.preflight) {
 		logFailureResponseBody()
-		return false, false, 0, nil, fmt.Errorf("流式响应预检超时，未收到任何 SSE 事件")
+		return false, false, 0, nil, "", fmt.Errorf("流式响应预检超时，未收到任何 SSE 事件")
 	}
+
+	// 提取上游响应自报的模型名（识别厂商侧隐式模型重定向）
+	upstreamModel := common.ExtractUpstreamModelFromEvents(result.preflight.BufferedEvents)
 
 	go func(eventChan <-chan string) {
 		for range eventChan {
 		}
 	}(eventChan)
 
-	return true, true, resp.StatusCode, nil, nil
+	return true, true, resp.StatusCode, nil, upstreamModel, nil
 }
 
 func isTimedOutPreflightResult(preflight *common.StreamPreflightResult) bool {

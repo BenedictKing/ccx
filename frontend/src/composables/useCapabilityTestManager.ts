@@ -29,6 +29,9 @@ const capabilityTestJobId = ref('')
 const capabilityPollers = ref<Record<string, ReturnType<typeof setInterval>>>({})
 const capabilityTestJob = ref<CapabilityTestJob | null>(null)
 const capabilityTestRpm = ref(30)
+const capabilityUseChannelModels = ref(false) // 以渠道认可的模型列表为探测范围
+const capabilityTestChannelMapping = ref<Record<string, string>>({}) // 当前渠道 ModelMapping（创建映射动作用）
+const capabilityTestChannelSupportedModels = ref<string[]>([]) // 当前渠道 SupportedModels（源模型名建议）
 const capabilityTestPreviousJobId = ref('') // 记录上一次的 jobId，用于复用成功结果
 const capabilityRetryPendingUntil = ref<Record<string, number>>({})
 
@@ -505,6 +508,8 @@ const testChannelCapability = async (target: number | Channel) => {
   capabilityTestChannelId.value = channelId
   capabilityTestChannelType.value = channelType
   capabilityTestSourceTab.value = sourceTab
+  capabilityTestChannelMapping.value = { ...(channel.modelMapping ?? {}) }
+  capabilityTestChannelSupportedModels.value = channel.supportedModels ?? []
 
   if (dialogStore.showAddChannelModal) {
     dialogStore.closeAddChannelModal()
@@ -573,7 +578,8 @@ const handleTestCapabilityProtocol = async (protocol: string, models?: string[])
         previousJobId,
         rpm: capabilityTestRpm.value,
         sourceTab: capabilityTestSourceTab.value,
-        models
+        models,
+        useChannelModels: capabilityUseChannelModels.value && !models?.length
       }
     )
     capabilityTestJobId.value = startResp.jobId
@@ -734,10 +740,39 @@ const handleCopyToTab = async (targetProtocol: string, serviceProtocol = targetP
   }
 }
 
+// createCapabilityModelMapping 把「源模型名 → 实测真实模型」写入渠道 ModelMapping（upsert 语义）
+const createCapabilityModelMapping = async (sourcePattern: string, targetModel: string): Promise<boolean> => {
+  if (capabilityTestChannelId.value === null) return false
+  const id = capabilityTestChannelId.value
+  try {
+    switch (capabilityTestChannelType.value) {
+      case 'chat':
+        await api.updateChatChannelModelMapping(id, sourcePattern, targetModel, '')
+        break
+      case 'gemini':
+        await api.updateGeminiChannelModelMapping(id, sourcePattern, targetModel, '')
+        break
+      case 'responses':
+        await api.updateResponsesChannelModelMapping(id, sourcePattern, targetModel, '')
+        break
+      default:
+        await api.updateChannelModelMapping(id, sourcePattern, targetModel, '')
+        break
+    }
+    capabilityTestChannelMapping.value = { ...capabilityTestChannelMapping.value, [sourcePattern]: targetModel }
+    showToast(t('capability.mappingCreated', { source: sourcePattern, target: targetModel }), 'success')
+    return true
+  } catch (error) {
+    showToast(t('toast.capabilityFailed', { message: error instanceof Error ? error.message : t('system.unknown') }), 'error')
+    return false
+  }
+}
+
   return {
     showCapabilityTestDialog, capabilityTestChannelName, capabilityTestChannelId,
     capabilityTestChannelType, capabilityTestSourceTab, capabilityTestDialogRef,
     capabilityTestJobId, capabilityPollers, capabilityTestJob, capabilityTestRpm,
+    capabilityUseChannelModels, capabilityTestChannelMapping, capabilityTestChannelSupportedModels,
     capabilityTestPreviousJobId, capabilityRetryPendingUntil,
     isCapabilityChannelKind, capabilityPlaceholderModels, getPlaceholderModelsForProtocol,
     capabilityBaseProtocolOrder, capabilityNativeServiceTypeByProtocol,
@@ -752,7 +787,7 @@ const handleCopyToTab = async (targetProtocol: string, serviceProtocol = targetP
     stopAllCapabilityPolling, startCapabilityPolling, updateCapabilityJob,
     getCapabilityPreviousJobId, testChannelCapability, handleTestCapabilityProtocol,
     handleTestCapabilityProtocolWithModels, handleCancelCapabilityTest,
-    handleRetryCapabilityModel, handleCopyToTab,
+    handleRetryCapabilityModel, handleCopyToTab, createCapabilityModelMapping,
   }
 }
 

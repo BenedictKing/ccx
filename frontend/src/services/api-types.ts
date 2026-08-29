@@ -492,6 +492,7 @@ export interface StartCapabilityTestOptions {
   rpm?: number
   sourceTab?: string
   models?: string[]
+  useChannelModels?: boolean // 以渠道认可的模型列表（上游清单/管控面）为探测范围
 }
 
 export type CapabilityLifecycle = 'pending' | 'active' | 'done' | 'cancelled'
@@ -534,6 +535,7 @@ export interface CapabilityJobProgress {
 export interface CapabilityModelJobResult {
   model: string
   actualModel?: string // 复合协议：经过 ModelMapping 后实际发送给上游的模型名
+  upstreamModel?: string // 上游响应自报的模型名（识别厂商侧隐式重定向）
   status: CapabilityModelJobStatus
   lifecycle: CapabilityLifecycle
   outcome: CapabilityOutcome
@@ -601,6 +603,7 @@ export interface CapabilityTestJob {
 export interface RedirectModelResult {
   probeModel: string      // 原生探测模型名
   actualModel: string     // ModelMapping 后实际发给上游的模型名
+  upstreamModel?: string  // 上游响应自报的模型名（识别厂商侧隐式重定向）
   success: boolean
   latency: number
   streamingSupported?: boolean
@@ -627,6 +630,7 @@ export interface CapabilitySnapshot {
 export interface ModelTestResult {
   model: string
   actualModel?: string
+  upstreamModel?: string // 上游响应自报的模型名（识别厂商侧隐式重定向）
   success: boolean
   latency: number
   streamingSupported: boolean

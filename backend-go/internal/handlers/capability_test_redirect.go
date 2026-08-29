@@ -143,6 +143,7 @@ func runRedirectVerification(ctx context.Context, channel *config.UpstreamConfig
 		capabilityJobs.update(jobID, func(job *CapabilityTestJob) {
 			updateCapabilityJobModelResultsByActualModel(job, virtualProtocol, rt.ActualModel, modelStatus, ModelTestResult{
 				ActualModel:          rt.ActualModel,
+				UpstreamModel:        result.UpstreamModel,
 				Success:              result.Success,
 				Latency:              result.Latency,
 				StreamingSupported:   result.StreamingSupported,
@@ -180,6 +181,7 @@ func runRedirectVerification(ctx context.Context, channel *config.UpstreamConfig
 						updateCapabilityJobModelResult(job, virtualProtocol, job.Tests[i].ModelResults[j].Model, modelStatus, ModelTestResult{
 							Model:                job.Tests[i].ModelResults[j].Model,
 							ActualModel:          actualModel,
+							UpstreamModel:        result.UpstreamModel,
 							Success:              result.Success,
 							Latency:              result.Latency,
 							StreamingSupported:   result.StreamingSupported,
@@ -277,8 +279,9 @@ func executeRedirectModelTest(ctx context.Context, channel *config.UpstreamConfi
 	startTime := time.Now()
 	log.Printf("[RedirectTest-Model] 渠道 %s 启动重定向测试 (探测: %s → 实际: %s)", channel.Name, probeModel, actualModel)
 
-	success, streamingSupported, statusCode, respBody, sendErr := sendAndCheckStream(reqCtx, channel, req, protocol)
+	success, streamingSupported, statusCode, respBody, upstreamModel, sendErr := sendAndCheckStream(reqCtx, channel, req, protocol)
 	result.Latency = time.Since(startTime).Milliseconds()
+	result.UpstreamModel = upstreamModel
 	result.TestedAt = time.Now().Format(time.RFC3339Nano)
 
 	requestURL := req.URL.String()
@@ -395,6 +398,7 @@ func updateCapabilityJobModelResult(job *CapabilityTestJob, protocol, model stri
 			}
 			job.Tests[i].ModelResults[j].Status = status
 			job.Tests[i].ModelResults[j].ActualModel = result.ActualModel
+			job.Tests[i].ModelResults[j].UpstreamModel = result.UpstreamModel
 			job.Tests[i].ModelResults[j].Success = result.Success
 			job.Tests[i].ModelResults[j].Latency = result.Latency
 			job.Tests[i].ModelResults[j].StreamingSupported = result.StreamingSupported

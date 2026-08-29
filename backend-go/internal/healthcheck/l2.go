@@ -166,7 +166,7 @@ func (m *Manager) probeOneModel(
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), policy.Timeout)
-	success, _, statusCode, respBody, sendErr := handlers.SendHealthCheckL2Stream(ctx, &probeChannel, req.WithContext(ctx), channelType)
+	success, _, statusCode, respBody, upstreamModel, sendErr := handlers.SendHealthCheckL2Stream(ctx, &probeChannel, req.WithContext(ctx), channelType)
 	cancel()
 
 	rec.LatencyMs = time.Since(start).Milliseconds()
@@ -176,6 +176,10 @@ func (m *Manager) probeOneModel(
 		rec.LastStatus = StatusOK
 		rec.ConsecutiveFailures = 0
 		rec.Detail = "model=" + model
+		// 上游自报模型与请求模型不一致时记录，用于观测厂商侧隐式模型重定向
+		if upstreamModel != "" && upstreamModel != model {
+			rec.Detail += " upstream=" + upstreamModel
+		}
 	case statusCode == 401 || statusCode == 403:
 		rec.LastStatus = StatusAuthFailed
 		rec.ConsecutiveFailures = prevFailures + 1

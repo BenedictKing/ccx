@@ -78,6 +78,22 @@
                 />
               </label>
 
+              <v-tooltip :text="t('capability.useChannelModelsHint')" location="top" content-class="ccx-tooltip">
+                <template #activator="{ props: toggleProps }">
+                  <label v-bind="toggleProps" class="capability-channel-models-toggle">
+                    <v-switch
+                      :model-value="useChannelModels"
+                      density="compact"
+                      hide-details
+                      color="primary"
+                      class="capability-channel-models-switch"
+                      @update:model-value="value => emit('update:useChannelModels', Boolean(value))"
+                    />
+                    <span class="text-caption">{{ t('capability.useChannelModels') }}</span>
+                  </label>
+                </template>
+              </v-tooltip>
+
               <span v-if="job?.progress?.totalModels && isJobActiveLike" class="text-caption text-medium-emphasis">
                 {{ t('capability.progressSummary', { done: job.progress.completedModels, total: job.progress.totalModels }) }}
               </span>
@@ -142,6 +158,7 @@
                 :show-label="false"
                 :retry-enabled="!isProtocolBusy(test)"
                 @retry-model="handleRetryModel"
+                @create-mapping="handleCreateMapping"
               />
             </div>
           </div>
@@ -258,6 +275,7 @@
                         :show-label="false"
                         :retry-enabled="!isProtocolBusy(test)"
                         @retry-model="handleRetryModel"
+                        @create-mapping="handleCreateMapping"
                       />
                     </div>
                   </td>
@@ -319,6 +337,45 @@
       </v-card-text>
     </v-card>
   </v-dialog>
+
+  <!-- 创建模型映射对话框：把源模型名显式重定向到探测到的真实模型 -->
+  <v-dialog v-model="mappingDialogOpen" max-width="480">
+    <v-card rounded="xl">
+      <v-card-title class="d-flex align-center ga-2 pa-4">
+        <v-icon color="primary">mdi-link-plus</v-icon>
+        <span class="dialog-title">{{ t('capability.createMappingTitle') }}</span>
+      </v-card-title>
+      <v-divider />
+      <v-card-text class="pa-4">
+        <div class="text-body-2 text-medium-emphasis mb-3">
+          {{ t('capability.createMappingDesc', { target: mappingTarget }) }}
+        </div>
+        <v-combobox
+          v-model="mappingSource"
+          :items="mappingSourceSuggestions"
+          :label="t('capability.mappingSourceLabel')"
+          :placeholder="t('capability.mappingSourcePlaceholder')"
+          variant="outlined"
+          density="comfortable"
+          hide-details="auto"
+          autofocus
+        />
+        <v-alert v-if="existingMappingTarget" type="warning" variant="tonal" density="compact" class="mt-3">
+          {{ t('capability.mappingOverwriteHint', { source: mappingSource.trim(), current: existingMappingTarget }) }}
+        </v-alert>
+        <div class="text-caption text-medium-emphasis mt-3">
+          {{ t('capability.mappingSupportedModelsHint') }}
+        </div>
+      </v-card-text>
+      <v-card-actions class="pa-4 pt-0">
+        <v-spacer />
+        <v-btn variant="text" @click="mappingDialogOpen = false">{{ t('app.actions.cancel') }}</v-btn>
+        <v-btn color="primary" variant="flat" :disabled="!mappingSource.trim()" @click="submitCreateMapping">
+          {{ t('capability.createMappingConfirm') }}
+        </v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
 </template>
 
 <script setup lang="ts">
@@ -330,6 +387,7 @@ import type {
 import { useI18n } from '../i18n'
 import CapabilityModelResults from './CapabilityModelResults.vue'
 import capabilityProbeSchema from '../../../shared/capability-probe-schema.json'
+import { useDialogHotkeys } from '../composables/useDialogHotkeys'
 
 const capabilityBaseProtocolOrder = capabilityProbeSchema.baseProtocols as readonly ('messages' | 'chat' | 'responses' | 'gemini')[]
 type CapabilityBaseProtocol = typeof capabilityBaseProtocolOrder[number]
@@ -340,19 +398,58 @@ interface Props {
   currentTab: string
   capabilityJob: CapabilityTestJob | null
   capabilityRpm: number
+  useChannelModels?: boolean            // 以渠道认可的模型列表为探测范围
+  existingMapping?: Record<string, string> // 当前渠道 ModelMapping（创建映射对话框覆盖提示）
+  supportedModels?: string[]               // 当前渠道 SupportedModels（源模型名建议）
 }
 
 const props = defineProps<Props>()
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
   'update:capabilityRpm': [value: number]
+  'update:useChannelModels': [value: boolean]
   'copyToTab': [targetProtocol: string, serviceProtocol?: string]
   'cancel': []
   'retryModel': [protocol: string, model: string]
   'testProtocol': [protocol: string]
+  'createMapping': [sourcePattern: string, targetModel: string]
 }>()
 
 const { t } = useI18n()
+
+// 创建模型映射对话框状态（探测到实测模型后，把源模型名显式重定向到该模型）
+const mappingDialogOpen = ref(false)
+const mappingTarget = ref('')
+const mappingSource = ref('')
+
+const mappingSourceSuggestions = computed(() => {
+  const suggestions = new Set<string>()
+  for (const m of props.supportedModels ?? []) {
+    const trimmed = m.trim()
+    if (trimmed && !trimmed.includes('*') && !trimmed.startsWith('!')) suggestions.add(trimmed)
+  }
+  for (const key of Object.keys(props.existingMapping ?? {})) suggestions.add(key)
+  return [...suggestions]
+})
+const existingMappingTarget = computed(() => {
+  const source = mappingSource.value.trim()
+  return source ? (props.existingMapping?.[source] ?? '') : ''
+})
+
+const handleCreateMapping = (_protocol: string, model: string) => {
+  mappingTarget.value = model
+  mappingSource.value = ''
+  mappingDialogOpen.value = true
+}
+
+const submitCreateMapping = () => {
+  const source = mappingSource.value.trim()
+  if (!source) return
+  emit('createMapping', source, mappingTarget.value)
+  mappingDialogOpen.value = false
+}
+
+useDialogHotkeys(mappingDialogOpen, { confirm: submitCreateMapping })
 
 const errorMessage = ref('')
 const cancelling = ref(false)
@@ -699,6 +796,28 @@ defineExpose({ setError })
 .capability-rpm-inline:focus-within {
   border-color: rgb(var(--v-theme-primary));
   box-shadow: 0 0 0 1px rgb(var(--v-theme-primary));
+}
+
+.capability-channel-models-toggle {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 2px;
+  min-height: 26px;
+  padding: 0 8px 0 4px;
+  border: 1px solid rgba(var(--v-theme-outline), 0.38);
+  border-radius: 6px;
+  color: rgba(var(--v-theme-on-surface), 0.78);
+  background: rgb(var(--v-theme-surface));
+  font-size: 0.75rem;
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.capability-channel-models-switch {
+  flex: 0 0 auto;
+  transform: scale(0.8);
 }
 
 .capability-rpm-label {

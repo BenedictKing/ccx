@@ -683,8 +683,9 @@ func executeModelTest(ctx context.Context, channel *config.UpstreamConfig, proto
 	startTime := time.Now()
 	log.Printf("[CapabilityTest-Model] 渠道 %s 启动 %s 协议模型测试 (模型: %s, startedAt: %s)",
 		channel.Name, protocol, model, modelResult.StartedAt)
-	success, streamingSupported, statusCode, respBody, sendErr := sendAndCheckStream(reqCtx, channel, req, protocol)
+	success, streamingSupported, statusCode, respBody, upstreamModel, sendErr := sendAndCheckStream(reqCtx, channel, req, protocol)
 	modelResult.statusCode = statusCode
+	modelResult.UpstreamModel = upstreamModel
 	modelResult.Latency = time.Since(startTime).Milliseconds()
 	modelResult.TestedAt = time.Now().Format(time.RFC3339Nano)
 	requestURL := req.URL.String()

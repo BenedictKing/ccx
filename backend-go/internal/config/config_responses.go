@@ -363,12 +363,10 @@ func (cm *ConfigManager) UpdateResponsesModelMapping(index int, sourcePattern, t
 		return fmt.Errorf("渠道 [%d] %s 为自动托管渠道，模型映射由 Autopilot 自动解析，不支持手工编辑", index, upstream.Name)
 	}
 
-	// 检查 sourcePattern 是否存在
+	// sourcePattern 不存在时插入（upsert 语义），存在时更新；
+	// 能力测试「创建映射」等场景需要向空映射中新增键。
 	if upstream.ModelMapping == nil {
-		return fmt.Errorf("源模型匹配模式 '%s' 不存在", sourcePattern)
-	}
-	if _, exists := upstream.ModelMapping[sourcePattern]; !exists {
-		return fmt.Errorf("源模型匹配模式 '%s' 不存在", sourcePattern)
+		upstream.ModelMapping = make(map[string]string)
 	}
 
 	// 验证 reasoning 值

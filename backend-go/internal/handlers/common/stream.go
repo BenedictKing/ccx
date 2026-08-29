@@ -949,3 +949,48 @@ func firstUnknownSSEDataType(event string) (string, bool) {
 	}
 	return "", false
 }
+
+// ExtractUpstreamModelFromEvents 从缓冲的 SSE 事件中提取上游响应自报的模型名。
+// 用于识别厂商侧隐式模型重定向（请求模型与上游实际使用模型不一致的场景）。
+// 覆盖 messages(message.model) / responses(response.model) / chat(顶层 model)；
+// gemini 响应不携带 model 字段，返回空字符串。
+// 注意：provider 转换层在缺失 model 时会合成占位值（"unknown"/"responses"），
+// 这些不是上游自报，一律过滤。
+func ExtractUpstreamModelFromEvents(events []string) string {
+	for _, event := range events {
+		for _, line := range strings.Split(event, "\n") {
+			jsonStr, ok := extractSSEJSONLine(strings.TrimSpace(line))
+			if !ok {
+				continue
+			}
+			var data map[string]interface{}
+			if err := json.Unmarshal([]byte(jsonStr), &data); err != nil {
+				continue
+			}
+			if model := extractUpstreamModelFromEventData(data); model != "" {
+				return model
+			}
+		}
+	}
+	return ""
+}
+
+// extractUpstreamModelFromEventData 从单条事件 JSON 中提取上游自报模型名，占位值返回空。
+func extractUpstreamModelFromEventData(data map[string]interface{}) string {
+	candidate := ""
+	if message, ok := data["message"].(map[string]interface{}); ok {
+		candidate, _ = message["model"].(string)
+	}
+	if candidate == "" {
+		if response, ok := data["response"].(map[string]interface{}); ok {
+			candidate, _ = response["model"].(string)
+		}
+	}
+	if candidate == "" {
+		candidate, _ = data["model"].(string)
+	}
+	if candidate == "unknown" || candidate == "responses" {
+		return ""
+	}
+	return candidate
+}

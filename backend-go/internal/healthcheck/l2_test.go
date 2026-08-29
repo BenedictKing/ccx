@@ -660,3 +660,80 @@ func TestCheckChannelL2VerifyModel指定不参与去重(t *testing.T) {
 		t.Fatalf("显式 VerifyModel 不参与去重, 两个 key 应各发 1 次 L2, 实际 %d 次", cap.count())
 	}
 }
+
+// TestCheckChannelL2记录上游自报模型：上游 SSE 自报模型与请求模型不一致时，detail 追加 upstream=<模型>
+func TestCheckChannelL2记录上游自报模型(t *testing.T) {
+	capabilities := map[string]config.UpstreamModelCapability{
+		"test-model": pricedCapability(1, 2),
+	}
+	cap := &genCapture{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/models" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"data":[{"id":"test-model"}]}`))
+			return
+		}
+		cap.add(r.URL.Path, "test-model")
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		// 上游自报模型与请求模型不一致（厂商侧隐式重定向）
+		_, _ = w.Write([]byte("data: {\"model\":\"upstream-real-model\",\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\n"))
+	}))
+	defer srv.Close()
+	f := newL2Fixture("chat", config.UpstreamConfig{
+		Name:        "ch0",
+		BaseURL:     srv.URL,
+		APIKeys:     []string{"sk-l2-key-upstream"},
+		Status:      "active",
+		ServiceType: "openai",
+		HealthCheck: &config.ChannelHealthCheckConfig{VerifyRealCall: boolPtr(true)},
+	}, capabilities)
+
+	f.manager.checkChannel("chat", 0)
+
+	l2 := f.l2Record(t, "chat")
+	if l2 == nil || l2.LastStatus != StatusOK {
+		t.Fatalf("l2 记录异常: %+v", l2)
+	}
+	if l2.Detail != "model=test-model upstream=upstream-real-model" {
+		t.Fatalf("l2 Detail = %q, 期望 model=test-model upstream=upstream-real-model", l2.Detail)
+	}
+}
+
+// TestCheckChannelL2上游自报模型一致不追加：上游自报模型与请求模型一致时 detail 保持原样
+func TestCheckChannelL2上游自报模型一致不追加(t *testing.T) {
+	capabilities := map[string]config.UpstreamModelCapability{
+		"test-model": pricedCapability(1, 2),
+	}
+	cap := &genCapture{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/models" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"data":[{"id":"test-model"}]}`))
+			return
+		}
+		cap.add(r.URL.Path, "test-model")
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("data: {\"model\":\"test-model\",\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\n"))
+	}))
+	defer srv.Close()
+	f := newL2Fixture("chat", config.UpstreamConfig{
+		Name:        "ch0",
+		BaseURL:     srv.URL,
+		APIKeys:     []string{"sk-l2-key-same"},
+		Status:      "active",
+		ServiceType: "openai",
+		HealthCheck: &config.ChannelHealthCheckConfig{VerifyRealCall: boolPtr(true)},
+	}, capabilities)
+
+	f.manager.checkChannel("chat", 0)
+
+	l2 := f.l2Record(t, "chat")
+	if l2 == nil || l2.LastStatus != StatusOK {
+		t.Fatalf("l2 记录异常: %+v", l2)
+	}
+	if l2.Detail != "model=test-model" {
+		t.Fatalf("l2 Detail = %q, 期望 model=test-model", l2.Detail)
+	}
+}

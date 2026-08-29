@@ -332,7 +332,7 @@ func probePlainResponsesWithCandidates(ctx context.Context, channel *config.Upst
 		if err != nil {
 			continue
 		}
-		success, _, _, _, _ := sendAndCheckStream(ctx, probeChannel, req.WithContext(ctx), "responses")
+		success, _, _, _, _, _ := sendAndCheckStream(ctx, probeChannel, req.WithContext(ctx), "responses")
 		if success {
 			return true
 		}

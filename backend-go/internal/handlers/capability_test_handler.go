@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -15,19 +16,21 @@ import (
 
 // CapabilityTestRequest 能力测试请求体
 type CapabilityTestRequest struct {
-	TargetProtocols []string `json:"targetProtocols"`
-	Models          []string `json:"models"`        // 可选：用户指定要测试的模型列表，为空时使用预定义列表
-	Timeout         int      `json:"timeout"`       // 毫秒
-	PreviousJobID   string   `json:"previousJobId"` // 可选：上次测试的 jobId，用于复用成功结果
-	RPM             int      `json:"rpm"`
-	SourceTab       string   `json:"sourceTab"` // 可选：当前 Tab 的协议类型（用于跨协议测试）
+	TargetProtocols  []string `json:"targetProtocols"`
+	Models           []string `json:"models"`                     // 可选：用户指定要测试的模型列表，为空时使用预定义列表
+	UseChannelModels bool     `json:"useChannelModels,omitempty"` // 可选：以渠道认可的模型列表（上游清单/管控面）为探测范围
+	Timeout          int      `json:"timeout"`                    // 毫秒
+	PreviousJobID    string   `json:"previousJobId"`              // 可选：上次测试的 jobId，用于复用成功结果
+	RPM              int      `json:"rpm"`
+	SourceTab        string   `json:"sourceTab"` // 可选：当前 Tab 的协议类型（用于跨协议测试）
 }
 
 const defaultCapabilityTestRPM = 30
 
 type ModelTestResult struct {
 	Model                string                            `json:"model"`
-	ActualModel          string                            `json:"actualModel,omitempty"` // 经 ModelMapping 重定向后实际发送给上游的模型名
+	ActualModel          string                            `json:"actualModel,omitempty"`   // 经 ModelMapping 重定向后实际发送给上游的模型名
+	UpstreamModel        string                            `json:"upstreamModel,omitempty"` // 上游响应自报的模型名（识别厂商侧隐式重定向）
 	Success              bool                              `json:"success"`
 	Skipped              bool                              `json:"skipped,omitempty"`
 	Latency              int64                             `json:"latency"` // 毫秒
@@ -146,6 +149,15 @@ func TestChannelCapability(cfgManager *config.ConfigManager, channelLogStore *me
 
 		modelMappingHash := hashModelMapping(channel.ModelMapping)
 		normalizedModels := normalizeCapabilityModels(req.Models)
+		// 渠道模型列表探测范围：以渠道认可的模型清单（上游 /models 或火山管控面）替代内置探测清单
+		if len(normalizedModels) == 0 && req.UseChannelModels {
+			resolved, err := resolveChannelProbeModels(c.Request.Context(), channel, channelKind, cfgManager)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("解析渠道模型列表失败: %v", err)})
+				return
+			}
+			normalizedModels = normalizeCapabilityModels(resolved)
+		}
 		dispatcherKey := metrics.GenerateMetricsIdentityKey(baseURL, apiKey, channel.ServiceType)
 		identityKey := buildCapabilityIdentityKey(channel, modelMappingHash)
 		cacheKey := buildCapabilityCacheKey(baseURL, capabilityProbeCacheAPIKey(channel, apiKey), channel.ServiceType, protocols, normalizedModels, modelMappingHash)
@@ -204,6 +216,7 @@ func TestChannelCapability(cfgManager *config.ConfigManager, channelLogStore *me
 						modelMap[mr.Model] = ModelTestResult{
 							Model:                mr.Model,
 							ActualModel:          mr.ActualModel,
+							UpstreamModel:        mr.UpstreamModel,
 							Success:              mr.Success,
 							Latency:              mr.Latency,
 							StreamingSupported:   mr.StreamingSupported,
@@ -283,6 +296,7 @@ func TestChannelCapability(cfgManager *config.ConfigManager, channelLogStore *me
 							modelMap[mr.Model] = ModelTestResult{
 								Model:                mr.Model,
 								ActualModel:          mr.ActualModel,
+								UpstreamModel:        mr.UpstreamModel,
 								Success:              mr.Success,
 								Latency:              mr.Latency,
 								StreamingSupported:   mr.StreamingSupported,

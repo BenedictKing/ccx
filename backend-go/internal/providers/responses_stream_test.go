@@ -251,3 +251,77 @@ data: {"type":"response.completed","response":{"status":"completed","usage":{"in
 		t.Fatalf("cache_read_input_tokens = %v, want 112256", usage["cache_read_input_tokens"])
 	}
 }
+
+// extractMessageStartModel 提取转换后 message_start 事件的模型名
+func extractMessageStartModel(t *testing.T, events []string) string {
+	t.Helper()
+	for _, event := range events {
+		for _, line := range strings.Split(event, "\n") {
+			if !strings.HasPrefix(line, "data: ") {
+				continue
+			}
+			var data map[string]interface{}
+			if err := json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &data); err != nil {
+				continue
+			}
+			if data["type"] != "message_start" {
+				continue
+			}
+			if message, ok := data["message"].(map[string]interface{}); ok {
+				if model, _ := message["model"].(string); model != "" {
+					return model
+				}
+			}
+		}
+	}
+	return ""
+}
+
+func TestResponsesProvider_HandleStreamResponse_MessageStartCarriesUpstreamModel(t *testing.T) {
+	body := `event: response.created
+data: {"type":"response.created","response":{"id":"resp_1","model":"doubao-seed-code-latest","status":"in_progress","output":[]}}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","delta":"ok"}
+
+event: response.completed
+data: {"type":"response.completed","response":{"status":"completed","model":"doubao-seed-code-latest","usage":{"input_tokens":1,"output_tokens":1}}}
+
+`
+	p := &ResponsesProvider{}
+	eventChan, _, err := p.HandleStreamResponse(io.NopCloser(strings.NewReader(body)))
+	if err != nil {
+		t.Fatalf("HandleStreamResponse failed: %v", err)
+	}
+	var events []string
+	for ev := range eventChan {
+		events = append(events, ev)
+	}
+
+	if model := extractMessageStartModel(t, events); model != "doubao-seed-code-latest" {
+		t.Fatalf("message_start model = %q, want %q", model, "doubao-seed-code-latest")
+	}
+}
+
+func TestResponsesProvider_HandleStreamResponse_MessageStartModelFallback(t *testing.T) {
+	body := `event: response.output_text.delta
+data: {"type":"response.output_text.delta","delta":"ok"}
+
+event: response.completed
+data: {"type":"response.completed","response":{"status":"completed","usage":{"input_tokens":1,"output_tokens":1}}}
+
+`
+	p := &ResponsesProvider{}
+	eventChan, _, err := p.HandleStreamResponse(io.NopCloser(strings.NewReader(body)))
+	if err != nil {
+		t.Fatalf("HandleStreamResponse failed: %v", err)
+	}
+	var events []string
+	for ev := range eventChan {
+		events = append(events, ev)
+	}
+
+	if model := extractMessageStartModel(t, events); model != "responses" {
+		t.Fatalf("message_start model = %q, want placeholder %q", model, "responses")
+	}
+}

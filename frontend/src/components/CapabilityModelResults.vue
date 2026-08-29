@@ -27,8 +27,20 @@
               <v-icon v-if="isRedirectedModel(modelResult)" size="14" class="redirect-icon">
                 mdi-arrow-right-bold
               </v-icon>
+              <v-icon v-if="isUpstreamModelRedirected(modelResult)" size="14" class="upstream-redirect-icon">
+                mdi-swap-horizontal-circle
+              </v-icon>
               <v-icon size="16">
                 {{ getModelStatusIcon(modelResult) }}
+              </v-icon>
+              <v-icon
+                v-if="isModelSuccessful(modelResult)"
+                size="14"
+                class="mapping-action-icon"
+                :title="t('capability.createMapping')"
+                @click.stop="emit('createMapping', test.protocol, modelResult.model)"
+              >
+                mdi-link-plus
               </v-icon>
             </div>
           </template>
@@ -37,6 +49,10 @@
             <div v-if="modelResult.actualModel" class="tooltip-row">
               <span class="tooltip-label">{{ t('capability.actualModel') }}</span>
               <span class="tooltip-value">{{ modelResult.actualModel }}</span>
+            </div>
+            <div v-if="modelResult.upstreamModel" class="tooltip-row">
+              <span class="tooltip-label">{{ t('capability.upstreamModel') }}</span>
+              <span :class="['tooltip-value', isUpstreamModelRedirected(modelResult) ? 'tooltip-value-warning' : '']">{{ modelResult.upstreamModel }}</span>
             </div>
             <div class="tooltip-row">
               <span class="tooltip-label">{{ t('capability.tooltipLatency') }}</span>
@@ -71,6 +87,10 @@
             <div v-if="modelResult.actualModel" class="tooltip-row">
               <span class="tooltip-label">{{ t('capability.actualModel') }}</span>
               <span class="tooltip-value">{{ modelResult.actualModel }}</span>
+            </div>
+            <div v-if="modelResult.upstreamModel" class="tooltip-row">
+              <span class="tooltip-label">{{ t('capability.upstreamModel') }}</span>
+              <span :class="['tooltip-value', isUpstreamModelRedirected(modelResult) ? 'tooltip-value-warning' : '']">{{ modelResult.upstreamModel }}</span>
             </div>
             <div class="tooltip-row">
               <span class="tooltip-label">{{ t('capability.modelStatus') }}</span>
@@ -108,6 +128,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   'retryModel': [protocol: string, model: string]
+  'createMapping': [protocol: string, model: string]
 }>()
 
 const { t } = useI18n()
@@ -223,6 +244,13 @@ const getModelTooltipLatencyText = (modelResult: CapabilityModelJobResult): stri
 
 const isRedirectedModel = (modelResult: CapabilityModelJobResult): boolean => {
   return Boolean(modelResult.actualModel && modelResult.actualModel !== modelResult.model)
+}
+
+// isUpstreamModelRedirected 上游自报模型与预期（CCX 映射后模型或请求模型）不一致——厂商侧隐式重定向
+const isUpstreamModelRedirected = (modelResult: CapabilityModelJobResult): boolean => {
+  if (!modelResult.upstreamModel) return false
+  const expected = modelResult.actualModel || modelResult.model
+  return modelResult.upstreamModel !== expected
 }
 
 </script>
@@ -374,5 +402,26 @@ const isRedirectedModel = (modelResult: CapabilityModelJobResult): boolean => {
   opacity: 0.7;
   margin-left: 2px;
   margin-right: -2px;
+}
+
+.upstream-redirect-icon {
+  opacity: 0.9;
+  color: #d97706;
+  margin-left: 2px;
+  margin-right: -2px;
+}
+
+.mapping-action-icon {
+  opacity: 0.55;
+  cursor: pointer;
+  margin-left: 2px;
+}
+
+.mapping-action-icon:hover {
+  opacity: 1;
+}
+
+.tooltip-value-warning {
+  color: #d97706;
 }
 </style>

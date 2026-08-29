@@ -1088,7 +1088,7 @@ func TestSendAndCheckStream_ChatReasoningOnlyCountsAsSuccess(t *testing.T) {
 		t.Fatalf("build request failed: %v", err)
 	}
 
-	success, streamingSupported, statusCode, respBody, err := sendAndCheckStream(context.Background(), channel, req, "chat")
+	success, streamingSupported, statusCode, respBody, upstreamModel, err := sendAndCheckStream(context.Background(), channel, req, "chat")
 	if err != nil {
 		t.Fatalf("sendAndCheckStream returned error: %v", err)
 	}
@@ -1100,6 +1100,9 @@ func TestSendAndCheckStream_ChatReasoningOnlyCountsAsSuccess(t *testing.T) {
 	}
 	if statusCode != http.StatusOK {
 		t.Fatalf("statusCode=%d, want %d", statusCode, http.StatusOK)
+	}
+	if upstreamModel != "deepseek-v4-flash" {
+		t.Fatalf("upstreamModel=%q, want %q", upstreamModel, "deepseek-v4-flash")
 	}
 }
 

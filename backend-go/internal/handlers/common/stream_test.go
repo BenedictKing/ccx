@@ -1561,3 +1561,87 @@ func TestProcessStreamEvent_MalformedAfterValidToolUse(t *testing.T) {
 		t.Fatalf("malformed tool_use after valid should still be forwarded, got: %s", body)
 	}
 }
+
+// TestExtractUpstreamModelFromEvents 验证从缓冲 SSE 事件中提取上游自报模型名
+func TestExtractUpstreamModelFromEvents(t *testing.T) {
+	tests := []struct {
+		name   string
+		events []string
+		want   string
+	}{
+		{
+			name: "messages message_start",
+			events: []string{
+				"event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_1\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"doubao-seed-code-latest\",\"content\":[],\"usage\":{\"input_tokens\":10}}}\n\n",
+			},
+			want: "doubao-seed-code-latest",
+		},
+		{
+			name: "chat chunk top-level model",
+			events: []string{
+				"data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"glm-5.3\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"}}]}\n\n",
+			},
+			want: "glm-5.3",
+		},
+		{
+			name: "responses response.created",
+			events: []string{
+				"event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_1\",\"object\":\"response\",\"model\":\"gpt-5.5\",\"output\":[]}}\n\n",
+			},
+			want: "gpt-5.5",
+		},
+		{
+			name: "responses response.completed fallback",
+			events: []string{
+				"event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\",\"model\":\"kimi-k3\",\"output\":[]}}\n\n",
+			},
+			want: "kimi-k3",
+		},
+		{
+			name: "gemini event without model",
+			events: []string{
+				"data: {\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"text\":\"hi\"}]}}],\"usageMetadata\":{\"promptTokenCount\":1}}\n\n",
+			},
+			want: "",
+		},
+		{
+			name:   "empty events",
+			events: nil,
+			want:   "",
+		},
+		{
+			name: "malformed json skipped",
+			events: []string{
+				"data: {not-json\n\n",
+				"data: {\"type\":\"message_start\",\"message\":{\"model\":\"deepseek-v4-pro\"}}\n\n",
+			},
+			want: "deepseek-v4-pro",
+		},
+		{
+			name: "first model wins across events",
+			events: []string{
+				"data: {\"type\":\"ping\"}\n\n",
+				"data: {\"type\":\"message_start\",\"message\":{\"model\":\"minimax-m3\"}}\n\n",
+				"data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"model\":\"other\"}\n\n",
+			},
+			want: "minimax-m3",
+		},
+		{
+			name: "empty model value ignored",
+			events: []string{
+				"data: {\"model\":\"\",\"choices\":[]}\n\n",
+				"data: {\"model\":\"doubao-seed-2.1-turbo\",\"choices\":[]}\n\n",
+			},
+			want: "doubao-seed-2.1-turbo",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ExtractUpstreamModelFromEvents(tt.events)
+			if got != tt.want {
+				t.Fatalf("ExtractUpstreamModelFromEvents = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

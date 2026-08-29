@@ -88,7 +88,8 @@ type CapabilityTestJobProgress struct {
 
 type CapabilityModelJobResult struct {
 	Model                string                            `json:"model"`
-	ActualModel          string                            `json:"actualModel,omitempty"` // 经 ModelMapping 重定向后实际发送给上游的模型名
+	ActualModel          string                            `json:"actualModel,omitempty"`   // 经 ModelMapping 重定向后实际发送给上游的模型名
+	UpstreamModel        string                            `json:"upstreamModel,omitempty"` // 上游响应自报的模型名（识别厂商侧隐式重定向）
 	Status               CapabilityModelStatus             `json:"status"`
 	Lifecycle            CapabilityLifecycle               `json:"lifecycle"`
 	Outcome              CapabilityOutcome                 `json:"outcome"`
@@ -121,8 +122,9 @@ type CapabilityProtocolJobResult struct {
 
 // RedirectModelResult 单个探测模型经 ModelMapping 后的测试结果
 type RedirectModelResult struct {
-	ProbeModel           string                            `json:"probeModel"`  // 原生探测模型名
-	ActualModel          string                            `json:"actualModel"` // ModelMapping 后实际发给上游的模型名
+	ProbeModel           string                            `json:"probeModel"`              // 原生探测模型名
+	ActualModel          string                            `json:"actualModel"`             // ModelMapping 后实际发给上游的模型名
+	UpstreamModel        string                            `json:"upstreamModel,omitempty"` // 上游响应自报的模型名（识别厂商侧隐式重定向）
 	Success              bool                              `json:"success"`
 	Latency              int64                             `json:"latency"` // 毫秒
 	StreamingSupported   bool                              `json:"streamingSupported,omitempty"`
