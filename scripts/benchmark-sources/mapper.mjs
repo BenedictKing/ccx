@@ -72,6 +72,7 @@ export const BENCHLM_MODEL_MAP = {
   'claude-sonnet-5': 'claude-sonnet-5',
   'claude-sonnet-4-6': 'claude-sonnet-4-6',
   'glm-5-3': 'glm-5.3',
+  'glm-5-3-flash': 'glm-5.3-flash',
   'glm-5-2': 'glm-5.2',
   'kimi-k2-7-code': 'kimi-k2.7-code',
   // 榜单 slug 是 kimi-k3（旧键 kimi-3 是 8/20 审计发现的键名错误，保留作别名）

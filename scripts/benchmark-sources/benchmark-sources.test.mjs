@@ -757,6 +757,10 @@ test('deepswe glm-5.3-flash stays mapped (2026-08-26 release-day regression)', (
   assert.equal(DEEPSWE_MODEL_MAP['glm-5-3-flash'], 'glm-5.3-flash')
 })
 
+test('benchlm glm-5.3-flash stays mapped (2026-08-29 audit)', () => {
+  assert.equal(BENCHLM_MODEL_MAP['glm-5-3-flash'], 'glm-5.3-flash')
+})
+
 test('benchlm dated deepseek variants and gemini-3-6-flash stay mapped (2026-08-23 regressions)', () => {
   assert.equal(BENCHLM_MODEL_MAP['deepseek-v4-flash-0731'], 'deepseek-v4-flash')
   assert.equal(BENCHLM_MODEL_MAP['gemini-3-6-flash'], 'gemini-3.6-flash')
