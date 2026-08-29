@@ -212,6 +212,55 @@ describe('ApiKeyManagementSection', () => {
     )
   })
 
+  it('converts decimal multiplier inputs to JSON numbers before saving', async () => {
+    const wrapper = mountSection({
+      apiKeyConfigs: [
+        { key: 'sk-1', keyUid: 'uid-1', groupMultiplier: 1, maxGroupMultiplier: 2 },
+      ],
+      channelUid: 'ch-1',
+      channelKind: 'messages',
+    })
+    await nextTick()
+    await wrapper.find('button').trigger('click')
+    await nextTick()
+
+    const multiplierInputs = wrapper.findAllComponents(inputStub)
+      .filter(input => input.props('type') === 'number')
+    expect(multiplierInputs).toHaveLength(2)
+    await multiplierInputs[0].vm.$emit('update:modelValue', '0.15')
+    await multiplierInputs[1].vm.$emit('update:modelValue', '1.25')
+    await nextTick()
+
+    const saveButton = wrapper.findAllComponents(buttonStub)
+      .find(b => b.text().includes('app.actions.save'))
+    await saveButton!.trigger('click')
+    await vi.waitFor(() => expect(apiMocks.patchKeyMultiplier).toHaveBeenCalled())
+
+    expect(apiMocks.patchKeyMultiplier).toHaveBeenCalledWith(
+      'messages',
+      'ch-1',
+      'uid-1',
+      expect.objectContaining({ groupMultiplier: 0.15, maxGroupMultiplier: 1.25 }),
+    )
+    expect(apiMocks.patchKeyMultiplier.mock.calls[0][3].groupMultiplier).toBeTypeOf('number')
+  })
+
+  it('shows consistent shortcuts on the multiplier dialog', async () => {
+    const wrapper = mountSection({
+      apiKeyConfigs: [
+        { key: 'sk-1', keyUid: 'uid-1', groupMultiplier: 1, maxGroupMultiplier: 2 },
+      ],
+      channelUid: 'ch-1',
+      channelKind: 'messages',
+    })
+    await nextTick()
+    await wrapper.find('button').trigger('click')
+    await nextTick()
+
+    expect(wrapper.text()).toContain('Esc')
+    expect(wrapper.text()).toMatch(/⌘Enter|Ctrl\+Enter/)
+  })
+
   it('does not show mark-public shortcut for new_api keys', async () => {
     const wrapper = mountSection({
       apiKeyConfigs: [

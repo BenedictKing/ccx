@@ -1340,7 +1340,9 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn variant="text" @click="groupModelDialog = false">{{ t('app.actions.cancel') }}</v-btn>
+          <v-btn variant="text" @click="groupModelDialog = false">
+            {{ t('app.actions.cancel') }}<span class="shortcut-hint ml-2 text-xs opacity-50">Esc</span>
+          </v-btn>
           <v-btn
             color="warning"
             variant="tonal"
@@ -1348,7 +1350,7 @@
             :disabled="!groupModelForm.model.trim() || !!changingGroupModel"
             @click="submitGroupModelDisable"
           >
-            {{ t('channelCard.disableGroupModel') }}
+            {{ t('channelCard.disableGroupModel') }}<span class="shortcut-hint ml-2 text-xs opacity-50">{{ isMac ? '⌘Enter' : 'Ctrl+Enter' }}</span>
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -1400,8 +1402,12 @@
             {{ t('subscription.keyMultiplier.markPublic') }}
           </v-btn>
           <v-spacer />
-          <v-btn variant="text" @click="multiplierDialog = false">{{ t('app.actions.cancel') }}</v-btn>
-          <v-btn color="primary" :loading="multiplierSaving" @click="saveMultiplier">{{ t('app.actions.save') }}</v-btn>
+          <v-btn variant="text" @click="multiplierDialog = false">
+            {{ t('app.actions.cancel') }}<span class="shortcut-hint ml-2 text-xs opacity-50">Esc</span>
+          </v-btn>
+          <v-btn color="primary" :loading="multiplierSaving" @click="saveMultiplier">
+            {{ t('app.actions.save') }}<span class="shortcut-hint ml-2 text-xs opacity-50">{{ isMac ? '⌘Enter' : 'Ctrl+Enter' }}</span>
+          </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -1497,6 +1503,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const apiService = new ApiService()
+const isMac = computed(() => typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform))
 
 const newApiKey = ref('')
 const apiKeyError = ref('')
@@ -1754,15 +1761,23 @@ const markAsPublicKey = () => {
   }
 }
 
+const parseMultiplierInput = (value: number | string | null): number | null => {
+  if (value === null || (typeof value === 'string' && value.trim() === '')) return null
+  const parsed = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(parsed) || parsed < 0) throw new Error('倍率必须是有限且非负数')
+  return parsed
+}
+
 const saveMultiplier = async () => {
   const row = multiplierEditing.value
   if (!row?.keyUid || !props.channelUid || !props.channelKind) return
   multiplierSaving.value = true
   multiplierError.value = ''
   try {
+    const maxGroupMultiplier = parseMultiplierInput(multiplierForm.value.maxGroupMultiplier)
     const body = row.multiplierSource === 'new_api'
-      ? { maxGroupMultiplier: multiplierForm.value.maxGroupMultiplier, consumptionPolicy: multiplierForm.value.consumptionPolicy }
-      : { groupMultiplier: multiplierForm.value.groupMultiplier, maxGroupMultiplier: multiplierForm.value.maxGroupMultiplier, consumptionPolicy: multiplierForm.value.consumptionPolicy }
+      ? { maxGroupMultiplier, consumptionPolicy: multiplierForm.value.consumptionPolicy }
+      : { groupMultiplier: parseMultiplierInput(multiplierForm.value.groupMultiplier), maxGroupMultiplier, consumptionPolicy: multiplierForm.value.consumptionPolicy }
     const response = await apiService.patchKeyMultiplier(props.channelKind, props.channelUid, row.keyUid, body)
     row.groupMultiplier = response.groupMultiplier ?? null
     row.maxGroupMultiplier = response.maxMultiplier ?? null
