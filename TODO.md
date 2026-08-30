@@ -70,7 +70,7 @@ https://github.com/QuantumNous/new-api/issues/5513
 
 **关键提交：** 本次后端落地提交；测试覆盖四桶组合、无席位静默、personal+team 并存（主桶 personal 优先 + hint 选中 team）、`GetSeatAFPUsage` 顶层/数组两形态、`AccessDenied` 桶级隔离、多桶持久化不覆盖主桶。
 
-**遗留：** ① 前端管理界面展示团队版桶（DTO 已暴露 `volcenginePlanBuckets`）；② 真机验证团队版 API 响应字段路径后修正宽松解析；③ 同产品双 edition 的推理 Key 关联消歧 UI（当前 hint 与 personal 优先策略覆盖常见场景）。
+**遗留：** ~~① 前端管理界面展示团队版桶~~ ✅ 已实现（渠道编辑器认证区「其他套餐」区块，`ed472970`）；② 真机验证团队版 API 响应字段路径后修正宽松解析；③ 同产品双 edition 的推理 Key 关联消歧 UI（当前 hint 与 personal 优先策略覆盖常见场景）。
 
 ~~当前状态：火山套餐绑定与用量刷新仅支持个人版 `Agent Plan` / `Coding Plan`。其中个人版分别使用 `GetAFPUsage` 和 `GetCodingPlanUsage`；`cd559c8a` 已修正个人版 Coding Plan 的 OpenAPI 地址、签名和百分比响应解析。团队版暂未纳入套餐识别、持久化和管理界面展示。~~
 
