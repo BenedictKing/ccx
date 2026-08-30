@@ -56,6 +56,8 @@ export const DRADAR_MODEL_MAP = {
   'dsh-deepseek-v4-flash': 'deepseek-v4-flash',
   'dsh-deepseek-v4-flash-vision-exp': 'deepseek-v4-flash',
   'dsh-deepseek-v4-pro': 'deepseek-v4-pro',
+  // 腾讯混元 Hy4 Preview：dradar 榜上 slug 与 canonical 同名
+  'hy4-preview': 'hy4-preview',
 }
 
 const BASE_URL = 'https://api.codexradar.com'

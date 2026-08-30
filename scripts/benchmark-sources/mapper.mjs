@@ -114,6 +114,8 @@ export const BENCHLM_MODEL_MAP = {
   'minimax-m2-7': 'minimax-m2.7',
   'minimax-m3': 'minimax-m3',
   'qwen3-7-max': 'qwen3.7-max',
+  // 腾讯混元 Hy4 Preview（2026-08-28 发布）：benchlm slug 与 canonical 同名
+  'hy4-preview': 'hy4-preview',
 }
 
 /**
