@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-30T04:06:01.928Z",
+  "generatedAt": "2026-08-30T04:24:36.535Z",
   "qualityTiers": {
     "scale": "0-100",
     "algorithm": "medium-aligned-coding-v1",
@@ -233,8 +233,8 @@
       "model": "gpt-5.6-terra",
       "effort": "low",
       "pass_rate": 0.313,
-      "mean_cost": 0.4904,
-      "median_cost": 0.4333,
+      "mean_cost": 0.491,
+      "median_cost": 0.4342,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-terra",
       "quality_score": 35.7,
@@ -244,7 +244,7 @@
       "model": "gpt-5.6-terra",
       "effort": "medium",
       "pass_rate": 0.357,
-      "mean_cost": 0.6169,
+      "mean_cost": 0.6166,
       "median_cost": 0.5409,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-terra",
@@ -266,7 +266,7 @@
       "model": "gpt-5.6-terra",
       "effort": "xhigh",
       "pass_rate": 0.616,
-      "mean_cost": 1.7925,
+      "mean_cost": 1.7922,
       "median_cost": 1.5253,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-terra",
@@ -298,7 +298,7 @@
     {
       "model": "grok-4.6",
       "effort": "low",
-      "pass_rate": 0.528,
+      "pass_rate": 0.537,
       "mean_cost": 0.7718,
       "median_cost": 0.9101,
       "source": "CodexRadar",
@@ -634,7 +634,7 @@
       "source": "DeepSWE v1.1",
       "sourceModel": "gemini-3-7-flash",
       "quality_score": 65.5,
-      "model_quality_score": 64.4
+      "model_quality_score": 63.3
     },
     {
       "model": "gemini-3.7-flash",
@@ -645,7 +645,7 @@
       "source": "DeepSWE v1.1",
       "sourceModel": "gemini-3-7-flash",
       "quality_score": 65.5,
-      "model_quality_score": 64.4
+      "model_quality_score": 63.3
     },
     {
       "model": "gemini-3.7-flash",
@@ -656,7 +656,7 @@
       "source": "DeepSWE v1.1",
       "sourceModel": "gemini-3-7-flash",
       "quality_score": 65.5,
-      "model_quality_score": 64.4
+      "model_quality_score": 63.3
     },
     {
       "model": "glm-5.2",
@@ -700,7 +700,7 @@
       "source": "DeepSWE v1.1",
       "sourceModel": "glm-5-3-flash",
       "quality_score": 63.4,
-      "model_quality_score": 48.2
+      "model_quality_score": 47.3
     },
     {
       "model": "gpt-5.4",
@@ -2258,7 +2258,7 @@
       "source": "CodexRadar",
       "category": "coding",
       "metric": "pass_at_1",
-      "score": 58.6,
+      "score": 59.7,
       "effort": "high"
     },
     {
@@ -2266,7 +2266,7 @@
       "source": "CodexRadar",
       "category": "coding",
       "metric": "pass_at_1",
-      "score": 64.4,
+      "score": 63.3,
       "effort": "medium"
     },
     {
@@ -2376,7 +2376,7 @@
       "source": "CodexRadar",
       "category": "coding",
       "metric": "pass_at_1",
-      "score": 37.5,
+      "score": 35.7,
       "effort": "low"
     },
     {
@@ -3023,7 +3023,7 @@
       "source": "CodexRadar",
       "category": "coding",
       "metric": "pass_at_1",
-      "score": 52.8,
+      "score": 53.7,
       "effort": "low"
     },
     {
