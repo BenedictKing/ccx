@@ -286,10 +286,11 @@
 - 路径：`frontend/src/components/CapabilityTestDialog.vue`；管理器 `frontend/src/composables/useCapabilityTestManager.ts`
 - 用途：展示渠道多协议能力测试（messages/chat/responses/gemini + 复合协议 `a->b`）；移动端卡片 / 桌面端表格双布局，含 RPM 调节、协议级重测、单模型重试、复制到其他协议 tab。
 - 触发入口：已在 `App.vue` 挂载并由 `ChannelOrchestration` 行操作菜单触发；管理器暴露 `testChannelCapability(target)`。
-- props：`modelValue`、`channelName`、`currentTab`、`capabilityJob: CapabilityTestJob|null`、`capabilityRpm`；emits：`update:modelValue`、`update:capabilityRpm`、`copyToTab(target, service?)`、`cancel`、`retryModel(protocol, model)`、`testProtocol(protocol)`。
+- props：`modelValue`、`channelName`、`currentTab`、`capabilityJob: CapabilityTestJob|null`、`capabilityRpm`、`useChannelModels?: boolean`（3e721de1，以渠道认可的模型列表为探测范围）、`existingMapping?: Record<string,string>`（当前渠道 ModelMapping，创建映射对话框覆盖提示）；emits：`update:modelValue`、`update:capabilityRpm`、`update:useChannelModels`、`copyToTab(target, service?)`、`cancel`、`retryModel(protocol, model)`、`testProtocol(protocol)`、`createMapping(sourcePattern, targetModel)`（3e721de1）。
 - 状态机：`initializing/idle/pending/running/completed/cancelled/error`。
-- 子组件：`CapabilityModelResults`（模型徽章 + tooltip，点击重试）。
+- 子组件：`CapabilityModelResults`（模型徽章 + tooltip，点击重试；3e721de1 起徽章 tooltip 含 `upstreamModel`——上游自报模型与请求模型不一致时展示，识别厂商侧隐式重定向）。
 - 后端调用（管理器）：`startChannelCapabilityTest`、`getChannelCapabilitySnapshot`、`getChannelCapabilityTestStatus`（轮询）、`cancelCapabilityTest`、`retryCapabilityTestModel`。
+- 「渠道认可模型列表」探测范围（3e721de1）：状态条提供 `useChannelModels` 开关（tooltip `capability.useChannelModelsHint`），开启且未自定义模型列表时管理器传 `useChannelModels: true`——后端 `resolveChannelProbeModels` 实时拉取上游清单（火山套餐走管控面）、剔除非对话模型、按 SupportedModels 过滤（口径不交退清单全量）、截断 20（详见 `channel-data-model-v2.md` §8）。能力测试成功行支持**一键创建显式映射**：内嵌确认对话框（`capability.createMappingTitle`，展示 `existingMapping` 覆盖提示），emit `createMapping(source, target)` → 落 `PUT /api/{kind}/channels/:id/mappings`（upsert，键不存在即插入）。
 
 布局示意图：
 
@@ -487,7 +488,7 @@ AutopilotDiagnosePanel:
 - 添加 API 密钥（`App.vue:610`）：`newApiKey` 输入，Enter 添加。
 - 通用确认对话框（`App.vue:636`）：`dialogStore.confirm({message,confirmText,cancelText,color})` 返回 Promise。
 - 认证登录（`App.vue:18`）+ 自动认证 overlay（`App.vue:4`）：`showAuthDialog` computed。
-- 分组模型策略 / Key 倍率（`ApiKeyManagementSection.vue:1295`/`:1347`）：`openGroupModelEditor`/`submitGroupModelDisable`；`openMultiplierEditor`/`saveMultiplier`。倍率编辑入口对全部可编辑 key 可见（未设置倍率时仅显示设置按钮，不产生空 chips）。
+- 分组模型策略 / Key 倍率（`ApiKeyManagementSection.vue:1295`/`:1347`）：`openGroupModelEditor`/`submitGroupModelDisable`；`openMultiplierEditor`/`saveMultiplier`。倍率编辑入口对全部可编辑 key 可见（未设置倍率时仅显示设置按钮，不产生空 chips）。倍率输入经 `parseMultiplierInput` 安全转 JSON 数字（`Number()` 转换支持常见小数倍率，非有限/负值抛错阻断提交，241de1f5）；两对话框取消/确认按钮带 Esc 与 ⌘/Ctrl+Enter 快捷键提示 chip（同提交，快捷键本身走 §15 全局栈）。
 - 计费条款 / 订阅关联渠道 / 同步结果（`SubscriptionsView.vue:49`/`:64`/`:102`）：`billingDialog`（四字段 paymentAmount/paymentUnit/creditAmount/creditUnit，a96098da 统一币种/金额模型）、`linkDialog`（v-select 选 `linkableChannels` + 已关联 channelUid chips 逐个解绑 `unlinkChannel`，入口 SubscriptionPlanTable 行操作）、`syncDialog`。
 
 布局示意图（按出现顺序，宽度标注在图右下）：

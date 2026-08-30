@@ -165,6 +165,7 @@ Channels   (Claude/OpenAI/Gemini/...)
    ├─ 429/5xx → MetricsManager.RecordFailure
    ├─ auth/permission → ShouldBlacklistKey → BlacklistKeyWithRecoverAt（跨协议级联）
    ├─ model_not_found → DisableKeyModel（自动映射渠道由发送前复查兜底）
+   ├─ 400/422 点名 tools 强信号（fb24a721）→ ToolUnsupportedFromError → TraitNoToolCallSupport（渠道-Key-模型 级，ChannelCompatCache 24h TTL，只收紧不放松）
    └─ TTFB 拥塞 → RateLimitDiscoverer.Observe
    │
    ▼
@@ -172,6 +173,7 @@ Channels   (Claude/OpenAI/Gemini/...)
    │
    ├─ learnedDocumentUnsupported → document_unsupported
    ├─ learnedContextLimit → context_limit
+   ├─ learnedToolCallUnsupported（fb24a721）→ 工具调用硬约束剔除
    └─ RateLimitDiscoverer.SuggestedLimit → rate_limit
    │
    ▼
@@ -182,6 +184,8 @@ Channels   (Claude/OpenAI/Gemini/...)
    ▼
 [ChannelProfile/KeyEndpointProfile 更新]
 ```
+
+成功路径同族观测（fb24a721）：forced tool_choice 全程零工具块 → `MaybeLearnForcedToolChoiceMiss`（`handlers/common/tool_unsupported_signal.go`，挂载 `upstream_failover.go` 成功分支，观测标记来自 `stream_observer.go` `MarkToolCallActivity`）——三层机制（探针/失败信号/成功信号）详见 `tool-call-capability.md`。
 
 ### 4.3 New-API 同步传播链
 

@@ -76,9 +76,10 @@ EndpointCapability（跨账号共享，按 CapabilityUID 索引）
 - `CostMultiplier *float64`：乘法简化路径（`EffectiveCostUSD = ListCostUSD × CostMultiplier`）
 - `ChannelPaymentCurrency/ChannelPaymentAmount/ChannelCreditCurrency/ChannelCreditAmount`：充值→到账四字段（四者同时配置且金额>0 才生效），按全局汇率图计算 `EffectiveMultiplier = (充值金额×充值币价)/(到账金额×渠道币价)`（`handlers/common/upstream_failover.go` `buildRequestCostContext`，复用 `autopilot.ResolveEffectiveCostUSD`）
 - `LearnedClientFingerprint bool`：上游 models 端点存在客户端指纹风控的学习标记（见 §8）
+- `APIKeyConfig.GroupMultiplier` + `MultiplierSource/UpdatedAt`（`config/config.go`）：key 级倍率（new-api 分组倍率同步或 UI 手工编辑，e205d9c6 手工 key 经 `CredentialUID` 兜底定位，`autopilot/handlers_key_multiplier.go`），同样不进 ChannelKeyView 读模型
 - `ProxyURL string` / `ProxyPreferDirect bool`（876eaf7e）：渠道级出站代理；`ProxyPreferDirect` 配置了代理时先直连，直连失败（网络错误或命中回退条件）再回退代理（`httpclient/direct_first.go`）。管理 DTO 经 `channel_view.go` 透出 `proxyPreferDirect`，`UpstreamUpdate` 支持两字段部分更新（`ProxyPreferDirect *bool`，nil=不修改）
 
-另外 `ChannelView` 有 `Remark string`（旧派生规则写下的历史名，新规则下不再使用，只读展示用）。
+另外 `ChannelView` 有 `Remark string`。2026-08-27 起（87da075d + 2f4eed27）Remark 是**纯用户字段**：~~旧派生规则写下的历史名，新规则下不再使用，只读展示用~~「历史名档案」派生语义废弃——名称迁移不再把物理渠道残留备注回填逻辑渠道（`config_utils.go` `migrateAllChannelNamesConfig`），物理单卡保存备注整组同步到逻辑渠道与全部六数组兄弟卡（`channel_crud.go` `syncRemarkAcrossLogicalGroupLocked`，行 747），Dashboard 展示真源是逻辑渠道层 `remark`（`handlers/logicalchannels/logical_channels.go:152`）。
 
 ### 3.1 自动渠道名派生规则（展示层）
 
@@ -153,4 +154,7 @@ EndpointCapability（跨账号共享，按 CapabilityUID 索引）
 - **(Key, 模型) 黑名单**：`DisabledKeyModels` 持久化于 `UpstreamConfig`，发送前复查兜底自动映射渠道（详见 `autopilot.md` §5.12）。
 - **火山套餐渠道模型清单走管控面**（`158d9c12`）：messages/chat/responses 三类 `GetChannelModels`（如 `handlers/messages/channels.go:461`）命中 `volces.com/api/{coding,plan}` 时改走 `autopilot.FetchVolcenginePlanModelsForChannel` 拉管控面套餐清单（AK/SK 签名接口），无渠道上下文时经 `config.FindCredentialByAPIKey` 定位凭证。
 - **按渠道实测输出上限钳制 max_tokens**（`dd57a6d7`）：`ChannelCompatCache` 以「渠道-Key-模型」粒度记忆 400/422 自报输出上限（24h TTL、下界 256 不采信），发送前 `clampMaxTokensInBody` 按协议钳制 `max_tokens`/`max_completion_tokens`/`max_output_tokens` 并同 Key 钳制重试（详见 `autopilot.md` §5.16）。
-- **代理直连优先**（`876eaf7e`）：`ProxyPreferDirect` 字段与回退策略见 §3；httpclient 层 `direct_first.go` 实现直连失败/451/403 回退代理。
+- **代理直连优先**（`876aaf7e`）：`ProxyPreferDirect` 字段与回退策略见 §3；httpclient 层 `direct_first.go` 实现直连失败/451/403 回退代理。
+- **模型映射 upsert**（`3e721de1`）：六类 `Update*ModelMapping` 由「源模型匹配模式不存在即报错」改为 **upsert**（键不存在时插入、存在时更新，`config_chat.go:345` 等六处），能力测试「创建映射」等场景可向空映射新增键；端点仍为六套协议路由 `PUT /api/{kind}/channels/:id/mappings`（`main.go:1269-1466`），不经 §6 Phase 2b 的 `/api/channels`。
+- **能力测试「渠道认可模型列表」探测范围与隐式重定向观测**（`3e721de1`）：`resolveChannelProbeModels`（`handlers/capability_test_channel_models.go`）解析探测范围——①实时拉取上游清单（火山套餐走管控面 `fetchChannelRecognizedModels`，其余走数据面 /models）并剔除非对话模型（`filterNonChatProbeModels`）；②按 `SupportedModels` 过滤，口径完全不交时退清单全量（SupportedModels 是对外放行口径，探测目标是上游真实模型）；③拉取失败回退 SupportedModels 精确项；④去重排序截断 20（`maxChannelProbeModels`）。能力测试结果与保活 L2 均记录**上游自报模型**（`upstreamModel` 字段 / L2 detail ` upstream=`，识别火山等厂商侧隐式模型重定向），前端能力测试成功行支持一键创建显式 ModelMapping（落上述 upsert 端点）。
+- **工具调用能力实测**（`fb24a721`）：渠道级「不支持工具调用」学习（`TraitNoToolCallSupport`，ChannelCompatCache 24h TTL）+ 能力测试工具探针 + 运行期负信号三层机制，路由硬约束只收紧不放松——详见 `tool-call-capability.md`。

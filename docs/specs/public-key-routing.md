@@ -361,7 +361,7 @@ ccx_opportunistic_saved_cost_usd_total
 | 配置加载规范化 | `backend-go/internal/config/config_loader.go` | 未知值降级为 `normal` 并告警 |
 | 配置合并保留策略 | `backend-go/internal/config/config_utils.go`、`api_key_config_merge_test.go` | new-api 同步不覆盖本地 `ConsumptionPolicy` |
 | 零倍率资格判断 | `backend-go/internal/config/key_group_multiplier_test.go` | `0` 合法且 eligible |
-| Key multiplier PATCH | `backend-go/internal/autopilot/handlers_key_multiplier.go`、`*_test.go` | 支持三态 `consumptionPolicy` 字段 |
+| Key multiplier PATCH | `backend-go/internal/autopilot/handlers_key_multiplier.go`、`*_test.go` | 支持三态 `consumptionPolicy` 字段；key 定位支持 `credentialUid` 兜底（e205d9c6，托管账号手工 key 无 KeyUID 时也可编辑，细节见 `autopilot.md` §5.18/§5.19） |
 | EndpointPolicy 排序/过滤 | `backend-go/internal/autopilot/endpoint_policy.go`、`*_test.go` | 连续效用分排序（`UtilityScore`，opportunistic ×1.5），FastDecay 软过滤，常规池回退 |
 | SmartRouter 代表成本 | `backend-go/internal/autopilot/smart_router.go` | 按可用 Key 最小有效成本聚合，保留 `0` |
 | FastDecay 投影 | `backend-go/internal/autopilot/fast_decay.go` | `PoolTagTemp` 按 opportunistic 投影 |

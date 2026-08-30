@@ -18,7 +18,7 @@
 - `backend-go/internal/upstreamprobe/volcengine.go` — 火山 Plan 数据面共享探针（与 autopilot 共用）
 - `backend-go/internal/metrics/sqlite_store_key_health.go` — `key_health` 表持久化（`KeyHealthRecord`）
 - `backend-go/internal/metrics/model_circuit.go` — 模型级熔断追踪器 `ModelCircuitTracker`
-- `backend-go/main.go:104-141` — L1Fetcher 接线、火山探针分流、拉黑/喂熔断回调注入
+- `backend-go/main.go:104-176、1043-1048` — L1Fetcher 接线、火山探针分流、拉黑/喂熔断回调注入
 - `backend-go/internal/scheduler/recovery.go` + `internal/config/config.go` — 渠道/Key 恢复
 - `backend-go/internal/autopilot/volcengine_coding_plan.go` — 火山管控面签名客户端（用量/套餐识别，凭证回填）
 
@@ -53,10 +53,10 @@
 - `probeOneModel`（`l2.go:133`）：核心 L2 执行。
   - 按 key 裁剪渠道副本 `probeChannel`：`APIKeys=[apiKey]`、`DisabledAPIKeys=nil`、覆盖 `BaseURL/BaseURLs` 为该 key 绑定端点（`keyBaseURLs`），避免把其他凭证/跨套餐地址带入探针。
   - 复用能力测试路径：`handlers.BuildHealthCheckL2Request`（= `buildTestRequestWithModel`）构建请求，`handlers.SendHealthCheckL2Stream`（= `sendAndCheckStream`）发送并做流式预检（`PreflightStreamEventsWithOptions`，`TreatThinkingAsContent`）。请求特征见 `capability_test_request.go:218`（Claude Code system 指纹、Codex `Originator`、思考参数等）。
-  - 处置与 L1 同构：成功 `ok`（`detail="model=<model>"`）；401/403 `auth_failed`+拉黑；其他 `error`+喂熔断（归因到 `keyBaseURLs[0]`）。`consecutive_failures` 基于该 `(key, check_kind)` 上次记录。
+  - 处置与 L1 同构：成功 `ok`（`detail="model=<model>"`；上游自报模型与请求模型不一致时追加 ` upstream=<model>`——隐式模型重定向观测，`l2.go:180`）；401/403 `auth_failed`+拉黑；其他 `error`+喂熔断（归因到 `keyBaseURLs[0]`）。`consecutive_failures` 基于该 `(key, check_kind)` 上次记录。
 
 ### 2.4 请求构建入口（`healthcheck_probe.go`）
-`handlers/healthcheck_probe.go` 是 L2 复用能力测试路径的薄适配：`BuildHealthCheckL2Request` / `SendHealthCheckL2Stream`。
+`handlers/healthcheck_probe.go` 是 L2 复用能力测试路径的薄适配：`BuildHealthCheckL2Request` / `SendHealthCheckL2Stream`。3e721de1 起 `SendHealthCheckL2Stream` 返回 6 元组，新增 `upstreamModel`（从流式预检缓冲事件经 `common.ExtractUpstreamModelFromEvents` 提取上游自报模型，见 §9.2）。
 
 ## 3. 动态频率、稀疏模型级探针、共享探针与去重机制
 
@@ -101,9 +101,9 @@
 - **L1/L2 同周期去重**：`RealCallVerified=true` 时跳过等价 L2（火山 L1 已是真实调用），改走稀疏探测；`RealCallVerified=false`（通用 `/v1/models`）L1 成功后仍执行 L2（非火山不回归）。
 - **同能力探测去重**：L2 经 `CapabilityProbeLedger` 按 `(siteIdentity, groupIdentity, protocol)` 抢占，同能力多 key 每周期只真实探测一次（见 §2.3）。
 
-### 3.6 L1Fetcher 接线与火山分流（`main.go:141 healthCheckL1Fetcher`）
+### 3.6 L1Fetcher 接线与火山分流（`main.go:142 healthCheckL1Fetcher`）
 - 命中 `IsVolcenginePlanBaseURL` → 走 `VolcenginePlanL1Probe`，用内置 manifest 候选动态选模型，返回 `RealCallVerified=true`。
-- 否则走 `channelModelsHandlerFetcher`（各渠道 `GetChannelModels` handler 的 httptest 包装，`main.go:104-135`），`RealCallVerified=false`；请求体透传 `learnedClientFingerprint`（`main.go:115`），六类 `GetChannelModels` 在渠道配置值或请求值为真时给 models 请求加 Claude Code 探针头（claude serviceType 默认带）。含义：L1 的 401/403 判定存在「客户端指纹风控」第三态背景，未学习指纹的渠道首次仍可能裸试被拒（由 discovery 学习后自动恢复）。被包装的 `GetChannelModels` handler 本身对火山套餐已改走管控面套餐清单（158d9c12，见 §9.1 与 `autopilot.md` §2.11）。
+- 否则走 `channelModelsHandlerFetcher`（各渠道 `GetChannelModels` handler 的 httptest 包装，`main.go:104`），`RealCallVerified=false`；请求体透传 `learnedClientFingerprint`（`main.go:116`），六类 `GetChannelModels` 在渠道配置值或请求值为真时给 models 请求加 Claude Code 探针头（claude serviceType 默认带）。含义：L1 的 401/403 判定存在「客户端指纹风控」第三态背景，未学习指纹的渠道首次仍可能裸试被拒（由 discovery 学习后自动恢复）。被包装的 `GetChannelModels` handler 本身对火山套餐已改走管控面套餐清单（158d9c12，见 §9.1 与 `autopilot.md` §2.11）。
 
 ## 4. 探针结果如何影响 scheduler 的选择/熔断/恢复
 
@@ -158,7 +158,7 @@ scheduler 选渠道读的是运行时熔断/健康度，探针失败与真实请
 
 healthcheck 不直接依赖 provider 适配层，而是通过 `internal/upstreamprobe`（中性共享包）与火山交互：
 
-- **数据面探针**（推理 key 可用性）：`upstreamprobe.VolcenginePlanL1Probe` / `ProbeVolcenginePlan`。healthcheck L1（`main.go:143`）与 autopilot 新渠道验证（`autopilot/verify_endpoint.go:324 verifyVolcenginePlanEndpoint`）共用同一实现，避免请求特征漂移。请求走真实 `/messages` 或 `/chat/completions`，非管控面。
+- **数据面探针**（推理 key 可用性）：`upstreamprobe.VolcenginePlanL1Probe` / `ProbeVolcenginePlan`。healthcheck L1（`main.go:145`）与 autopilot 新渠道验证（`autopilot/verify_endpoint.go:472 verifyVolcenginePlanEndpoint`）共用同一实现，避免请求特征漂移。请求走真实 `/messages` 或 `/chat/completions`，非管控面。
 - **管控面**（套餐识别/模型发现/用量，凭证回填）：`autopilot/volcengine_coding_plan.go volcenginePlanClient`（HMAC 签名），供用量刷新→`TryRestoreDisabledKeysByUsage` 恢复。
 - **内置 manifest**（`config/builtin_models_manifest.go`）：火山 Agent/Coding Plan 条目 `DisableProbe=true`（普通 key 无法用 `/v1/models` 探测），保活 L1 探针成功后用 `volcengineAgentPlanModelIDs`/`volcengineCodingPlanModelIDs` 生成模型清单。
 - **AFP 定价**（`config/volcengine_afp_pricing.go`）：`ResolveVolcengineAFPCost` 供稀疏 L2 选模型按成本排序，含输入分段（≤32k×0.67 / ≤128k×1 / >128k×2）与活动倍率、别名解析。目录已同步至 2026-08 文档（534ee04e）：`glm-latest` 改指 `glm-5.3`，新增 doubao-seed-2.0-mini/lite、doubao-seed-2.1-turbo、minimax-m3 等基础系数，移除 kimi-k2.6 规则。
@@ -282,6 +282,7 @@ healthcheck 不直接依赖 provider 适配层，而是通过 `internal/upstream
 - **Probe schema 版本化**：`capability_probe_models.go` 定义 `capabilityProbeSchemaVersion` 常量（探针特征集版本，模型列表/提示词/参数约束/协议头任一变更时递增）。`CapabilityTestResponse` / `CapabilityTestJob` 携带该版本；cache key 与 execution lookup key 纳入版本号，probe 参数升级后旧缓存自然失效。
 - **前后端统一 schema**：`shared/capability-probe-schema.json` 作为单一真相源，承载 `schemaVersion` / `baseProtocols` / `probeModels` / `frontendPlaceholderModels`。后端 `capability_probe_models.go` 经 `go:embed` 读取嵌入副本，前端 `useCapabilityTestManager.ts` 与 `CapabilityTestDialog.vue` 直接 import 该 JSON，消除前后端模型列表与基础协议双副本。
 - **Drift 观测与事件化**：`executeModelTest` 完成后将探测结果与 `config.ResolveUpstreamCapability` 声明能力比对，命中"registry 声明支持但探测失败"等偏差时打 `[Capability-Drift]` 日志，并经注入的共享 eventbus 发布 `capability_drift` 事件（Scope=config，Payload 含模型/声明能力/实际结果）。事件经 StateEventStore 持久化并由健康中心以告警展示；纯观测，不改调度/探测结论。
+- **上游自报模型统一观测口径**（3e721de1）：共享提取器 `common/stream.go` `ExtractUpstreamModelFromEvents`（行 959）覆盖 messages(`message.model`)/responses(`response.model`)/chat(顶层 `model`)，gemini 响应不携带 model 字段返回空串，并过滤 provider 层合成的 `"unknown"`/`"responses"` 占位值（非上游自报）。responses 转换层同步修复 `ensureMessageStart` 硬编码占位，改为携带 `response.created/completed` 的真实 model（`providers/responses.go:701` `firstNonEmpty(latestModel, "responses")`；L2 对 responses 协议复用该转换层做流式预检，同样受益）。L2（detail ` upstream=`，§2.3）与能力测试结果（`upstreamModel` 字段，`capability_test_handler.go`/`capability_test_jobs.go`）同源，用于识别火山等厂商侧隐式模型重定向。
 
 **待排期缺口**
 

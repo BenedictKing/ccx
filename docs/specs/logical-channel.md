@@ -228,12 +228,14 @@ LogicalChannel 持久化派生标签（`HealthTag`/`QualityTag`/`CostTag`/`Capab
   - Name → `UpstreamConfig.Name`、`LogicalName`
   - Website、Description
   - Tags
+  - Remark（2f4eed27）：用户备注，更新侧同步每个物理渠道的 `Common.Remark`；物理单卡反向同步见下条
   - BaseURLs → 重写物理渠道的 `BaseURLs` 并把首个设为 `BaseURL`
   - ProxyURL / ProxyPreferDirect（876eaf7e）：出站代理与直连优先开关，原子更新并同步到每个物理渠道（`logical_channel_crud.go` Create/Update/Append 各路径均透传）
 - Removals：删除指定 kind 的 protocol，同时删除对应物理渠道；拒绝删到 0 个 protocol。
 - Protocols：已存在则更新物理渠道并替换 logical protocol entry；不存在则新增物理渠道。
 - 任意失败则恢复备份，保证事务性。
 - Key 顺序无显式 sort 字段：顺序即 `APIKeys`/`APIKeyConfigs` 的 slice 顺序（前端拖拽排序/置顶置底直接重排 slice，85f362ba）。
+- **Remark 双向同步**（2f4eed27 + 87da075d）：物理单卡更新备注时 `channel_crud.go` 的 `syncRemarkAcrossLogicalGroupLocked`（行 747，由 `updateUpstreamCommonLocked` 在 `updates.Remark != nil` 时触发）把 TrimSpace 后的备注写入同 `LogicalChannelUID` 的 logical 与全部六数组兄弟卡——统一视图（Dashboard）展示的是逻辑渠道层备注，只改主路由会让逻辑层与兄弟卡残留值顶回（备注"删不掉"根因）；名称迁移不再把物理渠道残留备注回填逻辑渠道（`config_utils.go` `migrateAllChannelNamesConfig`，「历史名档案」语义废弃）。回归测试 `channel_crud_remark_sync_test.go`。
 
 ### 7.3 删除 `DeleteLogicalChannel`
 
@@ -400,6 +402,16 @@ LogicalChannel 持久化派生标签（`HealthTag`/`QualityTag`/`CostTag`/`Capab
 - `unifiedLlmChannelsData`：合并四类 LLM 渠道。
 - `currentDashboardMetrics` / `currentDashboardRecentActivity`：对 LLM tab 做 routeKind 标注与活动聚合。
 - `activeChannelCount` / `failoverChannelCount`：基于 `protocolRoutes` 计算。
+
+### 12.7 拉黑 key 删除/恢复的全协议路由分发
+
+文件：`frontend/src/composables/useDisabledApiKeys.ts`（df9e026b）
+
+统一视图行的 `disabledApiKeys` 是各协议路由凭证聚合的**并集**（§6.4 `mergeAccountCredentials`）。原实现删除/恢复拉黑 key 只操作主路由：其他协议路由上的同 key 拉黑副本残留，导致行刷新后"复活"、再次删除报 404 API key not found。
+
+- `disabledKeyRoutes`（行 98）：按 `protocolRoutes` 过滤**实际包含该 key** 的路由，无命中时回退主路由。
+- `forEachDisabledKeyRoute`（行 112）：`Promise.allSettled` 并发对各路由执行 `removeKeyAtRoute`/`restoreKeyAtRoute`（按 kind 分发六套 API）；key 在某路由已不存在（404，`isKeyNotFoundError` 行 109 匹配 `API key not found`/`API密钥不存在`）视为幂等成功吞掉，其余 rejection 取第一个照常抛出。
+- 挂载点：恢复（行 186）与删除（行 207）。与 §12.3 的 `resolveChannelStatusMutationRoutes` 同属「统一视图操作 → 物理路由分发」族，但作用于 key 级而非渠道状态级。
 
 ## 13. 与 Scheduler 的交互
 
