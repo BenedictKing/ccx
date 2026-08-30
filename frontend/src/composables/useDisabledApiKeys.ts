@@ -70,6 +70,52 @@ export function useDisabledApiKeys(options: DisabledApiKeyOptions) {
     }
   }
 
+  const restoreKeyAtRoute = (route: KeyRoute, apiKey: string): Promise<void> => {
+    switch (route.kind) {
+      case 'chat': return options.apiService.restoreChatApiKey(route.index, apiKey)
+      case 'images': return options.apiService.restoreImagesApiKey(route.index, apiKey)
+      case 'vectors': return options.apiService.restoreVectorsApiKey(route.index, apiKey)
+      case 'gemini': return options.apiService.restoreGeminiApiKey(route.index, apiKey)
+      case 'responses': return options.apiService.restoreResponsesApiKey(route.index, apiKey)
+      default: return options.apiService.restoreApiKey(route.index, apiKey)
+    }
+  }
+
+  const removeKeyAtRoute = (route: KeyRoute, apiKey: string): Promise<void> => {
+    switch (route.kind) {
+      case 'chat': return options.apiService.removeChatApiKey(route.index, apiKey)
+      case 'images': return options.apiService.removeImagesApiKey(route.index, apiKey)
+      case 'vectors': return options.apiService.removeVectorsApiKey(route.index, apiKey)
+      case 'gemini': return options.apiService.removeGeminiApiKey(route.index, apiKey)
+      case 'responses': return options.apiService.removeResponsesApiKey(route.index, apiKey)
+      default: return options.apiService.removeApiKey(route.index, apiKey)
+    }
+  }
+
+  // 统一视图下 channel.disabledApiKeys 是各协议路由拉黑记录的并集：
+  // 恢复/删除必须覆盖所有包含该 key 的物理路由，否则只清掉主路由副本，
+  // 刷新后行会从其他协议的拉黑记录中“复活”，再次删除则 404。
+  const disabledKeyRoutes = (channel: Channel, apiKey: string): KeyRoute[] => {
+    const routes = (channel.protocolRoutes ?? []).filter(route =>
+      route.disabledApiKeys?.some(item => item.key === apiKey),
+    )
+    if (routes.length > 0) {
+      return routes.map(route => ({ kind: route.kind, index: route.index }))
+    }
+    return [{ kind: options.channelType.value, index: channelId(channel) }]
+  }
+
+  // key 在某个路由已不存在（如刚被删除）时视为幂等成功，其他错误仍需透出
+  const isKeyNotFoundError = (error: unknown): boolean =>
+    error instanceof Error && (error.message.includes('API key not found') || error.message.includes('API密钥不存在'))
+
+  const forEachDisabledKeyRoute = async (channel: Channel, apiKey: string, action: (route: KeyRoute, key: string) => Promise<void>) => {
+    const routes = disabledKeyRoutes(channel, apiKey)
+    const results = await Promise.allSettled(routes.map(route => action(route, apiKey)))
+    const fatal = results.find((r): r is PromiseRejectedResult => r.status === 'rejected' && !isKeyNotFoundError(r.reason))
+    if (fatal) throw fatal.reason
+  }
+
   const markKeySuspended = (apiKey: string) => {
     const configs = options.form.apiKeyConfigs ?? []
     const existingIndex = configs.findIndex(config => config.key === apiKey)
@@ -137,26 +183,7 @@ export function useDisabledApiKeys(options: DisabledApiKeyOptions) {
     if (!channel || restoringKey.value) return
     restoringKey.value = apiKey
     try {
-      const id = channelId(channel)
-      switch (options.channelType.value) {
-        case 'chat':
-          await options.apiService.restoreChatApiKey(id, apiKey)
-          break
-        case 'images':
-          await options.apiService.restoreImagesApiKey(id, apiKey)
-          break
-        case 'vectors':
-          await options.apiService.restoreVectorsApiKey(id, apiKey)
-          break
-        case 'gemini':
-          await options.apiService.restoreGeminiApiKey(id, apiKey)
-          break
-        case 'responses':
-          await options.apiService.restoreResponsesApiKey(id, apiKey)
-          break
-        default:
-          await options.apiService.restoreApiKey(id, apiKey)
-      }
+      await forEachDisabledKeyRoute(channel, apiKey, restoreKeyAtRoute)
       if (!options.form.apiKeys.includes(apiKey)) {
         options.form.apiKeys = [...options.form.apiKeys, apiKey]
       }
@@ -177,26 +204,7 @@ export function useDisabledApiKeys(options: DisabledApiKeyOptions) {
     if (!channel || removingKey.value) return
     removingKey.value = apiKey
     try {
-      const id = channelId(channel)
-      switch (options.channelType.value) {
-        case 'chat':
-          await options.apiService.removeChatApiKey(id, apiKey)
-          break
-        case 'images':
-          await options.apiService.removeImagesApiKey(id, apiKey)
-          break
-        case 'vectors':
-          await options.apiService.removeVectorsApiKey(id, apiKey)
-          break
-        case 'gemini':
-          await options.apiService.removeGeminiApiKey(id, apiKey)
-          break
-        case 'responses':
-          await options.apiService.removeResponsesApiKey(id, apiKey)
-          break
-        default:
-          await options.apiService.removeApiKey(id, apiKey)
-      }
+      await forEachDisabledKeyRoute(channel, apiKey, removeKeyAtRoute)
       // 兼容拉黑记录与活跃列表同时存在的历史数据，表单内也一并移除
       if (options.form.apiKeys.includes(apiKey)) {
         options.form.apiKeys = options.form.apiKeys.filter(key => key !== apiKey)

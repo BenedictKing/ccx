@@ -127,6 +127,80 @@ describe('useDisabledApiKeys', () => {
     expect(state.visibleDisabledKeys.value).toHaveLength(1)
   })
 
+  // 统一视图：disabledApiKeys 是各协议路由的并集，删除/恢复必须覆盖所有包含该 key 的路由
+  const createUnifiedChannel = () => ref<Channel | null>({
+    index: 3,
+    routeKind: 'messages',
+    routeIndex: 3,
+    apiKeys: [activeKey],
+    disabledApiKeys: [{ key: disabledKey, reason: 'permission_error', message: '', disabledAt: '' }],
+    protocolRoutes: [
+      { kind: 'messages', index: 3, name: 'c', serviceType: 'claude', apiKeys: [activeKey], disabledApiKeys: [] },
+      { kind: 'chat', index: 19, name: 'c', serviceType: 'openai', apiKeys: [activeKey], disabledApiKeys: [{ key: disabledKey, reason: 'permission_error', message: '', disabledAt: '' }] },
+      { kind: 'responses', index: 14, name: 'c', serviceType: 'responses', apiKeys: [activeKey], disabledApiKeys: [{ key: disabledKey, reason: 'permission_error', message: '', disabledAt: '' }] },
+    ],
+  } as unknown as Channel)
+
+  it('统一视图下删除拉黑 Key 覆盖所有包含它的协议路由', async () => {
+    const removeApiKey = vi.fn().mockResolvedValue(undefined)
+    const removeChatApiKey = vi.fn().mockResolvedValue(undefined)
+    const removeResponsesApiKey = vi.fn().mockResolvedValue(undefined)
+    const channel = createUnifiedChannel()
+    const state = useDisabledApiKeys({
+      apiService: { removeApiKey, removeChatApiKey, removeResponsesApiKey } as unknown as ApiService,
+      channel: computed(() => channel.value),
+      channelType: computed(() => 'messages' as const),
+      emitError: vi.fn(),
+      form: { apiKeys: [] },
+    })
+
+    await state.removeDisabledKey(disabledKey)
+
+    expect(removeChatApiKey).toHaveBeenCalledWith(19, disabledKey)
+    expect(removeResponsesApiKey).toHaveBeenCalledWith(14, disabledKey)
+    expect(removeApiKey).not.toHaveBeenCalled()
+    expect(state.visibleDisabledKeys.value).toEqual([])
+  })
+
+  it('统一视图下部分路由已删除（404）时幂等成功', async () => {
+    const removeChatApiKey = vi.fn().mockRejectedValue(new Error('API key not found'))
+    const removeResponsesApiKey = vi.fn().mockResolvedValue(undefined)
+    const emitError = vi.fn()
+    const channel = createUnifiedChannel()
+    const state = useDisabledApiKeys({
+      apiService: { removeChatApiKey, removeResponsesApiKey } as unknown as ApiService,
+      channel: computed(() => channel.value),
+      channelType: computed(() => 'messages' as const),
+      emitError,
+      form: { apiKeys: [] },
+    })
+
+    await state.removeDisabledKey(disabledKey)
+
+    expect(emitError).not.toHaveBeenCalled()
+    expect(state.visibleDisabledKeys.value).toEqual([])
+  })
+
+  it('统一视图下恢复拉黑 Key 覆盖所有包含它的协议路由', async () => {
+    const restoreChatApiKey = vi.fn().mockResolvedValue(undefined)
+    const restoreResponsesApiKey = vi.fn().mockResolvedValue(undefined)
+    const channel = createUnifiedChannel()
+    const form: TestForm = { apiKeys: [activeKey] }
+    const state = useDisabledApiKeys({
+      apiService: { restoreChatApiKey, restoreResponsesApiKey } as unknown as ApiService,
+      channel: computed(() => channel.value),
+      channelType: computed(() => 'messages' as const),
+      emitError: vi.fn(),
+      form,
+    })
+
+    await state.restoreDisabledKey(disabledKey)
+
+    expect(restoreChatApiKey).toHaveBeenCalledWith(19, disabledKey)
+    expect(restoreResponsesApiKey).toHaveBeenCalledWith(14, disabledKey)
+    expect(form.apiKeys).toEqual([activeKey, disabledKey])
+  })
+
   it('暂停成功后立即写入 enabled=false，并使用真实路由索引', async () => {
     const suspendApiKey = vi.fn().mockResolvedValue(undefined)
     const form: TestForm = { apiKeys: [activeKey] }
