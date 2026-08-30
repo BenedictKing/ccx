@@ -149,7 +149,7 @@
   "subscription.newApi.step2Title": "Step 2: Confirm Provisioning Details",
   "subscription.newApi.baseUrl": "new-api Base URL",
   "subscription.newApi.accessToken": "Access Token",
-  "subscription.newApi.userId": "User ID (optional)",
+  "subscription.newApi.userId": "User ID",
   "subscription.newApi.authTokenMode": "Token Mode",
   "subscription.newApi.verify": "Verify",
   "subscription.newApi.reVerify": "Re-verify",

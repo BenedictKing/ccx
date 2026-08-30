@@ -32,6 +32,7 @@
         density="compact"
         class="mb-2"
         :disabled="verified"
+        required
       />
       <v-select
         v-model="verifyForm.authTokenMode"
@@ -284,7 +285,7 @@ const eligibleGroupItems = computed(() =>
 )
 const blockedGroupCount = computed(() => groupItems.value.length - eligibleGroupItems.value.length)
 
-const canVerify = computed(() => !!verifyForm.value.baseUrl.trim() && !!verifyForm.value.accessToken.trim())
+const canVerify = computed(() => !!verifyForm.value.baseUrl.trim() && !!verifyForm.value.accessToken.trim() && !!(verifyForm.value.userId ?? '').trim())
 const canProvision = computed(
   () =>
     !!provisionForm.value.subscriptionUid.trim() &&
@@ -300,7 +301,7 @@ async function handleVerify() {
     const result = await api.verifyNewApiSubscription({
       baseUrl: verifyForm.value.baseUrl.trim(),
       accessToken: verifyForm.value.accessToken,
-      userId: verifyForm.value.userId || undefined,
+      userId: verifyForm.value.userId?.trim() || undefined,
       authTokenMode: verifyForm.value.authTokenMode || undefined,
       displayName: verifyForm.value.displayName || undefined,
       proxyUrl: verifyForm.value.proxyUrl?.trim() || undefined,
@@ -312,7 +313,7 @@ async function handleVerify() {
     // 预填第 2 步表单
     provisionForm.value.baseUrl = verifyForm.value.baseUrl.trim()
     provisionForm.value.accessToken = verifyForm.value.accessToken
-    provisionForm.value.userId = verifyForm.value.userId || undefined
+    provisionForm.value.userId = verifyForm.value.userId?.trim() || undefined
     provisionForm.value.authTokenMode = verifyForm.value.authTokenMode || undefined
     provisionForm.value.displayName = verifyForm.value.displayName || result.username
     provisionForm.value.proxyUrl = verifyForm.value.proxyUrl?.trim() || undefined

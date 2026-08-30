@@ -1227,7 +1227,7 @@
   "subscription.newApi.step2Title": "Langkah 2: Konfirmasi Detail Provisioning",
   "subscription.newApi.baseUrl": "URL Dasar new-api",
   "subscription.newApi.accessToken": "Token Akses",
-  "subscription.newApi.userId": "ID Pengguna (opsional)",
+  "subscription.newApi.userId": "ID Pengguna",
   "subscription.newApi.username": "Nama Pengguna",
   "subscription.newApi.authTokenMode": "Mode Token",
   "subscription.newApi.proxyUrl": "URL proxy (opsional)",

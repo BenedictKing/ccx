@@ -149,7 +149,7 @@
   "subscription.newApi.step2Title": "第二步：确认接入信息",
   "subscription.newApi.baseUrl": "new-api 地址",
   "subscription.newApi.accessToken": "Access Token",
-  "subscription.newApi.userId": "用户 ID（可选）",
+  "subscription.newApi.userId": "用户 ID",
   "subscription.newApi.authTokenMode": "Token 模式",
   "subscription.newApi.verify": "校验",
   "subscription.newApi.reVerify": "重新校验",

@@ -53,7 +53,7 @@ const eligibleGroupItems = computed(() => maxGroupMultiplierValid.value
   ? groupItems.value.filter(group => Number.isFinite(group.ratio) && group.ratio >= 0 && group.ratio <= maxGroupMultiplier.value)
   : [])
 const blockedGroupItems = computed(() => groupItems.value.filter(group => !eligibleGroupItems.value.includes(group)))
-const canVerify = computed(() => !!verifyForm.value.baseUrl.trim() && !!verifyForm.value.accessToken.trim())
+const canVerify = computed(() => !!verifyForm.value.baseUrl.trim() && !!verifyForm.value.accessToken.trim() && !!(verifyForm.value.userId ?? '').trim())
 const canProvision = computed(() => !!provisionForm.value.subscriptionUid.trim()
   && !!provisionForm.value.channelKind
   && maxGroupMultiplierValid.value
@@ -76,14 +76,14 @@ async function handleVerify() {
   try {
     const result = await adminApi.post<NewApiVerifyResponse>(NEWAPI_VERIFY_PATH, {
       baseUrl: verifyForm.value.baseUrl.trim(), accessToken: verifyForm.value.accessToken,
-      userId: verifyForm.value.userId || undefined, authTokenMode: verifyForm.value.authTokenMode || undefined,
+      userId: verifyForm.value.userId?.trim() || undefined, authTokenMode: verifyForm.value.authTokenMode || undefined,
       displayName: verifyForm.value.displayName || undefined,
     })
     verifyResult.value = result
     verified.value = true
     Object.assign(provisionForm.value, {
       baseUrl: verifyForm.value.baseUrl.trim(), accessToken: verifyForm.value.accessToken,
-      userId: verifyForm.value.userId || undefined, authTokenMode: verifyForm.value.authTokenMode || undefined,
+      userId: verifyForm.value.userId?.trim() || undefined, authTokenMode: verifyForm.value.authTokenMode || undefined,
       displayName: verifyForm.value.displayName || result.username,
     })
     if (!provisionForm.value.subscriptionUid.trim()) {

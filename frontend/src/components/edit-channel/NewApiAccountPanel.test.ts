@@ -143,6 +143,7 @@ describe('NewApiAccountPanel', () => {
       isGeneric: true,
     })
     await wrapper.find('input[type="password"]').setValue('new-api-access-token')
+    await wrapper.find('input:not([type="password"])').setValue('42')
     await wrapper.findAll('button').find(button => button.text().includes('subscription.newApi.bindAccount'))!.trigger('click')
 
     await vi.waitFor(() => expect(apiMocks.provisionNewApiSubscription).toHaveBeenCalledWith({

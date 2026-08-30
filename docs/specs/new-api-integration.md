@@ -28,7 +28,7 @@
 
 调用的 new-api 接口子集与方法：
 - `Verify`（行 198）→ `GET /api/user/self`（`NewApiUserSelf`：id/username/quota/used_quota）
-- `VerifyWithFallback`（行 209）— userID 为空时回退 `userId="1"` 重试（`isNewApiUserHeaderError` 行 237）
+- `VerifyWithFallback`（行 209）— userID 为空时回退 `userId="1"` 重试（`isNewApiUserHeaderError` 行 237）。注意：标准 new-api 的 access token 认证强制要求 `New-Api-User` 头（缺失时报 `New-Api-User header not provided`），空 userID 仅在 fork 不校验该头或账号恰为 ID=1 管理员时可用，因此 **userId 实际必填**；前端各入口表单（2026-08-30）均已改为必填，后端保留空值兜底仅为兼容直接 API 调用与宽松 fork
 - `FetchGroups`（行 259）→ `GET /api/user/self/groups`（返回 `{group: ratio}`）
 - `FetchModels`（行 272）→ `GET /api/user/models`
 - `ListTokens`（行 281）/ `FindTokenByName`（行 309）→ `GET /api/token/?p=&size=`（分页遍历，maxPages=1000 防重复建 key）
@@ -147,11 +147,12 @@ UpstreamConfig (channelUid, autoManagedKind=new_api)
 
 ### 5.2 字段与校验
 - 首次接入 `NewApiSubscriptionForm.vue`：
-  - 表单字段：`baseUrl, accessToken(password), userId, authTokenMode, proxyUrl, proxyPreferDirect, displayName`；provision 步 `subscriptionUid, channelKind, channelName, maxGroupMultiplier(number,min=0), notes`（代理设置在 verify 步录入，provision 预填继承并写入所建渠道）
-  - 校验：`canVerify`（baseUrl+accessToken 非空，行 263）、`canProvision`（subscriptionUid+channelKind + `maxGroupMultiplierValid` + `eligibleGroupItems.length>0`，行 264）
+  - 表单字段：`baseUrl, accessToken(password), userId(必填，标准 new-api 强制 New-Api-User 头), authTokenMode, proxyUrl, proxyPreferDirect, displayName`；provision 步 `subscriptionUid, channelKind, channelName, maxGroupMultiplier(number,min=0), notes`（代理设置在 verify 步录入，provision 预填继承并写入所建渠道）
+  - 校验：`canVerify`（baseUrl+accessToken+userId 非空，行 287；userId 自 2026-08-30 起必填）、`canProvision`（subscriptionUid+channelKind + `maxGroupMultiplierValid` + `eligibleGroupItems.length>0`，行 288）
   - 合格分组过滤：`eligibleNewApiGroups`（`utils/newApiGroups.ts:12`）与 `isValidNewApiGroupMultiplier`（行 8，非负有限），前端与后端 `resolveNewApiProvisionGroups` 语义一致
   - provision 固定发 `provisionAllEligibleGroups=true`（行 318）
 - 已有渠道绑定 / 追加账号（`NewApiAccountPanel.vue`）：
+  - userId 同样必填（2026-08-30）：`canBindNewApi` 与添加账号按钮均要求 userId 非空
   - **同样先 verify，再使用 verify 返回的 `groups` + `availableModels` 计算全部合格分组**
   - 绑定主账号与追加账号都显式传 `provisionAllEligibleGroups=true`、`maxGroupMultiplier`（当前默认 1.0）与 `availableModels`
   - `groupFetchError`、无合格组、verify 失败时均阻断提交，不允许 fallback 到 `default`
@@ -161,7 +162,7 @@ UpstreamConfig (channelUid, autoManagedKind=new_api)
 `verifyNewApiSubscription`(1473) / `provisionNewApiSubscription`(1481) / `updateNewApiCredentials`(1490) / `getSubscriptionAccounts`(1497) / `addSubscriptionAccount`(1502) / `deleteSubscriptionAccount`(1510) / `deleteSubscriptionPrimaryAccount`(1517，账号平权) / `refreshSubscriptionAccount`(1524) / `updateSubscriptionAccountCredentials`(1531，62d2d46d，面板已不再调用) / `refreshSubscription`(1436) / `patchKeyMultiplier`(1460) / `linkSubscriptionChannel`(1422) / `unlinkSubscriptionChannel`(1429)。类型定义在 `api-types.ts`：`NewApiVerifyRequest/Response`、`NewApiProvisionRequest/Response`、`NewApiProvisionedKey(Info)`、`NewApiAccountItem`、`NewApiCredentialsUpdateRequest`、`NewApiKeyStatus`、`NewApiSyncResult`、`APIKeyConfig`。
 
 ### 5.4 调用链路（统一组计划）
-1. `verify`：输入 `baseUrl/accessToken/userId/authTokenMode`，后端拉 `GET /api/user/self`、`GET /api/user/self/groups`、`GET /api/user/models`，返回 `groups + availableModels`。
+1. `verify`：输入 `baseUrl/accessToken/userId(必填)/authTokenMode`，后端拉 `GET /api/user/self`、`GET /api/user/self/groups`、`GET /api/user/models`，返回 `groups + availableModels`。
 2. `plan`：前端按统一倍率阈值（默认 1.0）用 `eligibleNewApiGroups` 计算全部合格分组；若 `groupFetchError`、无合格组或阈值非法，则直接阻断。
 3. `provision / add-account`：
    - 新增订阅：`NewApiSubscriptionForm.handleProvision` → `api.provisionNewApiSubscription`

@@ -55,7 +55,7 @@ function requireEligibleGroups(result: NewApiVerifyResponse) {
 }
 
 async function addAccount() {
-  if (!props.subscription?.subscriptionUid || !addForm.value.accessToken.trim()) return
+  if (!props.subscription?.subscriptionUid || !addForm.value.accessToken.trim() || !addForm.value.userId.trim()) return
   adding.value = true
   error.value = ''
   try {
@@ -151,7 +151,7 @@ onMounted(() => void loadAccounts())
         <Label class="text-xs text-muted-foreground">{{ t('subscription.newApi.authTokenMode') }}</Label>
         <Select v-model="addForm.authTokenMode"><SelectTrigger class="h-9 w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="bearer">Bearer</SelectItem><SelectItem value="raw_auth">Raw Authorization</SelectItem></SelectContent></Select>
       </div>
-      <Button type="submit" class="sm:col-span-2" :disabled="adding || !addForm.accessToken.trim()">
+      <Button type="submit" class="sm:col-span-2" :disabled="adding || !addForm.accessToken.trim() || !addForm.userId.trim()">
         <Loader2 v-if="adding" class="h-3.5 w-3.5 animate-spin" /><Plus v-else class="h-3.5 w-3.5" />
         {{ t('subscription.newApi.addAccount') }}
       </Button>

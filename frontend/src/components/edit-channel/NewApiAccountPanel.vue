@@ -30,6 +30,7 @@
                   :label="t('subscription.newApi.userId')"
                   variant="outlined"
                   density="compact"
+                  required
                 />
               </v-col>
               <v-col cols="12" md="6">
@@ -216,6 +217,7 @@
                   :label="t('subscription.newApi.userId')"
                   variant="outlined"
                   density="compact"
+                  required
                 />
               </v-col>
               <v-col cols="12" md="6">
@@ -234,7 +236,7 @@
             <v-alert v-if="addError" color="error" variant="tonal" density="compact" class="mb-2">
               {{ addError }}
             </v-alert>
-            <v-btn color="primary" :loading="adding" :disabled="!addForm.accessToken.trim()" @click="handleAddAccount">
+            <v-btn color="primary" :loading="adding" :disabled="!addForm.accessToken.trim() || !addForm.userId.trim()" @click="handleAddAccount">
               {{ t('app.actions.add') }}
             </v-btn>
           </v-form>
@@ -427,7 +429,8 @@ const canBindNewApi = computed(() => Boolean(
   props.baseUrl?.trim() &&
   props.channelUid?.trim() &&
   props.channelKind?.trim() &&
-  bindForm.value.accessToken.trim(),
+  bindForm.value.accessToken.trim() &&
+  bindForm.value.userId.trim(),
 ))
 
 function normalizeAuthTokenMode(mode?: string) {
@@ -573,12 +576,12 @@ async function handleAddAccount() {
     addError.value = primaryError.value || t('subscription.newApi.subscriptionUnavailable')
     return
   }
-  if (!addForm.value.accessToken.trim()) return
+  if (!addForm.value.accessToken.trim() || !addForm.value.userId.trim()) return
   adding.value = true
   addError.value = ''
   try {
     const accessToken = addForm.value.accessToken.trim()
-    const userId = addForm.value.userId || undefined
+    const userId = addForm.value.userId.trim() || undefined
     const authTokenMode = addForm.value.authTokenMode || undefined
     // 代理沿用渠道"代理通道"设置（未配置时直连），账号级不再单独覆盖
     const proxyUrl = channelProxy.value?.proxyUrl || undefined
