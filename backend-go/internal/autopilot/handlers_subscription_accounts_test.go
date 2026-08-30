@@ -118,16 +118,16 @@ func TestHandleDeletePrimaryAccount_ClearsCredentialKeepsSubscription(t *testing
 		t.Fatalf("创建 store 失败: %v", err)
 	}
 	profile := &SubscriptionProfile{
-		SubscriptionUID: "sub-del",
-		Provider:        "new_api",
-		BaseURL:         "https://new-api.example.com",
-		AccessToken:     "primary-secret",
-		UserID:          "7",
-		Username:        "bob",
-		AuthTokenMode:   NewApiAuthModeBearer,
+		SubscriptionUID:   "sub-del",
+		Provider:          "new_api",
+		BaseURL:           "https://new-api.example.com",
+		AccessToken:       "primary-secret",
+		UserID:            "7",
+		Username:          "bob",
+		AuthTokenMode:     NewApiAuthModeBearer,
 		LinkedChannelUIDs: []string{"ch-1"},
-		ProvisionedKeys: []NewApiProvisionedKey{{Name: "ccx-default", Group: "default", TokenID: 11}},
-		Source:          "newapi_provision",
+		ProvisionedKeys:   []NewApiProvisionedKey{{Name: "ccx-default", Group: "default", TokenID: 11}},
+		Source:            "newapi_provision",
 	}
 	if err := store.Create(profile); err != nil {
 		t.Fatalf("创建订阅失败: %v", err)
