@@ -177,6 +177,18 @@ CCX 现状：不代理 realtime 链路（`/v1/responses` 的 WS 是 Responses ov
 
 结论：无影响。
 
+## [ ] Claude Code v2.1.251 上游协议/工具变更评估
+
+发现协议/工具/用法变更（2.1.242→2.1.251），需评估对 ccx Messages 渠道的影响：
+
+1. **effort × thinking 约束（Opus 5）**：上游修复 "effort … is not supported when thinking is disabled" —— 当 effort 为 xhigh/max 且 thinking 关闭时，Anthropic Messages API 拒绝请求，Claude Code 现改为降级发送 `effort: high`。CCX 的 effort-aware 路由在构造 Messages 请求时需应用同样的护栏（thinking 关闭时把 xhigh/max effort 降级为 high），否则命中 Opus 5 会 400。
+
+2. **thinking-only 轮次的空文本块**：上游修复 "text content blocks must be non-empty"（模型仅产生 thinking、无文本时的空 text block 被 API 拒绝）。CCX Messages 响应重组/透传若产生或转发 thinking + 空 text block，会导致后续请求 400，需核查响应解析与历史回放路径。
+
+3. **第三方 Anthropic 兼容端点的 tool_use id**：上游修复了第三方端点（如 CCX，`ANTHROPIC_BASE_URL`）流式返回缺少 `id` 的 `tool_use` block 导致客户端渲染错误；另有 "saved history contains tool blocks the Anthropic API does not accept (typically written by a third-party API proxy)" 的 400 修复。CCX 作为 Anthropic 兼容端点，需确保所有 `tool_use` block 都带合法 `id`，避免生成 API 不接受的 tool block。
+
+注：PreModelSwitch/PostModelSwitch hooks、`/effort` per-model 记忆、subagent 流式、spend limit、Bash 沙箱等均为 Claude Code 客户端内部能力，不影响 CCX 代理层协议。
+
 ---
 
 ## [ ] 英伟达渠道导入
