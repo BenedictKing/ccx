@@ -177,15 +177,30 @@ CCX 现状：不代理 realtime 链路（`/v1/responses` 的 WS 是 Responses ov
 
 结论：无影响。
 
-## [ ] Claude Code v2.1.251 上游协议/工具变更评估
+## [x] Claude Code v2.1.251 上游协议/工具变更评估（2026-08-30 完成）
 
-发现协议/工具/用法变更（2.1.242→2.1.251），需评估对 ccx Messages 渠道的影响：
+发现协议/工具/用法变更（2.1.242→2.1.251）。评估结论：第 1、2 项无需改动代码，第 3 项存在两个 tool_use id 兜底缺口并已修复。
 
-1. **effort × thinking 约束（Opus 5）**：上游修复 "effort … is not supported when thinking is disabled" —— 当 effort 为 xhigh/max 且 thinking 关闭时，Anthropic Messages API 拒绝请求，Claude Code 现改为降级发送 `effort: high`。CCX 的 effort-aware 路由在构造 Messages 请求时需应用同样的护栏（thinking 关闭时把 xhigh/max effort 降级为 high），否则命中 Opus 5 会 400。
+### 1. effort × thinking 约束（Opus 5）——无需改动
 
-2. **thinking-only 轮次的空文本块**：上游修复 "text content blocks must be non-empty"（模型仅产生 thinking、无文本时的空 text block 被 API 拒绝）。CCX Messages 响应重组/透传若产生或转发 thinking + 空 text block，会导致后续请求 400，需核查响应解析与历史回放路径。
+CCX 所有自身构造路径都不会产生 `thinking disabled + effort xhigh/max` 非法组合：
 
-3. **第三方 Anthropic 兼容端点的 tool_use id**：上游修复了第三方端点（如 CCX，`ANTHROPIC_BASE_URL`）流式返回缺少 `id` 的 `tool_use` block 导致客户端渲染错误；另有 "saved history contains tool blocks the Anthropic API does not accept (typically written by a third-party API proxy)" 的 400 修复。CCX 作为 Anthropic 兼容端点，需确保所有 `tool_use` block 都带合法 `id`，避免生成 API 不接受的 tool block。
+- `applyClaudeThinkingEffort`（`providers/claude.go:85`，messages 渠道配置了 ReasoningMapping 时介入）：effort 为 off/none → 写纯 `{"type":"disabled"}` 并删除 `reasoning`/`reasoning_effort`/`output_config.effort`；effort 生效 → 强制 `type:"enabled" + effort`。两种输出均合法。注意渠道级 effort 语义是覆盖：客户端 thinking disabled 会被渠道映射改写为 enabled+effort，属既有设计而非本次上游变更问题。
+- `ApplyReasoningParamStyle` 的 thinking style（`config/config_utils.go:441`，Responses 上游）：同构逻辑，干净。
+- Responses→Claude 桥接（`converters/claude_converter.go`）不构造顶层 thinking；场景预设路由只按 effort 维度选路，不改写请求体。
+- 残留暴露面：渠道未配 ReasoningMapping 时客户端请求原样透传——仅**旧版** Claude Code（<2.1.251）+ Opus 5 + thinking disabled + xhigh/max 会 400。新版客户端已自愈；CCX 侧由 ChannelCompatCache 失败学习 + failover 兜住重复失败。按「无真实流量证据不加静态行为」原则不加全局护栏；如后续真实流量命中该 400，在 `applyClaudeThinkingEffort` 补 xhigh/max→high 降级即可（MiMo 的 `NormalizeReasoningEffortForUpstream` 已有同款收敛模板，`config_utils.go:399`）。
+
+### 2. thinking-only 轮次的空文本块——无需改动
+
+- CCX 流式 normalizer（`claudeStreamNormalizer`）不会凭空合成空 text block：`ensureTextBlock`（`claude.go:1210`）仅在收到 `text_delta`（有真实文本）时打开文本块，`content_block_start` 的 text 块仅转发放上游真实事件。
+- 请求侧已有条件清洗：`stripEmptyTextBlocksFromBody`（`claude.go:671`）在渠道开启 `stripEmptyTextBlocks`（渠道级配置 / ChannelCompatCache 自学习 trait，兼容诊断端点检测推荐，DeepSeek 严格端点默认开启）时剔除空 text block。
+- 已知边界：`shouldStripEmptyTextBlock` 仅剔除恰好 type+text 两字段的空块（带 cache_control 的空 text 不剔除），且原生 Anthropic 上游默认不清洗——Anthropic 官方与 Claude Code v2.1.251 均已自身修复不再产生该形态，CCX 无需跟随。
+
+### 3. 第三方 Anthropic 兼容端点的 tool_use id——修复两个兜底缺口
+
+CCX 五个 tool_use 生成点核查：三处本就安全——`claudeStreamNormalizer.ensureToolBlock`（`claude.go:1224`，合成 `toolu_<ns>_<index>`）、gemini→claude（`gemini.go:441`，合成 `toolu_<n>`）、chat 流式（`openai.go:693`，`acc.ID != ""` 才发射，不会发出无 id 块；上游漏 id 时该工具调用被静默丢弃，属极端异常，暂不扩大修复范围）。两处直接透传上游 ID 无兜底，为空时产出无 id tool_use block → 客户端渲染错误 + 历史回放 400，本次修复：
+
+- 非流式 chat→claude（`openai.go:390`）与 responses→claude（`responses.go:590`）经新增的 `fallbackToolUseID`（`openai.go`，`toolu_<unixnano>` 前缀兜底）合成合法 id；回归测试 `providers/tool_use_id_fallback_test.go` 覆盖「上游漏 id 合成 / 上游有 id 原样保留」两方向。
 
 注：PreModelSwitch/PostModelSwitch hooks、`/effort` per-model 记忆、subagent 流式、spend limit、Bash 沙箱等均为 Claude Code 客户端内部能力，不影响 CCX 代理层协议。
 

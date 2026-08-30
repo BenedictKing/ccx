@@ -587,7 +587,7 @@ func (p *ResponsesProvider) ConvertToClaudeResponse(providerResp *types.Provider
 				input = sanitizeClaudeToolInput(toString(item["name"]), input)
 				claudeResp.Content = append(claudeResp.Content, types.ClaudeContent{
 					Type:  "tool_use",
-					ID:    toString(item["call_id"]),
+					ID:    fallbackToolUseID(toString(item["call_id"])),
 					Name:  toString(item["name"]),
 					Input: input,
 				})

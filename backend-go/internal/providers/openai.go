@@ -388,7 +388,7 @@ func (p *OpenAIProvider) ConvertToClaudeResponse(providerResp *types.ProviderRes
 
 			claudeResp.Content = append(claudeResp.Content, types.ClaudeContent{
 				Type:  "tool_use",
-				ID:    toolCall.ID,
+				ID:    fallbackToolUseID(toolCall.ID),
 				Name:  toolCall.Function.Name,
 				Input: input,
 			})
@@ -786,6 +786,15 @@ type ToolCallAccumulator struct {
 	ID        string
 	Name      string
 	Arguments string
+}
+
+// fallbackToolUseID 上游漏发工具调用 ID 时合成 toolu_ 兜底值，
+// 避免向客户端产出 Anthropic 协议不接受的无 id tool_use block。
+func fallbackToolUseID(id string) string {
+	if id != "" {
+		return id
+	}
+	return fmt.Sprintf("toolu_%d", time.Now().UnixNano())
 }
 
 // buildMessageStartEvent 构建 Claude Messages API 的 message_start SSE 事件
