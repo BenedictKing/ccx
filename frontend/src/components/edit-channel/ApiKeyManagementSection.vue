@@ -618,6 +618,29 @@
                     </div>
                   </div>
 
+                  <div v-if="otherVolcengineBuckets(row.volcengineCredential).length" class="mb-3">
+                    <div class="text-caption text-disabled mb-1">{{ t('volcengineAccessKey.otherPlans') }}</div>
+                    <div v-for="bucket in otherVolcengineBuckets(row.volcengineCredential)" :key="`${bucket.product}-${bucket.edition}`" class="d-flex align-center ga-2 flex-wrap mb-1">
+                      <v-chip
+                        size="x-small"
+                        :color="bucket.edition === 'team' ? 'primary' : 'success'"
+                        variant="tonal"
+                        :href="getVolcenginePlanConsoleURL(bucket.product)"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        @click.stop
+                      >
+                        {{ planDisplayName(bucket.product) }}<span v-if="bucket.tier"> · {{ bucket.tier }}</span>
+                        <span class="ml-1 opacity-70">· {{ bucket.edition === 'team' ? t('volcengineAccessKey.teamEdition') : t('volcengineAccessKey.personalEdition') }}</span>
+                        <v-icon end size="12">mdi-open-in-new</v-icon>
+                      </v-chip>
+                      <v-chip v-if="bucket.seatId" size="x-small" variant="tonal" color="info">seat {{ bucket.seatId }}</v-chip>
+                      <span v-if="bucket.error" class="text-caption text-error">{{ bucket.error }}</span>
+                      <span v-else-if="volcengineBucketUsageText(bucket)" class="text-caption">{{ volcengineBucketUsageText(bucket) }}</span>
+                      <span v-else class="text-caption text-disabled">{{ t('volcengineAccessKey.noUsageData') }}</span>
+                    </div>
+                  </div>
+
                   <div v-if="volcengineForms[row.volcengineCredential.credentialUid]" class="d-flex flex-column ga-2">
                     <div class="volcengine-key-fields">
                       <v-text-field
@@ -1430,6 +1453,7 @@ import type {
   ManagedAccountCredential,
   MiMoTokenPlanQuota,
   MiMoTokenPlanSnapshot,
+  VolcenginePlanBucket,
   VolcenginePlanUsage,
   VolcenginePlanUsageWindow,
   APIKeyConfig,
@@ -2415,6 +2439,18 @@ const formatVolcengineTime = (iso: string): string => {
   if (Number.isNaN(date.getTime())) return iso
   return date.toLocaleString()
 }
+
+// 其他套餐桶（主桶 personal 之外）：展示团队版席位与另一产品线的独立快照。
+const otherVolcengineBuckets = (credential: ManagedAccountCredential): VolcenginePlanBucket[] =>
+  (credential.volcenginePlanBuckets ?? []).filter(
+    bucket => !(bucket.product === credential.volcenginePlan && bucket.edition === 'personal'),
+  )
+
+// 桶级用量紧凑文本：与折叠摘要同构（窗口标签 + 首段值），不占独立余量行。
+const volcengineBucketUsageText = (bucket: VolcenginePlanBucket): string =>
+  volcengineUsageWindows(bucket.usage)
+    .map(cell => `${t(cell.labelKey)} ${cell.text.split(' · ')[0]}`)
+    .join(' · ')
 
 const refreshVolcengineUsage = async (credential: ManagedAccountCredential) => {
   if (!props.accountUid || !credential.hasVolcengineAccessKey) return

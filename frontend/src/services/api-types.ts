@@ -1977,6 +1977,7 @@ export interface ManagedAccountCredential {
   volcenginePlanTier?: string
   volcenginePlanStatus?: string
   volcenginePlanUsage?: VolcenginePlanUsage
+  volcenginePlanBuckets?: VolcenginePlanBucket[]
   hasMiMoConsoleCookie?: boolean
   mimoTokenPlan?: MiMoTokenPlanSnapshot
   hasCompshareConsoleCookie?: boolean
@@ -2031,6 +2032,18 @@ export interface VolcenginePlanUsage {
 export interface VolcenginePlanUsageRefreshResponse {
   usage: VolcenginePlanUsage
   cached: boolean
+  plans?: VolcenginePlanBucket[]
+}
+
+/** 火山套餐单桶快照：{agent|coding}_plan × {personal|team}，团队版带席位绑定。 */
+export interface VolcenginePlanBucket {
+  product: 'agent_plan' | 'coding_plan'
+  edition: 'personal' | 'team'
+  seatId?: string
+  tier?: string
+  status?: string
+  usage?: VolcenginePlanUsage
+  error?: string
 }
 
 export interface MiMoTokenPlanQuota {
