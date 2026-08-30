@@ -482,6 +482,30 @@ func (cm *ConfigManager) ResolveVolcenginePlanUsage(accountUID, credentialUID st
 	return nil
 }
 
+// SetManagedAccountVolcenginePlanBuckets 保存多套餐桶快照（personal/team 独立记录）。
+// 主桶字段（Plan/PlanTier/PlanStatus/Usage）不在此处修改，由调用方经
+// SetManagedAccountVolcenginePlan / SetManagedAccountVolcenginePlanUsage 单独维护。
+func (cm *ConfigManager) SetManagedAccountVolcenginePlanBuckets(accountUID, credentialUID string, buckets []VolcenginePlanBucket) error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+	for i := range cm.config.ManagedAccounts {
+		account := &cm.config.ManagedAccounts[i]
+		if account.AccountUID != accountUID {
+			continue
+		}
+		for j := range account.Credentials {
+			credential := &account.Credentials[j]
+			if credential.CredentialUID != credentialUID || credential.VolcengineAccessKey == nil {
+				continue
+			}
+			credential.VolcengineAccessKey.Plans = buckets
+			return cm.saveConfigLocked(cm.config)
+		}
+		return fmt.Errorf("凭证 %s 不存在或未绑定火山 Access Key", credentialUID)
+	}
+	return fmt.Errorf("账号 %s 不存在", accountUID)
+}
+
 // SetManagedAccountVolcenginePlanUsage 保存火山管控面查询到的套餐用量快照。
 func (cm *ConfigManager) SetManagedAccountVolcenginePlanUsage(accountUID, credentialUID string, usage *VolcenginePlanUsage) error {
 	cm.mu.Lock()

@@ -411,6 +411,7 @@ type managedAccountCredentialView struct {
 	VolcenginePlanTier        string                        `json:"volcenginePlanTier,omitempty"`
 	VolcenginePlanStatus      string                        `json:"volcenginePlanStatus,omitempty"`
 	VolcenginePlanUsage       *config.VolcenginePlanUsage   `json:"volcenginePlanUsage,omitempty"`
+	VolcenginePlanBuckets     []config.VolcenginePlanBucket `json:"volcenginePlanBuckets,omitempty"`
 	HasMiMoConsoleCookie      bool                          `json:"hasMiMoConsoleCookie,omitempty"`
 	MiMoTokenPlan             *managedMiMoTokenPlanView     `json:"mimoTokenPlan,omitempty"`
 	HasCompshareConsoleCookie bool                          `json:"hasCompshareConsoleCookie,omitempty"`
@@ -515,6 +516,7 @@ func handleListAccounts(deps *AutoManagedDeps) gin.HandlerFunc {
 					credentialView.VolcenginePlanTier = credential.VolcengineAccessKey.PlanTier
 					credentialView.VolcenginePlanStatus = credential.VolcengineAccessKey.PlanStatus
 					credentialView.VolcenginePlanUsage = credential.VolcengineAccessKey.Usage
+					credentialView.VolcenginePlanBuckets = credential.VolcengineAccessKey.Plans
 				}
 				if credential.MiMoConsole != nil {
 					credentialView.HasMiMoConsoleCookie = true
@@ -1283,7 +1285,7 @@ func handleSetVolcengineAccessKey(deps *AutoManagedDeps) gin.HandlerFunc {
 				break
 			}
 		}
-		plan, err := planClient.DetectPlan(c.Request.Context(), pair, hint)
+		buckets, plan, err := planClient.DetectPlans(c.Request.Context(), pair, hint)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
@@ -1296,16 +1298,22 @@ func handleSetVolcengineAccessKey(deps *AutoManagedDeps) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		// 用量查询失败不阻断保存流程，只记录错误快照。
-		usage, usageErr := planClient.FetchUsage(c.Request.Context(), pair, plan.Plan)
-		if usageErr != nil {
-			usage = &config.VolcenginePlanUsage{FetchedAt: time.Now(), Error: usageErr.Error()}
-			log.Printf("[Volcengine-Usage] 查询套餐用量失败: %v", usageErr)
+		// 逐桶查询用量：单桶失败只记桶级快照，不阻断保存流程。
+		buckets = planClient.FetchBucketsUsage(c.Request.Context(), pair, buckets)
+		usage := primaryUsageFromBuckets(buckets, plan.Plan)
+		if usage == nil {
+			usage = &config.VolcenginePlanUsage{FetchedAt: time.Now(), Error: "未查询到主套餐用量"}
+		}
+		if usage.Error != "" {
+			log.Printf("[Volcengine-Usage] 查询套餐用量失败: account=%s credential=%s err=%s", accountUID, credentialUID, usage.Error)
 		}
 		if err := deps.CfgManager.SetManagedAccountVolcenginePlanUsage(accountUID, credentialUID, usage); err != nil {
 			log.Printf("[Volcengine-Usage] 保存套餐用量失败: %v", err)
 		}
-		if usageErr == nil {
+		if err := deps.CfgManager.SetManagedAccountVolcenginePlanBuckets(accountUID, credentialUID, buckets); err != nil {
+			log.Printf("[Volcengine-Usage] 保存套餐桶快照失败: %v", err)
+		}
+		if usage.Error == "" {
 			config.TryRestoreDisabledKeysByUsage(deps.CfgManager, accountUID, credential.APIKey, credentialUID)
 		}
 		started := 0
@@ -1319,6 +1327,7 @@ func handleSetVolcengineAccessKey(deps *AutoManagedDeps) gin.HandlerFunc {
 			"accessKeyIdMask": utils.MaskAPIKey(strings.TrimSpace(req.AccessKeyID)),
 			"plan":            plan.Plan, "planTier": plan.Tier, "planStatus": plan.Status,
 			"usage":            usage,
+			"plans":            buckets,
 			"discoveryStarted": started,
 		})
 	}
@@ -1369,22 +1378,36 @@ func handleRefreshVolcenginePlanUsage(deps *AutoManagedDeps) gin.HandlerFunc {
 			planClient.Endpoint = deps.Runner.volcengineControlPlaneEndpoint
 			planClient.HTTPClient = deps.Runner.client
 		}
-		usage, err := planClient.FetchUsage(c.Request.Context(), pair, accessKey.Plan)
-		if err != nil {
-			usage = &config.VolcenginePlanUsage{FetchedAt: time.Now(), Error: err.Error()}
-			log.Printf("[Volcengine-Usage] 查询套餐用量失败: account=%s credential=%s err=%v", accountUID, credentialUID, err)
+		// 多桶快照存在时逐桶刷新（单桶失败只记桶级快照）；旧数据或主桶缺失退回单桶查询。
+		var buckets []config.VolcenginePlanBucket
+		if len(accessKey.Plans) > 0 {
+			buckets = planClient.FetchBucketsUsage(c.Request.Context(), pair, accessKey.Plans)
+		}
+		usage := primaryUsageFromBuckets(buckets, accessKey.Plan)
+		if usage == nil {
+			u, err := planClient.FetchUsage(c.Request.Context(), pair, accessKey.Plan)
+			if err != nil {
+				u = &config.VolcenginePlanUsage{FetchedAt: time.Now(), Error: err.Error()}
+				log.Printf("[Volcengine-Usage] 查询套餐用量失败: account=%s credential=%s err=%v", accountUID, credentialUID, err)
+			}
+			usage = u
 		}
 		if saveErr := deps.CfgManager.SetManagedAccountVolcenginePlanUsage(accountUID, credentialUID, usage); saveErr != nil {
 			log.Printf("[Volcengine-Usage] 保存套餐用量失败: %v", saveErr)
 		}
-		if err == nil {
+		if len(buckets) > 0 {
+			if saveErr := deps.CfgManager.SetManagedAccountVolcenginePlanBuckets(accountUID, credentialUID, buckets); saveErr != nil {
+				log.Printf("[Volcengine-Usage] 保存套餐桶快照失败: %v", saveErr)
+			}
+		}
+		if usage.Error == "" {
 			config.TryRestoreDisabledKeysByUsage(deps.CfgManager, accountUID, credential.APIKey, credentialUID)
 		}
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "usage": usage})
+		if usage.Error != "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": usage.Error, "usage": usage})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"usage": usage, "cached": false})
+		c.JSON(http.StatusOK, gin.H{"usage": usage, "cached": false, "plans": buckets})
 	}
 }
 

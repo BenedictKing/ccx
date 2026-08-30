@@ -395,12 +395,28 @@ type KimiBoosterWallet struct {
 // VolcengineAccessKeyPair 是火山云管控面签名凭证，用于 Agent/Coding Plan 识别与模型发现。
 // SecretAccessKey 与推理 API Key 一样只持久化在 0600 配置文件中，管理 API 不得回显。
 type VolcengineAccessKeyPair struct {
-	AccessKeyID     string               `json:"accessKeyId"`
-	SecretAccessKey string               `json:"secretAccessKey"`
-	Plan            string               `json:"plan,omitempty"`
-	PlanTier        string               `json:"planTier,omitempty"`
-	PlanStatus      string               `json:"planStatus,omitempty"`
-	Usage           *VolcenginePlanUsage `json:"usage,omitempty"`
+	AccessKeyID     string                 `json:"accessKeyId"`
+	SecretAccessKey string                 `json:"secretAccessKey"`
+	Plan            string                 `json:"plan,omitempty"`
+	PlanTier        string                 `json:"planTier,omitempty"`
+	PlanStatus      string                 `json:"planStatus,omitempty"`
+	Usage           *VolcenginePlanUsage   `json:"usage,omitempty"`
+	// Plans 是多套餐桶快照（personal/team × agent/coding）：各桶独立探测、
+	// 独立记录错误，团队版结果不覆盖个人版。Plan/Usage 继续指向选定的主桶，
+	// 供既有消费链（模型清单、稀疏 L2 预算、恢复）无感兼容。
+	Plans []VolcenginePlanBucket `json:"plans,omitempty"`
+}
+
+// VolcenginePlanBucket 是火山套餐单桶快照：{agent_plan|coding_plan} × {personal|team}。
+// 团队版桶携带席位绑定信息；Error 独立记录该桶探测/用量失败，不阻断其它桶。
+type VolcenginePlanBucket struct {
+	Product string               `json:"product"`
+	Edition string               `json:"edition"`
+	SeatID  string               `json:"seatId,omitempty"`
+	Tier    string               `json:"tier,omitempty"`
+	Status  string               `json:"status,omitempty"`
+	Usage   *VolcenginePlanUsage `json:"usage,omitempty"`
+	Error   string               `json:"error,omitempty"`
 }
 
 // VolcenginePlanUsageWindow 描述火山套餐单个时间窗口的用量。

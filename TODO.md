@@ -56,9 +56,23 @@ https://github.com/QuantumNous/new-api/issues/5513
 
 ---
 
-## [ ] 火山方舟团队版套餐自动探测与用量查询
+## [x] 火山方舟团队版套餐自动探测与用量查询（2026-08-30 后端落地）
 
-当前状态：火山套餐绑定与用量刷新仅支持个人版 `Agent Plan` / `Coding Plan`。其中个人版分别使用 `GetAFPUsage` 和 `GetCodingPlanUsage`；`cd559c8a` 已修正个人版 Coding Plan 的 OpenAPI 地址、签名和百分比响应解析。团队版暂未纳入套餐识别、持久化和管理界面展示。
+当前状态：~~火山套餐绑定与用量刷新仅支持个人版~~ 后端已落地多套餐桶。数据模型选型为**多桶**：`VolcengineAccessKeyPair` 新增 `Plans []VolcenginePlanBucket`（product/edition/seatId/tier/status/usage/error 各桶独立），旧 `Plan`/`PlanTier`/`PlanStatus`/`Usage` 继续指向选定的主桶，模型清单、稀疏 L2 预算、恢复等既有消费链无感兼容；团队版结果不覆盖个人版主桶字段。
+
+实现要点（`autopilot/volcengine_coding_plan.go` + `config/config_accounts.go` + `handlers_auto_managed.go`）：
+
+- `DetectPlans` 四桶探测：personal×2 走 `GetPersonalPlan`（鉴权/网络错误上抛、404 静默，语义不变）；team×2 走 `GetSeatInfo(Scene)`（Agent 用 `agent_plan_enterprise`、Coding 用空串），席位未绑定时静默不出桶、探测失败记桶级 `Error` 不阻断其它桶。
+- 主桶选择 `pickVolcenginePrimaryBucket`：hint 匹配（personal 优先于 team）→ personal 唯一/唯一 Running → team 同理 → 消歧错误（保持既有报错文案与行为）。
+- 团队版用量：Agent 走 `GetSeatAFPUsage(SeatIDs)`、Coding 走 `GetSeatInfoUsage(SeatID, Scene="")`；响应契约未经真机验证（ark-cli 未开源 CLI 本体），按文档语义做**多字段路径宽松解析**（SeatID 兼容 `Result.SeatID/SeatId/Seat.*/Data.List[]`；AFP 窗口兼容 Result 顶层与 `Seats/Datas[]` 数组按席位匹配），字段路径集中在响应类型定义处，真机验证后如需调整只动一处。
+- 绑定端点与手动刷新端点改为逐桶查询（`FetchBucketsUsage`，单桶失败记 `Usage.Error`）+ 双写（主桶字段 + `Plans` 数组）；旧数据（无 `Plans`）自动退回单桶查询路径。管理 DTO 新增 `volcenginePlanBuckets` 回显（不含 AK/SK）。
+- 团队版模型清单**未接入**：`ListArk{Agent,Coding}PlanModel` 是套餐线级清单，团队版席位可见清单无公开契约，不猜测；模型发现仍由主桶驱动（现状）。
+
+**关键提交：** 本次后端落地提交；测试覆盖四桶组合、无席位静默、personal+team 并存（主桶 personal 优先 + hint 选中 team）、`GetSeatAFPUsage` 顶层/数组两形态、`AccessDenied` 桶级隔离、多桶持久化不覆盖主桶。
+
+**遗留：** ① 前端管理界面展示团队版桶（DTO 已暴露 `volcenginePlanBuckets`）；② 真机验证团队版 API 响应字段路径后修正宽松解析；③ 同产品双 edition 的推理 Key 关联消歧 UI（当前 hint 与 personal 优先策略覆盖常见场景）。
+
+~~当前状态：火山套餐绑定与用量刷新仅支持个人版 `Agent Plan` / `Coding Plan`。其中个人版分别使用 `GetAFPUsage` 和 `GetCodingPlanUsage`；`cd559c8a` 已修正个人版 Coding Plan 的 OpenAPI 地址、签名和百分比响应解析。团队版暂未纳入套餐识别、持久化和管理界面展示。~~
 
 团队版候选调用链（统一使用 `open.volcengineapi.com`、`ark` 签名 scope）：
 

@@ -59,6 +59,9 @@ func TestVolcenginePlanClientDetectAndFetchModels(t *testing.T) {
 						return
 					}
 					_, _ = w.Write([]byte(`{"Result":{"PlanType":"Pro","Status":"Running"}}`))
+				case "GetSeatInfo":
+					// 团队版席位未绑定：空 SeatID 静默。
+					_, _ = w.Write([]byte(`{"Result":{}}`))
 				case "ListArkAgentPlanModel", "ListArkCodingPlanModel":
 					modelAction = action
 					_, _ = w.Write([]byte(`{"Result":{"Datas":[{"ModelID":"model-b"},{"ModelID":"model-a"},{"ModelID":"model-a"}]}}`))
@@ -457,5 +460,209 @@ func TestVolcengineAutoDiscoveryFiltersNonChatModels(t *testing.T) {
 	}
 	if result.ModelDiscoverySource != ModelDiscoverySourceControlPlane {
 		t.Fatalf("来源应为管控面, got=%q", result.ModelDiscoverySource)
+	}
+}
+
+func TestVolcenginePlanClientDetectPlansTeamOnly(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch action := r.URL.Query().Get("Action"); action {
+		case "GetPersonalPlan":
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"ResponseMetadata":{"Error":{"Code":"ResourceNotFound.Plan","Message":"not found"}}}`))
+		case "GetSeatInfo":
+			var body struct{ Scene string }
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			if body.Scene == volcengineAgentPlanEnterpriseScene {
+				_, _ = w.Write([]byte(`{"Result":{"SeatID":"seat-001"}}`))
+				return
+			}
+			// Coding Plan 企业版：未绑席位（空 SeatID 不报错）。
+			_, _ = w.Write([]byte(`{"Result":{"SeatID":""}}`))
+		default:
+			t.Errorf("未知 action: %s", action)
+		}
+	}))
+	defer server.Close()
+	client := &volcenginePlanClient{Endpoint: server.URL, HTTPClient: server.Client()}
+	pair := &config.VolcengineAccessKeyPair{AccessKeyID: "AK", SecretAccessKey: "SK"}
+	buckets, primary, err := client.DetectPlans(context.Background(), pair, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(buckets) != 1 {
+		t.Fatalf("buckets=%+v, want 1 team agent bucket", buckets)
+	}
+	bucket := buckets[0]
+	if bucket.Product != volcenginePlanAgent || bucket.Edition != volcengineEditionTeam || bucket.SeatID != "seat-001" {
+		t.Fatalf("bucket=%+v", bucket)
+	}
+	if primary.Plan != volcenginePlanAgent || primary.Status != "Running" {
+		t.Fatalf("primary=%+v", primary)
+	}
+}
+
+func TestVolcenginePlanClientDetectPlansPersonalAndTeamCoexist(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch action := r.URL.Query().Get("Action"); action {
+		case "GetPersonalPlan":
+			var body struct{ Plan string }
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			if body.Plan != "CodingPlan" {
+				w.WriteHeader(http.StatusNotFound)
+				_, _ = w.Write([]byte(`{"ResponseMetadata":{"Error":{"Code":"ResourceNotFound.Plan","Message":"not found"}}}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"Result":{"PlanType":"Pro","Status":"Running"}}`))
+		case "GetSeatInfo":
+			var body struct{ Scene string }
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			if body.Scene == volcengineAgentPlanEnterpriseScene {
+				// 多字段路径形态：Seat 嵌套。
+				_, _ = w.Write([]byte(`{"Result":{"Seat":{"SeatID":"seat-a"}}}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"Result":{}}`))
+		default:
+			t.Errorf("未知 action: %s", action)
+		}
+	}))
+	defer server.Close()
+	client := &volcenginePlanClient{Endpoint: server.URL, HTTPClient: server.Client()}
+	pair := &config.VolcengineAccessKeyPair{AccessKeyID: "AK", SecretAccessKey: "SK"}
+	buckets, primary, err := client.DetectPlans(context.Background(), pair, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(buckets) != 2 {
+		t.Fatalf("buckets=%+v, want personal coding + team agent", buckets)
+	}
+	// 个人版优先于团队版：primary 应为 personal coding。
+	if primary.Plan != volcenginePlanCoding {
+		t.Fatalf("primary=%+v, want personal coding_plan", primary)
+	}
+	// hint 指向 agent_plan 时应选中 team agent 桶。
+	_, primary, err = client.DetectPlans(context.Background(), pair, "agent_plan")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if primary.Plan != volcenginePlanAgent {
+		t.Fatalf("hint=agent_plan primary=%+v", primary)
+	}
+}
+
+func TestVolcenginePlanClientFetchSeatAFPUsage(t *testing.T) {
+	t.Run("窗口在 Result 顶层", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if action := r.URL.Query().Get("Action"); action != "GetSeatAFPUsage" {
+				t.Errorf("action=%s", action)
+			}
+			var body struct{ SeatIDs []string }
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			if len(body.SeatIDs) != 1 || body.SeatIDs[0] != "seat-001" {
+				t.Errorf("SeatIDs=%v", body.SeatIDs)
+			}
+			_, _ = w.Write([]byte(`{"Result":{
+				"AFPFiveHour":{"Quota":50,"Used":12.5,"ResetTime":1778806800000},
+				"AFPMonthly":{"Quota":2000,"Used":850.5,"ResetTime":1780531200000}}}`))
+		}))
+		defer server.Close()
+		client := &volcenginePlanClient{Endpoint: server.URL, HTTPClient: server.Client()}
+		usage, err := client.fetchSeatAFPUsage(context.Background(), &config.VolcengineAccessKeyPair{AccessKeyID: "AK", SecretAccessKey: "SK"}, "seat-001")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if usage.FiveHour == nil || usage.FiveHour.Quota != 50 || usage.Monthly == nil || usage.Monthly.Used != 850.5 {
+			t.Fatalf("usage=%+v", usage)
+		}
+	})
+	t.Run("窗口在 Seats 数组并按席位匹配", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte(`{"Result":{"Seats":[
+				{"SeatID":"seat-other","AFPFiveHour":{"Quota":1,"Used":1,"ResetTime":1}},
+				{"SeatID":"seat-001","AFPFiveHour":{"Quota":60,"Used":30,"ResetTime":1778806800000},"AFPWeekly":{"Quota":600,"Used":300,"ResetTime":1779062400000}}]}}`))
+		}))
+		defer server.Close()
+		client := &volcenginePlanClient{Endpoint: server.URL, HTTPClient: server.Client()}
+		usage, err := client.fetchSeatAFPUsage(context.Background(), &config.VolcengineAccessKeyPair{AccessKeyID: "AK", SecretAccessKey: "SK"}, "seat-001")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if usage.FiveHour == nil || usage.FiveHour.Quota != 60 || usage.Weekly == nil || usage.Weekly.Quota != 600 {
+			t.Fatalf("usage=%+v", usage)
+		}
+	})
+}
+
+func TestVolcenginePlanClientFetchSeatInfoUsage(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if action := r.URL.Query().Get("Action"); action != "GetSeatInfoUsage" {
+			t.Errorf("action=%s", action)
+		}
+		var body struct {
+			SeatID string
+			Scene  string
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if body.SeatID != "seat-001" || body.Scene != "" {
+			t.Errorf("body=%+v, want SeatID=seat-001 Scene 为空", body)
+		}
+		_, _ = w.Write([]byte(`{"Result":{"QuotaUsage":[
+			{"Level":"session","Percent":42.5,"ResetTimestamp":1782226478},
+			{"Level":"monthly","Percent":9.5,"ResetTimestamp":-1}]}}`))
+	}))
+	defer server.Close()
+	client := &volcenginePlanClient{Endpoint: server.URL, HTTPClient: server.Client()}
+	usage, err := client.fetchSeatInfoUsage(context.Background(), &config.VolcengineAccessKeyPair{AccessKeyID: "AK", SecretAccessKey: "SK"}, "seat-001")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if usage.FiveHour == nil || usage.FiveHour.UsedPercent == nil || *usage.FiveHour.UsedPercent != 42.5 {
+		t.Fatalf("fiveHour=%+v", usage.FiveHour)
+	}
+	if usage.Monthly == nil || usage.Monthly.UsedPercent == nil || *usage.Monthly.UsedPercent != 9.5 {
+		t.Fatalf("monthly=%+v", usage.Monthly)
+	}
+}
+
+func TestVolcenginePlanClientFetchBucketsUsageIsolation(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch action := r.URL.Query().Get("Action"); action {
+		case "GetCodingPlanUsage":
+			_, _ = w.Write([]byte(`{"Result":{"QuotaUsage":[{"Level":"weekly","Percent":20,"ResetTimestamp":-1}]}}`))
+		case "GetSeatInfo":
+			var body struct{ Scene string }
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			if body.Scene == volcengineAgentPlanEnterpriseScene {
+				_, _ = w.Write([]byte(`{"Result":{"SeatID":"seat-x"}}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"Result":{}}`))
+		case "GetSeatAFPUsage":
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"ResponseMetadata":{"Error":{"Code":"AccessDenied","Message":"denied"}}}`))
+		default:
+			t.Errorf("未知 action: %s", action)
+		}
+	}))
+	defer server.Close()
+	client := &volcenginePlanClient{Endpoint: server.URL, HTTPClient: server.Client()}
+	pair := &config.VolcengineAccessKeyPair{AccessKeyID: "AK", SecretAccessKey: "SK"}
+	buckets := []config.VolcenginePlanBucket{
+		{Product: volcenginePlanCoding, Edition: volcengineEditionPersonal, Status: "Running"},
+		{Product: volcenginePlanAgent, Edition: volcengineEditionTeam, SeatID: "seat-x", Status: "Running"},
+	}
+	out := client.FetchBucketsUsage(context.Background(), pair, buckets)
+	if len(out) != 2 {
+		t.Fatalf("len=%d", len(out))
+	}
+	if out[0].Usage == nil || out[0].Usage.Error != "" || out[0].Usage.Weekly == nil {
+		t.Fatalf("personal coding usage=%+v", out[0].Usage)
+	}
+	if out[1].Usage == nil || out[1].Usage.Error == "" {
+		t.Fatalf("team agent usage 应记录错误: %+v", out[1].Usage)
+	}
+	// 主桶用量：personal coding 正常返回。
+	if usage := primaryUsageFromBuckets(out, volcenginePlanCoding); usage == nil || usage.Error != "" {
+		t.Fatalf("primary usage=%+v", usage)
 	}
 }
