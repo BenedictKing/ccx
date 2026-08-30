@@ -857,6 +857,9 @@ func processToolUsePart(id, name string, input interface{}, index int) []string 
 // claudeCodeSystemPatterns 匹配 Claude Code 注入的 system header 文本
 var claudeCodeSystemPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`^x-anthropic-billing-header:`),
+	// Claude Code 每轮注入的上下文余量提醒，数字按 Claude 会话上下文核算，
+	// 同一请求内重复数十次，尾部常附带 output style 提醒，随块一并剔除
+	regexp.MustCompile(`^<total_tokens>\s*[\d.,]*\s*tokens left</total_tokens>`),
 	regexp.MustCompile(`^You are Claude Code, Anthropic's official CLI for Claude\.`),
 	regexp.MustCompile(`^You are a Claude agent, built on Anthropic's Claude Agent SDK\.`),
 	regexp.MustCompile(`^You are an? .+ (?:specialist|agent) for Claude Code`),

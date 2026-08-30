@@ -22,6 +22,33 @@ func TestIsClaudeCodeSystemHeader(t *testing.T) {
 			text:     "x-anthropic-billing-header: cc_version=2.1.216.046; cc_entrypoint=cli; cch=abc123;",
 			expected: true,
 		},
+		// Claude Code 每轮注入的上下文余量提醒
+		{
+			name:     "token budget reminder with style suffix",
+			text:     "<total_tokens>14963377 tokens left</total_tokens>\n\nengineer-professional output style is active. Remember to follow the specific guidelines for this style.",
+			expected: true,
+		},
+		{
+			name:     "token budget reminder fresh budget",
+			text:     "<total_tokens>15000000 tokens left</total_tokens>\n\nengineer-professional output style is active. Remember to follow the specific guidelines for this style.",
+			expected: true,
+		},
+		{
+			name:     "token budget reminder with comma formatted number",
+			text:     "<total_tokens>14,963,377 tokens left</total_tokens>",
+			expected: true,
+		},
+		// 无 tokens 标签的 output style 提醒不在此模式处理范围
+		{
+			name:     "style reminder without token tag",
+			text:     "engineer-professional output style is active. Remember to follow the specific guidelines for this style.",
+			expected: false,
+		},
+		{
+			name:     "token tag mentioned mid-text should not filter",
+			text:     "You have <total_tokens>123 tokens left</total_tokens> per the docs.",
+			expected: false,
+		},
 		// Claude Code identity
 		{
 			name:     "claude code identity",
@@ -110,6 +137,52 @@ func TestExtractSystemTextBlocks_FiltersClaudeCodeHeaders(t *testing.T) {
 	}
 	if !strings.Contains(result, "You are a helpful assistant.") {
 		t.Errorf("extractSystemTextBlocks should keep real system prompt, got: %s", result)
+	}
+}
+
+func TestExtractSystemTextBlocks_FiltersTokenBudgetReminders(t *testing.T) {
+	// 复刻真实 Claude Code 请求：同一会话多轮累积的 tokens-left 提醒块
+	system := []interface{}{
+		map[string]interface{}{
+			"type": "text",
+			"text": "x-anthropic-billing-header: cc_version=2.1.241.bc7; cc_entrypoint=cli;",
+		},
+		map[string]interface{}{
+			"type": "text",
+			"text": "You are Claude Code, Anthropic's official CLI for Claude.",
+		},
+		map[string]interface{}{
+			"type": "text",
+			"text": "You are a helpful assistant.",
+		},
+		map[string]interface{}{
+			"type": "text",
+			"text": "<total_tokens>14963377 tokens left</total_tokens>\n\nengineer-professional output style is active. Remember to follow the specific guidelines for this style.",
+		},
+		map[string]interface{}{
+			"type": "text",
+			"text": "<total_tokens>14940872 tokens left</total_tokens>\n\nengineer-professional output style is active. Remember to follow the specific guidelines for this style.",
+		},
+		map[string]interface{}{
+			"type": "text",
+			"text": "<total_tokens>15000000 tokens left</total_tokens>\n\nengineer-professional output style is active. Remember to follow the specific guidelines for this style.",
+		},
+		map[string]interface{}{
+			"type": "text",
+			"text": "Always respond in Chinese.",
+		},
+	}
+
+	result := extractSystemTextBlocks(system, 0)
+
+	if strings.Contains(result, "total_tokens") || strings.Contains(result, "tokens left") {
+		t.Errorf("extractSystemTextBlocks should filter token budget reminders, got: %s", result)
+	}
+	if !strings.Contains(result, "You are a helpful assistant.") {
+		t.Errorf("extractSystemTextBlocks should keep real system prompt, got: %s", result)
+	}
+	if !strings.Contains(result, "Always respond in Chinese.") {
+		t.Errorf("extractSystemTextBlocks should keep trailing real block, got: %s", result)
 	}
 }
 
