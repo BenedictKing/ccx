@@ -1985,6 +1985,39 @@
     },
     {
       "patterns": [
+        "(?:^|[-/])hy4-preview(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)"
+      ],
+      "provider": "tencent",
+      "displayName": "Hy4 Preview",
+      "description": "Tencent Hy Team's open-weight flagship MoE (770B total / 49B active, Apache 2.0) tuned for coding agents and complex tool-use workflows, with 1M context (960K input + 64K output). Text-only with native function calling; reasoning defaults to high effort and can be set to low or disabled (no_think). Dated snapshots such as hy4-preview-20260827 share the same profile.",
+      "contextWindowTokens": 1048576,
+      "maxOutputTokens": 64000,
+      "thinkingMode": "thinking",
+      "reasoningEfforts": [
+        "none",
+        "low",
+        "high"
+      ],
+      "capabilities": {
+        "toolCalls": true,
+        "reasoning": true,
+        "vision": false
+      },
+      "sources": [
+        "https://huggingface.co/tencent/Hy4-preview",
+        "https://openrouter.ai/tencent/hy4-preview",
+        "https://www.tencentcloud.com/techpedia/148044"
+      ],
+      "pricing": {
+        "unit": "per_1m_tokens_usd",
+        "currency": "USD",
+        "inputCacheMissPrice": 0.834,
+        "outputPrice": 2.501,
+        "inputCacheHitPrice": 0.042
+      }
+    },
+    {
+      "patterns": [
         "(?:^|[-/])baichuan-m2(?=$|@)"
       ],
       "provider": "baichuan",

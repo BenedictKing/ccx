@@ -316,6 +316,13 @@ func TestResolveUpstreamCapability_NewAugust2026Models(t *testing.T) {
 		{model: "grok-4-20-beta", provider: "xai", context: 1000000, maxOutput: 0, vision: true, toolCalls: true, inputPrice: 1.25, outputPrice: 2.5},
 		{model: "muse-spark-1.1", provider: "meta", context: 1048576, maxOutput: 131072, vision: true, toolCalls: true, inputPrice: 1.25, outputPrice: 4.25},
 		{model: "muse-spark-1.2", provider: "meta", context: 1048576, maxOutput: 131072, vision: true, toolCalls: true, inputPrice: 1.25, outputPrice: 4.25},
+		// 腾讯混元 Hy4 Preview（2026-08-28 发布，770B/49B 开源 MoE）：1M 上下文=960K 输入+64K 输出；
+		// 官方美元价 $0.834/$2.501/$0.042 每百万（腾讯云国际站新加坡区与 OpenRouter 一致）
+		{model: "hy4-preview", provider: "tencent", context: 1048576, maxOutput: 64000, toolCalls: true, inputPrice: 0.834, outputPrice: 2.501},
+		{model: "tencent/hy4-preview", provider: "tencent", context: 1048576, maxOutput: 64000, toolCalls: true, inputPrice: 0.834, outputPrice: 2.501},
+		// OpenRouter canonical slug（hy4-preview-20260827）带 8 位日期快照后缀
+		{model: "hy4-preview-20260827", provider: "tencent", context: 1048576, maxOutput: 64000, toolCalls: true, inputPrice: 0.834, outputPrice: 2.501},
+		{model: "Hy4-Preview", provider: "tencent", context: 1048576, maxOutput: 64000, toolCalls: true, inputPrice: 0.834, outputPrice: 2.501},
 	}
 
 	for _, tt := range tests {
@@ -340,6 +347,45 @@ func TestResolveUpstreamCapability_NewAugust2026Models(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestResolveUpstreamCapability_Hy4Preview(t *testing.T) {
+	// 事实源：huggingface.co/tencent/Hy4-preview、openrouter.ai/tencent/hy4-preview、
+	// 腾讯云国际站 FAQ（techpedia/148044，2026-08-28 核对，新加坡区美元价）
+	resolved := ResolveUpstreamCapability("hy4-preview", nil, nil)
+	if !resolved.Known || resolved.Source != "builtin" {
+		t.Fatalf("resolved = %+v, want builtin capability", resolved)
+	}
+	capability := resolved.Capability
+	if capability.ContextWindowTokens != 1048576 || capability.MaxOutputTokens != 64000 {
+		t.Fatalf("context/maxOutput = %d/%d, want 1048576/64000 (1M = 960K input + 64K output)", capability.ContextWindowTokens, capability.MaxOutputTokens)
+	}
+	if capability.ThinkingMode != "thinking" {
+		t.Fatalf("ThinkingMode = %q, want thinking", capability.ThinkingMode)
+	}
+	// 推理默认开启且 effort 默认 high，可设 low 或以 no_think 关闭（OpenRouter 对应 none/low/high）
+	wantEfforts := []string{"none", "low", "high"}
+	if len(capability.ReasoningEfforts) != len(wantEfforts) {
+		t.Fatalf("ReasoningEfforts = %v, want %v", capability.ReasoningEfforts, wantEfforts)
+	}
+	for i, effort := range wantEfforts {
+		if capability.ReasoningEfforts[i] != effort {
+			t.Fatalf("ReasoningEfforts = %v, want %v", capability.ReasoningEfforts, wantEfforts)
+		}
+	}
+	// 官方架构 text->text，纯文本模型无视觉输入
+	if capability.Capabilities["vision"] {
+		t.Fatalf("Capabilities = %v, hy4-preview is text-only", capability.Capabilities)
+	}
+	if !capability.Capabilities["toolCalls"] || !capability.Capabilities["reasoning"] {
+		t.Fatalf("Capabilities = %v, want toolCalls and reasoning", capability.Capabilities)
+	}
+	if capability.Pricing == nil {
+		t.Fatal("Pricing = nil")
+	}
+	assertFloatPointerValue(t, capability.Pricing.InputCacheMissPrice, 0.834, "Pricing.InputCacheMissPrice")
+	assertFloatPointerValue(t, capability.Pricing.InputCacheHitPrice, 0.042, "Pricing.InputCacheHitPrice")
+	assertFloatPointerValue(t, capability.Pricing.OutputPrice, 2.501, "Pricing.OutputPrice")
 }
 
 func TestResolveUpstreamCapability_Grok46PricingTiers(t *testing.T) {
