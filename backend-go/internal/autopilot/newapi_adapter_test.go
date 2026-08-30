@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -106,6 +107,47 @@ func TestNewApiAdapter_Verify_HTTPError(t *testing.T) {
 	_, err := adapter.Verify(context.Background(), srv.URL, "bad-token", "1", "")
 	if err == nil {
 		t.Fatal("期望返回错误，实际未报错")
+	}
+}
+
+func TestNewApiAdapter_Verify_HTTPError_HTMLPage(t *testing.T) {
+	// WAF/边缘节点拦截页（如 451）返回整页 HTML，错误信息应只保留 <title> 而不是原始标签/CSS
+	srv := newMockNewApiServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(451)
+		_, _ = w.Write([]byte(`<!DOCTYPE html> <html lang="zh"> <head> <meta charset="utf-8"> <title>访问受限 · 451</title> <style> body{margin:0} </style> </head> <body>blocked</body> </html>`))
+	})
+
+	adapter := &NewApiAdapter{HTTPClient: srv.Client()}
+	_, err := adapter.Verify(context.Background(), srv.URL, "token", "114446", "")
+	if err == nil {
+		t.Fatal("期望返回错误，实际未报错")
+	}
+	if !strings.Contains(err.Error(), "HTTP 451: 访问受限 · 451") {
+		t.Fatalf("期望错误包含提取的 title，实际: %v", err)
+	}
+	if strings.Contains(err.Error(), "<!DOCTYPE") || strings.Contains(err.Error(), "<style>") {
+		t.Fatalf("错误信息不应包含原始 HTML，实际: %v", err)
+	}
+}
+
+func TestSummarizeErrorBody(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want string
+	}{
+		{"json 错误原样返回", `{"message":"invalid token"}`, `{"message":"invalid token"}`},
+		{"HTML 提取 title", `<!DOCTYPE html><html><head><title>访问受限 · 451</title></head></html>`, "访问受限 · 451"},
+		{"HTML 无 title 给通用提示", `<html><body>blocked</body></html>`, "上游返回 HTML 错误页（非 new-api JSON 响应），站点可能拦截了请求"},
+		{"前导空白后识别 HTML", "  \n<!doctype html><title>Blocked</title>", "Blocked"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := summarizeErrorBody([]byte(tc.body)); got != tc.want {
+				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
 

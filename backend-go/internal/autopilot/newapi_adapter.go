@@ -9,6 +9,7 @@ import (
 	"github.com/BenedictKing/ccx/internal/httpclient"
 	"io"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -176,7 +177,7 @@ func (a *NewApiAdapter) doRequest(ctx context.Context, method, baseURL, path, ac
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("[NewApiAdapter] HTTP %d: %s", resp.StatusCode, truncateForError(respBody))
+		return fmt.Errorf("[NewApiAdapter] HTTP %d: %s", resp.StatusCode, summarizeErrorBody(respBody))
 	}
 
 	var envelope newApiEnvelope
@@ -208,6 +209,37 @@ func truncateForError(body []byte) string {
 		return s[:maxLen] + "..."
 	}
 	return s
+}
+
+// summarizeErrorBody 生成 HTTP 错误响应体的可读摘要。
+// WAF/边缘节点拦截页（如 451 访问受限）返回整页 HTML，直接塞入错误会把标签/CSS
+// 灌进用户可见的提示；此类响应只提取 <title>，非 HTML 响应按原逻辑截断返回。
+func summarizeErrorBody(body []byte) string {
+	s := strings.TrimSpace(string(body))
+	lower := strings.ToLower(s)
+	if !strings.HasPrefix(lower, "<!doctype") && !strings.HasPrefix(lower, "<html") {
+		return truncateForError(body)
+	}
+	if title := htmlTitleOf(s); title != "" {
+		return title
+	}
+	return "上游返回 HTML 错误页（非 new-api JSON 响应），站点可能拦截了请求"
+}
+
+var htmlTitlePattern = regexp.MustCompile(`(?is)<title[^>]*>(.*?)</title>`)
+
+// htmlTitleOf 提取 HTML 页面的 <title> 文本，最长保留 120 字符。
+func htmlTitleOf(s string) string {
+	m := htmlTitlePattern.FindStringSubmatch(s)
+	if len(m) < 2 {
+		return ""
+	}
+	const maxTitleLen = 120
+	title := strings.TrimSpace(m[1])
+	if len(title) > maxTitleLen {
+		return title[:maxTitleLen] + "..."
+	}
+	return title
 }
 
 // Verify 校验令牌有效性并查询用户信息/余额。对应 GET /api/user/self。

@@ -24,7 +24,7 @@
 - `NewApiProvisionResponse`（行 173）：`subscription, channelUid, channelIndex, channelName, mergedChannel, provisionedKey(仅此次返回明文), provisionedTokenId, reused, provisionedKeys[], discoveryStarted`
 
 ### 1.4 上游适配器（`internal/autopilot/newapi_adapter.go`）
-`NewApiAdapter`（行 98），零值可用（默认 15s client），封装 new-api family 面板接口。`doRequest`（行 121）统一注入认证并解析 `{success,data,message}` 信封（`newApiEnvelope` 行 29）。认证头 `buildAuthHeader`（行 110）：`bearer`（默认 `Authorization: Bearer <token>`）/ `raw`/`raw_auth`（裸 token）；同时下发 `New-API-User` 与 `User-id`（fork 兼容，行 142-146）。
+`NewApiAdapter`（行 98），零值可用（默认 15s client），封装 new-api family 面板接口。`doRequest`（行 121）统一注入认证并解析 `{success,data,message}` 信封（`newApiEnvelope` 行 29）。认证头 `buildAuthHeader`（行 110）：`bearer`（默认 `Authorization: Bearer <token>`）/ `raw`/`raw_auth`（裸 token）；同时下发 `New-API-User` 与 `User-id`（fork 兼容，行 142-146）。非 2xx 错误体经 `summarizeErrorBody` 生成用户可读摘要：HTML 拦截页（WAF/边缘节点，如 451 访问受限）仅提取 `<title>`，不再把整页标签/CSS 灌进错误提示；非 HTML 响应截断 512 字符返回（2026-08-30）。
 
 调用的 new-api 接口子集与方法：
 - `Verify`（行 198）→ `GET /api/user/self`（`NewApiUserSelf`：id/username/quota/used_quota）
