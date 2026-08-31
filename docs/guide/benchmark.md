@@ -24,6 +24,7 @@ CCX 会从多个公开 benchmark 来源汇总模型能力、成本与多来源�
 - `pass@1` / 原始 score 均来自对应上游 benchmark 的公开结果或公开 API。
 - 成本图当前主要使用 DeepSWE 与 CodexRadar 可映射出的单任务成本数据。
 - 多来源比较图会并列展示 DeepSWE、BenchLM.ai、CodexRadar、Artificial Analysis 等来源的原始分数。
+- **小样本口径**：直测档位任务数不足 3 时（如新模型只跑了 1 个任务且恰好通过，pass@1=100% 纯属噪声），该档视为样本不足——不参与常规等效分校准与质量档评定，图表中以半透明虚线点标注、悬停提示任务数，多来源比较图的模型排序也不计入。`taskCount` 缺失的来源不受影响。
 - 数据生成时间可查看 `benchmark-viz-data.json` 中的 `generatedAt` 字段；该文件与图表 HTML 一同生成到文档站静态资源目录。
 
 ## 数据来源与致谢

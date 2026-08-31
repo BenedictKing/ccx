@@ -347,6 +347,17 @@ var effortQualityRatio = map[string]float64{
 	"max":     1.975,
 }
 
+// minReliableBenchmarkTasks 是直测档位参与等效分与档位评定的最小任务格数。
+// CodexRadar 新模型常先跑极少量任务：1 格全过即 pass@1=100%，纯属噪声
+// （2026-08 hy4-preview low 档 1/1 曾把插值等效分虚抬进 premium 档）。
+// TaskCount==0 表示来源未提供任务数（兼容旧数据），不视为小样本。
+const minReliableBenchmarkTasks = 3
+
+// isSmallSampleEvidence 报告一条直测证据是否属于小样本档位。
+func isSmallSampleEvidence(ev config.ModelBenchmarkEvidence) bool {
+	return ev.TaskCount > 0 && ev.TaskCount < minReliableBenchmarkTasks
+}
+
 // regularEffortBaselineScore 从直测证据提取常规 effort 口径（medium/default）的 coding 分。
 // 证据按来源（deepswe / codexradar）分组，再按证据等级分层合成，升级仅作用于
 // 缺 medium 直测的模型（有直测的模型行为与旧算法一致）：
@@ -361,13 +372,17 @@ var effortQualityRatio = map[string]float64{
 //
 // 无直测证据时 ok=false。
 func regularEffortBaselineScore(evidence []config.ModelBenchmarkEvidence) (score float64, singleEffortOnly bool, ok bool) {
-	// 按来源收集各档原始分（百分制），同档多条证据取最大。
+	// 按来源收集各档原始分（百分制），同档多条证据取最大。小样本档位
+	// （任务格数不足）视为未完成测量，不参与校准。
 	bySource := map[string]map[EffortLevel]float64{}
 	for _, ev := range evidence {
 		if ev.Domain != "coding" || ev.Metric != "pass_at_1" {
 			continue
 		}
 		if ev.Benchmark != "deepswe" && ev.Benchmark != "codexradar" {
+			continue
+		}
+		if isSmallSampleEvidence(ev) {
 			continue
 		}
 		level := NormalizeEffortLevel(ev.Effort)

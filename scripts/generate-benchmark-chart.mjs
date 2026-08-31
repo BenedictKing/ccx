@@ -155,6 +155,7 @@ button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); o
 .benchmark-chart .point { stroke: var(--surface); stroke-width: 1.5; cursor: crosshair; vector-effect: non-scaling-stroke; transition: cx 180ms ease, cy 180ms ease, opacity 120ms ease; }
 .benchmark-chart .point.is-pareto { stroke: var(--frontier); stroke-width: 2; }
 .benchmark-chart .point.is-dim { opacity: .12; }
+.benchmark-chart .point.low-sample { opacity: .38; stroke-dasharray: 3 2; }
 .benchmark-chart .label { fill: var(--foreground); font-size: 11px; font-weight: 500; }
 .benchmark-chart .label-link { stroke: var(--border); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .tooltip { position: absolute; z-index: 2; width: max-content; max-width: min(260px, calc(100% - 16px)); padding: 9px 11px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--foreground); box-shadow: 0 8px 22px rgb(0 0 0 / .14); pointer-events: none; opacity: 0; transform: translateY(3px); transition: opacity 100ms ease, transform 100ms ease; }
@@ -175,6 +176,8 @@ button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); o
 .comparison-chart .comparison-row { stroke: var(--grid); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .comparison-chart .comparison-range { stroke: var(--border); stroke-width: 2; vector-effect: non-scaling-stroke; }
 .comparison-chart .comparison-point { stroke: var(--surface); stroke-width: 1.5; cursor: crosshair; vector-effect: non-scaling-stroke; }
+.comparison-chart .comparison-point.low-sample { opacity: .38; stroke-dasharray: 3 2; }
+.comparison-chart .comparison-value.low-sample { opacity: .45; }
 .comparison-chart .comparison-value { fill: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
 .comparison-meta { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 #comparison-summary { color: var(--muted); font-size: 11px; }
@@ -261,7 +264,7 @@ tbody tr:hover { background: var(--accent-soft); }
     <div class="comparison-heading">
       <div>
         <h2>多来源能力比较</h2>
-        <p class="section-note">按同一能力类别展示 BenchLM.ai、DeepSWE、CodexRadar 与 Artificial Analysis 的原始分数。不同基准的任务集和评分口径不同，仅用于观察来源内相对位置。</p>
+        <p class="section-note">按同一能力类别展示 BenchLM.ai、DeepSWE、CodexRadar 与 Artificial Analysis 的原始分数。不同基准的任务集和评分口径不同，仅用于观察来源内相对位置。任务数不足 3 的档位（半透明虚线点）视为样本不足：不参与常规等效分与质量档评定，排序时也不计入，仅供观察。</p>
       </div>
       <label class="control" for="comparison-category-control">
         <span class="control-label">能力类别</span>
@@ -302,6 +305,12 @@ const COMPARISON_ROWS = ${serializedComparisons};
 const QUALITY_TIERS = ${serializedQualityTiers};
 const state = { metric: 'mean_cost', range: 'focus', source: 'all' };
 const effortRank = new Map([['off', -2], ['minimal', -1], ['low', 0], ['medium', 1], ['high', 2], ['xhigh', 3], ['max', 4], ['ultra', 5]]);
+// 小样本阈值与 scripts/benchmark-sources/visualization.mjs 的 MIN_RELIABLE_TASKS 一致：
+// 任务数不足的档位不参与 Pareto 前沿与轨迹，仅在图上以半透明空点标注供参考。
+const LOW_SAMPLE_TASKS = 3;
+function isLowSampleRow(row) {
+  return Number.isFinite(row.taskCount) && row.taskCount > 0 && row.taskCount < LOW_SAMPLE_TASKS;
+}
 const palette = Array.from({ length: 10 }, (_, index) => 'var(--series-' + (index + 1) + ')');
 // 同族模型的展示排序覆盖：须在 compareModels 之前声明，否则顶层 sort 触发 TDZ。
 const modelOrderOverrides = new Map([
@@ -531,6 +540,8 @@ function renderTrajectories(rows, g) {
   container.replaceChildren();
   const groups = new Map();
   rows.forEach(row => {
+    // 小样本点的 pass@1 是噪声（1 任务全过 = 100%），连进轨迹会画出误导性折线
+    if (isLowSampleRow(row)) return;
     const key = row.model + '|' + row.source;
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(row);
@@ -545,10 +556,14 @@ function renderTrajectories(rows, g) {
 function tooltipHtml(row) {
   const effort = row.effort || 'default';
   const costLabel = state.metric === 'mean_cost' ? '平均成本' : '中位成本';
+  const taskLine = Number.isFinite(row.taskCount) && row.taskCount > 0
+    ? '<div class="tooltip-line">任务数 ' + row.taskCount + (isLowSampleRow(row) ? '（样本不足，仅供参考）' : '') + '</div>'
+    : '';
   return '<strong>' + escapeHtml(row.model) + ' · ' + escapeHtml(effort) + '</strong>'
     + '<div class="tooltip-line">pass@1 ' + (row.pass_rate * 100).toFixed(1) + '%</div>'
     + '<div class="tooltip-line">常规等效分 ' + row.quality_score.toFixed(1) + '</div>'
     + '<div class="tooltip-line">' + costLabel + ' $' + row.cost.toFixed(3) + '</div>'
+    + taskLine
     + '<div class="tooltip-line">' + escapeHtml(row.source) + '</div>';
 }
 
@@ -576,9 +591,10 @@ function renderPoints(rows, frontierKeys, g) {
   const container = document.getElementById('points');
   container.replaceChildren();
   rows.forEach(row => {
-    const isPareto = frontierKeys.has(row.key);
+      const isPareto = frontierKeys.has(row.key);
+    const lowSample = isLowSampleRow(row);
     const circle = svgNode('circle', {
-      class: 'point' + (isPareto ? ' is-pareto' : ''), cx: g.x(row.cost), cy: g.y(row.pass_rate * 100),
+      class: 'point' + (isPareto ? ' is-pareto' : '') + (lowSample ? ' low-sample' : ''), cx: g.x(row.cost), cy: g.y(row.pass_rate * 100),
       r: isPareto ? 5.5 : 4.5, fill: colors.get(row.model + '|' + row.source), 'aria-label': row.model + ' ' + (row.effort || 'default') + ' ' + row.source,
       'data-model': row.model, 'data-source': row.source,
     });
@@ -706,7 +722,7 @@ function update() {
   if (!allRows.length) return;
   const g = setGeometry(allRows);
   const visibleRows = allRows.filter(row => row.cost <= g.xMax + 1e-9);
-  const frontier = state.source === 'all' && sources.length > 1 ? [] : paretoFrontier(allRows);
+  const frontier = state.source === 'all' && sources.length > 1 ? [] : paretoFrontier(allRows.filter(row => !isLowSampleRow(row)));
   const visibleFrontier = frontier.filter(row => row.cost <= g.xMax + 1e-9);
   const frontierKeys = new Set(frontier.map(row => row.key));
   renderQualityBands(g);
@@ -755,9 +771,13 @@ function renderComparisonLegend(rows) {
 
 function showComparisonTooltip(row, pointX, pointY, g) {
   const effort = row.effort ? ' · ' + escapeHtml(row.effort) : '';
+  const taskLine = Number.isFinite(row.taskCount) && row.taskCount > 0
+    ? '<div class="tooltip-line">任务数 ' + row.taskCount + (isLowSampleRow(row) ? '（样本不足，仅供参考）' : '') + '</div>'
+    : '';
   comparisonTooltip.innerHTML = '<strong>' + escapeHtml(row.model) + '</strong>'
     + '<div class="tooltip-line">' + escapeHtml(row.source) + effort + '</div>'
-    + '<div class="tooltip-line">' + escapeHtml(comparisonCategoryLabel(row.category)) + ' ' + row.score.toFixed(1) + '</div>';
+    + '<div class="tooltip-line">' + escapeHtml(comparisonCategoryLabel(row.category)) + ' ' + row.score.toFixed(1) + '</div>'
+    + taskLine;
   comparisonTooltip.classList.add('visible');
   const shellRect = comparisonShell.getBoundingClientRect();
   const svgRect = comparisonSvg.getBoundingClientRect();
@@ -777,8 +797,14 @@ function updateComparison() {
     if (!grouped.has(row.model)) grouped.set(row.model, []);
     grouped.get(row.model).push(row);
   });
+  // 排序按可信样本的最高分：小样本点（如新模型 1 任务 100%）不把模型顶到最前。
+  const topScore = rows => {
+    const reliable = rows.filter(row => !isLowSampleRow(row));
+    const pool = reliable.length ? reliable : rows;
+    return Math.max(...pool.map(row => row.score));
+  };
   const models = [...grouped.keys()].sort((a, b) => (
-    Math.max(...grouped.get(b).map(row => row.score)) - Math.max(...grouped.get(a).map(row => row.score)) || a.localeCompare(b)
+    topScore(grouped.get(b)) - topScore(grouped.get(a)) || a.localeCompare(b)
   ));
   const width = Math.max(300, Math.round(comparisonShell.clientWidth));
   const margin = { top: 28, right: 52, bottom: 44, left: width < 560 ? 122 : 190 };
@@ -822,14 +848,16 @@ function updateComparison() {
       const offset = (sourceIndex - (modelRows.length - 1) / 2) * 8;
       const pointX = x(row.score);
       const pointY = centerY + offset;
+      const lowSample = isLowSampleRow(row);
       const circle = svgNode('circle', {
-        class: 'comparison-point', cx: pointX, cy: pointY, r: 5, fill: comparisonColors.get(row.source),
+        class: 'comparison-point' + (lowSample ? ' low-sample' : ''), cx: pointX, cy: pointY, r: 5, fill: comparisonColors.get(row.source),
       });
-      circle.append(svgNode('title', {}, row.model + ' · ' + row.source + ' · ' + row.score.toFixed(1)));
+      circle.append(svgNode('title', {}, row.model + ' · ' + row.source + ' · ' + row.score.toFixed(1)
+        + (Number.isFinite(row.taskCount) && row.taskCount > 0 ? ' · ' + row.taskCount + ' 任务' : '')));
       circle.addEventListener('mouseenter', () => showComparisonTooltip(row, pointX, pointY, g));
       circle.addEventListener('mouseleave', () => comparisonTooltip.classList.remove('visible'));
       points.append(circle);
-      points.append(svgNode('text', { class: 'comparison-value', x: pointX + 8, y: pointY + 3 }, row.score.toFixed(1)));
+      points.append(svgNode('text', { class: 'comparison-value' + (lowSample ? ' low-sample' : ''), x: pointX + 8, y: pointY + 3 }, row.score.toFixed(1)));
     });
   });
 

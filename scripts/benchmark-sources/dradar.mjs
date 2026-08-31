@@ -408,6 +408,35 @@ export function toBenchmarkEvidence(modelData, allModels, costData) {
 }
 
 /**
+ * 为每个已测 effort 档生成一条 benchmarkEvidence（附该档聚合值）。
+ * 每个已测 effort 档各生成一条 evidence：档位评定需要常规口径分数，
+ * 只存最佳档会把"开满思考强度"的成绩当成模型基础能力。
+ * cells/cellsPassed 必须取当前 effort 档的值：直接展开 modelData 会把
+ * 最佳档的格子数写进所有档位的 taskCount，小样本判定随之失真。
+ * @returns {Array<{effort: string, cell: Object, evidence: Object}>}
+ */
+export function buildEffortEvidences(modelData, allModels, costData) {
+  const efforts = Object.entries(modelData.efforts || {})
+  const measured = efforts.length > 0 ? efforts : [[modelData.bestEffort || 'default', {
+    passRate: modelData.passRate,
+    graded: modelData.graded,
+    cells: modelData.cells,
+    cellsPassed: modelData.cellsPassed,
+  }]]
+  return measured.map(([effort, cell]) => ({
+    effort,
+    cell,
+    evidence: toBenchmarkEvidence({
+      ...modelData,
+      bestEffort: effort,
+      passRate: cell.passRate,
+      cells: cell.cells,
+      cellsPassed: cell.cellsPassed,
+    }, allModels, costData),
+  }))
+}
+
+/**
  * 主函数：抓取并转换 dradar 数据
  * @param {Object} modelMap - dradar 模型名 -> CCX canonicalModel 映射
  * @returns {Promise<{profiles: Object, unmappedModels: string[]}>}
@@ -427,16 +456,6 @@ export async function fetchDradarData(modelMap) {
     const result = {}
 
     for (const [canonical, modelData] of Object.entries(bestPerModel)) {
-      // 每个已测 effort 档各生成一条 evidence：档位评定需要常规口径分数，
-      // 只存最佳档会把"开满思考强度"的成绩当成模型基础能力
-      const efforts = Object.entries(modelData.efforts || {})
-      const measured = efforts.length > 0 ? efforts : [[modelData.bestEffort || 'default', {
-        passRate: modelData.passRate,
-        graded: modelData.graded,
-        cells: modelData.cells,
-        cellsPassed: modelData.cellsPassed,
-      }]]
-
       if (!result[canonical]) {
         result[canonical] = {
           benchmarkEvidence: [],
@@ -445,10 +464,8 @@ export async function fetchDradarData(modelMap) {
         }
       }
 
-      for (const [effort, cell] of measured) {
-        result[canonical].benchmarkEvidence.push(
-          toBenchmarkEvidence({ ...modelData, bestEffort: effort, passRate: cell.passRate }, Object.values(bestPerModel), costData),
-        )
+      for (const { effort, cell, evidence } of buildEffortEvidences(modelData, Object.values(bestPerModel), costData)) {
+        result[canonical].benchmarkEvidence.push(evidence)
         result[canonical].efforts[effort] = cell
       }
       result[canonical].costData = costData[canonical] || {}

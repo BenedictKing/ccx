@@ -24,6 +24,7 @@ CCX aggregates model capability, cost, and multi-source comparison data from sev
 - `pass@1` and raw scores come from the corresponding upstream benchmark results or public APIs.
 - The cost frontier currently uses the single-task cost data that can be mapped from DeepSWE and CodexRadar.
 - The multi-source comparison chart juxtaposes raw scores from DeepSWE, BenchLM.ai, CodexRadar, Artificial Analysis, and related public sources.
+- **Small-sample policy**: effort levels with fewer than 3 graded tasks (e.g. a newly added model that ran a single task and happened to pass, yielding a noisy pass@1 of 100%) are treated as under-measured — they are excluded from the regular-effort quality calibration and quality tiers, drawn as dimmed dashed points with the task count shown on hover, and excluded from model ordering in the comparison chart. Sources that do not report a `taskCount` are unaffected.
 - For the generation timestamp, see the `generatedAt` field in `benchmark-viz-data.json`; that file is generated alongside the chart HTML in the docs static asset directory.
 
 ## Data sources and acknowledgments
