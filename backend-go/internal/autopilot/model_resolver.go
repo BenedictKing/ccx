@@ -18,18 +18,19 @@ import (
 // 上下文、推理、视觉和工具调用是硬约束；质量档是优先目标，
 // 仅在没有满足目标质量的模型时允许降档兜底。
 type CapabilityFloor struct {
-	MinContextTokens  int         // 最小上下文窗口（0=不限）
-	NeedsReasoning    bool        // 必须支持推理
-	NeedsVision       bool        // 必须支持视觉
-	NeedsDocument     bool        // 必须支持文档（PDF 等）
-	NeedsToolCalls    bool        // 必须支持工具调用
-	MinQualityTier    QualityTier // 目标质量档（无同档候选时允许降档）
-	QualityBenefitCap QualityTier // 简单/常规任务超过该档后不再自动获得质量排序收益
-	TaskClass         TaskClass   // 用于读取任务级 CostPreference
-	TaskDomain        TaskDomain  // 用于按 (domain, effort) 取任务域强度证据
-	EffortFloor       EffortLevel // 该请求的 effort 下界；空=不限
-	EffortCeil        EffortLevel // 该请求的 effort 上界（场景预设引入）；空=不限
-	PinnedEffort      EffortLevel // 手动意图精确锁定的 effort 档位；空=不锁定，由 Autopilot 选优
+	MinContextTokens   int         // 最小上下文窗口（0=不限）
+	NeedsReasoning     bool        // 必须支持推理
+	NeedsVision        bool        // 必须支持视觉
+	NeedsDocument      bool        // 必须支持文档（PDF 等）
+	NeedsToolCalls     bool        // 必须支持工具调用
+	NeedsSeverityClass bool        // 必须能完成格式约束型安全分类请求（规避实测不遵循格式的组合）
+	MinQualityTier     QualityTier // 目标质量档（无同档候选时允许降档）
+	QualityBenefitCap  QualityTier // 简单/常规任务超过该档后不再自动获得质量排序收益
+	TaskClass          TaskClass   // 用于读取任务级 CostPreference
+	TaskDomain         TaskDomain  // 用于按 (domain, effort) 取任务域强度证据
+	EffortFloor        EffortLevel // 该请求的 effort 下界；空=不限
+	EffortCeil         EffortLevel // 该请求的 effort 上界（场景预设引入）；空=不限
+	PinnedEffort       EffortLevel // 手动意图精确锁定的 effort 档位；空=不锁定，由 Autopilot 选优
 	// CostPreferenceOverride 请求级生效价格偏好（请求头 X-Cost-Preference 或场景预设默认）；
 	// 空 = 沿用配置链（PerTaskClass > 全局 Mode）。
 	CostPreferenceOverride string
@@ -43,16 +44,17 @@ func BuildCapabilityFloorFromRequestProfile(profile *RequestProfile) CapabilityF
 		return CapabilityFloor{}
 	}
 	floor := CapabilityFloor{
-		MinContextTokens:  profile.ContextNeed,
-		NeedsReasoning:    profile.ReasoningNeed,
-		NeedsVision:       profile.VisionNeed,
-		NeedsDocument:     profile.DocumentNeed,
-		NeedsToolCalls:    profile.ToolUseNeed,
-		MinQualityTier:    requestQualityTarget(profile),
-		QualityBenefitCap: requestQualityBenefitCap(profile),
-		TaskClass:         profile.TaskClass,
-		TaskDomain:        profile.TaskDomain,
-		PinnedEffort:      resolveIntentPinnedEffort(profile),
+		MinContextTokens:   profile.ContextNeed,
+		NeedsReasoning:     profile.ReasoningNeed,
+		NeedsVision:        profile.VisionNeed,
+		NeedsDocument:      profile.DocumentNeed,
+		NeedsToolCalls:     profile.ToolUseNeed,
+		NeedsSeverityClass: profile.SeverityClassNeed,
+		MinQualityTier:     requestQualityTarget(profile),
+		QualityBenefitCap:  requestQualityBenefitCap(profile),
+		TaskClass:          profile.TaskClass,
+		TaskDomain:         profile.TaskDomain,
+		PinnedEffort:       resolveIntentPinnedEffort(profile),
 	}
 	if profile.ScenarioPreset != nil {
 		floor.EffortFloor = profile.ScenarioPreset.EffortFloor
@@ -187,6 +189,14 @@ func (r *ModelResolver) ResolveModel(
 		return ResolvedRouteTarget{Model: requestModel, Reason: "no_model_profiles"}, false, "no_model_profiles"
 	}
 	candidates = r.refreshAutoDiscoveryCapabilities(candidates, channelUID, channelKind)
+
+	// Step 3.5: 安全分类能力硬约束——实测无法完成 </severity> 格式分类的 渠道×模型
+	// 组合不参与自动映射候选（docs/specs/severity-class-capability.md）。
+	// 过滤发生在 Step 4 能力下界与 Step 5 等价/精确命中之前；全部候选被剔除时走既有的
+	// no_capable_model → fail-open 透传链路，与其他硬约束的行为一致。
+	if floor.NeedsSeverityClass {
+		candidates = filterSeverityClassCapable(candidates, channelUID)
+	}
 
 	// Step 4: 能力过滤——上下文、推理、视觉、工具调用仍是硬约束；
 	// 质量档作为首选条件，只有更高质量候选完全不存在时才允许降档，
@@ -400,6 +410,13 @@ func (r *ModelResolver) capabilityFilteredModelsAnyEndpoint(
 	candidates, reason = r.probedModelsAnyEndpoint(channelUID, channelKind)
 	if len(candidates) == 0 {
 		return nil, reason
+	}
+	// 安全分类能力硬约束同 Step 3.5：兜底枚举路径也不给分类请求放出实测不遵循格式的组合。
+	if floor.NeedsSeverityClass {
+		candidates = filterSeverityClassCapable(candidates, channelUID)
+		if len(candidates) == 0 {
+			return nil, "no_capable_model"
+		}
 	}
 	// 仅按真实能力硬约束过滤，跳过质量档约束：低质量模型保留为低分行，由评分拉开差距。
 	candidates = filterByCapabilityFloorWithoutQuality(candidates, floor)
@@ -670,6 +687,20 @@ func filterProbedModelProfiles(profiles []ModelProfile) []ModelProfile {
 		if profile.ProbeSuccess {
 			eligible = append(eligible, profile)
 		}
+	}
+	return eligible
+}
+
+// filterSeverityClassCapable 剔除该渠道上实测无法完成安全分类请求的模型（TraitNoSeverityClass）。
+// 与 filterByCapabilityFloorInternal 的其他硬约束同款：不做 fail-open 兜底，
+// 全部被剔除时由调用方落入 no_capable_model 语义。
+func filterSeverityClassCapable(profiles []ModelProfile, channelUID string) []ModelProfile {
+	eligible := make([]ModelProfile, 0, len(profiles))
+	for _, p := range profiles {
+		if learnedSeverityClassUnsupported(channelUID, p.ModelID) {
+			continue
+		}
+		eligible = append(eligible, p)
 	}
 	return eligible
 }

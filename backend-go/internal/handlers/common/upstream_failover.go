@@ -1038,6 +1038,24 @@ func TryUpstreamWithAllKeys(
 			requestUpstream := applyAdaptiveResponseHeaderTimeout(
 				c, apiType, endpointPolicy, upstream, upstreamCopy, currentBaseURL, apiKey, globalResponseHeaderTimeout, isStream,
 			)
+			// 出站尝试摘要：一行说清"这条请求实际发到哪、用什么模型、是否被映射"。
+			// 动机：完整出站体日志（[X-Request-Body] 实际请求体）控制台侧被截断到
+			// consoleJSONTextLimit 字符，而 model 字段位于 JSON 尾部——控制台视角
+			// "看不到实际发送的模型"，排查自动映射问题时只能翻原始日志文件。
+			if envCfg.EnableRequestLogs {
+				mappingNote := "passthrough"
+				switch {
+				case appliedMappedModel != "":
+					mappingNote = "auto_resolve"
+				case c.GetString("mappingFailReason") != "":
+					mappingNote = "fail_open:" + c.GetString("mappingFailReason")
+				case attemptModel != model:
+					mappingNote = "manual_redirect"
+				}
+				RequestLogf(c, "[%s-UpstreamAttempt] 渠道=[%d] %s (%s) url=%s 模型 %q -> %q 映射=%s key=%s",
+					apiType, executionIndex, upstream.Name, executionAPIType, currentBaseURL,
+					model, actualAttemptModel, mappingNote, utils.MaskAPIKey(apiKey))
+			}
 			resp, err := SendRequestWithLifecycleTrace(req, requestUpstream, envCfg, isStream, apiType, lifecycleTrace)
 			if err != nil {
 				lastError = err
@@ -1493,6 +1511,11 @@ func TryUpstreamWithAllKeys(
 				if executionKind == scheduler.ChannelKindMessages || executionKind == scheduler.ChannelKindResponses {
 					MaybeLearnForcedToolChoiceMiss(c, upstream, apiKey, attemptModel, attemptBody,
 						GetStreamTimeoutObserver(c).SawToolCall())
+					// 安全分类能力自学习（被动侧·成功路径）：分类形状请求 2xx 完成但
+					// 输出无 <severity> 标记，说明该渠道×模型不遵循格式约束。
+					// 同样仅 messages/responses（只有这两条流式路径接了标记扫描）。
+					MaybeLearnSeverityClassOutcome(c, upstream, apiKey, attemptModel, attemptBody,
+						GetStreamTimeoutObserver(c).SawSeverityTag(), err)
 				}
 			}
 			if err != nil {

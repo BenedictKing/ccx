@@ -24,6 +24,7 @@ type StreamTimeoutObserver struct {
 	lastToolCallActivityAt time.Time
 	toolCallPending        bool
 	sawToolCall            bool
+	sawSeverityTag         bool
 	maxStreamIdleMs        int64
 	maxToolCallIdleMs      int64
 }
@@ -177,6 +178,34 @@ func (o *StreamTimeoutObserver) SawToolCall() bool {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	return o.sawToolCall
+}
+
+// MarkStreamSeverityTag 标记本次流式输出中出现了安全分类格式标记（<severity）。
+// 由各协议流处理器的文本增量扫描调用，供 MaybeLearnSeverityClassOutcome 读取。
+func MarkStreamSeverityTag(c *gin.Context) {
+	if observer := GetStreamTimeoutObserver(c); observer != nil {
+		observer.MarkSeverityTag()
+	}
+}
+
+// MarkSeverityTag 线程安全地记录"已见到 <severity 标记"事实。
+func (o *StreamTimeoutObserver) MarkSeverityTag() {
+	if o == nil {
+		return
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.sawSeverityTag = true
+}
+
+// SawSeverityTag 返回本次流式输出中是否出现过 <severity 标记。
+func (o *StreamTimeoutObserver) SawSeverityTag() bool {
+	if o == nil {
+		return false
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.sawSeverityTag
 }
 
 func (o *StreamTimeoutObserver) markToolCallCompleteLocked(now time.Time) {

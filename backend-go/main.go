@@ -1511,9 +1511,9 @@ func main() {
 				if err != nil {
 					log.Printf("[Autopilot-DiscoveryTaskStore] 初始化失败，降级为纯内存 discovery: %v", err)
 				} else {
-				autoDiscoveryRunner.SetTaskStore(discoveryTaskStore)
-				autoDiscoveryRunner.ResumeIncompleteDiscoveries(cfgManager)
-				autoDiscoveryRunner.StartModelRefreshLoop(cfgManager)
+					autoDiscoveryRunner.SetTaskStore(discoveryTaskStore)
+					autoDiscoveryRunner.ResumeIncompleteDiscoveries(cfgManager)
+					autoDiscoveryRunner.StartModelRefreshLoop(cfgManager)
 				}
 			}
 
@@ -1572,6 +1572,9 @@ func main() {
 			if autopilotManager.SmartRouter() != nil {
 				autopilot.RegisterDryRunRoutes(apiGroup, autopilotManager.SmartRouter())
 			}
+
+			// 渠道兼容性能力记忆查看/清除（工具调用、安全分类等自学习结论）
+			handlers.RegisterCompatCacheRoutes(apiGroup)
 
 			// Phase 2 第三批：自动托管 API（复用上方已构造的 autoDiscoveryRunner）
 			autopilot.RegisterAutoManagedRoutes(apiGroup, &autopilot.AutoManagedDeps{

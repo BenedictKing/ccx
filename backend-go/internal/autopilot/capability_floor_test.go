@@ -265,3 +265,23 @@ func TestMinQualityTierReasons(t *testing.T) {
 		})
 	}
 }
+
+// ── 安全分类硬约束 ──
+
+func TestCapabilityFloorReasonsSeverityClass(t *testing.T) {
+	// 分类请求 + 候选支持 -> 通过
+	reasons := CapabilityFloorReasons(CandidateCapabilities{SupportsSeverityClass: true}, &RequestProfile{SeverityClassNeed: true})
+	if len(reasons) != 0 {
+		t.Fatalf("支持时应通过，got %v", reasons)
+	}
+	// 分类请求 + 候选被实测收紧为不支持 -> 不满足
+	reasons = CapabilityFloorReasons(CandidateCapabilities{SupportsSeverityClass: false}, &RequestProfile{SeverityClassNeed: true})
+	if len(reasons) != 1 || reasons[0] != "安全分类格式能力不满足" {
+		t.Fatalf("不支持时应返回唯一原因，got %v", reasons)
+	}
+	// 非分类请求 + 候选不支持 -> 不影响（零记忆零影响）
+	reasons = CapabilityFloorReasons(CandidateCapabilities{SupportsSeverityClass: false}, &RequestProfile{})
+	if len(reasons) != 0 {
+		t.Fatalf("非分类请求不应受该约束影响，got %v", reasons)
+	}
+}
