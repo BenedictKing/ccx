@@ -265,9 +265,12 @@ func TestAttachAutopilotRequestProfileIgnoresHarnessOverheadForTaskDifficulty(t 
 	if profile.Complexity != autopilot.TaskComplexityRoutine || profile.TaskClass != autopilot.TaskClassWorker {
 		t.Fatalf("profile = complexity:%q class:%q, want routine/worker", profile.Complexity, profile.TaskClass)
 	}
-	// sonnet-5 常规口径 39.8 → normal 档
-	if profile.QualityTarget != autopilot.QualityTierNormal {
-		t.Fatalf("QualityTarget = %q, want normal", profile.QualityTarget)
+	// 质量档边界随基准数据分布动态漂移（computeQualityTierBoundaries 按全池
+	// 最大间隙划界，基准刷新会整体移动边界），期望不写死档位：reasoning 需求把
+	// routine 的 normal 抬到 high 后再被模型自身档位钳制，即 min(high, 模型档)。
+	sonnetTier := autopilot.ModelProfileQualityTier("claude-sonnet-5", autopilot.InferModelFamily("claude-sonnet-5", ""))
+	if wantTarget := clampTargetToModelTier(autopilot.QualityTierHigh, sonnetTier); profile.QualityTarget != wantTarget {
+		t.Fatalf("QualityTarget = %q, want %q (sonnet-5 tier=%q)", profile.QualityTarget, wantTarget, sonnetTier)
 	}
 	if !profile.ToolUseNeed || !profile.ReasoningNeed {
 		t.Fatalf("能力下界丢失: tools=%v reasoning=%v", profile.ToolUseNeed, profile.ReasoningNeed)
@@ -275,6 +278,14 @@ func TestAttachAutopilotRequestProfileIgnoresHarnessOverheadForTaskDifficulty(t 
 }
 
 func TestAttachAutopilotRequestProfileRoutesByCurrentTaskDifficulty(t *testing.T) {
+	// 质量档边界随基准数据分布动态漂移（2026-08-31 刷新曾把 opus-5 从 premium 降到
+	// high、sonnet-5 从 normal 降到 low，而两者自身分数未变），期望不写死档位，
+	// 改为与运行时模型档位自洽：trivial/routine 的推导目标不得越过模型自身档位
+	// 钳制，complex(supervisor) 分支直接取模型自身档位。
+	opusTier := autopilot.ModelProfileQualityTier("claude-opus-5", autopilot.InferModelFamily("claude-opus-5", ""))
+	if opusTier == "" {
+		t.Fatal("claude-opus-5 质量档不可为空，无法构造自洽期望")
+	}
 	tests := []struct {
 		name           string
 		prompt         string
@@ -283,8 +294,8 @@ func TestAttachAutopilotRequestProfileRoutesByCurrentTaskDifficulty(t *testing.T
 		wantTarget     autopilot.QualityTier
 	}{
 		{name: "trivial", prompt: "hello", wantComplexity: autopilot.TaskComplexityTrivial, wantClass: autopilot.TaskClassLightweight, wantTarget: autopilot.QualityTierLow},
-		{name: "routine", prompt: "实现一个分页查询并补充单元测试", wantComplexity: autopilot.TaskComplexityRoutine, wantClass: autopilot.TaskClassWorker, wantTarget: autopilot.QualityTierNormal},
-		{name: "complex", prompt: "定位分布式调度的根因并重构整体架构", wantComplexity: autopilot.TaskComplexityComplex, wantClass: autopilot.TaskClassSupervisor, wantTarget: autopilot.QualityTierPremium},
+		{name: "routine", prompt: "实现一个分页查询并补充单元测试", wantComplexity: autopilot.TaskComplexityRoutine, wantClass: autopilot.TaskClassWorker, wantTarget: clampTargetToModelTier(autopilot.QualityTierNormal, opusTier)},
+		{name: "complex", prompt: "定位分布式调度的根因并重构整体架构", wantComplexity: autopilot.TaskComplexityComplex, wantClass: autopilot.TaskClassSupervisor, wantTarget: opusTier},
 	}
 
 	for _, tt := range tests {
@@ -370,4 +381,20 @@ func TestAttachAutopilotRequestProfileRoutingHeaders(t *testing.T) {
 			t.Fatalf("batch_cheap 应有 medium 上限: %+v", profile.ScenarioPreset)
 		}
 	})
+}
+
+// clampTargetToModelTier 复现 ResolveQualityTarget 的档位钳制语义：
+// 复杂度推导出的质量目标不得超过模型自身档位（QualityNeed），取两者中较低者。
+// 用于把测试期望与随基准数据动态漂移的模型档位解耦。
+func clampTargetToModelTier(target, modelTier autopilot.QualityTier) autopilot.QualityTier {
+	rank := map[autopilot.QualityTier]int{
+		autopilot.QualityTierLow:     0,
+		autopilot.QualityTierNormal:  1,
+		autopilot.QualityTierHigh:    2,
+		autopilot.QualityTierPremium: 3,
+	}
+	if modelTier != "" && rank[modelTier] < rank[target] {
+		return modelTier
+	}
+	return target
 }
