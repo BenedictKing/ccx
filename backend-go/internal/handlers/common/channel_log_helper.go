@@ -78,6 +78,18 @@ func WithEffortDecisionSource(source string) ChannelLogOption {
 	}
 }
 
+// WithMappingFailReason 记录 endpoint 级自动模型映射的未命中原因
+// （no_capable_model / no_model_profiles / exact_model_required / no_profile 等）。
+// 非空表示本次尝试 fail-open 透传了原始模型，用于消除静默降级的排查盲区。
+func WithMappingFailReason(reason string) ChannelLogOption {
+	return func(log *metrics.ChannelLog) {
+		if log == nil || reason == "" {
+			return
+		}
+		log.MappingFailReason = reason
+	}
+}
+
 // WithEffortClampedByClient 标记 effort 是否被客户端显式值钳位。
 func WithEffortClampedByClient(clamped bool) ChannelLogOption {
 	return func(log *metrics.ChannelLog) {

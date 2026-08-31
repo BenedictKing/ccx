@@ -20,6 +20,7 @@ type ChannelLog struct {
 	ActualReasoningEffort   string    `json:"actualReasoningEffort,omitempty"`   // 实际发往上游的思考强度
 	EffortDecisionSource    string    `json:"effortDecisionSource,omitempty"`    // autopilot | client | passthrough
 	EffortClampedByClient   bool      `json:"effortClampedByClient,omitempty"`   // true if effort clamped by client upper bound
+	MappingFailReason       string    `json:"mappingFailReason,omitempty"`       // 自动映射未命中原因（fail-open 透传原始模型时非空）
 	StatusCode              int       `json:"statusCode"`
 	DurationMs              int64     `json:"durationMs"`
 	Success                 bool      `json:"success"`

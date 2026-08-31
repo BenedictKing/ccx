@@ -1178,11 +1178,11 @@ func TestAssistPolicyResolvesTargetForEveryKeyOnSharedBaseURL(t *testing.T) {
 	// URL 级排序最多只能缓存其中一个画像；发送阶段必须仍能解析任意实际选中的 Key。
 	policy.SortURLs([]string{baseURL})
 	for index, endpointUID := range endpointUIDs {
-		target := policy.ResolvedTargetByEndpointUID(endpointUID)
+		target, _ := policy.ResolvedTargetByEndpointUID(endpointUID)
 		if target == nil || target.Model != mappedModel {
 			t.Fatalf("endpoint %s target = %+v, want model %s", endpointUID, target, mappedModel)
 		}
-		bindingTarget := policy.ResolvedTargetForBinding(channelUID, baseURL, apiKeys[index])
+		bindingTarget, _ := policy.ResolvedTargetForBinding(channelUID, baseURL, apiKeys[index])
 		if bindingTarget == nil || bindingTarget.Model != mappedModel {
 			t.Fatalf("binding %s target = %+v, want model %s", endpointUID, bindingTarget, mappedModel)
 		}
@@ -1301,7 +1301,10 @@ func TestTargetByUIDFillConsistency(t *testing.T) {
 	}
 
 	req := &RequestProfile{Model: requestModel, ChannelKind: "messages"}
-	assertTarget := func(t *testing.T, label string, target *ResolvedRouteTarget) {
+	assertTarget := func(t *testing.T, label string, target *ResolvedRouteTarget, failReason string) {
+		if failReason != "" {
+			t.Fatalf("%s: failReason = %q, 期望命中时为空", label, failReason)
+		}
 		t.Helper()
 		if target == nil {
 			t.Fatalf("%s: 期望记录 targetByUID，实际为 nil", label)
@@ -1318,35 +1321,40 @@ func TestTargetByUIDFillConsistency(t *testing.T) {
 		store := newStoreWithProfiles(t)
 		policy := BuildEndpointPolicy(EndpointPolicyDeps{ProfileStore: store}, req, RoutingModeShadow)
 		policy.SortURLs([]string{baseURL})
-		assertTarget(t, "shadow_SortURLs", policy.ResolvedTargetByEndpointUID(profile1UID))
+		target, reason := policy.ResolvedTargetByEndpointUID(profile1UID)
+		assertTarget(t, "shadow_SortURLs", target, reason)
 	})
 
 	t.Run("shadow_SortKeys", func(t *testing.T) {
 		store := newStoreWithProfiles(t)
 		policy := BuildEndpointPolicy(EndpointPolicyDeps{ProfileStore: store}, req, RoutingModeShadow)
 		policy.SortKeys(baseURL, []string{apiKey})
-		assertTarget(t, "shadow_SortKeys", policy.ResolvedTargetByEndpointUID(profile1UID))
+		target, reason := policy.ResolvedTargetByEndpointUID(profile1UID)
+		assertTarget(t, "shadow_SortKeys", target, reason)
 	})
 
 	t.Run("active_SortURLs", func(t *testing.T) {
 		store := newStoreWithProfiles(t)
 		policy := BuildEndpointPolicy(EndpointPolicyDeps{ProfileStore: store}, req, RoutingModeAssist)
 		policy.SortURLs([]string{baseURL})
-		assertTarget(t, "active_SortURLs", policy.ResolvedTargetByEndpointUID(profile1UID))
+		target, reason := policy.ResolvedTargetByEndpointUID(profile1UID)
+		assertTarget(t, "active_SortURLs", target, reason)
 	})
 
 	t.Run("active_SortKeys", func(t *testing.T) {
 		store := newStoreWithProfiles(t)
 		policy := BuildEndpointPolicy(EndpointPolicyDeps{ProfileStore: store}, req, RoutingModeAssist)
 		policy.SortKeys(baseURL, []string{apiKey})
-		assertTarget(t, "active_SortKeys", policy.ResolvedTargetByEndpointUID(profile1UID))
+		target, reason := policy.ResolvedTargetByEndpointUID(profile1UID)
+		assertTarget(t, "active_SortKeys", target, reason)
 	})
 
 	t.Run("scoreAndSortKeyBindings_via_SortKeyBindings", func(t *testing.T) {
 		store := newStoreWithProfiles(t)
 		policy := BuildEndpointPolicy(EndpointPolicyDeps{ProfileStore: store}, req, RoutingModeAssist)
 		policy.SortKeyBindings(channelUID, bindingURL, []string{apiKey})
-		assertTarget(t, "scoreAndSortKeyBindings", policy.ResolvedTargetByEndpointUID(profile2UID))
+		target, reason := policy.ResolvedTargetByEndpointUID(profile2UID)
+		assertTarget(t, "scoreAndSortKeyBindings", target, reason)
 	})
 }
 

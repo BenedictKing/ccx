@@ -704,11 +704,11 @@ func TestTryUpstreamWithAllKeysLogsFinalRequestModelAndReasoningEffort(t *testin
 	cfg := cfgManager.GetConfig()
 	upstream := &cfg.Upstream[0]
 	policy := &autopilot.EndpointAttemptPolicy{
-		ResolvedTargetForBinding: func(channelUID, baseURL, apiKey string) *autopilot.ResolvedRouteTarget {
+		ResolvedTargetForBinding: func(channelUID, baseURL, apiKey string) (*autopilot.ResolvedRouteTarget, string) {
 			if channelUID != upstream.ChannelUID || baseURL != server.URL || apiKey != "sk-auto-mapped" {
 				t.Fatalf("unexpected binding identity: channel=%q url=%q key=%q", channelUID, baseURL, apiKey)
 			}
-			return &autopilot.ResolvedRouteTarget{Model: "glm-5.2"}
+			return &autopilot.ResolvedRouteTarget{Model: "glm-5.2"}, ""
 		},
 	}
 
@@ -776,6 +776,121 @@ func TestTryUpstreamWithAllKeysLogsFinalRequestModelAndReasoningEffort(t *testin
 	if _, ok := modelStats["claude-opus-4-8"]; ok {
 		t.Fatalf("model metrics should not record requested model: %v", modelStats)
 	}
+
+	// 回显头必须在响应写出前设置：非流式 handleSuccess 一旦写出再补头就丢失。
+	// 此处 handleSuccess 未写体，但 header 已在调用前落到 recorder 上即可证明时序。
+	if got := w.Header().Get("X-CCX-Mapped-Model"); got != "glm-5.2" {
+		t.Fatalf("X-CCX-Mapped-Model = %q, want glm-5.2", got)
+	}
+	if got := w.Header().Get("X-CCX-Original-Model"); got != "claude-opus-4-8" {
+		t.Fatalf("X-CCX-Original-Model = %q, want claude-opus-4-8", got)
+	}
+	if got := w.Header().Get("X-CCX-Mapping-Source"); got != "auto_resolve" {
+		t.Fatalf("X-CCX-Mapping-Source = %q, want auto_resolve", got)
+	}
+}
+
+// TestTryUpstreamWithAllKeysLogsMappingFailReason 自动映射未命中 fail-open 透传时，
+// 未命中原因必须落到 channel log（mappingFailReason）且不设置映射回显头。
+func TestTryUpstreamWithAllKeysLogsMappingFailReason(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	upstreamRequests := make(chan string, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			Model string `json:"model"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode upstream request: %v", err)
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		upstreamRequests <- request.Model
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer server.Close()
+
+	cfgManager, channelScheduler, messagesMetrics, cleanup := newTestFailoverDependencies(t, config.UpstreamConfig{
+		Name:        "auto-mapping-fail-test",
+		ChannelUID:  "ch-auto-mapping-fail",
+		BaseURL:     server.URL,
+		APIKeys:     []string{"sk-fail-open"},
+		Status:      "active",
+		ServiceType: "openai",
+		AutoManaged: true,
+	})
+	defer cleanup()
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	originalBody := []byte(`{"model":"claude-opus-4-8","messages":[]}`)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", bytes.NewReader(originalBody))
+
+	policy := &autopilot.EndpointAttemptPolicy{
+		ResolvedTargetForBinding: func(channelUID, baseURL, apiKey string) (*autopilot.ResolvedRouteTarget, string) {
+			return nil, "no_capable_model"
+		},
+	}
+
+	handled, successKey, _, failoverErr, _, lastErr := TryUpstreamWithAllKeys(
+		c,
+		config.NewEnvConfig(),
+		cfgManager,
+		channelScheduler,
+		scheduler.ChannelKindMessages,
+		"Messages",
+		messagesMetrics,
+		&cfgManager.GetConfig().Upstream[0],
+		[]warmup.URLLatencyResult{{URL: server.URL, OriginalIdx: 0}},
+		originalBody,
+		nil,
+		false,
+		func(upstream *config.UpstreamConfig, failedKeys map[string]bool) (string, error) {
+			return cfgManager.GetNextAPIKey(upstream, failedKeys, "Messages")
+		},
+		func(c *gin.Context, upstreamCopy *config.UpstreamConfig, apiKey string) (*http.Request, error) {
+			return http.NewRequestWithContext(c.Request.Context(), http.MethodPost, upstreamCopy.BaseURL, bytes.NewReader(GetEffectiveRequestBody(c, nil)))
+		},
+		func(string) {},
+		nil,
+		nil,
+		func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string, actualRequestBody []byte) (*types.Usage, error) {
+			_ = resp.Body.Close()
+			return nil, nil
+		},
+		"claude-opus-4-8",
+		"",
+		0,
+		channelScheduler.GetChannelLogStore(scheduler.ChannelKindMessages),
+		WithEndpointAttemptPolicy(policy),
+	)
+
+	if !handled || successKey != "sk-fail-open" || failoverErr != nil || lastErr != nil {
+		t.Fatalf("unexpected failover result: handled=%v key=%q failoverErr=%v lastErr=%v", handled, successKey, failoverErr, lastErr)
+	}
+
+	// fail-open 语义：上游收到的是原始模型名。
+	if got := <-upstreamRequests; got != "claude-opus-4-8" {
+		t.Fatalf("upstream request model = %q, want original claude-opus-4-8 (fail-open)", got)
+	}
+
+	serviceType := scheduler.NormalizedMetricsServiceType(scheduler.ChannelKindMessages, "openai")
+	metricsKey := metrics.GenerateMetricsIdentityKey(server.URL, "sk-fail-open", serviceType)
+	logs := channelScheduler.GetChannelLogStore(scheduler.ChannelKindMessages).Get(metricsKey)
+	if len(logs) != 1 {
+		t.Fatalf("logs count = %d, want 1", len(logs))
+	}
+	if got := logs[0]; got.Model != "claude-opus-4-8" || got.OriginalModel != "" || got.MappingFailReason != "no_capable_model" {
+		t.Fatalf("channel log = %+v, want passthrough model with mappingFailReason=no_capable_model", got)
+	}
+
+	// 未命中映射时不得残留映射回显头。
+	for _, header := range []string{"X-CCX-Mapped-Model", "X-CCX-Original-Model", "X-CCX-Mapping-Source"} {
+		if got := w.Header().Get(header); got != "" {
+			t.Fatalf("%s = %q, want empty on mapping miss", header, got)
+		}
+	}
 }
 
 // (Key,模型) 持久化限制复查：autopilot 自动映射的目标模型命中 DisabledKeyModels 时，
@@ -823,8 +938,8 @@ func TestTryUpstreamWithAllKeysSkipsKeyModelDisabledMappedModel(t *testing.T) {
 	cfg := cfgManager.GetConfig()
 	upstream := &cfg.Upstream[0]
 	policy := &autopilot.EndpointAttemptPolicy{
-		ResolvedTargetForBinding: func(channelUID, baseURL, apiKey string) *autopilot.ResolvedRouteTarget {
-			return &autopilot.ResolvedRouteTarget{Model: "glm-5.2"}
+		ResolvedTargetForBinding: func(channelUID, baseURL, apiKey string) (*autopilot.ResolvedRouteTarget, string) {
+			return &autopilot.ResolvedRouteTarget{Model: "glm-5.2"}, ""
 		},
 	}
 

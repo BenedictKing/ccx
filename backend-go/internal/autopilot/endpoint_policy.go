@@ -121,13 +121,16 @@ type EndpointAttemptPolicy struct {
 
 	// ResolvedTargetByEndpointUID 返回 endpointUID 的完整路由目标（model + effort 原子决定）。
 	// 由 SortURLs/SortKeys 阶段在评分时顺带填充，handlers 层在构建请求前查询。
-	// 返回 nil 表示无映射（使用原始模型和 effort）。
-	// 签名：(endpointUID) → *ResolvedRouteTarget（nil = 无映射）
-	ResolvedTargetByEndpointUID func(endpointUID string) *ResolvedRouteTarget
+	// 返回 nil 表示无映射（使用原始模型和 effort）；第二个返回值为解析链路运行过但
+	// 未命中的原因（no_capable_model / no_model_profiles / exact_model_required 等），
+	// 供 handlers 层 fail-open 透传时记录可观测性字段，命中时恒为空串。
+	// 签名：(endpointUID) → (*ResolvedRouteTarget, failReason)
+	ResolvedTargetByEndpointUID func(endpointUID string) (*ResolvedRouteTarget, string)
 
 	// ResolvedTargetForBinding 按最终选中的 channel + URL + Key 解析完整路由目标。
 	// 发送阶段优先使用此入口，避免同 URL 多 Key 或旧画像 UID 导致缓存查找落空。
-	ResolvedTargetForBinding func(channelUID, baseURL, apiKey string) *ResolvedRouteTarget
+	// 第二个返回值同 ResolvedTargetByEndpointUID 的 failReason（含绑定级 no_profile）。
+	ResolvedTargetForBinding func(channelUID, baseURL, apiKey string) (*ResolvedRouteTarget, string)
 
 	// ResponseHeaderTimeoutForEndpoint 根据 endpoint TTFB 画像返回响应头超时建议。
 	// 返回 0 表示样本不足或当前请求不应缩短超时。
@@ -827,7 +830,7 @@ func scoreEndpointForURL(store *ProfileStore, fastDecay *FastDecayScorer, model,
 	cand.MetricsKey = profile.MetricsKey
 	cand.KeyMask = profile.KeyMask
 	cand.EndpointUID = profile.EndpointUID
-	if target := resolveMappedModel(profile, model, req, deps); target != nil {
+	if target, _ := resolveMappedModel(profile, model, req, deps); target != nil {
 		cand.MappedModel = target.Model
 		cand.MappedEffort = target.Effort
 		cand.MappedEffortDecided = target.EffortDecided
@@ -887,7 +890,7 @@ func scoreEndpointForKey(store *ProfileStore, fastDecay *FastDecayScorer, model,
 	if profile.EndpointUID != "" {
 		cand.EndpointUID = profile.EndpointUID
 	}
-	if target := resolveMappedModel(profile, model, req, deps); target != nil {
+	if target, _ := resolveMappedModel(profile, model, req, deps); target != nil {
 		cand.MappedModel = target.Model
 		cand.MappedEffort = target.Effort
 		cand.MappedEffortDecided = target.EffortDecided
@@ -937,7 +940,7 @@ func scoreEndpointProfile(cand EndpointCandidate, profile *KeyEndpointProfile, f
 	cand.MetricsKey = profile.MetricsKey
 	cand.KeyMask = profile.KeyMask
 	cand.EndpointUID = profile.EndpointUID
-	if target := resolveMappedModel(profile, model, req, deps); target != nil {
+	if target, _ := resolveMappedModel(profile, model, req, deps); target != nil {
 		cand.MappedModel = target.Model
 		cand.MappedEffort = target.Effort
 		cand.MappedEffortDecided = target.EffortDecided
@@ -986,7 +989,7 @@ func profileSupportsRequestModel(profile *KeyEndpointProfile, model string, req 
 			return true
 		}
 	}
-	if target := resolveMappedModel(profile, model, req, deps); target != nil && target.Model != "" {
+	if target, _ := resolveMappedModel(profile, model, req, deps); target != nil && target.Model != "" {
 		return true
 	}
 	return false
@@ -1009,12 +1012,13 @@ func findProfileByBaseURL(store *ProfileStore, baseURL string) *KeyEndpointProfi
 
 // resolveMappedModel 解析 endpoint 的模型映射（含 effort 原子决定）。
 // 优先级：profile.ModelMapping（显式 per-endpoint 映射）> ModelResolver 自动映射。
-// ModelResolver 仅在 AutoResolve 门控通过时调用；返回 nil 表示无映射。
+// ModelResolver 仅在 AutoResolve 门控通过时调用；返回 (nil, failReason) 表示无映射，
+// failReason 为自动链路运行过但未命中的原因（手动映射命中或画像/模型为空时为空串）。
 // 显式 ModelMapping 返回 EffortDecided=false（不注入 effort）；
 // ModelResolver 自动映射返回完整 target（含 effort 和 EffortDecided）。
-func resolveMappedModel(profile *KeyEndpointProfile, model string, req *RequestProfile, deps *EndpointPolicyDeps) *ResolvedRouteTarget {
+func resolveMappedModel(profile *KeyEndpointProfile, model string, req *RequestProfile, deps *EndpointPolicyDeps) (*ResolvedRouteTarget, string) {
 	if profile == nil || model == "" {
-		return nil
+		return nil, ""
 	}
 
 	routingCfg := getRoutingCfgFromDeps(deps)
@@ -1023,15 +1027,19 @@ func resolveMappedModel(profile *KeyEndpointProfile, model string, req *RequestP
 	if preferAutoOverManual {
 		// 反转顺序（退役期灰度）：ModelResolver 自动决策优先；
 		// 自动决策 fail-open（未命中）时才回退到显式手动映射。
-		if target := resolveAutoModel(profile, model, req, deps, routingCfg); target != nil {
-			return target
+		target, failReason := resolveAutoModel(profile, model, req, deps, routingCfg)
+		if target != nil {
+			return target, ""
 		}
-		return resolveManualMapping(profile, model, "manual_mapping_fallback")
+		if fallback := resolveManualMapping(profile, model, "manual_mapping_fallback"); fallback != nil {
+			return fallback, ""
+		}
+		return nil, failReason
 	}
 
 	// 默认顺序（历史行为不变）：显式 modelMapping 优先，ModelResolver 自动映射兜底。
 	if target := resolveManualMapping(profile, model, "manual_mapping"); target != nil {
-		return target
+		return target, ""
 	}
 	return resolveAutoModel(profile, model, req, deps, routingCfg)
 }
@@ -1051,17 +1059,20 @@ func resolveManualMapping(profile *KeyEndpointProfile, model string, reason stri
 
 // resolveAutoModel 解析 ModelResolver 自动映射（Phase 3B-2）。
 // 三条件门控：AutoResolve + RoutingMode in {assist, auto} + no KillSwitch；不满足任一条件时返回 nil（fail-open）。
-func resolveAutoModel(profile *KeyEndpointProfile, model string, req *RequestProfile, deps *EndpointPolicyDeps, routingCfg *config.AutopilotRoutingConfig) *ResolvedRouteTarget {
+// 第二个返回值为未命中原因：门控未过（auto_resolve_disabled / resolver_unavailable）
+// 或 ModelResolver 的解析原因（no_model_profiles / no_capable_model / exact_model_required 等），
+// 供调用方在 fail-open 透传时记录，消除静默降级。
+func resolveAutoModel(profile *KeyEndpointProfile, model string, req *RequestProfile, deps *EndpointPolicyDeps, routingCfg *config.AutopilotRoutingConfig) (*ResolvedRouteTarget, string) {
 	resolver := getModelResolverFromDeps(deps)
 	if resolver == nil || req == nil {
-		return nil
+		return nil, "resolver_unavailable"
 	}
 
 	if routingCfg == nil || !routingCfg.ModelMapping.AutoResolve {
-		return nil
+		return nil, "auto_resolve_disabled"
 	}
 	floor := BuildCapabilityFloorFromRequestProfile(req)
-	target, resolved, _ := resolver.ResolveModel(
+	target, resolved, reason := resolver.ResolveModel(
 		model,
 		profile.ChannelUID,
 		profile.ChannelKind,
@@ -1069,9 +1080,12 @@ func resolveAutoModel(profile *KeyEndpointProfile, model string, req *RequestPro
 		floor,
 	)
 	if resolved {
-		return &target
+		return &target, ""
 	}
-	return nil
+	if reason == "" {
+		reason = "auto_resolve_no_match"
+	}
+	return nil, reason
 }
 
 // maskKeyForDisplay 对 API Key 做掩码（用于 EndpointCandidate.KeyMask）。
@@ -1241,45 +1255,46 @@ func buildResolvedModelLookup(m map[string]string) func(string) string {
 // 排序阶段填充的 map 仅作为缓存；缓存未命中时按最终选中的 endpoint 画像现场解析。
 // 同一 BaseURL 下可能有多个 Key，URL 级评分只会观察其中一个画像，不能让模型改写
 // 依赖排序副作用，否则最终选中另一 Key 时会把原始模型名直接发给上游。
-func buildResolvedTargetLookup(m map[string]*ResolvedRouteTarget, deps EndpointPolicyDeps, req *RequestProfile) func(string) *ResolvedRouteTarget {
-	return func(endpointUID string) *ResolvedRouteTarget {
+// 返回 (target, failReason)：未命中原因见 ResolvedTargetByEndpointUID 字段注释。
+func buildResolvedTargetLookup(m map[string]*ResolvedRouteTarget, deps EndpointPolicyDeps, req *RequestProfile) func(string) (*ResolvedRouteTarget, string) {
+	return func(endpointUID string) (*ResolvedRouteTarget, string) {
 		if target := m[endpointUID]; target != nil {
-			return target
+			return target, ""
 		}
 		if deps.ProfileStore == nil || req == nil || endpointUID == "" {
-			return nil
+			return nil, "resolver_unavailable"
 		}
 		profile := deps.ProfileStore.Get(endpointUID)
 		if profile == nil {
-			return nil
+			return nil, "no_profile"
 		}
-		target := resolveMappedModel(profile, req.Model, req, &deps)
+		target, failReason := resolveMappedModel(profile, req.Model, req, &deps)
 		if target != nil && target.Model != "" {
 			m[endpointUID] = target
-			return target
+			return target, ""
 		}
-		return nil
+		return nil, failReason
 	}
 }
 
-func buildResolvedTargetForBinding(m map[string]*ResolvedRouteTarget, deps EndpointPolicyDeps, req *RequestProfile) func(string, string, string) *ResolvedRouteTarget {
-	return func(channelUID, baseURL, apiKey string) *ResolvedRouteTarget {
+func buildResolvedTargetForBinding(m map[string]*ResolvedRouteTarget, deps EndpointPolicyDeps, req *RequestProfile) func(string, string, string) (*ResolvedRouteTarget, string) {
+	return func(channelUID, baseURL, apiKey string) (*ResolvedRouteTarget, string) {
 		if deps.ProfileStore == nil || req == nil {
-			return nil
+			return nil, "resolver_unavailable"
 		}
 		profile := findProfileForBinding(deps.ProfileStore, channelUID, baseURL, apiKey)
 		if profile == nil {
-			return nil
+			return nil, "no_profile"
 		}
 		if target := m[profile.EndpointUID]; target != nil {
-			return target
+			return target, ""
 		}
-		target := resolveMappedModel(profile, req.Model, req, &deps)
+		target, failReason := resolveMappedModel(profile, req.Model, req, &deps)
 		if target != nil && target.Model != "" {
 			m[profile.EndpointUID] = target
-			return target
+			return target, ""
 		}
-		return nil
+		return nil, failReason
 	}
 }
 func GetEndpointCandidates(store *ProfileStore, fastDecay *FastDecayScorer, model string, urls []string) []EndpointCandidate {
