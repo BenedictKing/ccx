@@ -23,6 +23,7 @@ import {
   extractCostData,
   collectUnmappedTableModels,
   toBenchmarkEvidence as toDradarEvidence,
+  buildEffortEvidences,
   DRADAR_MODEL_MAP,
 } from './dradar.mjs'
 import { extractProfiles as extractBenchlmProfiles } from './benchlm.mjs'
@@ -739,6 +740,85 @@ test('quality score calibration keeps low-gain models below stronger ones', () =
       assert.ok(row.quality_score >= min - 1e-9 && row.quality_score <= max + 1e-9)
     }
   }
+})
+
+test('small-sample efforts are excluded from calibration and tagged in chart data', () => {
+  const evidence = (rawValue, effort, taskCount, costUsd = 1) => ({
+    benchmark: 'codexradar',
+    benchmarkVersion: 'v1',
+    domain: 'coding',
+    metric: 'pass_at_1',
+    rawValue,
+    effort,
+    taskCount,
+    costUsd,
+  })
+  // hy4-preview 现场：low 1 任务全过 = 100%，max 6 任务 2 过 = 33.3%
+  const noisyEvidence = [
+    evidence(1, 'low', 1, 1.2),
+    evidence(0.333, 'max', 6, 0.8),
+  ]
+  const visualization = buildBenchmarkVisualizationData({
+    benchmarkProfiles: {
+      'noisy-low': { canonicalModel: 'noisy-low', benchmarkEvidence: noisyEvidence },
+      // 对照组：同样分数但任务数充足，low+max 跨 medium 插值 = 83.3
+      'ample-low': { canonicalModel: 'ample-low', benchmarkEvidence: [
+        evidence(1, 'low', 66, 1.2),
+        evidence(0.333, 'max', 6, 0.8),
+      ] },
+      // 全部档位小样本：无可用等效分
+      'all-tiny': { canonicalModel: 'all-tiny', benchmarkEvidence: [
+        evidence(1, 'low', 1, 1.2),
+      ] },
+    },
+    // 比较行从 dradarProfiles 生成
+    dradarProfiles: { 'noisy-low': { benchmarkEvidence: noisyEvidence } },
+  })
+
+  const scoreOf = (model, effort) => visualization.data
+    .find(row => row.model === model && row.effort === effort)?.quality_score
+  // 小样本 low 不参与插值：noisy-low 只剩 max 单点，等效分 33.3 而非 83.3
+  assert.equal(scoreOf('noisy-low', 'low'), 33.3)
+  assert.equal(scoreOf('noisy-low', 'max'), 33.3)
+  assert.equal(scoreOf('ample-low', 'low'), 83.3)
+  // 全小样本：等效分为 null，校验层会把该行从图表数据中丢弃
+  assert.equal(scoreOf('all-tiny', 'low'), null)
+  const validated = validateVisualizationData(visualization)
+  assert.ok(!validated.rows.some(row => row.model === 'all-tiny'))
+  // 成本行与比较行都带任务数，供图表标注小样本
+  assert.equal(visualization.data.find(row => row.model === 'noisy-low' && row.effort === 'low').taskCount, 1)
+  assert.equal(visualization.comparisons.find(row => row.model === 'noisy-low' && row.effort === 'low').taskCount, 1)
+})
+
+test('benchmark chart script carries low-sample marking logic', () => {
+  const html = renderBenchmarkChart([
+    { model: 'm', source: 'CodexRadar', effort: 'low', pass_rate: 1, quality_score: 33.3, mean_cost: 1, median_cost: 1, taskCount: 1 },
+  ], [], null)
+  assert.match(html, /low-sample/)
+  assert.match(html, /isLowSampleRow/)
+})
+
+test('dradar per-effort evidence carries each effort own cell count', () => {
+  // hy4-preview 现场：最佳档是 low（1 格），max 有 6 格；
+  // 展开遗漏曾把最佳档格子数写进所有档位的 taskCount
+  const modelData = {
+    canonicalModel: 'hy4-preview',
+    deepsweModel: 'hy4-preview',
+    bestEffort: 'low',
+    passRate: 1.0,
+    graded: 1,
+    cells: 1,
+    cellsPassed: 1,
+    efforts: {
+      low: { passRate: 1.0, graded: 1, cells: 1, cellsPassed: 1 },
+      max: { passRate: 0.333, graded: 6, cells: 6, cellsPassed: 2 },
+    },
+  }
+  const rows = buildEffortEvidences(modelData, [modelData], {})
+  const byEffort = Object.fromEntries(rows.map(row => [row.effort, row.evidence]))
+  assert.equal(byEffort.low.taskCount, 1)
+  assert.equal(byEffort.max.taskCount, 6)
+  assert.equal(byEffort.max.rawValue, 0.333)
 })
 
 test('LiteLLM fills only unknown capabilities', () => {

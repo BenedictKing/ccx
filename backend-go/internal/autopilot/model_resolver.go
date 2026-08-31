@@ -771,6 +771,10 @@ func effortLevelQualityAdmission(modelID string, min QualityTier) bool {
 		if ev.Benchmark != "deepswe" && ev.Benchmark != "codexradar" {
 			continue
 		}
+		// 小样本档位的 pass@1 是噪声，不能凭它放行质量下限
+		if isSmallSampleEvidence(ev) {
+			continue
+		}
 		effort := NormalizeEffortLevel(ev.Effort)
 		if effort == "" || effort == EffortOff {
 			continue

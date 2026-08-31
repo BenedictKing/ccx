@@ -29,6 +29,17 @@ function normalizedScore(value) {
   return value <= 1 ? value * 100 : value
 }
 
+// 小样本档位阈值：直测任务格数低于该值的 effort 档视为未完成测量，
+// 不参与等效分校准与质量档评定（CodexRadar 新模型先跑 1 个任务且恰好
+// 通过时 pass@1=100% 纯属噪声，2026-08 hy4-preview low 档 1/1 曾把
+// 插值等效分虚抬进 premium）。taskCount 缺失/为 0 表示来源未提供任务数，
+// 视为可信以兼容旧数据与无任务数口径的来源。
+const MIN_RELIABLE_TASKS = 3
+
+function hasReliableSample(taskCount) {
+  return !(Number.isFinite(taskCount) && taskCount > 0 && taskCount < MIN_RELIABLE_TASKS)
+}
+
 const REGULAR_EFFORT_RANK = 1
 
 function effortRankOf(effort) {
@@ -47,7 +58,7 @@ function effortRankOf(effort) {
  */
 function mediumAlignedScore(points) {
   const valid = points
-    .filter(point => Number.isFinite(point.passRate))
+    .filter(point => Number.isFinite(point.passRate) && hasReliableSample(point.taskCount))
     .map(point => ({ rank: effortRankOf(point.effort), score: point.passRate * 100 }))
   if (!valid.length) return null
   const regular = valid.filter(point => point.rank === REGULAR_EFFORT_RANK)
@@ -79,9 +90,10 @@ function regularEffortBaselineScore(evidence = []) {
     if (item?.domain !== 'coding' || item?.metric !== 'pass_at_1') continue
     if (item.benchmark !== 'deepswe' && item.benchmark !== 'codexradar' && item.benchmarkVersion !== 'codexradar') continue
     if (!Number.isFinite(item.rawValue)) continue
+    if (!hasReliableSample(item.taskCount)) continue
     const source = sourceName(item)
     if (!bySource.has(source)) bySource.set(source, [])
-    bySource.get(source).push({ effort: item.effort, passRate: item.rawValue })
+    bySource.get(source).push({ effort: item.effort, passRate: item.rawValue, taskCount: item.taskCount })
   }
   // 各来源分别校准后取最小值（保守，量纲仍为原始分百分制）。
   const scores = [...bySource.values()]
@@ -169,6 +181,7 @@ function extractRegistryCostRows(benchmarkProfiles = {}, models = null) {
         median_cost: evidence.costUsd,
         source,
         sourceModel: evidence.sourceModel || canonical,
+        taskCount: evidence.taskCount ?? null,
       }
       const current = bySource.get(key)
       if (!current || candidate.pass_rate > current.pass_rate ||
@@ -230,6 +243,7 @@ export function extractDradarCostRows(data, models = null) {
         median_cost: cost.medianCost,
         source: 'CodexRadar',
         sourceModel: model,
+        taskCount: result.cells ?? null,
       })
     }
   }
@@ -250,6 +264,7 @@ function evidenceComparisonRows(profiles, models) {
         metric: evidence.metric,
         score,
         effort: evidence.effort,
+        taskCount: evidence.taskCount ?? null,
       })
     }
   }
@@ -361,7 +376,7 @@ export function buildBenchmarkVisualizationData({
   for (const row of data) {
     const key = `${row.model}|${row.source}`
     if (!groupScores.has(key)) groupScores.set(key, [])
-    groupScores.get(key).push({ effort: row.effort, passRate: row.pass_rate })
+    groupScores.get(key).push({ effort: row.effort, passRate: row.pass_rate, taskCount: row.taskCount })
   }
   const qualityScoreByGroup = new Map([...groupScores]
     .map(([key, points]) => [key, mediumAlignedScore(points)]))
@@ -391,6 +406,7 @@ function normalizeCostRow(row) {
     median_cost: row.median_cost != null ? Math.round(row.median_cost * 10000) / 10000 : null,
     quality_score: row.quality_score != null ? Math.round(row.quality_score * 10) / 10 : null,
     model_quality_score: row.model_quality_score != null ? Math.round(row.model_quality_score * 10) / 10 : null,
+    taskCount: row.taskCount ?? null,
   }
 }
 
@@ -402,5 +418,6 @@ function normalizeComparisonRow(row) {
   return {
     ...row,
     score: Math.round(row.score * 10) / 10,
+    taskCount: row.taskCount ?? null,
   }
 }

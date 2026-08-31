@@ -27,11 +27,11 @@ const (
 	volcengineContentType    = "application/json; charset=UTF-8"
 	// 火山方舟管控面示例要求只对这三个请求头签名。Content-Type 仍会发送，
 	// 但不能列入 SignedHeaders，否则套餐模型列表接口会拒绝签名。
-	volcengineSignedHeaders = "host;x-content-sha256;x-date"
-	volcenginePlanAgent     = "agent_plan"
-	volcenginePlanCoding    = "coding_plan"
+	volcengineSignedHeaders   = "host;x-content-sha256;x-date"
+	volcenginePlanAgent       = "agent_plan"
+	volcenginePlanCoding      = "coding_plan"
 	volcengineEditionPersonal = "personal"
-	volcengineEditionTeam   = "team"
+	volcengineEditionTeam     = "team"
 	// GetSeatInfo 的 Scene 参数：Agent Plan 企业版必须用 agent_plan_enterprise，
 	// Coding Plan 企业版用空字符串（早期误用 agent_plan/coding_plan 会返空 SeatID 不报错）。
 	volcengineAgentPlanEnterpriseScene = "agent_plan_enterprise"
@@ -422,10 +422,10 @@ func (r *volcengineSeatInfo) seatID() string {
 // 顶层（单席位）或 Seats/Datas 数组（多席位，按 SeatID 匹配）。
 type volcengineSeatAFPUsage struct {
 	Result struct {
-		AFPFiveHour *volcengineAFPWindow `json:"AFPFiveHour,omitempty"`
-		AFPDaily    *volcengineAFPWindow `json:"AFPDaily,omitempty"`
-		AFPWeekly   *volcengineAFPWindow `json:"AFPWeekly,omitempty"`
-		AFPMonthly  *volcengineAFPWindow `json:"AFPMonthly,omitempty"`
+		AFPFiveHour *volcengineAFPWindow     `json:"AFPFiveHour,omitempty"`
+		AFPDaily    *volcengineAFPWindow     `json:"AFPDaily,omitempty"`
+		AFPWeekly   *volcengineAFPWindow     `json:"AFPWeekly,omitempty"`
+		AFPMonthly  *volcengineAFPWindow     `json:"AFPMonthly,omitempty"`
 		Seats       []volcengineSeatAFPEntry `json:"Seats,omitempty"`
 		Datas       []volcengineSeatAFPEntry `json:"Datas,omitempty"`
 	} `json:"Result"`

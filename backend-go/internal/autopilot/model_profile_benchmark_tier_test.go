@@ -110,6 +110,12 @@ func TestRegularEffortBaselineScoreSingleEffortOnly(t *testing.T) {
 			Effort: effort, RawValue: raw,
 		}
 	}
+	// evN 带任务格数：用于小样本剔除行为验证
+	evN := func(benchmark, effort string, raw float64, taskCount int) config.ModelBenchmarkEvidence {
+		e := ev(benchmark, effort, raw)
+		e.TaskCount = taskCount
+		return e
+	}
 	tests := []struct {
 		name       string
 		evidence   []config.ModelBenchmarkEvidence
@@ -131,6 +137,28 @@ func TestRegularEffortBaselineScoreSingleEffortOnly(t *testing.T) {
 			name:       "仅 max 档证据标记单一档",
 			evidence:   []config.ModelBenchmarkEvidence{ev("codexradar", "max", 0.90)},
 			singleWant: true, okWant: true, scoreWant: 0.90 * 100 / 1.975,
+		},
+		{
+			name: "小样本 low 档被剔除：1 任务 100% 不得抬高插值（hy4-preview 回归）",
+			evidence: []config.ModelBenchmarkEvidence{
+				evN("codexradar", "low", 1.0, 1),   // 1 任务全过，纯噪声
+				evN("codexradar", "max", 0.333, 6), // 唯一可信档
+			},
+			singleWant: true, okWant: true,
+			scoreWant: 0.333 * 100 / 1.975,
+		},
+		{
+			name: "全部档位均小样本则无可用等效分",
+			evidence: []config.ModelBenchmarkEvidence{
+				evN("codexradar", "low", 1.0, 1),
+				evN("codexradar", "max", 0.5, 2),
+			},
+			singleWant: false, okWant: false,
+		},
+		{
+			name:       "任务格数达到阈值即可信",
+			evidence:   []config.ModelBenchmarkEvidence{evN("deepswe", "low", 0.50, 3)},
+			singleWant: true, okWant: true, scoreWant: 0.50 * 100 / 0.686,
 		},
 		{
 			name: "low+high 跨 medium 相邻两档线性插值",
@@ -195,6 +223,28 @@ func TestRegularEffortBaselineScoreSingleEffortOnly(t *testing.T) {
 			}
 			if tt.okWant && math.Abs(score-tt.scoreWant) > 1e-9 {
 				t.Fatalf("score = %v, want %v", score, tt.scoreWant)
+			}
+		})
+	}
+}
+
+func TestIsSmallSampleEvidenceBoundaries(t *testing.T) {
+	tests := []struct {
+		name      string
+		taskCount int
+		want      bool
+	}{
+		{"未提供任务数视为可信", 0, false},
+		{"单任务属小样本", 1, true},
+		{"两任务属小样本", 2, true},
+		{"达到阈值即可信", 3, false},
+		{"大样本可信", 100, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ev := config.ModelBenchmarkEvidence{Benchmark: "codexradar", TaskCount: tt.taskCount}
+			if got := isSmallSampleEvidence(ev); got != tt.want {
+				t.Fatalf("isSmallSampleEvidence(taskCount=%d) = %v, want %v", tt.taskCount, got, tt.want)
 			}
 		})
 	}
