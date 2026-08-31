@@ -576,6 +576,8 @@ func TryUpstreamWithAllKeys(
 			// 防止 failover 到未产生 resolved target 的 endpoint 时残留旧值。
 			c.Set("effortDecisionSource", "passthrough")
 			c.Set("effortClampedByClient", false)
+			// 自动映射未命中原因同样按 attempt 重置：映射成功的尝试不携带上一轮的失败原因。
+			c.Set("mappingFailReason", "")
 			// 释放上一轮 attempt 的并发信号量（首次为空操作）
 			if activeRateLimitRelease != nil {
 				activeRateLimitRelease()
@@ -696,17 +698,27 @@ func TryUpstreamWithAllKeys(
 				keyHash := autopilot.KeyHashFromAPIKey(apiKey)
 				euid := autopilot.GenerateEndpointUID(upstream.ChannelUID, currentBaseURL, keyHash)
 
-				// 优先使用新 API（原子 model+effort），回退到旧 API（仅 model）
+				// 优先使用新 API（原子 model+effort），回退到旧 API（仅 model）。
+				// lookup 同时带出解析链路的未命中原因（no_capable_model / no_model_profiles /
+				// exact_model_required / no_profile 等），供 fail-open 透传时落可观测性字段，
+				// 避免"为什么没映射"完全静默。
 				var target *autopilot.ResolvedRouteTarget
+				mappingFailReason := ""
 				if endpointPolicy.ResolvedTargetForBinding != nil {
-					target = endpointPolicy.ResolvedTargetForBinding(upstream.ChannelUID, currentBaseURL, apiKey)
+					target, mappingFailReason = endpointPolicy.ResolvedTargetForBinding(upstream.ChannelUID, currentBaseURL, apiKey)
 				}
 				if target == nil && endpointPolicy.ResolvedTargetByEndpointUID != nil {
-					target = endpointPolicy.ResolvedTargetByEndpointUID(euid)
+					if t, reason := endpointPolicy.ResolvedTargetByEndpointUID(euid); t != nil {
+						target = t
+						mappingFailReason = ""
+					} else if mappingFailReason == "" {
+						mappingFailReason = reason
+					}
 				}
 				if target == nil && endpointPolicy.ResolvedModelByEndpointUID != nil {
 					if mm := endpointPolicy.ResolvedModelByEndpointUID(euid); mm != "" {
 						target = &autopilot.ResolvedRouteTarget{Model: mm}
+						mappingFailReason = ""
 					}
 				}
 				if target != nil && target.Model != "" {
@@ -733,6 +745,12 @@ func TryUpstreamWithAllKeys(
 					} else {
 						c.Set("effortDecisionSource", "passthrough")
 					}
+				} else if mappingFailReason != "" {
+					// 自动映射链路运行过但未命中：fail-open 透传原始模型，
+					// 记录原因供事后排查（ChannelLog.mappingFailReason + 请求日志）。
+					c.Set("mappingFailReason", mappingFailReason)
+					RequestLogf(c, "[%s-AutoModel] endpoint=%s 自动映射未命中，按原始模型透传: model=%s reason=%s",
+						apiType, euid, model, mappingFailReason)
 				}
 			}
 
@@ -950,6 +968,12 @@ func TryUpstreamWithAllKeys(
 				if c, ok := clamped.(bool); ok && c {
 					logOpts = append(logOpts, WithEffortClampedByClient(true))
 				}
+			}
+
+			// 提取自动映射未命中原因（endpoint policy 写入 gin context）。
+			// 非空表示本次尝试 fail-open 透传了原始模型，原因进 ChannelLog 供事后排查。
+			if reason := c.GetString("mappingFailReason"); reason != "" {
+				logOpts = append(logOpts, WithMappingFailReason(reason))
 			}
 
 			// 创建 pending 状态日志（附带代理上下文与会话标识，用于 subagent 观测）
@@ -1443,6 +1467,22 @@ func TryUpstreamWithAllKeys(
 				streamingUserID = trackStreamingConversation(c, channelScheduler, kind, model, executionIndex, upstream.Name)
 				StartStreamTimeoutObservation(c, channelLogStore, metricsKey, logRequestID, time.Now())
 			}
+			// Phase 3B-2: 回显自动模型映射信息（受 EchoMappedModel 配置门控）。
+			// 必须在 handleSuccess 写出响应体之前设置：流式首包/非流式 JSON 一旦写出，
+			// 再补 header 就会静默丢失（旧实现挂在完成后即有此 bug）。
+			// 每次 attempt 覆盖/清除，防止映射失败的 attempt failover 后残留旧值。
+			{
+				echoMapping := appliedMappedModel != "" && cfgManager.GetAutopilotRouting().ModelMapping.EchoMappedModel
+				if echoMapping {
+					c.Header("X-CCX-Mapped-Model", actualAttemptModel)
+					c.Header("X-CCX-Original-Model", model)
+					c.Header("X-CCX-Mapping-Source", "auto_resolve")
+				} else {
+					c.Writer.Header().Del("X-CCX-Mapped-Model")
+					c.Writer.Header().Del("X-CCX-Original-Model")
+					c.Writer.Header().Del("X-CCX-Mapping-Source")
+				}
+			}
 			usage, err = handleSuccess(c, resp, upstreamCopy, apiKey, attemptBody)
 			if isStream {
 				FinishStreamTimeoutObservation(c)
@@ -1559,16 +1599,6 @@ func TryUpstreamWithAllKeys(
 			// 记录渠道日志
 			CompleteLog(channelLogStore, metricsKey, logRequestID, http.StatusOK, true, "", isRetryAttempt)
 			recordAttemptCompleted(c, logRequestID, upstream.ChannelUID, "success", http.StatusOK, time.Since(attemptStartedAt).Milliseconds())
-
-			// Phase 3B-2: 回显自动模型映射信息（受 EchoMappedModel 配置门控）。
-			if appliedMappedModel != "" {
-				routingCfg := cfgManager.GetAutopilotRouting()
-				if routingCfg.ModelMapping.EchoMappedModel {
-					c.Header("X-CCX-Mapped-Model", actualAttemptModel)
-					c.Header("X-CCX-Original-Model", model)
-					c.Header("X-CCX-Mapping-Source", "auto_resolve")
-				}
-			}
 
 			// Phase 4 Item 8: 代理成功后回调（A/B 测试用）。
 			// 在主响应已写回客户端之后触发，不影响主请求路径。

@@ -94,7 +94,7 @@ func TestResolveMappedModel_PreferAutoOverManual(t *testing.T) {
 				GetRoutingCfg: func() config.AutopilotRoutingConfig { return routingCfg },
 			}
 
-			got := resolveMappedModel(baseProfile(), requestModel, req, deps)
+			got, _ := resolveMappedModel(baseProfile(), requestModel, req, deps)
 			if got == nil {
 				t.Fatalf("resolveMappedModel() = nil, want non-nil target")
 			}
@@ -121,4 +121,96 @@ func TestResolveMappedModel_PreferAutoOverManual_DefaultFalse(t *testing.T) {
 	if cfg.ModelMapping.PreferAutoOverManual {
 		t.Fatalf("DefaultAutopilotRoutingConfig().ModelMapping.PreferAutoOverManual = true, want false")
 	}
+}
+
+// TestResolveMappedModelFailReasons 验证自动映射未命中时 failReason 能穿透解析链路：
+// 门控未过、resolver 缺失、模型画像为空、画像库无该绑定各有独立原因，
+// 供 handlers 层 fail-open 透传时记录（消除"为什么没映射"的静默盲区）。
+func TestResolveMappedModelFailReasons(t *testing.T) {
+	const (
+		channelUID   = "ch_fail_reason_test"
+		requestModel = "claude-opus-4-8"
+	)
+	profile := &KeyEndpointProfile{
+		ChannelUID:  channelUID,
+		ChannelKind: "messages",
+		MetricsKey:  "metrics_fail_reason_test",
+	}
+	req := &RequestProfile{Model: requestModel, ChannelKind: "messages"}
+
+	t.Run("auto_resolve_disabled", func(t *testing.T) {
+		cfg := config.DefaultAutopilotRoutingConfig()
+		cfg.ModelMapping.AutoResolve = false
+		deps := &EndpointPolicyDeps{
+			ModelResolver: newTestResolver(t, nil),
+			GetRoutingCfg: func() config.AutopilotRoutingConfig { return cfg },
+		}
+		target, reason := resolveMappedModel(profile, requestModel, req, deps)
+		if target != nil || reason != "auto_resolve_disabled" {
+			t.Fatalf("resolveMappedModel() = (%+v, %q), want (nil, auto_resolve_disabled)", target, reason)
+		}
+	})
+
+	t.Run("resolver_unavailable", func(t *testing.T) {
+		cfg := config.DefaultAutopilotRoutingConfig()
+		cfg.ModelMapping.AutoResolve = true
+		deps := &EndpointPolicyDeps{
+			GetRoutingCfg: func() config.AutopilotRoutingConfig { return cfg },
+		}
+		target, reason := resolveMappedModel(profile, requestModel, req, deps)
+		if target != nil || reason != "resolver_unavailable" {
+			t.Fatalf("resolveMappedModel() = (%+v, %q), want (nil, resolver_unavailable)", target, reason)
+		}
+	})
+
+	t.Run("no_model_profiles", func(t *testing.T) {
+		cfg := config.DefaultAutopilotRoutingConfig()
+		cfg.ModelMapping.AutoResolve = true
+		deps := &EndpointPolicyDeps{
+			// resolver 存在但该 metricsKey 下没有任何模型画像。
+			ModelResolver: newTestResolver(t, nil),
+			GetRoutingCfg: func() config.AutopilotRoutingConfig { return cfg },
+		}
+		target, reason := resolveMappedModel(profile, requestModel, req, deps)
+		if target != nil || reason != "no_model_profiles" {
+			t.Fatalf("resolveMappedModel() = (%+v, %q), want (nil, no_model_profiles)", target, reason)
+		}
+	})
+
+	t.Run("binding_no_profile", func(t *testing.T) {
+		// 画像库中不存在该 (channel, baseURL, key) 绑定的 endpoint 画像。
+		store := newTestProfileStore(t)
+		cfg := config.DefaultAutopilotRoutingConfig()
+		cfg.ModelMapping.AutoResolve = true
+		policy := BuildEndpointPolicy(EndpointPolicyDeps{
+			ProfileStore:  store,
+			ModelResolver: newTestResolver(t, nil),
+			GetRoutingCfg: func() config.AutopilotRoutingConfig { return cfg },
+		}, req, RoutingModeAuto)
+		target, reason := policy.ResolvedTargetForBinding(channelUID, "https://api.example.com", "sk-missing")
+		if target != nil || reason != "no_profile" {
+			t.Fatalf("ResolvedTargetForBinding() = (%+v, %q), want (nil, no_profile)", target, reason)
+		}
+	})
+
+	t.Run("manual_mapping_hit_masks_reason", func(t *testing.T) {
+		// 手动映射命中时返回原因必须为空（不是失败）。
+		mapped := &KeyEndpointProfile{
+			ChannelUID:  channelUID,
+			ChannelKind: "messages",
+			MetricsKey:  "metrics_fail_reason_test",
+			ModelMapping: map[string]string{
+				requestModel: "manual-target",
+			},
+		}
+		cfg := config.DefaultAutopilotRoutingConfig()
+		cfg.ModelMapping.AutoResolve = false
+		deps := &EndpointPolicyDeps{
+			GetRoutingCfg: func() config.AutopilotRoutingConfig { return cfg },
+		}
+		target, reason := resolveMappedModel(mapped, requestModel, req, deps)
+		if target == nil || target.Model != "manual-target" || reason != "" {
+			t.Fatalf("resolveMappedModel() = (%+v, %q), want (manual-target, \"\")", target, reason)
+		}
+	})
 }
