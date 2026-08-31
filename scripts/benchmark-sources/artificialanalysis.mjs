@@ -73,6 +73,8 @@ export const ARTIFICIAL_ANALYSIS_MODEL_MAP = {
   'minimax-m3': 'minimax-m3',
   'qwen3-7-max': 'qwen3.7-max',
   'qwen3-8-max': 'qwen3.8-max',
+  // AA 快照变体：2.4T 参数量 + commit hash 后缀，属于 qwen3.8-max 同一模型
+  'qwen3-8-2-4t-a95b': 'qwen3.8-max',
   'mimo-v2-5': 'mimo-v2.5',
   'mimo-v2-5-pro': 'mimo-v2.5-pro',
   'muse-spark-1-1': 'muse-spark-1.1',
