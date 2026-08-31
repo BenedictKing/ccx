@@ -25,6 +25,7 @@ type RequestProfileFeatures struct {
 	EmbeddingNeed        bool
 	ToolUseNeed          bool
 	ReasoningNeed        bool
+	SeverityClassNeed    bool // 格式约束型安全分类请求（</severity> 停止序列），需规避实测不遵循格式的组合
 	EmbeddingDimension   int
 	SessionID            string
 	PromptHash           string
@@ -73,6 +74,7 @@ func BuildRequestProfile(features RequestProfileFeatures) RequestProfile {
 		EmbeddingNeed:      features.EmbeddingNeed,
 		ToolUseNeed:        features.ToolUseNeed,
 		ReasoningNeed:      features.ReasoningNeed,
+		SeverityClassNeed:  features.SeverityClassNeed,
 		EmbeddingDimension: features.EmbeddingDimension,
 		SessionID:          features.SessionID,
 		PromptHash:         features.PromptHash,

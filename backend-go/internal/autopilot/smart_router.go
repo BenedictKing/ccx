@@ -825,6 +825,8 @@ func (r *SmartRouter) executeFilter(
 							SupportsToolCalls:   le.SupportsToolCalls,
 							SupportsReasoning:   le.SupportsReasoning,
 							ContextWindowTokens: le.ContextWindowTokens,
+							// 本地运行时未接入安全分类能力学习，按支持处理（fail-open）。
+							SupportsSeverityClass: true,
 							ScoringCandidate: ScoringCandidate{
 								ChannelUID:                le.RuntimeUID,
 								QualityTier:               QualityTierNormal, // 中性默认值
@@ -1191,32 +1193,36 @@ func federatedRoute(ch scheduler.ChannelInfo, requestKind string) scheduler.Chan
 
 // channelScoreEntry 渠道评分输入条目。
 type channelScoreEntry struct {
-	ChannelUID          string
-	ChannelName         string // 渠道显示名（来自 upstream.Name）
-	ChannelKind         string
-	Route               scheduler.ChannelRouteRef
-	ProtocolFidelity    string
-	ConversionPenalty   float64
-	MetricsKey          string
-	KeyMask             string // 掩码后的 key，如 sk-***abc
-	MappedModel         string
-	MappingSource       string
-	MappingReason       string
-	CandidateKey        string // (渠道, 模型) 粒度标识：channelUID|model
-	OriginTier          ChannelOriginTier
-	HealthState         HealthState
-	EstimatedCost       float64
-	ChannelIndex        int
-	ModelID             string
-	BenchmarkScore      float64
-	BenchmarkKnown      bool
-	DomainProfiles      []ModelProfile
-	SupportsVision      bool // 渠道是否支持识图（模型注册表 + 画像聚合 + 手动配置覆盖）
-	SupportsDocument    bool // 渠道是否支持文档（PDF 等，模型注册表来源，无画像聚合来源）
-	SupportsToolCalls   bool // 渠道是否支持工具调用（模型注册表 + 画像聚合）
-	SupportsReasoning   bool // 渠道是否支持推理（模型注册表 + 画像聚合）
-	ContextWindowTokens int  // 渠道上下文窗口大小（0 = 未知，来自模型能力注册表）
-	ScoringCandidate    ScoringCandidate
+	ChannelUID        string
+	ChannelName       string // 渠道显示名（来自 upstream.Name）
+	ChannelKind       string
+	Route             scheduler.ChannelRouteRef
+	ProtocolFidelity  string
+	ConversionPenalty float64
+	MetricsKey        string
+	KeyMask           string // 掩码后的 key，如 sk-***abc
+	MappedModel       string
+	MappingSource     string
+	MappingReason     string
+	CandidateKey      string // (渠道, 模型) 粒度标识：channelUID|model
+	OriginTier        ChannelOriginTier
+	HealthState       HealthState
+	EstimatedCost     float64
+	ChannelIndex      int
+	ModelID           string
+	BenchmarkScore    float64
+	BenchmarkKnown    bool
+	DomainProfiles    []ModelProfile
+	SupportsVision    bool // 渠道是否支持识图（模型注册表 + 画像聚合 + 手动配置覆盖）
+	SupportsDocument  bool // 渠道是否支持文档（PDF 等，模型注册表来源，无画像聚合来源）
+	SupportsToolCalls bool // 渠道是否支持工具调用（模型注册表 + 画像聚合）
+	SupportsReasoning bool // 渠道是否支持推理（模型注册表 + 画像聚合）
+	// SupportsSeverityClass 能否完成格式约束型安全分类请求。注册表无此维度，
+	// 构造处必须显式置 true（零值 false 会把分类请求的全部候选杀光），
+	// 仅运行期实测负结论（TraitNoSeverityClass）收紧为 false。
+	SupportsSeverityClass bool
+	ContextWindowTokens   int // 渠道上下文窗口大小（0 = 未知，来自模型能力注册表）
+	ScoringCandidate      ScoringCandidate
 
 	// AFP 成本信息（仅火山 Agent Plan 渠道有值）
 	AFPCost *CandidateAFPCost // AFP 成本计算结果（nil = 非 AFP 渠道）
@@ -1473,6 +1479,9 @@ func (r *SmartRouter) buildChannelEntry(
 		OriginTier:    OriginTierUnknown,
 		EstimatedCost: -1,
 	}
+	// 安全分类能力默认 true（注册表无此维度），仅实测负结论收紧；
+	// 零值 false 会让分类形状请求过滤掉所有候选，必须在此显式置位。
+	entry.SupportsSeverityClass = true
 	if r.isLogicalChannelIdentityEnabled() {
 		entry.LogicalChannelUID = strings.TrimSpace(upstream.LogicalChannelUID)
 		entry.LogicalChannelName = strings.TrimSpace(upstream.LogicalName)
@@ -1512,6 +1521,11 @@ func (r *SmartRouter) buildChannelEntry(
 	// 带工具请求经工具硬约束自动规避（docs/specs/tool-call-capability.md）。
 	if learnedToolCallUnsupported(channelUID, actualModel) {
 		entry.SupportsToolCalls = false
+	}
+	// 安全分类同款：实测无法完成 </severity> 格式分类的渠道×模型，
+	// 分类形状请求经 CapabilityFloor 硬约束自动规避（docs/specs/severity-class-capability.md）。
+	if learnedSeverityClassUnsupported(channelUID, actualModel) {
+		entry.SupportsSeverityClass = false
 	}
 	if modelPricing != nil {
 		listCost := metrics.CalculateTokenCostUSDWithPricing(modelPricing, 1_000_000, 1_000_000, 1_000_000, 1_000_000)
@@ -2098,11 +2112,12 @@ func routingHardConstraintReasons(profile *RequestProfile, entry *channelScoreEn
 		reasons = append(reasons, "document_unsupported")
 	}
 
-	// CapabilityFloor 三项硬约束（工具调用、推理、上下文窗口）
+	// CapabilityFloor 四项硬约束（工具调用、推理、安全分类、上下文窗口）
 	reasons = append(reasons, CapabilityFloorReasons(CandidateCapabilities{
-		SupportsToolCalls:   entry.SupportsToolCalls,
-		SupportsReasoning:   entry.SupportsReasoning,
-		ContextWindowTokens: entry.ContextWindowTokens,
+		SupportsToolCalls:     entry.SupportsToolCalls,
+		SupportsReasoning:     entry.SupportsReasoning,
+		SupportsSeverityClass: entry.SupportsSeverityClass,
+		ContextWindowTokens:   entry.ContextWindowTokens,
 	}, profile)...)
 
 	return reasons

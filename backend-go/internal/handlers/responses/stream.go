@@ -278,6 +278,8 @@ func handleStreamSuccess(
 				// 检查是否为 response.completed 事件（流正常结束）
 				if isResponsesCompletedEvent(event) {
 					preflightDone = true
+					// 安全分类格式标记：短分类响应可能整体在预检阶段完成，此处必须一并扫描。
+					common.MarkSeverityTagIfHit(c, preflightTextBuf.String())
 					// 检查是否有实际内容（文本或工具调用）
 					preflightEmpty = !preflightHasNonTextContent && common.IsEffectivelyEmptyStreamText(preflightTextBuf.String())
 					// 如果有工具调用，不算空响应
@@ -515,6 +517,8 @@ func handleStreamSuccess(
 	}
 
 	postCommitToolTracker := common.NewStreamToolCallTracker()
+	// 安全分类格式标记扫描：post-commit 阶段逐 SSE 行检测 <severity（分片安全）。
+	severityScanner := &common.SeverityTagScanner{}
 	observePostCommitEvents := func(events []string) bool {
 		hadChange := false
 		wasPending := postCommitToolTracker.HasPendingToolCall()
@@ -591,6 +595,9 @@ func handleStreamSuccess(
 				goto streamEnd
 			}
 			events := processLine(sl.text)
+			if severityScanner.Feed(sl.text) {
+				common.MarkStreamSeverityTag(c)
+			}
 			keepaliveTicker.Reset(15 * time.Second)
 			wasToolCallPending := postCommitToolTracker.HasPendingToolCall()
 			toolCallStateChanged := observePostCommitEvents(events)

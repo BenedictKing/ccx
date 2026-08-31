@@ -26,6 +26,7 @@ type RequestProfile struct {
 	EmbeddingNeed        bool        // 是否需要原生 embedding 端点
 	ToolUseNeed          bool        // 是否需要工具调用
 	ReasoningNeed        bool        // 是否需要推理
+	SeverityClassNeed    bool        // 是否为格式约束型安全分类请求（</severity> 停止序列），需规避实测不遵循格式的渠道×模型
 	EmbeddingDimension   int         // vectors handler 的硬约束；未知时为 0
 	ClientEffort         EffortLevel // 客户端显式声明的思考等级；空=未声明
 	ClientEffortExplicit bool        // 客户端是否显式设置了思考等级（区分"显式无"和"未声明"）

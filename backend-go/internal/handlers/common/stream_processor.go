@@ -667,6 +667,8 @@ func ProcessStreamEvents(
 	}
 	keepaliveTicker := time.NewTicker(15 * time.Second)
 	defer keepaliveTicker.Stop()
+	// 安全分类格式标记扫描：输出文本增量里检测 <severity，供运行期能力学习读取。
+	severityScanner := &SeverityTagScanner{}
 
 	for {
 		select {
@@ -682,8 +684,12 @@ func ProcessStreamEvents(
 			prevToolCallPending := toolCallPending
 			ProcessStreamEvent(c, w, flusher, event, ctx, envCfg, requestBody)
 			if ctx.OutputTextBuffer.Len() > prevTextLen {
-				progress.AddText(ctx.OutputTextBuffer.String()[prevTextLen:])
+				delta := ctx.OutputTextBuffer.String()[prevTextLen:]
+				progress.AddText(delta)
 				progress.Tick()
+				if severityScanner.Feed(delta) {
+					MarkStreamSeverityTag(c)
+				}
 			}
 			eventHasActivity := ctx.OutputTextBuffer.Len() > prevTextLen || HasClaudeSemanticContent(event) || HasStreamEventActivity(event)
 			nowToolCallPending := ctx.ToolCallTracker != nil && ctx.ToolCallTracker.HasPendingToolCall()

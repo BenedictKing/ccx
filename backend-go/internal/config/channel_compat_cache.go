@@ -48,6 +48,11 @@ const (
 	// 与 TraitNoDocumentSupport 同类：没有对应的请求改写（剥掉 tools 等于改变用户意图），
 	// 不进入 AllCompatTraits，仅供 SmartRouter 路由侧读取（带工具请求规避该渠道×模型）。
 	TraitNoToolCallSupport CompatTrait = "no_tool_call_support"
+	// TraitNoSeverityClass 上游实测无法完成"格式约束型安全分类"请求（如 Claude Code 安全
+	// 监控的 <severity>N</severity> 分级）：上游 2xx 正常完成但输出不含期望格式标记。
+	// 与 TraitNoToolCallSupport 同类：无请求改写可兜底，不进 AllCompatTraits，
+	// 仅供路由侧读取（该类请求规避此渠道×模型组合）。规格见 docs/specs/severity-class-capability.md。
+	TraitNoSeverityClass CompatTrait = "no_severity_classification"
 	// TraitUnsupportedBetaHeader 上游拒绝某个 anthropic-beta token（如 context-1m-2025-08-07），
 	// 需在转发前从 anthropic-beta header 中按 token 粒度剥离。
 	// 学习条件：400/422 错误明确点名拒绝某 token + 请求侧确实携带 anthropic-beta header。
@@ -395,6 +400,76 @@ func (c *ChannelCompatCache) Clear() {
 	c.cache = make(map[string]*ChannelCompatEntry)
 }
 
+// ClearTrait 清除指定 trait 的学习结论（其他 trait 保留），返回清除的条目数。
+// trait 为空时等价于 Clear。空条目（清除后不再含任何学习事实）整体移除。
+func (c *ChannelCompatCache) ClearTrait(trait CompatTrait) int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if trait == "" {
+		n := len(c.cache)
+		c.cache = make(map[string]*ChannelCompatEntry)
+		return n
+	}
+	removed := 0
+	for key, entry := range c.cache {
+		if entry == nil {
+			continue
+		}
+		if _, ok := entry.Traits[trait]; !ok {
+			continue
+		}
+		delete(entry.Traits, trait)
+		removed++
+		if len(entry.Traits) == 0 && entry.ContextLimit == nil && entry.OutputLimit == nil {
+			delete(c.cache, key)
+		}
+	}
+	return removed
+}
+
+// CompatSnapshotEntry 管理端查看用的一条学习记录视图（键拆开 + 事实明细）。
+type CompatSnapshotEntry struct {
+	ChannelUID   string                      `json:"channelUid"`
+	KeyHash      string                      `json:"keyHash"`
+	Model        string                      `json:"model"`
+	Traits       map[string]CompatTraitState `json:"traits,omitempty"`
+	ContextLimit *ContextLimitState          `json:"contextLimit,omitempty"`
+	OutputLimit  *OutputLimitState           `json:"outputLimit,omitempty"`
+	DetectedAt   time.Time                   `json:"detectedAt"`
+}
+
+// Snapshot 返回全部未过期学习记录的视图（管理端查看用，只读拷贝）。
+func (c *ChannelCompatCache) Snapshot() []CompatSnapshotEntry {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	entries := make([]CompatSnapshotEntry, 0, len(c.cache))
+	for key, entry := range c.cache {
+		if entry == nil || time.Since(entry.DetectedAt) > channelCompatTTL {
+			continue
+		}
+		parts := strings.SplitN(key, ":", 3)
+		if len(parts) != 3 {
+			continue
+		}
+		view := CompatSnapshotEntry{
+			ChannelUID:   parts[0],
+			KeyHash:      parts[1],
+			Model:        parts[2],
+			Traits:       make(map[string]CompatTraitState, len(entry.Traits)),
+			ContextLimit: entry.ContextLimit,
+			OutputLimit:  entry.OutputLimit,
+			DetectedAt:   entry.DetectedAt,
+		}
+		for trait, state := range entry.Traits {
+			view.Traits[string(trait)] = state
+		}
+		entries = append(entries, view)
+	}
+	return entries
+}
+
 // Size 返回缓存条目数量。
 func (c *ChannelCompatCache) Size() int {
 	c.mu.RLock()
@@ -629,6 +704,23 @@ func (c *ChannelCompatCache) IsDocumentUnsupportedForChannelModel(channelUID, mo
 // 口径与 IsDocumentUnsupportedForChannelModel 一致：路由决策发生在选定具体 Key 之前，
 // 任一 Key 已知不支持就按不支持处理。无学习记录 = false（fail-open）。
 func (c *ChannelCompatCache) IsToolCallUnsupportedForChannelModel(channelUID, model string) bool {
+	return c.isTraitEnabledForChannelModel(channelUID, model, TraitNoToolCallSupport)
+}
+
+// IsSeverityClassUnsupportedForChannelModel 返回该渠道-模型是否有任一已知 Key 学到过
+// "无法完成格式约束型安全分类请求"（TraitNoSeverityClass）。
+//
+// 写入方是运行期行为观测（分类请求 2xx 完成但输出无 <severity> 标记），
+// 读取方是 SmartRouter 与 ModelResolver（分类形状请求规避该渠道×模型）。
+// 口径与 IsToolCallUnsupportedForChannelModel 一致。无学习记录 = false（fail-open）。
+func (c *ChannelCompatCache) IsSeverityClassUnsupportedForChannelModel(channelUID, model string) bool {
+	return c.isTraitEnabledForChannelModel(channelUID, model, TraitNoSeverityClass)
+}
+
+// isTraitEnabledForChannelModel 返回该渠道-模型是否有任一已知 Key 学到过指定 trait 的
+// 否定结论（Enabled=true）。路由决策发生在选定具体 Key 之前，任一 Key 已知命中就按命中
+// 处理（保守）；键 SplitN 前两个冒号后精确比对，容忍模型名本身含冒号。
+func (c *ChannelCompatCache) isTraitEnabledForChannelModel(channelUID, model string, trait CompatTrait) bool {
 	if channelUID == "" || model == "" {
 		return false
 	}
@@ -640,8 +732,6 @@ func (c *ChannelCompatCache) IsToolCallUnsupportedForChannelModel(channelUID, mo
 		if entry == nil {
 			continue
 		}
-		// 键比对规则同 IsDocumentUnsupportedForChannelModel：SplitN 前两个冒号后精确比对，
-		// 容忍模型名本身含冒号，不能用 HasPrefix/HasSuffix。
 		parts := strings.SplitN(key, ":", 3)
 		if len(parts) != 3 {
 			continue
@@ -652,7 +742,7 @@ func (c *ChannelCompatCache) IsToolCallUnsupportedForChannelModel(channelUID, mo
 		if time.Since(entry.DetectedAt) > channelCompatTTL {
 			continue
 		}
-		if state, ok := entry.Traits[TraitNoToolCallSupport]; ok && state.Enabled {
+		if state, ok := entry.Traits[trait]; ok && state.Enabled {
 			return true
 		}
 	}
