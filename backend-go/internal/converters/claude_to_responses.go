@@ -32,6 +32,11 @@ type claudeToResponsesState struct {
 	CompletedOutput    []interface{}
 	InputTokens        int64
 	OutputTokens       int64
+	// Claude usage 的缓存字段：completed 事件原样透出，供出口归一为官方 OpenAI 口径时加回 input_tokens
+	CacheReadInputTokens     int64
+	CacheCreationInputTokens int64
+	CacheCreation5mTokens    int64
+	CacheCreation1hTokens    int64
 }
 
 func ConvertClaudeMessagesToResponses(ctx context.Context, modelName string, originalRequestRawJSON, requestRawJSON, rawJSON []byte, param *any) []string {
@@ -76,6 +81,18 @@ func ConvertClaudeMessagesToResponses(ctx context.Context, modelName string, ori
 		}
 		if inputTokens := root.Get("message.usage.input_tokens"); inputTokens.Exists() {
 			st.InputTokens = inputTokens.Int()
+		}
+		if v := root.Get("message.usage.cache_read_input_tokens"); v.Exists() {
+			st.CacheReadInputTokens = v.Int()
+		}
+		if v := root.Get("message.usage.cache_creation_input_tokens"); v.Exists() {
+			st.CacheCreationInputTokens = v.Int()
+		}
+		if v := root.Get("message.usage.cache_creation_5m_input_tokens"); v.Exists() {
+			st.CacheCreation5mTokens = v.Int()
+		}
+		if v := root.Get("message.usage.cache_creation_1h_input_tokens"); v.Exists() {
+			st.CacheCreation1hTokens = v.Int()
 		}
 	case "content_block_start":
 		blockType := root.Get("content_block.type").String()
@@ -137,6 +154,18 @@ func ConvertClaudeMessagesToResponses(ctx context.Context, modelName string, ori
 			}
 			if outputTokens := usage.Get("output_tokens"); outputTokens.Exists() {
 				st.OutputTokens = outputTokens.Int()
+			}
+			if v := usage.Get("cache_read_input_tokens"); v.Exists() {
+				st.CacheReadInputTokens = v.Int()
+			}
+			if v := usage.Get("cache_creation_input_tokens"); v.Exists() {
+				st.CacheCreationInputTokens = v.Int()
+			}
+			if v := usage.Get("cache_creation_5m_input_tokens"); v.Exists() {
+				st.CacheCreation5mTokens = v.Int()
+			}
+			if v := usage.Get("cache_creation_1h_input_tokens"); v.Exists() {
+				st.CacheCreation1hTokens = v.Int()
 			}
 		}
 	case "message_stop":
@@ -409,6 +438,18 @@ func (st *claudeToResponsesState) completedEvent(modelName string, originalReque
 	completed, _ = sjson.Set(completed, "response.usage.input_tokens", st.InputTokens)
 	completed, _ = sjson.Set(completed, "response.usage.output_tokens", st.OutputTokens)
 	completed, _ = sjson.Set(completed, "response.usage.total_tokens", st.InputTokens+st.OutputTokens)
+	if st.CacheReadInputTokens > 0 {
+		completed, _ = sjson.Set(completed, "response.usage.cache_read_input_tokens", st.CacheReadInputTokens)
+	}
+	if st.CacheCreationInputTokens > 0 {
+		completed, _ = sjson.Set(completed, "response.usage.cache_creation_input_tokens", st.CacheCreationInputTokens)
+	}
+	if st.CacheCreation5mTokens > 0 {
+		completed, _ = sjson.Set(completed, "response.usage.cache_creation_5m_input_tokens", st.CacheCreation5mTokens)
+	}
+	if st.CacheCreation1hTokens > 0 {
+		completed, _ = sjson.Set(completed, "response.usage.cache_creation_1h_input_tokens", st.CacheCreation1hTokens)
+	}
 
 	return emitResponsesEvent("response.completed", completed)
 }
