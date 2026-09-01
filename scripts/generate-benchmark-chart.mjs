@@ -463,10 +463,12 @@ function setGeometry(rows) {
   const visibleMax = state.range === 'focus' ? focusMax : Math.max(...costs);
   const xMax = niceMax(visibleMax * 1.04);
   const scores = rows.filter(row => row.cost <= xMax).map(row => row.pass_rate * 100);
-  const scoreMin = Math.max(0, Math.min(...scores) - 4);
-  const scoreMax = Math.max(100, Math.max(...scores) + 4.5);
-  const yMin = Math.max(0, Math.floor(scoreMin));
-  const yMax = Math.max(yMin + 10, Math.ceil(scoreMax));
+  // Y 轴随可见数据自适应展开；pass@1 理论区间 [0,100]，上下限不得越界
+  const dataMin = Math.min(...scores);
+  const dataMax = Math.max(...scores);
+  const span = Math.max(10, dataMax - dataMin);
+  const yMin = Math.max(0, Math.floor((dataMin - span * .07) / 5) * 5);
+  const yMax = Math.min(100, Math.max(yMin + 10, Math.ceil((dataMax + span * .07) / 5) * 5));
   const x = value => margin.left + value / xMax * plotWidth;
   const y = value => margin.top + (yMax - value) / (yMax - yMin) * plotHeight;
   svg.setAttribute('viewBox', '0 0 ' + width + ' ' + height);
