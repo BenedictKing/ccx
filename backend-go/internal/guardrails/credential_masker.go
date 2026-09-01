@@ -15,8 +15,8 @@ type CredentialMasker struct {
 	priority     int
 	maxScanBytes int
 
-	mu        sync.RWMutex
-	staticKeys []string // 网关自身密钥完整值（ProxyAccessKey/AdminAccessKey/ExtraKeys）
+	mu          sync.RWMutex
+	staticKeys  []string // 网关自身密钥完整值（ProxyAccessKey/AdminAccessKey/ExtraKeys）
 	keyPrefixes []string // 渠道 key 前缀（前 8 字符），用于指纹匹配
 }
 
@@ -86,8 +86,8 @@ func (m *CredentialMasker) SetChannelKeyPrefixes(prefixes []string) {
 	m.keyPrefixes = filtered
 }
 
-func (m *CredentialMasker) Name() string     { return "credential-masker" }
-func (m *CredentialMasker) Priority() int   { return m.priority }
+func (m *CredentialMasker) Name() string  { return "credential-masker" }
+func (m *CredentialMasker) Priority() int { return m.priority }
 func (m *CredentialMasker) Enabled() bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -111,16 +111,21 @@ func (m *CredentialMasker) mask(data []byte, isResponse bool) (*Result, error) {
 
 	m.mu.RLock()
 	maxBytes := m.maxScanBytes
-	trimmed := false
-	if len(data) > maxBytes {
-		data = data[:maxBytes]
-		trimmed = true
-	}
 	staticKeys := m.staticKeys
 	keyPrefixes := m.keyPrefixes
 	m.mu.RUnlock()
 
-	text := string(data)
+	// 截断仅限制扫描窗口，输出必须保持原始长度：
+	// 掩码后的头部 + 未扫描的尾部原样拼接，绝不能把截断后的文本当作新 payload
+	// （否则大请求体的 JSON/UTF-8 会在截断点被切断，上游报 unexpected end of JSON input）
+	scanEnd := len(data)
+	trimmed := false
+	if scanEnd > maxBytes {
+		scanEnd = maxBytes
+		trimmed = true
+	}
+
+	text := string(data[:scanEnd])
 	detections := make(map[string]int)
 	result := text
 
@@ -134,10 +139,12 @@ func (m *CredentialMasker) mask(data []byte, isResponse bool) (*Result, error) {
 	}
 
 	// 2. 渠道 key 前缀指纹匹配
-	//    匹配规则：前缀 + 至少 12 个非空白字符，整体掩码
+	//    匹配规则：前缀 + 至少 12 个密钥 token 字符，整体掩码。
+	//    字符集刻意排除正则/代码语法字符（[ ] { } \ ` 等），
+	//    避免把上下文里讨论密钥格式的源码字面量（如 `sk-proj-[\w-]{20,}`）误掩。
 	for _, prefix := range keyPrefixes {
-		// 构造正则：前缀 + 连续非空白字符（至少 len(prefix) + 12）
-		re := regexp.MustCompile(regexp.QuoteMeta(prefix) + `\S{12,}`)
+		// 构造正则：前缀 + 连续密钥字符（至少 len(prefix) + 12）
+		re := regexp.MustCompile(regexp.QuoteMeta(prefix) + `[A-Za-z0-9._~+/=-]{12,}`)
 		matches := re.FindAllString(result, -1)
 		if len(matches) > 0 {
 			for _, match := range matches {
@@ -158,6 +165,10 @@ func (m *CredentialMasker) mask(data []byte, isResponse bool) (*Result, error) {
 
 	if len(detections) == 0 {
 		return nil, nil
+	}
+
+	if trimmed {
+		result += string(data[scanEnd:])
 	}
 
 	totalCount := 0
@@ -215,20 +226,20 @@ var genericPatterns = []credentialPattern{
 	{name: "jwt", re: regexp.MustCompile(`\beyJ[\w-]{10,}\.[\w-]{10,}\.[\w-]{10,}\b`), replacement: "[MASKED:jwt]"},
 	// Bearer token 形态（跟在 Authorization: Bearer 后面的长 token）
 	{
-		name: "bearer_token",
-		re:   regexp.MustCompile(`((?:Bearer|bearer)\s+)[A-Za-z0-9._~+/=-]{20,}`),
+		name:        "bearer_token",
+		re:          regexp.MustCompile(`((?:Bearer|bearer)\s+)[A-Za-z0-9._~+/=-]{20,}`),
 		replacement: "$1[MASKED:bearer_token]",
 	},
 	// 连接字符串
 	{
-		name: "connection_string",
-		re:   regexp.MustCompile(`(?:mongodb(?:\+srv)?|postgres(?:ql)?|mysql|redis|amqp):\/\/[^\s:@"']+:[^\s:@"']+@`),
+		name:        "connection_string",
+		re:          regexp.MustCompile(`(?:mongodb(?:\+srv)?|postgres(?:ql)?|mysql|redis|amqp):\/\/[^\s:@"']+:[^\s:@"']+@`),
 		replacement: "[MASKED:connection_string]",
 	},
 	// Private key PEM
 	{
-		name: "private_key",
-		re:   regexp.MustCompile(`-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----`),
+		name:        "private_key",
+		re:          regexp.MustCompile(`-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----`),
 		replacement: "[MASKED:private_key]",
 	},
 }

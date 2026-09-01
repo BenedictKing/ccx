@@ -164,13 +164,49 @@ func TestCredentialMasker_SizeLimit(t *testing.T) {
 	if !result.Modified {
 		t.Error("expected Modified=true (head key should be masked)")
 	}
-	// 因为超限时只扫了头部，result.Payload 只有前 1KB + 掩码
-	if len(result.Payload) > 1024+100 {
-		t.Errorf("result payload too large (%d bytes), expected truncated scan", len(result.Payload))
+	// 截断只限扫描窗口：输出必须保持完整，头部掩码 + 尾部原样拼接，
+	// 绝不能把截断后的文本作为新 payload（会把大请求体的 JSON/UTF-8 切断）
+	if len(result.Payload) <= 1024+100 {
+		t.Errorf("result payload truncated to %d bytes, tail must be preserved", len(result.Payload))
 	}
-	// 验证 trimmed 标记
+	if !strings.HasSuffix(string(result.Payload), tailKey) {
+		t.Error("unscanned tail must be preserved verbatim")
+	}
+	if strings.Contains(string(result.Payload), "sk-abcdefghijklmnopqrstuvwxyz1234567890") {
+		t.Error("head key should be masked")
+	}
+	// 验证 trimmed 标记（仅表示尾部未扫描，而非输出被截断）
 	if trimmed, ok := result.Meta["trimmed"].(bool); !ok || !trimmed {
 		t.Error("expected trimmed=true in meta")
+	}
+}
+
+func TestCredentialMasker_ChannelPrefixRegexLiteral(t *testing.T) {
+	m := NewCredentialMasker()
+	m.SetChannelKeyPrefixes([]string{"sk-proj-"})
+
+	// 上下文中讨论密钥格式的源码字面量不应被前缀指纹误掩
+	// （前缀后的 [ \ ` 等语法字符不属于密钥 token 字符集）
+	literal := "code: regexp.MustCompile(`sk-proj-[\\w-]{20,}`) end"
+	result, err := m.PreCall([]byte(literal), nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result != nil && result.Modified {
+		t.Errorf("regex literal should not be masked, got %q", string(result.Payload))
+	}
+
+	// 真实渠道 key（前缀 + 连续 token 字符）仍应掩码
+	realKey := `{"key": "sk-proj-A1b2C3d4E5f6G7h8I9j0K1l2"}`
+	result2, err := m.PreCall([]byte(realKey), nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result2 == nil || !result2.Modified {
+		t.Fatal("real channel key should be masked")
+	}
+	if strings.Contains(string(result2.Payload), "sk-proj-A1b2C3d4E5f6G7h8I9j0K1l2") {
+		t.Error("real channel key should be masked")
 	}
 }
 
@@ -320,9 +356,9 @@ type panicGuardrail struct {
 	priority int
 }
 
-func (g *panicGuardrail) Name() string                       { return g.name }
-func (g *panicGuardrail) Priority() int                      { return g.priority }
-func (g *panicGuardrail) Enabled() bool                      { return true }
+func (g *panicGuardrail) Name() string  { return g.name }
+func (g *panicGuardrail) Priority() int { return g.priority }
+func (g *panicGuardrail) Enabled() bool { return true }
 func (g *panicGuardrail) PreCall(_ []byte, _ *Context) (*Result, error) {
 	panic("intentional test panic")
 }
