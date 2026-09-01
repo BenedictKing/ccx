@@ -584,6 +584,10 @@ func TryUpstreamWithAllKeys(
 				activeRateLimitRelease = nil
 			}
 			attemptBody := requestBody
+			// harness 重复注入的 total_tokens 提醒块对任何上游都是纯垃圾，无条件去重
+			if deduped, changed := DeduplicateTotalTokensSystemBlocks(c, attemptBody, envCfg.EnableRequestLogs, apiType); changed {
+				attemptBody = deduped
+			}
 			if shouldStripBillingHeader(kind, upstream) {
 				attemptBody, _ = RemoveBillingHeadersWithContext(c, attemptBody, envCfg.EnableRequestLogs, apiType)
 			}

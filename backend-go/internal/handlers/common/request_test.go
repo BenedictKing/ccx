@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/http/httptrace"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -800,6 +801,78 @@ func TestGetEffectiveRequestBody(t *testing.T) {
 	t.Run("returns fallback when context nil", func(t *testing.T) {
 		if got := GetEffectiveRequestBody(nil, fallback); string(got) != string(fallback) {
 			t.Fatalf("got %s, want fallback %s", string(got), string(fallback))
+		}
+	})
+}
+
+func TestDeduplicateTotalTokensSystemBlocks(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	t.Run("重复块只保留最后一份", func(t *testing.T) {
+		body := []byte(`{"model":"m","system":[` +
+			`{"type":"text","text":"You are Claude Code"},` +
+			`{"type":"text","text":"<total_tokens>100 tokens left</total_tokens>\n\nstyle active"},` +
+			`{"type":"text","text":"Contents of CLAUDE.md"},` +
+			`{"type":"text","text":"<total_tokens>90 tokens left</total_tokens>\n\nstyle active"},` +
+			`{"type":"text","text":"<total_tokens>80 tokens left</total_tokens>\n\nstyle active","cache_control":{"type":"ephemeral"}}` +
+			`],"messages":[]}`)
+
+		out, changed := DeduplicateTotalTokensSystemBlocks(nil, body, false, "Messages")
+		if !changed {
+			t.Fatal("expected changed=true")
+		}
+		var data map[string]interface{}
+		if err := json.Unmarshal(out, &data); err != nil {
+			t.Fatalf("output is not valid JSON: %v", err)
+		}
+		sys := data["system"].([]interface{})
+		if len(sys) != 3 {
+			t.Fatalf("system len = %d, want 3", len(sys))
+		}
+		last := sys[2].(map[string]interface{})
+		text := last["text"].(string)
+		if !strings.Contains(text, "80 tokens left") {
+			t.Errorf("kept block = %q, want the last (newest) copy", text)
+		}
+		if _, ok := last["cache_control"]; !ok {
+			t.Error("kept block should retain its own cache_control")
+		}
+	})
+
+	t.Run("被删块的 cache_control 转移给保留块", func(t *testing.T) {
+		body := []byte(`{"system":[` +
+			`{"type":"text","text":"identity"},` +
+			`{"type":"text","text":"<total_tokens>10 tokens left</total_tokens>","cache_control":{"type":"ephemeral"}},` +
+			`{"type":"text","text":"<total_tokens>5 tokens left</total_tokens>"}` +
+			`]}`)
+
+		out, changed := DeduplicateTotalTokensSystemBlocks(nil, body, false, "Messages")
+		if !changed {
+			t.Fatal("expected changed=true")
+		}
+		var data map[string]interface{}
+		json.Unmarshal(out, &data)
+		sys := data["system"].([]interface{})
+		if len(sys) != 2 {
+			t.Fatalf("system len = %d, want 2", len(sys))
+		}
+		kept := sys[1].(map[string]interface{})
+		if _, ok := kept["cache_control"]; !ok {
+			t.Error("orphan cache_control should be transferred to the kept block")
+		}
+	})
+
+	t.Run("单份或无重复不动", func(t *testing.T) {
+		body := []byte(`{"system":[{"type":"text","text":"<total_tokens>5 tokens left</total_tokens>"}]}`)
+		if _, changed := DeduplicateTotalTokensSystemBlocks(nil, body, false, "Messages"); changed {
+			t.Error("single block should not be modified")
+		}
+	})
+
+	t.Run("普通 system 块不误伤", func(t *testing.T) {
+		body := []byte(`{"system":[{"type":"text","text":"tokens left in budget"},{"type":"text","text":"another"}]}`)
+		if _, changed := DeduplicateTotalTokensSystemBlocks(nil, body, false, "Messages"); changed {
+			t.Error("non-total_tokens blocks should not be touched")
 		}
 	})
 }

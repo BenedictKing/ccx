@@ -35,6 +35,8 @@ var contextLimitPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(prompt|input|request)[^.]{0,30}(exceeds|exceeded)[^.]{0,40}(context|token)`),
 	regexp.MustCompile(`too many (input )?tokens`),
 	regexp.MustCompile(`reduce the length of the (messages|prompt|input)`),
+	// 多模态总量文案：火山方舟 "Total tokens of image and text exceed max message tokens"
+	regexp.MustCompile(`tokens[^.]{0,30}exceed[^.]{0,20}max`),
 }
 
 // contextLimitCorroborations 佐证特征：必须同时命中其一。
@@ -47,6 +49,9 @@ var contextLimitCorroborations = []string{
 // contextLimitExclusions 明确排除的相邻错误。
 // 命中任一即放弃学习：这些是输出上限、请求体字节数、图片尺寸等问题，
 // 与"该组合能接受多少输入 token"无关，误当成上下文上限会造成永久性误排除。
+// 注意图片类只能用体积/尺寸语义的短语，不能用裸 "image"：多模态模型的上下文
+// 超限文案常带 "image and text"（如火山方舟 "Total tokens of image and text
+// exceed max message tokens"），裸词会把真正的上下文超限误排除。
 var contextLimitExclusions = []string{
 	"max_tokens",
 	"maxtokens",
@@ -57,7 +62,12 @@ var contextLimitExclusions = []string{
 	"request body",
 	"payload too large",
 	"entity too large",
-	"image",
+	"image size",
+	"image too",
+	"image is too",
+	"image exceed",
+	"image dimension",
+	"invalid image",
 	"file size",
 	"rate limit",
 	"quota",

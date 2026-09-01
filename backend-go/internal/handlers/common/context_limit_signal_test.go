@@ -65,6 +65,21 @@ func TestContextLimitFromError(t *testing.T) {
 			wantNil:    true,
 		},
 		{
+			name:          "火山方舟图文总量超限按被拒量反推",
+			statusCode:    http.StatusBadRequest,
+			body:          `{"error":{"code":"InvalidParameter","message":"Total tokens of image and text exceed max message tokens. Request id: 02178827046354520244bbcebb250bf80b1bc04ef464017b6ad95","param":"","type":"BadRequest"}}`,
+			estimated:     218_149,
+			wantMaxTokens: 190_880, // 218149 * 7/8
+			wantSource:    config.CompatSourceRejectedEstimate,
+		},
+		{
+			name:       "图片体积错误仍排除在上下文学习外",
+			statusCode: http.StatusBadRequest,
+			body:       `{"error":{"message":"image size exceeds the maximum allowed for this model"}}`,
+			estimated:  50_000,
+			wantNil:    true,
+		},
+		{
 			name:       "429 不参与能力学习",
 			statusCode: http.StatusTooManyRequests,
 			body:       `{"error":{"message":"context_length_exceeded"}}`,

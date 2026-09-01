@@ -822,3 +822,87 @@ func RemoveBillingHeadersWithContext(c *gin.Context, bodyBytes []byte, enableLog
 	}
 	return newBytes, true
 }
+
+// totalTokensBlockPrefix 标识 harness 每轮注入的 token 计数提醒块
+// （"<total_tokens>N tokens left</total_tokens>"，常附带 output-style 提醒文本）。
+const totalTokensBlockPrefix = "<total_tokens>"
+
+// DeduplicateTotalTokensSystemBlocks 清理 system 数组中重复累积的 total_tokens 块：
+// 某些 harness 每轮注入一份新的且不清理旧的，长会话会累积数百份重复块，
+// 白白消耗上下文预算并撑破上游窗口。保留最后一份（最新计数与 style 提醒仍生效），
+// 移除其余；被删块携带 cache_control 而保留块没有时，把 cache_control 转移给
+// 前一个保留块，尽量保住 prompt caching 断点。
+func DeduplicateTotalTokensSystemBlocks(c *gin.Context, bodyBytes []byte, enableLog bool, apiType string) ([]byte, bool) {
+	decoder := json.NewDecoder(bytes.NewReader(bodyBytes))
+	decoder.UseNumber() // 保留数字精度
+
+	var data map[string]interface{}
+	if err := decoder.Decode(&data); err != nil {
+		return bodyBytes, false
+	}
+
+	systemArr, ok := data["system"].([]interface{})
+	if !ok || len(systemArr) == 0 {
+		return bodyBytes, false
+	}
+
+	isTokenBlock := func(item interface{}) bool {
+		itemMap, ok := item.(map[string]interface{})
+		if !ok {
+			return false
+		}
+		text, ok := itemMap["text"].(string)
+		return ok && strings.HasPrefix(strings.TrimSpace(text), totalTokensBlockPrefix)
+	}
+
+	// 定位所有重复块；少于 2 份无需处理
+	lastTokenIdx := -1
+	tokenCount := 0
+	for i, item := range systemArr {
+		if isTokenBlock(item) {
+			lastTokenIdx = i
+			tokenCount++
+		}
+	}
+	if tokenCount < 2 {
+		return bodyBytes, false
+	}
+
+	removed := 0
+	var orphanCacheControl interface{}
+	newSystemArr := make([]interface{}, 0, len(systemArr)-(tokenCount-1))
+	for i, item := range systemArr {
+		if isTokenBlock(item) && i != lastTokenIdx {
+			removed++
+			if orphanCacheControl == nil {
+				if itemMap, ok := item.(map[string]interface{}); ok {
+					if cc, exists := itemMap["cache_control"]; exists {
+						orphanCacheControl = cc
+					}
+				}
+			}
+			continue
+		}
+		newSystemArr = append(newSystemArr, item)
+	}
+
+	// 保留块自己没有 cache_control 时，继承被删块的缓存断点
+	if orphanCacheControl != nil && lastTokenIdx >= 0 {
+		if keepMap, ok := systemArr[lastTokenIdx].(map[string]interface{}); ok {
+			if _, exists := keepMap["cache_control"]; !exists {
+				keepMap["cache_control"] = orphanCacheControl
+			}
+		}
+	}
+
+	if enableLog {
+		RequestLogf(c, "[%s-Preprocess] 已去重 system 中的 total_tokens 块: 移除 %d 份重复", apiType, removed)
+	}
+	data["system"] = newSystemArr
+
+	newBytes, err := utils.MarshalJSONNoEscape(data)
+	if err != nil {
+		return bodyBytes, false
+	}
+	return newBytes, true
+}
