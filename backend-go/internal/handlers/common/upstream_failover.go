@@ -454,16 +454,6 @@ func TryUpstreamWithAllKeys(
 	}
 	upstream = config.RuntimeUpstreamForAutoManagedProvider(upstream)
 
-	// 请求侧 guardrail：发往上游前扫描请求体中的凭据并掩码。
-	// fail-open：异常仅记日志，不阻断请求。
-	if len(requestBody) > 0 {
-		if masked, modified := ApplyRequestGuardrails(c, requestBody, model, upstream.ServiceType, upstream.ChannelUID, upstream.Name); modified {
-			requestBody = masked
-			RestoreRequestBody(c, requestBody)
-			c.Set("requestBodyBytes", requestBody)
-		}
-	}
-
 	tryOpts := tryUpstreamOptions{}
 	for _, opt := range opts {
 		if opt != nil {
@@ -1405,12 +1395,6 @@ func TryUpstreamWithAllKeys(
 						RequestLogf(c, "[%s-Key] 上游错误详情摘要: channel=[%d] %s, key=%s, summary=%s", apiType, executionIndex, upstream.Name, utils.MaskAPIKey(apiKey), errorSummary)
 					}
 					RequestLogf(c, "[%s-Key] 警告: API密钥失败 (状态: %d)，尝试下一个密钥", apiType, resp.StatusCode)
-
-					// 响应侧 guardrail：错误体中掩码凭据，防止泄漏到客户端和日志
-					maskedBody, modifiedResp := ApplyResponseGuardrails(c, respBodyBytes, redirectedModel, upstream.ServiceType, upstream.ChannelUID, upstream.Name)
-					if modifiedResp {
-						respBodyBytes = maskedBody
-					}
 
 					lastFailoverError = &FailoverError{
 						Status: resp.StatusCode,

@@ -211,7 +211,7 @@ func CompleteLog(
 	// 日志侧 guardrail：写日志前扫描 errorInfo 中的凭据，防御性掩码。
 	// 与请求侧豁免头解耦——日志脱敏是安全底线，始终生效。
 	if errorInfo != "" {
-		if masked := MaskErrorInfoForLog(errorInfo); masked != errorInfo {
+		if masked := MaskForLog(errorInfo); masked != errorInfo {
 			errorInfo = masked
 		}
 	}
@@ -313,7 +313,7 @@ func RecordChannelLogWithSource(
 	errorInfo = normalizeChannelLogErrorInfo(errorInfo)
 	// 日志侧 guardrail：写日志前扫描 errorInfo 中的凭据，防御性掩码。
 	if errorInfo != "" {
-		if masked := MaskErrorInfoForLog(errorInfo); masked != errorInfo {
+		if masked := MaskForLog(errorInfo); masked != errorInfo {
 			errorInfo = masked
 		}
 	}

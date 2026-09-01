@@ -104,9 +104,9 @@ OmniRoute 蓝本：`src/lib/guardrails/`（`registry.ts` 优先级链、`BaseGua
 
 ### 4.2 核心设计决策
 
-1. **最小集只做 credential-masker**：preCall 扫描请求体、postCall 扫描错误消息/响应体，命中已知密钥格式（本网关 `PROXY_ACCESS_KEY`/`ADMIN_ACCESS_KEY`/渠道 key 的前缀指纹、通用 `sk-`/`Bearer` 形态）即掩码。成本最低，直接兑现日志脱敏红线。
+1. **最小集只做 credential-masker**：统一日志脱敏入口（`MaskForLog`），写日志/落库前扫描文本，命中已知密钥格式（本网关 `PROXY_ACCESS_KEY`/`ADMIN_ACCESS_KEY`/渠道 key 的前缀指纹、通用 `sk-`/`Bearer` 形态）即掩码。成本最低，直接兑现日志脱敏红线。（2026-09-01 修订：原 preCall/postCall 转发挂载点已拆除，转发路径不再改写请求/响应体，详见 guardrails.md §3.4。）
 2. **架构即扩展点**：`Guardrail` 接口（`preCall/postCall`，返回 `{block, rewrite}`）+ 优先级注册表 + **fail-open**（guardrail 异常记日志放行）+ 请求头豁免。后续 PII masker、prompt-injection、模态桥（"图片请求发给非视觉模型 → 自动转描述"）都作为新 guardrail 挂链，不动调度内核。
-3. **挂载点**：请求侧挂 `handlers/common` 处理链头部；响应侧挂 `upstream_failover.go` 错误路径与 `channel_log_helper.go` 写日志路径（写前扫）。
+3. **挂载点**：仅日志侧——`channel_log_helper.go` 写日志路径（写前扫）与 `request.go` 请求体日志，统一经 `MaskForLog`；转发路径（请求/响应）不挂载、不改写。
 
 ### 4.3 边界与保守策略
 

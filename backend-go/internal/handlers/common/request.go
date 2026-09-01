@@ -336,8 +336,8 @@ func logRequestDetails(req *http.Request, envCfg *config.EnvConfig, apiType stri
 		bodyBytes, err := io.ReadAll(req.Body)
 		if err == nil {
 			req.Body = io.NopCloser(bytes.NewReader(bodyBytes))
-			requestLogToConsoleFromRequest(req, "[%s-Request-Body] 实际请求体:\n%s", apiType, utils.FormatJSONBytesForLog(bodyBytes, consoleJSONTextLimit))
-			requestLogToFileFromRequest(req, "[%s-Request-Body] 实际请求体:\n%s", apiType, utils.FormatJSONBytesRaw(bodyBytes))
+			requestLogToConsoleFromRequest(req, "[%s-Request-Body] 实际请求体:\n%s", apiType, MaskForLog(utils.FormatJSONBytesForLog(bodyBytes, consoleJSONTextLimit)))
+			requestLogToFileFromRequest(req, "[%s-Request-Body] 实际请求体:\n%s", apiType, MaskForLog(utils.FormatJSONBytesRaw(bodyBytes)))
 		}
 	}
 }
@@ -360,8 +360,8 @@ func LogOriginalRequest(c *gin.Context, bodyBytes []byte, envCfg *config.EnvConf
 			requestLogToConsole(c, "[Request-OriginalBody] 原始请求体: [multipart/form-data omitted]")
 			requestLogToFile(c, "[Request-OriginalBody] 原始请求体: [multipart/form-data omitted]")
 		} else {
-			requestLogToConsole(c, "[Request-OriginalBody] 原始请求体:\n%s", utils.FormatJSONBytesForLog(bodyBytes, consoleJSONTextLimit))
-			requestLogToFile(c, "[Request-OriginalBody] 原始请求体:\n%s", utils.FormatJSONBytesRaw(bodyBytes))
+			requestLogToConsole(c, "[Request-OriginalBody] 原始请求体:\n%s", MaskForLog(utils.FormatJSONBytesForLog(bodyBytes, consoleJSONTextLimit)))
+			requestLogToFile(c, "[Request-OriginalBody] 原始请求体:\n%s", MaskForLog(utils.FormatJSONBytesRaw(bodyBytes)))
 		}
 
 		sanitizedHeaders := make(map[string]string)

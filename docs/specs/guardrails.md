@@ -18,7 +18,7 @@
 
 ## 2. 核心设计决策
 
-1. **最小集只做 credential-masker**：preCall 扫描请求体、postCall 扫描错误消息/响应体，命中已知密钥格式（本网关 `PROXY_ACCESS_KEY`/`ADMIN_ACCESS_KEY`/渠道 key 前缀指纹、通用 `sk-`/`Bearer` 形态）即掩码。成本最低，直接兑现日志脱敏红线。
+1. **最小集只做 credential-masker**：统一一个日志脱敏入口 `MaskForLog`，写日志/落库前扫描文本，命中已知密钥格式（本网关 `PROXY_ACCESS_KEY`/`ADMIN_ACCESS_KEY`/渠道 key 前缀指纹、通用 `sk-`/`Bearer` 形态）即掩码。成本最低，直接兑现日志脱敏红线。**转发路径（请求体/响应体）一律不改写**——2026-09-01 事故证明转发侧掩码会污染对话上下文、破坏 prompt caching，且 256KB 扫描上限曾把大请求体截断导致上游 400。
 2. **架构即扩展点**：`Guardrail` 接口（`preCall/postCall`，返回 `{block, rewrite}`）+ 优先级注册表 + **fail-open**（guardrail 异常记日志放行）+ 请求头豁免。后续 PII masker、prompt-injection、模态桥都作为新 guardrail 挂链，不动调度内核。
 3. **只掩不拦**：credential-masker 永远 `block=false`，rewrite 掩码后放行。本期不做阻断型 guardrail。
 4. **性能预算**：单次扫描字节上限 256KB，超出只扫头部。
@@ -27,28 +27,14 @@
 ## 3. 架构
 
 ```text
-[入站请求]
-     │
-     ▼
-TryUpstreamWithAllKeys (upstream_failover.go)
-     │  ┌─ preCall guardrail 链 ─┐
-     ├─►│ credential-masker      │──► 掩码后发往 upstream
-     │  └─ 按 priority 排序执行 ─┘    （fail-open：异常放行）
-     ...
-     ▼
-[上游响应]
-     │
-     │  错误路径：
-     │  ┌─ postCall guardrail 链 ─┐
-     ├─►│ credential-masker      │──► 掩码后写入 FailoverError.Body
-     │  └────────────────────────┘    和 channelErrorInfo
-     │
-     ▼
+[入站请求] ──► 转发上游（不改写，guardrail 链不挂载）
+[上游响应] ──► 返回客户端（不改写，guardrail 链不挂载）
+
 [日志写入]
-     │  CompleteLog / RecordChannelLog
-     │  ┌─ 日志侧防御性掩码 ──┐
-     └─►│ MaskErrorInfoForLog │──► 掩码后落库
-        └────────────────────┘    （不受豁免头影响，安全底线）
+     │  CompleteLog / RecordChannelLog / 请求体日志（request.go）
+     │  ┌─ 统一日志脱敏入口 ─┐
+     └─►│ MaskForLog        │──► 掩码后落库/输出
+        └───────────────────┘   （不受豁免头影响，安全底线）
 ```
 
 ### 3.1 Guardrail 接口
@@ -94,15 +80,15 @@ type Guardrail interface {
 - 支持配置热重载（渠道 key 前缀随 config change 自动更新）
 - 完整密钥值仅在初始化时传入，不写入日志
 
-### 3.4 三个挂载点
+### 3.4 挂载点（仅日志侧）
 
 | 挂载点 | 位置 | 作用 | 豁免头 |
 |---|---|---|---|
-| 请求侧 preCall | `upstream_failover.go` `TryUpstreamWithAllKeys` 入口 | 防止请求体中的 key 被发往第三方上游 | 受 `x-ccx-disabled-guardrails` 影响 |
-| 响应侧 postCall | `upstream_failover.go` 错误路径 `lastFailoverError` 创建前 | 防止上游错误消息中的 key 泄漏到客户端 | 受 `x-ccx-disabled-guardrails` 影响 |
-| 日志侧防御 | `channel_log_helper.go` `CompleteLog` / `RecordChannelLogWithSource` 入口 | 防止 key 进入日志和 trace 详情 | **不受豁免头影响**（安全底线） |
+| 日志侧统一脱敏 | `handlers/common/guardrails.go` `MaskForLog`；消费方：`channel_log_helper.go` `CompleteLog` / `RecordChannelLogWithSource`、`request.go` 请求体日志 | 防止 key 进入日志和 trace 详情 | **不受豁免头影响**（安全底线） |
 
-日志侧独立于请求侧豁免的原因：日志脱敏是安全底线，客户端不应有能力关闭服务端日志的防护。
+2026-09-01 设计变更：原"请求侧 preCall / 响应侧 postCall"两个转发挂载点已拆除。转发路径改写请求/响应体会污染发给 AI 的对话上下文（前缀指纹曾把上下文里的源码字面量掩坏）、破坏 prompt caching，且扫描上限截断曾直接引发上游 `unexpected end of JSON input`。key 掩码收敛为纯日志脱敏，统一走 `MaskForLog`。
+
+日志侧独立于豁免头的原因：日志脱敏是安全底线，客户端不应有能力关闭服务端日志的防护。
 
 ## 4. 配置与运行时
 
@@ -110,7 +96,7 @@ type Guardrail interface {
 - **密钥来源**：
   - 网关密钥：启动时从 `EnvConfig` 读取，运行时不变
   - 渠道 key 前缀：启动时 + 配置热重载时从 `ConfigManager` 提取前 8 字符
-- **请求头豁免**：`X-Ccx-Disabled-Guardrails: credential-masker` 可按请求关闭（仅请求/响应侧，日志侧始终生效）
+- **请求头豁免**：`X-Ccx-Disabled-Guardrails` 豁免头语义由 Registry 保留，供未来转发侧 guardrail 扩展使用；当前唯一挂载点（日志脱敏）不检查豁免头，始终生效
 
 ## 5. 边界与保守策略
 
@@ -157,7 +143,7 @@ type Guardrail interface {
 | `internal/guardrails/credential_masker.go` | credential-masker 实现（静态/前缀/通用三级匹配） |
 | `internal/guardrails/credential_masker_test.go` | 表驱动单测（命中/不误杀/超限/fail-open 等） |
 | `internal/guardrails/default.go` | 全局默认注册表单例 |
-| `internal/handlers/common/guardrails.go` | 挂载点适配函数（ApplyRequestGuardrails / ApplyResponseGuardrails / MaskErrorInfoForLog） |
-| `internal/handlers/common/upstream_failover.go` | 请求侧 preCall + 响应侧 postCall 挂载 |
-| `internal/handlers/common/channel_log_helper.go` | 日志侧防御性掩码挂载 |
+| `internal/handlers/common/guardrails.go` | 日志脱敏统一入口 `MaskForLog`（转发路径无挂载点） |
+| `internal/handlers/common/request.go` | 请求体日志（实际/原始）写入前经 `MaskForLog` 脱敏 |
+| `internal/handlers/common/channel_log_helper.go` | 渠道错误日志落库前经 `MaskForLog` 脱敏 |
 | `main.go` | 初始化注册 + 配置热重载联动 |

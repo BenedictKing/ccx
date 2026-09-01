@@ -52,8 +52,11 @@ type Guardrail interface {
 	Enabled() bool
 	// PreCall 在请求发往上游前执行，payload 为原始请求体字节。
 	// 返回 nil Result 等价于 {Blocked:false, Modified:false}。
+	// 注意：当前转发路径不挂载 PreCall（掩码改写会污染对话上下文），
+	// 该契约仅作为扩展点保留。
 	PreCall(payload []byte, ctx *Context) (*Result, error)
-	// PostCall 在响应返回客户端前执行，response 为响应体或错误体字节。
+	// PostCall 处理响应体或错误体字节。当前唯一生产消费者是日志脱敏
+	// 统一入口 MaskForLog（handlers/common/guardrails.go），转发路径不挂载。
 	// 返回 nil Result 等价于 {Blocked:false, Modified:false}。
 	PostCall(response []byte, ctx *Context) (*Result, error)
 }
