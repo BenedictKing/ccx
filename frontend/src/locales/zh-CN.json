@@ -1611,5 +1611,9 @@
   "subscription.keyMultiplier.markPublic": "标记为公开/临时 Key",
   "subscription.keyMultiplier.policyHint": "公开/临时 Key 可能被其他人耗尽或快速失效；系统会在失败时自动回退到稳定 Key。",
   "subscription.keyMultiplier.policyChip": "公开/临时",
-  "subscription.keyMultiplier.effectiveCostClass": "成本等级"
+  "subscription.keyMultiplier.effectiveCostClass": "成本等级",
+  "costReport.col.compressionSavings": "压缩节省",
+  "costReport.compressionsSavingHint": "请求侧 tool 输出压缩节省的 token",
+  "costReport.csv.compressionOriginalTokens": "compressionOriginalTokens",
+  "costReport.csv.compressionSavedTokens": "compressionSavedTokens"
 }

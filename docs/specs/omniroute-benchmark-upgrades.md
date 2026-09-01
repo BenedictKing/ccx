@@ -1,7 +1,7 @@
 # 对标 OmniRoute 网关增强规划 设计文档
 
 > 范围：与 OmniRoute（本地快照 `/Users/petaflops/works/unsorted/OmniRoute`，v3.8.51）全面对比后沉淀的增强方向——Tier-1 四项详细设计（配额真相分级调度、请求侧工具输出压缩、guardrails 最小集、路由预演升级）、Tier-2 backlog、不跟进决策记录。
-> 状态：**部分实现**（2026-09-01 定稿；§2 配额分级调度 + §4 Guardrails 最小集 + §5 路由预演已落地，各拆独立 spec；其余项规划中）。各项落地后应拆出独立 spec 并回填状态。
+> 状态：**部分实现**（2026-09-01 定稿；§2 配额分级调度 + §3 请求侧压缩 + §4 Guardrails 最小集 + §5 路由预演已落地，各拆独立 spec：[guardrails.md](./guardrails.md)、[request-compression.md](./request-compression.md)、[quota-truth-scheduling.md](./quota-truth-scheduling.md)、[route-preview.md](./route-preview.md)；其余项规划中）。各项落地后应拆出独立 spec 并回填状态。
 > 锚点约定：CCX 锚点为仓库相对路径；OmniRoute 锚点均为上述快照仓库内相对路径。
 
 ## 1. 背景与对比结论
@@ -11,7 +11,7 @@ OmniRoute 是 TS/Next.js 单体消费级网关（352 provider、19 种路由策�
 | 方向 | 一句话 | 优先级 | 本文 |
 |---|---|---|---|
 | A. 配额真相分级 + 按余量调度 | "这个账号本窗口还剩多少"参与选路 | Tier-1 | §2 ✅ 已拆独立 spec：[quota-truth-scheduling.md](./quota-truth-scheduling.md) |
-| B. 请求侧工具输出压缩 | 请求发出前压 tool_result 历史（RTK 模式） | Tier-1 | §3 |
+| B. 请求侧工具输出压缩 | 请求发出前压 tool_result 历史（RTK 模式） | Tier-1 | §3 ✅ 已拆独立 spec：[request-compression.md](./request-compression.md) |
 | C. Guardrails 最小集 | 内容级凭据掩码起步，预留扩展链 | Tier-1 | §4 |
 | D. 路由预演升级 | 请求体直喂的零上游请求路由预演 | Tier-1 | §5 |
 | E~H. MCP 化 / 韧性补课 / context-relay / doctor CLI | — | Tier-2 | §6 |
@@ -53,7 +53,9 @@ OmniRoute 蓝本：`src/lib/quota/`（`providerQuotaTelemetry.ts` 来源优先�
 3. 不推翻 newapi `MultiplierSource` 状态机（`config.go`），配额分级只消费其产出。
 4. 与 TTFB 拥挤度方案（kiro.rs 蓝本四层）合流时共用同一采集管道，避免双份观测开销。
 
-## 3. 方向 B：请求侧工具输出压缩（RTK 模式）
+## 3. 方向 B：请求侧工具输出压缩（RTK 模式） ✅ 已实现
+
+> 独立 spec：[request-compression.md](./request-compression.md)；本节约束与设计决策同步保留，作为上下文参考。
 
 OmniRoute 蓝本：`open-sse/services/compression/`（`engines/rtk/` 命令输出 filter、`fidelityGate.ts` 保真门、`pipelineGuards.ts` 膨胀回退）、`docs/compression/RTK_COMPRESSION.md`。
 
@@ -171,7 +173,7 @@ OmniRoute 蓝本：`POST /api/omniroute/route/preview`（零上游请求确定�
 | 1 | C. credential-masker | 成本最低，兑现脱敏红线 | 表驱动单测（掩码命中/不误杀/超限跳过）+ trace 抽查 | ✅ 已实现（2026-09-01） |
 | 2 | D. route preview | 纯增量入口层，调试效率立现 | 预演结果与真实路由一致性对拍（dry-run vs trace） | ✅ 已实现（2026-09-01） |
 | 3 | A. 配额分级调度 | 调度体验最大增量，与拥挤度合流 | 单测（桶懒重置/真相分级/降级排序）+ 饱和场景沉底验证 | ✅ 已实现（2026-09-01） |
-| 4 | B. RTK 压缩 | 收益直观但改动面大，放后 | 保真门单测 + 真实 CC 会话压缩率抽样 | 规划中 |
+| 4 | B. RTK 压缩 | 收益直观但改动面大，放后 | 保真门单测 + 真实 CC 会话压缩率抽样 | ✅ 已实现（2026-09-01） |
 | 5 | Tier-2 各项 | 按痛感排期 | 各自拆 spec 时定 | 规划中 |
 
 统一要求：各项实现时 `cd backend-go && make test` + `go build ./...`；涉及前端时 `cd frontend && bun run build`。

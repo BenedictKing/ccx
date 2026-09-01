@@ -454,6 +454,22 @@ func TryUpstreamWithAllKeys(
 	}
 	upstream = config.RuntimeUpstreamForAutoManagedProvider(upstream)
 
+	// 请求侧压缩：仅对 messages 类入口的 tool_result 历史做 RTK 模式压缩。
+	// fail-open：异常/保真门不通过/膨胀 均回退原文，不阻断请求。
+	if len(requestBody) > 0 {
+		scenarioKey := c.GetHeader("X-Routing-Scenario")
+		compressedBody := ApplyRequestCompression(
+			c, requestBody, kind, scenarioKey,
+			false, // 全局默认关（最小集阶段，仅场景预设触发）
+			false, // 渠道级暂未暴露配置
+		)
+		if len(compressedBody) != len(requestBody) {
+			requestBody = compressedBody
+			RestoreRequestBody(c, requestBody)
+			c.Set("requestBodyBytes", requestBody)
+		}
+	}
+
 	tryOpts := tryUpstreamOptions{}
 	for _, opt := range opts {
 		if opt != nil {
