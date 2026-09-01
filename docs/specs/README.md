@@ -18,6 +18,7 @@
 | [cross-module-integration.md](./cross-module-integration.md) | 跨模块集成 | 路由决策链、事件传播、状态一致性边界 |
 | [model-inventory-consistency.md](./model-inventory-consistency.md) | 模型清单一致性 | 三条模型数链路口径、协议视图聚合、火山案例复盘、自动保鲜改造(用户无感) |
 | [tool-call-capability.md](./tool-call-capability.md) | 工具调用能力实测 | seekai 假渠道复盘、能力测试工具探针、运行期负信号学习、硬约束收紧 |
+| [guardrails.md](./guardrails.md) | Guardrails 最小集 | credential-masker 起步、优先级注册表、fail-open、三挂载点（请求/响应/日志） |
 | [omniroute-benchmark-upgrades.md](./omniroute-benchmark-upgrades.md) | 对标 OmniRoute 增强规划 | 配额真相分级调度、请求侧工具输出压缩、guardrails 最小集、路由预演升级、Tier-2/3 backlog 与不跟进决策 |
 
 ## 总览关系图
@@ -75,7 +76,8 @@ Channels   (Claude/OpenAI/Gemini/...)
 | web-ui-pages.md | ✅ 完成 | 覆盖 8 个 View、导航 IA、全局区块显隐、ego-browser 实测、IA 问题清单 |
 | cross-module-integration.md | ✅ 完成 | 覆盖交互边界、事件传播、配置传播、竞态处理、事件总线 |
 | model-inventory-consistency.md | ✅ 完成 | P0/P1/P2 全部落地(2026-08-29):自动保鲜、整组发现、查看自愈、清单净化、画像双口径收敛;存储归并随 v2 |
-| omniroute-benchmark-upgrades.md | 🚧 规划中 | 2026-09-01 定稿的增强路线图，未实现；各项落地后拆独立 spec 并回填 |
+| guardrails.md | ✅ 完成 | credential-masker 最小集 + 注册表架构 + 三挂载点 + 表驱动单测 |
+| omniroute-benchmark-upgrades.md | 🔄 部分实现 | 2026-09-01 定稿的增强路线图；§4 Guardrails 已落地，其余规划中 |
 
 > `phase3c-handoff.md` 为 2026-08-11 的历史交接快照（任务已全部完成），不作为现状参考。
 

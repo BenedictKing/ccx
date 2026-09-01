@@ -21,6 +21,7 @@ import (
 
 	"github.com/BenedictKing/ccx/internal/autopilot"
 	"github.com/BenedictKing/ccx/internal/config"
+	"github.com/BenedictKing/ccx/internal/guardrails"
 	"github.com/BenedictKing/ccx/internal/conversation"
 	"github.com/BenedictKing/ccx/internal/errutil"
 	"github.com/BenedictKing/ccx/internal/eventbus"
@@ -429,6 +430,45 @@ func main() {
 		log.Fatalf("初始化配置管理器失败: %v", err)
 	}
 	defer errutil.IgnoreDeferred(cfgManager.Close)
+
+	// 初始化 Guardrails 注册表：credential-masker（最小集）
+	// fail-open：guardrail 异常仅记日志放行，绝不阻断流量
+	credentialMasker := guardrails.NewCredentialMasker()
+	// 注入网关自身密钥
+	gatewayKeys := []string{envCfg.ProxyAccessKey, envCfg.GetAdminAccessKey()}
+	gatewayKeys = append(gatewayKeys, envCfg.ExtraProxyAccessKeys...)
+	credentialMasker.SetStaticKeys(gatewayKeys)
+	// 注入渠道 key 前缀指纹
+	initCfg := cfgManager.GetConfig()
+	var channelKeyPrefixes []string
+	for _, upstream := range initCfg.Upstream {
+		for _, key := range upstream.APIKeys {
+			if len(key) >= 8 {
+				channelKeyPrefixes = append(channelKeyPrefixes, key[:8])
+			}
+		}
+	}
+	credentialMasker.SetChannelKeyPrefixes(channelKeyPrefixes)
+	guardrails.DefaultRegistry().Register(credentialMasker)
+	log.Printf("[Guardrails-Init] 已注册 credential-masker，渠道 key 前缀 %d 个", len(channelKeyPrefixes))
+
+	// 配置热重载时同步更新 credential-masker 的渠道 key 前缀
+	cfgManager.RegisterOnConfigChange(func(cfg config.Config) {
+		var prefixes []string
+		seen := make(map[string]struct{})
+		for _, upstream := range cfg.Upstream {
+			for _, key := range upstream.APIKeys {
+				if len(key) >= 8 {
+					p := key[:8]
+					if _, ok := seen[p]; !ok {
+						seen[p] = struct{}{}
+						prefixes = append(prefixes, p)
+					}
+				}
+			}
+		}
+		credentialMasker.SetChannelKeyPrefixes(prefixes)
+	})
 
 	// 远程预置更新：启动时先尝试恢复已校验磁盘缓存，再由后台 worker 异步检查文档站。
 	// 网络/缓存失败不阻断服务，始终保留编译期 embedded fallback。

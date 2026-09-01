@@ -1,7 +1,7 @@
 # 对标 OmniRoute 网关增强规划 设计文档
 
 > 范围：与 OmniRoute（本地快照 `/Users/petaflops/works/unsorted/OmniRoute`，v3.8.51）全面对比后沉淀的增强方向——Tier-1 四项详细设计（配额真相分级调度、请求侧工具输出压缩、guardrails 最小集、路由预演升级）、Tier-2 backlog、不跟进决策记录。
-> 状态：**规划中，未实现**（2026-09-01 定稿）。各项落地后应拆出独立 spec 并回填状态。
+> 状态：**部分实现**（2026-09-01 定稿；§4 Guardrails 最小集已落地，拆独立 spec [guardrails.md](./guardrails.md)；其余项规划中）。各项落地后应拆出独立 spec 并回填状态。
 > 锚点约定：CCX 锚点为仓库相对路径；OmniRoute 锚点均为上述快照仓库内相对路径。
 
 ## 1. 背景与对比结论
@@ -86,7 +86,9 @@ OmniRoute 蓝本：`open-sse/services/compression/`（`engines/rtk/` 命令输�
 2. 流式响应不压缩（响应侧不动，与 OmniRoute 同口径）。
 3. images/vectors 入口不适用。
 
-## 4. 方向 C：Guardrails 最小集
+## 4. 方向 C：Guardrails 最小集 ✅ 已实现
+
+> 独立 spec：[guardrails.md](./guardrails.md)；本节约束与设计决策同步保留，作为上下文参考。
 
 OmniRoute 蓝本：`src/lib/guardrails/`（`registry.ts` 优先级链、`BaseGuardrail` preCall/postCall 契约、fail-open、`credential-masker.ts` priority 95、请求头 `x-omniroute-disabled-guardrails` 豁免）。
 
@@ -166,7 +168,7 @@ OmniRoute 蓝本：`POST /api/omniroute/route/preview`（零上游请求确定�
 
 | 序 | 项 | 理由 | 验证基线 |
 |---|---|---|---|
-| 1 | C. credential-masker | 成本最低，兑现脱敏红线 | 表驱动单测（掩码命中/不误杀/超限跳过）+ trace 抽查 |
+| 1 | C. credential-masker ✅ | 成本最低，兑现脱敏红线（已落地） | 表驱动单测（掩码命中/不误杀/超限跳过）+ trace 抽查 |
 | 2 | D. route preview | 纯增量入口层，调试效率立现 | 预演结果与真实路由一致性对拍（dry-run vs trace） |
 | 3 | A. 配额分级调度 | 调度体验最大增量，与拥挤度合流 | 单测（桶懒重置/真相分级/降级排序）+ 饱和场景集成测试 |
 | 4 | B. RTK 压缩 | 收益直观但改动面大，放后 | 保真门单测 + 真实 CC 会话压缩率抽样 |
