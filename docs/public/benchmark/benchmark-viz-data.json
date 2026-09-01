@@ -30,7 +30,7 @@
       "source": "CodexRadar",
       "sourceModel": "deepseek-v4-flash",
       "taskCount": 300,
-      "quality_score": 42.4,
+      "quality_score": 56.7,
       "model_quality_score": 42.4
     },
     {
@@ -54,7 +54,7 @@
       "source": "CodexRadar",
       "sourceModel": "deepseek-v4-pro",
       "taskCount": 215,
-      "quality_score": 51.3,
+      "quality_score": 55.3,
       "model_quality_score": 51.3
     },
     {
@@ -66,7 +66,7 @@
       "source": "CodexRadar",
       "sourceModel": "glm-5.3",
       "taskCount": 112,
-      "quality_score": 54,
+      "quality_score": 49.1,
       "model_quality_score": 54
     },
     {
@@ -78,7 +78,7 @@
       "source": "CodexRadar",
       "sourceModel": "glm-5.3",
       "taskCount": 112,
-      "quality_score": 54,
+      "quality_score": 58.9,
       "model_quality_score": 54
     },
     {
@@ -90,7 +90,7 @@
       "source": "CodexRadar",
       "sourceModel": "glm-5.3",
       "taskCount": 111,
-      "quality_score": 54,
+      "quality_score": 60.4,
       "model_quality_score": 54
     },
     {
@@ -126,7 +126,7 @@
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-luna",
       "taskCount": 112,
-      "quality_score": 19.6,
+      "quality_score": 5.4,
       "model_quality_score": 11.3
     },
     {
@@ -150,7 +150,7 @@
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-luna",
       "taskCount": 112,
-      "quality_score": 19.6,
+      "quality_score": 51.8,
       "model_quality_score": 11.3
     },
     {
@@ -162,7 +162,7 @@
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-luna",
       "taskCount": 112,
-      "quality_score": 19.6,
+      "quality_score": 58,
       "model_quality_score": 11.3
     },
     {
@@ -174,7 +174,7 @@
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-luna",
       "taskCount": 112,
-      "quality_score": 19.6,
+      "quality_score": 67.9,
       "model_quality_score": 11.3
     },
     {
@@ -186,7 +186,7 @@
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-sol",
       "taskCount": 112,
-      "quality_score": 64.3,
+      "quality_score": 57.1,
       "model_quality_score": 61.1
     },
     {
@@ -210,7 +210,7 @@
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-sol",
       "taskCount": 112,
-      "quality_score": 64.3,
+      "quality_score": 63.4,
       "model_quality_score": 61.1
     },
     {
@@ -222,7 +222,7 @@
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-sol",
       "taskCount": 112,
-      "quality_score": 64.3,
+      "quality_score": 69.6,
       "model_quality_score": 61.1
     },
     {
@@ -234,7 +234,7 @@
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-sol",
       "taskCount": 112,
-      "quality_score": 64.3,
+      "quality_score": 72.3,
       "model_quality_score": 61.1
     },
     {
@@ -246,7 +246,7 @@
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-sol",
       "taskCount": 112,
-      "quality_score": 64.3,
+      "quality_score": 68.8,
       "model_quality_score": 61.1
     },
     {
@@ -258,7 +258,7 @@
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-terra",
       "taskCount": 112,
-      "quality_score": 36.6,
+      "quality_score": 31.3,
       "model_quality_score": 35.1
     },
     {
@@ -282,7 +282,7 @@
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-terra",
       "taskCount": 112,
-      "quality_score": 36.6,
+      "quality_score": 50,
       "model_quality_score": 35.1
     },
     {
@@ -294,7 +294,7 @@
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-terra",
       "taskCount": 112,
-      "quality_score": 36.6,
+      "quality_score": 62.5,
       "model_quality_score": 35.1
     },
     {
@@ -306,7 +306,7 @@
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-terra",
       "taskCount": 112,
-      "quality_score": 36.6,
+      "quality_score": 67.9,
       "model_quality_score": 35.1
     },
     {
@@ -318,7 +318,7 @@
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-terra",
       "taskCount": 112,
-      "quality_score": 36.6,
+      "quality_score": 69.6,
       "model_quality_score": 35.1
     },
     {
@@ -330,7 +330,7 @@
       "source": "CodexRadar",
       "sourceModel": "grok-4.6",
       "taskCount": 109,
-      "quality_score": 61.1,
+      "quality_score": 54.1,
       "model_quality_score": 61.1
     },
     {
@@ -354,7 +354,7 @@
       "source": "CodexRadar",
       "sourceModel": "grok-4.6",
       "taskCount": 112,
-      "quality_score": 61.1,
+      "quality_score": 66.1,
       "model_quality_score": 61.1
     },
     {
@@ -366,7 +366,7 @@
       "source": "CodexRadar",
       "sourceModel": "grok-4.6",
       "taskCount": 112,
-      "quality_score": 61.1,
+      "quality_score": 66.1,
       "model_quality_score": 61.1
     },
     {
@@ -377,7 +377,7 @@
       "median_cost": 2.7559,
       "source": "DeepSWE v1.1",
       "sourceModel": "claude-fable-5",
-      "quality_score": 65.4,
+      "quality_score": 59.6,
       "model_quality_score": 65.4,
       "taskCount": null
     },
@@ -401,7 +401,7 @@
       "median_cost": 7.3227,
       "source": "DeepSWE v1.1",
       "sourceModel": "claude-fable-5",
-      "quality_score": 65.4,
+      "quality_score": 68.6,
       "model_quality_score": 65.4,
       "taskCount": null
     },
@@ -413,7 +413,7 @@
       "median_cost": 11.3411,
       "source": "DeepSWE v1.1",
       "sourceModel": "claude-fable-5",
-      "quality_score": 65.4,
+      "quality_score": 69.9,
       "model_quality_score": 65.4,
       "taskCount": null
     },
@@ -425,7 +425,7 @@
       "median_cost": 19.2346,
       "source": "DeepSWE v1.1",
       "sourceModel": "claude-fable-5",
-      "quality_score": 65.4,
+      "quality_score": 69.7,
       "model_quality_score": 65.4,
       "taskCount": null
     },
@@ -437,7 +437,7 @@
       "median_cost": 1.824,
       "source": "DeepSWE v1.1",
       "sourceModel": "claude-opus-4-8",
-      "quality_score": 48.7,
+      "quality_score": 40.8,
       "model_quality_score": 48.7,
       "taskCount": null
     },
@@ -461,7 +461,7 @@
       "median_cost": 3.6635,
       "source": "DeepSWE v1.1",
       "sourceModel": "claude-opus-4-8",
-      "quality_score": 48.7,
+      "quality_score": 51.8,
       "model_quality_score": 48.7,
       "taskCount": null
     },
@@ -473,7 +473,7 @@
       "median_cost": 7.0494,
       "source": "DeepSWE v1.1",
       "sourceModel": "claude-opus-4-8",
-      "quality_score": 48.7,
+      "quality_score": 54.4,
       "model_quality_score": 48.7,
       "taskCount": null
     },
@@ -485,7 +485,7 @@
       "median_cost": 12.3535,
       "source": "DeepSWE v1.1",
       "sourceModel": "claude-opus-4-8",
-      "quality_score": 48.7,
+      "quality_score": 59,
       "model_quality_score": 48.7,
       "taskCount": null
     },
@@ -497,7 +497,7 @@
       "median_cost": 1.2163,
       "source": "DeepSWE v1.1",
       "sourceModel": "claude-opus-5",
-      "quality_score": 68.9,
+      "quality_score": 58.1,
       "model_quality_score": 68.9,
       "taskCount": null
     },
@@ -521,7 +521,7 @@
       "median_cost": 4.9688,
       "source": "DeepSWE v1.1",
       "sourceModel": "claude-opus-5",
-      "quality_score": 68.9,
+      "quality_score": 72.8,
       "model_quality_score": 68.9,
       "taskCount": null
     },
@@ -533,7 +533,7 @@
       "median_cost": 7.9288,
       "source": "DeepSWE v1.1",
       "sourceModel": "claude-opus-5",
-      "quality_score": 68.9,
+      "quality_score": 73.2,
       "model_quality_score": 68.9,
       "taskCount": null
     },
@@ -545,7 +545,7 @@
       "median_cost": 10.4282,
       "source": "DeepSWE v1.1",
       "sourceModel": "claude-opus-5",
-      "quality_score": 68.9,
+      "quality_score": 73.6,
       "model_quality_score": 68.9,
       "taskCount": null
     },
@@ -569,7 +569,7 @@
       "median_cost": 1.6765,
       "source": "DeepSWE v1.1",
       "sourceModel": "claude-sonnet-5",
-      "quality_score": 39.8,
+      "quality_score": 30.5,
       "model_quality_score": 16.7,
       "taskCount": null
     },
@@ -593,7 +593,7 @@
       "median_cost": 5.8336,
       "source": "DeepSWE v1.1",
       "sourceModel": "claude-sonnet-5",
-      "quality_score": 39.8,
+      "quality_score": 48.2,
       "model_quality_score": 16.7,
       "taskCount": null
     },
@@ -605,7 +605,7 @@
       "median_cost": 9.9654,
       "source": "DeepSWE v1.1",
       "sourceModel": "claude-sonnet-5",
-      "quality_score": 39.8,
+      "quality_score": 49.7,
       "model_quality_score": 16.7,
       "taskCount": null
     },
@@ -617,7 +617,7 @@
       "median_cost": 23.2774,
       "source": "DeepSWE v1.1",
       "sourceModel": "claude-sonnet-5",
-      "quality_score": 39.8,
+      "quality_score": 53.8,
       "model_quality_score": 16.7,
       "taskCount": null
     },
@@ -689,7 +689,7 @@
       "median_cost": 1.3913,
       "source": "DeepSWE v1.1",
       "sourceModel": "gemini-3-7-flash",
-      "quality_score": 65.5,
+      "quality_score": 53.8,
       "model_quality_score": 59,
       "taskCount": null
     },
@@ -713,7 +713,7 @@
       "median_cost": 1.9044,
       "source": "DeepSWE v1.1",
       "sourceModel": "gemini-3-7-flash",
-      "quality_score": 65.5,
+      "quality_score": 65.3,
       "model_quality_score": 59,
       "taskCount": null
     },
@@ -737,7 +737,7 @@
       "median_cost": 3.4637,
       "source": "DeepSWE v1.1",
       "sourceModel": "glm-5-2",
-      "quality_score": 36.3,
+      "quality_score": 43.8,
       "model_quality_score": 36.3,
       "taskCount": null
     },
@@ -785,7 +785,7 @@
       "median_cost": 1.1081,
       "source": "DeepSWE v1.1",
       "sourceModel": "gpt-5-5",
-      "quality_score": 54,
+      "quality_score": 27,
       "model_quality_score": 54,
       "taskCount": null
     },
@@ -809,7 +809,7 @@
       "median_cost": 4.5829,
       "source": "DeepSWE v1.1",
       "sourceModel": "gpt-5-5",
-      "quality_score": 54,
+      "quality_score": 64.4,
       "model_quality_score": 54,
       "taskCount": null
     },
@@ -821,7 +821,7 @@
       "median_cost": 6.1105,
       "source": "DeepSWE v1.1",
       "sourceModel": "gpt-5-5",
-      "quality_score": 54,
+      "quality_score": 67,
       "model_quality_score": 54,
       "taskCount": null
     },
@@ -833,7 +833,7 @@
       "median_cost": 0.0698,
       "source": "DeepSWE v1.1",
       "sourceModel": "gpt-5-6-luna",
-      "quality_score": 11.3,
+      "quality_score": 1.5,
       "model_quality_score": 11.3,
       "taskCount": null
     },
@@ -857,7 +857,7 @@
       "median_cost": 0.6636,
       "source": "DeepSWE v1.1",
       "sourceModel": "gpt-5-6-luna",
-      "quality_score": 11.3,
+      "quality_score": 44.2,
       "model_quality_score": 11.3,
       "taskCount": null
     },
@@ -869,7 +869,7 @@
       "median_cost": 1.2449,
       "source": "DeepSWE v1.1",
       "sourceModel": "gpt-5-6-luna",
-      "quality_score": 11.3,
+      "quality_score": 56.9,
       "model_quality_score": 11.3,
       "taskCount": null
     },
@@ -881,7 +881,7 @@
       "median_cost": 2.2921,
       "source": "DeepSWE v1.1",
       "sourceModel": "gpt-5-6-luna",
-      "quality_score": 11.3,
+      "quality_score": 67.2,
       "model_quality_score": 11.3,
       "taskCount": null
     },
@@ -893,7 +893,7 @@
       "median_cost": 0.9446,
       "source": "DeepSWE v1.1",
       "sourceModel": "gpt-5-6-sol",
-      "quality_score": 61.1,
+      "quality_score": 45.4,
       "model_quality_score": 61.1,
       "taskCount": null
     },
@@ -917,7 +917,7 @@
       "median_cost": 2.9794,
       "source": "DeepSWE v1.1",
       "sourceModel": "gpt-5-6-sol",
-      "quality_score": 61.1,
+      "quality_score": 69.4,
       "model_quality_score": 61.1,
       "taskCount": null
     },
@@ -929,7 +929,7 @@
       "median_cost": 4.117,
       "source": "DeepSWE v1.1",
       "sourceModel": "gpt-5-6-sol",
-      "quality_score": 61.1,
+      "quality_score": 70.7,
       "model_quality_score": 61.1,
       "taskCount": null
     },
@@ -941,7 +941,7 @@
       "median_cost": 6.8415,
       "source": "DeepSWE v1.1",
       "sourceModel": "gpt-5-6-sol",
-      "quality_score": 61.1,
+      "quality_score": 72.7,
       "model_quality_score": 61.1,
       "taskCount": null
     },
@@ -953,7 +953,7 @@
       "median_cost": 0.399,
       "source": "DeepSWE v1.1",
       "sourceModel": "gpt-5-6-terra",
-      "quality_score": 35.1,
+      "quality_score": 24.1,
       "model_quality_score": 35.1,
       "taskCount": null
     },
@@ -977,7 +977,7 @@
       "median_cost": 1.0317,
       "source": "DeepSWE v1.1",
       "sourceModel": "gpt-5-6-terra",
-      "quality_score": 35.1,
+      "quality_score": 53.8,
       "model_quality_score": 35.1,
       "taskCount": null
     },
@@ -989,7 +989,7 @@
       "median_cost": 1.867,
       "source": "DeepSWE v1.1",
       "sourceModel": "gpt-5-6-terra",
-      "quality_score": 35.1,
+      "quality_score": 60.2,
       "model_quality_score": 35.1,
       "taskCount": null
     },
@@ -1001,7 +1001,7 @@
       "median_cost": 4.1146,
       "source": "DeepSWE v1.1",
       "sourceModel": "gpt-5-6-terra",
-      "quality_score": 35.1,
+      "quality_score": 69.6,
       "model_quality_score": 35.1,
       "taskCount": null
     },
@@ -1025,7 +1025,7 @@
       "median_cost": 0.7426,
       "source": "DeepSWE v1.1",
       "sourceModel": "grok-4-6",
-      "quality_score": 67.5,
+      "quality_score": 41.6,
       "model_quality_score": 61.1,
       "taskCount": null
     },
@@ -1049,7 +1049,7 @@
       "median_cost": 3.6936,
       "source": "DeepSWE v1.1",
       "sourceModel": "grok-4-6",
-      "quality_score": 67.5,
+      "quality_score": 65.2,
       "model_quality_score": 61.1,
       "taskCount": null
     },
@@ -1061,7 +1061,7 @@
       "median_cost": 4.6394,
       "source": "DeepSWE v1.1",
       "sourceModel": "grok-4-6",
-      "quality_score": 67.5,
+      "quality_score": 66.7,
       "model_quality_score": 61.1,
       "taskCount": null
     },
