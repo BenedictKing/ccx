@@ -771,6 +771,17 @@ health(40) > fastDecay(25) > successRate(20) > latency(10) > cost(5)
 - 修复：`findAPIKeyConfigByKeyUID` 兜底匹配 `CredentialUID`（托管渠道加载期 `ensureCredentialUIDs` 必回填）；前端 `buildChannelApiKeyRows` 以 `keyUid ?? credentialUid` 回填行 `keyUid`；倍率编辑按钮对可编辑 key（有 keyUid/channelUid/channelKind）始终可见，未设置倍率时不渲染空 chips。
 - 效果：免费/签到类渠道的 key 可在编辑弹窗一键「标记为公开/临时 Key」（`groupMultiplier=0` 显式零成本 `manual_zero_cost` + `opportunistic` 消耗策略），成本报表归入「已确认零成本」，调度零成本优先。
 
+### 5.20 基准图表质量档改为（模型×effort）逐档口径
+
+提交：`5656e6b4`
+
+- 动机：`quality_score` 原按（模型×来源）组共享一个 medium 对齐"常规等效分"，表格中同模型各 effort 档显示同一个数字；实际同一模型随 effort 升降跨越质量档（low 掉 normal、max 进 premium）正是模型-思考强度粒度的真实情况。
+- `scripts/benchmark-sources/visualization.mjs`：每行 `quality_score` 改为本档可靠实测分（`pass_rate*100`）；小样本档（`taskCount<3`）置 `null` 不评定。删除组共享的 `qualityScoreByGroup` 块。
+- `mediumAlignedScore` 保留，仅服务两处模型级校准：`model_quality_score`（图表 tooltip「常规档等效」行，首次获得消费者）与 `qualityTiers` 阈值推导（`deriveQualityMetadata`，与后端 `computeQualityTierBoundariesFromRegistry` 的 Go 镜像，口径不动）。
+- `scripts/generate-benchmark-chart.mjs`：校验层放宽 `quality_score == null` 的行（原会被整行丢弃，与"小样本半透明点仅供观察"冲突）；表格「常规等效分」列替换为「质量档」列（`tierOf` 按阈值 premium≥/high≥/normal≥/low 评定，null 显示"—"），排序改档位降序→成本升序；图例前缀、`<desc>`、section-note 文案同步。
+- 后端零波及：backend-go 不读 `benchmark-viz-data.json`，其自身 `quality_score`（`frontierQualityScore` 0-1 合成分）是另一概念，且本就是模型×effort 口径（`effortAwareBenchmarkScore`）。
+- 产物重生成：viz JSON 的逐档分数可由现存行（`pass_rate`+`taskCount`）确定性推导，无需打网络重拉数据源。
+
 ## 6. 与其他模块的交互点
 
 ### 6.1 scheduler
