@@ -727,8 +727,12 @@ func TryUpstreamWithAllKeys(
 				}
 				if target != nil && target.Model != "" {
 					// Atomic rewrite: model + effort together
-					attemptBody, rewriteOk := atomicModelEffortRewrite(attemptBody, target, upstreamCopy, executionKind)
-					if rewriteOk {
+					// 注意必须赋回外层 attemptBody：此前此处用 := 声明了块内影子变量，
+					// 模型改写只短暂进入 gin context，随后的 system 归一化/参数约束等步骤
+					// 基于外层旧 body 再次 Set，会把改写静默覆盖（火山渠道 auto_resolve 后
+					// 仍以原模型发出、上游 400 的根因）。
+					if rewritten, rewriteOk := atomicModelEffortRewrite(attemptBody, target, upstreamCopy, executionKind); rewriteOk {
+						attemptBody = rewritten
 						attemptModel = target.Model
 						appliedMappedModel = target.Model
 						RestoreRequestBody(c, attemptBody)

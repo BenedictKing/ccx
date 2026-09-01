@@ -790,6 +790,108 @@ func TestTryUpstreamWithAllKeysLogsFinalRequestModelAndReasoningEffort(t *testin
 	}
 }
 
+// TestTryUpstreamWithAllKeysMappedModelSurvivesSystemNormalization 回归：
+// auto_resolve 改写模型后，若请求体带 inline system 消息触发归一化（normChanged=true），
+// 归一化必须基于已改写的 body 进行。此前改写结果因 := 影子变量只进入 gin context，
+// 归一化用外层旧 body 再次 Set 把模型改写覆盖，最终以原模型发出（火山渠道 400 根因）。
+func TestTryUpstreamWithAllKeysMappedModelSurvivesSystemNormalization(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	upstreamRequests := make(chan map[string]interface{}, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode upstream request: %v", err)
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		upstreamRequests <- request
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer server.Close()
+
+	cfgManager, channelScheduler, messagesMetrics, cleanup := newTestFailoverDependencies(t, config.UpstreamConfig{
+		Name:        "auto-mapped-normalize-test",
+		ChannelUID:  "ch-auto-mapped-normalize",
+		BaseURL:     server.URL,
+		APIKeys:     []string{"sk-auto-mapped-norm"},
+		Status:      "active",
+		ServiceType: "openai",
+		AutoManaged: true,
+	})
+	defer cleanup()
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	// inline system 消息确保归一化真正改写 body（normChanged=true），
+	// 这是旧遮蔽 bug 下覆盖模型改写的必要条件。
+	originalBody := []byte(`{"model":"claude-opus-4-8","messages":[{"role":"system","content":"You are helpful."},{"role":"user","content":"hi"}]}`)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", bytes.NewReader(originalBody))
+
+	cfg := cfgManager.GetConfig()
+	upstream := &cfg.Upstream[0]
+	policy := &autopilot.EndpointAttemptPolicy{
+		ResolvedTargetForBinding: func(channelUID, baseURL, apiKey string) (*autopilot.ResolvedRouteTarget, string) {
+			return &autopilot.ResolvedRouteTarget{Model: "glm-5.2"}, ""
+		},
+	}
+
+	handled, successKey, _, failoverErr, _, lastErr := TryUpstreamWithAllKeys(
+		c,
+		config.NewEnvConfig(),
+		cfgManager,
+		channelScheduler,
+		scheduler.ChannelKindMessages,
+		"Messages",
+		messagesMetrics,
+		upstream,
+		[]warmup.URLLatencyResult{{URL: server.URL, OriginalIdx: 0}},
+		originalBody,
+		nil,
+		false,
+		func(upstream *config.UpstreamConfig, failedKeys map[string]bool) (string, error) {
+			return cfgManager.GetNextAPIKey(upstream, failedKeys, "Messages")
+		},
+		func(c *gin.Context, upstreamCopy *config.UpstreamConfig, apiKey string) (*http.Request, error) {
+			return http.NewRequestWithContext(c.Request.Context(), http.MethodPost, upstreamCopy.BaseURL,
+				bytes.NewReader(GetEffectiveRequestBody(c, nil)))
+		},
+		func(string) {},
+		nil,
+		nil,
+		func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string, actualRequestBody []byte) (*types.Usage, error) {
+			_ = resp.Body.Close()
+			return nil, nil
+		},
+		"claude-opus-4-8",
+		"",
+		0,
+		channelScheduler.GetChannelLogStore(scheduler.ChannelKindMessages),
+		WithEndpointAttemptPolicy(policy),
+	)
+
+	if !handled || successKey != "sk-auto-mapped-norm" || failoverErr != nil || lastErr != nil {
+		t.Fatalf("unexpected failover result: handled=%v key=%q failoverErr=%v lastErr=%v", handled, successKey, failoverErr, lastErr)
+	}
+
+	gotRequest := <-upstreamRequests
+	if gotRequest["model"] != "glm-5.2" {
+		t.Fatalf("upstream request model = %v, want glm-5.2 (模型改写被后续归一化覆盖)", gotRequest["model"])
+	}
+	// 归一化仍应生效：inline system 被抽到顶层，messages 中不再含 system 角色。
+	if gotRequest["system"] == nil {
+		t.Fatalf("upstream request missing top-level system: %v", gotRequest)
+	}
+	if msgs, ok := gotRequest["messages"].([]interface{}); ok {
+		for _, m := range msgs {
+			if mm, ok := m.(map[string]interface{}); ok && mm["role"] == "system" {
+				t.Fatalf("inline system message should have been normalized to top-level: %v", msgs)
+			}
+		}
+	}
+}
+
 // TestTryUpstreamWithAllKeysLogsMappingFailReason 自动映射未命中 fail-open 透传时，
 // 未命中原因必须落到 channel log（mappingFailReason）且不设置映射回显头。
 func TestTryUpstreamWithAllKeysLogsMappingFailReason(t *testing.T) {
