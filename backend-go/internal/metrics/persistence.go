@@ -100,4 +100,11 @@ type PersistentRecord struct {
 	EffectiveCostAvailable  bool
 	EffectiveCostReason     string
 	ConsumptionPolicy       string
+	// 请求侧压缩统计（RTK 模式）
+	Compressed                bool    // 是否执行了压缩
+	OriginalTokens            int64   // 压缩前 tool_result 估算 token 数
+	CompressedTokens          int64   // 压缩后 tool_result 估算 token 数
+	CompressionSavingsPct     float64 // 节省比例（0-100）
+	CompressionTechnique      string  // 压缩技术标识（rtk_filter 等）
+	CompressionFallbackReason string  // 回退原因
 }

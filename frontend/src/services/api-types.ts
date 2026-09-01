@@ -2366,6 +2366,12 @@ export interface CostReportRow {
   configuredMultiplierCount?: number
   subscriptionCostCount?: number
   unpricedCostCount?: number
+  // 请求侧压缩统计（RTK 模式）
+  compressedRequests?: number
+  originalTokensSaved?: number
+  compressedTokensAfter?: number
+  compressionFallbackCount?: number
+  compressionSavingsPct?: number
 }
 
 export interface CostReportResponse {

@@ -1,7 +1,7 @@
 # 对标 OmniRoute 网关增强规划 设计文档
 
 > 范围：与 OmniRoute（本地快照 `/Users/petaflops/works/unsorted/OmniRoute`，v3.8.51）全面对比后沉淀的增强方向——Tier-1 四项详细设计（配额真相分级调度、请求侧工具输出压缩、guardrails 最小集、路由预演升级）、Tier-2 backlog、不跟进决策记录。
-> 状态：**部分实现**（2026-09-01 定稿；§4 Guardrails 最小集已落地，拆独立 spec [guardrails.md](./guardrails.md)；其余项规划中）。各项落地后应拆出独立 spec 并回填状态。
+> 状态：**部分实现**（2026-09-01 定稿；§3 请求侧压缩与 §4 Guardrails 最小集已落地，拆独立 spec [guardrails.md](./guardrails.md) 与 [request-compression.md](./request-compression.md)；其余项规划中）。各项落地后应拆出独立 spec 并回填状态。
 > 锚点约定：CCX 锚点为仓库相对路径；OmniRoute 锚点均为上述快照仓库内相对路径。
 
 ## 1. 背景与对比结论
@@ -53,7 +53,9 @@ OmniRoute 蓝本：`src/lib/quota/`（`providerQuotaTelemetry.ts` 来源优先�
 3. 不推翻 newapi `MultiplierSource` 状态机（`config.go`），配额分级只消费其产出。
 4. 与 TTFB 拥挤度方案（kiro.rs 蓝本四层）合流时共用同一采集管道，避免双份观测开销。
 
-## 3. 方向 B：请求侧工具输出压缩（RTK 模式）
+## 3. 方向 B：请求侧工具输出压缩（RTK 模式） ✅ 已实现
+
+> 独立 spec：[request-compression.md](./request-compression.md)；本节约束与设计决策同步保留，作为上下文参考。
 
 OmniRoute 蓝本：`open-sse/services/compression/`（`engines/rtk/` 命令输出 filter、`fidelityGate.ts` 保真门、`pipelineGuards.ts` 膨胀回退）、`docs/compression/RTK_COMPRESSION.md`。
 
@@ -171,7 +173,7 @@ OmniRoute 蓝本：`POST /api/omniroute/route/preview`（零上游请求确定�
 | 1 | C. credential-masker ✅ | 成本最低，兑现脱敏红线（已落地） | 表驱动单测（掩码命中/不误杀/超限跳过）+ trace 抽查 |
 | 2 | D. route preview | 纯增量入口层，调试效率立现 | 预演结果与真实路由一致性对拍（dry-run vs trace） |
 | 3 | A. 配额分级调度 | 调度体验最大增量，与拥挤度合流 | 单测（桶懒重置/真相分级/降级排序）+ 饱和场景集成测试 |
-| 4 | B. RTK 压缩 | 收益直观但改动面大，放后 | 保真门单测 + 真实 CC 会话压缩率抽样 |
+| 4 | B. RTK 压缩 ✅ | 收益直观但改动面大，放后（已落地） | 保真门单测 + 真实 CC 会话压缩率抽样 |
 | 5 | Tier-2 各项 | 按痛感排期 | 各自拆 spec 时定 |
 
 统一要求：各项实现时 `cd backend-go && make test` + `go build ./...`；涉及前端时 `cd frontend && bun run build`。

@@ -103,6 +103,17 @@
           <div v-if="!pricingComplete" class="text-caption text-warning">{{ t('costReport.incompletePricingHint') }}</div>
         </v-card>
       </v-col>
+      <v-col cols="6" sm="3">
+        <v-card variant="outlined" class="pa-3 text-center">
+          <div class="text-caption text-medium-emphasis" :title="t('costReport.compressionsSavingHint')">
+            {{ t('costReport.col.compressionSavings') }}
+          </div>
+          <div class="text-h6 font-weight-bold text-success">{{ formatTokens(totalCompressionSaved) }}</div>
+          <div v-if="totalCompressionSaved > 0" class="text-caption text-medium-emphasis">
+            {{ formatTokens(totalCompressionSaved) }}
+          </div>
+        </v-card>
+      </v-col>
     </v-row>
 
     <!-- Loading state -->
@@ -129,6 +140,7 @@
             <th class="text-right">{{ t('costReport.col.outputTokens') }}</th>
             <th class="text-right">{{ t('costReport.col.cacheCreation') }}</th>
             <th class="text-right">{{ t('costReport.col.cacheRead') }}</th>
+            <th class="text-right">{{ t('costReport.col.compressionSavings') }}</th>
             <th class="text-right">{{ t('costReport.col.listCost') }}</th>
             <th class="text-left">{{ t('costReport.col.costBreakdown') }}</th>
           </tr>
@@ -148,6 +160,12 @@
             <td class="text-right">{{ formatTokens(row.outputTokens) }}</td>
             <td class="text-right">{{ formatTokens(row.cacheCreationTokens) }}</td>
             <td class="text-right">{{ formatTokens(row.cacheReadTokens) }}</td>
+            <td class="text-right">
+              <span v-if="(row.originalTokensSaved ?? 0) > 0" class="text-success">
+                {{ formatTokens((row.originalTokensSaved ?? 0) - (row.compressedTokensAfter ?? 0)) }}
+              </span>
+              <span v-else class="text-medium-emphasis">-</span>
+            </td>
             <td class="text-right font-weight-bold">
               <span :class="{ 'text-warning': !isPricingComplete(row) }">
                 {{ formatCost(row.listCostUSD, isPricingComplete(row)) }}
@@ -251,6 +269,7 @@ const totalRequests = computed(() => rows.value.reduce((s, r) => s + r.totalRequ
 const totalSuccess = computed(() => rows.value.reduce((s, r) => s + r.successCount, 0))
 const totalInputTokens = computed(() => rows.value.reduce((s, r) => s + r.inputTokens, 0))
 const totalListCostUSD = computed(() => rows.value.reduce((s, r) => s + r.listCostUSD, 0))
+const totalCompressionSaved = computed(() => rows.value.reduce((s, r) => s + ((r.originalTokensSaved ?? 0) - (r.compressedTokensAfter ?? 0)), 0))
 const pricingComplete = computed(() => rows.value.every(isPricingComplete))
 const successRate = computed(() => {
   if (totalRequests.value === 0) return '0.0'
@@ -308,6 +327,8 @@ function exportCSV() {
     t('costReport.csv.outputTokens'),
     t('costReport.csv.cacheCreationTokens'),
     t('costReport.csv.cacheReadTokens'),
+    t('costReport.csv.compressionOriginalTokens'),
+    t('costReport.csv.compressionSavedTokens'),
     t('costReport.csv.listCostUsd'),
     t('costReport.csv.pricingStatus'),
     t('costReport.csv.unpricedModels'),
@@ -319,7 +340,10 @@ function exportCSV() {
   const csvRows = rows.value.map(r => [
     r.groupKey, r.totalRequests, r.successCount,
     r.inputTokens, r.outputTokens, r.cacheCreationTokens,
-    r.cacheReadTokens, r.listCostUSD.toFixed(6),
+    r.cacheReadTokens,
+    (r.originalTokensSaved ?? 0),
+    ((r.originalTokensSaved ?? 0) - (r.compressedTokensAfter ?? 0)),
+    r.listCostUSD.toFixed(6),
     isPricingComplete(r) ? t('costReport.pricingStatus.complete') : t('costReport.pricingStatus.partial'),
     r.unpricedModels?.join(' | ') || '',
     r.zeroCostCount || 0,

@@ -1598,5 +1598,9 @@
   "subscription.keyMultiplier.markPublic": "Tandai sebagai kunci publik/temporer",
   "subscription.keyMultiplier.policyHint": "Kunci publik/temporer dapat habis atau kedaluwarsa dengan cepat; sistem akan kembali ke kunci stabil saat gagal.",
   "subscription.keyMultiplier.policyChip": "Publik/Temporer",
-  "subscription.keyMultiplier.effectiveCostClass": "Kelas biaya"
+  "subscription.keyMultiplier.effectiveCostClass": "Kelas biaya",
+  "costReport.col.compressionSavings": "Kompresi Drop",
+  "costReport.compressionsSavingHint": "Token yang dihemat oleh kompresi output tool sisi request",
+  "costReport.csv.compressionOriginalTokens": "compressionOriginalTokens",
+  "costReport.csv.compressionSavedTokens": "compressionSavedTokens"
 }

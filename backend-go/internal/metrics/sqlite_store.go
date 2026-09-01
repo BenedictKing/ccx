@@ -310,6 +310,29 @@ func initSchema(db *sql.DB) error {
 		log.Printf("[SQLite-Migration] schema 升级: v6 -> v7 (添加 consumption_policy 列)")
 	}
 
+	// v8: 记录请求侧压缩统计（tool_result RTK 模式节省的 token）。
+	var compressionVersion int
+	if err := db.QueryRow("PRAGMA user_version").Scan(&compressionVersion); err != nil {
+		return fmt.Errorf("读取 schema 版本失败: %w", err)
+	}
+	if compressionVersion < 8 {
+		migrations := []string{
+			"ALTER TABLE request_records ADD COLUMN compressed INTEGER NOT NULL DEFAULT 0",
+			"ALTER TABLE request_records ADD COLUMN original_tokens INTEGER DEFAULT 0",
+			"ALTER TABLE request_records ADD COLUMN compressed_tokens INTEGER DEFAULT 0",
+			"ALTER TABLE request_records ADD COLUMN compression_savings_percent REAL DEFAULT 0",
+			"ALTER TABLE request_records ADD COLUMN compression_technique TEXT NOT NULL DEFAULT ''",
+			"ALTER TABLE request_records ADD COLUMN compression_fallback_reason TEXT NOT NULL DEFAULT ''",
+			"PRAGMA user_version = 8",
+		}
+		for _, q := range migrations {
+			if _, err := db.Exec(q); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+				return fmt.Errorf("migration v7->v8 failed: %w", err)
+			}
+		}
+		log.Printf("[SQLite-Migration] schema 升级: v7 -> v8 (添加请求侧压缩统计列)")
+	}
+
 	return nil
 }
 
@@ -734,8 +757,9 @@ func (s *SQLiteStore) batchInsertRecords(records []PersistentRecord) error {
 		(metrics_key, base_url, key_mask, timestamp, success, failure_class,
 		 input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, api_type, model, proxy_key_mask,
 		 channel_uid, route_model, key_uid, subscription_uid, exchange_snapshot_version,
-		 list_cost_usd, effective_cost_usd, effective_cost_available, effective_cost_reason, consumption_policy)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 list_cost_usd, effective_cost_usd, effective_cost_available, effective_cost_reason, consumption_policy,
+			 compressed, original_tokens, compressed_tokens, compression_savings_percent, compression_technique, compression_fallback_reason)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return err
@@ -754,6 +778,7 @@ func (s *SQLiteStore) batchInsertRecords(records []PersistentRecord) error {
 			r.InputTokens, r.OutputTokens, r.CacheCreationTokens, r.CacheReadTokens, r.APIType, r.Model, r.ProxyKeyMask,
 			r.ChannelUID, r.RouteModel, r.KeyUID, r.SubscriptionUID, r.ExchangeSnapshotVersion,
 			r.ListCostUSD, r.EffectiveCostUSD, effectiveAvailable, r.EffectiveCostReason, r.ConsumptionPolicy,
+			r.Compressed, r.OriginalTokens, r.CompressedTokens, r.CompressionSavingsPct, r.CompressionTechnique, r.CompressionFallbackReason,
 		)
 		if err != nil {
 			return err
@@ -768,7 +793,8 @@ func (s *SQLiteStore) LoadRecords(since time.Time, apiType string) ([]Persistent
 		SELECT metrics_key, base_url, key_mask, timestamp, success, failure_class,
 		       input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, model, proxy_key_mask, channel_uid, route_model,
 		       key_uid, subscription_uid, exchange_snapshot_version, list_cost_usd, effective_cost_usd,
-		       effective_cost_available, effective_cost_reason, consumption_policy
+		       effective_cost_available, effective_cost_reason, consumption_policy,
+		       compressed, original_tokens, compressed_tokens, compression_savings_percent, compression_technique, compression_fallback_reason
 		FROM request_records
 		WHERE timestamp >= ? AND api_type = ?
 		ORDER BY timestamp ASC
@@ -792,6 +818,7 @@ func (s *SQLiteStore) LoadRecords(since time.Time, apiType string) ([]Persistent
 			&r.InputTokens, &r.OutputTokens, &r.CacheCreationTokens, &r.CacheReadTokens, &r.Model, &r.ProxyKeyMask,
 			&r.ChannelUID, &r.RouteModel, &keyUID, &subscriptionUID, &version, &listCost, &effectiveCost,
 			&effectiveAvailable, &effectiveReason, &consumptionPolicy,
+			&r.Compressed, &r.OriginalTokens, &r.CompressedTokens, &r.CompressionSavingsPct, &r.CompressionTechnique, &r.CompressionFallbackReason,
 		)
 		if err != nil {
 			return nil, err
@@ -1347,6 +1374,11 @@ type CostReportRow struct {
 	ConfiguredMultiplierCount int64 `json:"configuredMultiplierCount"`
 	SubscriptionCostCount     int64 `json:"subscriptionCostCount"`
 	UnpricedCostCount         int64 `json:"unpricedCostCount"`
+	// 请求侧压缩统计（RTK 模式）
+	CompressedRequests       int64 `json:"compressedRequests"`       // 执行了压缩的请求数
+	OriginalTokensSaved      int64 `json:"originalTokensSaved"`      // 压缩前 tool_result 估算 token 总数
+	CompressedTokensAfter    int64 `json:"compressedTokensAfter"`    // 压缩后 tool_result 估算 token 总数
+	CompressionFallbackCount int64 `json:"compressionFallbackCount"` // 压缩失败/回退的请求数
 }
 
 // QueryCostReport 按指定维度聚合成本数据。
@@ -1377,7 +1409,11 @@ func (s *SQLiteStore) QueryCostReport(apiType string, since time.Time, groupBy s
 			SUM(CASE WHEN effective_cost_available = 1 AND effective_cost_reason = 'manual_zero_cost' THEN 1 ELSE 0 END),
 			SUM(CASE WHEN effective_cost_available = 1 AND effective_cost_reason = 'configured_group_multiplier' THEN 1 ELSE 0 END),
 			SUM(CASE WHEN effective_cost_available = 1 AND effective_cost_reason LIKE 'subscription_%%' THEN 1 ELSE 0 END),
-			SUM(CASE WHEN effective_cost_available = 1 AND effective_cost_reason NOT IN ('manual_zero_cost', 'configured_group_multiplier') AND effective_cost_reason NOT LIKE 'subscription_%%' THEN 1 ELSE 0 END)
+			SUM(CASE WHEN effective_cost_available = 1 AND effective_cost_reason NOT IN ('manual_zero_cost', 'configured_group_multiplier') AND effective_cost_reason NOT LIKE 'subscription_%%' THEN 1 ELSE 0 END),
+			SUM(CASE WHEN compressed = 1 THEN 1 ELSE 0 END),
+			COALESCE(SUM(CASE WHEN compressed = 1 THEN original_tokens ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN compressed = 1 THEN compressed_tokens ELSE 0 END), 0),
+			SUM(CASE WHEN compression_fallback_reason <> '' THEN 1 ELSE 0 END)
 		FROM request_records
 		WHERE api_type = ? AND timestamp >= ?
 		GROUP BY group_key HAVING group_key <> '' ORDER BY COUNT(*) DESC
@@ -1393,7 +1429,8 @@ func (s *SQLiteStore) QueryCostReport(apiType string, since time.Time, groupBy s
 		if err := rows.Scan(&row.GroupKey, &row.TotalRequests, &row.SuccessCount,
 			&row.InputTokens, &row.OutputTokens, &row.CacheCreationTokens, &row.CacheReadTokens,
 			&row.ListCostUSD, &row.EffectiveCostUSD, &row.EffectivePricedCount, &row.EffectiveUnavailableCount,
-			&row.ZeroCostCount, &row.ConfiguredMultiplierCount, &row.SubscriptionCostCount, &row.UnpricedCostCount); err != nil {
+			&row.ZeroCostCount, &row.ConfiguredMultiplierCount, &row.SubscriptionCostCount, &row.UnpricedCostCount,
+			&row.CompressedRequests, &row.OriginalTokensSaved, &row.CompressedTokensAfter, &row.CompressionFallbackCount); err != nil {
 			return nil, fmt.Errorf("扫描成本报表结果失败: %w", err)
 		}
 		results = append(results, row)

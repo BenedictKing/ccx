@@ -1598,5 +1598,9 @@
   "subscription.keyMultiplier.markPublic": "Mark as public/temp key",
   "subscription.keyMultiplier.policyHint": "Public/temp keys may be exhausted or expire quickly; the system will fall back to stable keys on failure.",
   "subscription.keyMultiplier.policyChip": "Public/Temp",
-  "subscription.keyMultiplier.effectiveCostClass": "Cost class"
+  "subscription.keyMultiplier.effectiveCostClass": "Cost class",
+  "costReport.col.compressionSavings": "Compression Saved",
+  "costReport.compressionsSavingHint": "Tokens saved by request-side tool output compression",
+  "costReport.csv.compressionOriginalTokens": "compressionOriginalTokens",
+  "costReport.csv.compressionSavedTokens": "compressionSavedTokens"
 }

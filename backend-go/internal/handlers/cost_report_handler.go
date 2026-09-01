@@ -36,6 +36,12 @@ type costReportRow struct {
 	ConfiguredMultiplierCount int64 `json:"configuredMultiplierCount"`
 	SubscriptionCostCount     int64 `json:"subscriptionCostCount"`
 	UnpricedCostCount         int64 `json:"unpricedCostCount"`
+	// 请求侧压缩统计（RTK 模式）
+	CompressedRequests       int64   `json:"compressedRequests"`
+	OriginalTokensSaved      int64   `json:"originalTokensSaved"`
+	CompressedTokensAfter    int64   `json:"compressedTokensAfter"`
+	CompressionFallbackCount int64   `json:"compressionFallbackCount"`
+	CompressionSavingsPct    float64 `json:"compressionSavingsPct"`
 }
 
 // GetCostReport 返回按维度聚合的成本报表。
@@ -83,6 +89,13 @@ func GetCostReport(deps *CostReportDeps) gin.HandlerFunc {
 				ConfiguredMultiplierCount: row.ConfiguredMultiplierCount,
 				SubscriptionCostCount:     row.SubscriptionCostCount,
 				UnpricedCostCount:         row.UnpricedCostCount,
+				CompressedRequests:        row.CompressedRequests,
+				OriginalTokensSaved:       row.OriginalTokensSaved,
+				CompressedTokensAfter:     row.CompressedTokensAfter,
+				CompressionFallbackCount:  row.CompressionFallbackCount,
+			}
+			if row.OriginalTokensSaved > 0 {
+				cr.CompressionSavingsPct = float64(row.OriginalTokensSaved-row.CompressedTokensAfter) / float64(row.OriginalTokensSaved) * 100.0
 			}
 			modelBreakdowns, breakdownErr := store.QueryModelCostBreakdown(apiType, since, groupBy, row.GroupKey)
 			if breakdownErr != nil {
