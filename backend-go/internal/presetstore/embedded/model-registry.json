@@ -2526,12 +2526,12 @@
           "rawValue": 56.6,
           "uncertainty": 0,
           "cohortPercentile": 0.971,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/claude-fable-5",
-          "capturedAt": "2026-08-28"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -2542,12 +2542,12 @@
           "rawValue": 76.5,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/claude-fable-5",
-          "capturedAt": "2026-08-28"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -2558,12 +2558,12 @@
           "rawValue": 62.1,
           "uncertainty": 0,
           "cohortPercentile": 0.997,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/claude-fable-5",
-          "capturedAt": "2026-08-28"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "deepswe",
@@ -2652,12 +2652,12 @@
         "https://benchlm.ai/models/claude-fable",
         "https://deepswe.datacurve.ai/"
       ],
-      "verifiedAt": "2026-08-31",
+      "verifiedAt": "2026-09-01",
       "lane": "provisional",
-      "sharedResults": 624,
+      "sharedResults": 625,
       "comparableCategories": 4,
       "totalCategories": 8,
-      "overallScore": 83.15,
+      "overallScore": 83.32,
       "categoryScores": {
         "agentic": 92.8,
         "coding": 83,
@@ -2670,7 +2670,7 @@
         "(?:^|[-/])claude-haiku-4.5(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)"
       ],
       "canonicalModel": "claude-haiku-4.5",
-      "verifiedAt": "2026-08-31",
+      "verifiedAt": "2026-09-01",
       "lane": "provisional",
       "sources": [
         "https://benchlm.ai/methodology",
@@ -2698,7 +2698,7 @@
           "capturedAt": "2026-08-24"
         }
       ],
-      "overallScore": 57.38,
+      "overallScore": 57.8,
       "categoryScores": {
         "coding": 48.1,
         "math": 29
@@ -2709,7 +2709,7 @@
         "(?:^|[-/])claude-mythos-5(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)"
       ],
       "canonicalModel": "claude-mythos-5",
-      "verifiedAt": "2026-08-31",
+      "verifiedAt": "2026-09-01",
       "lane": "provisional",
       "sources": [
         "https://benchlm.ai/methodology",
@@ -2718,7 +2718,7 @@
       "sharedResults": 14,
       "comparableCategories": 4,
       "totalCategories": 8,
-      "overallScore": 83.4,
+      "overallScore": 83.57,
       "categoryScores": {
         "agentic": 97.7,
         "coding": 83,
@@ -2731,7 +2731,7 @@
         "(?:^|[-/])claude-opus-5(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)"
       ],
       "canonicalModel": "claude-opus-5",
-      "verifiedAt": "2026-08-31",
+      "verifiedAt": "2026-09-01",
       "lane": "provisional",
       "sources": [
         "https://artificialanalysis.ai/models/claude-opus-5-xhigh",
@@ -2739,7 +2739,7 @@
         "https://benchlm.ai/models/claude-opus-5",
         "https://deepswe.datacurve.ai/"
       ],
-      "sharedResults": 624,
+      "sharedResults": 625,
       "comparableCategories": 4,
       "totalCategories": 8,
       "benchmarkEvidence": [
@@ -2752,12 +2752,12 @@
           "rawValue": 59.2,
           "uncertainty": 0,
           "cohortPercentile": 0.986,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/claude-opus-5",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -2768,12 +2768,12 @@
           "rawValue": 56.1,
           "uncertainty": 0,
           "cohortPercentile": 0.968,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "high",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/claude-opus-5-high",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -2783,13 +2783,13 @@
           "metric": "agentic_index",
           "rawValue": 42.1,
           "uncertainty": 0,
-          "cohortPercentile": 0.883,
-          "cohortSize": 624,
+          "cohortPercentile": 0.882,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "low",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/claude-opus-5-low",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -2799,13 +2799,13 @@
           "metric": "agentic_index",
           "rawValue": 50.4,
           "uncertainty": 0,
-          "cohortPercentile": 0.929,
-          "cohortSize": 624,
+          "cohortPercentile": 0.93,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "medium",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/claude-opus-5-medium",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -2816,12 +2816,12 @@
           "rawValue": 58.4,
           "uncertainty": 0,
           "cohortPercentile": 0.981,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "xhigh",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/claude-opus-5-xhigh",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -2832,12 +2832,12 @@
           "rawValue": 78,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/claude-opus-5",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -2848,12 +2848,12 @@
           "rawValue": 76.5,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "high",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/claude-opus-5-high",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -2864,12 +2864,12 @@
           "rawValue": 66.9,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "low",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/claude-opus-5-low",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -2880,12 +2880,12 @@
           "rawValue": 74.3,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "medium",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/claude-opus-5-medium",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -2896,12 +2896,12 @@
           "rawValue": 77,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "xhigh",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/claude-opus-5-xhigh",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -2912,12 +2912,12 @@
           "rawValue": 63.1,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/claude-opus-5",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -2928,12 +2928,12 @@
           "rawValue": 61.5,
           "uncertainty": 0,
           "cohortPercentile": 0.995,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "high",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/claude-opus-5-high",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -2944,12 +2944,12 @@
           "rawValue": 52.5,
           "uncertainty": 0,
           "cohortPercentile": 0.947,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "low",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/claude-opus-5-low",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -2960,12 +2960,12 @@
           "rawValue": 58.6,
           "uncertainty": 0,
           "cohortPercentile": 0.982,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "medium",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/claude-opus-5-medium",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -2976,12 +2976,12 @@
           "rawValue": 62.5,
           "uncertainty": 0,
           "cohortPercentile": 0.998,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "xhigh",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/claude-opus-5-xhigh",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "deepswe",
@@ -3064,7 +3064,7 @@
           "capturedAt": "2026-08-26"
         }
       ],
-      "overallScore": 83.06,
+      "overallScore": 83.24,
       "categoryScores": {
         "agentic": 84.7,
         "coding": 83,
@@ -3077,7 +3077,7 @@
         "(?:^|[-/])claude-opus-4[.-]8(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)"
       ],
       "canonicalModel": "claude-opus-4-8",
-      "overallScore": 76.6,
+      "overallScore": 76.75,
       "categoryScores": {
         "agentic": 82.8,
         "coding": 68.8,
@@ -3095,12 +3095,12 @@
           "rawValue": 49.4,
           "uncertainty": 0,
           "cohortPercentile": 0.926,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/claude-opus-4-8",
-          "capturedAt": "2026-08-28"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -3111,12 +3111,12 @@
           "rawValue": 74.3,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/claude-opus-4-8",
-          "capturedAt": "2026-08-28"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -3127,12 +3127,12 @@
           "rawValue": 57.3,
           "uncertainty": 0,
           "cohortPercentile": 0.976,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/claude-opus-4-8",
-          "capturedAt": "2026-08-28"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "deepswe",
@@ -3221,9 +3221,9 @@
         "https://benchlm.ai/models/claude-opus-4-8",
         "https://deepswe.datacurve.ai/"
       ],
-      "verifiedAt": "2026-08-31",
+      "verifiedAt": "2026-09-01",
       "lane": "provisional",
-      "sharedResults": 624,
+      "sharedResults": 625,
       "comparableCategories": 5,
       "totalCategories": 8
     },
@@ -3232,7 +3232,7 @@
         "(?:^|[-/])claude-opus-4-7(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)"
       ],
       "canonicalModel": "claude-opus-4-7",
-      "verifiedAt": "2026-08-31",
+      "verifiedAt": "2026-09-01",
       "lane": "provisional",
       "sources": [
         "https://artificialanalysis.ai/models/claude-opus-4-7-non-reasoning",
@@ -3240,10 +3240,10 @@
         "https://benchlm.ai/models/claude-opus-4-7",
         "https://benchlm.ai/models/claude-opus-4-7-adaptive"
       ],
-      "sharedResults": 624,
+      "sharedResults": 625,
       "comparableCategories": 5,
       "totalCategories": 8,
-      "overallScore": 72.58,
+      "overallScore": 72.72,
       "categoryScores": {
         "agentic": 70.1,
         "coding": 63.9,
@@ -3261,12 +3261,12 @@
           "rawValue": 46.3,
           "uncertainty": 0,
           "cohortPercentile": 0.912,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/claude-opus-4-7",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -3277,12 +3277,12 @@
           "rawValue": 73.6,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/claude-opus-4-7",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -3292,13 +3292,13 @@
           "metric": "intelligence_index",
           "rawValue": 43.9,
           "uncertainty": 0,
-          "cohortPercentile": 0.897,
-          "cohortSize": 624,
+          "cohortPercentile": 0.896,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "non_reasoning",
           "sourceUrl": "https://artificialanalysis.ai/models/claude-opus-4-7-non-reasoning",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -3309,12 +3309,12 @@
           "rawValue": 55,
           "uncertainty": 0,
           "cohortPercentile": 0.96,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/claude-opus-4-7",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         }
       ]
     },
@@ -3323,7 +3323,7 @@
         "(?:^|[-/])claude-opus-4-6(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)"
       ],
       "canonicalModel": "claude-opus-4-6",
-      "verifiedAt": "2026-08-31",
+      "verifiedAt": "2026-09-01",
       "lane": "provisional",
       "sources": [
         "https://artificialanalysis.ai/models/claude-opus-4-6",
@@ -3331,10 +3331,10 @@
         "https://benchlm.ai/models/claude-opus-4-6",
         "https://benchlm.ai/models/claude-opus-4-6-thinking"
       ],
-      "sharedResults": 624,
+      "sharedResults": 625,
       "comparableCategories": 5,
       "totalCategories": 8,
-      "overallScore": 68.26,
+      "overallScore": 68.43,
       "categoryScores": {
         "agentic": 65.3,
         "coding": 63.2,
@@ -3351,13 +3351,13 @@
           "metric": "intelligence_index",
           "rawValue": 38.8,
           "uncertainty": 0,
-          "cohortPercentile": 0.841,
-          "cohortSize": 624,
+          "cohortPercentile": 0.84,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/claude-opus-4-6",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -3368,12 +3368,12 @@
           "rawValue": 44.9,
           "uncertainty": 0,
           "cohortPercentile": 0.904,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/claude-opus-4-6-adaptive",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         }
       ]
     },
@@ -3392,12 +3392,12 @@
           "rawValue": 49.7,
           "uncertainty": 0,
           "cohortPercentile": 0.926,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/claude-sonnet-5",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -3407,13 +3407,13 @@
           "metric": "agentic_index",
           "rawValue": 34.2,
           "uncertainty": 0,
-          "cohortPercentile": 0.774,
-          "cohortSize": 624,
+          "cohortPercentile": 0.773,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "non_reasoning",
           "sourceUrl": "https://artificialanalysis.ai/models/claude-sonnet-5-non-reasoning",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -3424,12 +3424,12 @@
           "rawValue": 71.5,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/claude-sonnet-5",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -3440,12 +3440,12 @@
           "rawValue": 66.4,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "non_reasoning",
           "sourceUrl": "https://artificialanalysis.ai/models/claude-sonnet-5-non-reasoning",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -3456,12 +3456,12 @@
           "rawValue": 55.3,
           "uncertainty": 0,
           "cohortPercentile": 0.962,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/claude-sonnet-5",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -3471,13 +3471,29 @@
           "metric": "intelligence_index",
           "rawValue": 42.6,
           "uncertainty": 0,
-          "cohortPercentile": 0.888,
-          "cohortSize": 624,
+          "cohortPercentile": 0.886,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "non_reasoning",
           "sourceUrl": "https://artificialanalysis.ai/models/claude-sonnet-5-non-reasoning",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
+        },
+        {
+          "benchmark": "codexradar",
+          "benchmarkVersion": "v1",
+          "sourceModel": "claude-sonnet-5",
+          "domain": "coding",
+          "metric": "pass_at_1",
+          "rawValue": 0.167,
+          "uncertainty": 0,
+          "cohortPercentile": 0.077,
+          "taskCount": 6,
+          "cohortSize": 13,
+          "effort": "low",
+          "selectionBasis": "per_effort",
+          "sourceUrl": "https://deng.codexradar.com/",
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "deepswe",
@@ -3564,14 +3580,15 @@
         "https://artificialanalysis.ai/models/claude-sonnet-5",
         "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/claude-sonnet-5",
-        "https://deepswe.datacurve.ai/"
+        "https://deepswe.datacurve.ai/",
+        "https://deng.codexradar.com/"
       ],
-      "verifiedAt": "2026-08-31",
+      "verifiedAt": "2026-09-01",
       "lane": "provisional",
-      "sharedResults": 624,
+      "sharedResults": 625,
       "comparableCategories": 4,
       "totalCategories": 8,
-      "overallScore": 65.02,
+      "overallScore": 65.21,
       "categoryScores": {
         "agentic": 85.8,
         "coding": 60.7,
@@ -3593,13 +3610,13 @@
           "metric": "intelligence_index",
           "rawValue": 36.8,
           "uncertainty": 0,
-          "cohortPercentile": 0.816,
-          "cohortSize": 624,
+          "cohortPercentile": 0.814,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/claude-sonnet-4-6",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -3609,13 +3626,13 @@
           "metric": "intelligence_index",
           "rawValue": 35.1,
           "uncertainty": 0,
-          "cohortPercentile": 0.796,
-          "cohortSize": 624,
+          "cohortPercentile": 0.795,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "non_reasoning",
           "sourceUrl": "https://artificialanalysis.ai/models/claude-sonnet-4-6-non-reasoning-low-effort",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "deepswe",
@@ -3640,12 +3657,12 @@
         "https://benchlm.ai/models/claude-sonnet-4-6",
         "https://deepswe.datacurve.ai/"
       ],
-      "verifiedAt": "2026-08-31",
+      "verifiedAt": "2026-09-01",
       "lane": "provisional",
-      "sharedResults": 624,
+      "sharedResults": 625,
       "comparableCategories": 5,
       "totalCategories": 8,
-      "overallScore": 64.77,
+      "overallScore": 64.96,
       "categoryScores": {
         "agentic": 55,
         "coding": 63.2,
@@ -3660,7 +3677,7 @@
         "(?:^|[-/])deepseek-v4-flash(?=$|@)"
       ],
       "canonicalModel": "deepseek-v4-flash",
-      "verifiedAt": "2026-08-31",
+      "verifiedAt": "2026-09-01",
       "lane": "provisional",
       "sources": [
         "https://artificialanalysis.ai/models/deepseek-v4-flash-non-reasoning",
@@ -3669,7 +3686,7 @@
         "https://deepswe.datacurve.ai/",
         "https://deng.codexradar.com/"
       ],
-      "sharedResults": 624,
+      "sharedResults": 625,
       "comparableCategories": 4,
       "totalCategories": 8,
       "categoryScores": {
@@ -3688,12 +3705,12 @@
           "rawValue": 48.4,
           "uncertainty": 0,
           "cohortPercentile": 0.925,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/deepseek-v4-flash",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -3704,12 +3721,12 @@
           "rawValue": 69.1,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/deepseek-v4-flash",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -3719,13 +3736,13 @@
           "metric": "intelligence_index",
           "rawValue": 29.3,
           "uncertainty": 0,
-          "cohortPercentile": 0.71,
-          "cohortSize": 624,
+          "cohortPercentile": 0.709,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "non_reasoning",
           "sourceUrl": "https://artificialanalysis.ai/models/deepseek-v4-flash-non-reasoning",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -3736,12 +3753,12 @@
           "rawValue": 51.8,
           "uncertainty": 0,
           "cohortPercentile": 0.941,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/deepseek-v4-flash",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "codexradar",
@@ -3751,13 +3768,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.424,
           "uncertainty": 0,
-          "cohortPercentile": 0,
+          "cohortPercentile": 0.077,
           "taskCount": 290,
-          "cohortSize": 12,
+          "cohortSize": 13,
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-31",
+          "capturedAt": "2026-09-01",
           "costUsd": 0.12
         },
         {
@@ -3766,15 +3783,15 @@
           "sourceModel": "deepseek-v4-flash",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.563,
+          "rawValue": 0.567,
           "uncertainty": 0,
-          "cohortPercentile": 0.167,
+          "cohortPercentile": 0.231,
           "taskCount": 300,
-          "cohortSize": 12,
+          "cohortSize": 13,
           "effort": "max",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-31",
+          "capturedAt": "2026-09-01",
           "costUsd": 0.16
         },
         {
@@ -3802,7 +3819,7 @@
         "(?:^|[-/])deepseek-v4-pro(?=$|@)"
       ],
       "canonicalModel": "deepseek-v4-pro",
-      "verifiedAt": "2026-08-31",
+      "verifiedAt": "2026-09-01",
       "lane": "provisional",
       "sources": [
         "https://artificialanalysis.ai/models/deepseek-v4-pro",
@@ -3811,10 +3828,10 @@
         "https://deepswe.datacurve.ai/",
         "https://deng.codexradar.com/"
       ],
-      "sharedResults": 624,
+      "sharedResults": 625,
       "comparableCategories": 4,
       "totalCategories": 8,
-      "overallScore": 61.02,
+      "overallScore": 61.81,
       "categoryScores": {
         "agentic": 67.7,
         "coding": 51.9,
@@ -3831,12 +3848,12 @@
           "rawValue": 49.6,
           "uncertainty": 0,
           "cohortPercentile": 0.926,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/deepseek-v4-pro",
-          "capturedAt": "2026-08-28"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -3847,12 +3864,12 @@
           "rawValue": 68.8,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/deepseek-v4-pro",
-          "capturedAt": "2026-08-28"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -3863,12 +3880,12 @@
           "rawValue": 53.2,
           "uncertainty": 0,
           "cohortPercentile": 0.955,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/deepseek-v4-pro",
-          "capturedAt": "2026-08-28"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "codexradar",
@@ -3878,13 +3895,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.513,
           "uncertainty": 0,
-          "cohortPercentile": 0,
+          "cohortPercentile": 0.077,
           "taskCount": 193,
-          "cohortSize": 12,
+          "cohortSize": 13,
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-31",
+          "capturedAt": "2026-09-01",
           "costUsd": 0.26
         },
         {
@@ -3895,13 +3912,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.553,
           "uncertainty": 0,
-          "cohortPercentile": 0.083,
+          "cohortPercentile": 0.154,
           "taskCount": 215,
-          "cohortSize": 12,
+          "cohortSize": 13,
           "effort": "max",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-31",
+          "capturedAt": "2026-09-01",
           "costUsd": 0.32
         },
         {
@@ -3927,7 +3944,7 @@
         "(?:^|[-/])gemini-3.7-flash(?=$|@)"
       ],
       "canonicalModel": "gemini-3.7-flash",
-      "verifiedAt": "2026-08-31",
+      "verifiedAt": "2026-09-01",
       "lane": "provisional",
       "sources": [
         "https://artificialanalysis.ai/models/gemini-3-7-flash",
@@ -3936,7 +3953,7 @@
         "https://deepswe.datacurve.ai/",
         "https://deng.codexradar.com/"
       ],
-      "sharedResults": 624,
+      "sharedResults": 625,
       "comparableCategories": 4,
       "totalCategories": 8,
       "benchmarkEvidence": [
@@ -3948,13 +3965,13 @@
           "metric": "agentic_index",
           "rawValue": 45.1,
           "uncertainty": 0,
-          "cohortPercentile": 0.905,
-          "cohortSize": 624,
+          "cohortPercentile": 0.906,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/gemini-3-7-flash",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -3964,13 +3981,13 @@
           "metric": "agentic_index",
           "rawValue": 41.6,
           "uncertainty": 0,
-          "cohortPercentile": 0.877,
-          "cohortSize": 624,
+          "cohortPercentile": 0.875,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "low",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gemini-3-7-flash-low",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -3980,13 +3997,13 @@
           "metric": "agentic_index",
           "rawValue": 45.1,
           "uncertainty": 0,
-          "cohortPercentile": 0.905,
-          "cohortSize": 624,
+          "cohortPercentile": 0.906,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "medium",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gemini-3-7-flash-medium",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -3997,12 +4014,12 @@
           "rawValue": 76.1,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/gemini-3-7-flash",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -4013,12 +4030,12 @@
           "rawValue": 71,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "low",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gemini-3-7-flash-low",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -4029,12 +4046,12 @@
           "rawValue": 71.5,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "medium",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gemini-3-7-flash-medium",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -4045,12 +4062,12 @@
           "rawValue": 56,
           "uncertainty": 0,
           "cohortPercentile": 0.968,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/gemini-3-7-flash",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -4061,12 +4078,12 @@
           "rawValue": 50.9,
           "uncertainty": 0,
           "cohortPercentile": 0.933,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "low",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gemini-3-7-flash-low",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -4077,12 +4094,12 @@
           "rawValue": 53.4,
           "uncertainty": 0,
           "cohortPercentile": 0.957,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "medium",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gemini-3-7-flash-medium",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "codexradar",
@@ -4092,13 +4109,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.605,
           "uncertainty": 0,
-          "cohortPercentile": 0.417,
+          "cohortPercentile": 0.462,
           "taskCount": 86,
-          "cohortSize": 12,
+          "cohortSize": 13,
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "codexradar",
@@ -4108,13 +4125,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.481,
           "uncertainty": 0,
-          "cohortPercentile": 0,
+          "cohortPercentile": 0.077,
           "taskCount": 77,
-          "cohortSize": 12,
+          "cohortSize": 13,
           "effort": "low",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "codexradar",
@@ -4124,13 +4141,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.59,
           "uncertainty": 0,
-          "cohortPercentile": 0.167,
+          "cohortPercentile": 0.231,
           "taskCount": 83,
-          "cohortSize": 12,
+          "cohortSize": 13,
           "effort": "medium",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "deepswe",
@@ -4184,17 +4201,17 @@
       "categoryScores": {
         "agentic": 84.8,
         "coding": 58.7,
-        "multimodal": 69.9,
+        "multimodal": 70.2,
         "knowledge": 66.8
       },
-      "overallScore": 61.4
+      "overallScore": 61.85
     },
     {
       "patterns": [
         "(?:^|[-/])gemini-3.6-flash(?=$|@)"
       ],
       "canonicalModel": "gemini-3.6-flash",
-      "verifiedAt": "2026-08-31",
+      "verifiedAt": "2026-09-01",
       "lane": "provisional",
       "sources": [
         "https://artificialanalysis.ai/models/gemini-3-6-flash",
@@ -4202,7 +4219,7 @@
         "https://benchlm.ai/models/gemini-3-6-flash",
         "https://deepswe.datacurve.ai/"
       ],
-      "sharedResults": 624,
+      "sharedResults": 625,
       "comparableCategories": 3,
       "totalCategories": 8,
       "benchmarkEvidence": [
@@ -4214,13 +4231,13 @@
           "metric": "agentic_index",
           "rawValue": 40.5,
           "uncertainty": 0,
-          "cohortPercentile": 0.859,
-          "cohortSize": 624,
+          "cohortPercentile": 0.858,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/gemini-3-6-flash",
-          "capturedAt": "2026-08-28"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -4231,12 +4248,12 @@
           "rawValue": 69.2,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/gemini-3-6-flash",
-          "capturedAt": "2026-08-28"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -4247,12 +4264,12 @@
           "rawValue": 51.6,
           "uncertainty": 0,
           "cohortPercentile": 0.938,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/gemini-3-6-flash",
-          "capturedAt": "2026-08-28"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "deepswe",
@@ -4271,10 +4288,10 @@
           "capturedAt": "2026-08-26"
         }
       ],
-      "overallScore": 75.66,
+      "overallScore": 75.84,
       "categoryScores": {
         "agentic": 83.1,
-        "coding": 60.1,
+        "coding": 60.2,
         "knowledge": 69.1
       }
     },
@@ -4283,7 +4300,7 @@
         "(?:^|[-/])gemini-3.5-flash(?=$|@)"
       ],
       "canonicalModel": "gemini-3.5-flash",
-      "verifiedAt": "2026-08-31",
+      "verifiedAt": "2026-09-01",
       "lane": "provisional",
       "sources": [
         "https://artificialanalysis.ai/models/gemini-3-5-flash",
@@ -4291,7 +4308,7 @@
         "https://benchlm.ai/models/gemini-3-5-flash",
         "https://deepswe.datacurve.ai/"
       ],
-      "sharedResults": 624,
+      "sharedResults": 625,
       "comparableCategories": 5,
       "totalCategories": 8,
       "benchmarkEvidence": [
@@ -4303,13 +4320,13 @@
           "metric": "agentic_index",
           "rawValue": 39.7,
           "uncertainty": 0,
-          "cohortPercentile": 0.854,
-          "cohortSize": 624,
+          "cohortPercentile": 0.853,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/gemini-3-5-flash",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -4320,12 +4337,12 @@
           "rawValue": 70.1,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/gemini-3-5-flash",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -4336,12 +4353,12 @@
           "rawValue": 52,
           "uncertainty": 0,
           "cohortPercentile": 0.944,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/gemini-3-5-flash",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -4352,12 +4369,12 @@
           "rawValue": 46.7,
           "uncertainty": 0,
           "cohortPercentile": 0.915,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "medium",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gemini-3-5-flash-medium",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -4367,13 +4384,13 @@
           "metric": "intelligence_index",
           "rawValue": 35.8,
           "uncertainty": 0,
-          "cohortPercentile": 0.808,
-          "cohortSize": 624,
+          "cohortPercentile": 0.806,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "minimal",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gemini-3-5-flash-minimal",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "deepswe",
@@ -4392,7 +4409,7 @@
           "capturedAt": "2026-08-26"
         }
       ],
-      "overallScore": 64.73,
+      "overallScore": 64.95,
       "categoryScores": {
         "agentic": 77.9,
         "coding": 54.4,
@@ -4406,21 +4423,21 @@
         "(?:^|[-/])gemini-3.5-flash-lite(?=$|@)"
       ],
       "canonicalModel": "gemini-3.5-flash-lite",
-      "verifiedAt": "2026-08-31",
+      "verifiedAt": "2026-09-01",
       "lane": "provisional",
       "sources": [
         "https://artificialanalysis.ai/models/gemini-3-5-flash-lite",
         "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/gemini-3-5-flash-lite"
       ],
-      "sharedResults": 624,
+      "sharedResults": 625,
       "comparableCategories": 4,
       "totalCategories": 8,
-      "overallScore": 65.5,
+      "overallScore": 65.67,
       "categoryScores": {
         "agentic": 52.9,
         "coding": 35.7,
-        "multimodal": 53.7,
+        "multimodal": 53.8,
         "knowledge": 60.9
       },
       "benchmarkEvidence": [
@@ -4432,13 +4449,13 @@
           "metric": "agentic_index",
           "rawValue": 27.2,
           "uncertainty": 0,
-          "cohortPercentile": 0.689,
-          "cohortSize": 624,
+          "cohortPercentile": 0.688,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/gemini-3-5-flash-lite",
-          "capturedAt": "2026-08-28"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -4449,12 +4466,12 @@
           "rawValue": 49.3,
           "uncertainty": 0,
           "cohortPercentile": 0.926,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/gemini-3-5-flash-lite",
-          "capturedAt": "2026-08-28"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -4464,13 +4481,13 @@
           "metric": "intelligence_index",
           "rawValue": 37.4,
           "uncertainty": 0,
-          "cohortPercentile": 0.827,
-          "cohortSize": 624,
+          "cohortPercentile": 0.826,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/gemini-3-5-flash-lite",
-          "capturedAt": "2026-08-28"
+          "capturedAt": "2026-09-01"
         }
       ]
     },
@@ -4479,7 +4496,7 @@
         "(?:^|[-/])gemini-3.1-pro(?=$|@)"
       ],
       "canonicalModel": "gemini-3.1-pro",
-      "verifiedAt": "2026-08-31",
+      "verifiedAt": "2026-09-01",
       "lane": "provisional",
       "sources": [
         "https://benchlm.ai/methodology",
@@ -4507,7 +4524,7 @@
           "capturedAt": "2026-08-26"
         }
       ],
-      "overallScore": 56.25,
+      "overallScore": 56.67,
       "categoryScores": {
         "agentic": 67.5,
         "coding": 59.4,
@@ -4521,7 +4538,7 @@
         "(?:^|[-/])gemini-3-flash(?=$|@)"
       ],
       "canonicalModel": "gemini-3-flash",
-      "verifiedAt": "2026-08-31",
+      "verifiedAt": "2026-09-01",
       "lane": "provisional",
       "sources": [
         "https://artificialanalysis.ai/models/gemini-3-flash",
@@ -4529,7 +4546,7 @@
         "https://benchlm.ai/models/gemini-3-flash",
         "https://deepswe.datacurve.ai/"
       ],
-      "sharedResults": 624,
+      "sharedResults": 625,
       "comparableCategories": 2,
       "totalCategories": 8,
       "benchmarkEvidence": [
@@ -4541,13 +4558,13 @@
           "metric": "intelligence_index",
           "rawValue": 27.9,
           "uncertainty": 0,
-          "cohortPercentile": 0.694,
-          "cohortSize": 624,
+          "cohortPercentile": 0.693,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/gemini-3-flash",
-          "capturedAt": "2026-08-28"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "deepswe",
@@ -4566,7 +4583,7 @@
           "capturedAt": "2026-08-24"
         }
       ],
-      "overallScore": 60.09,
+      "overallScore": 60.26,
       "categoryScores": {
         "math": 50.3
       }
@@ -4576,7 +4593,7 @@
         "(?:^|[-/])glm-5\\.3(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)"
       ],
       "canonicalModel": "glm-5.3",
-      "verifiedAt": "2026-08-31",
+      "verifiedAt": "2026-09-01",
       "lane": "provisional",
       "sources": [
         "https://artificialanalysis.ai/models/glm-5-3",
@@ -4585,7 +4602,7 @@
         "https://deepswe.datacurve.ai/",
         "https://deng.codexradar.com/"
       ],
-      "sharedResults": 624,
+      "sharedResults": 625,
       "comparableCategories": 3,
       "totalCategories": 8,
       "benchmarkEvidence": [
@@ -4598,12 +4615,12 @@
           "rawValue": 59.1,
           "uncertainty": 0,
           "cohortPercentile": 0.986,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/glm-5-3",
-          "capturedAt": "2026-08-28"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -4614,12 +4631,12 @@
           "rawValue": 74.8,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/glm-5-3",
-          "capturedAt": "2026-08-28"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -4630,12 +4647,12 @@
           "rawValue": 59.5,
           "uncertainty": 0,
           "cohortPercentile": 0.987,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/glm-5-3",
-          "capturedAt": "2026-08-28"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "codexradar",
@@ -4645,13 +4662,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.589,
           "uncertainty": 0,
-          "cohortPercentile": 0.167,
+          "cohortPercentile": 0.231,
           "taskCount": 112,
-          "cohortSize": 12,
+          "cohortSize": 13,
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-31",
+          "capturedAt": "2026-09-01",
           "costUsd": 1.61
         },
         {
@@ -4662,13 +4679,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.491,
           "uncertainty": 0,
-          "cohortPercentile": 0,
+          "cohortPercentile": 0.077,
           "taskCount": 112,
-          "cohortSize": 12,
+          "cohortSize": 13,
           "effort": "low",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-31",
+          "capturedAt": "2026-09-01",
           "costUsd": 0.15
         },
         {
@@ -4679,13 +4696,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.604,
           "uncertainty": 0,
-          "cohortPercentile": 0.333,
+          "cohortPercentile": 0.385,
           "taskCount": 111,
-          "cohortSize": 12,
+          "cohortSize": 13,
           "effort": "max",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-31",
+          "capturedAt": "2026-09-01",
           "costUsd": 1.75
         },
         {
@@ -4705,7 +4722,7 @@
           "capturedAt": "2026-08-26"
         }
       ],
-      "overallScore": 62.84,
+      "overallScore": 63.29,
       "categoryScores": {
         "agentic": 85.4,
         "coding": 59.3,
@@ -4717,7 +4734,7 @@
         "(?:^|[-/])glm-5\\.3-flash(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)"
       ],
       "canonicalModel": "glm-5.3-flash",
-      "verifiedAt": "2026-08-31",
+      "verifiedAt": "2026-09-01",
       "lane": "provisional",
       "sources": [
         "https://benchlm.ai/methodology",
@@ -4726,7 +4743,7 @@
         "https://deng.codexradar.com/"
       ],
       "sharedResults": 26,
-      "comparableCategories": 3,
+      "comparableCategories": 4,
       "totalCategories": 8,
       "benchmarkEvidence": [
         {
@@ -4737,13 +4754,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.593,
           "uncertainty": 0,
-          "cohortPercentile": 0.167,
+          "cohortPercentile": 0.231,
           "taskCount": 81,
-          "cohortSize": 12,
+          "cohortSize": 13,
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "codexradar",
@@ -4753,13 +4770,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.329,
           "uncertainty": 0,
-          "cohortPercentile": 0,
+          "cohortPercentile": 0.077,
           "taskCount": 73,
-          "cohortSize": 12,
+          "cohortSize": 13,
           "effort": "low",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "codexradar",
@@ -4767,15 +4784,15 @@
           "sourceModel": "glm-5.3-flash",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.598,
+          "rawValue": 0.596,
           "uncertainty": 0,
-          "cohortPercentile": 0.25,
-          "taskCount": 107,
-          "cohortSize": 12,
+          "cohortPercentile": 0.308,
+          "taskCount": 109,
+          "cohortSize": 13,
           "effort": "max",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "deepswe",
@@ -4794,11 +4811,12 @@
           "capturedAt": "2026-08-26"
         }
       ],
-      "overallScore": 61.27,
+      "overallScore": 61.69,
       "categoryScores": {
-        "agentic": 83,
+        "agentic": 79.3,
+        "coding": 60.9,
         "multimodal": 77.8,
-        "knowledge": 62.4
+        "knowledge": 62.9
       }
     },
     {
@@ -4816,13 +4834,13 @@
           "metric": "agentic_index",
           "rawValue": 35.1,
           "uncertainty": 0,
-          "cohortPercentile": 0.796,
-          "cohortSize": 624,
+          "cohortPercentile": 0.795,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "non_reasoning",
           "sourceUrl": "https://artificialanalysis.ai/models/glm-5-2-non-reasoning",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -4833,12 +4851,12 @@
           "rawValue": 45.7,
           "uncertainty": 0,
           "cohortPercentile": 0.912,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/glm-5-2",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -4849,12 +4867,12 @@
           "rawValue": 46.5,
           "uncertainty": 0,
           "cohortPercentile": 0.912,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "non_reasoning",
           "sourceUrl": "https://artificialanalysis.ai/models/glm-5-2-non-reasoning",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -4865,12 +4883,12 @@
           "rawValue": 68.8,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/glm-5-2",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -4880,13 +4898,13 @@
           "metric": "intelligence_index",
           "rawValue": 34.8,
           "uncertainty": 0,
-          "cohortPercentile": 0.792,
-          "cohortSize": 624,
+          "cohortPercentile": 0.79,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "non_reasoning",
           "sourceUrl": "https://artificialanalysis.ai/models/glm-5-2-non-reasoning",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -4897,12 +4915,12 @@
           "rawValue": 52.6,
           "uncertainty": 0,
           "cohortPercentile": 0.949,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/glm-5-2",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "deepswe",
@@ -4943,12 +4961,12 @@
         "https://benchlm.ai/models/glm-5-2",
         "https://deepswe.datacurve.ai/"
       ],
-      "verifiedAt": "2026-08-31",
+      "verifiedAt": "2026-09-01",
       "lane": "provisional",
-      "sharedResults": 624,
+      "sharedResults": 625,
       "comparableCategories": 4,
       "totalCategories": 8,
-      "overallScore": 63.4,
+      "overallScore": 63.65,
       "categoryScores": {
         "agentic": 80.7,
         "coding": 50.1,
@@ -4971,12 +4989,12 @@
           "rawValue": 46.9,
           "uncertainty": 0,
           "cohortPercentile": 0.917,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-luna",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -4986,13 +5004,13 @@
           "metric": "agentic_index",
           "rawValue": 22.2,
           "uncertainty": 0,
-          "cohortPercentile": 0.619,
-          "cohortSize": 624,
+          "cohortPercentile": 0.618,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "non_reasoning",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-luna-non-reasoning",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -5002,13 +5020,13 @@
           "metric": "agentic_index",
           "rawValue": 41,
           "uncertainty": 0,
-          "cohortPercentile": 0.867,
-          "cohortSize": 624,
+          "cohortPercentile": 0.866,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "high",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-luna-high",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -5018,13 +5036,13 @@
           "metric": "agentic_index",
           "rawValue": 25.7,
           "uncertainty": 0,
-          "cohortPercentile": 0.665,
-          "cohortSize": 624,
+          "cohortPercentile": 0.664,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "low",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-luna-low",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -5034,13 +5052,13 @@
           "metric": "agentic_index",
           "rawValue": 31.8,
           "uncertainty": 0,
-          "cohortPercentile": 0.744,
-          "cohortSize": 624,
+          "cohortPercentile": 0.742,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "medium",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-luna-medium",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -5051,12 +5069,12 @@
           "rawValue": 44.4,
           "uncertainty": 0,
           "cohortPercentile": 0.899,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "xhigh",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-luna-xhigh",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -5067,12 +5085,12 @@
           "rawValue": 71.4,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-luna",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -5082,13 +5100,13 @@
           "metric": "coding_index",
           "rawValue": 39.3,
           "uncertainty": 0,
-          "cohortPercentile": 0.849,
-          "cohortSize": 624,
+          "cohortPercentile": 0.848,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "non_reasoning",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-luna-non-reasoning",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -5099,12 +5117,12 @@
           "rawValue": 63.3,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "high",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-luna-high",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -5114,13 +5132,13 @@
           "metric": "coding_index",
           "rawValue": 44.2,
           "uncertainty": 0,
-          "cohortPercentile": 0.897,
-          "cohortSize": 624,
+          "cohortPercentile": 0.898,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "low",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-luna-low",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -5131,12 +5149,12 @@
           "rawValue": 50.7,
           "uncertainty": 0,
           "cohortPercentile": 0.931,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "medium",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-luna-medium",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -5147,12 +5165,12 @@
           "rawValue": 68.6,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "xhigh",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-luna-xhigh",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -5163,12 +5181,12 @@
           "rawValue": 52.3,
           "uncertainty": 0,
           "cohortPercentile": 0.946,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-luna",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -5178,13 +5196,13 @@
           "metric": "intelligence_index",
           "rawValue": 26.8,
           "uncertainty": 0,
-          "cohortPercentile": 0.688,
-          "cohortSize": 624,
+          "cohortPercentile": 0.686,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "non_reasoning",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-luna-non-reasoning",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -5195,12 +5213,12 @@
           "rawValue": 47,
           "uncertainty": 0,
           "cohortPercentile": 0.918,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "high",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-luna-high",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -5210,13 +5228,13 @@
           "metric": "intelligence_index",
           "rawValue": 33.9,
           "uncertainty": 0,
-          "cohortPercentile": 0.768,
-          "cohortSize": 624,
+          "cohortPercentile": 0.766,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "low",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-luna-low",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -5226,13 +5244,13 @@
           "metric": "intelligence_index",
           "rawValue": 38.9,
           "uncertainty": 0,
-          "cohortPercentile": 0.846,
-          "cohortSize": 624,
+          "cohortPercentile": 0.845,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "medium",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-luna-medium",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -5242,13 +5260,13 @@
           "metric": "intelligence_index",
           "rawValue": 50.1,
           "uncertainty": 0,
-          "cohortPercentile": 0.929,
-          "cohortSize": 624,
+          "cohortPercentile": 0.93,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "xhigh",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-luna-xhigh",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "codexradar",
@@ -5258,13 +5276,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.518,
           "uncertainty": 0,
-          "cohortPercentile": 0,
+          "cohortPercentile": 0.077,
           "taskCount": 112,
-          "cohortSize": 12,
+          "cohortSize": 13,
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-31",
+          "capturedAt": "2026-09-01",
           "costUsd": 0.21
         },
         {
@@ -5277,11 +5295,11 @@
           "uncertainty": 0,
           "cohortPercentile": 0,
           "taskCount": 112,
-          "cohortSize": 12,
+          "cohortSize": 13,
           "effort": "low",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-31",
+          "capturedAt": "2026-09-01",
           "costUsd": 0.03
         },
         {
@@ -5292,13 +5310,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.679,
           "uncertainty": 0,
-          "cohortPercentile": 0.75,
+          "cohortPercentile": 0.769,
           "taskCount": 112,
-          "cohortSize": 12,
+          "cohortSize": 13,
           "effort": "max",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-31",
+          "capturedAt": "2026-09-01",
           "costUsd": 0.52
         },
         {
@@ -5309,13 +5327,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.196,
           "uncertainty": 0,
-          "cohortPercentile": 0,
+          "cohortPercentile": 0.077,
           "taskCount": 112,
-          "cohortSize": 12,
+          "cohortSize": 13,
           "effort": "medium",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-31",
+          "capturedAt": "2026-09-01",
           "costUsd": 0.08
         },
         {
@@ -5326,13 +5344,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.58,
           "uncertainty": 0,
-          "cohortPercentile": 0.167,
+          "cohortPercentile": 0.231,
           "taskCount": 112,
-          "cohortSize": 12,
+          "cohortSize": 13,
           "effort": "xhigh",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-31",
+          "capturedAt": "2026-09-01",
           "costUsd": 0.33
         },
         {
@@ -5423,12 +5441,12 @@
         "https://deepswe.datacurve.ai/",
         "https://deng.codexradar.com/"
       ],
-      "verifiedAt": "2026-08-31",
+      "verifiedAt": "2026-09-01",
       "lane": "provisional",
-      "sharedResults": 624,
+      "sharedResults": 625,
       "comparableCategories": 5,
       "totalCategories": 8,
-      "overallScore": 67.35,
+      "overallScore": 67.61,
       "categoryScores": {
         "agentic": 84.2,
         "coding": 51.2,
@@ -5442,7 +5460,7 @@
         "(?:^|[-/])gpt-5\\.6-sol(?=$|@)"
       ],
       "canonicalModel": "gpt-5.6-sol",
-      "overallScore": 82.2,
+      "overallScore": 82.39,
       "categoryScores": {
         "agentic": 94.6,
         "coding": 54.7,
@@ -5459,13 +5477,13 @@
           "metric": "agentic_index",
           "rawValue": 36,
           "uncertainty": 0,
-          "cohortPercentile": 0.811,
-          "cohortSize": 624,
+          "cohortPercentile": 0.81,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "non_reasoning",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-sol-non-reasoning",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -5476,12 +5494,12 @@
           "rawValue": 57.8,
           "uncertainty": 0,
           "cohortPercentile": 0.979,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-sol",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -5491,13 +5509,13 @@
           "metric": "agentic_index",
           "rawValue": 50.6,
           "uncertainty": 0,
-          "cohortPercentile": 0.929,
-          "cohortSize": 624,
+          "cohortPercentile": 0.93,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "high",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-sol-high",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -5507,13 +5525,13 @@
           "metric": "agentic_index",
           "rawValue": 41.6,
           "uncertainty": 0,
-          "cohortPercentile": 0.877,
-          "cohortSize": 624,
+          "cohortPercentile": 0.875,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "low",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-sol-low",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -5523,13 +5541,13 @@
           "metric": "agentic_index",
           "rawValue": 47.9,
           "uncertainty": 0,
-          "cohortPercentile": 0.921,
-          "cohortSize": 624,
+          "cohortPercentile": 0.922,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "medium",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-sol-medium",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -5540,12 +5558,12 @@
           "rawValue": 53.6,
           "uncertainty": 0,
           "cohortPercentile": 0.957,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "xhigh",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-sol-xhigh",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -5556,12 +5574,12 @@
           "rawValue": 65.1,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "non_reasoning",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-sol-non-reasoning",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -5572,12 +5590,12 @@
           "rawValue": 77.4,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-sol",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -5588,12 +5606,12 @@
           "rawValue": 77.2,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "high",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-sol-high",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -5604,12 +5622,12 @@
           "rawValue": 69.7,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "low",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-sol-low",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -5620,12 +5638,12 @@
           "rawValue": 76.3,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "medium",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-sol-medium",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -5636,12 +5654,12 @@
           "rawValue": 78.3,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "xhigh",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-sol-xhigh",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -5651,13 +5669,13 @@
           "metric": "intelligence_index",
           "rawValue": 41.9,
           "uncertainty": 0,
-          "cohortPercentile": 0.881,
-          "cohortSize": 624,
+          "cohortPercentile": 0.88,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "non_reasoning",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-sol-non-reasoning",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -5668,12 +5686,12 @@
           "rawValue": 60.9,
           "uncertainty": 0,
           "cohortPercentile": 0.994,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-sol",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -5684,12 +5702,12 @@
           "rawValue": 57.3,
           "uncertainty": 0,
           "cohortPercentile": 0.976,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "high",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-sol-high",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -5700,12 +5718,12 @@
           "rawValue": 50.7,
           "uncertainty": 0,
           "cohortPercentile": 0.931,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "low",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-sol-low",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -5716,12 +5734,12 @@
           "rawValue": 55.6,
           "uncertainty": 0,
           "cohortPercentile": 0.963,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "medium",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-sol-medium",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -5732,12 +5750,12 @@
           "rawValue": 59,
           "uncertainty": 0,
           "cohortPercentile": 0.986,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "xhigh",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-sol-xhigh",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "codexradar",
@@ -5747,13 +5765,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.634,
           "uncertainty": 0,
-          "cohortPercentile": 0.5,
+          "cohortPercentile": 0.538,
           "taskCount": 112,
-          "cohortSize": 12,
+          "cohortSize": 13,
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-31",
+          "capturedAt": "2026-09-01",
           "costUsd": 4.16
         },
         {
@@ -5764,13 +5782,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.571,
           "uncertainty": 0,
-          "cohortPercentile": 0.167,
+          "cohortPercentile": 0.231,
           "taskCount": 112,
-          "cohortSize": 12,
+          "cohortSize": 13,
           "effort": "low",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-31",
+          "capturedAt": "2026-09-01",
           "costUsd": 1.61
         },
         {
@@ -5781,13 +5799,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.723,
           "uncertainty": 0,
-          "cohortPercentile": 0.917,
+          "cohortPercentile": 0.923,
           "taskCount": 112,
-          "cohortSize": 12,
+          "cohortSize": 13,
           "effort": "max",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-31",
+          "capturedAt": "2026-09-01",
           "costUsd": 8.04
         },
         {
@@ -5798,13 +5816,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.643,
           "uncertainty": 0,
-          "cohortPercentile": 0.5,
+          "cohortPercentile": 0.615,
           "taskCount": 112,
-          "cohortSize": 12,
+          "cohortSize": 13,
           "effort": "medium",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-31",
+          "capturedAt": "2026-09-01",
           "costUsd": 2.96
         },
         {
@@ -5815,14 +5833,14 @@
           "metric": "pass_at_1",
           "rawValue": 0.688,
           "uncertainty": 0,
-          "cohortPercentile": 0.75,
+          "cohortPercentile": 0.769,
           "taskCount": 112,
-          "cohortSize": 12,
+          "cohortSize": 13,
           "effort": "ultra",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-31",
-          "costUsd": 24.43
+          "capturedAt": "2026-09-01",
+          "costUsd": 24.36
         },
         {
           "benchmark": "codexradar",
@@ -5832,13 +5850,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.696,
           "uncertainty": 0,
-          "cohortPercentile": 0.833,
+          "cohortPercentile": 0.846,
           "taskCount": 112,
-          "cohortSize": 12,
+          "cohortSize": 13,
           "effort": "xhigh",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-31",
+          "capturedAt": "2026-09-01",
           "costUsd": 5.27
         },
         {
@@ -5929,9 +5947,9 @@
         "https://deepswe.datacurve.ai/",
         "https://deng.codexradar.com/"
       ],
-      "verifiedAt": "2026-08-31",
+      "verifiedAt": "2026-09-01",
       "lane": "provisional",
-      "sharedResults": 624,
+      "sharedResults": 625,
       "comparableCategories": 5,
       "totalCategories": 8
     },
@@ -5940,7 +5958,7 @@
         "(?:^|[-/])gpt-5\\.6-terra(?=$|@)"
       ],
       "canonicalModel": "gpt-5.6-terra",
-      "overallScore": 72.95,
+      "overallScore": 73.21,
       "categoryScores": {
         "agentic": 90.7,
         "coding": 52.1,
@@ -5957,13 +5975,13 @@
           "metric": "agentic_index",
           "rawValue": 30.1,
           "uncertainty": 0,
-          "cohortPercentile": 0.721,
-          "cohortSize": 624,
+          "cohortPercentile": 0.72,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "non_reasoning",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-terra-non-reasoning",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -5973,13 +5991,13 @@
           "metric": "agentic_index",
           "rawValue": 50.2,
           "uncertainty": 0,
-          "cohortPercentile": 0.929,
-          "cohortSize": 624,
+          "cohortPercentile": 0.93,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-terra",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -5989,13 +6007,13 @@
           "metric": "agentic_index",
           "rawValue": 43.5,
           "uncertainty": 0,
-          "cohortPercentile": 0.894,
-          "cohortSize": 624,
+          "cohortPercentile": 0.893,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "high",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-terra-high",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -6005,13 +6023,13 @@
           "metric": "agentic_index",
           "rawValue": 31.5,
           "uncertainty": 0,
-          "cohortPercentile": 0.739,
-          "cohortSize": 624,
+          "cohortPercentile": 0.738,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "low",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-terra-low",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -6021,13 +6039,13 @@
           "metric": "agentic_index",
           "rawValue": 39.1,
           "uncertainty": 0,
-          "cohortPercentile": 0.849,
-          "cohortSize": 624,
+          "cohortPercentile": 0.848,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "medium",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-terra-medium",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -6038,12 +6056,12 @@
           "rawValue": 46.5,
           "uncertainty": 0,
           "cohortPercentile": 0.912,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "xhigh",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-terra-xhigh",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -6054,12 +6072,12 @@
           "rawValue": 52.3,
           "uncertainty": 0,
           "cohortPercentile": 0.946,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "non_reasoning",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-terra-non-reasoning",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -6070,12 +6088,12 @@
           "rawValue": 76.7,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-terra",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -6086,12 +6104,12 @@
           "rawValue": 67.1,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "high",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-terra-high",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -6102,12 +6120,12 @@
           "rawValue": 58.1,
           "uncertainty": 0,
           "cohortPercentile": 0.981,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "low",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-terra-low",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -6118,12 +6136,12 @@
           "rawValue": 64.7,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "medium",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-terra-medium",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -6134,12 +6152,12 @@
           "rawValue": 70.6,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "xhigh",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-terra-xhigh",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -6149,13 +6167,13 @@
           "metric": "intelligence_index",
           "rawValue": 34.6,
           "uncertainty": 0,
-          "cohortPercentile": 0.788,
-          "cohortSize": 624,
+          "cohortPercentile": 0.787,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "non_reasoning",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-terra-non-reasoning",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -6166,12 +6184,12 @@
           "rawValue": 56.6,
           "uncertainty": 0,
           "cohortPercentile": 0.971,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-terra",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -6181,13 +6199,13 @@
           "metric": "intelligence_index",
           "rawValue": 50.1,
           "uncertainty": 0,
-          "cohortPercentile": 0.929,
-          "cohortSize": 624,
+          "cohortPercentile": 0.93,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "high",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-terra-high",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -6197,13 +6215,13 @@
           "metric": "intelligence_index",
           "rawValue": 41.3,
           "uncertainty": 0,
-          "cohortPercentile": 0.873,
-          "cohortSize": 624,
+          "cohortPercentile": 0.872,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "low",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-terra-low",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -6214,12 +6232,12 @@
           "rawValue": 46.8,
           "uncertainty": 0,
           "cohortPercentile": 0.917,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "medium",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-terra-medium",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -6230,12 +6248,12 @@
           "rawValue": 52.8,
           "uncertainty": 0,
           "cohortPercentile": 0.95,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "xhigh",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-6-terra-xhigh",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "codexradar",
@@ -6245,13 +6263,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.5,
           "uncertainty": 0,
-          "cohortPercentile": 0,
+          "cohortPercentile": 0.077,
           "taskCount": 112,
-          "cohortSize": 12,
+          "cohortSize": 13,
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-31",
+          "capturedAt": "2026-09-01",
           "costUsd": 1.08
         },
         {
@@ -6262,13 +6280,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.313,
           "uncertainty": 0,
-          "cohortPercentile": 0,
+          "cohortPercentile": 0.077,
           "taskCount": 112,
-          "cohortSize": 12,
+          "cohortSize": 13,
           "effort": "low",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-31",
+          "capturedAt": "2026-09-01",
           "costUsd": 0.49
         },
         {
@@ -6279,13 +6297,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.679,
           "uncertainty": 0,
-          "cohortPercentile": 0.75,
+          "cohortPercentile": 0.769,
           "taskCount": 112,
-          "cohortSize": 12,
+          "cohortSize": 13,
           "effort": "max",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-31",
+          "capturedAt": "2026-09-01",
           "costUsd": 3.5
         },
         {
@@ -6296,13 +6314,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.366,
           "uncertainty": 0,
-          "cohortPercentile": 0,
+          "cohortPercentile": 0.077,
           "taskCount": 112,
-          "cohortSize": 12,
+          "cohortSize": 13,
           "effort": "medium",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-31",
+          "capturedAt": "2026-09-01",
           "costUsd": 0.62
         },
         {
@@ -6313,13 +6331,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.696,
           "uncertainty": 0,
-          "cohortPercentile": 0.833,
+          "cohortPercentile": 0.846,
           "taskCount": 112,
-          "cohortSize": 12,
+          "cohortSize": 13,
           "effort": "ultra",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-31",
+          "capturedAt": "2026-09-01",
           "costUsd": 9.82
         },
         {
@@ -6330,13 +6348,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.625,
           "uncertainty": 0,
-          "cohortPercentile": 0.5,
+          "cohortPercentile": 0.538,
           "taskCount": 112,
-          "cohortSize": 12,
+          "cohortSize": 13,
           "effort": "xhigh",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-31",
+          "capturedAt": "2026-09-01",
           "costUsd": 1.78
         },
         {
@@ -6427,9 +6445,9 @@
         "https://deepswe.datacurve.ai/",
         "https://deng.codexradar.com/"
       ],
-      "verifiedAt": "2026-08-31",
+      "verifiedAt": "2026-09-01",
       "lane": "provisional",
-      "sharedResults": 624,
+      "sharedResults": 625,
       "comparableCategories": 5,
       "totalCategories": 8
     },
@@ -6448,12 +6466,12 @@
           "rawValue": 47.4,
           "uncertainty": 0,
           "cohortPercentile": 0.92,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-5",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -6463,13 +6481,13 @@
           "metric": "agentic_index",
           "rawValue": 26.1,
           "uncertainty": 0,
-          "cohortPercentile": 0.678,
-          "cohortSize": 624,
+          "cohortPercentile": 0.677,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "non_reasoning",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-5-non-reasoning",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -6480,12 +6498,12 @@
           "rawValue": 45.9,
           "uncertainty": 0,
           "cohortPercentile": 0.912,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "high",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-5-high",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -6495,13 +6513,13 @@
           "metric": "agentic_index",
           "rawValue": 31.7,
           "uncertainty": 0,
-          "cohortPercentile": 0.744,
-          "cohortSize": 624,
+          "cohortPercentile": 0.742,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "low",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-5-low",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -6511,13 +6529,13 @@
           "metric": "agentic_index",
           "rawValue": 39.2,
           "uncertainty": 0,
-          "cohortPercentile": 0.849,
-          "cohortSize": 624,
+          "cohortPercentile": 0.848,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "medium",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-5-medium",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -6528,12 +6546,12 @@
           "rawValue": 74.9,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-5",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -6544,12 +6562,12 @@
           "rawValue": 56.5,
           "uncertainty": 0,
           "cohortPercentile": 0.97,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "non_reasoning",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-5-non-reasoning",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -6560,12 +6578,12 @@
           "rawValue": 71.6,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "high",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-5-high",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -6576,12 +6594,12 @@
           "rawValue": 60.9,
           "uncertainty": 0,
           "cohortPercentile": 0.994,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "low",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-5-low",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -6592,12 +6610,12 @@
           "rawValue": 71.5,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "medium",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-5-medium",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -6608,12 +6626,12 @@
           "rawValue": 56.3,
           "uncertainty": 0,
           "cohortPercentile": 0.97,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-5",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -6623,13 +6641,13 @@
           "metric": "intelligence_index",
           "rawValue": 35.8,
           "uncertainty": 0,
-          "cohortPercentile": 0.808,
-          "cohortSize": 624,
+          "cohortPercentile": 0.806,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "non_reasoning",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-5-non-reasoning",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -6640,12 +6658,12 @@
           "rawValue": 54.7,
           "uncertainty": 0,
           "cohortPercentile": 0.958,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "high",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-5-high",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -6656,12 +6674,12 @@
           "rawValue": 44.5,
           "uncertainty": 0,
           "cohortPercentile": 0.902,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "low",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-5-low",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -6672,12 +6690,12 @@
           "rawValue": 51.4,
           "uncertainty": 0,
           "cohortPercentile": 0.934,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "medium",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-5-medium",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "codexradar",
@@ -6687,13 +6705,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.625,
           "uncertainty": 0,
-          "cohortPercentile": 0.5,
+          "cohortPercentile": 0.538,
           "taskCount": 112,
-          "cohortSize": 12,
+          "cohortSize": 13,
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-31",
+          "capturedAt": "2026-09-01",
           "costUsd": 3.74
         },
         {
@@ -6704,13 +6722,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.625,
           "uncertainty": 0,
-          "cohortPercentile": 0.5,
+          "cohortPercentile": 0.538,
           "taskCount": 112,
-          "cohortSize": 12,
+          "cohortSize": 13,
           "effort": "xhigh",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-31",
+          "capturedAt": "2026-09-01",
           "costUsd": 5.88
         },
         {
@@ -6785,12 +6803,12 @@
         "https://deepswe.datacurve.ai/",
         "https://deng.codexradar.com/"
       ],
-      "verifiedAt": "2026-08-31",
+      "verifiedAt": "2026-09-01",
       "lane": "provisional",
-      "sharedResults": 624,
+      "sharedResults": 625,
       "comparableCategories": 5,
       "totalCategories": 8,
-      "overallScore": 72.92,
+      "overallScore": 73.47,
       "categoryScores": {
         "agentic": 84.6,
         "coding": 43.7,
@@ -6813,13 +6831,13 @@
           "metric": "agentic_index",
           "rawValue": 44.2,
           "uncertainty": 0,
-          "cohortPercentile": 0.897,
-          "cohortSize": 624,
+          "cohortPercentile": 0.898,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-4",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -6830,12 +6848,12 @@
           "rawValue": 71.1,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-4",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -6845,13 +6863,13 @@
           "metric": "intelligence_index",
           "rawValue": 28.3,
           "uncertainty": 0,
-          "cohortPercentile": 0.697,
-          "cohortSize": 624,
+          "cohortPercentile": 0.696,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "non_reasoning",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-4-non-reasoning",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -6862,12 +6880,12 @@
           "rawValue": 53.1,
           "uncertainty": 0,
           "cohortPercentile": 0.952,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-4",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -6877,13 +6895,13 @@
           "metric": "intelligence_index",
           "rawValue": 40.2,
           "uncertainty": 0,
-          "cohortPercentile": 0.857,
-          "cohortSize": 624,
+          "cohortPercentile": 0.856,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "low",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-4-low",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "deepswe",
@@ -6908,12 +6926,12 @@
         "https://benchlm.ai/models/gpt-5-4",
         "https://deepswe.datacurve.ai/"
       ],
-      "verifiedAt": "2026-08-31",
+      "verifiedAt": "2026-09-01",
       "lane": "provisional",
-      "sharedResults": 624,
+      "sharedResults": 625,
       "comparableCategories": 5,
       "totalCategories": 8,
-      "overallScore": 73.56,
+      "overallScore": 73.72,
       "categoryScores": {
         "agentic": 74.5,
         "coding": 42.1,
@@ -6927,7 +6945,7 @@
         "(?:^|[-/])gpt-5\\.4-mini(?=$|@)"
       ],
       "canonicalModel": "gpt-5.4-mini",
-      "verifiedAt": "2026-08-31",
+      "verifiedAt": "2026-09-01",
       "lane": "provisional",
       "sources": [
         "https://artificialanalysis.ai/models/gpt-5-4-mini-medium",
@@ -6935,7 +6953,7 @@
         "https://benchlm.ai/models/gpt-5-4-mini",
         "https://deepswe.datacurve.ai/"
       ],
-      "sharedResults": 624,
+      "sharedResults": 625,
       "comparableCategories": 5,
       "totalCategories": 8,
       "benchmarkEvidence": [
@@ -6947,13 +6965,13 @@
           "metric": "agentic_index",
           "rawValue": 31.5,
           "uncertainty": 0,
-          "cohortPercentile": 0.739,
-          "cohortSize": 624,
+          "cohortPercentile": 0.738,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-4-mini",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -6964,12 +6982,12 @@
           "rawValue": 56.1,
           "uncertainty": 0,
           "cohortPercentile": 0.968,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-4-mini",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -6979,13 +6997,13 @@
           "metric": "intelligence_index",
           "rawValue": 16.8,
           "uncertainty": 0,
-          "cohortPercentile": 0.513,
-          "cohortSize": 624,
+          "cohortPercentile": 0.512,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "non_reasoning",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-4-mini-non-reasoning",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -6995,13 +7013,13 @@
           "metric": "intelligence_index",
           "rawValue": 40.9,
           "uncertainty": 0,
-          "cohortPercentile": 0.865,
-          "cohortSize": 624,
+          "cohortPercentile": 0.864,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-4-mini",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -7011,13 +7029,13 @@
           "metric": "intelligence_index",
           "rawValue": 30.5,
           "uncertainty": 0,
-          "cohortPercentile": 0.724,
-          "cohortSize": 624,
+          "cohortPercentile": 0.723,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "medium",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-4-mini-medium",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "deepswe",
@@ -7036,7 +7054,7 @@
           "capturedAt": "2026-08-24"
         }
       ],
-      "overallScore": 56.96,
+      "overallScore": 57.4,
       "categoryScores": {
         "agentic": 55.6,
         "coding": 52.7,
@@ -7050,7 +7068,7 @@
         "(?:^|[-/])grok-4.6(?=$|@)"
       ],
       "canonicalModel": "grok-4.6",
-      "verifiedAt": "2026-08-31",
+      "verifiedAt": "2026-09-01",
       "lane": "provisional",
       "sources": [
         "https://artificialanalysis.ai/models/grok-4-6-medium",
@@ -7059,7 +7077,7 @@
         "https://deepswe.datacurve.ai/",
         "https://deng.codexradar.com/"
       ],
-      "sharedResults": 624,
+      "sharedResults": 625,
       "comparableCategories": 3,
       "totalCategories": 8,
       "benchmarkEvidence": [
@@ -7072,12 +7090,12 @@
           "rawValue": 58.7,
           "uncertainty": 0,
           "cohortPercentile": 0.982,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/grok-4-6",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -7087,13 +7105,13 @@
           "metric": "agentic_index",
           "rawValue": 47.8,
           "uncertainty": 0,
-          "cohortPercentile": 0.921,
-          "cohortSize": 624,
+          "cohortPercentile": 0.922,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "low",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/grok-4-6-low",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -7104,12 +7122,12 @@
           "rawValue": 56.3,
           "uncertainty": 0,
           "cohortPercentile": 0.97,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "medium",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/grok-4-6-medium",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -7120,12 +7138,12 @@
           "rawValue": 56.6,
           "uncertainty": 0,
           "cohortPercentile": 0.971,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "xhigh",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/grok-4-6-xhigh",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -7136,12 +7154,12 @@
           "rawValue": 76.8,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/grok-4-6",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -7152,12 +7170,12 @@
           "rawValue": 66.3,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "low",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/grok-4-6-low",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -7168,12 +7186,12 @@
           "rawValue": 74.4,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "medium",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/grok-4-6-medium",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -7184,12 +7202,12 @@
           "rawValue": 75.9,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "xhigh",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/grok-4-6-xhigh",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -7200,12 +7218,12 @@
           "rawValue": 60.9,
           "uncertainty": 0,
           "cohortPercentile": 0.994,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/grok-4-6",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -7216,12 +7234,12 @@
           "rawValue": 51.7,
           "uncertainty": 0,
           "cohortPercentile": 0.939,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "low",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/grok-4-6-low",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -7232,12 +7250,12 @@
           "rawValue": 59,
           "uncertainty": 0,
           "cohortPercentile": 0.986,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "medium",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/grok-4-6-medium",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -7248,12 +7266,12 @@
           "rawValue": 60,
           "uncertainty": 0,
           "cohortPercentile": 0.99,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "xhigh",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/grok-4-6-xhigh",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "codexradar",
@@ -7263,13 +7281,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.661,
           "uncertainty": 0,
-          "cohortPercentile": 0.667,
+          "cohortPercentile": 0.692,
           "taskCount": 112,
-          "cohortSize": 12,
+          "cohortSize": 13,
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-31",
+          "capturedAt": "2026-09-01",
           "costUsd": 6.2
         },
         {
@@ -7280,13 +7298,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.541,
           "uncertainty": 0,
-          "cohortPercentile": 0,
+          "cohortPercentile": 0.077,
           "taskCount": 109,
-          "cohortSize": 12,
+          "cohortSize": 13,
           "effort": "low",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-31",
+          "capturedAt": "2026-09-01",
           "costUsd": 0.77
         },
         {
@@ -7297,13 +7315,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.611,
           "uncertainty": 0,
-          "cohortPercentile": 0.417,
+          "cohortPercentile": 0.462,
           "taskCount": 108,
-          "cohortSize": 12,
+          "cohortSize": 13,
           "effort": "medium",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-31",
+          "capturedAt": "2026-09-01",
           "costUsd": 2.64
         },
         {
@@ -7314,13 +7332,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.661,
           "uncertainty": 0,
-          "cohortPercentile": 0.667,
+          "cohortPercentile": 0.692,
           "taskCount": 112,
-          "cohortSize": 12,
+          "cohortSize": 13,
           "effort": "xhigh",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-31",
+          "capturedAt": "2026-09-01",
           "costUsd": 6.38
         },
         {
@@ -7388,7 +7406,7 @@
           "capturedAt": "2026-08-26"
         }
       ],
-      "overallScore": 63.42,
+      "overallScore": 63.87,
       "categoryScores": {
         "agentic": 85.4,
         "coding": 62.3,
@@ -7400,7 +7418,7 @@
         "(?:^|[-/])grok-4.5(?=$|@)"
       ],
       "canonicalModel": "grok-4.5",
-      "verifiedAt": "2026-08-31",
+      "verifiedAt": "2026-09-01",
       "lane": "provisional",
       "sources": [
         "https://artificialanalysis.ai/models/grok-4-5",
@@ -7408,7 +7426,7 @@
         "https://benchlm.ai/models/grok-4-5",
         "https://deepswe.datacurve.ai/"
       ],
-      "sharedResults": 624,
+      "sharedResults": 625,
       "comparableCategories": 3,
       "totalCategories": 8,
       "benchmarkEvidence": [
@@ -7421,12 +7439,12 @@
           "rawValue": 48.9,
           "uncertainty": 0,
           "cohortPercentile": 0.925,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/grok-4-5",
-          "capturedAt": "2026-08-28"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -7437,12 +7455,12 @@
           "rawValue": 72.4,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/grok-4-5",
-          "capturedAt": "2026-08-28"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -7453,12 +7471,12 @@
           "rawValue": 55.8,
           "uncertainty": 0,
           "cohortPercentile": 0.966,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/grok-4-5",
-          "capturedAt": "2026-08-28"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "deepswe",
@@ -7477,7 +7495,7 @@
           "capturedAt": "2026-08-26"
         }
       ],
-      "overallScore": 75.65,
+      "overallScore": 75.78,
       "categoryScores": {
         "agentic": 84.1,
         "coding": 54.3,
@@ -7489,17 +7507,17 @@
         "(?:^|[-/])grok-4.20(?=$|@)"
       ],
       "canonicalModel": "grok-4.20",
-      "verifiedAt": "2026-08-31",
+      "verifiedAt": "2026-09-01",
       "lane": "provisional",
       "sources": [
         "https://artificialanalysis.ai/models/grok-4-20-non-reasoning",
         "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/grok-4-20-beta"
       ],
-      "sharedResults": 624,
+      "sharedResults": 625,
       "comparableCategories": 3,
       "totalCategories": 8,
-      "overallScore": 55.44,
+      "overallScore": 55.87,
       "categoryScores": {
         "agentic": 30.9,
         "coding": 43.3,
@@ -7514,13 +7532,13 @@
           "metric": "intelligence_index",
           "rawValue": 22.2,
           "uncertainty": 0,
-          "cohortPercentile": 0.619,
-          "cohortSize": 624,
+          "cohortPercentile": 0.618,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "non_reasoning",
           "sourceUrl": "https://artificialanalysis.ai/models/grok-4-20-non-reasoning",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -7530,13 +7548,13 @@
           "metric": "intelligence_index",
           "rawValue": 38,
           "uncertainty": 0,
-          "cohortPercentile": 0.837,
-          "cohortSize": 624,
+          "cohortPercentile": 0.835,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/grok-4-20",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         }
       ]
     },
@@ -7545,7 +7563,7 @@
         "(?:^|[-/])hy4-preview(?=$|@)"
       ],
       "canonicalModel": "hy4-preview",
-      "verifiedAt": "2026-08-31",
+      "verifiedAt": "2026-09-01",
       "lane": "provisional",
       "sources": [
         "https://benchlm.ai/methodology",
@@ -7555,7 +7573,7 @@
       "sharedResults": 16,
       "comparableCategories": 3,
       "totalCategories": 8,
-      "overallScore": 79.16,
+      "overallScore": 79.87,
       "categoryScores": {
         "coding": 54.7,
         "multimodal": 84,
@@ -7572,11 +7590,11 @@
           "uncertainty": 0,
           "cohortPercentile": 1,
           "taskCount": 1,
-          "cohortSize": 12,
+          "cohortSize": 13,
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "codexradar",
@@ -7584,15 +7602,15 @@
           "sourceModel": "hy4-preview",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.333,
+          "rawValue": 0.5,
           "uncertainty": 0,
-          "cohortPercentile": 0,
-          "taskCount": 3,
-          "cohortSize": 12,
+          "cohortPercentile": 0.077,
+          "taskCount": 4,
+          "cohortSize": 13,
           "effort": "low",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "codexradar",
@@ -7600,15 +7618,15 @@
           "sourceModel": "hy4-preview",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.333,
+          "rawValue": 0.375,
           "uncertainty": 0,
-          "cohortPercentile": 0,
-          "taskCount": 6,
-          "cohortSize": 12,
+          "cohortPercentile": 0.077,
+          "taskCount": 8,
+          "cohortSize": 13,
           "effort": "max",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         }
       ]
     },
@@ -7617,7 +7635,7 @@
         "(?:^|[-/])kimi-k3(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)"
       ],
       "canonicalModel": "kimi-k3",
-      "verifiedAt": "2026-08-31",
+      "verifiedAt": "2026-09-01",
       "lane": "provisional",
       "sources": [
         "https://artificialanalysis.ai/models/kimi-k3-low",
@@ -7626,10 +7644,10 @@
         "https://deepswe.datacurve.ai/",
         "https://deng.codexradar.com/"
       ],
-      "sharedResults": 624,
+      "sharedResults": 625,
       "comparableCategories": 4,
       "totalCategories": 8,
-      "overallScore": 80.61,
+      "overallScore": 80.78,
       "categoryScores": {
         "agentic": 94.6,
         "coding": 63.3,
@@ -7646,12 +7664,12 @@
           "rawValue": 54.3,
           "uncertainty": 0,
           "cohortPercentile": 0.957,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/kimi-k3",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -7661,13 +7679,13 @@
           "metric": "agentic_index",
           "rawValue": 39.6,
           "uncertainty": 0,
-          "cohortPercentile": 0.851,
-          "cohortSize": 624,
+          "cohortPercentile": 0.85,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "low",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/kimi-k3-low",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -7678,12 +7696,12 @@
           "rawValue": 76.2,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/kimi-k3",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -7694,12 +7712,12 @@
           "rawValue": 72,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "low",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/kimi-k3-low",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -7710,12 +7728,12 @@
           "rawValue": 59.7,
           "uncertainty": 0,
           "cohortPercentile": 0.989,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/kimi-k3",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -7726,12 +7744,12 @@
           "rawValue": 48.3,
           "uncertainty": 0,
           "cohortPercentile": 0.923,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "low",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/kimi-k3-low",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "codexradar",
@@ -7741,13 +7759,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.571,
           "uncertainty": 0,
-          "cohortPercentile": 0.167,
+          "cohortPercentile": 0.231,
           "taskCount": 112,
-          "cohortSize": 12,
+          "cohortSize": 13,
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "codexradar",
@@ -7757,13 +7775,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.571,
           "uncertainty": 0,
-          "cohortPercentile": 0.167,
+          "cohortPercentile": 0.231,
           "taskCount": 112,
-          "cohortSize": 12,
+          "cohortSize": 13,
           "effort": "low",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "codexradar",
@@ -7771,15 +7789,15 @@
           "sourceModel": "k3",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.652,
+          "rawValue": 0.643,
           "uncertainty": 0,
-          "cohortPercentile": 0.583,
+          "cohortPercentile": 0.615,
           "taskCount": 112,
-          "cohortSize": 12,
+          "cohortSize": 13,
           "effort": "max",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "deepswe",
@@ -7815,13 +7833,13 @@
           "metric": "agentic_index",
           "rawValue": 30.3,
           "uncertainty": 0,
-          "cohortPercentile": 0.721,
-          "cohortSize": 624,
+          "cohortPercentile": 0.72,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/kimi-k2-7-code",
-          "capturedAt": "2026-08-28"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -7832,12 +7850,12 @@
           "rawValue": 60.8,
           "uncertainty": 0,
           "cohortPercentile": 0.99,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/kimi-k2-7-code",
-          "capturedAt": "2026-08-28"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -7847,13 +7865,13 @@
           "metric": "intelligence_index",
           "rawValue": 43,
           "uncertainty": 0,
-          "cohortPercentile": 0.893,
-          "cohortSize": 624,
+          "cohortPercentile": 0.891,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/kimi-k2-7-code",
-          "capturedAt": "2026-08-28"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "deepswe",
@@ -7878,12 +7896,12 @@
         "https://benchlm.ai/models/kimi-k2-7-code",
         "https://deepswe.datacurve.ai/"
       ],
-      "verifiedAt": "2026-08-31",
+      "verifiedAt": "2026-09-01",
       "lane": "provisional",
-      "sharedResults": 624,
+      "sharedResults": 625,
       "comparableCategories": 3,
       "totalCategories": 8,
-      "overallScore": 54.44,
+      "overallScore": 54.69,
       "categoryScores": {
         "agentic": 61,
         "coding": 59.9
@@ -7894,12 +7912,12 @@
         "(?:^|[-/])kimi-k2\\.6(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)"
       ],
       "canonicalModel": "kimi-k2.6",
-      "verifiedAt": "2026-08-28",
+      "verifiedAt": "2026-09-01",
       "lane": "provisional",
       "sources": [
         "https://artificialanalysis.ai/models/kimi-k2-6"
       ],
-      "sharedResults": 624,
+      "sharedResults": 625,
       "comparableCategories": 3,
       "totalCategories": 3,
       "benchmarkEvidence": [
@@ -7911,13 +7929,13 @@
           "metric": "agentic_index",
           "rawValue": 31.2,
           "uncertainty": 0,
-          "cohortPercentile": 0.731,
-          "cohortSize": 624,
+          "cohortPercentile": 0.73,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/kimi-k2-6",
-          "capturedAt": "2026-08-28"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -7928,12 +7946,12 @@
           "rawValue": 61.8,
           "uncertainty": 0,
           "cohortPercentile": 0.995,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/kimi-k2-6",
-          "capturedAt": "2026-08-28"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -7943,13 +7961,13 @@
           "metric": "intelligence_index",
           "rawValue": 45.1,
           "uncertainty": 0,
-          "cohortPercentile": 0.905,
-          "cohortSize": 624,
+          "cohortPercentile": 0.906,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/kimi-k2-6",
-          "capturedAt": "2026-08-28"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -7959,13 +7977,13 @@
           "metric": "intelligence_index",
           "rawValue": 35.4,
           "uncertainty": 0,
-          "cohortPercentile": 0.801,
-          "cohortSize": 624,
+          "cohortPercentile": 0.8,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "non_reasoning",
           "sourceUrl": "https://artificialanalysis.ai/models/kimi-k2-6-non-reasoning",
-          "capturedAt": "2026-08-28"
+          "capturedAt": "2026-09-01"
         }
       ]
     },
@@ -7974,7 +7992,7 @@
         "(?:^|[-/])mimo-v2.5(?=$|@)"
       ],
       "canonicalModel": "mimo-v2.5",
-      "verifiedAt": "2026-08-31",
+      "verifiedAt": "2026-09-01",
       "lane": "provisional",
       "sources": [
         "https://benchlm.ai/methodology",
@@ -7983,7 +8001,7 @@
       "sharedResults": 8,
       "comparableCategories": 3,
       "totalCategories": 8,
-      "overallScore": 59.48,
+      "overallScore": 59.9,
       "categoryScores": {
         "agentic": 58.4,
         "coding": 37.1,
@@ -7995,17 +8013,17 @@
         "(?:^|[-/])mimo-v2.5-pro(?=$|@)"
       ],
       "canonicalModel": "mimo-v2.5-pro",
-      "verifiedAt": "2026-08-31",
+      "verifiedAt": "2026-09-01",
       "lane": "provisional",
       "sources": [
         "https://artificialanalysis.ai/models/mimo-v2-5-pro",
         "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/mimo-v2-5-pro"
       ],
-      "sharedResults": 624,
+      "sharedResults": 625,
       "comparableCategories": 3,
       "totalCategories": 8,
-      "overallScore": 69.41,
+      "overallScore": 69.59,
       "categoryScores": {
         "agentic": 62.2,
         "coding": 39.2,
@@ -8020,13 +8038,13 @@
           "metric": "agentic_index",
           "rawValue": 29.5,
           "uncertainty": 0,
-          "cohortPercentile": 0.71,
-          "cohortSize": 624,
+          "cohortPercentile": 0.709,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/mimo-v2-5-pro",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -8037,12 +8055,12 @@
           "rawValue": 60.2,
           "uncertainty": 0,
           "cohortPercentile": 0.99,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/mimo-v2-5-pro",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -8052,13 +8070,13 @@
           "metric": "intelligence_index",
           "rawValue": 42.9,
           "uncertainty": 0,
-          "cohortPercentile": 0.891,
-          "cohortSize": 624,
+          "cohortPercentile": 0.89,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/mimo-v2-5-pro",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -8068,13 +8086,13 @@
           "metric": "intelligence_index",
           "rawValue": 28.4,
           "uncertainty": 0,
-          "cohortPercentile": 0.699,
-          "cohortSize": 624,
+          "cohortPercentile": 0.698,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "non_reasoning",
           "sourceUrl": "https://artificialanalysis.ai/models/mimo-v2-5-pro-non-reasoning",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         }
       ]
     },
@@ -8083,17 +8101,17 @@
         "(?:^|[-/])minimax-m3(?=$|@)"
       ],
       "canonicalModel": "minimax-m3",
-      "verifiedAt": "2026-08-31",
+      "verifiedAt": "2026-09-01",
       "lane": "provisional",
       "sources": [
         "https://artificialanalysis.ai/models/minimax-m3",
         "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/minimax-m3"
       ],
-      "sharedResults": 624,
+      "sharedResults": 625,
       "comparableCategories": 4,
       "totalCategories": 8,
-      "overallScore": 68.73,
+      "overallScore": 68.9,
       "categoryScores": {
         "agentic": 63.3,
         "coding": 53.8,
@@ -8109,13 +8127,13 @@
           "metric": "agentic_index",
           "rawValue": 36.1,
           "uncertainty": 0,
-          "cohortPercentile": 0.811,
-          "cohortSize": 624,
+          "cohortPercentile": 0.81,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/minimax-m3",
-          "capturedAt": "2026-08-28"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -8126,12 +8144,12 @@
           "rawValue": 58.6,
           "uncertainty": 0,
           "cohortPercentile": 0.982,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/minimax-m3",
-          "capturedAt": "2026-08-28"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -8142,12 +8160,12 @@
           "rawValue": 45.4,
           "uncertainty": 0,
           "cohortPercentile": 0.91,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/minimax-m3",
-          "capturedAt": "2026-08-28"
+          "capturedAt": "2026-09-01"
         }
       ]
     },
@@ -8156,17 +8174,17 @@
         "(?:^|[-/])minimax-m2.7(?=$|@)"
       ],
       "canonicalModel": "minimax-m2.7",
-      "verifiedAt": "2026-08-31",
+      "verifiedAt": "2026-09-01",
       "lane": "provisional",
       "sources": [
         "https://artificialanalysis.ai/models/minimax-m2-7",
         "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/minimax-m2-7"
       ],
-      "sharedResults": 624,
+      "sharedResults": 625,
       "comparableCategories": 3,
       "totalCategories": 8,
-      "overallScore": 63.29,
+      "overallScore": 63.5,
       "categoryScores": {
         "agentic": 45.5,
         "coding": 41.1
@@ -8180,13 +8198,13 @@
           "metric": "agentic_index",
           "rawValue": 25.9,
           "uncertainty": 0,
-          "cohortPercentile": 0.67,
-          "cohortSize": 624,
+          "cohortPercentile": 0.669,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/minimax-m2-7",
-          "capturedAt": "2026-08-28"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -8197,12 +8215,12 @@
           "rawValue": 52.6,
           "uncertainty": 0,
           "cohortPercentile": 0.949,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/minimax-m2-7",
-          "capturedAt": "2026-08-28"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -8212,13 +8230,13 @@
           "metric": "intelligence_index",
           "rawValue": 38.9,
           "uncertainty": 0,
-          "cohortPercentile": 0.846,
-          "cohortSize": 624,
+          "cohortPercentile": 0.845,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/minimax-m2-7",
-          "capturedAt": "2026-08-28"
+          "capturedAt": "2026-09-01"
         }
       ]
     },
@@ -8227,7 +8245,7 @@
         "(?:^|[-/])muse-spark-1\\.2(?=$|@)"
       ],
       "canonicalModel": "muse-spark-1.2",
-      "verifiedAt": "2026-08-31",
+      "verifiedAt": "2026-09-01",
       "lane": "provisional",
       "sources": [
         "https://artificialanalysis.ai/models/muse-spark-1-2",
@@ -8235,7 +8253,7 @@
         "https://benchlm.ai/models/muse-spark-1-2",
         "https://deepswe.datacurve.ai/"
       ],
-      "sharedResults": 624,
+      "sharedResults": 625,
       "comparableCategories": 3,
       "totalCategories": 8,
       "benchmarkEvidence": [
@@ -8248,12 +8266,12 @@
           "rawValue": 49.3,
           "uncertainty": 0,
           "cohortPercentile": 0.926,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/muse-spark-1-2",
-          "capturedAt": "2026-08-28"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -8264,12 +8282,12 @@
           "rawValue": 72.2,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/muse-spark-1-2",
-          "capturedAt": "2026-08-28"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -8280,12 +8298,12 @@
           "rawValue": 56.8,
           "uncertainty": 0,
           "cohortPercentile": 0.973,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/muse-spark-1-2",
-          "capturedAt": "2026-08-28"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "deepswe",
@@ -8304,7 +8322,7 @@
           "capturedAt": "2026-08-26"
         }
       ],
-      "overallScore": 61.71,
+      "overallScore": 62.15,
       "categoryScores": {
         "agentic": 80.1,
         "coding": 59.4,
@@ -8316,7 +8334,7 @@
         "(?:^|[-/])muse-spark-1.1(?=$|@)"
       ],
       "canonicalModel": "muse-spark-1.1",
-      "verifiedAt": "2026-08-31",
+      "verifiedAt": "2026-09-01",
       "lane": "provisional",
       "sources": [
         "https://artificialanalysis.ai/models/muse-spark-1-1",
@@ -8324,7 +8342,7 @@
         "https://benchlm.ai/models/muse-spark-1-1",
         "https://deepswe.datacurve.ai/"
       ],
-      "sharedResults": 624,
+      "sharedResults": 625,
       "comparableCategories": 4,
       "totalCategories": 8,
       "benchmarkEvidence": [
@@ -8336,13 +8354,13 @@
           "metric": "agentic_index",
           "rawValue": 39.7,
           "uncertainty": 0,
-          "cohortPercentile": 0.854,
-          "cohortSize": 624,
+          "cohortPercentile": 0.853,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/muse-spark-1-1",
-          "capturedAt": "2026-08-28"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -8353,12 +8371,12 @@
           "rawValue": 71.3,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/muse-spark-1-1",
-          "capturedAt": "2026-08-28"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -8369,12 +8387,12 @@
           "rawValue": 53.2,
           "uncertainty": 0,
           "cohortPercentile": 0.955,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/muse-spark-1-1",
-          "capturedAt": "2026-08-28"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "deepswe",
@@ -8393,7 +8411,7 @@
           "capturedAt": "2026-08-26"
         }
       ],
-      "overallScore": 77.14,
+      "overallScore": 77.32,
       "categoryScores": {
         "agentic": 84.1,
         "coding": 49,
@@ -8406,7 +8424,7 @@
         "(?:^|[-/])qwen3.8-max(?=$|@)"
       ],
       "canonicalModel": "qwen3.8-max",
-      "verifiedAt": "2026-08-31",
+      "verifiedAt": "2026-09-01",
       "lane": "provisional",
       "sources": [
         "https://artificialanalysis.ai/models/qwen3-8-max",
@@ -8415,7 +8433,7 @@
         "https://benchlm.ai/models/qwen3-8-max-preview",
         "https://deepswe.datacurve.ai/"
       ],
-      "sharedResults": 624,
+      "sharedResults": 625,
       "comparableCategories": 4,
       "totalCategories": 8,
       "benchmarkEvidence": [
@@ -8428,12 +8446,12 @@
           "rawValue": 58.4,
           "uncertainty": 0,
           "cohortPercentile": 0.981,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/qwen3-8-max",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -8444,12 +8462,12 @@
           "rawValue": 57.1,
           "uncertainty": 0,
           "cohortPercentile": 0.973,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/qwen3-8-2-4t-a95b",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -8460,12 +8478,12 @@
           "rawValue": 71.8,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/qwen3-8-max",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -8476,12 +8494,12 @@
           "rawValue": 71.9,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/qwen3-8-2-4t-a95b",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -8492,12 +8510,12 @@
           "rawValue": 58.1,
           "uncertainty": 0,
           "cohortPercentile": 0.981,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/qwen3-8-max",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -8508,12 +8526,12 @@
           "rawValue": 57.7,
           "uncertainty": 0,
           "cohortPercentile": 0.979,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/qwen3-8-2-4t-a95b",
-          "capturedAt": "2026-08-31"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "deepswe",
@@ -8532,7 +8550,7 @@
           "capturedAt": "2026-08-26"
         }
       ],
-      "overallScore": 79.22,
+      "overallScore": 79.4,
       "categoryScores": {
         "agentic": 86.7,
         "coding": 58.9,
@@ -8545,17 +8563,17 @@
         "(?:^|[-/])qwen3.7-max(?=$|@)"
       ],
       "canonicalModel": "qwen3.7-max",
-      "verifiedAt": "2026-08-31",
+      "verifiedAt": "2026-09-01",
       "lane": "provisional",
       "sources": [
         "https://artificialanalysis.ai/models/qwen3-7-max",
         "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/qwen3-7-max"
       ],
-      "sharedResults": 624,
+      "sharedResults": 625,
       "comparableCategories": 4,
       "totalCategories": 8,
-      "overallScore": 71.79,
+      "overallScore": 71.97,
       "categoryScores": {
         "agentic": 64.1,
         "coding": 79.5,
@@ -8571,13 +8589,13 @@
           "metric": "agentic_index",
           "rawValue": 30.9,
           "uncertainty": 0,
-          "cohortPercentile": 0.728,
-          "cohortSize": 624,
+          "cohortPercentile": 0.726,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/qwen3-7-max",
-          "capturedAt": "2026-08-28"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -8588,12 +8606,12 @@
           "rawValue": 66,
           "uncertainty": 0,
           "cohortPercentile": 1,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/qwen3-7-max",
-          "capturedAt": "2026-08-28"
+          "capturedAt": "2026-09-01"
         },
         {
           "benchmark": "artificial_analysis",
@@ -8604,12 +8622,12 @@
           "rawValue": 46.7,
           "uncertainty": 0,
           "cohortPercentile": 0.915,
-          "cohortSize": 624,
+          "cohortSize": 625,
           "taskCount": 9,
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/qwen3-7-max",
-          "capturedAt": "2026-08-28"
+          "capturedAt": "2026-09-01"
         }
       ]
     }
@@ -8621,12 +8639,12 @@
       ],
       "canonicalModel": "gpt-image-2",
       "lane": "provisional",
-      "elo": 1370,
+      "elo": 1369,
       "ci95": 10,
       "sources": [
         "https://artificialanalysis.ai/leaderboards/image-generation"
       ],
-      "verifiedAt": "2026-08-28"
+      "verifiedAt": "2026-09-01"
     },
     {
       "patterns": [
@@ -8634,12 +8652,12 @@
       ],
       "canonicalModel": "nano-banana-2",
       "lane": "provisional",
-      "elo": 1322,
-      "ci95": 9,
+      "elo": 1320,
+      "ci95": 8,
       "sources": [
         "https://artificialanalysis.ai/leaderboards/image-generation"
       ],
-      "verifiedAt": "2026-08-28"
+      "verifiedAt": "2026-09-01"
     },
     {
       "patterns": [
@@ -8647,12 +8665,12 @@
       ],
       "canonicalModel": "seedream-5.0-pro",
       "lane": "provisional",
-      "elo": 1281,
+      "elo": 1279,
       "ci95": 9,
       "sources": [
         "https://artificialanalysis.ai/leaderboards/image-generation"
       ],
-      "verifiedAt": "2026-08-28"
+      "verifiedAt": "2026-09-01"
     },
     {
       "patterns": [
@@ -8660,12 +8678,12 @@
       ],
       "canonicalModel": "seedream-4.0",
       "lane": "provisional",
-      "elo": 1226,
+      "elo": 1224,
       "ci95": 11,
       "sources": [
         "https://artificialanalysis.ai/leaderboards/image-generation"
       ],
-      "verifiedAt": "2026-08-28"
+      "verifiedAt": "2026-09-01"
     }
   ]
 }
