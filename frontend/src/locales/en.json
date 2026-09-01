@@ -1494,6 +1494,8 @@
   "autopilot.traceDetail.duration": "Duration",
   "autopilot.traceDetail.firstByte": "First Byte",
   "autopilot.traceDetail.fallbackUsed": "Fail-open",
+  "autopilot.traceDetail.copy": "Copy decision detail",
+  "autopilot.traceDetail.copied": "Copied — ready to paste for AI analysis",
   "autopilot.quickAdd.modeStandard": "Standard",
   "autopilot.quickAdd.modeQuick": "Quick Add",
   "autopilot.quickAdd.addUrl": "Add URL",

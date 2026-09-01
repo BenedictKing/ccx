@@ -1494,6 +1494,8 @@
   "autopilot.traceDetail.duration": "耗时",
   "autopilot.traceDetail.firstByte": "首字节",
   "autopilot.traceDetail.fallbackUsed": "Fail-open",
+  "autopilot.traceDetail.copy": "复制决策详情",
+  "autopilot.traceDetail.copied": "已复制，可直接发给 AI 分析",
   "autopilot.quickAdd.modeStandard": "标准模式",
   "autopilot.quickAdd.modeQuick": "快速添加",
   "autopilot.quickAdd.addUrl": "添加地址",

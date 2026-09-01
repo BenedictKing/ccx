@@ -228,6 +228,7 @@ import { ref, watch, onUnmounted } from 'vue'
 import { api, type ChannelBreakerEvidence, type ChannelKind, type ChannelLogEntry, type ChannelProtocolRoute } from '../services/api'
 import { useI18n } from '../i18n'
 import { useGlobalTick } from '../composables/useGlobalTick'
+import { writeClipboardText } from '../utils/clipboard'
 import AutopilotTraceDetailDialog from './AutopilotTraceDetailDialog.vue'
 
 const props = defineProps<{
@@ -267,38 +268,6 @@ const stopPolling = () => { pollingActive = false }
 
 const getLogCopyKey = (log: ChannelLogEntry, index: number): string => {
   return log.requestId || `${log.timestamp}-${index}`
-}
-
-const writeClipboardText = async (text: string) => {
-  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-    try {
-      await navigator.clipboard.writeText(text)
-      return
-    } catch {
-      // 继续使用传统复制路径
-    }
-  }
-
-  if (typeof document === 'undefined') {
-    throw new Error('Clipboard API is unavailable')
-  }
-
-  const textarea = document.createElement('textarea')
-  textarea.value = text
-  textarea.setAttribute('readonly', '')
-  textarea.style.position = 'fixed'
-  textarea.style.top = '-9999px'
-  textarea.style.left = '-9999px'
-  document.body.appendChild(textarea)
-  textarea.select()
-
-  try {
-    if (!document.execCommand('copy')) {
-      throw new Error('Copy command failed')
-    }
-  } finally {
-    document.body.removeChild(textarea)
-  }
 }
 
 const copyLogEntry = async (log: ChannelLogEntry, index: number) => {

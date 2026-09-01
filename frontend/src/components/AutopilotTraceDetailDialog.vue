@@ -10,13 +10,34 @@
           <v-icon size="20" class="mr-2" color="info">mdi-chart-timeline-variant</v-icon>
           {{ t('autopilot.traceDetail.title') }}
         </span>
-        <v-tooltip :text="t('app.actions.close') + ' (Esc)'" location="bottom" content-class="ccx-tooltip">
-          <template #activator="{ props: tooltipProps }">
-            <v-btn icon size="small" variant="text" v-bind="tooltipProps" @click="$emit('update:modelValue', false)">
-              <v-icon>mdi-close</v-icon>
-            </v-btn>
-          </template>
-        </v-tooltip>
+        <div class="d-flex align-center">
+          <v-tooltip
+            v-if="detail"
+            :text="copied ? t('autopilot.traceDetail.copied') : t('autopilot.traceDetail.copy')"
+            location="bottom"
+            content-class="ccx-tooltip"
+          >
+            <template #activator="{ props: tooltipProps }">
+              <v-btn
+                icon
+                size="small"
+                variant="text"
+                v-bind="tooltipProps"
+                :aria-label="t('autopilot.traceDetail.copy')"
+                @click="copyDetail"
+              >
+                <v-icon size="18">{{ copied ? 'mdi-check' : 'mdi-content-copy' }}</v-icon>
+              </v-btn>
+            </template>
+          </v-tooltip>
+          <v-tooltip :text="t('app.actions.close') + ' (Esc)'" location="bottom" content-class="ccx-tooltip">
+            <template #activator="{ props: tooltipProps }">
+              <v-btn icon size="small" variant="text" v-bind="tooltipProps" @click="$emit('update:modelValue', false)">
+                <v-icon>mdi-close</v-icon>
+              </v-btn>
+            </template>
+          </v-tooltip>
+        </div>
       </v-card-title>
       <v-divider />
 
@@ -352,6 +373,7 @@ import { ref, watch } from 'vue'
 import { useI18n } from '@/i18n'
 import { api } from '@/services/api'
 import type { TraceDetailV2, RoutingCandidate } from '@/services/api-types'
+import { writeClipboardText } from '@/utils/clipboard'
 
 const props = defineProps<{
   modelValue: boolean
@@ -368,6 +390,24 @@ const loading = ref(false)
 const notFound = ref(false)
 const fetchError = ref(false)
 const detail = ref<TraceDetailV2 | null>(null)
+const copied = ref(false)
+let copyResetTimer: ReturnType<typeof setTimeout> | null = null
+
+// 复制整个决策详情为格式化 JSON，便于直接粘贴给 AI 分析定位问题
+async function copyDetail() {
+  if (!detail.value) return
+  try {
+    await writeClipboardText(JSON.stringify(detail.value, null, 2))
+    copied.value = true
+    if (copyResetTimer) clearTimeout(copyResetTimer)
+    copyResetTimer = setTimeout(() => {
+      copied.value = false
+      copyResetTimer = null
+    }, 1600)
+  } catch (e) {
+    console.error('Failed to copy trace detail:', e)
+  }
+}
 
 watch(
   () => props.modelValue,

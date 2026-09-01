@@ -1483,6 +1483,8 @@
   "autopilot.traceDetail.duration": "Durasi",
   "autopilot.traceDetail.firstByte": "Byte Pertama",
   "autopilot.traceDetail.fallbackUsed": "Fail-open",
+  "autopilot.traceDetail.copy": "Salin detail keputusan",
+  "autopilot.traceDetail.copied": "Tersalin — siap ditempel untuk analisis AI",
   "autopilot.quickAdd.modeStandard": "Standar",
   "autopilot.quickAdd.modeQuick": "Tambah Cepat",
   "autopilot.quickAdd.addUrl": "Tambah URL",
