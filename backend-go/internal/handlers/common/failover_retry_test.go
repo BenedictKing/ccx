@@ -438,6 +438,38 @@ func TestShouldRetryWithNextKey_InvalidRequestShouldNotFailover(t *testing.T) {
 	}
 }
 
+func TestShouldRetryWithNextKey_UpstreamJSONParseErrorShouldFailover(t *testing.T) {
+	tests := []struct {
+		name string
+		body []byte
+	}{
+		{
+			name: "new_api unexpected end of JSON input",
+			body: []byte(`{"error":{"code":"","message":"Invalid request: Invalid request: unexpected end of JSON input (request id: 202609011139529793614648268d9d6UFHLbsmR)","type":"new_api_error"}}`),
+		},
+		{
+			name: "unexpected end of JSON input in upstream_error",
+			body: []byte(`{"error":{"type":"upstream_error","upstream_error":{"message":"unexpected end of JSON input"}}}`),
+		},
+		{
+			name: "failed to parse json detail",
+			body: []byte(`{"error":{"message":"bad request","detail":"failed to parse JSON body"}}`),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotFailover, gotQuota := ShouldRetryWithNextKey(400, tt.body, "Messages")
+			if !gotFailover {
+				t.Error("上游请求体解析失败的 400 应触发 failover（换渠道可恢复）")
+			}
+			if gotQuota {
+				t.Error("上游解析失败不应标记为 quota")
+			}
+		})
+	}
+}
+
 func TestShouldRetryWithNextKey_ModelNameMismatchOverridesInvalidRequest(t *testing.T) {
 	body := []byte(`{"error":{"message":"The supported API model names are deepseek-v4-pro or deepseek-v4-flash, but you passed claude-sonnet-5.","type":"invalid_request_error","code":"invalid_request_error"}}`)
 

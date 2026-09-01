@@ -959,6 +959,12 @@ func isNonRetryableError(bodyBytes []byte, apiType string) bool {
 	if strings.EqualFold(apiType, "Responses") && isResponsesToolsProtocolError(errObj) {
 		return false
 	}
+	// 同理放行上游请求体解析失败（"unexpected end of JSON input" 等）：
+	// 网关自身已成功解析并转发出完整请求体，此类 400 源于上游代理/后端链路解析失败，
+	// 换渠道后可恢复，不应作为客户端 schema 错误终结请求。
+	if isUpstreamRequestParseError(errObj) {
+		return false
+	}
 	if isSchemaValidationError(errObj) {
 		return true
 	}
@@ -1000,6 +1006,38 @@ func isResponsesToolsProtocolError(errObj map[string]interface{}) bool {
 	}
 	for _, marker := range markers {
 		if strings.Contains(combined, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+// isUpstreamRequestParseError 识别上游代理/后端对请求体的 JSON 解析失败
+// （"unexpected end of JSON input" 等）。网关自身已成功解析并转发出完整请求体，
+// 此类 400 说明该上游链路有问题，换渠道可恢复，不属于客户端 schema 错误。
+func isUpstreamRequestParseError(errObj map[string]interface{}) bool {
+	signatures := []string{
+		"unexpected end of json input",
+		"unexpected eof",
+		"cannot parse json",
+		"failed to parse json",
+	}
+	match := func(s string) bool {
+		s = strings.ToLower(s)
+		for _, sig := range signatures {
+			if strings.Contains(s, sig) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, field := range []string{"message", "detail", "msg"} {
+		if match(toStringField(errObj, field)) {
+			return true
+		}
+	}
+	if nested, ok := errObj["upstream_error"].(map[string]interface{}); ok {
+		if match(toStringField(nested, "message")) {
 			return true
 		}
 	}
