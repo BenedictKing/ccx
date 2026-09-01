@@ -203,6 +203,58 @@ export interface SmartRoutingDiagnoseResponse {
   message?: string
 }
 
+// ─── 路由预演（Route Preview）──
+
+/** 路由预演请求：原始请求体 + 入站协议。 */
+export interface RoutePreviewRequest {
+  channelKind: SmartRoutingDiagnoseChannelKind
+  model?: string
+  operation?: string
+  body: Record<string, unknown> | unknown[]
+}
+
+/** 预演响应中的 scheduler 层诊断。 */
+export interface RoutePreviewSchedulerDiagnose {
+  ok: boolean
+  kind: string
+  reason?: string
+  summary?: string
+  trace?: RoutePreviewSelectionTrace
+  selected?: {
+    channelIndex: number
+    channelName: string
+    serviceType: string
+  }
+}
+
+export interface RoutePreviewSelectionTrace {
+  kind: string
+  model?: string
+  routePrefix?: string
+  stages?: Array<{ name: string; count: number }>
+  candidates?: Array<{
+    channelIndex: number
+    channelName: string
+    stage: string
+    reason: string
+    details?: string
+  }>
+  selected?: {
+    channelIndex: number
+    channelName: string
+    reason: string
+  }
+}
+
+/** 路由预演响应：SmartRouter 层 + scheduler 层两面。 */
+export interface RoutePreviewResponse {
+  plan: SmartRoutingDiagnosePlan | null
+  mode: string
+  extractedProfile: SmartRoutingDiagnoseProfile | null
+  schedulerDiagnose: RoutePreviewSchedulerDiagnose | null
+  message?: string
+}
+
 // ─── 辅助方法 ───
 
 function getAuthHeaders(): Record<string, string> {
@@ -428,6 +480,28 @@ export async function diagnoseSmartRouting(
   if (!response.ok) {
     const text = await response.text().catch(() => response.statusText)
     throw new Error(`smart-routing diagnose failed (${response.status}): ${text}`)
+  }
+
+  return response.json()
+}
+
+/**
+ * 路由预演：粘贴原始请求体，自动提取特征后执行 SmartRouter + scheduler 两层预演。
+ * 零上游请求，请求体仅内存态用于特征提取。
+ * POST /api/autopilot/route-preview
+ */
+export async function previewRoute(
+  request: RoutePreviewRequest
+): Promise<RoutePreviewResponse> {
+  const response = await fetch(`${API_BASE}/autopilot/route-preview`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(request)
+  })
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => response.statusText)
+    throw new Error(`route preview failed (${response.status}): ${text}`)
   }
 
   return response.json()
