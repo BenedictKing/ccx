@@ -10,6 +10,7 @@ import (
 
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/metrics"
+	"github.com/BenedictKing/ccx/internal/quota"
 	"github.com/BenedictKing/ccx/internal/routingref"
 	"github.com/BenedictKing/ccx/internal/scheduler"
 )
@@ -74,6 +75,7 @@ type SmartRouter struct {
 	modelResolver     *ModelResolver         // dry-run 自动模型映射预览（nil = 不扩展候选）
 	modelProfileStore *ModelProfileStore     // endpoint 模型质量/任务域覆盖（nil = 仅用规范基准与种子）
 	subscriptionStore *SubscriptionStore     // 订阅账务快照（nil = effective cost 不可用）
+	quotaManager      *quota.Manager         // 配额真相与余量管理器（nil = 不参与评分，全量 0.5 中性分）
 	now               func() time.Time
 
 	// onCandidatesRanked Phase 4 Item 8: 候选排名回调（A/B 测试用）。
@@ -110,6 +112,22 @@ func (r *SmartRouter) SetSubscriptionStore(store *SubscriptionStore) {
 	if r != nil {
 		r.subscriptionStore = store
 	}
+}
+
+// SetQuotaManager 注入配额管理器，用于配额余量评分。
+// nil 时 QuotaHeadroom 全量 0.5 中性分（fail-open，不影响现有排序）。
+func (r *SmartRouter) SetQuotaManager(qm *quota.Manager) {
+	if r != nil {
+		r.quotaManager = qm
+	}
+}
+
+// QuotaManager 返回配额管理器（供外部模块读取，如 scheduler 注入）。
+func (r *SmartRouter) QuotaManager() *quota.Manager {
+	if r == nil {
+		return nil
+	}
+	return r.quotaManager
 }
 
 // ConfigManager 返回内部 ConfigManager 引用。
@@ -1639,6 +1657,7 @@ func (r *SmartRouter) buildChannelEntry(
 			}
 			r.applyModelQualityTier(&entry)
 			r.attachDomainProfiles(&entry, modelProvider)
+			r.applyQuotaHeadroom(&entry, channelUID)
 			return entry
 		}
 
@@ -1661,6 +1680,7 @@ func (r *SmartRouter) buildChannelEntry(
 			}
 			r.applyModelQualityTier(&entry)
 			r.attachDomainProfiles(&entry, modelProvider)
+			r.applyQuotaHeadroom(&entry, channelUID)
 			return entry
 		}
 	}
@@ -1672,7 +1692,17 @@ func (r *SmartRouter) buildChannelEntry(
 	}
 	r.applyModelQualityTier(&entry)
 	r.attachDomainProfiles(&entry, modelProvider)
+	r.applyQuotaHeadroom(&entry, channelUID)
 	return entry
+}
+
+// applyQuotaHeadroom 从配额管理器获取渠道的 headroom 分并填入评分候选。
+// quotaManager 为 nil 时不填值（ScoreCandidate 中 0 值会被修正为 0.5 中性分）。
+func (r *SmartRouter) applyQuotaHeadroom(entry *channelScoreEntry, channelUID string) {
+	if entry == nil || r == nil || r.quotaManager == nil || channelUID == "" {
+		return
+	}
+	entry.ScoringCandidate.QuotaHeadroomScore = r.quotaManager.GetChannelHeadroom(channelUID)
 }
 
 // aggregateSiblingChannelProfile 聚合同一 LogicalChannel 下兄弟物理渠道（跨协议）的画像，

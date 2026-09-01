@@ -1,5 +1,5 @@
 /**
- * 统一的套餐余量/用量明细行：标签 + 可选进度条 + 数值 + 说明。
+ * 统一的套餐余量/用量明细行：标签 + 可选进度条 + 数值 + 说明 + 真相等级。
  * 各渠道把自家数据映射为该结构后交给 UsageQuotaRows 组件渲染。
  */
 export interface UsageQuotaItem {
@@ -14,4 +14,13 @@ export interface UsageQuotaItem {
   caption?: string
   /** 说明文本的悬浮提示（如完整重置时间）。 */
   captionTitle?: string
+  /**
+   * 配额真相等级（配额真相分级调度 §2）。
+   * healthy: 数据可信且充足；approaching_limit: 接近上限；exhausted: 已耗尽；
+   * unavailable: 支持查询但本次获取失败；unknown: 无数据/不支持查询。
+   * 用于前端可视化区分数据可信度，unknown 不显示为红色（fail-open 原则）。
+   */
+  truthLevel?: 'healthy' | 'approaching_limit' | 'exhausted' | 'unavailable' | 'unknown'
+  /** 配额数据来源（可选，悬浮提示用）。 */
+  truthSource?: 'provider_api' | 'response_headers' | 'configured' | 'estimated' | 'unknown'
 }

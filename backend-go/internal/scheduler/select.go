@@ -559,6 +559,7 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 
 	// 2. 按优先级遍历活跃渠道
 	softSkipped := make([]softSkippedChannel, 0)
+	quotaSunk := make([]softSkippedChannel, 0) // 配额饱和沉底列表：饱和但不剔除，排到非饱和之后
 	for _, ch := range activeChannels {
 		// 跳过本次请求已经失败的渠道
 		if channelInfoFailed(ch, failedChannels, failedRoutes) {
@@ -632,6 +633,25 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 			continue
 		}
 
+		// 配额饱和沉底：配额接近耗尽或已耗尽的渠道沉到非饱和渠道之后，
+		// 不剔除（fail-open）。全员饱和时全体回候选。
+		if s.quotaManager != nil && upstream.ChannelUID != "" {
+			if s.quotaManager.IsChannelSaturated(upstream.ChannelUID, time.Now().UnixMilli()) {
+				prefix := kindSchedulerLogPrefix(kind)
+				truth := s.quotaManager.GetChannelTruth(upstream.ChannelUID)
+				log.Printf("[%s-Quota] 配额饱和沉底: [%d] %s truth=%s (非饱和渠道耗尽后回退)",
+					prefix, ch.Index, upstream.Name, truth)
+				quotaSunk = append(quotaSunk, softSkippedChannel{
+					channel:  ch,
+					upstream: upstream,
+					ratio:    1.0,
+					scope:    string(truth),
+				})
+				trace.skipChannel(ch, "priority_order", "quota_saturated", string(truth))
+				continue
+			}
+		}
+
 		if shouldReserveVisionChannelForText(kind, opts.HasImageContent, upstream, softSkipped) {
 			prefix := kindSchedulerLogPrefix(kind)
 			log.Printf("[%s-Vision] 文本请求保留可识图渠道: [%d] %s (待普通文本渠道水位 >= %.0f%% 后再作为溢出池)",
@@ -653,6 +673,18 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 		log.Printf("[%s-RateLimit] 所有低水位候选不可用，回退选择高水位渠道: [%d] %s scope=%s usage=%.0f%%",
 			prefix, skipped.channel.Index, skipped.upstream.Name, skipped.scope, skipped.ratio*100)
 		return finish(skipped.upstream, skipped.channel.Index, "rate_limit_pressure"), nil
+	}
+
+	// 配额饱和回退：所有非饱和渠道不可用时，尝试配额饱和的渠道（fail-open）。
+	// 确保不会因为配额数据缺失或不准确而阻断全部调度。
+	for _, sunk := range quotaSunk {
+		if sunk.upstream == nil || !s.channelIsRuntimeAvailable(sunk.upstream, kind, sunk.channel.Index, "") {
+			continue
+		}
+		prefix := kindSchedulerLogPrefix(kind)
+		log.Printf("[%s-Quota] 所有非饱和渠道不可用，回退选择配额饱和渠道: [%d] %s truth=%s",
+			prefix, sunk.channel.Index, sunk.upstream.Name, sunk.scope)
+		return finish(sunk.upstream, sunk.channel.Index, "quota_saturated_fallback"), nil
 	}
 
 	// 3. 所有健康渠道都失败，选择失败率最低的作为降级

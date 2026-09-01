@@ -41,6 +41,7 @@ import (
 	"github.com/BenedictKing/ccx/internal/metrics"
 	"github.com/BenedictKing/ccx/internal/middleware"
 	"github.com/BenedictKing/ccx/internal/presetstore"
+	"github.com/BenedictKing/ccx/internal/quota"
 	"github.com/BenedictKing/ccx/internal/ratelimit"
 	"github.com/BenedictKing/ccx/internal/scheduler"
 	"github.com/BenedictKing/ccx/internal/session"
@@ -683,6 +684,10 @@ func main() {
 				)
 				autopilotManager.SetSmartRouter(smartRouter)
 
+				// 配额管理器：真相分级 + 懒重置饱和桶 + 响应头解析（§2 配额真相分级调度）
+				quotaManager := quota.NewManager()
+				smartRouter.SetQuotaManager(quotaManager)
+
 				// Phase 2: 将 Advisor + LocalRuntimeStore 注入 SmartRouter
 				autopilotManager.WireSmartRouter()
 				log.Printf("[Autopilot-Init] SmartRouter advisor + localRuntimeStore 已注入")
@@ -842,6 +847,13 @@ func main() {
 			return sr.CandidateFilterForWithActual(&profile)
 		})
 		log.Printf("[Scheduler-Init] SmartRouter Autopilot filter 已注册")
+
+		// 配额管理器注入 scheduler（饱和沉底排序用）
+		if autopilotManager != nil && autopilotManager.SmartRouter() != nil {
+			if qm := autopilotManager.SmartRouter().QuotaManager(); qm != nil {
+				channelScheduler.SetQuotaManager(qm)
+			}
+		}
 	}
 
 	// EndpointAttemptPolicy 注入 + FastDecay 通知 + L2 探测 + 限速应用。

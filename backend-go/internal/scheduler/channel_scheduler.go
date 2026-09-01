@@ -10,6 +10,7 @@ import (
 	"github.com/BenedictKing/ccx/internal/conversation"
 	"github.com/BenedictKing/ccx/internal/eventbus"
 	"github.com/BenedictKing/ccx/internal/metrics"
+	"github.com/BenedictKing/ccx/internal/quota"
 	"github.com/BenedictKing/ccx/internal/ratelimit"
 	"github.com/BenedictKing/ccx/internal/routingref"
 	"github.com/BenedictKing/ccx/internal/session"
@@ -46,6 +47,7 @@ type ChannelScheduler struct {
 	rateLimitManager         *ratelimit.Manager
 	candidateFilterProvider  CandidateFilterProvider  // SmartRouter shadow 注入点
 	modelSupportResolverFunc ModelSupportResolverFunc // Autopilot 模型支持解析注入点
+	quotaManager             *quota.Manager            // 配额真相与余量管理器（nil = 不参与沉底排序）
 	loadShedMu               sync.Mutex
 	loadShedStates           map[string]rateLimitLoadShedState
 	loadShedStopCh           chan struct{}
@@ -239,6 +241,14 @@ func (s *ChannelScheduler) SetModelSupportResolverProvider(fn ModelSupportResolv
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.modelSupportResolverFunc = fn
+}
+
+// SetQuotaManager 注入配额管理器，用于配额饱和沉底排序。
+// nil 时不参与排序（fail-open，不影响现有调度顺序）。
+func (s *ChannelScheduler) SetQuotaManager(qm *quota.Manager) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.quotaManager = qm
 }
 
 // GetRateLimitManager 获取主动限速管理器

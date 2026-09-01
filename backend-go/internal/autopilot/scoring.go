@@ -7,7 +7,7 @@ import "fmt"
 
 // ── §5.3 权重表 ──
 
-// ScoringWeights 是九项评分公式的权重配置。
+// ScoringWeights 是十项评分公式的权重配置。
 // 设计 §5.3：Score = Σ(w_i * score_i) - penalty
 type ScoringWeights struct {
 	WQuality         float64 `json:"wQuality"`         // 质量档
@@ -19,38 +19,48 @@ type ScoringWeights struct {
 	WFamily          float64 `json:"wFamily"`          // 模型派系偏好
 	WProviderQuality float64 `json:"wProviderQuality"` // 上游供应商质量
 	WDomain          float64 `json:"wDomain"`          // 任务域优势
+	WQuotaHeadroom   float64 `json:"wQuotaHeadroom"`   // 配额余量（配额真相分级调度 §2）
 }
 
 // DefaultTaskWeights 返回七类 TaskClass 的默认权重表（§5.3 照抄）。
+// quotaHeadroom 权重从 WDomain / WSavings 匀出，保持总权重基本不变。
+// unknown 渠道得 0.5 中性分，配额数据缺失时不惩罚（fail-open）。
 func DefaultTaskWeights() map[TaskClass]ScoringWeights {
 	return map[TaskClass]ScoringWeights{
 		TaskClassSupervisor: {
 			WQuality: 3, WStability: 2, WSpeed: 1, WCost: 0, WSavings: 0.5,
-			WTierMatch: 1, WFamily: 0.2, WProviderQuality: 1.0, WDomain: 0.5,
+			WTierMatch: 1, WFamily: 0.2, WProviderQuality: 1.0, WDomain: 0.2,
+			WQuotaHeadroom: 0.3, // 从 WDomain(0.5→0.2)匀出 0.3
 		},
 		TaskClassWorker: {
-			WQuality: 1, WStability: 1, WSpeed: 2, WCost: 2, WSavings: 3,
+			WQuality: 1, WStability: 1, WSpeed: 2, WCost: 2, WSavings: 2.5,
 			WTierMatch: 1, WFamily: 0.2, WProviderQuality: 0.8, WDomain: 0.5,
+			WQuotaHeadroom: 0.5, // 从 WSavings(3→2.5)匀出 0.5
 		},
 		TaskClassLightweight: {
-			WQuality: 0, WStability: 1, WSpeed: 3, WCost: 2, WSavings: 3,
+			WQuality: 0, WStability: 1, WSpeed: 3, WCost: 2, WSavings: 2.5,
 			WTierMatch: 1, WFamily: 0.1, WProviderQuality: 0.5, WDomain: 0.5,
+			WQuotaHeadroom: 0.5, // 从 WSavings(3→2.5)匀出 0.5
 		},
 		TaskClassVision: {
 			WQuality: 2, WStability: 2, WSpeed: 1, WCost: 1, WSavings: 1,
-			WTierMatch: 1, WFamily: 0.2, WProviderQuality: 1.0, WDomain: 0.5,
+			WTierMatch: 1, WFamily: 0.2, WProviderQuality: 1.0, WDomain: 0.2,
+			WQuotaHeadroom: 0.3, // 从 WDomain(0.5→0.2)匀出 0.3
 		},
 		TaskClassImageGen: {
-			WQuality: 1, WStability: 2, WSpeed: 1, WCost: 2, WSavings: 2,
+			WQuality: 1, WStability: 2, WSpeed: 1, WCost: 2, WSavings: 1.5,
 			WTierMatch: 1, WFamily: 0.1, WProviderQuality: 0.3, WDomain: 0,
+			WQuotaHeadroom: 0.5, // 从 WSavings(2→1.5)匀出 0.5
 		},
 		TaskClassEmbedding: {
-			WQuality: 0, WStability: 2, WSpeed: 2, WCost: 3, WSavings: 3,
+			WQuality: 0, WStability: 2, WSpeed: 2, WCost: 3, WSavings: 2.5,
 			WTierMatch: 1, WFamily: 0, WProviderQuality: 0, WDomain: 0,
+			WQuotaHeadroom: 0.5, // 从 WSavings(3→2.5)匀出 0.5
 		},
 		TaskClassLongContext: {
 			WQuality: 2, WStability: 2, WSpeed: 1, WCost: 0, WSavings: 1,
-			WTierMatch: 1, WFamily: 0.2, WProviderQuality: 1.0, WDomain: 0.5,
+			WTierMatch: 1, WFamily: 0.2, WProviderQuality: 1.0, WDomain: 0.2,
+			WQuotaHeadroom: 0.3, // 从 WDomain(0.5→0.2)匀出 0.3
 		},
 	}
 }
@@ -149,6 +159,11 @@ type ScoringCandidate struct {
 	// 调用方应使用 applyPremiumBenchmarkEvidence 预计算，未知时保持零值不参与细分。
 	QualityBenchmarkKnown bool
 	QualityBenchmarkScore float64
+
+	// QuotaHeadroomScore 是配额余量分（0.0-1.0，越充足越高）。
+	// 来源：配额真相分级（quota 包），unknown 时给 0.5 中性分（fail-open，不惩罚冷候选）。
+	// 调用方通过 quota.Manager.GetChannelHeadroom 获取。
+	QuotaHeadroomScore float64
 }
 
 // ScoringContext 是评分时的上下文信息（来自请求/策略）。
@@ -182,6 +197,7 @@ type ScoredCandidate struct {
 	ProviderQualityScore float64                 `json:"providerQualityScore"`
 	DomainStrengthScore  float64                 `json:"domainStrengthScore"`
 	DomainEvidence       *DomainStrengthEvidence `json:"domainEvidence,omitempty"`
+	QuotaHeadroomScore   float64                 `json:"quotaHeadroomScore"`
 	Penalty              float64                 `json:"penalty"`
 }
 
@@ -223,7 +239,7 @@ var costTierScore = map[CostTier]float64{
 	CostTierFree:      3,
 }
 
-// ScoreCandidate 对单个候选项执行九项评分公式（§5.3）。
+// ScoreCandidate 对单个候选项执行十项评分公式（§5.3 + §2 配额余量）。
 // 返回 ScoredCandidate，包含总分和各分项明细。
 func ScoreCandidate(candidate ScoringCandidate, ctx ScoringContext) ScoredCandidate {
 	w := ctx.Weights
@@ -277,10 +293,16 @@ func ScoreCandidate(candidate ScoringCandidate, ctx ScoringContext) ScoredCandid
 	// 9. domainStrengthScore：调用方通过 BuildDomainStrengthScore 预计算
 	dss := candidate.DomainStrengthScore
 
-	// 10. penalty：healthState=degraded 时 -5, limited 时 -20
+	// 10. quotaHeadroomScore：配额余量分（0.0-1.0，unknown 时为 0.5 中性分）
+	qhs := candidate.QuotaHeadroomScore
+	if qhs <= 0 {
+		qhs = 0.5 // fail-open：无数据时给中性分，不惩罚
+	}
+
+	// 11. penalty：healthState=degraded 时 -5, limited 时 -20
 	penalty := calcPenalty(candidate.HealthState)
 
-	// 九项求和
+	// 十项求和
 	total := w.WQuality*qs +
 		w.WStability*ss +
 		w.WSpeed*sp +
@@ -289,7 +311,8 @@ func ScoreCandidate(candidate ScoringCandidate, ctx ScoringContext) ScoredCandid
 		w.WTierMatch*tmb +
 		w.WFamily*fps +
 		w.WProviderQuality*pqs +
-		w.WDomain*dss -
+		w.WDomain*dss +
+		w.WQuotaHeadroom*qhs -
 		penalty
 
 	return ScoredCandidate{
@@ -305,6 +328,7 @@ func ScoreCandidate(candidate ScoringCandidate, ctx ScoringContext) ScoredCandid
 		ProviderQualityScore: pqs,
 		DomainStrengthScore:  dss,
 		DomainEvidence:       candidate.DomainEvidence,
+		QuotaHeadroomScore:   qhs,
 		Penalty:              penalty,
 	}
 }
