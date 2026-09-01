@@ -573,6 +573,7 @@ health(40) > fastDecay(25) > successRate(20) > latency(10) > cost(5)
 - `EndpointPolicy` 提供的 `FilterKeyBindings` 在重试前已过滤 dead/misconfigured 和不兼容模型
 - `ResolvedTargetForBinding` 按最终 channel+URL+Key 解析 model+effort
 - `ResponseHeaderTimeoutForEndpoint` 对轻任务可缩短响应头超时
+- `isNonRetryableError` 的 schema 不重试判定对上游链路 JSON 解析失败（`unexpected end of JSON input` 等）豁免，换渠道可恢复（见 §5.21）
 
 ## 5. 最近新增功能
 
@@ -782,6 +783,32 @@ health(40) > fastDecay(25) > successRate(20) > latency(10) > cost(5)
 - `scripts/generate-benchmark-chart.mjs`：校验层放宽 `quality_score == null` 的行（原会被整行丢弃，与"小样本半透明点仅供观察"冲突）；表格「常规等效分」列替换为「质量档」列（`tierOf` 按阈值 premium≥/high≥/normal≥/low 评定，null 显示"—"），排序改档位降序→成本升序；图例前缀、`<desc>`、section-note 文案同步。
 - 后端零波及：backend-go 不读 `benchmark-viz-data.json`，其自身 `quality_score`（`frontierQualityScore` 0-1 合成分）是另一概念，且本就是模型×effort 口径（`effortAwareBenchmarkScore`）。
 - 产物重生成：viz JSON 的逐档分数可由现存行（`pass_rate`+`taskCount`）确定性推导，无需打网络重拉数据源。
+
+### 5.21 上游 400 的 JSON 解析失败豁免 schema 不重试判定
+
+提交：`396a3345`
+
+- 动机：new-api 中转站（如 x666）对完整请求体返回 400 `"Invalid request: unexpected end of JSON input"`，`isSchemaValidationMessage` 的 `"invalid request"` 关键词命中 → `isNonRetryableError` 判为客户端 schema 错误 → 19 个候选零尝试直接 400 回客户端。
+- 修复：`isNonRetryableError`（`handlers/common/failover.go:945`）在 schema 判定前新增 `isUpstreamRequestParseError`（`:1018`）豁免——网关自身已成功解析并转发完整请求体，`unexpected end of JSON input` / `unexpected EOF` / `cannot|failed to parse json` 必源于上游代理/后端链路的解析失败，换渠道可恢复。覆盖 message/detail/msg 与嵌套 `upstream_error.message`，全 apiType 生效（与 Responses 专用的 `isResponsesToolsProtocolError` 先例并列）。
+- 前提：`shouldRetryWithNextKey` 末尾默认 failover=true，豁免即恢复 failover；真 schema 错误（字段类型不符等）仍不重试，既有回归测试保持不动。
+
+### 5.22 请求预处理：重复 total_tokens 提醒块去重
+
+提交：`a12fc320`，顺序修复 `537b78cb`
+
+- 动机：新版 Claude Code 每轮往请求注入 `<total_tokens>N tokens left</total_tokens>` 提醒块（常附带 output-style 提醒文本）且不清理旧的，长会话累积数百份重复块，白耗上下文预算并撑破上游窗口。
+- `DeduplicateTotalTokensSystemBlocks`（`handlers/common/request.go:835`）：识别顶层 `system` 数组中以 `<total_tokens>` 开头的文本块，重复时只保留数组末尾最后一份（最新计数与 style 提醒仍生效）；被删块携带 `cache_control` 而保留块没有时，把缓存断点转移给保留块。per-attempt 预处理链中无条件执行。
+- **顺序约束**（`537b78cb`）：去重必须排在 `NormalizeSystemRoleToTopLevelWithChanged` 之后（`upstream_failover.go:782` vs `:770`）——新客户端把该块作为 messages 里的 `role=system` 字符串发送，归一化抽到顶层之前去重扫不到任何块（`tokenCount < 2` 直接返回），日志表现为有归一化日志、无去重日志。归一化按 messages 出现顺序追加到顶层末尾，与「保留最后一份 = 最新计数」语义自洽。
+- 同 commit 附带的信号修复（`a12fc320`）：火山方舟 400 文案 `Total tokens of image and text exceed max message tokens` 此前被上下文上限信号提取的裸 `"image"` 排除词误杀（学不到上限）；排除词收紧为体积/尺寸语义短语（`image size` / `image too` / `image dimension` 等），并新增 `tokens[^.]{0,30}exceed[^.]{0,20}max` 多模态总量模式（`handlers/common/context_limit_signal.go:39,52-70`）。
+
+### 5.23 attemptBody 变量遮蔽致模型改写丢失
+
+提交：`a080d045`
+
+- 症状：auto_resolve 日志正常产出 `claude-opus-4-8 -> deepseek-v4-flash`，但上游实际收到的仍是原模型。
+- 根因：`upstream_failover.go` 曾在块内用 `attemptBody, rewriteOk := atomicModelEffortRewrite(...)` 声明影子变量——改写结果只进 gin context，随后的 system 归一化用**外层旧 body** 处理后 `c.Set("requestBodyBytes", ...)` 把改写覆盖。请求无 inline system role 时 `normChanged=false` 侥幸逃生，bug 长期潜伏。
+- 修复：改回 `if rewritten, rewriteOk := ...; rewriteOk { attemptBody = rewritten; ... }` 赋回外层（`upstream_failover.go:730`）。教训：per-attempt 预处理链上所有 body 变换必须赋回同一个 `attemptBody` 并同步 `RestoreRequestBody` + `c.Set("requestBodyBytes")`，禁止块内 `:=` 遮蔽。
+- 回归测试 `TestTryUpstreamWithAllKeysMappedModelSurvivesSystemNormalization`：body 带 inline system 消息（`normChanged=true` 是触发覆盖的必要条件），断言上游收到改写后模型；旧写法下已负向验证必挂。
 
 ## 6. 与其他模块的交互点
 
