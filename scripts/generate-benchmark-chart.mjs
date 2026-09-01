@@ -30,10 +30,11 @@ export function validateVisualizationData(raw) {
       || boundaries.some((value, index) => index > 0 && value < boundaries[index - 1])) {
     throw new Error('输入文件的 qualityTiers 无效')
   }
+  // quality_score 为逐档口径：可靠档有值，小样本档为 null（保留行、不评定档位）
   const rows = raw.data.filter(row => (
     row && typeof row.model === 'string' && typeof row.source === 'string'
       && Number.isFinite(row.pass_rate)
-      && Number.isFinite(row.quality_score)
+      && (row.quality_score == null || Number.isFinite(row.quality_score))
       && (Number.isFinite(row.mean_cost) || Number.isFinite(row.median_cost))
   ))
   const comparisons = (Array.isArray(raw.comparisons) ? raw.comparisons : []).filter(row => (
@@ -246,7 +247,7 @@ tbody tr:hover { background: var(--accent-soft); }
   <section class="chart-shell" id="chart-shell">
     <svg class="benchmark-chart" id="chart" role="img" aria-labelledby="chart-title chart-description">
       <title id="chart-title">模型 pass@1 与单任务成本散点图</title>
-      <desc id="chart-description">纵轴为各思考强度档的实测 pass@1，轨迹展示同一模型随 effort 升高的能力增益；背景色带为常规 effort 口径的自动质量档边界（与表格常规等效分同口径），深色折线表示成本与实测 pass@1 的 Pareto 前沿。</desc>
+      <desc id="chart-description">纵轴为各思考强度档的实测 pass@1，轨迹展示同一模型随 effort 升高的能力增益；背景色带为自动质量档边界，档位按各点自身实测 pass@1 逐档评定（同一模型不同 effort 档可分属不同档位），深色折线表示成本与实测 pass@1 的 Pareto 前沿。</desc>
       <defs><clipPath id="plot-clip"><rect id="clip-rect"></rect></clipPath></defs>
       <g id="quality-bands" clip-path="url(#plot-clip)" aria-label="自动质量档背景区域"></g>
       <g id="grid"></g>
@@ -264,7 +265,7 @@ tbody tr:hover { background: var(--accent-soft); }
     <div class="comparison-heading">
       <div>
         <h2>多来源能力比较</h2>
-        <p class="section-note">按同一能力类别展示 BenchLM.ai、DeepSWE、CodexRadar 与 Artificial Analysis 的原始分数。不同基准的任务集和评分口径不同，仅用于观察来源内相对位置。任务数不足 3 的档位（半透明虚线点）视为样本不足：不参与常规等效分与质量档评定，排序时也不计入，仅供观察。</p>
+        <p class="section-note">按同一能力类别展示 BenchLM.ai、DeepSWE、CodexRadar 与 Artificial Analysis 的原始分数。不同基准的任务集和评分口径不同，仅用于观察来源内相对位置。任务数不足 3 的档位（半透明虚线点）视为样本不足：该档不评定质量档，排序时也不计入，仅供观察。</p>
       </div>
       <label class="control" for="comparison-category-control">
         <span class="control-label">能力类别</span>
@@ -292,7 +293,7 @@ tbody tr:hover { background: var(--accent-soft); }
     <table>
       <thead><tr>
         <th class="col-model">模型</th><th class="col-effort">强度</th>
-        <th class="col-score numeric">常规等效分</th><th class="col-rate numeric">pass@1</th><th class="col-cost numeric" id="cost-heading">平均成本</th>
+        <th class="col-score numeric">质量档</th><th class="col-rate numeric">pass@1</th><th class="col-cost numeric" id="cost-heading">平均成本</th>
         <th class="col-pareto">边界</th><th class="col-source">数据源</th>
       </tr></thead>
       <tbody id="table-body"></tbody>
@@ -310,6 +311,16 @@ const effortRank = new Map([['off', -2], ['minimal', -1], ['low', 0], ['medium',
 const LOW_SAMPLE_TASKS = 3;
 function isLowSampleRow(row) {
   return Number.isFinite(row.taskCount) && row.taskCount > 0 && row.taskCount < LOW_SAMPLE_TASKS;
+}
+// 质量档按各点自身实测 pass@1 逐档评定：同一模型不同 effort 档可分属不同档位。
+// quality_score 为 null（小样本档）时不评定。
+const TIER_RANK = { premium: 3, high: 2, normal: 1, low: 0 };
+function tierOf(row) {
+  if (!Number.isFinite(row.quality_score)) return null;
+  if (row.quality_score >= QUALITY_TIERS.premiumMin) return 'premium';
+  if (row.quality_score >= QUALITY_TIERS.highMin) return 'high';
+  if (row.quality_score >= QUALITY_TIERS.normalMin) return 'normal';
+  return 'low';
 }
 const palette = Array.from({ length: 10 }, (_, index) => 'var(--series-' + (index + 1) + ')');
 // 同族模型的展示排序覆盖：须在 compareModels 之前声明，否则顶层 sort 触发 TDZ。
@@ -563,7 +574,10 @@ function tooltipHtml(row) {
     : '';
   return '<strong>' + escapeHtml(row.model) + ' · ' + escapeHtml(effort) + '</strong>'
     + '<div class="tooltip-line">pass@1 ' + (row.pass_rate * 100).toFixed(1) + '%</div>'
-    + '<div class="tooltip-line">常规等效分 ' + row.quality_score.toFixed(1) + '</div>'
+    + '<div class="tooltip-line">质量档 ' + (tierOf(row) ?? '未定（样本不足）') + '</div>'
+    + (Number.isFinite(row.model_quality_score)
+      ? '<div class="tooltip-line">常规档等效 ' + row.model_quality_score.toFixed(1) + '</div>'
+      : '')
     + '<div class="tooltip-line">' + costLabel + ' $' + row.cost.toFixed(3) + '</div>'
     + taskLine
     + '<div class="tooltip-line">' + escapeHtml(row.source) + '</div>';
@@ -660,7 +674,7 @@ function renderQualityLegend() {
   legend.replaceChildren();
   const intro = document.createElement('span');
   intro.className = 'quality-legend-item';
-  intro.textContent = '常规口径档位（按各模型常规等效分划分）：';
+  intro.textContent = '档位边界（按各点实测 pass@1 逐档划分）：';
   legend.append(intro);
   qualityBands.forEach(band => {
     const from = typeof band.from === 'function' ? band.from() : band.from;
@@ -702,8 +716,10 @@ function renderLegend(rows) {
 function renderTable(rows, frontierKeys) {
   const body = document.getElementById('table-body');
   body.replaceChildren();
-  [...rows].sort((a, b) => b.quality_score - a.quality_score || a.cost - b.cost).forEach(row => {
-    const cells = [row.model, row.effort || 'default', row.quality_score.toFixed(1), (row.pass_rate * 100).toFixed(1) + '%', '$' + row.cost.toFixed(3), frontierKeys.has(row.key) ? 'Pareto' : '', row.source];
+  [...rows].sort((a, b) => (
+    (TIER_RANK[tierOf(b)] ?? -1) - (TIER_RANK[tierOf(a)] ?? -1) || a.cost - b.cost
+  )).forEach(row => {
+    const cells = [row.model, row.effort || 'default', tierOf(row) ?? '—', (row.pass_rate * 100).toFixed(1) + '%', '$' + row.cost.toFixed(3), frontierKeys.has(row.key) ? 'Pareto' : '', row.source];
     const tr = document.createElement('tr');
     cells.forEach((value, index) => {
       const td = document.createElement('td');

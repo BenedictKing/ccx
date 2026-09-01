@@ -370,23 +370,20 @@ export function buildBenchmarkVisualizationData({
     a.source.localeCompare(b.source)
   ))
 
-  // 等效分按（模型×来源）组校准：同组各 effort 档共享同一常规等效能力分，
-  // 图表轨迹即"同一能力在不同 effort 档的成本"。
-  const groupScores = new Map()
-  for (const row of data) {
-    const key = `${row.model}|${row.source}`
-    if (!groupScores.has(key)) groupScores.set(key, [])
-    groupScores.get(key).push({ effort: row.effort, passRate: row.pass_rate, taskCount: row.taskCount })
-  }
-  const qualityScoreByGroup = new Map([...groupScores]
-    .map(([key, points]) => [key, mediumAlignedScore(points)]))
+  // quality_score 是（模型×来源×effort）逐档口径：直接取本档可靠实测分。
+  // 同一模型随 effort 升降跨越质量档是真实情况（low 掉 normal、max 进 premium），
+  // 不再按组共享 medium 对齐分；小样本档（taskCount<3）实测分是噪声，置 null 不评定。
+  // 模型级 medium 对齐校准仅保留在 model_quality_score 与 qualityTiers 阈值推导
+  // （后者与后端 computeQualityTierBoundariesFromRegistry 镜像，勿改口径）。
 
   return {
     generatedAt: new Date().toISOString(),
     qualityTiers,
     data: data.map(row => normalizeCostRow({
       ...row,
-      quality_score: qualityScoreByGroup.get(`${row.model}|${row.source}`) ?? null,
+      quality_score: hasReliableSample(row.taskCount) && Number.isFinite(row.pass_rate)
+        ? row.pass_rate * 100
+        : null,
       model_quality_score: qualityScores.get(row.model) ?? null,
     })),
     comparisons: comparisons.map(normalizeComparisonRow),

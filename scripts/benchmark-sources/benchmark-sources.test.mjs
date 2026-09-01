@@ -640,7 +640,7 @@ test('visualization combines DeepSWE, BenchLM and CodexRadar sources', () => {
   const validated = validateVisualizationData(visualization)
   const html = renderBenchmarkChart(validated.rows, validated.comparisons, validated.qualityTiers)
   const deepsweHighRow = visualization.data.find(row => row.source === 'DeepSWE v1.1' && row.effort === 'high')
-  // 组内仅有 high 单点：一侧回退取该档原始分，不再按全局比率折算
+  // 逐档口径：quality_score 直接取本档可靠实测分
   assert.equal(deepsweHighRow.quality_score, 70)
   const registryVisualization = buildBenchmarkVisualizationData({
     benchmarkProfiles: { model: { canonicalModel: 'model', benchmarkEvidence: [
@@ -680,7 +680,7 @@ test('visualization dedupes cost rows preferring live sources over registry back
   assert.equal(lowRow.mean_cost, 0.3)
 })
 
-test('quality score calibration keeps low-gain models below stronger ones', () => {
+test('quality score is per-effort raw pass rate with model-level calibration retained', () => {
   const evidence = (rawValue, effort, costUsd) => ({
     benchmark: 'deepswe',
     benchmarkVersion: 'v1.1',
@@ -692,7 +692,7 @@ test('quality score calibration keeps low-gain models below stronger ones', () =
   })
   const visualization = buildBenchmarkVisualizationData({
     benchmarkProfiles: {
-      // 低增益模型：low→medium 实测仅 +9.7%，全局比率法曾把 low 点虚抬到 86.9
+      // 低增益模型：low→medium 实测仅 +9.7%，逐档口径下各档只呈现自身实测
       'low-gain': { canonicalModel: 'low-gain', benchmarkEvidence: [
         evidence(0.596, 'low', 3.7),
         evidence(0.654, 'medium', 6),
@@ -701,45 +701,42 @@ test('quality score calibration keeps low-gain models below stronger ones', () =
       strong: { canonicalModel: 'strong', benchmarkEvidence: [
         evidence(0.689, 'medium', 3.2),
       ] },
-      // 无 medium：low 与 high 跨越常规档，组内轨迹线性插值
+      // 无 medium：low 与 high 跨越常规档
       interpolated: { canonicalModel: 'interpolated', benchmarkEvidence: [
         evidence(0.545, 'low', 1),
         evidence(0.665, 'high', 3),
       ] },
-      // 无 medium：全部在常规档一侧，取最接近档位（high）原始分
+      // 无 medium：全部在常规档一侧
       'one-side': { canonicalModel: 'one-side', benchmarkEvidence: [
         evidence(0.607, 'high', 5),
         evidence(0.67, 'xhigh', 7),
       ] },
     },
   })
-  const scoreOf = (model, effort) => visualization.data
-    .find(row => row.model === model && row.effort === effort)?.quality_score
+  const rowOf = (model, effort) => visualization.data
+    .find(row => row.model === model && row.effort === effort)
 
-  // 同组共享 medium 实测等效分：low 点不再超过本组 medium 实测
-  assert.equal(scoreOf('low-gain', 'low'), 65.4)
-  assert.equal(scoreOf('low-gain', 'medium'), 65.4)
-  assert.equal(scoreOf('strong', 'medium'), 68.9)
-  assert.equal(scoreOf('interpolated', 'low'), 60.5)
-  assert.equal(scoreOf('one-side', 'high'), 60.7)
+  // 逐档 quality_score = 本档自身实测 pass@1（百分制），同组各档不再共享
+  assert.equal(rowOf('low-gain', 'low').quality_score, 59.6)
+  assert.equal(rowOf('low-gain', 'medium').quality_score, 65.4)
+  assert.equal(rowOf('strong', 'medium').quality_score, 68.9)
+  assert.equal(rowOf('interpolated', 'low').quality_score, 54.5)
+  assert.equal(rowOf('interpolated', 'high').quality_score, 66.5)
+  assert.equal(rowOf('one-side', 'high').quality_score, 60.7)
+  assert.equal(rowOf('one-side', 'xhigh').quality_score, 67)
 
-  // 回归：低增益低能力模型的任意点不得高于高能力模型的等效分
+  // 模型级 medium 对齐校准保留在 model_quality_score：
+  // 有 medium 直接用、跨 medium 插值 60.5、一侧取最近档 60.7
+  assert.equal(rowOf('low-gain', 'low').model_quality_score, 65.4)
+  assert.equal(rowOf('strong', 'medium').model_quality_score, 68.9)
+  assert.equal(rowOf('interpolated', 'low').model_quality_score, 60.5)
+  assert.equal(rowOf('one-side', 'high').model_quality_score, 60.7)
+
+  // 低增益低能力模型的任意档实测分不得高于高能力模型 medium 实测
   const lowGainMax = Math.max(
     ...visualization.data.filter(row => row.model === 'low-gain').map(row => row.quality_score),
   )
-  assert.ok(lowGainMax < scoreOf('strong', 'medium'))
-
-  // 校准分恒在组内实测原始分范围内（百分制）
-  const rangeOf = (model) => {
-    const rates = visualization.data.filter(row => row.model === model).map(row => row.pass_rate * 100)
-    return [Math.min(...rates), Math.max(...rates)]
-  }
-  for (const model of ['low-gain', 'strong', 'interpolated', 'one-side']) {
-    const [min, max] = rangeOf(model)
-    for (const row of visualization.data.filter(r => r.model === model)) {
-      assert.ok(row.quality_score >= min - 1e-9 && row.quality_score <= max + 1e-9)
-    }
-  }
+  assert.ok(lowGainMax < rowOf('strong', 'medium').quality_score)
 })
 
 test('small-sample efforts are excluded from calibration and tagged in chart data', () => {
@@ -777,14 +774,16 @@ test('small-sample efforts are excluded from calibration and tagged in chart dat
 
   const scoreOf = (model, effort) => visualization.data
     .find(row => row.model === model && row.effort === effort)?.quality_score
-  // 小样本 low 不参与插值：noisy-low 只剩 max 单点，等效分 33.3 而非 83.3
-  assert.equal(scoreOf('noisy-low', 'low'), 33.3)
+  // 逐档口径：小样本档自身实测是噪声（1 任务全过=100%），不评定档位 → null；
+  // 可靠档（max 6 任务）保留自身实测分
+  assert.equal(scoreOf('noisy-low', 'low'), null)
   assert.equal(scoreOf('noisy-low', 'max'), 33.3)
-  assert.equal(scoreOf('ample-low', 'low'), 83.3)
-  // 全小样本：等效分为 null，校验层会把该行从图表数据中丢弃
+  assert.equal(scoreOf('ample-low', 'low'), 100)
+  // 全小样本：quality_score 为 null，但行保留在图表数据中（半透明点仅供观察）
   assert.equal(scoreOf('all-tiny', 'low'), null)
   const validated = validateVisualizationData(visualization)
-  assert.ok(!validated.rows.some(row => row.model === 'all-tiny'))
+  assert.ok(validated.rows.some(row => row.model === 'all-tiny'))
+  assert.ok(validated.rows.some(row => row.model === 'noisy-low' && row.effort === 'low'))
   // 成本行与比较行都带任务数，供图表标注小样本
   assert.equal(visualization.data.find(row => row.model === 'noisy-low' && row.effort === 'low').taskCount, 1)
   assert.equal(visualization.comparisons.find(row => row.model === 'noisy-low' && row.effort === 'low').taskCount, 1)
@@ -792,10 +791,13 @@ test('small-sample efforts are excluded from calibration and tagged in chart dat
 
 test('benchmark chart script carries low-sample marking logic', () => {
   const html = renderBenchmarkChart([
-    { model: 'm', source: 'CodexRadar', effort: 'low', pass_rate: 1, quality_score: 33.3, mean_cost: 1, median_cost: 1, taskCount: 1 },
+    { model: 'm', source: 'CodexRadar', effort: 'low', pass_rate: 1, quality_score: null, mean_cost: 1, median_cost: 1, taskCount: 1 },
   ], [], null)
   assert.match(html, /low-sample/)
   assert.match(html, /isLowSampleRow/)
+  // 档位列与逐档评定逻辑随 HTML 内联分发
+  assert.match(html, /质量档/)
+  assert.match(html, /tierOf/)
 })
 
 test('dradar per-effort evidence carries each effort own cell count', () => {
