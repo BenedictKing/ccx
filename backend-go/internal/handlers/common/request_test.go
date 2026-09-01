@@ -16,6 +16,7 @@ import (
 
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/errutil"
+	"github.com/BenedictKing/ccx/internal/providers"
 	"github.com/BenedictKing/ccx/internal/utils"
 	"github.com/gin-gonic/gin"
 	"github.com/klauspost/compress/zstd"
@@ -873,6 +874,41 @@ func TestDeduplicateTotalTokensSystemBlocks(t *testing.T) {
 		body := []byte(`{"system":[{"type":"text","text":"tokens left in budget"},{"type":"text","text":"another"}]}`)
 		if _, changed := DeduplicateTotalTokensSystemBlocks(nil, body, false, "Messages"); changed {
 			t.Error("non-total_tokens blocks should not be touched")
+		}
+	})
+
+	// 回归：新客户端把 total_tokens 块作为 messages 里的 system 角色发送，
+	// 归一化抽到顶层后去重必须能识别并只留一份（顺序：先归一化，再去重）。
+	t.Run("归一化抽回的 system 角色块可去重", func(t *testing.T) {
+		body := []byte(`{"model":"m","system":[{"type":"text","text":"You are Claude Code"}],` +
+			`"messages":[` +
+			`{"role":"user","content":"hi"},` +
+			`{"role":"system","content":"<total_tokens>100 tokens left</total_tokens>\n\nstyle active"},` +
+			`{"role":"system","content":"<total_tokens>90 tokens left</total_tokens>\n\nstyle active"}` +
+			`]}`)
+
+		normalized, normChanged := providers.NormalizeSystemRoleToTopLevelWithChanged(body)
+		if !normChanged {
+			t.Fatal("expected normalization to change the body")
+		}
+		out, changed := DeduplicateTotalTokensSystemBlocks(nil, normalized, false, "Messages")
+		if !changed {
+			t.Fatal("expected dedup to change the normalized body")
+		}
+		var data map[string]interface{}
+		if err := json.Unmarshal(out, &data); err != nil {
+			t.Fatalf("output is not valid JSON: %v", err)
+		}
+		sys := data["system"].([]interface{})
+		if len(sys) != 2 {
+			t.Fatalf("system len = %d, want 2 (identity + newest token block)", len(sys))
+		}
+		kept := sys[1].(map[string]interface{})["text"].(string)
+		if !strings.Contains(kept, "90 tokens left") {
+			t.Errorf("kept block = %q, want the last (newest) copy", kept)
+		}
+		if msgs := data["messages"].([]interface{}); len(msgs) != 1 {
+			t.Errorf("messages len = %d, want 1 (system roles extracted)", len(msgs))
 		}
 	})
 }

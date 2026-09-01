@@ -584,10 +584,6 @@ func TryUpstreamWithAllKeys(
 				activeRateLimitRelease = nil
 			}
 			attemptBody := requestBody
-			// harness 重复注入的 total_tokens 提醒块对任何上游都是纯垃圾，无条件去重
-			if deduped, changed := DeduplicateTotalTokensSystemBlocks(c, attemptBody, envCfg.EnableRequestLogs, apiType); changed {
-				attemptBody = deduped
-			}
 			if shouldStripBillingHeader(kind, upstream) {
 				attemptBody, _ = RemoveBillingHeadersWithContext(c, attemptBody, envCfg.EnableRequestLogs, apiType)
 			}
@@ -778,6 +774,15 @@ func TryUpstreamWithAllKeys(
 						RequestLogf(c, "[%s-Preprocess] 已将 messages 中的 system 角色抽回顶层 system 字段（原因: %s）", apiType, normReason)
 					}
 				}
+			}
+
+			// harness 重复注入的 total_tokens 提醒块对任何上游都是纯垃圾，无条件去重。
+			// 必须放在 system 角色归一化之后：新客户端把该块作为 messages 里的 system
+			// 角色发送，归一化抽到顶层之前去重扫不到任何块。
+			if deduped, changed := DeduplicateTotalTokensSystemBlocks(c, attemptBody, envCfg.EnableRequestLogs, apiType); changed {
+				attemptBody = deduped
+				RestoreRequestBody(c, attemptBody)
+				c.Set("requestBodyBytes", attemptBody)
 			}
 
 			// 已知厂商参数约束（主动侧）：无需先失败一次，按 model-registry 里的文档约束直接规避。
