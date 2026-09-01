@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
+	"github.com/BenedictKing/ccx/internal/keypool"
 	"github.com/BenedictKing/ccx/internal/metrics"
 	"github.com/BenedictKing/ccx/internal/quota"
 	"github.com/BenedictKing/ccx/internal/routingref"
@@ -81,6 +82,10 @@ type SmartRouter struct {
 	// onCandidatesRanked Phase 4 Item 8: 候选排名回调（A/B 测试用）。
 	// executeFilter 完成评分排序后调用，传入 ranked candidates。
 	onCandidatesRanked func(model, channelKind string, candidates []RoutingCandidate)
+
+	// modelCircuitProbe 判断 (渠道, Key, 模型) 是否处于运行时熔断隔离期（nil = 不检查，fail-open）。
+	// 由 main.go 按 channelKind 装配到对应 MetricsManager，供 exactModelRuntimeViable 使用。
+	modelCircuitProbe func(channelKind, channelUID, apiKey, model string) bool
 }
 
 // NewSmartRouter 创建 SmartRouter 实例。
@@ -119,6 +124,14 @@ func (r *SmartRouter) SetSubscriptionStore(store *SubscriptionStore) {
 func (r *SmartRouter) SetQuotaManager(qm *quota.Manager) {
 	if r != nil {
 		r.quotaManager = qm
+	}
+}
+
+// SetModelCircuitProbe 注入模型熔断探针（按 channelKind 路由到对应 MetricsManager）。
+// nil 时熔断不参与精确模型否决判定（fail-open）。
+func (r *SmartRouter) SetModelCircuitProbe(probe func(channelKind, channelUID, apiKey, model string) bool) {
+	if r != nil {
+		r.modelCircuitProbe = probe
 	}
 }
 
@@ -1287,6 +1300,70 @@ type channelModelResolution struct {
 	Supported     bool
 }
 
+// exactModelRuntimeViable 判断精确模型在该渠道是否仍有可承接的运行时 Key：
+// keypool 候选（禁用/持久限制/分组/熔断过滤后）∩ endpoint binding 硬约束（模型兼容 + 健康）。
+// 数据缺失（无画像 / 无 baseURL）时向存活方向 fail-open，避免把"没有画像"误判成"被否决"。
+func (r *SmartRouter) exactModelRuntimeViable(upstream *config.UpstreamConfig, profile *RequestProfile, exactModel string) bool {
+	if upstream == nil || profile == nil || exactModel == "" {
+		return true
+	}
+
+	var circuitChecker keypool.ModelCircuitChecker
+	if r.modelCircuitProbe != nil {
+		channelKind := profile.ChannelKind
+		circuitChecker = func(channelUID, apiKey, model string) bool {
+			return r.modelCircuitProbe(channelKind, channelUID, apiKey, model)
+		}
+	}
+	candidates := keypool.CandidatesForModelFiltered(upstream, nil, exactModel, circuitChecker)
+	if len(candidates) == 0 {
+		return false
+	}
+	if r.profileStore == nil {
+		return true
+	}
+
+	deps := EndpointPolicyDeps{
+		ProfileStore:  r.profileStore,
+		ModelResolver: r.modelResolver,
+		APIKeyConfigs: config.NormalizeAPIKeyConfigsForView(*upstream),
+	}
+	if r.configManager != nil {
+		deps.GetRoutingCfg = func() config.AutopilotRoutingConfig { return r.configManager.GetAutopilotRouting() }
+	}
+	keys := make([]string, 0, len(candidates))
+	for _, cand := range candidates {
+		keys = append(keys, cand.APIKey)
+	}
+	baseURLs := upstream.GetAllBaseURLs()
+	if len(baseURLs) == 0 {
+		// 无 baseURL 可查 binding 画像，fail-open。
+		return true
+	}
+	for _, baseURL := range baseURLs {
+		if len(filterKeyBindings(deps, profile, upstream.ChannelUID, baseURL, keys, false)) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// bestSubstituteModel 返回渠道内满足能力下界的最佳非精确候选模型（精确模型被否决时的替代）。
+func (r *SmartRouter) bestSubstituteModel(profile *RequestProfile, upstream *config.UpstreamConfig, requestModel string) (string, bool) {
+	if r.modelResolver == nil || profile == nil || upstream == nil {
+		return "", false
+	}
+	ranked := r.modelResolver.ResolveModelsAnyEndpointWithFloor(
+		requestModel, upstream.ChannelUID, profile.ChannelKind, BuildCapabilityFloorFromRequestProfile(profile), 0)
+	for _, candidate := range ranked {
+		model := candidate.profile.ModelID
+		if normalizeRoutingModelID(model) != "" && normalizeRoutingModelID(model) != normalizeRoutingModelID(requestModel) {
+			return model, true
+		}
+	}
+	return "", false
+}
+
 // resolveChannelModel 在构建渠道能力条目前解析该渠道实际承接请求的模型。
 // 真实路由与 dry-run 共用此逻辑，避免拿原始 Claude/OpenAI 模型名去判断
 // GLM、Kimi 等自动映射模型的工具调用、推理和上下文能力。
@@ -1320,6 +1397,20 @@ func (r *SmartRouter) resolveChannelModel(
 			resolution.MappedModel = resolution.ActualModel
 			resolution.MappingSource = "explicit_mapping"
 			resolution.MappingReason = "matched configured model mapping"
+		} else if upstream.AutoManaged &&
+			ClassifyModelRoutingIntent(profile.ChannelKind, requestModel).AllowsSubstitution() &&
+			!r.exactModelRuntimeViable(upstream, profile, resolution.ActualModel) {
+			// AutoManaged 同名承接（无显式映射）被运行期负信号否决：
+			// 改取最佳非精确候选，与复数版 resolveChannelModels 的否决展开一致。
+			// 手动渠道与显式映射路径不受影响。
+			if substitute, ok := r.bestSubstituteModel(profile, upstream, requestModel); ok {
+				log.Printf("[SmartRouter-ExactVeto] 渠道 %s: 精确模型 %q 被运行期负信号否决，单数解析映射到 %q",
+					upstream.ChannelUID, requestModel, substitute)
+				resolution.ActualModel = substitute
+				resolution.MappedModel = substitute
+				resolution.MappingSource = "auto_resolve"
+				resolution.MappingReason = "exact_vetoed: exact model runtime-vetoed on same-name carryover"
+			}
 		}
 		return resolution
 	}
@@ -1332,6 +1423,16 @@ func (r *SmartRouter) resolveChannelModel(
 			BuildCapabilityFloorFromRequestProfile(profile),
 		)
 		if found && target.Model != "" {
+			// 精确命中但被运行期负信号否决：自适应意图下改取最佳非精确候选，
+			// 与复数版 resolveChannelModels 的否决展开保持一致。
+			if normalizeRoutingModelID(target.Model) == normalizeRoutingModelID(requestModel) &&
+				ClassifyModelRoutingIntent(profile.ChannelKind, requestModel).AllowsSubstitution() &&
+				!r.exactModelRuntimeViable(upstream, profile, target.Model) {
+				if substitute, ok := r.bestSubstituteModel(profile, upstream, requestModel); ok {
+					target.Model = substitute
+					reason = "exact_vetoed: " + reason
+				}
+			}
 			resolution.ActualModel = target.Model
 			resolution.Supported = true
 			if normalizeRoutingModelID(target.Model) != normalizeRoutingModelID(requestModel) {
@@ -1383,9 +1484,20 @@ func (r *SmartRouter) resolveChannelModels(
 				break
 			}
 		}
+		// 精确模型被运行期负信号（Key 禁用/持久限制/熔断/binding 判死）否决时，
+		// 自适应意图下不短路，展开替代模型行（无感知模型重定向）；
+		// 被否决的精确模型本身不再产行，让位替代模型。
+		exactVetoed := false
+		if exactModel != "" &&
+			ClassifyModelRoutingIntent(profile.ChannelKind, requestModel).AllowsSubstitution() &&
+			!r.exactModelRuntimeViable(upstream, profile, exactModel) {
+			log.Printf("[SmartRouter-ExactVeto] 渠道 %s: 精确模型 %q 被运行期负信号否决，展开替代模型行", channelUID, requestModel)
+			exactModel = ""
+			exactVetoed = true
+		}
 		// 非自适应入口禁止跨模型替代：无精确/等价命中且意图要求精确时，
 		// 交由单数版返回 Supported=false（该渠道不产生候选行）。
-		if exactModel == "" && !ClassifyModelRoutingIntent(profile.ChannelKind, requestModel).AllowsSubstitution() {
+		if exactModel == "" && !exactVetoed && !ClassifyModelRoutingIntent(profile.ChannelKind, requestModel).AllowsSubstitution() {
 			return nil
 		}
 		resolutions := make([]channelModelResolution, 0, len(ranked))
@@ -1400,6 +1512,9 @@ func (r *SmartRouter) resolveChannelModels(
 			if normalized == "" || seen[normalized] {
 				continue
 			}
+			if exactVetoed && normalized == normalizeRoutingModelID(requestModel) {
+				continue
+			}
 			seen[normalized] = true
 			res := channelModelResolution{
 				ActualModel:  model,
@@ -1410,6 +1525,9 @@ func (r *SmartRouter) resolveChannelModels(
 				res.MappedModel = model
 				res.MappingSource = "auto_resolve"
 				res.MappingReason = candidate.reasonSummary()
+				if exactVetoed {
+					res.MappingReason = "exact_vetoed: " + res.MappingReason
+				}
 			}
 			// 同名承接（normalized == 请求模型）：MappedModel 留空，由调用方用请求模型名补显示。
 			resolutions = append(resolutions, res)

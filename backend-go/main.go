@@ -21,10 +21,10 @@ import (
 
 	"github.com/BenedictKing/ccx/internal/autopilot"
 	"github.com/BenedictKing/ccx/internal/config"
-	"github.com/BenedictKing/ccx/internal/guardrails"
 	"github.com/BenedictKing/ccx/internal/conversation"
 	"github.com/BenedictKing/ccx/internal/errutil"
 	"github.com/BenedictKing/ccx/internal/eventbus"
+	"github.com/BenedictKing/ccx/internal/guardrails"
 	"github.com/BenedictKing/ccx/internal/handlers"
 	channelsv2 "github.com/BenedictKing/ccx/internal/handlers/channels"
 	"github.com/BenedictKing/ccx/internal/handlers/chat"
@@ -691,6 +691,34 @@ func main() {
 				// Phase 2: 将 Advisor + LocalRuntimeStore 注入 SmartRouter
 				autopilotManager.WireSmartRouter()
 				log.Printf("[Autopilot-Init] SmartRouter advisor + localRuntimeStore 已注入")
+
+				// 模型熔断探针：SmartRouter 精确模型运行期否决判定用
+				// （按 channelKind 路由到对应 MetricsManager，镜像下方 healthCheck 的逐类 tracker 解析）。
+				smartRouter.SetModelCircuitProbe(func(channelKind, channelUID, apiKey, model string) bool {
+					var mgr *metrics.MetricsManager
+					switch channelKind {
+					case "messages":
+						mgr = messagesMetricsManager
+					case "responses":
+						mgr = responsesMetricsManager
+					case "gemini":
+						mgr = geminiMetricsManager
+					case "chat":
+						mgr = chatMetricsManager
+					case "images":
+						mgr = imagesMetricsManager
+					case "vectors":
+						mgr = vectorsMetricsManager
+					}
+					if mgr == nil {
+						return false
+					}
+					tracker := mgr.ModelCircuit()
+					if tracker == nil {
+						return false
+					}
+					return tracker.IsModelCircuitOpen(channelUID, metrics.ModelCircuitKeyHash(apiKey), model)
+				})
 
 				log.Printf("[Autopilot-Init] SmartRouter 已初始化 (Autopilot 自动运行)")
 

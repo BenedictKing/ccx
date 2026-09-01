@@ -1,6 +1,7 @@
 package autopilot
 
 import (
+	"fmt"
 	"log"
 	"sort"
 	"strings"
@@ -545,7 +546,14 @@ func buildActivePolicy(deps EndpointPolicyDeps, req *RequestProfile, enableFilte
 	}
 
 	policy.FilterKeyBindings = func(channelUID, baseURL string, apiKeys []string) []string {
-		return filterKeyBindings(deps, req, channelUID, baseURL, apiKeys, enableFilter)
+		filtered, decisions := filterKeyBindingsWithDecisions(deps, req, channelUID, baseURL, apiKeys, enableFilter)
+		if len(filtered) == 0 && len(apiKeys) > 0 {
+			// 全灭路径聚合原因落日志：排障时"所有密钥都失败"必须能定位到具体过滤源。
+			// 是否放行由 handlers 层 callPolicyFilterKeyBindings 的 fail-open 决定。
+			log.Printf("[EndpointPolicy-Filter] 渠道 %s %s: %d 个 Key 全部被过滤 (%s)",
+				channelUID, baseURL, len(apiKeys), summarizeKeyBindingFilterReasons(decisions, enableFilter))
+		}
+		return filtered
 	}
 	policy.SortKeyBindings = func(channelUID, baseURL string, apiKeys []string) ([]string, []EndpointCandidate) {
 		sorted, cands := scoreAndSortKeyBindings(deps, req, targetByUID, channelUID, baseURL, apiKeys, true, true)
@@ -571,12 +579,21 @@ func buildActivePolicy(deps EndpointPolicyDeps, req *RequestProfile, enableFilte
 // filterKeyBindings 将正确性约束与调度优化分开：
 // 已知模型不兼容在所有模式下都必须排除；健康和衰减只在 auto 模式参与硬过滤。
 func filterKeyBindings(deps EndpointPolicyDeps, req *RequestProfile, channelUID, baseURL string, apiKeys []string, filterOperationalState bool) []string {
+	filtered, _ := filterKeyBindingsWithDecisions(deps, req, channelUID, baseURL, apiKeys, filterOperationalState)
+	return filtered
+}
+
+// filterKeyBindingsWithDecisions 与 filterKeyBindings 过滤逻辑一致，同时返回每个 Key 的
+// 分类决策，供全灭路径聚合过滤原因（可观测性），避免二次 classify。
+func filterKeyBindingsWithDecisions(deps EndpointPolicyDeps, req *RequestProfile, channelUID, baseURL string, apiKeys []string, filterOperationalState bool) ([]string, []keyBindingDecision) {
 	if len(apiKeys) == 0 {
-		return apiKeys
+		return apiKeys, nil
 	}
 	filtered := make([]string, 0, len(apiKeys))
+	decisions := make([]keyBindingDecision, 0, len(apiKeys))
 	for idx, key := range apiKeys {
 		decision := classifyKeyBinding(deps, req, channelUID, baseURL, key, idx, true)
+		decisions = append(decisions, decision)
 		if !decision.HardEligible {
 			continue
 		}
@@ -585,7 +602,36 @@ func filterKeyBindings(deps EndpointPolicyDeps, req *RequestProfile, channelUID,
 		}
 		filtered = append(filtered, key)
 	}
-	return filtered
+	return filtered, decisions
+}
+
+// summarizeKeyBindingFilterReasons 聚合被过滤 Key 的原因计数，如 "health_ineligible=2, model_ineligible=1"。
+func summarizeKeyBindingFilterReasons(decisions []keyBindingDecision, filterOperationalState bool) string {
+	counts := make(map[string]int)
+	order := make([]string, 0, 4)
+	for _, d := range decisions {
+		reason := ""
+		switch {
+		case !d.HardEligible:
+			reason = d.Candidate.Reason
+		case filterOperationalState && d.ConsumptionPolicy == config.KeyConsumptionOpportunistic && !d.FastDecayEligible:
+			reason = "opportunistic_decayed"
+		default:
+			continue // 未被过滤
+		}
+		if reason == "" {
+			reason = "unknown"
+		}
+		if _, ok := counts[reason]; !ok {
+			order = append(order, reason)
+		}
+		counts[reason]++
+	}
+	parts := make([]string, 0, len(order))
+	for _, r := range order {
+		parts = append(parts, fmt.Sprintf("%s=%d", r, counts[r]))
+	}
+	return strings.Join(parts, ", ")
 }
 
 func scoreAndSortKeyBindings(deps EndpointPolicyDeps, req *RequestProfile, targetByUID map[string]*ResolvedRouteTarget, channelUID, baseURL string, apiKeys []string, active bool, enableOpportunistic bool) ([]string, []EndpointCandidate) {

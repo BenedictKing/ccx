@@ -751,7 +751,7 @@ func TryUpstreamWithAllKeys(
 						clientRaw, clientExplicit := ExtractClientEffortExplicit(requestBody, string(kind))
 						if isEffortClampedByClient(clientRaw, clientExplicit, target.Effort) {
 							c.Set("effortClampedByClient", true)
-					}
+						}
 					} else {
 						c.Set("effortDecisionSource", "passthrough")
 					}
@@ -844,8 +844,8 @@ func TryUpstreamWithAllKeys(
 						if trait == config.TraitUnsupportedBetaHeader && state.Enabled {
 							if tokens := ExtractRejectedBetaTokens(state.Evidence); len(tokens) > 0 {
 								upstreamCopy.SetLearnedRejectedBetaTokens(tokens)
+							}
 						}
-					}
 					}
 				}
 			}
@@ -889,10 +889,10 @@ func TryUpstreamWithAllKeys(
 						failedKeys[apiKey] = true
 						if selection.QuotaGroup != "" {
 							failedQuotaGroups[selection.QuotaGroup] = true
-					}
+						}
 						for i := len(releases) - 1; i >= 0; i-- {
 							releases[i]()
-					}
+						}
 						continue
 					}
 					releases = append(releases, release)
@@ -1175,10 +1175,10 @@ func TryUpstreamWithAllKeys(
 						blacklistMessage := blResult.Message
 						if strings.EqualFold(apiType, "Vectors") {
 							blacklistMessage = errorBodySummaryForLog(apiType, resp.StatusCode, respBodyBytes)
-					}
+						}
 						if err := cfgManager.BlacklistKeyWithRecoverAt(executionAPIType, executionIndex, apiKey, blResult.Reason, blacklistMessage, blResult.RecoverAt); err != nil {
 							RequestLogf(c, "[%s-Blacklist] 拉黑 Key 失败: %v", apiType, err)
-					}
+						}
 						// 认证/权限/余额错误写入 global 桶：整把 Key 不可用，所有模型都受影响。
 						recordModelCircuitGlobal(c, metricsManager, upstream, apiKey, blResult.Reason, apiType)
 					}
@@ -1201,7 +1201,7 @@ func TryUpstreamWithAllKeys(
 						if learnedImageStrip {
 							RequestLogf(c, "[%s-ChannelCompat] 渠道 %s 模型 %s 未开通图片生成，已记忆并将在重试时剥离图片工具",
 								apiType, upstream.Name, attemptModel)
-					}
+						}
 					}
 					if !learnedImageStrip {
 						// 上游明确声明该模型或其 Codex 图片工具不受支持：限制该 Key 对这个实际模型的路由。
@@ -1209,7 +1209,7 @@ func TryUpstreamWithAllKeys(
 						summary := errorBodySummaryForLog(apiType, resp.StatusCode, respBodyBytes)
 						if err := cfgManager.DisableKeyModel(executionAPIType, executionIndex, apiKey, actualAttemptModel, restrictionReason, summary); err != nil {
 							RequestLogf(c, "[%s-KeyModel] 限制 (Key,模型) 组合失败: %v", apiType, err)
-					}
+						}
 					}
 				}
 
@@ -1229,7 +1229,7 @@ func TryUpstreamWithAllKeys(
 							signal.MaxInputTokens, signal.Source, signal.Evidence, estimatedInput) {
 							RequestLogf(c, "[%s-ContextLimit] 渠道 %s 模型 %s 实测上下文上限 %d tokens（来源 %s，本次请求约 %d tokens），已记忆并将在后续路由中规避",
 								apiType, upstream.Name, attemptModel, signal.MaxInputTokens, signal.Source, estimatedInput)
-					}
+						}
 					}
 				}
 
@@ -1251,14 +1251,14 @@ func TryUpstreamWithAllKeys(
 									if probeKey := currentBaseURL + "|" + apiKey; probeAcquired[probeKey] {
 										metricsManager.ReleaseProbe(currentBaseURL, apiKey, metricsServiceType)
 										delete(probeAcquired, probeKey)
-								}
+									}
 									CompleteLog(channelLogStore, metricsKey, logRequestID, resp.StatusCode, false, string(respBodyBytes), isRetryAttempt)
 									RequestLogf(c, "[%s-OutputLimit] 渠道 %s 模型 %s 拒绝输出 token %d（上限 %d），已记忆并下调后同 Key 重试",
 										apiType, upstream.Name, attemptModel, requested, signal.MaxOutputTokens)
 									continue
+								}
 							}
 						}
-					}
 					}
 				}
 
@@ -1277,12 +1277,12 @@ func TryUpstreamWithAllKeys(
 							if probeKey := currentBaseURL + "|" + apiKey; probeAcquired[probeKey] {
 								metricsManager.ReleaseProbe(currentBaseURL, apiKey, metricsServiceType)
 								delete(probeAcquired, probeKey)
-						}
+							}
 							CompleteLog(channelLogStore, metricsKey, logRequestID, resp.StatusCode, false, string(respBodyBytes), isRetryAttempt)
 							RequestLogf(c, "[%s-DeprecatedParam] 渠道 %s 模型 %s 拒绝参数 %q，已记忆并剥离后同 Key 重试",
 								apiType, upstream.Name, attemptModel, param)
 							continue
-					}
+						}
 					}
 				}
 
@@ -1313,12 +1313,12 @@ func TryUpstreamWithAllKeys(
 							if probeKey := currentBaseURL + "|" + apiKey; probeAcquired[probeKey] {
 								metricsManager.ReleaseProbe(currentBaseURL, apiKey, metricsServiceType)
 								delete(probeAcquired, probeKey)
-						}
+							}
 							CompleteLog(channelLogStore, metricsKey, logRequestID, resp.StatusCode, false, string(respBodyBytes), isRetryAttempt)
 							RequestLogf(c, "[%s-ChannelCompat] 渠道 %s 模型 %s 缺少能力 %s，已记忆并应用兼容改写后同 Key 重试",
 								apiType, upstream.Name, attemptModel, signal.Trait)
 							continue
-					}
+						}
 					}
 				}
 
@@ -1338,10 +1338,10 @@ func TryUpstreamWithAllKeys(
 							strength := "弱信号"
 							if signal.Strong {
 								strength = "强信号"
-						}
+							}
 							RequestLogf(c, "[%s-DocumentCompat] 渠道 %s 模型 %s 拒绝 document 块（%s），已记忆并将在后续路由中规避",
 								apiType, upstream.Name, attemptModel, strength)
-					}
+						}
 					}
 				}
 
@@ -1357,7 +1357,7 @@ func TryUpstreamWithAllKeys(
 							config.TraitNoToolCallSupport, true, config.CompatSourceErrorSignal, signal.Evidence) {
 							RequestLogf(c, "[%s-ToolCallCompat] 渠道 %s 模型 %s 拒绝工具调用（%s），已记忆并将在后续路由中规避",
 								apiType, upstream.Name, attemptModel, signal.Evidence)
-					}
+						}
 					}
 				}
 
@@ -1398,7 +1398,7 @@ func TryUpstreamWithAllKeys(
 						if isSystemHeaderError(errorSummary) {
 							systemHeaderFilterCache.RecordFailure(upstream.ChannelUID, keyHash, redirectedModel, errorSummary)
 							tryUpgradeFilterLevel(upstream.ChannelUID, keyHash, redirectedModel)
-					}
+						}
 					}
 					errorSummary := errorBodySummaryForLog(apiType, resp.StatusCode, respBodyBytes)
 					if errorSummary != "" {
@@ -1428,7 +1428,7 @@ func TryUpstreamWithAllKeys(
 						deprioritizeCandidates[apiKey] = true
 						if selection.QuotaGroup != "" {
 							failedQuotaGroups[selection.QuotaGroup] = true
-					}
+						}
 					}
 					// 火山账号级 429：只冷却当前 key/quota scope，同渠道其他独立账号继续 failover。
 					// scope 非空 → scoped cooldown + continue（尝试同渠道下一个独立 key）。
@@ -1440,7 +1440,7 @@ func TryUpstreamWithAllKeys(
 							RequestLogf(c, "[%s-AccountRateLimit] 渠道 [%d] %s key=%s 账号级限流，冷却 scope=%s %s，尝试同渠道下一个独立 key",
 								apiType, executionIndex, upstream.Name, utils.MaskAPIKey(apiKey), selection.LimiterScope, upstreamAccountRateLimitCooldown)
 							continue
-					}
+						}
 						channelScheduler.MarkChannelCooldown(executionKind, executionIndex, upstreamAccountRateLimitCooldown)
 						RequestLogf(c, "[%s-AccountRateLimit] 渠道 [%d] %s 账号级限流且无 scope，冷却渠道 %s 并尝试下一个渠道",
 							apiType, executionIndex, upstream.Name, upstreamAccountRateLimitCooldown)
@@ -1560,7 +1560,7 @@ func TryUpstreamWithAllKeys(
 						if probeAcquired[retryKey] {
 							metricsManager.ReleaseProbe(currentBaseURL, apiKey, metricsServiceType)
 							delete(probeAcquired, retryKey)
-					}
+						}
 						CompleteLog(channelLogStore, metricsKey, logRequestID, http.StatusOK, false, err.Error(), isRetryAttempt)
 						RequestLogf(c, "[%s-EmptyResponse-Retry] 上游短空响应 (Key: %s, 耗时: %dms)，同渠道同 Key 重试一次",
 							apiType, utils.MaskAPIKey(apiKey), elapsed.Milliseconds())
@@ -1586,7 +1586,7 @@ func TryUpstreamWithAllKeys(
 					if !isBalanceError || upstream.IsAutoBlacklistBalanceEnabled() {
 						if blacklistErr := cfgManager.BlacklistKey(executionAPIType, executionIndex, apiKey, blErr.Reason, blErr.Message); blacklistErr != nil {
 							RequestLogf(c, "[%s-Blacklist] 拉黑 Key 失败: %v", apiType, blacklistErr)
-					}
+						}
 					}
 					cfgManager.MarkKeyAsFailed(apiKey, executionAPIType)
 					metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, metrics.FailureClassRetryable)
@@ -1867,6 +1867,10 @@ func selectAttemptAPIKeyFiltered(
 	// keypool 路径：获取候选 → FilterKeys → SortKeys → 选择
 	candidates := keypool.CandidatesForModelFiltered(upstream, failedKeys, model, circuitOpen)
 	if len(candidates) == 0 {
+		// 候选为空必须能区分"没配 Key"与"Key 全被运行时限制（禁用/持久限制/熔断）"，
+		// 否则排障时只能看到笼统的"没有可用的API密钥"。
+		RequestLogf(c, "[%s-KeySelection] 上游 %s 模型 %q keypool 候选为空 (configured=%d disabledKeys=%d failedKeys=%d disabledKeyModels=%d)",
+			apiType, upstream.Name, model, len(upstream.APIKeys), len(upstream.DisabledAPIKeys), len(failedKeys), len(upstream.DisabledKeyModels))
 		return keypool.Selection{}, "", fmt.Errorf("上游 %s 没有可用的API密钥", upstream.Name)
 	}
 
@@ -1957,6 +1961,15 @@ func callPolicyFilterKeyBindings(policy *autopilot.EndpointAttemptPolicy, channe
 		}()
 		result = policy.FilterKeyBindings(channelUID, baseURL, keys)
 	}()
+	// 全灭 fail-open：binding 画像（健康/模型兼容）是推测性负信号，可能过期或误判。
+	// 全灭时放行让真实上游裁决——真不支持则由 model_not_found 学习闭环持久化限制，
+	// 误判则请求成功并带动画像恢复；避免"本地判死→本地拒绝→永远拿不到真实信号"的死锁。
+	// 与 callPolicyFilterKeys 的空结果回退语义一致；局部过滤（剩部分 Key）不受影响。
+	if len(result) == 0 && len(keys) > 0 {
+		RequestLogf(c, "[%s-Autopilot-EndpointPolicy] FilterKeyBindings 渠道 %s %s 全部 %d 个 Key 被硬过滤，fail-open 回退原列表以暴露真实上游信号",
+			apiType, channelUID, baseURL, len(keys))
+		return keys
+	}
 	return result
 }
 

@@ -1987,3 +1987,38 @@ func TestTryUpstreamWithAllKeys_PanicPolicy_DoesNotBreakRequest(t *testing.T) {
 		t.Fatalf("panic policy 时 lastErr 应为 nil: %v", lastErr)
 	}
 }
+
+// ── callPolicyFilterKeyBindings 全灭 fail-open 测试 ──
+
+// 过滤全灭时回退原列表（暴露真实上游信号）；输入本身为空不放行；局部过滤语义不变。
+func TestCallPolicyFilterKeyBindings_FailOpenOnAllFiltered(t *testing.T) {
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+
+	allFiltered := &autopilot.EndpointAttemptPolicy{
+		FilterKeyBindings: func(channelUID, baseURL string, apiKeys []string) []string {
+			return nil
+		},
+	}
+	keys := []string{"sk-a", "sk-b"}
+
+	got := callPolicyFilterKeyBindings(allFiltered, "ch1", "https://a.com", keys, "messages", c)
+	if len(got) != len(keys) {
+		t.Fatalf("全灭时应 fail-open 返回原列表: got %v, want %v", got, keys)
+	}
+
+	got = callPolicyFilterKeyBindings(allFiltered, "ch1", "https://a.com", nil, "messages", c)
+	if len(got) != 0 {
+		t.Fatalf("空输入不应放行: got %v", got)
+	}
+
+	partial := &autopilot.EndpointAttemptPolicy{
+		FilterKeyBindings: func(channelUID, baseURL string, apiKeys []string) []string {
+			return apiKeys[:1]
+		},
+	}
+	got = callPolicyFilterKeyBindings(partial, "ch1", "https://a.com", keys, "messages", c)
+	if len(got) != 1 || got[0] != "sk-a" {
+		t.Fatalf("局部过滤语义应保持: got %v", got)
+	}
+}
