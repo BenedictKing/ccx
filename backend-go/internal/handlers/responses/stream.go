@@ -493,6 +493,11 @@ func handleStreamSuccess(
 				if envCfg.RewriteResponseModel && !needConvert && originalReq != nil && originalReq.Model != "" {
 					eventToSend = patchResponsesCompletedEventModel(eventToSend, originalReq.Model, common.RequestLogTag(c))
 				}
+				// 转换路径 usage 归一官方 OpenAI 口径（input_tokens 含缓存）；
+				// 内部采集/指标沿用不含缓存口径，不受影响（#274）。
+				if needConvert {
+					eventToSend = normalizeCompletedEventUsageToOpenAISemantics(eventToSend)
+				}
 			}
 
 			// 转发给客户端
@@ -704,6 +709,11 @@ streamEnd:
 				// 改写 model 字段（仅 passthrough 场景，转换器已处理好转换场景）
 				if envCfg.RewriteResponseModel && !needConvert && originalReq != nil && originalReq.Model != "" {
 					eventToSend = patchResponsesCompletedEventModel(eventToSend, originalReq.Model, common.RequestLogTag(c))
+				}
+				// 转换路径 usage 归一官方 OpenAI 口径（input_tokens 含缓存）；
+				// 内部采集/指标沿用不含缓存口径，不受影响（#274）。
+				if needConvert {
+					eventToSend = normalizeCompletedEventUsageToOpenAISemantics(eventToSend)
 				}
 			}
 			if _, err := c.Writer.Write([]byte(eventToSend)); err == nil && flusher != nil {

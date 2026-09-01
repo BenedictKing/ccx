@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+## [v3.0.0] - 2026-08-31
+
 ### 新增
 
 - **渠道数据模型 v2（Channel → Key → Endpoint → Model）** - 把渠道粒度从"协议入口=渠道"重构为"物理站点/账号=渠道"。新增只读 `ChannelView` 家族（`channel_model.go`）与 `BuildChannelViews`（`channel_view.go`）：按 `LogicalChannelUID > AccountUID > SiteIdentity` 归组，同一明文 key 跨协议合并为一个 `ChannelKeyView`，每个 key 的 `(baseURL,协议)` endpoint 通过 `CapabilityUID` 引用可跨账号共享的 `EndpointCapability`（`(SiteIdentity, GroupIdentity, IdentityBaseURL, Protocol)` 唯一确定，`GroupIdentity=归一化分组名`，"同站点同名分组=同能力"），实现不同 new-api 账号同分组共享协议+模型认知而账号/凭证状态隔离。新增 `EndpointCapabilityRegistry` 查询封装与 `CapabilityProbeLedger` 跨账号探测去重台账（`endpoint_capability.go`）。Phase 2a 把 `channels`/`channelCapabilities`/`channelSchemaVersion` 作为非权威镜像在落盘前由 `RebuildChannels` 合成（仅 KeyMask 不含明文）；Phase 2b 新增只读 `GET /api/channels`、`GET /api/channels/:uid`（`internal/handlers/channels`，基于 `ConfigManager.GetChannelViews` 实时合成）。Phase 3a 新增无损权威形态 `ChannelV3`（每协议成员携带完整 `UpstreamConfig`）与 `BuildAuthoritativeChannels`/`ApplyAuthoritativeChannels` 双向投影（按 Index 恢复数组顺序，逐字段无损）；Phase 3b 在 save 落盘 `channelsV3`+`channelAuthoritativeVersion`（脱敏后合成），load 时 `reconcileAuthoritativeChannels` 对账告警（非破坏，仍以六数组为运行时权威）。六个 `Upstream` 数组仍是运行时权威，全部改动纯附加可回退。设计见 `docs/specs/channel-data-model-v2.md`。
@@ -32,60 +34,6 @@
 - **模型清单展示改进** - 共有/协议专属模型少于 10 个时直接展开列出，其余默认两行、仅实际溢出时显示展开
 - **火山套餐 Key 保活 per-key 路由与共享探针** - `config.BaseURLsForKey` 让已绑定端点的 Key 只在自己端点探测，不参与渠道级 BaseURL 笛卡尔积；新增 `internal/upstreamprobe` 共享火山 Agent/Coding Plan 数据面探针（autopilot 验证与 healthcheck 保活共用，避免请求特征漂移）；`L1Response.RealCallVerified` 标记真实调用，火山 L1 成功后同周期跳过等价 L2 避免重复消耗额度；L2 探针副本覆盖绑定 BaseURL，recordFailure 归因到 Key 实际绑定端点
 - **渠道级实测上下文上限自学习** - 模型注册表登记的是模型公开窗口，个别渠道对某个模型的实际窗口更短（中转商自行截断、上游按套餐限制），长上下文请求会反复吃 400 `context_too_large`。新增按 渠道-Key-模型 维度记忆实测上限的数值型能力覆盖（`config.ContextLimitState`，复用 `ChannelCompatCache` 键空间/24h TTL/落盘，但独立于布尔型 `CompatTrait` 存储）：`ContextLimitFromError` 从 400/422 报错识别超限信号，上游明确声明窗口值时直接采信，仅表示「太长」时按被拒请求量的 7/8 反推保守上界，并排除 `max_tokens`/请求体过大/图片尺寸/配额等相邻错误避免误判；合成规则「宁小勿大」多次学习取最小值，只在遇到更严格证据时收紧，放宽只能靠 TTL 过期重学；`SmartRouter.buildChannelEntry` 取 `min(注册表窗口, 实测上限)` 让上下文硬约束按真实容量判断，路由发生在选定 Key 之前故取该渠道-模型在所有已知 Key 上的最小值。上下文上限按自身 `LearnedAt` 独立计算 TTL（不共用 `entry.DetectedAt`，否则 trait 命中刷新会让实测上限被无限续期）；无记忆时 fail-open，反推上界低于 4096 不采信。兼容性记忆单例上移为 `config.SharedChannelCompatCache`，供写入方 handlers 与读取方 autopilot 共享
-
-### 修复
-
-- **兼容性自学习块位于 failover 判断之后导致生产环境从未生效** - `upstream_failover.go` 的弃用参数自适应与渠道兼容性自学习（developer role 降级、Codex 工具剥离等）两个学习块原本写在 `if shouldFailover` 分支之后。而错误分类以「大多数非 2xx 都 failover」为默认策略，未命中已知不可重试关键词的 400/422 会被判定为 `shouldFailover=true` 并提前 `continue`，导致这两个学习块在默认配置下几乎从未被执行到——只有极少数恰好命中窄关键词表的报错才能落到它们。现已移至 `shouldFailover` 判断之前，与上下文上限自学习块位置一致；新增用真实 `TryUpstreamWithAllKeys` 驱动的集成测试钉住「上游 422 → 学习 → 同 Key 重试成功」完整闭环
-- **422 兼容性学习分支不可达** - 兼容性自学习块声称覆盖 400/422，但被嵌套在外层 `resp.StatusCode == 400` 守卫内，422 分支实际永远不可达（部分上游用 422 表达请求结构不受支持）；改为与弃用参数块平级的兄弟块——弃用参数识别只针对 400，兼容性学习覆盖 400 与 422，二者条件不同不应嵌套
-- **Chat 入口 Gemini 上游响应被误判为空** - `handleSuccess` 的 `default` 分支承接 gemini 等没有专属 case 的透传上游类型，却统一使用只认识 OpenAI `choices[].message` 结构的 `IsChatResponseEmpty` 判空；对 Gemini 的 `candidates` 结构，`respMap["choices"]` 断言必然失败而被判定为空，导致所有合法 Gemini 响应都误触发 failover、最终以 503 收尾。改为按 `candidates` 字段（Gemini 专属、非 omitempty）区分 schema 后走 `IsGeminiResponseEmpty`；不用 `usageMetadata` 判断是因为该字段为 omitempty，缺省时会误判回 OpenAI 形态
-- **effort 注入形态误判与三处死代码** - 自动托管渠道被 `RuntimeUpstreamForAutoManagedProvider` 清空 `ReasoningParamStyle` 后，`effortInjectionStyle` 一律回落 `reasoning` 对象形式，导致 Claude messages 渠道被写入 `reasoning.effort`、chat 渠道被写成对象，上游均不识别而静默丢弃 effort；改为按渠道类型推导原生形态（messages→`thinking`，chat→`reasoning_effort`）。同时修复三处「代码存在但调用链不通」的死代码：`CapabilityFloor.EffortFloor` 从未被赋值致 `filterEffortFloor` 恒直接返回，改为在 `rankEligibleModels` 内按 `ReasoningEffortConfig.PerTaskClass` 推导；`resolveRelativeBenchmarkEvidence` 的 `targetEffort` 恒传空串致 `(domain, effort)` 精确匹配与置信度折算永不执行，新增 `ResolveDomainStrengthForEffort` 并在候选展开处按变体实际档位取证据；`extractClientEffort` 协议无关全字段扫描与按渠道分支的 `ExtractClientEffortExplicit` 对跨协议字段判定相反，导致手动意图 effort 被静默屏蔽而日志记录未钳位，删除前者统一走后者。另补齐 messages 分支的 `thinking.effort` 提取（此前 `type=enabled` 只返回 `enabled` 占位而非真实档位）
-- **精确模型命中绕过 effort 决策** - `ResolveModel` 的精确/等价模型命中路径直接返回，从未调用 `resolveEffortVariants`，导致请求模型能在渠道内精确匹配时（最常见路径）手动意图锁定档位与自动展开全部失效，仅跨模型替换才走 effort 逻辑；抽出 `resolveSingleProfileEffort` 在两处分支补齐，语义与排序路径一致（意图锁定优先，否则按配置展开取最低档）
-- **effort 钳位语义与 Gemini 档位提取** - 修正 effort 钳位语义并在 failover 时重置标记；Gemini effort 提取取真实档位而非占位值，`targetByUID` 写入条件统一；`ResolvedRouteTarget` 定义与 `upstream_failover` 旧 API 保留兼容 fallback
-- **火山套餐 Key 识别与恢复** - 优先识别火山 Agent Plan 的 Kimi K3；按火山额度重置时间恢复被拉黑的 Key；`ListArkAgentPlanModel` 签名 scope 从 `ark_stg` 改回 `ark`
-- **渠道列表与诊断展示错位** - 渠道列表第二个渠道不再错显首个渠道的请求数与缓存率；渠道排序不再随 Key 拉黑变动；重新发现协议后同步刷新渠道列表；自定义渠道协议发现结果正常展示；路由过滤原因与诊断面板改用渠道名和热门模型替代 `ch_xxx` 内部 ID；Key 与健康状态同步修复
-- **驾驶舱空白** - 意图列表 nil slice 被序列化成 `null` 导致驾驶舱整页空白
-- **system 角色归一化破坏缓存边界** - providers 归一化 system 角色时保留 `cache_control` block 边界，避免打断上游 prompt 缓存
-- **billing header 域名判断忽略端口号** - 带端口的自建地址不再被误判为非官方域名，新建渠道默认值跟随 baseUrl
-- **保活验证失败无痕迹** - healthcheck 保活验证失败写入渠道日志
-- **连接延迟慢速判定误报** - 样本数不足 20 时 P95 退化为最大值导致误判慢速，新增最小样本门槛
-- **new-api 地址与图标注册** - new-api 地址自动剥离控制台路径；补齐 `mdi-github`/`mdi-plus-circle`/`mdiPause`/`timer-alert-outline`/信息提示轮廓等缺失图标注册；简化延迟告警芯片文案
-- **基准与预置数据修正** - litellm 映射补齐 26 个模型定价并去重 Kimi 会员条目；AA evidence 补 `taskCount` 修复 TS 类型校验；presetstore 支持多量纲基准原始值；区分 kimi-k3 的 256k/1m 变体上下文；清理渠道配置中过时的 grok 精确模型映射
-- **RoutingReleaseSnapshot 字段缺失** - 补全 `RolloutSeed`/`ControlPercent`，避免灰度分桶快照失真
-- **火山套餐 Key 跨套餐误探测** - 混合套餐渠道中 Agent Plan Key 不再被首地址 `/api/coding` 误打导致 auth_failed 误拉黑；火山官方套餐入口不再调用通用 `/v1/models`（套餐 Key 无法通过该接口探测），改用专用探针 + 内置 manifest 模型清单；400/404/500/网络错误不升级为认证失败
-- **渠道全部 Key 禁用时无恢复入口** - `hasOnlyDisabledChannelApiKeys` 判定（可用=0 且禁用>0）下渠道行直接显示恢复按钮，一次点击恢复全部禁用 Key，无需先暂停；active 渠道跳过冗余 `setStatus(active)`，直接 resume 并刷新
-- **非官方域名默认剔除 billing header** - `stripBillingHeader` 未显式设置时按渠道 BaseURL 推断默认值：仅当渠道所有地址均为 Anthropic 官方 API（`api.anthropic.com`）时保留计费 header，其余第三方渠道默认剔除；此前默认关闭，导致 Claude Code 每次请求变化的 `cch=` 计费 nonce 打穿第三方上游的 prompt 缓存前缀，造成缓存命中率异常下降
-
-### 重构
-
-- **移除 Fuzzy 模式开关，统一为单一 failover 策略（BREAKING）** - Fuzzy 模式早已是唯一实际使用的默认值，Normal 模式的精确状态码分类分支已无存在意义，保留两套逻辑徒增维护成本。删除 `FuzzyModeEnabled` 配置字段、`GetFuzzyModeEnabled`/`SetFuzzyModeEnabled`、`GET/PUT /api/settings/fuzzy-mode` 接口及其配置迁移逻辑；`shouldRetryWithNextKeyNormal` 与 `classifyByStatusCode` 整体删除，`shouldRetryWithNextKeyFuzzy` 重命名为 `shouldRetryWithNextKey` 成为唯一实现；`HandleAllChannelsFailed`/`HandleAllKeysFailed` 不再接收 `fuzzyMode` 参数，统一返回通用 503；各协议 `handleSuccess` 的空响应拦截（`IsClaudeResponseEmpty` 等）不再受 `fuzzyMode` 门控而无条件生效；Web 与桌面前端一并移除工具栏开关、stores 状态、API 封装与 i18n key。**行为变化**：404/405/409-417/422/423/424/426/428/431/451 与 3xx 不再走「不 failover 直接透传上游原始状态码与错误体」路径，这类错误会消耗全部 Key/渠道后以通用 503 收尾；全部渠道失败时不再透传最后一个上游错误详情（`model_not_found` 等可归一化的模型路由错误仍保留精确状态码透传）
-- **订阅中心精简** - 移除分区标题、能力标签与手动添加入口，补齐快捷接入文案；赞助商置顶、new-api 置底，GitHub Copilot 卡移到倒数第二位
-- **移除渠道菜单的试用意图入口**
-- **清理火山套餐历史分支** - 移除 `volcenginePlanModelsHost` 常量与 `endpointFor` 的 `ark_stg` 分支
-
-### 优化
-
-- **展示格式统一** - 统一所有订阅套餐余量展示格式并补全火山"剩余"前缀；组合展示统一为单空格分隔；渠道日志不再展示调度摘要原始串
-- **后端代码质量** - 清理 Go lint 问题，gofmt 对齐结构体字段与注释缩进
-
-### 测试
-
-- **Autopilot 分层测试补齐** - L2 SmartRouter + TraceStore 集成、L3 SQLite 生命周期、L4 HTTP 契约、L5 真实上游 smoke 与 SSE golden 回归
-- **回归与稳定性** - 快速探活多模型候选回退测试；healthcheck `per_key_test` flaky 记录断言修复
-- **基准断言同步** - 同步模型能力基准断言，且不再硬编码 registry 刷新日期与分值
-
-### 文档
-
-- **Autopilot 计划与设计** - 新增 trace 灰度实施计划、火山 AFP 感知路由计划、火山套餐 Key 保活恢复计划、渠道异步发现方案，并补充 model+effort 联合决策现状与进度
-- **配置与基准说明** - 火山 provider 模板补充 AFP 路由说明；`make help` 补充 `ARTIFICIAL_ANALYSIS_API_KEY` 用法；量化 Kimi HighSpeed 配额消耗为 3 倍；修正 `canonicalModelToPattern` 的 kimi 分支注释
-
-### 其他
-
-- **停止跟踪 upstream-check 运行时状态文件**
-- **重新生成 model registry 产物**
-
-## [v3.0.0] - 2026-07-23
-
-### 新增
 
 - **Claude Code System Header 过滤** - OpenAI/Gemini/Responses provider 自动过滤 CC billing header、identity 与 subagent 角色描述，减少上游噪音；StripBillingHeader 扩展为完整移除 billing block
 - **分层 system header 过滤接入请求流程** - Messages 入口按 channel-keyHash-model 记忆最优过滤层级，连接错误与 HTTP failover 失败时渐进升级，成功后巩固层级；仅影响 Claude 透传入口，其余 provider 保持原有过滤
@@ -138,7 +86,29 @@
 - **前端 Health Center / Subscriptions / Cockpit 视图**
 - **渠道卡片健康 badge + 来源标签系统（§8.2）**
 
+
 ### 修复
+
+- **Responses 转换路径 usage 出口对齐官方 OpenAI 口径（#274）** - 协议转换（chat/claude/gemini 上游）生成的 `/v1/responses` 响应此前按"不含缓存"口径输出 `input_tokens`，而官方语义中 `input_tokens` 已包含缓存命中部分；按官方语义计算"未命中输入 = input_tokens - cached_tokens"的客户端（如 codeg/ACP）在缓存占比过半时会得到负数并触发 u64 解析失败。流式（含兜底合成 completed）与非流式出口统一归一：`input_tokens` 加回缓存读与有效缓存写、`total_tokens = input + output`；透传路径上游即官方口径不动；内部指标/计费沿用"不含缓存"口径与 `PromptTokensTotal` 归一化，不受影响。另修复 Claude Messages 上游的 usage 缓存字段此前在转换中被整体丢弃的问题（completed 现透出 `cache_read_input_tokens` 与 `cache_creation_*`）。
+- **兼容性自学习块位于 failover 判断之后导致生产环境从未生效** - `upstream_failover.go` 的弃用参数自适应与渠道兼容性自学习（developer role 降级、Codex 工具剥离等）两个学习块原本写在 `if shouldFailover` 分支之后。而错误分类以「大多数非 2xx 都 failover」为默认策略，未命中已知不可重试关键词的 400/422 会被判定为 `shouldFailover=true` 并提前 `continue`，导致这两个学习块在默认配置下几乎从未被执行到——只有极少数恰好命中窄关键词表的报错才能落到它们。现已移至 `shouldFailover` 判断之前，与上下文上限自学习块位置一致；新增用真实 `TryUpstreamWithAllKeys` 驱动的集成测试钉住「上游 422 → 学习 → 同 Key 重试成功」完整闭环
+- **422 兼容性学习分支不可达** - 兼容性自学习块声称覆盖 400/422，但被嵌套在外层 `resp.StatusCode == 400` 守卫内，422 分支实际永远不可达（部分上游用 422 表达请求结构不受支持）；改为与弃用参数块平级的兄弟块——弃用参数识别只针对 400，兼容性学习覆盖 400 与 422，二者条件不同不应嵌套
+- **Chat 入口 Gemini 上游响应被误判为空** - `handleSuccess` 的 `default` 分支承接 gemini 等没有专属 case 的透传上游类型，却统一使用只认识 OpenAI `choices[].message` 结构的 `IsChatResponseEmpty` 判空；对 Gemini 的 `candidates` 结构，`respMap["choices"]` 断言必然失败而被判定为空，导致所有合法 Gemini 响应都误触发 failover、最终以 503 收尾。改为按 `candidates` 字段（Gemini 专属、非 omitempty）区分 schema 后走 `IsGeminiResponseEmpty`；不用 `usageMetadata` 判断是因为该字段为 omitempty，缺省时会误判回 OpenAI 形态
+- **effort 注入形态误判与三处死代码** - 自动托管渠道被 `RuntimeUpstreamForAutoManagedProvider` 清空 `ReasoningParamStyle` 后，`effortInjectionStyle` 一律回落 `reasoning` 对象形式，导致 Claude messages 渠道被写入 `reasoning.effort`、chat 渠道被写成对象，上游均不识别而静默丢弃 effort；改为按渠道类型推导原生形态（messages→`thinking`，chat→`reasoning_effort`）。同时修复三处「代码存在但调用链不通」的死代码：`CapabilityFloor.EffortFloor` 从未被赋值致 `filterEffortFloor` 恒直接返回，改为在 `rankEligibleModels` 内按 `ReasoningEffortConfig.PerTaskClass` 推导；`resolveRelativeBenchmarkEvidence` 的 `targetEffort` 恒传空串致 `(domain, effort)` 精确匹配与置信度折算永不执行，新增 `ResolveDomainStrengthForEffort` 并在候选展开处按变体实际档位取证据；`extractClientEffort` 协议无关全字段扫描与按渠道分支的 `ExtractClientEffortExplicit` 对跨协议字段判定相反，导致手动意图 effort 被静默屏蔽而日志记录未钳位，删除前者统一走后者。另补齐 messages 分支的 `thinking.effort` 提取（此前 `type=enabled` 只返回 `enabled` 占位而非真实档位）
+- **精确模型命中绕过 effort 决策** - `ResolveModel` 的精确/等价模型命中路径直接返回，从未调用 `resolveEffortVariants`，导致请求模型能在渠道内精确匹配时（最常见路径）手动意图锁定档位与自动展开全部失效，仅跨模型替换才走 effort 逻辑；抽出 `resolveSingleProfileEffort` 在两处分支补齐，语义与排序路径一致（意图锁定优先，否则按配置展开取最低档）
+- **effort 钳位语义与 Gemini 档位提取** - 修正 effort 钳位语义并在 failover 时重置标记；Gemini effort 提取取真实档位而非占位值，`targetByUID` 写入条件统一；`ResolvedRouteTarget` 定义与 `upstream_failover` 旧 API 保留兼容 fallback
+- **火山套餐 Key 识别与恢复** - 优先识别火山 Agent Plan 的 Kimi K3；按火山额度重置时间恢复被拉黑的 Key；`ListArkAgentPlanModel` 签名 scope 从 `ark_stg` 改回 `ark`
+- **渠道列表与诊断展示错位** - 渠道列表第二个渠道不再错显首个渠道的请求数与缓存率；渠道排序不再随 Key 拉黑变动；重新发现协议后同步刷新渠道列表；自定义渠道协议发现结果正常展示；路由过滤原因与诊断面板改用渠道名和热门模型替代 `ch_xxx` 内部 ID；Key 与健康状态同步修复
+- **驾驶舱空白** - 意图列表 nil slice 被序列化成 `null` 导致驾驶舱整页空白
+- **system 角色归一化破坏缓存边界** - providers 归一化 system 角色时保留 `cache_control` block 边界，避免打断上游 prompt 缓存
+- **billing header 域名判断忽略端口号** - 带端口的自建地址不再被误判为非官方域名，新建渠道默认值跟随 baseUrl
+- **保活验证失败无痕迹** - healthcheck 保活验证失败写入渠道日志
+- **连接延迟慢速判定误报** - 样本数不足 20 时 P95 退化为最大值导致误判慢速，新增最小样本门槛
+- **new-api 地址与图标注册** - new-api 地址自动剥离控制台路径；补齐 `mdi-github`/`mdi-plus-circle`/`mdiPause`/`timer-alert-outline`/信息提示轮廓等缺失图标注册；简化延迟告警芯片文案
+- **基准与预置数据修正** - litellm 映射补齐 26 个模型定价并去重 Kimi 会员条目；AA evidence 补 `taskCount` 修复 TS 类型校验；presetstore 支持多量纲基准原始值；区分 kimi-k3 的 256k/1m 变体上下文；清理渠道配置中过时的 grok 精确模型映射
+- **RoutingReleaseSnapshot 字段缺失** - 补全 `RolloutSeed`/`ControlPercent`，避免灰度分桶快照失真
+- **火山套餐 Key 跨套餐误探测** - 混合套餐渠道中 Agent Plan Key 不再被首地址 `/api/coding` 误打导致 auth_failed 误拉黑；火山官方套餐入口不再调用通用 `/v1/models`（套餐 Key 无法通过该接口探测），改用专用探针 + 内置 manifest 模型清单；400/404/500/网络错误不升级为认证失败
+- **渠道全部 Key 禁用时无恢复入口** - `hasOnlyDisabledChannelApiKeys` 判定（可用=0 且禁用>0）下渠道行直接显示恢复按钮，一次点击恢复全部禁用 Key，无需先暂停；active 渠道跳过冗余 `setStatus(active)`，直接 resume 并刷新
+- **非官方域名默认剔除 billing header** - `stripBillingHeader` 未显式设置时按渠道 BaseURL 推断默认值：仅当渠道所有地址均为 Anthropic 官方 API（`api.anthropic.com`）时保留计费 header，其余第三方渠道默认剔除；此前默认关闭，导致 Claude Code 每次请求变化的 `cch=` 计费 nonce 打穿第三方上游的 prompt 缓存前缀，造成缓存命中率异常下降
 
 - **本地部署渠道重新发现后显示"来源未知/历史记录未保存"** - `writeProfiles` 与 `buildEndpointInventory` 统一用 `CanonicalBaseURL` 规范化 baseURL，修复带 `/v1` 后缀时 endpointUID 不一致导致画像写入后无法被 `ListActiveByChannel` 命中的问题
 - **套餐型 Provider Key 限额重置后不自动恢复** - Kimi/MiMo/优云智算/火山用量刷新后新增 `TryRestoreDisabledKeysByUsage`，按各 Provider 用量快照的重置时间与剩余额度自动恢复因余额/限额不足被拉黑的 Key；同时修复 `syncManagedAccountsFromChannels` 仅从活跃 Key 重建凭证池、导致被拉黑托管 Key 的 Console token/AccessKey/用量快照在下次配置保存时丢失的问题
@@ -199,18 +169,39 @@
 - **快速添加上游类型选择移除**
 - **黑名单密钥恢复状态提示**
 
+
 ### 重构
+
+- **移除 Fuzzy 模式开关，统一为单一 failover 策略（BREAKING）** - Fuzzy 模式早已是唯一实际使用的默认值，Normal 模式的精确状态码分类分支已无存在意义，保留两套逻辑徒增维护成本。删除 `FuzzyModeEnabled` 配置字段、`GetFuzzyModeEnabled`/`SetFuzzyModeEnabled`、`GET/PUT /api/settings/fuzzy-mode` 接口及其配置迁移逻辑；`shouldRetryWithNextKeyNormal` 与 `classifyByStatusCode` 整体删除，`shouldRetryWithNextKeyFuzzy` 重命名为 `shouldRetryWithNextKey` 成为唯一实现；`HandleAllChannelsFailed`/`HandleAllKeysFailed` 不再接收 `fuzzyMode` 参数，统一返回通用 503；各协议 `handleSuccess` 的空响应拦截（`IsClaudeResponseEmpty` 等）不再受 `fuzzyMode` 门控而无条件生效；Web 与桌面前端一并移除工具栏开关、stores 状态、API 封装与 i18n key。**行为变化**：404/405/409-417/422/423/424/426/428/431/451 与 3xx 不再走「不 failover 直接透传上游原始状态码与错误体」路径，这类错误会消耗全部 Key/渠道后以通用 503 收尾；全部渠道失败时不再透传最后一个上游错误详情（`model_not_found` 等可归一化的模型路由错误仍保留精确状态码透传）
+- **订阅中心精简** - 移除分区标题、能力标签与手动添加入口，补齐快捷接入文案；赞助商置顶、new-api 置底，GitHub Copilot 卡移到倒数第二位
+- **移除渠道菜单的试用意图入口**
+- **清理火山套餐历史分支** - 移除 `volcenginePlanModelsHost` 常量与 `endpointFor` 的 `ark_stg` 分支
 
 - **订阅中心重构为 Provider 卡片式快捷接入面板** - 移除订阅列表表格展示，改为双栏布局：左侧 Provider 卡片（GitHub Copilot/new-api/手动添加），右侧详情表单；订阅中心只负责接入新订阅
 - **Agent skills 迁移至 .claude/skills** - 通过 symlink 将 agent skills 迁移到 .claude/skills 目录
 - **协议模型可用性 diff 视图重新设计** - frontend: 重新设计协议模型可用性差异视图
 - **Kimi 用量展示简化** - frontend: 简化 Kimi 用量展示以匹配官方 CLI
 
+
 ### 优化
+
+- **展示格式统一** - 统一所有订阅套餐余量展示格式并补全火山"剩余"前缀；组合展示统一为单空格分隔；渠道日志不再展示调度摘要原始串
+- **后端代码质量** - 清理 Go lint 问题，gofmt 对齐结构体字段与注释缩进
 
 - **路由性能优化** - config: clone only selected upstream；routing: cache request channel snapshots、prefilter incapable managed channels、prefilter channels without usable keys
 
+
+### 测试
+
+- **Autopilot 分层测试补齐** - L2 SmartRouter + TraceStore 集成、L3 SQLite 生命周期、L4 HTTP 契约、L5 真实上游 smoke 与 SSE golden 回归
+- **回归与稳定性** - 快速探活多模型候选回退测试；healthcheck `per_key_test` flaky 记录断言修复
+- **基准断言同步** - 同步模型能力基准断言，且不再硬编码 registry 刷新日期与分值
+
+
 ### 文档
+
+- **Autopilot 计划与设计** - 新增 trace 灰度实施计划、火山 AFP 感知路由计划、火山套餐 Key 保活恢复计划、渠道异步发现方案，并补充 model+effort 联合决策现状与进度
+- **配置与基准说明** - 火山 provider 模板补充 AFP 路由说明；`make help` 补充 `ARTIFICIAL_ANALYSIS_API_KEY` 用法；量化 Kimi HighSpeed 配额消耗为 3 倍；修正 `canonicalModelToPattern` 的 kimi 分支注释
 
 - **Autopilot 设计文档** - 新增同订阅多 Key 能力共享/配额负载均衡(§3.2.3)与用量窗口(§3.2.4)设计、任务域优势矩阵(§5.7)与思考等级差异(§5.8)设计、内置模型清单设计(§4.2.1)、new-api 集成与订阅 Provider Adapter 框架、Phase 3A/3B/4 全部完成状态更新
 - **桌面端文档** - 补充后端发现与端口附着约定
@@ -219,7 +210,11 @@
 - **Star History 图表更新** - 调整为 Markdown 图片并更新 token
 - **火山引擎推广链接** - README 为火山引擎注册即领 2500 万 Tokens 添加推广链接
 
+
 ### 其他
+
+- **停止跟踪 upstream-check 运行时状态文件**
+- **重新生成 model registry 产物**
 
 - **Windows 签名切换至正式证书策略** - ci: 切换 Windows 签名至正式证书策略
 - **Serena 项目配置更新**

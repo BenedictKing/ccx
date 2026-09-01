@@ -155,16 +155,22 @@ func handleSuccess(
 		responsesResp.Model = originalReq.Model
 	}
 
-	utils.ForwardResponseHeaders(resp.Header, c.Writer)
-	c.JSON(200, responsesResp)
-
-	// 返回 usage 数据用于指标记录
+	// 指标沿用内部"不含缓存"口径；转换路径的出口 usage 在发送前归一为官方 OpenAI 语义，
+	// 避免按官方语义计算未命中输入的客户端得到负数（#274）。
 	promptTokensTotal := promptTokensTotalFromResponsesInput(
 		originalUsage.InputTokens,
 		upstreamType,
 		responsesUsageHasClaudeCache(originalUsage),
 	)
-	return metricsUsageFromResponsesUsage(responsesResp.Usage, promptTokensTotal), nil
+	metricsUsage := metricsUsageFromResponsesUsage(responsesResp.Usage, promptTokensTotal)
+	if upstreamType != "responses" {
+		normalizeResponsesUsageToOpenAISemantics(&responsesResp.Usage)
+	}
+
+	utils.ForwardResponseHeaders(resp.Header, c.Writer)
+	c.JSON(200, responsesResp)
+
+	return metricsUsage, nil
 }
 
 func responsesUsageHasClaudeCache(usage types.ResponsesUsage) bool {
