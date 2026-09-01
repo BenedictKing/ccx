@@ -271,6 +271,7 @@ import {
   mdiCurrencyUsd,
   mdiVpn,
   mdiScaleBalance,
+  mdiMagnifyScan,
 } from '@mdi/js'
 
 // 图标名称到 SVG path 的映射 (使用 kebab-case)
@@ -539,6 +540,8 @@ const iconMap: Record<string, string> = {
   'cached': mdiCached,
   'auto-fix': mdiAutoFix,
   'radar': mdiRadar,
+  'git-branch': mdiSourceBranch,
+  'magnify-scan': mdiMagnifyScan,
   'shield-check': mdiShieldCheck,
   'account-group': mdiAccountGroup,
   'hand-heart': mdiHandHeart,

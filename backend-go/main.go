@@ -1623,6 +1623,8 @@ func main() {
 			// SmartRouter dry-run API
 			if autopilotManager.SmartRouter() != nil {
 				autopilot.RegisterDryRunRoutes(apiGroup, autopilotManager.SmartRouter())
+				// 路由预演 API（请求体直喂 + 两层对齐）
+				autopilot.RegisterRoutePreviewRoutes(apiGroup, autopilotManager.SmartRouter(), channelScheduler)
 			}
 
 			// 渠道兼容性能力记忆查看/清除（工具调用、安全分类等自学习结论）

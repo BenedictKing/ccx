@@ -21,6 +21,7 @@
 | [guardrails.md](./guardrails.md) | Guardrails 最小集 | credential-masker 起步、优先级注册表、fail-open、三挂载点（请求/响应/日志） |
 | [omniroute-benchmark-upgrades.md](./omniroute-benchmark-upgrades.md) | 对标 OmniRoute 增强规划 | 配额真相分级调度、请求侧工具输出压缩、guardrails 最小集、路由预演升级、Tier-2/3 backlog 与不跟进决策 |
 | [quota-truth-scheduling.md](./quota-truth-scheduling.md) | 配额真相分级与按余量调度 | Truth 五级+来源优先级、懒重置饱和桶、SmartRouter quotaHeadroom 因子、scheduler 沉底排序、前端真相等级列 |
+| [route-preview.md](./route-preview.md) | 路由预演升级 | 请求体直喂的零上游请求路由预演、SmartRouter + scheduler 两层对齐、前端 DiagnosePanel 升级 |
 
 ## 总览关系图
 
@@ -78,8 +79,9 @@ Channels   (Claude/OpenAI/Gemini/...)
 | cross-module-integration.md | ✅ 完成 | 覆盖交互边界、事件传播、配置传播、竞态处理、事件总线 |
 | model-inventory-consistency.md | ✅ 完成 | P0/P1/P2 全部落地(2026-08-29):自动保鲜、整组发现、查看自愈、清单净化、画像双口径收敛;存储归并随 v2 |
 | guardrails.md | ✅ 完成 | credential-masker 最小集 + 注册表架构 + 三挂载点 + 表驱动单测 |
-| omniroute-benchmark-upgrades.md | 🔄 部分实现 | 2026-09-01 定稿的增强路线图；§2 配额调度、§4 Guardrails 已落地，其余规划中 |
+| omniroute-benchmark-upgrades.md | 🔄 部分实现 | 2026-09-01 定稿的增强路线图；§2 配额调度、§4 Guardrails、§5 路由预演已落地，其余规划中 |
 | quota-truth-scheduling.md | ✅ 完成 | 2026-09-01 落地：配额包+SmartRouter评分+scheduler沉底+前端真相列，对应 omniroute §2 方向 A |
+| route-preview.md | ✅ 完成 | 2026-09-01 落地，v3.0.x：请求体直喂路由预演、两层对齐、前端 DiagnosePanel 升级 |
 
 > `phase3c-handoff.md` 为 2026-08-11 的历史交接快照（任务已全部完成），不作为现状参考。
 
