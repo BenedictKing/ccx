@@ -25,7 +25,7 @@ func SetUpstreamSignalCallback(cb func(endpointUID, metricsKey, serviceType, cha
 
 // NotifySignal 若回调已注册，触发信号回调。
 // endpointUID / metricsKey 由调用方在请求上下文中计算好后传入。
-// channelName 为渠道可读名，仅用于日志展示，可能为空。
+// channelName 为渠道可读名，仅用于日志展示。
 // reason 为 429 细分原因（非 429 传空串）。
 // 失败安全：回调 panic 不影响主流程。
 func NotifySignal(endpointUID, metricsKey, serviceType, channelName string, isStream bool, latencyMs int64, headers http.Header, statusCode int, reason string) {
@@ -41,14 +41,22 @@ func NotifySignal(endpointUID, metricsKey, serviceType, channelName string, isSt
 	cb(endpointUID, metricsKey, serviceType, channelName, isStream, latencyMs, headers, statusCode, reason)
 }
 
+// maxUpstreamResetDelay 上游重置指示的冷却上限。
+// 异常值（如伪造的 Retry-After: 86400 或周窗口 reset 时间戳）不该冻结渠道一整天，
+// 超过上限的指示截断到上限；更长的硬隔离由持久限制/熔断层负责。
+const maxUpstreamResetDelay = time.Hour
+
 // ApplyUpstreamHints 从上游响应头解析限流信息，动态调整 limiter 状态。
-// 支持的 header（按 provider 分类）：
 //
-//	通用：    Retry-After（秒整数 或 HTTP-date）
-//	Anthropic: anthropic-ratelimit-requests-remaining / -reset（RFC3339）
-//	OpenAI:    x-ratelimit-remaining-requests / x-ratelimit-reset-requests（duration 如 "1s","6m0s"）
+// 429/5xx 时按三族重置头取最晚有效值冷却（蓝本 GPT-Load v2 ParseRateLimitReset）：
 //
-// headers 传入上游 resp.Header；statusCode 用于判断 429 冷却。
+//	通用：      Retry-After（秒整数 或 HTTP-date）
+//	Anthropic: anthropic-ratelimit-*-reset（RFC3339 / duration / epoch）
+//	OpenAI:    x-ratelimit-reset / x-ratelimit-reset-*（duration / epoch / RFC3339）
+//
+// 所有冷却指示统一截断到 now+1h，只延长不缩短。
+// 非 429 响应上仍保留 remaining 耗尽的探测（anthropic requests remaining<=1、
+// openai remaining-requests<=1），同样受 1h 上限约束。
 func (l *ChannelLimiter) ApplyUpstreamHints(headers http.Header, statusCode int, now time.Time) {
 	if l == nil || headers == nil {
 		return
@@ -57,27 +65,22 @@ func (l *ChannelLimiter) ApplyUpstreamHints(headers http.Header, statusCode int,
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	// 429 或 5xx + Retry-After → cooldown（5xx 语义为服务暂时不可用，尊重上游退避指示）
+	// 429 或 5xx + 重置头 → cooldown（5xx 语义为服务暂时不可用，尊重上游退避指示）
 	if statusCode == http.StatusTooManyRequests || statusCode >= 500 {
-		if ra := parseRetryAfter(headers, now); ra > 0 {
-			candidate := now.Add(ra)
-			if candidate.After(l.cooldownUntil) {
-				l.cooldownUntil = candidate
-			}
+		if until, ok := latestUpstreamReset(headers, now); ok {
+			l.extendCooldownUntil(until, now)
 		}
 	}
 
-	// Anthropic remaining/reset headers
+	// Anthropic remaining/reset headers（非 429 时也可能带出耗尽信号）
 	remaining := headers.Get("anthropic-ratelimit-requests-remaining")
 	resetStr := headers.Get("anthropic-ratelimit-requests-reset")
 	if remaining != "" && resetStr != "" {
 		rem, err1 := strconv.ParseInt(remaining, 10, 64)
-		resetTime, err2 := time.Parse(time.RFC3339, resetStr)
-		if err1 == nil && err2 == nil && rem <= 1 && resetTime.After(now) {
+		resetTime, ok := parseResetValue(resetStr, now)
+		if err1 == nil && ok && rem <= 1 && resetTime.After(now) {
 			// 无剩余配额：在 reset 前完全冷却
-			if resetTime.After(l.cooldownUntil) {
-				l.cooldownUntil = resetTime
-			}
+			l.extendCooldownUntil(resetTime, now)
 		}
 	}
 
@@ -87,46 +90,115 @@ func (l *ChannelLimiter) ApplyUpstreamHints(headers http.Header, statusCode int,
 	if remaining != "" && resetStr != "" {
 		rem, err1 := strconv.ParseInt(remaining, 10, 64)
 		if err1 == nil && rem <= 1 {
-			if d := parseDuration(resetStr); d > 0 {
-				candidate := now.Add(d)
-				if candidate.After(l.cooldownUntil) {
-					l.cooldownUntil = candidate
-				}
+			if resetTime, ok := parseResetValue(resetStr, now); ok && resetTime.After(now) {
+				l.extendCooldownUntil(resetTime, now)
 			}
 		}
 	}
 }
 
-// parseRetryAfter 解析 Retry-After header，返回等待时长。
-// 支持秒整数 和 HTTP-date 两种格式。
-func parseRetryAfter(headers http.Header, now time.Time) time.Duration {
-	ra := headers.Get("Retry-After")
-	if ra == "" {
-		return 0
+// extendCooldownUntil 将冷却截止延长到 until（已持有 mu）。
+// 超过上限的指示截断到 now+maxUpstreamResetDelay，永不缩短现有冷却。
+func (l *ChannelLimiter) extendCooldownUntil(until time.Time, now time.Time) {
+	if cap := now.Add(maxUpstreamResetDelay); until.After(cap) {
+		until = cap
 	}
-	// 尝试秒数
-	if secs, err := strconv.ParseInt(ra, 10, 64); err == nil && secs > 0 {
-		return time.Duration(secs) * time.Second
+	if until.After(l.cooldownUntil) {
+		l.cooldownUntil = until
 	}
-	// 尝试 HTTP-date
-	if t, err := time.Parse(http.TimeFormat, ra); err == nil {
-		d := t.Sub(now)
-		if d > 0 {
-			return d
-		}
-	}
-	return 0
 }
 
-// parseDuration 解析 OpenAI 风格的 duration 字符串，如 "1s", "6m0s", "30s"。
-// 返回 0 表示无法解析。
-func parseDuration(s string) time.Duration {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return 0
+// latestUpstreamReset 从三族重置头中取最晚的有效值。
+// 任一族有有效值即返回；全部无效返回 false。
+func latestUpstreamReset(headers http.Header, now time.Time) (time.Time, bool) {
+	var latest time.Time
+	consider := func(candidate time.Time, ok bool) {
+		if !ok || !candidate.After(now) {
+			return
+		}
+		if latest.IsZero() || candidate.After(latest) {
+			latest = candidate
+		}
 	}
-	if d, err := time.ParseDuration(s); err == nil {
-		return d
+
+	// 族 1：Retry-After（秒整数 / HTTP-date）
+	consider(parseRetryAfterTime(headers.Get("Retry-After"), now))
+
+	// 族 2：anthropic-ratelimit-*-reset（requests/tokens 等多维度，逐头解析）
+	for name, values := range headers {
+		lower := strings.ToLower(name)
+		if !strings.HasPrefix(lower, "anthropic-ratelimit-") || !strings.HasSuffix(lower, "-reset") {
+			continue
+		}
+		for _, value := range values {
+			consider(parseResetValue(value, now))
+		}
 	}
-	return 0
+
+	// 族 3：x-ratelimit-reset / x-ratelimit-reset-*（OpenAI 及兼容网关）
+	for name, values := range headers {
+		lower := strings.ToLower(name)
+		if lower != "x-ratelimit-reset" && !strings.HasPrefix(lower, "x-ratelimit-reset-") {
+			continue
+		}
+		for _, value := range values {
+			consider(parseResetValue(value, now))
+		}
+	}
+
+	return latest, !latest.IsZero()
+}
+
+// parseRetryAfterTime 解析 Retry-After 单值，返回冷却截止时刻。
+// 支持秒整数与 HTTP-date 两种格式。Retry-After 是上游显式退避指示，
+// 超长的合法值（如 86400）保留解析、由 extendCooldownUntil 截断到 1h，
+// 而不是丢弃让渠道继续被打。
+func parseRetryAfterTime(value string, now time.Time) (time.Time, bool) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return time.Time{}, false
+	}
+	if secs, err := strconv.ParseInt(trimmed, 10, 64); err == nil {
+		if secs <= 0 {
+			return time.Time{}, false
+		}
+		return now.Add(time.Duration(secs) * time.Second), true
+	}
+	if t, err := http.ParseTime(trimmed); err == nil {
+		return t, true
+	}
+	return time.Time{}, false
+}
+
+// parseResetValue 解析单个重置头值，兼容四种上游风格：
+// RFC3339 时间戳；Go duration（"1s"/"6m0s"）；epoch 秒/毫秒数值；相对秒数。
+// 过去时间与超上限的相对时长返回无效（超上限的绝对时间仍返回，由上层截断）。
+func parseResetValue(value string, now time.Time) (time.Time, bool) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return time.Time{}, false
+	}
+	if t, err := time.Parse(time.RFC3339, trimmed); err == nil {
+		return t, true
+	}
+	if d, err := time.ParseDuration(trimmed); err == nil {
+		if d <= 0 || d > maxUpstreamResetDelay {
+			return time.Time{}, false
+		}
+		return now.Add(d), true
+	}
+	numeric, err := strconv.ParseInt(trimmed, 10, 64)
+	if err != nil {
+		return time.Time{}, false
+	}
+	switch {
+	case numeric >= 1_000_000_000_000: // epoch 毫秒
+		return time.UnixMilli(numeric), true
+	case numeric >= 1_000_000_000: // epoch 秒
+		return time.Unix(numeric, 0), true
+	case numeric > 0 && numeric <= int64(maxUpstreamResetDelay/time.Second): // 相对秒
+		return now.Add(time.Duration(numeric) * time.Second), true
+	default:
+		return time.Time{}, false
+	}
 }

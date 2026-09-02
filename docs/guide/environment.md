@@ -268,7 +268,7 @@ Vectors 仍不支持 capability-test；不要通过能力测试推断 Embedding 
 | `rateLimitRpm` | `0` | 每分钟请求数上限（令牌桶填充速率 = RPM/60）。`0` 或留空表示不限速。 |
 | `rateLimitBurst` | `0` | 令牌桶突发容量，允许的瞬时突发请求数。`0` 时自动取 `rateLimitRpm` 的值。 |
 | `rateLimitMaxConcurrent` | `0` | 同时进行的上游请求数上限（信号量）。`0` 表示不限并发。 |
-| `rateLimitAutoFromHeaders` | `false` | 启用后解析上游 `Retry-After` / `anthropic-ratelimit-*` / `x-ratelimit-*` 响应头，命中限流时对该渠道动态冷却（cooldown），进一步规避 429。 |
+| `rateLimitAutoFromHeaders` | `false` | 启用后解析上游 `Retry-After` / `anthropic-ratelimit-*-reset` / `x-ratelimit-reset*` 响应头：429/5xx 时按三族重置头取最晚有效值冷却（多维度并存取最晚，兼容 RFC3339 / duration / epoch 秒与毫秒 / 相对秒格式），所有冷却指示统一截断到 1 小时，进一步规避 429。 |
 
 限速作用域是**渠道级**（同渠道下所有 API Key 共享同一令牌桶），符合「单账号跨 Key 共享额度」的常见上游计费模型。请求被限速拦截（cooldown / 超出 maxWait 排队上限）时会自动 failover 到其它可用渠道；调度器在选择渠道时会跳过处于 cooldown 的渠道。桌面端一键添加 MiMo 渠道时会内置保守默认 `rateLimitRpm`（官方 RPM 上限的约 80%）。
 
