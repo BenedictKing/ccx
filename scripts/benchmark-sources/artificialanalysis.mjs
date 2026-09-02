@@ -44,7 +44,7 @@ export const ARTIFICIAL_ANALYSIS_MODEL_MAP = {
   'claude-sonnet-4-6': 'claude-sonnet-4-6',
   'claude-haiku-4-5': 'claude-haiku-4.5',
   'claude-fable-5': 'claude-fable-5',
-  'claude-fable-5-1': 'claude-fable-5',
+  'claude-fable-5-1': 'claude-fable-5-1',
   'gpt-5-6-sol': 'gpt-5.6-sol',
   'gpt-5-6-terra': 'gpt-5.6-terra',
   'gpt-5-6-luna': 'gpt-5.6-luna',

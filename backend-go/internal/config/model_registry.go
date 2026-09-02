@@ -304,6 +304,13 @@ func BuiltinAgentModelProfiles() map[string]AgentModelProfile {
 			MaxOutputTokens:     128000,
 			ReasoningEfforts:    []string{"low", "medium", "high", "xhigh", "max"},
 		},
+		// Fable 5.1 是独立模型（非 Fable 5 别名）；pattern 更长，resolvePatternValue 长度降序保证优先命中。
+		"claude-fable-5-1*": {
+			DisplayName:         "Claude Fable 5.1",
+			ContextWindowTokens: 1000000,
+			MaxOutputTokens:     128000,
+			ReasoningEfforts:    []string{"low", "medium", "high", "xhigh", "max"},
+		},
 		"claude-mythos-5*": {
 			DisplayName:         "Claude Mythos 5",
 			ContextWindowTokens: 1000000,

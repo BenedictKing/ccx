@@ -743,11 +743,14 @@ func TestResolveUpstreamCapability_ClaudeFable5Variants(t *testing.T) {
 		displayName string
 	}{
 		{model: "claude-fable-5", displayName: "Claude Fable 5"},
-		{model: "claude-fable-5-1", displayName: "Claude Fable 5"},
-		{model: "claude-fable-5.1", displayName: "Claude Fable 5"},
-		{model: "claude-fable-5-1-20260902", displayName: "Claude Fable 5"},
-		{model: "claude-fable-5-1-2026-09-02", displayName: "Claude Fable 5"},
-		{model: "anthropic/claude-fable-5-1", displayName: "Claude Fable 5"},
+		{model: "claude-fable-5-20260902", displayName: "Claude Fable 5"},
+		{model: "anthropic/claude-fable-5", displayName: "Claude Fable 5"},
+		// Fable 5.1 是独立模型，不再归并到 Fable 5
+		{model: "claude-fable-5-1", displayName: "Claude Fable 5.1"},
+		{model: "claude-fable-5.1", displayName: "Claude Fable 5.1"},
+		{model: "claude-fable-5-1-20260902", displayName: "Claude Fable 5.1"},
+		{model: "claude-fable-5-1-2026-09-02", displayName: "Claude Fable 5.1"},
+		{model: "anthropic/claude-fable-5-1", displayName: "Claude Fable 5.1"},
 	}
 
 	for _, tt := range tests {

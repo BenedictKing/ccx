@@ -2,6 +2,7 @@
 // 规则顺序：先新后旧、先精确后宽松；同家族新版本在前，带 codex/pro/max 等精确后缀优先于通用名。
 const modelPriorityPatterns: RegExp[] = [
   // Anthropic Claude
+  /fable-5[.-]1/i,
   /fable-5/i,
   /opus-5/i,
   /opus-4[.-]8/i,

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-02T00:49:37.068Z",
+  "generatedAt": "2026-09-02T02:15:33.251Z",
   "qualityTiers": {
     "scale": "0-100",
     "algorithm": "medium-aligned-coding-v1",
@@ -122,7 +122,7 @@
       "effort": "low",
       "pass_rate": 0.054,
       "mean_cost": 0.0285,
-      "median_cost": 0.0263,
+      "median_cost": 0.0261,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-luna",
       "taskCount": 112,
@@ -288,13 +288,13 @@
     {
       "model": "gpt-5.6-terra",
       "effort": "xhigh",
-      "pass_rate": 0.616,
-      "mean_cost": 1.7873,
+      "pass_rate": 0.625,
+      "mean_cost": 1.7854,
       "median_cost": 1.5184,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-terra",
       "taskCount": 112,
-      "quality_score": 61.6,
+      "quality_score": 62.5,
       "model_quality_score": 35.1
     },
     {
@@ -1145,6 +1145,59 @@
       "taskCount": null
     },
     {
+      "model": "claude-fable-5-1",
+      "source": "Artificial Analysis",
+      "category": "agentic",
+      "metric": "agentic_index",
+      "score": 49.2,
+      "effort": "low",
+      "taskCount": 9
+    },
+    {
+      "model": "claude-fable-5-1",
+      "source": "Artificial Analysis",
+      "category": "agentic",
+      "metric": "agentic_index",
+      "score": 52.7,
+      "effort": "medium",
+      "taskCount": 9
+    },
+    {
+      "model": "claude-fable-5-1",
+      "source": "Artificial Analysis",
+      "category": "agentic",
+      "metric": "agentic_index",
+      "score": 61.3,
+      "effort": "default",
+      "taskCount": 9
+    },
+    {
+      "model": "claude-fable-5-1",
+      "source": "Artificial Analysis",
+      "category": "agentic",
+      "metric": "agentic_index",
+      "score": 59.8,
+      "effort": "xhigh",
+      "taskCount": 9
+    },
+    {
+      "model": "claude-fable-5-1",
+      "source": "Artificial Analysis",
+      "category": "agentic",
+      "metric": "agentic_index",
+      "score": 55.8,
+      "effort": "high",
+      "taskCount": 9
+    },
+    {
+      "model": "claude-fable-5-1",
+      "source": "BenchLM.ai",
+      "category": "agentic",
+      "metric": "category_score",
+      "score": 85,
+      "taskCount": null
+    },
+    {
       "model": "claude-mythos-5",
       "source": "BenchLM.ai",
       "category": "agentic",
@@ -1988,6 +2041,59 @@
       "score": 59.6,
       "effort": "low",
       "taskCount": 113
+    },
+    {
+      "model": "claude-fable-5-1",
+      "source": "Artificial Analysis",
+      "category": "coding",
+      "metric": "coding_index",
+      "score": 75.2,
+      "effort": "low",
+      "taskCount": 9
+    },
+    {
+      "model": "claude-fable-5-1",
+      "source": "Artificial Analysis",
+      "category": "coding",
+      "metric": "coding_index",
+      "score": 77.1,
+      "effort": "medium",
+      "taskCount": 9
+    },
+    {
+      "model": "claude-fable-5-1",
+      "source": "Artificial Analysis",
+      "category": "coding",
+      "metric": "coding_index",
+      "score": 81.6,
+      "effort": "default",
+      "taskCount": 9
+    },
+    {
+      "model": "claude-fable-5-1",
+      "source": "Artificial Analysis",
+      "category": "coding",
+      "metric": "coding_index",
+      "score": 80.7,
+      "effort": "xhigh",
+      "taskCount": 9
+    },
+    {
+      "model": "claude-fable-5-1",
+      "source": "Artificial Analysis",
+      "category": "coding",
+      "metric": "coding_index",
+      "score": 79.1,
+      "effort": "high",
+      "taskCount": 9
+    },
+    {
+      "model": "claude-fable-5-1",
+      "source": "BenchLM.ai",
+      "category": "coding",
+      "metric": "category_score",
+      "score": 80.3,
+      "taskCount": null
     },
     {
       "model": "claude-haiku-4.5",
@@ -3221,7 +3327,7 @@
       "source": "CodexRadar",
       "category": "coding",
       "metric": "pass_at_1",
-      "score": 61.6,
+      "score": 62.5,
       "effort": "xhigh",
       "taskCount": 112
     },
@@ -3762,6 +3868,14 @@
       "category": "knowledge",
       "metric": "category_score",
       "score": 67,
+      "taskCount": null
+    },
+    {
+      "model": "claude-fable-5-1",
+      "source": "BenchLM.ai",
+      "category": "knowledge",
+      "metric": "category_score",
+      "score": 97,
       "taskCount": null
     },
     {
@@ -4395,6 +4509,59 @@
       "category": "overall",
       "metric": "score",
       "score": 82.5,
+      "taskCount": null
+    },
+    {
+      "model": "claude-fable-5-1",
+      "source": "Artificial Analysis",
+      "category": "overall",
+      "metric": "intelligence_index",
+      "score": 58.1,
+      "effort": "low",
+      "taskCount": 9
+    },
+    {
+      "model": "claude-fable-5-1",
+      "source": "Artificial Analysis",
+      "category": "overall",
+      "metric": "intelligence_index",
+      "score": 60.5,
+      "effort": "medium",
+      "taskCount": 9
+    },
+    {
+      "model": "claude-fable-5-1",
+      "source": "Artificial Analysis",
+      "category": "overall",
+      "metric": "intelligence_index",
+      "score": 65.7,
+      "effort": "default",
+      "taskCount": 9
+    },
+    {
+      "model": "claude-fable-5-1",
+      "source": "Artificial Analysis",
+      "category": "overall",
+      "metric": "intelligence_index",
+      "score": 64.8,
+      "effort": "xhigh",
+      "taskCount": 9
+    },
+    {
+      "model": "claude-fable-5-1",
+      "source": "Artificial Analysis",
+      "category": "overall",
+      "metric": "intelligence_index",
+      "score": 62.5,
+      "effort": "high",
+      "taskCount": 9
+    },
+    {
+      "model": "claude-fable-5-1",
+      "source": "BenchLM.ai",
+      "category": "overall",
+      "metric": "score",
+      "score": 82.7,
       "taskCount": null
     },
     {

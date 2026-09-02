@@ -51,6 +51,7 @@ var builtinModelsManifests = []BuiltinModelsManifest{
 		PlanHint:       "anthropic_api",
 		ModelIDs: []string{
 			"claude-fable-5",
+			"claude-fable-5-1",
 			"claude-mythos-5",
 			"claude-opus-4-8",
 			"claude-opus-4-7",
