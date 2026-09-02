@@ -1,20 +1,20 @@
 {
-  "generatedAt": "2026-09-01T00:22:20.260Z",
+  "generatedAt": "2026-09-02T00:49:37.068Z",
   "qualityTiers": {
     "scale": "0-100",
     "algorithm": "medium-aligned-coding-v1",
     "source": "backend-autopilot",
     "premiumMin": 63.25,
     "highMin": 39.349999999999994,
-    "normalMin": 20.5
+    "normalMin": 27.1
   },
   "data": [
     {
       "model": "deepseek-v4-flash",
       "effort": "high",
       "pass_rate": 0.424,
-      "mean_cost": 0.1242,
-      "median_cost": 0.0847,
+      "mean_cost": 0.1223,
+      "median_cost": 0.085,
       "source": "CodexRadar",
       "sourceModel": "deepseek-v4-flash",
       "taskCount": 290,
@@ -36,26 +36,26 @@
     {
       "model": "deepseek-v4-pro",
       "effort": "high",
-      "pass_rate": 0.513,
-      "mean_cost": 0.2574,
-      "median_cost": 0.1739,
+      "pass_rate": 0.51,
+      "mean_cost": 0.2652,
+      "median_cost": 0.1752,
       "source": "CodexRadar",
       "sourceModel": "deepseek-v4-pro",
-      "taskCount": 193,
-      "quality_score": 51.3,
-      "model_quality_score": 51.3
+      "taskCount": 196,
+      "quality_score": 51,
+      "model_quality_score": 51
     },
     {
       "model": "deepseek-v4-pro",
       "effort": "max",
       "pass_rate": 0.553,
-      "mean_cost": 0.3244,
-      "median_cost": 0.2472,
+      "mean_cost": 0.3385,
+      "median_cost": 0.2475,
       "source": "CodexRadar",
       "sourceModel": "deepseek-v4-pro",
       "taskCount": 215,
       "quality_score": 55.3,
-      "model_quality_score": 51.3
+      "model_quality_score": 51
     },
     {
       "model": "glm-5.3",
@@ -73,7 +73,7 @@
       "model": "glm-5.3",
       "effort": "high",
       "pass_rate": 0.589,
-      "mean_cost": 1.6106,
+      "mean_cost": 1.587,
       "median_cost": 1.7193,
       "source": "CodexRadar",
       "sourceModel": "glm-5.3",
@@ -97,8 +97,8 @@
       "model": "gpt-5.5",
       "effort": "high",
       "pass_rate": 0.625,
-      "mean_cost": 3.7441,
-      "median_cost": 3.1103,
+      "mean_cost": 3.7507,
+      "median_cost": 3.1459,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.5",
       "taskCount": 112,
@@ -108,21 +108,21 @@
     {
       "model": "gpt-5.5",
       "effort": "xhigh",
-      "pass_rate": 0.625,
-      "mean_cost": 5.8766,
-      "median_cost": 4.7841,
+      "pass_rate": 0.634,
+      "mean_cost": 5.9235,
+      "median_cost": 4.79,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.5",
       "taskCount": 112,
-      "quality_score": 62.5,
+      "quality_score": 63.4,
       "model_quality_score": 54
     },
     {
       "model": "gpt-5.6-luna",
       "effort": "low",
       "pass_rate": 0.054,
-      "mean_cost": 0.0284,
-      "median_cost": 0.0265,
+      "mean_cost": 0.0285,
+      "median_cost": 0.0263,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-luna",
       "taskCount": 112,
@@ -144,13 +144,13 @@
     {
       "model": "gpt-5.6-luna",
       "effort": "high",
-      "pass_rate": 0.518,
-      "mean_cost": 0.2066,
-      "median_cost": 0.1613,
+      "pass_rate": 0.527,
+      "mean_cost": 0.2068,
+      "median_cost": 0.1619,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-luna",
       "taskCount": 112,
-      "quality_score": 51.8,
+      "quality_score": 52.7,
       "model_quality_score": 11.3
     },
     {
@@ -168,20 +168,20 @@
     {
       "model": "gpt-5.6-luna",
       "effort": "max",
-      "pass_rate": 0.679,
-      "mean_cost": 0.5242,
-      "median_cost": 0.4146,
+      "pass_rate": 0.688,
+      "mean_cost": 0.5257,
+      "median_cost": 0.4151,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-luna",
       "taskCount": 112,
-      "quality_score": 67.9,
+      "quality_score": 68.8,
       "model_quality_score": 11.3
     },
     {
       "model": "gpt-5.6-sol",
       "effort": "low",
       "pass_rate": 0.571,
-      "mean_cost": 1.6138,
+      "mean_cost": 1.6127,
       "median_cost": 1.1817,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-sol",
@@ -193,8 +193,8 @@
       "model": "gpt-5.6-sol",
       "effort": "medium",
       "pass_rate": 0.643,
-      "mean_cost": 2.9625,
-      "median_cost": 2.3282,
+      "mean_cost": 2.9569,
+      "median_cost": 2.3233,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-sol",
       "taskCount": 112,
@@ -205,7 +205,7 @@
       "model": "gpt-5.6-sol",
       "effort": "high",
       "pass_rate": 0.634,
-      "mean_cost": 4.1564,
+      "mean_cost": 4.1424,
       "median_cost": 3.4036,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-sol",
@@ -217,7 +217,7 @@
       "model": "gpt-5.6-sol",
       "effort": "xhigh",
       "pass_rate": 0.696,
-      "mean_cost": 5.2731,
+      "mean_cost": 5.2761,
       "median_cost": 4.252,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-sol",
@@ -229,7 +229,7 @@
       "model": "gpt-5.6-sol",
       "effort": "max",
       "pass_rate": 0.723,
-      "mean_cost": 8.0366,
+      "mean_cost": 8.0308,
       "median_cost": 6.4789,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-sol",
@@ -241,7 +241,7 @@
       "model": "gpt-5.6-sol",
       "effort": "ultra",
       "pass_rate": 0.688,
-      "mean_cost": 24.3631,
+      "mean_cost": 24.3119,
       "median_cost": 18.9532,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-sol",
@@ -252,20 +252,20 @@
     {
       "model": "gpt-5.6-terra",
       "effort": "low",
-      "pass_rate": 0.313,
-      "mean_cost": 0.4879,
-      "median_cost": 0.4415,
+      "pass_rate": 0.321,
+      "mean_cost": 0.4866,
+      "median_cost": 0.4389,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-terra",
       "taskCount": 112,
-      "quality_score": 31.3,
+      "quality_score": 32.1,
       "model_quality_score": 35.1
     },
     {
       "model": "gpt-5.6-terra",
       "effort": "medium",
       "pass_rate": 0.366,
-      "mean_cost": 0.6208,
+      "mean_cost": 0.6203,
       "median_cost": 0.5466,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-terra",
@@ -277,8 +277,8 @@
       "model": "gpt-5.6-terra",
       "effort": "high",
       "pass_rate": 0.5,
-      "mean_cost": 1.0815,
-      "median_cost": 0.9066,
+      "mean_cost": 1.0818,
+      "median_cost": 0.9058,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-terra",
       "taskCount": 112,
@@ -288,20 +288,20 @@
     {
       "model": "gpt-5.6-terra",
       "effort": "xhigh",
-      "pass_rate": 0.625,
-      "mean_cost": 1.778,
-      "median_cost": 1.5182,
+      "pass_rate": 0.616,
+      "mean_cost": 1.7873,
+      "median_cost": 1.5184,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-terra",
       "taskCount": 112,
-      "quality_score": 62.5,
+      "quality_score": 61.6,
       "model_quality_score": 35.1
     },
     {
       "model": "gpt-5.6-terra",
       "effort": "max",
       "pass_rate": 0.679,
-      "mean_cost": 3.4979,
+      "mean_cost": 3.537,
       "median_cost": 2.8289,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-terra",
@@ -313,7 +313,7 @@
       "model": "gpt-5.6-terra",
       "effort": "ultra",
       "pass_rate": 0.696,
-      "mean_cost": 9.8224,
+      "mean_cost": 9.7993,
       "median_cost": 7.6001,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-terra",
@@ -324,26 +324,26 @@
     {
       "model": "grok-4.6",
       "effort": "low",
-      "pass_rate": 0.541,
+      "pass_rate": 0.518,
       "mean_cost": 0.7718,
       "median_cost": 0.9101,
       "source": "CodexRadar",
       "sourceModel": "grok-4.6",
-      "taskCount": 109,
-      "quality_score": 54.1,
-      "model_quality_score": 61.1
+      "taskCount": 112,
+      "quality_score": 51.8,
+      "model_quality_score": 60.6
     },
     {
       "model": "grok-4.6",
       "effort": "medium",
-      "pass_rate": 0.611,
+      "pass_rate": 0.606,
       "mean_cost": 2.6447,
       "median_cost": 3.1348,
       "source": "CodexRadar",
       "sourceModel": "grok-4.6",
-      "taskCount": 108,
-      "quality_score": 61.1,
-      "model_quality_score": 61.1
+      "taskCount": 109,
+      "quality_score": 60.6,
+      "model_quality_score": 60.6
     },
     {
       "model": "grok-4.6",
@@ -355,7 +355,7 @@
       "sourceModel": "grok-4.6",
       "taskCount": 112,
       "quality_score": 66.1,
-      "model_quality_score": 61.1
+      "model_quality_score": 60.6
     },
     {
       "model": "grok-4.6",
@@ -367,7 +367,7 @@
       "sourceModel": "grok-4.6",
       "taskCount": 112,
       "quality_score": 66.1,
-      "model_quality_score": 61.1
+      "model_quality_score": 60.6
     },
     {
       "model": "claude-fable-5",
@@ -570,7 +570,7 @@
       "source": "DeepSWE v1.1",
       "sourceModel": "claude-sonnet-5",
       "quality_score": 30.5,
-      "model_quality_score": 16.7,
+      "model_quality_score": 33.3,
       "taskCount": null
     },
     {
@@ -582,7 +582,7 @@
       "source": "DeepSWE v1.1",
       "sourceModel": "claude-sonnet-5",
       "quality_score": 39.8,
-      "model_quality_score": 16.7,
+      "model_quality_score": 33.3,
       "taskCount": null
     },
     {
@@ -594,7 +594,7 @@
       "source": "DeepSWE v1.1",
       "sourceModel": "claude-sonnet-5",
       "quality_score": 48.2,
-      "model_quality_score": 16.7,
+      "model_quality_score": 33.3,
       "taskCount": null
     },
     {
@@ -606,7 +606,7 @@
       "source": "DeepSWE v1.1",
       "sourceModel": "claude-sonnet-5",
       "quality_score": 49.7,
-      "model_quality_score": 16.7,
+      "model_quality_score": 33.3,
       "taskCount": null
     },
     {
@@ -618,7 +618,7 @@
       "source": "DeepSWE v1.1",
       "sourceModel": "claude-sonnet-5",
       "quality_score": 53.8,
-      "model_quality_score": 16.7,
+      "model_quality_score": 33.3,
       "taskCount": null
     },
     {
@@ -642,7 +642,7 @@
       "source": "DeepSWE v1.1",
       "sourceModel": "deepseek-v4-pro",
       "quality_score": 62.8,
-      "model_quality_score": 51.3,
+      "model_quality_score": 51,
       "taskCount": null
     },
     {
@@ -690,7 +690,7 @@
       "source": "DeepSWE v1.1",
       "sourceModel": "gemini-3-7-flash",
       "quality_score": 53.8,
-      "model_quality_score": 59,
+      "model_quality_score": 58.1,
       "taskCount": null
     },
     {
@@ -702,7 +702,7 @@
       "source": "DeepSWE v1.1",
       "sourceModel": "gemini-3-7-flash",
       "quality_score": 65.5,
-      "model_quality_score": 59,
+      "model_quality_score": 58.1,
       "taskCount": null
     },
     {
@@ -714,7 +714,7 @@
       "source": "DeepSWE v1.1",
       "sourceModel": "gemini-3-7-flash",
       "quality_score": 65.3,
-      "model_quality_score": 59,
+      "model_quality_score": 58.1,
       "taskCount": null
     },
     {
@@ -762,7 +762,7 @@
       "source": "DeepSWE v1.1",
       "sourceModel": "glm-5-3-flash",
       "quality_score": 63.4,
-      "model_quality_score": 46.1,
+      "model_quality_score": 50.6,
       "taskCount": null
     },
     {
@@ -1026,7 +1026,7 @@
       "source": "DeepSWE v1.1",
       "sourceModel": "grok-4-6",
       "quality_score": 41.6,
-      "model_quality_score": 61.1,
+      "model_quality_score": 60.6,
       "taskCount": null
     },
     {
@@ -1038,7 +1038,7 @@
       "source": "DeepSWE v1.1",
       "sourceModel": "grok-4-6",
       "quality_score": 67.5,
-      "model_quality_score": 61.1,
+      "model_quality_score": 60.6,
       "taskCount": null
     },
     {
@@ -1050,7 +1050,7 @@
       "source": "DeepSWE v1.1",
       "sourceModel": "grok-4-6",
       "quality_score": 65.2,
-      "model_quality_score": 61.1,
+      "model_quality_score": 60.6,
       "taskCount": null
     },
     {
@@ -1062,7 +1062,7 @@
       "source": "DeepSWE v1.1",
       "sourceModel": "grok-4-6",
       "quality_score": 66.7,
-      "model_quality_score": 61.1,
+      "model_quality_score": 60.6,
       "taskCount": null
     },
     {
@@ -1086,7 +1086,7 @@
       "source": "DeepSWE v1.1",
       "sourceModel": "kimi-k3",
       "quality_score": 68.5,
-      "model_quality_score": 57.1,
+      "model_quality_score": 56.7,
       "taskCount": null
     },
     {
@@ -1141,7 +1141,7 @@
       "source": "BenchLM.ai",
       "category": "agentic",
       "metric": "category_score",
-      "score": 92.8,
+      "score": 92.7,
       "taskCount": null
     },
     {
@@ -1157,7 +1157,7 @@
       "source": "BenchLM.ai",
       "category": "agentic",
       "metric": "category_score",
-      "score": 65.3,
+      "score": 65.5,
       "taskCount": null
     },
     {
@@ -1174,7 +1174,7 @@
       "source": "BenchLM.ai",
       "category": "agentic",
       "metric": "category_score",
-      "score": 70.1,
+      "score": 70.4,
       "taskCount": null
     },
     {
@@ -1191,7 +1191,7 @@
       "source": "BenchLM.ai",
       "category": "agentic",
       "metric": "category_score",
-      "score": 82.8,
+      "score": 83.1,
       "taskCount": null
     },
     {
@@ -1244,7 +1244,7 @@
       "source": "BenchLM.ai",
       "category": "agentic",
       "metric": "category_score",
-      "score": 84.7,
+      "score": 84.6,
       "taskCount": null
     },
     {
@@ -1252,7 +1252,7 @@
       "source": "BenchLM.ai",
       "category": "agentic",
       "metric": "category_score",
-      "score": 55,
+      "score": 54.5,
       "taskCount": null
     },
     {
@@ -1269,7 +1269,7 @@
       "source": "BenchLM.ai",
       "category": "agentic",
       "metric": "category_score",
-      "score": 85.8,
+      "score": 86.2,
       "taskCount": null
     },
     {
@@ -1286,7 +1286,7 @@
       "source": "BenchLM.ai",
       "category": "agentic",
       "metric": "category_score",
-      "score": 48.8,
+      "score": 49,
       "taskCount": null
     },
     {
@@ -1303,7 +1303,7 @@
       "source": "BenchLM.ai",
       "category": "agentic",
       "metric": "category_score",
-      "score": 67.7,
+      "score": 67.5,
       "taskCount": null
     },
     {
@@ -1311,7 +1311,7 @@
       "source": "BenchLM.ai",
       "category": "agentic",
       "metric": "category_score",
-      "score": 67.5,
+      "score": 67.8,
       "taskCount": null
     },
     {
@@ -1328,7 +1328,7 @@
       "source": "BenchLM.ai",
       "category": "agentic",
       "metric": "category_score",
-      "score": 77.9,
+      "score": 77.7,
       "taskCount": null
     },
     {
@@ -1345,7 +1345,7 @@
       "source": "BenchLM.ai",
       "category": "agentic",
       "metric": "category_score",
-      "score": 52.9,
+      "score": 52.3,
       "taskCount": null
     },
     {
@@ -1362,7 +1362,7 @@
       "source": "BenchLM.ai",
       "category": "agentic",
       "metric": "category_score",
-      "score": 83.1,
+      "score": 82.5,
       "taskCount": null
     },
     {
@@ -1397,7 +1397,7 @@
       "source": "BenchLM.ai",
       "category": "agentic",
       "metric": "category_score",
-      "score": 84.8,
+      "score": 84.3,
       "taskCount": null
     },
     {
@@ -1414,7 +1414,7 @@
       "source": "BenchLM.ai",
       "category": "agentic",
       "metric": "category_score",
-      "score": 80.7,
+      "score": 80.8,
       "taskCount": null
     },
     {
@@ -1431,7 +1431,7 @@
       "source": "BenchLM.ai",
       "category": "agentic",
       "metric": "category_score",
-      "score": 85.4,
+      "score": 85.1,
       "taskCount": null
     },
     {
@@ -1439,7 +1439,7 @@
       "source": "BenchLM.ai",
       "category": "agentic",
       "metric": "category_score",
-      "score": 79.3,
+      "score": 75.6,
       "taskCount": null
     },
     {
@@ -1456,7 +1456,7 @@
       "source": "BenchLM.ai",
       "category": "agentic",
       "metric": "category_score",
-      "score": 74.5,
+      "score": 74.8,
       "taskCount": null
     },
     {
@@ -1473,7 +1473,7 @@
       "source": "BenchLM.ai",
       "category": "agentic",
       "metric": "category_score",
-      "score": 55.6,
+      "score": 55.1,
       "taskCount": null
     },
     {
@@ -1517,7 +1517,7 @@
       "source": "BenchLM.ai",
       "category": "agentic",
       "metric": "category_score",
-      "score": 84.6,
+      "score": 85,
       "taskCount": null
     },
     {
@@ -1570,7 +1570,7 @@
       "source": "BenchLM.ai",
       "category": "agentic",
       "metric": "category_score",
-      "score": 84.2,
+      "score": 84.7,
       "taskCount": null
     },
     {
@@ -1623,7 +1623,7 @@
       "source": "BenchLM.ai",
       "category": "agentic",
       "metric": "category_score",
-      "score": 94.6,
+      "score": 94.5,
       "taskCount": null
     },
     {
@@ -1676,7 +1676,7 @@
       "source": "BenchLM.ai",
       "category": "agentic",
       "metric": "category_score",
-      "score": 90.7,
+      "score": 91.2,
       "taskCount": null
     },
     {
@@ -1684,7 +1684,7 @@
       "source": "BenchLM.ai",
       "category": "agentic",
       "metric": "category_score",
-      "score": 30.9,
+      "score": 30.4,
       "taskCount": null
     },
     {
@@ -1701,7 +1701,7 @@
       "source": "BenchLM.ai",
       "category": "agentic",
       "metric": "category_score",
-      "score": 84.1,
+      "score": 84.2,
       "taskCount": null
     },
     {
@@ -1745,7 +1745,7 @@
       "source": "BenchLM.ai",
       "category": "agentic",
       "metric": "category_score",
-      "score": 85.4,
+      "score": 84.9,
       "taskCount": null
     },
     {
@@ -1771,7 +1771,7 @@
       "source": "BenchLM.ai",
       "category": "agentic",
       "metric": "category_score",
-      "score": 61,
+      "score": 61.6,
       "taskCount": null
     },
     {
@@ -1797,7 +1797,7 @@
       "source": "BenchLM.ai",
       "category": "agentic",
       "metric": "category_score",
-      "score": 94.6,
+      "score": 94.5,
       "taskCount": null
     },
     {
@@ -1805,7 +1805,7 @@
       "source": "BenchLM.ai",
       "category": "agentic",
       "metric": "category_score",
-      "score": 58.4,
+      "score": 58.2,
       "taskCount": null
     },
     {
@@ -1822,7 +1822,7 @@
       "source": "BenchLM.ai",
       "category": "agentic",
       "metric": "category_score",
-      "score": 62.2,
+      "score": 62,
       "taskCount": null
     },
     {
@@ -1839,7 +1839,7 @@
       "source": "BenchLM.ai",
       "category": "agentic",
       "metric": "category_score",
-      "score": 45.5,
+      "score": 45.1,
       "taskCount": null
     },
     {
@@ -1856,7 +1856,7 @@
       "source": "BenchLM.ai",
       "category": "agentic",
       "metric": "category_score",
-      "score": 63.3,
+      "score": 63.5,
       "taskCount": null
     },
     {
@@ -1873,7 +1873,7 @@
       "source": "BenchLM.ai",
       "category": "agentic",
       "metric": "category_score",
-      "score": 84.1,
+      "score": 84,
       "taskCount": null
     },
     {
@@ -1890,7 +1890,7 @@
       "source": "BenchLM.ai",
       "category": "agentic",
       "metric": "category_score",
-      "score": 80.1,
+      "score": 76,
       "taskCount": null
     },
     {
@@ -1907,7 +1907,7 @@
       "source": "BenchLM.ai",
       "category": "agentic",
       "metric": "category_score",
-      "score": 64.1,
+      "score": 64,
       "taskCount": null
     },
     {
@@ -1924,7 +1924,7 @@
       "source": "BenchLM.ai",
       "category": "agentic",
       "metric": "category_score",
-      "score": 86.7,
+      "score": 86.1,
       "taskCount": null
     },
     {
@@ -1994,7 +1994,7 @@
       "source": "BenchLM.ai",
       "category": "coding",
       "metric": "category_score",
-      "score": 48.1,
+      "score": 53.2,
       "taskCount": null
     },
     {
@@ -2019,7 +2019,7 @@
       "source": "BenchLM.ai",
       "category": "coding",
       "metric": "category_score",
-      "score": 63.2,
+      "score": 66.3,
       "taskCount": null
     },
     {
@@ -2036,7 +2036,7 @@
       "source": "BenchLM.ai",
       "category": "coding",
       "metric": "category_score",
-      "score": 63.9,
+      "score": 69.8,
       "taskCount": null
     },
     {
@@ -2053,7 +2053,7 @@
       "source": "BenchLM.ai",
       "category": "coding",
       "metric": "category_score",
-      "score": 68.8,
+      "score": 74.9,
       "taskCount": null
     },
     {
@@ -2204,7 +2204,7 @@
       "source": "BenchLM.ai",
       "category": "coding",
       "metric": "category_score",
-      "score": 63.2,
+      "score": 66.7,
       "taskCount": null
     },
     {
@@ -2230,7 +2230,7 @@
       "source": "BenchLM.ai",
       "category": "coding",
       "metric": "category_score",
-      "score": 60.7,
+      "score": 66.2,
       "taskCount": null
     },
     {
@@ -2238,9 +2238,9 @@
       "source": "CodexRadar",
       "category": "coding",
       "metric": "pass_at_1",
-      "score": 16.7,
+      "score": 33.3,
       "effort": "low",
-      "taskCount": 6
+      "taskCount": 12
     },
     {
       "model": "claude-sonnet-5",
@@ -2301,7 +2301,7 @@
       "source": "BenchLM.ai",
       "category": "coding",
       "metric": "category_score",
-      "score": 48.2,
+      "score": 52.6,
       "taskCount": null
     },
     {
@@ -2345,7 +2345,7 @@
       "source": "BenchLM.ai",
       "category": "coding",
       "metric": "category_score",
-      "score": 51.9,
+      "score": 55.6,
       "taskCount": null
     },
     {
@@ -2362,9 +2362,9 @@
       "source": "CodexRadar",
       "category": "coding",
       "metric": "pass_at_1",
-      "score": 51.3,
+      "score": 51,
       "effort": "high",
-      "taskCount": 193
+      "taskCount": 196
     },
     {
       "model": "deepseek-v4-pro",
@@ -2389,7 +2389,7 @@
       "source": "BenchLM.ai",
       "category": "coding",
       "metric": "category_score",
-      "score": 59.4,
+      "score": 59.2,
       "taskCount": null
     },
     {
@@ -2415,7 +2415,7 @@
       "source": "BenchLM.ai",
       "category": "coding",
       "metric": "category_score",
-      "score": 54.4,
+      "score": 55,
       "taskCount": null
     },
     {
@@ -2441,7 +2441,7 @@
       "source": "BenchLM.ai",
       "category": "coding",
       "metric": "category_score",
-      "score": 35.7,
+      "score": 36.5,
       "taskCount": null
     },
     {
@@ -2458,7 +2458,7 @@
       "source": "BenchLM.ai",
       "category": "coding",
       "metric": "category_score",
-      "score": 60.2,
+      "score": 60.1,
       "taskCount": null
     },
     {
@@ -2502,7 +2502,7 @@
       "source": "BenchLM.ai",
       "category": "coding",
       "metric": "category_score",
-      "score": 58.7,
+      "score": 58.5,
       "taskCount": null
     },
     {
@@ -2510,27 +2510,27 @@
       "source": "CodexRadar",
       "category": "coding",
       "metric": "pass_at_1",
-      "score": 48.1,
+      "score": 47.7,
       "effort": "low",
-      "taskCount": 77
-    },
-    {
-      "model": "gemini-3.7-flash",
-      "source": "CodexRadar",
-      "category": "coding",
-      "metric": "pass_at_1",
-      "score": 59,
-      "effort": "medium",
-      "taskCount": 83
-    },
-    {
-      "model": "gemini-3.7-flash",
-      "source": "CodexRadar",
-      "category": "coding",
-      "metric": "pass_at_1",
-      "score": 60.5,
-      "effort": "high",
       "taskCount": 86
+    },
+    {
+      "model": "gemini-3.7-flash",
+      "source": "CodexRadar",
+      "category": "coding",
+      "metric": "pass_at_1",
+      "score": 58.1,
+      "effort": "medium",
+      "taskCount": 86
+    },
+    {
+      "model": "gemini-3.7-flash",
+      "source": "CodexRadar",
+      "category": "coding",
+      "metric": "pass_at_1",
+      "score": 59.1,
+      "effort": "high",
+      "taskCount": 88
     },
     {
       "model": "gemini-3.7-flash",
@@ -2573,7 +2573,7 @@
       "source": "BenchLM.ai",
       "category": "coding",
       "metric": "category_score",
-      "score": 50.1,
+      "score": 50.9,
       "taskCount": null
     },
     {
@@ -2608,7 +2608,7 @@
       "source": "BenchLM.ai",
       "category": "coding",
       "metric": "category_score",
-      "score": 59.3,
+      "score": 59.2,
       "taskCount": null
     },
     {
@@ -2652,7 +2652,7 @@
       "source": "BenchLM.ai",
       "category": "coding",
       "metric": "category_score",
-      "score": 60.9,
+      "score": 60.7,
       "taskCount": null
     },
     {
@@ -2660,27 +2660,27 @@
       "source": "CodexRadar",
       "category": "coding",
       "metric": "pass_at_1",
-      "score": 32.9,
+      "score": 37.8,
       "effort": "low",
-      "taskCount": 73
+      "taskCount": 74
     },
     {
       "model": "glm-5.3-flash",
       "source": "CodexRadar",
       "category": "coding",
       "metric": "pass_at_1",
-      "score": 59.3,
+      "score": 63.4,
       "effort": "high",
-      "taskCount": 81
+      "taskCount": 82
     },
     {
       "model": "glm-5.3-flash",
       "source": "CodexRadar",
       "category": "coding",
       "metric": "pass_at_1",
-      "score": 59.6,
+      "score": 60.9,
       "effort": "max",
-      "taskCount": 109
+      "taskCount": 110
     },
     {
       "model": "glm-5.3-flash",
@@ -2705,7 +2705,7 @@
       "source": "BenchLM.ai",
       "category": "coding",
       "metric": "category_score",
-      "score": 42.1,
+      "score": 42.9,
       "taskCount": null
     },
     {
@@ -2731,7 +2731,7 @@
       "source": "BenchLM.ai",
       "category": "coding",
       "metric": "category_score",
-      "score": 52.7,
+      "score": 52.6,
       "taskCount": null
     },
     {
@@ -2784,7 +2784,7 @@
       "source": "BenchLM.ai",
       "category": "coding",
       "metric": "category_score",
-      "score": 43.7,
+      "score": 44.5,
       "taskCount": null
     },
     {
@@ -2801,7 +2801,7 @@
       "source": "CodexRadar",
       "category": "coding",
       "metric": "pass_at_1",
-      "score": 62.5,
+      "score": 63.4,
       "effort": "xhigh",
       "taskCount": 112
     },
@@ -2891,7 +2891,7 @@
       "source": "BenchLM.ai",
       "category": "coding",
       "metric": "category_score",
-      "score": 51.2,
+      "score": 52,
       "taskCount": null
     },
     {
@@ -2917,7 +2917,7 @@
       "source": "CodexRadar",
       "category": "coding",
       "metric": "pass_at_1",
-      "score": 51.8,
+      "score": 52.7,
       "effort": "high",
       "taskCount": 112
     },
@@ -2935,7 +2935,7 @@
       "source": "CodexRadar",
       "category": "coding",
       "metric": "pass_at_1",
-      "score": 67.9,
+      "score": 68.8,
       "effort": "max",
       "taskCount": 112
     },
@@ -3034,7 +3034,7 @@
       "source": "BenchLM.ai",
       "category": "coding",
       "metric": "category_score",
-      "score": 54.7,
+      "score": 55.3,
       "taskCount": null
     },
     {
@@ -3186,7 +3186,7 @@
       "source": "BenchLM.ai",
       "category": "coding",
       "metric": "category_score",
-      "score": 52.1,
+      "score": 52.7,
       "taskCount": null
     },
     {
@@ -3194,7 +3194,7 @@
       "source": "CodexRadar",
       "category": "coding",
       "metric": "pass_at_1",
-      "score": 31.3,
+      "score": 32.1,
       "effort": "low",
       "taskCount": 112
     },
@@ -3221,7 +3221,7 @@
       "source": "CodexRadar",
       "category": "coding",
       "metric": "pass_at_1",
-      "score": 62.5,
+      "score": 61.6,
       "effort": "xhigh",
       "taskCount": 112
     },
@@ -3293,7 +3293,7 @@
       "source": "BenchLM.ai",
       "category": "coding",
       "metric": "category_score",
-      "score": 43.3,
+      "score": 47.3,
       "taskCount": null
     },
     {
@@ -3310,7 +3310,7 @@
       "source": "BenchLM.ai",
       "category": "coding",
       "metric": "category_score",
-      "score": 54.3,
+      "score": 54.9,
       "taskCount": null
     },
     {
@@ -3363,7 +3363,7 @@
       "source": "BenchLM.ai",
       "category": "coding",
       "metric": "category_score",
-      "score": 62.3,
+      "score": 62.1,
       "taskCount": null
     },
     {
@@ -3380,18 +3380,18 @@
       "source": "CodexRadar",
       "category": "coding",
       "metric": "pass_at_1",
-      "score": 61.1,
+      "score": 60.6,
       "effort": "medium",
-      "taskCount": 108
+      "taskCount": 109
     },
     {
       "model": "grok-4.6",
       "source": "CodexRadar",
       "category": "coding",
       "metric": "pass_at_1",
-      "score": 54.1,
+      "score": 51.8,
       "effort": "low",
-      "taskCount": 109
+      "taskCount": 112
     },
     {
       "model": "grok-4.6",
@@ -3443,7 +3443,7 @@
       "source": "BenchLM.ai",
       "category": "coding",
       "metric": "category_score",
-      "score": 54.7,
+      "score": 55.5,
       "taskCount": null
     },
     {
@@ -3451,17 +3451,8 @@
       "source": "CodexRadar",
       "category": "coding",
       "metric": "pass_at_1",
-      "score": 100,
+      "score": 75,
       "effort": "high",
-      "taskCount": 1
-    },
-    {
-      "model": "hy4-preview",
-      "source": "CodexRadar",
-      "category": "coding",
-      "metric": "pass_at_1",
-      "score": 50,
-      "effort": "low",
       "taskCount": 4
     },
     {
@@ -3469,9 +3460,18 @@
       "source": "CodexRadar",
       "category": "coding",
       "metric": "pass_at_1",
-      "score": 37.5,
+      "score": 71.4,
+      "effort": "low",
+      "taskCount": 7
+    },
+    {
+      "model": "hy4-preview",
+      "source": "CodexRadar",
+      "category": "coding",
+      "metric": "pass_at_1",
+      "score": 40,
       "effort": "max",
-      "taskCount": 8
+      "taskCount": 10
     },
     {
       "model": "kimi-k2.6",
@@ -3496,7 +3496,7 @@
       "source": "BenchLM.ai",
       "category": "coding",
       "metric": "category_score",
-      "score": 59.9,
+      "score": 59.8,
       "taskCount": null
     },
     {
@@ -3531,7 +3531,7 @@
       "source": "BenchLM.ai",
       "category": "coding",
       "metric": "category_score",
-      "score": 63.3,
+      "score": 63,
       "taskCount": null
     },
     {
@@ -3539,7 +3539,7 @@
       "source": "CodexRadar",
       "category": "coding",
       "metric": "pass_at_1",
-      "score": 57.1,
+      "score": 56.3,
       "effort": "low",
       "taskCount": 112
     },
@@ -3575,7 +3575,7 @@
       "source": "BenchLM.ai",
       "category": "coding",
       "metric": "category_score",
-      "score": 37.1,
+      "score": 37.9,
       "taskCount": null
     },
     {
@@ -3592,7 +3592,7 @@
       "source": "BenchLM.ai",
       "category": "coding",
       "metric": "category_score",
-      "score": 39.2,
+      "score": 40,
       "taskCount": null
     },
     {
@@ -3609,7 +3609,7 @@
       "source": "BenchLM.ai",
       "category": "coding",
       "metric": "category_score",
-      "score": 41.1,
+      "score": 41.9,
       "taskCount": null
     },
     {
@@ -3626,7 +3626,7 @@
       "source": "BenchLM.ai",
       "category": "coding",
       "metric": "category_score",
-      "score": 53.8,
+      "score": 57.6,
       "taskCount": null
     },
     {
@@ -3643,7 +3643,7 @@
       "source": "BenchLM.ai",
       "category": "coding",
       "metric": "category_score",
-      "score": 49,
+      "score": 49.8,
       "taskCount": null
     },
     {
@@ -3669,7 +3669,7 @@
       "source": "BenchLM.ai",
       "category": "coding",
       "metric": "category_score",
-      "score": 59.4,
+      "score": 59.2,
       "taskCount": null
     },
     {
@@ -3695,7 +3695,7 @@
       "source": "BenchLM.ai",
       "category": "coding",
       "metric": "category_score",
-      "score": 79.5,
+      "score": 81.7,
       "taskCount": null
     },
     {
@@ -3712,7 +3712,7 @@
       "source": "BenchLM.ai",
       "category": "coding",
       "metric": "category_score",
-      "score": 58.9,
+      "score": 59.5,
       "taskCount": null
     },
     {
@@ -3729,7 +3729,7 @@
       "source": "Artificial Analysis Image Arena",
       "category": "image_arena",
       "metric": "elo",
-      "score": 1369,
+      "score": 1370,
       "taskCount": null
     },
     {
@@ -3737,7 +3737,7 @@
       "source": "Artificial Analysis Image Arena",
       "category": "image_arena",
       "metric": "elo",
-      "score": 1320,
+      "score": 1321,
       "taskCount": null
     },
     {
@@ -3753,7 +3753,7 @@
       "source": "Artificial Analysis Image Arena",
       "category": "image_arena",
       "metric": "elo",
-      "score": 1279,
+      "score": 1280,
       "taskCount": null
     },
     {
@@ -3761,7 +3761,7 @@
       "source": "BenchLM.ai",
       "category": "knowledge",
       "metric": "category_score",
-      "score": 67.4,
+      "score": 67,
       "taskCount": null
     },
     {
@@ -3769,7 +3769,7 @@
       "source": "BenchLM.ai",
       "category": "knowledge",
       "metric": "category_score",
-      "score": 97.4,
+      "score": 97.1,
       "taskCount": null
     },
     {
@@ -3777,7 +3777,7 @@
       "source": "BenchLM.ai",
       "category": "knowledge",
       "metric": "category_score",
-      "score": 82.4,
+      "score": 82.2,
       "taskCount": null
     },
     {
@@ -3785,7 +3785,7 @@
       "source": "BenchLM.ai",
       "category": "knowledge",
       "metric": "category_score",
-      "score": 81.8,
+      "score": 81.6,
       "taskCount": null
     },
     {
@@ -3793,7 +3793,7 @@
       "source": "BenchLM.ai",
       "category": "knowledge",
       "metric": "category_score",
-      "score": 86.8,
+      "score": 86.5,
       "taskCount": null
     },
     {
@@ -3809,7 +3809,7 @@
       "source": "BenchLM.ai",
       "category": "knowledge",
       "metric": "category_score",
-      "score": 76.1,
+      "score": 76,
       "taskCount": null
     },
     {
@@ -3817,7 +3817,7 @@
       "source": "BenchLM.ai",
       "category": "knowledge",
       "metric": "category_score",
-      "score": 84.6,
+      "score": 84.3,
       "taskCount": null
     },
     {
@@ -3825,7 +3825,7 @@
       "source": "BenchLM.ai",
       "category": "knowledge",
       "metric": "category_score",
-      "score": 60.3,
+      "score": 60.2,
       "taskCount": null
     },
     {
@@ -3833,7 +3833,7 @@
       "source": "BenchLM.ai",
       "category": "knowledge",
       "metric": "category_score",
-      "score": 70.2,
+      "score": 70,
       "taskCount": null
     },
     {
@@ -3841,7 +3841,7 @@
       "source": "BenchLM.ai",
       "category": "knowledge",
       "metric": "category_score",
-      "score": 66.7,
+      "score": 66.4,
       "taskCount": null
     },
     {
@@ -3849,7 +3849,7 @@
       "source": "BenchLM.ai",
       "category": "knowledge",
       "metric": "category_score",
-      "score": 60.4,
+      "score": 60.2,
       "taskCount": null
     },
     {
@@ -3857,7 +3857,7 @@
       "source": "BenchLM.ai",
       "category": "knowledge",
       "metric": "category_score",
-      "score": 60.9,
+      "score": 57.6,
       "taskCount": null
     },
     {
@@ -3865,7 +3865,7 @@
       "source": "BenchLM.ai",
       "category": "knowledge",
       "metric": "category_score",
-      "score": 69.1,
+      "score": 68.8,
       "taskCount": null
     },
     {
@@ -3873,7 +3873,7 @@
       "source": "BenchLM.ai",
       "category": "knowledge",
       "metric": "category_score",
-      "score": 66.8,
+      "score": 66.5,
       "taskCount": null
     },
     {
@@ -3881,7 +3881,7 @@
       "source": "BenchLM.ai",
       "category": "knowledge",
       "metric": "category_score",
-      "score": 81.2,
+      "score": 81,
       "taskCount": null
     },
     {
@@ -3889,7 +3889,7 @@
       "source": "BenchLM.ai",
       "category": "knowledge",
       "metric": "category_score",
-      "score": 63.5,
+      "score": 63.3,
       "taskCount": null
     },
     {
@@ -3897,7 +3897,7 @@
       "source": "BenchLM.ai",
       "category": "knowledge",
       "metric": "category_score",
-      "score": 62.9,
+      "score": 62.7,
       "taskCount": null
     },
     {
@@ -3905,7 +3905,7 @@
       "source": "BenchLM.ai",
       "category": "knowledge",
       "metric": "category_score",
-      "score": 75.3,
+      "score": 75.1,
       "taskCount": null
     },
     {
@@ -3913,7 +3913,7 @@
       "source": "BenchLM.ai",
       "category": "knowledge",
       "metric": "category_score",
-      "score": 57.3,
+      "score": 57,
       "taskCount": null
     },
     {
@@ -3921,7 +3921,7 @@
       "source": "BenchLM.ai",
       "category": "knowledge",
       "metric": "category_score",
-      "score": 77.7,
+      "score": 77.5,
       "taskCount": null
     },
     {
@@ -3937,7 +3937,7 @@
       "source": "BenchLM.ai",
       "category": "knowledge",
       "metric": "category_score",
-      "score": 86,
+      "score": 85.9,
       "taskCount": null
     },
     {
@@ -3953,7 +3953,7 @@
       "source": "BenchLM.ai",
       "category": "knowledge",
       "metric": "category_score",
-      "score": 68.7,
+      "score": 68.4,
       "taskCount": null
     },
     {
@@ -3961,7 +3961,7 @@
       "source": "BenchLM.ai",
       "category": "knowledge",
       "metric": "category_score",
-      "score": 68.4,
+      "score": 68.2,
       "taskCount": null
     },
     {
@@ -3969,7 +3969,7 @@
       "source": "BenchLM.ai",
       "category": "knowledge",
       "metric": "category_score",
-      "score": 82.6,
+      "score": 82.3,
       "taskCount": null
     },
     {
@@ -3977,7 +3977,7 @@
       "source": "BenchLM.ai",
       "category": "knowledge",
       "metric": "category_score",
-      "score": 83.8,
+      "score": 83.5,
       "taskCount": null
     },
     {
@@ -3985,7 +3985,7 @@
       "source": "BenchLM.ai",
       "category": "knowledge",
       "metric": "category_score",
-      "score": 68.2,
+      "score": 68,
       "taskCount": null
     },
     {
@@ -3993,7 +3993,7 @@
       "source": "BenchLM.ai",
       "category": "knowledge",
       "metric": "category_score",
-      "score": 64.1,
+      "score": 63.9,
       "taskCount": null
     },
     {
@@ -4001,7 +4001,7 @@
       "source": "BenchLM.ai",
       "category": "knowledge",
       "metric": "category_score",
-      "score": 92.8,
+      "score": 92.5,
       "taskCount": null
     },
     {
@@ -4009,7 +4009,7 @@
       "source": "BenchLM.ai",
       "category": "knowledge",
       "metric": "category_score",
-      "score": 60.7,
+      "score": 60.6,
       "taskCount": null
     },
     {
@@ -4017,7 +4017,7 @@
       "source": "BenchLM.ai",
       "category": "knowledge",
       "metric": "category_score",
-      "score": 70.2,
+      "score": 70.1,
       "taskCount": null
     },
     {
@@ -4025,7 +4025,7 @@
       "source": "BenchLM.ai",
       "category": "knowledge",
       "metric": "category_score",
-      "score": 64.7,
+      "score": 64.6,
       "taskCount": null
     },
     {
@@ -4177,7 +4177,7 @@
       "source": "BenchLM.ai",
       "category": "multimodal",
       "metric": "category_score",
-      "score": 60.8,
+      "score": 61.3,
       "taskCount": null
     },
     {
@@ -4193,7 +4193,7 @@
       "source": "BenchLM.ai",
       "category": "multimodal",
       "metric": "category_score",
-      "score": 54.8,
+      "score": 55.3,
       "taskCount": null
     },
     {
@@ -4201,7 +4201,7 @@
       "source": "BenchLM.ai",
       "category": "multimodal",
       "metric": "category_score",
-      "score": 46,
+      "score": 49.1,
       "taskCount": null
     },
     {
@@ -4209,7 +4209,7 @@
       "source": "BenchLM.ai",
       "category": "multimodal",
       "metric": "category_score",
-      "score": 85.4,
+      "score": 88.4,
       "taskCount": null
     },
     {
@@ -4217,7 +4217,7 @@
       "source": "BenchLM.ai",
       "category": "multimodal",
       "metric": "category_score",
-      "score": 85.9,
+      "score": 86.4,
       "taskCount": null
     },
     {
@@ -4225,7 +4225,7 @@
       "source": "BenchLM.ai",
       "category": "multimodal",
       "metric": "category_score",
-      "score": 44.5,
+      "score": 46.7,
       "taskCount": null
     },
     {
@@ -4233,7 +4233,7 @@
       "source": "BenchLM.ai",
       "category": "multimodal",
       "metric": "category_score",
-      "score": 71.8,
+      "score": 76.5,
       "taskCount": null
     },
     {
@@ -4241,7 +4241,7 @@
       "source": "BenchLM.ai",
       "category": "multimodal",
       "metric": "category_score",
-      "score": 76.8,
+      "score": 78.2,
       "taskCount": null
     },
     {
@@ -4249,7 +4249,7 @@
       "source": "BenchLM.ai",
       "category": "multimodal",
       "metric": "category_score",
-      "score": 80.6,
+      "score": 82.4,
       "taskCount": null
     },
     {
@@ -4265,7 +4265,7 @@
       "source": "BenchLM.ai",
       "category": "multimodal",
       "metric": "category_score",
-      "score": 70.2,
+      "score": 70.1,
       "taskCount": null
     },
     {
@@ -4273,7 +4273,7 @@
       "source": "BenchLM.ai",
       "category": "multimodal",
       "metric": "category_score",
-      "score": 77.8,
+      "score": 80.7,
       "taskCount": null
     },
     {
@@ -4281,7 +4281,7 @@
       "source": "BenchLM.ai",
       "category": "multimodal",
       "metric": "category_score",
-      "score": 63.5,
+      "score": 64.8,
       "taskCount": null
     },
     {
@@ -4289,7 +4289,7 @@
       "source": "BenchLM.ai",
       "category": "multimodal",
       "metric": "category_score",
-      "score": 51.3,
+      "score": 51.8,
       "taskCount": null
     },
     {
@@ -4297,7 +4297,7 @@
       "source": "BenchLM.ai",
       "category": "multimodal",
       "metric": "category_score",
-      "score": 65.3,
+      "score": 65.8,
       "taskCount": null
     },
     {
@@ -4305,7 +4305,7 @@
       "source": "BenchLM.ai",
       "category": "multimodal",
       "metric": "category_score",
-      "score": 60.2,
+      "score": 60.7,
       "taskCount": null
     },
     {
@@ -4313,7 +4313,7 @@
       "source": "BenchLM.ai",
       "category": "multimodal",
       "metric": "category_score",
-      "score": 82.7,
+      "score": 83.2,
       "taskCount": null
     },
     {
@@ -4321,7 +4321,7 @@
       "source": "BenchLM.ai",
       "category": "multimodal",
       "metric": "category_score",
-      "score": 71.4,
+      "score": 71.9,
       "taskCount": null
     },
     {
@@ -4337,7 +4337,7 @@
       "source": "BenchLM.ai",
       "category": "multimodal",
       "metric": "category_score",
-      "score": 84,
+      "score": 84.5,
       "taskCount": null
     },
     {
@@ -4345,7 +4345,7 @@
       "source": "BenchLM.ai",
       "category": "multimodal",
       "metric": "category_score",
-      "score": 86.2,
+      "score": 88.4,
       "taskCount": null
     },
     {
@@ -4353,7 +4353,7 @@
       "source": "BenchLM.ai",
       "category": "multimodal",
       "metric": "category_score",
-      "score": 55.7,
+      "score": 57.1,
       "taskCount": null
     },
     {
@@ -4361,7 +4361,7 @@
       "source": "BenchLM.ai",
       "category": "multimodal",
       "metric": "category_score",
-      "score": 42.2,
+      "score": 42.6,
       "taskCount": null
     },
     {
@@ -4369,7 +4369,7 @@
       "source": "BenchLM.ai",
       "category": "multimodal",
       "metric": "category_score",
-      "score": 72,
+      "score": 76.8,
       "taskCount": null
     },
     {
@@ -4394,7 +4394,7 @@
       "source": "BenchLM.ai",
       "category": "overall",
       "metric": "score",
-      "score": 83.3,
+      "score": 82.5,
       "taskCount": null
     },
     {
@@ -4402,7 +4402,7 @@
       "source": "BenchLM.ai",
       "category": "overall",
       "metric": "score",
-      "score": 57.8,
+      "score": 57.4,
       "taskCount": null
     },
     {
@@ -4410,7 +4410,7 @@
       "source": "BenchLM.ai",
       "category": "overall",
       "metric": "score",
-      "score": 83.6,
+      "score": 86,
       "taskCount": null
     },
     {
@@ -4427,7 +4427,7 @@
       "source": "BenchLM.ai",
       "category": "overall",
       "metric": "score",
-      "score": 68.4,
+      "score": 67.9,
       "taskCount": null
     },
     {
@@ -4444,7 +4444,7 @@
       "source": "BenchLM.ai",
       "category": "overall",
       "metric": "score",
-      "score": 72.7,
+      "score": 72.2,
       "taskCount": null
     },
     {
@@ -4461,7 +4461,7 @@
       "source": "BenchLM.ai",
       "category": "overall",
       "metric": "score",
-      "score": 76.8,
+      "score": 76,
       "taskCount": null
     },
     {
@@ -4514,7 +4514,7 @@
       "source": "BenchLM.ai",
       "category": "overall",
       "metric": "score",
-      "score": 83.2,
+      "score": 82.3,
       "taskCount": null
     },
     {
@@ -4531,7 +4531,7 @@
       "source": "BenchLM.ai",
       "category": "overall",
       "metric": "score",
-      "score": 65,
+      "score": 64.5,
       "taskCount": null
     },
     {
@@ -4548,7 +4548,7 @@
       "source": "BenchLM.ai",
       "category": "overall",
       "metric": "score",
-      "score": 65.2,
+      "score": 64.7,
       "taskCount": null
     },
     {
@@ -4565,7 +4565,7 @@
       "source": "BenchLM.ai",
       "category": "overall",
       "metric": "score",
-      "score": 55,
+      "score": 57,
       "taskCount": null
     },
     {
@@ -4582,7 +4582,7 @@
       "source": "BenchLM.ai",
       "category": "overall",
       "metric": "score",
-      "score": 61.8,
+      "score": 61.2,
       "taskCount": null
     },
     {
@@ -4599,7 +4599,7 @@
       "source": "BenchLM.ai",
       "category": "overall",
       "metric": "score",
-      "score": 60.3,
+      "score": 59.7,
       "taskCount": null
     },
     {
@@ -4607,7 +4607,7 @@
       "source": "BenchLM.ai",
       "category": "overall",
       "metric": "score",
-      "score": 56.7,
+      "score": 56.2,
       "taskCount": null
     },
     {
@@ -4642,7 +4642,7 @@
       "source": "BenchLM.ai",
       "category": "overall",
       "metric": "score",
-      "score": 65,
+      "score": 64.2,
       "taskCount": null
     },
     {
@@ -4659,7 +4659,7 @@
       "source": "BenchLM.ai",
       "category": "overall",
       "metric": "score",
-      "score": 65.7,
+      "score": 65,
       "taskCount": null
     },
     {
@@ -4676,7 +4676,7 @@
       "source": "BenchLM.ai",
       "category": "overall",
       "metric": "score",
-      "score": 75.8,
+      "score": 75.1,
       "taskCount": null
     },
     {
@@ -4711,7 +4711,7 @@
       "source": "BenchLM.ai",
       "category": "overall",
       "metric": "score",
-      "score": 61.9,
+      "score": 61,
       "taskCount": null
     },
     {
@@ -4728,7 +4728,7 @@
       "source": "BenchLM.ai",
       "category": "overall",
       "metric": "score",
-      "score": 63.7,
+      "score": 62.9,
       "taskCount": null
     },
     {
@@ -4745,7 +4745,7 @@
       "source": "BenchLM.ai",
       "category": "overall",
       "metric": "score",
-      "score": 63.3,
+      "score": 62.4,
       "taskCount": null
     },
     {
@@ -4753,7 +4753,7 @@
       "source": "BenchLM.ai",
       "category": "overall",
       "metric": "score",
-      "score": 61.7,
+      "score": 61.3,
       "taskCount": null
     },
     {
@@ -4779,7 +4779,7 @@
       "source": "BenchLM.ai",
       "category": "overall",
       "metric": "score",
-      "score": 73.7,
+      "score": 73,
       "taskCount": null
     },
     {
@@ -4805,7 +4805,7 @@
       "source": "BenchLM.ai",
       "category": "overall",
       "metric": "score",
-      "score": 57.4,
+      "score": 56.7,
       "taskCount": null
     },
     {
@@ -4849,7 +4849,7 @@
       "source": "BenchLM.ai",
       "category": "overall",
       "metric": "score",
-      "score": 73.5,
+      "score": 72.7,
       "taskCount": null
     },
     {
@@ -4902,7 +4902,7 @@
       "source": "BenchLM.ai",
       "category": "overall",
       "metric": "score",
-      "score": 67.6,
+      "score": 66.9,
       "taskCount": null
     },
     {
@@ -4955,7 +4955,7 @@
       "source": "BenchLM.ai",
       "category": "overall",
       "metric": "score",
-      "score": 82.4,
+      "score": 81.7,
       "taskCount": null
     },
     {
@@ -5008,7 +5008,7 @@
       "source": "BenchLM.ai",
       "category": "overall",
       "metric": "score",
-      "score": 73.2,
+      "score": 72.5,
       "taskCount": null
     },
     {
@@ -5025,7 +5025,7 @@
       "source": "BenchLM.ai",
       "category": "overall",
       "metric": "score",
-      "score": 55.9,
+      "score": 55.4,
       "taskCount": null
     },
     {
@@ -5042,7 +5042,7 @@
       "source": "BenchLM.ai",
       "category": "overall",
       "metric": "score",
-      "score": 75.8,
+      "score": 74.9,
       "taskCount": null
     },
     {
@@ -5086,7 +5086,7 @@
       "source": "BenchLM.ai",
       "category": "overall",
       "metric": "score",
-      "score": 63.9,
+      "score": 63,
       "taskCount": null
     },
     {
@@ -5094,7 +5094,7 @@
       "source": "BenchLM.ai",
       "category": "overall",
       "metric": "score",
-      "score": 79.9,
+      "score": 78.3,
       "taskCount": null
     },
     {
@@ -5120,7 +5120,7 @@
       "source": "BenchLM.ai",
       "category": "overall",
       "metric": "score",
-      "score": 54.7,
+      "score": 54,
       "taskCount": null
     },
     {
@@ -5146,7 +5146,7 @@
       "source": "BenchLM.ai",
       "category": "overall",
       "metric": "score",
-      "score": 80.8,
+      "score": 79.9,
       "taskCount": null
     },
     {
@@ -5154,7 +5154,7 @@
       "source": "BenchLM.ai",
       "category": "overall",
       "metric": "score",
-      "score": 59.9,
+      "score": 59.5,
       "taskCount": null
     },
     {
@@ -5171,7 +5171,7 @@
       "source": "BenchLM.ai",
       "category": "overall",
       "metric": "score",
-      "score": 69.6,
+      "score": 68.9,
       "taskCount": null
     },
     {
@@ -5188,7 +5188,7 @@
       "source": "BenchLM.ai",
       "category": "overall",
       "metric": "score",
-      "score": 63.5,
+      "score": 62.9,
       "taskCount": null
     },
     {
@@ -5205,7 +5205,7 @@
       "source": "BenchLM.ai",
       "category": "overall",
       "metric": "score",
-      "score": 68.9,
+      "score": 68.2,
       "taskCount": null
     },
     {
@@ -5222,7 +5222,7 @@
       "source": "BenchLM.ai",
       "category": "overall",
       "metric": "score",
-      "score": 77.3,
+      "score": 76.5,
       "taskCount": null
     },
     {
@@ -5239,7 +5239,7 @@
       "source": "BenchLM.ai",
       "category": "overall",
       "metric": "score",
-      "score": 62.2,
+      "score": 61.3,
       "taskCount": null
     },
     {
@@ -5256,7 +5256,7 @@
       "source": "BenchLM.ai",
       "category": "overall",
       "metric": "score",
-      "score": 72,
+      "score": 71.3,
       "taskCount": null
     },
     {
@@ -5273,7 +5273,7 @@
       "source": "BenchLM.ai",
       "category": "overall",
       "metric": "score",
-      "score": 79.4,
+      "score": 78.6,
       "taskCount": null
     }
   ]
