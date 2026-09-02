@@ -3709,11 +3709,13 @@
       "verifiedAt": "2026-09-02",
       "lane": "provisional",
       "sources": [
-        "https://artificialanalysis.ai/models/claude-opus-4-5"
+        "https://artificialanalysis.ai/models/claude-opus-4-5",
+        "https://benchlm.ai/methodology",
+        "https://benchlm.ai/models/claude-opus-4-5"
       ],
       "sharedResults": 631,
-      "comparableCategories": 1,
-      "totalCategories": 1,
+      "comparableCategories": 5,
+      "totalCategories": 8,
       "benchmarkEvidence": [
         {
           "benchmark": "artificial_analysis",
@@ -3731,7 +3733,15 @@
           "sourceUrl": "https://artificialanalysis.ai/models/claude-opus-4-5",
           "capturedAt": "2026-09-02"
         }
-      ]
+      ],
+      "overallScore": 63.51,
+      "categoryScores": {
+        "agentic": 48.1,
+        "coding": 57,
+        "multimodal": 13.5,
+        "knowledge": 58,
+        "math": 58.4
+      }
     },
     {
       "patterns": [
@@ -4025,6 +4035,28 @@
         "multimodal": 46.7,
         "knowledge": 76,
         "math": 49.4
+      }
+    },
+    {
+      "patterns": [
+        "(?:^|[-/])claude-sonnet-4-5(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)"
+      ],
+      "canonicalModel": "claude-sonnet-4-5",
+      "verifiedAt": "2026-09-02",
+      "lane": "provisional",
+      "sources": [
+        "https://benchlm.ai/methodology",
+        "https://benchlm.ai/models/claude-sonnet-4-5"
+      ],
+      "sharedResults": 9,
+      "comparableCategories": 4,
+      "totalCategories": 8,
+      "overallScore": 54.48,
+      "categoryScores": {
+        "agentic": 33.7,
+        "coding": 59.8,
+        "knowledge": 74.6,
+        "math": 34.9
       }
     },
     {
@@ -4511,11 +4543,13 @@
       "verifiedAt": "2026-09-02",
       "lane": "provisional",
       "sources": [
-        "https://artificialanalysis.ai/models/deepseek-v3-2"
+        "https://artificialanalysis.ai/models/deepseek-v3-2",
+        "https://benchlm.ai/methodology",
+        "https://benchlm.ai/models/deepseek-v3-2"
       ],
       "sharedResults": 631,
-      "comparableCategories": 1,
-      "totalCategories": 1,
+      "comparableCategories": 2,
+      "totalCategories": 8,
       "benchmarkEvidence": [
         {
           "benchmark": "artificial_analysis",
@@ -4533,7 +4567,12 @@
           "sourceUrl": "https://artificialanalysis.ai/models/deepseek-v3-2",
           "capturedAt": "2026-09-02"
         }
-      ]
+      ],
+      "overallScore": 54.64,
+      "categoryScores": {
+        "coding": 68.2,
+        "math": 40.3
+      }
     },
     {
       "patterns": [
@@ -5659,11 +5698,13 @@
       "verifiedAt": "2026-09-02",
       "lane": "provisional",
       "sources": [
-        "https://artificialanalysis.ai/models/glm-5-1"
+        "https://artificialanalysis.ai/models/glm-5-1",
+        "https://benchlm.ai/methodology",
+        "https://benchlm.ai/models/glm-5-1"
       ],
       "sharedResults": 631,
-      "comparableCategories": 3,
-      "totalCategories": 3,
+      "comparableCategories": 4,
+      "totalCategories": 8,
       "benchmarkEvidence": [
         {
           "benchmark": "artificial_analysis",
@@ -5729,7 +5770,14 @@
           "sourceUrl": "https://artificialanalysis.ai/models/glm-5-1-non-reasoning",
           "capturedAt": "2026-09-02"
         }
-      ]
+      ],
+      "overallScore": 66.68,
+      "categoryScores": {
+        "agentic": 49.1,
+        "coding": 63.3,
+        "knowledge": 75.4,
+        "math": 64.5
+      }
     },
     {
       "patterns": [
@@ -5739,11 +5787,13 @@
       "verifiedAt": "2026-09-02",
       "lane": "provisional",
       "sources": [
-        "https://artificialanalysis.ai/models/glm-5"
+        "https://artificialanalysis.ai/models/glm-5",
+        "https://benchlm.ai/methodology",
+        "https://benchlm.ai/models/glm-5"
       ],
       "sharedResults": 631,
-      "comparableCategories": 1,
-      "totalCategories": 1,
+      "comparableCategories": 4,
+      "totalCategories": 8,
       "benchmarkEvidence": [
         {
           "benchmark": "artificial_analysis",
@@ -5777,7 +5827,14 @@
           "sourceUrl": "https://artificialanalysis.ai/models/glm-5-non-reasoning",
           "capturedAt": "2026-09-02"
         }
-      ]
+      ],
+      "overallScore": 65.49,
+      "categoryScores": {
+        "agentic": 43.9,
+        "coding": 61.6,
+        "knowledge": 77.1,
+        "math": 56.9
+      }
     },
     {
       "patterns": [
@@ -6645,7 +6702,7 @@
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
           "capturedAt": "2026-09-02",
-          "costUsd": 24.31
+          "costUsd": 24.36
         },
         {
           "benchmark": "codexradar",
@@ -7624,6 +7681,27 @@
     },
     {
       "patterns": [
+        "(?:^|[-/])gpt-5\\.5-pro(?=$|@)"
+      ],
+      "canonicalModel": "gpt-5.5-pro",
+      "verifiedAt": "2026-09-02",
+      "lane": "provisional",
+      "sources": [
+        "https://benchlm.ai/methodology",
+        "https://benchlm.ai/models/gpt-5-5-pro"
+      ],
+      "sharedResults": 6,
+      "comparableCategories": 3,
+      "totalCategories": 8,
+      "overallScore": 64.35,
+      "categoryScores": {
+        "agentic": 83.1,
+        "knowledge": 84,
+        "math": 72
+      }
+    },
+    {
+      "patterns": [
         "(?:^|[-/])gpt-5\\.4(?:-openai-compact)?(?=$|@)"
       ],
       "canonicalModel": "gpt-5.4",
@@ -7876,11 +7954,13 @@
       "verifiedAt": "2026-09-02",
       "lane": "provisional",
       "sources": [
-        "https://artificialanalysis.ai/models/gpt-5-4-nano-medium"
+        "https://artificialanalysis.ai/models/gpt-5-4-nano-medium",
+        "https://benchlm.ai/methodology",
+        "https://benchlm.ai/models/gpt-5-4-nano"
       ],
       "sharedResults": 631,
-      "comparableCategories": 3,
-      "totalCategories": 3,
+      "comparableCategories": 5,
+      "totalCategories": 8,
       "benchmarkEvidence": [
         {
           "benchmark": "artificial_analysis",
@@ -7962,7 +8042,37 @@
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-4-nano-medium",
           "capturedAt": "2026-09-02"
         }
-      ]
+      ],
+      "overallScore": 66.39,
+      "categoryScores": {
+        "agentic": 16.9,
+        "coding": 57,
+        "multimodal": 15.1,
+        "knowledge": 51.6,
+        "math": 44.2
+      }
+    },
+    {
+      "patterns": [
+        "(?:^|[-/])gpt-5\\.4-pro(?=$|@)"
+      ],
+      "canonicalModel": "gpt-5.4-pro",
+      "verifiedAt": "2026-09-02",
+      "lane": "provisional",
+      "sources": [
+        "https://benchlm.ai/methodology",
+        "https://benchlm.ai/models/gpt-5-4-pro"
+      ],
+      "sharedResults": 11,
+      "comparableCategories": 4,
+      "totalCategories": 8,
+      "overallScore": 61.47,
+      "categoryScores": {
+        "agentic": 81.8,
+        "multimodal": 87.6,
+        "knowledge": 86.6,
+        "math": 70.6
+      }
     },
     {
       "patterns": [
@@ -7972,11 +8082,13 @@
       "verifiedAt": "2026-09-02",
       "lane": "provisional",
       "sources": [
-        "https://artificialanalysis.ai/models/gpt-5-3-codex"
+        "https://artificialanalysis.ai/models/gpt-5-3-codex",
+        "https://benchlm.ai/methodology",
+        "https://benchlm.ai/models/gpt-5-3-codex"
       ],
       "sharedResults": 631,
-      "comparableCategories": 1,
-      "totalCategories": 1,
+      "comparableCategories": 2,
+      "totalCategories": 8,
       "benchmarkEvidence": [
         {
           "benchmark": "artificial_analysis",
@@ -7994,7 +8106,12 @@
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-3-codex",
           "capturedAt": "2026-09-02"
         }
-      ]
+      ],
+      "overallScore": 65.6,
+      "categoryScores": {
+        "agentic": 64,
+        "coding": 61.7
+      }
     },
     {
       "patterns": [
@@ -8004,11 +8121,13 @@
       "verifiedAt": "2026-09-02",
       "lane": "provisional",
       "sources": [
-        "https://artificialanalysis.ai/models/gpt-5-2"
+        "https://artificialanalysis.ai/models/gpt-5-2",
+        "https://benchlm.ai/methodology",
+        "https://benchlm.ai/models/gpt-5-2"
       ],
       "sharedResults": 631,
-      "comparableCategories": 1,
-      "totalCategories": 1,
+      "comparableCategories": 5,
+      "totalCategories": 8,
       "benchmarkEvidence": [
         {
           "benchmark": "artificial_analysis",
@@ -8058,7 +8177,15 @@
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-2-medium",
           "capturedAt": "2026-09-02"
         }
-      ]
+      ],
+      "overallScore": 57.95,
+      "categoryScores": {
+        "agentic": 22.2,
+        "coding": 55.1,
+        "multimodal": 64.5,
+        "knowledge": 83.7,
+        "math": 58.4
+      }
     },
     {
       "patterns": [
@@ -8068,11 +8195,13 @@
       "verifiedAt": "2026-09-02",
       "lane": "provisional",
       "sources": [
-        "https://artificialanalysis.ai/models/gpt-5-2-codex"
+        "https://artificialanalysis.ai/models/gpt-5-2-codex",
+        "https://benchlm.ai/methodology",
+        "https://benchlm.ai/models/gpt-5-2-codex"
       ],
       "sharedResults": 631,
       "comparableCategories": 1,
-      "totalCategories": 1,
+      "totalCategories": 8,
       "benchmarkEvidence": [
         {
           "benchmark": "artificial_analysis",
@@ -8090,7 +8219,11 @@
           "sourceUrl": "https://artificialanalysis.ai/models/gpt-5-2-codex",
           "capturedAt": "2026-09-02"
         }
-      ]
+      ],
+      "overallScore": 57.86,
+      "categoryScores": {
+        "coding": 58.6
+      }
     },
     {
       "patterns": [
@@ -9024,11 +9157,13 @@
       "verifiedAt": "2026-09-02",
       "lane": "provisional",
       "sources": [
-        "https://artificialanalysis.ai/models/kimi-k2-5"
+        "https://artificialanalysis.ai/models/kimi-k2-5",
+        "https://benchlm.ai/methodology",
+        "https://benchlm.ai/models/kimi-k2-5"
       ],
       "sharedResults": 631,
-      "comparableCategories": 3,
-      "totalCategories": 3,
+      "comparableCategories": 5,
+      "totalCategories": 8,
       "benchmarkEvidence": [
         {
           "benchmark": "artificial_analysis",
@@ -9094,7 +9229,15 @@
           "sourceUrl": "https://artificialanalysis.ai/models/kimi-k2-5-non-reasoning",
           "capturedAt": "2026-09-02"
         }
-      ]
+      ],
+      "overallScore": 58.74,
+      "categoryScores": {
+        "agentic": 29.4,
+        "coding": 53,
+        "multimodal": 61.2,
+        "knowledge": 54.6,
+        "math": 62.5
+      }
     },
     {
       "patterns": [
@@ -9136,11 +9279,13 @@
       "verifiedAt": "2026-09-02",
       "lane": "provisional",
       "sources": [
-        "https://artificialanalysis.ai/models/longcat-2-0"
+        "https://artificialanalysis.ai/models/longcat-2-0",
+        "https://benchlm.ai/methodology",
+        "https://benchlm.ai/models/longcat-2-0"
       ],
       "sharedResults": 631,
       "comparableCategories": 3,
-      "totalCategories": 3,
+      "totalCategories": 8,
       "benchmarkEvidence": [
         {
           "benchmark": "artificial_analysis",
@@ -9453,11 +9598,13 @@
       "verifiedAt": "2026-09-02",
       "lane": "provisional",
       "sources": [
-        "https://artificialanalysis.ai/models/minimax-m2-5"
+        "https://artificialanalysis.ai/models/minimax-m2-5",
+        "https://benchlm.ai/methodology",
+        "https://benchlm.ai/models/minimax-m2-5"
       ],
       "sharedResults": 631,
       "comparableCategories": 1,
-      "totalCategories": 1,
+      "totalCategories": 8,
       "benchmarkEvidence": [
         {
           "benchmark": "artificial_analysis",
@@ -9475,7 +9622,8 @@
           "sourceUrl": "https://artificialanalysis.ai/models/minimax-m2-5",
           "capturedAt": "2026-09-02"
         }
-      ]
+      ],
+      "overallScore": 58.49
     },
     {
       "patterns": [
@@ -9908,11 +10056,13 @@
       "verifiedAt": "2026-09-02",
       "lane": "provisional",
       "sources": [
-        "https://artificialanalysis.ai/models/qwen3-7-plus"
+        "https://artificialanalysis.ai/models/qwen3-7-plus",
+        "https://benchlm.ai/methodology",
+        "https://benchlm.ai/models/qwen3-7-plus"
       ],
       "sharedResults": 631,
-      "comparableCategories": 3,
-      "totalCategories": 3,
+      "comparableCategories": 5,
+      "totalCategories": 8,
       "benchmarkEvidence": [
         {
           "benchmark": "artificial_analysis",
@@ -9962,7 +10112,15 @@
           "sourceUrl": "https://artificialanalysis.ai/models/qwen3-7-plus",
           "capturedAt": "2026-09-02"
         }
-      ]
+      ],
+      "overallScore": 65.45,
+      "categoryScores": {
+        "agentic": 66.4,
+        "coding": 70.1,
+        "multimodal": 67.7,
+        "knowledge": 61.3,
+        "math": 78.4
+      }
     },
     {
       "patterns": [
@@ -9972,11 +10130,13 @@
       "verifiedAt": "2026-09-02",
       "lane": "provisional",
       "sources": [
-        "https://artificialanalysis.ai/models/qwen3-max"
+        "https://artificialanalysis.ai/models/qwen3-max",
+        "https://benchlm.ai/methodology",
+        "https://benchlm.ai/models/qwen3-max"
       ],
       "sharedResults": 631,
       "comparableCategories": 1,
-      "totalCategories": 1,
+      "totalCategories": 8,
       "benchmarkEvidence": [
         {
           "benchmark": "artificial_analysis",
@@ -9994,7 +10154,8 @@
           "sourceUrl": "https://artificialanalysis.ai/models/qwen3-max",
           "capturedAt": "2026-09-02"
         }
-      ]
+      ],
+      "overallScore": 48.25
     },
     {
       "patterns": [
@@ -10004,11 +10165,13 @@
       "verifiedAt": "2026-09-02",
       "lane": "provisional",
       "sources": [
-        "https://artificialanalysis.ai/models/step-3-7-flash"
+        "https://artificialanalysis.ai/models/step-3-7-flash",
+        "https://benchlm.ai/methodology",
+        "https://benchlm.ai/models/step-3-7-flash"
       ],
       "sharedResults": 631,
       "comparableCategories": 3,
-      "totalCategories": 3,
+      "totalCategories": 8,
       "benchmarkEvidence": [
         {
           "benchmark": "artificial_analysis",
@@ -10058,7 +10221,12 @@
           "sourceUrl": "https://artificialanalysis.ai/models/step-3-7-flash",
           "capturedAt": "2026-09-02"
         }
-      ]
+      ],
+      "overallScore": 50.83,
+      "categoryScores": {
+        "agentic": 52,
+        "coding": 38.3
+      }
     }
   ],
   "imageArenaProfiles": [

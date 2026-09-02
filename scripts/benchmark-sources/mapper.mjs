@@ -119,6 +119,27 @@ export const BENCHLM_MODEL_MAP = {
   'qwen3-7-max': 'qwen3.7-max',
   // 腾讯混元 Hy4 Preview（2026-08-28 发布）：benchlm slug 与 canonical 同名
   'hy4-preview': 'hy4-preview',
+  // 2026-09-02 补全：已注册但漏配 benchlm 映射的模型（此前持续丢 benchlm 数据）
+  'claude-opus-4-5': 'claude-opus-4-5',
+  'claude-sonnet-4-5': 'claude-sonnet-4-5',
+  // claude-mythos-preview / longcat-2-0 当前 displayScore 为 null，映射仅为消除 UNMAPPED 误报，null 不会写入
+  'claude-mythos-preview': 'claude-mythos-preview',
+  'gpt-5-2': 'gpt-5.2',
+  'gpt-5-2-codex': 'gpt-5.2-codex',
+  'gpt-5-2-pro': 'gpt-5.2-pro',
+  'gpt-5-3-codex': 'gpt-5.3-codex',
+  'gpt-5-4-nano': 'gpt-5.4-nano',
+  'gpt-5-4-pro': 'gpt-5.4-pro',
+  'gpt-5-5-pro': 'gpt-5.5-pro',
+  'glm-5': 'glm-5',
+  'glm-5-1': 'glm-5.1',
+  'deepseek-v3-2': 'deepseek-v3.2',
+  'kimi-k2-5': 'kimi-k2.5',
+  'longcat-2-0': 'longcat-2.0',
+  'minimax-m2-5': 'minimax-m2.5',
+  'qwen3-7-plus': 'qwen3.7-plus',
+  'qwen3-max': 'qwen3-max',
+  'step-3-7-flash': 'step-3.7-flash',
 }
 
 /**

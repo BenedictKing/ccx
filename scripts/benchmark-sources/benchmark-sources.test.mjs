@@ -965,6 +965,29 @@ test('DeepSeek BenchLM variants fold into canonical flash and pro models', () =>
   assert.equal(BENCHLM_MODEL_MAP['deepseek-v4-pro-0813'], 'deepseek-v4-pro')
 })
 
+test('19 registered models map in benchlm (2026-09-02 additions)', () => {
+  // 与 AA 映射表补全同批：这些模型已注册进 registry，但 benchlm 表漏配导致丢数据
+  assert.equal(BENCHLM_MODEL_MAP['claude-opus-4-5'], 'claude-opus-4-5')
+  assert.equal(BENCHLM_MODEL_MAP['claude-sonnet-4-5'], 'claude-sonnet-4-5')
+  assert.equal(BENCHLM_MODEL_MAP['claude-mythos-preview'], 'claude-mythos-preview')
+  assert.equal(BENCHLM_MODEL_MAP['gpt-5-2'], 'gpt-5.2')
+  assert.equal(BENCHLM_MODEL_MAP['gpt-5-2-codex'], 'gpt-5.2-codex')
+  assert.equal(BENCHLM_MODEL_MAP['gpt-5-2-pro'], 'gpt-5.2-pro')
+  assert.equal(BENCHLM_MODEL_MAP['gpt-5-3-codex'], 'gpt-5.3-codex')
+  assert.equal(BENCHLM_MODEL_MAP['gpt-5-4-nano'], 'gpt-5.4-nano')
+  assert.equal(BENCHLM_MODEL_MAP['gpt-5-4-pro'], 'gpt-5.4-pro')
+  assert.equal(BENCHLM_MODEL_MAP['gpt-5-5-pro'], 'gpt-5.5-pro')
+  assert.equal(BENCHLM_MODEL_MAP['glm-5'], 'glm-5')
+  assert.equal(BENCHLM_MODEL_MAP['glm-5-1'], 'glm-5.1')
+  assert.equal(BENCHLM_MODEL_MAP['deepseek-v3-2'], 'deepseek-v3.2')
+  assert.equal(BENCHLM_MODEL_MAP['kimi-k2-5'], 'kimi-k2.5')
+  assert.equal(BENCHLM_MODEL_MAP['longcat-2-0'], 'longcat-2.0')
+  assert.equal(BENCHLM_MODEL_MAP['minimax-m2-5'], 'minimax-m2.5')
+  assert.equal(BENCHLM_MODEL_MAP['qwen3-7-plus'], 'qwen3.7-plus')
+  assert.equal(BENCHLM_MODEL_MAP['qwen3-max'], 'qwen3-max')
+  assert.equal(BENCHLM_MODEL_MAP['step-3-7-flash'], 'step-3.7-flash')
+})
+
 test('DeepSeek CodexRadar flash and pro models are mapped', () => {
   assert.equal(DRADAR_MODEL_MAP['deepseek-v4-flash'], 'deepseek-v4-flash')
   assert.equal(DRADAR_MODEL_MAP['deepseek-v4-pro'], 'deepseek-v4-pro')
