@@ -769,6 +769,36 @@ func TestResolveUpstreamCapability_ClaudeFable5Variants(t *testing.T) {
 	}
 }
 
+func TestResolveUpstreamCapability_ClaudeMythos51Variants(t *testing.T) {
+	tests := []struct {
+		model       string
+		displayName string
+	}{
+		{model: "claude-mythos-5", displayName: "Claude Mythos 5"},
+		{model: "claude-mythos-5-20260902", displayName: "Claude Mythos 5"},
+		// Mythos 5.1 是独立模型
+		{model: "claude-mythos-5-1", displayName: "Claude Mythos 5.1"},
+		{model: "claude-mythos-5.1", displayName: "Claude Mythos 5.1"},
+		{model: "claude-mythos-5-1-20260902", displayName: "Claude Mythos 5.1"},
+		{model: "anthropic/claude-mythos-5-1", displayName: "Claude Mythos 5.1"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			resolved := ResolveUpstreamCapability(tt.model, nil, nil)
+			if !resolved.Known || resolved.Source != "builtin" {
+				t.Fatalf("resolved = %+v, want builtin capability for %s", resolved, tt.model)
+			}
+			capability := resolved.Capability
+			if capability.DisplayName != tt.displayName || capability.ContextWindowTokens != 1_000_000 ||
+				capability.MaxOutputTokens != 128_000 || !capability.Capabilities["reasoning"] ||
+				!capability.Capabilities["vision"] || !capability.Capabilities["toolCalls"] {
+				t.Fatalf("capability = %+v for model %s", capability, tt.model)
+			}
+		})
+	}
+}
+
 func TestResolveUpstreamCapability_MultimodalAgentModels(t *testing.T) {
 	for _, model := range []string{
 		"k3",

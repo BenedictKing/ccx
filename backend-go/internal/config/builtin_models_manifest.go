@@ -53,6 +53,7 @@ var builtinModelsManifests = []BuiltinModelsManifest{
 			"claude-fable-5",
 			"claude-fable-5-1",
 			"claude-mythos-5",
+			"claude-mythos-5-1",
 			"claude-opus-4-8",
 			"claude-opus-4-7",
 			"claude-opus-4-6",

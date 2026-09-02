@@ -317,6 +317,13 @@ func BuiltinAgentModelProfiles() map[string]AgentModelProfile {
 			MaxOutputTokens:     128000,
 			ReasoningEfforts:    []string{"low", "medium", "high", "xhigh", "max"},
 		},
+		// Mythos 5.1 是独立模型（非 Mythos 5 别名）；pattern 更长，resolvePatternValue 长度降序保证优先命中。
+		"claude-mythos-5-1*": {
+			DisplayName:         "Claude Mythos 5.1",
+			ContextWindowTokens: 1000000,
+			MaxOutputTokens:     128000,
+			ReasoningEfforts:    []string{"low", "medium", "high", "xhigh", "max"},
+		},
 		"claude-mythos-preview*": {
 			DisplayName:         "Claude Mythos Preview",
 			ContextWindowTokens: 1000000,

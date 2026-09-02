@@ -347,6 +347,36 @@
     },
     {
       "patterns": [
+        "(?:^|[-/])claude-mythos-5[.-]1(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{4,8})?(?=$|@)"
+      ],
+      "provider": "anthropic",
+      "displayName": "Claude Mythos 5.1",
+      "contextWindowTokens": 1000000,
+      "maxOutputTokens": 128000,
+      "thinkingMode": "adaptive_always_on",
+      "reasoningEfforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "pricing": {
+        "unit": "per_1m_tokens_usd",
+        "currency": "USD",
+        "inputCacheMissPrice": 10,
+        "outputPrice": 50,
+        "inputCacheHitPrice": 1
+      },
+      "capabilities": {
+        "document": true,
+        "reasoning": true,
+        "vision": true,
+        "toolCalls": true
+      }
+    },
+    {
+      "patterns": [
         "(?:^|[-/])claude-mythos-preview(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)"
       ],
       "provider": "anthropic",
@@ -5046,9 +5076,9 @@
           "sourceModel": "glm-5.3-flash",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.634,
+          "rawValue": 0.646,
           "uncertainty": 0,
-          "cohortPercentile": 0.538,
+          "cohortPercentile": 0.615,
           "taskCount": 82,
           "cohortSize": 13,
           "effort": "high",
@@ -6110,7 +6140,7 @@
           "metric": "pass_at_1",
           "rawValue": 0.643,
           "uncertainty": 0,
-          "cohortPercentile": 0.615,
+          "cohortPercentile": 0.538,
           "taskCount": 112,
           "cohortSize": 13,
           "effort": "medium",
@@ -8085,7 +8115,7 @@
           "metric": "pass_at_1",
           "rawValue": 0.643,
           "uncertainty": 0,
-          "cohortPercentile": 0.615,
+          "cohortPercentile": 0.538,
           "taskCount": 112,
           "cohortSize": 13,
           "effort": "max",

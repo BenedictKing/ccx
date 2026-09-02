@@ -19,28 +19,28 @@ func TestLookupBuiltinManifest_ExactHostMatch(t *testing.T) {
 			baseURL:     "https://api.anthropic.com",
 			serviceType: "messages",
 			wantFound:   true,
-			wantModels:  11,
+			wantModels:  12,
 		},
 		{
 			name:        "Anthropic API 带尾部斜杠",
 			baseURL:     "https://api.anthropic.com/",
 			serviceType: "messages",
 			wantFound:   true,
-			wantModels:  11,
+			wantModels:  12,
 		},
 		{
 			name:        "Anthropic API 带路径前缀",
 			baseURL:     "https://api.anthropic.com/v1",
 			serviceType: "messages",
 			wantFound:   true,
-			wantModels:  11,
+			wantModels:  12,
 		},
 		{
 			name:        "Anthropic API 带 # 标记",
 			baseURL:     "https://api.anthropic.com#",
 			serviceType: "messages",
 			wantFound:   true,
-			wantModels:  11,
+			wantModels:  12,
 		},
 	}
 
@@ -149,6 +149,7 @@ func TestLookupBuiltinManifest_ModelIDsContent(t *testing.T) {
 	expectedModels := []string{
 		"claude-fable-5",
 		"claude-fable-5-1",
+		"claude-mythos-5-1",
 		"claude-sonnet-5",
 		"claude-opus-4-8",
 		"claude-sonnet-4-6",

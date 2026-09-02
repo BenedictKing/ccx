@@ -81,6 +81,7 @@ export const BENCHLM_MODEL_MAP = {
   'kimi-k3': 'kimi-k3',
   'kimi-3': 'kimi-k3',
   'claude-mythos-5': 'claude-mythos-5',
+  'claude-mythos-5-1': 'claude-mythos-5-1',
   'qwen3-8-max': 'qwen3.8-max',
   // preview 当前 displayScore 为 null，映射仅为消除 UNMAPPED 误报，null 不会写入
   'qwen3-8-max-preview': 'qwen3.8-max',

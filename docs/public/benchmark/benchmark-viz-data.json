@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-02T02:15:33.251Z",
+  "generatedAt": "2026-09-02T03:03:07.221Z",
   "qualityTiers": {
     "scale": "0-100",
     "algorithm": "medium-aligned-coding-v1",
@@ -762,7 +762,7 @@
       "source": "DeepSWE v1.1",
       "sourceModel": "glm-5-3-flash",
       "quality_score": 63.4,
-      "model_quality_score": 50.6,
+      "model_quality_score": 51.2,
       "taskCount": null
     },
     {
@@ -2775,7 +2775,7 @@
       "source": "CodexRadar",
       "category": "coding",
       "metric": "pass_at_1",
-      "score": 63.4,
+      "score": 64.6,
       "effort": "high",
       "taskCount": 82
     },
