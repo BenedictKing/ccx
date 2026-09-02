@@ -253,7 +253,6 @@ function isLowSampleRow(row) {
 }
 // 质量档按各点自身实测 pass@1 逐档评定：同一模型不同 effort 档可分属不同档位。
 // quality_score 为 null（小样本档）时不评定。
-const TIER_RANK = { premium: 3, high: 2, normal: 1, low: 0 };
 function tierOf(row) {
   if (!Number.isFinite(row.quality_score)) return null;
   if (row.quality_score >= QUALITY_TIERS.premiumMin) return 'premium';
@@ -655,9 +654,7 @@ function renderLegend(rows) {
 function renderTable(rows, frontierKeys) {
   const body = document.getElementById('table-body');
   body.replaceChildren();
-  [...rows].sort((a, b) => (
-    (TIER_RANK[tierOf(b)] ?? -1) - (TIER_RANK[tierOf(a)] ?? -1) || a.cost - b.cost
-  )).forEach(row => {
+  [...rows].sort((a, b) => b.pass_rate - a.pass_rate || a.cost - b.cost).forEach(row => {
     const cells = [row.model, row.effort || 'default', tierOf(row) ?? '—', (row.pass_rate * 100).toFixed(1) + '%', '$' + row.cost.toFixed(3), frontierKeys.has(row.key) ? 'Pareto' : '', row.source];
     const tr = document.createElement('tr');
     cells.forEach((value, index) => {
