@@ -7,6 +7,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/BenedictKing/ccx/internal/quota"
 )
 
 // ── 默认配置 ──
@@ -142,6 +144,8 @@ type SubscriptionRefreshWorker struct {
 	budget   *RefreshBudget
 	timeFn   func() time.Time
 	enabled  func() bool // 从配置读取全局开关（热重载感知）
+	quotaMu  sync.RWMutex
+	quota    *quota.Manager // 余额结果接入配额真相体系（可选，nil = 不接入）
 
 	cancel func()
 	wg     sync.WaitGroup
@@ -184,6 +188,17 @@ func (w *SubscriptionRefreshWorker) Start(ctx context.Context) {
 		log.Printf("[SubscriptionRefreshWorker-Start] 余额刷新 worker 已启动 (interval=%s, budget=%d/day)",
 			w.config.RefreshInterval, w.config.DailyBudget)
 	}
+}
+
+// SetQuotaManager 注入配额管理器（main.go 在创建后、Start 前调用）。
+// 注入后余额刷新结果会同步到配额真相体系（provider_api 级），供调度评分消费。
+func (w *SubscriptionRefreshWorker) SetQuotaManager(qm *quota.Manager) {
+	if w == nil {
+		return
+	}
+	w.quotaMu.Lock()
+	w.quota = qm
+	w.quotaMu.Unlock()
 }
 
 // Stop 优雅停止刷新 worker。
@@ -255,6 +270,7 @@ func (w *SubscriptionRefreshWorker) refreshAll() {
 
 		result := w.fetchBalance(profile)
 		w.applyResult(result)
+		w.updateQuota(profile, result)
 
 		if result.Success {
 			refreshed++
@@ -322,6 +338,39 @@ func (w *SubscriptionRefreshWorker) applyResult(result SubscriptionRefreshResult
 	})
 	if err != nil {
 		log.Printf("[SubscriptionRefreshWorker-Apply] 回写订阅画像失败 uid=%s: %v", result.SubscriptionUID, err)
+	}
+}
+
+// updateQuota 将余额刷新结果接入配额管理器（provider_api 级，最高可信度来源）。
+// 订阅经 LinkedChannelUIDs 关联渠道；accountUID 用 SubscriptionUID 做饱和桶聚合键。
+// fail-open：未注入管理器或订阅未关联渠道时静默跳过。
+func (w *SubscriptionRefreshWorker) updateQuota(profile *SubscriptionProfile, result SubscriptionRefreshResult) {
+	if w == nil || profile == nil || len(profile.LinkedChannelUIDs) == 0 {
+		return
+	}
+	w.quotaMu.RLock()
+	qm := w.quota
+	w.quotaMu.RUnlock()
+	if qm == nil {
+		return
+	}
+
+	var values []quota.Value
+	var fetchErr error
+	if result.Success {
+		if result.Balance >= 0 {
+			balance := result.Balance
+			values = []quota.Value{{
+				Dimension: quota.DimCurrency,
+				Remaining: &balance,
+				Unit:      result.Currency,
+			}}
+		}
+	} else {
+		fetchErr = fmt.Errorf("%s", result.ErrorMessage)
+	}
+	for _, channelUID := range profile.LinkedChannelUIDs {
+		qm.UpdateChannelProviderAPI(channelUID, profile.SubscriptionUID, values, fetchErr)
 	}
 }
 

@@ -238,6 +238,42 @@ func (m *MetricsManager) RecordRequestConnectedWithCostContext(baseURL, apiKey, 
 	return requestID
 }
 
+// CompressionStats 请求侧 tool_result 压缩的遥测统计。
+// 由 handlers/common 在请求转发链生成（CompressionContext），随 pending 记录传播到 SQLite。
+type CompressionStats struct {
+	Compressed       bool    // 是否执行了压缩
+	OriginalTokens   int64   // 压缩前 tool_result 估算 token 数
+	CompressedTokens int64   // 压缩后 tool_result 估算 token 数
+	SavingsPercent   float64 // 节省比例（0-100）
+	Technique        string  // 压缩技术标识（rtk_filter 等）
+	FallbackReason   string  // 回退原因（压缩未生效时）
+}
+
+// RecordRequestCompression 将请求级压缩统计附加到 pending 记录，
+// 随 RecordRequestFinalize* 写入 PersistentRecord 持久化到 SQLite。
+// 压缩发生在 attempt 循环之前，因此每个 attempt 建连后都需要调用一次。
+// 找不到 pending 记录时静默跳过（fail-open）。
+func (m *MetricsManager) RecordRequestCompression(baseURL, apiKey, serviceType string, requestID uint64, stats CompressionStats) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	metrics := m.findPendingRequestMetricsLocked(baseURL, apiKey, serviceType, requestID)
+	if metrics == nil {
+		return
+	}
+	idx, ok := metrics.pendingHistoryIdx[requestID]
+	if !ok || idx < 0 || idx >= len(metrics.requestHistory) {
+		return
+	}
+	record := &metrics.requestHistory[idx]
+	record.Compressed = stats.Compressed
+	record.CompressionOriginalTokens = stats.OriginalTokens
+	record.CompressionCompressedTokens = stats.CompressedTokens
+	record.CompressionSavingsPct = stats.SavingsPercent
+	record.CompressionTechnique = stats.Technique
+	record.CompressionFallbackReason = stats.FallbackReason
+}
+
 // calculateRecordListCost 计算一次请求的标价成本（USD），用全局默认汇率换算 CNY 类标价。
 func (m *MetricsManager) calculateRecordListCost(model string, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens int64) (float64, bool) {
 	if model == "" || model == "unknown" {
@@ -320,29 +356,35 @@ func (m *MetricsManager) RecordRequestFinalizeOutcome(baseURL, apiKey, serviceTy
 
 		if m.store != nil {
 			m.store.AddRecord(PersistentRecord{
-				ChannelUID:              record.ChannelUID,
-				RouteModel:              record.RouteModel,
-				MetricsKey:              metrics.MetricsKey,
-				BaseURL:                 metrics.BaseURL,
-				KeyMask:                 metrics.KeyMask,
-				Timestamp:               record.Timestamp,
-				Success:                 true,
-				FailureClass:            FailureClassNone,
-				InputTokens:             inputTokens,
-				OutputTokens:            outputTokens,
-				CacheCreationTokens:     cacheCreationTokens,
-				CacheReadTokens:         cacheReadTokens,
-				APIType:                 m.apiType,
-				Model:                   record.Model,
-				ProxyKeyMask:            record.ProxyKeyMask,
-				KeyUID:                  record.KeyUID,
-				SubscriptionUID:         record.SubscriptionUID,
-				ExchangeSnapshotVersion: record.ExchangeSnapshotVersion,
-				ListCostUSD:             record.ListCostUSD,
-				EffectiveCostUSD:        record.EffectiveCostUSD,
-				EffectiveCostAvailable:  record.EffectiveCostAvailable,
-				EffectiveCostReason:     record.EffectiveCostReason,
-				ConsumptionPolicy:       record.ConsumptionPolicy,
+				ChannelUID:                record.ChannelUID,
+				RouteModel:                record.RouteModel,
+				MetricsKey:                metrics.MetricsKey,
+				BaseURL:                   metrics.BaseURL,
+				KeyMask:                   metrics.KeyMask,
+				Timestamp:                 record.Timestamp,
+				Success:                   true,
+				FailureClass:              FailureClassNone,
+				InputTokens:               inputTokens,
+				OutputTokens:              outputTokens,
+				CacheCreationTokens:       cacheCreationTokens,
+				CacheReadTokens:           cacheReadTokens,
+				APIType:                   m.apiType,
+				Model:                     record.Model,
+				ProxyKeyMask:              record.ProxyKeyMask,
+				KeyUID:                    record.KeyUID,
+				SubscriptionUID:           record.SubscriptionUID,
+				ExchangeSnapshotVersion:   record.ExchangeSnapshotVersion,
+				ListCostUSD:               record.ListCostUSD,
+				EffectiveCostUSD:          record.EffectiveCostUSD,
+				EffectiveCostAvailable:    record.EffectiveCostAvailable,
+				EffectiveCostReason:       record.EffectiveCostReason,
+				ConsumptionPolicy:         record.ConsumptionPolicy,
+				Compressed:                record.Compressed,
+				OriginalTokens:            record.CompressionOriginalTokens,
+				CompressedTokens:          record.CompressionCompressedTokens,
+				CompressionSavingsPct:     record.CompressionSavingsPct,
+				CompressionTechnique:      record.CompressionTechnique,
+				CompressionFallbackReason: record.CompressionFallbackReason,
 			})
 		}
 		return
@@ -373,6 +415,13 @@ func (m *MetricsManager) RecordRequestFinalizeOutcome(baseURL, apiKey, serviceTy
 			Model:               record.Model,
 			ProxyKeyMask:        record.ProxyKeyMask,
 			ConsumptionPolicy:   record.ConsumptionPolicy,
+			// 压缩统计与成败无关（压缩发生在转发前），失败记录同样保留观测
+			Compressed:                record.Compressed,
+			OriginalTokens:            record.CompressionOriginalTokens,
+			CompressedTokens:          record.CompressionCompressedTokens,
+			CompressionSavingsPct:     record.CompressionSavingsPct,
+			CompressionTechnique:      record.CompressionTechnique,
+			CompressionFallbackReason: record.CompressionFallbackReason,
 		})
 	}
 }

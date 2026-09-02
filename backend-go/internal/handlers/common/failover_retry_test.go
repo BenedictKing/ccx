@@ -455,6 +455,14 @@ func TestShouldRetryWithNextKey_UpstreamJSONParseErrorShouldFailover(t *testing.
 			name: "failed to parse json detail",
 			body: []byte(`{"error":{"message":"bad request","detail":"failed to parse JSON body"}}`),
 		},
+		{
+			name: "Python 解析器原生特征在顶层 message",
+			body: []byte(`{"error":{"message":"Expecting value: line 1 column 1 (char 0)","code":"invalid_request"}}`),
+		},
+		{
+			name: "弱短语位于嵌套 upstream_error",
+			body: []byte(`{"error":{"message":"bad request","upstream_error":{"message":"cannot parse json: relay truncated body"}}}`),
+		},
 	}
 
 	for _, tt := range tests {
@@ -465,6 +473,37 @@ func TestShouldRetryWithNextKey_UpstreamJSONParseErrorShouldFailover(t *testing.
 			}
 			if gotQuota {
 				t.Error("上游解析失败不应标记为 quota")
+			}
+		})
+	}
+}
+
+// 豁免收紧的反例：顶层弱短语（无请求体指向、无解析器原生特征、无 upstream_error 来源）
+// 不得豁免 schema 不可重试判定——否则客户端/业务侧解析错误会被跨 Key/渠道重放，
+// 增加延迟与重复计费。
+func TestShouldRetryWithNextKey_WeakParsePhraseNotExempted(t *testing.T) {
+	tests := []struct {
+		name string
+		body []byte
+	}{
+		{
+			name: "顶层 cannot parse json 无 body 上下文",
+			body: []byte(`{"error":{"message":"cannot parse json in tool configuration","code":"invalid_request"}}`),
+		},
+		{
+			name: "顶层 failed to parse json 无 body 上下文",
+			body: []byte(`{"error":{"message":"failed to parse json settings for this request","code":"invalid_request"}}`),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotFailover, gotQuota := ShouldRetryWithNextKey(400, tt.body, "Messages")
+			if gotFailover {
+				t.Error("客户端/业务侧弱解析短语不应触发 failover（不属于上游链路故障）")
+			}
+			if gotQuota {
+				t.Error("该类错误不应标记为 quota")
 			}
 		})
 	}

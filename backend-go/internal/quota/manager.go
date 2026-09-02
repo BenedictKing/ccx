@@ -132,6 +132,30 @@ func (m *Manager) UpdateChannelResponseHeaders(channelUID, accountUID, provider 
 	}
 }
 
+// serviceTypeQuotaProviders 将渠道协议族（handlers/common.ChannelAPIType 取值）
+// 映射到已确认的响应头 provider 映射。未列出的协议族无显式确认的头映射，
+// 跳过解析（fail-open，不猜测头名归属）。
+var serviceTypeQuotaProviders = map[string]string{
+	"Messages":  "anthropic",
+	"Chat":      "openai",
+	"Responses": "openai",
+}
+
+// UpdateFromUpstreamSignal 是 response_headers 级数据的生产接线入口，
+// 供 ratelimit 上游信号回调（与限速发现器共享的同一挂点）调用：
+// 由 serviceType 推导 provider 头映射后更新渠道配额状态。
+// accountUID 传 endpointUID（channelUID+baseURL+keyHash 摘要），饱和桶按 endpoint 粒度聚合。
+func (m *Manager) UpdateFromUpstreamSignal(channelUID, accountUID, serviceType string, headers http.Header) {
+	if m == nil || channelUID == "" || headers == nil {
+		return
+	}
+	provider, ok := serviceTypeQuotaProviders[serviceType]
+	if !ok {
+		return
+	}
+	m.UpdateChannelResponseHeaders(channelUID, accountUID, provider, headers)
+}
+
 // UpdateChannelConfigured 更新渠道的 configured 级配额数据。
 // 用于静态配置的配额（如 newapi multiplier、手动设置的额度）。
 func (m *Manager) UpdateChannelConfigured(channelUID, accountUID string, values []Value) {

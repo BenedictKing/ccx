@@ -1044,6 +1044,18 @@ func TryUpstreamWithAllKeys(
 			// TCP 建连开始即计数：将活跃度统计提前到发起上游请求之前；同时关联 proxyKeyMask 用于成本报表持久化
 			costContext := buildRequestCostContext(cfgManager, upstream, selection, actualAttemptModel, consumptionPolicy)
 			requestID := metricsManager.RecordRequestConnectedWithCostContext(currentBaseURL, apiKey, metricsServiceType, upstream.ChannelUID, actualAttemptModel, model, proxyKeyMask, costContext)
+			// 压缩遥测随 pending 记录传播：压缩发生在进入 attempt 循环之前，
+			// 每个 attempt 的记录都要补挂，否则 SQLite 压缩列长期为零（成本报表统计失真）。
+			if compCtx := GetCompressionContext(c); compCtx != nil {
+				metricsManager.RecordRequestCompression(currentBaseURL, apiKey, metricsServiceType, requestID, metrics.CompressionStats{
+					Compressed:       compCtx.Compressed,
+					OriginalTokens:   int64(compCtx.OriginalTokens),
+					CompressedTokens: int64(compCtx.CompressedTokens),
+					SavingsPercent:   compCtx.SavingsPercent,
+					Technique:        compCtx.Technique,
+					FallbackReason:   compCtx.FallbackReason,
+				})
+			}
 
 			attemptStartedAt := time.Now()
 			var connectedOnce sync.Once
@@ -1182,7 +1194,7 @@ func TryUpstreamWithAllKeys(
 					signalReason = string(autopilot.RateLimitReasonAccountRateLimitExceeded)
 				}
 				ratelimit.NotifySignal(
-					signalEndpointUID, metricsKey, executionAPIType, upstream.Name, isStream,
+					upstream.ChannelUID, signalEndpointUID, metricsKey, executionAPIType, upstream.Name, isStream,
 					time.Since(attemptStartedAt).Milliseconds(),
 					resp.Header, resp.StatusCode, signalReason,
 				)
@@ -1498,7 +1510,7 @@ func TryUpstreamWithAllKeys(
 
 			// 成功响应（2xx）：通知 Discoverer（header/success 路径），reason 为空
 			ratelimit.NotifySignal(
-				signalEndpointUID, metricsKey, executionAPIType, upstream.Name, isStream,
+				upstream.ChannelUID, signalEndpointUID, metricsKey, executionAPIType, upstream.Name, isStream,
 				time.Since(attemptStartedAt).Milliseconds(),
 				resp.Header, resp.StatusCode, "",
 			)

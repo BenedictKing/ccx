@@ -739,10 +739,15 @@ func main() {
 				// endpointUID 和 metricsKey 由 upstream_failover.go 在请求上下文中计算后传入
 				// reason 携带 429 细分原因（如 account_rate_limit_exceeded），由
 				// upstream_failover.go 读完 body 分类后传入，确保同一次 429 只通知一次
-				ratelimit.SetUpstreamSignalCallback(func(endpointUID, metricsKey, serviceType, channelName string, isStream bool, latencyMs int64, headers http.Header, statusCode int, reason string) {
+				ratelimit.SetUpstreamSignalCallback(func(channelUID, endpointUID, metricsKey, serviceType, channelName string, isStream bool, latencyMs int64, headers http.Header, statusCode int, reason string) {
 					if autopilotManager.ObserveRateLimitSignal(endpointUID, 0, metricsKey, serviceType, channelName, isStream, latencyMs, headers, statusCode, reason) {
 						autopilotManager.RequestRateLimitApply()
 					}
+					// 配额真相 response_headers 级接线（§2 配额真相分级调度）：
+					// 与限速发现器共享同一观测回调，从响应头学习 token/request 余量，
+					// 供 SmartRouter 评分与 scheduler 饱和沉底消费。accountUID 用
+					// endpointUID，饱和桶按 endpoint（渠道+基地址+Key）粒度聚合。
+					quotaManager.UpdateFromUpstreamSignal(channelUID, endpointUID, serviceType, headers)
 				})
 
 				// 限速发现器配置接线：从 AutopilotRouting.RateLimitDiscovery 映射到 Discoverer 参数。
@@ -1020,6 +1025,11 @@ func main() {
 				},
 				func() bool { return cfgManager.GetAutopilotRouting().SubscriptionAutoRefresh.Enabled },
 			)
+			// 余额刷新结果接入配额管理器（provider_api 级，最高可信度来源）：
+			// SmartRouter 余量评分与 scheduler 饱和沉底由此获得真实余额数据。
+			if qm := autopilotManager.SmartRouter().QuotaManager(); qm != nil {
+				refreshWorker.SetQuotaManager(qm)
+			}
 			autopilotManager.SetSubscriptionRefreshWorker(refreshWorker)
 			log.Printf("[Autopilot-Init] SubscriptionRefreshWorker 已创建 (将在 StartWorker 时启动)")
 		}

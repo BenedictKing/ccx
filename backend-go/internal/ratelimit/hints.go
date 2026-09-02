@@ -12,23 +12,24 @@ import (
 
 // UpstreamSignalCallback 可选的信号回调，上游响应后触发。
 // 由 main.go 注册，仅传递解析后的信号；默认 nil 不影响现有行为。
+// channelUID 是渠道稳定标识（配额真相按渠道聚合必需；空串时配额侧跳过）。
 // endpointUID 和 metricsKey 由调用方（upstream_failover.go）在当前请求上下文中计算。
 // channelName 为渠道可读名（upstream.Name），仅用于日志展示，可能为空。
 // reason 携带 429 细分原因（如 account_rate_limit_exceeded），用于 AIMD 精确置信度。
-var UpstreamSignalCallback func(endpointUID, metricsKey, serviceType, channelName string, isStream bool, latencyMs int64, headers http.Header, statusCode int, reason string)
+var UpstreamSignalCallback func(channelUID, endpointUID, metricsKey, serviceType, channelName string, isStream bool, latencyMs int64, headers http.Header, statusCode int, reason string)
 
 // SetUpstreamSignalCallback 设置上游信号回调（main.go 调用）。
 // 传 nil 可清除回调。
-func SetUpstreamSignalCallback(cb func(endpointUID, metricsKey, serviceType, channelName string, isStream bool, latencyMs int64, headers http.Header, statusCode int, reason string)) {
+func SetUpstreamSignalCallback(cb func(channelUID, endpointUID, metricsKey, serviceType, channelName string, isStream bool, latencyMs int64, headers http.Header, statusCode int, reason string)) {
 	UpstreamSignalCallback = cb
 }
 
 // NotifySignal 若回调已注册，触发信号回调。
-// endpointUID / metricsKey 由调用方在请求上下文中计算好后传入。
+// channelUID 为渠道稳定标识；endpointUID / metricsKey 由调用方在请求上下文中计算好后传入。
 // channelName 为渠道可读名，仅用于日志展示。
 // reason 为 429 细分原因（非 429 传空串）。
 // 失败安全：回调 panic 不影响主流程。
-func NotifySignal(endpointUID, metricsKey, serviceType, channelName string, isStream bool, latencyMs int64, headers http.Header, statusCode int, reason string) {
+func NotifySignal(channelUID, endpointUID, metricsKey, serviceType, channelName string, isStream bool, latencyMs int64, headers http.Header, statusCode int, reason string) {
 	cb := UpstreamSignalCallback
 	if cb == nil || headers == nil {
 		return
@@ -38,7 +39,7 @@ func NotifySignal(endpointUID, metricsKey, serviceType, channelName string, isSt
 			log.Printf("[RateLimit-Signal] 回调 panic（已忽略）: %v", r)
 		}
 	}()
-	cb(endpointUID, metricsKey, serviceType, channelName, isStream, latencyMs, headers, statusCode, reason)
+	cb(channelUID, endpointUID, metricsKey, serviceType, channelName, isStream, latencyMs, headers, statusCode, reason)
 }
 
 // maxUpstreamResetDelay 上游重置指示的冷却上限。

@@ -95,15 +95,12 @@ func TestParseResponseHeadersEmpty(t *testing.T) {
 }
 
 func TestRegisterHeaderMapping(t *testing.T) {
+	// 快照全局映射表，defer 恢复完整原始表：
+	// 只回填单条映射会清掉其余默认项，污染同包后续测试的解析行为。
+	original := make([]HeaderMapping, len(knownHeaderMappings))
+	copy(original, knownHeaderMappings)
 	defer func() {
-		// 清理：恢复原始映射
-		knownHeaderMappings = []HeaderMapping{}
-		// 重新注册默认的
-		knownHeaderMappings = append(knownHeaderMappings,
-			HeaderMapping{Provider: "anthropic", Limit: "anthropic-ratelimit-input-tokens-limit",
-				Remaining: "anthropic-ratelimit-input-tokens-remaining", Reset: "anthropic-ratelimit-input-tokens-reset",
-				Dimension: DimInputTokens, Unit: "tokens"},
-		)
+		knownHeaderMappings = original
 	}()
 
 	RegisterHeaderMapping(HeaderMapping{

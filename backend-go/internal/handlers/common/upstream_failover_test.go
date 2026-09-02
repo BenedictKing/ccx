@@ -1594,7 +1594,7 @@ func runAccountRateLimitFailover(
 	originalSignalCallback := ratelimit.UpstreamSignalCallback
 	var accountSignals int
 	var signalReasons []string
-	ratelimit.SetUpstreamSignalCallback(func(_ string, _ string, _ string, _ string, _ bool, _ int64, _ http.Header, statusCode int, reason string) {
+	ratelimit.SetUpstreamSignalCallback(func(_ string, _ string, _ string, _ string, _ string, _ bool, _ int64, _ http.Header, statusCode int, reason string) {
 		if statusCode == http.StatusTooManyRequests {
 			accountSignals++
 			signalReasons = append(signalReasons, reason)

@@ -1012,32 +1012,65 @@ func isResponsesToolsProtocolError(errObj map[string]interface{}) bool {
 	return false
 }
 
-// isUpstreamRequestParseError 识别上游代理/后端对请求体的 JSON 解析失败
-// （"unexpected end of JSON input" 等）。网关自身已成功解析并转发出完整请求体，
-// 此类 400 说明该上游链路有问题，换渠道可恢复，不属于客户端 schema 错误。
+// parserNativeRequestParseSignatures 是 JSON 解析器运行时的原生错误文案
+// （Go encoding/json / io、Python json、Node），业务错误文案不会偶然包含。
+var parserNativeRequestParseSignatures = []string{
+	"unexpected end of json input",   // Go encoding/json / Node
+	"unexpected eof",                 // Go io 截断
+	"looking for beginning of value", // Go encoding/json
+	"expecting value:",               // Python json
+	"expecting ',' delimiter",        // Python json
+	"extra data:",                    // Python json
+	"in json at position",            // Node（旧版 "Unexpected token < in JSON at position 0"）
+	"is not valid json",              // Node / 各运行时通用
+}
+
+// weakRequestParsePhrases 是弱解析短语：单独出现在顶层文案时不足以证明
+// 错误源于上游链路（业务文案可能偶然包含），须有额外证据（嵌套 upstream_error
+// 或文案同时指向请求体）才可作为豁免依据。
+var weakRequestParsePhrases = []string{
+	"cannot parse json",
+	"failed to parse json",
+}
+
+// isUpstreamRequestParseError 识别上游代理/后端对请求体的 JSON 解析失败。
+// 网关自身已成功解析并转发出完整请求体，此类 400 说明该上游链路有问题，
+// 换渠道可恢复，不属于客户端 schema 错误。
+//
+// 判定收紧为两条明确路径，避免客户端侧/业务侧解析错误被误豁免
+// （误豁免会导致必然失败的请求跨 Key/渠道重放，增加延迟与重复计费）：
+//  1. 解析错误位于嵌套 upstream_error（中转站显式标注上游来源），弱短语也认；
+//  2. 顶层 message/detail/msg 命中解析器原生特征；
+//     或弱短语且文案同时指向请求体（含 "body"，如 "failed to parse JSON body"）。
 func isUpstreamRequestParseError(errObj map[string]interface{}) bool {
-	signatures := []string{
-		"unexpected end of json input",
-		"unexpected eof",
-		"cannot parse json",
-		"failed to parse json",
-	}
-	match := func(s string) bool {
+	containsAny := func(s string, markers []string) bool {
 		s = strings.ToLower(s)
-		for _, sig := range signatures {
-			if strings.Contains(s, sig) {
+		for _, marker := range markers {
+			if strings.Contains(s, marker) {
 				return true
 			}
 		}
 		return false
 	}
-	for _, field := range []string{"message", "detail", "msg"} {
-		if match(toStringField(errObj, field)) {
+	topLevelMatch := func(s string) bool {
+		if containsAny(s, parserNativeRequestParseSignatures) {
 			return true
 		}
+		// 弱短语必须同时指向请求体：解析器原生文案之外的通用短语，
+		// 只有 "…json body…" 这类明确描述请求体解析失败的才可信。
+		lower := strings.ToLower(s)
+		return containsAny(lower, weakRequestParsePhrases) && strings.Contains(lower, "body")
 	}
+
 	if nested, ok := errObj["upstream_error"].(map[string]interface{}); ok {
-		if match(toStringField(nested, "message")) {
+		for _, field := range []string{"message", "detail", "msg"} {
+			if containsAny(toStringField(nested, field), append(append([]string{}, parserNativeRequestParseSignatures...), weakRequestParsePhrases...)) {
+				return true
+			}
+		}
+	}
+	for _, field := range []string{"message", "detail", "msg"} {
+		if topLevelMatch(toStringField(errObj, field)) {
 			return true
 		}
 	}

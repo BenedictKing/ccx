@@ -103,6 +103,13 @@ type RequestRecord struct {
 	EffectiveCostAvailable   bool
 	EffectiveCostReason      string
 	ConsumptionPolicy        string
+	// 请求侧 tool_result 压缩遥测（由 RecordRequestCompression 附加，finalize 时持久化）
+	Compressed                  bool
+	CompressionOriginalTokens   int64
+	CompressionCompressedTokens int64
+	CompressionSavingsPct       float64
+	CompressionTechnique        string
+	CompressionFallbackReason   string
 }
 
 // recordRouteModel 返回 breaker 聚合使用的模型键。
