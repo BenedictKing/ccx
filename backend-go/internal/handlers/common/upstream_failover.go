@@ -487,6 +487,7 @@ func TryUpstreamWithAllKeys(
 		channelLogStore = routedLogStore
 	}
 	modelCircuit := modelCircuitChecker(metricsManager, model)
+	keyAutoWeight := keyAutoWeightFactor(metricsManager)
 
 	metricsServiceType := scheduler.NormalizedMetricsServiceType(executionKind, upstream.ServiceType)
 
@@ -633,7 +634,7 @@ func TryUpstreamWithAllKeys(
 				// 步骤 5+6: EndpointAttemptPolicy FilterKeys + SortKeys
 				// selectAttemptAPIKeyFiltered 在 keypool.CandidatesForModel 之后应用 policy 过滤/排序。
 				// nil policy 时回退到 selectAttemptAPIKey（行为不变）。
-				selection, apiKey, err = selectAttemptAPIKeyFiltered(channelScheduler, executionKind, executionIndex, upstream, currentBaseURL, failedKeys, failedQuotaGroups, redirectedModel, nextAPIKey, endpointPolicy, apiType, c, modelCircuit)
+				selection, apiKey, err = selectAttemptAPIKeyFiltered(channelScheduler, executionKind, executionIndex, upstream, currentBaseURL, failedKeys, failedQuotaGroups, redirectedModel, nextAPIKey, endpointPolicy, apiType, c, modelCircuit, keyAutoWeight)
 				if err != nil {
 					lastError = err
 					break // 当前 BaseURL 没有可用 Key，尝试下一个 BaseURL
@@ -1829,9 +1830,10 @@ func selectAttemptAPIKeyFiltered(
 	apiType string,
 	c *gin.Context,
 	circuitOpen keypool.ModelCircuitChecker,
+	autoWeight keypool.AutoWeightFactor,
 ) (keypool.Selection, string, error) {
 	if policy == nil {
-		return selectAttemptAPIKey(channelScheduler, kind, channelIndex, upstream, failedKeys, failedQuotaGroups, model, fallback, circuitOpen)
+		return selectAttemptAPIKey(channelScheduler, kind, channelIndex, upstream, failedKeys, failedQuotaGroups, model, fallback, circuitOpen, autoWeight)
 	}
 	if baseURL == "" {
 		baseURL = upstream.BaseURL
@@ -1878,7 +1880,7 @@ func selectAttemptAPIKeyFiltered(
 	}
 
 	// keypool 路径：获取候选 → FilterKeys → SortKeys → 选择
-	candidates := keypool.CandidatesForModelFiltered(upstream, failedKeys, model, circuitOpen)
+	candidates := keypool.CandidatesForModelWeighted(upstream, failedKeys, model, circuitOpen, autoWeight)
 	if len(candidates) == 0 {
 		// 候选为空必须能区分"没配 Key"与"Key 全被运行时限制（禁用/持久限制/熔断）"，
 		// 否则排障时只能看到笼统的"没有可用的API密钥"。
@@ -2071,7 +2073,7 @@ func callPolicySortKeys(policy *autopilot.EndpointAttemptPolicy, baseURL string,
 	return result, candidates
 }
 
-func selectAttemptAPIKey(channelScheduler *scheduler.ChannelScheduler, kind scheduler.ChannelKind, channelIndex int, upstream *config.UpstreamConfig, failedKeys map[string]bool, failedQuotaGroups map[string]bool, model string, fallback NextAPIKeyFunc, circuitOpen keypool.ModelCircuitChecker) (keypool.Selection, string, error) {
+func selectAttemptAPIKey(channelScheduler *scheduler.ChannelScheduler, kind scheduler.ChannelKind, channelIndex int, upstream *config.UpstreamConfig, failedKeys map[string]bool, failedQuotaGroups map[string]bool, model string, fallback NextAPIKeyFunc, circuitOpen keypool.ModelCircuitChecker, autoWeight keypool.AutoWeightFactor) (keypool.Selection, string, error) {
 	if !keypool.HasEffectiveConfig(upstream) {
 		if fallback == nil {
 			return keypool.Selection{}, "", fmt.Errorf("上游 %s 没有可用的API密钥", upstream.Name)
@@ -2084,7 +2086,7 @@ func selectAttemptAPIKey(channelScheduler *scheduler.ChannelScheduler, kind sche
 	}
 
 	var deferred []keypool.Selection
-	for _, candidate := range keypool.CandidatesForModelFiltered(upstream, failedKeys, model, circuitOpen) {
+	for _, candidate := range keypool.CandidatesForModelWeighted(upstream, failedKeys, model, circuitOpen, autoWeight) {
 		if candidate.QuotaGroup != "" && failedQuotaGroups[candidate.QuotaGroup] {
 			continue
 		}
@@ -2131,6 +2133,10 @@ func recordModelCircuitGlobal(c *gin.Context, metricsManager *metrics.MetricsMan
 		RequestLogf(c, "[%s-ModelCircuit] 渠道 %s Key 持续失败，暂停全模型调度至 %s",
 			apiType, upstream.Name, until.Format(time.RFC3339))
 	}
+	// 整把 Key 不可用的失败同时计入 per-key 自动权重（软降权）。
+	if aw := metricsManager.KeyAutoWeight(); aw != nil {
+		aw.RecordFailure(upstream.ChannelUID, metrics.ModelCircuitKeyHash(apiKey), time.Now())
+	}
 }
 
 // recordModelCircuitFailure 记录一次渠道-模型级失败。
@@ -2166,6 +2172,27 @@ func recordModelCircuitSuccess(metricsManager *metrics.MetricsManager,
 	}
 	if tracker := metricsManager.ModelCircuit(); tracker != nil {
 		tracker.RecordModelSuccess(upstream.ChannelUID, metrics.ModelCircuitKeyHash(apiKey), model)
+	}
+	if aw := metricsManager.KeyAutoWeight(); aw != nil {
+		aw.RecordSuccess(upstream.ChannelUID, metrics.ModelCircuitKeyHash(apiKey), time.Now())
+	}
+}
+
+// keyAutoWeightFactor 构造 keypool 的 per-key 自动权重系数闭包。
+//
+// 读取 metrics 滑窗统计并完成 apiKey → keyHash 换算，让 keypool 不感知 metrics。
+// 配置关闭（config scheduler.keyAutoWeight=false，main.go 热更新运行态）或
+// metricsManager 缺失时返回 nil，keypool 排序退回纯手控 weight。
+func keyAutoWeightFactor(metricsManager *metrics.MetricsManager) keypool.AutoWeightFactor {
+	if metricsManager == nil || !config.RuntimeKeyAutoWeightEnabled() {
+		return nil
+	}
+	tracker := metricsManager.KeyAutoWeight()
+	if tracker == nil {
+		return nil
+	}
+	return func(channelUID, apiKey string) float64 {
+		return tracker.WeightFactor(channelUID, metrics.ModelCircuitKeyHash(apiKey), time.Now())
 	}
 }
 

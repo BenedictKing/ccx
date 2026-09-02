@@ -226,9 +226,9 @@ func TestPlainAPIKeySelectionSkipsDisabledModel(t *testing.T) {
 			var key string
 			var err error
 			if tt.policy == nil {
-				_, key, err = selectAttemptAPIKey(nil, scheduler.ChannelKindMessages, 0, upstream, map[string]bool{}, map[string]bool{}, "target-model", fallback, nil)
+				_, key, err = selectAttemptAPIKey(nil, scheduler.ChannelKindMessages, 0, upstream, map[string]bool{}, map[string]bool{}, "target-model", fallback, nil, nil)
 			} else {
-				_, key, err = selectAttemptAPIKeyFiltered(nil, scheduler.ChannelKindMessages, 0, upstream, upstream.BaseURL, map[string]bool{}, map[string]bool{}, "target-model", fallback, tt.policy, "Messages", nil, nil)
+				_, key, err = selectAttemptAPIKeyFiltered(nil, scheduler.ChannelKindMessages, 0, upstream, upstream.BaseURL, map[string]bool{}, map[string]bool{}, "target-model", fallback, tt.policy, "Messages", nil, nil, nil)
 			}
 			if err != nil {
 				t.Fatalf("select key error: %v", err)
@@ -273,9 +273,9 @@ func TestPlainAPIKeySelectionSkipsDisabledKey(t *testing.T) {
 			var key string
 			var err error
 			if tt.policy == nil {
-				_, key, err = selectAttemptAPIKey(nil, scheduler.ChannelKindMessages, 0, upstream, map[string]bool{}, map[string]bool{}, "target-model", fallback, nil)
+				_, key, err = selectAttemptAPIKey(nil, scheduler.ChannelKindMessages, 0, upstream, map[string]bool{}, map[string]bool{}, "target-model", fallback, nil, nil)
 			} else {
-				_, key, err = selectAttemptAPIKeyFiltered(nil, scheduler.ChannelKindMessages, 0, upstream, upstream.BaseURL, map[string]bool{}, map[string]bool{}, "target-model", fallback, tt.policy, "Messages", nil, nil)
+				_, key, err = selectAttemptAPIKeyFiltered(nil, scheduler.ChannelKindMessages, 0, upstream, upstream.BaseURL, map[string]bool{}, map[string]bool{}, "target-model", fallback, tt.policy, "Messages", nil, nil, nil)
 			}
 			if err != nil {
 				t.Fatalf("select key error: %v", err)
@@ -1984,6 +1984,7 @@ func TestSelectAttemptAPIKeyFilteredUsesBindingIdentity(t *testing.T) {
 		policy,
 		"Messages",
 		c,
+		nil,
 		nil,
 	)
 	if err != nil {

@@ -1,6 +1,7 @@
 package keypool
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -343,5 +344,79 @@ func TestCandidatesForModel_CarriesKeyUID(t *testing.T) {
 	candidates := CandidatesForModel(up, nil, "")
 	if len(candidates) != 1 || candidates[0].KeyUID != "key-stable-1" {
 		t.Fatalf("expected stable KeyUID on candidate, got %+v", candidates)
+	}
+}
+
+// TestCandidatesForModelWeighted_AutoWeightReorders 验证自动权重系数叠加手控
+// weight 排序：健康度差的 Key 软降权，样本不足（系数 1.0）时与旧排序一致。
+func TestCandidatesForModelWeighted_AutoWeightReorders(t *testing.T) {
+	up := &config.UpstreamConfig{
+		ChannelUID: "ch_test",
+		APIKeys:    []string{"k-healthy", "k-sick"},
+		APIKeyConfigs: []config.APIKeyConfig{
+			{Key: "k-healthy", Weight: 10},
+			{Key: "k-sick", Weight: 10},
+		},
+	}
+
+	// 声明顺序在前的 k-healthy 在同权重下应先被选中（稳定排序基线）
+	base := CandidatesForModelWeighted(up, nil, "", nil, nil)
+	if len(base) != 2 || base[0].APIKey != "k-healthy" {
+		t.Fatalf("同权重稳定排序基线失效: %+v", base)
+	}
+
+	// k-sick 系数 0.1：有效权重 10×0.1 < k-healthy 10×1.0，顺序反转
+	weighted := CandidatesForModelWeighted(up, nil, "", nil, func(channelUID, apiKey string) float64 {
+		if channelUID == "ch_test" && apiKey == "k-sick" {
+			return 0.1
+		}
+		return 1.0
+	})
+	if len(weighted) != 2 || weighted[0].APIKey != "k-healthy" {
+		t.Fatalf("降权后 k-healthy 应排首: %+v", weighted)
+	}
+
+	// 手控权重差距大到自动权重无法翻盘：k-sick 手控 100 × 0.1 = 10 仍高于 k-healthy 1×1.0
+	upHighManual := &config.UpstreamConfig{
+		ChannelUID: "ch_test",
+		APIKeys:    []string{"k-healthy", "k-sick"},
+		APIKeyConfigs: []config.APIKeyConfig{
+			{Key: "k-healthy", Weight: 1},
+			{Key: "k-sick", Weight: 100},
+		},
+	}
+	manualWins := CandidatesForModelWeighted(upHighManual, nil, "", nil, func(channelUID, apiKey string) float64 {
+		if apiKey == "k-sick" {
+			return 0.1
+		}
+		return 1.0
+	})
+	if len(manualWins) != 2 || manualWins[0].APIKey != "k-sick" {
+		t.Fatalf("大手控权重应保持优先: %+v", manualWins)
+	}
+
+	// 系数异常（NaN/越界）按 1.0 处理，不破坏排序
+	nan := CandidatesForModelWeighted(up, nil, "", nil, func(channelUID, apiKey string) float64 {
+		if apiKey == "k-sick" {
+			return math.NaN()
+		}
+		return 1.5 // >1 也按 1.0
+	})
+	if len(nan) != 2 || nan[0].APIKey != "k-healthy" {
+		t.Fatalf("异常系数应按 1.0 处理保持基线顺序: %+v", nan)
+	}
+}
+
+// TestCandidatesForModelWeighted_NoChannelUIDIgnoresAutoWeight 无 ChannelUID 的
+// 老渠道无法定位统计条目，自动权重不参与（与熔断 checker 同款 fail-open 语义）。
+func TestCandidatesForModelWeighted_NoChannelUIDIgnoresAutoWeight(t *testing.T) {
+	up := &config.UpstreamConfig{
+		APIKeys: []string{"k1", "k2"},
+	}
+	weighted := CandidatesForModelWeighted(up, nil, "", nil, func(channelUID, apiKey string) float64 {
+		return 0.01 // 即使全部降权也应被忽略
+	})
+	if len(weighted) != 2 || weighted[0].APIKey != "k1" {
+		t.Fatalf("无 ChannelUID 应忽略自动权重: %+v", weighted)
 	}
 }

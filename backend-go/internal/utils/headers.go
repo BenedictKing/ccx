@@ -14,8 +14,10 @@ import (
 // 保留原始请求头，移除代理相关头部，设置认证头
 // 注意：此函数适用于Claude类型渠道，对于其他类型请使用 PrepareMinimalHeaders
 // ExtractUnifiedSessionID 统一提取会话/缓存标识，供 Messages/Responses/Chat/Gemini 复用。
-// 优先级: Conversation_id > Session_id > X-Claude-Code-Session-Id > user > user_id > prompt_cache_key > metadata.user_id > X-Gemini-Api-Privileged-User-Id > X-Client-Request-Id
+// 优先级: Conversation_id > Session_id > X-Claude-Code-Session-Id > user > user_id > prompt_cache_key > metadata.user_id > X-Gemini-Api-Privileged-User-Id > X-Client-Request-Id > 内容指纹(pp:)
 // X-Client-Request-Id 通常是逐请求 ID，只作为最终兜底，避免把同一会话拆成多张驾驶舱卡片。
+// 内容指纹（DerivePromptPrefixID）是匿名请求的最后回退：同一会话各轮的 system 与首条
+// user 消息不变，指纹即稳定会话 ID，使亲和与会话跟踪对无标识客户端同样生效。
 func ExtractUnifiedSessionID(c *gin.Context, bodyBytes []byte) string {
 	if c != nil {
 		if convID := c.GetHeader("Conversation_id"); convID != "" {
@@ -62,6 +64,12 @@ func ExtractUnifiedSessionID(c *gin.Context, bodyBytes []byte) string {
 		if clientRequestID := c.GetHeader("X-Client-Request-Id"); clientRequestID != "" {
 			return clientRequestID
 		}
+	}
+
+	// 最终回退：匿名请求用对话内容指纹（system + 首条 user 消息）做会话标识，
+	// 让 Trace 亲和对无任何显式标识的客户端也能生效。指纹以 "pp:" 前缀命名空间隔离。
+	if prefixID := DerivePromptPrefixID(req); prefixID != "" {
+		return prefixID
 	}
 
 	return ""

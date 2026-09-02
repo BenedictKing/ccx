@@ -272,6 +272,15 @@ Vectors 仍不支持 capability-test；不要通过能力测试推断 Embedding 
 
 限速作用域是**渠道级**（同渠道下所有 API Key 共享同一令牌桶），符合「单账号跨 Key 共享额度」的常见上游计费模型。请求被限速拦截（cooldown / 超出 maxWait 排队上限）时会自动 failover 到其它可用渠道；调度器在选择渠道时会跳过处于 cooldown 的渠道。桌面端一键添加 MiMo 渠道时会内置保守默认 `rateLimitRpm`（官方 RPM 上限的约 80%）。
 
+#### 调度软增强（`scheduler`）
+
+`config.json` 顶层的 `scheduler` 段控制两项调度软增强，均可省略（省略即默认启用）并支持热重载：
+
+| 字段 | 默认值 | 说明 |
+| --- | --- | --- |
+| `promptAffinityFallback` | `true` | 匿名请求的内容指纹亲和回退。请求未携带任何显式会话标识（请求头、`user`/`user_id`/`prompt_cache_key`、`metadata.user_id` 等）时，用 system 提示与首条 user 消息的规范指纹（`pp:` 前缀合成 ID）作为会话标识，使 Trace 亲和、会话跟踪对裸 SDK 客户端同样生效。同一会话各轮指纹一致；超过 4KB 的部分截断。 |
+| `keyAutoWeight` | `true` | per-key 自动权重。以 5 分钟滑动窗口统计每把 Key 的整把级成功/失败（模型级失败只进熔断，不连累同 Key 其他模型），按「Laplace 平滑成功率 × 连续失败减半」计算 0.05-1.0 的软降权系数叠加到手控 weight 排序上；窗口内样本不足 10 次时不干预。硬隔离仍由熔断与持久限制负责。 |
+
 #### 命令行运行时路径
 
 命令行版支持用参数覆盖运行时路径，不传参数时仍保持默认行为：

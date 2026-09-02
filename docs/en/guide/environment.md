@@ -248,6 +248,15 @@ The runtime config file also supports stream health fields under `circuitBreaker
 
 `streamToolCallIdleTimeoutMs` is a breaking field name. The old `streamToolCallTimeoutMs` field is no longer used, and this setting is not a total runtime limit for tool calls.
 
+#### Scheduler soft enhancements (`scheduler`)
+
+The top-level `scheduler` section in `config.json` controls two scheduling soft enhancements. Both fields are optional (omitted means enabled by default) and hot-reloadable:
+
+| Field | Default | Description |
+| --- | --- | --- |
+| `promptAffinityFallback` | `true` | Content-fingerprint affinity fallback for anonymous requests. When a request carries no explicit session identifier (headers, `user`/`user_id`/`prompt_cache_key`, `metadata.user_id`, etc.), a stable fingerprint of the system prompt plus the first user message (a synthetic `pp:`-prefixed ID) is used as the session identifier, so trace affinity and conversation tracking also work for bare SDK clients. The fingerprint is stable across turns of the same conversation; content beyond 4KB per role is truncated. |
+| `keyAutoWeight` | `true` | Per-key auto weight. Tracks whole-key successes/failures per key over a 5-minute sliding window (model-scoped failures only feed the model circuit and never demote other models on the same key), and applies a soft demotion factor of 0.05-1.0, computed as Laplace-smoothed success rate halved per consecutive failure, on top of manual weight ordering. Keys with fewer than 10 samples in the window are left untouched. Hard isolation remains the job of circuit breakers and persistent restrictions. |
+
 #### Command-line runtime paths
 
 The CLI binary supports runtime path overrides. Without these flags, CCX keeps the existing defaults:

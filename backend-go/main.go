@@ -47,6 +47,7 @@ import (
 	"github.com/BenedictKing/ccx/internal/session"
 	"github.com/BenedictKing/ccx/internal/thinkingcache"
 	"github.com/BenedictKing/ccx/internal/upstreamprobe"
+	"github.com/BenedictKing/ccx/internal/utils"
 	"github.com/BenedictKing/ccx/internal/warmup"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -495,6 +496,18 @@ func main() {
 	applyThinkingCacheConfig(cfgManager.GetConfig())
 	cfgManager.RegisterOnConfigChange(applyThinkingCacheConfig)
 	defer errutil.IgnoreDeferred(thinkingcache.Close)
+
+	// 调度软增强（匿名请求内容指纹亲和回退 + per-key 自动权重），热重载生效
+	applySchedulerTuning := func(cfg config.Config) {
+		tuning := config.SchedulerConfig{}
+		if cfg.Scheduler != nil {
+			tuning = *cfg.Scheduler
+		}
+		config.ApplySchedulerTuning(tuning)
+		utils.SetPromptAffinityFallback(tuning.PromptAffinityFallbackEnabled())
+	}
+	applySchedulerTuning(cfgManager.GetConfig())
+	cfgManager.RegisterOnConfigChange(applySchedulerTuning)
 
 	// 初始化会话管理器（Responses API 专用）
 	sessionManager := session.NewSessionManager(

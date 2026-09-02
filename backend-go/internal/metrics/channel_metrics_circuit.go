@@ -361,6 +361,7 @@ func (m *MetricsManager) cleanupCircuitBreakers() {
 		case <-cleanupTicker.C:
 			m.cleanupStaleKeys()
 			m.modelCircuit.Cleanup()
+			m.keyAutoWeight.Cleanup(time.Now())
 		case <-m.stopCh:
 			return
 		}

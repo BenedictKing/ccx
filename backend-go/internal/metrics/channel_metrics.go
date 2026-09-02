@@ -219,6 +219,9 @@ type MetricsManager struct {
 	// 渠道-模型级熔断（内存态，自带独立锁，见 model_circuit.go）
 	modelCircuit *ModelCircuitTracker
 
+	// per-key 滑窗自动权重（内存态，自带独立锁，见 key_autoweight.go）
+	keyAutoWeight *KeyAutoWeightTracker
+
 	// 跨模块事件总线（Phase B.1，可选）。未注入时熔断迁移不发事件。
 	eventBus atomic.Pointer[eventbus.Bus]
 }
@@ -229,6 +232,14 @@ func (m *MetricsManager) ModelCircuit() *ModelCircuitTracker {
 		return nil
 	}
 	return m.modelCircuit
+}
+
+// KeyAutoWeight 返回 per-key 自动权重跟踪器。
+func (m *MetricsManager) KeyAutoWeight() *KeyAutoWeightTracker {
+	if m == nil {
+		return nil
+	}
+	return m.keyAutoWeight
 }
 
 // GetPersistenceStore 获取持久化存储（可能为 nil）
@@ -267,6 +278,7 @@ func NewMetricsManager() *MetricsManager {
 		streamToolCallIdleTimeoutMs:  defaultStreamToolCallIdleTimeoutMs,
 		stopCh:                       make(chan struct{}),
 		modelCircuit:                 NewModelCircuitTracker(""),
+		keyAutoWeight:                NewKeyAutoWeightTracker(),
 	}
 	// 启动后台熔断恢复任务
 	go m.cleanupCircuitBreakers()
@@ -296,6 +308,7 @@ func NewMetricsManagerWithConfig(windowSize int, failureThreshold float64) *Metr
 		streamToolCallIdleTimeoutMs:  defaultStreamToolCallIdleTimeoutMs,
 		stopCh:                       make(chan struct{}),
 		modelCircuit:                 NewModelCircuitTracker(""),
+		keyAutoWeight:                NewKeyAutoWeightTracker(),
 	}
 	// 启动后台熔断恢复任务
 	go m.cleanupCircuitBreakers()
@@ -327,6 +340,7 @@ func NewMetricsManagerWithPersistence(windowSize int, failureThreshold float64, 
 		store:                        store,
 		apiType:                      apiType,
 		modelCircuit:                 NewModelCircuitTracker(apiType),
+		keyAutoWeight:                NewKeyAutoWeightTracker(),
 	}
 
 	// 从持久化存储加载历史数据

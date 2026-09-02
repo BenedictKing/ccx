@@ -1385,6 +1385,10 @@ type Config struct {
 	// 熔断器运行时配置（可选，nil 使用环境变量或代码默认值）
 	CircuitBreaker *CircuitBreakerConfig `json:"circuitBreaker,omitempty"`
 
+	// 调度软增强配置（可选，nil 时各项默认启用）。热重载生效：
+	// promptAffinityFallback 匿名请求内容指纹亲和回退；keyAutoWeight per-key 滑窗自动权重。
+	Scheduler *SchedulerConfig `json:"scheduler,omitempty"`
+
 	// 渠道保活验证全局配置（可选，nil 使用默认值）
 	HealthCheck *GlobalHealthCheckConfig `json:"healthCheck,omitempty"`
 

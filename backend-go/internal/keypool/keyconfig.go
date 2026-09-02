@@ -54,12 +54,24 @@ func CandidatesForModel(upstream *config.UpstreamConfig, failedKeys map[string]b
 	return CandidatesForModelFiltered(upstream, failedKeys, model, nil)
 }
 
+// AutoWeightFactor 返回一把 Key 的软降权系数（0-1，1=不降权）。
+// channelUID 为渠道稳定标识，apiKey 为明文 Key；由调用方注入（metrics 层滑窗统计），
+// keypool 保持不依赖 metrics。nil 表示自动权重未启用。
+type AutoWeightFactor func(channelUID, apiKey string) float64
+
 // CandidatesForModelFiltered 在 CandidatesForModel 的基础上追加渠道-模型级运行时熔断过滤。
 //
 // 与 (Key,模型) 持久化限制（IsKeyModelDisabledNow）互补：后者针对上游明确声明的
 // model_not_found 等结构化信号，限制期 1 小时并写盘；circuitOpen 覆盖的是无法结构化
 // 识别的持续失败（如网关返回 HTML 403），纯内存、短周期、自动恢复。
 func CandidatesForModelFiltered(upstream *config.UpstreamConfig, failedKeys map[string]bool, model string, circuitOpen ModelCircuitChecker) []Candidate {
+	return CandidatesForModelWeighted(upstream, failedKeys, model, circuitOpen, nil)
+}
+
+// CandidatesForModelWeighted 在 CandidatesForModelFiltered 的基础上叠加 per-key
+// 自动权重：排序键从手控 weight 变为 手控weight × autoWeight系数。样本不足的 Key
+// 系数为 1，语义与旧排序完全一致；系数由 metrics 的 5 分钟滑窗成功率计算。
+func CandidatesForModelWeighted(upstream *config.UpstreamConfig, failedKeys map[string]bool, model string, circuitOpen ModelCircuitChecker, autoWeight AutoWeightFactor) []Candidate {
 	if upstream == nil || len(upstream.APIKeys) == 0 {
 		return nil
 	}
@@ -126,8 +138,20 @@ func CandidatesForModelFiltered(upstream *config.UpstreamConfig, failedKeys map[
 		})
 	}
 
-	// 按 weight 降序排序，weight 相同时保持原有顺序（稳定排序）
+	// 按有效权重降序排序，同权重时保持原有顺序（稳定排序）。
+	// 有效权重 = 手控 weight（0 视为 1）× 自动权重系数（默认 1.0）；
+	// 自动权重只做软降权，不改变手控权重的相对优先级语义。
 	if len(out) > 1 {
+		factorOf := func(cand Candidate) float64 {
+			if autoWeight == nil || upstream.ChannelUID == "" || cand.APIKey == "" {
+				return 1.0
+			}
+			factor := autoWeight(upstream.ChannelUID, cand.APIKey)
+			if factor <= 0 || factor > 1 || isNaN64(factor) {
+				return 1.0
+			}
+			return factor
+		}
 		sort.SliceStable(out, func(i, j int) bool {
 			wi, wj := out[i].Config.Weight, out[j].Config.Weight
 			if wi == 0 {
@@ -136,7 +160,7 @@ func CandidatesForModelFiltered(upstream *config.UpstreamConfig, failedKeys map[
 			if wj == 0 {
 				wj = 1
 			}
-			return wi > wj
+			return float64(wi)*factorOf(out[i]) > float64(wj)*factorOf(out[j])
 		})
 	}
 
@@ -301,4 +325,9 @@ func LimiterScopeFor(key string, cfg config.APIKeyConfig) string {
 func stableKeyID(key string) string {
 	sum := sha256.Sum256([]byte(key))
 	return hex.EncodeToString(sum[:])[:16]
+}
+
+// isNaN64 判断 float64 是否为 NaN（自动权重系数异常时按 1.0 处理）。
+func isNaN64(v float64) bool {
+	return v != v
 }
