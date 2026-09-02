@@ -1035,8 +1035,16 @@ test('Artificial Analysis slug resolver folds effort and non-reasoning variants 
   // non-reasoning + low-effort 组合后缀
   assert.deepEqual(resolveArtificialAnalysisSlug('claude-sonnet-4-6-non-reasoning-low-effort'),
     { canonical: 'claude-sonnet-4-6', effort: 'default', selectionBasis: 'non_reasoning' })
-  // 剥离后基名仍不在映射表 → null（继续计入 unmappedSlugs）
-  assert.equal(resolveArtificialAnalysisSlug('gpt-5-2-medium'), null)
+  // 新补的精确表项：flash 非 effort 后缀，不剥离，直接命中
+  assert.deepEqual(resolveArtificialAnalysisSlug('glm-5-3-flash'),
+    { canonical: 'glm-5.3-flash', effort: 'default', selectionBasis: 'composite_index' })
+  // deepseek 日期快照（-MMDD）归并到对应基模型
+  assert.deepEqual(resolveArtificialAnalysisSlug('deepseek-v4-flash-0420'),
+    { canonical: 'deepseek-v4-flash', effort: 'default', selectionBasis: 'composite_index' })
+  assert.deepEqual(resolveArtificialAnalysisSlug('deepseek-v4-pro-0424'),
+    { canonical: 'deepseek-v4-pro', effort: 'default', selectionBasis: 'composite_index' })
+  // 剥离后基名仍不在映射表 → null（继续计入 unmappedSlugs）；用虚构型号防止未来真被映射
+  assert.equal(resolveArtificialAnalysisSlug('gpt-5-9-medium'), null)
   assert.equal(resolveArtificialAnalysisSlug('totally-unknown-xhigh'), null)
 })
 

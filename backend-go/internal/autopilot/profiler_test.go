@@ -513,10 +513,12 @@ func TestDeriveQualityTier(t *testing.T) {
 			want:    QualityTierLow,
 		},
 		{
-			name:    "gpt-5.4-nano → normal",
+			name:    "gpt-5.4-nano → low",
 			family:  ModelFamilyOpenAI,
 			modelID: "gpt-5.4-nano",
-			want:    QualityTierNormal,
+			// 2026-09-02 补全 AA 映射：nano 获得 coding_index 56.1，折算 18.1 < normalMin，
+			// 从模型族回退 normal 翻入 low（nano 直测低分符合预期）
+			want: QualityTierLow,
 		},
 		{
 			name:    "glm-5.2（常规口径 22.2）→ low",
@@ -525,10 +527,12 @@ func TestDeriveQualityTier(t *testing.T) {
 			want:    QualityTierLow,
 		},
 		{
-			name:    "glm-5.1 → high",
+			name:    "glm-5.1 → low",
 			family:  ModelFamilyGLM,
 			modelID: "glm-5.1",
-			want:    QualityTierHigh,
+			// 2026-09-02 补全 AA 映射：glm-5.1 获得 coding_index 55.8，折算 17.4 < normalMin，
+			// 从模型族回退 high 翻入 low（5.1 已落后 5.2/5.3 两代，低分符合预期）
+			want: QualityTierLow,
 		},
 		{
 			name:    "mimo-v2.5-pro（校准 27.9 ≥ normalMin 27.0）→ normal",
