@@ -21,6 +21,7 @@ export const DEEPSWE_MODEL_MAP = {
   'claude-opus-4-8': 'claude-opus-4-8',
   'claude-opus-5': 'claude-opus-5',
   'claude-fable-5': 'claude-fable-5',
+  'claude-fable-5-1': 'claude-fable-5',
   'claude-sonnet-5': 'claude-sonnet-5',
   'claude-sonnet-4-6': 'claude-sonnet-4-6',
   'claude-sonnet-4-6-thinking': 'claude-sonnet-4-6',
@@ -69,6 +70,7 @@ export const BENCHLM_MODEL_MAP = {
   'gpt-5-4': 'gpt-5.4',
   'claude-fable': 'claude-fable-5',        // benchlm 使用简称
   'claude-fable-5': 'claude-fable-5',
+  'claude-fable-5-1': 'claude-fable-5',
   'claude-sonnet-5': 'claude-sonnet-5',
   'claude-sonnet-4-6': 'claude-sonnet-4-6',
   'glm-5-3': 'glm-5.3',

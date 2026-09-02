@@ -257,7 +257,7 @@
     },
     {
       "patterns": [
-        "(?:^|[-/])claude-fable-5(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)"
+        "(?:^|[-/])claude-fable-5(?:[.-]1)?(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{4,8})?(?=$|@)"
       ],
       "provider": "anthropic",
       "displayName": "Claude Fable 5",
@@ -2513,7 +2513,7 @@
   "benchmarkProfiles": [
     {
       "patterns": [
-        "(?:^|[-/])claude-fable-5(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)"
+        "(?:^|[-/])claude-fable-5(?:[.-]1)?(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{4,8})?(?=$|@)"
       ],
       "canonicalModel": "claude-fable-5",
       "benchmarkEvidence": [
