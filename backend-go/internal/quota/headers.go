@@ -213,6 +213,11 @@ func resetHeaderToMs(value string) int64 {
 		}
 	}
 
+	// 尝试 duration（如 OpenAI 的 "6m0s"），相对当前时间换算为绝对 reset 时间。
+	if d, err := time.ParseDuration(value); err == nil {
+		return time.Now().Add(d).UnixMilli()
+	}
+
 	return 0
 }
 
