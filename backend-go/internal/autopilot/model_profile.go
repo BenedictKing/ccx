@@ -547,8 +547,8 @@ func computeQualityTierBoundaries() (premiumMin, highMin, normalMin float64) {
 }
 
 // computeQualityTierBoundariesFromRegistry 从注册表直接 benchmark 证据的分数分布自动划分质量档边界。
-// 算法：分数排序后自顶向下分段寻找最大间隙（自然断层）——premium 边界取顶部区域
-// （>= 60% 最高分）最大间隙的中点，high / normal 依次在低于上一档边界的分段中
+// 算法：分数排序后自顶向下分段寻找最大间隙（自然断层）——premium 边界取顶部四分位
+// （按名次）区间内最大间隙的中点，high / normal 依次在低于上一档边界的分段中
 // 找最大间隙。calibrated 估计值不参与边界计算，避免污染分布形态。
 // 数据不足时回退默认边界。
 func computeQualityTierBoundariesFromRegistry() (premiumMin, highMin, normalMin float64) {
@@ -589,10 +589,14 @@ func computeQualityTierBoundariesFromRegistry() (premiumMin, highMin, normalMin 
 		return bestMid, found
 	}
 
-	// premium 断层在最高分下方 25% 量表区间内寻找。此前的 60% 锚假设分布
-	// 铺满量表；当前池分数集中在 40-77 时，60% 锚（≈46）把中段空隙包进
-	// "顶部区域"，premiumMin 一度塌到 49，让 53 分模型全部升入 premium。
-	if mid, ok := largestGapMid(scores, scores[len(scores)-1]*0.75); ok {
+	// premium 断层在顶部四分位（按名次）区间内寻找。区域锚定经历两代修正：
+	// 60% 分数锚假设分布铺满量表，分数集中时把中段空隙包进"顶部区域"，
+	// premiumMin 一度塌到 49；改为 75% 分数锚后又对榜首离群值敏感——单个
+	// 高分新模型入场抬高锚线，把定义 premium 档的最大自然断层挤出区域
+	// （8 分间隙因下端 56.2 < 76.1×0.75 被排除），premiumMin 从 60 跳到 73，
+	// premium 档塌缩成 singleton。按名次取顶部四分位与分数量纲解耦，
+	// 区域成员不受榜首分数波动影响，两个方向都稳定。
+	if mid, ok := largestGapMid(scores, scores[(3*len(scores))/4]); ok {
 		premiumMin = mid
 	}
 	if rest := filterBelow(scores, premiumMin); len(rest) >= 2 {
