@@ -3,7 +3,6 @@ package compression
 import (
 	"fmt"
 	"log"
-	"strings"
 
 	"github.com/BenedictKing/ccx/internal/utils"
 	"github.com/tidwall/gjson"
@@ -113,16 +112,18 @@ func CompressRequestBody(bodyBytes []byte, plan Plan) (Result, error) {
 				textContent = contentField.String()
 				isContentString = true
 			} else if contentField.IsArray() {
-				// content 是数组（带 type 的 text 块），提取所有 text
-				var sb strings.Builder
+				// 只有单个 text 块才压缩；多个 text 块可能有独立语义，保守跳过。
 				blocks := contentField.Array()
+				textBlockCount := 0
 				for _, b := range blocks {
 					if b.Get("type").String() == "text" {
-						sb.WriteString(b.Get("text").String())
-						sb.WriteByte('\n')
+						textBlockCount++
+						textContent = b.Get("text").String()
 					}
 				}
-				textContent = sb.String()
+				if textBlockCount != 1 {
+					continue
+				}
 			} else {
 				continue
 			}
@@ -131,9 +132,10 @@ func CompressRequestBody(bodyBytes []byte, plan Plan) (Result, error) {
 				continue
 			}
 
-			// 字节预算：超出只扫头部
+			// 超出扫描预算时跳过该结果，不能把截断副本写回原字段。
+			// 截断会让保真门只验证前缀，并可能静默丢失尾部数据。
 			if plan.MaxBytesPerResult > 0 && len(textContent) > plan.MaxBytesPerResult {
-				textContent = textContent[:plan.MaxBytesPerResult]
+				continue
 			}
 
 			// 估算原始 token
@@ -190,13 +192,24 @@ func CompressRequestBody(bodyBytes []byte, plan Plan) (Result, error) {
 					return Result{Body: bodyBytes, Compressed: false, FallbackReason: "sjson_error"}, nil
 				}
 			} else {
-				// 数组型 content：找第一个 text 类型块并改写其 text
-				// 简化处理：直接替换整个 content 为单个 text 块
-				newContent := []map[string]interface{}{
-					{"type": "text", "text": filteredText},
+				// 数组型 content 可能同时包含 text、image 和附件块。
+				// 仅在恰好一个 text 块时改写其 text 字段，保留其它块和字段。
+				blocks := contentField.Array()
+				textBlockIdx := -1
+				textBlockCount := 0
+				for idx, b := range blocks {
+					if b.Get("type").String() == "text" {
+						textBlockIdx = idx
+						textBlockCount++
+					}
 				}
+				if textBlockCount != 1 {
+					continue
+				}
+
+				path := fmt.Sprintf("messages.%d.content.%d.content.%d.text", msgIdx, blockIdx, textBlockIdx)
 				var err error
-				modifiedBody, err = sjson.SetBytes(modifiedBody, path, newContent)
+				modifiedBody, err = sjson.SetBytes(modifiedBody, path, filteredText)
 				if err != nil {
 					log.Printf("[Compression-Engine] sjson set failed, fail-open: %v", err)
 					return Result{Body: bodyBytes, Compressed: false, FallbackReason: "sjson_error"}, nil
