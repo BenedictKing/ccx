@@ -47,6 +47,7 @@ type KeyAutoWeightTracker struct {
 type keyAutoWeightWindow struct {
 	buckets            [autoWeightBucketCount]keyAutoWeightBucket
 	consecutiveFailure uint64
+	lastFailureAt      time.Time
 	lastEventAt        time.Time
 }
 
@@ -100,12 +101,19 @@ func (t *KeyAutoWeightTracker) record(channelUID, keyHash string, now time.Time,
 		return
 	}
 
+	// 连续失败只描述当前滑窗；窗口外的旧失败不能继续压低已恢复的 Key。
+	if window.consecutiveFailure > 0 && !window.lastFailureAt.IsZero() && now.Sub(window.lastFailureAt) >= AutoWeightWindow {
+		window.consecutiveFailure = 0
+	}
+
 	if success {
 		bucket.success++
 		window.consecutiveFailure = 0
+		window.lastFailureAt = time.Time{}
 	} else {
 		bucket.failure++
 		window.consecutiveFailure++
+		window.lastFailureAt = now
 	}
 	window.lastEventAt = now
 }
@@ -124,6 +132,10 @@ func (t *KeyAutoWeightTracker) WeightFactor(channelUID, keyHash string, now time
 	window := t.windows[autoWeightEntryKey(channelUID, keyHash)]
 	if window == nil {
 		return 1.0
+	}
+
+	if window.consecutiveFailure > 0 && !window.lastFailureAt.IsZero() && now.Sub(window.lastFailureAt) >= AutoWeightWindow {
+		window.consecutiveFailure = 0
 	}
 
 	var success, failure uint64
