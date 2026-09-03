@@ -22,6 +22,7 @@ export const providerConsoleLinks: Record<string, string> = {
   openrouter: 'https://openrouter.ai/keys',
   modelscope: 'https://modelscope.cn/my/myaccesstoken',
   xfyun: 'https://console.xfyun.cn/',
+  stepfun: 'https://platform.stepfun.com/interface-key',
   atomgit: 'https://ai.atomgit.com/dashboard/coding-plan'
 }
 

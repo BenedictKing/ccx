@@ -28,6 +28,7 @@ const PROVIDER_BRAND_NAMES: Record<string, string> = {
   openrouter: 'OpenRouter',
   modelscope: 'ModelScope 魔搭',
   originrouter: '极易云 OriginRouter',
+  stepfun: '阶跃星辰',
   atomgit: 'AtomGit'
 }
 

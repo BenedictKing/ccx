@@ -73,6 +73,7 @@ type ProviderCandidate struct {
 //   - Kimi:     https://api.moonshot.ai/anthropic（全球）/ https://api.moonshot.cn/anthropic（中国）
 //   - GLM:      https://open.bigmodel.cn/api/anthropic（Claude）与 /api/paas/v4（OpenAI）
 //   - 火山方舟: https://ark.cn-beijing.volces.com/api/plan（Agent Plan）与 /api/coding（Coding Plan）
+//   - 阶跃星辰: https://api.stepfun.com/step_plan（Step Plan 套餐，Chat 与 Messages 双协议）
 //
 // Claude route 的 baseURL 使用 Anthropic 兼容入口且不带 /v1（claude provider 会自动补 /v1/messages）。
 // Chat/Responses route 使用 OpenAI Chat 兼容入口，由 provider 自动补协议端点。
@@ -287,6 +288,33 @@ var builtinProviderTemplates = []ProviderTemplate{
 		"official_token_plan",
 		"first",
 		xfYunRoutes(),
+	),
+	newProviderTemplate(
+		"stepfun",
+		"阶跃星辰 Step Plan",
+		"阶跃星辰 Step Plan 套餐（按开放平台计费折算套餐额度；Claude 走 /step_plan，Chat/Codex 走 /step_plan/v1）",
+		"official_token_plan",
+		"first",
+		[]ProviderRoute{
+			{
+				ChannelKind: "messages",
+				ServiceType: "claude",
+				Description: "Step Plan Claude Messages Anthropic 兼容入口（baseURL 不带 /v1，自动补 /v1/messages）",
+				Candidates:  stepFunPlanClaudeCandidates(),
+			},
+			{
+				ChannelKind: "chat",
+				ServiceType: "openai",
+				Description: "Step Plan OpenAI Chat Completions 兼容入口",
+				Candidates:  stepFunPlanChatCandidates(),
+			},
+			{
+				ChannelKind: "responses",
+				ServiceType: "openai",
+				Description: "Responses 请求转换到 OpenAI Chat Completions",
+				Candidates:  stepFunPlanChatCandidates(),
+			},
+		},
 	),
 	newProviderTemplate(
 		"openrouter",
@@ -763,6 +791,22 @@ func mimoChatCandidates() []ProviderCandidate {
 		{BaseURL: "https://token-plan-cn.xiaomimimo.com/v1", PlanTag: "token_plan", Region: "cn", Priority: 0},
 		{BaseURL: "https://token-plan-sgp.xiaomimimo.com/v1", PlanTag: "token_plan", Region: "sgp", Priority: 1},
 		{BaseURL: "https://token-plan-ams.xiaomimimo.com/v1", PlanTag: "token_plan", Region: "ams", Priority: 2},
+	}
+}
+
+// stepFunPlanClaudeCandidates 阶跃星辰 Step Plan 的 Anthropic Messages 入口。
+// 官方 base_url 为 https://api.stepfun.com/step_plan（SDK 自动补 /v1/messages，不带 /v1）。
+func stepFunPlanClaudeCandidates() []ProviderCandidate {
+	return []ProviderCandidate{
+		{BaseURL: "https://api.stepfun.com/step_plan", PlanTag: "step_plan", Region: "cn", Priority: 0},
+	}
+}
+
+// stepFunPlanChatCandidates 阶跃星辰 Step Plan 的 OpenAI Chat Completions 入口。
+// 官方 base_url 为 https://api.stepfun.com/step_plan/v1。
+func stepFunPlanChatCandidates() []ProviderCandidate {
+	return []ProviderCandidate{
+		{BaseURL: "https://api.stepfun.com/step_plan/v1", PlanTag: "step_plan", Region: "cn", Priority: 0},
 	}
 }
 
