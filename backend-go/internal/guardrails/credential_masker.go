@@ -9,7 +9,8 @@ import (
 // CredentialMasker 实现凭据掩码 guardrail。
 // 永远 block=false，只掩不拦；命中已知密钥格式即替换为 [MASKED:type]。
 //
-// 扫描字节上限 maxScanBytes（默认 256KB），超出只扫头部。
+// 扫描完整 payload，避免大请求体尾部的凭据绕过脱敏。
+// maxScanBytes 保留为兼容配置字段，但不再截断安全扫描窗口。
 type CredentialMasker struct {
 	enabled      bool
 	priority     int
@@ -115,15 +116,11 @@ func (m *CredentialMasker) mask(data []byte, isResponse bool) (*Result, error) {
 	keyPrefixes := m.keyPrefixes
 	m.mu.RUnlock()
 
-	// 截断仅限制扫描窗口，输出必须保持原始长度：
-	// 掩码后的头部 + 未扫描的尾部原样拼接，绝不能把截断后的文本当作新 payload
-	// （否则大请求体的 JSON/UTF-8 会在截断点被切断，上游报 unexpected end of JSON input）
-	scanEnd := len(data)
+	// 凭据脱敏必须覆盖完整 payload；只扫描前缀会让尾部凭据原样进入日志。
+	// 保留 maxBytes 读取以兼容既有配置，但不将其作为安全边界。
+	_ = maxBytes
 	trimmed := false
-	if scanEnd > maxBytes {
-		scanEnd = maxBytes
-		trimmed = true
-	}
+	scanEnd := len(data)
 
 	text := string(data[:scanEnd])
 	detections := make(map[string]int)

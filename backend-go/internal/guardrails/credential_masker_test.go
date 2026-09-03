@@ -139,22 +139,21 @@ func TestCredentialMasker_NoFalsePositives(t *testing.T) {
 	}
 }
 
-func TestCredentialMasker_SizeLimit(t *testing.T) {
+// 凭据脱敏必须覆盖完整 payload：大请求体尾部的凭据同样要被掩码，
+// 只扫前缀会让尾部 key 原样进入日志（日志脱敏安全底线）。
+// maxScanBytes 保留为兼容字段，不再作为扫描边界。
+func TestCredentialMasker_ScansFullPayload(t *testing.T) {
 	m := NewCredentialMasker()
-	m.SetMaxScanBytes(1024) // 1KB 上限
+	m.SetMaxScanBytes(1024) // 兼容字段：不再限制扫描范围
 
-	// 构造 4KB 文本，尾部放 key
-	big := make([]byte, 4*1024)
-	for i := range big {
-		big[i] = 'a'
-	}
-	// 在开头放一个 key（应该被扫到）
-	input := append([]byte(`secret: sk-abcdefghijklmnopqrstuvwxyz1234567890`), big...)
-	// 在尾部放另一个 key（应该在扫描范围外）
-	tailKey := "trailing: sk-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
-	input = append(input, []byte(tailKey)...)
+	// 构造 4KB 文本，尾部放 key。
+	// 填充用空格（不在密钥字符集内），避免被前缀指纹吞并成单个超长匹配。
+	big := strings.Repeat(" ", 4*1024)
+	headKey := "sk-abcdefghijklmnopqrstuvwxyz1234567890"
+	tailKey := "sk-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+	input := "secret: " + headKey + big + "trailing: " + tailKey
 
-	result, err := m.PreCall(input, nil)
+	result, err := m.PreCall([]byte(input), nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -162,22 +161,27 @@ func TestCredentialMasker_SizeLimit(t *testing.T) {
 		t.Fatal("expected non-nil result")
 	}
 	if !result.Modified {
-		t.Error("expected Modified=true (head key should be masked)")
+		t.Error("expected Modified=true")
 	}
-	// 截断只限扫描窗口：输出必须保持完整，头部掩码 + 尾部原样拼接，
-	// 绝不能把截断后的文本作为新 payload（会把大请求体的 JSON/UTF-8 切断）
-	if len(result.Payload) <= 1024+100 {
-		t.Errorf("result payload truncated to %d bytes, tail must be preserved", len(result.Payload))
-	}
-	if !strings.HasSuffix(string(result.Payload), tailKey) {
-		t.Error("unscanned tail must be preserved verbatim")
-	}
-	if strings.Contains(string(result.Payload), "sk-abcdefghijklmnopqrstuvwxyz1234567890") {
+
+	payload := string(result.Payload)
+	// 头部与尾部 key 都必须被掩码（尾部在旧截断窗口之外）
+	if strings.Contains(payload, headKey) {
 		t.Error("head key should be masked")
 	}
-	// 验证 trimmed 标记（仅表示尾部未扫描，而非输出被截断）
-	if trimmed, ok := result.Meta["trimmed"].(bool); !ok || !trimmed {
-		t.Error("expected trimmed=true in meta")
+	if strings.Contains(payload, tailKey) {
+		t.Error("tail key should be masked（全量扫描后尾部凭据不得绕过脱敏）")
+	}
+	if !strings.Contains(payload, "[MASKED:") {
+		t.Error("expected masked placeholder in payload")
+	}
+	// 非密钥内容原样保留
+	if !strings.Contains(payload, "secret: ") || !strings.Contains(payload, "trailing: ") {
+		t.Error("non-credential context must be preserved")
+	}
+	// 全量扫描不应标记 trimmed
+	if trimmed, ok := result.Meta["trimmed"].(bool); !ok || trimmed {
+		t.Error("expected trimmed=false in meta（无扫描窗口截断）")
 	}
 }
 
