@@ -300,6 +300,8 @@ func TestResolveUpstreamCapability_NewAugust2026Models(t *testing.T) {
 		{model: "glm-5.3-flash", provider: "zai", context: 1000000, maxOutput: 131072, vision: true, toolCalls: true},
 		{model: "zai/glm-5.3-flash", provider: "zai", context: 1000000, maxOutput: 131072, vision: true, toolCalls: true},
 		{model: "GLM-5.3-Flash[1m]", provider: "zai", context: 1000000, maxOutput: 131072, vision: true, toolCalls: true},
+		{model: "gemini-3.8-flash", provider: "google", context: 1048576, maxOutput: 65536, vision: true, toolCalls: true, inputPrice: 0.75, outputPrice: 3.75},
+		{model: "google/gemini-3.8-flash", provider: "google", context: 1048576, maxOutput: 65536, vision: true, toolCalls: true, inputPrice: 0.75, outputPrice: 3.75},
 		{model: "gemini-3.7-flash", provider: "google", context: 1048576, maxOutput: 65536, vision: true, toolCalls: true, inputPrice: 0.75, outputPrice: 3.75},
 		{model: "gemini-3.5-flash-lite", provider: "google", context: 1048576, maxOutput: 65536, vision: true, toolCalls: true, inputPrice: 0.3, outputPrice: 2.5},
 		{model: "google/gemini-3.5-flash-lite", provider: "google", context: 1048576, maxOutput: 65536, vision: true, toolCalls: true, inputPrice: 0.3, outputPrice: 2.5},
@@ -316,6 +318,8 @@ func TestResolveUpstreamCapability_NewAugust2026Models(t *testing.T) {
 		{model: "grok-4-20-beta", provider: "xai", context: 1000000, maxOutput: 0, vision: true, toolCalls: true, inputPrice: 1.25, outputPrice: 2.5},
 		{model: "muse-spark-1.1", provider: "meta", context: 1048576, maxOutput: 131072, vision: true, toolCalls: true, inputPrice: 1.25, outputPrice: 4.25},
 		{model: "muse-spark-1.2", provider: "meta", context: 1048576, maxOutput: 131072, vision: true, toolCalls: true, inputPrice: 1.25, outputPrice: 4.25},
+		{model: "muse-spark-1.3", provider: "meta", context: 1048576, maxOutput: 131072, vision: true, toolCalls: true, inputPrice: 1.25, outputPrice: 4.25},
+		{model: "meta/muse-spark-1.3", provider: "meta", context: 1048576, maxOutput: 131072, vision: true, toolCalls: true, inputPrice: 1.25, outputPrice: 4.25},
 		// 腾讯混元 Hy4 Preview（2026-08-28 发布，770B/49B 开源 MoE）：1M 上下文=960K 输入+64K 输出；
 		// 官方美元价 $0.834/$2.501/$0.042 每百万（腾讯云国际站新加坡区与 OpenRouter 一致）
 		{model: "hy4-preview", provider: "tencent", context: 1048576, maxOutput: 64000, toolCalls: true, inputPrice: 0.834, outputPrice: 2.501},

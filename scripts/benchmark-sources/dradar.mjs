@@ -44,6 +44,8 @@ export const DRADAR_MODEL_MAP = {
   'kimi-k3': 'kimi-k3',
   'gemini-3-7-flash': 'gemini-3.7-flash',
   'gemini-3.7-flash': 'gemini-3.7-flash',
+  'gemini-3-8-flash': 'gemini-3.8-flash',
+  'gemini-3.8-flash': 'gemini-3.8-flash',
   'gemini-3-5-flash': 'gemini-3.5-flash',
   'gemini-3-1-pro': 'gemini-3.1-pro',
   'gemini-3-flash': 'gemini-3-flash',

@@ -135,6 +135,7 @@ export const LITELLM_MODEL_MAP = {
   'xai/grok-4.6': 'grok-4.6',
   'meta/muse-spark-1.1': 'muse-spark-1.1',
   'meta/muse-spark-1.2': 'muse-spark-1.2',
+  'meta/muse-spark-1.3': 'muse-spark-1.3',
   'minimax/MiniMax-M3': 'minimax-m3',
   'openrouter/xiaomi/mimo-v2.5': 'mimo-v2.5',
   'openrouter/xiaomi/mimo-v2.5-pro': 'mimo-v2.5-pro',
@@ -144,6 +145,7 @@ export const LITELLM_MODEL_MAP = {
   'gemini-3.5-flash-lite': 'gemini-3.5-flash-lite',
   'gemini-3.7-flash': 'gemini-3.7-flash',
   'gemini-3.6-flash': 'gemini-3.6-flash',
+  'gemini-3.8-flash': 'gemini-3.8-flash',
   'gemini-3.1-pro-preview': 'gemini-3.1-pro',
   'gemini-3-flash-preview': 'gemini-3-flash',
 }

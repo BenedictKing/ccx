@@ -74,6 +74,7 @@ export const ARTIFICIAL_ANALYSIS_MODEL_MAP = {
   'gemini-3-5-flash-lite': 'gemini-3.5-flash-lite',
   'gemini-3-7-flash': 'gemini-3.7-flash',
   'gemini-3-6-flash': 'gemini-3.6-flash',
+  'gemini-3-8-flash': 'gemini-3.8-flash',
   'grok-4-5': 'grok-4.5',
   'grok-4-6': 'grok-4.6',
   // AA v2 GA slug（2026-04-07）；-non-reasoning 变体经 splitEffortSuffix 折进同一 canonical，
@@ -103,6 +104,7 @@ export const ARTIFICIAL_ANALYSIS_MODEL_MAP = {
   'mimo-v2-5-pro': 'mimo-v2.5-pro',
   'muse-spark-1-1': 'muse-spark-1.1',
   'muse-spark-1-2': 'muse-spark-1.2',
+  'muse-spark-1-3': 'muse-spark-1.3',
 }
 
 // 点号 canonical（claude-haiku-4.5 / gpt-5.5 / glm-5.2 …）的 AA slug 一律用连字符。
