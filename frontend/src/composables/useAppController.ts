@@ -167,6 +167,10 @@ export function useAppController() {
       }
       dialogStore.closeAddChannelModal()
       dialogStore.closeEditChannelModal()
+      // 短暂延迟后刷新，避免后端配置保存竞态：
+      // AddUpstream API 返回后，RebuildLogicalChannels 已执行，但配置可能还在异步写入/发布事件中。
+      // 立即刷新可能拿到过渡态数据（LogicalChannelUID 未完全同步），导致同一渠道短暂显示为两个独立卡片。
+      await new Promise(resolve => setTimeout(resolve, 300))
       await refreshChannels()
 
       return result
@@ -198,6 +202,8 @@ export function useAppController() {
   const handleAutoAddedChannel = async (_channelId: number) => {
     dialogStore.closeAddChannelModal()
     showToast(t('store.channel.added'), 'success')
+    // 短暂延迟后刷新，与 saveChannel 保持一致的竞态避免策略
+    await new Promise(resolve => setTimeout(resolve, 300))
     await refreshChannels()
   }
 
