@@ -219,7 +219,55 @@ func RebuildLogicalChannels(cfg *Config) {
 	// 这里以 accountUid 为身份真相：把同账号的物理渠道重新归并到一张 canonical 卡，
 	// 并强制重指物理渠道的 LogicalChannelUID，孤儿卡在物化时随之消失。
 	convergeLogicalByAccount(cfg, all, logicals)
-	// 5) 剩余按归组键合并
+	// 5) 剩余按归组键合并。
+	// 空 UID（新增）或被移出原 logical 的物理渠道，先尝试并入归组键匹配的存量卡：
+	// "向已有站点/账号追加协议路由"必须落入既有逻辑卡，否则每次增量添加都会
+	// 生成全新 UID、与存量卡永久分裂（后续 rebuild 因存量卡 UID 匹配而 continue，
+	// 分裂无法自愈；convergeLogicalByAccount 也只处理已持有 UID 的渠道）。
+	// 仅无匹配存量卡时才走新建组路径，与冷启动重建语义保持一致。
+	absorbIntoExistingLogical := func(e physicalChannelEntry) bool {
+		ek := logicalChannelGroupKeyFrom(e.channel)
+		for _, l := range logicals {
+			if len(l.Protocols) == 0 {
+				continue
+			}
+			lk := logicalChannelGroupKeyFromPhysical(l)
+			// 裸手工渠道（无 accountUID / 无 provider）放宽账号维度并入同站点存量卡：
+			// 加载期迁移会给历史手工渠道回填随机 accountUID 并归类 generic 托管，
+			// 该随机 UID 不承载账号身份；若因此拒绝并入，会与冷启动"手工同站点合并"
+			// 语义冲突，回到增量永久分裂。带真实 accountUID 的新渠道不放宽，
+			// 不同账号/托管身份依旧互斥（对齐 shouldGroupLogical 规则 1/2）。
+			relaxedManualSite := !ek.hasAccount && !ek.hasProvider && !lk.hasProvider &&
+				lk.siteIdent != "" && lk.siteIdent == ek.siteIdent
+			absorbable := shouldGroupLogical(lk, ek) || relaxedManualSite
+			if !absorbable {
+				continue
+			}
+			appendProtocolToLogical(l, e.slice, e.channel)
+			for _, u := range e.channel.GetAllBaseURLs() {
+				u = strings.TrimSpace(u)
+				if u == "" {
+					continue
+				}
+				found := false
+				for _, existing := range l.BaseURLs {
+					if existing == u {
+						found = true
+						break
+					}
+				}
+				if !found {
+					l.BaseURLs = append(l.BaseURLs, u)
+				}
+			}
+			if up := findChannelInSlices(cfg, e.slice, e.channel.ChannelUID); up != nil {
+				up.LogicalChannelUID = l.LogicalChannelUID
+				up.LogicalName = l.Name
+			}
+			return true
+		}
+		return false
+	}
 	groups := make(map[logicalChannelGroupKey][]physicalChannelEntry)
 	groupOrder := make([]logicalChannelGroupKey, 0)
 	for _, e := range all {
@@ -236,6 +284,9 @@ func RebuildLogicalChannels(cfg *Config) {
 				}
 				removeProtocolFromLogical(l, e.slice)
 			}
+		}
+		if absorbIntoExistingLogical(e) {
+			continue
 		}
 		k := logicalChannelGroupKeyFrom(e.channel)
 		if _, ok := groups[k]; !ok {
