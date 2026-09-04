@@ -2500,7 +2500,7 @@ long_context: [medium, high]     image_generation/embedding: 不展开
 
 #### 5.8.4 联合决策的现状实现（model + effort 原子化）
 
-> 状态说明（2026-07-26）：本节描述的联合决策链路已实现并接入真实请求路径（关联计划 [2026-07-26-autopilot-model-effort-joint-routing.md](../superpowers/plans/2026-07-26-autopilot-model-effort-joint-routing.md) 的 Task 1~7）。**渠道级手工 `modelMapping` / `reasoningMapping` 表目前仍然存在且仍然生效**，退役是该计划的 Task 8，尚未执行；手工表当前的优先级关系见下文。
+> 状态说明（2026-07-26）：本节描述的联合决策链路已实现并接入真实请求路径（关联计划 `2026-07-26-autopilot-model-effort-joint-routing.md` 的 Task 1~7）。**渠道级手工 `modelMapping` / `reasoningMapping` 表目前仍然存在且仍然生效**，退役是该计划的 Task 8，尚未执行；手工表当前的优先级关系见下文。
 
 **决策对象。** 自动路由的返回值不再是裸模型名，而是 `autopilot.ResolvedRouteTarget`（`backend-go/internal/autopilot/route_target.go`）：
 

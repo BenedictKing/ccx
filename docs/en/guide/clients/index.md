@@ -9,6 +9,7 @@ CCX client setup docs are organized by client. Choose the client you use, then f
 | Client | Recommended endpoint | CCX Base URL | Use case |
 |--------|----------------------|--------------|----------|
 | [Claude Code](./claude-code) | Messages | `http://localhost:3000` | Coding assistant using Claude Messages protocol |
+| [Claude Desktop](./claude-desktop) | Messages | `https://127.0.0.1:8443` (HTTPS wrapper required) | Desktop client using any upstream model through the gateway, without an official sign-in |
 | [Codex CLI / Codex App](./codex) | Responses | `http://localhost:3000/v1` | Codex tools using OpenAI Responses protocol |
 | [OpenCode](./opencode) | Chat | `http://localhost:3000/v1` | Coding tools using OpenAI Chat-compatible protocol |
 
@@ -23,6 +24,7 @@ CCX client setup docs are organized by client. Choose the client you use, then f
 
 ```text
 Claude Code           ->  /v1/messages          ->  Messages channels
+Claude Desktop        ->  /v1/messages          ->  Messages channels (via an HTTPS wrapper)
 Codex CLI / App       ->  /v1/responses         ->  Responses channels
 OpenCode              ->  /v1/chat/completions  ->  Chat channels
 ```
