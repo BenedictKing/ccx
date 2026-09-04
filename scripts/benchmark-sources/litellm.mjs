@@ -101,6 +101,9 @@ export const LITELLM_MODEL_MAP = {
   'claude-fable-5': 'claude-fable-5',
   'claude-fable-5-1': 'claude-fable-5-1',
   // GPT（pattern 用点号）
+  'gpt-6-astra': 'gpt-6-astra',
+  'gpt-6': 'gpt-6-astra',
+  'astra': 'gpt-6-astra',
   'gpt-5.6-sol': 'gpt-5.6-sol',
   'gpt-5.6-terra': 'gpt-5.6-terra',
   'gpt-5.6-luna': 'gpt-5.6-luna',

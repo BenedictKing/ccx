@@ -35,6 +35,9 @@ const FETCH_HEADERS = {
  * gpt-5.5、glm-5.2）只需收录基名一条，无需重复维护点号/连字符两个变体。
  */
 export const ARTIFICIAL_ANALYSIS_MODEL_MAP = {
+  'gpt-6-astra': 'gpt-6-astra',
+  'gpt-6': 'gpt-6-astra',
+  'astra': 'gpt-6-astra',
   'claude-opus-4-8': 'claude-opus-4-8',
   'claude-opus-4-7': 'claude-opus-4-7',
   'claude-opus-4-6': 'claude-opus-4-6',

@@ -13,6 +13,9 @@
  * deepswe 模型名 -> CCX canonicalModel 映射
  */
 export const DEEPSWE_MODEL_MAP = {
+  'gpt-6-astra': 'gpt-6-astra',
+  'gpt-6': 'gpt-6-astra',
+  'astra': 'gpt-6-astra',
   'gpt-5-6-sol': 'gpt-5.6-sol',
   'gpt-5-6-terra': 'gpt-5.6-terra',
   'gpt-5-6-luna': 'gpt-5.6-luna',
@@ -59,6 +62,9 @@ export const DEEPSWE_MODEL_MAP = {
  * 注意：benchlm.ai 可能使用简称，如 'claude-fable' 而不是 'claude-fable-5'
  */
 export const BENCHLM_MODEL_MAP = {
+  'gpt-6-astra': 'gpt-6-astra',
+  'gpt-6': 'gpt-6-astra',
+  'astra': 'gpt-6-astra',
   'claude-opus-4-8': 'claude-opus-4-8',
   'claude-opus-4-7': 'claude-opus-4-7',
   'claude-opus-4-7-adaptive': 'claude-opus-4-7',

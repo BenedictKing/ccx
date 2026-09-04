@@ -228,7 +228,7 @@ test('new-model detection rejects date snapshots, parameter sizes and legacy nam
       'qwen3-32b',             // 参数量段(32b) 落掉后与 mapped qwen3 等版本 → 忽略
       'Qwen3-235B-A22B',       // 参数量段落掉后等版本 → 忽略
       'Qwen3.5-397B-A22B',     // 参数量段落掉后 [3,5] > [3] → 提示
-      'gpt-7',                 // 主版本跳两代 → 忽略（安全网只覆盖同代与下一代）
+      'gpt-8',                 // 主版本跳两代 → 忽略（安全网只覆盖同代与下一代）
       'grok-4-7',              // 同代更高版本 → 提示
       'grok-4-20-beta',        // 十进制 4.20 = 4.2 < 4.6 → 忽略（营销版本非整数）
     ],

@@ -666,6 +666,45 @@
     },
     {
       "patterns": [
+        "(?:^|[-/])gpt-6-astra(?=$|@)",
+        "(?:^|[-/])gpt-6(?=$|@)",
+        "(?:^|[-/])astra(?=$|@)"
+      ],
+      "provider": "openai",
+      "displayName": "GPT-6 Astra",
+      "description": "OpenAI frontier reasoning model with SOTA capabilities across computer use, coding, cybersecurity, and science. Context window 1.05M tokens, max output 128K tokens.",
+      "contextWindowTokens": 1050000,
+      "maxOutputTokens": 128000,
+      "reasoningEfforts": [
+        "none",
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "capabilities": {
+        "vision": true,
+        "toolCalls": true,
+        "jsonMode": true,
+        "reasoning": true,
+        "parallelFunctionCalling": true,
+        "webSearch": true
+      },
+      "sources": [
+        "https://openai.com/index/gpt-6-astra/"
+      ],
+      "pricing": {
+        "unit": "per_1m_tokens_usd",
+        "currency": "USD",
+        "inputCacheMissPrice": 10,
+        "outputPrice": 50,
+        "inputCacheHitPrice": 1
+      }
+    },
+    {
+      "patterns": [
         "(?:^|[-/])gpt-5\\.6(?=$|@)",
         "(?:^|[-/])gpt-5\\.6-sol(?=$|@)",
         "(?:^|[-/])gpt-5\\.6-terra(?=$|@)",

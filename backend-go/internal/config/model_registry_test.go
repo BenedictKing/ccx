@@ -45,6 +45,35 @@ func TestResolveAgentModelProfile_GPT56BedrockBuiltins(t *testing.T) {
 	}
 }
 
+func TestResolveAgentModelProfile_GPT6AstraBuiltins(t *testing.T) {
+	for _, model := range []string{"gpt-6-astra", "gpt-6", "astra"} {
+		t.Run(model, func(t *testing.T) {
+			profile := ResolveAgentModelProfile(model, nil)
+			if !profile.Known {
+				t.Fatalf("expected built-in %s profile", model)
+			}
+			if profile.Profile.DisplayName != "GPT-6 Astra" {
+				t.Fatalf("DisplayName = %q, want GPT-6 Astra", profile.Profile.DisplayName)
+			}
+			if profile.Profile.ContextWindowTokens != 272000 {
+				t.Fatalf("ContextWindowTokens = %d, want conservative routing minimum 272000", profile.Profile.ContextWindowTokens)
+			}
+			if profile.Profile.MaxContextWindowTokens != 1050000 {
+				t.Fatalf("MaxContextWindowTokens = %d, want 1050000", profile.Profile.MaxContextWindowTokens)
+			}
+			if profile.Profile.MaxOutputTokens != 128000 {
+				t.Fatalf("MaxOutputTokens = %d, want 128000", profile.Profile.MaxOutputTokens)
+			}
+			if !containsString(profile.Profile.ReasoningEfforts, "max") {
+				t.Fatalf("ReasoningEfforts = %v, want max", profile.Profile.ReasoningEfforts)
+			}
+			if !containsString(profile.Profile.ReasoningEfforts, "none") {
+				t.Fatalf("ReasoningEfforts = %v, want none", profile.Profile.ReasoningEfforts)
+			}
+		})
+	}
+}
+
 func TestResolveAgentModelProfile_GPT55UsesLiteLLMMaximumContext(t *testing.T) {
 	profile := ResolveAgentModelProfile("gpt-5.5", nil)
 	if !profile.Known {

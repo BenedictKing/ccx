@@ -244,6 +244,18 @@ func BuiltinAgentModelProfiles() map[string]AgentModelProfile {
 			TruncationLimit:        10000,
 			ReasoningEfforts:       []string{"low", "medium", "high", "xhigh", "max"},
 		},
+		"gpt-6-astra": builtinGPTAgentModelProfile(
+			"GPT-6 Astra", 272000, 1050000, 128000, "tokens",
+			[]string{"none", "minimal", "low", "medium", "high", "xhigh", "max"}, true,
+		),
+		"gpt-6": builtinGPTAgentModelProfile(
+			"GPT-6 Astra", 272000, 1050000, 128000, "tokens",
+			[]string{"none", "minimal", "low", "medium", "high", "xhigh", "max"}, true,
+		),
+		"astra": builtinGPTAgentModelProfile(
+			"GPT-6 Astra", 272000, 1050000, 128000, "tokens",
+			[]string{"none", "minimal", "low", "medium", "high", "xhigh", "max"}, true,
+		),
 		"claude-haiku-4-5*": {
 			DisplayName:         "Claude Haiku 4.5",
 			ContextWindowTokens: 200000,
