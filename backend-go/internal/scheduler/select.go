@@ -252,6 +252,8 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 		// 执行 kind/模型必须来自候选自身的物理路由，否则联邦 sibling 会被误记为请求协议。
 		executionKind := kind
 		executionModel := ""
+		executionKeyIdentity := ""
+		executionEffort := ""
 		if upstream != nil {
 			for _, ch := range activeChannels {
 				route := normalizedChannelRoute(ch, kind)
@@ -263,12 +265,16 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 				}
 				executionKind = ChannelKind(route.Kind)
 				executionModel = ch.ActualModel
+				executionKeyIdentity = ch.PinnedKeyIdentity
+				executionEffort = ch.PinnedEffort
 				break
 			}
 		}
 		result := s.selectionResultWithRecord(executionKind, upstream, channelIndex, reason, !opts.DryRun)
 		result.CandidateCount = candidateCount
 		result.ExecutionModel = executionModel
+		result.ExecutionKeyIdentity = executionKeyIdentity
+		result.ExecutionEffort = executionEffort
 		if !opts.DryRun && candidateSelectionObserver != nil {
 			actualChannelUID := fmt.Sprintf("ch_%d", channelIndex)
 			if upstream != nil && upstream.ChannelUID != "" {
@@ -1405,6 +1411,13 @@ type ChannelInfo struct {
 	ActualModel       string          `json:"actualModel,omitempty"`
 	ProtocolFidelity  string          `json:"protocolFidelity,omitempty"`
 	ConversionPenalty float64         `json:"conversionPenalty,omitempty"`
+
+	// 五元组调度 pin（autopilot 路径回填，执行层消费；零值 = 未锁定，走原行为）：
+	// PinnedKeyIdentity 是选中候选行的 key 身份（KeyUID 或 "kh_"+hash），
+	// 执行层把它对应明文 key 提到首次尝试位，其余 key 仍按原顺序兜底。
+	PinnedKeyIdentity string `json:"pinnedKeyIdentity,omitempty"`
+	// PinnedEffort 是选中候选行的思考档位（autopilot 已决档；空 = passthrough）。
+	PinnedEffort string `json:"pinnedEffort,omitempty"`
 }
 
 // getActiveChannels 获取活跃渠道列表（按优先级排序）

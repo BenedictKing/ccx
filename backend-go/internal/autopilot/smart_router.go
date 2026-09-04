@@ -627,6 +627,23 @@ func toStringSet(items []string) map[string]bool {
 }
 
 // executeFilter 执行 SmartRouter 过滤逻辑。
+// applyCandidatePin 把五元组候选行的执行 pin 写入回填的 ChannelInfo：
+// key 身份 + 思考档位。意图固定档（IntentEffortPin，意图匹配在回填前完成）
+// 覆盖行档——用户显式意图优先于自动决策。零值 pin 表示不锁定，执行层走原行为。
+func applyCandidatePin(ch *scheduler.ChannelInfo, e channelScoreEntry, profile *RequestProfile) {
+	if ch == nil {
+		return
+	}
+	ch.PinnedKeyIdentity = e.KeyIdentity
+	if profile != nil && profile.IntentEffortPin != nil && profile.IntentEffortPin.Set {
+		if pin := NormalizeEffortLevel(string(profile.IntentEffortPin.Effort)); pin != "" {
+			ch.PinnedEffort = string(pin)
+			return
+		}
+	}
+	ch.PinnedEffort = string(e.Effort)
+}
+
 func (r *SmartRouter) executeFilter(
 	channels []scheduler.ChannelInfo,
 	upstreamFor func(scheduler.ChannelInfo) *config.UpstreamConfig,
@@ -1017,6 +1034,7 @@ func (r *SmartRouter) executeFilter(
 		if !seenRouteKeys[e.Route.Key()] {
 			for _, ch := range channels {
 				if federatedRoute(ch, profile.ChannelKind).Key() == e.Route.Key() {
+					applyCandidatePin(&ch, e, profile)
 					result = append(result, ch)
 					seenRouteKeys[e.Route.Key()] = true
 					break
@@ -1055,6 +1073,7 @@ func (r *SmartRouter) executeFilter(
 				if !seenFilteredRouteKeys[se.entry.Route.Key()] {
 					for _, ch := range channels {
 						if federatedRoute(ch, profile.ChannelKind).Key() == se.entry.Route.Key() {
+							applyCandidatePin(&ch, se.entry, profile)
 							filteredResult = append(filteredResult, ch)
 							seenFilteredRouteKeys[se.entry.Route.Key()] = true
 							break

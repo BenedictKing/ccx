@@ -64,6 +64,24 @@ func keyIdentityFor(cfg config.APIKeyConfig, apiKey string) string {
 	return "kh_" + KeyHashFromAPIKey(apiKey)
 }
 
+// ResolvePinnedAPIKey 把调度 pin 的 key 身份反查为渠道内明文 key。
+// 未匹配（key 已被移除/轮换）返回空，调用方按无 pin 处理（fail-open）。
+func ResolvePinnedAPIKey(upstream *config.UpstreamConfig, keyIdentity string) string {
+	if upstream == nil || keyIdentity == "" {
+		return ""
+	}
+	uid := strings.TrimSpace(keyIdentity)
+	for _, cfg := range config.NormalizeAPIKeyConfigsForView(*upstream) {
+		if cfg.Key == "" {
+			continue
+		}
+		if strings.TrimSpace(cfg.KeyUID) == uid || "kh_"+KeyHashFromAPIKey(cfg.Key) == uid {
+			return cfg.Key
+		}
+	}
+	return ""
+}
+
 // channelKeyCandidates 全量枚举渠道在该模型上的可用 key。
 // 复用 keypool 的运行期负信号过滤（key 禁用 / (key,模型) 限制 / 分组禁用 /
 // 渠道-Key-模型熔断 / 倍率闸门），顺序为权重降序。

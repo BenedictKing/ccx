@@ -69,9 +69,14 @@ type tryUpstreamOptions struct {
 	endpointPolicy    *autopilot.EndpointAttemptPolicy // endpoint 级策略（nil 时不注入）
 	executionRoute    scheduler.ChannelRouteRef
 	executionModel    string // 联邦 sibling 的实际执行模型（为空时沿用请求模型）
+	// 五元组调度 pin：选中候选行的 key 身份与思考档位（锁定首选，执行层兜底）。
+	executionKeyIdentity string
+	executionEffort      string
 }
 
 // WithSelectionTrace 将调度器的选择摘要写入后续渠道请求日志。
+// 同时同源透传五元组执行 pin（选中 key 身份与 effort 档；零值 = 不锁定），
+// 六类 handler 经此统一接入；显式 WithExecutionPin 优先（条件赋值不覆盖）。
 func WithSelectionTrace(selection *scheduler.SelectionResult) TryUpstreamOption {
 	return func(opts *tryUpstreamOptions) {
 		if opts == nil || selection == nil {
@@ -81,6 +86,12 @@ func WithSelectionTrace(selection *scheduler.SelectionResult) TryUpstreamOption 
 			selection.Reason,
 			scheduler.FormatSelectionTraceSummary(selection.Trace, 4),
 		))
+		if opts.executionKeyIdentity == "" {
+			opts.executionKeyIdentity = selection.ExecutionKeyIdentity
+		}
+		if opts.executionEffort == "" {
+			opts.executionEffort = selection.ExecutionEffort
+		}
 	}
 }
 
@@ -116,6 +127,20 @@ func WithExecutionModel(model string) TryUpstreamOption {
 			return
 		}
 		opts.executionModel = model
+	}
+}
+
+// WithExecutionPin 传入 autopilot 五元组候选行的执行 pin：选中 key 身份与思考档位。
+// key 身份对应的明文 key 被提到首次尝试位（失败后仍按原顺序轮转其余 key 兜底）；
+// effort 档在 endpoint binding 解析未决档位时作为首选填充。
+// 空值等同未设置（fail-open，走原行为）。
+func WithExecutionPin(keyIdentity, effort string) TryUpstreamOption {
+	return func(opts *tryUpstreamOptions) {
+		if opts == nil {
+			return
+		}
+		opts.executionKeyIdentity = keyIdentity
+		opts.executionEffort = effort
 	}
 }
 
@@ -522,6 +547,9 @@ func TryUpstreamWithAllKeys(
 		model = tryOpts.executionModel
 	}
 
+	// 五元组调度 pin 的明文 key：身份反查一次（key 已被移除/轮换时为空 = 不锁定）。
+	pinnedAPIKey := autopilot.ResolvePinnedAPIKey(upstream, tryOpts.executionKeyIdentity)
+
 	// 先应用用户配置的模型映射。endpoint 级自动映射会在选定 Key 后再覆盖本次尝试的模型。
 	redirectedModel := config.RedirectModel(model, upstream)
 	capabilityRequestModel := model
@@ -634,7 +662,7 @@ func TryUpstreamWithAllKeys(
 				// 步骤 5+6: EndpointAttemptPolicy FilterKeys + SortKeys
 				// selectAttemptAPIKeyFiltered 在 keypool.CandidatesForModel 之后应用 policy 过滤/排序。
 				// nil policy 时回退到 selectAttemptAPIKey（行为不变）。
-				selection, apiKey, err = selectAttemptAPIKeyFiltered(channelScheduler, executionKind, executionIndex, upstream, currentBaseURL, failedKeys, failedQuotaGroups, redirectedModel, nextAPIKey, endpointPolicy, apiType, c, modelCircuit, keyAutoWeight)
+				selection, apiKey, err = selectAttemptAPIKeyFiltered(channelScheduler, executionKind, executionIndex, upstream, currentBaseURL, failedKeys, failedQuotaGroups, redirectedModel, nextAPIKey, endpointPolicy, apiType, c, modelCircuit, keyAutoWeight, pinnedAPIKey)
 				if err != nil {
 					lastError = err
 					break // 当前 BaseURL 没有可用 Key，尝试下一个 BaseURL
@@ -739,6 +767,15 @@ func TryUpstreamWithAllKeys(
 					}
 				}
 				if target != nil && target.Model != "" {
+					// 五元组调度 pin：binding 解析未决档（passthrough）时用调度选中档填充。
+					// 拷贝填充，勿改 policy 缓存中的共享 target；模型以 per-key 解析为准
+					//（与调度同源 resolver，冲突时信任执行近实时结论）。
+					if target.Effort == "" && tryOpts.executionEffort != "" {
+						pinnedTarget := *target
+						pinnedTarget.Effort = autopilot.EffortLevel(tryOpts.executionEffort)
+						pinnedTarget.EffortDecided = true
+						target = &pinnedTarget
+					}
 					// Atomic rewrite: model + effort together
 					// 注意必须赋回外层 attemptBody：此前此处用 := 声明了块内影子变量，
 					// 模型改写只短暂进入 gin context，随后的 system 归一化/参数约束等步骤
@@ -1849,6 +1886,7 @@ func selectAttemptAPIKeyFiltered(
 	c *gin.Context,
 	circuitOpen keypool.ModelCircuitChecker,
 	autoWeight keypool.AutoWeightFactor,
+	pinAPIKey string,
 ) (keypool.Selection, string, error) {
 	if policy == nil {
 		return selectAttemptAPIKey(channelScheduler, kind, channelIndex, upstream, failedKeys, failedQuotaGroups, model, fallback, circuitOpen, autoWeight)
@@ -1887,6 +1925,15 @@ func selectAttemptAPIKeyFiltered(
 			}
 			if key != "" && filteredSet[key] && !effectiveFailedKeys[key] {
 				return keypool.Selection{APIKey: key}, key, nil
+			}
+		}
+		// 五元组调度 pin：选中 key 在 policy 过滤集内时优先返回；
+		// pin key 失败进入 failedKeys 后自然落到下方循环（兜底轮转）。
+		if pinAPIKey != "" && !effectiveFailedKeys[pinAPIKey] {
+			for _, key := range sorted {
+				if key == pinAPIKey {
+					return keypool.Selection{APIKey: key}, key, nil
+				}
 			}
 		}
 		for _, key := range sorted {
@@ -1940,7 +1987,17 @@ func selectAttemptAPIKeyFiltered(
 		candidateMap[cand.APIKey] = cand
 	}
 
-	// 按 policy 排序后的顺序选择第一个可用 key
+	// 按 policy 排序后的顺序选择第一个可用 key。
+	// 五元组调度 pin：选中 key 在过滤集内时提到选择序首位（swap 不破坏集合语义），
+	// 失败/quota 组失败/限流 defer 由下方循环体统一处理，自然轮转后续 key。
+	if pinAPIKey != "" {
+		for i, k := range sortedKeys {
+			if k == pinAPIKey && i > 0 {
+				sortedKeys[0], sortedKeys[i] = sortedKeys[i], sortedKeys[0]
+				break
+			}
+		}
+	}
 	var deferred []keypool.Selection
 	for _, apiKey := range sortedKeys {
 		if failedKeys[apiKey] {
