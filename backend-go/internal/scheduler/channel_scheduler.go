@@ -47,7 +47,7 @@ type ChannelScheduler struct {
 	rateLimitManager         *ratelimit.Manager
 	candidateFilterProvider  CandidateFilterProvider  // SmartRouter shadow 注入点
 	modelSupportResolverFunc ModelSupportResolverFunc // Autopilot 模型支持解析注入点
-	quotaManager             *quota.Manager            // 配额真相与余量管理器（nil = 不参与沉底排序）
+	quotaManager             *quota.Manager           // 配额真相与余量管理器（nil = 不参与沉底排序）
 	loadShedMu               sync.Mutex
 	loadShedStates           map[string]rateLimitLoadShedState
 	loadShedStopCh           chan struct{}
