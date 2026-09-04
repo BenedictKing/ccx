@@ -28,7 +28,7 @@ func TestRoutePreview_ExtractsFeaturesFromMessagesBody(t *testing.T) {
 				},
 			},
 			map[string]interface{}{
-				"role": "assistant",
+				"role":    "assistant",
 				"content": "Hi there!",
 			},
 		},
@@ -78,9 +78,9 @@ func TestRoutePreview_DetectsImageContent(t *testing.T) {
 					map[string]interface{}{
 						"type": "image",
 						"source": map[string]interface{}{
-							"type":      "base64",
+							"type":       "base64",
 							"media_type": "image/png",
-							"data":      "...",
+							"data":       "...",
 						},
 					},
 				},
@@ -109,7 +109,7 @@ func TestRoutePreview_DetectsReasoning(t *testing.T) {
 	body := map[string]interface{}{
 		"model": "claude-sonnet-4",
 		"thinking": map[string]interface{}{
-			"type": "enabled",
+			"type":          "enabled",
 			"budget_tokens": 2000,
 		},
 		"messages": []interface{}{
@@ -403,15 +403,15 @@ func TestRoutePreview_ConsistencyWithDryRun(t *testing.T) {
 
 	// 方式 2：手工构造 DryRunRequest，用相同特征调 BuildPlan
 	dryRunProfile := BuildRequestProfile(RequestProfileFeatures{
-		Model:        "claude-sonnet-4",
-		ChannelKind:  "messages",
-		Operation:    "completion",
-		HasImage:     routePreviewProfile.HasImage,
-		EstTokens:    routePreviewProfile.EstTokens,
-		VisionNeed:   routePreviewProfile.VisionNeed,
-		ToolUseNeed:  routePreviewProfile.ToolUseNeed,
+		Model:         "claude-sonnet-4",
+		ChannelKind:   "messages",
+		Operation:     "completion",
+		HasImage:      routePreviewProfile.HasImage,
+		EstTokens:     routePreviewProfile.EstTokens,
+		VisionNeed:    routePreviewProfile.VisionNeed,
+		ToolUseNeed:   routePreviewProfile.ToolUseNeed,
 		ReasoningNeed: routePreviewProfile.ReasoningNeed,
-		ContextNeed:  routePreviewProfile.EstTokens,
+		ContextNeed:   routePreviewProfile.EstTokens,
 	})
 	dryRunPlan := smartRouter.BuildPlan(&dryRunProfile)
 

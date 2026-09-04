@@ -117,10 +117,10 @@ func handleRoutePreview(smartRouter *SmartRouter, sch *scheduler.ChannelSchedule
 		if sch != nil {
 			selectionCtx := ContextWithRequestProfile(c.Request.Context(), profile)
 			result, err := sch.SelectChannelWithOptions(selectionCtx, scheduler.SelectionOptions{
-				Kind:             kind,
-				Model:            model,
-				HasImageContent:  profile.VisionNeed,
-				AgentRole:        profile.AgentRole,
+				Kind:            kind,
+				Model:           model,
+				HasImageContent: profile.VisionNeed,
+				AgentRole:       profile.AgentRole,
 				ContextRequirement: &scheduler.ContextRequirement{
 					InputTokens: profile.ContextNeed,
 				},
