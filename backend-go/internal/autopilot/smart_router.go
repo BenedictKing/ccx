@@ -720,31 +720,10 @@ func (r *SmartRouter) executeFilter(
 				modelResolutions[0].MappingReason = ""
 			}
 		}
-		for _, modelResolution := range modelResolutions {
-			entry := r.buildChannelEntry(
-				ch,
-				upstream,
-				executionKind,
-				modelResolution.ActualModel,
-				upstreamModelCapabilities,
-			)
-			entry.Route = route
-			entry.CandidateKey = modelResolution.CandidateKey
-			if entry.CandidateKey == "" {
-				entry.CandidateKey = routingCandidateKey(channelUID, modelResolution.ActualModel)
-			}
-			// 同名承接（MappingSource 为空）时 MappedModel 保持空：映射质量档折算
-			// (applyModelQualityTier) 依赖 MappedModel 判空，填入请求模型名会把同名承接
-			// 误判为映射模型并抬高其质量档。模型名展示由 CandidateKey + 前端回退负责。
-			entry.MappedModel = modelResolution.MappedModel
-			entry.MappingSource = modelResolution.MappingSource
-			entry.MappingReason = modelResolution.MappingReason
-			entry.ProtocolFidelity = ch.ProtocolFidelity
-			entry.ConversionPenalty = ch.ConversionPenalty
-			r.applyModelQualityTier(&entry)
-			entries = append(entries, entry)
-			costMap[entry.CandidateKey] = entry.EstimatedCost
-		}
+		// 五元组展开：模型行 × 全量 key × effort 档（已决档+相邻降档），逐行独立评分。
+		// 同名承接语义（MappedModel 判空防质量档折算误判）由 applyResolutionIdentity 保持。
+		entries = r.expandChannelCandidates(ch, upstream, executionKind, route, modelResolutions,
+			upstreamModelCapabilities, entries, costMap)
 	}
 	// AFP 路由：为火山 Agent Plan 渠道填充 AFP 成本（含折扣），开启时用分组归一化
 	// 替代扁平 USD 归一化，使 GLM-5.2 ×0.25 等折扣真正影响 SavingsScore。
@@ -1235,7 +1214,7 @@ type channelScoreEntry struct {
 	MappedModel       string
 	MappingSource     string
 	MappingReason     string
-	CandidateKey      string // (渠道, 模型) 粒度标识：channelUID|model
+	CandidateKey      string // 五元组粒度标识：channelUID|protocol|keyIdentity|model|effort
 	OriginTier        ChannelOriginTier
 	HealthState       HealthState
 	EstimatedCost     float64
@@ -1271,6 +1250,20 @@ type channelScoreEntry struct {
 	// 当前 Phase A.1 仅透传，不参与评分；旧配置或独立物理渠道为空。
 	LogicalChannelUID  string
 	LogicalChannelName string
+
+	// ── 五元组维度字段（渠道, 协议, key, 模型, effort）──
+	// KeyIdentity 是候选行的 key 身份（KeyUID 或 "kh_"+keyHash；空 = 无 key 维度行）。
+	KeyIdentity string
+	// KeyHash 是明文 key 的单向哈希（跨模块一致算法），仅用于画像匹配与执行 pin 对齐。
+	KeyHash string
+	// QuotaGroup 是 key 分组（GroupIdentity 语义），组级禁用与展示用。
+	QuotaGroup string
+	// KeyMetricsKey 是该 key 匹配画像的 metrics 身份（无画像时为空）。
+	KeyMetricsKey string
+	// Effort 是候选行的思考档位（空 = passthrough）；EffortDecided 表示该档
+	// 由 autopilot/意图决定（非透传）。行身份五段 CandidateKey 含此维度。
+	Effort         EffortLevel
+	EffortDecided  bool
 }
 
 type scoredChannelEntry struct {
@@ -1301,8 +1294,13 @@ type channelModelResolution struct {
 	MappedModel   string
 	MappingSource string
 	MappingReason string
-	CandidateKey  string // (渠道, 模型) 粒度标识：channelUID|model
+	CandidateKey  string // (渠道, 模型) 粒度标识：channelUID|model（展开前的模型行身份）
 	Supported     bool
+	// EffortChain 是该模型行的 effort 档链（已决档 + 相邻降档）；nil = passthrough 单档。
+	EffortChain []EffortLevel
+	// Effort / EffortDecided 是链首档及其决定状态（执行 pin 与展示用）。
+	Effort        EffortLevel
+	EffortDecided bool
 }
 
 // exactModelRuntimeViable 判断精确模型在该渠道是否仍有可承接的运行时 Key：
@@ -1526,6 +1524,13 @@ func (r *SmartRouter) resolveChannelModels(
 				Supported:    true,
 				CandidateKey: routingCandidateKey(channelUID, model),
 			}
+			// effort 维：解析器已决档 + 相邻降档（模型声明多档时）。
+			// 意图 pin 由 executeFilter 的回填阶段（意图匹配后）覆盖，不在此展开。
+			res.EffortChain = deriveEffortChain(candidate.effort, candidate.effortDecided, candidate.profile.SupportedEffortLevels)
+			if len(res.EffortChain) > 0 {
+				res.Effort = res.EffortChain[0]
+				res.EffortDecided = candidate.effortDecided
+			}
 			if normalized != normalizeRoutingModelID(requestModel) {
 				res.MappedModel = model
 				res.MappingSource = "auto_resolve"
@@ -1594,14 +1599,32 @@ func (r *SmartRouter) resolveChannelModels(
 	return resolutions
 }
 
-// buildChannelEntry 从 ChannelInfo + UpstreamConfig 构建评分输入。
-// 无画像时使用中性默认值（不惩罚）。
+// buildChannelEntry 旧口径入口（无 key 维行）：全 key 最小成本 + 渠道聚合画像。
+// 生产展开路径已走 buildChannelEntryForKey；保留供既有单测与 fail-open 无 key 行复用。
 func (r *SmartRouter) buildChannelEntry(
 	ch scheduler.ChannelInfo,
 	upstream *config.UpstreamConfig,
 	channelKind string,
 	model string,
 	upstreamModelCapabilities map[string]config.UpstreamModelCapability,
+) channelScoreEntry {
+	return r.buildChannelEntryForKey(ch, upstream, channelKind, model, upstreamModelCapabilities, nil, nil, "")
+}
+
+// buildChannelEntryForKey 从 ChannelInfo + UpstreamConfig 构建五元组候选行的评分输入。
+// keyCand 非 nil 时是 per-key 行：成本按该 key 自己的倍率/订阅价计算（不再取渠道最小值），
+// 画像优先用该 key 的 endpoint 画像（keyProfiles 按 KeyHash 预取索引）；
+// keyCand 为 nil 时回退旧口径（全 key 最小成本 + 渠道聚合画像），供无 key 维行复用。
+// 无画像时使用中性默认值（不惩罚）。
+func (r *SmartRouter) buildChannelEntryForKey(
+	ch scheduler.ChannelInfo,
+	upstream *config.UpstreamConfig,
+	channelKind string,
+	model string,
+	upstreamModelCapabilities map[string]config.UpstreamModelCapability,
+	keyCand *routingKeyCandidate,
+	keyProfiles map[string]*KeyEndpointProfile,
+	effort EffortLevel,
 ) channelScoreEntry {
 	channelUID := upstream.ChannelUID
 	if channelUID == "" {
@@ -1702,9 +1725,17 @@ func (r *SmartRouter) buildChannelEntry(
 				}
 			}
 		}
-		// 默认成本：请求可用 key 中的最小有效成本（保留 0 成本）。
+		// per-key 行：成本按该 key 自己的倍率/订阅价计算（执行落点一致性优先，
+		// 不再用渠道内最便宜 key 的价格给整行评分）；
+		// 无 key 维行：请求可用 key 中的最小有效成本（保留 0 成本，旧口径）。
 		entry.EstimatedCost = -1
-		for _, cfg := range config.NormalizeAPIKeyConfigsForView(*upstream) {
+		var keyCfgs []config.APIKeyConfig
+		if keyCand != nil {
+			keyCfgs = []config.APIKeyConfig{keyCand.Config}
+		} else {
+			keyCfgs = config.NormalizeAPIKeyConfigsForView(*upstream)
+		}
+		for _, cfg := range keyCfgs {
 			eligibility := config.EvaluateAPIKeyMultiplierEligibility(cfg, r.currentTime())
 			if !eligibility.Eligible {
 				continue
@@ -1750,6 +1781,37 @@ func (r *SmartRouter) buildChannelEntry(
 	}
 
 	if r.profileStore != nil {
+		// per-key 行优先：该 key 有 endpoint 画像时直接用单画像值，不做渠道级聚合。
+		// key 级健康/四档差异由此进入行评分（软死、限流等信号不再被跨 key 平均）。
+		if keyCand != nil && keyProfiles != nil {
+			if kp, ok := keyProfiles[keyCand.KeyHash]; ok && kp != nil {
+				entry.HealthState = kp.HealthState
+				entry.OriginTier = ChannelOriginTier(kp.OriginTier)
+				entry.MetricsKey = kp.MetricsKey
+				entry.KeyMask = kp.KeyMask
+				entry.KeyMetricsKey = kp.MetricsKey
+				if !visionDisabled {
+					entry.SupportsVision = entry.SupportsVision || kp.SupportsVision
+				}
+				entry.SupportsToolCalls = entry.SupportsToolCalls || kp.SupportsToolCalls
+				entry.SupportsReasoning = entry.SupportsReasoning || kp.SupportsReasoning
+				stability := kp.StabilityTier
+				if kp.EffectiveStabilityTier != "" {
+					stability = kp.EffectiveStabilityTier
+				}
+				entry.ScoringCandidate = ScoringCandidate{
+					ChannelUID: channelUID, QualityTier: kp.QualityTier, StabilityTier: stability,
+					SpeedTier: kp.SpeedTier, CostTier: kp.CostTier, HealthState: kp.HealthState,
+					ProviderQualityScore: 0.5, ProviderQualityConfidence: 0.3,
+					ModelFamily: modelFamily, SavingsScore: 0.5, DomainStrengthScore: 0.5,
+				}
+				r.applyModelQualityTier(&entry)
+				r.attachDomainProfiles(&entry, modelProvider)
+				r.applyQuotaHeadroom(&entry, channelUID)
+				return entry
+			}
+			// 该 key 无画像：回退渠道聚合口径（下方分支）。
+		}
 		profiles := r.profileStore.ListActiveByChannel(channelUID)
 		matchingProfiles := make([]*KeyEndpointProfile, 0, len(profiles))
 		for _, profile := range profiles {
@@ -2230,9 +2292,11 @@ func applyDomainStrength(entry *channelScoreEntry, domain TaskDomain) {
 	}
 
 	selected := profiles[0]
-	best := ResolveDomainStrength(&selected, domain)
+	// effort 档锚定：候选行已决档时基准证据优先精确匹配 (domain, effort)，
+	// 跨档回退降低置信度（ResolveDomainStrengthForEffort 契约）；passthrough 行为空档。
+	best := ResolveDomainStrengthForEffort(&selected, domain, entry.Effort)
 	for i := 1; i < len(profiles); i++ {
-		candidate := ResolveDomainStrength(&profiles[i], domain)
+		candidate := ResolveDomainStrengthForEffort(&profiles[i], domain, entry.Effort)
 		if candidate.Score > best.Score ||
 			(candidate.Score == best.Score && candidate.EvidenceConfidence > best.EvidenceConfidence) {
 			selected = profiles[i]
@@ -2381,21 +2445,14 @@ func (r *SmartRouter) collectChannelEntries(profile *RequestProfile) []channelSc
 			Priority: upstream.Priority,
 			Status:   status,
 		}
-		for _, modelResolution := range modelResolutions {
-			entry := r.buildChannelEntry(ch, &upstream, channelKind, modelResolution.ActualModel, cfg.UpstreamModelCapabilities)
-			entry.CandidateKey = modelResolution.CandidateKey
-			if entry.CandidateKey == "" {
-				entry.CandidateKey = routingCandidateKey(upstream.ChannelUID, modelResolution.ActualModel)
+		// 五元组展开与真实路径同构（模型 × 全量 key × effort 档）；预览标记后置处理。
+		before := len(entries)
+		entries = r.expandChannelCandidates(ch, &upstream, channelKind, scheduler.ChannelRouteRef{},
+			modelResolutions, cfg.UpstreamModelCapabilities, entries, nil)
+		for i := before; i < len(entries); i++ {
+			if entries[i].MappingSource == "auto_resolve" {
+				entries[i].MappingSource = "auto_resolve_preview"
 			}
-			// 同名承接（MappingSource 为空）时 MappedModel 保持空，避免映射质量档折算误判；见 executeFilter。
-			entry.MappedModel = modelResolution.MappedModel
-			entry.MappingSource = modelResolution.MappingSource
-			if entry.MappingSource == "auto_resolve" {
-				entry.MappingSource = "auto_resolve_preview"
-			}
-			entry.MappingReason = modelResolution.MappingReason
-			r.applyModelQualityTier(&entry)
-			entries = append(entries, entry)
 		}
 	}
 	return entries
