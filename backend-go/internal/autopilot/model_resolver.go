@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -1443,6 +1444,8 @@ func (r *ModelResolver) refreshAutoDiscoveryCapabilities(
 		oldDocument := profile.SupportsDocument
 		oldTools := profile.SupportsToolCalls
 		oldReasoning := profile.SupportsReasoning
+		oldEffortControl := profile.SupportsEffortControl
+		oldEffortLevels := append([]EffortLevel(nil), profile.SupportedEffortLevels...)
 		profile.ModelFamily = InferModelFamily(profile.ModelID, "")
 		profile.QualityTier = ModelProfileQualityTier(profile.ModelID, profile.ModelFamily)
 		if resolved := config.ResolveUpstreamCapability(profile.ModelID, upstream, global); resolved.Known {
@@ -1451,7 +1454,9 @@ func (r *ModelResolver) refreshAutoDiscoveryCapabilities(
 		if oldFamily != profile.ModelFamily || oldQuality != profile.QualityTier ||
 			oldContext != profile.ContextTokens || oldVision != profile.SupportsVision ||
 			oldDocument != profile.SupportsDocument ||
-			oldTools != profile.SupportsToolCalls || oldReasoning != profile.SupportsReasoning {
+			oldTools != profile.SupportsToolCalls || oldReasoning != profile.SupportsReasoning ||
+			oldEffortControl != profile.SupportsEffortControl ||
+			!slices.Equal(oldEffortLevels, profile.SupportedEffortLevels) {
 			profile.UpdatedAt = time.Now()
 			_ = r.profileStore.Upsert(profile)
 		}

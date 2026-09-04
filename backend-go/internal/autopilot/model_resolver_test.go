@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -889,6 +890,50 @@ func TestResolveModel_RefreshesLegacyAutoDiscoveryCapabilities(t *testing.T) {
 	if refreshed == nil || refreshed.QualityTier != QualityTierLow ||
 		refreshed.ContextTokens != 1048576 || !refreshed.SupportsReasoning || !refreshed.SupportsToolCalls {
 		t.Fatalf("旧自动发现画像未在内存中完成升级: %+v", refreshed)
+	}
+}
+
+func TestResolveModel_RefreshesLegacyAutoDiscoveryEffortCapabilities(t *testing.T) {
+	profile := makeModelProfile("custom-effort-model", ModelFamilyUnknown, QualityTierLow, 128000,
+		true, false, true, true, 0)
+	profile.Source = "auto_discovery"
+	store := newTestModelProfileStore([]ModelProfile{profile})
+	store.flushMu.Lock()
+	store.dirtyKeys = make(map[string]struct{})
+	store.flushMu.Unlock()
+
+	cfgManager, cleanup := createTestConfigManagerForResolver(t, config.Config{
+		Upstream: []config.UpstreamConfig{{
+			ChannelUID: "ch_test", AutoManaged: true, ServiceType: "openai",
+			ModelCapabilities: map[string]config.UpstreamModelCapability{
+				"custom-effort-model": {
+					ContextWindowTokens: 128000,
+					ReasoningEfforts:    []string{"low", "high", "max"},
+					Capabilities:        map[string]bool{"reasoning": true, "toolCalls": true},
+				},
+			},
+		}},
+	})
+	defer cleanup()
+	resolver := NewModelResolver(store, cfgManager)
+
+	target, resolved, reason := resolver.ResolveModel(
+		"custom-effort-model", "ch_test", "messages", "metrics_test",
+		CapabilityFloor{TaskClass: TaskClassWorker})
+	if !resolved || target.Model != "custom-effort-model" || !target.EffortDecided {
+		t.Fatalf("ResolveModel() = (%+v, %v, %q), want effort-aware exact match", target, resolved, reason)
+	}
+	refreshed := store.Get("ch_test", "messages", "metrics_test", "custom-effort-model")
+	wantLevels := []EffortLevel{EffortLow, EffortHigh, EffortMax}
+	if refreshed == nil || !refreshed.SupportsEffortControl ||
+		!slices.Equal(refreshed.SupportedEffortLevels, wantLevels) {
+		t.Fatalf("旧自动发现画像未补齐 effort 能力: %+v", refreshed)
+	}
+	store.flushMu.Lock()
+	_, markedDirty := store.dirtyKeys[modelProfileKey(refreshed)]
+	store.flushMu.Unlock()
+	if !markedDirty {
+		t.Fatal("补齐 effort 能力的存量画像未标记持久化")
 	}
 }
 

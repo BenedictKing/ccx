@@ -820,6 +820,24 @@ func applyUpstreamModelCapability(profile *ModelProfile, capability config.Upstr
 	profile.SupportsToolCalls = capability.Capabilities["toolCalls"] ||
 		capability.Capabilities["tool_calls"] || capability.Capabilities["tools"]
 	profile.SupportsReasoning = upstreamCapabilitySupportsReasoning(capability)
+	// ReasoningEfforts 是上游原生档位声明，统一映射到路由使用的 EffortLevel。
+	// 每次应用能力时先清空旧值，避免注册表撤销档位后存量画像继续宣称可控。
+	profile.SupportsEffortControl = false
+	profile.SupportedEffortLevels = nil
+	seen := make(map[EffortLevel]struct{}, len(capability.ReasoningEfforts))
+	for _, raw := range capability.ReasoningEfforts {
+		level := NormalizeEffortLevel(raw)
+		if level == "" {
+			// 未知供应商档位（例如 extended）不能安全映射，保持 passthrough。
+			continue
+		}
+		if _, exists := seen[level]; exists {
+			continue
+		}
+		seen[level] = struct{}{}
+		profile.SupportedEffortLevels = append(profile.SupportedEffortLevels, level)
+	}
+	profile.SupportsEffortControl = len(profile.SupportedEffortLevels) > 0
 }
 
 // requestEffortOfProfile 返回请求实际生效的思考等级：手动意图 pin 优先于

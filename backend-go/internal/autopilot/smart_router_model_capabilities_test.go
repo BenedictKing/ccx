@@ -3,6 +3,7 @@ package autopilot
 import (
 	"math"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -279,6 +280,38 @@ func TestBuildChannelEntryReasoningMatchesModelProfileDerivation(t *testing.T) {
 			t.Fatalf("reasoning=%v 时候选应与请求期解析一致通过/拒绝硬约束, got reasons=%v want len=%d",
 				entry.SupportsReasoning, reasons, wantReasons)
 		}
+	}
+}
+
+func TestApplyUpstreamModelCapabilityMapsEffortLevels(t *testing.T) {
+	profile := ModelProfile{
+		SupportsEffortControl: true,
+		SupportedEffortLevels: []EffortLevel{EffortLow, EffortHigh},
+	}
+	applyUpstreamModelCapability(&profile, config.UpstreamModelCapability{
+		ReasoningEfforts: []string{" LOW ", "medium", "med", "max", "extended", "unknown", "max"},
+	})
+
+	want := []EffortLevel{EffortLow, EffortMedium, EffortMax}
+	if !profile.SupportsEffortControl {
+		t.Fatal("effort control should be enabled when at least one effort level is normalized")
+	}
+	if !slices.Equal(profile.SupportedEffortLevels, want) {
+		t.Fatalf("SupportedEffortLevels = %v, want %v", profile.SupportedEffortLevels, want)
+	}
+}
+
+func TestApplyUpstreamModelCapabilityClearsStaleEffortLevels(t *testing.T) {
+	profile := ModelProfile{
+		SupportsEffortControl: true,
+		SupportedEffortLevels: []EffortLevel{EffortLow, EffortHigh},
+	}
+	applyUpstreamModelCapability(&profile, config.UpstreamModelCapability{
+		ReasoningEfforts: []string{"extended"},
+	})
+
+	if profile.SupportsEffortControl || len(profile.SupportedEffortLevels) != 0 {
+		t.Fatalf("unknown-only effort declaration must remain passthrough: %+v", profile)
 	}
 }
 
