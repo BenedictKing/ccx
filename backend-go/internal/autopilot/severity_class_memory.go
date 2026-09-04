@@ -22,6 +22,11 @@ const severityClassStopMarker = "</severity>"
 // severityClassStopMarkerBytes 同上，bytes 形态用于廉价预筛。
 var severityClassStopMarkerBytes = []byte(severityClassStopMarker)
 
+// severityClassStopMarkerEscapedBytes 标记的 JSON 转义形态（\u003c/severity\u003e）。
+// failover 链路会多次经 Go json.Marshal 重写出站体，< > 默认被转义为 \u003c \u003e，
+// 字节级预筛若只认原始形态会漏判，导致能力学习永远不触发。
+var severityClassStopMarkerEscapedBytes = []byte(`\u003c/severity\u003e`)
+
 // SeverityClassRequestShape 判定请求体是否为"格式约束型安全分类"请求：
 // 停止序列包含 </severity>。覆盖 messages（stop_sequences 数组）与 openai chat
 // （stop 字符串/数组）两种形态；协议转换（messages→chat）会保留该标记，
@@ -33,8 +38,10 @@ func SeverityClassRequestShape(body []byte) bool {
 	if len(body) == 0 {
 		return false
 	}
-	// 廉价预筛：正文不含标记字节序列时直接排除，避免绝大多数请求解析 JSON。
-	if !bytes.Contains(body, severityClassStopMarkerBytes) {
+	// 廉价预筛：正文不含标记字节序列（原始或 JSON 转义形态）时直接排除，
+	// 避免绝大多数请求解析 JSON。
+	if !bytes.Contains(body, severityClassStopMarkerBytes) &&
+		!bytes.Contains(body, severityClassStopMarkerEscapedBytes) {
 		return false
 	}
 	for _, field := range []string{"stop_sequences", "stop"} {

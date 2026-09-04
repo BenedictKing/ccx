@@ -46,6 +46,17 @@ func TestSeverityClassRequestShape(t *testing.T) {
 			body: `{"model":"m","messages":[{"role":"user","content":"hello"}]}`,
 			want: false,
 		},
+		// Go json.Marshal 转义形态（< > -> \u003c \u003e）：failover 链路重写出站体后的真实形态
+		{
+			name: "messages-数组含标记(JSON转义形态)",
+			body: `{"model":"claude-sonnet-5","max_tokens":64,"stop_sequences":["\u003c/severity\u003e"],"messages":[{"role":"user","content":"x"}]}`,
+			want: true,
+		},
+		{
+			name: "chat-stop数组(JSON转义形态)",
+			body: `{"model":"gpt-x","stop":["END","\u003c/severity\u003e"]}`,
+			want: true,
+		},
 		// 空/非法输入
 		{name: "空体", body: "", want: false},
 		{name: "非法JSON含标记字节", body: `not json </severity>`, want: false},
