@@ -65,18 +65,27 @@ func keyIdentityFor(cfg config.APIKeyConfig, apiKey string) string {
 }
 
 // ResolvePinnedAPIKey 把调度 pin 的 key 身份反查为渠道内明文 key。
+// 遍历明文 APIKeys 而非 NormalizeAPIKeyConfigsForView（后者会过滤无附加配置的
+// 手工 key 条目，导致 kh_ 身份反查静默失效）；KeyUID 优先匹配，哈希兜底。
 // 未匹配（key 已被移除/轮换）返回空，调用方按无 pin 处理（fail-open）。
 func ResolvePinnedAPIKey(upstream *config.UpstreamConfig, keyIdentity string) string {
 	if upstream == nil || keyIdentity == "" {
 		return ""
 	}
 	uid := strings.TrimSpace(keyIdentity)
-	for _, cfg := range config.NormalizeAPIKeyConfigsForView(*upstream) {
-		if cfg.Key == "" {
+	configs := config.NormalizeAPIKeyConfigsForView(*upstream)
+	byKey := make(map[string]config.APIKeyConfig, len(configs))
+	for _, cfg := range configs {
+		byKey[cfg.Key] = cfg
+	}
+	for _, key := range upstream.APIKeys {
+		key = strings.TrimSpace(key)
+		if key == "" {
 			continue
 		}
-		if strings.TrimSpace(cfg.KeyUID) == uid || "kh_"+KeyHashFromAPIKey(cfg.Key) == uid {
-			return cfg.Key
+		cfg := byKey[key]
+		if strings.TrimSpace(cfg.KeyUID) == uid || "kh_"+KeyHashFromAPIKey(key) == uid {
+			return key
 		}
 	}
 	return ""

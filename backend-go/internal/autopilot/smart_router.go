@@ -1299,8 +1299,8 @@ type channelScoreEntry struct {
 	KeyMetricsKey string
 	// Effort 是候选行的思考档位（空 = passthrough）；EffortDecided 表示该档
 	// 由 autopilot/意图决定（非透传）。行身份五段 CandidateKey 含此维度。
-	Effort         EffortLevel
-	EffortDecided  bool
+	Effort        EffortLevel
+	EffortDecided bool
 }
 
 type scoredChannelEntry struct {

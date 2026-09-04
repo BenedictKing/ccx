@@ -2126,3 +2126,53 @@ func TestCallPolicyFilterKeyBindings_FailOpenOnAllFiltered(t *testing.T) {
 		t.Fatalf("局部过滤语义应保持: got %v", got)
 	}
 }
+
+// 五元组调度 pin：pin key 在 policy 过滤集内时应提到首次尝试位；
+// pin key 失败进入 failedKeys 后自然轮转后续 key（兜底语义）。
+func TestSelectAttemptAPIKeyFilteredPinsScheduledKey(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	upstream := &config.UpstreamConfig{
+		Name:       "pin-test",
+		ChannelUID: "ch-pin",
+		BaseURL:    "https://pin.example.com",
+		APIKeys:    []string{"sk-a", "sk-b"},
+		APIKeyConfigs: []config.APIKeyConfig{
+			{Key: "sk-a"},
+			{Key: "sk-b"},
+		},
+	}
+	policy := &autopilot.EndpointAttemptPolicy{
+		FilterKeyBindings: func(channelUID, baseURL string, apiKeys []string) []string {
+			return apiKeys
+		},
+		SortKeyBindings: func(channelUID, baseURL string, apiKeys []string) ([]string, []autopilot.EndpointCandidate) {
+			return []string{"sk-a", "sk-b"}, nil // 正常排序首选 sk-a
+		},
+	}
+	pinB := autopilot.ResolvePinnedAPIKey(upstream, "kh_"+autopilot.KeyHashFromAPIKey("sk-b"))
+
+	// 首次尝试：pin=sk-b 应越过排序首选 sk-a。
+	_, key, err := selectAttemptAPIKeyFiltered(nil, scheduler.ChannelKindMessages, 0, upstream,
+		"https://pin.example.com", map[string]bool{}, map[string]bool{}, "model-x", nil, policy,
+		"Messages", c, nil, nil, pinB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if key != "sk-b" {
+		t.Fatalf("首次尝试应选 pin key sk-b, got %q", key)
+	}
+
+	// pin key 失败后：failedKeys 剔除 sk-b，回退正常排序 sk-a。
+	failed := map[string]bool{"sk-b": true}
+	_, key, err = selectAttemptAPIKeyFiltered(nil, scheduler.ChannelKindMessages, 0, upstream,
+		"https://pin.example.com", failed, map[string]bool{}, "model-x", nil, policy,
+		"Messages", c, nil, nil, pinB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if key != "sk-a" {
+		t.Fatalf("pin key 失败后应轮转 sk-a, got %q", key)
+	}
+}

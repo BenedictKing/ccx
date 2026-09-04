@@ -20,9 +20,9 @@ type ScheduledRecoveryResult struct {
 
 // SelectionResult 渠道选择结果
 type SelectionResult struct {
-	Upstream     *config.UpstreamConfig
-	Route        ChannelRouteRef
-	ChannelIndex int
+	Upstream       *config.UpstreamConfig
+	Route          ChannelRouteRef
+	ChannelIndex   int
 	CandidateCount int    // 本次选择路径实际可尝试的去重物理候选数
 	ExecutionModel string // 联邦 sibling 的实际执行模型；为空表示沿用请求模型
 	// ExecutionKeyIdentity / ExecutionEffort 是 autopilot 五元组候选行的执行 pin：
@@ -30,7 +30,7 @@ type SelectionResult struct {
 	// 为空表示调度未锁定（非 autopilot 路径或候选无 key/effort 维），走原行为。
 	ExecutionKeyIdentity string
 	ExecutionEffort      string
-	Reason               string          // 选择原因（用于日志）
+	Reason               string // 选择原因（用于日志）
 	Trace                *SelectionTrace
 	AutopilotTraceUID    string // SmartRouter 请求级 trace；为空表示未介入
 }
