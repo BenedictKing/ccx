@@ -570,7 +570,9 @@ func handleLocalCompactStream(
 				)
 			}
 		} else {
-			eventsToSend = []string{line + "\n"}
+			// OpenRouter 等上游的非标准 reasoning 事件归一化后，
+			// reasoning_text.* / content_part(reasoning_text) 恰好落入 shouldSkipCompactStreamEvent 的过滤清单
+			eventsToSend = []string{converters.NormalizeOpenRouterReasoningSSELine(line) + "\n"}
 		}
 
 		for _, event := range eventsToSend {

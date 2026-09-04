@@ -651,6 +651,8 @@ func (p *ResponsesProvider) ConvertToResponsesResponse(
 	if err != nil {
 		return nil, fmt.Errorf("解析响应失败: %w", err)
 	}
+	// OpenRouter 等上游会把思考文本放在非标准 content 字段，先归一化为规范 summary 形态
+	converters.NormalizeOpenRouterReasoningResponseBody(respMap)
 	converter := converters.NewConverter(upstreamType)
 	return converter.FromProviderResponse(respMap, sessionID)
 }

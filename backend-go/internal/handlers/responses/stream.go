@@ -200,7 +200,7 @@ func handleStreamSuccess(
 					)
 				}
 			} else {
-				eventsToCheck = []string{line + "\n"}
+				eventsToCheck = []string{converters.NormalizeOpenRouterReasoningSSELine(line) + "\n"}
 			}
 
 			for _, event := range eventsToCheck {
@@ -211,11 +211,8 @@ func handleStreamSuccess(
 					if r, m := detectResponsesErrorBlacklist(upstreamErr); r != "" {
 						return nil, &common.ErrBlacklistKey{Reason: r, Message: m}
 					}
-					if isRetryableResponsesError(upstreamErr) {
-						common.RequestLogf(c, "[Responses-UpstreamError] %s，触发重试", preflightDiagnostic)
-						return nil, fmt.Errorf("%w: %s", common.ErrEmptyStreamResponse, preflightDiagnostic)
-					}
-					return nil, fmt.Errorf("upstream Responses error: %s", preflightDiagnostic)
+					common.RequestLogf(c, "[Responses-UpstreamError] %s，触发重试", preflightDiagnostic)
+					return nil, fmt.Errorf("%w: %s", common.ErrEmptyStreamResponse, preflightDiagnostic)
 				}
 				hadPendingToolCall := preflightToolTracker.HasPendingToolCall()
 				if malformed, name := preflightToolTracker.ProcessResponsesEvent(event); malformed {
@@ -422,7 +419,7 @@ func handleStreamSuccess(
 			}
 			eventsToProcess = events
 		} else {
-			eventsToProcess = []string{line + "\n"}
+			eventsToProcess = []string{converters.NormalizeOpenRouterReasoningSSELine(line) + "\n"}
 		}
 
 		for _, event := range eventsToProcess {

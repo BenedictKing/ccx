@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
+	"github.com/BenedictKing/ccx/internal/converters"
 	"github.com/BenedictKing/ccx/internal/handlers/common"
 	"github.com/BenedictKing/ccx/internal/providers"
 	"github.com/BenedictKing/ccx/internal/session"
@@ -152,6 +153,9 @@ func runResponsesFold(
 			if frame.done {
 				continue
 			}
+
+			// OpenRouter 等上游的 reasoning 非标准事件/条目归一化（按形状触发，标准流零改动）
+			converters.NormalizeOpenRouterReasoningEvent(frame.event)
 
 			eventType, _ := frame.event["type"].(string)
 			switch eventType {
@@ -351,10 +355,7 @@ func (e *responsesFoldHTTPEmitter) emit(event map[string]interface{}) error {
 			return &common.ErrBlacklistKey{Reason: r, Message: m}
 		}
 		diagnostic := formatResponsesErrorDiagnostic(upstreamErr)
-		if isRetryableResponsesError(upstreamErr) {
-			return fmt.Errorf("%w: %s", common.ErrEmptyStreamResponse, diagnostic)
-		}
-		return fmt.Errorf("upstream Responses error: %s", diagnostic)
+		return fmt.Errorf("%w: %s", common.ErrEmptyStreamResponse, diagnostic)
 	}
 
 	e.preflightEvents = append(e.preflightEvents, eventString)

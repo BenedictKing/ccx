@@ -235,10 +235,14 @@ func isCompactionV2UsageOnlyStream(isCompactionV2, seenCompleted, seenUsageOnly 
 func firstUnknownResponsesEventType(event string) (string, bool) {
 	knownTypes := map[string]struct{}{
 		"response.created": {}, "response.in_progress": {}, "response.incomplete": {},
-		"response.output_text.delta": {}, "response.function_call_arguments.delta": {}, "response.function_call_arguments.done": {},
+		"response.output_text.delta": {}, "response.output_text.done": {},
+		"response.content_part.added": {}, "response.content_part.delta": {}, "response.content_part.done": {},
+		"response.function_call_arguments.delta": {}, "response.function_call_arguments.done": {},
 		"response.custom_tool_call_input.delta": {}, "response.custom_tool_call_input.done": {},
 		"response.reasoning_summary_text.delta": {}, "response.reasoning_summary_text.done": {}, "response.reasoning_summary_part.added": {}, "response.reasoning_summary_part.done": {},
-		"response.output_json.delta": {}, "response.content_part.added": {}, "response.content_part.delta": {}, "response.content_part.done": {}, "response.audio.delta": {}, "response.audio_transcript.delta": {},
+		"response.reasoning_text.delta": {}, "response.reasoning_text.done": {},
+		"response.output_json.delta": {}, "response.output_json.done": {}, "response.audio.delta": {}, "response.audio.done": {}, "response.audio_transcript.delta": {}, "response.audio_transcript.done": {},
+		"response.refusal.delta": {}, "response.refusal.done": {},
 		"response.output_item.added": {}, "response.output_item.done": {}, "response.completed": {},
 		"response.error": {}, "response.failed": {}, "error": {}, "keepalive": {},
 	}
@@ -360,22 +364,25 @@ func detectResponsesErrorBlacklist(info responsesStreamErrorInfo) (reason, messa
 	return common.DetectStreamBlacklistError("event: error\ndata: " + string(payload) + "\n\n")
 }
 
-func isRetryableResponsesError(info responsesStreamErrorInfo) bool {
-	code := strings.ToLower(strings.TrimSpace(info.Code))
-	errType := strings.ToLower(strings.TrimSpace(info.Type))
-	message := strings.ToLower(strings.TrimSpace(info.Message))
-
-	switch code {
-	case "server_is_overloaded", "slow_down", "rate_limit_exceeded", "rate_limit", "temporarily_unavailable",
-		"service_unavailable", "server_error", "internal_error", "timeout":
-		return true
-	}
-	switch errType {
-	case "service_unavailable_error", "server_error", "rate_limit_error", "timeout_error":
-		return true
-	}
-	return strings.Contains(message, "server") && strings.Contains(message, "overload")
-}
+// isRetryableResponsesError is no longer used; all non-blacklisted upstream errors
+// now trigger failover in the preflight phase.
+//
+// func isRetryableResponsesError(info responsesStreamErrorInfo) bool {
+// 	code := strings.ToLower(strings.TrimSpace(info.Code))
+// 	errType := strings.ToLower(strings.TrimSpace(info.Type))
+// 	message := strings.ToLower(strings.TrimSpace(info.Message))
+//
+// 	switch code {
+// 	case "server_is_overloaded", "slow_down", "rate_limit_exceeded", "rate_limit", "temporarily_unavailable",
+// 		"service_unavailable", "server_error", "internal_error", "timeout":
+// 		return true
+// 	}
+// 	switch errType {
+// 	case "service_unavailable_error", "server_error", "rate_limit_error", "timeout_error":
+// 		return true
+// 	}
+// 	return strings.Contains(message, "server") && strings.Contains(message, "overload")
+// }
 
 func formatResponsesErrorDiagnostic(info responsesStreamErrorInfo) string {
 	parts := make([]string, 0, 2)

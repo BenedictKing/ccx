@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/BenedictKing/ccx/internal/config"
+	"github.com/BenedictKing/ccx/internal/converters"
 	"github.com/BenedictKing/ccx/internal/metrics"
 	"github.com/BenedictKing/ccx/internal/scheduler"
 	"github.com/BenedictKing/ccx/internal/session"
@@ -454,5 +455,36 @@ func TestShouldSkipCompactStreamEvent(t *testing.T) {
 				t.Errorf("shouldSkipCompactStreamEvent() = %v, want %v for event: %s", got, tt.skip, tt.event)
 			}
 		})
+	}
+}
+
+// 验证 compact 透传分支接入归一化后，OpenRouter 非标准 reasoning 事件
+// 会被改写为规范事件名并落入 shouldSkipCompactStreamEvent 过滤清单。
+func TestCompactPassthroughNormalizesOpenRouterReasoning(t *testing.T) {
+	openRouterLines := []string{
+		`data: {"type":"response.reasoning_text.delta","output_index":0,"content_index":0,"delta":"thinking"}`,
+		`data: {"type":"response.reasoning_text.done","output_index":0,"content_index":0,"text":"thinking done"}`,
+		`data: {"type":"response.content_part.added","output_index":0,"item_id":"rs_1","content_index":0,"part":{"type":"reasoning_text","text":""}}`,
+		`data: {"type":"response.content_part.done","output_index":0,"item_id":"rs_1","content_index":0,"part":{"type":"reasoning_text","text":"thinking done"}}`,
+	}
+	for _, line := range openRouterLines {
+		normalized := converters.NormalizeOpenRouterReasoningSSELine(line) + "\n"
+		if !shouldSkipCompactStreamEvent(normalized) {
+			t.Errorf("归一化后的 OpenRouter reasoning 事件应被 compact 流过滤，line: %s", line)
+		}
+	}
+
+	passthroughLines := []string{
+		`data: {"type":"response.output_text.delta","output_index":1,"content_index":0,"delta":"hello"}`,
+		`data: {"type":"response.completed","response":{"id":"resp_1","output":[]}}`,
+	}
+	for _, line := range passthroughLines {
+		normalized := converters.NormalizeOpenRouterReasoningSSELine(line) + "\n"
+		if shouldSkipCompactStreamEvent(normalized) {
+			t.Errorf("正文/终态事件不应被过滤，line: %s", line)
+		}
+		if normalized != line+"\n" {
+			t.Errorf("标准事件应原样透传，got: %s, want: %s", normalized, line+"\n")
+		}
 	}
 }

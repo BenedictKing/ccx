@@ -106,6 +106,27 @@ func TestHasResponsesSemanticContent(t *testing.T) {
 			t.Fatal("expected content_part.added output_text to be treated as semantic content")
 		}
 	})
+
+	t.Run("reasoning_text delta (OpenRouter non-standard)", func(t *testing.T) {
+		event := "event: response.reasoning_text.delta\ndata: {\"type\":\"response.reasoning_text.delta\",\"delta\":\"thinking...\",\"content_index\":0}\n\n"
+		if !common.HasResponsesSemanticContent(event) {
+			t.Fatal("expected reasoning_text.delta to be treated as semantic content")
+		}
+	})
+
+	t.Run("reasoning_text done (OpenRouter non-standard)", func(t *testing.T) {
+		event := "event: response.reasoning_text.done\ndata: {\"type\":\"response.reasoning_text.done\",\"content_index\":0}\n\n"
+		if !common.HasResponsesSemanticContent(event) {
+			t.Fatal("expected reasoning_text.done to be treated as semantic content")
+		}
+	})
+
+	t.Run("reasoning_summary_text delta (standard)", func(t *testing.T) {
+		event := "event: response.reasoning_summary_text.delta\ndata: {\"type\":\"response.reasoning_summary_text.delta\",\"delta\":\"thinking...\",\"summary_index\":0}\n\n"
+		if !common.HasResponsesSemanticContent(event) {
+			t.Fatal("expected reasoning_summary_text.delta to be treated as semantic content")
+		}
+	})
 }
 
 func TestExtractResponsesTextFromEventUnknownTypes(t *testing.T) {
@@ -223,6 +244,37 @@ func TestFirstUnknownResponsesEventType_AllowsResponsesLifecycleAndErrorTypes(t 
 	for _, eventType := range eventTypes {
 		t.Run(eventType, func(t *testing.T) {
 			event := "event: " + eventType + "\ndata: {\"type\":\"" + eventType + "\"}\n\n"
+			if got, ok := firstUnknownResponsesEventType(event); ok {
+				t.Fatalf("firstUnknownResponsesEventType() = %q, true; want known type", got)
+			}
+		})
+	}
+}
+
+// 标准 OpenAI 流中高频出现的 content_part 与 done 系事件不应被判为未知类型，
+// 否则空流诊断文案会被 seenUnknown 分支抢占（knownTypes 缺口回归测试）。
+func TestFirstUnknownResponsesEventType_AllowsStandardContentPartAndDoneEvents(t *testing.T) {
+	eventTypes := []string{
+		"response.content_part.added",
+		"response.content_part.delta",
+		"response.content_part.done",
+		"response.output_text.delta",
+		"response.output_text.done",
+		"response.output_json.done",
+		"response.refusal.delta",
+		"response.refusal.done",
+		"response.audio.done",
+		"response.audio_transcript.done",
+		"response.function_call_arguments.delta",
+		"response.function_call_arguments.done",
+		"response.reasoning_text.delta",
+		"response.reasoning_text.done",
+		"response.reasoning_summary_text.delta",
+		"response.reasoning_summary_text.done",
+	}
+	for _, eventType := range eventTypes {
+		t.Run(eventType, func(t *testing.T) {
+			event := "data: {\"type\":\"" + eventType + "\",\"output_index\":0}\n"
 			if got, ok := firstUnknownResponsesEventType(event); ok {
 				t.Fatalf("firstUnknownResponsesEventType() = %q, true; want known type", got)
 			}
