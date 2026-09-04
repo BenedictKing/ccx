@@ -253,12 +253,12 @@ func TestRequestQualityBenefitCapScenario(t *testing.T) {
 	}
 }
 
-func TestEffortLevelQualityAdmission(t *testing.T) {
-	// gpt-5.6-luna 模型级常规档为 low，但非常规档（max）直测显著更高：
-	// 凭 effort 级实测应通过与「该模型最佳非常规档直测分」匹配的档位下限。
-	// 档位下限随基准分布漂移，这里独立复算：admission(tier) 必须等价于
-	// 最佳非常规档直测分 ≥ tier 下限（图上「Luna max 做日常开发」的复现路径）。
-	lunaBest := 0.0
+func TestEffortAwareQualityTierLunaReplay(t *testing.T) {
+	// gpt-5.6-luna 模型级常规档为 low，但各 effort 档直测分差异巨大：
+	// (模型, effort) 组合档位必须按该档证据评定——luna max 直测 69.6 可达
+	// high（差 0.35 分不到 premium 线），medium/low 回落实际观测水平。
+	// 档位下限为固定版本化阈值，此处独立复算该档最佳直测分做交叉验证。
+	lunaByEffort := map[EffortLevel]float64{}
 	benchmark := config.ResolveModelBenchmarkProfile("gpt-5.6-luna")
 	if !benchmark.Known {
 		t.Fatal("gpt-5.6-luna missing from builtin benchmark profiles")
@@ -273,53 +273,68 @@ func TestEffortLevelQualityAdmission(t *testing.T) {
 		if isSmallSampleEvidence(ev) {
 			continue
 		}
-		effort := NormalizeEffortLevel(ev.Effort)
-		if effort == "" || effort == EffortOff ||
-			EffortLevelOrdinal(effort) <= EffortLevelOrdinal(EffortMedium) {
-			continue
-		}
-		if score := ev.RawValue * 100; score > lunaBest {
-			lunaBest = score
+		if effort := NormalizeEffortLevel(ev.Effort); effort != "" {
+			if score := ev.RawValue * 100; score > lunaByEffort[effort] {
+				lunaByEffort[effort] = score
+			}
 		}
 	}
-	if lunaBest <= 0 {
-		t.Fatal("gpt-5.6-luna has no usable above-medium evidence")
+	if len(lunaByEffort) == 0 {
+		t.Fatal("gpt-5.6-luna has no usable effort evidence")
 	}
 	premiumMin, highMin, normalMin := computeQualityTierBoundaries()
+	// 期望值独立推导：有该档直测按直测分评档（direct 证据可证明 premium），
+	// 未指定 effort 回落模型基础档。
 	for _, tt := range []struct {
-		tier   QualityTier
-		cutoff float64
+		effort EffortLevel
+		want   QualityTier
 	}{
-		{QualityTierNormal, normalMin},
-		{QualityTierHigh, highMin},
-		{QualityTierPremium, premiumMin},
+		{EffortMax, qualityTierFromScoreFloor(lunaByEffort[EffortMax], premiumMin, highMin, normalMin)},
+		{EffortMedium, qualityTierFromScoreFloor(lunaByEffort[EffortMedium], premiumMin, highMin, normalMin)},
+		{EffortLow, qualityTierFromScoreFloor(lunaByEffort[EffortLow], premiumMin, highMin, normalMin)},
+		{"", ModelProfileQualityTier("gpt-5.6-luna", ModelFamilyOpenAI)},
 	} {
-		want := lunaBest >= tt.cutoff
-		if got := effortLevelQualityAdmission("gpt-5.6-luna", tt.tier); got != want {
-			t.Fatalf("luna admission(%v) = %v, want %v (best=%.1f cutoff=%.2f)",
-				tt.tier, got, want, lunaBest, tt.cutoff)
+		if got := EffortAwareQualityTier("gpt-5.6-luna", tt.effort, ModelFamilyOpenAI); got != tt.want {
+			t.Fatalf("luna effort=%v tier = %v, want %v", tt.effort, got, tt.want)
 		}
 	}
-	// 未知模型不豁免：保持模型级过滤语义
-	if effortLevelQualityAdmission("totally-unknown-model", QualityTierNormal) {
-		t.Fatal("未知模型不应豁免")
+	// 未注册模型回退家族规则（与模型级判定一致）
+	if got := EffortAwareQualityTier("totally-unknown-model", EffortMax, ModelFamilyOpenAI); got != ModelProfileQualityTier("totally-unknown-model", ModelFamilyOpenAI) {
+		t.Fatalf("未知模型应回退家族规则: %v", got)
 	}
-	// low 下限恒通过
-	if !effortLevelQualityAdmission("totally-unknown-model", QualityTierLow) {
-		t.Fatal("low 下限应恒通过")
+}
+
+// qualityTierFromScoreFloor 纯分数评档（无证据封顶），供测试独立推导期望值。
+func qualityTierFromScoreFloor(score, premiumMin, highMin, normalMin float64) QualityTier {
+	switch {
+	case score >= premiumMin:
+		return QualityTierPremium
+	case score >= highMin:
+		return QualityTierHigh
+	case score >= normalMin:
+		return QualityTierNormal
+	default:
+		return QualityTierLow
 	}
 }
 
 func TestFilterByCapabilityFloorEffortAdmission(t *testing.T) {
-	// 低常规档模型（QualityTier=low）+ normal 下限：凭 effort 级证据应放行
+	// 旁路已删除：未 pin effort 时低常规档模型不再凭"任一高档实测达标"放行；
+	// pin 了 effort 且该 (模型, effort) 组合达标才豁免。
 	profiles := []ModelProfile{
-		{ModelID: "gpt-5.6-luna", QualityTier: QualityTierLow, ProbeSuccess: true, ContextTokens: 200_000},
+		{ModelID: "gpt-5.6-luna", QualityTier: QualityTierLow, ProbeSuccess: true, ContextTokens: 200_000, ModelFamily: ModelFamilyOpenAI},
 		{ModelID: "unknown-model", QualityTier: QualityTierLow, ProbeSuccess: true, ContextTokens: 200_000},
 	}
+	// 未 pin：模型级 low 达不到 normal 下限，全部过滤。
 	floor := CapabilityFloor{MinQualityTier: QualityTierNormal}
+	if eligible := filterByCapabilityFloor(profiles, floor); len(eligible) != 0 {
+		t.Fatalf("未 pin effort 时不应有 effort 级豁免: %+v", eligible)
+	}
+	// pin=max：luna max 档直测 69.6 达 normal 下限，放行；unknown 模型仍被过滤。
+	floor.PinnedEffort = EffortMax
 	eligible := filterByCapabilityFloor(profiles, floor)
 	if len(eligible) != 1 || eligible[0].ModelID != "gpt-5.6-luna" {
-		t.Fatalf("应仅放行有 effort 级实测证据的模型: %+v", eligible)
+		t.Fatalf("pin=max 应仅放行 max 档达标的 luna: %+v", eligible)
 	}
 	// 无豁免时质量降档兜底路径保持可用
 	eligible2, fallback := filterByCapabilityFloorWithQualityFallback([]ModelProfile{

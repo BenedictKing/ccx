@@ -18,11 +18,11 @@ export function validateVisualizationData(raw) {
   if (!raw || !Array.isArray(raw.data)) throw new Error('输入文件缺少 data 数组')
   const qualityTiers = raw.qualityTiers || {
     scale: '0-100',
-    algorithm: 'medium-aligned-coding-v1-fallback',
+    algorithm: 'fixed-direct-calibration-v2-fallback',
     source: 'benchmark-chart',
-    premiumMin: 75,
-    highMin: 61,
-    normalMin: 55,
+    premiumMin: 69.95,
+    highMin: 59.15,
+    normalMin: 44.25,
   }
   const boundaries = [qualityTiers.normalMin, qualityTiers.highMin, qualityTiers.premiumMin]
   if (qualityTiers.scale !== '0-100' || boundaries.some(value => !Number.isFinite(value))
@@ -50,11 +50,11 @@ export function validateVisualizationData(raw) {
 export function renderBenchmarkChart(rows, comparisons = [], qualityTiers = null) {
   const resolvedQualityTiers = qualityTiers || {
     scale: '0-100',
-    algorithm: 'medium-aligned-coding-v1-fallback',
+    algorithm: 'fixed-direct-calibration-v2-fallback',
     source: 'benchmark-chart',
-    premiumMin: 75,
-    highMin: 61,
-    normalMin: 55,
+    premiumMin: 69.95,
+    highMin: 59.15,
+    normalMin: 44.25,
   }
   const serializedRows = JSON.stringify(rows).replaceAll('<', '\\u003c')
   const serializedComparisons = JSON.stringify(comparisons).replaceAll('<', '\\u003c')

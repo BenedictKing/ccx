@@ -11,13 +11,17 @@ const EFFORT_ORDER = new Map([
   ['ultra', 5],
 ])
 
+// 质量档阈值与 Go 侧 backend-go/internal/autopilot/model_profile.go 的
+// qualityTierThresholdsVersion = "fixed-direct-calibration-v2-2026-09-04" 保持一致：
+// 固定版本化阈值，由离线校准从 medium/default 直测分布推导（Go 侧锚定测试验证）。
+// 两侧同步修改；动态聚类推导已随 Go 侧一并移除（注册表刷新会导致全局重排）。
 const DEFAULT_QUALITY_TIERS = {
   scale: '0-100',
-  algorithm: 'medium-aligned-coding-v1',
+  algorithm: 'fixed-direct-calibration-v2',
   source: 'backend-autopilot',
-  premiumMin: 75,
-  highMin: 61,
-  normalMin: 55,
+  premiumMin: 69.95,
+  highMin: 59.15,
+  normalMin: 44.25,
 }
 
 function includesModel(model, models) {
@@ -102,20 +106,6 @@ function regularEffortBaselineScore(evidence = []) {
   return scores.length ? Math.min(...scores) : null
 }
 
-function largestGapMid(scores, floor) {
-  let bestSize = 0
-  let bestMid = null
-  for (let index = 0; index + 1 < scores.length; index++) {
-    if (scores[index] < floor || scores[index + 1] < floor) continue
-    const size = scores[index + 1] - scores[index]
-    if (size > bestSize) {
-      bestSize = size
-      bestMid = (scores[index] + scores[index + 1]) / 2
-    }
-  }
-  return bestMid
-}
-
 function deriveQualityMetadata(benchmarkProfiles = {}) {
   const scores = []
   const qualityScores = new Map()
@@ -129,21 +119,9 @@ function deriveQualityMetadata(benchmarkProfiles = {}) {
     qualityScores.set(canonical, score)
     scores.push(score)
   }
-  scores.sort((a, b) => a - b)
-  let { premiumMin, highMin, normalMin } = DEFAULT_QUALITY_TIERS
-  if (scores.length >= 4) {
-    const premium = largestGapMid(scores, scores.at(-1) * 0.75)
-    if (premium != null) premiumMin = premium
-    const belowPremium = scores.filter(score => score < premiumMin)
-    const high = largestGapMid(belowPremium, premiumMin * 0.5)
-    if (high != null) highMin = high
-    const belowHigh = scores.filter(score => score < highMin)
-    const normal = largestGapMid(belowHigh, highMin * 0.4)
-    if (normal != null) normalMin = normal
-  }
   return {
     qualityScores,
-    qualityTiers: { ...DEFAULT_QUALITY_TIERS, premiumMin, highMin, normalMin },
+    qualityTiers: { ...DEFAULT_QUALITY_TIERS },
   }
 }
 

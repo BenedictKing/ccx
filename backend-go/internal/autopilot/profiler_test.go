@@ -505,16 +505,16 @@ func TestDeriveQualityTier(t *testing.T) {
 			want:    QualityTierHigh,
 		},
 		{
-			name:    "gpt-5.5（常规口径 54.0）→ high",
+			name:    "gpt-5.5（常规口径 54.0）→ normal（v2 阈值 59.15）",
 			family:  ModelFamilyOpenAI,
 			modelID: "gpt-5.5",
-			want:    QualityTierHigh,
+			want:    QualityTierNormal,
 		},
 		{
-			name:    "gpt-5.4（单档 max 折算 31.8）→ normal",
+			name:    "gpt-5.4（单档 max 折算 31.8）→ low（v2 阈值 44.25）",
 			family:  ModelFamilyOpenAI,
 			modelID: "gpt-5.4",
-			want:    QualityTierNormal,
+			want:    QualityTierLow,
 		},
 		{
 			name:    "gpt-5.4-mini（直测 24.3 < normalMin）→ low",
@@ -545,18 +545,17 @@ func TestDeriveQualityTier(t *testing.T) {
 			want: QualityTierLow,
 		},
 		{
-			name:    "mimo-v2.5-pro（校准 27.9 ≥ normalMin 27.0）→ normal",
+			name:    "mimo-v2.5-pro（校准 27.9 < normalMin 44.25）→ low",
 			family:  ModelFamilyMiMo,
 			modelID: "mimo-v2.5-pro",
-			// 2026-08-29 基准刷新：deepseek-v4-flash 常规口径 26.99→28.51 填补低段断层，
-			// normalMin 28.74→27.03，校准分 27.93 随之从 low 翻入 normal（边界随数据分布浮动）
-			want: QualityTierNormal,
+			// v2 固定阈值：normalMin 27.03→44.25，低段模型不再随分布浮动翻档
+			want: QualityTierLow,
 		},
 		{
-			name:    "deepseek-v4-pro（常规口径 31.1）→ normal",
+			name:    "deepseek-v4-pro（常规口径 31.8 < normalMin 44.25）→ low",
 			family:  ModelFamilyDeepSeek,
 			modelID: "deepseek-v4-pro",
-			want:    QualityTierNormal,
+			want:    QualityTierLow,
 		},
 		{
 			name:    "deepseek-v3 → normal",

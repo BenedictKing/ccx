@@ -1055,10 +1055,12 @@ func (r *SmartRouter) executeFilter(
 			reasons := routingHardConstraintReasons(profile, &se.entry)
 
 			// advisor hint 的 MinQualityTier 约束（hint 真正 Applied 时才非零值）；
-			// 行粒度为 (渠道, 模型)，与模型级过滤同样允许 effort 级实测分豁免
+			// 行粒度为 (渠道, 模型)，effort 感知：请求实际思考等级下该 (模型,
+			// effort) 组合的档位达标才豁免——高 effort 达线不再无条件绕过模型级
+			// 过滤（medium 请求不能凭 max 档实测分进 premium）。
 			if advisorMinQualityTier != "" {
 				if advisorMinQualityReasons := MinQualityTierReasons(se.entry.ScoringCandidate.QualityTier, advisorMinQualityTier); len(advisorMinQualityReasons) > 0 &&
-					!effortLevelQualityAdmission(se.entry.ModelID, advisorMinQualityTier) {
+					qualityTierRank(EffortAwareQualityTier(se.entry.ModelID, requestEffortOfProfile(profile), se.entry.ScoringCandidate.ModelFamily)) < qualityTierRank(advisorMinQualityTier) {
 					reasons = append(reasons, advisorMinQualityReasons...)
 				}
 			}
