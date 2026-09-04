@@ -254,11 +254,50 @@ func TestRequestQualityBenefitCapScenario(t *testing.T) {
 }
 
 func TestEffortLevelQualityAdmission(t *testing.T) {
-	// gpt-5.6-luna 模型级常规档为 low，但 max 档实测 65.2%：
-	// 凭 effort 级实测应通过全部下限（图上「Luna max 做日常开发」的复现路径）。
-	for _, tier := range []QualityTier{QualityTierNormal, QualityTierHigh, QualityTierPremium} {
-		if !effortLevelQualityAdmission("gpt-5.6-luna", tier) {
-			t.Fatalf("luna 应凭 max 实测通过 %v 下限", tier)
+	// gpt-5.6-luna 模型级常规档为 low，但非常规档（max）直测显著更高：
+	// 凭 effort 级实测应通过与「该模型最佳非常规档直测分」匹配的档位下限。
+	// 档位下限随基准分布漂移，这里独立复算：admission(tier) 必须等价于
+	// 最佳非常规档直测分 ≥ tier 下限（图上「Luna max 做日常开发」的复现路径）。
+	lunaBest := 0.0
+	benchmark := config.ResolveModelBenchmarkProfile("gpt-5.6-luna")
+	if !benchmark.Known {
+		t.Fatal("gpt-5.6-luna missing from builtin benchmark profiles")
+	}
+	for _, ev := range benchmark.Profile.BenchmarkEvidence {
+		if ev.Domain != "coding" || ev.Metric != "pass_at_1" {
+			continue
+		}
+		if ev.Benchmark != "deepswe" && ev.Benchmark != "codexradar" {
+			continue
+		}
+		if isSmallSampleEvidence(ev) {
+			continue
+		}
+		effort := NormalizeEffortLevel(ev.Effort)
+		if effort == "" || effort == EffortOff ||
+			EffortLevelOrdinal(effort) <= EffortLevelOrdinal(EffortMedium) {
+			continue
+		}
+		if score := ev.RawValue * 100; score > lunaBest {
+			lunaBest = score
+		}
+	}
+	if lunaBest <= 0 {
+		t.Fatal("gpt-5.6-luna has no usable above-medium evidence")
+	}
+	premiumMin, highMin, normalMin := computeQualityTierBoundaries()
+	for _, tt := range []struct {
+		tier   QualityTier
+		cutoff float64
+	}{
+		{QualityTierNormal, normalMin},
+		{QualityTierHigh, highMin},
+		{QualityTierPremium, premiumMin},
+	} {
+		want := lunaBest >= tt.cutoff
+		if got := effortLevelQualityAdmission("gpt-5.6-luna", tt.tier); got != want {
+			t.Fatalf("luna admission(%v) = %v, want %v (best=%.1f cutoff=%.2f)",
+				tt.tier, got, want, lunaBest, tt.cutoff)
 		}
 	}
 	// 未知模型不豁免：保持模型级过滤语义

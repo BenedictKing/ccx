@@ -491,16 +491,18 @@ func TestDeriveQualityTier(t *testing.T) {
 			want:    QualityTierNormal,
 		},
 		{
-			name:    "claude fable → premium",
+			// 档位随基准分布漂移：2026-09 快照下 premiumMin=74.45（hy4-preview
+			// 插值 76.1 独占顶部间隙），fable 65.4 落入 high 段顶部。
+			name:    "claude fable → high（2026-09 分布）",
 			family:  ModelFamilyClaude,
 			modelID: "claude-fable-5",
-			want:    QualityTierPremium,
+			want:    QualityTierHigh,
 		},
 		{
-			name:    "gpt-5.6 → premium",
+			name:    "gpt-5.6 → high（2026-09 分布）",
 			family:  ModelFamilyOpenAI,
 			modelID: "gpt-5.6-sol",
-			want:    QualityTierPremium,
+			want:    QualityTierHigh,
 		},
 		{
 			name:    "gpt-5.5（常规口径 54.0）→ high",

@@ -80,6 +80,29 @@ func federationUpstreamFor(cfg config.Config) func(scheduler.ChannelInfo) *confi
 	}
 }
 
+// federationModelProfileStore 为 chat sibling 挂显式模型级档位。
+// applyModelQualityTier 在命中模型级画像时不会再用注册表实时推导覆盖档位；
+// 不注入则 mock 的 endpoint 级 Premium 会被 gpt-5.6-sol 的注册表档位
+// （随基准分布漂移）穿透，测试将不再隔离于数据快照。
+func federationModelProfileStore(t *testing.T) *ModelProfileStore {
+	t.Helper()
+	db := newTestDB(t)
+	store, err := NewModelProfileStoreWithDB(db)
+	if err != nil {
+		t.Fatalf("NewModelProfileStoreWithDB 失败: %v", err)
+	}
+	if err := store.Upsert(&ModelProfile{
+		ChannelUID:  "ch_k3_chat",
+		ChannelKind: "chat",
+		MetricsKey:  "metrics_k3",
+		ModelID:     "gpt-5.6-sol",
+		QualityTier: QualityTierPremium,
+	}); err != nil {
+		t.Fatalf("Upsert model profile 失败: %v", err)
+	}
+	return store
+}
+
 func runFederationFilter(t *testing.T, profile *RequestProfile, penalty float64) ([]scheduler.ChannelInfo, *RoutingDecisionTrace) {
 	t.Helper()
 	cfg := federationRouterConfig()
@@ -87,6 +110,7 @@ func runFederationFilter(t *testing.T, profile *RequestProfile, penalty float64)
 	t.Cleanup(cleanup)
 	traceStore := createTestTraceStore(t)
 	router := NewSmartRouter(federationProfileStore(t), nil, traceStore, cfgManager)
+	router.SetModelProfileStore(federationModelProfileStore(t))
 
 	filter := router.CandidateFilterFor(profile)
 	if filter == nil {
