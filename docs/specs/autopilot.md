@@ -327,7 +327,7 @@ Autopilot 是 CCX 的智能路由与渠道托管子系统，由 Manager + SmartR
 
 - `TraceUID/SchemaVersion/RequestCorrelationId`
 - `TaskClass/TaskDomain/RequestedModel/AgentRole`
-- `Candidates`（含 `CandidateKey`（`channelUID|model`，见 §5.8）、`CandidateScore` 明细、`FilterReasons`、`DomainEvidence`、AFP 成本）
+- `Candidates`（含 `CandidateKey`（五元组 `channelUID|protocol|keyIdentity|model|effort`，空段 `*`，见 §5.8；v2 前为 `channelUID|model` 二元组）、`ActualModel/KeyIdentity/QuotaGroup/Effort` 结构化字段、`CandidateScore` 明细、`FilterReasons`、`DomainEvidence`、AFP 成本；v3 落盘截断 `CandidatesTotal/CandidatesTruncated`）
 - `GlobalFilterReasons/SortReasons`
 - `SelectedChannelUID/SelectedMetricsKey/SelectedOriginTier`
 - `FallbackUsed/ShadowChannelUID/ActualChannelUID`
@@ -435,10 +435,10 @@ ContextFilter → CandidateFilter(SmartRouter) → X-Channel/ManualOverride/Prom
 2. 遍历 scheduler 传入的候选渠道
    - 三个预过滤跳过点（missing_upstream/disabled_channel/candidate_unavailable）不再静默，写入 `trace.GlobalFilterReasons["candidate_pre_filter"]`
    - 联邦路由：`federatedRoute(ch, profile.ChannelKind)`；`ch.ActualModel != ""` 时协议联邦短路为单候选行（MappingSource="protocol_federation"）
-   - 解析模型映射：`resolveChannelModels`（复数）——候选粒度为 **(渠道, 模型)** 行，单渠道上限 `routingCandidateFanoutLimit = 8`（见 §5.8）
+   - 解析模型映射：`resolveChannelModels`（复数）——模型粒度行上限 `routingCandidateFanoutLimit = 8`；`expandChannelCandidates` 再按 **key（全量）× effort（已决档+降档）** 展开为五元组行（见 §5.8）
    - 每行独立构建 `channelScoreEntry` 并独立做硬约束判定；`applyModelQualityTier`（同名承接行 `MappedModel` 保持空，防映射质量档折算误判）
 3. 应用 AFP 成本（若启用）
-4. 归一化 `SavingsScore`：cost/savings 按 `CandidateKey`（`channelUID|model`）归一化，空则回退 ChannelUID
+4. 归一化 `SavingsScore`：cost/savings 按 `CandidateKey`（五元组，见 §5.8）归一化，空则回退 ChannelUID
 5. `ScoreCandidate` 对每个候选行评分
 6. **Advisor hint**：
    - 仅 `lightweight/worker` 允许生效
@@ -674,6 +674,19 @@ health(40) > fastDecay(25) > successRate(20) > latency(10) > cost(5)
 - 显式/白名单渠道从 `ModelMapping` 值 + redirect 目标枚举，逐个过 `ExplainModelSupport`；枚举为空但单数版认为 supported 时回退单模型行（fail-open）。
 - 同名承接（映射后模型名 == 请求模型名）的行 `MappedModel` 保持空——`applyModelQualityTier` 依赖 MappedModel 判空做映射质量档折算；模型名展示由前端经 CandidateKey 回退解析（`AutopilotTraceDetailDialog.vue` 加 Model 列）。
 - 返回 scheduler 的结果仍按路由键渠道级去重：同渠道一个模型行通过即保留该渠道（取最高分行），不重复占用 failover 槽位。`RoutingPlan`/`BuildPlan`（dry-run 诊断面板）同样消费 CandidateKey。
+
+### 5.8.1 候选粒度升级五元组（渠道 × 协议 × key × 模型 × effort）
+
+提交：`391c6277`（展开与评分）/ `c81659bd`（执行锁定）/ `3da00056`（trace v3）
+
+- **动机**：二元组下 key 维被渠道级聚合吞掉（`AggregateChannelProfile` 平均、成本取 min-over-keys、`KeyMask` 取首个画像仅展示）、effort 档在调度侧折叠（执行层 per-key 重决），导致 ① key 级健康/成本差异不进评分（软死 key 污染全渠道行）② domain 分锚定错档（supervisor 请求用 low 档基准评分）③ 调度选中结果不约束执行。
+- **身份**：`routingCandidateIdentity.Key()` = `channelUID|protocol|keyIdentity|model|effort`（空段 `*`）。keyIdentity = KeyUID 优先，手工 key 用 `"kh_"+KeyHashFromAPIKey`；协议 = 物理渠道执行协议（一渠道一协议，渠道属性显式化）；effort 空 = passthrough。
+- **展开**（`expandChannelCandidates`，真实路径与 dry-run 同构）：模型行（fanout ≤8）× 全量 key（复用 `keypool.CandidatesForModelWeighted` 的运行期负信号过滤：key 禁用 / (key,模型) 限制 / 分组禁用 / 渠道-Key-模型熔断 / 倍率闸门）× effort 档（`deriveEffortChain`：解析器已决档 + `SupportedEffortLevels` 序数相邻降档，≤2 档；意图 pin 在回填阶段覆盖不参与展开）。单渠道行硬顶 `routingCandidateRowsPerChannelLimit = 64`；无可用 key 时 fail-open 产无 key 维单行。
+- **per-key 评分**（`buildChannelEntryForKey`）：成本按该 key 自己的 GroupMultiplier/订阅 effective cost（替换 min-over-keys）；画像优先该 key 的 endpoint 画像（health/四档/MetricsKey/KeyMask 直接取值不聚合），无该 key 画像回退渠道聚合口径。`applyDomainStrength` 切换 `ResolveDomainStrengthForEffort`：domain 分按候选 effort 档锚定基准证据（跨档回退降置信度）。
+- **执行锁定（锁定首选 + 执行层兜底）**：回填时把渠道最高分存活行的 pin 写入 `ChannelInfo.PinnedKeyIdentity/PinnedEffort`（意图 pin 覆盖行档），`SelectionResult.ExecutionKeyIdentity/ExecutionEffort` 透传（`WithSelectionTrace` 同源携带，六类 handler 零改动）。执行层：pin key 在 policy 过滤集内提到选择序首位（失败/quota/defer 自然轮转兜底）；endpoint binding 解析未决档时拷贝填充调度档（不污染 policy 缓存）。模型仍以 per-key `ResolvedTargetForBinding` 解析为权威（与调度同源 resolver）。
+- **降档语义**：effort 链在调度侧按行展开——同渠道同模型的 xhigh 行与 high 行是独立候选行，跨渠道 failover（重调度剔除失败渠道）时降档行天然参与全局排序竞争；渠道内 key 级降档 attempt 留作后续 failover 策略演进。
+- **trace v3**：`RoutingCandidate` 加 `actualModel/keyIdentity/quotaGroup/effort` 结构化字段，`schemaVersion=3`；落盘/预览截断（每渠道 top-5、全局 top-40，`CandidatesTotal/CandidatesTruncated` 标记）只影响体积不影响调度。旧 v1/v2 trace 读取不反解析，前端 `displayCandidateModel` 按 key 段数兜底（五段取第 4 段，两段取首段后）。
+- **未做（记录）**：metrics `request_records` effort 列——传参链侵入面大（十几个 RecordRequest 系签名），观测已由 ChannelLog `effortDecisionSource` + trace 候选行覆盖；`autopilot_model_profiles` PK 保持四维不动（稳态画像；effort 证据走 benchmark 注册表，避免画像迁移丢历史）。
 
 ### 5.9 scheduler 过滤明细接入路由 trace
 

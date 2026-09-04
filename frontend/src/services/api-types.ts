@@ -1701,15 +1701,22 @@ export interface DomainStrengthEvidence {
 export interface RoutingCandidate {
   channelUid: string
   channelName?: string
-  candidateKey?: string // (渠道, 模型) 粒度标识：channelUid|model
+  candidateKey?: string // 五元组标识（v3）：channelUID|protocol|keyIdentity|model|effort；v2 前为二元组 channelUID|model
   metricsKey?: string
   keyMask?: string
   originTier?: string
   channelKind?: string
+  executionKind?: string
+  protocolFidelity?: string
+  conversionPenalty?: number
   healthState?: string
   mappedModel?: string
   mappingSource?: string
   mappingReason?: string
+  actualModel?: string // v3：候选行实际发送模型（五元组模型维）
+  keyIdentity?: string // v3：候选行 key 身份（KeyUID 或 kh_ 哈希前缀）
+  quotaGroup?: string // v3：key 分组
+  effort?: string // v3：思考档位（空 = passthrough）
   totalScore: number
   scores?: CandidateScore[]
   domainEvidence?: DomainStrengthEvidence

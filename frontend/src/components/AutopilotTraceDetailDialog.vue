@@ -176,6 +176,8 @@
                 <tr>
                   <th class="text-caption">Channel</th>
                   <th class="text-caption">Model</th>
+                  <th class="text-caption">Key</th>
+                  <th class="text-caption">Effort</th>
                   <th class="text-caption">Origin Tier</th>
                   <th class="text-caption">Score</th>
                   <th class="text-caption">Selected</th>
@@ -186,6 +188,8 @@
                 <tr v-for="(cand, ci) in detail.candidates" :key="ci">
                   <td class="text-caption">{{ formatChannelDisplay(cand) }}</td>
                   <td class="text-caption">{{ displayCandidateModel(cand) }}</td>
+                  <td class="text-caption">{{ displayCandidateKeyIdentity(cand) }}</td>
+                  <td class="text-caption">{{ displayCandidateEffort(cand) }}</td>
                   <td class="text-caption">{{ cand.originTier || '-' }}</td>
                   <td class="text-caption">{{ cand.totalScore.toFixed(3) }}</td>
                   <td>
@@ -464,29 +468,55 @@ function shortReleaseId(id?: string): string {
 
 // 紧凑展示候选渠道：渠道名 (key掩码)。
 // 模型名单独成列（displayCandidateModel），不再拼进渠道名。
+// v3 五元组行的 key 维已单独成列（displayCandidateKeyIdentity），
+// 渠道列仅在旧 trace（无 keyIdentity）时拼 keyMask 兜底。
 function formatChannelDisplay(cand: RoutingCandidate): string {
   const name = cand.channelName || cand.channelUid
-  if (cand.keyMask) {
+  if (cand.keyMask && !cand.keyIdentity) {
     return `${name} (${cand.keyMask})`
   }
   return name
 }
 
-// displayCandidateModel 返回该 (渠道, 模型) 行的承接模型名。
-// 显式/自动映射时 mappedModel 直接有值；同名承接时 mappedModel 为空，
-// 回退取 candidateKey（channelUid|model）的模型段，保证每行模型名非空。
+// displayCandidateModel 返回该候选行的承接模型名。
+// 优先结构化字段（v3 五元组）：mappedModel/actualModel；旧 trace（v2 二元组
+// candidateKey=channelUid|model）回退解析：五段格式取第 4 段（模型维），
+// 两段格式取首段之后，保证每行模型名非空。
 function displayCandidateModel(cand: RoutingCandidate): string {
   if (cand.mappedModel) {
     return cand.mappedModel
   }
+  if (cand.actualModel) {
+    return cand.actualModel
+  }
   const key = cand.candidateKey
   if (key) {
+    const parts = key.split('|')
+    if (parts.length >= 5) {
+      return parts[3] || '-'
+    }
     const idx = key.indexOf('|')
     if (idx >= 0 && idx < key.length - 1) {
       return key.slice(idx + 1)
     }
   }
   return '-'
+}
+
+// displayCandidateEffort 返回候选行思考档位（五元组 effort 维）；
+// 空 = passthrough（未决档），旧 trace 无此字段。
+function displayCandidateEffort(cand: RoutingCandidate): string {
+  return cand.effort || '-'
+}
+
+// displayCandidateKeyIdentity 返回候选行 key 身份的紧凑展示：
+// 五元组 keyIdentity（KeyUID 尾段或 kh_ 哈希）优先，回退 keyMask。
+function displayCandidateKeyIdentity(cand: RoutingCandidate): string {
+  if (cand.keyIdentity) {
+    const id = cand.keyIdentity
+    return id.length > 10 ? id.slice(0, 10) + '…' : id
+  }
+  return cand.keyMask || '-'
 }
 
 function modeColor(mode?: string): string {

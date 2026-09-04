@@ -168,10 +168,14 @@ export interface SmartRoutingDiagnoseCandidate {
   savingsScore: number
   selected: boolean
   filterReasons?: string[]
-  candidateKey?: string // (渠道, 模型) 粒度标识：channelUid|model
+  candidateKey?: string // 五元组标识（v3）：channelUID|protocol|keyIdentity|model|effort；v2 前为二元组
   mappedModel?: string
   mappingSource?: string
   mappingReason?: string
+  actualModel?: string // v3：候选行实际发送模型
+  keyIdentity?: string // v3：候选行 key 身份（KeyUID 或 kh_ 哈希前缀）
+  quotaGroup?: string // v3：key 分组
+  effort?: string // v3：思考档位（空 = passthrough）
 }
 
 export interface SmartRoutingDiagnosePlan {
