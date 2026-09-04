@@ -1559,6 +1559,12 @@ func TryUpstreamWithAllKeys(
 					MaybeLearnSeverityClassOutcome(c, upstream, apiKey, attemptModel, attemptBody,
 						GetStreamTimeoutObserver(c).SawSeverityTag(), err)
 				}
+			} else if scanned, found := NonStreamSeverityOutcome(c); scanned {
+				// 安全分类能力自学习（被动侧·成功路径，非流式）：CC 安全分类器子请求
+				// 是非流式的（stream=false），只挂流式会漏掉全部此类请求。扫描结论由
+				// messages/responses 的非流式成功处理写入（MarkNonStreamSeverityScan）；
+				// 未接线路径不置位、不学习。
+				MaybeLearnSeverityClassOutcome(c, upstream, apiKey, attemptModel, attemptBody, found, err)
 			}
 			if err != nil {
 				if isStream && streamingUserID != "" {

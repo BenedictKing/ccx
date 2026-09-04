@@ -413,6 +413,10 @@ func handleNormalResponse(
 		return nil, err
 	}
 
+	// 安全分类能力观测（非流式）：分类形状请求才扫描响应体 <severity> 标记，
+	// 结论供执行器成功路径的自学习读取（NonStreamSeverityOutcome）。
+	common.MarkNonStreamSeverityScan(c, requestBody, bodyBytes)
+
 	if envCfg.EnableResponseLogs {
 		responseTime := time.Since(startTime).Milliseconds()
 		common.RequestLogf(c, "[Messages-Timing] 响应完成: %dms, 状态: %d", responseTime, resp.StatusCode)

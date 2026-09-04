@@ -1,6 +1,7 @@
 package common
 
 import (
+	"bytes"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -27,6 +28,14 @@ import (
 // severityTagMarker 流式文本中检测的格式标记（开标签即可，客户端可能在
 // stop_sequence 处截断，闭标签未必出现在输出里）。
 const severityTagMarker = "<severity"
+
+var (
+	// severityTagMarkerBytes / severityTagMarkerEscapedJSON 非流式响应体的字节级
+	// 扫描形态：原始（上游未转义）与 JSON 转义（\u003cseverity，Go json.Marshal
+	// 默认 HTML 转义，newapi 系上游重写后的响应体只含转义形态）。
+	severityTagMarkerBytes       = []byte(severityTagMarker)
+	severityTagMarkerEscapedJSON = []byte(`\u003cseverity`)
+)
 
 // SeverityTagScanner 跨增量安全地检测流式文本中的 <severity 标记。
 // 标记可能被 SSE 分片切成两半（"<sev" + "erity>"），用 N-1 长度的尾部拼接兜底。
@@ -105,4 +114,46 @@ func MaybeLearnSeverityClassOutcome(c *gin.Context, upstream *config.UpstreamCon
 		RequestLogf(c, "[SeverityClassCompat] 渠道 %s 模型 %s 无法完成安全分类格式输出（流式全程无 <severity> 标记），已记忆并将在后续路由中规避",
 			upstream.Name, model)
 	}
+}
+
+// 非流式路径的扫描结论经 gin context 传递：学习挂载点在 handleSuccess 返回之后
+// （upstream_failover.go），而响应体只在各协议的非流式成功处理函数内部可见。
+const nonStreamSeverityScanKey = "ccx_nonstream_severity_scan"
+
+type nonStreamSeverityScan struct {
+	scanned bool
+	found   bool
+}
+
+// MarkNonStreamSeverityScan 非流式成功路径的观测入口：分类形状请求才扫描响应体
+// 是否含 <severity> 标记，结论记入请求上下文供学习挂载点读取。
+//
+// 口径与流式 SeverityTagScanner 一致（开标签即命中，闭标签可能被 stop_sequence
+// 截断）。CC 的安全分类器子请求是非流式的（stream=false），只挂流式观测会漏掉
+// 全部此类请求。同渠道重试会覆盖旧结论。
+func MarkNonStreamSeverityScan(c *gin.Context, requestBody, responseBody []byte) {
+	if c == nil || !autopilot.SeverityClassRequestShape(requestBody) {
+		return
+	}
+	found := bytes.Contains(responseBody, severityTagMarkerBytes) ||
+		bytes.Contains(responseBody, severityTagMarkerEscapedJSON)
+	c.Set(nonStreamSeverityScanKey, &nonStreamSeverityScan{scanned: true, found: found})
+}
+
+// NonStreamSeverityOutcome 返回 (非流式响应是否已扫描, 是否含 <severity> 标记)。
+// 未扫描（chat 等未接线路径，或非分类形状请求）返回 false——挂载点据此跳过，
+// 防误杀红线：不得把"未观测"当成"无标记"学成负结论。
+func NonStreamSeverityOutcome(c *gin.Context) (scanned, found bool) {
+	if c == nil {
+		return false, false
+	}
+	v, ok := c.Get(nonStreamSeverityScanKey)
+	if !ok {
+		return false, false
+	}
+	scan, _ := v.(*nonStreamSeverityScan)
+	if scan == nil {
+		return false, false
+	}
+	return scan.scanned, scan.found
 }

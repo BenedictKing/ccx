@@ -65,6 +65,10 @@ func handleSuccess(
 		return nil, err
 	}
 
+	// 安全分类能力观测（非流式）：同 messages 非流式路径，结论供执行器
+	// 成功路径的自学习读取（NonStreamSeverityOutcome）。
+	common.MarkNonStreamSeverityScan(c, originalRequestJSON, bodyBytes)
+
 	if envCfg.EnableResponseLogs {
 		responseTime := time.Since(startTime).Milliseconds()
 		common.RequestLogf(c, "[Responses-Timing] Responses 响应完成: %dms, 状态: %d", responseTime, resp.StatusCode)
