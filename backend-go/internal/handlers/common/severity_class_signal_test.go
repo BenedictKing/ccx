@@ -86,3 +86,53 @@ func errNonNil() error { return &fakeStreamError{} }
 type fakeStreamError struct{}
 
 func (*fakeStreamError) Error() string { return "stream aborted" }
+
+// ── 非流式扫描入口 ──
+
+func TestMarkNonStreamSeverityScan(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	// 出站体经 Go json.Marshal 重写后 stop_sequences 为转义形态（\u003c/severity\u003e）
+	shapeReqEscaped := []byte(`{"model":"m1","max_tokens":64,"stop_sequences":["\u003c/severity\u003e"],"messages":[]}`)
+	shapeReqRaw := []byte(`{"model":"m1","max_tokens":64,"stop_sequences":["</severity>"],"messages":[]}`)
+	normalReq := []byte(`{"model":"m1","messages":[]}`)
+
+	tests := []struct {
+		name        string
+		req, resp   []byte
+		wantScanned bool
+		wantFound   bool
+	}{
+		{name: "分类形状+响应含原始标记", req: shapeReqRaw, resp: []byte(`{"content":[{"type":"text","text":"<severity>1"}]}`), wantScanned: true, wantFound: true},
+		{name: "分类形状+响应含转义标记", req: shapeReqEscaped, resp: []byte(`{"content":[{"type":"text","text":"\u003cseverity\u003e1"}]}`), wantScanned: true, wantFound: true},
+		{name: "分类形状+罐头响应无标记", req: shapeReqEscaped, resp: []byte(`{"content":[{"type":"text","text":"分类器暂时不可用，稍等片刻后重试。"}]}`), wantScanned: true, wantFound: false},
+		{name: "非分类形状不扫描", req: normalReq, resp: []byte(`{"content":[{"type":"text","text":"<severity>1"}]}`), wantScanned: false, wantFound: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			MarkNonStreamSeverityScan(c, tt.req, tt.resp)
+			scanned, found := NonStreamSeverityOutcome(c)
+			if scanned != tt.wantScanned || found != tt.wantFound {
+				t.Fatalf("scanned=%v found=%v, want %v/%v", scanned, found, tt.wantScanned, tt.wantFound)
+			}
+		})
+	}
+
+	// 未调用扫描入口（chat 等未接线路径）：保持未置位，挂载点据此跳过
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	if scanned, found := NonStreamSeverityOutcome(c); scanned || found {
+		t.Fatal("未扫描不应置位")
+	}
+	// nil context 防御
+	if scanned, found := NonStreamSeverityOutcome(nil); scanned || found {
+		t.Fatal("nil context 应返回未扫描")
+	}
+	// failover 后同渠道重试：后一次扫描覆盖前一次结论
+	c2, _ := gin.CreateTestContext(httptest.NewRecorder())
+	MarkNonStreamSeverityScan(c2, shapeReqEscaped, []byte(`{"content":[{"type":"text","text":"罐头"}]}`))
+	MarkNonStreamSeverityScan(c2, shapeReqEscaped, []byte(`{"content":[{"type":"text","text":"<severity>2"}]}`))
+	if _, found := NonStreamSeverityOutcome(c2); !found {
+		t.Fatal("重试后的扫描结论应覆盖前一次")
+	}
+}

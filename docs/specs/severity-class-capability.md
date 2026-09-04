@@ -24,9 +24,10 @@
 
 ### 2.3 写入：仅运行期被动信号（层3b）
 
-挂载点与 `MaybeLearnForcedToolChoiceMiss` 同一处（`upstream_failover.go` handleSuccess 之后），同样仅 messages/responses 流式路径——只有这两条路径接了标记扫描：
+挂载点与 `MaybeLearnForcedToolChoiceMiss` 同一处（`upstream_failover.go` handleSuccess 之后），messages/responses 的流式与非流式路径均接线：
 
-- **扫描**：`SeverityTagScanner`（`severity_class_signal.go`）跨增量检测 `<severity` 开标签（闭标签可能被 stop_sequence 截断，故只认开标签；SSE 分片切开由 N-1 尾部拼接兜底）。messages 挂在流循环文本增量处（`stream_processor.go`）；responses 挂两处——预检完成分支（短分类响应可能整体在预检阶段完成）与 post-commit 逐 SSE 行。
+- **流式扫描**：`SeverityTagScanner`（`severity_class_signal.go`）跨增量检测 `<severity` 开标签（闭标签可能被 stop_sequence 截断，故只认开标签；SSE 分片切开由 N-1 尾部拼接兜底）。messages 挂在流循环文本增量处（`stream_processor.go`）；responses 挂两处——预检完成分支（短分类响应可能整体在预检阶段完成）与 post-commit 逐 SSE 行。
+- **非流式扫描**：`MarkNonStreamSeverityScan`（分类形状请求才扫描）在 messages `handleNormalResponse` / responses 非流式分支读完响应体后调用，字节级检测原始与 JSON 转义两种标记形态（Go json.Marshal 默认 HTML 转义，`\u003cseverity`），结论经 gin context 传递，执行器侧 `NonStreamSeverityOutcome` 读取——**只有真扫过才置位**，未接线路径（chat/gemini 等）不置位、不学习，避免把"未观测"误学成负结论。CC 安全分类器子请求实测为非流式（`stream=false`，2026-09-04 日志 Protocol-Debug 可证），此前只挂流式导致学习对该流量永不触发。
 - **学习口径（防误杀红线）**：仅分类形状请求（对**实际出站体**判定）且 `handleSuccess` 无错误时学习——中途出错/客户端取消/空响应一律不学。输出含标记 → 能力确认（清除负结论，Record 翻转语义保证不重复落盘）；不含 → 负结论。
 
 不做主动探针：分类请求频次高（每次工具调用前都有一发），被动学习收敛速度足够，主动探测反而白花钱。
@@ -53,10 +54,10 @@
 
 - 误杀面分析：即使错误学到负结论，被影响的只是"停止序列含 `</severity>`"的请求；上游行为变化后 24h TTL 自动恢复，或管理端手动清除。
 - 乐观翻转：同组合后续输出含标记即清除负结论（能力确认），中转商修复后无需等 TTL。
-- 非流式路径不学习（CC 分类请求均为流式；非流式无标记扫描，`sawSeverityTag=false` 无法区分"没输出"与"没观测"）。
+- 非流式路径已接线学习（CC 分类请求实测为非流式；扫描结论区分"已扫描无标记"与"未扫描"，后者不学）。
 - gemini/chat 入站路径不学习（无扫描接线，同工具调用先例的约束）。
 
 ## 5. 验证
 
-- 单测：`severity_class_memory_test.go`（形状判定/读取/候选过滤）、`channel_compat_severity_test.go`（记录/查询/翻转/清除/快照/跨 trait 隔离）、`severity_class_signal_test.go`（跨增量扫描/学习口径五分支）、`capability_floor_test.go`（硬约束三态）。
+- 单测：`severity_class_memory_test.go`（形状判定/读取/候选过滤）、`channel_compat_severity_test.go`（记录/查询/翻转/清除/快照/跨 trait 隔离）、`severity_class_signal_test.go`（跨增量扫描/学习口径五分支/非流式扫描入口含转义与未置位红线）、`capability_floor_test.go`（硬约束三态）。
 - 实测路径：重启后端后复跑 CC 分类请求 → 观察 `[SeverityClassCompat]` 学习日志 → 第二发请求应经硬约束避开 deepseek-v4-flash（trace FilterReasons 出现「安全分类格式能力不满足」或映射候选变化）。
