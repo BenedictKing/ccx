@@ -24,19 +24,23 @@ const (
 // 全部字段由 worker 填充，HealthAnalyzer 不主动抓取任何数据。
 type EndpointSignals struct {
 	// ── 基础计数（滑动窗口）──
-	TotalRequests1h  int     // 最近 1 小时总请求数
-	SuccessCount1h   int     // 最近 1 小时成功请求数
-	FailureCount1h   int     // 最近 1 小时失败请求数
-	TotalRequests24h int     // 最近 24 小时总请求数
-	SuccessCount24h  int     // 最近 24 小时成功请求数
-	FailureCount24h  int     // 最近 24 小时失败请求数
-	TotalRequests15m int     // 最近 15 分钟总请求数
-	SuccessRate15m   float64 // 最近 15 分钟成功率（直接从 MetricsManager 取）
-	SuccessRate1h    float64 // 最近 1 小时成功率（直接从 MetricsManager 取）
-	ConsecutiveFail  int     // 连续失败次数
-	LastSuccessAt    *time.Time
-	LastFailureAt    *time.Time
-	Now              time.Time // 当前时间（方便测试注入）
+	TotalRequests1h  int // 最近 1 小时总请求数
+	SuccessCount1h   int // 最近 1 小时成功请求数
+	FailureCount1h   int // 最近 1 小时失败请求数
+	TotalRequests24h int // 最近 24 小时总请求数
+	SuccessCount24h  int // 最近 24 小时成功请求数
+	FailureCount24h  int // 最近 24 小时失败请求数
+	// 按 S 型时间衰减加权的 24h 有效计数：越是久远的记录权重越低
+	// （w(age)=1/(1+exp((age-4h)/1h))），用于软性判据，避免陈旧故障无限期维持判死。
+	EffectiveSuccessCount24h float64
+	EffectiveFailureCount24h float64
+	TotalRequests15m         int     // 最近 15 分钟总请求数
+	SuccessRate15m           float64 // 最近 15 分钟成功率（直接从 MetricsManager 取）
+	SuccessRate1h            float64 // 最近 1 小时成功率（直接从 MetricsManager 取）
+	ConsecutiveFail          int     // 连续失败次数
+	LastSuccessAt            *time.Time
+	LastFailureAt            *time.Time
+	Now                      time.Time // 当前时间（方便测试注入）
 
 	// ── 错误分类计数（最近 1 小时）──
 	AuthFailureCount   int // 401/403 非重试失败（FailureClass=non_retryable）
@@ -66,6 +70,13 @@ type DiagnosisResult struct {
 	Confidence float64   // 诊断置信度 0.0-1.0
 	Reason     string    // 中文诊断原因
 }
+
+// 软死有效计数门槛：加权失败证据低于 failureFloor 视为证据已衰减殆尽；
+// 加权成功证据高于 successFloor 即视为“窗口内有成功”，均不判死。
+const (
+	softDeathEffectiveFailureFloor = 1.0
+	softDeathEffectiveSuccessFloor = 0.5
+)
 
 // ── HealthAnalyzer ──
 
@@ -177,13 +188,21 @@ func (h *HealthAnalyzer) checkDead(s EndpointSignals) (DiagnosisResult, bool) {
 
 	// ── 软死（confidence >= 0.80）──
 
-	// 最近 24 小时无成功请求，且有失败记录
-	if s.TotalRequests24h > 0 && s.SuccessCount24h == 0 && s.FailureCount24h > 0 {
+	// 最近 24 小时无成功请求，且有失败记录。
+	// 判据使用 S 型时间衰减后的有效计数：陈旧失败（如数小时前的一次本机网络抖动）
+	// 证据权重随时间衰减，不足以维持判死时渠道回落到 unknown，由后续流量重新验证。
+	effSuccess, effFailure := s.EffectiveSuccessCount24h, s.EffectiveFailureCount24h
+	if effSuccess == 0 && effFailure == 0 && s.FailureCount24h > 0 {
+		// 信号来源未填充衰减计数时退回原始计数（衰减字段对旧调用方可选）
+		effSuccess, effFailure = float64(s.SuccessCount24h), float64(s.FailureCount24h)
+	}
+	if s.TotalRequests24h > 0 && effSuccess < softDeathEffectiveSuccessFloor && effFailure >= softDeathEffectiveFailureFloor {
 		return DiagnosisResult{
 			State:      HealthStateDead,
 			DeathType:  DeathTypeSoft,
 			Confidence: 0.85,
-			Reason:     "软死：最近 24 小时无成功请求（共 " + itoa(s.TotalRequests24h) + " 次尝试均失败）",
+			Reason: "软死：最近 24 小时无成功请求（有效失败证据 " + formatFixed1(effFailure) +
+				"，共 " + itoa(s.TotalRequests24h) + " 次尝试）",
 		}, true
 	}
 
@@ -394,6 +413,15 @@ func itoa(n int) string {
 		buf[i] = '-'
 	}
 	return string(buf[i:])
+}
+
+// formatFixed1 将非负浮点数格式化为一位小数字符串（如 "2.4"）。
+func formatFixed1(f float64) string {
+	if f < 0 {
+		f = 0
+	}
+	tenths := int(math.Round(f * 10))
+	return itoa(tenths/10) + "." + itoa(tenths%10)
 }
 
 // formatPercent 将 0.0-1.0 的浮点数格式化为百分比字符串（如 "73.5%"）。

@@ -13,6 +13,8 @@ import (
 type MetricsProvider interface {
 	// GetTimeWindowStatsForKey 获取指定 Key 在时间窗口内的统计。
 	GetTimeWindowStatsForKey(channelKind, baseURL, apiKey, serviceType string, duration time.Duration) TimeWindowStats
+	// GetDecayedStatsForKey 获取指定 Key 在时间窗口内按 S 型时间衰减加权的有效计数。
+	GetDecayedStatsForKey(channelKind, baseURL, apiKey, serviceType string, duration time.Duration) DecayedStats
 	// GetKeySnapshot 获取指定 Key 的快照状态（熔断器、连续失败等）。
 	GetKeySnapshot(channelKind, baseURL, apiKey, serviceType string) KeyCircuitSnapshot
 }
@@ -42,6 +44,12 @@ type TimeWindowStats struct {
 	P95ConnectLatencyMs   int64
 	FirstByteSampleCount  int64
 	P95FirstByteLatencyMs int64
+}
+
+// DecayedStats 是按 S 型时间衰减加权后的有效计数（字段对齐 metrics.DecayedStats）。
+type DecayedStats struct {
+	SuccessCount float64
+	FailureCount float64
 }
 
 // ── Profiler ──
