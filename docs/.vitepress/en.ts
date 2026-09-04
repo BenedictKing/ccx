@@ -16,6 +16,7 @@ export const enConfig: LocaleSpecificConfig<DefaultTheme.Config> = {
           items: [
             { text: 'Overview', link: '/en/guide/clients/' },
             { text: 'Claude Code', link: '/en/guide/clients/claude-code' },
+            { text: 'Claude Desktop', link: '/en/guide/clients/claude-desktop' },
             { text: 'Codex CLI / Codex App', link: '/en/guide/clients/codex' },
             { text: 'OpenCode', link: '/en/guide/clients/opencode' },
             { text: 'CCX Desktop', link: '/en/guide/desktop/' },

@@ -16,6 +16,7 @@ export const zhConfig: LocaleSpecificConfig<DefaultTheme.Config> = {
           items: [
             { text: '概览', link: '/guide/clients/' },
             { text: 'Claude Code', link: '/guide/clients/claude-code' },
+            { text: 'Claude Desktop', link: '/guide/clients/claude-desktop' },
             { text: 'Codex CLI / Codex App', link: '/guide/clients/codex' },
             { text: 'OpenCode', link: '/guide/clients/opencode' },
             { text: 'CCX Desktop', link: '/guide/desktop/' },
