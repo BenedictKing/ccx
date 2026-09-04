@@ -4,10 +4,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"github.com/BenedictKing/ccx/internal/errutil"
-	"log"
+	"sort"
 	"sync"
 	"time"
+
+	"github.com/BenedictKing/ccx/internal/errutil"
+	"log"
 )
 
 // ── ModelProfileStore: 内存缓存 + SQLite 异步持久化 ──
@@ -29,7 +31,16 @@ type ModelProfileStore struct {
 
 	flushMu sync.Mutex
 
-	dirtyKeys map[string]struct{} // 待落盘的 composite key 集合
+	dirtyKeys   map[string]struct{}          // 待落盘的 composite key 集合
+	deletedKeys map[string]modelProfileRowID // 待删除落盘的 composite key 集合
+}
+
+// modelProfileRowID 是模型画像的持久化主键四元组，供删除落盘使用。
+type modelProfileRowID struct {
+	channelUID  string
+	channelKind string
+	metricsKey  string
+	modelID     string
 }
 
 // DB 返回底层 *sql.DB，供 Manager 内部复用连接。
@@ -68,10 +79,11 @@ func newModelProfileStoreFromDB(db *sql.DB, dbPath string) (*ModelProfileStore, 
 	}
 
 	store := &ModelProfileStore{
-		db:        db,
-		dbPath:    dbPath,
-		cache:     make(map[string]*ModelProfile),
-		dirtyKeys: make(map[string]struct{}),
+		db:          db,
+		dbPath:      dbPath,
+		cache:       make(map[string]*ModelProfile),
+		dirtyKeys:   make(map[string]struct{}),
+		deletedKeys: make(map[string]modelProfileRowID),
 	}
 
 	if err := store.loadAll(); err != nil {
@@ -162,9 +174,53 @@ func (s *ModelProfileStore) Upsert(profile *ModelProfile) error {
 
 	s.flushMu.Lock()
 	s.dirtyKeys[key] = struct{}{}
+	// 同一 key 先删后写以写入为准：从待删集合移除，避免 Flush 时误删。
+	delete(s.deletedKeys, key)
 	s.flushMu.Unlock()
 
 	return nil
+}
+
+// ReconcileModels 把 (channelUID, channelKind, metricsKey) binding 下的模型画像
+// 收敛到 keep 集合：不在清单内的旧行（上游已下架/更名的模型）从内存与 SQLite 移除，
+// 返回被移除的 modelID 列表（字典序）。
+// keep 为空时是 no-op：空清单通常意味着本端点探测失败，不允许据此清空画像。
+func (s *ModelProfileStore) ReconcileModels(channelUID, channelKind, metricsKey string, keep map[string]struct{}) []string {
+	if s == nil || len(keep) == 0 {
+		return nil
+	}
+
+	var removed []string
+	s.mu.Lock()
+	for k, p := range s.cache {
+		if p.ChannelUID != channelUID || p.ChannelKind != channelKind || p.MetricsKey != metricsKey {
+			continue
+		}
+		if _, ok := keep[p.ModelID]; ok {
+			continue
+		}
+		delete(s.cache, k)
+		removed = append(removed, p.ModelID)
+	}
+	s.mu.Unlock()
+
+	if len(removed) == 0 {
+		return nil
+	}
+	sort.Strings(removed)
+
+	s.flushMu.Lock()
+	for _, modelID := range removed {
+		s.deletedKeys[channelUID+"|"+channelKind+"|"+metricsKey+"|"+modelID] = modelProfileRowID{
+			channelUID:  channelUID,
+			channelKind: channelKind,
+			metricsKey:  metricsKey,
+			modelID:     modelID,
+		}
+	}
+	s.flushMu.Unlock()
+
+	return removed
 }
 
 // Get 返回指定复合主键对应的模型画像副本。不存在时返回 nil。
@@ -261,27 +317,26 @@ func (s *ModelProfileStore) ListActiveByChannel(channelUID string) []ModelProfil
 // 非 dirty 的画像不重复写入。
 func (s *ModelProfileStore) Flush() error {
 	s.flushMu.Lock()
-	if len(s.dirtyKeys) == 0 {
-		s.flushMu.Unlock()
-		return nil
-	}
-	keys := make([]string, 0, len(s.dirtyKeys))
-	for k := range s.dirtyKeys {
-		keys = append(keys, k)
-	}
+	dirty := s.dirtyKeys
+	deleted := s.deletedKeys
 	s.dirtyKeys = make(map[string]struct{})
+	s.deletedKeys = make(map[string]modelProfileRowID)
 	s.flushMu.Unlock()
 
+	if len(dirty) == 0 && len(deleted) == 0 {
+		return nil
+	}
+
 	s.mu.RLock()
-	profiles := make([]*ModelProfile, 0, len(keys))
-	for _, k := range keys {
+	profiles := make([]*ModelProfile, 0, len(dirty))
+	for k := range dirty {
 		if p, ok := s.cache[k]; ok {
 			profiles = append(profiles, p)
 		}
 	}
 	s.mu.RUnlock()
 
-	if len(profiles) == 0 {
+	if len(profiles) == 0 && len(deleted) == 0 {
 		return nil
 	}
 
@@ -290,6 +345,21 @@ func (s *ModelProfileStore) Flush() error {
 		return fmt.Errorf("[ModelProfileStore-Flush] 开启事务失败: %w", err)
 	}
 	defer errutil.IgnoreDeferred(tx.Rollback)
+
+	// 先执行删除：同一 key 若随后被 UPSERT（删除后重新发现），最终以写入为准。
+	if len(deleted) > 0 {
+		delStmt, err := tx.Prepare(`DELETE FROM autopilot_model_profiles
+WHERE channel_uid = ? AND channel_kind = ? AND metrics_key = ? AND model_id = ?`)
+		if err != nil {
+			return fmt.Errorf("[ModelProfileStore-Flush] 准备删除语句失败: %w", err)
+		}
+		for _, id := range deleted {
+			if _, err := delStmt.Exec(id.channelUID, id.channelKind, id.metricsKey, id.modelID); err != nil {
+				log.Printf("[ModelProfileStore-Flush] 删除失败 model=%s channel=%s: %v", id.modelID, id.channelUID, err)
+			}
+		}
+		defer errutil.IgnoreDeferred(delStmt.Close)
+	}
 
 	stmt, err := tx.Prepare(`
 INSERT INTO autopilot_model_profiles (channel_uid, channel_id, channel_kind, service_type, metrics_key, model_id, profile_json, updated_at)
@@ -331,7 +401,7 @@ ON CONFLICT(channel_uid, channel_kind, metrics_key, model_id) DO UPDATE SET
 		return fmt.Errorf("[ModelProfileStore-Flush] 提交事务失败: %w", err)
 	}
 
-	log.Printf("[ModelProfileStore-Flush] 已落盘 %d 条模型画像", len(profiles))
+	log.Printf("[ModelProfileStore-Flush] 已落盘 %d 条模型画像，删除 %d 条", len(profiles), len(deleted))
 	return nil
 }
 
