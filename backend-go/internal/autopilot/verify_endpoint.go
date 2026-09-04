@@ -149,23 +149,33 @@ func verifyChannelKey(ctx context.Context, kind string, upstream config.Upstream
 	}
 	var diagnostics []string
 	authFailedCount := 0
+	probeDescSeen := make(map[string]bool)
+	var probeDescs []string
 	for candidateIndex, baseURL := range baseURLs {
 		var result EndpointVerifyResult
-		switch kind {
-		case "messages":
+		probeDesc := channelKeyProbeDesc(kind)
+		switch {
+		case modelsListProbeForBaseURL(baseURL):
+			result = VerifyModelsListEndpoint(ctx, baseURL, apiKey, upstream.AuthHeader)
+			probeDesc = modelsListProbeDesc
+		case kind == "messages":
 			result = VerifyClaudeEndpoint(ctx, baseURL, apiKey, upstream.AuthHeader)
-		case "responses":
+		case kind == "responses":
 			result = VerifyResponsesEndpoint(ctx, baseURL, apiKey, upstream.AuthHeader)
-		case "gemini":
+		case kind == "gemini":
 			result = VerifyGeminiEndpoint(ctx, baseURL, apiKey, upstream.AuthHeader)
-		case "chat":
+		case kind == "chat":
 			result = VerifyOpenAIChatEndpoint(ctx, baseURL, apiKey, upstream.AuthHeader)
-		case "images":
+		case kind == "images":
 			result = VerifyImagesEndpoint(ctx, baseURL, apiKey, upstream.AuthHeader)
-		case "vectors":
+		case kind == "vectors":
 			result = VerifyVectorsEndpoint(ctx, baseURL, apiKey, upstream.AuthHeader)
 		default:
 			return fmt.Errorf("不支持验证的渠道类型: %s", kind)
+		}
+		if !probeDescSeen[probeDesc] {
+			probeDescSeen[probeDesc] = true
+			probeDescs = append(probeDescs, probeDesc)
 		}
 		if result.OK {
 			return nil
@@ -178,7 +188,7 @@ func verifyChannelKey(ctx context.Context, kind string, upstream config.Upstream
 	return &KeyVerifyError{
 		MaskedKey:   utils.MaskAPIKey(apiKey),
 		AuthFailed:  authFailedCount == len(baseURLs),
-		Probe:       channelKeyProbeDesc(kind),
+		Probe:       strings.Join(probeDescs, "；"),
 		Diagnostics: diagnostics,
 	}
 }
@@ -191,14 +201,24 @@ func buildGeminiProbeURL(baseURL string) string {
 	return baseURL + "/v1beta/models/gemini-2.5-flash:generateContent"
 }
 
-// VerifyKimiCodeModelsEndpoint 使用 Kimi Code 的模型列表接口验证 Key。
-// Kimi Code 的 /coding/v1/models 会按 Key 返回套餐可用模型，避免用虚构模型
-// 发起推理请求，也不会消耗请求额度。
-func VerifyKimiCodeModelsEndpoint(ctx context.Context, baseURL, apiKey, authHeader string) EndpointVerifyResult {
+// modelsListProbeDesc 描述模型列表探测方式。
+const modelsListProbeDesc = "GET /v1/models（按 Key 拉取模型列表，不发起推理）"
+
+// modelsListProbeForBaseURL 判断该 baseURL 是否应改用模型列表接口验证 Key。
+// kimi code 与 stepfun step_plan 的上游对未知模型的推理请求返回 404（而非 400/422），
+// 占位模型探测会被误判为「端点不可用」；模型列表接口按 Key 鉴权，可避开该误判。
+func modelsListProbeForBaseURL(baseURL string) bool {
+	return isKimiCodeBaseURL(baseURL) || isStepFunPlanBaseURL(baseURL)
+}
+
+// VerifyModelsListEndpoint 用上游模型列表接口验证 Key（kimi code、stepfun step_plan 等套餐入口）。
+// /v1/models 会按 Key 鉴权并返回套餐可用模型，避免用虚构模型发起推理请求，
+// 也不会消耗请求额度。
+func VerifyModelsListEndpoint(ctx context.Context, baseURL, apiKey, authHeader string) EndpointVerifyResult {
 	reqCtx, cancel := context.WithTimeout(ctx, verifyEndpointTimeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, buildKimiCodeModelsURL(baseURL), nil)
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, buildModelsListURL(baseURL), nil)
 	if err != nil {
 		return EndpointVerifyResult{Err: err, Message: "构建请求失败"}
 	}
@@ -434,7 +454,10 @@ func verifyProviderCandidateEndpoint(ctx context.Context, providerID string, rou
 		return verifyVolcenginePlanEndpoint(ctx, route, baseURL, apiKey)
 	}
 	if strings.EqualFold(providerID, "kimi") && isKimiCodeBaseURL(baseURL) {
-		return VerifyKimiCodeModelsEndpoint(ctx, baseURL, apiKey, "")
+		return VerifyModelsListEndpoint(ctx, baseURL, apiKey, "")
+	}
+	if isStepFunPlanBaseURL(baseURL) {
+		return VerifyModelsListEndpoint(ctx, baseURL, apiKey, "")
 	}
 	switch route.ServiceType {
 	case "claude":
@@ -457,7 +480,18 @@ func isKimiCodeBaseURL(baseURL string) bool {
 	return path == "/coding" || strings.HasPrefix(path, "/coding/")
 }
 
-func buildKimiCodeModelsURL(baseURL string) string {
+// isStepFunPlanBaseURL 判断 baseURL 是否为阶跃星辰 Step Plan 套餐入口
+// （https://api.stepfun.com/step_plan 或其 /v1 子路径）。
+func isStepFunPlanBaseURL(baseURL string) bool {
+	target, err := url.Parse(strings.TrimSuffix(strings.TrimSpace(baseURL), "#"))
+	if err != nil || !strings.EqualFold(target.Hostname(), "api.stepfun.com") {
+		return false
+	}
+	path := strings.TrimRight(target.EscapedPath(), "/")
+	return path == "/step_plan" || strings.HasPrefix(path, "/step_plan/")
+}
+
+func buildModelsListURL(baseURL string) string {
 	baseURL = strings.TrimSuffix(strings.TrimSpace(baseURL), "#")
 	baseURL = strings.TrimRight(baseURL, "/")
 	if strings.HasSuffix(strings.ToLower(baseURL), "/models") {

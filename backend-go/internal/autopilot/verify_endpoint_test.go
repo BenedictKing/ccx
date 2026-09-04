@@ -72,7 +72,7 @@ func TestBuildResponsesProbeURL(t *testing.T) {
 	}
 }
 
-func TestBuildKimiCodeModelsURL(t *testing.T) {
+func TestBuildModelsListURL(t *testing.T) {
 	cases := []struct {
 		name    string
 		baseURL string
@@ -82,17 +82,20 @@ func TestBuildKimiCodeModelsURL(t *testing.T) {
 		{"OpenAI 入口", "https://api.kimi.com/coding/v1", "https://api.kimi.com/coding/v1/models"},
 		{"尾部斜杠", "https://api.kimi.com/coding/v1/", "https://api.kimi.com/coding/v1/models"},
 		{"已有 models", "https://api.kimi.com/coding/v1/models", "https://api.kimi.com/coding/v1/models"},
+		{"stepfun Messages 入口", "https://api.stepfun.com/step_plan", "https://api.stepfun.com/step_plan/v1/models"},
+		{"stepfun Chat 入口", "https://api.stepfun.com/step_plan/v1", "https://api.stepfun.com/step_plan/v1/models"},
+		{"stepfun 尾部斜杠", "https://api.stepfun.com/step_plan/", "https://api.stepfun.com/step_plan/v1/models"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := buildKimiCodeModelsURL(tc.baseURL); got != tc.want {
-				t.Errorf("buildKimiCodeModelsURL(%q) = %q, want %q", tc.baseURL, got, tc.want)
+			if got := buildModelsListURL(tc.baseURL); got != tc.want {
+				t.Errorf("buildModelsListURL(%q) = %q, want %q", tc.baseURL, got, tc.want)
 			}
 		})
 	}
 }
 
-func TestVerifyKimiCodeModelsEndpoint(t *testing.T) {
+func TestVerifyModelsListEndpoint(t *testing.T) {
 	cases := []struct {
 		name           string
 		statusCode     int
@@ -113,7 +116,7 @@ func TestVerifyKimiCodeModelsEndpoint(t *testing.T) {
 			}))
 			defer server.Close()
 
-			res := VerifyKimiCodeModelsEndpoint(context.Background(), server.URL+"/coding", "sk-kimi-test", "")
+			res := VerifyModelsListEndpoint(context.Background(), server.URL+"/coding", "sk-kimi-test", "")
 			if res.OK != tc.wantOK || res.AuthFailed != tc.wantAuthFailed {
 				t.Fatalf("result = %+v, want ok=%v authFailed=%v", res, tc.wantOK, tc.wantAuthFailed)
 			}
@@ -121,6 +124,23 @@ func TestVerifyKimiCodeModelsEndpoint(t *testing.T) {
 				t.Fatalf("request = method=%q path=%q auth=%q", method, path, auth)
 			}
 		})
+	}
+}
+
+func TestVerifyModelsListEndpointStepFunBase(t *testing.T) {
+	var path string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path = r.URL.Path
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	res := VerifyModelsListEndpoint(context.Background(), server.URL+"/step_plan", "sk-step-test", "")
+	if !res.OK {
+		t.Fatalf("result = %+v, want ok", res)
+	}
+	if path != "/step_plan/v1/models" {
+		t.Fatalf("request path = %q, want /step_plan/v1/models", path)
 	}
 }
 
@@ -136,6 +156,41 @@ func TestIsKimiCodeBaseURL(t *testing.T) {
 	} {
 		if got := isKimiCodeBaseURL(tc.baseURL); got != tc.want {
 			t.Errorf("isKimiCodeBaseURL(%q) = %v, want %v", tc.baseURL, got, tc.want)
+		}
+	}
+}
+
+func TestIsStepFunPlanBaseURL(t *testing.T) {
+	for _, tc := range []struct {
+		baseURL string
+		want    bool
+	}{
+		{"https://api.stepfun.com/step_plan", true},
+		{"https://api.stepfun.com/step_plan/", true},
+		{"https://api.stepfun.com/step_plan/v1", true},
+		{"https://api.stepfun.com/v1", false},
+		{"https://evil.example/step_plan", false},
+		{"https://api.stepfun.com.evil.example/step_plan", false},
+	} {
+		if got := isStepFunPlanBaseURL(tc.baseURL); got != tc.want {
+			t.Errorf("isStepFunPlanBaseURL(%q) = %v, want %v", tc.baseURL, got, tc.want)
+		}
+	}
+}
+
+func TestModelsListProbeForBaseURL(t *testing.T) {
+	for _, tc := range []struct {
+		baseURL string
+		want    bool
+	}{
+		{"https://api.stepfun.com/step_plan", true},
+		{"https://api.stepfun.com/step_plan/v1", true},
+		{"https://api.kimi.com/coding", true},
+		{"https://api.stepfun.com/v1", false},
+		{"https://api.moonshot.ai/v1", false},
+	} {
+		if got := modelsListProbeForBaseURL(tc.baseURL); got != tc.want {
+			t.Errorf("modelsListProbeForBaseURL(%q) = %v, want %v", tc.baseURL, got, tc.want)
 		}
 	}
 }
