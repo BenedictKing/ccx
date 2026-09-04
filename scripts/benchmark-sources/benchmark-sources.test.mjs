@@ -1007,6 +1007,23 @@ test('DeepSeek canonical model pattern supports dated suffixes', () => {
   }
 })
 
+test('Qwen canonical model pattern escapes the dot and supports dated suffixes', () => {
+  const pattern = canonicalModelToPattern('qwen3.8-max')
+  const ok = [
+    'qwen3.8-max',
+    'Qwen3.8-Max-0902',
+    'qwen3.8-max-2026-09-02',
+    'qwen3.8-max-260902',
+    'qwen3.8-max-20260902',
+    'dashscope/qwen3.8-max-0902',
+  ]
+  for (const model of ok) {
+    assert.match(model, new RegExp(pattern, 'i'), `${model} should match ${pattern}`)
+  }
+  // 点号已转义：不能把任意字符当作分隔符匹配
+  assert.doesNotMatch('qwen3x8-max', new RegExp(pattern, 'i'))
+})
+
 test('Artificial Analysis LLM extraction yields one evidence per composite index', () => {
   const models = [
     { slug: 'claude-opus-5', evaluations: {

@@ -91,6 +91,8 @@ export const BENCHLM_MODEL_MAP = {
   'claude-mythos-5': 'claude-mythos-5',
   'claude-mythos-5-1': 'claude-mythos-5-1',
   'qwen3-8-max': 'qwen3.8-max',
+  // Model Studio 以 -MMDD 发布快照别名（Qwen3.8-Max-0902），榜单 slug 同步归并
+  'qwen3-8-max-0902': 'qwen3.8-max',
   // preview 当前 displayScore 为 null，映射仅为消除 UNMAPPED 误报，null 不会写入
   'qwen3-8-max-preview': 'qwen3.8-max',
   'gemini-3-7-flash': 'gemini-3.7-flash',
@@ -235,6 +237,13 @@ export function canonicalModelToPattern(canonical) {
   if (canonical.startsWith('deepseek-')) {
     // deepseek 渠道常以 -MMDD 发布版本别名，注册表已放宽到 -\d{4,8}
     return `(?:^|[-/])${canonical}(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{4,8})?(?=$|@)`
+  }
+  if (canonical.startsWith('qwen')) {
+    // qwen3.8-max -> (?:^|[-/])qwen3\.8-max(?:-\d{4}-\d{2}-\d{2}|-\d{4,8})?(?=$|@)
+    // Model Studio 以 -MMDD 发布快照别名（如 Qwen3.8-Max-0902），与 deepseek 同口径放宽到 -\d{4,8}；
+    // 点号必须转义，否则 qwen3.8-max 会误匹配 qwen3X8-max 之类的名字。
+    const escaped = canonical.replace(/\./g, '\\.')
+    return `(?:^|[-/])${escaped}(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{4,8})?(?=$|@)`
   }
   // 默认
   return `(?:^|[-/])${canonical}(?=$|@)`

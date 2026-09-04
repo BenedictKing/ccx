@@ -97,6 +97,8 @@ export const ARTIFICIAL_ANALYSIS_MODEL_MAP = {
   'qwen3-7-max': 'qwen3.7-max',
   'qwen3-7-plus': 'qwen3.7-plus',
   'qwen3-8-max': 'qwen3.8-max',
+  // Model Studio 快照别名 Qwen3.8-Max-0902 归并到基模型
+  'qwen3-8-max-0902': 'qwen3.8-max',
   'qwen3-max': 'qwen3-max',
   // AA 快照变体：2.4T 参数量 + commit hash 后缀，属于 qwen3.8-max 同一模型
   'qwen3-8-2-4t-a95b': 'qwen3.8-max',
