@@ -252,3 +252,49 @@ data: {"type":"response.failed","response":{"id":"resp_1","status":"failed","err
 		t.Fatalf("preflight error should not commit response body, got %q", w.Body.String())
 	}
 }
+
+// TestHandleStreamSuccess_NonListedResponsesErrorPreflightTriggersFailover 锁定
+// preflight 阶段所有非黑名单流内错误事件都触发 failover 的行为：
+// 中转商/OpenRouter 的自定义错误码不在任何"可重试"清单内，
+// 但流内 error 事件（HTTP 已 200 开流）几乎全是渠道侧运行时故障，换渠道可能成功。
+// 客户端侧确定性错误（模型不存在、格式错误等）走 HTTP 非 2xx 的独立分类链路，不经过此处。
+func TestHandleStreamSuccess_NonListedResponsesErrorPreflightTriggersFailover(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"model":"gpt-5","stream":true}`))
+
+	body := `event: response.created
+data: {"type":"response.created","response":{"id":"resp_1","status":"in_progress"}}
+
+event: error
+data: {"type":"error","error":{"code":"provider_error","message":"upstream provider returned an unexpected error"}}
+
+`
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": {"text/event-stream"}},
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+
+	_, err := handleStreamSuccess(
+		c,
+		resp,
+		"responses",
+		&config.EnvConfig{LogLevel: "info"},
+		nil, // sessionManager
+		time.Now(),
+		&types.ResponsesRequest{Model: "gpt-5"},
+		[]byte(`{"model":"gpt-5","stream":true}`),
+		common.StreamPreflightTimeouts{},
+	)
+	if !errors.Is(err, common.ErrEmptyStreamResponse) {
+		t.Fatalf("handleStreamSuccess() err = %v, want ErrEmptyStreamResponse (non-listed error must trigger failover)", err)
+	}
+	if !strings.Contains(err.Error(), "provider_error") {
+		t.Fatalf("expected diagnostic to include provider_error, got %v", err)
+	}
+	if w.Body.Len() != 0 {
+		t.Fatalf("preflight error should not commit response body, got %q", w.Body.String())
+	}
+}

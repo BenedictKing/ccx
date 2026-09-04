@@ -85,6 +85,59 @@ func TestNormalizeOpenRouterReasoningEvent(t *testing.T) {
 	}
 }
 
+func TestNormalizeOpenRouterReasoningEventKeepsPlainContentPart(t *testing.T) {
+	// 普通 message 的 content_part 事件在 fold 主路上高频出现，误改会破坏正文流
+	tests := []struct {
+		name string
+		in   string
+	}{
+		{
+			name: "text part 不动",
+			in:   `{"type":"response.content_part.added","item_id":"msg_1","output_index":1,"content_index":0,"part":{"type":"text","text":""}}`,
+		},
+		{
+			name: "output_text part 不动",
+			in:   `{"type":"response.content_part.done","item_id":"msg_1","output_index":1,"content_index":0,"part":{"type":"output_text","text":"391"}}`,
+		},
+		{
+			name: "part 缺失不动",
+			in:   `{"type":"response.content_part.added","item_id":"msg_1","content_index":0}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			event := mustEvent(t, tt.in)
+			before, err := json.Marshal(event)
+			if err != nil {
+				t.Fatalf("marshal: %v", err)
+			}
+			if NormalizeOpenRouterReasoningEvent(event) {
+				t.Fatalf("plain content_part event must not be touched: %s", tt.in)
+			}
+			after, err := json.Marshal(event)
+			if err != nil {
+				t.Fatalf("marshal: %v", err)
+			}
+			if string(before) != string(after) {
+				t.Fatalf("event mutated: before=%s after=%s", before, after)
+			}
+		})
+	}
+}
+
+func TestNormalizeOpenRouterReasoningEventPreservesExistingSummaryIndex(t *testing.T) {
+	event := mustEvent(t, `{"type":"response.reasoning_text.delta","item_id":"rs_1","content_index":3,"summary_index":0,"delta":"x"}`)
+	if !NormalizeOpenRouterReasoningEvent(event) {
+		t.Fatal("event type rename should still happen")
+	}
+	if got, _ := event["summary_index"].(float64); got != 0 {
+		t.Fatalf("existing summary_index must be preserved, got %v", event["summary_index"])
+	}
+	if _, has := event["content_index"]; !has {
+		t.Fatal("content_index should be kept when summary_index already exists")
+	}
+}
+
 func TestNormalizeOpenRouterReasoningEventOutputItem(t *testing.T) {
 	event := mustEvent(t, `{
 		"type": "response.output_item.done",
@@ -115,6 +168,99 @@ func TestNormalizeOpenRouterReasoningEventOutputItem(t *testing.T) {
 	// 幂等：再次调用不再改动
 	if NormalizeOpenRouterReasoningEvent(event) {
 		t.Fatal("second call should be a no-op")
+	}
+}
+
+func TestNormalizeOpenRouterReasoningResponseBodyIdempotent(t *testing.T) {
+	body := mustEvent(t, `{
+		"output": [
+			{"id": "rs_1", "type": "reasoning", "summary": [], "content": [{"type": "reasoning_text", "text": "思考"}]}
+		]
+	}`)
+	if !NormalizeOpenRouterReasoningResponseBody(body) {
+		t.Fatal("first call should normalize")
+	}
+	if NormalizeOpenRouterReasoningResponseBody(body) {
+		t.Fatal("second call should be a no-op")
+	}
+}
+
+func TestNormalizeOpenRouterReasoningResponseBodySkipsMixedParts(t *testing.T) {
+	// reasoning 条目 content 混入未知 part 类型时保守跳过，Event 层与 Body 层行为必须一致
+	body := mustEvent(t, `{
+		"output": [
+			{"id": "rs_1", "type": "reasoning", "summary": [], "content": [{"type": "reasoning_text", "text": "a"}, {"type": "custom", "text": "b"}]}
+		]
+	}`)
+	if NormalizeOpenRouterReasoningResponseBody(body) {
+		t.Fatal("mixed content parts should be left untouched")
+	}
+}
+
+func TestNormalizeOpenRouterReasoningResponseBodyMissingSummaryField(t *testing.T) {
+	// summary 字段缺失（而非空数组）时仍应迁移，防御上游形态漂移
+	body := mustEvent(t, `{
+		"output": [
+			{"id": "rs_1", "type": "reasoning", "content": [{"type": "reasoning_text", "text": "思考"}]}
+		]
+	}`)
+	if !NormalizeOpenRouterReasoningResponseBody(body) {
+		t.Fatal("missing summary field should still normalize")
+	}
+	summary, ok := body["output"].([]interface{})[0].(map[string]interface{})["summary"].([]interface{})
+	if !ok || len(summary) != 1 {
+		t.Fatalf("summary = %#v, want one part", body["output"])
+	}
+	if part, _ := summary[0].(map[string]interface{}); part["text"] != "思考" {
+		t.Fatalf("summary part = %#v", part)
+	}
+}
+
+func TestNormalizeOpenRouterReasoningEventOutputItemAdded(t *testing.T) {
+	event := mustEvent(t, `{
+		"type": "response.output_item.added",
+		"output_index": 0,
+		"item": {"id": "rs_1", "type": "reasoning", "summary": [], "content": [{"type": "reasoning_text", "text": ""}]}
+	}`)
+	if !NormalizeOpenRouterReasoningEvent(event) {
+		t.Fatal("expected change")
+	}
+	item := event["item"].(map[string]interface{})
+	if _, has := item["content"]; has {
+		t.Fatalf("content field should be removed: %#v", item)
+	}
+	summary, ok := item["summary"].([]interface{})
+	if !ok || len(summary) != 1 {
+		t.Fatalf("summary = %#v, want one part", item["summary"])
+	}
+}
+
+func TestNormalizeOpenRouterReasoningEventMigratesAllPartsInOrder(t *testing.T) {
+	event := mustEvent(t, `{
+		"type": "response.output_item.done",
+		"item": {
+			"id": "rs_1",
+			"type": "reasoning",
+			"summary": [],
+			"content": [
+				{"type": "reasoning_text", "text": "第一段"},
+				{"type": "reasoning_text", "text": "第二段"},
+				{"type": "reasoning_text", "text": "第三段"}
+			]
+		}
+	}`)
+	if !NormalizeOpenRouterReasoningEvent(event) {
+		t.Fatal("expected change")
+	}
+	summary := event["item"].(map[string]interface{})["summary"].([]interface{})
+	if len(summary) != 3 {
+		t.Fatalf("summary len = %d, want 3", len(summary))
+	}
+	for i, want := range []string{"第一段", "第二段", "第三段"} {
+		part, _ := summary[i].(map[string]interface{})
+		if part["type"] != "summary_text" || part["text"] != want {
+			t.Fatalf("summary[%d] = %#v, want type=summary_text text=%s", i, part, want)
+		}
 	}
 }
 
@@ -234,5 +380,27 @@ func TestNormalizeOpenRouterReasoningSSELine(t *testing.T) {
 	}
 	if strings.Contains(got, "content_index") {
 		t.Fatalf("content_index should be renamed: %q", got)
+	}
+	var parsed map[string]interface{}
+	if err := json.Unmarshal([]byte(strings.TrimPrefix(got, "data: ")), &parsed); err != nil {
+		t.Fatalf("normalized line must stay valid JSON: %q: %v", got, err)
+	}
+	if parsed["type"] != "response.reasoning_summary_text.delta" || parsed["delta"] != "想" {
+		t.Fatalf("normalized payload = %#v", parsed)
+	}
+	if idx, _ := parsed["summary_index"].(float64); idx != 0 {
+		t.Fatalf("summary_index = %v, want 0 (migrated from content_index)", parsed["summary_index"])
+	}
+
+	// 幂等：对已归一化的行再次调用返回不变
+	if again := NormalizeOpenRouterReasoningSSELine(got); again != got {
+		t.Fatalf("idempotency violated: %q -> %q", got, again)
+	}
+
+	// output_item 路径整行归一化同样生效
+	itemLine := `data: {"type":"response.output_item.done","item":{"id":"rs_1","type":"reasoning","summary":[],"content":[{"type":"reasoning_text","text":"全文"}]}}`
+	gotItem := NormalizeOpenRouterReasoningSSELine(itemLine)
+	if !strings.Contains(gotItem, `"summary_text"`) || strings.Contains(gotItem, `"reasoning_text"`) {
+		t.Fatalf("output_item line should be normalized: %q", gotItem)
 	}
 }
