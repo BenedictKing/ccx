@@ -27,11 +27,16 @@ type RoutingPlanCandidate struct {
 	MappedModel        string   `json:"mappedModel,omitempty"`
 	MappingSource      string   `json:"mappingSource,omitempty"`
 	MappingReason      string   `json:"mappingReason,omitempty"`
-	CandidateKey       string   `json:"candidateKey,omitempty"` // (渠道, 模型) 粒度标识：channelUID|model
+	CandidateKey       string   `json:"candidateKey,omitempty"` // 五元组标识：channelUID|protocol|keyIdentity|model|effort
 	ChannelName        string   `json:"channelName,omitempty"`
 	KeyMask            string   `json:"keyMask,omitempty"`
 	LogicalChannelUID  string   `json:"logicalChannelUid,omitempty"`
 	LogicalChannelName string   `json:"logicalChannelName,omitempty"`
+	// 五元组维度字段（v3，与 trace RoutingCandidate 对齐）
+	ActualModel string `json:"actualModel,omitempty"`
+	KeyIdentity string `json:"keyIdentity,omitempty"`
+	QuotaGroup  string `json:"quotaGroup,omitempty"`
+	Effort      string `json:"effort,omitempty"`
 }
 
 // RoutingPlanLogicalGroup 是 dry-run 候选在 LogicalChannel 维度的聚合视图（Phase A.3）。
@@ -340,6 +345,10 @@ func (r *SmartRouter) BuildPlan(profile *RequestProfile) *RoutingPlan {
 			KeyMask:            se.entry.KeyMask,
 			LogicalChannelUID:  se.entry.LogicalChannelUID,
 			LogicalChannelName: se.entry.LogicalChannelName,
+			ActualModel:        se.entry.ModelID,
+			KeyIdentity:        se.entry.KeyIdentity,
+			QuotaGroup:         se.entry.QuotaGroup,
+			Effort:             string(se.entry.Effort),
 		}
 		if candidate.Selected {
 			selectedCandidates = append(selectedCandidates, candidate)
@@ -374,6 +383,10 @@ func (r *SmartRouter) BuildPlan(profile *RequestProfile) *RoutingPlan {
 			sortReasons = append(sortReasons, "dryrun_auto_resolve_preview")
 			break
 		}
+	}
+	// v3：五元组展开后行数膨胀，plan 候选与 trace 同口径截断（存活行在前，截尾滤被过滤行）。
+	if truncated, ok := truncatePlanCandidates(&candidates); ok {
+		sortReasons = append(sortReasons, fmt.Sprintf("candidates_truncated_%d", truncated))
 	}
 
 	plan := &RoutingPlan{
@@ -661,7 +674,7 @@ func (r *SmartRouter) executeFilter(
 
 	// 构建 RoutingDecisionTrace
 	trace := &RoutingDecisionTrace{
-		SchemaVersion:       2,
+		SchemaVersion:       3,
 		RequestKind:         profile.ChannelKind,
 		TaskClass:           profile.TaskClass,
 		TaskDomain:          profile.TaskDomain,
@@ -997,6 +1010,10 @@ func (r *SmartRouter) executeFilter(
 			MappedModel:        e.MappedModel,
 			MappingSource:      e.MappingSource,
 			MappingReason:      e.MappingReason,
+			ActualModel:        e.ModelID,
+			KeyIdentity:        e.KeyIdentity,
+			QuotaGroup:         e.QuotaGroup,
+			Effort:             string(e.Effort),
 			LogicalChannelUID:  e.LogicalChannelUID,
 			LogicalChannelName: e.LogicalChannelName,
 			TotalScore:         sc.Score,
@@ -1131,8 +1148,9 @@ func (r *SmartRouter) executeFilter(
 		}
 	}
 
-	// 记录 trace 信息
-	trace.Candidates = candidates
+	// 记录 trace 信息（v3：五元组展开后行数可膨胀，落盘前按渠道/全局上限截断）
+	trace.Candidates, trace.CandidatesTruncated = truncateTraceCandidates(candidates)
+	trace.CandidatesTotal = len(candidates)
 	// result 表示 SmartRouter 模拟/生效后的候选集合：部分硬过滤时只计
 	// 通过者，全部被过滤并 fail-open 时则恢复为完整候选数。
 	trace.CandidatesAfter = len(result)

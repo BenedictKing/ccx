@@ -164,6 +164,57 @@ func adjacentEffortDownshift(supported []EffortLevel, decided EffortLevel) Effor
 // 截断按（模型序 × key 权重序）保序截尾，即保留质量排序靠前的组合。
 const routingCandidateRowsPerChannelLimit = 64
 
+// trace 候选落盘/预览截断上限（v3）：不影响评分与调度，仅控制 trace/plan 体积。
+const (
+	routingTraceCandidatesPerChannelCap = 5  // 每渠道保留候选行数
+	routingTraceCandidatesGlobalCap     = 40 // 全局保留候选行数
+)
+
+// truncateTraceCandidates 按（渠道 top-N、全局 top-N）截断 trace/plan 候选。
+// candidates 须按分数降序：依次扫描，每渠道最多保留 perChannelCap 行，
+// 总量截到 globalCap；未超上限时原样返回（truncated=false）。
+func truncateTraceCandidates(candidates []RoutingCandidate) ([]RoutingCandidate, bool) {
+	if len(candidates) <= routingTraceCandidatesGlobalCap {
+		return candidates, false
+	}
+	perChannel := make(map[string]int, 16)
+	out := make([]RoutingCandidate, 0, routingTraceCandidatesGlobalCap)
+	for _, cand := range candidates {
+		if len(out) >= routingTraceCandidatesGlobalCap {
+			break
+		}
+		if perChannel[cand.ChannelUID] >= routingTraceCandidatesPerChannelCap {
+			continue
+		}
+		perChannel[cand.ChannelUID]++
+		out = append(out, cand)
+	}
+	return out, true
+}
+
+// truncatePlanCandidates 是 dry-run plan 候选的同口径截断（存活行在前，
+// 被过滤行在尾部，截尾优先丢弃过滤行）。返回被截掉的行数。
+func truncatePlanCandidates(candidates *[]RoutingPlanCandidate) (int, bool) {
+	if candidates == nil || len(*candidates) <= routingTraceCandidatesGlobalCap {
+		return 0, false
+	}
+	before := len(*candidates)
+	perChannel := make(map[string]int, 16)
+	out := make([]RoutingPlanCandidate, 0, routingTraceCandidatesGlobalCap)
+	for _, cand := range *candidates {
+		if len(out) >= routingTraceCandidatesGlobalCap {
+			break
+		}
+		if perChannel[cand.ChannelUID] >= routingTraceCandidatesPerChannelCap {
+			continue
+		}
+		perChannel[cand.ChannelUID]++
+		out = append(out, cand)
+	}
+	*candidates = out
+	return before - len(out), true
+}
+
 // expandChannelCandidates 把 (渠道, 模型) 解析行展开为 (渠道, 协议, key, 模型, effort)
 // 五元组候选行，逐行构建评分输入并回填 costMap。
 //

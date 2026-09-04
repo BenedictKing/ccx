@@ -43,20 +43,28 @@ type CandidateScore struct {
 type RoutingCandidate struct {
 	ChannelUID  string `json:"channelUid"`
 	ChannelName string `json:"channelName,omitempty"` // 渠道显示名
-	// CandidateKey 标识 (渠道, 模型) 粒度的候选行（channelUID|model）。
-	// 同名承接时模型名取请求模型，保证每行模型名非空；旧 trace 行反序列化为空。
+	// CandidateKey 标识五元组候选行（channelUID|protocol|keyIdentity|model|effort，空段*）。
+	// schema v2 及以前为二元组（channelUID|model）；同名承接时模型名取请求模型。
+	// 旧 trace 行反序列化时结构化字段为空，前端按 key 段数兜底。
 	CandidateKey      string  `json:"candidateKey,omitempty"`
 	MetricsKey        string  `json:"metricsKey,omitempty"` // 已脱敏：不含 key 明文
 	KeyMask           string  `json:"keyMask,omitempty"`    // 掩码后的 key，如 sk-***abc
 	OriginTier        string  `json:"originTier,omitempty"`
 	ChannelKind       string  `json:"channelKind,omitempty"`
-	ExecutionKind     string  `json:"executionKind,omitempty"`
+	ExecutionKind     string  `json:"executionKind,omitempty"` // 候选行执行协议（五元组协议维）
 	ProtocolFidelity  string  `json:"protocolFidelity,omitempty"`
 	ConversionPenalty float64 `json:"conversionPenalty,omitempty"`
 	HealthState       string  `json:"healthState,omitempty"`
 	MappedModel       string  `json:"mappedModel,omitempty"`
 	MappingSource     string  `json:"mappingSource,omitempty"`
 	MappingReason     string  `json:"mappingReason,omitempty"`
+	// ActualModel 是候选行的实际发送模型（五元组模型维；同名承接=请求模型）。
+	ActualModel string `json:"actualModel,omitempty"`
+	// KeyIdentity / QuotaGroup 是五元组 key 维：候选行 key 身份（KeyUID 或 "kh_"+hash）与分组。
+	KeyIdentity string `json:"keyIdentity,omitempty"`
+	QuotaGroup  string `json:"quotaGroup,omitempty"`
+	// Effort 是五元组 effort 维：候选行思考档位（空 = passthrough）。
+	Effort string `json:"effort,omitempty"`
 
 	// 分数明细
 	TotalScore float64          `json:"totalScore"`
@@ -119,6 +127,10 @@ type RoutingDecisionTrace struct {
 	Candidates       []RoutingCandidate `json:"candidates"`
 	CandidatesBefore int                `json:"candidatesBefore"` // 粗筛前候选数
 	CandidatesAfter  int                `json:"candidatesAfter"`  // 粗筛后候选数
+	// CandidatesTotal / CandidatesTruncated（v3）：五元组展开后候选行可远超落盘上限，
+	// 落盘前按（渠道 top-N、全局 top-N）截断保 trace 体积；Total 是截断前行总数。
+	CandidatesTotal     int  `json:"candidatesTotal,omitempty"`
+	CandidatesTruncated bool `json:"candidatesTruncated,omitempty"`
 
 	// 过滤与排序说明
 	GlobalFilterReasons map[string][]string `json:"globalFilterReasons,omitempty"` // key=过滤阶段, value=原因列表
