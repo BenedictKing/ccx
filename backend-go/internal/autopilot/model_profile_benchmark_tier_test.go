@@ -8,34 +8,7 @@ import (
 	"github.com/BenedictKing/ccx/internal/config"
 )
 
-func TestComputeQualityTierBoundariesCachedByGeneration(t *testing.T) {
-	t.Cleanup(func() { benchmarkTierBoundariesCache.Store(nil) })
-	// 注入过期世代的伪缓存，验证调用后按当前世代重算并覆盖缓存。
-	benchmarkTierBoundariesCache.Store(&benchmarkTierBoundaries{generation: 0, premiumMin: -1, highMin: -2, normalMin: -3})
-	premiumMin, highMin, normalMin := computeQualityTierBoundaries()
-	if premiumMin == -1 || highMin == -2 || normalMin == -3 {
-		t.Fatalf("过期缓存不应被复用: %v/%v/%v", premiumMin, highMin, normalMin)
-	}
-	cached := benchmarkTierBoundariesCache.Load()
-	if cached == nil || cached.generation != config.BuiltinSnapshotGeneration() {
-		t.Fatalf("缓存未按当前世代更新: %+v", cached)
-	}
-	if cached.premiumMin != premiumMin || cached.highMin != highMin || cached.normalMin != normalMin {
-		t.Fatalf("缓存值与重算结果不一致: %+v vs %v/%v/%v", cached, premiumMin, highMin, normalMin)
-	}
-
-	// 世代不变时直接复用缓存：篡改缓存值后应原样返回。
-	benchmarkTierBoundariesCache.Store(&benchmarkTierBoundaries{
-		generation: config.BuiltinSnapshotGeneration(),
-		premiumMin: 11, highMin: 22, normalMin: 33,
-	})
-	if p, h, n := computeQualityTierBoundaries(); p != 11 || h != 22 || n != 33 {
-		t.Fatalf("同世代应复用缓存: %v/%v/%v", p, h, n)
-	}
-}
-
 func TestComputeQualityTierBoundariesConsistentAcrossCalls(t *testing.T) {
-	t.Cleanup(func() { benchmarkTierBoundariesCache.Store(nil) })
 	wantPremium, wantHigh, wantNormal := computeQualityTierBoundaries()
 	for i := 0; i < 3; i++ {
 		if p, h, n := computeQualityTierBoundaries(); p != wantPremium || h != wantHigh || n != wantNormal {
@@ -57,29 +30,55 @@ func TestComputeQualityTierBoundariesConcurrent(t *testing.T) {
 	wg.Wait()
 }
 
-func TestComputeQualityTierBoundariesWithinTopRegion(t *testing.T) {
-	t.Cleanup(func() { benchmarkTierBoundariesCache.Store(nil) })
-	// premium 断层必须在最高分下方 25% 量表区间内：60% 锚在分数集中分布时
-	// 会把中段空隙包进"顶部区域"，曾把 premiumMin 塌到 49、53 分模型全部
-	// 升入 premium。修复后的不变量：premium 边界不低于 0.75×最高分。
-	premiumMin, _, _ := computeQualityTierBoundaries()
+// TestQualityTierThresholdsAnchoredToDirectEvidence 是固定阈值的离线校准锚定测试：
+// 注册表直测分布只在此处（离线）验证阈值的合理性，不进入请求热路径。
+// 断言的是结构性不变量而非精确值——数据温和漂移时保持稳定，分布形态剧变
+// （premium singleton、档位成员枯竭）时报警，提示重新校准阈值并升版本号。
+func TestQualityTierThresholdsAnchoredToDirectEvidence(t *testing.T) {
+	premiumMin, highMin, normalMin := computeQualityTierBoundaries()
+	if !(premiumMin > highMin && highMin > normalMin && normalMin > 0) {
+		t.Fatalf("阈值必须严格递减为正: %.2f/%.2f/%.2f", premiumMin, highMin, normalMin)
+	}
 
-	maxScore := 0.0
+	// 收集 medium/default 直测池（离线校准证据源）。
+	scores := make([]float64, 0, 16)
 	seen := make(map[string]struct{})
 	for _, bp := range config.BuiltinModelBenchmarkProfiles() {
 		if _, ok := seen[bp.CanonicalModel]; ok {
 			continue
 		}
 		seen[bp.CanonicalModel] = struct{}{}
-		if score, _, ok := regularEffortBaselineScore(bp.BenchmarkEvidence); ok && score > maxScore {
-			maxScore = score
+		if score, ok := directRegularEffortScore(bp.BenchmarkEvidence); ok {
+			scores = append(scores, score)
 		}
 	}
-	if maxScore <= 0 {
-		t.Skip("注册表无直测分数，使用默认边界")
+	if len(scores) < 8 {
+		t.Skipf("直测池仅 %d 个模型，不足以锚定", len(scores))
 	}
-	if premiumMin < maxScore*0.75 {
-		t.Fatalf("premiumMin=%.2f 低于顶部区域下限 %.2f（75%% 最高分 %.2f）", premiumMin, maxScore*0.75, maxScore)
+	sortFloat64s(scores)
+
+	countAtLeast := func(min float64) int {
+		n := 0
+		for _, s := range scores {
+			if s >= min {
+				n++
+			}
+		}
+		return n
+	}
+	// premium 档在直测池中至少 2 个成员（singleton 回归报警——2026-09-04
+	// hy4-preview 插值登顶曾让动态边界把 premium 塌缩成 singleton）。
+	if n := countAtLeast(premiumMin); n < 2 {
+		t.Fatalf("premium 档直测成员仅 %d 个（阈值 %.2f），分布形态剧变，需重新校准阈值", n, premiumMin)
+	}
+	// high 档同样不枯竭。
+	if n := countAtLeast(highMin); n < 4 {
+		t.Fatalf("high 档及以上直测成员仅 %d 个（阈值 %.2f），分布形态剧变，需重新校准阈值", n, highMin)
+	}
+	// premium 边界仍在顶部区域（不低于直测池 75 分位值）。
+	q3 := scores[(3*len(scores))/4]
+	if premiumMin < q3 {
+		t.Fatalf("premiumMin=%.2f 低于直测池 75 分位 %.2f，premium 档会被中段模型涌入", premiumMin, q3)
 	}
 }
 
@@ -103,7 +102,38 @@ func TestInferModelFamilyDottedAndNewPrefixes(t *testing.T) {
 	}
 }
 
-func TestRegularEffortBaselineScoreSingleEffortOnly(t *testing.T) {
+func TestDirectRegularEffortScore(t *testing.T) {
+	makeEvidence := func(benchmark, effort string, raw float64, tasks int) config.ModelBenchmarkEvidence {
+		return config.ModelBenchmarkEvidence{
+			Benchmark: benchmark, Domain: "coding", Metric: "pass_at_1",
+			Effort: effort, RawValue: raw, TaskCount: tasks,
+		}
+	}
+	if got, ok := directRegularEffortScore([]config.ModelBenchmarkEvidence{
+		makeEvidence("deepswe", "low", 0.99, 113),
+		makeEvidence("deepswe", "medium", 0.72, 113),
+		makeEvidence("codexradar", "default", 0.70, 98),
+	}); !ok || got != 72 {
+		t.Fatalf("direct regular score = %v/%v, want 72/true", got, ok)
+	}
+	if got, ok := directRegularEffortScore([]config.ModelBenchmarkEvidence{
+		makeEvidence("deepswe", "low", 0.99, 113),
+		makeEvidence("deepswe", "high", 0.90, 113),
+	}); ok || got != -1 {
+		t.Fatalf("estimated-only evidence = %v/%v, want -1/false", got, ok)
+	}
+	if got, ok := directRegularEffortScore([]config.ModelBenchmarkEvidence{
+		makeEvidence("deepswe", "medium", 1.0, 1),
+	}); ok || got != -1 {
+		t.Fatalf("small sample evidence = %v/%v, want -1/false", got, ok)
+	}
+}
+
+// TestCalibrateRegularEffortEvidenceClass 验证三层证据合成的分数与证据等级：
+// 只有 medium/default 直测是 direct（唯一可证明 premium 的等级），
+// 跨 medium 插值是 interpolated，其余折算是 deflated（旧 singleEffortOnly
+// 语义已并入 deflated 封顶，且同侧多档折算从"不封顶"收紧为封顶 high）。
+func TestCalibrateRegularEffortEvidenceClass(t *testing.T) {
 	ev := func(benchmark, effort string, raw float64) config.ModelBenchmarkEvidence {
 		return config.ModelBenchmarkEvidence{
 			Benchmark: benchmark, Domain: "coding", Metric: "pass_at_1",
@@ -117,26 +147,26 @@ func TestRegularEffortBaselineScoreSingleEffortOnly(t *testing.T) {
 		return e
 	}
 	tests := []struct {
-		name       string
-		evidence   []config.ModelBenchmarkEvidence
-		singleWant bool
-		okWant     bool
-		scoreWant  float64
+		name      string
+		evidence  []config.ModelBenchmarkEvidence
+		classWant EvidenceClass
+		okWant    bool
+		scoreWant float64
 	}{
 		{
-			name:       "常规口径实测不算单一档",
-			evidence:   []config.ModelBenchmarkEvidence{ev("deepswe", "default", 0.60)},
-			singleWant: false, okWant: true, scoreWant: 60,
+			name:      "常规口径实测为 direct",
+			evidence:  []config.ModelBenchmarkEvidence{ev("deepswe", "default", 0.60)},
+			classWant: EvidenceDirect, okWant: true, scoreWant: 60,
 		},
 		{
-			name:       "仅 low 档证据标记单一档（上折虚高需封顶）",
-			evidence:   []config.ModelBenchmarkEvidence{ev("deepswe", "low", 0.50)},
-			singleWant: true, okWant: true, scoreWant: 0.50 * 100 / 0.686,
+			name:      "仅 low 档证据折算为 deflated（上折虚高需封顶）",
+			evidence:  []config.ModelBenchmarkEvidence{ev("deepswe", "low", 0.50)},
+			classWant: EvidenceDeflated, okWant: true, scoreWant: 0.50 * 100 / 0.686,
 		},
 		{
-			name:       "仅 max 档证据标记单一档",
-			evidence:   []config.ModelBenchmarkEvidence{ev("codexradar", "max", 0.90)},
-			singleWant: true, okWant: true, scoreWant: 0.90 * 100 / 1.975,
+			name:      "仅 max 档证据折算为 deflated",
+			evidence:  []config.ModelBenchmarkEvidence{ev("codexradar", "max", 0.90)},
+			classWant: EvidenceDeflated, okWant: true, scoreWant: 0.90 * 100 / 1.975,
 		},
 		{
 			name: "小样本 low 档被剔除：1 任务 100% 不得抬高插值（hy4-preview 回归）",
@@ -144,7 +174,7 @@ func TestRegularEffortBaselineScoreSingleEffortOnly(t *testing.T) {
 				evN("codexradar", "low", 1.0, 1),   // 1 任务全过，纯噪声
 				evN("codexradar", "max", 0.333, 6), // 唯一可信档
 			},
-			singleWant: true, okWant: true,
+			classWant: EvidenceDeflated, okWant: true,
 			scoreWant: 0.333 * 100 / 1.975,
 		},
 		{
@@ -153,19 +183,19 @@ func TestRegularEffortBaselineScoreSingleEffortOnly(t *testing.T) {
 				evN("codexradar", "low", 1.0, 1),
 				evN("codexradar", "max", 0.5, 2),
 			},
-			singleWant: false, okWant: false,
+			classWant: "", okWant: false,
 		},
 		{
-			name:       "任务格数达到阈值即可信",
-			evidence:   []config.ModelBenchmarkEvidence{evN("deepswe", "low", 0.50, 3)},
-			singleWant: true, okWant: true, scoreWant: 0.50 * 100 / 0.686,
+			name:      "任务格数达到阈值即可信",
+			evidence:  []config.ModelBenchmarkEvidence{evN("deepswe", "low", 0.50, 3)},
+			classWant: EvidenceDeflated, okWant: true, scoreWant: 0.50 * 100 / 0.686,
 		},
 		{
-			name: "low+high 跨 medium 相邻两档线性插值",
+			name: "low+high 跨 medium 相邻两档线性插值为 interpolated",
 			evidence: []config.ModelBenchmarkEvidence{
 				ev("deepswe", "low", 0.50), ev("deepswe", "high", 0.80),
 			},
-			singleWant: false, okWant: true,
+			classWant: EvidenceInterpolated, okWant: true,
 			scoreWant: 65, // ranks 2,4 → t=0.5：(50+80)/2
 		},
 		{
@@ -173,15 +203,15 @@ func TestRegularEffortBaselineScoreSingleEffortOnly(t *testing.T) {
 			evidence: []config.ModelBenchmarkEvidence{
 				ev("deepswe", "low", 0.50), ev("deepswe", "xhigh", 0.80),
 			},
-			singleWant: false, okWant: true,
+			classWant: EvidenceInterpolated, okWant: true,
 			scoreWant: 50 + (80-50)/3.0, // ranks 2,5 → t=(3-2)/(5-2)=1/3
 		},
 		{
-			name: "high+max 同侧保留全局比率折算取最小",
+			name: "high+max 同侧保留全局比率折算（deflated，统一封顶 high）",
 			evidence: []config.ModelBenchmarkEvidence{
 				ev("deepswe", "high", 0.80), ev("deepswe", "max", 0.90),
 			},
-			singleWant: false, okWant: true,
+			classWant: EvidenceDeflated, okWant: true,
 			scoreWant: 0.90 * 100 / 1.975, // min(56.6, 45.6)
 		},
 		{
@@ -190,7 +220,7 @@ func TestRegularEffortBaselineScoreSingleEffortOnly(t *testing.T) {
 				ev("deepswe", "low", 0.50), ev("deepswe", "high", 0.80), // 插值 65
 				ev("codexradar", "max", 0.90), // 单点折算 45.6（弱证据层）
 			},
-			singleWant: false, okWant: true,
+			classWant: EvidenceInterpolated, okWant: true,
 			scoreWant: 65,
 		},
 		{
@@ -198,7 +228,7 @@ func TestRegularEffortBaselineScoreSingleEffortOnly(t *testing.T) {
 			evidence: []config.ModelBenchmarkEvidence{
 				ev("deepswe", "medium", 0.54), ev("codexradar", "high", 0.607), // 单侧折算 43.0
 			},
-			singleWant: false, okWant: true,
+			classWant: EvidenceDirect, okWant: true,
 			scoreWant: 54,
 		},
 		{
@@ -206,23 +236,54 @@ func TestRegularEffortBaselineScoreSingleEffortOnly(t *testing.T) {
 			evidence: []config.ModelBenchmarkEvidence{
 				ev("deepswe", "max", 0.628), ev("codexradar", "high", 0.444), ev("codexradar", "max", 0.54),
 			},
-			singleWant: false, okWant: true,
+			classWant: EvidenceDeflated, okWant: true,
 			scoreWant: math.Min(0.628*100/1.975, 0.444*100/1.413), // min(31.8, 31.4)
 		},
 		{
-			name:       "非 coding 或非 deepswe/codexradar 证据忽略",
-			evidence:   []config.ModelBenchmarkEvidence{ev("artificial_analysis", "low", 0.50)},
-			singleWant: false, okWant: false,
+			name:      "非 coding 或非 deepswe/codexradar 证据忽略",
+			evidence:  []config.ModelBenchmarkEvidence{ev("artificial_analysis", "low", 0.50)},
+			classWant: "", okWant: false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			score, single, ok := regularEffortBaselineScore(tt.evidence)
-			if ok != tt.okWant || single != tt.singleWant {
-				t.Fatalf("single/ok = %v/%v, want %v/%v", single, ok, tt.singleWant, tt.okWant)
+			result, ok := calibrateRegularEffort(tt.evidence)
+			if ok != tt.okWant {
+				t.Fatalf("ok = %v, want %v", ok, tt.okWant)
 			}
-			if tt.okWant && math.Abs(score-tt.scoreWant) > 1e-9 {
-				t.Fatalf("score = %v, want %v", score, tt.scoreWant)
+			if tt.okWant {
+				if result.Class != tt.classWant {
+					t.Fatalf("class = %v, want %v", result.Class, tt.classWant)
+				}
+				if math.Abs(result.Score-tt.scoreWant) > 1e-9 {
+					t.Fatalf("score = %v, want %v", result.Score, tt.scoreWant)
+				}
+			}
+		})
+	}
+}
+
+// TestQualityTierFromCalibrationCapsEstimates 验证证据等级封顶：
+// 估计类证据（interpolated/deflated/calibrated）即使分数达标也不得证明 premium。
+func TestQualityTierFromCalibrationCapsEstimates(t *testing.T) {
+	tests := []struct {
+		name  string
+		calib CalibrationResult
+		want  QualityTier
+	}{
+		{"direct 高分进 premium", CalibrationResult{Score: 80, Class: EvidenceDirect}, QualityTierPremium},
+		{"interpolated 高分封顶 high", CalibrationResult{Score: 90, Class: EvidenceInterpolated}, QualityTierHigh},
+		{"deflated 高分封顶 high", CalibrationResult{Score: 70, Class: EvidenceDeflated}, QualityTierHigh},
+		{"calibrated 高分封顶 high", CalibrationResult{Score: 90, Class: EvidenceCalibrated}, QualityTierHigh},
+		{"direct 中段进 high", CalibrationResult{Score: 65, Class: EvidenceDirect}, QualityTierHigh},
+		{"direct 中低段进 normal", CalibrationResult{Score: 50, Class: EvidenceDirect}, QualityTierNormal},
+		{"低分为 low", CalibrationResult{Score: 20, Class: EvidenceDeflated}, QualityTierLow},
+		{"封顶不影响更低档位", CalibrationResult{Score: 50, Class: EvidenceInterpolated}, QualityTierNormal},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := qualityTierFromCalibration(tt.calib); got != tt.want {
+				t.Fatalf("qualityTierFromCalibration(%+v) = %v, want %v", tt.calib, got, tt.want)
 			}
 		})
 	}
@@ -245,6 +306,46 @@ func TestIsSmallSampleEvidenceBoundaries(t *testing.T) {
 			ev := config.ModelBenchmarkEvidence{Benchmark: "codexradar", TaskCount: tt.taskCount}
 			if got := isSmallSampleEvidence(ev); got != tt.want {
 				t.Fatalf("isSmallSampleEvidence(taskCount=%d) = %v, want %v", tt.taskCount, got, tt.want)
+			}
+		})
+	}
+}
+
+func sortFloat64s(vals []float64) {
+	for i := 1; i < len(vals); i++ {
+		for j := i; j > 0 && vals[j] < vals[j-1]; j-- {
+			vals[j], vals[j-1] = vals[j-1], vals[j]
+		}
+	}
+}
+
+// TestModelProfileQualityTierRegistryReplay 锁定当前注册表在 v2 固定阈值下的
+// 档位快照（回放验证）。快照随注册表数据演进而维护：基准数据大改后按
+// 「锚定测试报警 → 重新校准阈值 → 升版本号 → 更新本快照」的流程处理。
+func TestModelProfileQualityTierRegistryReplay(t *testing.T) {
+	tests := []struct {
+		model  string
+		family ModelFamily
+		want   QualityTier
+		note   string
+	}{
+		{"gpt-6-astra", ModelFamilyOpenAI, QualityTierPremium, "direct 72.8 ≥ 69.95"},
+		{"gemini-3.8-flash", ModelFamilyGemini, QualityTierPremium, "direct 71.0 ≥ 69.95"},
+		{"hy4-preview", ModelFamilyUnknown, QualityTierHigh, "interpolated 76.1 封顶（premium 须直测证明）"},
+		{"claude-opus-5", ModelFamilyClaude, QualityTierHigh, "direct 68.9 < 69.95"},
+		{"claude-fable-5", ModelFamilyClaude, QualityTierHigh, "direct 65.4"},
+		{"gpt-5.6-sol", ModelFamilyOpenAI, QualityTierHigh, "direct 64.3"},
+		{"kimi-k3", ModelFamilyKimi, QualityTierNormal, "interpolated 56.7 < 59.15"},
+		{"gpt-5.5", ModelFamilyOpenAI, QualityTierNormal, "direct 54.0 < 59.15"},
+		{"glm-5.3", ModelFamilyGLM, QualityTierNormal, "interpolated 54.0 < 59.15"},
+		{"claude-opus-4-8", ModelFamilyClaude, QualityTierNormal, "direct 48.7"},
+		{"claude-sonnet-5", ModelFamilyClaude, QualityTierLow, "direct 39.8 < 44.25"},
+		{"grok-4.5", ModelFamilyGrok, QualityTierLow, "deflated 38.1"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			if got := ModelProfileQualityTier(tt.model, tt.family); got != tt.want {
+				t.Fatalf("ModelProfileQualityTier(%s) = %v, want %v（%s）", tt.model, got, tt.want, tt.note)
 			}
 		})
 	}

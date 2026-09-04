@@ -3,7 +3,6 @@ package autopilot
 import (
 	"sort"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
@@ -325,12 +324,61 @@ func ModelProfileQualityTierFromFamily(family ModelFamily, modelID string) Quali
 
 // ── Benchmark 驱动的质量档推导 ──
 
-// 默认质量档边界，在注册表直测分数不足时作为回退。
+// 固定质量档阈值（版本化）。生产热路径直接使用，不随注册表刷新动态重算：
+// 动态聚类会让每次数据同步都重排全部模型档位（2026-09-04 hy4-preview 的
+// 小样本插值 76.1 曾把动态 premiumMin 从 60.70 推到 74.45，全榜连锁换档）。
+// 阈值由离线校准从 medium/default 直测分布推导（锚定测试见
+// TestQualityTierThresholdsAnchoredToDirectEvidence）：取 2026-09-04 快照
+// 直测池（16 模型）升序分布的最大间隙断层中点——
+// premium = 68.9↔71.0、high = 54.0↔64.3、normal = 39.8↔48.7。
+// 调整阈值必须升版本号并在 CHANGELOG 说明掉档/升档面。
 const (
-	defaultBenchmarkTierPremiumMin = 75.0
-	defaultBenchmarkTierHighMin    = 61.0
-	defaultBenchmarkTierNormalMin  = 55.0
+	qualityTierThresholdsVersion = "fixed-direct-calibration-v2-2026-09-04"
+	qualityTierPremiumMin        = 69.95
+	qualityTierHighMin           = 59.15
+	qualityTierNormalMin         = 44.25
 )
+
+// computeQualityTierBoundaries 返回质量档边界。阈值固定版本化（见上），
+// 注册表直测分布只在离线校准（锚定测试）中验证其合理性，不进入请求热路径。
+func computeQualityTierBoundaries() (premiumMin, highMin, normalMin float64) {
+	return qualityTierPremiumMin, qualityTierHighMin, qualityTierNormalMin
+}
+
+// EvidenceClass 标注校准分数的证据等级，决定该分数可证明的最高质量档。
+type EvidenceClass string
+
+const (
+	// EvidenceDirect：medium/default 可靠直测。唯一可证明 premium 的等级。
+	EvidenceDirect EvidenceClass = "direct"
+	// EvidenceInterpolated：同源 effort 曲线跨 medium 相邻档线性插值。
+	// 用了模型自身曲线，可信度高于全局折算，但终属估计，封顶 high。
+	EvidenceInterpolated EvidenceClass = "interpolated"
+	// EvidenceDeflated：无跨 medium 曲线，按全局平均比率折算（单档或单侧多档）。
+	// 完全依赖全局曲线，封顶 high（含旧 singleEffortOnly 语义）。
+	EvidenceDeflated EvidenceClass = "deflated"
+	// EvidenceCalibrated：artificial_analysis coding_index 线性校准，封顶 high。
+	EvidenceCalibrated EvidenceClass = "calibrated"
+)
+
+// maxTierProvableByEvidence 返回各证据等级可证明的最高质量档：
+// 只有常规口径直测可以证明 premium，估计类证据一律封顶 high。
+func maxTierProvableByEvidence(class EvidenceClass) QualityTier {
+	if class == EvidenceDirect {
+		return QualityTierPremium
+	}
+	return QualityTierHigh
+}
+
+// CalibrationResult 结构化承载常规 effort 口径的校准结果：
+// 分数 + 证据等级 + 观测档位，替代此前散落的 (score, singleEffortOnly) 元组。
+type CalibrationResult struct {
+	Score float64
+	Class EvidenceClass
+	// MeasuredEffort 是该分数的观测档位：direct 为 medium；
+	// deflated 为实际参与折算的非常规档；interpolated 为 medium（两档中点口径）。
+	MeasuredEffort EffortLevel
+}
 
 // effortQualityRatio 是各思考强度档相对常规口径（medium/default=1.0）的平均分数比率。
 // 来源：deepswe v1.1 live leaderboard 同模型 effort 曲线统计（2026-08，
@@ -358,20 +406,37 @@ func isSmallSampleEvidence(ev config.ModelBenchmarkEvidence) bool {
 	return ev.TaskCount > 0 && ev.TaskCount < minReliableBenchmarkTasks
 }
 
-// regularEffortBaselineScore 从直测证据提取常规 effort 口径（medium/default）的 coding 分。
-// 证据按来源（deepswe / codexradar）分组，再按证据等级分层合成，升级仅作用于
-// 缺 medium 直测的模型（有直测的模型行为与旧算法一致）：
-//  1. 有 medium/default 实测 → 跨源取最大（与旧合并语义一致，证据最充分）；
+func directRegularEffortScore(evidence []config.ModelBenchmarkEvidence) (float64, bool) {
+	best := -1.0
+	for _, ev := range evidence {
+		if ev.Domain != "coding" || ev.Metric != "pass_at_1" ||
+			(ev.Benchmark != "deepswe" && ev.Benchmark != "codexradar") ||
+			isSmallSampleEvidence(ev) {
+			continue
+		}
+		if NormalizeEffortLevel(ev.Effort) != EffortMedium {
+			continue
+		}
+		if score := ev.RawValue * 100; score > best {
+			best = score
+		}
+	}
+	return best, best >= 0
+}
+
+// calibrateRegularEffort 从直测证据提取常规 effort 口径（medium/default）的 coding 分，
+// 并标注证据等级。证据按来源（deepswe / codexradar）分组，再按证据等级分层合成，
+// 升级仅作用于缺 medium 直测的模型（有直测的模型行为与旧算法一致）：
+//  1. 有 medium/default 实测 → 跨源取最大（与旧合并语义一致，证据最充分），EvidenceDirect；
 //  2. 曲线跨 medium（如 low+high）→ 相邻两档按 effort 序数线性插值，
 //     源间取最小（模型自身的 effort 曲线是对其中档水平的最好估计，但插值
-//     属估计值，源间分歧保守取低）；
+//     属估计值，源间分歧保守取低），EvidenceInterpolated；
 //  3. 全部在一侧或仅剩单点 → 跨源合并各档后按全局平均比率折算取最小值
-//     （保守：断崖曲线的高档成绩不会高估基础能力），仅剩单档时返回
-//     singleEffortOnly=true（折算完全依赖全局曲线，不足以支撑 premium，
-//     调用方应封顶 high）。
+//     （保守：断崖曲线的高档成绩不会高估基础能力），EvidenceDeflated。
 //
+// 估计类证据（interpolated/deflated）封顶 high，由 maxTierProvableByEvidence 统一表达。
 // 无直测证据时 ok=false。
-func regularEffortBaselineScore(evidence []config.ModelBenchmarkEvidence) (score float64, singleEffortOnly bool, ok bool) {
+func calibrateRegularEffort(evidence []config.ModelBenchmarkEvidence) (CalibrationResult, bool) {
 	// 按来源收集各档原始分（百分制），同档多条证据取最大。小样本档位
 	// （任务格数不足）视为未完成测量，不参与校准。
 	bySource := map[string]map[EffortLevel]float64{}
@@ -399,7 +464,7 @@ func regularEffortBaselineScore(evidence []config.ModelBenchmarkEvidence) (score
 		}
 	}
 	if len(bySource) == 0 {
-		return 0, false, false
+		return CalibrationResult{}, false
 	}
 
 	// 第 1 层：实测常规口径，跨源取最大（与旧合并语义一致）。
@@ -410,7 +475,7 @@ func regularEffortBaselineScore(evidence []config.ModelBenchmarkEvidence) (score
 		}
 	}
 	if regularBest >= 0 {
-		return regularBest, false, true
+		return CalibrationResult{Score: regularBest, Class: EvidenceDirect, MeasuredEffort: EffortMedium}, true
 	}
 
 	// 第 2 层：跨 medium 的同源曲线插值，源间取最小。
@@ -421,7 +486,7 @@ func regularEffortBaselineScore(evidence []config.ModelBenchmarkEvidence) (score
 		}
 	}
 	if straddleWorst >= 0 {
-		return straddleWorst, false, true
+		return CalibrationResult{Score: straddleWorst, Class: EvidenceInterpolated, MeasuredEffort: EffortMedium}, true
 	}
 
 	// 第 3 层：全部在一侧或单点，跨源合并后全局比率折算取最小。
@@ -434,13 +499,15 @@ func regularEffortBaselineScore(evidence []config.ModelBenchmarkEvidence) (score
 		}
 	}
 	worst := -1.0
+	worstLevel := EffortMedium
 	for level, raw := range pooled {
 		deflated := raw / effortQualityRatio[string(level)]
 		if worst < 0 || deflated < worst {
 			worst = deflated
+			worstLevel = level
 		}
 	}
-	return worst, len(pooled) == 1, true
+	return CalibrationResult{Score: worst, Class: EvidenceDeflated, MeasuredEffort: worstLevel}, true
 }
 
 // interpolatedMediumScore 在单来源的 effort 曲线跨 medium 时，取相邻两档按序数线性插值。
@@ -483,19 +550,18 @@ func directBenchmarkScoreFromEvidence(evidence []config.ModelBenchmarkEvidence) 
 	return best
 }
 
-// normalizedCapabilityScoreWithEvidenceClass 把不同 benchmark 的 coding 证据归一化到 DeepSWE 等价的
-// 0-100 分，并统一到常规 effort 口径（medium/default）。
-// 优先级：直测常规口径分（regularEffortBaselineScore）> artificial_analysis
-// coding_index 线性校准。无任何可用证据时返回 -1。
-// singleEffortOnly 表示直测仅剩单一非常规档（无论高低），证据不足以支撑
-// premium（调用方 ModelProfileQualityTier 据此封顶）。
-func normalizedCapabilityScoreWithEvidenceClass(modelID string) (float64, bool) {
+// calibrateModelCapability 把不同 benchmark 的 coding 证据归一化到 DeepSWE 等价的
+// 0-100 分，统一到常规 effort 口径（medium/default），并携带证据等级。
+// 优先级：直测常规口径分（calibrateRegularEffort）> artificial_analysis
+// coding_index 线性校准（EvidenceCalibrated，封顶 high）。
+// 模型不在注册表时 ok=false。
+func calibrateModelCapability(modelID string) (CalibrationResult, bool) {
 	benchmark := config.ResolveModelBenchmarkProfile(modelID)
 	if !benchmark.Known {
-		return -1, false
+		return CalibrationResult{}, false
 	}
-	if score, singleEffortOnly, ok := regularEffortBaselineScore(benchmark.Profile.BenchmarkEvidence); ok {
-		return score, singleEffortOnly
+	if result, ok := calibrateRegularEffort(benchmark.Profile.BenchmarkEvidence); ok {
+		return result, true
 	}
 	bestAACoding := -1.0
 	for _, ev := range benchmark.Profile.BenchmarkEvidence {
@@ -507,141 +573,181 @@ func normalizedCapabilityScoreWithEvidenceClass(modelID string) (float64, bool) 
 		// 系数来自注册表中同时具有 deepswe/codexradar 实测分与 AA coding_index 的
 		// 重叠模型的最小二乘线性拟合；基准数据大改后需重算。
 		// deepswe ≈ 2.391 * aa_coding - 116.007
-		return 2.391*bestAACoding - 116.007, false
+		return CalibrationResult{
+			Score:          2.391*bestAACoding - 116.007,
+			Class:          EvidenceCalibrated,
+			MeasuredEffort: EffortMedium,
+		}, true
 	}
-	return -1, false
+	return CalibrationResult{}, false
 }
 
 // normalizedCapabilityScore 返回常规 effort 口径的归一化能力分（无证据类信息）。
 func normalizedCapabilityScore(modelID string) float64 {
-	score, _ := normalizedCapabilityScoreWithEvidenceClass(modelID)
-	return score
+	result, ok := calibrateModelCapability(modelID)
+	if !ok {
+		return -1
+	}
+	return result.Score
 }
 
-// benchmarkTierBoundariesCache 缓存质量档边界，以注册表世代号做缓存键：
-// 基准数据不变时直接复用，避免热路径（每请求画像、渠道评分）重复深拷贝
-// 整个注册表并重算分布。
-var benchmarkTierBoundariesCache atomic.Pointer[benchmarkTierBoundaries]
-
-type benchmarkTierBoundaries struct {
-	generation uint64
-	premiumMin float64
-	highMin    float64
-	normalMin  float64
-}
-
-// computeQualityTierBoundaries 返回质量档边界（带世代缓存）。
-func computeQualityTierBoundaries() (premiumMin, highMin, normalMin float64) {
-	generation := config.BuiltinSnapshotGeneration()
-	if cached := benchmarkTierBoundariesCache.Load(); cached != nil && cached.generation == generation {
-		return cached.premiumMin, cached.highMin, cached.normalMin
+// qualityTierFromCalibration 按固定阈值与证据等级上限评定质量档：
+// 分数决定档位，证据等级封顶（估计类证据不得证明 premium）。
+func qualityTierFromCalibration(calib CalibrationResult) QualityTier {
+	premiumMin, highMin, normalMin := computeQualityTierBoundaries()
+	cap := maxTierProvableByEvidence(calib.Class)
+	tier := QualityTierLow
+	switch {
+	case calib.Score >= premiumMin:
+		tier = QualityTierPremium
+	case calib.Score >= highMin:
+		tier = QualityTierHigh
+	case calib.Score >= normalMin:
+		tier = QualityTierNormal
 	}
-	premiumMin, highMin, normalMin = computeQualityTierBoundariesFromRegistry()
-	benchmarkTierBoundariesCache.Store(&benchmarkTierBoundaries{
-		generation: generation,
-		premiumMin: premiumMin,
-		highMin:    highMin,
-		normalMin:  normalMin,
-	})
-	return
-}
-
-// computeQualityTierBoundariesFromRegistry 从注册表直接 benchmark 证据的分数分布自动划分质量档边界。
-// 算法：分数排序后自顶向下分段寻找最大间隙（自然断层）——premium 边界取顶部四分位
-// （按名次）区间内最大间隙的中点，high / normal 依次在低于上一档边界的分段中
-// 找最大间隙。calibrated 估计值不参与边界计算，避免污染分布形态。
-// 数据不足时回退默认边界。
-func computeQualityTierBoundariesFromRegistry() (premiumMin, highMin, normalMin float64) {
-	premiumMin, highMin, normalMin = defaultBenchmarkTierPremiumMin, defaultBenchmarkTierHighMin, defaultBenchmarkTierNormalMin
-	profiles := config.BuiltinModelBenchmarkProfiles()
-	scores := make([]float64, 0, len(profiles))
-	seen := make(map[string]struct{}, len(profiles))
-	for _, bp := range profiles {
-		// pattern 别名与 canonical 模型共享同一 CanonicalModel，按 canonical 去重，
-		// 每个模型只计一次常规口径分（与模型侧评分同口径，避免边界线与
-		// 模型分数量纲不一致）。
-		if _, ok := seen[bp.CanonicalModel]; ok {
-			continue
-		}
-		seen[bp.CanonicalModel] = struct{}{}
-		if score, _, ok := regularEffortBaselineScore(bp.BenchmarkEvidence); ok {
-			scores = append(scores, score)
-		}
+	if qualityTierRank(tier) > qualityTierRank(cap) {
+		return cap
 	}
-	if len(scores) < 4 {
-		return
-	}
-	sort.Float64s(scores)
-
-	// largestGapMid 返回 vals 中完全位于区域内的最大间隙的中点：
-	// 间隙两端都必须 >= floor。只查上端会让低段的跨区域间隙被误当成顶部断层。
-	largestGapMid := func(vals []float64, floor float64) (float64, bool) {
-		bestSize, bestMid := 0.0, 0.0
-		found := false
-		for i := 0; i+1 < len(vals); i++ {
-			if vals[i] < floor || vals[i+1] < floor {
-				continue
-			}
-			if size := vals[i+1] - vals[i]; size > bestSize {
-				bestSize, bestMid, found = size, (vals[i]+vals[i+1])/2, true
-			}
-		}
-		return bestMid, found
-	}
-
-	// premium 断层在顶部四分位（按名次）区间内寻找。区域锚定经历两代修正：
-	// 60% 分数锚假设分布铺满量表，分数集中时把中段空隙包进"顶部区域"，
-	// premiumMin 一度塌到 49；改为 75% 分数锚后又对榜首离群值敏感——单个
-	// 高分新模型入场抬高锚线，把定义 premium 档的最大自然断层挤出区域
-	// （8 分间隙因下端 56.2 < 76.1×0.75 被排除），premiumMin 从 60 跳到 73，
-	// premium 档塌缩成 singleton。按名次取顶部四分位与分数量纲解耦，
-	// 区域成员不受榜首分数波动影响，两个方向都稳定。
-	if mid, ok := largestGapMid(scores, scores[(3*len(scores))/4]); ok {
-		premiumMin = mid
-	}
-	if rest := filterBelow(scores, premiumMin); len(rest) >= 2 {
-		if mid, ok := largestGapMid(rest, premiumMin*0.5); ok {
-			highMin = mid
-		}
-	}
-	if rest := filterBelow(scores, highMin); len(rest) >= 2 {
-		if mid, ok := largestGapMid(rest, highMin*0.4); ok {
-			normalMin = mid
-		}
-	}
-	return
-}
-
-// filterBelow 返回 vals 中小于 cut 的元素（保持有序）。
-func filterBelow(vals []float64, cut float64) []float64 {
-	out := make([]float64, 0, len(vals))
-	for _, v := range vals {
-		if v < cut {
-			out = append(out, v)
-		}
-	}
-	return out
+	return tier
 }
 
 // ModelProfileQualityTier 优先按常规 effort 口径的归一化能力分推导质量档，
-// 无 benchmark 时回退到模型族规则。仅剩单一非常规档（低档或高思考档）直测证据时
-// 封顶 high：全局平均曲线的折算不足以支撑 premium（等该模型补测常规口径）。
+// 无 benchmark 时回退到模型族规则。估计类证据（插值/折算/校准）封顶 high：
+// premium 必须有常规口径直测证明（等该模型补测 medium/default）。
 func ModelProfileQualityTier(modelID string, family ModelFamily) QualityTier {
-	score, singleEffortOnly := normalizedCapabilityScoreWithEvidenceClass(modelID)
-	if score >= 0 {
-		premiumMin, highMin, normalMin := computeQualityTierBoundaries()
-		switch {
-		case score >= premiumMin && !singleEffortOnly:
-			return QualityTierPremium
-		case score >= highMin:
-			return QualityTierHigh
-		case score >= normalMin:
-			return QualityTierNormal
-		default:
-			return QualityTierLow
-		}
+	if calib, ok := calibrateModelCapability(modelID); ok {
+		return qualityTierFromCalibration(calib)
 	}
 	return ModelProfileQualityTierFromFamily(family, modelID)
+}
+
+// directEffortScore 返回指定 effort 档的可靠直测 coding 分（跨源取最大）。
+// ok=false 表示该档无可靠直测（无证据或小样本）。
+func directEffortScore(evidence []config.ModelBenchmarkEvidence, level EffortLevel) (float64, bool) {
+	best := -1.0
+	for _, ev := range evidence {
+		if ev.Domain != "coding" || ev.Metric != "pass_at_1" ||
+			(ev.Benchmark != "deepswe" && ev.Benchmark != "codexradar") ||
+			isSmallSampleEvidence(ev) {
+			continue
+		}
+		if NormalizeEffortLevel(ev.Effort) != level {
+			continue
+		}
+		if score := ev.RawValue * 100; score > best {
+			best = score
+		}
+	}
+	return best, best >= 0
+}
+
+// interpolatedEffortScore 用同源 effort 曲线中紧邻目标档两侧的实测点
+// 线性插值出该档估计分，源间取最小（插值属估计值，保守取低）。
+// ok=false 表示没有任何来源的曲线能覆盖该档。
+func interpolatedEffortScore(evidence []config.ModelBenchmarkEvidence, level EffortLevel) (float64, bool) {
+	targetOrd := EffortLevelOrdinal(level)
+	worst := -1.0
+	bySource := map[string]map[EffortLevel]float64{}
+	for _, ev := range evidence {
+		if ev.Domain != "coding" || ev.Metric != "pass_at_1" ||
+			(ev.Benchmark != "deepswe" && ev.Benchmark != "codexradar") ||
+			isSmallSampleEvidence(ev) {
+			continue
+		}
+		norm := NormalizeEffortLevel(ev.Effort)
+		if norm == "" {
+			continue
+		}
+		efforts := bySource[ev.Benchmark]
+		if efforts == nil {
+			efforts = map[EffortLevel]float64{}
+			bySource[ev.Benchmark] = efforts
+		}
+		if raw := ev.RawValue * 100; raw > efforts[norm] {
+			efforts[norm] = raw
+		}
+	}
+	for _, efforts := range bySource {
+		var lo, hi *struct {
+			ord   int
+			score float64
+		}
+		for lv, score := range efforts {
+			ord := EffortLevelOrdinal(lv)
+			if ord < targetOrd && (lo == nil || ord > lo.ord) {
+				lo = &struct {
+					ord   int
+					score float64
+				}{ord, score}
+			}
+			if ord > targetOrd && (hi == nil || ord < hi.ord) {
+				hi = &struct {
+					ord   int
+					score float64
+				}{ord, score}
+			}
+		}
+		if lo == nil || hi == nil {
+			continue
+		}
+		t := float64(targetOrd-lo.ord) / float64(hi.ord-lo.ord)
+		estimate := lo.score + (hi.score-lo.score)*t
+		if worst < 0 || estimate < worst {
+			worst = estimate
+		}
+	}
+	return worst, worst >= 0
+}
+
+// EffortAwareQualityTier 评定 (模型, 思考强度) 组合的质量档，是模型×effort
+// 候选过滤与 advisor MinQualityTier 豁免的统一口径：
+//  1. 该档有可靠直测 → 直测分按固定阈值评档（direct 证据可证明 premium）；
+//  2. 该档无直测但同模型曲线可插值 → 估计分评档，封顶 high；
+//  3. 无该档证据 → 回落模型基础档（medium 口径）：effort 不低于 medium 时
+//     沿用基础档（effort 曲线单调不减），低于 medium 时按全局比率保守下调
+//     并封顶 high（low 档能力可能显著低于常规口径）。
+//
+// 模型不在注册表时回退模型族规则（与 ModelProfileQualityTier 一致）。
+// effort 为空表示未指定，等价 medium 口径（与模型基础档相同）。
+func EffortAwareQualityTier(modelID string, effort EffortLevel, family ModelFamily) QualityTier {
+	benchmark := config.ResolveModelBenchmarkProfile(modelID)
+	if !benchmark.Known {
+		return ModelProfileQualityTierFromFamily(family, modelID)
+	}
+	evidence := benchmark.Profile.BenchmarkEvidence
+
+	// 1. 该档可靠直测。
+	if score, ok := directEffortScore(evidence, effort); ok {
+		return qualityTierFromCalibration(CalibrationResult{
+			Score:          score,
+			Class:          EvidenceDirect,
+			MeasuredEffort: effort,
+		})
+	}
+
+	// 2. 同模型曲线插值该档（估计值，封顶 high）。
+	if score, ok := interpolatedEffortScore(evidence, effort); ok {
+		return qualityTierFromCalibration(CalibrationResult{
+			Score:          score,
+			Class:          EvidenceInterpolated,
+			MeasuredEffort: effort,
+		})
+	}
+
+	// 3. 回落模型基础档。
+	calib, ok := calibrateModelCapability(modelID)
+	if !ok {
+		return ModelProfileQualityTierFromFamily(family, modelID)
+	}
+	if effort == "" || EffortLevelOrdinal(effort) >= EffortLevelOrdinal(EffortMedium) {
+		return qualityTierFromCalibration(calib)
+	}
+	deflated := CalibrationResult{
+		Score:          calib.Score / effortQualityRatio[string(effort)],
+		Class:          EvidenceDeflated,
+		MeasuredEffort: effort,
+	}
+	return qualityTierFromCalibration(deflated)
 }
 
 // ── ModelProfile ──
@@ -714,4 +820,19 @@ func applyUpstreamModelCapability(profile *ModelProfile, capability config.Upstr
 	profile.SupportsToolCalls = capability.Capabilities["toolCalls"] ||
 		capability.Capabilities["tool_calls"] || capability.Capabilities["tools"]
 	profile.SupportsReasoning = upstreamCapabilitySupportsReasoning(capability)
+}
+
+// requestEffortOfProfile 返回请求实际生效的思考等级：手动意图 pin 优先于
+// 客户端显式声明；空表示未指定（按 medium 口径评定，与模型基础档同义）。
+func requestEffortOfProfile(profile *RequestProfile) EffortLevel {
+	if profile == nil {
+		return ""
+	}
+	if profile.IntentEffortPin != nil && profile.IntentEffortPin.Set && profile.IntentEffortPin.Effort != "" {
+		return profile.IntentEffortPin.Effort
+	}
+	if profile.ClientEffort != "" {
+		return profile.ClientEffort
+	}
+	return ""
 }

@@ -764,9 +764,10 @@ func TestResolveModel_CompshareInventoryFrontierByFloor(t *testing.T) {
 	// - Normal 下界：全部候选可比较，balanced 前沿最廉价可比点是同 1x 同公开价的
 	//   deepseek-v4-flash 对，日期快照 0731 为更新 checkpoint，优先胜出
 	//   （DeepSeek-V3.2 已从优云下架）
-	// - High 下界 + 收益帽 High：effort 级实测豁免（model × effort 组合准入）后，
-	//   deepseek-v4-flash 凭 max 档实测 52.7 达 high 边界进入候选，glm-5.2 的
-	//   Premium 溢价被收益帽截断，balanced 前沿以更廉价的 deepseek-v4-flash 胜出
+	// - High 下界 + 收益帽 High：effort 豁免旁路已删除——未 pin 思考等级时
+	//   低常规档候选不再凭任一高档实测分绕过模型级过滤（v4-flash max 实测
+	//   52.7 也低于 v2 highMin 59.15），glm-5.2 的 Premium 溢价被收益帽截断，
+	//   balanced 前沿以 mock High 的 kimi-k2.6 胜出
 	//   （质量下限是准入门槛而非排序标准，过线后按性价比选）
 	floors := []struct {
 		floor    CapabilityFloor
@@ -781,7 +782,7 @@ func TestResolveModel_CompshareInventoryFrontierByFloor(t *testing.T) {
 				MinContextTokens: 39_561, MinQualityTier: QualityTierHigh,
 				QualityBenefitCap: QualityTierHigh,
 			},
-			expected: "deepseek-v4-flash",
+			expected: "kimi-k2.6",
 		},
 	}
 	for _, tt := range floors {
@@ -831,10 +832,12 @@ func TestResolveModel_RecognizesDottedOpus48AndOpus5BeforeCapabilityFilter(t *te
 	}}})
 	floor := CapabilityFloor{
 		MinContextTokens: 200_000,
-		MinQualityTier:   QualityTierHigh,
-		NeedsReasoning:   true,
-		NeedsVision:      true,
-		NeedsToolCalls:   true,
+		// opus-4.8 注册表常规口径 48.7 在 v2 阈值下为 normal，high 下限会把它
+		// 滤掉，与本测试「点号命名在能力过滤前完成识别」的意图无关。
+		MinQualityTier: QualityTierNormal,
+		NeedsReasoning: true,
+		NeedsVision:    true,
+		NeedsToolCalls: true,
 	}
 
 	tests := []struct {

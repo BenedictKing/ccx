@@ -727,68 +727,22 @@ func filterByCapabilityFloorInternal(profiles []ModelProfile, floor CapabilityFl
 		if floor.NeedsToolCalls && !p.SupportsToolCalls {
 			continue
 		}
-		if enforceQuality && qualityTierRank(p.QualityTier) < qualityTierRank(floor.MinQualityTier) &&
-			!effortLevelQualityAdmission(p.ModelID, floor.MinQualityTier) {
-			continue
+		if enforceQuality && qualityTierRank(p.QualityTier) < qualityTierRank(floor.MinQualityTier) {
+			// effort 感知豁免：仅当请求 pin 了思考等级、且该 (模型, effort)
+			// 组合的档位达标时放行。"任一高档实测达标即绕过模型级过滤"的
+			// 旁路已删除——未 pin 时请求实际发送的是常规档，凭 max 档实测
+			// 分放行属于档位错配（luna medium 19.6 凭 max 69.6 进 high 候选）。
+			exempt := false
+			if pinned := NormalizeEffortLevel(string(floor.PinnedEffort)); pinned != "" {
+				exempt = qualityTierRank(EffortAwareQualityTier(p.ModelID, pinned, p.ModelFamily)) >= qualityTierRank(floor.MinQualityTier)
+			}
+			if !exempt {
+				continue
+			}
 		}
 		eligible = append(eligible, p)
 	}
 	return eligible
-}
-
-// effortLevelQualityAdmission 判断模型是否凭任一已测 effort 档的实测分通过质量下限。
-// 背景：QualityTier 是模型级常规口径分（medium 对齐），压平了 effort 维度；部分模型
-// effort 档间差异极大（低常规档模型拉满 effort 后实测可达高档能力），仅按模型级档位
-// 过滤会把这类 (model, effort) 组合整体排除。口径：取 coding 域 deepswe/codexradar
-// pass@1 直测证据（与 regularEffortBaselineScore/档位边界同源同量纲，default 档按
-// medium 归一），任一档实测分（百分制）达到下限对应边界分即放行。放行后该模型在
-// 排序层仍按各 effort 档实际分数竞争，不会被虚抬。
-func effortLevelQualityAdmission(modelID string, min QualityTier) bool {
-	if min == "" || min == QualityTierLow {
-		return true
-	}
-	benchmark := config.ResolveModelBenchmarkProfile(modelID)
-	if !benchmark.Known {
-		return false
-	}
-	premiumMin, highMin, normalMin := computeQualityTierBoundaries()
-	var cutoff float64
-	switch min {
-	case QualityTierPremium:
-		cutoff = premiumMin
-	case QualityTierHigh:
-		cutoff = highMin
-	default:
-		cutoff = normalMin
-	}
-	if cutoff <= 0 {
-		return false
-	}
-	for _, ev := range benchmark.Profile.BenchmarkEvidence {
-		if ev.Domain != "coding" || ev.Metric != "pass_at_1" {
-			continue
-		}
-		if ev.Benchmark != "deepswe" && ev.Benchmark != "codexradar" {
-			continue
-		}
-		// 小样本档位的 pass@1 是噪声，不能凭它放行质量下限
-		if isSmallSampleEvidence(ev) {
-			continue
-		}
-		effort := NormalizeEffortLevel(ev.Effort)
-		if effort == "" || effort == EffortOff {
-			continue
-		}
-		// 只认非常规档（序数 > medium）的实测：default/medium 是常规口径本身，
-		// 已由模型级档位表达；豁免它会让 singleEffortOnly 封顶等保守判定失效。
-		if EffortLevelOrdinal(effort) <= EffortLevelOrdinal(EffortMedium) {
-			continue
-		}
-		if score := ev.RawValue * 100; score >= cutoff {
-			return true
-		}
-	}
-	return false
 }
 
 // modelResolutionReason 标记发生了质量降档，但不改变现有调用方的映射结果。

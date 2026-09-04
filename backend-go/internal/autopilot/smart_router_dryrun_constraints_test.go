@@ -199,9 +199,9 @@ func TestDryRunUsesCanonicalRequestProfileBuilder(t *testing.T) {
 		t.Fatalf("response plan = %+v", response.Plan)
 	}
 	profile := response.Plan.RequestProfile
-	// glm-5.2 常规口径 22.2 → low 档？QualityNeed 从模型档位推导
-	if profile.QualityNeed != QualityTierNormal || profile.ContextNeed != 1234 || !profile.VisionNeed {
-		t.Fatalf("request profile quality=%q context=%d vision=%v, want normal/1234/true",
+	// glm-5.2 常规口径 22.2 → low 档，QualityNeed 从模型档位推导（v2 固定阈值）
+	if profile.QualityNeed != QualityTierLow || profile.ContextNeed != 1234 || !profile.VisionNeed {
+		t.Fatalf("request profile quality=%q context=%d vision=%v, want low/1234/true",
 			profile.QualityNeed, profile.ContextNeed, profile.VisionNeed)
 	}
 	if profile.TaskClass != TaskClassVision {
