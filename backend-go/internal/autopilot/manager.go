@@ -46,6 +46,14 @@ func (a *metricsManagerAdapter) GetTimeWindowStatsForKey(_ string, baseURL, apiK
 	}
 }
 
+func (a *metricsManagerAdapter) GetDecayedStatsForKey(_ string, baseURL, apiKey, serviceType string, duration time.Duration) DecayedStats {
+	stats := a.mgr.GetDecayedStatsForKey(baseURL, apiKey, serviceType, duration)
+	return DecayedStats{
+		SuccessCount: stats.SuccessCount,
+		FailureCount: stats.FailureCount,
+	}
+}
+
 func (a *metricsManagerAdapter) GetKeySnapshot(_ string, baseURL, apiKey, serviceType string) KeyCircuitSnapshot {
 	cs := a.mgr.GetKeyCircuitState(baseURL, apiKey, serviceType)
 	km := a.mgr.GetKeyMetrics(baseURL, apiKey, serviceType)
@@ -78,6 +86,14 @@ func (a *metricsAdapterManager) GetTimeWindowStatsForKey(channelKind, baseURL, a
 		return TimeWindowStats{SuccessRate: 100}
 	}
 	return mgr.GetTimeWindowStatsForKey(channelKind, baseURL, apiKey, serviceType, duration)
+}
+
+func (a *metricsAdapterManager) GetDecayedStatsForKey(channelKind, baseURL, apiKey, serviceType string, duration time.Duration) DecayedStats {
+	mgr, ok := a.managers[channelKind]
+	if !ok || mgr == nil {
+		return DecayedStats{}
+	}
+	return mgr.GetDecayedStatsForKey(channelKind, baseURL, apiKey, serviceType, duration)
 }
 
 func (a *metricsAdapterManager) GetKeySnapshot(channelKind, baseURL, apiKey, serviceType string) KeyCircuitSnapshot {
@@ -1319,6 +1335,11 @@ func (m *Manager) collectSignals(channelKind, baseURL, apiKey, serviceType strin
 	signals.TotalRequests24h = int(stats24h.RequestCount)
 	signals.SuccessCount24h = int(stats24h.SuccessCount)
 	signals.FailureCount24h = int(stats24h.FailureCount)
+
+	// 24 小时窗口的 S 型时间衰减有效计数（供软死判据使用）
+	decayed24h := m.metrics.GetDecayedStatsForKey(channelKind, baseURL, apiKey, serviceType, 24*time.Hour)
+	signals.EffectiveSuccessCount24h = decayed24h.SuccessCount
+	signals.EffectiveFailureCount24h = decayed24h.FailureCount
 
 	// 15 分钟窗口
 	stats15m := m.metrics.GetTimeWindowStatsForKey(channelKind, baseURL, apiKey, serviceType, 15*time.Minute)

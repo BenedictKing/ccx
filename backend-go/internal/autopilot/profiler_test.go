@@ -10,7 +10,15 @@ import (
 // mockMetricsProvider 实现 MetricsProvider 接口，用于测试。
 type mockMetricsProvider struct {
 	statsFn    func(channelKind, baseURL, apiKey, serviceType string, duration time.Duration) TimeWindowStats
+	decayedFn  func(channelKind, baseURL, apiKey, serviceType string, duration time.Duration) DecayedStats
 	snapshotFn func(channelKind, baseURL, apiKey, serviceType string) KeyCircuitSnapshot
+}
+
+func (m *mockMetricsProvider) GetDecayedStatsForKey(channelKind, baseURL, apiKey, serviceType string, duration time.Duration) DecayedStats {
+	if m.decayedFn != nil {
+		return m.decayedFn(channelKind, baseURL, apiKey, serviceType, duration)
+	}
+	return DecayedStats{}
 }
 
 func (m *mockMetricsProvider) GetTimeWindowStatsForKey(channelKind, baseURL, apiKey, serviceType string, duration time.Duration) TimeWindowStats {

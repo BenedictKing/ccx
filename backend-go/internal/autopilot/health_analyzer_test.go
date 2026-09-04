@@ -571,3 +571,103 @@ func TestFormatPercent(t *testing.T) {
 		}
 	}
 }
+
+func TestHealthAnalyzer_SoftDeathDecay(t *testing.T) {
+	now := time.Date(2026, 9, 4, 0, 36, 0, 0, time.UTC)
+	ha := NewHealthAnalyzer()
+
+	tests := []struct {
+		name      string
+		signals   EndpointSignals
+		wantState HealthState
+	}{
+		{
+			name: "陈旧失败已衰减-不判死",
+			signals: EndpointSignals{
+				TotalRequests24h:         20,
+				SuccessCount24h:          0,
+				FailureCount24h:          20,
+				EffectiveSuccessCount24h: 0,
+				EffectiveFailureCount24h: 0.05,
+				Now:                      now,
+			},
+			wantState: HealthStateUnknown,
+		},
+		{
+			name: "近期失败证据充足-仍判死",
+			signals: EndpointSignals{
+				TotalRequests24h:         20,
+				SuccessCount24h:          0,
+				FailureCount24h:          20,
+				EffectiveSuccessCount24h: 0,
+				EffectiveFailureCount24h: 2.4,
+				Now:                      now,
+			},
+			wantState: HealthStateDead,
+		},
+		{
+			name: "有效成功证据存在-不判死",
+			signals: EndpointSignals{
+				TotalRequests24h:         30,
+				SuccessCount24h:          1,
+				FailureCount24h:          29,
+				EffectiveSuccessCount24h: 0.8,
+				EffectiveFailureCount24h: 5.0,
+				Now:                      now,
+			},
+			wantState: HealthStateUnknown,
+		},
+		{
+			name: "未填充衰减字段-退回原始计数判死",
+			signals: EndpointSignals{
+				TotalRequests24h: 20,
+				SuccessCount24h:  0,
+				FailureCount24h:  20,
+				Now:              now,
+			},
+			wantState: HealthStateDead,
+		},
+		{
+			name: "硬死不受衰减影响",
+			signals: EndpointSignals{
+				TotalRequests1h:          10,
+				AuthFailureCount:         10,
+				SuccessCount1h:           0,
+				FailureCount1h:           10,
+				TotalRequests24h:         10,
+				EffectiveSuccessCount24h: 0,
+				EffectiveFailureCount24h: 0.01,
+				Now:                      now,
+			},
+			wantState: HealthStateDead,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ha.Diagnose(tt.signals)
+			if got.State != tt.wantState {
+				t.Errorf("Diagnose() state = %v, want %v (reason: %s)", got.State, tt.wantState, got.Reason)
+			}
+		})
+	}
+}
+
+func TestFormatFixed1(t *testing.T) {
+	tests := []struct {
+		input float64
+		want  string
+	}{
+		{0, "0.0"},
+		{1.04, "1.0"},
+		{2.38, "2.4"},
+		{5.96, "6.0"},
+		{-3, "0.0"},
+	}
+	for _, tt := range tests {
+		got := formatFixed1(tt.input)
+		if got != tt.want {
+			t.Errorf("formatFixed1(%f) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}

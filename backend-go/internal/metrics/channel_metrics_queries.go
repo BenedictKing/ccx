@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"log"
+	"math"
 	"sort"
 	"time"
 
@@ -673,6 +674,64 @@ func nearestRankPercentile(sortedValues []int64, percentile int) int64 {
 		index = 1
 	}
 	return sortedValues[index-1]
+}
+
+// ── S 型时间衰减统计 ──
+
+// 衰减参数：w(age) = 1 / (1 + exp((age - t50) / k))。
+// t50=4h 表示记录发生 4 小时后证据权重衰减到 0.5；k=1h 控制 S 型过渡带的陡峭程度。
+const (
+	recencyDecayT50 = 4 * time.Hour
+	recencyDecayK   = 1 * time.Hour
+)
+
+// RecencyWeight 返回一条距今 age 的历史记录对当前健康判定的证据权重（0-1，S 型衰减）。
+// 越是久远的记录（尤其是失败）对当前判定的贡献越低。
+func RecencyWeight(age time.Duration) float64 {
+	if age <= 0 {
+		return 1
+	}
+	x := float64(age-recencyDecayT50) / float64(recencyDecayK)
+	// 防止 exp 上溢（age 极大时直接归零）
+	if x > 40 {
+		return 0
+	}
+	return 1 / (1 + math.Exp(x))
+}
+
+// DecayedStats 是按 S 型时间衰减加权后的有效计数。
+type DecayedStats struct {
+	SuccessCount float64
+	FailureCount float64
+}
+
+// GetDecayedStatsForKey 获取指定 Key 在时间窗口内按 S 型衰减加权的有效成功/失败计数。
+// 供健康判定使用：一次陈旧故障（如数小时前的本机 DNS 抖动）不会无限期维持判死，
+// 证据随时间自然衰减，过期后渠道回到 unknown 由后续流量重新验证。
+func (m *MetricsManager) GetDecayedStatsForKey(baseURL, apiKey, serviceType string, duration time.Duration) DecayedStats {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	now := time.Now()
+	cutoff := now.Add(-duration)
+	var stats DecayedStats
+
+	metrics := m.getIdentityMetricsLocked(baseURL, apiKey, serviceType)
+	if metrics == nil {
+		return stats
+	}
+	for _, record := range metrics.requestHistory {
+		if !record.Timestamp.After(cutoff) {
+			continue
+		}
+		w := RecencyWeight(now.Sub(record.Timestamp))
+		if record.Success {
+			stats.SuccessCount += w
+		} else {
+			stats.FailureCount += w
+		}
+	}
+	return stats
 }
 
 // GetAllTimeWindowStatsForKey 获取单个 Key 所有时间窗口的统计
