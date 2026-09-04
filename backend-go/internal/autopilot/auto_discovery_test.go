@@ -1418,3 +1418,180 @@ func TestStringSetsEqual(t *testing.T) {
 		})
 	}
 }
+
+// TestAutoDiscoveryWriteProfilesReconcilesDelistedModels 验证发现管线把模型画像
+// 收敛到本次清单：上游已下架的模型（清单中消失）从内存与 SQLite 移除，
+// 不再残留候选池（kimi-k2.6 2026-08-18 下架后死候选的事故路径）。
+func TestAutoDiscoveryWriteProfilesReconcilesDelistedModels(t *testing.T) {
+	db := newTestDB(t)
+	profileStore, err := NewProfileStoreWithDB(db)
+	if err != nil {
+		t.Fatalf("NewProfileStoreWithDB: %v", err)
+	}
+	modelStore, err := NewModelProfileStoreWithDB(db)
+	if err != nil {
+		t.Fatalf("NewModelProfileStoreWithDB: %v", err)
+	}
+
+	const (
+		channelUID = "ch-ark-reconcile"
+		baseURL    = "https://ark.example.com"
+		apiKey     = "sk-ark-reconcile"
+	)
+	channel := config.UpstreamConfig{
+		ChannelUID:  channelUID,
+		BaseURL:     baseURL,
+		APIKeys:     []string{apiKey},
+		ServiceType: "openai",
+		AutoManaged: true,
+	}
+	cfgManager, cleanup := createTestConfigManager(t, config.Config{Upstream: []config.UpstreamConfig{channel}})
+	t.Cleanup(cleanup)
+
+	metricsKey := computeMetricsIdentityKey(baseURL, apiKey, channel.ServiceType)
+	// 下架模型 k2.6 的存量画像行 + 在售 k2.7-code 行。
+	for _, modelID := range []string{"kimi-k2.6", "kimi-k2.7-code"} {
+		if err := modelStore.Upsert(&ModelProfile{
+			ChannelUID:  channelUID,
+			ChannelKind: "messages",
+			ServiceType: channel.ServiceType,
+			MetricsKey:  metricsKey,
+			ModelID:     modelID,
+			Source:      "auto_discovery",
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	runner := NewAutoDiscoveryRunner(profileStore, nil)
+	runner.ModelProfileStore = modelStore
+	runner.writeProfiles(channelUID, &channel, []EndpointDiscoveryResult{
+		{
+			KeyMask:     utils.MaskAPIKey(apiKey),
+			BaseURL:     baseURL,
+			Models:      []string{"kimi-k2.7-code", "kimi-k3"},
+			ModelsCount: 2,
+			ProtocolOk:  true,
+		},
+	}, cfgManager)
+
+	if got := modelStore.Get(channelUID, "messages", metricsKey, "kimi-k2.6"); got != nil {
+		t.Fatalf("已下架模型画像应被移除: %+v", got)
+	}
+	for _, modelID := range []string{"kimi-k2.7-code", "kimi-k3"} {
+		if got := modelStore.Get(channelUID, "messages", metricsKey, modelID); got == nil {
+			t.Fatalf("清单内模型画像应保留: %s", modelID)
+		}
+	}
+
+	// Flush 后 SQLite 层同样删除。
+	if err := modelStore.Flush(); err != nil {
+		t.Fatalf("Flush: %v", err)
+	}
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM autopilot_model_profiles
+		WHERE channel_uid = ? AND metrics_key = ? AND model_id = ?`,
+		channelUID, metricsKey, "kimi-k2.6").Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("已下架模型画像应从 SQLite 删除, 剩余 %d 行", count)
+	}
+}
+
+// TestModelProfileStoreReconcileModelsGuardOnEmptyKeep 验证空清单守则：
+// keep 为空时不做任何清理（探测失败不得清空画像）。
+func TestModelProfileStoreReconcileModelsGuardOnEmptyKeep(t *testing.T) {
+	db := newTestDB(t)
+	modelStore, err := NewModelProfileStoreWithDB(db)
+	if err != nil {
+		t.Fatalf("NewModelProfileStoreWithDB: %v", err)
+	}
+	const channelUID = "ch-guard"
+	metricsKey := "mk-guard"
+	for _, modelID := range []string{"m1", "m2"} {
+		if err := modelStore.Upsert(&ModelProfile{
+			ChannelUID: channelUID, ChannelKind: "messages",
+			MetricsKey: metricsKey, ModelID: modelID,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if removed := modelStore.ReconcileModels(channelUID, "messages", metricsKey, nil); removed != nil {
+		t.Fatalf("空 keep 应为 no-op, removed=%v", removed)
+	}
+	if got := modelStore.Get(channelUID, "messages", metricsKey, "m1"); got == nil {
+		t.Fatal("空 keep 不应删除画像")
+	}
+}
+
+// TestReconcileModelProfilesFromEndpoints 验证刷新循环首扫前的存量收敛：
+// 直接以端点画像的当前清单清理模型画像行，历史残留（接入 ReconcileModels
+// 之前下架的模型）无需等待清单 TTL 重发现即可清除。
+func TestReconcileModelProfilesFromEndpoints(t *testing.T) {
+	db := newTestDB(t)
+	profileStore, err := NewProfileStoreWithDB(db)
+	if err != nil {
+		t.Fatalf("NewProfileStoreWithDB: %v", err)
+	}
+	modelStore, err := NewModelProfileStoreWithDB(db)
+	if err != nil {
+		t.Fatalf("NewModelProfileStoreWithDB: %v", err)
+	}
+
+	const (
+		channelUID = "ch-ark-legacy"
+		baseURL    = "https://legacy.example.com"
+		apiKey     = "sk-legacy"
+	)
+	channel := config.UpstreamConfig{
+		ChannelUID:  channelUID,
+		BaseURL:     baseURL,
+		APIKeys:     []string{apiKey},
+		ServiceType: "openai",
+		AutoManaged: true,
+	}
+	cfgManager, cleanup := createTestConfigManager(t, config.Config{Upstream: []config.UpstreamConfig{channel}})
+	t.Cleanup(cleanup)
+
+	keyHash := KeyHashFromAPIKey(apiKey)
+	endpointUID := GenerateEndpointUID(channelUID, baseURL, keyHash)
+	metricsKey := computeMetricsIdentityKey(baseURL, apiKey, channel.ServiceType)
+	// 端点画像清单已不含 k2.6（昨日发现刷过），但模型画像行仍残留。
+	if err := profileStore.Upsert(&KeyEndpointProfile{
+		EndpointUID:     endpointUID,
+		ChannelUID:      channelUID,
+		ChannelKind:     "messages",
+		ServiceType:     channel.ServiceType,
+		BaseURL:         baseURL,
+		KeyHash:         keyHash,
+		MetricsKey:      metricsKey,
+		AvailableModels: []string{"kimi-k2.7-code"},
+		UpdatedAt:       time.Now().UTC(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, modelID := range []string{"kimi-k2.6", "kimi-k2.7-code"} {
+		if err := modelStore.Upsert(&ModelProfile{
+			ChannelUID:  channelUID,
+			ChannelKind: "messages",
+			ServiceType: channel.ServiceType,
+			MetricsKey:  metricsKey,
+			ModelID:     modelID,
+			Source:      "auto_discovery",
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	runner := NewAutoDiscoveryRunner(profileStore, nil)
+	runner.ModelProfileStore = modelStore
+	runner.reconcileModelProfilesFromEndpoints(cfgManager)
+
+	if got := modelStore.Get(channelUID, "messages", metricsKey, "kimi-k2.6"); got != nil {
+		t.Fatalf("存量下架模型画像应被收敛移除: %+v", got)
+	}
+	if got := modelStore.Get(channelUID, "messages", metricsKey, "kimi-k2.7-code"); got == nil {
+		t.Fatal("清单内模型画像应保留")
+	}
+}

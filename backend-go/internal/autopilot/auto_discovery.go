@@ -216,6 +216,9 @@ func (r *AutoDiscoveryRunner) modelRefreshLoop(cfgManager *config.ConfigManager)
 		initial.Stop()
 		return
 	case <-initial.C:
+		// 首扫前先按端点画像现有清单收敛模型画像，清理接入 ReconcileModels
+		// 之前遗留的下架模型行；存量残留不等 TTL 重发现即可清除。
+		r.reconcileModelProfilesFromEndpoints(cfgManager)
 		r.refreshStaleModelLists(cfgManager)
 	}
 
@@ -258,6 +261,45 @@ func (r *AutoDiscoveryRunner) refreshStaleModelLists(cfgManager *config.ConfigMa
 				log.Printf("[AutoDiscovery-ModelRefresh] 渠道 %s 发现任务已在运行，跳过本次刷新", ch.ChannelUID)
 			}
 		}
+	}
+}
+
+// reconcileModelProfilesFromEndpoints 用端点画像的当前模型清单收敛模型画像行，
+// 清理历史残留（发现管线接入 ReconcileModels 之前已下架的模型）。
+// 只处理 AutoManaged 渠道；端点清单为空的画像跳过（空清单守则与 ReconcileModels 一致）。
+func (r *AutoDiscoveryRunner) reconcileModelProfilesFromEndpoints(cfgManager *config.ConfigManager) {
+	if r == nil || r.store == nil || r.ModelProfileStore == nil || cfgManager == nil {
+		return
+	}
+	cfg := cfgManager.GetConfig()
+	for kind := range validChannelKinds {
+		channels := getChannelSlice(cfg, kind)
+		for i := range channels {
+			ch := &channels[i]
+			if !ch.AutoManaged {
+				continue
+			}
+			for _, p := range r.store.ListByChannel(ch.ChannelUID) {
+				if p.MetricsKey == "" || len(p.AvailableModels) == 0 {
+					continue
+				}
+				channelKind := p.ChannelKind
+				if channelKind == "" {
+					channelKind = kind
+				}
+				keep := make(map[string]struct{}, len(p.AvailableModels))
+				for _, m := range p.AvailableModels {
+					keep[m] = struct{}{}
+				}
+				if removed := r.ModelProfileStore.ReconcileModels(ch.ChannelUID, channelKind, p.MetricsKey, keep); len(removed) > 0 {
+					log.Printf("[AutoDiscovery-ModelRefresh] 渠道 %s key %s 清单外模型画像已移除: %s",
+						ch.ChannelUID, p.KeyMask, strings.Join(removed, ", "))
+				}
+			}
+		}
+	}
+	if err := r.flushStores(); err != nil {
+		log.Printf("[AutoDiscovery-ModelRefresh] 模型画像收敛落盘失败: %v", err)
 	}
 }
 
@@ -1467,6 +1509,16 @@ func (r *AutoDiscoveryRunner) writeProfileForEndpoint(channelUID string, channel
 
 	// Phase 3B-2：写入每个发现模型的 ModelProfile 行
 	if r.ModelProfileStore != nil && channel.AutoManaged && len(ep.Models) > 0 {
+		// 先收敛到本次清单：上游已下架/更名的模型不再残留候选池
+		//（kimi-k2.6 2026-08-18 下架后模型画像行不清理导致死候选的事故路径）。
+		keep := make(map[string]struct{}, len(ep.Models))
+		for _, modelID := range ep.Models {
+			keep[modelID] = struct{}{}
+		}
+		if removed := r.ModelProfileStore.ReconcileModels(channelUID, channelKind, metricsKey, keep); len(removed) > 0 {
+			log.Printf("[AutoDiscovery-ModelProfile] channel=%s key=%s 清单外模型画像已移除: %s",
+				channelUID, ep.KeyMask, strings.Join(removed, ", "))
+		}
 		now := time.Now()
 		for _, modelID := range ep.Models {
 			family := InferModelFamily(modelID, "")

@@ -1258,6 +1258,11 @@ type channelScoreEntry struct {
 	// AFP 成本信息（仅火山 Agent Plan 渠道有值）
 	AFPCost *CandidateAFPCost // AFP 成本计算结果（nil = 非 AFP 渠道）
 
+	// AFPCostMissing 标记火山可比 scope 下套餐未收录该模型（典型：已下架模型）。
+	// 这类候选不回退 USD 牌价组参与归一化——公开牌价组普遍昂贵，混入其中会拿
+	// 接近满分的 savings（下架反而占优），因此 savings 取 0.5 中性。
+	AFPCostMissing bool
+
 	// CompshareDeduction 优云智算套餐单次减扣倍数（0 = 非 compshare 渠道，>0 = 减扣次数）。
 	// 来自 ProviderTemplate.ModelCostMultipliers；越低越省，全局可比。
 	CompshareDeduction float64
@@ -2023,8 +2028,13 @@ func (r *SmartRouter) applyAFPCosts(entries []channelScoreEntry, inputTokens int
 			continue
 		}
 		// 火山 Agent Plan AFP
-		if scope := r.resolveChannelAFPScope(upstream); scope != nil {
+		if scope := r.resolveChannelAFPScope(upstream); scope != nil && scope.AFPComparable {
 			e.AFPCost = ComputeCandidateAFPCostWithScope(at, scope, e.ModelID, inputTokens, 0)
+			if e.AFPCost == nil {
+				// scope 可比但套餐未收录该模型（如下架）：打标走中性 savings，
+				// 不回退 USD 牌价组（牌价组 min/max 被贵候选撑大，缺数据者反而拿高分）。
+				e.AFPCostMissing = true
+			}
 		}
 		// 优云智算 compshare 单次减扣
 		if ded := r.resolveCompshareDeduction(upstream, e.ModelID); ded > 0 {
@@ -2107,6 +2117,10 @@ func normalizeSavingsScoreGrouped(entries []channelScoreEntry) map[string]float6
 				afpGroups[scopeID] = make(map[string]float64)
 			}
 			afpGroups[scopeID][key(e)] = float64(e.AFPCost.Evidence.Estimated)
+		} else if e.AFPCostMissing {
+			// 火山可比 scope 下套餐未收录（如已下架模型）：数据缺失不是便宜的证据，
+			// 取 0.5 中性，禁止借 USD 牌价组归一化拿接近满分。
+			result[key(e)] = 0.5
 		} else if e.EstimatedCost >= 0 {
 			usdCosts[key(e)] = e.EstimatedCost
 		} else {

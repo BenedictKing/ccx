@@ -239,3 +239,67 @@ func TestNormalizeSavingsScoreGrouped_DifferentScopes(t *testing.T) {
 		t.Fatalf("most expensive scope2 SavingsScore = %v, want 0.0", got)
 	}
 }
+
+// TestNormalizeSavingsScoreGrouped_AFPCostMissingNeutral verifies that a
+// volcengine candidate whose plan has no price for the model (typically a
+// delisted model) gets the neutral 0.5 instead of joining the USD list-price
+// group. Falling back to USD normalization handed missing-data candidates a
+// near-perfect savings score (the USD group's min/max is dominated by
+// expensive models), so delisted models outranked their in-plan successors.
+func TestNormalizeSavingsScoreGrouped_AFPCostMissingNeutral(t *testing.T) {
+	entries := []channelScoreEntry{
+		{
+			// 已下架模型：火山可比 scope 但套餐无价，仅剩公开牌价。
+			ChannelUID:     "ch_ark_delisted",
+			CandidateKey:   "ch_ark_delisted|kimi-k2.6",
+			EstimatedCost:  4.95,
+			AFPCostMissing: true,
+		},
+		{
+			// 在售模型：套餐价 149，组内与 17/330 归一化。
+			ChannelUID:   "ch_ark_k27",
+			CandidateKey: "ch_ark_k27|kimi-k2.7-code",
+			AFPCost: &CandidateAFPCost{
+				Result:   config.AFPCostResult{TotalAFP: 149},
+				Evidence: CostEvidence{Unit: CostUnitAFP, ScopeID: "vp_ark", Estimated: 149},
+			},
+		},
+		{
+			// 同 scope 最便宜/最贵锚点。
+			ChannelUID:   "ch_ark_lite",
+			CandidateKey: "ch_ark_lite|doubao-lite",
+			AFPCost: &CandidateAFPCost{
+				Result:   config.AFPCostResult{TotalAFP: 17},
+				Evidence: CostEvidence{Unit: CostUnitAFP, ScopeID: "vp_ark", Estimated: 17},
+			},
+		},
+		{
+			ChannelUID:   "ch_ark_k3",
+			CandidateKey: "ch_ark_k3|kimi-k3",
+			AFPCost: &CandidateAFPCost{
+				Result:   config.AFPCostResult{TotalAFP: 330},
+				Evidence: CostEvidence{Unit: CostUnitAFP, ScopeID: "vp_ark", Estimated: 330},
+			},
+		},
+		// USD 组对照：证明 missing 候选没有借牌价组抬高分数。
+		{ChannelUID: "ch_usd_cheap", CandidateKey: "ch_usd_cheap|m", EstimatedCost: 1.35},
+		{ChannelUID: "ch_usd_expensive", CandidateKey: "ch_usd_expensive|m", EstimatedCost: 210},
+	}
+
+	savings := normalizeSavingsScoreGrouped(entries)
+	if got := savings["ch_ark_delisted|kimi-k2.6"]; got != 0.5 {
+		t.Fatalf("delisted (no plan price) SavingsScore = %v, want neutral 0.5", got)
+	}
+	// 149 在 {17,149,330} 内: 1-(149-17)/313 = 0.5783
+	wantK27 := 1.0 - (149.0-17.0)/(330.0-17.0)
+	gotK27 := savings["ch_ark_k27|kimi-k2.7-code"]
+	if diff := gotK27 - wantK27; diff > 1e-9 || diff < -1e-9 {
+		t.Fatalf("k2.7-code SavingsScore = %v, want %v", gotK27, wantK27)
+	}
+	if got := savings["ch_usd_cheap|m"]; got != 1.0 {
+		t.Fatalf("cheapest USD SavingsScore = %v, want 1.0", got)
+	}
+	if got := savings["ch_usd_expensive|m"]; got != 0.0 {
+		t.Fatalf("most expensive USD SavingsScore = %v, want 0.0", got)
+	}
+}
