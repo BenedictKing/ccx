@@ -321,18 +321,20 @@ test('dradar cohort size is model count rather than graded run count', () => {
 })
 
 test('dradar collectUnmappedTableModels dedupes unmapped models and feeds new-model detection', () => {
+  // gpt-6.5 须高于 DRADAR_MODEL_MAP 中 gpt 族已映射最高版本（现为 gpt-6-astra v6），
+  // 且主版本同代或仅高一代，否则不会被报为新候选
   const table = {
     cells: {
       'task-a|gpt-5.6-sol|low': { n: 3, p: 2 },
       'task-b|gpt-5.6-sol|high': { n: 3, p: 3 },
-      'task-c|gpt-5.7|high': { n: 3, p: 1 },
-      'task-d|gpt-5.7|low': { n: 3, p: 2 },
+      'task-c|gpt-6.5|high': { n: 3, p: 1 },
+      'task-d|gpt-6.5|low': { n: 3, p: 2 },
       'task-e|unrelated-model|high': { n: 3, p: 1 },
     },
   }
   const unmapped = collectUnmappedTableModels(table, DRADAR_MODEL_MAP)
-  assert.deepEqual(unmapped, ['gpt-5.7', 'unrelated-model'])
-  assert.deepEqual(detectNewModelCandidates(unmapped, DRADAR_MODEL_MAP).map(c => c.name), ['gpt-5.7'])
+  assert.deepEqual(unmapped, ['gpt-6.5', 'unrelated-model'])
+  assert.deepEqual(detectNewModelCandidates(unmapped, DRADAR_MODEL_MAP).map(c => c.name), ['gpt-6.5'])
 })
 
 test('CodexRadar leaderboard aggregation uses strict cell majority', () => {
@@ -862,7 +864,8 @@ test('newly published dradar model variants stay mapped (2026-08-29 audit)', () 
   assert.equal(DRADAR_MODEL_MAP['gemini-3.7-flash'], 'gemini-3.7-flash')
   assert.equal(DRADAR_MODEL_MAP['glm-5.3-flash'], 'glm-5.3-flash')
   assert.equal(DRADAR_MODEL_MAP['glm-5-3-flash'], 'glm-5.3-flash')
-  assert.equal(DRADAR_MODEL_MAP['dsh-deepseek-v4-flash-vision-exp'], 'deepseek-v4-flash')
+  // vision-exp 2026-09-05 起独立注册为 deepseek-v4-flash-vision，不再归并 flash
+  assert.equal(DRADAR_MODEL_MAP['dsh-deepseek-v4-flash-vision-exp'], 'deepseek-v4-flash-vision')
 })
 
 test('deepswe glm-5.3-flash stays mapped (2026-08-26 release-day regression)', () => {

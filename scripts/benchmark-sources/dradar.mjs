@@ -22,6 +22,7 @@ import { cachedFetch, cacheResponseData, getCacheEntry, getSimpleCache, setSimpl
 import { warnNewModelCandidates } from './mapper.mjs'
 
 export const DRADAR_MODEL_MAP = {
+  'gpt-6-astra': 'gpt-6-astra',
   'gpt-5.6-sol': 'gpt-5.6-sol',
   'gpt-5.6-terra': 'gpt-5.6-terra',
   'gpt-5.6-luna': 'gpt-5.6-luna',
@@ -35,6 +36,7 @@ export const DRADAR_MODEL_MAP = {
   'claude-haiku-4-5': 'claude-haiku-4.5',
   'glm-5.3': 'glm-5.3',
   'glm-5.3-flash': 'glm-5.3-flash',
+  'glm-5-turbo': 'glm-5-turbo',
   'glm-5-3-flash': 'glm-5.3-flash',
   'glm-5-3': 'glm-5.3',
   'glm-5.2': 'glm-5.2',
@@ -56,7 +58,7 @@ export const DRADAR_MODEL_MAP = {
   'deepseek-v4-flash': 'deepseek-v4-flash',
   'deepseek-v4-pro': 'deepseek-v4-pro',
   'dsh-deepseek-v4-flash': 'deepseek-v4-flash',
-  'dsh-deepseek-v4-flash-vision-exp': 'deepseek-v4-flash',
+  'dsh-deepseek-v4-flash-vision-exp': 'deepseek-v4-flash-vision',
   'dsh-deepseek-v4-pro': 'deepseek-v4-pro',
   // 腾讯混元 Hy4 Preview：dradar 榜上 slug 与 canonical 同名
   'hy4-preview': 'hy4-preview',

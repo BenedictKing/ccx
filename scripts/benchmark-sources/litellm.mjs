@@ -122,6 +122,8 @@ export const LITELLM_MODEL_MAP = {
   'gpt-5.3-chat-latest': 'gpt-5.3-chat-latest',
   // GLM / Qwen / 其他国产（litellm 多用 provider 前缀 slug）
   'zai/glm-5.3': 'glm-5.3',
+  // glm-5-turbo 在 litellm 无 zai/ 官方主 key，novita 为 zai-org 直供镜像（定价等同官方）
+  'novita/zai-org/glm-5-turbo': 'glm-5-turbo',
   'fireworks_ai/glm-5p2': 'glm-5.2',
   'zai/glm-5.1': 'glm-5.1',
   'dashscope/qwen-coder': 'qwen3-coder',
