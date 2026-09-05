@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/BenedictKing/ccx/internal/scheduler"
 	"github.com/BenedictKing/ccx/internal/utils"
 	"github.com/gin-gonic/gin"
 )
@@ -837,11 +838,46 @@ func HandleAllChannelsFailed(c *gin.Context, lastFailoverError *FailoverError, l
 	if handleModelRoutingError(c, lastFailoverError) {
 		return
 	}
+	// 上下文容量不足是请求属性而非服务故障：透传 400 context_length_exceeded，
+	// Codex 等客户端才能识别并触发压缩，而不是当作可重试的 503 无限重试。
+	if capErr, ok := scheduler.AsContextCapacityError(lastError); ok {
+		respondContextCapacityExceeded(c, capErr)
+		return
+	}
 	c.JSON(503, gin.H{
 		"type": "error",
 		"error": gin.H{
 			"type":    "service_unavailable",
 			"message": "All upstream channels are currently unavailable",
+		},
+	})
+}
+
+// respondContextCapacityExceeded 按上游 OpenAI 的 400 语义回包，
+// message 措辞与官方 context_length_exceeded 对齐以最大化客户端识别率。
+func respondContextCapacityExceeded(c *gin.Context, capErr *scheduler.ContextCapacityError) {
+	outputTokens := capErr.TotalBudget - capErr.InputTokens
+	if outputTokens < 0 {
+		outputTokens = 0
+	}
+	var message string
+	if capErr.MaxKnownWindow > 0 {
+		message = fmt.Sprintf(
+			"This model's maximum context length is %d tokens. However, you requested %d tokens (%d in the messages, %d in the completion). Please reduce the length of the messages or completion.",
+			capErr.MaxKnownWindow, capErr.TotalBudget, capErr.InputTokens, outputTokens,
+		)
+	} else {
+		message = fmt.Sprintf(
+			"No available channel declares a context window large enough: you requested %d tokens (%d in the messages, %d in the completion). Please reduce the length of the messages or completion.",
+			capErr.TotalBudget, capErr.InputTokens, outputTokens,
+		)
+	}
+	c.JSON(400, gin.H{
+		"error": gin.H{
+			"message": message,
+			"type":    "invalid_request_error",
+			"param":   nil,
+			"code":    "context_length_exceeded",
 		},
 	})
 }

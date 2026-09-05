@@ -1178,10 +1178,15 @@ func (s *ChannelScheduler) filterChannelsByContext(activeChannels []ChannelInfo,
 	}
 	filtered = append(filtered, outputFallback...)
 	if len(filtered) == 0 {
-		if maxKnownWindow > 0 {
-			return nil, fmt.Errorf("没有候选物理路由可承载当前上下文：输入估算 %d tokens，最大已知窗口 %d tokens（已过滤：%s）", channelRequiredWindow, maxKnownWindow, strings.Join(skipped, "; "))
+		// 上下文容量不足是请求属性而非渠道故障：用类型化错误承载，
+		// 让响应层能返回 400 context_length_exceeded 而非 503，
+		// 客户端（Codex）才能识别并触发压缩而不是无限重试。
+		return nil, &ContextCapacityError{
+			InputTokens:    channelRequiredWindow,
+			TotalBudget:    requirement.RequiredTokens,
+			MaxKnownWindow: maxKnownWindow,
+			Detail:         strings.Join(skipped, "; "),
 		}
-		return nil, fmt.Errorf("没有候选物理路由可承载当前上下文：输入估算 %d tokens（已过滤：%s）", channelRequiredWindow, strings.Join(skipped, "; "))
 	}
 	return filtered, nil
 }
