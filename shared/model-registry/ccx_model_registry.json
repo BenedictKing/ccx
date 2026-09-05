@@ -712,7 +712,12 @@
       ],
       "provider": "amazon-bedrock",
       "displayName": "Amazon Bedrock GPT-5.6",
-      "contextWindowTokens": 272000,
+      "contextWindowTokens": 1050000,
+      "contextWindowTiers": [
+        272000,
+        372000,
+        1050000
+      ],
       "maxOutputTokens": 128000,
       "reasoningEfforts": [
         "low",
@@ -730,7 +735,8 @@
         "webSearch": true
       },
       "sources": [
-        "https://github.com/openai/codex/compare/rust-v0.142.2...rust-v0.142.3"
+        "https://github.com/openai/codex/compare/rust-v0.142.2...rust-v0.142.3",
+        "https://developer.cloud.tencent.com/article/2728426"
       ],
       "pricing": {
         "unit": "per_1m_tokens_usd",
