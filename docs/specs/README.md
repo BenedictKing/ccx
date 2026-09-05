@@ -23,6 +23,7 @@
 | [omniroute-benchmark-upgrades.md](./omniroute-benchmark-upgrades.md) | 对标 OmniRoute 增强规划 | 配额真相分级调度、请求侧工具输出压缩、guardrails 最小集、路由预演升级、Tier-2/3 backlog 与不跟进决策 |
 | [quota-truth-scheduling.md](./quota-truth-scheduling.md) | 配额真相分级与按余量调度 | Truth 五级+来源优先级、懒重置饱和桶、SmartRouter quotaHeadroom 因子、scheduler 沉底排序、前端真相等级列 |
 | [route-preview.md](./route-preview.md) | 路由预演升级 | 请求体直喂的零上游请求路由预演、SmartRouter + scheduler 两层对齐、前端 DiagnosePanel 升级 |
+| [implementation-gap-remediation-plan.md](./implementation-gap-remediation-plan.md) | Specs 实现缺口修复计划 | 上下文溢出、配额状态、Route Preview、配额展示与兼容缓存运维闭环 |
 
 ## 总览关系图
 
