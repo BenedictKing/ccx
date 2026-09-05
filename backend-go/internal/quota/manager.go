@@ -30,73 +30,95 @@ func NewManager() *Manager {
 	}
 }
 
-// GetChannelState 获取指定渠道的配额状态。
+// GetChannelState 获取指定渠道的配额状态快照（深拷贝）。
 // 如果不存在，返回 unknown 状态（fail-open）。
+// 返回值与 Manager 内部状态完全隔离：修改快照不影响内部数据。
 func (m *Manager) GetChannelState(channelUID string) *ChannelState {
 	if m == nil || channelUID == "" {
 		return NewChannelState("")
 	}
 
 	m.mu.RLock()
-	state, ok := m.states[channelUID]
-	m.mu.RUnlock()
+	defer m.mu.RUnlock()
 
+	state, ok := m.states[channelUID]
 	if !ok {
 		return NewChannelState(channelUID)
 	}
-	return state
+	return state.DeepCopy()
 }
 
 // GetChannelHeadroom 获取指定渠道的综合 headroom（0.0-1.0）。
 // 无数据时返回 0.5（中性分）。
 // 这是 SmartRouter 评分因子的主要消费点。
 func (m *Manager) GetChannelHeadroom(channelUID string) float64 {
-	state := m.GetChannelState(channelUID)
+	if m == nil || channelUID == "" {
+		return 0.5
+	}
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	state, ok := m.states[channelUID]
+	if !ok {
+		return 0.5
+	}
 	return state.OverallHeadroom()
 }
 
 // GetChannelTruth 获取指定渠道的真相等级。
 func (m *Manager) GetChannelTruth(channelUID string) TruthLevel {
-	state := m.GetChannelState(channelUID)
+	if m == nil || channelUID == "" {
+		return TruthUnknown
+	}
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	state, ok := m.states[channelUID]
+	if !ok {
+		return TruthUnknown
+	}
 	return state.Status
 }
 
 // UpdateChannelProviderAPI 更新渠道的 provider_api 级配额数据。
 // 用于 SubscriptionBalanceFetcher 等官方 API 返回的数据。
+// 状态修改在 Manager 写锁内完成；查询失败不以空值清除最后一次成功数据，
+// 只更新 Error/FetchedAtMs。
 func (m *Manager) UpdateChannelProviderAPI(channelUID, accountUID string, values []Value, fetchErr error) {
 	if m == nil || channelUID == "" {
 		return
 	}
 
-	m.mu.Lock()
-	state, ok := m.states[channelUID]
-	if !ok {
-		state = NewChannelState(channelUID)
-		m.states[channelUID] = state
-	}
-	m.mu.Unlock()
-
-	state.Supported = true
-	state.AccountUID = accountUID
-	state.FetchedAtMs = time.Now().UnixMilli()
-	if fetchErr != nil {
-		state.Error = fetchErr.Error()
-	} else {
-		state.Error = ""
-	}
-
-	// 将来源标记为 provider_api
+	// 复制并标记来源，避免调用方后续修改切片影响 Manager 内部状态。
 	apiValues := make([]Value, len(values))
 	copy(apiValues, values)
 	for i := range apiValues {
 		apiValues[i].Source = SourceProviderAPI
 	}
 
+	nowMs := time.Now().UnixMilli()
+	m.mu.Lock()
+	state, ok := m.states[channelUID]
+	if !ok {
+		state = NewChannelState(channelUID)
+		m.states[channelUID] = state
+	}
+	state.Supported = true
+	state.AccountUID = accountUID
+	state.FetchedAtMs = nowMs
+	if fetchErr != nil {
+		state.Error = fetchErr.Error()
+	} else {
+		state.Error = ""
+	}
 	state.MergeValues(apiValues)
+	m.mu.Unlock()
 
-	// 更新饱和桶
+	// 饱和桶有自己的锁，更新放在 Manager 锁外避免扩大临界区
+	//（锁顺序恒为 Manager.mu → buckets.mu，无反转风险）。
 	if accountUID != "" {
-		nowMs := time.Now().UnixMilli()
 		m.buckets.UpdateFromValues(accountUID, apiValues, nowMs)
 	}
 }
@@ -113,21 +135,19 @@ func (m *Manager) UpdateChannelResponseHeaders(channelUID, accountUID, provider 
 		return
 	}
 
+	nowMs := time.Now().UnixMilli()
 	m.mu.Lock()
 	state, ok := m.states[channelUID]
 	if !ok {
 		state = NewChannelState(channelUID)
 		m.states[channelUID] = state
 	}
-	m.mu.Unlock()
-
-	state.FetchedAtMs = time.Now().UnixMilli()
+	state.FetchedAtMs = nowMs
 	state.AccountUID = accountUID
 	state.MergeValues(values)
+	m.mu.Unlock()
 
-	// 更新饱和桶
 	if accountUID != "" {
-		nowMs := time.Now().UnixMilli()
 		m.buckets.UpdateFromValues(accountUID, values, nowMs)
 	}
 }
@@ -163,26 +183,24 @@ func (m *Manager) UpdateChannelConfigured(channelUID, accountUID string, values 
 		return
 	}
 
-	m.mu.Lock()
-	state, ok := m.states[channelUID]
-	if !ok {
-		state = NewChannelState(channelUID)
-		m.states[channelUID] = state
-	}
-	m.mu.Unlock()
-
-	// 将来源标记为 configured
+	// 将来源标记为 configured（复制，隔离调用方切片）
 	cfgValues := make([]Value, len(values))
 	copy(cfgValues, values)
 	for i := range cfgValues {
 		cfgValues[i].Source = SourceConfigured
 	}
 
+	m.mu.Lock()
+	state, ok := m.states[channelUID]
+	if !ok {
+		state = NewChannelState(channelUID)
+		m.states[channelUID] = state
+	}
 	state.MergeValues(cfgValues)
+	m.mu.Unlock()
 
 	if accountUID != "" {
-		nowMs := time.Now().UnixMilli()
-		m.buckets.UpdateFromValues(accountUID, cfgValues, nowMs)
+		m.buckets.UpdateFromValues(accountUID, cfgValues, time.Now().UnixMilli())
 	}
 }
 
@@ -197,12 +215,20 @@ func (m *Manager) Buckets() *BucketManager {
 // IsChannelSaturated 判断渠道是否处于配额紧张状态。
 // 供 scheduler 底层选择时使用（沉底排序用，不剔除）。
 // approaching_limit 和 exhausted 都返回 true；桶的懒重置只对 exhausted 状态生效。
+// 在 Manager 读锁内读取一致快照；饱和桶有自己的锁，锁顺序恒为
+// Manager.mu → buckets.mu（写侧先释放 Manager.mu 再更新桶）。
 func (m *Manager) IsChannelSaturated(channelUID string, nowMs int64) bool {
 	if m == nil {
 		return false
 	}
 
-	state := m.GetChannelState(channelUID)
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	state, ok := m.states[channelUID]
+	if !ok {
+		return false
+	}
 	switch state.Status {
 	case TruthExhausted:
 		// exhausted 状态需要通过桶的懒重置来判断是否已恢复
@@ -233,7 +259,13 @@ func (m *Manager) ChannelSaturationRank(channelUID string, nowMs int64) int {
 		return -1
 	}
 
-	state := m.GetChannelState(channelUID)
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	state, ok := m.states[channelUID]
+	if !ok {
+		return -1
+	}
 	switch state.Status {
 	case TruthExhausted:
 		return 2

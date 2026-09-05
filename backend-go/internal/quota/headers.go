@@ -17,13 +17,13 @@ import (
 // HeaderMapping 定义单个 provider 的响应头字段映射。
 // 所有头名不区分大小写。
 type HeaderMapping struct {
-	Provider    string    // provider 标识（如 "anthropic", "openai"）
-	Limit       string    // 上限头名（如 "anthropic-ratelimit-input-tokens-limit"）
-	Remaining   string    // 剩余量头名
-	Reset       string    // 重置时间头名（秒级时间戳或 HTTP-date）
-	RetryAfter  string    // 重试后头名（秒数）
-	Dimension   Dimension // 对应配额维度
-	Unit        string    // 单位
+	Provider   string    // provider 标识（如 "anthropic", "openai"）
+	Limit      string    // 上限头名（如 "anthropic-ratelimit-input-tokens-limit"）
+	Remaining  string    // 剩余量头名
+	Reset      string    // 重置时间头名（秒级时间戳或 HTTP-date）
+	RetryAfter string    // 重试后头名（秒数）
+	Dimension  Dimension // 对应配额维度
+	Unit       string    // 单位
 }
 
 // knownHeaderMappings 是已知 provider 的配额响应头映射表。

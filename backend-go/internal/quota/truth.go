@@ -140,13 +140,13 @@ func (v Value) IsApproaching(approachingThreshold float64) bool {
 
 // ChannelState 是一个渠道的完整配额状态。
 type ChannelState struct {
-	ChannelUID  string            `json:"channelUid"`
-	AccountUID  string            `json:"accountUid,omitempty"`
-	Supported   bool              `json:"supported"`   // 是否有任何来源支持配额查询
-	FetchedAtMs int64             `json:"fetchedAtMs"` // 数据获取时间
-	Values      map[Dimension]Value `json:"values"`    // 按维度存储，每个维度只保留最高来源优先级的数据
-	Status      TruthLevel        `json:"status"`      // 综合状态（取所有维度的最差情况）
-	Error       string            `json:"error,omitempty"`
+	ChannelUID  string              `json:"channelUid"`
+	AccountUID  string              `json:"accountUid,omitempty"`
+	Supported   bool                `json:"supported"`   // 是否有任何来源支持配额查询
+	FetchedAtMs int64               `json:"fetchedAtMs"` // 数据获取时间
+	Values      map[Dimension]Value `json:"values"`      // 按维度存储，每个维度只保留最高来源优先级的数据
+	Status      TruthLevel          `json:"status"`      // 综合状态（取所有维度的最差情况）
+	Error       string              `json:"error,omitempty"`
 }
 
 // NewChannelState 创建空的渠道配额状态（unknown）。
@@ -158,14 +158,35 @@ func NewChannelState(channelUID string) *ChannelState {
 	}
 }
 
-// MergeValues 合并一组配额值，按维度逐项取来源优先级最高的。
+// DeepCopy 返回状态的深拷贝（至少复制 Values map）。
+// Manager 拥有状态，对外只交出快照：调用方修改返回值不影响内部数据。
+func (cs *ChannelState) DeepCopy() *ChannelState {
+	if cs == nil {
+		return nil
+	}
+	cp := *cs
+	cp.Values = make(map[Dimension]Value, len(cs.Values))
+	for k, v := range cs.Values {
+		cp.Values[k] = v
+	}
+	return &cp
+}
+
+// MergeValues 合并一组配额值，按维度逐项判定归属：
+//   - 新维度直接写入；
+//   - 更高优先级来源覆盖；
+//   - 相同来源由本次调用中的最新观测覆盖（同来源快照代表同一数据面的
+//     新读数，不覆盖会让调度长期使用陈旧余量，如 provider API 80%→5%）；
+//   - 更低优先级来源保持忽略。
+//
+// Manager 的一次 update 即代表同来源的新快照，无需为 Value 增加时间戳。
 func (cs *ChannelState) MergeValues(values []Value) {
 	if cs.Values == nil {
 		cs.Values = make(map[Dimension]Value)
 	}
 	for _, v := range values {
 		current, exists := cs.Values[v.Dimension]
-		if !exists || SourceHigherThan(v.Source, current.Source) {
+		if !exists || sourceRank(v.Source) <= sourceRank(current.Source) {
 			cs.Values[v.Dimension] = v
 		}
 	}
