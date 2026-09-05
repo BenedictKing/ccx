@@ -1,5 +1,6 @@
 import type { EndpointDetailItem, MiniMaxTokenPlanUsage } from '../services/api-types'
 import type { UsageQuotaItem } from './usageQuotaItem'
+import { buildQuotaTruth } from './quotaTruth'
 
 const hasUsableUsage = (endpoint: EndpointDetailItem): boolean =>
   !endpoint.miniMaxTokenPlanUsageError && Boolean(endpoint.miniMaxTokenPlanUsage?.models.length)
@@ -50,26 +51,30 @@ export const buildMinimaxQuotaItems = (
 ): UsageQuotaItem[] => {
   const items: UsageQuotaItem[] = []
   for (const quota of usage.models) {
+    const currentUsedPercent = 100 - clampPercent(quota.currentIntervalRemainingPercent)
     items.push({
       key: `${quota.modelName}-current`,
       label: `${quota.modelName} · ${t('healthCenter.detail.currentWindow')}`,
-      usedPercent: 100 - clampPercent(quota.currentIntervalRemainingPercent),
+      usedPercent: currentUsedPercent,
       value: formatModelQuota(
         quota.currentIntervalRemainingPercent,
         quota.currentIntervalUsageCount,
         quota.currentIntervalTotalCount,
       ),
       caption: `${t('healthCenter.detail.resetsIn')} ${formatRemainsTime(t, quota.remainsTimeMs)}`,
+      ...buildQuotaTruth(currentUsedPercent),
     })
+    const weeklyUsedPercent = 100 - clampPercent(quota.currentWeeklyRemainingPercent)
     items.push({
       key: `${quota.modelName}-weekly`,
       label: `${quota.modelName} · ${t('healthCenter.detail.weeklyWindow')}`,
-      usedPercent: 100 - clampPercent(quota.currentWeeklyRemainingPercent),
+      usedPercent: weeklyUsedPercent,
       value: formatModelQuota(
         quota.currentWeeklyRemainingPercent,
         quota.currentWeeklyUsageCount,
         quota.currentWeeklyTotalCount,
       ),
+      ...buildQuotaTruth(weeklyUsedPercent),
     })
   }
   return items

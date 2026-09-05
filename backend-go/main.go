@@ -701,6 +701,16 @@ func main() {
 				quotaManager := quota.NewManager()
 				smartRouter.SetQuotaManager(quotaManager)
 
+				// configured 级生产接线（§7.3）：订阅画像的静态额度声明在配置变更
+				// （热重载 / new-api reconcile 落盘 / 手工配置）时全量重放进配额体系。
+				// 闭包延迟取 SubscriptionStore——此时订阅存储尚未就绪，回调只会在
+				// 配置文件实际变更后触发。
+				cfgManager.RegisterOnConfigChange(func(cfg config.Config) {
+					if store := autopilotManager.SubscriptionStore(); store != nil {
+						autopilot.SyncAllSubscriptionsQuotaAsConfigured(quotaManager, store, cfg)
+					}
+				})
+
 				// Phase 2: 将 Advisor + LocalRuntimeStore 注入 SmartRouter
 				autopilotManager.WireSmartRouter()
 				log.Printf("[Autopilot-Init] SmartRouter advisor + localRuntimeStore 已注入")
@@ -1646,6 +1656,11 @@ func main() {
 				QuietLogs: envCfg.QuietPollingLogs,
 				Enabled:   func() bool { return cfgManager.GetAutopilotRouting().SubscriptionAutoRefresh.Enabled },
 			})
+			// new-api 余额同步成功后接入配额真相体系（configured 级；
+			// provider_api 级仍由 SubscriptionRefreshWorker 的 BillingAPIKey 路径负责）。
+			if qm := autopilotManager.SmartRouter().QuotaManager(); qm != nil {
+				newApiSyncService.SetQuotaManager(qm)
+			}
 			newApiSyncService.SyncAllNewAPIAsync(context.Background())
 			newApiSyncService.Start(context.Background())
 

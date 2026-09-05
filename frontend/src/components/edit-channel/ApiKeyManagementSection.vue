@@ -604,7 +604,7 @@
 
                   <div v-if="row.volcengineCredential.hasVolcengineAccessKey" class="mb-3">
                     <UsageQuotaRows
-                      v-if="hasVolcengineUsageData(row.volcengineCredential.volcenginePlanUsage)"
+                      v-if="hasVolcengineUsageData(row.volcengineCredential.volcenginePlanUsage) || row.volcengineCredential.volcenginePlanUsage?.error"
                       :items="volcengineUsageItems(row.volcengineCredential.volcenginePlanUsage)"
                     />
                     <div v-else class="text-caption text-disabled">
@@ -1464,6 +1464,7 @@ import { buildChannelApiKeyRows, type ChannelApiKeyRow } from '../../utils/chann
 import { getVolcenginePlanConsoleURL } from '../../utils/channelWebsite'
 import { quotaRemainingColorClass } from '../../utils/quotaColor'
 import { buildKimiUsageSections } from '../../utils/kimiPlanUsage'
+import { buildQuotaTruth, unavailableQuotaTruth } from '../../utils/quotaTruth'
 import { buildMinimaxQuotaItems, selectMiniMaxTokenPlanEndpoint, sha256KeyHash } from '../../utils/minimaxEndpointUsage'
 import { multiplierStatusLabel } from '../../utils/subscriptionBilling'
 import type { UsageQuotaItem } from '../../utils/usageQuotaItem'
@@ -2164,6 +2165,7 @@ const compshareUsageQuotaItems = (plan: CompsharePlanSnapshot): UsageQuotaItem[]
     usedPercent: compshareUsagePercent(item.window),
     value: compshareFormatRemaining(item.window),
     caption: `${t('compshareConsoleCookie.nextReset')} ${compshareFormatEpoch(item.window.nextResetAt)}`,
+    ...buildQuotaTruth(compshareUsagePercent(item.window)),
   }))
 
 const compshareFormatEpoch = (value?: number) =>
@@ -2326,21 +2328,25 @@ const formatMiMoQuota = (quota: MiMoTokenPlanQuota) => {
 
 // 明细行：当前/月度配额映射为统一余量行；当前周期行附带到期时间说明，月度额度为 0 时与摘要一致不展示。
 const mimoUsageItems = (plan: MiMoTokenPlanSnapshot): UsageQuotaItem[] => {
+  const currentUsedPercent = Math.max(0, Math.min(100, plan.currentUsage.usedPercent * 100))
   const items: UsageQuotaItem[] = [
     {
       key: 'current',
       label: t('mimoConsoleCookie.currentRemaining'),
-      usedPercent: Math.max(0, Math.min(100, plan.currentUsage.usedPercent * 100)),
+      usedPercent: currentUsedPercent,
       value: formatMiMoQuota(plan.currentUsage),
       caption: plan.currentPeriodEnd ? `${t('mimoConsoleCookie.expiresAt')} ${plan.currentPeriodEnd}` : '',
+      ...buildQuotaTruth(currentUsedPercent),
     },
   ]
   if (plan.monthUsage.limit > 0) {
+    const monthUsedPercent = Math.max(0, Math.min(100, plan.monthUsage.usedPercent * 100))
     items.push({
       key: 'month',
       label: t('mimoConsoleCookie.monthRemaining'),
-      usedPercent: Math.max(0, Math.min(100, plan.monthUsage.usedPercent * 100)),
+      usedPercent: monthUsedPercent,
       value: formatMiMoQuota(plan.monthUsage),
+      ...buildQuotaTruth(monthUsedPercent),
     })
   }
   return items
@@ -2407,13 +2413,25 @@ const volcengineUsageWindows = (usage?: VolcenginePlanUsage): VolcengineUsageCel
 }
 
 // 明细行：复用摘要单元格的文本与百分比，交给统一的 UsageQuotaRows 渲染。
-const volcengineUsageItems = (usage?: VolcenginePlanUsage): UsageQuotaItem[] =>
-  volcengineUsageWindows(usage).map(cell => ({
+// 查询失败（凭证已配、provider 已知支持）时渲染 unavailable 占位行，
+// 真相徽章明示"获取失败"而非把错误静默折叠成纯文本。
+const volcengineUsageItems = (usage?: VolcenginePlanUsage): UsageQuotaItem[] => {
+  if (usage?.error) {
+    return [{
+      key: 'volcengine-error',
+      label: t('volcengineAccessKey.noUsageData'),
+      value: usage.error,
+      ...unavailableQuotaTruth(),
+    }]
+  }
+  return volcengineUsageWindows(usage).map(cell => ({
     key: cell.labelKey,
     label: t(cell.labelKey),
     usedPercent: cell.usedPercent,
     value: cell.text,
+    ...buildQuotaTruth(cell.usedPercent),
   }))
+}
 
 // 折叠摘要按窗口拆分为独立片段，复用 volcengineUsageColor 的阈值高亮低余量窗口。
 const volcengineUsageSummaryParts = (credential: ManagedAccountCredential): VolcengineUsageCell[] => {
@@ -2607,7 +2625,7 @@ const kimiUsageItems = (usage: Parameters<typeof buildKimiUsageSections>[0]): Us
       caption = `${t('kimiConsoleToken.boosterWalletMonthlyUsed')} ${kimiFormatMoney(section.wallet.monthlyUsed)}`
     }
 
-    return { key: section.key, label: t(section.labelKey), usedPercent: section.usedPercent, value, caption, captionTitle }
+    return { key: section.key, label: t(section.labelKey), usedPercent: section.usedPercent, value, caption, captionTitle, ...buildQuotaTruth(section.usedPercent) }
   })
 
 const kimiFormatExpireTime = (value?: string) => {

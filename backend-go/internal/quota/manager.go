@@ -196,6 +196,9 @@ func (m *Manager) UpdateChannelConfigured(channelUID, accountUID string, values 
 		state = NewChannelState(channelUID)
 		m.states[channelUID] = state
 	}
+	if accountUID != "" {
+		state.AccountUID = accountUID
+	}
 	state.MergeValues(cfgValues)
 	m.mu.Unlock()
 

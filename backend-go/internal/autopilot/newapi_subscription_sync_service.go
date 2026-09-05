@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
+	"github.com/BenedictKing/ccx/internal/quota"
 )
 
 const (
@@ -67,6 +68,10 @@ type NewApiSubscriptionSyncService struct {
 	now        func() time.Time
 	locksMu    sync.Mutex
 	locks      map[string]*sync.Mutex
+
+	// quota 余额结果接入配额真相体系（configured 级；nil = 不接入）。
+	quotaMu sync.RWMutex
+	quota   *quota.Manager
 
 	// 周期性自动刷新
 	cancel        func()
@@ -191,6 +196,33 @@ func (s *NewApiSubscriptionSyncService) Stop() {
 }
 
 // SweepAll 扫描所有 new_api 订阅并并发刷新。
+// SetQuotaManager 注入配额管理器（main.go 在创建后、Start 前调用）。
+// 余额同步成功后经 writeConfiguredQuota 以 configured 级写入。
+func (s *NewApiSubscriptionSyncService) SetQuotaManager(qm *quota.Manager) {
+	if s == nil {
+		return
+	}
+	s.quotaMu.Lock()
+	s.quota = qm
+	s.quotaMu.Unlock()
+}
+
+// writeConfiguredQuota 把指定订阅的最新画像余额写入配额管理器（configured 级）。
+// fail-open：未注入管理器、画像缺失或配置不可读时静默跳过。
+func (s *NewApiSubscriptionSyncService) writeConfiguredQuota(uid string) {
+	s.quotaMu.RLock()
+	qm := s.quota
+	s.quotaMu.RUnlock()
+	if qm == nil || s.cfgManager == nil {
+		return
+	}
+	profile := s.store.Get(uid)
+	if profile == nil {
+		return
+	}
+	SyncSubscriptionQuotaAsConfigured(qm, profile, LiveChannelUIDSet(s.cfgManager.GetConfig()))
+}
+
 func (s *NewApiSubscriptionSyncService) SweepAll(ctx context.Context) {
 	if !s.enabled() {
 		if !s.quietLogs {
@@ -349,6 +381,11 @@ func (s *NewApiSubscriptionSyncService) SyncNow(ctx context.Context, uid string)
 	}); err != nil {
 		return result, err
 	}
+
+	// 余额落盘成功：把订阅画像的额度声明接入配额真相体系（configured 级）。
+	// 只写配置中仍存在的关联渠道；渠道配置在下方 reconcile 更新后再全量
+	// 重放一次（RegisterOnConfigChange 出口），这里做的是余额侧增量。
+	s.writeConfiguredQuota(uid)
 
 	changedChannels, conflict, updateErr := s.reconcileChannels(profile, desired)
 	if updateErr != nil {
