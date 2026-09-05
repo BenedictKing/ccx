@@ -714,8 +714,10 @@ func executeModelTest(ctx context.Context, channel *config.UpstreamConfig, proto
 		)
 	}
 
-	// 拉黑判定：非 2xx 响应时检查是否需要永久拉黑该 Key
-	if !success && cfgManager != nil && apiKey != "" && respBody != nil {
+	// 拉黑判定：非 2xx 响应时检查是否需要永久拉黑该 Key。
+	// channelID < 0 表示发现流程的临时渠道（无持久化身份），跳过拉黑——
+	// 对临时渠道拉黑只会刷 "无效的渠道索引" 错误日志。
+	if !success && cfgManager != nil && apiKey != "" && respBody != nil && channelID >= 0 {
 		blacklistResult := common.ShouldBlacklistKey(statusCode, respBody)
 		if blacklistResult.ShouldBlacklist {
 			isBalanceError := common.IsBalanceOrQuotaBlacklistReason(blacklistResult.Reason)
@@ -780,6 +782,11 @@ func executeModelTest(ctx context.Context, channel *config.UpstreamConfig, proto
 // 当注册表声明支持但实际探测失败时输出观测日志（仅观测，不改变调度或探测结论）。
 func logModelCapabilityDrift(result ModelTestResult, channel *config.UpstreamConfig, protocol, model string, cfgManager *config.ConfigManager) {
 	if cfgManager == nil {
+		return
+	}
+	// 余额/配额类失败是账户状态问题而非模型能力信号，与"只认无歧义信号"的
+	// drift 原则相悖（付费模型欠费不代表模型不支持该协议），不记录 drift。
+	if !result.Success && isBalanceQuotaTestFailure(result) {
 		return
 	}
 	global := capabilityProbeGlobalCapabilities(cfgManager)

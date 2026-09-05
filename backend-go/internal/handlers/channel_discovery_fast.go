@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync"
@@ -149,6 +150,8 @@ func ChannelDiscoveryFast(cfgManager *config.ConfigManager) gin.HandlerFunc {
 		var bestResults []DiscoveryProtocolResult
 		bestStreaming := false
 		var bestRateLimit DiscoveryRateLimitResult
+		totalFailures := 0
+		totalBalanceFailures := 0
 
 		for _, model := range probeModels {
 			// 对当前模型并行探测 4 协议。
@@ -158,6 +161,8 @@ func ChannelDiscoveryFast(cfgManager *config.ConfigManager) gin.HandlerFunc {
 			rateLimitedCount := 0
 			anyRateLimited := false
 			minEffectiveRPM := fastDiscoveryRPM
+			failureCount := 0
+			balanceFailureCount := 0
 
 			var wg sync.WaitGroup
 			for i, protocol := range protocols {
@@ -165,12 +170,18 @@ func ChannelDiscoveryFast(cfgManager *config.ConfigManager) gin.HandlerFunc {
 				go func(idx int, proto string) {
 					defer wg.Done()
 					pacer := newDiscoveryProbePacer(fastDiscoveryRPM)
-					success, streaming := fastProbeProtocol(c.Request.Context(), probeChannel, proto, model, fastDiscoveryProbeTimeout, cfgManager, pacer)
+					success, streaming, balanceFailure := fastProbeProtocol(c.Request.Context(), probeChannel, proto, model, fastDiscoveryProbeTimeout, cfgManager, pacer)
 					results[idx] = DiscoveryProtocolResult{Protocol: proto, Success: success}
 					r := pacer.result()
 					rateLimitMu.Lock()
 					if success && streaming {
 						streamingSupported = true
+					}
+					if !success {
+						failureCount++
+						if balanceFailure {
+							balanceFailureCount++
+						}
 					}
 					if r.RateLimited {
 						anyRateLimited = true
@@ -204,9 +215,19 @@ func ChannelDiscoveryFast(cfgManager *config.ConfigManager) gin.HandlerFunc {
 				bestRateLimit.RateLimited = true
 			}
 			bestRateLimit.RateLimitedCount += rateLimitedCount
+			totalFailures += failureCount
+			totalBalanceFailures += balanceFailureCount
 		}
 
 		if bestModel == "" {
+			// 全部失败且失败原因统一为余额/配额类时，根因是 key 账户状态而非协议
+			// 兼容性（付费模型欠费时平台免费模型仍可调用），错误信息须直说，
+			// 避免误导用户以为渠道类型无法判定。
+			if totalFailures > 0 && totalFailures == totalBalanceFailures {
+				c.JSON(http.StatusUnprocessableEntity, gin.H{"error": fmt.Sprintf(
+					"所有 %d 个候选模型的协议探测均因 Key 余额/配额不足失败（402），无法确定渠道类型；候选均为付费模型，若平台有限时免费模型可稍后重试或先充值后重试", len(probeModels))})
+				return
+			}
 			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "所有候选模型的协议探测均失败，无法确定渠道类型"})
 			return
 		}
@@ -286,9 +307,28 @@ func fastDiscoveryManifestFallback(baseURL string) []string {
 	return result
 }
 
-// fastProbeProtocol 对单个真实模型探测单个协议，返回成功标志与流式支持标志。
-// 复用 executeModelTest 的 429 重试与 pacer 限速，但不把测试模型写成渠道白名单。
-func fastProbeProtocol(ctx context.Context, channel *config.UpstreamConfig, protocol, model string, timeout time.Duration, cfgManager *config.ConfigManager, pacer *discoveryProbePacer) (bool, bool) {
+// isBalanceQuotaTestFailure 判定探测失败是否为账户余额/配额类：此类失败与模型
+// 能力无关（付费模型欠费时，平台免费模型仍可调用），不得写入 capability drift，
+// 也不应把发现失败的根因误报为"无法确定渠道类型"。
+func isBalanceQuotaTestFailure(result ModelTestResult) bool {
+	if result.statusCode == 402 {
+		return true
+	}
+	if result.Error == nil {
+		return false
+	}
+	msg := strings.ToLower(*result.Error)
+	return strings.Contains(msg, "insufficient balance") ||
+		strings.Contains(msg, "insufficient_quota") ||
+		strings.Contains(msg, "insufficient quota") ||
+		strings.Contains(msg, "insufficient credit") ||
+		strings.Contains(msg, "account balance")
+}
+
+// fastProbeProtocol 对单个真实模型探测单个协议，返回成功标志、流式支持标志与
+// 余额类失败标志。复用 executeModelTest 的 429 重试与 pacer 限速，但不把测试
+// 模型写成渠道白名单。
+func fastProbeProtocol(ctx context.Context, channel *config.UpstreamConfig, protocol, model string, timeout time.Duration, cfgManager *config.ConfigManager, pacer *discoveryProbePacer) (bool, bool, bool) {
 	probeChannel := channel
 	if strings.TrimSpace(channel.ServiceType) == "" {
 		cloned := *channel
@@ -297,15 +337,15 @@ func fastProbeProtocol(ctx context.Context, channel *config.UpstreamConfig, prot
 	}
 	for attempt := 0; ; attempt++ {
 		if err := pacer.waitForNext(ctx); err != nil {
-			return false, false
+			return false, false, false
 		}
 		result := executeModelTest(ctx, probeChannel, protocol, model, timeout, "", cfgManager, -1, protocol, probeChannel.APIKeys[0], nil, false)
 		if !isDiscoveryRateLimited(result) {
-			return result.Success, result.StreamingSupported
+			return result.Success, result.StreamingSupported, isBalanceQuotaTestFailure(result)
 		}
 		pacer.observeRateLimited()
 		if attempt >= maxDiscovery429Retries {
-			return result.Success, result.StreamingSupported
+			return result.Success, result.StreamingSupported, isBalanceQuotaTestFailure(result)
 		}
 	}
 }

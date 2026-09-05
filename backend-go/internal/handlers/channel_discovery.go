@@ -411,6 +411,14 @@ func selectDiscoveryModels(models []string, global map[string]config.UpstreamMod
 }
 
 func uniqueDiscoveryModels(models []string) []string {
+	result := uniqueDiscoveryModelsPreservingOrder(models)
+	sort.Strings(result)
+	return result
+}
+
+// uniqueDiscoveryModelsPreservingOrder 去重并保留首次出现顺序（平台目录的原生排序
+// 通常把主推模型排在前面，是探测候选补位的关键信号）。
+func uniqueDiscoveryModelsPreservingOrder(models []string) []string {
 	seen := make(map[string]struct{}, len(models))
 	result := make([]string, 0, len(models))
 	for _, model := range models {
@@ -424,7 +432,6 @@ func uniqueDiscoveryModels(models []string) []string {
 		seen[trimmed] = struct{}{}
 		result = append(result, trimmed)
 	}
-	sort.Strings(result)
 	return result
 }
 
@@ -1372,7 +1379,9 @@ func discoverAutoTransientModelsWithFetchers(ctx context.Context, channel *confi
 		result.Warnings = append(result.Warnings, candidateResult.Warnings...)
 	}
 
-	result.Items = uniqueDiscoveryModels(items)
+	// 保留 API 原始顺序：平台通常把主推/免费模型排在目录前面，探测候选的
+	// 补位窗口依赖该顺序；ASCII 排序会让大写 org 的 embedding 模型霸占头部。
+	result.Items = uniqueDiscoveryModelsPreservingOrder(items)
 	if len(result.Items) == 0 {
 		result.Warnings = failureWarnings
 		return result
@@ -1542,7 +1551,7 @@ func parseDiscoveryModels(body []byte) []string {
 			appendModel(item)
 		}
 	}
-	return uniqueDiscoveryModels(models)
+	return uniqueDiscoveryModelsPreservingOrder(models)
 }
 
 func fallbackDiscoveryProbeModels(channelKind, serviceType string) []string {
@@ -1559,15 +1568,49 @@ func fallbackDiscoveryProbeModels(channelKind, serviceType string) []string {
 	return []string{"gpt-5.4", "claude-sonnet-4-6", "gemini-3.5-flash"}
 }
 
+// nonChatDiscoveryModelMarkers 命名特征命中即视为非 chat 模型：它们挂在
+// embeddings/images 等专用端点上，对 messages/chat/responses/gemini 四协议
+// 的探测只可能失败，却会挤占候选补位窗口（bitdeer 事件：BAAI/bge-* 两个
+// embedding 模型按 ASCII 序霸占头部，把免费 chat 模型挤出候选导致 422）。
+const nonChatDiscoveryModelMarkers = "\x00bge\x00embed\x00reranker\x00flux\x00imagen\x00whisper\x00tts\x00"
+
+// isNonChatDiscoveryModel 判断模型是否明显不属于 chat/completions 类推理模型。
+// 保守起见只匹配词边界内的高置信命名特征，误杀的代价只是少一个候选。
+func isNonChatDiscoveryModel(model string) bool {
+	lower := strings.ToLower(model)
+	for _, marker := range strings.Split(nonChatDiscoveryModelMarkers, "\x00") {
+		if marker == "" {
+			continue
+		}
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
+}
+
 func discoveryProbeModels(selected DiscoverySelectedModels, all []string) []string {
 	candidates := []string{selected.Strong, selected.Primary, selected.Fast}
 	for _, model := range all {
+		if isNonChatDiscoveryModel(model) {
+			continue
+		}
 		candidates = append(candidates, model)
 		if len(candidates) >= 6 {
 			break
 		}
 	}
-	return uniqueDiscoveryModels(candidates)
+	probes := uniqueDiscoveryModels(candidates)
+	chatOnly := make([]string, 0, len(probes))
+	for _, model := range probes {
+		if !isNonChatDiscoveryModel(model) {
+			chatOnly = append(chatOnly, model)
+		}
+	}
+	if len(chatOnly) > 0 {
+		return chatOnly
+	}
+	return probes
 }
 
 func discoveryProtocolProbeModels(models DiscoveryModelsResult, probeAll bool) []string {
