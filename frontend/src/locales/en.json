@@ -1386,7 +1386,7 @@
   "autopilot.qualityTier.high": "High tier",
   "autopilot.qualityTier.premium": "Premium tier",
   "autopilot.traceDetail.qualityShadow": "Quality (shadow)",
-  "autopilot.traceDetail.qualityShadowTitle": "Evidence: {evidence}; quality score: {qualityScore}; shadow total: {totalScore}",
+  "autopilot.traceDetail.qualityShadowTitle": "Evidence: {evidence}; quality score: {qualityScore}; confidence: {confidence}; discount: {discount}; shadow total: {totalScore}",
   "autopilot.effortRange": "Effort {floor}–{ceil}",
   "autopilot.diagnose.title": "Smart Routing Diagnosis",
   "autopilot.diagnose.hint": "Computes task classification, hard constraints, channel ranking, and model mapping previews only. It sends no upstream request and does not change live scheduling.",

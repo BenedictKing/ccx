@@ -1723,6 +1723,9 @@ export interface RoutingCandidate {
   effortEvidenceClass?: string
   effortQualityKnown?: boolean
   effortAwareTotalScore?: number
+  qualityConfidence?: number
+  qualityDiscount?: number
+  qualityDiscountReason?: string
   totalScore: number
   scores?: CandidateScore[]
   domainEvidence?: DomainStrengthEvidence

@@ -72,6 +72,9 @@ type RoutingCandidate struct {
 	EffortEvidenceClass   string  `json:"effortEvidenceClass,omitempty"`
 	EffortQualityKnown    bool    `json:"effortQualityKnown,omitempty"`
 	EffortAwareTotalScore float64 `json:"effortAwareTotalScore,omitempty"`
+	QualityConfidence     float64 `json:"qualityConfidence,omitempty"`
+	QualityDiscount       float64 `json:"qualityDiscount,omitempty"`
+	QualityDiscountReason string  `json:"qualityDiscountReason,omitempty"`
 
 	// 分数明细
 	TotalScore float64          `json:"totalScore"`

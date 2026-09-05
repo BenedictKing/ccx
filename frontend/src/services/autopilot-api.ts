@@ -182,6 +182,9 @@ export interface SmartRoutingDiagnoseCandidate {
   effortEvidenceClass?: string
   effortQualityKnown?: boolean
   effortAwareTotalScore?: number
+  qualityConfidence?: number
+  qualityDiscount?: number
+  qualityDiscountReason?: string
 }
 
 export interface SmartRoutingDiagnosePlan {

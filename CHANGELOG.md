@@ -2,6 +2,7 @@
 
 - 修复 Autopilot 模型画像漏写注册表思考强度档位的问题，并让存量自动发现画像在请求期刷新后持久化，恢复模型×effort 候选展开与 trace 展示。
 - 增加 effort-aware 质量档 shadow 观测：trace 和决策页展示基础档、实际 effort 档、证据等级与影子总分，默认不改变线上排序。
+- 增加缺失可靠 coding 证据候选的质量置信度 shadow 折扣，避免将低价与未知质量混合作为线上收益。
 - **修复 Codex 长对话中断（gpt-5.6-sol 274K 事故）并建立上下文窗口自适应体系** - ①上下文容量选路错误不再被吞成 503：类型化 `ContextCapacityError` 按 OpenAI 语义透传 400 `context_length_exceeded`，Codex 可识别并触发压缩而非无限重试。②GPT-5.6 注册表窗口 272K→1.05M（原生 API 口径），新增 `contextWindowTiers` 内置分段阶梯 `[272K, 372K, 1.05M]` 承载「同模型多档窗口随时间上移」事实。③渠道×协议×模型粒度自适应学习（`channel_compat.json` 新分区）：成功请求实证棘轮（放宽）+ /v1/models 元数据声明收割 + 既有 400 收紧上限，三源合成有效窗口接入 scheduler 过滤、SmartRouter 与 ModelResolver——渠道渐进扩容（200K→272K→372K→1M）自动跟进，注册表滞后不再自锁。④溢出逃生阀：同模型窗口不足但分段阶梯可覆盖时降级为试探候选（成功即棘轮上调、400 即学习收紧 failover）；试探全灭则调度器在容量错误分支注入**完全跨协议**重定向候选（四类协议渠道池按同协议优先+质量档降序，复用联邦改写与协议转换，`X-CCX-Model-Redirect` 标注，responses 跨模型剥离 `encrypted_content`）。
 
 ## [v3.0.0] - 2026-08-31

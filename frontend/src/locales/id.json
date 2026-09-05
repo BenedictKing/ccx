@@ -1386,7 +1386,7 @@
   "autopilot.qualityTier.high": "Tingkat tinggi",
   "autopilot.qualityTier.premium": "Tingkat premium",
   "autopilot.traceDetail.qualityShadow": "Kualitas (shadow)",
-  "autopilot.traceDetail.qualityShadowTitle": "Bukti: {evidence}; skor kualitas: {qualityScore}; total shadow: {totalScore}",
+  "autopilot.traceDetail.qualityShadowTitle": "Bukti: {evidence}; skor kualitas: {qualityScore}; kepercayaan: {confidence}; diskon: {discount}; total shadow: {totalScore}",
   "autopilot.effortRange": "Effort {floor}–{ceil}",
   "autopilot.diagnose.title": "Diagnosis Smart Routing",
   "autopilot.diagnose.hint": "Hanya menghitung klasifikasi tugas, batasan keras, peringkat channel, dan pratinjau pemetaan model. Tidak mengirim permintaan upstream atau mengubah penjadwalan aktif.",

@@ -343,6 +343,14 @@ func TestEffortQualityShadowConfigCanBeDisabled(t *testing.T) {
 	}
 }
 
+func TestEffortQualityShadowAppliesDiscountOnlyToUnknownEvidence(t *testing.T) {
+	unknown := effortQualityConfidence(EffortQualityAssessment{Tier: QualityTierNormal})
+	known := effortQualityConfidence(EffortQualityAssessment{Tier: QualityTierNormal, Known: true})
+	if unknown != 0.5 || known != 1 {
+		t.Fatalf("confidence = unknown %.2f known %.2f, want 0.5/1", unknown, known)
+	}
+}
+
 func TestEffortAwareQualityAssessmentFor_UnknownLowEffortRatioFallsBack(t *testing.T) {
 	assessment := EffortAwareQualityAssessmentFor("gpt-5.6-luna", EffortOff, ModelFamilyOpenAI)
 	if !assessment.Known || math.IsInf(assessment.Score, 0) || math.IsNaN(assessment.Score) {

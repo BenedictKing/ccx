@@ -831,6 +831,7 @@ health(40) > fastDecay(25) > successRate(20) > latency(10) > cost(5)
 - **P1 shadow（本次已实现）**：候选记录 `baseQualityTier`、`effortQualityTier`、`effortQualityScore`、`effortEvidenceClass`、`effortQualityKnown` 和 `effortAwareTotalScore`。实际 `totalScore`、硬约束、排序和执行绑定仍使用基础 `QualityTier`；`reasoningEffort.qualityTierShadowEnabled=false` 可关闭观测，缺失该键默认开启。
 - **P1 验收**：显式/pin `xhigh` 请求必须按 xhigh 证据评档；passthrough 继续使用基础档；同模型不同 effort 候选允许跨档；advisor 与主评分使用同一函数和同一实际 effort；回放中不存在因空 effort 或未知证据导致的非预期硬过滤。
 - **P2（计划，依赖 P1 的观测字段）**：为缺少可靠 coding 证据、仅依赖模型族兜底的候选引入置信度折扣，作用于质量收益而非硬能力过滤。折扣必须与 `SavingsScore` 分离，避免低价叠加未知质量后反超有可靠证据的同档模型；不直接使用 overall intelligence 代替 coding 证据。
+- **P2 shadow（本次已实现）**：无可靠 coding 证据的候选以 `qualityConfidence=0.5` 计算 `effortAwareTotalScore`，已知 coding 证据保持 `1.0`；仅折扣质量收益，`SavingsScore`、基础 `totalScore`、硬约束和线上排序不变。trace/UI 同时输出折扣原因 `missing_reliable_coding_evidence`。
 - **P2 验收**：增加 `kimi-k2-thinking` 对 `kimi-k3` 的固定 trace 回放；质量证据未知的候选不得仅靠族兜底同档和价格优势反超可靠证据候选，除非 `cost_first` 场景明确允许；`quality_first` 不降级可靠证据，`balanced` 的价格收益需跨过配置化置信度门槛；输出折扣原因和原始/调整后质量分以便审计。
 - **发布顺序**：P0 独立发布并确认画像覆盖率和 trace effort 非空率；P1 shadow 回放后单独提交；P2 基于 P1 数据定阈值并单独提交。P1/P2 各自保留开关，禁止在同一发布中同时切 active，以便归因和回滚。
 

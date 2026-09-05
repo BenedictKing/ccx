@@ -43,6 +43,9 @@ type RoutingPlanCandidate struct {
 	EffortEvidenceClass   string  `json:"effortEvidenceClass,omitempty"`
 	EffortQualityKnown    bool    `json:"effortQualityKnown,omitempty"`
 	EffortAwareTotalScore float64 `json:"effortAwareTotalScore,omitempty"`
+	QualityConfidence     float64 `json:"qualityConfidence,omitempty"`
+	QualityDiscount       float64 `json:"qualityDiscount,omitempty"`
+	QualityDiscountReason string  `json:"qualityDiscountReason,omitempty"`
 }
 
 // RoutingPlanLogicalGroup 是 dry-run 候选在 LogicalChannel 维度的聚合视图（Phase A.3）。
@@ -364,6 +367,9 @@ func (r *SmartRouter) BuildPlan(profile *RequestProfile) *RoutingPlan {
 			EffortEvidenceClass:   string(se.entry.EffortEvidenceClass),
 			EffortQualityKnown:    se.entry.EffortQualityKnown,
 			EffortAwareTotalScore: se.entry.EffortAwareTotalScore,
+			QualityConfidence:     se.entry.QualityConfidence,
+			QualityDiscount:       se.entry.QualityDiscount,
+			QualityDiscountReason: se.entry.QualityDiscountReason,
 		}
 		if candidate.Selected {
 			selectedCandidates = append(selectedCandidates, candidate)
@@ -495,6 +501,9 @@ func (r *SmartRouter) recordDryRunTrace(plan *RoutingPlan, candidatesBefore, can
 			EffortEvidenceClass:   candidate.EffortEvidenceClass,
 			EffortQualityKnown:    candidate.EffortQualityKnown,
 			EffortAwareTotalScore: candidate.EffortAwareTotalScore,
+			QualityConfidence:     candidate.QualityConfidence,
+			QualityDiscount:       candidate.QualityDiscount,
+			QualityDiscountReason: candidate.QualityDiscountReason,
 			TotalScore:            candidate.Score,
 			Selected:              candidate.Selected,
 			FilterReasons:         candidate.FilterReasons,
@@ -1045,6 +1054,9 @@ func (r *SmartRouter) executeFilter(
 			EffortEvidenceClass:   string(e.EffortEvidenceClass),
 			EffortQualityKnown:    e.EffortQualityKnown,
 			EffortAwareTotalScore: e.EffortAwareTotalScore,
+			QualityConfidence:     e.QualityConfidence,
+			QualityDiscount:       e.QualityDiscount,
+			QualityDiscountReason: e.QualityDiscountReason,
 			LogicalChannelUID:     e.LogicalChannelUID,
 			LogicalChannelName:    e.LogicalChannelName,
 			TotalScore:            sc.Score,
@@ -1342,6 +1354,9 @@ type channelScoreEntry struct {
 	EffortEvidenceClass   EvidenceClass
 	EffortQualityKnown    bool
 	EffortAwareTotalScore float64
+	QualityConfidence     float64
+	QualityDiscount       float64
+	QualityDiscountReason string
 }
 
 type scoredChannelEntry struct {
@@ -1359,6 +1374,11 @@ func applyEffortQualityShadow(entry *channelScoreEntry, ctx ScoringContext) {
 	entry.EffortQualityScore = assessment.Score
 	entry.EffortEvidenceClass = assessment.Evidence
 	entry.EffortQualityKnown = assessment.Known
+	entry.QualityConfidence = effortQualityConfidence(assessment)
+	entry.QualityDiscount = 1 - entry.QualityConfidence
+	if entry.QualityDiscount > 0 {
+		entry.QualityDiscountReason = "missing_reliable_coding_evidence"
+	}
 
 	shadowCandidate := entry.ScoringCandidate
 	shadowCandidate.QualityTier = assessment.Tier
@@ -1368,7 +1388,20 @@ func applyEffortQualityShadow(entry *channelScoreEntry, ctx ScoringContext) {
 	} else {
 		shadowCandidate.QualityBenchmarkScore = 0
 	}
-	entry.EffortAwareTotalScore = ScoreCandidate(shadowCandidate, ctx).Score
+	shadowScore := ScoreCandidate(shadowCandidate, ctx).Score
+	if entry.QualityDiscount > 0 {
+		// 只折扣质量收益，SavingsScore 仍保持独立，避免低价与未知质量叠加获利。
+		adjustedQuality := ScoreCandidate(shadowCandidate, ctx).QualityScore * entry.QualityConfidence
+		shadowScore -= ctx.Weights.WQuality * (ScoreCandidate(shadowCandidate, ctx).QualityScore - adjustedQuality)
+	}
+	entry.EffortAwareTotalScore = shadowScore
+}
+
+func effortQualityConfidence(assessment EffortQualityAssessment) float64 {
+	if assessment.Known {
+		return 1
+	}
+	return 0.5
 }
 
 func (r *SmartRouter) effortQualityTierShadowEnabled() bool {

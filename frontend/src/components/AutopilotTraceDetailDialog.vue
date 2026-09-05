@@ -524,7 +524,9 @@ function qualityShadowTitle(cand: RoutingCandidate): string {
   const evidence = cand.effortQualityKnown ? cand.effortEvidenceClass || 'known' : 'unknown'
   const qualityScore = cand.effortQualityKnown ? cand.effortQualityScore?.toFixed(2) || '-' : '-'
   const totalScore = cand.effortAwareTotalScore?.toFixed(3) || '-'
-  return t('autopilot.traceDetail.qualityShadowTitle', { evidence, qualityScore, totalScore })
+  const confidence = cand.qualityConfidence != null ? cand.qualityConfidence.toFixed(2) : '-'
+  const discount = cand.qualityDiscount != null ? cand.qualityDiscount.toFixed(2) : '-'
+  return t('autopilot.traceDetail.qualityShadowTitle', { evidence, qualityScore, totalScore, confidence, discount })
 }
 
 // displayCandidateKeyIdentity 返回候选行 key 身份的紧凑展示：
