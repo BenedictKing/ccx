@@ -79,8 +79,12 @@ func healthStateRank(s HealthState) int {
 // ── tier 排序辅助 ──
 
 // qualityTierRank 返回 QualityTier 数值排名（数值越大越好）。
+// avoid 为负：低于所有常规档，MinQualityTier=low 的地板过滤无需改动即自动排除它；
+// 未知/空档位仍按 low（0）处理，fail-open 语义不变。
 func qualityTierRank(t QualityTier) int {
 	switch t {
+	case QualityTierAvoid:
+		return -1
 	case QualityTierLow:
 		return 0
 	case QualityTierNormal:

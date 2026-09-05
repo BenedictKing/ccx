@@ -9,10 +9,10 @@ import (
 )
 
 func TestComputeQualityTierBoundariesConsistentAcrossCalls(t *testing.T) {
-	wantPremium, wantHigh, wantNormal := computeQualityTierBoundaries()
+	wantPremium, wantHigh, wantNormal, wantAvoid := computeQualityTierBoundaries()
 	for i := 0; i < 3; i++ {
-		if p, h, n := computeQualityTierBoundaries(); p != wantPremium || h != wantHigh || n != wantNormal {
-			t.Fatalf("边界计算不稳定: %v/%v/%v vs %v/%v/%v", p, h, n, wantPremium, wantHigh, wantNormal)
+		if p, h, n, a := computeQualityTierBoundaries(); p != wantPremium || h != wantHigh || n != wantNormal || a != wantAvoid {
+			t.Fatalf("边界计算不稳定: %v/%v/%v/%v vs %v/%v/%v/%v", p, h, n, a, wantPremium, wantHigh, wantNormal, wantAvoid)
 		}
 	}
 }
@@ -24,7 +24,7 @@ func TestComputeQualityTierBoundariesConcurrent(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			_ = ModelProfileQualityTier("gpt-5.4", ModelFamilyOpenAI)
-			_, _, _ = computeQualityTierBoundaries()
+			_, _, _, _ = computeQualityTierBoundaries()
 		}()
 	}
 	wg.Wait()
@@ -35,9 +35,9 @@ func TestComputeQualityTierBoundariesConcurrent(t *testing.T) {
 // 断言的是结构性不变量而非精确值——数据温和漂移时保持稳定，分布形态剧变
 // （premium singleton、档位成员枯竭）时报警，提示重新校准阈值并升版本号。
 func TestQualityTierThresholdsAnchoredToDirectEvidence(t *testing.T) {
-	premiumMin, highMin, normalMin := computeQualityTierBoundaries()
-	if !(premiumMin > highMin && highMin > normalMin && normalMin > 0) {
-		t.Fatalf("阈值必须严格递减为正: %.2f/%.2f/%.2f", premiumMin, highMin, normalMin)
+	premiumMin, highMin, normalMin, avoidMax := computeQualityTierBoundaries()
+	if !(premiumMin > highMin && highMin > normalMin && normalMin > avoidMax && avoidMax > 0) {
+		t.Fatalf("阈值必须严格递减为正: %.2f/%.2f/%.2f/%.2f", premiumMin, highMin, normalMin, avoidMax)
 	}
 
 	// 收集 medium/default 直测池（离线校准证据源）。
@@ -319,7 +319,7 @@ func sortFloat64s(vals []float64) {
 	}
 }
 
-// TestModelProfileQualityTierRegistryReplay 锁定当前注册表在 v2 固定阈值下的
+// TestModelProfileQualityTierRegistryReplay 锁定当前注册表在 v3 固定阈值下的
 // 档位快照（回放验证）。快照随注册表数据演进而维护：基准数据大改后按
 // 「锚定测试报警 → 重新校准阈值 → 升版本号 → 更新本快照」的流程处理。
 func TestModelProfileQualityTierRegistryReplay(t *testing.T) {
@@ -331,7 +331,9 @@ func TestModelProfileQualityTierRegistryReplay(t *testing.T) {
 	}{
 		{"gpt-6-astra", ModelFamilyOpenAI, QualityTierPremium, "direct 72.8 ≥ 69.95"},
 		{"gemini-3.8-flash", ModelFamilyGemini, QualityTierPremium, "direct 71.0 ≥ 69.95"},
-		{"hy4-preview", ModelFamilyUnknown, QualityTierHigh, "interpolated 76.1 封顶（premium 须直测证明）"},
+		// 2026-09-05 codexradar 覆盖率门槛（<60% 任务覆盖剔除）后 hy4-preview
+		// 无可靠证据（原插值 76.1 的源行全部被门槛/小样本剔除），回落模型族 low
+		{"hy4-preview", ModelFamilyUnknown, QualityTierLow, "覆盖门槛后无可靠证据，回落模型族"},
 		{"claude-opus-5", ModelFamilyClaude, QualityTierHigh, "direct 68.9 < 69.95"},
 		{"claude-fable-5", ModelFamilyClaude, QualityTierHigh, "direct 65.4"},
 		{"gpt-5.6-sol", ModelFamilyOpenAI, QualityTierHigh, "direct 64.3"},
@@ -348,5 +350,31 @@ func TestModelProfileQualityTierRegistryReplay(t *testing.T) {
 				t.Fatalf("ModelProfileQualityTier(%s) = %v, want %v（%s）", tt.model, got, tt.want, tt.note)
 			}
 		})
+	}
+}
+
+// TestQualityTierAvoidBoundary 锁定 v3 新增的 avoid 档边界语义：
+// direct 证据 <15 分判 avoid、≥15 分判 low；估计类证据同样落 avoid（封顶只压上限）。
+func TestQualityTierAvoidBoundary(t *testing.T) {
+	_, _, _, avoidMax := computeQualityTierBoundaries()
+	if avoidMax != 15.0 {
+		t.Fatalf("avoidMax = %.2f, want 15.0（产品拍板值，改动须升阈值版本）", avoidMax)
+	}
+	cases := []struct {
+		score float64
+		class EvidenceClass
+		want  QualityTier
+		note  string
+	}{
+		{avoidMax - 0.01, EvidenceDirect, QualityTierAvoid, "直测 14.99 判不推荐"},
+		{avoidMax, EvidenceDirect, QualityTierLow, "直测恰 15 分判 low（含边界）"},
+		{44.24, EvidenceDirect, QualityTierLow, "直测 44.24 仍为 low"},
+		{avoidMax - 0.01, EvidenceInterpolated, QualityTierAvoid, "估计证据低分同样 avoid（封顶不抬下限）"},
+		{avoidMax - 0.01, EvidenceDeflated, QualityTierAvoid, "折算证据低分同样 avoid"},
+	}
+	for _, tt := range cases {
+		if got := qualityTierFromCalibration(CalibrationResult{Score: tt.score, Class: tt.class}); got != tt.want {
+			t.Fatalf("score=%.2f class=%s: tier = %v, want %v（%s）", tt.score, tt.class, got, tt.want, tt.note)
+		}
 	}
 }

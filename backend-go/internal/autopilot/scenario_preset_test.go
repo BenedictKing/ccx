@@ -283,16 +283,16 @@ func TestEffortAwareQualityTierLunaReplay(t *testing.T) {
 	if len(lunaByEffort) == 0 {
 		t.Fatal("gpt-5.6-luna has no usable effort evidence")
 	}
-	premiumMin, highMin, normalMin := computeQualityTierBoundaries()
+	premiumMin, highMin, normalMin, avoidMax := computeQualityTierBoundaries()
 	// 期望值独立推导：有该档直测按直测分评档（direct 证据可证明 premium），
 	// 未指定 effort 回落模型基础档。
 	for _, tt := range []struct {
 		effort EffortLevel
 		want   QualityTier
 	}{
-		{EffortMax, qualityTierFromScoreFloor(lunaByEffort[EffortMax], premiumMin, highMin, normalMin)},
-		{EffortMedium, qualityTierFromScoreFloor(lunaByEffort[EffortMedium], premiumMin, highMin, normalMin)},
-		{EffortLow, qualityTierFromScoreFloor(lunaByEffort[EffortLow], premiumMin, highMin, normalMin)},
+		{EffortMax, qualityTierFromScoreFloor(lunaByEffort[EffortMax], premiumMin, highMin, normalMin, avoidMax)},
+		{EffortMedium, qualityTierFromScoreFloor(lunaByEffort[EffortMedium], premiumMin, highMin, normalMin, avoidMax)},
+		{EffortLow, qualityTierFromScoreFloor(lunaByEffort[EffortLow], premiumMin, highMin, normalMin, avoidMax)},
 		{"", ModelProfileQualityTier("gpt-5.6-luna", ModelFamilyOpenAI)},
 	} {
 		if got := EffortAwareQualityTier("gpt-5.6-luna", tt.effort, ModelFamilyOpenAI); got != tt.want {
@@ -359,7 +359,7 @@ func TestEffortAwareQualityAssessmentFor_UnknownLowEffortRatioFallsBack(t *testi
 }
 
 // qualityTierFromScoreFloor 纯分数评档（无证据封顶），供测试独立推导期望值。
-func qualityTierFromScoreFloor(score, premiumMin, highMin, normalMin float64) QualityTier {
+func qualityTierFromScoreFloor(score, premiumMin, highMin, normalMin, avoidMax float64) QualityTier {
 	switch {
 	case score >= premiumMin:
 		return QualityTierPremium
@@ -367,8 +367,10 @@ func qualityTierFromScoreFloor(score, premiumMin, highMin, normalMin float64) Qu
 		return QualityTierHigh
 	case score >= normalMin:
 		return QualityTierNormal
-	default:
+	case score >= avoidMax:
 		return QualityTierLow
+	default:
+		return QualityTierAvoid
 	}
 }
 

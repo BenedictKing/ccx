@@ -209,8 +209,9 @@ type ScoredCandidate struct {
 const premiumBenchmarkTieBreakWeight = 0.5
 
 // tierScoreMap 将各 tier 映射为评分公式中的分数。
-// qualityScore: low=1, normal=2, high=3, premium=4
+// qualityScore: avoid=0, low=1, normal=2, high=3, premium=4
 var qualityTierScore = map[QualityTier]float64{
+	QualityTierAvoid:   0,
 	QualityTierLow:     1,
 	QualityTierNormal:  2,
 	QualityTierHigh:    3,

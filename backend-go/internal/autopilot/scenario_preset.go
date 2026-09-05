@@ -141,6 +141,7 @@ func applyScenarioOverride(preset *ScenarioPreset, override config.ScenarioPrese
 }
 
 // parseQualityTier 把字符串解析为 QualityTier（非法返回空）。
+// avoid 有意不在此列：它是实测结果档而非路由目标，设为地板会排除所有候选。
 func parseQualityTier(v string) QualityTier {
 	switch QualityTier(v) {
 	case QualityTierPremium, QualityTierHigh, QualityTierNormal, QualityTierLow:

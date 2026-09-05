@@ -53,7 +53,12 @@ func normalizeRecommendationOptions(opts RecommendationOptions) RecommendationOp
 // 加权：域匹配度（modelProfiles 中最佳 DomainStrength）0.5 + QualityTier 0.3 + StabilityTier 0.2。
 // modelProfiles 为空时域匹配度回退中性值 0.5（与 DomainStrength 的中性默认保持一致）。
 func ChannelDomainScore(cp ChannelProfile, domain TaskDomain, modelProfiles []ModelProfile) float64 {
-	qualityScore := float64(qualityTierRank(cp.QualityTier)) / 3.0
+	qualityScore := float64(qualityTierRank(cp.QualityTier))
+	if qualityScore < 0 {
+		// avoid 档 rank 为负，钳到 0 防止渠道综合分被拉成负值
+		qualityScore = 0
+	}
+	qualityScore /= 3.0
 	stabilityScore := float64(stabilityTierRank(cp.StabilityTier)) / 2.0
 
 	domainScore := 0.5

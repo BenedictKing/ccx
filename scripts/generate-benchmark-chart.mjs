@@ -18,13 +18,14 @@ export function validateVisualizationData(raw) {
   if (!raw || !Array.isArray(raw.data)) throw new Error('输入文件缺少 data 数组')
   const qualityTiers = raw.qualityTiers || {
     scale: '0-100',
-    algorithm: 'fixed-direct-calibration-v2-fallback',
+    algorithm: 'fixed-direct-calibration-v3-fallback',
     source: 'benchmark-chart',
     premiumMin: 69.95,
     highMin: 59.15,
     normalMin: 44.25,
+    avoidMax: 15,
   }
-  const boundaries = [qualityTiers.normalMin, qualityTiers.highMin, qualityTiers.premiumMin]
+  const boundaries = [qualityTiers.avoidMax, qualityTiers.normalMin, qualityTiers.highMin, qualityTiers.premiumMin]
   if (qualityTiers.scale !== '0-100' || boundaries.some(value => !Number.isFinite(value))
       || boundaries.some(value => value < 0 || value > 100)
       || boundaries.some((value, index) => index > 0 && value < boundaries[index - 1])) {
@@ -76,6 +77,7 @@ export function renderBenchmarkChart(rows, comparisons = [], qualityTiers = null
   --grid: #e7eae5;
   --accent: #176a4b;
   --accent-soft: #dceee5;
+  --tier-avoid: #f6e9e7;
   --tier-low: #f0f1ee;
   --tier-normal: #e7eef5;
   --tier-high: #e5f1ec;
@@ -102,6 +104,7 @@ export function renderBenchmarkChart(rows, comparisons = [], qualityTiers = null
     --grid: #2c302c;
     --accent: #58c899;
     --accent-soft: #233d31;
+    --tier-avoid: #332221;
     --tier-low: #212421;
     --tier-normal: #202831;
     --tier-high: #203129;
@@ -319,7 +322,12 @@ function tierOf(row) {
   if (row.quality_score >= QUALITY_TIERS.premiumMin) return 'premium';
   if (row.quality_score >= QUALITY_TIERS.highMin) return 'high';
   if (row.quality_score >= QUALITY_TIERS.normalMin) return 'normal';
-  return 'low';
+  if (row.quality_score >= QUALITY_TIERS.avoidMax) return 'low';
+  return 'avoid';
+}
+// 档位展示名：avoid 用中文「不推荐」，其余保留英文档位键
+function tierLabel(tier) {
+  return tier === 'avoid' ? '不推荐' : tier;
 }
 const palette = Array.from({ length: 10 }, (_, index) => 'var(--series-' + (index + 1) + ')');
 // 同族模型的展示排序覆盖：须在 compareModels 之前声明，否则顶层 sort 触发 TDZ。
@@ -396,7 +404,8 @@ const categoryLabels = {
 const comparisonState = { category: null };
 const ns = 'http://www.w3.org/2000/svg';
 const qualityBands = [
-  { key: 'low', label: 'Low', from: 0, to: () => QUALITY_TIERS.normalMin, color: 'var(--tier-low)' },
+  { key: 'avoid', label: '不推荐', from: 0, to: () => QUALITY_TIERS.avoidMax, color: 'var(--tier-avoid)' },
+  { key: 'low', label: 'Low', from: () => QUALITY_TIERS.avoidMax, to: () => QUALITY_TIERS.normalMin, color: 'var(--tier-low)' },
   { key: 'normal', label: 'Normal', from: () => QUALITY_TIERS.normalMin, to: () => QUALITY_TIERS.highMin, color: 'var(--tier-normal)' },
   { key: 'high', label: 'High', from: () => QUALITY_TIERS.highMin, to: () => QUALITY_TIERS.premiumMin, color: 'var(--tier-high)' },
   { key: 'premium', label: 'Premium', from: () => QUALITY_TIERS.premiumMin, to: 100, color: 'var(--tier-premium)' },
@@ -533,16 +542,16 @@ function renderQualityBands(g) {
       fill: band.color, role: 'img', 'aria-label': band.label + ' 质量档',
     }));
   });
-  [QUALITY_TIERS.normalMin, QUALITY_TIERS.highMin, QUALITY_TIERS.premiumMin].forEach((value, index) => {
+  [QUALITY_TIERS.avoidMax, QUALITY_TIERS.normalMin, QUALITY_TIERS.highMin, QUALITY_TIERS.premiumMin].forEach((value, index) => {
     if (value < g.yMin || value > g.yMax) return;
     const y = g.y(value);
-    const label = ['normal', 'high', 'premium'][index];
+    const label = ['avoid', 'normal', 'high', 'premium'][index];
     container.append(svgNode('line', {
       class: 'quality-band-boundary', x1: g.margin.left, x2: right, y1: y, y2: y,
     }));
     container.append(svgNode('text', {
       class: 'quality-band-label', x: g.margin.left + 8, y: y - 4,
-    }, label + ' ≥ ' + value.toFixed(1)));
+    }, (label === 'avoid' ? '不推荐 < ' : label + ' ≥ ') + value.toFixed(1)));
   });
   container.append(svgNode('line', { x1: g.margin.left, x2: right, y1: bottom, y2: bottom, display: 'none' }));
 }
@@ -573,7 +582,7 @@ function tooltipHtml(row) {
     : '';
   return '<strong>' + escapeHtml(row.model) + ' · ' + escapeHtml(effort) + '</strong>'
     + '<div class="tooltip-line">pass@1 ' + (row.pass_rate * 100).toFixed(1) + '%</div>'
-    + '<div class="tooltip-line">质量档 ' + (tierOf(row) ?? '未定（样本不足）') + '</div>'
+    + '<div class="tooltip-line">质量档 ' + (tierLabel(tierOf(row)) ?? '未定（样本不足）') + '</div>'
     + (Number.isFinite(row.model_quality_score)
       ? '<div class="tooltip-line">常规档等效 ' + row.model_quality_score.toFixed(1) + '</div>'
       : '')
@@ -684,7 +693,10 @@ function renderQualityLegend() {
     swatch.className = 'quality-swatch';
     swatch.style.background = band.color;
     const label = document.createElement('span');
-    label.textContent = band.label + ' ' + (band.key === 'premium' ? '≥ ' + from.toFixed(1) : band.key === 'low' ? '< ' + to.toFixed(1) : from.toFixed(1) + '–' + to.toFixed(1));
+    const range = band.key === 'premium' ? '≥ ' + from.toFixed(1)
+      : band.key === 'avoid' ? '< ' + to.toFixed(1)
+      : from.toFixed(1) + '–' + to.toFixed(1);
+    label.textContent = band.label + ' ' + range;
     item.append(swatch, label);
     legend.append(item);
   });
@@ -716,7 +728,7 @@ function renderTable(rows, frontierKeys) {
   const body = document.getElementById('table-body');
   body.replaceChildren();
   [...rows].sort((a, b) => b.pass_rate - a.pass_rate || a.cost - b.cost).forEach(row => {
-    const cells = [row.model, row.effort || 'default', tierOf(row) ?? '—', (row.pass_rate * 100).toFixed(1) + '%', '$' + row.cost.toFixed(3), frontierKeys.has(row.key) ? 'Pareto' : '', row.source];
+    const cells = [row.model, row.effort || 'default', tierLabel(tierOf(row)) ?? '—', (row.pass_rate * 100).toFixed(1) + '%', '$' + row.cost.toFixed(3), frontierKeys.has(row.key) ? 'Pareto' : '', row.source];
     const tr = document.createElement('tr');
     cells.forEach((value, index) => {
       const td = document.createElement('td');

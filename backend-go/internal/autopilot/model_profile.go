@@ -19,6 +19,10 @@ const (
 	QualityTierHigh    QualityTier = "high"    // 高端：claude-sonnet, gpt-5.3-codex
 	QualityTierNormal  QualityTier = "normal"  // 标准：claude-haiku, gpt-5.4-mini/nano
 	QualityTierLow     QualityTier = "low"     // 低端：其他
+	// 不推荐：常规口径实测分低于 qualityTierAvoidMax 的档位（v3 新增）。
+	// 只能由实测分数产生（模型族回退永不给出 avoid），MinQualityTier=low 的
+	// 质量地板自动将其排除，故不是可设置的路由目标。
+	QualityTierAvoid QualityTier = "avoid"
 )
 
 // ── 稳定性档 ──
@@ -331,18 +335,21 @@ func ModelProfileQualityTierFromFamily(family ModelFamily, modelID string) Quali
 // TestQualityTierThresholdsAnchoredToDirectEvidence）：取 2026-09-04 快照
 // 直测池（16 模型）升序分布的最大间隙断层中点——
 // premium = 68.9↔71.0、high = 54.0↔64.3、normal = 39.8↔48.7。
-// 调整阈值必须升版本号并在 CHANGELOG 说明掉档/升档面。
+// v3（2026-09-05）新增 avoidMax：产品拍板值而非分布推导——常规口径实测
+// <15 分的档位成功率已被噪声主导（如 luna medium=11.3），单独列为「不推荐」
+// 档避免污染 low 档语义；adjust 须升版本号并在 CHANGELOG 说明掉档/升档面。
 const (
-	qualityTierThresholdsVersion = "fixed-direct-calibration-v2-2026-09-04"
+	qualityTierThresholdsVersion = "fixed-direct-calibration-v3-2026-09-05"
 	qualityTierPremiumMin        = 69.95
 	qualityTierHighMin           = 59.15
 	qualityTierNormalMin         = 44.25
+	qualityTierAvoidMax          = 15.0
 )
 
 // computeQualityTierBoundaries 返回质量档边界。阈值固定版本化（见上），
 // 注册表直测分布只在离线校准（锚定测试）中验证其合理性，不进入请求热路径。
-func computeQualityTierBoundaries() (premiumMin, highMin, normalMin float64) {
-	return qualityTierPremiumMin, qualityTierHighMin, qualityTierNormalMin
+func computeQualityTierBoundaries() (premiumMin, highMin, normalMin, avoidMax float64) {
+	return qualityTierPremiumMin, qualityTierHighMin, qualityTierNormalMin, qualityTierAvoidMax
 }
 
 // EvidenceClass 标注校准分数的证据等级，决定该分数可证明的最高质量档。
@@ -603,9 +610,9 @@ func normalizedCapabilityScore(modelID string) float64 {
 // qualityTierFromCalibration 按固定阈值与证据等级上限评定质量档：
 // 分数决定档位，证据等级封顶（估计类证据不得证明 premium）。
 func qualityTierFromCalibration(calib CalibrationResult) QualityTier {
-	premiumMin, highMin, normalMin := computeQualityTierBoundaries()
+	premiumMin, highMin, normalMin, avoidMax := computeQualityTierBoundaries()
 	cap := maxTierProvableByEvidence(calib.Class)
-	tier := QualityTierLow
+	tier := QualityTierAvoid
 	switch {
 	case calib.Score >= premiumMin:
 		tier = QualityTierPremium
@@ -613,6 +620,8 @@ func qualityTierFromCalibration(calib CalibrationResult) QualityTier {
 		tier = QualityTierHigh
 	case calib.Score >= normalMin:
 		tier = QualityTierNormal
+	case calib.Score >= avoidMax:
+		tier = QualityTierLow
 	}
 	if qualityTierRank(tier) > qualityTierRank(cap) {
 		return cap

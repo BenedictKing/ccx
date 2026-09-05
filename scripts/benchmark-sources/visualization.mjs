@@ -12,16 +12,18 @@ const EFFORT_ORDER = new Map([
 ])
 
 // 质量档阈值与 Go 侧 backend-go/internal/autopilot/model_profile.go 的
-// qualityTierThresholdsVersion = "fixed-direct-calibration-v2-2026-09-04" 保持一致：
-// 固定版本化阈值，由离线校准从 medium/default 直测分布推导（Go 侧锚定测试验证）。
+// qualityTierThresholdsVersion = "fixed-direct-calibration-v3-2026-09-05" 保持一致：
+// 固定版本化阈值，由离线校准从 medium/default 直测分布推导（Go 侧锚定测试验证）；
+// v3 新增 avoidMax=15（产品拍板值）：常规口径实测 <15 分单独列「不推荐」档。
 // 两侧同步修改；动态聚类推导已随 Go 侧一并移除（注册表刷新会导致全局重排）。
 const DEFAULT_QUALITY_TIERS = {
   scale: '0-100',
-  algorithm: 'fixed-direct-calibration-v2',
+  algorithm: 'fixed-direct-calibration-v3',
   source: 'backend-autopilot',
   premiumMin: 69.95,
   highMin: 59.15,
   normalMin: 44.25,
+  avoidMax: 15,
 }
 
 function includesModel(model, models) {
