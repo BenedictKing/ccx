@@ -395,12 +395,12 @@ type KimiBoosterWallet struct {
 // VolcengineAccessKeyPair 是火山云管控面签名凭证，用于 Agent/Coding Plan 识别与模型发现。
 // SecretAccessKey 与推理 API Key 一样只持久化在 0600 配置文件中，管理 API 不得回显。
 type VolcengineAccessKeyPair struct {
-	AccessKeyID     string                 `json:"accessKeyId"`
-	SecretAccessKey string                 `json:"secretAccessKey"`
-	Plan            string                 `json:"plan,omitempty"`
-	PlanTier        string                 `json:"planTier,omitempty"`
-	PlanStatus      string                 `json:"planStatus,omitempty"`
-	Usage           *VolcenginePlanUsage   `json:"usage,omitempty"`
+	AccessKeyID     string               `json:"accessKeyId"`
+	SecretAccessKey string               `json:"secretAccessKey"`
+	Plan            string               `json:"plan,omitempty"`
+	PlanTier        string               `json:"planTier,omitempty"`
+	PlanStatus      string               `json:"planStatus,omitempty"`
+	Usage           *VolcenginePlanUsage `json:"usage,omitempty"`
 	// Plans 是多套餐桶快照（personal/team × agent/coding）：各桶独立探测、
 	// 独立记录错误，团队版结果不覆盖个人版。Plan/Usage 继续指向选定的主桶，
 	// 供既有消费链（模型清单、稀疏 L2 预算、恢复）无感兼容。
@@ -555,7 +555,14 @@ type AgentModelProfile struct {
 
 // UpstreamModelCapability 描述实际发送给上游的模型能力。
 type UpstreamModelCapability struct {
-	ContextWindowTokens     int             `json:"contextWindowTokens,omitempty"` // CCX 路由使用的可承载输入窗口；若来源是总上下文窗口，应在能力数据层预先扣除输出预留
+	ContextWindowTokens int `json:"contextWindowTokens,omitempty"` // CCX 路由使用的可承载输入窗口；若来源是总上下文窗口，应在能力数据层预先扣除输出预留
+	// ContextWindowTiers 是该模型已知的能力分段阶梯（升序、去重），承载"同一模型在野外
+	// 同时存在多档窗口且随时间上移"的事实：如 GPT-5.6 的 [272K, 372K, 1.05M]（272K/372K
+	// 是 Codex 目录窗口，1.05M 是原生 API 窗口）。contextWindowTokens 是路由默认信任的
+	// 保守声明；tiers 末位是已知最大可试探上限——注册表滞后时，溢出逃生阀仍可按最高档
+	// 对同模型候选发起试探，成功后由学习层棘轮上调。单元素 tiers（或留空）表示该模型
+	// 发布后窗口不再扩展，不做向上试探。
+	ContextWindowTiers      []int           `json:"contextWindowTiers,omitempty"`
 	MaxOutputTokens         int             `json:"maxOutputTokens,omitempty"`
 	DefaultOutputTokens     int             `json:"defaultOutputTokens,omitempty"`
 	RecommendedOutputTokens int             `json:"recommendedOutputTokens,omitempty"`
@@ -571,6 +578,18 @@ type UpstreamModelCapability struct {
 	// temperature/top_p 固定值不可改）。随 model-registry 走 presetstore 的定期刷新链路，
 	// 不需要重新编译发版；应用逻辑见 internal/handlers/common/compat_param_constraints.go。
 	ParamConstraints *ModelParamConstraints `json:"paramConstraints,omitempty"`
+}
+
+// MaxKnownWindowTokens 返回该模型已知（含试探档）的最大输入窗口。
+// 无分段数据时与 ContextWindowTokens 一致，即不允许向声明窗口之上试探。
+func (c UpstreamModelCapability) MaxKnownWindowTokens() int {
+	known := c.ContextWindowTokens
+	for _, tier := range c.ContextWindowTiers {
+		if tier > known {
+			known = tier
+		}
+	}
+	return known
 }
 
 // ModelParamConstraints 描述单个模型在请求参数上的厂商级硬约束。

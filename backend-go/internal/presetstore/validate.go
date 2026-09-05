@@ -107,6 +107,11 @@ func validateModelRegistryPreset(preset *ModelRegistryPreset) error {
 		if err := validateNonNegativeInt("contextWindowTokens", capability.ContextWindowTokens); err != nil {
 			return fmt.Errorf("[presetstore] modelRegistry.upstreamCapabilities[%d].%w", idx, err)
 		}
+		for tierIdx, tier := range capability.ContextWindowTiers {
+			if tier < 0 {
+				return fmt.Errorf("[presetstore] modelRegistry.upstreamCapabilities[%d].contextWindowTiers[%d] 不能为负数", idx, tierIdx)
+			}
+		}
 		if err := validateNonNegativeInt("maxOutputTokens", capability.MaxOutputTokens); err != nil {
 			return fmt.Errorf("[presetstore] modelRegistry.upstreamCapabilities[%d].%w", idx, err)
 		}

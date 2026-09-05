@@ -39,8 +39,11 @@ type ModelRegistryPreset struct {
 }
 
 type ModelRegistryCapabilityPreset struct {
-	Patterns                []string            `json:"patterns"`
-	ContextWindowTokens     int                 `json:"contextWindowTokens,omitempty"`
+	Patterns            []string `json:"patterns"`
+	ContextWindowTokens int      `json:"contextWindowTokens,omitempty"`
+	// ContextWindowTiers 已知上下文分段阶梯（升序）；对应 config.UpstreamModelCapability
+	// 同名字段，用于注册表滞后时的向上试探上限。
+	ContextWindowTiers      []int               `json:"contextWindowTiers,omitempty"`
 	MaxOutputTokens         int                 `json:"maxOutputTokens,omitempty"`
 	DefaultOutputTokens     int                 `json:"defaultOutputTokens,omitempty"`
 	RecommendedOutputTokens int                 `json:"recommendedOutputTokens,omitempty"`

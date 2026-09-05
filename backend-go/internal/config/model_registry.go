@@ -554,6 +554,9 @@ func cloneCapability(src UpstreamModelCapability) UpstreamModelCapability {
 	if len(src.ReasoningEfforts) > 0 {
 		dst.ReasoningEfforts = append([]string(nil), src.ReasoningEfforts...)
 	}
+	if len(src.ContextWindowTiers) > 0 {
+		dst.ContextWindowTiers = append([]int(nil), src.ContextWindowTiers...)
+	}
 	if len(src.Sources) > 0 {
 		dst.Sources = append([]string(nil), src.Sources...)
 	}
@@ -654,6 +657,31 @@ func clonePricingTier(src ModelPricingTier) ModelPricingTier {
 	return dst
 }
 
+// normalizeContextWindowTiers 把分段阶梯整理为升序去重的正数序列。
+// 数据源手写容错：乱序、重复、非正值都不阻断加载，只是被规整。
+func normalizeContextWindowTiers(tiers []int) []int {
+	if len(tiers) == 0 {
+		return nil
+	}
+	normalized := make([]int, 0, len(tiers))
+	for _, tier := range tiers {
+		if tier > 0 {
+			normalized = append(normalized, tier)
+		}
+	}
+	sort.Ints(normalized)
+	deduped := normalized[:0]
+	for i, tier := range normalized {
+		if i == 0 || tier != normalized[i-1] {
+			deduped = append(deduped, tier)
+		}
+	}
+	if len(deduped) == 0 {
+		return nil
+	}
+	return deduped
+}
+
 func convertRuntimeCapabilities(preset *presetstore.ModelRegistryPreset) map[string]UpstreamModelCapability {
 	if preset == nil || len(preset.UpstreamCapabilities) == 0 {
 		return nil
@@ -662,6 +690,7 @@ func convertRuntimeCapabilities(preset *presetstore.ModelRegistryPreset) map[str
 	for _, entry := range preset.UpstreamCapabilities {
 		capability := UpstreamModelCapability{
 			ContextWindowTokens:     entry.ContextWindowTokens,
+			ContextWindowTiers:      normalizeContextWindowTiers(entry.ContextWindowTiers),
 			MaxOutputTokens:         entry.MaxOutputTokens,
 			DefaultOutputTokens:     entry.DefaultOutputTokens,
 			RecommendedOutputTokens: entry.RecommendedOutputTokens,
