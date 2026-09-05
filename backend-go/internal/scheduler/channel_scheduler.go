@@ -45,10 +45,11 @@ type ChannelScheduler struct {
 	conversationTracker       *conversation.ConversationTracker
 	overrideManager           *conversation.OverrideManager
 	rateLimitManager          *ratelimit.Manager
-	candidateFilterProvider   CandidateFilterProvider   // SmartRouter shadow 注入点
-	modelSupportResolverFunc  ModelSupportResolverFunc  // Autopilot 模型支持解析注入点
-	contextWindowResolverFunc ContextWindowResolverFunc // 上下文有效窗口解析注入点（学习证据合成）
-	quotaManager              *quota.Manager            // 配额真相与余量管理器（nil = 不参与沉底排序）
+	candidateFilterProvider   CandidateFilterProvider       // SmartRouter shadow 注入点
+	modelSupportResolverFunc  ModelSupportResolverFunc      // Autopilot 模型支持解析注入点
+	contextWindowResolverFunc ContextWindowResolverFunc     // 上下文有效窗口解析注入点（学习证据合成）
+	overflowCandidateProvider OverflowCandidateProviderFunc // 溢出跨协议重定向候选注入点
+	quotaManager              *quota.Manager                // 配额真相与余量管理器（nil = 不参与沉底排序）
 	loadShedMu                sync.Mutex
 	loadShedStates            map[string]rateLimitLoadShedState
 	loadShedStopCh            chan struct{}
@@ -251,6 +252,20 @@ func (s *ChannelScheduler) SetModelSupportResolverProvider(fn ModelSupportResolv
 // 判定装不下的组合——那种试探只会在已知会 400 的渠道上浪费一次往返。
 // effective 返回 0 或负数时调用方沿用 registryWindow（fail-open）。
 type ContextWindowResolverFunc func(channelUID string, kind ChannelKind, actualModel string, registryWindow int) (effective int, declared int)
+
+// OverflowCandidateProviderFunc 返回可承载 inputTokens 的跨协议重定向候选。
+// 候选必须带 Route（指向目标协议渠道数组）与 ActualModel（执行模型），
+// 可用性/优先级遍历由调度管线后续阶段兜底。返回空 = 无重定向（沿用容量错误）。
+type OverflowCandidateProviderFunc func(ctx context.Context, kind ChannelKind, model string, inputTokens int) []ChannelInfo
+
+// SetOverflowCandidateProvider 设置溢出重定向候选提供器。
+// 由 main.go 在 autopilot Manager 初始化后注册；nil 时清除。
+// 消费点：SelectChannelWithOptions 的上下文过滤全灭分支（试探候选也耗尽之后）。
+func (s *ChannelScheduler) SetOverflowCandidateProvider(fn OverflowCandidateProviderFunc) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.overflowCandidateProvider = fn
+}
 
 // SetContextWindowResolverProvider 设置上下文有效窗口解析提供器。
 // 由 main.go 注册（闭包读 config.SharedChannelCompatCache）。

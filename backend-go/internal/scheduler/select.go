@@ -254,6 +254,7 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 		executionModel := ""
 		executionKeyIdentity := ""
 		executionEffort := ""
+		overflowRedirect := false
 		if upstream != nil {
 			for _, ch := range activeChannels {
 				route := normalizedChannelRoute(ch, kind)
@@ -267,6 +268,7 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 				executionModel = ch.ActualModel
 				executionKeyIdentity = ch.PinnedKeyIdentity
 				executionEffort = ch.PinnedEffort
+				overflowRedirect = ch.OverflowRedirect
 				break
 			}
 		}
@@ -275,6 +277,7 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 		result.ExecutionModel = executionModel
 		result.ExecutionKeyIdentity = executionKeyIdentity
 		result.ExecutionEffort = executionEffort
+		result.OverflowRedirect = overflowRedirect
 		if !opts.DryRun && candidateSelectionObserver != nil {
 			actualChannelUID := fmt.Sprintf("ch_%d", channelIndex)
 			if upstream != nil && upstream.ChannelUID != "" {
@@ -376,9 +379,34 @@ func (s *ChannelScheduler) SelectChannelWithOptions(ctx context.Context, opts Se
 	activeChannels, err := s.filterChannelsByContext(activeChannels, kind, model, opts.ContextRequirement, trace)
 	if err != nil {
 		trace.setStage("context_filter", 0)
-		return nil, traceErr(err)
+		// 溢出跨协议重定向注入：同协议候选（含试探档）全灭时，询问注入器
+		// 是否有其他协议渠道上的可承载模型（ActualModel 已带执行模型，
+		// 发送层复用联邦改写与协议转换）。仅默认路由（无 pin/前缀）时启用。
+		// 注入后沿用后续管线（key 可用性 / SmartFilter / 优先级遍历），
+		// SmartFilter 对请求模型不支持的注入候选返回空时会 fail-open 保留原列表。
+		if capErr, ok := AsContextCapacityError(err); ok && opts.ChannelName == "" && opts.RoutePrefix == "" {
+			s.mu.RLock()
+			provider := s.overflowCandidateProvider
+			s.mu.RUnlock()
+			if provider != nil {
+				if injected := provider(ctx, kind, model, capErr.InputTokens); len(injected) > 0 {
+					log.Printf("[Scheduler-Overflow] %s 模型 %q 上下文 %d tokens 全灭，注入 %d 个跨协议重定向候选",
+						kindSchedulerLogPrefix(kind), model, capErr.InputTokens, len(injected))
+					for _, ch := range injected {
+						trace.skipChannel(ch, "overflow_redirect", "injected", fmt.Sprintf("actual=%s", ch.ActualModel))
+					}
+					trace.setStage("overflow_redirect", len(injected))
+					activeChannels = injected
+					err = nil
+				}
+			}
+		}
+		if err != nil {
+			return nil, traceErr(err)
+		}
+	} else {
+		trace.setStage("context_filter", len(activeChannels))
 	}
-	trace.setStage("context_filter", len(activeChannels))
 
 	// 在进入 SmartRouter、亲和与优先级排序前剔除没有可选 Key 的渠道。
 	// 这是基础可用性约束，不属于模型重定向或自动路由决策：
@@ -1469,6 +1497,8 @@ type ChannelInfo struct {
 	PinnedKeyIdentity string `json:"pinnedKeyIdentity,omitempty"`
 	// PinnedEffort 是选中候选行的思考档位（autopilot 已决档；空 = passthrough）。
 	PinnedEffort string `json:"pinnedEffort,omitempty"`
+	// OverflowRedirect 标记该候选来自上下文溢出重定向注入（跨协议/跨模型兜底）。
+	OverflowRedirect bool `json:"overflowRedirect,omitempty"`
 }
 
 // getActiveChannels 获取活跃渠道列表（按优先级排序）

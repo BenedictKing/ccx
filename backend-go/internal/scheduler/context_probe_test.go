@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"context"
 	"testing"
 
 	"github.com/BenedictKing/ccx/internal/config"
@@ -107,5 +108,73 @@ func TestResolveContextWindowFallbackNilResolver(t *testing.T) {
 	effective, declared = s.resolveContextWindow("ch_x", ChannelKindResponses, "m", 272_000)
 	if effective != 272_000 || declared != 0 {
 		t.Fatalf("非正返回应回退注册表并钳平 declared, got (%d, %d)", effective, declared)
+	}
+}
+
+// TestSelectChannelWithOptionsOverflowInjection 验证容量错误分支的跨协议注入：
+// 请求协议候选全灭（无试探档）时，注入候选被选中并携带执行模型与标记。
+func TestSelectChannelWithOptionsOverflowInjection(t *testing.T) {
+	cfg := config.Config{
+		ResponsesUpstream: []config.UpstreamConfig{
+			{
+				Name: "tiny", Status: "active", ChannelUID: "ch_tiny",
+				BaseURL: "https://tiny.example.com", APIKeys: []string{"sk-test"},
+				ModelCapabilities: map[string]config.UpstreamModelCapability{
+					"gpt-5.6-sol": {ContextWindowTokens: 128_000}, // 无 tiers：不可试探
+				},
+			},
+		},
+		ChatUpstream: []config.UpstreamConfig{
+			{
+				Name: "big-chat", Status: "active", ChannelUID: "ch_bigchat",
+				BaseURL: "https://bigchat.example.com", APIKeys: []string{"sk-test"},
+			},
+		},
+	}
+	s, cleanup := createTestScheduler(t, cfg)
+	defer cleanup()
+
+	s.SetOverflowCandidateProvider(func(ctx context.Context, kind ChannelKind, model string, inputTokens int) []ChannelInfo {
+		if inputTokens < 600_000 {
+			return nil
+		}
+		return []ChannelInfo{{
+			Route:            ChannelRouteRef{Kind: string(ChannelKindChat), Index: 0, ChannelUID: "ch_bigchat"},
+			Index:            0,
+			Name:             "big-chat",
+			Priority:         0,
+			Status:           "active",
+			ActualModel:      "chat-premium-big",
+			OverflowRedirect: true,
+		}}
+	})
+
+	// 600K 输入：responses 渠道 128K 全灭且不可试探 → 注入 chat 候选被选中
+	selection, err := s.SelectChannelWithOptions(context.Background(), SelectionOptions{
+		Kind:               ChannelKindResponses,
+		Model:              "gpt-5.6-sol",
+		ContextRequirement: &ContextRequirement{InputTokens: 600_000, RequiredTokens: 608_000},
+	})
+	if err != nil {
+		t.Fatalf("注入候选应被选中: %v", err)
+	}
+	if selection.ExecutionModel != "chat-premium-big" {
+		t.Fatalf("ExecutionModel = %q, want chat-premium-big", selection.ExecutionModel)
+	}
+	if !selection.OverflowRedirect {
+		t.Fatal("SelectionResult.OverflowRedirect 应为 true")
+	}
+	if selection.Route.Kind != string(ChannelKindChat) {
+		t.Fatalf("Route.Kind = %q, want chat（跨协议执行）", selection.Route.Kind)
+	}
+
+	// 500K 输入：注入器不提供候选 → 原容量错误透传
+	_, err = s.SelectChannelWithOptions(context.Background(), SelectionOptions{
+		Kind:               ChannelKindResponses,
+		Model:              "gpt-5.6-sol",
+		ContextRequirement: &ContextRequirement{InputTokens: 500_000, RequiredTokens: 508_000},
+	})
+	if _, ok := AsContextCapacityError(err); !ok {
+		t.Fatalf("无注入候选时应返回容量错误, got %v", err)
 	}
 }

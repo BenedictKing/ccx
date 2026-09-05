@@ -1072,12 +1072,13 @@ func main() {
 	})
 	log.Printf("[Autopilot-Init] ContextWindowResolver 已注册到调度器")
 
-	// 溢出跨模型重定向：同模型候选（含试探档）全灭时，全池按质量档选一个
-	// 能承载的替代模型改写请求（用户拍板），响应头 X-CCX-Model-Redirect 标注。
-	common.SetOverflowRedirectProvider(func(ctx context.Context, channelKind, model string, inputTokens int) (string, bool) {
-		return autopilotManager.OverflowRedirectModel(ctx, channelKind, model, inputTokens)
+	// 溢出跨协议重定向：同协议候选（含试探档）全灭时，从四类协议渠道池
+	// 按质量档注入能承载的替代模型候选（用户拍板"完全跨协议"），发送层
+	// 复用联邦改写与协议转换，响应头 X-CCX-Model-Redirect 标注。
+	channelScheduler.SetOverflowCandidateProvider(func(ctx context.Context, kind scheduler.ChannelKind, model string, inputTokens int) []scheduler.ChannelInfo {
+		return autopilotManager.OverflowRedirectCandidates(ctx, kind, model, inputTokens)
 	})
-	log.Printf("[Autopilot-Init] OverflowRedirectProvider 已注册")
+	log.Printf("[Autopilot-Init] OverflowCandidateProvider 已注册")
 
 	// 初始化对话追踪器和覆盖管理器
 	conversationTracker := conversation.NewConversationTracker(1*time.Hour, 24*time.Hour, paths.ConversationStatePath)

@@ -30,9 +30,12 @@ type SelectionResult struct {
 	// 为空表示调度未锁定（非 autopilot 路径或候选无 key/effort 维），走原行为。
 	ExecutionKeyIdentity string
 	ExecutionEffort      string
-	Reason               string // 选择原因（用于日志）
-	Trace                *SelectionTrace
-	AutopilotTraceUID    string // SmartRouter 请求级 trace；为空表示未介入
+	// OverflowRedirect 标记本次选择来自上下文溢出跨协议/跨模型重定向注入：
+	// 发送层据此剥离 responses 历史 encrypted_content 并回显 X-CCX-Model-Redirect。
+	OverflowRedirect  bool
+	Reason            string // 选择原因（用于日志）
+	Trace             *SelectionTrace
+	AutopilotTraceUID string // SmartRouter 请求级 trace；为空表示未介入
 }
 
 // ContextRequirement 描述当前请求的输入上下文与输出预算。

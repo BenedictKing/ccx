@@ -69,6 +69,9 @@ type tryUpstreamOptions struct {
 	endpointPolicy    *autopilot.EndpointAttemptPolicy // endpoint 级策略（nil 时不注入）
 	executionRoute    scheduler.ChannelRouteRef
 	executionModel    string // 联邦 sibling 的实际执行模型（为空时沿用请求模型）
+	// overflowRedirect 标记执行模型来自上下文溢出重定向注入：发送层据此
+	// 剥离 responses 历史 encrypted_content 并回显 X-CCX-Model-Redirect。
+	overflowRedirect bool
 	// 五元组调度 pin：选中候选行的 key 身份与思考档位（锁定首选，执行层兜底）。
 	executionKeyIdentity string
 	executionEffort      string
@@ -92,6 +95,7 @@ func WithSelectionTrace(selection *scheduler.SelectionResult) TryUpstreamOption 
 		if opts.executionEffort == "" {
 			opts.executionEffort = selection.ExecutionEffort
 		}
+		opts.overflowRedirect = opts.overflowRedirect || selection.OverflowRedirect
 	}
 }
 
@@ -547,20 +551,21 @@ func TryUpstreamWithAllKeys(
 		model = tryOpts.executionModel
 	}
 
-	// 溢出跨模型重定向（逃生阀兜底）：failover 外壳已决定改用替代模型时，
-	// 在此统一落到请求体。responses 协议下跨模型无法解密历史加密推理，
-	// 同步剥离 input items 的 encrypted_content（与 chat 转换器行为对齐）。
-	if overflowTarget := OverflowRedirectTarget(c); overflowTarget != "" && overflowTarget != model {
-		if rewritten, err := sjson.SetBytes(requestBody, "model", overflowTarget); err == nil {
-			if executionKind == scheduler.ChannelKindResponses {
-				rewritten = stripResponsesEncryptedContent(rewritten)
+	// 溢出跨协议/跨模型重定向（调度器注入的 OverflowRedirect 候选）：
+	// 执行模型已在联邦改写中落到请求体，这里补剥离与回显。responses 直连下
+	// 跨模型无法解密历史加密推理，剥离 encrypted_content 保留 summary
+	//（与 chat 转换器口径对齐）；跨协议组合本来就要走转换器，无需剥离。
+	if tryOpts.overflowRedirect && tryOpts.executionModel != "" && tryOpts.executionModel != model {
+		if executionKind == scheduler.ChannelKindResponses {
+			if stripped := stripResponsesEncryptedContent(requestBody); string(stripped) != string(requestBody) {
+				requestBody = stripped
+				RestoreRequestBody(c, requestBody)
+				c.Set("requestBodyBytes", requestBody)
 			}
-			requestBody = rewritten
-			RestoreRequestBody(c, requestBody)
-			c.Set("requestBodyBytes", requestBody)
-			RequestLogf(c, "[%s-Overflow] 上下文溢出重定向生效: %s -> %s", apiType, model, overflowTarget)
 		}
-		model = overflowTarget
+		c.Header("X-CCX-Model-Redirect", model+" -> "+tryOpts.executionModel)
+		RequestLogf(c, "[%s-Overflow] 上下文溢出重定向生效: %s -> %s（执行协议 %s）",
+			apiType, model, tryOpts.executionModel, executionKind)
 	}
 
 	// 五元组调度 pin 的明文 key：身份反查一次（key 已被移除/轮换时为空 = 不锁定）。

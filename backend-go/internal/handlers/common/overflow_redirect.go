@@ -1,55 +1,8 @@
 package common
 
 import (
-	"context"
 	"encoding/json"
-
-	"github.com/BenedictKing/ccx/internal/scheduler"
-	"github.com/gin-gonic/gin"
 )
-
-// 溢出跨模型重定向：provider 与请求级标记。
-// 触发与重试逻辑在 multi_channel_failover.go；发送层模型改写与
-// encrypted_content 剥离在 upstream_failover.go。
-
-// ccxOverflowRedirectKey gin context 键：本次请求已发生的溢出重定向目标模型。
-const ccxOverflowRedirectKey = "ccx.overflow_redirect_model"
-
-// OverflowRedirectProviderFunc 返回可承载 inputTokens 的替代模型（全池按质量档）。
-// 由 main.go 在 autopilot Manager 初始化后注册。
-type OverflowRedirectProviderFunc func(ctx context.Context, channelKind, model string, inputTokens int) (string, bool)
-
-// overflowRedirectProvider 默认空实现（无重定向能力）；启动期由 SetOverflowRedirectProvider 注入。
-var overflowRedirectProvider OverflowRedirectProviderFunc = func(context.Context, string, string, int) (string, bool) {
-	return "", false
-}
-
-// SetOverflowRedirectProvider 注册溢出重定向模型提供器。
-func SetOverflowRedirectProvider(fn OverflowRedirectProviderFunc) {
-	overflowRedirectProvider = fn
-}
-
-// canOverflowRedirect 判定当前请求是否允许溢出重定向：
-// 未重定向过、非 pin 路由（routePrefix/X-Channel 显式指定的渠道不偷换模型）。
-func canOverflowRedirect(c *gin.Context, kind scheduler.ChannelKind) bool {
-	if _, redirected := c.Get(ccxOverflowRedirectKey); redirected {
-		return false
-	}
-	if c.Param("routePrefix") != "" || c.GetHeader("X-Channel") != "" {
-		return false
-	}
-	return kind != ""
-}
-
-// OverflowRedirectTarget 供发送层读取本次请求的溢出重定向目标模型；空 = 未重定向。
-func OverflowRedirectTarget(c *gin.Context) string {
-	if c == nil {
-		return ""
-	}
-	target, _ := c.Get(ccxOverflowRedirectKey)
-	model, _ := target.(string)
-	return model
-}
 
 // stripResponsesEncryptedContent 剥离 Responses 请求 input items 中 reasoning
 // 项的 encrypted_content（保留 summary）。跨模型改写后上游无法解密其他模型

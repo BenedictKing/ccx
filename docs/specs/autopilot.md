@@ -849,7 +849,7 @@ health(40) > fastDecay(25) > successRate(20) > latency(10) > cost(5)
   消费接线三点：scheduler 上下文过滤（`SetContextWindowResolverProvider` 注入，`filterChannelsByContext` 与 `ValidateUpstreamContext`）、SmartRouter 评分条目（`buildChannelEntry` 双向合成，替换只收紧）、ModelResolver 能力下界（`filterByCapabilityFloorInternal`）。
 - **溢出逃生阀（先同模型试探，再跨模型重定向）**：
   - `filterChannelsByContext` 把窗口不足候选降级为**试探候选**（最低优先级，仿 outputFallback）：无 declared 收紧矛盾且输入在分段阶梯覆盖范围内时保留；试探成功 = proven 棘轮上调回归正常档，试探 400 = 学习收紧 + 正常 failover。ModelResolver 地板层对请求同名模型同步放宽（调度最前端不堵死试探路），替代模型仍必须真实满足窗口。
-  - 试探也救不回时，failover 外壳询问 `OverflowRedirectProvider`（`Manager.OverflowRedirectModel`）：在请求协议的渠道池内按「有效窗口 ≥ 输入 + 探测成功 + 质量档降序」选替代模型，改写后重跑选路（全池按质量档自动选，pin 路由 routePrefix/X-Channel 不偷换；响应头 `X-CCX-Model-Redirect` 标注）。
+  - 试探也救不回时，调度器在容量错误分支询问 `SetOverflowCandidateProvider`（`Manager.OverflowRedirectCandidates`，**完全跨协议**）：四类协议渠道池（responses/chat/messages/gemini）内按「有效窗口 ≥ 输入 + 探测成功 + 同协议优先 + 质量档降序」注入替代模型候选（`ChannelInfo` 带 Route 与 ActualModel，上限 4 个），复用联邦 sibling 的发送层模型改写与协议转换；pin 路由（routePrefix/X-Channel）不注入。选中后 `SelectionResult.OverflowRedirect` 传播到发送层：responses 直连跨模型剥离 `encrypted_content` 并回显 `X-CCX-Model-Redirect`。
   - responses 协议跨模型改写时发送层统一剥离 input reasoning 项的 `encrypted_content`（保留 summary，与 chat 转换器口径对齐）。
 
 ## 6. 与其他模块的交互点
