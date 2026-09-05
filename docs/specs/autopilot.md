@@ -833,6 +833,25 @@ health(40) > fastDecay(25) > successRate(20) > latency(10) > cost(5)
 - **P2 验收**：增加 `kimi-k2-thinking` 对 `kimi-k3` 的固定 trace 回放；质量证据未知的候选不得仅靠族兜底同档和价格优势反超可靠证据候选，除非 `cost_first` 场景明确允许；`quality_first` 不降级可靠证据，`balanced` 的价格收益需跨过配置化置信度门槛；输出折扣原因和原始/调整后质量分以便审计。
 - **发布顺序**：P0 独立发布并确认画像覆盖率和 trace effort 非空率；P1 shadow 回放后单独提交；P2 基于 P1 数据定阈值并单独提交。P1/P2 各自保留开关，禁止在同一发布中同时切 active，以便归因和回滚。
 
+### 5.25 上下文窗口自适应学习与溢出逃生阀（gpt-5.6-sol 274K 事故）
+
+**事故路径**：Codex 会话涨到 input≈274,081 tokens 后，`filterChannelsByContext` 用注册表窗口 272,000 把所有 gpt-5.6-sol 渠道静默剔除（只进 trace 不打日志），剩余 suspended 通配渠道被跳过，120ms 内报「所有渠道都失败了」；`HandleAllChannelsFailed` 把上下文容量错误吞成 503 `service_unavailable`，Codex 无法识别为超限、不压缩、无限重试，对话卡死。根因：GPT-5.6 原生 API 窗口实为 1.05M（272K/372K 只是 Codex 客户端目录窗口），注册表自 2026-06-28 引入后未跟进；且既有学习机制（ContextLimitState）只收紧不放宽、scheduler 上下文过滤不读学习数据——发前硬过滤 × 过期低窗口 = 自锁，成功证据永远拿不到，「渠道渐进扩容（200K→272K→372K→1M）」无法被发现。
+
+**四层修复**（均已实现）：
+
+- **错误语义**：`filterChannelsByContext` 全灭时返回类型化 `ContextCapacityError`（`internal/scheduler/context_capacity_error.go`），`HandleAllChannelsFailed` 识别后按 OpenAI 语义回 400 `context_length_exceeded`（含 input 估算与最大已知窗口），Codex 可据此触发压缩而非无限重试。
+- **注册表分段**：`UpstreamModelCapability` 新增 `contextWindowTiers`（升序已知容量阶梯）：`contextWindowTokens` 是路由默认信任的保守声明，tiers 末位是已知最大可试探上限；单元素/无 tiers 表示发布后不扩容、不向上试探。GPT-5.6 数据更新为 1,050,000 + `[272K, 372K, 1.05M]`。
+- **自适应学习（渠道×协议×模型，双向）**：`ChannelCompatCache` 新增学习窗口分区（`channel_compat.json` 升级为分区包装格式，兼容旧格式迁移）。三源合成有效窗口 `eff = min(实测收紧, max(注册表, 成功实证棘轮, models API 声明))`：
+  - **proven**：请求 2xx 完成即实证可承载输入（usage 总口径，含缓存命中），棘轮只升不降，7 天 TTL；
+  - **modelsApi**：自动发现解析 /v1/models 的 `context_window`/`context_length`/`max_input_tokens`/`max_model_len`/`top_provider.context_length`，声明值最新覆盖；
+  - **declared**：既有 400 学习收紧上限（渠道×模型跨 Key 取最小，24h TTL）永远压得住放宽证据（渠道真降级自愈）。
+
+  消费接线三点：scheduler 上下文过滤（`SetContextWindowResolverProvider` 注入，`filterChannelsByContext` 与 `ValidateUpstreamContext`）、SmartRouter 评分条目（`buildChannelEntry` 双向合成，替换只收紧）、ModelResolver 能力下界（`filterByCapabilityFloorInternal`）。
+- **溢出逃生阀（先同模型试探，再跨模型重定向）**：
+  - `filterChannelsByContext` 把窗口不足候选降级为**试探候选**（最低优先级，仿 outputFallback）：无 declared 收紧矛盾且输入在分段阶梯覆盖范围内时保留；试探成功 = proven 棘轮上调回归正常档，试探 400 = 学习收紧 + 正常 failover。ModelResolver 地板层对请求同名模型同步放宽（调度最前端不堵死试探路），替代模型仍必须真实满足窗口。
+  - 试探也救不回时，failover 外壳询问 `OverflowRedirectProvider`（`Manager.OverflowRedirectModel`）：在请求协议的渠道池内按「有效窗口 ≥ 输入 + 探测成功 + 质量档降序」选替代模型，改写后重跑选路（全池按质量档自动选，pin 路由 routePrefix/X-Channel 不偷换；响应头 `X-CCX-Model-Redirect` 标注）。
+  - responses 协议跨模型改写时发送层统一剥离 input reasoning 项的 `encrypted_content`（保留 summary，与 chat 转换器口径对齐）。
+
 ## 6. 与其他模块的交互点
 
 ### 6.1 scheduler
