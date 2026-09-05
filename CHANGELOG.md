@@ -1,5 +1,6 @@
 ## [Unreleased]
 
+- **Specs 实现缺口修复（五阶段）** - 修复规格标注"已实现"但代码仍存在的行为偏差。①溢出执行链：上下文溢出重定向的密文剥离/回显头因条件恒假从未生效（改写前后模型对分离判定），跨模型执行的 Key 熔断改绑执行模型（读写同键），溢出候选按物理路由+模型去重并固定协议遍历顺序（同模型多渠道不再丢失），窗口实证棘轮过期后可重新学习。②配额内核：同来源新观测覆盖旧值（provider 80%→5% 不再被钉死），Manager 全量快照隔离 + 读写锁收紧（-race 验证）。③Route Preview：画像与真实入口同源（共用 prompt 分析、加载全局场景配置、补 Complexity/DomainHints），预演不再写 trace，错误契约对齐（503/400/401、kill switch 跳过调度预演）。④配额接线：new-api 余额与配置热更新接入 configured 级真相（订阅画像 → quota.Manager），MiniMax/火山/Kimi/Compshare/MiMo 前端余量行统一填充真相徽章与来源。⑤兼容缓存运维：compat-cache 端点新增上下文窗口分区查看（contextWindows）与 `?section=context-window` 清除，全清覆盖四类事实并立即落盘。
 - 修复 Autopilot 模型画像漏写注册表思考强度档位的问题，并让存量自动发现画像在请求期刷新后持久化，恢复模型×effort 候选展开与 trace 展示。
 - 增加 effort-aware 质量档 shadow 观测：trace 和决策页展示基础档、实际 effort 档、证据等级与影子总分，默认不改变线上排序。
 - 增加缺失可靠 coding 证据候选的质量置信度 shadow 折扣，避免将低价与未知质量混合作为线上收益。
