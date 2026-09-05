@@ -231,13 +231,13 @@ func BuiltinAgentModelProfiles() map[string]AgentModelProfile {
 			[]string{"minimal", "low", "medium", "high", "xhigh"}, true,
 		),
 		"gpt-5.6": builtinGPTAgentModelProfile(
-			"Amazon Bedrock GPT-5.6", 272000, 272000, 128000, "tokens",
+			"Amazon Bedrock GPT-5.6", 272000, 1050000, 128000, "tokens",
 			[]string{"low", "medium", "high", "xhigh", "max"}, false,
 		),
 		"gpt-5.6-*": {
 			DisplayName:            "Amazon Bedrock GPT-5.6",
 			ContextWindowTokens:    272000,
-			MaxContextWindowTokens: 272000,
+			MaxContextWindowTokens: 1050000,
 			EffectiveContextRatio:  0.95,
 			AutoCompactRatio:       0.90,
 			TruncationMode:         "tokens",

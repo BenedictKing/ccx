@@ -35,8 +35,8 @@ func TestResolveAgentModelProfile_GPT56BedrockBuiltins(t *testing.T) {
 			if profile.Profile.ContextWindowTokens != 272000 {
 				t.Fatalf("ContextWindowTokens = %d, want 272000", profile.Profile.ContextWindowTokens)
 			}
-			if profile.Profile.MaxContextWindowTokens != 272000 {
-				t.Fatalf("MaxContextWindowTokens = %d, want 272000", profile.Profile.MaxContextWindowTokens)
+			if profile.Profile.MaxContextWindowTokens != 1050000 {
+				t.Fatalf("MaxContextWindowTokens = %d, want 1050000", profile.Profile.MaxContextWindowTokens)
 			}
 			if !containsString(profile.Profile.ReasoningEfforts, "max") {
 				t.Fatalf("ReasoningEfforts = %v, want max", profile.Profile.ReasoningEfforts)
@@ -734,8 +734,11 @@ func TestResolveUpstreamCapability_GPT56BedrockBuiltin(t *testing.T) {
 	if resolved.Capability.Provider != "amazon-bedrock" {
 		t.Fatalf("Provider = %q, want amazon-bedrock", resolved.Capability.Provider)
 	}
-	if resolved.Capability.ContextWindowTokens != 272000 {
-		t.Fatalf("ContextWindowTokens = %d, want 272000", resolved.Capability.ContextWindowTokens)
+	if resolved.Capability.ContextWindowTokens != 1050000 {
+		t.Fatalf("ContextWindowTokens = %d, want 1050000", resolved.Capability.ContextWindowTokens)
+	}
+	if !containsInt(resolved.Capability.ContextWindowTiers, 372000) || resolved.Capability.MaxKnownWindowTokens() != 1050000 {
+		t.Fatalf("ContextWindowTiers = %v, want [272000 372000 1050000]", resolved.Capability.ContextWindowTiers)
 	}
 	if resolved.Capability.MaxOutputTokens != 128000 {
 		t.Fatalf("MaxOutputTokens = %d, want 128000", resolved.Capability.MaxOutputTokens)
@@ -1093,6 +1096,15 @@ func assertFloatPointerValue(t *testing.T, got *float64, want float64, name stri
 }
 
 func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func containsInt(values []int, want int) bool {
 	for _, value := range values {
 		if value == want {
 			return true
