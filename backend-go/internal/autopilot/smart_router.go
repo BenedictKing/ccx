@@ -216,9 +216,22 @@ func (r *SmartRouter) SetOnCandidatesRanked(fn func(model, channelKind string, c
 	r.onCandidatesRanked = fn
 }
 
+// BuildPlanOptions 控制 BuildPlan 的副作用范围。
+type BuildPlanOptions struct {
+	// RecordTrace 是否记录 dry-run trace。BuildPlan 默认为 true（既有 dry-run
+	// API 契约）；Route Preview 必须传 false——预演是无副作用操作，不得写
+	// trace 污染统计。不得通过临时替换 traceStore 实现（并发请求互相影响）。
+	RecordTrace bool
+}
+
 // BuildPlan 为请求构建路由计划（§4.6.1）。
-// 用于 dry-run API 和诊断，不影响真实调度。
+// 用于 dry-run API 和诊断，不影响真实调度。保持记录 trace 的原契约。
 func (r *SmartRouter) BuildPlan(profile *RequestProfile) *RoutingPlan {
+	return r.BuildPlanWithOptions(profile, BuildPlanOptions{RecordTrace: true})
+}
+
+// BuildPlanWithOptions 按 opts 控制副作用构建路由计划。
+func (r *SmartRouter) BuildPlanWithOptions(profile *RequestProfile, opts BuildPlanOptions) *RoutingPlan {
 	if profile == nil {
 		return &RoutingPlan{Mode: RoutingModeDryRun}
 	}
@@ -292,7 +305,9 @@ func (r *SmartRouter) BuildPlan(profile *RequestProfile) *RoutingPlan {
 			Mode:           RoutingModeDryRun,
 			Weights:        weights,
 		}
-		r.recordDryRunTrace(plan, 0, 0)
+		if opts.RecordTrace {
+			r.recordDryRunTrace(plan, 0, 0)
+		}
 		return plan
 	}
 
@@ -424,7 +439,9 @@ func (r *SmartRouter) BuildPlan(profile *RequestProfile) *RoutingPlan {
 		plan.LogicalGroups = groupCandidatesByLogical(candidates)
 	}
 
-	r.recordDryRunTrace(plan, len(entries), len(selectedCandidates))
+	if opts.RecordTrace {
+		r.recordDryRunTrace(plan, len(entries), len(selectedCandidates))
+	}
 
 	return plan
 }

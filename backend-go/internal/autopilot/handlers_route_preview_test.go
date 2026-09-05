@@ -49,6 +49,7 @@ func TestRoutePreview_ExtractsFeaturesFromMessagesBody(t *testing.T) {
 		"claude-sonnet-4",
 		"completion",
 		bodyBytes,
+		config.ScenarioRoutingConfig{},
 	)
 
 	if profile.Model != "claude-sonnet-4" {
@@ -95,6 +96,7 @@ func TestRoutePreview_DetectsImageContent(t *testing.T) {
 		"claude-sonnet-4",
 		"completion",
 		bodyBytes,
+		config.ScenarioRoutingConfig{},
 	)
 
 	if !profile.HasImage {
@@ -127,6 +129,7 @@ func TestRoutePreview_DetectsReasoning(t *testing.T) {
 		"claude-sonnet-4",
 		"completion",
 		bodyBytes,
+		config.ScenarioRoutingConfig{},
 	)
 
 	if !profile.ReasoningNeed {
@@ -154,6 +157,7 @@ func TestRoutePreview_GeminiFormat(t *testing.T) {
 		"gemini-2.0-flash",
 		"completion",
 		bodyBytes,
+		config.ScenarioRoutingConfig{},
 	)
 
 	if profile.ChannelKind != "gemini" {
@@ -180,6 +184,7 @@ func TestRoutePreview_ImagesKind(t *testing.T) {
 		"dall-e-3",
 		"image_generation",
 		bodyBytes,
+		config.ScenarioRoutingConfig{},
 	)
 
 	if !profile.ImageGenNeed {
@@ -203,6 +208,7 @@ func TestRoutePreview_VectorsKind(t *testing.T) {
 		"text-embedding-3-small",
 		"embedding",
 		bodyBytes,
+		config.ScenarioRoutingConfig{},
 	)
 
 	if !profile.EmbeddingNeed {
@@ -217,6 +223,7 @@ func TestRoutePreview_EmptyBody(t *testing.T) {
 		"claude-sonnet-4",
 		"completion",
 		[]byte{},
+		config.ScenarioRoutingConfig{},
 	)
 
 	if profile.Model != "claude-sonnet-4" {
@@ -398,16 +405,19 @@ func TestRoutePreview_ConsistencyWithDryRun(t *testing.T) {
 		"claude-sonnet-4",
 		"completion",
 		bodyBytes,
+		config.ScenarioRoutingConfig{},
 	)
 	routePreviewPlan := smartRouter.BuildPlan(&routePreviewProfile)
 
 	// 方式 2：手工构造 DryRunRequest，用相同特征调 BuildPlan
+	//（Complexity/DomainHints 与 preview 同源：都来自 AnalyzePromptSignals）
 	dryRunProfile := BuildRequestProfile(RequestProfileFeatures{
 		Model:         "claude-sonnet-4",
 		ChannelKind:   "messages",
 		Operation:     "completion",
 		HasImage:      routePreviewProfile.HasImage,
 		EstTokens:     routePreviewProfile.EstTokens,
+		Complexity:    routePreviewProfile.Complexity,
 		VisionNeed:    routePreviewProfile.VisionNeed,
 		ToolUseNeed:   routePreviewProfile.ToolUseNeed,
 		ReasoningNeed: routePreviewProfile.ReasoningNeed,

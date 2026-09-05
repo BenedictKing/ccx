@@ -1,6 +1,7 @@
 package autopilot
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -69,7 +70,11 @@ type RoutePreviewResponse struct {
 
 // handleRoutePreview POST /api/autopilot/route-preview。
 // 接受原始请求体 + 入站协议，自动提取特征后进 SmartRouter + scheduler 两层预演，
-// 返回 RoutingPlan + 逐阶段淘汰原因。零上游请求，请求体仅内存态。
+// 返回 RoutingPlan + 逐阶段淘汰原因。零上游请求，请求体仅内存态，不产生 trace。
+//
+// 错误契约（route-preview.md）：外层/嵌套 body 非法或不支持 channelKind → 400；
+// SmartRouter 未初始化 → 503（与 /api/smart-routing/diagnose 一致）；
+// kill switch → 200 + message，跳过 scheduler 预演（不展示不会真实生效的选择）。
 func handleRoutePreview(smartRouter *SmartRouter, sch *scheduler.ChannelScheduler) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req RoutePreviewRequest
@@ -79,6 +84,23 @@ func handleRoutePreview(smartRouter *SmartRouter, sch *scheduler.ChannelSchedule
 		}
 
 		kind := scheduler.ChannelKind(strings.TrimSpace(req.ChannelKind))
+		if !isValidRoutePreviewKind(kind) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "不支持的 channelKind: " + req.ChannelKind + "（合法值: messages | chat | responses | gemini | images | vectors）"})
+			return
+		}
+
+		// 嵌套 body 必须是合法的 JSON 对象（协议请求体都是对象形态）。
+		// json.RawMessage 绑定字符串字面量也能通过外层校验，这里显式拦截。
+		if trimmed := bytes.TrimSpace(req.Body); len(trimmed) > 0 && (trimmed[0] != '{' || !json.Valid(trimmed)) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "body 必须是合法的 JSON 对象"})
+			return
+		}
+
+		if smartRouter == nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "SmartRouter 未初始化"})
+			return
+		}
+
 		bodyBytes := []byte(req.Body)
 
 		// 从 body 中解析 model 作为兜底（请求显式 model 优先）
@@ -90,31 +112,50 @@ func handleRoutePreview(smartRouter *SmartRouter, sch *scheduler.ChannelSchedule
 		// 推导 operation
 		operation := normalizeRoutePreviewOperation(kind, strings.TrimSpace(req.Operation), c)
 
+		// 全局场景配置与真实入口同源（R1）：真实路径经 scenarioConfigProvider
+		// 读 ConfigManager，预演直接从 SmartRouter 的 ConfigManager 读取，
+		// 两条路径拿到同一份 ScenarioRoutingConfig。
+		scenarioCfg := smartRouter.ConfigManager().GetConfig().AutopilotRouting.Scenario
+
 		// 从原始请求体自动提取特征 → RequestProfile
-		profile := buildRoutePreviewProfile(c, kind, model, operation, bodyBytes)
+		profile := buildRoutePreviewProfile(c, kind, model, operation, bodyBytes, scenarioCfg)
 
 		// ── SmartRouter 层预演 ──
+		// RecordTrace=false：预演是无副作用操作，不得写 trace 污染统计
+		//（既有 dry-run API 保持记录 trace 的原契约）。
 		var plan *RoutingPlan
 		var mode string
 		var message string
 
-		if smartRouter == nil {
-			message = "SmartRouter 未初始化"
-		} else {
-			cfg := smartRouter.ConfigManager().GetConfig()
-			autopilotCfg := cfg.AutopilotRouting
-			mode = string(autopilotCfg.EffectiveRoutingMode())
+		cfg := smartRouter.ConfigManager().GetConfig()
+		autopilotCfg := cfg.AutopilotRouting
+		mode = string(autopilotCfg.EffectiveRoutingMode())
 
-			if autopilotCfg.KillSwitch {
-				message = "智能路由已关闭（mode=off 或 kill switch 已启用）"
-			} else {
-				plan = smartRouter.BuildPlan(&profile)
-			}
+		killSwitched := autopilotCfg.KillSwitch
+		if killSwitched {
+			message = "智能路由已关闭（mode=off 或 kill switch 已启用）"
+		} else {
+			plan = smartRouter.BuildPlanWithOptions(&profile, BuildPlanOptions{RecordTrace: false})
 		}
 
 		// ── Scheduler 层预演（DryRun=true，零上游请求、不更新状态）──
+		// kill switch 时跳过：SmartRouter 已停用，调度层预演展示的选择
+		// 不会真实生效；scheduler 缺失时给出结构化降级原因而非静默缺省。
 		var schedDiag *RoutePreviewSchedulerDiagnose
-		if sch != nil {
+		switch {
+		case killSwitched:
+			schedDiag = &RoutePreviewSchedulerDiagnose{
+				OK:     false,
+				Kind:   kind,
+				Reason: "智能路由已关闭，跳过调度层预演（避免展示不会真实生效的选择）",
+			}
+		case sch == nil:
+			schedDiag = &RoutePreviewSchedulerDiagnose{
+				OK:     false,
+				Kind:   kind,
+				Reason: "scheduler 不可用，未执行调度层预演",
+			}
+		default:
 			selectionCtx := ContextWithRequestProfile(c.Request.Context(), profile)
 			result, err := sch.SelectChannelWithOptions(selectionCtx, scheduler.SelectionOptions{
 				Kind:            kind,
@@ -165,15 +206,30 @@ func handleRoutePreview(smartRouter *SmartRouter, sch *scheduler.ChannelSchedule
 	}
 }
 
+// isValidRoutePreviewKind 校验入站协议类型是否受支持。
+// 不支持的 kind 直接 400，而不是退化为 messages 语义。
+func isValidRoutePreviewKind(kind scheduler.ChannelKind) bool {
+	switch kind {
+	case scheduler.ChannelKindMessages, scheduler.ChannelKindChat,
+		scheduler.ChannelKindResponses, scheduler.ChannelKindGemini,
+		scheduler.ChannelKindImages, scheduler.ChannelKindVectors:
+		return true
+	default:
+		return false
+	}
+}
+
 // buildRoutePreviewProfile 从原始请求体 + 元数据构造 RequestProfile。
-// 特征提取口径与 handlers/common/AttachAutopilotRequestProfile 对齐，
-// 但因包依赖关系（autopilot 不能 import handlers/common）在此独立实现。
+// 特征提取口径与 handlers/common/AttachAutopilotRequestProfile 对齐：
+// prompt 信号分析共用 autopilot.AnalyzePromptSignals，全局场景配置由
+// handler 从 ConfigManager 读取传入（与真实路径的 scenarioConfigProvider 同源）。
 func buildRoutePreviewProfile(
 	c *gin.Context,
 	kind scheduler.ChannelKind,
 	model string,
 	operation string,
 	bodyBytes []byte,
+	scenarioCfg config.ScenarioRoutingConfig,
 ) RequestProfile {
 	agentCtx := utils.ExtractAgentContext(c, bodyBytes)
 	agentRole := agentCtx.AgentRole
@@ -187,20 +243,13 @@ func buildRoutePreviewProfile(
 	toolUseNeed := routePreviewUsesTools(parsedBody)
 	reasoningNeed := routePreviewNeedsReasoning(parsedBody)
 	severityClass := SeverityClassRequestShape(bodyBytes)
+	promptAnalysis := AnalyzePromptSignals(parsedBody, routePreviewExplicitDomain(c))
 
-	var scenarioCfg config.ScenarioRoutingConfig
 	routingScenarioHeader := ""
 	costPreferenceHeader := ""
 	if c != nil {
 		routingScenarioHeader = c.GetHeader("X-Routing-Scenario")
 		costPreferenceHeader = c.GetHeader("X-Cost-Preference")
-		// 注意：这里不读全局 ScenarioCfg，因为需要 ConfigManager；
-		// BuildRequestProfile 内部 ScenarioCfg 零值时仅请求头声明的场景可生效。
-		// 这与真实路径有细微差别（真实路径有全局场景配置），但预演端点
-		// 作为管理工具主要用于特征核对与预演，影响有限。
-		// SmartRouter.BuildPlan 会用它自己的 ConfigManager 重新计算
-		// 场景解析（见 BuildPlan 内的 ResolveScenarioPreset），所以这里
-		// 的 ScenarioCfg 不影响最终 BuildPlan 结果。
 	}
 
 	return BuildRequestProfile(RequestProfileFeatures{
@@ -212,6 +261,7 @@ func buildRoutePreviewProfile(
 		HasImage:              hasImage,
 		HasDocument:           hasDocument,
 		EstTokens:             estTokens,
+		Complexity:            promptAnalysis.Complexity,
 		ContextNeed:           estTokens,
 		VisionNeed:            hasImage,
 		DocumentNeed:          hasDocument,
@@ -220,12 +270,29 @@ func buildRoutePreviewProfile(
 		ToolUseNeed:           toolUseNeed,
 		ReasoningNeed:         reasoningNeed,
 		SeverityClassNeed:     severityClass,
+		EmbeddingDimension:    extractRoutePreviewEmbeddingDimension(kind, bodyBytes),
 		ClientEffortRaw:       extractRoutePreviewClientEffort(bodyBytes, string(kind)),
 		ClientEffortExplicit:  routePreviewHasExplicitEffort(bodyBytes, string(kind)),
 		RoutingScenarioHeader: routingScenarioHeader,
 		CostPreferenceHeader:  costPreferenceHeader,
 		ScenarioCfg:           scenarioCfg,
 	})
+}
+
+// routePreviewExplicitDomain 读取请求头 X-Task-Domain（与真实入口一致）。
+func routePreviewExplicitDomain(c *gin.Context) string {
+	if c == nil {
+		return ""
+	}
+	return c.GetHeader("X-Task-Domain")
+}
+
+// extractRoutePreviewEmbeddingDimension 从 vectors 请求体解析 dimensions 字段。
+func extractRoutePreviewEmbeddingDimension(kind scheduler.ChannelKind, bodyBytes []byte) int {
+	if kind != scheduler.ChannelKindVectors || len(bodyBytes) == 0 {
+		return 0
+	}
+	return int(gjson.GetBytes(bodyBytes, "dimensions").Int())
 }
 
 // ── 辅助函数：特征提取 ──
