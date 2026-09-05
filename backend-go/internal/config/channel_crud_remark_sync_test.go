@@ -57,10 +57,10 @@ func TestSingleCardRemarkClearSyncsWholeGroup(t *testing.T) {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
 	checks := map[string]string{
-		"messages 卡":   cm.config.Upstream[0].Remark,
-		"chat 兄弟卡":    cm.config.ChatUpstream[0].Remark,
+		"messages 卡":    cm.config.Upstream[0].Remark,
+		"chat 兄弟卡":      cm.config.ChatUpstream[0].Remark,
 		"responses 兄弟卡": cm.config.ResponsesUpstream[0].Remark,
-		"逻辑渠道":         cm.config.LogicalChannels[0].Remark,
+		"逻辑渠道":          cm.config.LogicalChannels[0].Remark,
 	}
 	for label, got := range checks {
 		if strings.TrimSpace(got) != "" {

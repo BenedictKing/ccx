@@ -147,12 +147,12 @@ func (c *ChannelCompatCache) LearnedContextWindow(channelUID, kind, model string
 
 // EffectiveContextWindow 合成该渠道×协议×模型的有效输入窗口：
 //
-//	eff = min(declared上限, max(注册表窗口, 实证下界, models API 声明))
+//		eff = min(declared上限, max(注册表窗口, 实证下界, models API 声明))
 //
-//   - 无任何学习证据时等于注册表窗口（现行为，fail-open）；
-//   - 实证/声明顶开过期偏低的注册表（渐进扩容自动跟进）；
-//   - 实测 400 学到的收紧上限（渠道×模型，跨 Key 取最小）永远压得住放宽证据
-//     （渠道真降级时 declared 会重新学到，压过陈旧的 proven）。
+//	  - 无任何学习证据时等于注册表窗口（现行为，fail-open）；
+//	  - 实证/声明顶开过期偏低的注册表（渐进扩容自动跟进）；
+//	  - 实测 400 学到的收紧上限（渠道×模型，跨 Key 取最小）永远压得住放宽证据
+//	    （渠道真降级时 declared 会重新学到，压过陈旧的 proven）。
 func (c *ChannelCompatCache) EffectiveContextWindow(channelUID, kind, model string, registryWindow int) int {
 	proven, modelsAPI := c.LearnedContextWindow(channelUID, kind, model)
 	eff := registryWindow
