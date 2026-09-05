@@ -64,11 +64,19 @@ func TestResolveAgentModelProfile_GPT6AstraBuiltins(t *testing.T) {
 			if profile.Profile.MaxOutputTokens != 128000 {
 				t.Fatalf("MaxOutputTokens = %d, want 128000", profile.Profile.MaxOutputTokens)
 			}
-			if !containsString(profile.Profile.ReasoningEfforts, "max") {
-				t.Fatalf("ReasoningEfforts = %v, want max", profile.Profile.ReasoningEfforts)
+			wantEfforts := []string{"low", "medium", "high", "xhigh", "max"}
+			if len(profile.Profile.ReasoningEfforts) != len(wantEfforts) {
+				t.Fatalf("ReasoningEfforts = %v, want exactly %v", profile.Profile.ReasoningEfforts, wantEfforts)
 			}
-			if !containsString(profile.Profile.ReasoningEfforts, "none") {
-				t.Fatalf("ReasoningEfforts = %v, want none", profile.Profile.ReasoningEfforts)
+			for _, effort := range wantEfforts {
+				if !containsString(profile.Profile.ReasoningEfforts, effort) {
+					t.Fatalf("ReasoningEfforts = %v, want %s", profile.Profile.ReasoningEfforts, effort)
+				}
+			}
+			for _, unsupported := range []string{"none", "minimal"} {
+				if containsString(profile.Profile.ReasoningEfforts, unsupported) {
+					t.Fatalf("ReasoningEfforts = %v, official docs only support low/medium/high/xhigh/max", profile.Profile.ReasoningEfforts)
+				}
 			}
 		})
 	}

@@ -672,12 +672,14 @@
       ],
       "provider": "openai",
       "displayName": "GPT-6 Astra",
-      "description": "OpenAI frontier reasoning model with SOTA capabilities across computer use, coding, cybersecurity, and science. Context window 1.05M tokens, max output 128K tokens.",
+      "description": "OpenAI frontier reasoning model with SOTA capabilities across computer use, coding, cybersecurity, and science. Context window 1.05M tokens, max output 128K tokens. Knowledge cutoff Apr 30, 2026.",
       "contextWindowTokens": 1050000,
+      "contextWindowTiers": [
+        272000,
+        1050000
+      ],
       "maxOutputTokens": 128000,
       "reasoningEfforts": [
-        "none",
-        "minimal",
         "low",
         "medium",
         "high",
@@ -693,6 +695,7 @@
         "webSearch": true
       },
       "sources": [
+        "https://developers.openai.com/api/docs/models/gpt-6-astra",
         "https://openai.com/index/gpt-6-astra/"
       ],
       "pricing": {
@@ -700,7 +703,24 @@
         "currency": "USD",
         "inputCacheMissPrice": 10,
         "outputPrice": 50,
-        "inputCacheHitPrice": 1
+        "inputCacheHitPrice": 1,
+        "tiers": [
+          {
+            "label": "short_context",
+            "inputTokensUpTo": 272000,
+            "inputCacheHitPrice": 1,
+            "inputCacheMissPrice": 10,
+            "outputPrice": 50
+          },
+          {
+            "label": "long_context",
+            "inputTokensAbove": 272000,
+            "inputTokensUpTo": 1050000,
+            "inputCacheHitPrice": 2,
+            "inputCacheMissPrice": 20,
+            "outputPrice": 75
+          }
+        ]
       }
     },
     {
