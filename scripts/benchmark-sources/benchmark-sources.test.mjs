@@ -24,6 +24,7 @@ import {
   collectUnmappedTableModels,
   toBenchmarkEvidence as toDradarEvidence,
   buildEffortEvidences,
+  effortCoverageSufficient,
   DRADAR_MODEL_MAP,
 } from './dradar.mjs'
 import { extractProfiles as extractBenchlmProfiles } from './benchlm.mjs'
@@ -354,8 +355,26 @@ test('CodexRadar leaderboard aggregation uses strict cell majority', () => {
     passed: 6,
     cells: 3,
     cells_passed: 2,
+    taskIds: ['task-a', 'task-b', 'task-c'],
     pass_rate: 2 / 3,
   }])
+  // 分母按全表任务计（含未映射模型的 task-d）
+  assert.equal(leaderboard.totalTasks, 4)
+})
+
+test('dradar task-coverage gate follows official MIN_BENCHMARK_TASK_COVERAGE', () => {
+  // 官网口径：单模型×effort 覆盖去重任务数 / 全表任务数 >= 0.6 才足额
+  assert.equal(effortCoverageSufficient({ taskIds: ['a', 'b', 'c'] }, 5), true)   // 3/5 = 0.6
+  assert.equal(effortCoverageSufficient({ taskIds: ['a', 'b'] }, 5), false)       // 2/5 < 0.6
+  assert.equal(effortCoverageSufficient({ taskIds: ['a'] }, 0), true)             // total=0 官方判非不足
+  assert.equal(effortCoverageSufficient({}, 5), false)                            // 无 taskIds 视为 0 覆盖
+  // tasks 清单优先作分母；缺失时回退 cells 键去重
+  const withTasks = extractLeaderboardFromTable({
+    tasks: [{ id: 't1' }, { id: 't2' }, { id: 't3' }, { id: 't4' }, { id: 't5' }, { id: 't6' }, { id: 't7' }, { id: 't8' }, { id: 't9' }, { id: 't10' }],
+    cells: { 't1|m|low': { n: 1, p: 1 }, 't2|m|low': { n: 1, p: 0 }, 't3|m|low': { n: 1, p: 1 }, 't4|m|low': { n: 1, p: 1 }, 't5|m|low': { n: 1, p: 0 }, 't6|m|low': { n: 1, p: 1 } },
+  }, { m: 'm' })
+  assert.equal(withTasks.totalTasks, 10)
+  assert.equal(effortCoverageSufficient(withTasks.models[0], withTasks.totalTasks), true) // 6/10
 })
 
 test('dradar extractCostData aggregates mean and median cost per model x effort', () => {

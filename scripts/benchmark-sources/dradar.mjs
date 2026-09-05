@@ -250,6 +250,7 @@ export function extractBestPerModel(data, modelMap) {
       graded: m.graded,
       cells: m.cells,
       cellsPassed: m.cells_passed,
+      taskIds: m.taskIds || [],
     }
 
     // 更新最佳 effort
@@ -271,12 +272,16 @@ export function extractBestPerModel(data, modelMap) {
  */
 export function extractLeaderboardFromTable(data, modelMap) {
   const aggregates = new Map()
+  const allTaskIds = new Set()
   for (const [key, cell] of Object.entries(data?.cells || {})) {
     const [taskId, dradarModel, effort] = key.split('|')
     const canonical = modelMap[dradarModel]
     const graded = Number(cell?.n)
     const passed = Number(cell?.p)
-    if (!taskId || !canonical || !effort || !Number.isFinite(graded) || graded <= 0) continue
+    if (!taskId || !effort || !Number.isFinite(graded)) continue
+    // 覆盖率分母按全表任务计（含未映射模型），与官网 benchmarkTaskCoverage 一致
+    allTaskIds.add(taskId)
+    if (!canonical || graded <= 0) continue
 
     const aggregateKey = `${canonical}|${effort}`
     if (!aggregates.has(aggregateKey)) {
@@ -287,21 +292,40 @@ export function extractLeaderboardFromTable(data, modelMap) {
         passed: 0,
         cells: 0,
         cells_passed: 0,
+        taskIds: new Set(),
       })
     }
     const aggregate = aggregates.get(aggregateKey)
     aggregate.graded += graded
     aggregate.passed += Number.isFinite(passed) ? passed : 0
     aggregate.cells += 1
+    aggregate.taskIds.add(taskId)
     if (Number.isFinite(passed) && passed * 2 > graded) aggregate.cells_passed += 1
   }
 
   return {
     models: [...aggregates.values()].map(aggregate => ({
       ...aggregate,
+      taskIds: [...aggregate.taskIds],
       pass_rate: aggregate.cells > 0 ? aggregate.cells_passed / aggregate.cells : 0,
     })),
+    // 官方口径分母是全表任务清单（含尚无判分的任务）；cells 键集合仅作缺 tasks 字段时的回退
+    totalTasks: Array.isArray(data?.tasks) && data.tasks.length > 0 ? data.tasks.length : allTaskIds.size,
   }
+}
+
+/**
+ * 官网 MIN_BENCHMARK_TASK_COVERAGE = 0.6（benchmarkTaskCoverage）：
+ * 单模型×effort 档覆盖的去重任务数低于全表任务数的 60% 即「数据不足」，
+ * 官网对该档标 ⚠；采集侧同样不产出其分数，避免小样本档污染选型证据。
+ * total=0 时官方判 insufficient=false，此处保持一致（实际无数据行可判）。
+ */
+export const DRADAR_MIN_TASK_COVERAGE = 0.6
+
+export function effortCoverageSufficient(cell, totalTasks, minCoverage = DRADAR_MIN_TASK_COVERAGE) {
+  if (!totalTasks || totalTasks <= 0) return true
+  const covered = Array.isArray(cell?.taskIds) ? cell.taskIds.length : 0
+  return covered / totalTasks >= minCoverage
 }
 
 /**
@@ -469,6 +493,14 @@ export async function fetchDradarData(modelMap) {
       }
 
       for (const { effort, cell, evidence } of buildEffortEvidences(modelData, Object.values(bestPerModel), costData)) {
+        if (!effortCoverageSufficient(cell, leaderboard.totalTasks)) {
+          const covered = Array.isArray(cell?.taskIds) ? cell.taskIds.length : 0
+          console.warn(
+            `[dradar] [INSUFFICIENT] ${canonical} ${effort}: 任务覆盖 ${covered}/${leaderboard.totalTasks} ` +
+              `< ${DRADAR_MIN_TASK_COVERAGE * 100}%，证据丢弃`,
+          )
+          continue
+        }
         result[canonical].benchmarkEvidence.push(evidence)
         result[canonical].efforts[effort] = cell
       }
