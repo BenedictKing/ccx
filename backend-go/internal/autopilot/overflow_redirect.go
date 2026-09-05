@@ -32,18 +32,45 @@ func (m *Manager) OverflowRedirectCandidates(ctx context.Context, requestKind sc
 	}
 	cfg := m.cfgManager.GetConfig()
 
+	// 显式有序协议切片替换 map 遍历：请求协议优先，其后按固定协议顺序，
+	// 保证对同一配置重复运行的结果顺序一致（map 遍历顺序随机，会让同名候选
+	// 的取舍受哈希布局影响）。
+	protocolOrder := []scheduler.ChannelKind{
+		scheduler.ChannelKindResponses,
+		scheduler.ChannelKindChat,
+		scheduler.ChannelKindMessages,
+		scheduler.ChannelKindGemini,
+	}
+	orderedKinds := make([]scheduler.ChannelKind, 0, len(protocolOrder))
+	for _, k := range protocolOrder {
+		if k == requestKind {
+			orderedKinds = append(orderedKinds, k)
+		}
+	}
+	for _, k := range protocolOrder {
+		if k != requestKind {
+			orderedKinds = append(orderedKinds, k)
+		}
+	}
+
 	type protocolPool struct {
 		kind     scheduler.ChannelKind
 		upstream config.UpstreamConfig
 		index    int
 	}
 	var pools []protocolPool
-	for kind, upstreams := range map[scheduler.ChannelKind][]config.UpstreamConfig{
-		scheduler.ChannelKindResponses: cfg.ResponsesUpstream,
-		scheduler.ChannelKindChat:      cfg.ChatUpstream,
-		scheduler.ChannelKindMessages:  cfg.Upstream,
-		scheduler.ChannelKindGemini:    cfg.GeminiUpstream,
-	} {
+	for _, kind := range orderedKinds {
+		var upstreams []config.UpstreamConfig
+		switch kind {
+		case scheduler.ChannelKindResponses:
+			upstreams = cfg.ResponsesUpstream
+		case scheduler.ChannelKindChat:
+			upstreams = cfg.ChatUpstream
+		case scheduler.ChannelKindMessages:
+			upstreams = cfg.Upstream
+		case scheduler.ChannelKindGemini:
+			upstreams = cfg.GeminiUpstream
+		}
 		for i := range upstreams {
 			if upstreams[i].ChannelUID != "" {
 				pools = append(pools, protocolPool{kind: kind, upstream: upstreams[i], index: i})
@@ -59,25 +86,45 @@ func (m *Manager) OverflowRedirectCandidates(ctx context.Context, requestKind sc
 		tier   QualityTier
 		native bool
 	}
+	// 候选唯一键 = 物理路由 + 模型：同一物理渠道的同一画像只保留一条，
+	// 同一模型在不同物理渠道上各保留一条（物理渠道间可用性/Key 独立，
+	// 按协议+模型去重会丢掉可用渠道，最终可用性由 fanout 上限裁剪）。
+	type candidateKey struct {
+		route scheduler.ChannelRouteKey
+		model string
+	}
 	best := make([]redirectCandidate, 0, overflowRedirectFanout)
-	seen := make(map[string]bool)
+	seen := make(map[candidateKey]bool)
 	for _, pool := range pools {
 		for _, p := range m.modelProfileStore.ListActiveByChannel(pool.upstream.ChannelUID) {
-			if !p.ProbeSuccess || seen[string(pool.kind)+"|"+p.ModelID] {
+			if !p.ProbeSuccess {
 				continue
 			}
 			// 同名模型刚被证明装不下，重定向到它没有意义
 			if p.ModelID == requestModel {
 				continue
 			}
-			seen[string(pool.kind)+"|"+p.ModelID] = true
+			// 协议画像匹配：ListActiveByChannel 返回渠道下全部协议的画像，
+			// 执行路由按 pool.kind 构造，窗口按画像自身协议查询，两者必须一致，
+			// 否则会出现"以 chat 路由执行 responses 窗口口径"的错配候选。
+			if p.ChannelKind != string(pool.kind) {
+				continue
+			}
 			window := effectiveContextWindow(p.ChannelUID, p.ChannelKind, p.ModelID, p.ContextTokens)
 			if window < inputTokens {
 				continue
 			}
+			route := scheduler.ChannelRouteRef{Kind: string(pool.kind), Index: pool.index, ChannelUID: pool.upstream.ChannelUID}
+			key := candidateKey{route: route.Key(), model: p.ModelID}
+			if seen[key] {
+				continue
+			}
+			// 全部检查通过后才写 seen：窗口不足等被拒的组合不得占用去重名额，
+			// 否则第一个窗口不足的渠道会把其他渠道的同名模型也挡在门外。
+			seen[key] = true
 			best = append(best, redirectCandidate{
 				info: scheduler.ChannelInfo{
-					Route:            scheduler.ChannelRouteRef{Kind: string(pool.kind), Index: pool.index, ChannelUID: pool.upstream.ChannelUID},
+					Route:            route,
 					Index:            pool.index,
 					Name:             pool.upstream.Name,
 					Priority:         pool.index,
@@ -94,7 +141,7 @@ func (m *Manager) OverflowRedirectCandidates(ctx context.Context, requestKind sc
 		return nil
 	}
 
-	// 同协议优先，其后质量档降序、名称稳定序兜底
+	// 同协议优先，其后质量档降序、稳定兜底键（名称、路由身份、模型）
 	sort.SliceStable(best, func(i, j int) bool {
 		if best[i].native != best[j].native {
 			return best[i].native
@@ -102,7 +149,19 @@ func (m *Manager) OverflowRedirectCandidates(ctx context.Context, requestKind sc
 		if qualityTierRank(best[i].tier) != qualityTierRank(best[j].tier) {
 			return qualityTierRank(best[i].tier) > qualityTierRank(best[j].tier)
 		}
-		return best[i].info.Name < best[j].info.Name
+		if best[i].info.Name != best[j].info.Name {
+			return best[i].info.Name < best[j].info.Name
+		}
+		if best[i].info.Route.Kind != best[j].info.Route.Kind {
+			return best[i].info.Route.Kind < best[j].info.Route.Kind
+		}
+		if best[i].info.Route.Index != best[j].info.Route.Index {
+			return best[i].info.Route.Index < best[j].info.Route.Index
+		}
+		if best[i].info.Route.ChannelUID != best[j].info.Route.ChannelUID {
+			return best[i].info.Route.ChannelUID < best[j].info.Route.ChannelUID
+		}
+		return best[i].info.ActualModel < best[j].info.ActualModel
 	})
 	if len(best) > overflowRedirectFanout {
 		best = best[:overflowRedirectFanout]

@@ -45,8 +45,11 @@ func modelsAPIWindowFresh(state *ContextWindowLearnedState, now time.Time) bool 
 }
 
 // RecordContextWindowProven 记录一次成功请求实证的输入承载量。
-// 下界棘轮：只在新值更大时更新（宁大勿小），返回是否发生更新。
-// 调用方：handlers/common 的成功路径（handleSuccess 无错误且 usage 有输入量）。
+// 下界棘轮：证据未过期时只在新值更大时更新（宁大勿小）；证据过期
+// （ProvenAt 距今超过 contextWindowLearnedTTL）后允许以本次成功值重新起算，
+// 否则 7 天后一个无法重新证明的历史高值会让放宽证据永久失效。
+// 返回是否发生更新。调用方：handlers/common 的成功路径（handleSuccess 无错误
+// 且 usage 有输入量）。
 func (c *ChannelCompatCache) RecordContextWindowProven(channelUID, kind, model string, inputTokens int, now time.Time) bool {
 	if channelUID == "" || model == "" || inputTokens <= 0 {
 		return false
@@ -62,12 +65,20 @@ func (c *ChannelCompatCache) RecordContextWindowProven(channelUID, kind, model s
 		state = &ContextWindowLearnedState{}
 		c.contextWindows[key] = state
 	}
-	updated := inputTokens > state.ProvenInputTokens || state.ProvenAt.IsZero()
-	if updated {
-		if inputTokens > state.ProvenInputTokens {
-			state.ProvenInputTokens = inputTokens
-		}
+	updated := false
+	switch {
+	case state.ProvenAt.IsZero() || !contextWindowLearnedFresh(state, now):
+		// 首次记录或证据已过期：以本次成功值重建棘轮
+		//（不保留一个已无法重新证明的历史高值）
+		state.ProvenInputTokens = inputTokens
 		state.ProvenAt = now
+		updated = true
+	case inputTokens > state.ProvenInputTokens:
+		state.ProvenInputTokens = inputTokens
+		state.ProvenAt = now
+		updated = true
+	}
+	if updated {
 		c.dirty = true
 	}
 	c.mu.Unlock()

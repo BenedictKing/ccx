@@ -48,6 +48,43 @@ func TestRecordContextWindowProvenTTL(t *testing.T) {
 	}
 }
 
+// TestRecordContextWindowProvenRelearnAfterExpiry 过期实证必须可以重新学习（O4）：
+// 未过期时较小成功值不降棘轮；过期后较小成功值以本次值重新起算，
+// 不保留一个已无法重新证明的历史高值。
+func TestRecordContextWindowProvenRelearnAfterExpiry(t *testing.T) {
+	cache := newTestContextWindowCache()
+	base := time.Now()
+
+	// 建立高棘轮（500K），未过期时 200K 成功不得下调
+	cache.RecordContextWindowProven("ch_c", "responses", "m", 500_000, base)
+	if updated := cache.RecordContextWindowProven("ch_c", "responses", "m", 200_000, base.Add(time.Hour)); updated {
+		t.Fatal("未过期时较小成功值不应触发更新")
+	}
+	proven, _ := cache.LearnedContextWindow("ch_c", "responses", "m")
+	if proven != 500_000 {
+		t.Fatalf("未过期时棘轮应保持 500000, got %d", proven)
+	}
+
+	// 过期后较小成功值重新起算棘轮与新鲜度
+	afterExpiry := base.Add(contextWindowLearnedTTL + time.Minute)
+	if updated := cache.RecordContextWindowProven("ch_c", "responses", "m", 200_000, afterExpiry); !updated {
+		t.Fatal("过期后的成功实证应允许重新学习")
+	}
+	proven, _ = cache.LearnedContextWindow("ch_c", "responses", "m")
+	if proven != 200_000 {
+		t.Fatalf("过期重学习后棘轮应以本次成功值起算, got %d, want 200000", proven)
+	}
+
+	// 重学习后的棘轮恢复正常只升不降语义
+	if updated := cache.RecordContextWindowProven("ch_c", "responses", "m", 100_000, afterExpiry.Add(time.Minute)); updated {
+		t.Fatal("重学习后未过期时较小成功值不应再触发更新")
+	}
+	proven, _ = cache.LearnedContextWindow("ch_c", "responses", "m")
+	if proven != 200_000 {
+		t.Fatalf("重学习后棘轮应保持 200000, got %d", proven)
+	}
+}
+
 func TestEffectiveContextWindowFormula(t *testing.T) {
 	cases := []struct {
 		name      string

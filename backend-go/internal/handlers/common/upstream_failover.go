@@ -515,7 +515,6 @@ func TryUpstreamWithAllKeys(
 	if routedLogStore := channelScheduler.GetChannelLogStoreForRoute(executionRoute); routedLogStore != nil {
 		channelLogStore = routedLogStore
 	}
-	modelCircuit := modelCircuitChecker(metricsManager, model)
 	keyAutoWeight := keyAutoWeightFactor(metricsManager)
 
 	metricsServiceType := scheduler.NormalizedMetricsServiceType(executionKind, upstream.ServiceType)
@@ -540,14 +539,23 @@ func TryUpstreamWithAllKeys(
 
 	// 协议联邦：调度器已按 sibling 执行协议解析出真实模型，先落到请求体，
 	// 后续的能力判断、参数约束与 provider 请求构造都以该模型为准。
+	// originalModel 固定为改写前的请求模型：溢出重定向的后处理（密文剥离、
+	// 回显头）以"发生了跨模型改写"为触发条件，改写后 model 已等于
+	// executionModel，直接比较会恒假。
+	originalModel := model
 	if tryOpts.executionModel != "" && tryOpts.executionModel != model {
-		if rewritten, err := sjson.SetBytes(requestBody, "model", tryOpts.executionModel); err == nil {
-			requestBody = rewritten
-			RestoreRequestBody(c, requestBody)
-			c.Set("requestBodyBytes", requestBody)
-			RequestLogf(c, "[%s-Federation] 请求协议 %s 走执行协议 %s，模型改写: %s -> %s",
-				apiType, kind, executionKind, model, tryOpts.executionModel)
+		rewritten, rewriteErr := sjson.SetBytes(requestBody, "model", tryOpts.executionModel)
+		if rewriteErr != nil {
+			// 改写失败不得静默更新运行时模型：请求体与能力判断必须使用同一模型，
+			// 否则会以上游不认识的模型构造请求。直接返回构建错误，交由上层处理。
+			RequestLogf(c, "[%s-Federation] 请求体模型改写失败: %v", apiType, rewriteErr)
+			return false, "", 0, nil, nil, fmt.Errorf("execution model rewrite failed: %w", rewriteErr)
 		}
+		requestBody = rewritten
+		RestoreRequestBody(c, requestBody)
+		c.Set("requestBodyBytes", requestBody)
+		RequestLogf(c, "[%s-Federation] 请求协议 %s 走执行协议 %s，模型改写: %s -> %s",
+			apiType, kind, executionKind, originalModel, tryOpts.executionModel)
 		model = tryOpts.executionModel
 	}
 
@@ -555,7 +563,7 @@ func TryUpstreamWithAllKeys(
 	// 执行模型已在联邦改写中落到请求体，这里补剥离与回显。responses 直连下
 	// 跨模型无法解密历史加密推理，剥离 encrypted_content 保留 summary
 	//（与 chat 转换器口径对齐）；跨协议组合本来就要走转换器，无需剥离。
-	if tryOpts.overflowRedirect && tryOpts.executionModel != "" && tryOpts.executionModel != model {
+	if tryOpts.overflowRedirect && tryOpts.executionModel != "" && tryOpts.executionModel != originalModel {
 		if executionKind == scheduler.ChannelKindResponses {
 			if stripped := stripResponsesEncryptedContent(requestBody); string(stripped) != string(requestBody) {
 				requestBody = stripped
@@ -563,10 +571,16 @@ func TryUpstreamWithAllKeys(
 				c.Set("requestBodyBytes", requestBody)
 			}
 		}
-		c.Header("X-CCX-Model-Redirect", model+" -> "+tryOpts.executionModel)
+		c.Header("X-CCX-Model-Redirect", originalModel+" -> "+tryOpts.executionModel)
 		RequestLogf(c, "[%s-Overflow] 上下文溢出重定向生效: %s -> %s（执行协议 %s）",
-			apiType, model, tryOpts.executionModel, executionKind)
+			apiType, originalModel, tryOpts.executionModel, executionKind)
 	}
+
+	// 渠道-模型熔断的模型键绑定改写后的执行模型：跨模型执行（联邦 sibling/
+	// 溢出重定向）时失败记账按执行模型写入（下方 recordModelCircuitFailure
+	// 传的 model 已是改写后值），读侧闭包若固定原始模型会错放或错杀具体 Key。
+	// 普通请求 model 未被改写，行为与固定原始模型一致。
+	modelCircuit := modelCircuitChecker(metricsManager, model)
 
 	// 五元组调度 pin 的明文 key：身份反查一次（key 已被移除/轮换时为空 = 不锁定）。
 	pinnedAPIKey := autopilot.ResolvePinnedAPIKey(upstream, tryOpts.executionKeyIdentity)
@@ -2244,9 +2258,12 @@ func recordModelCircuitGlobal(c *gin.Context, metricsManager *metrics.MetricsMan
 // 配额/账号限流（已有 cooldown 与 scope 冷却机制）、内容审核（换渠道不改变请求内容）、
 // 客户端取消、以及 RecordRequestFinalizeIgnored 的中间态重试。
 //
-// model 必须传客户端请求的原始模型，不要改用 attemptModel / redirectedModel：
-// 读侧（scheduler 渠道级过滤、keypool Key 级过滤）都以原始模型为键，
-// 写读不一致会让熔断在 AutoManaged 渠道上完全失效。详见 modelCircuitChecker 的说明。
+// model 传本次请求链路的基准模型：手动 RedirectModel / autopilot 映射场景下为
+// 客户端请求的原始模型（读侧 scheduler 渠道级过滤、keypool Key 级过滤都以原始模型
+// 为键，写读不一致会让熔断在 AutoManaged 渠道上完全失效）；联邦 sibling / 溢出
+// 重定向发生跨模型执行时，调用点的 model 已被改写为执行模型，与读侧
+// circuitModel（见 modelCircuitChecker）同源。不要改传 attemptModel /
+// redirectedModel——那两者在手动映射场景与熔断读侧的键不一致。
 func recordModelCircuitFailure(c *gin.Context, metricsManager *metrics.MetricsManager,
 	upstream *config.UpstreamConfig, apiKey, model, errSummary, apiType string) {
 	if metricsManager == nil || upstream == nil || upstream.ChannelUID == "" || model == "" {
@@ -2300,12 +2317,15 @@ func keyAutoWeightFactor(metricsManager *metrics.MetricsManager) keypool.AutoWei
 // 把 apiKey → keyHash 的换算放在这里，让 keypool 无需感知哈希算法。
 // metricsManager 为 nil 时返回 nil（fail-open，不做该项过滤）。
 //
-// circuitModel 是熔断表的模型键，固定取客户端请求的原始模型，**不使用** keypool
-// 传入的模型参数。原因：熔断的读侧散布在三个层次，各自能拿到的最精确模型名不同——
-// scheduler 选渠道时只有原始 model（渠道级 RedirectModel 尚未应用），keypool 选 Key
-// 时有 redirectedModel，而记账发生在 autopilot 映射之后（attemptModel）。三者取值
-// 不一致会让写入的键永远查不到，AutoManaged 渠道上熔断将完全失效。原始 model 是唯一
-// 在三层都可得的标识，也贴合用户视角："这个渠道处理不了我请求的模型"。
+// circuitModel 是熔断表的模型键，取本次请求链路的基准模型：手动 RedirectModel /
+// autopilot 映射场景下即客户端请求的原始模型（此时 model 未被改写）；联邦
+// sibling / 溢出重定向发生跨模型执行时为改写后的执行模型（调用点位于改写之后），
+// 与写侧 recordModelCircuitFailure 传入的 model、scheduler 渠道级过滤使用的
+// ActualModel 三层同键。**不使用** keypool 传入的模型参数。原因：熔断的读侧
+// 散布在三个层次，各自能拿到的最精确模型名不同——scheduler 选渠道时有候选的
+// ActualModel，keypool 选 Key 时有 redirectedModel，而记账发生在 autopilot 映射
+// 之后（attemptModel）。键不一致会让写入的键永远查不到，AutoManaged 渠道上
+// 熔断将完全失效。
 //
 // keypool 侧传入的 model 仍用于 per-key 白名单与 IsKeyModelDisabledNow 判定，
 // 那两个机制按重定向后的模型比较才正确，因此签名保留该参数。
