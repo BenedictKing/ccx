@@ -1581,6 +1581,9 @@ func TryUpstreamWithAllKeys(
 				}
 			}
 			usage, err = handleSuccess(c, resp, upstreamCopy, apiKey, attemptBody)
+			// 上下文窗口自学习（放宽侧）：2xx 完成即实证该渠道×协议×模型可承载本次输入，
+			// 棘轮只升不降。失败/取消/空响应不学习（err 非 nil 时内部直接返回）。
+			MaybeRecordContextWindowProven(c, apiType, upstreamCopy, executionKind, attemptModel, usage, err)
 			if isStream {
 				FinishStreamTimeoutObservation(c)
 				// 工具调用能力自学习（被动侧·成功路径）：强制 tool_choice 的请求 2xx

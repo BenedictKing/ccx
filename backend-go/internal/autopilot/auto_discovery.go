@@ -64,6 +64,10 @@ type EndpointDiscoveryResult struct {
 	// declaredEndpointTypes 是 new-api 系上游在 /v1/models 里声明的 模型 -> 协议集合。
 	// 仅在本轮发现内用于协议探测排序，不持久化：上游会少报，不能当作权威事实。
 	declaredEndpointTypes map[string][]string `json:"-"`
+	// contextWindows 是 /v1/models 元数据自报的 模型 -> 输入窗口（放宽方向声明证据）。
+	// 大多数部署不提供；提供时（OpenRouter/vLLM 系）在 writeProfileForEndpoint 落入
+	// ChannelCompatCache 的学习窗口，供有效窗口合成顶开过低的注册表声明。
+	contextWindows map[string]int `json:"-"`
 }
 
 // DiscoveryTask 单渠道发现任务的运行时状态。
@@ -1151,6 +1155,7 @@ func (r *AutoDiscoveryRunner) probeEndpoint(ctx context.Context, client *http.Cl
 	result.Models = models
 	result.ProtocolOk = true
 	result.declaredEndpointTypes = parseModelsDeclaredEndpointTypes(body)
+	result.contextWindows = config.ParseModelsAPIContextWindows(body)
 	setModelDiscoveryMetadata(&result, ModelDiscoverySourceModelsAPI, "models API 返回实时模型清单")
 
 	return result
@@ -1552,6 +1557,24 @@ func (r *AutoDiscoveryRunner) writeProfileForEndpoint(channelUID string, channel
 			if err := r.ModelProfileStore.Upsert(modelProfile); err != nil {
 				log.Printf("[AutoDiscovery-ModelProfile] 写入模型画像失败 channel=%s model=%s: %v",
 					channelUID, modelID, err)
+			}
+		}
+		// /v1/models 元数据自报的输入窗口落入学习记忆（放宽方向声明证据）。
+		// 仅当上游确实提供该元数据时写入；RecordModelsAPIContextWindow 内部有变化才落盘。
+		if len(ep.contextWindows) > 0 {
+			cache := config.SharedChannelCompatCache()
+			if cache != nil {
+				now := time.Now()
+				recorded := 0
+				for modelID, window := range ep.contextWindows {
+					if cache.RecordModelsAPIContextWindow(channelUID, channelKind, modelID, window, now) {
+						recorded++
+					}
+				}
+				if recorded > 0 {
+					log.Printf("[AutoDiscovery-ContextWindow] channel=%s key=%s 从 models API 收割 %d 个模型输入窗口声明",
+						channelUID, ep.KeyMask, recorded)
+				}
 			}
 		}
 	}

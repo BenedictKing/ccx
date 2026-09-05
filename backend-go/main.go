@@ -1059,6 +1059,18 @@ func main() {
 		log.Printf("[Autopilot-Init] ModelSupportResolver 已注册到调度器")
 	}
 
+	// 上下文有效窗口解析注入：scheduler 的上下文过滤不再只信注册表声明，
+	// 而是合成学习证据（成功实证放宽棘轮 / models API 声明 / 实测 400 收紧）。
+	// 渠道渐进扩容（200K→272K→372K→1M）由此自动跟进，注册表滞后不再锁死长对话。
+	channelScheduler.SetContextWindowResolverProvider(func(channelUID string, kind scheduler.ChannelKind, actualModel string, registryWindow int) int {
+		cache := config.SharedChannelCompatCache()
+		if cache == nil || channelUID == "" || actualModel == "" {
+			return registryWindow
+		}
+		return cache.EffectiveContextWindow(channelUID, string(kind), actualModel, registryWindow)
+	})
+	log.Printf("[Autopilot-Init] ContextWindowResolver 已注册到调度器")
+
 	// 初始化对话追踪器和覆盖管理器
 	conversationTracker := conversation.NewConversationTracker(1*time.Hour, 24*time.Hour, paths.ConversationStatePath)
 

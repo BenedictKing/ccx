@@ -8,26 +8,26 @@ import "github.com/BenedictKing/ccx/internal/config"
 // SmartRouter。两侧通过 config.SharedChannelCompatCache 共享同一实例：autopilot 不能
 // import handlers/common（依赖方向相反），config 是双方共同的下层依赖。
 
-// learnedContextLimitLookup 供测试替换的查询入口。
-// 生产实现读共享兼容性记忆；测试里替换成内存桩，避免依赖落盘状态。
-var learnedContextLimitLookup = func(channelUID, model string) (int, bool) {
+// effectiveContextWindowLookup 供测试替换的有效窗口查询入口。
+// 生产实现读共享兼容性记忆做三源合成；测试里替换成内存桩，避免依赖落盘状态。
+var effectiveContextWindowLookup = func(channelUID, channelKind, model string, registryWindow int) int {
 	cache := config.SharedChannelCompatCache()
 	if cache == nil {
-		return 0, false
+		return registryWindow
 	}
-	return cache.MinContextLimitForChannelModel(channelUID, model)
+	return cache.EffectiveContextWindow(channelUID, channelKind, model, registryWindow)
 }
 
-// learnedContextLimit 返回该渠道-模型在所有已知 Key 上实测到的最小上下文上限。
+// effectiveContextWindow 返回渠道×协议×模型的有效输入窗口：
 //
-// 为什么取最小值：路由决策发生在选定具体 Key 之前，此刻只知道渠道与目标模型。
-// 同渠道不同 Key 可能因套餐不同而窗口不同，取最小是保守的——宁可放过一个窗口更大的 Key，
-// 也不要把长上下文请求送进已知会 400 的组合。
+//	eff = min(实测收紧上限, max(注册表窗口, 成功实证棘轮, models API 声明))
 //
-// fail-open：无任何记忆时返回 false，调用方沿用注册表窗口，不额外限制新渠道。
-func learnedContextLimit(channelUID, model string) (int, bool) {
+// 与 learnedContextLimit 的只收紧不同，这里是双向合成：注册表滞后偏低时由
+// 放宽证据顶开（渠道渐进扩容自愈），实测 400 学到的收紧上限永远压得住。
+// kind 为空时按 "unknown" 桶查询；无任何证据时等于 registryWindow（fail-open）。
+func effectiveContextWindow(channelUID, channelKind, model string, registryWindow int) int {
 	if channelUID == "" || model == "" {
-		return 0, false
+		return registryWindow
 	}
-	return learnedContextLimitLookup(channelUID, model)
+	return effectiveContextWindowLookup(channelUID, channelKind, model, registryWindow)
 }

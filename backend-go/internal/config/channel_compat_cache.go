@@ -164,6 +164,8 @@ type ChannelCompatEntry struct {
 type ChannelCompatCache struct {
 	cache map[string]*ChannelCompatEntry
 	mu    sync.RWMutex
+	// contextWindows 渠道×协议×模型 粒度的放宽方向窗口证据（键见 contextWindowLearnedKey）。
+	contextWindows map[string]*ContextWindowLearnedState
 	// path 为空表示纯内存模式（测试与未启用持久化时）。
 	path string
 	// dirty 标记自上次落盘后是否有新增记忆，避免无变化时重复写盘。
@@ -172,7 +174,10 @@ type ChannelCompatCache struct {
 
 // NewChannelCompatCache 创建纯内存缓存实例（不落盘）。
 func NewChannelCompatCache() *ChannelCompatCache {
-	return &ChannelCompatCache{cache: make(map[string]*ChannelCompatEntry)}
+	return &ChannelCompatCache{
+		cache:          make(map[string]*ChannelCompatEntry),
+		contextWindows: make(map[string]*ContextWindowLearnedState),
+	}
 }
 
 // NewChannelCompatCacheWithPersistence 创建带落盘的缓存实例，并立即加载已有记忆。
@@ -180,8 +185,9 @@ func NewChannelCompatCache() *ChannelCompatCache {
 // 不应阻断代理服务启动。
 func NewChannelCompatCacheWithPersistence(path string) *ChannelCompatCache {
 	c := &ChannelCompatCache{
-		cache: make(map[string]*ChannelCompatEntry),
-		path:  path,
+		cache:          make(map[string]*ChannelCompatEntry),
+		contextWindows: make(map[string]*ContextWindowLearnedState),
+		path:           path,
 	}
 	if err := c.load(); err != nil {
 		log.Printf("[ChannelCompat-Load] 加载渠道兼容性记忆失败，从空状态开始: %v", err)
@@ -189,6 +195,14 @@ func NewChannelCompatCacheWithPersistence(path string) *ChannelCompatCache {
 		log.Printf("[ChannelCompat-Load] 已加载 %d 条渠道兼容性记忆", n)
 	}
 	return c
+}
+
+// channelCompatFile 落盘文件结构。
+// v1 格式是裸的 map[key]*ChannelCompatEntry；引入学习窗口后升级为分区包装，
+// 读取侧对旧格式做兼容迁移。
+type channelCompatFile struct {
+	Entries        map[string]*ChannelCompatEntry        `json:"entries"`
+	ContextWindows map[string]*ContextWindowLearnedState `json:"contextWindows,omitempty"`
 }
 
 // load 从磁盘读取记忆，跳过已过期条目。
@@ -207,14 +221,22 @@ func (c *ChannelCompatCache) load() error {
 		return nil
 	}
 
-	var stored map[string]*ChannelCompatEntry
+	var stored channelCompatFile
 	if err := json.Unmarshal(data, &stored); err != nil {
 		return err
+	}
+	// 旧格式（顶层即缓存键 map）迁移：没有 entries 分区时整体视为 entries。
+	if stored.Entries == nil {
+		var legacy map[string]*ChannelCompatEntry
+		if err := json.Unmarshal(data, &legacy); err != nil {
+			return err
+		}
+		stored.Entries = legacy
 	}
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	for key, entry := range stored {
+	for key, entry := range stored.Entries {
 		if entry == nil {
 			continue
 		}
@@ -242,6 +264,28 @@ func (c *ChannelCompatCache) load() error {
 		}
 		c.cache[key] = entry
 	}
+	now := time.Now()
+	for key, state := range stored.ContextWindows {
+		if state == nil {
+			continue
+		}
+		// 分字段过期：实证与声明各自独立判定，谁过期谁作废。
+		if !contextWindowLearnedFresh(state, now) {
+			state.ProvenInputTokens = 0
+			state.ProvenAt = time.Time{}
+		}
+		if !modelsAPIWindowFresh(state, now) {
+			state.ModelsAPIWindow = 0
+			state.ModelsAPIAt = time.Time{}
+		}
+		if state.ProvenInputTokens == 0 && state.ModelsAPIWindow == 0 {
+			continue
+		}
+		if c.contextWindows == nil {
+			c.contextWindows = make(map[string]*ContextWindowLearnedState)
+		}
+		c.contextWindows[key] = state
+	}
 	return nil
 }
 
@@ -253,10 +297,22 @@ func (c *ChannelCompatCache) Flush() error {
 		return nil
 	}
 	// 仅序列化未过期条目，顺带完成落盘时的清理
-	snapshot := make(map[string]*ChannelCompatEntry, len(c.cache))
+	snapshot := channelCompatFile{Entries: make(map[string]*ChannelCompatEntry, len(c.cache))}
 	for key, entry := range c.cache {
 		if time.Since(entry.DetectedAt) <= channelCompatTTL {
-			snapshot[key] = entry
+			snapshot.Entries[key] = entry
+		}
+	}
+	now := time.Now()
+	for key, state := range c.contextWindows {
+		if state == nil {
+			continue
+		}
+		if contextWindowLearnedFresh(state, now) || modelsAPIWindowFresh(state, now) {
+			if snapshot.ContextWindows == nil {
+				snapshot.ContextWindows = make(map[string]*ContextWindowLearnedState, len(c.contextWindows))
+			}
+			snapshot.ContextWindows[key] = state
 		}
 	}
 	path := c.path

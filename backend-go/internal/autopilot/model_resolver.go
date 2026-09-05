@@ -713,7 +713,9 @@ func filterByCapabilityFloorInternal(profiles []ModelProfile, floor CapabilityFl
 		if !p.ProbeSuccess {
 			continue
 		}
-		if p.ContextTokens < floor.MinContextTokens {
+		// 上下文下界用有效窗口（注册表×学习证据合成）判定：渠道渐进扩容后
+		// 画像里的注册表镜像可能滞后，实证窗口应放行更大的请求。
+		if effectiveContextWindow(p.ChannelUID, p.ChannelKind, p.ModelID, p.ContextTokens) < floor.MinContextTokens {
 			continue
 		}
 		if floor.NeedsReasoning && !p.SupportsReasoning {

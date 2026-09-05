@@ -26,33 +26,34 @@ type ChannelRouteRef = routingref.RouteRef
 type ChannelRouteKey = routingref.Key
 
 type ChannelScheduler struct {
-	mu                       sync.RWMutex
-	configManager            *config.ConfigManager
-	messagesMetricsManager   *metrics.MetricsManager // Messages 渠道指标
-	responsesMetricsManager  *metrics.MetricsManager // Responses 渠道指标
-	geminiMetricsManager     *metrics.MetricsManager // Gemini 渠道指标
-	chatMetricsManager       *metrics.MetricsManager // Chat 渠道指标
-	imagesMetricsManager     *metrics.MetricsManager // Images 渠道指标
-	vectorsMetricsManager    *metrics.MetricsManager // Vectors 渠道指标
-	traceAffinity            *session.TraceAffinityManager
-	urlManager               *warmup.URLManager       // URL 管理器（非阻塞，动态排序）
-	messagesChannelLogStore  *metrics.ChannelLogStore // Messages 渠道请求日志
-	responsesChannelLogStore *metrics.ChannelLogStore // Responses 渠道请求日志
-	geminiChannelLogStore    *metrics.ChannelLogStore // Gemini 渠道请求日志
-	chatChannelLogStore      *metrics.ChannelLogStore // Chat 渠道请求日志
-	imagesChannelLogStore    *metrics.ChannelLogStore // Images 渠道请求日志
-	vectorsChannelLogStore   *metrics.ChannelLogStore // Vectors 渠道请求日志
-	conversationTracker      *conversation.ConversationTracker
-	overrideManager          *conversation.OverrideManager
-	rateLimitManager         *ratelimit.Manager
-	candidateFilterProvider  CandidateFilterProvider  // SmartRouter shadow 注入点
-	modelSupportResolverFunc ModelSupportResolverFunc // Autopilot 模型支持解析注入点
-	quotaManager             *quota.Manager           // 配额真相与余量管理器（nil = 不参与沉底排序）
-	loadShedMu               sync.Mutex
-	loadShedStates           map[string]rateLimitLoadShedState
-	loadShedStopCh           chan struct{}
-	lastSelectedMu           sync.RWMutex
-	lastSelectedChannels     map[ChannelKind]int
+	mu                        sync.RWMutex
+	configManager             *config.ConfigManager
+	messagesMetricsManager    *metrics.MetricsManager // Messages 渠道指标
+	responsesMetricsManager   *metrics.MetricsManager // Responses 渠道指标
+	geminiMetricsManager      *metrics.MetricsManager // Gemini 渠道指标
+	chatMetricsManager        *metrics.MetricsManager // Chat 渠道指标
+	imagesMetricsManager      *metrics.MetricsManager // Images 渠道指标
+	vectorsMetricsManager     *metrics.MetricsManager // Vectors 渠道指标
+	traceAffinity             *session.TraceAffinityManager
+	urlManager                *warmup.URLManager       // URL 管理器（非阻塞，动态排序）
+	messagesChannelLogStore   *metrics.ChannelLogStore // Messages 渠道请求日志
+	responsesChannelLogStore  *metrics.ChannelLogStore // Responses 渠道请求日志
+	geminiChannelLogStore     *metrics.ChannelLogStore // Gemini 渠道请求日志
+	chatChannelLogStore       *metrics.ChannelLogStore // Chat 渠道请求日志
+	imagesChannelLogStore     *metrics.ChannelLogStore // Images 渠道请求日志
+	vectorsChannelLogStore    *metrics.ChannelLogStore // Vectors 渠道请求日志
+	conversationTracker       *conversation.ConversationTracker
+	overrideManager           *conversation.OverrideManager
+	rateLimitManager          *ratelimit.Manager
+	candidateFilterProvider   CandidateFilterProvider   // SmartRouter shadow 注入点
+	modelSupportResolverFunc  ModelSupportResolverFunc  // Autopilot 模型支持解析注入点
+	contextWindowResolverFunc ContextWindowResolverFunc // 上下文有效窗口解析注入点（学习证据合成）
+	quotaManager              *quota.Manager            // 配额真相与余量管理器（nil = 不参与沉底排序）
+	loadShedMu                sync.Mutex
+	loadShedStates            map[string]rateLimitLoadShedState
+	loadShedStopCh            chan struct{}
+	lastSelectedMu            sync.RWMutex
+	lastSelectedChannels      map[ChannelKind]int
 
 	// eventBus 跨模块事件总线（Phase B.1，可选）。未注入时渠道状态迁移不发事件。
 	eventBus atomic.Pointer[eventbus.Bus]
@@ -241,6 +242,22 @@ func (s *ChannelScheduler) SetModelSupportResolverProvider(fn ModelSupportResolv
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.modelSupportResolverFunc = fn
+}
+
+// ContextWindowResolverFunc 把注册表窗口解析为该渠道×协议×模型的有效输入窗口。
+// registryWindow 是注册表/渠道配置声明的窗口；返回值应合成学习证据：
+// 成功实证（放宽棘轮）、/v1/models 自报（声明）与实测 400 收紧上限。
+// 返回 0 或负数时调用方沿用 registryWindow（fail-open）。
+type ContextWindowResolverFunc func(channelUID string, kind ChannelKind, actualModel string, registryWindow int) int
+
+// SetContextWindowResolverProvider 设置上下文有效窗口解析提供器。
+// 由 main.go 注册（闭包读 config.SharedChannelCompatCache）。
+// nil 时清除（恢复默认行为：只信注册表声明）。
+// 消费点：filterChannelsByContext 与 ValidateUpstreamContext。
+func (s *ChannelScheduler) SetContextWindowResolverProvider(fn ContextWindowResolverFunc) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.contextWindowResolverFunc = fn
 }
 
 // SetQuotaManager 注入配额管理器，用于配额饱和沉底排序。

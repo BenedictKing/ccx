@@ -1103,6 +1103,21 @@ func (s *ChannelScheduler) channelIsRuntimeAvailable(upstream *config.UpstreamCo
 	return !s.channelInRuntimeCooldown(kind, channelIndex)
 }
 
+// resolveContextWindow 把注册表窗口合成为有效窗口（学习证据注入点）。
+// 注入器为 nil、无证据或返回非正数时沿用 registryWindow（fail-open，原行为）。
+func (s *ChannelScheduler) resolveContextWindow(channelUID string, kind ChannelKind, actualModel string, registryWindow int) int {
+	s.mu.RLock()
+	resolver := s.contextWindowResolverFunc
+	s.mu.RUnlock()
+	if resolver == nil {
+		return registryWindow
+	}
+	if effective := resolver(channelUID, kind, actualModel, registryWindow); effective > 0 {
+		return effective
+	}
+	return registryWindow
+}
+
 func (s *ChannelScheduler) filterChannelsByContext(activeChannels []ChannelInfo, kind ChannelKind, model string, requirement *ContextRequirement, trace *SelectionTrace) ([]ChannelInfo, error) {
 	if requirement == nil {
 		return activeChannels, nil
@@ -1144,8 +1159,11 @@ func (s *ChannelScheduler) filterChannelsByContext(activeChannels []ChannelInfo,
 		}
 		resolved := config.ResolveUpstreamCapability(actualModel, upstream, cfg.UpstreamModelCapabilities)
 		capability := resolved.Capability
-		if capability.ContextWindowTokens > maxKnownWindow {
-			maxKnownWindow = capability.ContextWindowTokens
+		// 有效窗口 = 注册表声明 × 学习证据合成（成功实证放宽棘轮 / models API 声明 /
+		// 实测 400 收紧）。注入点为 nil 或无证据时等于注册表声明（原行为）。
+		window := s.resolveContextWindow(upstream.ChannelUID, executionKind, resolved.ActualModel, capability.ContextWindowTokens)
+		if window > maxKnownWindow {
+			maxKnownWindow = window
 		}
 		outputOverflow := requirement.ExplicitOutputMax && capability.MaxOutputTokens > 0 && requirement.OutputTokens > capability.MaxOutputTokens
 		if outputOverflow {
@@ -1156,11 +1174,11 @@ func (s *ChannelScheduler) filterChannelsByContext(activeChannels []ChannelInfo,
 			appendCandidate(ch, outputOverflow)
 			continue
 		}
-		if capability.ContextWindowTokens > 0 {
-			if channelRequiredWindow > 0 && channelRequiredWindow > capability.ContextWindowTokens {
-				reason := fmt.Sprintf("[%s:%d]%s actual=%s input=%d>%d totalBudget=%d", route.Kind, ch.Index, ch.Name, resolved.ActualModel, channelRequiredWindow, capability.ContextWindowTokens, requirement.RequiredTokens)
+		if window > 0 {
+			if channelRequiredWindow > 0 && channelRequiredWindow > window {
+				reason := fmt.Sprintf("[%s:%d]%s actual=%s input=%d>%d totalBudget=%d", route.Kind, ch.Index, ch.Name, resolved.ActualModel, channelRequiredWindow, window, requirement.RequiredTokens)
 				skipped = append(skipped, reason)
-				trace.skipChannel(ch, "context_filter", "context_window_exceeded", fmt.Sprintf("actual=%s input=%d window=%d totalBudget=%d", resolved.ActualModel, channelRequiredWindow, capability.ContextWindowTokens, requirement.RequiredTokens))
+				trace.skipChannel(ch, "context_filter", "context_window_exceeded", fmt.Sprintf("actual=%s input=%d window=%d totalBudget=%d", resolved.ActualModel, channelRequiredWindow, window, requirement.RequiredTokens))
 				continue
 			}
 			appendCandidate(ch, outputOverflow)
@@ -1214,10 +1232,11 @@ func (s *ChannelScheduler) ValidateUpstreamContext(kind ChannelKind, model strin
 	if channelRequiredWindow <= 0 {
 		return nil
 	}
-	if capability.ContextWindowTokens > 0 {
-		if channelRequiredWindow > capability.ContextWindowTokens {
+	window := s.resolveContextWindow(upstream.ChannelUID, kind, resolved.ActualModel, capability.ContextWindowTokens)
+	if window > 0 {
+		if channelRequiredWindow > window {
 			return fmt.Errorf("渠道 %q 的实际模型 %q 上下文窗口为 %d tokens，低于当前请求输入估算 %d tokens",
-				upstream.Name, resolved.ActualModel, capability.ContextWindowTokens, channelRequiredWindow)
+				upstream.Name, resolved.ActualModel, window, channelRequiredWindow)
 		}
 		return nil
 	}

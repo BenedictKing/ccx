@@ -1710,11 +1710,10 @@ func (r *SmartRouter) buildChannelEntryForKey(
 	benchmark := config.ResolveModelBenchmarkProfile(actualModel)
 	entry.BenchmarkKnown = benchmark.Known && benchmark.Profile.OverallScore > 0
 	entry.BenchmarkScore = benchmark.Profile.OverallScore
-	if learned, ok := learnedContextLimit(channelUID, actualModel); ok {
-		if entry.ContextWindowTokens == 0 || learned < entry.ContextWindowTokens {
-			entry.ContextWindowTokens = learned
-		}
-	}
+	// 上下文窗口做三源有效合成（双向）：注册表声明 × 成功实证棘轮/models API 声明（放宽）
+	// × 实测 400 收紧上限（收紧）。旧的只收紧逻辑会让过期偏低的注册表把长对话锁死在
+	// 发前过滤，成功证据永远拿不到（gpt-5.6-sol 274K 事故路径）。
+	entry.ContextWindowTokens = effectiveContextWindow(channelUID, channelKind, actualModel, entry.ContextWindowTokens)
 	// 实测结论只收紧不放松：注册表说不支持保持不支持，注册表说支持但实测拒绝也收紧为不支持。
 	// 学到的规避经既有 document_unsupported 硬约束呈现，routingHardConstraintReasons 无需改动。
 	if learnedDocumentUnsupported(channelUID, actualModel) {
