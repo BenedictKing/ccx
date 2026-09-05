@@ -255,7 +255,7 @@ func buildBenchmarkReportRow(resolver *ModelResolver, pool []ModelProfile, poolU
 		TaskClass:        scenario.TaskClass,
 		TaskDomain:       scenario.TaskDomain,
 	}
-	eligible := filterByCapabilityFloor(pool, floor)
+	eligible := filterByCapabilityFloor(pool, floor, "")
 	if len(eligible) == 0 {
 		row.Anomaly = "no_eligible_after_floor"
 		return row

@@ -327,19 +327,19 @@ func TestFilterByCapabilityFloorEffortAdmission(t *testing.T) {
 	}
 	// 未 pin：模型级 low 达不到 normal 下限，全部过滤。
 	floor := CapabilityFloor{MinQualityTier: QualityTierNormal}
-	if eligible := filterByCapabilityFloor(profiles, floor); len(eligible) != 0 {
+	if eligible := filterByCapabilityFloor(profiles, floor, ""); len(eligible) != 0 {
 		t.Fatalf("未 pin effort 时不应有 effort 级豁免: %+v", eligible)
 	}
 	// pin=max：luna max 档直测 69.6 达 normal 下限，放行；unknown 模型仍被过滤。
 	floor.PinnedEffort = EffortMax
-	eligible := filterByCapabilityFloor(profiles, floor)
+	eligible := filterByCapabilityFloor(profiles, floor, "")
 	if len(eligible) != 1 || eligible[0].ModelID != "gpt-5.6-luna" {
 		t.Fatalf("pin=max 应仅放行 max 档达标的 luna: %+v", eligible)
 	}
 	// 无豁免时质量降档兜底路径保持可用
 	eligible2, fallback := filterByCapabilityFloorWithQualityFallback([]ModelProfile{
 		{ModelID: "unknown-model", QualityTier: QualityTierLow, ProbeSuccess: true, ContextTokens: 200_000},
-	}, floor)
+	}, floor, "")
 	if len(eligible2) != 1 || !fallback {
 		t.Fatalf("全被过滤时应走质量降档兜底: %+v fallback=%v", eligible2, fallback)
 	}

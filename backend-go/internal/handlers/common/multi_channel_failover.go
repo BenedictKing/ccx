@@ -176,6 +176,21 @@ func HandleMultiChannelFailoverWithSelectionFilter(
 		})
 		if err != nil {
 			lastError = err
+			// 溢出跨模型重定向（逃生阀兜底，用户拍板"全池按质量档自动选"）：
+			// 同模型候选（含试探档）全部装不下时，若池内存在能承载的替代模型，
+			// 改写模型后重跑选路，而不是直接 400。仅未重定向过、非 pin 路由时生效。
+			if capErr, ok := scheduler.AsContextCapacityError(err); ok && canOverflowRedirect(c, kind) {
+				if target, found := overflowRedirectProvider(c.Request.Context(), string(kind), model, capErr.InputTokens); found && target != "" && target != model {
+					originalModel := model
+					model = target
+					c.Set(ccxOverflowRedirectKey, target)
+					c.Header("X-CCX-Model-Redirect", originalModel+" -> "+target)
+					RequestLogf(c, "[%s-Overflow] 输入 %d tokens 超出 %s 全部候选（最大已知窗口 %d），重定向到 %s",
+						apiType, capErr.InputTokens, originalModel, capErr.MaxKnownWindow, target)
+					channelAttempt--
+					continue
+				}
+			}
 			break
 		}
 		if channelAttempt == 0 && selection.CandidateCount > 0 {

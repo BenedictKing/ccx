@@ -31,3 +31,21 @@ func effectiveContextWindow(channelUID, channelKind, model string, registryWindo
 	}
 	return effectiveContextWindowLookup(channelUID, channelKind, model, registryWindow)
 }
+
+// learnedDeclaredContextLimitLookup 供测试替换的实测收紧上限查询入口。
+var learnedDeclaredContextLimitLookup = func(channelUID, model string) (int, bool) {
+	cache := config.SharedChannelCompatCache()
+	if cache == nil {
+		return 0, false
+	}
+	return cache.MinContextLimitForChannelModel(channelUID, model)
+}
+
+// learnedDeclaredContextLimit 返回该渠道-模型实测学到的收紧上限。
+// 有值意味着真实 400 已证明窗口不高于此值——上下文试探必须排除这类组合。
+func learnedDeclaredContextLimit(channelUID, model string) (int, bool) {
+	if channelUID == "" || model == "" {
+		return 0, false
+	}
+	return learnedDeclaredContextLimitLookup(channelUID, model)
+}

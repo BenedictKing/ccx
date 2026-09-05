@@ -1105,17 +1105,22 @@ func (s *ChannelScheduler) channelIsRuntimeAvailable(upstream *config.UpstreamCo
 
 // resolveContextWindow 把注册表窗口合成为有效窗口（学习证据注入点）。
 // 注入器为 nil、无证据或返回非正数时沿用 registryWindow（fail-open，原行为）。
-func (s *ChannelScheduler) resolveContextWindow(channelUID string, kind ChannelKind, actualModel string, registryWindow int) int {
+// declared 为实测收紧上限（0 = 无收紧证据），供溢出试探候选排除已知装不下的组合。
+func (s *ChannelScheduler) resolveContextWindow(channelUID string, kind ChannelKind, actualModel string, registryWindow int) (int, int) {
 	s.mu.RLock()
 	resolver := s.contextWindowResolverFunc
 	s.mu.RUnlock()
 	if resolver == nil {
-		return registryWindow
+		return registryWindow, 0
 	}
-	if effective := resolver(channelUID, kind, actualModel, registryWindow); effective > 0 {
-		return effective
+	effective, declared := resolver(channelUID, kind, actualModel, registryWindow)
+	if effective <= 0 {
+		effective = registryWindow
 	}
-	return registryWindow
+	if declared < 0 {
+		declared = 0
+	}
+	return effective, declared
 }
 
 func (s *ChannelScheduler) filterChannelsByContext(activeChannels []ChannelInfo, kind ChannelKind, model string, requirement *ContextRequirement, trace *SelectionTrace) ([]ChannelInfo, error) {
@@ -1134,6 +1139,12 @@ func (s *ChannelScheduler) filterChannelsByContext(activeChannels []ChannelInfo,
 	unknownSafeWindow := cfg.ContextRouting.EffectiveUnknownSafeWindowTokens()
 	filtered := make([]ChannelInfo, 0, len(activeChannels))
 	outputFallback := make([]ChannelInfo, 0)
+	// probeFallback 是窗口不足但仍可试探的同模型候选（最低优先级）：
+	// 注册表/学习窗口可能滞后于渠道渐进扩容（200K→272K→372K→1M），
+	// 发一次要么成功实证棘轮上调、渠道回归正常档，要么 400 学习收紧 + failover。
+	// 仿 outputFallback 先例。准入条件：无实测收紧矛盾（declared）且输入在
+	// 注册表分段阶梯覆盖范围内（含试探档上限）。
+	probeFallback := make([]ChannelInfo, 0)
 	skipped := make([]string, 0)
 	maxKnownWindow := 0
 	appendCandidate := func(ch ChannelInfo, outputOverflow bool) {
@@ -1161,7 +1172,7 @@ func (s *ChannelScheduler) filterChannelsByContext(activeChannels []ChannelInfo,
 		capability := resolved.Capability
 		// 有效窗口 = 注册表声明 × 学习证据合成（成功实证放宽棘轮 / models API 声明 /
 		// 实测 400 收紧）。注入点为 nil 或无证据时等于注册表声明（原行为）。
-		window := s.resolveContextWindow(upstream.ChannelUID, executionKind, resolved.ActualModel, capability.ContextWindowTokens)
+		window, declaredWindow := s.resolveContextWindow(upstream.ChannelUID, executionKind, resolved.ActualModel, capability.ContextWindowTokens)
 		if window > maxKnownWindow {
 			maxKnownWindow = window
 		}
@@ -1176,6 +1187,18 @@ func (s *ChannelScheduler) filterChannelsByContext(activeChannels []ChannelInfo,
 		}
 		if window > 0 {
 			if channelRequiredWindow > 0 && channelRequiredWindow > window {
+				// 试探准入：无实测收紧矛盾 + 注册表分段阶梯（含试探档）覆盖请求。
+				// ceiling 取 max(阶梯末位, 有效窗口)：学习实证已超过注册表声明时，
+				// 允许在其之上再探一步。
+				ceiling := capability.MaxKnownWindowTokens()
+				if window > ceiling {
+					ceiling = window
+				}
+				if declaredWindow <= 0 && channelRequiredWindow <= ceiling {
+					trace.skipChannel(ch, "context_filter", "context_probe_candidate", fmt.Sprintf("actual=%s input=%d window=%d ceiling=%d", resolved.ActualModel, channelRequiredWindow, window, ceiling))
+					probeFallback = append(probeFallback, ch)
+					continue
+				}
 				reason := fmt.Sprintf("[%s:%d]%s actual=%s input=%d>%d totalBudget=%d", route.Kind, ch.Index, ch.Name, resolved.ActualModel, channelRequiredWindow, window, requirement.RequiredTokens)
 				skipped = append(skipped, reason)
 				trace.skipChannel(ch, "context_filter", "context_window_exceeded", fmt.Sprintf("actual=%s input=%d window=%d totalBudget=%d", resolved.ActualModel, channelRequiredWindow, window, requirement.RequiredTokens))
@@ -1195,6 +1218,10 @@ func (s *ChannelScheduler) filterChannelsByContext(activeChannels []ChannelInfo,
 		return outputFallback, nil
 	}
 	filtered = append(filtered, outputFallback...)
+	if len(filtered) == 0 && len(probeFallback) > 0 {
+		log.Printf("[ContextFilter] 无窗口充分候选，保留 %d 个试探候选（注册表/学习窗口可能滞后于渠道扩容）", len(probeFallback))
+		return probeFallback, nil
+	}
 	if len(filtered) == 0 {
 		// 上下文容量不足是请求属性而非渠道故障：用类型化错误承载，
 		// 让响应层能返回 400 context_length_exceeded 而非 503，
@@ -1232,7 +1259,7 @@ func (s *ChannelScheduler) ValidateUpstreamContext(kind ChannelKind, model strin
 	if channelRequiredWindow <= 0 {
 		return nil
 	}
-	window := s.resolveContextWindow(upstream.ChannelUID, kind, resolved.ActualModel, capability.ContextWindowTokens)
+	window, _ := s.resolveContextWindow(upstream.ChannelUID, kind, resolved.ActualModel, capability.ContextWindowTokens)
 	if window > 0 {
 		if channelRequiredWindow > window {
 			return fmt.Errorf("渠道 %q 的实际模型 %q 上下文窗口为 %d tokens，低于当前请求输入估算 %d tokens",

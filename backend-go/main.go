@@ -1062,14 +1062,22 @@ func main() {
 	// 上下文有效窗口解析注入：scheduler 的上下文过滤不再只信注册表声明，
 	// 而是合成学习证据（成功实证放宽棘轮 / models API 声明 / 实测 400 收紧）。
 	// 渠道渐进扩容（200K→272K→372K→1M）由此自动跟进，注册表滞后不再锁死长对话。
-	channelScheduler.SetContextWindowResolverProvider(func(channelUID string, kind scheduler.ChannelKind, actualModel string, registryWindow int) int {
+	channelScheduler.SetContextWindowResolverProvider(func(channelUID string, kind scheduler.ChannelKind, actualModel string, registryWindow int) (int, int) {
 		cache := config.SharedChannelCompatCache()
 		if cache == nil || channelUID == "" || actualModel == "" {
-			return registryWindow
+			return registryWindow, 0
 		}
-		return cache.EffectiveContextWindow(channelUID, string(kind), actualModel, registryWindow)
+		declared, _ := cache.MinContextLimitForChannelModel(channelUID, actualModel)
+		return cache.EffectiveContextWindow(channelUID, string(kind), actualModel, registryWindow), declared
 	})
 	log.Printf("[Autopilot-Init] ContextWindowResolver 已注册到调度器")
+
+	// 溢出跨模型重定向：同模型候选（含试探档）全灭时，全池按质量档选一个
+	// 能承载的替代模型改写请求（用户拍板），响应头 X-CCX-Model-Redirect 标注。
+	common.SetOverflowRedirectProvider(func(ctx context.Context, channelKind, model string, inputTokens int) (string, bool) {
+		return autopilotManager.OverflowRedirectModel(ctx, channelKind, model, inputTokens)
+	})
+	log.Printf("[Autopilot-Init] OverflowRedirectProvider 已注册")
 
 	// 初始化对话追踪器和覆盖管理器
 	conversationTracker := conversation.NewConversationTracker(1*time.Hour, 24*time.Hour, paths.ConversationStatePath)

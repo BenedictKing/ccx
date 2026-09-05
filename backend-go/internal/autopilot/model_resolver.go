@@ -214,10 +214,10 @@ func (r *ModelResolver) ResolveModel(
 			}
 			candidates = probeEligible
 		} else {
-			candidates, qualityFallback = filterByCapabilityFloorWithQualityFallback(candidates, floor)
+			candidates, qualityFallback = filterByCapabilityFloorWithQualityFallback(candidates, floor, requestModel)
 		}
 	} else {
-		candidates, qualityFallback = filterByCapabilityFloorWithQualityFallback(candidates, floor)
+		candidates, qualityFallback = filterByCapabilityFloorWithQualityFallback(candidates, floor, requestModel)
 	}
 	if len(candidates) == 0 {
 		return ResolvedRouteTarget{Model: requestModel, Reason: "no_capable_model"}, false, "no_capable_model"
@@ -345,7 +345,7 @@ func (r *ModelResolver) resolveModelAnyEndpoint(
 	channelKind string,
 	floor CapabilityFloor,
 ) (target ResolvedRouteTarget, found bool, reason string) {
-	candidates, qualityFallback, reason := r.eligibleModelsAnyEndpoint(channelUID, channelKind, floor)
+	candidates, qualityFallback, reason := r.eligibleModelsAnyEndpoint(channelUID, channelKind, floor, requestModel)
 	if len(candidates) == 0 {
 		return ResolvedRouteTarget{Model: requestModel, Reason: reason}, false, reason
 	}
@@ -380,6 +380,7 @@ func (r *ModelResolver) eligibleModelsAnyEndpoint(
 	channelUID string,
 	channelKind string,
 	floor CapabilityFloor,
+	requestModel string,
 ) (candidates []ModelProfile, qualityFallback bool, reason string) {
 	candidates, reason = r.probedModelsAnyEndpoint(channelUID, channelKind)
 	if len(candidates) == 0 {
@@ -389,10 +390,10 @@ func (r *ModelResolver) eligibleModelsAnyEndpoint(
 	if r.cfgManager != nil {
 		routingCfg := r.cfgManager.GetAutopilotRouting()
 		if routingCfg.ModelMapping.CapabilityFloorEnabled {
-			candidates, qualityFallback = filterByCapabilityFloorWithQualityFallback(candidates, floor)
+			candidates, qualityFallback = filterByCapabilityFloorWithQualityFallback(candidates, floor, requestModel)
 		}
 	} else {
-		candidates, qualityFallback = filterByCapabilityFloorWithQualityFallback(candidates, floor)
+		candidates, qualityFallback = filterByCapabilityFloorWithQualityFallback(candidates, floor, requestModel)
 	}
 	if len(candidates) == 0 {
 		return nil, qualityFallback, "no_capable_model"
@@ -420,7 +421,8 @@ func (r *ModelResolver) capabilityFilteredModelsAnyEndpoint(
 		}
 	}
 	// 仅按真实能力硬约束过滤，跳过质量档约束：低质量模型保留为低分行，由评分拉开差距。
-	candidates = filterByCapabilityFloorWithoutQuality(candidates, floor)
+	// 此处是跨模型兜底枚举，无请求同名模型概念，传空串禁用试探放宽。
+	candidates = filterByCapabilityFloorWithoutQuality(candidates, floor, "")
 	if len(candidates) == 0 {
 		return nil, "no_capable_model"
 	}
@@ -661,25 +663,47 @@ func filterEffortFloor(candidates []rankedModelCandidate, floor CapabilityFloor)
 
 // 与 capability_floor.go 的 CapabilityFloorReasons 逻辑一致，
 // 但作用于 ModelProfile（而非 CandidateCapabilities），并额外检查 QualityTier。
-func filterByCapabilityFloor(profiles []ModelProfile, floor CapabilityFloor) []ModelProfile {
-	return filterByCapabilityFloorInternal(profiles, floor, true)
+func filterByCapabilityFloor(profiles []ModelProfile, floor CapabilityFloor, requestModel string) []ModelProfile {
+	return filterByCapabilityFloorInternal(profiles, floor, true, requestModel)
 }
 
 // filterByCapabilityFloorWithoutQuality 保留所有真实能力约束，仅跳过质量档约束。
 // 用于“高档候选不存在时”的用户体验兜底；不会放行上下文或工具能力不足的模型。
-func filterByCapabilityFloorWithoutQuality(profiles []ModelProfile, floor CapabilityFloor) []ModelProfile {
-	return filterByCapabilityFloorInternal(profiles, floor, false)
+func filterByCapabilityFloorWithoutQuality(profiles []ModelProfile, floor CapabilityFloor, requestModel string) []ModelProfile {
+	return filterByCapabilityFloorInternal(profiles, floor, false, requestModel)
 }
 
 // filterByCapabilityFloorWithQualityFallback 先按完整能力目标筛选；若仅质量档
 // 导致无候选，则保留所有真实能力硬约束并允许质量降档。
-func filterByCapabilityFloorWithQualityFallback(profiles []ModelProfile, floor CapabilityFloor) ([]ModelProfile, bool) {
-	eligible := filterByCapabilityFloor(profiles, floor)
+func filterByCapabilityFloorWithQualityFallback(profiles []ModelProfile, floor CapabilityFloor, requestModel string) ([]ModelProfile, bool) {
+	eligible := filterByCapabilityFloor(profiles, floor, requestModel)
 	if len(eligible) > 0 || floor.MinQualityTier == "" {
 		return eligible, false
 	}
-	fallback := filterByCapabilityFloorWithoutQuality(profiles, floor)
+	fallback := filterByCapabilityFloorWithoutQuality(profiles, floor, requestModel)
 	return fallback, len(fallback) > 0
+}
+
+// contextProbeEligible 判断上下文不足的画像能否作为试探候选保留。
+// 仅限请求的同名模型：替代模型是被选来装下请求的，必须真实满足窗口，无"试探"语义。
+// 准入条件与 scheduler 的 probeFallback 一致：无实测收紧矛盾（declared）且注册表
+// 分段阶梯（含试探档）覆盖请求量级；单档/无 tiers 的模型（发布后不扩容）不放行。
+func contextProbeEligible(p *ModelProfile, minContext int, requestModel string, window int) bool {
+	if requestModel == "" || p.ModelID != requestModel {
+		return false
+	}
+	if declared, ok := learnedDeclaredContextLimit(p.ChannelUID, p.ModelID); ok && declared > 0 {
+		return false
+	}
+	resolved := config.ResolveUpstreamCapability(p.ModelID, nil, nil)
+	if !resolved.Known {
+		return false
+	}
+	ceiling := resolved.Capability.MaxKnownWindowTokens()
+	if window > ceiling {
+		ceiling = window
+	}
+	return ceiling >= minContext
 }
 
 func filterProbedModelProfiles(profiles []ModelProfile) []ModelProfile {
@@ -706,7 +730,7 @@ func filterSeverityClassCapable(profiles []ModelProfile, channelUID string) []Mo
 	return eligible
 }
 
-func filterByCapabilityFloorInternal(profiles []ModelProfile, floor CapabilityFloor, enforceQuality bool) []ModelProfile {
+func filterByCapabilityFloorInternal(profiles []ModelProfile, floor CapabilityFloor, enforceQuality bool, requestModel string) []ModelProfile {
 	var eligible []ModelProfile
 	for _, p := range profiles {
 		// 未验证通过的模型不参与自动映射
@@ -715,7 +739,10 @@ func filterByCapabilityFloorInternal(profiles []ModelProfile, floor CapabilityFl
 		}
 		// 上下文下界用有效窗口（注册表×学习证据合成）判定：渠道渐进扩容后
 		// 画像里的注册表镜像可能滞后，实证窗口应放行更大的请求。
-		if effectiveContextWindow(p.ChannelUID, p.ChannelKind, p.ModelID, p.ContextTokens) < floor.MinContextTokens {
+		// 同名模型窗口不足但分段阶梯可覆盖时保留为试探候选（发送层 400 后
+		// 学习收紧 + failover 兜底），避免 ModelFilter 在调度最前端把试探路堵死。
+		window := effectiveContextWindow(p.ChannelUID, p.ChannelKind, p.ModelID, p.ContextTokens)
+		if window < floor.MinContextTokens && !contextProbeEligible(&p, floor.MinContextTokens, requestModel, window) {
 			continue
 		}
 		if floor.NeedsReasoning && !p.SupportsReasoning {

@@ -245,10 +245,12 @@ func (s *ChannelScheduler) SetModelSupportResolverProvider(fn ModelSupportResolv
 }
 
 // ContextWindowResolverFunc 把注册表窗口解析为该渠道×协议×模型的有效输入窗口。
-// registryWindow 是注册表/渠道配置声明的窗口；返回值应合成学习证据：
+// registryWindow 是注册表/渠道配置声明的窗口；返回 effective 应合成学习证据：
 // 成功实证（放宽棘轮）、/v1/models 自报（声明）与实测 400 收紧上限。
-// 返回 0 或负数时调用方沿用 registryWindow（fail-open）。
-type ContextWindowResolverFunc func(channelUID string, kind ChannelKind, actualModel string, registryWindow int) int
+// declared 返回实测收紧上限（0 = 无收紧证据）：溢出试探候选必须排除 declared 已
+// 判定装不下的组合——那种试探只会在已知会 400 的渠道上浪费一次往返。
+// effective 返回 0 或负数时调用方沿用 registryWindow（fail-open）。
+type ContextWindowResolverFunc func(channelUID string, kind ChannelKind, actualModel string, registryWindow int) (effective int, declared int)
 
 // SetContextWindowResolverProvider 设置上下文有效窗口解析提供器。
 // 由 main.go 注册（闭包读 config.SharedChannelCompatCache）。

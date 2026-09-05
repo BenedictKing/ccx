@@ -229,7 +229,7 @@ func TestFilterByCapabilityFloor_DropsUnderQualified(t *testing.T) {
 		MinQualityTier:   QualityTierPremium,
 	}
 
-	eligible := filterByCapabilityFloor(profiles, floor)
+	eligible := filterByCapabilityFloor(profiles, floor, "")
 
 	if len(eligible) != 1 {
 		t.Fatalf("expected 1 eligible, got %d", len(eligible))
@@ -247,7 +247,7 @@ func TestFilterByCapabilityFloor_DropsWithoutDocumentSupport(t *testing.T) {
 		true, true, true, true, 100)
 
 	floor := CapabilityFloor{NeedsDocument: true}
-	eligible := filterByCapabilityFloor([]ModelProfile{withDoc, withoutDoc}, floor)
+	eligible := filterByCapabilityFloor([]ModelProfile{withDoc, withoutDoc}, floor, "")
 	if len(eligible) != 1 || eligible[0].ModelID != "model-doc" {
 		t.Fatalf("expected only model-doc, got %+v", eligible)
 	}
@@ -260,7 +260,7 @@ func TestFilterByCapabilityFloor_ZeroFloorPassesAllProbed(t *testing.T) {
 		makeModelProfile("m2", ModelFamilyUnknown, QualityTierLow, 0,
 			false, false, false, false, 0), // 未探测
 	}
-	eligible := filterByCapabilityFloor(profiles, CapabilityFloor{})
+	eligible := filterByCapabilityFloor(profiles, CapabilityFloor{}, "")
 	if len(eligible) != 1 {
 		t.Fatalf("expected 1 (only probed), got %d", len(eligible))
 	}

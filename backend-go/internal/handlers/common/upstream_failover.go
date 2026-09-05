@@ -547,6 +547,22 @@ func TryUpstreamWithAllKeys(
 		model = tryOpts.executionModel
 	}
 
+	// 溢出跨模型重定向（逃生阀兜底）：failover 外壳已决定改用替代模型时，
+	// 在此统一落到请求体。responses 协议下跨模型无法解密历史加密推理，
+	// 同步剥离 input items 的 encrypted_content（与 chat 转换器行为对齐）。
+	if overflowTarget := OverflowRedirectTarget(c); overflowTarget != "" && overflowTarget != model {
+		if rewritten, err := sjson.SetBytes(requestBody, "model", overflowTarget); err == nil {
+			if executionKind == scheduler.ChannelKindResponses {
+				rewritten = stripResponsesEncryptedContent(rewritten)
+			}
+			requestBody = rewritten
+			RestoreRequestBody(c, requestBody)
+			c.Set("requestBodyBytes", requestBody)
+			RequestLogf(c, "[%s-Overflow] 上下文溢出重定向生效: %s -> %s", apiType, model, overflowTarget)
+		}
+		model = overflowTarget
+	}
+
 	// 五元组调度 pin 的明文 key：身份反查一次（key 已被移除/轮换时为空 = 不锁定）。
 	pinnedAPIKey := autopilot.ResolvePinnedAPIKey(upstream, tryOpts.executionKeyIdentity)
 
