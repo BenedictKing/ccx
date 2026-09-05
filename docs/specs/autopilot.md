@@ -828,6 +828,7 @@ health(40) > fastDecay(25) > successRate(20) > latency(10) > cost(5)
 - **P0（已实现）**：`applyUpstreamModelCapability` 把注册表 `ReasoningEfforts` 归一化、去重后写入 `SupportedEffortLevels`，并据此设置 `SupportsEffortControl`。未知原生档位保持 fail-open，不猜测映射；能力声明撤销时清空旧值，避免陈旧画像继续生成无效档位。
 - **P0 存量收敛**：`refreshAutoDiscoveryCapabilities` 把 effort 控制标记和档位列表纳入变化检测。旧 `Source=auto_discovery` 画像在请求期解析或后续自动发现时更新，无需 SQLite schema 迁移；修复后候选五元组的 effort 段和 trace `effort` 字段可恢复实际值。
 - **P1（计划，未改变当前排序）**：评分候选的质量档改为 `EffortAwareQualityTier(actualModel, candidateEffort, family)`，而不是画像的 medium/default 静态 `QualityTier`。先增加独立开关与 shadow 字段，同时记录 `baseQualityTier`、`effortQualityTier`、证据等级及分数，使用历史 trace 回放比较 Top-1、候选淘汰和各任务类成本变化；确认无缺证据模型异常升档后再切 active。
+- **P1 shadow（本次已实现）**：候选记录 `baseQualityTier`、`effortQualityTier`、`effortQualityScore`、`effortEvidenceClass`、`effortQualityKnown` 和 `effortAwareTotalScore`。实际 `totalScore`、硬约束、排序和执行绑定仍使用基础 `QualityTier`；`reasoningEffort.qualityTierShadowEnabled=false` 可关闭观测，缺失该键默认开启。
 - **P1 验收**：显式/pin `xhigh` 请求必须按 xhigh 证据评档；passthrough 继续使用基础档；同模型不同 effort 候选允许跨档；advisor 与主评分使用同一函数和同一实际 effort；回放中不存在因空 effort 或未知证据导致的非预期硬过滤。
 - **P2（计划，依赖 P1 的观测字段）**：为缺少可靠 coding 证据、仅依赖模型族兜底的候选引入置信度折扣，作用于质量收益而非硬能力过滤。折扣必须与 `SavingsScore` 分离，避免低价叠加未知质量后反超有可靠证据的同档模型；不直接使用 overall intelligence 代替 coding 证据。
 - **P2 验收**：增加 `kimi-k2-thinking` 对 `kimi-k3` 的固定 trace 回放；质量证据未知的候选不得仅靠族兜底同档和价格优势反超可靠证据候选，除非 `cost_first` 场景明确允许；`quality_first` 不降级可靠证据，`balanced` 的价格收益需跨过配置化置信度门槛；输出折扣原因和原始/调整后质量分以便审计。

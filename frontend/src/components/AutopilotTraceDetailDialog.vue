@@ -178,6 +178,7 @@
                   <th class="text-caption">Model</th>
                   <th class="text-caption">Key</th>
                   <th class="text-caption">Effort</th>
+                  <th class="text-caption">{{ t('autopilot.traceDetail.qualityShadow') }}</th>
                   <th class="text-caption">Origin Tier</th>
                   <th class="text-caption">Score</th>
                   <th class="text-caption">Selected</th>
@@ -190,6 +191,9 @@
                   <td class="text-caption">{{ displayCandidateModel(cand) }}</td>
                   <td class="text-caption">{{ displayCandidateKeyIdentity(cand) }}</td>
                   <td class="text-caption">{{ displayCandidateEffort(cand) }}</td>
+                  <td class="text-caption" :title="qualityShadowTitle(cand)">
+                    {{ displayQualityShadow(cand) }}
+                  </td>
                   <td class="text-caption">{{ cand.originTier || '-' }}</td>
                   <td class="text-caption">{{ cand.totalScore.toFixed(3) }}</td>
                   <td>
@@ -507,6 +511,20 @@ function displayCandidateModel(cand: RoutingCandidate): string {
 // 空 = passthrough（未决档），旧 trace 无此字段。
 function displayCandidateEffort(cand: RoutingCandidate): string {
   return cand.effort || '-'
+}
+
+function displayQualityShadow(cand: RoutingCandidate): string {
+  if (!cand.effortQualityTier) return '-'
+  const base = cand.baseQualityTier || '-'
+  return base === cand.effortQualityTier ? base : `${base} -> ${cand.effortQualityTier}`
+}
+
+function qualityShadowTitle(cand: RoutingCandidate): string {
+  if (!cand.effortQualityTier) return ''
+  const evidence = cand.effortQualityKnown ? cand.effortEvidenceClass || 'known' : 'unknown'
+  const qualityScore = cand.effortQualityKnown ? cand.effortQualityScore?.toFixed(2) || '-' : '-'
+  const totalScore = cand.effortAwareTotalScore?.toFixed(3) || '-'
+  return t('autopilot.traceDetail.qualityShadowTitle', { evidence, qualityScore, totalScore })
 }
 
 // displayCandidateKeyIdentity 返回候选行 key 身份的紧凑展示：

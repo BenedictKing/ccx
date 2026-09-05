@@ -65,6 +65,13 @@ type RoutingCandidate struct {
 	QuotaGroup  string `json:"quotaGroup,omitempty"`
 	// Effort 是五元组 effort 维：候选行思考档位（空 = passthrough）。
 	Effort string `json:"effort,omitempty"`
+	// P1 shadow：按实际 effort 评估的质量档，不参与当前线上排序。
+	BaseQualityTier       string  `json:"baseQualityTier,omitempty"`
+	EffortQualityTier     string  `json:"effortQualityTier,omitempty"`
+	EffortQualityScore    float64 `json:"effortQualityScore,omitempty"`
+	EffortEvidenceClass   string  `json:"effortEvidenceClass,omitempty"`
+	EffortQualityKnown    bool    `json:"effortQualityKnown,omitempty"`
+	EffortAwareTotalScore float64 `json:"effortAwareTotalScore,omitempty"`
 
 	// 分数明细
 	TotalScore float64          `json:"totalScore"`

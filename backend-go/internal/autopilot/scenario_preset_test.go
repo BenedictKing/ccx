@@ -1,6 +1,7 @@
 package autopilot
 
 import (
+	"math"
 	"testing"
 
 	"github.com/BenedictKing/ccx/internal/config"
@@ -301,6 +302,51 @@ func TestEffortAwareQualityTierLunaReplay(t *testing.T) {
 	// 未注册模型回退家族规则（与模型级判定一致）
 	if got := EffortAwareQualityTier("totally-unknown-model", EffortMax, ModelFamilyOpenAI); got != ModelProfileQualityTier("totally-unknown-model", ModelFamilyOpenAI) {
 		t.Fatalf("未知模型应回退家族规则: %v", got)
+	}
+}
+
+func TestEffortAwareQualityAssessmentFor_ShadowKeepsBaseScoreUntouched(t *testing.T) {
+	entry := channelScoreEntry{
+		ModelID: "gpt-5.6-luna",
+		Effort:  EffortMax,
+		ScoringCandidate: ScoringCandidate{
+			ChannelUID:          "luna",
+			QualityTier:         QualityTierLow,
+			StabilityTier:       StabilityTierNormal,
+			SpeedTier:           SpeedTierNormal,
+			CostTier:            CostTierNormal,
+			HealthState:         HealthStateHealthy,
+			ModelFamily:         ModelFamilyOpenAI,
+			DomainStrengthScore: 0.5,
+		},
+	}
+	ctx := ScoringContext{Weights: DefaultTaskWeights()[TaskClassWorker], TargetQualityTier: QualityTierNormal}
+	base := ScoreCandidate(entry.ScoringCandidate, ctx).Score
+	applyEffortQualityShadow(&entry, ctx)
+	after := ScoreCandidate(entry.ScoringCandidate, ctx).Score
+	if after != base {
+		t.Fatalf("shadow evaluation mutated live scoring input: before=%v after=%v", base, after)
+	}
+	if entry.EffortQualityTier == "" || !entry.EffortQualityKnown || entry.EffortAwareTotalScore <= base {
+		t.Fatalf("shadow assessment = tier=%q known=%v score=%v total=%v, want a higher max-effort observation", entry.EffortQualityTier, entry.EffortQualityKnown, entry.EffortQualityScore, entry.EffortAwareTotalScore)
+	}
+}
+
+func TestEffortQualityShadowConfigCanBeDisabled(t *testing.T) {
+	defaultConfig := config.ReasoningEffortConfig{}
+	if !defaultConfig.IsQualityTierShadowEnabled() {
+		t.Fatal("missing shadow setting should default to enabled")
+	}
+	disabled := false
+	if (config.ReasoningEffortConfig{QualityTierShadowEnabled: &disabled}).IsQualityTierShadowEnabled() {
+		t.Fatal("explicit false shadow setting should disable observation")
+	}
+}
+
+func TestEffortAwareQualityAssessmentFor_UnknownLowEffortRatioFallsBack(t *testing.T) {
+	assessment := EffortAwareQualityAssessmentFor("gpt-5.6-luna", EffortOff, ModelFamilyOpenAI)
+	if !assessment.Known || math.IsInf(assessment.Score, 0) || math.IsNaN(assessment.Score) {
+		t.Fatalf("off effort assessment must not fabricate an infinite score: %+v", assessment)
 	}
 }
 

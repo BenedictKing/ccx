@@ -380,6 +380,15 @@ type CalibrationResult struct {
 	MeasuredEffort EffortLevel
 }
 
+// EffortQualityAssessment 是模型×effort 的 shadow 评估结果。
+// 它只用于 trace/回放观测，不参与当前线上评分。
+type EffortQualityAssessment struct {
+	Tier     QualityTier
+	Score    float64
+	Evidence EvidenceClass
+	Known    bool
+}
+
 // effortQualityRatio 是各思考强度档相对常规口径（medium/default=1.0）的平均分数比率。
 // 来源：deepswe v1.1 live leaderboard 同模型 effort 曲线统计（2026-08，
 // 每档 n=7~10）：low=0.686、high=1.413、xhigh=1.627、max=1.975。
@@ -710,44 +719,57 @@ func interpolatedEffortScore(evidence []config.ModelBenchmarkEvidence, level Eff
 // 模型不在注册表时回退模型族规则（与 ModelProfileQualityTier 一致）。
 // effort 为空表示未指定，等价 medium 口径（与模型基础档相同）。
 func EffortAwareQualityTier(modelID string, effort EffortLevel, family ModelFamily) QualityTier {
+	return EffortAwareQualityAssessmentFor(modelID, effort, family).Tier
+}
+
+// EffortAwareQualityAssessmentFor 返回模型×effort 的完整 shadow 评估结果。
+// 与 EffortAwareQualityTier 共用同一证据优先级，避免观测口径与未来 active 口径漂移。
+func EffortAwareQualityAssessmentFor(modelID string, effort EffortLevel, family ModelFamily) EffortQualityAssessment {
 	benchmark := config.ResolveModelBenchmarkProfile(modelID)
 	if !benchmark.Known {
-		return ModelProfileQualityTierFromFamily(family, modelID)
+		return EffortQualityAssessment{Tier: ModelProfileQualityTierFromFamily(family, modelID)}
 	}
 	evidence := benchmark.Profile.BenchmarkEvidence
 
 	// 1. 该档可靠直测。
 	if score, ok := directEffortScore(evidence, effort); ok {
-		return qualityTierFromCalibration(CalibrationResult{
+		calib := CalibrationResult{
 			Score:          score,
 			Class:          EvidenceDirect,
 			MeasuredEffort: effort,
-		})
+		}
+		return EffortQualityAssessment{Tier: qualityTierFromCalibration(calib), Score: score, Evidence: calib.Class, Known: true}
 	}
 
 	// 2. 同模型曲线插值该档（估计值，封顶 high）。
 	if score, ok := interpolatedEffortScore(evidence, effort); ok {
-		return qualityTierFromCalibration(CalibrationResult{
+		calib := CalibrationResult{
 			Score:          score,
 			Class:          EvidenceInterpolated,
 			MeasuredEffort: effort,
-		})
+		}
+		return EffortQualityAssessment{Tier: qualityTierFromCalibration(calib), Score: score, Evidence: calib.Class, Known: true}
 	}
 
 	// 3. 回落模型基础档。
 	calib, ok := calibrateModelCapability(modelID)
 	if !ok {
-		return ModelProfileQualityTierFromFamily(family, modelID)
+		return EffortQualityAssessment{Tier: ModelProfileQualityTierFromFamily(family, modelID)}
 	}
 	if effort == "" || EffortLevelOrdinal(effort) >= EffortLevelOrdinal(EffortMedium) {
-		return qualityTierFromCalibration(calib)
+		return EffortQualityAssessment{Tier: qualityTierFromCalibration(calib), Score: calib.Score, Evidence: calib.Class, Known: true}
+	}
+	ratio, hasRatio := effortQualityRatio[string(effort)]
+	if !hasRatio || ratio <= 0 {
+		// off/minimal 暂无可靠的全局折算系数，不能用除零或猜测值制造能力分。
+		return EffortQualityAssessment{Tier: qualityTierFromCalibration(calib), Score: calib.Score, Evidence: calib.Class, Known: true}
 	}
 	deflated := CalibrationResult{
-		Score:          calib.Score / effortQualityRatio[string(effort)],
+		Score:          calib.Score / ratio,
 		Class:          EvidenceDeflated,
 		MeasuredEffort: effort,
 	}
-	return qualityTierFromCalibration(deflated)
+	return EffortQualityAssessment{Tier: qualityTierFromCalibration(deflated), Score: deflated.Score, Evidence: deflated.Class, Known: true}
 }
 
 // ── ModelProfile ──

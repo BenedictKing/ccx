@@ -395,7 +395,17 @@ type ReasoningEffortConfig struct {
 	ExpandVariants        bool                `json:"expandVariants,omitempty"`
 	PerTaskClass          map[string][]string `json:"perTaskClass,omitempty"`
 	RespectClientThinking bool                `json:"respectClientThinking,omitempty"`
+	// QualityTierShadowEnabled 仅记录模型×effort 质量档及影子总分，不改变实际排序。
+	// nil 默认开启；指针用于区分旧配置缺失与显式 false。
+	QualityTierShadowEnabled *bool `json:"qualityTierShadowEnabled,omitempty"`
 }
+
+// IsQualityTierShadowEnabled 返回 effort-aware 质量档 shadow 是否开启。
+func (c ReasoningEffortConfig) IsQualityTierShadowEnabled() bool {
+	return c.QualityTierShadowEnabled == nil || *c.QualityTierShadowEnabled
+}
+
+func boolPointer(value bool) *bool { return &value }
 
 // ManualIntentConfig 人工路由意图配置。
 type ManualIntentConfig struct {
@@ -626,9 +636,10 @@ func DefaultAutopilotRoutingConfig() AutopilotRoutingConfig {
 		},
 
 		ReasoningEffort: ReasoningEffortConfig{
-			Enabled:               true,
-			ExpandVariants:        true,
-			RespectClientThinking: true,
+			Enabled:                  true,
+			ExpandVariants:           true,
+			RespectClientThinking:    true,
+			QualityTierShadowEnabled: boolPointer(true),
 			PerTaskClass: map[string][]string{
 				"supervisor":   {"high", "max"},
 				"worker":       {"medium"},
@@ -1330,6 +1341,10 @@ func (c AutopilotRoutingConfig) deepCopy() AutopilotRoutingConfig {
 			copy(effortsCopy, v)
 			cp.ReasoningEffort.PerTaskClass[k] = effortsCopy
 		}
+	}
+	if c.ReasoningEffort.QualityTierShadowEnabled != nil {
+		value := *c.ReasoningEffort.QualityTierShadowEnabled
+		cp.ReasoningEffort.QualityTierShadowEnabled = &value
 	}
 
 	// TrustedRoutingAdvisor slice 字段

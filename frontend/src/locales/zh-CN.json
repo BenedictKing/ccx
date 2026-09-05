@@ -1385,6 +1385,8 @@
   "autopilot.qualityTier.normal": "标准档",
   "autopilot.qualityTier.high": "高端档",
   "autopilot.qualityTier.premium": "旗舰档",
+  "autopilot.traceDetail.qualityShadow": "质量档（影子）",
+  "autopilot.traceDetail.qualityShadowTitle": "证据：{evidence}；质量分：{qualityScore}；影子总分：{totalScore}",
   "autopilot.effortRange": "思考档位 {floor}–{ceil}",
   "autopilot.diagnose.title": "智能路由诊断",
   "autopilot.diagnose.hint": "仅计算任务分类、硬约束、渠道排序和模型映射预览，不发送真实上游请求，也不改变当前调度。",

@@ -33,10 +33,16 @@ type RoutingPlanCandidate struct {
 	LogicalChannelUID  string   `json:"logicalChannelUid,omitempty"`
 	LogicalChannelName string   `json:"logicalChannelName,omitempty"`
 	// 五元组维度字段（v3，与 trace RoutingCandidate 对齐）
-	ActualModel string `json:"actualModel,omitempty"`
-	KeyIdentity string `json:"keyIdentity,omitempty"`
-	QuotaGroup  string `json:"quotaGroup,omitempty"`
-	Effort      string `json:"effort,omitempty"`
+	ActualModel           string  `json:"actualModel,omitempty"`
+	KeyIdentity           string  `json:"keyIdentity,omitempty"`
+	QuotaGroup            string  `json:"quotaGroup,omitempty"`
+	Effort                string  `json:"effort,omitempty"`
+	BaseQualityTier       string  `json:"baseQualityTier,omitempty"`
+	EffortQualityTier     string  `json:"effortQualityTier,omitempty"`
+	EffortQualityScore    float64 `json:"effortQualityScore,omitempty"`
+	EffortEvidenceClass   string  `json:"effortEvidenceClass,omitempty"`
+	EffortQualityKnown    bool    `json:"effortQualityKnown,omitempty"`
+	EffortAwareTotalScore float64 `json:"effortAwareTotalScore,omitempty"`
 }
 
 // RoutingPlanLogicalGroup 是 dry-run 候选在 LogicalChannel 维度的聚合视图（Phase A.3）。
@@ -324,6 +330,9 @@ func (r *SmartRouter) BuildPlan(profile *RequestProfile) *RoutingPlan {
 		}
 		e.ScoringCandidate.SavingsScore = savingsMap[savingsKey]
 		applyDomainStrength(&e, ctx.TaskDomain)
+		if r.effortQualityTierShadowEnabled() {
+			applyEffortQualityShadow(&e, ctx)
+		}
 		scored := ScoreCandidate(e.ScoringCandidate, ctx)
 		scoredEntries = append(scoredEntries, scoredChannelEntry{entry: e, scored: scored})
 	}
@@ -334,21 +343,27 @@ func (r *SmartRouter) BuildPlan(profile *RequestProfile) *RoutingPlan {
 	for _, se := range scoredEntries {
 		reasons := routingHardConstraintReasons(profile, &se.entry)
 		candidate := RoutingPlanCandidate{
-			ScoredCandidate:    se.scored,
-			Selected:           len(reasons) == 0,
-			FilterReasons:      reasons,
-			MappedModel:        se.entry.MappedModel,
-			MappingSource:      se.entry.MappingSource,
-			MappingReason:      se.entry.MappingReason,
-			CandidateKey:       se.entry.CandidateKey,
-			ChannelName:        se.entry.ChannelName,
-			KeyMask:            se.entry.KeyMask,
-			LogicalChannelUID:  se.entry.LogicalChannelUID,
-			LogicalChannelName: se.entry.LogicalChannelName,
-			ActualModel:        se.entry.ModelID,
-			KeyIdentity:        se.entry.KeyIdentity,
-			QuotaGroup:         se.entry.QuotaGroup,
-			Effort:             string(se.entry.Effort),
+			ScoredCandidate:       se.scored,
+			Selected:              len(reasons) == 0,
+			FilterReasons:         reasons,
+			MappedModel:           se.entry.MappedModel,
+			MappingSource:         se.entry.MappingSource,
+			MappingReason:         se.entry.MappingReason,
+			CandidateKey:          se.entry.CandidateKey,
+			ChannelName:           se.entry.ChannelName,
+			KeyMask:               se.entry.KeyMask,
+			LogicalChannelUID:     se.entry.LogicalChannelUID,
+			LogicalChannelName:    se.entry.LogicalChannelName,
+			ActualModel:           se.entry.ModelID,
+			KeyIdentity:           se.entry.KeyIdentity,
+			QuotaGroup:            se.entry.QuotaGroup,
+			Effort:                string(se.entry.Effort),
+			BaseQualityTier:       string(se.entry.BaseQualityTier),
+			EffortQualityTier:     string(se.entry.EffortQualityTier),
+			EffortQualityScore:    se.entry.EffortQualityScore,
+			EffortEvidenceClass:   string(se.entry.EffortEvidenceClass),
+			EffortQualityKnown:    se.entry.EffortQualityKnown,
+			EffortAwareTotalScore: se.entry.EffortAwareTotalScore,
 		}
 		if candidate.Selected {
 			selectedCandidates = append(selectedCandidates, candidate)
@@ -468,17 +483,23 @@ func (r *SmartRouter) recordDryRunTrace(plan *RoutingPlan, candidatesBefore, can
 	traceCandidates := make([]RoutingCandidate, 0, len(plan.Candidates))
 	for _, candidate := range plan.Candidates {
 		traceCandidates = append(traceCandidates, RoutingCandidate{
-			ChannelUID:         candidate.ChannelUID,
-			ChannelName:        candidate.ChannelName,
-			KeyMask:            candidate.KeyMask,
-			MappedModel:        candidate.MappedModel,
-			MappingSource:      candidate.MappingSource,
-			MappingReason:      candidate.MappingReason,
-			TotalScore:         candidate.Score,
-			Selected:           candidate.Selected,
-			FilterReasons:      candidate.FilterReasons,
-			LogicalChannelUID:  candidate.LogicalChannelUID,
-			LogicalChannelName: candidate.LogicalChannelName,
+			ChannelUID:            candidate.ChannelUID,
+			ChannelName:           candidate.ChannelName,
+			KeyMask:               candidate.KeyMask,
+			MappedModel:           candidate.MappedModel,
+			MappingSource:         candidate.MappingSource,
+			MappingReason:         candidate.MappingReason,
+			BaseQualityTier:       candidate.BaseQualityTier,
+			EffortQualityTier:     candidate.EffortQualityTier,
+			EffortQualityScore:    candidate.EffortQualityScore,
+			EffortEvidenceClass:   candidate.EffortEvidenceClass,
+			EffortQualityKnown:    candidate.EffortQualityKnown,
+			EffortAwareTotalScore: candidate.EffortAwareTotalScore,
+			TotalScore:            candidate.Score,
+			Selected:              candidate.Selected,
+			FilterReasons:         candidate.FilterReasons,
+			LogicalChannelUID:     candidate.LogicalChannelUID,
+			LogicalChannelName:    candidate.LogicalChannelName,
 		})
 	}
 
@@ -778,10 +799,14 @@ func (r *SmartRouter) executeFilter(
 		}
 		e.ScoringCandidate.SavingsScore = savingsMap[savingsKey]
 		applyDomainStrength(&e, scoringCtx.TaskDomain)
+		if r.effortQualityTierShadowEnabled() {
+			applyEffortQualityShadow(&e, scoringCtx)
+		}
 		scored := ScoreCandidate(e.ScoringCandidate, scoringCtx)
 		if e.ProtocolFidelity == "converted" && e.ConversionPenalty > 0 {
 			scored.Score -= e.ConversionPenalty
 			scored.Penalty += e.ConversionPenalty
+			e.EffortAwareTotalScore -= e.ConversionPenalty
 		}
 		scoredEntries = append(scoredEntries, scoredChannelEntry{entry: e, scored: scored})
 	}
@@ -997,27 +1022,33 @@ func (r *SmartRouter) executeFilter(
 		e := se.entry
 		sc := se.scored
 		candidate := RoutingCandidate{
-			ChannelUID:         e.ChannelUID,
-			ChannelName:        e.ChannelName,
-			CandidateKey:       e.CandidateKey,
-			ExecutionKind:      e.ChannelKind,
-			ProtocolFidelity:   e.ProtocolFidelity,
-			ConversionPenalty:  e.ConversionPenalty,
-			MetricsKey:         SanitizeMetricsKey(e.MetricsKey),
-			KeyMask:            e.KeyMask,
-			OriginTier:         string(e.OriginTier),
-			HealthState:        string(e.HealthState),
-			MappedModel:        e.MappedModel,
-			MappingSource:      e.MappingSource,
-			MappingReason:      e.MappingReason,
-			ActualModel:        e.ModelID,
-			KeyIdentity:        e.KeyIdentity,
-			QuotaGroup:         e.QuotaGroup,
-			Effort:             string(e.Effort),
-			LogicalChannelUID:  e.LogicalChannelUID,
-			LogicalChannelName: e.LogicalChannelName,
-			TotalScore:         sc.Score,
-			DomainEvidence:     sc.DomainEvidence,
+			ChannelUID:            e.ChannelUID,
+			ChannelName:           e.ChannelName,
+			CandidateKey:          e.CandidateKey,
+			ExecutionKind:         e.ChannelKind,
+			ProtocolFidelity:      e.ProtocolFidelity,
+			ConversionPenalty:     e.ConversionPenalty,
+			MetricsKey:            SanitizeMetricsKey(e.MetricsKey),
+			KeyMask:               e.KeyMask,
+			OriginTier:            string(e.OriginTier),
+			HealthState:           string(e.HealthState),
+			MappedModel:           e.MappedModel,
+			MappingSource:         e.MappingSource,
+			MappingReason:         e.MappingReason,
+			ActualModel:           e.ModelID,
+			KeyIdentity:           e.KeyIdentity,
+			QuotaGroup:            e.QuotaGroup,
+			Effort:                string(e.Effort),
+			BaseQualityTier:       string(e.BaseQualityTier),
+			EffortQualityTier:     string(e.EffortQualityTier),
+			EffortQualityScore:    e.EffortQualityScore,
+			EffortEvidenceClass:   string(e.EffortEvidenceClass),
+			EffortQualityKnown:    e.EffortQualityKnown,
+			EffortAwareTotalScore: e.EffortAwareTotalScore,
+			LogicalChannelUID:     e.LogicalChannelUID,
+			LogicalChannelName:    e.LogicalChannelName,
+			TotalScore:            sc.Score,
+			DomainEvidence:        sc.DomainEvidence,
 			Scores: []CandidateScore{
 				{Dimension: "quality", Score: sc.QualityScore, Weight: weights.WQuality},
 				{Dimension: "stability", Score: sc.StabilityScore, Weight: weights.WStability},
@@ -1303,11 +1334,48 @@ type channelScoreEntry struct {
 	// 由 autopilot/意图决定（非透传）。行身份五段 CandidateKey 含此维度。
 	Effort        EffortLevel
 	EffortDecided bool
+
+	// P1 shadow 评估：保留基础档与实际 effort 档的差异，但不改 ScoringCandidate。
+	BaseQualityTier       QualityTier
+	EffortQualityTier     QualityTier
+	EffortQualityScore    float64
+	EffortEvidenceClass   EvidenceClass
+	EffortQualityKnown    bool
+	EffortAwareTotalScore float64
 }
 
 type scoredChannelEntry struct {
 	entry  channelScoreEntry
 	scored ScoredCandidate
+}
+
+func applyEffortQualityShadow(entry *channelScoreEntry, ctx ScoringContext) {
+	if entry == nil {
+		return
+	}
+	entry.BaseQualityTier = entry.ScoringCandidate.QualityTier
+	assessment := EffortAwareQualityAssessmentFor(entry.ModelID, entry.Effort, entry.ScoringCandidate.ModelFamily)
+	entry.EffortQualityTier = assessment.Tier
+	entry.EffortQualityScore = assessment.Score
+	entry.EffortEvidenceClass = assessment.Evidence
+	entry.EffortQualityKnown = assessment.Known
+
+	shadowCandidate := entry.ScoringCandidate
+	shadowCandidate.QualityTier = assessment.Tier
+	shadowCandidate.QualityBenchmarkKnown = assessment.Tier == QualityTierPremium && entry.BenchmarkKnown
+	if shadowCandidate.QualityBenchmarkKnown {
+		shadowCandidate.QualityBenchmarkScore = entry.BenchmarkScore
+	} else {
+		shadowCandidate.QualityBenchmarkScore = 0
+	}
+	entry.EffortAwareTotalScore = ScoreCandidate(shadowCandidate, ctx).Score
+}
+
+func (r *SmartRouter) effortQualityTierShadowEnabled() bool {
+	if r == nil || r.configManager == nil {
+		return true
+	}
+	return r.configManager.GetAutopilotRouting().ReasoningEffort.IsQualityTierShadowEnabled()
 }
 
 // sortScoredChannelEntries 统一真实路径与 dry-run 的排序语义。

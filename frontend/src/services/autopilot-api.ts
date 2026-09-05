@@ -176,6 +176,12 @@ export interface SmartRoutingDiagnoseCandidate {
   keyIdentity?: string // v3：候选行 key 身份（KeyUID 或 kh_ 哈希前缀）
   quotaGroup?: string // v3：key 分组
   effort?: string // v3：思考档位（空 = passthrough）
+  baseQualityTier?: string
+  effortQualityTier?: string
+  effortQualityScore?: number
+  effortEvidenceClass?: string
+  effortQualityKnown?: boolean
+  effortAwareTotalScore?: number
 }
 
 export interface SmartRoutingDiagnosePlan {
