@@ -448,23 +448,41 @@ func (c *ChannelCompatCache) EnabledTraitNames(channelUID, keyHash, model string
 	return names
 }
 
-// Clear 清除所有缓存。
+// Clear 清除所有缓存（含上下文窗口学习分区），清除后立即落盘。
 func (c *ChannelCompatCache) Clear() {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 
 	c.cache = make(map[string]*ChannelCompatEntry)
+	clearedWindows := len(c.contextWindows)
+	c.contextWindows = make(map[string]*ContextWindowLearnedState)
+	c.dirty = true
+	c.mu.Unlock()
+
+	if clearedWindows > 0 {
+		if err := c.Flush(); err != nil {
+			log.Printf("[ChannelCompat-Flush] 清除后落盘失败: %v", err)
+		}
+	}
 }
 
 // ClearTrait 清除指定 trait 的学习结论（其他 trait 保留），返回清除的条目数。
-// trait 为空时等价于 Clear。空条目（清除后不再含任何学习事实）整体移除。
+// trait 为空时等价于 Clear（全部分区：traits、context/output limits、context windows）。
+// 空条目（清除后不再含任何学习事实）整体移除。清除后立即落盘，重启不复活。
 func (c *ChannelCompatCache) ClearTrait(trait CompatTrait) int {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 
 	if trait == "" {
 		n := len(c.cache)
+		windows := len(c.contextWindows)
 		c.cache = make(map[string]*ChannelCompatEntry)
+		c.contextWindows = make(map[string]*ContextWindowLearnedState)
+		c.dirty = true
+		c.mu.Unlock()
+		if windows > 0 {
+			if err := c.Flush(); err != nil {
+				log.Printf("[ChannelCompat-Flush] 清除后落盘失败: %v", err)
+			}
+		}
 		return n
 	}
 	removed := 0
@@ -479,6 +497,15 @@ func (c *ChannelCompatCache) ClearTrait(trait CompatTrait) int {
 		removed++
 		if len(entry.Traits) == 0 && entry.ContextLimit == nil && entry.OutputLimit == nil {
 			delete(c.cache, key)
+		}
+	}
+	if removed > 0 {
+		c.dirty = true
+	}
+	c.mu.Unlock()
+	if removed > 0 {
+		if err := c.Flush(); err != nil {
+			log.Printf("[ChannelCompat-Flush] 清除 trait 后落盘失败: %v", err)
 		}
 	}
 	return removed

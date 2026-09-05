@@ -17,12 +17,12 @@ import (
 
 // tryUpstreamHarness 聚合一次 TryUpstreamWithAllKeys 跨模型执行所需的依赖。
 type tryUpstreamHarness struct {
-	cfgManager      *config.ConfigManager
+	cfgManager       *config.ConfigManager
 	channelScheduler *scheduler.ChannelScheduler
-	messagesMetrics *metrics.MetricsManager
-	upstream        *config.UpstreamConfig
-	executionRoute  scheduler.ChannelRouteRef
-	cleanup         func()
+	messagesMetrics  *metrics.MetricsManager
+	upstream         *config.UpstreamConfig
+	executionRoute   scheduler.ChannelRouteRef
+	cleanup          func()
 }
 
 func newCrossModelHarness(t *testing.T, serverURL string) *tryUpstreamHarness {
@@ -37,12 +37,12 @@ func newCrossModelHarness(t *testing.T, serverURL string) *tryUpstreamHarness {
 	})
 	cfg := cfgManager.GetConfig()
 	return &tryUpstreamHarness{
-		cfgManager:      cfgManager,
+		cfgManager:       cfgManager,
 		channelScheduler: channelScheduler,
-		messagesMetrics: messagesMetrics,
-		upstream:        &cfg.Upstream[0],
-		executionRoute:  scheduler.ChannelRouteRef{Kind: string(scheduler.ChannelKindChat), Index: 0, ChannelUID: "ch_gpt_chat"},
-		cleanup:         cleanup,
+		messagesMetrics:  messagesMetrics,
+		upstream:         &cfg.Upstream[0],
+		executionRoute:   scheduler.ChannelRouteRef{Kind: string(scheduler.ChannelKindChat), Index: 0, ChannelUID: "ch_gpt_chat"},
+		cleanup:          cleanup,
 	}
 }
 

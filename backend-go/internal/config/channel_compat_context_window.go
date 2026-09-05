@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"log"
+	"sort"
 	"strings"
 	"time"
 )
@@ -178,6 +179,81 @@ func (c *ChannelCompatCache) ContextWindowLearnedEntries() map[string]ContextWin
 		}
 	}
 	return out
+}
+
+// ContextWindowSnapshotEntry 管理端查看用的一条窗口学习记录视图。
+// 复合键 channel|protocol|model 已拆开，禁止把原始键交给前端解析。
+type ContextWindowSnapshotEntry struct {
+	ChannelUID string `json:"channelUid"`
+	Kind       string `json:"kind"`
+	Model      string `json:"model"`
+	// ProvenInputTokens/ProvenAt 成功请求实证（下界棘轮）及其时间与新鲜度。
+	ProvenInputTokens int       `json:"provenInputTokens,omitempty"`
+	ProvenAt          time.Time `json:"provenAt,omitempty"`
+	ProvenFresh       bool      `json:"provenFresh"`
+	// ModelsAPIWindow/ModelsAPIAt /v1/models 元数据声明及其时间与新鲜度。
+	ModelsAPIWindow int       `json:"modelsApiWindow,omitempty"`
+	ModelsAPIAt     time.Time `json:"modelsApiAt,omitempty"`
+	ModelsAPIFresh  bool      `json:"modelsApiFresh"`
+}
+
+// ContextWindowSnapshot 返回全部上下文窗口学习记录的视图（管理端查看用，只读拷贝）。
+func (c *ChannelCompatCache) ContextWindowSnapshot() []ContextWindowSnapshotEntry {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	now := time.Now()
+	entries := make([]ContextWindowSnapshotEntry, 0, len(c.contextWindows))
+	for key, state := range c.contextWindows {
+		if state == nil {
+			continue
+		}
+		parts := strings.SplitN(key, "|", 3)
+		if len(parts) != 3 {
+			continue
+		}
+		entries = append(entries, ContextWindowSnapshotEntry{
+			ChannelUID:        parts[0],
+			Kind:              parts[1],
+			Model:             parts[2],
+			ProvenInputTokens: state.ProvenInputTokens,
+			ProvenAt:          state.ProvenAt,
+			ProvenFresh:       contextWindowLearnedFresh(state, now),
+			ModelsAPIWindow:   state.ModelsAPIWindow,
+			ModelsAPIAt:       state.ModelsAPIAt,
+			ModelsAPIFresh:    modelsAPIWindowFresh(state, now),
+		})
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].ChannelUID != entries[j].ChannelUID {
+			return entries[i].ChannelUID < entries[j].ChannelUID
+		}
+		if entries[i].Kind != entries[j].Kind {
+			return entries[i].Kind < entries[j].Kind
+		}
+		return entries[i].Model < entries[j].Model
+	})
+	return entries
+}
+
+// ClearContextWindows 只清除上下文窗口学习分区（traits/limits 保留），返回清除条目数。
+// 清除后立即落盘，重启不复活。
+func (c *ChannelCompatCache) ClearContextWindows() int {
+	c.mu.Lock()
+
+	removed := len(c.contextWindows)
+	if removed == 0 {
+		c.mu.Unlock()
+		return 0
+	}
+	c.contextWindows = make(map[string]*ContextWindowLearnedState)
+	c.dirty = true
+	c.mu.Unlock()
+
+	if err := c.Flush(); err != nil {
+		log.Printf("[ChannelCompat-Flush] 清除窗口分区后落盘失败: %v", err)
+	}
+	return removed
 }
 
 // ParseModelsAPIContextWindows 从 OpenAI 兼容 /v1/models 响应体提取模型粒度的
