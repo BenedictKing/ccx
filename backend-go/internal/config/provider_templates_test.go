@@ -156,6 +156,34 @@ func TestProviderTemplateGLMRoutes(t *testing.T) {
 	}
 }
 
+func TestProviderTemplateBitdeerRoutes(t *testing.T) {
+	tmpl, ok := GetProviderTemplate("bitdeer")
+	if !ok {
+		t.Fatal("未找到 bitdeer 模板")
+	}
+	routes := tmpl.AutoAddRoutes()
+	if len(routes) != 3 {
+		t.Fatalf("bitdeer 应创建 messages/chat/responses 三条 route，实际 %d: %+v", len(routes), routes)
+	}
+	want := map[string]struct {
+		serviceType string
+		baseURL     string
+	}{
+		"messages":  {serviceType: "claude", baseURL: "https://api-inference.bitdeer.ai"},
+		"chat":      {serviceType: "openai", baseURL: "https://api-inference.bitdeer.ai/v1"},
+		"responses": {serviceType: "responses", baseURL: "https://api-inference.bitdeer.ai/v1/responses"},
+	}
+	for _, route := range routes {
+		expect, found := want[route.ChannelKind]
+		if !found || route.ServiceType != expect.serviceType || len(route.Candidates) != 1 || route.Candidates[0].BaseURL != expect.baseURL {
+			t.Fatalf("bitdeer route 不符合预期: %+v", route)
+		}
+		if route.Candidates[0].PlanTag != "payg" {
+			t.Fatalf("bitdeer route 应标记为 payg: %+v", route.Candidates[0])
+		}
+	}
+}
+
 func TestInferProviderIDFromBaseURL(t *testing.T) {
 	tests := []struct {
 		baseURL string
@@ -163,6 +191,9 @@ func TestInferProviderIDFromBaseURL(t *testing.T) {
 		ok      bool
 	}{
 		{baseURL: "https://api.deepseek.com", want: "deepseek", ok: true},
+		{baseURL: "https://api-inference.bitdeer.ai", want: "bitdeer", ok: true},
+		{baseURL: "https://api-inference.bitdeer.ai/v1/chat/completions", want: "bitdeer", ok: true},
+		{baseURL: "https://api-inference.bitdeer.ai/v1/responses", want: "bitdeer", ok: true},
 		{baseURL: "https://api.deepseek.com/anthropic/v1", want: "deepseek", ok: true},
 		{baseURL: "https://ark.cn-beijing.volces.com/api/plan/v3", want: "volcengine", ok: true},
 		{baseURL: "https://open.bigmodel.cn/api/anthropic", want: "glm", ok: true},
@@ -249,13 +280,13 @@ func TestProviderTemplateVolcenginePlanRoutes(t *testing.T) {
 
 func TestListAndGetProviderTemplate(t *testing.T) {
 	all := ListProviderTemplates()
-	if len(all) < 18 {
-		t.Errorf("内置 provider 模板应至少为 18 个，实际 %d", len(all))
+	if len(all) < 19 {
+		t.Errorf("内置 provider 模板应至少为 19 个，实际 %d", len(all))
 	}
 	for _, id := range []string{
 		"mimo", "deepseek", "kimi", "glm", "volcengine", "compshare", "tokenrhythm", "sensenova", "minimax",
 		"dashscope", "opencode-zen", "tencent-lkeap", "qianfan", "xfyun", "openrouter", "modelscope", "originrouter",
-		"stepfun",
+		"stepfun", "bitdeer",
 	} {
 		if _, ok := GetProviderTemplate(id); !ok {
 			t.Errorf("缺少 provider 模板: %s", id)

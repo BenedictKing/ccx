@@ -23,6 +23,7 @@ export const providerConsoleLinks: Record<string, string> = {
   modelscope: 'https://modelscope.cn/my/myaccesstoken',
   xfyun: 'https://console.xfyun.cn/',
   stepfun: 'https://platform.stepfun.com/interface-key',
+  bitdeer: 'https://www.bitdeer.ai/en/model/apikeys',
   atomgit: 'https://ai.atomgit.com/dashboard/coding-plan'
 }
 

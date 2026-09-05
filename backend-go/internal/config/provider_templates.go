@@ -74,6 +74,7 @@ type ProviderCandidate struct {
 //   - GLM:      https://open.bigmodel.cn/api/anthropic（Claude）与 /api/paas/v4（OpenAI）
 //   - 火山方舟: https://ark.cn-beijing.volces.com/api/plan（Agent Plan）与 /api/coding（Coding Plan）
 //   - 阶跃星辰: https://api.stepfun.com/step_plan（Step Plan 套餐，Chat 与 Messages 双协议）
+//   - Bitdeer:  https://api-inference.bitdeer.ai/v1（无服务器推理，Chat/Messages/Responses 三协议原生）
 //
 // Claude route 的 baseURL 使用 Anthropic 兼容入口且不带 /v1（claude provider 会自动补 /v1/messages）。
 // Chat/Responses route 使用 OpenAI Chat 兼容入口，由 provider 自动补协议端点。
@@ -340,6 +341,37 @@ var builtinProviderTemplates = []ProviderTemplate{
 			{BaseURL: "https://api-inference.modelscope.cn/v1", PlanTag: "payg", Region: "cn", Priority: 0},
 		}),
 	),
+	// Bitdeer AI（来源：https://developers.bitdeer.ai/zh/docs/guides 与 2026-09-05 实测）。
+	// 无服务器自部署模型推理，按量计费（限时免费模型见官网）；基础 URL
+	// https://api-inference.bitdeer.ai/v1。/v1/messages、/v1/chat/completions 与
+	// /v1/responses 三端点均实测返回原生格式；gemini /v1beta 404 不支持。
+	newProviderTemplate(
+		"bitdeer",
+		"Bitdeer AI",
+		"比特鹿 Bitdeer AI 自部署模型无服务器推理（OpenAI Chat、Anthropic Messages 与 Responses 三协议原生兼容）",
+		"official_api",
+		"first",
+		[]ProviderRoute{
+			{
+				ChannelKind: "messages",
+				ServiceType: "claude",
+				Description: "Claude Messages Anthropic 兼容入口（baseURL 不带 /v1，自动补 /v1/messages）",
+				Candidates:  bitdeerClaudeCandidates(),
+			},
+			{
+				ChannelKind: "chat",
+				ServiceType: "openai",
+				Description: "OpenAI Chat Completions 兼容入口",
+				Candidates:  bitdeerOpenAICandidates(),
+			},
+			{
+				ChannelKind: "responses",
+				ServiceType: "responses",
+				Description: "OpenAI Responses 原生入口",
+				Candidates:  bitdeerResponsesCandidates(),
+			},
+		},
+	),
 	newProviderTemplate(
 		"originrouter",
 		"极易云 OriginRouter",
@@ -493,6 +525,30 @@ func deepseekOpenAICandidates() []ProviderCandidate {
 func deepseekResponsesCandidates() []ProviderCandidate {
 	return []ProviderCandidate{
 		{BaseURL: "https://api.deepseek.com/v1/responses", PlanTag: "", Region: "", Priority: 0},
+	}
+}
+
+// bitdeerClaudeCandidates Bitdeer AI 的 Anthropic Messages 入口。
+// 根地址 https://api-inference.bitdeer.ai，Anthropic 端点 /v1/messages（实测 200，标准 Messages 格式）。
+func bitdeerClaudeCandidates() []ProviderCandidate {
+	return []ProviderCandidate{
+		{BaseURL: "https://api-inference.bitdeer.ai", PlanTag: "payg", Region: "global", Priority: 0},
+	}
+}
+
+// bitdeerOpenAICandidates Bitdeer AI 的 OpenAI Chat Completions 入口。
+// 官方 base_url 为 https://api-inference.bitdeer.ai/v1。
+func bitdeerOpenAICandidates() []ProviderCandidate {
+	return []ProviderCandidate{
+		{BaseURL: "https://api-inference.bitdeer.ai/v1", PlanTag: "payg", Region: "global", Priority: 0},
+	}
+}
+
+// bitdeerResponsesCandidates Bitdeer AI 原生 Responses 入口。
+// /v1/responses 实测返回标准 OpenAI Responses 格式。
+func bitdeerResponsesCandidates() []ProviderCandidate {
+	return []ProviderCandidate{
+		{BaseURL: "https://api-inference.bitdeer.ai/v1/responses", PlanTag: "payg", Region: "global", Priority: 0},
 	}
 }
 

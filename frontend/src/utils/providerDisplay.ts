@@ -29,6 +29,7 @@ const PROVIDER_BRAND_NAMES: Record<string, string> = {
   modelscope: 'ModelScope 魔搭',
   originrouter: '极易云 OriginRouter',
   stepfun: '阶跃星辰',
+  bitdeer: 'Bitdeer AI',
   atomgit: 'AtomGit'
 }
 
