@@ -1,12 +1,13 @@
 {
-  "generatedAt": "2026-09-05T12:09:11.062Z",
+  "generatedAt": "2026-09-05T12:44:45.186Z",
   "qualityTiers": {
     "scale": "0-100",
-    "algorithm": "fixed-direct-calibration-v2",
+    "algorithm": "fixed-direct-calibration-v3",
     "source": "backend-autopilot",
     "premiumMin": 69.95,
     "highMin": 59.15,
-    "normalMin": 44.25
+    "normalMin": 44.25,
+    "avoidMax": 15
   },
   "data": [
     {
@@ -348,13 +349,13 @@
     {
       "model": "grok-4.6",
       "effort": "low",
-      "pass_rate": 0.527,
+      "pass_rate": 0.536,
       "mean_cost": 0.7718,
       "median_cost": 0.9101,
       "source": "CodexRadar",
       "sourceModel": "grok-4.6",
       "taskCount": 112,
-      "quality_score": 52.7,
+      "quality_score": 53.6,
       "model_quality_score": 63.1
     },
     {
@@ -714,7 +715,7 @@
       "source": "DeepSWE v1.1",
       "sourceModel": "gemini-3-7-flash",
       "quality_score": 53.8,
-      "model_quality_score": 58.8,
+      "model_quality_score": 57.8,
       "taskCount": null
     },
     {
@@ -726,7 +727,7 @@
       "source": "DeepSWE v1.1",
       "sourceModel": "gemini-3-7-flash",
       "quality_score": 65.5,
-      "model_quality_score": 58.8,
+      "model_quality_score": 57.8,
       "taskCount": null
     },
     {
@@ -738,7 +739,7 @@
       "source": "DeepSWE v1.1",
       "sourceModel": "gemini-3-7-flash",
       "quality_score": 65.3,
-      "model_quality_score": 58.8,
+      "model_quality_score": 57.8,
       "taskCount": null
     },
     {
@@ -2939,7 +2940,7 @@
       "source": "CodexRadar",
       "category": "coding",
       "metric": "pass_at_1",
-      "score": 58.8,
+      "score": 57.8,
       "effort": "medium",
       "taskCount": 102
     },
@@ -4035,7 +4036,7 @@
       "source": "CodexRadar",
       "category": "coding",
       "metric": "pass_at_1",
-      "score": 52.7,
+      "score": 53.6,
       "effort": "low",
       "taskCount": 112
     },
