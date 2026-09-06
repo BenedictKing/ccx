@@ -878,9 +878,16 @@ func (r *ModelResolver) rankEligibleModels(
 	ranked := r.buildRankedCandidates(eligible, requestModel, channelUID, channelKind, floor)
 	preferenceMode := r.modelCostPreferenceMode(floor)
 
+	// 收益帽在进入前沿前先做档位带过滤（与回退链 selectQualityBenefitBand 同语义）：
+	// 带外模型不参与前沿。旧实现依赖"四档→簇索引投影"把 cap 映射到动态 F0...Fn，
+	// 该投影假设簇数≈档位数量，细粒度聚类下投影漂移，premium 模型可穿透 cap=high。
+	if floor.QualityBenefitCap != "" && floor.QualityBenefitCap != QualityTierPremium {
+		ranked = selectQualityBenefitBand(ranked, floor.QualityBenefitCap)
+	}
+
 	// Frontier 选型：在全部 model × effort 候选的 Pareto 前沿上按车道选择，
 	// 成本与质量并列成轴（替代下方 qualityRank 绝对主导的字典序链）。
-	// QualityBenefitCap 在 Frontier 内投影到动态 F0...Fn；成本证据不足时
+	// QualityBenefitCap 已在上方收敛为档位带；成本证据不足时
 	// 才回退固定 QualityTier 分带与旧字典序链。
 	frontierFallback := ""
 	idx, note, frontierOK := selectViaFrontier(ranked, floor, preferenceMode)
@@ -904,16 +911,33 @@ func (r *ModelResolver) rankEligibleModels(
 	return best
 }
 
-// effortAwareBenchmarkScore 根据候选 effort 档位返回该档位对应的 benchmark 分数。
-// 当 BenchmarkEvidence 中存有该 effort 的 overall 实测数据时，用实测 rawValue 相对
-// default effort 的比值缩放 OverallScore；否则返回原始 OverallScore（不惩罚缺数据）。
-// effort 为空时视为 default，直接返回 OverallScore。
-func effortAwareBenchmarkScore(bp config.ModelBenchmarkProfile, effort EffortLevel) (float64, bool) {
-	if bp.OverallScore <= 0 {
+// domainBenchmarkAnchor 返回候选在指定任务域的基准锚分。
+// general（含空域）沿用 OverallScore 总分；其余域优先取域映射类目的校准类目分
+// （coding 请求锚 coding 分，而非总分冒充），弱代理映射（置信度 <0.8，如
+// aesthetics_ui 借用多模态分）不接管锚点；类目分缺失时回退 OverallScore，
+// 不惩罚缺域证据的模型。
+func domainBenchmarkAnchor(bp config.ModelBenchmarkProfile, domain TaskDomain) (float64, bool) {
+	if domain != "" && domain != TaskDomainGeneral {
+		if mapping, ok := benchmarkDomainMappings[domain]; ok && mapping.confidence >= 0.8 {
+			if score, found := bp.CategoryScores[mapping.category]; found && score > 0 {
+				return score, true
+			}
+		}
+	}
+	return bp.OverallScore, bp.OverallScore > 0
+}
+
+// effortAwareBenchmarkScore 根据候选 effort 档位返回该档位对应的 benchmark 分数，
+// 锚点随任务域切换（domainBenchmarkAnchor）。当 BenchmarkEvidence 中存有该 effort
+// 的 overall 实测数据时，用实测 rawValue 相对 default effort 的比值缩放锚点；
+// 否则返回原始锚点（不惩罚缺数据）。effort 为空时视为 default。
+func effortAwareBenchmarkScore(bp config.ModelBenchmarkProfile, effort EffortLevel, domain TaskDomain) (float64, bool) {
+	anchor, known := domainBenchmarkAnchor(bp, domain)
+	if !known {
 		return 0, false
 	}
 	if effort == "" || effort == "default" {
-		return bp.OverallScore, true
+		return anchor, true
 	}
 
 	// 收集 default effort 的 overall rawValue 作为基准。
@@ -932,15 +956,15 @@ func effortAwareBenchmarkScore(bp config.ModelBenchmarkProfile, effort EffortLev
 		}
 	}
 	if defaultRaw <= 0 {
-		// 无 default 基准，直接返回 OverallScore。
-		return bp.OverallScore, true
+		// 无 default 基准，直接返回锚点。
+		return anchor, true
 	}
 	if effortRaw > 0 {
-		// 按实测 raw 比值缩放 OverallScore，反映 effort 间真实智商差异。
+		// 按实测 raw 比值缩放锚点，反映 effort 间真实智商差异。
 		ratio := effortRaw / defaultRaw
-		return bp.OverallScore * ratio, true
+		return anchor * ratio, true
 	}
-	return bp.OverallScore, true
+	return anchor, true
 }
 
 // 优先精确匹配候选 effort 档位；当 evidence 报告的档位超出注册表 SupportedEffortLevels
@@ -1015,8 +1039,9 @@ func (r *ModelResolver) buildRankedCandidates(
 			// 实测 cost 按候选 effort 精确取；未命中时回退该模型已测档位成本下界，
 			// 保证 frontier 校准在"evidence 档位超注册表档位"场景仍生效。
 			measuredCost := measuredCostForEffort(effortCostUSD, effort)
-			// benchmark 分按 effort 特定实测数据缩放，反映不同思考等级的真实智商差异。
-			effBenchScore, effBenchKnown := effortAwareBenchmarkScore(benchmark.Profile, effort)
+			// benchmark 分按 effort 特定实测数据缩放，反映不同思考等级的真实智商差异；
+			// 锚点随场景任务域切换（coding 场景锚 coding 类目分）。
+			effBenchScore, effBenchKnown := effortAwareBenchmarkScore(benchmark.Profile, effort, floor.TaskDomain)
 			ranked = append(ranked, rankedModelCandidate{
 				profile:                      profile,
 				effort:                       effort,

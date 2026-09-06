@@ -41,10 +41,14 @@ const (
 	frontierProvisionalLaneFactor = 1.5
 
 	// frontierMaxCostPremiumPerQualityBase 是 balanced 车道的成本溢价上限基础值。
-	// 相对最便宜前沿簇，每 1.0 质量增益（0-1 刻度）最多接受 2.0 倍成本溢价，
-	// 即每 0.01 质量增益约 2% 溢价。防止膝点落在"质量略高但成本翻倍"的簇上。
+	// 刻度按前沿观测带宽校准：候选合成质量分实际分布在 ~0.35-0.86，簇间断点
+	// 阈值 0.08-0.12 即"一档质量"，因此取 10.0——一档质量提升（≈0.1）允许约
+	// 2 倍成本溢价，全幅提升（≈0.4）允许约 5 倍。旧值 2.0 按 0-1 满幅刻度
+	// 标定，在真实带宽下任何 ≥2 倍的成本提升都不可辩护，balanced 退化为
+	// "永远选最便宜簇"（如 coding 场景 43.7 分的 mimo 压过 67.6 分的
+	// deepseek-v3.2）。
 	// 实际值会按 CostPreferenceMode 与 TaskClass 权重动态放大/收紧。
-	frontierMaxCostPremiumPerQualityBase = 2.0
+	frontierMaxCostPremiumPerQualityBase = 10.0
 )
 
 // frontierEffortCostFactor 是灰度期的 effort 成本系数（2026-07-26 联合路由计划 §3.4）。
@@ -124,11 +128,17 @@ func frontierQualityScore(candidate rankedModelCandidate, mode CostPreferenceMod
 // 避免显著质量优势被低成本候选的并列池吞掉。
 func frontierQualityHalfWidth(candidate rankedModelCandidate, mode CostPreferenceMode, maxBenchmark float64) float64 {
 	half := frontierQualityIntervalBase
-	if clampUnit(candidate.profile.ProviderQualityConfidence) < 0.5 {
-		half *= frontierLowConfidenceFactor
-	}
-	if candidate.benchmarkLane == "provisional" {
-		half *= frontierProvisionalLaneFactor
+	// 区间加宽只适用于缺乏实测基准的候选：有校准 benchmark 分的候选主锚本身
+	// 已是独立测量（±5 分量级），再叠乘渠道置信度与 provisional 泳道倍率会
+	// 把半宽推到 0.15，让真实质量差距（如 coding 43.7 vs 67.6）全部落回
+	// "噪声并列"——支配判定失效，前沿混入被支配点，簇结构锯齿化。
+	if !candidate.benchmarkKnown {
+		if clampUnit(candidate.profile.ProviderQualityConfidence) < 0.5 {
+			half *= frontierLowConfidenceFactor
+		}
+		if candidate.benchmarkLane == "provisional" {
+			half *= frontierProvisionalLaneFactor
+		}
 	}
 	// quality_first 下整体缩窄区间，让质量证据更锐利；cost_first 下保持较宽。
 	switch mode {
@@ -212,6 +222,10 @@ func buildFrontierPoints(ranked []rankedModelCandidate, floor CapabilityFloor, m
 		}
 	}
 
+	benchScale := frontierQualityWeights[mode].Benchmark
+	if benchScale <= 0 {
+		benchScale = frontierQualityWeights[CostPrefBalanced].Benchmark
+	}
 	points := make([]FrontierPoint, 0, len(ranked))
 	for i := range ranked {
 		c := ranked[i]
@@ -252,6 +266,7 @@ func buildFrontierPoints(ranked []rankedModelCandidate, floor CapabilityFloor, m
 				Source:     pointSource,
 			},
 			EvidenceVersion: frontierEvidenceVersion,
+			BenchScale:      benchScale,
 		})
 	}
 	return points
@@ -261,15 +276,17 @@ func buildFrontierPoints(ranked []rankedModelCandidate, floor CapabilityFloor, m
 
 // maxCostPremiumPerQuality 按成本偏好车道与任务类权重动态决定溢价上限。
 // quality_first / supervisor / long_context 允许更高溢价；cost_first / lightweight / embedding 更严格。
+// 各车道基准按 frontierMaxCostPremiumPerQualityBase 的倍率表达（3x / 1x / 0.5x），
+// 保持车道间相对松紧随基准重校准同步缩放。
 func maxCostPremiumPerQuality(mode CostPreferenceMode, taskClass TaskClass) float64 {
 	base := frontierMaxCostPremiumPerQualityBase
 	switch mode {
 	case CostPrefQualityFirst:
-		base = 6.0
+		base *= 3.0
 	case CostPrefCostFirst:
-		base = 1.0
+		base *= 0.5
 	default:
-		base = frontierMaxCostPremiumPerQualityBase
+		base *= 1.0
 	}
 
 	// 按任务类权重做 0.9~1.2 的微调：重质量任务稍微放宽，重成本任务稍微收紧。
@@ -309,15 +326,13 @@ func selectViaFrontier(
 	if mode == CostPrefQualityFirst && !capActive {
 		idx, note = selectFrontierQualityFirst(forest, ranked)
 	} else {
+		// 收益帽请求已在调用方收敛为档位带（selectQualityBenefitBand），
+		// 带内前沿不再需要簇索引投影；此处只保留带内"不重购不需要的质量"选点。
 		target := ladderTargetCluster(forest, mode)
 		if mode == CostPrefBalanced || (capActive && mode != CostPrefCostFirst) {
 			target = capClusterCostPremium(forest.Clusters, target, mode, floor.TaskClass)
 		}
 		if capActive {
-			capTarget := qualityBenefitCapClusterIndex(len(forest.Clusters), floor.QualityBenefitCap)
-			if target > capTarget {
-				target = capTarget
-			}
 			idx, note = selectBenefitCappedFrontierPoint(forest, target, ranked, mode, floor.QualityBenefitCap)
 		} else {
 			idx, note = selectFrontierClusterPoint(forest, target, ranked, mode)
@@ -329,20 +344,14 @@ func selectViaFrontier(
 	return idx, note, true
 }
 
-// qualityBenefitCapClusterIndex 将兼容性的四档请求目标投影到本次请求动态生成的 F0...Fn。
-// 它不改变模型的永久等级，也不限制簇数量；例如 7 个簇会映射为 F0/F2/F4/F6。
-func qualityBenefitCapClusterIndex(clusterCount int, cap QualityTier) int {
-	if clusterCount <= 1 {
-		return 0
-	}
-	maxIndex := clusterCount - 1
-	ratio := float64(qualityTierRank(cap)) / float64(qualityTierRank(QualityTierPremium))
-	return int(math.Round(float64(maxIndex) * ratio))
-}
-
-// ladderTargetCluster 复用 BuildCandidateLadder 的车道目标簇（Preferred[0]）。
+// ladderTargetCluster 返回车道目标簇（balanced=膝点；quality_first=最高簇；
+// cost_first=最低簇）。此前误取 Preferred[0]——balanced 的 Preferred 按簇序
+// 升序排列，Preferred[0] 是窗口内最便宜的簇（膝点-3），膝点语义被系统性丢弃。
 func ladderTargetCluster(forest FrontierForest, mode CostPreferenceMode) int {
 	ladder := BuildCandidateLadder(forest, mode)
+	if ladder.TargetClusterIdx >= 0 && ladder.TargetClusterIdx < len(forest.Clusters) {
+		return ladder.TargetClusterIdx
+	}
 	if len(ladder.Preferred) == 0 {
 		return 0
 	}

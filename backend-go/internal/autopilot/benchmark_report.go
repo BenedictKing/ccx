@@ -357,7 +357,13 @@ func findBetterOptions(ranked []rankedModelCandidate, selectedModel string, mode
 			continue
 		}
 		seen[cand.profile.ModelID] = true
-		options = append(options, fmt.Sprintf("%s(bench=%.2f,cost=%.2f)", cand.profile.ModelID, cand.benchmarkScore, cand.normalizedPublicCostUSD))
+		// 公开价未知的候选渲染 cost=unknown：frontier 因成本不可比将其排除在
+		// 选型外，cost=0.00 会被误读为"免费"。
+		costLabel := "unknown"
+		if cand.publicCostKnown && cand.normalizedPublicCostUSD > 0 {
+			costLabel = fmt.Sprintf("%.2f", cand.normalizedPublicCostUSD)
+		}
+		options = append(options, fmt.Sprintf("%s(bench=%.2f,cost=%s)", cand.profile.ModelID, cand.benchmarkScore, costLabel))
 	}
 	sort.Strings(options)
 	if len(options) > benchmarkReportMaxBetterOptions {

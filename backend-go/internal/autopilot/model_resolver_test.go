@@ -1532,3 +1532,51 @@ func TestMeasuredCostForEffort(t *testing.T) {
 		}
 	})
 }
+
+// TestEffortAwareBenchmarkScoreDomainAnchor 钉住域感知锚点：coding 请求锚 coding
+// 类目分而非 OverallScore 总分（总分冒充域分会把编程垫底模型推上榜首）；
+// general 沿用总分，弱代理映射与缺失类目回退总分。
+func TestEffortAwareBenchmarkScoreDomainAnchor(t *testing.T) {
+	bp := config.ModelBenchmarkProfile{
+		OverallScore:   60.72,
+		CategoryScores: map[string]float64{"coding": 43.7, "multimodal": 59.2},
+	}
+	cases := []struct {
+		name   string
+		bp     config.ModelBenchmarkProfile
+		effort EffortLevel
+		domain TaskDomain
+		want   float64
+		wantOK bool
+	}{
+		{"coding 域取 coding 类目分", bp, EffortMedium, TaskDomainCoding, 43.7, true},
+		{"code_review 同映射取 coding 类目分", bp, "", TaskDomainCodeReview, 43.7, true},
+		{"general 域沿用 OverallScore", bp, EffortMedium, TaskDomainGeneral, 60.72, true},
+		{"空域沿用 OverallScore", bp, "", "", 60.72, true},
+		{"类目缺失回退 OverallScore", config.ModelBenchmarkProfile{OverallScore: 62.16, CategoryScores: map[string]float64{"knowledge": 72.9}}, EffortHigh, TaskDomainCoding, 62.16, true},
+		{"弱代理映射 aesthetics_ui 不接管锚点", bp, "", TaskDomainAestheticsUI, 60.72, true},
+		{"仅类目分无总分也可作锚", config.ModelBenchmarkProfile{CategoryScores: map[string]float64{"coding": 67.6}}, "", TaskDomainCoding, 67.6, true},
+		{"总分与类目分皆缺失", config.ModelBenchmarkProfile{CategoryScores: map[string]float64{"knowledge": 64}}, "", TaskDomainCoding, 0, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, ok := effortAwareBenchmarkScore(c.bp, c.effort, c.domain)
+			if ok != c.wantOK || (c.wantOK && got != c.want) {
+				t.Fatalf("期望 (%.2f,%v)，实际 (%.2f,%v)", c.want, c.wantOK, got, ok)
+			}
+		})
+	}
+
+	// effort 比值缩放作用于域锚点：overall 证据 high/off=75/50 → coding 锚 50×1.5。
+	scaled := config.ModelBenchmarkProfile{
+		OverallScore:   100,
+		CategoryScores: map[string]float64{"coding": 50},
+		BenchmarkEvidence: []config.ModelBenchmarkEvidence{
+			{Domain: "overall", Effort: "off", RawValue: 50},
+			{Domain: "overall", Effort: "high", RawValue: 75},
+		},
+	}
+	if got, ok := effortAwareBenchmarkScore(scaled, EffortHigh, TaskDomainCoding); !ok || got != 75 {
+		t.Fatalf("effort 缩放应作用于域锚点：期望 (75,true)，实际 (%.2f,%v)", got, ok)
+	}
+}

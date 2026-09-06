@@ -206,6 +206,20 @@ func TestFindBetterOptions(t *testing.T) {
 	}
 }
 
+func TestFindBetterOptionsUnknownCost(t *testing.T) {
+	// 公开价未知的候选仍应作为 anomaly 报出（frontier 因成本不可比将其排除在选型外），
+	// 但 cost 必须渲染 unknown，不得以 0.00 冒充免费。
+	ranked := []rankedModelCandidate{
+		makeRankedCand("selected", EffortMedium, 60.72, 0.42, QualityTierNormal),
+		makeRankedCand("unpriced", EffortMedium, 66.09, 0, QualityTierNormal),
+	}
+	got := findBetterOptions(ranked, "selected", CostPrefBalanced)
+	want := []string{"unpriced(bench=66.09,cost=unknown)"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("期望 %v，实际 %v", want, got)
+	}
+}
+
 func TestFormatTopCandidatesTable(t *testing.T) {
 	if got := formatTopCandidatesTable(nil); got != "" {
 		t.Fatalf("空列表应返回空串，实际 %q", got)

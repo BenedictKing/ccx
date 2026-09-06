@@ -311,7 +311,7 @@ func TestClusterGapThreshold(t *testing.T) {
 			mkPoint("m2", "m2/max", 0.641, 24),
 			mkPoint("m3", "m3/high", 0.79, 30),
 		}
-		if got := clusterGapThreshold(points); got != maxClusterGap {
+		if got := clusterGapThreshold(points, frontierBenchScale(points)); got != maxClusterGap {
 			t.Fatalf("clusterGapThreshold() = %f, want capped at %f", got, maxClusterGap)
 		}
 	})
@@ -322,13 +322,13 @@ func TestClusterGapThreshold(t *testing.T) {
 			mkPoint("b", "b/high", 0.55, 20),
 		}
 		// 去重后仅一个 0.049 的 gap：中位数+MAD=0.049 < 0.08 → 兜底。
-		if got := clusterGapThreshold(points); got != minClusterGap {
+		if got := clusterGapThreshold(points, frontierBenchScale(points)); got != minClusterGap {
 			t.Fatalf("clusterGapThreshold() = %f, want floored to %f", got, minClusterGap)
 		}
 	})
 	t.Run("空样本兜底", func(t *testing.T) {
 		points := []FrontierPoint{mkPoint("only", "only/high", 0.5, 10)}
-		if got := clusterGapThreshold(points); got != minClusterGap {
+		if got := clusterGapThreshold(points, frontierBenchScale(points)); got != minClusterGap {
 			t.Fatalf("clusterGapThreshold() = %f, want %f for single point", got, minClusterGap)
 		}
 	})

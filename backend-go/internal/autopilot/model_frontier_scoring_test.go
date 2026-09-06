@@ -65,18 +65,29 @@ func TestFrontierQualityScore(t *testing.T) {
 func TestFrontierQualityHalfWidth(t *testing.T) {
 	cases := []struct {
 		name       string
+		benchKnown bool
 		confidence float64
 		lane       string
 		expected   float64
 	}{
-		{"高置信 + verified", 1.0, "verified", 0.05},
-		{"低置信加宽", 0.0, "verified", 0.10},
-		{"provisional 加宽", 1.0, "provisional", 0.075},
-		{"低置信 + provisional", 0.0, "provisional", 0.15},
+		{"有基准分：高置信 + verified", true, 1.0, "verified", 0.05},
+		// 区间加宽只适用于缺乏实测基准的候选：有校准 benchmark 分的主锚已是
+		// 独立测量，再叠加渠道置信度/泳道倍率会把真实质量差距压回噪声并列。
+		{"有基准分：低置信不叠加加宽", true, 0.0, "verified", 0.05},
+		{"有基准分：provisional 不叠加加宽", true, 1.0, "provisional", 0.05},
+		{"有基准分：低置信 + provisional 不叠加加宽", true, 0.0, "provisional", 0.05},
+		{"无基准分：高置信 + verified", false, 1.0, "verified", 0.05},
+		{"无基准分：低置信加宽", false, 0.0, "verified", 0.10},
+		{"无基准分：provisional 加宽", false, 1.0, "provisional", 0.075},
+		{"无基准分：低置信 + provisional", false, 0.0, "provisional", 0.15},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			cand := makeFrontierCandidate("m", 2, 0.5, 80, 10)
+			bench := 0.0
+			if tc.benchKnown {
+				bench = 80
+			}
+			cand := makeFrontierCandidate("m", 2, 0.5, bench, 10)
 			cand.profile.ProviderQualityConfidence = tc.confidence
 			cand.benchmarkLane = tc.lane
 			if got := frontierQualityHalfWidth(cand, CostPrefBalanced, 0); !almostEqual(got, tc.expected) {
@@ -374,29 +385,6 @@ func TestSelectViaFrontier_EffortInflationGuard(t *testing.T) {
 		if !ok || ranked[idx].effort != EffortLow {
 			t.Fatalf("mode %s selected effort %q (ok=%v), want low", mode, ranked[idx].effort, ok)
 		}
-	}
-}
-
-func TestQualityBenefitCapClusterIndex(t *testing.T) {
-	tests := []struct {
-		name         string
-		clusterCount int
-		cap          QualityTier
-		want         int
-	}{
-		{name: "单簇自然收敛", clusterCount: 1, cap: QualityTierHigh, want: 0},
-		{name: "四簇精确映射 normal", clusterCount: 4, cap: QualityTierNormal, want: 1},
-		{name: "四簇精确映射 high", clusterCount: 4, cap: QualityTierHigh, want: 2},
-		{name: "七簇保留动态细分 normal", clusterCount: 7, cap: QualityTierNormal, want: 2},
-		{name: "七簇保留动态细分 high", clusterCount: 7, cap: QualityTierHigh, want: 4},
-		{name: "七簇 premium 到最高簇", clusterCount: 7, cap: QualityTierPremium, want: 6},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := qualityBenefitCapClusterIndex(tt.clusterCount, tt.cap); got != tt.want {
-				t.Fatalf("qualityBenefitCapClusterIndex(%d, %q) = %d, want %d", tt.clusterCount, tt.cap, got, tt.want)
-			}
-		})
 	}
 }
 
