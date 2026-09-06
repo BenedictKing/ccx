@@ -1,7 +1,10 @@
 package autopilot
 
 import (
+	"encoding/json"
 	"math"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/BenedictKing/ccx/internal/config"
@@ -305,8 +308,27 @@ func TestEffortAwareQualityTierLunaReplay(t *testing.T) {
 	}
 }
 
-func TestEffortAwareQualityAssessmentFor_ShadowKeepsBaseScoreUntouched(t *testing.T) {
-	entry := channelScoreEntry{
+// newEffortTierTestRouter 构造指定 reasoningEffort 配置的 SmartRouter（仅 configManager）。
+func newEffortTierTestRouter(t *testing.T, reasoning config.ReasoningEffortConfig) *SmartRouter {
+	t.Helper()
+	cfg := config.Config{AutopilotRouting: config.AutopilotRoutingConfig{ReasoningEffort: reasoning}}
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		t.Fatalf("序列化配置失败: %v", err)
+	}
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(configPath, data, 0600); err != nil {
+		t.Fatalf("写入临时配置失败: %v", err)
+	}
+	cfgManager, err := config.NewConfigManager(configPath, "")
+	if err != nil {
+		t.Fatalf("创建 ConfigManager 失败: %v", err)
+	}
+	return &SmartRouter{configManager: cfgManager}
+}
+
+func newEffortTierTestEntry() channelScoreEntry {
+	return channelScoreEntry{
 		ModelID: "gpt-5.6-luna",
 		Effort:  EffortMax,
 		ScoringCandidate: ScoringCandidate{
@@ -320,15 +342,104 @@ func TestEffortAwareQualityAssessmentFor_ShadowKeepsBaseScoreUntouched(t *testin
 			DomainStrengthScore: 0.5,
 		},
 	}
-	ctx := ScoringContext{Weights: DefaultTaskWeights()[TaskClassWorker], TargetQualityTier: QualityTierNormal}
-	base := ScoreCandidate(entry.ScoringCandidate, ctx).Score
-	applyEffortQualityShadow(&entry, ctx)
-	after := ScoreCandidate(entry.ScoringCandidate, ctx).Score
-	if after != base {
-		t.Fatalf("shadow evaluation mutated live scoring input: before=%v after=%v", base, after)
+}
+
+func effortTierTestContext() ScoringContext {
+	return ScoringContext{Weights: DefaultTaskWeights()[TaskClassWorker], TargetQualityTier: QualityTierNormal}
+}
+
+// TestEffortQualityTierActiveDrivesScoring 锁定转正语义：
+// effort-aware 档位写入真实评分输入，排序分随之变化，影子总分与实际分同源。
+func TestEffortQualityTierActiveDrivesScoring(t *testing.T) {
+	// configManager 为 nil 时按默认配置（active 开启）处理。
+	r := &SmartRouter{}
+	if !r.effortQualityTierActiveEnabled() {
+		t.Fatal("默认配置应启用 effort 质量档转正")
 	}
-	if entry.EffortQualityTier == "" || !entry.EffortQualityKnown || entry.EffortAwareTotalScore <= base {
-		t.Fatalf("shadow assessment = tier=%q known=%v score=%v total=%v, want a higher max-effort observation", entry.EffortQualityTier, entry.EffortQualityKnown, entry.EffortQualityScore, entry.EffortAwareTotalScore)
+
+	entry := newEffortTierTestEntry()
+	ctx := effortTierTestContext()
+	base := ScoreCandidate(entry.ScoringCandidate, ctx).Score
+	scored := r.scoreChannelEntry(&entry, ctx)
+
+	assessment := EffortAwareQualityAssessmentFor(entry.ModelID, entry.Effort, entry.ScoringCandidate.ModelFamily)
+	if entry.BaseQualityTier != QualityTierLow {
+		t.Fatalf("baseQualityTier = %q, want low（保留降档前口径）", entry.BaseQualityTier)
+	}
+	if entry.ScoringCandidate.QualityTier != assessment.Tier || entry.EffortQualityTier != assessment.Tier {
+		t.Fatalf("scoring input tier=%q trace tier=%q, want effort-aware tier %q", entry.ScoringCandidate.QualityTier, entry.EffortQualityTier, assessment.Tier)
+	}
+	if scored.Score <= base {
+		t.Fatalf("active 评分应体现 effort 升档: scored=%v base=%v", scored.Score, base)
+	}
+	if entry.EffortAwareTotalScore != scored.Score {
+		t.Fatalf("影子总分应与实际分同源: shadow=%v scored=%v", entry.EffortAwareTotalScore, scored.Score)
+	}
+	if scored.Penalty != 0 {
+		t.Fatalf("已知证据不应产生折扣: penalty=%v", scored.Penalty)
+	}
+}
+
+// TestEffortQualityTierActiveDisabledKeepsBaseOrdering 锁定回退开关：
+// qualityTierActiveEnabled=false 时排序输入保持基础档，影子总分仅作观测预览。
+func TestEffortQualityTierActiveDisabledKeepsBaseOrdering(t *testing.T) {
+	disabled := false
+	r := newEffortTierTestRouter(t, config.ReasoningEffortConfig{QualityTierActiveEnabled: &disabled})
+	if r.effortQualityTierActiveEnabled() {
+		t.Fatal("显式 false 应关闭 effort 质量档转正")
+	}
+
+	entry := newEffortTierTestEntry()
+	ctx := effortTierTestContext()
+	base := ScoreCandidate(entry.ScoringCandidate, ctx).Score
+	scored := r.scoreChannelEntry(&entry, ctx)
+
+	if entry.ScoringCandidate.QualityTier != QualityTierLow {
+		t.Fatalf("回退模式不得改写排序输入: tier=%q", entry.ScoringCandidate.QualityTier)
+	}
+	if scored.Score != base {
+		t.Fatalf("回退模式排序分应等于基础档: scored=%v base=%v", scored.Score, base)
+	}
+	if !entry.EffortQualityKnown || entry.EffortAwareTotalScore <= scored.Score {
+		t.Fatalf("影子观测应保留: known=%v shadow=%v scored=%v", entry.EffortQualityKnown, entry.EffortAwareTotalScore, scored.Score)
+	}
+}
+
+// TestEffortQualityTierActiveDiscountsUnknownEvidence 锁定未知证据折扣进实际分：
+// 折扣只作用于质量收益（以 penalty 记录），SavingsScore 保持独立。
+func TestEffortQualityTierActiveDiscountsUnknownEvidence(t *testing.T) {
+	r := &SmartRouter{}
+	entry := channelScoreEntry{
+		ModelID: "totally-unknown-model",
+		Effort:  EffortLow,
+		ScoringCandidate: ScoringCandidate{
+			ChannelUID:          "unknown",
+			QualityTier:         QualityTierNormal,
+			StabilityTier:       StabilityTierNormal,
+			SpeedTier:           SpeedTierNormal,
+			CostTier:            CostTierNormal,
+			HealthState:         HealthStateHealthy,
+			ModelFamily:         ModelFamilyOpenAI,
+			DomainStrengthScore: 0.5,
+		},
+	}
+	ctx := effortTierTestContext()
+	scored := r.scoreChannelEntry(&entry, ctx)
+
+	if entry.QualityConfidence != 0.5 || entry.QualityDiscount != 0.5 {
+		t.Fatalf("未知证据置信度/折扣 = %v/%v, want 0.5/0.5", entry.QualityConfidence, entry.QualityDiscount)
+	}
+	// 评分输入已被改写为 effort-aware 档，重算得到折扣前基准。
+	preDiscount := ScoreCandidate(entry.ScoringCandidate, ctx)
+	wantDiscount := ctx.Weights.WQuality * preDiscount.QualityScore * entry.QualityDiscount
+	if math.Abs(scored.Score-(preDiscount.Score-wantDiscount)) > 1e-9 {
+		t.Fatalf("折扣后总分 = %v, want %v（折扣 %v）", scored.Score, preDiscount.Score-wantDiscount, wantDiscount)
+	}
+	if math.Abs(scored.Penalty-wantDiscount) > 1e-9 {
+		t.Fatalf("折扣应记入 penalty: penalty=%v want=%v", scored.Penalty, wantDiscount)
+	}
+	if scored.SavingsScore != preDiscount.SavingsScore {
+		t.Fatalf("折扣不得影响 SavingsScore: %v vs %v", scored.SavingsScore, preDiscount.SavingsScore)
 	}
 }
 
@@ -340,6 +451,17 @@ func TestEffortQualityShadowConfigCanBeDisabled(t *testing.T) {
 	disabled := false
 	if (config.ReasoningEffortConfig{QualityTierShadowEnabled: &disabled}).IsQualityTierShadowEnabled() {
 		t.Fatal("explicit false shadow setting should disable observation")
+	}
+}
+
+func TestEffortQualityActiveConfigDefaults(t *testing.T) {
+	defaultConfig := config.ReasoningEffortConfig{}
+	if !defaultConfig.IsQualityTierActiveEnabled() {
+		t.Fatal("missing active setting should default to enabled")
+	}
+	disabled := false
+	if (config.ReasoningEffortConfig{QualityTierActiveEnabled: &disabled}).IsQualityTierActiveEnabled() {
+		t.Fatal("explicit false active setting should disable active scoring")
 	}
 }
 

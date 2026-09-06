@@ -60,7 +60,7 @@ func federationChannels(penalty float64) []scheduler.ChannelInfo {
 			Index:             0,
 			Name:              "sol-chat",
 			Status:            "active",
-			ActualModel:       "gpt-5.6-sol",
+			ActualModel:       "fed-sibling-model",
 			ProtocolFidelity:  "converted",
 			ConversionPenalty: penalty,
 		},
@@ -81,9 +81,9 @@ func federationUpstreamFor(cfg config.Config) func(scheduler.ChannelInfo) *confi
 }
 
 // federationModelProfileStore 为 chat sibling 挂显式模型级档位。
-// applyModelQualityTier 在命中模型级画像时不会再用注册表实时推导覆盖档位；
-// 不注入则 mock 的 endpoint 级 Premium 会被 gpt-5.6-sol 的注册表档位
-// （随基准分布漂移）穿透，测试将不再隔离于数据快照。
+// 模型名用虚构 ID（无注册表基准证据）：effort 质量档转正后有证据的模型会被
+// 档位证据覆盖 mock 档位，测试须隔离于基准数据快照；无证据时 mock 的基础档
+// （含 endpoint 级 Premium）原样保留，仅叠加未知证据折扣。
 func federationModelProfileStore(t *testing.T) *ModelProfileStore {
 	t.Helper()
 	db := newTestDB(t)
@@ -95,7 +95,7 @@ func federationModelProfileStore(t *testing.T) *ModelProfileStore {
 		ChannelUID:  "ch_k3_chat",
 		ChannelKind: "chat",
 		MetricsKey:  "metrics_k3",
-		ModelID:     "gpt-5.6-sol",
+		ModelID:     "fed-sibling-model",
 		QualityTier: QualityTierPremium,
 	}); err != nil {
 		t.Fatalf("Upsert model profile 失败: %v", err)
@@ -134,7 +134,7 @@ func runFederationFilter(t *testing.T, profile *RequestProfile, penalty float64)
 
 func federationWorkerProfile() *RequestProfile {
 	return &RequestProfile{
-		Model: "claude-sonnet-5", ChannelKind: "messages", Operation: "completion",
+		Model: "fed-native-model", ChannelKind: "messages", Operation: "completion",
 		AgentRole: "main", TaskClass: TaskClassWorker, Complexity: TaskComplexityRoutine,
 		QualityNeed: QualityTierHigh, EstTokens: 4000, ToolUseNeed: true,
 	}
@@ -142,7 +142,7 @@ func federationWorkerProfile() *RequestProfile {
 
 func federationComplexProfile() *RequestProfile {
 	return &RequestProfile{
-		Model: "claude-sonnet-5", ChannelKind: "messages", Operation: "completion",
+		Model: "fed-native-model", ChannelKind: "messages", Operation: "completion",
 		AgentRole: "main", TaskClass: TaskClassWorker, Complexity: TaskComplexityComplex,
 		QualityNeed: QualityTierPremium, EstTokens: 90_000, ToolUseNeed: true, ReasoningNeed: true,
 	}
@@ -169,7 +169,7 @@ func TestFederationTraceRecordsRequestAndExecutionKind(t *testing.T) {
 	if sibling.ProtocolFidelity != "converted" || sibling.ConversionPenalty != 0.35 {
 		t.Fatalf("fidelity/penalty not traced: %#v", sibling)
 	}
-	if sibling.MappedModel != "gpt-5.6-sol" || sibling.MappingSource == "" {
+	if sibling.MappedModel != "fed-sibling-model" || sibling.MappingSource == "" {
 		t.Fatalf("sibling execution model attribution missing: %#v", sibling)
 	}
 	for i := range trace.Candidates {
@@ -232,7 +232,7 @@ func TestFederationEntryUsesExecutionKindForProfileLookup(t *testing.T) {
 	processed := cfgManager.GetConfig()
 	sibling := federationChannels(0.35)[1]
 	upstream := processed.ChatUpstream[0]
-	entry := router.buildChannelEntry(sibling, &upstream, sibling.Route.Kind, "gpt-5.6-sol", processed.UpstreamModelCapabilities)
+	entry := router.buildChannelEntry(sibling, &upstream, sibling.Route.Kind, "fed-sibling-model", processed.UpstreamModelCapabilities)
 
 	if entry.ChannelKind != "chat" {
 		t.Fatalf("ChannelKind = %q, want chat", entry.ChannelKind)

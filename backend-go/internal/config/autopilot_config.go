@@ -398,11 +398,20 @@ type ReasoningEffortConfig struct {
 	// QualityTierShadowEnabled 仅记录模型×effort 质量档及影子总分，不改变实际排序。
 	// nil 默认开启；指针用于区分旧配置缺失与显式 false。
 	QualityTierShadowEnabled *bool `json:"qualityTierShadowEnabled,omitempty"`
+	// QualityTierActiveEnabled 将模型×effort 质量档与未知证据折扣用于实际排序
+	// （2026-09 由 shadow 转正）。nil 默认开启；显式 false 回退为仅影子观测，
+	// 排序回到模型基础档口径。
+	QualityTierActiveEnabled *bool `json:"qualityTierActiveEnabled,omitempty"`
 }
 
 // IsQualityTierShadowEnabled 返回 effort-aware 质量档 shadow 是否开启。
 func (c ReasoningEffortConfig) IsQualityTierShadowEnabled() bool {
 	return c.QualityTierShadowEnabled == nil || *c.QualityTierShadowEnabled
+}
+
+// IsQualityTierActiveEnabled 返回 effort-aware 质量档是否参与实际排序。
+func (c ReasoningEffortConfig) IsQualityTierActiveEnabled() bool {
+	return c.QualityTierActiveEnabled == nil || *c.QualityTierActiveEnabled
 }
 
 func boolPointer(value bool) *bool { return &value }
@@ -640,6 +649,7 @@ func DefaultAutopilotRoutingConfig() AutopilotRoutingConfig {
 			ExpandVariants:           true,
 			RespectClientThinking:    true,
 			QualityTierShadowEnabled: boolPointer(true),
+			QualityTierActiveEnabled: boolPointer(true),
 			PerTaskClass: map[string][]string{
 				"supervisor":   {"high", "max"},
 				"worker":       {"medium"},
@@ -1345,6 +1355,10 @@ func (c AutopilotRoutingConfig) deepCopy() AutopilotRoutingConfig {
 	if c.ReasoningEffort.QualityTierShadowEnabled != nil {
 		value := *c.ReasoningEffort.QualityTierShadowEnabled
 		cp.ReasoningEffort.QualityTierShadowEnabled = &value
+	}
+	if c.ReasoningEffort.QualityTierActiveEnabled != nil {
+		value := *c.ReasoningEffort.QualityTierActiveEnabled
+		cp.ReasoningEffort.QualityTierActiveEnabled = &value
 	}
 
 	// TrustedRoutingAdvisor slice 字段

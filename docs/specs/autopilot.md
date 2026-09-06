@@ -833,7 +833,8 @@ health(40) > fastDecay(25) > successRate(20) > latency(10) > cost(5)
 - **P2（计划，依赖 P1 的观测字段）**：为缺少可靠 coding 证据、仅依赖模型族兜底的候选引入置信度折扣，作用于质量收益而非硬能力过滤。折扣必须与 `SavingsScore` 分离，避免低价叠加未知质量后反超有可靠证据的同档模型；不直接使用 overall intelligence 代替 coding 证据。
 - **P2 shadow（本次已实现）**：无可靠 coding 证据的候选以 `qualityConfidence=0.5` 计算 `effortAwareTotalScore`，已知 coding 证据保持 `1.0`；仅折扣质量收益，`SavingsScore`、基础 `totalScore`、硬约束和线上排序不变。trace/UI 同时输出折扣原因 `missing_reliable_coding_evidence`。
 - **P2 验收**：增加 `kimi-k2-thinking` 对 `kimi-k3` 的固定 trace 回放；质量证据未知的候选不得仅靠族兜底同档和价格优势反超可靠证据候选，除非 `cost_first` 场景明确允许；`quality_first` 不降级可靠证据，`balanced` 的价格收益需跨过配置化置信度门槛；输出折扣原因和原始/调整后质量分以便审计。
-- **发布顺序**：P0 独立发布并确认画像覆盖率和 trace effort 非空率；P1 shadow 回放后单独提交；P2 基于 P1 数据定阈值并单独提交。P1/P2 各自保留开关，禁止在同一发布中同时切 active，以便归因和回滚。
+- **P1+P2 active（2026-09-06 转正）**：`reasoningEffort.qualityTierActiveEnabled`（默认开启，显式 false 回退纯影子）把模型×effort 档位写入实际评分输入——`totalScore`、`scores[].quality` 与排序均按 effort 档计，`effortAwareTotalScore` 与实际分同源，转换罚分照常叠加。档位取值语义：有注册表证据时证据档位覆盖画像基础档（证据是能力事实源，premium 档内 benchmark tie-break 仅在 effort 档同为 premium 时保留）；无证据（`effortQualityKnown=false`）时保留画像/基础档、不做 family 兜底重评（维持 `applyModelQualityTier` 的画像优先级），仅叠加未知证据折扣（`qualityConfidence=0.5` 折半质量收益，计入 `penalty`，`SavingsScore` 独立）。advisor MinQualityTier 豁免本就以 effort-aware 档为准，两处口径一致。
+- **发布顺序**：P0 独立发布并确认画像覆盖率和 trace effort 非空率；P1 shadow 回放后单独提交；P2 基于 P1 数据定阈值并单独提交。P1/P2 各自保留开关，禁止在同一发布中同时切 active，以便归因和回滚。（2026-09-06 实际执行：P1+P2 经拍板同批转正，`qualityTierActiveEnabled` 单键统一控制、一键整体回滚；触发动机是 UI 并排暴露「Score 列不含 effort vs 影子总分含 effort」的口径矛盾。）
 
 ### 5.25 上下文窗口自适应学习与溢出逃生阀（gpt-5.6-sol 274K 事故）
 

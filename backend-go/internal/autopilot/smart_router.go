@@ -347,11 +347,7 @@ func (r *SmartRouter) BuildPlanWithOptions(profile *RequestProfile, opts BuildPl
 			savingsKey = e.ChannelUID
 		}
 		e.ScoringCandidate.SavingsScore = savingsMap[savingsKey]
-		applyDomainStrength(&e, ctx.TaskDomain)
-		if r.effortQualityTierShadowEnabled() {
-			applyEffortQualityShadow(&e, ctx)
-		}
-		scored := ScoreCandidate(e.ScoringCandidate, ctx)
+		scored := r.scoreChannelEntry(&e, ctx)
 		scoredEntries = append(scoredEntries, scoredChannelEntry{entry: e, scored: scored})
 	}
 	sortScoredChannelEntries(scoredEntries)
@@ -824,11 +820,7 @@ func (r *SmartRouter) executeFilter(
 			savingsKey = e.ChannelUID
 		}
 		e.ScoringCandidate.SavingsScore = savingsMap[savingsKey]
-		applyDomainStrength(&e, scoringCtx.TaskDomain)
-		if r.effortQualityTierShadowEnabled() {
-			applyEffortQualityShadow(&e, scoringCtx)
-		}
-		scored := ScoreCandidate(e.ScoringCandidate, scoringCtx)
+		scored := r.scoreChannelEntry(&e, scoringCtx)
 		if e.ProtocolFidelity == "converted" && e.ConversionPenalty > 0 {
 			scored.Score -= e.ConversionPenalty
 			scored.Penalty += e.ConversionPenalty
@@ -1381,12 +1373,40 @@ type scoredChannelEntry struct {
 	scored ScoredCandidate
 }
 
-func applyEffortQualityShadow(entry *channelScoreEntry, ctx ScoringContext) {
+// scoreChannelEntry 统一真实路径与 dry-run 的候选评分顺序：
+// 域优势 → 模型×effort 质量档（观测 + 转正排序）→ 十项评分 → 未知证据质量折扣。
+func (r *SmartRouter) scoreChannelEntry(e *channelScoreEntry, ctx ScoringContext) ScoredCandidate {
+	applyDomainStrength(e, ctx.TaskDomain)
+	r.applyEffortQualityTier(e, ctx)
+	scored := ScoreCandidate(e.ScoringCandidate, ctx)
+	if r.effortQualityTierActiveEnabled() && e.QualityDiscount > 0 {
+		// 与影子口径一致：未知证据只折扣质量收益，SavingsScore 保持独立，
+		// 避免低价与未知质量叠加获利。
+		discount := ctx.Weights.WQuality * scored.QualityScore * e.QualityDiscount
+		scored.Score -= discount
+		scored.Penalty += discount
+	}
+	if r.effortQualityTierActiveEnabled() {
+		// 转正后实际分即 effort-aware 分：影子总分与排序同源，避免双口径漂移。
+		// 转换罚分等后续调整仍在其上继续扣减。
+		e.EffortAwareTotalScore = scored.Score
+	}
+	return scored
+}
+
+// applyEffortQualityTier 计算模型×effort 质量档评估。观测字段始终填充（trace/回放）；
+// active（转正）时把档位写进真实评分输入，shadow-only 时保持排序不变并输出影子总分预览。
+// 无注册表证据（!Known）时以基础档（画像/现状）为准，保持 applyModelQualityTier
+// 的画像优先级；family 兜底仅在基础档缺失时使用，质量折扣照常表达证据缺失。
+func (r *SmartRouter) applyEffortQualityTier(entry *channelScoreEntry, ctx ScoringContext) {
 	if entry == nil {
 		return
 	}
 	entry.BaseQualityTier = entry.ScoringCandidate.QualityTier
 	assessment := EffortAwareQualityAssessmentFor(entry.ModelID, entry.Effort, entry.ScoringCandidate.ModelFamily)
+	if !assessment.Known && entry.BaseQualityTier != "" {
+		assessment.Tier = entry.BaseQualityTier
+	}
 	entry.EffortQualityTier = assessment.Tier
 	entry.EffortQualityScore = assessment.Score
 	entry.EffortEvidenceClass = assessment.Evidence
@@ -1397,19 +1417,37 @@ func applyEffortQualityShadow(entry *channelScoreEntry, ctx ScoringContext) {
 		entry.QualityDiscountReason = "missing_reliable_coding_evidence"
 	}
 
-	shadowCandidate := entry.ScoringCandidate
-	shadowCandidate.QualityTier = assessment.Tier
-	shadowCandidate.QualityBenchmarkKnown = assessment.Tier == QualityTierPremium && entry.BenchmarkKnown
-	if shadowCandidate.QualityBenchmarkKnown {
-		shadowCandidate.QualityBenchmarkScore = entry.BenchmarkScore
-	} else {
-		shadowCandidate.QualityBenchmarkScore = 0
+	if r.effortQualityTierActiveEnabled() {
+		entry.ScoringCandidate = effortAwareScoringCandidate(entry, assessment)
+		return
 	}
+	if r.effortQualityTierShadowEnabled() {
+		applyEffortQualityShadowPreview(entry, assessment, ctx)
+	}
+}
+
+// effortAwareScoringCandidate 返回套用 effort-aware 档位后的评分输入副本：
+// premium 档内仍用模型级 benchmark 做 tie-break，非 premium 清零避免跨档泄漏。
+func effortAwareScoringCandidate(entry *channelScoreEntry, assessment EffortQualityAssessment) ScoringCandidate {
+	candidate := entry.ScoringCandidate
+	candidate.QualityTier = assessment.Tier
+	candidate.QualityBenchmarkKnown = assessment.Tier == QualityTierPremium && entry.BenchmarkKnown
+	if candidate.QualityBenchmarkKnown {
+		candidate.QualityBenchmarkScore = entry.BenchmarkScore
+	} else {
+		candidate.QualityBenchmarkScore = 0
+	}
+	return candidate
+}
+
+// applyEffortQualityShadowPreview 用 effort-aware 档位重算总分写入观测字段，
+// 不改真实评分输入（shadow-only 口径，排序仍按基础档）。
+func applyEffortQualityShadowPreview(entry *channelScoreEntry, assessment EffortQualityAssessment, ctx ScoringContext) {
+	shadowCandidate := effortAwareScoringCandidate(entry, assessment)
 	shadowScore := ScoreCandidate(shadowCandidate, ctx).Score
 	if entry.QualityDiscount > 0 {
 		// 只折扣质量收益，SavingsScore 仍保持独立，避免低价与未知质量叠加获利。
-		adjustedQuality := ScoreCandidate(shadowCandidate, ctx).QualityScore * entry.QualityConfidence
-		shadowScore -= ctx.Weights.WQuality * (ScoreCandidate(shadowCandidate, ctx).QualityScore - adjustedQuality)
+		shadowScore -= ctx.Weights.WQuality * ScoreCandidate(shadowCandidate, ctx).QualityScore * entry.QualityDiscount
 	}
 	entry.EffortAwareTotalScore = shadowScore
 }
@@ -1426,6 +1464,13 @@ func (r *SmartRouter) effortQualityTierShadowEnabled() bool {
 		return true
 	}
 	return r.configManager.GetAutopilotRouting().ReasoningEffort.IsQualityTierShadowEnabled()
+}
+
+func (r *SmartRouter) effortQualityTierActiveEnabled() bool {
+	if r == nil || r.configManager == nil {
+		return true
+	}
+	return r.configManager.GetAutopilotRouting().ReasoningEffort.IsQualityTierActiveEnabled()
 }
 
 // sortScoredChannelEntries 统一真实路径与 dry-run 的排序语义。
