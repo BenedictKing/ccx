@@ -631,6 +631,26 @@ func TestScoreCandidate_HigherQualityIsNotPenalizedAboveFloor(t *testing.T) {
 	}
 }
 
+func TestScoreCandidate_EffortQualityBreaksSameTierTie(t *testing.T) {
+	ctx := ScoringContext{Weights: ScoringWeights{WQuality: 1}}
+	base := ScoringCandidate{QualityTier: QualityTierHigh, EffortQualityConfidence: 1}
+	lowEffort := base
+	lowEffort.EffortQualityScore = 60
+	highEffort := base
+	highEffort.EffortQualityScore = 80
+	low := ScoreCandidate(lowEffort, ctx)
+	high := ScoreCandidate(highEffort, ctx)
+	if high.Score <= low.Score {
+		t.Fatalf("同质量档的连续 effort 分应参与排序: high=%v low=%v", high.Score, low.Score)
+	}
+	if high.Score-low.Score >= 1 {
+		t.Fatalf("连续 tie-break 不得跨越质量档间距: delta=%v", high.Score-low.Score)
+	}
+	if high.QualityScore <= low.QualityScore {
+		t.Fatalf("质量分明细应包含连续 effort 加成: high=%v low=%v", high.QualityScore, low.QualityScore)
+	}
+}
+
 // ── Penalty 测试 ──
 
 func TestScoreCandidate_Penalty(t *testing.T) {

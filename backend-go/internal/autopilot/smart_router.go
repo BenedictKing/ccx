@@ -1356,7 +1356,7 @@ type channelScoreEntry struct {
 	Effort        EffortLevel
 	EffortDecided bool
 
-	// P1 shadow 评估：保留基础档与实际 effort 档的差异，但不改 ScoringCandidate。
+	// effort 质量评估：保留基础档与实际 effort 档的差异，并在 active 模式写入评分输入。
 	BaseQualityTier       QualityTier
 	EffortQualityTier     QualityTier
 	EffortQualityScore    float64
@@ -1431,6 +1431,8 @@ func (r *SmartRouter) applyEffortQualityTier(entry *channelScoreEntry, ctx Scori
 func effortAwareScoringCandidate(entry *channelScoreEntry, assessment EffortQualityAssessment) ScoringCandidate {
 	candidate := entry.ScoringCandidate
 	candidate.QualityTier = assessment.Tier
+	candidate.EffortQualityScore = assessment.Score
+	candidate.EffortQualityConfidence = entry.QualityConfidence
 	candidate.QualityBenchmarkKnown = assessment.Tier == QualityTierPremium && entry.BenchmarkKnown
 	if candidate.QualityBenchmarkKnown {
 		candidate.QualityBenchmarkScore = entry.BenchmarkScore

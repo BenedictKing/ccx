@@ -364,8 +364,10 @@ const (
 	// EvidenceDeflated：无跨 medium 曲线，按全局平均比率折算（单档或单侧多档）。
 	// 完全依赖全局曲线，封顶 high（含旧 singleEffortOnly 语义）。
 	EvidenceDeflated EvidenceClass = "deflated"
-	// EvidenceCalibrated：artificial_analysis coding_index 线性校准，封顶 high。
+	// EvidenceCalibrated：其他排行榜（当前为 artificial_analysis）线性校准，封顶 high。
 	EvidenceCalibrated EvidenceClass = "calibrated"
+	// EvidencePrior：没有可比榜单时使用模型族/注册表摘要先验，仅作低置信度连续排序。
+	EvidencePrior EvidenceClass = "prior"
 )
 
 // maxTierProvableByEvidence 返回各证据等级可证明的最高质量档：
@@ -373,6 +375,9 @@ const (
 func maxTierProvableByEvidence(class EvidenceClass) QualityTier {
 	if class == EvidenceDirect {
 		return QualityTierPremium
+	}
+	if class == EvidencePrior {
+		return QualityTierHigh
 	}
 	return QualityTierHigh
 }
@@ -387,8 +392,9 @@ type CalibrationResult struct {
 	MeasuredEffort EffortLevel
 }
 
-// EffortQualityAssessment 是模型×effort 的 shadow 评估结果。
-// 它只用于 trace/回放观测，不参与当前线上评分。
+// EffortQualityAssessment 是模型×effort 的质量评估结果。
+// Score 统一为 DeepSWE 等价的 0-100 分；Known 表示有可比榜单证据，
+// 未知时仍可返回低置信度先验分供 active 排序使用。
 type EffortQualityAssessment struct {
 	Tier     QualityTier
 	Score    float64
@@ -409,6 +415,34 @@ var effortQualityRatio = map[string]float64{
 	"high":    1.413,
 	"xhigh":   1.627,
 	"max":     1.975,
+	// deepswe 当前没有 ultra 曲线，按 max 的保守上界复用，避免该档退化为零分。
+	"ultra": 1.975,
+}
+
+const (
+	aaCodingToDeepSWESlope     = 2.391
+	aaCodingToDeepSWEIntercept = -116.007
+)
+
+// effortQualityRatioFor 返回指定 effort 相对 medium 的质量先验比率。
+// 已观测档位使用 deepswe 曲线；off/minimal 由 low→medium 线性外推，
+// ultra 在缺少独立曲线时保守复用 max。这样缺档模型也能保持 effort 之间的相对差异。
+func effortQualityRatioFor(level EffortLevel) (float64, bool) {
+	if ratio, ok := effortQualityRatio[string(level)]; ok {
+		return ratio, true
+	}
+	ord := EffortLevelOrdinal(level)
+	if ord < 0 {
+		return 0, false
+	}
+	low := effortQualityRatio[string(EffortLow)]
+	medium := effortQualityRatio[string(EffortMedium)]
+	if ord < EffortLevelOrdinal(EffortLow) {
+		// 沿 low→medium 的斜率向 off/minimal 外推，并限制在有效正区间。
+		ratio := low - float64(EffortLevelOrdinal(EffortLow)-ord)*(medium-low)
+		return clampF(ratio, 0.25, low), true
+	}
+	return medium, true
 }
 
 // minReliableBenchmarkTasks 是直测档位参与等效分与档位评定的最小任务格数。
@@ -517,13 +551,113 @@ func calibrateRegularEffort(evidence []config.ModelBenchmarkEvidence) (Calibrati
 	worst := -1.0
 	worstLevel := EffortMedium
 	for level, raw := range pooled {
-		deflated := raw / effortQualityRatio[string(level)]
+		ratio, ok := effortQualityRatioFor(level)
+		if !ok || ratio <= 0 {
+			continue
+		}
+		deflated := raw / ratio
 		if worst < 0 || deflated < worst {
 			worst = deflated
 			worstLevel = level
 		}
 	}
 	return CalibrationResult{Score: worst, Class: EvidenceDeflated, MeasuredEffort: worstLevel}, true
+}
+
+// artificialAnalysisCodingScore 返回 Artificial Analysis coding_index 在 DeepSWE
+// 等价尺度上的分数。AA 的 effort 证据用于补齐 DeepSWE 未覆盖的模型/档位，
+// 不直接与 pass@1 混算。
+func artificialAnalysisCodingScore(evidence []config.ModelBenchmarkEvidence, level EffortLevel) (float64, bool) {
+	best := -1.0
+	for _, ev := range evidence {
+		if ev.Domain != "coding" || ev.Benchmark != "artificial_analysis" || ev.Metric != "coding_index" {
+			continue
+		}
+		if NormalizeEffortLevel(ev.Effort) != level {
+			continue
+		}
+		if ev.RawValue > best {
+			best = ev.RawValue
+		}
+	}
+	if best < 0 {
+		return 0, false
+	}
+	return aaCodingToDeepSWESlope*best + aaCodingToDeepSWEIntercept, true
+}
+
+// interpolateEffortEvidence 在同一基准来源内按 effort 序数插值。
+// transform 用于把不同榜单的原始值转换到统一分数尺度。
+func interpolateEffortEvidence(
+	evidence []config.ModelBenchmarkEvidence,
+	level EffortLevel,
+	accept func(config.ModelBenchmarkEvidence) bool,
+	transform func(float64) float64,
+) (float64, bool) {
+	targetOrd := EffortLevelOrdinal(level)
+	if targetOrd < 0 {
+		return 0, false
+	}
+	bySource := map[string]map[EffortLevel]float64{}
+	for _, ev := range evidence {
+		if !accept(ev) {
+			continue
+		}
+		normalized := NormalizeEffortLevel(ev.Effort)
+		if normalized == "" {
+			continue
+		}
+		efforts := bySource[ev.Benchmark]
+		if efforts == nil {
+			efforts = map[EffortLevel]float64{}
+			bySource[ev.Benchmark] = efforts
+		}
+		score := transform(ev.RawValue)
+		if score > efforts[normalized] {
+			efforts[normalized] = score
+		}
+	}
+
+	worst := -1.0
+	for _, efforts := range bySource {
+		var lo, hi *struct {
+			ord   int
+			score float64
+		}
+		for candidateEffort, score := range efforts {
+			ord := EffortLevelOrdinal(candidateEffort)
+			if ord < targetOrd && (lo == nil || ord > lo.ord) {
+				lo = &struct {
+					ord   int
+					score float64
+				}{ord, score}
+			}
+			if ord > targetOrd && (hi == nil || ord < hi.ord) {
+				hi = &struct {
+					ord   int
+					score float64
+				}{ord, score}
+			}
+		}
+		if lo == nil || hi == nil {
+			continue
+		}
+		t := float64(targetOrd-lo.ord) / float64(hi.ord-lo.ord)
+		estimate := lo.score + (hi.score-lo.score)*t
+		if worst < 0 || estimate < worst {
+			worst = estimate
+		}
+	}
+	return worst, worst >= 0
+}
+
+func interpolatedArtificialAnalysisCodingScore(evidence []config.ModelBenchmarkEvidence, level EffortLevel) (float64, bool) {
+	return interpolateEffortEvidence(evidence, level,
+		func(ev config.ModelBenchmarkEvidence) bool {
+			return ev.Domain == "coding" && ev.Benchmark == "artificial_analysis" && ev.Metric == "coding_index"
+		}, func(raw float64) float64 {
+			return aaCodingToDeepSWESlope*raw + aaCodingToDeepSWEIntercept
+		})
 }
 
 // interpolatedMediumScore 在单来源的 effort 曲线跨 medium 时，取相邻两档按序数线性插值。
@@ -579,23 +713,47 @@ func calibrateModelCapability(modelID string) (CalibrationResult, bool) {
 	if result, ok := calibrateRegularEffort(benchmark.Profile.BenchmarkEvidence); ok {
 		return result, true
 	}
-	bestAACoding := -1.0
-	for _, ev := range benchmark.Profile.BenchmarkEvidence {
-		if ev.Domain == "coding" && ev.Benchmark == "artificial_analysis" && ev.Metric == "coding_index" && ev.RawValue > bestAACoding {
-			bestAACoding = ev.RawValue
-		}
-	}
-	if bestAACoding >= 0 {
-		// 系数来自注册表中同时具有 deepswe/codexradar 实测分与 AA coding_index 的
-		// 重叠模型的最小二乘线性拟合；基准数据大改后需重算。
-		// deepswe ≈ 2.391 * aa_coding - 116.007
-		return CalibrationResult{
-			Score:          2.391*bestAACoding - 116.007,
-			Class:          EvidenceCalibrated,
-			MeasuredEffort: EffortMedium,
-		}, true
+	if result, ok := calibrateArtificialAnalysisEffort(benchmark.Profile.BenchmarkEvidence); ok {
+		return result, true
 	}
 	return CalibrationResult{}, false
+}
+
+// calibrateArtificialAnalysisEffort 将 AA coding_index 证据归一化到 medium 口径。
+// 规则与 DeepSWE 校准一致：medium/default 直取；曲线跨 medium 插值；
+// 只有单侧/单点时按全局 effort 比率折算，避免高档成绩冒充基础能力。
+func calibrateArtificialAnalysisEffort(evidence []config.ModelBenchmarkEvidence) (CalibrationResult, bool) {
+	if score, ok := artificialAnalysisCodingScore(evidence, EffortMedium); ok {
+		return CalibrationResult{Score: score, Class: EvidenceCalibrated, MeasuredEffort: EffortMedium}, true
+	}
+	if score, ok := interpolatedArtificialAnalysisCodingScore(evidence, EffortMedium); ok {
+		return CalibrationResult{Score: score, Class: EvidenceInterpolated, MeasuredEffort: EffortMedium}, true
+	}
+
+	best := -1.0
+	measuredEffort := EffortMedium
+	for _, ev := range evidence {
+		if ev.Domain != "coding" || ev.Benchmark != "artificial_analysis" || ev.Metric != "coding_index" {
+			continue
+		}
+		level := NormalizeEffortLevel(ev.Effort)
+		if level == "" {
+			continue
+		}
+		ratio, ok := effortQualityRatioFor(level)
+		if !ok || ratio <= 0 {
+			continue
+		}
+		score := (aaCodingToDeepSWESlope*ev.RawValue + aaCodingToDeepSWEIntercept) / ratio
+		if best < 0 || score < best {
+			best = score
+			measuredEffort = level
+		}
+	}
+	if best < 0 {
+		return CalibrationResult{}, false
+	}
+	return CalibrationResult{Score: best, Class: EvidenceDeflated, MeasuredEffort: measuredEffort}, true
 }
 
 // normalizedCapabilityScore 返回常规 effort 口径的归一化能力分（无证据类信息）。
@@ -731,12 +889,22 @@ func EffortAwareQualityTier(modelID string, effort EffortLevel, family ModelFami
 	return EffortAwareQualityAssessmentFor(modelID, effort, family).Tier
 }
 
-// EffortAwareQualityAssessmentFor 返回模型×effort 的完整 shadow 评估结果。
+// EffortAwareQualityAssessmentFor 返回模型×effort 的完整质量评估结果。
 // 与 EffortAwareQualityTier 共用同一证据优先级，避免观测口径与未来 active 口径漂移。
 func EffortAwareQualityAssessmentFor(modelID string, effort EffortLevel, family ModelFamily) EffortQualityAssessment {
 	benchmark := config.ResolveModelBenchmarkProfile(modelID)
 	if !benchmark.Known {
-		return EffortQualityAssessment{Tier: ModelProfileQualityTierFromFamily(family, modelID)}
+		tier := ModelProfileQualityTierFromFamily(family, modelID)
+		// 未知模型仍保留档位先验的连续排序能力，但以低置信度返回，
+		// 由 active 评分折扣其质量收益，不把未观测先验当成事实。
+		priorScore := map[QualityTier]float64{
+			QualityTierAvoid: 5, QualityTierLow: 25, QualityTierNormal: 50,
+			QualityTierHigh: 65, QualityTierPremium: 80,
+		}[tier]
+		if ratio, ok := effortQualityRatioFor(effort); ok && effort != "" && effort != EffortMedium {
+			priorScore *= ratio
+		}
+		return EffortQualityAssessment{Tier: tier, Score: priorScore, Evidence: EvidencePrior, Known: false}
 	}
 	evidence := benchmark.Profile.BenchmarkEvidence
 
@@ -747,6 +915,11 @@ func EffortAwareQualityAssessmentFor(modelID string, effort EffortLevel, family 
 			Class:          EvidenceDirect,
 			MeasuredEffort: effort,
 		}
+		return EffortQualityAssessment{Tier: qualityTierFromCalibration(calib), Score: score, Evidence: calib.Class, Known: true}
+	}
+	// 1b. DeepSWE 未覆盖时，用 AA coding_index 的同档数据补齐。
+	if score, ok := artificialAnalysisCodingScore(evidence, effort); ok {
+		calib := CalibrationResult{Score: score, Class: EvidenceCalibrated, MeasuredEffort: effort}
 		return EffortQualityAssessment{Tier: qualityTierFromCalibration(calib), Score: score, Evidence: calib.Class, Known: true}
 	}
 
@@ -760,21 +933,22 @@ func EffortAwareQualityAssessmentFor(modelID string, effort EffortLevel, family 
 		return EffortQualityAssessment{Tier: qualityTierFromCalibration(calib), Score: score, Evidence: calib.Class, Known: true}
 	}
 
-	// 3. 回落模型基础档。
+	// 3. 回落模型基础档。即使缺少当前档直测，也按 effort 曲线比率
+	// 缩放常规分，确保 high/max 与 medium 不会得到完全相同的评分。
 	calib, ok := calibrateModelCapability(modelID)
 	if !ok {
-		return EffortQualityAssessment{Tier: ModelProfileQualityTierFromFamily(family, modelID)}
+		tier := ModelProfileQualityTierFromFamily(family, modelID)
+		return EffortQualityAssessment{Tier: tier, Score: 0, Evidence: EvidencePrior, Known: false}
 	}
-	if effort == "" || EffortLevelOrdinal(effort) >= EffortLevelOrdinal(EffortMedium) {
+	if effort == "" || effort == EffortMedium {
 		return EffortQualityAssessment{Tier: qualityTierFromCalibration(calib), Score: calib.Score, Evidence: calib.Class, Known: true}
 	}
-	ratio, hasRatio := effortQualityRatio[string(effort)]
+	ratio, hasRatio := effortQualityRatioFor(effort)
 	if !hasRatio || ratio <= 0 {
-		// off/minimal 暂无可靠的全局折算系数，不能用除零或猜测值制造能力分。
 		return EffortQualityAssessment{Tier: qualityTierFromCalibration(calib), Score: calib.Score, Evidence: calib.Class, Known: true}
 	}
 	deflated := CalibrationResult{
-		Score:          calib.Score / ratio,
+		Score:          calib.Score * ratio,
 		Class:          EvidenceDeflated,
 		MeasuredEffort: effort,
 	}

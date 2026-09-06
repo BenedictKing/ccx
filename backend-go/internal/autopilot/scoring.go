@@ -160,6 +160,12 @@ type ScoringCandidate struct {
 	QualityBenchmarkKnown bool
 	QualityBenchmarkScore float64
 
+	// EffortQualityScore 是模型×effort 的 DeepSWE 等价连续分（0-100）。
+	// 仅作为最终质量档内的 tie-break，最大加成小于一个质量档间距；
+	// EffortQualityConfidence 用于避免低置信度先验压过已观测证据。
+	EffortQualityScore      float64
+	EffortQualityConfidence float64
+
 	// QuotaHeadroomScore 是配额余量分（0.0-1.0，越充足越高）。
 	// 来源：配额真相分级（quota 包），unknown 时给 0.5 中性分（fail-open，不惩罚冷候选）。
 	// 调用方通过 quota.Manager.GetChannelHeadroom 获取。
@@ -207,6 +213,10 @@ type ScoredCandidate struct {
 // 必须 < 1（qualityTierScore 相邻档位的最小间距），确保 benchmark 差异只能在同一档位内
 // 重排序，永远不足以让 premium 候选反超下一档，也不会让弱 benchmark 的 premium 候选跌到 high 档以下。
 const premiumBenchmarkTieBreakWeight = 0.5
+
+// effortQualityTieBreakWeight 是同一 QualityTier 内 effort 连续分的最大加成。
+// 质量档基础分相邻差为 1，因此该加成不会跨档，只会在同档内稳定区分 effort。
+const effortQualityTieBreakWeight = 0.5
 
 // tierScoreMap 将各 tier 映射为评分公式中的分数。
 // qualityScore: avoid=0, low=1, normal=2, high=3, premium=4
@@ -265,6 +275,12 @@ func ScoreCandidate(candidate ScoringCandidate, ctx ScoringContext) ScoredCandid
 		qualityTierRank(candidate.QualityTier) <= qualityTierRank(ctx.QualityBenefitCap)
 	if candidate.QualityTier == QualityTierPremium && candidate.QualityBenchmarkKnown && benchmarkBenefitAllowed {
 		qs += clampF(candidate.QualityBenchmarkScore/100.0, 0, 1) * premiumBenchmarkTieBreakWeight
+	}
+	// effort 连续分必须在同档内生效。confidence=0 表示调用方未提供该维度，
+	// 保持所有旧调用方的评分完全不变；未知先验由上层传入 0.5 置信度。
+	if candidate.EffortQualityScore > 0 && candidate.EffortQualityConfidence > 0 && benchmarkBenefitAllowed {
+		confidence := clampF(candidate.EffortQualityConfidence, 0, 1)
+		qs += clampF(candidate.EffortQualityScore/100.0, 0, 1) * confidence * effortQualityTieBreakWeight
 	}
 
 	// 2. stabilityScore: unstable=0, normal=1, stable=2
