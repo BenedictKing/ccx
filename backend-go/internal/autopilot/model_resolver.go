@@ -807,6 +807,10 @@ type rankedModelCandidate struct {
 	benchmarkScore                 float64
 	benchmarkModel                 string
 	benchmarkLane                  string // benchmark 证据泳道（provisional/verified），frontier 置信区间加宽用
+	// evidenceQualityTier 是编码域证据档位（EffortAwareQualityAssessment 的
+	// 评定结果，即图表档位带）。非空时报告展示与排序均以它为准；空表示
+	// 未做证据评定（非编码域或无编码证据）。
+	evidenceQualityTier            QualityTier
 	measuredCostUSD                float64
 	versionLineage                 string
 	versionNumbers                 []int
@@ -984,6 +988,12 @@ func measuredCostForEffort(effortCostUSD map[EffortLevel]float64, effort EffortL
 	return minCost
 }
 
+// isCodingBenchmarkDomain 报告任务域是否由 deepswe/codexradar 编码直测证据
+// 驱动选型（DeepSWE 等效分与证据档位）。code_review 与 coding 共用同一映射类目。
+func isCodingBenchmarkDomain(domain TaskDomain) bool {
+	return domain == TaskDomainCoding || domain == TaskDomainCodeReview
+}
+
 // buildRankedCandidates 把 eligible 画像展开为 model × effort 排序候选，
 // 并补齐证据字段（质量/成本/基准/版本）与 EffortFloor 过滤。
 // 候选顺序保持输入顺序，排序决策由调用方完成。
@@ -1042,11 +1052,38 @@ func (r *ModelResolver) buildRankedCandidates(
 			// benchmark 分按 effort 特定实测数据缩放，反映不同思考等级的真实智商差异；
 			// 锚点随场景任务域切换（coding 场景锚 coding 类目分）。
 			effBenchScore, effBenchKnown := effortAwareBenchmarkScore(benchmark.Profile, effort, floor.TaskDomain)
+			qualityRank := qualityTierRank(profile.QualityTier)
+			var evidenceTier QualityTier
+			// 编码域候选锚定到图表同源校准：EffortAwareQualityAssessmentFor 返回
+			// DeepSWE 等效 0-100 分（即 benchmark 图表 Y 轴刻度）与证据档位
+			// （阈值即图表 v3 档位线 70/59.1/44.3/15）。这使模型选型与图表的
+			// 能力—成本边界同一把尺：图上直测模型按实测分与证据档竞争，
+			// 图外旧世代模型不再凭静态家族档位或 AA 类目分冒充编程能力登顶。
+			if isCodingBenchmarkDomain(floor.TaskDomain) {
+				assessment := EffortAwareQualityAssessmentFor(profile.ModelID, effort, profile.ModelFamily)
+				if assessment.Known {
+					effBenchScore, effBenchKnown = assessment.Score, true
+					qualityRank = qualityTierRank(assessment.Tier)
+					evidenceTier = assessment.Tier
+					// 「不推荐」档（常规口径实测 <15，成功率被噪声主导）不参与编码选型；
+					// 与图表 avoid 档的产品语义一致。
+					if assessment.Tier == QualityTierAvoid {
+						continue
+					}
+				} else {
+					// 无编码证据（注册表外或仅 AA 未钉档摘要）：不冒充图表刻度分数，
+					// 档位先验封顶 normal——编码域的高/旗舰档必须由编码证据证明。
+					effBenchScore, effBenchKnown = 0, false
+					if normalRank := qualityTierRank(QualityTierNormal); qualityRank > normalRank {
+						qualityRank = normalRank
+					}
+				}
+			}
 			ranked = append(ranked, rankedModelCandidate{
 				profile:                      profile,
 				effort:                       effort,
 				effortDecided:                decided,
-				qualityRank:                  qualityTierRank(profile.QualityTier),
+				qualityRank:                  qualityRank,
 				qualityBenefitCap:            floor.QualityBenefitCap,
 				providerModelQualityKnown:    qualityKnown,
 				providerModelQualityPriority: qualityPriority,
@@ -1060,9 +1097,10 @@ func (r *ModelResolver) buildRankedCandidates(
 				publicCostKnown:              publicCostKnown,
 				normalizedPublicCostUSD:      publicCostUSD,
 				benchmarkKnown:               effBenchKnown,
-				benchmarkScore:               effBenchScore,
-				benchmarkModel:               benchmark.Profile.CanonicalModel,
-				benchmarkLane:                benchmark.Profile.Lane,
+					benchmarkScore:               effBenchScore,
+					benchmarkModel:               benchmark.Profile.CanonicalModel,
+					benchmarkLane:                benchmark.Profile.Lane,
+					evidenceQualityTier:          evidenceTier,
 				measuredCostUSD:              measuredCost,
 				versionLineage:               modelVersionLineage(profile.ModelFamily, profile.ModelID),
 				versionNumbers:               modelVersionNumbers(profile.ModelFamily, profile.ModelID),
@@ -1074,6 +1112,26 @@ func (r *ModelResolver) buildRankedCandidates(
 
 	// EffortFloor 过滤：移除低于下界的已决定候选（fail-open）。
 	ranked = filterEffortFloor(ranked, floor)
+	// 编码域兜底退场：池内存在任一图表在册（有编码证据）模型时，
+	// 无编码证据的候选不参与自动选型——编码选型只落在 benchmark 图表的
+	// 模型集合内；整池皆无证据时保留原候选（fail-open，防空池断路）。
+	if isCodingBenchmarkDomain(floor.TaskDomain) && len(ranked) > 0 {
+		evidenceBacked := 0
+		for i := range ranked {
+			if ranked[i].benchmarkKnown {
+				evidenceBacked++
+			}
+		}
+		if evidenceBacked > 0 && evidenceBacked < len(ranked) {
+			filtered := make([]rankedModelCandidate, 0, evidenceBacked)
+			for i := range ranked {
+				if ranked[i].benchmarkKnown {
+					filtered = append(filtered, ranked[i])
+				}
+			}
+			ranked = filtered
+		}
+	}
 	qualityPriorityComplete := make(map[int]bool)
 	qualityRankSeen := make(map[int]bool)
 	for i := range ranked {

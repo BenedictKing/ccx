@@ -1580,3 +1580,68 @@ func TestEffortAwareBenchmarkScoreDomainAnchor(t *testing.T) {
 		t.Fatalf("effort 缩放应作用于域锚点：期望 (75,true)，实际 (%.2f,%v)", got, ok)
 	}
 }
+
+// TestBuildRankedCandidates_CodingEvidenceAnchor 钉住编码域选型与 benchmark
+// 图表同源：有编码证据的候选按 DeepSWE 等效分与证据档位参选；无证据候选
+// 在池内存在在册模型时兜底退场（整池无证据时 fail-open 保留）。
+func TestBuildRankedCandidates_CodingEvidenceAnchor(t *testing.T) {
+	// glm-5.3-flash 在注册表内有 deepswe/codexradar 直测；mystery-model 不在注册表。
+	profiles := []ModelProfile{
+		makeModelProfile("glm-5.3-flash", ModelFamilyGLM, QualityTierNormal, 1000000,
+			true, false, true, true, 0),
+		makeModelProfile("mystery-model", ModelFamilyOpenAI, QualityTierPremium, 200000,
+			true, false, true, true, 0),
+	}
+	resolver := newTestResolver(t, profiles)
+	floor := CapabilityFloor{TaskDomain: TaskDomainCoding, TaskClass: TaskClassWorker}
+
+	ranked := resolver.buildRankedCandidates(filterProbedModelProfiles(profiles), "claude-opus-4-8", "ch_test", "messages", floor)
+	if len(ranked) == 0 {
+		t.Fatal("编码域候选不应为空")
+	}
+	for _, cand := range ranked {
+		if cand.profile.ModelID == "mystery-model" {
+			t.Fatalf("池内存在在册模型时，无编码证据的 mystery-model 不应参选")
+		}
+	}
+
+	// 在册候选：分数与档位必须来自证据评估（图表同源），而非静态家族档位。
+	assessment := EffortAwareQualityAssessmentFor("glm-5.3-flash", ranked[0].effort, ModelFamilyGLM)
+	if !assessment.Known {
+		t.Fatalf("测试前置失效：glm-5.3-flash 应有编码证据评估")
+	}
+	var evidenceCand *rankedModelCandidate
+	for i := range ranked {
+		if ranked[i].profile.ModelID == "glm-5.3-flash" {
+			evidenceCand = &ranked[i]
+			break
+		}
+	}
+	if evidenceCand == nil {
+		t.Fatal("glm-5.3-flash 应在编码候选中")
+	}
+	if !evidenceCand.benchmarkKnown {
+		t.Fatalf("在册模型候选应标记 benchmarkKnown")
+	}
+	if evidenceCand.evidenceQualityTier != assessment.Tier {
+		t.Fatalf("证据档位 = %q, want 评估档位 %q", evidenceCand.evidenceQualityTier, assessment.Tier)
+	}
+	if evidenceCand.qualityRank != qualityTierRank(assessment.Tier) {
+		t.Fatalf("qualityRank 应随证据档位覆盖")
+	}
+
+	// 整池无证据：fail-open 保留候选，且档位先验封顶 normal。
+	onlyMystery := []ModelProfile{
+		makeModelProfile("mystery-model", ModelFamilyOpenAI, QualityTierPremium, 200000,
+			true, false, true, true, 0),
+	}
+	rankedMystery := resolver.buildRankedCandidates(filterProbedModelProfiles(onlyMystery), "claude-opus-4-8", "ch_test", "messages", floor)
+	for _, cand := range rankedMystery {
+		if cand.benchmarkKnown {
+			t.Fatalf("无证据模型不应有 benchmark 分")
+		}
+		if cand.qualityRank > qualityTierRank(QualityTierNormal) {
+			t.Fatalf("无编码证据的档位先验应封顶 normal，实际 rank=%d", cand.qualityRank)
+		}
+	}
+}

@@ -583,7 +583,13 @@ func artificialAnalysisCodingScore(evidence []config.ModelBenchmarkEvidence, lev
 	if best < 0 {
 		return 0, false
 	}
-	return aaCodingToDeepSWESlope*best + aaCodingToDeepSWEIntercept, true
+	score := aaCodingToDeepSWESlope*best + aaCodingToDeepSWEIntercept
+	// 线性换算对低分模型可能越出 0-100 契约（如 AA coding 43.7 → -11.5）；
+	// 负分等价于"无一题通过"，钳到 0。
+	if score < 0 {
+		score = 0
+	}
+	return score, true
 }
 
 // interpolateEffortEvidence 在同一基准来源内按 effort 序数插值。

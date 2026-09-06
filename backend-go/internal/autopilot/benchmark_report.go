@@ -299,7 +299,12 @@ func fillBenchmarkReportRow(row *BenchmarkReportRow, best rankedModelCandidate, 
 	row.BenchmarkScore = best.benchmarkScore
 	row.BenchmarkKnown = best.benchmarkKnown
 	row.CostUSD = best.normalizedPublicCostUSD
-	row.QualityTier = string(best.profile.QualityTier)
+	// 编码域展示证据档位（图表档位带），与 benchmark 图例口径一致。
+	if best.evidenceQualityTier != "" {
+		row.QualityTier = string(best.evidenceQualityTier)
+	} else {
+		row.QualityTier = string(best.profile.QualityTier)
+	}
 
 	row.ScoreBreakdown["quality_score"] = frontierQualityScore(best, mode)
 	row.ScoreBreakdown["cost_usd"] = best.normalizedPublicCostUSD
@@ -396,13 +401,18 @@ func buildTopCandidates(ranked []rankedModelCandidate, floor CapabilityFloor, mo
 			continue
 		}
 		seen[cand.profile.ModelID] = true
+		// 编码域候选展示证据档位（图表档位带），与选中项口径一致。
+		tier := cand.profile.QualityTier
+		if cand.evidenceQualityTier != "" {
+			tier = cand.evidenceQualityTier
+		}
 		rows = append(rows, TopCandidateRow{
 			Model:          cand.profile.ModelID,
 			Effort:         string(cand.effort),
 			BenchmarkScore: cand.benchmarkScore,
 			BenchmarkKnown: cand.benchmarkKnown,
 			CostUSD:        cand.normalizedPublicCostUSD,
-			QualityTier:    string(cand.profile.QualityTier),
+			QualityTier:    string(tier),
 		})
 	}
 	return rows
