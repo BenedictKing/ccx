@@ -219,13 +219,26 @@ func SetPostSuccessfulProxyHook(hook func(channelKind, model, channelUID string,
 // usagePatternRecorderHook 可选的用量画像记录器（Phase 4 Item 4：渠道推荐）。
 // 由 main.go 在 autopilot 初始化后注入；在主响应已写回客户端之后触发，纯观测性累积，
 // 不参与任何调度/候选过滤决策。
-// 签名：(proxyKeyMask, channelKind, channelUID, model string)。
-var usagePatternRecorderHook func(proxyKeyMask, channelKind, channelUID, model string)
+// 签名：(proxyKeyMask, channelKind, channelUID, model string, domain TaskDomain)。
+// domain 来自请求路径上已推导的 RequestProfile.TaskDomain（无法取得时回退 general），
+// 使按域用量画像（渠道推荐）不再退化为全局单一域。
+var usagePatternRecorderHook func(proxyKeyMask, channelKind, channelUID, model string, domain autopilot.TaskDomain)
 
 // SetUsagePatternRecorderHook 设置用量画像记录钩子。
 // 由 main.go 在 autopilot 初始化后调用；nil 表示不记录。
-func SetUsagePatternRecorderHook(hook func(proxyKeyMask, channelKind, channelUID, model string)) {
+func SetUsagePatternRecorderHook(hook func(proxyKeyMask, channelKind, channelUID, model string, domain autopilot.TaskDomain)) {
 	usagePatternRecorderHook = hook
+}
+
+// usagePatternTaskDomain 从请求 context 提取已推导的任务域；
+// 未绑定画像或域为空时回退 general（与 InferTaskDomain 的兜底一致）。
+func usagePatternTaskDomain(c *gin.Context) autopilot.TaskDomain {
+	if c != nil && c.Request != nil {
+		if profile, ok := autopilot.RequestProfileFromContext(c.Request.Context()); ok && profile.TaskDomain != "" {
+			return profile.TaskDomain
+		}
+	}
+	return autopilot.TaskDomainGeneral
 }
 
 // systemHeaderFilterCache 按渠道-keyHash-模型记忆最优 system header 过滤层级。
@@ -1760,7 +1773,7 @@ func TryUpstreamWithAllKeys(
 			// 与上面的 A/B 测试回调同一时机（主响应已返回），纯观测性累积，不影响主请求路径。
 			if usagePatternRecorderHook != nil {
 				if proxyKeyMask := middleware.GetProxyKeyMask(c); proxyKeyMask != "" {
-					usagePatternRecorderHook(proxyKeyMask, string(executionKind), upstream.ChannelUID, model)
+					usagePatternRecorderHook(proxyKeyMask, string(executionKind), upstream.ChannelUID, model, usagePatternTaskDomain(c))
 				}
 			}
 

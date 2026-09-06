@@ -252,9 +252,7 @@ func buildFrontierPoints(ranked []rankedModelCandidate, floor CapabilityFloor, m
 		points = append(points, FrontierPoint{
 			CandidateID:    strconv.Itoa(i),
 			CanonicalModel: c.profile.ModelID,
-			ModelVersion:   c.versionLineage,
 			Effort:         string(c.effort),
-			Domain:         floor.TaskDomain,
 			QualityScore:   score,
 			QualityLow:     clampUnit(score - half),
 			QualityHigh:    clampUnit(score + half),
@@ -265,8 +263,7 @@ func buildFrontierPoints(ranked []rankedModelCandidate, floor CapabilityFloor, m
 				Confidence: CostConfidenceEstimated,
 				Source:     pointSource,
 			},
-			EvidenceVersion: frontierEvidenceVersion,
-			BenchScale:      benchScale,
+			BenchScale: benchScale,
 		})
 	}
 	return points

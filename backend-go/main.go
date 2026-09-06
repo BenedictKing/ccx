@@ -998,8 +998,8 @@ func main() {
 	// 请求成功完成后（主响应已返回客户端之后）记录 proxyKeyMask -> channelUID 归因，
 	// 纯观测性累积，不参与任何调度/候选过滤决策。
 	if autopilotManager != nil {
-		common.SetUsagePatternRecorderHook(func(proxyKeyMask, channelKind, channelUID, model string) {
-			autopilotManager.RecordUsagePattern(proxyKeyMask, channelKind, channelUID, model)
+		common.SetUsagePatternRecorderHook(func(proxyKeyMask, channelKind, channelUID, model string, domain autopilot.TaskDomain) {
+			autopilotManager.RecordUsagePattern(proxyKeyMask, channelKind, channelUID, model, domain)
 		})
 	}
 

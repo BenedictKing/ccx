@@ -632,18 +632,21 @@ func (m *Manager) UsagePatternAccumulator() *UsagePatternAccumulator {
 // 用于 Phase 4 Item 4 渠道推荐的用量画像积累。
 // 由 handlers/common 的 usagePatternRecorderHook 在请求成功完成后调用（主响应已返回客户端之后），
 // 纯观测性累积，不参与任何调度/候选过滤决策。
+// domain 由调用方传入请求路径上 RequestProfile 已推导的任务域；空值回退 general，
+// 使按域渠道推荐不再退化为全局单一域。
 // proxyKeyMask 或 channelUID 为空时静默跳过。
 //
-// channelKind/model 目前未参与域推导（InferTaskDomain 依赖 system prompt/工具集/文件扩展名等
-// DomainHints，这些信号在代理层的请求完成钩子上不可得，是现有代码库的已知缺口，非本项新增回归）；
-// 保留参数是为了未来在有 DomainHints 数据源时无需再改调用方签名。
-func (m *Manager) RecordUsagePattern(proxyKeyMask, channelKind, channelUID, model string) {
+// channelKind/model 目前未参与画像维度（画像键为 proxyKey×domain×channelUID），
+// 保留参数是为了未来扩展画像维度时无需再改调用方签名。
+func (m *Manager) RecordUsagePattern(proxyKeyMask, channelKind, channelUID, model string, domain TaskDomain) {
 	if m.usagePatternAccumulator == nil || proxyKeyMask == "" || channelUID == "" {
 		return
 	}
 	_ = channelKind
 	_ = model
-	domain := InferTaskDomain(DomainHints{})
+	if domain == "" {
+		domain = TaskDomainGeneral
+	}
 	m.usagePatternAccumulator.RecordUsage(proxyKeyMask, domain, channelUID)
 }
 

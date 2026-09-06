@@ -15,26 +15,18 @@ import (
 
 // FrontierPoint 是请求级能力—成本路由点。
 type FrontierPoint struct {
-	CandidateID     string       // 候选唯一标识（如 channelUID + modelID）
-	CanonicalModel  string       // 规范模型 ID
-	ModelVersion    string       // 模型版本
-	Effort          string       // effort 级别
-	Domain          TaskDomain   // 任务域
-	QualityScore    float64      // 归一化质量分 0.0-1.0
-	QualityLow      float64      // 质量置信下界
-	QualityHigh     float64      // 质量置信上界
-	Cost            CostEvidence // 成本证据
-	EvidenceVersion string       // 证据版本标识
+	CandidateID    string       // 候选唯一标识（如 channelUID + modelID）
+	CanonicalModel string       // 规范模型 ID
+	Effort         string       // effort 级别
+	QualityScore   float64      // 归一化质量分 0.0-1.0
+	QualityLow     float64      // 质量置信下界
+	QualityHigh    float64      // 质量置信上界
+	Cost           CostEvidence // 成本证据
 	// BenchScale 是该点质量分中 benchmark 主锚的权重（车道相关：balanced 0.5、
 	// cost_first 0.4、quality_first 0.6）。合成质量分把 bench 差距压缩了该倍数，
 	// 而簇间断点阈值（minClusterGap≈8 分 bench）按 bench 等效刻度解释，聚类
 	// 比较前需除回该倍数。零值视为 1.0（质量分即 bench 刻度）。
 	BenchScale float64
-}
-
-// EffectiveQualityRange 返回置信区间的宽度。
-func (p FrontierPoint) EffectiveQualityRange() float64 {
-	return p.QualityHigh - p.QualityLow
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -332,7 +324,7 @@ func medianAbsoluteDeviation(sorted []float64, medianVal float64) float64 {
 type LadderStage struct {
 	Index      int             // 阶段序号（0 = 目标档）
 	ClusterIdx int             // 对应的 FrontierCluster 序号
-	Points     []FrontierPoint // 该阶段的候选点（按健康/延迟排序）
+	Points     []FrontierPoint // 簇内点（按前沿成本序；健康/延迟维度当前不参与阶梯排序）
 	AvgQuality float64         // 阶段平均质量分
 	AvgCost    float64         // 阶段平均成本
 	Reason     string          // 进入该阶段的原因
