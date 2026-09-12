@@ -137,6 +137,7 @@ func (p *ResponsesProvider) buildProviderRequestBody(c *gin.Context, requestPath
 		if err := json.Unmarshal(bodyBytes, &reqMap); err != nil {
 			return nil, nil, fmt.Errorf("透传模式下解析请求失败: %w", err)
 		}
+		hoistCodexAdditionalTools(c, reqMap)
 		normalizeResponsesInputForPassthrough(reqMap)
 		if upstream.IsCodexNativeToolPassthroughEnabled() {
 			convertCodexToolsForPassthrough(reqMap)
@@ -1235,6 +1236,102 @@ func convertCodexToolsForPassthrough(reqMap map[string]interface{}) {
 
 	ctx := converters.BuildCodexToolContextFromRaw(rawTools)
 	reqMap["tool_choice"] = converters.ConvertToolChoiceForCodex(reqMap["tool_choice"], ctx)
+}
+
+// hoistCodexAdditionalTools 收割 codex 0.153+ 放在 input[] 的 type=additional_tools
+// 条目里的 namespace/custom 工具，提升为顶层扁平 function tools，并把历史里的
+// custom_tool_call(_output) 与带 namespace 的 function_call 归一为上游可识别的
+// function_call(_output) 形态。第三方 Responses 上游只认顶层 tools，对
+// additional_tools 条目静默忽略，导致 codex 工具调用完全失效（ark 实测）。
+// 仅在顶层 tools 为空时触发（codex 0.153+ 的标配形状），与既有
+// codexNativeToolPassthrough/codexToolCompat 顶层转换互不叠加。
+// 必须先于 normalizeResponsesInputForPassthrough 执行：其无状态配对检查会丢弃
+// 未配对的 function_call_output，custom_tool_call 历史须先完成归一。
+func hoistCodexAdditionalTools(c *gin.Context, reqMap map[string]interface{}) {
+	if rawTools, ok := reqMap["tools"].([]interface{}); ok && len(rawTools) > 0 {
+		return
+	}
+	input, ok := reqMap["input"].([]interface{})
+	if !ok {
+		return
+	}
+
+	var harvested []interface{}
+	kept := make([]interface{}, 0, len(input))
+	for _, rawItem := range input {
+		item, ok := rawItem.(map[string]interface{})
+		if !ok || toString(item["type"]) != "additional_tools" {
+			kept = append(kept, rawItem)
+			continue
+		}
+		if tools, ok := item["tools"].([]interface{}); ok {
+			harvested = append(harvested, tools...)
+		}
+	}
+	if len(harvested) == 0 {
+		return
+	}
+
+	ctx := converters.BuildCodexToolContextFromRaw(harvested)
+	hoisted := make([]interface{}, 0, len(harvested))
+	for _, rawTool := range harvested {
+		tool, ok := rawTool.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		switch toString(tool["type"]) {
+		case "namespace":
+			for _, flat := range converters.NamespaceToolsToResponsesFlat(tool, ctx) {
+				hoisted = append(hoisted, flat)
+			}
+		case "function":
+			hoisted = append(hoisted, tool)
+		case "custom":
+			name := toString(tool["name"])
+			if name == "" {
+				continue
+			}
+			hoisted = append(hoisted, converters.CustomProxyToolResponsesFlat(name, toString(tool["description"])))
+		}
+	}
+	if len(hoisted) == 0 {
+		return
+	}
+
+	for i, rawItem := range kept {
+		item, ok := rawItem.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		switch toString(item["type"]) {
+		case "custom_tool_call":
+			upstreamName, argsJSON := converters.BuildCustomToolCallHistoryArguments(ctx, toString(item["name"]), toString(item["input"]))
+			item["type"] = "function_call"
+			item["name"] = upstreamName
+			delete(item, "input")
+			item["arguments"] = argsJSON
+			kept[i] = item
+		case "custom_tool_call_output":
+			item["type"] = "function_call_output"
+			kept[i] = item
+		case "function_call":
+			namespace := toString(item["namespace"])
+			if namespace == "" {
+				continue
+			}
+			if flat, ok := ctx.UpstreamNameForNamespaceCall(namespace, toString(item["name"])); ok {
+				item["name"] = flat
+				delete(item, "namespace")
+				kept[i] = item
+			}
+		}
+	}
+
+	reqMap["input"] = kept
+	reqMap["tools"] = hoisted
+	reqMap["tool_choice"] = converters.ConvertToolChoiceForCodex(reqMap["tool_choice"], ctx)
+	c.Set("codex_tool_context", ctx)
+	c.Set("codex_additional_tools_hoisted", true)
 }
 
 func normalizeToolChoiceAfterToolStrip(reqMap map[string]interface{}, keptTools []interface{}) {

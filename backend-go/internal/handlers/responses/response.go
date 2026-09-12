@@ -108,6 +108,12 @@ func handleSuccess(
 				codexEnabled = v
 			}
 		}
+		if !codexEnabled {
+			// additional_tools 提升路径（默认开启，不经渠道开关）
+			if hoisted, ok := c.Get("codex_additional_tools_hoisted"); ok {
+				codexEnabled, _ = hoisted.(bool)
+			}
+		}
 		if codexEnabled {
 			codexCtx, ok := c.Get("codex_tool_context")
 			if !ok {

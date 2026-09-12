@@ -902,3 +902,154 @@ func TestToolSearchCustomHistoryPreservesArguments(t *testing.T) {
 		t.Fatalf("wrapped tool_search history args = %q, want %q", args, input)
 	}
 }
+
+// ============== additional_tools 提升（codex 0.153+）==============
+
+func additionalToolsNamespaceFixture() map[string]interface{} {
+	return map[string]interface{}{
+		"type":        "namespace",
+		"name":        "functions",
+		"description": "Unified exec namespace.",
+		"tools": []interface{}{
+			map[string]interface{}{
+				"type":        "custom",
+				"name":        "exec",
+				"description": "Run JavaScript code to orchestrate tool calls.",
+				"format": map[string]interface{}{
+					"type":       "grammar",
+					"syntax":     "lark",
+					"definition": "start: .*",
+				},
+			},
+			map[string]interface{}{
+				"type":        "function",
+				"name":        "wait",
+				"description": "Waits on a yielded exec cell.",
+				"parameters": map[string]interface{}{
+					"type":       "object",
+					"properties": map[string]interface{}{"cell_id": map[string]interface{}{"type": "string"}},
+				},
+			},
+		},
+	}
+}
+
+func TestBuildCodexToolContext_NamespaceCustomChild(t *testing.T) {
+	ctx := BuildCodexToolContextFromRaw([]interface{}{additionalToolsNamespaceFixture()})
+
+	if !ctx.HasCustomTools || !ctx.HasNamespaceTools {
+		t.Fatalf("ctx flags = custom:%v namespace:%v, want both true", ctx.HasCustomTools, ctx.HasNamespaceTools)
+	}
+	spec, ok := ctx.CustomTools["functions__exec"]
+	if !ok {
+		t.Fatalf("CustomTools missing functions__exec: %#v", ctx.CustomTools)
+	}
+	if spec.OpenAIName != "exec" || spec.Kind != CodexCustomToolExec {
+		t.Fatalf("spec = %#v, want OpenAIName=exec Kind=exec", spec)
+	}
+	fn, ok := ctx.FunctionTools["functions__wait"]
+	if !ok || fn.Namespace != "functions" || fn.Name != "wait" {
+		t.Fatalf("FunctionTools[functions__wait] = %#v, ok=%v", fn, ok)
+	}
+}
+
+func TestBuildCodexToolContext_NamespaceCustomApplyPatchDegradedToRaw(t *testing.T) {
+	nsTool := map[string]interface{}{
+		"type": "namespace",
+		"name": "functions",
+		"tools": []interface{}{
+			map[string]interface{}{"type": "custom", "name": "apply_patch"},
+		},
+	}
+	ctx := BuildCodexToolContextFromRaw([]interface{}{nsTool})
+	spec, ok := ctx.CustomTools["functions__apply_patch"]
+	if !ok {
+		t.Fatalf("CustomTools missing functions__apply_patch")
+	}
+	if spec.Kind != CodexCustomToolRaw {
+		t.Fatalf("namespace custom apply_patch Kind = %q, want raw（不做 action 拆分）", spec.Kind)
+	}
+	if _, exists := ctx.CustomTools["functions__apply_patch_batch"]; exists {
+		t.Fatalf("namespace custom 不应注册 proxy 后缀变体")
+	}
+}
+
+func TestBuildCustomToolCallHistoryArguments_ReverseLookupHoisted(t *testing.T) {
+	ctx := BuildCodexToolContextFromRaw([]interface{}{additionalToolsNamespaceFixture()})
+
+	name, args := BuildCustomToolCallHistoryArguments(ctx, "exec", "console.log(1)")
+	if name != "functions__exec" {
+		t.Fatalf("name = %q, want functions__exec", name)
+	}
+	if args != `{"input":"console.log(1)"}` {
+		t.Fatalf("args = %q, want wrapped input", args)
+	}
+}
+
+func TestBuildCustomToolCallHistoryArguments_TopLevelStillWorks(t *testing.T) {
+	ctx := BuildCodexToolContextFromRaw([]interface{}{
+		map[string]interface{}{"type": "custom", "name": "exec", "format": map[string]interface{}{"type": "grammar", "definition": "start: .*"}},
+	})
+	name, args := BuildCustomToolCallHistoryArguments(ctx, "exec", "ls")
+	if name != "exec" {
+		t.Fatalf("顶层 custom name = %q, want exec（行为不变）", name)
+	}
+	if args != `{"input":"ls"}` {
+		t.Fatalf("args = %q", args)
+	}
+}
+
+func TestNamespaceToolsToResponsesFlat(t *testing.T) {
+	ctx := BuildCodexToolContextFromRaw([]interface{}{additionalToolsNamespaceFixture()})
+	out := NamespaceToolsToResponsesFlat(additionalToolsNamespaceFixture(), ctx)
+	if len(out) != 2 {
+		t.Fatalf("flat tools 数量 = %d, want 2", len(out))
+	}
+
+	byName := map[string]map[string]interface{}{}
+	for _, tool := range out {
+		byName[tool["name"].(string)] = tool
+		if tool["type"] != "function" {
+			t.Fatalf("tool type = %v, want function", tool["type"])
+		}
+		if _, nested := tool["function"]; nested {
+			t.Fatalf("提升输出应为 Responses 扁平格式，得到嵌套 function 字段: %#v", tool)
+		}
+	}
+
+	wait := byName["functions__wait"]
+	if wait == nil {
+		t.Fatalf("缺少 functions__wait: %#v", byName)
+	}
+	if _, ok := wait["parameters"].(map[string]interface{}); !ok {
+		t.Fatalf("functions__wait 缺 parameters: %#v", wait)
+	}
+	desc, _ := wait["description"].(string)
+	if !strings.Contains(desc, "Unified exec namespace.") || !strings.Contains(desc, "Waits on a yielded exec cell.") {
+		t.Fatalf("description 未合并 namespace 描述: %q", desc)
+	}
+
+	exec := byName["functions__exec"]
+	if exec == nil {
+		t.Fatalf("缺少 functions__exec freeform 代理")
+	}
+	params, _ := exec["parameters"].(map[string]interface{})
+	props, _ := params["properties"].(map[string]interface{})
+	if _, ok := props["input"]; !ok {
+		t.Fatalf("custom 子工具应为 freeform input schema: %#v", params)
+	}
+	if desc, _ := exec["description"].(string); !strings.Contains(desc, "FREEFORM") {
+		t.Fatalf("freeform 代理 description 缺提示: %q", desc)
+	}
+}
+
+func TestUpstreamNameForNamespaceCall(t *testing.T) {
+	ctx := BuildCodexToolContextFromRaw([]interface{}{additionalToolsNamespaceFixture()})
+	flat, ok := ctx.UpstreamNameForNamespaceCall("functions", "wait")
+	if !ok || flat != "functions__wait" {
+		t.Fatalf("UpstreamNameForNamespaceCall = %q, %v", flat, ok)
+	}
+	if _, ok := ctx.UpstreamNameForNamespaceCall("functions", "nonexistent"); ok {
+		t.Fatalf("未知工具不应命中")
+	}
+}

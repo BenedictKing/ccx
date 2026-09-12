@@ -34,6 +34,7 @@ func TestRunResponsesFoldNormalizesOpenRouterReasoningEvents(t *testing.T) {
 			emitted = append(emitted, event)
 			return nil
 		},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("runResponsesFold() err = %v", err)
@@ -122,6 +123,7 @@ func TestRunResponsesFoldKeepsStandardSummaryEventsUntouched(t *testing.T) {
 			emitted = append(emitted, event)
 			return nil
 		},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("runResponsesFold() err = %v", err)

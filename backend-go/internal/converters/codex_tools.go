@@ -169,7 +169,30 @@ func addNamespaceToolsToContext(ctx *CodexToolContext, namespaceTool map[string]
 				Name:      name,
 			}
 			ctx.HasNamespaceTools = true
-			// case "custom", "namespace": not implemented in this pass
+		case "custom":
+			// namespace 内的 custom 子工具（codex 0.153+ 的 functions.exec）：
+			// key 用扁平上游名（functions__exec），OpenAIName 记原始名（exec）。
+			// apply_patch 不做 action 拆分——namespace custom 的提升形态是
+			// freeform 代理（{"input": ...}），强制降级为 Raw 保持回放口径一致。
+			name, _ := child["name"].(string)
+			if name == "" {
+				continue
+			}
+			flat := flattenNamespaceToolName(namespace, name)
+			if _, exists := ctx.CustomTools[flat]; exists {
+				continue
+			}
+			kind, grammarDef := detectCodexCustomToolKind(child)
+			if kind == CodexCustomToolApplyPatch {
+				kind = CodexCustomToolRaw
+			}
+			ctx.CustomTools[flat] = CodexCustomToolSpec{
+				OpenAIName:        name,
+				GrammarDefinition: grammarDef,
+				Kind:              kind,
+			}
+			ctx.HasCustomTools = true
+			// case "namespace": nested namespaces not implemented in this pass
 		}
 	}
 }
@@ -184,6 +207,16 @@ func (ctx CodexToolContext) OpenAINameForFunctionTool(upstreamName string) (name
 		return upstreamName, spec.Namespace
 	}
 	return spec.Name, spec.Namespace
+}
+
+// UpstreamNameForNamespaceCall returns the flat upstream function name for a
+// (namespace, name) pair as replayed by the Codex client in function_call history.
+func (ctx CodexToolContext) UpstreamNameForNamespaceCall(namespace, name string) (string, bool) {
+	flat := flattenNamespaceToolName(namespace, name)
+	if _, ok := ctx.FunctionTools[flat]; ok {
+		return flat, true
+	}
+	return "", false
 }
 
 func detectCodexCustomToolKind(tool map[string]interface{}) (CodexCustomToolKind, string) {
@@ -415,29 +448,91 @@ func combineNamespaceDescription(namespaceDesc, childDesc string) string {
 }
 
 func genericCustomProxyTool(name, description string) map[string]interface{} {
-	desc := description
-	if desc == "" {
-		desc = "FREEFORM custom tool: " + name + ". Put only the tool input text here."
-	} else {
-		desc = description + "\n\nThis is a FREEFORM tool. Do not wrap the input in JSON or markdown."
-	}
 	return map[string]interface{}{
 		"type": "function",
 		"function": map[string]interface{}{
 			"name":        name,
-			"description": desc,
-			"parameters": map[string]interface{}{
-				"type":                 "object",
-				"additionalProperties": false,
-				"properties": map[string]interface{}{
-					"input": map[string]interface{}{
-						"type":        "string",
-						"description": "Raw freeform input for this custom tool.",
-					},
-				},
-				"required": []string{"input"},
+			"description": freeformProxyDescription(name, description),
+			"parameters":  freeformInputSchema(),
+		},
+	}
+}
+
+func freeformProxyDescription(name, description string) string {
+	if description == "" {
+		return "FREEFORM custom tool: " + name + ". Put only the tool input text here."
+	}
+	return description + "\n\nThis is a FREEFORM tool. Do not wrap the input in JSON or markdown."
+}
+
+func freeformInputSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"additionalProperties": false,
+		"properties": map[string]interface{}{
+			"input": map[string]interface{}{
+				"type":        "string",
+				"description": "Raw freeform input for this custom tool.",
 			},
 		},
+		"required": []string{"input"},
+	}
+}
+
+// NamespaceToolsToResponsesFlat converts a namespace tool into Responses-format
+// flat function tools ({"type":"function","name":...} with top-level fields),
+// for hoisting Codex additional_tools entries to the top-level tools array.
+// Function children are flattened; custom children become freeform proxy tools.
+func NamespaceToolsToResponsesFlat(namespaceTool map[string]interface{}, ctx CodexToolContext) []map[string]interface{} {
+	namespace, _ := namespaceTool["name"].(string)
+	namespaceDesc, _ := namespaceTool["description"].(string)
+	children, _ := namespaceTool["tools"].([]interface{})
+
+	out := make([]map[string]interface{}, 0, len(children))
+	for _, raw := range children {
+		child, ok := raw.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		childType, _ := child["type"].(string)
+		name, description, parameters := extractResponsesToolFields(child)
+		if name == "" {
+			continue
+		}
+		flat := flattenNamespaceToolName(namespace, name)
+		// Skip when the flat name is already occupied by a top-level function.
+		if namespace != "" {
+			if spec, exists := ctx.FunctionTools[flat]; exists && spec.Namespace == "" {
+				continue
+			}
+		}
+		combinedDescription := combineNamespaceDescription(namespaceDesc, description)
+		switch childType {
+		case "function":
+			function := map[string]interface{}{
+				"type":       "function",
+				"name":       flat,
+				"parameters": parameters,
+			}
+			if combinedDescription != "" {
+				function["description"] = combinedDescription
+			}
+			out = append(out, function)
+		case "custom":
+			out = append(out, CustomProxyToolResponsesFlat(flat, combinedDescription))
+		}
+	}
+	return out
+}
+
+// CustomProxyToolResponsesFlat builds a Responses-format flat freeform proxy
+// tool for a Codex custom tool (input carried as a plain string).
+func CustomProxyToolResponsesFlat(name, description string) map[string]interface{} {
+	return map[string]interface{}{
+		"type":        "function",
+		"name":        name,
+		"description": freeformProxyDescription(name, description),
+		"parameters":  freeformInputSchema(),
 	}
 }
 
@@ -952,6 +1047,17 @@ func proxyActionFromUpstreamName(name string) string {
 // into upstream Chat Completions function call arguments for history replay.
 func BuildCustomToolCallHistoryArguments(ctx CodexToolContext, originalName, input string) (string, string) {
 	spec, ok := ctx.CustomTools[originalName]
+	upstreamName := originalName
+	if !ok {
+		// additional_tools 提升场景：CustomTools 的 key 是扁平上游名
+		// （functions__exec），按客户端原始名（exec）反查。
+		for name, candidate := range ctx.CustomTools {
+			if candidate.OpenAIName == originalName {
+				spec, ok, upstreamName = candidate, true, name
+				break
+			}
+		}
+	}
 	if !ok {
 		argsJSON, _ := json.Marshal(map[string]interface{}{"input": input})
 		return originalName, string(argsJSON)
@@ -965,21 +1071,21 @@ func BuildCustomToolCallHistoryArguments(ctx CodexToolContext, originalName, inp
 				"operations": []interface{}{},
 				"raw_patch":  input,
 			})
-			return spec.OpenAIName + "_batch", string(argsJSON)
+			return upstreamName + "_batch", string(argsJSON)
 		}
 		if len(ops) == 1 {
 			action := chooseSingleProxyAction(ops[0].Type)
-			return spec.OpenAIName + "_" + action, buildSingleOpArgsJSON(ops[0])
+			return upstreamName + "_" + action, buildSingleOpArgsJSON(ops[0])
 		}
-		return spec.OpenAIName + "_batch", buildBatchOpsJSON(ops)
+		return upstreamName + "_batch", buildBatchOpsJSON(ops)
 	case CodexCustomToolBuiltIn:
 		if spec.OpenAIName == "tool_search" || originalName == "tool_search" {
-			return spec.OpenAIName, normalizeToolSearchInput(input)
+			return upstreamName, normalizeToolSearchInput(input)
 		}
 		fallthrough
 	default:
 		argsJSON, _ := json.Marshal(map[string]interface{}{"input": input})
-		return spec.OpenAIName, string(argsJSON)
+		return upstreamName, string(argsJSON)
 	}
 }
 

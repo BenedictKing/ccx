@@ -36,7 +36,7 @@ func TestRunResponsesFoldDetectsContinuesAndFoldsRounds(t *testing.T) {
 	_, err := runResponsesFold(baseBody, responsesFoldTestResp(rounds[0]), openRound, func(event map[string]interface{}) error {
 		emitted = append(emitted, cloneFoldTestMap(event))
 		return nil
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("runResponsesFold() err = %v", err)
 	}
@@ -144,6 +144,7 @@ func TestRunResponsesFoldStopsWhenReasoningHasNoEncryptedContent(t *testing.T) {
 			emitted = append(emitted, cloneFoldTestMap(event))
 			return nil
 		},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("runResponsesFold() err = %v", err)
