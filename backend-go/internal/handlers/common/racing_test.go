@@ -1,6 +1,9 @@
 package common_test
 
 import (
+	"fmt"
+	"sort"
+	"sync"
 	"errors"
 	"net/http/httptest"
 	"sync/atomic"
@@ -417,4 +420,101 @@ func TestRunRacingAttemptSkipsRateLimitHotCandidate(t *testing.T) {
 	if got, _ := shadowUID.Load().(string); got != "ch_third" {
 		t.Fatalf("限流热渠道应被跳过, got %q", got)
 	}
+}
+
+// 影子按渠道粒度去重（2026-09-13 生产观测：白名单排他下 3 个影子全打同一 ark
+// 渠道同 key 同模型——同 provider 同队列的重复消耗，无延迟/可用性多样性收益，
+// 只放大流量与 429 风险）。
+func TestRunRacingAttemptShadowsChannelDedup(t *testing.T) {
+	recordBranch := func(shadowCalls *[]string, mu *sync.Mutex) common.TrySelectedChannelFunc {
+		return func(c *gin.Context, selection *scheduler.SelectionResult) common.MultiChannelAttemptResult {
+			uid := selection.Route.ChannelUID
+			if uid == "ch_first" {
+				// 慢主：阻塞至影子 claim 后被取消
+				select {
+				case <-time.After(2 * time.Second):
+				case <-c.Request.Context().Done():
+				}
+			} else {
+				mu.Lock()
+				*shadowCalls = append(*shadowCalls, uid)
+				mu.Unlock()
+				// 影子延迟须明显长于派出循环（瞬时连发），避免首个影子
+				// 提前 claim 终止后续派出，干扰去重计数。
+				select {
+				case <-time.After(200 * time.Millisecond):
+				case <-c.Request.Context().Done():
+				}
+			}
+			if !common.RacingClaimClientCommit(c) {
+				return common.MultiChannelAttemptResult{Route: selection.Route, Attempted: true, LastError: common.ErrRacingSuperseded}
+			}
+			return common.MultiChannelAttemptResult{Route: selection.Route, Handled: true, SuccessKey: "sk-" + uid}
+		}
+	}
+
+	t.Run("同渠道多key行只派一个影子", func(t *testing.T) {
+		env := racingTestEnv(t, nil)
+		installRacingHub(t, func(model, _ string) []autopilot.RoutingCandidate {
+			return []autopilot.RoutingCandidate{
+				{ChannelUID: "ch_first", ActualModel: model, Selected: true},
+				{ChannelUID: "ch_second", KeyIdentity: "k1", ActualModel: model, Selected: true},
+				{ChannelUID: "ch_second", KeyIdentity: "k2", ActualModel: model, Selected: true},
+				{ChannelUID: "ch_third", KeyIdentity: "k3", ActualModel: model, Selected: true},
+			}
+		}, racing.Behavior{MaxShadows: 3, StreamFloorMs: 30})
+
+		var mu sync.Mutex
+		var shadowCalls []string
+		_, result := common.RunRacingAttempt(newRacingGinContext(), recordBranch(&shadowCalls, &mu), racingInput(env, racingPrimarySelection(t, env)))
+		if !result.Handled {
+			t.Fatalf("应有赢家: %+v", result)
+		}
+		sort.Strings(shadowCalls)
+		if fmt.Sprint(shadowCalls) != "[ch_second ch_third]" {
+			t.Fatalf("影子应按渠道去重为 [ch_second ch_third], got %v", shadowCalls)
+		}
+	})
+
+	t.Run("无跨渠道候选时不重复打同一渠道", func(t *testing.T) {
+		// ch_third 禁用：缓存与调度器重选的可行集都只剩 ch_second 一个跨渠道候选
+		env := racingTestEnv(t, func(cfg *config.Config) {
+			cfg.Upstream[2].Status = "disabled"
+		})
+		installRacingHub(t, func(model, _ string) []autopilot.RoutingCandidate {
+			return []autopilot.RoutingCandidate{
+				{ChannelUID: "ch_first", ActualModel: model, Selected: true},
+				{ChannelUID: "ch_second", KeyIdentity: "k1", ActualModel: model, Selected: true},
+				{ChannelUID: "ch_second", KeyIdentity: "k2", ActualModel: model, Selected: true},
+			}
+		}, racing.Behavior{MaxShadows: 3, StreamFloorMs: 30})
+
+		var mu sync.Mutex
+		var shadowCalls []string
+		_, result := common.RunRacingAttempt(newRacingGinContext(), recordBranch(&shadowCalls, &mu), racingInput(env, racingPrimarySelection(t, env)))
+		if !result.Handled {
+			t.Fatalf("应有赢家: %+v", result)
+		}
+		if fmt.Sprint(shadowCalls) != "[ch_second]" {
+			t.Fatalf("仅一个跨渠道候选时只应派一个影子, got %v", shadowCalls)
+		}
+	})
+
+	t.Run("兜底重选路径同样按渠道去重", func(t *testing.T) {
+		env := racingTestEnv(t, nil)
+		// 排名缓存为空 → 全部走路径二调度器重选；调度器按 priority 依次返回
+		// ch_second、ch_third，第三个影子无未用渠道可派而放弃。
+		installRacingHub(t, nil, racing.Behavior{MaxShadows: 3, StreamFloorMs: 30})
+
+		var mu sync.Mutex
+		var shadowCalls []string
+		_, result := common.RunRacingAttempt(newRacingGinContext(), recordBranch(&shadowCalls, &mu), racingInput(env, racingPrimarySelection(t, env)))
+		if !result.Handled {
+			t.Fatalf("应有赢家: %+v", result)
+		}
+		sort.Strings(shadowCalls)
+		if fmt.Sprint(shadowCalls) != "[ch_second ch_third]" {
+			t.Fatalf("路径二影子应分散到不同渠道 [ch_second ch_third], got %v", shadowCalls)
+		}
+	})
 }

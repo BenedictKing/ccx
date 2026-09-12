@@ -345,6 +345,7 @@ type racingRuns struct {
 	results         map[int]MultiChannelAttemptResult
 	nextBranchID    int
 	usedIdentities  map[string]bool // 已占用候选身份（主 + 已派影子）
+	usedChannels    map[string]bool // 已占用渠道身份（主 + 已派影子）：影子按渠道粒度去重
 	usedRouteKeys   map[scheduler.ChannelRouteKey]bool
 	failedRouteKeys []scheduler.ChannelRouteKey
 	spawned         bool
@@ -424,6 +425,7 @@ func RunRacingAttempt(
 		usedIdentities: map[string]bool{
 			racingCandidateIdentity(in.Selection.Upstream.ChannelUID, in.Selection.ExecutionKeyIdentity, in.Selection.ExecutionModel): true,
 		},
+		usedChannels:  map[string]bool{racingChannelIdentity(in.Selection.Upstream, in.Selection.Route): true},
 		usedRouteKeys: map[scheduler.ChannelRouteKey]bool{in.Selection.Route.Key(): true},
 	}
 
@@ -599,11 +601,17 @@ func (r *racingRuns) startShadow(c *gin.Context, sel *scheduler.SelectionResult)
 
 // nextShadowSelection 选取下一个影子候选：排名缓存优先（整渠道排除主渠道），
 // 缓存不可用时回退调度器按已用路由重选。nil 表示无可用候选。
+// 影子按渠道粒度去重：同渠道影子是同 provider 同队列的重复消耗（key 级对冲
+// 已由 attempt 内部轮转覆盖），对延迟/可用性无实质改善，只放大流量与 429 风险。
 func (r *racingRuns) nextShadowSelection(primaryCost float64) *scheduler.SelectionResult {
 	r.mu.Lock()
 	usedIdentities := make(map[string]bool, len(r.usedIdentities))
 	for k := range r.usedIdentities {
 		usedIdentities[k] = true
+	}
+	usedChannels := make(map[string]bool, len(r.usedChannels))
+	for k := range r.usedChannels {
+		usedChannels[k] = true
 	}
 	usedRouteKeys := make(map[scheduler.ChannelRouteKey]bool, len(r.usedRouteKeys))
 	for k := range r.usedRouteKeys {
@@ -611,7 +619,8 @@ func (r *racingRuns) nextShadowSelection(primaryCost float64) *scheduler.Selecti
 	}
 	r.mu.Unlock()
 
-	// 路径一：SmartRouter 排名缓存（同渠道行由候选函数整渠道排除）。
+	// 路径一：SmartRouter 排名缓存（同渠道行由候选函数整渠道排除主渠道，
+	// 影子间渠道去重在此处的 usedChannels 检查落地）。
 	if r.hub.CandidateProvider != nil {
 		cands := r.hub.CandidateProvider(r.in.Model, string(r.in.Kind))
 		if len(cands) > 0 {
@@ -622,6 +631,9 @@ func (r *racingRuns) nextShadowSelection(primaryCost float64) *scheduler.Selecti
 				len(cands),
 			)
 			for _, cand := range picked {
+				if usedChannels[cand.ChannelUID] {
+					continue
+				}
 				identity := racingCandidateIdentity(cand.ChannelUID, cand.KeyIdentity, cand.ActualModel)
 				if usedIdentities[identity] {
 					continue
@@ -632,6 +644,7 @@ func (r *racingRuns) nextShadowSelection(primaryCost float64) *scheduler.Selecti
 				}
 				r.mu.Lock()
 				r.usedIdentities[identity] = true
+				r.usedChannels[cand.ChannelUID] = true
 				r.mu.Unlock()
 				return sel
 			}
@@ -640,40 +653,53 @@ func (r *racingRuns) nextShadowSelection(primaryCost float64) *scheduler.Selecti
 		}
 	}
 
-	// 路径二：调度器按已用路由重选（路由粒度回退）。
+	// 路径二：调度器按已用路由重选（路由粒度回退）。循环跳过已用渠道与
+	// 不可行路由，直到找到未用渠道或无可选；调度器回退到已排除路由时放弃
+	// （防死循环）。
 	failedRoutes := usedRouteKeys
-	sel, err := r.in.Scheduler.SelectChannelWithOptions(r.in.Ctx, func() scheduler.SelectionOptions {
-		opts := r.in.SelectionOptions
-		opts.FailedRoutes = failedRoutes
-		return opts
-	}())
-	if err != nil || sel == nil || sel.Upstream == nil {
-		return nil
-	}
-	cfgSnapshot := r.in.CfgManager.GetConfig()
-	if !cfgSnapshot.ResolveRacingPolicy(sel.Upstream) {
-		return nil
-	}
-	// 同路径一：调度器兜底重选可能返回软延迟/冷却渠道（last-resort），热渠道不派影子。
-	if r.in.Scheduler.IsChannelRateLimitHot(r.in.Kind, sel.ChannelIndex, sel.Upstream, r.in.Model) {
-		return nil
-	}
-	// cost_first 的倍率过滤在回退路径同样生效：调度器按路由重选拿不到五元组，
-	// 用渠道 CostMultiplier 近似（key 分组倍率未 pin 时不可知）。
-	if r.behavior.CheapCandidateOnly {
-		if racingEffectiveCostMultiplier(sel.Upstream, sel.ExecutionKeyIdentity) > primaryCost*0.5 {
+	for {
+		sel, err := r.in.Scheduler.SelectChannelWithOptions(r.in.Ctx, func() scheduler.SelectionOptions {
+			opts := r.in.SelectionOptions
+			opts.FailedRoutes = failedRoutes
+			return opts
+		}())
+		if err != nil || sel == nil || sel.Upstream == nil {
 			return nil
 		}
+		routeKey := sel.Route.Key()
+		if failedRoutes[routeKey] {
+			return nil
+		}
+		failedRoutes[routeKey] = true
+		if usedChannels[racingChannelIdentity(sel.Upstream, sel.Route)] {
+			continue
+		}
+		cfgSnapshot := r.in.CfgManager.GetConfig()
+		if !cfgSnapshot.ResolveRacingPolicy(sel.Upstream) {
+			continue
+		}
+		// 同路径一：调度器兜底重选可能返回软延迟/冷却渠道（last-resort），热渠道不派影子。
+		if r.in.Scheduler.IsChannelRateLimitHot(r.in.Kind, sel.ChannelIndex, sel.Upstream, r.in.Model) {
+			continue
+		}
+		// cost_first 的倍率过滤在回退路径同样生效：调度器按路由重选拿不到五元组，
+		// 用渠道 CostMultiplier 近似（key 分组倍率未 pin 时不可知）。
+		if r.behavior.CheapCandidateOnly {
+			if racingEffectiveCostMultiplier(sel.Upstream, sel.ExecutionKeyIdentity) > primaryCost*0.5 {
+				continue
+			}
+		}
+		// 工具调用白名单路由排他（带工具请求）：兜底重选不经影子构建出口，
+		// 须单独挡（语义同 buildSelectionFromCandidate 内的排他）。
+		if !r.toolWhitelistAllows(sel.Upstream) {
+			continue
+		}
+		r.mu.Lock()
+		r.usedRouteKeys[routeKey] = true
+		r.usedChannels[racingChannelIdentity(sel.Upstream, sel.Route)] = true
+		r.mu.Unlock()
+		return sel
 	}
-	// 工具调用白名单路由排他（带工具请求）：兜底重选不经影子构建出口，
-	// 须单独挡（语义同 buildSelectionFromCandidate 内的排他）。
-	if !r.toolWhitelistAllows(sel.Upstream) {
-		return nil
-	}
-	r.mu.Lock()
-	r.usedRouteKeys[sel.Route.Key()] = true
-	r.mu.Unlock()
-	return sel
 }
 
 // buildSelectionFromCandidate 把五元组候选落为可执行的 SelectionResult。
@@ -720,6 +746,14 @@ func (r *racingRuns) buildSelectionFromCandidate(cand autopilot.RoutingCandidate
 
 func racingCandidateIdentity(channelUID, keyIdentity, actualModel string) string {
 	return channelUID + "|" + strings.TrimSpace(keyIdentity) + "|" + actualModel
+}
+
+// racingChannelIdentity 渠道粒度身份：优先稳定 ChannelUID，空 UID 回退路由键。
+func racingChannelIdentity(upstream *config.UpstreamConfig, route scheduler.ChannelRouteRef) string {
+	if upstream != nil && upstream.ChannelUID != "" {
+		return upstream.ChannelUID
+	}
+	return route.Key().String()
 }
 
 // snapshotRuns 当前分支列表（副本）。
