@@ -179,6 +179,21 @@ func (p *ResponsesProvider) buildProviderRequestBody(c *gin.Context, requestPath
 		}
 		providerReq = reqMap
 	} else {
+		// 协议转换路径（responses→chat/claude/gemini）同样收割 additional_tools：
+		// 提升为顶层扁平 tools 后转换器才能带上工具；提升前的原始工具形态经
+		// codex_merged_raw_tools 通道供响应侧 remap 重建 ctx（custom_tool_call 还原）。
+		codexHoisted := false
+		var reqMapHoist map[string]interface{}
+		if err := json.Unmarshal(bodyBytes, &reqMapHoist); err == nil {
+			if harvested, ok := hoistCodexAdditionalTools(c, reqMapHoist); ok {
+				if normalizedBody, err := utils.MarshalJSONNoEscape(reqMapHoist); err == nil {
+					bodyBytes = normalizedBody
+					c.Set("codex_merged_raw_tools", harvested)
+					codexHoisted = true
+				}
+			}
+		}
+
 		var responsesReq types.ResponsesRequest
 		if err := json.Unmarshal(bodyBytes, &responsesReq); err != nil {
 			return nil, nil, fmt.Errorf("解析 Responses 请求失败: %w", err)
@@ -206,10 +221,21 @@ func (p *ResponsesProvider) buildProviderRequestBody(c *gin.Context, requestPath
 		}
 		// codexToolCompat applies to Responses -> Chat/Claude/Gemini conversion.
 		// codexNativeToolPassthrough is handled only in the Responses passthrough branch above.
+		// additional_tools 提升（codexHoisted）默认开启，不经渠道开关。
 		if responsesReq.TransformerMetadata == nil {
 			responsesReq.TransformerMetadata = make(map[string]interface{})
 		}
-		responsesReq.TransformerMetadata["codex_tool_compat_enabled"] = upstream.IsCodexToolCompatEnabled()
+		responsesReq.TransformerMetadata["codex_tool_compat_enabled"] = upstream.IsCodexToolCompatEnabled() || codexHoisted
+		if codexHoisted {
+			// 提升前 ctx/原始工具形态经 TransformerMetadata 传入转换器，保证
+			// 请求转换与响应 remap 都用带 custom 代理语义的上下文。
+			if ctxVal, ok := c.Get("codex_tool_context"); ok {
+				responsesReq.TransformerMetadata["codex_tool_context"] = ctxVal
+			}
+			if harvested, ok := c.Get("codex_merged_raw_tools"); ok {
+				responsesReq.TransformerMetadata["codex_merged_raw_tools"] = harvested
+			}
+		}
 		responsesReq.RawTools = extractRawToolsFromRequest(bodyBytes)
 		convertedReq, err := converter.ToProviderRequest(sess, &responsesReq)
 		if err != nil {
@@ -1247,13 +1273,16 @@ func convertCodexToolsForPassthrough(reqMap map[string]interface{}) {
 // codexNativeToolPassthrough/codexToolCompat 顶层转换互不叠加。
 // 必须先于 normalizeResponsesInputForPassthrough 执行：其无状态配对检查会丢弃
 // 未配对的 function_call_output，custom_tool_call 历史须先完成归一。
-func hoistCodexAdditionalTools(c *gin.Context, reqMap map[string]interface{}) {
+// 返回提升前的原始工具数组（namespace/custom 形态）与是否提升；原始工具供
+// 协议转换路径（responses→chat 等）经 codex_merged_raw_tools 通道重建响应侧
+// remap 上下文——提升后的扁平形态丢了 custom 代理语义，无法还原 custom_tool_call。
+func hoistCodexAdditionalTools(c *gin.Context, reqMap map[string]interface{}) ([]interface{}, bool) {
 	if rawTools, ok := reqMap["tools"].([]interface{}); ok && len(rawTools) > 0 {
-		return
+		return nil, false
 	}
 	input, ok := reqMap["input"].([]interface{})
 	if !ok {
-		return
+		return nil, false
 	}
 
 	var harvested []interface{}
@@ -1269,7 +1298,7 @@ func hoistCodexAdditionalTools(c *gin.Context, reqMap map[string]interface{}) {
 		}
 	}
 	if len(harvested) == 0 {
-		return
+		return nil, false
 	}
 
 	ctx := converters.BuildCodexToolContextFromRaw(harvested)
@@ -1295,7 +1324,7 @@ func hoistCodexAdditionalTools(c *gin.Context, reqMap map[string]interface{}) {
 		}
 	}
 	if len(hoisted) == 0 {
-		return
+		return nil, false
 	}
 
 	for i, rawItem := range kept {
@@ -1332,6 +1361,7 @@ func hoistCodexAdditionalTools(c *gin.Context, reqMap map[string]interface{}) {
 	reqMap["tool_choice"] = converters.ConvertToolChoiceForCodex(reqMap["tool_choice"], ctx)
 	c.Set("codex_tool_context", ctx)
 	c.Set("codex_additional_tools_hoisted", true)
+	return harvested, true
 }
 
 func normalizeToolChoiceAfterToolStrip(reqMap map[string]interface{}, keptTools []interface{}) {

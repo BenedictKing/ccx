@@ -311,3 +311,70 @@ func TestOpenAIChatResponseToResponses_ToolCalls(t *testing.T) {
 	assert.Equal(t, "call_123", resp.Output[1].CallID)
 	assert.Equal(t, "get_weather", resp.Output[1].Name)
 }
+
+// additional_tools 提升场景（codex 0.153+）：providers 层已把 input[] 的
+// additional_tools 收割提升为顶层扁平 tools，提升前（namespace/custom 形态）的
+// ctx 与原始工具数组经 TransformerMetadata 传入。转换器必须复用该 ctx（而非按
+// 提升后的扁平 rawTools 重建），否则 custom 代理语义丢失、custom_tool_call 无法还原。
+func TestOpenAIChatConverter_HoistedAdditionalToolsReusesPreHoistCtx(t *testing.T) {
+	preHoistRaw := []interface{}{
+		map[string]interface{}{
+			"type": "namespace",
+			"name": "functions",
+			"tools": []interface{}{
+				map[string]interface{}{
+					"type":   "custom",
+					"name":   "exec",
+					"format": map[string]interface{}{"type": "grammar", "syntax": "lark", "definition": "start: .*"},
+				},
+				map[string]interface{}{
+					"type":       "function",
+					"name":       "wait",
+					"parameters": map[string]interface{}{"type": "object"},
+				},
+			},
+		},
+	}
+	preHoistCtx := BuildCodexToolContextFromRaw(preHoistRaw)
+
+	req := &types.ResponsesRequest{
+		Model: "gpt-6-astra",
+		Input: "run cat probe.txt",
+		RawTools: []interface{}{
+			map[string]interface{}{"type": "function", "name": "functions__exec", "parameters": map[string]interface{}{"type": "object", "properties": map[string]interface{}{"input": map[string]interface{}{"type": "string"}}}},
+			map[string]interface{}{"type": "function", "name": "functions__wait", "parameters": map[string]interface{}{"type": "object"}},
+		},
+		TransformerMetadata: map[string]interface{}{
+			"codex_tool_compat_enabled": true,
+			"codex_tool_context":        preHoistCtx,
+			"codex_merged_raw_tools":    preHoistRaw,
+		},
+	}
+
+	converted, err := (&OpenAIChatConverter{}).ToProviderRequest(&session.Session{}, req)
+	assert.NoError(t, err)
+
+	requestMap := converted.(map[string]interface{})
+	tools := requestMap["tools"].([]map[string]interface{})
+	names := make([]string, 0, len(tools))
+	for _, tool := range tools {
+		names = append(names, tool["function"].(map[string]interface{})["name"].(string))
+	}
+	assert.Contains(t, names, "functions__exec")
+	assert.Contains(t, names, "functions__wait")
+
+	// ctx 必须保持提升前形态（custom 代理语义），不被提升后扁平 rawTools 覆盖
+	ctx, ok := req.TransformerMetadata["codex_tool_context"].(CodexToolContext)
+	assert.True(t, ok)
+	assert.True(t, ctx.HasCustomTools)
+	spec, ok := ctx.CustomTools["functions__exec"]
+	assert.True(t, ok)
+	assert.Equal(t, "exec", spec.OpenAIName)
+	assert.Equal(t, CodexCustomToolExec, spec.Kind)
+
+	// merged raw tools 必须保持提升前 namespace/custom 形态
+	merged, ok := req.TransformerMetadata["codex_merged_raw_tools"].([]interface{})
+	assert.True(t, ok)
+	assert.Len(t, merged, 1)
+	assert.Equal(t, "namespace", merged[0].(map[string]interface{})["type"])
+}

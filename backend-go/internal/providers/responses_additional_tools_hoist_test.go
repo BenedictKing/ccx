@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/converters"
 	"github.com/gin-gonic/gin"
 )
@@ -255,4 +256,101 @@ func TestHoistCodexAdditionalTools(t *testing.T) {
 			t.Fatalf("tools 序列化形状异常")
 		}
 	})
+}
+
+// 协议转换路径（responses→chat）接线：additional_tools 提升后 chat body 必须
+// 带上嵌套格式 tools，且 codex_merged_raw_tools / codex_tool_context 保持提升前
+// 原始形态（响应侧 remap 依赖 custom 代理语义还原 custom_tool_call）。
+func TestBuildProviderRequestBody_ChatHoistsAdditionalTools(t *testing.T) {
+	provider := &ResponsesProvider{}
+	upstream := &config.UpstreamConfig{ServiceType: "openai"}
+
+	body := []byte(`{
+		"model": "gpt-6-astra",
+		"stream": true,
+		"tool_choice": "auto",
+		"input": [
+			{"type":"additional_tools","id":"at_1","role":"developer","tools":[
+				{"type":"namespace","name":"functions","tools":[
+					{"type":"custom","name":"exec","format":{"type":"grammar","syntax":"lark","definition":"start: .*"}},
+					{"type":"function","name":"wait","parameters":{"type":"object","properties":{"cell_id":{"type":"string"}}}}
+				]},
+				{"type":"namespace","name":"clock","tools":[
+					{"type":"function","name":"sleep","parameters":{"type":"object"}}
+				]}
+			]},
+			{"type":"message","role":"user","content":[{"type":"input_text","text":"run ls"}]}
+		]
+	}`)
+
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	reqBody, _, err := provider.buildProviderRequestBody(c, "/v1/responses", body, upstream)
+	if err != nil {
+		t.Fatalf("buildProviderRequestBody() err = %v", err)
+	}
+
+	reqMap, ok := reqBody.(map[string]interface{})
+	if !ok {
+		t.Fatalf("provider request type = %T, want map", reqBody)
+	}
+
+	// chat 嵌套格式 tools，扁平名
+	names := map[string]bool{}
+	switch rawTools := reqMap["tools"].(type) {
+	case []map[string]interface{}:
+		for _, tool := range rawTools {
+			fn, _ := tool["function"].(map[string]interface{})
+			names[toString(fn["name"])] = true
+			if tool["type"] != "function" {
+				t.Fatalf("chat tool type = %v, want function", tool["type"])
+			}
+		}
+	case []interface{}:
+		for _, raw := range rawTools {
+			tool, _ := raw.(map[string]interface{})
+			fn, _ := tool["function"].(map[string]interface{})
+			names[toString(fn["name"])] = true
+			if tool["type"] != "function" {
+				t.Fatalf("chat tool type = %v, want function", tool["type"])
+			}
+		}
+	default:
+		t.Fatalf("chat body 无 tools: keys=%v", reqMap)
+	}
+	for _, want := range []string{"functions__exec", "functions__wait", "clock__sleep"} {
+		if !names[want] {
+			t.Fatalf("chat tools 缺 %s, got %v", want, names)
+		}
+	}
+
+	// messages 不含 additional_tools 条目残留（应转为 developer/system 等常规消息）
+	for _, rawMsg := range reqMap["messages"].([]interface{}) {
+		msg := rawMsg.(map[string]interface{})
+		if _, leaked := msg["tools"]; leaked && toString(msg["role"]) == "" {
+			t.Fatalf("messages 疑似残留 additional_tools 条目: %#v", msg)
+		}
+	}
+
+	// 提升前原始形态经 codex_merged_raw_tools 保留（namespace/custom 语义）
+	merged, ok := c.Get("codex_merged_raw_tools")
+	if !ok {
+		t.Fatalf("codex_merged_raw_tools 未设置")
+	}
+	mergedTools := merged.([]interface{})
+	if len(mergedTools) != 2 || toString(mergedTools[0].(map[string]interface{})["type"]) != "namespace" {
+		t.Fatalf("codex_merged_raw_tools 应为提升前 namespace 形态: %#v", mergedTools)
+	}
+
+	// 提升前 ctx 带 custom 代理语义
+	ctxVal, ok := c.Get("codex_tool_context")
+	if !ok {
+		t.Fatalf("codex_tool_context 未设置")
+	}
+	ctx := ctxVal.(converters.CodexToolContext)
+	if !ctx.IsCustomToolProxy("functions__exec") {
+		t.Fatalf("ctx 应注册 functions__exec custom 代理: %#v", ctx.CustomTools)
+	}
+	if hoisted, _ := c.Get("codex_additional_tools_hoisted"); hoisted != true {
+		t.Fatalf("codex_additional_tools_hoisted 未置位")
+	}
 }

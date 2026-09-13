@@ -339,3 +339,49 @@ func TestConvertOpenAIChatToResponses_Stream_OpenAICacheDetailsNormalizesInput(t
 		t.Fatalf("cached_tokens = %d, want 36608", got)
 	}
 }
+
+// additional_tools 提升场景的 chat 承接端到端：originalRequestJSON 经 handlers 层
+// 注入后为「提升前 namespace/custom 形态 tools + transformer_metadata 开关置位」，
+// 上游 chat 返回扁平名 tool_call（functions__exec），必须还原为 custom_tool_call
+// 序列（name=exec、input=原始 JS），且 namespace function 还原 name+namespace。
+func TestConvertOpenAIChatToResponses_HoistedAdditionalToolsRemap(t *testing.T) {
+	ctx := context.Background()
+	sseLines := []string{
+		`data: {"id":"chatcmpl-hoist","object":"chat.completion.chunk","created":1234567890,"model":"gpt-6-astra","choices":[{"index":0,"delta":{"role":"assistant","tool_calls":[{"index":0,"id":"call_exec","type":"function","function":{"name":"functions__exec","arguments":""}}]},"finish_reason":null}]}`,
+		`data: {"id":"chatcmpl-hoist","object":"chat.completion.chunk","created":1234567890,"model":"gpt-6-astra","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"input\":\"await tools.exec_command({ cmd: \"cat probe.txt\" })\"}"}}]},"finish_reason":null}]}`,
+		`data: {"id":"chatcmpl-hoist","object":"chat.completion.chunk","created":1234567890,"model":"gpt-6-astra","choices":[{"index":0,"delta":{"tool_calls":[{"index":1,"id":"call_wait","type":"function","function":{"name":"functions__wait","arguments":"{\"cell_id\":\"c1\"}"}}]},"finish_reason":null}]}`,
+		`data: {"id":"chatcmpl-hoist","object":"chat.completion.chunk","created":1234567890,"model":"gpt-6-astra","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}`,
+		`data: [DONE]`,
+	}
+	// 提升前原始形态（response.go 注入 codex_merged_raw_tools 后的 tools 字段）
+	originalReq := []byte(`{"model":"gpt-6-astra","input":"run ls","tools":[{"type":"namespace","name":"functions","tools":[{"type":"custom","name":"exec","format":{"type":"grammar","syntax":"lark","definition":"start: .*"}},{"type":"function","name":"wait","parameters":{"type":"object"}}]}],"transformer_metadata":{"codex_tool_compat_enabled":true}}`)
+
+	var state any
+	var allEvents []string
+	for _, line := range sseLines {
+		allEvents = append(allEvents, ConvertOpenAIChatToResponses(ctx, "gpt-6-astra", originalReq, nil, []byte(line), &state)...)
+	}
+	joined := strings.Join(allEvents, "\n")
+
+	// functions__exec → custom_tool_call exec，input 还原为原始 JS
+	if !strings.Contains(joined, `"type":"custom_tool_call"`) {
+		t.Fatalf("missing custom_tool_call: %s", joined)
+	}
+	if !strings.Contains(joined, `"name":"exec"`) {
+		t.Fatalf("custom_tool_call name 应为 exec: %s", joined)
+	}
+	if !strings.Contains(joined, "await tools.exec_command") {
+		t.Fatalf("custom_tool_call input 应为原始 JS: %s", joined)
+	}
+	if strings.Contains(joined, `"name":"functions__exec"`) {
+		t.Fatalf("扁平名 functions__exec 不应泄漏给客户端: %s", joined)
+	}
+
+	// functions__wait → function_call wait + namespace=functions
+	if !strings.Contains(joined, `"name":"wait"`) || !strings.Contains(joined, `"namespace":"functions"`) {
+		t.Fatalf("namespace function 应还原 name+namespace: %s", joined)
+	}
+	if strings.Contains(joined, `"name":"functions__wait"`) {
+		t.Fatalf("扁平名 functions__wait 不应泄漏: %s", joined)
+	}
+}

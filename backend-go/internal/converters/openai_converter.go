@@ -62,12 +62,23 @@ func (c *OpenAIChatConverter) ToProviderRequest(sess *session.Session, req *type
 	rawTools := req.RawTools
 	if codexEnabled {
 		rawTools = MergeCodexToolSearchOutputTools(req.RawTools, sess, req.Input)
-		codexToolCtx = BuildCodexToolContextFromRaw(rawTools)
+		// additional_tools 提升场景：providers 层已把提升前（namespace/custom 形态）
+		// 的 ctx 放入 TransformerMetadata——rawTools 是提升后的扁平形态，据此重建
+		// 会丢 custom 代理语义，优先复用已有 ctx。
+		if existing, ok := req.TransformerMetadata["codex_tool_context"].(CodexToolContext); ok && (existing.HasCustomTools || existing.HasNamespaceTools) {
+			codexToolCtx = existing
+		} else {
+			codexToolCtx = BuildCodexToolContextFromRaw(rawTools)
+		}
 		if len(rawTools) > 0 {
 			if req.TransformerMetadata == nil {
 				req.TransformerMetadata = make(map[string]interface{})
 			}
-			req.TransformerMetadata["codex_merged_raw_tools"] = rawTools
+			// additional_tools 提升场景下该键已是提升前原始形态（providers 层写入），
+			// 不用提升后的扁平 rawTools 覆盖（响应侧 remap 依赖原始 namespace/custom 语义）。
+			if _, exists := req.TransformerMetadata["codex_merged_raw_tools"]; !exists {
+				req.TransformerMetadata["codex_merged_raw_tools"] = rawTools
+			}
 		}
 	}
 	if len(rawTools) > 0 {

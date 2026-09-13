@@ -203,7 +203,10 @@ func handleMultiChannel(
 					if responsesReq.TransformerMetadata == nil {
 						responsesReq.TransformerMetadata = make(map[string]interface{})
 					}
-					responsesReq.TransformerMetadata["codex_tool_compat_enabled"] = upstreamCopy.IsCodexToolCompatEnabled() || upstreamCopy.IsCodexNativeToolPassthroughEnabled()
+					// additional_tools 提升（默认开启，不经渠道开关）同样激活响应侧 remap
+					hoisted, _ := c.Get("codex_additional_tools_hoisted")
+					hoistedBool, _ := hoisted.(bool)
+					responsesReq.TransformerMetadata["codex_tool_compat_enabled"] = upstreamCopy.IsCodexToolCompatEnabled() || upstreamCopy.IsCodexNativeToolPassthroughEnabled() || hoistedBool
 					timeouts := common.ResolveStreamPreflightTimeouts(upstreamCopy, metricsManager.GetCircuitBreakerConfig())
 					return handleSuccess(c, resp, provider, upstreamCopy, apiKey, upstream.ServiceType, envCfg, sessionManager, startTime, &responsesReq, actualRequestBody, timeouts)
 				},
@@ -335,7 +338,10 @@ func handleSingleChannel(
 			if responsesReq.TransformerMetadata == nil {
 				responsesReq.TransformerMetadata = make(map[string]interface{})
 			}
-			responsesReq.TransformerMetadata["codex_tool_compat_enabled"] = upstreamCopy.IsCodexToolCompatEnabled() || upstreamCopy.IsCodexNativeToolPassthroughEnabled()
+			// additional_tools 提升（默认开启，不经渠道开关）同样激活响应侧 remap
+			hoisted, _ := c.Get("codex_additional_tools_hoisted")
+			hoistedBool, _ := hoisted.(bool)
+			responsesReq.TransformerMetadata["codex_tool_compat_enabled"] = upstreamCopy.IsCodexToolCompatEnabled() || upstreamCopy.IsCodexNativeToolPassthroughEnabled() || hoistedBool
 			timeouts := common.ResolveStreamPreflightTimeouts(upstreamCopy, metricsManager.GetCircuitBreakerConfig())
 			return handleSuccess(c, resp, provider, upstreamCopy, apiKey, upstream.ServiceType, envCfg, sessionManager, startTime, &responsesReq, actualRequestBody, timeouts)
 		},
