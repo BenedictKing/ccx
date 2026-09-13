@@ -37,6 +37,11 @@ type claudeToResponsesState struct {
 	CacheCreationInputTokens int64
 	CacheCreation5mTokens    int64
 	CacheCreation1hTokens    int64
+	// Codex 工具 remap 上下文（additional_tools 提升/codexToolCompat 场景）：
+	// custom 代理 function 还原为 custom_tool_call，namespace function 还原
+	// name+namespace。惰性初始化于首个 chunk。
+	CodexCtx            CodexToolContext
+	CodexCtxInitialized bool
 }
 
 func ConvertClaudeMessagesToResponses(ctx context.Context, modelName string, originalRequestRawJSON, requestRawJSON, rawJSON []byte, param *any) []string {
@@ -71,6 +76,10 @@ func ConvertClaudeMessagesToResponses(ctx context.Context, modelName string, ori
 			st.ResponseID = fmt.Sprintf("resp_%d", time.Now().UnixNano())
 		}
 		st.CreatedAt = time.Now().Unix()
+		if !st.CodexCtxInitialized {
+			st.CodexCtx = buildCodexToolContextFromRequest(originalRequestRawJSON)
+			st.CodexCtxInitialized = true
+		}
 		out = append(out, st.emitCreatedAndInProgress(nextSeq)...)
 	}
 
@@ -363,18 +372,50 @@ func (st *claudeToResponsesState) startToolUse(callID, name string, nextSeq func
 	}
 	st.ToolArgsBuf.Reset()
 
+	// Codex remap：custom 代理以 custom_tool_call 形态开局；namespace function 还原名
+	if st.isCodexCustomProxy(name) {
+		item := `{"type":"response.output_item.added","sequence_number":0,"output_index":0,"item":{"id":"","type":"custom_tool_call","status":"in_progress","call_id":"","name":"","input":""}}`
+		item, _ = sjson.Set(item, "sequence_number", nextSeq())
+		item, _ = sjson.Set(item, "output_index", st.ToolIndex)
+		item, _ = sjson.Set(item, "item.id", st.CurrentToolItemID)
+		item, _ = sjson.Set(item, "item.call_id", st.CurrentToolCallID)
+		item, _ = sjson.Set(item, "item.name", st.CodexCtx.OriginalCustomToolName(name))
+		return []string{emitResponsesEvent("response.output_item.added", item)}
+	}
+
 	item := `{"type":"response.output_item.added","sequence_number":0,"output_index":0,"item":{"id":"","type":"function_call","status":"in_progress","arguments":"","call_id":"","name":""}}`
 	item, _ = sjson.Set(item, "sequence_number", nextSeq())
 	item, _ = sjson.Set(item, "output_index", st.ToolIndex)
 	item, _ = sjson.Set(item, "item.id", st.CurrentToolItemID)
 	item, _ = sjson.Set(item, "item.call_id", st.CurrentToolCallID)
-	item, _ = sjson.Set(item, "item.name", st.CurrentToolName)
+	displayName, namespace := st.codexDisplayName(name)
+	item, _ = sjson.Set(item, "item.name", displayName)
+	if namespace != "" {
+		item, _ = sjson.Set(item, "item.namespace", namespace)
+	}
 
 	return []string{emitResponsesEvent("response.output_item.added", item)}
 }
 
+// isCodexCustomProxy 判断上游工具名是否为 Codex custom 代理（需 remap 为 custom_tool_call）。
+func (st *claudeToResponsesState) isCodexCustomProxy(name string) bool {
+	return st.CodexCtxInitialized && name != "" && st.CodexCtx.IsCustomToolProxy(name)
+}
+
+// codexDisplayName 还原 namespace function 的原始（name, namespace）；非 namespace 原样。
+func (st *claudeToResponsesState) codexDisplayName(name string) (string, string) {
+	if !st.CodexCtxInitialized || name == "" {
+		return name, ""
+	}
+	return st.CodexCtx.OpenAINameForFunctionTool(name)
+}
+
 func (st *claudeToResponsesState) appendToolUseDelta(partialJSON string, nextSeq func() int) []string {
 	st.ToolArgsBuf.WriteString(partialJSON)
+	// custom 代理的 input 聚合后一次性下发（closeToolUse），不发增量 delta
+	if st.isCodexCustomProxy(st.CurrentToolName) {
+		return nil
+	}
 	delta := `{"type":"response.function_call_arguments.delta","sequence_number":0,"item_id":"","output_index":0,"delta":""}`
 	delta, _ = sjson.Set(delta, "sequence_number", nextSeq())
 	delta, _ = sjson.Set(delta, "item_id", st.CurrentToolItemID)
@@ -389,6 +430,50 @@ func (st *claudeToResponsesState) closeToolUse(nextSeq func() int) []string {
 		args = "{}"
 	}
 
+	// Codex custom 代理 → custom_tool_call 序列（input delta/done + item done）
+	if st.isCodexCustomProxy(st.CurrentToolName) {
+		customInput := ReconstructCustomToolCallInput(st.CodexCtx, st.CurrentToolName, args)
+		originalName := st.CodexCtx.OriginalCustomToolName(st.CurrentToolName)
+
+		inputDelta := `{"type":"response.custom_tool_call_input.delta","sequence_number":0,"item_id":"","call_id":"","output_index":0,"delta":""}`
+		inputDelta, _ = sjson.Set(inputDelta, "sequence_number", nextSeq())
+		inputDelta, _ = sjson.Set(inputDelta, "item_id", st.CurrentToolItemID)
+		inputDelta, _ = sjson.Set(inputDelta, "call_id", st.CurrentToolCallID)
+		inputDelta, _ = sjson.Set(inputDelta, "output_index", st.ToolIndex)
+		inputDelta, _ = sjson.Set(inputDelta, "delta", customInput)
+
+		inputDone := `{"type":"response.custom_tool_call_input.done","sequence_number":0,"item_id":"","call_id":"","output_index":0,"input":""}`
+		inputDone, _ = sjson.Set(inputDone, "sequence_number", nextSeq())
+		inputDone, _ = sjson.Set(inputDone, "item_id", st.CurrentToolItemID)
+		inputDone, _ = sjson.Set(inputDone, "call_id", st.CurrentToolCallID)
+		inputDone, _ = sjson.Set(inputDone, "output_index", st.ToolIndex)
+		inputDone, _ = sjson.Set(inputDone, "input", customInput)
+
+		itemDone := `{"type":"response.output_item.done","sequence_number":0,"output_index":0,"item":{"id":"","type":"custom_tool_call","status":"completed","call_id":"","name":"","input":""}}`
+		itemDone, _ = sjson.Set(itemDone, "sequence_number", nextSeq())
+		itemDone, _ = sjson.Set(itemDone, "output_index", st.ToolIndex)
+		itemDone, _ = sjson.Set(itemDone, "item.id", st.CurrentToolItemID)
+		itemDone, _ = sjson.Set(itemDone, "item.call_id", st.CurrentToolCallID)
+		itemDone, _ = sjson.Set(itemDone, "item.name", originalName)
+		itemDone, _ = sjson.Set(itemDone, "item.input", customInput)
+
+		st.CompletedOutput = append(st.CompletedOutput, map[string]interface{}{
+			"id":      st.CurrentToolItemID,
+			"type":    "custom_tool_call",
+			"status":  "completed",
+			"call_id": st.CurrentToolCallID,
+			"name":    originalName,
+			"input":   customInput,
+		})
+
+		st.ActiveItemType = ""
+		return []string{
+			emitResponsesEvent("response.custom_tool_call_input.delta", inputDelta),
+			emitResponsesEvent("response.custom_tool_call_input.done", inputDone),
+			emitResponsesEvent("response.output_item.done", itemDone),
+		}
+	}
+
 	argsDone := `{"type":"response.function_call_arguments.done","sequence_number":0,"item_id":"","output_index":0,"arguments":""}`
 	argsDone, _ = sjson.Set(argsDone, "sequence_number", nextSeq())
 	argsDone, _ = sjson.Set(argsDone, "item_id", st.CurrentToolItemID)
@@ -401,16 +486,24 @@ func (st *claudeToResponsesState) closeToolUse(nextSeq func() int) []string {
 	itemDone, _ = sjson.Set(itemDone, "item.id", st.CurrentToolItemID)
 	itemDone, _ = sjson.Set(itemDone, "item.arguments", args)
 	itemDone, _ = sjson.Set(itemDone, "item.call_id", st.CurrentToolCallID)
-	itemDone, _ = sjson.Set(itemDone, "item.name", st.CurrentToolName)
+	displayName, namespace := st.codexDisplayName(st.CurrentToolName)
+	itemDone, _ = sjson.Set(itemDone, "item.name", displayName)
+	if namespace != "" {
+		itemDone, _ = sjson.Set(itemDone, "item.namespace", namespace)
+	}
 
-	st.CompletedOutput = append(st.CompletedOutput, map[string]interface{}{
+	completedItem := map[string]interface{}{
 		"id":        st.CurrentToolItemID,
 		"type":      "function_call",
 		"status":    "completed",
 		"arguments": args,
 		"call_id":   st.CurrentToolCallID,
-		"name":      st.CurrentToolName,
-	})
+		"name":      displayName,
+	}
+	if namespace != "" {
+		completedItem["namespace"] = namespace
+	}
+	st.CompletedOutput = append(st.CompletedOutput, completedItem)
 
 	st.ActiveItemType = ""
 	return []string{
