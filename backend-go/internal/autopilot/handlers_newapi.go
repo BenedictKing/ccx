@@ -399,8 +399,8 @@ func newApiProvisionTimeout(groupCount int) time.Duration {
 	if groupCount < 1 {
 		groupCount = 1
 	}
-	budget := 30*time.Second + time.Duration(groupCount)*time.Minute
-	const maxBudget = 10 * time.Minute
+	budget := 30*time.Second + time.Duration(groupCount)*2*time.Minute
+	const maxBudget = 20 * time.Minute
 	if budget > maxBudget {
 		return maxBudget
 	}
