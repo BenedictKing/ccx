@@ -125,8 +125,10 @@ func handleAddSubscriptionAccount(deps *NewApiRouteDeps) gin.HandlerFunc {
 		lock.Lock()
 		defer lock.Unlock()
 
-		ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
-		defer cancel()
+		// 探测（校验/分组）与建 key 分开计时：建 key 预算随分组数伸缩，
+		// 避免慢速代理下共享小预算在流程中途到期（context deadline exceeded）。
+		probeCtx, probeCancel := context.WithTimeout(c.Request.Context(), newApiProbeTimeout)
+		defer probeCancel()
 
 		// 代理解析：请求显式携带优先，缺省继承渠道级代理通道（回退订阅级设置）
 		proxyURL := strings.TrimSpace(req.ProxyURL)
@@ -139,7 +141,7 @@ func handleAddSubscriptionAccount(deps *NewApiRouteDeps) gin.HandlerFunc {
 			}
 		}
 		adapter := NewApiAdapterForProxy(proxyURL, proxyPreferDirect)
-		self, derivedUserID, err := adapter.VerifyWithFallback(ctx, profile.BaseURL, req.AccessToken, req.UserID, req.AuthTokenMode)
+		self, derivedUserID, err := adapter.VerifyWithFallback(probeCtx, profile.BaseURL, req.AccessToken, req.UserID, req.AuthTokenMode)
 		if err != nil {
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("账号验证失败: %v", err)})
 			return
@@ -150,7 +152,7 @@ func handleAddSubscriptionAccount(deps *NewApiRouteDeps) gin.HandlerFunc {
 		// 为该账号建 key：沿用订阅级倍率上限与模型白名单。建 key 失败即整个添加失败并回收已建 key。
 		var accountKeys []NewApiProvisionedKey
 		if deps.CfgManager != nil {
-			groups, gErr := adapter.FetchGroups(ctx, profile.BaseURL, req.AccessToken, derivedUserID, req.AuthTokenMode)
+			groups, gErr := adapter.FetchGroups(probeCtx, profile.BaseURL, req.AccessToken, derivedUserID, req.AuthTokenMode)
 			if gErr != nil {
 				c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("无法获取该账号分组倍率，已阻止建 key: %v", gErr)})
 				return
@@ -172,6 +174,9 @@ func handleAddSubscriptionAccount(deps *NewApiRouteDeps) gin.HandlerFunc {
 			if len(provisionModels) == 0 {
 				provisionModels = profile.ProvisionModels
 			}
+			// 建 key 阶段单独计时：预算随分组数伸缩（查重+创建+揭示，每个分组多次顺序往返）。
+			ctx, cancel := context.WithTimeout(c.Request.Context(), newApiProvisionTimeout(len(resolved)))
+			defer cancel()
 			provisionReq := NewApiProvisionRequest{
 				BaseURL:                    profile.BaseURL,
 				AccessToken:                req.AccessToken,

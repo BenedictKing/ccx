@@ -386,6 +386,27 @@ func updateChannelForKind(cm *config.ConfigManager, kind string, index int, upda
 	return false, fmt.Errorf("不支持的渠道类型: %s", kind)
 }
 
+// newApiProbeTimeout 是「校验令牌 + 拉分组/模型」探测阶段的总预算：
+// 最多约 4 次顺序上游请求，单次请求已由适配器 15s 客户端超时约束；
+// 慢速代理（如 socks5 绕行）下需要为顺序往返留出足够余量。
+const newApiProbeTimeout = 90 * time.Second
+
+// newApiProvisionTimeout 计算「逐分组建 key」阶段的总预算。
+// 每个分组需 查重 + 创建（+掩码揭示）多次顺序往返：固定的小预算在慢速代理下会
+// 在流程中途到期（context deadline exceeded），误杀本来健康的接入流程；
+// 因此预算随分组数伸缩，并设上限避免异常站点长时间占用请求。
+func newApiProvisionTimeout(groupCount int) time.Duration {
+	if groupCount < 1 {
+		groupCount = 1
+	}
+	budget := 30*time.Second + time.Duration(groupCount)*time.Minute
+	const maxBudget = 10 * time.Minute
+	if budget > maxBudget {
+		return maxBudget
+	}
+	return budget
+}
+
 // handleNewApiVerify 校验 new-api 凭据 + 预览账户/分组/模型信息（不写入数据库）。
 func handleNewApiVerify(deps *NewApiRouteDeps) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -399,7 +420,7 @@ func handleNewApiVerify(deps *NewApiRouteDeps) gin.HandlerFunc {
 			return
 		}
 
-		ctx, cancel := context.WithTimeout(c.Request.Context(), 20*time.Second)
+		ctx, cancel := context.WithTimeout(c.Request.Context(), newApiProbeTimeout)
 		defer cancel()
 
 		adapter := NewApiAdapterForProxy(req.ProxyURL, req.ProxyPreferDirect)
@@ -486,20 +507,22 @@ func handleNewApiProvision(deps *NewApiRouteDeps) gin.HandlerFunc {
 			}
 		}
 
-		ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
-		defer cancel()
+		// 探测（校验/分组/模型）与建 key 分开计时：建 key 预算随分组数伸缩，
+		// 避免慢速代理下共享小预算在流程中途到期（context deadline exceeded）。
+		probeCtx, probeCancel := context.WithTimeout(c.Request.Context(), newApiProbeTimeout)
+		defer probeCancel()
 
 		adapter := NewApiAdapterForProxy(req.ProxyURL, req.ProxyPreferDirect)
 
 		// 1) 校验 + 拉用户信息（支持 New-API-User header 缺失回退）
-		self, derivedUserID, err := adapter.VerifyWithFallback(ctx, req.BaseURL, req.AccessToken, req.UserID, req.AuthTokenMode)
+		self, derivedUserID, err := adapter.VerifyWithFallback(probeCtx, req.BaseURL, req.AccessToken, req.UserID, req.AuthTokenMode)
 		if err != nil {
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("校验失败: %v", err)})
 			return
 		}
 
 		// 2) 拉分组倍率并强制校验。分组未知时不能安全决定要创建或调用哪一把 Key。
-		groups, err := adapter.FetchGroups(ctx, req.BaseURL, req.AccessToken, derivedUserID, req.AuthTokenMode)
+		groups, err := adapter.FetchGroups(probeCtx, req.BaseURL, req.AccessToken, derivedUserID, req.AuthTokenMode)
 		if err != nil {
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("无法获取分组倍率，已阻止自动建 key: %v", err)})
 			return
@@ -511,7 +534,10 @@ func handleNewApiProvision(deps *NewApiRouteDeps) gin.HandlerFunc {
 		}
 
 		// 模型清单只用于订阅画像和后续 Discovery，不影响分组安全闸门。
-		models, _ := adapter.FetchModels(ctx, req.BaseURL, req.AccessToken, derivedUserID, req.AuthTokenMode)
+		models, _ := adapter.FetchModels(probeCtx, req.BaseURL, req.AccessToken, derivedUserID, req.AuthTokenMode)
+
+		ctx, cancel := context.WithTimeout(c.Request.Context(), newApiProvisionTimeout(len(resolvedGroups)))
+		defer cancel()
 
 		// 3) 为全部合格分组分别建/复用代理 Key。一个 Key 固定绑定一个上游分组，
 		// 不会因为同渠道的其他分组而越过用户设置的倍率上限。
