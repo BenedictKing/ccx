@@ -698,7 +698,8 @@ func TestHandleNewApiProvision_SecondGroupFailureRollsBackCreatedKey(t *testing.
 		}, "")
 	})
 	mux.HandleFunc("/api/user/models", func(w http.ResponseWriter, r *http.Request) {
-		writeEnvelope(w, true, []string{}, "")
+		// 忽略 ?group= 参数返回非空并集：模拟不支持分组查询的 fork（安全降级，不过滤任何分组）。
+		writeEnvelope(w, true, []string{"gpt-4o"}, "")
 	})
 	mux.HandleFunc("/api/token/", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {

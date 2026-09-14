@@ -1405,6 +1405,8 @@ export interface NewApiVerifyResponse {
   usedQuota: number
   groups: Record<string, number>
   groupFetchError?: string
+  /** 各分组可用模型数（GET /api/user/models?group=）；某组缺记录表示查询失败或 fork 不支持 */
+  groupModelCounts?: Record<string, number>
   availableModels: string[]
   suggestedOriginType: string
   suggestedOriginTier: string
@@ -1453,6 +1455,8 @@ export interface NewApiProvisionResponse {
   provisionedTokenId: number
   reused: boolean
   provisionedKeys?: NewApiProvisionedKey[]
+  /** 因可用模型数为 0 被跳过建 key 的分组 */
+  skippedEmptyGroups?: string[]
   discoveryStarted: boolean
 }
 

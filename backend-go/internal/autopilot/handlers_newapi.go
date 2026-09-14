@@ -145,7 +145,10 @@ type NewApiVerifyResponse struct {
 	UsedQuota       int64              `json:"usedQuota"`
 	Groups          map[string]float64 `json:"groups"`
 	GroupFetchError string             `json:"groupFetchError,omitempty"`
-	AvailableModels []string           `json:"availableModels"`
+	// GroupModelCounts 记录各分组可用模型数（best-effort，查询失败的分组缺省）；
+	// 0 模型的分组在接入时会被跳过，前端据此提前标注。
+	GroupModelCounts map[string]int `json:"groupModelCounts,omitempty"`
+	AvailableModels  []string       `json:"availableModels"`
 	// 派生建议：前端可直接展示
 	SuggestedOriginType string `json:"suggestedOriginType"`
 	SuggestedOriginTier string `json:"suggestedOriginTier"`
@@ -188,7 +191,9 @@ type NewApiProvisionResponse struct {
 	ProvisionedTokenID int                            `json:"provisionedTokenId"`
 	Reused             bool                           `json:"reused"` // true 表示全部 Key 都复用了已存在的同名 key
 	ProvisionedKeys    []NewApiProvisionedKeyResponse `json:"provisionedKeys,omitempty"`
-	DiscoveryStarted   bool                           `json:"discoveryStarted"`
+	// SkippedEmptyGroups 是本次被跳过的 0 可用模型分组（未为其建 key）；后续分组补上模型后由同步兜底自动补建。
+	SkippedEmptyGroups []string `json:"skippedEmptyGroups,omitempty"`
+	DiscoveryStarted   bool     `json:"discoveryStarted"`
 }
 
 // NewApiProvisionedKeyResponse 是一把自动接入 Key 的非敏感结果。
@@ -230,8 +235,38 @@ func cleanupNewApiProvisionedKeys(ctx context.Context, adapter *NewApiAdapter, r
 	}
 }
 
+// newApiGroupModelCounter 是按分组拉取可用模型数的能力；*NewApiAdapter 与同步侧 fake 均满足。
+type newApiGroupModelCounter interface {
+	FetchGroupModels(ctx context.Context, baseURL, accessToken, userID, authTokenMode, group string) ([]string, error)
+}
+
+// fetchNewApiGroupModelCounts 并行拉取各分组的可用模型数。
+// 单个分组失败仅省略其计数（调用方按"未知"保守保留），不返回错误。
+func fetchNewApiGroupModelCounts(ctx context.Context, adapter newApiGroupModelCounter, baseURL, accessToken, userID, authTokenMode string, groups []string) map[string]int {
+	counts := make(map[string]int, len(groups))
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	for _, name := range groups {
+		wg.Add(1)
+		go func(name string) {
+			defer wg.Done()
+			models, err := adapter.FetchGroupModels(ctx, baseURL, accessToken, userID, authTokenMode, name)
+			if err != nil {
+				return
+			}
+			mu.Lock()
+			counts[name] = len(models)
+			mu.Unlock()
+		}(name)
+	}
+	wg.Wait()
+	return counts
+}
+
 // provisionNewApiGroupKeys 为各分组创建/复用代理 Key。namePrefix 用于多账号场景给 key 名加账号前缀，
 // 避免与主账号或其他账号在同站点下的同名 key 被 FindTokenByName 误复用；主账号调用传空串保持旧命名。
+// 返回的 skippedEmpty 是被剔除的 0 模型分组名（仅为它们建 key 必然产出空渠道）；
+// 计数查询失败的分组保守保留，全部为空则阻止建 key 并列出分组名。
 func provisionNewApiGroupKeys(
 	ctx context.Context,
 	adapter *NewApiAdapter,
@@ -239,12 +274,22 @@ func provisionNewApiGroupKeys(
 	userID string,
 	groups []newApiResolvedGroup,
 	namePrefix string,
-) ([]newApiProvisionedKey, error) {
+) ([]newApiProvisionedKey, []string, error) {
 	if len(groups) == 0 {
-		return nil, fmt.Errorf("没有可创建 key 的分组")
+		return nil, nil, fmt.Errorf("没有可创建 key 的分组")
 	}
 	if req.ProvisionAllEligibleGroups && strings.TrimSpace(req.ProvisionKeyName) != "" {
-		return nil, fmt.Errorf("自动接入全部合格分组时不支持 provisionKeyName")
+		return nil, nil, fmt.Errorf("自动接入全部合格分组时不支持 provisionKeyName")
+	}
+
+	groupNames := make([]string, len(groups))
+	for i, group := range groups {
+		groupNames[i] = group.Name
+	}
+	counts := fetchNewApiGroupModelCounts(ctx, adapter, req.BaseURL, req.AccessToken, userID, req.AuthTokenMode, groupNames)
+	groups, skippedEmpty := partitionNewApiEmptyGroups(groups, counts)
+	if len(groups) == 0 {
+		return nil, skippedEmpty, fmt.Errorf("分组 %s 的可用模型数均为 0，已阻止建 key", strings.Join(skippedEmpty, "、"))
 	}
 
 	names := make([]string, len(groups))
@@ -256,7 +301,7 @@ func provisionNewApiGroupKeys(
 		}
 		name = namePrefix + name
 		if previousGroup, exists := nameGroups[name]; exists && previousGroup != group.Name {
-			return nil, fmt.Errorf("分组 %q 与 %q 生成了相同的 key 名称 %q", previousGroup, group.Name, name)
+			return nil, skippedEmpty, fmt.Errorf("分组 %q 与 %q 生成了相同的 key 名称 %q", previousGroup, group.Name, name)
 		}
 		names[i] = name
 		nameGroups[name] = group.Name
@@ -285,7 +330,7 @@ func provisionNewApiGroupKeys(
 			} else {
 				rollback()
 			}
-			return nil, fmt.Errorf("分组 %q 建 key 失败: %w", group.Name, err)
+			return nil, skippedEmpty, fmt.Errorf("分组 %q 建 key 失败: %w", group.Name, err)
 		}
 		// 记录实际使用的名字：同名冲突避让时 finalName 会带后缀，与远端保持一致。
 		current := newApiProvisionedKey{
@@ -300,22 +345,22 @@ func provisionNewApiGroupKeys(
 		}
 		if keyPlain == "" {
 			rollback(current)
-			return nil, &newApiProvisionConflictError{err: fmt.Errorf("分组 %q 的同名 key=%s 未返回明文，无法直接绑定，请删除后重试或手动填 key", group.Name, names[i])}
+			return nil, skippedEmpty, &newApiProvisionConflictError{err: fmt.Errorf("分组 %q 的同名 key=%s 未返回明文，无法直接绑定，请删除后重试或手动填 key", group.Name, names[i])}
 		}
 		// 兜底：掩码 key 绝不能当明文绑定（会导致必然 403 并污染黑名单）。
 		// 正常流程中适配器已通过揭示端点换回明文，此处拦截异常链路。
 		if IsMaskedNewApiKey(keyPlain) {
 			rollback(current)
-			return nil, &newApiProvisionConflictError{err: fmt.Errorf("分组 %q 的 key=%s 仍为掩码形态，已阻止绑定，请手动填写 key", group.Name, names[i])}
+			return nil, skippedEmpty, &newApiProvisionConflictError{err: fmt.Errorf("分组 %q 的 key=%s 仍为掩码形态，已阻止绑定，请手动填写 key", group.Name, names[i])}
 		}
 		if previousGroup, exists := seenKeys[keyPlain]; exists && previousGroup != group.Name {
 			rollback(current)
-			return nil, fmt.Errorf("分组 %q 与 %q 返回相同的 key，已阻止绑定", previousGroup, group.Name)
+			return nil, skippedEmpty, fmt.Errorf("分组 %q 与 %q 返回相同的 key，已阻止绑定", previousGroup, group.Name)
 		}
 		seenKeys[keyPlain] = group.Name
 		provisioned = append(provisioned, current)
 	}
-	return provisioned, nil
+	return provisioned, skippedEmpty, nil
 }
 
 // ─── Handler ───
@@ -439,6 +484,16 @@ func handleNewApiVerify(deps *NewApiRouteDeps) gin.HandlerFunc {
 			groupFetchError = groupErr.Error()
 		}
 
+		// 2.5) 各分组可用模型数（并行拉取，单组失败不阻断；0 模型的分组接入时会被跳过，预览提前标注）
+		var groupModelCounts map[string]int
+		if groupErr == nil && len(groups) > 0 {
+			groupNames := make([]string, 0, len(groups))
+			for name := range groups {
+				groupNames = append(groupNames, name)
+			}
+			groupModelCounts = fetchNewApiGroupModelCounts(ctx, adapter, req.BaseURL, req.AccessToken, derivedUserID, req.AuthTokenMode, groupNames)
+		}
+
 		// 3) 拉可用模型（失败不阻断）
 		models, _ := adapter.FetchModels(ctx, req.BaseURL, req.AccessToken, derivedUserID, req.AuthTokenMode)
 
@@ -450,6 +505,7 @@ func handleNewApiVerify(deps *NewApiRouteDeps) gin.HandlerFunc {
 			UsedQuota:           self.UsedQuota,
 			Groups:              groups,
 			GroupFetchError:     groupFetchError,
+			GroupModelCounts:    groupModelCounts,
 			AvailableModels:     models,
 			SuggestedOriginType: defaults.OriginType,
 			SuggestedOriginTier: defaults.OriginTier,
@@ -541,7 +597,7 @@ func handleNewApiProvision(deps *NewApiRouteDeps) gin.HandlerFunc {
 
 		// 3) 为全部合格分组分别建/复用代理 Key。一个 Key 固定绑定一个上游分组，
 		// 不会因为同渠道的其他分组而越过用户设置的倍率上限。
-		provisioned, err := provisionNewApiGroupKeys(ctx, adapter, req, derivedUserID, resolvedGroups, "")
+		provisioned, skippedEmptyGroups, err := provisionNewApiGroupKeys(ctx, adapter, req, derivedUserID, resolvedGroups, "")
 		if err != nil {
 			var conflict *newApiProvisionConflictError
 			if errors.As(err, &conflict) {
@@ -604,24 +660,25 @@ func handleNewApiProvision(deps *NewApiRouteDeps) gin.HandlerFunc {
 				Confidence:        0.95,
 				Notes:             req.Notes,
 				// §8.5.1
-				BaseURL:             req.BaseURL,
-				AccessToken:         req.AccessToken, // 持久化但不出 API 响应
-				UserID:              derivedUserID,
-				Username:            self.Username,
-				AuthTokenMode:       req.AuthTokenMode,
-				ProxyURL:            strings.TrimSpace(req.ProxyURL),
-				ProxyPreferDirect:   req.ProxyPreferDirect,
-				ProvisionKeyName:    primaryKey.Name,
-				ProvisionGroup:      primaryKey.Group,
-				ProvisionGroupRatio: &provisionGroupRatio,
-				MaxGroupMultiplier:  &maxGroupMultiplier,
-				ProvisionModels:     req.ProvisionModels,
-				ProvisionedTokenID:  primaryKey.TokenID,
-				ProvisionedKeys:     profileKeys,
-				AvailableModels:     models,
-				AutoRefreshEnabled:  false, // new-api 走 Verify，不直接接 SubscriptionBalanceFetcher
-				CreatedAt:           now,
-				UpdatedAt:           now,
+				BaseURL:              req.BaseURL,
+				AccessToken:          req.AccessToken, // 持久化但不出 API 响应
+				UserID:               derivedUserID,
+				Username:             self.Username,
+				AuthTokenMode:        req.AuthTokenMode,
+				ProxyURL:             strings.TrimSpace(req.ProxyURL),
+				ProxyPreferDirect:    req.ProxyPreferDirect,
+				ProvisionKeyName:     primaryKey.Name,
+				ProvisionGroup:       primaryKey.Group,
+				ProvisionGroupRatio:  &provisionGroupRatio,
+				MaxGroupMultiplier:   &maxGroupMultiplier,
+				ProvisionModels:      req.ProvisionModels,
+				ProvisionAllEligible: req.ProvisionAllEligibleGroups,
+				ProvisionedTokenID:   primaryKey.TokenID,
+				ProvisionedKeys:      profileKeys,
+				AvailableModels:      models,
+				AutoRefreshEnabled:   false, // new-api 走 Verify，不直接接 SubscriptionBalanceFetcher
+				CreatedAt:            now,
+				UpdatedAt:            now,
 			}
 			if err := deps.Store.Create(profile); err != nil {
 				cleanupNewApiProvisionedKeys(ctx, adapter, req, derivedUserID, provisioned)
@@ -792,8 +849,8 @@ func handleNewApiProvision(deps *NewApiRouteDeps) gin.HandlerFunc {
 					Reused:          key.Reused,
 				})
 			}
-			log.Printf("[NewApi-Provision] 完成 subscription=%s channelUID=%s merged=%v groups=%d maxRatio=%.4g allReused=%v discovery=%v",
-				req.SubscriptionUID, channelUID, mergeFound, len(provisioned), maxGroupMultiplier, allReused, discoveryStarted)
+			log.Printf("[NewApi-Provision] 完成 subscription=%s channelUID=%s merged=%v groups=%d skippedEmpty=%v maxRatio=%.4g allReused=%v discovery=%v",
+				req.SubscriptionUID, channelUID, mergeFound, len(provisioned), skippedEmptyGroups, maxGroupMultiplier, allReused, discoveryStarted)
 
 			fresh := deps.Store.Get(req.SubscriptionUID)
 			if fresh == nil {
@@ -825,6 +882,7 @@ func handleNewApiProvision(deps *NewApiRouteDeps) gin.HandlerFunc {
 				ProvisionedTokenID: primaryKey.TokenID,
 				Reused:             allReused,
 				ProvisionedKeys:    responseKeys,
+				SkippedEmptyGroups: skippedEmptyGroups,
 				DiscoveryStarted:   discoveryStarted,
 			})
 		})

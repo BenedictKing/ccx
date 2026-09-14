@@ -11,6 +11,7 @@ import (
 	"io"
 	"math/big"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -323,6 +324,18 @@ func (a *NewApiAdapter) FetchModels(ctx context.Context, baseURL, accessToken, u
 	var models []string
 	if err := a.doRequest(ctx, http.MethodGet, baseURL, "/api/user/models", accessToken, userID, authTokenMode, nil, &models); err != nil {
 		return nil, fmt.Errorf("[NewApiAdapter-FetchModels] %w", err)
+	}
+	return models, nil
+}
+
+// FetchGroupModels 拉取单个分组的可用模型列表。对应 GET /api/user/models?group=<name>。
+// 兼容性：不认识 group 参数的 fork 会忽略 query、返回账号并集，调用方据此得到非空计数，
+// 不会产生误排除；分组不存在或查询失败按普通错误返回，由调用方保守处理。
+func (a *NewApiAdapter) FetchGroupModels(ctx context.Context, baseURL, accessToken, userID, authTokenMode, group string) ([]string, error) {
+	var models []string
+	path := "/api/user/models?group=" + url.QueryEscape(group)
+	if err := a.doRequest(ctx, http.MethodGet, baseURL, path, accessToken, userID, authTokenMode, nil, &models); err != nil {
+		return nil, fmt.Errorf("[NewApiAdapter-FetchGroupModels] %w", err)
 	}
 	return models, nil
 }

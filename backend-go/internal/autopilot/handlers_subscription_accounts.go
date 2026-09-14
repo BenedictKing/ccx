@@ -188,7 +188,10 @@ func handleAddSubscriptionAccount(deps *NewApiRouteDeps) gin.HandlerFunc {
 			}
 			// key 名直接用 ccx-{分组名}：FindTokenByName 按各账号自己的 token 列表查重，
 			// 跨账号同名天然隔离，同名同组自动复用。
-			provisioned, pErr := provisionNewApiGroupKeys(ctx, adapter, provisionReq, derivedUserID, resolved, "")
+			provisioned, skippedEmptyGroups, pErr := provisionNewApiGroupKeys(ctx, adapter, provisionReq, derivedUserID, resolved, "")
+			if len(skippedEmptyGroups) > 0 {
+				log.Printf("[NewApi-Account] 跳过 0 模型分组 subscription=%s groups=%v", uid, skippedEmptyGroups)
+			}
 			if pErr != nil {
 				var conflict *newApiProvisionConflictError
 				if errors.As(pErr, &conflict) {

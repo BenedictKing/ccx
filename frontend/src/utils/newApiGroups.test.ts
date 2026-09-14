@@ -21,4 +21,13 @@ describe('new-api group multiplier guard', () => {
     expect(isValidNewApiGroupMultiplier(-0.1)).toBe(false)
     expect(isValidNewApiGroupMultiplier(Number.POSITIVE_INFINITY)).toBe(false)
   })
+
+  it('剔除明确 0 模型的分组；无计数记录的分组保守保留', () => {
+    expect(
+      eligibleNewApiGroups({ default: 1, drawing: 1, unknown: 1 }, 1, { default: 3, drawing: 0 })
+    ).toEqual([
+      { name: 'default', ratio: 1, modelCount: 3 },
+      { name: 'unknown', ratio: 1, modelCount: undefined }
+    ])
+  })
 })

@@ -1,6 +1,9 @@
 package autopilot
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 func TestResolveNewApiProvisionGroups_AllEligible(t *testing.T) {
 	limit := 1.0
@@ -61,5 +64,69 @@ func TestResolveNewApiProvisionGroupsRejectsAmbiguousMode(t *testing.T) {
 func TestDefaultNewApiProvisionKeyNameForGroup(t *testing.T) {
 	if got := defaultNewApiProvisionKeyNameForGroup("Premium Group"); got != "ccx-premium-group" {
 		t.Fatalf("分组 Key 名称 = %q", got)
+	}
+}
+
+func TestPartitionNewApiEmptyGroups(t *testing.T) {
+	cases := []struct {
+		name        string
+		groups      []newApiResolvedGroup
+		counts      map[string]int
+		wantKept    []string
+		wantSkipped []string
+	}{
+		{
+			name: "0 模型分组被剔除",
+			groups: []newApiResolvedGroup{
+				{Name: "default", Ratio: 1},
+				{Name: "画图", Ratio: 1},
+			},
+			counts:      map[string]int{"default": 3, "画图": 0},
+			wantKept:    []string{"default"},
+			wantSkipped: []string{"画图"},
+		},
+		{
+			name: "无计数记录的分组保守保留（fork 忽略 group 参数或查询失败）",
+			groups: []newApiResolvedGroup{
+				{Name: "default", Ratio: 1},
+				{Name: "premium", Ratio: 1},
+			},
+			counts:   map[string]int{"default": 1},
+			wantKept: []string{"default", "premium"},
+		},
+		{
+			name: "计数全空时 kept 为空",
+			groups: []newApiResolvedGroup{
+				{Name: "a", Ratio: 1},
+				{Name: "b", Ratio: 1},
+			},
+			counts:      map[string]int{"a": 0, "b": 0},
+			wantKept:    []string{},
+			wantSkipped: []string{"a", "b"},
+		},
+		{
+			name: "负数计数同样视为空分组",
+			groups: []newApiResolvedGroup{
+				{Name: "a", Ratio: 1},
+			},
+			counts:      map[string]int{"a": -1},
+			wantKept:    []string{},
+			wantSkipped: []string{"a"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			kept, skipped := partitionNewApiEmptyGroups(tc.groups, tc.counts)
+			gotKept := make([]string, 0, len(kept))
+			for _, g := range kept {
+				gotKept = append(gotKept, g.Name)
+			}
+			if fmt.Sprintf("%v", gotKept) != fmt.Sprintf("%v", tc.wantKept) {
+				t.Fatalf("kept = %v, want %v", gotKept, tc.wantKept)
+			}
+			if fmt.Sprintf("%v", skipped) != fmt.Sprintf("%v", tc.wantSkipped) {
+				t.Fatalf("skipped = %v, want %v", skipped, tc.wantSkipped)
+			}
+		})
 	}
 }

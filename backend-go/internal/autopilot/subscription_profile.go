@@ -99,6 +99,10 @@ type SubscriptionProfile struct {
 	MaxGroupMultiplier *float64 `json:"maxGroupMultiplier,omitempty"`
 	// ProvisionModels 建 key 时的 model_limits 白名单，空=不限制。
 	ProvisionModels []string `json:"provisionModels,omitempty"`
+	// ProvisionAllEligible 记录接入时是否选择「自动接入全部合格分组」。
+	// 为 true 时同步兜底会对 远端新增合格分组 / 补上模型的空分组 自动补建 key；
+	// 缺省 false（存量订阅、显式单分组接入），行为不变，避免后台静默扩组。
+	ProvisionAllEligible bool `json:"provisionAllEligible,omitempty"`
 	// ProvisionedTokenID 是自动建 key 后回填的 new-api 侧令牌 ID（只读展示）。
 	ProvisionedTokenID int `json:"provisionedTokenId,omitempty"`
 	// ProvisionedKeys 记录自动接入的全部安全分组 Key 元数据，不含明文 Key。

@@ -125,10 +125,13 @@
             :key="g.name"
             size="small"
             class="mr-1 mt-1"
-            :color="g.ratio <= maxGroupMultiplier ? 'success' : 'warning'"
+            :color="g.modelCount === 0 ? 'error' : g.ratio <= maxGroupMultiplier ? 'success' : 'warning'"
             variant="tonal"
           >
-            {{ g.name }} × {{ g.ratio }}
+            {{ g.name }} × {{ g.ratio
+            }}<template v-if="g.modelCount !== undefined">
+              · {{ t('subscription.newApi.groupModelCount', { count: g.modelCount }) }}</template
+            >
           </v-chip>
         </div>
       </div>
@@ -180,6 +183,11 @@
       </div>
       <v-alert v-if="blockedGroupCount > 0" color="warning" variant="tonal" density="compact" class="mb-2">
         {{ t('subscription.newApi.excludedGroups', { count: blockedGroupCount, limit: maxGroupMultiplier }) }}
+      </v-alert>
+      <v-alert v-if="emptySkippedGroupNames.length > 0" color="info" variant="tonal" density="compact" class="mb-2">
+        {{
+          t('subscription.newApi.emptyGroupsSkipped', { count: emptySkippedGroupNames.length, groups: emptySkippedGroupNames.join('、') })
+        }}
       </v-alert>
       <v-alert v-if="verifyResult?.groupFetchError" color="error" variant="tonal" density="compact" class="mb-2">
         {{ t('subscription.newApi.groupFetchError') }} {{ verifyResult.groupFetchError }}
@@ -305,16 +313,27 @@ const channelKindOptions = computed(() => [
 
 const groupItems = computed(() => {
   if (!verifyResult.value) return []
+  const counts = verifyResult.value.groupModelCounts
   return Object.entries(verifyResult.value.groups || {})
-    .map(([name, ratio]) => ({ name, ratio }))
+    .map(([name, ratio]) => ({ name, ratio, modelCount: counts?.[name] }))
     .sort((left, right) => left.ratio - right.ratio || left.name.localeCompare(right.name))
 })
 
 const maxGroupMultiplierValid = computed(() => isValidNewApiGroupMultiplier(maxGroupMultiplier.value))
-const eligibleGroupItems = computed(() =>
+// 倍率合格集合（不看模型数）：用于区分「倍率超限」与「分组 0 模型」两类排除原因
+const ratioEligibleGroupItems = computed(() =>
   eligibleNewApiGroups(verifyResult.value?.groups || {}, maxGroupMultiplier.value)
 )
-const blockedGroupCount = computed(() => groupItems.value.length - eligibleGroupItems.value.length)
+const eligibleGroupItems = computed(() =>
+  eligibleNewApiGroups(verifyResult.value?.groups || {}, maxGroupMultiplier.value, verifyResult.value?.groupModelCounts)
+)
+const blockedGroupCount = computed(() => groupItems.value.length - ratioEligibleGroupItems.value.length)
+// 倍率合格但可用模型数为 0 而被跳过的分组：接入时不建 key，站点补上模型后同步兜底会自动补建
+const emptySkippedGroupNames = computed(() => {
+  if (ratioEligibleGroupItems.value.length === eligibleGroupItems.value.length) return []
+  const eligible = new Set(eligibleGroupItems.value.map(g => g.name))
+  return ratioEligibleGroupItems.value.filter(g => !eligible.has(g.name)).map(g => g.name)
+})
 
 const canVerify = computed(() => !!verifyForm.value.baseUrl.trim() && !!verifyForm.value.accessToken.trim() && !!(verifyForm.value.userId ?? '').trim())
 
@@ -412,12 +431,14 @@ async function autoProvisionAfterVerify() {
   // 分组未知或无合格分组时后端会硬性拦截，提前以明确文案失败，避免无效建 key 请求
   if (result.groupFetchError || eligibleGroupItems.value.length === 0) {
     resetVerification()
-    emit(
-      'error',
-      result.groupFetchError
-        ? `${t('subscription.newApi.groupFetchError')} ${result.groupFetchError}`
-        : t('subscription.newApi.noEligibleGroups', { limit: maxGroupMultiplier.value })
-    )
+    if (result.groupFetchError) {
+      emit('error', `${t('subscription.newApi.groupFetchError')} ${result.groupFetchError}`)
+    } else if (ratioEligibleGroupItems.value.length > 0 && emptySkippedGroupNames.value.length > 0) {
+      // 倍率合格但全部 0 可用模型：不是倍率问题，需告知真实原因
+      emit('error', t('subscription.newApi.allEligibleGroupsEmpty', { groups: emptySkippedGroupNames.value.join('、') }))
+    } else {
+      emit('error', t('subscription.newApi.noEligibleGroups', { limit: maxGroupMultiplier.value }))
+    }
     return
   }
 

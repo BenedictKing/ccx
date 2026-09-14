@@ -227,6 +227,29 @@ func TestNewApiAdapter_FetchModels(t *testing.T) {
 	}
 }
 
+// ── FetchGroupModels ──
+
+func TestNewApiAdapter_FetchGroupModels(t *testing.T) {
+	srv := newMockNewApiServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/user/models" {
+			t.Fatalf("意外路径: %s", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("group"); got != "画图" {
+			t.Fatalf("group 查询参数不符（须 URL 转义中文分组名）: got=%s", got)
+		}
+		writeEnvelope(w, true, []string{"dall-e-3"}, "")
+	})
+
+	adapter := &NewApiAdapter{HTTPClient: srv.Client()}
+	models, err := adapter.FetchGroupModels(context.Background(), srv.URL, "token", "1", "", "画图")
+	if err != nil {
+		t.Fatalf("FetchGroupModels 失败: %v", err)
+	}
+	if len(models) != 1 || models[0] != "dall-e-3" {
+		t.Fatalf("分组模型列表不符: %+v", models)
+	}
+}
+
 // ── ListTokens / FindTokenByName ──
 
 func TestNewApiAdapter_ListTokens_ItemsShape(t *testing.T) {

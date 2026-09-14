@@ -450,8 +450,13 @@ function requireEligibleGroups(result: NewApiVerifyResponse) {
   if (result.groupFetchError) {
     throw new Error(`无法获取上游分组: ${result.groupFetchError}`)
   }
-  const groups = eligibleNewApiGroups(result.groups, DEFAULT_NEWAPI_MAX_GROUP_MULTIPLIER)
+  const groups = eligibleNewApiGroups(result.groups, DEFAULT_NEWAPI_MAX_GROUP_MULTIPLIER, result.groupModelCounts)
   if (groups.length === 0) {
+    // 区分「倍率超限」与「倍率合格但可用模型数为 0」：后者是站点分组配置问题，需如实告知
+    const byRatio = eligibleNewApiGroups(result.groups, DEFAULT_NEWAPI_MAX_GROUP_MULTIPLIER)
+    if (byRatio.length > 0) {
+      throw new Error(`合格分组（${byRatio.map(g => g.name).join('、')}）的可用模型数均为 0，无法接入`)
+    }
     throw new Error(`没有倍率不高于 ${DEFAULT_NEWAPI_MAX_GROUP_MULTIPLIER} 的可用分组`)
   }
   return groups

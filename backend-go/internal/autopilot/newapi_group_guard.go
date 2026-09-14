@@ -88,6 +88,21 @@ func validNewApiGroupRatio(ratio float64) bool {
 	return !math.IsNaN(ratio) && !math.IsInf(ratio, 0) && ratio >= 0
 }
 
+// partitionNewApiEmptyGroups 按各分组可用模型数剔除 0 模型的分组。
+// 仅当 counts 中存在该分组的记录且为 0 才剔除；无记录（查询失败或 fork 不支持
+// group 参数）时保守保留，避免因兼容差异误排除可用分组。返回的 skipped 保持入参顺序。
+func partitionNewApiEmptyGroups(groups []newApiResolvedGroup, counts map[string]int) (kept []newApiResolvedGroup, skipped []string) {
+	kept = make([]newApiResolvedGroup, 0, len(groups))
+	for _, group := range groups {
+		if count, known := counts[group.Name]; known && count <= 0 {
+			skipped = append(skipped, group.Name)
+			continue
+		}
+		kept = append(kept, group)
+	}
+	return kept, skipped
+}
+
 func defaultNewApiProvisionKeyNameForGroup(group string) string {
 	suffix := strings.Map(func(r rune) rune {
 		if unicode.IsLetter(r) || unicode.IsDigit(r) {

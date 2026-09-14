@@ -396,6 +396,9 @@ func (s *NewApiSubscriptionSyncService) SyncNow(ctx context.Context, uid string)
 	}
 	// 常规同步只更新已存在 config；渠道侧被误删的自动接入 key 在此自愈找回。
 	s.healMissingProvisionedKeys(ctx, profile, adapter, profile.BaseURL, profile.AccessToken, userID, mode, desired, "")
+	// 兜底补建：「自动接入全部合格分组」的订阅，远端新增合格分组、或接入时因 0 模型
+	// 被跳过的分组补上模型后，在此自动补建 key 并注入渠道（幂等，失败下轮 sweep 重试）。
+	s.catchUpUncoveredGroups(ctx, profile, adapter, userID, mode, groups)
 
 	if result.ModelsHashChanged && s.runner != nil && s.cfgManager != nil {
 		for _, channel := range changedChannels {
@@ -934,6 +937,152 @@ func (s *NewApiSubscriptionSyncService) injectProvisionedKeys(profile *Subscript
 type newApiTokenHealer interface {
 	ListTokens(ctx context.Context, baseURL, accessToken, userID, authTokenMode string, page, size int) ([]NewApiToken, error)
 	GetTokenKey(ctx context.Context, baseURL, accessToken, userID, authTokenMode string, tokenID int) (string, error)
+}
+
+// newApiGroupCatchUpper 是同步兜底补建 key 所需的适配器能力；*NewApiAdapter 天然满足。
+// 测试 fake 未实现时兜底自动跳过，不破坏既有 mock。
+type newApiGroupCatchUpper interface {
+	newApiGroupModelCounter
+	ProvisionKey(ctx context.Context, baseURL, accessToken, userID, authTokenMode string, opts NewApiProvisionOptions) (tokenID int, keyPlainText string, reused bool, finalName string, err error)
+}
+
+// catchUpUncoveredGroups 同步兜底：为「自动接入全部合格分组」的订阅补建缺失分组的 key。
+// 覆盖接入之后的两类变化：站点新增合格分组；接入时因 0 可用模型被跳过的分组补上了模型。
+// 显式单分组接入（ProvisionAllEligible=false）与存量订阅不扩组，避免后台静默建 key。
+// best-effort：任何失败只记日志、不影响本次同步结果；ProvisionKey 查重幂等，下轮 sweep 自动重试。
+func (s *NewApiSubscriptionSyncService) catchUpUncoveredGroups(ctx context.Context, profile *SubscriptionProfile, adapter NewApiSyncAdapter, userID, authTokenMode string, groups map[string]float64) {
+	if s.cfgManager == nil || s.store == nil || !profile.ProvisionAllEligible || len(profile.LinkedChannelUIDs) == 0 {
+		return
+	}
+	catcher, ok := adapter.(newApiGroupCatchUpper)
+	if !ok {
+		return
+	}
+	// 渠道级上限是唯一真源；未配置时回退订阅记录的接入初始值，再回退全局默认。
+	limit := DefaultNewApiMaxGroupMultiplier
+	if configured := s.linkedChannelMaxGroupMultiplier(profile); configured != nil && finiteNonNegative(*configured) {
+		limit = *configured
+	}
+	covered := make(map[string]struct{}, len(profile.ProvisionedKeys))
+	for _, key := range profile.ProvisionedKeys {
+		covered[key.Group] = struct{}{}
+	}
+	missing := make([]newApiResolvedGroup, 0)
+	for name, ratio := range groups {
+		if strings.TrimSpace(name) == "" || !finiteNonNegative(ratio) || ratio > limit {
+			continue
+		}
+		if _, ok := covered[name]; ok {
+			continue
+		}
+		missing = append(missing, newApiResolvedGroup{Name: name, Ratio: ratio})
+	}
+	if len(missing) == 0 {
+		return
+	}
+	sort.Slice(missing, func(i, j int) bool { return missing[i].Name < missing[j].Name })
+
+	names := make([]string, len(missing))
+	for i, group := range missing {
+		names[i] = group.Name
+	}
+	counts := fetchNewApiGroupModelCounts(ctx, catcher, profile.BaseURL, profile.AccessToken, userID, authTokenMode, names)
+
+	// 与 provision 共用站点级锁：避免与进行中的接入/加账号流程并发建 key。
+	siteLock := lockForKeyFrom(&newAPIProvisionSiteLocksMu, newAPIProvisionSiteLocks, newAPIProvisionSiteKey(profile.BaseURL, userID, profile.AccessToken))
+	siteLock.Lock()
+	defer siteLock.Unlock()
+
+	now := s.now()
+	expiry := now.Add(newApiSyncTTL)
+	provisioned := make([]newApiProvisionedKey, 0, len(missing))
+	for _, group := range missing {
+		if count, known := counts[group.Name]; known && count <= 0 {
+			continue // 依旧没有可用模型，下轮 sweep 再看
+		}
+		tokenID, keyPlain, reused, finalName, err := catcher.ProvisionKey(ctx, profile.BaseURL, profile.AccessToken, userID, authTokenMode, NewApiProvisionOptions{
+			Name:   defaultNewApiProvisionKeyNameForGroup(group.Name),
+			Group:  group.Name,
+			Models: profile.ProvisionModels,
+		})
+		if err != nil {
+			log.Printf("[NewApi-Sync] 补建分组 key 失败 subscription=%s group=%s: %v", profile.SubscriptionUID, group.Name, err)
+			continue
+		}
+		if keyPlain == "" || IsMaskedNewApiKey(keyPlain) {
+			log.Printf("[NewApi-Sync] 补建分组 key 未取得明文，跳过 subscription=%s group=%s token=%d", profile.SubscriptionUID, group.Name, tokenID)
+			continue
+		}
+		provisioned = append(provisioned, newApiProvisionedKey{
+			NewApiProvisionedKey: NewApiProvisionedKey{
+				Name:            finalName,
+				Group:           group.Name,
+				GroupMultiplier: group.Ratio,
+				TokenID:         tokenID,
+				KeyUID:          StableKeyUID(profile.SubscriptionUID, int64(tokenID)),
+			},
+			Key:    keyPlain,
+			Reused: reused,
+		})
+	}
+	if len(provisioned) == 0 {
+		return
+	}
+
+	if err := s.store.Patch(profile.SubscriptionUID, nil, func(p *SubscriptionProfile) error {
+		existing := make(map[int]struct{}, len(p.ProvisionedKeys))
+		for _, key := range p.ProvisionedKeys {
+			existing[key.TokenID] = struct{}{}
+		}
+		for _, key := range provisioned {
+			if _, dup := existing[key.TokenID]; dup {
+				continue
+			}
+			p.ProvisionedKeys = append(p.ProvisionedKeys, key.NewApiProvisionedKey)
+		}
+		p.UpdatedAt = now
+		return nil
+	}); err != nil {
+		log.Printf("[NewApi-Sync] 补建 key 落库失败 subscription=%s: %v", profile.SubscriptionUID, err)
+		return
+	}
+
+	desired := make([]newApiDesiredKey, 0, len(provisioned))
+	plaintextByToken := make(map[int64]string, len(provisioned))
+	for _, key := range provisioned {
+		desired = append(desired, newApiDesiredKey{
+			keyUID:    key.KeyUID,
+			name:      key.Name,
+			group:     key.Group,
+			tokenID:   int64(key.TokenID),
+			ratio:     key.GroupMultiplier,
+			status:    newApiSyncStatusFresh,
+			updatedAt: now,
+			expiresAt: &expiry,
+		})
+		plaintextByToken[int64(key.TokenID)] = key.Key
+	}
+	if err := s.injectProvisionedKeys(profile, desired, plaintextByToken); err != nil {
+		log.Printf("[NewApi-Sync] 补建 key 注入渠道失败 subscription=%s: %v", profile.SubscriptionUID, err)
+		return
+	}
+	caughtGroups := make([]string, 0, len(provisioned))
+	for _, key := range provisioned {
+		caughtGroups = append(caughtGroups, key.Group)
+	}
+	log.Printf("[NewApi-Sync] 已补建合格分组 key subscription=%s groups=%v", profile.SubscriptionUID, caughtGroups)
+
+	// 新 key 注入后触发 Discovery 拉取各分组模型。
+	if s.runner != nil {
+		for _, uid := range profile.LinkedChannelUIDs {
+			_, _, channel, ok := findNewApiChannel(s.cfgManager, uid)
+			if !ok {
+				continue
+			}
+			ch := channel
+			s.runner.TriggerDiscovery(uid, &ch, s.cfgManager)
+		}
+	}
 }
 
 // healMissingProvisionedKeys 补齐订阅期望、但关联渠道缺失的自动接入 key：
