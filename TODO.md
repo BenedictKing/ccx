@@ -43,6 +43,8 @@
 
 ## [ ] gpt-5.6的适配
 
+当前状态（2026-09-16 核对）：模型注册/窗口/基准已落地（luna/sol/terra + Bedrock，context 1.05M）。仍待办如下。
+
 2.openai新增了"OpenAI-Beta": “{client_header:OpenAI-Beta}” 这个，来传输子代理相关信息，这个也需要调整
 3.工具调用传参之类的都需要优化
 4.提醒下同行，oai在最新版本codex里面加入了设备验证相关信息，可能会封pro号
@@ -50,6 +52,8 @@
 ---
 
 ## [ ] 在codex里面使用imagegen使用上游的文生图
+
+当前状态（2026-09-16 核对）：Images 渠道已有 `ConvertImageURLToB64JSON`（百炼 URL → OpenAI `b64_json`），管理界面可开，默认关闭。Codex 自带 imagegen 技能走 `/v1/images` 或 Responses `image_generation` 打到百炼的端到端通路仍待验证。
 
 百炼生图是生成url, 和 openai生成base64不一样，比如我在codex介入ccx, ccx配的是百炼，然后在codex里面用 codex自带技能 imagegen 能调用百炼生图模型 成功生图
 https://github.com/QuantumNous/new-api/issues/5513
@@ -222,6 +226,8 @@ CCX 五个 tool_use 生成点核查：三处本就安全——`claudeStreamNorma
 
 ## [ ] 英伟达渠道导入
 
+当前状态（2026-09-16 核对）：`builtinProviderTemplates` 仍无 nvidia/NIM 模板；`docs/design/channel-autopilot.md` 标为 P2。Claude Code v2.1.269 新增 `CLAUDE_CODE_GATEWAY_MODEL_DISCOVERY_TIMEOUT_MS`（默认 3s），客户端侧可缓解 `/v1/models` 超时，不替代 CCX 导入模板。
+
 可能模型太多响应太慢导致预检时间过长，或者需要代理？
 
 ## [x] Codex token budget 记忆系统适配 + 客户端预算提醒剔除统一机制（2026-09-11 完成）
@@ -248,3 +254,41 @@ CCX 五个 tool_use 生成点核查：三处本就安全——`claudeStreamNorma
 Codex namespace 工具的 function_call 可携带分段加密参数：`ResponsesItem` 加字段 + 解析/响应侧枚举 + passthrough 天然透传 + converter 密文丢弃但空 arguments 补 `"{}"` 占位（DeepSeek 拒收空串）+ token 保守计数 + 日志截断白名单。
 
 明确不做：不改写 `get_context_remaining` 的 function_call_output（客户端本地计算，改写风险大于收益）；不动 RemoteCompactionV2 兼容路径与 thinkingcache reasoning encrypted_content。
+
+---
+
+> **上游版本变更**
+
+## [x] Claude Code v2.1.273 上游协议/工具变更评估（2026-09-16 完成）
+
+发现协议/工具/用法变更（2.1.263→2.1.273）。评估结论：第 1 项 hint 头按透传兼容、无需改代码；第 2 项非流式 Content-Type 已由 CCX 自身保证 JSON；第 3 项均为客户端侧，不影响 CCX 透传。
+
+### 1. 网关 hint 头（v2.1.273）——无需改动
+
+上游新增 opt-in 请求头（`CLAUDE_CODE_GATEWAY_HINT_HEADERS=1`）：`x-claude-code-request-class` / `x-claude-code-agent-type` / `x-claude-code-prev-tool-durations` / `x-claude-code-compaction` / `x-claude-code-context-compacted`。
+
+CCX 现状：
+- `PrepareUpstreamHeaders`（`utils/headers.go`）Clone 客户端头后只删除代理/内部路由头（`x-proxy-key`、`X-Forwarded-*`、`X-Task-Domain` / `X-Routing-Scenario` / `X-Cost-Preference`、`Accept-Encoding`），**不剥离** `x-claude-code-*`。
+- Messages / Chat / Responses / Gemini 构造路径均走该函数，客户端 opt-in 后 hint 头会原样到达 Anthropic 兼容上游。
+- `ExtractAgentContext` 仍用 `X-Claude-Code-Agent-Id` + 启发式识别 subagent，不消费新 hint 头；路由不依赖这些头。
+
+结论：协议兼容无需改动。第三方 Anthropic 镜像若因未知头 400，走既有 `ChannelCompatCache` 三态自学习，不加静态剥离开关。可选观察项：日后可用 `x-claude-code-agent-type` 替代启发式 subagent 识别（当前不强制）。
+
+### 2. 非流式 text/plain（v2.1.271）——无需改动
+
+上游客户端修复：LLM gateway 非流式 `text/plain` 不再被判 malformed。这是**客户端容错**，不是要求网关改 Content-Type。
+
+CCX 写回：
+- Messages 非流式 `handleNormalResponse`：`json.Unmarshal` 成功后 `c.JSON(200, claudeResp)`，恒为 `application/json`；上游 body 非 JSON（含 text/plain/HTML）走 `ErrInvalidResponseBody` failover，不把畸形体转给客户端。
+- Chat 成功路径 `c.Data(..., "application/json", ...)`；Responses `c.JSON(200, responsesResp)`。
+- `ForwardContentType` 仅用于 Gemini/Images 等透传分支，Claude Code Messages 不走该路径。
+
+结论：CCX 作为 Claude Code 的 Messages/Chat/Responses 网关不会发出成功路径的 `text/plain`。无需改动。
+
+### 3. maxEffortLevel / task-tracking 白名单 / Artifact schema 400——无需改动
+
+- v2.1.267 `maxEffortLevel`：客户端在发往网关前封顶 effort。CCX `applyClaudeThinkingEffort` 按渠道 ReasoningMapping 覆盖或透传已封顶值；不实现组织级 cap。
+- v2.1.268 task-tracking tools 模型白名单：客户端按模型决定是否投放 TaskCreate/TodoWrite。CCX 不注入这些工具；映射到不支持模型后的 400 由既有工具白名单/兼容性学习处理。
+- v2.1.265 Artifact input schema 正则导致第三方 Anthropic 兼容端点整轮 400，2.1.268 已在客户端修复。CCX 不构造 Artifact schema。
+
+注：v2.1.269 `CLAUDE_CODE_GATEWAY_MODEL_DISCOVERY_TIMEOUT_MS`（默认 3s）是客户端 `/v1/models` 超时，与「英伟达渠道导入」预检过慢观察项相关，非协议变更。PreModelSwitch hooks、Remote Control、Artifact 发布、MCP 重连等均为客户端内部能力，不影响 CCX 代理层协议。
