@@ -4,7 +4,6 @@ description: 新增或更新 CCX 项目中的模型注册技能。适用于 Clau
 version: 2.1.0
 author: https://github.com/BenedictKing/ccx/
 allowed-tools: Bash, Read, Write, Edit, Agent
-context: fork
 ---
 
 # CCX 模型注册更新技能
