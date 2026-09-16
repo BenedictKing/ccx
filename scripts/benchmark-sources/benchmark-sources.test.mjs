@@ -901,6 +901,7 @@ test('newly published dradar model variants stay mapped (2026-08-29 audit)', () 
   assert.equal(DRADAR_MODEL_MAP['glm-5-3-flash'], 'glm-5.3-flash')
   // vision-exp 2026-09-05 起独立注册为 deepseek-v4-flash-vision，不再归并 flash
   assert.equal(DRADAR_MODEL_MAP['dsh-deepseek-v4-flash-vision-exp'], 'deepseek-v4-flash-vision')
+  assert.equal(DRADAR_MODEL_MAP['dsh-deepseek-v4.1-flash'], 'deepseek-v4.1-flash')
 })
 
 test('deepswe glm-5.3-flash stays mapped (2026-08-26 release-day regression)', () => {

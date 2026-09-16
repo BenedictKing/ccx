@@ -64,6 +64,7 @@ export const DRADAR_MODEL_MAP = {
   'deepseek-v4.1-flash': 'deepseek-v4.1-flash',
   'deepseek-v4-1-flash': 'deepseek-v4.1-flash',
   'deepseek-flash': 'deepseek-v4.1-flash',
+  'dsh-deepseek-v4.1-flash': 'deepseek-v4.1-flash',
   'dsh-deepseek-v4-1-flash': 'deepseek-v4.1-flash',
   'dsh-deepseek-flash': 'deepseek-v4.1-flash',
   // 腾讯混元 Hy4 Preview：dradar 榜上 slug 与 canonical 同名
