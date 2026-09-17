@@ -68,7 +68,7 @@
 
         <v-expand-transition>
           <div v-if="expandedProviderId === card.id" class="provider-expand mt-4">
-            <slot name="expand" :providerId="card.id" :card="card" />
+            <slot name="expand" :provider-id="card.id" :card="card" ></slot>
           </div>
         </v-expand-transition>
       </div>
@@ -202,6 +202,8 @@ onMounted(async () => {
 }
 .provider-block--expanded .provider-card {
   max-width: 300px;
+  /* 展开块 = 卡片 + 表单两段内容；min-height:100% 会把卡片撑到含表单的总高，把表单顶出块外叠到下一行 */
+  min-height: 0;
 }
 .provider-block--sponsor.provider-block--expanded .provider-card {
   max-width: 600px;
