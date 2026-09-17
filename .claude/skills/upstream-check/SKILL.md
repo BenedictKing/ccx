@@ -4,7 +4,6 @@ description: 检查 Claude Code / Codex 上游版本变更，对比本地版本�
 version: 1.0.0
 author: https://github.com/BenedictKing/ccx/
 allowed-tools: Bash, Read, Write, Edit
-context: fork
 ---
 
 # 上游版本检查技能
