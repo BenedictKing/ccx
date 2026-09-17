@@ -1,31 +1,26 @@
 <template>
   <div class="subscriptions-view">
-    <SubscriptionProviderGrid @select="handleProviderSelect" @add="handleProviderAdd" />
-
-    <v-expand-transition>
-      <v-card v-if="addProvider" variant="outlined" class="pa-4 mt-6">
-        <v-card-title class="text-h6 d-flex align-center"><v-icon color="secondary" class="mr-2">mdi-domain</v-icon>{{ addProvider.displayName }}</v-card-title>
-        <v-card-text>
-          <div class="text-body-2 text-medium-emphasis mb-4">{{ addProvider.description }}</div>
-          <v-text-field v-model="addApiKey" :label="t('subscription.apiKeyLabel')" type="password" variant="outlined" density="compact" />
-          <v-alert v-if="addError" color="error" variant="tonal" density="compact" class="mt-3">{{ addError }}</v-alert>
-        </v-card-text>
-        <v-card-actions><v-spacer /><v-btn variant="text" @click="cancelProviderAdd">{{ t('app.actions.cancel') }}</v-btn><v-btn color="primary" :loading="addSubmitting" :disabled="!addApiKey.trim()" @click="handleProviderAddSubmit">{{ t('app.actions.add') }}</v-btn></v-card-actions>
-      </v-card>
-    </v-expand-transition>
-
-    <v-expand-transition>
-      <div v-if="selectedProvider" class="mt-6">
-        <v-card v-if="selectedProvider === 'github-copilot'" variant="outlined" class="pa-4">
+    <SubscriptionProviderGrid v-model:expanded-provider-id="expandedProviderId" @add="handleProviderAdd">
+      <template #expand="{ providerId }">
+        <v-card v-if="providerId === 'github-copilot'" variant="outlined" class="pa-4">
           <v-card-title class="text-h6"><v-icon color="primary" class="mr-2">mdi-github</v-icon>GitHub Copilot</v-card-title>
           <v-card-text><v-alert color="info" variant="tonal">{{ t('subscription.copilotComingSoon') }}</v-alert></v-card-text>
         </v-card>
-        <v-card v-if="selectedProvider === 'new-api'" variant="outlined" class="pa-4">
+        <v-card v-else-if="providerId === 'new-api'" variant="outlined" class="pa-4">
           <v-card-title class="text-h6"><v-icon color="warning" class="mr-2">mdi-server-network</v-icon>{{ t('subscription.newApi.connect') }}</v-card-title>
           <v-card-text><NewApiSubscriptionForm @created="handleNewApiCreated" @error="emit('error', $event)" /></v-card-text>
         </v-card>
-      </div>
-    </v-expand-transition>
+        <v-card v-else-if="addProvider && addProvider.providerId === providerId" variant="outlined" class="pa-4">
+          <v-card-title class="text-h6 d-flex align-center"><v-icon color="secondary" class="mr-2">mdi-domain</v-icon>{{ addProvider.displayName }}</v-card-title>
+          <v-card-text>
+            <div class="text-body-2 text-medium-emphasis mb-4">{{ addProvider.description }}</div>
+            <v-text-field v-model="addApiKey" :label="t('subscription.apiKeyLabel')" type="password" variant="outlined" density="compact" />
+            <v-alert v-if="addError" color="error" variant="tonal" density="compact" class="mt-3">{{ addError }}</v-alert>
+          </v-card-text>
+          <v-card-actions><v-spacer /><v-btn variant="text" @click="cancelProviderAdd">{{ t('app.actions.cancel') }}</v-btn><v-btn color="primary" :loading="addSubmitting" :disabled="!addApiKey.trim()" @click="handleProviderAddSubmit">{{ t('app.actions.add') }}</v-btn></v-card-actions>
+        </v-card>
+      </template>
+    </SubscriptionProviderGrid>
 
     <v-card variant="outlined" class="mt-6">
       <v-card-title class="d-flex align-center justify-space-between ga-2 flex-wrap">
@@ -126,7 +121,8 @@ const emit = defineEmits<{
   success: [message: string]
   error: [message: string]
 }>()
-const selectedProvider = ref('')
+const expandedProviderId = ref('')
+const providerTemplates = ref<ProviderTemplate[]>([])
 const addProvider = ref<ProviderTemplate | null>(null)
 const addApiKey = ref('')
 const addSubmitting = ref(false)
@@ -150,9 +146,28 @@ const linkSelectedChannelUid = ref('')
 const linkableChannels = ref<{ channelUid: string; label: string }[]>([])
 const unlinkLoading = ref('')
 
-function handleProviderSelect(provider: string) { selectedProvider.value = provider; cancelProviderAdd() }
-async function handleProviderAdd(providerId: string) { selectedProvider.value = ''; addError.value = ''; const templates = await getProviderTemplates(); addProvider.value = templates.find(item => item.providerId === providerId) || null }
-function cancelProviderAdd() { addProvider.value = null; addApiKey.value = ''; addError.value = '' }
+async function ensureProviderTemplates() {
+  if (providerTemplates.value.length > 0) return providerTemplates.value
+  providerTemplates.value = await getProviderTemplates()
+  return providerTemplates.value
+}
+
+async function handleProviderAdd(providerId: string) {
+  addError.value = ''
+  addApiKey.value = ''
+  if (providerId === 'github-copilot' || providerId === 'new-api') {
+    addProvider.value = null
+    return
+  }
+  const templates = await ensureProviderTemplates()
+  addProvider.value = templates.find(item => item.providerId === providerId) || null
+}
+function cancelProviderAdd() {
+  expandedProviderId.value = ''
+  addProvider.value = null
+  addApiKey.value = ''
+  addError.value = ''
+}
 async function handleProviderAddSubmit() {
   const provider = addProvider.value
   if (!provider || !addApiKey.value.trim()) return
@@ -174,7 +189,12 @@ async function handleProviderAddSubmit() {
     addSubmitting.value = false
   }
 }
-function handleNewApiCreated(result: NewApiProvisionResponse) { selectedProvider.value = ''; const skipped = result.skippedEmptyGroups; emit('success', skipped?.length ? `${t('subscription.newApi.provisionSuccess')} ${t('subscription.newApi.emptyGroupsSkipped', { count: skipped.length, groups: skipped.join('、') })}` : t('subscription.newApi.provisionSuccess')); void loadSubscriptions() }
+function handleNewApiCreated(result: NewApiProvisionResponse) {
+  expandedProviderId.value = ''
+  const skipped = result.skippedEmptyGroups
+  emit('success', skipped?.length ? `${t('subscription.newApi.provisionSuccess')} ${t('subscription.newApi.emptyGroupsSkipped', { count: skipped.length, groups: skipped.join('、') })}` : t('subscription.newApi.provisionSuccess'))
+  void loadSubscriptions()
+}
 async function loadSubscriptions() { loading.value = true; loadError.value = ''; try { subscriptions.value = (await api.getSubscriptions()).subscriptions } catch (error) { loadError.value = error instanceof Error ? error.message : String(error) } finally { loading.value = false } }
 function openBillingEditor(item: SubscriptionItem) { billingItem.value = item; billingForm.value = { paymentAmount: item.paymentAmount ?? null, paymentUnit: item.paymentUnit || '', creditAmount: item.creditAmount ?? null, creditUnit: item.creditUnit || '' }; billingError.value = ''; billingDialog.value = true }
 async function saveBillingTerms() { if (!billingItem.value) return; billingSaving.value = true; billingError.value = ''; try { await api.patchSubscriptionBillingTerms(billingItem.value.subscriptionUid, billingTermsPatch(billingForm.value, billingItem.value.version)); billingDialog.value = false; await loadSubscriptions() } catch (error) { if (error instanceof ApiError && error.status === 409) { billingError.value = t('subscription.billingTerms.versionConflict'); await loadSubscriptions() } else billingError.value = error instanceof Error ? error.message : String(error) } finally { billingSaving.value = false } }
@@ -261,7 +281,10 @@ async function unlinkChannel(channelUid: string) {
   }
 }
 
-onMounted(loadSubscriptions)
+onMounted(() => {
+  void loadSubscriptions()
+  void ensureProviderTemplates()
+})
 </script>
 
 <style scoped>.subscriptions-view { padding: 16px; }</style>

@@ -3,6 +3,7 @@
 
 /** 官方控制台链接（查看用量 / 余额 / 密钥） */
 export const providerConsoleLinks: Record<string, string> = {
+  'github-copilot': 'https://github.com/settings/copilot',
   deepseek: 'https://platform.deepseek.com/usage',
   mimo: 'https://platform.xiaomimimo.com/console/balance',
   compshare: 'https://console.compshare.cn/light-gpu/model-subscription',
@@ -29,8 +30,8 @@ export const providerConsoleLinks: Record<string, string> = {
 
 /** 推广 / 注册链接（带 aff 溯源，标记赞助商渠道） */
 export const providerPromotionLinks: Record<string, string> = {
+  'github-copilot': 'https://github.com/features/copilot',
   compshare: 'https://www.compshare.cn/?ytag=GPU_YY_git_ccx',
-  runapi: 'https://runapi.co/register?aff=CqQO',
   volcengine:
     'https://www.volcengine.com/activity/ai618?utm_campaign=hw&utm_content=hw&utm_medium=devrel_tool_web&utm_source=OWO&utm_term=ccx',
 }

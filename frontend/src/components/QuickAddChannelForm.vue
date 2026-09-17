@@ -280,7 +280,7 @@ const providerTemplatesLoading = ref(true)
 
 // ---- Provider 模板计算属性 ----
 // 赞助商展示顺序与订阅中心/README 保持一致，排在服务商列表最前（无模板的赞助商自然跳过）
-const SPONSOR_PROVIDER_ORDER = ['volcengine', 'compshare', 'runapi']
+const SPONSOR_PROVIDER_ORDER = ['volcengine', 'compshare']
 
 // 不按 channelKind 过滤：所有 provider 都对用户可见（与订阅中心对齐）；
 // 选中后由 handleSubmit 用 provider.channelKind 提交，保证多渠道自动建全
