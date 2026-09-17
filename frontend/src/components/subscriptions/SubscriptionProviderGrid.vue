@@ -1,77 +1,72 @@
 <template>
   <div class="subscription-provider-grid">
     <div class="d-flex flex-wrap ga-4">
-      <div
-        v-for="card in allCards"
-        :key="card.id"
-        class="provider-block"
-        :class="{
-          'provider-block--sponsor': card.kind === 'sponsor',
-          'provider-block--expanded': expandedProviderId === card.id,
-        }"
-      >
-        <v-card
-          class="provider-card pa-4 d-flex flex-column"
-          :class="{
-            'provider-card--sponsor': card.kind === 'sponsor',
-            'provider-card--active': expandedProviderId === card.id,
-          }"
-          variant="outlined"
-        >
-          <div class="d-flex align-center ga-3 mb-2">
-            <div v-if="card.logo" class="sponsor-logo-wrapper flex-shrink-0">
-              <img :src="card.logo" :alt="card.displayName" class="sponsor-logo" />
+      <template v-for="card in allCards" :key="card.id">
+        <div class="provider-block" :class="{ 'provider-block--sponsor': card.kind === 'sponsor' }">
+          <v-card
+            class="provider-card pa-4 d-flex flex-column"
+            :class="{
+              'provider-card--sponsor': card.kind === 'sponsor',
+              'provider-card--active': expandedProviderId === card.id,
+            }"
+            variant="outlined"
+          >
+            <div class="d-flex align-center ga-3 mb-2">
+              <div v-if="card.logo" class="sponsor-logo-wrapper flex-shrink-0">
+                <img :src="card.logo" :alt="card.displayName" class="sponsor-logo" />
+              </div>
+              <v-icon v-else size="32" :color="card.iconColor || 'secondary'">
+                {{ card.icon || 'mdi-domain' }}
+              </v-icon>
+              <div class="text-subtitle-1 font-weight-bold">{{ card.displayName }}</div>
+              <v-chip
+                v-if="card.kind === 'sponsor'"
+                size="x-small"
+                color="deep-purple"
+                variant="tonal"
+                class="ml-auto"
+              >
+                {{ t('subscription.sponsorBadge') }}
+              </v-chip>
             </div>
-            <v-icon v-else size="32" :color="card.iconColor || 'secondary'">
-              {{ card.icon || 'mdi-domain' }}
-            </v-icon>
-            <div class="text-subtitle-1 font-weight-bold">{{ card.displayName }}</div>
-            <v-chip
-              v-if="card.kind === 'sponsor'"
-              size="x-small"
-              color="deep-purple"
-              variant="tonal"
-              class="ml-auto"
-            >
-              {{ t('subscription.sponsorBadge') }}
-            </v-chip>
-          </div>
-          <div class="text-caption text-medium-emphasis mb-3 provider-card__desc">
-            {{ card.description }}
-          </div>
-          <v-spacer />
-          <div class="d-flex align-center ga-2 mt-auto flex-wrap">
-            <v-btn size="small" color="primary" variant="flat" @click="handleAdd(card.id)">
-              {{ t('subscription.addProvider') }}
-            </v-btn>
-            <v-btn
-              v-if="providerPromotionLinks[card.id]"
-              size="small"
-              variant="text"
-              color="secondary"
-              append-icon="mdi-open-in-new"
-              @click="openProviderPromotion(card.id)"
-            >
-              {{ t('subscription.visitSite') }}
-            </v-btn>
-            <v-btn
-              v-if="providerConsoleLinks[card.id]"
-              size="small"
-              variant="text"
-              append-icon="mdi-open-in-new"
-              @click="openProviderConsole(card.id)"
-            >
-              {{ t('subscription.visitConsole') }}
-            </v-btn>
-          </div>
-        </v-card>
+            <div class="text-caption text-medium-emphasis mb-3 provider-card__desc">
+              {{ card.description }}
+            </div>
+            <v-spacer />
+            <div class="d-flex align-center ga-2 mt-auto flex-wrap">
+              <v-btn size="small" color="primary" variant="flat" @click="handleAdd(card.id)">
+                {{ t('subscription.addProvider') }}
+              </v-btn>
+              <v-btn
+                v-if="providerPromotionLinks[card.id]"
+                size="small"
+                variant="text"
+                color="secondary"
+                append-icon="mdi-open-in-new"
+                @click="openProviderPromotion(card.id)"
+              >
+                {{ t('subscription.visitSite') }}
+              </v-btn>
+              <v-btn
+                v-if="providerConsoleLinks[card.id]"
+                size="small"
+                variant="text"
+                append-icon="mdi-open-in-new"
+                @click="openProviderConsole(card.id)"
+              >
+                {{ t('subscription.visitConsole') }}
+              </v-btn>
+            </div>
+          </v-card>
+        </div>
 
+        <!-- 展开面板是兄弟 flex item 而非块内子元素：卡片保持原位填空行，面板独占下一行 -->
         <v-expand-transition>
-          <div v-if="expandedProviderId === card.id" class="provider-expand mt-4">
+          <div v-if="expandedProviderId === card.id" class="provider-expand">
             <slot name="expand" :provider-id="card.id" :card="card" ></slot>
           </div>
         </v-expand-transition>
-      </div>
+      </template>
     </div>
   </div>
 </template>
@@ -195,19 +190,6 @@ onMounted(async () => {
   max-width: 600px;
   flex: 2 1 480px;
 }
-.provider-block--expanded {
-  flex: 1 1 100%;
-  min-width: 100%;
-  max-width: 100%;
-}
-.provider-block--expanded .provider-card {
-  max-width: 300px;
-  /* 展开块 = 卡片 + 表单两段内容；min-height:100% 会把卡片撑到含表单的总高，把表单顶出块外叠到下一行 */
-  min-height: 0;
-}
-.provider-block--sponsor.provider-block--expanded .provider-card {
-  max-width: 600px;
-}
 .provider-card {
   width: 100%;
   min-height: 100%;
@@ -234,6 +216,9 @@ onMounted(async () => {
   -webkit-line-clamp: 6;
 }
 .provider-expand {
+  /* 独占一行的兄弟 flex item：展开面板全宽，卡片保持在原位 */
+  flex: 1 1 100%;
+  min-width: 100%;
   width: 100%;
 }
 /* Logo 容器只锁高度：横版品牌图保持原比例，不水平裁剪 */
