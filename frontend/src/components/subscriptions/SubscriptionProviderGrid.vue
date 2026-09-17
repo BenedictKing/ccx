@@ -19,12 +19,9 @@
           variant="outlined"
         >
           <div class="d-flex align-center ga-3 mb-2">
-            <img
-              v-if="card.logo"
-              :src="card.logo"
-              :alt="card.displayName"
-              class="sponsor-logo flex-shrink-0"
-            />
+            <div v-if="card.logo" class="sponsor-logo-wrapper flex-shrink-0">
+              <img :src="card.logo" :alt="card.displayName" class="sponsor-logo" />
+            </div>
             <v-icon v-else size="32" :color="card.iconColor || 'secondary'">
               {{ card.icon || 'mdi-domain' }}
             </v-icon>
@@ -237,11 +234,20 @@ onMounted(async () => {
 .provider-expand {
   width: 100%;
 }
-.sponsor-logo {
-  width: 32px;
+/* Logo 容器只锁高度：横版品牌图保持原比例，不水平裁剪 */
+.sponsor-logo-wrapper {
   height: 32px;
+  max-width: 120px;
+  display: flex;
+  align-items: center;
+}
+.sponsor-logo {
+  max-height: 32px;
+  max-width: 120px;
+  width: auto;
+  height: auto;
   border-radius: 6px;
-  object-fit: cover;
+  object-fit: contain;
   display: block;
 }
 </style>
