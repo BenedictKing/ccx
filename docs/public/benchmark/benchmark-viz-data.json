@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-16T01:15:54.275Z",
+  "generatedAt": "2026-09-17T00:20:45.113Z",
   "qualityTiers": {
     "scale": "0-100",
     "algorithm": "fixed-direct-calibration-v3",
@@ -85,62 +85,62 @@
     {
       "model": "deepseek-v4.1-flash",
       "effort": "high",
-      "pass_rate": 0.724,
-      "mean_cost": 0.1591,
-      "median_cost": 0.1479,
+      "pass_rate": 0.684,
+      "mean_cost": 0.1704,
+      "median_cost": 0.154,
       "source": "CodexRadar",
       "sourceModel": "deepseek-v4.1-flash",
-      "taskCount": 123,
-      "quality_score": 72.4,
-      "model_quality_score": 72.4
+      "taskCount": 158,
+      "quality_score": 68.4,
+      "model_quality_score": 68.4
     },
     {
       "model": "deepseek-v4.1-flash",
       "effort": "max",
-      "pass_rate": 0.612,
-      "mean_cost": 0.2476,
+      "pass_rate": 0.593,
+      "mean_cost": 0.2548,
       "median_cost": 0.2264,
       "source": "CodexRadar",
       "sourceModel": "deepseek-v4.1-flash",
-      "taskCount": 121,
-      "quality_score": 61.2,
-      "model_quality_score": 72.4
+      "taskCount": 145,
+      "quality_score": 59.3,
+      "model_quality_score": 68.4
     },
     {
       "model": "glm-5.3",
       "effort": "low",
-      "pass_rate": 0.527,
+      "pass_rate": 0.536,
       "mean_cost": 0.1466,
       "median_cost": 0.1466,
       "source": "CodexRadar",
       "sourceModel": "glm-5.3",
       "taskCount": 112,
-      "quality_score": 52.7,
-      "model_quality_score": 55.4
+      "quality_score": 53.6,
+      "model_quality_score": 57.2
     },
     {
       "model": "glm-5.3",
       "effort": "high",
-      "pass_rate": 0.58,
-      "mean_cost": 1.587,
-      "median_cost": 1.7193,
+      "pass_rate": 0.607,
+      "mean_cost": 1.7435,
+      "median_cost": 1.7989,
       "source": "CodexRadar",
       "sourceModel": "glm-5.3",
       "taskCount": 112,
-      "quality_score": 58,
-      "model_quality_score": 55.4
+      "quality_score": 60.7,
+      "model_quality_score": 57.2
     },
     {
       "model": "glm-5.3",
       "effort": "max",
-      "pass_rate": 0.604,
+      "pass_rate": 0.598,
       "mean_cost": 1.7495,
       "median_cost": 1.9492,
       "source": "CodexRadar",
       "sourceModel": "glm-5.3",
-      "taskCount": 111,
-      "quality_score": 60.4,
-      "model_quality_score": 55.4
+      "taskCount": 112,
+      "quality_score": 59.8,
+      "model_quality_score": 57.2
     },
     {
       "model": "gpt-5.5",
@@ -171,7 +171,7 @@
       "effort": "low",
       "pass_rate": 0.054,
       "mean_cost": 0.0287,
-      "median_cost": 0.0263,
+      "median_cost": 0.0264,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-luna",
       "taskCount": 112,
@@ -182,8 +182,8 @@
       "model": "gpt-5.6-luna",
       "effort": "medium",
       "pass_rate": 0.196,
-      "mean_cost": 0.0791,
-      "median_cost": 0.066,
+      "mean_cost": 0.0789,
+      "median_cost": 0.0657,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-luna",
       "taskCount": 112,
@@ -194,8 +194,8 @@
       "model": "gpt-5.6-luna",
       "effort": "high",
       "pass_rate": 0.527,
-      "mean_cost": 0.2061,
-      "median_cost": 0.1626,
+      "mean_cost": 0.2062,
+      "median_cost": 0.1646,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-luna",
       "taskCount": 112,
@@ -206,7 +206,7 @@
       "model": "gpt-5.6-luna",
       "effort": "xhigh",
       "pass_rate": 0.598,
-      "mean_cost": 0.3357,
+      "mean_cost": 0.3363,
       "median_cost": 0.2636,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-luna",
@@ -218,8 +218,8 @@
       "model": "gpt-5.6-luna",
       "effort": "max",
       "pass_rate": 0.705,
-      "mean_cost": 0.5362,
-      "median_cost": 0.4268,
+      "mean_cost": 0.5411,
+      "median_cost": 0.4275,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-luna",
       "taskCount": 112,
@@ -266,8 +266,8 @@
       "model": "gpt-5.6-sol",
       "effort": "xhigh",
       "pass_rate": 0.679,
-      "mean_cost": 5.1946,
-      "median_cost": 4.1688,
+      "mean_cost": 5.1897,
+      "median_cost": 4.1453,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-sol",
       "taskCount": 112,
@@ -452,7 +452,7 @@
       "sourceModel": "grok-4.6",
       "taskCount": 112,
       "quality_score": 72.3,
-      "model_quality_score": 66.1
+      "model_quality_score": 65.2
     },
     {
       "model": "claude-fable-5",
@@ -775,7 +775,7 @@
       "source": "DeepSWE v1.1",
       "sourceModel": "gemini-3-7-flash",
       "quality_score": 53.8,
-      "model_quality_score": 59.5,
+      "model_quality_score": 58.6,
       "taskCount": null
     },
     {
@@ -787,7 +787,7 @@
       "source": "DeepSWE v1.1",
       "sourceModel": "gemini-3-7-flash",
       "quality_score": 65.5,
-      "model_quality_score": 59.5,
+      "model_quality_score": 58.6,
       "taskCount": null
     },
     {
@@ -799,7 +799,7 @@
       "source": "DeepSWE v1.1",
       "sourceModel": "gemini-3-7-flash",
       "quality_score": 65.3,
-      "model_quality_score": 59.5,
+      "model_quality_score": 58.6,
       "taskCount": null
     },
     {
@@ -859,7 +859,7 @@
       "source": "DeepSWE v1.1",
       "sourceModel": "glm-5-3",
       "quality_score": 69,
-      "model_quality_score": 55.4,
+      "model_quality_score": 57.2,
       "taskCount": null
     },
     {
@@ -1195,7 +1195,7 @@
       "source": "DeepSWE v1.1",
       "sourceModel": "grok-4-6",
       "quality_score": 41.6,
-      "model_quality_score": 66.1,
+      "model_quality_score": 65.2,
       "taskCount": null
     },
     {
@@ -1207,7 +1207,7 @@
       "source": "DeepSWE v1.1",
       "sourceModel": "grok-4-6",
       "quality_score": 67.5,
-      "model_quality_score": 66.1,
+      "model_quality_score": 65.2,
       "taskCount": null
     },
     {
@@ -1219,7 +1219,7 @@
       "source": "DeepSWE v1.1",
       "sourceModel": "grok-4-6",
       "quality_score": 65.2,
-      "model_quality_score": 66.1,
+      "model_quality_score": 65.2,
       "taskCount": null
     },
     {
@@ -1231,7 +1231,7 @@
       "source": "DeepSWE v1.1",
       "sourceModel": "grok-4-6",
       "quality_score": 66.7,
-      "model_quality_score": 66.1,
+      "model_quality_score": 65.2,
       "taskCount": null
     },
     {
@@ -2924,18 +2924,18 @@
       "source": "CodexRadar",
       "category": "coding",
       "metric": "pass_at_1",
-      "score": 61.2,
+      "score": 59.3,
       "effort": "max",
-      "taskCount": 121
+      "taskCount": 145
     },
     {
       "model": "deepseek-v4.1-flash",
       "source": "CodexRadar",
       "category": "coding",
       "metric": "pass_at_1",
-      "score": 72.4,
+      "score": 68.4,
       "effort": "high",
-      "taskCount": 123
+      "taskCount": 158
     },
     {
       "model": "gemini-3-flash",
@@ -3089,7 +3089,7 @@
       "source": "CodexRadar",
       "category": "coding",
       "metric": "pass_at_1",
-      "score": 59.5,
+      "score": 58.6,
       "effort": "medium",
       "taskCount": 111
     },
@@ -3264,7 +3264,7 @@
       "source": "CodexRadar",
       "category": "coding",
       "metric": "pass_at_1",
-      "score": 52.7,
+      "score": 53.6,
       "effort": "low",
       "taskCount": 112
     },
@@ -3273,7 +3273,7 @@
       "source": "CodexRadar",
       "category": "coding",
       "metric": "pass_at_1",
-      "score": 58,
+      "score": 60.7,
       "effort": "high",
       "taskCount": 112
     },
@@ -3282,9 +3282,9 @@
       "source": "CodexRadar",
       "category": "coding",
       "metric": "pass_at_1",
-      "score": 60.4,
+      "score": 59.8,
       "effort": "max",
-      "taskCount": 111
+      "taskCount": 112
     },
     {
       "model": "glm-5.3",
@@ -4221,7 +4221,7 @@
       "source": "CodexRadar",
       "category": "coding",
       "metric": "pass_at_1",
-      "score": 65.2,
+      "score": 66.1,
       "effort": "high",
       "taskCount": 112
     },
@@ -4230,7 +4230,7 @@
       "source": "CodexRadar",
       "category": "coding",
       "metric": "pass_at_1",
-      "score": 66.1,
+      "score": 65.2,
       "effort": "medium",
       "taskCount": 112
     },
@@ -4239,7 +4239,7 @@
       "source": "CodexRadar",
       "category": "coding",
       "metric": "pass_at_1",
-      "score": 53.6,
+      "score": 52.7,
       "effort": "low",
       "taskCount": 112
     },
@@ -4638,7 +4638,7 @@
       "source": "Artificial Analysis Image Arena",
       "category": "image_arena",
       "metric": "elo",
-      "score": 1172,
+      "score": 1169,
       "taskCount": null
     },
     {
@@ -4654,7 +4654,7 @@
       "source": "Artificial Analysis Image Arena",
       "category": "image_arena",
       "metric": "elo",
-      "score": 1033,
+      "score": 1026,
       "taskCount": null
     },
     {
@@ -4662,7 +4662,7 @@
       "source": "Artificial Analysis Image Arena",
       "category": "image_arena",
       "metric": "elo",
-      "score": 1000,
+      "score": 1009,
       "taskCount": null
     },
     {
@@ -4670,7 +4670,7 @@
       "source": "Artificial Analysis Image Arena",
       "category": "image_arena",
       "metric": "elo",
-      "score": 1081,
+      "score": 1077,
       "taskCount": null
     },
     {
