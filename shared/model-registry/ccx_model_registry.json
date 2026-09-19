@@ -5458,7 +5458,7 @@
           "sourceModel": "gemini-3.7-flash",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.429,
+          "rawValue": 0.438,
           "uncertainty": 0,
           "cohortPercentile": 0,
           "taskCount": 112,
@@ -5467,7 +5467,7 @@
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
           "capturedAt": "2026-09-19",
-          "costUsd": 2.59
+          "costUsd": 2.58
         },
         {
           "benchmark": "codexradar",

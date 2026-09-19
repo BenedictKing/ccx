@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-19T15:37:33.403Z",
+  "generatedAt": "2026-09-19T16:00:45.541Z",
   "qualityTiers": {
     "scale": "0-100",
     "algorithm": "fixed-direct-calibration-v3",
@@ -109,13 +109,13 @@
     {
       "model": "gemini-3.7-flash",
       "effort": "low",
-      "pass_rate": 0.429,
-      "mean_cost": 2.5865,
+      "pass_rate": 0.438,
+      "mean_cost": 2.5802,
       "median_cost": 1.663,
       "source": "CodexRadar",
       "sourceModel": "gemini-3.7-flash",
       "taskCount": 112,
-      "quality_score": 42.9,
+      "quality_score": 43.8,
       "model_quality_score": 58.6
     },
     {
@@ -134,7 +134,7 @@
       "model": "gemini-3.7-flash",
       "effort": "high",
       "pass_rate": 0.58,
-      "mean_cost": 2.3031,
+      "mean_cost": 2.3018,
       "median_cost": 1.9786,
       "source": "CodexRadar",
       "sourceModel": "gemini-3.7-flash",
@@ -158,8 +158,8 @@
       "model": "glm-5.3",
       "effort": "low",
       "pass_rate": 0.527,
-      "mean_cost": 0.9883,
-      "median_cost": 0.7119,
+      "mean_cost": 0.9895,
+      "median_cost": 0.7121,
       "source": "CodexRadar",
       "sourceModel": "glm-5.3",
       "taskCount": 112,
@@ -542,7 +542,7 @@
       "model": "grok-4.6",
       "effort": "medium",
       "pass_rate": 0.67,
-      "mean_cost": 2.5003,
+      "mean_cost": 2.4954,
       "median_cost": 2.2209,
       "source": "CodexRadar",
       "sourceModel": "grok-4.6",
@@ -3248,7 +3248,7 @@
       "source": "CodexRadar",
       "category": "coding",
       "metric": "pass_at_1",
-      "score": 42.9,
+      "score": 43.8,
       "effort": "low",
       "taskCount": 112
     },
