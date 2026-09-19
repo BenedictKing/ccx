@@ -4780,7 +4780,7 @@
           "metric": "pass_at_1",
           "rawValue": 0.643,
           "uncertainty": 0,
-          "cohortPercentile": 0.471,
+          "cohortPercentile": 0.529,
           "taskCount": 112,
           "cohortSize": 17,
           "effort": "max",
@@ -5261,7 +5261,8 @@
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-09-19"
+          "capturedAt": "2026-09-19",
+          "costUsd": 3.06
         },
         {
           "benchmark": "deepswe",
@@ -5448,7 +5449,8 @@
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-09-19"
+          "capturedAt": "2026-09-19",
+          "costUsd": 2.3
         },
         {
           "benchmark": "codexradar",
@@ -5464,7 +5466,8 @@
           "effort": "low",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-09-19"
+          "capturedAt": "2026-09-19",
+          "costUsd": 2.59
         },
         {
           "benchmark": "codexradar",
@@ -5480,7 +5483,8 @@
           "effort": "medium",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-09-19"
+          "capturedAt": "2026-09-19",
+          "costUsd": 1.99
         },
         {
           "benchmark": "deepswe",
@@ -6006,7 +6010,7 @@
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
           "capturedAt": "2026-09-19",
-          "costUsd": 1.74
+          "costUsd": 3.14
         },
         {
           "benchmark": "codexradar",
@@ -6014,15 +6018,16 @@
           "sourceModel": "glm-5.3",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.536,
+          "rawValue": 0.527,
           "uncertainty": 0,
-          "cohortPercentile": 0.059,
+          "cohortPercentile": 0,
           "taskCount": 112,
           "cohortSize": 17,
           "effort": "low",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-09-19"
+          "capturedAt": "2026-09-19",
+          "costUsd": 0.99
         },
         {
           "benchmark": "codexradar",
@@ -6039,7 +6044,7 @@
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
           "capturedAt": "2026-09-19",
-          "costUsd": 1.87
+          "costUsd": 3.25
         },
         {
           "benchmark": "deepswe",
@@ -6145,7 +6150,8 @@
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-09-19"
+          "capturedAt": "2026-09-19",
+          "costUsd": 0.38
         },
         {
           "benchmark": "codexradar",
@@ -6161,7 +6167,8 @@
           "effort": "low",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-09-19"
+          "capturedAt": "2026-09-19",
+          "costUsd": 0.14
         },
         {
           "benchmark": "codexradar",
@@ -6177,7 +6184,8 @@
           "effort": "max",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-09-19"
+          "capturedAt": "2026-09-19",
+          "costUsd": 0.38
         },
         {
           "benchmark": "deepswe",
@@ -6828,7 +6836,7 @@
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
           "capturedAt": "2026-09-19",
-          "costUsd": 5.23
+          "costUsd": 5.27
         },
         {
           "benchmark": "codexradar",
@@ -6862,7 +6870,7 @@
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
           "capturedAt": "2026-09-19",
-          "costUsd": 10.17
+          "costUsd": 10.3
         },
         {
           "benchmark": "codexradar",
@@ -6879,7 +6887,7 @@
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
           "capturedAt": "2026-09-19",
-          "costUsd": 4.11
+          "costUsd": 4.09
         },
         {
           "benchmark": "deepswe",
@@ -7271,9 +7279,9 @@
           "sourceModel": "gpt-5.6-luna",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.527,
+          "rawValue": 0.536,
           "uncertainty": 0,
-          "cohortPercentile": 0,
+          "cohortPercentile": 0.059,
           "taskCount": 112,
           "cohortSize": 17,
           "effort": "high",
@@ -7813,7 +7821,7 @@
           "metric": "pass_at_1",
           "rawValue": 0.652,
           "uncertainty": 0,
-          "cohortPercentile": 0.471,
+          "cohortPercentile": 0.529,
           "taskCount": 112,
           "cohortSize": 17,
           "effort": "medium",
@@ -7837,7 +7845,7 @@
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
           "capturedAt": "2026-09-19",
-          "costUsd": 24.32
+          "costUsd": 24.27
         },
         {
           "benchmark": "codexradar",
@@ -8687,7 +8695,7 @@
           "metric": "pass_at_1",
           "rawValue": 0.643,
           "uncertainty": 0,
-          "cohortPercentile": 0.471,
+          "cohortPercentile": 0.529,
           "taskCount": 112,
           "cohortSize": 17,
           "effort": "xhigh",
@@ -9539,7 +9547,8 @@
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-09-19"
+          "capturedAt": "2026-09-19",
+          "costUsd": 3.2
         },
         {
           "benchmark": "codexradar",
@@ -9547,7 +9556,7 @@
           "sourceModel": "grok-4.6",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.527,
+          "rawValue": 0.518,
           "uncertainty": 0,
           "cohortPercentile": 0,
           "taskCount": 112,
@@ -9555,7 +9564,8 @@
           "effort": "low",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-09-19"
+          "capturedAt": "2026-09-19",
+          "costUsd": 1.2
         },
         {
           "benchmark": "codexradar",
@@ -9563,15 +9573,16 @@
           "sourceModel": "grok-4.6",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.661,
+          "rawValue": 0.67,
           "uncertainty": 0,
-          "cohortPercentile": 0.529,
+          "cohortPercentile": 0.588,
           "taskCount": 112,
           "cohortSize": 17,
           "effort": "medium",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-09-19"
+          "capturedAt": "2026-09-19",
+          "costUsd": 2.5
         },
         {
           "benchmark": "codexradar",
@@ -9587,7 +9598,8 @@
           "effort": "xhigh",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-09-19"
+          "capturedAt": "2026-09-19",
+          "costUsd": 3.91
         },
         {
           "benchmark": "deepswe",
@@ -9844,7 +9856,8 @@
           "effort": "low",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-09-19"
+          "capturedAt": "2026-09-19",
+          "costUsd": 0.75
         }
       ]
     },
@@ -9983,7 +9996,8 @@
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-09-19"
+          "capturedAt": "2026-09-19",
+          "costUsd": 2.25
         },
         {
           "benchmark": "codexradar",
@@ -9999,7 +10013,8 @@
           "effort": "low",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-09-19"
+          "capturedAt": "2026-09-19",
+          "costUsd": 1.14
         },
         {
           "benchmark": "codexradar",
@@ -10015,7 +10030,8 @@
           "effort": "max",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-09-19"
+          "capturedAt": "2026-09-19",
+          "costUsd": 4.49
         },
         {
           "benchmark": "deepswe",
