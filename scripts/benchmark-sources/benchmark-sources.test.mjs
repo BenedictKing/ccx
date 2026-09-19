@@ -411,6 +411,40 @@ test('dradar extractCostData aggregates mean and median cost per model x effort'
   assert.equal(Object.keys(cost).length, 1)
 })
 
+test('dradar extractCostData prefers api_equivalent_cost_usd and falls back to actual_cost_usd', () => {
+  const data = {
+    cells: {
+      // 新口径 run：只有 api_equivalent_cost_usd（actual_cost_usd 已退役、缺失）
+      'task-a|dradar-model|low': {
+        ran_by: [
+          { api_equivalent_cost_usd: 0.9, duration_sec: 10 },
+          { api_equivalent_cost_usd: 1.1, duration_sec: 12 },
+        ],
+      },
+      // 旧口径老 run：仅剩 actual_cost_usd，应作为回退被采纳
+      'task-b|dradar-model|low': {
+        ran_by: [{ actual_cost_usd: 2.0, duration_sec: 20 }],
+      },
+      // 两者并存的极少数 run：以新口径为准，忽略 actual_cost_usd
+      'task-c|dradar-model|high': {
+        ran_by: [{ api_equivalent_cost_usd: 3.0, actual_cost_usd: 1.0, duration_sec: 30 }],
+      },
+      // fallback_estimate_usd 是估算而非实测，不应计入
+      'task-d|dradar-model|high': {
+        ran_by: [{ fallback_estimate_usd: 5.0, duration_sec: 40 }],
+      },
+    },
+  }
+  const cost = extractCostData(data, { 'dradar-model': 'canonical-model' })
+
+  // low 档：新口径 0.9/1.1 + 回退老 run 2.0 -> costs [0.9,1.1,2.0]，mean ≈ 1.3333
+  assert.equal(cost['canonical-model'].low.nRuns, 3)
+  assert.ok(Math.abs(cost['canonical-model'].low.meanCost - 4 / 3) < 1e-9)
+  // high 档：并存 run 取新口径 3.0；fallback_estimate_usd 的 run 被跳过
+  assert.equal(cost['canonical-model'].high.nRuns, 1)
+  assert.equal(cost['canonical-model'].high.meanCost, 3.0)
+})
+
 test('dradar toBenchmarkEvidence injects meanCost into costUsd when costData present', () => {
   const modelData = {
     deepsweModel: 'dradar-model',

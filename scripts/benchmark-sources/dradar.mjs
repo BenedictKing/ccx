@@ -9,7 +9,8 @@
  *
  * 数据结构：
  * - leaderboard: {models: [{model, effort, pass_rate, graded, passed, cells, cells_passed, tasks}]}
- * - table: {cells: {"task|model|effort": {rate, n, p, ran_by: [{actual_cost_usd, duration_sec, ...}]}}}
+ * - table: {cells: {"task|model|effort": {rate, n, p, ran_by: [{api_equivalent_cost_usd, actual_cost_usd, duration_sec, ...}]}}}
+ *   成本优先取 api_equivalent_cost_usd（重算等效价），回退 actual_cost_usd（退役中的原始花费）
  */
 
 /**
@@ -336,6 +337,24 @@ export function effortCoverageSufficient(cell, totalTasks, minCoverage = DRADAR_
 }
 
 /**
+ * 从单条运行记录取成本，返回 number 或 null。
+ *
+ * CodexRadar 自 "server-repriced-api-equivalent-beta-v2" 起把成本口径迁到
+ * api_equivalent_cost_usd（按标准 API 价重算的等效成本），新跑的 run 只填该字段；
+ * 旧字段 actual_cost_usd（志愿者原始花费，受各自订阅折扣影响、不可横向比）正在退役，
+ * 仅残留在少量老 run 上。网页看板展示的 mean 用的就是新字段，故这里以新字段为准、
+ * 回退旧字段——两者在同一 run 上极少同时出现，优先新口径既补齐覆盖、又与 CCX
+ * normalizedModelCostUSD 的标准价基准同口径。fallback_estimate_usd 是估算而非实测，不采用。
+ *
+ * @param {Object} run - ran_by 单条运行记录
+ * @returns {number|null}
+ */
+function runCostUSD(run) {
+  const candidate = run?.api_equivalent_cost_usd ?? run?.actual_cost_usd
+  return Number.isFinite(candidate) ? candidate : null
+}
+
+/**
  * 从 table 数据中提取 cost 信息
  *
  * @param {Object} data - table JSON 数据
@@ -365,8 +384,9 @@ export function extractCostData(data, modelMap) {
     }
 
     for (const run of cell.ran_by) {
-      if (run.actual_cost_usd !== null && run.actual_cost_usd !== undefined) {
-        costByModelEffort[canonical][effort].costs.push(run.actual_cost_usd)
+      const cost = runCostUSD(run)
+      if (cost !== null) {
+        costByModelEffort[canonical][effort].costs.push(cost)
       }
       if (run.duration_sec !== null && run.duration_sec !== undefined) {
         costByModelEffort[canonical][effort].durations.push(run.duration_sec)
