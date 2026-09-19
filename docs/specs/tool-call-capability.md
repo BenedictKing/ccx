@@ -127,6 +127,7 @@ if learnedToolCallUnsupported(routeIdentity, actualModel) {
   4. override 终审（`upstream_failover.go` AutoModel 应用点）：policy 构建期的预解析缓存（targetByUID 等）不经本次请求的 ResolveModel 过滤，应用前对 override 目标做白名单终审，不在名单内即放弃 override 按原始模型透传。
 - **路由间排他（两级收紧）**：`VerifiedToolCallRoutes(kind, true)` 返回**该执行协议**上的白名单路由集合；集合非空时，非成员路由的候选行 `SupportsToolCalls=false`（经既有工具硬约束剔除），带工具流量锁定到实证路由。该协议无任何成员时 fail-open（冷启动不堵、按协议独立判定）。
 - **失败撤销（动态自愈）**：排他把流量锁定白名单路由后，白名单路由自身故障（上游空流）会无路可退。带工具请求在该组合上收到空/无效响应时撤销 verified 记录（`MaybeForgetVerifiedToolCalls`，`Record(..., enabled=false, ...)`），路由从集合摘牌、排他 fail-open 放开全部候选；后续真实成功经正向学习重建。白名单由此成为动态自愈集合而非静态锁定。
+- **伪标记负反馈与 fail-open 窗口收敛（2026-09-19）**：auto 模式干净 2xx 但零真实调用且输出命中伪标记 → 连续 miss 计数（`RecordVerifiedToolCallPseudoMiss`），达阈值（3 次）撤销 verified。证据两路汇入：成功路径收尾（`MaybeCountPseudoToolCallMiss`）与竞速闸门让出（`notePseudoToolCallYield`——「让出即证据」：伪标记已在分支首包缓冲实测命中，是已完成观察，不适用「败者不学习」红线；仅非强制 tool_choice 计数，强制形态由 MaybeLearnForcedToolChoiceMiss 覆盖不双算）。**无 verified 条目同样计数**：fail-open 窗口（冷启动/TTL 过期/撤销重建期）内伪标记 miss 是唯一的劣化证据留存；竞速影子派发在窗口内对连续 miss 达阈值的组合不再派影子（`toolWhitelistAllows` 冷启动影子纪律，`VerifiedToolCallPseudoMissed` 按 路由×模型 判定），无证据组合照常放行——劣化渠道在窗口内命中三次即失去影子资格，窗口自动收敛；真实工具调用成功即时清零重建。
 - **与显式 pin 正交**：`X-Channel` pin 路径不受排他影响。
 
 ## 5. 边界与保守策略

@@ -18,8 +18,10 @@ import (
 // 定位与红线：仅在竞速闸门裁决时生效的软信号——命中伪标记的分支让出
 // 提交权（按竞速败出退位，免渠道惩罚、不进学习黑名单），主分支/其他影子
 // 继续服务；误杀（如用户确实让模型书写这类标记的文档）的代价只是换一个
-// 分支交付。无闸门的直连路径行为完全不变；仅对本请求携带 tools 的流式
-// 分支启用。
+// 分支交付。让出同时把这次已完成的伪标记观察计入白名单负反馈（让出即证据，
+// tool_unsupported_signal.go notePseudoToolCallYield）——白名单 fail-open
+// 窗口内劣化组合连续命中后不再获派影子，窗口自动收敛。
+// 无闸门的直连路径行为完全不变；仅对本请求携带 tools 的流式分支启用。
 
 // pseudoToolCallMarkerPatterns 伪工具调用标记的强特征（字面量子串）。
 // 这些是模型内部工具调用协议的标记词，正常 assistant 正文不应包含。
@@ -115,6 +117,9 @@ func RacingClaimClientCommitForStream(c *gin.Context, bufferedOutput string) boo
 			bw.Discard()
 		}
 		RequestLogf(c, "[Racing-QualityGate] 分支首包命中伪工具调用标记（tool_choice=auto 下模型把工具调用写成文本），让出提交权")
+		// 让出即证据：伪标记已在该分支自身首包缓冲实测命中（非部分流推断），
+		// 与成功路径 pseudo-miss 同强度，计入白名单负反馈。
+		notePseudoToolCallYield(c)
 		return false
 	}
 	return racingClaimClientCommit(c)

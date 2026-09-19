@@ -245,10 +245,11 @@ func TestMaybeCountPseudoToolCallMiss(t *testing.T) {
 		t.Fatalf("守卫场景全部不应计数，got streak=%d", got)
 	}
 
-	// 无 verified 条目的模型：不计数
+	// 无 verified 条目的模型：同样计数（fail-open 窗口的劣化证据留存，供竞速影子规避）
 	MaybeCountPseudoToolCallMiss(c, upstream, apiKey, "m2", toolBody, false, true, nil, "messages")
-	if _, ok := cache.Trait("ch_test#messages", keyHash, "m2", config.TraitVerifiedToolCalls); ok {
-		t.Fatal("无 verified 条目时不应产生任何状态")
+	state2, ok := cache.Trait("ch_test#messages", keyHash, "m2", config.TraitVerifiedToolCalls)
+	if !ok || state2.Enabled || state2.AutoMissStreak != 1 {
+		t.Fatalf("无 verified 条目时应记入 Enabled=false 的 miss 计数，got %+v, ok=%v", state2, ok)
 	}
 
 	// 连续 3 次 miss：撤销

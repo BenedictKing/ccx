@@ -1062,6 +1062,10 @@ func TryUpstreamWithAllKeys(
 			}
 			c.Set(autopilotActualModelKey, actualAttemptModel)
 			c.Set(autopilotActualEffortKey, actualReasoningEffort)
+			// 竞速质量闸门「让出即证据」的学习身份：分支在 claim 裁决处只有 gin
+			// context 可用，提前把本尝试的 渠道×Key×模型×协议 挂上（影子分支持
+			// 独立 context 副本，互不串扰；模型与成功路径学习同口径 attemptModel）。
+			setToolCallLearningIdentity(c, upstream, apiKey, attemptModel, string(executionKind))
 
 			// (Key,模型) 持久化限制复查：autopilot 映射在选 Key 之后才发生，
 			// 选 Key 阶段的 IsKeyModelDisabledNow 只能按映射前模型检查，
@@ -1700,7 +1704,9 @@ func TryUpstreamWithAllKeys(
 			// 上下文窗口自学习（放宽侧）：2xx 完成即实证该渠道×协议×模型可承载本次输入，
 			// 棘轮只升不降。失败/取消/空响应不学习（err 非 nil 时内部直接返回）。
 			MaybeRecordContextWindowProven(c, apiType, upstreamCopy, executionKind, attemptModel, usage, err)
-			// 竞速败出分支不参与任何自学习（部分流的部分标记不代表渠道真实能力）。
+			// 竞速败出分支不参与任何自学习（部分流的部分标记不代表渠道真实能力）；
+			// 例外：闸门让出分支的伪标记命中已在 claim 时刻单独计数
+			// （notePseudoToolCallYield——首包缓冲实测命中是已完成观察，非部分流推断）。
 			racingSuperseded := isRacingSuperseded(c, err)
 			if isStream {
 				FinishStreamTimeoutObservation(c)

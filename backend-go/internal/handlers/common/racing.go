@@ -354,10 +354,13 @@ type racingRuns struct {
 // toolWhitelistAllows 带工具请求的影子候选路由排他判定：
 // 本次请求的执行协议上存在任一「运行期 auto 实测真实工具调用」路由
 // （TraitVerifiedToolCalls runtime 来源）时，非白名单路由不放行；该协议无任何
-// 白名单路由 fail-open。不带工具的请求恒放行。兜底重选路径不经 SmartRouter
-// 行构建，须在此挡。白名单按稳定路由身份（逻辑渠道×协议）比对，渠道重建
-// 重铸物理 UID 不影响判定。
-func (r *racingRuns) toolWhitelistAllows(upstream *config.UpstreamConfig) bool {
+// 白名单路由时 fail-open，但「连续伪标记 miss 达阈值」的已知劣化组合仍不放行
+// （竞速是拿冗余流量换延迟，窗口内已证实劣化的组合期望收益为负——冷启动影子
+// 纪律）；无证据组合照常放行，不堵冷启动。不带工具的请求恒放行。
+// 兜底重选路径不经 SmartRouter 行构建，须在此挡。白名单按稳定路由身份
+// （逻辑渠道×协议）比对，渠道重建重铸物理 UID 不影响判定。
+// model 为候选的执行模型（伪标记 miss 按 路由×模型 判定）；为空时回退请求模型。
+func (r *racingRuns) toolWhitelistAllows(upstream *config.UpstreamConfig, model string) bool {
 	if !r.needsToolWhitelist || upstream == nil {
 		return true
 	}
@@ -366,11 +369,14 @@ func (r *racingRuns) toolWhitelistAllows(upstream *config.UpstreamConfig) bool {
 		return true
 	}
 	kind := string(r.in.Kind)
-	routes := cache.VerifiedToolCallRoutes(kind, true)
-	if len(routes) == 0 {
-		return true
+	identity := config.ToolRouteIdentity(upstream, kind)
+	if routes := cache.VerifiedToolCallRoutes(kind, true); len(routes) > 0 {
+		return routes[identity]
 	}
-	return routes[config.ToolRouteIdentity(upstream, kind)]
+	if model == "" {
+		model = r.in.Model
+	}
+	return !cache.VerifiedToolCallPseudoMissed(identity, model)
 }
 
 // RunRacingAttempt 包装一次渠道尝试：竞速未武装时行为与直接调用闭包完全一致；
@@ -691,7 +697,7 @@ func (r *racingRuns) nextShadowSelection(primaryCost float64) *scheduler.Selecti
 		}
 		// 工具调用白名单路由排他（带工具请求）：兜底重选不经影子构建出口，
 		// 须单独挡（语义同 buildSelectionFromCandidate 内的排他）。
-		if !r.toolWhitelistAllows(sel.Upstream) {
+		if !r.toolWhitelistAllows(sel.Upstream, sel.ExecutionModel) {
 			continue
 		}
 		r.mu.Lock()
@@ -713,8 +719,9 @@ func (r *racingRuns) buildSelectionFromCandidate(cand autopilot.RoutingCandidate
 	// 工具调用白名单路由排他（带工具请求）：排名缓存行由本请求以外的
 	// 历史/并发排名产生，其 Selected 语义不含本请求的工具白名单约束，
 	// 须在影子构建出口统一挡——本次执行协议上存在任一运行期验证路由时，
-	// 影子不从非白名单路由派（伪工具标记方言的根治约束；该协议无白名单 fail-open）。
-	if !r.toolWhitelistAllows(upstream) {
+	// 影子不从非白名单路由派（伪工具标记方言的根治约束；该协议无白名单
+	// fail-open，但连续伪标记 miss 达阈值的已知劣化组合仍不派）。
+	if !r.toolWhitelistAllows(upstream, cand.ActualModel) {
 		return nil
 	}
 	if !cfgSnapshot.ResolveRacingPolicy(upstream) {

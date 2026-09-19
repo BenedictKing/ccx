@@ -121,14 +121,24 @@ func TestVerifiedToolCallRoutesKindScoping(t *testing.T) {
 	}
 }
 
-// RecordVerifiedToolCallPseudoMiss / ClearVerifiedToolCallPseudoMiss 的口径：
-// 无 verified 条目不计数；连续计数达阈值撤销并摘牌；真实工具调用重置（连续而非累计）。
+// RecordVerifiedToolCallPseudoMiss / ClearVerifiedToolCallPseudoMiss /
+// VerifiedToolCallPseudoMissed 的口径：无 verified 条目同样计数（fail-open 窗口的
+// 劣化证据留存，供竞速影子规避）；启用条目连续计数达阈值撤销并摘牌；真实工具调用
+// 重置（连续而非累计）；撤销后继续计数（重新累积影子规避证据）。
 func TestRecordVerifiedToolCallPseudoMiss(t *testing.T) {
 	cache := NewChannelCompatCache()
 
-	// 无 verified 条目：无可撤销，不计数
-	if streak, revoked := cache.RecordVerifiedToolCallPseudoMiss("lc_a#responses", "k1", "m1"); streak != 0 || revoked {
-		t.Fatalf("无条目时应返回 (0,false)，got (%d,%v)", streak, revoked)
+	// 无 verified 条目：同样计数（Enabled=false 的负证据条目），不撤销
+	if streak, revoked := cache.RecordVerifiedToolCallPseudoMiss("lc_a#responses", "k1", "m1"); streak != 1 || revoked {
+		t.Fatalf("无条目时也应计数 (1,false)，got (%d,%v)", streak, revoked)
+	}
+	state, ok := cache.Trait("lc_a#responses", "k1", "m1", TraitVerifiedToolCalls)
+	if !ok || state.Enabled || state.AutoMissStreak != 1 {
+		t.Fatalf("无 verified 条目时应记入 Enabled=false 的 miss 计数，got %+v, ok=%v", state, ok)
+	}
+	// 未达阈值：不构成劣化证据
+	if cache.VerifiedToolCallPseudoMissed("lc_a#responses", "m1") {
+		t.Fatal("streak 未达阈值不应判定劣化")
 	}
 
 	_ = cache.Record("lc_a#responses", "k1", "m1", TraitVerifiedToolCalls, true, CompatSourceRuntimeSignal, "e")
@@ -159,9 +169,55 @@ func TestRecordVerifiedToolCallPseudoMiss(t *testing.T) {
 	if routes := cache.VerifiedToolCallRoutes("responses", true); len(routes) != 0 {
 		t.Fatalf("撤销后路由集合应为空，got %v", routes)
 	}
+	// 撤销时计数清零：刚摘牌的组合不立即构成影子规避证据（再积累需新一轮连续 miss）
+	if cache.VerifiedToolCallPseudoMissed("lc_a#responses", "m1") {
+		t.Fatal("撤销清零后不应立即判定劣化")
+	}
 
-	// 已禁用条目：不再计数（等下次真实成功重建）
-	if streak, revoked := cache.RecordVerifiedToolCallPseudoMiss("lc_a#responses", "k1", "m1"); streak != 0 || revoked {
-		t.Fatalf("已禁用条目应返回 (0,false)，got (%d,%v)", streak, revoked)
+	// 已禁用条目：继续计数（撤销不是终点，重新累积达阈值后供 fail-open 窗口规避影子）
+	if streak, revoked := cache.RecordVerifiedToolCallPseudoMiss("lc_a#responses", "k1", "m1"); streak != 1 || revoked {
+		t.Fatalf("已禁用条目应继续计数 (1,false)，got (%d,%v)", streak, revoked)
+	}
+	cache.RecordVerifiedToolCallPseudoMiss("lc_a#responses", "k1", "m1")
+	cache.RecordVerifiedToolCallPseudoMiss("lc_a#responses", "k1", "m1")
+	if !cache.VerifiedToolCallPseudoMissed("lc_a#responses", "m1") {
+		t.Fatal("禁用条目重新累积达阈值后应判定劣化（fail-open 窗口不派影子）")
+	}
+}
+
+// VerifiedToolCallPseudoMissed 的判定口径：路由×模型维度、任一 Key 命中即劣化、
+// 跨模型/跨路由隔离、空参数与无记录 fail-open。
+func TestVerifiedToolCallPseudoMissed(t *testing.T) {
+	cache := NewChannelCompatCache()
+
+	if cache.VerifiedToolCallPseudoMissed("lc_a#responses", "m1") {
+		t.Fatal("无记录时应 fail-open 返回 false")
+	}
+
+	// 达阈值：任一 Key 命中即判定
+	for i := 0; i < 3; i++ {
+		cache.RecordVerifiedToolCallPseudoMiss("lc_a#responses", "k1", "m1")
+	}
+	if !cache.VerifiedToolCallPseudoMissed("lc_a#responses", "m1") {
+		t.Fatal("连续 3 次 miss 应判定劣化")
+	}
+	// 跨模型/跨路由/跨协议隔离
+	if cache.VerifiedToolCallPseudoMissed("lc_a#responses", "m2") {
+		t.Fatal("同路由其他模型不应命中")
+	}
+	if cache.VerifiedToolCallPseudoMissed("lc_b#responses", "m1") {
+		t.Fatal("其他路由不应命中")
+	}
+	if cache.VerifiedToolCallPseudoMissed("lc_a#messages", "m1") {
+		t.Fatal("同渠道其他协议不应命中")
+	}
+	// 空参数直接 false
+	if cache.VerifiedToolCallPseudoMissed("", "m1") || cache.VerifiedToolCallPseudoMissed("lc_a#responses", "") {
+		t.Fatal("空参数应直接返回 false")
+	}
+	// 真实工具调用重建（正向学习覆盖状态）后清零
+	_ = cache.Record("lc_a#responses", "k1", "m1", TraitVerifiedToolCalls, true, CompatSourceRuntimeSignal, "e")
+	if cache.VerifiedToolCallPseudoMissed("lc_a#responses", "m1") {
+		t.Fatal("真实工具调用重建后不应判定劣化")
 	}
 }

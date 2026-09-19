@@ -569,26 +569,33 @@ func (c *ChannelCompatCache) Record(channelUID, keyHash, model string, trait Com
 const verifiedToolCallPseudoMissRevokeThreshold = 3
 
 // RecordVerifiedToolCallPseudoMiss 白名单负反馈计数：该 (路由,Key,模型) 上又出现
-// 一次伪标记未命中。返回当前连续计数与是否已触发撤销。无 verified 记录（或已
-// 禁用）时无可撤销，直接返回。计数变更不落盘（易失信号），仅撤销（结论翻转）
-// 时持久化；真实工具调用成功经 ClearVerifiedToolCallPseudoMiss 重置计数。
+// 一次伪标记未命中。返回当前连续计数与是否已触发撤销。
+//
+// 无 verified 记录（或已禁用）时同样计数：白名单按协议 fail-open，集合为空
+// （冷启动/TTL 过期/撤销重建期）时未验证组合照常承接带工具流量并派影子，
+// 此时伪标记 miss 是唯一的劣化证据留存——消费方是竞速影子派发的 fail-open
+// 窗口（VerifiedToolCallPseudoMissed：达阈值的组合不再派影子），让窗口自动
+// 收敛；无可撤销对象时 revoked 恒为 false。计数变更不落盘（易失信号），仅
+// 撤销（结论翻转）时持久化；真实工具调用成功经 ClearVerifiedToolCallPseudoMiss
+// 与正向学习（重建条目时整体覆盖状态）重置计数。
 func (c *ChannelCompatCache) RecordVerifiedToolCallPseudoMiss(routeIdentity, keyHash, model string) (int, bool) {
 	c.mu.Lock()
 	key := GenerateCacheKey(routeIdentity, keyHash, model)
 	entry, ok := c.cache[key]
 	if !ok || time.Since(entry.DetectedAt) > channelCompatTTL {
-		c.mu.Unlock()
-		return 0, false
+		entry = &ChannelCompatEntry{Traits: make(map[CompatTrait]CompatTraitState)}
+		c.cache[key] = entry
 	}
-	state, ok := entry.Traits[TraitVerifiedToolCalls]
-	if !ok || !state.Enabled {
-		c.mu.Unlock()
-		return 0, false
+	if entry.Traits == nil {
+		entry.Traits = make(map[CompatTrait]CompatTraitState)
 	}
+	entry.DetectedAt = time.Now()
+
+	state := entry.Traits[TraitVerifiedToolCalls]
 	state.AutoMissStreak++
 	streak := state.AutoMissStreak
 	revoked := false
-	if streak >= verifiedToolCallPseudoMissRevokeThreshold {
+	if state.Enabled && streak >= verifiedToolCallPseudoMissRevokeThreshold {
 		state.Enabled = false
 		state.AutoMissStreak = 0
 		state.Source = CompatSourceRuntimeSignal
@@ -625,6 +632,44 @@ func (c *ChannelCompatCache) ClearVerifiedToolCallPseudoMiss(routeIdentity, keyH
 	}
 	state.AutoMissStreak = 0
 	entry.Traits[TraitVerifiedToolCalls] = state
+}
+
+// VerifiedToolCallPseudoMissed 返回该 路由×模型 是否有任一 Key 的连续伪标记
+// miss 达到撤销阈值（任一 Key 命中即视为该组合劣化，口径与白名单聚合一致：
+// 路由决策发生在选定具体 Key 之前）。
+//
+// 消费方是竞速影子派发的 fail-open 窗口（racing.go toolWhitelistAllows）：
+// 协议白名单为空时未验证组合本可照常派影子，但已积累伪标记证据的组合期望
+// 收益为负，不再派出；无证据组合不受影响（fail-open 语义不变，不堵冷启动）。
+func (c *ChannelCompatCache) VerifiedToolCallPseudoMissed(routeIdentity, model string) bool {
+	if routeIdentity == "" || model == "" {
+		return false
+	}
+
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	for key, entry := range c.cache {
+		if entry == nil {
+			continue
+		}
+		// 键比对规则同 MinContextLimitForChannelModel：SplitN 前两个冒号后
+		// 精确比对，容忍模型名本身含冒号。
+		parts := strings.SplitN(key, ":", 3)
+		if len(parts) != 3 {
+			continue
+		}
+		if parts[0] != routeIdentity || !strings.EqualFold(parts[2], model) {
+			continue
+		}
+		if time.Since(entry.DetectedAt) > channelCompatTTL {
+			continue
+		}
+		if state, ok := entry.Traits[TraitVerifiedToolCalls]; ok && state.AutoMissStreak >= verifiedToolCallPseudoMissRevokeThreshold {
+			return true
+		}
+	}
+	return false
 }
 
 // Trait 返回该组合上某个兼容性事实的学习结论。条目过期或未学习过时第二个返回值为 false。
