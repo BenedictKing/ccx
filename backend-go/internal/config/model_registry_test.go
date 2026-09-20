@@ -792,6 +792,51 @@ func TestResolveUpstreamCapability_Step37FlashBuiltin(t *testing.T) {
 	assertFloatPointerValue(t, pricing.OutputPrice, 1.15, "Pricing.OutputPrice")
 }
 
+func TestResolveUpstreamCapability_Step5PreviewBuiltin(t *testing.T) {
+	for _, alias := range []string{"step-5-preview", "stepfun/step-5-preview"} {
+		t.Run(alias, func(t *testing.T) {
+			upstream := &UpstreamConfig{
+				ModelMapping: map[string]string{
+					"agent": alias,
+				},
+			}
+
+			resolved := ResolveUpstreamCapability("agent", upstream, nil)
+			if !resolved.Known || resolved.Source != "builtin" {
+				t.Fatalf("source = %q known=%v, want builtin known", resolved.Source, resolved.Known)
+			}
+			if resolved.Capability.Provider != "stepfun" {
+				t.Fatalf("Provider = %q, want stepfun", resolved.Capability.Provider)
+			}
+			if resolved.Capability.ContextWindowTokens != 1048576 {
+				t.Fatalf("ContextWindowTokens = %d, want 1048576", resolved.Capability.ContextWindowTokens)
+			}
+			if resolved.Capability.ThinkingMode != "thinking" {
+				t.Fatalf("ThinkingMode = %q, want thinking", resolved.Capability.ThinkingMode)
+			}
+			if !containsString(resolved.Capability.ReasoningEfforts, "high") {
+				t.Fatalf("ReasoningEfforts = %v, want high", resolved.Capability.ReasoningEfforts)
+			}
+			if !resolved.Capability.Capabilities["vision"] {
+				t.Fatal("step-5-preview should advertise vision")
+			}
+			if !resolved.Capability.Capabilities["videoInput"] {
+				t.Fatal("step-5-preview should advertise videoInput")
+			}
+			if !resolved.Capability.Capabilities["toolCalls"] {
+				t.Fatal("step-5-preview should advertise toolCalls")
+			}
+			pricing := resolved.Capability.Pricing
+			if pricing == nil {
+				t.Fatal("Pricing = nil, want step-5-preview pricing")
+			}
+			assertFloatPointerValue(t, pricing.InputCacheHitPrice, 0.05, "Pricing.InputCacheHitPrice")
+			assertFloatPointerValue(t, pricing.InputCacheMissPrice, 1, "Pricing.InputCacheMissPrice")
+			assertFloatPointerValue(t, pricing.OutputPrice, 2.86, "Pricing.OutputPrice")
+		})
+	}
+}
+
 func TestResolveUpstreamCapability_GPT56BedrockBuiltin(t *testing.T) {
 	upstream := &UpstreamConfig{
 		ModelMapping: map[string]string{

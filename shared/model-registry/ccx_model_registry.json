@@ -1238,6 +1238,40 @@
     },
     {
       "patterns": [
+        "(?:^|[-/])step-5-preview(?=$|@)"
+      ],
+      "provider": "stepfun",
+      "displayName": "Step 5 Preview",
+      "description": "StepFun next-generation flagship multimodal reasoning model with 1M context, native text/image/video input, tool calling, JSON Mode/Schema output, prompt caching, and three reasoning-effort levels.",
+      "contextWindowTokens": 1048576,
+      "maxOutputTokens": 65536,
+      "thinkingMode": "thinking",
+      "reasoningEfforts": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "capabilities": {
+        "vision": true,
+        "videoInput": true,
+        "reasoning": true,
+        "toolCalls": true,
+        "jsonOutput": true,
+        "contextCaching": true
+      },
+      "pricing": {
+        "inputCacheHitPrice": 0.05,
+        "inputCacheMissPrice": 1,
+        "outputPrice": 2.86
+      },
+      "sources": [
+        "https://platform.stepfun.com/docs/zh/guides/models/step-5-preview",
+        "https://platform.stepfun.com/docs/zh/quickstart/overview",
+        "https://platform.stepfun.com/docs/zh/guides/pricing/details"
+      ]
+    },
+    {
+      "patterns": [
         "(?:^|[-/])step-3\\.7-flash(?=$|@)"
       ],
       "provider": "stepfun",
