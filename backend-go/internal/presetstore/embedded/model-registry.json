@@ -1260,9 +1260,11 @@
         "contextCaching": true
       },
       "pricing": {
-        "inputCacheHitPrice": 0.05,
-        "inputCacheMissPrice": 1,
-        "outputPrice": 2.86
+        "unit": "per_1m_tokens_cny",
+        "currency": "CNY",
+        "inputCacheHitPrice": 0.35,
+        "inputCacheMissPrice": 7,
+        "outputPrice": 20
       },
       "sources": [
         "https://platform.stepfun.com/docs/zh/guides/models/step-5-preview",

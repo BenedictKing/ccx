@@ -830,9 +830,9 @@ func TestResolveUpstreamCapability_Step5PreviewBuiltin(t *testing.T) {
 			if pricing == nil {
 				t.Fatal("Pricing = nil, want step-5-preview pricing")
 			}
-			assertFloatPointerValue(t, pricing.InputCacheHitPrice, 0.05, "Pricing.InputCacheHitPrice")
-			assertFloatPointerValue(t, pricing.InputCacheMissPrice, 1, "Pricing.InputCacheMissPrice")
-			assertFloatPointerValue(t, pricing.OutputPrice, 2.86, "Pricing.OutputPrice")
+			assertFloatPointerValue(t, pricing.InputCacheHitPrice, 0.35, "Pricing.InputCacheHitPrice")
+			assertFloatPointerValue(t, pricing.InputCacheMissPrice, 7, "Pricing.InputCacheMissPrice")
+			assertFloatPointerValue(t, pricing.OutputPrice, 20, "Pricing.OutputPrice")
 		})
 	}
 }
