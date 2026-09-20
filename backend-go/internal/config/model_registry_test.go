@@ -787,9 +787,9 @@ func TestResolveUpstreamCapability_Step37FlashBuiltin(t *testing.T) {
 	if pricing == nil {
 		t.Fatal("Pricing = nil, want step-3.7-flash pricing")
 	}
-	assertFloatPointerValue(t, pricing.InputCacheHitPrice, 0.04, "Pricing.InputCacheHitPrice")
-	assertFloatPointerValue(t, pricing.InputCacheMissPrice, 0.2, "Pricing.InputCacheMissPrice")
-	assertFloatPointerValue(t, pricing.OutputPrice, 1.15, "Pricing.OutputPrice")
+	assertFloatPointerValue(t, pricing.InputCacheHitPrice, 0.27, "Pricing.InputCacheHitPrice")
+	assertFloatPointerValue(t, pricing.InputCacheMissPrice, 1.35, "Pricing.InputCacheMissPrice")
+	assertFloatPointerValue(t, pricing.OutputPrice, 8.1, "Pricing.OutputPrice")
 }
 
 func TestResolveUpstreamCapability_Step5PreviewBuiltin(t *testing.T) {

@@ -1292,9 +1292,11 @@
         "toolCalls": true
       },
       "pricing": {
-        "inputCacheHitPrice": 0.04,
-        "inputCacheMissPrice": 0.2,
-        "outputPrice": 1.15
+        "unit": "per_1m_tokens_cny",
+        "currency": "CNY",
+        "inputCacheHitPrice": 0.27,
+        "inputCacheMissPrice": 1.35,
+        "outputPrice": 8.1
       },
       "sources": [
         "https://platform.stepfun.ai/docs/en/guides/models/step-3.7-flash",
