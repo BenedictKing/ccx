@@ -1,5 +1,7 @@
 package types
 
+import "encoding/json"
+
 // ClaudeRequest Claude 请求结构
 // AgentContext 请求的代理上下文信息，用于 subagent 观测与角色路由
 type AgentContext struct {
@@ -58,6 +60,8 @@ type ClaudeTool struct {
 }
 
 // ClaudeResponse Claude 响应
+// ExtraFields 保留上游响应中网关未建模的顶层字段（如 safeguards 相关、container、
+// stop_sequence 等），满足网关兼容性要求：不丢响应键，新协议字段无需改网关即可透传。
 type ClaudeResponse struct {
 	ID         string          `json:"id"`
 	Type       string          `json:"type"`
@@ -66,6 +70,68 @@ type ClaudeResponse struct {
 	Content    []ClaudeContent `json:"content"`
 	StopReason string          `json:"stop_reason,omitempty"`
 	Usage      *Usage          `json:"usage,omitempty"`
+
+	ExtraFields map[string]interface{} `json:"-"`
+}
+
+// claudeResponseKnownFields Claude Messages 响应已建模的顶层字段，其余键进入 ExtraFields。
+var claudeResponseKnownFields = map[string]struct{}{
+	"id": {}, "type": {}, "role": {}, "model": {},
+	"content": {}, "stop_reason": {}, "usage": {},
+}
+
+// claudeResponseAlias MarshalJSON/UnmarshalJSON 内部使用的别名，避免递归调用。
+type claudeResponseAlias ClaudeResponse
+
+// UnmarshalJSON 解析已知字段并把未知顶层字段收集进 ExtraFields。
+func (r *ClaudeResponse) UnmarshalJSON(data []byte) error {
+	var alias claudeResponseAlias
+	if err := json.Unmarshal(data, &alias); err != nil {
+		return err
+	}
+	*r = ClaudeResponse(alias)
+
+	// 已知字段解析成功即可用；extra 收集失败不阻塞响应
+	var probe map[string]json.RawMessage
+	if err := json.Unmarshal(data, &probe); err != nil {
+		return nil
+	}
+	extra := make(map[string]interface{}, len(probe))
+	for key, raw := range probe {
+		if _, known := claudeResponseKnownFields[key]; known {
+			continue
+		}
+		var value interface{}
+		if err := json.Unmarshal(raw, &value); err != nil {
+			continue
+		}
+		extra[key] = value
+	}
+	if len(extra) > 0 {
+		r.ExtraFields = extra
+	}
+	return nil
+}
+
+// MarshalJSON 输出已知字段并合并 ExtraFields（已知字段优先，extra 不覆盖）。
+func (r ClaudeResponse) MarshalJSON() ([]byte, error) {
+	base, err := json.Marshal(claudeResponseAlias(r))
+	if err != nil {
+		return nil, err
+	}
+	if len(r.ExtraFields) == 0 {
+		return base, nil
+	}
+	var merged map[string]interface{}
+	if err := json.Unmarshal(base, &merged); err != nil {
+		return base, nil // 合并失败时退化为仅已知字段
+	}
+	for key, value := range r.ExtraFields {
+		if _, exists := merged[key]; !exists {
+			merged[key] = value
+		}
+	}
+	return json.Marshal(merged)
 }
 
 // OpenAIRequest OpenAI 请求结构
