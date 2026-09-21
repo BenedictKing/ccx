@@ -111,8 +111,8 @@ func TestDeleteChannelMetrics_SharedMetricsKeyPreserved(t *testing.T) {
 			}
 
 			// 为所有 key 记录一些指标
-			metricsManager.RecordSuccess(sharedBaseURL, sharedAPIKey, tcServiceType(tc.kind))
-			metricsManager.RecordSuccess(sharedBaseURL, "sk-exclusive-A", tcServiceType(tc.kind))
+			metricsManager.RecordSuccess(sharedBaseURL, sharedAPIKey, tcServiceType(tc.kind), "")
+			metricsManager.RecordSuccess(sharedBaseURL, "sk-exclusive-A", tcServiceType(tc.kind), "")
 
 			// 验证指标存在
 			sharedMetricsKey := metrics.GenerateMetricsIdentityKey(sharedBaseURL, sharedAPIKey, tcServiceType(tc.kind))
@@ -188,9 +188,9 @@ func TestDeleteChannelMetrics_AllExclusiveKeysDeleted(t *testing.T) {
 	metricsManager := scheduler.messagesMetricsManager
 
 	// 为所有 key 记录指标
-	metricsManager.RecordSuccess("https://exclusive.example.com", "sk-key-1", "claude")
-	metricsManager.RecordSuccess("https://exclusive.example.com", "sk-key-2", "claude")
-	metricsManager.RecordSuccess("https://other.example.com", "sk-other-key", "claude")
+	metricsManager.RecordSuccess("https://exclusive.example.com", "sk-key-1", "claude", "")
+	metricsManager.RecordSuccess("https://exclusive.example.com", "sk-key-2", "claude", "")
+	metricsManager.RecordSuccess("https://other.example.com", "sk-other-key", "claude", "")
 
 	// 从配置中移除要删除的渠道
 	channelToDelete := cfg.Upstream[0]
@@ -240,7 +240,7 @@ func TestDeleteChannelMetrics_SkipsWhenUpstreamStillInConfig(t *testing.T) {
 	defer cleanup()
 
 	metricsManager := scheduler.messagesMetricsManager
-	metricsManager.RecordSuccess("https://example.com", "sk-key", "claude")
+	metricsManager.RecordSuccess("https://example.com", "sk-key", "claude", "")
 
 	// 不从配置中移除渠道，直接调用 DeleteChannelMetrics
 	// 这违反了前置条件，但方法应该仍然执行（只是结果可能不正确）
@@ -274,8 +274,8 @@ func TestDeleteChannelMetrics_DeletesOnlyRealServiceTypeIdentity(t *testing.T) {
 	defer cleanup()
 
 	metricsManager := scheduler.messagesMetricsManager
-	metricsManager.RecordSuccess("https://shared.example.com", "sk-key", "openai")
-	metricsManager.RecordSuccess("https://shared.example.com", "sk-key", "gemini")
+	metricsManager.RecordSuccess("https://shared.example.com", "sk-key", "openai", "")
+	metricsManager.RecordSuccess("https://shared.example.com", "sk-key", "gemini", "")
 	legacyKey := metrics.GenerateMetricsIdentityKey("https://shared.example.com", "sk-key", "openai")
 	currentKey := metrics.GenerateMetricsIdentityKey("https://shared.example.com", "sk-key", "gemini")
 
@@ -433,7 +433,7 @@ func TestFallbackSkipsCombinedUnhealthyChannel(t *testing.T) {
 	baseURLs := []string{"https://primary.example.com", "https://backup.example.com"}
 	apiKeys := []string{"sk-a", "sk-b"}
 	for i := 0; i < 10; i++ {
-		scheduler.messagesMetricsManager.RecordFailure(baseURLs[i%2], apiKeys[(i/2)%2], "claude")
+		scheduler.messagesMetricsManager.RecordFailure(baseURLs[i%2], apiKeys[(i/2)%2], "claude", "")
 	}
 
 	activeChannels := []ChannelInfo{

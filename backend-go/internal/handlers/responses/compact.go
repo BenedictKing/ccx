@@ -126,7 +126,7 @@ func handleSingleChannelCompact(
 		metricsKey := metrics.GenerateMetricsIdentityKey(upstream.BaseURL, apiKey, metricsServiceType)
 		if success {
 			common.RecordChannelLog(channelLogStore, metricsKey, channelIndex, requestModel, "", http.StatusOK, time.Since(attemptStart).Milliseconds(), true, apiKey, upstream.BaseURL, "", "Responses", attempt > 0, upstream.Name)
-			channelScheduler.RecordSuccessWithUsage(upstream.BaseURL, apiKey, metricsServiceType, nil, scheduler.ChannelKindResponses)
+			channelScheduler.RecordSuccessWithUsage(upstream.BaseURL, apiKey, metricsServiceType, requestModel, nil, scheduler.ChannelKindResponses)
 			return
 		}
 
@@ -134,7 +134,7 @@ func handleSingleChannelCompact(
 			if compactErr.shouldFailover {
 				failedKeys[apiKey] = true
 				cfgManager.MarkKeyAsFailed(apiKey, "Responses")
-				channelScheduler.RecordFailure(upstream.BaseURL, apiKey, metricsServiceType, scheduler.ChannelKindResponses)
+				channelScheduler.RecordFailure(upstream.BaseURL, apiKey, metricsServiceType, requestModel, scheduler.ChannelKindResponses)
 				common.RecordChannelLog(channelLogStore, metricsKey, channelIndex, requestModel, "", compactErr.status, time.Since(attemptStart).Milliseconds(), false, apiKey, upstream.BaseURL, compactErr.errorInfo(), "Responses", attempt > 0, upstream.Name)
 				continue
 			}
@@ -261,7 +261,7 @@ func tryCompactChannelWithAllKeys(
 
 		if success {
 			common.RecordChannelLog(channelLogStore, metricsKey, channelIndex, requestModel, "", http.StatusOK, time.Since(attemptStart).Milliseconds(), true, apiKey, upstream.BaseURL, "", "Responses", attempt > 0, upstream.Name)
-			channelScheduler.RecordSuccessWithUsage(upstream.BaseURL, apiKey, metricsServiceType, nil, scheduler.ChannelKindResponses)
+			channelScheduler.RecordSuccessWithUsage(upstream.BaseURL, apiKey, metricsServiceType, requestModel, nil, scheduler.ChannelKindResponses)
 			// 释放探针
 			probeKey := upstream.BaseURL + "|" + apiKey
 			if probeAcquired[probeKey] {
@@ -276,7 +276,7 @@ func tryCompactChannelWithAllKeys(
 			if compactErr.shouldFailover {
 				failedKeys[apiKey] = true
 				cfgManager.MarkKeyAsFailed(apiKey, "Responses")
-				channelScheduler.RecordFailure(upstream.BaseURL, apiKey, metricsServiceType, scheduler.ChannelKindResponses)
+				channelScheduler.RecordFailure(upstream.BaseURL, apiKey, metricsServiceType, requestModel, scheduler.ChannelKindResponses)
 				common.RecordChannelLog(channelLogStore, metricsKey, channelIndex, requestModel, "", compactErr.status, time.Since(attemptStart).Milliseconds(), false, apiKey, upstream.BaseURL, compactErr.errorInfo(), "Responses", attempt > 0, upstream.Name)
 				// 释放探针
 				probeKey := upstream.BaseURL + "|" + apiKey

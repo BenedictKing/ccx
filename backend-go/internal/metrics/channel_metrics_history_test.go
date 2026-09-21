@@ -45,7 +45,7 @@ func TestMultiURLCombinedFailuresOpenChannelBeforeAnySingleIdentity(t *testing.T
 	for i := 0; i < 10; i++ {
 		baseURL := baseURLs[i%len(baseURLs)]
 		apiKey := apiKeys[(i/2)%len(apiKeys)]
-		m.RecordFailure(baseURL, apiKey, serviceType)
+		m.RecordFailure(baseURL, apiKey, serviceType, "")
 	}
 
 	for _, baseURL := range baseURLs {
@@ -80,9 +80,9 @@ func TestMultiURLCombinedFailureRecoversAfterSuccess(t *testing.T) {
 	apiKeys := []string{"sk-a", "sk-b"}
 	serviceType := "openai"
 	for i := 0; i < 10; i++ {
-		m.RecordFailure(baseURLs[i%2], apiKeys[(i/2)%2], serviceType)
+		m.RecordFailure(baseURLs[i%2], apiKeys[(i/2)%2], serviceType, "")
 	}
-	m.RecordSuccess(baseURLs[0], apiKeys[0], serviceType)
+	m.RecordSuccess(baseURLs[0], apiKeys[0], serviceType, "")
 
 	if got := m.GetChannelCircuitStateMultiURL(baseURLs, apiKeys, serviceType, ""); got != CircuitStateClosed {
 		t.Fatalf("channel state after success = %v, want closed", got)

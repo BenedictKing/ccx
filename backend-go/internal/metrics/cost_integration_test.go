@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"math"
+	"sort"
 	"testing"
 	"time"
 )
@@ -93,4 +94,46 @@ func TestGetKeyModelHistoricalStatsMultiURL_ComputesCostUSD(t *testing.T) {
 	if math.Abs(cost-2.475) > 0.01 {
 		t.Fatalf("expected ~2.475 USD, got %v", cost)
 	}
+}
+
+// TestRecordFailure_ModelAttribution 验证保活验证等旁路失败带上 model 后：
+// per-key 模型分桶按真实模型归因（不再落入 unknown 桶）；传空保持 unknown 兜底。
+func TestRecordFailure_ModelAttribution(t *testing.T) {
+	m := NewMetricsManager()
+	defer m.Stop()
+
+	baseURL := "https://example.com"
+	apiKey := "sk-test"
+
+	m.RecordFailure(baseURL, apiKey, "openai", "deepseek-v4-flash")
+	m.RecordSuccess(baseURL, apiKey, "openai", "kimi-k3")
+	m.RecordFailure(baseURL, apiKey, "openai", "")
+
+	modelData := m.GetKeyModelHistoricalStatsMultiURL([]string{baseURL}, apiKey, "openai", time.Hour, 5*time.Minute)
+	if _, ok := modelData["deepseek-v4-flash"]; !ok {
+		t.Fatalf("expected deepseek-v4-flash bucket, got models %v", keysOf(modelData))
+	}
+	if _, ok := modelData["kimi-k3"]; !ok {
+		t.Fatalf("expected kimi-k3 bucket, got models %v", keysOf(modelData))
+	}
+	unknownPoints, ok := modelData["unknown"]
+	if !ok || len(unknownPoints) == 0 {
+		t.Fatalf("expected unknown bucket for model-less failure, got models %v", keysOf(modelData))
+	}
+	var unknownRequests int64
+	for _, p := range unknownPoints {
+		unknownRequests += p.RequestCount
+	}
+	if unknownRequests != 1 {
+		t.Fatalf("expected 1 unknown request, got %d", unknownRequests)
+	}
+}
+
+func keysOf(m map[string][]KeyModelHistoryDataPoint) []string {
+	names := make([]string, 0, len(m))
+	for name := range m {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }

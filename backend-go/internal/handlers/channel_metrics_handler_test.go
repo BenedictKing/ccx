@@ -194,7 +194,7 @@ func TestChannelMetricsHandlers_FallbackServiceTypeForLegacyConfig(t *testing.T)
 			baseURL:     "https://example.com",
 			record: func(mm *metrics.MetricsManager, baseURL, apiKey, serviceType string) {
 				for i := 0; i < 5; i++ {
-					mm.RecordFailure(baseURL, apiKey, serviceType)
+					mm.RecordFailure(baseURL, apiKey, serviceType, "")
 				}
 			},
 			register: func(r *gin.Engine, mm *metrics.MetricsManager, cfgManager *config.ConfigManager) {
@@ -220,7 +220,7 @@ func TestChannelMetricsHandlers_FallbackServiceTypeForLegacyConfig(t *testing.T)
 			baseURL:     "https://example.com",
 			record: func(mm *metrics.MetricsManager, baseURL, apiKey, serviceType string) {
 				for i := 0; i < 5; i++ {
-					mm.RecordFailure(baseURL, apiKey, serviceType)
+					mm.RecordFailure(baseURL, apiKey, serviceType, "")
 				}
 			},
 			register: func(r *gin.Engine, mm *metrics.MetricsManager, cfgManager *config.ConfigManager) {
@@ -245,7 +245,7 @@ func TestChannelMetricsHandlers_FallbackServiceTypeForLegacyConfig(t *testing.T)
 			serviceType: "gemini",
 			baseURL:     "https://example.com",
 			record: func(mm *metrics.MetricsManager, baseURL, apiKey, serviceType string) {
-				mm.RecordSuccess(baseURL, apiKey, serviceType)
+				mm.RecordSuccess(baseURL, apiKey, serviceType, "")
 			},
 			register: func(r *gin.Engine, mm *metrics.MetricsManager, cfgManager *config.ConfigManager) {
 				r.GET("/gemini/channels/metrics/history", GetGeminiChannelMetricsHistory(mm, cfgManager))
@@ -271,7 +271,7 @@ func TestChannelMetricsHandlers_FallbackServiceTypeForLegacyConfig(t *testing.T)
 			serviceType: "openai",
 			baseURL:     "https://example.com",
 			record: func(mm *metrics.MetricsManager, baseURL, apiKey, serviceType string) {
-				mm.RecordSuccess(baseURL, apiKey, serviceType)
+				mm.RecordSuccess(baseURL, apiKey, serviceType, "")
 			},
 			register: func(r *gin.Engine, mm *metrics.MetricsManager, cfgManager *config.ConfigManager) {
 				r.GET("/chat/channels/:id/keys/metrics/history", GetChatChannelKeyMetricsHistory(mm, cfgManager))

@@ -11,18 +11,18 @@ import (
 	"github.com/BenedictKing/ccx/internal/warmup"
 )
 
-func (s *ChannelScheduler) RecordSuccess(baseURL, apiKey, serviceType string, kind ChannelKind) {
-	s.getMetricsManager(kind).RecordSuccess(baseURL, apiKey, serviceType)
+func (s *ChannelScheduler) RecordSuccess(baseURL, apiKey, serviceType, model string, kind ChannelKind) {
+	s.getMetricsManager(kind).RecordSuccess(baseURL, apiKey, serviceType, model)
 }
 
 // RecordSuccessWithUsage 记录渠道成功（带 Usage 数据）
-func (s *ChannelScheduler) RecordSuccessWithUsage(baseURL, apiKey, serviceType string, usage *types.Usage, kind ChannelKind) {
-	s.getMetricsManager(kind).RecordSuccessWithUsage(baseURL, apiKey, serviceType, usage)
+func (s *ChannelScheduler) RecordSuccessWithUsage(baseURL, apiKey, serviceType, model string, usage *types.Usage, kind ChannelKind) {
+	s.getMetricsManager(kind).RecordSuccessWithUsage(baseURL, apiKey, serviceType, model, usage)
 }
 
-// RecordFailure 记录渠道失败（使用 baseURL + apiKey）
-func (s *ChannelScheduler) RecordFailure(baseURL, apiKey, serviceType string, kind ChannelKind) {
-	s.getMetricsManager(kind).RecordFailure(baseURL, apiKey, serviceType)
+// RecordFailure 记录渠道失败（使用 baseURL + apiKey）。model 用于失败归因（保活验证等旁路调用方传入）。
+func (s *ChannelScheduler) RecordFailure(baseURL, apiKey, serviceType, model string, kind ChannelKind) {
+	s.getMetricsManager(kind).RecordFailure(baseURL, apiKey, serviceType, model)
 }
 
 // RecordRequestStart 记录请求开始

@@ -390,7 +390,7 @@ func TestGetChannelDashboard_AfterChannelDeletion(t *testing.T) {
 	})
 
 	// 为 channel 1 (ch-b) 记录 metrics
-	messagesMetrics.RecordSuccess("https://api-b.example.com", "sk-b", "claude")
+	messagesMetrics.RecordSuccess("https://api-b.example.com", "sk-b", "claude", "")
 
 	// 模拟删除 channel 0，此时配置中只剩 channel-b
 	removed, err := cfgManager.RemoveUpstream(0)

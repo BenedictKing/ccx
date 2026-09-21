@@ -1135,7 +1135,7 @@ func main() {
 			func(channelType string, channelIndex int, baseURL, apiKey, serviceType, model, detail string) {
 				kind := scheduler.ChannelKind(channelType)
 				normalizedServiceType := scheduler.NormalizedMetricsServiceType(kind, serviceType)
-				channelScheduler.RecordFailure(baseURL, apiKey, normalizedServiceType, kind)
+				channelScheduler.RecordFailure(baseURL, apiKey, normalizedServiceType, model, kind)
 
 				channelName := ""
 				cfg := cfgManager.GetConfig()

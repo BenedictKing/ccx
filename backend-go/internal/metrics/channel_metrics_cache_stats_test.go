@@ -16,13 +16,13 @@ func TestToResponse_TimeWindowsIncludesCacheStats(t *testing.T) {
 	key1 := "k1"
 	key2 := "k2"
 
-	m.RecordSuccessWithUsage(baseURL, key1, "openai", &types.Usage{
+	m.RecordSuccessWithUsage(baseURL, key1, "openai", "", &types.Usage{
 		InputTokens:              100,
 		OutputTokens:             10,
 		CacheCreationInputTokens: 20,
 		CacheReadInputTokens:     50,
 	})
-	m.RecordSuccessWithUsage(baseURL, key2, "openai", &types.Usage{
+	m.RecordSuccessWithUsage(baseURL, key2, "openai", "", &types.Usage{
 		InputTokens:  200,
 		OutputTokens: 20,
 	})
@@ -58,7 +58,7 @@ func TestRecordSuccessWithUsage_NormalizesResponsesPromptTotalsForCacheHitRate(t
 	baseURL := "https://example.com"
 	key := "k1"
 
-	m.RecordSuccessWithUsage(baseURL, key, "openai", &types.Usage{
+	m.RecordSuccessWithUsage(baseURL, key, "openai", "", &types.Usage{
 		InputTokens:          114931,
 		PromptTokensTotal:    114931,
 		OutputTokens:         100,
@@ -92,7 +92,7 @@ func TestRecordSuccessWithUsage_CacheCreationFallbackFromTTLBreakdown(t *testing
 	key := "k1"
 
 	// 上游有时只返回 TTL 细分字段（5m/1h），不返回 cache_creation_input_tokens。
-	m.RecordSuccessWithUsage(baseURL, key, "openai", &types.Usage{
+	m.RecordSuccessWithUsage(baseURL, key, "openai", "", &types.Usage{
 		InputTokens:                100,
 		OutputTokens:               10,
 		CacheCreationInputTokens:   0,

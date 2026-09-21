@@ -57,7 +57,7 @@ func TestGetChannelDashboard_IncludesBreakerFields(t *testing.T) {
 	defer imagesMetrics.Stop()
 
 	for i := 0; i < 5; i++ {
-		messagesMetrics.RecordFailure("https://example.com", "sk-test", "claude")
+		messagesMetrics.RecordFailure("https://example.com", "sk-test", "claude", "")
 	}
 
 	traceAffinity := session.NewTraceAffinityManager()
@@ -358,7 +358,7 @@ func TestGetChannelDashboard_GeminiFallbackServiceTypeReadsMetrics(t *testing.T)
 	defer imagesMetrics.Stop()
 
 	for i := 0; i < 5; i++ {
-		geminiMetrics.RecordFailure("https://example.com", "sk-test", "gemini")
+		geminiMetrics.RecordFailure("https://example.com", "sk-test", "gemini", "")
 	}
 
 	traceAffinity := session.NewTraceAffinityManager()
@@ -609,7 +609,7 @@ func TestGetChannelDashboard_ChatFallbackServiceTypeReadsMetrics(t *testing.T) {
 	defer imagesMetrics.Stop()
 
 	for i := 0; i < 5; i++ {
-		chatMetrics.RecordFailure("https://example.com", "sk-test", "openai")
+		chatMetrics.RecordFailure("https://example.com", "sk-test", "openai", "")
 	}
 
 	traceAffinity := session.NewTraceAffinityManager()

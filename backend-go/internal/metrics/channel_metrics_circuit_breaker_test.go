@@ -178,7 +178,7 @@ func TestQuotaFailureClassDoesNotAffectCircuit(t *testing.T) {
 	m := NewMetricsManager()
 	defer m.Stop()
 
-	m.RecordFailureWithClass("https://example.com", "sk-test", "claude", FailureClassQuota)
+	m.RecordFailureWithClass("https://example.com", "sk-test", "claude", "", FailureClassQuota)
 
 	if got := m.GetKeyCircuitState("https://example.com", "sk-test", "claude"); got != CircuitStateClosed {
 		t.Fatalf("circuit state = %v, want %v", got, CircuitStateClosed)
@@ -201,7 +201,7 @@ func TestToResponseMultiURLCircuitStateUsesChannelAvailability(t *testing.T) {
 	defer m.Stop()
 
 	m.MoveKeyToHalfOpen("https://example.com", "sk-recovered", "claude")
-	m.RecordSuccess("https://example.com", "sk-active", "claude")
+	m.RecordSuccess("https://example.com", "sk-active", "claude", "")
 
 	resp := m.ToResponseMultiURL(0, []string{"https://example.com"}, []string{"sk-active", "sk-recovered"}, "claude", 0)
 
@@ -218,7 +218,7 @@ func TestToResponseMultiURLCircuitStateClosedWhenOneBaseURLRecovered(t *testing.
 	for _, baseURL := range baseURLs {
 		m.MoveKeyToHalfOpen(baseURL, "sk-recovered", "claude")
 	}
-	m.RecordSuccess("https://primary.example.com", "sk-recovered", "claude")
+	m.RecordSuccess("https://primary.example.com", "sk-recovered", "claude", "")
 
 	resp := m.ToResponseMultiURL(0, baseURLs, []string{"sk-recovered"}, "claude", 0)
 
@@ -237,10 +237,10 @@ func TestCircuitLogsIncludeTransitionFields(t *testing.T) {
 	defer log.SetOutput(origWriter)
 
 	for i := 0; i < 5; i++ {
-		m.RecordFailure("https://example.com", "sk-test", "claude")
+		m.RecordFailure("https://example.com", "sk-test", "claude", "")
 	}
 	m.MoveKeyToHalfOpen("https://example.com", "sk-test", "claude")
-	m.RecordSuccess("https://example.com", "sk-test", "claude")
+	m.RecordSuccess("https://example.com", "sk-test", "claude", "")
 
 	output := buf.String()
 	if !strings.Contains(output, "from=closed") || !strings.Contains(output, "to=open") || !strings.Contains(output, "cause=breaker_threshold") {

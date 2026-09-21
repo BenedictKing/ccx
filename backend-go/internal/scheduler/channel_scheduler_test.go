@@ -421,7 +421,7 @@ func TestPromotedChannelBypassesHealthCheck(t *testing.T) {
 	// 模拟促销渠道之前有高失败率（使其不健康）
 	metricsManager := scheduler.messagesMetricsManager
 	for i := 0; i < 10; i++ {
-		metricsManager.RecordFailure("https://promoted.example.com", "sk-promoted-key", "claude")
+		metricsManager.RecordFailure("https://promoted.example.com", "sk-promoted-key", "claude", "")
 	}
 
 	// 验证促销渠道确实不健康
@@ -569,7 +569,7 @@ func TestNonPromotedChannelStillChecksHealth(t *testing.T) {
 	// 模拟第一个渠道不健康
 	metricsManager := scheduler.messagesMetricsManager
 	for i := 0; i < 10; i++ {
-		metricsManager.RecordFailure("https://unhealthy.example.com", "sk-unhealthy-key", "claude")
+		metricsManager.RecordFailure("https://unhealthy.example.com", "sk-unhealthy-key", "claude", "")
 	}
 
 	// 选择渠道 - 应该跳过不健康的渠道，选择健康的渠道
@@ -716,7 +716,7 @@ func TestExpiredPromotionNotBypassHealthCheck(t *testing.T) {
 	// 模拟过期促销渠道不健康
 	metricsManager := scheduler.messagesMetricsManager
 	for i := 0; i < 10; i++ {
-		metricsManager.RecordFailure("https://expired.example.com", "sk-expired-key", "claude")
+		metricsManager.RecordFailure("https://expired.example.com", "sk-expired-key", "claude", "")
 	}
 
 	// 选择渠道 - 过期促销渠道不应该被优先选择，应该选择健康的渠道

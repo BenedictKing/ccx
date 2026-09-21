@@ -7,20 +7,21 @@ import (
 	"github.com/BenedictKing/ccx/internal/types"
 )
 
-// RecordSuccess 记录成功请求（新方法，使用 baseURL + apiKey）
-func (m *MetricsManager) RecordSuccess(baseURL, apiKey, serviceType string) {
-	m.RecordSuccessWithUsage(baseURL, apiKey, serviceType, nil)
+// RecordSuccess 记录成功请求（使用 baseURL + apiKey）。model 为实际请求模型，
+// 探测/压缩等旁路流量传空则图表按 unknown 归桶。
+func (m *MetricsManager) RecordSuccess(baseURL, apiKey, serviceType, model string) {
+	m.RecordSuccessWithUsage(baseURL, apiKey, serviceType, model, nil)
 }
 
 // RecordSuccessWithUsage 记录成功请求（带 Usage 数据）
-func (m *MetricsManager) RecordSuccessWithUsage(baseURL, apiKey, serviceType string, usage *types.Usage) {
+func (m *MetricsManager) RecordSuccessWithUsage(baseURL, apiKey, serviceType, model string, usage *types.Usage) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.recordSuccessWithUsageLocked(baseURL, apiKey, serviceType, usage, time.Now())
+	m.recordSuccessWithUsageLocked(baseURL, apiKey, serviceType, model, usage, time.Now())
 }
 
-func (m *MetricsManager) recordSuccessWithUsageLocked(baseURL, apiKey, serviceType string, usage *types.Usage, now time.Time) {
+func (m *MetricsManager) recordSuccessWithUsageLocked(baseURL, apiKey, serviceType, model string, usage *types.Usage, now time.Time) {
 	metrics := m.getWritableMetricsLocked(baseURL, apiKey, serviceType)
 	metrics.RequestCount++
 	metrics.SuccessCount++
@@ -28,7 +29,7 @@ func (m *MetricsManager) recordSuccessWithUsageLocked(baseURL, apiKey, serviceTy
 
 	inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens := extractUsageTokens(usage)
 
-	m.appendToHistoryKeyWithUsage(metrics, now, true, FailureClassNone, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens)
+	m.appendToHistoryKeyWithUsage(metrics, now, true, FailureClassNone, model, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens)
 	m.handleBreakerSuccessLocked(metrics, now)
 
 	if m.store != nil {
@@ -45,31 +46,33 @@ func (m *MetricsManager) recordSuccessWithUsageLocked(baseURL, apiKey, serviceTy
 			OutputTokens:        outputTokens,
 			CacheCreationTokens: cacheCreationTokens,
 			CacheReadTokens:     cacheReadTokens,
+			Model:               model,
 			APIType:             m.apiType,
 		})
 	}
 }
 
-// RecordFailure 记录失败请求（新方法，使用 baseURL + apiKey）
-func (m *MetricsManager) RecordFailure(baseURL, apiKey, serviceType string) {
-	m.RecordFailureWithClass(baseURL, apiKey, serviceType, FailureClassRetryable)
+// RecordFailure 记录失败请求（使用 baseURL + apiKey）。model 为失败归因的请求模型，
+// 由保活验证等旁路调用方传入，使图表与熔断的单一模型归因能识别这类失败。
+func (m *MetricsManager) RecordFailure(baseURL, apiKey, serviceType, model string) {
+	m.RecordFailureWithClass(baseURL, apiKey, serviceType, model, FailureClassRetryable)
 }
 
 // RecordFailureWithClass 记录失败请求并指定失败分类。
-func (m *MetricsManager) RecordFailureWithClass(baseURL, apiKey, serviceType string, failureClass FailureClass) {
+func (m *MetricsManager) RecordFailureWithClass(baseURL, apiKey, serviceType, model string, failureClass FailureClass) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.recordFailureLocked(baseURL, apiKey, serviceType, normalizeFailureClass(false, failureClass), time.Now())
+	m.recordFailureLocked(baseURL, apiKey, serviceType, model, normalizeFailureClass(false, failureClass), time.Now())
 }
 
-func (m *MetricsManager) recordFailureLocked(baseURL, apiKey, serviceType string, failureClass FailureClass, now time.Time) {
+func (m *MetricsManager) recordFailureLocked(baseURL, apiKey, serviceType, model string, failureClass FailureClass, now time.Time) {
 	metrics := m.getWritableMetricsLocked(baseURL, apiKey, serviceType)
 	metrics.RequestCount++
 	metrics.FailureCount++
 	metrics.LastFailureAt = &now
 
-	m.appendToHistoryKey(metrics, now, false, normalizeFailureClass(false, failureClass))
+	m.appendToHistoryKey(metrics, now, false, normalizeFailureClass(false, failureClass), model)
 	m.handleBreakerFailureLocked(metrics, failureClass, now)
 
 	if m.store != nil {
@@ -86,6 +89,7 @@ func (m *MetricsManager) recordFailureLocked(baseURL, apiKey, serviceType string
 			OutputTokens:        0,
 			CacheCreationTokens: 0,
 			CacheReadTokens:     0,
+			Model:               model,
 			APIType:             m.apiType,
 		})
 	}
@@ -335,19 +339,20 @@ func (m *MetricsManager) RecordRequestFinalizeOutcome(baseURL, apiKey, serviceTy
 	}
 	if metrics == nil {
 		if success {
-			m.recordSuccessWithUsageLocked(baseURL, apiKey, serviceType, usage, time.Now())
+			m.recordSuccessWithUsageLocked(baseURL, apiKey, serviceType, "", usage, time.Now())
 		} else {
-			m.recordFailureLocked(baseURL, apiKey, serviceType, normalizeFailureClass(false, failureClass), time.Now())
+			m.recordFailureLocked(baseURL, apiKey, serviceType, "", normalizeFailureClass(false, failureClass), time.Now())
 		}
 		return
 	}
 
 	idx, ok := metrics.pendingHistoryIdx[requestID]
 	if !ok || idx < 0 || idx >= len(metrics.requestHistory) {
+		// pending 记录丢失，拿不到模型信息，按无模型记录处理
 		if success {
-			m.recordSuccessWithUsageLocked(baseURL, apiKey, serviceType, usage, time.Now())
+			m.recordSuccessWithUsageLocked(baseURL, apiKey, serviceType, "", usage, time.Now())
 		} else {
-			m.recordFailureLocked(baseURL, apiKey, serviceType, normalizeFailureClass(false, failureClass), time.Now())
+			m.recordFailureLocked(baseURL, apiKey, serviceType, "", normalizeFailureClass(false, failureClass), time.Now())
 		}
 		return
 	}
@@ -539,8 +544,8 @@ func (m *MetricsManager) RecordRequestEnd(baseURL, apiKey, serviceType string) {
 }
 
 // appendToHistoryKey 向 Key 历史记录添加请求（保留24小时）
-func (m *MetricsManager) appendToHistoryKey(metrics *KeyMetrics, timestamp time.Time, success bool, failureClass FailureClass) {
-	m.appendToHistoryKeyWithUsage(metrics, timestamp, success, failureClass, 0, 0, 0, 0)
+func (m *MetricsManager) appendToHistoryKey(metrics *KeyMetrics, timestamp time.Time, success bool, failureClass FailureClass, model string) {
+	m.appendToHistoryKeyWithUsage(metrics, timestamp, success, failureClass, model, 0, 0, 0, 0)
 }
 
 // cleanupHistoryLocked 清理超过 24 小时的历史记录，并同步修正 pendingHistoryIdx 索引。
@@ -587,8 +592,9 @@ func (m *MetricsManager) cleanupHistoryLocked(metrics *KeyMetrics) {
 }
 
 // appendToHistoryKeyWithUsage 向 Key 历史记录添加请求（带 Usage 数据）
-func (m *MetricsManager) appendToHistoryKeyWithUsage(metrics *KeyMetrics, timestamp time.Time, success bool, failureClass FailureClass, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens int64) {
+func (m *MetricsManager) appendToHistoryKeyWithUsage(metrics *KeyMetrics, timestamp time.Time, success bool, failureClass FailureClass, model string, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens int64) {
 	metrics.requestHistory = append(metrics.requestHistory, RequestRecord{
+		Model:                    model,
 		Timestamp:                timestamp,
 		Success:                  success,
 		FailureClass:             normalizeFailureClass(success, failureClass),
