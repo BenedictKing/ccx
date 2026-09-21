@@ -17,6 +17,9 @@ type AFPScaledCoefficient int64
 
 const afpScaleFactor int64 = 1_000_000
 
+// afpCST 是 AFP 目录统一使用的时区（Asia/Shanghai，无夏令时）。
+var afpCST = time.FixedZone("CST", 8*3600)
+
 // NewAFPCoefficient 从浮点数创建固定精度系数。
 // 仅用于目录初始化；运行时计算全部使用整数运算。
 func NewAFPCoefficient(v float64) AFPScaledCoefficient {
@@ -35,8 +38,8 @@ func (c AFPScaledCoefficient) Mul(other AFPScaledCoefficient) AFPScaledCoefficie
 }
 
 // ────────────────────────────────────────────────────────────────
-// 输入分段：AFP 输入系数按总输入 token 长度分段。
-// ≤32k → 基础系数 × 0.67，(32k, 128k] → × 1，>128k → × 2
+// 输入分段：2026-09-01 起官方取消输入长度分段。
+// 分界前保留历史规则：≤32k → ×0.67，(32k, 128k] → ×1，>128k → ×2。
 // ────────────────────────────────────────────────────────────────
 
 // InputSegment 表示输入 token 长度分段。
@@ -71,6 +74,21 @@ func ClassifyInputSegment(inputTokens int) InputSegment {
 		return InputSegmentMedium
 	}
 	return InputSegmentLong
+}
+
+// afpSegmentCutoff 是输入分段系数的取消时点（2026-09-01 00:00 CST）。
+// 官方公告：自 2026-09-01 起，文本生成模型与向量化模型的输入抵扣系数
+// 不再按输入长度分段，统一等于模型抵扣系数（即分段倍率恒为 1）。
+// 分界前保留历史三段倍率，保证历史时刻的成本复算结果不变。
+var afpSegmentCutoff = time.Date(2026, 9, 1, 0, 0, 0, 0, afpCST)
+
+// InputSegmentMultiplierAt 返回给定时刻的输入分段倍率。
+// 分界时点起恒为 1；分界前按 ClassifyInputSegment 的三段倍率。
+func InputSegmentMultiplierAt(at time.Time, inputTokens int) AFPScaledCoefficient {
+	if !at.Before(afpSegmentCutoff) {
+		return NewAFPCoefficient(1.0)
+	}
+	return InputSegmentMultiplier(ClassifyInputSegment(inputTokens))
 }
 
 // InputSegmentName 返回分段的可读名称。
@@ -183,16 +201,19 @@ type AFPCostResult struct {
 // ────────────────────────────────────────────────────────────────
 
 // agentPlanAFPRules 是编译期内置的火山 Agent Plan AFP 模型规则。
-// 基础系数来源：https://docs.volcengine.com/docs/82379/2516283 (套餐内 AFP 抵扣规则)
-// 活动倍率来源：https://www.volcengine.com/docs/82379/2533565
-// 核验日期：2026-08-18；minimax-m2.7/kimi-k2.6 已于 2026-08-18 下线移除，
-// glm-5.2 将于 2026-08-31 下线路由至 glm-5.3（系数一致，过渡期保留）。
+// 基础系数来源：https://docs.volcengine.com/docs/ark/agent-plan-personal-afp-credits-billing-rules
+// 活动倍率来源：https://docs.volcengine.com/docs/ark/agent-plan-personal-model-discount
+// 核验日期：2026-09-20。本次对齐 2026-09 官方口径：
+//   - 新增 glm-5.3-flash / deepseek-v4.1-flash / kimi-k2.8-preview / doubao-embedding-vision；
+//   - 移除已下线的 glm-5.2（官方抵扣表已无此模型）；
+//   - 修正 kimi-k2.7-code 与 deepseek-v4-pro 的历史活动边界（6/10 18:00 起，7/15 00:00 止）；
+//   - 输入分段系数自 2026-09-01 起取消，见 afpSegmentCutoff。
 var agentPlanAFPRules = []VolcengineAFPModelRule{
 	{
 		RuleID:     "volc-agent-doubao-seed-2-0-mini",
 		Plan:       "agent_plan",
-		SourceURL:  "https://docs.volcengine.com/docs/82379/2516283",
-		VerifiedAt: time.Date(2026, 8, 18, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
+		SourceURL:  "https://docs.volcengine.com/docs/ark/agent-plan-personal-afp-credits-billing-rules",
+		VerifiedAt: time.Date(2026, 9, 20, 0, 0, 0, 0, afpCST),
 		ModelIDs:   []string{"doubao-seed-2.0-mini"},
 		InputBase:  NewAFPCoefficient(0.25),
 		OutputBase: NewAFPCoefficient(0.25),
@@ -201,18 +222,38 @@ var agentPlanAFPRules = []VolcengineAFPModelRule{
 	{
 		RuleID:     "volc-agent-doubao-seed-2-0-lite",
 		Plan:       "agent_plan",
-		SourceURL:  "https://docs.volcengine.com/docs/82379/2516283",
-		VerifiedAt: time.Date(2026, 8, 18, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
+		SourceURL:  "https://docs.volcengine.com/docs/ark/agent-plan-personal-afp-credits-billing-rules",
+		VerifiedAt: time.Date(2026, 9, 20, 0, 0, 0, 0, afpCST),
 		ModelIDs:   []string{"doubao-seed-2.0-lite"},
 		InputBase:  NewAFPCoefficient(0.5),
 		OutputBase: NewAFPCoefficient(0.5),
 		Promotions: nil, // 无本轮活动
 	},
 	{
+		RuleID:     "volc-agent-glm53-flash",
+		Plan:       "agent_plan",
+		SourceURL:  "https://docs.volcengine.com/docs/ark/agent-plan-personal-afp-credits-billing-rules",
+		VerifiedAt: time.Date(2026, 9, 20, 0, 0, 0, 0, afpCST),
+		ModelIDs:   []string{"glm-5.3-flash"},
+		InputBase:  NewAFPCoefficient(0.5),
+		OutputBase: NewAFPCoefficient(0.5),
+		Promotions: []AFPPromotionRule{
+			{
+				PromotionID: "volc-agent-glm53-flash-x05-2026q3",
+				// 官方展示 2026-09-11 23:59:59，规范化为排他边界 2026-09-12 00:00:00
+				StartsAt:   time.Date(2026, 8, 28, 0, 0, 0, 0, afpCST),
+				EndsAt:     time.Date(2026, 9, 12, 0, 0, 0, 0, afpCST),
+				Multiplier: NewAFPCoefficient(0.5),
+				SourceURL:  "https://docs.volcengine.com/docs/ark/agent-plan-personal-model-discount",
+				VerifiedAt: time.Date(2026, 9, 20, 0, 0, 0, 0, afpCST),
+			},
+		},
+	},
+	{
 		RuleID:     "volc-agent-dsv4-flash",
 		Plan:       "agent_plan",
-		SourceURL:  "https://docs.volcengine.com/docs/82379/2516283",
-		VerifiedAt: time.Date(2026, 8, 18, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
+		SourceURL:  "https://docs.volcengine.com/docs/ark/agent-plan-personal-afp-credits-billing-rules",
+		VerifiedAt: time.Date(2026, 9, 20, 0, 0, 0, 0, afpCST),
 		ModelIDs:   []string{"deepseek-v4-flash"},
 		InputBase:  NewAFPCoefficient(0.5),
 		OutputBase: NewAFPCoefficient(0.5),
@@ -221,8 +262,8 @@ var agentPlanAFPRules = []VolcengineAFPModelRule{
 	{
 		RuleID:     "volc-agent-doubao-seed-2-1-turbo",
 		Plan:       "agent_plan",
-		SourceURL:  "https://docs.volcengine.com/docs/82379/2516283",
-		VerifiedAt: time.Date(2026, 8, 18, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
+		SourceURL:  "https://docs.volcengine.com/docs/ark/agent-plan-personal-afp-credits-billing-rules",
+		VerifiedAt: time.Date(2026, 9, 20, 0, 0, 0, 0, afpCST),
 		ModelIDs:   []string{"doubao-seed-2.1-turbo"},
 		InputBase:  NewAFPCoefficient(2.5),
 		OutputBase: NewAFPCoefficient(2.5),
@@ -231,8 +272,8 @@ var agentPlanAFPRules = []VolcengineAFPModelRule{
 	{
 		RuleID:     "volc-agent-doubao-seed-evolving",
 		Plan:       "agent_plan",
-		SourceURL:  "https://docs.volcengine.com/docs/82379/2516283",
-		VerifiedAt: time.Date(2026, 8, 18, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
+		SourceURL:  "https://docs.volcengine.com/docs/ark/agent-plan-personal-afp-credits-billing-rules",
+		VerifiedAt: time.Date(2026, 9, 20, 0, 0, 0, 0, afpCST),
 		ModelIDs:   []string{"doubao-seed-evolving"},
 		InputBase:  NewAFPCoefficient(2.5),
 		OutputBase: NewAFPCoefficient(2.5),
@@ -241,68 +282,88 @@ var agentPlanAFPRules = []VolcengineAFPModelRule{
 	{
 		RuleID:     "volc-agent-minimax-m3",
 		Plan:       "agent_plan",
-		SourceURL:  "https://docs.volcengine.com/docs/82379/2516283",
-		VerifiedAt: time.Date(2026, 8, 18, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
+		SourceURL:  "https://docs.volcengine.com/docs/ark/agent-plan-personal-afp-credits-billing-rules",
+		VerifiedAt: time.Date(2026, 9, 20, 0, 0, 0, 0, afpCST),
 		ModelIDs:   []string{"minimax-m3"},
 		InputBase:  NewAFPCoefficient(2.5),
 		OutputBase: NewAFPCoefficient(2.5),
 		Promotions: nil, // 无本轮活动
 	},
 	{
+		RuleID:     "volc-agent-dsv41-flash",
+		Plan:       "agent_plan",
+		SourceURL:  "https://docs.volcengine.com/docs/ark/agent-plan-personal-afp-credits-billing-rules",
+		VerifiedAt: time.Date(2026, 9, 20, 0, 0, 0, 0, afpCST),
+		ModelIDs:   []string{"deepseek-v4.1-flash"},
+		InputBase:  NewAFPCoefficient(2.5),
+		OutputBase: NewAFPCoefficient(2.5),
+		Promotions: []AFPPromotionRule{
+			{
+				PromotionID: "volc-agent-dsv41-flash-x05-2026q3",
+				// 官方展示 2026-09-28 23:59:59，规范化为排他边界 2026-09-29 00:00:00
+				StartsAt:   time.Date(2026, 9, 15, 0, 0, 0, 0, afpCST),
+				EndsAt:     time.Date(2026, 9, 29, 0, 0, 0, 0, afpCST),
+				Multiplier: NewAFPCoefficient(0.5),
+				SourceURL:  "https://docs.volcengine.com/docs/ark/agent-plan-personal-model-discount",
+				VerifiedAt: time.Date(2026, 9, 20, 0, 0, 0, 0, afpCST),
+			},
+		},
+	},
+	{
 		RuleID:     "volc-agent-glm53",
 		Plan:       "agent_plan",
-		SourceURL:  "https://docs.volcengine.com/docs/82379/2516283",
-		VerifiedAt: time.Date(2026, 8, 18, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
+		SourceURL:  "https://docs.volcengine.com/docs/ark/agent-plan-personal-afp-credits-billing-rules",
+		VerifiedAt: time.Date(2026, 9, 20, 0, 0, 0, 0, afpCST),
 		ModelIDs:   []string{"glm-5.3", "glm-latest"}, // glm-latest 是 glm-5.3 的显式别名
 		InputBase:  NewAFPCoefficient(4.5),
 		OutputBase: NewAFPCoefficient(4.5),
 		Promotions: nil, // 无本轮活动
 	},
 	{
-		RuleID:     "volc-agent-glm52",
-		Plan:       "agent_plan",
-		SourceURL:  "https://docs.volcengine.com/docs/82379/2516283",
-		VerifiedAt: time.Date(2026, 8, 18, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
-		ModelIDs:   []string{"glm-5.2"}, // 2026-08-31 下线后路由至 glm-5.3，系数一致
-		InputBase:  NewAFPCoefficient(4.5),
-		OutputBase: NewAFPCoefficient(4.5),
-		Promotions: []AFPPromotionRule{
-			{
-				PromotionID: "volc-agent-glm52-x025-2026q3",
-				// 官方页面展示 2026-08-08 23:59:59，规范化为排他边界 2026-08-09 00:00:00
-				StartsAt:   time.Date(2026, 7, 1, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
-				EndsAt:     time.Date(2026, 8, 9, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
-				Multiplier: NewAFPCoefficient(0.25),
-				SourceURL:  "https://www.volcengine.com/docs/82379/2533565",
-				VerifiedAt: time.Date(2026, 7, 24, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
-			},
-		},
-	},
-	{
 		RuleID:     "volc-agent-kimi-k27-code",
 		Plan:       "agent_plan",
-		SourceURL:  "https://docs.volcengine.com/docs/82379/2516283",
-		VerifiedAt: time.Date(2026, 8, 18, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
+		SourceURL:  "https://docs.volcengine.com/docs/ark/agent-plan-personal-afp-credits-billing-rules",
+		VerifiedAt: time.Date(2026, 9, 20, 0, 0, 0, 0, afpCST),
 		ModelIDs:   []string{"kimi-k2.7-code"},
 		InputBase:  NewAFPCoefficient(4.5),
 		OutputBase: NewAFPCoefficient(4.5),
 		Promotions: []AFPPromotionRule{
 			{
 				PromotionID: "volc-agent-kimi-k27-code-x025-2026q3",
-				// ×0.25 活动已结束
-				StartsAt:   time.Date(2026, 6, 1, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
-				EndsAt:     time.Date(2026, 7, 1, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
+				// ×0.25 活动已结束；官方展示 2026-07-15 00:00:00 截止
+				StartsAt:   time.Date(2026, 6, 10, 18, 0, 0, 0, afpCST),
+				EndsAt:     time.Date(2026, 7, 15, 0, 0, 0, 0, afpCST),
 				Multiplier: NewAFPCoefficient(0.25),
-				SourceURL:  "https://www.volcengine.com/docs/82379/2533565",
-				VerifiedAt: time.Date(2026, 7, 24, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
+				SourceURL:  "https://docs.volcengine.com/docs/ark/agent-plan-personal-model-discount",
+				VerifiedAt: time.Date(2026, 9, 20, 0, 0, 0, 0, afpCST),
+			},
+		},
+	},
+	{
+		RuleID:     "volc-agent-kimi-k28-preview",
+		Plan:       "agent_plan",
+		SourceURL:  "https://docs.volcengine.com/docs/ark/agent-plan-personal-afp-credits-billing-rules",
+		VerifiedAt: time.Date(2026, 9, 20, 0, 0, 0, 0, afpCST),
+		ModelIDs:   []string{"kimi-k2.8-preview"},
+		InputBase:  NewAFPCoefficient(8.0),
+		OutputBase: NewAFPCoefficient(8.0),
+		Promotions: []AFPPromotionRule{
+			{
+				PromotionID: "volc-agent-kimi-k28-preview-x06-2026q3",
+				// 官方展示 2026-09-30 23:59:59，规范化为排他边界 2026-10-01 00:00:00
+				StartsAt:   time.Date(2026, 9, 17, 0, 0, 0, 0, afpCST),
+				EndsAt:     time.Date(2026, 10, 1, 0, 0, 0, 0, afpCST),
+				Multiplier: NewAFPCoefficient(0.6),
+				SourceURL:  "https://docs.volcengine.com/docs/ark/agent-plan-personal-model-discount",
+				VerifiedAt: time.Date(2026, 9, 20, 0, 0, 0, 0, afpCST),
 			},
 		},
 	},
 	{
 		RuleID:     "volc-agent-dsv4-pro",
 		Plan:       "agent_plan",
-		SourceURL:  "https://docs.volcengine.com/docs/82379/2516283",
-		VerifiedAt: time.Date(2026, 8, 18, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
+		SourceURL:  "https://docs.volcengine.com/docs/ark/agent-plan-personal-afp-credits-billing-rules",
+		VerifiedAt: time.Date(2026, 9, 20, 0, 0, 0, 0, afpCST),
 		ModelIDs:   []string{"deepseek-v4-pro"},
 		InputBase:  NewAFPCoefficient(5.5),
 		OutputBase: NewAFPCoefficient(5.5),
@@ -310,23 +371,33 @@ var agentPlanAFPRules = []VolcengineAFPModelRule{
 			{
 				PromotionID: "volc-agent-dsv4-pro-x04-2026q3",
 				// ×0.4 活动已于 2026-07-15 00:00:00 结束
-				StartsAt:   time.Date(2026, 6, 1, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
-				EndsAt:     time.Date(2026, 7, 15, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
+				StartsAt:   time.Date(2026, 6, 10, 18, 0, 0, 0, afpCST),
+				EndsAt:     time.Date(2026, 7, 15, 0, 0, 0, 0, afpCST),
 				Multiplier: NewAFPCoefficient(0.4),
-				SourceURL:  "https://www.volcengine.com/docs/82379/2533565",
-				VerifiedAt: time.Date(2026, 7, 24, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
+				SourceURL:  "https://docs.volcengine.com/docs/ark/agent-plan-personal-model-discount",
+				VerifiedAt: time.Date(2026, 9, 20, 0, 0, 0, 0, afpCST),
 			},
 		},
 	},
 	{
 		RuleID:     "volc-agent-kimi-k3",
 		Plan:       "agent_plan",
-		SourceURL:  "https://docs.volcengine.com/docs/82379/2516283",
-		VerifiedAt: time.Date(2026, 8, 18, 0, 0, 0, 0, time.FixedZone("CST", 8*3600)),
+		SourceURL:  "https://docs.volcengine.com/docs/ark/agent-plan-personal-afp-credits-billing-rules",
+		VerifiedAt: time.Date(2026, 9, 20, 0, 0, 0, 0, afpCST),
 		ModelIDs:   []string{"kimi-k3"},
 		InputBase:  NewAFPCoefficient(10.0),
 		OutputBase: NewAFPCoefficient(10.0),
 		Promotions: nil, // 无本轮活动
+	},
+	{
+		RuleID:     "volc-agent-doubao-embedding-vision",
+		Plan:       "agent_plan",
+		SourceURL:  "https://docs.volcengine.com/docs/ark/agent-plan-personal-afp-credits-billing-rules",
+		VerifiedAt: time.Date(2026, 9, 20, 0, 0, 0, 0, afpCST),
+		ModelIDs:   []string{"doubao-embedding-vision"},
+		InputBase:  NewAFPCoefficient(0.5),
+		OutputBase: NewAFPCoefficient(0.5),
+		Promotions: nil, // 向量化模型无活动
 	},
 }
 
@@ -368,9 +439,9 @@ func ResolveVolcengineAFPCost(
 	result.InputBaseCoeff = rule.InputBase
 	result.OutputBaseCoeff = rule.OutputBase
 
-	// 输入分段
+	// 输入分段（2026-09-01 起官方取消分段，分段倍率恒为 1）
 	seg := ClassifyInputSegment(inputTokens)
-	segMult := InputSegmentMultiplier(seg)
+	segMult := InputSegmentMultiplierAt(at, inputTokens)
 	result.InputSegment = seg
 	result.SegmentMult = segMult
 

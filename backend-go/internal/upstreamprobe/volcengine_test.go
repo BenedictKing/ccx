@@ -44,12 +44,13 @@ func TestVolcenginePlanProbeModel(t *testing.T) {
 		t.Fatalf("无候选时探针模型 = %q, 期望 deepseek-v4-flash", got)
 	}
 	// deepseek-v4-flash 存在时优先使用
-	if got := volcenginePlanProbeModel(agentPlanURL, []string{"kimi-k3", "deepseek-v4-flash", "glm-5.2"}); got != "deepseek-v4-flash" {
+	if got := volcenginePlanProbeModel(agentPlanURL, []string{"kimi-k3", "deepseek-v4-flash", "glm-5.3"}); got != "deepseek-v4-flash" {
 		t.Fatalf("含 flash 时应优先 = %q, 期望 deepseek-v4-flash", got)
 	}
-	// Agent Plan 无 flash 时按 AFP 选最便宜（glm-5.2 当前有 ×0.25 活动，成本低于 pro）
-	if got := volcenginePlanProbeModel(agentPlanURL, []string{"kimi-k3", "deepseek-v4-pro", "glm-5.2"}); got != "glm-5.2" {
-		t.Fatalf("Agent Plan 最便宜模型 = %q, 期望 glm-5.2", got)
+	// Agent Plan 无 flash 时按 AFP 选最便宜（deepseek-v4.1-flash 有 ×0.5 活动，成本低于 pro；
+	// 活动结束后基础 2.5 仍低于 pro 5.5，断言对时间鲁棒）
+	if got := volcenginePlanProbeModel(agentPlanURL, []string{"kimi-k3", "deepseek-v4-pro", "deepseek-v4.1-flash"}); got != "deepseek-v4.1-flash" {
+		t.Fatalf("Agent Plan 最便宜模型 = %q, 期望 deepseek-v4.1-flash", got)
 	}
 	// Coding Plan 无 flash 时回退首个候选
 	if got := volcenginePlanProbeModel(codingURL, []string{"kimi-k3", "deepseek-v4-pro"}); got != "kimi-k3" {

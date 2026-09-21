@@ -84,7 +84,7 @@
   2. 无近期成功记录的次之。
   3. 剩余按成本升序（火山用 `ResolveVolcengineAFPCost` AFP 成本，非火山用 USD 等价 `pricingCost`）。
 - 预算：`SparseL2MaxModels` 数量上限 + `SparseL2MaxCostAFP` AFP 成本上限；最近失败模型不受成本预算限制。
-- 别名去重：`ResolveVolcengineAFPCost` 返回 `IsAlias/AliasOf`（如 `glm-latest` 是 `glm-5.3` 的显式别名，534ee04e；`glm-5.2` 保留至 8/31 下线），规范模型在列表内时跳过别名。
+- 别名去重：`ResolveVolcengineAFPCost` 返回 `IsAlias/AliasOf`（如 `glm-latest` 是 `glm-5.3` 的显式别名），规范模型在列表内时跳过别名。
 - 静默期 `L2ModelQuietPeriod`：近期成功模型在该期内降级（不重复浪费）。
 - 内存熔断信号：注入 `modelCircuitLookup`（`manager.go:177`，`SetModelCircuitLookup`），`circuit.IsModelCircuitOpen` 提供更快的失败信号，把熔断中模型标记为 `RecentlyFailed` 优先探测恢复。
 
@@ -161,7 +161,7 @@ healthcheck 不直接依赖 provider 适配层，而是通过 `internal/upstream
 - **数据面探针**（推理 key 可用性）：`upstreamprobe.VolcenginePlanL1Probe` / `ProbeVolcenginePlan`。healthcheck L1（`main.go:145`）与 autopilot 新渠道验证（`autopilot/verify_endpoint.go:472 verifyVolcenginePlanEndpoint`）共用同一实现，避免请求特征漂移。请求走真实 `/messages` 或 `/chat/completions`，非管控面。
 - **管控面**（套餐识别/模型发现/用量，凭证回填）：`autopilot/volcengine_coding_plan.go volcenginePlanClient`（HMAC 签名），供用量刷新→`TryRestoreDisabledKeysByUsage` 恢复。
 - **内置 manifest**（`config/builtin_models_manifest.go`）：火山 Agent/Coding Plan 条目 `DisableProbe=true`（普通 key 无法用 `/v1/models` 探测），保活 L1 探针成功后用 `volcengineAgentPlanModelIDs`/`volcengineCodingPlanModelIDs` 生成模型清单。
-- **AFP 定价**（`config/volcengine_afp_pricing.go`）：`ResolveVolcengineAFPCost` 供稀疏 L2 选模型按成本排序，含输入分段（≤32k×0.67 / ≤128k×1 / >128k×2）与活动倍率、别名解析。目录已同步至 2026-08 文档（534ee04e）：`glm-latest` 改指 `glm-5.3`，新增 doubao-seed-2.0-mini/lite、doubao-seed-2.1-turbo、minimax-m3 等基础系数，移除 kimi-k2.6 规则。
+- **AFP 定价**（`config/volcengine_afp_pricing.go`）：`ResolveVolcengineAFPCost` 供稀疏 L2 选模型按成本排序，含输入分段与活动倍率、别名解析。**输入分段系数自 2026-09-01（`afpSegmentCutoff`）取消**：分界前按 ≤32k×0.67 / ≤128k×1 / >128k×2，分界后统一 ×1（官方取消输入长度分段）。目录已同步至 2026-09-20 官方文档：新增 `glm-5.3-flash` / `deepseek-v4.1-flash` / `kimi-k2.8-preview` / `doubao-embedding-vision`，移除已下线的 `glm-5.2`，修正 kimi-k2.7-code 与 deepseek-v4-pro 历史活动边界（6/10 18:00 起、7/15 00:00 止）。
 
 ## 7. 关键状态流转
 

@@ -54,15 +54,15 @@ func TestSelectL2ProbeModels成本预算与数量上限(t *testing.T) {
 		SparseL2MaxCostAFP: 6,
 		L2ModelQuietPeriod: time.Hour,
 	}
-	now := time.Date(2026, 8, 8, 12, 0, 0, 0, time.FixedZone("CST", 8*3600))
+	now := time.Date(2026, 9, 20, 12, 0, 0, 0, time.FixedZone("CST", 8*3600))
 
 	got := m.selectL2ProbeModels("ch-volc", "keyhash", u,
-		[]string{"kimi-k3", "deepseek-v4-pro", "glm-5.2", "deepseek-v4-flash"},
+		[]string{"kimi-k3", "deepseek-v4-pro", "deepseek-v4.1-flash", "deepseek-v4-flash"},
 		nil, nil, policy, now)
 
-	// flash=2 AFP，glm=2 AFP（活动期），pro=5 AFP，k3=8 AFP；动态放宽后数量上限 3、成本上限 12，
-	// 因此选中 glm + flash + pro。
-	want := []string{"glm-5.2", "deepseek-v4-flash", "deepseek-v4-pro"}
+	// flash=2 AFP，v4.1-flash=3 AFP（×0.5 活动期），pro=7 AFP，k3=11 AFP；动态放宽后数量上限 3、
+	// 成本上限 12，因此选中 flash + v4.1-flash + pro（2+3+7=12）。
+	want := []string{"deepseek-v4-flash", "deepseek-v4.1-flash", "deepseek-v4-pro"}
 	if len(got) != len(want) {
 		t.Fatalf("选择结果 = %v，期望 %v", got, want)
 	}
@@ -81,13 +81,13 @@ func TestSelectL2ProbeModels失败优先可突破成本预算(t *testing.T) {
 		SparseL2MaxCostAFP: 2,
 		L2ModelQuietPeriod: time.Hour,
 	}
-	now := time.Date(2026, 8, 8, 12, 0, 0, 0, time.FixedZone("CST", 8*3600))
+	now := time.Date(2026, 9, 20, 12, 0, 0, 0, time.FixedZone("CST", 8*3600))
 	prev := map[string]metrics.KeyHealthRecord{
 		"kimi-k3": {LastStatus: StatusError, LastCheckAt: now.Add(-10 * time.Minute), ConsecutiveFailures: 1},
 	}
 
 	got := m.selectL2ProbeModels("ch-volc", "keyhash", u,
-		[]string{"deepseek-v4-flash", "kimi-k3", "glm-5.2"},
+		[]string{"deepseek-v4-flash", "kimi-k3", "deepseek-v4.1-flash"},
 		nil, prev, policy, now)
 
 	if len(got) != 1 || got[0] != "kimi-k3" {
@@ -103,17 +103,17 @@ func TestSelectL2ProbeModels近期成功降级(t *testing.T) {
 		SparseL2MaxCostAFP: 10,
 		L2ModelQuietPeriod: time.Hour,
 	}
-	now := time.Date(2026, 8, 8, 12, 0, 0, 0, time.FixedZone("CST", 8*3600))
+	now := time.Date(2026, 9, 20, 12, 0, 0, 0, time.FixedZone("CST", 8*3600))
 	prev := map[string]metrics.KeyHealthRecord{
 		"deepseek-v4-flash": {LastStatus: StatusOK, LastCheckAt: now.Add(-10 * time.Minute)},
 	}
 
 	got := m.selectL2ProbeModels("ch-volc", "keyhash", u,
-		[]string{"deepseek-v4-flash", "glm-5.2", "deepseek-v4-pro"},
+		[]string{"deepseek-v4-flash", "deepseek-v4.1-flash", "deepseek-v4-pro"},
 		nil, prev, policy, now)
 
-	// flash 虽更便宜，但近期成功，应排在无成功记录的 glm/pro 之后
-	if len(got) < 1 || got[0] != "glm-5.2" {
+	// flash 虽更便宜，但近期成功，应排在无成功记录的 v4.1-flash/pro 之后
+	if len(got) < 1 || got[0] != "deepseek-v4.1-flash" {
 		t.Fatalf("无成功记录模型应优先，结果 = %v", got)
 	}
 }
@@ -272,7 +272,7 @@ func TestClampCostByVolcengineBalance(t *testing.T) {
 func TestSelectL2ProbeModelsAFP余额收紧预算(t *testing.T) {
 	m := NewManager(func() config.Config { return config.Config{} }, newFakeKeyHealthStore(), nil, nil, Options{})
 	u := &config.UpstreamConfig{ProviderID: "volcengine", AccountUID: "acct_volc"}
-	// 余额紧张：剩余 40 AFP，5% = 2，仅够 flash(2)/glm(2) 之一
+	// 余额紧张：剩余 40 AFP，5% = 2，仅够 flash(2) 之一
 	m.SetProbeUsageResolver(&fakeUsageResolver{usage: &config.VolcenginePlanUsage{
 		FiveHour: &config.VolcenginePlanUsageWindow{Quota: 40, Used: 0},
 	}})
@@ -281,19 +281,18 @@ func TestSelectL2ProbeModelsAFP余额收紧预算(t *testing.T) {
 		SparseL2MaxCostAFP: 6,
 		L2ModelQuietPeriod: time.Hour,
 	}
-	now := time.Date(2026, 8, 8, 12, 0, 0, 0, time.FixedZone("CST", 8*3600))
+	now := time.Date(2026, 9, 20, 12, 0, 0, 0, time.FixedZone("CST", 8*3600))
 
 	got := m.selectL2ProbeModels("ch-volc", "keyhash", u,
-		[]string{"kimi-k3", "deepseek-v4-pro", "glm-5.2", "deepseek-v4-flash"},
+		[]string{"kimi-k3", "deepseek-v4-pro", "deepseek-v4.1-flash", "deepseek-v4-flash"},
 		nil, nil, policy, now)
 
-	// 成本上限被余额收紧到 2 AFP：仅第一个便宜模型（glm 或 flash，均 2 AFP）可入选，
-	// 累计后其余非失败模型超预算被跳过。
+	// 成本上限被余额收紧到 2 AFP：仅 flash(2) 可入选，v4.1-flash(3) 累计后超预算被跳过。
 	if len(got) != 1 {
 		t.Fatalf("余额收紧后应仅选中 1 个模型，结果 = %v", got)
 	}
-	if got[0] != "glm-5.2" && got[0] != "deepseek-v4-flash" {
-		t.Fatalf("应选中最便宜的 2 AFP 模型，结果 = %v", got)
+	if got[0] != "deepseek-v4-flash" {
+		t.Fatalf("应选中最低成本 2 AFP 的 flash，结果 = %v", got)
 	}
 }
 
@@ -309,14 +308,14 @@ func TestSelectL2ProbeModelsAFP余额充裕不收紧(t *testing.T) {
 		SparseL2MaxCostAFP: 6,
 		L2ModelQuietPeriod: time.Hour,
 	}
-	now := time.Date(2026, 8, 8, 12, 0, 0, 0, time.FixedZone("CST", 8*3600))
+	now := time.Date(2026, 9, 20, 12, 0, 0, 0, time.FixedZone("CST", 8*3600))
 
 	got := m.selectL2ProbeModels("ch-volc", "keyhash", u,
-		[]string{"kimi-k3", "deepseek-v4-pro", "glm-5.2", "deepseek-v4-flash"},
+		[]string{"kimi-k3", "deepseek-v4-pro", "deepseek-v4.1-flash", "deepseek-v4-flash"},
 		nil, nil, policy, now)
 
-	// 与无 resolver 时同构：动态放宽后成本上限 12，选中 glm(2)+flash(2)+pro(5)=9<=12。
-	want := []string{"glm-5.2", "deepseek-v4-flash", "deepseek-v4-pro"}
+	// 与无 resolver 时同构：动态放宽后成本上限 12，选中 flash(2)+v4.1-flash(3)+pro(7)=12<=12。
+	want := []string{"deepseek-v4-flash", "deepseek-v4.1-flash", "deepseek-v4-pro"}
 	if len(got) != len(want) {
 		t.Fatalf("余额充裕不应收紧预算，结果 = %v，期望 %v", got, want)
 	}

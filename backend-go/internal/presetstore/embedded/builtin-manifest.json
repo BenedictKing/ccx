@@ -187,8 +187,11 @@
         "glm-latest",
         "deepseek-v4-flash",
         "deepseek-v4-pro",
+        "deepseek-v4.1-flash",
         "kimi-k3",
-        "kimi-k2.7-code"
+        "kimi-k2.7-code",
+        "kimi-k2.8-preview",
+        "glm-5.3-flash"
       ],
       "excludeModelPatterns": [
         "(?:^|[-_/])(?:embedding|seedance|seedream|tts|asr|ocr)(?:[-_.]|$)"
@@ -206,7 +209,9 @@
         "glm-5.3",
         "deepseek-v4-flash",
         "deepseek-v4-pro",
-        "kimi-k2.7-code"
+        "kimi-k2.7-code",
+        "kimi-k2.8-preview",
+        "glm-5.3-flash"
       ],
       "excludeModelPatterns": [
         "(?:^|[-_/])(?:embedding|seedance|seedream|tts|asr|ocr)(?:[-_.]|$)"
@@ -227,8 +232,11 @@
         "glm-latest",
         "deepseek-v4-flash",
         "deepseek-v4-pro",
+        "deepseek-v4.1-flash",
         "kimi-k3",
-        "kimi-k2.7-code"
+        "kimi-k2.7-code",
+        "kimi-k2.8-preview",
+        "glm-5.3-flash"
       ],
       "excludeModelPatterns": [
         "(?:^|[-_/])(?:embedding|seedance|seedream|tts|asr|ocr)(?:[-_.]|$)"
@@ -246,7 +254,9 @@
         "glm-5.3",
         "deepseek-v4-flash",
         "deepseek-v4-pro",
-        "kimi-k2.7-code"
+        "kimi-k2.7-code",
+        "kimi-k2.8-preview",
+        "glm-5.3-flash"
       ],
       "excludeModelPatterns": [
         "(?:^|[-_/])(?:embedding|seedance|seedream|tts|asr|ocr)(?:[-_.]|$)"
@@ -267,8 +277,11 @@
         "glm-latest",
         "deepseek-v4-flash",
         "deepseek-v4-pro",
+        "deepseek-v4.1-flash",
         "kimi-k3",
-        "kimi-k2.7-code"
+        "kimi-k2.7-code",
+        "kimi-k2.8-preview",
+        "glm-5.3-flash"
       ],
       "excludeModelPatterns": [
         "(?:^|[-_/])(?:embedding|seedance|seedream|tts|asr|ocr)(?:[-_.]|$)"
@@ -286,7 +299,9 @@
         "glm-5.3",
         "deepseek-v4-flash",
         "deepseek-v4-pro",
-        "kimi-k2.7-code"
+        "kimi-k2.7-code",
+        "kimi-k2.8-preview",
+        "glm-5.3-flash"
       ],
       "excludeModelPatterns": [
         "(?:^|[-_/])(?:embedding|seedance|seedream|tts|asr|ocr)(?:[-_.]|$)"
