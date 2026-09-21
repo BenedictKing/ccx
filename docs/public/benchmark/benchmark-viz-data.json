@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-21T01:35:19.717Z",
+  "generatedAt": "2026-09-21T03:46:06.585Z",
   "qualityTiers": {
     "scale": "0-100",
     "algorithm": "fixed-direct-calibration-v3",
@@ -86,8 +86,8 @@
       "model": "deepseek-v4.1-flash",
       "effort": "high",
       "pass_rate": 0.671,
-      "mean_cost": 0.1744,
-      "median_cost": 0.1561,
+      "mean_cost": 0.1749,
+      "median_cost": 0.1588,
       "source": "CodexRadar",
       "sourceModel": "deepseek-v4.1-flash",
       "taskCount": 158,
@@ -98,8 +98,8 @@
       "model": "deepseek-v4.1-flash",
       "effort": "max",
       "pass_rate": 0.592,
-      "mean_cost": 0.2593,
-      "median_cost": 0.229,
+      "mean_cost": 0.265,
+      "median_cost": 0.23,
       "source": "CodexRadar",
       "sourceModel": "deepseek-v4.1-flash",
       "taskCount": 147,
@@ -314,8 +314,8 @@
       "model": "gpt-5.6-sol",
       "effort": "low",
       "pass_rate": 0.58,
-      "mean_cost": 1.5856,
-      "median_cost": 1.162,
+      "mean_cost": 1.5847,
+      "median_cost": 1.1614,
       "source": "CodexRadar",
       "sourceModel": "gpt-5.6-sol",
       "taskCount": 112,
@@ -517,13 +517,13 @@
     {
       "model": "gpt-6-astra",
       "effort": "ultra",
-      "pass_rate": 0.688,
-      "mean_cost": 10.2635,
-      "median_cost": 8.8955,
+      "pass_rate": 0.679,
+      "mean_cost": 10.3033,
+      "median_cost": 8.9145,
       "source": "CodexRadar",
       "sourceModel": "gpt-6-astra",
       "taskCount": 112,
-      "quality_score": 68.8,
+      "quality_score": 67.9,
       "model_quality_score": 71.4
     },
     {
@@ -566,7 +566,7 @@
       "model": "grok-4.6",
       "effort": "xhigh",
       "pass_rate": 0.732,
-      "mean_cost": 3.9771,
+      "mean_cost": 3.9801,
       "median_cost": 3.2237,
       "source": "CodexRadar",
       "sourceModel": "grok-4.6",
@@ -1471,7 +1471,7 @@
       "metric": "agentic_index",
       "score": 50.7,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-fable-5",
@@ -1488,7 +1488,7 @@
       "metric": "agentic_index",
       "score": 47.1,
       "effort": "low",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-fable-5-1",
@@ -1497,7 +1497,7 @@
       "metric": "agentic_index",
       "score": 50.2,
       "effort": "medium",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-fable-5-1",
@@ -1506,7 +1506,7 @@
       "metric": "agentic_index",
       "score": 57.9,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-fable-5-1",
@@ -1515,7 +1515,7 @@
       "metric": "agentic_index",
       "score": 57.2,
       "effort": "xhigh",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-fable-5-1",
@@ -1524,7 +1524,7 @@
       "metric": "agentic_index",
       "score": 53.1,
       "effort": "high",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-fable-5-1",
@@ -1565,7 +1565,7 @@
       "metric": "agentic_index",
       "score": 38.6,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-opus-4-7",
@@ -1582,7 +1582,7 @@
       "metric": "agentic_index",
       "score": 41.9,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-opus-4-8",
@@ -1599,7 +1599,7 @@
       "metric": "agentic_index",
       "score": 55.6,
       "effort": "xhigh",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-opus-5",
@@ -1608,7 +1608,7 @@
       "metric": "agentic_index",
       "score": 36,
       "effort": "low",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-opus-5",
@@ -1617,7 +1617,7 @@
       "metric": "agentic_index",
       "score": 52.3,
       "effort": "high",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-opus-5",
@@ -1626,7 +1626,7 @@
       "metric": "agentic_index",
       "score": 56.5,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-opus-5",
@@ -1635,7 +1635,7 @@
       "metric": "agentic_index",
       "score": 46.2,
       "effort": "medium",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-opus-5",
@@ -1668,7 +1668,7 @@
       "metric": "agentic_index",
       "score": 43.6,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-sonnet-5",
@@ -1685,7 +1685,7 @@
       "metric": "agentic_index",
       "score": 41,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "deepseek-v4-flash",
@@ -1702,7 +1702,7 @@
       "metric": "agentic_index",
       "score": 41.3,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "deepseek-v4-pro",
@@ -1735,7 +1735,7 @@
       "metric": "agentic_index",
       "score": 26,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gemini-3.5-flash",
@@ -1752,7 +1752,7 @@
       "metric": "agentic_index",
       "score": 14.3,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gemini-3.5-flash-lite",
@@ -1769,7 +1769,7 @@
       "metric": "agentic_index",
       "score": 29,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gemini-3.6-flash",
@@ -1786,7 +1786,7 @@
       "metric": "agentic_index",
       "score": 35.2,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gemini-3.7-flash",
@@ -1803,7 +1803,7 @@
       "metric": "agentic_index",
       "score": 39.7,
       "effort": "medium",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gemini-3.8-flash",
@@ -1812,7 +1812,7 @@
       "metric": "agentic_index",
       "score": 40.2,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gemini-3.8-flash",
@@ -1821,7 +1821,7 @@
       "metric": "agentic_index",
       "score": 32.6,
       "effort": "low",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gemini-3.8-flash",
@@ -1846,7 +1846,7 @@
       "metric": "agentic_index",
       "score": 23.9,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "glm-5.1",
@@ -1863,7 +1863,7 @@
       "metric": "agentic_index",
       "score": 38.4,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "glm-5.2",
@@ -1880,7 +1880,7 @@
       "metric": "agentic_index",
       "score": 53.1,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "glm-5.3",
@@ -1897,7 +1897,7 @@
       "metric": "agentic_index",
       "score": 50.9,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "glm-5.3-flash",
@@ -1938,7 +1938,7 @@
       "metric": "agentic_index",
       "score": 17.9,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.4-mini",
@@ -1955,7 +1955,7 @@
       "metric": "agentic_index",
       "score": 16,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.4-nano",
@@ -1980,7 +1980,7 @@
       "metric": "agentic_index",
       "score": 36.4,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.5",
@@ -1989,7 +1989,7 @@
       "metric": "agentic_index",
       "score": 29.5,
       "effort": "medium",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.5",
@@ -1998,7 +1998,7 @@
       "metric": "agentic_index",
       "score": 34.3,
       "effort": "high",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.5",
@@ -2023,7 +2023,7 @@
       "metric": "agentic_index",
       "score": 16.1,
       "effort": "low",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-luna",
@@ -2032,7 +2032,7 @@
       "metric": "agentic_index",
       "score": 42.1,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-luna",
@@ -2041,7 +2041,7 @@
       "metric": "agentic_index",
       "score": 23.9,
       "effort": "medium",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-luna",
@@ -2050,7 +2050,7 @@
       "metric": "agentic_index",
       "score": 38.7,
       "effort": "xhigh",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-luna",
@@ -2059,7 +2059,7 @@
       "metric": "agentic_index",
       "score": 34.6,
       "effort": "high",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-luna",
@@ -2076,7 +2076,7 @@
       "metric": "agentic_index",
       "score": 31.6,
       "effort": "low",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-sol",
@@ -2085,7 +2085,7 @@
       "metric": "agentic_index",
       "score": 39.7,
       "effort": "medium",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-sol",
@@ -2094,7 +2094,7 @@
       "metric": "agentic_index",
       "score": 50.2,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-sol",
@@ -2103,7 +2103,7 @@
       "metric": "agentic_index",
       "score": 44.2,
       "effort": "high",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-sol",
@@ -2112,7 +2112,7 @@
       "metric": "agentic_index",
       "score": 47.4,
       "effort": "xhigh",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-sol",
@@ -2129,7 +2129,7 @@
       "metric": "agentic_index",
       "score": 30.4,
       "effort": "medium",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-terra",
@@ -2138,7 +2138,7 @@
       "metric": "agentic_index",
       "score": 36.7,
       "effort": "high",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-terra",
@@ -2147,7 +2147,7 @@
       "metric": "agentic_index",
       "score": 43.2,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-terra",
@@ -2156,7 +2156,7 @@
       "metric": "agentic_index",
       "score": 41.4,
       "effort": "xhigh",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-terra",
@@ -2165,7 +2165,7 @@
       "metric": "agentic_index",
       "score": 25.9,
       "effort": "low",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-terra",
@@ -2182,7 +2182,7 @@
       "metric": "agentic_index",
       "score": 50.2,
       "effort": "xhigh",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-6-astra",
@@ -2191,7 +2191,7 @@
       "metric": "agentic_index",
       "score": 51,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-6-astra",
@@ -2200,7 +2200,7 @@
       "metric": "agentic_index",
       "score": 38.8,
       "effort": "low",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-6-astra",
@@ -2209,7 +2209,7 @@
       "metric": "agentic_index",
       "score": 48.2,
       "effort": "high",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-6-astra",
@@ -2218,7 +2218,7 @@
       "metric": "agentic_index",
       "score": 46,
       "effort": "medium",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-6-astra",
@@ -2243,7 +2243,7 @@
       "metric": "agentic_index",
       "score": 41.2,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "grok-4.5",
@@ -2260,7 +2260,7 @@
       "metric": "agentic_index",
       "score": 50.6,
       "effort": "medium",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "grok-4.6",
@@ -2269,7 +2269,7 @@
       "metric": "agentic_index",
       "score": 41.2,
       "effort": "low",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "grok-4.6",
@@ -2278,7 +2278,7 @@
       "metric": "agentic_index",
       "score": 53,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "grok-4.6",
@@ -2287,7 +2287,7 @@
       "metric": "agentic_index",
       "score": 52.5,
       "effort": "xhigh",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "grok-4.6",
@@ -2312,7 +2312,7 @@
       "metric": "agentic_index",
       "score": 20.5,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "kimi-k2.7-code",
@@ -2321,7 +2321,7 @@
       "metric": "agentic_index",
       "score": 21,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "kimi-k2.7-code",
@@ -2338,7 +2338,7 @@
       "metric": "agentic_index",
       "score": 50,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "kimi-k3",
@@ -2355,7 +2355,7 @@
       "metric": "agentic_index",
       "score": 14,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "mimo-v2.5",
@@ -2372,7 +2372,7 @@
       "metric": "agentic_index",
       "score": 21.3,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "mimo-v2.5-pro",
@@ -2389,7 +2389,7 @@
       "metric": "agentic_index",
       "score": 15.3,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "minimax-m2.7",
@@ -2406,7 +2406,7 @@
       "metric": "agentic_index",
       "score": 29.5,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "minimax-m3",
@@ -2423,7 +2423,7 @@
       "metric": "agentic_index",
       "score": 25.8,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "muse-spark-1.1",
@@ -2440,7 +2440,7 @@
       "metric": "agentic_index",
       "score": 43.2,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "muse-spark-1.2",
@@ -2457,7 +2457,7 @@
       "metric": "agentic_index",
       "score": 55.5,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "muse-spark-1.3",
@@ -2466,7 +2466,7 @@
       "metric": "agentic_index",
       "score": 51.5,
       "effort": "xhigh",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "muse-spark-1.3",
@@ -2483,7 +2483,7 @@
       "metric": "agentic_index",
       "score": 22.5,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "qwen3.7-max",
@@ -2500,7 +2500,7 @@
       "metric": "agentic_index",
       "score": 17.5,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "qwen3.7-plus",
@@ -2517,7 +2517,7 @@
       "metric": "agentic_index",
       "score": 56,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "qwen3.8-max",
@@ -2542,7 +2542,7 @@
       "metric": "coding_index",
       "score": 76.5,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-fable-5",
@@ -2604,7 +2604,7 @@
       "metric": "coding_index",
       "score": 75.2,
       "effort": "low",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-fable-5-1",
@@ -2613,7 +2613,7 @@
       "metric": "coding_index",
       "score": 77.1,
       "effort": "medium",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-fable-5-1",
@@ -2622,7 +2622,7 @@
       "metric": "coding_index",
       "score": 81.6,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-fable-5-1",
@@ -2631,7 +2631,7 @@
       "metric": "coding_index",
       "score": 80.7,
       "effort": "xhigh",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-fable-5-1",
@@ -2640,7 +2640,7 @@
       "metric": "coding_index",
       "score": 79.1,
       "effort": "high",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-fable-5-1",
@@ -2698,7 +2698,7 @@
       "metric": "coding_index",
       "score": 73.6,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-opus-4-7",
@@ -2715,7 +2715,7 @@
       "metric": "coding_index",
       "score": 74.3,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-opus-4-8",
@@ -2777,7 +2777,7 @@
       "metric": "coding_index",
       "score": 77,
       "effort": "xhigh",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-opus-5",
@@ -2786,7 +2786,7 @@
       "metric": "coding_index",
       "score": 66.9,
       "effort": "low",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-opus-5",
@@ -2795,7 +2795,7 @@
       "metric": "coding_index",
       "score": 76.5,
       "effort": "high",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-opus-5",
@@ -2804,7 +2804,7 @@
       "metric": "coding_index",
       "score": 78,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-opus-5",
@@ -2813,7 +2813,7 @@
       "metric": "coding_index",
       "score": 74.3,
       "effort": "medium",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-opus-5",
@@ -2900,7 +2900,7 @@
       "metric": "coding_index",
       "score": 71.5,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-sonnet-5",
@@ -2970,7 +2970,7 @@
       "metric": "coding_index",
       "score": 52,
       "effort": "high",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "deepseek-v4-flash",
@@ -2979,7 +2979,7 @@
       "metric": "coding_index",
       "score": 69.1,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "deepseek-v4-flash",
@@ -3041,7 +3041,7 @@
       "metric": "coding_index",
       "score": 58.7,
       "effort": "high",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "deepseek-v4-pro",
@@ -3050,7 +3050,7 @@
       "metric": "coding_index",
       "score": 68.8,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "deepseek-v4-pro",
@@ -3128,7 +3128,7 @@
       "metric": "coding_index",
       "score": 70.1,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gemini-3.5-flash",
@@ -3154,7 +3154,7 @@
       "metric": "coding_index",
       "score": 49.3,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gemini-3.5-flash-lite",
@@ -3171,7 +3171,7 @@
       "metric": "coding_index",
       "score": 69.2,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gemini-3.6-flash",
@@ -3197,7 +3197,7 @@
       "metric": "coding_index",
       "score": 76.1,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gemini-3.7-flash",
@@ -3206,7 +3206,7 @@
       "metric": "coding_index",
       "score": 71,
       "effort": "low",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gemini-3.7-flash",
@@ -3215,7 +3215,7 @@
       "metric": "coding_index",
       "score": 71.5,
       "effort": "medium",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gemini-3.7-flash",
@@ -3286,7 +3286,7 @@
       "metric": "coding_index",
       "score": 74.1,
       "effort": "medium",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gemini-3.8-flash",
@@ -3295,7 +3295,7 @@
       "metric": "coding_index",
       "score": 76.3,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gemini-3.8-flash",
@@ -3304,7 +3304,7 @@
       "metric": "coding_index",
       "score": 73.5,
       "effort": "low",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gemini-3.8-flash",
@@ -3356,7 +3356,7 @@
       "metric": "coding_index",
       "score": 55.8,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "glm-5.1",
@@ -3373,7 +3373,7 @@
       "metric": "coding_index",
       "score": 68.8,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "glm-5.2",
@@ -3408,7 +3408,7 @@
       "metric": "coding_index",
       "score": 74.8,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "glm-5.3",
@@ -3461,7 +3461,7 @@
       "metric": "coding_index",
       "score": 71.5,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "glm-5.3-flash",
@@ -3538,7 +3538,7 @@
       "metric": "coding_index",
       "score": 71.1,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.4",
@@ -3564,7 +3564,7 @@
       "metric": "coding_index",
       "score": 56.1,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.4-mini",
@@ -3590,7 +3590,7 @@
       "metric": "coding_index",
       "score": 56.1,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.4-nano",
@@ -3607,7 +3607,7 @@
       "metric": "coding_index",
       "score": 74.9,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.5",
@@ -3616,7 +3616,7 @@
       "metric": "coding_index",
       "score": 71.5,
       "effort": "medium",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.5",
@@ -3625,7 +3625,7 @@
       "metric": "coding_index",
       "score": 71.6,
       "effort": "high",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.5",
@@ -3634,7 +3634,7 @@
       "metric": "coding_index",
       "score": 60.9,
       "effort": "low",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.5",
@@ -3705,7 +3705,7 @@
       "metric": "coding_index",
       "score": 44.2,
       "effort": "low",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-luna",
@@ -3714,7 +3714,7 @@
       "metric": "coding_index",
       "score": 71.4,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-luna",
@@ -3723,7 +3723,7 @@
       "metric": "coding_index",
       "score": 50.7,
       "effort": "medium",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-luna",
@@ -3732,7 +3732,7 @@
       "metric": "coding_index",
       "score": 68.6,
       "effort": "xhigh",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-luna",
@@ -3741,7 +3741,7 @@
       "metric": "coding_index",
       "score": 63.3,
       "effort": "high",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-luna",
@@ -3848,7 +3848,7 @@
       "metric": "coding_index",
       "score": 69.7,
       "effort": "low",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-sol",
@@ -3857,7 +3857,7 @@
       "metric": "coding_index",
       "score": 76.3,
       "effort": "medium",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-sol",
@@ -3866,7 +3866,7 @@
       "metric": "coding_index",
       "score": 77.4,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-sol",
@@ -3875,7 +3875,7 @@
       "metric": "coding_index",
       "score": 77.2,
       "effort": "high",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-sol",
@@ -3884,7 +3884,7 @@
       "metric": "coding_index",
       "score": 78.3,
       "effort": "xhigh",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-sol",
@@ -4000,7 +4000,7 @@
       "metric": "coding_index",
       "score": 64.7,
       "effort": "medium",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-terra",
@@ -4009,7 +4009,7 @@
       "metric": "coding_index",
       "score": 67.1,
       "effort": "high",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-terra",
@@ -4018,7 +4018,7 @@
       "metric": "coding_index",
       "score": 76.7,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-terra",
@@ -4027,7 +4027,7 @@
       "metric": "coding_index",
       "score": 70.6,
       "effort": "xhigh",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-terra",
@@ -4036,7 +4036,7 @@
       "metric": "coding_index",
       "score": 58.1,
       "effort": "low",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-terra",
@@ -4152,7 +4152,7 @@
       "metric": "coding_index",
       "score": 75.9,
       "effort": "xhigh",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-6-astra",
@@ -4161,7 +4161,7 @@
       "metric": "coding_index",
       "score": 76.9,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-6-astra",
@@ -4170,7 +4170,7 @@
       "metric": "coding_index",
       "score": 75.7,
       "effort": "low",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-6-astra",
@@ -4179,7 +4179,7 @@
       "metric": "coding_index",
       "score": 77.1,
       "effort": "high",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-6-astra",
@@ -4188,7 +4188,7 @@
       "metric": "coding_index",
       "score": 76.7,
       "effort": "medium",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-6-astra",
@@ -4248,7 +4248,7 @@
       "source": "CodexRadar",
       "category": "coding",
       "metric": "pass_at_1",
-      "score": 68.8,
+      "score": 67.9,
       "effort": "ultra",
       "taskCount": 112
     },
@@ -4312,7 +4312,7 @@
       "metric": "coding_index",
       "score": 72.4,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "grok-4.5",
@@ -4338,7 +4338,7 @@
       "metric": "coding_index",
       "score": 74.4,
       "effort": "medium",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "grok-4.6",
@@ -4347,7 +4347,7 @@
       "metric": "coding_index",
       "score": 66.3,
       "effort": "low",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "grok-4.6",
@@ -4356,7 +4356,7 @@
       "metric": "coding_index",
       "score": 76.8,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "grok-4.6",
@@ -4365,7 +4365,7 @@
       "metric": "coding_index",
       "score": 75.9,
       "effort": "xhigh",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "grok-4.6",
@@ -4471,7 +4471,7 @@
       "metric": "coding_index",
       "score": 46.8,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "kimi-k2.5",
@@ -4488,7 +4488,7 @@
       "metric": "coding_index",
       "score": 61.8,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "kimi-k2.7-code",
@@ -4497,7 +4497,7 @@
       "metric": "coding_index",
       "score": 60.8,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "kimi-k2.7-code",
@@ -4523,7 +4523,7 @@
       "metric": "coding_index",
       "score": 72,
       "effort": "low",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "kimi-k3",
@@ -4532,7 +4532,7 @@
       "metric": "coding_index",
       "score": 76.2,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "kimi-k3",
@@ -4585,7 +4585,7 @@
       "metric": "coding_index",
       "score": 45.3,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "mimo-v2.5",
@@ -4602,7 +4602,7 @@
       "metric": "coding_index",
       "score": 60.2,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "mimo-v2.5-pro",
@@ -4619,7 +4619,7 @@
       "metric": "coding_index",
       "score": 52.6,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "minimax-m2.7",
@@ -4636,7 +4636,7 @@
       "metric": "coding_index",
       "score": 58.6,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "minimax-m3",
@@ -4653,7 +4653,7 @@
       "metric": "coding_index",
       "score": 71.3,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "muse-spark-1.1",
@@ -4679,7 +4679,7 @@
       "metric": "coding_index",
       "score": 72.2,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "muse-spark-1.2",
@@ -4705,7 +4705,7 @@
       "metric": "coding_index",
       "score": 75.8,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "muse-spark-1.3",
@@ -4714,7 +4714,7 @@
       "metric": "coding_index",
       "score": 76.5,
       "effort": "xhigh",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "muse-spark-1.3",
@@ -4731,7 +4731,7 @@
       "metric": "coding_index",
       "score": 66,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "qwen3.7-max",
@@ -4748,7 +4748,7 @@
       "metric": "coding_index",
       "score": 55.9,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "qwen3.7-plus",
@@ -4765,7 +4765,7 @@
       "metric": "coding_index",
       "score": 76.2,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "qwen3.8-max",
@@ -4791,7 +4791,7 @@
       "metric": "coding_index",
       "score": 39.6,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "step-3.7-flash",
@@ -5888,7 +5888,7 @@
       "metric": "intelligence_index",
       "score": 49.6,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-fable-5",
@@ -5905,7 +5905,7 @@
       "metric": "intelligence_index",
       "score": 46.8,
       "effort": "low",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-fable-5-1",
@@ -5914,7 +5914,7 @@
       "metric": "intelligence_index",
       "score": 48.9,
       "effort": "medium",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-fable-5-1",
@@ -5923,7 +5923,7 @@
       "metric": "intelligence_index",
       "score": 53.4,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-fable-5-1",
@@ -5932,7 +5932,7 @@
       "metric": "intelligence_index",
       "score": 53.2,
       "effort": "xhigh",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-fable-5-1",
@@ -5941,7 +5941,7 @@
       "metric": "intelligence_index",
       "score": 51.2,
       "effort": "high",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-fable-5-1",
@@ -5974,7 +5974,7 @@
       "metric": "intelligence_index",
       "score": 23.7,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-opus-4-5",
@@ -5991,7 +5991,7 @@
       "metric": "intelligence_index",
       "score": 31.9,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-opus-4-6",
@@ -6008,7 +6008,7 @@
       "metric": "intelligence_index",
       "score": 40.7,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-opus-4-7",
@@ -6025,7 +6025,7 @@
       "metric": "intelligence_index",
       "score": 41.8,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-opus-4-8",
@@ -6042,7 +6042,7 @@
       "metric": "intelligence_index",
       "score": 49.7,
       "effort": "xhigh",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-opus-5",
@@ -6051,7 +6051,7 @@
       "metric": "intelligence_index",
       "score": 39.4,
       "effort": "low",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-opus-5",
@@ -6060,7 +6060,7 @@
       "metric": "intelligence_index",
       "score": 48.1,
       "effort": "high",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-opus-5",
@@ -6069,7 +6069,7 @@
       "metric": "intelligence_index",
       "score": 50.8,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-opus-5",
@@ -6078,7 +6078,7 @@
       "metric": "intelligence_index",
       "score": 44.8,
       "effort": "medium",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-opus-5",
@@ -6103,7 +6103,7 @@
       "metric": "intelligence_index",
       "score": 24.7,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-sonnet-4-6",
@@ -6120,7 +6120,7 @@
       "metric": "intelligence_index",
       "score": 24.3,
       "effort": "low",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-sonnet-5",
@@ -6129,7 +6129,7 @@
       "metric": "intelligence_index",
       "score": 38.2,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-sonnet-5",
@@ -6138,7 +6138,7 @@
       "metric": "intelligence_index",
       "score": 34.4,
       "effort": "xhigh",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-sonnet-5",
@@ -6147,7 +6147,7 @@
       "metric": "intelligence_index",
       "score": 31.7,
       "effort": "high",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-sonnet-5",
@@ -6156,7 +6156,7 @@
       "metric": "intelligence_index",
       "score": 28.1,
       "effort": "medium",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "claude-sonnet-5",
@@ -6173,7 +6173,7 @@
       "metric": "intelligence_index",
       "score": 16,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "deepseek-v3.2",
@@ -6190,7 +6190,7 @@
       "metric": "intelligence_index",
       "score": 26,
       "effort": "high",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "deepseek-v4-flash",
@@ -6199,7 +6199,7 @@
       "metric": "intelligence_index",
       "score": 34.3,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "deepseek-v4-flash",
@@ -6216,7 +6216,7 @@
       "metric": "intelligence_index",
       "score": 30.1,
       "effort": "high",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "deepseek-v4-pro",
@@ -6225,7 +6225,7 @@
       "metric": "intelligence_index",
       "score": 36,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "deepseek-v4-pro",
@@ -6242,7 +6242,7 @@
       "metric": "intelligence_index",
       "score": 39.5,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "deepseek-v4.1-flash",
@@ -6259,7 +6259,7 @@
       "metric": "intelligence_index",
       "score": 16.9,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gemini-3-flash",
@@ -6268,7 +6268,7 @@
       "metric": "intelligence_index",
       "score": 17.9,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gemini-3-flash",
@@ -6293,7 +6293,7 @@
       "metric": "intelligence_index",
       "score": 32.6,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gemini-3.5-flash",
@@ -6302,7 +6302,7 @@
       "metric": "intelligence_index",
       "score": 23.8,
       "effort": "minimal",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gemini-3.5-flash",
@@ -6311,7 +6311,7 @@
       "metric": "intelligence_index",
       "score": 33.6,
       "effort": "medium",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gemini-3.5-flash",
@@ -6328,7 +6328,7 @@
       "metric": "intelligence_index",
       "score": 22.2,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gemini-3.5-flash-lite",
@@ -6345,7 +6345,7 @@
       "metric": "intelligence_index",
       "score": 34,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gemini-3.6-flash",
@@ -6362,7 +6362,7 @@
       "metric": "intelligence_index",
       "score": 39.1,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gemini-3.7-flash",
@@ -6371,7 +6371,7 @@
       "metric": "intelligence_index",
       "score": 36.9,
       "effort": "low",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gemini-3.7-flash",
@@ -6380,7 +6380,7 @@
       "metric": "intelligence_index",
       "score": 39.6,
       "effort": "medium",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gemini-3.7-flash",
@@ -6397,7 +6397,7 @@
       "metric": "intelligence_index",
       "score": 39.8,
       "effort": "medium",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gemini-3.8-flash",
@@ -6406,7 +6406,7 @@
       "metric": "intelligence_index",
       "score": 40.9,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gemini-3.8-flash",
@@ -6415,7 +6415,7 @@
       "metric": "intelligence_index",
       "score": 33.5,
       "effort": "low",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gemini-3.8-flash",
@@ -6432,7 +6432,7 @@
       "metric": "intelligence_index",
       "score": 27.9,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "glm-5",
@@ -6449,7 +6449,7 @@
       "metric": "intelligence_index",
       "score": 26.6,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "glm-5.1",
@@ -6458,7 +6458,7 @@
       "metric": "intelligence_index",
       "score": 26.1,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "glm-5.1",
@@ -6475,7 +6475,7 @@
       "metric": "intelligence_index",
       "score": 33.7,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "glm-5.2",
@@ -6492,7 +6492,7 @@
       "metric": "intelligence_index",
       "score": 44.8,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "glm-5.3",
@@ -6509,7 +6509,7 @@
       "metric": "intelligence_index",
       "score": 41.8,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "glm-5.3-flash",
@@ -6526,7 +6526,7 @@
       "metric": "intelligence_index",
       "score": 30.4,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.2",
@@ -6535,7 +6535,7 @@
       "metric": "intelligence_index",
       "score": 26.5,
       "effort": "medium",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.2",
@@ -6552,7 +6552,7 @@
       "metric": "intelligence_index",
       "score": 28.5,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.2-codex",
@@ -6577,7 +6577,7 @@
       "metric": "intelligence_index",
       "score": 32.5,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.3-codex",
@@ -6594,7 +6594,7 @@
       "metric": "intelligence_index",
       "score": 39,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.4",
@@ -6603,7 +6603,7 @@
       "metric": "intelligence_index",
       "score": 27.6,
       "effort": "low",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.4",
@@ -6620,7 +6620,7 @@
       "metric": "intelligence_index",
       "score": 19.7,
       "effort": "medium",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.4-mini",
@@ -6629,7 +6629,7 @@
       "metric": "intelligence_index",
       "score": 24.1,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.4-mini",
@@ -6646,7 +6646,7 @@
       "metric": "intelligence_index",
       "score": 20,
       "effort": "medium",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.4-nano",
@@ -6655,7 +6655,7 @@
       "metric": "intelligence_index",
       "score": 20.7,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.4-nano",
@@ -6680,7 +6680,7 @@
       "metric": "intelligence_index",
       "score": 38.4,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.5",
@@ -6689,7 +6689,7 @@
       "metric": "intelligence_index",
       "score": 33.8,
       "effort": "medium",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.5",
@@ -6698,7 +6698,7 @@
       "metric": "intelligence_index",
       "score": 37,
       "effort": "high",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.5",
@@ -6707,7 +6707,7 @@
       "metric": "intelligence_index",
       "score": 30.7,
       "effort": "low",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.5",
@@ -6732,7 +6732,7 @@
       "metric": "intelligence_index",
       "score": 21,
       "effort": "low",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-luna",
@@ -6741,7 +6741,7 @@
       "metric": "intelligence_index",
       "score": 37.3,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-luna",
@@ -6750,7 +6750,7 @@
       "metric": "intelligence_index",
       "score": 25,
       "effort": "medium",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-luna",
@@ -6759,7 +6759,7 @@
       "metric": "intelligence_index",
       "score": 34.6,
       "effort": "xhigh",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-luna",
@@ -6768,7 +6768,7 @@
       "metric": "intelligence_index",
       "score": 32.1,
       "effort": "high",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-luna",
@@ -6785,7 +6785,7 @@
       "metric": "intelligence_index",
       "score": 33.5,
       "effort": "low",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-sol",
@@ -6794,7 +6794,7 @@
       "metric": "intelligence_index",
       "score": 39.2,
       "effort": "medium",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-sol",
@@ -6803,7 +6803,7 @@
       "metric": "intelligence_index",
       "score": 47,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-sol",
@@ -6812,7 +6812,7 @@
       "metric": "intelligence_index",
       "score": 42.3,
       "effort": "high",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-sol",
@@ -6821,7 +6821,7 @@
       "metric": "intelligence_index",
       "score": 44,
       "effort": "xhigh",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-sol",
@@ -6838,7 +6838,7 @@
       "metric": "intelligence_index",
       "score": 30.1,
       "effort": "medium",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-terra",
@@ -6847,7 +6847,7 @@
       "metric": "intelligence_index",
       "score": 34.2,
       "effort": "high",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-terra",
@@ -6856,7 +6856,7 @@
       "metric": "intelligence_index",
       "score": 42.1,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-terra",
@@ -6865,7 +6865,7 @@
       "metric": "intelligence_index",
       "score": 38,
       "effort": "xhigh",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-terra",
@@ -6874,7 +6874,7 @@
       "metric": "intelligence_index",
       "score": 27.5,
       "effort": "low",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-5.6-terra",
@@ -6891,7 +6891,7 @@
       "metric": "intelligence_index",
       "score": 52.4,
       "effort": "xhigh",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-6-astra",
@@ -6900,7 +6900,7 @@
       "metric": "intelligence_index",
       "score": 52.7,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-6-astra",
@@ -6909,7 +6909,7 @@
       "metric": "intelligence_index",
       "score": 45.8,
       "effort": "low",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-6-astra",
@@ -6918,7 +6918,7 @@
       "metric": "intelligence_index",
       "score": 50.9,
       "effort": "high",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-6-astra",
@@ -6927,7 +6927,7 @@
       "metric": "intelligence_index",
       "score": 49.6,
       "effort": "medium",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "gpt-6-astra",
@@ -6944,7 +6944,7 @@
       "metric": "intelligence_index",
       "score": 25.7,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "grok-4.20",
@@ -6961,7 +6961,7 @@
       "metric": "intelligence_index",
       "score": 38.8,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "grok-4.5",
@@ -6978,7 +6978,7 @@
       "metric": "intelligence_index",
       "score": 42.8,
       "effort": "medium",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "grok-4.6",
@@ -6987,7 +6987,7 @@
       "metric": "intelligence_index",
       "score": 35.1,
       "effort": "low",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "grok-4.6",
@@ -6996,7 +6996,7 @@
       "metric": "intelligence_index",
       "score": 44.3,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "grok-4.6",
@@ -7005,7 +7005,7 @@
       "metric": "intelligence_index",
       "score": 44.2,
       "effort": "xhigh",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "grok-4.6",
@@ -7030,7 +7030,7 @@
       "metric": "intelligence_index",
       "score": 22,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "kimi-k2.5",
@@ -7039,7 +7039,7 @@
       "metric": "intelligence_index",
       "score": 23.5,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "kimi-k2.5",
@@ -7056,7 +7056,7 @@
       "metric": "intelligence_index",
       "score": 27,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "kimi-k2.7-code",
@@ -7065,7 +7065,7 @@
       "metric": "intelligence_index",
       "score": 25.8,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "kimi-k2.7-code",
@@ -7082,7 +7082,7 @@
       "metric": "intelligence_index",
       "score": 34.5,
       "effort": "low",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "kimi-k3",
@@ -7091,7 +7091,7 @@
       "metric": "intelligence_index",
       "score": 43.6,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "kimi-k3",
@@ -7108,7 +7108,7 @@
       "metric": "intelligence_index",
       "score": 19.1,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "mimo-v2.5",
@@ -7125,7 +7125,7 @@
       "metric": "intelligence_index",
       "score": 26,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "mimo-v2.5-pro",
@@ -7142,7 +7142,7 @@
       "metric": "intelligence_index",
       "score": 20.9,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "minimax-m2.5",
@@ -7151,7 +7151,7 @@
       "metric": "intelligence_index",
       "score": 22.8,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "minimax-m2.5",
@@ -7168,7 +7168,7 @@
       "metric": "intelligence_index",
       "score": 22.8,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "minimax-m2.7",
@@ -7185,7 +7185,7 @@
       "metric": "intelligence_index",
       "score": 29.2,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "minimax-m3",
@@ -7202,7 +7202,7 @@
       "metric": "intelligence_index",
       "score": 33.7,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "muse-spark-1.1",
@@ -7219,7 +7219,7 @@
       "metric": "intelligence_index",
       "score": 39.6,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "muse-spark-1.2",
@@ -7236,7 +7236,7 @@
       "metric": "intelligence_index",
       "score": 48.1,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "muse-spark-1.3",
@@ -7245,7 +7245,7 @@
       "metric": "intelligence_index",
       "score": 45.1,
       "effort": "xhigh",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "muse-spark-1.3",
@@ -7262,7 +7262,7 @@
       "metric": "intelligence_index",
       "score": 15.6,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "qwen3-max",
@@ -7279,7 +7279,7 @@
       "metric": "intelligence_index",
       "score": 29.5,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "qwen3.7-max",
@@ -7296,7 +7296,7 @@
       "metric": "intelligence_index",
       "score": 25.2,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "qwen3.7-plus",
@@ -7313,7 +7313,7 @@
       "metric": "intelligence_index",
       "score": 45.4,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "qwen3.8-max",
@@ -7330,7 +7330,7 @@
       "metric": "intelligence_index",
       "score": 19.5,
       "effort": "default",
-      "taskCount": 9
+      "taskCount": 10
     },
     {
       "model": "step-3.7-flash",
@@ -7339,6 +7339,15 @@
       "metric": "score",
       "score": 49.8,
       "taskCount": null
+    },
+    {
+      "model": "step-5",
+      "source": "Artificial Analysis",
+      "category": "overall",
+      "metric": "intelligence_index",
+      "score": 43.7,
+      "effort": "default",
+      "taskCount": 10
     }
   ]
 }

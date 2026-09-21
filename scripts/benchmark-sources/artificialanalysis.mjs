@@ -108,6 +108,8 @@ export const ARTIFICIAL_ANALYSIS_MODEL_MAP = {
   'qwen3-8-2-4t-a95b': 'qwen3.8-max',
   'longcat-2-0': 'longcat-2.0',
   'step-3-7-flash': 'step-3.7-flash',
+  // Step 5 Preview（2026-09-18 发布）：AA slug 与 canonical 同名
+  'step-5': 'step-5',
   'doubao-seed-code': 'doubao-seed-code',
   'mimo-v2-5': 'mimo-v2.5',
   'mimo-v2-5-pro': 'mimo-v2.5-pro',
@@ -230,12 +232,14 @@ function today() {
   return new Date().toISOString().split('T')[0]
 }
 
-// AA intelligence_index 当前版本 v4.1.1（2026-08-06 patch），由 9 项 evaluation 复合而成（见 AA 方法文档）。
-// 主要变更：τ³-Banking v1.0.1；HLE/AA-LCR/AA-Omniscience 评分模型统一为 GPT-5.6 Luna (medium)。
+// AA intelligence_index 当前版本 v4.3.2，由 10 项 evaluation 复合而成（AA-Briefcase v1.1、
+// GDPval-AA v2.1、AutomationBench-AA、Terminal-Bench 4.0、SciCode、AA-LCR v1.1、
+// AA-Omniscience、HLE、GDP.pdf、CritPt；类别权重 Agents 30% / Coding 20% /
+// Scientific Reasoning 20% / General 30%，见 AA 方法文档）。
 // coding_index 与 agentic_index 为上述 evaluation 子集派生指标，不单独 version。
 // composite index 无任务级 raw data，taskCount 用 evaluation 数作代理，满足
 // ModelBenchmarkEvidence.taskCount>0 的 schema 约束与 presetstore 校验。
-const INTELLIGENCE_INDEX_EVALUATION_COUNT = 9
+const INTELLIGENCE_INDEX_EVALUATION_COUNT = 10
 
 /**
  * 分页拉取 /language/models/free，合并所有页的 data[]。

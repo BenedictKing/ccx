@@ -11,8 +11,8 @@
     {
       "kind": "modelRegistry",
       "url": "./model-registry.json",
-      "sha256": "8ecf8396d40ededebccbff4904bac14ba974c367b69811c2c0c7ec33096eeeaa",
-      "sizeBytes": 368046
+      "sha256": "b08fa7bbdaff99797625c8dbaa9fe8198cb8608b00999b82b51205fcbe869949",
+      "sizeBytes": 369269
     },
     {
       "kind": "channelPresets",
