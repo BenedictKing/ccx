@@ -14,7 +14,9 @@ import type {
   AutopilotTraceStats as TraceStatsType,
   SmartRoutingConfig,
 } from '@/services/admin-api'
+import AutopilotDiagnosePanel from './AutopilotDiagnosePanel.vue'
 import AutopilotModePanel from './AutopilotModePanel.vue'
+import AutopilotTraceDetailDialog from './AutopilotTraceDetailDialog.vue'
 import AutopilotTraceStats from './AutopilotTraceStats.vue'
 import AutopilotTraceTable from './AutopilotTraceTable.vue'
 
@@ -27,6 +29,10 @@ const traces = ref<AutopilotTraceListResponse['traces']>([])
 const loading = ref(true)
 const saving = ref(false)
 const tracesLoading = ref(false)
+
+// Trace 详情对话框状态
+const detailTraceUid = ref<string | null>(null)
+const detailOpen = ref(false)
 
 async function fetchAll() {
   loading.value = true
@@ -94,13 +100,18 @@ onMounted(fetchAll)
         @update:config="handleConfigUpdate"
       />
 
+      <AutopilotDiagnosePanel />
+
       <AutopilotTraceStats v-if="traceStats" :stats="traceStats" />
 
       <AutopilotTraceTable
         :traces="traces"
         :loading="tracesLoading"
         @refresh="fetchTraces"
+        @select="detailTraceUid = $event; detailOpen = true"
       />
     </template>
+
+    <AutopilotTraceDetailDialog v-model:open="detailOpen" :trace-uid="detailTraceUid" />
   </div>
 </template>

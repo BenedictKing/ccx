@@ -32,6 +32,7 @@ function cloneConfig(src: SmartRoutingConfig): SmartRoutingConfig {
     mode: src.mode,
     killSwitchActive: src.killSwitchActive,
     costPreference: src.costPreference,
+    racingEnabled: src.racingEnabled ?? false,
     l2ProbeEnabled: src.l2ProbeEnabled,
     readiness: cloneReadiness(src.readiness),
   }
@@ -58,6 +59,7 @@ watch(
     localConfig.mode = newCfg.mode
     localConfig.killSwitchActive = newCfg.killSwitchActive
     localConfig.costPreference = newCfg.costPreference
+    localConfig.racingEnabled = newCfg.racingEnabled ?? false
     localConfig.l2ProbeEnabled = newCfg.l2ProbeEnabled
     localConfig.readiness = cloneReadiness(newCfg.readiness)
   },
@@ -94,7 +96,8 @@ const lastRollback = computed(() => localConfig.readiness?.lastRollback)
 const hasChanges = computed(() => {
   return (
     localConfig.mode !== props.config.mode ||
-    localConfig.costPreference !== props.config.costPreference
+    localConfig.costPreference !== props.config.costPreference ||
+    (localConfig.racingEnabled ?? false) !== (props.config.racingEnabled ?? false)
   )
 })
 
@@ -133,6 +136,7 @@ function resetConfig() {
   localConfig.mode = props.config.mode
   localConfig.killSwitchActive = props.config.killSwitchActive
   localConfig.costPreference = props.config.costPreference
+  localConfig.racingEnabled = props.config.racingEnabled ?? false
 }
 </script>
 
@@ -233,6 +237,17 @@ function resetConfig() {
       <div class="mt-1 text-xs text-muted-foreground">
         {{ t(`autopilot.costPreferenceDesc.${localConfig.costPreference}`) }}
       </div>
+    </div>
+
+    <div class="mb-4">
+      <div class="flex items-center gap-2">
+        <Switch
+          :model-value="localConfig.racingEnabled ?? false"
+          @update:model-value="(v) => (localConfig.racingEnabled = Boolean(v))"
+        />
+        <span class="text-sm">{{ t('autopilot.modePanel.racing') }}</span>
+      </div>
+      <div class="mt-1 text-xs text-muted-foreground">{{ t('autopilot.modePanel.racingHint') }}</div>
     </div>
 
     <div class="flex gap-2">
