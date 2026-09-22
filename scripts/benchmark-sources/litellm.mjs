@@ -138,6 +138,8 @@ export const LITELLM_MODEL_MAP = {
   // 故意不映射，定价以 registry 手工维护为准。
   'xai/grok-4.5': 'grok-4.5',
   'xai/grok-4.6': 'grok-4.6',
+  // Grok 4.7（2026-09-21 发布，官方价与 4.6 同价 $2/$6）
+  'xai/grok-4.7': 'grok-4.7',
   'meta/muse-spark-1.1': 'muse-spark-1.1',
   'meta/muse-spark-1.2': 'muse-spark-1.2',
   'meta/muse-spark-1.3': 'muse-spark-1.3',

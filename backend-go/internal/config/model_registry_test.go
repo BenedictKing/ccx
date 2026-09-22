@@ -332,6 +332,9 @@ func TestResolveUpstreamCapability_NewAugust2026Models(t *testing.T) {
 		// xAI 官方不设独立输出上限；litellm 数据按 context 上限对齐为 500000
 		{model: "grok-4.6", provider: "xai", context: 500000, maxOutput: 500000, vision: true, toolCalls: true, inputPrice: 2, outputPrice: 6},
 		{model: "xai/grok-4.6", provider: "xai", context: 500000, maxOutput: 500000, vision: true, toolCalls: true, inputPrice: 2, outputPrice: 6},
+		// Grok 4.7（2026-09-21 发布）：与 4.6 同价 $2/$6、同 500K 上下文
+		{model: "grok-4.7", provider: "xai", context: 500000, maxOutput: 500000, vision: true, toolCalls: true, inputPrice: 2, outputPrice: 6},
+		{model: "xai/grok-4.7", provider: "xai", context: 500000, maxOutput: 500000, vision: true, toolCalls: true, inputPrice: 2, outputPrice: 6},
 		{model: "glm-5.3", provider: "zai", context: 1000000, maxOutput: 131072, toolCalls: true},
 		{model: "glm-5.3[1m]", provider: "zai", context: 1000000, maxOutput: 131072, toolCalls: true},
 		{model: "glm-5.3-flash", provider: "zai", context: 1000000, maxOutput: 131072, vision: true, toolCalls: true},
@@ -442,6 +445,44 @@ func TestResolveUpstreamCapability_Grok46PricingTiers(t *testing.T) {
 	}
 	capability := resolved.Capability
 	// xAI 官方不设独立输出上限；litellm 数据按 context 上限对齐为 500000
+	if capability.MaxOutputTokens != 500000 {
+		t.Fatalf("MaxOutputTokens = %d, want 500000 (context-aligned)", capability.MaxOutputTokens)
+	}
+	if capability.ThinkingMode != "adaptive" || !containsString(capability.ReasoningEfforts, "xhigh") {
+		t.Fatalf("thinkingMode=%q reasoningEfforts=%v, want adaptive with xhigh", capability.ThinkingMode, capability.ReasoningEfforts)
+	}
+	if !capability.Capabilities["structuredOutput"] || !capability.Capabilities["webSearch"] || !capability.Capabilities["codeExecution"] {
+		t.Fatalf("Capabilities = %v, want structured output, web search, and code execution", capability.Capabilities)
+	}
+	pricing := capability.Pricing
+	if pricing == nil || len(pricing.Tiers) != 2 {
+		t.Fatalf("Pricing = %+v, want two context tiers", pricing)
+	}
+	short := pricing.Tiers[0]
+	if short.InputTokensAbove != 0 || short.InputTokensUpTo != 199999 {
+		t.Fatalf("short tier bounds = (%d, %d), want (0, 199999)", short.InputTokensAbove, short.InputTokensUpTo)
+	}
+	assertFloatPointerValue(t, short.InputCacheHitPrice, 0.5, "Pricing.Tiers[0].InputCacheHitPrice")
+	assertFloatPointerValue(t, short.InputCacheMissPrice, 2, "Pricing.Tiers[0].InputCacheMissPrice")
+	assertFloatPointerValue(t, short.OutputPrice, 6, "Pricing.Tiers[0].OutputPrice")
+	long := pricing.Tiers[1]
+	if long.InputTokensAbove != 199999 || long.InputTokensUpTo != 500000 {
+		t.Fatalf("long tier bounds = (%d, %d), want (199999, 500000)", long.InputTokensAbove, long.InputTokensUpTo)
+	}
+	assertFloatPointerValue(t, long.InputCacheHitPrice, 1, "Pricing.Tiers[1].InputCacheHitPrice")
+	assertFloatPointerValue(t, long.InputCacheMissPrice, 4, "Pricing.Tiers[1].InputCacheMissPrice")
+	assertFloatPointerValue(t, long.OutputPrice, 12, "Pricing.Tiers[1].OutputPrice")
+}
+
+func TestResolveUpstreamCapability_Grok47PricingTiers(t *testing.T) {
+	// 事实源：docs.x.ai/developers/grok-4-7（2026-09-21 发布，2026-09-22 核对）。
+	// 与 Grok 4.6 同价：短上下文 0.5/2/6，超过 200K 后整请求翻倍至 1/4/12。
+	resolved := ResolveUpstreamCapability("grok-4.7", nil, nil)
+	if !resolved.Known || resolved.Source != "builtin" {
+		t.Fatalf("resolved = %+v, want builtin capability", resolved)
+	}
+	capability := resolved.Capability
+	// 官方声明无独立输出上限；与 4.6 同样按 context 上限对齐为 500000
 	if capability.MaxOutputTokens != 500000 {
 		t.Fatalf("MaxOutputTokens = %d, want 500000 (context-aligned)", capability.MaxOutputTokens)
 	}

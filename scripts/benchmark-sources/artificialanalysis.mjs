@@ -81,6 +81,8 @@ export const ARTIFICIAL_ANALYSIS_MODEL_MAP = {
   'gemini-3-8-flash': 'gemini-3.8-flash',
   'grok-4-5': 'grok-4.5',
   'grok-4-6': 'grok-4.6',
+  // Grok 4.7（2026-09-21 发布）：AA slug 用连字符分段版本号，effort 变体经 splitEffortSuffix 折入
+  'grok-4-7': 'grok-4.7',
   // AA v2 GA slug（2026-04-07）；-non-reasoning 变体经 splitEffortSuffix 折进同一 canonical，
   // grok-4-20-0309 旧快照（定价 $2/$6 已过期）故意不映射
   'grok-4-20': 'grok-4.20',

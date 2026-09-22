@@ -49,6 +49,8 @@ export const DEEPSWE_MODEL_MAP = {
   'gpt-5-4-openai-compact': 'gpt-5.4',
   'grok-4-5': 'grok-4.5',
   'grok-4-6': 'grok-4.6',
+  // Grok 4.7（2026-09-21 发布）：deepswe 用连字符分段版本号
+  'grok-4-7': 'grok-4.7',
   'muse-spark-1-1': 'muse-spark-1.1',
   'muse-spark-1-2': 'muse-spark-1.2',
   'muse-spark-1-3': 'muse-spark-1.3',
@@ -105,6 +107,8 @@ export const BENCHLM_MODEL_MAP = {
   'gpt-5-4-mini': 'gpt-5.4-mini',
   'grok-4-5': 'grok-4.5',
   'grok-4-6': 'grok-4.6',
+  // Grok 4.7（2026-09-21 发布）：benchlm slug 用连字符分段版本号
+  'grok-4-7': 'grok-4.7',
   // benchlm 只收录 beta 榜单 slug（2026-03-10 发布）；官方已 GA，canonical 不带 beta。
   // grok-4-20-multi-agent-beta 是多 agent 专用子形态（无总分），故意不映射。
   'grok-4-20-beta': 'grok-4.20',

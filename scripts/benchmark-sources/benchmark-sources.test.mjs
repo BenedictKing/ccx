@@ -159,7 +159,7 @@ test('new-model detection expands provider prefixes and underscore variants', ()
     [
       'zai/glm-6',                    // provider/ 前缀剥离后命中 glm 家族 → 提示
       'openrouter/xiaomi/mimo-v3',    // 多级前缀逐段剥离后命中 → 提示
-      'google_grok-4-7',              // provider_ 前缀剥离后命中 → 提示
+      'google_grok-4-8',              // provider_ 前缀剥离后命中 → 提示（grok-4-7 已注册，取更高版本）
       'zai/glm-4',                    // 前缀剥离后版本更低 → 忽略
       'foo/grok-4-1',                 // 前缀剥离后版本更低 → 忽略
     ],
@@ -167,7 +167,7 @@ test('new-model detection expands provider prefixes and underscore variants', ()
   )
   assert.deepEqual(
     candidates.map(c => c.name),
-    ['zai/glm-6', 'openrouter/xiaomi/mimo-v3', 'google_grok-4-7'],
+    ['zai/glm-6', 'openrouter/xiaomi/mimo-v3', 'google_grok-4-8'],
   )
   assert.equal(candidates[0].family, 'glm')
   assert.equal(candidates[0].version, '6')
@@ -230,14 +230,14 @@ test('new-model detection rejects date snapshots, parameter sizes and legacy nam
       'Qwen3-235B-A22B',       // 参数量段落掉后等版本 → 忽略
       'Qwen3.5-397B-A22B',     // 参数量段落掉后 [3,5] > [3] → 提示
       'gpt-8',                 // 主版本跳两代 → 忽略（安全网只覆盖同代与下一代）
-      'grok-4-7',              // 同代更高版本 → 提示
+      'grok-4-8',              // 同代更高版本 → 提示（grok-4-7 已于 2026-09-22 注册，改用 4-8）
       'grok-4-20-beta',        // 十进制 4.20 = 4.2 < 4.6 → 忽略（营销版本非整数）
     ],
     LITELLM_MODEL_MAP,
   )
   assert.deepEqual(
     candidates.map(c => c.name),
-    ['Qwen3.5-397B-A22B', 'grok-4-7'],
+    ['Qwen3.5-397B-A22B', 'grok-4-8'],
   )
   assert.equal(candidates[0].version, '3.5')
 })
@@ -246,14 +246,14 @@ test('extractProfiles collects unmapped slugs for new-model detection', () => {
   const doc = {
     items: [
       { slug: 'grok-4-5', displayScore: 75, scores: { displayCategoryScores: { coding: 50 } } },
-      { slug: 'grok-4-7', displayScore: 90, scores: { displayCategoryScores: {} } },
+      { slug: 'grok-4-8', displayScore: 90, scores: { displayCategoryScores: {} } }, // grok-4-7 已注册，样例改用未映射的 4-8
     ],
   }
   const unmapped = []
   const profiles = extractBenchlmProfiles(doc, BENCHLM_MODEL_MAP, { coding: 'coding' }, unmapped)
   assert.ok(profiles['grok-4.5'])
   assert.equal(profiles['grok-4.5'].overallScore, 75)
-  assert.deepEqual(unmapped, ['grok-4-7'])
+  assert.deepEqual(unmapped, ['grok-4-8'])
   assert.equal(detectNewModelCandidates(unmapped, BENCHLM_MODEL_MAP).length, 1)
 })
 

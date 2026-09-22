@@ -2831,6 +2831,61 @@
     },
     {
       "patterns": [
+        "(?:^|[-/])grok-4\\.7(?=$|@)"
+      ],
+      "provider": "xai",
+      "displayName": "Grok 4.7",
+      "description": "xAI frontier multimodal reasoning model for coding, agentic tasks, and knowledge work; trained with a longer RL run for long-horizon tasks and stronger self-verification. Supports Responses and Chat Completions APIs; the Responses API always returns encrypted reasoning content, and the official documentation states no text output limit.",
+      "contextWindowTokens": 500000,
+      "thinkingMode": "adaptive",
+      "reasoningEfforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh"
+      ],
+      "capabilities": {
+        "reasoning": true,
+        "vision": true,
+        "toolCalls": true,
+        "structuredOutput": true,
+        "webSearch": true,
+        "codeExecution": true,
+        "contextCaching": true
+      },
+      "pricing": {
+        "unit": "per_1m_tokens_usd",
+        "currency": "USD",
+        "inputCacheHitPrice": 0.5,
+        "inputCacheMissPrice": 2,
+        "outputPrice": 6,
+        "tiers": [
+          {
+            "label": "short_context",
+            "inputTokensUpTo": 199999,
+            "inputCacheHitPrice": 0.5,
+            "inputCacheMissPrice": 2,
+            "outputPrice": 6
+          },
+          {
+            "label": "long_context",
+            "inputTokensAbove": 199999,
+            "inputTokensUpTo": 500000,
+            "inputCacheHitPrice": 1,
+            "inputCacheMissPrice": 4,
+            "outputPrice": 12
+          }
+        ]
+      },
+      "sources": [
+        "https://docs.x.ai/developers/grok-4-7",
+        "https://docs.x.ai/developers/models",
+        "https://docs.x.ai/developers/pricing"
+      ],
+      "maxOutputTokens": 500000
+    },
+    {
+      "patterns": [
         "(?:^|[-/])grok-4\\.6(?=$|@)"
       ],
       "provider": "xai",

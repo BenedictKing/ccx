@@ -57,6 +57,7 @@ const modelPriorityPatterns: RegExp[] = [
   /gemini-2\.5-flash/i,
 
   // xAI Grok
+  /grok-4\.7/i,
   /grok-4\.6/i,
   /grok-4\.5/i,
   /grok-4\.3/i,
