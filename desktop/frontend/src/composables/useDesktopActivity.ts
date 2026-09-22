@@ -26,8 +26,10 @@ export function useDesktopActivity() {
   const isCockpitActive = computed(() => windowVisible.value && activeTab.value === 'cockpit')
   const isDashboardActive = computed(() => windowVisible.value && activeTab.value === 'dashboard')
   const isStatusActive = computed(() => windowVisible.value && activeTab.value === 'status')
+  const isConversationsActive = computed(() => windowVisible.value && activeTab.value === 'conversations')
   const isConsoleChannelsActive = computed(() => isDashboardActive.value)
-  const isConsoleConversationsActive = computed(() => isCockpitActive.value)
+  // 会话数据轮询跟随会话雷达 tab；cockpit 不再拉会话数据（CockpitOverview 自身不消费）
+  const isConsoleConversationsActive = computed(() => isConversationsActive.value)
 
   return {
     windowVisible,
@@ -36,6 +38,7 @@ export function useDesktopActivity() {
     isChannelPageActive,
     isCockpitActive,
     isStatusActive,
+    isConversationsActive,
     isConsoleChannelsActive,
     isConsoleConversationsActive,
   }

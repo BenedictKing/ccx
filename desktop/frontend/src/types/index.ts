@@ -74,7 +74,7 @@ export type MigrateCodexSessionsResult = {
   sqliteError?: string
 }
 
-export type TabValue = 'status' | 'agent' | 'env' | 'channels' | 'subscriptions' | 'cockpit' | 'dashboard' | 'health' | 'autopilot'
+export type TabValue = 'status' | 'agent' | 'env' | 'channels' | 'subscriptions' | 'cockpit' | 'dashboard' | 'health' | 'autopilot' | 'conversations' | 'reports'
 
 export type ProviderPlan = {
   id: string

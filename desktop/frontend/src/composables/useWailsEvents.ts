@@ -14,7 +14,7 @@ export function useWailsEvents(
 
   onMounted(() => {
     unsubscribeTab = Events.On('desktop:show-tab', (event: { data: string }) => {
-      const validTabs: TabValue[] = ['status', 'agent', 'channels', 'subscriptions', 'cockpit', 'env', 'dashboard']
+      const validTabs: TabValue[] = ['status', 'agent', 'channels', 'subscriptions', 'cockpit', 'env', 'dashboard', 'health', 'autopilot', 'conversations', 'reports']
       if (validTabs.includes(event.data as TabValue)) {
         activeTab.value = event.data as TabValue
       }

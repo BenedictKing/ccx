@@ -10,6 +10,8 @@ import SubscriptionTab from '@/components/subscriptions/SubscriptionTab.vue'
 import CockpitOverview from '@/components/cockpit/CockpitOverview.vue'
 import HealthCenterTab from '@/components/health/HealthCenterTab.vue'
 import AutopilotTab from '@/components/autopilot/AutopilotTab.vue'
+import ConversationsTab from '@/components/console/ConversationsTab.vue'
+import CostReportTab from '@/components/report/CostReportTab.vue'
 import SetupLoading from '@/components/setup/SetupLoading.vue'
 import SetupView from '@/components/setup/SetupView.vue'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -142,6 +144,8 @@ const tabTitles = computed<Record<TabValue, string>>(() => ({
   dashboard: t('tab.dashboardTitle'),
   health: t('tab.healthTitle'),
   autopilot: t('tab.autopilotTitle'),
+  conversations: t('tab.conversationsTitle'),
+  reports: t('tab.reportsTitle'),
 }))
 
 watch(activeTab, (tab) => {
@@ -278,6 +282,12 @@ onBeforeUnmount(() => {
           </div>
           <div v-show="activeTab === 'autopilot'" class="h-full">
             <AutopilotTab />
+          </div>
+          <div v-show="activeTab === 'conversations'" class="h-full">
+            <ConversationsTab />
+          </div>
+          <div v-show="activeTab === 'reports'" class="h-full">
+            <CostReportTab />
           </div>
         </div>
       </div>
