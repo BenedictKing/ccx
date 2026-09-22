@@ -55,7 +55,7 @@ describe('ConsoleTab', () => {
     errors.push(event.reason)
   }
 
-  it('keeps management dashboard scoped to channel protocol tabs', async () => {
+  it('keeps management dashboard scoped to merged view tabs', async () => {
     const updates: string[] = []
     const app = createApp(ConsoleTab, {
       selection: '/channels/messages',
@@ -68,19 +68,21 @@ describe('ConsoleTab', () => {
     await nextTick()
 
     expect(root.querySelector('[data-testid="channel-manager"]')?.textContent).toBe('channel:messages')
-    expect(findButton('app.tabs.conversations', false)).toBeNull()
+    // IA 合并：旧协议子 tab 已收敛为统一 LLM 视图
+    expect(findButton('OpenAI Chat', false)).toBeNull()
+    expect(findButton('Codex', false)).toBeNull()
 
-    const chatButton = findButton('OpenAI Chat')
-    chatButton.click()
+    const imagesButton = findButton('console.view.images')
+    imagesButton.click()
     await nextTick()
 
-    expect(activeTab.value).toBe('chat')
-    expect(updates.at(-1)).toBe('/channels/chat')
-    expect(root.querySelector('[data-testid="channel-manager"]')?.textContent).toBe('channel:chat')
+    expect(activeTab.value).toBe('images')
+    expect(updates.at(-1)).toBe('/channels/images')
+    expect(root.querySelector('[data-testid="channel-manager"]')?.textContent).toBe('channel:images')
     expect(vueErrors).toEqual([])
     expect(errors).toEqual([])
 
-    const vectorsButton = findButton('Vectors')
+    const vectorsButton = findButton('console.view.vectors')
     vectorsButton.click()
     await nextTick()
 
@@ -88,6 +90,20 @@ describe('ConsoleTab', () => {
     expect(updates.at(-1)).toBe('/channels/vectors')
     expect(root.querySelector('[data-testid="channel-manager"]')?.textContent).toBe('channel:vectors')
 
+    app.unmount()
+  })
+
+  it('normalizes legacy protocol selections into the merged LLM view', async () => {
+    const updates: string[] = []
+    const app = createApp(ConsoleTab, {
+      selection: '/channels/chat',
+      'onUpdate:selection': (selection: string) => updates.push(selection),
+    })
+    app.mount(root)
+    await nextTick()
+
+    // 旧 chat 子 tab 选择自动落在统一 LLM 列表
+    expect(root.querySelector('[data-testid="channel-manager"]')?.textContent).toBe('channel:messages')
     app.unmount()
   })
 

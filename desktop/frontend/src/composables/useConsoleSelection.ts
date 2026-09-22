@@ -26,14 +26,22 @@ export function normalizeConsoleSelection(value: unknown): ConsoleSelection {
   if (!channelMatch) return DEFAULT_CONSOLE_SELECTION
 
   const channelType = channelMatch[1]
-  return isManagedChannelType(channelType)
-    ? channelSelectionPath(channelType)
-    : DEFAULT_CONSOLE_SELECTION
+  if (!isManagedChannelType(channelType)) return DEFAULT_CONSOLE_SELECTION
+  // IA 合并：旧协议子 tab（chat/responses/gemini）已并入统一 LLM 列表
+  if (channelType === 'chat' || channelType === 'responses' || channelType === 'gemini') {
+    return channelSelectionPath('messages')
+  }
+  return channelSelectionPath(channelType)
 }
 
 export function consoleSelectionChannelType(value: ConsoleSelection): ManagedChannelType {
   const channelType = value.replace('/channels/', '')
-  return isManagedChannelType(channelType) ? channelType : 'messages'
+  if (!isManagedChannelType(channelType)) return 'messages'
+  // IA 合并：旧协议子 tab 归一到统一 LLM 列表
+  if (channelType === 'chat' || channelType === 'responses' || channelType === 'gemini') {
+    return 'messages'
+  }
+  return channelType
 }
 
 function loadConsoleSelection(): ConsoleSelection {

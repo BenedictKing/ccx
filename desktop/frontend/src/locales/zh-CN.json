@@ -1806,5 +1806,8 @@
   "nav.reports": "成本报表",
   "nav.reportsDesc": "用量与成本分组统计",
   "tab.conversationsTitle": "会话雷达",
-  "tab.reportsTitle": "成本报表"
+  "tab.reportsTitle": "成本报表",
+  "console.view.llm": "LLM 渠道",
+  "console.view.images": "Images",
+  "console.view.vectors": "Vectors"
 }

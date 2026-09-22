@@ -1806,5 +1806,8 @@
   "nav.reports": "Cost Report",
   "nav.reportsDesc": "Usage & cost breakdown",
   "tab.conversationsTitle": "Conversations",
-  "tab.reportsTitle": "Cost Report"
+  "tab.reportsTitle": "Cost Report",
+  "console.view.llm": "LLM Channels",
+  "console.view.images": "Images",
+  "console.view.vectors": "Vectors"
 }

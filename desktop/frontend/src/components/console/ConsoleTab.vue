@@ -30,14 +30,11 @@ const { status } = useStatus()
 const { t } = useLanguage()
 const { activeTab, refreshError } = useConsoleChannels()
 
-// 子 Tab 定义
+// 子 Tab 定义：对齐 web 端 IA——LLM 多协议合并为统一列表（logical 聚合）+ Images / Vectors
 const protocolTabs: { value: ManagedChannelType; label: string }[] = [
-  { value: 'messages', label: 'Claude' },
-  { value: 'chat', label: 'OpenAI Chat' },
-  { value: 'images', label: 'Images' },
-  { value: 'vectors', label: 'Vectors' },
-  { value: 'responses', label: 'Codex' },
-  { value: 'gemini', label: 'Gemini' },
+  { value: 'messages', label: t('console.view.llm') },
+  { value: 'images', label: t('console.view.images') },
+  { value: 'vectors', label: t('console.view.vectors') },
 ]
 
 const applySelection = (selection: ConsoleSelection) => {

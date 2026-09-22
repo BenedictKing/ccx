@@ -87,10 +87,12 @@ const failoverChannelCount = computed(() => {
 async function doRefresh(tab: ChannelType) {
   const api = useAdminApi()
   try {
-    // 统一 dashboard 接口：GET /api/logical-channels/dashboard?kind=llm
-    // 后端已按 logical channel 聚合，一个站点多协议只返回一张卡片
+    // 统一 dashboard 接口：GET /api/logical-channels/dashboard?kind=...
+    // 后端已按 logical channel 聚合，一个站点多协议只返回一张卡片。
+    // kind 映射对齐后端 LogicalChannelKind：LLM 四协议合并为 llm，vectors 对应 embeddings。
+    const dashboardKind = tab === 'vectors' ? 'embeddings' : tab === 'images' ? 'images' : 'llm'
     const dashboard = await api.get<ChannelDashboardResponse>(
-      `/api/logical-channels/dashboard?kind=llm`
+      `/api/logical-channels/dashboard?kind=${dashboardKind}`
     )
     const existing = channelsByType.value[tab].channels
     channelsByType.value[tab] = {
