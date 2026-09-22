@@ -155,6 +155,14 @@ const { t } = useLanguage()
     baseUrlsText: '',
     website: '',
     proxyUrl: '',
+    proxyPreferDirect: false,
+    racingEnabled: true,
+    racingTouched: false,
+    costMultiplier: '' as string | number,
+    channelPaymentCurrency: '',
+    channelPaymentAmount: '' as string | number,
+    channelCreditCurrency: '',
+    channelCreditAmount: '' as string | number,
     requestTimeoutMs: '' as string | number,
     responseHeaderTimeoutMs: '' as string | number,
     streamFirstContentTimeoutEnabled: false,
@@ -334,6 +342,14 @@ const { t } = useLanguage()
     form.baseUrlsText = ''
     form.website = ''
     form.proxyUrl = ''
+    form.proxyPreferDirect = false
+    form.racingEnabled = true
+    form.racingTouched = false
+    form.costMultiplier = ''
+    form.channelPaymentCurrency = ''
+    form.channelPaymentAmount = ''
+    form.channelCreditCurrency = ''
+    form.channelCreditAmount = ''
     form.requestTimeoutMs = ''
     form.responseHeaderTimeoutMs = ''
     form.streamFirstContentTimeoutEnabled = false
@@ -409,6 +425,15 @@ const { t } = useLanguage()
     form.baseUrlsText = (ch.baseUrls?.length ? ch.baseUrls : [ch.baseUrl].filter(Boolean)).join('\n')
     form.website = ch.website || ''
     form.proxyUrl = ch.proxyUrl || ''
+    form.proxyPreferDirect = ch.proxyPreferDirect ?? false
+    // 显示为开 = !== false；racingTouched 标记本会话是否触碰过开关，未触碰保存时保持后端缺省（跟随全局）
+    form.racingEnabled = ch.racing?.enabled !== false
+    form.racingTouched = false
+    form.costMultiplier = ch.costMultiplier ?? ''
+    form.channelPaymentCurrency = ch.channelPaymentCurrency ?? ''
+    form.channelPaymentAmount = ch.channelPaymentAmount ?? ''
+    form.channelCreditCurrency = ch.channelCreditCurrency ?? ''
+    form.channelCreditAmount = ch.channelCreditAmount ?? ''
     form.requestTimeoutMs = ch.requestTimeoutMs || ''
     form.responseHeaderTimeoutMs = ch.responseHeaderTimeoutMs || ''
     form.streamFirstContentTimeoutEnabled = !!(ch.streamFirstContentTimeoutMs && ch.streamFirstContentTimeoutMs > 0)
@@ -791,6 +816,14 @@ const { t } = useLanguage()
           fastMode: form.fastMode,
           customHeaders: parseJsonObject<Record<string, string>>(form.customHeadersText, 'Custom headers'),
           proxyUrl: form.proxyUrl,
+          proxyPreferDirect: form.proxyPreferDirect,
+          racingEnabled: form.racingEnabled,
+          racingTouched: form.racingTouched,
+          costMultiplier: form.costMultiplier,
+          channelPaymentCurrency: form.channelPaymentCurrency,
+          channelPaymentAmount: form.channelPaymentAmount,
+          channelCreditCurrency: form.channelCreditCurrency,
+          channelCreditAmount: form.channelCreditAmount,
           requestTimeoutMs: form.requestTimeoutMs,
           responseHeaderTimeoutMs: form.responseHeaderTimeoutMs,
           streamFirstContentTimeoutMs: form.streamFirstContentTimeoutEnabled ? form.streamFirstContentTimeoutMs : undefined,
@@ -1095,6 +1128,14 @@ const { t } = useLanguage()
       fastMode: form.fastMode,
       customHeaders: getHeadersAsObject(),
       proxyUrl: form.proxyUrl,
+      proxyPreferDirect: form.proxyPreferDirect,
+      racingEnabled: form.racingEnabled,
+      racingTouched: form.racingTouched,
+      costMultiplier: form.costMultiplier,
+      channelPaymentCurrency: form.channelPaymentCurrency,
+      channelPaymentAmount: form.channelPaymentAmount,
+      channelCreditCurrency: form.channelCreditCurrency,
+      channelCreditAmount: form.channelCreditAmount,
       requestTimeoutMs: form.requestTimeoutMs,
       responseHeaderTimeoutMs: form.responseHeaderTimeoutMs,
       streamFirstContentTimeoutMs: form.streamFirstContentTimeoutEnabled ? form.streamFirstContentTimeoutMs : undefined,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { eligibleNewApiGroups, isFiniteNonNegative } from '@/utils/subscription-management'
-import type { ChannelKind, NewApiProvisionRequest } from '@/services/admin-api'
+import type { ChannelKind, NewApiProvisionRequest, NewApiVerifyRequest } from '@/services/admin-api'
 
 describe('NewApiSubscriptionForm contract', () => {
   it('uses raw_auth and supports all six channel kinds', () => {
@@ -22,5 +22,22 @@ describe('NewApiSubscriptionForm contract', () => {
       maxGroupMultiplier: 1.25,
     }
     expect(payload).toEqual({ provisionAllEligibleGroups: true, maxGroupMultiplier: 1.25 })
+  })
+
+  it('carries proxy settings on verify and provision payloads', () => {
+    // verify/provision 均透传 proxyUrl + proxyPreferDirect；未配置代理时直连优先开关不生效
+    const verify: NewApiVerifyRequest = {
+      baseUrl: 'https://example.com', accessToken: 'sk-test',
+      proxyUrl: 'socks5://127.0.0.1:7890', proxyPreferDirect: true,
+    }
+    const provision: Pick<NewApiProvisionRequest, 'proxyUrl' | 'proxyPreferDirect'> = {
+      proxyUrl: verify.proxyUrl, proxyPreferDirect: verify.proxyPreferDirect,
+    }
+    expect(verify.proxyUrl).toBe('socks5://127.0.0.1:7890')
+    expect(provision).toEqual({ proxyUrl: 'socks5://127.0.0.1:7890', proxyPreferDirect: true })
+    // 空代理直连：proxyUrl 缺省、直连优先不透传
+    const direct: NewApiVerifyRequest = { baseUrl: 'https://example.com', accessToken: 'sk-test' }
+    expect(direct.proxyUrl ?? '').toBe('')
+    expect(direct.proxyPreferDirect).toBeUndefined()
   })
 })

@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { Check, CheckCircle2, Copy, Loader2, RefreshCw, Save, ShieldCheck, Trash2, X } from 'lucide-vue-next'
+import { AlertCircle, Check, CheckCircle2, Copy, Link2, Loader2, RefreshCw, Save, ShieldCheck, Trash2, X } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useAdminApi } from '@/composables/useAdminApi'
@@ -12,8 +13,9 @@ import { useLanguage } from '@/composables/useLanguage'
 import { GetProviderKeyAssets } from '@bindings/github.com/BenedictKing/ccx/desktop/desktopservice'
 import NewApiSubscriptionForm from '@/components/subscriptions/NewApiSubscriptionForm.vue'
 import NewApiAccountPanel from '@/components/subscriptions/NewApiAccountPanel.vue'
+import SubscriptionLinkDialog from '@/components/subscriptions/SubscriptionLinkDialog.vue'
 import ExchangeRateManager from '@/components/subscriptions/ExchangeRateManager.vue'
-import { SUBSCRIPTIONS_PATH } from '@/services/admin-api'
+import { SUBSCRIPTIONS_PATH, subscriptionPath } from '@/services/admin-api'
 import type {
   Channel,
   ChannelsResponse,
@@ -68,6 +70,10 @@ const subscriptionActionError = ref('')
 const subscriptionActionSuccess = ref('')
 const keyStatuses = ref<Record<string, NewApiKeyStatus[]>>({})
 const billingDraft = ref({ paymentAmount: '', paymentUnit: 'USD', creditAmount: '', creditUnit: 'USD' })
+const linkDialogOpen = ref(false)
+const linkTarget = ref<SubscriptionItem | null>(null)
+const deleteTarget = ref<SubscriptionItem | null>(null)
+const deletingSubscription = ref(false)
 
 const selectedManagedSubscription = computed(() => subscriptions.value.find(item => item.subscriptionUid === selectedSubscriptionUid.value) || null)
 const billingPreview = computed(() => {
@@ -383,6 +389,28 @@ async function refreshManagedSubscription(subscription: SubscriptionItem) {
   } finally { refreshingSubscriptionUid.value = '' }
 }
 
+function openLinkDialog(subscription: SubscriptionItem) {
+  linkTarget.value = subscription
+  linkDialogOpen.value = true
+}
+
+async function deleteSubscriptionConfirmed() {
+  const target = deleteTarget.value
+  if (!target || deletingSubscription.value) return
+  deletingSubscription.value = true
+  subscriptionActionError.value = ''; subscriptionActionSuccess.value = ''
+  try {
+    await adminApi.del(subscriptionPath(target.subscriptionUid))
+    deleteTarget.value = null
+    subscriptionActionSuccess.value = t('subscription.deleteSuccess', { name: target.displayName })
+    await loadSubscriptions()
+  } catch (cause) {
+    subscriptionActionError.value = cause instanceof Error ? cause.message : String(cause)
+  } finally {
+    deletingSubscription.value = false
+  }
+}
+
 function statusLabel(status: string) {
   const key = `multiplier.status.${status}`
   return tf(key, status)
@@ -674,11 +702,34 @@ onMounted(() => {
           <div v-if="subscriptions.length" class="space-y-2">
             <div v-for="subscription in subscriptions" :key="subscription.subscriptionUid" class="rounded-xl border border-border bg-background/60 p-3 space-y-2">
               <div class="flex items-start justify-between gap-3">
-                <div><p class="text-sm font-semibold">{{ subscription.displayName }}</p><p class="text-xs text-muted-foreground">{{ subscription.subscriptionUid }} · {{ subscription.provider || '-' }}</p></div>
+                <div class="min-w-0">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <p class="text-sm font-semibold">{{ subscription.displayName }}</p>
+                    <span class="rounded border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground" :title="t('subscription.field.version')">v{{ subscription.version }}</span>
+                  </div>
+                  <p class="text-xs text-muted-foreground">{{ subscription.subscriptionUid }} · {{ subscription.provider || '-' }}</p>
+                </div>
                 <div class="text-right"><p class="text-sm font-mono" :class="subscription.balance === 0 ? 'text-amber-600' : ''">{{ subscription.balance ?? 0 }} {{ subscription.currency || '' }}</p><p v-if="subscription.balance === 0" class="text-[10px] text-amber-600">{{ t('subscription.management.zeroBalance') }}</p></div>
               </div>
+              <div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <span class="rounded bg-secondary/50 px-1.5 py-0.5 text-[10px]">{{ t('subscription.autoRefresh.section') }}</span>
+                <span v-if="subscription.autoRefreshEnabled && subscription.autoRefreshSupported" class="inline-flex items-center gap-1">
+                  <CheckCircle2 v-if="!subscription.lastBalanceRefreshError" class="h-3.5 w-3.5 text-emerald-500" />
+                  <AlertCircle v-else class="h-3.5 w-3.5 text-amber-500" :title="subscription.lastBalanceRefreshError" />
+                  <span :title="subscription.lastBalanceRefreshError">{{ t('subscription.autoRefresh.lastRefreshedAt') }}: {{ subscription.lastBalanceRefreshAt ? new Date(subscription.lastBalanceRefreshAt).toLocaleString() : '-' }}</span>
+                </span>
+                <span v-else-if="subscription.autoRefreshEnabled">{{ t('subscription.autoRefresh.unsupported') }}</span>
+                <span v-else>{{ t('subscription.autoRefresh.off') }}</span>
+              </div>
+              <div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <span class="rounded bg-secondary/50 px-1.5 py-0.5 text-[10px]">{{ t('subscription.field.linkedChannels') }}</span>
+                <template v-if="subscription.linkedChannelUids?.length">
+                  <code v-for="channelUid in subscription.linkedChannelUids" :key="channelUid" class="rounded border border-primary/30 bg-primary/10 px-1.5 py-0.5 font-mono text-[10px] text-primary">{{ channelUid }}</code>
+                </template>
+                <span v-else>{{ t('subscription.noChannels') }}</span>
+              </div>
               <div class="rounded-lg bg-secondary/40 px-3 py-2 text-xs text-muted-foreground">{{ subscription.paymentAmount && subscription.creditAmount ? t('billingTerms.preview', { payment: subscription.paymentAmount, paymentUnit: subscription.paymentUnit || '', credit: subscription.creditAmount, creditUnit: subscription.creditUnit || '' }) : t('billingTerms.unconfigured') }}</div>
-              <div class="flex flex-wrap gap-2"><Button size="sm" variant="outline" @click="editBillingTerms(subscription)"><Save class="h-3.5 w-3.5" />{{ t('billingTerms.edit') }}</Button><Button size="sm" variant="outline" :disabled="refreshingSubscriptionUid === subscription.subscriptionUid" @click="refreshManagedSubscription(subscription)"><Loader2 v-if="refreshingSubscriptionUid === subscription.subscriptionUid" class="h-3.5 w-3.5 animate-spin" /><RefreshCw v-else class="h-3.5 w-3.5" />{{ t('subscription.management.refresh') }}</Button></div>
+              <div class="flex flex-wrap gap-2"><Button size="sm" variant="outline" @click="editBillingTerms(subscription)"><Save class="h-3.5 w-3.5" />{{ t('billingTerms.edit') }}</Button><Button size="sm" variant="outline" :disabled="refreshingSubscriptionUid === subscription.subscriptionUid" @click="refreshManagedSubscription(subscription)"><Loader2 v-if="refreshingSubscriptionUid === subscription.subscriptionUid" class="h-3.5 w-3.5 animate-spin" /><RefreshCw v-else class="h-3.5 w-3.5" />{{ t('subscription.management.refresh') }}</Button><Button size="sm" variant="outline" @click="openLinkDialog(subscription)"><Link2 class="h-3.5 w-3.5" />{{ t('subscription.linkChannel') }}</Button><Button size="sm" variant="outline" class="text-destructive" @click="deleteTarget = subscription"><Trash2 class="h-3.5 w-3.5" />{{ t('subscription.delete') }}</Button></div>
               <div v-if="keyStatuses[subscription.subscriptionUid]?.length" class="space-y-1 border-t border-border/60 pt-2">
                 <div v-for="key in keyStatuses[subscription.subscriptionUid]" :key="key.keyUid || key.sourceRemoteTokenId" class="flex flex-wrap items-center justify-between gap-2 text-xs"><span>{{ key.name }} · {{ key.group }} × {{ key.groupMultiplier }}</span><span :title="key.reason" class="rounded border border-border px-1.5 py-0.5">{{ statusLabel(key.syncStatus) }}<span v-if="key.multiplierExpiresAt"> · {{ t('multiplier.ttl') }} {{ key.multiplierExpiresAt }}</span></span></div>
               </div>
@@ -694,6 +745,25 @@ onMounted(() => {
           </div>
           <p v-if="subscriptionActionError" class="text-xs text-destructive">{{ subscriptionActionError }}</p><p v-if="subscriptionActionSuccess" class="text-xs text-emerald-600">{{ subscriptionActionSuccess }}</p>
         </div>
+
+        <SubscriptionLinkDialog v-model:open="linkDialogOpen" :subscription="linkTarget" @updated="loadSubscriptions(linkTarget?.subscriptionUid)" />
+
+        <Dialog :open="!!deleteTarget" @update:open="(value) => { if (!value) deleteTarget = null }">
+          <DialogContent class="sm:max-w-[420px]">
+            <DialogHeader>
+              <DialogTitle>{{ t('subscription.delete') }}</DialogTitle>
+              <DialogDescription>{{ t('subscription.deleteConfirm', { name: deleteTarget?.displayName || '' }) }}</DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="ghost" :disabled="deletingSubscription" @click="deleteTarget = null">{{ t('common.cancel') }}</Button>
+              <Button variant="destructive" :disabled="deletingSubscription" @click="deleteSubscriptionConfirmed">
+                <Loader2 v-if="deletingSubscription" class="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                <Trash2 v-else class="mr-1.5 h-3.5 w-3.5" />
+                {{ t('common.delete') }}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <ExchangeRateManager />
       </section>

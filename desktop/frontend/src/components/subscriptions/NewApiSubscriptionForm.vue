@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { useAdminApi } from '@/composables/useAdminApi'
 import { useLanguage } from '@/composables/useLanguage'
@@ -30,10 +31,12 @@ const maxGroupMultiplierText = ref('1')
 
 const verifyForm = ref<NewApiVerifyRequest>({
   baseUrl: '', accessToken: '', userId: '', authTokenMode: 'bearer', displayName: '',
+  proxyUrl: '', proxyPreferDirect: false,
 })
 const provisionForm = ref<NewApiProvisionRequest>({
   subscriptionUid: '', displayName: '', baseUrl: '', accessToken: '', channelKind: 'messages',
   userId: '', authTokenMode: 'bearer', channelName: '', provisionAllEligibleGroups: true, notes: '',
+  proxyUrl: '', proxyPreferDirect: false,
 })
 
 const authTokenModeOptions = [
@@ -78,6 +81,8 @@ async function handleVerify() {
       baseUrl: verifyForm.value.baseUrl.trim(), accessToken: verifyForm.value.accessToken,
       userId: verifyForm.value.userId?.trim() || undefined, authTokenMode: verifyForm.value.authTokenMode || undefined,
       displayName: verifyForm.value.displayName || undefined,
+      proxyUrl: verifyForm.value.proxyUrl?.trim() || undefined,
+      proxyPreferDirect: verifyForm.value.proxyPreferDirect || undefined,
     })
     verifyResult.value = result
     verified.value = true
@@ -85,6 +90,7 @@ async function handleVerify() {
       baseUrl: verifyForm.value.baseUrl.trim(), accessToken: verifyForm.value.accessToken,
       userId: verifyForm.value.userId?.trim() || undefined, authTokenMode: verifyForm.value.authTokenMode || undefined,
       displayName: verifyForm.value.displayName || result.username,
+      proxyUrl: verifyForm.value.proxyUrl?.trim() || undefined, proxyPreferDirect: verifyForm.value.proxyPreferDirect,
     })
     if (!provisionForm.value.subscriptionUid.trim()) {
       provisionForm.value.subscriptionUid = `newapi-${slugifyDisplayName(verifyForm.value.displayName || result.username)}`
@@ -108,6 +114,8 @@ async function handleProvision() {
       provisionAllEligibleGroups: true,
       maxGroupMultiplier: maxGroupMultiplier.value,
       notes: provisionForm.value.notes || undefined,
+      proxyUrl: provisionForm.value.proxyUrl?.trim() || undefined,
+      proxyPreferDirect: provisionForm.value.proxyPreferDirect || undefined,
     })
     emit('created', result)
   } catch (error) {
@@ -128,6 +136,18 @@ async function handleProvision() {
         <Select v-model="verifyForm.authTokenMode" :disabled="verified"><SelectTrigger class="h-9 w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem v-for="opt in authTokenModeOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</SelectItem></SelectContent></Select>
       </div>
       <div class="space-y-1.5"><Label class="text-xs text-muted-foreground">{{ t('subscription.field.name') }}</Label><Input v-model="verifyForm.displayName" :disabled="verified" /></div>
+      <div class="space-y-1.5">
+        <Label class="text-xs text-muted-foreground">{{ t('subscription.newApi.proxyUrl') }}</Label>
+        <Input v-model="verifyForm.proxyUrl" class="font-mono text-xs" placeholder="socks5://..." :disabled="verified" />
+        <p class="text-[11px] text-muted-foreground">{{ t('subscription.newApi.proxyUrlHint') }}</p>
+      </div>
+      <div class="flex items-center justify-between gap-3 rounded-lg border border-border/60 px-3 py-2" :class="{ 'opacity-50': verified || !verifyForm.proxyUrl?.trim() }">
+        <div class="min-w-0">
+          <p class="text-xs font-medium">{{ t('subscription.newApi.proxyPreferDirect') }}</p>
+          <p class="text-[11px] text-muted-foreground">{{ t('subscription.newApi.proxyPreferDirectHint') }}</p>
+        </div>
+        <Switch :model-value="verifyForm.proxyPreferDirect" :disabled="verified || !verifyForm.proxyUrl?.trim()" @update:model-value="verifyForm.proxyPreferDirect = $event" />
+      </div>
       <Button v-if="!verified" type="submit" :disabled="!canVerify || verifying" class="w-full"><Loader2 v-if="verifying" class="h-3.5 w-3.5 animate-spin" />{{ t('subscription.newApi.verify') }}</Button>
       <Button v-else type="button" variant="outline" class="w-full" @click="resetVerification">{{ t('subscription.newApi.reVerify') }}</Button>
     </form>

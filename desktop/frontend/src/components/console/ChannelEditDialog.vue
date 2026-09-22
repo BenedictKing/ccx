@@ -21,6 +21,7 @@ import AdvancedPanel from './channel-edit/AdvancedPanel.vue'
 import CustomHeadersPanel from './channel-edit/CustomHeadersPanel.vue'
 import CustomParamsPanel from './channel-edit/CustomParamsPanel.vue'
 import StreamTimeoutPanel from './channel-edit/StreamTimeoutPanel.vue'
+import NewApiAccountPanel from '@/components/subscriptions/NewApiAccountPanel.vue'
 import { useChannelEditDialog, type ChannelEditDialogEmit, type ChannelEditDialogProps } from '@/composables/useChannelEditDialog'
 
 const props = defineProps<ChannelEditDialogProps>()
@@ -156,6 +157,27 @@ const {
 const embeddingTargetModels = computed(() =>
   targetModelDatalist.value.map(m => ({ title: m, value: m }))
 )
+
+// new-api 托管渠道：显式 autoManagedKind 标记，或已关联订阅
+const isNewApiManagedChannel = computed(() =>
+  props.channel?.autoManagedKind === 'new_api' || !!props.channel?.subscriptionUid,
+)
+// generic 自动托管渠道：autoManaged=true、无 providerId、尚未绑定 new-api
+const isGenericAutoManagedChannel = computed(() =>
+  !!props.channel?.autoManaged && !props.channel?.providerId && props.channel?.autoManagedKind !== 'new_api',
+)
+
+// CustomParamsPanel 更新：触碰竞速开关时打 racingTouched 标记，保存时才显式写入 racing
+function handleCustomParamsUpdate(updates: Record<string, unknown>) {
+  if ('racingEnabled' in updates) form.racingTouched = true
+  Object.assign(form, updates)
+}
+
+// accounts 区更新：面板内部已自刷新订阅与账号状态，这里无需回写渠道表单
+// （刷新渠道列表会触发 props.channel 变化并重置表单，丢失未保存的编辑）。
+function handleAccountsUpdated() {
+  // no-op：面板内部状态自洽
+}
 </script>
 
 <template>
@@ -325,6 +347,21 @@ const embeddingTargetModels = computed(() =>
                           <span v-if="copilotPolling" class="text-xs text-muted-foreground">{{ t('copilotOAuth.waiting') }}</span>
                           <button v-if="copilotPolling || copilotOAuthLoading" type="button" class="text-xs text-muted-foreground underline" @click="clearCopilotPollTimer(); copilotPolling = false; copilotOAuthLoading = false">{{ t('copilotOAuth.cancel') }}</button>
                         </div>
+                      </div>
+                      <!-- new-api 账号管理（订阅绑定/多账号），对齐 web EditChannelModal accounts 区 -->
+                      <div v-if="isNewApiManagedChannel || isGenericAutoManagedChannel" class="mt-4">
+                        <NewApiAccountPanel
+                          :subscription-uid="channel?.subscriptionUid || ''"
+                          :channel-name="channel?.name"
+                          :base-url="channel?.baseUrl"
+                          :channel-uid="channel?.channelUid"
+                          :channel-kind="channelType"
+                          :is-generic="isGenericAutoManagedChannel"
+                          :auto-managed-kind="channel?.autoManagedKind"
+                          :channel-proxy-url="form.proxyUrl"
+                          :channel-proxy-prefer-direct="form.proxyPreferDirect"
+                          @updated="handleAccountsUpdated"
+                        />
                       </div>
                     </section>
 
@@ -579,7 +616,7 @@ const embeddingTargetModels = computed(() =>
                       <div class="mt-6">
                         <CustomParamsPanel
                           :form="form"
-                          @update:form="(updates) => Object.assign(form, updates)"
+                          @update:form="handleCustomParamsUpdate"
                         />
                       </div>
                     </section>
