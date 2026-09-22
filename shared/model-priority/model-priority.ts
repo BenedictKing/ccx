@@ -108,6 +108,7 @@ const modelPriorityPatterns: RegExp[] = [
   /minimax-?m3/i,
   /minimax-?m2\.7/i,
   /minimax-?m2\.5/i,
+  /mimo-v2\.6/i,
   /mimo-v2\.5/i,
   /doubao-seed-2-0/i,
   /ernie-4\.5/i,

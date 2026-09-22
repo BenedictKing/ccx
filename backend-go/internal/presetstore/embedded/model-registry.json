@@ -2117,6 +2117,120 @@
     },
     {
       "patterns": [
+        "(?:^|[-/])mimo-v2\\.6-pro(?=$|@)"
+      ],
+      "provider": "xiaomi",
+      "displayName": "MiMo V2.6 Pro",
+      "description": "MiMo trillion-parameter flagship reasoning model with omnimodal input (text, image, video, audio), covering complex projects, long-horizon tasks and high-value work.",
+      "contextWindowTokens": 1048576,
+      "maxOutputTokens": 131072,
+      "reasoningEfforts": [
+        "low",
+        "medium",
+        "high",
+        "max"
+      ],
+      "capabilities": {
+        "contextCaching": true,
+        "jsonOutput": true,
+        "toolCalls": true,
+        "vision": true,
+        "videoInput": true,
+        "audioInput": true,
+        "webSearch": true,
+        "reasoning": true
+      },
+      "pricing": {
+        "unit": "per_1m_tokens_usd",
+        "currency": "USD",
+        "inputCacheMissPrice": 0.435,
+        "outputPrice": 0.87,
+        "inputCacheHitPrice": 0.0036
+      },
+      "sources": [
+        "https://mimo.mi.com/docs/zh-CN/price/pay-as-you-go",
+        "https://platform.xiaomimimo.com/docs/zh-CN/integration/claudecode",
+        "https://openrouter.ai/xiaomi/mimo-v2.6-pro"
+      ]
+    },
+    {
+      "patterns": [
+        "(?:^|[-/])mimo-v2\\.6-flash(?=$|@)"
+      ],
+      "provider": "xiaomi",
+      "displayName": "MiMo V2.6 Flash",
+      "description": "MiMo efficient reasoning model with omnimodal input (text, image, video, audio), tuned for high-frequency professional workloads and large-scale tasks.",
+      "contextWindowTokens": 1048576,
+      "maxOutputTokens": 131072,
+      "reasoningEfforts": [
+        "low",
+        "medium",
+        "high",
+        "max"
+      ],
+      "capabilities": {
+        "contextCaching": true,
+        "jsonOutput": true,
+        "toolCalls": true,
+        "vision": true,
+        "videoInput": true,
+        "audioInput": true,
+        "webSearch": true,
+        "reasoning": true
+      },
+      "pricing": {
+        "unit": "per_1m_tokens_usd",
+        "currency": "USD",
+        "inputCacheMissPrice": 0.14,
+        "outputPrice": 0.28,
+        "inputCacheHitPrice": 0.0028
+      },
+      "sources": [
+        "https://mimo.mi.com/docs/zh-CN/price/pay-as-you-go",
+        "https://platform.xiaomimimo.com/docs/zh-CN/integration/claudecode",
+        "https://openrouter.ai/xiaomi/mimo-v2.6-flash"
+      ]
+    },
+    {
+      "patterns": [
+        "(?:^|[-/])mimo-v2\\.6-pro-ultraspeed(?=$|@)"
+      ],
+      "provider": "xiaomi",
+      "displayName": "MiMo V2.6 Pro Ultraspeed",
+      "description": "MiMo-V2.6-Pro high-speed edition: same flagship checkpoint with up to 20x output speed for latency-sensitive production workloads. Omnimodal input with reasoning, tool calls and web search.",
+      "contextWindowTokens": 1048576,
+      "maxOutputTokens": 131072,
+      "reasoningEfforts": [
+        "low",
+        "medium",
+        "high",
+        "max"
+      ],
+      "capabilities": {
+        "contextCaching": true,
+        "jsonOutput": true,
+        "toolCalls": true,
+        "vision": true,
+        "videoInput": true,
+        "audioInput": true,
+        "webSearch": true,
+        "reasoning": true
+      },
+      "pricing": {
+        "unit": "per_1m_tokens_usd",
+        "currency": "USD",
+        "inputCacheMissPrice": 4.35,
+        "outputPrice": 8.7,
+        "inputCacheHitPrice": 0.036
+      },
+      "sources": [
+        "https://mimo.mi.com/docs/zh-CN/price/pay-as-you-go",
+        "https://platform.xiaomimimo.com/docs/zh-CN/integration/claudecode",
+        "https://openrouter.ai/xiaomi/mimo-v2.6-pro-ultraspeed"
+      ]
+    },
+    {
+      "patterns": [
         "(?:^|[-/])mimo-v2\\.5(?=$|@)"
       ],
       "provider": "xiaomi",

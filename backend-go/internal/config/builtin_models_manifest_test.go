@@ -187,7 +187,7 @@ func TestLookupBuiltinManifest_MiMoAnthropicTokenPlan(t *testing.T) {
 	if manifest.PlanHint != "mimo_token_plan_cn_anthropic" {
 		t.Fatalf("planHint = %q, want mimo_token_plan_cn_anthropic", manifest.PlanHint)
 	}
-	expected := []string{"mimo-v2.5-pro", "mimo-v2.5"}
+	expected := []string{"mimo-v2.6-pro-ultraspeed", "mimo-v2.6-pro", "mimo-v2.6-flash", "mimo-v2.5-pro", "mimo-v2.5"}
 	if len(manifest.ModelIDs) != len(expected) {
 		t.Fatalf("ModelIDs len = %d, want %d", len(manifest.ModelIDs), len(expected))
 	}
@@ -331,7 +331,7 @@ func TestLookupBuiltinManifest_MiMoOpenAIChatTokenPlan(t *testing.T) {
 	if manifest.PlanHint != "mimo_token_plan_cn_openai" {
 		t.Fatalf("planHint = %q, want mimo_token_plan_cn_openai", manifest.PlanHint)
 	}
-	expected := []string{"mimo-v2.5-pro", "mimo-v2.5"}
+	expected := []string{"mimo-v2.6-pro-ultraspeed", "mimo-v2.6-pro", "mimo-v2.6-flash", "mimo-v2.5-pro", "mimo-v2.5"}
 	if len(manifest.ModelIDs) != len(expected) {
 		t.Fatalf("ModelIDs len = %d, want %d", len(manifest.ModelIDs), len(expected))
 	}

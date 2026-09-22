@@ -113,6 +113,10 @@ export const BENCHLM_MODEL_MAP = {
   'muse-spark-1-3': 'muse-spark-1.3',
   'mimo-v2-5': 'mimo-v2.5',
   'mimo-v2-5-pro': 'mimo-v2.5-pro',
+  // MiMo V2.6 系列（2026-09-22 发布）：benchlm slug 与 canonical 同名连字符形式
+  'mimo-v2-6-pro-ultraspeed': 'mimo-v2.6-pro-ultraspeed',
+  'mimo-v2-6-pro': 'mimo-v2.6-pro',
+  'mimo-v2-6-flash': 'mimo-v2.6-flash',
   'deepseek-v4-flash': 'deepseek-v4-flash',
   'deepseek-v4-flash-base': 'deepseek-v4-flash',
   'deepseek-v4-flash-high': 'deepseek-v4-flash',

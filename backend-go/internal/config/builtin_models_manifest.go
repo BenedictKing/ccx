@@ -228,8 +228,14 @@ var builtinModelsManifests = []BuiltinModelsManifest{
 	},
 }
 
+// mimoModelIDs 小米 MiMo 官方入口兜底文本模型清单。
+// 来源：MiMo 开放平台模型列表（mimo.mi.com/docs，2026-09-21 更新）：
+// V2.6 系列（pro / flash / pro-ultraspeed）为当前主力；V2.5 系列官方公告 2026-10-21 下线，保留至下线日。
 func mimoModelIDs() []string {
 	return []string{
+		"mimo-v2.6-pro-ultraspeed",
+		"mimo-v2.6-pro",
+		"mimo-v2.6-flash",
 		"mimo-v2.5-pro",
 		"mimo-v2.5",
 	}

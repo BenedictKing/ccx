@@ -1227,6 +1227,53 @@ func TestResolveUpstreamCapability_MimoVisionCapabilities(t *testing.T) {
 	}
 }
 
+func TestResolveUpstreamCapability_MiMoV26Series(t *testing.T) {
+	// 事实源：MiMo 开放平台模型列表与 API 定价（mimo.mi.com/docs，2026-09-21 更新）。
+	// V2.6 全系全模态输入（文本/图像/视频/音频），1M 上下文、128K 最大输出；
+	// 定价为海外美元口径：pro 0.435/0.87（缓存 0.0036）、flash 0.14/0.28（0.0028）、
+	// ultraspeed 4.35/8.7（0.036）。
+	tests := []struct {
+		model       string
+		displayName string
+		cacheHit    float64
+		input       float64
+		output      float64
+	}{
+		{model: "mimo-v2.6-pro", displayName: "MiMo V2.6 Pro", cacheHit: 0.0036, input: 0.435, output: 0.87},
+		{model: "xiaomi/mimo-v2.6-pro", displayName: "MiMo V2.6 Pro", cacheHit: 0.0036, input: 0.435, output: 0.87},
+		{model: "mimo-v2.6-flash", displayName: "MiMo V2.6 Flash", cacheHit: 0.0028, input: 0.14, output: 0.28},
+		{model: "mimo-v2.6-pro-ultraspeed", displayName: "MiMo V2.6 Pro Ultraspeed", cacheHit: 0.036, input: 4.35, output: 8.7},
+	}
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			resolved := ResolveUpstreamCapability(tt.model, nil, nil)
+			if !resolved.Known || resolved.Source != "builtin" {
+				t.Fatalf("resolved = %+v, want builtin capability", resolved)
+			}
+			capability := resolved.Capability
+			if capability.DisplayName != tt.displayName {
+				t.Fatalf("DisplayName = %q, want %q", capability.DisplayName, tt.displayName)
+			}
+			if capability.ContextWindowTokens != 1048576 || capability.MaxOutputTokens != 131072 {
+				t.Fatalf("context/maxOutput = %d/%d, want 1048576/131072 (1M / 128K)", capability.ContextWindowTokens, capability.MaxOutputTokens)
+			}
+			// V2.6 全系支持全模态理解，不再保留 V2.5-Pro 的 text-only 差异
+			for _, name := range []string{"vision", "videoInput", "audioInput", "toolCalls", "jsonOutput", "webSearch", "reasoning", "contextCaching"} {
+				if !capability.Capabilities[name] {
+					t.Fatalf("Capabilities[%q] = false, want true", name)
+				}
+			}
+			pricing := capability.Pricing
+			if pricing == nil {
+				t.Fatal("Pricing = nil")
+			}
+			assertFloatPointerValue(t, pricing.InputCacheHitPrice, tt.cacheHit, "Pricing.InputCacheHitPrice")
+			assertFloatPointerValue(t, pricing.InputCacheMissPrice, tt.input, "Pricing.InputCacheMissPrice")
+			assertFloatPointerValue(t, pricing.OutputPrice, tt.output, "Pricing.OutputPrice")
+		})
+	}
+}
+
 func TestResolveUpstreamCapability_RequestModelFallback(t *testing.T) {
 	upstream := &UpstreamConfig{
 		ModelMapping: map[string]string{"agent-1m": "vendor-hidden-model"},

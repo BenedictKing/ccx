@@ -113,6 +113,10 @@ export const ARTIFICIAL_ANALYSIS_MODEL_MAP = {
   'doubao-seed-code': 'doubao-seed-code',
   'mimo-v2-5': 'mimo-v2.5',
   'mimo-v2-5-pro': 'mimo-v2.5-pro',
+  // MiMo V2.6 系列（2026-09-22 发布）：AA slug 用连字符分段版本号
+  'mimo-v2-6-pro-ultraspeed': 'mimo-v2.6-pro-ultraspeed',
+  'mimo-v2-6-pro': 'mimo-v2.6-pro',
+  'mimo-v2-6-flash': 'mimo-v2.6-flash',
   'muse-spark-1-1': 'muse-spark-1.1',
   'muse-spark-1-2': 'muse-spark-1.2',
   'muse-spark-1-3': 'muse-spark-1.3',
