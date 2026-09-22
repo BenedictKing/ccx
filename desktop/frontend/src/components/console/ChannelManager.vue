@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Alert } from '@/components/ui/alert'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Plus, Search, Layers, Archive, Loader2, Zap, ChevronDown, BarChart3, X } from 'lucide-vue-next'
+import { Plus, Search, Layers, Archive, Loader2, Zap, ChevronDown, BarChart3, X, Network } from 'lucide-vue-next'
 import { useConsoleChannels } from '@/composables/useConsoleChannels'
 import { useAdminApi } from '@/composables/useAdminApi'
 import { useDesktopActivity } from '@/composables/useDesktopActivity'
@@ -15,6 +15,7 @@ import ChannelEditDialog from '@/components/console/ChannelEditDialog.vue'
 import ChannelLogsDialog from '@/components/console/ChannelLogsDialog.vue'
 import CapabilityTestDialog from '@/components/console/CapabilityTestDialog.vue'
 import CircuitBreakerDialog from '@/components/console/CircuitBreakerDialog.vue'
+import SchedulerDiagnoseDialog from '@/components/console/SchedulerDiagnoseDialog.vue'
 import GlobalStatsChart from '@/components/console/charts/GlobalStatsChart.vue'
 import KeyTrendChart from '@/components/console/charts/KeyTrendChart.vue'
 import type { ManagedChannelType } from '@/utils/channel-type-api'
@@ -100,6 +101,7 @@ const showCapabilityDialog = ref(false)
 const draggedIndex = ref<number | null>(null)
 
 const showCbDialog = ref(false)
+const showSchedulerDiagnose = ref(false)
 
 // 用量统计
 const globalStatsChartRef = ref<InstanceType<typeof GlobalStatsChart> | null>(null)
@@ -575,6 +577,10 @@ onBeforeUnmount(() => {
           {{ t('app.actions.addChannel') }}
         </Button>
         <div class="flex-1" />
+        <Button size="sm" variant="outline" class="h-7 text-xs" :title="t('schedulerDiagnose.title')" @click="showSchedulerDiagnose = true">
+          <Network class="h-3 w-3 mr-1" />
+          {{ t('schedulerDiagnose.title') }}
+        </Button>
         <Button size="sm" variant="outline" class="h-7 text-xs" @click="showCbDialog = true">
           <Zap class="h-3 w-3 mr-1" />
           TB
@@ -770,6 +776,12 @@ onBeforeUnmount(() => {
     <CircuitBreakerDialog
       :open="showCbDialog"
       @close="showCbDialog = false"
+    />
+
+    <SchedulerDiagnoseDialog
+      :open="showSchedulerDiagnose"
+      :channel-type="type"
+      @close="showSchedulerDiagnose = false"
     />
   </div>
 </template>

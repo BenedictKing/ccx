@@ -5,6 +5,7 @@ import { useLanguage } from '@/composables/useLanguage'
 import { useReleaseCheck } from '@/composables/useReleaseCheck'
 import { useTheme } from '@/composables/useTheme'
 import { openExternalLink } from '@/lib/external-link'
+import { useUserGuide } from '@/composables/useUserGuide'
 import { GetVersion } from '@bindings/github.com/BenedictKing/ccx/desktop/desktopservice'
 import type { VersionInfo } from '@bindings/github.com/BenedictKing/ccx/desktop/models'
 import Logo from '@/components/layout/Logo.vue'
@@ -27,11 +28,14 @@ import {
   HeartPulse,
   Gauge,
   Radar,
-  CircleDollarSign
+  CircleDollarSign,
+  CircleHelp
 } from 'lucide-vue-next'
 import type { TabValue } from '@/types'
 
 const modelValue = defineModel<TabValue>({ required: true })
+
+const { openUserGuide } = useUserGuide()
 
 const { status, loading, autostartEnabled, startService, stopService, setAutostart } = useStatus()
 const { locale, languageOptions, setLanguage, t } = useLanguage()
@@ -225,19 +229,29 @@ const handleDaemonAction = async () => {
             <div :class="['w-2 h-2 rounded-full transition-all duration-500 shrink-0', statusGlowClass]" />
             <span class="text-xs font-semibold text-foreground truncate">{{ statusLabel }}</span>
           </div>
-          <!-- 迷你开关控制，可快速启停 -->
-          <button
-            @click="handleDaemonAction"
-            :disabled="loading"
-            :class="[
-              'p-1.5 rounded-lg border text-xs transition-all duration-200 hover:scale-105 active:scale-95 shrink-0 cursor-pointer',
-              status.running
-                ? 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/20 hover:bg-rose-500/20'
-                : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'
-            ]"
-          >
-            <component :is="status.running ? Square : Play" class="w-3 h-3" />
-          </button>
+          <div class="flex items-center gap-1.5 shrink-0">
+            <!-- 使用指引入口 -->
+            <button
+              @click="openUserGuide"
+              :title="t('guide.helpButton')"
+              class="p-1.5 rounded-lg border border-border bg-secondary/60 text-muted-foreground hover:text-primary hover:border-primary/30 hover:bg-primary/10 transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer"
+            >
+              <CircleHelp class="w-3 h-3" />
+            </button>
+            <!-- 迷你开关控制，可快速启停 -->
+            <button
+              @click="handleDaemonAction"
+              :disabled="loading"
+              :class="[
+                'p-1.5 rounded-lg border text-xs transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer',
+                status.running
+                  ? 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/20 hover:bg-rose-500/20'
+                  : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'
+              ]"
+            >
+              <component :is="status.running ? Square : Play" class="w-3 h-3" />
+            </button>
+          </div>
         </div>
 
         <!-- 详细物理信息 -->

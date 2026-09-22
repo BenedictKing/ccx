@@ -4,12 +4,14 @@ import { GetAdminAccessKey } from '@bindings/github.com/BenedictKing/ccx/desktop
 import {
   HEALTH_CENTER_CHANGELOG_PATH,
   HEALTH_CENTER_EVENTS_WS_PATH,
+  HEALTH_CENTER_STATE_EVENTS_WS_PATH,
 } from '@/services/admin-api'
-import type { ProfileChangeEvent, ProfileChangelogResponse } from '@/services/admin-api'
+import type { ProfileChangeEvent, ProfileChangelogResponse, StateEvent } from '@/services/admin-api'
 
 /**
  * 渠道健康画像变更事件的历史拉取 + WebSocket 实时推送。
- * 复用后端 /api/health-center/changelog（REST）与 /api/health-center/events（WS）。
+ * 复用后端 /api/health-center/changelog（REST）、/api/health-center/events（WS，画像变更）
+ * 与 /api/health-center/state-events/stream（WS，跨模块状态事件，含 drift）。
  */
 
 export type ProfileEventsConnectionStatus = 'connecting' | 'open' | 'closed'
@@ -36,12 +38,18 @@ function buildWsUrl(baseUrl: string, path: string): string {
   return baseUrl.replace(/^http/i, 'ws') + path
 }
 
+interface EventsSocketOptions<T> {
+  path: string
+  onMessage: (event: T) => void
+  onStatusChange?: (status: ProfileEventsConnectionStatus) => void
+}
+
 /**
- * 建立画像变更事件 WebSocket 连接（实时推送）。
+ * 健康中心事件 WebSocket 公共管线：key 走 Sec-WebSocket-Protocol 子协议鉴权，
  * 断线自动重连（指数退避，1s 起步，封顶 30s）；返回的 close() 用于组件卸载时清理，
- * 调用后不再重连。若网关未运行则直接返回已关闭状态，不建立连接。
+ * 调用后不再重连。若网关未运行则等待其启动后再建立连接。
  */
-export function connectHealthChangelogEvents(options: ConnectProfileEventsOptions): () => void {
+function openEventsSocket<T>(options: EventsSocketOptions<T>): () => void {
   const { status } = useStatus()
   let closedByCaller = false
   let socket: WebSocket | null = null
@@ -63,7 +71,7 @@ export function connectHealthChangelogEvents(options: ConnectProfileEventsOption
     }
 
     const adminKey = await GetAdminAccessKey()
-    const url = buildWsUrl(status.value.url, HEALTH_CENTER_EVENTS_WS_PATH)
+    const url = buildWsUrl(status.value.url, options.path)
 
     notifyStatus('connecting')
     socket = adminKey ? new WebSocket(url, [adminKey]) : new WebSocket(url)
@@ -75,8 +83,7 @@ export function connectHealthChangelogEvents(options: ConnectProfileEventsOption
 
     socket.onmessage = (event: MessageEvent<string>) => {
       try {
-        const parsed = JSON.parse(event.data) as ProfileChangeEvent
-        options.onEvent(parsed)
+        options.onMessage(JSON.parse(event.data) as T)
       } catch {
         // 忽略无法解析的消息
       }
@@ -111,4 +118,32 @@ export function connectHealthChangelogEvents(options: ConnectProfileEventsOption
       socket = null
     }
   }
+}
+
+/**
+ * 建立画像变更事件 WebSocket 连接（实时推送，ProfileChangeEvent）。
+ */
+export function connectHealthChangelogEvents(options: ConnectProfileEventsOptions): () => void {
+  return openEventsSocket<ProfileChangeEvent>({
+    path: HEALTH_CENTER_EVENTS_WS_PATH,
+    onMessage: options.onEvent,
+    onStatusChange: options.onStatusChange,
+  })
+}
+
+export interface ConnectStateEventsOptions {
+  onEvent: (event: StateEvent) => void
+  onStatusChange?: (status: ProfileEventsConnectionStatus) => void
+}
+
+/**
+ * 建立跨模块状态事件 WebSocket 连接（/api/health-center/state-events/stream，
+ * 推送 eventbus.Event：circuit_breaker / key 黑名单 / manifest_drift / capability_drift 等）。
+ */
+export function connectHealthStateEvents(options: ConnectStateEventsOptions): () => void {
+  return openEventsSocket<StateEvent>({
+    path: HEALTH_CENTER_STATE_EVENTS_WS_PATH,
+    onMessage: options.onEvent,
+    onStatusChange: options.onStatusChange,
+  })
 }

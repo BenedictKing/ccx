@@ -10,8 +10,11 @@ import {
   Ban,
   CheckCircle2,
   Copy,
+  GripVertical,
   Key,
   Loader2,
+  Pause,
+  Play,
   Plus,
   RotateCcw,
   Trash2,
@@ -21,9 +24,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useLanguage } from '@/composables/useLanguage'
 import { useAdminApi } from '@/composables/useAdminApi'
 import { maskApiKey } from '@/utils/api-key-mask'
+import { suspendKeyPath } from '@/services/admin-api'
 import type {
   APIKeyConfig,
   ChannelKind,
+  ChannelsResponse,
   DisabledGroupModel,
   GroupModelMutationResponse,
   KeyMultiplierPatch,
@@ -84,6 +89,95 @@ const groupModelDrafts = ref<Record<string, { model: string; note: string }>>({}
 const groupModelBusy = ref('')
 const groupModelError = ref('')
 const groupModelNotice = ref('')
+
+// ── 每 Key 暂停/恢复（manual suspend，Enabled=false，与拉黑互不影响）──
+const suspendingKey = ref('')
+const localSuspendedKeys = ref(new Set<string>())
+const localResumedKeys = ref(new Set<string>())
+const suspendError = ref('')
+
+function isKeySuspended(key: string): boolean {
+  if (localResumedKeys.value.has(key)) return false
+  return localSuspendedKeys.value.has(key) || keyConfig(key)?.enabled === false
+}
+
+// 后端 suspend/resume 端点只接受数字渠道索引；编辑弹窗未传入 index，
+// 以 channelUid 反查渠道列表获得（与 multiplier 编辑一致依赖 channelUid）。
+async function resolveChannelIndex(): Promise<number | null> {
+  if (!props.channelUid) return null
+  const resp = await adminApi.get<ChannelsResponse>(`/api/${props.channelKind}/channels`)
+  const found = (resp.channels || []).find(ch => ch.channelUid === props.channelUid)
+  return found ? found.index : null
+}
+
+async function suspendKey(key: string) {
+  if (suspendingKey.value) return
+  suspendingKey.value = key
+  suspendError.value = ''
+  try {
+    const channelId = await resolveChannelIndex()
+    if (channelId === null) throw new Error(t('groupModel.error.channelRequired'))
+    await adminApi.post(suspendKeyPath(props.channelKind, channelId), { apiKey: key })
+    localSuspendedKeys.value = new Set([...localSuspendedKeys.value, key])
+    localResumedKeys.value.delete(key)
+  } catch (cause) {
+    suspendError.value = cause instanceof Error ? cause.message : String(cause)
+  } finally {
+    suspendingKey.value = ''
+  }
+}
+
+async function resumeSuspendedKey(key: string) {
+  if (suspendingKey.value) return
+  suspendingKey.value = key
+  suspendError.value = ''
+  try {
+    const channelId = await resolveChannelIndex()
+    if (channelId === null) throw new Error(t('groupModel.error.channelRequired'))
+    await adminApi.post(`/api/${props.channelKind}/channels/${channelId}/keys/resume`, { apiKey: key })
+    localResumedKeys.value = new Set([...localResumedKeys.value, key])
+    localSuspendedKeys.value.delete(key)
+  } catch (cause) {
+    suspendError.value = cause instanceof Error ? cause.message : String(cause)
+  } finally {
+    suspendingKey.value = ''
+  }
+}
+
+// ── Key 行拖拽排序（本地草稿重排，保存时随 apiKeys 顺序一并提交）──
+const dragEnabledIndex = ref<number | null>(null)
+const draggingIndex = ref<number | null>(null)
+
+function enableKeyDrag(index: number) {
+  dragEnabledIndex.value = index
+}
+
+function resetKeyDrag() {
+  dragEnabledIndex.value = null
+  draggingIndex.value = null
+}
+
+function onKeyDragStart(e: DragEvent, index: number) {
+  draggingIndex.value = index
+  e.dataTransfer?.setData('text/plain', String(index))
+  if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'
+}
+
+function onKeyDragOver(e: DragEvent) {
+  e.preventDefault()
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
+}
+
+function onKeyDrop(e: DragEvent, targetIndex: number) {
+  e.preventDefault()
+  const sourceIndex = draggingIndex.value
+  if (sourceIndex === null || sourceIndex === targetIndex) return
+  // existingApiKeys 与父组件草稿为同一响应式数组实例，就地重排等价于
+  // moveApiKeyToTop/Bottom 的本地语义，保存时按新顺序提交
+  const [moved] = props.existingApiKeys.splice(sourceIndex, 1)
+  props.existingApiKeys.splice(targetIndex, 0, moved)
+  resetKeyDrag()
+}
 
 watch(() => props.apiKeyConfigs, configs => {
   const next: Record<string, { groupMultiplier: string; maxGroupMultiplier: string; consumptionPolicy: 'normal' | 'opportunistic' }> = {}
@@ -214,11 +308,29 @@ const visibleDisabledKeys = computed(() => {
       <div
         class="flex items-center justify-between gap-4 rounded-lg px-3 py-2 text-xs shadow-2xs transition-all group"
         :class="duplicateKeyIndex === index ? 'border-destructive/70 bg-destructive/10 animate-pulse' : 'border border-border/60 bg-background/60 hover:bg-background'"
+        :draggable="dragEnabledIndex === index"
+        :style="draggingIndex === index ? 'opacity: 0.5' : ''"
+        @dragstart="onKeyDragStart($event, index)"
+        @dragover="onKeyDragOver"
+        @drop="onKeyDrop($event, index)"
+        @dragend="resetKeyDrag"
       >
         <div class="flex min-w-0 items-center gap-2.5">
+          <GripVertical
+            class="h-3.5 w-3.5 shrink-0 cursor-grab text-muted-foreground/50 transition-colors hover:text-foreground active:cursor-grabbing"
+            :title="t('channelEditor.auth.dragKeyHint')"
+            @mousedown="enableKeyDrag(index)"
+            @mouseup="resetKeyDrag"
+          />
           <AlertTriangle v-if="duplicateKeyIndex === index" class="h-3.5 w-3.5 shrink-0 text-destructive" />
           <Key v-else class="h-3.5 w-3.5 shrink-0 text-primary/70" />
           <code class="font-mono text-muted-foreground font-medium select-all">{{ maskApiKey(key) }}</code>
+          <span
+            v-if="isKeySuspended(key)"
+            class="shrink-0 rounded bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-medium text-amber-600 dark:text-amber-300"
+          >
+            {{ t('channelCard.keyPaused') }}
+          </span>
           <span
             v-if="getKeyStatus(key)?.loading"
             class="rounded bg-sky-500/10 px-1.5 py-0.5 text-[9px] font-medium text-sky-600"
@@ -284,6 +396,34 @@ const visibleDisabledKeys = computed(() => {
           >
             <ArrowDown class="h-3.5 w-3.5" />
           </Button>
+          <template v-if="channelUid">
+            <Button
+              v-if="isKeySuspended(key)"
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              class="h-7 w-7 rounded-md text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-700 dark:text-emerald-300"
+              :title="t('channelCard.resumeKey')"
+              :disabled="suspendingKey === key"
+              @click="resumeSuspendedKey(key)"
+            >
+              <Loader2 v-if="suspendingKey === key" class="h-3.5 w-3.5 animate-spin" />
+              <Play v-else class="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              v-else
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              class="h-7 w-7 rounded-md text-amber-600 hover:bg-amber-500/10 hover:text-amber-700 dark:text-amber-300"
+              :title="t('channelCard.suspendKey')"
+              :disabled="suspendingKey === key"
+              @click="suspendKey(key)"
+            >
+              <Loader2 v-if="suspendingKey === key" class="h-3.5 w-3.5 animate-spin" />
+              <Pause v-else class="h-3.5 w-3.5" />
+            </Button>
+          </template>
           <Button
             type="button"
             size="icon-sm"
@@ -359,6 +499,7 @@ const visibleDisabledKeys = computed(() => {
       </div>
     </div>
     <p v-if="multiplierError" class="text-[10px] text-destructive">{{ multiplierError }}</p>
+    <p v-if="suspendError" class="text-[10px] text-destructive">{{ suspendError }}</p>
     <p v-if="groupModelError" class="text-[10px] text-destructive">{{ groupModelError }}</p>
     <p v-if="groupModelNotice" class="text-[10px] text-emerald-700 dark:text-emerald-300">{{ groupModelNotice }}</p>
 

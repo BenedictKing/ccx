@@ -152,6 +152,10 @@ vi.mock('@/components/console/CircuitBreakerDialog.vue', () => ({
   default: defineComponent({ setup: () => () => h('div') }),
 }))
 
+vi.mock('@/components/console/SchedulerDiagnoseDialog.vue', () => ({
+  default: defineComponent({ setup: () => () => h('div') }),
+}))
+
 vi.mock('@/components/console/charts/KeyTrendChart.vue', () => ({
   default: defineComponent({ setup: () => () => h('div', { 'data-testid': 'key-trend-chart' }) }),
 }))

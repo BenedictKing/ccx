@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import type {
   Channel,
   ChannelMetrics,
+  ChannelProtocolCapsule,
   ChannelRecentActivity,
   TimeWindowStats,
 } from '@/services/admin-api'
@@ -11,6 +12,7 @@ import { availableChannelApiKeyCount, disabledChannelApiKeyCount } from '@/utils
 import { openExternalLink } from '@/lib/external-link'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,6 +31,7 @@ import {
   Database,
   Edit3,
   ExternalLink,
+  EyeOff,
   GripVertical,
   History,
   Key,
@@ -37,6 +40,7 @@ import {
   Play,
   RotateCcw,
   Sparkles,
+  Tag,
   Trash2,
   Zap,
 } from 'lucide-vue-next'
@@ -78,7 +82,7 @@ const emit = defineEmits<{
   toggle: []
 }>()
 
-const { t } = useLanguage()
+const { t, tf } = useLanguage()
 
 const isSuspended = computed(() => props.channel.status === 'suspended')
 const isDisabled = computed(() => props.channel.status === 'disabled')
@@ -97,6 +101,18 @@ function protocolClass(serviceType: string) {
     responses: 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
   }
   return map[serviceType] || map.openai
+}
+
+// 协议胶囊配色：优先 serviceType，缺失时按协议 kind 兜底
+function capsuleClass(capsule: ChannelProtocolCapsule) {
+  if (capsule.serviceType) return protocolClass(capsule.serviceType)
+  const kindMap: Record<string, string> = {
+    messages: 'border-orange-500/25 bg-orange-500/10 text-orange-700 dark:text-orange-300',
+    chat: 'border-blue-500/25 bg-blue-500/10 text-blue-700 dark:text-blue-300',
+    responses: 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+    gemini: 'border-purple-500/25 bg-purple-500/10 text-purple-700 dark:text-purple-300',
+  }
+  return kindMap[capsule.kind] || 'border-border bg-secondary/50 text-muted-foreground'
 }
 
 const statusConfig = computed(() => {
@@ -172,6 +188,39 @@ const tpmDisplay = computed(() => {
 })
 
 const currentStats = computed(() => props.metrics?.timeWindows?.['15m'])
+
+// 双口径请求统计：15m 窗口 userRequestCount 与 requestCount 不一致时，
+// 显示「X 请求 / Y 次尝试」——尝试口径为上游尝试次数（竞速败出豁免计数）
+const requestDualCaliber = computed(() => {
+  const stats = currentStats.value
+  if (!stats || !stats.requestCount) return null
+  const users = stats.userRequestCount
+  if (users === undefined || users === stats.requestCount) return null
+  return t('orchestration.requestsVsAttempts', {
+    users: formatTokenCount(users),
+    attempts: formatTokenCount(stats.requestCount),
+  })
+})
+
+// 来源层级徽章（§8.2 标签系统）
+const originTierTag = computed(() => {
+  const tier = props.channel.originTier
+  if (!tier || tier === 'unknown') return null
+  const tierMap: Record<string, { key: string; class: string }> = {
+    first: { key: 'channelHealth.originOfficial', class: 'border-blue-500/25 bg-blue-500/10 text-blue-700 dark:text-blue-300' },
+    second: { key: 'channelHealth.originRelay', class: 'border-indigo-500/25 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300' },
+    third: { key: 'channelHealth.originCommunity', class: 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' },
+  }
+  const cfg = tierMap[tier]
+  if (!cfg) return null
+  return { label: t(cfg.key), class: cfg.class }
+})
+
+const originTypeLabel = computed(() => {
+  const originType = props.channel.originType?.trim()
+  if (!originType) return ''
+  return tf(`subscription.originType.${originType}`, originType)
+})
 
 const cacheHitRate = computed(() => {
   const stats = currentStats.value
@@ -289,34 +338,69 @@ function handleCardClick(event: MouseEvent) {
     </div>
 
     <div class="relative z-10 min-w-0 space-y-1">
-      <div class="flex min-w-0 items-center gap-2">
+      <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
         <span
           class="h-2 w-2 shrink-0 rounded-full shadow-[0_0_8px_currentColor]"
           :class="statusConfig.dot"
           :title="statusConfig.label"
         />
-        <button
-          type="button"
-          class="min-w-0 truncate text-left text-sm font-semibold text-foreground underline-offset-4 transition-colors hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
-          @click.stop="emit('edit')"
-          @keydown.enter.stop="emit('edit')"
-          @keydown.space.prevent.stop="emit('edit')"
-        >
-          {{ channel.name }}
-        </button>
+        <Tooltip :delay-duration="150">
+          <TooltipTrigger as-child>
+            <button
+              type="button"
+              class="min-w-0 truncate text-left text-sm font-semibold text-foreground underline-offset-4 transition-colors hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+              @click.stop="emit('edit')"
+              @keydown.enter.stop="emit('edit')"
+              @keydown.space.prevent.stop="emit('edit')"
+            >
+              {{ channel.name }}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent v-if="channel.remark?.trim()" side="top" class="max-w-[320px] break-words text-xs">
+            {{ channel.remark }}
+          </TooltipContent>
+        </Tooltip>
         <template v-if="channel.protocolCapsules?.length">
           <Badge
             v-for="capsule in channel.protocolCapsules"
-            :key="capsule.kind"
+            :key="`${capsule.kind}-${capsule.index}`"
             class="shrink-0 border text-[10px] uppercase"
-            :class="protocolClass(capsule.serviceType)"
+            :class="capsuleClass(capsule)"
+            :title="capsule.label || capsule.kind"
           >
-            {{ capsule.kind }}
+            {{ capsule.label || capsule.kind }}
           </Badge>
         </template>
         <Badge v-else class="shrink-0 border text-[10px] uppercase" :class="serviceTypeClass">
           {{ channel.serviceType }}
         </Badge>
+        <EyeOff
+          v-if="channel.noVision"
+          class="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-300"
+          :title="t('channelEditor.compat.noVision.label')"
+        />
+        <span
+          v-if="originTierTag"
+          class="inline-flex shrink-0 items-center border px-1.5 py-0.5 text-[10px] font-semibold"
+          :class="originTierTag.class"
+        >
+          {{ originTierTag.label }}
+        </span>
+        <span
+          v-if="originTypeLabel"
+          class="inline-flex shrink-0 items-center border border-border bg-secondary/40 px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground"
+          :title="channel.originType"
+        >
+          {{ originTypeLabel }}
+        </span>
+        <span
+          v-for="userTag in channel.tags"
+          :key="userTag"
+          class="inline-flex shrink-0 items-center gap-0.5 border border-teal-500/40 px-1.5 py-0.5 text-[10px] font-semibold text-teal-700 dark:text-teal-300"
+        >
+          <Tag class="h-2.5 w-2.5" />
+          {{ userTag }}
+        </span>
         <button
           v-if="websiteUrl"
           type="button"
@@ -400,6 +484,13 @@ function handleCardClick(event: MouseEvent) {
 
     <div class="relative z-10 hidden space-y-0.5 text-right font-mono lg:block">
       <div class="text-[11px] font-bold text-foreground xl:text-xs">{{ requestDisplay }}</div>
+      <div
+        v-if="requestDualCaliber"
+        class="text-[10px] text-muted-foreground"
+        :title="t('orchestration.attemptsNote')"
+      >
+        {{ requestDualCaliber }}
+      </div>
       <div class="text-[10px] text-muted-foreground">{{ successRateDisplay }}</div>
     </div>
 

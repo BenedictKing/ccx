@@ -14,6 +14,7 @@ import ConversationsTab from '@/components/console/ConversationsTab.vue'
 import CostReportTab from '@/components/report/CostReportTab.vue'
 import SetupLoading from '@/components/setup/SetupLoading.vue'
 import SetupView from '@/components/setup/SetupView.vue'
+import UserGuideDialog from '@/components/guide/UserGuideDialog.vue'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { useStatus } from '@/composables/useStatus'
 import { useWailsEvents } from '@/composables/useWailsEvents'
@@ -21,6 +22,7 @@ import { useSetup } from '@/composables/useSetup'
 import { useLanguage } from '@/composables/useLanguage'
 import { useTheme } from '@/composables/useTheme'
 import { ensureDesktopRuntimePresetsLoaded } from '@/composables/useRuntimePresets'
+import { useUserGuide } from '@/composables/useUserGuide'
 import {
   setDesktopActiveTab,
   setDesktopConsoleSelection,
@@ -58,6 +60,16 @@ useWailsEvents(activeTab, actionError, syncStatus)
 
 // Setup 引导流程
 const { setupChecked, setupComplete, pendingTab, checkSetup } = useSetup()
+
+// 用户指引：首次启动自动弹一次（Setup 完成后才弹出，避免遮挡配置向导）
+const { showUserGuide } = useUserGuide()
+const GUIDE_SEEN_STORAGE_KEY = 'ccx-desktop-guide-seen'
+watch(setupComplete, (complete) => {
+  if (!complete) return
+  if (localStorage.getItem(GUIDE_SEEN_STORAGE_KEY)) return
+  localStorage.setItem(GUIDE_SEEN_STORAGE_KEY, '1')
+  showUserGuide.value = true
+})
 
 onMounted(() => {
   initTheme()
@@ -293,5 +305,8 @@ onBeforeUnmount(() => {
       </div>
     </main>
     </div>
+
+    <!-- 用户指引（v-model:open） -->
+    <UserGuideDialog v-model:open="showUserGuide" />
   </TooltipProvider>
 </template>

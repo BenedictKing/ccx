@@ -2145,3 +2145,67 @@ export const suspendKeyPath = (kind: ChannelKind, channelId: number | string) =>
 export const subscriptionLinkPath = (uid: string) => `${subscriptionPath(uid)}/link`
 export const subscriptionUnlinkPath = (uid: string) => `${subscriptionPath(uid)}/unlink`
 export const subscriptionPrimaryAccountPath = (uid: string) => `${subscriptionPath(uid)}/accounts/primary`
+
+// ============== 健康中心跨模块状态事件（对齐 web 端 api-types.ts） ==============
+
+/** 状态事件 REST 拉取端点 */
+export const HEALTH_CENTER_STATE_EVENTS_PATH = '/api/health-center/state-events'
+
+/** 状态事件 WebSocket 推送端点（eventbus.Event：含 manifest_drift / capability_drift 等） */
+export const HEALTH_CENTER_STATE_EVENTS_WS_PATH = '/api/health-center/state-events/stream'
+
+/** eventbus.Event 统一 envelope（与后端 internal/eventbus/event.go 对齐） */
+export interface StateEvent {
+  uid: string
+  type: string
+  scope?: string
+  /** channelUID / metricsKey / logicalChannelUid 等 */
+  subject?: string
+  /** messages / chat / ...（可选） */
+  channelKind?: string
+  /** 状态迁移前值 */
+  from?: string
+  /** 状态迁移后值 */
+  to?: string
+  cause?: string
+  payload?: Record<string, unknown>
+  createdAt: string
+}
+
+/** manifest_drift 事件 payload */
+export interface ManifestDriftPayload {
+  /** 新增模型 */
+  added?: string[]
+  /** 移除模型 */
+  removed?: string[]
+}
+
+/** capability_drift 事件 payload */
+export interface CapabilityDriftPayload {
+  /** 探测模型 */
+  model?: string
+  /** 经 model mapping 重定向后实际发往上游的模型 */
+  actualModel?: string
+  /** 探测协议 */
+  protocol?: string
+  /** 渠道可读名 */
+  channelName?: string
+  /** 注册表声明的能力 */
+  declared?: {
+    source?: string
+    matchedPattern?: string
+    contextWindow?: number
+    maxOutput?: number
+    thinkingMode?: string
+    reasoningEfforts?: string[]
+  }
+  /** 实际探测结果 */
+  actual?: {
+    success?: boolean
+    streamingSupported?: boolean
+    latencyMs?: number
+    error?: string
+  }
+  /** 漂移字段列表 */
+  driftFields?: string[]
+}

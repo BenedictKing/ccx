@@ -599,7 +599,7 @@ export function useCapabilityTests() {
   async function startTest(
     channelType: string,
     channelId: number,
-    options?: { targetProtocols?: string[]; models?: string[]; rpm?: number; previousJobId?: string; sourceTab?: string },
+    options?: { targetProtocols?: string[]; models?: string[]; rpm?: number; previousJobId?: string; sourceTab?: string; useChannelModels?: boolean },
   ) {
     loading.value = true
     clearError()
@@ -638,6 +638,7 @@ export function useCapabilityTests() {
     protocol: string,
     models?: string[],
     rpm?: number,
+    useChannelModels?: boolean,
   ) {
     const currentJob = activeJob.value ?? buildCapabilityIdleJob(channelType, channelId, '')
     activeJob.value = mergeCapabilityJob(currentJob, {
@@ -656,6 +657,8 @@ export function useCapabilityTests() {
       rpm: rpm ?? DEFAULT_CAPABILITY_TEST_RPM,
       sourceTab: channelType,
       previousJobId: getPreviousJobId(protocol),
+      // Web 语义：显式指定模型时忽略 useChannelModels
+      useChannelModels: useChannelModels && !models?.length,
     })
   }
 
@@ -924,6 +927,25 @@ export function useCapabilityTests() {
     }
   }
 
+  // ── Model Mapping ──
+
+  /** 一键建映射：把「源模型名 → 实测真实模型」写入渠道 modelMapping（后端 upsert 合并语义） */
+  async function createModelMapping(
+    channelType: string,
+    channelId: number,
+    sourcePattern: string,
+    targetModel: string,
+  ) {
+    await api.put(`/api/${channelType}/channels/${channelId}/mappings`, {
+      source_pattern: sourcePattern,
+      target_model: targetModel,
+      reasoning: '',
+    })
+    if (isManagedChannelType(channelType)) {
+      await refreshChannels(channelType)
+    }
+  }
+
   // ── Reset ──
 
   function reset() {
@@ -1003,6 +1025,7 @@ export function useCapabilityTests() {
     retryModel,
     retryModelForProtocol,
     copyToTab,
+    createModelMapping,
     closeDialog,
     reset,
     // computed helpers

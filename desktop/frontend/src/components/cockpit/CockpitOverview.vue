@@ -10,6 +10,7 @@ import {
   Lightbulb,
   Loader2,
   RefreshCw,
+  Server,
   ShieldAlert,
   StopCircle,
   UserCheck,
@@ -75,6 +76,16 @@ function intentStatusVariant(status: string): 'default' | 'secondary' | 'destruc
     case 'exhausted': return 'secondary'
     case 'disabled': return 'destructive'
     default: return 'outline'
+  }
+}
+
+function runtimeStatusClass(status: string): string {
+  switch (status) {
+    case 'healthy': return 'border-emerald-500/30 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400'
+    case 'slow': return 'border-amber-500/30 bg-amber-500/5 text-amber-600 dark:text-amber-400'
+    case 'error':
+    case 'dead': return 'border-red-500/30 bg-red-500/5 text-red-600 dark:text-red-400'
+    default: return 'border-border/60 bg-card/40 text-foreground'
   }
 }
 
@@ -255,6 +266,37 @@ onMounted(fetchAll)
             >
               {{ tier }}: {{ count }}
             </Badge>
+          </div>
+        </CardContent>
+      </Card>
+
+      <!-- 本地 Runtime 概览 -->
+      <Card>
+        <CardHeader>
+          <CardTitle class="flex items-center gap-2 text-sm">
+            <Server class="size-4 text-amber-500" />
+            {{ t('cockpitOverview.localRuntimes') }}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div class="rounded-lg border border-border/60 bg-card/40 px-4 py-3 text-center">
+              <div class="text-2xl font-bold">{{ overview.localRuntimes.total }}</div>
+              <div class="text-xs text-muted-foreground">{{ t('cockpitOverview.totalRuntimes') }}</div>
+            </div>
+            <div class="rounded-lg border border-border/60 bg-card/40 px-4 py-3 text-center">
+              <div class="text-2xl font-bold">{{ overview.localRuntimes.totalModels }}</div>
+              <div class="text-xs text-muted-foreground">{{ t('cockpitOverview.totalModels') }}</div>
+            </div>
+            <div
+              v-for="(count, status) in overview.localRuntimes.statusCounts"
+              :key="`runtime-${status}`"
+              class="rounded-lg border px-4 py-3 text-center"
+              :class="runtimeStatusClass(String(status))"
+            >
+              <div class="text-2xl font-bold">{{ count }}</div>
+              <div class="text-xs text-muted-foreground">{{ status }}</div>
+            </div>
           </div>
         </CardContent>
       </Card>
