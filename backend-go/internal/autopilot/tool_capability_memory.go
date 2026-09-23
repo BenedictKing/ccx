@@ -66,11 +66,11 @@ var verifiedToolCallRoutesLookup = func(kind string) map[string]bool {
 	if cache == nil {
 		return nil
 	}
-	return cache.VerifiedToolCallRoutes(kind, true)
+	return cache.VerifiedToolCallRoutesForExclusive(kind, true)
 }
 
-// verifiedToolCallRoutes 返回指定执行协议上存在运行期 auto 实测真实工具调用组合的
-// 路由身份集合（渠道间排他的判定依据；该协议集合为空 = fail-open）。
+// verifiedToolCallRoutes 返回指定执行协议上足够多的运行期 auto 实测真实工具调用
+// 路由身份集合（渠道间排他的判定依据；验证路由不足时 fail-open）。
 // 按协议独立判定：messages 流量不被 responses 证据锁死，反之亦然。
 func verifiedToolCallRoutes(kind string) map[string]bool {
 	return verifiedToolCallRoutesLookup(kind)

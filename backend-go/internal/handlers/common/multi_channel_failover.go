@@ -226,6 +226,14 @@ func HandleMultiChannelFailoverWithSelectionFilter(
 
 		// 竞速编排：未启用时行为等同直接调用 trySelectedChannel；
 		// 启用后主分支与影子分支竞速，返回实际服务请求的 selection 与结果。
+		reasoningNeed := false
+		reasoningEffort := ""
+		if profile, ok := autopilot.RequestProfileFromContext(c.Request.Context()); ok {
+			reasoningNeed = profile.ReasoningNeed
+			if profile.ClientEffortExplicit {
+				reasoningEffort = string(profile.ClientEffort)
+			}
+		}
 		var result MultiChannelAttemptResult
 		selection, result = RunRacingAttempt(c, trySelectedChannel, RacingAttemptInput{
 			Ctx:              c.Request.Context(),
@@ -234,6 +242,8 @@ func HandleMultiChannelFailoverWithSelectionFilter(
 			Scheduler:        channelScheduler,
 			Kind:             kind,
 			Model:            model,
+			ReasoningNeed:    reasoningNeed,
+			ReasoningEffort:  reasoningEffort,
 			IsStream:         isStream,
 			HasImageContent:  hasImageContent,
 			SelectionOptions: selectionOpts,

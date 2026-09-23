@@ -812,6 +812,10 @@ func TestTryUpstreamWithAllKeysToolWhitelistConflictPassthrough(t *testing.T) {
 		}
 		config.SharedChannelCompatCache().Record(routeIdentity, "kh_test", "kimi-k3",
 			config.TraitVerifiedToolCalls, true, config.CompatSourceRuntimeSignal, "test seed")
+		// 两个独立验证路由后才进入协议级排他；第二个路由模拟已有其他渠道的
+		// 运行期成功证据，确保本测试覆盖 override 的白名单冲突分支。
+		config.SharedChannelCompatCache().Record("lc-other#"+kind, "kh_other", "kimi-k3",
+			config.TraitVerifiedToolCalls, true, config.CompatSourceRuntimeSignal, "test seed")
 	}
 
 	w := httptest.NewRecorder()

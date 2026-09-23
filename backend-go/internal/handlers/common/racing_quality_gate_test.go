@@ -185,6 +185,7 @@ func TestToolWhitelistAllowsColdStartDiscipline(t *testing.T) {
 	}
 	bad := &config.UpstreamConfig{ChannelUID: "ch_bad", LogicalChannelUID: "lc_bad", Name: "bad"}
 	clean := &config.UpstreamConfig{ChannelUID: "ch_clean", LogicalChannelUID: "lc_clean", Name: "clean"}
+	neutral := &config.UpstreamConfig{ChannelUID: "ch_neutral", LogicalChannelUID: "lc_neutral", Name: "neutral"}
 
 	// 无任何证据：fail-open 全放行（不堵冷启动）
 	if !runs.toolWhitelistAllows(bad, "m1") || !runs.toolWhitelistAllows(clean, "m1") {
@@ -210,13 +211,21 @@ func TestToolWhitelistAllowsColdStartDiscipline(t *testing.T) {
 		t.Fatal("候选模型为空应回退请求模型判定（m1 已劣化，不应放行）")
 	}
 
-	// 白名单非空时排他规则优先：成员放行，非成员（含无证据组合）拒绝
+	// 单一路由验证仍处于探索期，不能启用协议级排他。
 	cache.Record("lc_clean#responses", "k1", "m1", config.TraitVerifiedToolCalls, true, config.CompatSourceRuntimeSignal, "e")
+	if !runs.toolWhitelistAllows(neutral, "m1") {
+		t.Fatal("仅一个验证路由时应保持 fail-open")
+	}
+	// 达到最小路由数后排他规则生效：成员放行，非成员（含无证据组合）拒绝
+	cache.Record("lc_second#responses", "k1", "m1", config.TraitVerifiedToolCalls, true, config.CompatSourceRuntimeSignal, "e")
 	if !runs.toolWhitelistAllows(clean, "m1") {
 		t.Fatal("白名单成员应放行")
 	}
 	if runs.toolWhitelistAllows(bad, "m1") {
 		t.Fatal("白名单非空时非成员应拒绝")
+	}
+	if runs.toolWhitelistAllows(neutral, "m1") {
+		t.Fatal("白名单启用后无证据路由应拒绝")
 	}
 
 	// 不带工具的请求恒放行

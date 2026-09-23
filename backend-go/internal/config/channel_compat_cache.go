@@ -20,6 +20,11 @@ const ChannelCompatStatePath = ".config/channel_compat.json"
 // 与 DeprecatedParamCache / SystemHeaderFilterCache 保持一致：上游能力变化后自动重新学习。
 const channelCompatTTL = 24 * time.Hour
 
+// VerifiedToolCallRouteMinCount 是启用协议级工具白名单排他的最小路由数。
+// 只有一个运行期验证路由时仍处于探索阶段，继续 fail-open，避免首个成功样本
+// 把其他路由永久挡在工具流量之外，形成无法自我验证的单成员闭环。
+const VerifiedToolCallRouteMinCount = 2
+
 // channelCompatFlushDebounce 高频统计样本（latency 证据）的防抖落盘窗口。
 // 这类样本廉价且可重新学习，合并到固定窗口后单次落盘，避免把整份状态的
 // 序列化+rename 压到请求热路径上；窗口内进程退出只是少学几次样本（streak 重计）。
@@ -1179,6 +1184,17 @@ func (c *ChannelCompatCache) VerifiedToolCallRoutes(kind string, onlyRuntime boo
 			}
 			routes[parts[0]] = true
 		}
+	}
+	return routes
+}
+
+// VerifiedToolCallRoutesForExclusive 返回可用于协议级排他的运行期验证路由集合。
+// 验证路由不足时返回 nil，调用方应保持 fail-open；普通诊断查询仍使用
+// VerifiedToolCallRoutes 获取完整集合。
+func (c *ChannelCompatCache) VerifiedToolCallRoutesForExclusive(kind string, onlyRuntime bool) map[string]bool {
+	routes := c.VerifiedToolCallRoutes(kind, onlyRuntime)
+	if len(routes) < VerifiedToolCallRouteMinCount {
+		return nil
 	}
 	return routes
 }

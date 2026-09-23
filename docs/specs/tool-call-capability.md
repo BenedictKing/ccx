@@ -125,8 +125,8 @@ if learnedToolCallUnsupported(routeIdentity, actualModel) {
   2. SmartRouter 候选行收紧（`buildChannelEntryForKey`）：影子候选行直接携带模型（不经 resolver），必须在此挡。
   3. 竞速影子排他（`racing.go toolWhitelistAllows`）：兜底重选与排名缓存两条影子出口，非白名单路由不派影子。
   4. override 终审（`upstream_failover.go` AutoModel 应用点）：policy 构建期的预解析缓存（targetByUID 等）不经本次请求的 ResolveModel 过滤，应用前对 override 目标做白名单终审，不在名单内即放弃 override 按原始模型透传。
-- **路由间排他（两级收紧）**：`VerifiedToolCallRoutes(kind, true)` 返回**该执行协议**上的白名单路由集合；集合非空时，非成员路由的候选行 `SupportsToolCalls=false`（经既有工具硬约束剔除），带工具流量锁定到实证路由。该协议无任何成员时 fail-open（冷启动不堵、按协议独立判定）。
-- **失败撤销（动态自愈）**：排他把流量锁定白名单路由后，白名单路由自身故障（上游空流）会无路可退。带工具请求在该组合上收到空/无效响应时撤销 verified 记录（`MaybeForgetVerifiedToolCalls`，`Record(..., enabled=false, ...)`），路由从集合摘牌、排他 fail-open 放开全部候选；后续真实成功经正向学习重建。白名单由此成为动态自愈集合而非静态锁定。
+- **路由间排他（两级收紧）**：`VerifiedToolCallRoutesForExclusive(kind, true)` 只在该执行协议上存在至少两个独立运行期验证路由时返回白名单集合；验证路由不足时保持 fail-open，给其他路由保留探索机会，避免单成员锁死冷启动。排他启用后，非成员路由的候选行 `SupportsToolCalls=false`（经既有工具硬约束剔除），带工具流量锁定到实证路由。集合按协议独立判定。
+- **能力撤销**：空流、无效响应、首字超时和断流只说明本次请求不可用，不改变工具能力记忆。只有上游 400/422 明确点名不支持工具调用时，才撤销对应的 `verified_tool_calls` 记录（`MaybeForgetVerifiedToolCallsOnUnsupported`），避免把可用性故障污染成能力否定。伪工具标记仍通过连续三次 miss 撤销。
 - **伪标记负反馈与 fail-open 窗口收敛（2026-09-19）**：auto 模式干净 2xx 但零真实调用且输出命中伪标记 → 连续 miss 计数（`RecordVerifiedToolCallPseudoMiss`），达阈值（3 次）撤销 verified。证据两路汇入：成功路径收尾（`MaybeCountPseudoToolCallMiss`）与竞速闸门让出（`notePseudoToolCallYield`——「让出即证据」：伪标记已在分支首包缓冲实测命中，是已完成观察，不适用「败者不学习」红线；仅非强制 tool_choice 计数，强制形态由 MaybeLearnForcedToolChoiceMiss 覆盖不双算）。**无 verified 条目同样计数**：fail-open 窗口（冷启动/TTL 过期/撤销重建期）内伪标记 miss 是唯一的劣化证据留存；竞速影子派发在窗口内对连续 miss 达阈值的组合不再派影子（`toolWhitelistAllows` 冷启动影子纪律，`VerifiedToolCallPseudoMissed` 按 路由×模型 判定），无证据组合照常放行——劣化渠道在窗口内命中三次即失去影子资格，窗口自动收敛；真实工具调用成功即时清零重建。
 - **与显式 pin 正交**：`X-Channel` pin 路径不受排他影响。
 
@@ -142,6 +142,6 @@ if learnedToolCallUnsupported(routeIdentity, actualModel) {
 ## 6. 验证
 
 - 单测：trait 查询口径（含 TTL 过期、跨模型不串）、错误信号正则（点名/非点名/非 400）、强制 tool_choice 四协议形态识别、探针 SSE 判定（tool_use SSE / 纯文本 SSE / 非 2xx / 空响应）、buildChannelEntry 收紧覆盖注册表、observer sawToolCall 置位。
-- 白名单与路由身份（2026-09-12）：`ToolRouteIdentity` 锚选择表驱动（逻辑优先/物理回退/kind 归一）；`VerifiedToolCallRoutes` 按协议聚合、只认 runtime、跨协议隔离、历史裸键不参与；**跨重铸存活**（`TestFilterLearnedToolCallCapableSurvivesUIDRemint` / `TestRecordToolCallProbeResultSurvivesUIDRemint`：旧代物理渠道上写入的证据，同逻辑卡新代渠道继续命中）；resolver 身份翻译（当前 UID 翻译 / 幽灵 UID 回退）。
+- 白名单与路由身份（2026-09-12）：`ToolRouteIdentity` 锚选择表驱动（逻辑优先/物理回退/kind 归一）；`VerifiedToolCallRoutes` 按协议聚合、只认 runtime、跨协议隔离、历史裸键不参与，`VerifiedToolCallRoutesForExclusive` 另加至少两个路由的排他门槛；**跨重铸存活**（`TestFilterLearnedToolCallCapableSurvivesUIDRemint` / `TestRecordToolCallProbeResultSurvivesUIDRemint`：旧代物理渠道上写入的证据，同逻辑卡新代渠道继续命中）；resolver 身份翻译（当前 UID 翻译 / 幽灵 UID 回退）。
 - 集成口径：能力测试跑 seekai 类渠道 → `ModelTestResult.toolCalls.Supported=false` → compat cache 落盘 → SmartRouter trace 中该渠道在带工具请求下出现"工具调用能力不满足"过滤原因。
 - 构建：`cd backend-go && make test`、`go build ./...`。

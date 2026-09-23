@@ -121,6 +121,20 @@ func TestVerifiedToolCallRoutesKindScoping(t *testing.T) {
 	}
 }
 
+func TestVerifiedToolCallRoutesForExclusiveRequiresMultipleRoutes(t *testing.T) {
+	cache := NewChannelCompatCache()
+	_ = cache.Record("lc_only#responses", "k1", "m1", TraitVerifiedToolCalls, true, CompatSourceRuntimeSignal, "e")
+	if got := cache.VerifiedToolCallRoutesForExclusive("responses", true); len(got) != 0 {
+		t.Fatalf("单一路由仍处于探索期，应保持 fail-open，got %v", got)
+	}
+
+	_ = cache.Record("lc_second#responses", "k2", "m2", TraitVerifiedToolCalls, true, CompatSourceRuntimeSignal, "e")
+	got := cache.VerifiedToolCallRoutesForExclusive("responses", true)
+	if len(got) != 2 || !got["lc_only#responses"] || !got["lc_second#responses"] {
+		t.Fatalf("达到两个独立验证路由后应启用排他，got %v", got)
+	}
+}
+
 // RecordVerifiedToolCallPseudoMiss / ClearVerifiedToolCallPseudoMiss /
 // VerifiedToolCallPseudoMissed 的口径：无 verified 条目同样计数（fail-open 窗口的
 // 劣化证据留存，供竞速影子规避）；启用条目连续计数达阈值撤销并摘牌；真实工具调用

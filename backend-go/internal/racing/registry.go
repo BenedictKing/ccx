@@ -106,6 +106,31 @@ func BehaviorForCostPreference(costPreference string) Behavior {
 	}
 }
 
+// StreamFloorForReasoning 返回带隐藏推理阶段的流式竞速下限。
+// 这类模型可能在产生首个可见语义内容前完成较长推理，沿用普通请求的
+// 4s/8s floor 会在正常推理期间过早派出影子请求。显式 effort 越高，等待下限越高；
+// 未声明 effort 时按中档保守处理。最终阈值仍由调用方按渠道首字超时上限裁剪。
+func StreamFloorForReasoning(baseMs int, effort string) int {
+	if baseMs < 0 {
+		baseMs = 0
+	}
+	minimum := 24_000
+	switch strings.ToLower(strings.TrimSpace(effort)) {
+	case "low", "minimal":
+		minimum = 16_000
+	case "medium":
+		minimum = 24_000
+	case "high", "xhigh", "max", "ultra":
+		minimum = 30_000
+	case "none", "off":
+		return baseMs
+	}
+	if baseMs > minimum {
+		return baseMs
+	}
+	return minimum
+}
+
 // NonStreamFloorMs 非流式触发下限（全策略统一）。
 const NonStreamFloorMs = 10000
 

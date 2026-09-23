@@ -24,6 +24,8 @@
 
 其余内部常量：分位数 p90、样本门槛 20、观测窗口 15 分钟、窗口容量 512、全局并发影子信号量 12、非流式 floor 10s。
 
+带隐藏推理阶段的流式请求（请求画像 `ReasoningNeed=true`）使用更高的首内容保护下限：未声明 effort 为 24s，low/minimal 为 16s，medium 为 24s，high/xhigh/max/ultra 为 30s；`none/off` 保持普通请求 floor。该下限仍受渠道 `StreamFirstContentTimeoutMs` ceiling 裁剪，避免把正常推理等待误判为慢渠道。
+
 ## 触发阈值
 
 `threshold = p90(近 15 分钟同家族×阶段成功样本，n≥20) 否则 floor，再 clamp[floor, ceiling]`

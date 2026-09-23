@@ -75,6 +75,8 @@ type RacingAttemptInput struct {
 	Scheduler        *scheduler.ChannelScheduler
 	Kind             scheduler.ChannelKind
 	Model            string
+	ReasoningNeed    bool
+	ReasoningEffort  string
 	IsStream         bool
 	HasImageContent  bool
 	SelectionOptions scheduler.SelectionOptions // 主选择参数模板（回退重选时仅替换 FailedRoutes）
@@ -373,7 +375,7 @@ func (r *racingRuns) toolWhitelistAllows(upstream *config.UpstreamConfig, model 
 	}
 	kind := string(r.in.Kind)
 	identity := config.ToolRouteIdentity(upstream, kind)
-	if routes := cache.VerifiedToolCallRoutes(kind, true); len(routes) > 0 {
+	if routes := cache.VerifiedToolCallRoutesForExclusive(kind, true); len(routes) > 0 {
 		return routes[identity]
 	}
 	if model == "" {
@@ -414,6 +416,13 @@ func RunRacingAttempt(
 		ceilingMs = racingNonStreamCeilingMs(&in, in.Selection.Upstream)
 	}
 	thresholdMs := hub.Registry.ThresholdMs(family, stage, floorMs, ceilingMs)
+	if in.IsStream && in.ReasoningNeed {
+		floorMs = racing.StreamFloorForReasoning(floorMs, in.ReasoningEffort)
+		if floorMs > ceilingMs {
+			floorMs = ceilingMs
+		}
+		thresholdMs = hub.Registry.ThresholdMs(family, stage, floorMs, ceilingMs)
+	}
 
 	primaryCost := racingEffectiveCostMultiplier(in.Selection.Upstream, in.Selection.ExecutionKeyIdentity)
 	// 主分支同样经分支 writer 写出：真实客户端 writer 只被 claim 赢家触碰

@@ -193,15 +193,10 @@ func MaybeLearnVerifiedToolCalls(c *gin.Context, upstream *config.UpstreamConfig
 	cache.ClearVerifiedToolCallPseudoMiss(routeIdentity, keyHash, model)
 }
 
-// MaybeForgetVerifiedToolCalls 白名单的失败撤销（学习闭环的负向对偶）。
-//
-// 背景：渠道间排他把带工具流量锁定到白名单渠道；白名单渠道自身故障
-// （上游空流/限流）时若无撤销机制会无路可退（2026-09-13 ark 空流事故）。
-// 带工具请求在该组合上以无效响应（空流/无效响应体）失败时撤销 verified
-// 记录——渠道级集合随即摘牌，排他 fail-open 放开全部渠道；后续真实成功
-// 经 MaybeLearnVerifiedToolCalls 重建。白名单由此成为动态自愈集合。
-// kind 为该次尝试的执行协议，撤销必须与学习落在同一路由身份上。
-func MaybeForgetVerifiedToolCalls(c *gin.Context, upstream *config.UpstreamConfig, apiKey, model string, attemptBody []byte, kind string) {
+// MaybeForgetVerifiedToolCallsOnUnsupported 处理明确的工具能力拒绝。
+// 空流、超时、断流和无效响应只说明本次请求不可用，不能证明渠道没有工具能力，
+// 因此不会撤销 verified；只有上游 400/422 明确点名工具能力不支持时才调用此函数。
+func MaybeForgetVerifiedToolCallsOnUnsupported(c *gin.Context, upstream *config.UpstreamConfig, apiKey, model string, attemptBody []byte, kind, evidence string) {
 	if c == nil || upstream == nil || model == "" {
 		return
 	}
@@ -217,15 +212,18 @@ func MaybeForgetVerifiedToolCalls(c *gin.Context, upstream *config.UpstreamConfi
 		return
 	}
 	keyHash := autopilot.KeyHashFromAPIKey(apiKey)
-	if cache.Record(routeIdentity, keyHash, model, config.TraitVerifiedToolCalls, false, config.CompatSourceRuntimeSignal, "带工具请求收到空/无效响应，撤销正向白名单记录") {
-		RequestLogf(c, "[ToolCallCompat] 渠道 %s 模型 %s 带工具请求无效响应，已撤销正向白名单（排他将 fail-open 放开候选）",
+	if strings.TrimSpace(evidence) == "" {
+		evidence = "上游明确拒绝工具调用能力，撤销正向白名单记录"
+	}
+	if cache.Record(routeIdentity, keyHash, model, config.TraitVerifiedToolCalls, false, config.CompatSourceErrorSignal, evidence) {
+		RequestLogf(c, "[ToolCallCompat] 渠道 %s 模型 %s 明确拒绝工具调用能力，已撤销正向白名单（排他将 fail-open 放开候选）",
 			upstream.Name, model)
 	}
 }
 
 // MaybeCountPseudoToolCallMiss 白名单负反馈补盲：agentic 干净 200 却零真实工具调用、
 // 且输出命中伪工具调用标记文本（模型用纯文本"扮演"工具调用）时，对该组合的 verified
-// 条目计一次连续 miss，连续达阈值即撤销（与 MaybeForgetVerifiedToolCalls 的失败路径
+// 条目计一次连续 miss，连续达阈值即撤销（与 MaybeForgetVerifiedToolCallsOnUnsupported 的明确拒绝路径
 // 撤销互补，覆盖"假成功"形态）。
 //
 // 防误判约束（缺一不可）：

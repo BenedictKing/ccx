@@ -52,6 +52,28 @@ func TestBehaviorForCostPreference(t *testing.T) {
 	}
 }
 
+func TestStreamFloorForReasoning(t *testing.T) {
+	cases := []struct {
+		effort string
+		want   int
+	}{
+		{"", 24_000},
+		{"low", 16_000},
+		{"medium", 24_000},
+		{"high", 30_000},
+		{"xhigh", 30_000},
+		{"none", 8_000},
+	}
+	for _, tc := range cases {
+		if got := StreamFloorForReasoning(8_000, tc.effort); got != tc.want {
+			t.Fatalf("StreamFloorForReasoning(%q) = %d, want %d", tc.effort, got, tc.want)
+		}
+	}
+	if got := StreamFloorForReasoning(35_000, "low"); got != 35_000 {
+		t.Fatalf("已有更高 floor 时不应降低，got %d", got)
+	}
+}
+
 func TestRegistryThresholdFallbackAndClamp(t *testing.T) {
 	r := NewRegistry()
 	// 样本不足：回退 floor

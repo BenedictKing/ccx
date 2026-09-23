@@ -272,3 +272,27 @@ func TestMaybeCountPseudoToolCallMiss(t *testing.T) {
 		t.Fatal("真实工具调用后条目应保持启用")
 	}
 }
+
+func TestMaybeForgetVerifiedToolCallsOnUnsupported(t *testing.T) {
+	restore := config.SwapSharedChannelCompatCacheForTest(config.NewChannelCompatCache())
+	defer restore()
+
+	gin.SetMode(gin.TestMode)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	upstream := &config.UpstreamConfig{ChannelUID: "ch_test", Name: "test-channel"}
+	const apiKey = "sk-test"
+	const model = "m1"
+	body := []byte(`{"model":"m1","tools":[{"type":"function","function":{"name":"exec"}}]}`)
+	keyHash := autopilot.KeyHashFromAPIKey(apiKey)
+	cache := config.SharedChannelCompatCache()
+	cache.Record("ch_test#responses", keyHash, model, config.TraitVerifiedToolCalls, true, config.CompatSourceRuntimeSignal, "runtime")
+
+	MaybeForgetVerifiedToolCallsOnUnsupported(c, upstream, apiKey, model, body, "responses", "tools are not supported")
+	state, ok := cache.Trait("ch_test#responses", keyHash, model, config.TraitVerifiedToolCalls)
+	if !ok || state.Enabled {
+		t.Fatalf("明确工具能力拒绝后应撤销 verified，got %+v, ok=%v", state, ok)
+	}
+	if state.Source != config.CompatSourceErrorSignal {
+		t.Fatalf("撤销证据来源应为 error_signal，got %q", state.Source)
+	}
+}
