@@ -674,6 +674,22 @@ watch(
   },
   { immediate: true },
 )
+
+/**
+ * 渠道编辑主保存前的钩子：绑定表单已填写时先执行绑定，避免「填了令牌点保存被静默丢弃」。
+ * 绑定失败时错误已显示在表单 alert 中，由调用方决定是否中止保存。
+ */
+function hasFilledBindForm(): boolean {
+  return !!props.isGeneric && !subscription.value && !!bindForm.value.accessToken.trim() && !!bindForm.value.userId.trim()
+}
+
+async function maybeBindBeforeSave(): Promise<{ attempted: boolean; ok: boolean }> {
+  if (!hasFilledBindForm()) return { attempted: false, ok: true }
+  await bindNewApi()
+  return { attempted: true, ok: !bindError.value }
+}
+
+defineExpose({ hasFilledBindForm, maybeBindBeforeSave })
 </script>
 
 <style scoped>

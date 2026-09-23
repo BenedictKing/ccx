@@ -329,4 +329,78 @@ describe('NewApiAccountPanel', () => {
     // 删除子账号会剔除其自动接入 Key：主账号订阅同步重拉
     await vi.waitFor(() => expect(apiMocks.getSubscription.mock.calls.filter(c => c[0] === 'sub-main').length).toBeGreaterThanOrEqual(2))
   })
+
+  it('主保存钩子：绑定表单已填写时 maybeBindBeforeSave 执行绑定', async () => {
+    apiMocks.verifyNewApiSubscription.mockResolvedValue({
+      userId: 42,
+      groups: { default: 1 },
+      availableModels: ['gpt-4o'],
+    })
+    apiMocks.provisionNewApiSubscription = vi.fn().mockResolvedValue({
+      subscription: await apiMocks.getSubscription(),
+      channelUid: 'ch-existing',
+      channelIndex: 0,
+      provisionedKey: '',
+      provisionedTokenId: 1,
+      reused: true,
+      discoveryStarted: true,
+    })
+    const wrapper = mountPanel({
+      subscriptionUid: '',
+      channelName: 'Legacy relay',
+      baseUrl: 'https://relay.example.com',
+      channelUid: 'ch-existing',
+      channelKind: 'messages',
+      isGeneric: true,
+    })
+    const vm = wrapper.vm as { hasFilledBindForm: () => boolean; maybeBindBeforeSave: () => Promise<{ attempted: boolean; ok: boolean }> }
+    await vi.waitFor(() => expect(vm.hasFilledBindForm()).toBe(false))
+
+    await wrapper.find('input[type="password"]').setValue('new-api-access-token')
+    await wrapper.find('input:not([type="password"])').setValue('42')
+    expect(vm.hasFilledBindForm()).toBe(true)
+
+    const result = await vm.maybeBindBeforeSave()
+    expect(result).toEqual({ attempted: true, ok: true })
+    await vi.waitFor(() => expect(apiMocks.provisionNewApiSubscription).toHaveBeenCalled())
+  })
+
+  it('主保存钩子：绑定失败返回 ok=false，主保存据此中止', async () => {
+    apiMocks.verifyNewApiSubscription.mockRejectedValue(new Error('校验失败: timeout'))
+    const wrapper = mountPanel({
+      subscriptionUid: '',
+      channelName: 'Legacy relay',
+      baseUrl: 'https://relay.example.com',
+      channelUid: 'ch-existing',
+      channelKind: 'messages',
+      isGeneric: true,
+    })
+    const vm = wrapper.vm as { hasFilledBindForm: () => boolean; maybeBindBeforeSave: () => Promise<{ attempted: boolean; ok: boolean }> }
+    await wrapper.find('input[type="password"]').setValue('new-api-access-token')
+    await wrapper.find('input:not([type="password"])').setValue('42')
+    expect(vm.hasFilledBindForm()).toBe(true)
+
+    const result = await vm.maybeBindBeforeSave()
+    expect(result).toEqual({ attempted: true, ok: false })
+    expect(apiMocks.provisionNewApiSubscription).not.toHaveBeenCalled()
+    // 错误已渲染在表单 alert 中
+    expect(wrapper.text()).toContain('校验失败: timeout')
+  })
+
+  it('主保存钩子：表单未填写时直接放行不触发绑定', async () => {
+    const wrapper = mountPanel({
+      subscriptionUid: '',
+      channelName: 'Legacy relay',
+      baseUrl: 'https://relay.example.com',
+      channelUid: 'ch-existing',
+      channelKind: 'messages',
+      isGeneric: true,
+    })
+    const vm = wrapper.vm as { hasFilledBindForm: () => boolean; maybeBindBeforeSave: () => Promise<{ attempted: boolean; ok: boolean }> }
+    await vi.waitFor(() => expect(vm.hasFilledBindForm()).toBe(false))
+    const result = await vm.maybeBindBeforeSave()
+    expect(result).toEqual({ attempted: false, ok: true })
+    expect(apiMocks.verifyNewApiSubscription).not.toHaveBeenCalled()
+    expect(apiMocks.provisionNewApiSubscription).not.toHaveBeenCalled()
+  })
 })

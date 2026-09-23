@@ -343,8 +343,14 @@ export const useChannelStore = defineStore('channel', () => {
     channelType: ApiTab,
     channelId: number,
     patch: Partial<Channel>,
+    preferredChannelUid?: string,
   ): Promise<void> {
-    // 优先使用统一 API（按 ChannelUID 寻址）
+    // 优先使用统一 API（按 ChannelUID 寻址）。preferredChannelUid 是编辑会话开始时的
+    // 快照 UID：保存期间列表若被后台刷新重排，按下标反查可能命中别的渠道（保存串渠道）。
+    if (preferredChannelUid) {
+      await api.updateChannelV2(preferredChannelUid, patch as Record<string, unknown>)
+      return
+    }
     const channelsForType = getChannelsForType(channelType)
     const channel = channelsForType.value.channels[channelId]
     if (channel?.channelUid) {
@@ -419,17 +425,19 @@ export const useChannelStore = defineStore('channel', () => {
         }
 
         // 账号接口只负责凭证池；官网地址属于单条协议渠道，需要单独持久化。
+        // 以下单卡更新一律用编辑会话快照的 channelUid 寻址，避免保存期间列表重排串渠道。
+        const snapshotChannelUid = original?.channelUid
         if (original && (channel.website ?? '').trim() !== (original.website ?? '').trim()) {
           await updateChannelByType(targetTab, editingChannelIndex, {
             website: (channel.website ?? '').trim(),
-          })
+          }, snapshotChannelUid)
         }
         // 备注同样是跨协议共享字段，账号接口（PUT /accounts）不承载 remark；
         // 变化时经单卡更新下发，由后端整组同步到逻辑渠道与兄弟卡。
         if (original && (channel.remark ?? '').trim() !== (original.remark ?? '').trim()) {
           await updateChannelByType(targetTab, editingChannelIndex, {
             remark: (channel.remark ?? '').trim(),
-          })
+          }, snapshotChannelUid)
         }
         // 渠道级字段（计费倍率/充值到账/代理/自定义请求头）账号接口不承载；
         // 变化时合并为一次单卡更新下发（0/空=清除，与 CostMultiplier 惯例一致），
@@ -443,7 +451,7 @@ export const useChannelStore = defineStore('channel', () => {
           channelPatch.apiKeyConfigs = stagedKeyMultiplierConfigs
         }
         if (Object.keys(channelPatch).length > 0) {
-          await updateChannelByType(targetTab, editingChannelIndex, channelPatch)
+          await updateChannelByType(targetTab, editingChannelIndex, channelPatch, snapshotChannelUid)
         }
         // 静默丢弃兜底：编辑前后变化但未被任何保存链路承载的字段输出 debug 日志，
         // 防止再次出现「保存后丢」无感知（新增可编辑字段时据此补 channelPatch 白名单）。

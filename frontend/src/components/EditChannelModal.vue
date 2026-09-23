@@ -41,7 +41,7 @@
           />
 
           <!-- 右侧内容面板 -->
-          <v-form ref="formRef" class="content-area" @submit.prevent="handleSubmit">
+          <v-form ref="formRef" class="content-area" @submit.prevent="handleSubmitWithBind">
             <!-- 基本信息 -->
             <section :ref="(el: any) => setSectionRef('basic', el)" data-section-id="basic" class="px-6 py-4 scroll-mt-4">
               <header class="section-header">
@@ -125,6 +125,7 @@
               class="px-6 py-4 scroll-mt-4"
             >
               <NewApiAccountPanel
+                ref="newApiPanelRef"
                 :subscription-uid="props.channel?.subscriptionUid || ''"
                 :channel-name="props.channel?.name"
                 :base-url="props.channel?.baseUrl"
@@ -314,7 +315,7 @@
           variant="elevated"
           :disabled="!isFormValid || submitting"
           :loading="submitting"
-          @click="handleSubmit"
+          @click="handleSubmitWithBind"
         >
           {{ t('app.actions.save') }}<span class="shortcut-hint ml-2 text-xs opacity-50">{{ isMac ? '⌘Enter' : 'Ctrl+Enter' }}</span>
         </v-btn>
@@ -495,6 +496,27 @@ const isNewApiChannel = computed(() =>
 )
 const handleAccountsUpdated = () => {
   emit('updated')
+}
+
+// 认证管理面板：主保存时若绑定表单已填写则先执行绑定（绑定失败中止保存，错误显示在面板内）
+const newApiPanelRef = ref<InstanceType<typeof NewApiAccountPanel> | null>(null)
+const handleSubmitWithBind = async () => {
+  const panel = newApiPanelRef.value
+  if (panel?.hasFilledBindForm()) {
+    submitting.value = true
+    let bind
+    try {
+      bind = await panel.maybeBindBeforeSave()
+    } finally {
+      submitting.value = false
+    }
+    if (!bind.ok) {
+      // 绑定失败时用户可能停在其它分区，滚到面板让错误 alert 可见
+      scrollToSection('accounts')
+      return
+    }
+  }
+  await handleSubmit()
 }
 </script>
 
