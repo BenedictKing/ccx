@@ -182,8 +182,9 @@ function onKeyDrop(e: DragEvent, targetIndex: number) {
 watch(() => props.apiKeyConfigs, configs => {
   const next: Record<string, { groupMultiplier: string; maxGroupMultiplier: string; consumptionPolicy: 'normal' | 'opportunistic' }> = {}
   for (const config of configs || []) {
-    if (!config.keyUid) continue
-    next[config.keyUid] = {
+    const keyId = keyIdentity(config)
+    if (!keyId) continue
+    next[keyId] = {
       groupMultiplier: config.groupMultiplier == null ? '' : String(config.groupMultiplier),
       maxGroupMultiplier: config.maxGroupMultiplier == null ? '' : String(config.maxGroupMultiplier),
       consumptionPolicy: config.consumptionPolicy === 'opportunistic' ? 'opportunistic' : 'normal',
@@ -193,31 +194,37 @@ watch(() => props.apiKeyConfigs, configs => {
 }, { immediate: true, deep: true })
 
 function keyConfig(key: string) { return props.apiKeyConfigs?.find(config => config.key === key) }
+// 自定义托管渠道的 key 条目只有 credentialUid 没有 keyUid；后端倍率端点两种 UID 都可定位，
+// 这里同样兜底，否则这些 key 的倍率编辑区不渲染、保存点击静默无效。
+function keyIdentity(config: APIKeyConfig | undefined) { return config?.keyUid ?? config?.credentialUid }
 function finiteNonNegative(value: string) { return value.trim() === '' || (Number.isFinite(Number(value)) && Number(value) >= 0) }
 async function saveMultiplier(config: APIKeyConfig) {
-  if (!props.channelUid || !config.keyUid) return
-  const draft = multiplierDrafts.value[config.keyUid]
+  const keyId = keyIdentity(config)
+  if (!props.channelUid || !keyId) return
+  const draft = multiplierDrafts.value[keyId]
   if (!draft || !finiteNonNegative(draft.groupMultiplier) || !finiteNonNegative(draft.maxGroupMultiplier)) {
     multiplierError.value = t('multiplier.invalid')
     return
   }
-  savingMultiplier.value = config.keyUid; multiplierError.value = ''
+  savingMultiplier.value = keyId; multiplierError.value = ''
   try {
     const payload: KeyMultiplierPatch = {
       maxGroupMultiplier: draft.maxGroupMultiplier.trim() === '' ? null : Number(draft.maxGroupMultiplier),
       consumptionPolicy: draft.consumptionPolicy,
     }
     if (config.multiplierSource !== 'new_api') payload.groupMultiplier = draft.groupMultiplier.trim() === '' ? null : Number(draft.groupMultiplier)
-    multiplierResults.value[config.keyUid] = await adminApi.patchKeyMultiplier(props.channelKind, props.channelUid, config.keyUid, payload)
+    multiplierResults.value[keyId] = await adminApi.patchKeyMultiplier(props.channelKind, props.channelUid, keyId, payload)
   } catch (cause) { multiplierError.value = cause instanceof Error ? cause.message : String(cause) }
   finally { savingMultiplier.value = '' }
 }
 function multiplierStatus(config: APIKeyConfig) {
-  const result = config.keyUid ? multiplierResults.value[config.keyUid] : undefined
+  const keyId = keyIdentity(config)
+  const result = keyId ? multiplierResults.value[keyId] : undefined
   return result?.status || config.multiplierSyncStatus || (config.groupMultiplier != null || config.maxGroupMultiplier != null ? 'manual' : '')
 }
 function multiplierReason(config: APIKeyConfig) {
-  const result = config.keyUid ? multiplierResults.value[config.keyUid] : undefined
+  const keyId = keyIdentity(config)
+  const result = keyId ? multiplierResults.value[keyId] : undefined
   return result?.reason || config.ineligibleReason || config.multiplierSyncError || ''
 }
 
@@ -226,8 +233,8 @@ function effectiveCostClassLabel(value?: string) {
   return `multiplier.effectiveCostClass.${value}`
 }
 
-function markAsOpportunistic(keyUid: string) {
-  const draft = multiplierDrafts.value[keyUid]
+function markAsOpportunistic(keyId: string) {
+  const draft = multiplierDrafts.value[keyId]
   if (!draft) return
   draft.groupMultiplier = '0'
   draft.maxGroupMultiplier = '0'
@@ -436,18 +443,18 @@ const visibleDisabledKeys = computed(() => {
           </Button>
         </div>
       </div>
-      <div v-if="keyConfig(key)?.keyUid" class="grid grid-cols-1 gap-2 rounded-lg border border-border/60 bg-secondary/20 p-2 sm:grid-cols-[1fr_1fr_1fr_auto]">
+      <div v-if="keyIdentity(keyConfig(key))" class="grid grid-cols-1 gap-2 rounded-lg border border-border/60 bg-secondary/20 p-2 sm:grid-cols-[1fr_1fr_1fr_auto]">
         <div>
           <label class="text-[10px] text-muted-foreground">{{ t('multiplier.group') }}</label>
-          <Input v-model="multiplierDrafts[keyConfig(key)!.keyUid!].groupMultiplier" type="number" min="0" step="any" class="h-8" :disabled="keyConfig(key)?.multiplierSource === 'new_api'" />
+          <Input v-model="multiplierDrafts[keyIdentity(keyConfig(key))!].groupMultiplier" type="number" min="0" step="any" class="h-8" :disabled="keyConfig(key)?.multiplierSource === 'new_api'" />
         </div>
         <div>
           <label class="text-[10px] text-muted-foreground">{{ t('multiplier.max') }}</label>
-          <Input v-model="multiplierDrafts[keyConfig(key)!.keyUid!].maxGroupMultiplier" type="number" min="0" step="any" class="h-8" />
+          <Input v-model="multiplierDrafts[keyIdentity(keyConfig(key))!].maxGroupMultiplier" type="number" min="0" step="any" class="h-8" />
         </div>
         <div>
           <label class="text-[10px] text-muted-foreground">{{ t('multiplier.consumptionPolicy.label') }}</label>
-          <Select v-model="multiplierDrafts[keyConfig(key)!.keyUid!].consumptionPolicy">
+          <Select v-model="multiplierDrafts[keyIdentity(keyConfig(key))!].consumptionPolicy">
             <SelectTrigger class="h-8">
               <SelectValue :placeholder="t('multiplier.consumptionPolicy.normal')" />
             </SelectTrigger>
@@ -458,11 +465,11 @@ const visibleDisabledKeys = computed(() => {
           </Select>
         </div>
         <div class="flex flex-col gap-1 self-end">
-          <Button type="button" size="sm" :disabled="savingMultiplier === keyConfig(key)?.keyUid" @click="saveMultiplier(keyConfig(key)!)">
-            <Loader2 v-if="savingMultiplier === keyConfig(key)?.keyUid" class="h-3.5 w-3.5 animate-spin" />
+          <Button type="button" size="sm" :disabled="savingMultiplier === keyIdentity(keyConfig(key))" @click="saveMultiplier(keyConfig(key)!)">
+            <Loader2 v-if="savingMultiplier === keyIdentity(keyConfig(key))" class="h-3.5 w-3.5 animate-spin" />
             {{ t('multiplier.save') }}
           </Button>
-          <Button type="button" size="sm" variant="outline" :disabled="!keyConfig(key)?.keyUid" @click="markAsOpportunistic(keyConfig(key)!.keyUid!)">
+          <Button type="button" size="sm" variant="outline" :disabled="!keyIdentity(keyConfig(key))" @click="markAsOpportunistic(keyIdentity(keyConfig(key))!)">
             <Zap class="h-3 w-3 mr-1" />
             {{ t('multiplier.markAsOpportunistic') }}
           </Button>
@@ -472,11 +479,11 @@ const visibleDisabledKeys = computed(() => {
           <span v-if="multiplierStatus(keyConfig(key)!)">{{ t('multiplier.statusLabel') }}: {{ tf(`multiplier.status.${multiplierStatus(keyConfig(key)!)}`, multiplierStatus(keyConfig(key)!)) }}</span>
           <span v-if="keyConfig(key)?.eligible !== undefined"> · {{ keyConfig(key)?.eligible ? t('multiplier.eligible') : t('multiplier.ineligible') }}</span>
           <span v-if="keyConfig(key)?.multiplierExpiresAt"> · {{ t('multiplier.ttl') }}: {{ keyConfig(key)?.multiplierExpiresAt }}</span>
-          <span v-if="multiplierResults[keyConfig(key)!.keyUid!]?.consumptionPolicy"> · {{ t('multiplier.consumptionPolicy.label') }}: {{ t(`multiplier.consumptionPolicy.${multiplierResults[keyConfig(key)!.keyUid!].consumptionPolicy}`) }}</span>
-          <span v-if="multiplierResults[keyConfig(key)!.keyUid!]?.effectiveCostClass"> · {{ t('multiplier.effectiveCostClass.label') }}: {{ t(effectiveCostClassLabel(multiplierResults[keyConfig(key)!.keyUid!].effectiveCostClass)) }}</span>
+          <span v-if="multiplierResults[keyIdentity(keyConfig(key))!]?.consumptionPolicy"> · {{ t('multiplier.consumptionPolicy.label') }}: {{ t(`multiplier.consumptionPolicy.${multiplierResults[keyIdentity(keyConfig(key))!].consumptionPolicy}`) }}</span>
+          <span v-if="multiplierResults[keyIdentity(keyConfig(key))!]?.effectiveCostClass"> · {{ t('multiplier.effectiveCostClass.label') }}: {{ t(effectiveCostClassLabel(multiplierResults[keyIdentity(keyConfig(key))!].effectiveCostClass)) }}</span>
           <span v-if="multiplierReason(keyConfig(key)!)" :title="multiplierReason(keyConfig(key)!)"> · {{ t('multiplier.reason') }}: {{ multiplierReason(keyConfig(key)!) }}</span>
         </div>
-        <p v-if="multiplierDrafts[keyConfig(key)!.keyUid!].consumptionPolicy === 'opportunistic'" class="text-[10px] text-amber-700 dark:text-amber-300 sm:col-span-4">
+        <p v-if="multiplierDrafts[keyIdentity(keyConfig(key))!].consumptionPolicy === 'opportunistic'" class="text-[10px] text-amber-700 dark:text-amber-300 sm:col-span-4">
           {{ t('multiplier.consumptionPolicy.opportunisticHint') }}
         </p>
       </div>

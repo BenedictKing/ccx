@@ -1782,16 +1782,21 @@ const channelMaxGroupMultiplierHint = computed(() => {
 // 托管渠道由 channel.ts 单卡更新补发）。行副标题 chips 经 props 回流即时反映新值。
 const applyMultiplierToConfigs = () => {
   const row = multiplierEditing.value
-  if (!row || !props.apiKeyConfigs?.length) return
+  if (!row) return
   let groupMultiplier: number | null
   try {
     groupMultiplier = parseMultiplierInput(multiplierForm.value.groupMultiplier)
   } catch {
     return // 非法输入暂不暂存，保留上次合法值
   }
-  const configs = props.apiKeyConfigs.map(cfg => {
+  // 裸 key（从未有过任何 key 级附加配置）会被后端视图的 IsAPIKeyConfigEffective
+  // 过滤，表单 apiKeyConfigs 里没有它的条目：首次设置倍率时须补建条目暂存，
+  // 否则改动无处可写，随渠道保存后静默丢失。
+  let matched = false
+  const configs = (props.apiKeyConfigs ?? []).map(cfg => {
     const cfgId = cfg.keyUid ?? cfg.credentialUid
     if (cfgId !== row.keyUid && cfg.key !== row.key) return cfg
+    matched = true
     return {
       ...cfg,
       groupMultiplier,
@@ -1799,6 +1804,18 @@ const applyMultiplierToConfigs = () => {
       consumptionPolicy: multiplierForm.value.consumptionPolicy ?? undefined,
     }
   })
+  if (!matched) {
+    // row.keyUid 可能是 credentialUid 兜底值（buildChannelApiKeyRows 合并过），
+    // 与 credentialUid 相同时不写入 keyUid，避免身份字段错位。
+    const keyUidIsCredentialFallback = !!row.credentialUid && row.keyUid === row.credentialUid
+    configs.push({
+      key: row.key,
+      ...(row.keyUid && !keyUidIsCredentialFallback ? { keyUid: row.keyUid } : {}),
+      ...(row.credentialUid ? { credentialUid: row.credentialUid } : {}),
+      groupMultiplier,
+      consumptionPolicy: multiplierForm.value.consumptionPolicy ?? undefined,
+    })
+  }
   emit('update:apiKeyConfigs', configs)
 }
 
