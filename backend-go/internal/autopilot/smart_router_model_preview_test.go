@@ -300,6 +300,22 @@ func TestResolveModelSupportAutoManagedEmptyModelsUsesProfilePolicy(t *testing.T
 	}
 }
 
+func TestResolveModelSupportKillSwitchFallsBackToExplainModelSupport(t *testing.T) {
+	cfg := modelPreviewConfig("auto")
+	cfg.AutopilotRouting.KillSwitch = true
+	cfg.Upstream[0].SupportedModels = nil
+	cfgManager, cleanup := createTestConfigManager(t, cfg)
+	defer cleanup()
+	resolver := NewModelResolver(newModelPreviewStore(t, glmPreviewProfile()), cfgManager)
+	manager := &Manager{cfgManager: cfgManager, modelResolver: resolver}
+	upstream := cfgManager.GetConfig().Upstream[0]
+
+	supported, mapped, source, _ := manager.ResolveModelSupport("messages", &upstream, "claude-sonnet-5")
+	if !supported || mapped != "" || source != "explain" {
+		t.Fatalf("Kill Switch 下应回退 ExplainModelSupport，got supported=%v mapped=%q source=%q", supported, mapped, source)
+	}
+}
+
 func TestResolveModelSupportWithFloorFallsBackBelowQualityTarget(t *testing.T) {
 	cfg := modelPreviewConfig("assist")
 	cfg.Upstream[0].SupportedModels = nil

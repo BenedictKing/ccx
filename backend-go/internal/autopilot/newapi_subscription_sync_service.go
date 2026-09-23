@@ -398,7 +398,7 @@ func (s *NewApiSubscriptionSyncService) SyncNow(ctx context.Context, uid string)
 	s.healMissingProvisionedKeys(ctx, profile, adapter, profile.BaseURL, profile.AccessToken, userID, mode, desired, "")
 	// 兜底补建：「自动接入全部合格分组」的订阅，远端新增合格分组、或接入时因 0 模型
 	// 被跳过的分组补上模型后，在此自动补建 key 并注入渠道（幂等，失败下轮 sweep 重试）。
-	s.catchUpUncoveredGroups(ctx, profile, adapter, userID, mode, groups)
+	catchUpErr := s.catchUpUncoveredGroups(ctx, profile, adapter, userID, mode, groups)
 
 	if result.ModelsHashChanged && s.runner != nil && s.cfgManager != nil {
 		for _, channel := range changedChannels {
@@ -413,6 +413,10 @@ func (s *NewApiSubscriptionSyncService) SyncNow(ctx context.Context, uid string)
 		if status.SyncStatus != newApiSyncStatusFresh {
 			result.Success = false
 		}
+	}
+	if catchUpErr != nil {
+		result.Success = false
+		result.FailedReason = catchUpErr.Error()
 	}
 
 	// 额外账号：各自验证/拉分组/reconcile 自己的 ProvisionedKeys。单账号失败隔离，不影响主账号结果。
@@ -949,14 +953,15 @@ type newApiGroupCatchUpper interface {
 // catchUpUncoveredGroups 同步兜底：为「自动接入全部合格分组」的订阅补建缺失分组的 key。
 // 覆盖接入之后的两类变化：站点新增合格分组；接入时因 0 可用模型被跳过的分组补上了模型。
 // 显式单分组接入（ProvisionAllEligible=false）与存量订阅不扩组，避免后台静默建 key。
-// best-effort：任何失败只记日志、不影响本次同步结果；ProvisionKey 查重幂等，下轮 sweep 自动重试。
-func (s *NewApiSubscriptionSyncService) catchUpUncoveredGroups(ctx context.Context, profile *SubscriptionProfile, adapter NewApiSyncAdapter, userID, authTokenMode string, groups map[string]float64) {
+// best-effort：单个远端分组建 key 失败只记日志并留待下轮重试；已落库但渠道注入失败
+// 会返回错误，让本次同步明确标记失败，避免报告成功但渠道尚未可调度。
+func (s *NewApiSubscriptionSyncService) catchUpUncoveredGroups(ctx context.Context, profile *SubscriptionProfile, adapter NewApiSyncAdapter, userID, authTokenMode string, groups map[string]float64) error {
 	if s.cfgManager == nil || s.store == nil || !profile.ProvisionAllEligible || len(profile.LinkedChannelUIDs) == 0 {
-		return
+		return nil
 	}
 	catcher, ok := adapter.(newApiGroupCatchUpper)
 	if !ok {
-		return
+		return nil
 	}
 	// 渠道级上限是唯一真源；未配置时回退订阅记录的接入初始值，再回退全局默认。
 	limit := DefaultNewApiMaxGroupMultiplier
@@ -978,7 +983,7 @@ func (s *NewApiSubscriptionSyncService) catchUpUncoveredGroups(ctx context.Conte
 		missing = append(missing, newApiResolvedGroup{Name: name, Ratio: ratio})
 	}
 	if len(missing) == 0 {
-		return
+		return nil
 	}
 	sort.Slice(missing, func(i, j int) bool { return missing[i].Name < missing[j].Name })
 
@@ -1026,7 +1031,7 @@ func (s *NewApiSubscriptionSyncService) catchUpUncoveredGroups(ctx context.Conte
 		})
 	}
 	if len(provisioned) == 0 {
-		return
+		return nil
 	}
 
 	if err := s.store.Patch(profile.SubscriptionUID, nil, func(p *SubscriptionProfile) error {
@@ -1044,7 +1049,7 @@ func (s *NewApiSubscriptionSyncService) catchUpUncoveredGroups(ctx context.Conte
 		return nil
 	}); err != nil {
 		log.Printf("[NewApi-Sync] 补建 key 落库失败 subscription=%s: %v", profile.SubscriptionUID, err)
-		return
+		return err
 	}
 
 	desired := make([]newApiDesiredKey, 0, len(provisioned))
@@ -1064,7 +1069,7 @@ func (s *NewApiSubscriptionSyncService) catchUpUncoveredGroups(ctx context.Conte
 	}
 	if err := s.injectProvisionedKeys(profile, desired, plaintextByToken); err != nil {
 		log.Printf("[NewApi-Sync] 补建 key 注入渠道失败 subscription=%s: %v", profile.SubscriptionUID, err)
-		return
+		return fmt.Errorf("补建分组 key 已落库但渠道注入失败: %w", err)
 	}
 	caughtGroups := make([]string, 0, len(provisioned))
 	for _, key := range provisioned {
@@ -1083,6 +1088,7 @@ func (s *NewApiSubscriptionSyncService) catchUpUncoveredGroups(ctx context.Conte
 			s.runner.TriggerDiscovery(uid, &ch, s.cfgManager)
 		}
 	}
+	return nil
 }
 
 // healMissingProvisionedKeys 补齐订阅期望、但关联渠道缺失的自动接入 key：

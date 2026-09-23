@@ -772,7 +772,9 @@ func (m *Manager) ResolveModelSupportWithFloor(
 
 	// ExplainModelSupport 拒绝：检查三条件门控
 	routingCfg := m.cfgManager.GetAutopilotRouting()
-	if !routingCfg.ModelMapping.AutoResolve {
+	// Kill Switch 必须在调度器 resolver 入口生效。SmartRouter 和 endpoint policy
+	// 由外层跳过并不足够，因为 scheduler 仍会调用本回调做模型准入过滤。
+	if routingCfg.KillSwitch || !routingCfg.ModelMapping.AutoResolve {
 		return sup, "", "explain", rsn
 	}
 	// 门控通过：调用 ModelResolver（调度器候选筛选阶段，无具体 API Key）
