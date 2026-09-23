@@ -84,6 +84,13 @@ func (g *Gate) ClaimedBy() int {
 	return int(g.winner.Load())
 }
 
+// Participants 已注册分支数（含主分支）；1 表示无对手分支，竞速未实际发生。
+func (g *Gate) Participants() int {
+	g.cancelMu.Lock()
+	defer g.cancelMu.Unlock()
+	return len(g.cancels)
+}
+
 // CancelExcept 主动取消除 ownerID 外的全部分支（编排器在赢家结算后调用）。
 func (g *Gate) CancelExcept(ownerID int) {
 	g.cancelMu.Lock()
