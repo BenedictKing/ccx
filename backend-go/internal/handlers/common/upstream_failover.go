@@ -687,6 +687,9 @@ func TryUpstreamWithAllKeys(
 			c.Set("effortClampedByClient", false)
 			// 自动映射未命中原因同样按 attempt 重置：映射成功的尝试不携带上一轮的失败原因。
 			c.Set("mappingFailReason", "")
+			// 流式桥接改写标记同样按 attempt 重置：仅对已应用改写的 Key 生效，
+			// 防止上一 attempt 的标记污染无需改写的后续 Key（见 ForceStreamRequestBody）。
+			SetUpstreamStreamBridge(c, false)
 			// 释放上一轮 attempt 的并发信号量（首次为空操作）
 			if activeRateLimitRelease != nil {
 				activeRateLimitRelease()
@@ -898,16 +901,33 @@ func TryUpstreamWithAllKeys(
 				}
 			}
 
-			// 已学习"仅接受流式"的 Key：非流式请求在发送前直接跳过，省一次必然 400 的
-			// 上游往返。与学习侧同粒度（渠道-Key-模型）：流式请求不受影响，
-			// 同渠道其他 Key/模型照常尝试。
+			// 已学习"仅接受流式"的 Key：非流式请求做流式桥接兼容改写——上游请求强制
+			// stream:true，上游 SSE 由各 handler 非流式路径按 Content-Type 检测并合成
+			// 回非流式响应体（见 common.ReadUpstreamNonStreamBody）。改写后若上游仍 400，
+			// 既有学习/放行/failover 逻辑逐 Key 退避，无死循环。
+			// 请求体无顶层 stream 字段语义的入口（gemini）或执行协议，退回发送前跳过，
+			// 省一次必然 400 的上游往返。同渠道其他 Key/模型照常尝试，流式请求不受影响。
 			if !isStream && upstream.ChannelUID != "" {
 				keyHash := autopilot.KeyHashFromAPIKey(apiKey)
 				if state, ok := channelCompatCache.Trait(upstream.ChannelUID, keyHash, attemptModel, config.TraitRequiresStream); ok && state.Enabled {
-					failedKeys[apiKey] = true
-					RequestLogf(c, "[%s-ChannelCompat] 渠道 %s 模型 %s 已学习仅接受流式请求，非流式请求跳过 Key: %s",
-						apiType, upstream.Name, attemptModel, utils.MaskAPIKey(apiKey))
-					continue
+					bodyKind := string(kind)
+					executionKindStr := string(executionKind)
+					if StreamBridgeSupportedKind(bodyKind) && StreamBridgeSupportedKind(executionKindStr) {
+						if rewritten, changed := ForceStreamRequestBody(attemptBody, bodyKind, executionKindStr); changed {
+							attemptBody = rewritten
+							RestoreRequestBody(c, attemptBody)
+							c.Set("requestBodyBytes", attemptBody)
+							SetUpstreamStreamBridge(c, true)
+							channelCompatCache.MarkApplied(upstream.ChannelUID, keyHash, attemptModel, config.TraitRequiresStream)
+							RequestLogf(c, "[%s-ChannelCompat] 渠道 %s 模型 %s 仅接受流式请求，非流式请求已改写为流式桥接（上游 SSE 将合成回非流式响应）",
+								apiType, upstream.Name, attemptModel)
+						}
+					} else {
+						failedKeys[apiKey] = true
+						RequestLogf(c, "[%s-ChannelCompat] 渠道 %s 模型 %s 已学习仅接受流式请求，入口/执行协议 %s/%s 暂不支持流式桥接，跳过 Key: %s",
+							apiType, upstream.Name, attemptModel, bodyKind, executionKindStr, utils.MaskAPIKey(apiKey))
+						continue
+					}
 				}
 			}
 

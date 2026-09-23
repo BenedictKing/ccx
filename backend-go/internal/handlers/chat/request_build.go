@@ -10,6 +10,7 @@ import (
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/converters"
 	"github.com/BenedictKing/ccx/internal/copilot"
+	"github.com/BenedictKing/ccx/internal/handlers/common"
 	"github.com/BenedictKing/ccx/internal/providers"
 	"github.com/BenedictKing/ccx/internal/utils"
 	"github.com/gin-gonic/gin"
@@ -192,6 +193,13 @@ func buildProviderRequest(
 	model string,
 	isStream bool,
 ) (*http.Request, error) {
+	// 流式桥接改写：非流式客户端请求经仅接受流式渠道时强制以上游流式发送，
+	// 响应侧按 Content-Type 合成回非流式（见 common.ReadUpstreamNonStreamBody）。
+	// 本函数的 claude 分支从 isStream 参数而非请求体派生上游 stream 字段，
+	// 因此需在此覆盖；其余分支均读取请求体，改写自然生效。
+	if !isStream && common.UpstreamStreamBridgeRequested(c) {
+		isStream = true
+	}
 	skipVersionPrefix := strings.HasSuffix(baseURL, "#")
 	baseURL = strings.TrimSuffix(strings.TrimRight(baseURL, "/"), "#")
 	// 应用模型映射

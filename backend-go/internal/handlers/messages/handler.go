@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -408,7 +407,9 @@ func handleNormalResponse(
 ) (*types.Usage, error) {
 	defer errutil.IgnoreDeferred(resp.Body.Close)
 
-	bodyBytes, err := io.ReadAll(resp.Body)
+	// 流式桥接：上游实际返回 SSE（仅接受流式渠道的兼容改写）时合成回非流式体，
+	// 后续 ConvertToClaudeResponse 转换与原生非流式路径完全一致。
+	bodyBytes, err := common.ReadUpstreamNonStreamBody(c, resp, upstream.ServiceType)
 	if err != nil {
 		c.JSON(500, gin.H{"error": "Failed to read response"})
 		return nil, err

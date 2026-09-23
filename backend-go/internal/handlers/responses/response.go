@@ -2,7 +2,6 @@ package responses
 
 import (
 	"fmt"
-	"io"
 	"net/http"
 	"time"
 
@@ -59,7 +58,9 @@ func handleSuccess(
 	}
 
 	// 非流式响应处理
-	bodyBytes, err := io.ReadAll(resp.Body)
+	// 流式桥接：上游实际返回 SSE（仅接受流式渠道的兼容改写）时合成回非流式体，
+	// 后续转换/usage 提取与原生非流式路径完全一致。
+	bodyBytes, err := common.ReadUpstreamNonStreamBody(c, resp, upstreamType)
 	if err != nil {
 		c.JSON(500, gin.H{"error": "Failed to read response"})
 		return nil, err

@@ -1,6 +1,7 @@
 package common
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/BenedictKing/ccx/internal/types"
 	"github.com/BenedictKing/ccx/internal/warmup"
 	"github.com/gin-gonic/gin"
+	"github.com/tidwall/gjson"
 )
 
 const streamRequiredErrorBody = `{"error":{"message":"streaming is required: this endpoint only accepts \"stream\": true"}}`
@@ -114,45 +116,45 @@ func TestStreamRequirementLearnsAndFailsOver(t *testing.T) {
 	}
 }
 
-// 预置学习结论后，非流式请求应在发送前直接跳过该 Key，不消耗必然失败的上游往返；
-// 同渠道其余 Key（可能路由到支持非流式的后端分组）照常交付。
-// 上游按授权 Key 区分行为：sk-stream-2a 已学习仅流式（请求根本不该发出），
-// sk-stream-2b 正常服务。
-func TestStreamRequirementSkipAvoidsUpstreamRoundtrip(t *testing.T) {
+// 预置学习结论后，非流式请求应做流式桥接改写：上游收到 stream:true 的请求体并按
+// SSE 正常返回（上游计数 1，无额外失败往返）。gemini 入口不支持桥接，退回发送前跳过。
+func TestStreamRequirementRewritesRequestBody(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	t.Cleanup(swapChannelCompatCacheForTest(config.NewChannelCompatCache()))
 
 	const (
-		channelUID = "ch-stream-skip"
-		skippedKey = "sk-stream-2a"
-		servingKey = "sk-stream-2b"
+		channelUID = "ch-stream-bridge"
+		apiKey     = "sk-stream-2"
 		model      = "gpt-5"
 	)
 
+	var sawStreamTrue, sawIncludeUsage bool
 	callCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		auth := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 		callCount++
-		if auth == skippedKey {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			_, _ = w.Write([]byte(streamRequiredErrorBody))
-			return
+		body, _ := io.ReadAll(r.Body)
+		if gjson.GetBytes(body, "stream").Bool() {
+			sawStreamTrue = true
 		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"ok":true}`))
+		if gjson.GetBytes(body, "stream_options.include_usage").Bool() {
+			sawIncludeUsage = true
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"model\":\"gpt-5\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"},\"finish_reason\":null}]}\n" +
+			"data: {\"id\":\"chatcmpl-1\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n" +
+			"data: [DONE]\n"))
 	}))
 	t.Cleanup(server.Close)
 
-	keyHash := autopilot.KeyHashFromAPIKey(skippedKey)
+	keyHash := autopilot.KeyHashFromAPIKey(apiKey)
 	channelCompatCache.Record(channelUID, keyHash, model, config.TraitRequiresStream, true,
 		config.CompatSourceErrorSignal, "预置测试结论")
 
 	cfgManager, channelScheduler, responsesMetrics, cleanup := newTestFailoverDependencies(t, config.UpstreamConfig{
-		Name:        "stream-required-skip",
+		Name:        "stream-bridge-rewrite",
 		ChannelUID:  channelUID,
 		BaseURL:     server.URL,
-		APIKeys:     []string{skippedKey, servingKey},
+		APIKeys:     []string{apiKey},
 		Status:      "active",
 		ServiceType: "openai",
 	})
@@ -183,12 +185,105 @@ func TestStreamRequirementSkipAvoidsUpstreamRoundtrip(t *testing.T) {
 			return cfgManager.GetNextAPIKey(upstream, failedKeys, "Responses")
 		},
 		func(c *gin.Context, upstreamCopy *config.UpstreamConfig, apiKey string) (*http.Request, error) {
-			req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodPost, upstreamCopy.BaseURL, strings.NewReader(reqBody))
-			if err != nil {
-				return nil, err
+			// 模拟真实 handler 闭包：从 context 读取改写后的请求体（流式桥接改写经
+			// RestoreRequestBody 落到 requestBodyBytes，此处才可观测）。
+			return http.NewRequestWithContext(c.Request.Context(), http.MethodPost, upstreamCopy.BaseURL,
+				strings.NewReader(string(GetEffectiveRequestBody(c, []byte(reqBody)))))
+		},
+		func(apiKey string) {},
+		func(url string) {},
+		func(url string) {},
+		func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string, actualRequestBody []byte) (*types.Usage, error) {
+			body, _ := io.ReadAll(resp.Body)
+			if !strings.Contains(string(body), `"finish_reason":"stop"`) {
+				t.Errorf("上游响应应为 SSE 流, got: %s", body)
 			}
-			req.Header.Set("Authorization", "Bearer "+apiKey)
-			return req, nil
+			return nil, nil
+		},
+		model,
+		"",
+		0,
+		channelScheduler.GetChannelLogStore(scheduler.ChannelKindResponses),
+	)
+
+	if !handled {
+		t.Fatalf("流式桥接改写后请求应成功交付, lastErr=%v failoverErr=%#v", lastErr, failoverErr)
+	}
+	if successKey != apiKey {
+		t.Fatalf("successKey = %q, want %q", successKey, apiKey)
+	}
+	if callCount != 1 {
+		t.Fatalf("上游调用次数 = %d, want 1", callCount)
+	}
+	if !sawStreamTrue {
+		t.Fatal("上游应收到 stream:true 的请求体")
+	}
+	// responses 体不附 stream_options（仅 chat 体）
+	if sawIncludeUsage {
+		t.Fatal("responses 体不应附 stream_options")
+	}
+}
+
+// gemini 入口请求体无顶层 stream 字段语义，不支持桥接：预置学习结论后发送前直接跳过，
+// 不消耗必然失败的上游往返。
+func TestStreamRequirementSkipsUnsupportedExecution(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Cleanup(swapChannelCompatCacheForTest(config.NewChannelCompatCache()))
+
+	callCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(streamRequiredErrorBody))
+	}))
+	t.Cleanup(server.Close)
+
+	const (
+		channelUID = "ch-stream-skip-gemini"
+		apiKey     = "sk-stream-4"
+		model      = "gemini-3.8-flash"
+	)
+	keyHash := autopilot.KeyHashFromAPIKey(apiKey)
+	channelCompatCache.Record(channelUID, keyHash, model, config.TraitRequiresStream, true,
+		config.CompatSourceErrorSignal, "预置测试结论")
+
+	cfgManager, channelScheduler, geminiMetrics, cleanup := newTestFailoverDependencies(t, config.UpstreamConfig{
+		Name:        "stream-required-skip-gemini",
+		ChannelUID:  channelUID,
+		BaseURL:     server.URL,
+		APIKeys:     []string{apiKey},
+		Status:      "active",
+		ServiceType: "gemini",
+	})
+	t.Cleanup(cleanup)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	reqBody := `{"contents":[{"role":"user","parts":[{"text":"hi"}]}]}`
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1beta/models/gemini-3.8-flash:generateContent", strings.NewReader(reqBody))
+
+	cfg := cfgManager.GetConfig()
+	upstream := &cfg.Upstream[0]
+
+	handled, _, _, _, _, _ := TryUpstreamWithAllKeys(
+		c,
+		config.NewEnvConfig(),
+		cfgManager,
+		channelScheduler,
+		scheduler.ChannelKindGemini,
+		"Gemini",
+		geminiMetrics,
+		upstream,
+		[]warmup.URLLatencyResult{{URL: server.URL, OriginalIdx: 0}},
+		[]byte(reqBody),
+		nil,
+		false, // 非流式请求
+		func(upstream *config.UpstreamConfig, failedKeys map[string]bool) (string, error) {
+			return cfgManager.GetNextAPIKey(upstream, failedKeys, "Gemini")
+		},
+		func(c *gin.Context, upstreamCopy *config.UpstreamConfig, apiKey string) (*http.Request, error) {
+			return http.NewRequestWithContext(c.Request.Context(), http.MethodPost, upstreamCopy.BaseURL, strings.NewReader(reqBody))
 		},
 		func(apiKey string) {},
 		func(url string) {},
@@ -199,18 +294,17 @@ func TestStreamRequirementSkipAvoidsUpstreamRoundtrip(t *testing.T) {
 		model,
 		"",
 		0,
-		channelScheduler.GetChannelLogStore(scheduler.ChannelKindResponses),
+		channelScheduler.GetChannelLogStore(scheduler.ChannelKindGemini),
 	)
 
-	if !handled {
-		t.Fatalf("跳过已学习 Key 后应由同渠道其余 Key 成功交付, lastErr=%v failoverErr=%#v", lastErr, failoverErr)
+	if handled {
+		t.Fatal("不支持桥接的入口应跳过该 Key 而非发送请求")
 	}
-	if successKey != servingKey {
-		t.Fatalf("successKey = %q, want %q", successKey, servingKey)
+	if callCount != 0 {
+		t.Fatalf("上游调用次数 = %d, want 0（发送前跳过）", callCount)
 	}
-	if callCount != 1 {
-		t.Fatalf("上游调用次数 = %d, want 1（被跳过 Key 零往返，仅 serving Key 一次成功调用）", callCount)
-	}
+	// 全部 Key 被跳过时循环自然退出（与 circuit skip 形态一致，返回全 nil 由上层
+	// HandleAllChannelsFailed 兜底 503），跳过原因已由 RequestLogf 记录。
 }
 
 // 防误判门控：流式请求（isStream=true）收到同样的 400 不学习结论
