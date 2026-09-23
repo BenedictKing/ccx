@@ -1401,7 +1401,7 @@
                 <v-chip size="x-small" color="primary" variant="tonal" class="ml-1">{{ dm.model }}</v-chip>
               </v-list-item-title>
               <v-list-item-subtitle class="d-flex align-center ga-1">
-                <v-chip size="x-small" color="warning" variant="tonal">{{ t('channelCard.modelNotFound') }}</v-chip>
+                <v-chip size="x-small" color="warning" variant="tonal">{{ t(getDisabledKeyLabel(dm.reason)) }}</v-chip>
                 <span class="text-caption">{{ t('channelCard.recoverAt') }}: {{ new Date(dm.recoverAt).toLocaleString() }}</span>
               </v-list-item-subtitle>
               <template #append>
@@ -2892,6 +2892,10 @@ const getDisabledKeyLabel = (reason: string) => {
     'invalid': 'channelCard.blacklistReason.invalid',
     'authentication_error': 'channelCard.blacklistReason.authentication_error',
     'permission_error': 'channelCard.blacklistReason.permission_error',
+    // 组合级限制 (Key,模型) 的 reason：能力类差异统一展示"模型不可用"
+    'model_not_found': 'channelCard.modelNotFound',
+    'model_not_in_key_group': 'channelCard.modelNotFound',
+    'image_generation_not_enabled': 'channelCard.modelNotFound',
   }
   return (map[reason] || 'channelCard.blacklistReason.unknown') as any
 }

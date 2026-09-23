@@ -730,7 +730,15 @@ func executeModelTest(ctx context.Context, channel *config.UpstreamConfig, proto
 		blacklistResult := common.ShouldBlacklistKey(statusCode, respBody)
 		if blacklistResult.ShouldBlacklist {
 			isBalanceError := common.IsBalanceOrQuotaBlacklistReason(blacklistResult.Reason)
-			if !isBalanceError || channel.IsAutoBlacklistBalanceEnabled() {
+			restrictModel := config.RedirectModel(model, channel)
+			if isBalanceError && restrictModel != "" {
+				// 余额/配额类：降级为 (Key,模型) 组合级限制，覆盖全部模型时才升级整 Key 拉黑。
+				if common.HandleBalanceClassKeyFailure(cfgManager, channel, channelKindToApiType(channelKind), channelID,
+					apiKey, restrictModel, blacklistResult.Reason, blacklistResult.Message, blacklistResult.RecoverAt) {
+					log.Printf("[CapabilityTest-Blacklist] 渠道 %s 的 %s 协议余额/配额受限已覆盖全部模型，升级整 Key 拉黑 (模型: %s, 原因: %s)",
+						channel.Name, protocol, restrictModel, blacklistResult.Reason)
+				}
+			} else if !isBalanceError || channel.IsAutoBlacklistBalanceEnabled() {
 				apiType := channelKindToApiType(channelKind)
 				log.Printf("[CapabilityTest-Blacklist] 渠道 %s 的 %s 协议触发 Key 拉黑 (模型: %s, 原因: %s, 状态码: %d)",
 					channel.Name, protocol, model, blacklistResult.Reason, statusCode)

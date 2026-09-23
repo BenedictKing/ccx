@@ -549,3 +549,20 @@ func TestCheckChannel跳过(t *testing.T) {
 		})
 	}
 }
+
+func TestCheckKeyL1余额类错误不整Key拉黑(t *testing.T) {
+	// 403 + 余额文案：ShouldBlacklistKey 判为 insufficient_balance，
+	// 但 L1 只拉模型列表，单模型证据不足以杀整 Key，不应触发拉黑回调。
+	srv := newModelsServer(t, 403, `{"error":{"message":"insufficient balance, please top up"}}`)
+	f := newCheckKeyFixture()
+	u := &config.UpstreamConfig{ServiceType: "claude"}
+
+	rec := f.run(u, []string{srv.URL}, "sk-broke", defaultTestPolicy(2*time.Second), nil)
+
+	if rec.LastStatus != StatusAuthFailed {
+		t.Fatalf("LastStatus = %q, 期望 auth_failed", rec.LastStatus)
+	}
+	if len(f.blacklistCalls) != 0 {
+		t.Fatalf("余额类错误不应整 Key 拉黑: %+v", f.blacklistCalls)
+	}
+}

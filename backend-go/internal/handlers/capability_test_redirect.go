@@ -315,7 +315,14 @@ func executeRedirectModelTest(ctx context.Context, channel *config.UpstreamConfi
 		blacklistResult := common.ShouldBlacklistKey(statusCode, respBody)
 		if blacklistResult.ShouldBlacklist {
 			isBalanceError := common.IsBalanceOrQuotaBlacklistReason(blacklistResult.Reason)
-			if !isBalanceError || channel.IsAutoBlacklistBalanceEnabled() {
+			if isBalanceError && actualModel != "" {
+				// 余额/配额类：降级为 (Key,模型) 组合级限制，覆盖全部模型时才升级整 Key 拉黑。
+				if common.HandleBalanceClassKeyFailure(cfgManager, channel, channelKindToApiType(protocol), channelID,
+					apiKey, actualModel, blacklistResult.Reason, blacklistResult.Message, blacklistResult.RecoverAt) {
+					log.Printf("[RedirectTest-Blacklist] 渠道 %s 余额/配额受限已覆盖全部模型，升级整 Key 拉黑 (探测: %s → 实际: %s, 原因: %s)",
+						channel.Name, probeModel, actualModel, blacklistResult.Reason)
+				}
+			} else if !isBalanceError || channel.IsAutoBlacklistBalanceEnabled() {
 				apiType := channelKindToApiType(protocol)
 				log.Printf("[RedirectTest-Blacklist] 渠道 %s 触发 Key 拉黑 (探测: %s → 实际: %s, 原因: %s, 状态码: %d)",
 					channel.Name, probeModel, actualModel, blacklistResult.Reason, statusCode)

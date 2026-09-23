@@ -1,11 +1,11 @@
 package common_test
 
 import (
+	"errors"
 	"fmt"
+	"net/http/httptest"
 	"sort"
 	"sync"
-	"errors"
-	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 	"time"

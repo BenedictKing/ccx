@@ -2692,6 +2692,67 @@ func (cm *ConfigManager) IsKeyModelDisabled(apiType string, channelIndex int, ap
 	return (*upstreams)[channelIndex].IsKeyModelDisabledNow(apiKey, model, time.Now())
 }
 
+// balanceEscalateModelThreshold 余额/配额类组合限制升级为整 Key 拉黑的阈值：
+// 渠道未配置精确模型白名单（空白名单或含通配/排除条目）时，无法证明"全部模型
+// 都不可用"，以该 Key 生效中限制的不同模型数达到该值作为升级信号。
+const balanceEscalateModelThreshold = 3
+
+// ShouldEscalateBalanceKeyBlacklist 判断余额/配额类组合限制是否已覆盖该 Key 的
+// 全部可用模型，应升级为整 Key 拉黑。
+//
+// 规则 1（精确覆盖）：SupportedModels 非空且全部为精确模型名（无 * 通配、无 ! 排除）
+// 且每个条目都已有生效中的组合限制。
+// 规则 2（阈值）：生效中限制的不同模型数（忽略大小写）≥ balanceEscalateModelThreshold。
+// 已过期（RecoverAt 已到）的限制不计入。
+func (cm *ConfigManager) ShouldEscalateBalanceKeyBlacklist(apiType string, channelIndex int, apiKey string) bool {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+
+	upstreams := cm.getUpstreamSliceLocked(apiType)
+	if upstreams == nil || channelIndex < 0 || channelIndex >= len(*upstreams) {
+		return false
+	}
+	upstream := &(*upstreams)[channelIndex]
+
+	now := time.Now()
+	restricted := make(map[string]struct{})
+	for _, dm := range upstream.DisabledKeyModels {
+		if dm.Key != apiKey {
+			continue
+		}
+		if !upstream.IsKeyModelDisabledNow(apiKey, dm.Model, now) {
+			continue
+		}
+		restricted[strings.ToLower(strings.TrimSpace(dm.Model))] = struct{}{}
+	}
+	if len(restricted) == 0 {
+		return false
+	}
+	if len(restricted) >= balanceEscalateModelThreshold {
+		return true
+	}
+
+	// 规则 1：仅当白名单全部为精确名时才可精确判定覆盖；含通配/排除条目时
+	// 单次命中不足以证明钱包耗尽（可能只是个别模型池空），回落阈值规则。
+	allExact := len(upstream.SupportedModels) > 0
+	for _, pattern := range upstream.SupportedModels {
+		trimmed := strings.TrimSpace(pattern)
+		if trimmed == "" || strings.Contains(trimmed, "*") || strings.HasPrefix(trimmed, "!") {
+			allExact = false
+			break
+		}
+	}
+	if !allExact {
+		return false
+	}
+	for _, pattern := range upstream.SupportedModels {
+		if _, ok := restricted[strings.ToLower(strings.TrimSpace(pattern))]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
 // RestoreKeyModel 手动移除指定渠道下 (apiKey, model) 组合的限制（持久化）。
 func (cm *ConfigManager) RestoreKeyModel(apiType string, channelIndex int, apiKey, model string) error {
 	cm.mu.Lock()

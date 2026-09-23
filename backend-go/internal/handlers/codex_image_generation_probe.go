@@ -369,7 +369,10 @@ func reconcileCodexImageGenerationRestriction(
 		if !blacklist.ShouldBlacklist {
 			continue
 		}
-		if common.IsBalanceOrQuotaBlacklistReason(blacklist.Reason) && !channel.IsAutoBlacklistBalanceEnabled() {
+		if common.IsBalanceOrQuotaBlacklistReason(blacklist.Reason) {
+			// 余额/配额类：降级为 (Key,模型) 组合级限制，覆盖全部模型时才升级整 Key 拉黑。
+			common.HandleBalanceClassKeyFailure(cfgManager, channel, apiType, channelID,
+				apiKey, actualModel, blacklist.Reason, blacklist.Message, blacklist.RecoverAt)
 			return
 		}
 		_ = cfgManager.BlacklistKeyWithRecoverAt(apiType, channelID, apiKey, blacklist.Reason, blacklist.Message, blacklist.RecoverAt)

@@ -226,9 +226,12 @@ func (m *Manager) checkKeyL1(
 		rec.LastStatus = StatusAuthFailed
 		rec.ConsecutiveFailures = prevFailures + 1
 		rec.Detail = summarizeDetail(lastStatus, lastBody, nil)
-		// 鉴权失败拉黑：内部用 ShouldBlacklistKey 语义判断，拉黑交注入的回调
+		// 鉴权失败拉黑：内部用 ShouldBlacklistKey 语义判断，拉黑交注入的回调。
+		// 余额/配额类不走整 Key 拉黑——L1 只拉模型列表、L2 只测最便宜模型，
+		// 单模型证据不足以杀整 Key；真实流量会按 (Key,模型) 组合写限制。
 		if m.blacklist != nil {
-			if bl := common.ShouldBlacklistKey(lastStatus, lastBody); bl.ShouldBlacklist {
+			if bl := common.ShouldBlacklistKey(lastStatus, lastBody); bl.ShouldBlacklist &&
+				!common.IsBalanceOrQuotaBlacklistReason(bl.Reason) {
 				m.blacklist(channelType, channelIndex, apiKey, bl.Reason, bl.Message, bl.RecoverAt)
 			}
 		}

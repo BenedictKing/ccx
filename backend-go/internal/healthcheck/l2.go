@@ -184,9 +184,12 @@ func (m *Manager) probeOneModel(
 		rec.LastStatus = StatusAuthFailed
 		rec.ConsecutiveFailures = prevFailures + 1
 		rec.Detail = summarizeDetail(statusCode, respBody, nil)
-		// 鉴权失败拉黑：与 L1 同一 ShouldBlacklistKey 语义
+		// 鉴权失败拉黑：与 L1 同一 ShouldBlacklistKey 语义。
+		// 余额/配额类不走整 Key 拉黑——L2 只测最便宜模型，单模型证据不足以
+		// 杀整 Key；真实流量会按 (Key,模型) 组合写限制。
 		if m.blacklist != nil {
-			if bl := common.ShouldBlacklistKey(statusCode, respBody); bl.ShouldBlacklist {
+			if bl := common.ShouldBlacklistKey(statusCode, respBody); bl.ShouldBlacklist &&
+				!common.IsBalanceOrQuotaBlacklistReason(bl.Reason) {
 				m.blacklist(channelType, channelIndex, apiKey, bl.Reason, bl.Message, bl.RecoverAt)
 			}
 		}
