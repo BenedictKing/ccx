@@ -1059,50 +1059,16 @@ func findProfileByBaseURL(store *ProfileStore, baseURL string) *KeyEndpointProfi
 }
 
 // resolveMappedModel 解析 endpoint 的模型映射（含 effort 原子决定）。
-// 优先级：profile.ModelMapping（显式 per-endpoint 映射）> ModelResolver 自动映射。
-// ModelResolver 仅在 AutoResolve 门控通过时调用；返回 (nil, failReason) 表示无映射，
-// failReason 为自动链路运行过但未命中的原因（手动映射命中或画像/模型为空时为空串）。
-// 显式 ModelMapping 返回 EffortDecided=false（不注入 effort）；
-// ModelResolver 自动映射返回完整 target（含 effort 和 EffortDecided）。
+// 显式 ModelMapping 已退役，全渠道统一走 ModelResolver 画像映射；
+// 返回 (nil, failReason) 表示无映射，failReason 为自动链路运行过但未命中的原因
+// （画像/模型为空时为空串），供调用方在 fail-open 透传时记录，消除静默降级。
 func resolveMappedModel(profile *KeyEndpointProfile, model string, req *RequestProfile, deps *EndpointPolicyDeps) (*ResolvedRouteTarget, string) {
 	if profile == nil || model == "" {
 		return nil, ""
 	}
 
 	routingCfg := getRoutingCfgFromDeps(deps)
-	preferAutoOverManual := routingCfg != nil && routingCfg.ModelMapping.PreferAutoOverManual
-
-	if preferAutoOverManual {
-		// 反转顺序（退役期灰度）：ModelResolver 自动决策优先；
-		// 自动决策 fail-open（未命中）时才回退到显式手动映射。
-		target, failReason := resolveAutoModel(profile, model, req, deps, routingCfg)
-		if target != nil {
-			return target, ""
-		}
-		if fallback := resolveManualMapping(profile, model, "manual_mapping_fallback"); fallback != nil {
-			return fallback, ""
-		}
-		return nil, failReason
-	}
-
-	// 默认顺序（历史行为不变）：显式 modelMapping 优先，ModelResolver 自动映射兜底。
-	if target := resolveManualMapping(profile, model, "manual_mapping"); target != nil {
-		return target, ""
-	}
 	return resolveAutoModel(profile, model, req, deps, routingCfg)
-}
-
-// resolveManualMapping 解析 profile 上显式配置的 modelMapping（用户手动配置，视为已知正确；不覆盖 effort）。
-// reason 由调用方指定，用于区分默认优先级路径（manual_mapping）与自动决策 fail-open 后的兜底路径（manual_mapping_fallback）。
-func resolveManualMapping(profile *KeyEndpointProfile, model string, reason string) *ResolvedRouteTarget {
-	if len(profile.ModelMapping) == 0 {
-		return nil
-	}
-	mapped, ok := profile.ModelMapping[model]
-	if !ok {
-		return nil
-	}
-	return &ResolvedRouteTarget{Model: mapped, Effort: "", EffortDecided: false, Reason: reason}
 }
 
 // resolveAutoModel 解析 ModelResolver 自动映射（Phase 3B-2）。

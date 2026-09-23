@@ -417,8 +417,8 @@ func buildProviderRequest(
 	isStream bool,
 ) (*http.Request, error) {
 	baseURL = strings.TrimSuffix(strings.TrimRight(baseURL, "/"), "#")
-	// 应用模型映射
-	mappedModel := config.RedirectModel(model, upstream)
+	// 显式 ModelMapping 已退役：请求模型直接作为上游执行模型
+	mappedModel := model
 
 	// 使用 context 中的最新请求体（已经过 failover 内的历史图片轮次限制替换等处理）。
 	// 若替换后的 body 与原始不同，需同步重新解析 geminiReq，使 claude/openai/responses

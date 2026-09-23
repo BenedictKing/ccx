@@ -110,8 +110,6 @@ type ChannelDiscoveryRequest struct {
 	ProxyURL           string            `json:"proxyUrl"`
 	ProxyPreferDirect  bool              `json:"proxyPreferDirect"`
 	InsecureSkipVerify bool              `json:"insecureSkipVerify"`
-	ModelMapping       map[string]string `json:"modelMapping"`
-	ReasoningMapping   map[string]string `json:"reasoningMapping"`
 	TargetClients      []string          `json:"targetClients"`
 	// ProbeAllModels 仅用于兼容旧版调用方。serviceType 为空时服务端会自动全量探测。
 	ProbeAllModels bool `json:"probeAllModels"`
@@ -198,18 +196,14 @@ type DiscoveryEvidence struct {
 }
 
 type DiscoveryRecommendation struct {
-	ChannelKind         string                 `json:"channelKind"`
-	ServiceType         string                 `json:"serviceType"`
-	BaseURLs            []string               `json:"baseUrls,omitempty"`
-	ModelMapping        map[string]string      `json:"modelMapping"`
-	ReasoningMapping    map[string]string      `json:"reasoningMapping,omitempty"`
-	SupportedModels     []string               `json:"supportedModels,omitempty"`
-	NoVisionModels      []string               `json:"noVisionModels,omitempty"`
-	VisionFallbackModel string                 `json:"visionFallbackModel,omitempty"`
-	Compat              map[string]bool        `json:"compat,omitempty"`
-	URLRecommendation   *URLRecommendation     `json:"urlRecommendation,omitempty"`
-	Evidence            []DiscoveryEvidence    `json:"evidence,omitempty"`
-	Alternatives        []DiscoveryAlternative `json:"alternatives,omitempty"`
+	ChannelKind       string                 `json:"channelKind"`
+	ServiceType       string                 `json:"serviceType"`
+	BaseURLs          []string               `json:"baseUrls,omitempty"`
+	SupportedModels   []string               `json:"supportedModels,omitempty"`
+	Compat            map[string]bool        `json:"compat,omitempty"`
+	URLRecommendation *URLRecommendation     `json:"urlRecommendation,omitempty"`
+	Evidence          []DiscoveryEvidence    `json:"evidence,omitempty"`
+	Alternatives      []DiscoveryAlternative `json:"alternatives,omitempty"`
 }
 
 type DiscoveryAlternative struct {
@@ -277,17 +271,16 @@ func channelDiscoveryWithPacerFactory(
 		recommendedKind := recommendDiscoveryChannelKind(req.ChannelKind, req.TargetClients, protocols)
 		channel.ServiceType = resolveDiscoveryServiceType(req.ServiceType, recommendedKind)
 
-		recommendation := buildDiscoveryMappingRecommendation(recommendedKind, compatProbeProtocol(channel, recommendedKind), models.Selected, successByProtocol, req.TargetClients)
+		recommendation := buildDiscoveryRecommendation(recommendedKind, compatProbeProtocol(channel, recommendedKind), successByProtocol)
 		recommendation.ServiceType = channel.ServiceType
 		recommendation.BaseURLs = append([]string(nil), channel.BaseURLs...)
-		// 实际生效的成功模型列表：当 channelKind 协议无成功模型时（已做过 fallback
-		// 建映射）此处同步用 fallback 结果，避免后续探测从空 successByProtocol 取数。
+		// 实际生效的成功模型列表：当 channelKind 协议无成功模型时（已做过 fallback），
+		// 此处同步用 fallback 结果，避免后续探测从空 successByProtocol 取数。
 		effectiveSuccessModels := discoveryEffectiveSuccessModels(recommendedKind, compatProbeProtocol(channel, recommendedKind), successByProtocol)
-		applyDiscoveryModelCapabilityRecommendations(&recommendation, models.Items, effectiveSuccessModels, globalCapabilities)
 		capabilities := DiscoveryCapabilitiesResult{}
 		if recommendation.ChannelKind != "" {
 			compatModel := discoveryCompatProbeModel(recommendation.ChannelKind, models.Selected, effectiveSuccessModels)
-			visionModel := discoveryVisionProbeModel(recommendation, models.Items, effectiveSuccessModels, globalCapabilities, compatModel)
+			visionModel := discoveryVisionProbeModel(models.Items, effectiveSuccessModels, globalCapabilities, compatModel)
 			compat := runCompatDiagnoseWithProbeModel(channel, recommendation.ChannelKind, channel.APIKeys[0], capabilityTestBaseURL(channel), compatModel)
 			recommendation.Compat = compat.Recommendations
 			recommendation.URLRecommendation = compat.URLRecommendations
@@ -341,8 +334,6 @@ func buildTransientDiscoveryChannel(req ChannelDiscoveryRequest) (*config.Upstre
 		ProxyURL:           strings.TrimSpace(req.ProxyURL),
 		ProxyPreferDirect:  req.ProxyPreferDirect,
 		InsecureSkipVerify: req.InsecureSkipVerify,
-		ModelMapping:       cloneStringMap(req.ModelMapping),
-		ReasoningMapping:   cloneStringMap(req.ReasoningMapping),
 	}, nil
 }
 
@@ -510,148 +501,19 @@ func discoveryModelKeywordScore(model string, keywords []string) int {
 	return score
 }
 
-func buildDiscoveryMappingRecommendation(
+func buildDiscoveryRecommendation(
 	channelKind string,
 	preferredProtocol string,
-	selected DiscoverySelectedModels,
 	successByProtocol map[string][]string,
-	targetClients []string,
 ) DiscoveryRecommendation {
-	// 当 channelKind 协议无成功模型时降级到其他成功协议，确保别名映射仍能生成。
-	// preferredProtocol 来自 compatProbeProtocol，反映 serviceType 对应的实际上游协议。
-	successful := make(map[string]struct{})
-	for _, model := range discoveryEffectiveSuccessModels(channelKind, preferredProtocol, successByProtocol) {
-		successful[model] = struct{}{}
-	}
-
-	modelMapping := make(map[string]string)
-	add := func(alias, model string) {
-		if model == "" {
-			return
-		}
-		if _, ok := successful[model]; !ok {
-			return
-		}
-		modelMapping[alias] = model
-	}
-
-	switch channelKind {
-	case "messages":
-		add("opus", selected.Strong)
-		add("sonnet", selected.Primary)
-		add("haiku", selected.Fast)
-		add("fable", selected.Strong)
-	case "responses", "chat":
-		add("gpt", selected.Primary)
-		add("mini", selected.Fast)
-		add("codex", firstSuccessfulDiscoveryModel(successful, selected.Strong, selected.Primary))
-	case "gemini":
-		add("gemini", selected.Primary)
-		add("pro", selected.Strong)
-		add("flash", selected.Fast)
-	}
-
-	reasoningMapping := discoveryReasoningMapping(channelKind, modelMapping)
-	evidence := []DiscoveryEvidence(nil)
-	if len(reasoningMapping) > 0 {
-		evidence = append(evidence, DiscoveryEvidence{Type: "reasoning", Message: "思考强度为按源模型角色给出的默认建议；发现流程会继续验证工具调用与思考回传要求"})
-	}
+	// 渠道级显式模型映射已退役（autopilot ModelResolver 画像映射全渠道接管），
+	// 发现建议只保留成功模型清单写入，供前端展示与建渠道时参考。
+	// 当 channelKind 协议无成功模型时降级到其他成功协议。
+	supported := discoveryEffectiveSuccessModels(channelKind, preferredProtocol, successByProtocol)
 	return DiscoveryRecommendation{
-		ChannelKind:      channelKind,
-		ModelMapping:     modelMapping,
-		ReasoningMapping: reasoningMapping,
-		Evidence:         evidence,
+		ChannelKind:     channelKind,
+		SupportedModels: supported,
 	}
-}
-
-func firstSuccessfulDiscoveryModel(successful map[string]struct{}, models ...string) string {
-	for _, model := range models {
-		if _, ok := successful[model]; ok {
-			return model
-		}
-	}
-	return ""
-}
-
-func discoveryReasoningMapping(channelKind string, modelMapping map[string]string) map[string]string {
-	reasoning := make(map[string]string)
-	add := func(alias, effort string) {
-		if _, ok := modelMapping[alias]; ok {
-			reasoning[alias] = effort
-		}
-	}
-	switch channelKind {
-	case "messages":
-		add("fable", "max")
-		add("opus", "max")
-		add("sonnet", "max")
-		add("haiku", "high")
-	case "responses", "chat":
-		add("gpt", "max")
-		add("mini", "high")
-		add("codex", "high")
-		// gemini: reasoningMapping 暂不推荐，Gemini handler 目前不消费该字段，
-		// 写入配置只会产生无效噪声。待 Gemini thinking 路径完整支持后再启用。
-	}
-	if len(reasoning) == 0 {
-		return nil
-	}
-	return reasoning
-}
-
-func applyDiscoveryModelCapabilityRecommendations(
-	recommendation *DiscoveryRecommendation,
-	allModels []string,
-	successfulModels []string,
-	global map[string]config.UpstreamModelCapability,
-) {
-	if recommendation == nil || len(recommendation.ModelMapping) == 0 {
-		return
-	}
-
-	mappedModels := uniqueDiscoveryModels(mapValuesDiscoveryModels(recommendation.ModelMapping))
-	noVisionModels := make([]string, 0, len(mappedModels))
-	noToolModels := make([]string, 0)
-	for _, model := range mappedModels {
-		if known, supported := discoveryModelKnownCapability(model, "vision", global); known && !supported {
-			noVisionModels = append(noVisionModels, model)
-		}
-		if known, supported := discoveryModelKnownCapability(model, "toolCalls", global); known && !supported {
-			noToolModels = append(noToolModels, model)
-		}
-	}
-	if len(noVisionModels) > 0 {
-		recommendation.NoVisionModels = noVisionModels
-		if fallback := bestDiscoveryVisionModel(successfulModels, allModels, global, noVisionModels); fallback != "" {
-			recommendation.VisionFallbackModel = fallback
-			recommendation.Evidence = append(recommendation.Evidence, DiscoveryEvidence{
-				Type:    "vision",
-				Key:     "visionFallbackModel",
-				Message: fmt.Sprintf("内置能力表显示部分映射模型不支持图片输入，推荐使用 %s 作为图片回退模型", fallback),
-			})
-		} else {
-			recommendation.Evidence = append(recommendation.Evidence, DiscoveryEvidence{
-				Type:    "vision",
-				Key:     "noVisionModels",
-				Message: "内置能力表显示部分映射模型不支持图片输入，未找到可确认的图片回退模型",
-			})
-		}
-	}
-	if len(noToolModels) > 0 {
-		recommendation.Evidence = append(recommendation.Evidence, DiscoveryEvidence{
-			Type:    "capability",
-			Key:     "toolCalls",
-			Message: fmt.Sprintf("内置能力表显示部分映射模型可能不支持工具调用：%s", strings.Join(noToolModels, ", ")),
-		})
-	}
-}
-
-func mapValuesDiscoveryModels(mapping map[string]string) []string {
-	values := make([]string, 0, len(mapping))
-	for _, value := range mapping {
-		values = append(values, value)
-	}
-	return values
 }
 
 func bestDiscoveryVisionModel(successfulModels []string, allModels []string, global map[string]config.UpstreamModelCapability, exclude []string) string {
@@ -755,17 +617,15 @@ func discoveryImageGenerationProbeResult(compat CompatDiagnoseResult) DiscoveryC
 	}
 }
 
+// discoveryVisionProbeModel 从有效成功模型中选出支持图片输入的探测模型；
+// 能力表不可知时退回 compat 探测模型。
 func discoveryVisionProbeModel(
-	recommendation DiscoveryRecommendation,
 	allModels []string,
 	successfulModels []string,
 	global map[string]config.UpstreamModelCapability,
 	fallbackModel string,
 ) string {
-	if model := strings.TrimSpace(recommendation.VisionFallbackModel); model != "" {
-		return model
-	}
-	if model := bestDiscoveryVisionModel(successfulModels, allModels, global, recommendation.NoVisionModels); model != "" {
+	if model := bestDiscoveryVisionModel(successfulModels, allModels, global, nil); model != "" {
 		return model
 	}
 	return fallbackModel
@@ -1722,7 +1582,7 @@ func discoverySuccessModelsByProtocol(protocols []DiscoveryProtocolResult) map[s
 //  1. 优先尝试 preferredProtocol（通常来自 compatProbeProtocol，反映 serviceType 实际目标协议）
 //  2. 再按 responses > messages > chat > gemini 固定顺序兜底
 //
-// 保持与 buildDiscoveryMappingRecommendation 的 fallback 行为一致。
+// 保持与 buildDiscoveryRecommendation 的 fallback 行为一致。
 func discoveryEffectiveSuccessModels(channelKind, preferredProtocol string, successByProtocol map[string][]string) []string {
 	if models := successByProtocol[channelKind]; len(models) > 0 {
 		return models

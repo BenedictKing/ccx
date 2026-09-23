@@ -237,7 +237,7 @@ func buildProviderRequest(
 	}
 	upstream.ServiceType = serviceType
 
-	redirectedModel, mappingMatched := config.RedirectModelWithMatch(model, upstream)
+	redirectedModel := model
 	requestBody, err := buildEmbeddingsRequestBody(bodyBytes, model, redirectedModel)
 	if err != nil {
 		common.RequestLogf(c, "[Vectors-BuildRequest] base_url=%q key_mask=%s model=%q stage=build_json reason=invalid_json error=%q",
@@ -246,8 +246,8 @@ func buildProviderRequest(
 	}
 
 	endpointURL := buildEmbeddingsURL(baseURL)
-	common.RequestLogf(c, "[Vectors-Mapping] channel=%q original_model=%q mapped_model=%q upstream_body_model=%q base_host=%q mapping_hit=%t",
-		upstream.Name, model, redirectedModel, extractEmbeddingsBodyModel(requestBody), safeURLHost(endpointURL), mappingMatched)
+	common.RequestLogf(c, "[Vectors-Model] channel=%q model=%q upstream_body_model=%q base_host=%q",
+		upstream.Name, model, extractEmbeddingsBodyModel(requestBody), safeURLHost(endpointURL))
 
 	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodPost, endpointURL, bytes.NewReader(requestBody))
 	if err != nil {

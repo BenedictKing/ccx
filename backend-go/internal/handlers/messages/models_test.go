@@ -842,7 +842,6 @@ func TestModelsHandler_ReturnsConfiguredModelsWhenDiscoveryFails(t *testing.T) {
 			BaseURL:         upstream.URL,
 			APIKeys:         []string{"sk-configured"},
 			ServiceType:     "openai",
-			ModelMapping:    map[string]string{"agent": "upstream-agent"},
 			SupportedModels: []string{"gpt-5", "gpt-*", "!gpt-5-bad", "codex-mini，codex-pro"},
 		}},
 	})
@@ -862,7 +861,7 @@ func TestModelsHandler_ReturnsConfiguredModelsWhenDiscoveryFails(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("解析配置回退响应失败: %v", err)
 	}
-	for _, id := range []string{"agent", "gpt-5", "codex-mini", "codex-pro"} {
+	for _, id := range []string{"gpt-5", "codex-mini", "codex-pro"} {
 		if findModelEntry(resp.Data, id) == nil {
 			t.Fatalf("缺少配置回退模型 %q: %#v", id, resp.Data)
 		}
@@ -960,68 +959,67 @@ func TestModelsDetailHandler_FallsBackToImages(t *testing.T) {
 	}
 }
 
-func TestModelsHandler_EnrichesInputModalitiesAndVisionFallback(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"object":"list","data":[{"id":"mimo-v2.5-pro","object":"model"}]}`))
-	}))
-	defer upstream.Close()
-
-	cfgManager := setupModelsConfigManager(t, config.Config{
-		Upstream: []config.UpstreamConfig{{
-			Name:                "mimo",
-			BaseURL:             upstream.URL,
-			APIKeys:             []string{"sk-mimo"},
-			ServiceType:         "claude",
-			ModelMapping:        map[string]string{"opus": "mimo-v2.5-pro"},
-			NoVisionModels:      []string{"mimo-v2.5-pro"},
-			VisionFallbackModel: "mimo-v2.5",
-		}},
-	})
-	sch := newModelsTestScheduler(cfgManager)
-	router := newModelsRouterForAggregate(&config.EnvConfig{ProxyAccessKey: "test-key"}, cfgManager, sch)
-
-	req := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
-	req.Header.Set("Authorization", "Bearer test-key")
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, body=%s", w.Code, w.Body.String())
+func TestModelsHandler_EnrichesInputModalitiesByChannelVisionSwitch(t *testing.T) {
+	// 视觉硬约束（NoVisionModels/VisionFallbackModel）已由 autopilot CapabilityFloor
+	// 在选模阶段接管；/v1/models 聚合只按整渠道 NoVision 开关标注模态。
+	tests := []struct {
+		name     string
+		noVision bool
+		wantText []string
+	}{
+		{name: "渠道未关视觉时全部标注 text+image", wantText: []string{"text", "image"}},
+		{name: "渠道关闭视觉时全部标注 text", noVision: true, wantText: []string{"text"}},
 	}
 
-	var resp ModelsResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("解析响应失败: %v", err)
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"object":"list","data":[{"id":"mimo-v2.5-pro","object":"model"}]}`))
+			}))
+			defer upstream.Close()
 
-	modelsByID := make(map[string]ModelEntry, len(resp.Data))
-	for _, model := range resp.Data {
-		modelsByID[model.ID] = model
-	}
+			cfgManager := setupModelsConfigManager(t, config.Config{
+				Upstream: []config.UpstreamConfig{{
+					Name:        "mimo",
+					BaseURL:     upstream.URL,
+					APIKeys:     []string{"sk-mimo"},
+					ServiceType: "claude",
+					NoVision:    tt.noVision,
+				}},
+			})
+			sch := newModelsTestScheduler(cfgManager)
+			router := newModelsRouterForAggregate(&config.EnvConfig{ProxyAccessKey: "test-key"}, cfgManager, sch)
 
-	pro, ok := modelsByID["mimo-v2.5-pro"]
-	if !ok {
-		t.Fatalf("缺少 noVision 模型: %#v", resp.Data)
-	}
-	if !sameStrings(pro.InputModalities, []string{"text"}) {
-		t.Fatalf("mimo-v2.5-pro input_modalities = %v, want [text]", pro.InputModalities)
-	}
+			req := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+			req.Header.Set("Authorization", "Bearer test-key")
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
 
-	opus, ok := modelsByID["opus"]
-	if !ok {
-		t.Fatalf("缺少请求模型别名 opus: %#v", resp.Data)
-	}
-	if !sameStrings(opus.InputModalities, []string{"text", "image"}) {
-		t.Fatalf("opus input_modalities = %v, want [text image]", opus.InputModalities)
-	}
+			if w.Code != http.StatusOK {
+				t.Fatalf("status = %d, body=%s", w.Code, w.Body.String())
+			}
 
-	fallback, ok := modelsByID["mimo-v2.5"]
-	if !ok {
-		t.Fatalf("缺少 vision fallback 模型: %#v", resp.Data)
-	}
-	if !sameStrings(fallback.InputModalities, []string{"text", "image"}) {
-		t.Fatalf("mimo-v2.5 input_modalities = %v, want [text image]", fallback.InputModalities)
+			var resp ModelsResponse
+			if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+				t.Fatalf("解析响应失败: %v", err)
+			}
+
+			pro, ok := func() (ModelEntry, bool) {
+				for _, model := range resp.Data {
+					if model.ID == "mimo-v2.5-pro" {
+						return model, true
+					}
+				}
+				return ModelEntry{}, false
+			}()
+			if !ok {
+				t.Fatalf("缺少 mimo-v2.5-pro: %#v", resp.Data)
+			}
+			if !sameStrings(pro.InputModalities, tt.wantText) {
+				t.Fatalf("mimo-v2.5-pro input_modalities = %v, want %v", pro.InputModalities, tt.wantText)
+			}
+		})
 	}
 }
 
@@ -1044,34 +1042,6 @@ func TestMergeModels_PreservesVisionWhenAnyChannelSupportsImage(t *testing.T) {
 	}
 	if !sameStrings(result[0].InputModalities, []string{"text", "image"}) {
 		t.Fatalf("input_modalities = %v, want [text image]", result[0].InputModalities)
-	}
-}
-
-func TestEnrichModelModalitiesForUpstream_MappedModelNeedsVisionFallback(t *testing.T) {
-	upstream := &config.UpstreamConfig{
-		ModelMapping:   map[string]string{"alias-pro": "mimo-v2.5-pro"},
-		NoVisionModels: []string{"mimo-v2.5-pro"},
-	}
-
-	result := enrichModelModalitiesForUpstream([]ModelEntry{{ID: "alias-pro", Object: "model"}}, upstream)
-
-	alias := findModelEntry(result, "alias-pro")
-	if alias == nil {
-		t.Fatalf("缺少请求模型别名: %#v", result)
-	}
-	if !sameStrings(alias.InputModalities, []string{"text"}) {
-		t.Fatalf("alias-pro input_modalities = %v, want [text]", alias.InputModalities)
-	}
-
-	upstream.VisionFallbackModel = "mimo-v2.5"
-	result = enrichModelModalitiesForUpstream([]ModelEntry{{ID: "mimo-v2.5-pro", Object: "model"}}, upstream)
-
-	alias = findModelEntry(result, "alias-pro")
-	if alias == nil {
-		t.Fatalf("缺少请求模型别名: %#v", result)
-	}
-	if !sameStrings(alias.InputModalities, []string{"text", "image"}) {
-		t.Fatalf("alias-pro input_modalities = %v, want [text image]", alias.InputModalities)
 	}
 }
 

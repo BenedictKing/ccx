@@ -56,8 +56,6 @@ func glmPreviewProfile() ModelProfile {
 func TestBuildPlanAutoManagedIgnoresStaleExplicitMapping(t *testing.T) {
 	cfg := modelPreviewConfig("shadow")
 	cfg.Upstream[0].SupportedModels = nil
-	cfg.Upstream[0].ModelMapping = map[string]string{"claude-sonnet-5": "legacy-manual-target"}
-	cfg.Upstream[0].ReasoningMapping = map[string]string{"claude-sonnet-5": "high"}
 	cfgManager, cleanup := createTestConfigManager(t, cfg)
 	defer cleanup()
 	store := newModelPreviewStore(t, glmPreviewProfile())

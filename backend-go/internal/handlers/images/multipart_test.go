@@ -82,11 +82,8 @@ func TestBuildOperationRequest_JSONEdits(t *testing.T) {
 
 	upstream := &config.UpstreamConfig{
 		ServiceType: "openai",
-		ModelMapping: map[string]string{
-			"image-default": "gpt-image-2",
-		},
 	}
-	req, err := buildOperationRequest(c, upstream, "https://api.openai.com", "sk-test", body, "image-default", operationEdits, "application/json")
+	req, err := buildOperationRequest(c, upstream, "https://api.openai.com", "sk-test", body, "gpt-image-2", operationEdits, "application/json")
 	if err != nil {
 		t.Fatalf("buildOperationRequest() error = %v", err)
 	}
@@ -102,7 +99,7 @@ func TestBuildOperationRequest_JSONEdits(t *testing.T) {
 		t.Fatalf("read request body: %v", err)
 	}
 	if !strings.Contains(string(requestBody), `"model":"gpt-image-2"`) {
-		t.Fatalf("model mapping was not applied: %s", string(requestBody))
+		t.Fatalf("request model not preserved: %s", string(requestBody))
 	}
 }
 
@@ -135,11 +132,8 @@ func TestBuildOperationRequest_MultipartEdits(t *testing.T) {
 
 	upstream := &config.UpstreamConfig{
 		ServiceType: "openai",
-		ModelMapping: map[string]string{
-			"image-default": "gpt-image-2",
-		},
 	}
-	req, err := buildOperationRequest(c, upstream, "https://api.openai.com#", "sk-test", body.Bytes(), "image-default", operationEdits, contentType)
+	req, err := buildOperationRequest(c, upstream, "https://api.openai.com#", "sk-test", body.Bytes(), "gpt-image-2", operationEdits, contentType)
 	if err != nil {
 		t.Fatalf("buildOperationRequest() error = %v", err)
 	}
@@ -255,11 +249,8 @@ func TestBuildOperationRequest_PreservesQueryString(t *testing.T) {
 
 	upstream := &config.UpstreamConfig{
 		ServiceType: "openai",
-		ModelMapping: map[string]string{
-			"image-default": "gpt-image-2",
-		},
 	}
-	req, err := buildOperationRequest(c, upstream, "https://api.openai.com", "sk-test", body, "image-default", operationEdits, "application/json")
+	req, err := buildOperationRequest(c, upstream, "https://api.openai.com", "sk-test", body, "gpt-image-2", operationEdits, "application/json")
 	if err != nil {
 		t.Fatalf("buildOperationRequest() error = %v", err)
 	}

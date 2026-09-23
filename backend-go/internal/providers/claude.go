@@ -22,108 +22,6 @@ import (
 // ClaudeProvider Claude 提供商（直接透传）
 type ClaudeProvider struct{}
 
-// redirectModelInBody 仅修改请求体中的 model 字段，保持其他内容不变
-// 使用 map[string]interface{} 避免结构体字段丢失问题
-func redirectModelInBody(bodyBytes []byte, upstream *config.UpstreamConfig) []byte {
-	decoder := json.NewDecoder(bytes.NewReader(bodyBytes))
-	decoder.UseNumber() // 保留数字精度
-
-	var data map[string]interface{}
-	if err := decoder.Decode(&data); err != nil {
-		return bodyBytes // 解析失败，返回原始数据
-	}
-
-	model, ok := data["model"].(string)
-	if !ok {
-		return bodyBytes // 没有 model 字段或类型不对
-	}
-
-	newModel := config.RedirectModel(model, upstream)
-	if newModel == model {
-		return bodyBytes // 模型未变，无需重编码
-	}
-
-	data["model"] = newModel
-
-	// 模型已改写：CC 按原模型窗口注入的 tokens-left 提醒随之失真，剔除
-	// （统一语义见 client_budget_reminders.go）。未命中时 data 零改动，保缓存。
-	if stripped, changed := StripCCBudgetRemindersFromClaudeSystem(data["system"]); changed {
-		if stripped == nil {
-			delete(data, "system")
-		} else {
-			data["system"] = stripped
-		}
-	}
-
-	// 使用 Encoder 并禁用 HTML 转义，保持原始格式
-	newBytes, err := utils.MarshalJSONNoEscape(data)
-	if err != nil {
-		return bodyBytes // 编码失败，返回原始数据
-	}
-	return newBytes
-}
-
-// applyClaudeReasoningEffort 根据原始模型名将渠道级思考强度写入 Claude 请求体。
-func applyClaudeReasoningEffort(bodyBytes []byte, upstream *config.UpstreamConfig) []byte {
-	decoder := json.NewDecoder(bytes.NewReader(bodyBytes))
-	decoder.UseNumber()
-
-	var data map[string]interface{}
-	if err := decoder.Decode(&data); err != nil {
-		return bodyBytes
-	}
-
-	model, ok := data["model"].(string)
-	if !ok {
-		return bodyBytes
-	}
-
-	effort := config.ResolveReasoningEffort(model, upstream)
-	if effort == "" {
-		return bodyBytes
-	}
-
-	applyClaudeThinkingEffort(data, effort)
-
-	newBytes, err := utils.MarshalJSONNoEscape(data)
-	if err != nil {
-		return bodyBytes
-	}
-	return newBytes
-}
-
-func applyClaudeThinkingEffort(data map[string]interface{}, effort string) {
-	delete(data, "reasoning")
-	delete(data, "reasoning_effort")
-	stripClaudeOutputConfigEffort(data)
-
-	if effort == "off" || effort == "none" {
-		data["thinking"] = map[string]interface{}{"type": "disabled"}
-		return
-	}
-
-	thinking, _ := data["thinking"].(map[string]interface{})
-	if thinking == nil {
-		thinking = make(map[string]interface{})
-	}
-	thinking["type"] = "enabled"
-	thinking["effort"] = effort
-	delete(thinking, "budget_tokens")
-	data["thinking"] = thinking
-}
-
-func stripClaudeOutputConfigEffort(data map[string]interface{}) {
-	outputConfig, ok := data["output_config"].(map[string]interface{})
-	if !ok {
-		return
-	}
-
-	delete(outputConfig, "effort")
-	if len(outputConfig) == 0 {
-		delete(data, "output_config")
-	}
-}
-
 // stripUnsupportedDeepSeekContextManagement removes Claude Code context edits that
 // DeepSeek's Claude-compatible endpoint does not implement.
 func stripUnsupportedDeepSeekContextManagement(bodyBytes []byte, upstream *config.UpstreamConfig) []byte {
@@ -843,14 +741,6 @@ func (p *ClaudeProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 	bodyBytes, err := getRequestBodyBytes(c)
 	if err != nil {
 		return nil, nil, err
-	}
-
-	if len(upstream.ReasoningMapping) > 0 {
-		bodyBytes = applyClaudeReasoningEffort(bodyBytes, upstream)
-	}
-	// 模型重定向：仅修改 model 字段，保持其他内容不变
-	if len(upstream.ModelMapping) > 0 {
-		bodyBytes = redirectModelInBody(bodyBytes, upstream)
 	}
 
 	passbackReasoning := upstream.IsPassbackReasoningContentEnabled()

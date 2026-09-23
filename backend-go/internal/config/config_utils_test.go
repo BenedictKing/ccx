@@ -77,15 +77,11 @@ func TestRuntimeUpstreamForAutoManagedProviderStripsLegacyCompat(t *testing.T) {
 		APIKeys:                       []string{"sk-test"},
 		SupportedModels:               []string{"mimo-v2.5-pro", "mimo-v2.5"},
 		RateLimitRPM:                  80,
-		ModelMapping:                  map[string]string{"sonnet": "legacy-target"},
-		ReasoningMapping:              map[string]string{"sonnet": "max"},
 		ReasoningParamStyle:           "thinking",
 		NormalizeMetadataUserID:       &trueValue,
 		StripBillingHeader:            &trueValue,
 		NormalizeSystemRoleToTopLevel: true,
 		NoVision:                      true,
-		NoVisionModels:                []string{"mimo-v2.5-pro"},
-		VisionFallbackModel:           "mimo-v2.5",
 		CodexToolCompat:               &trueValue,
 		StripCodexClientTools:         true,
 		ConvertImageURLToB64JSON:      true,
@@ -106,36 +102,35 @@ func TestRuntimeUpstreamForAutoManagedProviderStripsLegacyCompat(t *testing.T) {
 	if runtime == upstream {
 		t.Fatal("autoManaged provider should return a sanitized clone")
 	}
-	if len(runtime.ModelMapping) != 0 || len(runtime.ReasoningMapping) != 0 || runtime.ReasoningParamStyle != "" {
-		t.Fatalf("legacy model/reasoning fields not stripped: %#v", runtime)
+	if runtime.ReasoningParamStyle != "" {
+		t.Fatalf("legacy reasoning param style not stripped: %#v", runtime)
 	}
 	if runtime.IsPassbackReasoningContentEnabled() || runtime.IsPassbackThinkingBlocksEnabled() || runtime.IsStripEmptyTextBlocksEnabled() || runtime.NormalizeSystemRoleToTopLevel {
 		t.Fatalf("legacy Claude compat fields not stripped: %#v", runtime)
 	}
-	if runtime.NoVision || len(runtime.NoVisionModels) != 0 || runtime.VisionFallbackModel != "" {
+	if runtime.NoVision {
 		t.Fatalf("legacy vision compat fields not stripped: %#v", runtime)
 	}
 	if len(runtime.SupportedModels) != 2 || runtime.RateLimitRPM != 80 || runtime.ProviderID != "mimo" {
 		t.Fatalf("runtime scheduling fields should be preserved: %#v", runtime)
 	}
-	if len(upstream.ModelMapping) == 0 || !upstream.IsPassbackReasoningContentEnabled() {
+	if !upstream.IsPassbackReasoningContentEnabled() {
 		t.Fatal("original upstream must not be mutated")
 	}
 }
 
 func TestRuntimeUpstreamForAutoManagedProviderLeavesManualChannelUntouched(t *testing.T) {
 	upstream := &UpstreamConfig{
-		ProviderID:   "",
-		AutoManaged:  false,
-		ModelMapping: map[string]string{"sonnet": "manual-target"},
-		NoVision:     true,
+		ProviderID:  "",
+		AutoManaged: false,
+		NoVision:    true,
 	}
 
 	runtime := RuntimeUpstreamForAutoManagedProvider(upstream)
 	if runtime != upstream {
 		t.Fatal("manual channel should not be cloned or sanitized")
 	}
-	if runtime.ModelMapping["sonnet"] != "manual-target" || !runtime.NoVision {
+	if !runtime.NoVision {
 		t.Fatalf("manual channel fields changed: %#v", runtime)
 	}
 }
@@ -145,8 +140,6 @@ func TestStripAutoManagedExplicitOverrides(t *testing.T) {
 	upstream := &UpstreamConfig{
 		ProviderID:                    "glm",
 		AutoManaged:                   true,
-		ModelMapping:                  map[string]string{"sonnet": "glm-5.2"},
-		ReasoningMapping:              map[string]string{"sonnet": "high"},
 		ReasoningParamStyle:           "thinking",
 		FastMode:                      true,
 		CompatSeeds:                   map[string]CompatSeedEntry{"passback_reasoning_content": {Enabled: true}},
@@ -159,8 +152,6 @@ func TestStripAutoManagedExplicitOverrides(t *testing.T) {
 		InjectDummyThoughtSignature:   true,
 		StripThoughtSignature:         true,
 		NoVision:                      true,
-		NoVisionModels:                []string{"glm-5.2"},
-		VisionFallbackModel:           "glm-5.2-air",
 		HistoricalImageTurnLimit:      4,
 		CompactModel:                  "glm-5.2-mini",
 		SupportedModels:               []string{"glm-5.2"},
@@ -169,8 +160,8 @@ func TestStripAutoManagedExplicitOverrides(t *testing.T) {
 	if !stripAutoManagedExplicitOverrides(upstream) {
 		t.Fatal("expected auto-managed explicit overrides to be stripped")
 	}
-	if len(upstream.ModelMapping) != 0 || len(upstream.ReasoningMapping) != 0 || upstream.ReasoningParamStyle != "" || upstream.FastMode {
-		t.Fatalf("model/reasoning overrides not stripped: %#v", upstream)
+	if upstream.ReasoningParamStyle != "" || upstream.FastMode {
+		t.Fatalf("reasoning param style/fast mode not stripped: %#v", upstream)
 	}
 	if len(upstream.CompatSeeds) != 0 || upstream.CodexToolCompat != nil || upstream.StripCodexClientTools || upstream.ConvertImageURLToB64JSON {
 		t.Fatalf("compat overrides not stripped: %#v", upstream)
@@ -178,7 +169,7 @@ func TestStripAutoManagedExplicitOverrides(t *testing.T) {
 	if upstream.NormalizeMetadataUserID != nil || upstream.StripBillingHeader != nil || upstream.NormalizeSystemRoleToTopLevel || upstream.InjectDummyThoughtSignature || upstream.StripThoughtSignature {
 		t.Fatalf("request normalization overrides not stripped: %#v", upstream)
 	}
-	if upstream.NoVision || len(upstream.NoVisionModels) != 0 || upstream.VisionFallbackModel != "" || upstream.HistoricalImageTurnLimit != 0 || upstream.CompactModel != "" {
+	if upstream.NoVision || upstream.HistoricalImageTurnLimit != 0 || upstream.CompactModel != "" {
 		t.Fatalf("vision/compact overrides not stripped: %#v", upstream)
 	}
 	if len(upstream.SupportedModels) != 1 || upstream.SupportedModels[0] != "glm-5.2" {
@@ -194,8 +185,6 @@ func TestRuntimeUpstreamForAutoManagedProviderStripsWithoutProviderID(t *testing
 		AutoManaged:         true,
 		ProviderID:          "",
 		ServiceType:         "claude",
-		ModelMapping:        map[string]string{"opus": "gpt-5.4"},
-		ReasoningMapping:    map[string]string{"opus": "high"},
 		ReasoningParamStyle: "thinking",
 		FastMode:            true,
 	}
@@ -204,13 +193,13 @@ func TestRuntimeUpstreamForAutoManagedProviderStripsWithoutProviderID(t *testing
 	if runtime == upstream {
 		t.Fatal("autoManaged upstream without providerId should still return a sanitized clone")
 	}
-	if len(runtime.ModelMapping) != 0 || len(runtime.ReasoningMapping) != 0 || runtime.ReasoningParamStyle != "" || runtime.FastMode {
+	if runtime.ReasoningParamStyle != "" || runtime.FastMode {
 		t.Fatalf("runtime should strip stale explicit overrides even without providerId: %#v", runtime)
 	}
 	if runtime.NormalizeSystemRoleToTopLevel {
 		t.Fatalf("no provider defaults should be applied when providerId is empty: %#v", runtime)
 	}
-	if len(upstream.ModelMapping) == 0 || upstream.ReasoningParamStyle != "thinking" {
+	if upstream.ReasoningParamStyle != "thinking" {
 		t.Fatal("original upstream must remain unchanged")
 	}
 }
@@ -281,256 +270,6 @@ func TestIsValidSupportedModelPattern(t *testing.T) {
 	}
 }
 
-func TestSanitizeDeprecatedGrokModelMapping(t *testing.T) {
-	t.Run("nil map 原样返回", func(t *testing.T) {
-		cleaned, changed := sanitizeDeprecatedGrokModelMapping(nil)
-		if changed {
-			t.Fatalf("expected changed=false for nil map")
-		}
-		if cleaned != nil {
-			t.Fatalf("expected nil map to remain nil, got %v", cleaned)
-		}
-	})
-
-	t.Run("空 map 原样返回", func(t *testing.T) {
-		mm := map[string]string{}
-		cleaned, changed := sanitizeDeprecatedGrokModelMapping(mm)
-		if changed {
-			t.Fatalf("expected changed=false for empty map")
-		}
-		if len(cleaned) != 0 {
-			t.Fatalf("expected empty map, got %v", cleaned)
-		}
-	})
-
-	t.Run("无关映射不受影响", func(t *testing.T) {
-		mm := map[string]string{"gpt": "gpt-5"}
-		cleaned, changed := sanitizeDeprecatedGrokModelMapping(mm)
-		if changed {
-			t.Fatalf("expected changed=false, got true")
-		}
-		if cleaned["gpt"] != "gpt-5" {
-			t.Fatalf("unrelated mapping got altered: %v", cleaned)
-		}
-	})
-
-	t.Run("命中第一对精确映射被删除", func(t *testing.T) {
-		mm := map[string]string{"grok-4.1": "grok-4.1-thinking", "gpt": "gpt-5"}
-		cleaned, changed := sanitizeDeprecatedGrokModelMapping(mm)
-		if !changed {
-			t.Fatalf("expected changed=true")
-		}
-		if _, ok := cleaned["grok-4.1"]; ok {
-			t.Fatalf("expected grok-4.1 removed, got %v", cleaned)
-		}
-		if cleaned["gpt"] != "gpt-5" {
-			t.Fatalf("expected unrelated mapping preserved, got %v", cleaned)
-		}
-	})
-
-	t.Run("命中第二对精确映射被删除", func(t *testing.T) {
-		mm := map[string]string{"grok-4.2": "grok-4.20-beta"}
-		cleaned, changed := sanitizeDeprecatedGrokModelMapping(mm)
-		if !changed {
-			t.Fatalf("expected changed=true")
-		}
-		if len(cleaned) != 0 {
-			t.Fatalf("expected empty map after cleanup, got %v", cleaned)
-		}
-	})
-
-	t.Run("两对同时命中且保留其他 key", func(t *testing.T) {
-		mm := map[string]string{
-			"grok-4.1": "grok-4.1-thinking",
-			"grok-4.2": "grok-4.20-beta",
-			"gpt":      "gpt-5",
-		}
-		cleaned, changed := sanitizeDeprecatedGrokModelMapping(mm)
-		if !changed {
-			t.Fatalf("expected changed=true")
-		}
-		if len(cleaned) != 1 || cleaned["gpt"] != "gpt-5" {
-			t.Fatalf("expected only gpt mapping to remain, got %v", cleaned)
-		}
-	})
-
-	t.Run("相同 key 不同 target 不删除", func(t *testing.T) {
-		mm := map[string]string{"grok-4.1": "custom-grok-4.1"}
-		cleaned, changed := sanitizeDeprecatedGrokModelMapping(mm)
-		if changed {
-			t.Fatalf("expected changed=false for custom target")
-		}
-		if cleaned["grok-4.1"] != "custom-grok-4.1" {
-			t.Fatalf("expected custom mapping preserved, got %v", cleaned)
-		}
-	})
-
-	t.Run("相同 target 不同 key 不删除", func(t *testing.T) {
-		mm := map[string]string{"my-alias": "grok-4.1-thinking"}
-		cleaned, changed := sanitizeDeprecatedGrokModelMapping(mm)
-		if changed {
-			t.Fatalf("expected changed=false for unrelated key with same target")
-		}
-		if cleaned["my-alias"] != "grok-4.1-thinking" {
-			t.Fatalf("expected mapping preserved, got %v", cleaned)
-		}
-	})
-
-	t.Run("对已清理结果二次调用保持幂等且不分配新 map", func(t *testing.T) {
-		mm := map[string]string{"gpt": "gpt-5"}
-		cleaned1, changed1 := sanitizeDeprecatedGrokModelMapping(mm)
-		if changed1 {
-			t.Fatalf("expected changed=false on first call without deprecated pairs")
-		}
-		cleaned2, changed2 := sanitizeDeprecatedGrokModelMapping(cleaned1)
-		if changed2 {
-			t.Fatalf("expected changed=false on second call")
-		}
-		if len(cleaned2) != 1 || cleaned2["gpt"] != "gpt-5" {
-			t.Fatalf("expected mapping unchanged, got %v", cleaned2)
-		}
-	})
-}
-
-func TestMigrateAutoManagedExplicitMappings(t *testing.T) {
-	cm := &ConfigManager{}
-	legacy := func(name string) UpstreamConfig {
-		trueValue := true
-		return UpstreamConfig{
-			Name:                  name,
-			ProviderID:            "glm",
-			AutoManaged:           true,
-			ModelMapping:          map[string]string{"sonnet": "glm-5.2"},
-			ReasoningMapping:      map[string]string{"sonnet": "high"},
-			ReasoningParamStyle:   "thinking",
-			FastMode:              true,
-			CodexToolCompat:       &trueValue,
-			StripCodexClientTools: true,
-			NoVisionModels:        []string{"glm-5.2"},
-			SupportedModels:       []string{"glm-5.2"},
-		}
-	}
-	manual := UpstreamConfig{
-		Name:            "manual",
-		ProviderID:      "",
-		AutoManaged:     false,
-		ModelMapping:    map[string]string{"sonnet": "manual-target"},
-		SupportedModels: []string{"manual-target"},
-	}
-	cm.config.Upstream = []UpstreamConfig{legacy("messages"), manual}
-	cm.config.ResponsesUpstream = []UpstreamConfig{legacy("responses")}
-	cm.config.GeminiUpstream = []UpstreamConfig{legacy("gemini")}
-	cm.config.ChatUpstream = []UpstreamConfig{legacy("chat")}
-	cm.config.ImagesUpstream = []UpstreamConfig{legacy("images")}
-	cm.config.VectorsUpstream = []UpstreamConfig{legacy("vectors")}
-
-	if !cm.migrateAutoManagedExplicitMappings() {
-		t.Fatal("expected auto-managed mapping migration to report changes")
-	}
-	for _, channels := range [][]UpstreamConfig{cm.config.Upstream[:1], cm.config.ResponsesUpstream, cm.config.GeminiUpstream, cm.config.ChatUpstream, cm.config.ImagesUpstream, cm.config.VectorsUpstream} {
-		if len(channels[0].ModelMapping) != 0 || len(channels[0].ReasoningMapping) != 0 || channels[0].ReasoningParamStyle != "" {
-			t.Fatalf("auto-managed mapping overrides not stripped: %#v", channels[0])
-		}
-		if len(channels[0].SupportedModels) != 1 || channels[0].SupportedModels[0] != "glm-5.2" {
-			t.Fatalf("supportedModels should remain intact after migration: %#v", channels[0])
-		}
-	}
-	if cm.config.Upstream[1].ModelMapping["sonnet"] != "manual-target" {
-		t.Fatalf("manual channel should remain untouched: %#v", cm.config.Upstream[1])
-	}
-	if cm.migrateAutoManagedExplicitMappings() {
-		t.Fatal("second migration should be idempotent")
-	}
-}
-
-func TestMigrateDeprecatedGrokModelMapping(t *testing.T) {
-	newChannels := func() []UpstreamConfig {
-		return []UpstreamConfig{
-			{
-				Name: "legacy",
-				ModelMapping: map[string]string{
-					"grok-4.1": "grok-4.1-thinking",
-					"grok-4.2": "grok-4.20-beta",
-				},
-			},
-			{
-				Name: "custom",
-				ModelMapping: map[string]string{
-					"grok-4.1": "my-custom-target",
-				},
-			},
-		}
-	}
-
-	cm := &ConfigManager{}
-	cm.config.Upstream = newChannels()
-	cm.config.ResponsesUpstream = newChannels()
-	cm.config.GeminiUpstream = newChannels()
-	cm.config.ChatUpstream = newChannels()
-	cm.config.ImagesUpstream = newChannels()
-	cm.config.VectorsUpstream = newChannels()
-
-	if !cm.migrateDeprecatedGrokModelMapping() {
-		t.Fatalf("expected migrateDeprecatedGrokModelMapping to return true")
-	}
-
-	channelSets := map[string][]UpstreamConfig{
-		"Upstream":          cm.config.Upstream,
-		"ResponsesUpstream": cm.config.ResponsesUpstream,
-		"GeminiUpstream":    cm.config.GeminiUpstream,
-		"ChatUpstream":      cm.config.ChatUpstream,
-		"ImagesUpstream":    cm.config.ImagesUpstream,
-		"VectorsUpstream":   cm.config.VectorsUpstream,
-	}
-	for name, channels := range channelSets {
-		legacy := channels[0]
-		if _, ok := legacy.ModelMapping["grok-4.1"]; ok {
-			t.Fatalf("%s: expected legacy grok-4.1 mapping removed, got %v", name, legacy.ModelMapping)
-		}
-		if _, ok := legacy.ModelMapping["grok-4.2"]; ok {
-			t.Fatalf("%s: expected legacy grok-4.2 mapping removed, got %v", name, legacy.ModelMapping)
-		}
-		custom := channels[1]
-		if custom.ModelMapping["grok-4.1"] != "my-custom-target" {
-			t.Fatalf("%s: expected custom grok-4.1 mapping preserved, got %v", name, custom.ModelMapping)
-		}
-	}
-
-	// 再次调用应为幂等，不再产生变更
-	if cm.migrateDeprecatedGrokModelMapping() {
-		t.Fatalf("expected migrateDeprecatedGrokModelMapping to return false on second call")
-	}
-}
-
-func TestMigrateFableReasoningMapping(t *testing.T) {
-	cm := &ConfigManager{}
-	cm.config.Upstream = []UpstreamConfig{
-		{
-			Name: "demo",
-			ReasoningMapping: map[string]string{
-				"opus": "high",
-			},
-		},
-	}
-
-	if !cm.migrateFableReasoningMapping() {
-		t.Fatalf("expected migrateFableReasoningMapping to return true")
-	}
-
-	if got := cm.config.Upstream[0].ReasoningMapping["fable"]; got != "high" {
-		t.Fatalf("ReasoningMapping[fable] = %q, want high", got)
-	}
-
-	// 已有 fable 配置时不应覆盖
-	cm.config.Upstream[0].ReasoningMapping["fable"] = "medium"
-	if cm.migrateFableReasoningMapping() {
-		t.Fatalf("expected migrateFableReasoningMapping to return false when fable already exists")
-	}
-	if got := cm.config.Upstream[0].ReasoningMapping["fable"]; got != "medium" {
-		t.Fatalf("ReasoningMapping[fable] = %q, want medium", got)
-	}
-}
-
 func TestParseSupportedModelInput(t *testing.T) {
 	tests := []struct {
 		name string
@@ -577,54 +316,20 @@ func TestSplitSupportedModelRulesSeparators(t *testing.T) {
 	}
 }
 
-func TestResolveReasoningEffort(t *testing.T) {
-	upstream := &UpstreamConfig{
-		ReasoningMapping: map[string]string{
-			"gpt-5":         "high",
-			"gpt-5.1-codex": "xhigh",
-			"o3":            "medium",
-		},
-	}
-
-	tests := []struct {
-		name  string
-		model string
-		want  string
-	}{
-		{"精确匹配", "o3", "medium"},
-		{"最长匹配优先", "gpt-5.1-codex", "xhigh"},
-		{"模糊匹配回退", "gpt-5.1", "high"},
-		{"未匹配返回空", "claude-3-7-sonnet", ""},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := ResolveReasoningEffort(tt.model, upstream); got != tt.want {
-				t.Fatalf("ResolveReasoningEffort(%q) = %q, want %q", tt.model, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestNormalizeMiMoResponsesReasoningEffort(t *testing.T) {
 	upstream := &UpstreamConfig{
 		ServiceType: "responses",
 		BaseURL:     "https://token-plan-sgp.xiaomimimo.com",
-		ReasoningMapping: map[string]string{
-			"gpt":  "max",
-			"mini": "xhigh",
-			"off":  "off",
-		},
 	}
 
-	if got := ResolveReasoningEffort("gpt-5.5", upstream); got != "high" {
-		t.Fatalf("ResolveReasoningEffort gpt = %q, want high", got)
+	if got := NormalizeReasoningEffortForUpstream(upstream, "max"); got != "high" {
+		t.Fatalf("NormalizeReasoningEffortForUpstream max = %q, want high", got)
 	}
-	if got := ResolveReasoningEffort("mini", upstream); got != "high" {
-		t.Fatalf("ResolveReasoningEffort mini = %q, want high", got)
+	if got := NormalizeReasoningEffortForUpstream(upstream, "xhigh"); got != "high" {
+		t.Fatalf("NormalizeReasoningEffortForUpstream xhigh = %q, want high", got)
 	}
-	if got := ResolveReasoningEffort("off", upstream); got != "none" {
-		t.Fatalf("ResolveReasoningEffort off = %q, want none", got)
+	if got := NormalizeReasoningEffortForUpstream(upstream, "off"); got != "none" {
+		t.Fatalf("NormalizeReasoningEffortForUpstream off = %q, want none", got)
 	}
 
 	req := map[string]interface{}{

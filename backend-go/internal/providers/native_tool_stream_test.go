@@ -43,7 +43,6 @@ func TestGLMProviderConversionsEnableNativeToolStreaming(t *testing.T) {
 		ServiceType:         "openai",
 		BaseURL:             "https://open.bigmodel.cn/api/paas/v4#",
 		ReasoningParamStyle: "reasoning_effort",
-		ReasoningMapping:    map[string]string{"glm-5.2": "minimal"},
 	}
 
 	t.Run("Messages 转 Chat", func(t *testing.T) {
@@ -53,8 +52,7 @@ func TestGLMProviderConversionsEnableNativeToolStreaming(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		requestBody := assertToolStreamEnabled(t, req)
-		assertReasoningEffort(t, requestBody, "minimal")
+		assertToolStreamEnabled(t, req)
 	})
 
 	t.Run("Responses 转 Chat", func(t *testing.T) {
@@ -66,16 +64,6 @@ func TestGLMProviderConversionsEnableNativeToolStreaming(t *testing.T) {
 		}
 		assertToolStreamEnabled(t, req)
 	})
-}
-
-func assertReasoningEffort(t *testing.T, body map[string]interface{}, want string) {
-	t.Helper()
-	if body["reasoning_effort"] != want {
-		t.Fatalf("reasoning_effort = %#v, want %q; body=%#v", body["reasoning_effort"], want, body)
-	}
-	if _, exists := body["reasoning"]; exists {
-		t.Fatalf("reasoning object should not be sent with reasoning_effort style: %#v", body)
-	}
 }
 
 func assertToolStreamEnabled(t *testing.T, req *http.Request) map[string]interface{} {

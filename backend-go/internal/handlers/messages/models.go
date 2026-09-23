@@ -621,32 +621,8 @@ func enrichModelsForUpstream(models []ModelEntry, upstream *config.UpstreamConfi
 		if modelID == "" {
 			modelID = strings.TrimSpace(model.Name)
 		}
-		if _, isRequestModel := upstream.ModelMapping[modelID]; isRequestModel {
-			model.InputModalities = inputModalitiesForRequestModel(upstream, modelID)
-		} else {
-			model.InputModalities = inputModalitiesForActualModel(upstream, modelID)
-		}
+		model.InputModalities = inputModalitiesForActualModel(upstream, modelID)
 		addOrUpdate(model)
-	}
-
-	for requestModel := range upstream.ModelMapping {
-		requestModel = strings.TrimSpace(requestModel)
-		if requestModel == "" {
-			continue
-		}
-		addOrUpdate(ModelEntry{
-			ID:              requestModel,
-			Object:          "model",
-			InputModalities: inputModalitiesForRequestModel(upstream, requestModel),
-		})
-	}
-
-	if fallback := strings.TrimSpace(upstream.VisionFallbackModel); fallback != "" && !upstream.NoVision {
-		addOrUpdate(ModelEntry{
-			ID:              fallback,
-			Object:          "model",
-			InputModalities: inputModalitiesForActualModel(upstream, fallback),
-		})
 	}
 
 	return enriched
@@ -801,38 +777,11 @@ func inputModalitiesForActualModel(upstream *config.UpstreamConfig, modelID stri
 	return []string{"text"}
 }
 
-func inputModalitiesForRequestModel(upstream *config.UpstreamConfig, modelID string) []string {
-	if requestModelSupportsImageInput(upstream, modelID) {
-		return []string{"text", "image"}
-	}
-	return []string{"text"}
-}
-
-func requestModelSupportsImageInput(upstream *config.UpstreamConfig, modelID string) bool {
-	if upstream == nil || upstream.NoVision {
-		return false
-	}
-
-	actualModel := config.RedirectModel(modelID, upstream)
-	if actualModelSupportsImageInput(upstream, actualModel) {
-		return true
-	}
-
-	fallback := strings.TrimSpace(upstream.VisionFallbackModel)
-	return fallback != "" && actualModelSupportsImageInput(upstream, fallback)
-}
-
+// actualModelSupportsImageInput 判断模型是否可接收图片输入。
+// 视觉硬约束（NoVisionModels/VisionFallbackModel）已由 autopilot CapabilityFloor
+// 在选模阶段接管，这里只保留整渠道 NoVision 开关语义。
 func actualModelSupportsImageInput(upstream *config.UpstreamConfig, modelID string) bool {
-	if upstream == nil || upstream.NoVision {
-		return false
-	}
-
-	for _, noVisionModel := range upstream.NoVisionModels {
-		if noVisionModel == modelID {
-			return false
-		}
-	}
-	return true
+	return upstream != nil && !upstream.NoVision
 }
 
 func mergeInputModalities(a, b []string) []string {

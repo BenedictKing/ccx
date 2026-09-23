@@ -77,7 +77,6 @@ func TestCarryForwardDiscoveryFields_CopiesDiscoveryFields(t *testing.T) {
 	old.CredentialUID = "cred-1"
 	old.AvailableModels = []string{"mimo-v2.5", "mimo-v2-pro"}
 	old.ModelListHash = "models-hash"
-	old.ModelMapping = map[string]string{"mimo-v2": "mimo-v2-pro"}
 	old.MiniMaxTokenPlanUsage = &MiniMaxTokenPlanUsage{
 		Models: []MiniMaxTokenPlanModelUsage{{ModelName: "MiniMax-M3", CurrentIntervalRemainingPercent: 80}},
 	}
@@ -97,9 +96,6 @@ func TestCarryForwardDiscoveryFields_CopiesDiscoveryFields(t *testing.T) {
 	if current.ModelListHash != "models-hash" {
 		t.Fatalf("ModelListHash 未搬运: %q", current.ModelListHash)
 	}
-	if current.ModelMapping["mimo-v2"] != "mimo-v2-pro" {
-		t.Fatalf("ModelMapping 未搬运: %v", current.ModelMapping)
-	}
 	if current.MiniMaxTokenPlanUsage == nil || current.MiniMaxTokenPlanUsage.Models[0].ModelName != "MiniMax-M3" {
 		t.Fatalf("MiniMax Token Plan 用量未搬运: %+v", current.MiniMaxTokenPlanUsage)
 	}
@@ -108,9 +104,8 @@ func TestCarryForwardDiscoveryFields_CopiesDiscoveryFields(t *testing.T) {
 	}
 
 	current.AvailableModels[0] = "changed"
-	current.ModelMapping["mimo-v2"] = "changed"
 	current.MiniMaxTokenPlanUsage.Models[0].ModelName = "changed"
-	if old.AvailableModels[0] != "mimo-v2.5" || old.ModelMapping["mimo-v2"] != "mimo-v2-pro" || old.MiniMaxTokenPlanUsage.Models[0].ModelName != "MiniMax-M3" {
+	if old.AvailableModels[0] != "mimo-v2.5" || old.MiniMaxTokenPlanUsage.Models[0].ModelName != "MiniMax-M3" {
 		t.Fatal("自动发现字段必须深拷贝，不能修改旧画像")
 	}
 }

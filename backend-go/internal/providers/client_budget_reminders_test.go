@@ -5,8 +5,6 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-
-	"github.com/BenedictKing/ccx/internal/config"
 )
 
 func TestIsCCBudgetReminderText(t *testing.T) {
@@ -256,39 +254,5 @@ func TestIsClaudeCodeSystemHeader_RegressionAfterSplit(t *testing.T) {
 	}
 	if isClaudeCodeSystemHeader("normal system prompt") {
 		t.Error("normal prompt must not be detected")
-	}
-}
-
-func TestRedirectModelInBody_StripsBudgetReminderOnRedirect(t *testing.T) {
-	upstream := &config.UpstreamConfig{
-		ModelMapping: map[string]string{"claude-sonnet-5": "claude-opus-4.6"},
-	}
-	body := []byte(`{"model":"claude-sonnet-5","system":[{"type":"text","text":"<total_tokens>1000 tokens left</total_tokens>"},{"type":"text","text":"real prompt"}],"messages":[{"role":"user","content":"hi"}],"max_tokens":100}`)
-
-	got := redirectModelInBody(body, upstream)
-	var m map[string]interface{}
-	if err := json.Unmarshal(got, &m); err != nil {
-		t.Fatalf("invalid json: %v", err)
-	}
-	if m["model"] != "claude-opus-4.6" {
-		t.Fatalf("model must be redirected, got %v", m["model"])
-	}
-	system, _ := m["system"].([]interface{})
-	if len(system) != 1 {
-		t.Fatalf("budget block must be stripped on redirect, got %v", m["system"])
-	}
-	if m["max_tokens"] != float64(100) {
-		t.Error("other fields must survive")
-	}
-}
-
-func TestRedirectModelInBody_NoMappingKeepsBodyUntouched(t *testing.T) {
-	upstream := &config.UpstreamConfig{
-		ModelMapping: map[string]string{"other-model": "x"},
-	}
-	body := []byte(`{"model":"claude-sonnet-5","system":[{"type":"text","text":"<total_tokens>1000 tokens left</total_tokens>"}],"messages":[]}`)
-	got := redirectModelInBody(body, upstream)
-	if string(got) != string(body) {
-		t.Errorf("no redirect → zero byte changes (保 prompt cache), got: %s", got)
 	}
 }

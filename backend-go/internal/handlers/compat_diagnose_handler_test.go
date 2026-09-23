@@ -36,25 +36,10 @@ func TestCompatDiagnoseThinkingPassbackDefaults(t *testing.T) {
 			want:    true,
 		},
 		{
-			name: "glm by model mapping",
-			channel: &config.UpstreamConfig{
-				ServiceType: "claude",
-				ModelMapping: map[string]string{
-					"sonnet": "glm-5.2",
-				},
-			},
-			baseURL: "https://api.example.com/messages",
-			want:    true,
-		},
-		{
 			name: "dashscope qwen should use probe instead of default",
 			channel: &config.UpstreamConfig{
 				Name:        "code-gpt5.5-ali-qwen",
 				ServiceType: "claude",
-				ModelMapping: map[string]string{
-					"codex": "qwen3.7-plus",
-					"gpt":   "qwen3.7-plus",
-				},
 			},
 			baseURL: "https://coding.dashscope.aliyuncs.com/apps/anthropic",
 			want:    false,
@@ -102,15 +87,6 @@ func TestCompatDiagnoseDeepSeekUsesThinkingCacheDefaults(t *testing.T) {
 				ServiceType: "claude",
 			},
 			baseURL: "https://api.deepseek.com/anthropic",
-			want:    true,
-		},
-		{
-			name: "deepseek by model mapping",
-			channel: &config.UpstreamConfig{
-				ServiceType:  "claude",
-				ModelMapping: map[string]string{"sonnet": "deepseek-v4-pro"},
-			},
-			baseURL: "https://api.example.com/anthropic",
 			want:    true,
 		},
 		{
@@ -230,10 +206,6 @@ func TestDiagnoseClaudeChannelDisablesThinkingBlocksWhenProbeRejected(t *testing
 	channel := &config.UpstreamConfig{
 		Name:        "code-gpt5.5-ali-qwen",
 		ServiceType: "claude",
-		ModelMapping: map[string]string{
-			"codex": "qwen3.7-plus",
-			"gpt":   "qwen3.7-plus",
-		},
 	}
 
 	result := runCompatDiagnose(channel, "messages", "sk-test", server.URL)

@@ -738,20 +738,19 @@ func (m *Manager) ModelResolver() *ModelResolver {
 // scheduler.SetModelSupportResolverProvider(mgr.ResolveModelSupport) 注册。
 //
 // 实现策略：
-//   - 非 AutoManaged 渠道：直接委托 ExplainModelSupport（零额外成本）
-//   - AutoManaged 渠道 + 显式 SupportedModels 命中：直接返回
-//   - AutoManaged 渠道 + 三条件门控通过：其余情况调用 ModelResolver；
+//   - 显式 SupportedModels 命中：直接返回（全渠道 fast path）
+//   - 三条件门控通过：其余情况调用 ModelResolver；
 //     空 SupportedModels 下画像未命中是权威拒绝，禁止回退到“支持全部”
 //   - 门控不满足（AutoResolve=false 或 mode=off/shadow 或 KillSwitch）：回退 ExplainModelSupport
 //
 // 安全不变量：
 //   - Resolver nil 时行为与原有路径字节级一致（fail-open）
-//   - 非 AutoManaged 渠道的 ExplainModelSupport/RedirectModel 路径完全不变
+//   - 显式 ModelMapping 已退役，全渠道统一走画像映射（无画像 fail-open 透传）
 func (m *Manager) ResolveModelSupport(kind string, upstream *config.UpstreamConfig, model string) (supported bool, actualModel string, source string, reason string) {
 	return m.ResolveModelSupportWithFloor(kind, upstream, model, CapabilityFloor{})
 }
 
-// ResolveModelSupportWithFloor 使用请求级能力下界判断 AutoManaged 渠道能否承接模型。
+// ResolveModelSupportWithFloor 使用请求级能力下界判断渠道能否承接模型。
 // scheduler 首次选渠与 endpoint policy 复用同一份 RequestProfile，避免先选中已知不兼容渠道后再 failover。
 func (m *Manager) ResolveModelSupportWithFloor(
 	kind string,
@@ -763,14 +762,8 @@ func (m *Manager) ResolveModelSupportWithFloor(
 		return false, "", "invalid_input", "upstream or model is nil/empty"
 	}
 
-	// 非 AutoManaged 渠道：直接走原有路径
-	if !upstream.AutoManaged {
-		sup, rsn := upstream.ExplainModelSupport(model)
-		return sup, "", "explain", rsn
-	}
-
-	// AutoManaged 渠道：显式 SupportedModels 命中时走 fast path。
-	// 空列表的传统语义是“支持全部”，但自动托管渠道的实际模型以 endpoint profile 为准，
+	// 全渠道统一：显式 SupportedModels 命中时走 fast path。
+	// 空列表的传统语义是“支持全部”，但渠道的实际模型以 endpoint profile 为准，
 	// 不能在这里短路，否则 ModelResolver 永远没有机会运行。
 	sup, rsn := upstream.ExplainModelSupport(model)
 	if len(upstream.SupportedModels) > 0 && sup {
@@ -1226,12 +1219,6 @@ func carryForwardDiscoveryFields(old *KeyEndpointProfile, current *KeyEndpointPr
 	current.SuggestedRPMSource = old.SuggestedRPMSource
 	current.SuggestedRPMTPM = old.SuggestedRPMTPM
 	current.SuggestedRPMRPD = old.SuggestedRPMRPD
-	if old.ModelMapping != nil {
-		current.ModelMapping = make(map[string]string, len(old.ModelMapping))
-		for source, target := range old.ModelMapping {
-			current.ModelMapping[source] = target
-		}
-	}
 }
 
 // carryForwardProbeFields 将旧画像的 L2 探测字段搬运到本轮新构造的画像上。

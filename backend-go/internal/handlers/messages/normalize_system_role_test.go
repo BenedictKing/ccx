@@ -288,11 +288,12 @@ func TestMessagesHandler_AutoManagedCompshareNormalizesSystemRoles(t *testing.T)
 	}
 }
 
-// TestMessagesHandler_AutoNormalizeSystemRoleByMappedModel 验证：渠道未开手动开关，
-// 但 ModelMapping 把上线模型重定向为非 claude 家族（deepseek-v4-flash）时，
+// TestMessagesHandler_AutoNormalizeSystemRoleByModelFamily 验证：渠道未开手动开关，
+// 请求的非 claude 家族模型（deepseek-v4-flash）触发 model_family 分支，
 // 转发前自动把 messages 中的 system 角色抽回顶层 system 字段。
-func TestMessagesHandler_AutoNormalizeSystemRoleByMappedModel(t *testing.T) {
-	const reqBody = `{"model":"claude-sonnet-5","system":[{"type":"text","text":"base prompt"}],"messages":[{"role":"system","content":"you are helpful"},{"role":"user","content":[{"type":"text","text":"hello"}]}]}`
+// （显式 ModelMapping 已退役：请求模型即实际上线模型。）
+func TestMessagesHandler_AutoNormalizeSystemRoleByModelFamily(t *testing.T) {
+	const reqBody = `{"model":"deepseek-v4-flash","system":[{"type":"text","text":"base prompt"}],"messages":[{"role":"system","content":"you are helpful"},{"role":"user","content":[{"type":"text","text":"hello"}]}]}`
 
 	var captured []byte
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -308,12 +309,11 @@ func TestMessagesHandler_AutoNormalizeSystemRoleByMappedModel(t *testing.T) {
 	defer upstream.Close()
 
 	router := newMessagesTestRouter(t, config.UpstreamConfig{
-		Name:         "auto-normalize-by-model",
-		BaseURL:      upstream.URL,
-		APIKeys:      []string{"sk-test"},
-		ServiceType:  "claude",
-		Status:       "active",
-		ModelMapping: map[string]string{"claude-sonnet-5": "deepseek-v4-flash"},
+		Name:        "auto-normalize-by-model",
+		BaseURL:     upstream.URL,
+		APIKeys:     []string{"sk-test"},
+		ServiceType: "claude",
+		Status:      "active",
 	})
 
 	w := performMessagesHandlerRequest(t, router, reqBody)

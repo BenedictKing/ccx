@@ -208,7 +208,7 @@ func RetryCapabilityTestModel(cfgManager *config.ConfigManager, channelLogStore 
 				j.Tests[i].Status = CapabilityProtocolStatusRunning
 				j.Tests[i].Reason = nil
 				j.Tests[i].Error = nil
-				updateCapabilityRetryModelResult(j, channel, req.Protocol, req.Model, CapabilityModelStatusRunning, ModelTestResult{
+				updateCapabilityJobModelResult(j, req.Protocol, req.Model, CapabilityModelStatusRunning, ModelTestResult{
 					Model:     req.Model,
 					StartedAt: retryStartedAt,
 				})
@@ -252,7 +252,7 @@ func RetryCapabilityTestModel(cfgManager *config.ConfigManager, channelLogStore 
 					jobID, req.Protocol, req.Model, err)
 				capabilityJobs.update(jobID, func(j *CapabilityTestJob) {
 					errMsg := fmt.Sprintf("retry_queue_cancelled: %v", err)
-					updateCapabilityRetryModelResult(j, channel, req.Protocol, req.Model, CapabilityModelStatusFailed, ModelTestResult{
+					updateCapabilityJobModelResult(j, req.Protocol, req.Model, CapabilityModelStatusFailed, ModelTestResult{
 						Model:    req.Model,
 						Error:    &errMsg,
 						TestedAt: time.Now().Format(time.RFC3339Nano),
@@ -283,59 +283,8 @@ func RetryCapabilityTestModel(cfgManager *config.ConfigManager, channelLogStore 
 }
 
 func executeRetryModelTest(ctx context.Context, channel *config.UpstreamConfig, protocol, model string, timeout time.Duration, jobID string, cfgManager *config.ConfigManager, channelID int, channelKind, apiKey string, channelLogStore *metrics.ChannelLogStore) ModelTestResult {
-	if !strings.Contains(protocol, "->") {
-		return executeModelTest(ctx, channel, protocol, model, timeout, jobID, cfgManager, channelID, channelKind, apiKey, channelLogStore, true)
-	}
-
-	parts := strings.SplitN(protocol, "->", 2)
-	if len(parts) != 2 || parts[1] == "" {
-		errMsg := fmt.Sprintf("invalid_virtual_protocol: %s", protocol)
-		result := ModelTestResult{
-			Model:    model,
-			Error:    &errMsg,
-			TestedAt: time.Now().Format(time.RFC3339Nano),
-		}
-		capabilityJobs.update(jobID, func(job *CapabilityTestJob) {
-			updateCapabilityJobModelResult(job, protocol, model, CapabilityModelStatusFailed, result)
-		})
-		return result
-	}
-
-	actualModel := config.RedirectModel(model, channel)
-	redirectResult := executeRedirectModelTest(ctx, channel, channelKind, parts[1], model, actualModel, timeout, jobID, cfgManager, channelID, apiKey, channelLogStore)
-	modelStatus := CapabilityModelStatusFailed
-	if redirectResult.Success {
-		modelStatus = CapabilityModelStatusSuccess
-	}
-	result := ModelTestResult{
-		Model:                model,
-		ActualModel:          redirectResult.ActualModel,
-		Success:              redirectResult.Success,
-		Latency:              redirectResult.Latency,
-		StreamingSupported:   redirectResult.StreamingSupported,
-		CodexImageGeneration: redirectResult.CodexImageGeneration,
-		Error:                redirectResult.Error,
-		StartedAt:            redirectResult.StartedAt,
-		TestedAt:             redirectResult.TestedAt,
-	}
-	capabilityJobs.update(jobID, func(job *CapabilityTestJob) {
-		updateCapabilityRetryModelResult(job, channel, protocol, model, modelStatus, result)
-	})
-	return result
-}
-
-func updateCapabilityRetryModelResult(job *CapabilityTestJob, channel *config.UpstreamConfig, protocol, model string, status CapabilityModelStatus, result ModelTestResult) {
-	if channel != nil && strings.Contains(protocol, "->") {
-		actualModel := result.ActualModel
-		if actualModel == "" {
-			actualModel = config.RedirectModel(model, channel)
-		}
-		groupResult := result
-		groupResult.ActualModel = actualModel
-		if updateCapabilityJobModelResultsByActualModel(job, protocol, actualModel, status, groupResult) > 0 {
-			return
-		}
-	}
-
-	updateCapabilityJobModelResult(job, protocol, model, status, result)
+	// 复合/虚拟协议（含 "->"）由 buildTestRequestWithModel 走 compositePathRegistry
+	// 构建入口协议请求；重定向验证时代不做工具调用探针，保持 probeToolCalls=false
+	probeToolCalls := !strings.Contains(protocol, "->")
+	return executeModelTest(ctx, channel, protocol, model, timeout, jobID, cfgManager, channelID, channelKind, apiKey, channelLogStore, probeToolCalls)
 }

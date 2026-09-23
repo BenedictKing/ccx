@@ -3,8 +3,6 @@ package handlers
 import (
 	"encoding/json"
 	"testing"
-
-	"github.com/BenedictKing/ccx/internal/config"
 )
 
 func TestBuildChatProbeBody_ReasoningEffortUsesProviderCompatibleValue(t *testing.T) {
@@ -65,23 +63,6 @@ func TestBuildProbeBodiesUseExpandedTokenBudget(t *testing.T) {
 
 func TestBuildChatProbeBody_KimiK27CodeUsesRequiredReasoningEffort(t *testing.T) {
 	bodyBytes := buildChatProbeBody("kimi-k2.7-code", nil)
-
-	var body map[string]interface{}
-	if err := json.Unmarshal(bodyBytes, &body); err != nil {
-		t.Fatalf("unmarshal body failed: %v", err)
-	}
-	if body["reasoning_effort"] != "high" {
-		t.Fatalf("reasoning_effort=%v, want high", body["reasoning_effort"])
-	}
-}
-
-func TestBuildChatProbeBody_KimiK27CodeMappingUsesRequiredReasoningEffort(t *testing.T) {
-	channel := &config.UpstreamConfig{
-		ModelMapping: map[string]string{
-			"agent": "kimi-k2.7-code",
-		},
-	}
-	bodyBytes := buildChatProbeBody("agent", nil, channel)
 
 	var body map[string]interface{}
 	if err := json.Unmarshal(bodyBytes, &body); err != nil {

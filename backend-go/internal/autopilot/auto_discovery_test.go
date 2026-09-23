@@ -753,7 +753,7 @@ func TestWriteProfilesSetsEndpointIdentity(t *testing.T) {
 		APIKeys:     []string{apiKey},
 		AutoManaged: true,
 	}
-	cfgManager := setupTestConfigManagerForDiscovery(t, channelUID, nil, nil)
+	cfgManager := setupTestConfigManagerForDiscovery(t, channelUID, nil)
 	defer errutil.IgnoreDeferred(cfgManager.Close)
 	runner.writeProfiles(channelUID, channel, []EndpointDiscoveryResult{{
 		KeyMask:     utils.MaskAPIKey(apiKey),
@@ -828,7 +828,7 @@ func TestWriteProfilesBackfillsLegacyChannelKindForRouting(t *testing.T) {
 		t.Fatalf("写入 legacy profile 失败: %v", err)
 	}
 
-	cfgManager := setupTestConfigManagerForDiscovery(t, channelUID, nil, nil)
+	cfgManager := setupTestConfigManagerForDiscovery(t, channelUID, nil)
 	defer errutil.IgnoreDeferred(cfgManager.Close)
 	channel := &config.UpstreamConfig{
 		ChannelUID: channelUID, ServiceType: "claude", BaseURL: baseURL, APIKeys: []string{apiKey},
@@ -967,7 +967,7 @@ func trimTestURLScheme(rawURL string) string {
 // ── maybeAutoWriteChannelConfig 测试 ──────────────────────────────────────────
 
 // setupTestConfigManagerForDiscovery 创建带指定 messages 渠道的临时 ConfigManager。
-func setupTestConfigManagerForDiscovery(t *testing.T, channelUID string, supportedModels []string, modelMapping map[string]string) *config.ConfigManager {
+func setupTestConfigManagerForDiscovery(t *testing.T, channelUID string, supportedModels []string) *config.ConfigManager {
 	t.Helper()
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
@@ -982,7 +982,6 @@ func setupTestConfigManagerForDiscovery(t *testing.T, channelUID string, support
 				BaseURLs:        []string{"https://api.example.com"},
 				APIKeys:         []string{"sk-test-key"},
 				SupportedModels: supportedModels,
-				ModelMapping:    modelMapping,
 				Status:          "active",
 			},
 		},
@@ -1021,8 +1020,7 @@ func TestMaybeAutoWriteChannelConfig_TableDriven(t *testing.T) {
 	tests := []struct {
 		name            string
 		channelUID      string
-		supportedModels []string          // 渠道当前 SupportedModels
-		modelMapping    map[string]string // 渠道当前 ModelMapping
+		supportedModels []string // 渠道当前 SupportedModels
 		endpoints       []EndpointDiscoveryResult
 		wantWritten     bool     // 是否应写入
 		wantModels      []string // 期望写入的模型（wantWritten=true 时检查）
@@ -1031,7 +1029,6 @@ func TestMaybeAutoWriteChannelConfig_TableDriven(t *testing.T) {
 			name:            "全部一致且配置为空 -> 写入 SupportedModels",
 			channelUID:      "ch_auto_write_001",
 			supportedModels: nil,
-			modelMapping:    nil,
 			endpoints: []EndpointDiscoveryResult{
 				{KeyMask: "sk-****a", BaseURL: "https://a.example.com", ProtocolOk: true, Models: []string{"gpt-4o", "gpt-3.5-turbo"}, ModelsCount: 2},
 				{KeyMask: "sk-****b", BaseURL: "https://b.example.com", ProtocolOk: true, Models: []string{"gpt-3.5-turbo", "gpt-4o"}, ModelsCount: 2},
@@ -1043,7 +1040,6 @@ func TestMaybeAutoWriteChannelConfig_TableDriven(t *testing.T) {
 			name:            "模型列表不一致 -> 不写入",
 			channelUID:      "ch_auto_write_002",
 			supportedModels: nil,
-			modelMapping:    nil,
 			endpoints: []EndpointDiscoveryResult{
 				{KeyMask: "sk-****a", BaseURL: "https://a.example.com", ProtocolOk: true, Models: []string{"gpt-4o"}, ModelsCount: 1},
 				{KeyMask: "sk-****b", BaseURL: "https://b.example.com", ProtocolOk: true, Models: []string{"gpt-4o-mini"}, ModelsCount: 1},
@@ -1054,18 +1050,6 @@ func TestMaybeAutoWriteChannelConfig_TableDriven(t *testing.T) {
 			name:            "用户已有 SupportedModels -> 即使新探测一致也不覆盖",
 			channelUID:      "ch_auto_write_003",
 			supportedModels: []string{"old-model-1"},
-			modelMapping:    nil,
-			endpoints: []EndpointDiscoveryResult{
-				{KeyMask: "sk-****a", BaseURL: "https://a.example.com", ProtocolOk: true, Models: []string{"gpt-4o"}, ModelsCount: 1},
-				{KeyMask: "sk-****b", BaseURL: "https://b.example.com", ProtocolOk: true, Models: []string{"gpt-4o"}, ModelsCount: 1},
-			},
-			wantWritten: false,
-		},
-		{
-			name:            "用户已有 ModelMapping -> 即使新探测一致也不写 SupportedModels",
-			channelUID:      "ch_auto_write_004",
-			supportedModels: nil,
-			modelMapping:    map[string]string{"old-model": "new-model"},
 			endpoints: []EndpointDiscoveryResult{
 				{KeyMask: "sk-****a", BaseURL: "https://a.example.com", ProtocolOk: true, Models: []string{"gpt-4o"}, ModelsCount: 1},
 				{KeyMask: "sk-****b", BaseURL: "https://b.example.com", ProtocolOk: true, Models: []string{"gpt-4o"}, ModelsCount: 1},
@@ -1076,7 +1060,6 @@ func TestMaybeAutoWriteChannelConfig_TableDriven(t *testing.T) {
 			name:            "单 endpoint 渠道（天然一致） -> 正确写入",
 			channelUID:      "ch_auto_write_005",
 			supportedModels: nil,
-			modelMapping:    nil,
 			endpoints: []EndpointDiscoveryResult{
 				{KeyMask: "sk-****a", BaseURL: "https://a.example.com", ProtocolOk: true, Models: []string{"claude-3-opus", "claude-3-sonnet"}, ModelsCount: 2},
 			},
@@ -1087,7 +1070,6 @@ func TestMaybeAutoWriteChannelConfig_TableDriven(t *testing.T) {
 			name:            "所有 endpoint 不可达 -> 不写入",
 			channelUID:      "ch_auto_write_006",
 			supportedModels: nil,
-			modelMapping:    nil,
 			endpoints: []EndpointDiscoveryResult{
 				{KeyMask: "sk-****a", BaseURL: "https://a.example.com", ProtocolOk: false, ErrorMessage: "连接失败"},
 				{KeyMask: "sk-****b", BaseURL: "https://b.example.com", ProtocolOk: false, ErrorMessage: "连接失败"},
@@ -1098,7 +1080,6 @@ func TestMaybeAutoWriteChannelConfig_TableDriven(t *testing.T) {
 			name:            "部分 endpoint 不可达但可达的一致 -> 正确写入",
 			channelUID:      "ch_auto_write_007",
 			supportedModels: nil,
-			modelMapping:    nil,
 			endpoints: []EndpointDiscoveryResult{
 				{KeyMask: "sk-****a", BaseURL: "https://a.example.com", ProtocolOk: true, Models: []string{"gpt-4o", "gpt-3.5-turbo"}, ModelsCount: 2},
 				{KeyMask: "sk-****b", BaseURL: "https://b.example.com", ProtocolOk: false, ErrorMessage: "连接失败"},
@@ -1110,7 +1091,6 @@ func TestMaybeAutoWriteChannelConfig_TableDriven(t *testing.T) {
 			name:            "endpoint 模型列表为空 -> 不写入",
 			channelUID:      "ch_auto_write_008",
 			supportedModels: nil,
-			modelMapping:    nil,
 			endpoints: []EndpointDiscoveryResult{
 				{KeyMask: "sk-****a", BaseURL: "https://a.example.com", ProtocolOk: true, Models: []string{}, ModelsCount: 0},
 			},
@@ -1120,12 +1100,11 @@ func TestMaybeAutoWriteChannelConfig_TableDriven(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfgManager := setupTestConfigManagerForDiscovery(t, tt.channelUID, tt.supportedModels, tt.modelMapping)
+			cfgManager := setupTestConfigManagerForDiscovery(t, tt.channelUID, tt.supportedModels)
 			runner := NewAutoDiscoveryRunner(nil, nil)
 			channel := &config.UpstreamConfig{
 				ChannelUID:      tt.channelUID,
 				SupportedModels: tt.supportedModels,
-				ModelMapping:    tt.modelMapping,
 			}
 
 			runner.maybeAutoWriteChannelConfig(tt.channelUID, channel, tt.endpoints, cfgManager)

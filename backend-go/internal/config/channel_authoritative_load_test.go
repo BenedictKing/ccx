@@ -15,7 +15,6 @@ func TestAuthoritativeLoad_RoundTripLossless(t *testing.T) {
 	mk := func(kind, uid, acct, base, svc, key string, priority int) UpstreamConfig {
 		u := makeKeyChannel(kind, uid, acct, base, svc, key, "vip", []string{"m1", "m2"})
 		u.Priority = priority
-		u.ModelMapping = map[string]string{"a": "b"}
 		return u
 	}
 	cfg := &Config{

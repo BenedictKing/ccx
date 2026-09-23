@@ -49,32 +49,6 @@ func TestGetCapabilityProbeModels_ContainsGPT56Models(t *testing.T) {
 	}
 }
 
-func TestGetCapabilityProbeModels_CodexAutoReviewRedirect(t *testing.T) {
-	channel := &config.UpstreamConfig{
-		ServiceType: "openai",
-		ModelMapping: map[string]string{
-			"codex-auto-review": "deepseek-v4-flash",
-		},
-	}
-
-	models, err := getCapabilityProbeModels("responses")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// codex-auto-review 应该通过 ModelMapping 映射到实际模型
-	for _, m := range models {
-		if m == "codex-auto-review" {
-			actual := config.RedirectModel(m, channel)
-			if actual != "deepseek-v4-flash" {
-				t.Fatalf("codex-auto-review redirect=%s, want deepseek-v4-flash", actual)
-			}
-			return
-		}
-	}
-	t.Fatal("codex-auto-review not found in responses probe models")
-}
-
 func TestGetCapabilityProbeModel(t *testing.T) {
 	cases := []struct {
 		protocol string

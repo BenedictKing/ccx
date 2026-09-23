@@ -242,14 +242,10 @@ func TestResolveAgentModelProfile_GlobalOverrideWins(t *testing.T) {
 	}
 }
 
-func TestResolveUpstreamCapability_UsesActualModelAfterMapping(t *testing.T) {
-	upstream := &UpstreamConfig{
-		ModelMapping: map[string]string{
-			"agent": "claude-sonnet-4-6",
-		},
-	}
+func TestResolveUpstreamCapability_ResolvesBuiltinModel(t *testing.T) {
+	upstream := &UpstreamConfig{}
 
-	resolved := ResolveUpstreamCapability("agent", upstream, nil)
+	resolved := ResolveUpstreamCapability("claude-sonnet-4-6", upstream, nil)
 	if !resolved.Known {
 		t.Fatal("expected built-in upstream capability")
 	}
@@ -266,13 +262,12 @@ func TestResolveUpstreamCapability_UsesActualModelAfterMapping(t *testing.T) {
 
 func TestResolveUpstreamCapability_ChannelOverrideWins(t *testing.T) {
 	upstream := &UpstreamConfig{
-		ModelMapping: map[string]string{"agent": "claude-sonnet-4-6"},
 		ModelCapabilities: map[string]UpstreamModelCapability{
 			"claude-sonnet-4-6": {ContextWindowTokens: 200000, MaxOutputTokens: 32000},
 		},
 	}
 
-	resolved := ResolveUpstreamCapability("agent", upstream, map[string]UpstreamModelCapability{
+	resolved := ResolveUpstreamCapability("claude-sonnet-4-6", upstream, map[string]UpstreamModelCapability{
 		"claude-sonnet-4-6": {ContextWindowTokens: 500000},
 	})
 	if resolved.Source != "channel" {
@@ -284,13 +279,9 @@ func TestResolveUpstreamCapability_ChannelOverrideWins(t *testing.T) {
 }
 
 func TestResolveUpstreamCapability_KimiK27Builtin(t *testing.T) {
-	upstream := &UpstreamConfig{
-		ModelMapping: map[string]string{
-			"agent": "Kimi-K2.7-Code-HighSpeed",
-		},
-	}
+	upstream := &UpstreamConfig{}
 
-	resolved := ResolveUpstreamCapability("agent", upstream, nil)
+	resolved := ResolveUpstreamCapability("Kimi-K2.7-Code-HighSpeed", upstream, nil)
 	if !resolved.Known || resolved.Source != "builtin" {
 		t.Fatalf("source = %q known=%v, want builtin known", resolved.Source, resolved.Known)
 	}
@@ -781,13 +772,9 @@ func TestResolveUpstreamCapability_DeepSeekV4DatedSuffixes(t *testing.T) {
 }
 
 func TestResolveUpstreamCapability_Qwen37MaxBuiltin(t *testing.T) {
-	upstream := &UpstreamConfig{
-		ModelMapping: map[string]string{
-			"agent": "qwen3.7-max-2026-05-20",
-		},
-	}
+	upstream := &UpstreamConfig{}
 
-	resolved := ResolveUpstreamCapability("agent", upstream, nil)
+	resolved := ResolveUpstreamCapability("qwen3.7-max-2026-05-20", upstream, nil)
 	if !resolved.Known || resolved.Source != "builtin" {
 		t.Fatalf("source = %q known=%v, want builtin known", resolved.Source, resolved.Known)
 	}
@@ -810,13 +797,9 @@ func TestResolveUpstreamCapability_Qwen37MaxBuiltin(t *testing.T) {
 }
 
 func TestResolveUpstreamCapability_LongCat20Builtin(t *testing.T) {
-	upstream := &UpstreamConfig{
-		ModelMapping: map[string]string{
-			"agent": "LongCat-2.0",
-		},
-	}
+	upstream := &UpstreamConfig{}
 
-	resolved := ResolveUpstreamCapability("agent", upstream, nil)
+	resolved := ResolveUpstreamCapability("LongCat-2.0", upstream, nil)
 	if !resolved.Known || resolved.Source != "builtin" {
 		t.Fatalf("source = %q known=%v, want builtin known", resolved.Source, resolved.Known)
 	}
@@ -836,13 +819,9 @@ func TestResolveUpstreamCapability_LongCat20Builtin(t *testing.T) {
 }
 
 func TestResolveUpstreamCapability_Step37FlashBuiltin(t *testing.T) {
-	upstream := &UpstreamConfig{
-		ModelMapping: map[string]string{
-			"agent": "step-3.7-flash",
-		},
-	}
+	upstream := &UpstreamConfig{}
 
-	resolved := ResolveUpstreamCapability("agent", upstream, nil)
+	resolved := ResolveUpstreamCapability("step-3.7-flash", upstream, nil)
 	if !resolved.Known || resolved.Source != "builtin" {
 		t.Fatalf("source = %q known=%v, want builtin known", resolved.Source, resolved.Known)
 	}
@@ -879,13 +858,9 @@ func TestResolveUpstreamCapability_Step37FlashBuiltin(t *testing.T) {
 func TestResolveUpstreamCapability_Step5PreviewBuiltin(t *testing.T) {
 	for _, alias := range []string{"step-5-preview", "stepfun/step-5-preview"} {
 		t.Run(alias, func(t *testing.T) {
-			upstream := &UpstreamConfig{
-				ModelMapping: map[string]string{
-					"agent": alias,
-				},
-			}
+			upstream := &UpstreamConfig{}
 
-			resolved := ResolveUpstreamCapability("agent", upstream, nil)
+			resolved := ResolveUpstreamCapability(alias, upstream, nil)
 			if !resolved.Known || resolved.Source != "builtin" {
 				t.Fatalf("source = %q known=%v, want builtin known", resolved.Source, resolved.Known)
 			}
@@ -922,13 +897,9 @@ func TestResolveUpstreamCapability_Step5PreviewBuiltin(t *testing.T) {
 }
 
 func TestResolveUpstreamCapability_GPT56BedrockBuiltin(t *testing.T) {
-	upstream := &UpstreamConfig{
-		ModelMapping: map[string]string{
-			"agent": "gpt-5.6-terra",
-		},
-	}
+	upstream := &UpstreamConfig{}
 
-	resolved := ResolveUpstreamCapability("agent", upstream, nil)
+	resolved := ResolveUpstreamCapability("gpt-5.6-terra", upstream, nil)
 	if !resolved.Known || resolved.Source != "builtin" {
 		t.Fatalf("source = %q known=%v, want builtin known", resolved.Source, resolved.Known)
 	}
@@ -1254,13 +1225,9 @@ func TestResolveUpstreamCapability_LiteLLMGPTVariants(t *testing.T) {
 }
 
 func TestResolveUpstreamCapability_Qwen37PlusTieredPricing(t *testing.T) {
-	upstream := &UpstreamConfig{
-		ModelMapping: map[string]string{
-			"agent": "qwen3.7-plus-2026-05-26",
-		},
-	}
+	upstream := &UpstreamConfig{}
 
-	resolved := ResolveUpstreamCapability("agent", upstream, nil)
+	resolved := ResolveUpstreamCapability("qwen3.7-plus-2026-05-26", upstream, nil)
 	if !resolved.Known || resolved.Source != "builtin" {
 		t.Fatalf("source = %q known=%v, want builtin known", resolved.Source, resolved.Known)
 	}
@@ -1419,9 +1386,7 @@ func TestResolveUpstreamCapability_MiMoV26Series(t *testing.T) {
 }
 
 func TestResolveUpstreamCapability_RequestModelFallback(t *testing.T) {
-	upstream := &UpstreamConfig{
-		ModelMapping: map[string]string{"agent-1m": "vendor-hidden-model"},
-	}
+	upstream := &UpstreamConfig{}
 
 	resolved := ResolveUpstreamCapability("agent-1m", upstream, map[string]UpstreamModelCapability{
 		"agent-*": {ContextWindowTokens: 1000000},

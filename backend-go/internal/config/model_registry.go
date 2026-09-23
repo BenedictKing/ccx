@@ -854,13 +854,9 @@ func ResolveAgentModelProfile(requestModel string, global map[string]AgentModelP
 
 // ResolveUpstreamCapability 解析渠道中实际模型的能力。
 func ResolveUpstreamCapability(requestModel string, upstream *UpstreamConfig, global map[string]UpstreamModelCapability) ResolvedUpstreamCapability {
-	actualModel := requestModel
-	if upstream != nil {
-		actualModel = RedirectModel(requestModel, upstream)
-	}
 	// allowRequestModelFallback=true：未提供动态映射结果时，保留历史行为——渠道/全局能力表
 	// 按 requestModel 的通配符也可命中，兼容"能力表只登记请求侧别名"的既有配置。
-	return resolveUpstreamCapabilityForModels(requestModel, actualModel, upstream, global, true)
+	return resolveUpstreamCapabilityForModels(requestModel, requestModel, upstream, global, true)
 }
 
 // ResolveMappedUpstreamCapability 解析动态路由已决定的实际上游模型能力。

@@ -219,12 +219,6 @@ func buildCompatDiagnoseChannelSignal(channel *config.UpstreamConfig, baseURL st
 		channel.ServiceType,
 		channel.RoutePrefix,
 	}
-	for key, value := range channel.ModelMapping {
-		parts = append(parts, key, value)
-	}
-	for key, value := range channel.ReasoningMapping {
-		parts = append(parts, key, value)
-	}
 	for key, value := range channel.CustomHeaders {
 		parts = append(parts, key, value)
 	}

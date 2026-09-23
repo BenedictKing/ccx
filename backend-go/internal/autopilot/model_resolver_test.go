@@ -993,12 +993,11 @@ func TestResolveModelAnyEndpoint_MapsWithoutExactModelMatch(t *testing.T) {
 	}
 }
 
-func TestResolveModel_IgnoresLegacyManualRedirectForAutoManagedProvider(t *testing.T) {
+func TestResolveModel_MapsToDiscoveredProfile(t *testing.T) {
 	upstream := config.UpstreamConfig{
-		ChannelUID:   "ch_test",
-		AutoManaged:  true,
-		ProviderID:   "mimo",
-		ModelMapping: map[string]string{"claude-sonnet-5": "legacy-target"},
+		ChannelUID:  "ch_test",
+		AutoManaged: true,
+		ProviderID:  "mimo",
 	}
 	cfg := config.Config{
 		Upstream: []config.UpstreamConfig{upstream},
@@ -1022,68 +1021,8 @@ func TestResolveModel_IgnoresLegacyManualRedirectForAutoManagedProvider(t *testi
 	if !resolved {
 		t.Fatalf("expected resolved=true, reason=%s", reason)
 	}
-	if target.Model == "legacy-target" {
-		t.Fatalf("autoManaged provider should ignore legacy modelMapping, got %q", target.Model)
-	}
 	if target.Model != "mimo-v2.5-pro" {
 		t.Fatalf("target.Model = %q, want mimo-v2.5-pro", target.Model)
-	}
-}
-
-func TestResolveModel_ManualRedirect_ShortCircuits(t *testing.T) {
-	upstream := config.UpstreamConfig{
-		ChannelUID:   "ch_manual",
-		ModelMapping: map[string]string{"claude-opus-4-8": "claude-opus-4-7"},
-	}
-	cfg := config.Config{
-		Upstream: []config.UpstreamConfig{upstream},
-	}
-	cfgManager, cleanup := createTestConfigManagerForResolver(t, cfg)
-	defer cleanup()
-
-	resolver := &ModelResolver{
-		profileStore: nil, // 无 ModelProfileStore
-		cfgManager:   cfgManager,
-	}
-
-	target, resolved, reason := resolver.ResolveModel(
-		"claude-opus-4-8", "ch_manual", "messages", "any", CapabilityFloor{})
-
-	if !resolved {
-		t.Error("expected resolved=true for manual redirect")
-	}
-	if target.Model != "claude-opus-4-7" {
-		t.Errorf("expected claude-opus-4-7, got %s", target.Model)
-	}
-	if reason != "manual_redirect" {
-		t.Errorf("expected reason 'manual_redirect', got %s", reason)
-	}
-}
-
-func TestResolveModel_ManualRedirect_NotApplied_WhenNoMapping(t *testing.T) {
-	upstream := config.UpstreamConfig{
-		ChannelUID:   "ch_manual",
-		ModelMapping: nil,
-	}
-	cfg := config.Config{
-		Upstream: []config.UpstreamConfig{upstream},
-	}
-	cfgManager, cleanup := createTestConfigManagerForResolver(t, cfg)
-	defer cleanup()
-
-	resolver := &ModelResolver{
-		profileStore: nil,
-		cfgManager:   cfgManager,
-	}
-
-	target, resolved, _ := resolver.ResolveModel(
-		"claude-opus-4-8", "ch_manual", "messages", "any", CapabilityFloor{})
-
-	if resolved {
-		t.Error("expected resolved=false when no mapping and no store")
-	}
-	if target.Model != "claude-opus-4-8" {
-		t.Errorf("expected passthrough, got %s", target.Model)
 	}
 }
 

@@ -29,7 +29,7 @@ const defaultCapabilityTestRPM = 30
 
 type ModelTestResult struct {
 	Model                string                            `json:"model"`
-	ActualModel          string                            `json:"actualModel,omitempty"`   // 经 ModelMapping 重定向后实际发送给上游的模型名
+	ActualModel          string                            `json:"actualModel,omitempty"`   // 实际使用的模型名（兼容旧快照；现仅 Codex 图片探测回填）
 	UpstreamModel        string                            `json:"upstreamModel,omitempty"` // 上游响应自报的模型名（识别厂商侧隐式重定向）
 	Success              bool                              `json:"success"`
 	Skipped              bool                              `json:"skipped,omitempty"`
@@ -59,14 +59,13 @@ type ProtocolTestResult struct {
 
 // CapabilityTestResponse 能力测试响应体
 type CapabilityTestResponse struct {
-	ChannelID           int                   `json:"channelId"`
-	ChannelName         string                `json:"channelName"`
-	SourceType          string                `json:"sourceType"`
-	Tests               []ProtocolTestResult  `json:"tests"`
-	RedirectTests       []RedirectModelResult `json:"redirectTests,omitempty"`
-	CompatibleProtocols []string              `json:"compatibleProtocols"`
-	TotalDuration       int64                 `json:"totalDuration"` // 毫秒
-	SchemaVersion       int                   `json:"schemaVersion,omitempty"`
+	ChannelID           int                  `json:"channelId"`
+	ChannelName         string               `json:"channelName"`
+	SourceType          string               `json:"sourceType"`
+	Tests               []ProtocolTestResult `json:"tests"`
+	CompatibleProtocols []string             `json:"compatibleProtocols"`
+	TotalDuration       int64                `json:"totalDuration"` // 毫秒
+	SchemaVersion       int                  `json:"schemaVersion,omitempty"`
 }
 
 // ============== 主处理器 ==============
@@ -147,7 +146,6 @@ func TestChannelCapability(cfgManager *config.ConfigManager, channelLogStore *me
 			apiKey = channel.DisabledAPIKeys[0].Key
 		}
 
-		modelMappingHash := hashModelMapping(channel.ModelMapping)
 		normalizedModels := normalizeCapabilityModels(req.Models)
 		// 渠道模型列表探测范围：以渠道认可的模型清单（上游 /models 或火山管控面）替代内置探测清单
 		if len(normalizedModels) == 0 && req.UseChannelModels {
@@ -159,9 +157,9 @@ func TestChannelCapability(cfgManager *config.ConfigManager, channelLogStore *me
 			normalizedModels = normalizeCapabilityModels(resolved)
 		}
 		dispatcherKey := metrics.GenerateMetricsIdentityKey(baseURL, apiKey, channel.ServiceType)
-		identityKey := buildCapabilityIdentityKey(channel, modelMappingHash)
-		cacheKey := buildCapabilityCacheKey(baseURL, capabilityProbeCacheAPIKey(channel, apiKey), channel.ServiceType, protocols, normalizedModels, modelMappingHash)
-		executionLookupKey := buildCapabilityExecutionLookupKey(identityKey, channelKind, protocols, normalizedModels, "")
+		identityKey := buildCapabilityIdentityKey(channel)
+		cacheKey := buildCapabilityCacheKey(baseURL, capabilityProbeCacheAPIKey(channel, apiKey), channel.ServiceType, protocols, normalizedModels)
+		executionLookupKey := buildCapabilityExecutionLookupKey(identityKey, channelKind, protocols, normalizedModels)
 		lookupKey := buildCapabilityJobLookupKey(cacheKey, channelKind, id)
 
 		if cached, ok := getCapabilityCache(cacheKey); ok {
@@ -265,7 +263,7 @@ func TestChannelCapability(cfgManager *config.ConfigManager, channelLogStore *me
 				return
 			}
 
-			go runCapabilityTestJob(job.JobID, channelKind, id, *channel, protocols, timeout, effectiveRPM, cacheKey, lookupKey, identityKey, dispatcherKey, previousResults, normalizedModels, req.SourceTab, cfgManager, channelLogStore)
+			go runCapabilityTestJob(job.JobID, channelKind, id, *channel, protocols, timeout, effectiveRPM, cacheKey, lookupKey, identityKey, dispatcherKey, previousResults, normalizedModels, cfgManager, channelLogStore)
 
 			c.JSON(http.StatusOK, gin.H{"jobId": updatedJob.JobID, "resumed": true, "job": updatedJob})
 			return
@@ -321,7 +319,7 @@ func TestChannelCapability(cfgManager *config.ConfigManager, channelLogStore *me
 			}
 		}
 
-		go runCapabilityTestJob(job.JobID, channelKind, id, *channel, protocols, timeout, effectiveRPM, cacheKey, lookupKey, identityKey, dispatcherKey, previousResults, normalizedModels, req.SourceTab, cfgManager, channelLogStore)
+		go runCapabilityTestJob(job.JobID, channelKind, id, *channel, protocols, timeout, effectiveRPM, cacheKey, lookupKey, identityKey, dispatcherKey, previousResults, normalizedModels, cfgManager, channelLogStore)
 
 		c.JSON(http.StatusOK, gin.H{"jobId": job.JobID, "resumed": false, "job": job})
 	}

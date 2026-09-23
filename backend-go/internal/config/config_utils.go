@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"sort"
 	"strings"
 	"time"
 
@@ -29,42 +28,6 @@ func deduplicateStrings(items []string) []string {
 		}
 	}
 	return result
-}
-
-// deprecatedGrokModelMappings 记录已下线/不再需要的 grok 模型映射精确对照，
-// 用于从渠道 modelMapping 中清除历史遗留项。
-var deprecatedGrokModelMappings = map[string]string{
-	"grok-4.1": "grok-4.1-thinking",
-	"grok-4.2": "grok-4.20-beta",
-}
-
-// sanitizeDeprecatedGrokModelMapping 从 mapping 中精确剔除已废弃的 grok 映射对。
-// 仅当 key 与 value 同时匹配才删除，避免影响用户自定义的其他 target。
-// 返回 changed=true 表示发生了删除；未命中或 mapping 为 nil/空时原样返回，不分配新 map。
-func sanitizeDeprecatedGrokModelMapping(mapping map[string]string) (map[string]string, bool) {
-	if len(mapping) == 0 {
-		return mapping, false
-	}
-	changed := false
-	for k, v := range deprecatedGrokModelMappings {
-		if mapping[k] == v {
-			changed = true
-			break
-		}
-	}
-	if !changed {
-		return mapping, false
-	}
-	cleaned := make(map[string]string, len(mapping))
-	for k, v := range mapping {
-		cleaned[k] = v
-	}
-	for k, v := range deprecatedGrokModelMappings {
-		if cleaned[k] == v {
-			delete(cleaned, k)
-		}
-	}
-	return cleaned, true
 }
 
 func normalizeUpstreamServiceType(serviceType, fallback string) string {
@@ -317,74 +280,6 @@ var (
 	ErrDuplicateChannelName       = errors.New("duplicate channel name")
 	ErrInvalidEmbeddingCapability = errors.New("invalid embedding capability")
 )
-
-// ============== 模型重定向 ==============
-
-// RedirectModel 模型重定向
-func RedirectModel(model string, upstream *UpstreamConfig) string {
-	redirected, _ := RedirectModelWithMatch(model, upstream)
-	return redirected
-}
-
-// RedirectModelWithMatch 返回模型重定向结果，并标记是否命中 ModelMapping。
-func RedirectModelWithMatch(model string, upstream *UpstreamConfig) (string, bool) {
-	if upstream == nil || upstream.ModelMapping == nil || len(upstream.ModelMapping) == 0 {
-		return model, false
-	}
-
-	// 直接匹配（精确匹配优先）
-	if mapped, ok := upstream.ModelMapping[model]; ok {
-		return mapped, true
-	}
-
-	// 模糊匹配：按源模型长度从长到短排序，确保最长匹配优先
-	type mapping struct {
-		source string
-		target string
-	}
-	mappings := make([]mapping, 0, len(upstream.ModelMapping))
-	for source, target := range upstream.ModelMapping {
-		mappings = append(mappings, mapping{source, target})
-	}
-	sort.Slice(mappings, func(i, j int) bool {
-		return len(mappings[i].source) > len(mappings[j].source)
-	})
-
-	for _, m := range mappings {
-		if strings.Contains(model, m.source) {
-			return m.target, true
-		}
-	}
-
-	return model, false
-}
-
-// ResolveReasoningEffort 根据原始模型名解析 reasoning effort
-func ResolveReasoningEffort(model string, upstream *UpstreamConfig) string {
-	if upstream == nil || upstream.ReasoningMapping == nil || len(upstream.ReasoningMapping) == 0 {
-		return ""
-	}
-	if effort, ok := upstream.ReasoningMapping[model]; ok {
-		return NormalizeReasoningEffortForUpstream(upstream, effort)
-	}
-	type mapping struct {
-		source string
-		effort string
-	}
-	mappings := make([]mapping, 0, len(upstream.ReasoningMapping))
-	for source, effort := range upstream.ReasoningMapping {
-		mappings = append(mappings, mapping{source, effort})
-	}
-	sort.Slice(mappings, func(i, j int) bool {
-		return len(mappings[i].source) > len(mappings[j].source)
-	})
-	for _, m := range mappings {
-		if strings.Contains(model, m.source) {
-			return NormalizeReasoningEffortForUpstream(upstream, m.effort)
-		}
-	}
-	return ""
-}
 
 // NormalizeReasoningEffortForUpstream 将通用 effort 收敛到特定上游实际支持的枚举。
 func NormalizeReasoningEffortForUpstream(upstream *UpstreamConfig, effort string) string {
@@ -708,12 +603,6 @@ func (u *UpstreamConfig) Clone() *UpstreamConfig {
 		cloned.HistoricalAPIKeys = make([]string, len(u.HistoricalAPIKeys))
 		copy(cloned.HistoricalAPIKeys, u.HistoricalAPIKeys)
 	}
-	if u.ModelMapping != nil {
-		cloned.ModelMapping = make(map[string]string, len(u.ModelMapping))
-		for k, v := range u.ModelMapping {
-			cloned.ModelMapping[k] = v
-		}
-	}
 	if u.ModelCapabilities != nil {
 		cloned.ModelCapabilities = make(map[string]UpstreamModelCapability, len(u.ModelCapabilities))
 		for k, v := range u.ModelCapabilities {
@@ -799,10 +688,6 @@ func (u *UpstreamConfig) Clone() *UpstreamConfig {
 		v := *u.RateLimitAutoFromHeaders
 		cloned.RateLimitAutoFromHeaders = &v
 	}
-	if u.NoVisionModels != nil {
-		cloned.NoVisionModels = make([]string, len(u.NoVisionModels))
-		copy(cloned.NoVisionModels, u.NoVisionModels)
-	}
 	if u.Racing != nil {
 		c := *u.Racing
 		cloned.Racing = &c
@@ -837,14 +722,6 @@ func stripAutoManagedExplicitOverrides(upstream *UpstreamConfig) bool {
 		return false
 	}
 	changed := false
-	if len(upstream.ModelMapping) > 0 {
-		upstream.ModelMapping = nil
-		changed = true
-	}
-	if len(upstream.ReasoningMapping) > 0 {
-		upstream.ReasoningMapping = nil
-		changed = true
-	}
 	if upstream.ReasoningParamStyle != "" {
 		upstream.ReasoningParamStyle = ""
 		changed = true
@@ -891,14 +768,6 @@ func stripAutoManagedExplicitOverrides(upstream *UpstreamConfig) bool {
 	}
 	if upstream.NoVision {
 		upstream.NoVision = false
-		changed = true
-	}
-	if len(upstream.NoVisionModels) > 0 {
-		upstream.NoVisionModels = nil
-		changed = true
-	}
-	if upstream.VisionFallbackModel != "" {
-		upstream.VisionFallbackModel = ""
 		changed = true
 	}
 	if upstream.HistoricalImageTurnLimit != 0 {

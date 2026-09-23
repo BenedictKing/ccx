@@ -19,8 +19,8 @@ func TestSelectChannelFiltersByContextWindowStableOrder(t *testing.T) {
 				APIKeys:  []string{"sk-cheap"},
 				Status:   "active",
 				Priority: 1,
-				ModelMapping: map[string]string{
-					"agent": "claude-sonnet-4-5",
+				ModelCapabilities: map[string]config.UpstreamModelCapability{
+					"agent": {ContextWindowTokens: 200000},
 				},
 			},
 			{
@@ -30,10 +30,7 @@ func TestSelectChannelFiltersByContextWindowStableOrder(t *testing.T) {
 				Status:   "active",
 				Priority: 2,
 				ModelCapabilities: map[string]config.UpstreamModelCapability{
-					"mid-model": {ContextWindowTokens: 272000},
-				},
-				ModelMapping: map[string]string{
-					"agent": "mid-model",
+					"agent": {ContextWindowTokens: 272000},
 				},
 			},
 			{
@@ -42,8 +39,8 @@ func TestSelectChannelFiltersByContextWindowStableOrder(t *testing.T) {
 				APIKeys:  []string{"sk-premium"},
 				Status:   "active",
 				Priority: 3,
-				ModelMapping: map[string]string{
-					"agent": "claude-sonnet-4-6",
+				ModelCapabilities: map[string]config.UpstreamModelCapability{
+					"agent": {ContextWindowTokens: 1000000},
 				},
 			},
 		},
@@ -94,8 +91,8 @@ func TestSelectChannelFiltersContextWindowByInputOnlyWithoutExtraOutputReserve(t
 				APIKeys:  []string{"sk-cheap"},
 				Status:   "active",
 				Priority: 1,
-				ModelMapping: map[string]string{
-					"agent": "claude-sonnet-4-5",
+				ModelCapabilities: map[string]config.UpstreamModelCapability{
+					"agent": {ContextWindowTokens: 200000},
 				},
 			},
 			{
@@ -104,8 +101,8 @@ func TestSelectChannelFiltersContextWindowByInputOnlyWithoutExtraOutputReserve(t
 				APIKeys:  []string{"sk-premium"},
 				Status:   "active",
 				Priority: 2,
-				ModelMapping: map[string]string{
-					"agent": "claude-sonnet-4-6",
+				ModelCapabilities: map[string]config.UpstreamModelCapability{
+					"agent": {ContextWindowTokens: 1000000},
 				},
 			},
 		},
@@ -143,9 +140,9 @@ func TestSelectChannelDoesNotUseAgentProfileAsHardMinimumWindow(t *testing.T) {
 				APIKeys:  []string{"sk-legacy"},
 				Status:   "active",
 				Priority: 1,
-				ModelMapping: map[string]string{
-					"sonnet": "claude-sonnet-4-5",
-					"haiku":  "claude-haiku-4-5",
+				ModelCapabilities: map[string]config.UpstreamModelCapability{
+					"sonnet": {ContextWindowTokens: 200000},
+					"haiku":  {ContextWindowTokens: 200000},
 				},
 			},
 			{
@@ -154,9 +151,9 @@ func TestSelectChannelDoesNotUseAgentProfileAsHardMinimumWindow(t *testing.T) {
 				APIKeys:  []string{"sk-modern"},
 				Status:   "active",
 				Priority: 2,
-				ModelMapping: map[string]string{
-					"sonnet": "claude-sonnet-4-6",
-					"haiku":  "claude-haiku-4-5",
+				ModelCapabilities: map[string]config.UpstreamModelCapability{
+					"sonnet": {ContextWindowTokens: 1000000},
+					"haiku":  {ContextWindowTokens: 200000},
 				},
 			},
 		},
@@ -221,8 +218,8 @@ func TestSelectChannelFiltersExplicitOutputLimit(t *testing.T) {
 				APIKeys:  []string{"sk-sonnet"},
 				Status:   "active",
 				Priority: 1,
-				ModelMapping: map[string]string{
-					"agent": "claude-sonnet-4-6",
+				ModelCapabilities: map[string]config.UpstreamModelCapability{
+					"agent": {ContextWindowTokens: 1000000, MaxOutputTokens: 64000},
 				},
 			},
 			{
@@ -231,8 +228,8 @@ func TestSelectChannelFiltersExplicitOutputLimit(t *testing.T) {
 				APIKeys:  []string{"sk-opus"},
 				Status:   "active",
 				Priority: 2,
-				ModelMapping: map[string]string{
-					"agent": "claude-opus-4-8",
+				ModelCapabilities: map[string]config.UpstreamModelCapability{
+					"agent": {ContextWindowTokens: 1000000, MaxOutputTokens: 128000},
 				},
 			},
 		},
@@ -270,8 +267,8 @@ func TestSelectChannelOutputLimitFallsBackToClampCandidateAfterFailure(t *testin
 				APIKeys:  []string{"sk-opus"},
 				Status:   "active",
 				Priority: 1,
-				ModelMapping: map[string]string{
-					"agent": "claude-opus-4-8",
+				ModelCapabilities: map[string]config.UpstreamModelCapability{
+					"agent": {ContextWindowTokens: 1000000, MaxOutputTokens: 128000},
 				},
 			},
 			{
@@ -280,8 +277,8 @@ func TestSelectChannelOutputLimitFallsBackToClampCandidateAfterFailure(t *testin
 				APIKeys:  []string{"sk-sonnet"},
 				Status:   "active",
 				Priority: 2,
-				ModelMapping: map[string]string{
-					"agent": "claude-sonnet-4-6",
+				ModelCapabilities: map[string]config.UpstreamModelCapability{
+					"agent": {ContextWindowTokens: 1000000, MaxOutputTokens: 64000},
 				},
 			},
 		},
@@ -321,8 +318,8 @@ func TestSelectChannelCompactionSkipsWindowButKeepsOutputLimit(t *testing.T) {
 				APIKeys:  []string{"sk-sonnet"},
 				Status:   "active",
 				Priority: 1,
-				ModelMapping: map[string]string{
-					"agent": "claude-sonnet-4-5",
+				ModelCapabilities: map[string]config.UpstreamModelCapability{
+					"agent": {ContextWindowTokens: 200000, MaxOutputTokens: 64000},
 				},
 			},
 			{
@@ -331,8 +328,8 @@ func TestSelectChannelCompactionSkipsWindowButKeepsOutputLimit(t *testing.T) {
 				APIKeys:  []string{"sk-opus"},
 				Status:   "active",
 				Priority: 2,
-				ModelMapping: map[string]string{
-					"agent": "claude-opus-4-8",
+				ModelCapabilities: map[string]config.UpstreamModelCapability{
+					"agent": {ContextWindowTokens: 1000000, MaxOutputTokens: 128000},
 				},
 			},
 		},
@@ -390,8 +387,8 @@ func TestSelectChannelPinnedChannelMustSatisfyContext(t *testing.T) {
 				APIKeys:  []string{"sk-cheap"},
 				Status:   "active",
 				Priority: 1,
-				ModelMapping: map[string]string{
-					"agent": "claude-sonnet-4-5",
+				ModelCapabilities: map[string]config.UpstreamModelCapability{
+					"agent": {ContextWindowTokens: 200000},
 				},
 			},
 			{
@@ -400,8 +397,8 @@ func TestSelectChannelPinnedChannelMustSatisfyContext(t *testing.T) {
 				APIKeys:  []string{"sk-premium"},
 				Status:   "active",
 				Priority: 2,
-				ModelMapping: map[string]string{
-					"agent": "claude-sonnet-4-6",
+				ModelCapabilities: map[string]config.UpstreamModelCapability{
+					"agent": {ContextWindowTokens: 1000000},
 				},
 			},
 		},
@@ -439,9 +436,6 @@ func TestSelectChannelUnknownContextPolicy(t *testing.T) {
 				APIKeys:  []string{"sk-unknown"},
 				Status:   "active",
 				Priority: 1,
-				ModelMapping: map[string]string{
-					"agent": "vendor-unknown",
-				},
 			},
 			{
 				Name:     "premium-1m",
@@ -449,8 +443,8 @@ func TestSelectChannelUnknownContextPolicy(t *testing.T) {
 				APIKeys:  []string{"sk-premium"},
 				Status:   "active",
 				Priority: 2,
-				ModelMapping: map[string]string{
-					"agent": "claude-sonnet-4-6",
+				ModelCapabilities: map[string]config.UpstreamModelCapability{
+					"agent": {ContextWindowTokens: 1000000},
 				},
 			},
 		},
@@ -505,8 +499,8 @@ func TestSelectChannelManualOverridePreservedWhenContextFiltersChannel(t *testin
 				APIKeys:  []string{"sk-cheap"},
 				Status:   "active",
 				Priority: 1,
-				ModelMapping: map[string]string{
-					"agent": "claude-sonnet-4-5",
+				ModelCapabilities: map[string]config.UpstreamModelCapability{
+					"agent": {ContextWindowTokens: 200000},
 				},
 			},
 			{
@@ -515,8 +509,8 @@ func TestSelectChannelManualOverridePreservedWhenContextFiltersChannel(t *testin
 				APIKeys:  []string{"sk-premium"},
 				Status:   "active",
 				Priority: 2,
-				ModelMapping: map[string]string{
-					"agent": "claude-sonnet-4-6",
+				ModelCapabilities: map[string]config.UpstreamModelCapability{
+					"agent": {ContextWindowTokens: 1000000},
 				},
 			},
 		},
@@ -565,8 +559,8 @@ func TestTraceAffinityUsesContextBuckets(t *testing.T) {
 				APIKeys:  []string{"sk-cheap"},
 				Status:   "active",
 				Priority: 1,
-				ModelMapping: map[string]string{
-					"agent": "claude-sonnet-4-5",
+				ModelCapabilities: map[string]config.UpstreamModelCapability{
+					"agent": {ContextWindowTokens: 200000},
 				},
 			},
 			{
@@ -575,8 +569,8 @@ func TestTraceAffinityUsesContextBuckets(t *testing.T) {
 				APIKeys:  []string{"sk-premium"},
 				Status:   "active",
 				Priority: 2,
-				ModelMapping: map[string]string{
-					"agent": "claude-sonnet-4-6",
+				ModelCapabilities: map[string]config.UpstreamModelCapability{
+					"agent": {ContextWindowTokens: 1000000},
 				},
 			},
 		},

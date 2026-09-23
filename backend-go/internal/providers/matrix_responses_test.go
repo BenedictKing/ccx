@@ -3,6 +3,7 @@ package providers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -71,11 +72,12 @@ func TestResponsesEntry_RequestMatrix_AllFourUpstreams(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := newGinContext(http.MethodPost, tt.path, []byte(tt.body), context.Background())
+			// 显式 ModelMapping 已退役：客户端直接以上游真实模型名发起请求。
+			reqJSON := strings.Replace(tt.body, `"model":"gpt-5"`, fmt.Sprintf(`"model":%q`, tt.expectedModel), 1)
+			c := newGinContext(http.MethodPost, tt.path, []byte(reqJSON), context.Background())
 			upstream := &config.UpstreamConfig{
-				BaseURL:      "https://api.example.com",
-				ServiceType:  tt.serviceType,
-				ModelMapping: map[string]string{"gpt-5": tt.expectedModel},
+				BaseURL:     "https://api.example.com",
+				ServiceType: tt.serviceType,
 			}
 			if tt.name == "responses_hash_baseurl_openai" {
 				upstream.BaseURL = "https://core.blink.new/api/v1/ai#"
@@ -196,11 +198,10 @@ func TestResponsesEntry_RequestMatrix_PreservesKeyParams(t *testing.T) {
 	})
 
 	t.Run("responses_to_gemini_uses_model_in_url", func(t *testing.T) {
-		c := newGinContext(http.MethodPost, "/v1/responses", []byte(`{"model":"gemini-pro","input":"hi","stream":false}`), context.Background())
+		c := newGinContext(http.MethodPost, "/v1/responses", []byte(`{"model":"gemini-2.5-pro","input":"hi","stream":false}`), context.Background())
 		upstream := &config.UpstreamConfig{
-			BaseURL:      "https://api.example.com",
-			ServiceType:  "gemini",
-			ModelMapping: map[string]string{"gemini-pro": "gemini-2.5-pro"},
+			BaseURL:     "https://api.example.com",
+			ServiceType: "gemini",
 		}
 
 		provider := &ResponsesProvider{}
@@ -273,23 +274,13 @@ func TestResponsesEntry_BudgetReminderStripMatrix(t *testing.T) {
 	tests := []struct {
 		name          string
 		serviceType   string
-		modelMapping  map[string]string
 		wantStripped  bool
 		checkField    string
 		wantRemaining int
 	}{
 		{
-			name:          "passthrough_redirect_hit_strips",
-			serviceType:   "responses",
-			modelMapping:  map[string]string{"gpt-5": "gpt-5.4"},
-			wantStripped:  true,
-			checkField:    "input",
-			wantRemaining: 1,
-		},
-		{
 			name:          "passthrough_no_mapping_keeps",
 			serviceType:   "responses",
-			modelMapping:  nil,
 			wantStripped:  false,
 			checkField:    "input",
 			wantRemaining: 2,
@@ -297,7 +288,6 @@ func TestResponsesEntry_BudgetReminderStripMatrix(t *testing.T) {
 		{
 			name:          "converter_chat_unconditional_strips",
 			serviceType:   "openai",
-			modelMapping:  nil,
 			wantStripped:  true,
 			checkField:    "messages",
 			wantRemaining: 1,
@@ -310,9 +300,6 @@ func TestResponsesEntry_BudgetReminderStripMatrix(t *testing.T) {
 			upstream := &config.UpstreamConfig{
 				BaseURL:     "https://api.example.com",
 				ServiceType: tt.serviceType,
-			}
-			if tt.modelMapping != nil {
-				upstream.ModelMapping = tt.modelMapping
 			}
 
 			provider := &ResponsesProvider{}

@@ -218,7 +218,6 @@ type KeyEndpointProfile struct {
 	ProtocolDiscoverySource  map[string]string    `json:"protocolDiscoverySource,omitempty"`  // 上游原生协议 -> 清单来源
 	ProtocolDiscoveryMessage map[string]string    `json:"protocolDiscoveryMessage,omitempty"` // 上游原生协议 -> 发现说明
 	ProtocolDiscoveryError   map[string]string    `json:"protocolDiscoveryError,omitempty"`   // 上游原生协议 -> 最近失败原因
-	ModelMapping             map[string]string    `json:"modelMapping"`                       // 该 endpoint 的模型映射
 
 	// ── 运行时指标（来自 MetricsManager）──
 	SuccessRate15m          float64    `json:"successRate15m"` // 0-1；MetricsManager 返回 0-100，L1 已归一化

@@ -861,7 +861,6 @@ func TestUpdateGeminiUpstream_AdvancedOptions(t *testing.T) {
 			"baseUrl": "https://old.gemini.com",
 			"apiKeys": ["test-key"],
 			"serviceType": "gemini",
-			"reasoningMapping": {"gemini-2.5-pro": "low"},
 			"textVerbosity": "low",
 			"fastMode": false
 		}]
@@ -879,9 +878,8 @@ func TestUpdateGeminiUpstream_AdvancedOptions(t *testing.T) {
 	defer errutil.IgnoreDeferred(cm.Close)
 
 	_, err = cm.UpdateGeminiUpstream(0, UpstreamUpdate{
-		ReasoningMapping: map[string]string{"gemini-2.5-pro": "high"},
-		TextVerbosity:    strPtr("medium"),
-		FastMode:         boolPtr(true),
+		TextVerbosity: strPtr("medium"),
+		FastMode:      boolPtr(true),
 	})
 	if err != nil {
 		t.Fatalf("UpdateGeminiUpstream 失败: %v", err)
@@ -890,9 +888,6 @@ func TestUpdateGeminiUpstream_AdvancedOptions(t *testing.T) {
 	cfg := cm.GetConfig()
 	upstream := cfg.GeminiUpstream[0]
 
-	if got := upstream.ReasoningMapping["gemini-2.5-pro"]; got != "high" {
-		t.Fatalf("ReasoningMapping[gemini-2.5-pro] = %q, want high", got)
-	}
 	if upstream.TextVerbosity != "medium" {
 		t.Fatalf("TextVerbosity = %q, want medium", upstream.TextVerbosity)
 	}

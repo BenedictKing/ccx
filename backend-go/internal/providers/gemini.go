@@ -44,7 +44,7 @@ func (p *GeminiProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 		return nil, originalBodyBytes, fmt.Errorf("序列化Gemini请求体失败: %w", err)
 	}
 
-	model := config.RedirectModel(claudeReq.Model, upstream)
+	model := claudeReq.Model
 	action := "generateContent"
 	if claudeReq.Stream {
 		action = "streamGenerateContent?alt=sse"

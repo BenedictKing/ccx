@@ -124,7 +124,6 @@ func TestBuildTransientDiscoveryChannelDoesNotNeedConfigManager(t *testing.T) {
 		CustomHeaders:      map[string]string{"X-Test": "yes"},
 		ProxyURL:           "http://127.0.0.1:8080",
 		InsecureSkipVerify: true,
-		ModelMapping:       map[string]string{"gpt": "actual-main"},
 	}
 
 	channel, err := buildTransientDiscoveryChannel(req)
@@ -146,96 +145,11 @@ func TestBuildTransientDiscoveryChannelDoesNotNeedConfigManager(t *testing.T) {
 	if !channel.InsecureSkipVerify || channel.ProxyURL == "" || channel.AuthHeader != "bearer" {
 		t.Fatalf("transport fields not copied: %#v", channel)
 	}
-	if channel.ModelMapping["gpt"] != "actual-main" {
-		t.Fatalf("model mapping not copied: %#v", channel.ModelMapping)
-	}
-}
-
-func TestBuildDiscoveryMappingRecommendationUsesOnlySuccessfulModels(t *testing.T) {
-	selected := DiscoverySelectedModels{Strong: "actual-pro", Primary: "actual-main", Fast: "actual-mini"}
-	successByProtocol := map[string][]string{"responses": {"actual-main", "actual-mini"}}
-
-	rec := buildDiscoveryMappingRecommendation("responses", "", selected, successByProtocol, []string{"codex"})
-	if rec.ChannelKind != "responses" {
-		t.Fatalf("channelKind=%q", rec.ChannelKind)
-	}
-	if rec.ModelMapping["gpt"] != "actual-main" || rec.ModelMapping["mini"] != "actual-mini" {
-		t.Fatalf("unexpected mapping: %#v", rec.ModelMapping)
-	}
-	if rec.ModelMapping["codex"] == "actual-pro" {
-		t.Fatalf("codex should not map to failed actual-pro: %#v", rec.ModelMapping)
-	}
-	if _, ok := rec.ModelMapping["gpt-5"]; ok {
-		t.Fatalf("codex recommendation should keep stable source aliases only: %#v", rec.ModelMapping)
-	}
-	if rec.ReasoningMapping["gpt"] != "max" || rec.ReasoningMapping["mini"] != "high" || rec.ReasoningMapping["codex"] != "high" {
-		t.Fatalf("unexpected reasoning mapping: %#v", rec.ReasoningMapping)
-	}
-	if len(rec.SupportedModels) != 0 {
-		t.Fatalf("discovery should not set supportedModels: %#v", rec.SupportedModels)
-	}
-	if len(rec.Evidence) != 1 || rec.Evidence[0].Type != "reasoning" || !strings.Contains(rec.Evidence[0].Message, "验证工具调用与思考回传") {
-		t.Fatalf("reasoning evidence should explain follow-up capability probes: %#v", rec.Evidence)
-	}
-}
-
-func TestBuildDiscoveryMappingRecommendationUsesStableClaudeSourceAliases(t *testing.T) {
-	selected := DiscoverySelectedModels{Strong: "claude-opus-4-7", Primary: "claude-opus-4-7", Fast: "claude-opus-4-7"}
-	successByProtocol := map[string][]string{"messages": {"claude-opus-4-7"}}
-
-	rec := buildDiscoveryMappingRecommendation("messages", "", selected, successByProtocol, []string{"claude-code"})
-	wantSources := map[string]string{
-		"fable":  "claude-opus-4-7",
-		"haiku":  "claude-opus-4-7",
-		"opus":   "claude-opus-4-7",
-		"sonnet": "claude-opus-4-7",
-	}
-	if len(rec.ModelMapping) != len(wantSources) {
-		t.Fatalf("unexpected source alias count: %#v", rec.ModelMapping)
-	}
-	for source, target := range wantSources {
-		if rec.ModelMapping[source] != target {
-			t.Fatalf("modelMapping[%q]=%q, want %q; full mapping=%#v", source, rec.ModelMapping[source], target, rec.ModelMapping)
-		}
-	}
-	for _, internalRole := range []string{"strong", "primary", "fast"} {
-		if _, ok := rec.ModelMapping[internalRole]; ok {
-			t.Fatalf("internal role %q should not be exposed as source alias: %#v", internalRole, rec.ModelMapping)
-		}
-	}
-	if rec.ReasoningMapping["opus"] != "max" || rec.ReasoningMapping["sonnet"] != "max" || rec.ReasoningMapping["haiku"] != "high" || rec.ReasoningMapping["fable"] != "max" {
-		t.Fatalf("unexpected Claude reasoning mapping: %#v", rec.ReasoningMapping)
-	}
-	if len(rec.SupportedModels) != 0 {
-		t.Fatalf("discovery should not set supportedModels: %#v", rec.SupportedModels)
-	}
 }
 
 // 当 messages 协议探测失败但 responses 协议成功时，
 // buildDiscoveryMappingRecommendation 应降级使用 responses 的模型，
 // 确保 Claude 别名映射仍能生成（避免发现结果空映射）。
-func TestBuildDiscoveryMappingRecommendationFallsBackWhenChannelProtocolFails(t *testing.T) {
-	selected := DiscoverySelectedModels{Strong: "gpt-5.5", Primary: "gpt-5.4", Fast: "gpt-5.4-mini"}
-	// messages 协议失败，responses 协议成功
-	successByProtocol := map[string][]string{
-		"responses": {"gpt-5.4", "gpt-5.4-mini", "gpt-5.5"},
-	}
-
-	rec := buildDiscoveryMappingRecommendation("messages", "", selected, successByProtocol, []string{"claude-code"})
-
-	if len(rec.ModelMapping) == 0 {
-		t.Fatal("expected non-empty modelMapping when falling back to successful protocol models; got empty")
-	}
-	for _, alias := range []string{"opus", "sonnet", "haiku", "fable"} {
-		if _, ok := rec.ModelMapping[alias]; !ok {
-			t.Fatalf("expected Claude alias %q in modelMapping; got %#v", alias, rec.ModelMapping)
-		}
-	}
-	if len(rec.SupportedModels) != 0 {
-		t.Fatalf("discovery should not set supportedModels: %#v", rec.SupportedModels)
-	}
-}
-
 func TestRecommendDiscoveryChannelKindKeepsExplicitRequestedProtocol(t *testing.T) {
 	protocols := []DiscoveryProtocolResult{
 		{Protocol: "messages", Success: false},
@@ -476,27 +390,6 @@ func TestSelectDiscoveryModelsPrefersToolCapableModels(t *testing.T) {
 	}
 }
 
-func TestDiscoveryRecommendationUsesMiMoVisionCapabilities(t *testing.T) {
-	models := []string{"mimo-v2.5", "mimo-v2.5-pro"}
-	selected := selectDiscoveryModels(models, nil)
-	successByProtocol := map[string][]string{"messages": models}
-
-	rec := buildDiscoveryMappingRecommendation("messages", "", selected, successByProtocol, []string{"claude-code"})
-	applyDiscoveryModelCapabilityRecommendations(&rec, models, successByProtocol["messages"], nil)
-
-	for source, target := range rec.ModelMapping {
-		if target != "mimo-v2.5-pro" {
-			t.Fatalf("modelMapping[%q]=%q, want mimo-v2.5-pro; full mapping=%#v", source, target, rec.ModelMapping)
-		}
-	}
-	if !sameStringSet(rec.NoVisionModels, []string{"mimo-v2.5-pro"}) {
-		t.Fatalf("noVisionModels=%#v", rec.NoVisionModels)
-	}
-	if rec.VisionFallbackModel != "mimo-v2.5" {
-		t.Fatalf("visionFallbackModel=%q, want mimo-v2.5", rec.VisionFallbackModel)
-	}
-}
-
 func sameStringSet(got []string, want []string) bool {
 	if len(got) != len(want) {
 		return false
@@ -564,9 +457,6 @@ func TestChannelDiscoveryHandlerDiscoversTransientResponsesChannel(t *testing.T)
 	}
 	if resp.Recommendation.ChannelKind != "responses" {
 		t.Fatalf("recommended channelKind=%q", resp.Recommendation.ChannelKind)
-	}
-	if resp.Recommendation.ModelMapping["gpt"] != "actual-main" {
-		t.Fatalf("modelMapping=%#v", resp.Recommendation.ModelMapping)
 	}
 	var responsesOK bool
 	for _, protocol := range resp.Protocols {
@@ -916,17 +806,6 @@ func TestChannelDiscoveryReportsVisionCapabilityAndFallback(t *testing.T) {
 	}
 	if !resp.Capabilities.Vision.Tested || !resp.Capabilities.Vision.Supported {
 		t.Fatalf("vision capability=%#v", resp.Capabilities.Vision)
-	}
-	for source, target := range resp.Recommendation.ModelMapping {
-		if target != "mimo-v2.5-pro" {
-			t.Fatalf("modelMapping[%q]=%q, want mimo-v2.5-pro; full mapping=%#v", source, target, resp.Recommendation.ModelMapping)
-		}
-	}
-	if !sameStringSet(resp.Recommendation.NoVisionModels, []string{"mimo-v2.5-pro"}) {
-		t.Fatalf("noVisionModels=%#v", resp.Recommendation.NoVisionModels)
-	}
-	if resp.Recommendation.VisionFallbackModel != "mimo-v2.5" {
-		t.Fatalf("visionFallbackModel=%q", resp.Recommendation.VisionFallbackModel)
 	}
 }
 

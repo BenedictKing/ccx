@@ -1,7 +1,6 @@
 package common
 
 import (
-	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
 )
@@ -97,15 +96,5 @@ func detectImageInBody(body []byte) bool {
 		}
 	}
 
-	return false
-}
-
-// isNoVisionModel 检查模型是否在渠道的 NoVisionModels 列表中（精确匹配）。
-func isNoVisionModel(upstream *config.UpstreamConfig, model string) bool {
-	for _, m := range upstream.NoVisionModels {
-		if m == model {
-			return true
-		}
-	}
 	return false
 }

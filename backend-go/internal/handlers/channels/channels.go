@@ -101,8 +101,6 @@ type CreateRequest struct {
 	BaseURLs                []string              `json:"baseUrls"`
 	APIKeys                 []string              `json:"apiKeys"`
 	APIKeyConfigs           []config.APIKeyConfig `json:"apiKeyConfigs"`
-	ModelMapping            map[string]string     `json:"modelMapping"`
-	ReasoningMapping        map[string]string     `json:"reasoningMapping"`
 	SupportedModels         []string              `json:"supportedModels"`
 	CustomHeaders           map[string]string     `json:"customHeaders"`
 	ProxyURL                string                `json:"proxyUrl"`
@@ -139,8 +137,6 @@ func (h *Handler) Create(c *gin.Context) {
 		BaseURLs:                req.BaseURLs,
 		APIKeys:                 req.APIKeys,
 		APIKeyConfigs:           req.APIKeyConfigs,
-		ModelMapping:            req.ModelMapping,
-		ReasoningMapping:        req.ReasoningMapping,
 		SupportedModels:         req.SupportedModels,
 		CustomHeaders:           req.CustomHeaders,
 		ProxyURL:                req.ProxyURL,
@@ -173,9 +169,7 @@ type UpdateRequest struct {
 	BaseURLs                      []string                                  `json:"baseUrls"`
 	APIKeys                       []string                                  `json:"apiKeys"`
 	APIKeyConfigs                 []config.APIKeyConfig                     `json:"apiKeyConfigs"`
-	ModelMapping                  map[string]string                         `json:"modelMapping"`
 	ModelCapabilities             map[string]config.UpstreamModelCapability `json:"modelCapabilities"`
-	ReasoningMapping              map[string]string                         `json:"reasoningMapping"`
 	SupportedModels               []string                                  `json:"supportedModels"`
 	CustomHeaders                 map[string]string                         `json:"customHeaders"`
 	ProxyURL                      *string                                   `json:"proxyUrl"`
@@ -193,8 +187,6 @@ type UpdateRequest struct {
 	Description                   *string                                   `json:"description"`
 	Website                       *string                                   `json:"website"`
 	Tags                          []string                                  `json:"tags"`
-	NoVisionModels                []string                                  `json:"noVisionModels"`
-	VisionFallbackModel           *string                                   `json:"visionFallbackModel"`
 	RateLimitRPM                  *int                                      `json:"rateLimitRpm"`
 	RateLimitBurst                *int                                      `json:"rateLimitBurst"`
 	RateLimitMaxConcurrent        *int                                      `json:"rateLimitMaxConcurrent"`
@@ -250,9 +242,7 @@ func (h *Handler) Update(c *gin.Context) {
 		BaseURLs:                      req.BaseURLs,
 		APIKeys:                       req.APIKeys,
 		APIKeyConfigs:                 req.APIKeyConfigs,
-		ModelMapping:                  req.ModelMapping,
 		ModelCapabilities:             req.ModelCapabilities,
-		ReasoningMapping:              req.ReasoningMapping,
 		SupportedModels:               req.SupportedModels,
 		CustomHeaders:                 req.CustomHeaders,
 		ProxyURL:                      req.ProxyURL,
@@ -270,8 +260,6 @@ func (h *Handler) Update(c *gin.Context) {
 		Description:                   req.Description,
 		Website:                       req.Website,
 		Tags:                          req.Tags,
-		NoVisionModels:                req.NoVisionModels,
-		VisionFallbackModel:           req.VisionFallbackModel,
 		RateLimitRPM:                  req.RateLimitRPM,
 		RateLimitBurst:                req.RateLimitBurst,
 		RateLimitMaxConcurrent:        req.RateLimitMaxConcurrent,

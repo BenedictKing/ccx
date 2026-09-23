@@ -62,9 +62,6 @@ func buildChatCompletionRequestBody(
 	}
 
 	if includeAdvancedOptions {
-		if effort := config.ResolveReasoningEffort(model, upstream); effort != "" {
-			config.ApplyReasoningParamStyle(reqMap, upstream.ReasoningParamStyle, effort)
-		}
 		if upstream.TextVerbosity != "" {
 			reqMap["text"] = map[string]interface{}{"verbosity": upstream.TextVerbosity}
 		}
@@ -194,9 +191,9 @@ func buildProviderRequest(
 ) (*http.Request, error) {
 	skipVersionPrefix := strings.HasSuffix(baseURL, "#")
 	baseURL = strings.TrimSuffix(strings.TrimRight(baseURL, "/"), "#")
-	// 应用模型映射
+	// 显式 ModelMapping 已退役：请求模型直接作为上游执行模型
 	effectiveModel := extractRequestModel(bodyBytes, model)
-	mappedModel := config.RedirectModel(effectiveModel, upstream)
+	mappedModel := effectiveModel
 
 	var requestBody []byte
 	var url string

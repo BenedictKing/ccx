@@ -112,7 +112,7 @@ func TestResolvePinnedAPIKey(t *testing.T) {
 }
 
 // explicitMultiKeyConfig 构建显式映射多 key 渠道（非 AutoManaged）。
-func explicitMultiKeyConfig(t *testing.T, keys []config.APIKeyConfig, mapping map[string]string, supportedModels []string) (config.Config, *config.ConfigManager, func()) {
+func explicitMultiKeyConfig(t *testing.T, keys []config.APIKeyConfig, supportedModels []string) (config.Config, *config.ConfigManager, func()) {
 	t.Helper()
 	plainKeys := make([]string, 0, len(keys))
 	for _, k := range keys {
@@ -126,7 +126,6 @@ func explicitMultiKeyConfig(t *testing.T, keys []config.APIKeyConfig, mapping ma
 			APIKeys:         plainKeys,
 			APIKeyConfigs:   keys,
 			Status:          "active",
-			ModelMapping:    mapping,
 			SupportedModels: supportedModels,
 		}},
 		AutopilotRouting: config.AutopilotRoutingConfig{
@@ -146,7 +145,7 @@ func TestExpandChannelCandidatesExplicitMultiKey(t *testing.T) {
 	cfg, cfgManager, cleanup := explicitMultiKeyConfig(t, []config.APIKeyConfig{
 		{Key: "sk-a", KeyUID: "kuid_a", QuotaGroup: "vip"},
 		{Key: "sk-b"},
-	}, map[string]string{"claude-opus-4-8": "claude-opus-4-8"}, []string{"claude-opus-4-8"})
+	}, []string{"claude-opus-4-8"})
 	defer cleanup()
 	_ = g2
 	_ = g3
@@ -187,22 +186,14 @@ func TestExpandChannelCandidatesExplicitMultiKey(t *testing.T) {
 	}
 }
 
-// 单渠道 64 行硬顶：9 模型映射 × 9 key = 81 > 64，截断保序。
+// 单渠道多 key 展开上限行为：9 key × 请求模型 1 行 = 9 行。
+// （显式 ModelMapping 已退役：SupportedModels 只做准入过滤，不再枚举多模型行。）
 func TestExpandChannelCandidatesRowLimit(t *testing.T) {
 	keys := make([]config.APIKeyConfig, 0, 9)
 	for i := 0; i < 9; i++ {
 		keys = append(keys, config.APIKeyConfig{Key: "sk-" + string(rune('a'+i))})
 	}
-	mapping := map[string]string{}
-	for i := 0; i < 9; i++ {
-		m := "model-" + string(rune('a'+i))
-		mapping[m] = m
-	}
-	supported := make([]string, 0, 9)
-	for m := range mapping {
-		supported = append(supported, m)
-	}
-	_, cfgManager, cleanup := explicitMultiKeyConfig(t, keys, mapping, supported)
+	_, cfgManager, cleanup := explicitMultiKeyConfig(t, keys, nil)
 	defer cleanup()
 	router := NewSmartRouter(nil, nil, nil, cfgManager)
 	profile := BuildRequestProfile(RequestProfileFeatures{Model: "model-a", ChannelKind: "messages", Operation: "completion", EstTokens: 1000})
@@ -211,8 +202,8 @@ func TestExpandChannelCandidatesRowLimit(t *testing.T) {
 	ch := scheduler.ChannelInfo{Index: 0, Name: up.Name, Status: "active"}
 	var got []channelScoreEntry
 	got = router.expandChannelCandidates(ch, &up, "messages", scheduler.ChannelRouteRef{}, resolutions, nil, got, nil, "")
-	if len(got) != routingCandidateRowsPerChannelLimit {
-		t.Fatalf("81 组合应截断到 %d 行, got %d", routingCandidateRowsPerChannelLimit, len(got))
+	if len(got) != len(keys) {
+		t.Fatalf("9 key 应展开 9 行, got %d", len(got))
 	}
 }
 
@@ -224,7 +215,6 @@ func TestExpandChannelCandidatesNoKeysFailOpen(t *testing.T) {
 			ChannelUID:      "ch_nokey",
 			BaseURL:         "https://x.example.com",
 			Status:          "active",
-			ModelMapping:    map[string]string{"claude-opus-4-8": "claude-opus-4-8"},
 			SupportedModels: []string{"claude-opus-4-8"},
 		}},
 		AutopilotRouting: config.AutopilotRoutingConfig{SchemaVersion: 99, RoutingMode: "auto"},
@@ -272,7 +262,6 @@ func TestBuildChannelEntryForKeyPerKeyCost(t *testing.T) {
 			APIKeys:         []string{"sk-cheap", "sk-dear"},
 			APIKeyConfigs:   []config.APIKeyConfig{{Key: "sk-cheap"}, {Key: "sk-dear", GroupMultiplier: &m2, MaxGroupMultiplier: &m3, MultiplierSource: "manual"}},
 			Status:          "active",
-			ModelMapping:    map[string]string{"claude-opus-4-8": "claude-opus-4-8"},
 			SupportedModels: []string{"claude-opus-4-8"},
 		}},
 		AutopilotRouting: config.AutopilotRoutingConfig{SchemaVersion: 99, RoutingMode: "auto"},
@@ -457,7 +446,6 @@ func TestBuildChannelEntryForKeyProfileMatch(t *testing.T) {
 			BaseURL:         "https://p.example.com",
 			APIKeys:         []string{"sk-healthy", "sk-dead"},
 			Status:          "active",
-			ModelMapping:    map[string]string{"claude-opus-4-8": "claude-opus-4-8"},
 			SupportedModels: []string{"claude-opus-4-8"},
 		}},
 		AutopilotRouting: config.AutopilotRoutingConfig{SchemaVersion: 99, RoutingMode: "auto"},

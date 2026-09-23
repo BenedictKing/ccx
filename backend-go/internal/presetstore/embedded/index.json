@@ -17,8 +17,8 @@
     {
       "kind": "channelPresets",
       "url": "./channel-presets.json",
-      "sha256": "97bf79568bca7afe1dff69c9fe3abe0c48619fc22be6f586436c3a68fd10e6e5",
-      "sizeBytes": 16163
+      "sha256": "bf2fa7dc6d05b7431c1c7c46088d1b7f7f9019711e958619e0bce77acec30686",
+      "sizeBytes": 4884
     },
     {
       "kind": "builtinManifest",

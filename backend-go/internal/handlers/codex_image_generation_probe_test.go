@@ -155,7 +155,7 @@ func TestProbeImageGenerationToolModesRequiresBothCodexForms(t *testing.T) {
 	}
 }
 
-func TestExecuteCodexImageGenerationCapabilityTestUsesMappedModelAndAllKeys(t *testing.T) {
+func TestExecuteCodexImageGenerationCapabilityTestUsesActualModelAndAllKeys(t *testing.T) {
 	const (
 		supportedKey   = "sk-supported-123456"
 		unsupportedKey = "sk-unsupported-654321"
@@ -185,12 +185,10 @@ func TestExecuteCodexImageGenerationCapabilityTestUsesMappedModelAndAllKeys(t *t
 		APIKeys:     []string{supportedKey, unsupportedKey},
 		AuthHeader:  "bearer",
 		ServiceType: "responses",
-		ModelMapping: map[string]string{
-			codexAutoReviewModel: "actual-review-model",
-		},
 	}
-	result := executeCodexImageGenerationCapabilityTest(context.Background(), channel, codexAutoReviewModel, 5*time.Second, nil, 0, "responses")
-	if !result.Success || result.ActualModel != "actual-review-model" {
+	// 显式 ModelMapping 已退役：探测直接使用实际模型名。
+	result := executeCodexImageGenerationCapabilityTest(context.Background(), channel, "actual-review-model", 5*time.Second, nil, 0, "responses")
+	if !result.Success || result.Model != "actual-review-model" {
 		t.Fatalf("探测结果 = %+v", result)
 	}
 	if result.CodexImageGeneration.SupportedKeys != 1 || result.CodexImageGeneration.UnsupportedKeys != 1 {
@@ -226,13 +224,10 @@ func TestExecuteCodexImageGenerationCapabilityTestRestrictsOnlyRejectedKeyModel(
 		APIKeys:     []string{unsupportedKey, supportedKey},
 		AuthHeader:  "bearer",
 		ServiceType: "responses",
-		ModelMapping: map[string]string{
-			codexAutoReviewModel: actualModel,
-		},
 	}
 	cfgManager := newResponsesConfigManager(t, channel)
 	configured := cfgManager.GetConfig().ResponsesUpstream[0]
-	result := executeCodexImageGenerationCapabilityTest(context.Background(), &configured, codexAutoReviewModel, 5*time.Second, cfgManager, 0, "responses")
+	result := executeCodexImageGenerationCapabilityTest(context.Background(), &configured, actualModel, 5*time.Second, cfgManager, 0, "responses")
 	if !result.Success {
 		t.Fatalf("至少一个 Key 支持时渠道应成功，结果 = %+v", result)
 	}
@@ -306,9 +301,6 @@ func TestExecuteCodexImageGenerationCapabilityTestRestoresProbeRestriction(t *te
 		APIKeys:     []string{apiKey},
 		AuthHeader:  "bearer",
 		ServiceType: "responses",
-		ModelMapping: map[string]string{
-			codexAutoReviewModel: actualModel,
-		},
 		DisabledKeyModels: []config.DisabledKeyModelInfo{{
 			Key:        apiKey,
 			Model:      actualModel,
@@ -319,7 +311,7 @@ func TestExecuteCodexImageGenerationCapabilityTestRestoresProbeRestriction(t *te
 	}
 	cfgManager := newResponsesConfigManager(t, channel)
 	configured := cfgManager.GetConfig().ResponsesUpstream[0]
-	result := executeCodexImageGenerationCapabilityTest(context.Background(), &configured, codexAutoReviewModel, 5*time.Second, cfgManager, 0, "responses")
+	result := executeCodexImageGenerationCapabilityTest(context.Background(), &configured, actualModel, 5*time.Second, cfgManager, 0, "responses")
 	if !result.Success {
 		t.Fatalf("复测应成功，结果 = %+v", result)
 	}

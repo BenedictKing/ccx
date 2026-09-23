@@ -614,8 +614,10 @@ func TryUpstreamWithAllKeys(
 	// 五元组调度 pin 的明文 key：身份反查一次（key 已被移除/轮换时为空 = 不锁定）。
 	pinnedAPIKey := autopilot.ResolvePinnedAPIKey(upstream, tryOpts.executionKeyIdentity)
 
-	// 先应用用户配置的模型映射。endpoint 级自动映射会在选定 Key 后再覆盖本次尝试的模型。
-	redirectedModel := config.RedirectModel(model, upstream)
+	// 请求模型直接进入尝试流程。endpoint 级自动映射会在选定 Key 后再覆盖本次尝试的模型：
+	// 显式 ModelMapping 已退役，模型承接与映射由 autopilot ModelResolver 画像映射
+	// 在选模阶段统一决策。
+	redirectedModel := model
 	capabilityRequestModel := model
 
 	// 历史图片轮次限制：替换历史图片为占位符，避免不必要的 vision 回退
@@ -633,24 +635,6 @@ func TryUpstreamWithAllKeys(
 		if upstream.NoVision {
 			RequestLogf(c, "[%s-Vision] 跳过不支持视觉的渠道 [%d] %s", apiType, executionIndex, upstream.Name)
 			return false, "", 0, nil, nil, fmt.Errorf("channel %s does not support vision", upstream.Name)
-		}
-		if isNoVisionModel(upstream, redirectedModel) {
-			if upstream.VisionFallbackModel != "" {
-				fallback := upstream.VisionFallbackModel
-				RequestLogf(c, "[%s-Vision] 模型 %s 不支持视觉，使用 fallback: %s (渠道 [%d] %s)", apiType, redirectedModel, fallback, executionIndex, upstream.Name)
-				if replaced, err := sjson.SetBytes(requestBody, "model", fallback); err == nil {
-					requestBody = replaced
-				}
-				redirectedModel = fallback
-				capabilityRequestModel = fallback
-				if err := channelScheduler.ValidateUpstreamContext(executionKind, redirectedModel, upstream, contextRequirement); err != nil {
-					RequestLogf(c, "[%s-Vision] fallback 模型 %s 不满足上下文需求，跳过渠道 [%d] %s: %v", apiType, redirectedModel, executionIndex, upstream.Name, err)
-					return false, "", 0, nil, nil, err
-				}
-			} else {
-				RequestLogf(c, "[%s-Vision] 模型 %s 不支持视觉且无 fallback，跳过渠道 [%d] %s", apiType, redirectedModel, executionIndex, upstream.Name)
-				return false, "", 0, nil, nil, fmt.Errorf("model %s does not support vision", redirectedModel)
-			}
 		}
 	}
 
@@ -799,8 +783,7 @@ func TryUpstreamWithAllKeys(
 			upstreamCopy.BaseURL = currentBaseURL
 
 			// Phase 3B-2: 应用 EndpointAttemptPolicy 的自动模型映射（含 effort 原子改写）。
-			// ResolvedRouteTarget 来自 ModelResolver（AutoManaged 渠道，三条件门控通过），
-			// 优先级低于 RedirectModel（手动配置短路后 target 恒为 nil，不会双重映射）。
+			// ResolvedRouteTarget 来自 ModelResolver（AutoManaged 渠道，三条件门控通过）。
 			attemptModel := redirectedModel
 			var appliedMappedModel string
 			if endpointPolicy != nil {
@@ -2416,12 +2399,12 @@ func recordModelCircuitGlobal(c *gin.Context, metricsManager *metrics.MetricsMan
 // 配额/账号限流（已有 cooldown 与 scope 冷却机制）、内容审核（换渠道不改变请求内容）、
 // 客户端取消、以及 RecordRequestFinalizeIgnored 的中间态重试。
 //
-// model 传本次请求链路的基准模型：手动 RedirectModel / autopilot 映射场景下为
-// 客户端请求的原始模型（读侧 scheduler 渠道级过滤、keypool Key 级过滤都以原始模型
+// model 传本次请求链路的基准模型，即客户端请求的原始模型（显式映射已退役；
+// 读侧 scheduler 渠道级过滤、keypool Key 级过滤都以原始模型
 // 为键，写读不一致会让熔断在 AutoManaged 渠道上完全失效）；联邦 sibling / 溢出
 // 重定向发生跨模型执行时，调用点的 model 已被改写为执行模型，与读侧
 // circuitModel（见 modelCircuitChecker）同源。不要改传 attemptModel /
-// redirectedModel——那两者在手动映射场景与熔断读侧的键不一致。
+// redirectedModel——那两者与熔断读侧的键可能不一致。
 func recordModelCircuitFailure(c *gin.Context, metricsManager *metrics.MetricsManager,
 	upstream *config.UpstreamConfig, apiKey, model, errSummary, apiType string) {
 	if metricsManager == nil || upstream == nil || upstream.ChannelUID == "" || model == "" {
@@ -2475,8 +2458,8 @@ func keyAutoWeightFactor(metricsManager *metrics.MetricsManager) keypool.AutoWei
 // 把 apiKey → keyHash 的换算放在这里，让 keypool 无需感知哈希算法。
 // metricsManager 为 nil 时返回 nil（fail-open，不做该项过滤）。
 //
-// circuitModel 是熔断表的模型键，取本次请求链路的基准模型：手动 RedirectModel /
-// autopilot 映射场景下即客户端请求的原始模型（此时 model 未被改写）；联邦
+// circuitModel 是熔断表的模型键，取本次请求链路的基准模型：请求未被改写时即
+// 客户端请求的原始模型（此时 model 未被改写）；联邦
 // sibling / 溢出重定向发生跨模型执行时为改写后的执行模型（调用点位于改写之后），
 // 与写侧 recordModelCircuitFailure 传入的 model、scheduler 渠道级过滤使用的
 // ActualModel 三层同键。**不使用** keypool 传入的模型参数。原因：熔断的读侧
@@ -2486,8 +2469,9 @@ func keyAutoWeightFactor(metricsManager *metrics.MetricsManager) keypool.AutoWei
 // 熔断将完全失效。
 //
 // keypool 侧传入的 model 仍用于 per-key 白名单与 IsKeyModelDisabledNow 判定，
-// 那两个机制按重定向后的模型比较才正确，因此签名保留该参数。
-// 注意 IsKeyModelDisabledNow 在此只能覆盖手动 RedirectModel 的场景；autopilot
+// 那两个机制按请求模型比较才正确，因此签名保留该参数。
+// 注意 IsKeyModelDisabledNow 在此覆盖请求模型与持久化 (Key,模型) 限制的组合；
+// autopilot
 // 映射目标由发送前的复查兜底（见请求构建后的 KeyModel 复查块），两层合起来
 // 才保证持久化限制对自动映射渠道生效。
 func modelCircuitChecker(metricsManager *metrics.MetricsManager, circuitModel string) keypool.ModelCircuitChecker {

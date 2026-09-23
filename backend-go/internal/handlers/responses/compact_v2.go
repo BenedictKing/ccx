@@ -108,15 +108,8 @@ func tryLocalCompactV2WithKey(
 		return false, &compactError{status: 400, body: []byte(fmt.Sprintf(`{"error":"%s"}`, err.Error())), shouldFailover: false, err: err}
 	}
 
-	upstreamForCompact := upstream
-	if upstream.CompactModel != "" {
-		upstreamCopy := *upstream
-		upstreamCopy.ModelMapping = nil
-		upstreamForCompact = &upstreamCopy
-	}
-
 	provider := &providers.ResponsesProvider{SessionManager: sessionManager}
-	req, _, err := provider.ConvertBodyToProviderRequest(c, upstreamForCompact, apiKey, localBody, "/v1/responses")
+	req, _, err := provider.ConvertBodyToProviderRequest(c, upstream, apiKey, localBody, "/v1/responses")
 	if err != nil {
 		return false, &compactError{status: 500, body: []byte(`{"error":"构建本地 compact v2 上游请求失败"}`), shouldFailover: true, err: err}
 	}

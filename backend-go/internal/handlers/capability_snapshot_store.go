@@ -24,7 +24,6 @@ type CapabilitySnapshot struct {
 	ProtocolJobIDs      map[string]string                   `json:"protocolJobIds,omitempty"`
 	ProtocolJobRefs     map[string]CapabilityProtocolJobRef `json:"protocolJobRefs,omitempty"`
 	Tests               []CapabilityProtocolJobResult       `json:"tests"`
-	RedirectTests       []RedirectModelResult               `json:"redirectTests,omitempty"`
 	CompatibleProtocols []string                            `json:"compatibleProtocols"`
 	TotalDuration       int64                               `json:"totalDuration"`
 	Progress            CapabilityTestJobProgress           `json:"progress"`
@@ -74,7 +73,6 @@ func cloneCapabilitySnapshot(snapshot *CapabilitySnapshot) *CapabilitySnapshot {
 		cloned.Tests[i] = test
 		cloned.Tests[i].ModelResults = append([]CapabilityModelJobResult(nil), test.ModelResults...)
 	}
-	cloned.RedirectTests = append([]RedirectModelResult(nil), snapshot.RedirectTests...)
 	cloned.CompatibleProtocols = append([]string(nil), snapshot.CompatibleProtocols...)
 	return &cloned
 }
@@ -138,7 +136,6 @@ func (s *capabilitySnapshotStore) replaceFromJob(identityKey string, job *Capabi
 	existing.Progress = mergeSnapshotProgress(existing.Tests)
 	existing.Lifecycle = mergeSnapshotLifecycle(existing.Tests)
 	existing.Outcome = mergeSnapshotOutcome(existing.Tests, existing.Lifecycle)
-	existing.RedirectTests = append([]RedirectModelResult(nil), job.RedirectTests...)
 	existing.SourceType = job.SourceType
 	existing.UpdatedAt = job.UpdatedAt
 	if existing.UpdatedAt == "" {
@@ -312,10 +309,10 @@ func resolveCapabilityIdentityKey(channel *config.UpstreamConfig) string {
 	if channel == nil {
 		return ""
 	}
-	return buildCapabilityIdentityKey(channel, hashModelMapping(channel.ModelMapping))
+	return buildCapabilityIdentityKey(channel)
 }
 
-func buildCapabilityIdentityKey(channel *config.UpstreamConfig, modelMappingHash string) string {
+func buildCapabilityIdentityKey(channel *config.UpstreamConfig) string {
 	if channel == nil {
 		return ""
 	}
@@ -333,10 +330,7 @@ func buildCapabilityIdentityKey(channel *config.UpstreamConfig, modelMappingHash
 	if poolHash := hashCapabilityProbePool(channel); poolHash != "" {
 		identityKey += ":pool:" + poolHash
 	}
-	if modelMappingHash == "" {
-		return identityKey
-	}
-	return identityKey + ":mapping:" + modelMappingHash
+	return identityKey
 }
 
 func capabilityJobMatchesChannel(job *CapabilityTestJob, channel *config.UpstreamConfig, channelKind string, channelID int) bool {
@@ -411,19 +405,9 @@ func GetCapabilitySnapshot(cfgManager *config.ConfigManager, channelKind string)
 			// 获取 sourceTab 协议的探测模型
 			probeModels, err := getCapabilityProbeModels(sourceTab)
 			if err == nil {
-				// 跨协议转换与模型重定向是两个独立触发条件。
+				// 跨协议转换（sourceTab != 渠道原生协议）生成虚拟协议占位符
 				needsVirtualProtocol := sourceTab != channelServiceType
-				if !needsVirtualProtocol {
-					for _, m := range probeModels {
-						actual := config.RedirectModel(m, channel)
-						if actual != m {
-							needsVirtualProtocol = true
-							break
-						}
-					}
-				}
 
-				// 跨协议转换或同源模型重定向都需要生成虚拟协议占位符。
 				if needsVirtualProtocol {
 					virtualProtocol := sourceTab + "->" + channelServiceType
 					// 检查快照中是否已经有这个虚拟协议
@@ -435,7 +419,7 @@ func GetCapabilitySnapshot(cfgManager *config.ConfigManager, channelKind string)
 						}
 					}
 
-					// 构建模型结果列表（包含所有探测模型，被重定向的标记 actualModel）
+					// 构建模型结果列表
 					buildModelResults := func(existingResults []CapabilityModelJobResult) []CapabilityModelJobResult {
 						existingByModel := make(map[string]CapabilityModelJobResult, len(existingResults))
 						for _, result := range existingResults {
@@ -444,7 +428,6 @@ func GetCapabilitySnapshot(cfgManager *config.ConfigManager, channelKind string)
 
 						modelResults := make([]CapabilityModelJobResult, 0, len(probeModels))
 						for _, m := range probeModels {
-							actual := config.RedirectModel(m, channel)
 							result, ok := existingByModel[m]
 							if !ok {
 								result = CapabilityModelJobResult{
@@ -452,9 +435,7 @@ func GetCapabilitySnapshot(cfgManager *config.ConfigManager, channelKind string)
 									Status: "idle",
 								}
 							}
-							if actual != m {
-								result.ActualModel = actual
-							} else if result.ActualModel == m {
+							if result.ActualModel == m {
 								result.ActualModel = ""
 							}
 							modelResults = append(modelResults, result)
@@ -481,7 +462,7 @@ func GetCapabilitySnapshot(cfgManager *config.ConfigManager, channelKind string)
 						}
 					} else {
 						// 已存在，始终用当前配置刷新模型列表
-						// 这样配置变更（ModelMapping、ServiceType）会自动反映
+						// 这样配置变更（ServiceType）会自动反映
 						existing := &snapshot.Tests[foundIndex]
 						modelResults := buildModelResults(existing.ModelResults)
 						if len(modelResults) > 0 {

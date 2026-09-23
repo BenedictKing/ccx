@@ -41,12 +41,10 @@ type UpstreamConfig struct {
 	Description           string                             `json:"description,omitempty"`
 	Website               string                             `json:"website,omitempty"`
 	InsecureSkipVerify    bool                               `json:"insecureSkipVerify,omitempty"`
-	ModelMapping          map[string]string                  `json:"modelMapping,omitempty"`
 	ModelCapabilities     map[string]UpstreamModelCapability `json:"modelCapabilities,omitempty"` // 实际模型能力覆盖，key 支持模型通配符
 	EmbeddingCapabilities map[string]EmbeddingCapability     `json:"embeddingCapabilities,omitempty"`
 	DefaultCapability     UpstreamModelCapability            `json:"defaultCapability,omitempty"`   // 渠道默认实际模型能力
 	AllowUnknownContext   bool                               `json:"allowUnknownContext,omitempty"` // 大上下文请求是否允许落到未知能力渠道
-	ReasoningMapping      map[string]string                  `json:"reasoningMapping,omitempty"`
 	ReasoningParamStyle   string                             `json:"reasoningParamStyle,omitempty"`
 	TextVerbosity         string                             `json:"textVerbosity,omitempty"`
 	FastMode              bool                               `json:"fastMode,omitempty"`
@@ -145,9 +143,7 @@ type UpstreamConfig struct {
 	MaxGroupMultiplier *float64 `json:"maxGroupMultiplier,omitempty"` // 最高分组倍率上限（如 1=不超过标准倍率）
 
 	// Vision 能力配置
-	NoVision            bool     `json:"noVision,omitempty"`            // 整个渠道不支持图片输入
-	NoVisionModels      []string `json:"noVisionModels,omitempty"`      // 不支持图片输入的模型列表（匹配 modelMapping 后的实际模型名）
-	VisionFallbackModel string   `json:"visionFallbackModel,omitempty"` // 含图请求命中 noVisionModels 时使用的替代模型
+	NoVision bool `json:"noVision,omitempty"` // 整个渠道不支持图片输入
 	// 历史图片轮次限制
 	HistoricalImageTurnLimit int `json:"historicalImageTurnLimit,omitempty"` // 超过此轮次的历史图片替换为占位符（0=不限制，2-10=限制轮次）
 	// Compact 专用模型配置
@@ -1298,12 +1294,10 @@ type UpstreamUpdate struct {
 	Description              *string                            `json:"description"`
 	Website                  *string                            `json:"website"`
 	InsecureSkipVerify       *bool                              `json:"insecureSkipVerify"`
-	ModelMapping             map[string]string                  `json:"modelMapping"`
 	ModelCapabilities        map[string]UpstreamModelCapability `json:"modelCapabilities"`
 	EmbeddingCapabilities    map[string]EmbeddingCapability     `json:"embeddingCapabilities"`
 	DefaultCapability        *UpstreamModelCapability           `json:"defaultCapability"`
 	AllowUnknownContext      *bool                              `json:"allowUnknownContext"`
-	ReasoningMapping         map[string]string                  `json:"reasoningMapping"`
 	ReasoningParamStyle      *string                            `json:"reasoningParamStyle"`
 	TextVerbosity            *string                            `json:"textVerbosity"`
 	FastMode                 *bool                              `json:"fastMode"`
@@ -1361,9 +1355,7 @@ type UpstreamUpdate struct {
 	MaxGroupMultiplier *float64 `json:"maxGroupMultiplier"` // 最高分组倍率上限
 
 	// Vision 能力配置
-	NoVision            *bool    `json:"noVision"`
-	NoVisionModels      []string `json:"noVisionModels"`
-	VisionFallbackModel *string  `json:"visionFallbackModel"`
+	NoVision *bool `json:"noVision"`
 	// 历史图片轮次限制（0=不限制，2-10=限制轮次）
 	HistoricalImageTurnLimit *int `json:"historicalImageTurnLimit"`
 	// 自动托管字段

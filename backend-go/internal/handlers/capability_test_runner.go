@@ -35,22 +35,6 @@ type testItem struct {
 
 // buildRoundRobinQueue 构建交错队列
 // 输出: messages[0], chat[0], gemini[0], responses[0], messages[1], chat[1], ...
-func shouldRunRedirectVerification(protocols []string, sourceTab, channelServiceType string) bool {
-	if sourceTab == "" {
-		return false
-	}
-	if sourceTab != channelServiceType {
-		return true
-	}
-	virtualProtocol := sourceTab + "->" + channelServiceType
-	for _, protocol := range protocols {
-		if protocol == virtualProtocol {
-			return true
-		}
-	}
-	return false
-}
-
 func buildRoundRobinQueue(protocolModels map[string][]string, protocols []string) []testItem {
 	maxModels := 0
 	for _, models := range protocolModels {
@@ -75,8 +59,8 @@ func buildRoundRobinQueue(protocolModels map[string][]string, protocols []string
 	return queue
 }
 
-func runCapabilityTestJob(jobID, channelKind string, channelID int, channel config.UpstreamConfig, protocols []string, timeout time.Duration, effectiveRPM int, cacheKey, lookupKey, identityKey, dispatcherKey string, previousResults map[string]map[string]ModelTestResult, userModels []string, sourceTab string, cfgManager *config.ConfigManager, channelLogStore *metrics.ChannelLogStore) {
-	executionKey := buildCapabilityExecutionLookupKey(identityKey, channelKind, protocols, userModels, "")
+func runCapabilityTestJob(jobID, channelKind string, channelID int, channel config.UpstreamConfig, protocols []string, timeout time.Duration, effectiveRPM int, cacheKey, lookupKey, identityKey, dispatcherKey string, previousResults map[string]map[string]ModelTestResult, userModels []string, cfgManager *config.ConfigManager, channelLogStore *metrics.ChannelLogStore) {
+	executionKey := buildCapabilityExecutionLookupKey(identityKey, channelKind, protocols, userModels)
 	// 创建可取消的 context，用于支持前端取消操作
 	ctx, cancel := context.WithCancel(context.Background())
 	capabilityJobs.setCancelFunc(jobID, cancel)
@@ -122,47 +106,8 @@ func runCapabilityTestJob(jobID, channelKind string, channelID int, channel conf
 		apiKey = channel.DisabledAPIKeys[0].Key
 	}
 
-	channelServiceType := serviceTypeToChannelKind(channel.ServiceType)
+	results := runRoundRobinTests(ctx, &channel, protocols, timeout, effectiveRPM, jobID, previousResults, userModels, cfgManager, channelID, channelKind, apiKey, dispatcherKey, channelLogStore)
 
-	// 并发运行重定向验证（仅在本次目标协议需要 sourceTab 虚拟协议时启动）
-	// 通过 buffered channel 传递结果，避免共享变量在 cancel+超时场景下产生数据竞争：
-	// - goroutine 单向写入 channel（容量 1，即便主协程放弃等待也不会阻塞）
-	// - 主协程仅通过 channel 接收赋值，与 goroutine 无共享内存写入
-	var redirectResults []RedirectModelResult
-	var redirectCh chan []RedirectModelResult
-	if shouldRunRedirectVerification(protocols, sourceTab, channelServiceType) {
-		redirectCh = make(chan []RedirectModelResult, 1)
-		go func() {
-			redirectCh <- runRedirectVerification(ctx, &channel, channelKind, sourceTab, timeout, effectiveRPM, jobID, cfgManager, channelID, apiKey, dispatcherKey, channelLogStore, userModels)
-		}()
-	}
-
-	// 过滤掉虚拟协议（含 "->"），原生协议测试只测基础协议
-	nativeProtocols := make([]string, 0, len(protocols))
-	for _, p := range protocols {
-		if !strings.Contains(p, "->") {
-			nativeProtocols = append(nativeProtocols, p)
-		}
-	}
-
-	var results []ProtocolTestResult
-	if len(nativeProtocols) > 0 {
-		results = runRoundRobinTests(ctx, &channel, nativeProtocols, timeout, effectiveRPM, jobID, previousResults, userModels, cfgManager, channelID, channelKind, apiKey, dispatcherKey, channelLogStore)
-	}
-
-	// 等待重定向协程结果：优先直接等待；若任务被取消，给 2s 宽限后立即返回，
-	// 避免阻塞在正在排队的限流槽位或未完成的 HTTP 请求上。超时丢弃则 redirectResults 保持 nil。
-	if redirectCh != nil {
-		select {
-		case redirectResults = <-redirectCh:
-		case <-ctx.Done():
-			select {
-			case redirectResults = <-redirectCh:
-			case <-time.After(2 * time.Second):
-				log.Printf("[RedirectTest-Cancel] 任务取消后 2s 内重定向验证协程未结束，放弃等待以加速退出 (jobID=%s)", jobID)
-			}
-		}
-	}
 	totalDuration := time.Since(totalStart).Milliseconds()
 
 	compatible := make([]string, 0)
@@ -172,95 +117,11 @@ func runCapabilityTestJob(jobID, channelKind string, channelID int, channel conf
 		}
 	}
 
-	// 将 redirectResults 转换为虚拟协议测试结果
-	var virtualResults []ProtocolTestResult
-	if len(redirectResults) > 0 && sourceTab != "" {
-		virtualProtocol := sourceTab + "->" + channelServiceType
-
-		// 构建 actualModel 到测试结果的映射
-		actualModelResults := make(map[string]RedirectModelResult)
-		for _, rr := range redirectResults {
-			actualModelResults[rr.ActualModel] = rr
-		}
-
-		// 获取本次探测模型，按顺序生成模型结果
-		probeModels, _ := getCapabilityProbeModels(sourceTab)
-		probeModels = filterCapabilityProbeModels(probeModels, userModels)
-		var modelResults []ModelTestResult
-		successCount := 0
-		totalLatency := int64(0)
-		hasStreaming := false
-
-		for _, probeModel := range probeModels {
-			actualModel := config.RedirectModel(probeModel, &channel)
-
-			rr, tested := actualModelResults[actualModel]
-			if tested {
-				modelResults = append(modelResults, ModelTestResult{
-					Model:                probeModel,
-					ActualModel:          actualModel,
-					Success:              rr.Success,
-					Latency:              rr.Latency,
-					StreamingSupported:   rr.StreamingSupported,
-					CodexImageGeneration: rr.CodexImageGeneration,
-					Error:                rr.Error,
-					StartedAt:            rr.StartedAt,
-					TestedAt:             rr.TestedAt,
-				})
-				if rr.Success {
-					successCount++
-					totalLatency += rr.Latency
-					if rr.StreamingSupported {
-						hasStreaming = true
-					}
-				}
-			}
-		}
-
-		if len(modelResults) > 0 {
-			avgLatency := int64(0)
-			if successCount > 0 {
-				avgLatency = totalLatency / int64(successCount)
-			}
-
-			virtualResult := ProtocolTestResult{
-				Protocol:           virtualProtocol,
-				Success:            successCount > 0,
-				Latency:            avgLatency,
-				StreamingSupported: hasStreaming,
-				TestedModel:        "",
-				ModelResults:       modelResults,
-				SuccessCount:       successCount,
-				AttemptedModels:    len(modelResults),
-				TestedAt:           time.Now().Format(time.RFC3339),
-			}
-
-			if successCount == 0 {
-				errMsg := "all_models_failed"
-				virtualResult.Error = &errMsg
-			} else {
-				virtualResult.TestedModel = modelResults[0].ActualModel
-			}
-
-			virtualResults = append(virtualResults, virtualResult)
-
-			if successCount > 0 {
-				compatible = append(compatible, virtualProtocol)
-			}
-		}
-	}
-
-	// 将虚拟协议结果插入到结果列表开头
-	if len(virtualResults) > 0 {
-		results = append(virtualResults, results...)
-	}
-
 	resp := CapabilityTestResponse{
 		ChannelID:           channelID,
 		ChannelName:         channel.Name,
 		SourceType:          channel.ServiceType,
 		Tests:               results,
-		RedirectTests:       redirectResults,
 		CompatibleProtocols: compatible,
 		TotalDuration:       totalDuration,
 		SchemaVersion:       capabilityProbeSchemaVersion,
@@ -271,35 +132,15 @@ func runCapabilityTestJob(jobID, channelKind string, channelID int, channel conf
 	capabilityJobs.update(jobID, func(job *CapabilityTestJob) {
 		if job.Lifecycle == CapabilityLifecycleCancelled {
 			job.TotalDuration = totalDuration
-			job.RedirectTests = append([]RedirectModelResult(nil), redirectResults...)
 			return
 		}
 		job.ChannelName = channel.Name
 		job.SourceType = channel.ServiceType
 		job.IdentityKey = identityKey
-		job.ExecutionKey = buildCapabilityExecutionLookupKey(identityKey, channelKind, protocols, userModels, "")
+		job.ExecutionKey = buildCapabilityExecutionLookupKey(identityKey, channelKind, protocols, userModels)
 		job.CompatibleProtocols = append([]string(nil), compatible...)
-		job.RedirectTests = append([]RedirectModelResult(nil), redirectResults...)
 		job.TotalDuration = totalDuration
 		job.FinishedAt = time.Now().Format(time.RFC3339Nano)
-
-		// 合并虚拟协议结果到 job.Tests（包含 modelResults）
-		if len(virtualResults) > 0 {
-			virtualJobResults := capabilityProtocolResultsFromResponse(CapabilityTestResponse{Tests: virtualResults})
-			for _, vr := range virtualJobResults {
-				found := false
-				for i, existing := range job.Tests {
-					if existing.Protocol == vr.Protocol {
-						job.Tests[i] = vr
-						found = true
-						break
-					}
-				}
-				if !found {
-					job.Tests = append(job.Tests, vr)
-				}
-			}
-		}
 	})
 
 	// 仅在未被取消且有兼容协议时写入缓存
@@ -635,7 +476,7 @@ func runRoundRobinTests(ctx context.Context, channel *config.UpstreamConfig, pro
 }
 
 // executeModelTest 单模型测试（不调用 AcquireSendSlot，由编排器负责限流）
-// 原生协议测试直接用原始模型名发请求，不走 ModelMapping 重定向
+// executeModelTest 单模型测试（不调用 AcquireSendSlot，由编排器负责限流）
 // executeModelTest 执行单个模型的基础协议测试。probeToolCalls 控制成功后是否附加
 // 工具调用探针（能力测试路径为 true；渠道发现复用本函数，保持原请求量传 false）。
 func executeModelTest(ctx context.Context, channel *config.UpstreamConfig, protocol, model string, timeout time.Duration, jobID string, cfgManager *config.ConfigManager, channelID int, channelKind, apiKey string, channelLogStore *metrics.ChannelLogStore, probeToolCalls bool) ModelTestResult {
@@ -730,7 +571,7 @@ func executeModelTest(ctx context.Context, channel *config.UpstreamConfig, proto
 		blacklistResult := common.ShouldBlacklistKey(statusCode, respBody)
 		if blacklistResult.ShouldBlacklist {
 			isBalanceError := common.IsBalanceOrQuotaBlacklistReason(blacklistResult.Reason)
-			restrictModel := config.RedirectModel(model, channel)
+			restrictModel := model
 			if isBalanceError && restrictModel != "" {
 				// 余额/配额类：降级为 (Key,模型) 组合级限制，覆盖全部模型时才升级整 Key 拉黑。
 				if common.HandleBalanceClassKeyFailure(cfgManager, channel, channelKindToApiType(channelKind), channelID,
@@ -758,13 +599,12 @@ func executeModelTest(ctx context.Context, channel *config.UpstreamConfig, proto
 		// 模型可用，再验"是否真的执行工具调用"。结论只附加展示与落库学习，
 		// 不回改 modelResult.Success——模型对无工具流量仍然可用。
 		if probeToolCalls {
-			actualModel := config.RedirectModel(model, channel)
-			toolSummary := runCapabilityToolCallProbe(reqCtx, channel, protocol, actualModel, apiKey)
+			toolSummary := runCapabilityToolCallProbe(reqCtx, channel, protocol, model, apiKey)
 			if toolSummary.Tested {
 				modelResult.ToolCalls = &toolSummary
-				recordToolCallProbeResult(channel, apiKey, actualModel, protocol, toolSummary)
+				recordToolCallProbeResult(channel, apiKey, model, protocol, toolSummary)
 				log.Printf("[CapabilityTest-ToolCall] 渠道 %s 模型 %s 工具调用探针完成 (支持: %v, %s)",
-					channel.Name, actualModel, toolSummary.Supported, toolSummary.Evidence)
+					channel.Name, model, toolSummary.Supported, toolSummary.Evidence)
 			}
 		}
 
@@ -889,4 +729,73 @@ func truncateCapabilityError(msg string) string {
 		return msg[:200]
 	}
 	return msg
+}
+
+func filterCapabilityProbeModels(probeModels []string, userModels []string) []string {
+	if len(userModels) == 0 {
+		return probeModels
+	}
+	userSet := make(map[string]bool, len(userModels))
+	for _, model := range userModels {
+		userSet[model] = true
+	}
+	filtered := make([]string, 0, len(userModels))
+	for _, model := range probeModels {
+		if userSet[model] {
+			filtered = append(filtered, model)
+		}
+	}
+	return filtered
+}
+
+func updateCapabilityJobModelResult(job *CapabilityTestJob, protocol, model string, status CapabilityModelStatus, result ModelTestResult) {
+	for i := range job.Tests {
+		if job.Tests[i].Protocol != protocol {
+			continue
+		}
+		for j := range job.Tests[i].ModelResults {
+			if job.Tests[i].ModelResults[j].Model != model {
+				continue
+			}
+			job.Tests[i].ModelResults[j].Status = status
+			job.Tests[i].ModelResults[j].ActualModel = result.ActualModel
+			job.Tests[i].ModelResults[j].UpstreamModel = result.UpstreamModel
+			job.Tests[i].ModelResults[j].Success = result.Success
+			job.Tests[i].ModelResults[j].Latency = result.Latency
+			job.Tests[i].ModelResults[j].StreamingSupported = result.StreamingSupported
+			job.Tests[i].ModelResults[j].CodexImageGeneration = result.CodexImageGeneration
+			job.Tests[i].ModelResults[j].Error = result.Error
+			job.Tests[i].ModelResults[j].StartedAt = result.StartedAt
+			job.Tests[i].ModelResults[j].TestedAt = result.TestedAt
+			switch status {
+			case CapabilityModelStatusQueued:
+				job.Tests[i].ModelResults[j].Lifecycle = CapabilityLifecyclePending
+				job.Tests[i].ModelResults[j].Outcome = CapabilityOutcomeUnknown
+				job.Tests[i].ModelResults[j].Reason = nil
+			case CapabilityModelStatusRunning:
+				job.Tests[i].ModelResults[j].Lifecycle = CapabilityLifecycleActive
+				job.Tests[i].ModelResults[j].Outcome = CapabilityOutcomeUnknown
+				job.Tests[i].ModelResults[j].Reason = nil
+			case CapabilityModelStatusSuccess:
+				job.Tests[i].ModelResults[j].Lifecycle = CapabilityLifecycleDone
+				job.Tests[i].ModelResults[j].Outcome = CapabilityOutcomeSuccess
+				job.Tests[i].ModelResults[j].Reason = nil
+			case CapabilityModelStatusFailed:
+				job.Tests[i].ModelResults[j].Lifecycle = CapabilityLifecycleDone
+				job.Tests[i].ModelResults[j].Outcome = CapabilityOutcomeFailed
+				job.Tests[i].ModelResults[j].Reason = result.Error
+			case CapabilityModelStatusSkipped:
+				job.Tests[i].ModelResults[j].Lifecycle = CapabilityLifecycleDone
+				job.Tests[i].ModelResults[j].Outcome = CapabilityOutcomeUnknown
+				reason := "not_run"
+				if result.Error != nil && *result.Error == "cancelled" {
+					job.Tests[i].ModelResults[j].Lifecycle = CapabilityLifecycleCancelled
+					job.Tests[i].ModelResults[j].Outcome = CapabilityOutcomeCancelled
+					reason = "cancelled"
+				}
+				job.Tests[i].ModelResults[j].Reason = &reason
+			}
+			return
+		}
+	}
 }

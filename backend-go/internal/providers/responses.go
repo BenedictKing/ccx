@@ -147,28 +147,15 @@ func (p *ResponsesProvider) buildProviderRequestBody(c *gin.Context, requestPath
 		if upstream.IsStripImageGenerationToolEnabled() {
 			stripImageGenerationFromTools(reqMap)
 		}
-		if model, ok := reqMap["model"].(string); ok {
-			// 模型重定向：命中映射（实际换模型）时剔除 Codex 预算提醒，未命中不动
-			// （数字按客户端认知窗口核算，模型未变则准确，统一语义见 client_budget_reminders.go）
-			redirectedModel, _ := config.RedirectModelWithMatch(model, upstream)
-			reqMap["model"] = redirectedModel
-			if redirectedModel != model {
-				if stripped, changed := StripCodexBudgetRemindersFromResponsesInput(reqMap["input"]); changed {
-					reqMap["input"] = stripped
-				}
+		if reasoning, hasReasoning := reqMap["reasoning"]; hasReasoning {
+			// 按 ReasoningParamStyle 转换客户端原始 reasoning
+			switch upstream.ReasoningParamStyle {
+			case "thinking":
+				config.ApplyReasoningParamStyle(reqMap, upstream.ReasoningParamStyle, extractEffortFromReasoning(reasoning))
+			case "reasoning_effort":
+				config.ApplyReasoningParamStyle(reqMap, upstream.ReasoningParamStyle, extractEffortFromReasoning(reasoning))
 			}
-			if effort := config.ResolveReasoningEffort(model, upstream); effort != "" {
-				config.ApplyReasoningParamStyle(reqMap, upstream.ReasoningParamStyle, effort)
-			} else if reasoning, hasReasoning := reqMap["reasoning"]; hasReasoning {
-				// 无 ReasoningMapping 配置时，按 ReasoningParamStyle 转换客户端原始 reasoning
-				switch upstream.ReasoningParamStyle {
-				case "thinking":
-					config.ApplyReasoningParamStyle(reqMap, upstream.ReasoningParamStyle, extractEffortFromReasoning(reasoning))
-				case "reasoning_effort":
-					config.ApplyReasoningParamStyle(reqMap, upstream.ReasoningParamStyle, extractEffortFromReasoning(reasoning))
-				}
-				// 默认样式保持原样透传（原始 reasoning 对象直接转发）
-			}
+			// 默认样式保持原样透传（原始 reasoning 对象直接转发）
 		}
 		config.NormalizeReasoningObjectForUpstream(reqMap, upstream)
 		if upstream.TextVerbosity != "" {
@@ -212,8 +199,6 @@ func (p *ResponsesProvider) buildProviderRequestBody(c *gin.Context, requestPath
 			sess = &session.Session{}
 		}
 
-		originalModel := responsesReq.Model
-		responsesReq.Model = config.RedirectModel(responsesReq.Model, upstream)
 		// 跨协议转换必然改变模型语义，Codex 预算提醒数字失真，无条件剔除
 		// （统一语义见 client_budget_reminders.go）
 		if stripped, changed := StripCodexBudgetRemindersFromResponsesInput(responsesReq.Input); changed {
@@ -252,22 +237,17 @@ func (p *ResponsesProvider) buildProviderRequestBody(c *gin.Context, requestPath
 
 		// converter 路径：注入 reasoning/thinking 参数
 		if reqMap, ok := convertedReq.(map[string]interface{}); ok {
-			model := originalModel
-			if effort := config.ResolveReasoningEffort(model, upstream); effort != "" {
-				config.ApplyReasoningParamStyle(reqMap, upstream.ReasoningParamStyle, effort)
-			} else {
-				// 无 ReasoningMapping 配置时，透传客户端原始 reasoning 并按 style 转换
-				var rawReq map[string]interface{}
-				if json.Unmarshal(bodyBytes, &rawReq) == nil {
-					if reasoning, hasReasoning := rawReq["reasoning"]; hasReasoning {
-						switch upstream.ReasoningParamStyle {
-						case "thinking":
-							config.ApplyReasoningParamStyle(reqMap, upstream.ReasoningParamStyle, extractEffortFromReasoning(reasoning))
-						case "reasoning_effort":
-							config.ApplyReasoningParamStyle(reqMap, upstream.ReasoningParamStyle, extractEffortFromReasoning(reasoning))
-						default:
-							reqMap["reasoning"] = reasoning
-						}
+			// 透传客户端原始 reasoning 并按 style 转换
+			var rawReq map[string]interface{}
+			if json.Unmarshal(bodyBytes, &rawReq) == nil {
+				if reasoning, hasReasoning := rawReq["reasoning"]; hasReasoning {
+					switch upstream.ReasoningParamStyle {
+					case "thinking":
+						config.ApplyReasoningParamStyle(reqMap, upstream.ReasoningParamStyle, extractEffortFromReasoning(reasoning))
+					case "reasoning_effort":
+						config.ApplyReasoningParamStyle(reqMap, upstream.ReasoningParamStyle, extractEffortFromReasoning(reasoning))
+					default:
+						reqMap["reasoning"] = reasoning
 					}
 				}
 			}
@@ -412,12 +392,9 @@ func (p *ResponsesProvider) buildResponsesRequestFromClaude(c *gin.Context, body
 	}
 
 	responsesReq := map[string]interface{}{
-		"model":  config.RedirectModel(claudeReq.Model, upstream),
+		"model":  claudeReq.Model,
 		"input":  input,
 		"stream": claudeReq.Stream,
-	}
-	if effort := config.ResolveReasoningEffort(claudeReq.Model, upstream); effort != "" {
-		config.ApplyReasoningParamStyle(responsesReq, upstream.ReasoningParamStyle, effort)
 	}
 	if instructions := extractResponsesInstructions(claudeReq.System); instructions != "" {
 		responsesReq["instructions"] = instructions
@@ -521,7 +498,7 @@ func (p *ResponsesProvider) buildRequestURL(upstream *config.UpstreamConfig, bod
 		if err := json.Unmarshal(bodyBytes, &responsesReq); err != nil {
 			return "", fmt.Errorf("解析 Responses 请求失败: %w", err)
 		}
-		model := config.RedirectModel(responsesReq.Model, upstream)
+		model := responsesReq.Model
 		action := "generateContent"
 		if responsesReq.Stream {
 			action = "streamGenerateContent?alt=sse"

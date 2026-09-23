@@ -13,7 +13,7 @@ import (
 
 func TestMaybeAutoWriteChannelConfig_PublishesAutoMappingAppliedOnWrite(t *testing.T) {
 	channelUID := "ch_event_write_001"
-	cfgManager := setupTestConfigManagerForDiscovery(t, channelUID, nil, nil)
+	cfgManager := setupTestConfigManagerForDiscovery(t, channelUID, nil)
 
 	hub := NewEventHub()
 	sub, unsubscribe := hub.Subscribe()
@@ -46,7 +46,7 @@ func TestMaybeAutoWriteChannelConfig_PublishesAutoMappingAppliedOnWrite(t *testi
 func TestMaybeAutoWriteChannelConfig_NoEventWhenSkipped(t *testing.T) {
 	channelUID := "ch_event_skip_001"
 	// 用户已配置 SupportedModels，写入应被跳过
-	cfgManager := setupTestConfigManagerForDiscovery(t, channelUID, []string{"existing-model"}, nil)
+	cfgManager := setupTestConfigManagerForDiscovery(t, channelUID, []string{"existing-model"})
 
 	hub := NewEventHub()
 	sub, unsubscribe := hub.Subscribe()
@@ -70,7 +70,7 @@ func TestMaybeAutoWriteChannelConfig_NoEventWhenSkipped(t *testing.T) {
 
 func TestMaybeAutoWriteChannelConfig_NilHub_NoPanic(t *testing.T) {
 	channelUID := "ch_event_nilhub_001"
-	cfgManager := setupTestConfigManagerForDiscovery(t, channelUID, nil, nil)
+	cfgManager := setupTestConfigManagerForDiscovery(t, channelUID, nil)
 
 	runner := NewAutoDiscoveryRunner(nil, nil) // hub=nil
 	channel := &config.UpstreamConfig{ChannelUID: channelUID}
@@ -92,7 +92,7 @@ func TestRunDiscovery_PublishesDiscoveryCompletedOnSuccess(t *testing.T) {
 	defer server.Close()
 
 	channelUID := "ch_event_discovery_001"
-	cfgManager := setupTestConfigManagerForDiscovery(t, channelUID, nil, nil)
+	cfgManager := setupTestConfigManagerForDiscovery(t, channelUID, nil)
 
 	hub := NewEventHub()
 	sub, unsubscribe := hub.Subscribe()

@@ -30,7 +30,7 @@ func newRunnerWithTaskStore(t *testing.T) (*AutoDiscoveryRunner, *ProfileStore, 
 
 func TestResumeIncompleteDiscoveries_DeletedChannelMarkedFailed(t *testing.T) {
 	runner, _, taskStore := newRunnerWithTaskStore(t)
-	cfgManager := setupTestConfigManagerForDiscovery(t, "ch-exists", nil, nil)
+	cfgManager := setupTestConfigManagerForDiscovery(t, "ch-exists", nil)
 	defer errutil.IgnoreDeferred(cfgManager.Close)
 
 	// 两条 running 记录：一条渠道仍存在，一条已删除。
@@ -53,7 +53,7 @@ func TestResumeIncompleteDiscoveries_DeletedChannelMarkedFailed(t *testing.T) {
 
 func TestResumeIncompleteDiscoveries_DuplicateRunningSkipped(t *testing.T) {
 	runner, _, taskStore := newRunnerWithTaskStore(t)
-	cfgManager := setupTestConfigManagerForDiscovery(t, "ch-dup", nil, nil)
+	cfgManager := setupTestConfigManagerForDiscovery(t, "ch-dup", nil)
 	defer errutil.IgnoreDeferred(cfgManager.Close)
 
 	_ = taskStore.Start("ch-dup", "acct", "messages")
@@ -135,7 +135,7 @@ func TestCheckpointPath_PersistsProfileBeforeCheckpoint(t *testing.T) {
 		APIKeys:     []string{apiKey},
 		AutoManaged: true,
 	}
-	cfgManager := setupTestConfigManagerForDiscovery(t, channelUID, nil, nil)
+	cfgManager := setupTestConfigManagerForDiscovery(t, channelUID, nil)
 	defer errutil.IgnoreDeferred(cfgManager.Close)
 
 	// 直接驱动 checkpoint 路径：先 Start，再写一个成功端点的画像 + Flush + checkpoint。

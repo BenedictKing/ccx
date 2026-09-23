@@ -401,7 +401,6 @@ func TestGetChannelDashboard_Gemini_IncludesAdvancedOptionFields(t *testing.T) {
 				ServiceType:             "gemini",
 				BaseURL:                 "https://example.com",
 				APIKeys:                 []string{"test-key"},
-				ReasoningMapping:        map[string]string{"gemini-2.5-pro": "high"},
 				TextVerbosity:           "medium",
 				FastMode:                true,
 				StripThoughtSignature:   true,
@@ -483,13 +482,6 @@ func TestGetChannelDashboard_Gemini_IncludesAdvancedOptionFields(t *testing.T) {
 		t.Fatalf("fastMode=%v, want=true", got)
 	}
 
-	reasoning, ok := resp.Channels[0]["reasoningMapping"].(map[string]any)
-	if !ok {
-		t.Fatalf("reasoningMapping 类型=%T, want=map[string]any", resp.Channels[0]["reasoningMapping"])
-	}
-	if got := reasoning["gemini-2.5-pro"]; got != "high" {
-		t.Fatalf("reasoningMapping[gemini-2.5-pro]=%v, want=high", got)
-	}
 	if got := resp.Channels[0]["normalizeMetadataUserId"]; got != true {
 		t.Fatalf("normalizeMetadataUserId=%v, want=true", got)
 	}

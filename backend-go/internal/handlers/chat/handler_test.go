@@ -11,7 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func TestBuildProviderRequest_InjectsReasoningBeforeModelRedirect(t *testing.T) {
+func TestBuildProviderRequest_KeepsRequestModelPassthrough(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -19,13 +19,7 @@ func TestBuildProviderRequest_InjectsReasoningBeforeModelRedirect(t *testing.T) 
 
 	bodyBytes := []byte(`{"model":"gpt-5.1-codex","messages":[{"role":"user","content":"hi"}]}`)
 	upstream := &config.UpstreamConfig{
-		ServiceType: "openai",
-		ModelMapping: map[string]string{
-			"gpt-5.1-codex": "gpt-5.4-mini",
-		},
-		ReasoningMapping: map[string]string{
-			"gpt-5.1-codex": "xhigh",
-		},
+		ServiceType:   "openai",
 		TextVerbosity: "low",
 		FastMode:      true,
 	}
@@ -40,13 +34,9 @@ func TestBuildProviderRequest_InjectsReasoningBeforeModelRedirect(t *testing.T) 
 		t.Fatalf("decode request body: %v", err)
 	}
 
-	if got["model"] != "gpt-5.4-mini" {
-		t.Fatalf("model = %v, want gpt-5.4-mini", got["model"])
-	}
-
-	reasoning, ok := got["reasoning"].(map[string]interface{})
-	if !ok || reasoning["effort"] != "xhigh" {
-		t.Fatalf("reasoning = %#v, want effort=xhigh", got["reasoning"])
+	// 显式 ModelMapping 已退役：请求模型透传，不再改写为映射目标。
+	if got["model"] != "gpt-5.1-codex" {
+		t.Fatalf("model = %v, want gpt-5.1-codex (passthrough)", got["model"])
 	}
 
 	text, ok := got["text"].(map[string]interface{})
@@ -56,39 +46,6 @@ func TestBuildProviderRequest_InjectsReasoningBeforeModelRedirect(t *testing.T) 
 
 	if got["service_tier"] != "priority" {
 		t.Fatalf("service_tier = %v, want priority", got["service_tier"])
-	}
-}
-
-func TestBuildProviderRequest_UsesEffectiveBodyModelForVisionFallbackReasoning(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil).WithContext(context.Background())
-
-	bodyBytes := []byte(`{"model":"mimo-v2.5","messages":[{"role":"user","content":"hi"}]}`)
-	upstream := &config.UpstreamConfig{
-		ServiceType: "openai",
-		ReasoningMapping: map[string]string{
-			"mimo-v2.5": "max",
-		},
-	}
-
-	req, err := buildProviderRequest(c, upstream, "https://api.example.com", "sk-test", bodyBytes, "mimo-v2.5-pro", false)
-	if err != nil {
-		t.Fatalf("buildProviderRequest() err = %v", err)
-	}
-
-	var got map[string]interface{}
-	if err := json.NewDecoder(req.Body).Decode(&got); err != nil {
-		t.Fatalf("decode request body: %v", err)
-	}
-
-	if got["model"] != "mimo-v2.5" {
-		t.Fatalf("model = %v, want mimo-v2.5", got["model"])
-	}
-	reasoning, ok := got["reasoning"].(map[string]interface{})
-	if !ok || reasoning["effort"] != "max" {
-		t.Fatalf("reasoning = %#v, want effort=max", got["reasoning"])
 	}
 }
 
@@ -215,19 +172,18 @@ func TestConvertChatToClaudeRequest_MapsUserIDToMetadata(t *testing.T) {
 	}
 }
 
-func TestBuildProviderRequest_InjectsReasoningEffortStyle(t *testing.T) {
+func TestBuildProviderRequest_KeepsRequestReasoningParamsPassthrough(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil).WithContext(context.Background())
 
-	bodyBytes := []byte(`{"model":"gpt-5.1-codex","messages":[{"role":"user","content":"hi"}]}`)
+	// 显式 ReasoningMapping 已退役：请求路径不再注入/改写思考参数，
+	// 客户端自带的 reasoning 形态按原样透传（风格改写仅存在于 autopilot 决档注入路径）。
+	bodyBytes := []byte(`{"model":"gpt-5.1-codex","messages":[{"role":"user","content":"hi"}],"reasoning":{"effort":"high"},"reasoning_effort":"high"}`)
 	upstream := &config.UpstreamConfig{
 		ServiceType:         "openai",
-		ReasoningParamStyle: "reasoning_effort",
-		ReasoningMapping: map[string]string{
-			"gpt-5.1-codex": "xhigh",
-		},
+		ReasoningParamStyle: "thinking",
 	}
 
 	req, err := buildProviderRequest(c, upstream, "https://api.example.com", "sk-test", bodyBytes, "gpt-5.1-codex", false)
@@ -240,65 +196,15 @@ func TestBuildProviderRequest_InjectsReasoningEffortStyle(t *testing.T) {
 		t.Fatalf("decode request body: %v", err)
 	}
 
-	if got["reasoning_effort"] != "xhigh" {
-		t.Fatalf("reasoning_effort = %v, want xhigh", got["reasoning_effort"])
+	if _, ok := got["thinking"]; ok {
+		t.Fatalf("thinking 不应被注入: %#v", got)
 	}
-	if _, ok := got["reasoning"]; ok {
-		t.Fatalf("reasoning should not be set when reasoningParamStyle=reasoning_effort: %#v", got["reasoning"])
+	reasoning, ok := got["reasoning"].(map[string]interface{})
+	if !ok || reasoning["effort"] != "high" {
+		t.Fatalf("reasoning 应原样透传: %#v", got["reasoning"])
 	}
-}
-
-func TestBuildProviderRequest_InjectsThinkingParamStyle(t *testing.T) {
-	tests := []struct {
-		name       string
-		effort     string
-		wantType   string
-		wantEffort string
-	}{
-		{name: "none disables thinking", effort: "none", wantType: "disabled"},
-		{name: "high enables thinking", effort: "high", wantType: "enabled", wantEffort: "high"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			gin.SetMode(gin.TestMode)
-			w := httptest.NewRecorder()
-			c, _ := gin.CreateTestContext(w)
-			c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil).WithContext(context.Background())
-
-			bodyBytes := []byte(`{"model":"gpt-5.1-codex","messages":[{"role":"user","content":"hi"}],"reasoning":{"effort":"medium"},"reasoning_effort":"medium"}`)
-			upstream := &config.UpstreamConfig{
-				ServiceType:         "openai",
-				ReasoningParamStyle: "thinking",
-				ReasoningMapping: map[string]string{
-					"gpt-5.1-codex": tt.effort,
-				},
-			}
-
-			req, err := buildProviderRequest(c, upstream, "https://api.example.com", "sk-test", bodyBytes, "gpt-5.1-codex", false)
-			if err != nil {
-				t.Fatalf("buildProviderRequest() err = %v", err)
-			}
-
-			var got map[string]interface{}
-			if err := json.NewDecoder(req.Body).Decode(&got); err != nil {
-				t.Fatalf("decode request body: %v", err)
-			}
-
-			thinking, ok := got["thinking"].(map[string]interface{})
-			if !ok || thinking["type"] != tt.wantType {
-				t.Fatalf("thinking = %#v, want type=%s; body=%#v", got["thinking"], tt.wantType, got)
-			}
-			if gotEffort, _ := thinking["effort"].(string); gotEffort != tt.wantEffort {
-				t.Fatalf("thinking.effort = %q, want %q; thinking=%#v", gotEffort, tt.wantEffort, thinking)
-			}
-			if _, ok := got["reasoning"]; ok {
-				t.Fatalf("reasoning should be removed for thinking style: %#v", got)
-			}
-			if _, ok := got["reasoning_effort"]; ok {
-				t.Fatalf("reasoning_effort should be removed for thinking style: %#v", got)
-			}
-		})
+	if gotEffort, _ := got["reasoning_effort"].(string); gotEffort != "high" {
+		t.Fatalf("reasoning_effort 应原样透传: %#v", got["reasoning_effort"])
 	}
 }
 
@@ -452,18 +358,15 @@ func TestBuildProviderRequest_PreservesMultimodalContentArray(t *testing.T) {
 			serviceType: "gemini",
 			upstream: &config.UpstreamConfig{
 				ServiceType: "gemini",
-				ModelMapping: map[string]string{
-					"gpt-4o-image": "gemini-2.5-flash-image-preview",
-				},
 			},
-			model:     "gpt-4o-image",
+			model:     "gemini-2.5-flash-image-preview",
 			wantModel: "gemini-2.5-flash-image-preview",
 		},
 	}
 
-	bodyBytes := []byte(`{"model":"gpt-4o-image","messages":[{"role":"user","content":[{"type":"text","text":"修改这个图片"},{"type":"image_url","image_url":{"url":"https://example.com/image.png"}}]}]}`)
-
 	for _, tt := range tests {
+		// 显式 ModelMapping 已退役：请求体 model 直接使用各 case 的请求模型。
+		bodyBytes := []byte(`{"model":"` + tt.model + `","messages":[{"role":"user","content":[{"type":"text","text":"修改这个图片"},{"type":"image_url","image_url":{"url":"https://example.com/image.png"}}]}]}`)
 		t.Run(tt.name, func(t *testing.T) {
 			w := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(w)

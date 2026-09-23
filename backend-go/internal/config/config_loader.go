@@ -138,18 +138,6 @@ func (cm *ConfigManager) loadConfig() error {
 	if cm.normalizeAPIKeyConsumptionPolicies() {
 		needSaveDefaults = true
 	}
-	if cm.migrateFableModelMapping() {
-		needSaveDefaults = true
-	}
-	if cm.migrateFableReasoningMapping() {
-		needSaveDefaults = true
-	}
-	if cm.migrateDeprecatedGrokModelMapping() {
-		needSaveDefaults = true
-	}
-	if cm.migrateAutoManagedExplicitMappings() {
-		needSaveDefaults = true
-	}
 	if cm.migrateVolcengineResponsesServiceType() {
 		needSaveDefaults = true
 	}
@@ -761,9 +749,6 @@ func (cm *ConfigManager) applyCodexToolCompatMigration(rawJSON []byte) bool {
 	return updated
 }
 
-// migrateFableModelMapping 自动为现有渠道补齐 fable 模型映射。
-// 若渠道 modelMapping 中存在 "opus" 映射但缺少 "fable"，则将 "fable" 指向同一目标。
-// 确保已有 opus 转发配置的渠道在升级后无需手动添加 fable 条目。
 // compatSeedMigrationJSONKeys 历史手工兼容开关的 JSON 字段名 -> trait。
 // 这些字段已从 UpstreamConfig 结构体删除（管理面板不再提供编辑入口，渠道更新接口不再接受
 // 手工写入），只能从磁盘原始 JSON 里读到老用户的历史值，因此本迁移必须读 rawJSON 而非结构体字段。
@@ -838,75 +823,6 @@ func (cm *ConfigManager) migrateManualCompatSwitchesToSeeds(rawJSON []byte) bool
 	return updated
 }
 
-func (cm *ConfigManager) migrateFableModelMapping() bool {
-	updated := false
-	apply := func(channels []UpstreamConfig, channelName string) {
-		for i := range channels {
-			mm := channels[i].ModelMapping
-			if mm == nil {
-				continue
-			}
-			opusTarget, hasOpus := mm["opus"]
-			_, hasFable := mm["fable"]
-			if hasOpus && !hasFable {
-				mm["fable"] = opusTarget
-				updated = true
-				log.Printf("[Config-Migration] %s 渠道 [%d] %s modelMapping 已自动补齐 fable -> %s（与 opus 一致）", channelName, i, channels[i].Name, opusTarget)
-			}
-		}
-	}
-	apply(cm.config.Upstream, "Messages")
-	apply(cm.config.ResponsesUpstream, "Responses")
-	apply(cm.config.GeminiUpstream, "Gemini")
-	apply(cm.config.ChatUpstream, "Chat")
-	apply(cm.config.ImagesUpstream, "Images")
-	return updated
-}
-
-// migrateDeprecatedGrokModelMapping 清除历史遗留的 grok 精确模型映射
-// （grok-4.1 -> grok-4.1-thinking，grok-4.2 -> grok-4.20-beta），
-// 保证老配置文件里的渠道即使用户从不编辑，也会在下次启动时被清理。
-func (cm *ConfigManager) migrateDeprecatedGrokModelMapping() bool {
-	updated := false
-	apply := func(channels []UpstreamConfig, channelName string) {
-		for i := range channels {
-			cleaned, changed := sanitizeDeprecatedGrokModelMapping(channels[i].ModelMapping)
-			if changed {
-				channels[i].ModelMapping = cleaned
-				updated = true
-				log.Printf("[Config-Migration] %s 渠道 [%d] %s 已清除过时的 grok modelMapping", channelName, i, channels[i].Name)
-			}
-		}
-	}
-	apply(cm.config.Upstream, "Messages")
-	apply(cm.config.ResponsesUpstream, "Responses")
-	apply(cm.config.GeminiUpstream, "Gemini")
-	apply(cm.config.ChatUpstream, "Chat")
-	apply(cm.config.ImagesUpstream, "Images")
-	apply(cm.config.VectorsUpstream, "Vectors")
-	return updated
-}
-
-func (cm *ConfigManager) migrateAutoManagedExplicitMappings() bool {
-	updated := false
-	apply := func(channels []UpstreamConfig, channelName string) {
-		for i := range channels {
-			if !stripAutoManagedExplicitOverrides(&channels[i]) {
-				continue
-			}
-			updated = true
-			log.Printf("[Config-Migration] %s 渠道 [%d] %s 已清理 AutoManaged 显式映射与手工兼容字段", channelName, i, channels[i].Name)
-		}
-	}
-	apply(cm.config.Upstream, "Messages")
-	apply(cm.config.ResponsesUpstream, "Responses")
-	apply(cm.config.GeminiUpstream, "Gemini")
-	apply(cm.config.ChatUpstream, "Chat")
-	apply(cm.config.ImagesUpstream, "Images")
-	apply(cm.config.VectorsUpstream, "Vectors")
-	return updated
-}
-
 // migrateVolcengineResponsesServiceType 把火山方舟 Agent/Coding Plan 的存量
 // Responses 渠道从 Chat Completions 转换（serviceType=openai）翻转为原生
 // Responses API（serviceType=responses）。模板自 2026-08 起按官方推荐原生接入
@@ -966,34 +882,6 @@ func isVolcenginePlanBaseURLLocal(baseURL string) bool {
 	path := strings.TrimRight(s[len(host):], "/")
 	return path == "/api/plan" || strings.HasPrefix(path, "/api/plan/") ||
 		path == "/api/coding" || strings.HasPrefix(path, "/api/coding/")
-}
-
-// migrateFableReasoningMapping 自动为现有渠道补齐 fable 推理强度映射。
-// 若渠道 reasoningMapping 中存在 "opus" 映射但缺少 "fable"，则将 "fable" 指向同一 effort。
-// 确保已有 opus 思考强度配置的渠道在升级后自动继承到 fable。
-func (cm *ConfigManager) migrateFableReasoningMapping() bool {
-	updated := false
-	apply := func(channels []UpstreamConfig, channelName string) {
-		for i := range channels {
-			rm := channels[i].ReasoningMapping
-			if rm == nil {
-				continue
-			}
-			opusEffort, hasOpus := rm["opus"]
-			_, hasFable := rm["fable"]
-			if hasOpus && !hasFable {
-				rm["fable"] = opusEffort
-				updated = true
-				log.Printf("[Config-Migration] %s 渠道 [%d] %s reasoningMapping 已自动补齐 fable -> %s（与 opus 一致）", channelName, i, channels[i].Name, opusEffort)
-			}
-		}
-	}
-	apply(cm.config.Upstream, "Messages")
-	apply(cm.config.ResponsesUpstream, "Responses")
-	apply(cm.config.GeminiUpstream, "Gemini")
-	apply(cm.config.ChatUpstream, "Chat")
-	apply(cm.config.ImagesUpstream, "Images")
-	return updated
 }
 
 // generateChannelUID 生成渠道稳定身份标识。

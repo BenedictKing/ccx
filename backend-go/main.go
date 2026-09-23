@@ -1404,7 +1404,6 @@ func main() {
 		apiGroup.POST("/messages/channels/:id/keys/group-model/restore", handlers.RestoreGroupModel(cfgManager, "Messages"))
 		apiGroup.POST("/messages/channels/:id/keys/suspend", handlers.SuspendAPIKey(cfgManager, "Messages"))
 		apiGroup.POST("/messages/channels/:id/keys/resume", handlers.ResumeAPIKey(cfgManager, "Messages"))
-		apiGroup.PUT("/messages/channels/:id/mappings", messages.UpdateModelMapping(cfgManager))
 
 		// Messages 多渠道调度 API
 		apiGroup.POST("/messages/channels/reorder", messages.ReorderChannels(cfgManager))
@@ -1446,7 +1445,6 @@ func main() {
 		apiGroup.POST("/responses/channels/:id/keys/group-model/restore", handlers.RestoreGroupModel(cfgManager, "Responses"))
 		apiGroup.POST("/responses/channels/:id/keys/suspend", handlers.SuspendAPIKey(cfgManager, "Responses"))
 		apiGroup.POST("/responses/channels/:id/keys/resume", handlers.ResumeAPIKey(cfgManager, "Responses"))
-		apiGroup.PUT("/responses/channels/:id/mappings", responses.UpdateModelMapping(cfgManager))
 
 		// Responses 多渠道调度 API
 		apiGroup.POST("/responses/channels/reorder", responses.ReorderChannels(cfgManager))
@@ -1486,7 +1484,6 @@ func main() {
 		apiGroup.POST("/gemini/channels/:id/keys/group-model/restore", handlers.RestoreGroupModel(cfgManager, "Gemini"))
 		apiGroup.POST("/gemini/channels/:id/keys/suspend", handlers.SuspendAPIKey(cfgManager, "Gemini"))
 		apiGroup.POST("/gemini/channels/:id/keys/resume", handlers.ResumeAPIKey(cfgManager, "Gemini"))
-		apiGroup.PUT("/gemini/channels/:id/mappings", gemini.UpdateModelMapping(cfgManager))
 
 		// Gemini 多渠道调度 API
 		apiGroup.POST("/gemini/channels/reorder", gemini.ReorderChannels(cfgManager))
@@ -1526,7 +1523,6 @@ func main() {
 		apiGroup.POST("/chat/channels/:id/keys/group-model/restore", handlers.RestoreGroupModel(cfgManager, "Chat"))
 		apiGroup.POST("/chat/channels/:id/keys/suspend", handlers.SuspendAPIKey(cfgManager, "Chat"))
 		apiGroup.POST("/chat/channels/:id/keys/resume", handlers.ResumeAPIKey(cfgManager, "Chat"))
-		apiGroup.PUT("/chat/channels/:id/mappings", chat.UpdateModelMapping(cfgManager))
 
 		// Chat 多渠道调度 API
 		apiGroup.POST("/chat/channels/reorder", chat.ReorderChannels(cfgManager))
@@ -1567,7 +1563,6 @@ func main() {
 		apiGroup.POST("/images/channels/:id/keys/group-model/restore", handlers.RestoreGroupModel(cfgManager, "Images"))
 		apiGroup.POST("/images/channels/:id/keys/suspend", handlers.SuspendAPIKey(cfgManager, "Images"))
 		apiGroup.POST("/images/channels/:id/keys/resume", handlers.ResumeAPIKey(cfgManager, "Images"))
-		apiGroup.PUT("/images/channels/:id/mappings", images.UpdateModelMapping(cfgManager))
 
 		// Images 多渠道调度 API
 		apiGroup.POST("/images/channels/reorder", images.ReorderChannels(cfgManager))
@@ -1601,7 +1596,6 @@ func main() {
 		apiGroup.POST("/vectors/channels/:id/keys/group-model/restore", handlers.RestoreGroupModel(cfgManager, "Vectors"))
 		apiGroup.POST("/vectors/channels/:id/keys/suspend", handlers.SuspendAPIKey(cfgManager, "Vectors"))
 		apiGroup.POST("/vectors/channels/:id/keys/resume", handlers.ResumeAPIKey(cfgManager, "Vectors"))
-		apiGroup.PUT("/vectors/channels/:id/mappings", vectors.UpdateModelMapping(cfgManager))
 
 		// Vectors 多渠道调度 API
 		apiGroup.POST("/vectors/channels/reorder", vectors.ReorderChannels(cfgManager))

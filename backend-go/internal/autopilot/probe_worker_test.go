@@ -817,30 +817,6 @@ func TestBuildProbeRequest_BodyValidJSON(t *testing.T) {
 	}
 }
 
-func TestBuildProbeRequest_WithModelMapping(t *testing.T) {
-	profile := &KeyEndpointProfile{
-		EndpointUID: "ep-mapping",
-		BaseURL:     "https://example.com",
-		ServiceType: "openai",
-		KeyMask:     "sk-***test",
-		ModelMapping: map[string]string{
-			"claude-3-5-sonnet": "gpt-4o",
-		},
-	}
-
-	req, err := buildProbeRequest(profile, "sk-real-test-key")
-	if err != nil {
-		t.Fatalf("buildProbeRequest 失败: %v", err)
-	}
-
-	// 应使用 ModelMapping 中的模型
-	var body map[string]interface{}
-	_ = json.Unmarshal(req.Body, &body)
-	if model, ok := body["model"].(string); !ok || model != "gpt-4o" {
-		t.Errorf("探测模型: got %v, want gpt-4o", body["model"])
-	}
-}
-
 func TestProbeWorker_ProbeConfidence(t *testing.T) {
 	now := time.Date(2025, 6, 1, 12, 0, 0, 0, time.UTC)
 

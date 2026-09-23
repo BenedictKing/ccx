@@ -37,7 +37,7 @@ func (p *OpenAIProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 
 	// --- 复用旧的转换逻辑 ---
 	openaiReq := &types.OpenAIRequest{
-		Model:       config.RedirectModel(claudeReq.Model, upstream),
+		Model:       claudeReq.Model,
 		Messages:    p.convertMessages(&claudeReq),
 		Stream:      claudeReq.Stream,
 		Temperature: claudeReq.Temperature,
@@ -69,9 +69,6 @@ func (p *OpenAIProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 	}
 	if userID, ok := claudeReq.Metadata["user_id"].(string); ok && userID != "" {
 		requestMap["user_id"] = userID
-	}
-	if effort := config.ResolveReasoningEffort(claudeReq.Model, upstream); effort != "" {
-		config.ApplyReasoningParamStyle(requestMap, upstream.ReasoningParamStyle, effort)
 	}
 	if upstream.TextVerbosity != "" {
 		requestMap["text"] = map[string]interface{}{"verbosity": upstream.TextVerbosity}

@@ -3,6 +3,7 @@ package providers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"testing"
 
@@ -10,18 +11,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func TestOpenAIProvider_InjectsModelLevelReasoningAndChannelLevelOptions(t *testing.T) {
+func TestOpenAIProvider_InjectsChannelLevelOptions(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	c := newGinContext(http.MethodPost, "/v1/messages", []byte(`{"model":"gpt-5.1-codex","messages":[{"role":"user","content":"hi"}]}`), context.Background())
 	upstream := &config.UpstreamConfig{
-		BaseURL:     "https://api.example.com",
-		ServiceType: "openai",
-		ModelMapping: map[string]string{
-			"gpt-5.1-codex": "gpt-5.4-mini",
-		},
-		ReasoningMapping: map[string]string{
-			"gpt-5.1-codex": "xhigh",
-		},
+		BaseURL:       "https://api.example.com",
+		ServiceType:   "openai",
 		TextVerbosity: "high",
 		FastMode:      true,
 	}
@@ -37,13 +32,9 @@ func TestOpenAIProvider_InjectsModelLevelReasoningAndChannelLevelOptions(t *test
 		t.Fatalf("decode request body: %v", err)
 	}
 
-	if got := body["model"]; got != "gpt-5.4-mini" {
-		t.Fatalf("model = %v, want gpt-5.4-mini", got)
-	}
-
-	reasoning, ok := body["reasoning"].(map[string]interface{})
-	if !ok || reasoning["effort"] != "xhigh" {
-		t.Fatalf("reasoning = %#v, want effort=xhigh", body["reasoning"])
+	// 显式 ModelMapping 已退役：请求模型直接透传，不再改写。
+	if got := body["model"]; got != "gpt-5.1-codex" {
+		t.Fatalf("model = %v, want gpt-5.1-codex", got)
 	}
 
 	text, ok := body["text"].(map[string]interface{})
@@ -56,18 +47,12 @@ func TestOpenAIProvider_InjectsModelLevelReasoningAndChannelLevelOptions(t *test
 	}
 }
 
-func TestResponsesProvider_PassthroughInjectsModelLevelReasoningAndChannelLevelOptions(t *testing.T) {
+func TestResponsesProvider_PassthroughInjectsChannelLevelOptions(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	c := newGinContext(http.MethodPost, "/v1/responses", []byte(`{"model":"gpt-5","input":"hi"}`), context.Background())
 	upstream := &config.UpstreamConfig{
-		BaseURL:     "https://api.example.com",
-		ServiceType: "responses",
-		ModelMapping: map[string]string{
-			"gpt-5": "gpt-5.4",
-		},
-		ReasoningMapping: map[string]string{
-			"gpt-5": "high",
-		},
+		BaseURL:       "https://api.example.com",
+		ServiceType:   "responses",
 		TextVerbosity: "medium",
 		FastMode:      true,
 	}
@@ -83,13 +68,9 @@ func TestResponsesProvider_PassthroughInjectsModelLevelReasoningAndChannelLevelO
 		t.Fatalf("decode request body: %v", err)
 	}
 
-	if got := body["model"]; got != "gpt-5.4" {
-		t.Fatalf("model = %v, want gpt-5.4", got)
-	}
-
-	reasoning, ok := body["reasoning"].(map[string]interface{})
-	if !ok || reasoning["effort"] != "high" {
-		t.Fatalf("reasoning = %#v, want effort=high", body["reasoning"])
+	// 显式 ModelMapping 已退役：请求模型直接透传，不再改写。
+	if got := body["model"]; got != "gpt-5" {
+		t.Fatalf("model = %v, want gpt-5", got)
 	}
 
 	text, ok := body["text"].(map[string]interface{})
@@ -116,14 +97,13 @@ func TestResponsesProvider_PassthroughInjectsThinkingParamStyle(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			gin.SetMode(gin.TestMode)
-			c := newGinContext(http.MethodPost, "/v1/responses", []byte(`{"model":"gpt-5","input":"hi","reasoning":{"effort":"medium"},"reasoning_effort":"medium"}`), context.Background())
+			// 显式 ReasoningMapping 已退役：thinking style 依据客户端原始 reasoning.effort 转换。
+			bodyJSON := fmt.Sprintf(`{"model":"gpt-5","input":"hi","reasoning":{"effort":%q},"reasoning_effort":%q}`, tt.effort, tt.effort)
+			c := newGinContext(http.MethodPost, "/v1/responses", []byte(bodyJSON), context.Background())
 			upstream := &config.UpstreamConfig{
 				BaseURL:             "https://api.example.com",
 				ServiceType:         "responses",
 				ReasoningParamStyle: "thinking",
-				ReasoningMapping: map[string]string{
-					"gpt-5": tt.effort,
-				},
 			}
 
 			req, _, err := (&ResponsesProvider{}).ConvertToProviderRequest(c, upstream, "sk-test")

@@ -1783,17 +1783,8 @@ func (r *SmartRouter) resolveChannelModels(
 		resolutions = append(resolutions, res)
 	}
 
-	if len(upstream.ModelMapping) > 0 {
-		for _, target := range upstream.ModelMapping {
-			addResolution(target, "explicit_mapping", "matched configured model mapping")
-		}
-	}
-	// 请求模型的 redirect 目标（无映射时为请求模型本身）。
-	if redirected, matched := config.RedirectModelWithMatch(requestModel, upstream); matched {
-		addResolution(redirected, "explicit_mapping", "matched configured model mapping")
-	} else if redirected != "" {
-		addResolution(redirected, "", "")
-	}
+	// 请求模型本身（显式 ModelMapping 已退役，候选枚举只含请求模型）。
+	addResolution(requestModel, "", "")
 
 	// fail-open：枚举为空但单数解析认为渠道 supported 时，回退到单模型行。
 	if len(resolutions) == 0 {
@@ -1862,7 +1853,7 @@ func (r *SmartRouter) buildChannelEntryForKey(
 	modelProvider := ""
 	var modelPricing *config.ModelPricing
 	if model != "" {
-		resolved := config.ResolveMappedUpstreamCapability(model, config.RedirectModel(model, upstream), upstream, upstreamModelCapabilities)
+		resolved := config.ResolveMappedUpstreamCapability(model, model, upstream, upstreamModelCapabilities)
 		actualModel = resolved.ActualModel
 		if resolved.Known {
 			capability := resolved.Capability
@@ -2007,7 +1998,9 @@ func (r *SmartRouter) buildChannelEntryForKey(
 		}
 	}
 	modelFamily := InferModelFamily(actualModel, modelProvider)
-	visionDisabled := upstream.NoVision || containsString(upstream.NoVisionModels, actualModel)
+	// 整渠道视觉禁用仍由渠道开关决定；按模型的禁用已随 NoVisionModels 退役，
+	// 由 CapabilityFloor 的画像 SupportsVision 硬约束在选模阶段接管。
+	visionDisabled := upstream.NoVision
 	if visionDisabled {
 		entry.SupportsVision = false
 	}

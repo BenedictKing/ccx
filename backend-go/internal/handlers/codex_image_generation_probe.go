@@ -232,18 +232,16 @@ func executeCodexImageGenerationCapabilityTest(
 	channelKind string,
 ) ModelTestResult {
 	startedAt := time.Now()
-	actualModel := config.RedirectModel(model, channel)
 	result := ModelTestResult{
-		Model:       model,
-		ActualModel: actualModel,
-		StartedAt:   startedAt.Format(time.RFC3339Nano),
+		Model:     model,
+		StartedAt: startedAt.Format(time.RFC3339Nano),
 	}
-	summary := &CodexImageGenerationProbeSummary{ActualModel: actualModel}
+	summary := &CodexImageGenerationProbeSummary{ActualModel: model}
 	result.CodexImageGeneration = summary
 
 	probeChannel := channel.Clone()
 	probeChannel.DisabledKeyModels = nil
-	candidates := keypool.CandidatesForModel(probeChannel, nil, actualModel)
+	candidates := keypool.CandidatesForModel(probeChannel, nil, model)
 	if len(candidates) == 0 {
 		errMsg := "no_eligible_api_key"
 		result.Error = &errMsg
@@ -266,7 +264,7 @@ func executeCodexImageGenerationCapabilityTest(
 		}
 
 		baseURL := codexProbeBaseURL(channel, candidate)
-		modeResults := probeImageGenerationToolModes(probeCtx, channel, "responses", candidate.APIKey, baseURL, actualModel)
+		modeResults := probeImageGenerationToolModes(probeCtx, channel, "responses", candidate.APIKey, baseURL, model)
 		state := aggregateImageGenerationProbeState(modeResults)
 		summary.Tested = true
 		summary.KeyResults = append(summary.KeyResults, CodexImageGenerationKeyProbeResult{
@@ -283,7 +281,7 @@ func executeCodexImageGenerationCapabilityTest(
 		default:
 			summary.InconclusiveKeys++
 		}
-		reconcileCodexImageGenerationRestriction(cfgManager, channel, channelKind, channelID, candidate.APIKey, actualModel, state, modeResults)
+		reconcileCodexImageGenerationRestriction(cfgManager, channel, channelKind, channelID, candidate.APIKey, model, state, modeResults)
 	}
 
 	summary.Supported = summary.SupportedKeys > 0
@@ -295,7 +293,7 @@ func executeCodexImageGenerationCapabilityTest(
 		return result
 	}
 
-	if channel.IsStripImageGenerationToolEnabled() && probePlainResponsesWithCandidates(probeCtx, channel, candidates, actualModel) {
+	if channel.IsStripImageGenerationToolEnabled() && probePlainResponsesWithCandidates(probeCtx, channel, candidates, model) {
 		summary.CompatibleViaStrip = true
 		result.Success = true
 		result.StreamingSupported = true

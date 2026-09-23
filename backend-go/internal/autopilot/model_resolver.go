@@ -131,8 +131,8 @@ func requestQualityBenefitCap(profile *RequestProfile) QualityTier {
 // 当请求模型在渠道 supportedModels 中不存在时，从 ModelProfileStore 中
 // 找到满足 CapabilityFloor 的最佳匹配模型。
 //
-// 仅对 AutoManaged==true 的渠道生效；手动配置渠道通过 config.RedirectModel
-// 直接短路，不经过自动映射。
+// 全渠道统一生效（显式 ModelMapping 已退役，渠道模型承接判断与映射
+// 统一由画像驱动；无画像渠道 fail-open 透传原模型名）。
 type ModelResolver struct {
 	profileStore *ModelProfileStore
 	cfgManager   *config.ConfigManager
@@ -157,7 +157,7 @@ func NewModelResolver(profileStore *ModelProfileStore, cfgManager *config.Config
 // 安全不变量:
 //   - 显式 modelMapping（用户手动配置）始终优先，不经过能力下界检查
 //   - 禁止链式映射：candidate 源始终是原始 GetModelProfiles 结果
-//   - 仅 autoManaged 渠道走自动映射；手动渠道由 config.RedirectModel 短路
+//   - 全渠道统一自动映射；无画像渠道 fail-open 透传原模型名
 //   - 自适应协议入口（messages/responses）允许跨模型替代；其余请求必须精确命中模型 ID
 func (r *ModelResolver) ResolveModel(
 	requestModel string,
@@ -166,18 +166,7 @@ func (r *ModelResolver) ResolveModel(
 	metricsKey string,
 	floor CapabilityFloor,
 ) (target ResolvedRouteTarget, resolved bool, reason string) {
-
-	// Step 1: 显式 modelMapping（精确 → 模糊）始终优先。
-	// 手动配置视为已知正确，不经过能力下界检查（设计 doc 安全边界）。
-	if r.cfgManager != nil {
-		upstream := r.findUpstream(channelUID, channelKind)
-		if upstream != nil && !upstream.AutoManaged {
-			redirected, matched := config.RedirectModelWithMatch(requestModel, upstream)
-			if matched && redirected != requestModel {
-				return ResolvedRouteTarget{Model: redirected, Reason: "manual_redirect"}, true, "manual_redirect"
-			}
-		}
-	}
+	// Step 1（原显式 modelMapping 短路已随 ModelMapping 退役删除）。
 
 	// Step 2: 无 ModelProfileStore 时自动映射不可用，fail-open。
 	if r.profileStore == nil {
@@ -1596,7 +1585,6 @@ func (r *ModelResolver) modelRankingCapabilityContext(
 		return nil, cfg.UpstreamModelCapabilities
 	}
 	upstreamCopy := *upstream
-	upstreamCopy.ModelMapping = nil
 	return &upstreamCopy, cfg.UpstreamModelCapabilities
 }
 

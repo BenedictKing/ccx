@@ -174,7 +174,6 @@ func (cm *ConfigManager) addUpstreamCommonLocked(k ChannelKindConfig, upstream U
 	upstream.BaseURLs = deduplicateBaseURLs(upstream.BaseURLs, upstream.ServiceType)
 	applyDefaultBaseURL(&upstream)
 
-	upstream.ModelMapping, _ = sanitizeDeprecatedGrokModelMapping(upstream.ModelMapping)
 	stripAutoManagedExplicitOverrides(&upstream)
 	applyAutoDerivedChannelName(&upstream, "")
 	if shouldAutoDeriveChannelName(&upstream) {
@@ -343,14 +342,7 @@ func applyUpstreamUpdateFields(upstream *UpstreamConfig, updates UpstreamUpdate)
 		upstream.APIKeys = deduplicateStrings(updates.APIKeys)
 	}
 	applyAPIKeyConfigUpdate(upstream, updates)
-	if updates.ModelMapping != nil {
-		upstream.ModelMapping = updates.ModelMapping
-	}
-	upstream.ModelMapping, _ = sanitizeDeprecatedGrokModelMapping(upstream.ModelMapping)
 	applyModelCapabilityUpdates(upstream, updates)
-	if updates.ReasoningMapping != nil {
-		upstream.ReasoningMapping = updates.ReasoningMapping
-	}
 	if updates.ReasoningParamStyle != nil {
 		upstream.ReasoningParamStyle = *updates.ReasoningParamStyle
 	}
@@ -460,12 +452,6 @@ func applyUpstreamUpdateFields(upstream *UpstreamConfig, updates UpstreamUpdate)
 	}
 	if updates.NoVision != nil {
 		upstream.NoVision = *updates.NoVision
-	}
-	if updates.NoVisionModels != nil {
-		upstream.NoVisionModels = updates.NoVisionModels
-	}
-	if updates.VisionFallbackModel != nil {
-		upstream.VisionFallbackModel = *updates.VisionFallbackModel
 	}
 	if updates.RateLimitRPM != nil {
 		if *updates.RateLimitRPM < 0 {

@@ -235,9 +235,9 @@ func TestCapabilityCacheHit_DoesNotBindExecutionLookupKey(t *testing.T) {
 	baseURL := channel.GetAllBaseURLs()[0]
 	apiKey := channel.APIKeys[0]
 	protocols := []string{"messages"}
-	cacheKey := buildCapabilityCacheKey(baseURL, apiKey, channel.ServiceType, protocols, nil, hashModelMapping(channel.ModelMapping))
+	cacheKey := buildCapabilityCacheKey(baseURL, apiKey, channel.ServiceType, protocols, nil)
 	identityKey := resolveCapabilityIdentityKey(&channel)
-	executionLookupKey := buildCapabilityExecutionLookupKey(identityKey, "messages", protocols, nil, hashModelMapping(channel.ModelMapping))
+	executionLookupKey := buildCapabilityExecutionLookupKey(identityKey, "messages", protocols, nil)
 
 	setCapabilityCache(cacheKey, CapabilityTestResponse{
 		ChannelID:           0,
@@ -518,8 +518,7 @@ func TestExecuteModelTest_NativeProtocolDoesNotExposeActualModel(t *testing.T) {
 			"name": "channel",
 			"baseUrl": "REPLACE_ME",
 			"apiKeys": ["test-key"],
-			"serviceType": "claude",
-			"modelMapping": {"claude-test": "claude-redirected"}
+			"serviceType": "claude"
 		}]
 	}`
 
@@ -779,8 +778,8 @@ func TestResumedCancelledJob_ReturnsUpdatedState(t *testing.T) {
 	}
 
 	// 绑定 execution lookupKey，模拟取消后保留的 identity 运行复用键
-	executionLookupKey := buildCapabilityExecutionLookupKey(resolveCapabilityIdentityKey(&channel), "messages", []string{"messages"}, nil, hashModelMapping(channel.ModelMapping))
-	cacheKey := buildCapabilityCacheKey(baseURL, apiKey, channel.ServiceType, []string{"messages"}, nil, hashModelMapping(channel.ModelMapping))
+	executionLookupKey := buildCapabilityExecutionLookupKey(resolveCapabilityIdentityKey(&channel), "messages", []string{"messages"}, nil)
+	cacheKey := buildCapabilityCacheKey(baseURL, apiKey, channel.ServiceType, []string{"messages"}, nil)
 	lookupKey := buildCapabilityJobLookupKey(cacheKey, "messages", 0)
 	capabilityJobs.bindLookupKey(executionLookupKey, job.JobID)
 	capabilityJobs.bindLookupKey(lookupKey, job.JobID)
@@ -905,75 +904,6 @@ func TestCapabilityPreviousJobReuse_ByIdentityAcrossChannels(t *testing.T) {
 	waitForCapabilityJobTerminal(resp.Job.JobID, 5*time.Second)
 }
 
-func TestCapabilityPreviousJobReuse_IsolatedByModelMapping(t *testing.T) {
-	resetCapabilityTestState()
-	gin.SetMode(gin.TestMode)
-
-	tmpDir := t.TempDir()
-	configFile := filepath.Join(tmpDir, "config.json")
-	configJSON := `{"upstream":[{"name":"channel-a","accountUid":"shared-account","serviceType":"claude","baseUrl":"https://example.com","apiKeys":["test"],"modelMapping":{"claude-sonnet-4-6":"old-target"}},{"name":"channel-b","accountUid":"shared-account","serviceType":"claude","baseUrl":"https://example.com","apiKeys":["test"],"modelMapping":{"claude-sonnet-4-6":"new-target"}}]}`
-	if err := os.WriteFile(configFile, []byte(configJSON), 0644); err != nil {
-		t.Fatalf("write config failed: %v", err)
-	}
-	cfgManager, err := config.NewConfigManager(configFile, "")
-	if err != nil {
-		t.Fatalf("create config manager failed: %v", err)
-	}
-	defer errutil.IgnoreDeferred(cfgManager.Close)
-
-	cfg := cfgManager.GetConfig()
-	prevJob := newCapabilityTestJob(0, "channel-a", "messages", "claude", []string{"messages"}, 10*time.Second, 10)
-	prevJob.IdentityKey = resolveCapabilityIdentityKey(&cfg.Upstream[0])
-	prevJob.ChannelKind = "messages"
-	prevJob.Lifecycle = CapabilityLifecycleDone
-	prevJob.Outcome = CapabilityOutcomeSuccess
-	prevJob.Status = CapabilityJobStatusCompleted
-	prevJob.CompatibleProtocols = []string{"messages"}
-	prevJob.Tests[0].Success = true
-	prevJob.Tests[0].SuccessCount = 1
-	prevJob.Tests[0].AttemptedModels = 1
-	prevJob.Tests[0].ModelResults = []CapabilityModelJobResult{{
-		Model:     "claude-sonnet-4-6",
-		Status:    CapabilityModelStatusSuccess,
-		Lifecycle: CapabilityLifecycleDone,
-		Outcome:   CapabilityOutcomeSuccess,
-		Success:   true,
-		TestedAt:  time.Now().Format(time.RFC3339Nano),
-	}}
-	capabilityJobs.create(prevJob)
-
-	r := gin.New()
-	r.POST("/messages/channels/:id/capability-test", TestChannelCapability(cfgManager, nil, "messages"))
-
-	// 不同 modelMapping 必然不复用，新 job 会真实执行：限定单模型 + 短超时，
-	// 并在断言后等待终态，避免后台 goroutine 泄漏到后续测试。
-	body := `{"targetProtocols":["messages"],"timeout":1000,"models":["claude-sonnet-4-6"],"previousJobId":"` + prevJob.JobID + `"}`
-	req := httptest.NewRequest(http.MethodPost, "/messages/channels/1/capability-test", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status=%d, want=%d, body=%s", w.Code, http.StatusOK, w.Body.String())
-	}
-
-	var resp struct {
-		Job CapabilityTestJob `json:"job"`
-	}
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal response failed: %v", err)
-	}
-
-	if resp.Job.HasReusedResults {
-		t.Fatal("expected previous results not to be reused across different modelMapping")
-	}
-	if resp.Job.RunMode == CapabilityRunModeReusedPreviousResult {
-		t.Fatalf("runMode=%s, want not reused_previous_results", resp.Job.RunMode)
-	}
-
-	waitForCapabilityJobTerminal(resp.Job.JobID, 5*time.Second)
-}
-
 func TestCapabilityRunningJobReuse_ByIdentityAcrossChannels(t *testing.T) {
 	resetCapabilityTestState()
 	gin.SetMode(gin.TestMode)
@@ -999,8 +929,8 @@ func TestCapabilityRunningJobReuse_ByIdentityAcrossChannels(t *testing.T) {
 
 	cfg := cfgManager.GetConfig()
 	channel := cfg.Upstream[0]
-	cacheKey := buildCapabilityCacheKey(channel.GetAllBaseURLs()[0], channel.APIKeys[0], channel.ServiceType, []string{"messages"}, nil, hashModelMapping(channel.ModelMapping))
-	executionLookupKey := buildCapabilityExecutionLookupKey(resolveCapabilityIdentityKey(&channel), "messages", []string{"messages"}, nil, hashModelMapping(channel.ModelMapping))
+	cacheKey := buildCapabilityCacheKey(channel.GetAllBaseURLs()[0], channel.APIKeys[0], channel.ServiceType, []string{"messages"}, nil)
+	executionLookupKey := buildCapabilityExecutionLookupKey(resolveCapabilityIdentityKey(&channel), "messages", []string{"messages"}, nil)
 	lookupKey := buildCapabilityJobLookupKey(cacheKey, "messages", 0)
 	capabilityJobs.bindLookupKey(executionLookupKey, runningJob.JobID)
 	capabilityJobs.bindLookupKey(lookupKey, runningJob.JobID)

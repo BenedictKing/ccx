@@ -12,14 +12,12 @@ import (
 
 func TestGetUpstreams_IncludesAdvancedOptionFields(t *testing.T) {
 	cm := setupTestConfigManager(t, []config.UpstreamConfig{{
-		Name:             "msg-ch",
-		ServiceType:      "responses",
-		BaseURL:          "https://api.example.com",
-		APIKeys:          []string{"sk-1"},
-		ModelMapping:     map[string]string{"gpt-5": "gpt-5.4"},
-		ReasoningMapping: map[string]string{"gpt-5": "high"},
-		TextVerbosity:    "medium",
-		FastMode:         true,
+		Name:          "msg-ch",
+		ServiceType:   "responses",
+		BaseURL:       "https://api.example.com",
+		APIKeys:       []string{"sk-1"},
+		TextVerbosity: "medium",
+		FastMode:      true,
 	}})
 
 	gin.SetMode(gin.TestMode)
@@ -49,10 +47,6 @@ func TestGetUpstreams_IncludesAdvancedOptionFields(t *testing.T) {
 	}
 	if ch["fastMode"] != true {
 		t.Fatalf("fastMode = %v, want true", ch["fastMode"])
-	}
-	rm, ok := ch["reasoningMapping"].(map[string]interface{})
-	if !ok || rm["gpt-5"] != "high" {
-		t.Fatalf("reasoningMapping = %#v, want gpt-5=high", ch["reasoningMapping"])
 	}
 }
 

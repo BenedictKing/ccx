@@ -133,7 +133,7 @@ func firstCapabilityProbeChannel(channels []*config.UpstreamConfig) *config.Upst
 // 经过 provider.ConvertToProviderRequest 转换为 toProtocol 上游请求。
 //
 // 实现原理：构造 gin.CreateTestContext + httptest.NewRequest 模拟 fromProtocol 入口请求，
-// 调用 toProtocol 对应 provider 的 ConvertToProviderRequest 完成协议方向转换 + ModelMapping。
+// 调用 toProtocol 对应 provider 的 ConvertToProviderRequest 完成协议方向转换。
 //
 // 返回值：
 //   - reqURL: 完整上游请求 URL
@@ -161,7 +161,7 @@ func buildCompositeRequestViaProvider(
 	c.Request.Header.Set("Content-Type", "application/json")
 
 	// 通过 provider 转换：fromBody → toProtocol 上游请求
-	// 此过程会自动应用 ModelMapping 和协议方向转换
+	// 此过程会自动应用协议方向转换
 	req, _, err := provider.ConvertToProviderRequest(c, channel, apiKey)
 	if err != nil {
 		return "", nil, "", fmt.Errorf("ConvertToProviderRequest failed: %w", err)

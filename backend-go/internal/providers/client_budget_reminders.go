@@ -12,17 +12,15 @@ import (
 // ============== 客户端上下文预算提醒剔除（CC + Codex 统一机制） ==============
 //
 // 统一语义：客户端（Claude Code / Codex CLI）按「自己认知的模型窗口」向请求注入
-// 上下文余量提醒。网关改写实际执行模型（渠道 ModelMapping 重定向、调度器联邦/
-// 溢出跨模型改写、跨协议转换）后，这些数字按原模型窗口核算，必然失真；失真数字
-// 比没有数字更误导模型决策 → 剔除。模型语义未变（原生直通且未命中映射）则保留，
-// 此时数字准确，客户端依赖它驱动主动的上下文切换。
+// 上下文余量提醒。网关改写实际执行模型（调度器联邦/溢出跨模型改写、跨协议转换）
+// 后，这些数字按原模型窗口核算，必然失真；失真数字比没有数字更误导模型决策 →
+// 剔除。模型语义未变（原生直通）则保留，此时数字准确，客户端依赖它驱动主动的
+// 上下文切换。
 //
 // 何时剔 / 何时留（按客户端协议 × 换模型层级）：
 //   - messages → chat/gemini/responses 转换：无条件剔（跨协议必换模型语义），
 //     与 isClaudeCodeSystemHeader 的其他 CC header 一并处理；
-//   - messages → Claude 直通 + ModelMapping 命中：剔（redirectModelInBody 内）；
 //   - messages → Claude 直通 + 调度器联邦/溢出改写模型：剔（failover 改写点）；
-//   - responses → Responses 直通 + ModelMapping 命中：剔（passthrough 分支）；
 //   - responses → chat/claude/gemini 转换：无条件剔（converter 分支）；
 //   - 其余（直通且未换模型）：保留。
 //

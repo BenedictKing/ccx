@@ -800,11 +800,5 @@ func pickProbeModel(profile *KeyEndpointProfile, defaultModel string) string {
 	if len(profile.AvailableModels) > 0 {
 		return profile.AvailableModels[0]
 	}
-	// 尝试从 ModelMapping 中选一个
-	for _, target := range profile.ModelMapping {
-		if target != "" {
-			return target
-		}
-	}
 	return defaultModel
 }

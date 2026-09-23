@@ -52,38 +52,14 @@ var (
 	capabilityResponsesProvider providers.Provider = &providers.ResponsesProvider{}
 )
 
-func buildCapabilityCacheKey(baseURL string, apiKey string, serviceType string, protocols []string, models []string, modelMappingHash string) string {
+func buildCapabilityCacheKey(baseURL string, apiKey string, serviceType string, protocols []string, models []string) string {
 	sorted := make([]string, len(protocols))
 	copy(sorted, protocols)
 	sort.Strings(sorted)
 
 	normalizedModels := normalizeCapabilityModels(models)
 	metricsKey := metrics.GenerateMetricsIdentityKey(baseURL, apiKey, serviceType)
-	key := fmt.Sprintf("%s:%d:%s:%s", metricsKey, capabilityProbeSchemaVersion, strings.Join(sorted, ","), strings.Join(normalizedModels, ","))
-	if modelMappingHash != "" {
-		key += ":" + modelMappingHash
-	}
-	return key
-}
-
-func hashModelMapping(m map[string]string) string {
-	if len(m) == 0 {
-		return ""
-	}
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	var sb strings.Builder
-	for _, k := range keys {
-		sb.WriteString(k)
-		sb.WriteString("=>")
-		sb.WriteString(m[k])
-		sb.WriteByte(';')
-	}
-	h := sha1.Sum([]byte(sb.String()))
-	return hex.EncodeToString(h[:8])
+	return fmt.Sprintf("%s:%d:%s:%s", metricsKey, capabilityProbeSchemaVersion, strings.Join(sorted, ","), strings.Join(normalizedModels, ","))
 }
 
 func hashCapabilityProbePool(channel *config.UpstreamConfig) string {

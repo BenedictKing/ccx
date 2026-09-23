@@ -152,35 +152,6 @@ func TestResolveChannelModelsNoReasoningNeedBothScored(t *testing.T) {
 }
 
 // 显式映射渠道（单映射目标）展开应恰好一行，无 fan-out 回归。
-func TestResolveChannelModelsExplicitMappingSingleRow(t *testing.T) {
-	cfg := config.Config{
-		Upstream: []config.UpstreamConfig{{
-			Name:            "manual",
-			ChannelUID:      "ch_manual",
-			BaseURL:         "https://manual.example.com",
-			APIKeys:         []string{"sk-manual"},
-			Status:          "active",
-			SupportedModels: []string{"*"},
-			ModelMapping:    map[string]string{"claude-opus-4-8": "real-opus"},
-		}},
-		AutopilotRouting: config.AutopilotRoutingConfig{RoutingMode: "auto"},
-	}
-	cfgManager, cleanup := createTestConfigManager(t, cfg)
-	defer cleanup()
-	router := NewSmartRouter(nil, nil, nil, cfgManager)
-	profile := BuildRequestProfile(RequestProfileFeatures{
-		Model: "claude-opus-4-8", ChannelKind: "messages", Operation: "completion", EstTokens: 1000,
-	})
-	up := cfgManager.GetConfig().Upstream[0]
-	resolutions := router.resolveChannelModels(&profile, &up, cfgManager.GetConfig().UpstreamModelCapabilities)
-	if len(resolutions) != 1 {
-		t.Fatalf("显式映射渠道展开行数 = %d, want 1: %+v", len(resolutions), resolutions)
-	}
-	if resolutions[0].MappedModel != "real-opus" || resolutions[0].MappingSource != "explicit_mapping" {
-		t.Errorf("显式映射行 = %+v, want real-opus/explicit_mapping", resolutions[0])
-	}
-}
-
 // 同名承接渠道：解析结果的 ActualModel == 请求模型，CandidateKey 携带请求模型名。
 // MappedModel 保持空（避免映射质量档折算误判），展示模型名由 CandidateKey 回退。
 func TestResolveChannelModelsSameNameCarryover(t *testing.T) {
@@ -228,19 +199,15 @@ func TestResolveChannelModelsSupportedModelsFilter(t *testing.T) {
 			APIKeys:         []string{"sk-filtered"},
 			Status:          "active",
 			SupportedModels: []string{"good-*", "!good-blocked"},
-			ModelMapping: map[string]string{
-				"claude-opus-4-8": "good-model",
-				"other":           "good-blocked",
-				"third":           "bad-model",
-			},
 		}},
 		AutopilotRouting: config.AutopilotRoutingConfig{RoutingMode: "auto"},
 	}
 	cfgManager, cleanup := createTestConfigManager(t, cfg)
 	defer cleanup()
 	router := NewSmartRouter(nil, nil, nil, cfgManager)
+	// 显式 ModelMapping 已退役：SupportedModels 只做准入过滤，请求模型直接是实际模型。
 	profile := BuildRequestProfile(RequestProfileFeatures{
-		Model: "claude-opus-4-8", ChannelKind: "messages", Operation: "completion", EstTokens: 1000,
+		Model: "good-model", ChannelKind: "messages", Operation: "completion", EstTokens: 1000,
 	})
 	up := cfgManager.GetConfig().Upstream[0]
 	resolutions := router.resolveChannelModels(&profile, &up, cfgManager.GetConfig().UpstreamModelCapabilities)

@@ -35,14 +35,6 @@ func TestBuildChannelEntryUsesRegistryCapabilities(t *testing.T) {
 			wantTools: true, wantReasoning: true,
 		},
 		{
-			name: "映射后的 NoVisionModels 强制覆盖注册表", model: "alias-model",
-			upstream: config.UpstreamConfig{
-				ModelMapping:   map[string]string{"alias-model": "mimo-v2.5"},
-				NoVisionModels: []string{"mimo-v2.5"},
-			},
-			wantTools: true, wantReasoning: true,
-		},
-		{
 			name: "渠道能力覆盖可提供正向能力", model: "custom-model",
 			upstream: config.UpstreamConfig{ModelCapabilities: map[string]config.UpstreamModelCapability{
 				"custom-model": {

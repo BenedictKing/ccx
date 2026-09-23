@@ -17,9 +17,8 @@ func TestBuildChannelEntryResolvesContextWindow(t *testing.T) {
 	}{
 		{
 			name:  "渠道模型能力覆盖优先",
-			model: "alias-model",
+			model: "actual-model",
 			upstream: config.UpstreamConfig{
-				ModelMapping: map[string]string{"alias-model": "actual-model"},
 				ModelCapabilities: map[string]config.UpstreamModelCapability{
 					"actual-model": {ContextWindowTokens: 4096},
 				},
@@ -30,11 +29,8 @@ func TestBuildChannelEntryResolvesContextWindow(t *testing.T) {
 			wantTokens: 4096,
 		},
 		{
-			name:  "映射后命中全局能力",
-			model: "alias-model",
-			upstream: config.UpstreamConfig{
-				ModelMapping: map[string]string{"alias-model": "actual-model"},
-			},
+			name:  "无渠道覆盖时命中全局能力",
+			model: "actual-model",
 			global: map[string]config.UpstreamModelCapability{
 				"actual-model": {ContextWindowTokens: 8192},
 			},

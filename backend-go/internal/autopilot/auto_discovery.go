@@ -238,7 +238,8 @@ func (r *AutoDiscoveryRunner) modelRefreshLoop(cfgManager *config.ConfigManager)
 	}
 }
 
-// refreshStaleModelLists 对画像模型清单整体超过 TTL 的自动托管渠道重新触发发现。
+// refreshStaleModelLists 对画像模型清单整体超过 TTL 的渠道重新触发发现。
+// 全渠道参与（手动渠道与托管渠道统一走发现管线产出模型画像种子）。
 // 只处理已有画像的渠道：从未发现的渠道由添加流程负责首发现；
 // 渠道已有 running 任务时 TriggerDiscoveryWithStatus 会幂等拒绝，不会重复探测。
 func (r *AutoDiscoveryRunner) refreshStaleModelLists(cfgManager *config.ConfigManager) {
@@ -251,7 +252,7 @@ func (r *AutoDiscoveryRunner) refreshStaleModelLists(cfgManager *config.ConfigMa
 		channels := getChannelSlice(cfg, kind)
 		for i := range channels {
 			ch := &channels[i]
-			if !ch.AutoManaged || !r.channelModelsStale(ch.ChannelUID, now) {
+			if !r.channelModelsStale(ch.ChannelUID, now) {
 				continue
 			}
 			started, err := r.TriggerDiscoveryWithStatus(ch.ChannelUID, ch, cfgManager)
@@ -270,7 +271,7 @@ func (r *AutoDiscoveryRunner) refreshStaleModelLists(cfgManager *config.ConfigMa
 
 // reconcileModelProfilesFromEndpoints 用端点画像的当前模型清单收敛模型画像行，
 // 清理历史残留（发现管线接入 ReconcileModels 之前已下架的模型）。
-// 只处理 AutoManaged 渠道；端点清单为空的画像跳过（空清单守则与 ReconcileModels 一致）。
+// 全渠道参与（手动渠道与托管渠道统一收敛）；端点清单为空的画像跳过（空清单守则与 ReconcileModels 一致）。
 func (r *AutoDiscoveryRunner) reconcileModelProfilesFromEndpoints(cfgManager *config.ConfigManager) {
 	if r == nil || r.store == nil || r.ModelProfileStore == nil || cfgManager == nil {
 		return
@@ -280,9 +281,6 @@ func (r *AutoDiscoveryRunner) reconcileModelProfilesFromEndpoints(cfgManager *co
 		channels := getChannelSlice(cfg, kind)
 		for i := range channels {
 			ch := &channels[i]
-			if !ch.AutoManaged {
-				continue
-			}
 			for _, p := range r.store.ListByChannel(ch.ChannelUID) {
 				if p.MetricsKey == "" || len(p.AvailableModels) == 0 {
 					continue
@@ -1512,8 +1510,8 @@ func (r *AutoDiscoveryRunner) writeProfileForEndpoint(channelUID string, channel
 		return endpointUID, err
 	}
 
-	// Phase 3B-2：写入每个发现模型的 ModelProfile 行
-	if r.ModelProfileStore != nil && channel.AutoManaged && len(ep.Models) > 0 {
+	// Phase 3B-2：写入每个发现模型的 ModelProfile 行（全渠道统一，手动渠道由此获得映射候选池）
+	if r.ModelProfileStore != nil && len(ep.Models) > 0 {
 		// 先收敛到本次清单：上游已下架/更名的模型不再残留候选池
 		//（kimi-k2.6 2026-08-18 下架后模型画像行不清理导致死候选的事故路径）。
 		keep := make(map[string]struct{}, len(ep.Models))
@@ -1602,8 +1600,7 @@ func (r *AutoDiscoveryRunner) flushStores() error {
 // maybeAutoWriteChannelConfig 在发现完成后，检查是否可以将一致模型列表写入渠道配置。
 // 安全守则：
 //  1. 仅当所有成功探测的 endpoint 返回完全相同的模型列表（集合相等，顺序无关）时才写入
-//  2. 不覆盖用户已有的手动配置（SupportedModels 或 ModelMapping 非空时不写入）
-//  3. ModelMapping 不自动写入（比 SupportedModels 更容易出错，留给用户手动确认）
+//  2. 不覆盖用户已有的手动配置（SupportedModels 非空时不写入）
 func (r *AutoDiscoveryRunner) maybeAutoWriteChannelConfig(channelUID string, channel *config.UpstreamConfig, endpoints []EndpointDiscoveryResult, cfgManager *config.ConfigManager) {
 	// cfgManager 为 nil 时直接返回（runDiscovery 入口已有 guard，此处防御直接调用）
 	if cfgManager == nil {
@@ -1638,15 +1635,10 @@ func (r *AutoDiscoveryRunner) maybeAutoWriteChannelConfig(channelUID string, cha
 		return
 	}
 
-	// 检查用户已有配置：SupportedModels 或 ModelMapping 非空时不覆盖
+	// 检查用户已有配置：SupportedModels 非空时不覆盖
 	if len(channel.SupportedModels) > 0 {
 		log.Printf("[AutoDiscovery-ConfigSkip] 渠道 %s: 用户已配置 SupportedModels（%d 项），不覆盖",
 			channelUID, len(channel.SupportedModels))
-		return
-	}
-	if len(channel.ModelMapping) > 0 {
-		log.Printf("[AutoDiscovery-ConfigSkip] 渠道 %s: 用户已配置 ModelMapping（%d 项），不覆盖 SupportedModels",
-			channelUID, len(channel.ModelMapping))
 		return
 	}
 

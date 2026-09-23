@@ -62,44 +62,6 @@ func parseCompositeProtocol(protocol string) (CapabilityBaseProtocol, Capability
 
 // isCompositeProtocol 判断 protocol 是否为复合协议（含 "->" 分隔符）。
 
-// hasModelMapping 判断渠道是否配置了 ModelMapping。
-func hasModelMapping(channel *config.UpstreamConfig) bool {
-	if channel == nil {
-		return false
-	}
-	return len(channel.ModelMapping) > 0
-}
-
-// expandCapabilityProtocolsForChannel 根据渠道 ModelMapping 扩展协议列表。
-// 当 ModelMapping 非空时，在 protocols 前插入一条复合协议行 {channelKind}->{serviceType}。
-// 复合协议行始终排在第一位；同协议也保留，用于验证实际 ModelMapping 后的用户使用路径。
-func expandCapabilityProtocolsForChannel(channelKind string, channel *config.UpstreamConfig, protocols []string) []string {
-	from := CapabilityBaseProtocol(channelKind)
-	to, ok := normalizeServiceTypeToProtocol(channel.ServiceType)
-	if !ok {
-		return protocols
-	}
-
-	if from == to && !hasModelMapping(channel) {
-		return protocols
-	}
-
-	composite := buildCompositeProtocol(from, to)
-
-	// 检查是否已存在
-	for _, p := range protocols {
-		if p == composite {
-			return protocols
-		}
-	}
-
-	// 复合协议排在第一位
-	expanded := make([]string, 0, len(protocols)+1)
-	expanded = append(expanded, composite)
-	expanded = append(expanded, protocols...)
-	return expanded
-}
-
 // getProbeModelsForCapabilityProtocol 获取指定协议的探测模型列表。
 // 普通协议：直接查 capabilityProbeModels 表。
 // 复合协议：使用 from 方向的探测模型（复合协议行展示的是入口侧探测模型）。
@@ -153,7 +115,7 @@ func init() {
 		func(channel *config.UpstreamConfig, apiKey, probeModel string, global map[string]config.UpstreamModelCapability) (string, []byte, string, error) {
 			// 构造 messages 入口最小请求体
 			messagesBody := buildMessagesProbeBody(probeModel, global, channel)
-			// 使用 ClaudeProvider 将 messages 请求转换为 messages 上游请求（会应用 ModelMapping）
+			// 使用 ClaudeProvider 将 messages 请求转换为 messages 上游请求
 			return buildCompositeRequestViaProvider("messages", channel, apiKey, messagesBody, "/v1/messages")
 		},
 	)

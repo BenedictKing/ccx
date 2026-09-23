@@ -5,9 +5,10 @@ import "testing"
 func TestGetUpstreamByIndexReturnsIndependentClone(t *testing.T) {
 	cm := &ConfigManager{config: Config{
 		ResponsesUpstream: []UpstreamConfig{{
-			Name:         "responses",
-			APIKeys:      []string{"sk-original"},
-			ModelMapping: map[string]string{"requested": "actual"},
+			Name:              "responses",
+			APIKeys:           []string{"sk-original"},
+			SupportedModels:   []string{"requested"},
+			ModelCapabilities: map[string]UpstreamModelCapability{"requested": {ContextWindowTokens: 200000}},
 		}},
 	}}
 
@@ -17,13 +18,15 @@ func TestGetUpstreamByIndexReturnsIndependentClone(t *testing.T) {
 	}
 	first.Name = "mutated"
 	first.APIKeys[0] = "sk-mutated"
-	first.ModelMapping["requested"] = "mutated"
+	first.SupportedModels[0] = "mutated"
+	first.ModelCapabilities["requested"] = UpstreamModelCapability{ContextWindowTokens: 1}
 
 	second := cm.GetUpstreamByIndex("Responses", 0)
 	if second == nil {
 		t.Fatal("second GetUpstreamByIndex() returned nil")
 	}
-	if second.Name != "responses" || second.APIKeys[0] != "sk-original" || second.ModelMapping["requested"] != "actual" {
+	if second.Name != "responses" || second.APIKeys[0] != "sk-original" ||
+		second.SupportedModels[0] != "requested" || second.ModelCapabilities["requested"].ContextWindowTokens != 200000 {
 		t.Fatalf("stored upstream was mutated through snapshot: %+v", second)
 	}
 }

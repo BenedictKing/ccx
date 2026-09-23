@@ -128,8 +128,8 @@ func TestUpdateCapabilityJobModelResult_SetsCancelledReason(t *testing.T) {
 }
 
 func TestBuildCapabilityExecutionLookupKey_NormalizesProtocolsAndModels(t *testing.T) {
-	keyA := buildCapabilityExecutionLookupKey("identity-a", "messages", []string{"responses", "messages"}, []string{"model-b", "model-a"}, "")
-	keyB := buildCapabilityExecutionLookupKey("identity-a", "messages", []string{"messages", "responses"}, []string{"model-a", "model-b", "model-a"}, "")
+	keyA := buildCapabilityExecutionLookupKey("identity-a", "messages", []string{"responses", "messages"}, []string{"model-b", "model-a"})
+	keyB := buildCapabilityExecutionLookupKey("identity-a", "messages", []string{"messages", "responses"}, []string{"model-a", "model-b", "model-a"})
 
 	if keyA != keyB {
 		t.Fatalf("execution lookup key mismatch: got %q want %q", keyA, keyB)
