@@ -122,7 +122,7 @@
                 <v-row dense>
                   <v-col cols="12" md="7">
                     <div class="d-flex flex-column ga-3">
-                      <div class="d-flex align-center ga-3 pa-3 bg-grey-lighten-4 rounded-lg">
+                      <div class="d-flex align-center ga-3 pa-3 rounded-lg channel-name-card">
                         <v-icon color="primary" size="20">mdi-tag</v-icon>
                         <div class="flex-grow-1">
                           <div class="text-caption text-medium-emphasis">{{ t('addChannel.channelName') }}</div>
@@ -643,7 +643,8 @@ watch(
   }
 }
 
-.apikeys-card {
+.apikeys-card,
+.channel-name-card {
   border: 1px solid rgba(var(--v-theme-outline), 0.32);
 }
 
