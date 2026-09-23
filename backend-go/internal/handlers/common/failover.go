@@ -1012,6 +1012,12 @@ func isNonRetryableError(bodyBytes []byte, apiType string) bool {
 	if isUpstreamRequestParseError(errObj) {
 		return false
 	}
+	// 同理放行「仅接受流式」类 400（"streaming is required: ..."）：文案含 "is
+	// required" 会被下面的 schema 校验拦截，但错误源于上游端点只接受 stream:true，
+	// 请求本身没有可修正之处，换流式友好的渠道后可恢复，不应终结请求。
+	if isStreamRequirementError(errObj) {
+		return false
+	}
 	if isSchemaValidationError(errObj) {
 		return true
 	}

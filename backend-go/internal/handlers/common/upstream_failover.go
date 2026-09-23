@@ -898,6 +898,19 @@ func TryUpstreamWithAllKeys(
 				}
 			}
 
+			// 已学习"仅接受流式"的 Key：非流式请求在发送前直接跳过，省一次必然 400 的
+			// 上游往返。与学习侧同粒度（渠道-Key-模型）：流式请求不受影响，
+			// 同渠道其他 Key/模型照常尝试。
+			if !isStream && upstream.ChannelUID != "" {
+				keyHash := autopilot.KeyHashFromAPIKey(apiKey)
+				if state, ok := channelCompatCache.Trait(upstream.ChannelUID, keyHash, attemptModel, config.TraitRequiresStream); ok && state.Enabled {
+					failedKeys[apiKey] = true
+					RequestLogf(c, "[%s-ChannelCompat] 渠道 %s 模型 %s 已学习仅接受流式请求，非流式请求跳过 Key: %s",
+						apiType, upstream.Name, attemptModel, utils.MaskAPIKey(apiKey))
+					continue
+				}
+			}
+
 			// Claude Messages 入口：将 messages 中的 system 角色抽回顶层 system 字段。
 			// 统一判定点放在 attemptModel 确定之后：手动开关为强制开；自动触发覆盖两类场景——
 			// (a) 上线模型经 override/mapping 后非 claude 家族（messages 协议发非 claude 模型
@@ -1499,6 +1512,22 @@ func TryUpstreamWithAllKeys(
 							RequestLogf(c, "[%s-ChannelCompat] 渠道 %s 模型 %s 缺少能力 %s，已记忆并应用兼容改写后同 Key 重试",
 								apiType, upstream.Name, attemptModel, signal.Trait)
 							continue
+						}
+					}
+				}
+
+				// 流式要求自学习（被动侧）：上游以 400/422 明确表示该端点仅接受 stream:true 时，
+				// 记忆该 渠道-Key-模型 组合仅支持流式。与其他兼容项不同：非流式请求没有可自动
+				// 改写之处（强制 stream:true 需要合成非流式响应，不属于兼容改写），不做同 Key
+				// 重试；学到结论后按正常流程 failover 到其他渠道（错误分类已放行该文案），
+				// 后续非流式请求在 attempt 循环开头直接跳过该组合。流式请求不受影响。
+				if (resp.StatusCode == 400 || resp.StatusCode == 422) && upstream.ChannelUID != "" && !c.Writer.Written() {
+					if signal := StreamRequirementFromError(resp.StatusCode, respBodyBytes, isStream); signal != nil {
+						keyHash := autopilot.KeyHashFromAPIKey(apiKey)
+						if channelCompatCache.Record(upstream.ChannelUID, keyHash, attemptModel,
+							signal.Trait, signal.Enabled, config.CompatSourceErrorSignal, signal.Evidence) {
+							RequestLogf(c, "[%s-ChannelCompat] 渠道 %s 模型 %s 仅接受流式请求，已记忆，非流式请求将跳过该组合",
+								apiType, upstream.Name, attemptModel)
 						}
 					}
 				}
