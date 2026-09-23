@@ -709,7 +709,8 @@ func directBenchmarkScoreFromEvidence(evidence []config.ModelBenchmarkEvidence) 
 // calibrateModelCapability 把不同 benchmark 的 coding 证据归一化到 DeepSWE 等价的
 // 0-100 分，统一到常规 effort 口径（medium/default），并携带证据等级。
 // 优先级：直测常规口径分（calibrateRegularEffort）> artificial_analysis
-// coding_index 线性校准（EvidenceCalibrated，封顶 high）。
+// coding_index 线性校准（EvidenceCalibrated，封顶 high）> 官方公告锚点折算
+// 等价分（calibrateOfficialReleaseEffort，EvidenceCalibrated，封顶 high）。
 // 模型不在注册表时 ok=false。
 func calibrateModelCapability(modelID string) (CalibrationResult, bool) {
 	benchmark := config.ResolveModelBenchmarkProfile(modelID)
@@ -720,6 +721,9 @@ func calibrateModelCapability(modelID string) (CalibrationResult, bool) {
 		return result, true
 	}
 	if result, ok := calibrateArtificialAnalysisEffort(benchmark.Profile.BenchmarkEvidence); ok {
+		return result, true
+	}
+	if result, ok := calibrateOfficialReleaseEffort(benchmark.Profile.BenchmarkEvidence); ok {
 		return result, true
 	}
 	return CalibrationResult{}, false
@@ -760,6 +764,62 @@ func calibrateArtificialAnalysisEffort(evidence []config.ModelBenchmarkEvidence)
 		return CalibrationResult{}, false
 	}
 	return CalibrationResult{Score: best, Class: EvidenceDeflated, MeasuredEffort: measuredEffort}, true
+}
+
+// calibrateOfficialReleaseEffort 将官方公告 DeepSWE 等价证据折算到 medium 口径。
+// 等价分由 scripts/prefill-official-scores.mjs 按公告内锚点（已有 DeepSWE medium
+// 直测的模型）序数插值预折算为 medium 口径（0-1），此处 ×100 对齐直测分尺度，
+// medium/default 直取（与 AA 链同构），多条证据取最大；非 medium 档按全局
+// effort 比率折算（防御路径，当前管线只产出 medium）。
+// EvidenceCalibrated：锚点相对折算属估计值，封顶 high，premium 仍需真实直测。
+func calibrateOfficialReleaseEffort(evidence []config.ModelBenchmarkEvidence) (CalibrationResult, bool) {
+	if score, ok := officialReleaseEquivalentScore(evidence, EffortMedium); ok {
+		return CalibrationResult{Score: score, Class: EvidenceCalibrated, MeasuredEffort: EffortMedium}, true
+	}
+	best := -1.0
+	measuredEffort := EffortMedium
+	for _, ev := range evidence {
+		if ev.Domain != "coding" || ev.Benchmark != "official_release" || ev.Metric != "deepswe_equivalent" {
+			continue
+		}
+		level := NormalizeEffortLevel(ev.Effort)
+		if level == "" {
+			continue
+		}
+		ratio, ok := effortQualityRatioFor(level)
+		if !ok || ratio <= 0 {
+			continue
+		}
+		score := ev.RawValue * 100 / ratio
+		if best < 0 || score < best {
+			best = score
+			measuredEffort = level
+		}
+	}
+	if best < 0 {
+		return CalibrationResult{}, false
+	}
+	return CalibrationResult{Score: best, Class: EvidenceCalibrated, MeasuredEffort: measuredEffort}, true
+}
+
+// officialReleaseEquivalentScore 取指定 effort 档的官方公告等价分（百分制，跨条目取最大）。
+func officialReleaseEquivalentScore(evidence []config.ModelBenchmarkEvidence, level EffortLevel) (float64, bool) {
+	best := -1.0
+	for _, ev := range evidence {
+		if ev.Domain != "coding" || ev.Benchmark != "official_release" || ev.Metric != "deepswe_equivalent" {
+			continue
+		}
+		if NormalizeEffortLevel(ev.Effort) != level {
+			continue
+		}
+		if raw := ev.RawValue * 100; raw > best {
+			best = raw
+		}
+	}
+	if best < 0 {
+		return 0, false
+	}
+	return best, true
 }
 
 // normalizedCapabilityScore 返回常规 effort 口径的归一化能力分（无证据类信息）。

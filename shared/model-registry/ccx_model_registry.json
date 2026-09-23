@@ -3502,21 +3502,200 @@
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/claude-fable-5-1-xhigh",
           "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "terminal_bench_4",
+          "benchmarkVersion": "4.0",
+          "sourceModel": "claude-fable-5-1",
+          "domain": "coding",
+          "metric": "pass_rate",
+          "rawValue": 0.558,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.anthropic.com/claude-opus-5-5",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "frontier_code_1_1",
+          "benchmarkVersion": "1.1-main",
+          "sourceModel": "claude-fable-5-1",
+          "domain": "coding",
+          "metric": "pass_rate",
+          "rawValue": 0.503,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.anthropic.com/claude-opus-5-5",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "cursor_bench_4",
+          "benchmarkVersion": "4.0",
+          "sourceModel": "claude-fable-5-1",
+          "domain": "coding",
+          "metric": "pass_rate",
+          "rawValue": 0.518,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.anthropic.com/claude-opus-5-5",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "automation_bench",
+          "benchmarkVersion": "zapier",
+          "sourceModel": "claude-fable-5-1",
+          "domain": "agentic",
+          "metric": "pass_rate",
+          "rawValue": 0.314,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.anthropic.com/claude-opus-5-5",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "gdpval_aa_v2_1",
+          "benchmarkVersion": "2.1",
+          "sourceModel": "claude-fable-5-1",
+          "domain": "knowledge",
+          "metric": "elo",
+          "rawValue": 1735,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.anthropic.com/claude-opus-5-5",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "hle",
+          "benchmarkVersion": "with-tools",
+          "sourceModel": "claude-fable-5-1",
+          "domain": "knowledge",
+          "metric": "pass_rate",
+          "rawValue": 0.656,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.anthropic.com/claude-opus-5-5",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "terminal_bench_science_0_1",
+          "benchmarkVersion": "0.1",
+          "sourceModel": "claude-fable-5-1",
+          "domain": "agentic",
+          "metric": "pass_rate",
+          "rawValue": 0.526,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.anthropic.com/claude-opus-5-5",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "deepswe_official",
+          "benchmarkVersion": "v1.1-stepfun",
+          "sourceModel": "claude-fable-5-1",
+          "domain": "coding",
+          "metric": "pass_rate",
+          "rawValue": 0.674,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.stepfun.com/step-5-preview",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "terminal_bench_4",
+          "benchmarkVersion": "4.0",
+          "sourceModel": "claude-fable-5-1",
+          "domain": "coding",
+          "metric": "pass_rate",
+          "rawValue": 0.558,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.stepfun.com/step-5-preview",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "cursor_bench_4",
+          "benchmarkVersion": "4.0",
+          "sourceModel": "claude-fable-5-1",
+          "domain": "coding",
+          "metric": "pass_rate",
+          "rawValue": 0.518,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.unite.ai/spacexai-releases-grok-4-7-for-coding-and-knowledge-work",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "terminal_bench_4",
+          "benchmarkVersion": "4.0",
+          "sourceModel": "claude-fable-5-1",
+          "domain": "coding",
+          "metric": "pass_rate",
+          "rawValue": 0.579,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.unite.ai/spacexai-releases-grok-4-7-for-coding-and-knowledge-work",
+          "capturedAt": "2026-09-23"
         }
       ],
       "sources": [
         "https://artificialanalysis.ai/models/claude-fable-5-1-low",
         "https://benchlm.ai/methodology",
-        "https://benchlm.ai/models/claude-fable-5-1"
+        "https://benchlm.ai/models/claude-fable-5-1",
+        "https://www.anthropic.com/claude-opus-5-5",
+        "https://www.stepfun.com/step-5-preview",
+        "https://www.unite.ai/spacexai-releases-grok-4-7-for-coding-and-knowledge-work"
       ],
       "verifiedAt": "2026-09-23",
       "lane": "provisional",
       "sharedResults": 673,
-      "comparableCategories": 3,
+      "comparableCategories": 4,
       "totalCategories": 8,
-      "overallScore": 83.65,
+      "overallScore": 83.34,
       "categoryScores": {
-        "agentic": 60.8,
+        "agentic": 60.5,
         "coding": 90.4,
         "knowledge": 97.5
       }
@@ -3654,22 +3833,55 @@
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
           "capturedAt": "2026-09-04"
+        },
+        {
+          "benchmark": "deepswe_official",
+          "benchmarkVersion": "v1.1-xiaomi",
+          "sourceModel": "claude-fable-5",
+          "domain": "coding",
+          "metric": "pass_rate",
+          "rawValue": 0.7,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://mimo.mi.com/docs/zh-CN/news/latest/v2-6",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "terminal_bench_4",
+          "benchmarkVersion": "4.0",
+          "sourceModel": "claude-fable-5",
+          "domain": "coding",
+          "metric": "pass_rate",
+          "rawValue": 0.424,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://mimo.mi.com/docs/zh-CN/news/latest/v2-6",
+          "capturedAt": "2026-09-23"
         }
       ],
       "sources": [
         "https://artificialanalysis.ai/models/claude-fable-5",
         "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/claude-fable",
-        "https://deepswe.datacurve.ai/"
+        "https://deepswe.datacurve.ai/",
+        "https://mimo.mi.com/docs/zh-CN/news/latest/v2-6"
       ],
       "verifiedAt": "2026-09-23",
       "lane": "provisional",
       "sharedResults": 673,
       "comparableCategories": 4,
       "totalCategories": 8,
-      "overallScore": 81.04,
+      "overallScore": 79.53,
       "categoryScores": {
-        "agentic": 89.1,
+        "agentic": 83.3,
         "coding": 89.5,
         "multimodal": 62.6,
         "knowledge": 87.2
@@ -3708,7 +3920,7 @@
           "capturedAt": "2026-08-24"
         }
       ],
-      "overallScore": 53.55,
+      "overallScore": 41.55,
       "categoryScores": {
         "coding": 30.7,
         "knowledge": 41.6,
@@ -3729,9 +3941,9 @@
       "sharedResults": 14,
       "comparableCategories": 4,
       "totalCategories": 8,
-      "overallScore": 85,
+      "overallScore": 82,
       "categoryScores": {
-        "agentic": 93.2,
+        "agentic": 83.6,
         "coding": 87.3,
         "multimodal": 85.1,
         "knowledge": 94.1
@@ -3747,14 +3959,15 @@
       "sources": [
         "https://artificialanalysis.ai/models/claude-opus-5-5",
         "https://benchlm.ai/methodology",
-        "https://benchlm.ai/models/claude-opus-5-5"
+        "https://benchlm.ai/models/claude-opus-5-5",
+        "https://www.anthropic.com/claude-opus-5-5"
       ],
       "sharedResults": 673,
       "comparableCategories": 4,
       "totalCategories": 8,
-      "overallScore": 81.03,
+      "overallScore": 88.45,
       "categoryScores": {
-        "agentic": 66.4,
+        "agentic": 66.1,
         "coding": 86.6,
         "multimodal": 88.8,
         "knowledge": 87.5
@@ -3839,6 +4052,134 @@
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/claude-opus-5-5-xhigh",
           "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "terminal_bench_4",
+          "benchmarkVersion": "4.0",
+          "sourceModel": "claude-opus-5-5",
+          "domain": "coding",
+          "metric": "pass_rate",
+          "rawValue": 0.664,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "xhigh",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.anthropic.com/claude-opus-5-5",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "frontier_code_1_1",
+          "benchmarkVersion": "1.1-main",
+          "sourceModel": "claude-opus-5-5",
+          "domain": "coding",
+          "metric": "pass_rate",
+          "rawValue": 0.544,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.anthropic.com/claude-opus-5-5",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "cursor_bench_4",
+          "benchmarkVersion": "4.0",
+          "sourceModel": "claude-opus-5-5",
+          "domain": "coding",
+          "metric": "pass_rate",
+          "rawValue": 0.578,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.anthropic.com/claude-opus-5-5",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "automation_bench",
+          "benchmarkVersion": "zapier",
+          "sourceModel": "claude-opus-5-5",
+          "domain": "agentic",
+          "metric": "pass_rate",
+          "rawValue": 0.4,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.anthropic.com/claude-opus-5-5",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "gdpval_aa_v2_1",
+          "benchmarkVersion": "2.1",
+          "sourceModel": "claude-opus-5-5",
+          "domain": "knowledge",
+          "metric": "elo",
+          "rawValue": 1846,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.anthropic.com/claude-opus-5-5",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "hle",
+          "benchmarkVersion": "with-tools",
+          "sourceModel": "claude-opus-5-5",
+          "domain": "knowledge",
+          "metric": "pass_rate",
+          "rawValue": 0.677,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.anthropic.com/claude-opus-5-5",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "terminal_bench_science_0_1",
+          "benchmarkVersion": "0.1",
+          "sourceModel": "claude-opus-5-5",
+          "domain": "agentic",
+          "metric": "pass_rate",
+          "rawValue": 0.587,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.anthropic.com/claude-opus-5-5",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "official_release",
+          "benchmarkVersion": "4.0",
+          "sourceModel": "claude-opus-5-5",
+          "domain": "coding",
+          "metric": "deepswe_equivalent",
+          "rawValue": 0.728,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "medium",
+          "selectionBasis": "anchor_interp raw=undefined@undefined@undefined anchors=claude-opus-5:0.689,gpt-6-astra:0.728,gpt-5.6-sol:0.611 per-benchmark: 0.664@terminal_bench_4@xhigh→0.728 0.544@frontier_code_1_1@max→0.728 0.578@cursor_bench_4@max→0.689",
+          "sourceUrl": "https://www.anthropic.com/claude-opus-5-5",
+          "capturedAt": "2026-09-23"
         }
       ]
     },
@@ -3854,7 +4195,10 @@
         "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/claude-opus-5",
         "https://deepswe.datacurve.ai/",
-        "https://deng.codexradar.com/"
+        "https://deng.codexradar.com/",
+        "https://mimo.mi.com/docs/zh-CN/news/latest/v2-6",
+        "https://www.anthropic.com/claude-opus-5-5",
+        "https://www.stepfun.com/step-5-preview"
       ],
       "sharedResults": 673,
       "comparableCategories": 4,
@@ -4179,11 +4523,203 @@
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
           "capturedAt": "2026-09-04"
+        },
+        {
+          "benchmark": "terminal_bench_4",
+          "benchmarkVersion": "4.0",
+          "sourceModel": "claude-opus-5",
+          "domain": "coding",
+          "metric": "pass_rate",
+          "rawValue": 0.523,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.anthropic.com/claude-opus-5-5",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "frontier_code_1_1",
+          "benchmarkVersion": "1.1-main",
+          "sourceModel": "claude-opus-5",
+          "domain": "coding",
+          "metric": "pass_rate",
+          "rawValue": 0.48,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.anthropic.com/claude-opus-5-5",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "cursor_bench_4",
+          "benchmarkVersion": "4.0",
+          "sourceModel": "claude-opus-5",
+          "domain": "coding",
+          "metric": "pass_rate",
+          "rawValue": 0.466,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.anthropic.com/claude-opus-5-5",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "automation_bench",
+          "benchmarkVersion": "zapier",
+          "sourceModel": "claude-opus-5",
+          "domain": "agentic",
+          "metric": "pass_rate",
+          "rawValue": 0.269,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.anthropic.com/claude-opus-5-5",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "gdpval_aa_v2_1",
+          "benchmarkVersion": "2.1",
+          "sourceModel": "claude-opus-5",
+          "domain": "knowledge",
+          "metric": "elo",
+          "rawValue": 1708,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.anthropic.com/claude-opus-5-5",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "hle",
+          "benchmarkVersion": "with-tools",
+          "sourceModel": "claude-opus-5",
+          "domain": "knowledge",
+          "metric": "pass_rate",
+          "rawValue": 0.636,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.anthropic.com/claude-opus-5-5",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "terminal_bench_science_0_1",
+          "benchmarkVersion": "0.1",
+          "sourceModel": "claude-opus-5",
+          "domain": "agentic",
+          "metric": "pass_rate",
+          "rawValue": 0.29,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.anthropic.com/claude-opus-5-5",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "deepswe_official",
+          "benchmarkVersion": "v1.1-xiaomi",
+          "sourceModel": "claude-opus-5",
+          "domain": "coding",
+          "metric": "pass_rate",
+          "rawValue": 0.74,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://mimo.mi.com/docs/zh-CN/news/latest/v2-6",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "terminal_bench_4",
+          "benchmarkVersion": "4.0",
+          "sourceModel": "claude-opus-5",
+          "domain": "coding",
+          "metric": "pass_rate",
+          "rawValue": 0.49,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://mimo.mi.com/docs/zh-CN/news/latest/v2-6",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "automation_bench",
+          "benchmarkVersion": "v1.0.6",
+          "sourceModel": "claude-opus-5",
+          "domain": "agentic",
+          "metric": "pass_rate",
+          "rawValue": 0.503,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://mimo.mi.com/docs/zh-CN/news/latest/v2-6",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "deepswe_official",
+          "benchmarkVersion": "v1.1-stepfun",
+          "sourceModel": "claude-opus-5",
+          "domain": "coding",
+          "metric": "pass_rate",
+          "rawValue": 0.74,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.stepfun.com/step-5-preview",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "terminal_bench_4",
+          "benchmarkVersion": "4.0",
+          "sourceModel": "claude-opus-5",
+          "domain": "coding",
+          "metric": "pass_rate",
+          "rawValue": 0.523,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.stepfun.com/step-5-preview",
+          "capturedAt": "2026-09-23"
         }
       ],
-      "overallScore": 80.93,
+      "overallScore": 80.35,
       "categoryScores": {
-        "agentic": 85.6,
+        "agentic": 85.4,
         "coding": 90.4,
         "multimodal": 88.8,
         "knowledge": 97.5
@@ -4194,9 +4730,9 @@
         "(?:^|[-/])claude-opus-4[.-]8(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)"
       ],
       "canonicalModel": "claude-opus-4-8",
-      "overallScore": 72.05,
+      "overallScore": 70.86,
       "categoryScores": {
-        "agentic": 76.6,
+        "agentic": 73.1,
         "coding": 73.8,
         "multimodal": 87.7,
         "knowledge": 88.3,
@@ -4360,9 +4896,9 @@
       "sharedResults": 673,
       "comparableCategories": 5,
       "totalCategories": 8,
-      "overallScore": 71.24,
+      "overallScore": 69.42,
       "categoryScores": {
-        "agentic": 64.7,
+        "agentic": 70.4,
         "coding": 67.3,
         "multimodal": 50.1,
         "knowledge": 81.7,
@@ -4451,9 +4987,9 @@
       "sharedResults": 673,
       "comparableCategories": 5,
       "totalCategories": 8,
-      "overallScore": 69.53,
+      "overallScore": 64.33,
       "categoryScores": {
-        "agentic": 63.5,
+        "agentic": 68.9,
         "coding": 50.3,
         "multimodal": 59.6,
         "knowledge": 81.1,
@@ -4527,9 +5063,9 @@
           "capturedAt": "2026-09-23"
         }
       ],
-      "overallScore": 58.72,
+      "overallScore": 55.9,
       "categoryScores": {
-        "agentic": 47.3,
+        "agentic": 52.4,
         "coding": 50.3,
         "multimodal": 23.5,
         "knowledge": 59.4,
@@ -4779,9 +5315,9 @@
       "sharedResults": 673,
       "comparableCategories": 4,
       "totalCategories": 8,
-      "overallScore": 69.47,
+      "overallScore": 67.25,
       "categoryScores": {
-        "agentic": 82.4,
+        "agentic": 76.4,
         "coding": 60.1,
         "multimodal": 77.4,
         "knowledge": 81.9
@@ -4853,9 +5389,9 @@
       "sharedResults": 673,
       "comparableCategories": 5,
       "totalCategories": 8,
-      "overallScore": 63.17,
+      "overallScore": 56.73,
       "categoryScores": {
-        "agentic": 50.5,
+        "agentic": 54.8,
         "coding": 62.7,
         "multimodal": 54.1,
         "knowledge": 76,
@@ -4876,9 +5412,9 @@
       "sharedResults": 9,
       "comparableCategories": 4,
       "totalCategories": 8,
-      "overallScore": 54.75,
+      "overallScore": 47.86,
       "categoryScores": {
-        "agentic": 33.7,
+        "agentic": 36.6,
         "coding": 59.6,
         "knowledge": 72.4,
         "math": 34.6
@@ -4900,7 +5436,7 @@
       "sharedResults": 673,
       "comparableCategories": 2,
       "totalCategories": 8,
-      "overallScore": 66,
+      "overallScore": 67,
       "categoryScores": {
         "multimodal": 73.5,
         "knowledge": 57.3
@@ -4930,9 +5466,9 @@
           "metric": "pass_at_1",
           "rawValue": 0.671,
           "uncertainty": 0,
-          "cohortPercentile": 0.647,
+          "cohortPercentile": 0.611,
           "taskCount": 158,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
@@ -4947,9 +5483,9 @@
           "metric": "pass_at_1",
           "rawValue": 0.571,
           "uncertainty": 0,
-          "cohortPercentile": 0.059,
+          "cohortPercentile": 0.056,
           "taskCount": 147,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "max",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
@@ -4977,7 +5513,7 @@
       "comparableCategories": 4,
       "totalCategories": 8,
       "categoryScores": {
-        "agentic": 47.5,
+        "agentic": 52,
         "coding": 50.8,
         "knowledge": 61.3,
         "math": 79.9
@@ -5137,11 +5673,11 @@
           "uncertainty": 0,
           "cohortPercentile": 0,
           "taskCount": 224,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-09-12",
+          "capturedAt": "2026-09-23",
           "costUsd": 0.12
         },
         {
@@ -5152,13 +5688,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.529,
           "uncertainty": 0,
-          "cohortPercentile": 0.059,
+          "cohortPercentile": 0.056,
           "taskCount": 223,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "max",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-09-12",
+          "capturedAt": "2026-09-23",
           "costUsd": 0.14
         },
         {
@@ -5178,19 +5714,19 @@
           "capturedAt": "2026-09-04"
         }
       ],
-      "overallScore": 56
+      "overallScore": 57
     },
     {
       "patterns": [
         "(?:^|[-/])deepseek-v4-flash-vision(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{4,8})?(?=$|@)"
       ],
       "canonicalModel": "deepseek-v4-flash-vision",
-      "verifiedAt": "2026-09-21",
+      "verifiedAt": "2026-09-23",
       "lane": "provisional",
       "sources": [
         "https://deng.codexradar.com/"
       ],
-      "sharedResults": 17,
+      "sharedResults": 18,
       "comparableCategories": 1,
       "totalCategories": 1,
       "benchmarkEvidence": [
@@ -5204,11 +5740,11 @@
           "uncertainty": 0,
           "cohortPercentile": 0,
           "taskCount": 82,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-09-21",
+          "capturedAt": "2026-09-23",
           "costUsd": 0.24
         },
         {
@@ -5219,13 +5755,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.643,
           "uncertainty": 0,
-          "cohortPercentile": 0.471,
+          "cohortPercentile": 0.444,
           "taskCount": 112,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "max",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-09-21",
+          "capturedAt": "2026-09-23",
           "costUsd": 0.37
         }
       ]
@@ -5248,9 +5784,9 @@
       "sharedResults": 673,
       "comparableCategories": 4,
       "totalCategories": 8,
-      "overallScore": 64.37,
+      "overallScore": 63.49,
       "categoryScores": {
-        "agentic": 67.2,
+        "agentic": 72.6,
         "coding": 55.3,
         "knowledge": 69.7,
         "math": 80.2
@@ -5485,7 +6021,7 @@
           "capturedAt": "2026-09-23"
         }
       ],
-      "overallScore": 57.33,
+      "overallScore": 50.2,
       "categoryScores": {
         "coding": 67.4,
         "knowledge": 48.8,
@@ -5694,13 +6230,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.577,
           "uncertainty": 0,
-          "cohortPercentile": 0.059,
+          "cohortPercentile": 0.056,
           "taskCount": 71,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-09-19",
+          "capturedAt": "2026-09-23",
           "costUsd": 3.06
         },
         {
@@ -5736,9 +6272,9 @@
           "capturedAt": "2026-09-04"
         }
       ],
-      "overallScore": 74.05,
+      "overallScore": 72.74,
       "categoryScores": {
-        "agentic": 74.5,
+        "agentic": 73.3,
         "coding": 75.8,
         "multimodal": 82.9,
         "knowledge": 82.2
@@ -5882,9 +6418,9 @@
           "metric": "pass_at_1",
           "rawValue": 0.58,
           "uncertainty": 0,
-          "cohortPercentile": 0.118,
+          "cohortPercentile": 0.111,
           "taskCount": 112,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
@@ -5901,7 +6437,7 @@
           "uncertainty": 0,
           "cohortPercentile": 0,
           "taskCount": 112,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "low",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
@@ -5916,9 +6452,9 @@
           "metric": "pass_at_1",
           "rawValue": 0.554,
           "uncertainty": 0,
-          "cohortPercentile": 0.059,
+          "cohortPercentile": 0.056,
           "taskCount": 112,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "medium",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
@@ -5975,12 +6511,12 @@
         }
       ],
       "categoryScores": {
-        "agentic": 65.7,
+        "agentic": 65.5,
         "coding": 76.9,
         "multimodal": 82.6,
         "knowledge": 82.3
       },
-      "overallScore": 68.83
+      "overallScore": 65.31
     },
     {
       "patterns": [
@@ -6064,9 +6600,9 @@
           "capturedAt": "2026-09-04"
         }
       ],
-      "overallScore": 68.73,
+      "overallScore": 65.06,
       "categoryScores": {
-        "agentic": 80.2,
+        "agentic": 79.9,
         "coding": 58.7,
         "multimodal": 82.6,
         "knowledge": 78.2
@@ -6186,9 +6722,9 @@
           "capturedAt": "2026-09-04"
         }
       ],
-      "overallScore": 68.02,
+      "overallScore": 63.93,
       "categoryScores": {
-        "agentic": 75.3,
+        "agentic": 72.2,
         "coding": 48.6,
         "multimodal": 86.8,
         "knowledge": 68.3,
@@ -6210,9 +6746,9 @@
       "sharedResults": 673,
       "comparableCategories": 4,
       "totalCategories": 8,
-      "overallScore": 58.92,
+      "overallScore": 51.32,
       "categoryScores": {
-        "agentic": 51.8,
+        "agentic": 65,
         "coding": 40.4,
         "multimodal": 76.4,
         "knowledge": 61.6
@@ -6301,9 +6837,9 @@
           "capturedAt": "2026-09-04"
         }
       ],
-      "overallScore": 70.92,
+      "overallScore": 64.97,
       "categoryScores": {
-        "agentic": 72,
+        "agentic": 69.1,
         "coding": 76.4,
         "multimodal": 79.1,
         "knowledge": 78.9,
@@ -6360,7 +6896,7 @@
           "capturedAt": "2026-08-24"
         }
       ],
-      "overallScore": 62.45,
+      "overallScore": 55.62,
       "categoryScores": {
         "coding": 68.7,
         "multimodal": 75.8,
@@ -6442,14 +6978,14 @@
           "metric": "pass_at_1",
           "rawValue": 0.607,
           "uncertainty": 0,
-          "cohortPercentile": 0.235,
+          "cohortPercentile": 0.222,
           "taskCount": 112,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
           "capturedAt": "2026-09-23",
-          "costUsd": 3.15
+          "costUsd": 3.14
         },
         {
           "benchmark": "codexradar",
@@ -6461,7 +6997,7 @@
           "uncertainty": 0,
           "cohortPercentile": 0,
           "taskCount": 112,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "low",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
@@ -6476,9 +7012,9 @@
           "metric": "pass_at_1",
           "rawValue": 0.598,
           "uncertainty": 0,
-          "cohortPercentile": 0.118,
+          "cohortPercentile": 0.111,
           "taskCount": 112,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "max",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
@@ -6502,9 +7038,9 @@
           "capturedAt": "2026-09-04"
         }
       ],
-      "overallScore": 67.04,
+      "overallScore": 65.55,
       "categoryScores": {
-        "agentic": 82.2,
+        "agentic": 75.1,
         "coding": 56.4,
         "knowledge": 66.1
       }
@@ -6583,13 +7119,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.604,
           "uncertainty": 0,
-          "cohortPercentile": 0.176,
+          "cohortPercentile": 0.167,
           "taskCount": 111,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-09-19",
+          "capturedAt": "2026-09-23",
           "costUsd": 0.38
         },
         {
@@ -6602,11 +7138,11 @@
           "uncertainty": 0,
           "cohortPercentile": 0,
           "taskCount": 107,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "low",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-09-19",
+          "capturedAt": "2026-09-23",
           "costUsd": 0.14
         },
         {
@@ -6617,13 +7153,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.598,
           "uncertainty": 0,
-          "cohortPercentile": 0.118,
+          "cohortPercentile": 0.111,
           "taskCount": 112,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "max",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-09-19",
+          "capturedAt": "2026-09-23",
           "costUsd": 0.38
         },
         {
@@ -6643,9 +7179,9 @@
           "capturedAt": "2026-09-04"
         }
       ],
-      "overallScore": 66.8,
+      "overallScore": 58.17,
       "categoryScores": {
-        "agentic": 77.2,
+        "agentic": 73.4,
         "coding": 56.5,
         "multimodal": 80.4,
         "knowledge": 66.7
@@ -6782,9 +7318,9 @@
       "sharedResults": 673,
       "comparableCategories": 4,
       "totalCategories": 8,
-      "overallScore": 66.79,
+      "overallScore": 62.5,
       "categoryScores": {
-        "agentic": 78.4,
+        "agentic": 72.4,
         "coding": 38.4,
         "knowledge": 76.1,
         "math": 80.7
@@ -6871,9 +7407,9 @@
           "capturedAt": "2026-09-23"
         }
       ],
-      "overallScore": 63.45,
+      "overallScore": 57.71,
       "categoryScores": {
-        "agentic": 46.9,
+        "agentic": 53,
         "coding": 52.8,
         "knowledge": 72.4,
         "math": 63.8
@@ -6928,9 +7464,9 @@
           "capturedAt": "2026-09-23"
         }
       ],
-      "overallScore": 61.8,
+      "overallScore": 55.36,
       "categoryScores": {
-        "agentic": 42.8,
+        "agentic": 49.4,
         "coding": 49.4,
         "knowledge": 74.1,
         "math": 56.5
@@ -6980,7 +7516,9 @@
         "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/gpt-6-astra",
         "https://deepswe.datacurve.ai/",
-        "https://deng.codexradar.com/"
+        "https://deng.codexradar.com/",
+        "https://www.anthropic.com/claude-opus-5-5",
+        "https://www.stepfun.com/step-5-preview"
       ],
       "sharedResults": 673,
       "comparableCategories": 5,
@@ -7234,14 +7772,14 @@
           "metric": "pass_at_1",
           "rawValue": 0.714,
           "uncertainty": 0,
-          "cohortPercentile": 0.765,
+          "cohortPercentile": 0.722,
           "taskCount": 112,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
           "capturedAt": "2026-09-23",
-          "costUsd": 3.24
+          "costUsd": 3.25
         },
         {
           "benchmark": "codexradar",
@@ -7251,9 +7789,9 @@
           "metric": "pass_at_1",
           "rawValue": 0.676,
           "uncertainty": 0,
-          "cohortPercentile": 0.647,
+          "cohortPercentile": 0.611,
           "taskCount": 111,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "low",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
@@ -7268,9 +7806,9 @@
           "metric": "pass_at_1",
           "rawValue": 0.679,
           "uncertainty": 0,
-          "cohortPercentile": 0.706,
+          "cohortPercentile": 0.667,
           "taskCount": 112,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "max",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
@@ -7285,9 +7823,9 @@
           "metric": "pass_at_1",
           "rawValue": 0.723,
           "uncertainty": 0,
-          "cohortPercentile": 0.882,
+          "cohortPercentile": 0.833,
           "taskCount": 112,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "medium",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
@@ -7302,9 +7840,9 @@
           "metric": "pass_at_1",
           "rawValue": 0.705,
           "uncertainty": 0,
-          "cohortPercentile": 0.765,
+          "cohortPercentile": 0.722,
           "taskCount": 112,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "ultra",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
@@ -7319,9 +7857,9 @@
           "metric": "pass_at_1",
           "rawValue": 0.696,
           "uncertainty": 0,
-          "cohortPercentile": 0.765,
+          "cohortPercentile": 0.722,
           "taskCount": 112,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "xhigh",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
@@ -7407,11 +7945,139 @@
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
           "capturedAt": "2026-09-04"
+        },
+        {
+          "benchmark": "terminal_bench_4",
+          "benchmarkVersion": "4.0",
+          "sourceModel": "gpt-6-astra",
+          "domain": "coding",
+          "metric": "pass_rate",
+          "rawValue": 0.579,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "high",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.anthropic.com/claude-opus-5-5",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "frontier_code_1_1",
+          "benchmarkVersion": "1.1-main",
+          "sourceModel": "gpt-6-astra",
+          "domain": "coding",
+          "metric": "pass_rate",
+          "rawValue": 0.533,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.anthropic.com/claude-opus-5-5",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "automation_bench",
+          "benchmarkVersion": "zapier",
+          "sourceModel": "gpt-6-astra",
+          "domain": "agentic",
+          "metric": "pass_rate",
+          "rawValue": 0.414,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.anthropic.com/claude-opus-5-5",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "gdpval_aa_v2_1",
+          "benchmarkVersion": "2.1",
+          "sourceModel": "gpt-6-astra",
+          "domain": "knowledge",
+          "metric": "elo",
+          "rawValue": 1542,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.anthropic.com/claude-opus-5-5",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "hle",
+          "benchmarkVersion": "with-tools",
+          "sourceModel": "gpt-6-astra",
+          "domain": "knowledge",
+          "metric": "pass_rate",
+          "rawValue": 0.572,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.anthropic.com/claude-opus-5-5",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "terminal_bench_science_0_1",
+          "benchmarkVersion": "0.1",
+          "sourceModel": "gpt-6-astra",
+          "domain": "agentic",
+          "metric": "pass_rate",
+          "rawValue": 0.646,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.anthropic.com/claude-opus-5-5",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "deepswe_official",
+          "benchmarkVersion": "v1.1-stepfun",
+          "sourceModel": "gpt-6-astra",
+          "domain": "coding",
+          "metric": "pass_rate",
+          "rawValue": 0.741,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.stepfun.com/step-5-preview",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "terminal_bench_4",
+          "benchmarkVersion": "4.0",
+          "sourceModel": "gpt-6-astra",
+          "domain": "coding",
+          "metric": "pass_rate",
+          "rawValue": 0.579,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.stepfun.com/step-5-preview",
+          "capturedAt": "2026-09-23"
         }
       ],
-      "overallScore": 82.93,
+      "overallScore": 88.47,
       "categoryScores": {
-        "agentic": 87.1,
+        "agentic": 86.8,
         "coding": 73.9,
         "multimodal": 82.9,
         "knowledge": 86.4,
@@ -7433,7 +8099,7 @@
       "sharedResults": 673,
       "comparableCategories": 2,
       "totalCategories": 8,
-      "overallScore": 62.33,
+      "overallScore": 66.52,
       "categoryScores": {
         "multimodal": 71.3,
         "knowledge": 69.6
@@ -7552,9 +8218,9 @@
       "sharedResults": 673,
       "comparableCategories": 4,
       "totalCategories": 8,
-      "overallScore": 80.45,
+      "overallScore": 82.17,
       "categoryScores": {
-        "agentic": 73.7,
+        "agentic": 73.5,
         "coding": 77.5,
         "multimodal": 82.8,
         "knowledge": 80.8
@@ -7962,11 +8628,11 @@
           "uncertainty": 0,
           "cohortPercentile": 0,
           "taskCount": 112,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-09-21",
+          "capturedAt": "2026-09-23",
           "costUsd": 0.21
         },
         {
@@ -7979,11 +8645,11 @@
           "uncertainty": 0,
           "cohortPercentile": 0,
           "taskCount": 112,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "low",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-09-21",
+          "capturedAt": "2026-09-23",
           "costUsd": 0.03
         },
         {
@@ -7994,13 +8660,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.696,
           "uncertainty": 0,
-          "cohortPercentile": 0.765,
+          "cohortPercentile": 0.722,
           "taskCount": 112,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "max",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-09-21",
+          "capturedAt": "2026-09-23",
           "costUsd": 0.54
         },
         {
@@ -8013,11 +8679,11 @@
           "uncertainty": 0,
           "cohortPercentile": 0,
           "taskCount": 112,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "medium",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-09-21",
+          "capturedAt": "2026-09-23",
           "costUsd": 0.08
         },
         {
@@ -8028,13 +8694,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.598,
           "uncertainty": 0,
-          "cohortPercentile": 0.118,
+          "cohortPercentile": 0.111,
           "taskCount": 112,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "xhigh",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-09-21",
+          "capturedAt": "2026-09-23",
           "costUsd": 0.34
         },
         {
@@ -8130,9 +8796,9 @@
       "sharedResults": 673,
       "comparableCategories": 5,
       "totalCategories": 8,
-      "overallScore": 62.23,
+      "overallScore": 64.87,
       "categoryScores": {
-        "agentic": 81.2,
+        "agentic": 69.7,
         "coding": 53.7,
         "multimodal": 67.1,
         "knowledge": 72.3,
@@ -8144,9 +8810,9 @@
         "(?:^|[-/])gpt-5\\.6-sol(?=$|@)"
       ],
       "canonicalModel": "gpt-5.6-sol",
-      "overallScore": 80.35,
+      "overallScore": 80.44,
       "categoryScores": {
-        "agentic": 93.6,
+        "agentic": 84,
         "coding": 62.6,
         "multimodal": 87.6,
         "knowledge": 83.5,
@@ -8449,9 +9115,9 @@
           "metric": "pass_at_1",
           "rawValue": 0.625,
           "uncertainty": 0,
-          "cohortPercentile": 0.235,
+          "cohortPercentile": 0.222,
           "taskCount": 112,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
@@ -8466,9 +9132,9 @@
           "metric": "pass_at_1",
           "rawValue": 0.58,
           "uncertainty": 0,
-          "cohortPercentile": 0.118,
+          "cohortPercentile": 0.111,
           "taskCount": 112,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "low",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
@@ -8483,9 +9149,9 @@
           "metric": "pass_at_1",
           "rawValue": 0.75,
           "uncertainty": 0,
-          "cohortPercentile": 0.941,
+          "cohortPercentile": 0.889,
           "taskCount": 112,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "max",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
@@ -8500,9 +9166,9 @@
           "metric": "pass_at_1",
           "rawValue": 0.652,
           "uncertainty": 0,
-          "cohortPercentile": 0.471,
+          "cohortPercentile": 0.444,
           "taskCount": 112,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "medium",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
@@ -8517,9 +9183,9 @@
           "metric": "pass_at_1",
           "rawValue": 0.679,
           "uncertainty": 0,
-          "cohortPercentile": 0.706,
+          "cohortPercentile": 0.667,
           "taskCount": 112,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "ultra",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
@@ -8534,9 +9200,9 @@
           "metric": "pass_at_1",
           "rawValue": 0.661,
           "uncertainty": 0,
-          "cohortPercentile": 0.529,
+          "cohortPercentile": 0.5,
           "taskCount": 112,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "xhigh",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
@@ -8622,6 +9288,182 @@
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deepswe.datacurve.ai/",
           "capturedAt": "2026-09-04"
+        },
+        {
+          "benchmark": "terminal_bench_4",
+          "benchmarkVersion": "4.0",
+          "sourceModel": "gpt-5.6-sol",
+          "domain": "coding",
+          "metric": "pass_rate",
+          "rawValue": 0.373,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.anthropic.com/claude-opus-5-5",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "frontier_code_1_1",
+          "benchmarkVersion": "1.1-main",
+          "sourceModel": "gpt-5.6-sol",
+          "domain": "coding",
+          "metric": "pass_rate",
+          "rawValue": 0.475,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.anthropic.com/claude-opus-5-5",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "cursor_bench_4",
+          "benchmarkVersion": "4.0",
+          "sourceModel": "gpt-5.6-sol",
+          "domain": "coding",
+          "metric": "pass_rate",
+          "rawValue": 0.417,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.anthropic.com/claude-opus-5-5",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "automation_bench",
+          "benchmarkVersion": "zapier",
+          "sourceModel": "gpt-5.6-sol",
+          "domain": "agentic",
+          "metric": "pass_rate",
+          "rawValue": 0.288,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.anthropic.com/claude-opus-5-5",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "gdpval_aa_v2_1",
+          "benchmarkVersion": "2.1",
+          "sourceModel": "gpt-5.6-sol",
+          "domain": "knowledge",
+          "metric": "elo",
+          "rawValue": 1588,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.anthropic.com/claude-opus-5-5",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "terminal_bench_science_0_1",
+          "benchmarkVersion": "0.1",
+          "sourceModel": "gpt-5.6-sol",
+          "domain": "agentic",
+          "metric": "pass_rate",
+          "rawValue": 0.224,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.anthropic.com/claude-opus-5-5",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "deepswe_official",
+          "benchmarkVersion": "v1.1-xiaomi",
+          "sourceModel": "gpt-5.6-sol",
+          "domain": "coding",
+          "metric": "pass_rate",
+          "rawValue": 0.73,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://mimo.mi.com/docs/zh-CN/news/latest/v2-6",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "terminal_bench_4",
+          "benchmarkVersion": "4.0",
+          "sourceModel": "gpt-5.6-sol",
+          "domain": "coding",
+          "metric": "pass_rate",
+          "rawValue": 0.399,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://mimo.mi.com/docs/zh-CN/news/latest/v2-6",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "automation_bench",
+          "benchmarkVersion": "v1.0.6",
+          "sourceModel": "gpt-5.6-sol",
+          "domain": "agentic",
+          "metric": "pass_rate",
+          "rawValue": 0.458,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://mimo.mi.com/docs/zh-CN/news/latest/v2-6",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "cursor_bench_4",
+          "benchmarkVersion": "4.0",
+          "sourceModel": "gpt-5.6-sol",
+          "domain": "coding",
+          "metric": "pass_rate",
+          "rawValue": 0.417,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.unite.ai/spacexai-releases-grok-4-7-for-coding-and-knowledge-work",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "terminal_bench_4",
+          "benchmarkVersion": "4.0",
+          "sourceModel": "gpt-5.6-sol",
+          "domain": "coding",
+          "metric": "pass_rate",
+          "rawValue": 0.373,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.unite.ai/spacexai-releases-grok-4-7-for-coding-and-knowledge-work",
+          "capturedAt": "2026-09-23"
         }
       ],
       "sources": [
@@ -8629,7 +9471,10 @@
         "https://benchlm.ai/methodology",
         "https://benchlm.ai/models/gpt-5-6-sol",
         "https://deepswe.datacurve.ai/",
-        "https://deng.codexradar.com/"
+        "https://deng.codexradar.com/",
+        "https://mimo.mi.com/docs/zh-CN/news/latest/v2-6",
+        "https://www.anthropic.com/claude-opus-5-5",
+        "https://www.unite.ai/spacexai-releases-grok-4-7-for-coding-and-knowledge-work"
       ],
       "verifiedAt": "2026-09-23",
       "lane": "provisional",
@@ -8642,9 +9487,9 @@
         "(?:^|[-/])gpt-5\\.6-terra(?=$|@)"
       ],
       "canonicalModel": "gpt-5.6-terra",
-      "overallScore": 70.71,
+      "overallScore": 72.76,
       "categoryScores": {
-        "agentic": 87.9,
+        "agentic": 75.6,
         "coding": 61.9,
         "multimodal": 77.2,
         "knowledge": 74.9,
@@ -8949,7 +9794,7 @@
           "uncertainty": 0,
           "cohortPercentile": 0,
           "taskCount": 112,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
@@ -8966,7 +9811,7 @@
           "uncertainty": 0,
           "cohortPercentile": 0,
           "taskCount": 112,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "low",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
@@ -8981,9 +9826,9 @@
           "metric": "pass_at_1",
           "rawValue": 0.679,
           "uncertainty": 0,
-          "cohortPercentile": 0.706,
+          "cohortPercentile": 0.667,
           "taskCount": 112,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "max",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
@@ -9000,7 +9845,7 @@
           "uncertainty": 0,
           "cohortPercentile": 0,
           "taskCount": 112,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "medium",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
@@ -9015,9 +9860,9 @@
           "metric": "pass_at_1",
           "rawValue": 0.679,
           "uncertainty": 0,
-          "cohortPercentile": 0.706,
+          "cohortPercentile": 0.667,
           "taskCount": 112,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "ultra",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
@@ -9032,9 +9877,9 @@
           "metric": "pass_at_1",
           "rawValue": 0.625,
           "uncertainty": 0,
-          "cohortPercentile": 0.235,
+          "cohortPercentile": 0.222,
           "taskCount": 112,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "xhigh",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
@@ -9357,13 +10202,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.634,
           "uncertainty": 0,
-          "cohortPercentile": 0.294,
+          "cohortPercentile": 0.278,
           "taskCount": 112,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-09-21",
+          "capturedAt": "2026-09-23",
           "costUsd": 3.73
         },
         {
@@ -9374,13 +10219,13 @@
           "metric": "pass_at_1",
           "rawValue": 0.643,
           "uncertainty": 0,
-          "cohortPercentile": 0.471,
+          "cohortPercentile": 0.444,
           "taskCount": 112,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "xhigh",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
-          "capturedAt": "2026-09-21",
+          "capturedAt": "2026-09-23",
           "costUsd": 5.91
         },
         {
@@ -9460,9 +10305,9 @@
       "sharedResults": 673,
       "comparableCategories": 5,
       "totalCategories": 8,
-      "overallScore": 71.74,
+      "overallScore": 69.48,
       "categoryScores": {
-        "agentic": 77.2,
+        "agentic": 80.9,
         "coding": 52.6,
         "multimodal": 71.4,
         "knowledge": 80.1,
@@ -9483,9 +10328,9 @@
       "sharedResults": 7,
       "comparableCategories": 3,
       "totalCategories": 8,
-      "overallScore": 79.27,
+      "overallScore": 75.08,
       "categoryScores": {
-        "agentic": 80.6,
+        "agentic": 80.3,
         "knowledge": 82.4,
         "math": 70.1
       }
@@ -9588,9 +10433,9 @@
       "sharedResults": 673,
       "comparableCategories": 5,
       "totalCategories": 8,
-      "overallScore": 71.04,
+      "overallScore": 69.23,
       "categoryScores": {
-        "agentic": 72,
+        "agentic": 79.2,
         "coding": 42.7,
         "multimodal": 69.3,
         "knowledge": 76.2,
@@ -9711,9 +10556,9 @@
           "capturedAt": "2026-08-24"
         }
       ],
-      "overallScore": 61.31,
+      "overallScore": 55.72,
       "categoryScores": {
-        "agentic": 55.5,
+        "agentic": 59.7,
         "coding": 57.8,
         "multimodal": 57.3,
         "knowledge": 57.1,
@@ -9817,9 +10662,9 @@
           "capturedAt": "2026-09-23"
         }
       ],
-      "overallScore": 59.72,
+      "overallScore": 51.73,
       "categoryScores": {
-        "agentic": 18.5,
+        "agentic": 20.4,
         "coding": 64.4,
         "multimodal": 23.8,
         "knowledge": 44.9,
@@ -9840,9 +10685,9 @@
       "sharedResults": 11,
       "comparableCategories": 3,
       "totalCategories": 8,
-      "overallScore": 60.94,
+      "overallScore": 74.27,
       "categoryScores": {
-        "agentic": 79.3,
+        "agentic": 79,
         "knowledge": 84.3,
         "math": 68.8
       }
@@ -9880,9 +10725,9 @@
           "capturedAt": "2026-09-23"
         }
       ],
-      "overallScore": 63.73,
+      "overallScore": 62.07,
       "categoryScores": {
-        "agentic": 62.8,
+        "agentic": 72.4,
         "coding": 58.2,
         "multimodal": 75.7,
         "knowledge": 79.1
@@ -9953,9 +10798,9 @@
           "capturedAt": "2026-09-23"
         }
       ],
-      "overallScore": 65.23,
+      "overallScore": 62.2,
       "categoryScores": {
-        "agentic": 23.1,
+        "agentic": 22.8,
         "coding": 46.5,
         "multimodal": 66.3,
         "knowledge": 76.9,
@@ -9995,7 +10840,7 @@
           "capturedAt": "2026-09-23"
         }
       ],
-      "overallScore": 52.49,
+      "overallScore": 50.22,
       "categoryScores": {
         "coding": 75.1,
         "multimodal": 72.5,
@@ -10012,14 +10857,15 @@
       "sources": [
         "https://artificialanalysis.ai/models/grok-4-7-high",
         "https://benchlm.ai/methodology",
-        "https://benchlm.ai/models/grok-4-7"
+        "https://benchlm.ai/models/grok-4-7",
+        "https://www.unite.ai/spacexai-releases-grok-4-7-for-coding-and-knowledge-work"
       ],
       "sharedResults": 673,
       "comparableCategories": 3,
       "totalCategories": 8,
       "overallScore": 68,
       "categoryScores": {
-        "agentic": 82.1,
+        "agentic": 75.5,
         "coding": 67.4,
         "knowledge": 73.3
       },
@@ -10054,6 +10900,70 @@
           "effort": "high",
           "selectionBasis": "best_available_effort",
           "sourceUrl": "https://artificialanalysis.ai/models/grok-4-7-high",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "cursor_bench_4",
+          "benchmarkVersion": "4.0",
+          "sourceModel": "grok-4.7",
+          "domain": "coding",
+          "metric": "pass_rate",
+          "rawValue": 0.463,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "xhigh",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.unite.ai/spacexai-releases-grok-4-7-for-coding-and-knowledge-work",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "terminal_bench_4",
+          "benchmarkVersion": "4.0",
+          "sourceModel": "grok-4.7",
+          "domain": "coding",
+          "metric": "pass_rate",
+          "rawValue": 0.38,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "xhigh",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.unite.ai/spacexai-releases-grok-4-7-for-coding-and-knowledge-work",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "deepswe_official",
+          "benchmarkVersion": "v1.1-xai",
+          "sourceModel": "grok-4.7",
+          "domain": "coding",
+          "metric": "pass_rate",
+          "rawValue": 0.71,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "high",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.unite.ai/spacexai-releases-grok-4-7-for-coding-and-knowledge-work",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "official_release",
+          "benchmarkVersion": "4.0",
+          "sourceModel": "grok-4.7",
+          "domain": "coding",
+          "metric": "deepswe_equivalent",
+          "rawValue": 0.649,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "medium",
+          "selectionBasis": "anchor_interp raw=undefined@undefined@undefined anchors=claude-opus-5:0.689,gpt-5.6-sol:0.611 per-benchmark: 0.463@cursor_bench_4@xhigh→0.684 0.38@terminal_bench_4@xhigh→0.615",
+          "sourceUrl": "https://www.unite.ai/spacexai-releases-grok-4-7-for-coding-and-knowledge-work",
           "capturedAt": "2026-09-23"
         }
       ]
@@ -10276,9 +11186,9 @@
           "metric": "pass_at_1",
           "rawValue": 0.661,
           "uncertainty": 0,
-          "cohortPercentile": 0.529,
+          "cohortPercentile": 0.5,
           "taskCount": 112,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
@@ -10295,7 +11205,7 @@
           "uncertainty": 0,
           "cohortPercentile": 0,
           "taskCount": 112,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "low",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
@@ -10310,9 +11220,9 @@
           "metric": "pass_at_1",
           "rawValue": 0.652,
           "uncertainty": 0,
-          "cohortPercentile": 0.471,
+          "cohortPercentile": 0.444,
           "taskCount": 112,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "medium",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
@@ -10327,9 +11237,9 @@
           "metric": "pass_at_1",
           "rawValue": 0.723,
           "uncertainty": 0,
-          "cohortPercentile": 0.882,
+          "cohortPercentile": 0.833,
           "taskCount": 112,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "xhigh",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
@@ -10401,9 +11311,9 @@
           "capturedAt": "2026-09-04"
         }
       ],
-      "overallScore": 69.75,
+      "overallScore": 69.23,
       "categoryScores": {
-        "agentic": 83.2,
+        "agentic": 77.7,
         "coding": 75.6,
         "knowledge": 77.7
       }
@@ -10490,9 +11400,9 @@
           "capturedAt": "2026-09-04"
         }
       ],
-      "overallScore": 68,
+      "overallScore": 65.37,
       "categoryScores": {
-        "agentic": 81.7,
+        "agentic": 74.7,
         "coding": 65.5,
         "multimodal": 78.5,
         "knowledge": 78.7
@@ -10513,9 +11423,9 @@
       "sharedResults": 673,
       "comparableCategories": 4,
       "totalCategories": 8,
-      "overallScore": 67.97,
+      "overallScore": 59.56,
       "categoryScores": {
-        "agentic": 29.7,
+        "agentic": 32.9,
         "coding": 44.3,
         "multimodal": 34.6,
         "knowledge": 61.4
@@ -10570,7 +11480,7 @@
       "sharedResults": 25,
       "comparableCategories": 3,
       "totalCategories": 8,
-      "overallScore": 61.19,
+      "overallScore": 59.67,
       "categoryScores": {
         "coding": 60.1,
         "multimodal": 84.9,
@@ -10585,9 +11495,9 @@
           "metric": "pass_at_1",
           "rawValue": 0.58,
           "uncertainty": 0,
-          "cohortPercentile": 0.059,
+          "cohortPercentile": 0.056,
           "taskCount": 69,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "low",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
@@ -10600,11 +11510,11 @@
           "sourceModel": "hy4-preview",
           "domain": "coding",
           "metric": "pass_at_1",
-          "rawValue": 0.494,
+          "rawValue": 0.482,
           "uncertainty": 0,
           "cohortPercentile": 0,
-          "taskCount": 81,
-          "cohortSize": 17,
+          "taskCount": 85,
+          "cohortSize": 18,
           "effort": "max",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
@@ -10630,9 +11540,9 @@
       "sharedResults": 673,
       "comparableCategories": 4,
       "totalCategories": 8,
-      "overallScore": 73.99,
+      "overallScore": 72.53,
       "categoryScores": {
-        "agentic": 91,
+        "agentic": 82.1,
         "coding": 73,
         "multimodal": 89.4,
         "knowledge": 83.7
@@ -10726,9 +11636,9 @@
           "metric": "pass_at_1",
           "rawValue": 0.545,
           "uncertainty": 0,
-          "cohortPercentile": 0.059,
+          "cohortPercentile": 0.056,
           "taskCount": 112,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "high",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
@@ -10743,9 +11653,9 @@
           "metric": "pass_at_1",
           "rawValue": 0.589,
           "uncertainty": 0,
-          "cohortPercentile": 0.118,
+          "cohortPercentile": 0.111,
           "taskCount": 112,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "low",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
@@ -10760,14 +11670,14 @@
           "metric": "pass_at_1",
           "rawValue": 0.634,
           "uncertainty": 0,
-          "cohortPercentile": 0.294,
+          "cohortPercentile": 0.278,
           "taskCount": 112,
-          "cohortSize": 17,
+          "cohortSize": 18,
           "effort": "max",
           "selectionBasis": "per_effort",
           "sourceUrl": "https://deng.codexradar.com/",
           "capturedAt": "2026-09-23",
-          "costUsd": 4.51
+          "costUsd": 4.52
         },
         {
           "benchmark": "deepswe",
@@ -10871,9 +11781,9 @@
       "sharedResults": 673,
       "comparableCategories": 3,
       "totalCategories": 8,
-      "overallScore": 66.23,
+      "overallScore": 50.42,
       "categoryScores": {
-        "agentic": 70.9,
+        "agentic": 69.2,
         "coding": 46,
         "knowledge": 65.2
       }
@@ -11023,9 +11933,9 @@
           "capturedAt": "2026-09-23"
         }
       ],
-      "overallScore": 54.41,
+      "overallScore": 53.79,
       "categoryScores": {
-        "agentic": 28,
+        "agentic": 31,
         "coding": 42.8,
         "multimodal": 65.8,
         "knowledge": 55.5,
@@ -11139,15 +12049,82 @@
       "lane": "provisional",
       "sources": [
         "https://benchlm.ai/methodology",
-        "https://benchlm.ai/models/mimo-v2-6-flash"
+        "https://benchlm.ai/models/mimo-v2-6-flash",
+        "https://mimo.mi.com/docs/zh-CN/news/latest/v2-6"
       ],
       "sharedResults": 10,
-      "comparableCategories": 1,
+      "comparableCategories": 2,
       "totalCategories": 8,
       "overallScore": 69,
       "categoryScores": {
-        "agentic": 76.5
-      }
+        "agentic": 76.2
+      },
+      "benchmarkEvidence": [
+        {
+          "benchmark": "deepswe_official",
+          "benchmarkVersion": "v1.1-xiaomi",
+          "sourceModel": "mimo-v2.6-flash",
+          "domain": "coding",
+          "metric": "pass_rate",
+          "rawValue": 0.679,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://mimo.mi.com/docs/zh-CN/news/latest/v2-6",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "terminal_bench_4",
+          "benchmarkVersion": "4.0",
+          "sourceModel": "mimo-v2.6-flash",
+          "domain": "coding",
+          "metric": "pass_rate",
+          "rawValue": 0.288,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://mimo.mi.com/docs/zh-CN/news/latest/v2-6",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "automation_bench",
+          "benchmarkVersion": "v1.0.6",
+          "sourceModel": "mimo-v2.6-flash",
+          "domain": "agentic",
+          "metric": "pass_rate",
+          "rawValue": 0.523,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://mimo.mi.com/docs/zh-CN/news/latest/v2-6",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "official_release",
+          "benchmarkVersion": "v1.1-xiaomi",
+          "sourceModel": "mimo-v2.6-flash",
+          "domain": "coding",
+          "metric": "deepswe_equivalent",
+          "rawValue": 0.552,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "medium",
+          "selectionBasis": "anchor_interp raw=undefined@undefined@undefined anchors=claude-opus-5:0.689,gpt-5.6-sol:0.611,claude-fable-5:0.654 per-benchmark: 0.679@deepswe_official@max→0.684 0.288@terminal_bench_4@max→0.420",
+          "sourceUrl": "https://mimo.mi.com/docs/zh-CN/news/latest/v2-6",
+          "capturedAt": "2026-09-23"
+        }
+      ]
     },
     {
       "patterns": [
@@ -11159,14 +12136,15 @@
       "sources": [
         "https://artificialanalysis.ai/models/mimo-v2-6-pro",
         "https://benchlm.ai/methodology",
-        "https://benchlm.ai/models/mimo-v2-6-pro"
+        "https://benchlm.ai/models/mimo-v2-6-pro",
+        "https://mimo.mi.com/docs/zh-CN/news/latest/v2-6"
       ],
       "sharedResults": 673,
-      "comparableCategories": 2,
+      "comparableCategories": 3,
       "totalCategories": 8,
       "overallScore": 70,
       "categoryScores": {
-        "agentic": 78.5,
+        "agentic": 78.2,
         "knowledge": 60.1
       },
       "benchmarkEvidence": [
@@ -11185,6 +12163,70 @@
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/mimo-v2-6-pro",
           "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "deepswe_official",
+          "benchmarkVersion": "v1.1-xiaomi",
+          "sourceModel": "mimo-v2.6-pro",
+          "domain": "coding",
+          "metric": "pass_rate",
+          "rawValue": 0.719,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://mimo.mi.com/docs/zh-CN/news/latest/v2-6",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "terminal_bench_4",
+          "benchmarkVersion": "4.0",
+          "sourceModel": "mimo-v2.6-pro",
+          "domain": "coding",
+          "metric": "pass_rate",
+          "rawValue": 0.349,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://mimo.mi.com/docs/zh-CN/news/latest/v2-6",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "automation_bench",
+          "benchmarkVersion": "v1.0.6",
+          "sourceModel": "mimo-v2.6-pro",
+          "domain": "agentic",
+          "metric": "pass_rate",
+          "rawValue": 0.531,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://mimo.mi.com/docs/zh-CN/news/latest/v2-6",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "official_release",
+          "benchmarkVersion": "v1.1-xiaomi",
+          "sourceModel": "mimo-v2.6-pro",
+          "domain": "coding",
+          "metric": "deepswe_equivalent",
+          "rawValue": 0.576,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "medium",
+          "selectionBasis": "anchor_interp raw=undefined@undefined@undefined anchors=claude-opus-5:0.689,gpt-5.6-sol:0.611,claude-fable-5:0.654 per-benchmark: 0.719@deepswe_official@max→0.627 0.349@terminal_bench_4@max→0.525",
+          "sourceUrl": "https://mimo.mi.com/docs/zh-CN/news/latest/v2-6",
+          "capturedAt": "2026-09-23"
         }
       ]
     },
@@ -11202,9 +12244,9 @@
       "sharedResults": 13,
       "comparableCategories": 4,
       "totalCategories": 8,
-      "overallScore": 57.58,
+      "overallScore": 55.56,
       "categoryScores": {
-        "agentic": 56.6,
+        "agentic": 66.8,
         "coding": 44.2,
         "multimodal": 59.1,
         "knowledge": 55.8
@@ -11225,9 +12267,9 @@
       "sharedResults": 673,
       "comparableCategories": 3,
       "totalCategories": 8,
-      "overallScore": 62.39,
+      "overallScore": 54.04,
       "categoryScores": {
-        "agentic": 60.3,
+        "agentic": 71.5,
         "coding": 45.7,
         "knowledge": 63.2
       },
@@ -11313,9 +12355,9 @@
       "sharedResults": 673,
       "comparableCategories": 4,
       "totalCategories": 8,
-      "overallScore": 61.02,
+      "overallScore": 55.28,
       "categoryScores": {
-        "agentic": 58.2,
+        "agentic": 58.1,
         "coding": 53.6,
         "multimodal": 52,
         "knowledge": 54.4
@@ -11386,9 +12428,9 @@
       "sharedResults": 673,
       "comparableCategories": 3,
       "totalCategories": 8,
-      "overallScore": 55.08,
+      "overallScore": 48.53,
       "categoryScores": {
-        "agentic": 43.9,
+        "agentic": 50.8,
         "coding": 42.7,
         "knowledge": 48.3
       },
@@ -11476,7 +12518,7 @@
           "capturedAt": "2026-09-23"
         }
       ],
-      "overallScore": 54.98
+      "overallScore": 49.88
     },
     {
       "patterns": [
@@ -11526,7 +12568,7 @@
       "comparableCategories": 3,
       "totalCategories": 8,
       "categoryScores": {
-        "agentic": 82.8,
+        "agentic": 76.2,
         "coding": 73.2,
         "knowledge": 69.4
       },
@@ -11712,9 +12754,9 @@
           "capturedAt": "2026-09-04"
         }
       ],
-      "overallScore": 70.01,
+      "overallScore": 65.24,
       "categoryScores": {
-        "agentic": 79.8,
+        "agentic": 75.9,
         "coding": 61,
         "knowledge": 74
       }
@@ -11801,9 +12843,9 @@
           "capturedAt": "2026-09-04"
         }
       ],
-      "overallScore": 69.91,
+      "overallScore": 66.44,
       "categoryScores": {
-        "agentic": 75.8,
+        "agentic": 67.4,
         "coding": 57.4,
         "multimodal": 77.3,
         "knowledge": 92.7
@@ -11940,9 +12982,9 @@
           "capturedAt": "2026-09-04"
         }
       ],
-      "overallScore": 73.1,
+      "overallScore": 72.02,
       "categoryScores": {
-        "agentic": 83.6,
+        "agentic": 83.3,
         "coding": 68.9,
         "multimodal": 87.4,
         "knowledge": 68.4
@@ -11964,9 +13006,9 @@
       "sharedResults": 673,
       "comparableCategories": 4,
       "totalCategories": 8,
-      "overallScore": 67.07,
+      "overallScore": 62.89,
       "categoryScores": {
-        "agentic": 63.8,
+        "agentic": 73.8,
         "coding": 70.1,
         "knowledge": 70.7,
         "math": 81.9
@@ -12088,9 +13130,9 @@
           "capturedAt": "2026-09-23"
         }
       ],
-      "overallScore": 62.05,
+      "overallScore": 55.76,
       "categoryScores": {
-        "agentic": 58.1,
+        "agentic": 65.2,
         "coding": 57.9,
         "multimodal": 72.4,
         "knowledge": 59.6,
@@ -12131,7 +13173,7 @@
           "capturedAt": "2026-09-23"
         }
       ],
-      "overallScore": 40.99,
+      "overallScore": 39.09,
       "categoryScores": {
         "knowledge": 49.3
       }
@@ -12144,7 +13186,8 @@
       "verifiedAt": "2026-09-23",
       "lane": "provisional",
       "sources": [
-        "https://artificialanalysis.ai/models/step-5"
+        "https://artificialanalysis.ai/models/step-5",
+        "https://www.stepfun.com/step-5-preview"
       ],
       "sharedResults": 673,
       "comparableCategories": 1,
@@ -12164,6 +13207,54 @@
           "effort": "default",
           "selectionBasis": "composite_index",
           "sourceUrl": "https://artificialanalysis.ai/models/step-5",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "deepswe_official",
+          "benchmarkVersion": "v1.1-stepfun",
+          "sourceModel": "step-5",
+          "domain": "coding",
+          "metric": "pass_rate",
+          "rawValue": 0.677,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "high",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.stepfun.com/step-5-preview",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "terminal_bench_4",
+          "benchmarkVersion": "4.0",
+          "sourceModel": "step-5",
+          "domain": "coding",
+          "metric": "pass_rate",
+          "rawValue": 0.333,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "high",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.stepfun.com/step-5-preview",
+          "capturedAt": "2026-09-23"
+        },
+        {
+          "benchmark": "official_release",
+          "benchmarkVersion": "v1.1-stepfun",
+          "sourceModel": "step-5",
+          "domain": "coding",
+          "metric": "deepswe_equivalent",
+          "rawValue": 0.56,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "medium",
+          "selectionBasis": "anchor_interp raw=undefined@undefined@undefined anchors=gpt-6-astra:0.728,claude-opus-5:0.689 per-benchmark: 0.677@deepswe_official@high→0.563 0.333@terminal_bench_4@high→0.557",
+          "sourceUrl": "https://www.stepfun.com/step-5-preview",
           "capturedAt": "2026-09-23"
         }
       ]
@@ -12217,9 +13308,9 @@
           "capturedAt": "2026-09-23"
         }
       ],
-      "overallScore": 49.96,
+      "overallScore": 41.33,
       "categoryScores": {
-        "agentic": 50.4,
+        "agentic": 57.2,
         "coding": 37.8,
         "multimodal": 71,
         "knowledge": 50.7
@@ -12233,12 +13324,12 @@
       ],
       "canonicalModel": "gpt-image-2",
       "lane": "provisional",
-      "elo": 1171,
+      "elo": 1170,
       "ci95": 9,
       "sources": [
         "https://artificialanalysis.ai/leaderboards/image-generation"
       ],
-      "verifiedAt": "2026-09-18"
+      "verifiedAt": "2026-09-23"
     },
     {
       "patterns": [
@@ -12285,12 +13376,12 @@
       ],
       "canonicalModel": "seedream-5.0-lite",
       "lane": "provisional",
-      "elo": 1009,
+      "elo": 1007,
       "ci95": 9,
       "sources": [
         "https://artificialanalysis.ai/leaderboards/image-generation"
       ],
-      "verifiedAt": "2026-09-22"
+      "verifiedAt": "2026-09-23"
     }
   ]
 }

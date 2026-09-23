@@ -10,6 +10,7 @@ scripts/*
 !scripts/generate-channel-presets.mjs
 !scripts/generate-preset-manifest.mjs
 !scripts/update-benchmark-data.mjs
+!scripts/prefill-official-scores.mjs
 !scripts/generate-benchmark-chart.mjs
 !scripts/benchmark-sources/
 !scripts/benchmark-sources/**
