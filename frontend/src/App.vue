@@ -389,14 +389,11 @@
       :current-tab="channelStore.activeTab"
       :capability-job="capabilityTestJob"
       :capability-rpm="capabilityTestRpm"
-      :existing-mapping="capabilityTestChannelMapping"
-      :supported-models="capabilityTestChannelSupportedModels"
       @update:capability-rpm="value => capabilityTestRpm = value"
       @copy-to-tab="handleCopyToTab"
       @cancel="handleCancelCapabilityTest"
       @retry-model="handleRetryCapabilityModel"
       @test-protocol="handleTestCapabilityProtocol"
-      @create-mapping="createCapabilityModelMapping"
     />
 
     <!-- 熔断器配置对话框 -->
@@ -751,14 +748,11 @@ const {
   capabilityTestJob,
   capabilityTestRpm,
   capabilityUseChannelModels,
-  capabilityTestChannelMapping,
-  capabilityTestChannelSupportedModels,
   testChannelCapability,
   handleCopyToTab,
   handleCancelCapabilityTest,
   handleRetryCapabilityModel,
   handleTestCapabilityProtocol,
-  createCapabilityModelMapping,
 } = useCapabilityTestManager(channelStore, dialogStore, showToast, t, refreshChannels)
 </script>
 

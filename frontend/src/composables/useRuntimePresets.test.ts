@@ -50,8 +50,6 @@ const runtimeBundle = {
       schemaVersion: 1,
       presets: {
         'gpt-5.5': {
-          modelMapping: { sonnet: 'runtime-gpt-5' },
-          reasoningMapping: { sonnet: 'max' as const },
           fastMode: false,
           textVerbosity: 'high' as const,
         },
@@ -61,14 +59,10 @@ const runtimeBundle = {
       schemaVersion: 1,
       providers: {
         mimo: {
-          modelMapping: {},
-          reasoningMapping: {},
           reasoningParamStyle: 'thinking' as const,
           authHeader: '' as const,
           normalizeSystemRoleToTopLevel: false,
           noVision: false,
-          noVisionModels: ['runtime-chat-model'],
-          visionFallbackModel: 'runtime-chat-fallback',
         },
       },
     },
@@ -76,14 +70,10 @@ const runtimeBundle = {
       schemaVersion: 1,
       providers: {
         mimo: {
-          modelMapping: { sonnet: 'runtime-mimo' },
-          reasoningMapping: {},
           reasoningParamStyle: 'thinking' as const,
           authHeader: '' as const,
           normalizeSystemRoleToTopLevel: true,
           noVision: false,
-          noVisionModels: [],
-          visionFallbackModel: '',
         },
       },
     },
@@ -91,14 +81,10 @@ const runtimeBundle = {
       schemaVersion: 1,
       providers: {
         mimo: {
-          modelMapping: { codex: 'runtime-codex' },
-          reasoningMapping: {},
           reasoningParamStyle: 'reasoning' as const,
           codexToolCompat: true,
           stripCodexClientTools: true,
           noVision: false,
-          noVisionModels: [],
-          visionFallbackModel: '',
         },
       },
     },
@@ -122,9 +108,9 @@ describe('useRuntimePresets', () => {
     expect(effectiveModelRegistry.value['^gpt-5$']?.displayName).toBe('runtime-gpt-5')
     expect(effectiveModelRegistry.value['^gpt-5@prod$']?.maxOutputTokens).toBe(24)
     expect(effectiveBenchmarkProfiles.value['^gpt-5$']?.overallScore).toBe(88)
-    expect(effectiveChannelPresets.value.openAIMessages['gpt-5.5']?.modelMapping).toEqual({ sonnet: 'runtime-gpt-5' })
-    expect(effectiveChannelPresets.value.openAIChat.mimo?.visionFallbackModel).toBe('runtime-chat-fallback')
-    expect(effectiveChannelPresets.value.claudeMessages.mimo?.modelMapping).toEqual({ sonnet: 'runtime-mimo' })
+    expect(effectiveChannelPresets.value.openAIMessages['gpt-5.5']?.textVerbosity).toBe('high')
+    expect(effectiveChannelPresets.value.openAIChat.mimo?.reasoningParamStyle).toBe('thinking')
+    expect(effectiveChannelPresets.value.claudeMessages.mimo?.normalizeSystemRoleToTopLevel).toBe(true)
     expect(resolveBuiltinUpstreamModelCapability('gpt-5')?.capability.displayName).toBe('runtime-gpt-5')
   })
 
@@ -161,8 +147,8 @@ describe('useRuntimePresets', () => {
     })
 
     const { effectiveChannelPresets } = useRuntimePresets()
-    expect(effectiveChannelPresets.value.claudeMessages.mimo?.modelMapping).toEqual({ sonnet: 'runtime-mimo' })
-    expect(effectiveChannelPresets.value.codexResponses.mimo?.modelMapping).toEqual({ codex: 'runtime-codex' })
+    expect(effectiveChannelPresets.value.claudeMessages.mimo?.normalizeSystemRoleToTopLevel).toBe(true)
+    expect(effectiveChannelPresets.value.codexResponses.mimo?.reasoningParamStyle).toBe('reasoning')
   })
 
   it('force 请求应防止旧响应覆盖新状态', async () => {
@@ -190,8 +176,6 @@ describe('useRuntimePresets', () => {
           schemaVersion: 1,
           presets: {
             'gpt-5.5': {
-              modelMapping: { sonnet: 'second-runtime' },
-              reasoningMapping: { sonnet: 'max' as const },
               fastMode: true,
               textVerbosity: 'high' as const,
             },
@@ -210,8 +194,6 @@ describe('useRuntimePresets', () => {
           schemaVersion: 1,
           presets: {
             'gpt-5.5': {
-              modelMapping: { sonnet: 'first-runtime' },
-              reasoningMapping: { sonnet: 'max' as const },
               fastMode: false,
               textVerbosity: 'high' as const,
             },
@@ -223,7 +205,7 @@ describe('useRuntimePresets', () => {
 
     const { runtimePresets, loading } = useRuntimePresets()
     expect(runtimePresets.value.dataVersion).toBe('newer')
-    expect(runtimePresets.value.channelPresets.openAIMessages['gpt-5.5']?.modelMapping).toEqual({ sonnet: 'second-runtime' })
+    expect(runtimePresets.value.channelPresets.openAIMessages['gpt-5.5']?.fastMode).toBe(true)
     expect(loading.value).toBe(false)
   })
 })

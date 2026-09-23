@@ -4,224 +4,110 @@ export type OpenAIChatReasoningEffort = "none" | "minimal" | "low" | "medium" | 
 export type OpenAIChatReasoningParamStyle = '' | 'reasoning' | 'reasoning_effort' | 'thinking'
 
 export interface OpenAIChatPreset {
-  modelMapping: Record<string, string>
-  reasoningMapping: Partial<Record<string, OpenAIChatReasoningEffort>>
   reasoningParamStyle: OpenAIChatReasoningParamStyle
   serviceType?: 'openai' | 'gemini' | 'claude' | 'responses' | 'copilot'
   authHeader: '' | 'auto' | 'bearer' | 'x-api-key'
   normalizeSystemRoleToTopLevel: boolean
   noVision: boolean
-  noVisionModels: string[]
-  visionFallbackModel: string
   rateLimitRpm?: number
 }
 
 export const openaiChatPresets: Record<string, OpenAIChatPreset> = {
   "deepseek": {
-    "modelMapping": {},
-    "reasoningMapping": {},
     "reasoningParamStyle": "reasoning",
     "authHeader": "",
     "normalizeSystemRoleToTopLevel": false,
-    "noVision": false,
-    "noVisionModels": [
-      "deepseek-v4-pro"
-    ],
-    "visionFallbackModel": ""
+    "noVision": false
   },
   "mimo": {
-    "modelMapping": {},
-    "reasoningMapping": {},
     "reasoningParamStyle": "thinking",
     "authHeader": "",
     "normalizeSystemRoleToTopLevel": false,
     "noVision": false,
-    "noVisionModels": [
-      "mimo-v2.5-pro"
-    ],
-    "visionFallbackModel": "mimo-v2.5",
     "rateLimitRpm": 80
   },
   "compshare": {
-    "modelMapping": {},
-    "reasoningMapping": {},
     "reasoningParamStyle": "reasoning",
     "authHeader": "",
     "normalizeSystemRoleToTopLevel": false,
-    "noVision": false,
-    "noVisionModels": [
-      "glm-5.2",
-      "deepseek-v4-flash"
-    ],
-    "visionFallbackModel": "MiniMax-M2.7"
+    "noVision": false
   },
   "runapi": {
-    "modelMapping": {},
-    "reasoningMapping": {},
     "reasoningParamStyle": "",
     "authHeader": "",
     "normalizeSystemRoleToTopLevel": false,
-    "noVision": false,
-    "noVisionModels": [],
-    "visionFallbackModel": ""
+    "noVision": false
   },
   "unity2": {
-    "modelMapping": {},
-    "reasoningMapping": {},
     "reasoningParamStyle": "",
     "authHeader": "",
     "normalizeSystemRoleToTopLevel": false,
-    "noVision": false,
-    "noVisionModels": [],
-    "visionFallbackModel": ""
+    "noVision": false
   },
   "openrouter": {
-    "modelMapping": {},
-    "reasoningMapping": {},
     "reasoningParamStyle": "",
     "authHeader": "",
     "normalizeSystemRoleToTopLevel": false,
-    "noVision": false,
-    "noVisionModels": [],
-    "visionFallbackModel": ""
+    "noVision": false
   },
   "sensenova": {
-    "modelMapping": {},
-    "reasoningMapping": {},
     "reasoningParamStyle": "",
     "authHeader": "",
     "normalizeSystemRoleToTopLevel": false,
-    "noVision": false,
-    "noVisionModels": [
-      "glm-5.2",
-      "deepseek-v4-flash"
-    ],
-    "visionFallbackModel": "sensenova-6.7-flash-lite"
+    "noVision": false
   },
   "modelscope": {
-    "modelMapping": {},
-    "reasoningMapping": {},
     "reasoningParamStyle": "",
     "authHeader": "",
     "normalizeSystemRoleToTopLevel": false,
-    "noVision": false,
-    "noVisionModels": [],
-    "visionFallbackModel": ""
+    "noVision": false
   },
   "minimax": {
-    "modelMapping": {},
-    "reasoningMapping": {},
     "reasoningParamStyle": "",
     "authHeader": "",
     "normalizeSystemRoleToTopLevel": false,
-    "noVision": false,
-    "noVisionModels": [],
-    "visionFallbackModel": ""
+    "noVision": false
   },
   "dashscope": {
-    "modelMapping": {},
-    "reasoningMapping": {},
     "reasoningParamStyle": "",
     "authHeader": "",
     "normalizeSystemRoleToTopLevel": false,
-    "noVision": false,
-    "noVisionModels": [],
-    "visionFallbackModel": ""
+    "noVision": false
   },
   "opencode-zen": {
-    "modelMapping": {
-      "codex": "deepseek-v4-flash",
-      "gpt": "glm-5.2",
-      "mini": "deepseek-v4-flash"
-    },
-    "reasoningMapping": {
-      "codex": "high",
-      "gpt": "max",
-      "mini": "high"
-    },
     "reasoningParamStyle": "reasoning",
     "authHeader": "bearer",
     "normalizeSystemRoleToTopLevel": false,
-    "noVision": false,
-    "noVisionModels": [
-      "glm-5.2",
-      "deepseek-v4-flash"
-    ],
-    "visionFallbackModel": "minimax-m3"
+    "noVision": false
   },
   "opencode-go": {
-    "modelMapping": {
-      "codex": "deepseek-v4-flash",
-      "gpt": "glm-5.2",
-      "mini": "deepseek-v4-flash"
-    },
-    "reasoningMapping": {
-      "codex": "high",
-      "gpt": "max",
-      "mini": "high"
-    },
     "reasoningParamStyle": "reasoning",
     "authHeader": "bearer",
     "normalizeSystemRoleToTopLevel": false,
-    "noVision": false,
-    "noVisionModels": [
-      "glm-5.2",
-      "deepseek-v4-flash"
-    ],
-    "visionFallbackModel": "minimax-m3"
+    "noVision": false
   },
   "volc-ark": {
-    "modelMapping": {},
-    "reasoningMapping": {},
     "reasoningParamStyle": "",
     "authHeader": "",
     "normalizeSystemRoleToTopLevel": false,
-    "noVision": false,
-    "noVisionModels": [],
-    "visionFallbackModel": ""
+    "noVision": false
   },
   "qianfan": {
-    "modelMapping": {},
-    "reasoningMapping": {},
     "reasoningParamStyle": "",
     "authHeader": "",
     "normalizeSystemRoleToTopLevel": false,
-    "noVision": false,
-    "noVisionModels": [],
-    "visionFallbackModel": ""
+    "noVision": false
   },
   "xfyun": {
-    "modelMapping": {
-      "codex": "astron-code-latest",
-      "gpt": "astron-code-latest",
-      "mini": "astron-code-latest"
-    },
-    "reasoningMapping": {},
     "reasoningParamStyle": "",
     "authHeader": "",
     "normalizeSystemRoleToTopLevel": false,
-    "noVision": false,
-    "noVisionModels": [],
-    "visionFallbackModel": ""
+    "noVision": false
   },
   "atomgit": {
-    "modelMapping": {
-      "gpt": "glm-5.2-200k",
-      "mini": "glm-5.2-200k",
-      "codex": "glm-5.2-200k"
-    },
-    "reasoningMapping": {
-      "gpt": "high",
-      "mini": "high",
-      "codex": "high"
-    },
     "reasoningParamStyle": "thinking",
     "authHeader": "",
     "normalizeSystemRoleToTopLevel": false,
-    "noVision": false,
-    "noVisionModels": [
-      "glm-5.2-200k"
-    ],
-    "visionFallbackModel": ""
+    "noVision": false
   }
 }

@@ -30,10 +30,10 @@ describe('freezeImmutableFields', () => {
     expect(Object.isFrozen(ch.disabledApiKeys)).toBe(true)
   })
 
-  it('冻结 modelMapping 对象', () => {
-    const ch = makeChannel({ modelMapping: { 'gpt-4': 'gpt-4o' } })
+  it('冻结 supportedModels 数组', () => {
+    const ch = makeChannel({ supportedModels: ['gpt-4', 'gpt-4o'] })
     freezeImmutableFields(ch)
-    expect(Object.isFrozen(ch.modelMapping)).toBe(true)
+    expect(Object.isFrozen(ch.supportedModels)).toBe(true)
   })
 
   it('冻结大型配置集合，避免被 Vue 深度代理化', () => {
@@ -70,13 +70,13 @@ describe('mergeChannelsWithLocalData', () => {
 
   it('existingChannels 为空时，直接返回新数组并冻结字段', () => {
     const newChannels = [
-      makeChannel({ index: 0, apiKeys: ['a'], modelMapping: { x: 'y' } }),
+      makeChannel({ index: 0, apiKeys: ['a'], supportedModels: ['x'] }),
       makeChannel({ index: 1, apiKeys: ['b'] }),
     ]
     const result = mergeChannelsWithLocalData(newChannels, undefined, NOW)
     expect(result).toBe(newChannels)
     expect(Object.isFrozen(result[0].apiKeys)).toBe(true)
-    expect(Object.isFrozen(result[0].modelMapping)).toBe(true)
+    expect(Object.isFrozen(result[0].supportedModels)).toBe(true)
     expect(Object.isFrozen(result[1].apiKeys)).toBe(true)
   })
 
@@ -115,15 +115,15 @@ describe('mergeChannelsWithLocalData', () => {
     expect(result[2].latency).toBeUndefined()
   })
 
-  it('所有返回的 channel 都冻结了 apiKeys / modelMapping', () => {
+  it('所有返回的 channel 都冻结了 apiKeys / supportedModels', () => {
     const fresh = [
-      makeChannel({ index: 0, apiKeys: ['a'], modelMapping: { x: 'y' } }),
+      makeChannel({ index: 0, apiKeys: ['a'], supportedModels: ['x'] }),
       makeChannel({ index: 1, apiKeys: ['b'] }),
     ]
     const result = mergeChannelsWithLocalData(fresh, [], NOW)
     for (const ch of result) {
       expect(Object.isFrozen(ch.apiKeys)).toBe(true)
-      if (ch.modelMapping) expect(Object.isFrozen(ch.modelMapping)).toBe(true)
+      if (ch.supportedModels) expect(Object.isFrozen(ch.supportedModels)).toBe(true)
     }
   })
 

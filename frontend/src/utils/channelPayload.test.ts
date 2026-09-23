@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { buildChannelPayload, embeddingCapabilityRowsToRecord, normalizeMaxGroupMultiplier } from './channelPayload'
 
 describe('buildChannelPayload', () => {
-  it('应序列化 reasoningMapping 与渠道级 verbosity/fastMode', () => {
+  it('应序列化渠道级 verbosity/fastMode', () => {
     const result = buildChannelPayload({
       name: '  test-channel  ',
       serviceType: 'openai',
@@ -15,8 +15,6 @@ describe('buildChannelPayload', () => {
       stripThoughtSignature: false,
       description: '  desc  ',
       apiKeys: ['sk-1', '  ', 'sk-2'],
-      modelMapping: { 'gpt-5': 'gpt-5.4' },
-      reasoningMapping: { 'gpt-5': 'max' },
       reasoningParamStyle: 'reasoning_effort',
       textVerbosity: 'medium',
       fastMode: true,
@@ -31,8 +29,6 @@ describe('buildChannelPayload', () => {
       normalizeSystemRoleToTopLevel: false,
       codexToolCompat: true,
       noVision: false,
-      noVisionModels: [],
-      visionFallbackModel: '',
       historicalImageTurnLimit: 3
     })
 
@@ -42,8 +38,6 @@ describe('buildChannelPayload', () => {
     expect(result.website).toBe('https://platform.openai.com')
     expect(result.description).toBe('desc')
     expect(result.apiKeys).toEqual(['sk-1', 'sk-2'])
-    expect(result.modelMapping).toEqual({ 'gpt-5': 'gpt-5.4' })
-    expect(result.reasoningMapping).toEqual({ 'gpt-5': 'max' })
     expect(result.reasoningParamStyle).toBe('reasoning_effort')
     expect(result.textVerbosity).toBe('medium')
     expect(result.fastMode).toBe(true)
@@ -66,8 +60,6 @@ describe('buildChannelPayload', () => {
       stripThoughtSignature: false,
       description: '',
       apiKeys: [],
-      modelMapping: {},
-      reasoningMapping: {},
       reasoningParamStyle: 'reasoning',
       textVerbosity: '',
       fastMode: false,
@@ -80,49 +72,10 @@ describe('buildChannelPayload', () => {
       normalizeSystemRoleToTopLevel: false,
       codexToolCompat: false,
       noVision: false,
-      noVisionModels: [],
-      visionFallbackModel: ''
     })
 
     expect(result.baseUrl).toBe('https://api.githubcopilot.com')
     expect(result.baseUrls).toBeUndefined()
-  })
-
-  it('应将模型映射中的 combobox 对象规整为字符串', () => {
-    const result = buildChannelPayload({
-      name: 'mapping-object',
-      serviceType: 'responses',
-      baseUrl: 'https://api.example.com/v1',
-      baseUrls: [],
-      website: '',
-      insecureSkipVerify: false,
-      lowQuality: false,
-      injectDummyThoughtSignature: false,
-      stripThoughtSignature: false,
-      description: '',
-      apiKeys: ['sk-1'],
-      modelMapping: {
-        '{"title":"codex","value":"codex"}': { title: 'MiMo', value: 'mimo-v2.5-pro' }
-      },
-      reasoningMapping: {},
-      reasoningParamStyle: 'reasoning',
-      textVerbosity: '',
-      fastMode: false,
-      customHeaders: {},
-      proxyUrl: '',
-      routePrefix: '',
-      supportedModels: [],
-      autoBlacklistBalance: true,
-      normalizeMetadataUserId: true,
-      normalizeSystemRoleToTopLevel: false,
-      codexToolCompat: true,
-      noVision: false,
-      noVisionModels: [],
-      visionFallbackModel: { title: 'MiMo', value: 'mimo-v2.5-pro' }
-    })
-
-    expect(result.modelMapping).toEqual({ codex: 'mimo-v2.5-pro' })
-    expect(result.visionFallbackModel).toBe('mimo-v2.5-pro')
   })
 
   it('应对多个 baseUrls 去重并保留 baseUrls 输出', () => {
@@ -138,8 +91,6 @@ describe('buildChannelPayload', () => {
       stripThoughtSignature: false,
       description: '',
       apiKeys: ['sk-1'],
-      modelMapping: {},
-      reasoningMapping: {},
       reasoningParamStyle: 'reasoning',
       textVerbosity: '',
       fastMode: false,
@@ -152,8 +103,6 @@ describe('buildChannelPayload', () => {
       normalizeSystemRoleToTopLevel: false,
       codexToolCompat: true,
       noVision: false,
-      noVisionModels: [],
-      visionFallbackModel: ''
     })
 
     expect(result.baseUrl).toBe('https://api.example.com')
@@ -177,8 +126,6 @@ describe('buildChannelPayload', () => {
       stripThoughtSignature: false,
       description: '',
       apiKeys: ['sk-1'],
-      modelMapping: {},
-      reasoningMapping: {},
       reasoningParamStyle: 'reasoning',
       textVerbosity: '',
       fastMode: false,
@@ -191,8 +138,6 @@ describe('buildChannelPayload', () => {
       normalizeSystemRoleToTopLevel: false,
       codexToolCompat: true,
       noVision: false,
-      noVisionModels: [],
-      visionFallbackModel: ''
     })
 
     expect(result.baseUrl).toBe('https://new.timefiles.online')
@@ -212,8 +157,6 @@ describe('buildChannelPayload', () => {
       stripThoughtSignature: false,
       description: '',
       apiKeys: ['sk-1'],
-      modelMapping: {},
-      reasoningMapping: {},
       reasoningParamStyle: 'reasoning',
       textVerbosity: '',
       fastMode: false,
@@ -226,15 +169,13 @@ describe('buildChannelPayload', () => {
       normalizeSystemRoleToTopLevel: false,
       codexToolCompat: true,
       noVision: false,
-      noVisionModels: [],
-      visionFallbackModel: ''
     })
 
     expect(result.baseUrl).toBe('https://new.timefiles.online')
     expect(result.baseUrls).toEqual(['https://new.timefiles.online', 'https://new.timefiles.online#'])
   })
 
-  it('应为 claude 渠道保留模型级思考强度并清空 OpenAI 专属高级参数', () => {
+  it('应为 claude 渠道清空 OpenAI 专属高级参数', () => {
     const result = buildChannelPayload({
       name: 'claude-channel',
       serviceType: 'claude',
@@ -247,8 +188,6 @@ describe('buildChannelPayload', () => {
       stripThoughtSignature: false,
       description: '',
       apiKeys: ['sk-ant'],
-      modelMapping: { opus: 'claude-3-7-sonnet' },
-      reasoningMapping: { opus: 'high' },
       reasoningParamStyle: 'reasoning_effort',
       textVerbosity: 'high',
       fastMode: true,
@@ -261,12 +200,8 @@ describe('buildChannelPayload', () => {
       normalizeSystemRoleToTopLevel: false,
       codexToolCompat: true,
       noVision: false,
-      noVisionModels: [],
-      visionFallbackModel: ''
     })
 
-    expect(result.modelMapping).toEqual({ opus: 'claude-3-7-sonnet' })
-    expect(result.reasoningMapping).toEqual({ opus: 'high' })
     expect(result.reasoningParamStyle).toBe('reasoning')
     expect(result.textVerbosity).toBe('')
     expect(result.fastMode).toBe(false)
@@ -285,8 +220,6 @@ describe('buildChannelPayload', () => {
       stripThoughtSignature: false,
       description: '',
       apiKeys: ['sk-1'],
-      modelMapping: {},
-      reasoningMapping: {},
       reasoningParamStyle: 'reasoning',
       textVerbosity: '',
       fastMode: false,
@@ -299,8 +232,6 @@ describe('buildChannelPayload', () => {
       normalizeSystemRoleToTopLevel: false,
       codexToolCompat: true,
       noVision: false,
-      noVisionModels: [],
-      visionFallbackModel: ''
     })
 
     expect(result.autoBlacklistBalance).toBe(false)
@@ -319,8 +250,6 @@ describe('buildChannelPayload', () => {
       stripThoughtSignature: false,
       description: '',
       apiKeys: ['sk-1'],
-      modelMapping: {},
-      reasoningMapping: {},
       reasoningParamStyle: 'reasoning',
       textVerbosity: '',
       fastMode: false,
@@ -333,8 +262,6 @@ describe('buildChannelPayload', () => {
       normalizeSystemRoleToTopLevel: false,
       codexToolCompat: true,
       noVision: false,
-      noVisionModels: [],
-      visionFallbackModel: ''
     } satisfies Parameters<typeof buildChannelPayload>[0]
 
     const responsesResult = buildChannelPayload(form, { channelType: 'responses' })
@@ -360,8 +287,6 @@ describe('buildChannelPayload', () => {
       stripThoughtSignature: false,
       description: '',
       apiKeys: ['sk-1'],
-      modelMapping: {},
-      reasoningMapping: {},
       reasoningParamStyle: 'reasoning',
       textVerbosity: '',
       fastMode: false,
@@ -375,8 +300,6 @@ describe('buildChannelPayload', () => {
       normalizeSystemRoleToTopLevel: false,
       codexToolCompat: true,
       noVision: false,
-      noVisionModels: [],
-      visionFallbackModel: ''
     })
 
     expect(result.stripBillingHeader).toBe(true)
@@ -395,8 +318,6 @@ describe('buildChannelPayload', () => {
       stripThoughtSignature: false,
       description: '',
       apiKeys: ['sk-1'],
-      modelMapping: {},
-      reasoningMapping: {},
       reasoningParamStyle: 'reasoning',
       textVerbosity: '',
       fastMode: false,
@@ -409,8 +330,6 @@ describe('buildChannelPayload', () => {
       normalizeSystemRoleToTopLevel: true,
       codexToolCompat: true,
       noVision: false,
-      noVisionModels: [],
-      visionFallbackModel: ''
     })
 
     expect(result.normalizeSystemRoleToTopLevel).toBe(true)
@@ -429,8 +348,6 @@ describe('buildChannelPayload', () => {
       stripThoughtSignature: false,
       description: '',
       apiKeys: ['sk-1'],
-      modelMapping: {},
-      reasoningMapping: {},
       reasoningParamStyle: 'reasoning',
       textVerbosity: '',
       fastMode: false,
@@ -445,8 +362,6 @@ describe('buildChannelPayload', () => {
       normalizeSystemRoleToTopLevel: false,
       codexToolCompat: true,
       noVision: false,
-      noVisionModels: [],
-      visionFallbackModel: ''
     })
 
     expect(result.requestTimeoutMs).toBeUndefined()
@@ -466,8 +381,6 @@ describe('buildChannelPayload', () => {
       stripThoughtSignature: false,
       description: '',
       apiKeys: ['sk-1'],
-      modelMapping: {},
-      reasoningMapping: {},
       reasoningParamStyle: 'reasoning',
       textVerbosity: '',
       fastMode: false,
@@ -482,57 +395,10 @@ describe('buildChannelPayload', () => {
       normalizeSystemRoleToTopLevel: false,
       codexToolCompat: true,
       noVision: false,
-      noVisionModels: [],
-      visionFallbackModel: ''
     })
 
     expect(result.requestTimeoutMs).toBeUndefined()
     expect(result.responseHeaderTimeoutMs).toBeUndefined()
-  })
-
-  it('应清洗 modelMapping 中的对象值为字符串', () => {
-    const result = buildChannelPayload({
-      name: 'test',
-      serviceType: 'claude',
-      baseUrl: 'https://api.example.com',
-      baseUrls: [],
-      website: '',
-      insecureSkipVerify: false,
-      lowQuality: false,
-      injectDummyThoughtSignature: false,
-      stripThoughtSignature: false,
-      description: '',
-      apiKeys: ['sk-1'],
-      // v-combobox 选中下拉后可能产生对象值
-      modelMapping: {
-        'fable': 'claude-3-5-sonnet',
-        'haiku': { title: 'claude-3-5-haiku', value: 'claude-3-5-haiku' }
-      },
-      reasoningMapping: {},
-      reasoningParamStyle: 'reasoning',
-      textVerbosity: '',
-      fastMode: false,
-      customHeaders: {},
-      proxyUrl: '',
-      routePrefix: '',
-      supportedModels: [],
-      autoBlacklistBalance: true,
-      normalizeMetadataUserId: true,
-      normalizeSystemRoleToTopLevel: false,
-      codexToolCompat: false,
-      noVision: false,
-      noVisionModels: [],
-      visionFallbackModel: ''
-    })
-
-    // 确保所有 modelMapping 值都是字符串
-    expect(result.modelMapping).toEqual({
-      'fable': 'claude-3-5-sonnet',
-      'haiku': 'claude-3-5-haiku'
-    })
-    expect(result.modelMapping).toBeDefined()
-    expect(typeof result.modelMapping!.fable).toBe('string')
-    expect(typeof result.modelMapping!.haiku).toBe('string')
   })
 
   it('应为 Vectors 渠道序列化 embeddingCapabilities', () => {
@@ -548,7 +414,6 @@ describe('buildChannelPayload', () => {
       stripThoughtSignature: false,
       description: '',
       apiKeys: ['sk-1'],
-      modelMapping: { 'embed-public': 'embedding-model-a' },
       embeddingCapabilityRows: [
         {
           id: 1,
@@ -559,7 +424,6 @@ describe('buildChannelPayload', () => {
           normalized: 'false',
         },
       ],
-      reasoningMapping: {},
       reasoningParamStyle: 'reasoning',
       textVerbosity: '',
       fastMode: false,
@@ -572,8 +436,6 @@ describe('buildChannelPayload', () => {
       normalizeSystemRoleToTopLevel: false,
       codexToolCompat: false,
       noVision: false,
-      noVisionModels: [],
-      visionFallbackModel: ''
     }, { channelType: 'vectors' })
 
     expect(result.embeddingCapabilities).toEqual({
@@ -599,7 +461,6 @@ describe('buildChannelPayload', () => {
       stripThoughtSignature: false,
       description: '',
       apiKeys: ['sk-1'],
-      modelMapping: {},
       embeddingCapabilityRows: [
         {
           id: 1,
@@ -610,7 +471,6 @@ describe('buildChannelPayload', () => {
           normalized: 'true',
         },
       ],
-      reasoningMapping: {},
       reasoningParamStyle: 'reasoning',
       textVerbosity: '',
       fastMode: false,
@@ -623,8 +483,6 @@ describe('buildChannelPayload', () => {
       normalizeSystemRoleToTopLevel: false,
       codexToolCompat: false,
       noVision: false,
-      noVisionModels: [],
-      visionFallbackModel: ''
     }, { channelType: 'chat' })
 
     expect(result.embeddingCapabilities).toBeUndefined()
@@ -643,7 +501,6 @@ describe('buildChannelPayload', () => {
       stripThoughtSignature: false,
       description: '',
       apiKeys: ['sk-1'],
-      modelMapping: { 'embed-public': 'embedding-model-a' },
       embeddingCapabilityRows: [
         {
           id: 1,
@@ -654,7 +511,6 @@ describe('buildChannelPayload', () => {
           normalized: '',
         },
       ],
-      reasoningMapping: {},
       reasoningParamStyle: 'reasoning',
       textVerbosity: '',
       fastMode: false,
@@ -667,8 +523,6 @@ describe('buildChannelPayload', () => {
       normalizeSystemRoleToTopLevel: false,
       codexToolCompat: false,
       noVision: false,
-      noVisionModels: [],
-      visionFallbackModel: ''
     }, { channelType: 'vectors' })
 
     expect(result.embeddingCapabilities).toEqual({})
@@ -725,10 +579,10 @@ describe('buildChannelPayload', () => {
     const result = buildChannelPayload({
       name: 'keys', serviceType: 'openai', baseUrl: 'https://api.example.com', baseUrls: [], website: '',
       insecureSkipVerify: false, lowQuality: false, injectDummyThoughtSignature: false, stripThoughtSignature: false,
-      description: '', apiKeys: ['sk-preserved'], apiKeyConfigs: [metadata], modelMapping: {}, reasoningMapping: {},
+      description: '', apiKeys: ['sk-preserved'], apiKeyConfigs: [metadata],
       reasoningParamStyle: 'reasoning', textVerbosity: '', fastMode: false, customHeaders: {}, proxyUrl: '',
       routePrefix: '', supportedModels: [], autoBlacklistBalance: true, normalizeMetadataUserId: true,
-      normalizeSystemRoleToTopLevel: false, codexToolCompat: false, noVision: false, noVisionModels: [], visionFallbackModel: '',
+      normalizeSystemRoleToTopLevel: false, codexToolCompat: false, noVision: false,
     })
 
     expect(result.apiKeyConfigs).toEqual([{ ...metadata, key: 'sk-preserved' }])
@@ -743,10 +597,10 @@ describe('buildChannelPayload', () => {
       description: '', apiKeys: ['key-normal', 'key-opportunistic'], apiKeyConfigs: [
         { key: 'key-normal', consumptionPolicy: undefined },
         { key: 'key-opportunistic', consumptionPolicy: 'opportunistic', effectiveCostClass: 'zero' },
-      ], modelMapping: {}, reasoningMapping: {}, reasoningParamStyle: 'reasoning', textVerbosity: '', fastMode: false,
+      ], reasoningParamStyle: 'reasoning', textVerbosity: '', fastMode: false,
       customHeaders: {}, proxyUrl: '', routePrefix: '', supportedModels: [], autoBlacklistBalance: true,
       normalizeMetadataUserId: true, normalizeSystemRoleToTopLevel: false, codexToolCompat: false,
-      noVision: false, noVisionModels: [], visionFallbackModel: '',
+      noVision: false,
     })
 
     expect(result.apiKeyConfigs).toEqual([
@@ -762,10 +616,10 @@ describe('buildChannelPayload', () => {
       insecureSkipVerify: false, lowQuality: false, injectDummyThoughtSignature: false, stripThoughtSignature: false,
       description: '', apiKeys: ['key-b'], apiKeyConfigs: [
         { key: 'key-a', keyUid: 'uid-a', groupMultiplier: 2 }, untouched,
-      ], modelMapping: {}, reasoningMapping: {}, reasoningParamStyle: 'reasoning', textVerbosity: '', fastMode: false,
+      ], reasoningParamStyle: 'reasoning', textVerbosity: '', fastMode: false,
       customHeaders: {}, proxyUrl: '', routePrefix: '', supportedModels: [], autoBlacklistBalance: true,
       normalizeMetadataUserId: true, normalizeSystemRoleToTopLevel: false, codexToolCompat: false,
-      noVision: false, noVisionModels: [], visionFallbackModel: '',
+      noVision: false,
     })
 
     expect(result.apiKeyConfigs).toEqual([untouched])
@@ -779,10 +633,10 @@ describe('buildChannelPayload', () => {
         { key: 'key-a', groupMultiplier: undefined, maxGroupMultiplier: null },
         { key: 'key-b', groupMultiplier: 0, maxGroupMultiplier: 0 },
         { key: '', keyUid: 'uid-only', credentialUid: 'credential-only' },
-      ], modelMapping: {}, reasoningMapping: {}, reasoningParamStyle: 'reasoning', textVerbosity: '', fastMode: false,
+      ], reasoningParamStyle: 'reasoning', textVerbosity: '', fastMode: false,
       customHeaders: {}, proxyUrl: '', routePrefix: '', supportedModels: [], autoBlacklistBalance: true,
       normalizeMetadataUserId: true, normalizeSystemRoleToTopLevel: false, codexToolCompat: false,
-      noVision: false, noVisionModels: [], visionFallbackModel: '',
+      noVision: false,
     })
 
     expect(result.apiKeyConfigs).toEqual([
@@ -806,8 +660,6 @@ describe('buildChannelPayload tags', () => {
     stripThoughtSignature: false,
     description: '',
     apiKeys: ['sk-1'],
-    modelMapping: {},
-    reasoningMapping: {},
     reasoningParamStyle: 'reasoning' as const,
     textVerbosity: '' as const,
     fastMode: false,
@@ -820,8 +672,6 @@ describe('buildChannelPayload tags', () => {
     normalizeSystemRoleToTopLevel: false,
     codexToolCompat: false,
     noVision: false,
-    noVisionModels: [] as string[],
-    visionFallbackModel: '',
   }
 
   it('应包含非空 tags', () => {

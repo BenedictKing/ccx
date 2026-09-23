@@ -4,321 +4,132 @@ export type CodexResponsesReasoningEffort = "none" | "minimal" | "low" | "medium
 export type CodexResponsesReasoningParamStyle = '' | 'reasoning' | 'reasoning_effort' | 'thinking'
 
 export interface CodexResponsesPreset {
-  modelMapping: Record<string, string>
-  reasoningMapping: Partial<Record<string, CodexResponsesReasoningEffort>>
   reasoningParamStyle: CodexResponsesReasoningParamStyle
   serviceType?: 'openai' | 'gemini' | 'claude' | 'responses' | 'copilot'
   codexToolCompat: boolean
   stripCodexClientTools: boolean
   noVision: boolean
-  noVisionModels: string[]
-  visionFallbackModel: string
   rateLimitRpm?: number
 }
 
 export const codexResponsesPresets: Record<string, CodexResponsesPreset> = {
   "deepseek": {
-    "modelMapping": {
-      "codex": "deepseek-flash",
-      "gpt": "deepseek-v4-pro",
-      "mini": "deepseek-flash"
-    },
-    "reasoningMapping": {
-      "gpt": "max"
-    },
     "reasoningParamStyle": "reasoning",
     "codexToolCompat": false,
     "stripCodexClientTools": false,
-    "noVision": false,
-    "noVisionModels": [
-      "deepseek-v4-pro"
-    ],
-    "visionFallbackModel": ""
+    "noVision": false
   },
   "mimo": {
-    "modelMapping": {
-      "codex": "mimo-v2.5-pro",
-      "gpt": "mimo-v2.5-pro",
-      "mini": "mimo-v2.5-pro"
-    },
-    "reasoningMapping": {
-      "codex": "high",
-      "gpt": "high",
-      "mimo-v2.5": "high",
-      "mini": "high"
-    },
     "reasoningParamStyle": "reasoning",
     "codexToolCompat": true,
     "stripCodexClientTools": true,
     "noVision": false,
-    "noVisionModels": [
-      "mimo-v2.5-pro"
-    ],
-    "visionFallbackModel": "mimo-v2.5",
     "serviceType": "responses",
     "rateLimitRpm": 80
   },
   "compshare": {
-    "modelMapping": {
-      "codex": "deepseek-v4-flash",
-      "gpt": "glm-5.2",
-      "mini": "deepseek-v4-flash"
-    },
-    "reasoningMapping": {
-      "MiniMax-M2.7": "xhigh",
-      "gpt": "max",
-      "mini": "high"
-    },
     "reasoningParamStyle": "reasoning",
     "codexToolCompat": false,
     "stripCodexClientTools": false,
-    "noVision": false,
-    "noVisionModels": [
-      "glm-5.2",
-      "deepseek-v4-flash"
-    ],
-    "visionFallbackModel": "MiniMax-M2.7"
+    "noVision": false
   },
   "runapi": {
-    "modelMapping": {},
-    "reasoningMapping": {},
     "reasoningParamStyle": "",
     "codexToolCompat": false,
     "stripCodexClientTools": false,
-    "noVision": false,
-    "noVisionModels": [],
-    "visionFallbackModel": ""
+    "noVision": false
   },
   "unity2": {
-    "modelMapping": {},
-    "reasoningMapping": {},
     "reasoningParamStyle": "",
     "codexToolCompat": false,
     "stripCodexClientTools": false,
-    "noVision": false,
-    "noVisionModels": [],
-    "visionFallbackModel": ""
+    "noVision": false
   },
   "minimax": {
-    "modelMapping": {
-      "codex": "MiniMax-M2.7",
-      "gpt": "MiniMax-M3",
-      "mini": "MiniMax-M2.7"
-    },
-    "reasoningMapping": {},
     "reasoningParamStyle": "",
     "codexToolCompat": false,
     "stripCodexClientTools": false,
-    "noVision": false,
-    "noVisionModels": [],
-    "visionFallbackModel": ""
+    "noVision": false
   },
   "dashscope": {
-    "modelMapping": {
-      "codex": "deepseek-v4-flash",
-      "gpt": "deepseek-v4-pro",
-      "mini": "deepseek-v4-flash"
-    },
-    "reasoningMapping": {
-      "gpt": "max"
-    },
     "reasoningParamStyle": "",
     "codexToolCompat": true,
     "stripCodexClientTools": true,
-    "noVision": false,
-    "noVisionModels": [],
-    "visionFallbackModel": ""
+    "noVision": false
   },
   "opencode-zen": {
-    "modelMapping": {
-      "codex": "deepseek-v4-flash",
-      "gpt": "glm-5.2",
-      "mini": "deepseek-v4-flash"
-    },
-    "reasoningMapping": {
-      "codex": "high",
-      "gpt": "max",
-      "mini": "high"
-    },
     "reasoningParamStyle": "reasoning",
     "codexToolCompat": true,
     "stripCodexClientTools": true,
-    "noVision": false,
-    "noVisionModels": [
-      "glm-5.2",
-      "deepseek-v4-flash"
-    ],
-    "visionFallbackModel": "minimax-m3"
+    "noVision": false
   },
   "opencode-go": {
-    "modelMapping": {
-      "codex": "deepseek-v4-flash",
-      "gpt": "glm-5.2",
-      "mini": "deepseek-v4-flash"
-    },
-    "reasoningMapping": {
-      "codex": "high",
-      "gpt": "max",
-      "mini": "high"
-    },
     "reasoningParamStyle": "reasoning",
     "codexToolCompat": true,
     "stripCodexClientTools": true,
-    "noVision": false,
-    "noVisionModels": [
-      "glm-5.2",
-      "deepseek-v4-flash"
-    ],
-    "visionFallbackModel": "minimax-m3"
+    "noVision": false
   },
   "kimi": {
-    "modelMapping": {
-      "codex": "kimi-k2.7",
-      "gpt": "kimi-k2.7"
-    },
-    "reasoningMapping": {},
     "reasoningParamStyle": "",
     "codexToolCompat": true,
     "stripCodexClientTools": true,
-    "noVision": false,
-    "noVisionModels": [],
-    "visionFallbackModel": ""
+    "noVision": false
   },
   "glm": {
-    "modelMapping": {
-      "codex": "glm-5.2",
-      "gpt": "glm-5.2"
-    },
-    "reasoningMapping": {},
     "reasoningParamStyle": "",
     "codexToolCompat": true,
     "stripCodexClientTools": true,
-    "noVision": false,
-    "noVisionModels": [],
-    "visionFallbackModel": ""
+    "noVision": false
   },
   "sensenova": {
-    "modelMapping": {
-      "codex": "deepseek-v4-flash",
-      "gpt": "glm-5.2",
-      "mini": "deepseek-v4-flash"
-    },
-    "reasoningMapping": {},
     "reasoningParamStyle": "",
     "codexToolCompat": true,
     "stripCodexClientTools": true,
-    "noVision": false,
-    "noVisionModels": [
-      "glm-5.2",
-      "deepseek-v4-flash"
-    ],
-    "visionFallbackModel": "sensenova-6.7-flash-lite"
+    "noVision": false
   },
   "openrouter": {
-    "modelMapping": {},
-    "reasoningMapping": {},
     "reasoningParamStyle": "",
     "codexToolCompat": false,
     "stripCodexClientTools": false,
-    "noVision": false,
-    "noVisionModels": [],
-    "visionFallbackModel": ""
+    "noVision": false
   },
   "modelscope": {
-    "modelMapping": {
-      "codex": "deepseek-ai/DeepSeek-V4-Flash",
-      "gpt": "ZhipuAI/GLM-5.2",
-      "mini": "deepseek-ai/DeepSeek-V4-Flash"
-    },
-    "reasoningMapping": {},
     "reasoningParamStyle": "",
     "codexToolCompat": false,
     "stripCodexClientTools": false,
-    "noVision": false,
-    "noVisionModels": [],
-    "visionFallbackModel": ""
+    "noVision": false
   },
   "volc-ark": {
-    "modelMapping": {
-      "codex": "deepseek-v4-flash",
-      "gpt": "glm-5.3",
-      "mini": "deepseek-v4-flash"
-    },
-    "reasoningMapping": {
-      "codex": "high",
-      "gpt": "max",
-      "mini": "high",
-      "minimax-m3": "xhigh"
-    },
     "reasoningParamStyle": "reasoning",
     "codexToolCompat": false,
     "stripCodexClientTools": false,
-    "noVision": false,
-    "noVisionModels": [
-      "glm-5.3",
-      "deepseek-v4-flash"
-    ],
-    "visionFallbackModel": "minimax-m3"
+    "noVision": false
   },
   "qianfan": {
-    "modelMapping": {
-      "codex": "qianfan-code-latest",
-      "gpt": "qianfan-code-latest",
-      "mini": "qianfan-code-latest"
-    },
-    "reasoningMapping": {},
     "reasoningParamStyle": "",
     "codexToolCompat": true,
     "stripCodexClientTools": true,
-    "noVision": false,
-    "noVisionModels": [],
-    "visionFallbackModel": ""
+    "noVision": false
   },
   "xfyun": {
-    "modelMapping": {
-      "codex": "astron-code-latest",
-      "gpt": "astron-code-latest",
-      "mini": "astron-code-latest"
-    },
-    "reasoningMapping": {},
     "reasoningParamStyle": "",
     "codexToolCompat": true,
     "stripCodexClientTools": true,
     "noVision": false,
-    "noVisionModels": [],
-    "visionFallbackModel": "",
     "serviceType": "responses"
   },
   "github-copilot": {
-    "modelMapping": {},
-    "reasoningMapping": {},
     "reasoningParamStyle": "",
     "codexToolCompat": false,
     "stripCodexClientTools": false,
     "noVision": false,
-    "noVisionModels": [],
-    "visionFallbackModel": "",
     "serviceType": "copilot"
   },
   "atomgit": {
-    "modelMapping": {
-      "codex": "glm-5.2-200k",
-      "gpt": "glm-5.2-200k",
-      "mini": "glm-5.2-200k"
-    },
-    "reasoningMapping": {
-      "codex": "high",
-      "gpt": "high",
-      "mini": "high"
-    },
     "reasoningParamStyle": "thinking",
     "codexToolCompat": true,
     "stripCodexClientTools": true,
     "noVision": false,
-    "noVisionModels": [
-      "glm-5.2-200k"
-    ],
-    "visionFallbackModel": "",
     "serviceType": "openai"
   }
 }

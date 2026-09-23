@@ -115,7 +115,7 @@ describe('auto add route discovery', () => {
         { protocol: 'gemini', success: false, failedModels: ['shared'] }
       ],
       capabilities: {} as never,
-      recommendation: { channelKind: 'responses', serviceType: 'responses', modelMapping: {} },
+      recommendation: { channelKind: 'responses', serviceType: 'responses' },
       rateLimit: { initialRpm: 30, effectiveRpm: 15, rateLimited: true, rateLimitedCount: 1 }
     })
     const { discoverAutoAddRoutes } = await import('./autopilot-api')

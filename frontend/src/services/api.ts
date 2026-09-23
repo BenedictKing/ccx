@@ -346,13 +346,6 @@ export class ApiService {
     })
   }
 
-  async updateChannelModelMapping(id: number, sourcePattern: string, targetModel: string, reasoning: string): Promise<void> {
-    await this.request(`/messages/channels/${id}/mappings`, {
-      method: 'PUT',
-      body: JSON.stringify({ source_pattern: sourcePattern, target_model: targetModel, reasoning })
-    })
-  }
-
   // ============== 兼容性诊断 API ==============
 
   async diagnoseChannelCompat(
@@ -532,13 +525,6 @@ export class ApiService {
     return this.request(`/responses/channels/${id}/models`, {
       method: 'POST',
       body: JSON.stringify(request)
-    })
-  }
-
-  async updateResponsesChannelModelMapping(id: number, sourcePattern: string, targetModel: string, reasoning: string): Promise<void> {
-    await this.request(`/responses/channels/${id}/mappings`, {
-      method: 'PUT',
-      body: JSON.stringify({ source_pattern: sourcePattern, target_model: targetModel, reasoning })
     })
   }
 
@@ -866,13 +852,6 @@ export class ApiService {
     })
   }
 
-  async updateChatChannelModelMapping(id: number, sourcePattern: string, targetModel: string, reasoning: string): Promise<void> {
-    await this.request(`/chat/channels/${id}/mappings`, {
-      method: 'PUT',
-      body: JSON.stringify({ source_pattern: sourcePattern, target_model: targetModel, reasoning })
-    })
-  }
-
   // ============== Images 渠道管理 API ==============
 
   async getImagesChannels(): Promise<ChannelsResponse> {
@@ -1016,13 +995,6 @@ export class ApiService {
     })
   }
 
-  async updateImagesChannelModelMapping(id: number, sourcePattern: string, targetModel: string, reasoning: string): Promise<void> {
-    await this.request(`/images/channels/${id}/mappings`, {
-      method: 'PUT',
-      body: JSON.stringify({ source_pattern: sourcePattern, target_model: targetModel, reasoning })
-    })
-  }
-
   // ============== Vectors 渠道管理 API ==============
 
   async getVectorsChannels(): Promise<ChannelsResponse> {
@@ -1163,13 +1135,6 @@ export class ApiService {
     return this.request(`/vectors/channels/${id}/models`, {
       method: 'POST',
       body: JSON.stringify(request)
-    })
-  }
-
-  async updateVectorsChannelModelMapping(id: number, sourcePattern: string, targetModel: string, reasoning: string): Promise<void> {
-    await this.request(`/vectors/channels/${id}/mappings`, {
-      method: 'PUT',
-      body: JSON.stringify({ source_pattern: sourcePattern, target_model: targetModel, reasoning })
     })
   }
 
@@ -1322,13 +1287,6 @@ export class ApiService {
     return this.request(`/gemini/channels/${id}/models`, {
       method: 'POST',
       body: JSON.stringify(request)
-    })
-  }
-
-  async updateGeminiChannelModelMapping(id: number, sourcePattern: string, targetModel: string, reasoning: string): Promise<void> {
-    await this.request(`/gemini/channels/${id}/mappings`, {
-      method: 'PUT',
-      body: JSON.stringify({ source_pattern: sourcePattern, target_model: targetModel, reasoning })
     })
   }
 

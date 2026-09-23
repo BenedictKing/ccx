@@ -64,14 +64,12 @@ export interface ChannelFormLike {
   description: string
   apiKeys: string[]
   apiKeyConfigs?: Channel['apiKeyConfigs']
-  modelMapping: Record<string, SelectableString>
   modelCapabilitiesText?: string
   modelCapabilityRows?: ModelCapabilityRow[]
   embeddingCapabilityRows?: EmbeddingCapabilityRow[]
   defaultContextWindowTokens?: string | number | null
   defaultMaxOutputTokens?: string | number | null
   allowUnknownContext?: boolean
-  reasoningMapping: Record<string, 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'>
   reasoningParamStyle: 'reasoning' | 'reasoning_effort' | 'thinking'
   textVerbosity: 'low' | 'medium' | 'high' | ''
   fastMode: boolean
@@ -103,8 +101,6 @@ export interface ChannelFormLike {
   stripCodexClientTools?: boolean
   convertImageUrlToB64Json?: boolean
   noVision: boolean
-  noVisionModels: string[]
-  visionFallbackModel: SelectableString
   historicalImageTurnLimit?: string | number | null
   tags?: string[]
 
@@ -509,7 +505,6 @@ export function buildChannelPayload(
       return normalized
     })
   const advancedOptions = normalizeAdvancedChannelOptions(form.serviceType, {
-    reasoningMapping: form.reasoningMapping,
     reasoningParamStyle: form.reasoningParamStyle,
     textVerbosity: form.textVerbosity,
     fastMode: form.fastMode
@@ -520,16 +515,6 @@ export function buildChannelPayload(
     sourceUrls = [DEFAULT_COPILOT_BASE_URL]
   }
   const deduplicatedUrls = deduplicateEquivalentBaseUrls(sourceUrls, form.serviceType)
-
-  // 清洗 modelMapping：v-combobox 选中下拉后 key/value 都可能是 { title, value } 对象。
-  const cleanModelMapping: Record<string, string> = {}
-  for (const [source, target] of Object.entries(form.modelMapping)) {
-    const cleanSource = normalizeSelectableString(source).trim()
-    const cleanTarget = normalizeSelectableString(target as SelectableString).trim()
-    if (cleanSource && cleanTarget) {
-      cleanModelMapping[cleanSource] = cleanTarget
-    }
-  }
 
   const modelCapabilities = form.modelCapabilityRows
     ? modelCapabilityRowsToRecord(form.modelCapabilityRows)
@@ -543,7 +528,6 @@ export function buildChannelPayload(
     : options.channelType === 'messages' && form.normalizeMetadataUserId
 
   const isManagedProviderChannel = form.baseUrl.trim() === '' && form.baseUrls.length === 0
-  const shouldStripExplicitMappingFields = isManagedProviderChannel && form.serviceType !== 'copilot'
 
   // 渠道名称不再接受手工修改：非托管渠道按首个 baseURL 自动派生；托管渠道沿用原名称。
   const derivedChannelName = isManagedProviderChannel
@@ -562,11 +546,9 @@ export function buildChannelPayload(
     stripThoughtSignature: form.stripThoughtSignature,
     description: form.description.trim(),
     apiKeys: processedApiKeys,
-    modelMapping: shouldStripExplicitMappingFields ? {} : cleanModelMapping,
     modelCapabilities: modelCapabilities || {},
     defaultCapability: {},
     allowUnknownContext: false,
-    reasoningMapping: shouldStripExplicitMappingFields ? {} : advancedOptions.reasoningMapping,
     reasoningParamStyle: advancedOptions.reasoningParamStyle,
     textVerbosity: advancedOptions.textVerbosity,
     fastMode: advancedOptions.fastMode,
@@ -582,8 +564,6 @@ export function buildChannelPayload(
     stripCodexClientTools: form.codexToolCompat,
     convertImageUrlToB64Json: !!form.convertImageUrlToB64Json,
     noVision: form.noVision,
-    noVisionModels: form.noVisionModels,
-    visionFallbackModel: normalizeSelectableString(form.visionFallbackModel),
   }
 
   if (options.channelType === 'vectors') {

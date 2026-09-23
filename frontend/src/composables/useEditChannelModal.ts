@@ -7,7 +7,6 @@ import {
   buildChannelPayload,
   embeddingCapabilitiesToRows,
   modelCapabilitiesToRows,
-  normalizeSelectableString,
   type EmbeddingCapabilityRow,
   type ModelCapabilityRow,
 } from '../utils/channelPayload'
@@ -116,14 +115,12 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     tags: [] as string[],
     apiKeys: [] as string[],
     apiKeyConfigs: undefined as Channel['apiKeyConfigs'],
-    modelMapping: {} as Record<string, string>,
     modelCapabilitiesText: '',
     modelCapabilityRows: [] as ModelCapabilityRow[],
     embeddingCapabilityRows: [] as EmbeddingCapabilityRow[],
     defaultContextWindowTokens: null as string | number | null,
     defaultMaxOutputTokens: null as string | number | null,
     allowUnknownContext: false,
-    reasoningMapping: {} as Record<string, 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'>,
     reasoningParamStyle: 'reasoning' as 'reasoning' | 'reasoning_effort' | 'thinking',
     textVerbosity: '' as 'low' | 'medium' | 'high' | '',
     fastMode: false,
@@ -158,22 +155,15 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     stripCodexClientTools: false,
     convertImageUrlToB64Json: false,
     noVision: false,
-    noVisionModels: [] as string[],
-    visionFallbackModel: '',
-    visionFallbackReasoningEffort: '' as 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | '',
     historicalImageTurnLimit: 0,
   })
 
   const channelTypeRef = computed(() => props.channelType)
   const {
     serviceTypeOptions,
-    sourceModelOptions,
-    modelMappingHint,
-    targetModelPlaceholder,
-    reasoningEffortOptions,
     reasoningParamStyleOptions,
     textVerbosityOptions,
-  } = useEditChannelOptions(channelTypeRef, form, t)
+  } = useEditChannelOptions(channelTypeRef)
 
   // 多 BaseURL 文本输入（独立变量，保留用户输入的换行）
   const baseUrlsText = ref('')
@@ -328,19 +318,15 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
       website: form.website ?? '',
       description: props.channel.description || '',
       tags: [...(props.channel.tags || [])],
-      modelMapping: { ...(props.channel.modelMapping || {}) },
       modelCapabilities: { ...(props.channel.modelCapabilities || {}) },
       embeddingCapabilities: { ...(props.channel.embeddingCapabilities || {}) },
       defaultCapability: { ...(props.channel.defaultCapability || {}) },
       allowUnknownContext: !!props.channel.allowUnknownContext,
-      reasoningMapping: { ...(props.channel.reasoningMapping || {}) },
       reasoningParamStyle: props.channel.reasoningParamStyle,
       textVerbosity: props.channel.textVerbosity,
       fastMode: !!props.channel.fastMode,
       supportedModels: [...(props.channel.supportedModels || [])],
       noVision: !!props.channel.noVision,
-      noVisionModels: [...(props.channel.noVisionModels || [])],
-      visionFallbackModel: props.channel.visionFallbackModel || '',
       lowQuality: !!props.channel.lowQuality,
       injectDummyThoughtSignature: !!props.channel.injectDummyThoughtSignature,
       stripThoughtSignature: !!props.channel.stripThoughtSignature,
@@ -459,14 +445,12 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     form.description = ''
     form.apiKeys = []
     form.apiKeyConfigs = undefined
-    form.modelMapping = {}
     form.modelCapabilitiesText = ''
     form.modelCapabilityRows = []
     form.embeddingCapabilityRows = []
     form.defaultContextWindowTokens = null
     form.defaultMaxOutputTokens = null
     form.allowUnknownContext = false
-    form.reasoningMapping = {}
 
     form.reasoningParamStyle = 'reasoning'
     form.textVerbosity = ''
@@ -503,9 +487,6 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     form.stripCodexClientTools = false
     form.convertImageUrlToB64Json = false
     form.noVision = false
-    form.noVisionModels = []
-    form.visionFallbackModel = ''
-    form.visionFallbackReasoningEffort = ''
     form.historicalImageTurnLimit = 0
 
     // 重置 baseUrlsText
@@ -552,7 +533,6 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
         }))
       : undefined
 
-    form.modelMapping = { ...(channel.modelMapping || {}) }
     form.modelCapabilitiesText = Object.keys(channel.modelCapabilities || {}).length > 0
       ? JSON.stringify(normalizeModelCapabilities(channel.modelCapabilities), null, 2)
       : ''
@@ -563,7 +543,6 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     form.defaultContextWindowTokens = channel.defaultCapability?.contextWindowTokens || null
     form.defaultMaxOutputTokens = channel.defaultCapability?.maxOutputTokens || null
     form.allowUnknownContext = !!channel.allowUnknownContext
-    form.reasoningMapping = { ...(channel.reasoningMapping || {}) }
 
     form.reasoningParamStyle = channel.reasoningParamStyle || 'reasoning'
     form.textVerbosity = channel.textVerbosity || ''
@@ -602,9 +581,6 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     form.stripCodexClientTools = channel.codexToolCompat ?? channel.stripCodexClientTools ?? false
     form.convertImageUrlToB64Json = !!channel.convertImageUrlToB64Json
     form.noVision = !!channel.noVision
-    form.noVisionModels = [...(channel.noVisionModels || [])]
-    form.visionFallbackModel = channel.visionFallbackModel || ''
-    form.visionFallbackReasoningEffort = (channel.reasoningMapping?.[form.visionFallbackModel] || '') as 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | ''
     form.historicalImageTurnLimit = channel.historicalImageTurnLimit ?? 0
 
     // 立即同步 baseUrl 到预览变量，避免等待 debounce
@@ -693,10 +669,6 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     customHeadersArray,
     updateCustomHeaders,
   } = useChannelEditorFormDerived(channelTypeRef, form, baseUrlsText)
-
-  // 将 modelMappingRows 转换为 form.modelMapping 对象（保存时使用）
-
-  // 从渠道数据初始化 modelMappingRows
 
 
   // 辅助函数：更新表单字段

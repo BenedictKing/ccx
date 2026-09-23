@@ -1,15 +1,9 @@
 import { computed, type ComputedRef } from 'vue'
 
 type ChannelType = 'messages' | 'chat' | 'responses' | 'gemini' | 'images' | 'vectors'
-type Translator = (key: string) => string
-type FormLike = {
-  modelMapping: Record<string, string>
-}
 
 export function useEditChannelOptions(
   channelType: ComputedRef<ChannelType>,
-  form: FormLike,
-  t: Translator,
 ) {
   const serviceTypeOptions = computed(() => {
     const allOptions = [
@@ -44,116 +38,6 @@ export function useEditChannelOptions(
     }
   })
 
-  const allSourceModelOptions = computed(() => {
-    if (channelType.value === 'chat') {
-      return [
-        { title: 'codex', value: 'codex' },
-        { title: 'gpt', value: 'gpt' },
-        { title: 'mini', value: 'mini' },
-        { title: 'gpt-5', value: 'gpt-5' },
-        { title: 'gpt-5.5', value: 'gpt-5.5' },
-        { title: 'gpt-5.4', value: 'gpt-5.4' },
-        { title: 'gpt-5.6-sol', value: 'gpt-5.6-sol' },
-        { title: 'gpt-5.6-terra', value: 'gpt-5.6-terra' },
-        { title: 'gpt-5.6-luna', value: 'gpt-5.6-luna' },
-        { title: 'gpt-5.4-mini', value: 'gpt-5.4-mini' },
-      ]
-    }
-    if (channelType.value === 'images') {
-      return [
-        { title: 'gpt-image-2', value: 'gpt-image-2' },
-        { title: 'gpt-image-1', value: 'gpt-image-1' },
-        { title: 'dall-e-3', value: 'dall-e-3' },
-        { title: 'dall-e-2', value: 'dall-e-2' },
-      ]
-    }
-    if (channelType.value === 'vectors') {
-      return []
-    }
-    if (channelType.value === 'gemini') {
-      return [
-        { title: 'gemini-3.5-flash', value: 'gemini-3.5-flash' },
-        { title: 'gemini-3.1-pro-preview', value: 'gemini-3.1-pro-preview' },
-        { title: 'gemini-3-pro-preview', value: 'gemini-3-pro-preview' },
-        { title: 'gemini-3-flash-preview', value: 'gemini-3-flash-preview' },
-        { title: 'gemini-3.1-flash-lite', value: 'gemini-3.1-flash-lite' },
-        { title: 'gemini-2.5-pro', value: 'gemini-2.5-pro' },
-        { title: 'gemini-2.5-flash', value: 'gemini-2.5-flash' },
-        { title: 'gemini-2.5-flash-lite', value: 'gemini-2.5-flash-lite' },
-        { title: 'gemini-2', value: 'gemini-2' },
-      ]
-    }
-    if (channelType.value === 'responses') {
-      return [
-        { title: 'codex', value: 'codex' },
-        { title: 'codex-auto-review', value: 'codex-auto-review' },
-        { title: 'gpt-5', value: 'gpt-5' },
-        { title: 'gpt', value: 'gpt' },
-        { title: 'mini', value: 'mini' },
-        { title: 'gpt-5.5', value: 'gpt-5.5' },
-        { title: 'gpt-5.4', value: 'gpt-5.4' },
-        { title: 'gpt-5.6-sol', value: 'gpt-5.6-sol' },
-        { title: 'gpt-5.6-terra', value: 'gpt-5.6-terra' },
-        { title: 'gpt-5.6-luna', value: 'gpt-5.6-luna' },
-        { title: 'gpt-5.4-mini', value: 'gpt-5.4-mini' },
-      ]
-    }
-    return [
-      { title: 'fable', value: 'fable' },
-      { title: 'opus', value: 'opus' },
-      { title: 'sonnet', value: 'sonnet' },
-      { title: 'haiku', value: 'haiku' },
-    ]
-  })
-
-  const sourceModelOptions = computed(() => {
-    const configuredModels = Object.keys(form.modelMapping)
-    return allSourceModelOptions.value.filter(opt => !configuredModels.includes(opt.value))
-  })
-
-  const modelMappingHint = computed(() => {
-    if (channelType.value === 'vectors') {
-      return t('addChannel.modelMappingHintVectors')
-    }
-    if (channelType.value === 'chat' || channelType.value === 'images') {
-      return t('addChannel.modelMappingHintChat')
-    }
-    if (channelType.value === 'gemini') {
-      return t('addChannel.modelMappingHintGemini')
-    }
-    if (channelType.value === 'responses') {
-      return t('addChannel.modelMappingHintResponses')
-    }
-    return t('addChannel.modelMappingHintMessages')
-  })
-
-  const targetModelPlaceholder = computed(() => {
-    if (channelType.value === 'vectors') {
-      return t('addChannel.targetModelPlaceholderVectors')
-    }
-    if (channelType.value === 'chat' || channelType.value === 'images') {
-      return t('addChannel.targetModelPlaceholderChat')
-    }
-    if (channelType.value === 'responses') {
-      return t('addChannel.targetModelPlaceholderResponses')
-    }
-    if (channelType.value === 'gemini') {
-      return t('addChannel.targetModelPlaceholderGemini')
-    }
-    return t('addChannel.targetModelPlaceholderMessages')
-  })
-
-  const reasoningEffortOptions = [
-    { title: t('addChannel.reasoningDefault'), value: '' },
-    { title: 'None', value: 'none' },
-    { title: 'Minimal', value: 'minimal' },
-    { title: 'Low', value: 'low' },
-    { title: 'Medium', value: 'medium' },
-    { title: 'High', value: 'high' },
-    { title: 'XHigh', value: 'xhigh' },
-    { title: 'Max', value: 'max' },
-  ]
-
   const reasoningParamStyleOptions = [
     { title: 'reasoning.effort', value: 'reasoning' },
     { title: 'reasoning_effort', value: 'reasoning_effort' },
@@ -168,11 +52,6 @@ export function useEditChannelOptions(
 
   return {
     serviceTypeOptions,
-    allSourceModelOptions,
-    sourceModelOptions,
-    modelMappingHint,
-    targetModelPlaceholder,
-    reasoningEffortOptions,
     reasoningParamStyleOptions,
     textVerbosityOptions,
   }

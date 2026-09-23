@@ -33,15 +33,6 @@
               <v-icon size="16">
                 {{ getModelStatusIcon(modelResult) }}
               </v-icon>
-              <v-icon
-                v-if="isModelSuccessful(modelResult)"
-                size="14"
-                class="mapping-action-icon"
-                :title="t('capability.createMapping')"
-                @click.stop="emit('createMapping', test.protocol, modelResult.model)"
-              >
-                mdi-link-plus
-              </v-icon>
             </div>
           </template>
           <div v-if="getModelTooltipView(modelResult) === 'success'" class="tooltip-content">
@@ -128,7 +119,6 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   'retryModel': [protocol: string, model: string]
-  'createMapping': [protocol: string, model: string]
 }>()
 
 const { t } = useI18n()
@@ -409,16 +399,6 @@ const isUpstreamModelRedirected = (modelResult: CapabilityModelJobResult): boole
   color: #d97706;
   margin-left: 2px;
   margin-right: -2px;
-}
-
-.mapping-action-icon {
-  opacity: 0.55;
-  cursor: pointer;
-  margin-left: 2px;
-}
-
-.mapping-action-icon:hover {
-  opacity: 1;
 }
 
 .tooltip-value-warning {

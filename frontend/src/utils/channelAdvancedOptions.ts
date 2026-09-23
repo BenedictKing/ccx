@@ -4,7 +4,6 @@ export type ReasoningParamStyle = 'reasoning' | 'reasoning_effort' | 'thinking'
 export type TextVerbosity = 'low' | 'medium' | 'high' | ''
 
 export interface AdvancedChannelOptions {
-  reasoningMapping: Record<string, ReasoningEffort>
   reasoningParamStyle: ReasoningParamStyle
   textVerbosity: TextVerbosity
   fastMode: boolean
@@ -12,10 +11,6 @@ export interface AdvancedChannelOptions {
 
 export const supportsAdvancedChannelOptions = (serviceType: ChannelServiceType): boolean => {
   return serviceType === 'openai' || serviceType === 'responses' || serviceType === 'copilot'
-}
-
-export const supportsReasoningMapping = (serviceType: ChannelServiceType): boolean => {
-  return serviceType === 'openai' || serviceType === 'responses' || serviceType === 'copilot' || serviceType === 'claude'
 }
 
 export const normalizeAdvancedChannelOptions = (
@@ -27,7 +22,6 @@ export const normalizeAdvancedChannelOptions = (
   }
 
   return {
-    reasoningMapping: supportsReasoningMapping(serviceType) ? options.reasoningMapping : {},
     reasoningParamStyle: 'reasoning',
     textVerbosity: '',
     fastMode: false

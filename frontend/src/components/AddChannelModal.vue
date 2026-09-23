@@ -472,7 +472,6 @@ async function handleQuickSubmit() {
         baseUrl: detectedBaseUrl.value,
         baseUrls: detectedBaseUrls.value,
         apiKeys: detectedApiKeys.value,
-        modelMapping: {},
         normalizeMetadataUserId: false
       },
       { isQuickAdd: true, placement: placement.value }

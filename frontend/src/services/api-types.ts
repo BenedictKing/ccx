@@ -250,12 +250,10 @@ export interface Channel {
   remark?: string
   website?: string
   insecureSkipVerify?: boolean
-  modelMapping?: Record<string, string>
   modelCapabilities?: Record<string, UpstreamModelCapability>
   embeddingCapabilities?: Record<string, EmbeddingCapability>
   defaultCapability?: UpstreamModelCapability
   allowUnknownContext?: boolean
-  reasoningMapping?: Record<string, 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'>
   reasoningParamStyle?: 'reasoning' | 'reasoning_effort' | 'thinking'
   textVerbosity?: 'low' | 'medium' | 'high' | ''
   fastMode?: boolean
@@ -303,8 +301,6 @@ export interface Channel {
   passbackThinkingBlocks?: boolean       // Claude 协议特定：将真实 reasoning_content 投影为 content[].thinking（兼容 DeepSeek/GLM 等严格 thinking 上游）
   supportedModels?: string[]  // 支持的模型白名单（空=全部），支持通配符如 gpt-4*
   noVision?: boolean                       // 整个渠道不支持图片输入
-  noVisionModels?: string[]                // 不支持图片输入的模型列表（匹配 modelMapping 后的实际模型名）
-  visionFallbackModel?: string               // 含图请求命中 noVisionModels 时使用的替代模型
   // 主动限速（渠道级生产代理限速，区别于能力测试的 rpm）
   rateLimitRpm?: number                      // 每分钟请求数上限（0/空=不限）
   rateLimitWindowMinutes?: number            // 滑动窗口时长（秒，0/空=默认60秒）
@@ -312,7 +308,7 @@ export interface Channel {
   rateLimitMaxConcurrent?: number            // 最大并发上游请求数（0/空=不限）
   rateLimitAutoFromHeaders?: boolean         // 自动从上游响应头解析限流信息并动态调速（默认 true）
   historicalImageTurnLimit?: number          // 历史图片轮次限制（0=不限制，2-10=裁剪历史图片）
-  compactModel?: string                      // 本地 compact 时使用的上游模型名（不经过 modelMapping，为空则使用原始请求的模型）
+  compactModel?: string                      // 本地 compact 时使用的上游模型名（为空则使用原始请求的模型）
   autoManaged?: boolean                      // 启用自动托管
   autoManagedAt?: string                     // 开始托管时间（ISO 格式）
   autoManagedKind?: string                   // 托管子类型："" | "generic" | "new_api"
@@ -537,7 +533,7 @@ export interface CapabilityJobProgress {
 
 export interface CapabilityModelJobResult {
   model: string
-  actualModel?: string // 复合协议：经过 ModelMapping 后实际发送给上游的模型名
+  actualModel?: string // 实际使用的模型名（现仅 Codex 图片探测回填）
   upstreamModel?: string // 上游响应自报的模型名（识别厂商侧隐式重定向）
   status: CapabilityModelJobStatus
   lifecycle: CapabilityLifecycle
@@ -602,10 +598,10 @@ export interface CapabilityTestJob {
   snapshotUpdatedAt?: string
 }
 
-// RedirectModelResult 单个探测模型经 ModelMapping 后的测试结果
+// RedirectModelResult 单个探测模型的实测结果（现仅 Codex 图片探测回填 actualModel）
 export interface RedirectModelResult {
   probeModel: string      // 原生探测模型名
-  actualModel: string     // ModelMapping 后实际发给上游的模型名
+  actualModel: string     // 实际发给上游的模型名
   upstreamModel?: string  // 上游响应自报的模型名（识别厂商侧隐式重定向）
   success: boolean
   latency: number
@@ -979,8 +975,6 @@ export interface ChannelDiscoveryRequest {
   proxyUrl?: string
   proxyPreferDirect?: boolean
   insecureSkipVerify?: boolean
-  modelMapping?: Record<string, string>
-  reasoningMapping?: Record<string, string>
   targetClients?: ChannelDiscoveryTargetClient[]
 }
 
@@ -1042,11 +1036,7 @@ export interface ChannelDiscoveryRecommendation {
   channelKind: ChannelDiscoveryKind | ''
   serviceType: Channel['serviceType'] | ''
   baseUrls?: string[]
-  modelMapping: Record<string, string>
-  reasoningMapping?: Record<string, string>
   supportedModels?: string[]
-  noVisionModels?: string[]
-  visionFallbackModel?: string
   compat?: Partial<Record<string, boolean>>
   urlRecommendation?: {
     current: string
@@ -2572,8 +2562,6 @@ export interface CreateLogicalChannelProtocol {
   apiKeyConfigs?: APIKeyConfig[]
   baseUrls?: string[]
   baseUrl?: string
-  modelMapping?: Record<string, string>
-  reasoningMapping?: Record<string, string>
   priority?: number
   enabled?: boolean
   status?: string

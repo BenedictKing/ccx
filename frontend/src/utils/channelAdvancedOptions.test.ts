@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   normalizeAdvancedChannelOptions,
-  supportsAdvancedChannelOptions,
-  supportsReasoningMapping
+  supportsAdvancedChannelOptions
 } from './channelAdvancedOptions'
 
 describe('channelAdvancedOptions', () => {
@@ -14,34 +13,28 @@ describe('channelAdvancedOptions', () => {
     expect(supportsAdvancedChannelOptions('')).toBe(false)
   })
 
-  it('应为 claude 保留 reasoningMapping', () => {
-    expect(supportsReasoningMapping('claude')).toBe(true)
-
-    const result = normalizeAdvancedChannelOptions('claude', {
-      reasoningMapping: { opus: 'high' },
+  it('应保留受支持渠道的高级选项原值', () => {
+    const result = normalizeAdvancedChannelOptions('openai', {
       reasoningParamStyle: 'reasoning_effort',
       textVerbosity: 'high',
       fastMode: true
     })
 
     expect(result).toEqual({
-      reasoningMapping: { opus: 'high' },
-      reasoningParamStyle: 'reasoning',
-      textVerbosity: '',
-      fastMode: false
+      reasoningParamStyle: 'reasoning_effort',
+      textVerbosity: 'high',
+      fastMode: true
     })
   })
 
   it('应清空不支持渠道的高级选项', () => {
     const result = normalizeAdvancedChannelOptions('gemini', {
-      reasoningMapping: { opus: 'high' },
       reasoningParamStyle: 'reasoning_effort',
       textVerbosity: 'high',
       fastMode: true
     })
 
     expect(result).toEqual({
-      reasoningMapping: {},
       reasoningParamStyle: 'reasoning',
       textVerbosity: '',
       fastMode: false
