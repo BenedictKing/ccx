@@ -1331,7 +1331,8 @@ func (m *Manager) collectSignals(channelKind, baseURL, apiKey, serviceType strin
 	signals.TotalRequests1h = int(stats1h.RequestCount)
 	signals.SuccessCount1h = int(stats1h.SuccessCount)
 	signals.FailureCount1h = int(stats1h.FailureCount)
-	signals.SuccessRate1h = stats1h.SuccessRate
+	// MetricsManager 返回 0-100，信号与画像层统一用 0-1（判据阈值/评分/前端展示均按 0-1）
+	signals.SuccessRate1h = stats1h.SuccessRate / 100
 
 	// 24 小时窗口
 	stats24h := m.metrics.GetTimeWindowStatsForKey(channelKind, baseURL, apiKey, serviceType, 24*time.Hour)
@@ -1348,7 +1349,7 @@ func (m *Manager) collectSignals(channelKind, baseURL, apiKey, serviceType strin
 	stats15m := m.metrics.GetTimeWindowStatsForKey(channelKind, baseURL, apiKey, serviceType, 15*time.Minute)
 	signals.TotalRequests15m = int(stats15m.RequestCount)
 	if stats15m.RequestCount > 0 {
-		signals.SuccessRate15m = stats15m.SuccessRate
+		signals.SuccessRate15m = stats15m.SuccessRate / 100
 	}
 
 	// 熔断器快照

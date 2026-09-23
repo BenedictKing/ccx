@@ -133,7 +133,8 @@ func (p *Profiler) DeriveEndpointProfile(
 	// 填充运行时指标字段
 	profile.ConsecutiveFail = int(snapshot.ConsecutiveFailures)
 	profile.LastSuccessAt = snapshot.LastSuccessAt
-	profile.SuccessRate15m = stats1h.SuccessRate // 用 1h 窗口近似（Phase 1 精度足够）
+	// 用 1h 窗口近似（Phase 1 精度足够）；MetricsManager 返回 0-100，画像层统一 0-1
+	profile.SuccessRate15m = stats1h.SuccessRate / 100
 	profile.ConnectSampleCount = stats1h.ConnectSampleCount
 	profile.P95ConnectLatencyMs = stats1h.P95ConnectLatencyMs
 	if stats1h.ConnectSampleCount > 0 && stats1h.P95ConnectLatencyMs > 0 {

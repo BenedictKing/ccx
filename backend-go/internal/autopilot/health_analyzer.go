@@ -35,8 +35,8 @@ type EndpointSignals struct {
 	EffectiveSuccessCount24h float64
 	EffectiveFailureCount24h float64
 	TotalRequests15m         int     // 最近 15 分钟总请求数
-	SuccessRate15m           float64 // 最近 15 分钟成功率（直接从 MetricsManager 取）
-	SuccessRate1h            float64 // 最近 1 小时成功率（直接从 MetricsManager 取）
+	SuccessRate15m           float64 // 最近 15 分钟成功率，0-1（MetricsManager 返回 0-100，collectSignals 已归一化）
+	SuccessRate1h            float64 // 最近 1 小时成功率，0-1（MetricsManager 返回 0-100，collectSignals 已归一化）
 	ConsecutiveFail          int     // 连续失败次数
 	LastSuccessAt            *time.Time
 	LastFailureAt            *time.Time

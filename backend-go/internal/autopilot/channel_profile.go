@@ -42,8 +42,8 @@ type ChannelProfile struct {
 	// ── 聚合指标 ──
 	TotalEndpoints   int     `json:"totalEndpoints"`
 	HealthyEndpoints int     `json:"healthyEndpoints"`
-	TotalModels      int     `json:"totalModels"` // 去重后的模型总数
-	SuccessRate15m   float64 `json:"successRate15m"`
+	TotalModels      int     `json:"totalModels"`    // 去重后的模型总数
+	SuccessRate15m   float64 `json:"successRate15m"` // 0-1；endpoint 画像均值
 	P95LatencyMs     int64   `json:"p95LatencyMs"`
 
 	// ── 能力不一致警告 ──

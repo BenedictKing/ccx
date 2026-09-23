@@ -221,7 +221,7 @@ type KeyEndpointProfile struct {
 	ModelMapping             map[string]string    `json:"modelMapping"`                       // 该 endpoint 的模型映射
 
 	// ── 运行时指标（来自 MetricsManager）──
-	SuccessRate15m          float64    `json:"successRate15m"`
+	SuccessRate15m          float64    `json:"successRate15m"` // 0-1；MetricsManager 返回 0-100，L1 已归一化
 	P95LatencyMs            int64      `json:"p95LatencyMs"`
 	ConnectSampleCount      int64      `json:"connectSampleCount,omitempty"`
 	P95ConnectLatencyMs     int64      `json:"p95ConnectLatencyMs,omitempty"`
