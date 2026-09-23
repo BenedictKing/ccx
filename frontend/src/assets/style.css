@@ -148,10 +148,23 @@
   border: 1px solid #fecaca !important;
 }
 
+.v-theme--dark .error-tooltip,
+.v-theme--dark .failure-tooltip {
+  color: #fecaca !important;
+  background-color: #3a1a20 !important;
+  border-color: #f87171 !important;
+}
+
 .success-tooltip {
   color: #166534 !important;
   background-color: #f6fff8 !important;
   border: 1px solid #bbf7d0 !important;
+}
+
+.v-theme--dark .success-tooltip {
+  color: #bbf7d0 !important;
+  background-color: #16281d !important;
+  border-color: #34d399 !important;
 }
 
 /* 对话框标题统一样式 */
