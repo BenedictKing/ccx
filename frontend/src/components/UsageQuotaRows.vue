@@ -138,6 +138,27 @@ const truthTooltip = (item: UsageQuotaItem): string => {
   color: #6b7280;
 }
 
+/* 暗色下 500/600 级文字偏暗，提亮到主题 400 级并略升底色透明度保持药丸可辨 */
+.v-theme--dark .truth-badge--healthy {
+  background: rgba(52, 211, 153, 0.18);
+  color: #34d399;
+}
+
+.v-theme--dark .truth-badge--approaching_limit {
+  background: rgba(251, 191, 36, 0.18);
+  color: #fbbf24;
+}
+
+.v-theme--dark .truth-badge--exhausted {
+  background: rgba(248, 113, 113, 0.18);
+  color: #f87171;
+}
+
+.v-theme--dark .truth-badge--unavailable {
+  background: rgba(156, 163, 175, 0.16);
+  color: #9ca3af;
+}
+
 .truth-badge--unknown {
   background: rgba(156, 163, 175, 0.1);
   color: #9ca3af;
