@@ -7,30 +7,20 @@ const reasoningEfforts = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', '
 const textVerbosityValues = ['low', 'medium', 'high']
 
 const channelPresetDefaults = {
-  modelMapping: {},
-  reasoningMapping: {},
   reasoningParamStyle: '',
   authHeader: '',
   normalizeSystemRoleToTopLevel: false,
   noVision: false,
-  noVisionModels: [],
-  visionFallbackModel: '',
 }
 
 const codexResponsesDefaults = {
-  modelMapping: {},
-  reasoningMapping: {},
   reasoningParamStyle: '',
   codexToolCompat: true,
   stripCodexClientTools: true,
   noVision: false,
-  noVisionModels: [],
-  visionFallbackModel: '',
 }
 
 const openaiMessagesDefaults = {
-  modelMapping: {},
-  reasoningMapping: {},
   fastMode: false,
   textVerbosity: 'medium',
 }
@@ -113,15 +103,6 @@ function normalizedCollection(source, collectionKey, defaults) {
           normalized[key] = value
         }
       }
-      if (hasOwn(defaults, 'modelMapping') || hasOwn(preset, 'modelMapping')) {
-        normalized.modelMapping = preset.modelMapping || {}
-      }
-      if (hasOwn(defaults, 'reasoningMapping') || hasOwn(preset, 'reasoningMapping')) {
-        normalized.reasoningMapping = preset.reasoningMapping || {}
-      }
-      if (hasOwn(defaults, 'noVisionModels') || hasOwn(preset, 'noVisionModels')) {
-        normalized.noVisionModels = preset.noVisionModels || []
-      }
       return [name, normalized]
     }),
   )
@@ -140,8 +121,6 @@ export type ${config.typePrefix}ReasoningEffort = ${reasoningEfforts.map(quote).
 export type ${config.typePrefix}TextVerbosity = ${textVerbosityValues.map(quote).join(' | ')}
 
 export interface ${config.interfaceName} {
-  modelMapping: Record<string, string>
-  reasoningMapping: Partial<Record<string, ${config.typePrefix}ReasoningEffort>>
   fastMode: boolean
   textVerbosity: ${config.typePrefix}TextVerbosity
 }
@@ -157,15 +136,11 @@ export type ${config.typePrefix}ReasoningEffort = ${reasoningEfforts.map(quote).
 export type ${config.typePrefix}ReasoningParamStyle = '' | 'reasoning' | 'reasoning_effort' | 'thinking'
 
 export interface ${config.interfaceName} {
-  modelMapping: Record<string, string>
-  reasoningMapping: Partial<Record<string, ${config.typePrefix}ReasoningEffort>>
   reasoningParamStyle: ${config.typePrefix}ReasoningParamStyle
   serviceType?: 'openai' | 'gemini' | 'claude' | 'responses' | 'copilot'
   codexToolCompat: boolean
   stripCodexClientTools: boolean
   noVision: boolean
-  noVisionModels: string[]
-  visionFallbackModel: string
   rateLimitRpm?: number
 }
 
@@ -179,15 +154,11 @@ export type ${config.typePrefix}ReasoningEffort = ${reasoningEfforts.map(quote).
 export type ${config.typePrefix}ReasoningParamStyle = '' | 'reasoning' | 'reasoning_effort' | 'thinking'
 
 export interface ${config.interfaceName} {
-  modelMapping: Record<string, string>
-  reasoningMapping: Partial<Record<string, ${config.typePrefix}ReasoningEffort>>
   reasoningParamStyle: ${config.typePrefix}ReasoningParamStyle
   serviceType?: 'openai' | 'gemini' | 'claude' | 'responses' | 'copilot'
   authHeader: '' | 'auto' | 'bearer' | 'x-api-key'
   normalizeSystemRoleToTopLevel: boolean
 ${compatibilityInterfaceFields}  noVision: boolean
-  noVisionModels: string[]
-  visionFallbackModel: string
   rateLimitRpm?: number
 }
 
@@ -195,25 +166,9 @@ export const ${config.exportName}: Record<string, ${config.interfaceName}> = ${j
 `
 }
 
-function formatGoStringMap(values) {
-  const entries = Object.entries(values || {})
-  if (!entries.length) return ''
-  return `map[string]string{${entries.map(([key, value]) => `${quote(key)}: ${quote(value)}`).join(', ')}}`
-}
-
-function formatGoStringSlice(values) {
-  if (!values?.length) return ''
-  return `[]string{${values.map(quote).join(', ')}}`
-}
-
 function formatGoConfig(preset) {
   const fields = []
-  const modelMapping = formatGoStringMap(preset.modelMapping)
-  const reasoningMapping = formatGoStringMap(preset.reasoningMapping)
-  const noVisionModels = formatGoStringSlice(preset.noVisionModels)
 
-  if (modelMapping) fields.push(`ModelMapping: ${modelMapping}`)
-  if (reasoningMapping) fields.push(`ReasoningMapping: ${reasoningMapping}`)
   if (preset.serviceType) fields.push(`ServiceType: ${quote(preset.serviceType)}`)
   if (preset.reasoningParamStyle) fields.push(`ReasoningParamStyle: ${quote(preset.reasoningParamStyle)}`)
   if (preset.authHeader) fields.push(`AuthHeader: ${quote(preset.authHeader)}`)
@@ -221,8 +176,6 @@ function formatGoConfig(preset) {
   if (hasOwn(preset, 'normalizeMetadataUserId')) fields.push(`NormalizeMetadataUserId: boolRef(${Boolean(preset.normalizeMetadataUserId)})`)
   if (preset.stripBillingHeader) fields.push('StripBillingHeader: true')
   if (preset.noVision) fields.push('NoVision: true')
-  if (noVisionModels) fields.push(`NoVisionModels: ${noVisionModels}`)
-  if (preset.visionFallbackModel) fields.push(`VisionFallbackModel: ${quote(preset.visionFallbackModel)}`)
   if (hasOwn(preset, 'codexToolCompat')) fields.push(`CodexToolCompat: boolRef(${Boolean(preset.codexToolCompat)})`)
   if (hasOwn(preset, 'stripCodexClientTools')) fields.push(`StripCodexClientTools: boolRef(${Boolean(preset.stripCodexClientTools)})`)
   if (preset.rateLimitRpm) fields.push(`RateLimitRPM: ${Number(preset.rateLimitRpm)}`)

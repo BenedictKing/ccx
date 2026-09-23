@@ -4,244 +4,69 @@
     "schemaVersion": 1,
     "providers": {
       "deepseek": {
-        "modelMapping": {
-          "fable": "deepseek-v4-pro",
-          "haiku": "deepseek-flash",
-          "opus": "deepseek-v4-pro",
-          "sonnet": "deepseek-v4-pro"
-        },
         "reasoningParamStyle": "reasoning",
         "normalizeSystemRoleToTopLevel": true,
         "normalizeMetadataUserId": true,
-        "stripBillingHeader": true,
-        "noVisionModels": [
-          "deepseek-v4-pro"
-        ]
+        "stripBillingHeader": true
       },
       "mimo": {
-        "modelMapping": {
-          "fable": "mimo-v2.5-pro",
-          "haiku": "mimo-v2.5-pro",
-          "opus": "mimo-v2.5-pro",
-          "sonnet": "mimo-v2.5-pro"
-        },
-        "reasoningMapping": {
-          "fable": "max",
-          "haiku": "high",
-          "mimo-v2.5": "max",
-          "opus": "max",
-          "sonnet": "max"
-        },
         "reasoningParamStyle": "thinking",
         "normalizeSystemRoleToTopLevel": true,
-        "noVisionModels": [
-          "mimo-v2.5-pro"
-        ],
-        "visionFallbackModel": "mimo-v2.5",
         "rateLimitRpm": 80
       },
       "compshare": {
-        "modelMapping": {
-          "fable": "glm-5.2",
-          "haiku": "deepseek-v4-flash",
-          "opus": "glm-5.2",
-          "sonnet": "glm-5.2"
-        },
-        "reasoningMapping": {
-          "MiniMax-M2.7": "xhigh",
-          "fable": "max",
-          "haiku": "high",
-          "opus": "max",
-          "sonnet": "max"
-        },
         "reasoningParamStyle": "reasoning",
-        "normalizeSystemRoleToTopLevel": true,
-        "noVisionModels": [
-          "glm-5.2",
-          "deepseek-v4-flash"
-        ],
-        "visionFallbackModel": "MiniMax-M2.7"
+        "normalizeSystemRoleToTopLevel": true
       },
       "runapi": {},
       "unity2": {},
       "kimi": {
-        "modelMapping": {
-          "fable": "kimi-k2.6",
-          "haiku": "kimi-k2.6",
-          "opus": "kimi-k2.6",
-          "sonnet": "kimi-k2.6"
-        },
         "normalizeSystemRoleToTopLevel": true
       },
       "glm": {
-        "modelMapping": {
-          "fable": "glm-5.2",
-          "haiku": "glm-5.2",
-          "opus": "glm-5.2",
-          "sonnet": "glm-5.2"
-        },
         "normalizeSystemRoleToTopLevel": true
       },
       "sensenova": {
-        "modelMapping": {
-          "fable": "glm-5.2",
-          "haiku": "deepseek-v4-flash",
-          "opus": "glm-5.2",
-          "sonnet": "glm-5.2"
-        },
-        "normalizeSystemRoleToTopLevel": true,
-        "noVisionModels": [
-          "glm-5.2",
-          "deepseek-v4-flash"
-        ],
-        "visionFallbackModel": "sensenova-6.7-flash-lite"
+        "normalizeSystemRoleToTopLevel": true
       },
       "minimax": {
-        "modelMapping": {
-          "fable": "MiniMax-M3",
-          "haiku": "MiniMax-M2.7",
-          "opus": "MiniMax-M3",
-          "sonnet": "MiniMax-M3"
-        },
-        "normalizeSystemRoleToTopLevel": true,
-        "noVisionModels": [
-          "MiniMax-M2.7"
-        ],
-        "visionFallbackModel": "MiniMax-M3"
+        "normalizeSystemRoleToTopLevel": true
       },
       "dashscope": {
-        "modelMapping": {
-          "fable": "glm-5.2",
-          "haiku": "glm-5.2",
-          "opus": "glm-5.2",
-          "sonnet": "glm-5.2"
-        },
         "normalizeSystemRoleToTopLevel": true
       },
       "opencode-zen": {
-        "modelMapping": {
-          "fable": "glm-5.2",
-          "haiku": "deepseek-v4-flash",
-          "opus": "glm-5.2",
-          "sonnet": "minimax-m3"
-        },
         "serviceType": "openai",
         "authHeader": "bearer",
-        "reasoningMapping": {
-          "fable": "max",
-          "haiku": "high",
-          "minimax-m3": "max",
-          "opus": "max",
-          "sonnet": "max"
-        },
         "reasoningParamStyle": "reasoning",
-        "normalizeSystemRoleToTopLevel": true,
-        "noVisionModels": [
-          "glm-5.2",
-          "deepseek-v4-flash"
-        ],
-        "visionFallbackModel": "minimax-m3"
+        "normalizeSystemRoleToTopLevel": true
       },
       "opencode-go": {
-        "modelMapping": {
-          "fable": "glm-5.2",
-          "haiku": "deepseek-v4-flash",
-          "opus": "glm-5.2",
-          "sonnet": "minimax-m3"
-        },
         "serviceType": "openai",
         "authHeader": "bearer",
-        "reasoningMapping": {
-          "fable": "max",
-          "haiku": "high",
-          "minimax-m3": "max",
-          "opus": "max",
-          "sonnet": "max"
-        },
         "reasoningParamStyle": "reasoning",
-        "normalizeSystemRoleToTopLevel": true,
-        "noVisionModels": [
-          "glm-5.2",
-          "deepseek-v4-flash"
-        ],
-        "visionFallbackModel": "minimax-m3"
+        "normalizeSystemRoleToTopLevel": true
       },
       "modelscope": {
-        "modelMapping": {
-          "fable": "ZhipuAI/GLM-5.2",
-          "haiku": "deepseek-ai/DeepSeek-V4-Flash",
-          "opus": "ZhipuAI/GLM-5.2",
-          "sonnet": "ZhipuAI/GLM-5.2"
-        },
-        "normalizeSystemRoleToTopLevel": true,
-        "noVisionModels": [
-          "deepseek-ai/DeepSeek-V4-Flash"
-        ],
-        "visionFallbackModel": "MiniMax/MiniMax-M2.7"
+        "normalizeSystemRoleToTopLevel": true
       },
       "volc-ark": {
-        "modelMapping": {
-          "fable": "glm-5.3",
-          "haiku": "deepseek-v4-flash",
-          "opus": "glm-5.3",
-          "sonnet": "glm-5.3"
-        },
-        "reasoningMapping": {
-          "fable": "max",
-          "haiku": "high",
-          "opus": "max",
-          "sonnet": "max",
-          "minimax-m3": "xhigh"
-        },
         "reasoningParamStyle": "reasoning",
-        "normalizeSystemRoleToTopLevel": true,
-        "noVisionModels": [
-          "glm-5.3",
-          "deepseek-v4-flash"
-        ],
-        "visionFallbackModel": "minimax-m3"
+        "normalizeSystemRoleToTopLevel": true
       },
       "qianfan": {
-        "modelMapping": {
-          "fable": "qianfan-code-latest",
-          "haiku": "qianfan-code-latest",
-          "opus": "qianfan-code-latest",
-          "sonnet": "qianfan-code-latest"
-        },
         "normalizeSystemRoleToTopLevel": true
       },
       "xfyun": {
-        "modelMapping": {
-          "fable": "astron-code-latest",
-          "haiku": "astron-code-latest",
-          "opus": "astron-code-latest",
-          "sonnet": "astron-code-latest"
-        },
         "normalizeSystemRoleToTopLevel": true
       },
       "tencent-lkeap": {
         "normalizeSystemRoleToTopLevel": true
       },
       "atomgit": {
-        "modelMapping": {
-          "fable": "glm-5.2-200k",
-          "haiku": "glm-5.2-200k",
-          "opus": "glm-5.2-200k",
-          "sonnet": "glm-5.2-200k"
-        },
-        "reasoningMapping": {
-          "fable": "max",
-          "haiku": "high",
-          "opus": "max",
-          "sonnet": "max"
-        },
         "reasoningParamStyle": "thinking",
         "serviceType": "openai",
-        "normalizeSystemRoleToTopLevel": true,
-        "noVisionModels": [
-          "glm-5.2-200k"
-        ],
-        "visionFallbackModel": ""
+        "normalizeSystemRoleToTopLevel": true
       }
     }
   },
@@ -249,103 +74,35 @@
     "schemaVersion": 1,
     "providers": {
       "deepseek": {
-        "reasoningParamStyle": "reasoning",
-        "noVisionModels": [
-          "deepseek-v4-pro"
-        ]
+        "reasoningParamStyle": "reasoning"
       },
       "mimo": {
         "reasoningParamStyle": "thinking",
-        "noVisionModels": [
-          "mimo-v2.5-pro"
-        ],
-        "visionFallbackModel": "mimo-v2.5",
         "rateLimitRpm": 80
       },
       "compshare": {
-        "reasoningParamStyle": "reasoning",
-        "noVisionModels": [
-          "glm-5.2",
-          "deepseek-v4-flash"
-        ],
-        "visionFallbackModel": "MiniMax-M2.7"
+        "reasoningParamStyle": "reasoning"
       },
       "runapi": {},
       "unity2": {},
       "openrouter": {},
-      "sensenova": {
-        "noVisionModels": [
-          "glm-5.2",
-          "deepseek-v4-flash"
-        ],
-        "visionFallbackModel": "sensenova-6.7-flash-lite"
-      },
+      "sensenova": {},
       "modelscope": {},
       "minimax": {},
       "dashscope": {},
       "opencode-zen": {
-        "modelMapping": {
-          "codex": "deepseek-v4-flash",
-          "gpt": "glm-5.2",
-          "mini": "deepseek-v4-flash"
-        },
-        "reasoningMapping": {
-          "codex": "high",
-          "gpt": "max",
-          "mini": "high"
-        },
         "reasoningParamStyle": "reasoning",
-        "authHeader": "bearer",
-        "noVisionModels": [
-          "glm-5.2",
-          "deepseek-v4-flash"
-        ],
-        "visionFallbackModel": "minimax-m3"
+        "authHeader": "bearer"
       },
       "opencode-go": {
-        "modelMapping": {
-          "codex": "deepseek-v4-flash",
-          "gpt": "glm-5.2",
-          "mini": "deepseek-v4-flash"
-        },
-        "reasoningMapping": {
-          "codex": "high",
-          "gpt": "max",
-          "mini": "high"
-        },
         "reasoningParamStyle": "reasoning",
-        "authHeader": "bearer",
-        "noVisionModels": [
-          "glm-5.2",
-          "deepseek-v4-flash"
-        ],
-        "visionFallbackModel": "minimax-m3"
+        "authHeader": "bearer"
       },
       "volc-ark": {},
       "qianfan": {},
-      "xfyun": {
-        "modelMapping": {
-          "codex": "astron-code-latest",
-          "gpt": "astron-code-latest",
-          "mini": "astron-code-latest"
-        }
-      },
+      "xfyun": {},
       "atomgit": {
-        "modelMapping": {
-          "gpt": "glm-5.2-200k",
-          "mini": "glm-5.2-200k",
-          "codex": "glm-5.2-200k"
-        },
-        "reasoningMapping": {
-          "gpt": "high",
-          "mini": "high",
-          "codex": "high"
-        },
-        "reasoningParamStyle": "thinking",
-        "noVisionModels": [
-          "glm-5.2-200k"
-        ],
-        "visionFallbackModel": ""
+        "reasoningParamStyle": "thinking"
       }
     }
   },
@@ -353,62 +110,21 @@
     "schemaVersion": 1,
     "providers": {
       "deepseek": {
-        "modelMapping": {
-          "codex": "deepseek-flash",
-          "gpt": "deepseek-v4-pro",
-          "mini": "deepseek-flash"
-        },
-        "reasoningMapping": {
-          "gpt": "max"
-        },
         "reasoningParamStyle": "reasoning",
         "codexToolCompat": false,
-        "stripCodexClientTools": false,
-        "noVisionModels": [
-          "deepseek-v4-pro"
-        ]
+        "stripCodexClientTools": false
       },
       "mimo": {
-        "modelMapping": {
-          "codex": "mimo-v2.5-pro",
-          "gpt": "mimo-v2.5-pro",
-          "mini": "mimo-v2.5-pro"
-        },
-        "reasoningMapping": {
-          "codex": "high",
-          "gpt": "high",
-          "mimo-v2.5": "high",
-          "mini": "high"
-        },
         "reasoningParamStyle": "reasoning",
         "serviceType": "responses",
         "codexToolCompat": true,
         "stripCodexClientTools": true,
-        "noVisionModels": [
-          "mimo-v2.5-pro"
-        ],
-        "visionFallbackModel": "mimo-v2.5",
         "rateLimitRpm": 80
       },
       "compshare": {
-        "modelMapping": {
-          "codex": "deepseek-v4-flash",
-          "gpt": "glm-5.2",
-          "mini": "deepseek-v4-flash"
-        },
-        "reasoningMapping": {
-          "MiniMax-M2.7": "xhigh",
-          "gpt": "max",
-          "mini": "high"
-        },
         "reasoningParamStyle": "reasoning",
         "codexToolCompat": false,
-        "stripCodexClientTools": false,
-        "noVisionModels": [
-          "glm-5.2",
-          "deepseek-v4-flash"
-        ],
-        "visionFallbackModel": "MiniMax-M2.7"
+        "stripCodexClientTools": false
       },
       "runapi": {
         "codexToolCompat": false,
@@ -419,131 +135,34 @@
         "stripCodexClientTools": false
       },
       "minimax": {
-        "modelMapping": {
-          "codex": "MiniMax-M2.7",
-          "gpt": "MiniMax-M3",
-          "mini": "MiniMax-M2.7"
-        },
         "codexToolCompat": false,
         "stripCodexClientTools": false
       },
-      "dashscope": {
-        "modelMapping": {
-          "codex": "deepseek-v4-flash",
-          "gpt": "deepseek-v4-pro",
-          "mini": "deepseek-v4-flash"
-        },
-        "reasoningMapping": {
-          "gpt": "max"
-        }
-      },
+      "dashscope": {},
       "opencode-zen": {
-        "modelMapping": {
-          "codex": "deepseek-v4-flash",
-          "gpt": "glm-5.2",
-          "mini": "deepseek-v4-flash"
-        },
-        "reasoningMapping": {
-          "codex": "high",
-          "gpt": "max",
-          "mini": "high"
-        },
-        "reasoningParamStyle": "reasoning",
-        "noVisionModels": [
-          "glm-5.2",
-          "deepseek-v4-flash"
-        ],
-        "visionFallbackModel": "minimax-m3"
+        "reasoningParamStyle": "reasoning"
       },
       "opencode-go": {
-        "modelMapping": {
-          "codex": "deepseek-v4-flash",
-          "gpt": "glm-5.2",
-          "mini": "deepseek-v4-flash"
-        },
-        "reasoningMapping": {
-          "codex": "high",
-          "gpt": "max",
-          "mini": "high"
-        },
-        "reasoningParamStyle": "reasoning",
-        "noVisionModels": [
-          "glm-5.2",
-          "deepseek-v4-flash"
-        ],
-        "visionFallbackModel": "minimax-m3"
+        "reasoningParamStyle": "reasoning"
       },
-      "kimi": {
-        "modelMapping": {
-          "codex": "kimi-k2.7",
-          "gpt": "kimi-k2.7"
-        }
-      },
-      "glm": {
-        "modelMapping": {
-          "codex": "glm-5.2",
-          "gpt": "glm-5.2"
-        }
-      },
-      "sensenova": {
-        "modelMapping": {
-          "codex": "deepseek-v4-flash",
-          "gpt": "glm-5.2",
-          "mini": "deepseek-v4-flash"
-        },
-        "noVisionModels": [
-          "glm-5.2",
-          "deepseek-v4-flash"
-        ],
-        "visionFallbackModel": "sensenova-6.7-flash-lite"
-      },
+      "kimi": {},
+      "glm": {},
+      "sensenova": {},
       "openrouter": {
         "codexToolCompat": false,
         "stripCodexClientTools": false
       },
       "modelscope": {
-        "modelMapping": {
-          "codex": "deepseek-ai/DeepSeek-V4-Flash",
-          "gpt": "ZhipuAI/GLM-5.2",
-          "mini": "deepseek-ai/DeepSeek-V4-Flash"
-        },
         "codexToolCompat": false,
         "stripCodexClientTools": false
       },
       "volc-ark": {
-        "modelMapping": {
-          "codex": "deepseek-v4-flash",
-          "gpt": "glm-5.3",
-          "mini": "deepseek-v4-flash"
-        },
-        "reasoningMapping": {
-          "codex": "high",
-          "gpt": "max",
-          "mini": "high",
-          "minimax-m3": "xhigh"
-        },
         "reasoningParamStyle": "reasoning",
         "codexToolCompat": false,
-        "stripCodexClientTools": false,
-        "noVisionModels": [
-          "glm-5.3",
-          "deepseek-v4-flash"
-        ],
-        "visionFallbackModel": "minimax-m3"
+        "stripCodexClientTools": false
       },
-      "qianfan": {
-        "modelMapping": {
-          "codex": "qianfan-code-latest",
-          "gpt": "qianfan-code-latest",
-          "mini": "qianfan-code-latest"
-        }
-      },
+      "qianfan": {},
       "xfyun": {
-        "modelMapping": {
-          "codex": "astron-code-latest",
-          "gpt": "astron-code-latest",
-          "mini": "astron-code-latest"
-        },
         "serviceType": "responses"
       },
       "github-copilot": {
@@ -553,24 +172,10 @@
         "stripCodexClientTools": false
       },
       "atomgit": {
-        "modelMapping": {
-          "codex": "glm-5.2-200k",
-          "gpt": "glm-5.2-200k",
-          "mini": "glm-5.2-200k"
-        },
-        "reasoningMapping": {
-          "codex": "high",
-          "gpt": "high",
-          "mini": "high"
-        },
         "reasoningParamStyle": "thinking",
         "serviceType": "openai",
         "codexToolCompat": true,
-        "stripCodexClientTools": true,
-        "noVisionModels": [
-          "glm-5.2-200k"
-        ],
-        "visionFallbackModel": ""
+        "stripCodexClientTools": true
       }
     }
   },
@@ -578,34 +183,10 @@
     "schemaVersion": 1,
     "presets": {
       "gpt-5.5": {
-        "modelMapping": {
-          "fable": "gpt-5.5",
-          "opus": "gpt-5.5",
-          "sonnet": "gpt-5.4",
-          "haiku": "gpt-5.4-mini"
-        },
-        "reasoningMapping": {
-          "fable": "xhigh",
-          "opus": "xhigh",
-          "sonnet": "xhigh",
-          "haiku": "high"
-        },
         "fastMode": true,
         "textVerbosity": "medium"
       },
       "gpt-5.4": {
-        "modelMapping": {
-          "fable": "gpt-5.4",
-          "opus": "gpt-5.4",
-          "sonnet": "gpt-5.4",
-          "haiku": "gpt-5.4-mini"
-        },
-        "reasoningMapping": {
-          "fable": "xhigh",
-          "opus": "xhigh",
-          "sonnet": "xhigh",
-          "haiku": "high"
-        },
         "fastMode": true,
         "textVerbosity": "medium"
       }

@@ -2,85 +2,35 @@
   "schemaVersion": 1,
   "providers": {
     "deepseek": {
-      "reasoningParamStyle": "reasoning",
-      "noVisionModels": ["deepseek-v4-pro"]
+      "reasoningParamStyle": "reasoning"
     },
     "mimo": {
       "reasoningParamStyle": "thinking",
-      "noVisionModels": ["mimo-v2.5-pro"],
-      "visionFallbackModel": "mimo-v2.5",
       "rateLimitRpm": 80
     },
     "compshare": {
-      "reasoningParamStyle": "reasoning",
-      "noVisionModels": ["glm-5.2", "deepseek-v4-flash"],
-      "visionFallbackModel": "MiniMax-M2.7"
+      "reasoningParamStyle": "reasoning"
     },
     "runapi": {},
     "unity2": {},
     "openrouter": {},
-    "sensenova": {
-      "noVisionModels": ["glm-5.2", "deepseek-v4-flash"],
-      "visionFallbackModel": "sensenova-6.7-flash-lite"
-    },
+    "sensenova": {},
     "modelscope": {},
     "minimax": {},
     "dashscope": {},
     "opencode-zen": {
-      "modelMapping": {
-        "codex": "deepseek-v4-flash",
-        "gpt": "glm-5.2",
-        "mini": "deepseek-v4-flash"
-      },
-      "reasoningMapping": {
-        "codex": "high",
-        "gpt": "max",
-        "mini": "high"
-      },
       "reasoningParamStyle": "reasoning",
-      "authHeader": "bearer",
-      "noVisionModels": ["glm-5.2", "deepseek-v4-flash"],
-      "visionFallbackModel": "minimax-m3"
+      "authHeader": "bearer"
     },
     "opencode-go": {
-      "modelMapping": {
-        "codex": "deepseek-v4-flash",
-        "gpt": "glm-5.2",
-        "mini": "deepseek-v4-flash"
-      },
-      "reasoningMapping": {
-        "codex": "high",
-        "gpt": "max",
-        "mini": "high"
-      },
       "reasoningParamStyle": "reasoning",
-      "authHeader": "bearer",
-      "noVisionModels": ["glm-5.2", "deepseek-v4-flash"],
-      "visionFallbackModel": "minimax-m3"
+      "authHeader": "bearer"
     },
     "volc-ark": {},
     "qianfan": {},
-    "xfyun": {
-      "modelMapping": {
-        "codex": "astron-code-latest",
-        "gpt": "astron-code-latest",
-        "mini": "astron-code-latest"
-      }
-    },
+    "xfyun": {},
     "atomgit": {
-      "modelMapping": {
-        "gpt": "glm-5.2-200k",
-        "mini": "glm-5.2-200k",
-        "codex": "glm-5.2-200k"
-      },
-      "reasoningMapping": {
-        "gpt": "high",
-        "mini": "high",
-        "codex": "high"
-      },
-      "reasoningParamStyle": "thinking",
-      "noVisionModels": ["glm-5.2-200k"],
-      "visionFallbackModel": ""
+      "reasoningParamStyle": "thinking"
     }
   }
 }

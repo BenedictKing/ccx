@@ -2,219 +2,69 @@
   "schemaVersion": 1,
   "providers": {
     "deepseek": {
-      "modelMapping": {
-        "fable": "deepseek-v4-pro",
-        "haiku": "deepseek-flash",
-        "opus": "deepseek-v4-pro",
-        "sonnet": "deepseek-v4-pro"
-      },
       "reasoningParamStyle": "reasoning",
       "normalizeSystemRoleToTopLevel": true,
       "normalizeMetadataUserId": true,
-      "stripBillingHeader": true,
-      "noVisionModels": ["deepseek-v4-pro"]
+      "stripBillingHeader": true
     },
     "mimo": {
-      "modelMapping": {
-        "fable": "mimo-v2.5-pro",
-        "haiku": "mimo-v2.5-pro",
-        "opus": "mimo-v2.5-pro",
-        "sonnet": "mimo-v2.5-pro"
-      },
-      "reasoningMapping": {
-        "fable": "max",
-        "haiku": "high",
-        "mimo-v2.5": "max",
-        "opus": "max",
-        "sonnet": "max"
-      },
       "reasoningParamStyle": "thinking",
       "normalizeSystemRoleToTopLevel": true,
-      "noVisionModels": ["mimo-v2.5-pro"],
-      "visionFallbackModel": "mimo-v2.5",
       "rateLimitRpm": 80
     },
     "compshare": {
-      "modelMapping": {
-        "fable": "glm-5.2",
-        "haiku": "deepseek-v4-flash",
-        "opus": "glm-5.2",
-        "sonnet": "glm-5.2"
-      },
-      "reasoningMapping": {
-        "MiniMax-M2.7": "xhigh",
-        "fable": "max",
-        "haiku": "high",
-        "opus": "max",
-        "sonnet": "max"
-      },
       "reasoningParamStyle": "reasoning",
-      "normalizeSystemRoleToTopLevel": true,
-      "noVisionModels": ["glm-5.2", "deepseek-v4-flash"],
-      "visionFallbackModel": "MiniMax-M2.7"
+      "normalizeSystemRoleToTopLevel": true
     },
     "runapi": {},
     "unity2": {},
     "kimi": {
-      "modelMapping": {
-        "fable": "kimi-k2.6",
-        "haiku": "kimi-k2.6",
-        "opus": "kimi-k2.6",
-        "sonnet": "kimi-k2.6"
-      },
       "normalizeSystemRoleToTopLevel": true
     },
     "glm": {
-      "modelMapping": {
-        "fable": "glm-5.2",
-        "haiku": "glm-5.2",
-        "opus": "glm-5.2",
-        "sonnet": "glm-5.2"
-      },
       "normalizeSystemRoleToTopLevel": true
     },
     "sensenova": {
-      "modelMapping": {
-        "fable": "glm-5.2",
-        "haiku": "deepseek-v4-flash",
-        "opus": "glm-5.2",
-        "sonnet": "glm-5.2"
-      },
-      "normalizeSystemRoleToTopLevel": true,
-      "noVisionModels": ["glm-5.2", "deepseek-v4-flash"],
-      "visionFallbackModel": "sensenova-6.7-flash-lite"
+      "normalizeSystemRoleToTopLevel": true
     },
     "minimax": {
-      "modelMapping": {
-        "fable": "MiniMax-M3",
-        "haiku": "MiniMax-M2.7",
-        "opus": "MiniMax-M3",
-        "sonnet": "MiniMax-M3"
-      },
-      "normalizeSystemRoleToTopLevel": true,
-      "noVisionModels": ["MiniMax-M2.7"],
-      "visionFallbackModel": "MiniMax-M3"
+      "normalizeSystemRoleToTopLevel": true
     },
     "dashscope": {
-      "modelMapping": {
-        "fable": "glm-5.2",
-        "haiku": "glm-5.2",
-        "opus": "glm-5.2",
-        "sonnet": "glm-5.2"
-      },
       "normalizeSystemRoleToTopLevel": true
     },
     "opencode-zen": {
-      "modelMapping": {
-        "fable": "glm-5.2",
-        "haiku": "deepseek-v4-flash",
-        "opus": "glm-5.2",
-        "sonnet": "minimax-m3"
-      },
       "serviceType": "openai",
       "authHeader": "bearer",
-      "reasoningMapping": {
-        "fable": "max",
-        "haiku": "high",
-        "minimax-m3": "max",
-        "opus": "max",
-        "sonnet": "max"
-      },
       "reasoningParamStyle": "reasoning",
-      "normalizeSystemRoleToTopLevel": true,
-      "noVisionModels": ["glm-5.2", "deepseek-v4-flash"],
-      "visionFallbackModel": "minimax-m3"
+      "normalizeSystemRoleToTopLevel": true
     },
     "opencode-go": {
-      "modelMapping": {
-        "fable": "glm-5.2",
-        "haiku": "deepseek-v4-flash",
-        "opus": "glm-5.2",
-        "sonnet": "minimax-m3"
-      },
       "serviceType": "openai",
       "authHeader": "bearer",
-      "reasoningMapping": {
-        "fable": "max",
-        "haiku": "high",
-        "minimax-m3": "max",
-        "opus": "max",
-        "sonnet": "max"
-      },
       "reasoningParamStyle": "reasoning",
-      "normalizeSystemRoleToTopLevel": true,
-      "noVisionModels": ["glm-5.2", "deepseek-v4-flash"],
-      "visionFallbackModel": "minimax-m3"
+      "normalizeSystemRoleToTopLevel": true
     },
     "modelscope": {
-      "modelMapping": {
-        "fable": "ZhipuAI/GLM-5.2",
-        "haiku": "deepseek-ai/DeepSeek-V4-Flash",
-        "opus": "ZhipuAI/GLM-5.2",
-        "sonnet": "ZhipuAI/GLM-5.2"
-      },
-      "normalizeSystemRoleToTopLevel": true,
-      "noVisionModels": ["deepseek-ai/DeepSeek-V4-Flash"],
-      "visionFallbackModel": "MiniMax/MiniMax-M2.7"
+      "normalizeSystemRoleToTopLevel": true
     },
     "volc-ark": {
-      "modelMapping": {
-        "fable": "glm-5.3",
-        "haiku": "deepseek-v4-flash",
-        "opus": "glm-5.3",
-        "sonnet": "glm-5.3"
-      },
-      "reasoningMapping": {
-        "fable": "max",
-        "haiku": "high",
-        "opus": "max",
-        "sonnet": "max",
-        "minimax-m3": "xhigh"
-      },
       "reasoningParamStyle": "reasoning",
-      "normalizeSystemRoleToTopLevel": true,
-      "noVisionModels": ["glm-5.3", "deepseek-v4-flash"],
-      "visionFallbackModel": "minimax-m3"
+      "normalizeSystemRoleToTopLevel": true
     },
     "qianfan": {
-      "modelMapping": {
-        "fable": "qianfan-code-latest",
-        "haiku": "qianfan-code-latest",
-        "opus": "qianfan-code-latest",
-        "sonnet": "qianfan-code-latest"
-      },
       "normalizeSystemRoleToTopLevel": true
     },
     "xfyun": {
-      "modelMapping": {
-        "fable": "astron-code-latest",
-        "haiku": "astron-code-latest",
-        "opus": "astron-code-latest",
-        "sonnet": "astron-code-latest"
-      },
       "normalizeSystemRoleToTopLevel": true
     },
     "tencent-lkeap": {
       "normalizeSystemRoleToTopLevel": true
     },
     "atomgit": {
-      "modelMapping": {
-        "fable": "glm-5.2-200k",
-        "haiku": "glm-5.2-200k",
-        "opus": "glm-5.2-200k",
-        "sonnet": "glm-5.2-200k"
-      },
-      "reasoningMapping": {
-        "fable": "max",
-        "haiku": "high",
-        "opus": "max",
-        "sonnet": "max"
-      },
       "reasoningParamStyle": "thinking",
       "serviceType": "openai",
-      "normalizeSystemRoleToTopLevel": true,
-      "noVisionModels": ["glm-5.2-200k"],
-      "visionFallbackModel": ""
+      "normalizeSystemRoleToTopLevel": true
     }
   }
 }
