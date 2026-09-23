@@ -63,6 +63,12 @@ const (
 	// 需在转发前从 anthropic-beta header 中按 token 粒度剥离。
 	// 学习条件：400/422 错误明确点名拒绝某 token + 请求侧确实携带 anthropic-beta header。
 	TraitUnsupportedBetaHeader CompatTrait = "unsupported_beta_header"
+	// TraitRequiresStream 上游端点仅接受 stream:true，非流式请求必然 400。
+	// 与 TraitNoDocumentSupport 同类：没有对应的请求改写（强制 stream:true 需要把
+	// 上游 SSE 合成回非流式响应，不属于兼容改写），不进入 AllCompatTraits；
+	// 读取方是 failover 发送前跳过（非流式请求直接跳过该 渠道-Key-模型 组合）。
+	// 学习条件：400/422 错误文案点名仅接受流式 + 请求侧确实为非流式。
+	TraitRequiresStream CompatTrait = "requires_stream"
 	// TraitVerifiedToolCalls 渠道×模型实测产生过真实 function_call 事件（正向证据）。
 	// 写入方：能力测试工具探针（强制 tool_choice 返回 ccx_probe 调用）与运行期
 	// 成功路径（带 tools 请求 2xx 完成且流中观察到真实工具调用块）。读取方：

@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -595,7 +594,9 @@ func handleSuccess(
 	}
 
 	// 非流式响应处理
-	bodyBytes, err := io.ReadAll(resp.Body)
+	// 流式桥接：上游实际返回 SSE（仅接受流式渠道的兼容改写）时合成回非流式体，
+	// 后续按上游类型的转换与原生非流式路径完全一致。
+	bodyBytes, err := common.ReadUpstreamNonStreamBody(c, resp, upstreamType)
 	if err != nil {
 		c.JSON(500, types.GeminiError{
 			Error: types.GeminiErrorDetail{

@@ -671,6 +671,9 @@ func TryUpstreamWithAllKeys(
 			c.Set("effortClampedByClient", false)
 			// 自动映射未命中原因同样按 attempt 重置：映射成功的尝试不携带上一轮的失败原因。
 			c.Set("mappingFailReason", "")
+			// 流式桥接改写标记同样按 attempt 重置：仅对已应用改写的 Key 生效，
+			// 防止上一 attempt 的标记污染无需改写的后续 Key（见 ForceStreamRequestBody）。
+			SetUpstreamStreamBridge(c, false)
 			// 释放上一轮 attempt 的并发信号量（首次为空操作）
 			if activeRateLimitRelease != nil {
 				activeRateLimitRelease()
@@ -878,6 +881,36 @@ func TryUpstreamWithAllKeys(
 					c.Set("mappingFailReason", mappingFailReason)
 					RequestLogf(c, "[%s-AutoModel] endpoint=%s 自动映射未命中，按原始模型透传: model=%s reason=%s",
 						apiType, euid, model, mappingFailReason)
+				}
+			}
+
+			// 已学习"仅接受流式"的 Key：非流式请求做流式桥接兼容改写——上游请求强制
+			// stream:true，上游 SSE 由各 handler 非流式路径按 Content-Type 检测并合成
+			// 回非流式响应体（见 common.ReadUpstreamNonStreamBody）。改写后若上游仍 400，
+			// 既有学习/放行/failover 逻辑逐 Key 退避，无死循环。
+			// 请求体无顶层 stream 字段语义的入口（gemini）或执行协议，退回发送前跳过，
+			// 省一次必然 400 的上游往返。同渠道其他 Key/模型照常尝试，流式请求不受影响。
+			if !isStream && upstream.ChannelUID != "" {
+				keyHash := autopilot.KeyHashFromAPIKey(apiKey)
+				if state, ok := channelCompatCache.Trait(upstream.ChannelUID, keyHash, attemptModel, config.TraitRequiresStream); ok && state.Enabled {
+					bodyKind := string(kind)
+					executionKindStr := string(executionKind)
+					if StreamBridgeSupportedKind(bodyKind) && StreamBridgeSupportedKind(executionKindStr) {
+						if rewritten, changed := ForceStreamRequestBody(attemptBody, bodyKind, executionKindStr); changed {
+							attemptBody = rewritten
+							RestoreRequestBody(c, attemptBody)
+							c.Set("requestBodyBytes", attemptBody)
+							SetUpstreamStreamBridge(c, true)
+							channelCompatCache.MarkApplied(upstream.ChannelUID, keyHash, attemptModel, config.TraitRequiresStream)
+							RequestLogf(c, "[%s-ChannelCompat] 渠道 %s 模型 %s 仅接受流式请求，非流式请求已改写为流式桥接（上游 SSE 将合成回非流式响应）",
+								apiType, upstream.Name, attemptModel)
+						}
+					} else {
+						failedKeys[apiKey] = true
+						RequestLogf(c, "[%s-ChannelCompat] 渠道 %s 模型 %s 已学习仅接受流式请求，入口/执行协议 %s/%s 暂不支持流式桥接，跳过 Key: %s",
+							apiType, upstream.Name, attemptModel, bodyKind, executionKindStr, utils.MaskAPIKey(apiKey))
+						continue
+					}
 				}
 			}
 
@@ -1503,6 +1536,22 @@ func TryUpstreamWithAllKeys(
 							RequestLogf(c, "[%s-ChannelCompat] 渠道 %s 模型 %s 缺少能力 %s，已记忆并应用兼容改写后同 Key 重试",
 								apiType, upstream.Name, attemptModel, signal.Trait)
 							continue
+						}
+					}
+				}
+
+				// 流式要求自学习（被动侧）：上游以 400/422 明确表示该端点仅接受 stream:true 时，
+				// 记忆该 渠道-Key-模型 组合仅支持流式。与其他兼容项不同：非流式请求没有可自动
+				// 改写之处（强制 stream:true 需要合成非流式响应，不属于兼容改写），不做同 Key
+				// 重试；学到结论后按正常流程 failover 到其他渠道（错误分类已放行该文案），
+				// 后续非流式请求在 attempt 循环开头直接跳过该组合。流式请求不受影响。
+				if (resp.StatusCode == 400 || resp.StatusCode == 422) && upstream.ChannelUID != "" && !c.Writer.Written() {
+					if signal := StreamRequirementFromError(resp.StatusCode, respBodyBytes, isStream); signal != nil {
+						keyHash := autopilot.KeyHashFromAPIKey(apiKey)
+						if channelCompatCache.Record(upstream.ChannelUID, keyHash, attemptModel,
+							signal.Trait, signal.Enabled, config.CompatSourceErrorSignal, signal.Evidence) {
+							RequestLogf(c, "[%s-ChannelCompat] 渠道 %s 模型 %s 仅接受流式请求，已记忆，非流式请求将跳过该组合",
+								apiType, upstream.Name, attemptModel)
 						}
 					}
 				}
