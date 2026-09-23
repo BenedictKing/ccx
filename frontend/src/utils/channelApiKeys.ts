@@ -1,8 +1,12 @@
 import type { DisabledKeyInfo, APIKeyConfig } from '../services/api-types'
 
+// 注意：APIKeyConfig 带 index signature，keyof 求值为宽泛的 string|number，
+// Omit 之后具名属性会全部丢失，因此用到的字段必须在下方重复声明，
+// 否则（如 credentialUid）会退化为 unknown。
 export interface ChannelApiKeyRow extends Omit<APIKeyConfig, 'key'> {
   key: string
   activeIndex: number
+  credentialUid?: string
   keyUid?: string
   quotaGroup?: string
   groupMultiplier?: number | null
