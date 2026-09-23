@@ -38,12 +38,17 @@ export const ARTIFICIAL_ANALYSIS_MODEL_MAP = {
   'gpt-6-astra': 'gpt-6-astra',
   'gpt-6': 'gpt-6-astra',
   'astra': 'gpt-6-astra',
+  // GPT-6 Sol/Luna（2026-09-22 发布）：AA slug 与 canonical 同名
+  'gpt-6-sol': 'gpt-6-sol',
+  'gpt-6-luna': 'gpt-6-luna',
   'claude-opus-4-8': 'claude-opus-4-8',
   'claude-opus-4-7': 'claude-opus-4-7',
   'claude-opus-4-6': 'claude-opus-4-6',
   'claude-opus-4-6-adaptive': 'claude-opus-4-6',
   'claude-opus-4-5': 'claude-opus-4-5',
   'claude-opus-5': 'claude-opus-5',
+  // Claude Opus 5.5（2026-09-22 发布）：AA slug 与 canonical 同名
+  'claude-opus-5-5': 'claude-opus-5-5',
   'claude-sonnet-5': 'claude-sonnet-5',
   'claude-sonnet-4-6': 'claude-sonnet-4-6',
   'claude-haiku-4-5': 'claude-haiku-4.5',

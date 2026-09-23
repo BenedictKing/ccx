@@ -4,6 +4,7 @@ const modelPriorityPatterns: RegExp[] = [
   // Anthropic Claude
   /fable-5[.-]1/i,
   /fable-5/i,
+  /opus-5[.-]5/i,
   /opus-5/i,
   /opus-4[.-]8/i,
   /opus-4-7/i,
@@ -19,6 +20,8 @@ const modelPriorityPatterns: RegExp[] = [
 
   // OpenAI GPT 系列
   /gpt-6-astra/i,
+  /gpt-6-sol/i,
+  /gpt-6-luna/i,
   /gpt-6/i,
   /astra/i,
   /gpt-5\.6-sol/i,

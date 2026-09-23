@@ -16,6 +16,9 @@ export const DEEPSWE_MODEL_MAP = {
   'gpt-6-astra': 'gpt-6-astra',
   'gpt-6': 'gpt-6-astra',
   'astra': 'gpt-6-astra',
+  // GPT-6 Sol/Luna（2026-09-22 发布）：deepswe slug 与 canonical 同名
+  'gpt-6-sol': 'gpt-6-sol',
+  'gpt-6-luna': 'gpt-6-luna',
   'gpt-5-6-sol': 'gpt-5.6-sol',
   'gpt-5-6-terra': 'gpt-5.6-terra',
   'gpt-5-6-luna': 'gpt-5.6-luna',
@@ -23,6 +26,8 @@ export const DEEPSWE_MODEL_MAP = {
   'gpt-5-4': 'gpt-5.4',
   'claude-opus-4-8': 'claude-opus-4-8',
   'claude-opus-5': 'claude-opus-5',
+  // Claude Opus 5.5（2026-09-22 发布）：deepswe slug 与 canonical 同名
+  'claude-opus-5-5': 'claude-opus-5-5',
   'claude-fable-5': 'claude-fable-5',
   'claude-fable-5-1': 'claude-fable-5-1',
   'claude-sonnet-5': 'claude-sonnet-5',
@@ -70,12 +75,17 @@ export const BENCHLM_MODEL_MAP = {
   'gpt-6-astra': 'gpt-6-astra',
   'gpt-6': 'gpt-6-astra',
   'astra': 'gpt-6-astra',
+  // GPT-6 Sol/Luna（2026-09-22 发布）：benchlm slug 与 canonical 同名
+  'gpt-6-sol': 'gpt-6-sol',
+  'gpt-6-luna': 'gpt-6-luna',
   'claude-opus-4-8': 'claude-opus-4-8',
   'claude-opus-4-7': 'claude-opus-4-7',
   'claude-opus-4-7-adaptive': 'claude-opus-4-7',
   'claude-opus-4-6': 'claude-opus-4-6',
   'claude-opus-4-6-thinking': 'claude-opus-4-6',
   'claude-opus-5': 'claude-opus-5',
+  // Claude Opus 5.5（2026-09-22 发布）：benchlm slug 与 canonical 同名
+  'claude-opus-5-5': 'claude-opus-5-5',
   'gpt-5-6-terra': 'gpt-5.6-terra',
   'gpt-5-6-sol': 'gpt-5.6-sol',
   'gpt-5-6-luna': 'gpt-5.6-luna',

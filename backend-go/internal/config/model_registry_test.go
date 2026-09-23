@@ -82,6 +82,49 @@ func TestResolveAgentModelProfile_GPT6AstraBuiltins(t *testing.T) {
 	}
 }
 
+func TestResolveAgentModelProfile_GPT6SolLunaBuiltins(t *testing.T) {
+	// Sol/Luna 是独立 tier 模型（非 Astra 别名），effort 比 Astra 多一档 none（官方文档确认）。
+	for _, model := range []string{"gpt-6-sol", "gpt-6-luna"} {
+		t.Run(model, func(t *testing.T) {
+			profile := ResolveAgentModelProfile(model, nil)
+			if !profile.Known {
+				t.Fatalf("expected built-in %s profile", model)
+			}
+			wantDisplay := "GPT-6 Sol"
+			if model == "gpt-6-luna" {
+				wantDisplay = "GPT-6 Luna"
+			}
+			if profile.Profile.DisplayName != wantDisplay {
+				t.Fatalf("DisplayName = %q, want %q", profile.Profile.DisplayName, wantDisplay)
+			}
+			if profile.Profile.ContextWindowTokens != 272000 {
+				t.Fatalf("ContextWindowTokens = %d, want conservative routing minimum 272000", profile.Profile.ContextWindowTokens)
+			}
+			if profile.Profile.MaxContextWindowTokens != 1050000 {
+				t.Fatalf("MaxContextWindowTokens = %d, want 1050000", profile.Profile.MaxContextWindowTokens)
+			}
+			if profile.Profile.MaxOutputTokens != 128000 {
+				t.Fatalf("MaxOutputTokens = %d, want 128000", profile.Profile.MaxOutputTokens)
+			}
+			wantEfforts := []string{"none", "low", "medium", "high", "xhigh", "max"}
+			if len(profile.Profile.ReasoningEfforts) != len(wantEfforts) {
+				t.Fatalf("ReasoningEfforts = %v, want exactly %v", profile.Profile.ReasoningEfforts, wantEfforts)
+			}
+			for _, effort := range wantEfforts {
+				if !containsString(profile.Profile.ReasoningEfforts, effort) {
+					t.Fatalf("ReasoningEfforts = %v, want %s", profile.Profile.ReasoningEfforts, effort)
+				}
+			}
+			if containsString(profile.Profile.ReasoningEfforts, "minimal") {
+				t.Fatalf("ReasoningEfforts = %v, official docs only support none/low/medium/high/xhigh/max", profile.Profile.ReasoningEfforts)
+			}
+			if profile.Profile.SupportsPriorityTier {
+				t.Fatalf("SupportsPriorityTier = true, official docs 未列出 Sol/Luna priority tier 支持")
+			}
+		})
+	}
+}
+
 func TestResolveAgentModelProfile_GPT55UsesLiteLLMMaximumContext(t *testing.T) {
 	profile := ResolveAgentModelProfile("gpt-5.5", nil)
 	if !profile.Known {
@@ -932,6 +975,66 @@ func TestResolveUpstreamCapability_ClaudeOpusAliasesAndOpus5(t *testing.T) {
 				capability.MaxOutputTokens != 128_000 || !capability.Capabilities["reasoning"] ||
 				!capability.Capabilities["vision"] || !capability.Capabilities["toolCalls"] {
 				t.Fatalf("capability = %+v", capability)
+			}
+		})
+	}
+}
+
+func TestResolveUpstreamCapability_ClaudeOpus55Variants(t *testing.T) {
+	tests := []struct {
+		model       string
+		displayName string
+	}{
+		// Opus 5.5 是独立模型（非 Opus 5 别名）
+		{model: "claude-opus-5-5", displayName: "Claude Opus 5.5"},
+		{model: "claude-opus-5.5", displayName: "Claude Opus 5.5"},
+		{model: "claude-opus-5-5-20260922", displayName: "Claude Opus 5.5"},
+		{model: "anthropic/claude-opus-5-5", displayName: "Claude Opus 5.5"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			resolved := ResolveUpstreamCapability(tt.model, nil, nil)
+			if !resolved.Known || resolved.Source != "builtin" {
+				t.Fatalf("resolved = %+v, want builtin capability for %s", resolved, tt.model)
+			}
+			capability := resolved.Capability
+			if capability.DisplayName != tt.displayName || capability.ContextWindowTokens != 1_000_000 ||
+				capability.MaxOutputTokens != 128_000 || !capability.Capabilities["reasoning"] ||
+				!capability.Capabilities["vision"] || !capability.Capabilities["toolCalls"] {
+				t.Fatalf("capability = %+v for model %s", capability, tt.model)
+			}
+			if capability.ThinkingMode != "adaptive_always_on" {
+				t.Fatalf("ThinkingMode = %q, want adaptive_always_on", capability.ThinkingMode)
+			}
+		})
+	}
+}
+
+func TestResolveUpstreamCapability_GPT6SolLuna(t *testing.T) {
+	tests := []struct {
+		model       string
+		displayName string
+	}{
+		// Sol/Luna 是 GPT-6 家族独立 tier；裸 gpt-6 仍指向 Astra（另有测试覆盖）
+		{model: "gpt-6-sol", displayName: "GPT-6 Sol"},
+		{model: "openai/gpt-6-sol", displayName: "GPT-6 Sol"},
+		{model: "gpt-6-luna", displayName: "GPT-6 Luna"},
+		{model: "openai/gpt-6-luna", displayName: "GPT-6 Luna"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			resolved := ResolveUpstreamCapability(tt.model, nil, nil)
+			if !resolved.Known || resolved.Source != "builtin" {
+				t.Fatalf("resolved = %+v, want builtin capability for %s", resolved, tt.model)
+			}
+			capability := resolved.Capability
+			if capability.DisplayName != tt.displayName || capability.ContextWindowTokens != 1_050_000 ||
+				capability.MaxOutputTokens != 128_000 || !capability.Capabilities["reasoning"] ||
+				!capability.Capabilities["vision"] || !capability.Capabilities["toolCalls"] ||
+				!capability.Capabilities["webSearch"] {
+				t.Fatalf("capability = %+v for model %s", capability, tt.model)
 			}
 		})
 	}

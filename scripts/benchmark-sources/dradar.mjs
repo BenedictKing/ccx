@@ -24,6 +24,9 @@ import { warnNewModelCandidates } from './mapper.mjs'
 
 export const DRADAR_MODEL_MAP = {
   'gpt-6-astra': 'gpt-6-astra',
+  // GPT-6 Sol/Luna（2026-09-22 发布）：dradar slug 与 canonical 同名
+  'gpt-6-sol': 'gpt-6-sol',
+  'gpt-6-luna': 'gpt-6-luna',
   'gpt-5.6-sol': 'gpt-5.6-sol',
   'gpt-5.6-terra': 'gpt-5.6-terra',
   'gpt-5.6-luna': 'gpt-5.6-luna',
@@ -32,6 +35,8 @@ export const DRADAR_MODEL_MAP = {
   'gpt-5-4-mini': 'gpt-5.4-mini',
   'claude-opus-4-8': 'claude-opus-4-8',
   'claude-opus-5': 'claude-opus-5',
+  // Claude Opus 5.5（2026-09-22 发布）：dradar slug 与 canonical 同名
+  'claude-opus-5-5': 'claude-opus-5-5',
   'claude-sonnet-5': 'claude-sonnet-5',
   'claude-sonnet-4-6': 'claude-sonnet-4-6',
   'claude-haiku-4-5': 'claude-haiku-4.5',

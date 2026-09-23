@@ -91,6 +91,8 @@ export const LITELLM_MODEL_MAP = {
   // Claude（pattern 用连字符；旧版 value 曾误用点号导致匹配失败，已修正）
   'claude-opus-4-8': 'claude-opus-4-8',
   'claude-opus-5': 'claude-opus-5',
+  // Claude Opus 5.5（2026-09-22 发布）：litellm slug 与 canonical 同名
+  'claude-opus-5-5': 'claude-opus-5-5',
   'claude-sonnet-5': 'claude-sonnet-5',
   'claude-sonnet-4-6': 'claude-sonnet-4-6',
   'claude-haiku-4-5-20251001': 'claude-haiku-4-5',
@@ -104,6 +106,9 @@ export const LITELLM_MODEL_MAP = {
   'gpt-6-astra': 'gpt-6-astra',
   'gpt-6': 'gpt-6-astra',
   'astra': 'gpt-6-astra',
+  // GPT-6 Sol/Luna（2026-09-22 发布）：litellm slug 与 canonical 同名
+  'gpt-6-sol': 'gpt-6-sol',
+  'gpt-6-luna': 'gpt-6-luna',
   'gpt-5.6-sol': 'gpt-5.6-sol',
   'gpt-5.6-terra': 'gpt-5.6-terra',
   'gpt-5.6-luna': 'gpt-5.6-luna',

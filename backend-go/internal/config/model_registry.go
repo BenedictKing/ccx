@@ -256,6 +256,17 @@ func BuiltinAgentModelProfiles() map[string]AgentModelProfile {
 			"GPT-6 Astra", 272000, 1050000, 128000, "tokens",
 			[]string{"low", "medium", "high", "xhigh", "max"}, true,
 		),
+		// GPT-6 Sol/Luna（2026-09-22 发布）是独立 tier 模型（非 Astra 别名）：
+		// Sol $2/$10 中档编码与 agent，Luna $0.10/$0.50 低成本高频；effort 多一档 none。
+		// Priority Tier 未见官方文档支持，保守关闭，待有证据再开。
+		"gpt-6-sol": builtinGPTAgentModelProfile(
+			"GPT-6 Sol", 272000, 1050000, 128000, "tokens",
+			[]string{"none", "low", "medium", "high", "xhigh", "max"}, false,
+		),
+		"gpt-6-luna": builtinGPTAgentModelProfile(
+			"GPT-6 Luna", 272000, 1050000, 128000, "tokens",
+			[]string{"none", "low", "medium", "high", "xhigh", "max"}, false,
+		),
 		"claude-haiku-4-5*": {
 			DisplayName:         "Claude Haiku 4.5",
 			ContextWindowTokens: 200000,
@@ -300,6 +311,13 @@ func BuiltinAgentModelProfiles() map[string]AgentModelProfile {
 		},
 		"claude-opus-5*": {
 			DisplayName:         "Claude Opus 5",
+			ContextWindowTokens: 1000000,
+			MaxOutputTokens:     128000,
+			ReasoningEfforts:    []string{"low", "medium", "high", "xhigh", "max"},
+		},
+		// Opus 5.5 是独立模型（非 Opus 5 别名）；pattern 更长，resolvePatternValue 长度降序保证优先命中。
+		"claude-opus-5-5*": {
+			DisplayName:         "Claude Opus 5.5",
 			ContextWindowTokens: 1000000,
 			MaxOutputTokens:     128000,
 			ReasoningEfforts:    []string{"low", "medium", "high", "xhigh", "max"},
