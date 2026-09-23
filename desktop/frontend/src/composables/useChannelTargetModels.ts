@@ -4,7 +4,6 @@ import type { Channel } from '@/services/admin-api'
 import { filterValidSupportedModelPatterns, parseSupportedModelInput } from '@/utils/channel-dialog-state'
 import { getChannelTypeApi, type ManagedChannelType } from '@/utils/channel-type-api'
 import { sortModelNamesDesc } from '@/utils/model-priority'
-import type { ModelMappingRow } from '@/composables/useChannelModelMapping'
 
 type Translator = (key: string) => string
 type ServiceType = 'openai' | 'claude' | 'gemini' | 'responses' | 'copilot' | ''
@@ -34,8 +33,6 @@ type ChannelTargetModelsOptions = {
   getHeadersAsObject: () => Record<string, string>
   getSubmitApiKeys: () => string[]
   keyModelsStatus: Ref<Map<string, KeyModelsStatus>>
-  modelMappingRows: Ref<ModelMappingRow[]>
-  newModelMapping: ModelMappingRow
   t: Translator
 }
 
@@ -54,30 +51,6 @@ export function useChannelTargetModels(options: ChannelTargetModelsOptions) {
 
   watch(() => options.channel()?.index, () => {
     resetTargetModelState(true)
-  })
-
-  const sourceModelPresetOptions = computed(() => {
-    if (options.channelType() === 'chat') {
-      return ['codex', 'gpt', 'mini', 'gpt-5', 'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini']
-    }
-    if (options.channelType() === 'images') {
-      return ['gpt-image-2', 'gpt-image-1', 'dall-e-3', 'dall-e-2']
-    }
-    if (options.channelType() === 'vectors') {
-      return []
-    }
-    if (options.channelType() === 'gemini') {
-      return ['gemini-3.5-flash', 'gemini-3.1-pro-preview', 'gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite', 'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2']
-    }
-    if (options.channelType() === 'responses') {
-      return ['codex', 'codex-auto-review', 'gpt-5', 'gpt', 'mini', 'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini']
-    }
-    return ['fable', 'opus', 'sonnet', 'haiku']
-  })
-
-  const sourceModelOptions = computed(() => {
-    const configuredSources = new Set(options.modelMappingRows.value.map(row => row.source))
-    return sourceModelPresetOptions.value.filter(model => !configuredSources.has(model))
   })
 
   const targetModelDatalist = computed(() => {
@@ -106,27 +79,6 @@ export function useChannelTargetModels(options: ChannelTargetModelsOptions) {
   ))
 
   const selectedSupportedModelSet = computed(() => new Set(normalizedSupportedModelState.value.validPatterns))
-
-  const isPresetSourceModel = (value: string): boolean => sourceModelPresetOptions.value.includes(value)
-
-  const validateSourceModelName = (value: string): string => {
-    const source = value.trim()
-    if (!source) return ''
-    if (!isPresetSourceModel(source) && source.length > 50) return options.t('addChannel.sourceModelNameTooLong')
-    if (/\s/.test(source)) return options.t('addChannel.sourceModelNoSpaces')
-    if (!/^[\w.\-/:@+]+$/.test(source)) return options.t('addChannel.sourceModelInvalidChars')
-    return ''
-  }
-
-  const sourceMappingError = computed(() => {
-    const source = options.newModelMapping.source.trim()
-    if (!source) return ''
-    const sourceNameError = validateSourceModelName(source)
-    if (sourceNameError) return sourceNameError
-    return options.modelMappingRows.value.some(row => row.source === source)
-      ? options.t('channelEditor.mapping.source.duplicate')
-      : ''
-  })
 
   function toggleSupportedModelFilter(filter: string) {
     const current = [...normalizedSupportedModelState.value.validPatterns]
@@ -259,13 +211,11 @@ export function useChannelTargetModels(options: ChannelTargetModelsOptions) {
     targetModelOptions,
     fetchedModelsError,
     hasTriedFetchModels,
-    sourceModelOptions,
     targetModelDatalist,
     commonSupportedModelFilters,
     normalizedSupportedModelState,
     supportedModelsError,
     selectedSupportedModelSet,
-    sourceMappingError,
     resetTargetModelState,
     toggleSupportedModelFilter,
     fetchTargetModels,

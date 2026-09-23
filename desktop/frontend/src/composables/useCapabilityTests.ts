@@ -927,25 +927,6 @@ export function useCapabilityTests() {
     }
   }
 
-  // ── Model Mapping ──
-
-  /** 一键建映射：把「源模型名 → 实测真实模型」写入渠道 modelMapping（后端 upsert 合并语义） */
-  async function createModelMapping(
-    channelType: string,
-    channelId: number,
-    sourcePattern: string,
-    targetModel: string,
-  ) {
-    await api.put(`/api/${channelType}/channels/${channelId}/mappings`, {
-      source_pattern: sourcePattern,
-      target_model: targetModel,
-      reasoning: '',
-    })
-    if (isManagedChannelType(channelType)) {
-      await refreshChannels(channelType)
-    }
-  }
-
   // ── Reset ──
 
   function reset() {
@@ -1025,7 +1006,6 @@ export function useCapabilityTests() {
     retryModel,
     retryModelForProtocol,
     copyToTab,
-    createModelMapping,
     closeDialog,
     reset,
     // computed helpers

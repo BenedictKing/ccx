@@ -4,8 +4,6 @@ export type ClaudeMessagesReasoningEffort = "none" | "minimal" | "low" | "medium
 export type ClaudeMessagesReasoningParamStyle = '' | 'reasoning' | 'reasoning_effort' | 'thinking'
 
 export interface ClaudeMessagesPreset {
-  modelMapping: Record<string, string>
-  reasoningMapping: Partial<Record<string, ClaudeMessagesReasoningEffort>>
   reasoningParamStyle: ClaudeMessagesReasoningParamStyle
   serviceType?: 'openai' | 'gemini' | 'claude' | 'responses' | 'copilot'
   authHeader: '' | 'auto' | 'bearer' | 'x-api-key'
@@ -13,331 +11,122 @@ export interface ClaudeMessagesPreset {
   normalizeMetadataUserId?: boolean
   stripBillingHeader?: boolean
   noVision: boolean
-  noVisionModels: string[]
-  visionFallbackModel: string
   rateLimitRpm?: number
 }
 
 export const claudeMessagesPresets: Record<string, ClaudeMessagesPreset> = {
   "deepseek": {
-    "modelMapping": {
-      "fable": "deepseek-v4-pro",
-      "haiku": "deepseek-flash",
-      "opus": "deepseek-v4-pro",
-      "sonnet": "deepseek-v4-pro"
-    },
-    "reasoningMapping": {},
     "reasoningParamStyle": "reasoning",
     "authHeader": "",
     "normalizeSystemRoleToTopLevel": true,
     "noVision": false,
-    "noVisionModels": [
-      "deepseek-v4-pro"
-    ],
-    "visionFallbackModel": "",
     "normalizeMetadataUserId": true,
     "stripBillingHeader": true
   },
   "mimo": {
-    "modelMapping": {
-      "fable": "mimo-v2.5-pro",
-      "haiku": "mimo-v2.5-pro",
-      "opus": "mimo-v2.5-pro",
-      "sonnet": "mimo-v2.5-pro"
-    },
-    "reasoningMapping": {
-      "fable": "max",
-      "haiku": "high",
-      "mimo-v2.5": "max",
-      "opus": "max",
-      "sonnet": "max"
-    },
     "reasoningParamStyle": "thinking",
     "authHeader": "",
     "normalizeSystemRoleToTopLevel": true,
     "noVision": false,
-    "noVisionModels": [
-      "mimo-v2.5-pro"
-    ],
-    "visionFallbackModel": "mimo-v2.5",
     "rateLimitRpm": 80
   },
   "compshare": {
-    "modelMapping": {
-      "fable": "glm-5.2",
-      "haiku": "deepseek-v4-flash",
-      "opus": "glm-5.2",
-      "sonnet": "glm-5.2"
-    },
-    "reasoningMapping": {
-      "MiniMax-M2.7": "xhigh",
-      "fable": "max",
-      "haiku": "high",
-      "opus": "max",
-      "sonnet": "max"
-    },
     "reasoningParamStyle": "reasoning",
     "authHeader": "",
     "normalizeSystemRoleToTopLevel": true,
-    "noVision": false,
-    "noVisionModels": [
-      "glm-5.2",
-      "deepseek-v4-flash"
-    ],
-    "visionFallbackModel": "MiniMax-M2.7"
+    "noVision": false
   },
   "runapi": {
-    "modelMapping": {},
-    "reasoningMapping": {},
     "reasoningParamStyle": "",
     "authHeader": "",
     "normalizeSystemRoleToTopLevel": false,
-    "noVision": false,
-    "noVisionModels": [],
-    "visionFallbackModel": ""
+    "noVision": false
   },
   "unity2": {
-    "modelMapping": {},
-    "reasoningMapping": {},
     "reasoningParamStyle": "",
     "authHeader": "",
     "normalizeSystemRoleToTopLevel": false,
-    "noVision": false,
-    "noVisionModels": [],
-    "visionFallbackModel": ""
+    "noVision": false
   },
   "kimi": {
-    "modelMapping": {
-      "fable": "kimi-k2.6",
-      "haiku": "kimi-k2.6",
-      "opus": "kimi-k2.6",
-      "sonnet": "kimi-k2.6"
-    },
-    "reasoningMapping": {},
     "reasoningParamStyle": "",
     "authHeader": "",
     "normalizeSystemRoleToTopLevel": true,
-    "noVision": false,
-    "noVisionModels": [],
-    "visionFallbackModel": ""
+    "noVision": false
   },
   "glm": {
-    "modelMapping": {
-      "fable": "glm-5.2",
-      "haiku": "glm-5.2",
-      "opus": "glm-5.2",
-      "sonnet": "glm-5.2"
-    },
-    "reasoningMapping": {},
     "reasoningParamStyle": "",
     "authHeader": "",
     "normalizeSystemRoleToTopLevel": true,
-    "noVision": false,
-    "noVisionModels": [],
-    "visionFallbackModel": ""
+    "noVision": false
   },
   "sensenova": {
-    "modelMapping": {
-      "fable": "glm-5.2",
-      "haiku": "deepseek-v4-flash",
-      "opus": "glm-5.2",
-      "sonnet": "glm-5.2"
-    },
-    "reasoningMapping": {},
     "reasoningParamStyle": "",
     "authHeader": "",
     "normalizeSystemRoleToTopLevel": true,
-    "noVision": false,
-    "noVisionModels": [
-      "glm-5.2",
-      "deepseek-v4-flash"
-    ],
-    "visionFallbackModel": "sensenova-6.7-flash-lite"
+    "noVision": false
   },
   "minimax": {
-    "modelMapping": {
-      "fable": "MiniMax-M3",
-      "haiku": "MiniMax-M2.7",
-      "opus": "MiniMax-M3",
-      "sonnet": "MiniMax-M3"
-    },
-    "reasoningMapping": {},
     "reasoningParamStyle": "",
     "authHeader": "",
     "normalizeSystemRoleToTopLevel": true,
-    "noVision": false,
-    "noVisionModels": [
-      "MiniMax-M2.7"
-    ],
-    "visionFallbackModel": "MiniMax-M3"
+    "noVision": false
   },
   "dashscope": {
-    "modelMapping": {
-      "fable": "glm-5.2",
-      "haiku": "glm-5.2",
-      "opus": "glm-5.2",
-      "sonnet": "glm-5.2"
-    },
-    "reasoningMapping": {},
     "reasoningParamStyle": "",
     "authHeader": "",
     "normalizeSystemRoleToTopLevel": true,
-    "noVision": false,
-    "noVisionModels": [],
-    "visionFallbackModel": ""
+    "noVision": false
   },
   "opencode-zen": {
-    "modelMapping": {
-      "fable": "glm-5.2",
-      "haiku": "deepseek-v4-flash",
-      "opus": "glm-5.2",
-      "sonnet": "minimax-m3"
-    },
-    "reasoningMapping": {
-      "fable": "max",
-      "haiku": "high",
-      "minimax-m3": "max",
-      "opus": "max",
-      "sonnet": "max"
-    },
     "reasoningParamStyle": "reasoning",
     "authHeader": "bearer",
     "normalizeSystemRoleToTopLevel": true,
     "noVision": false,
-    "noVisionModels": [
-      "glm-5.2",
-      "deepseek-v4-flash"
-    ],
-    "visionFallbackModel": "minimax-m3",
     "serviceType": "openai"
   },
   "opencode-go": {
-    "modelMapping": {
-      "fable": "glm-5.2",
-      "haiku": "deepseek-v4-flash",
-      "opus": "glm-5.2",
-      "sonnet": "minimax-m3"
-    },
-    "reasoningMapping": {
-      "fable": "max",
-      "haiku": "high",
-      "minimax-m3": "max",
-      "opus": "max",
-      "sonnet": "max"
-    },
     "reasoningParamStyle": "reasoning",
     "authHeader": "bearer",
     "normalizeSystemRoleToTopLevel": true,
     "noVision": false,
-    "noVisionModels": [
-      "glm-5.2",
-      "deepseek-v4-flash"
-    ],
-    "visionFallbackModel": "minimax-m3",
     "serviceType": "openai"
   },
   "modelscope": {
-    "modelMapping": {
-      "fable": "ZhipuAI/GLM-5.2",
-      "haiku": "deepseek-ai/DeepSeek-V4-Flash",
-      "opus": "ZhipuAI/GLM-5.2",
-      "sonnet": "ZhipuAI/GLM-5.2"
-    },
-    "reasoningMapping": {},
     "reasoningParamStyle": "",
     "authHeader": "",
     "normalizeSystemRoleToTopLevel": true,
-    "noVision": false,
-    "noVisionModels": [
-      "deepseek-ai/DeepSeek-V4-Flash"
-    ],
-    "visionFallbackModel": "MiniMax/MiniMax-M2.7"
+    "noVision": false
   },
   "volc-ark": {
-    "modelMapping": {
-      "fable": "glm-5.3",
-      "haiku": "deepseek-v4-flash",
-      "opus": "glm-5.3",
-      "sonnet": "glm-5.3"
-    },
-    "reasoningMapping": {
-      "fable": "max",
-      "haiku": "high",
-      "opus": "max",
-      "sonnet": "max",
-      "minimax-m3": "xhigh"
-    },
     "reasoningParamStyle": "reasoning",
     "authHeader": "",
     "normalizeSystemRoleToTopLevel": true,
-    "noVision": false,
-    "noVisionModels": [
-      "glm-5.3",
-      "deepseek-v4-flash"
-    ],
-    "visionFallbackModel": "minimax-m3"
+    "noVision": false
   },
   "qianfan": {
-    "modelMapping": {
-      "fable": "qianfan-code-latest",
-      "haiku": "qianfan-code-latest",
-      "opus": "qianfan-code-latest",
-      "sonnet": "qianfan-code-latest"
-    },
-    "reasoningMapping": {},
     "reasoningParamStyle": "",
     "authHeader": "",
     "normalizeSystemRoleToTopLevel": true,
-    "noVision": false,
-    "noVisionModels": [],
-    "visionFallbackModel": ""
+    "noVision": false
   },
   "xfyun": {
-    "modelMapping": {
-      "fable": "astron-code-latest",
-      "haiku": "astron-code-latest",
-      "opus": "astron-code-latest",
-      "sonnet": "astron-code-latest"
-    },
-    "reasoningMapping": {},
     "reasoningParamStyle": "",
     "authHeader": "",
     "normalizeSystemRoleToTopLevel": true,
-    "noVision": false,
-    "noVisionModels": [],
-    "visionFallbackModel": ""
+    "noVision": false
   },
   "tencent-lkeap": {
-    "modelMapping": {},
-    "reasoningMapping": {},
     "reasoningParamStyle": "",
     "authHeader": "",
     "normalizeSystemRoleToTopLevel": true,
-    "noVision": false,
-    "noVisionModels": [],
-    "visionFallbackModel": ""
+    "noVision": false
   },
   "atomgit": {
-    "modelMapping": {
-      "fable": "glm-5.2-200k",
-      "haiku": "glm-5.2-200k",
-      "opus": "glm-5.2-200k",
-      "sonnet": "glm-5.2-200k"
-    },
-    "reasoningMapping": {
-      "fable": "max",
-      "haiku": "high",
-      "opus": "max",
-      "sonnet": "max"
-    },
     "reasoningParamStyle": "thinking",
     "authHeader": "",
     "normalizeSystemRoleToTopLevel": true,
     "noVision": false,
-    "noVisionModels": [
-      "glm-5.2-200k"
-    ],
-    "visionFallbackModel": "",
     "serviceType": "openai"
   }
 }

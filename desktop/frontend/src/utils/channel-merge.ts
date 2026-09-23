@@ -5,7 +5,7 @@ import type { Channel } from '@/services/admin-api'
  *
  * 职责：
  * 1. 将新拉取的 channels 与本地缓存的 latency 测试结果合并（5 分钟有效期内保留本地 latency）
- * 2. 冻结不可变字段（apiKeys/disabledApiKeys/modelMapping），避免 Vue 深度 Proxy 化
+ * 2. 冻结不可变字段（apiKeys/disabledApiKeys），避免 Vue 深度 Proxy 化
  *
  * 抽离为独立模块便于单元测试，原闭包版本在 stores/channel.ts。
  */
@@ -26,9 +26,6 @@ export function freezeImmutableFields(ch: Channel): Channel {
   }
   if (Array.isArray(ch.disabledApiKeys) && !Object.isFrozen(ch.disabledApiKeys)) {
     Object.freeze(ch.disabledApiKeys)
-  }
-  if (ch.modelMapping && typeof ch.modelMapping === 'object' && !Object.isFrozen(ch.modelMapping)) {
-    Object.freeze(ch.modelMapping)
   }
   return ch
 }

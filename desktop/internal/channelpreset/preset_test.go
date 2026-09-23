@@ -17,14 +17,8 @@ func TestBuildPayload(t *testing.T) {
 		wantCodex             bool
 		wantStripCodex        bool
 		wantModels            []string
-		wantModelMap          map[string]string
-		wantNoModelMap        bool
-		wantReasoning         map[string]string
-		wantNoReasoningMap    bool
 		wantReasoningStyle    string
-		wantFallback          string
 		wantNormalizeSystem   bool
-		wantNoVisionModels    []string
 		wantAuthHeader        string
 	}{
 		{
@@ -32,35 +26,24 @@ func TestBuildPayload(t *testing.T) {
 			req:                   CreateChannelRequest{Provider: ProviderDeepSeek, Target: TargetMessages, APIKey: "sk-test"},
 			wantBaseURL:           "https://api.deepseek.com/anthropic",
 			wantService:           "claude",
-			wantVision:            true,
+			wantVision:            false,
 			wantNormalizeMetadata: boolRef(true),
 			wantStripBilling:      true,
 			wantNormalizeSystem:   true,
-			wantModelMap: map[string]string{
-				"fable":  "deepseek-v4-pro",
-				"haiku":  "deepseek-v4-flash",
-				"opus":   "deepseek-v4-pro",
-				"sonnet": "deepseek-v4-pro",
-			},
 		},
 		{
-			name:          "deepseek chat (openai endpoint)",
-			req:           CreateChannelRequest{Provider: ProviderDeepSeek, Target: TargetChat, APIKey: "sk-test"},
-			wantBaseURL:   "https://api.deepseek.com/v1",
-			wantService:   "openai",
-			wantVision:    true,
+			name:        "deepseek chat (openai endpoint)",
+			req:         CreateChannelRequest{Provider: ProviderDeepSeek, Target: TargetChat, APIKey: "sk-test"},
+			wantBaseURL: "https://api.deepseek.com/v1",
+			wantService: "openai",
+			wantVision:  false,
 		},
 		{
-			name:           "deepseek responses (openai endpoint)",
-			req:            CreateChannelRequest{Provider: ProviderDeepSeek, Target: TargetResponses, APIKey: "sk-test"},
-			wantBaseURL:    "https://api.deepseek.com/v1",
-			wantService:    "openai",
-			wantVision:     true,
-			wantModelMap: map[string]string{
-				"codex": "deepseek-v4-flash",
-				"gpt":   "deepseek-v4-pro",
-				"mini":  "deepseek-v4-flash",
-			},
+			name:        "deepseek responses (openai endpoint)",
+			req:         CreateChannelRequest{Provider: ProviderDeepSeek, Target: TargetResponses, APIKey: "sk-test"},
+			wantBaseURL: "https://api.deepseek.com/v1",
+			wantService: "openai",
+			wantVision:  false,
 		},
 		{
 			name:                "mimo messages (token plan)",
@@ -68,22 +51,7 @@ func TestBuildPayload(t *testing.T) {
 			wantBaseURL:         "https://token-plan-sgp.xiaomimimo.com/anthropic",
 			wantService:         "claude",
 			wantNormalizeSystem: true,
-			wantModelMap: map[string]string{
-				"fable":  "mimo-v2.5-pro",
-				"haiku":  "mimo-v2.5-pro",
-				"opus":   "mimo-v2.5-pro",
-				"sonnet": "mimo-v2.5-pro",
-			},
-			wantReasoning: map[string]string{
-				"fable":     "max",
-				"haiku":     "high",
-				"mimo-v2.5": "max",
-				"opus":      "max",
-				"sonnet":    "max",
-			},
-			wantReasoningStyle: "thinking",
-			wantNoVisionModels: []string{"mimo-v2.5-pro"},
-			wantFallback:       "mimo-v2.5",
+			wantReasoningStyle:  "thinking",
 		},
 		{
 			name:                "mimo messages (auto plan)",
@@ -91,15 +59,7 @@ func TestBuildPayload(t *testing.T) {
 			wantBaseURL:         "https://api.xiaomimimo.com/anthropic",
 			wantService:         "claude",
 			wantNormalizeSystem: true,
-			wantModelMap: map[string]string{
-				"fable":  "mimo-v2.5-pro",
-				"haiku":  "mimo-v2.5-pro",
-				"opus":   "mimo-v2.5-pro",
-				"sonnet": "mimo-v2.5-pro",
-			},
-			wantReasoningStyle: "thinking",
-			wantNoVisionModels: []string{"mimo-v2.5-pro"},
-			wantFallback:       "mimo-v2.5",
+			wantReasoningStyle:  "thinking",
 		},
 		{
 			name:               "mimo chat",
@@ -107,30 +67,15 @@ func TestBuildPayload(t *testing.T) {
 			wantBaseURL:        "https://api.xiaomimimo.com/v1",
 			wantService:        "openai",
 			wantReasoningStyle: "thinking",
-			wantNoVisionModels: []string{"mimo-v2.5-pro"},
-			wantFallback:       "mimo-v2.5",
 		},
 		{
-			name:           "mimo responses",
-			req:            CreateChannelRequest{Provider: ProviderMiMo, Target: TargetResponses, APIKey: "tp-test"},
-			wantBaseURL:    "https://api.xiaomimimo.com/v1",
-			wantService:    "responses",
-			wantCodex:      true,
-			wantStripCodex: true,
-			wantModelMap: map[string]string{
-				"codex": "mimo-v2.5-pro",
-				"gpt":   "mimo-v2.5-pro",
-				"mini":  "mimo-v2.5-pro",
-			},
-			wantReasoning: map[string]string{
-				"codex":     "high",
-				"gpt":       "high",
-				"mimo-v2.5": "high",
-				"mini":      "high",
-			},
+			name:               "mimo responses",
+			req:                CreateChannelRequest{Provider: ProviderMiMo, Target: TargetResponses, APIKey: "tp-test"},
+			wantBaseURL:        "https://api.xiaomimimo.com/v1",
+			wantService:        "responses",
+			wantCodex:          true,
+			wantStripCodex:     true,
 			wantReasoningStyle: "reasoning",
-			wantNoVisionModels: []string{"mimo-v2.5-pro"},
-			wantFallback:       "mimo-v2.5",
 		},
 		{
 			name:                "compshare messages",
@@ -139,67 +84,46 @@ func TestBuildPayload(t *testing.T) {
 			wantService:         "claude",
 			wantVision:          false,
 			wantNormalizeSystem: true,
-			wantModelMap: map[string]string{
-				"fable":  "glm-5.2",
-				"haiku":  "deepseek-v4-flash",
-				"opus":   "glm-5.2",
-				"sonnet": "glm-5.2",
-			},
-			wantNoVisionModels: []string{"glm-5.2", "deepseek-v4-flash"},
-			wantFallback:       "MiniMax-M2.7",
 		},
 		{
-			name:               "compshare chat",
-			req:                CreateChannelRequest{Provider: ProviderCompshare, Target: TargetChat, APIKey: "cs-test"},
-			wantBaseURL:        "https://cp.compshare.cn/v1",
-			wantService:        "openai",
-			wantVision:         false,
-			wantNoVisionModels: []string{"glm-5.2", "deepseek-v4-flash"},
-			wantFallback:       "MiniMax-M2.7",
+			name:        "compshare chat",
+			req:         CreateChannelRequest{Provider: ProviderCompshare, Target: TargetChat, APIKey: "cs-test"},
+			wantBaseURL: "https://cp.compshare.cn/v1",
+			wantService: "openai",
+			wantVision:  false,
 		},
 		{
-			name:           "compshare responses",
-			req:            CreateChannelRequest{Provider: ProviderCompshare, Target: TargetResponses, APIKey: "cs-test"},
-			wantBaseURL:    "https://cp.compshare.cn/v1",
-			wantService:    "openai",
-			wantVision:     false,
-			wantModelMap: map[string]string{
-				"codex": "deepseek-v4-flash",
-				"gpt":   "glm-5.2",
-				"mini":  "deepseek-v4-flash",
-			},
-			wantNoVisionModels: []string{"glm-5.2", "deepseek-v4-flash"},
-			wantFallback:       "MiniMax-M2.7",
+			name:        "compshare responses",
+			req:         CreateChannelRequest{Provider: ProviderCompshare, Target: TargetResponses, APIKey: "cs-test"},
+			wantBaseURL: "https://cp.compshare.cn/v1",
+			wantService: "openai",
+			wantVision:  false,
 		},
 		{
-			name:           "runapi messages",
-			req:            CreateChannelRequest{Provider: ProviderRunAPI, Target: TargetMessages, APIKey: "runapi-test"},
+			name:        "runapi messages",
+			req:         CreateChannelRequest{Provider: ProviderRunAPI, Target: TargetMessages, APIKey: "runapi-test"},
+			wantBaseURL: "https://runapi.co/v1",
+			wantService: "claude",
+		},
+		{
+			name:        "runapi chat",
+			req:         CreateChannelRequest{Provider: ProviderRunAPI, Target: TargetChat, APIKey: "runapi-test"},
+			wantBaseURL: "https://runapi.co/v1",
+			wantService: "openai",
+		},
+		{
+			name:           "runapi responses",
+			req:            CreateChannelRequest{Provider: ProviderRunAPI, Target: TargetResponses, APIKey: "runapi-test"},
 			wantBaseURL:    "https://runapi.co/v1",
-			wantService:    "claude",
-			wantNoModelMap: true,
+			wantService:    "responses",
+			wantCodex:      false,
+			wantStripCodex: false,
 		},
 		{
-			name:           "runapi chat",
-			req:            CreateChannelRequest{Provider: ProviderRunAPI, Target: TargetChat, APIKey: "runapi-test"},
-			wantBaseURL:    "https://runapi.co/v1",
-			wantService:    "openai",
-			wantNoModelMap: true,
-		},
-		{
-			name:               "runapi responses",
-			req:                CreateChannelRequest{Provider: ProviderRunAPI, Target: TargetResponses, APIKey: "runapi-test"},
-			wantBaseURL:        "https://runapi.co/v1",
-			wantService:        "responses",
-			wantCodex:          false,
-			wantStripCodex:     false,
-			wantNoModelMap:     true,
-			wantNoReasoningMap: true,
-		},
-		{
-			name:          "kimi chat",
-			req:           CreateChannelRequest{Provider: ProviderKimi, Target: TargetChat, APIKey: "sk-test"},
-			wantBaseURL:   "https://api.moonshot.cn/v1",
-			wantService:   "openai",
+			name:        "kimi chat",
+			req:         CreateChannelRequest{Provider: ProviderKimi, Target: TargetChat, APIKey: "sk-test"},
+			wantBaseURL: "https://api.moonshot.cn/v1",
+			wantService: "openai",
 		},
 		{
 			name:           "kimi responses",
@@ -216,7 +140,6 @@ func TestBuildPayload(t *testing.T) {
 			wantService:    "openai",
 			wantCodex:      true,
 			wantStripCodex: true,
-			wantModelMap:   map[string]string{"codex": "kimi-for-coding", "gpt": "kimi-for-coding"},
 		},
 		{
 			name:                "kimi coding plan messages",
@@ -224,18 +147,12 @@ func TestBuildPayload(t *testing.T) {
 			wantBaseURL:         "https://api.kimi.com/coding",
 			wantService:         "claude",
 			wantNormalizeSystem: true,
-			wantModelMap: map[string]string{
-				"fable":  "kimi-for-coding",
-				"haiku":  "kimi-for-coding",
-				"opus":   "kimi-for-coding",
-				"sonnet": "kimi-for-coding",
-			},
 		},
 		{
-			name:          "glm chat",
-			req:           CreateChannelRequest{Provider: ProviderGLM, Target: TargetChat, APIKey: "sk-test"},
-			wantBaseURL:   "https://open.bigmodel.cn/api/coding/paas/v4#",
-			wantService:   "openai",
+			name:        "glm chat",
+			req:         CreateChannelRequest{Provider: ProviderGLM, Target: TargetChat, APIKey: "sk-test"},
+			wantBaseURL: "https://open.bigmodel.cn/api/coding/paas/v4#",
+			wantService: "openai",
 		},
 		{
 			name:           "glm responses",
@@ -246,10 +163,10 @@ func TestBuildPayload(t *testing.T) {
 			wantStripCodex: true,
 		},
 		{
-			name:          "minimax chat",
-			req:           CreateChannelRequest{Provider: ProviderMiniMax, Target: TargetChat, APIKey: "sk-test"},
-			wantBaseURL:   "https://api.minimax.chat/v1",
-			wantService:   "openai",
+			name:        "minimax chat",
+			req:         CreateChannelRequest{Provider: ProviderMiniMax, Target: TargetChat, APIKey: "sk-test"},
+			wantBaseURL: "https://api.minimax.chat/v1",
+			wantService: "openai",
 		},
 		{
 			name:           "minimax responses",
@@ -258,13 +175,12 @@ func TestBuildPayload(t *testing.T) {
 			wantService:    "openai",
 			wantCodex:      false,
 			wantStripCodex: false,
-			wantModelMap:   map[string]string{"codex": "MiniMax-M2.7", "gpt": "MiniMax-M3", "mini": "MiniMax-M2.7"},
 		},
 		{
-			name:          "dashscope chat",
-			req:           CreateChannelRequest{Provider: ProviderDashScope, Target: TargetChat, APIKey: "sk-test"},
-			wantBaseURL:   "https://dashscope.aliyuncs.com/compatible-mode/v1",
-			wantService:   "openai",
+			name:        "dashscope chat",
+			req:         CreateChannelRequest{Provider: ProviderDashScope, Target: TargetChat, APIKey: "sk-test"},
+			wantBaseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+			wantService: "openai",
 		},
 		{
 			name:           "dashscope responses",
@@ -273,14 +189,6 @@ func TestBuildPayload(t *testing.T) {
 			wantService:    "openai",
 			wantCodex:      true,
 			wantStripCodex: true,
-			wantModelMap: map[string]string{
-				"codex": "deepseek-v4-flash",
-				"gpt":   "deepseek-v4-pro",
-				"mini":  "deepseek-v4-flash",
-			},
-			wantReasoning: map[string]string{
-				"gpt": "max",
-			},
 		},
 		{
 			name:           "dashscope coding plan responses",
@@ -289,14 +197,6 @@ func TestBuildPayload(t *testing.T) {
 			wantService:    "openai",
 			wantCodex:      true,
 			wantStripCodex: true,
-			wantModelMap: map[string]string{
-				"codex": "deepseek-v4-flash",
-				"gpt":   "deepseek-v4-pro",
-				"mini":  "deepseek-v4-flash",
-			},
-			wantReasoning: map[string]string{
-				"gpt": "max",
-			},
 		},
 		{
 			name:                "dashscope coding plan messages",
@@ -306,10 +206,10 @@ func TestBuildPayload(t *testing.T) {
 			wantNormalizeSystem: true,
 		},
 		{
-			name:          "dashscope coding plan chat",
-			req:           CreateChannelRequest{Provider: ProviderDashScope, Target: TargetChat, PlanID: "coding-openai-chat", APIKey: "sk-sp-test"},
-			wantBaseURL:   "https://coding.dashscope.aliyuncs.com/v1",
-			wantService:   "openai",
+			name:        "dashscope coding plan chat",
+			req:         CreateChannelRequest{Provider: ProviderDashScope, Target: TargetChat, PlanID: "coding-openai-chat", APIKey: "sk-sp-test"},
+			wantBaseURL: "https://coding.dashscope.aliyuncs.com/v1",
+			wantService: "openai",
 		},
 		{
 			name:                "dashscope token plan messages",
@@ -319,10 +219,10 @@ func TestBuildPayload(t *testing.T) {
 			wantNormalizeSystem: true,
 		},
 		{
-			name:          "dashscope token plan chat",
-			req:           CreateChannelRequest{Provider: ProviderDashScope, Target: TargetChat, PlanID: "token-plan-openai-chat", APIKey: "sk-tp-test"},
-			wantBaseURL:   "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
-			wantService:   "openai",
+			name:        "dashscope token plan chat",
+			req:         CreateChannelRequest{Provider: ProviderDashScope, Target: TargetChat, PlanID: "token-plan-openai-chat", APIKey: "sk-tp-test"},
+			wantBaseURL: "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+			wantService: "openai",
 		},
 		{
 			name:           "dashscope token plan responses",
@@ -331,14 +231,6 @@ func TestBuildPayload(t *testing.T) {
 			wantService:    "openai",
 			wantCodex:      true,
 			wantStripCodex: true,
-			wantModelMap: map[string]string{
-				"codex": "deepseek-v4-flash",
-				"gpt":   "deepseek-v4-pro",
-				"mini":  "deepseek-v4-flash",
-			},
-			wantReasoning: map[string]string{
-				"gpt": "max",
-			},
 		},
 		{
 			name:                "opencode merged defaults to go messages",
@@ -346,23 +238,8 @@ func TestBuildPayload(t *testing.T) {
 			wantBaseURL:         "https://opencode.ai/zen/go/v1",
 			wantService:         "openai",
 			wantNormalizeSystem: true,
-			wantNoVisionModels:  []string{"glm-5.2", "deepseek-v4-flash"},
-			wantFallback:        "minimax-m3",
-			wantModelMap: map[string]string{
-				"fable":  "glm-5.2",
-				"haiku":  "deepseek-v4-flash",
-				"opus":   "glm-5.2",
-				"sonnet": "minimax-m3",
-			},
-			wantReasoning: map[string]string{
-				"fable":      "max",
-				"haiku":      "high",
-				"minimax-m3": "max",
-				"opus":       "max",
-				"sonnet":     "max",
-			},
-			wantReasoningStyle: "reasoning",
-			wantAuthHeader:     "bearer",
+			wantReasoningStyle:  "reasoning",
+			wantAuthHeader:      "bearer",
 		},
 		{
 			name:                "opencode zen messages",
@@ -370,23 +247,8 @@ func TestBuildPayload(t *testing.T) {
 			wantBaseURL:         "https://opencode.ai/zen/v1",
 			wantService:         "openai",
 			wantNormalizeSystem: true,
-			wantNoVisionModels:  []string{"glm-5.2", "deepseek-v4-flash"},
-			wantFallback:        "minimax-m3",
-			wantModelMap: map[string]string{
-				"fable":  "glm-5.2",
-				"haiku":  "deepseek-v4-flash",
-				"opus":   "glm-5.2",
-				"sonnet": "minimax-m3",
-			},
-			wantReasoning: map[string]string{
-				"fable":      "max",
-				"haiku":      "high",
-				"minimax-m3": "max",
-				"opus":       "max",
-				"sonnet":     "max",
-			},
-			wantReasoningStyle: "reasoning",
-			wantAuthHeader:     "bearer",
+			wantReasoningStyle:  "reasoning",
+			wantAuthHeader:      "bearer",
 		},
 		{
 			name:                "opencode go messages",
@@ -394,103 +256,42 @@ func TestBuildPayload(t *testing.T) {
 			wantBaseURL:         "https://opencode.ai/zen/go/v1",
 			wantService:         "openai",
 			wantNormalizeSystem: true,
-			wantNoVisionModels:  []string{"glm-5.2", "deepseek-v4-flash"},
-			wantFallback:        "minimax-m3",
-			wantModelMap: map[string]string{
-				"fable":  "glm-5.2",
-				"haiku":  "deepseek-v4-flash",
-				"opus":   "glm-5.2",
-				"sonnet": "minimax-m3",
-			},
-			wantReasoning: map[string]string{
-				"fable":      "max",
-				"haiku":      "high",
-				"minimax-m3": "max",
-				"opus":       "max",
-				"sonnet":     "max",
-			},
+			wantReasoningStyle:  "reasoning",
+			wantAuthHeader:      "bearer",
+		},
+		{
+			name:               "opencode zen chat",
+			req:                CreateChannelRequest{Provider: ProviderOpenCodeZen, Target: TargetChat, PlanID: "openai-chat", APIKey: "sk-test"},
+			wantBaseURL:        "https://opencode.ai/zen/v1",
+			wantService:        "openai",
 			wantReasoningStyle: "reasoning",
 			wantAuthHeader:     "bearer",
 		},
 		{
-			name:          "opencode zen chat",
-			req:           CreateChannelRequest{Provider: ProviderOpenCodeZen, Target: TargetChat, PlanID: "openai-chat", APIKey: "sk-test"},
-			wantBaseURL:   "https://opencode.ai/zen/v1",
-			wantService:   "openai",
-			wantModelMap:  map[string]string{"codex": "deepseek-v4-flash", "gpt": "glm-5.2", "mini": "deepseek-v4-flash"},
-			wantReasoning: map[string]string{"codex": "high", "gpt": "max", "mini": "high"},
-			wantNoVisionModels: []string{
-				"glm-5.2",
-				"deepseek-v4-flash",
-			},
-			wantFallback:       "minimax-m3",
+			name:               "opencode go chat",
+			req:                CreateChannelRequest{Provider: ProviderOpenCodeGo, Target: TargetChat, APIKey: "sk-test"},
+			wantBaseURL:        "https://opencode.ai/zen/go/v1",
+			wantService:        "openai",
 			wantReasoningStyle: "reasoning",
 			wantAuthHeader:     "bearer",
 		},
 		{
-			name:          "opencode go chat",
-			req:           CreateChannelRequest{Provider: ProviderOpenCodeGo, Target: TargetChat, APIKey: "sk-test"},
-			wantBaseURL:   "https://opencode.ai/zen/go/v1",
-			wantService:   "openai",
-			wantModelMap:  map[string]string{"codex": "deepseek-v4-flash", "gpt": "glm-5.2", "mini": "deepseek-v4-flash"},
-			wantReasoning: map[string]string{"codex": "high", "gpt": "max", "mini": "high"},
-			wantNoVisionModels: []string{
-				"glm-5.2",
-				"deepseek-v4-flash",
-			},
-			wantFallback:       "minimax-m3",
-			wantReasoningStyle: "reasoning",
-			wantAuthHeader:     "bearer",
-		},
-		{
-			name:           "opencode zen responses",
-			req:            CreateChannelRequest{Provider: ProviderOpenCodeZen, Target: TargetResponses, PlanID: "openai-chat", APIKey: "sk-test"},
-			wantBaseURL:    "https://opencode.ai/zen/v1",
-			wantService:    "openai",
-			wantCodex:      true,
-			wantStripCodex: true,
-			wantModelMap:   map[string]string{"codex": "deepseek-v4-flash", "gpt": "glm-5.2", "mini": "deepseek-v4-flash"},
-			wantReasoning:  map[string]string{"codex": "high", "gpt": "max", "mini": "high"},
-			wantNoVisionModels: []string{
-				"glm-5.2",
-				"deepseek-v4-flash",
-			},
-			wantFallback:       "minimax-m3",
+			name:               "opencode zen responses",
+			req:                CreateChannelRequest{Provider: ProviderOpenCodeZen, Target: TargetResponses, PlanID: "openai-chat", APIKey: "sk-test"},
+			wantBaseURL:        "https://opencode.ai/zen/v1",
+			wantService:        "openai",
+			wantCodex:          true,
+			wantStripCodex:     true,
 			wantReasoningStyle: "reasoning",
 		},
 		{
-			name:           "opencode go responses",
-			req:            CreateChannelRequest{Provider: ProviderOpenCodeGo, Target: TargetResponses, APIKey: "sk-test"},
-			wantBaseURL:    "https://opencode.ai/zen/go/v1",
-			wantService:    "openai",
-			wantCodex:      true,
-			wantStripCodex: true,
-			wantModelMap:   map[string]string{"codex": "deepseek-v4-flash", "gpt": "glm-5.2", "mini": "deepseek-v4-flash"},
-			wantReasoning:  map[string]string{"codex": "high", "gpt": "max", "mini": "high"},
-			wantNoVisionModels: []string{
-				"glm-5.2",
-				"deepseek-v4-flash",
-			},
-			wantFallback:       "minimax-m3",
+			name:               "opencode go responses",
+			req:                CreateChannelRequest{Provider: ProviderOpenCodeGo, Target: TargetResponses, APIKey: "sk-test"},
+			wantBaseURL:        "https://opencode.ai/zen/go/v1",
+			wantService:        "openai",
+			wantCodex:          true,
+			wantStripCodex:     true,
 			wantReasoningStyle: "reasoning",
-		},
-		{
-			name:           "kimi responses auto-review redirect",
-			req:            CreateChannelRequest{Provider: ProviderKimi, Target: TargetResponses, APIKey: "sk-test"},
-			wantBaseURL:    "https://api.moonshot.cn/v1",
-			wantService:    "openai",
-			wantCodex:      true,
-			wantStripCodex: true,
-			wantModelMap:   map[string]string{"codex": "kimi-k2.7", "gpt": "kimi-k2.7"},
-		},
-		{
-			name:           "glm responses auto-review redirect",
-			req:            CreateChannelRequest{Provider: ProviderGLM, Target: TargetResponses, APIKey: "sk-test"},
-			wantBaseURL:    "https://open.bigmodel.cn/api/coding/paas/v4#",
-			wantService:    "openai",
-			wantCodex:      true,
-			wantStripCodex: true,
-			wantModelMap:   map[string]string{"codex": "glm-5.2", "gpt": "glm-5.2"},
 		},
 		{
 			name:                "sensenova messages",
@@ -498,22 +299,12 @@ func TestBuildPayload(t *testing.T) {
 			wantBaseURL:         "https://token.sensenova.cn",
 			wantService:         "claude",
 			wantNormalizeSystem: true,
-			wantModelMap: map[string]string{
-				"fable":  "glm-5.2",
-				"haiku":  "deepseek-v4-flash",
-				"opus":   "glm-5.2",
-				"sonnet": "glm-5.2",
-			},
-			wantNoVisionModels: []string{"glm-5.2", "deepseek-v4-flash"},
-			wantFallback:       "sensenova-6.7-flash-lite",
 		},
 		{
-			name:               "sensenova chat",
-			req:                CreateChannelRequest{Provider: ProviderSenseNova, Target: TargetChat, APIKey: "sk-test"},
-			wantBaseURL:        "https://token.sensenova.cn/v1",
-			wantService:        "openai",
-			wantNoVisionModels: []string{"glm-5.2", "deepseek-v4-flash"},
-			wantFallback:       "sensenova-6.7-flash-lite",
+			name:        "sensenova chat",
+			req:         CreateChannelRequest{Provider: ProviderSenseNova, Target: TargetChat, APIKey: "sk-test"},
+			wantBaseURL: "https://token.sensenova.cn/v1",
+			wantService: "openai",
 		},
 		{
 			name:           "sensenova responses",
@@ -522,13 +313,6 @@ func TestBuildPayload(t *testing.T) {
 			wantService:    "openai",
 			wantCodex:      true,
 			wantStripCodex: true,
-			wantModelMap: map[string]string{
-				"codex": "deepseek-v4-flash",
-				"gpt":   "glm-5.2",
-				"mini":  "deepseek-v4-flash",
-			},
-			wantNoVisionModels: []string{"glm-5.2", "deepseek-v4-flash"},
-			wantFallback:       "sensenova-6.7-flash-lite",
 		},
 		{
 			name:                "volc-ark messages (anthropic endpoint)",
@@ -536,46 +320,18 @@ func TestBuildPayload(t *testing.T) {
 			wantBaseURL:         "https://ark.cn-beijing.volces.com/api/coding",
 			wantService:         "claude",
 			wantNormalizeSystem: true,
-			wantModelMap: map[string]string{
-				"fable":  "glm-5.2",
-				"haiku":  "deepseek-v4-flash",
-				"opus":   "glm-5.2",
-				"sonnet": "glm-5.2",
-			},
-			wantReasoning: map[string]string{
-				"fable":      "max",
-				"haiku":      "high",
-				"opus":       "max",
-				"sonnet":     "max",
-				"minimax-m3": "xhigh",
-			},
-			wantNoVisionModels: []string{"glm-5.2", "deepseek-v4-flash"},
-			wantFallback:       "minimax-m3",
 		},
 		{
-			name:          "volc-ark chat",
-			req:           CreateChannelRequest{Provider: ProviderVolcArk, Target: TargetChat, APIKey: "ark-test"},
-			wantBaseURL:   "https://ark.cn-beijing.volces.com/api/coding/v3",
-			wantService:   "openai",
+			name:        "volc-ark chat",
+			req:         CreateChannelRequest{Provider: ProviderVolcArk, Target: TargetChat, APIKey: "ark-test"},
+			wantBaseURL: "https://ark.cn-beijing.volces.com/api/coding/v3",
+			wantService: "openai",
 		},
 		{
 			name:        "volc-ark responses",
 			req:         CreateChannelRequest{Provider: ProviderVolcArk, Target: TargetResponses, APIKey: "ark-test"},
 			wantBaseURL: "https://ark.cn-beijing.volces.com/api/coding/v3",
 			wantService: "openai",
-			wantModelMap: map[string]string{
-				"codex": "deepseek-v4-flash",
-				"gpt":   "glm-5.2",
-				"mini":  "deepseek-v4-flash",
-			},
-			wantReasoning: map[string]string{
-				"codex":      "high",
-				"gpt":        "max",
-				"mini":       "high",
-				"minimax-m3": "xhigh",
-			},
-			wantNoVisionModels: []string{"glm-5.2", "deepseek-v4-flash"},
-			wantFallback:       "minimax-m3",
 		},
 		{
 			name:                "qianfan messages (anthropic endpoint)",
@@ -583,29 +339,18 @@ func TestBuildPayload(t *testing.T) {
 			wantBaseURL:         "https://qianfan.baidubce.com/anthropic/coding",
 			wantService:         "claude",
 			wantNormalizeSystem: true,
-			wantModelMap: map[string]string{
-				"fable":  "qianfan-code-latest",
-				"haiku":  "qianfan-code-latest",
-				"opus":   "qianfan-code-latest",
-				"sonnet": "qianfan-code-latest",
-			},
 		},
 		{
-			name:          "qianfan chat",
-			req:           CreateChannelRequest{Provider: ProviderQianfan, Target: TargetChat, APIKey: "qf-test"},
-			wantBaseURL:   "https://qianfan.baidubce.com/v2/coding#",
-			wantService:   "openai",
-		},
-		{
-			name:        "qianfan responses",
-			req:         CreateChannelRequest{Provider: ProviderQianfan, Target: TargetResponses, APIKey: "qf-test"},
+			name:        "qianfan chat",
+			req:         CreateChannelRequest{Provider: ProviderQianfan, Target: TargetChat, APIKey: "qf-test"},
 			wantBaseURL: "https://qianfan.baidubce.com/v2/coding#",
 			wantService: "openai",
-			wantModelMap: map[string]string{
-				"codex": "qianfan-code-latest",
-				"gpt":   "qianfan-code-latest",
-				"mini":  "qianfan-code-latest",
-			},
+		},
+		{
+			name:           "qianfan responses",
+			req:            CreateChannelRequest{Provider: ProviderQianfan, Target: TargetResponses, APIKey: "qf-test"},
+			wantBaseURL:    "https://qianfan.baidubce.com/v2/coding#",
+			wantService:    "openai",
 			wantCodex:      true,
 			wantStripCodex: true,
 		},
@@ -615,19 +360,12 @@ func TestBuildPayload(t *testing.T) {
 			wantBaseURL:         "https://maas-coding-api.cn-huabei-1.xf-yun.com/anthropic",
 			wantService:         "claude",
 			wantNormalizeSystem: true,
-			wantModelMap: map[string]string{
-				"fable":  "astron-code-latest",
-				"haiku":  "astron-code-latest",
-				"opus":   "astron-code-latest",
-				"sonnet": "astron-code-latest",
-			},
 		},
 		{
-			name:          "xfyun chat",
-			req:           CreateChannelRequest{Provider: ProviderXFyun, Target: TargetChat, APIKey: "xf-test"},
-			wantBaseURL:   "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2",
-			wantService:   "openai",
-			wantModelMap:  map[string]string{"codex": "astron-code-latest", "gpt": "astron-code-latest", "mini": "astron-code-latest"},
+			name:        "xfyun chat",
+			req:         CreateChannelRequest{Provider: ProviderXFyun, Target: TargetChat, APIKey: "xf-test"},
+			wantBaseURL: "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2",
+			wantService: "openai",
 		},
 		{
 			name:           "xfyun responses",
@@ -636,7 +374,6 @@ func TestBuildPayload(t *testing.T) {
 			wantService:    "responses",
 			wantCodex:      true,
 			wantStripCodex: true,
-			wantModelMap:   map[string]string{"codex": "astron-code-latest", "gpt": "astron-code-latest", "mini": "astron-code-latest"},
 		},
 	}
 	for _, tt := range tests {
@@ -682,77 +419,10 @@ func TestBuildPayload(t *testing.T) {
 					t.Fatalf("SupportedModels = %v, want %v", got.SupportedModels, tt.wantModels)
 				}
 			}
-			for source, target := range tt.wantModelMap {
-				if got.ModelMapping[source] != target {
-					t.Fatalf("ModelMapping[%q] = %q, want %q; all mappings: %#v", source, got.ModelMapping[source], target, got.ModelMapping)
-				}
-			}
-			if tt.wantNoModelMap && len(got.ModelMapping) != 0 {
-				t.Fatalf("ModelMapping = %#v, want empty", got.ModelMapping)
-			}
-			for source, target := range tt.wantReasoning {
-				if got.ReasoningMapping[source] != target {
-					t.Fatalf("ReasoningMapping[%q] = %q, want %q; all mappings: %#v", source, got.ReasoningMapping[source], target, got.ReasoningMapping)
-				}
-			}
-			if tt.wantNoReasoningMap && len(got.ReasoningMapping) != 0 {
-				t.Fatalf("ReasoningMapping = %#v, want empty", got.ReasoningMapping)
-			}
 			if tt.wantReasoningStyle != "" && got.ReasoningParamStyle != tt.wantReasoningStyle {
 				t.Fatalf("ReasoningParamStyle = %q, want %q", got.ReasoningParamStyle, tt.wantReasoningStyle)
 			}
-			if tt.wantNoVisionModels != nil {
-				if !slices.Equal(got.NoVisionModels, tt.wantNoVisionModels) {
-					t.Fatalf("NoVisionModels = %v, want %v", got.NoVisionModels, tt.wantNoVisionModels)
-				}
-			}
-			if tt.wantFallback != "" {
-				if got.VisionFallbackModel != tt.wantFallback {
-					t.Fatalf("VisionFallbackModel = %q, want %q", got.VisionFallbackModel, tt.wantFallback)
-				}
-			}
 		})
-	}
-}
-
-func TestChannelTargetConfigsExcludeRetiredGPTModels(t *testing.T) {
-	retiredModels := map[string]struct{}{
-		"gpt-5.2":       {},
-		"gpt-5.2-codex": {},
-		"gpt-5.3-codex": {},
-	}
-
-	assertActiveModel := func(field string, provider string, target string, model string) {
-		if _, ok := retiredModels[model]; ok {
-			t.Fatalf("%s for %s/%s contains retired model %q", field, provider, target, model)
-		}
-	}
-
-	for target, providerConfigs := range channelTargetConfigs {
-		for provider, config := range providerConfigs {
-			for source, mapped := range config.ModelMapping {
-				assertActiveModel("ModelMapping source", provider, target, source)
-				assertActiveModel("ModelMapping target", provider, target, mapped)
-			}
-			for source := range config.ReasoningMapping {
-				assertActiveModel("ReasoningMapping source", provider, target, source)
-			}
-		}
-	}
-}
-
-func TestResponsesTargetMustIncludeCodexMapping(t *testing.T) {
-	responsesConfigs, ok := channelTargetConfigs[TargetResponses]
-	if !ok {
-		t.Fatal("channelTargetConfigs[TargetResponses] not found")
-	}
-	for provider, config := range responsesConfigs {
-		if len(config.ModelMapping) == 0 {
-			continue
-		}
-		if _, found := config.ModelMapping["codex"]; !found {
-			t.Fatalf("provider %q responses config missing codex mapping", provider)
-		}
 	}
 }
 

@@ -4,21 +4,21 @@ package channelpreset
 
 func generatedOpenAIChatTargetConfigs() map[string]channelTargetConfig {
 	return map[string]channelTargetConfig{
-		"deepseek":     channelTargetConfig{ReasoningParamStyle: "reasoning", NoVisionModels: []string{"deepseek-v4-pro"}},
-		"mimo":         channelTargetConfig{ReasoningParamStyle: "thinking", NoVisionModels: []string{"mimo-v2.5-pro"}, VisionFallbackModel: "mimo-v2.5", RateLimitRPM: 80},
-		"compshare":    channelTargetConfig{ReasoningParamStyle: "reasoning", NoVisionModels: []string{"glm-5.2", "deepseek-v4-flash"}, VisionFallbackModel: "MiniMax-M2.7"},
+		"deepseek":     channelTargetConfig{ReasoningParamStyle: "reasoning"},
+		"mimo":         channelTargetConfig{ReasoningParamStyle: "thinking", RateLimitRPM: 80},
+		"compshare":    channelTargetConfig{ReasoningParamStyle: "reasoning"},
 		"runapi":       channelTargetConfig{},
 		"unity2":       channelTargetConfig{},
 		"openrouter":   channelTargetConfig{},
-		"sensenova":    channelTargetConfig{NoVisionModels: []string{"glm-5.2", "deepseek-v4-flash"}, VisionFallbackModel: "sensenova-6.7-flash-lite"},
+		"sensenova":    channelTargetConfig{},
 		"modelscope":   channelTargetConfig{},
 		"minimax":      channelTargetConfig{},
 		"dashscope":    channelTargetConfig{},
-		"opencode-zen": channelTargetConfig{ModelMapping: map[string]string{"codex": "deepseek-v4-flash", "gpt": "glm-5.2", "mini": "deepseek-v4-flash"}, ReasoningMapping: map[string]string{"codex": "high", "gpt": "max", "mini": "high"}, ReasoningParamStyle: "reasoning", AuthHeader: "bearer", NoVisionModels: []string{"glm-5.2", "deepseek-v4-flash"}, VisionFallbackModel: "minimax-m3"},
-		"opencode-go":  channelTargetConfig{ModelMapping: map[string]string{"codex": "deepseek-v4-flash", "gpt": "glm-5.2", "mini": "deepseek-v4-flash"}, ReasoningMapping: map[string]string{"codex": "high", "gpt": "max", "mini": "high"}, ReasoningParamStyle: "reasoning", AuthHeader: "bearer", NoVisionModels: []string{"glm-5.2", "deepseek-v4-flash"}, VisionFallbackModel: "minimax-m3"},
+		"opencode-zen": channelTargetConfig{ReasoningParamStyle: "reasoning", AuthHeader: "bearer"},
+		"opencode-go":  channelTargetConfig{ReasoningParamStyle: "reasoning", AuthHeader: "bearer"},
 		"volc-ark":     channelTargetConfig{},
 		"qianfan":      channelTargetConfig{},
-		"xfyun":        channelTargetConfig{ModelMapping: map[string]string{"codex": "astron-code-latest", "gpt": "astron-code-latest", "mini": "astron-code-latest"}},
-		"atomgit":      channelTargetConfig{ModelMapping: map[string]string{"gpt": "glm-5.2-200k", "mini": "glm-5.2-200k", "codex": "glm-5.2-200k"}, ReasoningMapping: map[string]string{"gpt": "high", "mini": "high", "codex": "high"}, ReasoningParamStyle: "thinking", NoVisionModels: []string{"glm-5.2-200k"}},
+		"xfyun":        channelTargetConfig{},
+		"atomgit":      channelTargetConfig{ReasoningParamStyle: "thinking"},
 	}
 }

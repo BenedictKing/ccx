@@ -52,14 +52,12 @@ export interface ChannelFormLike {
   description: string
   apiKeys: string[]
   apiKeyConfigs?: Channel['apiKeyConfigs']
-  modelMapping: Record<string, string>
   modelCapabilitiesText?: string
   modelCapabilityRows?: ModelCapabilityRow[]
   embeddingCapabilityRows?: EmbeddingCapabilityRow[]
   defaultContextWindowTokens?: string | number | null
   defaultMaxOutputTokens?: string | number | null
   allowUnknownContext?: boolean
-  reasoningMapping: Record<string, 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'>
   reasoningParamStyle: 'reasoning' | 'reasoning_effort' | 'thinking'
   textVerbosity: 'low' | 'medium' | 'high' | ''
   fastMode: boolean
@@ -93,8 +91,6 @@ export interface ChannelFormLike {
   codexToolCompat: boolean
   stripCodexClientTools?: boolean
   noVision: boolean
-  noVisionModels: string[]
-  visionFallbackModel: string
   historicalImageTurnLimit?: string | number | null
 
 }
@@ -509,7 +505,6 @@ export function buildChannelPayload(
     }
   }
   const advancedOptions = normalizeAdvancedChannelOptions(form.serviceType, {
-    reasoningMapping: form.reasoningMapping,
     reasoningParamStyle: form.reasoningParamStyle,
     textVerbosity: form.textVerbosity,
     fastMode: form.fastMode
@@ -543,11 +538,9 @@ export function buildChannelPayload(
     stripThoughtSignature: form.stripThoughtSignature,
     description: form.description.trim(),
     apiKeys: mergedApiKeys,
-    modelMapping: form.modelMapping,
     modelCapabilities: modelCapabilities || {},
     defaultCapability: {},
     allowUnknownContext: false,
-    reasoningMapping: advancedOptions.reasoningMapping,
     reasoningParamStyle: advancedOptions.reasoningParamStyle,
     textVerbosity: advancedOptions.textVerbosity,
     fastMode: advancedOptions.fastMode,
@@ -568,10 +561,6 @@ export function buildChannelPayload(
     codexToolCompat: form.codexToolCompat,
     stripCodexClientTools: form.codexToolCompat,
     noVision: form.noVision,
-    noVisionModels: form.noVisionModels,
-    visionFallbackModel: typeof form.visionFallbackModel === 'object' && form.visionFallbackModel !== null
-      ? (form.visionFallbackModel as unknown as { value: string }).value || ''
-      : form.visionFallbackModel || '',
   }
 
   if (options.channelType === 'vectors') {

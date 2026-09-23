@@ -27,7 +27,6 @@ describe('ModelCapabilityPanel', () => {
     app = createApp(ModelCapabilityPanel, {
       rows: [],
       targetModels: ['gpt-5.5-openai-compact', 'gpt-5.5'],
-      mappedTargetModels: [],
       fetchingModels: false,
       fetchModelsError: '',
       error: '',

@@ -30,18 +30,6 @@ const textVerbosityOptions = [
 ]
 
 export function useChannelEditorOptions(options: ChannelEditorOptionsOptions) {
-  const DEFAULT_SELECT_VALUE = 'default'
-  const reasoningEffortOptions = computed(() => [
-    { label: options.t('channelEditor.compat.selectDefault'), value: DEFAULT_SELECT_VALUE },
-    { label: 'None', value: 'none' },
-    { label: 'Minimal', value: 'minimal' },
-    { label: 'Low', value: 'low' },
-    { label: 'Medium', value: 'medium' },
-    { label: 'High', value: 'high' },
-    { label: 'XHigh', value: 'xhigh' },
-    { label: 'Max', value: 'max' },
-  ])
-
   const serviceTypeOptions = computed(() => {
     const all = [
       { label: 'OpenAI Chat', value: 'openai' },
@@ -75,38 +63,10 @@ export function useChannelEditorOptions(options: ChannelEditorOptionsOptions) {
     )
   })
 
-  const modelMappingHint = computed(() => {
-    if (options.channelType() === 'vectors') {
-      return options.t('addChannel.modelMappingHintVectors')
-    }
-    if (options.channelType() === 'chat' || options.channelType() === 'images') {
-      return options.t('addChannel.modelMappingHintChat')
-    }
-    if (options.channelType() === 'gemini') return options.t('addChannel.modelMappingHintGemini')
-    if (options.channelType() === 'responses') return options.t('addChannel.modelMappingHintResponses')
-    return options.t('addChannel.modelMappingHintMessages')
-  })
-
-  const targetModelPlaceholder = computed(() => {
-    if (options.channelType() === 'vectors') {
-      return options.t('addChannel.targetModelPlaceholderVectors')
-    }
-    if (options.channelType() === 'chat' || options.channelType() === 'images') {
-      return options.t('addChannel.targetModelPlaceholderChat')
-    }
-    if (options.channelType() === 'responses') return options.t('addChannel.targetModelPlaceholderResponses')
-    if (options.channelType() === 'gemini') return options.t('addChannel.targetModelPlaceholderGemini')
-    return options.t('addChannel.targetModelPlaceholderMessages')
-  })
-
   return {
     reasoningParamStyleOptions,
     textVerbosityOptions,
-    DEFAULT_SELECT_VALUE,
-    reasoningEffortOptions,
     serviceTypeOptions,
     headerServiceTypeItems,
-    modelMappingHint,
-    targetModelPlaceholder,
   }
 }

@@ -6,8 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Switch } from '@/components/ui/switch'
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Loader2, X, Play, Square, ArrowRight, CheckCircle2, XCircle, Clock, Gauge, Link2 } from 'lucide-vue-next'
+import { Loader2, X, Play, Square, ArrowRight, CheckCircle2, XCircle, Clock, Gauge } from 'lucide-vue-next'
 import { useCapabilityTests } from '@/composables/useCapabilityTests'
 import { useLanguage } from '@/composables/useLanguage'
 import CapabilityModelResultBadge from '@/components/console/CapabilityModelResultBadge.vue'
@@ -39,7 +38,6 @@ const {
   cancelActiveTests,
   retryModelForProtocol,
   copyToTab,
-  createModelMapping,
   closeDialog,
   protocolResults,
   compatibleProtocols,
@@ -246,59 +244,6 @@ function handleRpmBlur() {
   rpmValue.value = Math.min(60, Math.max(1, parsedValue || DEFAULT_CAPABILITY_TEST_RPM))
 }
 
-// ── 一键建映射（源模型名 → 实测真实模型） ──
-
-interface MappableModel {
-  model: string
-  actualModel: string
-}
-
-function getMappableModels(test: CapabilityProtocolJobResult): MappableModel[] {
-  return (test.modelResults ?? [])
-    .filter(m => !!m.actualModel && m.actualModel !== m.model)
-    .map(m => ({ model: m.model, actualModel: m.actualModel as string }))
-}
-
-const mappingDialogOpen = ref(false)
-const mappingCandidates = ref<MappableModel[]>([])
-const mappingSource = ref('')
-const mappingTarget = ref('')
-const creatingMapping = ref(false)
-
-function applyMappingCandidate(candidate: MappableModel) {
-  mappingSource.value = candidate.model
-  mappingTarget.value = candidate.actualModel
-}
-
-function openMappingDialog(test: CapabilityProtocolJobResult) {
-  const candidates = getMappableModels(test)
-  if (candidates.length === 0) return
-  mappingCandidates.value = candidates
-  applyMappingCandidate(candidates[0])
-  mappingDialogOpen.value = true
-}
-
-async function submitCreateMapping() {
-  const source = mappingSource.value.trim()
-  if (!source || creatingMapping.value) return
-  creatingMapping.value = true
-  try {
-    await createModelMapping(props.channelType, props.channelId, source, mappingTarget.value)
-    mappingDialogOpen.value = false
-    copyMessage.value = {
-      type: 'success',
-      text: t('capability.mappingCreated', { source, target: mappingTarget.value }),
-    }
-  } catch (e) {
-    copyMessage.value = {
-      type: 'error',
-      text: e instanceof Error ? e.message : String(e),
-    }
-  } finally {
-    creatingMapping.value = false
-  }
-}
-
 function getRunModeLabel(mode: string): string {
   const map: Record<string, string> = {
     fresh: '',
@@ -502,16 +447,6 @@ onBeforeUnmount(() => {
                         <td colspan="6" class="px-3 py-2">
                           <div class="flex items-center gap-2 flex-wrap">
                             <CapabilityModelResultBadge :test="test" :pending-text="t('capability.modelQueued')" :retry-enabled="!isProtocolBusy(test)" @retry-model="handleRetryModel" />
-                            <Button
-                              v-if="getMappableModels(test).length > 0 && !isProtocolBusy(test)"
-                              variant="outline"
-                              size="sm"
-                              class="h-5 text-[10px] shrink-0"
-                              :title="t('capability.createMapping')"
-                              @click="openMappingDialog(test)"
-                            >
-                              <Link2 class="h-3 w-3" />{{ t('capability.createMapping') }}
-                            </Button>
                           </div>
                         </td>
                       </tr>
@@ -530,42 +465,6 @@ onBeforeUnmount(() => {
       </div>
     </Transition>
   </Teleport>
-
-  <!-- 创建模型映射对话框：把源模型名显式重定向到实测真实模型 -->
-  <Dialog v-model:open="mappingDialogOpen">
-    <DialogContent class="sm:max-w-[460px]">
-      <DialogHeader>
-        <DialogTitle>{{ t('capability.createMappingTitle') }}</DialogTitle>
-      </DialogHeader>
-      <div class="space-y-3">
-        <p class="text-sm text-muted-foreground">{{ t('capability.createMappingDesc', { target: mappingTarget }) }}</p>
-        <div v-if="mappingCandidates.length > 1" class="flex flex-wrap gap-1.5">
-          <button
-            v-for="candidate in mappingCandidates"
-            :key="candidate.model"
-            type="button"
-            :class="mappingSource.trim() === candidate.model ? 'border-primary/40 bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:text-foreground'"
-            class="cursor-pointer rounded border px-2 py-1 font-mono text-[11px] transition-colors"
-            @click="applyMappingCandidate(candidate)"
-          >
-            {{ candidate.model }} → {{ candidate.actualModel }}
-          </button>
-        </div>
-        <div class="space-y-1.5">
-          <label class="text-xs font-medium">{{ t('capability.mappingSourceLabel') }}</label>
-          <Input v-model="mappingSource" :placeholder="t('capability.mappingSourcePlaceholder')" />
-        </div>
-        <p class="text-xs text-muted-foreground">{{ t('capability.mappingSupportedModelsHint') }}</p>
-      </div>
-      <DialogFooter>
-        <Button variant="outline" size="sm" @click="mappingDialogOpen = false">{{ t('common.cancel') }}</Button>
-        <Button size="sm" :disabled="!mappingSource.trim() || creatingMapping" @click="submitCreateMapping">
-          <Loader2 v-if="creatingMapping" class="h-3.5 w-3.5 animate-spin" />
-          {{ t('capability.createMappingConfirm') }}
-        </Button>
-      </DialogFooter>
-    </DialogContent>
-  </Dialog>
 </template>
 
 <style scoped>

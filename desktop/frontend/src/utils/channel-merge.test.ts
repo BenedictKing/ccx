@@ -23,7 +23,6 @@ describe('freezeImmutableFields', () => {
       apiKeys: ['k1'],
       apiKeyConfigs: [{ key: 'k1' }],
       disabledApiKeys: [{ key: 'k2', reason: 'expired', message: 'expired', disabledAt: '2026-01-01T00:00:00Z' }],
-      modelMapping: { source: 'target' },
     })
 
     freezeImmutableFields(channel)
@@ -31,7 +30,6 @@ describe('freezeImmutableFields', () => {
     expect(Object.isFrozen(channel.apiKeys)).toBe(true)
     expect(Object.isFrozen(channel.apiKeyConfigs)).toBe(true)
     expect(Object.isFrozen(channel.disabledApiKeys)).toBe(true)
-    expect(Object.isFrozen(channel.modelMapping)).toBe(true)
   })
 })
 

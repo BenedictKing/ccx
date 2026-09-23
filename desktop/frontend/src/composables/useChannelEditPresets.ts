@@ -1,9 +1,8 @@
-import { computed, type ComputedRef, type Ref } from 'vue'
+import { computed, type ComputedRef } from 'vue'
 import { claudeMessagesPresets } from '@/generated/claude-messages-presets'
 import { codexResponsesPresets } from '@/generated/codex-responses-presets'
 import { openaiMessagesPresets } from '@/generated/openai-messages-presets'
 import type { ManagedChannelType } from '@/utils/channel-type-api'
-import type { ModelMappingRow } from '@/composables/useChannelModelMapping'
 
 type FormLike = {
   codexToolCompat: boolean
@@ -16,16 +15,12 @@ type FormLike = {
   stripBillingHeader: boolean
   stripCodexClientTools: boolean
   textVerbosity: 'low' | 'medium' | 'high' | ''
-  visionFallbackModel: string
-  visionFallbackReasoningEffort: ModelMappingRow['reasoning']
   authHeader: 'auto' | 'bearer' | 'x-api-key' | ''
 }
 
 type ChannelEditPresetOptions = {
   channelType: () => ManagedChannelType
   form: FormLike
-  modelMappingRows: Ref<ModelMappingRow[]>
-  nextRowId: () => number
   supportsOpenAIAdvanced: ComputedRef<boolean>
 }
 
@@ -50,14 +45,6 @@ export function useChannelEditPresets(options: ChannelEditPresetOptions) {
   function applyModelMappingPreset(name: string) {
     const preset = modelMappingPresets[name.toLowerCase()]
     if (!preset) return
-    const applyReasoning = options.supportsOpenAIAdvanced.value
-    options.modelMappingRows.value = Object.entries(preset.modelMapping).map(([source, target]) => ({
-      id: options.nextRowId(),
-      source,
-      target,
-      reasoning: applyReasoning ? (preset.reasoningMapping[source] || '') : '',
-      noVision: false,
-    }))
     options.form.fastMode = preset.fastMode
     options.form.textVerbosity = preset.textVerbosity as typeof options.form.textVerbosity
   }
@@ -65,14 +52,6 @@ export function useChannelEditPresets(options: ChannelEditPresetOptions) {
   function applyClaudePreset(name: string) {
     const preset = claudeChannelPresets[name.toLowerCase()]
     if (!preset) return
-    const noVisionSet = new Set(preset.noVisionModels)
-    options.modelMappingRows.value = Object.entries(preset.modelMapping).map(([source, target]) => ({
-      id: options.nextRowId(),
-      source,
-      target,
-      reasoning: preset.reasoningMapping[source] || '',
-      noVision: noVisionSet.has(target),
-    }))
     options.form.reasoningParamStyle = preset.reasoningParamStyle as typeof options.form.reasoningParamStyle
     if (preset.serviceType) {
       options.form.serviceType = preset.serviceType as typeof options.form.serviceType
@@ -83,22 +62,12 @@ export function useChannelEditPresets(options: ChannelEditPresetOptions) {
     }
     options.form.stripBillingHeader = !!preset.stripBillingHeader
     options.form.noVision = preset.noVision
-    options.form.visionFallbackModel = preset.visionFallbackModel
-    options.form.visionFallbackReasoningEffort = ''
     options.form.authHeader = preset.authHeader || 'auto'
   }
 
   function applyCodexResponsesPreset(name: string) {
     const preset = codexResponsesPresets[name.toLowerCase()]
     if (!preset) return
-    const noVisionSet = new Set(preset.noVisionModels)
-    options.modelMappingRows.value = Object.entries(preset.modelMapping).map(([source, target]) => ({
-      id: options.nextRowId(),
-      source,
-      target,
-      reasoning: preset.reasoningMapping[source] || '',
-      noVision: noVisionSet.has(target),
-    }))
     options.form.reasoningParamStyle = preset.reasoningParamStyle as typeof options.form.reasoningParamStyle
     if (preset.serviceType) {
       options.form.serviceType = preset.serviceType as typeof options.form.serviceType
@@ -106,8 +75,6 @@ export function useChannelEditPresets(options: ChannelEditPresetOptions) {
     options.form.codexToolCompat = preset.codexToolCompat
     options.form.stripCodexClientTools = preset.stripCodexClientTools
     options.form.noVision = preset.noVision
-    options.form.visionFallbackModel = preset.visionFallbackModel
-    options.form.visionFallbackReasoningEffort = ''
   }
 
   function applyPreset(presetName: string) {

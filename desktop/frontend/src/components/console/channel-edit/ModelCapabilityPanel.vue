@@ -15,7 +15,6 @@ import {
 const props = defineProps<{
   rows: ModelCapabilityRow[]
   targetModels: string[]
-  mappedTargetModels: string[]
   fetchingModels: boolean
   fetchModelsError: string
   error: string
@@ -202,17 +201,6 @@ function removeRow(id: number) {
           {{ t('addChannel.modelCapabilitiesRowsHint') }}
         </p>
       </div>
-    </div>
-
-    <div v-if="mappedTargetModels.length" class="flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
-      <span>{{ t('addChannel.modelCapabilityRedirectTargets') }}</span>
-      <span
-        v-for="model in mappedTargetModels"
-        :key="model"
-        class="rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 font-mono text-primary"
-      >
-        {{ model }}
-      </span>
     </div>
 
     <datalist :id="thinkingDatalistId">

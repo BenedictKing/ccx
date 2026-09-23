@@ -16,8 +16,6 @@ describe('buildChannelPayload', () => {
       stripThoughtSignature: false,
       description: '',
       apiKeys: [],
-      modelMapping: {},
-      reasoningMapping: {},
       reasoningParamStyle: 'reasoning',
       textVerbosity: '',
       fastMode: false,
@@ -30,8 +28,6 @@ describe('buildChannelPayload', () => {
       normalizeSystemRoleToTopLevel: false,
       codexToolCompat: false,
       noVision: false,
-      noVisionModels: [],
-      visionFallbackModel: ''
     })
 
     expect(result.baseUrl).toBe('https://api.githubcopilot.com')
@@ -73,9 +69,7 @@ describe('buildChannelPayload', () => {
       description: '',
       apiKeys: [],
       apiKeyConfigs: [cfg],
-      modelMapping: {},
       modelCapabilitiesText: '',
-      reasoningMapping: {},
       reasoningParamStyle: 'reasoning',
       textVerbosity: '',
       fastMode: false,
@@ -88,8 +82,6 @@ describe('buildChannelPayload', () => {
       normalizeSystemRoleToTopLevel: false,
       codexToolCompat: false,
       noVision: false,
-      noVisionModels: [],
-      visionFallbackModel: ''
     })
 
     expect(result.apiKeys).toEqual(['key-skeleton'])
@@ -130,9 +122,7 @@ describe('buildChannelPayload', () => {
       description: '',
       apiKeys: ['key-keep'],
       apiKeyConfigs: [keep, remove],
-      modelMapping: {},
       modelCapabilitiesText: '',
-      reasoningMapping: {},
       reasoningParamStyle: 'reasoning',
       textVerbosity: '',
       fastMode: false,
@@ -145,8 +135,6 @@ describe('buildChannelPayload', () => {
       normalizeSystemRoleToTopLevel: false,
       codexToolCompat: false,
       noVision: false,
-      noVisionModels: [],
-      visionFallbackModel: ''
     })
 
     expect(result.apiKeys).toEqual(['key-keep', 'key-remove'])
@@ -172,9 +160,7 @@ describe('buildChannelPayload', () => {
         { key: 'b', keyUid: 'ku_b', consumptionPolicy: 'opportunistic' },
         { key: 'c', keyUid: 'ku_c' },
       ],
-      modelMapping: {},
       modelCapabilitiesText: '',
-      reasoningMapping: {},
       reasoningParamStyle: 'reasoning',
       textVerbosity: '',
       fastMode: false,
@@ -187,8 +173,6 @@ describe('buildChannelPayload', () => {
       normalizeSystemRoleToTopLevel: false,
       codexToolCompat: false,
       noVision: false,
-      noVisionModels: [],
-      visionFallbackModel: ''
     })
 
     expect(result.apiKeyConfigs?.[0].consumptionPolicy).toBe('normal')

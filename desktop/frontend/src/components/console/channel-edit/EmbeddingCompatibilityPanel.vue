@@ -15,7 +15,6 @@ import {
 const props = defineProps<{
   rows: EmbeddingCapabilityRow[]
   targetModels: Array<{ title: string; value: string }>
-  mappedTargetModels: string[]
   fetchingModels: boolean
   fetchModelsError: string
   error: string
@@ -124,18 +123,6 @@ function selectNewModel(model: string) {
           {{ t('addChannel.embeddingCompatibilityHint') }}
         </p>
       </div>
-    </div>
-
-    <!-- Redirect target model chips -->
-    <div v-if="mappedTargetModels.length" class="flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
-      <span>{{ t('addChannel.embeddingCompatibilityRedirectTargets') }}</span>
-      <span
-        v-for="model in mappedTargetModels"
-        :key="model"
-        class="rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 font-mono text-primary"
-      >
-        {{ model }}
-      </span>
     </div>
 
     <!-- Existing rows -->

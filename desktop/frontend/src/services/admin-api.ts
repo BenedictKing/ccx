@@ -244,12 +244,10 @@ export interface Channel {
   remark?: string
   website?: string
   insecureSkipVerify?: boolean
-  modelMapping?: Record<string, string>
   modelCapabilities?: Record<string, UpstreamModelCapability>
   embeddingCapabilities?: Record<string, EmbeddingCapability>
   defaultCapability?: UpstreamModelCapability
   allowUnknownContext?: boolean
-  reasoningMapping?: Record<string, 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'>
   reasoningParamStyle?: 'reasoning' | 'reasoning_effort' | 'thinking'
   textVerbosity?: 'low' | 'medium' | 'high' | ''
   fastMode?: boolean
@@ -295,8 +293,6 @@ export interface Channel {
   passbackThinkingBlocks?: boolean
   supportedModels?: string[]
   noVision?: boolean
-  noVisionModels?: string[]
-  visionFallbackModel?: string
   historicalImageTurnLimit?: number
   compactModel?: string
   // 主动限速（渠道级生产代理限速）
@@ -590,8 +586,6 @@ export interface ChannelDiscoveryRequest {
   customHeaders?: Record<string, string>
   proxyUrl?: string
   insecureSkipVerify?: boolean
-  modelMapping?: Record<string, string>
-  reasoningMapping?: Record<string, string>
   targetClients?: ChannelDiscoveryTargetClient[]
 }
 
@@ -646,11 +640,7 @@ export interface ChannelDiscoveryRecommendation {
   channelKind: ChannelDiscoveryKind | ''
   serviceType: Channel['serviceType'] | ''
   baseUrls?: string[]
-  modelMapping: Record<string, string>
-  reasoningMapping?: Record<string, string>
   supportedModels?: string[]
-  noVisionModels?: string[]
-  visionFallbackModel?: string
   compat?: Partial<Record<string, boolean>>
   urlRecommendation?: {
     current: string
@@ -2046,8 +2036,6 @@ export interface CreateLogicalChannelProtocol {
   apiKeyConfigs?: APIKeyConfig[]
   baseUrls?: string[]
   baseUrl?: string
-  modelMapping?: Record<string, string>
-  reasoningMapping?: Record<string, string>
   priority?: number
   enabled?: boolean
   status?: string
@@ -2088,8 +2076,6 @@ export interface UpdateLogicalChannelProtocol {
   apiKeyConfigs?: APIKeyConfig[]
   baseUrls?: string[]
   baseUrl?: string
-  modelMapping?: Record<string, string>
-  reasoningMapping?: Record<string, string>
   priority?: number
   enabled?: boolean
   status?: string

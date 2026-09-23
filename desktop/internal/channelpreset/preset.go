@@ -2,8 +2,6 @@ package channelpreset
 
 import (
 	"fmt"
-	"maps"
-	"slices"
 	"strings"
 )
 
@@ -100,35 +98,31 @@ type CreateChannelResult struct {
 }
 
 type ChannelPayload struct {
-	Name                          string            `json:"name"`
-	Description                   string            `json:"description,omitempty"`
-	Website                       string            `json:"website,omitempty"`
-	ServiceType                   string            `json:"serviceType"`
-	AuthHeader                    string            `json:"authHeader,omitempty"`
-	ProviderID                    string            `json:"providerId,omitempty"`
-	BaseURL                       string            `json:"baseUrl"`
-	APIKeys                       []string          `json:"apiKeys"`
-	ProxyURL                      string            `json:"proxyUrl,omitempty"`
-	ModelMapping                  map[string]string `json:"modelMapping,omitempty"`
-	ReasoningMapping              map[string]string `json:"reasoningMapping,omitempty"`
-	ReasoningParamStyle           string            `json:"reasoningParamStyle,omitempty"`
-	NormalizeSystemRoleToTopLevel bool              `json:"normalizeSystemRoleToTopLevel,omitempty"`
-	StripBillingHeader            bool              `json:"stripBillingHeader,omitempty"`
-	NoVision                      bool              `json:"noVision,omitempty"`
-	NoVisionModels                []string          `json:"noVisionModels,omitempty"`
-	VisionFallbackModel           string            `json:"visionFallbackModel,omitempty"`
-	SupportedModels               []string          `json:"supportedModels,omitempty"`
-	InjectDummyThoughtSignature   bool              `json:"injectDummyThoughtSignature,omitempty"`
-	StripThoughtSignature         bool              `json:"stripThoughtSignature,omitempty"`
-	CodexToolCompat               bool              `json:"codexToolCompat,omitempty"`
-	StripCodexClientTools         bool              `json:"stripCodexClientTools,omitempty"`
-	NormalizeMetadataUserId       *bool             `json:"normalizeMetadataUserId,omitempty"`
-	RateLimitRPM                  int               `json:"rateLimitRpm,omitempty"`
-	RateLimitBurst                int               `json:"rateLimitBurst,omitempty"`
-	RateLimitMaxConcurrent        int               `json:"rateLimitMaxConcurrent,omitempty"`
-	RateLimitAutoFromHeaders      bool              `json:"rateLimitAutoFromHeaders,omitempty"`
-	Priority                      int               `json:"priority,omitempty"`
-	Status                        string            `json:"status,omitempty"`
+	Name                          string   `json:"name"`
+	Description                   string   `json:"description,omitempty"`
+	Website                       string   `json:"website,omitempty"`
+	ServiceType                   string   `json:"serviceType"`
+	AuthHeader                    string   `json:"authHeader,omitempty"`
+	ProviderID                    string   `json:"providerId,omitempty"`
+	BaseURL                       string   `json:"baseUrl"`
+	APIKeys                       []string `json:"apiKeys"`
+	ProxyURL                      string   `json:"proxyUrl,omitempty"`
+	ReasoningParamStyle           string   `json:"reasoningParamStyle,omitempty"`
+	NormalizeSystemRoleToTopLevel bool     `json:"normalizeSystemRoleToTopLevel,omitempty"`
+	StripBillingHeader            bool     `json:"stripBillingHeader,omitempty"`
+	NoVision                      bool     `json:"noVision,omitempty"`
+	SupportedModels               []string `json:"supportedModels,omitempty"`
+	InjectDummyThoughtSignature   bool     `json:"injectDummyThoughtSignature,omitempty"`
+	StripThoughtSignature         bool     `json:"stripThoughtSignature,omitempty"`
+	CodexToolCompat               bool     `json:"codexToolCompat,omitempty"`
+	StripCodexClientTools         bool     `json:"stripCodexClientTools,omitempty"`
+	NormalizeMetadataUserId       *bool    `json:"normalizeMetadataUserId,omitempty"`
+	RateLimitRPM                  int      `json:"rateLimitRpm,omitempty"`
+	RateLimitBurst                int      `json:"rateLimitBurst,omitempty"`
+	RateLimitMaxConcurrent        int      `json:"rateLimitMaxConcurrent,omitempty"`
+	RateLimitAutoFromHeaders      bool     `json:"rateLimitAutoFromHeaders,omitempty"`
+	Priority                      int      `json:"priority,omitempty"`
+	Status                        string   `json:"status,omitempty"`
 }
 
 var providerConsoleURLs = map[string]string{
@@ -529,14 +523,6 @@ func BuildPayload(req CreateChannelRequest) (ChannelPayload, error) {
 		Status:      "active",
 	}
 	applyTargetDefaults(&payload, preset.ID, target, planID)
-	if targetConfigs, ok := channelTargetConfigs[target]; ok {
-		if targetConfig, ok := targetConfigs[preset.ID]; ok {
-			if preset.ID == ProviderKimi {
-				targetConfig = applyKimiPlanOverrides(targetConfig, target, planID)
-			}
-			applyChannelTargetConfig(&payload, targetConfig)
-		}
-	}
 	return payload, nil
 }
 
@@ -760,15 +746,11 @@ func defaultChannelNameForPlan(provider string, target string, planID string) st
 type channelTargetConfig struct {
 	ServiceType                   string
 	AuthHeader                    string
-	ModelMapping                  map[string]string
-	ReasoningMapping              map[string]string
 	ReasoningParamStyle           string
 	NormalizeSystemRoleToTopLevel bool
 	NormalizeMetadataUserId       *bool
 	StripBillingHeader            bool
 	NoVision                      bool
-	NoVisionModels                []string
-	VisionFallbackModel           string
 	CodexToolCompat               *bool
 	StripCodexClientTools         *bool
 	RateLimitRPM                  int // 主动限速默认 RPM（0=不设默认）
@@ -784,48 +766,6 @@ func boolRef(value bool) *bool {
 	return &value
 }
 
-// applyKimiPlanOverrides 根据 Kimi planID 覆盖模型映射。
-// coding plan 使用 kimi-for-coding，普通按量使用 kimi-k2.7。
-func applyKimiPlanOverrides(config channelTargetConfig, target string, planID string) channelTargetConfig {
-	isCodingPlan := strings.HasPrefix(planID, "coding-")
-
-	if target == TargetMessages {
-		if isCodingPlan {
-			// Coding Plan: 使用 kimi-for-coding
-			config.ModelMapping = map[string]string{
-				"fable":  "kimi-for-coding",
-				"haiku":  "kimi-for-coding",
-				"opus":   "kimi-for-coding",
-				"sonnet": "kimi-for-coding",
-			}
-		} else {
-			// 普通按量: 使用 kimi-k2.7
-			config.ModelMapping = map[string]string{
-				"fable":  "kimi-k2.7",
-				"haiku":  "kimi-k2.7",
-				"opus":   "kimi-k2.7",
-				"sonnet": "kimi-k2.7",
-			}
-		}
-	} else if target == TargetResponses {
-		if isCodingPlan {
-			// Coding Plan: 使用 kimi-for-coding
-			config.ModelMapping = map[string]string{
-				"codex": "kimi-for-coding",
-				"gpt":   "kimi-for-coding",
-			}
-		} else {
-			// 普通按量: 使用 kimi-k2.7
-			config.ModelMapping = map[string]string{
-				"codex": "kimi-k2.7",
-				"gpt":   "kimi-k2.7",
-			}
-		}
-	}
-
-	return config
-}
-
 func applyChannelTargetConfig(payload *ChannelPayload, config channelTargetConfig) {
 	if config.ServiceType != "" {
 		payload.ServiceType = config.ServiceType
@@ -833,9 +773,6 @@ func applyChannelTargetConfig(payload *ChannelPayload, config channelTargetConfi
 	if config.AuthHeader != "" {
 		payload.AuthHeader = config.AuthHeader
 	}
-	payload.ModelMapping = maps.Clone(config.ModelMapping)
-	payload.ReasoningMapping = maps.Clone(config.ReasoningMapping)
-	payload.NoVisionModels = slices.Clone(config.NoVisionModels)
 	payload.ReasoningParamStyle = config.ReasoningParamStyle
 	payload.NormalizeSystemRoleToTopLevel = payload.NormalizeSystemRoleToTopLevel || config.NormalizeSystemRoleToTopLevel
 	if config.NormalizeMetadataUserId != nil {
@@ -843,7 +780,6 @@ func applyChannelTargetConfig(payload *ChannelPayload, config channelTargetConfi
 	}
 	payload.StripBillingHeader = payload.StripBillingHeader || config.StripBillingHeader
 	payload.NoVision = payload.NoVision || config.NoVision
-	payload.VisionFallbackModel = config.VisionFallbackModel
 	if config.CodexToolCompat != nil {
 		payload.CodexToolCompat = *config.CodexToolCompat
 	}
@@ -889,11 +825,6 @@ func applyTargetDefaults(payload *ChannelPayload, provider string, target string
 	config, ok := configs[provider]
 	if !ok {
 		return
-	}
-
-	// Kimi 根据 planID 选择不同的模型映射
-	if provider == ProviderKimi {
-		config = applyKimiPlanOverrides(config, target, planID)
 	}
 
 	applyChannelTargetConfig(payload, config)

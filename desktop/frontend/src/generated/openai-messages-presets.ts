@@ -4,42 +4,16 @@ export type OpenAIMessagesReasoningEffort = "none" | "minimal" | "low" | "medium
 export type OpenAIMessagesTextVerbosity = "low" | "medium" | "high"
 
 export interface OpenAIMessagesPreset {
-  modelMapping: Record<string, string>
-  reasoningMapping: Partial<Record<string, OpenAIMessagesReasoningEffort>>
   fastMode: boolean
   textVerbosity: OpenAIMessagesTextVerbosity
 }
 
 export const openaiMessagesPresets: Record<string, OpenAIMessagesPreset> = {
   "gpt-5.5": {
-    "modelMapping": {
-      "fable": "gpt-5.5",
-      "opus": "gpt-5.5",
-      "sonnet": "gpt-5.4",
-      "haiku": "gpt-5.4-mini"
-    },
-    "reasoningMapping": {
-      "fable": "xhigh",
-      "opus": "xhigh",
-      "sonnet": "xhigh",
-      "haiku": "high"
-    },
     "fastMode": true,
     "textVerbosity": "medium"
   },
   "gpt-5.4": {
-    "modelMapping": {
-      "fable": "gpt-5.4",
-      "opus": "gpt-5.4",
-      "sonnet": "gpt-5.4",
-      "haiku": "gpt-5.4-mini"
-    },
-    "reasoningMapping": {
-      "fable": "xhigh",
-      "opus": "xhigh",
-      "sonnet": "xhigh",
-      "haiku": "high"
-    },
     "fastMode": true,
     "textVerbosity": "medium"
   }

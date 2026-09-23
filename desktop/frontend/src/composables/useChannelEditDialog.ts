@@ -12,7 +12,7 @@ import {
   type ModelCapabilityRow,
 } from '@/utils/channel-payload'
 import { defaultStripBillingHeader } from '@/utils/base-url-semantics'
-import { supportsAdvancedChannelOptions, supportsReasoningMapping } from '@/utils/channel-advanced-options'
+import { supportsAdvancedChannelOptions } from '@/utils/channel-advanced-options'
 import { extractChannelNamePrefix, syncBaseUrlsFormState } from '@/utils/channel-dialog-state'
 import type { ManagedChannelType } from '@/utils/channel-type-api'
 import { buildExpectedRequestUrls } from '@/utils/expected-request-urls'
@@ -29,10 +29,8 @@ import type {
 } from '@/services/admin-api'
 import { useChannelEditSectionNav } from '@/composables/useChannelEditSectionNav'
 import { useCopilotOAuth } from '@/composables/useCopilotOAuth'
-import { useModelAutocomplete } from '@/composables/useModelAutocomplete'
 import { useChannelApiKeys } from '@/composables/useChannelApiKeys'
 import { useChannelEditPresets } from '@/composables/useChannelEditPresets'
-import { useChannelModelMapping, type ReasoningEffort } from '@/composables/useChannelModelMapping'
 import { useChannelTargetModels, type KeyModelsStatus } from '@/composables/useChannelTargetModels'
 import { useChannelCustomHeaders } from '@/composables/useChannelCustomHeaders'
 import { useChannelEditorOptions } from '@/composables/useChannelEditorOptions'
@@ -179,19 +177,15 @@ const { t } = useLanguage()
     insecureSkipVerify: false,
     apiKeysText: '',
     customHeadersText: '{}',
-    modelMappingText: '{}',
     modelCapabilitiesText: '',
     modelCapabilityRows: [] as ModelCapabilityRow[],
     embeddingCapabilityRows: [] as EmbeddingCapabilityRow[],
     defaultContextWindowTokens: '' as string | number,
     defaultMaxOutputTokens: '' as string | number,
     allowUnknownContext: false,
-    reasoningMappingText: '{}',
     reasoningParamStyle: 'reasoning' as 'reasoning' | 'reasoning_effort' | 'thinking',
     textVerbosity: '' as 'low' | 'medium' | 'high' | '',
     supportedModelsText: '',
-    visionFallbackModel: '',
-    visionFallbackReasoningEffort: '' as ReasoningEffort | '',
     noVision: false,
     historicalImageTurnLimit: 0,
     fastMode: false,
@@ -208,31 +202,13 @@ const { t } = useLanguage()
 
   const supportsOpenAIAdvanced = computed(() => props.channelType !== 'vectors' && supportsAdvancedChannelOptions(form.serviceType))
   const supportsOpenAIAdvancedOptions = computed(() => props.channelType !== 'vectors' && supportsAdvancedChannelOptions(form.serviceType))
-  const supportsReasoningMappingOptions = computed(() => props.channelType !== 'vectors' && supportsReasoningMapping(form.serviceType))
   const supportsChannelDiscovery = computed(() => props.channelType !== 'images' && props.channelType !== 'vectors')
-  const {
-    modelMappingRows,
-    modelCapabilityRows,
-    mappedTargetModels,
-    newModelMapping,
-    modelMappingFromChannel,
-    addModelMappingRow,
-    removeModelMappingRow,
-    getModelMappingAsObject,
-    getReasoningMappingAsObject,
-    applyVisionFallbackReasoning,
-    getNoVisionModelsFromRows,
-    updateMappingRow,
-    updateModelCapabilityRows,
-    syncModelCapabilitiesFromMapping,
-    startMappingTargetEdit,
-    finishMappingTargetEdit,
-  } = useChannelModelMapping({
-    form,
-    getSourceMappingError: () => sourceMappingError.value,
-    nextRowId,
-    supportsReasoningMappingOptions,
-  })
+  const modelCapabilityRows = ref<ModelCapabilityRow[]>([])
+
+  function updateModelCapabilityRows(rows: ModelCapabilityRow[]) {
+    modelCapabilityRows.value = rows
+    form.modelCapabilityRows = rows
+  }
   const {
     showModelMappingPresets,
     showMessagesOpenAIChannelPresets,
@@ -242,24 +218,19 @@ const { t } = useLanguage()
   } = useChannelEditPresets({
     channelType: () => props.channelType,
     form,
-    modelMappingRows,
-    nextRowId,
     supportsOpenAIAdvanced,
   })
   const {
     fetchingModels,
     fetchedModelsError,
-    sourceModelOptions,
     targetModelDatalist,
     commonSupportedModelFilters,
     normalizedSupportedModelState,
     supportedModelsError,
     selectedSupportedModelSet,
-    sourceMappingError,
     resetTargetModelState,
     toggleSupportedModelFilter,
     fetchTargetModels,
-    handleTargetFocus: loadTargetModelsOnFocus,
   } = useChannelTargetModels({
     channel: () => props.channel,
     channelType: () => props.channelType,
@@ -268,8 +239,6 @@ const { t } = useLanguage()
     getHeadersAsObject,
     getSubmitApiKeys,
     keyModelsStatus,
-    modelMappingRows,
-    newModelMapping,
     t,
   })
 
@@ -285,12 +254,8 @@ const { t } = useLanguage()
   const {
     reasoningParamStyleOptions,
     textVerbosityOptions,
-    DEFAULT_SELECT_VALUE,
-    reasoningEffortOptions,
     serviceTypeOptions,
     headerServiceTypeItems,
-    modelMappingHint,
-    targetModelPlaceholder,
   } = useChannelEditorOptions({
     channelType: () => props.channelType,
     defaultServiceTypeForChannel,
@@ -366,19 +331,15 @@ const { t } = useLanguage()
     form.insecureSkipVerify = false
     form.apiKeysText = ''
     form.customHeadersText = '{}'
-    form.modelMappingText = '{}'
     form.modelCapabilitiesText = ''
     form.modelCapabilityRows = []
     form.embeddingCapabilityRows = []
     form.defaultContextWindowTokens = ''
     form.defaultMaxOutputTokens = ''
     form.allowUnknownContext = false
-    form.reasoningMappingText = '{}'
     form.reasoningParamStyle = 'reasoning'
     form.textVerbosity = ''
     form.supportedModelsText = ''
-    form.visionFallbackModel = ''
-    form.visionFallbackReasoningEffort = ''
     form.noVision = false
     form.historicalImageTurnLimit = 0
     form.fastMode = false
@@ -401,7 +362,6 @@ const { t } = useLanguage()
     resetTargetModelState()
     localRestoredKeys.value = new Set()
     localDisabledGroupModels.value = []
-    modelMappingRows.value = []
     modelCapabilityRows.value = []
     headerRows.value = []
     error.value = ''
@@ -456,24 +416,18 @@ const { t } = useLanguage()
     resetTargetModelState()
     localRestoredKeys.value = new Set()
     localDisabledGroupModels.value = [...(ch.disabledGroupModels ?? [])]
-    modelMappingRows.value = modelMappingFromChannel(ch)
     modelCapabilityRows.value = modelCapabilitiesToRows(ch.modelCapabilities || {}, () => ++rowId)
     form.embeddingCapabilityRows = embeddingCapabilitiesToRows(ch.embeddingCapabilities || {}, nextEmbeddingRowId)
     form.modelCapabilityRows = modelCapabilityRows.value
     headerRows.value = headerRowsFromChannel(ch)
     form.customHeadersText = stringifyJson(ch.customHeaders)
-    form.modelMappingText = stringifyJson(ch.modelMapping)
     form.modelCapabilitiesText = stringifyJson(ch.modelCapabilities)
     form.defaultContextWindowTokens = ch.defaultCapability?.contextWindowTokens ?? ''
     form.defaultMaxOutputTokens = ch.defaultCapability?.maxOutputTokens ?? ''
     form.allowUnknownContext = ch.allowUnknownContext ?? false
-    form.reasoningMappingText = stringifyJson(ch.reasoningMapping)
     form.reasoningParamStyle = ch.reasoningParamStyle || 'reasoning'
     form.textVerbosity = ch.textVerbosity || ''
     form.supportedModelsText = (ch.supportedModels || []).join('\n')
-    // noVisionModels 中命中映射 target 的由行级 toggle 表示，其余保留在文本框，避免重复展示
-    form.visionFallbackModel = ch.visionFallbackModel || ''
-    form.visionFallbackReasoningEffort = (ch.reasoningMapping?.[form.visionFallbackModel] || '') as ReasoningEffort | ''
     form.noVision = ch.noVision ?? false
     form.historicalImageTurnLimit = ch.historicalImageTurnLimit ?? 0
     form.fastMode = ch.fastMode ?? false
@@ -494,14 +448,6 @@ const { t } = useLanguage()
     resetForm()
     if (ch) {
       populateFromChannel(ch)
-      syncModelCapabilitiesFromMapping()
-      // 如果有模型映射配置，主动触发一次模型列表获取
-      // 使用 nextTick 确保表单数据已填充完成
-      if (ch.modelMapping && Object.keys(ch.modelMapping).length > 0) {
-        nextTick(() => {
-          void fetchTargetModelsAndShowDropdown()
-        })
-      }
     }
   }, { immediate: true })
 
@@ -606,19 +552,9 @@ const { t } = useLanguage()
       .filter(Boolean)
   }
 
-  const channelDiscoveryModelMappingEntries = computed(() => {
-    const mapping = channelDiscoveryResult.value?.recommendation?.modelMapping ?? {}
-    return Object.entries(mapping)
-  })
-
   const channelDiscoveryCompatEntries = computed(() => {
     const compat = channelDiscoveryResult.value?.recommendation?.compat ?? {}
     return Object.entries(compat).filter(([, value]) => value !== undefined)
-  })
-
-  const channelDiscoveryReasoningEntries = computed(() => {
-    const reasoning = channelDiscoveryResult.value?.recommendation?.reasoningMapping ?? {}
-    return Object.entries(reasoning)
   })
 
   const channelDiscoverySuccessfulProtocols = computed(() => {
@@ -713,8 +649,6 @@ const { t } = useLanguage()
         customHeaders: getHeadersAsObject(),
         proxyUrl: form.proxyUrl,
         insecureSkipVerify: form.insecureSkipVerify,
-        modelMapping: getModelMappingAsObject(),
-        reasoningMapping: getReasoningMappingAsObject(),
         targetClients: discoveryTargetClients(),
       })
     } catch (e) {
@@ -741,23 +675,9 @@ const { t } = useLanguage()
       form.baseUrlsText = Array.from(new Set(nextLines.length ? nextLines : [recommended])).join('\n')
     }
 
-    const mapping = recommendation.modelMapping ?? {}
-    const noVisionSet = new Set(recommendation.noVisionModels ?? [])
-    modelMappingRows.value = Object.entries(mapping).map(([source, target]) => ({
-      id: nextRowId(),
-      source,
-      target,
-      reasoning: (recommendation.reasoningMapping?.[source] || '') as ReasoningEffort | '',
-      noVision: noVisionSet.has(target),
-    }))
-    form.modelMappingText = stringifyJson(mapping)
-    form.reasoningMappingText = stringifyJson(recommendation.reasoningMapping)
-    form.visionFallbackModel = recommendation.visionFallbackModel || ''
-    form.visionFallbackReasoningEffort = ''
     if (recommendation.supportedModels) {
       form.supportedModelsText = recommendation.supportedModels.join('\n')
     }
-    syncModelCapabilitiesFromMapping()
     for (const [key, value] of Object.entries(recommendation.compat || {})) {
       if (typeof value === 'boolean' && key in form) {
         ;(form as Record<string, unknown>)[key] = value
@@ -807,10 +727,8 @@ const { t } = useLanguage()
           stripThoughtSignature: form.stripThoughtSignature,
           description: form.description,
           apiKeys: submitApiKeys.value,
-          modelMapping: parseJsonObject<Record<string, string>>(form.modelMappingText, 'Model mapping'),
           modelCapabilityRows: modelCapabilityRows.value,
           embeddingCapabilityRows: form.embeddingCapabilityRows,
-          reasoningMapping: parseJsonObject<Record<string, 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'>>(form.reasoningMappingText, 'Reasoning mapping'),
           reasoningParamStyle: form.reasoningParamStyle,
           textVerbosity: form.textVerbosity,
           fastMode: form.fastMode,
@@ -839,12 +757,8 @@ const { t } = useLanguage()
           codexToolCompat: form.codexToolCompat,
           stripCodexClientTools: form.stripCodexClientTools,
           noVision: form.noVision,
-          noVisionModels: getNoVisionModelsFromRows(),
-          visionFallbackModel: form.visionFallbackModel,
           historicalImageTurnLimit: form.historicalImageTurnLimit,
         }, { channelType: props.channelType })
-
-    applyVisionFallbackReasoning(payload)
 
     if (isEditMode.value && props.channel?.requestTimeoutMs && !String(form.requestTimeoutMs ?? '').trim()) {
       payload.requestTimeoutMs = 0
@@ -872,7 +786,6 @@ const { t } = useLanguage()
   }
 
   async function persistCurrentDraft(options: { notifyParent?: boolean; close?: boolean } = {}) {
-    syncModelCapabilitiesFromMapping()
     applyQuickCopilotDefaults()
 
     if (!isValid.value) {
@@ -905,12 +818,6 @@ const { t } = useLanguage()
   // Keyboard shortcuts: Esc 取消，Cmd/Ctrl+Enter 保存（编辑/创建一致，避免多行文本内 Enter 误触发）
   const handleGlobalKeydown = (e: KeyboardEvent) => {
     if (e.key === 'Escape') {
-      if (showTargetSuggestions.value) {
-        e.preventDefault()
-        e.stopPropagation()
-        hideTargetDropdown()
-        return
-      }
       e.preventDefault()
       emit('close')
       return
@@ -929,7 +836,6 @@ const { t } = useLanguage()
   // 组件挂载即注册快捷键（新建和编辑模式都需要）
   onMounted(() => {
     window.addEventListener('keydown', handleGlobalKeydown)
-    window.addEventListener('pointerdown', handlePointerDown)
 
     // 按滚动位置同步左侧导航高亮；长 section 内滚动也需要实时更新
     // 使用多次 nextTick + setTimeout 确保 Teleport + reka-ui 完全渲染
@@ -944,34 +850,11 @@ const { t } = useLanguage()
 
   onBeforeUnmount(() => {
     window.removeEventListener('keydown', handleGlobalKeydown)
-    window.removeEventListener('pointerdown', handlePointerDown)
     unbindScrollRoot()
     clearDuplicateKeyHighlight()
     clearCopilotPollTimer()
     clearCopilotCopyTimer()
     if (diagnoseTimer) clearTimeout(diagnoseTimer)
-  })
-
-  const {
-    showTargetSuggestions,
-    activeTargetInputId,
-    filteredTargetModels,
-    showSourceSuggestions,
-    activeSourceInputId,
-    filteredSourceModels,
-    showTargetDropdown,
-    hideTargetDropdown,
-    handlePointerDown,
-    showSourceDropdown,
-    hideSourceDropdown,
-    selectSourceModel,
-    selectTargetModel,
-  } = useModelAutocomplete({
-    finishMappingTargetEdit,
-    modelMappingRows,
-    newModelMapping,
-    sourceModelOptions,
-    targetModelDatalist,
   })
 
   // ── Base URL 预期请求预览 ──
@@ -994,26 +877,9 @@ const { t } = useLanguage()
     )
   })
 
-  async function fetchTargetModelsAndShowDropdown() {
-    await fetchTargetModels()
-    showTargetSuggestions.value = !!activeTargetInputId.value && targetModelDatalist.value.length > 0
-  }
-
-  function handleTargetFocus() {
-    loadTargetModelsOnFocus()
-  }
-
   function syncUpstreamModels() {
-    void fetchTargetModelsAndShowDropdown()
+    void fetchTargetModels()
   }
-
-  // Refresh dropdown visibility after target models load asynchronously while the input is still focused.
-  // The first focus may see an empty datalist and hide suggestions; flip it back once data arrives.
-  watch(targetModelDatalist, (list) => {
-    if (activeTargetInputId.value && list.length > 0 && !showTargetSuggestions.value) {
-      showTargetSuggestions.value = true
-    }
-  })
 
   function upsertDisabledGroupModel(record: DisabledGroupModel) {
     localDisabledGroupModels.value = [
@@ -1102,9 +968,6 @@ const { t } = useLanguage()
   }
 
   function buildCurrentPayload() {
-    const modelMapping = getModelMappingAsObject()
-    const reasoningMapping = getReasoningMappingAsObject() as Record<string, 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'>
-
     return buildChannelPayload({
       name: form.name,
       remark: form.remark,
@@ -1119,10 +982,8 @@ const { t } = useLanguage()
       stripThoughtSignature: form.stripThoughtSignature,
       description: form.description,
       apiKeys: getSubmitApiKeys(),
-      modelMapping,
       modelCapabilityRows: modelCapabilityRows.value,
       embeddingCapabilityRows: form.embeddingCapabilityRows,
-      reasoningMapping,
       reasoningParamStyle: form.reasoningParamStyle,
       textVerbosity: form.textVerbosity,
       fastMode: form.fastMode,
@@ -1154,8 +1015,6 @@ const { t } = useLanguage()
       codexToolCompat: form.codexToolCompat,
       stripCodexClientTools: form.stripCodexClientTools,
       noVision: form.noVision,
-      noVisionModels: getNoVisionModelsFromRows(),
-      visionFallbackModel: form.visionFallbackModel,
       historicalImageTurnLimit: form.historicalImageTurnLimit,
     }, { channelType: props.channelType })
   }
@@ -1194,23 +1053,12 @@ const { t } = useLanguage()
     activeSection,
     dialogRef,
     sections,
-    modelMappingRows,
     modelCapabilityRows,
-    mappedTargetModels,
-    newModelMapping,
     headerRows,
     newHeader,
-    showTargetSuggestions,
-    activeTargetInputId,
     fetchedModelsError,
-    filteredTargetModels,
-    showSourceSuggestions,
-    activeSourceInputId,
-    filteredSourceModels,
     reasoningParamStyleOptions,
     textVerbosityOptions,
-    DEFAULT_SELECT_VALUE,
-    reasoningEffortOptions,
     form,
     disabledApiKeys,
     disabledGroupModels,
@@ -1224,27 +1072,20 @@ const { t } = useLanguage()
     serviceTypeOptions,
     headerServiceTypeItems,
     supportsOpenAIAdvancedOptions,
-    supportsReasoningMappingOptions,
     supportsChannelDiscovery,
-    modelMappingHint,
-    targetModelPlaceholder,
     showModelMappingPresets,
     showMessagesOpenAIChannelPresets,
     showClaudeChannelPresets,
     showCodexResponsesPresets,
     fetchingModels,
-    sourceModelOptions,
     targetModelDatalist,
     commonSupportedModelFilters,
     supportedModelsError,
     selectedSupportedModelSet,
-    sourceMappingError,
     discoveringChannelConfig,
     channelDiscoveryResult,
     channelDiscoveryError,
-    channelDiscoveryModelMappingEntries,
     channelDiscoveryCompatEntries,
-    channelDiscoveryReasoningEntries,
     channelDiscoverySuccessfulProtocols,
     channelDiscoveryCapabilityEntries,
     expectedRequestUrls,
@@ -1252,28 +1093,16 @@ const { t } = useLanguage()
     clearCopilotPollTimer,
     scrollToSection,
     setSectionRef,
-    showTargetDropdown,
-    hideTargetDropdown,
-    showSourceDropdown,
-    hideSourceDropdown,
-    selectSourceModel,
-    selectTargetModel,
     removeExistingApiKey,
     handleQuickPaste,
     updateQuickServiceType,
     clearDuplicateKeyHighlight,
     moveApiKeyToTop,
     moveApiKeyToBottom,
-    addModelMappingRow,
-    removeModelMappingRow,
     toggleSupportedModelFilter,
-    handleTargetFocus,
     applyPreset,
     syncUpstreamModels,
-    updateMappingRow,
     updateModelCapabilityRows,
-    startMappingTargetEdit,
-    finishMappingTargetEdit,
     addHeaderRow,
     removeHeaderRow,
     updateHeaderRow,
