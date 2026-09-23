@@ -191,7 +191,10 @@ func racingClaimClientCommit(c *gin.Context) bool {
 	if bw, ok := c.Writer.(*racingBranchWriter); ok {
 		bw.Commit()
 	}
-	SetChannelLogRacingWon(c)
+	// 仅实际竞速（已有对手分支注册）才补记 won：无影子的独占交付不是竞速获胜。
+	if gate.Participants() > 1 {
+		SetChannelLogRacingWon(c)
+	}
 	return true
 }
 

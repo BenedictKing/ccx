@@ -1861,7 +1861,7 @@ func TryUpstreamWithAllKeys(
 				metricsManager.ReleaseProbe(currentBaseURL, apiKey, metricsServiceType)
 				delete(probeAcquired, probeKey)
 			}
-			// 记录渠道日志（竞速赢家补记 won 标记，未参与竞速时无操作）
+			// 记录渠道日志（竞速赢家补记 won 标记；武装未竞速时清除创建期角色标记）
 			CompleteChannelLogWithRacingOutcome(channelLogStore, metricsKey, logRequestID, c)
 			CompleteLog(channelLogStore, metricsKey, logRequestID, http.StatusOK, true, "", isRetryAttempt)
 			recordAttemptCompleted(c, logRequestID, upstream.ChannelUID, "success", http.StatusOK, time.Since(attemptStartedAt).Milliseconds())

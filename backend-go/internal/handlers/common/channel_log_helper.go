@@ -127,31 +127,34 @@ func SetChannelLogRacingWon(c *gin.Context) {
 }
 
 // CompleteChannelLogWithRacingOutcome 完成日志并补记竞速结果：
-// gin context 带 won 标记（赢家）时置 RacingStatus=won；status 强制 completed。
-// 竞速未参与时不做任何额外处理。
+// gin context 带 won 标记（赢家）时置 RacingStatus=won；武装竞速但无对手分支
+// （未实际发生竞速）时清除创建期预置的角色标记，保证「空=未参与竞速」的日志口径。
 func CompleteChannelLogWithRacingOutcome(
 	channelLogStore *metrics.ChannelLogStore,
 	metricsKey string,
 	requestID string,
 	c *gin.Context,
 ) {
+	if channelLogStore == nil || metricsKey == "" || requestID == "" || c == nil {
+		return
+	}
 	won := false
-	if c != nil {
-		if v, ok := c.Get(racingOutcomeKey); ok {
-			if s, ok := v.(string); ok {
-				won = s == metrics.RacingStatusWon
-			}
+	if v, ok := c.Get(racingOutcomeKey); ok {
+		if s, ok := v.(string); ok {
+			won = s == metrics.RacingStatusWon
 		}
 	}
-	if !won {
+	if won {
+		channelLogStore.Update(metricsKey, requestID, func(log *metrics.ChannelLog) {
+			log.RacingStatus = metrics.RacingStatusWon
+		})
 		return
 	}
-	if channelLogStore == nil || metricsKey == "" || requestID == "" {
-		return
+	if gate := gateFromContext(c); gate != nil && gate.Participants() <= 1 {
+		channelLogStore.Update(metricsKey, requestID, func(log *metrics.ChannelLog) {
+			log.RacingRole = ""
+		})
 	}
-	channelLogStore.Update(metricsKey, requestID, func(log *metrics.ChannelLog) {
-		log.RacingStatus = metrics.RacingStatusWon
-	})
 }
 
 // MarkChannelLogRacingLost 将败者日志标记为竞速败出终态。
