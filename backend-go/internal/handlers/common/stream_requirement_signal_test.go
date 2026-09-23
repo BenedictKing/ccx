@@ -36,6 +36,37 @@ func TestStreamRequirementFromError(t *testing.T) {
 			body:       `{"error":{"upstream_error":{"message":"streaming is required"}}}`,
 		},
 		{
+			name:       "实测文案-中文禁止非流",
+			statusCode: http.StatusBadRequest,
+			body:       `{"error":{"type":"stream_required","message":"本渠道禁止非流请求 (request id: 202609230554293194136808268d9d65HVnJS5H)"},"type":"error"}`,
+		},
+		{
+			name:       "错误码强信号-文案无关",
+			statusCode: http.StatusBadRequest,
+			body:       `{"error":{"type":"stream_required","message":"invalid payload"}}`,
+		},
+		{
+			name:       "顶层 code 强信号",
+			statusCode: http.StatusBadRequest,
+			body:       `{"code":"stream_required","message":"x"}`,
+		},
+		{
+			name:       "中文文案-无错误码",
+			statusCode: http.StatusBadRequest,
+			body:       `{"error":{"message":"本渠道禁止非流请求"}}`,
+		},
+		{
+			name:       "英文文案-non-stream not supported",
+			statusCode: http.StatusBadRequest,
+			body:       `{"error":{"message":"non-streaming requests are not supported by this model"}}`,
+		},
+		{
+			name:       "反义错误码不误判",
+			statusCode: http.StatusBadRequest,
+			body:       `{"error":{"type":"not_stream_required","message":"invalid payload"}}`,
+			wantNil:    true,
+		},
+		{
 			name:            "流式请求不学习",
 			statusCode:      http.StatusBadRequest,
 			body:            `{"error":{"message":"streaming is required"}}`,
@@ -96,6 +127,16 @@ func TestIsStreamRequirementError(t *testing.T) {
 			name:   "error.message 命中",
 			errObj: map[string]interface{}{"message": `streaming is required: this endpoint only accepts "stream": true`},
 			want:   true,
+		},
+		{
+			name:   "type 强信号命中",
+			errObj: map[string]interface{}{"type": "stream_required"},
+			want:   true,
+		},
+		{
+			name:   "反义 code 不命中",
+			errObj: map[string]interface{}{"type": "not_stream_required"},
+			want:   false,
 		},
 		{
 			name:   "嵌套 upstream_error.message 命中",
