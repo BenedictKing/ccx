@@ -27,6 +27,16 @@ type ResponsesProvider struct {
 	SessionManager *session.SessionManager
 }
 
+// responsesStreamToolState 保存一个 Responses function_call 的独立流状态。
+// Responses 允许多个工具调用交错输出，不能用单个 currentTool 覆盖前一个调用。
+type responsesStreamToolState struct {
+	id     string
+	name   string
+	index  int
+	args   strings.Builder
+	closed bool
+}
+
 // ConvertToProviderRequest 将请求转换为上游格式
 func (p *ResponsesProvider) ConvertToProviderRequest(
 	c *gin.Context,
@@ -693,9 +703,9 @@ func (p *ResponsesProvider) HandleStreamResponse(body io.ReadCloser) (<-chan str
 		blockIndex := 0 // 下一个可用的 content_block 索引（thinking/text/tool_use 共享）
 		textBlockIndex := -1
 		thinkingBlockIndex := -1
-		currentTool := map[string]string{}
-		var currentToolArgs strings.Builder
-		currentToolIndex := -1
+		toolStates := make(map[string]*responsesStreamToolState)
+		toolKeyByItemID := make(map[string]string)
+		toolKeyByOutputIndex := make(map[int]string)
 		latestInputTokens := 0
 		latestOutputTokens := 0
 		latestCacheCreationTokens := 0
@@ -732,6 +742,149 @@ func (p *ResponsesProvider) HandleStreamResponse(body io.ReadCloser) (<-chan str
 			if textBlockStarted {
 				emitJSON("content_block_stop", map[string]interface{}{"index": textBlockIndex})
 				textBlockStarted = false
+			}
+		}
+
+		responseOutputIndex := func(data map[string]interface{}) (int, bool) {
+			value, ok := data["output_index"].(float64)
+			return int(value), ok
+		}
+
+		responseItemID := func(data map[string]interface{}, item map[string]interface{}) string {
+			for _, value := range []interface{}{data["item_id"], item["id"], item["call_id"]} {
+				if id := toString(value); id != "" {
+					return id
+				}
+			}
+			return ""
+		}
+
+		responseToolName := func(data map[string]interface{}, item map[string]interface{}) string {
+			if name := toString(item["name"]); name != "" {
+				return name
+			}
+			return toString(data["name"])
+		}
+
+		lookupToolState := func(data map[string]interface{}, item map[string]interface{}) *responsesStreamToolState {
+			if itemID := responseItemID(data, item); itemID != "" {
+				if key := toolKeyByItemID[itemID]; key != "" {
+					return toolStates[key]
+				}
+			}
+			if outputIndex, ok := responseOutputIndex(data); ok {
+				if key := toolKeyByOutputIndex[outputIndex]; key != "" {
+					return toolStates[key]
+				}
+			}
+			return nil
+		}
+
+		startToolState := func(data map[string]interface{}, item map[string]interface{}) *responsesStreamToolState {
+			if state := lookupToolState(data, item); state != nil {
+				if name := responseToolName(data, item); name != "" {
+					state.name = name
+				}
+				if id := toString(item["call_id"]); id != "" {
+					state.id = id
+				}
+				return state
+			}
+
+			itemID := responseItemID(data, item)
+			outputIndex, hasOutputIndex := responseOutputIndex(data)
+			key := itemID
+			if key == "" && hasOutputIndex {
+				key = fmt.Sprintf("output_index:%d", outputIndex)
+			}
+			if key == "" {
+				key = fmt.Sprintf("sequence:%d", blockIndex)
+			}
+			state := &responsesStreamToolState{
+				id:    toString(item["call_id"]),
+				name:  responseToolName(data, item),
+				index: blockIndex,
+			}
+			if state.id == "" {
+				state.id = state.name
+			}
+			blockIndex++
+			toolStates[key] = state
+			if itemID != "" {
+				toolKeyByItemID[itemID] = key
+			}
+			if hasOutputIndex {
+				toolKeyByOutputIndex[outputIndex] = key
+			}
+			ensureMessageStart()
+			closeOpenContentBlocks()
+			emitJSON("content_block_start", map[string]interface{}{
+				"index": state.index,
+				"content_block": map[string]interface{}{
+					"type": "tool_use",
+					"id":   state.id,
+					"name": state.name,
+				},
+			})
+			return state
+		}
+
+		closeToolState := func(state *responsesStreamToolState, item map[string]interface{}) {
+			if state == nil || state.closed {
+				return
+			}
+			if name := responseToolName(nil, item); name != "" {
+				state.name = name
+			}
+			if id := toString(item["call_id"]); id != "" {
+				state.id = id
+			}
+			argsJSON := state.args.String()
+			if strings.TrimSpace(argsJSON) == "" {
+				argsJSON = toString(item["arguments"])
+			}
+			if strings.TrimSpace(argsJSON) == "" {
+				argsJSON = toString(item["input"])
+			}
+			if strings.TrimSpace(argsJSON) == "" {
+				argsJSON = "{}"
+			}
+			argsJSON = sanitizeClaudeToolArgsJSON(state.name, argsJSON)
+			emitJSON("content_block_delta", map[string]interface{}{
+				"index": state.index,
+				"delta": map[string]interface{}{"type": "input_json_delta", "partial_json": argsJSON},
+			})
+			emitJSON("content_block_stop", map[string]interface{}{"index": state.index})
+			state.closed = true
+			stopReason = "tool_use"
+		}
+
+		finalizeCompletedToolStates := func(response map[string]interface{}) {
+			output, _ := response["output"].([]interface{})
+			for _, rawItem := range output {
+				item, ok := rawItem.(map[string]interface{})
+				if !ok || toString(item["type"]) != "function_call" {
+					continue
+				}
+				state := lookupToolState(map[string]interface{}{"item_id": item["id"]}, item)
+				if state == nil {
+					state = startToolState(map[string]interface{}{}, item)
+				}
+				closeToolState(state, item)
+			}
+			pending := make([]*responsesStreamToolState, 0)
+			for _, state := range toolStates {
+				if !state.closed {
+					pending = append(pending, state)
+				}
+			}
+			sort.SliceStable(pending, func(i, j int) bool {
+				return pending[i].index < pending[j].index
+			})
+			for _, state := range pending {
+				// 有些上游的 response.completed 只有 status/usage，没有 output 数组；
+				// 这里仍需闭合已累积的工具参数，避免下游收到孤立 content_block_start。
+				closeToolState(state, nil)
 			}
 		}
 
@@ -870,53 +1023,34 @@ func (p *ResponsesProvider) HandleStreamResponse(body io.ReadCloser) (<-chan str
 				if toString(item["type"]) != "function_call" {
 					continue
 				}
-				ensureMessageStart()
-				closeOpenContentBlocks()
-				currentTool = map[string]string{
-					"id":   toString(item["call_id"]),
-					"name": toString(item["name"]),
-				}
-				currentToolArgs.Reset()
-				if currentTool["id"] == "" {
-					currentTool["id"] = currentTool["name"]
-				}
-				currentToolIndex = blockIndex
-				blockIndex++
-				emitJSON("content_block_start", map[string]interface{}{
-					"index": currentToolIndex,
-					"content_block": map[string]interface{}{
-						"type": "tool_use",
-						"id":   currentTool["id"],
-						"name": currentTool["name"],
-					},
-				})
+				startToolState(data, item)
 			case "response.function_call_arguments.delta":
-				if currentTool["id"] == "" {
-					continue
+				state := lookupToolState(data, nil)
+				if state == nil {
+					state = startToolState(data, nil)
 				}
-				// 先聚合完整 arguments，再一次性发给下游（便于做 JSON 级别清洗）。
-				currentToolArgs.WriteString(toString(data["delta"]))
+				state.args.WriteString(toString(data["delta"]))
+			case "response.function_call_arguments.done":
+				item, _ := data["item"].(map[string]interface{})
+				state := lookupToolState(data, item)
+				if state == nil {
+					state = startToolState(data, item)
+				}
+				if name := responseToolName(data, item); name != "" {
+					state.name = name
+				}
+				if args := toString(data["arguments"]); args != "" {
+					state.args.Reset()
+					state.args.WriteString(args)
+				}
 			case "response.output_item.done":
 				item, _ := data["item"].(map[string]interface{})
-				if toString(item["type"]) == "function_call" && currentTool["id"] != "" {
-					argsJSON := currentToolArgs.String()
-					if strings.TrimSpace(argsJSON) == "" {
-						argsJSON = toString(item["arguments"])
+				if toString(item["type"]) == "function_call" {
+					state := lookupToolState(data, item)
+					if state == nil {
+						state = startToolState(data, item)
 					}
-					if strings.TrimSpace(argsJSON) == "" {
-						argsJSON = "{}"
-					}
-					argsJSON = sanitizeClaudeToolArgsJSON(currentTool["name"], argsJSON)
-
-					emitJSON("content_block_delta", map[string]interface{}{
-						"index": currentToolIndex,
-						"delta": map[string]interface{}{"type": "input_json_delta", "partial_json": argsJSON},
-					})
-					emitJSON("content_block_stop", map[string]interface{}{"index": currentToolIndex})
-					stopReason = "tool_use"
-					currentTool = map[string]string{}
-					currentToolArgs.Reset()
-					currentToolIndex = -1
+					closeToolState(state, item)
 				}
 			case "response.created", "response.in_progress":
 				// 上游自报模型名（厂商隐式重定向观测）：仅提取记录，不改变流转
@@ -963,6 +1097,7 @@ func (p *ResponsesProvider) HandleStreamResponse(body io.ReadCloser) (<-chan str
 					latestCacheTTL = v
 				}
 				status := toString(response["status"])
+				finalizeCompletedToolStates(response)
 				if status == "incomplete" || eventType == "response.incomplete" {
 					stopReason = "max_tokens"
 				}

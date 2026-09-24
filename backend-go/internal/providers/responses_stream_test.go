@@ -137,6 +137,115 @@ data: {"type":"response.completed","response":{"status":"completed","usage":{"in
 	}
 }
 
+func TestResponsesProvider_HandleStreamResponse_ParallelToolsCompleteOutOfOrder(t *testing.T) {
+	body := `event: response.output_item.added
+data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","id":"item_0","call_id":"call_0","name":"Bash"}}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","output_index":1,"item":{"type":"function_call","id":"item_1","call_id":"call_1","name":"Bash"}}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","output_index":1,"item_id":"item_1","delta":"{\"command\":\"second\"}"}
+
+event: response.function_call_arguments.done
+data: {"type":"response.function_call_arguments.done","output_index":1,"item_id":"item_1","arguments":"{\"command\":\"second\"}"}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","output_index":1,"item":{"type":"function_call","id":"item_1","call_id":"call_1","name":"Bash","arguments":"{\"command\":\"second\"}"}}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","output_index":0,"item_id":"item_0","delta":"{\"command\":\"first\"}"}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","id":"item_0","call_id":"call_0","name":"Bash","arguments":"{\"command\":\"first\"}"}}
+
+event: response.completed
+data: {"type":"response.completed","response":{"status":"completed","output":[{"type":"function_call","id":"item_0","call_id":"call_0","name":"Bash","arguments":"{\"command\":\"first\"}"},{"type":"function_call","id":"item_1","call_id":"call_1","name":"Bash","arguments":"{\"command\":\"second\"}"}],"usage":{"input_tokens":1,"output_tokens":1}}}
+
+`
+
+	provider := &ResponsesProvider{}
+	eventChan, errChan, err := provider.HandleStreamResponse(io.NopCloser(strings.NewReader(body)))
+	if err != nil {
+		t.Fatalf("HandleStreamResponse returned error: %v", err)
+	}
+	events := collectStreamEvents(eventChan)
+	select {
+	case streamErr := <-errChan:
+		if streamErr != nil {
+			t.Fatalf("unexpected stream error: %v", streamErr)
+		}
+	default:
+	}
+
+	starts := make(map[int]string)
+	stops := make(map[int]bool)
+	args := make(map[int]string)
+	for _, event := range events {
+		for _, line := range strings.Split(event, "\n") {
+			if !strings.HasPrefix(line, "data: ") {
+				continue
+			}
+			var data map[string]interface{}
+			if err := json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &data); err != nil {
+				continue
+			}
+			index, _ := data["index"].(float64)
+			switch data["type"] {
+			case "content_block_start":
+				block, _ := data["content_block"].(map[string]interface{})
+				if block["type"] == "tool_use" {
+					starts[int(index)] = toString(block["id"])
+				}
+			case "content_block_delta":
+				delta, _ := data["delta"].(map[string]interface{})
+				if delta["type"] == "input_json_delta" {
+					args[int(index)] = toString(delta["partial_json"])
+				}
+			case "content_block_stop":
+				stops[int(index)] = true
+			}
+		}
+	}
+	if len(starts) != 2 || len(stops) != 2 {
+		t.Fatalf("parallel tool blocks were not both closed: starts=%v stops=%v events=%v", starts, stops, events)
+	}
+	if args[0] != `{"command":"first"}` || args[1] != `{"command":"second"}` {
+		t.Fatalf("parallel tool arguments crossed or were lost: %v", args)
+	}
+	if starts[0] != "call_0" || starts[1] != "call_1" {
+		t.Fatalf("tool call IDs mismatch: %v", starts)
+	}
+}
+
+func TestResponsesProvider_HandleStreamResponse_CompletedClosesPendingTool(t *testing.T) {
+	body := `event: response.output_item.added
+data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","id":"item_0","call_id":"call_0","name":"Bash"}}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","output_index":0,"item_id":"item_0","delta":"{\"command\":\"from completed\"}"}
+
+event: response.completed
+data: {"type":"response.completed","response":{"status":"completed","usage":{"input_tokens":1,"output_tokens":1}}}
+
+`
+
+	provider := &ResponsesProvider{}
+	eventChan, _, err := provider.HandleStreamResponse(io.NopCloser(strings.NewReader(body)))
+	if err != nil {
+		t.Fatalf("HandleStreamResponse returned error: %v", err)
+	}
+	events := collectStreamEvents(eventChan)
+	partialJSON := extractInputJSONDelta(t, events)
+	if partialJSON != `{"command":"from completed"}` {
+		t.Fatalf("completed fallback arguments = %q", partialJSON)
+	}
+	joined := strings.Join(events, "\n")
+	if !strings.Contains(joined, `"type":"content_block_stop"`) {
+		t.Fatalf("completed fallback did not close pending tool: %s", joined)
+	}
+}
+
 func TestResponsesProvider_HandleStreamResponse_PropagatesCacheUsageFromInputTokensDetails(t *testing.T) {
 	body := `event: response.output_text.delta
 data: {"type":"response.output_text.delta","delta":"hello"}
