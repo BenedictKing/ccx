@@ -249,6 +249,13 @@ func (cm *ConfigManager) updateUpstreamCommonLocked(k ChannelKindConfig, index i
 	if err != nil {
 		return false, err
 	}
+	if shared := sharedChannelUpdate(updates); shared != nil {
+		resetSiblings, err := cm.applySharedChannelUpdateToLogicalGroupLocked(upstream, *shared)
+		if err != nil {
+			return false, err
+		}
+		shouldResetMetrics = shouldResetMetrics || resetSiblings
+	}
 	if updates.Remark != nil {
 		// 统一列表(Dashboard)展示的是逻辑渠道层备注；单卡保存不同步整组的话，
 		// 用户删除/修改的备注会被逻辑层与兄弟卡的残留值顶回（“删不掉”根因）。
@@ -275,6 +282,42 @@ func (cm *ConfigManager) updateUpstreamCommonLocked(k ChannelKindConfig, index i
 
 	log.Printf("[Config-Upstream] 已更新 %s 上游: [%d] %s", k.Kind.Label(), index, upstream.Name)
 	return shouldResetMetrics, nil
+}
+
+// applySharedChannelUpdateToLogicalGroupLocked 把共享字段投影到同一逻辑渠道的所有物理路由。
+// 调用方必须持有 cm.mu 写锁；target 已先应用本次更新，兄弟路由复用同一套字段校验/归一化逻辑。
+func (cm *ConfigManager) applySharedChannelUpdateToLogicalGroupLocked(target *UpstreamConfig, update UpstreamUpdate) (bool, error) {
+	uid := strings.TrimSpace(target.LogicalChannelUID)
+	if uid == "" {
+		return false, nil
+	}
+	shouldResetMetrics := false
+	var firstErr error
+	for _, kind := range orderedChannelKinds() {
+		slice := ChannelKindRegistry[kind].SliceRef(&cm.config)
+		for i := range *slice {
+			sibling := &(*slice)[i]
+			if sibling == target || strings.TrimSpace(sibling.LogicalChannelUID) != uid {
+				continue
+			}
+			reset, err := applyUpstreamUpdateFields(sibling, update)
+			if err != nil {
+				if firstErr == nil {
+					firstErr = err
+				}
+				continue
+			}
+			shouldResetMetrics = shouldResetMetrics || reset
+		}
+	}
+	return shouldResetMetrics, firstErr
+}
+
+func orderedChannelKinds() []ChannelKind {
+	return []ChannelKind{
+		ChannelKindMessages, ChannelKindChat, ChannelKindResponses,
+		ChannelKindGemini, ChannelKindImages, ChannelKindVectors,
+	}
 }
 
 // updateUpstreamCommon 是 Update*Upstream 的公开薄封装。

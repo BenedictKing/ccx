@@ -178,6 +178,9 @@ func (cm *ConfigManager) loadConfig() error {
 	if cm.migrateDisabledKeyRecoveryTimes(time.Now()) {
 		needSaveDefaults = true
 	}
+	if convergeSharedChannelFields(&cm.config) {
+		needSaveDefaults = true
+	}
 
 	// 兼容旧格式：检测是否需要迁移
 	needMigration := cm.migrateOldFormat()
