@@ -94,6 +94,58 @@ func extractMessageStartUsage(t *testing.T, events []string) map[string]interfac
 	return nil
 }
 
+type responsesToolBlockStart struct {
+	index int
+	id    string
+	name  string
+}
+
+type responsesToolBlockDelta struct {
+	index int
+	json  string
+}
+
+func extractResponsesToolBlocks(t *testing.T, events []string) ([]responsesToolBlockStart, []responsesToolBlockDelta, []int) {
+	t.Helper()
+	var starts []responsesToolBlockStart
+	var deltas []responsesToolBlockDelta
+	var stops []int
+	for _, event := range events {
+		for _, line := range strings.Split(event, "\n") {
+			if !strings.HasPrefix(line, "data: ") {
+				continue
+			}
+			var data map[string]interface{}
+			if err := json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &data); err != nil {
+				continue
+			}
+			index, _ := data["index"].(float64)
+			switch data["type"] {
+			case "content_block_start":
+				block, _ := data["content_block"].(map[string]interface{})
+				if block["type"] == "tool_use" {
+					starts = append(starts, responsesToolBlockStart{
+						index: int(index),
+						id:    toString(block["id"]),
+						name:  toString(block["name"]),
+					})
+				}
+			case "content_block_delta":
+				delta, _ := data["delta"].(map[string]interface{})
+				if delta["type"] == "input_json_delta" {
+					deltas = append(deltas, responsesToolBlockDelta{
+						index: int(index),
+						json:  toString(delta["partial_json"]),
+					})
+				}
+			case "content_block_stop":
+				stops = append(stops, int(index))
+			}
+		}
+	}
+	return starts, deltas, stops
+}
+
 func TestResponsesProvider_HandleStreamResponse_StripsEmptyReadPages(t *testing.T) {
 	body := `event: response.output_item.added
 data: {"type":"response.output_item.added","item":{"type":"function_call","call_id":"call_1","name":"Read"}}
@@ -215,6 +267,102 @@ data: {"type":"response.completed","response":{"status":"completed","output":[{"
 	}
 	if starts[0] != "call_0" || starts[1] != "call_1" {
 		t.Fatalf("tool call IDs mismatch: %v", starts)
+	}
+}
+
+func TestResponsesProvider_HandleStreamResponse_MissingItemIDDoesNotDuplicateTool(t *testing.T) {
+	body := `event: response.output_item.added
+data: {"type":"response.output_item.added","item":{"type":"function_call","call_id":"call_1","name":"Read"}}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","delta":"{\"file_path\":\"/tmp/x\",\"pages\":\"\"}"}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","item":{"type":"function_call","id":"item_1","call_id":"call_1","name":"Read","arguments":"{\"file_path\":\"/tmp/x\",\"pages\":\"\"}"}}
+
+event: response.completed
+data: {"type":"response.completed","response":{"status":"completed","output":[{"type":"function_call","id":"item_1","call_id":"call_1","name":"Read","arguments":"{\"file_path\":\"/tmp/x\",\"pages\":\"\"}"}],"usage":{"input_tokens":1,"output_tokens":1}}}
+
+`
+
+	provider := &ResponsesProvider{}
+	eventChan, _, err := provider.HandleStreamResponse(io.NopCloser(strings.NewReader(body)))
+	if err != nil {
+		t.Fatalf("HandleStreamResponse returned error: %v", err)
+	}
+	starts, deltas, stops := extractResponsesToolBlocks(t, collectStreamEvents(eventChan))
+	if len(starts) != 1 || len(deltas) != 1 || len(stops) != 1 {
+		t.Fatalf("expected one complete tool block, starts=%v deltas=%v stops=%v", starts, deltas, stops)
+	}
+	if starts[0] != (responsesToolBlockStart{index: 0, id: "call_1", name: "Read"}) {
+		t.Fatalf("tool metadata = %+v", starts[0])
+	}
+	if deltas[0].index != 0 || deltas[0].json != `{"file_path":"/tmp/x"}` {
+		t.Fatalf("tool arguments = %+v", deltas[0])
+	}
+	if stops[0] != 0 {
+		t.Fatalf("tool stop indexes = %v", stops)
+	}
+}
+
+func TestResponsesProvider_HandleStreamResponse_DeltaBeforeAddedBindsPendingTool(t *testing.T) {
+	body := `event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","delta":"{\"file_path\":\"/tmp/x\",\"pages\":\"\"}"}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","item":{"type":"function_call","call_id":"call_1","name":"Read"}}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","item":{"type":"function_call","id":"item_1","call_id":"call_1","name":"Read","arguments":"{\"file_path\":\"/tmp/x\",\"pages\":\"\"}"}}
+
+event: response.completed
+data: {"type":"response.completed","response":{"status":"completed","usage":{"input_tokens":1,"output_tokens":1}}}
+
+`
+
+	provider := &ResponsesProvider{}
+	eventChan, _, err := provider.HandleStreamResponse(io.NopCloser(strings.NewReader(body)))
+	if err != nil {
+		t.Fatalf("HandleStreamResponse returned error: %v", err)
+	}
+	starts, deltas, stops := extractResponsesToolBlocks(t, collectStreamEvents(eventChan))
+	if len(starts) != 1 || len(deltas) != 1 || len(stops) != 1 {
+		t.Fatalf("expected one complete tool block, starts=%v deltas=%v stops=%v", starts, deltas, stops)
+	}
+	if starts[0] != (responsesToolBlockStart{index: 0, id: "call_1", name: "Read"}) {
+		t.Fatalf("tool metadata = %+v", starts[0])
+	}
+	if deltas[0].json != `{"file_path":"/tmp/x"}` || stops[0] != 0 {
+		t.Fatalf("tool closure = deltas=%v stops=%v", deltas, stops)
+	}
+}
+
+func TestResponsesProvider_HandleStreamResponse_ArgumentsDoneClosesToolOnce(t *testing.T) {
+	body := `event: response.output_item.added
+data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","id":"item_0","call_id":"call_0","name":"Bash"}}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","output_index":0,"item_id":"item_0","delta":"{\"command\":\"run\"}"}
+
+event: response.function_call_arguments.done
+data: {"type":"response.function_call_arguments.done","output_index":0,"item_id":"item_0","arguments":"{\"command\":\"run\"}"}
+
+event: response.completed
+data: {"type":"response.completed","response":{"status":"completed","usage":{"input_tokens":1,"output_tokens":1}}}
+
+`
+
+	provider := &ResponsesProvider{}
+	eventChan, _, err := provider.HandleStreamResponse(io.NopCloser(strings.NewReader(body)))
+	if err != nil {
+		t.Fatalf("HandleStreamResponse returned error: %v", err)
+	}
+	starts, deltas, stops := extractResponsesToolBlocks(t, collectStreamEvents(eventChan))
+	if len(starts) != 1 || len(deltas) != 1 || len(stops) != 1 {
+		t.Fatalf("arguments.done emitted duplicate closure, starts=%v deltas=%v stops=%v", starts, deltas, stops)
+	}
+	if deltas[0].json != `{"command":"run"}` || stops[0] != 0 {
+		t.Fatalf("arguments.done closure = deltas=%v stops=%v", deltas, stops)
 	}
 }
 

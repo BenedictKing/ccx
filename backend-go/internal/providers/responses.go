@@ -30,11 +30,13 @@ type ResponsesProvider struct {
 // responsesStreamToolState 保存一个 Responses function_call 的独立流状态。
 // Responses 允许多个工具调用交错输出，不能用单个 currentTool 覆盖前一个调用。
 type responsesStreamToolState struct {
-	id     string
-	name   string
-	index  int
-	args   strings.Builder
-	closed bool
+	key     string
+	id      string
+	name    string
+	index   int
+	args    strings.Builder
+	started bool
+	closed  bool
 }
 
 // ConvertToProviderRequest 将请求转换为上游格式
@@ -706,6 +708,9 @@ func (p *ResponsesProvider) HandleStreamResponse(body io.ReadCloser) (<-chan str
 		toolStates := make(map[string]*responsesStreamToolState)
 		toolKeyByItemID := make(map[string]string)
 		toolKeyByOutputIndex := make(map[int]string)
+		toolStateOrder := make([]*responsesStreamToolState, 0)
+		pendingToolStates := make([]*responsesStreamToolState, 0)
+		toolSequence := 0
 		latestInputTokens := 0
 		latestOutputTokens := 0
 		latestCacheCreationTokens := 0
@@ -750,11 +755,28 @@ func (p *ResponsesProvider) HandleStreamResponse(body io.ReadCloser) (<-chan str
 			return int(value), ok
 		}
 
-		responseItemID := func(data map[string]interface{}, item map[string]interface{}) string {
-			for _, value := range []interface{}{data["item_id"], item["id"], item["call_id"]} {
-				if id := toString(value); id != "" {
-					return id
+		responseIdentityValues := func(data map[string]interface{}, item map[string]interface{}) []string {
+			values := []interface{}{data["item_id"], data["call_id"], item["id"], item["call_id"]}
+			identities := make([]string, 0, len(values))
+			seen := make(map[string]struct{}, len(values))
+			for _, value := range values {
+				id := toString(value)
+				if id == "" {
+					continue
 				}
+				if _, exists := seen[id]; exists {
+					continue
+				}
+				seen[id] = struct{}{}
+				identities = append(identities, id)
+			}
+			return identities
+		}
+
+		responseItemID := func(data map[string]interface{}, item map[string]interface{}) string {
+			identities := responseIdentityValues(data, item)
+			if len(identities) > 0 {
+				return identities[0]
 			}
 			return ""
 		}
@@ -766,9 +788,21 @@ func (p *ResponsesProvider) HandleStreamResponse(body io.ReadCloser) (<-chan str
 			return toString(data["name"])
 		}
 
+		registerToolStateAliases := func(state *responsesStreamToolState, data map[string]interface{}, item map[string]interface{}) {
+			if state == nil {
+				return
+			}
+			for _, identity := range responseIdentityValues(data, item) {
+				toolKeyByItemID[identity] = state.key
+			}
+			if outputIndex, ok := responseOutputIndex(data); ok {
+				toolKeyByOutputIndex[outputIndex] = state.key
+			}
+		}
+
 		lookupToolState := func(data map[string]interface{}, item map[string]interface{}) *responsesStreamToolState {
-			if itemID := responseItemID(data, item); itemID != "" {
-				if key := toolKeyByItemID[itemID]; key != "" {
+			for _, identity := range responseIdentityValues(data, item) {
+				if key := toolKeyByItemID[identity]; key != "" {
 					return toolStates[key]
 				}
 			}
@@ -780,41 +814,68 @@ func (p *ResponsesProvider) HandleStreamResponse(body io.ReadCloser) (<-chan str
 			return nil
 		}
 
-		startToolState := func(data map[string]interface{}, item map[string]interface{}) *responsesStreamToolState {
-			if state := lookupToolState(data, item); state != nil {
-				if name := responseToolName(data, item); name != "" {
-					state.name = name
+		latestOpenToolState := func() *responsesStreamToolState {
+			for i := len(toolStateOrder) - 1; i >= 0; i-- {
+				if state := toolStateOrder[i]; state != nil && !state.closed {
+					return state
 				}
-				if id := toString(item["call_id"]); id != "" {
-					state.id = id
+			}
+			return nil
+		}
+
+		onlyOpenToolState := func() *responsesStreamToolState {
+			var only *responsesStreamToolState
+			for _, state := range toolStateOrder {
+				if state == nil || state.closed {
+					continue
+				}
+				if only != nil {
+					return nil
+				}
+				only = state
+			}
+			return only
+		}
+
+		lookupToolStateHeuristic := func(data map[string]interface{}, item map[string]interface{}) *responsesStreamToolState {
+			if state := lookupToolState(data, item); state != nil {
+				return state
+			}
+			if state := onlyOpenToolState(); state != nil {
+				return state
+			}
+			if len(responseIdentityValues(data, item)) == 0 {
+				return latestOpenToolState()
+			}
+			return nil
+		}
+
+		claimPendingToolState := func() *responsesStreamToolState {
+			for i := 0; i < len(pendingToolStates); i++ {
+				state := pendingToolStates[i]
+				pendingToolStates = append(pendingToolStates[:i], pendingToolStates[i+1:]...)
+				if state == nil || state.closed {
+					i--
+					continue
 				}
 				return state
 			}
+			return nil
+		}
 
-			itemID := responseItemID(data, item)
-			outputIndex, hasOutputIndex := responseOutputIndex(data)
-			key := itemID
-			if key == "" && hasOutputIndex {
-				key = fmt.Sprintf("output_index:%d", outputIndex)
+		ensureToolBlockStarted := func(state *responsesStreamToolState) {
+			if state == nil || state.started {
+				return
 			}
-			if key == "" {
-				key = fmt.Sprintf("sequence:%d", blockIndex)
-			}
-			state := &responsesStreamToolState{
-				id:    toString(item["call_id"]),
-				name:  responseToolName(data, item),
-				index: blockIndex,
+			if state.id == "" && state.name == "" {
+				return
 			}
 			if state.id == "" {
-				state.id = state.name
+				state.id = fallbackToolUseID(state.name)
 			}
-			blockIndex++
-			toolStates[key] = state
-			if itemID != "" {
-				toolKeyByItemID[itemID] = key
-			}
-			if hasOutputIndex {
-				toolKeyByOutputIndex[outputIndex] = key
+			if state.index < 0 {
+				state.index = blockIndex
+				blockIndex++
 			}
 			ensureMessageStart()
 			closeOpenContentBlocks()
@@ -826,6 +887,74 @@ func (p *ResponsesProvider) HandleStreamResponse(body io.ReadCloser) (<-chan str
 					"name": state.name,
 				},
 			})
+			state.started = true
+		}
+
+		updateToolStateMetadata := func(state *responsesStreamToolState, data map[string]interface{}, item map[string]interface{}) {
+			if state == nil {
+				return
+			}
+			if name := responseToolName(data, item); name != "" {
+				state.name = name
+			}
+			callID := toString(item["call_id"])
+			if callID == "" {
+				callID = toString(data["call_id"])
+			}
+			if callID != "" {
+				state.id = callID
+			} else if state.id == "" {
+				state.id = responseItemID(data, item)
+				if state.id == "" {
+					state.id = state.name
+				}
+			}
+			registerToolStateAliases(state, data, item)
+			ensureToolBlockStarted(state)
+		}
+
+		startToolState := func(data map[string]interface{}, item map[string]interface{}) *responsesStreamToolState {
+			if state := lookupToolState(data, item); state != nil {
+				updateToolStateMetadata(state, data, item)
+				return state
+			}
+			if state := claimPendingToolState(); state != nil {
+				updateToolStateMetadata(state, data, item)
+				return state
+			}
+
+			itemID := responseItemID(data, item)
+			outputIndex, hasOutputIndex := responseOutputIndex(data)
+			key := itemID
+			if key == "" && hasOutputIndex {
+				key = fmt.Sprintf("output_index:%d", outputIndex)
+			}
+			if key == "" {
+				key = fmt.Sprintf("sequence:%d", toolSequence)
+				toolSequence++
+			}
+			state := &responsesStreamToolState{
+				key:   key,
+				id:    toString(item["call_id"]),
+				name:  responseToolName(data, item),
+				index: -1,
+			}
+			if state.id == "" {
+				state.id = toString(data["call_id"])
+			}
+			if state.id == "" {
+				state.id = toString(item["id"])
+			}
+			if state.id == "" {
+				state.id = state.name
+			}
+			toolStates[key] = state
+			toolStateOrder = append(toolStateOrder, state)
+			registerToolStateAliases(state, data, item)
+			if len(responseIdentityValues(data, item)) == 0 {
+				pendingToolStates = append(pendingToolStates, state)
+			}
+			ensureToolBlockStarted(state)
 			return state
 		}
 
@@ -833,11 +962,10 @@ func (p *ResponsesProvider) HandleStreamResponse(body io.ReadCloser) (<-chan str
 			if state == nil || state.closed {
 				return
 			}
-			if name := responseToolName(nil, item); name != "" {
-				state.name = name
-			}
-			if id := toString(item["call_id"]); id != "" {
-				state.id = id
+			updateToolStateMetadata(state, nil, item)
+			if !state.started {
+				state.id = fallbackToolUseID(state.id)
+				ensureToolBlockStarted(state)
 			}
 			argsJSON := state.args.String()
 			if strings.TrimSpace(argsJSON) == "" {
@@ -866,21 +994,18 @@ func (p *ResponsesProvider) HandleStreamResponse(body io.ReadCloser) (<-chan str
 				if !ok || toString(item["type"]) != "function_call" {
 					continue
 				}
-				state := lookupToolState(map[string]interface{}{"item_id": item["id"]}, item)
+				state := lookupToolStateHeuristic(map[string]interface{}{"item_id": item["id"]}, item)
 				if state == nil {
 					state = startToolState(map[string]interface{}{}, item)
 				}
 				closeToolState(state, item)
 			}
 			pending := make([]*responsesStreamToolState, 0)
-			for _, state := range toolStates {
+			for _, state := range toolStateOrder {
 				if !state.closed {
 					pending = append(pending, state)
 				}
 			}
-			sort.SliceStable(pending, func(i, j int) bool {
-				return pending[i].index < pending[j].index
-			})
 			for _, state := range pending {
 				// 有些上游的 response.completed 只有 status/usage，没有 output 数组；
 				// 这里仍需闭合已累积的工具参数，避免下游收到孤立 content_block_start。
@@ -1025,28 +1150,30 @@ func (p *ResponsesProvider) HandleStreamResponse(body io.ReadCloser) (<-chan str
 				}
 				startToolState(data, item)
 			case "response.function_call_arguments.delta":
-				state := lookupToolState(data, nil)
+				state := lookupToolStateHeuristic(data, nil)
 				if state == nil {
 					state = startToolState(data, nil)
 				}
+				registerToolStateAliases(state, data, nil)
 				state.args.WriteString(toString(data["delta"]))
 			case "response.function_call_arguments.done":
 				item, _ := data["item"].(map[string]interface{})
-				state := lookupToolState(data, item)
+				state := lookupToolStateHeuristic(data, item)
 				if state == nil {
 					state = startToolState(data, item)
-				}
-				if name := responseToolName(data, item); name != "" {
-					state.name = name
 				}
 				if args := toString(data["arguments"]); args != "" {
 					state.args.Reset()
 					state.args.WriteString(args)
 				}
+				updateToolStateMetadata(state, data, item)
+				if state.name != "" || state.id != "" {
+					closeToolState(state, item)
+				}
 			case "response.output_item.done":
 				item, _ := data["item"].(map[string]interface{})
 				if toString(item["type"]) == "function_call" {
-					state := lookupToolState(data, item)
+					state := lookupToolStateHeuristic(data, item)
 					if state == nil {
 						state = startToolState(data, item)
 					}

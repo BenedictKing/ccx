@@ -76,6 +76,34 @@ func TestConvergeSharedChannelFieldsUsesPrimaryRoute(t *testing.T) {
 	}
 }
 
+func TestConvergeSharedChannelFieldsClearsNilOptionalFieldsAndIsIdempotent(t *testing.T) {
+	enabled := false
+	costMultiplier := 1.5
+	cfg := Config{
+		ChatUpstream: []UpstreamConfig{{
+			LogicalChannelUID: "lc-nil-converge",
+			RoutePrefix:       "chat",
+		}},
+		ResponsesUpstream: []UpstreamConfig{{
+			LogicalChannelUID: "lc-nil-converge",
+			CostMultiplier:    &costMultiplier,
+			Racing:            &ChannelRacingConfig{Enabled: &enabled},
+			RoutePrefix:       "responses",
+		}},
+	}
+
+	if !convergeSharedChannelFields(&cfg) {
+		t.Fatal("expected nil shared fields to converge")
+	}
+	sibling := cfg.ResponsesUpstream[0]
+	if sibling.CostMultiplier != nil || sibling.Racing != nil {
+		t.Fatalf("nil shared fields were not cleared: cost=%v racing=%v", sibling.CostMultiplier, sibling.Racing)
+	}
+	if convergeSharedChannelFields(&cfg) {
+		t.Fatal("second convergence must be a no-op")
+	}
+}
+
 func TestSyncLogicalChannelSettingsProjectsAndIsIdempotent(t *testing.T) {
 	cfg := Config{
 		ChatUpstream: []UpstreamConfig{{
@@ -108,6 +136,44 @@ func TestSyncLogicalChannelSettingsProjectsAndIsIdempotent(t *testing.T) {
 	}
 	if syncLogicalChannelSettings(&cfg) {
 		t.Fatal("second sync must be a no-op (idempotent)")
+	}
+}
+
+func TestSyncLogicalChannelSettingsClearsNilOptionalFields(t *testing.T) {
+	enabled := false
+	costMultiplier := 1.5
+	cfg := Config{
+		ChatUpstream: []UpstreamConfig{{
+			ChannelUID:        "ch-chat-nil",
+			LogicalChannelUID: "lc-sync-nil",
+			RoutePrefix:       "chat",
+		}},
+		ResponsesUpstream: []UpstreamConfig{{
+			ChannelUID:        "ch-responses-nil",
+			LogicalChannelUID: "lc-sync-nil",
+			CostMultiplier:    &costMultiplier,
+			Racing:            &ChannelRacingConfig{Enabled: &enabled},
+			RoutePrefix:       "responses",
+		}},
+		LogicalChannels: []LogicalChannel{{
+			LogicalChannelUID: "lc-sync-nil",
+			Protocols: []LogicalChannelProtocol{
+				{Kind: string(ChannelKindChat), ChannelUID: "ch-chat-nil"},
+				{Kind: string(ChannelKindResponses), ChannelUID: "ch-responses-nil"},
+			},
+			Settings: &LogicalChannelSettings{},
+		}},
+	}
+
+	if !syncLogicalChannelSettings(&cfg) {
+		t.Fatal("expected nil Settings fields to clear sibling route fields")
+	}
+	sibling := cfg.ResponsesUpstream[0]
+	if sibling.CostMultiplier != nil || sibling.Racing != nil {
+		t.Fatalf("nil Settings fields were not projected: cost=%v racing=%v", sibling.CostMultiplier, sibling.Racing)
+	}
+	if syncLogicalChannelSettings(&cfg) {
+		t.Fatal("second Settings sync must be a no-op")
 	}
 }
 

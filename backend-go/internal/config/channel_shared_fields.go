@@ -117,12 +117,49 @@ func convergeSharedChannelFields(cfg *Config) bool {
 			if reflect.DeepEqual(before, shared) {
 				continue
 			}
-			if _, err := applyUpstreamUpdateFields(sibling.route, shared); err == nil {
+			if _, err := applyUpstreamUpdateFields(sibling.route, shared); err != nil {
+				continue
+			}
+			clearNilSharedChannelFields(sibling.route, shared)
+			if !reflect.DeepEqual(before, sharedChannelUpdateFromRoute(*sibling.route)) {
 				changed = true
 			}
 		}
 	}
 	return changed
+}
+
+// clearNilSharedChannelFields 把加载期共享设置中的 nil 投影为物理路由的清除操作。
+// UpstreamUpdate 的 nil 通常表示“保持不变”，因此不能直接依赖 applyUpstreamUpdateFields
+// 清除可选字段；这里仅由加载期收敛/Settings 投影调用，不改变普通部分更新的语义。
+func clearNilSharedChannelFields(route *UpstreamConfig, update UpstreamUpdate) {
+	if route == nil {
+		return
+	}
+	if update.AutoBlacklistBalance == nil {
+		route.AutoBlacklistBalance = nil
+	}
+	if update.NormalizeMetadataUserID == nil {
+		route.NormalizeMetadataUserID = nil
+	}
+	if update.CustomHeaders == nil {
+		route.CustomHeaders = nil
+	}
+	if update.CostMultiplier == nil {
+		route.CostMultiplier = nil
+	}
+	if update.MaxGroupMultiplier == nil {
+		route.MaxGroupMultiplier = nil
+	}
+	if update.ChannelPaymentAmount == nil {
+		route.ChannelPaymentAmount = nil
+	}
+	if update.ChannelCreditAmount == nil {
+		route.ChannelCreditAmount = nil
+	}
+	if update.Racing == nil {
+		route.Racing = nil
+	}
 }
 
 func sharedStringPtr(value string) *string { return &value }
@@ -282,9 +319,7 @@ func syncLogicalChannelSettings(cfg *Config) bool {
 			if _, err := applyUpstreamUpdateFields(route, update); err != nil {
 				continue
 			}
-			// applyUpstreamUpdateFields 对 nil 指针字段是"不改写"语义，
-			// 个别分叉（如 Settings 清空了 Racing 而路由仍持有）无法收敛，
-			// 此时不算实际变更，避免每次加载都触发无谓落盘。
+			clearNilSharedChannelFields(route, update)
 			if !reflect.DeepEqual(logicalSettingsFromRoute(*route), before) {
 				changed = true
 			}
