@@ -3,6 +3,7 @@ package autopilot
 import (
 	"fmt"
 	"log"
+	"math"
 	"sort"
 	"strings"
 	"sync"
@@ -350,7 +351,7 @@ func (r *SmartRouter) BuildPlanWithOptions(profile *RequestProfile, opts BuildPl
 		scored := r.scoreChannelEntry(&e, ctx)
 		scoredEntries = append(scoredEntries, scoredChannelEntry{entry: e, scored: scored})
 	}
-	sortScoredChannelEntries(scoredEntries)
+	sortScoredChannelEntries(scoredEntries, profile.Model)
 
 	selectedCandidates := make([]RoutingPlanCandidate, 0, len(scoredEntries))
 	filteredCandidates := make([]RoutingPlanCandidate, 0, len(scoredEntries))
@@ -937,7 +938,7 @@ func (r *SmartRouter) executeFilter(
 			}
 		}()
 	}
-	sortScoredChannelEntries(scoredEntries)
+	nearTieSemanticPreference := sortScoredChannelEntries(scoredEntries, profile.Model)
 
 	// ── 人工意图匹配（设计 §4.6.4）──
 	// 在评分排序后、构建结果前执行。
@@ -1209,6 +1210,9 @@ func (r *SmartRouter) executeFilter(
 	// 通过者，全部被过滤并 fail-open 时则恢复为完整候选数。
 	trace.CandidatesAfter = len(result)
 	trace.SortReasons = []string{"smart_routing_score"}
+	if nearTieSemanticPreference {
+		trace.SortReasons = append(trace.SortReasons, "near_tie_semantic_preference")
+	}
 	if matchedIntent != nil {
 		trace.SortReasons = append(trace.SortReasons, "intent_promote")
 		if matchedIntent.FallbackUsed {
@@ -1477,15 +1481,113 @@ func (r *SmartRouter) effortQualityTierActiveEnabled() bool {
 	return r.configManager.GetAutopilotRouting().ReasoningEffort.IsQualityTierActiveEnabled()
 }
 
+const (
+	// nearTieScoreMargin 避免小幅测量噪声让协议转换候选压过原生精确候选。
+	nearTieScoreMargin         = 0.35
+	nearTieRelativeScoreMargin = 0.03
+)
+
 // sortScoredChannelEntries 统一真实路径与 dry-run 的排序语义。
-// Score 为主序，OriginTier 只在同分时作为次序；稳定排序保留完全同分候选的输入顺序。
-func sortScoredChannelEntries(entries []scoredChannelEntry) {
+// 总分仍是第一排序依据；仅在近分组内依次偏好原生协议、精确请求模型、
+// 已知健康状态，避免把很小的分数差误当成明确的质量优势。
+// 返回值表示本次是否应用过近分语义偏好。
+func sortScoredChannelEntries(entries []scoredChannelEntry, requestedModel string) bool {
+	if len(entries) < 2 {
+		return false
+	}
+
+	// 先按原始分数排序，保证近分分组边界稳定，且大分差永远不受语义偏好影响。
 	sort.SliceStable(entries, func(i, j int) bool {
 		if entries[i].scored.Score != entries[j].scored.Score {
 			return entries[i].scored.Score > entries[j].scored.Score
 		}
 		return originTierRank(entries[i].entry.OriginTier) > originTierRank(entries[j].entry.OriginTier)
 	})
+
+	usedSemanticPreference := false
+	for start := 0; start < len(entries); {
+		end := start + 1
+		for end < len(entries) && nearTieScores(entries[start].scored.Score, entries[end].scored.Score) {
+			end++
+		}
+		if end-start > 1 {
+			before := append([]scoredChannelEntry(nil), entries[start:end]...)
+			sort.SliceStable(entries[start:end], func(i, j int) bool {
+				a := entries[start+i]
+				b := entries[start+j]
+				if preference := nearTieSemanticPreference(a.entry, b.entry, requestedModel); preference != 0 {
+					return preference > 0
+				}
+				return a.scored.Score > b.scored.Score
+			})
+			for i := range before {
+				if before[i].entry.ChannelUID != entries[start+i].entry.ChannelUID ||
+					before[i].entry.Route.Key() != entries[start+i].entry.Route.Key() ||
+					before[i].entry.CandidateKey != entries[start+i].entry.CandidateKey {
+					usedSemanticPreference = true
+					break
+				}
+			}
+		}
+		start = end
+	}
+	return usedSemanticPreference
+}
+
+func nearTieScores(a, b float64) bool {
+	diff := math.Abs(a - b)
+	if diff <= nearTieScoreMargin {
+		return true
+	}
+	maxScore := math.Max(math.Abs(a), math.Abs(b))
+	return maxScore > 0 && diff/maxScore <= nearTieRelativeScoreMargin
+}
+
+// nearTieSemanticPreference 返回 a 相对 b 的偏好：1=a 优先，-1=b 优先，0=无偏好。
+func nearTieSemanticPreference(a, b channelScoreEntry, requestedModel string) int {
+	aNative := strings.EqualFold(strings.TrimSpace(a.ProtocolFidelity), "native")
+	bNative := strings.EqualFold(strings.TrimSpace(b.ProtocolFidelity), "native")
+	if aNative != bNative {
+		if aNative {
+			return 1
+		}
+		return -1
+	}
+
+	requested := normalizeRoutingModelID(requestedModel)
+	if requested != "" {
+		aExact := normalizeRoutingModelID(a.ModelID) == requested && strings.TrimSpace(a.MappedModel) == ""
+		bExact := normalizeRoutingModelID(b.ModelID) == requested && strings.TrimSpace(b.MappedModel) == ""
+		if aExact != bExact {
+			if aExact {
+				return 1
+			}
+			return -1
+		}
+	}
+
+	aHealth := nearTieHealthRank(a.HealthState)
+	bHealth := nearTieHealthRank(b.HealthState)
+	if aHealth != bHealth {
+		if aHealth > bHealth {
+			return 1
+		}
+		return -1
+	}
+	return 0
+}
+
+func nearTieHealthRank(state HealthState) int {
+	switch state {
+	case HealthStateHealthy:
+		return 3
+	case HealthStateDegraded, HealthStateLimited:
+		return 1
+	case HealthStateUnknown:
+		return 0
+	default:
+		return -1
+	}
 }
 
 func resolvedCandidateModel(requestModel, mappedModel string) string {
