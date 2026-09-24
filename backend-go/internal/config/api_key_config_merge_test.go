@@ -86,11 +86,16 @@ func TestMergeAndNormalizeAPIKeyConfigsMatchesByKeyUIDBeforeCredentialOrKey(t *t
 	}
 	incoming := []APIKeyConfig{{Key: "new-b", KeyUID: "kid-2", QuotaGroup: "group-new"}}
 	got := mergeAndNormalizeAPIKeyConfigs([]string{"new-b"}, existing, incoming)
-	if len(got) != 1 {
-		t.Fatalf("expected 1 config, got %d", len(got))
+	// 合并语义是「在现有配置上覆盖 incoming」：未提及的 Key 配置（old-a）保留，
+	// 否则渠道编辑只补发变更 Key 时会清空同渠道其他 Key 的配置。
+	if len(got) != 2 {
+		t.Fatalf("expected 2 configs (matched + untouched), got %d", len(got))
 	}
 	if got[0].CredentialUID != "cred-shared" || got[0].KeyUID != "kid-2" || got[0].QuotaGroup != "group-new" {
 		t.Fatalf("expected keyUid match to win, got %+v", got[0])
+	}
+	if got[1].Key != "old-a" || got[1].KeyUID != "kid-1" || got[1].QuotaGroup != "group-a" {
+		t.Fatalf("expected untouched config preserved, got %+v", got[1])
 	}
 }
 

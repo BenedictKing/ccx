@@ -599,7 +599,9 @@ func (s *NewApiSubscriptionSyncService) removeTokenKeysFromChannels(profile *Sub
 			keptKeys = append(keptKeys, k)
 		}
 		if len(keptConfigs) != len(channel.APIKeyConfigs) || len(keptKeys) != len(channel.APIKeys) {
-			if _, err := updateChannelForKind(s.cfgManager, kind, index, config.UpstreamUpdate{APIKeys: keptKeys, APIKeyConfigs: keptConfigs}); err == nil {
+			// keptConfigs 是剔除后的完整清单（精确写语义）：必须绕过渠道编辑表单的增量合并，
+			// 否则被剔除的 token 配置会被 existing 回填复活。
+			if _, err := updateChannelForKind(s.cfgManager, kind, index, config.UpstreamUpdate{APIKeys: keptKeys, APIKeyConfigs: keptConfigs, SkipAPIKeyConfigMerge: true}); err == nil {
 				changedChannels++
 			}
 		}

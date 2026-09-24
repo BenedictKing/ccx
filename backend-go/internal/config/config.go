@@ -789,10 +789,19 @@ func normalizeAPIKeyConfigs(apiKeys []string, configs []APIKeyConfig) []APIKeyCo
 	return normalized
 }
 
+// mergeAndNormalizeAPIKeyConfigs 以 existing 为基底、把 incoming 逐条合并上去（按 KeyUID /
+// CredentialUID / Key 定位），未提及的 Key 配置保持原样。
+// 渠道编辑保存只下发变更 Key 的 trimmed 配置（托管渠道单卡补发仅带定位+倍率字段），
+// 若按 incoming 重建整份列表，其余 Key 的倍率/限额/凭证绑定会被静默清空。
 func mergeAndNormalizeAPIKeyConfigs(apiKeys []string, existing []APIKeyConfig, incoming []APIKeyConfig) []APIKeyConfig {
-	merged := make([]APIKeyConfig, 0, len(incoming))
+	merged := make([]APIKeyConfig, 0, len(existing)+len(incoming))
+	merged = append(merged, existing...)
 	for _, next := range incoming {
-		merged = append(merged, mergeAPIKeyConfig(findExistingAPIKeyConfig(existing, next), next))
+		if target := findExistingAPIKeyConfig(merged, next); target != nil {
+			*target = mergeAPIKeyConfig(target, next)
+			continue
+		}
+		merged = append(merged, next)
 	}
 	return normalizeAPIKeyConfigs(apiKeys, merged)
 }
