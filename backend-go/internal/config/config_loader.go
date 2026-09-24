@@ -111,6 +111,9 @@ func (cm *ConfigManager) loadConfig() error {
 		cm.config.Upstream, cm.config.ChatUpstream, cm.config.ResponsesUpstream,
 			cm.config.GeminiUpstream, cm.config.ImagesUpstream, cm.config.VectorsUpstream =
 			rebuilt.Upstream, rebuilt.Chat, rebuilt.Responses, rebuilt.Gemini, rebuilt.Images, rebuilt.Vectors
+		// C 阶段：ChannelsV3 同时承载逻辑渠道元数据，先恢复管理面内存视图，
+		// 后续迁移与 RebuildLogicalChannels 才能继续使用逻辑 UID/Settings。
+		restoreLogicalChannelsFromAuthoritative(&cm.config)
 		// 新名称协议迁移必须在后续默认值迁移/自检可能触发的首轮 save 之前完成，
 		// 这样 Name/Remark 会随同 ChannelsV3 一次性持久化，不会只停留在内存。
 		migrateAllChannelNamesConfig(&cm.config)
@@ -1066,6 +1069,12 @@ func (cm *ConfigManager) ensureAccountUIDs() bool {
 				accountUID = GenerateAccountUID()
 			}
 			channels[i].AccountUID = accountUID
+			// 纯 V3 加载会先恢复 LogicalChannels，再在本迁移阶段补齐旧路由的
+			// AccountUID。同步逻辑卡身份可避免随后 RebuildLogicalChannels 将旧 UID
+			// 误判为归组键分叉并重新生成一张卡。
+			if logical := FindLogicalChannelByUID(&cm.config, channels[i].LogicalChannelUID); logical != nil && logical.AccountUID == "" {
+				logical.AccountUID = accountUID
+			}
 			updated = true
 			log.Printf("[Config-AccountUID] %s 渠道 [%d] %s 已分配 AccountUID: %s", channelKind, i, channels[i].Name, channels[i].AccountUID)
 		}
@@ -1500,6 +1509,9 @@ func (cm *ConfigManager) saveConfigLocked(config Config) error {
 	// 持久化只保留无损权威形态。读侧仍兼容旧格式（双写或仅六数组的旧文件照常读入）。
 	persisted.Upstream, persisted.ChatUpstream, persisted.ResponsesUpstream,
 		persisted.GeminiUpstream, persisted.ImagesUpstream, persisted.VectorsUpstream = nil, nil, nil, nil, nil, nil
+	// C 阶段：逻辑渠道元数据已内嵌在 ChannelsV3。运行时仍保留 LogicalChannels
+	// 供管理 API 查询，但不再把第二份聚合记录写回磁盘。
+	persisted.LogicalChannels = nil
 	data, err := json.MarshalIndent(persisted, "", "  ")
 	if err != nil {
 		return err

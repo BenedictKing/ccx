@@ -128,6 +128,7 @@ EndpointCapability（跨账号共享，按 CapabilityUID 索引）
   - **3c 波 1（已落地，app 已验证）**：运行时权威反转——加载后以 `ChannelsV3` 为唯一权威重建运行时六数组（无开关门控）；严格模式 `CCX_CHANNEL_AUTHORITATIVE_STRICT` 对账失败拒绝启动，非严格以 V3 覆盖；加载期迁移落盘当次跳过翻转（避免旧 V3 快照撤销迁移）。
   - **3c 波 2（评估结论：免改）**：消费者无需逐文件切换——`GetConfig()` 返回的六数组已是 V3 运行时投影，读取语义不变；如需显式化可后续加 `UpstreamsForKind` 访问器。
   - **3c 波 3（已落地：读保留、写停）**：save 不再落盘六数组（置 nil + `omitempty`，文件只含 `channelsV3` 权威形态）；读侧兼容不变——旧双写/仅六数组文件照常读入并在下次 save 自动转纯 V3。纯 V3 文件加载时在入口提前投影 V3→六数组（迁移/中途落盘直接作用于投影，避免空数组重建出空 V3 与托管凭证丢失），跳过后置翻转；旧双写格式保持"迁移后翻转/对账 + savedDuringLoad 豁免"语义。**回滚约束**：纯 V3 文件不能被波 1 之前的旧二进制读取（旧二进制只认六数组），回滚不得低于波 1 版本，且须先从 `.config/backups/` 恢复双写格式备份；`ChannelV3SchemaVersion` 保持 1 不 bump（旧文件双写同代，平滑升级）。
+  - **3d（方案 C，已落地）**：`ChannelV3` 同时承载逻辑渠道展示元数据与 `LogicalChannel.Settings`。纯 V3 保存不再重复写 `logicalChannels`，加载时从同一条 `ChannelV3` 恢复管理面 `LogicalChannels` 视图；六数组仍只作为运行时投影。旧双写文件继续读取，并在下一次保存时收敛为单一聚合记录。
 
 ## 7. 当前实现状态
 
@@ -145,6 +146,7 @@ EndpointCapability（跨账号共享，按 CapabilityUID 索引）
 - ✅ Phase 3c 波 1（运行时权威反转）：加载后始终以 `ChannelsV3` 重建运行时六数组；托管 Key 经 `syncManagedAccountCredentialsFromChannels` + `hydrateManagedAccountCredentials` 闭环；对账忽略易变字段与 Key；加载期迁移落盘当次跳过翻转（回归测试覆盖）。app 回归通过（`make run` 实测 3399：297 渠道重建、管理 API/调度/保活正常）。
 - ❌ Phase 3c 波 2（消费者切换）：评估后免改（六数组已是 V3 投影）。
 - ✅ Phase 3c 波 3（六数组停落盘）：save 只写 `channelsV3`（六数组置 nil + `omitempty`）；读侧兼容旧双写/仅六数组文件并在下次 save 自动转纯 V3；纯 V3 加载入口提前投影 V3→六数组（修复中途落盘以空数组重建空 V3、清托管凭证的回归）；专项测试覆盖落盘格式/重载不清文件/旧格式升级。回滚约束见 §6。
+- ✅ 方案 C（单一聚合记录）：`ChannelV3` 吸收 `LogicalChannel` 元数据与 `Settings`；`logicalChannels` 仅作为运行时管理视图，不再与 `channelsV3` 双写；纯 V3 加载恢复逻辑卡并保持 UID/Settings 稳定。
 
 ## 8. 后续新增的渠道级机制
 

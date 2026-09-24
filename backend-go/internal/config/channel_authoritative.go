@@ -20,6 +20,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 )
 
 // ChannelV3SchemaVersion 是 ChannelsV3 权威形态的 schema 版本。
@@ -40,12 +41,28 @@ func channelAuthoritativeStrictEnabled() bool {
 
 // ChannelV3 是同账号/同站点多协议物理渠道的无损聚合权威形态。
 type ChannelV3 struct {
-	ChannelUID   string                  `json:"channelUid"`
-	AccountUID   string                  `json:"accountUid,omitempty"`
-	ProviderID   string                  `json:"providerId,omitempty"`
-	Name         string                  `json:"name,omitempty"`
-	SiteIdentity string                  `json:"siteIdentity,omitempty"`
-	Protocols    []ChannelProtocolMember `json:"protocols"`
+	ChannelUID   string `json:"channelUid"`
+	AccountUID   string `json:"accountUid,omitempty"`
+	ProviderID   string `json:"providerId,omitempty"`
+	Name         string `json:"name,omitempty"`
+	SiteIdentity string `json:"siteIdentity,omitempty"`
+	// 逻辑渠道元数据与协议成员共存于同一权威记录，避免 logicalChannels 与
+	// channelsV3 分别落盘后产生两套可写真源。
+	Remark                 string                  `json:"remark,omitempty"`
+	Description            string                  `json:"description,omitempty"`
+	Website                string                  `json:"website,omitempty"`
+	Kind                   LogicalChannelKind      `json:"kind,omitempty"`
+	BaseURLs               []string                `json:"baseUrls,omitempty"`
+	Tags                   []string                `json:"tags,omitempty"`
+	HealthTag              string                  `json:"healthTag,omitempty"`
+	QualityTag             string                  `json:"qualityTag,omitempty"`
+	CostTag                string                  `json:"costTag,omitempty"`
+	CapabilityTags         []string                `json:"capabilityTags,omitempty"`
+	LogicalMetadataVersion int                     `json:"logicalMetadataVersion,omitempty"`
+	Settings               *LogicalChannelSettings `json:"settings,omitempty"`
+	CreatedAt              *time.Time              `json:"createdAt,omitempty"`
+	UpdatedAt              *time.Time              `json:"updatedAt,omitempty"`
+	Protocols              []ChannelProtocolMember `json:"protocols"`
 }
 
 // ChannelProtocolMember 是渠道下一个协议成员，携带完整 UpstreamConfig。
@@ -74,6 +91,7 @@ func BuildAuthoritativeChannels(cfg *Config) []ChannelV3 {
 				Name:         authoritativeChannelName(m.channel),
 				SiteIdentity: SiteIdentityForBaseURL(primaryBaseURLForView(m.channel)),
 			}
+			copyLogicalChannelMetadata(ch, FindLogicalChannelByUID(cfg, ch.ChannelUID))
 			byKey[aggKey] = ch
 			order = append(order, aggKey)
 		}
@@ -88,6 +106,139 @@ func BuildAuthoritativeChannels(cfg *Config) []ChannelV3 {
 		out = append(out, *byKey[k])
 	}
 	return out
+}
+
+// copyLogicalChannelMetadata 将管理面的逻辑渠道字段复制到权威聚合记录。
+// 物理路由没有对应 LogicalChannel 时保持空值，兼容旧配置和直接构造的测试配置。
+func copyLogicalChannelMetadata(dst *ChannelV3, src *LogicalChannel) {
+	if dst == nil || src == nil {
+		return
+	}
+	dst.Remark = src.Remark
+	dst.Description = src.Description
+	dst.Website = src.Website
+	dst.Kind = src.Kind
+	dst.BaseURLs = append([]string(nil), src.BaseURLs...)
+	dst.Tags = append([]string(nil), src.Tags...)
+	dst.HealthTag = src.HealthTag
+	dst.QualityTag = src.QualityTag
+	dst.CostTag = src.CostTag
+	dst.CapabilityTags = append([]string(nil), src.CapabilityTags...)
+	dst.LogicalMetadataVersion = 1
+	dst.Settings = cloneLogicalChannelSettings(src.Settings)
+	if !src.CreatedAt.IsZero() {
+		v := src.CreatedAt
+		dst.CreatedAt = &v
+	}
+	if !src.UpdatedAt.IsZero() {
+		v := src.UpdatedAt
+		dst.UpdatedAt = &v
+	}
+}
+
+func cloneLogicalChannelSettings(input *LogicalChannelSettings) *LogicalChannelSettings {
+	if input == nil {
+		return nil
+	}
+	out := *input
+	out.CustomHeaders = cloneStringMap(input.CustomHeaders)
+	out.AutoBlacklistBalance = cloneBoolPtr(input.AutoBlacklistBalance)
+	out.NormalizeMetadataUserID = cloneBoolPtr(input.NormalizeMetadataUserID)
+	out.CostMultiplier = cloneFloatPtr(input.CostMultiplier)
+	out.MaxGroupMultiplier = cloneFloatPtr(input.MaxGroupMultiplier)
+	out.ChannelPaymentAmount = cloneFloatPtr(input.ChannelPaymentAmount)
+	out.ChannelCreditAmount = cloneFloatPtr(input.ChannelCreditAmount)
+	out.Racing = cloneRacing(input.Racing)
+	return &out
+}
+
+// restoreLogicalChannelsFromAuthoritative 在纯 V3 文件加载时恢复管理面逻辑渠道视图。
+// 该视图仍保留在内存中供管理 API 使用，但不再作为第二份持久化真源。
+func restoreLogicalChannelsFromAuthoritative(cfg *Config) bool {
+	if cfg == nil || len(cfg.ChannelsV3) == 0 {
+		return false
+	}
+	existingByUID := make(map[string]*LogicalChannel, len(cfg.LogicalChannels))
+	for i := range cfg.LogicalChannels {
+		if uid := strings.TrimSpace(cfg.LogicalChannels[i].LogicalChannelUID); uid != "" {
+			existingByUID[uid] = &cfg.LogicalChannels[i]
+		}
+	}
+	logicals := make([]LogicalChannel, 0, len(cfg.ChannelsV3))
+	changed := false
+	for _, ch := range cfg.ChannelsV3 {
+		if strings.TrimSpace(ch.ChannelUID) == "" {
+			continue
+		}
+		// 旧 V3 没有逻辑元数据版本标记：若旧文件还带有
+		// logicalChannels，继续信任那份管理视图，避免把非 C 字段清空。
+		if existing := existingByUID[ch.ChannelUID]; existing != nil && ch.LogicalMetadataVersion == 0 {
+			continue
+		}
+		lc := LogicalChannel{
+			LogicalChannelUID: ch.ChannelUID,
+			AccountUID:        ch.AccountUID,
+			ProviderID:        ch.ProviderID,
+			Name:              ch.Name,
+			Remark:            ch.Remark,
+			Description:       ch.Description,
+			Website:           ch.Website,
+			Kind:              ch.Kind,
+			BaseURLs:          append([]string(nil), ch.BaseURLs...),
+			SiteIdentity:      ch.SiteIdentity,
+			Tags:              append([]string(nil), ch.Tags...),
+			HealthTag:         ch.HealthTag,
+			QualityTag:        ch.QualityTag,
+			CostTag:           ch.CostTag,
+			CapabilityTags:    append([]string(nil), ch.CapabilityTags...),
+			Settings:          cloneLogicalChannelSettings(ch.Settings),
+		}
+		if ch.CreatedAt != nil {
+			lc.CreatedAt = *ch.CreatedAt
+		}
+		if ch.UpdatedAt != nil {
+			lc.UpdatedAt = *ch.UpdatedAt
+		}
+		for _, member := range ch.Protocols {
+			appendProtocolToLogical(&lc, member.Kind, member.Upstream)
+			if lc.AccountUID == "" && strings.TrimSpace(member.Upstream.AccountUID) != "" {
+				lc.AccountUID = strings.TrimSpace(member.Upstream.AccountUID)
+			}
+			if len(lc.BaseURLs) == 0 {
+				lc.BaseURLs = append(lc.BaseURLs, member.Upstream.GetAllBaseURLs()...)
+			}
+		}
+		if lc.Kind == "" {
+			members := make([]physicalChannelEntry, 0, len(ch.Protocols))
+			for _, member := range ch.Protocols {
+				members = append(members, physicalChannelEntry{slice: member.Kind, channel: member.Upstream})
+			}
+			lc.Kind = inferLogicalKindFromEntries(members)
+		}
+		if strings.TrimSpace(lc.Name) == "" {
+			for _, member := range ch.Protocols {
+				if name := strings.TrimSpace(member.Upstream.LogicalName); name != "" {
+					lc.Name = name
+					break
+				}
+			}
+		}
+		if existing := existingByUID[ch.ChannelUID]; existing != nil {
+			*existing = lc
+			changed = true
+		} else {
+			logicals = append(logicals, lc)
+			changed = true
+		}
+	}
+	if len(logicals) > 0 {
+		cfg.LogicalChannels = append(cfg.LogicalChannels, logicals...)
+		changed = true
+	}
+	if changed {
+		cfg.LogicalChannelSchemaVersion = LogicalChannelSchemaVersion
+	}
+	return changed
 }
 
 // ApplyAuthoritativeChannels 把 ChannelV3 列表无损回投影为六个 Upstream 数组，

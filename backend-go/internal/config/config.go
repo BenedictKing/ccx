@@ -1447,9 +1447,9 @@ type Config struct {
 	// 竞速（影子请求）全局配置（可选，nil 默认关闭；行为参数由策略表自动推导）
 	Racing *GlobalRacingConfig `json:"racing,omitempty"`
 
-	// LogicalChannels 逻辑渠道列表（管理面聚合实体）。
-	// 运行时的物理渠道仍以六个 Upstream* 数组为准；本字段由 ConfigManager 在加载时
-	// 重建（按归组规则），由 /api/logical-channels 在事务内维护。空数组表示旧配置。
+	// LogicalChannels 逻辑渠道列表（管理面运行时聚合视图）。
+	// C 阶段起纯 V3 配置不再重复落盘本字段；保存时元数据写入 ChannelsV3，加载后
+	// 再恢复本视图。仍兼容旧文件中携带 logicalChannels 的双写形态。
 	LogicalChannels []LogicalChannel `json:"logicalChannels,omitempty"`
 	// LogicalChannelSchemaVersion 逻辑渠道配置 schema 版本。
 	// 首次引入版本为 1；非 1 时 ConfigManager 会触发一次重建以保证字段完整。
