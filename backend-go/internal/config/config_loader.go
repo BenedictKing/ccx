@@ -181,6 +181,9 @@ func (cm *ConfigManager) loadConfig() error {
 	if convergeSharedChannelFields(&cm.config) {
 		needSaveDefaults = true
 	}
+	if syncLogicalChannelSettings(&cm.config) {
+		needSaveDefaults = true
+	}
 
 	// 兼容旧格式：检测是否需要迁移
 	needMigration := cm.migrateOldFormat()
@@ -1470,6 +1473,9 @@ func (cm *ConfigManager) saveConfigLocked(config Config) error {
 	// 统一重建 LogicalChannels 视图并回写 LogicalChannelUID / LogicalName。
 	// 在 deepCopy 之前执行，确保修改作用于调用方共享的 slice 并最终提交到 cm.config。
 	RebuildLogicalChannels(&config)
+	// 方案 B：物理路由是运行时更新落点，落盘前把共享设置镜像回 LogicalChannel.Settings，
+	// 确保磁盘 Settings 与主路由同代（这是加载期 Settings 投影幂等的前提）。
+	refreshLogicalChannelSettingsFromRoutes(&config)
 	// Channel Data Model v2：在逻辑渠道重建之后，合成非权威的 Channels 镜像
 	// （渠道→key→endpoint→模型 + 跨账号共享能力）。六个数组仍是运行时权威。
 	RebuildChannels(&config)

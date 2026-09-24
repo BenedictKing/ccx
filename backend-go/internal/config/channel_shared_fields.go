@@ -147,3 +147,166 @@ func cloneRacing(input *ChannelRacingConfig) *ChannelRacingConfig {
 	output := *input
 	return &output
 }
+
+func logicalSettingsFromRoute(route UpstreamConfig) LogicalChannelSettings {
+	settings := LogicalChannelSettings{
+		InsecureSkipVerify:          route.InsecureSkipVerify,
+		LowQuality:                  route.LowQuality,
+		CustomHeaders:               cloneStringMap(route.CustomHeaders),
+		ProxyURL:                    route.ProxyURL,
+		ProxyPreferDirect:           route.ProxyPreferDirect,
+		RequestTimeoutMs:            route.RequestTimeoutMs,
+		ResponseHeaderTimeoutMs:     route.ResponseHeaderTimeoutMs,
+		StreamFirstContentTimeoutMs: route.StreamFirstContentTimeoutMs,
+		StreamInactivityTimeoutMs:   route.StreamInactivityTimeoutMs,
+		StreamToolCallIdleTimeoutMs: route.StreamToolCallIdleTimeoutMs,
+		ChannelPaymentCurrency:      route.ChannelPaymentCurrency,
+		ChannelCreditCurrency:       route.ChannelCreditCurrency,
+		Racing:                      cloneRacing(route.Racing),
+	}
+	if route.AutoBlacklistBalance != nil {
+		v := *route.AutoBlacklistBalance
+		settings.AutoBlacklistBalance = &v
+	}
+	if route.NormalizeMetadataUserID != nil {
+		v := *route.NormalizeMetadataUserID
+		settings.NormalizeMetadataUserID = &v
+	}
+	if route.CostMultiplier != nil {
+		v := *route.CostMultiplier
+		settings.CostMultiplier = &v
+	}
+	if route.MaxGroupMultiplier != nil {
+		v := *route.MaxGroupMultiplier
+		settings.MaxGroupMultiplier = &v
+	}
+	if route.ChannelPaymentAmount != nil {
+		v := *route.ChannelPaymentAmount
+		settings.ChannelPaymentAmount = &v
+	}
+	if route.ChannelCreditAmount != nil {
+		v := *route.ChannelCreditAmount
+		settings.ChannelCreditAmount = &v
+	}
+	return settings
+}
+
+// logicalPrimaryRoute 按协议优先级返回逻辑渠道可解析到的主路由，找不到返回 nil。
+func logicalPrimaryRoute(cfg *Config, lc *LogicalChannel) *UpstreamConfig {
+	if cfg == nil || lc == nil {
+		return nil
+	}
+	for _, kind := range orderedChannelKinds() {
+		for _, protocol := range lc.Protocols {
+			if protocol.Kind != string(kind) {
+				continue
+			}
+			if route := getChannelByUID(cfg, protocol.Kind, protocol.ChannelUID); route != nil {
+				return route
+			}
+		}
+	}
+	return nil
+}
+
+func logicalSettingsUpdate(settings LogicalChannelSettings) UpstreamUpdate {
+	return UpstreamUpdate{
+		InsecureSkipVerify:          sharedBoolPtr(settings.InsecureSkipVerify),
+		LowQuality:                  sharedBoolPtr(settings.LowQuality),
+		AutoBlacklistBalance:        cloneBoolPtr(settings.AutoBlacklistBalance),
+		NormalizeMetadataUserID:     cloneBoolPtr(settings.NormalizeMetadataUserID),
+		CustomHeaders:               cloneStringMap(settings.CustomHeaders),
+		ProxyURL:                    sharedStringPtr(settings.ProxyURL),
+		ProxyPreferDirect:           sharedBoolPtr(settings.ProxyPreferDirect),
+		RequestTimeoutMs:            sharedIntPtr(settings.RequestTimeoutMs),
+		ResponseHeaderTimeoutMs:     sharedIntPtr(settings.ResponseHeaderTimeoutMs),
+		StreamFirstContentTimeoutMs: sharedIntPtr(settings.StreamFirstContentTimeoutMs),
+		StreamInactivityTimeoutMs:   sharedIntPtr(settings.StreamInactivityTimeoutMs),
+		StreamToolCallIdleTimeoutMs: sharedIntPtr(settings.StreamToolCallIdleTimeoutMs),
+		CostMultiplier:              cloneFloatPtr(settings.CostMultiplier),
+		MaxGroupMultiplier:          cloneFloatPtr(settings.MaxGroupMultiplier),
+		ChannelPaymentCurrency:      sharedStringPtr(settings.ChannelPaymentCurrency),
+		ChannelPaymentAmount:        cloneFloatPtr(settings.ChannelPaymentAmount),
+		ChannelCreditCurrency:       sharedStringPtr(settings.ChannelCreditCurrency),
+		ChannelCreditAmount:         cloneFloatPtr(settings.ChannelCreditAmount),
+		Racing:                      cloneRacing(settings.Racing),
+	}
+}
+
+func cloneBoolPtr(input *bool) *bool {
+	if input == nil {
+		return nil
+	}
+	v := *input
+	return &v
+}
+
+func cloneFloatPtr(input *float64) *float64 {
+	if input == nil {
+		return nil
+	}
+	v := *input
+	return &v
+}
+
+// syncLogicalChannelSettings 加载期以 LogicalChannel.Settings 为共享设置真源：
+// Settings 缺失时从主路由一次性迁移（旧配置升级）；存在但与物理路由分叉时投影回路由。
+// 返回值表示是否发生实际变更，供 loader 决定是否落盘。
+func syncLogicalChannelSettings(cfg *Config) bool {
+	if cfg == nil {
+		return false
+	}
+	changed := false
+	for i := range cfg.LogicalChannels {
+		lc := &cfg.LogicalChannels[i]
+		primary := logicalPrimaryRoute(cfg, lc)
+		if primary == nil {
+			continue
+		}
+		if lc.Settings == nil {
+			settings := logicalSettingsFromRoute(*primary)
+			lc.Settings = &settings
+			changed = true
+			continue
+		}
+		update := logicalSettingsUpdate(*lc.Settings)
+		for _, protocol := range lc.Protocols {
+			route := getChannelByUID(cfg, protocol.Kind, protocol.ChannelUID)
+			if route == nil {
+				continue
+			}
+			before := logicalSettingsFromRoute(*route)
+			if reflect.DeepEqual(before, *lc.Settings) {
+				continue
+			}
+			if _, err := applyUpstreamUpdateFields(route, update); err != nil {
+				continue
+			}
+			// applyUpstreamUpdateFields 对 nil 指针字段是"不改写"语义，
+			// 个别分叉（如 Settings 清空了 Racing 而路由仍持有）无法收敛，
+			// 此时不算实际变更，避免每次加载都触发无谓落盘。
+			if !reflect.DeepEqual(logicalSettingsFromRoute(*route), before) {
+				changed = true
+			}
+		}
+	}
+	return changed
+}
+
+// refreshLogicalChannelSettingsFromRoutes 落盘前从主路由刷新逻辑渠道 Settings。
+// 运行时更新路径（方案 A 投影）以物理路由为落点，这里把结果镜像回 Settings，
+// 保证持久化形态自洽：磁盘上的 Settings 永远与主路由同代，加载期投影才幂等。
+func refreshLogicalChannelSettingsFromRoutes(cfg *Config) {
+	if cfg == nil {
+		return
+	}
+	for i := range cfg.LogicalChannels {
+		lc := &cfg.LogicalChannels[i]
+		primary := logicalPrimaryRoute(cfg, lc)
+		if primary == nil {
+			continue
+		}
+		settings := logicalSettingsFromRoute(*primary)
+		lc.Settings = &settings
+	}
+}

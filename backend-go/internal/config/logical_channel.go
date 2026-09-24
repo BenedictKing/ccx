@@ -35,6 +35,30 @@ type LogicalChannelProtocol struct {
 	RoutePrefix string `json:"routePrefix"` // 物理 route 的 RoutePrefix（仅展示）
 }
 
+// LogicalChannelSettings 是跨协议共享的渠道设置。物理 UpstreamConfig 仍保留运行时投影，
+// 但持久化真源逐步迁移到这里，避免每条协议路由各自写一份导致分叉。
+type LogicalChannelSettings struct {
+	InsecureSkipVerify          bool                 `json:"insecureSkipVerify,omitempty"`
+	LowQuality                  bool                 `json:"lowQuality,omitempty"`
+	AutoBlacklistBalance        *bool                `json:"autoBlacklistBalance,omitempty"`
+	NormalizeMetadataUserID     *bool                `json:"normalizeMetadataUserId,omitempty"`
+	CustomHeaders               map[string]string    `json:"customHeaders,omitempty"`
+	ProxyURL                    string               `json:"proxyUrl,omitempty"`
+	ProxyPreferDirect           bool                 `json:"proxyPreferDirect,omitempty"`
+	RequestTimeoutMs            int                  `json:"requestTimeoutMs,omitempty"`
+	ResponseHeaderTimeoutMs     int                  `json:"responseHeaderTimeoutMs,omitempty"`
+	StreamFirstContentTimeoutMs int                  `json:"streamFirstContentTimeoutMs,omitempty"`
+	StreamInactivityTimeoutMs   int                  `json:"streamInactivityTimeoutMs,omitempty"`
+	StreamToolCallIdleTimeoutMs int                  `json:"streamToolCallIdleTimeoutMs,omitempty"`
+	CostMultiplier              *float64             `json:"costMultiplier,omitempty"`
+	MaxGroupMultiplier          *float64             `json:"maxGroupMultiplier,omitempty"`
+	ChannelPaymentCurrency      string               `json:"channelPaymentCurrency,omitempty"`
+	ChannelPaymentAmount        *float64             `json:"channelPaymentAmount,omitempty"`
+	ChannelCreditCurrency       string               `json:"channelCreditCurrency,omitempty"`
+	ChannelCreditAmount         *float64             `json:"channelCreditAmount,omitempty"`
+	Racing                      *ChannelRacingConfig `json:"racing,omitempty"`
+}
+
 // LogicalChannel 是管理面聚合的逻辑渠道视图。
 // 用户的产品语义是“同一个站点的多协议能力只看作一张渠道卡片”；运行时仍以六类 Upstream*
 // 数组为权威存储，本结构体是稳定身份与跨协议视图。
@@ -55,6 +79,7 @@ type LogicalChannel struct {
 	QualityTag        string                   `json:"qualityTag,omitempty"`
 	CostTag           string                   `json:"costTag,omitempty"`
 	CapabilityTags    []string                 `json:"capabilityTags,omitempty"`
+	Settings          *LogicalChannelSettings  `json:"settings,omitempty"`
 	CreatedAt         time.Time                `json:"createdAt"`
 	UpdatedAt         time.Time                `json:"updatedAt"`
 }

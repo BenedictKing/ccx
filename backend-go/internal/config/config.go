@@ -1622,6 +1622,14 @@ func (cm *ConfigManager) GetConfig() Config {
 		cloned.LogicalChannels = make([]LogicalChannel, len(cm.config.LogicalChannels))
 		copy(cloned.LogicalChannels, cm.config.LogicalChannels)
 		for i := range cloned.LogicalChannels {
+			if cm.config.LogicalChannels[i].Settings != nil {
+				settings := *cm.config.LogicalChannels[i].Settings
+				cloned.LogicalChannels[i].Settings = &settings
+				if settings.CustomHeaders != nil {
+					cloned.LogicalChannels[i].Settings.CustomHeaders = cloneStringMap(settings.CustomHeaders)
+				}
+				cloned.LogicalChannels[i].Settings.Racing = cloneRacing(settings.Racing)
+			}
 			if len(cm.config.LogicalChannels[i].BaseURLs) > 0 {
 				cloned.LogicalChannels[i].BaseURLs = append([]string(nil), cm.config.LogicalChannels[i].BaseURLs...)
 			}
