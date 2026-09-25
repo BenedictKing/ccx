@@ -195,7 +195,7 @@ describe('ApiKeyManagementSection', () => {
     expect(apiMocks.patchKeyMultiplier).not.toHaveBeenCalled()
   })
 
-  it('converts decimal multiplier inputs to JSON numbers on field commit', async () => {
+  it('stages decimal multiplier inputs as JSON numbers while typing', async () => {
     const wrapper = mountSection({
       apiKeyConfigs: [
         { key: 'sk-1', keyUid: 'uid-1', groupMultiplier: 1, maxGroupMultiplier: 2 },
@@ -213,8 +213,6 @@ describe('ApiKeyManagementSection', () => {
     expect(multiplierInputs).toHaveLength(1)
     await multiplierInputs[0].vm.$emit('update:modelValue', '0.15')
     await nextTick()
-    // 数字框失焦/回车定稿（change 事件）即暂存为表单数字
-    await multiplierInputs[0].vm.$emit('change', '0.15')
 
     const events = wrapper.emitted('update:apiKeyConfigs')
     expect(events).toBeTruthy()

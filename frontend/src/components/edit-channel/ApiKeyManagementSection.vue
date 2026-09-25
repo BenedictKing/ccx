@@ -589,7 +589,7 @@
                         variant="outlined"
                         density="compact"
                         hide-details
-                        @change="applyMultiplierToConfigs"
+                        @update:model-value="applyMultiplierToConfigs"
                       />
                     </v-col>
                   </v-row>
