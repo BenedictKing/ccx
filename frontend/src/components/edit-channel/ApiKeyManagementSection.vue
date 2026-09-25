@@ -590,6 +590,7 @@
                         density="compact"
                         hide-details
                         @update:model-value="applyMultiplierToConfigs"
+                        @keydown.enter="flushMultiplierInput"
                       />
                     </v-col>
                   </v-row>
@@ -1531,7 +1532,7 @@ const groupModelForm = ref({ model: '' })
 // Key 行统一详情展开（倍率 + 分组模型排除同一块）：一次只展开一行，切换即重置编辑态。
 const expandedDetailKey = ref<string | null>(null)
 const multiplierEditing = ref<ChannelApiKeyRow | null>(null)
-const multiplierForm = ref<{ groupMultiplier: number | null; consumptionPolicy: 'normal' | 'opportunistic' | null }>({ groupMultiplier: null, consumptionPolicy: null })
+const multiplierForm = ref<{ groupMultiplier: number | string | null; consumptionPolicy: 'normal' | 'opportunistic' | null }>({ groupMultiplier: null, consumptionPolicy: null })
 
 const consumptionPolicyOptions = computed(() => [
   { title: t('subscription.keyMultiplier.policyNormal'), value: 'normal' as const },
@@ -1817,6 +1818,14 @@ const applyMultiplierToConfigs = () => {
     })
   }
   emit('update:apiKeyConfigs', configs)
+}
+
+// 快捷键保存发生在 window keydown 监听中，可能早于数字输入框的 blur/change。
+// 先从当前 input 读取原始值，确保 Ctrl/Command+Enter 保存时使用焦点内的最新倍率。
+const flushMultiplierInput = (event: KeyboardEvent) => {
+  const target = event.target as { type?: string; value?: string } | null
+  if (target?.type === 'number') multiplierForm.value.groupMultiplier = target.value ?? ''
+  applyMultiplierToConfigs()
 }
 
 const parseMultiplierInput = (value: number | string | null): number | null => {

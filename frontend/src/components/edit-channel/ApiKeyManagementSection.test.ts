@@ -222,6 +222,30 @@ describe('ApiKeyManagementSection', () => {
     expect(apiMocks.patchKeyMultiplier).not.toHaveBeenCalled()
   })
 
+  it('flushes the focused multiplier input before the save shortcut runs', async () => {
+    const wrapper = mountSection({
+      apiKeyConfigs: [
+        { key: 'sk-1', keyUid: 'uid-1', groupMultiplier: 0.12 },
+      ],
+      channelUid: 'ch-1',
+      channelKind: 'messages',
+    })
+    await nextTick()
+    await wrapper.find('[aria-label="channelCard.keyDetail"]').trigger('click')
+    await nextTick()
+
+    const multiplierInput = wrapper.findAllComponents(inputStub)
+      .find(input => input.props('type') === 'number')
+    expect(multiplierInput).toBeDefined()
+    const inputElement = multiplierInput!.element as HTMLInputElement
+    inputElement.value = '0.13'
+    await multiplierInput!.trigger('keydown.enter', { ctrlKey: true })
+
+    const events = wrapper.emitted('update:apiKeyConfigs') || []
+    const lastConfig = events[events.length - 1]?.[0] as Array<Record<string, unknown>>
+    expect(lastConfig[0].groupMultiplier).toBe(0.13)
+  })
+
   it('expands multiplier editor inline without save/cancel/mark-public buttons', async () => {
     const wrapper = mountSection({
       apiKeyConfigs: [
