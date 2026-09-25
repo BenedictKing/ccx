@@ -51,7 +51,6 @@ export type EditChannelModalEmits = {
 type EditChannelModalEmit = <K extends keyof EditChannelModalEmits>(event: K, ...args: EditChannelModalEmits[K]) => void
 type ResolvedEditChannelModalProps = Readonly<EditChannelModalProps & { channelType: NonNullable<EditChannelModalProps['channelType']> }>
 
-
 export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: EditChannelModalEmit) {
   const { t } = useI18n()
   const apiService = new ApiService()
@@ -193,7 +192,6 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     },
   )
 
-
   function resetTransientUiState() {
     resetRestoredKeys()
     errors.name = ''
@@ -280,8 +278,6 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     const single = form.baseUrl.trim()
     return single ? [single] : []
   }
-
-
 
   const { headerClasses, avatarColor, headerIconStyle, subtitleClasses } = useChannelEditorHeaderState(theme)
 
@@ -425,7 +421,6 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
 
     return payload
   }
-
 
   // 表单操作
   const resetForm = () => {
@@ -670,7 +665,6 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     updateCustomHeaders,
   } = useChannelEditorFormDerived(channelTypeRef, form, baseUrlsText)
 
-
   // 辅助函数：更新表单字段
   const updateForm = (partial: Record<string, unknown>) => {
     if ('stripBillingHeader' in partial) {
@@ -678,7 +672,6 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     }
     Object.assign(form, partial)
   }
-
 
   const handleSubmit = async () => {
     if (submitting.value || !formRef.value) return

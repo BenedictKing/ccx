@@ -15,7 +15,6 @@ declare module '*.json' {
   export default value
 }
 
-
 import type { SupportedLocale } from './i18n/messages'
 
 export {}
