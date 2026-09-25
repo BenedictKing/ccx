@@ -37,7 +37,8 @@ vi.mock('../../utils/hash', () => ({
 }))
 
 vi.mock('../../i18n', () => ({
-  useI18n: () => ({ t: (key: string) => key }),
+  useI18n: () => ({ t: (key: string, params?: Record<string, unknown>) =>
+    params?.count === undefined ? key : `${key}:${params.count}` }),
 }))
 
 const passthroughStub = defineComponent({ template: '<div v-bind="$attrs"><slot /></div>' })
@@ -460,6 +461,69 @@ describe('ApiKeyManagementSection', () => {
 })
 
 describe('分组模型排除行内化', () => {
+  it.each([
+    { group: undefined, secondMultiplier: 0.12 },
+    { group: '', secondMultiplier: 0.08 },
+    { group: '   ', secondMultiplier: 0.12 },
+  ])('未分组 Key 独立显示作用范围：$group / $secondMultiplier', async ({ group, secondMultiplier }) => {
+    const wrapper = mountSection({
+      apiKeys: ['sk-1', 'sk-2'],
+      apiKeyConfigs: [
+        { key: 'sk-1', keyUid: 'uid-1', quotaGroup: group, groupMultiplier: 0.08 },
+        { key: 'sk-2', keyUid: 'uid-2', quotaGroup: group, groupMultiplier: secondMultiplier },
+      ],
+      channelUid: 'ch-1',
+      channelKind: 'chat',
+    })
+
+    for (const button of wrapper.findAll('[aria-label="channelCard.keyDetail"]')) {
+      await button.trigger('click')
+      expect(wrapper.text()).toContain('channelCard.independentKey')
+      expect(wrapper.text()).toContain('channelCard.affectedCurrentKey')
+      expect(wrapper.text()).toContain('channelCard.keyModelPolicy')
+      expect(wrapper.text()).not.toContain('channelCard.affectedGroupKeys')
+    }
+  })
+
+  it('明确分组按最新配置统计，排除其他分组与未分组 Key', async () => {
+    const configs = [
+      { key: 'sk-1', keyUid: 'uid-1', quotaGroup: ' coding ' },
+      { key: 'sk-2', keyUid: 'uid-2', quotaGroup: 'coding', enabled: false },
+      { key: 'sk-3', keyUid: 'uid-3', quotaGroup: 'other' },
+      { key: 'sk-4', keyUid: 'uid-4' },
+    ]
+    const wrapper = mountSection({
+      apiKeys: configs.map(config => config.key),
+      apiKeyConfigs: configs,
+      channelUid: 'ch-1',
+      channelKind: 'chat',
+    })
+
+    await wrapper.get('[aria-label="channelCard.keyDetail"]').trigger('click')
+    expect(wrapper.text()).toContain('channelCard.affectedGroupKeys:2')
+    expect(wrapper.text()).toContain('channelCard.groupModelPolicy')
+    await wrapper.setProps({ apiKeyConfigs: configs.map(config => ({ ...config, quotaGroup: '' })) })
+    expect(wrapper.text()).toContain('channelCard.affectedCurrentKey')
+    expect(wrapper.text()).not.toContain('channelCard.affectedGroupKeys')
+  })
+
+  it('同模型的独立 Key 排除记录可区分并正确恢复', async () => {
+    const records = ['sk-alpha-123456', 'sk-beta-654321'].map(key => ({
+      quotaGroup: '', key, model: 'model-x', disabledAt: '2026-09-25T00:00:00Z',
+    }))
+    const wrapper = mountSection({ disabledGroupModels: records })
+    const rows = wrapper.findAll('.group-model-policy-list .px-3')
+    expect(rows).toHaveLength(2)
+    expect(rows[0].text()).toContain(maskApiKey(records[0].key))
+    expect(rows[1].text()).toContain(maskApiKey(records[1].key))
+    await rows[1].get('button').trigger('click')
+    expect(wrapper.emitted('restore-group-model')?.[0]).toEqual([records[1]])
+
+    await wrapper.setProps({ disabledGroupModels: [records[1]] })
+    expect(wrapper.get('.group-model-policy-list').text()).toContain(maskApiKey(records[1].key))
+    expect(wrapper.get('.group-model-policy-list').text()).not.toContain(maskApiKey(records[0].key))
+  })
+
   it('统一详情按钮行内展开，模型选定即提交且无对话框按钮', async () => {
     const wrapper = mountSection({
       apiKeyConfigs: [

@@ -559,9 +559,9 @@
                   <div class="text-caption text-medium-emphasis mb-2">
                     <code>{{ maskApiKey(row.key) }}</code>
                     <v-chip size="x-small" color="secondary" variant="tonal" class="ml-2">
-                      {{ row.quotaGroup || t('channelCard.ungrouped') }}
+                      {{ editingQuotaGroup || t('channelCard.independentKey') }}
                     </v-chip>
-                    <span class="ml-2">{{ t('channelCard.affectedGroupKeys', { count: groupModelAffectedCount }) }}</span>
+                    <span class="ml-2">{{ editingQuotaGroup ? t('channelCard.affectedGroupKeys', { count: groupModelAffectedCount }) : t('channelCard.affectedCurrentKey') }}</span>
                   </div>
                   <v-row dense>
                     <v-col cols="12" sm="6">
@@ -618,7 +618,7 @@
 
                   <v-divider class="my-3" />
 
-                  <div class="text-subtitle-2 font-weight-medium mb-1">{{ t('channelCard.groupModelPolicy') }}</div>
+                  <div class="text-subtitle-2 font-weight-medium mb-1">{{ t(editingQuotaGroup ? 'channelCard.groupModelPolicy' : 'channelCard.keyModelPolicy') }}</div>
                   <v-combobox
                     v-model="groupModelForm.model"
                     :items="modelOptions"
@@ -1353,12 +1353,13 @@
           <v-list density="compact" class="rounded-lg group-model-policy-list">
             <v-list-item
               v-for="record in visibleDisabledGroupModels"
-              :key="record.quotaGroup + '|' + record.model"
+              :key="groupModelPolicyKey(record)"
               class="px-3"
             >
               <template #prepend><v-icon size="small" color="secondary" class="mr-2">mdi-account-multiple-outline</v-icon></template>
               <v-list-item-title class="d-flex align-center ga-2 flex-wrap text-caption">
-                <v-chip size="x-small" color="secondary" variant="tonal">{{ record.quotaGroup || t('channelCard.ungrouped') }}</v-chip>
+                <v-chip size="x-small" color="secondary" variant="tonal">{{ record.quotaGroup?.trim() || t('channelCard.independentKey') }}</v-chip>
+                <code v-if="!record.quotaGroup?.trim() && record.key">{{ maskApiKey(record.key) }}</code>
                 <strong>{{ record.model }}</strong>
               </v-list-item-title>
               <v-list-item-subtitle class="text-caption">
@@ -1369,7 +1370,7 @@
                   size="x-small"
                   color="success"
                   variant="tonal"
-                  :loading="changingGroupModel === (record.quotaGroup + '|' + record.model)"
+                  :loading="changingGroupModel === groupModelPolicyKey(record)"
                   :disabled="!!changingGroupModel"
                   @click="$emit('restore-group-model', record)"
                 >
@@ -1450,7 +1451,7 @@ import type {
 } from '../../services/api-types'
 import draggable from 'vuedraggable'
 import { maskApiKey } from '../../utils/apiKeyMask'
-import { buildChannelApiKeyRows, type ChannelApiKeyRow } from '../../utils/channelApiKeys'
+import { buildChannelApiKeyRows, groupModelPolicyKey, type ChannelApiKeyRow } from '../../utils/channelApiKeys'
 import { getVolcenginePlanConsoleURL } from '../../utils/channelWebsite'
 import { quotaRemainingColorClass } from '../../utils/quotaColor'
 import { buildKimiUsageSections } from '../../utils/kimiPlanUsage'
@@ -1735,9 +1736,12 @@ const hasConfigurableKeys = computed(() => props.serviceType === 'copilot' || ke
 const visibleDisabledKeyModels = computed(() => props.disabledKeyModels || [])
 const visibleDisabledGroupModels = computed(() => props.disabledGroupModels || [])
 const modelOptions = computed(() => props.modelOptions || [])
+const editingQuotaGroup = computed(() => keyRows.value.find(row => row.key === expandedDetailKey.value)?.quotaGroup?.trim() || '')
 const groupModelAffectedCount = computed(() => {
-  const group = groupModelEditing.value?.quotaGroup || ''
-  return keyRows.value.filter(row => (row.quotaGroup || '') === group && !row.disabled).length
+  if (!expandedDetailKey.value) return 0
+  const group = editingQuotaGroup.value
+  if (!group) return 1
+  return keyRows.value.filter(row => row.quotaGroup?.trim() === group && row.activeIndex >= 0).length
 })
 
 const multiplierStatusColor = (status?: string) => status === 'fresh' || status === 'manual' ? 'success' : status === 'over_limit' || status === 'sync_error' || status === 'relink_required' ? 'error' : 'warning'

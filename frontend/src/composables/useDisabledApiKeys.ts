@@ -1,6 +1,7 @@
 import { computed, ref, type ComputedRef } from 'vue'
 import { ApiService, type Channel } from '../services/api'
 import type { APIKeyConfig } from '../services/api-types'
+import { groupModelPolicyKey } from '../utils/channelApiKeys'
 
 type ChannelType = 'messages' | 'chat' | 'responses' | 'gemini' | 'images' | 'vectors'
 type FormLike = {
@@ -39,7 +40,6 @@ export function useDisabledApiKeys(options: DisabledApiKeyOptions) {
   const localResumedKeys = ref(new Set<string>())
 
   const keyModelKey = (apiKey: string, model: string) => `${apiKey}|${model}`
-  const groupModelKey = (quotaGroup: string, model: string) => `${quotaGroup}|${model}`
   const channelId = (channel: Channel) => channel.routeIndex ?? channel.index
 
   const keyRoutes = (channel: Channel, apiKey: string): KeyRoute[] => {
@@ -160,8 +160,9 @@ export function useDisabledApiKeys(options: DisabledApiKeyOptions) {
 
   const visibleDisabledGroupModels = computed(() => {
     const serverRecords = options.channel.value?.disabledGroupModels || []
-    return [...serverRecords, ...localDisabledGroupModels.value].filter(
-      record => !localRestoredGroupModels.value.has(groupModelKey(record.quotaGroup, record.model))
+    const records = new Map([...serverRecords, ...localDisabledGroupModels.value].map(record => [groupModelPolicyKey(record), record]))
+    return [...records.values()].filter(
+      record => !localRestoredGroupModels.value.has(groupModelPolicyKey(record))
     )
   })
 
@@ -269,11 +270,13 @@ export function useDisabledApiKeys(options: DisabledApiKeyOptions) {
         apiKey,
         normalizedModel,
       )
+      const record = { quotaGroup: result.quotaGroup, key: apiKey, model: result.model, disabledAt: new Date().toISOString() }
+      const policyKey = groupModelPolicyKey(record)
       localDisabledGroupModels.value = [
-        ...localDisabledGroupModels.value.filter(record => groupModelKey(record.quotaGroup, record.model) !== groupModelKey(result.quotaGroup, result.model)),
-        { quotaGroup: result.quotaGroup, key: apiKey, model: result.model, disabledAt: new Date().toISOString() },
+        ...localDisabledGroupModels.value.filter(item => groupModelPolicyKey(item) !== policyKey),
+        record,
       ]
-      localRestoredGroupModels.value.delete(groupModelKey(result.quotaGroup, result.model))
+      localRestoredGroupModels.value.delete(policyKey)
       return result
     } catch (error) {
       options.emitError(error instanceof Error ? error.message : 'Disable failed')
@@ -311,7 +314,7 @@ export function useDisabledApiKeys(options: DisabledApiKeyOptions) {
 
   const restoreDisabledGroupModel = async (record: { quotaGroup: string; key?: string; model: string }) => {
     const channel = options.channel.value
-    const key = groupModelKey(record.quotaGroup, record.model)
+    const key = groupModelPolicyKey(record)
     if (!channel || changingGroupModel.value) return
     changingGroupModel.value = key
     try {
@@ -319,10 +322,10 @@ export function useDisabledApiKeys(options: DisabledApiKeyOptions) {
         options.channelType.value,
         channelId(channel),
         record.model,
-        { quotaGroup: record.quotaGroup || undefined, apiKey: record.quotaGroup ? undefined : record.key },
+        { quotaGroup: record.quotaGroup?.trim() || undefined, apiKey: record.quotaGroup?.trim() ? undefined : record.key },
       )
       localRestoredGroupModels.value = new Set([...localRestoredGroupModels.value, key])
-      localDisabledGroupModels.value = localDisabledGroupModels.value.filter(item => groupModelKey(item.quotaGroup, item.model) !== key)
+      localDisabledGroupModels.value = localDisabledGroupModels.value.filter(item => groupModelPolicyKey(item) !== key)
       return result
     } catch (error) {
       options.emitError(error instanceof Error ? error.message : 'Restore failed')

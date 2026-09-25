@@ -1,4 +1,14 @@
-import type { DisabledKeyInfo, APIKeyConfig } from '../services/api-types'
+import type { DisabledKeyInfo, DisabledGroupModelInfo, APIKeyConfig } from '../services/api-types'
+
+/** 明确分组共享模型策略；空分组按 Key 隔离，与后端规则一致。 */
+export function groupModelPolicyKey(record: Pick<DisabledGroupModelInfo, 'quotaGroup' | 'key' | 'model'>): string {
+  const group = record.quotaGroup?.trim() || ''
+  return JSON.stringify([
+    group ? 'group' : 'key',
+    group || record.key?.trim() || '',
+    record.model.trim().toLowerCase(),
+  ])
+}
 
 // 注意：APIKeyConfig 带 index signature，keyof 求值为宽泛的 string|number，
 // Omit 之后具名属性会全部丢失，因此用到的字段必须在下方重复声明，

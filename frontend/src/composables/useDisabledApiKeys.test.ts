@@ -300,6 +300,44 @@ describe('useDisabledApiKeys', () => {
     expect(restoreGroupModel).toHaveBeenCalledWith('messages', 3, 'model-x', { quotaGroup: undefined, apiKey: activeKey })
   })
 
+  it('不同独立 Key 暂存同模型后保留两条记录，恢复其中一条不影响另一条', async () => {
+    const result = { success: true, quotaGroup: '', model: 'model-x', affectedKeyCount: 1 }
+    const disableGroupModel = vi.fn().mockResolvedValue(result)
+    const restoreGroupModel = vi.fn().mockResolvedValue(result)
+    const { state } = createOptions({ disableGroupModel, restoreGroupModel })
+
+    state.stageGroupModelDisable('key-a', 'model-x')
+    state.stageGroupModelDisable('key-b', 'model-x')
+    await state.flushStagedGroupModelDisables()
+    expect(state.visibleDisabledGroupModels.value.map(record => record.key)).toEqual(['key-a', 'key-b'])
+
+    await state.restoreDisabledGroupModel({ quotaGroup: '', key: 'key-a', model: 'model-x' })
+    expect(restoreGroupModel).toHaveBeenCalledWith('messages', 3, 'model-x', { quotaGroup: undefined, apiKey: 'key-a' })
+    expect(state.visibleDisabledGroupModels.value.map(record => record.key)).toEqual(['key-b'])
+  })
+
+  it('恢复服务端独立 Key 记录不会隐藏其他 Key 或同名分组记录', async () => {
+    const restoreGroupModel = vi.fn().mockResolvedValue({ success: true, quotaGroup: '', model: 'model-x', affectedKeyCount: 1 })
+    const { channel, state } = createOptions({ restoreGroupModel })
+    const records = [
+      { quotaGroup: '', key: 'key-a', model: 'model-x', disabledAt: '' },
+      { quotaGroup: '', key: 'key-b', model: 'model-x', disabledAt: '' },
+      { quotaGroup: 'key-a', model: 'model-x', disabledAt: '' },
+    ]
+    channel.value!.disabledGroupModels = records
+
+    await state.restoreDisabledGroupModel(records[0])
+    expect(state.visibleDisabledGroupModels.value).toEqual(records.slice(1))
+  })
+
+  it('同一明确分组的不同 Key 排除同模型仍合并为一条记录', async () => {
+    const disableGroupModel = vi.fn().mockResolvedValue({ success: true, quotaGroup: 'coding', model: 'model-x', affectedKeyCount: 2 })
+    const { state } = createOptions({ disableGroupModel })
+    await state.disableGroupModel('key-a', 'model-x')
+    await state.disableGroupModel('key-b', 'model-x')
+    expect(state.visibleDisabledGroupModels.value).toHaveLength(1)
+  })
+
   it('聚合渠道恢复 Key 时覆盖拥有该 Key 的全部协议路由', async () => {
     const resumeApiKey = vi.fn().mockResolvedValue(undefined)
     const resumeChatApiKey = vi.fn().mockResolvedValue(undefined)
