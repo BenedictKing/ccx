@@ -336,6 +336,7 @@ import ApiKeyManagementSection from './edit-channel/ApiKeyManagementSection.vue'
 import CustomHeadersSection from './edit-channel/CustomHeadersSection.vue'
 import NewApiAccountPanel from './edit-channel/NewApiAccountPanel.vue'
 import { useEditChannelModal, type EditChannelModalEmits, type EditChannelModalProps } from '../composables/useEditChannelModal'
+import { useDialogHotkeys } from '../composables/useDialogHotkeys'
 import { ApiService } from '../services/api'
 import type { ManagedAccountChannel } from '../services/api-types'
 import { buildNativeProtocolModelRoutes, loadLegacyManagedModelAvailability } from '../utils/channelModelAvailability'
@@ -471,6 +472,8 @@ const {
   resumeKey,
   ensureTargetModelsLoaded,
   updateForm,
+  isAnySelectMenuOpen,
+  suppressDialogEscapeUntil,
   handleSubmit,
   handleCancel,
   scrollToSection,
@@ -518,6 +521,20 @@ const handleSubmitWithBind = async () => {
   }
   await handleSubmit()
 }
+
+// 主保存按钮与 Ctrl/Command+Enter 共用同一条绑定前置链路，
+// 确保快捷键保存不会跳过托管账号绑定。
+useDialogHotkeys(
+  () => props.show,
+  {
+    esc: () => {
+      if (submitting.value) return false
+      if (isAnySelectMenuOpen.value || Date.now() < suppressDialogEscapeUntil.value) return false
+      handleCancel()
+    },
+    confirm: () => { void handleSubmitWithBind() },
+  },
+)
 </script>
 
 <style scoped src="./edit-channel/edit-channel-modal.css"></style>

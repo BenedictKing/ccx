@@ -2,7 +2,6 @@ import { ref, reactive, computed, watch, onUnmounted, nextTick } from 'vue'
 import { useTheme } from 'vuetify'
 import type { Channel } from '../services/api'
 import { ApiService } from '../services/api'
-import { useDialogHotkeys } from '@/composables/useDialogHotkeys'
 import {
   buildChannelPayload,
   embeddingCapabilitiesToRows,
@@ -796,19 +795,6 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     }
   )
 
-  // ESC 取消 & Cmd/Ctrl+Enter 确认（经全局对话框快捷键栈，仅栈顶时生效）
-  useDialogHotkeys(
-    () => props.show,
-    {
-      esc: () => {
-        if (submitting.value) return false
-        if (isAnySelectMenuOpen.value || Date.now() < suppressDialogEscapeUntil.value) return false
-        handleCancel()
-      },
-      confirm: () => handleSubmit(),
-    },
-  )
-
   onUnmounted(() => {
     detachScrollListener()
     if (formBaseUrlPreviewTimer !== null) {
@@ -861,6 +847,8 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     resumeKey,
     ensureTargetModelsLoaded,
     updateForm,
+    isAnySelectMenuOpen,
+    suppressDialogEscapeUntil,
     handleSubmit,
     handleCancel,
     scrollToSection,
