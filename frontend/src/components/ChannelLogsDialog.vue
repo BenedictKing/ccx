@@ -271,7 +271,7 @@ const props = defineProps<{
   protocolRoutes?: ChannelProtocolRoute[]
 }>()
 
-const emit = defineEmits<{
+defineEmits<{
   (_e: 'update:modelValue', _v: boolean): void
 }>()
 const { t } = useI18n()

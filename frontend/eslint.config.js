@@ -169,6 +169,16 @@ export default [
     }
   },
 
+  // 测试桩会在同一文件内声明多个轻量组件，并仅列出测试所需的 prop 名称。
+  // 这些生产组件约束不适用于测试替身，限定在测试文件中关闭以避免误报。
+  {
+    files: ['**/*.test.ts'],
+    rules: {
+      'vue/one-component-per-file': 'off',
+      'vue/require-prop-types': 'off'
+    }
+  },
+
   // 忽略文件
   {
     ignores: [

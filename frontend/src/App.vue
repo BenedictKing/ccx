@@ -748,7 +748,6 @@ const {
   capabilityTestJob,
   capabilityTestRpm,
   capabilityUseChannelModels,
-  testChannelCapability,
   handleCopyToTab,
   handleCancelCapabilityTest,
   handleRetryCapabilityModel,

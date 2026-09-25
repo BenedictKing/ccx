@@ -157,11 +157,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
   })
 
   const channelTypeRef = computed(() => props.channelType)
-  const {
-    serviceTypeOptions,
-    reasoningParamStyleOptions,
-    textVerbosityOptions,
-  } = useEditChannelOptions(channelTypeRef)
+  const { serviceTypeOptions } = useEditChannelOptions(channelTypeRef)
 
   // 多 BaseURL 文本输入（独立变量，保留用户输入的换行）
   const baseUrlsText = ref('')
@@ -564,7 +560,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     form.rateLimitMaxConcurrent = (channel.rateLimitMaxConcurrent && channel.rateLimitMaxConcurrent > 0) ? channel.rateLimitMaxConcurrent : null
     form.rateLimitAutoFromHeaders = channel.rateLimitAutoFromHeaders !== false
     form.routePrefix = channel.routePrefix || ''
-    const { validPatterns, hasInvalidPatterns } = filterValidSupportedModelPatterns(channel.supportedModels || [])
+    const { validPatterns } = filterValidSupportedModelPatterns(channel.supportedModels || [])
     form.supportedModels = validPatterns
     form.autoBlacklistBalance = channel.autoBlacklistBalance ?? true
     form.normalizeMetadataUserId = channel.normalizeMetadataUserId ?? true

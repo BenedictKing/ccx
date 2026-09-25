@@ -1522,7 +1522,6 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const apiService = new ApiService()
-const isMac = computed(() => typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform))
 
 const newApiKey = ref('')
 const apiKeyError = ref('')

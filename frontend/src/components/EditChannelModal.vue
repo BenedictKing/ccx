@@ -462,7 +462,6 @@ const {
   restoreDisabledKeyModel,
   changingGroupModel,
   visibleDisabledGroupModels,
-  disableGroupModel,
   restoreDisabledGroupModel,
   pendingGroupModelDisables,
   stageGroupModelDisable,
