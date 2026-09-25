@@ -287,11 +287,19 @@ const mergeAccountCredentials = (channels: Partial<Record<LlmChannelKind, Routed
   const apiKeys = Array.from(new Set(
     Object.values(channels).flatMap(channel => channel.apiKeys ?? []),
   ))
-  const configsByKey = new Map(
-    Object.values(channels)
-      .flatMap(channel => channel.apiKeyConfigs ?? [])
-      .map(config => [config.key, config]),
-  )
+  // 同一账号的多协议路由各自保存一份 Key 配置。不能用最后一条路由直接覆盖，
+  // 否则一条路由的旧空倍率会把另一条路由刚设置的分组倍率抹掉。
+  const apiKeyConfigs = Object.values(channels)
+    .flatMap(channel => channel.apiKeyConfigs ?? [])
+    .reduce<NonNullable<Channel['apiKeyConfigs']>>((merged, config) => {
+      const existing = merged.find(candidate => apiKeyConfigsMatch(candidate, config))
+      if (!existing) {
+        merged.push({ ...config })
+        return merged
+      }
+      mergeApiKeyConfigView(existing, config)
+      return merged
+    }, [])
   const disabledByKey = new Map(
     Object.values(channels)
       .flatMap(channel => channel.disabledApiKeys ?? [])
@@ -299,8 +307,34 @@ const mergeAccountCredentials = (channels: Partial<Record<LlmChannelKind, Routed
   )
   return {
     apiKeys,
-    apiKeyConfigs: configsByKey.size > 0 ? Array.from(configsByKey.values()) : undefined,
+    apiKeyConfigs: apiKeyConfigs.length > 0 ? apiKeyConfigs : undefined,
     disabledApiKeys: disabledByKey.size > 0 ? Array.from(disabledByKey.values()) : undefined,
+  }
+}
+
+const apiKeyConfigsMatch = (left: NonNullable<Channel['apiKeyConfigs']>[number], right: NonNullable<Channel['apiKeyConfigs']>[number]): boolean => {
+  const leftKey = left.key?.trim()
+  const rightKey = right.key?.trim()
+  if (leftKey && rightKey && leftKey === rightKey) return true
+  const leftKeyUid = left.keyUid?.trim()
+  const rightKeyUid = right.keyUid?.trim()
+  if (leftKeyUid && rightKeyUid && leftKeyUid === rightKeyUid) return true
+  const leftCredentialUid = left.credentialUid?.trim()
+  const rightCredentialUid = right.credentialUid?.trim()
+  return !!leftCredentialUid && !!rightCredentialUid && leftCredentialUid === rightCredentialUid
+}
+
+const mergeApiKeyConfigView = (
+  target: NonNullable<Channel['apiKeyConfigs']>[number],
+  incoming: NonNullable<Channel['apiKeyConfigs']>[number],
+) => {
+  for (const [field, value] of Object.entries(incoming)) {
+    if (value === undefined) continue
+    const current = target[field]
+    const identityField = field === 'key' || field === 'keyUid' || field === 'credentialUid'
+    const currentIsEmptyIdentity = identityField && typeof current === 'string' && current.trim() === ''
+    // 主路由的 null 是显式清空；只有 undefined 或空身份字段才由兄弟路由补齐。
+    if (current === undefined || currentIsEmptyIdentity) target[field] = value
   }
 }
 

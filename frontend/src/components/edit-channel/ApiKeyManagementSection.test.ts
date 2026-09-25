@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import ApiKeyManagementSection from './ApiKeyManagementSection.vue'
 import { maskApiKey } from '../../utils/apiKeyMask'
+import type { APIKeyConfig } from '../../services/api-types'
 
 const apiMocks = vi.hoisted(() => ({
   patchKeyMultiplier: vi.fn(),
@@ -245,6 +246,45 @@ describe('ApiKeyManagementSection', () => {
       .filter(b => ['app.actions.save', 'app.actions.cancel', 'subscription.keyMultiplier.markPublic'].some(k => b.text().includes(k)))
     expect(actionButtons).toHaveLength(0)
     expect(wrapper.text()).toContain('subscription.keyMultiplier.stagedHint')
+  })
+
+  it('reopens another key with the staged multiplier after the parent updates props', async () => {
+    const wrapper = mountSection({
+      apiKeys: ['sk-1', 'sk-2'],
+      apiKeyConfigs: [
+        { key: 'sk-1', keyUid: 'uid-1', groupMultiplier: 1 },
+        { key: 'sk-2', keyUid: 'uid-2' },
+      ],
+      channelUid: 'ch-1',
+      channelKind: 'messages',
+    })
+    await nextTick()
+
+    const detailButtons = wrapper.findAll('[aria-label="channelCard.keyDetail"]')
+    await detailButtons[1].trigger('click')
+    await nextTick()
+
+    const multiplierInput = wrapper.findAllComponents(inputStub)
+      .find(input => input.props('type') === 'number')
+    expect(multiplierInput).toBeDefined()
+    await multiplierInput!.vm.$emit('update:modelValue', '0.12')
+    await multiplierInput!.vm.$emit('change', '0.12')
+    await nextTick()
+
+    const configEvents = wrapper.emitted('update:apiKeyConfigs') || []
+    const staged = configEvents[configEvents.length - 1]?.[0] as APIKeyConfig[]
+    expect(staged?.find(config => config.key === 'sk-2')?.groupMultiplier).toBe(0.12)
+    await wrapper.setProps({ apiKeyConfigs: staged })
+    await nextTick()
+
+    const stagedDetailButton = wrapper.findAll('[aria-label="channelCard.keyDetail"]')[1]
+    await stagedDetailButton.trigger('click')
+    await nextTick()
+    await wrapper.findAll('[aria-label="channelCard.keyDetail"]')[1].trigger('click')
+    await nextTick()
+    const reopenedInput = wrapper.findAllComponents(inputStub)
+      .find(input => input.props('type') === 'number')
+    expect(reopenedInput?.props('modelValue')).toBe(0.12)
   })
 
   it('keeps Kimi credential bound to the correct key row after save and reload with reversed credential order', async () => {

@@ -246,6 +246,41 @@ describe('buildUnifiedChannelsData account grouping', () => {
     expect(logicalChannel.status).toBe('partial')
   })
 
+  it('合并同一 Key 的配置时保留其他协议路由已有的分组倍率', () => {
+    const data: Record<LlmChannelKind, ChannelsResponse> = {
+      messages: response([channel('site-claude', 'acct-shared', 0, ['sk-shared'], {
+        apiKeyConfigs: [{ key: 'sk-shared', keyUid: 'uid-shared', groupMultiplier: 0.12 }],
+      })]),
+      chat: response([channel('site-chat', 'acct-shared', 1, ['sk-shared'], {
+        apiKeyConfigs: [{ key: 'sk-shared', keyUid: 'uid-shared' }],
+      })]),
+      responses: response([]),
+      gemini: response([]),
+    }
+
+    const logicalChannel = buildUnifiedChannelsData(data).channels[0]
+    expect(logicalChannel.apiKeyConfigs).toEqual([
+      { key: 'sk-shared', keyUid: 'uid-shared', groupMultiplier: 0.12 },
+    ])
+  })
+
+  it('主路由显式清空倍率时不被兄弟路由旧值覆盖', () => {
+    const data: Record<LlmChannelKind, ChannelsResponse> = {
+      messages: response([channel('site-claude', 'acct-shared', 0, ['sk-shared'], {
+        apiKeyConfigs: [{ key: 'sk-shared', keyUid: 'uid-shared', groupMultiplier: null }],
+      })]),
+      chat: response([channel('site-chat', 'acct-shared', 1, ['sk-shared'], {
+        apiKeyConfigs: [{ key: 'sk-shared', keyUid: 'uid-shared', groupMultiplier: 0.8 }],
+      })]),
+      responses: response([]),
+      gemini: response([]),
+    }
+
+    expect(buildUnifiedChannelsData(data).channels[0].apiKeyConfigs).toEqual([
+      { key: 'sk-shared', keyUid: 'uid-shared', groupMultiplier: null },
+    ])
+  })
+
   it('保留各协议路由状态供聚合渠道恢复使用', () => {
     const data: Record<LlmChannelKind, ChannelsResponse> = {
       messages: response([channel('mimo-main-claude', 'acct-main', 0, ['sk-a'], { status: 'suspended' })]),
