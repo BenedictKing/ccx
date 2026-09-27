@@ -342,6 +342,45 @@ func TestNormalizeMiMoResponsesReasoningEffort(t *testing.T) {
 	}
 }
 
+func TestNormalizeOpenAIProtocolDisabledReasoningEffort(t *testing.T) {
+	for _, serviceType := range []string{"responses", "copilot", "openai"} {
+		t.Run(serviceType, func(t *testing.T) {
+			upstream := &UpstreamConfig{ServiceType: serviceType}
+			if got := NormalizeReasoningEffortForUpstream(upstream, "off"); got != "none" {
+				t.Fatalf("NormalizeReasoningEffortForUpstream(%s, off) = %q, want none", serviceType, got)
+			}
+			req := map[string]interface{}{"reasoning": map[string]interface{}{"effort": "off"}}
+			NormalizeReasoningObjectForUpstream(req, upstream)
+			reasoning := req["reasoning"].(map[string]interface{})
+			if reasoning["effort"] != "none" {
+				t.Fatalf("reasoning.effort = %q, want none", reasoning["effort"])
+			}
+		})
+	}
+}
+
+func TestEffectiveReasoningParamStyle(t *testing.T) {
+	tests := []struct {
+		name     string
+		upstream *UpstreamConfig
+		want     string
+	}{
+		{name: "nil", upstream: nil, want: ""},
+		{name: "responses default", upstream: &UpstreamConfig{ServiceType: "responses"}, want: "reasoning"},
+		{name: "openai default", upstream: &UpstreamConfig{ServiceType: "openai"}, want: "reasoning_effort"},
+		{name: "claude default", upstream: &UpstreamConfig{ServiceType: "claude"}, want: "thinking"},
+		{name: "gemini default", upstream: &UpstreamConfig{ServiceType: "gemini"}, want: ReasoningParamStyleGemini},
+		{name: "explicit compatibility override", upstream: &UpstreamConfig{ServiceType: "responses", ReasoningParamStyle: "thinking"}, want: "thinking"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := EffectiveReasoningParamStyle(tt.upstream); got != tt.want {
+				t.Fatalf("EffectiveReasoningParamStyle() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestIsValidReasoningEffort(t *testing.T) {
 	valid := []string{"", "off", "none", "minimal", "low", "medium", "high", "xhigh", "max"}
 	for _, effort := range valid {
@@ -395,6 +434,14 @@ func TestApplyReasoningParamStyle(t *testing.T) {
 			wantType: "disabled",
 		},
 		{
+			name:     "thinking: disabled on disabled alias",
+			style:    "thinking",
+			effort:   "disabled",
+			initial:  map[string]interface{}{},
+			wantKey:  "thinking",
+			wantType: "disabled",
+		},
+		{
 			name:    "thinking: empty effort = passthrough (no thinking key)",
 			style:   "thinking",
 			effort:  "",
@@ -426,6 +473,14 @@ func TestApplyReasoningParamStyle(t *testing.T) {
 			wantKey: "reasoning_effort",
 		},
 		{
+			name:       "reasoning_effort: off normalized to none",
+			style:      "reasoning_effort",
+			effort:     "off",
+			initial:    map[string]interface{}{},
+			wantKey:    "reasoning_effort",
+			wantEffort: "none",
+		},
+		{
 			name:    "reasoning_effort: empty effort = no key",
 			style:   "reasoning_effort",
 			effort:  "",
@@ -439,6 +494,14 @@ func TestApplyReasoningParamStyle(t *testing.T) {
 			effort:  "medium",
 			initial: map[string]interface{}{},
 			wantKey: "reasoning",
+		},
+		{
+			name:       "default: off normalized to none",
+			style:      "reasoning",
+			effort:     "off",
+			initial:    map[string]interface{}{},
+			wantKey:    "reasoning",
+			wantEffort: "none",
 		},
 		{
 			name:    "default: empty effort = no key",

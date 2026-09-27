@@ -1110,18 +1110,3 @@ func applyUpstreamModelCapability(profile *ModelProfile, capability config.Upstr
 	}
 	profile.SupportsEffortControl = len(profile.SupportedEffortLevels) > 0
 }
-
-// requestEffortOfProfile 返回请求实际生效的思考等级：手动意图 pin 优先于
-// 客户端显式声明；空表示未指定（按 medium 口径评定，与模型基础档同义）。
-func requestEffortOfProfile(profile *RequestProfile) EffortLevel {
-	if profile == nil {
-		return ""
-	}
-	if profile.IntentEffortPin != nil && profile.IntentEffortPin.Set && profile.IntentEffortPin.Effort != "" {
-		return profile.IntentEffortPin.Effort
-	}
-	if profile.ClientEffort != "" {
-		return profile.ClientEffort
-	}
-	return ""
-}

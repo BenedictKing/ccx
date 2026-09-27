@@ -1058,12 +1058,12 @@ func TestResolveModel_ProbeSuccessFalse_Filtered(t *testing.T) {
 	}
 }
 
-// ── ManualRoutingIntent effort 覆盖优先级测试 ──
+// ── 请求 effort 覆盖优先级测试 ──
 //
-// 覆盖计划要求的三个场景（加上 resolveIntentPinnedEffort 单测）：
+// 覆盖客户端显式声明与 ManualRoutingIntent 的优先级：
 //   - 只锁模型不锁 effort：effort 仍由 Autopilot 决定
 //   - 模型和 effort 都锁：两者都生效
-//   - 客户端显式 off 优先于意图的 effort 覆盖
+//   - 客户端显式 effort（包括 off）优先于意图的 effort 覆盖
 
 func TestResolveIntentPinnedEffort_ModelOnlyIntentLeavesEffortToAutopilot(t *testing.T) {
 	profile := &RequestProfile{
@@ -1092,22 +1092,78 @@ func TestResolveIntentPinnedEffort_ClientExplicitOffOverridesIntentEffort(t *tes
 		IntentEffortPin:      &IntentEffortPin{Effort: EffortHigh, Set: true},
 	}
 	floor := BuildCapabilityFloorFromRequestProfile(profile)
-	if floor.PinnedEffort != "" {
-		t.Errorf("PinnedEffort = %q, want empty: client explicit off must win over intent effort", floor.PinnedEffort)
+	if floor.PinnedEffort != EffortOff {
+		t.Errorf("PinnedEffort = %q, want %q: client explicit off must win over intent effort", floor.PinnedEffort, EffortOff)
 	}
 }
 
-func TestResolveIntentPinnedEffort_ClientExplicitNonOffDoesNotBlockIntent(t *testing.T) {
-	// 客户端显式声明了非 off 的 effort（例如 low）时，不属于"关闭思考"的最强信号，
-	// 意图的 effort 覆盖仍应生效。
+func TestResolveIntentPinnedEffort_ClientExplicitNonOffOverridesIntent(t *testing.T) {
 	profile := &RequestProfile{
 		ClientEffort:         EffortLow,
 		ClientEffortExplicit: true,
 		IntentEffortPin:      &IntentEffortPin{Effort: EffortHigh, Set: true},
 	}
 	floor := BuildCapabilityFloorFromRequestProfile(profile)
-	if floor.PinnedEffort != EffortHigh {
-		t.Errorf("PinnedEffort = %q, want %q: client non-off explicit effort must not block intent pin", floor.PinnedEffort, EffortHigh)
+	if floor.PinnedEffort != EffortLow {
+		t.Errorf("PinnedEffort = %q, want %q: client explicit effort must win over inferred intent", floor.PinnedEffort, EffortLow)
+	}
+}
+
+func TestResolveEffortVariants_ClientMaxHonoredForUnconfiguredTaskClass(t *testing.T) {
+	profile := makeEffortProfile("gpt-6-sol", ModelFamilyOpenAI, QualityTierNormal, 1000000,
+		true, 100, true, []EffortLevel{EffortOff, EffortLow, EffortMedium, EffortHigh, EffortMax})
+	cfg := makeRoutingConfig(true, true, map[string][]string{"worker": {"medium"}})
+	resolver := newTestResolverWithConfig(t, []ModelProfile{profile}, cfg)
+	floor := BuildCapabilityFloorFromRequestProfile(&RequestProfile{
+		TaskClass:            TaskClass("vision"),
+		ClientEffort:         EffortMax,
+		ClientEffortExplicit: true,
+	})
+
+	target, resolved, _ := resolver.ResolveModel("gpt-6-sol", "ch_test", "messages", "metrics_test", floor)
+	if !resolved {
+		t.Fatal("expected resolved=true")
+	}
+	if target.Effort != EffortMax || !target.EffortDecided {
+		t.Fatalf("effort = %q decided=%v, want max/true", target.Effort, target.EffortDecided)
+	}
+}
+
+func TestResolveEffortVariants_RespectClientThinkingDisabledUsesIntent(t *testing.T) {
+	profile := makeEffortProfile("gpt-6-sol", ModelFamilyOpenAI, QualityTierNormal, 1000000,
+		true, 100, true, []EffortLevel{EffortLow, EffortHigh})
+	cfg := makeRoutingConfig(true, true, map[string][]string{"worker": {"low"}})
+	cfg.AutopilotRouting.ReasoningEffort.RespectClientThinking = false
+	resolver := newTestResolverWithConfig(t, []ModelProfile{profile}, cfg)
+	floor := BuildCapabilityFloorFromRequestProfile(&RequestProfile{
+		TaskClass:            TaskClass("worker"),
+		ClientEffort:         EffortLow,
+		ClientEffortExplicit: true,
+		IntentEffortPin:      &IntentEffortPin{Effort: EffortHigh, Set: true},
+	})
+
+	target, resolved, _ := resolver.ResolveModel("gpt-6-sol", "ch_test", "messages", "metrics_test", floor)
+	if !resolved {
+		t.Fatal("expected resolved=true")
+	}
+	if target.Effort != EffortHigh || !target.EffortDecided {
+		t.Fatalf("effort = %q decided=%v, want high/true", target.Effort, target.EffortDecided)
+	}
+}
+
+func TestResolveEffortVariants_UnconfiguredTaskClassKeepsPassthrough(t *testing.T) {
+	profile := makeEffortProfile("gpt-6-sol", ModelFamilyOpenAI, QualityTierNormal, 1000000,
+		true, 100, true, []EffortLevel{EffortOff, EffortLow, EffortMedium})
+	cfg := makeRoutingConfig(true, true, map[string][]string{"worker": {"medium"}})
+	resolver := newTestResolverWithConfig(t, []ModelProfile{profile}, cfg)
+
+	target, resolved, _ := resolver.ResolveModel(
+		"gpt-6-sol", "ch_test", "messages", "metrics_test", CapabilityFloor{TaskClass: TaskClass("vision")})
+	if !resolved {
+		t.Fatal("expected resolved=true")
+	}
+	if target.Effort != "" || target.EffortDecided {
+		t.Fatalf("effort = %q decided=%v, want passthrough/false", target.Effort, target.EffortDecided)
 	}
 }
 
@@ -1139,9 +1195,9 @@ func TestResolveEffortVariants_PinnedEffortHonoredWhenSupported(t *testing.T) {
 	}
 }
 
-// TestResolveEffortVariants_PinnedEffortUnsupportedFallsBackToAutopilot 验证模型不支持
-// 锁定档位时 fail-open，落回常规展开逻辑而不是硬失败。
-func TestResolveEffortVariants_PinnedEffortUnsupportedFallsBackToAutopilot(t *testing.T) {
+// TestResolveEffortVariants_PinnedEffortUnsupportedKeepsPassthrough 验证模型画像不声明
+// 锁定档位时 fail-open 保留原请求，不自动降到更低档。
+func TestResolveEffortVariants_PinnedEffortUnsupportedKeepsPassthrough(t *testing.T) {
 	profiles := []ModelProfile{
 		makeEffortProfile("claude-sonnet-5", ModelFamilyClaude, QualityTierHigh, 1000000,
 			true, 100, true, []EffortLevel{EffortLow, EffortMedium}), // 不含 EffortMax
@@ -1159,12 +1215,8 @@ func TestResolveEffortVariants_PinnedEffortUnsupportedFallsBackToAutopilot(t *te
 	if target.Effort == EffortMax {
 		t.Error("expected fail-open: unsupported pinned effort should not be forced onto the model")
 	}
-	// fail-open 后仍应落到常规展开逻辑，产生一个已决定的、模型支持的档位。
-	if !target.EffortDecided {
-		t.Error("expected EffortDecided=true from the regular expansion fallback")
-	}
-	if target.Effort != EffortLow {
-		t.Errorf("Effort = %q, want %q (lowest supported, ExpandVariants=false)", target.Effort, EffortLow)
+	if target.EffortDecided || target.Effort != "" {
+		t.Errorf("Effort = %q decided=%v, want passthrough/false", target.Effort, target.EffortDecided)
 	}
 }
 
@@ -1201,9 +1253,10 @@ func makeRoutingConfig(enabled, expandVariants bool, perTaskClass map[string][]s
 				CapabilityFloorEnabled: true,
 			},
 			ReasoningEffort: config.ReasoningEffortConfig{
-				Enabled:        enabled,
-				ExpandVariants: expandVariants,
-				PerTaskClass:   perTaskClass,
+				Enabled:               enabled,
+				ExpandVariants:        expandVariants,
+				PerTaskClass:          perTaskClass,
+				RespectClientThinking: true,
 			},
 		},
 	}
@@ -1260,8 +1313,12 @@ func TestResolveEffortVariants_ExpandVariantsFalse_ReturnsLowest(t *testing.T) {
 		AutopilotRouting: config.AutopilotRoutingConfig{
 			SchemaVersion: 99, // 避免迁移覆盖
 			ReasoningEffort: config.ReasoningEffortConfig{
-				Enabled:        true,
-				ExpandVariants: false,
+				Enabled:               true,
+				ExpandVariants:        false,
+				RespectClientThinking: true,
+				PerTaskClass: map[string][]string{
+					"coding": {"low", "medium", "high", "max"},
+				},
 			},
 		},
 	}
@@ -1333,8 +1390,9 @@ func TestEffortFloorFilter_BelowFloorFilteredOut(t *testing.T) {
 		true, 100, true, []EffortLevel{EffortLow, EffortHigh})
 
 	profiles := []ModelProfile{lowModel, highModel}
-	// 不限制 PerTaskClass，让两个模型都展开
-	cfg := makeRoutingConfig(true, true, nil)
+	cfg := makeRoutingConfig(true, true, map[string][]string{
+		"coding": {"low", "medium", "high"},
+	})
 	resolver := newTestResolverWithConfig(t, profiles, cfg)
 
 	// EffortFloor=medium 应该过滤掉两个模型的 low 变体
@@ -1356,7 +1414,9 @@ func TestEffortFloorFilter_FailOpen_WhenAllFiltered(t *testing.T) {
 	profile := makeEffortProfile("model-low-only", ModelFamilyDeepSeek, QualityTierNormal, 100000,
 		true, 100, true, []EffortLevel{EffortLow})
 	profiles := []ModelProfile{profile}
-	cfg := makeRoutingConfig(true, true, nil)
+	cfg := makeRoutingConfig(true, true, map[string][]string{
+		"coding": {"low", "max"},
+	})
 	resolver := newTestResolverWithConfig(t, profiles, cfg)
 
 	floor := CapabilityFloor{EffortFloor: EffortHigh, TaskClass: TaskClass("coding")}
@@ -1425,7 +1485,9 @@ func TestEffortQualityBonus_AppliedToScore(t *testing.T) {
 	// 验证 EffortQualityBonus * 0.1 被加到 measuredQualityScore
 	profile := makeEffortProfile("claude-sonnet-5", ModelFamilyClaude, QualityTierHigh, 1000000,
 		true, 100, true, []EffortLevel{EffortLow, EffortMax})
-	cfg := makeRoutingConfig(true, true, nil)
+	cfg := makeRoutingConfig(true, true, map[string][]string{
+		"coding": {"low", "max"},
+	})
 	resolver := newTestResolverWithConfig(t, []ModelProfile{profile}, cfg)
 
 	floor := CapabilityFloor{TaskClass: TaskClass("coding")}

@@ -528,10 +528,11 @@ type ChannelKeyMetricsHistoryResponse struct {
 
 // KeyMetricsHistoryResult 单个 Key+Model 组合的历史数据
 type KeyMetricsHistoryResult struct {
-	KeyMask    string                        `json:"keyMask"`
-	Model      string                        `json:"model,omitempty"` // 模型名（空表示聚合所有模型）
-	Color      string                        `json:"color"`
-	DataPoints []metrics.KeyHistoryDataPoint `json:"dataPoints"`
+	KeyIdentity string                        `json:"keyIdentity,omitempty"` // 稳定单向标识，供跨协议合并，避免脱敏前缀碰撞
+	KeyMask     string                        `json:"keyMask"`
+	Model       string                        `json:"model,omitempty"` // 模型名（空表示聚合所有模型）
+	Color       string                        `json:"color"`
+	DataPoints  []metrics.KeyHistoryDataPoint `json:"dataPoints"`
 }
 
 // Key 颜色配置（与前端一致）
@@ -622,6 +623,7 @@ func getChannelKeyMetricsHistoryWithKind(metricsManager *metrics.MetricsManager,
 			colorIndex := 0
 			for _, keyInfo := range displayKeys {
 				keyMask := truncateKeyMask(keyInfo.KeyMask, 8)
+				keyIdentity := "kh_" + config.ChannelKeyHash(keyInfo.APIKey)
 				keyModelBuckets := filterModelBucketsByURLs(store, apiType, since, intervalSec, upstream.GetAllBaseURLs(), []string{keyInfo.APIKey}, serviceType)
 
 				// 按 (timestamp, model) 聚合，复用 AggregatedBucket 作为 key 级合并
@@ -653,9 +655,10 @@ func getChannelKeyMetricsHistoryWithKind(metricsManager *metrics.MetricsManager,
 
 				if len(bucketByModel) == 0 {
 					result.Keys = append(result.Keys, KeyMetricsHistoryResult{
-						KeyMask:    keyMask,
-						Color:      keyColors[colorIndex%len(keyColors)],
-						DataPoints: []metrics.KeyHistoryDataPoint{},
+						KeyIdentity: keyIdentity,
+						KeyMask:     keyMask,
+						Color:       keyColors[colorIndex%len(keyColors)],
+						DataPoints:  []metrics.KeyHistoryDataPoint{},
 					})
 					colorIndex++
 					continue
@@ -692,10 +695,11 @@ func getChannelKeyMetricsHistoryWithKind(metricsManager *metrics.MetricsManager,
 						return dataPoints[i].Timestamp.Before(dataPoints[j].Timestamp)
 					})
 					result.Keys = append(result.Keys, KeyMetricsHistoryResult{
-						KeyMask:    keyMask,
-						Model:      model,
-						Color:      keyColors[colorIndex%len(keyColors)],
-						DataPoints: dataPoints,
+						KeyIdentity: keyIdentity,
+						KeyMask:     keyMask,
+						Model:       model,
+						Color:       keyColors[colorIndex%len(keyColors)],
+						DataPoints:  dataPoints,
 					})
 					colorIndex++
 				}
@@ -709,15 +713,17 @@ func getChannelKeyMetricsHistoryWithKind(metricsManager *metrics.MetricsManager,
 		colorIndex := 0
 		for _, keyInfo := range displayKeys {
 			keyMask := truncateKeyMask(keyInfo.KeyMask, 8)
+			keyIdentity := "kh_" + config.ChannelKeyHash(keyInfo.APIKey)
 			fullDataPoints := metricsManager.GetKeyHistoricalStatsMultiURL(upstream.GetAllBaseURLs(), keyInfo.APIKey, serviceType, duration, interval)
 			modelData := metricsManager.GetKeyModelHistoricalStatsMultiURL(upstream.GetAllBaseURLs(), keyInfo.APIKey, serviceType, duration, interval)
 
 			// 没有任何模型时 fallback 到跨模型聚合数据（不计算 CostUSD，因为无模型定价依据）
 			if len(modelData) == 0 {
 				result.Keys = append(result.Keys, KeyMetricsHistoryResult{
-					KeyMask:    keyMask,
-					Color:      keyColors[colorIndex%len(keyColors)],
-					DataPoints: fullDataPoints,
+					KeyIdentity: keyIdentity,
+					KeyMask:     keyMask,
+					Color:       keyColors[colorIndex%len(keyColors)],
+					DataPoints:  fullDataPoints,
 				})
 				colorIndex++
 				continue
@@ -748,10 +754,11 @@ func getChannelKeyMetricsHistoryWithKind(metricsManager *metrics.MetricsManager,
 					}
 				}
 				result.Keys = append(result.Keys, KeyMetricsHistoryResult{
-					KeyMask:    keyMask,
-					Model:      model,
-					Color:      keyColors[colorIndex%len(keyColors)],
-					DataPoints: dataPoints,
+					KeyIdentity: keyIdentity,
+					KeyMask:     keyMask,
+					Model:       model,
+					Color:       keyColors[colorIndex%len(keyColors)],
+					DataPoints:  dataPoints,
 				})
 				colorIndex++
 			}

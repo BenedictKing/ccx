@@ -699,6 +699,7 @@ export interface KeyHistoryDataPoint {
 
 // 单个 Key 的历史数据
 export interface KeyHistoryData {
+  keyIdentity?: string // 稳定单向标识，用于同一逻辑渠道跨协议合并
   keyMask: string
   model?: string  // 模型名（可选，用于 Key+Model 组合显示）
   color: string
@@ -1727,6 +1728,7 @@ export interface RoutingCandidate {
   qualityDiscountReason?: string
   totalScore: number
   scores?: CandidateScore[]
+  penalty?: number
   domainEvidence?: DomainStrengthEvidence
   selected: boolean
   filterReasons?: string[]

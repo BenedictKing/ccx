@@ -53,6 +53,12 @@ func TestEffortInjectionStyle(t *testing.T) {
 			upstream: &config.UpstreamConfig{},
 			want:     "reasoning",
 		},
+		{
+			name:     "显式兼容形态覆盖 Responses 原生默认",
+			kind:     scheduler.ChannelKindResponses,
+			upstream: &config.UpstreamConfig{ServiceType: "responses", ReasoningParamStyle: "thinking"},
+			want:     "thinking",
+		},
 		// 自动托管渠道会被 RuntimeUpstreamForAutoManagedProvider 清空 ReasoningParamStyle，
 		// 此时必须按渠道类型推导原生形态，否则 effort 会写到上游不识别的字段被静默丢弃。
 		{
@@ -177,6 +183,24 @@ func TestAtomicModelEffortRewrite_ByChannelKind(t *testing.T) {
 			body:            `{"model":"old","input":[]}`,
 			wantPaths:       map[string]string{"reasoning.effort": "medium"},
 			wantAbsentPaths: []string{"generationConfig.thinkingConfig.thinkingLevel"},
+		},
+		{
+			name:            "responses 渠道将内部 off 写为协议 none",
+			kind:            scheduler.ChannelKindResponses,
+			upstream:        &config.UpstreamConfig{ServiceType: "responses"},
+			effort:          autopilot.EffortOff,
+			body:            `{"model":"old","input":[]}`,
+			wantPaths:       map[string]string{"reasoning.effort": "none"},
+			wantAbsentPaths: []string{"reasoning_effort", "thinking"},
+		},
+		{
+			name:            "chat 渠道将内部 off 写为协议 none",
+			kind:            scheduler.ChannelKindChat,
+			upstream:        &config.UpstreamConfig{ServiceType: "openai"},
+			effort:          autopilot.EffortOff,
+			body:            `{"model":"old","messages":[]}`,
+			wantPaths:       map[string]string{"reasoning_effort": "none"},
+			wantAbsentPaths: []string{"reasoning", "thinking"},
 		},
 		{
 			name:      "images 渠道不注入任何思考参数",

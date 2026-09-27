@@ -244,7 +244,7 @@ func handleStreamSuccess(
 					}
 				}
 
-				if !preflightHasNonTextContent && common.HasResponsesSemanticContent(event) && !preflightToolTracker.HasPendingToolCall() {
+				if !preflightHasNonTextContent && common.HasResponsesDeliverableContent(event) && !preflightToolTracker.HasPendingToolCall() {
 					preflightHasNonTextContent = true
 					preflightEmpty = false
 					// 进入阶段B，不立即放行
@@ -260,7 +260,7 @@ func handleStreamSuccess(
 					continue
 				}
 
-				extractResponsesTextFromEvent(event, &preflightTextBuf)
+				extractResponsesDeliverableTextFromEvent(event, &preflightTextBuf)
 
 				// 检查是否有有效内容 delta 事件
 				if !common.IsEffectivelyEmptyStreamText(preflightTextBuf.String()) {
@@ -308,6 +308,16 @@ func handleStreamSuccess(
 						break
 					}
 					continue
+				}
+
+				// reasoning/summary 只能证明连接仍有数据，不能证明客户端最终能收到
+				// assistant/tool/refusal 内容。因此在阶段 A 不取消首内容超时；只有已经
+				// 看到可交付内容后，它才作为阶段 B 的连续流活动续期。
+				if hasFirstContent && common.HasResponsesSemanticContent(event) {
+					if streamObserver != nil {
+						streamObserver.MarkStreamActivity(time.Now())
+					}
+					resetInactivityTimer()
 				}
 
 				// 检查是否为 response.completed 事件（流正常结束）
@@ -863,8 +873,19 @@ func normalizeResponsesSSEFieldLine(line string) string {
 	return line
 }
 
-// extractResponsesTextFromEvent 从 Responses SSE 事件中提取文本内容
+// extractResponsesTextFromEvent 从 Responses SSE 事件中提取文本内容（包含 reasoning，
+// 供日志、session 和 token 估算使用）。
 func extractResponsesTextFromEvent(event string, buf *bytes.Buffer) {
+	extractResponsesTextFromEventMode(event, buf, true)
+}
+
+// extractResponsesDeliverableTextFromEvent 仅提取客户端可交付内容，避免 reasoning-only
+// 的成功流在 preflight 阶段被误判为已有 assistant 输出。
+func extractResponsesDeliverableTextFromEvent(event string, buf *bytes.Buffer) {
+	extractResponsesTextFromEventMode(event, buf, false)
+}
+
+func extractResponsesTextFromEventMode(event string, buf *bytes.Buffer, includeReasoning bool) {
 	for _, line := range strings.Split(event, "\n") {
 		// 支持 "data:" 和 "data: " 两种格式（有些上游不带空格）
 		var jsonStr string
@@ -886,17 +907,27 @@ func extractResponsesTextFromEvent(event string, buf *bytes.Buffer) {
 		switch eventType {
 		case "response.output_text.delta", "response.output_text.done":
 			writeFirstStringField(buf, data, "delta", "text")
+		case "response.refusal.delta", "response.refusal.done":
+			writeFirstStringField(buf, data, "delta", "refusal", "text")
 		case "response.function_call_arguments.delta":
 			if delta, ok := data["delta"].(string); ok {
 				buf.WriteString(delta)
 			}
-		case "response.reasoning_summary_text.delta", "response.reasoning_summary_text.done", "response.reasoning_text.delta":
-			writeFirstStringField(buf, data, "delta", "text")
+		case "response.reasoning_summary_text.delta", "response.reasoning_summary_text.done", "response.reasoning_text.delta", "response.reasoning_text.done":
+			if includeReasoning {
+				writeFirstStringField(buf, data, "delta", "text")
+			}
 		case "response.output_json.delta", "response.output_json.done":
 			// JSON 输出增量
 			writeFirstStringField(buf, data, "delta", "text")
 		case "response.content_part.added", "response.content_part.delta", "response.content_part.done":
 			// 内容块增量（通用）
+			if part, ok := data["part"].(map[string]interface{}); ok && !includeReasoning {
+				partType, _ := part["type"].(string)
+				if strings.Contains(partType, "reasoning") || partType == "summary_text" {
+					continue
+				}
+			}
 			if !writeFirstStringField(buf, data, "delta", "text") {
 				if part, ok := data["part"].(map[string]interface{}); ok {
 					writeFirstStringField(buf, part, "text", "delta", "transcript")
@@ -912,16 +943,21 @@ func extractResponsesTextFromEvent(event string, buf *bytes.Buffer) {
 				case "message", "text":
 					writeResponsesContentText(buf, item["content"])
 				case "reasoning":
-					writeResponsesContentText(buf, item["summary"])
+					if includeReasoning {
+						writeResponsesContentText(buf, item["summary"])
+					}
 				}
 			}
 		case "response.completed":
 			if response, ok := data["response"].(map[string]interface{}); ok {
-				writeResponsesOutputText(buf, response["output"])
+				writeResponsesOutputText(buf, response["output"], includeReasoning)
 			}
 		default:
 			// 未知事件类型兜底：上游新增 response.*.delta / response.*.done 事件时，
 			// 尝试提取通用 delta/text 字段，避免文本提取不到被 preflight 误判为空流
+			if !includeReasoning && strings.Contains(eventType, "reasoning") {
+				continue
+			}
 			if strings.HasPrefix(eventType, "response.") &&
 				(strings.HasSuffix(eventType, ".delta") || strings.HasSuffix(eventType, ".done")) {
 				writeFirstStringField(buf, data, "delta", "text", "transcript")
@@ -954,7 +990,7 @@ func writeFirstStringField(buf *bytes.Buffer, data map[string]interface{}, keys 
 	return false
 }
 
-func writeResponsesOutputText(buf *bytes.Buffer, output interface{}) {
+func writeResponsesOutputText(buf *bytes.Buffer, output interface{}, includeReasoning bool) {
 	items, ok := output.([]interface{})
 	if !ok {
 		return
@@ -968,8 +1004,12 @@ func writeResponsesOutputText(buf *bytes.Buffer, output interface{}) {
 		switch itemType {
 		case "message", "text":
 			writeResponsesContentText(buf, item["content"])
+		case "refusal":
+			writeFirstStringField(buf, item, "refusal", "text")
 		case "reasoning":
-			writeResponsesContentText(buf, item["summary"])
+			if includeReasoning {
+				writeResponsesContentText(buf, item["summary"])
+			}
 		}
 	}
 }
@@ -984,12 +1024,12 @@ func writeResponsesContentText(buf *bytes.Buffer, content interface{}) {
 			if !ok {
 				continue
 			}
-			if !writeFirstStringField(buf, part, "text", "delta", "transcript") {
+			if !writeFirstStringField(buf, part, "text", "delta", "transcript", "refusal") {
 				writeResponsesContentText(buf, part["content"])
 			}
 		}
 	case map[string]interface{}:
-		if !writeFirstStringField(buf, v, "text", "delta", "transcript") {
+		if !writeFirstStringField(buf, v, "text", "delta", "transcript", "refusal") {
 			writeResponsesContentText(buf, v["content"])
 		}
 	}

@@ -160,14 +160,8 @@ func (p *ResponsesProvider) buildProviderRequestBody(c *gin.Context, requestPath
 			stripImageGenerationFromTools(reqMap)
 		}
 		if reasoning, hasReasoning := reqMap["reasoning"]; hasReasoning {
-			// 按 ReasoningParamStyle 转换客户端原始 reasoning
-			switch upstream.ReasoningParamStyle {
-			case "thinking":
-				config.ApplyReasoningParamStyle(reqMap, upstream.ReasoningParamStyle, extractEffortFromReasoning(reasoning))
-			case "reasoning_effort":
-				config.ApplyReasoningParamStyle(reqMap, upstream.ReasoningParamStyle, extractEffortFromReasoning(reasoning))
-			}
-			// 默认样式保持原样透传（原始 reasoning 对象直接转发）
+			// 按显式兼容配置或物理上游协议转换客户端原始 reasoning。
+			config.ApplyReasoningParamStyle(reqMap, config.EffectiveReasoningParamStyle(upstream), extractEffortFromReasoning(reasoning))
 		}
 		config.NormalizeReasoningObjectForUpstream(reqMap, upstream)
 		if upstream.TextVerbosity != "" {
@@ -247,20 +241,25 @@ func (p *ResponsesProvider) buildProviderRequestBody(c *gin.Context, requestPath
 			}
 		}
 
+		// converter 可能返回结构体（Gemini）或 map。统一转成 map 后再应用物理协议参数，
+		// 避免仅 map 分支生效导致 reasoning 在部分跨协议路由中静默丢失。
+		convertedBytes, err := utils.MarshalJSONNoEscape(convertedReq)
+		if err != nil {
+			return nil, nil, fmt.Errorf("序列化转换后请求失败: %w", err)
+		}
+		var reqMap map[string]interface{}
+		if err := json.Unmarshal(convertedBytes, &reqMap); err != nil {
+			return nil, nil, fmt.Errorf("解析转换后请求失败: %w", err)
+		}
+		convertedReq = reqMap
+
 		// converter 路径：注入 reasoning/thinking 参数
-		if reqMap, ok := convertedReq.(map[string]interface{}); ok {
+		{
 			// 透传客户端原始 reasoning 并按 style 转换
 			var rawReq map[string]interface{}
 			if json.Unmarshal(bodyBytes, &rawReq) == nil {
 				if reasoning, hasReasoning := rawReq["reasoning"]; hasReasoning {
-					switch upstream.ReasoningParamStyle {
-					case "thinking":
-						config.ApplyReasoningParamStyle(reqMap, upstream.ReasoningParamStyle, extractEffortFromReasoning(reasoning))
-					case "reasoning_effort":
-						config.ApplyReasoningParamStyle(reqMap, upstream.ReasoningParamStyle, extractEffortFromReasoning(reasoning))
-					default:
-						reqMap["reasoning"] = reasoning
-					}
+					config.ApplyReasoningParamStyle(reqMap, config.EffectiveReasoningParamStyle(upstream), extractEffortFromReasoning(reasoning))
 				}
 			}
 			config.NormalizeReasoningObjectForUpstream(reqMap, upstream)

@@ -2,6 +2,7 @@
 package common
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -789,6 +790,7 @@ func TryUpstreamWithAllKeys(
 			// ResolvedRouteTarget 来自 ModelResolver（AutoManaged 渠道，三条件门控通过）。
 			attemptModel := redirectedModel
 			var appliedMappedModel string
+			var resolvedAttemptTarget *autopilot.ResolvedRouteTarget
 			if endpointPolicy != nil {
 				keyHash := autopilot.KeyHashFromAPIKey(apiKey)
 				euid := autopilot.GenerateEndpointUID(upstream.ChannelUID, currentBaseURL, keyHash)
@@ -847,15 +849,18 @@ func TryUpstreamWithAllKeys(
 						pinnedTarget.EffortDecided = true
 						target = &pinnedTarget
 					}
-					// Atomic rewrite: model + effort together
+					// 此处请求体仍是入口协议形态，只改写 model。effort 必须等 buildRequest
+					// 完成协议转换后再按物理上游协议写入，否则 Responses→Chat/Gemini
+					// 会在中间结构体反序列化时静默丢掉目标协议字段。
 					// 注意必须赋回外层 attemptBody：此前此处用 := 声明了块内影子变量，
 					// 模型改写只短暂进入 gin context，随后的 system 归一化/参数约束等步骤
 					// 基于外层旧 body 再次 Set，会把改写静默覆盖（火山渠道 auto_resolve 后
 					// 仍以原模型发出、上游 400 的根因）。
-					if rewritten, rewriteOk := atomicModelEffortRewrite(attemptBody, target, upstreamCopy, executionKind); rewriteOk {
+					if rewritten, rewriteOk := atomicModelRewrite(attemptBody, target); rewriteOk {
 						attemptBody = rewritten
 						attemptModel = target.Model
 						appliedMappedModel = target.Model
+						resolvedAttemptTarget = target
 						RestoreRequestBody(c, attemptBody)
 						c.Set("requestBodyBytes", attemptBody)
 						RequestLogf(c, "[%s-AutoModel] endpoint=%s model override: %s -> %s (effort=%s, decided=%v)",
@@ -1071,6 +1076,11 @@ func TryUpstreamWithAllKeys(
 				return false, "", 0, nil, nil, fmt.Errorf("request build failed: %w", err)
 			}
 			req = WithRequestLogContext(req, c)
+			// 在最终物理协议请求上落 effort，保证实际发送内容与调度决策、日志一致。
+			// 该步骤位于 provider 转换之后，因此跨协议路由不会再丢失 effort。
+			if resolvedAttemptTarget != nil {
+				applyResolvedEffortToProviderRequest(req, resolvedAttemptTarget, upstreamCopy, executionKind)
+			}
 			originalReasoningEffort := extractReasoningEffortForLog(requestBody)
 			actualAttemptModel, actualReasoningEffort := extractActualRequestLogDetails(req)
 			if actualAttemptModel == "" {
@@ -2693,9 +2703,8 @@ func isSystemHeaderError(errStr string) bool {
 	return false
 }
 
-// atomicModelEffortRewrite 原子地改写请求体中的 model 和 effort。
-// 保证：如果 effort 改写失败，model 也保持不变（原子性）。
-// 返回 (newBody, true) 表示成功，(originalBody, false) 表示失败或无需改写。
+// atomicModelRewrite 只改写入口协议请求体中的 model。
+// effort 会在 provider 完成协议转换后写入最终出站请求。
 // isEffortClampedByClient 判断客户端显式声明的 effort 是否被 autopilot 的选择钳位。
 // 仅当客户端 effort 的序数值严格低于 autopilot 选择的 effort 时返回 true。
 // 客户端未显式声明 effort 时返回 false。
@@ -2708,44 +2717,67 @@ func isEffortClampedByClient(clientRaw string, clientExplicit bool, targetEffort
 	return clientOrd >= 0 && targetOrd >= 0 && clientOrd < targetOrd
 }
 
-func atomicModelEffortRewrite(body []byte, target *autopilot.ResolvedRouteTarget, upstream *config.UpstreamConfig, kind scheduler.ChannelKind) ([]byte, bool) {
+func atomicModelRewrite(body []byte, target *autopilot.ResolvedRouteTarget) ([]byte, bool) {
 	if target == nil || target.Model == "" {
 		return body, false
 	}
-
-	// Step 1: 改写 model
 	modelBody, err := sjson.SetBytes(body, "model", target.Model)
 	if err != nil {
 		return body, false
 	}
+	return modelBody, true
+}
 
-	// Step 2: 如果 effort 由 Autopilot 决定，注入 reasoning params
-	if target.EffortDecided && target.Effort != "" {
-		// adaptive_only guard: ThinkingMode=adaptive_only 的模型不注入 thinking params
-		// （模型自身决定思考深度，Autopilot 只负责模型选择）
-		cap := config.ResolveUpstreamCapability(target.Model, upstream, nil)
-		if cap.Known && cap.Capability.ThinkingMode == "adaptive_only" {
-			// 只改写 model，不注入 effort
-			return modelBody, true
-		}
+// rewriteOutboundEffort 将 Autopilot 决定的 effort 写入已经完成协议转换的请求体。
+func rewriteOutboundEffort(body []byte, target *autopilot.ResolvedRouteTarget, upstream *config.UpstreamConfig, kind scheduler.ChannelKind) ([]byte, bool) {
+	if target == nil || !target.EffortDecided || target.Effort == "" {
+		return body, false
+	}
+	cap := config.ResolveUpstreamCapability(target.Model, upstream, nil)
+	if cap.Known && cap.Capability.ThinkingMode == "adaptive_only" {
+		return body, false
+	}
+	style := effortInjectionStyle(kind, upstream)
+	if style == "" {
+		return body, false
+	}
+	var reqMap map[string]interface{}
+	if err := json.Unmarshal(body, &reqMap); err != nil {
+		return body, false
+	}
+	config.ApplyReasoningParamStyle(reqMap, style, string(target.Effort))
+	config.NormalizeReasoningObjectForUpstream(reqMap, upstream)
+	effortBody, err := json.Marshal(reqMap)
+	if err != nil {
+		return body, false
+	}
+	return effortBody, true
+}
 
-		style := effortInjectionStyle(kind, upstream)
-		if style == "" {
-			// 该渠道类型不接受思考参数（images/vectors），只改写 model。
-			return modelBody, true
-		}
-		var reqMap map[string]interface{}
-		if err := json.Unmarshal(modelBody, &reqMap); err != nil {
-			return body, false
-		}
-		config.ApplyReasoningParamStyle(reqMap, style, string(target.Effort))
-		effortBody, err := json.Marshal(reqMap)
-		if err != nil {
-			return body, false
-		}
+// applyResolvedEffortToProviderRequest 原地更新最终出站 HTTP 请求并保持 GetBody 可重放。
+func applyResolvedEffortToProviderRequest(req *http.Request, target *autopilot.ResolvedRouteTarget, upstream *config.UpstreamConfig, kind scheduler.ChannelKind) bool {
+	body := snapshotRequestBodyForLog(req)
+	rewritten, ok := rewriteOutboundEffort(body, target, upstream, kind)
+	if !ok {
+		return false
+	}
+	req.Body = io.NopCloser(bytes.NewReader(rewritten))
+	req.GetBody = func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(rewritten)), nil
+	}
+	req.ContentLength = int64(len(rewritten))
+	return true
+}
+
+// atomicModelEffortRewrite 组合改写 model 与最终协议 effort，供边界行为测试使用。
+func atomicModelEffortRewrite(body []byte, target *autopilot.ResolvedRouteTarget, upstream *config.UpstreamConfig, kind scheduler.ChannelKind) ([]byte, bool) {
+	modelBody, ok := atomicModelRewrite(body, target)
+	if !ok {
+		return body, false
+	}
+	if effortBody, changed := rewriteOutboundEffort(modelBody, target, upstream, kind); changed {
 		return effortBody, true
 	}
-
 	return modelBody, true
 }
 
@@ -2763,22 +2795,8 @@ func effortInjectionStyle(kind scheduler.ChannelKind, upstream *config.UpstreamC
 	case scheduler.ChannelKindGemini:
 		return config.ReasoningParamStyleGemini
 	}
-	serviceType := ""
-	if upstream != nil {
-		serviceType = strings.ToLower(strings.TrimSpace(upstream.ServiceType))
-	}
-	switch serviceType {
-	case "gemini":
-		return config.ReasoningParamStyleGemini
-	case "openai":
-		return "reasoning_effort"
-	case "responses", "copilot":
-		return "reasoning"
-	case "claude":
-		return "thinking"
-	}
-	if upstream != nil && upstream.ReasoningParamStyle != "" {
-		return upstream.ReasoningParamStyle
+	if style := config.EffectiveReasoningParamStyle(upstream); style != "" {
+		return style
 	}
 	// ServiceType 缺失时保留旧调用方的 kind 回退；route-aware 调用优先使用上游物理服务类型。
 	switch kind {

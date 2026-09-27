@@ -281,25 +281,32 @@ var (
 	ErrInvalidEmbeddingCapability = errors.New("invalid embedding capability")
 )
 
-// NormalizeReasoningEffortForUpstream 将通用 effort 收敛到特定上游实际支持的枚举。
+// NormalizeReasoningEffortForUpstream 将内部通用 effort 收敛到实际上游协议支持的枚举。
+//
+// CCX 内部使用 off 作为统一的关闭档位；OpenAI Responses / Chat 协议在线上请求中
+// 使用 none。这个转换必须发生在出站边界，避免上游接受 HTTP 请求却返回空响应。
 func NormalizeReasoningEffortForUpstream(upstream *UpstreamConfig, effort string) string {
 	effort = strings.TrimSpace(effort)
-	if !isMiMoResponsesUpstream(upstream) {
-		return effort
+	serviceType := ""
+	if upstream != nil {
+		serviceType = strings.ToLower(strings.TrimSpace(upstream.ServiceType))
 	}
-	switch effort {
-	case "max", "xhigh":
-		return "high"
-	case "off":
-		return "none"
-	default:
-		return effort
+	if (serviceType == "responses" || serviceType == "copilot" || serviceType == "openai") &&
+		(effort == "off" || effort == "disabled") {
+		effort = "none"
 	}
+	if isMiMoResponsesUpstream(upstream) {
+		switch effort {
+		case "max", "xhigh":
+			return "high"
+		}
+	}
+	return effort
 }
 
 // NormalizeReasoningObjectForUpstream 修正透传请求中上游不支持的 reasoning.effort。
 func NormalizeReasoningObjectForUpstream(req map[string]interface{}, upstream *UpstreamConfig) {
-	if req == nil || !isMiMoResponsesUpstream(upstream) {
+	if req == nil {
 		return
 	}
 	reasoning, ok := req["reasoning"].(map[string]interface{})
@@ -309,6 +316,29 @@ func NormalizeReasoningObjectForUpstream(req map[string]interface{}, upstream *U
 	effort, _ := reasoning["effort"].(string)
 	if normalized := NormalizeReasoningEffortForUpstream(upstream, effort); normalized != effort {
 		reasoning["effort"] = normalized
+	}
+}
+
+// EffectiveReasoningParamStyle 返回上游实际接受的思考参数形态。
+// 显式配置用于兼容非标准端点；未配置时按物理 ServiceType 推导原生协议。
+func EffectiveReasoningParamStyle(upstream *UpstreamConfig) string {
+	if upstream == nil {
+		return ""
+	}
+	if style := strings.TrimSpace(upstream.ReasoningParamStyle); style != "" {
+		return style
+	}
+	switch strings.ToLower(strings.TrimSpace(upstream.ServiceType)) {
+	case "gemini":
+		return ReasoningParamStyleGemini
+	case "openai":
+		return "reasoning_effort"
+	case "responses", "copilot":
+		return "reasoning"
+	case "claude":
+		return "thinking"
+	default:
+		return ""
 	}
 }
 
@@ -340,7 +370,7 @@ func ApplyReasoningParamStyle(req map[string]interface{}, style string, effort s
 		if effort == "" {
 			return
 		}
-		if effort == "off" || effort == "none" {
+		if effort == "off" || effort == "none" || effort == "disabled" {
 			req["thinking"] = map[string]interface{}{"type": "disabled"}
 			return
 		}
@@ -354,15 +384,27 @@ func ApplyReasoningParamStyle(req map[string]interface{}, style string, effort s
 		req["thinking"] = thinking
 	case "reasoning_effort":
 		delete(req, "reasoning")
+		delete(req, "thinking")
 		if effort != "" {
-			req["reasoning_effort"] = effort
+			req["reasoning_effort"] = normalizeOpenAIReasoningEffort(effort)
 		}
 	case ReasoningParamStyleGemini:
 		applyGeminiThinkingConfig(req, effort)
 	default:
+		delete(req, "thinking")
+		delete(req, "reasoning_effort")
 		if effort != "" {
-			req["reasoning"] = map[string]interface{}{"effort": effort}
+			req["reasoning"] = map[string]interface{}{"effort": normalizeOpenAIReasoningEffort(effort)}
 		}
+	}
+}
+
+func normalizeOpenAIReasoningEffort(effort string) string {
+	switch strings.ToLower(strings.TrimSpace(effort)) {
+	case "off", "disabled":
+		return "none"
+	default:
+		return strings.TrimSpace(effort)
 	}
 }
 

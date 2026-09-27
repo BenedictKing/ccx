@@ -364,6 +364,21 @@ func responseItemCarriesSemanticContent(item map[string]interface{}) bool {
 	case "output_text", "text":
 		text, _ := item["text"].(string)
 		return strings.TrimSpace(text) != ""
+	case "refusal":
+		refusal, _ := item["refusal"].(string)
+		if strings.TrimSpace(refusal) != "" {
+			return true
+		}
+		text, _ := item["text"].(string)
+		return strings.TrimSpace(text) != ""
+	case "message":
+		content, _ := item["content"].([]interface{})
+		for _, rawPart := range content {
+			if part, ok := rawPart.(map[string]interface{}); ok && responseItemCarriesSemanticContent(part) {
+				return true
+			}
+		}
+		return false
 	case "compaction", "compaction_summary":
 		encryptedContent, _ := item["encrypted_content"].(string)
 		return strings.TrimSpace(encryptedContent) != ""
@@ -372,6 +387,14 @@ func responseItemCarriesSemanticContent(item map[string]interface{}) bool {
 	}
 	// 形态规则：覆盖上游新增的 xxx_call / xxx_output 工具类 item 类型
 	return strings.HasSuffix(itemType, "_call") || strings.HasSuffix(itemType, "_output")
+}
+
+func responseItemCarriesDeliverableContent(item map[string]interface{}) bool {
+	itemType, _ := item["type"].(string)
+	if itemType == "reasoning" || itemType == "reasoning_text" || itemType == "summary_text" {
+		return false
+	}
+	return responseItemCarriesSemanticContent(item)
 }
 
 // HasResponsesSemanticContent 判断 Responses 风格 SSE 是否包含有效语义内容
@@ -391,6 +414,7 @@ func HasResponsesSemanticContent(event string) bool {
 		switch data["type"] {
 		case "response.function_call_arguments.delta", "response.function_call_arguments.done",
 			"response.custom_tool_call_input.delta", "response.custom_tool_call_input.done",
+			"response.refusal.delta", "response.refusal.done",
 			"response.reasoning_summary_part.added", "response.reasoning_summary_part.done",
 			"response.reasoning_summary_text.delta", "response.reasoning_summary_text.done",
 			"response.reasoning_text.delta", "response.reasoning_text.done":
@@ -428,6 +452,73 @@ func HasResponsesSemanticContent(event string) bool {
 			if callID, _ := data["call_id"].(string); callID != "" {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+// HasResponsesDeliverableContent 判断 Responses SSE 是否已经产生客户端可消费的最终内容。
+// reasoning/summary 代表模型仍在推理，只用于活跃度与超时续期；若流最终只有这类事件，
+// 应判为空响应并触发 failover，避免 HTTP 200 但客户端收不到 assistant 输出。
+func HasResponsesDeliverableContent(event string) bool {
+	lines := strings.Split(event, "\n")
+	for _, line := range lines {
+		jsonStr, ok := extractSSEJSONLine(line)
+		if !ok {
+			continue
+		}
+
+		var data map[string]interface{}
+		if err := json.Unmarshal([]byte(jsonStr), &data); err != nil {
+			continue
+		}
+
+		switch data["type"] {
+		case "response.function_call_arguments.delta", "response.function_call_arguments.done",
+			"response.custom_tool_call_input.delta", "response.custom_tool_call_input.done":
+			return true
+		case "response.refusal.delta", "response.refusal.done":
+			return firstNonBlankString(data, "delta", "refusal", "text")
+		case "response.output_item.added", "response.output_item.done":
+			item, _ := data["item"].(map[string]interface{})
+			if responseItemCarriesDeliverableContent(item) {
+				return true
+			}
+		case "response.content_part.added", "response.content_part.delta", "response.content_part.done":
+			part, _ := data["part"].(map[string]interface{})
+			if responseItemCarriesDeliverableContent(part) {
+				return true
+			}
+		case "response.completed":
+			if response, ok := data["response"].(map[string]interface{}); ok {
+				if output, ok := response["output"].([]interface{}); ok {
+					for _, item := range output {
+						if itemMap, ok := item.(map[string]interface{}); ok && responseItemCarriesDeliverableContent(itemMap) {
+							return true
+						}
+					}
+				}
+			}
+		default:
+			eventType, _ := data["type"].(string)
+			if !strings.HasPrefix(eventType, "response.") || strings.Contains(eventType, "reasoning") {
+				continue
+			}
+			if item, ok := data["item"].(map[string]interface{}); ok && responseItemCarriesDeliverableContent(item) {
+				return true
+			}
+			if callID, _ := data["call_id"].(string); callID != "" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func firstNonBlankString(data map[string]interface{}, keys ...string) bool {
+	for _, key := range keys {
+		if value, ok := data[key].(string); ok && strings.TrimSpace(value) != "" {
+			return true
 		}
 	}
 	return false

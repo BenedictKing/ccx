@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/BenedictKing/ccx/internal/config"
@@ -81,6 +82,56 @@ func TestResponsesProvider_PassthroughInjectsChannelLevelOptions(t *testing.T) {
 	if got := body["service_tier"]; got != "priority" {
 		t.Fatalf("service_tier = %v, want priority", got)
 	}
+}
+
+func TestResponsesProvider_NormalizesDisabledReasoningByUpstreamProtocol(t *testing.T) {
+	tests := []struct {
+		name        string
+		serviceType string
+		wantPath    string
+		wantValue   interface{}
+	}{
+		{name: "responses", serviceType: "responses", wantPath: "reasoning.effort", wantValue: "none"},
+		{name: "chat", serviceType: "openai", wantPath: "reasoning_effort", wantValue: "none"},
+		{name: "claude", serviceType: "claude", wantPath: "thinking.type", wantValue: "disabled"},
+		{name: "gemini", serviceType: "gemini", wantPath: "generationConfig.thinkingConfig.thinkingBudget", wantValue: float64(0)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gin.SetMode(gin.TestMode)
+			c := newGinContext(http.MethodPost, "/v1/responses", []byte(`{"model":"gpt-5","input":"hi","reasoning":{"effort":"off"}}`), context.Background())
+			upstream := &config.UpstreamConfig{BaseURL: "https://api.example.com", ServiceType: tt.serviceType}
+			req, _, err := (&ResponsesProvider{}).ConvertToProviderRequest(c, upstream, "sk-test")
+			if err != nil {
+				t.Fatalf("ConvertToProviderRequest() err = %v", err)
+			}
+			var body map[string]interface{}
+			if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+				t.Fatalf("decode request body: %v", err)
+			}
+			got := bodyValueAtPath(body, tt.wantPath)
+			if got != tt.wantValue {
+				t.Fatalf("%s = %#v, want %#v; body=%#v", tt.wantPath, got, tt.wantValue, body)
+			}
+			if tt.serviceType != "responses" {
+				if _, exists := body["reasoning"]; exists {
+					t.Fatalf("跨协议出站不应残留 reasoning 对象: %#v", body)
+				}
+			}
+		})
+	}
+}
+
+func bodyValueAtPath(body map[string]interface{}, path string) interface{} {
+	current := interface{}(body)
+	for _, part := range strings.Split(path, ".") {
+		object, ok := current.(map[string]interface{})
+		if !ok {
+			return nil
+		}
+		current = object[part]
+	}
+	return current
 }
 
 func TestResponsesProvider_PassthroughInjectsThinkingParamStyle(t *testing.T) {

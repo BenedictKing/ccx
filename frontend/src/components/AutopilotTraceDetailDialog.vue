@@ -181,7 +181,7 @@
                   <th class="text-caption">{{ t('autopilot.traceDetail.qualityShadow') }}</th>
                   <th class="text-caption">Origin Tier</th>
                   <th class="text-caption">Score</th>
-                  <th class="text-caption">Selected</th>
+                  <th class="text-caption" title="Passed candidate filters; the final route is shown in Scheduler Decision">Eligible</th>
                   <th class="text-caption">Filter Reasons</th>
                 </tr>
               </thead>

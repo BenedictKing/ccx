@@ -112,10 +112,11 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useTheme } from 'vuetify'
 import type { ApexOptions } from 'apexcharts'
 import VueApexCharts from 'vue3-apexcharts'
-import { api, type ChannelKeyMetricsHistoryResponse, type GlobalStatsSummary } from '../services/api'
+import { api, type ChannelKeyMetricsHistoryResponse, type ChannelKind, type ChannelProtocolRoute, type GlobalStatsSummary } from '../services/api'
 import { useGlobalTick } from '../composables/useGlobalTick'
 import { useI18n } from '../i18n'
 import { effectiveChartIntervalMs, selectDenseSamplingInterval } from '../utils/chartSampling'
+import { mergeChannelKeyMetricsHistories } from '../utils/channelKeyMetrics'
 
 // Register apexchart component
 const apexchart = VueApexCharts
@@ -123,7 +124,8 @@ const apexchart = VueApexCharts
 // Props
 const props = defineProps<{
   channelId: number
-  channelType: 'messages' | 'chat' | 'responses' | 'gemini' | 'images' | 'vectors'
+  channelType: ChannelKind
+  protocolRoutes?: ChannelProtocolRoute[]
 }>()
 const { t } = useI18n()
 
@@ -181,7 +183,13 @@ const selectedDuration = ref<Duration>(savedPrefs.duration)
 const isLoading = ref(false)
 const isRefreshing = ref(false) // includes auto-refresh (silent) requests
 const historyData = ref<ChannelKeyMetricsHistoryResponse | null>(null)
-const samplingKey = computed(() => `${props.channelType}:${props.channelId}:${selectedDuration.value}`)
+const routeSignature = computed(() => {
+  const routes = props.protocolRoutes?.length
+    ? props.protocolRoutes
+    : [{ kind: props.channelType, index: props.channelId }]
+  return routes.map(route => `${route.kind}:${route.index}`).sort().join(',')
+})
+const samplingKey = computed(() => `${routeSignature.value}:${selectedDuration.value}`)
 const adaptiveInterval = ref<{ key: string; interval: string } | null>(null)
 const currentAdaptiveInterval = computed(() => (
   adaptiveInterval.value?.key === samplingKey.value ? adaptiveInterval.value.interval : undefined
@@ -853,24 +861,52 @@ const getChartColors = (): string[] => {
   return colors
 }
 
-const fetchKeyMetrics = async (duration: Duration, interval?: string): Promise<ChannelKeyMetricsHistoryResponse> => {
-  if (props.channelType === 'chat') {
-    return api.getChatChannelKeyMetricsHistory(props.channelId, duration, interval)
+const fetchRouteKeyMetrics = async (
+  channelType: ChannelKind,
+  channelId: number,
+  duration: Duration,
+  interval?: string
+): Promise<ChannelKeyMetricsHistoryResponse> => {
+  if (channelType === 'chat') {
+    return api.getChatChannelKeyMetricsHistory(channelId, duration, interval)
   }
-  if (props.channelType === 'images') {
-    return api.getImagesChannelKeyMetricsHistory(props.channelId, duration, interval)
+  if (channelType === 'images') {
+    return api.getImagesChannelKeyMetricsHistory(channelId, duration, interval)
   }
-  if (props.channelType === 'vectors') {
-    return api.getVectorsChannelKeyMetricsHistory(props.channelId, duration, interval)
+  if (channelType === 'vectors') {
+    return api.getVectorsChannelKeyMetricsHistory(channelId, duration, interval)
   }
-  if (props.channelType === 'responses') {
-    return api.getResponsesChannelKeyMetricsHistory(props.channelId, duration, interval)
+  if (channelType === 'responses') {
+    return api.getResponsesChannelKeyMetricsHistory(channelId, duration, interval)
   }
-  if (props.channelType === 'gemini') {
-    return api.getGeminiChannelKeyMetricsHistory(props.channelId, duration, interval)
+  if (channelType === 'gemini') {
+    return api.getGeminiChannelKeyMetricsHistory(channelId, duration, interval)
   }
-  return api.getChannelKeyMetricsHistory(props.channelId, duration, interval)
+  return api.getChannelKeyMetricsHistory(channelId, duration, interval)
 }
+
+const fetchKeyMetrics = async (duration: Duration, interval?: string): Promise<ChannelKeyMetricsHistoryResponse> => {
+  const fallbackRoute = { kind: props.channelType, index: props.channelId }
+  const routes = props.protocolRoutes?.length ? props.protocolRoutes : [fallbackRoute]
+  const uniqueRoutes = Array.from(
+    new Map(routes.map(route => [`${route.kind}:${route.index}`, route])).values()
+  )
+  const results = await Promise.allSettled(
+    uniqueRoutes.map(route => fetchRouteKeyMetrics(route.kind, route.index, duration, interval))
+  )
+  const histories = results.flatMap(result => result.status === 'fulfilled' ? [result.value] : [])
+  if (histories.length === 0) {
+    const rejected = results.find(result => result.status === 'rejected')
+    throw rejected && rejected.status === 'rejected' ? rejected.reason : new Error('No metrics routes available')
+  }
+  for (const result of results) {
+    if (result.status === 'rejected') console.error('Failed to fetch channel route metrics:', result.reason)
+  }
+  return mergeChannelKeyMetricsHistories(histories, duration)
+}
+
+const keySeriesIdentity = (key: ChannelKeyMetricsHistoryResponse['keys'][number]): string =>
+  `${key.keyIdentity || key.keyMask}\u0000${key.model || ''}`
 
 const withAdaptiveInterval = async (duration: Duration): Promise<ChannelKeyMetricsHistoryResponse> => {
   const requestKey = samplingKey.value
@@ -917,7 +953,7 @@ const refreshData = async (isAutoRefresh = false) => {
     const canUpdateInPlace = isAutoRefresh &&
       chartRef.value &&
       historyData.value?.keys?.length === newData.keys?.length &&
-      historyData.value?.keys?.every((k, i) => k.keyMask === newData.keys[i].keyMask)
+      historyData.value?.keys?.every((k, i) => keySeriesIdentity(k) === keySeriesIdentity(newData.keys[i]))
 
     if (canUpdateInPlace) {
       // Update data in place and use updateSeries for smooth update
@@ -973,7 +1009,7 @@ watch(() => props.channelType, (newChannelType) => {
   }
 })
 
-watch(() => props.channelId, () => {
+watch(routeSignature, () => {
   historyData.value = null
   adaptiveInterval.value = null
   refreshData()

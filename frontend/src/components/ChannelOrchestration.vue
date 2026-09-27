@@ -591,6 +591,7 @@
                 :key="`chart-${getRouteKind(element)}-${getRouteIndex(element)}`"
                 :channel-id="getRouteIndex(element)"
                 :channel-type="getRouteKind(element)"
+                :protocol-routes="element.protocolRoutes"
                 @close="expandedChannelKey = null"
               />
             </div>

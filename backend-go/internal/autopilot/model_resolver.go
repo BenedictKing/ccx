@@ -31,7 +31,10 @@ type CapabilityFloor struct {
 	TaskDomain         TaskDomain  // 用于按 (domain, effort) 取任务域强度证据
 	EffortFloor        EffortLevel // 该请求的 effort 下界；空=不限
 	EffortCeil         EffortLevel // 该请求的 effort 上界（场景预设引入）；空=不限
-	PinnedEffort       EffortLevel // 手动意图精确锁定的 effort 档位；空=不锁定，由 Autopilot 选优
+	PinnedEffort       EffortLevel // 请求精确锁定的 effort 档位；空=不锁定，由 Autopilot 选优
+	ClientEffort       EffortLevel // 客户端显式声明的 effort，用于落实 RespectClientThinking
+	ClientEffortSet    bool        // 客户端是否显式声明了 effort
+	IntentPinnedEffort EffortLevel // 手动意图精确锁定的 effort，客户端未优先时生效
 	// CostPreferenceOverride 请求级生效价格偏好（请求头 X-Cost-Preference 或场景预设默认）；
 	// 空 = 沿用配置链（PerTaskClass > 全局 Mode）。
 	CostPreferenceOverride string
@@ -55,7 +58,12 @@ func BuildCapabilityFloorFromRequestProfile(profile *RequestProfile) CapabilityF
 		QualityBenefitCap:  requestQualityBenefitCap(profile),
 		TaskClass:          profile.TaskClass,
 		TaskDomain:         profile.TaskDomain,
-		PinnedEffort:       resolveIntentPinnedEffort(profile),
+		PinnedEffort:       resolveRequestPinnedEffort(profile),
+		ClientEffort:       profile.ClientEffort,
+		ClientEffortSet:    profile.ClientEffortExplicit,
+	}
+	if profile.IntentEffortPin != nil && profile.IntentEffortPin.Set {
+		floor.IntentPinnedEffort = profile.IntentEffortPin.Effort
 	}
 	if profile.ScenarioPreset != nil {
 		floor.EffortFloor = profile.ScenarioPreset.EffortFloor
@@ -80,18 +88,35 @@ func effectiveCostPreferenceForProfile(profile *RequestProfile) string {
 	return ""
 }
 
-// resolveIntentPinnedEffort 解析手动意图对 effort 的锁定值，遵循优先级约束：
-// 客户端显式声明的 off/none 是最强信号，任何手动意图都不得覆盖它重新开启思考。
-// 未被客户端显式关闭时，手动意图指定的 effort 才会被采纳为锁定档位。
-func resolveIntentPinnedEffort(profile *RequestProfile) EffortLevel {
-	if profile == nil || profile.IntentEffortPin == nil || !profile.IntentEffortPin.Set {
+// resolveRequestPinnedEffort 解析请求的默认 effort 锁定值。
+// 客户端显式声明代表本次请求的直接约束，优先于由提示词推导出的手动意图。
+func resolveRequestPinnedEffort(profile *RequestProfile) EffortLevel {
+	if profile == nil {
 		return ""
 	}
-	if profile.ClientEffortExplicit && profile.ClientEffort == EffortOff {
-		// 客户端显式关闭思考：手动意图的 effort 覆盖必须让路。
-		return ""
+	if profile.ClientEffortExplicit {
+		return profile.ClientEffort
 	}
-	return profile.IntentEffortPin.Effort
+	if profile.IntentEffortPin != nil && profile.IntentEffortPin.Set {
+		return profile.IntentEffortPin.Effort
+	}
+	return ""
+}
+
+// effectivePinnedEffort 按运行配置落实客户端与手动意图的优先级。
+// RespectClientThinking 开启或配置不可用时保留客户端显式值；关闭时允许手动意图接管。
+func (r *ModelResolver) effectivePinnedEffort(floor CapabilityFloor) EffortLevel {
+	if !floor.ClientEffortSet {
+		return floor.PinnedEffort
+	}
+	respectClient := true
+	if r != nil && r.cfgManager != nil {
+		respectClient = r.cfgManager.GetAutopilotRouting().ReasoningEffort.RespectClientThinking
+	}
+	if respectClient {
+		return floor.ClientEffort
+	}
+	return floor.IntentPinnedEffort
 }
 
 func requestQualityTarget(profile *RequestProfile) QualityTier {
@@ -166,6 +191,10 @@ func (r *ModelResolver) ResolveModel(
 	metricsKey string,
 	floor CapabilityFloor,
 ) (target ResolvedRouteTarget, resolved bool, reason string) {
+	// 在能力过滤和质量判断前统一落实客户端/意图 effort 优先级，避免同一次
+	// 决策在过滤阶段和发送阶段使用不同档位。
+	floor.PinnedEffort = r.effectivePinnedEffort(floor)
+
 	// Step 1（原显式 modelMapping 短路已随 ModelMapping 退役删除）。
 
 	// Step 2: 无 ModelProfileStore 时自动映射不可用，fail-open。
@@ -347,6 +376,7 @@ func (r *ModelResolver) resolveModelAnyEndpoint(
 	channelKind string,
 	floor CapabilityFloor,
 ) (target ResolvedRouteTarget, found bool, reason string) {
+	floor.PinnedEffort = r.effectivePinnedEffort(floor)
 	candidates, qualityFallback, reason := r.eligibleModelsAnyEndpoint(channelUID, channelKind, floor, requestModel)
 	if len(candidates) == 0 {
 		return ResolvedRouteTarget{Model: requestModel, Reason: reason}, false, reason
@@ -492,7 +522,8 @@ func (r *ModelResolver) resolveSingleProfileEffort(profile ModelProfile, floor C
 }
 
 func (r *ModelResolver) resolveEffortVariants(profile ModelProfile, floor CapabilityFloor) ([]EffortLevel, []bool) {
-	// 手动意图锁定的 effort 优先于自动决策管线，视为已知正确（类比显式 modelMapping 的处理方式）：
+	floor.PinnedEffort = r.effectivePinnedEffort(floor)
+	// 请求锁定的 effort 优先于自动决策管线，视为已知正确（类比显式 modelMapping 的处理方式）：
 	// 只要模型确实支持该档位就直接采纳，不受下方 ReasoningEffort.Enabled 全局开关影响。
 	// 模型不支持该档位时 fail-open，落回下方常规展开逻辑，由 Autopilot 自行决定。
 	if pinned := NormalizeEffortLevel(string(floor.PinnedEffort)); pinned != "" && profile.SupportsEffortControl {
@@ -500,6 +531,10 @@ func (r *ModelResolver) resolveEffortVariants(profile ModelProfile, floor Capabi
 			if NormalizeEffortLevel(string(lv)) == pinned {
 				return []EffortLevel{pinned}, []bool{true}
 			}
+		}
+		// 客户端显式档位不在画像声明中时保留原请求，避免自动降档改写。
+		if floor.ClientEffortSet && pinned == NormalizeEffortLevel(string(floor.ClientEffort)) {
+			return []EffortLevel{""}, []bool{false}
 		}
 	}
 
@@ -532,26 +567,22 @@ func (r *ModelResolver) resolveEffortVariants(profile ModelProfile, floor Capabi
 			}
 		}
 	}
-	// 如果没有为该 TaskClass 配置特定档位，也没有全局交集，使用模型支持的全部档位。
+	// 未配置任务类时不替客户端猜测档位。保持 passthrough，避免仅凭“上游接受该参数”
+	// 的能力证据自动选中最低档；只有显式客户端/意图 pin 或 PerTaskClass 配置才改写。
+	if len(configuredLevels) == 0 {
+		return []EffortLevel{""}, []bool{false}
+	}
+
 	var intersection []EffortLevel
-	if len(configuredLevels) > 0 {
-		supportedSet := make(map[EffortLevel]bool, len(profile.SupportedEffortLevels))
-		for _, lv := range profile.SupportedEffortLevels {
-			if norm := NormalizeEffortLevel(string(lv)); norm != "" {
-				supportedSet[norm] = true
-			}
+	supportedSet := make(map[EffortLevel]bool, len(profile.SupportedEffortLevels))
+	for _, lv := range profile.SupportedEffortLevels {
+		if norm := NormalizeEffortLevel(string(lv)); norm != "" {
+			supportedSet[norm] = true
 		}
-		for _, lv := range configuredLevels {
-			if supportedSet[lv] {
-				intersection = append(intersection, lv)
-			}
-		}
-	} else {
-		// 没有 PerTaskClass 约束时，使用模型支持的全部档位。
-		for _, lv := range profile.SupportedEffortLevels {
-			if norm := NormalizeEffortLevel(string(lv)); norm != "" {
-				intersection = append(intersection, norm)
-			}
+	}
+	for _, lv := range configuredLevels {
+		if supportedSet[lv] {
+			intersection = append(intersection, lv)
 		}
 	}
 

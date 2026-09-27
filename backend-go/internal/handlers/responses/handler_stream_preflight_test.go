@@ -129,6 +129,39 @@ func TestHasResponsesSemanticContent(t *testing.T) {
 	})
 }
 
+func TestHasResponsesDeliverableContent(t *testing.T) {
+	t.Run("reasoning is activity but not deliverable", func(t *testing.T) {
+		event := "event: response.reasoning_text.delta\ndata: {\"type\":\"response.reasoning_text.delta\",\"delta\":\"thinking...\"}\n\n"
+		if !common.HasResponsesSemanticContent(event) {
+			t.Fatal("reasoning should count as stream activity")
+		}
+		if common.HasResponsesDeliverableContent(event) {
+			t.Fatal("reasoning should not count as deliverable assistant output")
+		}
+	})
+
+	t.Run("function call is deliverable", func(t *testing.T) {
+		event := "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"type\":\"function_call\",\"name\":\"Read\",\"arguments\":\"{}\"}}\n\n"
+		if !common.HasResponsesDeliverableContent(event) {
+			t.Fatal("function call should count as deliverable output")
+		}
+	})
+
+	t.Run("refusal delta is a valid final delivery", func(t *testing.T) {
+		event := "event: response.refusal.delta\ndata: {\"type\":\"response.refusal.delta\",\"delta\":\"I cannot help with that.\"}\n\n"
+		if !common.HasResponsesDeliverableContent(event) {
+			t.Fatal("refusal should count as deliverable output")
+		}
+	})
+
+	t.Run("completed refusal content is deliverable", func(t *testing.T) {
+		event := "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"output\":[{\"type\":\"message\",\"content\":[{\"type\":\"refusal\",\"refusal\":\"I cannot help with that.\"}]}]}}\n\n"
+		if !common.HasResponsesDeliverableContent(event) {
+			t.Fatal("completed refusal should count as deliverable output")
+		}
+	})
+}
+
 func TestExtractResponsesTextFromEventUnknownTypes(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -149,6 +182,16 @@ func TestExtractResponsesTextFromEventUnknownTypes(t *testing.T) {
 			name:  "output text done",
 			event: "event: response.output_text.done\ndata: {\"type\":\"response.output_text.done\",\"text\":\"final text\"}\n\n",
 			want:  "final text",
+		},
+		{
+			name:  "refusal delta",
+			event: "event: response.refusal.delta\ndata: {\"type\":\"response.refusal.delta\",\"delta\":\"refused\"}\n\n",
+			want:  "refused",
+		},
+		{
+			name:  "completed refusal",
+			event: "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"output\":[{\"type\":\"message\",\"content\":[{\"type\":\"refusal\",\"refusal\":\"refused\"}]}]}}\n\n",
+			want:  "refused",
 		},
 		{
 			name:  "content part done",

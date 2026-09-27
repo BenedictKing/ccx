@@ -34,7 +34,7 @@ const (
 
 // CandidateScore 候选渠道单项得分明细。
 type CandidateScore struct {
-	Dimension string  `json:"dimension"` // quality | cost | health | domain | effort | stability
+	Dimension string  `json:"dimension"` // quality | stability | speed | cost | savings | tier_match | family | provider_quality | domain | quota_headroom
 	Score     float64 `json:"score"`     // 该维度得分
 	Weight    float64 `json:"weight"`    // 权重系数
 }
@@ -79,6 +79,9 @@ type RoutingCandidate struct {
 	// 分数明细
 	TotalScore float64          `json:"totalScore"`
 	Scores     []CandidateScore `json:"scores,omitempty"`
+	// Penalty 是健康状态、延迟、协议转换和质量证据折扣等非加权扣分。
+	// 与 Scores 分开记录，便于按 Σ(score×weight)-penalty 复算 TotalScore。
+	Penalty float64 `json:"penalty,omitempty"`
 	// DomainEvidence 解释 domain 分来自 endpoint 覆盖、规范基准、家族种子或中性回退。
 	DomainEvidence *DomainStrengthEvidence `json:"domainEvidence,omitempty"`
 

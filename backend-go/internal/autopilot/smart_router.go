@@ -685,20 +685,34 @@ func toStringSet(items []string) map[string]bool {
 
 // executeFilter 执行 SmartRouter 过滤逻辑。
 // applyCandidatePin 把五元组候选行的执行 pin 写入回填的 ChannelInfo：
-// key 身份 + 思考档位。意图固定档（IntentEffortPin，意图匹配在回填前完成）
-// 覆盖行档——用户显式意图优先于自动决策。零值 pin 表示不锁定，执行层走原行为。
-func applyCandidatePin(ch *scheduler.ChannelInfo, e channelScoreEntry, profile *RequestProfile) {
+// key 身份 + 思考档位。RespectClientThinking 开启（或配置不可用）时，客户端显式
+// effort 优先；关闭时允许人工意图接管。零值 pin 表示不锁定，执行层走原行为。
+func (r *SmartRouter) applyCandidatePin(ch *scheduler.ChannelInfo, e channelScoreEntry, profile *RequestProfile) {
 	if ch == nil {
 		return
 	}
 	ch.PinnedKeyIdentity = e.KeyIdentity
-	if profile != nil && profile.IntentEffortPin != nil && profile.IntentEffortPin.Set {
-		if pin := NormalizeEffortLevel(string(profile.IntentEffortPin.Effort)); pin != "" {
-			ch.PinnedEffort = string(pin)
-			return
+	ch.PinnedEffort = string(r.effectiveCandidateEffort(profile, e.Effort))
+}
+
+// effectiveCandidateEffort 与最终执行 pin 共用同一优先级，也用于 Advisor 的
+// effort 质量硬过滤，避免按一个档位过滤、按另一个档位发出。
+func (r *SmartRouter) effectiveCandidateEffort(profile *RequestProfile, rowEffort EffortLevel) EffortLevel {
+	respectClientThinking := true
+	if r != nil && r.configManager != nil {
+		respectClientThinking = r.configManager.GetAutopilotRouting().ReasoningEffort.RespectClientThinking
+	}
+	if respectClientThinking && profile != nil && profile.ClientEffortExplicit {
+		if pin := NormalizeEffortLevel(string(profile.ClientEffort)); pin != "" {
+			return pin
 		}
 	}
-	ch.PinnedEffort = string(e.Effort)
+	if profile != nil && profile.IntentEffortPin != nil && profile.IntentEffortPin.Set {
+		if pin := NormalizeEffortLevel(string(profile.IntentEffortPin.Effort)); pin != "" {
+			return pin
+		}
+	}
+	return NormalizeEffortLevel(string(rowEffort))
 }
 
 func (r *SmartRouter) executeFilter(
@@ -1071,17 +1085,9 @@ func (r *SmartRouter) executeFilter(
 			LogicalChannelName:    e.LogicalChannelName,
 			TotalScore:            sc.Score,
 			DomainEvidence:        sc.DomainEvidence,
-			Scores: []CandidateScore{
-				{Dimension: "quality", Score: sc.QualityScore, Weight: weights.WQuality},
-				{Dimension: "stability", Score: sc.StabilityScore, Weight: weights.WStability},
-				{Dimension: "speed", Score: sc.SpeedScore, Weight: weights.WSpeed},
-				{Dimension: "cost", Score: sc.CostScore, Weight: weights.WCost},
-				{Dimension: "savings", Score: sc.SavingsScore, Weight: weights.WSavings},
-				{Dimension: "family", Score: sc.FamilyPrefScore, Weight: weights.WFamily},
-				{Dimension: "provider_quality", Score: sc.ProviderQualityScore, Weight: weights.WProviderQuality},
-				{Dimension: "domain", Score: sc.DomainStrengthScore, Weight: weights.WDomain},
-			},
-			Selected: true,
+			Scores:                candidateScoreBreakdown(sc, weights),
+			Penalty:               sc.Penalty,
+			Selected:              true,
 		}
 		// AFP 成本信息传递到 trace
 		if e.AFPCost != nil {
@@ -1104,7 +1110,7 @@ func (r *SmartRouter) executeFilter(
 		if !seenRouteKeys[e.Route.Key()] {
 			for _, ch := range channels {
 				if federatedRoute(ch, profile.ChannelKind).Key() == e.Route.Key() {
-					applyCandidatePin(&ch, e, profile)
+					r.applyCandidatePin(&ch, e, profile)
 					result = append(result, ch)
 					seenRouteKeys[e.Route.Key()] = true
 					break
@@ -1127,7 +1133,7 @@ func (r *SmartRouter) executeFilter(
 			// 过滤（medium 请求不能凭 max 档实测分进 premium）。
 			if advisorMinQualityTier != "" {
 				if advisorMinQualityReasons := MinQualityTierReasons(se.entry.ScoringCandidate.QualityTier, advisorMinQualityTier); len(advisorMinQualityReasons) > 0 &&
-					qualityTierRank(EffortAwareQualityTier(se.entry.ModelID, requestEffortOfProfile(profile), se.entry.ScoringCandidate.ModelFamily)) < qualityTierRank(advisorMinQualityTier) {
+					qualityTierRank(EffortAwareQualityTier(se.entry.ModelID, r.effectiveCandidateEffort(profile, se.entry.Effort), se.entry.ScoringCandidate.ModelFamily)) < qualityTierRank(advisorMinQualityTier) {
 					reasons = append(reasons, advisorMinQualityReasons...)
 				}
 			}
@@ -1145,7 +1151,7 @@ func (r *SmartRouter) executeFilter(
 				if !seenFilteredRouteKeys[se.entry.Route.Key()] {
 					for _, ch := range channels {
 						if federatedRoute(ch, profile.ChannelKind).Key() == se.entry.Route.Key() {
-							applyCandidatePin(&ch, se.entry, profile)
+							r.applyCandidatePin(&ch, se.entry, profile)
 							filteredResult = append(filteredResult, ch)
 							seenFilteredRouteKeys[se.entry.Route.Key()] = true
 							break
@@ -1377,6 +1383,23 @@ type channelScoreEntry struct {
 type scoredChannelEntry struct {
 	entry  channelScoreEntry
 	scored ScoredCandidate
+}
+
+// candidateScoreBreakdown 保持 trace 的分项明细与 ScoreCandidate 的十项加权公式同源。
+// quota_headroom 不能省略：未知配额会按中性值 0.5 参与总分；Penalty 单独记录为总分扣减项。
+func candidateScoreBreakdown(sc ScoredCandidate, weights ScoringWeights) []CandidateScore {
+	return []CandidateScore{
+		{Dimension: "quality", Score: sc.QualityScore, Weight: weights.WQuality},
+		{Dimension: "stability", Score: sc.StabilityScore, Weight: weights.WStability},
+		{Dimension: "speed", Score: sc.SpeedScore, Weight: weights.WSpeed},
+		{Dimension: "cost", Score: sc.CostScore, Weight: weights.WCost},
+		{Dimension: "savings", Score: sc.SavingsScore, Weight: weights.WSavings},
+		{Dimension: "tier_match", Score: sc.TierMatchBonus, Weight: weights.WTierMatch},
+		{Dimension: "family", Score: sc.FamilyPrefScore, Weight: weights.WFamily},
+		{Dimension: "provider_quality", Score: sc.ProviderQualityScore, Weight: weights.WProviderQuality},
+		{Dimension: "domain", Score: sc.DomainStrengthScore, Weight: weights.WDomain},
+		{Dimension: "quota_headroom", Score: sc.QuotaHeadroomScore, Weight: weights.WQuotaHeadroom},
+	}
 }
 
 // scoreChannelEntry 统一真实路径与 dry-run 的候选评分顺序：

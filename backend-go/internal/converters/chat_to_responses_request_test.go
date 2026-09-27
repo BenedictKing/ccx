@@ -15,6 +15,16 @@ func TestConvertResponsesToOpenAIChatRequest(t *testing.T) {
 		validate func(t *testing.T, result []byte)
 	}{
 		{
+			name:  "关闭推理别名转换为 none",
+			input: `{"model":"gpt-5","input":"hello","reasoning":{"effort":"off"}}`,
+			model: "gpt-5",
+			validate: func(t *testing.T, result []byte) {
+				if got := gjson.GetBytes(result, "reasoning_effort").String(); got != "none" {
+					t.Fatalf("reasoning_effort = %q, want none", got)
+				}
+			},
+		},
+		{
 			name: "基本文本输入",
 			input: `{
 				"model": "gpt-4",

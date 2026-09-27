@@ -90,7 +90,7 @@ func ConvertResponsesToOpenAIChatRequest(modelName string, inputRawJSON []byte, 
 	if reasoningEffort := root.Get("reasoning.effort"); reasoningEffort.Exists() {
 		effort := reasoningEffort.String()
 		switch effort {
-		case "none":
+		case "none", "off", "disabled":
 			out, _ = sjson.Set(out, "reasoning_effort", "none")
 		case "auto":
 			out, _ = sjson.Set(out, "reasoning_effort", "auto")
@@ -574,8 +574,12 @@ func ConvertChatRequestToResponsesRequest(chatBody []byte) []byte {
 
 	// reasoning_effort → reasoning.effort（保留原始 reasoning 字段）
 	if effort := root.Get("reasoning_effort"); effort.Exists() {
+		normalizedEffort := effort.String()
+		if normalizedEffort == "off" || normalizedEffort == "disabled" {
+			normalizedEffort = "none"
+		}
 		if reasoning := root.Get("reasoning"); reasoning.Exists() && reasoning.IsObject() {
-			merged := map[string]interface{}{"effort": effort.String()}
+			merged := map[string]interface{}{"effort": normalizedEffort}
 			reasoning.ForEach(func(key gjson.Result, value gjson.Result) bool {
 				if key.String() != "effort" {
 					merged[key.String()] = value.Value()
@@ -584,7 +588,7 @@ func ConvertChatRequestToResponsesRequest(chatBody []byte) []byte {
 			})
 			out, _ = sjson.Set(out, "reasoning", merged)
 		} else {
-			out, _ = sjson.Set(out, "reasoning", map[string]interface{}{"effort": effort.String()})
+			out, _ = sjson.Set(out, "reasoning", map[string]interface{}{"effort": normalizedEffort})
 		}
 	} else if reasoning := root.Get("reasoning"); reasoning.Exists() {
 		out, _ = sjson.Set(out, "reasoning", reasoning.Value())

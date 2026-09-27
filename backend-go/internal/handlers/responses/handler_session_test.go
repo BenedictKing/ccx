@@ -214,6 +214,85 @@ data: {"type":"response.failed","response":{"id":"resp_1","status":"failed","err
 	}
 }
 
+func TestHandleStreamSuccess_ReasoningOnlyCompletedTriggersFailover(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"model":"gpt-6-sol","stream":true}`))
+
+	body := `event: response.output_item.added
+data: {"type":"response.output_item.added","item":{"type":"reasoning","id":"rs_1","status":"in_progress"}}
+
+event: response.reasoning_text.delta
+data: {"type":"response.reasoning_text.delta","delta":"thinking"}
+
+event: response.completed
+data: {"type":"response.completed","response":{"status":"completed","output":[{"type":"reasoning","summary":[{"type":"summary_text","text":"thinking"}]}]}}
+
+`
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": {"text/event-stream"}},
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+
+	_, err := handleStreamSuccess(
+		c,
+		resp,
+		"responses",
+		&config.EnvConfig{LogLevel: "info"},
+		nil,
+		time.Now(),
+		&types.ResponsesRequest{Model: "gpt-6-sol"},
+		[]byte(`{"model":"gpt-6-sol","stream":true}`),
+		common.StreamPreflightTimeouts{FirstContentTimeoutMs: 1000, InactivityTimeoutMs: 1000},
+	)
+	if !errors.Is(err, common.ErrEmptyStreamResponse) {
+		t.Fatalf("handleStreamSuccess() err = %v, want ErrEmptyStreamResponse", err)
+	}
+	if w.Body.Len() != 0 {
+		t.Fatalf("reasoning-only preflight must not commit HTTP 200 body, got %q", w.Body.String())
+	}
+}
+
+func TestHandleStreamSuccess_ReasoningDoesNotDisableFirstContentTimeout(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"model":"gpt-6-sol","stream":true}`))
+
+	reader, writer := io.Pipe()
+	defer reader.Close()
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": {"text/event-stream"}},
+		Body:       reader,
+	}
+	go func() {
+		_, _ = io.WriteString(writer, "event: response.reasoning_text.delta\ndata: {\"type\":\"response.reasoning_text.delta\",\"delta\":\"thinking\"}\n\n")
+		time.Sleep(100 * time.Millisecond)
+		_ = writer.Close()
+	}()
+
+	_, err := handleStreamSuccess(
+		c,
+		resp,
+		"responses",
+		&config.EnvConfig{LogLevel: "info"},
+		nil,
+		time.Now(),
+		&types.ResponsesRequest{Model: "gpt-6-sol"},
+		[]byte(`{"model":"gpt-6-sol","stream":true}`),
+		common.StreamPreflightTimeouts{FirstContentTimeoutMs: 20, InactivityTimeoutMs: 1000},
+	)
+	if !errors.Is(err, common.ErrStreamFirstContentTimeout) {
+		t.Fatalf("handleStreamSuccess() err = %v, want ErrStreamFirstContentTimeout", err)
+	}
+	if w.Body.Len() != 0 {
+		t.Fatalf("reasoning before final content must not commit body, got %q", w.Body.String())
+	}
+}
+
 func TestHandleStreamSuccess_ResponseFailedQuotaTriggersBlacklist(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
