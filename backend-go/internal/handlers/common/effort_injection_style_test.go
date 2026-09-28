@@ -97,8 +97,19 @@ func TestEffortInjectionStyle(t *testing.T) {
 	}
 }
 
-// TestAtomicModelEffortRewrite_ByChannelKind 断言各渠道的最终注入形态。
-func TestAtomicModelEffortRewrite_ByChannelKind(t *testing.T) {
+func TestAtomicModelRewrite(t *testing.T) {
+	target := &autopilot.ResolvedRouteTarget{Model: "gemini-3.5-flash"}
+	got, ok := atomicModelRewrite([]byte(`{"model":"old","input":[]}`), target)
+	if !ok {
+		t.Fatal("atomicModelRewrite() ok = false, want true")
+	}
+	if model := gjson.GetBytes(got, "model").String(); model != target.Model {
+		t.Fatalf("model = %q, want %q", model, target.Model)
+	}
+}
+
+// TestRewriteOutboundEffort_ByChannelKind 断言最终协议阶段的 effort 注入形态。
+func TestRewriteOutboundEffort_ByChannelKind(t *testing.T) {
 	tests := []struct {
 		name     string
 		kind     scheduler.ChannelKind
@@ -117,7 +128,6 @@ func TestAtomicModelEffortRewrite_ByChannelKind(t *testing.T) {
 			effort:   autopilot.EffortHigh,
 			body:     `{"model":"old","contents":[]}`,
 			wantPaths: map[string]string{
-				"model": "gemini-3.5-flash",
 				"generationConfig.thinkingConfig.thinkingLevel": "high",
 			},
 			wantAbsentPaths: []string{"thinking", "reasoning", "reasoning_effort", "generationConfig.thinkingConfig.thinkingBudget"},
@@ -144,12 +154,11 @@ func TestAtomicModelEffortRewrite_ByChannelKind(t *testing.T) {
 			},
 		},
 		{
-			name:      "gemini 渠道无法映射的档位只改写 model",
-			kind:      scheduler.ChannelKindGemini,
-			upstream:  &config.UpstreamConfig{},
-			effort:    autopilot.EffortLevel("turbo"),
-			body:      `{"model":"old","contents":[]}`,
-			wantPaths: map[string]string{"model": "gemini-3.5-flash"},
+			name:     "gemini 渠道无法映射的档位不注入 effort",
+			kind:     scheduler.ChannelKindGemini,
+			upstream: &config.UpstreamConfig{},
+			effort:   autopilot.EffortLevel("turbo"),
+			body:     `{"model":"old","contents":[]}`,
 			wantAbsentPaths: []string{
 				"generationConfig.thinkingConfig.thinkingLevel",
 				"generationConfig.thinkingConfig.thinkingBudget",
@@ -203,24 +212,22 @@ func TestAtomicModelEffortRewrite_ByChannelKind(t *testing.T) {
 			wantAbsentPaths: []string{"reasoning", "thinking"},
 		},
 		{
-			name:      "images 渠道不注入任何思考参数",
-			kind:      scheduler.ChannelKindImages,
-			upstream:  &config.UpstreamConfig{},
-			effort:    autopilot.EffortHigh,
-			body:      `{"model":"old","prompt":"cat"}`,
-			wantPaths: map[string]string{"model": "gemini-3.5-flash"},
+			name:     "images 渠道不注入任何思考参数",
+			kind:     scheduler.ChannelKindImages,
+			upstream: &config.UpstreamConfig{},
+			effort:   autopilot.EffortHigh,
+			body:     `{"model":"old","prompt":"cat"}`,
 			wantAbsentPaths: []string{
 				"reasoning", "reasoning_effort", "thinking",
 				"generationConfig.thinkingConfig.thinkingLevel",
 			},
 		},
 		{
-			name:      "vectors 渠道不注入任何思考参数",
-			kind:      scheduler.ChannelKindVectors,
-			upstream:  &config.UpstreamConfig{},
-			effort:    autopilot.EffortHigh,
-			body:      `{"model":"old","input":"hello"}`,
-			wantPaths: map[string]string{"model": "gemini-3.5-flash"},
+			name:     "vectors 渠道不注入任何思考参数",
+			kind:     scheduler.ChannelKindVectors,
+			upstream: &config.UpstreamConfig{},
+			effort:   autopilot.EffortHigh,
+			body:     `{"model":"old","input":"hello"}`,
 			wantAbsentPaths: []string{
 				"reasoning", "reasoning_effort", "thinking",
 				"generationConfig.thinkingConfig.thinkingLevel",
@@ -235,12 +242,9 @@ func TestAtomicModelEffortRewrite_ByChannelKind(t *testing.T) {
 				Effort:        tt.effort,
 				EffortDecided: true,
 			}
-			got, ok := atomicModelEffortRewrite([]byte(tt.body), target, tt.upstream, tt.kind)
-			if !ok {
-				t.Fatal("atomicModelEffortRewrite() ok = false, want true")
-			}
-			if model := gjson.GetBytes(got, "model").String(); model != "gemini-3.5-flash" {
-				t.Errorf("model = %q, want gemini-3.5-flash", model)
+			got := []byte(tt.body)
+			if effortBody, changed := rewriteOutboundEffort(got, target, tt.upstream, tt.kind); changed {
+				got = effortBody
 			}
 			for path, want := range tt.wantPaths {
 				value := gjson.GetBytes(got, path)

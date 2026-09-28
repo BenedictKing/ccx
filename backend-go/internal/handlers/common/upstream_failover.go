@@ -2769,18 +2769,6 @@ func applyResolvedEffortToProviderRequest(req *http.Request, target *autopilot.R
 	return true
 }
 
-// atomicModelEffortRewrite 组合改写 model 与最终协议 effort，供边界行为测试使用。
-func atomicModelEffortRewrite(body []byte, target *autopilot.ResolvedRouteTarget, upstream *config.UpstreamConfig, kind scheduler.ChannelKind) ([]byte, bool) {
-	modelBody, ok := atomicModelRewrite(body, target)
-	if !ok {
-		return body, false
-	}
-	if effortBody, changed := rewriteOutboundEffort(modelBody, target, upstream, kind); changed {
-		return effortBody, true
-	}
-	return modelBody, true
-}
-
 // effortInjectionStyle 决定该渠道的 effort 注入形态。
 //
 // 判定依据是渠道种类与 ServiceType，而不是模型名匹配：

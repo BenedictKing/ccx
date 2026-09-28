@@ -388,14 +388,24 @@ func ApplyReasoningParamStyle(req map[string]interface{}, style string, effort s
 		if effort != "" {
 			req["reasoning_effort"] = normalizeOpenAIReasoningEffort(effort)
 		}
+	case "reasoning":
+		delete(req, "thinking")
+		delete(req, "reasoning_effort")
+		if effort == "" {
+			return
+		}
+		reasoning, _ := req["reasoning"].(map[string]interface{})
+		if reasoning == nil {
+			reasoning = make(map[string]interface{})
+		}
+		reasoning["effort"] = normalizeOpenAIReasoningEffort(effort)
+		req["reasoning"] = reasoning
 	case ReasoningParamStyleGemini:
 		applyGeminiThinkingConfig(req, effort)
 	default:
-		delete(req, "thinking")
-		delete(req, "reasoning_effort")
-		if effort != "" {
-			req["reasoning"] = map[string]interface{}{"effort": normalizeOpenAIReasoningEffort(effort)}
-		}
+		// 未知或自定义形态由转换器负责；此处保持已生成的协议字段，
+		// 避免把 reasoning_effort/thinking 删除后注入上游不认识的字段。
+		return
 	}
 }
 

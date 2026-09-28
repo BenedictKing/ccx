@@ -872,9 +872,10 @@ func explicitEffortQualityTier(canonicalModel string, effort EffortLevel) (Quali
 	}
 }
 
-// ModelProfileQualityTier 优先按常规 effort 口径的归一化能力分推导质量档，
-// 无 benchmark 时回退到模型族规则。估计类证据（插值/折算/校准）封顶 high：
-// premium 必须有常规口径直测证明（等该模型补测 medium/default）。
+// ModelProfileQualityTier 先应用人工核定的 effort 能力边界，再按常规 effort
+// 口径的归一化能力分推导质量档；无 benchmark 时回退到模型族规则。
+// 人工边界用于表达 benchmark 无法区分的产品语义，优先级高于注册表刷新。
+// 估计类证据（插值/折算/校准）封顶 high：premium 必须有常规口径直测证明。
 func ModelProfileQualityTier(modelID string, family ModelFamily) QualityTier {
 	benchmark := config.ResolveModelBenchmarkProfile(modelID)
 	if benchmark.Known {
