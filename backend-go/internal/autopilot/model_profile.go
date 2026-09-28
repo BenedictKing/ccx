@@ -717,13 +717,17 @@ func calibrateModelCapability(modelID string) (CalibrationResult, bool) {
 	if !benchmark.Known {
 		return CalibrationResult{}, false
 	}
-	if result, ok := calibrateRegularEffort(benchmark.Profile.BenchmarkEvidence); ok {
+	return calibrateBenchmarkEvidence(benchmark.Profile.BenchmarkEvidence)
+}
+
+func calibrateBenchmarkEvidence(evidence []config.ModelBenchmarkEvidence) (CalibrationResult, bool) {
+	if result, ok := calibrateRegularEffort(evidence); ok {
 		return result, true
 	}
-	if result, ok := calibrateArtificialAnalysisEffort(benchmark.Profile.BenchmarkEvidence); ok {
+	if result, ok := calibrateArtificialAnalysisEffort(evidence); ok {
 		return result, true
 	}
-	if result, ok := calibrateOfficialReleaseEffort(benchmark.Profile.BenchmarkEvidence); ok {
+	if result, ok := calibrateOfficialReleaseEffort(evidence); ok {
 		return result, true
 	}
 	return CalibrationResult{}, false
@@ -969,6 +973,8 @@ func interpolatedEffortScore(evidence []config.ModelBenchmarkEvidence, level Eff
 //  3. 无该档证据 → 回落模型基础档（medium 口径）：effort 不低于 medium 时
 //     沿用基础档（effort 曲线单调不减），低于 medium 时按全局比率保守下调
 //     并封顶 high（low 档能力可能显著低于常规口径）。
+//  4. 对注册表明确支持的档位，QualityTier 沿 effort 序数单调不降；连续分和
+//     原始证据保持不变，仍用于同档候选的细粒度排序与观测。
 //
 // 模型不在注册表时回退模型族规则（与 ModelProfileQualityTier 一致）。
 // effort 为空表示未指定，等价 medium 口径（与模型基础档相同）。
@@ -993,13 +999,18 @@ func EffortAwareQualityAssessmentFor(modelID string, effort EffortLevel, family 
 		}
 		return EffortQualityAssessment{Tier: tier, Score: priorScore, Evidence: EvidencePrior, Known: false}
 	}
+	assessment := effortQualityAssessmentFromProfile(benchmark.Profile, effort, family)
+	return applySupportedEffortTierFloor(modelID, effort, family, benchmark.Profile, assessment)
+}
+
+func effortQualityAssessmentFromProfile(profile config.ModelBenchmarkProfile, effort EffortLevel, family ModelFamily) EffortQualityAssessment {
 	applyExplicitTier := func(assessment EffortQualityAssessment) EffortQualityAssessment {
-		if tier, ok := explicitEffortQualityTier(benchmark.Profile.CanonicalModel, effort); ok {
+		if tier, ok := explicitEffortQualityTier(profile.CanonicalModel, effort); ok {
 			assessment.Tier = tier
 		}
 		return assessment
 	}
-	evidence := benchmark.Profile.BenchmarkEvidence
+	evidence := profile.BenchmarkEvidence
 
 	// 1. 该档可靠直测。
 	if score, ok := directEffortScore(evidence, effort); ok {
@@ -1028,9 +1039,9 @@ func EffortAwareQualityAssessmentFor(modelID string, effort EffortLevel, family 
 
 	// 3. 回落模型基础档。即使缺少当前档直测，也按 effort 曲线比率
 	// 缩放常规分，确保 high/max 与 medium 不会得到完全相同的评分。
-	calib, ok := calibrateModelCapability(modelID)
+	calib, ok := calibrateBenchmarkEvidence(evidence)
 	if !ok {
-		tier := ModelProfileQualityTierFromFamily(family, modelID)
+		tier := ModelProfileQualityTierFromFamily(family, profile.CanonicalModel)
 		return applyExplicitTier(EffortQualityAssessment{Tier: tier, Score: 0, Evidence: EvidencePrior, Known: false})
 	}
 	if effort == "" || effort == EffortMedium {
@@ -1046,6 +1057,55 @@ func EffortAwareQualityAssessmentFor(modelID string, effort EffortLevel, family 
 		MeasuredEffort: effort,
 	}
 	return applyExplicitTier(EffortQualityAssessment{Tier: qualityTierFromCalibration(deflated), Score: deflated.Score, Evidence: deflated.Class, Known: true})
+}
+
+// applySupportedEffortTierFloor 保证同一模型在注册表声明支持的档位中，
+// 更高 effort 的粗粒度质量档不低于任一较低 effort。榜单分数可能受 harness、
+// 采集日期和统计噪声影响而局部下降；这些原始差异仍保留在 Score/Evidence 中。
+func applySupportedEffortTierFloor(
+	modelID string,
+	effort EffortLevel,
+	family ModelFamily,
+	profile config.ModelBenchmarkProfile,
+	assessment EffortQualityAssessment,
+) EffortQualityAssessment {
+	targetOrdinal := EffortLevelOrdinal(effort)
+	if targetOrdinal < 0 {
+		return assessment
+	}
+	originalAssessment := assessment
+	resolved := config.ResolveUpstreamCapability(modelID, nil, nil)
+	if !resolved.Known {
+		return assessment
+	}
+
+	targetSupported := false
+	seen := make(map[EffortLevel]struct{}, len(resolved.Capability.ReasoningEfforts))
+	for _, raw := range resolved.Capability.ReasoningEfforts {
+		level := NormalizeEffortLevel(raw)
+		if level == "" {
+			continue
+		}
+		if _, exists := seen[level]; exists {
+			continue
+		}
+		seen[level] = struct{}{}
+		ordinal := EffortLevelOrdinal(level)
+		if ordinal == targetOrdinal {
+			targetSupported = true
+		}
+		if ordinal < 0 || ordinal >= targetOrdinal {
+			continue
+		}
+		lower := effortQualityAssessmentFromProfile(profile, level, family)
+		if qualityTierRank(lower.Tier) > qualityTierRank(assessment.Tier) {
+			assessment.Tier = lower.Tier
+		}
+	}
+	if !targetSupported {
+		return originalAssessment
+	}
+	return assessment
 }
 
 // ── ModelProfile ──
