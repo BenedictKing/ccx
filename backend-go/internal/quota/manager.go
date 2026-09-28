@@ -2,6 +2,7 @@ package quota
 
 import (
 	"net/http"
+	"sort"
 	"sync"
 	"time"
 )
@@ -30,13 +31,34 @@ func NewManager() *Manager {
 	}
 }
 
-// GetChannelState 获取指定渠道的配额状态快照（深拷贝）。
+// pruneIfExpired 惰性剪除渠道状态中窗口已翻转的陈旧观测（读路径触发）。
+// RLock 快查无过期值时零额外开销；发现过期值（窗口翻转后的第一次读）才升级
+// 写锁剪除并重算状态，之后恢复纯读。被压底的渠道拿不到流量、也就等不到
+// 响应头刷新，惰性剪除是它唯一的自愈路径。
+func (m *Manager) pruneIfExpired(channelUID string, nowMs int64) {
+	m.mu.RLock()
+	state, ok := m.states[channelUID]
+	expired := ok && state.hasExpiredValues(nowMs)
+	m.mu.RUnlock()
+	if !expired {
+		return
+	}
+	m.mu.Lock()
+	if state, ok := m.states[channelUID]; ok {
+		state.pruneExpiredValues(nowMs)
+	}
+	m.mu.Unlock()
+}
+
+// GetChannelState 获取指定渠道的配额状态快照（深拷贝，先剪除陈旧观测）。
 // 如果不存在，返回 unknown 状态（fail-open）。
 // 返回值与 Manager 内部状态完全隔离：修改快照不影响内部数据。
 func (m *Manager) GetChannelState(channelUID string) *ChannelState {
 	if m == nil || channelUID == "" {
 		return NewChannelState("")
 	}
+
+	m.pruneIfExpired(channelUID, time.Now().UnixMilli())
 
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -56,6 +78,8 @@ func (m *Manager) GetChannelHeadroom(channelUID string) float64 {
 		return 0.5
 	}
 
+	m.pruneIfExpired(channelUID, time.Now().UnixMilli())
+
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -71,6 +95,8 @@ func (m *Manager) GetChannelTruth(channelUID string) TruthLevel {
 	if m == nil || channelUID == "" {
 		return TruthUnknown
 	}
+
+	m.pruneIfExpired(channelUID, time.Now().UnixMilli())
 
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -215,6 +241,29 @@ func (m *Manager) Buckets() *BucketManager {
 	return m.buckets
 }
 
+// SnapshotAll 返回全部渠道的配额状态快照（先剪除窗口已过期的陈旧观测），
+// 按 ChannelUID 排序保证输出稳定。观测为纯内存态，本快照即排查
+// 「渠道为何被沉底/压分」的权威出口。
+func (m *Manager) SnapshotAll() []*ChannelState {
+	if m == nil {
+		return nil
+	}
+	nowMs := time.Now().UnixMilli()
+	for uid := range m.states {
+		m.pruneIfExpired(uid, nowMs)
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	result := make([]*ChannelState, 0, len(m.states))
+	for _, state := range m.states {
+		result = append(result, state.DeepCopy())
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].ChannelUID < result[j].ChannelUID
+	})
+	return result
+}
+
 // IsChannelSaturated 判断渠道是否处于配额紧张状态。
 // 供 scheduler 底层选择时使用（沉底排序用，不剔除）。
 // approaching_limit 和 exhausted 都返回 true；桶的懒重置只对 exhausted 状态生效。
@@ -224,6 +273,8 @@ func (m *Manager) IsChannelSaturated(channelUID string, nowMs int64) bool {
 	if m == nil {
 		return false
 	}
+
+	m.pruneIfExpired(channelUID, nowMs)
 
 	m.mu.RLock()
 	defer m.mu.RUnlock()

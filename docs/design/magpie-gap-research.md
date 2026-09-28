@@ -25,7 +25,7 @@
 ## 后续顺序
 
 1. 流式故障转移与冷却行为矩阵。（2026-09-29 完成研究与第一轮实现，见 §1 实现记录；短文本 EOF 对齐为可选后续项）
-2. 额度来源、窗口和调度消费矩阵。
+2. 额度来源、窗口和调度消费矩阵。（2026-09-29 完成研究与第二轮实现（freshness + 观测出口），见 §2；窗口键统一、Provider 结构适配、快过期优先排序待续）
 3. 模型发现、注册表和运行时能力合并矩阵。
 4. 会话亲和与 turn 路由矩阵。
 
@@ -103,9 +103,33 @@ magpie 的价值主要在失败原因分级和恢复原因可解释性：credit�
 4. 当前调度关注“剩余是否紧张”，还没有“哪个窗口更快过期”这一排序维度。
 5. 本地 request meter 可以统计请求窗口，但不能冒充供应商真实余额。
 
+### 矩阵 3 结论：额度来源 × truth level × freshness × 调度消费点（2026-09-29 验证）
+
+| 来源 | 生产者 | 产出 | freshness 机制 |
+| --- | --- | --- | --- |
+| provider_api | SubscriptionRefreshWorker 的三个 fetcher（OpenAI/Anthropic/Google，**现均只做存活检测返回 -1，产不出真实余额**） | DimCurrency.Remaining（无 Limit/Reset） | 24h 周期 + 每日预算；无 TTL |
+| response_headers | 每请求响应头（仅 anthropic/openai 映射，gemini/images/vectors 无头映射） | tokens/requests 的 Limit+Remaining+ResetAtMs | 请求驱动滚动刷新 |
+| configured | new-api 同步 + 配置热更重放 | DimCurrency.Remaining+Used（无 Limit，headroom 恒中性，仅 Balance=0 提供 exhausted 信号） | 同步/热更驱动 |
+| estimated | 无生产者（枚举占位） | — | — |
+
+关键结论：
+
+1. **freshness 原先完全缺失**：Value 无时间戳、无 TTL，跨窗口后陈旧观测（上窗口剩 5%）持续压底渠道；exhausted 有饱和桶懒重置兜底，**approaching_limit 原先无任何恢复路径**，且被压底的渠道拿不到流量也就等不到响应头刷新（死锁）。**本轮已修复**（读路径惰性剪除，见实现记录）。
+2. **reset 时间只进桶懒重置，不进排序**：`Value.ResetAtMs` 在 quota 包之外零引用；「快过期额度优先」排序维度不存在（属下一阶段，模型稳定后再做）。
+3. **暗状态**：`GetChannelState`/`ChannelSaturationRank` 原先无生产调用方，headroom/truth/饱和状态无任何 API/UI 出口。**本轮已补观测出口**。
+4. **托管套餐（Kimi/MiMo/Compshare/Volcengine）与 quota.Manager 是平行体系**：console 用量落 ConfigManager 快照，只供前端展示与 `TryRestoreDisabledKeysByUsage` 恢复判定，不进 quota 包；订阅余额（new-api）走 configured 级是唯一进包的余额数据。
+5. 额度对路由的影响是双通道：软通道（headroom 进 SmartRouter 评分第 10 项，权重 0.3/0.5）+ 硬通道（饱和沉底 + 全员饱和 fail-open 回退）；与 Key 拉黑/ChannelLimiter 冷却无交叉触发。
+6. 观测纯内存不落盘，重启冷启动（configured 级靠 new-api 同步/热更重放重建）。
+
+### 第二轮实现记录（额度 freshness 与可观测出口）
+
+- `ChannelState.pruneExpiredValues`/`hasExpiredValues`（quota/truth.go）：窗口已翻转（`now >= ResetAtMs`）的观测属上一窗口，剪除后状态回退 unknown（fail-open）。无窗口语义的余额（ResetAtMs=0）永不剪除。
+- `Manager.pruneIfExpired`（quota/manager.go）：读路径惰性剪除——RLock 快查无过期值零开销，发现过期才升级写锁剪除一次；接入 `GetChannelHeadroom`/`GetChannelTruth`/`IsChannelSaturated`/`GetChannelState` 四个读 API。修复 approaching_limit 渠道在窗口翻转后的自愈死锁。
+- `Manager.SnapshotAll`：全部渠道配额快照（先剪除、按 ChannelUID 排序），配套管理端点 `GET /api/quota/channels`（handlers/quota_inspect.go，含 headroom/saturated 派生视图；autopilot 关闭时返回空列表）。
+
 ### 研究顺序
 
-先保持现有 `quota.Manager` 和 `TruthLevel`，补充统一的窗口键、来源新鲜度和 reset 时间，再把 Provider 特有结构适配到该模型。只有在统一模型稳定后，才增加“快过期额度优先”和任意余额路径。
+先保持现有 `quota.Manager` 和 `TruthLevel`，补充统一的窗口键、来源新鲜度和 reset 时间，再把 Provider 特有结构适配到该模型。只有在统一模型稳定后，才增加“快过期额度优先”和任意余额路径。（freshness 与可观测出口已落地，2026-09-29；窗口键统一与 Provider 结构适配为下一轮，快过期优先排序与任意余额路径在其后。）
 
 ## 3. 模型目录与运行时能力
 

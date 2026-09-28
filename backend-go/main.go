@@ -657,6 +657,7 @@ func main() {
 	var autopilotDB *sql.DB // Phase B.1: 暴露给 StateEventStore 复用
 	var autoDiscoveryRunner *autopilot.AutoDiscoveryRunner
 	var newApiSyncService *autopilot.NewApiSubscriptionSyncService
+	var quotaManager *quota.Manager // 配额真相管理器，暴露给管理路由做观测出口
 	{
 		autopilotStore, apErr := autopilot.NewProfileStore(paths.AutopilotDBPath)
 		if apErr != nil {
@@ -702,7 +703,7 @@ func main() {
 				autopilotManager.SetSmartRouter(smartRouter)
 
 				// 配额管理器：真相分级 + 懒重置饱和桶 + 响应头解析（§2 配额真相分级调度）
-				quotaManager := quota.NewManager()
+				quotaManager = quota.NewManager()
 				smartRouter.SetQuotaManager(quotaManager)
 
 				// configured 级生产接线（§7.3）：订阅画像的静态额度声明在配置变更
@@ -1367,6 +1368,10 @@ func main() {
 		// 预置数据（订阅来源分类等），前端表单选项来源；独立于 autopilot 开关。
 		apiGroup.GET("/presets", presetstore.Handler(presetstore.Default()))
 		apiGroup.GET("/presets/status", presetstore.StatusHandler(presetUpdater))
+
+		// 配额真相快照：全部渠道的来源分级/headroom/窗口重置时间/饱和状态。
+		// autopilot 关闭时 quotaManager 为 nil，返回空列表（fail-open）。
+		apiGroup.GET("/quota/channels", handlers.GetQuotaChannels(quotaManager))
 
 		apiGroup.POST("/channel-discovery", handlers.ChannelDiscoveryWithModelFetchers(cfgManager, discoveryModelFetchers))
 		// 快速探活：仅探一个真实模型以定 primaryKind，不做全量协议/能力探测。

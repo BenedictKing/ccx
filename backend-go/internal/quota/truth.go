@@ -269,6 +269,42 @@ func (cs *ChannelState) OverallHeadroom() float64 {
 
 // ── 辅助函数 ──
 
+// hasExpiredValues 判断是否存在窗口已翻转的陈旧观测。
+// ResetAtMs>0 且当前时间已过重置点时，该维度的余量属于上一窗口。
+func (cs *ChannelState) hasExpiredValues(nowMs int64) bool {
+	if cs == nil {
+		return false
+	}
+	for _, v := range cs.Values {
+		if v.ResetAtMs > 0 && nowMs >= v.ResetAtMs {
+			return true
+		}
+	}
+	return false
+}
+
+// pruneExpiredValues 剪除窗口已翻转的陈旧观测并重算状态。
+// 窗口重置后余量观测属于上一窗口（如上窗口剩 5%），继续参与判定会把已
+// 恢复满额的渠道压在 approaching_limit/exhausted；exhausted 尚有饱和桶
+// 懒重置兜底，approaching_limit 原先无任何恢复路径。剪除后状态回退
+// unknown（fail-open，不压分不沉底），待下一批观测刷新。
+// 无窗口语义的观测（ResetAtMs=0，如余额）永不剪除。
+func (cs *ChannelState) pruneExpiredValues(nowMs int64) {
+	if cs == nil {
+		return
+	}
+	pruned := false
+	for dim, v := range cs.Values {
+		if v.ResetAtMs > 0 && nowMs >= v.ResetAtMs {
+			delete(cs.Values, dim)
+			pruned = true
+		}
+	}
+	if pruned {
+		cs.recomputeStatus()
+	}
+}
+
 // ParseSource 解析来源字符串，不识别时回退为 unknown。
 func ParseSource(s string) Source {
 	switch strings.ToLower(strings.TrimSpace(s)) {
