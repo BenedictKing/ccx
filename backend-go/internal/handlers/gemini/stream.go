@@ -161,6 +161,11 @@ func preflightGeminiStream(resp *http.Response, upstreamType string, timeouts co
 			if hasGeminiSemanticContent(jsonData) {
 				return true
 			}
+			// 思考类增量对 Gemini 客户端是可交付内容（转换后为 thought part），
+			// 计入语义内容，避免纯思考流在预检中被判空。
+			if hasGeminiDeliverableThinkingContent(jsonData, line, upstreamType) {
+				return true
+			}
 			// 转换后格式检测（Claude/OpenAI/Responses → Gemini）
 			switch upstreamType {
 			case "claude":
@@ -193,9 +198,14 @@ func preflightGeminiStream(resp *http.Response, upstreamType string, timeouts co
 		select {
 		case chunk, chunkOk = <-chunkChan:
 			if !chunkOk {
-				// chunkChan 关闭：body 读取完成
+				// chunkChan 关闭：body 读取完成。
+				// 整个预检期间从未检测到语义内容（usage-only / 空流）：Header 未写，
+				// 按空响应进入 failover（对齐 messages/responses 语义）。
 				if remainder != "" {
 					allLines = append(allLines, remainder)
+				}
+				if !hasFirstContent {
+					return allLines, chunkChan, bodyErrChan, common.ErrEmptyStreamResponse
 				}
 				return allLines, chunkChan, bodyErrChan, nil
 			}
@@ -222,6 +232,22 @@ func preflightGeminiStream(resp *http.Response, upstreamType string, timeouts co
 		remainder = lines[len(lines)-1]
 		completeLines := lines[:len(lines)-1]
 		allLines = append(allLines, completeLines...)
+
+		// 流内错误事件检测：HTTP 200 但 data 里携带错误对象（中转站/原生错误形态）。
+		// 拉黑类错误返回 ErrBlacklistKey，其余错误按空响应语义进入 failover，
+		// 对齐 messages/responses 的预检行为，不再原样透传给客户端。
+		for _, line := range completeLines {
+			if !strings.HasPrefix(line, "data:") {
+				continue
+			}
+			jsonData := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+			if reason, msg, recoverAt, isErr := common.DetectStreamDataError(jsonData); isErr {
+				if reason != "" {
+					return nil, chunkChan, bodyErrChan, &common.ErrBlacklistKey{Reason: reason, Message: msg, RecoverAt: recoverAt}
+				}
+				return nil, chunkChan, bodyErrChan, fmt.Errorf("%w: %s", common.ErrEmptyStreamResponse, msg)
+			}
+		}
 
 		if hasSemanticContent(completeLines) {
 			if !hasFirstContent {
@@ -267,6 +293,36 @@ func preflightGeminiStream(resp *http.Response, upstreamType string, timeouts co
 			inactivityTimer.Reset(time.Duration(timeouts.InactivityTimeoutMs) * time.Millisecond)
 		}
 	}
+}
+
+// hasGeminiDeliverableThinkingContent 检测转换上游的思考类增量。
+// Gemini 客户端可把思考交付为 thought part（含纯思考流），因此思考计入
+// 语义内容，避免思考流在预检空判定中被误判。
+func hasGeminiDeliverableThinkingContent(jsonData string, line string, upstreamType string) bool {
+	switch upstreamType {
+	case "claude":
+		return strings.Contains(line, "thinking_delta") || strings.Contains(line, "redacted_thinking")
+	case "openai":
+		var event map[string]interface{}
+		if err := json.Unmarshal([]byte(jsonData), &event); err != nil {
+			return false
+		}
+		choices, _ := event["choices"].([]interface{})
+		if len(choices) == 0 {
+			return false
+		}
+		choice, _ := choices[0].(map[string]interface{})
+		delta, _ := choice["delta"].(map[string]interface{})
+		if rc, ok := delta["reasoning_content"].(string); ok && rc != "" {
+			return true
+		}
+		if r, ok := delta["reasoning"].(string); ok && r != "" {
+			return true
+		}
+	case "responses":
+		return strings.Contains(line, "reasoning_summary") || strings.Contains(line, "response.reasoning")
+	}
+	return false
 }
 
 // hasGeminiSemanticContent 检测 Gemini 原生格式的语义内容
@@ -364,7 +420,9 @@ func handleStreamSuccess(
 		} else if errors.Is(err, common.ErrStreamStalled) {
 			common.RequestLogf(c, "[Gemini-StreamStalled] 流式断流: 首字后 %dms 无活动，触发重试", timeouts.InactivityTimeoutMs)
 		}
-		return nil, err
+		// 预检阶段的任何非客户端错误 Header 均未写：统一归入 failover 家族，
+		// 避免裸传输错误/上游错误终结整个 failover 链。
+		return nil, common.ClassifyPreflightStreamError(err)
 	}
 
 	// 检查是否为空响应

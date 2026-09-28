@@ -206,3 +206,61 @@ func TestPreflightChatStream_FlushRemainder_NoByteDuplication(t *testing.T) {
 		t.Fatalf("buffered 字节不一致（说明重复写入或丢字节）:\n  want=%q\n  got =%q", want, got)
 	}
 }
+
+// TestPreflightChatStream_StreamDataErrorTriggersBlacklist 流内错误对象中的认证
+// 错误应在预检阶段被识别为拉黑条件，进入统一 failover（此前会原样透传给客户端）。
+func TestPreflightChatStream_StreamDataErrorTriggersBlacklist(t *testing.T) {
+	writer, resultCh := newPreflightPipe(t, "openai")
+
+	writeSSELine(t, writer, `{"error":{"message":"Invalid API key provided","type":"invalid_api_key"}}`)
+
+	result := waitForPreflight(t, resultCh, 300*time.Millisecond)
+	var blErr *common.ErrBlacklistKey
+	if !errors.As(result.err, &blErr) {
+		t.Fatalf("expected ErrBlacklistKey, got %v", result.err)
+	}
+	if blErr.Reason != "authentication_error" {
+		t.Fatalf("reason = %q, want authentication_error", blErr.Reason)
+	}
+}
+
+// TestPreflightChatStream_StreamDataErrorNonBlacklistFailsOver 非拉黑类流内错误
+// 应按空响应语义进入 failover，而不是透传。
+func TestPreflightChatStream_StreamDataErrorNonBlacklistFailsOver(t *testing.T) {
+	writer, resultCh := newPreflightPipe(t, "openai")
+
+	writeSSELine(t, writer, `{"error":{"code":503,"message":"The model is overloaded"}}`)
+
+	result := waitForPreflight(t, resultCh, 300*time.Millisecond)
+	if !errors.Is(result.err, common.ErrEmptyStreamResponse) {
+		t.Fatalf("expected ErrEmptyStreamResponse, got %v", result.err)
+	}
+}
+
+// TestPreflightChatStream_EmptyStreamAtEOFTriggersFailover usage/role-only 流在
+// 流结束时仍未出现语义内容：按空响应进入 failover（对齐 messages/responses）。
+func TestPreflightChatStream_EmptyStreamAtEOFTriggersFailover(t *testing.T) {
+	writer, resultCh := newPreflightPipe(t, "openai")
+
+	writeSSELine(t, writer, `{"choices":[{"delta":{"role":"assistant"}}]}`)
+	writeSSELine(t, writer, `{"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"total_tokens":3}}`)
+	writeSSELine(t, writer, `[DONE]`)
+	_ = writer.Close()
+
+	result := waitForPreflight(t, resultCh, 300*time.Millisecond)
+	if !errors.Is(result.err, common.ErrEmptyStreamResponse) {
+		t.Fatalf("expected ErrEmptyStreamResponse, got %v", result.err)
+	}
+}
+
+// TestPreflightChatStream_ContentStreamStillPasses 正常内容流不受错误检测影响。
+func TestPreflightChatStream_ContentStreamStillPasses(t *testing.T) {
+	writer, resultCh := newPreflightPipe(t, "openai")
+
+	writeSSELine(t, writer, `{"choices":[{"delta":{"content":"hello world this is fine"}}]}`)
+	time.Sleep(20 * time.Millisecond)
+	writeSSELine(t, writer, `{"choices":[{"delta":{"content":"more content"}}]}`)
+
+	result := waitForPreflight(t, resultCh, 300*time.Millisecond)
+	assertNoFirstContentTimeout(t, result)
+}

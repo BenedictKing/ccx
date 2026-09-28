@@ -2631,7 +2631,9 @@ func (cm *ConfigManager) RestoreDisabledKeys(apiType string, channelIndex int, k
 
 // DisableKeyModel 将 (apiKey, model) 组合加入限制列表（持久化，默认 1 小时后自动恢复）。
 // 仅限制该 Key 对该模型的路由，不影响该 Key 的其他模型，也不从 APIKeys 中移除。
-func (cm *ConfigManager) DisableKeyModel(apiType string, channelIndex int, apiKey, model, reason, message string) error {
+// recoverAt 为上游明确给出的恢复时间（RFC3339）；为空、无效或已过期时沿用 1 小时兜底，
+// 与 applyKeyBlacklistLocked 的 Key 级拉黑语义保持一致。
+func (cm *ConfigManager) DisableKeyModel(apiType string, channelIndex int, apiKey, model, reason, message, recoverAt string) error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -2647,7 +2649,11 @@ func (cm *ConfigManager) DisableKeyModel(apiType string, channelIndex int, apiKe
 
 	upstream := &(*upstreams)[channelIndex]
 	now := time.Now()
-	recoverAt := now.Add(time.Hour).Format(time.RFC3339)
+	resolvedRecoverAt := now.Add(time.Hour).Format(time.RFC3339)
+	if explicit, err := time.Parse(time.RFC3339, strings.TrimSpace(recoverAt)); err == nil && explicit.After(now) {
+		resolvedRecoverAt = explicit.Format(time.RFC3339)
+	}
+	recoverAt = resolvedRecoverAt
 
 	// 去重：限制仍生效时不刷新、不写盘，避免并发失败造成热路径磁盘抖动。
 	if upstream.IsKeyModelDisabledNow(apiKey, model, now) {

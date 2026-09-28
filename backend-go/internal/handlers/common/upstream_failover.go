@@ -1435,7 +1435,7 @@ func TryUpstreamWithAllKeys(
 						// 上游明确声明该模型或其 Codex 图片工具不受支持：限制该 Key 对这个实际模型的路由。
 						// 仅限制 (Key, 模型) 组合（持久化+定时恢复），保留 failover 换渠道，不连累该 Key 其他模型。
 						summary := errorBodySummaryForLog(apiType, resp.StatusCode, respBodyBytes)
-						if err := cfgManager.DisableKeyModel(executionAPIType, executionIndex, apiKey, actualAttemptModel, restrictionReason, summary); err != nil {
+						if err := cfgManager.DisableKeyModel(executionAPIType, executionIndex, apiKey, actualAttemptModel, restrictionReason, summary, ""); err != nil {
 							RequestLogf(c, "[%s-KeyModel] 限制 (Key,模型) 组合失败: %v", apiType, err)
 						}
 					}
@@ -1880,7 +1880,7 @@ func TryUpstreamWithAllKeys(
 						// 余额/配额类：降级为 (Key,模型) 组合级限制，覆盖全部模型时才升级整 Key 拉黑。
 						balanceRestricted = true
 						if HandleBalanceClassKeyFailure(cfgManager, upstream, executionAPIType, executionIndex,
-							apiKey, restrictModel, blErr.Reason, blErr.Message, "") {
+							apiKey, restrictModel, blErr.Reason, blErr.Message, blErr.RecoverAt) {
 							RequestLogf(c, "[%s-Blacklist] SSE 流内余额/配额受限已覆盖全部模型，升级整 Key 拉黑 (Key: %s)",
 								apiType, utils.MaskAPIKey(apiKey))
 						}

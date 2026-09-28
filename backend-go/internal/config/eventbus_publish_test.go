@@ -95,7 +95,7 @@ func TestConfig_PublishKeyModelDisabled(t *testing.T) {
 	cm, _, cleanup := newTestCMWithBus(t, bus)
 	defer cleanup()
 
-	if err := cm.DisableKeyModel("Messages", 0, "sk-test-key-1234", "claude-sonnet", "context_exceeded", "test"); err != nil {
+	if err := cm.DisableKeyModel("Messages", 0, "sk-test-key-1234", "claude-sonnet", "context_exceeded", "test", ""); err != nil {
 		t.Fatalf("DisableKeyModel 失败: %v", err)
 	}
 
@@ -116,7 +116,7 @@ func TestConfig_NilBus_NoPanic(t *testing.T) {
 	if err := cm.RestoreKey("Messages", 0, "sk-test-key-1234"); err != nil {
 		t.Fatalf("RestoreKey 失败: %v", err)
 	}
-	if err := cm.DisableKeyModel("Messages", 0, "sk-test-key-1234", "claude-sonnet", "ctx", "test"); err != nil {
+	if err := cm.DisableKeyModel("Messages", 0, "sk-test-key-1234", "claude-sonnet", "ctx", "test", ""); err != nil {
 		t.Fatalf("DisableKeyModel 失败: %v", err)
 	}
 }

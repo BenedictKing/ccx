@@ -115,8 +115,9 @@ var ErrInvalidResponseBody = errors.New("upstream returned invalid response body
 // ErrBlacklistKey 上游在 SSE 流中返回了应拉黑 Key 的错误（认证/余额）
 // Header 未发送，可安全 failover 到下一个 Key/BaseURL/渠道
 type ErrBlacklistKey struct {
-	Reason  string // "authentication_error" / "permission_error" / "insufficient_balance"
-	Message string
+	Reason    string // "authentication_error" / "permission_error" / "insufficient_balance"
+	Message   string
+	RecoverAt string // 上游错误文案中明确给出的恢复时间（RFC3339），空则按原因级默认策略
 }
 
 func (e *ErrBlacklistKey) Error() string {
