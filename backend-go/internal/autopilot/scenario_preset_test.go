@@ -308,6 +308,27 @@ func TestEffortAwareQualityTierLunaReplay(t *testing.T) {
 	}
 }
 
+func TestEffortAwareQualityTierHy4PreviewReplay(t *testing.T) {
+	for _, tt := range []struct {
+		effort EffortLevel
+		want   QualityTier
+	}{
+		{"", QualityTierLow},
+		{EffortOff, QualityTierLow},
+		{EffortMinimal, QualityTierLow},
+		{EffortLow, QualityTierLow},
+		{EffortMedium, QualityTierLow},
+		{EffortHigh, QualityTierHigh},
+		{EffortXhigh, QualityTierHigh},
+		{EffortMax, QualityTierHigh},
+		{EffortUltra, QualityTierHigh},
+	} {
+		if got := EffortAwareQualityTier("hy4-preview", tt.effort, ModelFamilyUnknown); got != tt.want {
+			t.Fatalf("hy4-preview effort=%q tier = %v, want %v", tt.effort, got, tt.want)
+		}
+	}
+}
+
 // newEffortTierTestRouter 构造指定 reasoningEffort 配置的 SmartRouter（仅 configManager）。
 func newEffortTierTestRouter(t *testing.T, reasoning config.ReasoningEffortConfig) *SmartRouter {
 	t.Helper()

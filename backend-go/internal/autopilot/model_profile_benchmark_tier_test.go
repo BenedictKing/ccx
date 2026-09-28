@@ -331,12 +331,9 @@ func TestModelProfileQualityTierRegistryReplay(t *testing.T) {
 	}{
 		{"gpt-6-astra", ModelFamilyOpenAI, QualityTierPremium, "direct 72.8 ≥ 69.95"},
 		{"gemini-3.8-flash", ModelFamilyGemini, QualityTierPremium, "direct 71.0 ≥ 69.95"},
-		// 2026-09-18 codexradar 新增 hy4-preview low 档实测（68 任务、任务覆盖达标）：
-		// 单点折算 83.7（ratio_low=0.686），估计类证据封顶 high。
-		// （2026-09-05 覆盖率门槛曾剔除其全部源行、回落模型族 low；新数据达标后回升。）
-		// 2026-09-23 codexradar 补充 max 档实测 48.2（85 任务）：跨档折算取最小
-		// （max 48.2/1.975=24.4 < low 58/0.686=84.5），medium 口径估计回落 normal。
-		{"hy4-preview", ModelFamilyUnknown, QualityTierNormal, "codexradar max 档实测拉低跨档折算 24.4"},
+		// hy4-preview 在 high 及以上思考具备高档能力；模型基础档代表未指定
+		// effort，不得由 low/high 跨档插值抬高，按显式能力约束固定为 low。
+		{"hy4-preview", ModelFamilyUnknown, QualityTierLow, "high 及以上为 high，基础档固定 low"},
 		{"claude-opus-5", ModelFamilyClaude, QualityTierHigh, "direct 68.9 < 69.95"},
 		{"claude-fable-5", ModelFamilyClaude, QualityTierHigh, "direct 65.4"},
 		{"gpt-5.6-sol", ModelFamilyOpenAI, QualityTierHigh, "direct 64.3"},

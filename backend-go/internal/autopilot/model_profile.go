@@ -853,10 +853,31 @@ func qualityTierFromCalibration(calib CalibrationResult) QualityTier {
 	return tier
 }
 
+// explicitEffortQualityTier 返回少数模型经人工核定的 effort 档位。
+// hy4-preview 在 high 及以上思考具备高档能力；低于 high 的档位不能用
+// 跨档插值抬高。
+func explicitEffortQualityTier(canonicalModel string, effort EffortLevel) (QualityTier, bool) {
+	switch strings.ToLower(strings.TrimSpace(canonicalModel)) {
+	case "hy4-preview":
+		if EffortLevelOrdinal(effort) >= EffortLevelOrdinal(EffortHigh) {
+			return QualityTierHigh, true
+		}
+		return QualityTierLow, true
+	default:
+		return "", false
+	}
+}
+
 // ModelProfileQualityTier 优先按常规 effort 口径的归一化能力分推导质量档，
 // 无 benchmark 时回退到模型族规则。估计类证据（插值/折算/校准）封顶 high：
 // premium 必须有常规口径直测证明（等该模型补测 medium/default）。
 func ModelProfileQualityTier(modelID string, family ModelFamily) QualityTier {
+	benchmark := config.ResolveModelBenchmarkProfile(modelID)
+	if benchmark.Known {
+		if tier, ok := explicitEffortQualityTier(benchmark.Profile.CanonicalModel, ""); ok {
+			return tier
+		}
+	}
 	if calib, ok := calibrateModelCapability(modelID); ok {
 		return qualityTierFromCalibration(calib)
 	}
@@ -972,6 +993,12 @@ func EffortAwareQualityAssessmentFor(modelID string, effort EffortLevel, family 
 		}
 		return EffortQualityAssessment{Tier: tier, Score: priorScore, Evidence: EvidencePrior, Known: false}
 	}
+	applyExplicitTier := func(assessment EffortQualityAssessment) EffortQualityAssessment {
+		if tier, ok := explicitEffortQualityTier(benchmark.Profile.CanonicalModel, effort); ok {
+			assessment.Tier = tier
+		}
+		return assessment
+	}
 	evidence := benchmark.Profile.BenchmarkEvidence
 
 	// 1. 该档可靠直测。
@@ -981,12 +1008,12 @@ func EffortAwareQualityAssessmentFor(modelID string, effort EffortLevel, family 
 			Class:          EvidenceDirect,
 			MeasuredEffort: effort,
 		}
-		return EffortQualityAssessment{Tier: qualityTierFromCalibration(calib), Score: score, Evidence: calib.Class, Known: true}
+		return applyExplicitTier(EffortQualityAssessment{Tier: qualityTierFromCalibration(calib), Score: score, Evidence: calib.Class, Known: true})
 	}
 	// 1b. DeepSWE 未覆盖时，用 AA coding_index 的同档数据补齐。
 	if score, ok := artificialAnalysisCodingScore(evidence, effort); ok {
 		calib := CalibrationResult{Score: score, Class: EvidenceCalibrated, MeasuredEffort: effort}
-		return EffortQualityAssessment{Tier: qualityTierFromCalibration(calib), Score: score, Evidence: calib.Class, Known: true}
+		return applyExplicitTier(EffortQualityAssessment{Tier: qualityTierFromCalibration(calib), Score: score, Evidence: calib.Class, Known: true})
 	}
 
 	// 2. 同模型曲线插值该档（估计值，封顶 high）。
@@ -996,7 +1023,7 @@ func EffortAwareQualityAssessmentFor(modelID string, effort EffortLevel, family 
 			Class:          EvidenceInterpolated,
 			MeasuredEffort: effort,
 		}
-		return EffortQualityAssessment{Tier: qualityTierFromCalibration(calib), Score: score, Evidence: calib.Class, Known: true}
+		return applyExplicitTier(EffortQualityAssessment{Tier: qualityTierFromCalibration(calib), Score: score, Evidence: calib.Class, Known: true})
 	}
 
 	// 3. 回落模型基础档。即使缺少当前档直测，也按 effort 曲线比率
@@ -1004,21 +1031,21 @@ func EffortAwareQualityAssessmentFor(modelID string, effort EffortLevel, family 
 	calib, ok := calibrateModelCapability(modelID)
 	if !ok {
 		tier := ModelProfileQualityTierFromFamily(family, modelID)
-		return EffortQualityAssessment{Tier: tier, Score: 0, Evidence: EvidencePrior, Known: false}
+		return applyExplicitTier(EffortQualityAssessment{Tier: tier, Score: 0, Evidence: EvidencePrior, Known: false})
 	}
 	if effort == "" || effort == EffortMedium {
-		return EffortQualityAssessment{Tier: qualityTierFromCalibration(calib), Score: calib.Score, Evidence: calib.Class, Known: true}
+		return applyExplicitTier(EffortQualityAssessment{Tier: qualityTierFromCalibration(calib), Score: calib.Score, Evidence: calib.Class, Known: true})
 	}
 	ratio, hasRatio := effortQualityRatioFor(effort)
 	if !hasRatio || ratio <= 0 {
-		return EffortQualityAssessment{Tier: qualityTierFromCalibration(calib), Score: calib.Score, Evidence: calib.Class, Known: true}
+		return applyExplicitTier(EffortQualityAssessment{Tier: qualityTierFromCalibration(calib), Score: calib.Score, Evidence: calib.Class, Known: true})
 	}
 	deflated := CalibrationResult{
 		Score:          calib.Score * ratio,
 		Class:          EvidenceDeflated,
 		MeasuredEffort: effort,
 	}
-	return EffortQualityAssessment{Tier: qualityTierFromCalibration(deflated), Score: deflated.Score, Evidence: deflated.Class, Known: true}
+	return applyExplicitTier(EffortQualityAssessment{Tier: qualityTierFromCalibration(deflated), Score: deflated.Score, Evidence: deflated.Class, Known: true})
 }
 
 // ── ModelProfile ──
