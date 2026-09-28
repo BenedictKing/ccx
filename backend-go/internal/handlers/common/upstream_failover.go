@@ -400,7 +400,14 @@ func buildRequestCostContext(cfgManager *config.ConfigManager, upstream *config.
 	}
 
 	// 列表成本（标价）：渠道计价币种为 CNY 等非 USD 时按全局硬编码汇率折 USD，作为基准。
-	resolved := config.ResolveUpstreamCapability(model, upstream, nil)
+	// 解析口径与调度侧一致（渠道覆盖 → 全局配置 → 内置注册表），并把标价快照固化进
+	// 成本上下文：finalize 回写 token 后按它重算，避免指标记录落入仅内置注册表的口径。
+	var globalCaps map[string]config.UpstreamModelCapability
+	if cfgManager != nil {
+		globalCaps = cfgManager.GetConfig().UpstreamModelCapabilities
+	}
+	resolved := config.ResolveUpstreamCapability(model, upstream, globalCaps)
+	ctx.ListPricing = resolved.Capability.Pricing
 	ctx.ListCostUSD = metrics.CalculateTokenCostUSDWithPricing(resolved.Capability.Pricing, 0, 0, 0, 0)
 
 	// 构建全局汇率图（用于充值/渠道币种到 USD 的折算）。

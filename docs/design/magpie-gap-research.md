@@ -26,7 +26,7 @@
 
 1. 流式故障转移与冷却行为矩阵。（2026-09-29 完成研究与第一轮实现，见 §1 实现记录；短文本 EOF 对齐为可选后续项）
 2. 额度来源、窗口和调度消费矩阵。（2026-09-29 完成研究与第二轮实现（freshness + 观测出口），见 §2；窗口键统一、Provider 结构适配、快过期优先排序待续）
-3. 模型发现、注册表和运行时能力合并矩阵。
+3. 模型发现、注册表和运行时能力合并矩阵。（2026-09-29 完成研究与第三轮实现（计费口径统一 + drift 回填上下文），见 §3；「待验证」显式状态与回填 API 为可选后续）
 4. 会话亲和与 turn 路由矩阵。
 
 ## 1. 流式故障转移与冷却
@@ -152,9 +152,24 @@ magpie 的价值主要在失败原因分级和恢复原因可解释性：credit�
 3. 外部目录不能直接作为协议能力和调度能力的事实源。
 4. manifest drift 尚未形成“审核后回填”的闭环。
 
+### 矩阵 4 结论：模型来源 × 元数据字段 × 能力过滤 × drift 行为（2026-09-29 验证）
+
+1. **调度候选的事实源是画像而非注册表**：发现（`/models`、火山管控面、内置清单兜底）为每个模型写 `ModelProfile{ProbeSuccess:true}` 行，候选池即画像；注册表（presetstore modelRegistry）只提供能力/价格元数据派生。未知模型（注册表 `Known=false`）当前**可以**被调度——能力全 false、上下文按 `UnknownSafeWindowTokens`（200K）兜底、仅请求无对应硬需求时通过。「待验证」显式状态不存在。
+2. **元数据三级合并调度侧完整**：`ResolveUpstreamCapability` 的合并优先级为渠道 `ModelCapabilities` → 全局 `cfg.UpstreamModelCapabilities` → builtin 快照 → 渠道 `DefaultCapability`。但**计费侧口径分裂**：指标记录（`calculateRecordListCost`）用 `(model, nil, nil)` 连全局配置都不读；请求成本上下文用 `(model, upstream, nil)` 缺全局，且只算 0 token 占位——落库 `ListCostUSD` 实际全部来自仅内置口径，**渠道级/全局级价格覆盖从未进过请求记录成本**。**本轮已修复**（见实现记录）。
+3. **drift 链路三处断点**（止于告警）：payload 原先只有 `{added, removed}`+channelUID，缺回填上下文（**本轮已补 baseURL/source/discoveredAt**）；发布面仅火山 `control_plane`（普通 `/models` 增减属上游正常变化，不扩是合理的）；注册表无运行时写入通道（更新只靠远程 preset 快照或发版重编译，`model-update` 技能是编译期人工流程）。
+4. **上下架 reconcile 已闭环**（k2.6→k2.7 案例）：清单消失的模型画像行由 `ReconcileModels` 单向删除，新模型发现时自动建行。
+5. **运行时学习统一在 CompatCache**（渠道×Key×模型，落盘 `.config/channel_compat.json`，TTL 24h）：上下文收紧/放宽双向合成 `EffectiveContextWindow = min(实测收紧, max(注册表, 实证棘轮, modelsAPI 声明))`；负向 trait（no_tool_call 等）硬排除、正向 verified_tool_calls 协议白名单硬排他、延迟证据软降权。
+6. 聚合报表侧（dashboard/全局统计/成本报表按模型聚合的桶）仍用仅内置口径——桶混合多渠道、无单一渠道归属，全局口径有其合理性；渠道归属明确的报表若未来需要精确口径，应改为读记录期已算好的 `ListCostUSD`。
+
+### 第三轮实现记录（计费口径统一与 drift 回填上下文）
+
+- `RequestCostContext.ListPricing` + `RequestRecord.ListPricing`（内存暂存不持久化）：请求开始时按「渠道覆盖 → 全局配置 → 内置注册表」完整口径解析标价并固化进成本上下文；finalize 回写 token 后优先用固化标价计算 `ListCostUSD`，与调度评分/请求成本读同一份价格。无固化标价时维持内置口径兜底。
+- `buildRequestCostContext` 补齐第三参数（全局 `UpstreamModelCapabilities`，经 `cfgManager.GetConfig()` 惰性读取，热重载新鲜）。
+- manifest_drift 事件 payload 补 `baseURL`/`source`/`discoveredAt`（回填上下文，告警侧只读 added/removed 向后兼容）；前端两处 payload 类型（`api-types.ts`/`admin-api.ts`）同步可选字段。
+
 ### 研究顺序
 
-先定义元数据来源优先级：真实渠道清单优先，运行时探测次之，远程目录和内置 registry 只补充元数据。未知模型可以进入“待验证”状态，但必须经过协议、上下文和兼容性过滤后才能成为调度候选。
+先定义元数据来源优先级：真实渠道清单优先，运行时探测次之，远程目录和内置 registry 只补充元数据。未知模型可以进入“待验证”状态，但必须经过协议、上下文和兼容性过滤后才能成为调度候选。（矩阵与计费口径统一已落地，2026-09-29；「待验证」显式状态与「审核后回填」API 为后续可选项——现状未知模型经能力过滤后可服务低需求请求，行为可用。）
 
 ## 4. 会话亲和与 turn 路由
 

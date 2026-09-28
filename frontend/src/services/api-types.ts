@@ -2333,6 +2333,12 @@ export interface ManifestDriftPayload {
   added?: string[]
   /** 移除模型 */
   removed?: string[]
+  /** 发现来源端点（回填上下文，可选） */
+  baseURL?: string
+  /** 清单来源（如 control_plane，可选） */
+  source?: string
+  /** 发现时间 RFC3339（可选） */
+  discoveredAt?: string
 }
 
 /** capability_drift 事件 payload */
