@@ -1665,8 +1665,33 @@ func (s *ChannelScheduler) getUpstreamByIndex(index int, kind ChannelKind) *conf
 	return s.configManager.GetUpstreamByIndex(kindAPIType(kind), index)
 }
 
+// getUpstreamByRoute 解析路由身份：优先按 ChannelUID 精确命中，UID 缺失或已不存在时
+// 回退按 kind+index。渠道被删除或列表重排后 index 会指向另一个渠道，UID 才是稳定身份
+// （亲和记录与失败路由集合都存 RouteRef，读写必须按同一规则解析）。
 func (s *ChannelScheduler) getUpstreamByRoute(route ChannelRouteRef) *config.UpstreamConfig {
+	if route.ChannelUID != "" {
+		if upstream := s.getUpstreamByUID(ChannelKind(route.Kind), route.ChannelUID); upstream != nil {
+			return upstream
+		}
+	}
 	return s.getUpstreamByIndex(route.Index, ChannelKind(route.Kind))
+}
+
+// getUpstreamByUID 按 ChannelUID 读取渠道深拷贝；kind 非空时限定在该协议内查找。
+func (s *ChannelScheduler) getUpstreamByUID(kind ChannelKind, uid string) *config.UpstreamConfig {
+	if s == nil || s.configManager == nil {
+		return nil
+	}
+	return s.configManager.GetUpstreamByUID(kindAPIType(kind), uid)
+}
+
+// channelUIDByIndex 只读返回 index 对应渠道的 ChannelUID（不克隆渠道），
+// 用于写入路由身份时补齐 UID；查不到时返回空串，调用方退回 index-only 身份。
+func (s *ChannelScheduler) channelUIDByIndex(index int, kind ChannelKind) string {
+	if s == nil || s.configManager == nil {
+		return ""
+	}
+	return s.configManager.ChannelUIDByIndex(kindAPIType(kind), index)
 }
 
 func (s *ChannelScheduler) channelInRuntimeCooldownByRoute(route ChannelRouteRef) bool {

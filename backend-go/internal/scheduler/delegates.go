@@ -42,8 +42,14 @@ func (s *ChannelScheduler) SetTraceAffinity(userID string, channelIndex int, kin
 }
 
 // SetTraceAffinityForRequirement 设置带上下文桶隔离的 Trace 亲和。
+// 路由身份必须带 ChannelUID：index 只是列表位置，渠道增删后会指向另一个渠道，
+// 只有 UID 能让「渠道删除 → RemoveByRoute(UID)」真正命中、也让读取侧按 UID 解析。
 func (s *ChannelScheduler) SetTraceAffinityForRequirement(userID string, channelIndex int, kind ChannelKind, requirement *ContextRequirement) {
-	s.SetTraceAffinityRouteForRequirement(userID, ChannelRouteRef{Kind: string(kind), Index: channelIndex}, kind, requirement)
+	route := ChannelRouteRef{Kind: string(kind), Index: channelIndex}
+	if uid := s.channelUIDByIndex(channelIndex, kind); uid != "" {
+		route.ChannelUID = uid
+	}
+	s.SetTraceAffinityRouteForRequirement(userID, route, kind, requirement)
 }
 
 func (s *ChannelScheduler) SetTraceAffinityRouteForRequirement(userID string, route ChannelRouteRef, kind ChannelKind, requirement *ContextRequirement) {

@@ -1659,6 +1659,51 @@ func (cm *ConfigManager) GetUpstreamByIndex(apiType string, index int) *Upstream
 	return (*upstreams)[index].Clone()
 }
 
+// ChannelUIDByIndex 只读返回指定协议与索引的 ChannelUID（不克隆渠道）。
+// 供热路径在写入路由身份时补齐稳定身份用：index 会随渠道增删重排，UID 不会。
+func (cm *ConfigManager) ChannelUIDByIndex(apiType string, index int) string {
+	if cm == nil {
+		return ""
+	}
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+
+	upstreams := cm.getUpstreamSliceLocked(apiType)
+	if upstreams == nil || index < 0 || index >= len(*upstreams) {
+		return ""
+	}
+	return (*upstreams)[index].ChannelUID
+}
+
+// GetUpstreamByUID 返回 ChannelUID 对应渠道的深拷贝（语义同 GetUpstreamByIndex）。
+// apiType 非空时限定在该协议内查找；为空时跨六类协议查找。未命中返回 nil。
+func (cm *ConfigManager) GetUpstreamByUID(apiType, uid string) *UpstreamConfig {
+	uid = strings.TrimSpace(uid)
+	if cm == nil || uid == "" {
+		return nil
+	}
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+
+	if strings.TrimSpace(apiType) != "" {
+		upstreams := cm.getUpstreamSliceLocked(apiType)
+		if upstreams == nil {
+			return nil
+		}
+		for i := range *upstreams {
+			if (*upstreams)[i].ChannelUID == uid {
+				return (*upstreams)[i].Clone()
+			}
+		}
+		return nil
+	}
+	_, upstream, ok := cm.findUpstreamByUIDLocked(uid)
+	if !ok {
+		return nil
+	}
+	return upstream.Clone()
+}
+
 // GetNextAPIKey 获取下一个 API 密钥（纯 failover 模式）
 // apiType: 接口类型（Messages/Responses/Gemini），用于日志标签前缀
 func (cm *ConfigManager) GetNextAPIKey(upstream *UpstreamConfig, failedKeys map[string]bool, apiType string) (string, error) {
