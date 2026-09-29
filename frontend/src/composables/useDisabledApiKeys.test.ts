@@ -29,15 +29,16 @@ const createOptions = (
   onKeysChanged?: () => Promise<void>,
 ) => {
   const channel = createChannel()
+  const emitError = vi.fn()
   const state = useDisabledApiKeys({
     apiService: apiService as ApiService,
     channel: computed(() => channel.value),
     channelType: computed(() => 'messages' as const),
-    emitError: vi.fn(),
+    emitError,
     form,
     onKeysChanged,
   })
-  return { channel, form, state }
+  return { channel, form, state, emitError }
 }
 
 describe('useDisabledApiKeys', () => {
@@ -141,6 +142,22 @@ describe('useDisabledApiKeys', () => {
     ],
   } as unknown as Channel)
 
+  const createUnifiedModelRestrictionChannel = () => {
+    const channel = createUnifiedChannel()
+    const keyModel = {
+      key: activeKey, model: 'model-x', reason: 'model_not_found', message: '', disabledAt: '', recoverAt: '',
+    }
+    const groupModel = { quotaGroup: 'coding', model: 'model-x', disabledAt: '' }
+    channel.value!.disabledKeyModels = [keyModel]
+    channel.value!.disabledGroupModels = [groupModel]
+    for (const route of channel.value!.protocolRoutes!) {
+      const model = route.kind === 'chat' ? ' MODEL-X ' : 'model-x'
+      route.disabledKeyModels = route.kind === 'messages' ? [] : [{ ...keyModel, model }]
+      route.disabledGroupModels = route.kind === 'messages' ? [] : [{ ...groupModel, model }]
+    }
+    return channel
+  }
+
   it('统一视图下删除拉黑 Key 覆盖所有包含它的协议路由', async () => {
     const removeApiKey = vi.fn().mockResolvedValue(undefined)
     const removeChatApiKey = vi.fn().mockResolvedValue(undefined)
@@ -199,6 +216,145 @@ describe('useDisabledApiKeys', () => {
     expect(restoreChatApiKey).toHaveBeenCalledWith(19, disabledKey)
     expect(restoreResponsesApiKey).toHaveBeenCalledWith(14, disabledKey)
     expect(form.apiKeys).toEqual([activeKey, disabledKey])
+  })
+
+  it('聚合渠道恢复 Key 模型限制时只请求包含该限制的全部协议路由', async () => {
+    const restoreKeyModel = vi.fn().mockResolvedValue(undefined)
+    const restoreChatKeyModel = vi.fn().mockResolvedValue(undefined)
+    const restoreResponsesKeyModel = vi.fn().mockResolvedValue(undefined)
+    const { channel, state, emitError } = createOptions({ restoreKeyModel, restoreChatKeyModel, restoreResponsesKeyModel })
+    channel.value = createUnifiedModelRestrictionChannel().value
+    const record = channel.value!.disabledKeyModels![0]
+    channel.value!.protocolRoutes![0].disabledKeyModels = [
+      { ...record, key: 'other-key' },
+      { ...record, model: 'other-model' },
+    ]
+
+    await state.restoreDisabledKeyModel(activeKey, 'model-x')
+
+    expect(restoreChatKeyModel).toHaveBeenCalledWith(19, activeKey, 'model-x')
+    expect(restoreResponsesKeyModel).toHaveBeenCalledWith(14, activeKey, 'model-x')
+    expect(restoreKeyModel).not.toHaveBeenCalled()
+    expect(emitError).not.toHaveBeenCalled()
+    expect(state.visibleDisabledKeyModels.value).toEqual([])
+    expect(state.restoringKeyModel.value).toBe('')
+  })
+
+  it('聚合渠道恢复 Key 模型部分失败时保留记录，重试兼容已恢复的路由', async () => {
+    const restoreChatKeyModel = vi.fn()
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValue(new Error('(Key test-key, 模型 model-x) 不在限制列表中'))
+    const restoreResponsesKeyModel = vi.fn()
+      .mockRejectedValueOnce(new Error('restore failed'))
+      .mockResolvedValue(undefined)
+    const { channel, state, emitError } = createOptions({ restoreChatKeyModel, restoreResponsesKeyModel })
+    channel.value = createUnifiedModelRestrictionChannel().value
+
+    await state.restoreDisabledKeyModel(activeKey, 'model-x')
+
+    expect(restoreChatKeyModel).toHaveBeenCalledTimes(1)
+    expect(restoreResponsesKeyModel).toHaveBeenCalledTimes(1)
+    expect(emitError).toHaveBeenCalledWith('restore failed')
+    expect(state.visibleDisabledKeyModels.value).toHaveLength(1)
+    expect(state.restoringKeyModel.value).toBe('')
+
+    await state.restoreDisabledKeyModel(activeKey, 'model-x')
+
+    expect(restoreChatKeyModel).toHaveBeenCalledTimes(2)
+    expect(restoreResponsesKeyModel).toHaveBeenCalledTimes(2)
+    expect(emitError).toHaveBeenCalledTimes(1)
+    expect(state.visibleDisabledKeyModels.value).toEqual([])
+  })
+
+  it('聚合渠道恢复分组模型时只请求包含该策略的全部协议路由', async () => {
+    const result = { success: true, quotaGroup: 'coding', model: 'model-x', affectedKeyCount: 2 }
+    const restoreGroupModel = vi.fn().mockResolvedValue(result)
+    const { channel, state, emitError } = createOptions({ restoreGroupModel })
+    channel.value = createUnifiedModelRestrictionChannel().value
+    channel.value!.protocolRoutes![0].disabledGroupModels = [
+      { quotaGroup: 'other-group', model: 'model-x', disabledAt: '' },
+      { quotaGroup: 'coding', model: 'other-model', disabledAt: '' },
+      { quotaGroup: '', key: 'coding', model: 'model-x', disabledAt: '' },
+    ]
+    channel.value!.protocolRoutes![1].disabledGroupModels![0].quotaGroup = ' coding '
+
+    expect(await state.restoreDisabledGroupModel(channel.value!.disabledGroupModels![0])).toEqual(result)
+
+    expect(restoreGroupModel).toHaveBeenCalledTimes(2)
+    expect(restoreGroupModel).toHaveBeenCalledWith('chat', 19, 'model-x', { quotaGroup: 'coding', apiKey: undefined })
+    expect(restoreGroupModel).toHaveBeenCalledWith('responses', 14, 'model-x', { quotaGroup: 'coding', apiKey: undefined })
+    expect(emitError).not.toHaveBeenCalled()
+    expect(state.visibleDisabledGroupModels.value).toEqual([])
+    expect(state.changingGroupModel.value).toBe('')
+  })
+
+  it('聚合渠道恢复空组模型按 Key 精确匹配，不影响其他 Key 或同名分组', async () => {
+    const restoreGroupModel = vi.fn().mockResolvedValue({ success: true, quotaGroup: '', model: 'model-x', affectedKeyCount: 1 })
+    const { channel, state, emitError } = createOptions({ restoreGroupModel })
+    channel.value = createUnifiedModelRestrictionChannel().value
+    const record = { quotaGroup: '', key: activeKey, model: 'model-x', disabledAt: '' }
+    const unrelatedRecords = [
+      { ...record, key: 'other-key' },
+      { ...record, model: 'other-model' },
+      { quotaGroup: activeKey, model: 'model-x', disabledAt: '' },
+    ]
+    channel.value!.disabledGroupModels = [record, ...unrelatedRecords]
+    for (const route of channel.value!.protocolRoutes!) {
+      route.disabledGroupModels = route.kind === 'messages' ? unrelatedRecords : [record]
+    }
+
+    await state.restoreDisabledGroupModel(record)
+
+    expect(restoreGroupModel).toHaveBeenCalledTimes(2)
+    expect(restoreGroupModel).toHaveBeenCalledWith('chat', 19, 'model-x', { quotaGroup: undefined, apiKey: activeKey })
+    expect(restoreGroupModel).toHaveBeenCalledWith('responses', 14, 'model-x', { quotaGroup: undefined, apiKey: activeKey })
+    expect(emitError).not.toHaveBeenCalled()
+    expect(state.visibleDisabledGroupModels.value).toEqual(unrelatedRecords)
+  })
+
+  it('聚合渠道恢复分组模型部分失败时保留记录并允许重试', async () => {
+    const result = { success: true, quotaGroup: 'coding', model: 'model-x', affectedKeyCount: 2 }
+    const restoreGroupModel = vi.fn()
+      .mockRejectedValueOnce(new Error('restore failed'))
+      .mockResolvedValue(result)
+    const { channel, state, emitError } = createOptions({ restoreGroupModel })
+    channel.value = createUnifiedModelRestrictionChannel().value
+    const record = channel.value!.disabledGroupModels![0]
+
+    await state.restoreDisabledGroupModel(record)
+
+    expect(restoreGroupModel).toHaveBeenCalledTimes(2)
+    expect(emitError).toHaveBeenCalledWith('restore failed')
+    expect(state.visibleDisabledGroupModels.value).toHaveLength(1)
+    expect(state.changingGroupModel.value).toBe('')
+
+    await state.restoreDisabledGroupModel(record)
+
+    expect(restoreGroupModel).toHaveBeenCalledTimes(4)
+    expect(emitError).toHaveBeenCalledTimes(1)
+    expect(state.visibleDisabledGroupModels.value).toEqual([])
+  })
+
+  it.each([
+    ['messages', 'restoreKeyModel'],
+    ['chat', 'restoreChatKeyModel'],
+    ['responses', 'restoreResponsesKeyModel'],
+    ['gemini', 'restoreGeminiKeyModel'],
+    ['images', 'restoreImagesKeyModel'],
+    ['vectors', 'restoreVectorsKeyModel'],
+  ] as const)('没有协议明细时恢复模型限制使用 %s 的真实路由和索引', async (kind, method) => {
+    const restoreKeyModel = vi.fn().mockResolvedValue(undefined)
+    const restoreGroupModel = vi.fn().mockResolvedValue({ success: true, quotaGroup: 'coding', model: 'model-x', affectedKeyCount: 1 })
+    const { channel, state, emitError } = createOptions({ [method]: restoreKeyModel, restoreGroupModel })
+    channel.value!.routeKind = kind
+    channel.value!.routeIndex = 9
+
+    await state.restoreDisabledKeyModel(activeKey, 'model-x')
+    await state.restoreDisabledGroupModel({ quotaGroup: 'coding', model: 'model-x' })
+
+    expect(restoreKeyModel).toHaveBeenCalledWith(9, activeKey, 'model-x')
+    expect(restoreGroupModel).toHaveBeenCalledWith(kind, 9, 'model-x', { quotaGroup: 'coding', apiKey: undefined })
+    expect(emitError).not.toHaveBeenCalled()
   })
 
   it('暂停成功后立即写入 enabled=false，并使用真实路由索引', async () => {

@@ -83,6 +83,17 @@ export function useDisabledApiKeys(options: DisabledApiKeyOptions) {
     }
   }
 
+  const restoreKeyModelAtRoute = (route: KeyRoute, apiKey: string, model: string): Promise<void> => {
+    switch (route.kind) {
+      case 'chat': return options.apiService.restoreChatKeyModel(route.index, apiKey, model)
+      case 'images': return options.apiService.restoreImagesKeyModel(route.index, apiKey, model)
+      case 'vectors': return options.apiService.restoreVectorsKeyModel(route.index, apiKey, model)
+      case 'gemini': return options.apiService.restoreGeminiKeyModel(route.index, apiKey, model)
+      case 'responses': return options.apiService.restoreResponsesKeyModel(route.index, apiKey, model)
+      default: return options.apiService.restoreKeyModel(route.index, apiKey, model)
+    }
+  }
+
   const removeKeyAtRoute = (route: KeyRoute, apiKey: string): Promise<void> => {
     switch (route.kind) {
       case 'chat': return options.apiService.removeChatApiKey(route.index, apiKey)
@@ -230,26 +241,20 @@ export function useDisabledApiKeys(options: DisabledApiKeyOptions) {
     if (!channel || restoringKeyModel.value) return
     restoringKeyModel.value = key
     try {
-      const id = channelId(channel)
-      switch (options.channelType.value) {
-        case 'chat':
-          await options.apiService.restoreChatKeyModel(id, apiKey, model)
-          break
-        case 'images':
-          await options.apiService.restoreImagesKeyModel(id, apiKey, model)
-          break
-        case 'vectors':
-          await options.apiService.restoreVectorsKeyModel(id, apiKey, model)
-          break
-        case 'gemini':
-          await options.apiService.restoreGeminiKeyModel(id, apiKey, model)
-          break
-        case 'responses':
-          await options.apiService.restoreResponsesKeyModel(id, apiKey, model)
-          break
-        default:
-          await options.apiService.restoreKeyModel(id, apiKey, model)
-      }
+      // 聚合记录来自各协议路由的并集，只恢复真正持有该 (Key, 模型) 限制的路由。
+      const normalizedModel = model.trim().toLowerCase()
+      const routes = (channel.protocolRoutes ?? []).filter(route =>
+        route.disabledKeyModels?.some(item => item.key === apiKey && item.model.trim().toLowerCase() === normalizedModel),
+      )
+      const targets: KeyRoute[] = routes.length > 0
+        ? routes
+        : [{ kind: channel.routeKind ?? options.channelType.value, index: channelId(channel) }]
+      const results = await Promise.allSettled(targets.map(route => restoreKeyModelAtRoute(route, apiKey, model)))
+      // 限制可能已过期或被前一次部分成功的操作移除，重试时按幂等成功处理。
+      const fatal = results.find((r): r is PromiseRejectedResult =>
+        r.status === 'rejected' && !(r.reason instanceof Error && r.reason.message.includes('不在限制列表中')),
+      )
+      if (fatal) throw fatal.reason
       localRestoredKeyModels.value = new Set([...localRestoredKeyModels.value, key])
     } catch (error) {
       options.emitError(error instanceof Error ? error.message : 'Restore failed')
@@ -322,15 +327,23 @@ export function useDisabledApiKeys(options: DisabledApiKeyOptions) {
     if (!channel || changingGroupModel.value) return
     changingGroupModel.value = key
     try {
-      const result = await options.apiService.restoreGroupModel(
-        options.channelType.value,
-        channelId(channel),
+      const routes = (channel.protocolRoutes ?? []).filter(route =>
+        route.disabledGroupModels?.some(item => groupModelPolicyKey(item) === key),
+      )
+      const targets: KeyRoute[] = routes.length > 0
+        ? routes
+        : [{ kind: channel.routeKind ?? options.channelType.value, index: channelId(channel) }]
+      const results = await Promise.allSettled(targets.map(route => options.apiService.restoreGroupModel(
+        route.kind,
+        route.index,
         record.model,
         { quotaGroup: record.quotaGroup?.trim() || undefined, apiKey: record.quotaGroup?.trim() ? undefined : record.key },
-      )
+      )))
+      const fatal = results.find((r): r is PromiseRejectedResult => r.status === 'rejected')
+      if (fatal) throw fatal.reason
       localRestoredGroupModels.value = new Set([...localRestoredGroupModels.value, key])
       localDisabledGroupModels.value = localDisabledGroupModels.value.filter(item => groupModelPolicyKey(item) !== key)
-      return result
+      return results[0]?.status === 'fulfilled' ? results[0].value : undefined
     } catch (error) {
       options.emitError(error instanceof Error ? error.message : 'Restore failed')
     } finally {
