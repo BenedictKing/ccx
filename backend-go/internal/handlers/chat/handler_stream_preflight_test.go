@@ -326,6 +326,76 @@ func TestHandleStreamSuccess_RefusalOnly(t *testing.T) {
 	}
 }
 
+// TestHandleStreamSuccess_PassthroughUnterminatedTail 透传流以未终结 data 行收尾时只补齐
+// SSE 终止符、不重发尾行正文（重发会被客户端 SSE 解析器拼到同一行，产生尾部重复输出）。
+// 覆盖尾行整体落在 preflight 预读缓冲与透传阶段跨 chunk 拼装两种送达方式。
+func TestHandleStreamSuccess_PassthroughUnterminatedTail(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	content := `data: {"choices":[{"index":0,"delta":{"role":"assistant","content":"hi"}}]}` + "\n\n"
+	finish := `data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}` + "\n\n"
+	doneNoNewline := `data: [DONE]`
+	finishNoNewline := `data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}`
+	truncated := `data: {"choices":[{"index":0,"delta":{"content":"hi"}}`
+
+	tests := []struct {
+		name string
+		body io.Reader
+		want string
+	}{
+		{
+			name: "DONE tail entirely in preflight buffer",
+			body: strings.NewReader(content + finish + doneNoNewline),
+			want: content + finish + doneNoNewline + "\n\n",
+		},
+		{
+			name: "JSON tail entirely in preflight buffer",
+			body: strings.NewReader(content + finish + finishNoNewline),
+			want: content + finish + finishNoNewline + "\n\n",
+		},
+		{
+			name: "DONE tail across one-byte chunks",
+			body: iotest.OneByteReader(strings.NewReader(content + finish + doneNoNewline)),
+			want: content + finish + doneNoNewline + "\n\n",
+		},
+		{
+			name: "JSON tail across one-byte chunks",
+			body: iotest.OneByteReader(strings.NewReader(content + finish + finishNoNewline)),
+			want: content + finish + finishNoNewline + "\n\n",
+		},
+		{
+			// 截断的 JSON 尾行不是完整事件：不补终止符，也不重发正文。
+			name: "truncated JSON tail gets no terminator",
+			body: strings.NewReader(content + truncated),
+			want: content + truncated,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"gpt-5","stream":true}`))
+			resp := &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+				Body:       io.NopCloser(tt.body),
+			}
+			t.Cleanup(func() { _ = resp.Body.Close() })
+
+			_, err := handleStreamSuccess(c, resp, "openai", &config.EnvConfig{LogLevel: "error"}, time.Now(), "gpt-5", common.StreamPreflightTimeouts{
+				FirstContentTimeoutMs: 1000,
+				InactivityTimeoutMs:   1000,
+			})
+			if err != nil {
+				t.Fatalf("stream failed: %v", err)
+			}
+			if got := w.Body.String(); got != tt.want {
+				t.Fatalf("client output mismatch:\ngot:  %q\nwant: %q", got, tt.want)
+			}
+		})
+	}
+}
+
 // TestPreflightChatStream_ContentStreamStillPasses 正常内容流不受错误检测影响。
 func TestPreflightChatStream_ContentStreamStillPasses(t *testing.T) {
 	writer, resultCh := newPreflightPipe(t, "openai")

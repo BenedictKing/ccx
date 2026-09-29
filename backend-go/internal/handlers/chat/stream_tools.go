@@ -118,6 +118,9 @@ func streamPassthrough(
 	return totalUsage, nil
 }
 
+// flushCompletePassthroughRemainder 在上游流以未终结的完整 data 行收尾时补齐 SSE 终止符。
+// 尾行正文已随原始 chunk 原样透传给客户端，这里只补 "\n\n"；若重发正文，
+// 客户端 SSE 解析器会把两份拼到同一行，产生尾部重复输出/JSON 损坏。
 func flushCompletePassthroughRemainder(c *gin.Context, flusher http.Flusher, remainder string) {
 	trimmed := strings.TrimSpace(remainder)
 	if !strings.HasPrefix(trimmed, "data: ") {
@@ -127,7 +130,7 @@ func flushCompletePassthroughRemainder(c *gin.Context, flusher http.Flusher, rem
 	if jsonData != "[DONE]" && !json.Valid([]byte(jsonData)) {
 		return
 	}
-	_, _ = fmt.Fprintf(c.Writer, "%s\n\n", trimmed)
+	_, _ = fmt.Fprintf(c.Writer, "\n\n")
 	if flusher != nil {
 		flusher.Flush()
 	}
