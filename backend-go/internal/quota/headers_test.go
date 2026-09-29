@@ -224,3 +224,33 @@ func TestGetHeaderCaseInsensitive(t *testing.T) {
 		t.Errorf("nonexistent = %q, want empty", v)
 	}
 }
+
+// 裸相对秒数（不少 provider 直接给 "60"）必须按相对时长解析。
+// 若照 epoch 秒解析会得到 1970 年，跨窗口剪除会把刚写入的有效观测判定为
+// 「窗口已翻转」并在首次读时删除，配额保护静默失效。
+func TestResetHeaderToMsBareRelativeSeconds(t *testing.T) {
+	before := time.Now()
+	got := resetHeaderToMs("60")
+	after := time.Now()
+
+	if minWant := before.Add(59 * time.Second).UnixMilli(); got < minWant {
+		t.Fatalf("resetHeaderToMs(\"60\") = %d, 早于相对 60s 下界 %d", got, minWant)
+	}
+	if maxWant := after.Add(61 * time.Second).UnixMilli(); got > maxWant {
+		t.Fatalf("resetHeaderToMs(\"60\") = %d, 晚于相对 60s 上界 %d", got, maxWant)
+	}
+	if got <= time.Now().UnixMilli() {
+		t.Fatalf("相对 60s 必须落在未来，got %d", got)
+	}
+	if got < 1_000_000_000_000 {
+		t.Fatalf("不得再返回 1970 量级的毫秒时间戳，got %d", got)
+	}
+
+	// 无窗口语义的值仍归一化为 0（0 会被上层当作"无 reset 头"）
+	if v := resetHeaderToMs("0"); v != 0 {
+		t.Fatalf("resetHeaderToMs(\"0\") = %d, want 0", v)
+	}
+	if v := resetHeaderToMs("-5"); v != 0 {
+		t.Fatalf("resetHeaderToMs(\"-5\") = %d, want 0", v)
+	}
+}

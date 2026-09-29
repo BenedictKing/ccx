@@ -180,7 +180,8 @@ func floatHeader(value string) *float64 {
 
 // resetHeaderToMs 将重置时间头值转换为毫秒时间戳。
 // 支持：Unix 秒（如 "1234567890"）、Unix 毫秒、HTTP-date（如 "Wed, 21 Oct 2015 07:28:00 GMT"）、
-// 相对秒数（如 "12s"、"90000ms" —— 部分 provider 用相对时间）。
+// 相对时长（"12s"、"90000ms"、"6m0s"）以及裸相对秒数（"60"，明显小于 epoch 量级）。
+// 0 或负数返回 0，表示该头没有可用的窗口语义。
 func resetHeaderToMs(value string) int64 {
 	if value == "" {
 		return 0
@@ -190,14 +191,24 @@ func resetHeaderToMs(value string) int64 {
 		return 0
 	}
 
-	// 尝试直接解析为数字（秒或毫秒）
+	// 尝试直接解析为数字：毫秒/秒级 epoch 时间戳，或相对秒数
 	if f, err := strconv.ParseFloat(value, 64); err == nil {
-		// 大于 10^10 视为毫秒时间戳
-		if f > 10_000_000_000 {
+		switch {
+		case f <= 0:
+			// 0/负数没有窗口语义（0 会被上层当作"无 reset 头"处理）
+			return 0
+		case f > 10_000_000_000:
+			// 毫秒时间戳
 			return int64(f)
+		case f >= 1_000_000_000:
+			// 秒级时间戳（≥ 2001-09-09）
+			return int64(f * 1000)
+		default:
+			// 明显小于 epoch 量级：按相对秒数解析（部分 provider 直接给 "60"）。
+			// 若照 epoch 秒解析会得到 1970 年，跨窗口剪除会判定该观测"窗口已翻转"
+			// 并在首次读时删除，刚拿到的有效余量观测等于白写（配额保护静默失效）。
+			return time.Now().Add(time.Duration(f * float64(time.Second))).UnixMilli()
 		}
-		// 否则视为秒级时间戳
-		return int64(f * 1000)
 	}
 
 	// 尝试 HTTP-date 格式
