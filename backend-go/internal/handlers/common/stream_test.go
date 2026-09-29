@@ -914,6 +914,36 @@ func TestHasOpenAIChatSemanticContent(t *testing.T) {
 			want:  true,
 		},
 		{
+			name:  "refusal delta",
+			event: `data: {"choices":[{"delta":{"content":null,"refusal":"I cannot help with that request."}}]}` + "\n\n",
+			want:  true,
+		},
+		{
+			name:  "refusal in later choice",
+			event: `data: {"choices":[{"delta":{}},{"delta":{"refusal":"I cannot help with that request."}}]}` + "\n\n",
+			want:  true,
+		},
+		{
+			name:  "empty refusal",
+			event: `data: {"choices":[{"delta":{"refusal":""}}]}` + "\n\n",
+			want:  false,
+		},
+		{
+			name:  "blank refusal",
+			event: `data: {"choices":[{"delta":{"refusal":" \t\n"}}]}` + "\n\n",
+			want:  false,
+		},
+		{
+			name:  "null refusal",
+			event: `data: {"choices":[{"delta":{"refusal":null}}]}` + "\n\n",
+			want:  false,
+		},
+		{
+			name:  "non-string refusal",
+			event: `data: {"choices":[{"delta":{"refusal":true}}]}` + "\n\n",
+			want:  false,
+		},
+		{
 			name:  "reasoning delta",
 			event: `data: {"choices":[{"delta":{"reasoning_content":"thinking"}}]}` + "\n\n",
 			want:  true,

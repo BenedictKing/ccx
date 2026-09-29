@@ -4,11 +4,15 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"testing/iotest"
 	"time"
 
+	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/handlers/common"
+	"github.com/gin-gonic/gin"
 )
 
 type preflightResult struct {
@@ -250,6 +254,75 @@ func TestPreflightChatStream_EmptyStreamAtEOFTriggersFailover(t *testing.T) {
 	result := waitForPreflight(t, resultCh, 300*time.Millisecond)
 	if !errors.Is(result.err, common.ErrEmptyStreamResponse) {
 		t.Fatalf("expected ErrEmptyStreamResponse, got %v", result.err)
+	}
+}
+
+func TestHandleStreamSuccess_RefusalOnly(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	refusal := `data: {"choices":[{"index":0,"delta":{"content":null,"refusal":"I cannot help with that request."}}]}` + "\n\n"
+	tests := []struct {
+		name      string
+		sse       string
+		wantEmpty bool
+	}{
+		{name: "refusal at EOF", sse: refusal},
+		{
+			name: "refusal with DONE",
+			sse: refusal + `data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}` + "\n\n" +
+				"data: [DONE]\n\n",
+		},
+		{
+			name:      "empty refusal",
+			sse:       `data: {"choices":[{"delta":{"content":null,"refusal":""}}]}` + "\n\n",
+			wantEmpty: true,
+		},
+		{
+			name:      "blank refusal",
+			sse:       `data: {"choices":[{"delta":{"content":null,"refusal":" \t\n"}}]}` + "\n\n",
+			wantEmpty: true,
+		},
+		{
+			name:      "null refusal",
+			sse:       `data: {"choices":[{"delta":{"content":null,"refusal":null}}]}` + "\n\n",
+			wantEmpty: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"gpt-5","stream":true}`))
+			resp := &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+				Body:       io.NopCloser(strings.NewReader(tt.sse)),
+			}
+			t.Cleanup(func() { _ = resp.Body.Close() })
+
+			_, err := handleStreamSuccess(c, resp, "openai", &config.EnvConfig{LogLevel: "error"}, time.Now(), "gpt-5", common.StreamPreflightTimeouts{
+				FirstContentTimeoutMs: 1000,
+				InactivityTimeoutMs:   1000,
+			})
+			if tt.wantEmpty {
+				if !errors.Is(err, common.ErrEmptyStreamResponse) {
+					t.Fatalf("expected empty stream error, got %v", err)
+				}
+				if c.Writer.Written() || w.Body.Len() != 0 {
+					t.Fatal("empty refusal must not commit a client response")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("refusal must pass preflight, got %v", err)
+			}
+			if w.Code != http.StatusOK || w.Header().Get("Content-Type") != "text/event-stream" {
+				t.Fatalf("expected SSE success, got status=%d headers=%v", w.Code, w.Header())
+			}
+			if got := w.Body.String(); got != tt.sse {
+				t.Fatalf("refusal stream changed: got %q, want %q", got, tt.sse)
+			}
+		})
 	}
 }
 

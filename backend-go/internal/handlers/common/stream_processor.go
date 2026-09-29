@@ -545,6 +545,9 @@ func HasOpenAIChatSemanticContent(event string) bool {
 			if content, _ := delta["content"].(string); !IsEffectivelyEmptyStreamText(content) {
 				return true
 			}
+			if firstNonBlankString(delta, "refusal") {
+				return true
+			}
 			reasoning, _ := delta["reasoning_content"].(string)
 			if reasoning == "" {
 				reasoning, _ = delta["reasoning"].(string)
