@@ -357,6 +357,40 @@ describe('useDisabledApiKeys', () => {
     expect(emitError).not.toHaveBeenCalled()
   })
 
+  it('统一视图下禁用分组模型覆盖所有持有该 Key 的协议路由', async () => {
+    const disableGroupModel = vi.fn().mockResolvedValue({ success: true, quotaGroup: 'coding', model: 'model-x', affectedKeyCount: 3 })
+    const { channel, state, emitError } = createOptions({ disableGroupModel })
+    channel.value = createUnifiedChannel().value
+
+    await state.disableGroupModel(activeKey, 'model-x')
+
+    expect(disableGroupModel).toHaveBeenCalledTimes(3)
+    expect(disableGroupModel).toHaveBeenCalledWith('messages', 3, activeKey, 'model-x')
+    expect(disableGroupModel).toHaveBeenCalledWith('chat', 19, activeKey, 'model-x')
+    expect(disableGroupModel).toHaveBeenCalledWith('responses', 14, activeKey, 'model-x')
+    expect(emitError).not.toHaveBeenCalled()
+    expect(state.visibleDisabledGroupModels.value).toEqual([
+      { quotaGroup: 'coding', key: activeKey, model: 'model-x', disabledAt: expect.any(String) },
+    ])
+  })
+
+  it('Key 只属于非主协议路由时，禁用分组模型打在该路由而非主路由', async () => {
+    // 旧实现固定打「主路由」：后端按渠道解析 Key 所属配额组，Key 不在该渠道会直接
+    // 报「API Key 不属于该渠道」，暂存条目静默丢失；其它协议也不受限制。
+    const disableGroupModel = vi.fn().mockResolvedValue({ success: true, quotaGroup: '', model: 'model-x', affectedKeyCount: 1 })
+    const { channel, state, emitError } = createOptions({ disableGroupModel })
+    const unified = createUnifiedChannel().value!
+    unified.protocolRoutes![0].apiKeys = []
+    unified.protocolRoutes![2].apiKeys = []
+    channel.value = unified
+
+    await state.disableGroupModel(activeKey, 'model-x')
+
+    expect(disableGroupModel).toHaveBeenCalledTimes(1)
+    expect(disableGroupModel).toHaveBeenCalledWith('chat', 19, activeKey, 'model-x')
+    expect(emitError).not.toHaveBeenCalled()
+  })
+
   it('暂停成功后立即写入 enabled=false，并使用真实路由索引', async () => {
     const suspendApiKey = vi.fn().mockResolvedValue(undefined)
     const form: TestForm = { apiKeys: [activeKey] }

@@ -42,12 +42,14 @@ export function useDisabledApiKeys(options: DisabledApiKeyOptions) {
   const keyModelKey = (apiKey: string, model: string) => `${apiKey}|${model}`
   const channelId = (channel: Channel) => channel.routeIndex ?? channel.index
 
+  // 统一视图下的协议路由明细（各路由的 Key 集合）。没有协议明细或 Key 不在任何
+  // 路由上时回退到渠道自身的 routeKind/routeIndex（与 restore* 的兜底规则一致）。
   const keyRoutes = (channel: Channel, apiKey: string): KeyRoute[] => {
     const routes = (channel.protocolRoutes ?? []).filter(route => route.apiKeys?.includes(apiKey))
     if (routes.length > 0) {
       return routes.map(route => ({ kind: route.kind, index: route.index }))
     }
-    return [{ kind: options.channelType.value, index: channelId(channel) }]
+    return [{ kind: channel.routeKind ?? options.channelType.value, index: channelId(channel) }]
   }
 
   const suspendKeyAtRoute = (route: KeyRoute, apiKey: string): Promise<void> => {
@@ -263,6 +265,10 @@ export function useDisabledApiKeys(options: DisabledApiKeyOptions) {
     }
   }
 
+  // 统一视图下 Key×分组模型限制按协议路由并集展示，禁用必须落到所有持有该 Key 的
+  // 路由上：后端 DisableGroupModel 按「渠道内 Key 所属配额组」落库，Key 不在该渠道
+  // 会直接报「API Key 不属于该渠道」，只打主路由会让其它协议继续放行该模型。
+  // 路由并集语义与 restoreDisabledGroupModel 一致（复用 keyRoutes）。
   // channelSnapshot：flush 发生在弹窗关闭后，此时父组件可能已清空 editingChannel
   // （保存成功 → closeEditChannelModal 同步置 null，而本 watch 异步触发）。
   // 传入打开时的渠道快照保证 disable 请求仍携带正确的 routeKind/routeIndex。
@@ -272,12 +278,18 @@ export function useDisabledApiKeys(options: DisabledApiKeyOptions) {
     if (!channel || !normalizedModel || changingGroupModel.value) return
     changingGroupModel.value = keyModelKey(apiKey, normalizedModel)
     try {
-      const result = await options.apiService.disableGroupModel(
-        channelSnapshot?.routeKind ?? options.channelType.value,
-        channelId(channel),
-        apiKey,
-        normalizedModel,
+      // 按并集逐个路由提交：单条路由失败即整体失败（避免"部分协议仍放行"被当成成功）。
+      const targets = keyRoutes(channel, apiKey)
+      const settled = await Promise.allSettled(
+        targets.map(route => options.apiService.disableGroupModel(route.kind, route.index, apiKey, normalizedModel)),
       )
+      const fatal = settled.find((r): r is PromiseRejectedResult => r.status === 'rejected')
+      if (fatal) throw fatal.reason
+      const firstOk = settled.find(
+        (r): r is PromiseFulfilledResult<Awaited<ReturnType<ApiService['disableGroupModel']>>> => r.status === 'fulfilled',
+      )
+      if (!firstOk) return
+      const result = firstOk.value
       const record = { quotaGroup: result.quotaGroup, key: apiKey, model: result.model, disabledAt: new Date().toISOString() }
       const policyKey = groupModelPolicyKey(record)
       localDisabledGroupModels.value = [
