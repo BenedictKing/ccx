@@ -163,7 +163,7 @@ func preflightGeminiStream(resp *http.Response, upstreamType string, timeouts co
 			}
 			// 思考类增量对 Gemini 客户端是可交付内容（转换后为 thought part），
 			// 计入语义内容，避免纯思考流在预检中被判空。
-			if hasGeminiDeliverableThinkingContent(jsonData, line, upstreamType) {
+			if hasGeminiDeliverableThinkingContent(jsonData, upstreamType) {
 				return true
 			}
 			// 转换后格式检测（Claude/OpenAI/Responses → Gemini）
@@ -234,8 +234,9 @@ func preflightGeminiStream(resp *http.Response, upstreamType string, timeouts co
 		allLines = append(allLines, completeLines...)
 
 		// 流内错误事件检测：HTTP 200 但 data 里携带错误对象（中转站/原生错误形态）。
-		// 拉黑类错误返回 ErrBlacklistKey，其余错误按空响应语义进入 failover，
-		// 对齐 messages/responses 的预检行为，不再原样透传给客户端。
+		// 拉黑类错误返回 ErrBlacklistKey；请求侧确定性错误（invalid_request /
+		// 上下文超长等）返回终态错误，不做逐 Key 重放；其余错误按空响应语义
+		// 进入 failover，对齐 messages/responses 的预检行为，不再原样透传给客户端。
 		for _, line := range completeLines {
 			if !strings.HasPrefix(line, "data:") {
 				continue
@@ -244,6 +245,9 @@ func preflightGeminiStream(resp *http.Response, upstreamType string, timeouts co
 			if reason, msg, recoverAt, isErr := common.DetectStreamDataError(jsonData); isErr {
 				if reason != "" {
 					return nil, chunkChan, bodyErrChan, &common.ErrBlacklistKey{Reason: reason, Message: msg, RecoverAt: recoverAt}
+				}
+				if rejected := common.RequestSideStreamError(jsonData); rejected != nil {
+					return nil, chunkChan, bodyErrChan, rejected
 				}
 				return nil, chunkChan, bodyErrChan, fmt.Errorf("%w: %s", common.ErrEmptyStreamResponse, msg)
 			}
@@ -295,32 +299,61 @@ func preflightGeminiStream(resp *http.Response, upstreamType string, timeouts co
 	}
 }
 
-// hasGeminiDeliverableThinkingContent 检测转换上游的思考类增量。
-// Gemini 客户端可把思考交付为 thought part（含纯思考流），因此思考计入
-// 语义内容，避免思考流在预检空判定中被误判。
-func hasGeminiDeliverableThinkingContent(jsonData string, line string, upstreamType string) bool {
+// hasGeminiDeliverableThinkingContent 检测转换上游**确实会被转换器交付**的思考类增量。
+// Gemini 客户端可把思考交付为 thought part（含纯思考流），因此这类增量计入语义内容，
+// 避免思考流在预检空判定中被误判。
+//
+// 判定必须与三个转换器的实现严格一致：只有真正写出 thought part 的事件才算可交付，
+// 否则预检会放行并写出空 200，取代本应发生的 failover。
+//   - claude:    streamClaudeToGemini 只处理 content_block_delta.thinking_delta 且 thinking 非空
+//   - openai:    streamOpenAIToGemini 只处理 delta.reasoning_content / delta.reasoning 非空
+//   - responses: ConvertResponsesToGeminiStream 只处理 response.reasoning_summary_text.delta 且 text 非空
+//
+// 反例（转换器零输出，不得计入）：redacted_thinking 的 content_block_start（无正文）、
+// response.reasoning_summary_part.added/done、response.reasoning_summary_text.done、
+// response.reasoning_text.delta/done 等完成态或结构态事件。
+func hasGeminiDeliverableThinkingContent(jsonData string, upstreamType string) bool {
 	switch upstreamType {
 	case "claude":
-		return strings.Contains(line, "thinking_delta") || strings.Contains(line, "redacted_thinking")
-	case "openai":
-		var event map[string]interface{}
+		var event struct {
+			Type  string `json:"type"`
+			Delta struct {
+				Type     string `json:"type"`
+				Thinking string `json:"thinking"`
+			} `json:"delta"`
+		}
 		if err := json.Unmarshal([]byte(jsonData), &event); err != nil {
 			return false
 		}
-		choices, _ := event["choices"].([]interface{})
-		if len(choices) == 0 {
+		return event.Type == "content_block_delta" &&
+			event.Delta.Type == "thinking_delta" &&
+			event.Delta.Thinking != ""
+	case "openai":
+		var event struct {
+			Choices []struct {
+				Delta struct {
+					ReasoningContent string `json:"reasoning_content"`
+					Reasoning        string `json:"reasoning"`
+				} `json:"delta"`
+			} `json:"choices"`
+		}
+		if err := json.Unmarshal([]byte(jsonData), &event); err != nil {
 			return false
 		}
-		choice, _ := choices[0].(map[string]interface{})
-		delta, _ := choice["delta"].(map[string]interface{})
-		if rc, ok := delta["reasoning_content"].(string); ok && rc != "" {
-			return true
+		if len(event.Choices) == 0 {
+			return false
 		}
-		if r, ok := delta["reasoning"].(string); ok && r != "" {
-			return true
-		}
+		delta := event.Choices[0].Delta
+		return delta.ReasoningContent != "" || delta.Reasoning != ""
 	case "responses":
-		return strings.Contains(line, "reasoning_summary") || strings.Contains(line, "response.reasoning")
+		var event struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		}
+		if err := json.Unmarshal([]byte(jsonData), &event); err != nil {
+			return false
+		}
+		return event.Type == "response.reasoning_summary_text.delta" && event.Text != ""
 	}
 	return false
 }

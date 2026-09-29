@@ -185,10 +185,12 @@ func applyProviderQualityReasoningControl(body map[string]any, serviceType, mode
 	effort := lowestProviderQualityReasoningEffort(resolved.Capability.ReasoningEfforts)
 	switch serviceType {
 	case "claude", "messages":
-		switch resolved.Capability.ThinkingMode {
-		case "adaptive_only", "adaptive_always_on":
+		if config.ThinkingModeRejectsManualControl(resolved.Capability.ThinkingMode) {
 			// adaptive_only 与 adaptive_always_on 模型不接受手动 enabled/disabled，沿用上游默认。
+			// 与 rewriteOutboundEffort 共用同一判定，避免两处漂移。
 			return
+		}
+		switch resolved.Capability.ThinkingMode {
 		case "thinking":
 			body["thinking"] = map[string]any{"type": "enabled", "effort": effort}
 		default:

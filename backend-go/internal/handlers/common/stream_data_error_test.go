@@ -146,3 +146,109 @@ func TestClassifyPreflightStreamError(t *testing.T) {
 		})
 	}
 }
+
+func TestRequestSideStreamError(t *testing.T) {
+	tests := []struct {
+		name     string
+		jsonData string
+		wantHit  bool
+		wantType string
+		wantCode string
+	}{
+		{
+			name:     "invalid_request_error 类型命中",
+			jsonData: `{"error":{"type":"invalid_request_error","message":"thinking is not supported for this model"}}`,
+			wantHit:  true,
+			wantType: "invalid_request_error",
+		},
+		{
+			name:     "invalid_request 类型命中",
+			jsonData: `{"type":"error","error":{"type":"invalid_request","message":"bad payload"}}`,
+			wantHit:  true,
+			wantType: "invalid_request",
+		},
+		{
+			name:     "context_length_exceeded 字符串码命中",
+			jsonData: `{"error":{"code":"context_length_exceeded","message":"too many tokens"}}`,
+			wantHit:  true,
+			wantCode: "context_length_exceeded",
+		},
+		{
+			name:     "responses 失败事件里的请求侧错误命中",
+			jsonData: `{"type":"response.failed","response":{"error":{"type":"invalid_request_error","message":"bad input"}}}`,
+			wantHit:  true,
+			wantType: "invalid_request_error",
+		},
+		{
+			name:     "model_not_found 不命中（其他渠道可能提供该模型）",
+			jsonData: `{"error":{"type":"model_not_found","message":"model does not exist"}}`,
+			wantHit:  false,
+		},
+		{
+			name:     "unsupported_parameter 不命中（渠道兼容差异应继续 failover）",
+			jsonData: `{"error":{"type":"unsupported_parameter","message":"unknown field foo"}}`,
+			wantHit:  false,
+		},
+		{
+			name:     "余额类错误不命中（拉黑路径优先）",
+			jsonData: `{"error":{"type":"insufficient_balance","message":"balance exhausted"}}`,
+			wantHit:  false,
+		},
+		{
+			name:     "数字错误码不命中",
+			jsonData: `{"error":{"code":503,"message":"overloaded"}}`,
+			wantHit:  false,
+		},
+		{
+			name:     "普通内容 chunk 不命中",
+			jsonData: `{"choices":[{"delta":{"content":"hi"}}]}`,
+			wantHit:  false,
+		},
+		{
+			name:     "[DONE] 不命中",
+			jsonData: `[DONE]`,
+			wantHit:  false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := RequestSideStreamError(tt.jsonData)
+			if tt.wantHit {
+				if got == nil {
+					t.Fatalf("expected request-side error, got nil")
+				}
+				if got.Type != tt.wantType {
+					t.Fatalf("type = %q, want %q", got.Type, tt.wantType)
+				}
+				if got.Code != tt.wantCode {
+					t.Fatalf("code = %q, want %q", got.Code, tt.wantCode)
+				}
+				if got.Error() == "" {
+					t.Fatal("request-side error must carry a message")
+				}
+				return
+			}
+			if got != nil {
+				t.Fatalf("expected nil (must keep failing over), got %v", got)
+			}
+		})
+	}
+}
+
+func TestClassifyPreflightStreamErrorKeepsRequestRejectedTerminal(t *testing.T) {
+	rejected := &UpstreamRequestRejectedError{Type: "invalid_request_error", Message: "bad input"}
+
+	got := ClassifyPreflightStreamError(rejected)
+	if got != rejected {
+		t.Fatalf("请求侧确定性错误必须原样透传（终态），got %v", got)
+	}
+	if errors.Is(got, ErrEmptyStreamResponse) {
+		t.Fatal("请求侧确定性错误不得被归入空响应家族（会被逐 Key 重放并累计渠道熔断）")
+	}
+
+	// 裸错误仍归入 failover 家族，保持 a6074e2c 的行为
+	plain := ClassifyPreflightStreamError(errors.New("read: connection reset by peer"))
+	if !errors.Is(plain, ErrEmptyStreamResponse) {
+		t.Fatalf("裸传输错误应归入空响应家族，got %v", plain)
+	}
+}

@@ -1842,6 +1842,16 @@ func TryUpstreamWithAllKeys(
 					RequestLogf(c, "[%s-Cancel] 请求已取消，停止渠道 failover", apiType)
 					// 完成日志记录（客户端取消）
 					CompleteLog(channelLogStore, metricsKey, logRequestID, http.StatusOK, false, "client canceled", isRetryAttempt)
+				} else if rejected, ok := err.(*UpstreamRequestRejectedError); ok {
+					// 上游以流内错误对象明确拒绝本次请求（invalid_request / 上下文超长等
+					// 请求侧确定性错误）：与 HTTP 4xx 的「非 failover 错误」分支同一语义，
+					// 问题出在请求本身而非渠道-模型健康度。不逐 Key/渠道重放，也不做渠道级
+					// 惩罚（不标记 Key/URL 失败、不计模型级熔断），直接返回真实错误。
+					metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, metrics.FailureClassNonRetryable)
+					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, executionKind)
+					CompleteLog(channelLogStore, metricsKey, logRequestID, http.StatusBadRequest, false, rejected.Error(), isRetryAttempt)
+					RequestLogf(c, "[%s-RequestRejected] 上游以流内错误拒绝请求 (Key: %s): %s", apiType, utils.MaskAPIKey(apiKey), rejected.Error())
+					return true, "", 0, nil, usage, err
 				} else if errors.Is(err, ErrEmptyStreamResponse) || errors.Is(err, ErrInvalidResponseBody) || errors.Is(err, ErrEmptyNonStreamResponse) || errors.Is(err, ErrStreamFirstContentTimeout) || errors.Is(err, ErrStreamStalled) {
 					// 空响应（流式 / 非流式）或无效响应体（如 HTML）或流式首字超时/断流：Header 未发送，可安全 failover
 					retryKey := currentBaseURL + "|" + apiKey
@@ -2741,7 +2751,9 @@ func rewriteOutboundEffort(body []byte, target *autopilot.ResolvedRouteTarget, u
 		return body, false
 	}
 	cap := config.ResolveUpstreamCapability(target.Model, upstream, nil)
-	if cap.Known && cap.Capability.ThinkingMode == "adaptive_only" {
+	if cap.Known && config.ThinkingModeRejectsManualControl(cap.Capability.ThinkingMode) {
+		// adaptive_only / adaptive_always_on 由上游自行决定思考深度，不接受手动
+		// enabled/disabled：注入 thinking 参数会与上游策略冲突。
 		return body, false
 	}
 	style := effortInjectionStyle(kind, upstream)

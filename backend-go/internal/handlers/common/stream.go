@@ -33,6 +33,38 @@ var ErrStreamStalled = errors.New("stream stalled after first content")
 // Header 已发送，不能安全拼接 failover；用于中止当前流并记录渠道故障
 var ErrStreamPostCommitStalled = errors.New("stream stalled after response committed")
 
+// UpstreamRequestRejectedError 上游以流内错误对象明确拒绝本次请求
+// （invalid_request_error / 上下文超长 / 参数非法等请求侧确定性错误）。
+// 与 HTTP 4xx 的「非 failover 错误」分支同一语义：问题在请求本身，
+// 换 Key、渠道、模型都不会让同一个畸形请求成功，因此不应惩罚渠道，
+// failover 执行器也不应把它当作可重试的空响应逐 Key 重放。
+type UpstreamRequestRejectedError struct {
+	Type    string // 上游错误类型（如 invalid_request_error）
+	Code    string // 上游错误码（如 context_length_exceeded）
+	Message string
+}
+
+func (e *UpstreamRequestRejectedError) Error() string {
+	switch {
+	case e == nil:
+		return "upstream rejected the request"
+	case strings.TrimSpace(e.Message) != "":
+		return fmt.Sprintf("upstream rejected the request (%s): %s", e.reasonLabel(), e.Message)
+	default:
+		return fmt.Sprintf("upstream rejected the request (%s)", e.reasonLabel())
+	}
+}
+
+func (e *UpstreamRequestRejectedError) reasonLabel() string {
+	if strings.TrimSpace(e.Type) != "" {
+		return e.Type
+	}
+	if strings.TrimSpace(e.Code) != "" {
+		return e.Code
+	}
+	return "request_error"
+}
+
 func streamPreflightEmptyError(preflight *StreamPreflightResult) error {
 	if preflight == nil || strings.TrimSpace(preflight.Diagnostic) == "" {
 		return ErrEmptyStreamResponse

@@ -916,6 +916,18 @@ func resolveUpstreamCapabilityExact(requestModel, actualModel string, upstream *
 	return ResolvedUpstreamCapability{RequestModel: requestModel, ActualModel: actualModel}
 }
 
+// ThinkingModeRejectsManualControl 判定该 thinkingMode 是否不接受手动 enabled/disabled
+// 控制：adaptive_only / adaptive_always_on 由上游自行决定思考深度，注入 thinking 参数
+// 会与上游策略冲突（严格上游直接 400）。所有出站注入点必须共用本判定，避免两处漂移。
+func ThinkingModeRejectsManualControl(mode string) bool {
+	switch strings.TrimSpace(mode) {
+	case "adaptive_only", "adaptive_always_on":
+		return true
+	default:
+		return false
+	}
+}
+
 // digitBoundaryDotDash 分别匹配数字间的点号与连字符，用于生成命名变体。
 var (
 	digitBoundaryDot  = regexp.MustCompile(`(\d)\.(\d)`)

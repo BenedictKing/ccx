@@ -242,14 +242,18 @@ func preflightChatStream(resp *http.Response, upstreamType string, timeouts comm
 			wasPendingToolCall := hasPendingToolCall()
 			lineSet := []string{line}
 			// 流内错误事件检测：HTTP 200 但 data 里携带错误对象（中转站常见）。
-			// 拉黑类错误返回 ErrBlacklistKey，其余错误按空响应语义进入 failover，
-			// 对齐 messages/responses 的预检行为，不再原样透传给客户端。
+			// 拉黑类错误返回 ErrBlacklistKey；请求侧确定性错误（invalid_request /
+			// 上下文超长等）返回终态错误，不做逐 Key 重放；其余错误按空响应语义
+			// 进入 failover，对齐 messages/responses 的预检行为，不再原样透传给客户端。
 			if strings.HasPrefix(line, "data:") {
 				jsonData := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
 				if reason, msg, recoverAt, isErr := common.DetectStreamDataError(jsonData); isErr {
 					clearRemainder()
 					if reason != "" {
 						return result, chunkChan, bodyErrChan, &common.ErrBlacklistKey{Reason: reason, Message: msg, RecoverAt: recoverAt}
+					}
+					if rejected := common.RequestSideStreamError(jsonData); rejected != nil {
+						return result, chunkChan, bodyErrChan, rejected
 					}
 					return result, chunkChan, bodyErrChan, fmt.Errorf("%w: %s", common.ErrEmptyStreamResponse, msg)
 				}
