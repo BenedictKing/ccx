@@ -49,6 +49,9 @@ func BuildChannelView(up config.UpstreamConfig, index int) gin.H {
 		"supportedModels":               up.SupportedModels,
 		"routePrefix":                   up.RoutePrefix,
 		"disabledApiKeys":               up.DisabledAPIKeys,
+		// Key/分组级模型限制记录：编辑对话框回读展示（"保存后记录消失"即漏登记所致），缺一不可
+		"disabledKeyModels":             up.DisabledKeyModels,
+		"disabledGroupModels":           up.DisabledGroupModels,
 		"autoManaged":                   up.AutoManaged,
 		"autoManagedAt":                 up.AutoManagedAt,
 		"autoManagedKind":               up.AutoManagedKind,

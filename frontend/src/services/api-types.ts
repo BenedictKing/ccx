@@ -350,6 +350,8 @@ export interface ChannelProtocolRoute {
   apiKeys?: string[]
   apiKeyConfigs?: APIKeyConfig[]
   disabledApiKeys?: DisabledKeyInfo[]
+  disabledKeyModels?: DisabledKeyModelInfo[]
+  disabledGroupModels?: DisabledGroupModelInfo[]
   supportedModels?: string[]
   modelInventoryKnown?: boolean
   discoveredModels?: string[]

@@ -258,14 +258,17 @@ export function useDisabledApiKeys(options: DisabledApiKeyOptions) {
     }
   }
 
-  const disableGroupModel = async (apiKey: string, model: string) => {
-    const channel = options.channel.value
+  // channelSnapshot：flush 发生在弹窗关闭后，此时父组件可能已清空 editingChannel
+  // （保存成功 → closeEditChannelModal 同步置 null，而本 watch 异步触发）。
+  // 传入打开时的渠道快照保证 disable 请求仍携带正确的 routeKind/routeIndex。
+  const disableGroupModel = async (apiKey: string, model: string, channelSnapshot?: Channel | null) => {
+    const channel = channelSnapshot ?? options.channel.value
     const normalizedModel = model.trim()
     if (!channel || !normalizedModel || changingGroupModel.value) return
     changingGroupModel.value = keyModelKey(apiKey, normalizedModel)
     try {
       const result = await options.apiService.disableGroupModel(
-        options.channelType.value,
+        channelSnapshot?.routeKind ?? options.channelType.value,
         channelId(channel),
         apiKey,
         normalizedModel,
@@ -304,11 +307,12 @@ export function useDisabledApiKeys(options: DisabledApiKeyOptions) {
   }
 
   // 渠道主保存成功后调用：逐个提交暂存的排除并清空暂存（单个失败仅报错，不阻断其余）。
-  const flushStagedGroupModelDisables = async () => {
+  // channelSnapshot 见 disableGroupModel 的说明。
+  const flushStagedGroupModelDisables = async (channelSnapshot?: Channel | null) => {
     const staged = pendingGroupModelDisables.value
     pendingGroupModelDisables.value = []
     for (const item of staged) {
-      await disableGroupModel(item.key, item.model)
+      await disableGroupModel(item.key, item.model, channelSnapshot)
     }
   }
 

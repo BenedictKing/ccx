@@ -338,6 +338,26 @@ describe('useDisabledApiKeys', () => {
     expect(state.visibleDisabledGroupModels.value).toHaveLength(1)
   })
 
+  it('flush 时渠道已清空仍按快照发出 disable 请求', async () => {
+    // 复现保存链路：saveChannel 成功 → closeEditChannelModal 同步置空 editingChannel，
+    // watch(show) 才异步 flush——不传快照时请求会被静默吞掉（暂存无声丢失）。
+    const disableGroupModel = vi.fn().mockResolvedValue({ success: true, quotaGroup: '', model: 'model-x', affectedKeyCount: 1 })
+    const { channel, state } = createOptions({ disableGroupModel })
+    const snapshot = {
+      ...channel.value!,
+      routeKind: 'chat' as const,
+      routeIndex: 7,
+    }
+
+    state.stageGroupModelDisable('key-a', 'model-x')
+    channel.value = null
+    await state.flushStagedGroupModelDisables(snapshot)
+
+    expect(disableGroupModel).toHaveBeenCalledTimes(1)
+    expect(disableGroupModel).toHaveBeenCalledWith('chat', 7, 'key-a', 'model-x')
+    expect(state.pendingGroupModelDisables.value).toEqual([])
+  })
+
   it('聚合渠道恢复 Key 时覆盖拥有该 Key 的全部协议路由', async () => {
     const resumeApiKey = vi.fn().mockResolvedValue(undefined)
     const resumeChatApiKey = vi.fn().mockResolvedValue(undefined)

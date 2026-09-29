@@ -625,6 +625,7 @@
                     item-title="title"
                     item-value="value"
                     :return-object="false"
+                    auto-select-first
                     :label="t('channelCard.groupModelModel')"
                     :placeholder="t('channelCard.groupModelModelPlaceholder')"
                     variant="outlined"
@@ -632,7 +633,8 @@
                     clearable
                     @update:model-value="submitGroupModelDisable"
                   />
-                  <!-- 无确认按钮：模型选定即暂存排除，随渠道主保存提交；误排可在此撤销或保存后经记录恢复。 -->
+                  <!-- 无确认按钮：模型选定即暂存排除，随渠道主保存提交；误排可在此撤销或保存后经记录恢复。
+                       auto-select-first：回车优先选中列表匹配项的完整模型名，避免把输入过程中的部分文本（如 "g"/"ge"）暂存成误条目。 -->
                   <div class="text-caption text-medium-emphasis mt-2">{{ t('channelCard.groupModelInlineHint') }}</div>
                   <div v-if="pendingDisablesForEditingKey.length" class="d-flex flex-wrap ga-2 mt-2">
                     <v-chip

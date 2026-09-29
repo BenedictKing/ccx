@@ -95,3 +95,23 @@ func TestBuildChannelViewExposesBillingAndGroupMultiplierFields(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildChannelViewExposesKeyModelRestrictionRecords(t *testing.T) {
+	// Key/分组级模型限制记录需回读展示：漏登记会表现为"保存成功但重开记录消失"
+	up := config.UpstreamConfig{
+		Name: "ch",
+		DisabledKeyModels: []config.DisabledKeyModelInfo{
+			{Key: "sk-a", Model: "model-x", DisabledAt: "2026-09-29T00:00:00Z"},
+		},
+		DisabledGroupModels: []config.DisabledGroupModelInfo{
+			{QuotaGroup: "coding", Model: "model-y", DisabledAt: "2026-09-29T00:00:00Z"},
+		},
+	}
+	view := BuildChannelView(up, 0)
+	if _, ok := view["disabledKeyModels"]; !ok {
+		t.Fatal("渠道视图应包含 disabledKeyModels（Key 级临时限制记录回读）")
+	}
+	if _, ok := view["disabledGroupModels"]; !ok {
+		t.Fatal("渠道视图应包含 disabledGroupModels（分组排除记录回读）")
+	}
+}

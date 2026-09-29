@@ -9,9 +9,10 @@ import type {
   ChannelRecentActivity,
   ChannelStatus,
   ChannelsResponse,
+  DisabledKeyModelInfo,
 } from '@/services/api'
 import { freezeImmutableFields } from './channelMerge'
-import { hasOnlyDisabledChannelApiKeys } from './channelApiKeys'
+import { groupModelPolicyKey, hasOnlyDisabledChannelApiKeys } from './channelApiKeys'
 
 export type LlmChannelKind = 'messages' | 'chat' | 'responses' | 'gemini'
 
@@ -274,6 +275,12 @@ const buildProtocolRoutes = (channels: Partial<Record<LlmChannelKind, RoutedChan
       disabledApiKeys: channel.disabledApiKeys == null
         ? undefined
         : channel.disabledApiKeys.map(item => ({ ...item })),
+      disabledKeyModels: channel.disabledKeyModels == null
+        ? undefined
+        : channel.disabledKeyModels.map(item => ({ ...item })),
+      disabledGroupModels: channel.disabledGroupModels == null
+        ? undefined
+        : channel.disabledGroupModels.map(item => ({ ...item })),
       supportedModels: channel.supportedModels == null ? undefined : [...channel.supportedModels],
     }]
   })
@@ -305,10 +312,24 @@ const mergeAccountCredentials = (channels: Partial<Record<LlmChannelKind, Routed
       .flatMap(channel => channel.disabledApiKeys ?? [])
       .map(item => [item.key, item]),
   )
+  // Key/分组级模型限制记录可能落在任意协议路由上，聚合视图需并集去重后展示
+  const keyModelKeyOf = (item: DisabledKeyModelInfo) => `${item.key}|${item.model.trim().toLowerCase()}`
+  const disabledKeyModelByKey = new Map(
+    Object.values(channels)
+      .flatMap(channel => channel.disabledKeyModels ?? [])
+      .map(item => [keyModelKeyOf(item), item]),
+  )
+  const disabledGroupModelByPolicy = new Map(
+    Object.values(channels)
+      .flatMap(channel => channel.disabledGroupModels ?? [])
+      .map(item => [groupModelPolicyKey(item), item]),
+  )
   return {
     apiKeys,
     apiKeyConfigs: apiKeyConfigs.length > 0 ? apiKeyConfigs : undefined,
     disabledApiKeys: disabledByKey.size > 0 ? Array.from(disabledByKey.values()) : undefined,
+    disabledKeyModels: disabledKeyModelByKey.size > 0 ? Array.from(disabledKeyModelByKey.values()) : undefined,
+    disabledGroupModels: disabledGroupModelByPolicy.size > 0 ? Array.from(disabledGroupModelByPolicy.values()) : undefined,
   }
 }
 
