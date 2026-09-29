@@ -249,15 +249,15 @@ func (m *Manager) SnapshotAll() []*ChannelState {
 		return nil
 	}
 	nowMs := time.Now().UnixMilli()
-	for uid := range m.states {
-		m.pruneIfExpired(uid, nowMs)
-	}
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	// 剪除与拷贝在同一写锁内完成，避免遍历期间新增渠道或写回陈旧观测。
+	m.mu.Lock()
 	result := make([]*ChannelState, 0, len(m.states))
 	for _, state := range m.states {
+		state.pruneExpiredValues(nowMs)
 		result = append(result, state.DeepCopy())
 	}
+	m.mu.Unlock()
+
 	sort.Slice(result, func(i, j int) bool {
 		return result[i].ChannelUID < result[j].ChannelUID
 	})

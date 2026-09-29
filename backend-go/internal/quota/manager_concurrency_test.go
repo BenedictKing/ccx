@@ -3,6 +3,7 @@ package quota
 import (
 	"errors"
 	"net/http"
+	"strconv"
 	"sync"
 	"testing"
 )
@@ -188,5 +189,50 @@ func TestManagerConcurrentReadWrite(t *testing.T) {
 	// 最终读一次确认状态有效
 	if s := m.GetChannelTruth("ch_race"); s == TruthUnknown {
 		t.Fatal("concurrent updates must leave a valid state")
+	}
+}
+
+func TestManagerSnapshotAllConcurrentChannelCreation(t *testing.T) {
+	m := NewManager()
+	values := []Value{{Dimension: DimTokens, Limit: ptrF(10000), Remaining: ptrF(500), ResetAtMs: 1}}
+	m.UpdateChannelProviderAPI("ch_seed", "", values, nil)
+
+	const channelCount = 500
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		<-start
+		for i := 0; i < channelCount; i++ {
+			m.UpdateChannelProviderAPI("ch_snapshot_"+strconv.Itoa(i), "", values, nil)
+		}
+	}()
+
+	for i := 0; i < 3; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			for j := 0; j < 100; j++ {
+				states := m.SnapshotAll()
+				for k, state := range states {
+					if k > 0 && states[k-1].ChannelUID >= state.ChannelUID {
+						t.Errorf("snapshot is not sorted: %s, %s", states[k-1].ChannelUID, state.ChannelUID)
+						return
+					}
+					if len(state.Values) != 0 {
+						t.Errorf("expired values survived snapshot: %s", state.ChannelUID)
+						return
+					}
+				}
+			}
+		}()
+	}
+
+	close(start)
+	wg.Wait()
+	if got := len(m.SnapshotAll()); got != channelCount+1 {
+		t.Fatalf("snapshot channel count = %d, want %d", got, channelCount+1)
 	}
 }
