@@ -219,7 +219,7 @@ for (const [announcementKey, announcement] of Object.entries(OFFICIAL_RELEASE_AN
     const aggregate = median(equivs)
     const detail = perBenchmark.map(p => `${p.raw}@${p.benchmark}@${p.effort}→${p.equiv.toFixed(3)}`).join(' ')
     profile.benchmarkEvidence.push(makeEquivEvidence(
-      { model, benchmarkVersion: perBenchmark[0].benchmarkVersion },
+      { model, benchmarkVersion: perBenchmark[0].benchmarkVersion, rawValue: aggregate, benchmark: EQUIV_BENCHMARK, effort: 'medium' },
       aggregate,
       `anchors=${perBenchmark[0].anchorSnapshot} per-benchmark: ${detail}`,
       sourceUrl,

@@ -917,6 +917,14 @@ test('opus-5 is mapped across every benchmark source', () => {
   assert.equal(ARTIFICIAL_ANALYSIS_MODEL_MAP['claude-opus-5'], 'claude-opus-5')
 })
 
+test('sonnet-5.5 is mapped across every benchmark source', () => {
+  assert.equal(DEEPSWE_MODEL_MAP['claude-sonnet-5-5'], 'claude-sonnet-5-5')
+  assert.equal(BENCHLM_MODEL_MAP['claude-sonnet-5-5'], 'claude-sonnet-5-5')
+  assert.equal(DRADAR_MODEL_MAP['claude-sonnet-5-5'], 'claude-sonnet-5-5')
+  assert.equal(LITELLM_MODEL_MAP['claude-sonnet-5-5'], 'claude-sonnet-5-5')
+  assert.equal(ARTIFICIAL_ANALYSIS_MODEL_MAP['claude-sonnet-5-5'], 'claude-sonnet-5-5')
+})
+
 test('grok-4.6 / kimi-k3 / glm-5.3 stay mapped in dradar and litellm (2026-08-20 audit regressions)', () => {
   // dradar 榜用点号 glm-5.3 与短名 k3；曾因连字符键/缺别名静默丢分
   assert.equal(DRADAR_MODEL_MAP['glm-5.3'], 'glm-5.3')

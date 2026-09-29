@@ -16,8 +16,50 @@
  */
 
 const ANTHROPIC_OPUS_55_URL = 'https://www.anthropic.com/claude-opus-5-5'
+const ANTHROPIC_SONNET_55_URL = 'https://www.anthropic.com/claude-sonnet-5-5'
 
 export const OFFICIAL_RELEASE_ANNOUNCEMENTS = {
+  claude_sonnet_55: {
+    label: 'Anthropic Claude Sonnet 5.5 发布公告',
+    sourceUrl: ANTHROPIC_SONNET_55_URL,
+    capturedAt: '2026-09-28',
+    anchorPoolFrom: 'claude_opus_55',
+    scores: [
+      // Agentic coding
+      { model: 'claude-sonnet-5-5', benchmark: 'terminal_bench_4', benchmarkVersion: '4.0', domain: 'coding', metric: 'pass_rate', effort: 'max', rawValue: 0.706 },
+      { model: 'claude-sonnet-5', benchmark: 'terminal_bench_4', benchmarkVersion: '4.0', domain: 'coding', metric: 'pass_rate', effort: 'max', rawValue: 0.103 },
+      { model: 'claude-opus-5-5', benchmark: 'terminal_bench_4', benchmarkVersion: '4.0', domain: 'coding', metric: 'pass_rate', effort: 'xhigh', rawValue: 0.664 },
+
+      { model: 'claude-sonnet-5-5', benchmark: 'frontier_code_1_1', benchmarkVersion: '1.1-main', domain: 'coding', metric: 'pass_rate', effort: 'xhigh', rawValue: 0.521 },
+      { model: 'claude-sonnet-5-5', benchmark: 'frontier_code_1_1', benchmarkVersion: '1.1-main', domain: 'coding', metric: 'pass_rate', effort: 'max', rawValue: 0.462 },
+      { model: 'claude-sonnet-5', benchmark: 'frontier_code_1_1', benchmarkVersion: '1.1-main', domain: 'coding', metric: 'pass_rate', effort: 'max', rawValue: 0.424 },
+      { model: 'claude-opus-5-5', benchmark: 'frontier_code_1_1', benchmarkVersion: '1.1-main', domain: 'coding', metric: 'pass_rate', effort: 'max', rawValue: 0.544 },
+      { model: 'gpt-6-sol', benchmark: 'frontier_code_1_1', benchmarkVersion: '1.1-main', domain: 'coding', metric: 'pass_rate', effort: 'max', rawValue: 0.493 },
+
+      { model: 'claude-sonnet-5-5', benchmark: 'cursor_bench_4', benchmarkVersion: '4.0', domain: 'coding', metric: 'pass_rate', effort: 'max', rawValue: 0.555 },
+      { model: 'claude-sonnet-5', benchmark: 'cursor_bench_4', benchmarkVersion: '4.0', domain: 'coding', metric: 'pass_rate', effort: 'max', rawValue: 0.341 },
+      { model: 'claude-opus-5-5', benchmark: 'cursor_bench_4', benchmarkVersion: '4.0', domain: 'coding', metric: 'pass_rate', effort: 'max', rawValue: 0.578 },
+
+      // 知识工作（展示用）
+      { model: 'claude-sonnet-5-5', benchmark: 'gdpval_aa_v2_1', benchmarkVersion: '2.1', domain: 'knowledge', metric: 'elo', effort: 'max', rawValue: 1844 },
+      { model: 'claude-sonnet-5', benchmark: 'gdpval_aa_v2_1', benchmarkVersion: '2.1', domain: 'knowledge', metric: 'elo', effort: 'max', rawValue: 1449 },
+      { model: 'claude-opus-5-5', benchmark: 'gdpval_aa_v2_1', benchmarkVersion: '2.1', domain: 'knowledge', metric: 'elo', effort: 'max', rawValue: 1846 },
+
+      { model: 'claude-sonnet-5-5', benchmark: 'hle', benchmarkVersion: 'with-tools', domain: 'knowledge', metric: 'pass_rate', effort: 'max', rawValue: 0.645 },
+      { model: 'claude-sonnet-5', benchmark: 'hle', benchmarkVersion: 'with-tools', domain: 'knowledge', metric: 'pass_rate', effort: 'max', rawValue: 0.549 },
+      { model: 'claude-opus-5-5', benchmark: 'hle', benchmarkVersion: 'with-tools', domain: 'knowledge', metric: 'pass_rate', effort: 'max', rawValue: 0.677 },
+
+      // Computer use & Vision（展示用）
+      { model: 'claude-sonnet-5-5', benchmark: 'osworld_2_1', benchmarkVersion: '2.1', domain: 'agentic', metric: 'pass_rate', effort: 'max', rawValue: 0.801 },
+      { model: 'claude-sonnet-5', benchmark: 'osworld_2_1', benchmarkVersion: '2.1', domain: 'agentic', metric: 'pass_rate', effort: 'max', rawValue: 0.570 },
+      { model: 'claude-opus-5-5', benchmark: 'osworld_2_1', benchmarkVersion: '2.1', domain: 'agentic', metric: 'pass_rate', effort: 'max', rawValue: 0.818 },
+
+      { model: 'claude-sonnet-5-5', benchmark: 'chartography', benchmarkVersion: '1.0', domain: 'vision', metric: 'pass_rate', effort: 'max', rawValue: 0.616 },
+      { model: 'claude-sonnet-5', benchmark: 'chartography', benchmarkVersion: '1.0', domain: 'vision', metric: 'pass_rate', effort: 'max', rawValue: 0.156 },
+      { model: 'claude-opus-5-5', benchmark: 'chartography', benchmarkVersion: '1.0', domain: 'vision', metric: 'pass_rate', effort: 'max', rawValue: 0.644 },
+    ],
+  },
+
   claude_opus_55: {
     label: 'Anthropic Claude Opus 5.5 发布公告',
     sourceUrl: ANTHROPIC_OPUS_55_URL,
@@ -153,6 +195,7 @@ export const OFFICIAL_RELEASE_ANNOUNCEMENTS = {
 export const OFFICIAL_RELEASE_ANCHOR_MODELS = [
   'claude-opus-5',
   'claude-fable-5',
+  'claude-sonnet-5',
   'gpt-6-astra',
   'gpt-5.6-sol',
 ]

@@ -37,6 +37,7 @@ export const DRADAR_MODEL_MAP = {
   'claude-opus-5': 'claude-opus-5',
   // Claude Opus 5.5（2026-09-22 发布）：dradar slug 与 canonical 同名
   'claude-opus-5-5': 'claude-opus-5-5',
+  'claude-sonnet-5-5': 'claude-sonnet-5-5',
   'claude-sonnet-5': 'claude-sonnet-5',
   'claude-sonnet-4-6': 'claude-sonnet-4-6',
   'claude-haiku-4-5': 'claude-haiku-4.5',

@@ -287,6 +287,36 @@
     },
     {
       "patterns": [
+        "(?:^|[-/])claude-sonnet-5[.-]5(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)"
+      ],
+      "provider": "anthropic",
+      "displayName": "Claude Sonnet 5.5",
+      "contextWindowTokens": 1000000,
+      "maxOutputTokens": 128000,
+      "thinkingMode": "adaptive_always_on",
+      "reasoningEfforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "pricing": {
+        "unit": "per_1m_tokens_usd",
+        "currency": "USD",
+        "inputCacheMissPrice": 2,
+        "outputPrice": 10,
+        "inputCacheHitPrice": 0.2
+      },
+      "capabilities": {
+        "document": true,
+        "reasoning": true,
+        "vision": true,
+        "toolCalls": true
+      }
+    },
+    {
+      "patterns": [
         "(?:^|[-/])claude-fable-5(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{4,8})?(?=$|@)"
       ],
       "provider": "anthropic",
@@ -5071,6 +5101,150 @@
         "knowledge": 59.4,
         "math": 57.9
       }
+    },
+    {
+      "patterns": [
+        "(?:^|[-/])claude-sonnet-5[.-]5(?:-\\d{4}-\\d{2}-\\d{2}|-\\d{6,8})?(?=$|@)"
+      ],
+      "canonicalModel": "claude-sonnet-5-5",
+      "verifiedAt": "2026-09-28",
+      "lane": "provisional",
+      "sources": [
+        "https://www.anthropic.com/claude-sonnet-5-5"
+      ],
+      "sharedResults": 1,
+      "comparableCategories": 1,
+      "totalCategories": 1,
+      "benchmarkEvidence": [
+        {
+          "benchmark": "terminal_bench_4",
+          "benchmarkVersion": "4.0",
+          "sourceModel": "claude-sonnet-5-5",
+          "domain": "coding",
+          "metric": "pass_rate",
+          "rawValue": 0.706,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.anthropic.com/claude-sonnet-5-5",
+          "capturedAt": "2026-09-28"
+        },
+        {
+          "benchmark": "frontier_code_1_1",
+          "benchmarkVersion": "1.1-main",
+          "sourceModel": "claude-sonnet-5-5",
+          "domain": "coding",
+          "metric": "pass_rate",
+          "rawValue": 0.462,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.anthropic.com/claude-sonnet-5-5",
+          "capturedAt": "2026-09-28"
+        },
+        {
+          "benchmark": "cursor_bench_4",
+          "benchmarkVersion": "4.0",
+          "sourceModel": "claude-sonnet-5-5",
+          "domain": "coding",
+          "metric": "pass_rate",
+          "rawValue": 0.555,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.anthropic.com/claude-sonnet-5-5",
+          "capturedAt": "2026-09-28"
+        },
+        {
+          "benchmark": "gdpval_aa_v2_1",
+          "benchmarkVersion": "2.1",
+          "sourceModel": "claude-sonnet-5-5",
+          "domain": "knowledge",
+          "metric": "elo",
+          "rawValue": 1844,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.anthropic.com/claude-sonnet-5-5",
+          "capturedAt": "2026-09-28"
+        },
+        {
+          "benchmark": "hle",
+          "benchmarkVersion": "with-tools",
+          "sourceModel": "claude-sonnet-5-5",
+          "domain": "knowledge",
+          "metric": "pass_rate",
+          "rawValue": 0.645,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.anthropic.com/claude-sonnet-5-5",
+          "capturedAt": "2026-09-28"
+        },
+        {
+          "benchmark": "osworld_2_1",
+          "benchmarkVersion": "2.1",
+          "sourceModel": "claude-sonnet-5-5",
+          "domain": "agentic",
+          "metric": "pass_rate",
+          "rawValue": 0.801,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.anthropic.com/claude-sonnet-5-5",
+          "capturedAt": "2026-09-28"
+        },
+        {
+          "benchmark": "chartography",
+          "benchmarkVersion": "1.0",
+          "sourceModel": "claude-sonnet-5-5",
+          "domain": "vision",
+          "metric": "pass_rate",
+          "rawValue": 0.616,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "max",
+          "selectionBasis": "official_release_announcement",
+          "sourceUrl": "https://www.anthropic.com/claude-sonnet-5-5",
+          "capturedAt": "2026-09-28"
+        },
+        {
+          "benchmark": "official_release",
+          "benchmarkVersion": "4.0",
+          "sourceModel": "claude-sonnet-5-5",
+          "domain": "coding",
+          "metric": "deepswe_equivalent",
+          "rawValue": 0.704,
+          "uncertainty": 0,
+          "cohortPercentile": 0,
+          "taskCount": 1,
+          "cohortSize": 1,
+          "effort": "medium",
+          "selectionBasis": "anchor_interp raw=0.7040849056603773@official_release@medium anchors=claude-opus-5:0.689,gpt-6-astra:0.728,gpt-5.6-sol:0.611 per-benchmark: 0.706@terminal_bench_4@max→0.728 0.521@frontier_code_1_1@xhigh→0.719 0.462@frontier_code_1_1@max→0.585 0.555@cursor_bench_4@max→0.689",
+          "sourceUrl": "https://www.anthropic.com/claude-sonnet-5-5",
+          "capturedAt": "2026-09-28"
+        }
+      ]
     },
     {
       "patterns": [

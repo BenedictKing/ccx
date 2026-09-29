@@ -153,6 +153,16 @@ func TestBuildProviderQualityRequestReasoningControl(t *testing.T) {
 				}
 			},
 		},
+		{
+			name:        "adaptive-always-on Claude 不注入 thinking",
+			serviceType: "claude",
+			modelID:     "claude-sonnet-5-5",
+			assert: func(t *testing.T, body map[string]any) {
+				if _, exists := body["thinking"]; exists {
+					t.Fatalf("adaptive_always_on 不应注入 thinking: %#v", body["thinking"])
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {

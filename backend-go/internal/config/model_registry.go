@@ -322,6 +322,19 @@ func BuiltinAgentModelProfiles() map[string]AgentModelProfile {
 			MaxOutputTokens:     128000,
 			ReasoningEfforts:    []string{"low", "medium", "high", "xhigh", "max"},
 		},
+		// Sonnet 5.5 是独立模型（非 Sonnet 5 别名）；pattern 更长，resolvePatternValue 长度降序保证优先命中。
+		"claude-sonnet-5-5*": {
+			DisplayName:         "Claude Sonnet 5.5",
+			ContextWindowTokens: 1000000,
+			MaxOutputTokens:     128000,
+			ReasoningEfforts:    []string{"low", "medium", "high", "xhigh", "max"},
+		},
+		"claude-sonnet-5.5*": {
+			DisplayName:         "Claude Sonnet 5.5",
+			ContextWindowTokens: 1000000,
+			MaxOutputTokens:     128000,
+			ReasoningEfforts:    []string{"low", "medium", "high", "xhigh", "max"},
+		},
 		"claude-sonnet-5*": {
 			DisplayName:         "Claude Sonnet 5",
 			ContextWindowTokens: 1000000,

@@ -186,8 +186,8 @@ func applyProviderQualityReasoningControl(body map[string]any, serviceType, mode
 	switch serviceType {
 	case "claude", "messages":
 		switch resolved.Capability.ThinkingMode {
-		case "adaptive_only":
-			// adaptive_only 模型不接受手动 enabled/disabled，沿用上游默认。
+		case "adaptive_only", "adaptive_always_on":
+			// adaptive_only 与 adaptive_always_on 模型不接受手动 enabled/disabled，沿用上游默认。
 			return
 		case "thinking":
 			body["thinking"] = map[string]any{"type": "enabled", "effort": effort}

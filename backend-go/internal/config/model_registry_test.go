@@ -200,6 +200,22 @@ func TestResolveAgentModelProfile_ClaudeBuiltins(t *testing.T) {
 	if alias.Profile.ContextWindowTokens != 1000000 {
 		t.Fatalf("alias ContextWindowTokens = %d, want 1000000", alias.Profile.ContextWindowTokens)
 	}
+
+	sonnet55 := ResolveAgentModelProfile("claude-sonnet-5-5", nil)
+	if !sonnet55.Known {
+		t.Fatal("expected built-in claude-sonnet-5-5 profile")
+	}
+	if sonnet55.Profile.DisplayName != "Claude Sonnet 5.5" || sonnet55.Profile.ContextWindowTokens != 1000000 || sonnet55.Profile.MaxOutputTokens != 128000 {
+		t.Fatalf("sonnet55 profile = %+v, want Claude Sonnet 5.5 (1M/128K)", sonnet55.Profile)
+	}
+
+	sonnet55Dot := ResolveAgentModelProfile("claude-sonnet-5.5", nil)
+	if !sonnet55Dot.Known {
+		t.Fatal("expected built-in claude-sonnet-5.5 profile")
+	}
+	if sonnet55Dot.Profile.DisplayName != "Claude Sonnet 5.5" {
+		t.Fatalf("sonnet55Dot profile = %+v, want Claude Sonnet 5.5", sonnet55Dot.Profile)
+	}
 }
 
 func TestResolveAgentModelProfile_KimiCodeBuiltins(t *testing.T) {
@@ -961,6 +977,37 @@ func TestResolveUpstreamCapability_ClaudeOpus55Variants(t *testing.T) {
 		{model: "claude-opus-5.5", displayName: "Claude Opus 5.5"},
 		{model: "claude-opus-5-5-20260922", displayName: "Claude Opus 5.5"},
 		{model: "anthropic/claude-opus-5-5", displayName: "Claude Opus 5.5"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			resolved := ResolveUpstreamCapability(tt.model, nil, nil)
+			if !resolved.Known || resolved.Source != "builtin" {
+				t.Fatalf("resolved = %+v, want builtin capability for %s", resolved, tt.model)
+			}
+			capability := resolved.Capability
+			if capability.DisplayName != tt.displayName || capability.ContextWindowTokens != 1_000_000 ||
+				capability.MaxOutputTokens != 128_000 || !capability.Capabilities["reasoning"] ||
+				!capability.Capabilities["vision"] || !capability.Capabilities["toolCalls"] {
+				t.Fatalf("capability = %+v for model %s", capability, tt.model)
+			}
+			if capability.ThinkingMode != "adaptive_always_on" {
+				t.Fatalf("ThinkingMode = %q, want adaptive_always_on", capability.ThinkingMode)
+			}
+		})
+	}
+}
+
+func TestResolveUpstreamCapability_ClaudeSonnet55Variants(t *testing.T) {
+	tests := []struct {
+		model       string
+		displayName string
+	}{
+		// Sonnet 5.5 是独立模型（非 Sonnet 5 别名）
+		{model: "claude-sonnet-5-5", displayName: "Claude Sonnet 5.5"},
+		{model: "claude-sonnet-5.5", displayName: "Claude Sonnet 5.5"},
+		{model: "claude-sonnet-5-5-20260928", displayName: "Claude Sonnet 5.5"},
+		{model: "anthropic/claude-sonnet-5-5", displayName: "Claude Sonnet 5.5"},
 	}
 
 	for _, tt := range tests {
