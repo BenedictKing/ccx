@@ -27,7 +27,7 @@
 1. 流式故障转移与冷却行为矩阵。（2026-09-29 完成研究与第一轮实现，见 §1 实现记录；短文本 EOF 对齐为可选后续项）
 2. 额度来源、窗口和调度消费矩阵。（2026-09-29 完成研究与第二轮实现（freshness + 观测出口），见 §2；窗口键统一、Provider 结构适配、快过期优先排序待续）
 3. 模型发现、注册表和运行时能力合并矩阵。（2026-09-29 完成研究与第三轮实现（计费口径统一 + drift 回填上下文），见 §3；「待验证」显式状态与回填 API 为可选后续）
-4. 会话亲和与 turn 路由矩阵。
+4. 会话亲和与 turn 路由矩阵。（2026-09-29 完成研究与第四轮实现（渠道删除清理悬空亲和），见 §4；turn 实体与缓存参与亲和经评估为 YAGNI/后续实验，全部矩阵研究收官）
 
 ## 1. 流式故障转移与冷却
 
@@ -186,6 +186,19 @@ magpie 的价值主要在失败原因分级和恢复原因可解释性：credit�
 3. `cache_read`、缓存年龄和缓存成本尚未参与是否继续亲和的判断。
 4. 上下文溢出、额度耗尽和渠道故障触发迁移时，解锁规则分散在调度和 failover 路径中。
 
+### 矩阵 5 结论：session/turn 状态 × affinity 命中 × failover 解锁条件（2026-09-29 验证）
+
+1. **turn 实体不存在**：一次 turn（用户消息的多步工具循环）在网关侧就是同一会话键下的 N 个独立 HTTP 请求。最接近的量：`ExtractUnifiedSessionID` 会话键（Conversation_id > Session_id > X-Claude-Code-Session-Id > body user > prompt_cache_key > … > `pp:` 内容指纹）、`Round`（请求体内 user 消息数，仅日志标签）、`Conversation` tracker（成功后观测回写，不参与选路）、请求级 correlation ID。
+2. **亲和是「最后成功渠道」的滞后跟踪，非 turn 内决策锁**：请求成功后写入（failover 与竞速赢家都会把亲和改写到实际成功渠道）；命中时若渠道非 active、存在更高优先级健康渠道（`bestPriority` 实时计算，亲和让位）、模型级熔断、渠道级熔断/冷却/不健康/无 Key 任一成立则静默降级到优先级遍历（条目保留）。亲和键=`kind:userID[:ctx-bucket]`，subagent 追加 `:subagent` 隔离。
+3. **亲和清理 API「已实现未接线」**：`Remove`/`RemoveByChannel`/`RemoveByRoute` 零生产调用方，渠道删除后亲和条目悬空至 TTL（30 分钟），期间 sweep 路径（alpha 端点按亲和渠道名 pin）仍指向已删渠道。**本轮已修复**（见实现记录）。
+4. **cache_read 路由消费为零**：只进 metrics/SQLite/成本报表；Anthropic prompt caching 与渠道粘性的关联无任何代码/注释考虑（模型映射层有「保 prompt cache」意识，渠道层没有）。唯一跨请求缓存复用是 thinkingcache（SQLite，与渠道解耦，换渠道后仍可用）。
+5. **迁移解锁规则分散 8 处**（各自独立到期/恢复，无统一状态模型）：请求内 `failedRoutes`（单请求生命周期）、渠道运行时冷却（15s/1min 常量）、Key 拉黑+RecoverAt、(Key,模型) 组合限制、模型级熔断（仅 Retryable 计入）、配额饱和沉底（fail-open 回退）、上下文溢出三段式（选路注入/运行中学习/全灭透传）、亲和解除。`failedRoutes` 不跨请求——下一个请求从空表开始，跨请求的「本 turn 已试过哪些渠道」记忆不存在。
+6. 亲和写入的排除项：含图请求不覆盖文本亲和、title/recap 不写、DryRun 不写。
+
+### 第四轮实现记录（渠道删除时清理悬空亲和）
+
+- `DeleteChannelMetrics`（scheduler/delegates.go）内按物理 `ChannelUID` 调 `TraceAffinityManager.RemoveByRoute`：渠道删除时同步清除指向它的全部亲和条目（跨协议一并清理，UID 是跨协议身份）。选择在 DeleteChannelMetrics 内部接线而非 8 个删除 handler 各加一行——它已是删除清理的事实汇聚点，未来新调用点不会漏接。无 ChannelUID 的 legacy 渠道仍靠 TTL 兜底。
+
 ### 研究顺序
 
 先用现有 trace/session 标识定义 turn 生命周期，再明确三类迁移：
@@ -195,6 +208,8 @@ magpie 的价值主要在失败原因分级和恢复原因可解释性：credit�
 - turn 内不可恢复故障：允许 failover，并记录迁移原因。
 
 缓存命中阈值和“是否值得固定”应作为后续实验参数，不应直接复制 magpie 的固定数值。
+
+（矩阵 5 已完成，2026-09-29。turn 实体与三类迁移经评估暂不实现：现状「亲和=最后成功渠道 + failedRoutes 请求内排除 + 8 处独立解锁」已覆盖主要场景，turn 级决策锁与迁移计数的需求未被实际故障案例证实，属 YAGNI；cache_read 参与亲和维持「后续实验参数」定位不变。）
 
 ## 5. 后续验证产物
 

@@ -6,6 +6,7 @@ import (
 
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/metrics"
+	"github.com/BenedictKing/ccx/internal/routingref"
 	"github.com/BenedictKing/ccx/internal/session"
 	"github.com/BenedictKing/ccx/internal/types"
 	"github.com/BenedictKing/ccx/internal/warmup"
@@ -223,6 +224,13 @@ func (s *ChannelScheduler) ResetKeyMetrics(baseURL, apiKey, serviceType string, 
 func (s *ChannelScheduler) DeleteChannelMetrics(upstream *config.UpstreamConfig, kind ChannelKind) {
 	if upstream == nil {
 		return
+	}
+
+	// 渠道删除时同步清理指向它的会话亲和：亲和条目原本只能等 TTL（默认
+	// 30 分钟）过期，期间 sweep 路径（alpha 端点按亲和渠道名 pin）仍会
+	// 指向已删渠道。按物理 ChannelUID 清理，跨协议亲和一并移除。
+	if upstream.ChannelUID != "" && s.traceAffinity != nil {
+		s.traceAffinity.RemoveByRoute(routingref.RouteRef{ChannelUID: upstream.ChannelUID})
 	}
 
 	prefix := kindSchedulerLogPrefix(kind)
