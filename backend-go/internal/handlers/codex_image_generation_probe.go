@@ -354,7 +354,7 @@ func reconcileCodexImageGenerationRestriction(
 	apiType := channelKindToApiType(channelKind)
 	if state == ImageGenerationProbeUnsupported && !channel.IsStripImageGenerationToolEnabled() {
 		diagnostic := codexProbeDiagnostic(modeResults)
-		_ = cfgManager.DisableKeyModel(apiType, channelID, apiKey, actualModel, codexImageGenerationRestrictionReason, diagnostic)
+		_ = cfgManager.DisableKeyModel(apiType, channelID, apiKey, actualModel, codexImageGenerationRestrictionReason, diagnostic, "")
 		return
 	}
 	if state == ImageGenerationProbeSupported || channel.IsStripImageGenerationToolEnabled() {

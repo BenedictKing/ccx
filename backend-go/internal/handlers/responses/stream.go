@@ -223,7 +223,7 @@ func handleStreamSuccess(
 					preflightDiagnostic = formatResponsesErrorDiagnostic(upstreamErr)
 					close(scanDone)
 					if r, m := detectResponsesErrorBlacklist(upstreamErr); r != "" {
-						return nil, &common.ErrBlacklistKey{Reason: r, Message: m}
+						return nil, &common.ErrBlacklistKey{Reason: r, Message: m, RecoverAt: utils.ExtractQuotaRecoverAt(m)}
 					}
 					common.RequestLogf(c, "[Responses-UpstreamError] %s，触发重试", preflightDiagnostic)
 					return nil, fmt.Errorf("%w: %s", common.ErrEmptyStreamResponse, preflightDiagnostic)
@@ -391,7 +391,7 @@ func handleStreamSuccess(
 		}
 		close(scanDone) // 通知 scanner goroutine 退出
 		if blacklistReason != "" {
-			return nil, &common.ErrBlacklistKey{Reason: blacklistReason, Message: blacklistMessage}
+			return nil, &common.ErrBlacklistKey{Reason: blacklistReason, Message: blacklistMessage, RecoverAt: utils.ExtractQuotaRecoverAt(blacklistMessage)}
 		}
 		return nil, common.ErrEmptyStreamResponse
 	}
@@ -399,7 +399,7 @@ func handleStreamSuccess(
 	// 流中有拉黑错误但内容非空：仍返回拉黑错误以触发 Key 拉黑
 	if blacklistReason != "" {
 		close(scanDone)
-		return nil, &common.ErrBlacklistKey{Reason: blacklistReason, Message: blacklistMessage}
+		return nil, &common.ErrBlacklistKey{Reason: blacklistReason, Message: blacklistMessage, RecoverAt: utils.ExtractQuotaRecoverAt(blacklistMessage)}
 	}
 
 	// 非空响应：发送 Header 并回放缓冲行

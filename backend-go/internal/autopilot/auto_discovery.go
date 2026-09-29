@@ -1044,13 +1044,19 @@ func (r *AutoDiscoveryRunner) publishManifestDriftIfNeeded(channelUID string, ch
 	if len(added) == 0 && len(removed) == 0 {
 		return
 	}
+	now := time.Now()
 	ev := eventbus.Event{
 		Type:    eventbus.TypeManifestDrift,
 		Scope:   eventbus.ScopeConfig,
 		Subject: channelUID,
 		Payload: map[string]any{
-			"added":   added,
-			"removed": removed,
+			"added": added,
+			// baseURL/source/discoveredAt 为后续「审核后回填注册表」保留的回填上下文：
+			// 告警侧只读 added/removed，新增字段向后兼容。
+			"baseURL":      baseURL,
+			"source":       ModelDiscoverySourceControlPlane,
+			"discoveredAt": now.Format(time.RFC3339),
+			"removed":      removed,
 		},
 	}
 	ev.EnsureUID()

@@ -400,7 +400,14 @@ func buildRequestCostContext(cfgManager *config.ConfigManager, upstream *config.
 	}
 
 	// 列表成本（标价）：渠道计价币种为 CNY 等非 USD 时按全局硬编码汇率折 USD，作为基准。
-	resolved := config.ResolveUpstreamCapability(model, upstream, nil)
+	// 解析口径与调度侧一致（渠道覆盖 → 全局配置 → 内置注册表），并把标价快照固化进
+	// 成本上下文：finalize 回写 token 后按它重算，避免指标记录落入仅内置注册表的口径。
+	var globalCaps map[string]config.UpstreamModelCapability
+	if cfgManager != nil {
+		globalCaps = cfgManager.GetConfig().UpstreamModelCapabilities
+	}
+	resolved := config.ResolveUpstreamCapability(model, upstream, globalCaps)
+	ctx.ListPricing = resolved.Capability.Pricing
 	ctx.ListCostUSD = metrics.CalculateTokenCostUSDWithPricing(resolved.Capability.Pricing, 0, 0, 0, 0)
 
 	// 构建全局汇率图（用于充值/渠道币种到 USD 的折算）。
@@ -1435,7 +1442,7 @@ func TryUpstreamWithAllKeys(
 						// 上游明确声明该模型或其 Codex 图片工具不受支持：限制该 Key 对这个实际模型的路由。
 						// 仅限制 (Key, 模型) 组合（持久化+定时恢复），保留 failover 换渠道，不连累该 Key 其他模型。
 						summary := errorBodySummaryForLog(apiType, resp.StatusCode, respBodyBytes)
-						if err := cfgManager.DisableKeyModel(executionAPIType, executionIndex, apiKey, actualAttemptModel, restrictionReason, summary); err != nil {
+						if err := cfgManager.DisableKeyModel(executionAPIType, executionIndex, apiKey, actualAttemptModel, restrictionReason, summary, ""); err != nil {
 							RequestLogf(c, "[%s-KeyModel] 限制 (Key,模型) 组合失败: %v", apiType, err)
 						}
 					}
@@ -1880,7 +1887,7 @@ func TryUpstreamWithAllKeys(
 						// 余额/配额类：降级为 (Key,模型) 组合级限制，覆盖全部模型时才升级整 Key 拉黑。
 						balanceRestricted = true
 						if HandleBalanceClassKeyFailure(cfgManager, upstream, executionAPIType, executionIndex,
-							apiKey, restrictModel, blErr.Reason, blErr.Message, "") {
+							apiKey, restrictModel, blErr.Reason, blErr.Message, blErr.RecoverAt) {
 							RequestLogf(c, "[%s-Blacklist] SSE 流内余额/配额受限已覆盖全部模型，升级整 Key 拉黑 (Key: %s)",
 								apiType, utils.MaskAPIKey(apiKey))
 						}

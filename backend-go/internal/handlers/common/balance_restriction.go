@@ -7,12 +7,12 @@ import (
 // HandleBalanceClassKeyFailure 处理余额/配额类 Key 失败的组合级降级。
 //
 // 余额/配额错误（402、余额文案等）可能是按模型分池计费导致的单模型不可用，
-// 不能仅凭一次失败就整 Key 拉黑：先写入 (Key, 模型) 组合级限制（1h 自动恢复），
+// 不能仅凭一次失败就整 Key 拉黑：先写入 (Key, 模型) 组合级限制（自动恢复），
 // 保留该 Key 对其他模型的调度；仅当限制已覆盖该渠道全部模型（精确白名单判定）
 // 或累计不同模型数达到阈值时，才升级为整 Key 拉黑（沿用跨协议级联与自动恢复）。
 //
 // 返回是否已升级为整 Key 拉黑。调用方需自行记录日志；上游给出的 recoverAt
-// 仅在升级拉黑时透传（组合限制固定 1h 恢复，与 DisableKeyModel 语义一致）。
+// 同时透传给组合限制与升级拉黑（无效或过期时由落库侧按 1 小时兜底）。
 func HandleBalanceClassKeyFailure(cfgManager *config.ConfigManager, upstream *config.UpstreamConfig,
 	apiType string, channelIndex int, apiKey, model, reason, message, recoverAt string) (escalated bool) {
 
@@ -23,7 +23,7 @@ func HandleBalanceClassKeyFailure(cfgManager *config.ConfigManager, upstream *co
 	if !upstream.IsAutoBlacklistBalanceEnabled() {
 		return false
 	}
-	if err := cfgManager.DisableKeyModel(apiType, channelIndex, apiKey, model, reason, message); err != nil {
+	if err := cfgManager.DisableKeyModel(apiType, channelIndex, apiKey, model, reason, message, recoverAt); err != nil {
 		return false
 	}
 	if !cfgManager.ShouldEscalateBalanceKeyBlacklist(apiType, channelIndex, apiKey) {

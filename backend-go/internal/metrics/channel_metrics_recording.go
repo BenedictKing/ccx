@@ -208,6 +208,9 @@ type RequestCostContext struct {
 	SubscriptionUID         string
 	ExchangeSnapshotVersion uint64
 	ListCostUSD             float64
+	// ListPricing 标价快照（渠道覆盖 → 全局配置 → 内置注册表完整口径解析）。
+	// finalize 回写 token 后按它重算 ListCostUSD，避免落入仅内置注册表的全局口径。
+	ListPricing             *config.ModelPricing
 	EffectiveCostMultiplier float64
 	EffectiveCostAvailable  bool
 	EffectiveCostReason     string
@@ -232,6 +235,7 @@ func (m *MetricsManager) RecordRequestConnectedWithCostContext(baseURL, apiKey, 
 	record.SubscriptionUID = cost.SubscriptionUID
 	record.ExchangeSnapshotVersion = cost.ExchangeSnapshotVersion
 	record.ListCostUSD = cost.ListCostUSD
+	record.ListPricing = cost.ListPricing
 	record.EffectiveCostMultiplier = cost.EffectiveCostMultiplier
 	record.EffectiveCostAvailable = cost.EffectiveCostAvailable
 	record.EffectiveCostReason = cost.EffectiveCostReason
@@ -375,7 +379,14 @@ func (m *MetricsManager) RecordRequestFinalizeOutcome(baseURL, apiKey, serviceTy
 		record.CacheCreationInputTokens = cacheCreationTokens
 		record.CacheReadInputTokens = cacheReadTokens
 		if record.ListCostUSD == 0 {
-			record.ListCostUSD, _ = m.calculateRecordListCost(record.Model, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens)
+			if record.ListPricing != nil {
+				// 请求开始时固化的完整口径标价（渠道覆盖 → 全局 → 内置）：
+				// 与调度评分/请求成本读同一份价格，避免渠道级或全局级
+				// 价格覆盖只影响调度、不影响指标记录成本。
+				record.ListCostUSD = CalculateTokenCostUSDWithPricing(record.ListPricing, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens)
+			} else {
+				record.ListCostUSD, _ = m.calculateRecordListCost(record.Model, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens)
+			}
 		}
 		if record.EffectiveCostAvailable {
 			record.EffectiveCostUSD = ApplyEffectiveCostMultiplier(record.ListCostUSD, record.EffectiveCostMultiplier)

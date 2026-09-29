@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/eventbus"
 	"github.com/BenedictKing/ccx/internal/types"
 	"github.com/BenedictKing/ccx/internal/utils"
@@ -102,6 +103,10 @@ type RequestRecord struct {
 	SubscriptionUID         string
 	ExchangeSnapshotVersion uint64
 	ListCostUSD             float64
+	// ListPricing 请求开始时按「渠道覆盖 → 全局配置 → 内置注册表」完整口径
+	// 固化的标价快照：finalize 回写 token 后用它重算 ListCostUSD，保证指标
+	// 记录成本与调度/请求成本读同一份价格（内存暂存，不持久化）。
+	ListPricing             *config.ModelPricing
 	EffectiveCostUSD        float64
 	EffectiveCostMultiplier float64
 	EffectiveCostAvailable  bool

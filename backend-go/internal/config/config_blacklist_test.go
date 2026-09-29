@@ -1257,7 +1257,7 @@ func TestDisableGroupModel_EmptyGroupTargetsSingleKey(t *testing.T) {
 func TestDisableKeyModelAndIsKeyModelDisabled(t *testing.T) {
 	cm := newKeyModelTestConfigManager(t)
 
-	if err := cm.DisableKeyModel("Messages", 0, "sk-a", "gpt-5.6-sol", "model_not_found", "no available channel"); err != nil {
+	if err := cm.DisableKeyModel("Messages", 0, "sk-a", "gpt-5.6-sol", "model_not_found", "no available channel", ""); err != nil {
 		t.Fatalf("DisableKeyModel() error = %v", err)
 	}
 
@@ -1281,12 +1281,12 @@ func TestDisableKeyModelAndIsKeyModelDisabled(t *testing.T) {
 
 func TestDisableKeyModelDoesNotRewriteActiveRestriction(t *testing.T) {
 	cm := newKeyModelTestConfigManager(t)
-	if err := cm.DisableKeyModel("Messages", 0, "sk-a", "m1", "model_not_found", "first"); err != nil {
+	if err := cm.DisableKeyModel("Messages", 0, "sk-a", "m1", "model_not_found", "first", ""); err != nil {
 		t.Fatalf("first DisableKeyModel() error = %v", err)
 	}
 	before := cm.GetConfig().Upstream[0].DisabledKeyModels[0]
 
-	if err := cm.DisableKeyModel("Messages", 0, "sk-a", "m1", "different_reason", "second"); err != nil {
+	if err := cm.DisableKeyModel("Messages", 0, "sk-a", "m1", "different_reason", "second", ""); err != nil {
 		t.Fatalf("second DisableKeyModel() error = %v", err)
 	}
 	after := cm.GetConfig().Upstream[0].DisabledKeyModels[0]
@@ -1314,7 +1314,7 @@ func TestIsKeyModelDisabledNowRespectsRecoverAt(t *testing.T) {
 
 func TestRestoreKeyModel(t *testing.T) {
 	cm := newKeyModelTestConfigManager(t)
-	if err := cm.DisableKeyModel("Messages", 0, "sk-a", "m1", "model_not_found", ""); err != nil {
+	if err := cm.DisableKeyModel("Messages", 0, "sk-a", "m1", "model_not_found", "", ""); err != nil {
 		t.Fatalf("DisableKeyModel() error = %v", err)
 	}
 	if err := cm.RestoreKeyModel("Messages", 0, "sk-a", "m1"); err != nil {
@@ -1330,10 +1330,10 @@ func TestRestoreKeyModel(t *testing.T) {
 
 func TestRestoreExpiredKeyModels(t *testing.T) {
 	cm := newKeyModelTestConfigManager(t)
-	if err := cm.DisableKeyModel("Messages", 0, "sk-a", "expired", "model_not_found", ""); err != nil {
+	if err := cm.DisableKeyModel("Messages", 0, "sk-a", "expired", "model_not_found", "", ""); err != nil {
 		t.Fatalf("DisableKeyModel() error = %v", err)
 	}
-	if err := cm.DisableKeyModel("Messages", 0, "sk-a", "active", "model_not_found", ""); err != nil {
+	if err := cm.DisableKeyModel("Messages", 0, "sk-a", "active", "model_not_found", "", ""); err != nil {
 		t.Fatalf("DisableKeyModel() error = %v", err)
 	}
 

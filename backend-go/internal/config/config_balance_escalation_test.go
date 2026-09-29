@@ -94,7 +94,7 @@ func TestShouldEscalateBalanceKeyBlacklist(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cm := newBalanceEscalationManager(t, tt.supportedModels)
 			for _, model := range tt.restricted {
-				if err := cm.DisableKeyModel("Messages", 0, "sk-a", model, "insufficient_balance", "402"); err != nil {
+				if err := cm.DisableKeyModel("Messages", 0, "sk-a", model, "insufficient_balance", "402", ""); err != nil {
 					t.Fatalf("DisableKeyModel(%s) error = %v", model, err)
 				}
 			}
@@ -102,7 +102,7 @@ func TestShouldEscalateBalanceKeyBlacklist(t *testing.T) {
 				t.Fatalf("ShouldEscalateBalanceKeyBlacklist() = %v, want %v", got, tt.want)
 			}
 			// 其他 Key 的限制不参与判定
-			if err := cm.DisableKeyModel("Messages", 0, "sk-b", "m1", "insufficient_balance", "402"); err != nil {
+			if err := cm.DisableKeyModel("Messages", 0, "sk-b", "m1", "insufficient_balance", "402", ""); err != nil {
 				t.Fatalf("DisableKeyModel(sk-b) error = %v", err)
 			}
 			if got := cm.ShouldEscalateBalanceKeyBlacklist("Messages", 0, "sk-a"); got != tt.want {
