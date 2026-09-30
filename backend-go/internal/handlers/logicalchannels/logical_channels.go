@@ -271,9 +271,11 @@ func buildLogicalProtocolRoutes(cfg config.Config, lc config.LogicalChannel) []g
 			up, idx := findPhysicalChannel(cfg, p.Kind, p.ChannelUID)
 			name := p.Kind
 			apiKeys := []string{}
+			var disabledGroupModels []config.DisabledGroupModelInfo
 			if up != nil {
 				name = up.Name
 				apiKeys = up.APIKeys
+				disabledGroupModels = up.DisabledGroupModels
 			}
 			out = append(out, gin.H{
 				"kind":        p.Kind,
@@ -283,6 +285,10 @@ func buildLogicalProtocolRoutes(cfg config.Config, lc config.LogicalChannel) []g
 				"channelUid":  p.ChannelUID,
 				"status":      p.Status,
 				"apiKeys":     apiKeys,
+				// 分组模型限制记录按路由下发：聚合视图是各协议路由的并集，客户端必须能在
+				// 路由粒度上看到并定位到真正持有该限制的路由（否则只能展示/清理主路由那一份，
+				// 其它协议会残留，Web 侧已按 unifiedChannels 并集处理）。
+				"disabledGroupModels": disabledGroupModels,
 			})
 		}
 	}
@@ -467,10 +473,38 @@ func (h *Handler) Update(c *gin.Context) {
 			ProxyPreferDirect: p.ProxyPreferDirect,
 		})
 	}
+	// removals 是"协议 kind"列表（如 "messages"），不是 ChannelUID：必须在 Update
+	// 之前按 LogicalChannelUID + kind 取到将被移除的物理渠道快照。更新之后上游已不在
+	// 配置里，无法再反查，指标/日志/亲和/配额会全部漏清理（悬空亲和会 pin 到挪位后的
+	// 另一个渠道）。DELETE 路径本就调用 cleanupRemovedChannels，PUT 原先直接丢弃 removals。
+	var removed []config.UpstreamConfig
+	if len(body.Removals) > 0 && h.cm != nil {
+		if logicalBefore := h.cm.GetLogicalChannel(uid); logicalBefore != nil {
+			cfgBefore := h.cm.GetConfig()
+			for _, kind := range body.Removals {
+				kindNorm := strings.ToLower(strings.TrimSpace(kind))
+				if kindNorm == "" {
+					continue
+				}
+				for _, protocol := range logicalBefore.Protocols {
+					if strings.ToLower(strings.TrimSpace(protocol.Kind)) != kindNorm {
+						continue
+					}
+					if upstream, _ := findPhysicalChannel(cfgBefore, protocol.Kind, protocol.ChannelUID); upstream != nil {
+						removed = append(removed, *upstream)
+					}
+				}
+			}
+		}
+	}
 	logical, err := h.cm.UpdateLogicalChannel(in)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+	// 与 DELETE 走同一个清理汇聚点（DeleteChannelMetrics → 指标/日志/亲和/配额）。
+	if h.scheduler != nil && len(removed) > 0 {
+		cleanupRemovedChannels(h.scheduler, removed)
 	}
 	c.JSON(http.StatusOK, logical)
 }
