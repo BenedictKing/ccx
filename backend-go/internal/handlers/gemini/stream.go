@@ -132,7 +132,7 @@ func preflightGeminiStream(resp *http.Response, upstreamType string, timeouts co
 	}
 
 	// 启动 goroutine 读取 body chunk。preflight 放行后继续由同一个 channel 驱动正常流式转发，避免丢 chunk。
-	chunkChan, bodyErrChan = common.StartBodyChunkReader(resp.Body, 32*1024, 16)
+	chunkChan, bodyErrChan = common.StartBodyChunkReader(resp.Body, 32*1024, 16, common.RequestDone(resp))
 
 	// 阶段A：首个有效内容等待超时
 	var firstContentTimer *time.Timer
@@ -538,6 +538,9 @@ func streamGeminiToGemini(
 	progress *common.StreamProgressLogger,
 ) (*types.Usage, error) {
 	var totalUsage *types.Usage
+	// lastWasDataLine 记录上一次写出的是否是 data 行：上游以单换行收尾时，
+	// EOF 需要再补一个空行才算把最后一个事件派发给客户端。
+	lastWasDataLine := false
 	inactivityTimeout := time.Duration(timeouts.InactivityTimeoutMs) * time.Millisecond
 
 	for {
@@ -547,6 +550,14 @@ func streamGeminiToGemini(
 			return nil, common.ErrStreamPostCommitStalled
 		}
 		if eof {
+			if lastWasDataLine {
+				// 上游最后一个 data 行只有单个 "\n"（没有空行）：补空行完成事件派发，
+				// 否则严格 SSE 解析器会丢掉最后一帧（finish / usage / [DONE]）。
+				_, _ = fmt.Fprint(c.Writer, "\n")
+				if flusher != nil {
+					flusher.Flush()
+				}
+			}
 			if err != nil {
 				progress.Finish("error")
 				return totalUsage, err
@@ -574,10 +585,13 @@ func streamGeminiToGemini(
 					}
 				}
 			}
+			lastWasDataLine = true
 			_, _ = fmt.Fprintf(c.Writer, "%s\n", line)
 		} else if line != "" {
+			lastWasDataLine = false
 			_, _ = fmt.Fprintf(c.Writer, "%s\n", line)
 		} else {
+			lastWasDataLine = false
 			_, _ = fmt.Fprintf(c.Writer, "\n")
 		}
 

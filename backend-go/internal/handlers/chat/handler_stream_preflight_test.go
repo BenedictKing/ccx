@@ -368,6 +368,24 @@ func TestHandleStreamSuccess_PassthroughUnterminatedTail(t *testing.T) {
 			body: strings.NewReader(content + truncated),
 			want: content + truncated,
 		},
+		{
+			// 上游以单换行收尾（`data: X\n`，没有空行）：必须再补一个空行，
+			// 否则严格 SSE 解析器不会派发最后一帧（finish/usage/[DONE]）。
+			name: "single newline tail gets the missing blank line",
+			body: strings.NewReader(content + finishNoNewline + "\n"),
+			want: content + finishNoNewline + "\n" + "\n",
+		},
+		{
+			name: "single newline DONE tail across one-byte chunks",
+			body: iotest.OneByteReader(strings.NewReader(content + doneNoNewline + "\n")),
+			want: content + doneNoNewline + "\n" + "\n",
+		},
+		{
+			// 已经以空行收尾的流不得再多补空行（避免把正常流写出多余的空白事件）。
+			name: "already terminated tail stays unchanged",
+			body: strings.NewReader(content + finish),
+			want: content + finish,
+		},
 	}
 
 	for _, tt := range tests {
@@ -406,4 +424,40 @@ func TestPreflightChatStream_ContentStreamStillPasses(t *testing.T) {
 
 	result := waitForPreflight(t, resultCh, 300*time.Millisecond)
 	assertNoFirstContentTimeout(t, result)
+}
+
+// TestHandleStreamSuccess_PreflightSizeCapPassesThrough 记录预读上限出口的**刻意**行为：
+// 达到 1MB 预读上限且未识别到已知语义内容时保守透传，不与 EOF 路径同判空。
+// HasOpenAIChatSemanticContent 只建模文本/思考/拒答/工具调用/音频，未建模的形态若被
+// 判失败会从"能正常透传"变成 failover；上限只约束预读，不扩大判空范围。
+func TestHandleStreamSuccess_PreflightSizeCapPassesThrough(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	// 无语义内容的合法 chunk（delta 为空对象），重复到超过 1MB 上限
+	line := `data: {"choices":[{"index":0,"delta":{}}]}` + "\n\n"
+	body := strings.Repeat(line, (1024*1024/len(line))+64)
+	if len(body) <= 1024*1024 {
+		t.Fatalf("测试体必须超过预读上限，got %d", len(body))
+	}
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"gpt-5","stream":true}`))
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+	t.Cleanup(func() { _ = resp.Body.Close() })
+
+	_, err := handleStreamSuccess(c, resp, "openai", &config.EnvConfig{LogLevel: "error"}, time.Now(), "gpt-5", common.StreamPreflightTimeouts{
+		FirstContentTimeoutMs: 5000,
+		InactivityTimeoutMs:   5000,
+	})
+	if err != nil {
+		t.Fatalf("超过预读上限的无语义内容流必须保守透传，got err = %v", err)
+	}
+	if got := w.Body.String(); got != body {
+		t.Fatalf("超限流应逐字节透传: got %d bytes, want %d bytes", len(got), len(body))
+	}
 }

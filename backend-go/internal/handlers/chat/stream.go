@@ -131,7 +131,7 @@ func preflightChatStream(resp *http.Response, upstreamType string, timeouts comm
 	}
 
 	// 启动 goroutine 读取 body chunk。preflight 放行后继续由同一个 channel 驱动正常流式转发，避免丢 chunk。
-	chunkChan, bodyErrChan := common.StartBodyChunkReader(resp.Body, 32*1024, 16)
+	chunkChan, bodyErrChan := common.StartBodyChunkReader(resp.Body, 32*1024, 16, common.RequestDone(resp))
 
 	// 阶段A：首个有效内容等待超时
 	var firstContentTimer *time.Timer
@@ -310,6 +310,11 @@ func preflightChatStream(resp *http.Response, upstreamType string, timeouts comm
 	}
 
 	clearRemainder()
+	// 预读达到 1MB 上限而退出：这里**刻意**保守放行，不与 EOF 路径同判空。
+	// HasOpenAIChatSemanticContent 只建模文本/思考/拒答/工具调用（含音频增量），
+	// 未建模的形态若在这里返回失败会被推进 failover，而它们此前能正常透传；
+	// 体积上限只约束预读，不扩大"判空"范围（与配额 unknown≠exhausted 同一条
+	// fail-open 纪律）。EOF 路径的空判定不受影响，见 TestPreflightChatStreamSizeCap。
 	return result, chunkChan, bodyErrChan, nil
 }
 

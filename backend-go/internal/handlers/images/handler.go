@@ -488,7 +488,7 @@ func prepareImagesUpstreamHeaders(c *gin.Context, targetHost string, contentType
 }
 
 func preflightImagesStream(resp *http.Response, timeouts common.StreamPreflightTimeouts, observers ...*common.StreamTimeoutObserver) ([]byte, <-chan []byte, <-chan error, error) {
-	chunkChan, bodyErrChan := common.StartBodyChunkReader(resp.Body, 4*1024, 16)
+	chunkChan, bodyErrChan := common.StartBodyChunkReader(resp.Body, 4*1024, 16, common.RequestDone(resp))
 	var buffered bytes.Buffer
 	hasFirstContent := false
 	var observer *common.StreamTimeoutObserver
