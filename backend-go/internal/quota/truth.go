@@ -1,6 +1,9 @@
 package quota
 
-import "strings"
+import (
+	"strings"
+	"time"
+)
 
 // ── 配额真相五级枚举 ──
 
@@ -81,8 +84,11 @@ type Value struct {
 	Used      *float64  `json:"used,omitempty"`      // 已用量
 	Remaining *float64  `json:"remaining,omitempty"` // 剩余量
 	ResetAtMs int64     `json:"resetAtMs,omitempty"` // 窗口重置时间（毫秒时间戳），0 表示未知
-	Unit      string    `json:"unit,omitempty"`      // 单位（如 "tokens", "USD"）
-	Source    Source    `json:"source"`              // 数据来源
+	// ObservedAtMs 观测时刻（毫秒时间戳），0 表示未知。由 MergeValues 在写入时打戳，
+	// 用于给「无 reset 头」的 response_headers 观测做新鲜度兜底（见 staleResponseHeaderObservationTTL）。
+	ObservedAtMs int64  `json:"observedAtMs,omitempty"`
+	Unit         string `json:"unit,omitempty"` // 单位（如 "tokens", "USD"）
+	Source       Source `json:"source"`         // 数据来源
 }
 
 // Headroom 返回归一化剩余额度（0.0-1.0）。
@@ -179,12 +185,18 @@ func (cs *ChannelState) DeepCopy() *ChannelState {
 //     新读数，不覆盖会让调度长期使用陈旧余量，如 provider API 80%→5%）；
 //   - 更低优先级来源保持忽略。
 //
-// Manager 的一次 update 即代表同来源的新快照，无需为 Value 增加时间戳。
+// Manager 的一次 update 即代表同来源的新快照，无需为 Value 增加时间戳；
+// 但窗口未知的 response_headers 观测需要按新鲜度兜底，因此进入状态时统一打观测戳
+// （调用方已带观测时刻则尊重原值）。所有写入路径都经过本方法，打戳不需要在解析点重复。
 func (cs *ChannelState) MergeValues(values []Value) {
 	if cs.Values == nil {
 		cs.Values = make(map[Dimension]Value)
 	}
+	nowMs := time.Now().UnixMilli()
 	for _, v := range values {
+		if v.ObservedAtMs == 0 {
+			v.ObservedAtMs = nowMs
+		}
 		current, exists := cs.Values[v.Dimension]
 		if !exists || sourceRank(v.Source) <= sourceRank(current.Source) {
 			cs.Values[v.Dimension] = v
@@ -269,33 +281,66 @@ func (cs *ChannelState) OverallHeadroom() float64 {
 
 // ── 辅助函数 ──
 
-// hasExpiredValues 判断是否存在窗口已翻转的陈旧观测。
-// ResetAtMs>0 且当前时间已过重置点时，该维度的余量属于上一窗口。
+// staleResponseHeaderObservationTTL 无 reset 头的 response_headers 观测的新鲜度上界。
+//
+// 该来源每次上游响应都会重写：超过这个时长仍未更新，等价于「该渠道在此期间没有拿到
+// 流量」，而它多半正是被这条陈旧读数压分导致的（自我强化的沉底死锁）——必须按新鲜度
+// 兜底剪除，否则 approaching_limit 永远没有第二条恢复路径。
+//
+// 只对 response_headers 生效：
+//   - provider_api 由订阅/余额轮询刷新（默认 24h 一轮），短 TTL 会在两次轮询之间丢掉
+//     余额与额度保护；
+//   - configured 是静态声明，不是观测。
+//
+// 取值 1h：分钟级窗口早已翻篇；同时与 Key/模型级拉黑的默认恢复时长（1h）同语义。
+const staleResponseHeaderObservationTTL = int64(time.Hour / time.Millisecond)
+
+// valueExpired 判定单条观测是否失效：
+//   - 窗口已知（ResetAtMs>0）：以窗口重置点为准，窗口未结束的读数依然有效，不再叠加
+//     新鲜度兜底；
+//   - 窗口未知（ResetAtMs==0）：只有 response_headers 观测按新鲜度上界兜底，其余来源
+//     永不剪除。
+//
+// 判据用观测时刻而不是渠道最后一次写入时刻——provider_api / configured 的写入也会顶新
+// ChannelState.FetchedAtMs，用状态级时间戳会把陈旧读数误判为新鲜。
+func valueExpired(v Value, nowMs int64) bool {
+	if v.ResetAtMs > 0 {
+		return nowMs >= v.ResetAtMs
+	}
+	if v.Source != SourceResponseHeaders || v.ObservedAtMs <= 0 {
+		return false
+	}
+	return nowMs-v.ObservedAtMs > staleResponseHeaderObservationTTL
+}
+
+// hasExpiredValues 判断是否存在已失效的观测（窗口翻转，或窗口未知的
+// response_headers 观测超过新鲜度上界）。
 func (cs *ChannelState) hasExpiredValues(nowMs int64) bool {
 	if cs == nil {
 		return false
 	}
 	for _, v := range cs.Values {
-		if v.ResetAtMs > 0 && nowMs >= v.ResetAtMs {
+		if valueExpired(v, nowMs) {
 			return true
 		}
 	}
 	return false
 }
 
-// pruneExpiredValues 剪除窗口已翻转的陈旧观测并重算状态。
+// pruneExpiredValues 剪除已失效的观测并重算状态。
 // 窗口重置后余量观测属于上一窗口（如上窗口剩 5%），继续参与判定会把已
 // 恢复满额的渠道压在 approaching_limit/exhausted；exhausted 尚有饱和桶
-// 懒重置兜底，approaching_limit 原先无任何恢复路径。剪除后状态回退
-// unknown（fail-open，不压分不沉底），待下一批观测刷新。
-// 无窗口语义的观测（ResetAtMs=0，如余额）永不剪除。
+// 懒重置兜底，approaching_limit 原先无任何恢复路径。窗口未知（无 reset 头）的
+// response_headers 观测再叠加一层新鲜度兜底，避免渠道停止拿量后永久沉底。
+// 剪除后状态回退 unknown（fail-open，不压分不沉底），待下一批观测刷新。
+// configured 与 provider_api 观测（ResetAtMs=0）永不剪除。
 func (cs *ChannelState) pruneExpiredValues(nowMs int64) {
 	if cs == nil {
 		return
 	}
 	pruned := false
 	for dim, v := range cs.Values {
-		if v.ResetAtMs > 0 && nowMs >= v.ResetAtMs {
+		if valueExpired(v, nowMs) {
 			delete(cs.Values, dim)
 			pruned = true
 		}
