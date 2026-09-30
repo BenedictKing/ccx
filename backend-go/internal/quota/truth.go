@@ -164,8 +164,9 @@ func NewChannelState(channelUID string) *ChannelState {
 	}
 }
 
-// DeepCopy 返回状态的深拷贝（至少复制 Values map）。
-// Manager 拥有状态，对外只交出快照：调用方修改返回值不影响内部数据。
+// DeepCopy 返回状态的深拷贝（Values map、每个 Value 的指针字段都复制）。
+// Manager 拥有状态，对外只交出快照：调用方修改返回值（含 *Remaining 这类指针）
+// 不影响内部数据。
 func (cs *ChannelState) DeepCopy() *ChannelState {
 	if cs == nil {
 		return nil
@@ -173,9 +174,27 @@ func (cs *ChannelState) DeepCopy() *ChannelState {
 	cp := *cs
 	cp.Values = make(map[Dimension]Value, len(cs.Values))
 	for k, v := range cs.Values {
-		cp.Values[k] = v
+		cp.Values[k] = v.DeepCopy()
 	}
 	return &cp
+}
+
+// DeepCopy 复制 Value 及其指针字段。Limit/Used/Remaining 是指针，逐字段浅拷贝会
+// 让快照与内部状态共享同一个浮点数，调用方一改就穿透。
+func (v Value) DeepCopy() Value {
+	cp := v
+	cp.Limit = cloneFloat64Ptr(v.Limit)
+	cp.Used = cloneFloat64Ptr(v.Used)
+	cp.Remaining = cloneFloat64Ptr(v.Remaining)
+	return cp
+}
+
+func cloneFloat64Ptr(p *float64) *float64 {
+	if p == nil {
+		return nil
+	}
+	cloned := *p
+	return &cloned
 }
 
 // MergeValues 合并一组配额值，按维度逐项判定归属：

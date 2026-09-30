@@ -241,27 +241,97 @@ func (m *Manager) Buckets() *BucketManager {
 	return m.buckets
 }
 
-// SnapshotAll 返回全部渠道的配额状态快照（先剪除窗口已过期的陈旧观测），
+// SnapshotAll 返回全部渠道的配额状态快照（先剪除已失效的观测），
 // 按 ChannelUID 排序保证输出稳定。观测为纯内存态，本快照即排查
 // 「渠道为何被沉底/压分」的权威出口。
+//
+// 两阶段：写锁内只做剪除（不改状态就不需要独占），拷贝放在读锁内完成，与调度侧的
+// 并发读不互斥；拷贝出来的副本再剪一次，保证「剪除与拷贝之间新写入的失效观测」也不会
+// 进快照（6a0444ed 的不变量：快照里不出现已失效观测）。
 func (m *Manager) SnapshotAll() []*ChannelState {
+	return m.snapshotAll(time.Now().UnixMilli())
+}
+
+// ChannelSnapshot 是一次一致性读取的结果：剪除后的状态副本 + 调度实际消费的派生值。
+// 两者取自同一瞬间，避免管理端点先取快照、再逐渠道重读而出现自相矛盾的行。
+type ChannelSnapshot struct {
+	State     *ChannelState
+	Headroom  float64
+	Saturated bool
+}
+
+// SnapshotAllWithStatus 在单次读取内产出全部渠道的快照与派生值（headroom / 饱和判定）。
+// 与 SnapshotAll 的差别是派生值直接算在快照副本上：不需要对每个渠道再取 3 次锁
+// （GetChannelHeadroom / IsChannelSaturated 各自还会触发一次惰性剪除），也不会出现
+// 「status=unknown 但 saturated=true」这类跨瞬间的矛盾。
+func (m *Manager) SnapshotAllWithStatus(nowMs int64) []ChannelSnapshot {
 	if m == nil {
 		return nil
 	}
-	nowMs := time.Now().UnixMilli()
-	// 剪除与拷贝在同一写锁内完成，避免遍历期间新增渠道或写回陈旧观测。
-	m.mu.Lock()
+	m.pruneAllStates(nowMs)
+
+	m.mu.RLock()
+	result := make([]ChannelSnapshot, 0, len(m.states))
+	for _, state := range m.states {
+		snapshot := state.DeepCopy()
+		snapshot.pruneExpiredValues(nowMs)
+		result = append(result, ChannelSnapshot{
+			State:     snapshot,
+			Headroom:  snapshot.OverallHeadroom(),
+			Saturated: m.saturatedForStateLocked(snapshot, nowMs),
+		})
+	}
+	m.mu.RUnlock()
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].State.ChannelUID < result[j].State.ChannelUID
+	})
+	return result
+}
+
+func (m *Manager) snapshotAll(nowMs int64) []*ChannelState {
+	if m == nil {
+		return nil
+	}
+	m.pruneAllStates(nowMs)
+
+	m.mu.RLock()
 	result := make([]*ChannelState, 0, len(m.states))
 	for _, state := range m.states {
-		state.pruneExpiredValues(nowMs)
-		result = append(result, state.DeepCopy())
+		snapshot := state.DeepCopy()
+		snapshot.pruneExpiredValues(nowMs)
+		result = append(result, snapshot)
 	}
-	m.mu.Unlock()
+	m.mu.RUnlock()
 
 	sort.Slice(result, func(i, j int) bool {
 		return result[i].ChannelUID < result[j].ChannelUID
 	})
 	return result
+}
+
+// pruneAllStates 在写锁内对所有渠道做一次惰性剪除（只改状态，不拷贝）。
+func (m *Manager) pruneAllStates(nowMs int64) {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, state := range m.states {
+		state.pruneExpiredValues(nowMs)
+	}
+}
+
+// RemoveChannel 删除渠道的配额状态（渠道删除后的清理汇聚点调用）。
+// 不删饱和桶：桶按 accountUID 聚合，而 accountUID 可能是多个渠道共享的订阅 UID，
+// 按单个渠道删除会误伤其他渠道；桶条目本身很小且会在窗口翻转时懒重置。
+func (m *Manager) RemoveChannel(channelUID string) {
+	if m == nil || channelUID == "" {
+		return
+	}
+	m.mu.Lock()
+	delete(m.states, channelUID)
+	m.mu.Unlock()
 }
 
 // IsChannelSaturated 判断渠道是否处于配额紧张状态。
@@ -281,6 +351,15 @@ func (m *Manager) IsChannelSaturated(channelUID string, nowMs int64) bool {
 
 	state, ok := m.states[channelUID]
 	if !ok {
+		return false
+	}
+	return m.saturatedForStateLocked(state, nowMs)
+}
+
+// saturatedForStateLocked 是饱和判定的唯一实现（调用方需持有 Manager 读锁）。
+// SnapshotAllWithStatus 把它作用在快照副本上，保证派生值与返回值来自同一瞬间。
+func (m *Manager) saturatedForStateLocked(state *ChannelState, nowMs int64) bool {
+	if state == nil {
 		return false
 	}
 	switch state.Status {
@@ -312,6 +391,10 @@ func (m *Manager) ChannelSaturationRank(channelUID string, nowMs int64) int {
 	if m == nil {
 		return -1
 	}
+
+	// 与 IsChannelSaturated 同一剪除口径：否则同一渠道在两处会给出相反结论
+	//（一处已按窗口/新鲜度剪除、另一处还拿陈旧观测压分）。
+	m.pruneIfExpired(channelUID, nowMs)
 
 	m.mu.RLock()
 	defer m.mu.RUnlock()

@@ -239,6 +239,13 @@ func (s *ChannelScheduler) DeleteChannelMetrics(upstream *config.UpstreamConfig,
 		s.traceAffinity.RemoveByRoute(routingref.RouteRef{ChannelUID: upstream.ChannelUID})
 	}
 
+	// 配额状态同样按 ChannelUID 清理：配额观测是纯内存态且原先没有删除路径，
+	// 已删渠道会永远留在 GET /api/quota/channels 输出里，运维会误判
+	// 「这渠道为什么还被压分」。放在同一个汇聚点，未来新调用点不会漏接。
+	if upstream.ChannelUID != "" && s.quotaManager != nil {
+		s.quotaManager.RemoveChannel(upstream.ChannelUID)
+	}
+
 	prefix := kindSchedulerLogPrefix(kind)
 
 	// 前置条件守卫：检查被删除渠道是否仍在配置中
@@ -277,6 +284,12 @@ func (s *ChannelScheduler) DeleteChannelMetrics(upstream *config.UpstreamConfig,
 	}
 
 	metricsManager := s.getMetricsManager(kind)
+
+	// 该协议未接指标管理器（精简装配或测试）时跳过指标清理，不能让它阻断
+	// 日志/亲和/配额这些同样挂在本清理汇聚点上的动作，更不能空指针崩溃。
+	if metricsManager == nil {
+		return
+	}
 
 	// 只删除独占的 MetricsKey
 	if len(exclusiveMetricsKeys) > 0 {
