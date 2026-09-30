@@ -1704,6 +1704,27 @@ func (cm *ConfigManager) GetUpstreamByUID(apiType, uid string) *UpstreamConfig {
 	return upstream.Clone()
 }
 
+// UpstreamModelCapabilitiesSnapshot 返回全局上游模型能力表的深拷贝快照。
+// 语义等价于 GetConfig().UpstreamModelCapabilities，但只克隆这一张表（百来条小结构），
+// 不克隆六个 upstream 数组与 autopilot 配置——调度热路径每个 attempt 都要读它，
+// 整份 GetConfig() 深拷贝纯属浪费。
+func (cm *ConfigManager) UpstreamModelCapabilitiesSnapshot() map[string]UpstreamModelCapability {
+	if cm == nil {
+		return nil
+	}
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+
+	if cm.config.UpstreamModelCapabilities == nil {
+		return nil
+	}
+	cloned := make(map[string]UpstreamModelCapability, len(cm.config.UpstreamModelCapabilities))
+	for key, capability := range cm.config.UpstreamModelCapabilities {
+		cloned[key] = cloneUpstreamModelCapability(capability)
+	}
+	return cloned
+}
+
 // GetNextAPIKey 获取下一个 API 密钥（纯 failover 模式）
 // apiType: 接口类型（Messages/Responses/Gemini），用于日志标签前缀
 func (cm *ConfigManager) GetNextAPIKey(upstream *UpstreamConfig, failedKeys map[string]bool, apiType string) (string, error) {

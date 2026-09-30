@@ -404,7 +404,7 @@ func buildRequestCostContext(cfgManager *config.ConfigManager, upstream *config.
 	// 成本上下文：finalize 回写 token 后按它重算，避免指标记录落入仅内置注册表的口径。
 	var globalCaps map[string]config.UpstreamModelCapability
 	if cfgManager != nil {
-		globalCaps = cfgManager.GetConfig().UpstreamModelCapabilities
+		globalCaps = cfgManager.UpstreamModelCapabilitiesSnapshot()
 	}
 	resolved := config.ResolveUpstreamCapability(model, upstream, globalCaps)
 	ctx.ListPricing = resolved.Capability.Pricing
@@ -698,7 +698,7 @@ func TryUpstreamWithAllKeys(
 			// 客户端/上游 subagent 可能发送超过模型上限的 max_tokens（如 Claude Code 默认 64000），
 			// 而部分平台（火山方舟 kimi 系列硬限 32768）会直接 400。此处静默下调到模型上限，
 			// 使请求成功而非被调度过滤为"无可用渠道"。
-			if cap := config.ResolveUpstreamCapability(capabilityRequestModel, upstream, cfgManager.GetConfig().UpstreamModelCapabilities); cap.Capability.MaxOutputTokens > 0 {
+			if cap := config.ResolveUpstreamCapability(capabilityRequestModel, upstream, cfgManager.UpstreamModelCapabilitiesSnapshot()); cap.Capability.MaxOutputTokens > 0 {
 				if clamped, changed := clampMaxTokensInBody(attemptBody, kind, cap.Capability.MaxOutputTokens); changed {
 					attemptBody = clamped
 					RequestLogf(c, "[%s-Clamp] max_tokens 超过模型 %q 上限 %d，已下调", apiType, cap.ActualModel, cap.Capability.MaxOutputTokens)
@@ -957,7 +957,7 @@ func TryUpstreamWithAllKeys(
 			// 例如 Kimi K3/K2.7-code/K2.6 的 temperature/top_p/n 等为固定值，传入即 400。
 			// 约束数据随 model-registry 走 presetstore 刷新链路，运营者更新 JSON 即可生效，
 			// 不需要重新编译发版。
-			if paramCap := config.ResolveUpstreamCapability(attemptModel, upstream, cfgManager.GetConfig().UpstreamModelCapabilities); paramCap.Capability.ParamConstraints != nil {
+			if paramCap := config.ResolveUpstreamCapability(attemptModel, upstream, cfgManager.UpstreamModelCapabilitiesSnapshot()); paramCap.Capability.ParamConstraints != nil {
 				if stripped, applied := ApplyKnownParamConstraints(attemptBody, paramCap.Capability.ParamConstraints); len(applied) > 0 {
 					attemptBody = stripped
 					RestoreRequestBody(c, attemptBody)
