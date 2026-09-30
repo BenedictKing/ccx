@@ -1511,6 +1511,7 @@
   "groupModel.restore": "恢复整组模型",
   "groupModel.unknownGroup": "未识别分组",
   "groupModel.error.channelRequired": "请先保存渠道再管理分组模型。",
+  "groupModel.error.noRouteResult": "分组模型操作没有落到任何协议路由，请刷新后重试。",
   "groupModel.error.modelRequired": "请输入要禁用的模型。",
   "groupModel.disableSuccess": "已禁用分组 {group} 的 {model}，影响 {count} 个 Key。",
   "groupModel.restoreSuccess": "已恢复分组 {group} 的 {model}，影响 {count} 个 Key。",

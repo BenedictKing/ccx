@@ -1511,6 +1511,7 @@
   "groupModel.restore": "Restore for group",
   "groupModel.unknownGroup": "Unknown group",
   "groupModel.error.channelRequired": "Save the channel before managing group models.",
+  "groupModel.error.noRouteResult": "The group model operation did not reach any protocol route. Refresh and retry.",
   "groupModel.error.modelRequired": "Enter a model to disable.",
   "groupModel.disableSuccess": "Disabled {model} for group {group}; {count} keys affected.",
   "groupModel.restoreSuccess": "Restored {model} for group {group}; {count} keys affected.",

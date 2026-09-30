@@ -17,15 +17,24 @@ import { extractChannelNamePrefix, syncBaseUrlsFormState } from '@/utils/channel
 import type { ManagedChannelType } from '@/utils/channel-type-api'
 import { buildExpectedRequestUrls } from '@/utils/expected-request-urls'
 import { parseQuickInput } from '@/utils/quick-input-parser'
+import {
+  groupModelDisableTargets,
+  groupModelPolicyKey,
+  groupModelRestoreTargets,
+  mergeGroupModelUnion,
+  type GroupModelRouteTarget,
+} from '@/utils/group-model-policy'
 import { providerDisplayName, isOfficialProviderChannel, isAutoManagedAccountChannel } from '@/utils/providerDisplay'
 import { defaultStreamTimeouts } from '@/utils/stream-timeout-presets'
 import type {
   Channel,
   ChannelDiscoveryResponse,
   ChannelDiscoveryTargetClient,
+  ChannelKind,
   CompatDiagnoseResult,
   DisabledGroupModel,
   DisabledKeyInfo,
+  GroupModelMutationResponse,
 } from '@/services/admin-api'
 import { useChannelEditSectionNav } from '@/composables/useChannelEditSectionNav'
 import { useCopilotOAuth } from '@/composables/useCopilotOAuth'
@@ -75,6 +84,12 @@ const { t } = useLanguage()
   const disabledApiKeys = computed<DisabledKeyInfo[]>(() => props.channel?.disabledApiKeys ?? [])
   const localDisabledGroupModels = ref<DisabledGroupModel[]>([])
   const disabledGroupModels = computed(() => localDisabledGroupModels.value)
+
+  // 分组模型限制的并集语义见 utils/group-model-policy（纯函数，便于单测）。
+  const primaryRouteTarget = (channel: Channel): GroupModelRouteTarget => ({
+    kind: props.channelType as ChannelKind,
+    index: channel.index,
+  })
   const historicalApiKeys = computed(() => props.channel?.historicalApiKeys ?? [])
   const {
     restoringKey,
@@ -415,7 +430,7 @@ const { t } = useLanguage()
     keyModelsStatus.value.clear()
     resetTargetModelState()
     localRestoredKeys.value = new Set()
-    localDisabledGroupModels.value = [...(ch.disabledGroupModels ?? [])]
+    localDisabledGroupModels.value = mergeGroupModelUnion(ch)
     modelCapabilityRows.value = modelCapabilitiesToRows(ch.modelCapabilities || {}, () => ++rowId)
     form.embeddingCapabilityRows = embeddingCapabilitiesToRows(ch.embeddingCapabilities || {}, nextEmbeddingRowId)
     form.modelCapabilityRows = modelCapabilityRows.value
@@ -890,9 +905,28 @@ const { t } = useLanguage()
     ]
   }
 
+  // 按并集逐路由提交：单条路由失败即整体失败，避免"部分协议仍放行"被当成成功。
+  // 无 fatal 即至少一条 fulfilled，返回其中第一条的结果供 UI 使用。
+  async function runGroupModelMutation(
+    targets: Array<{ kind: ChannelKind; index: number }>,
+    action: (target: { kind: ChannelKind; index: number }) => Promise<GroupModelMutationResponse>,
+  ): Promise<GroupModelMutationResponse> {
+    const settled = await Promise.allSettled(targets.map(action))
+    const fatal = settled.find((r): r is PromiseRejectedResult => r.status === 'rejected')
+    if (fatal) throw fatal.reason
+    const firstOk = settled.find(
+      (r): r is PromiseFulfilledResult<GroupModelMutationResponse> => r.status === 'fulfilled',
+    )
+    if (!firstOk) throw new Error(t('groupModel.error.noRouteResult'))
+    return firstOk.value
+  }
+
   async function handleGroupModelDisable(payload: { apiKey: string; model: string; note?: string }) {
     if (!props.channel) throw new Error(t('groupModel.error.channelRequired'))
-    const result = await adminApi.disableGroupModel(props.channelType, props.channel.index, payload)
+    const result = await runGroupModelMutation(
+      groupModelDisableTargets(props.channel, payload.apiKey, primaryRouteTarget(props.channel)),
+      target => adminApi.disableGroupModel(target.kind, target.index, payload),
+    )
     upsertDisabledGroupModel({
       quotaGroup: result.quotaGroup,
       key: payload.apiKey,
@@ -908,10 +942,12 @@ const { t } = useLanguage()
     const payload = record.quotaGroup
       ? { quotaGroup: record.quotaGroup, model: record.model }
       : { apiKey: record.key, model: record.model }
-    const result = await adminApi.restoreGroupModel(props.channelType, props.channel.index, payload)
-    localDisabledGroupModels.value = localDisabledGroupModels.value.filter(item =>
-      item.quotaGroup !== record.quotaGroup || item.model !== record.model
+    const policyKey = groupModelPolicyKey(record)
+    const result = await runGroupModelMutation(
+      groupModelRestoreTargets(props.channel, record, primaryRouteTarget(props.channel)),
+      target => adminApi.restoreGroupModel(target.kind, target.index, payload),
     )
+    localDisabledGroupModels.value = localDisabledGroupModels.value.filter(item => groupModelPolicyKey(item) !== policyKey)
     return result
   }
 

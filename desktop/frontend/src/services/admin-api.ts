@@ -326,6 +326,9 @@ export interface ChannelProtocolRoute {
   channelUid: string
   status: string
   apiKeys: string[]
+  // 该协议路由上的分组模型限制记录：聚合视图是各路由的并集，
+  // 展示与恢复都必须按路由粒度定位（否则只处理主路由那一份）。
+  disabledGroupModels?: DisabledGroupModel[]
 }
 
 export interface ChannelProtocolCapsule {
