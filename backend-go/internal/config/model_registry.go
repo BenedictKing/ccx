@@ -263,6 +263,13 @@ func BuiltinAgentModelProfiles() map[string]AgentModelProfile {
 			"GPT-6 Sol", 272000, 1050000, 128000, "tokens",
 			[]string{"none", "low", "medium", "high", "xhigh", "max"}, false,
 		),
+		// GPT-6.1 Sol（2026-09-29 发布）为独立次代模型（不归并进 gpt-6-sol）：
+		// 官方 effort 档去掉 none（low~max 五档）；工具调用仅限 Responses API，
+		// Chat Completions 不再支持 function calling；cached input 降为 input 的 5%。
+		"gpt-6.1-sol": builtinGPTAgentModelProfile(
+			"GPT-6.1 Sol", 272000, 1050000, 128000, "tokens",
+			[]string{"low", "medium", "high", "xhigh", "max"}, false,
+		),
 		"gpt-6-luna": builtinGPTAgentModelProfile(
 			"GPT-6 Luna", 272000, 1050000, 128000, "tokens",
 			[]string{"none", "low", "medium", "high", "xhigh", "max"}, false,

@@ -27,6 +27,8 @@ export const DRADAR_MODEL_MAP = {
   // GPT-6 Sol/Luna（2026-09-22 发布）：dradar slug 与 canonical 同名
   'gpt-6-sol': 'gpt-6-sol',
   'gpt-6-luna': 'gpt-6-luna',
+  // GPT-6.1 Sol（2026-09-29 发布）：dradar slug 保留点号
+  'gpt-6.1-sol': 'gpt-6.1-sol',
   'gpt-5.6-sol': 'gpt-5.6-sol',
   'gpt-5.6-terra': 'gpt-5.6-terra',
   'gpt-5.6-luna': 'gpt-5.6-luna',

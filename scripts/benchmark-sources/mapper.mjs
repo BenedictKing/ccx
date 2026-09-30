@@ -19,6 +19,8 @@ export const DEEPSWE_MODEL_MAP = {
   // GPT-6 Sol/Luna（2026-09-22 发布）：deepswe slug 与 canonical 同名
   'gpt-6-sol': 'gpt-6-sol',
   'gpt-6-luna': 'gpt-6-luna',
+  // GPT-6.1 Sol（2026-09-29 发布）：deepswe slug 点号转连字符
+  'gpt-6-1-sol': 'gpt-6.1-sol',
   'gpt-5-6-sol': 'gpt-5.6-sol',
   'gpt-5-6-terra': 'gpt-5.6-terra',
   'gpt-5-6-luna': 'gpt-5.6-luna',
@@ -79,6 +81,8 @@ export const BENCHLM_MODEL_MAP = {
   // GPT-6 Sol/Luna（2026-09-22 发布）：benchlm slug 与 canonical 同名
   'gpt-6-sol': 'gpt-6-sol',
   'gpt-6-luna': 'gpt-6-luna',
+  // GPT-6.1 Sol（2026-09-29 发布）：benchlm slug 点号转连字符
+  'gpt-6-1-sol': 'gpt-6.1-sol',
   'claude-opus-4-8': 'claude-opus-4-8',
   'claude-opus-4-7': 'claude-opus-4-7',
   'claude-opus-4-7-adaptive': 'claude-opus-4-7',

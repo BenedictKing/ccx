@@ -125,6 +125,38 @@ func TestResolveAgentModelProfile_GPT6SolLunaBuiltins(t *testing.T) {
 	}
 }
 
+func TestResolveAgentModelProfile_GPT61SolBuiltin(t *testing.T) {
+	// GPT-6.1 Sol（2026-09-29 发布）是独立次代模型：官方 effort 档去掉 none
+	//（low~max 五档），工具调用仅限 Responses API；Priority Tier 同 Sol 保守关闭。
+	profile := ResolveAgentModelProfile("gpt-6.1-sol", nil)
+	if !profile.Known {
+		t.Fatal("expected built-in gpt-6.1-sol profile")
+	}
+	if profile.Profile.DisplayName != "GPT-6.1 Sol" {
+		t.Fatalf("DisplayName = %q, want GPT-6.1 Sol", profile.Profile.DisplayName)
+	}
+	if profile.Profile.ContextWindowTokens != 272000 || profile.Profile.MaxContextWindowTokens != 1050000 ||
+		profile.Profile.MaxOutputTokens != 128000 {
+		t.Fatalf("window profile = %d/%d/%d, want 272000/1050000/128000",
+			profile.Profile.ContextWindowTokens, profile.Profile.MaxContextWindowTokens, profile.Profile.MaxOutputTokens)
+	}
+	wantEfforts := []string{"low", "medium", "high", "xhigh", "max"}
+	if len(profile.Profile.ReasoningEfforts) != len(wantEfforts) {
+		t.Fatalf("ReasoningEfforts = %v, want exactly %v", profile.Profile.ReasoningEfforts, wantEfforts)
+	}
+	for _, effort := range wantEfforts {
+		if !containsString(profile.Profile.ReasoningEfforts, effort) {
+			t.Fatalf("ReasoningEfforts = %v, want %s", profile.Profile.ReasoningEfforts, effort)
+		}
+	}
+	if containsString(profile.Profile.ReasoningEfforts, "none") {
+		t.Fatalf("ReasoningEfforts = %v, gpt-6.1-sol 官方不再支持 none 档", profile.Profile.ReasoningEfforts)
+	}
+	if profile.Profile.SupportsPriorityTier {
+		t.Fatal("SupportsPriorityTier = true, 官方文档未列出 gpt-6.1-sol priority tier 支持")
+	}
+}
+
 func TestResolveAgentModelProfile_GPT55UsesLiteLLMMaximumContext(t *testing.T) {
 	profile := ResolveAgentModelProfile("gpt-5.5", nil)
 	if !profile.Known {
@@ -1039,6 +1071,9 @@ func TestResolveUpstreamCapability_GPT6SolLuna(t *testing.T) {
 		{model: "openai/gpt-6-sol", displayName: "GPT-6 Sol"},
 		{model: "gpt-6-luna", displayName: "GPT-6 Luna"},
 		{model: "openai/gpt-6-luna", displayName: "GPT-6 Luna"},
+		// GPT-6.1 Sol 是独立次代模型，不归并进 gpt-6-sol
+		{model: "gpt-6.1-sol", displayName: "GPT-6.1 Sol"},
+		{model: "openai/gpt-6.1-sol", displayName: "GPT-6.1 Sol"},
 	}
 
 	for _, tt := range tests {

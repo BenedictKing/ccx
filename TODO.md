@@ -360,3 +360,31 @@ Codex 客户端本地凭证管理：为 provider gateway 管理 OAuth 凭证并�
 Codex 客户端 provider 配置能力：provider 块可显式指定 model catalog URL。属客户端侧特性——Desktop 生成的 `[model_providers.ccx]` 不含该字段即不触发（沿用 v0.146「独立 Web Search」「默认不开启即无影响」判定）；CCX 已提供 `GET /v1/models`（`main.go` 已注册），Codex 未显式指定 catalog URL 时按默认发现流程走。可选 Desktop 观察项：未来可在生成的 provider 配置里显式把 catalog URL 指向 CCX `/v1/models`，非代理层协议改动。
 
 **总体结论：整条 v0.156.0 无需落地代码改动。** 1/2/4/5/6 明确无影响；第 3 项（file_id 图片引用）透传路径原生兼容，仅非透传协议转换路径静默丢弃 file_id 图片——属既有兼容边界（同音频转 Chat），列为观察项。
+
+---
+
+> **上游版本变更**
+
+## [x] Claude Code v2.1.285 上游协议/工具变更评估（2026-09-30 完成）
+
+发现协议/工具/用法变更（2.1.280→2.1.285）。评估结论：四项均为客户端侧容错/新模型/透传兼容头，无需落地代码改动；第 1 项与 CCX SSE 尾终止符语义相关、第 2 项留观察项。
+
+### 1. 网关流处理容错三连（v2.1.281）——无需改动，与 CCX 尾事件语义对齐确认
+
+上游客户端修复：①经代理/网关「干净关闭的截断流」不再误判为完整响应（原来无警告显示为完成），重复流事件不再导致工具跑两次；②代理中途丢流事件不再整响应报 "Content block not found"（保留部分响应）；③代理发送「尾随 usage-only 帧」不再丢 stop reason；④最终事件前断连时空完整响应不再重发两次。
+
+CCX 侧确认：透传 EOF 只补 SSE 终止符（`\n\n`）不重发尾行正文（e2de1217/bd449ddb 语义），补齐终止符后 CC 会将流视为正常完结，与新版「无终止符=被截断并提示」的判定兼容；CCX 从不去重/重发 chunk，不产生「重复流事件」。客户端容错收紧不影响 CCX 发送侧行为。
+
+### 2. 网关 hint 头新增 `x-claude-code-prompt-id`（v2.1.283）——透传兼容，留观察项
+
+opt-in（`CLAUDE_CODE_GATEWAY_HINT_HEADERS=1`）新增 `x-claude-code-prompt-id`，供 LLM 网关把服务同一用户 prompt 的多个请求分组。与 v2.1.273 已评估的 hint 头族同性质：`PrepareUpstreamHeaders` 不剥离 `x-claude-code-*`，透传兼容，无需改动。观察项：CCX 会话亲和当前按会话标识（`ExtractUnifiedSessionID`），日后若需 prompt 级分组可考虑消费该头（当前不强制）。
+
+### 3. Claude Sonnet 5.5 成为默认 Sonnet（v2.1.284）——已跟上
+
+`claude-sonnet-5-5`（1M 上下文，$2/$10 per Mtok，cache 读 $0.20）现为 Anthropic API 默认 Sonnet。CCX 已注册该模型及 effort 分档（b7746d82，2026-09-29），注册表含 high/medium/xhigh 档，无需改动。
+
+### 4. 第三方网关 web search 密文 400（v2.1.282）——客户端侧修复，无需改动
+
+上游客户端修复：会话历史持有 API 无法解密的 web search 结果（例如某轮经第三方网关回答）时整请求 400。修复在客户端（历史修复/重试），不改变对网关的协议要求；CCX messages 透传不触碰 web_search 结果块。同类：redacted_thinking "Invalid data" 重试、compaction 被拒 fallback——均为客户端内部容错。
+
+**总体结论：v2.1.281→2.1.285 无需落地代码改动**；两项观察项（prompt-id 分组头、流截断判定语义）随相关模块迭代时顺带回访。
