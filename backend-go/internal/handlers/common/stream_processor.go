@@ -561,6 +561,12 @@ func HasOpenAIChatSemanticContent(event string) bool {
 			if calls, ok := delta["tool_calls"].([]interface{}); ok && len(calls) > 0 {
 				return true
 			}
+			// 音频等多模态增量（如 {"audio":{"data":"<base64>","transcript":"..."}}）：
+			// 本检测器只建模文本/思考/工具调用，漏掉这类增量会把纯音频流判成空响应
+			// 并触发 failover。带非空对象即视为可交付内容。
+			if audio, ok := delta["audio"].(map[string]interface{}); ok && len(audio) > 0 {
+				return true
+			}
 		}
 	}
 	return false

@@ -954,6 +954,16 @@ func TestHasOpenAIChatSemanticContent(t *testing.T) {
 			want:  true,
 		},
 		{
+			name:  "audio delta",
+			event: `data: {"choices":[{"delta":{"audio":{"id":"a1","data":"AAAA","transcript":"hi"}}}]}` + "\n\n",
+			want:  true,
+		},
+		{
+			name:  "empty audio object",
+			event: `data: {"choices":[{"delta":{"audio":{}}}]}` + "\n\n",
+			want:  false,
+		},
+		{
 			name:  "legacy function call name",
 			event: `data: {"choices":[{"delta":{"function_call":{"name":"Read"}}}]}` + "\n\n",
 			want:  true,
