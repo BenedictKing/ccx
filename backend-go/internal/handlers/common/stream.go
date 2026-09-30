@@ -14,7 +14,9 @@ import (
 
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/metrics"
+	"github.com/BenedictKing/ccx/internal/types"
 	"github.com/BenedictKing/ccx/internal/utils"
+	"github.com/gin-gonic/gin"
 )
 
 // ErrEmptyStreamResponse 上游返回 HTTP 200 但流式响应内容为空或几乎为空
@@ -63,6 +65,42 @@ func (e *UpstreamRequestRejectedError) reasonLabel() string {
 		return e.Code
 	}
 	return "request_error"
+}
+
+// RespondUpstreamRequestRejected 按客户端入口协议把预检阶段识别的请求侧拒绝
+// 写回客户端。调用点处于 SSE 头写出之前（预检在设置响应头前返回），与 HTTP 4xx
+// 「非 failover 错误」分支（先写响应体再返回 handled=true）同一契约：终态错误
+// 必须带着错误体返回，否则调用方按 handled=true 直接返回会造成 200 + 零字节。
+func RespondUpstreamRequestRejected(c *gin.Context, apiType string, rejected *UpstreamRequestRejectedError) {
+	if rejected == nil {
+		return
+	}
+	message := strings.TrimSpace(rejected.Message)
+	if message == "" {
+		message = rejected.Error()
+	}
+	if strings.EqualFold(apiType, "Gemini") {
+		c.JSON(400, types.GeminiError{
+			Error: types.GeminiErrorDetail{
+				Code:    400,
+				Message: message,
+				Status:  "INVALID_ARGUMENT",
+			},
+		})
+		return
+	}
+	errType := strings.TrimSpace(rejected.Type)
+	if errType == "" {
+		errType = strings.TrimSpace(rejected.Code)
+	}
+	if errType == "" {
+		errType = "invalid_request_error"
+	}
+	errObj := gin.H{"message": message, "type": errType, "param": nil}
+	if code := strings.TrimSpace(rejected.Code); code != "" {
+		errObj["code"] = code
+	}
+	c.JSON(400, gin.H{"error": errObj})
 }
 
 func streamPreflightEmptyError(preflight *StreamPreflightResult) error {

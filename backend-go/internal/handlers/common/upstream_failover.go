@@ -1834,7 +1834,9 @@ func TryUpstreamWithAllKeys(
 					channelScheduler.UpdateConversationStatus(kind, streamingUserID, "active")
 				}
 				lastError = err
-				// 区分客户端错误和渠道故障
+				// 区分客户端错误和渠道故障；errors.As 匹配 rejected，防止未来
+				// provider 闭包包装后静默落入「真实渠道故障」分支被逐 Key 重放。
+				var rejected *UpstreamRequestRejectedError
 				if isClientSideError(err) {
 					// 客户端取消/断开：计入总请求数但不计入失败
 					metricsManager.RecordRequestFinalizeClientCancel(currentBaseURL, apiKey, metricsServiceType, requestID)
@@ -1842,7 +1844,7 @@ func TryUpstreamWithAllKeys(
 					RequestLogf(c, "[%s-Cancel] 请求已取消，停止渠道 failover", apiType)
 					// 完成日志记录（客户端取消）
 					CompleteLog(channelLogStore, metricsKey, logRequestID, http.StatusOK, false, "client canceled", isRetryAttempt)
-				} else if rejected, ok := err.(*UpstreamRequestRejectedError); ok {
+				} else if errors.As(err, &rejected) {
 					// 上游以流内错误对象明确拒绝本次请求（invalid_request / 上下文超长等
 					// 请求侧确定性错误）：与 HTTP 4xx 的「非 failover 错误」分支同一语义，
 					// 问题出在请求本身而非渠道-模型健康度。不逐 Key/渠道重放，也不做渠道级
@@ -1851,6 +1853,9 @@ func TryUpstreamWithAllKeys(
 					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, executionKind)
 					CompleteLog(channelLogStore, metricsKey, logRequestID, http.StatusBadRequest, false, rejected.Error(), isRetryAttempt)
 					RequestLogf(c, "[%s-RequestRejected] 上游以流内错误拒绝请求 (Key: %s): %s", apiType, utils.MaskAPIKey(apiKey), rejected.Error())
+					// 预检阶段 SSE 头未写：先按客户端协议写出错误体再返回，兑现
+					// handled=true 的「已向客户端写回响应」契约，避免终态错误空 200。
+					RespondUpstreamRequestRejected(c, apiType, rejected)
 					return true, "", 0, nil, usage, err
 				} else if errors.Is(err, ErrEmptyStreamResponse) || errors.Is(err, ErrInvalidResponseBody) || errors.Is(err, ErrEmptyNonStreamResponse) || errors.Is(err, ErrStreamFirstContentTimeout) || errors.Is(err, ErrStreamStalled) {
 					// 空响应（流式 / 非流式）或无效响应体（如 HTML）或流式首字超时/断流：Header 未发送，可安全 failover
