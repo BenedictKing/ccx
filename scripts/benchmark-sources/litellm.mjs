@@ -138,7 +138,10 @@ export const LITELLM_MODEL_MAP = {
   'zai/glm-5.1': 'glm-5.1',
   'dashscope/qwen-coder': 'qwen3-coder',
   'dashscope/qwen-max': 'qwen3-max',
-  'moonshot/kimi-k2-thinking': 'kimi-k2-thinking',
+  // kimi-k2-thinking 上游裸 key 已改为 moonshot.kimi-k2-thinking（bedrock_converse，cacheRead=0 会污染缓存价），
+  // 改用 OpenRouter 托管 key：定价 0.6/2.5/0.15 与 registry 官方手工价完全一致，cacheRead 0.15 吻合；maxOutputTokens
+  // 上游 98304 < registry 262144，mergeLitellmData 有 !cap.maxOutputTokens 守卫不会降级。
+  'openrouter/moonshotai/kimi-k2-thinking': 'kimi-k2-thinking',
   // kimi-k2.7-code 的裸 key 已从上游移除，改用 Cloudflare 托管 key（定价与官方一致 0.95/4/0.19，ctx 256K）
   'cloudflare/@cf/moonshotai/kimi-k2.7-code': 'kimi-k2.7-code',
   // kimi-k3 在 litellm 仅有 Azure AI Foundry 托管价（高于官方直连），故意不映射：
