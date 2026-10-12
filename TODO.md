@@ -388,3 +388,39 @@ opt-in（`CLAUDE_CODE_GATEWAY_HINT_HEADERS=1`）新增 `x-claude-code-prompt-id`
 上游客户端修复：会话历史持有 API 无法解密的 web search 结果（例如某轮经第三方网关回答）时整请求 400。修复在客户端（历史修复/重试），不改变对网关的协议要求；CCX messages 透传不触碰 web_search 结果块。同类：redacted_thinking "Invalid data" 重试、compaction 被拒 fallback——均为客户端内部容错。
 
 **总体结论：v2.1.281→2.1.285 无需落地代码改动**；两项观察项（prompt-id 分组头、流截断判定语义）随相关模块迭代时顺带回访。
+
+---
+
+> **上游版本变更**
+
+## [ ] Claude Code v2.1.295 上游协议/工具变更评估
+
+发现协议/工具/用法变更（2.1.288→2.1.295）。初步判断：主要为 hooks `onFailure`、Program Status Protocol、plugin 架构完善、Claude Haiku 5.5 新模型、MCP 改进、云会话修复等，多为客户端内部能力与容错增强，协议层面无强制改动需求，列为观察评估待办。
+
+关键变更点：
+- v2.1.295：hooks `onFailure: "block"` 策略、OSC 7501 终端状态协议、`timeouts.upstream_ttfb_ms` 支持扩展到云上游、Fable 模型列表修复、`effort` 参数传递到 Agent tool
+- v2.1.293：Claude Haiku 5.5 新增（`claude-haiku-5-5`，1M context，$0.10/$0.50 per Mtok）、plugin `isDeferred` 工具注册、context compaction 内存泄漏修复
+- v2.1.292：`--marketplace <source>` 快捷安装、Agent tool `effort` 参数、prompt caching for mods、auto mode 修复
+- v2.1.290/291：plugin 架构重构、云会话稳定性、MCP 改进、安全修复（PreToolUse bypass、网络路径读取）
+
+待深入评估项（按优先级）：
+1. **Haiku 5.5 模型注册**（v2.1.293）：需确认 CCX `model-registry.json` 是否已注册该模型及其定价/能力
+2. **hooks `onFailure` 行为**（v2.1.295）：虽为客户端 hook 能力，需确认 CCX 作为网关是否透传相关配置头
+3. **`upstream_ttfb_ms` 超时配置**（v2.1.295）：CCX 自身已有上游超时机制，需对齐新增的 TTFB 语义
+4. **plugin 架构变更**（v2.1.290-295 多版本）：`$.tool.register` / `isDeferred` / mod 热重载 / guard hooks，确认是否影响 CCX 作为 LLM 网关的透传行为
+5. **Agent tool `effort` 参数**（v2.1.292）：确认 CCX Responses 渠道是否需要感知该参数
+
+## [ ] Codex rust-v0.162.0 上游协议/工具变更评估
+
+发现协议/工具/用法变更（0.160.0→0.162.0）。初步判断：主要为 worktree 管理、任务钉选、transcript 复制、MCP 改进、自定义 provider 能力扩展、Code Mode 工具搜索等，多为 TUI/app-server 侧能力，wire protocol 层面变更较少，列为观察评估待办。
+
+关键变更点：
+- v0.162.0：managed worktree 工具、任务钉选（Command Center）、`/copy` transcript 导航、自定义 provider 的 `live_web_access` / `remote_compaction` 能力配置、Code Mode 工具搜索排名、JavaScript streaming helpers
+- v0.161.0：GPT-6.1 Sol 默认模型、Bedrock multi-agent V2 + Ultra reasoning、`/mcp login` TUI 命令、音频设备选择、Daybreak opt-in 机制、filesystem 提权与权限保留、Windows 沙箱改进
+
+待深入评估项（按优先级）：
+1. **GPT-6.1 Sol 模型**（v0.161.0）：需确认 CCX 是否需要注册该模型（若客户端通过 CCX 访问 OpenAI/Bedrock）
+2. **自定义 provider 能力配置**（v0.162.0）：`live_web_access` / `remote_compaction` 字段，确认 CCX 作为自定义 Responses provider 是否需要在 `/v1/models` 或其他发现端点暴露这些能力
+3. **multi-agent V2 与 Ultra reasoning**（v0.161.0）：Bedrock 侧新增，需确认 CCX Responses 渠道对 Bedrock 的兼容性
+4. **reasoning parameters 演进**（v0.161.0 延续 v0.145）：确认 CCX `NormalizeReasoningObjectForUpstream` 是否需要适配新行为
+5. **CRLF 保留**（v0.162.0 `apply_patch`）：与 CCX 无直接关系，但可作为 converter 文本处理参考
