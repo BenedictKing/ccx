@@ -497,37 +497,51 @@ func TestShouldRetryWithNextKey_MessageWinsOverInvalidRequestCode(t *testing.T) 
 	}
 }
 
-// TestShouldRetryWithNextKey_SensitiveWordsDetected 测试敏感词检测错误不应重试
-// 这是修复的核心场景：500 + sensitive_words_detected 不应触发无限重试
+// TestShouldRetryWithNextKey_SensitiveWordsDetected 测试敏感词检测错误的 failover 判定。
+// 中转网关本地审核（type=new_api_error 的自建敏感词过滤）允许 failover 换渠道——
+// 词库各站独立、错误未到达真实上游；重试有界性由 failover 链路的渠道冷却保证
+// （命中即冷却并切下一渠道），不会在同一渠道上无限重试。
+// 真实上游透传的审核错误仍不 failover：换渠道不改变请求内容。
 func TestShouldRetryWithNextKey_SensitiveWordsDetected(t *testing.T) {
-	// 模拟生产环境的敏感词检测错误
-	body := []byte(`{"error":{"message":"sensitive words detected","type":"new_api_error","param":"","code":"sensitive_words_detected"}}`)
+	// 模拟生产环境的中转网关本地敏感词检测错误
+	localBody := []byte(`{"error":{"message":"sensitive words detected","type":"new_api_error","param":"","code":"sensitive_words_detected"}}`)
+	// 真实上游透传的审核错误（网关包装为 upstream_error）
+	upstreamBody := []byte(`{"error":{"message":"content policy violation","type":"upstream_error","code":"content_policy_violation"}}`)
+	// 上游违规计费（CSAM 类）：即使带本地网关类型也绝不 failover 扩散
+	violationFeeBody := []byte(`{"error":{"code":"violation_fee.grok.csam","message":"error","type":"new_api_error"}}`)
 
 	tests := []struct {
 		name         string
 		statusCode   int
-		fuzzyMode    bool
+		body         []byte
 		wantFailover bool
 		wantQuota    bool
 	}{
 		{
-			name:         "500 with sensitive_words_detected - normal mode",
+			name:         "500 local gateway sensitive words",
 			statusCode:   500,
-			fuzzyMode:    false,
-			wantFailover: false, // 不应重试
+			body:         localBody,
+			wantFailover: true, // 本地词库误报，换渠道可能通过
 			wantQuota:    false,
 		},
 		{
-			name:         "500 with sensitive_words_detected - fuzzy mode",
-			statusCode:   500,
-			fuzzyMode:    true,
-			wantFailover: false, // 即使在 fuzzy 模式下也不应重试
-			wantQuota:    false,
-		},
-		{
-			name:         "400 with sensitive_words_detected - normal mode",
+			name:         "400 local gateway sensitive words",
 			statusCode:   400,
-			fuzzyMode:    false,
+			body:         localBody,
+			wantFailover: true,
+			wantQuota:    false,
+		},
+		{
+			name:         "400 upstream moderation - no failover",
+			statusCode:   400,
+			body:         upstreamBody,
+			wantFailover: false,
+			wantQuota:    false,
+		},
+		{
+			name:         "500 violation_fee - never failover",
+			statusCode:   500,
+			body:         violationFeeBody,
 			wantFailover: false,
 			wantQuota:    false,
 		},
@@ -535,14 +549,14 @@ func TestShouldRetryWithNextKey_SensitiveWordsDetected(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotFailover, gotQuota := ShouldRetryWithNextKey(tt.statusCode, body, "Messages")
+			gotFailover, gotQuota := ShouldRetryWithNextKey(tt.statusCode, tt.body, "Messages")
 			if gotFailover != tt.wantFailover {
-				t.Errorf("ShouldRetryWithNextKey(%d, sensitive_words_body, %v) failover = %v, want %v",
-					tt.statusCode, tt.fuzzyMode, gotFailover, tt.wantFailover)
+				t.Errorf("ShouldRetryWithNextKey(%d) failover = %v, want %v",
+					tt.statusCode, gotFailover, tt.wantFailover)
 			}
 			if gotQuota != tt.wantQuota {
-				t.Errorf("ShouldRetryWithNextKey(%d, sensitive_words_body, %v) quota = %v, want %v",
-					tt.statusCode, tt.fuzzyMode, gotQuota, tt.wantQuota)
+				t.Errorf("ShouldRetryWithNextKey(%d) quota = %v, want %v",
+					tt.statusCode, gotQuota, tt.wantQuota)
 			}
 		})
 	}

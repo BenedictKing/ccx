@@ -857,3 +857,117 @@ func TestIsContentModerationErrorCode(t *testing.T) {
 		})
 	}
 }
+
+// TestIsLocalGatewayModerationError 测试中转网关本地审核错误判定：
+// 审核错误码 + 网关本地错误类型（new_api_error/one_api_error）才判定为本地审核，
+// 真实上游透传的审核错误（upstream_error/claude_error 等）不命中。
+func TestIsLocalGatewayModerationError(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want bool
+	}{
+		{
+			name: "new_api_sensitive_words",
+			body: `{"error":{"message":"sensitive words detected (request id: abc)","type":"new_api_error","param":"","code":"sensitive_words_detected"}}`,
+			want: true,
+		},
+		{
+			name: "one_api_sensitive_words",
+			body: `{"error":{"message":"sensitive words detected","type":"one_api_error","code":"sensitive_words_detected"}}`,
+			want: true,
+		},
+		{
+			name: "new_api_content_filter",
+			body: `{"error":{"message":"content filtered","type":"new_api_error","code":"content_filter"}}`,
+			want: true,
+		},
+		{
+			name: "upstream_error_type_not_local",
+			body: `{"error":{"message":"sensitive words detected","type":"upstream_error","code":"sensitive_words_detected"}}`,
+			want: false,
+		},
+		{
+			name: "claude_error_type_not_local",
+			body: `{"error":{"message":"content policy violation","type":"claude_error","code":"content_policy_violation"}}`,
+			want: false,
+		},
+		{
+			name: "no_type_not_local",
+			body: `{"error":{"message":"sensitive words detected","code":"sensitive_words_detected"}}`,
+			want: false,
+		},
+		{
+			name: "local_type_but_not_moderation_code",
+			body: `{"error":{"message":"invalid request","type":"new_api_error","code":"invalid_request"}}`,
+			want: false,
+		},
+		{
+			name: "nested_upstream_error_not_local",
+			body: `{"error":{"type":"new_api_error","upstream_error":{"code":"sensitive_words_detected","message":"blocked by real upstream"}}}`,
+			want: false,
+		},
+		{
+			name: "azure_style_type_is_code_not_local",
+			body: `{"error":{"message":"filtered","type":"content_filter","code":"content_filter"}}`,
+			want: false,
+		},
+		{
+			name: "invalid_json",
+			body: `not json`,
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := IsLocalGatewayModerationError([]byte(tt.body))
+			if got != tt.want {
+				t.Errorf("IsLocalGatewayModerationError() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestShouldRetryWithNextKey_LocalGatewayModeration 本地网关审核错误允许 failover（换渠道），
+// 上游透传的审核错误维持不 failover。
+func TestShouldRetryWithNextKey_LocalGatewayModeration(t *testing.T) {
+	tests := []struct {
+		name       string
+		statusCode int
+		body       string
+		wantRetry  bool
+		wantQuota  bool
+	}{
+		{
+			name:       "local_gateway_moderation_failover",
+			statusCode: 500,
+			body:       `{"error":{"message":"sensitive words detected (request id: abc)","type":"new_api_error","param":"","code":"sensitive_words_detected"}}`,
+			wantRetry:  true,
+			wantQuota:  false,
+		},
+		{
+			name:       "upstream_moderation_no_failover",
+			statusCode: 400,
+			body:       `{"error":{"message":"content policy violation","type":"upstream_error","code":"content_policy_violation"}}`,
+			wantRetry:  false,
+			wantQuota:  false,
+		},
+		{
+			name:       "moderation_without_type_no_failover",
+			statusCode: 500,
+			body:       `{"error":{"message":"sensitive words detected","code":"sensitive_words_detected"}}`,
+			wantRetry:  false,
+			wantQuota:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotRetry, gotQuota := shouldRetryWithNextKey(tt.statusCode, []byte(tt.body), "Messages", "")
+			if gotRetry != tt.wantRetry || gotQuota != tt.wantQuota {
+				t.Errorf("shouldRetryWithNextKey() = (%v, %v), want (%v, %v)", gotRetry, gotQuota, tt.wantRetry, tt.wantQuota)
+			}
+		})
+	}
+}

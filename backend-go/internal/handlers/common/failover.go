@@ -42,6 +42,8 @@ func ShouldRetryWithNextKeyWithLogTag(statusCode int, bodyBytes []byte, apiType 
 // shouldRetryWithNextKey 大多数非 2xx 错误都尝试 failover（模糊处理错误类型，不依赖状态码语义精确分类）。
 // 同时检查消息体中的配额相关关键词，确保 403 + "预扣费额度" 等情况能正确识别。
 // 但对于内容审核错误，以及 4xx 下的 invalid_request、schema 校验失败等不可重试错误不会重试。
+// 例外：中转网关本地审核错误（new-api/one-api 自建敏感词过滤）允许 failover——
+// 词库是各站独立配置，错误从未到达真实上游，换渠道可能通过。
 func shouldRetryWithNextKey(statusCode int, bodyBytes []byte, apiType string, logTag string) (bool, bool) {
 	LogWithTag(logTag, "[%s-Failover] 处理错误分类: statusCode=%d, bodyLen=%d", apiType, statusCode, len(bodyBytes))
 	if statusCode >= 200 && statusCode < 300 {
@@ -51,6 +53,10 @@ func shouldRetryWithNextKey(statusCode int, bodyBytes []byte, apiType string, lo
 	// 内容审核类错误（sensitive_words_detected 等）任何状态码都不应 failover
 	// 换渠道/换 Key 不会改变请求内容本身
 	if len(bodyBytes) > 0 && isContentModerationError(bodyBytes) {
+		if IsLocalGatewayModerationError(bodyBytes) {
+			LogWithTag(logTag, "[%s-Failover] 检测到中转网关本地审核错误 (statusCode=%d)，允许 failover 换渠道, body=%s", apiType, statusCode, errorBodySummaryForLog(apiType, statusCode, bodyBytes))
+			return true, false
+		}
 		LogWithTag(logTag, "[%s-Failover] 检测到内容审核错误 (statusCode=%d)，不进行 failover, body=%s", apiType, statusCode, errorBodySummaryForLog(apiType, statusCode, bodyBytes))
 		return false, false
 	}
@@ -918,7 +924,8 @@ func getMapKeys(m map[string]interface{}) []string {
 }
 
 // isContentModerationErrorCode 判断错误码是否为内容审核类错误
-// 内容审核错误与请求内容本身相关，换渠道/换 Key 重试不会改变结果，任何状态码都不应 failover
+// 上游内容审核错误与请求内容本身相关，换渠道/换 Key 重试不会改变结果，任何状态码都不应 failover。
+// 例外见 IsLocalGatewayModerationError：中转网关本地审核允许 failover。
 func isContentModerationErrorCode(code string) bool {
 	codes := []string{
 		"sensitive_words_detected",
@@ -957,7 +964,7 @@ func isNonRetryableErrorCode(code string) bool {
 }
 
 // isContentModerationError 检查响应体是否包含内容审核类错误
-// 任何状态码下都应阻止 failover
+// 任何状态码下都应阻止 failover（中转网关本地审核除外，见 IsLocalGatewayModerationError）
 func isContentModerationError(bodyBytes []byte) bool {
 	var errResp map[string]interface{}
 	if err := json.Unmarshal(bodyBytes, &errResp); err != nil {
@@ -977,6 +984,46 @@ func isContentModerationError(bodyBytes []byte) bool {
 		return isContentModerationMap(upstreamErr)
 	}
 	return false
+}
+
+// localGatewayModerationErrorTypes 中转网关本地审核错误的 type 指纹。
+// new-api/one-api 系网关的自建敏感词过滤在转发上游之前本地拦截
+// （refs/new-api relay/request_billing.go，ErrorSource=local），错误类型固定为
+// 网关自身类型；真实上游返回的审核错误会以 upstream_error/claude_error 等类型透传。
+var localGatewayModerationErrorTypes = map[string]bool{
+	"new_api_error": true,
+	"one_api_error": true,
+}
+
+// IsLocalGatewayModerationError 判断响应体是否为「中转网关本地内容审核」错误：
+// 审核错误码 + 网关本地错误类型。此类过滤是各站独立配置、在网关侧前置执行，
+// 错误从未到达真实上游，换渠道可能通过，应允许 failover；
+// 真实上游的审核错误（换渠道不改变结果）不在此列。
+func IsLocalGatewayModerationError(bodyBytes []byte) bool {
+	var errResp map[string]interface{}
+	if err := json.Unmarshal(bodyBytes, &errResp); err != nil {
+		return false
+	}
+	if errObj, ok := errResp["error"].(map[string]interface{}); ok {
+		return isLocalGatewayModerationMap(errObj)
+	}
+	return isLocalGatewayModerationMap(errResp)
+}
+
+func isLocalGatewayModerationMap(m map[string]interface{}) bool {
+	if !isContentModerationMap(m) {
+		return false
+	}
+	typ, ok := firstStringField(m, "type")
+	if !ok || !localGatewayModerationErrorTypes[strings.ToLower(typ)] {
+		return false
+	}
+	// violation_fee.* 是真实上游的违规计费（如 violation_fee.grok.csam），网关只是
+	// 透传包装；此类内容在任何渠道都会被拒，且向更多渠道扩散重试有害，排除在外。
+	if code, ok := firstStringField(m, "code"); ok && strings.HasPrefix(strings.ToLower(code), "violation_fee.") {
+		return false
+	}
+	return true
 }
 
 func isContentModerationMap(m map[string]interface{}) bool {

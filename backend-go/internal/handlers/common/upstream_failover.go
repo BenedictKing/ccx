@@ -34,6 +34,7 @@ const (
 	upstreamAccountPoolCooldown      = time.Minute
 	upstreamOverloadedCooldown       = 15 * time.Second
 	upstreamAccountRateLimitCooldown = 15 * time.Second
+	upstreamLocalModerationCooldown  = 5 * time.Minute
 	halfOpenProbeWaitTimeout         = 5 * time.Second
 	halfOpenProbePollInterval        = 100 * time.Millisecond
 	shortEmptyResponseRetryWindow    = 10 * time.Second
@@ -1368,6 +1369,9 @@ func TryUpstreamWithAllKeys(
 				isAccountPoolUnavailable := IsUpstreamAccountPoolUnavailable(respBodyBytes)
 				// 火山账号级 429 (AccountRateLimitExceeded)：精确识别，仅冷却当前 scope
 				isAccountRateLimited := IsUpstreamAccountRateLimited(resp.StatusCode, respBodyBytes)
+				// 中转网关本地内容审核（new-api/one-api 自建敏感词过滤）：请求内容相关，
+				// 与渠道/Key 健康度无关，换渠道可能通过
+				isLocalModeration := IsLocalGatewayModerationError(respBodyBytes)
 
 				// 非 2xx 响应：读完 body 分类后通知 Discoverer 一次（带 reason），
 				// 避免先记普通 429、再记精确账号限流导致同一次响应连续降速两次。
@@ -1642,6 +1646,12 @@ func TryUpstreamWithAllKeys(
 					if isTemporarilyOverloaded || isAccountPoolUnavailable || isAccountRateLimited {
 						failureClass = metrics.FailureClassOverloaded
 					}
+					if isLocalModeration {
+						// 本地审核拦截是请求内容相关，与渠道-模型健康度无关：
+						// 不计 breaker / 模型熔断，避免反复发送此类请求的客户端误伤健康渠道
+						// （与下方非 failover 分支对内容审核的处理约定一致）。
+						failureClass = metrics.FailureClassNonRetryable
+					}
 					metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, failureClass)
 					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, executionKind)
 					// 仅 Retryable 计入模型级熔断：Quota 与 Overloaded（含账号级限流）
@@ -1694,6 +1704,14 @@ func TryUpstreamWithAllKeys(
 							failedQuotaGroups[selection.QuotaGroup] = true
 						}
 					}
+					// 中转网关本地审核：过滤在网关侧前置执行且与 Key 无关，同渠道换 Key
+					// 必然同样被拦，无意义；冷却渠道后直接切下一个渠道（词库各站独立，
+					// 换渠道可能通过）。冷却同时阻断客户端重试时再次选中本渠道。
+					if isLocalModeration {
+						channelScheduler.MarkChannelCooldown(executionKind, executionIndex, upstreamLocalModerationCooldown)
+						RequestLogf(c, "[%s-Channel] 渠道 [%d] %s 命中网关本地内容审核，冷却 %s 并尝试下一个渠道", apiType, executionIndex, upstream.Name, upstreamLocalModerationCooldown)
+						return false, "", 0, lastFailoverError, nil, lastError
+					}
 					// 火山账号级 429：只冷却当前 key/quota scope，同渠道其他独立账号继续 failover。
 					// scope 非空 → scoped cooldown + continue（尝试同渠道下一个独立 key）。
 					// scope 为空（无 keypool 配置）→ 回退 channel cooldown + 切下一渠道。
@@ -1737,7 +1755,7 @@ func TryUpstreamWithAllKeys(
 				metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, metrics.FailureClassNonRetryable)
 				channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, executionKind)
 				// 不计入模型级熔断：本分支是 shouldFailover=false 的场景
-				// （invalid_request / bad_request / 内容审核），问题出在请求本身而非
+				// （invalid_request / bad_request / 上游内容审核），问题出在请求本身而非
 				// 渠道-模型健康度。换渠道换模型都不会让同一个畸形请求成功，
 				// 记账只会让反复发送此类请求的客户端把健康渠道打成熔断。
 				// 记录渠道日志
@@ -2476,7 +2494,8 @@ func recordModelCircuitGlobal(c *gin.Context, metricsManager *metrics.MetricsMan
 // recordModelCircuitFailure 记录一次渠道-模型级失败。
 //
 // 只在失败确实反映该渠道-模型健康度时调用。以下场景由调用方负责排除：
-// 配额/账号限流（已有 cooldown 与 scope 冷却机制）、内容审核（换渠道不改变请求内容）、
+// 配额/账号限流（已有 cooldown 与 scope 冷却机制）、内容审核（上游审核换渠道不改变
+// 请求内容；中转网关本地审核经 failureClass 归为 NonRetryable，同样不会走到这里）、
 // 客户端取消、以及 RecordRequestFinalizeIgnored 的中间态重试。
 //
 // model 传本次请求链路的基准模型，即客户端请求的原始模型（显式映射已退役；

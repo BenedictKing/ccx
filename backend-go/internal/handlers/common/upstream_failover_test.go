@@ -441,6 +441,133 @@ func TestTryUpstreamWithAllKeysOverloadedCooldownSingleModelNoCircuit(t *testing
 	}
 }
 
+// 中转网关本地内容审核（new-api 自建敏感词过滤）：允许 failover 换渠道、
+// 渠道进入 cooldown 阻断客户端重试回环，且不熔断 Key（请求内容相关，与渠道健康度无关）。
+// 真实上游透传的审核错误维持不 failover、不冷却。
+func TestTryUpstreamWithAllKeysLocalModerationCooldownNoCircuit(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tests := []struct {
+		name             string
+		upstreamBody     string
+		wantHandled      bool
+		wantCooldown     bool
+		wantClientStatus int
+	}{
+		{
+			name:         "local_gateway_sensitive_words_failover",
+			upstreamBody: `{"error":{"message":"sensitive words detected (request id: abc)","type":"new_api_error","param":"","code":"sensitive_words_detected"}}`,
+			wantHandled:  false, // 交还外层多渠道 failover，尝试下一个渠道
+			wantCooldown: true,
+		},
+		{
+			name:             "upstream_moderation_no_failover",
+			upstreamBody:     `{"error":{"message":"content policy violation","type":"upstream_error","code":"content_policy_violation"}}`,
+			wantHandled:      true, // 直接回客户端，不重试
+			wantCooldown:     false,
+			wantClientStatus: http.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				if tt.wantHandled {
+					w.WriteHeader(tt.wantClientStatus)
+				} else {
+					w.WriteHeader(http.StatusInternalServerError)
+				}
+				_, _ = w.Write([]byte(tt.upstreamBody))
+			}))
+			defer server.Close()
+
+			cfgManager, channelScheduler, messagesMetrics, cleanup := newTestFailoverDependencies(t, config.UpstreamConfig{
+				Name:        "moderation-messages",
+				BaseURL:     server.URL,
+				APIKeys:     []string{"sk-moderation"},
+				Status:      "active",
+				ServiceType: "openai",
+			})
+			defer cleanup()
+			rateLimitManager := ratelimit.NewManager()
+			defer rateLimitManager.Stop()
+			channelScheduler.SetRateLimitManager(rateLimitManager)
+
+			cfg := cfgManager.GetConfig()
+			upstream := &cfg.Upstream[0]
+
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader(`{"model":"gpt-5.5"}`))
+
+			handled, successKey, _, failoverErr, _, lastErr := TryUpstreamWithAllKeys(
+				c,
+				config.NewEnvConfig(),
+				cfgManager,
+				channelScheduler,
+				scheduler.ChannelKindMessages,
+				"Messages",
+				messagesMetrics,
+				upstream,
+				[]warmup.URLLatencyResult{{URL: upstream.BaseURL}},
+				[]byte(`{"model":"gpt-5.5","messages":[]}`),
+				nil,
+				false,
+				func(upstream *config.UpstreamConfig, failedKeys map[string]bool) (string, error) {
+					return cfgManager.GetNextAPIKey(upstream, failedKeys, "Messages")
+				},
+				func(c *gin.Context, upstreamCopy *config.UpstreamConfig, apiKey string) (*http.Request, error) {
+					return http.NewRequestWithContext(c.Request.Context(), http.MethodPost, upstreamCopy.BaseURL, strings.NewReader(`{}`))
+				},
+				func(apiKey string) {},
+				nil,
+				nil,
+				func(c *gin.Context, resp *http.Response, upstreamCopy *config.UpstreamConfig, apiKey string, actualRequestBody []byte) (*types.Usage, error) {
+					t.Fatal("moderation response should not call handleSuccess")
+					return nil, nil
+				},
+				"gpt-5.5",
+				"",
+				0,
+				channelScheduler.GetChannelLogStore(scheduler.ChannelKindMessages),
+			)
+
+			if handled != tt.wantHandled {
+				t.Fatalf("handled = %v, want %v", handled, tt.wantHandled)
+			}
+			if successKey != "" {
+				t.Fatalf("successKey = %q, want empty", successKey)
+			}
+			if tt.wantHandled {
+				if failoverErr != nil {
+					t.Fatalf("failoverErr = %#v, want nil (error returned to client directly)", failoverErr)
+				}
+				if w.Code != tt.wantClientStatus {
+					t.Fatalf("client status = %d, want %d", w.Code, tt.wantClientStatus)
+				}
+			} else {
+				if failoverErr == nil || failoverErr.Status != http.StatusInternalServerError || string(failoverErr.Body) != tt.upstreamBody {
+					t.Fatalf("failoverErr = %#v, want original 500 body", failoverErr)
+				}
+				if lastErr == nil {
+					t.Fatal("lastErr should record upstream 500")
+				}
+			}
+
+			// 审核拦截不熔断 Key
+			serviceType := scheduler.NormalizedMetricsServiceType(scheduler.ChannelKindMessages, upstream.ServiceType)
+			if got := messagesMetrics.GetKeyCircuitState(upstream.BaseURL, upstream.APIKeys[0], serviceType); got != metrics.CircuitStateClosed {
+				t.Fatalf("circuit state = %v, want %v (moderation must not open circuit)", got, metrics.CircuitStateClosed)
+			}
+			deferred, _, cooldown := channelScheduler.ShouldDeferForRateLimit(scheduler.ChannelKindMessages, 0, "", ratelimit.Config{}, time.Now())
+			if gotCooldown := deferred && cooldown; gotCooldown != tt.wantCooldown {
+				t.Fatalf("channel cooldown = %v, want %v", gotCooldown, tt.wantCooldown)
+			}
+		})
+	}
+}
+
 func TestTryUpstreamWithAllKeysRecordsSelectionTrace(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

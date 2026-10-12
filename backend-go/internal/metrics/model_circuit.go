@@ -177,8 +177,9 @@ func truncateModelCircuitError(msg string) string {
 // RecordModelFailure 记录一次渠道-模型级失败，返回本次是否触发熔断及隔离到期时间。
 //
 // 调用方只在"该失败确实反映渠道-模型健康度"时调用：配额/账号限流（已有 cooldown
-// 机制）、内容审核（换渠道不改变请求内容）、客户端取消、以及被忽略的中间态重试都
-// 不应计入，否则会把与模型可用性无关的问题记到模型头上。
+// 机制）、内容审核（上游审核换渠道不改变请求内容；中转网关本地审核也不计入）、
+// 客户端取消、以及被忽略的中间态重试都不应计入，否则会把与模型可用性无关的问题
+// 记到模型头上。
 func (t *ModelCircuitTracker) RecordModelFailure(channelUID, keyHash, model, errSummary string) (bool, time.Time) {
 	return t.recordModelFailureAt(channelUID, keyHash, model, errSummary, time.Now())
 }
