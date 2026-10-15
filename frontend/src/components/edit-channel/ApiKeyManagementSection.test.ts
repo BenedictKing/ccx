@@ -156,6 +156,21 @@ describe('ApiKeyManagementSection', () => {
     expect(wrapper.text()).toContain('zero')
   })
 
+  it('does not repeat manual in the multiplier chip', async () => {
+    const wrapper = mountSection({
+      apiKeys: ['sk-1'],
+      disabledKeys: [],
+      apiKeyConfigs: [
+        { key: 'sk-1', keyUid: 'uid-1', groupMultiplier: 1, maxGroupMultiplier: 2, multiplierSource: 'manual', multiplierSyncStatus: 'manual' },
+      ],
+      channelUid: 'ch-1',
+      channelKind: 'messages',
+    })
+    await nextTick()
+
+    expect(wrapper.text().toLowerCase().match(/manual/g)).toHaveLength(1)
+  })
+
   it('opens multiplier editor with current policy', async () => {
     const wrapper = mountSection({
       apiKeyConfigs: [

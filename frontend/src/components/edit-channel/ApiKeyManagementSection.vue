@@ -321,7 +321,12 @@
                   <div class="d-flex align-center ga-1 flex-wrap text-caption">
                     <template v-if="row.multiplierSource || row.groupMultiplier != null || row.maxGroupMultiplier != null">
                     <v-chip size="x-small" variant="tonal" :color="multiplierStatusColor(row.multiplierSyncStatus)">
-                      {{ row.multiplierSource || 'manual' }} · {{ multiplierStatusLabel(row.multiplierSyncStatus || 'manual') }}
+                      <template v-if="!row.multiplierSource || row.multiplierSource === 'manual'">
+                        {{ multiplierStatusLabel('manual') }}
+                      </template>
+                      <template v-else>
+                        {{ row.multiplierSource }} · {{ multiplierStatusLabel(row.multiplierSyncStatus || 'manual') }}
+                      </template>
                     </v-chip>
                     <v-chip
                       v-if="row.consumptionPolicy === 'opportunistic'"
