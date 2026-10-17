@@ -15,7 +15,7 @@ const slotStub = defineComponent({ template: '<div><slot /></div>' })
 const switchStub = defineComponent({
   props: ['modelValue'],
   emits: ['update:modelValue'],
-  template: '<button :aria-pressed="modelValue" @click="$emit(\'update:modelValue\', !modelValue)" />',
+  template: '<button :aria-pressed="modelValue" @click="$emit(\'update:modelValue\', !modelValue)" />'
 })
 
 it('实际编辑界面按上游类型显示可切换的 Responses 续接设置', async () => {
@@ -24,28 +24,47 @@ it('实际编辑界面按上游类型显示可切换的 Responses 续接设置',
       show: false,
       channelType: 'responses',
       channel: {
-        index: 0, name: 'test', baseUrl: 'https://example.com', apiKeys: ['test'],
-        serviceType: 'responses', responsesReasoningFold: false,
-      } as Channel,
+        index: 0,
+        name: 'test',
+        baseUrl: 'https://example.com',
+        apiKeys: ['test'],
+        serviceType: 'responses',
+        responsesReasoningFold: false
+      } as Channel
     },
     global: {
       stubs: {
-        VDialog: slotStub, VCard: slotStub, VCardText: slotStub, VCardActions: slotStub,
-        VForm: slotStub, VIcon: slotStub, VSpacer: true, VBtn: slotStub,
-        VTextField: true, VRow: slotStub, VCol: slotStub, VSelect: true, VSwitch: switchStub,
-        VTooltip: true, VAlert: true,
-        AddChannelHeader: true, AddChannelSidebarNav: true, BasicInfoSection: true,
-        ProtocolModelAvailability: true, ApiKeyManagementSection: true,
-        CustomHeadersSection: true, NewApiAccountPanel: true,
-      },
-    },
+        VDialog: slotStub,
+        VCard: slotStub,
+        VCardText: slotStub,
+        VCardActions: slotStub,
+        VForm: slotStub,
+        VIcon: slotStub,
+        VSpacer: true,
+        VBtn: slotStub,
+        VTextField: true,
+        VRow: slotStub,
+        VCol: slotStub,
+        VSelect: true,
+        VSwitch: switchStub,
+        VTooltip: true,
+        VAlert: true,
+        AddChannelHeader: true,
+        AddChannelSidebarNav: true,
+        BasicInfoSection: true,
+        ProtocolModelAvailability: true,
+        ApiKeyManagementSection: true,
+        CustomHeadersSection: true,
+        NewApiAccountPanel: true
+      }
+    }
   })
   try {
     await wrapper.setProps({ show: true })
     await nextTick()
-    const setting = wrapper.findAll('.proxy-direct-row').find(row => (
-      row.text().includes('channelEditor.compat.responsesReasoningFold.label')
-    ))
+    const setting = wrapper
+      .findAll('.proxy-direct-row')
+      .find(row => row.text().includes('channelEditor.compat.responsesReasoningFold.label'))
     expect(setting).toBeDefined()
     expect(setting!.get('button').attributes('aria-pressed')).toBe('false')
     await setting!.get('button').trigger('click')

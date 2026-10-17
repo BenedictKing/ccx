@@ -15,18 +15,24 @@ it.each([false, true])('既有渠道续接配置为 %s 时保存表单中的修�
     show: false,
     channelType: 'responses' as const,
     channel: {
-      index: 0, name: 'test', baseUrl: 'https://example.com', apiKeys: ['test'],
-      serviceType: 'responses', responsesReasoningFold: original,
-    } as Channel,
+      index: 0,
+      name: 'test',
+      baseUrl: 'https://example.com',
+      apiKeys: ['test'],
+      serviceType: 'responses',
+      responsesReasoningFold: original
+    } as Channel
   })
   const emit = vi.fn()
   let editor!: ReturnType<typeof useEditChannelModal>
-  const wrapper = mount(defineComponent({
-    setup() {
-      editor = useEditChannelModal(props, emit)
-      return () => h('div')
-    },
-  }))
+  const wrapper = mount(
+    defineComponent({
+      setup() {
+        editor = useEditChannelModal(props, emit)
+        return () => h('div')
+      }
+    })
+  )
   try {
     props.show = true
     await nextTick()
