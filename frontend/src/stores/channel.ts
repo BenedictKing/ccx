@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { buildProtocolModelLimitUpdates } from '@/utils/protocolModelLimits'
 import { ref, shallowReactive, computed, unref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePreferencesStore } from '@/stores/preferences'
@@ -462,17 +463,25 @@ export const useChannelStore = defineStore('channel', () => {
           )
         }
       } else if (isChat) {
-        await updateChannelByType('chat', editingChannelIndex, channel)
+        await updateChannelByType('chat', editingChannelIndex, channel, options?.originalChannel?.channelUid)
       } else if (isVectors) {
-        await updateChannelByType('vectors', editingChannelIndex, channel)
+        await updateChannelByType('vectors', editingChannelIndex, channel, options?.originalChannel?.channelUid)
       } else if (isImages) {
-        await updateChannelByType('images', editingChannelIndex, channel)
+        await updateChannelByType('images', editingChannelIndex, channel, options?.originalChannel?.channelUid)
       } else if (isGemini) {
-        await updateChannelByType('gemini', editingChannelIndex, channel)
+        await updateChannelByType('gemini', editingChannelIndex, channel, options?.originalChannel?.channelUid)
       } else if (isResponses) {
-        await updateChannelByType('responses', editingChannelIndex, channel)
+        await updateChannelByType('responses', editingChannelIndex, channel, options?.originalChannel?.channelUid)
       } else {
-        await updateChannelByType('messages', editingChannelIndex, channel)
+        await updateChannelByType('messages', editingChannelIndex, channel, options?.originalChannel?.channelUid)
+      }
+      const original = options?.originalChannel
+      const originalRoutes = original?.protocolRoutes?.length ? original.protocolRoutes : original ? [{
+        kind: targetTab, index: editingChannelIndex, channelUid: original.channelUid,
+        name: original.name, serviceType: original.serviceType, supportedModels: original.supportedModels,
+      }] : []
+      for (const update of buildProtocolModelLimitUpdates(originalRoutes, channel.protocolRoutes ?? [])) {
+        await api.updateChannelV2(update.channelUid, { kind: update.kind, supportedModels: update.supportedModels })
       }
       return { success: true, message: t('store.channel.updated'), channelId: editingChannelIndex, ...(accountWarnings?.length ? { warnings: accountWarnings } : {}) }
     } else {
