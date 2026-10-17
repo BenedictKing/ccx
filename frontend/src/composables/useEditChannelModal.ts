@@ -327,7 +327,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
       normalizeMetadataUserId: props.channel.normalizeMetadataUserId,
       stripBillingHeader: props.channel.stripBillingHeader,
       normalizeSystemRoleToTopLevel: props.channel.normalizeSystemRoleToTopLevel,
-      responsesReasoningFold: props.channel.responsesReasoningFold,
+      responsesReasoningFold: form.responsesReasoningFold,
       codexToolCompat: props.channel.codexToolCompat,
       stripCodexClientTools: props.channel.stripCodexClientTools,
       convertImageUrlToB64Json: props.channel.convertImageUrlToB64Json,

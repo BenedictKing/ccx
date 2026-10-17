@@ -202,6 +202,26 @@
                 />
               </div>
 
+              <div
+                v-if="props.channelType === 'responses' && form.serviceType === 'responses'"
+                class="proxy-direct-row mt-4"
+                :class="{ 'proxy-direct-row--on': form.responsesReasoningFold }"
+              >
+                <v-icon size="20" class="proxy-direct-row-icon">mdi-refresh</v-icon>
+                <div class="flex-grow-1">
+                  <div class="text-body-2 font-weight-medium">{{ t('channelEditor.compat.responsesReasoningFold.label') }}</div>
+                  <div class="text-caption text-medium-emphasis">{{ t('channelEditor.compat.responsesReasoningFold.hint') }}</div>
+                </div>
+                <v-switch
+                  :model-value="form.responsesReasoningFold"
+                  color="primary"
+                  density="compact"
+                  hide-details
+                  class="proxy-direct-row-switch"
+                  @update:model-value="updateForm({ responsesReasoningFold: $event === true })"
+                />
+              </div>
+
               <div class="mt-6">
                 <CustomHeadersSection
                   :headers="customHeadersArray"
