@@ -763,6 +763,11 @@ func TestResolveUpstreamCapability_DeepSeekV4DatedSuffixes(t *testing.T) {
 				"deepseek-v4.1-flash-2026-09-10",
 				"deepseek-v4.1-flash-260910",
 				"deepseek-v4.1-flash-20260910",
+				"DeepSeek-V4.1-Flash-1017",
+				"deepseek-v4.1-flash-2026-10-17",
+				"deepseek-v4.1-flash-261017",
+				"deepseek-v4.1-flash-20261017",
+				"deepseek-ai/DeepSeek-V4.1-Flash-1017",
 				"deepseek-ai/DeepSeek-V4.1-Flash",
 				"deepseek-ai/deepseek-flash",
 			},
@@ -1676,6 +1681,19 @@ func TestCurrentBuiltinSnapshot_IgnoresOlderCacheMissingK3(t *testing.T) {
 		!resolved.Capability.Capabilities["toolCalls"] ||
 		resolved.Capability.ContextWindowTokens != 1048576 {
 		t.Fatalf("resolved = %+v, want current embedded K3 capabilities", resolved)
+	}
+}
+
+func TestResolveModelBenchmarkProfile_DeepSeekV41Flash1017(t *testing.T) {
+	for _, model := range []string{
+		"deepseek-v4.1-flash",
+		"DeepSeek-V4.1-Flash-1017",
+		"deepseek-ai/DeepSeek-V4.1-Flash-1017",
+	} {
+		resolved := ResolveModelBenchmarkProfile(model)
+		if !resolved.Known || resolved.Source != "builtin" || resolved.Profile.CanonicalModel != "deepseek-v4.1-flash" {
+			t.Fatalf("%s: resolved = %+v, want deepseek-v4.1-flash benchmark", model, resolved)
+		}
 	}
 }
 
