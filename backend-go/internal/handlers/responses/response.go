@@ -51,7 +51,7 @@ func handleSuccess(
 	}
 
 	if isStream {
-		if upstreamType == "responses" {
+		if upstreamType == "responses" && upstream != nil && upstream.ResponsesReasoningFold {
 			return handleFoldedResponsesStreamSuccess(c, resp, provider, upstream, apiKey, envCfg, sessionManager, originalReq, originalRequestJSON)
 		}
 		return handleStreamSuccess(c, resp, upstreamType, envCfg, sessionManager, startTime, originalReq, originalRequestJSON, timeouts)

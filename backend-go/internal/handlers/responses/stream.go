@@ -49,6 +49,16 @@ func handleStreamSuccess(
 	}
 
 	needConvert := upstreamType != "responses"
+	var toolRemapper *responsesStreamToolRemapper
+	if !needConvert {
+		if hoisted, _ := c.Get("codex_additional_tools_hoisted"); hoisted == true {
+			if rawContext, ok := c.Get("codex_tool_context"); ok {
+				if ctx, ok := rawContext.(converters.CodexToolContext); ok {
+					toolRemapper = newResponsesStreamToolRemapper(&ctx)
+				}
+			}
+		}
+	}
 	var converterState any
 	isCompactionV2Stream := originalReq != nil && hasCompactionTrigger(originalReq.Input)
 
@@ -493,6 +503,14 @@ func handleStreamSuccess(
 		}
 
 		for _, event := range eventsToProcess {
+			if toolRemapper != nil {
+				// 只聚合需要格式还原的工具项，正文不等待工具或整轮结束。
+				remapped := toolRemapper.processLine(event)
+				if len(remapped) == 0 {
+					continue
+				}
+				event = strings.Join(remapped, "")
+			}
 			// 收集 output items（含 reasoning encrypted_content）用于 session 回写
 			outputCollector.processEvent(event)
 			// 收集 reasoning encrypted_content 到 thinkingcache

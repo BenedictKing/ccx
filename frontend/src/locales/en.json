@@ -975,6 +975,8 @@
   "channelEditor.compat.normalizeUserId.hint": "Flatten metadata user ID",
   "channelEditor.compat.stripBillingHeader.label": "Strip billing header",
   "channelEditor.compat.stripBillingHeader.hint": "Remove CCH billing suffix (default on for non-official domains)",
+  "channelEditor.compat.responsesReasoningFold.label": "Responses reasoning continuation",
+  "channelEditor.compat.responsesReasoningFold.hint": "Off by default for real-time text streaming. When enabled, attempts to continue truncated reasoning and buffers text and tool calls until the round ends.",
   "channelEditor.compat.codexCompat.label": "Codex tool compatibility",
   "channelEditor.compat.codexCompat.hint": "Enable Codex CLI compatibility mode",
   "channelEditor.compat.convertImageUrlToB64Json.label": "Convert URL response to b64_json",
