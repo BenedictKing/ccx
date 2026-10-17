@@ -99,6 +99,7 @@ export interface ChannelFormLike {
   normalizeMetadataUserId: boolean
   stripBillingHeader?: boolean
   normalizeSystemRoleToTopLevel: boolean
+  responsesReasoningFold?: boolean
   codexToolCompat: boolean
   stripCodexClientTools?: boolean
   convertImageUrlToB64Json?: boolean
@@ -562,6 +563,7 @@ export function buildChannelPayload(
     normalizeMetadataUserId,
     stripBillingHeader: !!form.stripBillingHeader,
     normalizeSystemRoleToTopLevel: form.normalizeSystemRoleToTopLevel,
+    responsesReasoningFold: !!form.responsesReasoningFold,
     codexToolCompat: form.codexToolCompat,
     stripCodexClientTools: form.codexToolCompat,
     convertImageUrlToB64Json: !!form.convertImageUrlToB64Json,

@@ -52,6 +52,17 @@
     </v-expand-transition>
 
     <div class="d-flex flex-column ga-3 compat-options">
+      <div v-if="channelType === 'responses' && form.serviceType === 'responses'" class="d-flex align-center justify-space-between">
+        <div class="d-flex align-center ga-2">
+          <v-icon color="primary">mdi-refresh</v-icon>
+          <div>
+            <div class="section-title section-title--soft">{{ t('channelEditor.compat.responsesReasoningFold.label') }}</div>
+            <div class="text-caption text-medium-emphasis">{{ t('channelEditor.compat.responsesReasoningFold.hint') }}</div>
+          </div>
+        </div>
+        <v-switch :model-value="form.responsesReasoningFold" inset color="primary" hide-details @update:model-value="updateField('responsesReasoningFold', $event)" />
+      </div>
+
       <!-- Codex Tool Compat -->
       <div v-if="channelType === 'responses'" class="d-flex align-center justify-space-between">
         <div class="d-flex align-center ga-2">
@@ -224,6 +235,7 @@ import { useI18n } from '../../i18n'
 
 interface FormData {
   serviceType: string
+  responsesReasoningFold?: boolean
   codexToolCompat?: boolean
   convertImageUrlToB64Json?: boolean
   normalizeSystemRoleToTopLevel?: boolean
