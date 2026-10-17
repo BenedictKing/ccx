@@ -274,12 +274,13 @@ Vectors 仍不支持 capability-test；不要通过能力测试推断 Embedding 
 
 #### 调度软增强（`scheduler`）
 
-`config.json` 顶层的 `scheduler` 段控制两项调度软增强，均可省略（省略即默认启用）并支持热重载：
+`config.json` 顶层的 `scheduler` 段控制调度软增强，均可省略（省略即默认启用）并支持热重载：
 
 | 字段 | 默认值 | 说明 |
 | --- | --- | --- |
 | `promptAffinityFallback` | `true` | 匿名请求的内容指纹亲和回退。请求未携带任何显式会话标识（请求头、`user`/`user_id`/`prompt_cache_key`、`metadata.user_id` 等）时，用 system 提示与首条 user 消息的规范指纹（`pp:` 前缀合成 ID）作为会话标识，使 Trace 亲和、会话跟踪对裸 SDK 客户端同样生效。同一会话各轮指纹一致；超过 4KB 的部分截断。 |
 | `keyAutoWeight` | `true` | per-key 自动权重。以 5 分钟滑动窗口统计每把 Key 的整把级成功/失败（模型级失败只进熔断，不连累同 Key 其他模型），按「Laplace 平滑成功率 × 连续失败减半」计算 0.05-1.0 的软降权系数叠加到手控 weight 排序上；窗口内样本不足 10 次时不干预。硬隔离仍由熔断与持久限制负责。 |
+| `streamRepetitionLoopDetection` | `true` | 流式输出无限重复检测。模型卡在同一短语/段落上无限复述（累计约 3KB 完全相同的字节级重复）时立即中止当前流（客户端收到错误/不完整收尾事件，停止烧 token），并按「一次确证即隔离」强制熔断该渠道×Key×模型组合 60 秒；隔离期满后复犯按 60s→2m→…→30min 递增退避，期间任意一次干净成功即自动恢复。误杀自愈成本低，如需一键回退可置 `false`。 |
 
 #### 命令行运行时路径
 

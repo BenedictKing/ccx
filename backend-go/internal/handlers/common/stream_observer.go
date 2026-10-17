@@ -28,8 +28,10 @@ type StreamTimeoutObserver struct {
 	// sawPseudoToolCallMarker 流式输出文本中命中过伪工具调用标记
 	// （MaybeCountPseudoToolCallMiss 的负反馈信号源）。
 	sawPseudoToolCallMarker bool
-	maxStreamIdleMs         int64
-	maxToolCallIdleMs       int64
+	// sawRepetitionLoop 流式输出命中过无限重复检测（中止并强制熔断的事实标记）。
+	sawRepetitionLoop bool
+	maxStreamIdleMs   int64
+	maxToolCallIdleMs int64
 }
 
 func StartStreamTimeoutObservation(c *gin.Context, store *metrics.ChannelLogStore, metricsKey, requestID string, startedAt time.Time) {
@@ -260,6 +262,34 @@ func (o *StreamTimeoutObserver) SawPseudoToolCallMarker() bool {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	return o.sawPseudoToolCallMarker
+}
+
+// MarkStreamRepetitionLoop 标记本次流式输出命中了无限重复检测。
+// 由各协议流处理器的重复扫描点调用，供日志与后续学习扩展读取。
+func MarkStreamRepetitionLoop(c *gin.Context) {
+	if observer := GetStreamTimeoutObserver(c); observer != nil {
+		observer.MarkRepetitionLoop()
+	}
+}
+
+// MarkRepetitionLoop 线程安全地记录"已命中无限重复检测"事实。
+func (o *StreamTimeoutObserver) MarkRepetitionLoop() {
+	if o == nil {
+		return
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.sawRepetitionLoop = true
+}
+
+// SawRepetitionLoop 返回本次流式输出是否命中过无限重复检测。
+func (o *StreamTimeoutObserver) SawRepetitionLoop() bool {
+	if o == nil {
+		return false
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.sawRepetitionLoop
 }
 
 func (o *StreamTimeoutObserver) markToolCallCompleteLocked(now time.Time) {

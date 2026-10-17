@@ -772,6 +772,8 @@ func ProcessStreamEvents(
 	severityScanner := &SeverityTagScanner{}
 	// 伪工具调用标记扫描：模型用纯文本"扮演"工具调用时命中，供白名单负反馈读取。
 	pseudoScanner := &PseudoToolCallMarkerScanner{}
+	// 无限重复循环扫描：同一短语/段落无限复述时中止流并强制熔断该渠道模型。
+	repetitionScanner := &RepetitionLoopScanner{}
 
 	for {
 		select {
@@ -795,6 +797,19 @@ func ProcessStreamEvents(
 				}
 				if pseudoScanner.Feed(delta) {
 					MarkPseudoToolCallMarker(c)
+				}
+				if config.RuntimeStreamRepetitionLoopEnabled() && repetitionScanner.Feed(delta) {
+					MarkStreamRepetitionLoop(c)
+					RequestLogf(c, "[Messages-RepetitionLoop] 检测到模型无限重复输出%s，中止当前流（Header 已发送，不换渠道；由调度层强制熔断该渠道模型）",
+						repetitionLoopDetailSuffix(repetitionScanner.Detail()))
+					logPartialResponse(ctx, envCfg)
+					if !ctx.ClientGone {
+						if _, err := w.Write([]byte(BuildStreamErrorEvent(ErrStreamRepetitionLoop))); err == nil {
+							flusher.Flush()
+						}
+					}
+					progress.Finish("repetition")
+					return nil, ErrStreamRepetitionLoop
 				}
 			}
 			eventHasActivity := ctx.OutputTextBuffer.Len() > prevTextLen || HasClaudeSemanticContent(event) || HasStreamEventActivity(event)

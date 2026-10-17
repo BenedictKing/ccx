@@ -235,6 +235,44 @@ func (t *ModelCircuitTracker) recordModelFailureAt(channelUID, keyHash, model, e
 	return true, st.openUntil
 }
 
+// RecordModelForcedFailure 记录一次「一次确证即隔离」的模型级故障：
+// 跳过双阈值，直接按当前退避级别熔断。
+//
+// 与 RecordModelFailure 的区别：调用方已拿到该渠道-模型输出确凿损坏的直接
+// 证据（如流式输出无限重复循环），这不是「多次偶发失败累积」的推断，无需
+// 再等第二次失败才隔离。退避/恢复语义与双阈值完全一致：复犯按 backoffLevel
+// 递增（60s→2m→…→30min），隔离期内一次成功即整体清零（RecordModelSuccess）。
+func (t *ModelCircuitTracker) RecordModelForcedFailure(channelUID, keyHash, model, errSummary string) (bool, time.Time) {
+	return t.recordModelForcedFailureAt(channelUID, keyHash, model, errSummary, time.Now())
+}
+
+func (t *ModelCircuitTracker) recordModelForcedFailureAt(channelUID, keyHash, model, errSummary string, now time.Time) (bool, time.Time) {
+	if t == nil || channelUID == "" {
+		return false, time.Time{}
+	}
+
+	k := modelCircuitKey{channelUID: channelUID, keyHash: keyHash, model: model}
+
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	st := t.states[k]
+	if st == nil {
+		st = &modelCircuitState{}
+		t.states[k] = st
+	}
+	st.lastActivity = now
+	st.lastError = truncateModelCircuitError(errSummary)
+
+	delay := modelCircuitBackoff(st.backoffLevel)
+	st.backoffLevel++
+	st.openUntil = now.Add(delay)
+	st.failures = nil
+	log.Printf("[%s-ModelCircuit] 渠道 %s 模型 %s 确证模型级故障，直接熔断 %s（最近错误: %s）",
+		t.logPrefix, channelUID, model, delay, st.lastError)
+	return true, st.openUntil
+}
+
 // RecordModelSuccess 记录一次成功，清空失败序列。
 func (t *ModelCircuitTracker) RecordModelSuccess(channelUID, keyHash, model string) {
 	t.recordModelSuccessAt(channelUID, keyHash, model, time.Now())

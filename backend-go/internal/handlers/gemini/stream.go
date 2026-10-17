@@ -528,6 +528,60 @@ func handleStreamSuccess(
 }
 
 // streamGeminiToGemini Gemini 上游直接透传
+// feedGeminiRepetitionText 喂无限重复扫描器（开关关闭时跳过）。返回是否命中。
+func feedGeminiRepetitionText(s *common.RepetitionLoopScanner, text string) bool {
+	if s == nil || !config.RuntimeStreamRepetitionLoopEnabled() || text == "" {
+		return false
+	}
+	s.Feed(text)
+	return s.Found()
+}
+
+// geminiFeedRepetitionFromChunk 从已解析的 Gemini 流 chunk 提取增量文本
+// （candidates[].content.parts[].text，含 thought 部分）喂无限重复扫描器。
+// 返回是否命中。
+func geminiFeedRepetitionFromChunk(s *common.RepetitionLoopScanner, chunk *types.GeminiStreamChunk) bool {
+	if s == nil || chunk == nil || !config.RuntimeStreamRepetitionLoopEnabled() {
+		return false
+	}
+	hit := false
+	for _, cand := range chunk.Candidates {
+		if cand.Content == nil {
+			continue
+		}
+		for _, part := range cand.Content.Parts {
+			if part.Text != "" {
+				s.Feed(part.Text)
+				if s.Found() {
+					hit = true
+				}
+			}
+		}
+	}
+	return hit
+}
+
+// geminiAbortRepetitionLoop 无限重复命中后的统一中止：写 Gemini 错误收尾
+// （带 error 的 data 行，避免客户端裸断连）并返回哨兵。
+func geminiAbortRepetitionLoop(c *gin.Context, flusher http.Flusher, progress *common.StreamProgressLogger, scanner *common.RepetitionLoopScanner) error {
+	common.MarkStreamRepetitionLoop(c)
+	common.RequestLogf(c, "[Gemini-Stream-RepetitionLoop] 检测到模型无限重复输出（%s），中止当前流（Header 已发送，不换渠道；由调度层强制熔断该渠道模型）", scanner.Detail())
+	errPayload := types.GeminiError{
+		Error: types.GeminiErrorDetail{
+			Code:    500,
+			Message: "stream aborted: model stuck in repetition loop",
+			Status:  "INTERNAL",
+		},
+	}
+	chunkBytes, _ := json.Marshal(errPayload)
+	_, _ = fmt.Fprintf(c.Writer, "data: %s\n\n", string(chunkBytes))
+	if flusher != nil {
+		flusher.Flush()
+	}
+	progress.Finish("repetition")
+	return common.ErrStreamRepetitionLoop
+}
+
 func streamGeminiToGemini(
 	c *gin.Context,
 	reader *streamLineReader,
@@ -542,6 +596,8 @@ func streamGeminiToGemini(
 	// EOF 需要再补一个空行才算把最后一个事件派发给客户端。
 	lastWasDataLine := false
 	inactivityTimeout := time.Duration(timeouts.InactivityTimeoutMs) * time.Millisecond
+	// 无限重复循环扫描：同一短语/段落无限复述时中止流并强制熔断该渠道模型。
+	repetitionScanner := &common.RepetitionLoopScanner{}
 
 	for {
 		line, eof, err, timedOut := reader.NextLine(inactivityTimeout)
@@ -584,6 +640,9 @@ func streamGeminiToGemini(
 						OutputTokens: chunk.UsageMetadata.CandidatesTokenCount,
 					}
 				}
+				if geminiFeedRepetitionFromChunk(repetitionScanner, &chunk) {
+					return nil, geminiAbortRepetitionLoop(c, flusher, progress, repetitionScanner)
+				}
 			}
 			lastWasDataLine = true
 			_, _ = fmt.Fprintf(c.Writer, "%s\n", line)
@@ -615,6 +674,8 @@ func streamClaudeToGemini(
 	var totalUsage *types.Usage
 	var currentText strings.Builder
 	inactivityTimeout := time.Duration(timeouts.InactivityTimeoutMs) * time.Millisecond
+	// 无限重复循环扫描：同一短语/段落无限复述时中止流并强制熔断该渠道模型。
+	repetitionScanner := &common.RepetitionLoopScanner{}
 
 	for {
 		line, eof, err, timedOut := reader.NextLine(inactivityTimeout)
@@ -666,6 +727,9 @@ func streamClaudeToGemini(
 				if thinking == "" {
 					continue
 				}
+				if feedGeminiRepetitionText(repetitionScanner, thinking) {
+					return nil, geminiAbortRepetitionLoop(c, flusher, progress, repetitionScanner)
+				}
 				geminiChunk := types.GeminiStreamChunk{
 					Candidates: []types.GeminiCandidate{
 						{
@@ -686,6 +750,9 @@ func streamClaudeToGemini(
 			case "text_delta":
 				text, _ := delta["text"].(string)
 				currentText.WriteString(text)
+				if feedGeminiRepetitionText(repetitionScanner, text) {
+					return nil, geminiAbortRepetitionLoop(c, flusher, progress, repetitionScanner)
+				}
 
 				// 转换为 Gemini 格式
 				geminiChunk := types.GeminiStreamChunk{
@@ -763,6 +830,8 @@ func streamOpenAIToGemini(
 	var totalUsage *types.Usage
 	var currentText strings.Builder
 	inactivityTimeout := time.Duration(timeouts.InactivityTimeoutMs) * time.Millisecond
+	// 无限重复循环扫描：同一短语/段落无限复述时中止流并强制熔断该渠道模型。
+	repetitionScanner := &common.RepetitionLoopScanner{}
 
 	for {
 		line, eof, err, timedOut := reader.NextLine(inactivityTimeout)
@@ -868,6 +937,9 @@ func streamOpenAIToGemini(
 			reasoning, _ = delta["reasoning"].(string)
 		}
 		if reasoning != "" {
+			if feedGeminiRepetitionText(repetitionScanner, reasoning) {
+				return nil, geminiAbortRepetitionLoop(c, flusher, progress, repetitionScanner)
+			}
 			geminiChunk := types.GeminiStreamChunk{
 				Candidates: []types.GeminiCandidate{
 					{
@@ -891,6 +963,9 @@ func streamOpenAIToGemini(
 		content, _ := delta["content"].(string)
 		if content != "" {
 			currentText.WriteString(content)
+			if feedGeminiRepetitionText(repetitionScanner, content) {
+				return nil, geminiAbortRepetitionLoop(c, flusher, progress, repetitionScanner)
+			}
 
 			geminiChunk := types.GeminiStreamChunk{
 				Candidates: []types.GeminiCandidate{
@@ -963,6 +1038,8 @@ func streamResponsesToGemini(
 	var totalUsage *types.Usage
 	var converterState any
 	inactivityTimeout := time.Duration(timeouts.InactivityTimeoutMs) * time.Millisecond
+	// 无限重复循环扫描：同一短语/段落无限复述时中止流并强制熔断该渠道模型。
+	repetitionScanner := &common.RepetitionLoopScanner{}
 
 	for {
 		line, eof, err, timedOut := reader.NextLine(inactivityTimeout)
@@ -1007,6 +1084,9 @@ func streamResponsesToGemini(
 							InputTokens:  chunk.UsageMetadata.PromptTokenCount - chunk.UsageMetadata.CachedContentTokenCount,
 							OutputTokens: chunk.UsageMetadata.CandidatesTokenCount,
 						}
+					}
+					if geminiFeedRepetitionFromChunk(repetitionScanner, &chunk) {
+						return nil, geminiAbortRepetitionLoop(c, flusher, progress, repetitionScanner)
 					}
 				}
 			}

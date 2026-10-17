@@ -11,6 +11,9 @@ type SchedulerConfig struct {
 	// KeyAutoWeight per-key 滑窗自动权重：5 分钟窗口成功率 × 连续失败衰减，
 	// 作为手控 weight 之外的软降权系数（硬隔离仍由熔断负责）。默认 true。
 	KeyAutoWeight *bool `json:"keyAutoWeight,omitempty"`
+	// StreamRepetitionLoopDetection 流式输出无限重复检测：同一短语/段落
+	// 无限复述时中止当前流并按「一次确证即隔离」熔断 渠道×Key×模型。默认 true。
+	StreamRepetitionLoopDetection *bool `json:"streamRepetitionLoopDetection,omitempty"`
 }
 
 // PromptAffinityFallbackEnabled 解析 promptAffinityFallback 生效值（nil → 默认开）。
@@ -29,11 +32,20 @@ func (s *SchedulerConfig) KeyAutoWeightEnabled() bool {
 	return *s.KeyAutoWeight
 }
 
+// StreamRepetitionLoopDetectionEnabled 解析 streamRepetitionLoopDetection 生效值（nil → 默认开）。
+func (s *SchedulerConfig) StreamRepetitionLoopDetectionEnabled() bool {
+	if s == nil || s.StreamRepetitionLoopDetection == nil {
+		return true
+	}
+	return *s.StreamRepetitionLoopDetection
+}
+
 // runtimeSchedulerTuning 保存热更新后的生效值，供 handlers 在无 ConfigManager
 // 引用的位置读取（与 runtimeTimeouts 同款模式：main.go 启动与热重载时写入）。
 type schedulerTuning struct {
 	promptAffinityFallback bool
 	keyAutoWeight          bool
+	streamRepetitionLoop   bool
 }
 
 var runtimeSchedulerTuning atomic.Pointer[schedulerTuning]
@@ -43,6 +55,7 @@ func ApplySchedulerTuning(cfg SchedulerConfig) {
 	runtimeSchedulerTuning.Store(&schedulerTuning{
 		promptAffinityFallback: cfg.PromptAffinityFallbackEnabled(),
 		keyAutoWeight:          cfg.KeyAutoWeightEnabled(),
+		streamRepetitionLoop:   cfg.StreamRepetitionLoopDetectionEnabled(),
 	})
 }
 
@@ -50,6 +63,14 @@ func ApplySchedulerTuning(cfg SchedulerConfig) {
 func RuntimeKeyAutoWeightEnabled() bool {
 	if current := runtimeSchedulerTuning.Load(); current != nil {
 		return current.keyAutoWeight
+	}
+	return true
+}
+
+// RuntimeStreamRepetitionLoopEnabled 返回无限重复检测当前生效值（未初始化时默认开）。
+func RuntimeStreamRepetitionLoopEnabled() bool {
+	if current := runtimeSchedulerTuning.Load(); current != nil {
+		return current.streamRepetitionLoop
 	}
 	return true
 }

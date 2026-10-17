@@ -35,6 +35,11 @@ var ErrStreamStalled = errors.New("stream stalled after first content")
 // Header 已发送，不能安全拼接 failover；用于中止当前流并记录渠道故障
 var ErrStreamPostCommitStalled = errors.New("stream stalled after response committed")
 
+// ErrStreamRepetitionLoop 模型输出陷入无限重复循环（同一短语/段落无限复述）
+// Header 已发送，不能安全拼接 failover；用于中止当前流并按「一次确证即隔离」
+// 强制熔断渠道×Key×模型（RecordModelForcedFailure），详见 repetition_loop.go。
+var ErrStreamRepetitionLoop = errors.New("stream repetition loop detected")
+
 // UpstreamRequestRejectedError 上游以流内错误对象明确拒绝本次请求
 // （invalid_request_error / 上下文超长 / 参数非法等请求侧确定性错误）。
 // 与 HTTP 4xx 的「非 failover 错误」分支同一语义：问题在请求本身，

@@ -1939,10 +1939,20 @@ func TryUpstreamWithAllKeys(
 					if balanceRestricted {
 						sseLogAction = "key model restricted"
 					}
-					CompleteLog(channelLogStore, metricsKey, logRequestID, http.StatusOK, false, fmt.Sprintf("%s: %s - %s", sseLogAction, blErr.Reason, blErr.Message), isRetryAttempt)
-					RequestLogf(c, "[%s-Blacklist] SSE 流内错误触发拉黑 (Key: %s, 原因: %s)，尝试下一个密钥", apiType, utils.MaskAPIKey(apiKey), blErr.Reason)
-					continue
-				} else {
+				CompleteLog(channelLogStore, metricsKey, logRequestID, http.StatusOK, false, fmt.Sprintf("%s: %s - %s", sseLogAction, blErr.Reason, blErr.Message), isRetryAttempt)
+				RequestLogf(c, "[%s-Blacklist] SSE 流内错误触发拉黑 (Key: %s, 原因: %s)，尝试下一个密钥", apiType, utils.MaskAPIKey(apiKey), blErr.Reason)
+				continue
+			} else if errors.Is(err, ErrStreamRepetitionLoop) {
+				// 无限重复循环：post-commit 阶段中止的确定性内容故障。记账与真实
+				// 渠道故障一致（Header 已发送，不换渠道），但熔断走「一次确证即隔离」
+				// ——字节级重复证据无歧义，不等双阈值累积。
+				cfgManager.MarkKeyAsFailed(apiKey, executionAPIType)
+				metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, metrics.FailureClassRetryable)
+				channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, executionKind)
+				recordModelCircuitForcedFailure(c, metricsManager, upstream, apiKey, model, err.Error(), apiType)
+				CompleteLog(channelLogStore, metricsKey, logRequestID, http.StatusOK, false, err.Error(), isRetryAttempt)
+				RequestLogf(c, "[%s-RepetitionLoop] 模型输出无限重复，已中止流并强制隔离该渠道模型 (Key: %s)", apiType, utils.MaskAPIKey(apiKey))
+			} else {
 					// 真实渠道故障：计入失败指标
 					cfgManager.MarkKeyAsFailed(apiKey, executionAPIType)
 					metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, metrics.FailureClassRetryable)
@@ -2531,6 +2541,25 @@ func recordModelCircuitSuccess(metricsManager *metrics.MetricsManager,
 	}
 	if aw := metricsManager.KeyAutoWeight(); aw != nil {
 		aw.RecordSuccess(upstream.ChannelUID, metrics.ModelCircuitKeyHash(apiKey), time.Now())
+	}
+}
+
+// recordModelCircuitForcedFailure 记录一次「一次确证即隔离」的渠道-模型故障：
+// 调用方已拿到该渠道-模型输出确凿损坏的直接证据（流式无限重复循环），跳过
+// 双阈值直接熔断。键语义与 recordModelCircuitFailure 相同（原始模型）。
+func recordModelCircuitForcedFailure(c *gin.Context, metricsManager *metrics.MetricsManager,
+	upstream *config.UpstreamConfig, apiKey, model, errSummary, apiType string) {
+	if metricsManager == nil || upstream == nil || upstream.ChannelUID == "" || model == "" {
+		return
+	}
+	tracker := metricsManager.ModelCircuit()
+	if tracker == nil {
+		return
+	}
+	if opened, until := tracker.RecordModelForcedFailure(
+		upstream.ChannelUID, metrics.ModelCircuitKeyHash(apiKey), model, errSummary); opened {
+		RequestLogf(c, "[%s-ModelCircuit] 渠道 %s 模型 %s 输出无限重复，强制隔离至 %s（复犯递增退避，干净成功自动恢复）",
+			apiType, upstream.Name, model, until.Format(time.RFC3339))
 	}
 }
 

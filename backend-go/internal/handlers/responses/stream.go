@@ -19,6 +19,30 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// responsesDeltaRepetitionText 从 Responses SSE data 行提取可判重复的增量文本
+// （output_text.delta / reasoning 相关 delta 事件的 string delta 字段），
+// 无文本时返回 ok=false。
+func responsesDeltaRepetitionText(line string) (string, bool) {
+	if !strings.HasPrefix(line, "data: ") {
+		return "", false
+	}
+	jsonData := strings.TrimPrefix(line, "data: ")
+	if jsonData == "" || jsonData == "[DONE]" {
+		return "", false
+	}
+	var event struct {
+		Type  string  `json:"type"`
+		Delta *string `json:"delta"`
+	}
+	if err := json.Unmarshal([]byte(jsonData), &event); err != nil || event.Delta == nil {
+		return "", false
+	}
+	if *event.Delta == "" {
+		return "", false
+	}
+	return *event.Delta, true
+}
+
 func handleStreamSuccess(
 	c *gin.Context,
 	resp *http.Response,
@@ -593,6 +617,8 @@ func handleStreamSuccess(
 	severityScanner := &common.SeverityTagScanner{}
 	// 伪工具调用标记扫描：逐 SSE 行检测文本扮演工具调用的标记，供白名单负反馈读取。
 	pseudoScanner := &common.PseudoToolCallMarkerScanner{}
+	// 无限重复循环扫描：同一短语/段落无限复述时中止流并强制熔断该渠道模型。
+	repetitionScanner := &common.RepetitionLoopScanner{}
 	observePostCommitEvents := func(events []string) bool {
 		hadChange := false
 		wasPending := postCommitToolTracker.HasPendingToolCall()
@@ -674,6 +700,31 @@ func handleStreamSuccess(
 			}
 			if pseudoScanner.Feed(sl.text) {
 				common.MarkPseudoToolCallMarker(c)
+			}
+			// 重复检测喂提取后的 delta 文本而非原始行：Responses 行内的
+			// sequence_number 逐行递增会破坏字节周期，掩盖真实重复。
+			if config.RuntimeStreamRepetitionLoopEnabled() {
+				if deltaText, ok := responsesDeltaRepetitionText(sl.text); ok && repetitionScanner.Feed(deltaText) {
+					common.MarkStreamRepetitionLoop(c)
+					progress.Finish("repetition")
+					common.RequestLogf(c, "[Responses-RepetitionLoop] 检测到模型无限重复输出（%s），中止当前流（Header 已发送，不换渠道；由调度层强制熔断该渠道模型）",
+						repetitionScanner.Detail())
+					close(scanDone)
+					// 补写 response.incomplete 终端事件，确保下游客户端收到带
+					// incomplete_details.reason 的终止信号而非裸断连（对齐 stall 分支）。
+					if !clientGone {
+						incompleteEvent := converters.SynthesizeResponsesIncomplete(eventsSentCount+1, outputCollector.responseID, "repetition_loop")
+						if _, err := c.Writer.Write([]byte(incompleteEvent)); err == nil && flusher != nil {
+							flusher.Flush()
+						}
+					}
+					// 中止时仍回写已收集的 reasoning 状态，避免推理状态因中止而丢失
+					repetitionSessionID := writeStreamSession(sessionManager, originalReq, outputCollector)
+					if repetitionSessionID != "" {
+						reasoningCollector.Store(repetitionSessionID)
+					}
+					return nil, common.ErrStreamRepetitionLoop
+				}
 			}
 			keepaliveTicker.Reset(15 * time.Second)
 			wasToolCallPending := postCommitToolTracker.HasPendingToolCall()

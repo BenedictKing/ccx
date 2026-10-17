@@ -392,3 +392,53 @@ func TestBreakerScopeDeleteByChannelUIDAndKeyHash(t *testing.T) {
 		t.Fatal("kb 的条目不应被删除")
 	}
 }
+
+// TestModelCircuitForcedFailureOpensImmediately 一次确证即隔离：强制失败
+// 跳过双阈值直接熔断，复犯按退避级别递增，成功清零后重新从 base 起步。
+func TestModelCircuitForcedFailureOpensImmediately(t *testing.T) {
+	base := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
+	tracker := NewModelCircuitTracker("messages")
+
+	// 首次强制失败：单次即熔断 60s。
+	opened, until := tracker.recordModelForcedFailureAt(testChannelUID, testKeyHash, testModel, "stream repetition loop detected", base)
+	if !opened {
+		t.Fatal("强制失败应单次即熔断，不等双阈值")
+	}
+	if got := until.Sub(base); got != modelCircuitBackoffBase {
+		t.Fatalf("首次强制熔断时长 = %v, want %v", got, modelCircuitBackoffBase)
+	}
+	if tracker.isAvailableAt(testChannelUID, testKeyHash, testModel, base.Add(30*time.Second)) {
+		t.Fatal("隔离期内 IsAvailable 应为 false")
+	}
+
+	// 隔离期内复犯：退避翻倍且隔离期顺延。
+	_, until2 := tracker.recordModelForcedFailureAt(testChannelUID, testKeyHash, testModel, "stream repetition loop detected", base.Add(30*time.Second))
+	if got := until2.Sub(base.Add(30 * time.Second)); got != 2*modelCircuitBackoffBase {
+		t.Fatalf("复犯熔断时长 = %v, want %v（退避翻倍）", got, 2*modelCircuitBackoffBase)
+	}
+
+	// 到期后一次成功：完全恢复并回收条目。
+	afterExpiry := until2.Add(time.Second)
+	tracker.recordModelSuccessAt(testChannelUID, testKeyHash, testModel, afterExpiry)
+	if tracker.TrackedCount() != 0 {
+		t.Fatalf("成功后应回收条目, TrackedCount = %d", tracker.TrackedCount())
+	}
+	// 退避清零：再次强制失败从 base 重新起步。
+	_, until3 := tracker.recordModelForcedFailureAt(testChannelUID, testKeyHash, testModel, "stream repetition loop detected", afterExpiry.Add(time.Minute))
+	if got := until3.Sub(afterExpiry.Add(time.Minute)); got != modelCircuitBackoffBase {
+		t.Fatalf("恢复后强制熔断应重置为 base, got %v", got)
+	}
+}
+
+// TestModelCircuitForcedFailureIgnoresEmptyChannel 与双阈值路径一致的防御：
+// 空 channelUID 忽略，不影响其他条目。
+func TestModelCircuitForcedFailureIgnoresEmptyChannel(t *testing.T) {
+	now := time.Now()
+	tracker := NewModelCircuitTracker("messages")
+	if opened, _ := tracker.recordModelForcedFailureAt("", testKeyHash, testModel, "err", now); opened {
+		t.Fatal("空 channelUID 应被忽略")
+	}
+	if tracker.TrackedCount() != 0 {
+		t.Fatalf("不应产生条目, TrackedCount = %d", tracker.TrackedCount())
+	}
+}

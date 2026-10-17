@@ -7,10 +7,106 @@ import (
 	"strings"
 	"time"
 
+	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/handlers/common"
 	"github.com/BenedictKing/ccx/internal/types"
 	"github.com/gin-gonic/gin"
 )
+
+// feedRepetitionText 喂无限重复扫描器（开关关闭时跳过）。返回是否命中。
+func feedRepetitionText(s *common.RepetitionLoopScanner, text string) bool {
+	if s == nil || !config.RuntimeStreamRepetitionLoopEnabled() || text == "" {
+		return false
+	}
+	s.Feed(text)
+	return s.Found()
+}
+
+// chatFeedRepetitionFromChatChunk 从已解析的 OpenAI chat chunk 提取增量文本
+// （choices[0].delta 的 content/reasoning_content）喂扫描器。返回是否命中。
+// 不喂原始 JSON 行：id/created 等包装字段会破坏字节周期，掩盖真实重复。
+func chatFeedRepetitionFromChatChunk(s *common.RepetitionLoopScanner, parsed map[string]interface{}) bool {
+	if s == nil {
+		return false
+	}
+	choices, ok := parsed["choices"].([]interface{})
+	if !ok || len(choices) == 0 {
+		return false
+	}
+	choice, ok := choices[0].(map[string]interface{})
+	if !ok {
+		return false
+	}
+	delta, ok := choice["delta"].(map[string]interface{})
+	if !ok {
+		return false
+	}
+	hit := false
+	if text, _ := delta["content"].(string); text != "" {
+		hit = feedRepetitionText(s, text) || hit
+	}
+	if text, _ := delta["reasoning_content"].(string); text != "" {
+		hit = feedRepetitionText(s, text) || hit
+	}
+	return hit
+}
+
+// claudeDeltaRepetitionText 从 Claude SSE data 行提取可判重复的增量文本
+// （content_block_delta 的 text_delta/thinking_delta），无文本返回 ok=false。
+func claudeDeltaRepetitionText(line string) (string, bool) {
+	if !strings.HasPrefix(line, "data: ") {
+		return "", false
+	}
+	jsonData := strings.TrimPrefix(line, "data: ")
+	if jsonData == "" || jsonData == "[DONE]" {
+		return "", false
+	}
+	var event struct {
+		Type  string `json:"type"`
+		Delta *struct {
+			Type     string `json:"type"`
+			Text     string `json:"text"`
+			Thinking string `json:"thinking"`
+		} `json:"delta"`
+	}
+	if err := json.Unmarshal([]byte(jsonData), &event); err != nil || event.Delta == nil {
+		return "", false
+	}
+	switch event.Delta.Type {
+	case "text_delta":
+		return event.Delta.Text, true
+	case "thinking_delta":
+		return event.Delta.Thinking, true
+	}
+	return "", false
+}
+
+// writeChatStreamAbortError 写出 chat 流式错误收尾（error chunk + [DONE]），
+// 用于 post-commit 阶段中止流（无限重复检测命中时），避免客户端裸断连。
+func writeChatStreamAbortError(c *gin.Context, flusher http.Flusher) {
+	errChunk := map[string]interface{}{
+		"error": map[string]interface{}{
+			"message": "stream aborted: model stuck in repetition loop",
+			"type":    "server_error",
+			"code":    "stream_repetition_loop",
+		},
+	}
+	chunkBytes, _ := json.Marshal(errChunk)
+	_, _ = fmt.Fprintf(c.Writer, "data: %s\n\n", string(chunkBytes))
+	_, _ = fmt.Fprintf(c.Writer, "data: [DONE]\n\n")
+	if flusher != nil {
+		flusher.Flush()
+	}
+}
+
+// chatAbortRepetitionLoop 无限重复命中后的统一中止：写 chat 错误收尾并返回哨兵。
+func chatAbortRepetitionLoop(c *gin.Context, flusher http.Flusher, progress *common.StreamProgressLogger, scanner *common.RepetitionLoopScanner) error {
+	common.MarkStreamRepetitionLoop(c)
+	common.RequestLogf(c, "[Chat-Stream-RepetitionLoop] 检测到模型无限重复输出（%s），中止当前流（Header 已发送，不换渠道；由调度层强制熔断该渠道模型）", scanner.Detail())
+	writeChatStreamAbortError(c, flusher)
+	progress.Finish("repetition")
+	return common.ErrStreamRepetitionLoop
+}
 
 func chatStreamHasDataActivity(lines []string) bool {
 	for _, line := range lines {
@@ -45,6 +141,8 @@ func streamPassthrough(
 	pending := prefetched
 	inactivityTimeout := time.Duration(timeouts.InactivityTimeoutMs) * time.Millisecond
 	lastActivity := time.Now()
+	// 无限重复循环扫描：同一短语/段落无限复述时中止流并强制熔断该渠道模型。
+	repetitionScanner := &common.RepetitionLoopScanner{}
 
 	for {
 		var chunk []byte
@@ -83,7 +181,7 @@ func streamPassthrough(
 			remainder = lines[len(lines)-1]
 			completeLines := lines[:len(lines)-1]
 
-			// 尝试从完整行中提取 usage
+			// 尝试从完整行中提取 usage；同时喂无限重复扫描器
 			for _, line := range completeLines {
 				if !strings.HasPrefix(line, "data: ") {
 					continue
@@ -101,6 +199,9 @@ func streamPassthrough(
 							InputTokens:  int(promptTokens),
 							OutputTokens: int(completionTokens),
 						}
+					}
+					if chatFeedRepetitionFromChatChunk(repetitionScanner, parsed) {
+						return nil, chatAbortRepetitionLoop(c, flusher, progress, repetitionScanner)
 					}
 				}
 			}
@@ -197,6 +298,8 @@ func streamClaudeToChat(
 	pending := prefetched
 	inactivityTimeout := time.Duration(timeouts.InactivityTimeoutMs) * time.Millisecond
 	lastActivity := time.Now()
+	// 无限重复循环扫描：同一短语/段落无限复述时中止流并强制熔断该渠道模型。
+	repetitionScanner := &common.RepetitionLoopScanner{}
 
 	for {
 		var chunk []byte
@@ -234,6 +337,9 @@ func streamClaudeToChat(
 			remainder = lines[len(lines)-1]
 			lines = lines[:len(lines)-1]
 			for _, line := range lines {
+				if text, ok := claudeDeltaRepetitionText(line); ok && feedRepetitionText(repetitionScanner, text) {
+					return nil, chatAbortRepetitionLoop(c, flusher, progress, repetitionScanner)
+				}
 				processClaudeChatStreamLine(c, flusher, model, line, &totalUsage, &doneSent)
 			}
 		}
@@ -287,6 +393,8 @@ func streamResponsesToChat(
 	var currentToolSeq int
 	var currentToolName string
 	chunkID := fmt.Sprintf("chatcmpl-resp-%d", time.Now().UnixNano())
+	// 无限重复循环扫描：同一短语/段落无限复述时中止流并强制熔断该渠道模型。
+	repetitionScanner := &common.RepetitionLoopScanner{}
 
 	for {
 		var chunk []byte
@@ -325,7 +433,11 @@ func streamResponsesToChat(
 			lines = lines[:len(lines)-1]
 
 			var currentEventType string
+			repetitionHit := false
 			for _, line := range lines {
+				if repetitionHit {
+					break
+				}
 				// 记录 event: 行
 				if strings.HasPrefix(line, "event: ") {
 					currentEventType = strings.TrimPrefix(line, "event: ")
@@ -372,6 +484,10 @@ func streamResponsesToChat(
 					text, _ := event["delta"].(string)
 					if text == "" {
 						continue
+					}
+					if feedRepetitionText(repetitionScanner, text) {
+						repetitionHit = true
+						break
 					}
 					chatChunk := map[string]interface{}{
 						"id":      chunkID,
@@ -486,6 +602,9 @@ func streamResponsesToChat(
 					}
 					doneSent = true
 				}
+			}
+			if repetitionHit {
+				return nil, chatAbortRepetitionLoop(c, flusher, progress, repetitionScanner)
 			}
 		}
 

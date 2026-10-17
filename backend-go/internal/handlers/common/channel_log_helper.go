@@ -449,6 +449,10 @@ func normalizeChannelLogErrorInfo(errorInfo string) string {
 		return "流式首内容超时：上游 HTTP 200 后未在配置窗口内返回有效内容"
 	case strings.HasPrefix(trimmed, ErrStreamStalled.Error()):
 		return "流式断流：首个有效内容后未在配置窗口内继续返回上游活动"
+	case strings.HasPrefix(trimmed, ErrStreamPostCommitStalled.Error()):
+		return "流式断流：Header 已发送后长时间无上游输出，已中止当前流"
+	case strings.HasPrefix(trimmed, ErrStreamRepetitionLoop.Error()):
+		return "模型输出无限重复：同一短语/段落无限复述，已中止当前流并强制隔离该渠道模型"
 	default:
 		return errorInfo
 	}
