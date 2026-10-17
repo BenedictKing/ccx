@@ -22,11 +22,11 @@
           </div>
           <div class="d-flex align-center ga-2">
             <div>
-              <!-- 渠道备注非空时悬停标题显示 -->
-              <v-tooltip v-if="channel.remark?.trim()" :text="channel.remark" location="bottom" :open-delay="150" content-class="ccx-tooltip">
+              <!-- 优先显示备注，悬停时显示原渠道名称 -->
+              <v-tooltip v-if="channel.remark?.trim()" :text="channel.name" location="bottom" :open-delay="150" content-class="ccx-tooltip">
                 <template #activator="{ props: tooltipProps }">
                   <div class="text-h6 font-weight-bold channel-title cursor-help" v-bind="tooltipProps">
-                    {{ channel.name }}
+                    {{ channel.remark.trim() }}
                   </div>
                 </template>
               </v-tooltip>
