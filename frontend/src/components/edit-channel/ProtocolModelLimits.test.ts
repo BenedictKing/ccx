@@ -9,13 +9,28 @@ vi.mock('../../i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
 const textarea = defineComponent({
   props: ['modelValue', 'rules', 'disabled'],
   emits: ['update:modelValue'],
-  template: `<textarea :value="modelValue" :disabled="disabled" @input="$emit('update:modelValue', $event.target.value)" />`,
+  template: `<textarea :value="modelValue" :disabled="disabled" @input="$emit('update:modelValue', $event.target.value)" />`
 })
 const routes: ChannelProtocolRoute[] = [
-  { kind: 'responses', index: 1, channelUid: 'luna', name: 'aihub-luna', serviceType: 'responses', supportedModels: ['*luna'] },
-  { kind: 'responses', index: 3, channelUid: 'code', name: 'aihub-code', serviceType: 'responses', supportedModels: ['*sol', '*astra'] },
+  {
+    kind: 'responses',
+    index: 1,
+    channelUid: 'luna',
+    name: 'aihub-luna',
+    serviceType: 'responses',
+    supportedModels: ['*luna']
+  },
+  {
+    kind: 'responses',
+    index: 3,
+    channelUid: 'code',
+    name: 'aihub-code',
+    serviceType: 'responses',
+    supportedModels: ['*sol', '*astra']
+  }
 ]
-const setup = () => mount(ProtocolModelLimits, { props: { modelValue: routes }, global: { stubs: { VTextarea: textarea } } })
+const setup = () =>
+  mount(ProtocolModelLimits, { props: { modelValue: routes }, global: { stubs: { VTextarea: textarea } } })
 
 describe('ProtocolModelLimits', () => {
   it('修改同协议的单条路由，保留其他路由且不直接调用接口', async () => {
