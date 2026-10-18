@@ -393,6 +393,11 @@ export const useChannelStore = defineStore('channel', () => {
 
     if (editingChannelIndex !== null) {
       // 更新现有渠道
+      const primaryPatch = { ...channel }
+      if (options?.originalChannel?.protocolRoutes?.length &&
+          (targetTab !== 'responses' || channel.serviceType !== 'responses')) {
+        delete primaryPatch.responsesReasoningFold
+      }
       let accountWarnings: string[] | undefined
       if (options?.autoManaged && options.accountUid) {
         const original = options.originalChannel
@@ -462,17 +467,25 @@ export const useChannelStore = defineStore('channel', () => {
           )
         }
       } else if (isChat) {
-        await updateChannelByType('chat', editingChannelIndex, channel)
+        await updateChannelByType('chat', editingChannelIndex, primaryPatch)
       } else if (isVectors) {
-        await updateChannelByType('vectors', editingChannelIndex, channel)
+        await updateChannelByType('vectors', editingChannelIndex, primaryPatch)
       } else if (isImages) {
-        await updateChannelByType('images', editingChannelIndex, channel)
+        await updateChannelByType('images', editingChannelIndex, primaryPatch)
       } else if (isGemini) {
-        await updateChannelByType('gemini', editingChannelIndex, channel)
+        await updateChannelByType('gemini', editingChannelIndex, primaryPatch)
       } else if (isResponses) {
-        await updateChannelByType('responses', editingChannelIndex, channel)
+        await updateChannelByType('responses', editingChannelIndex, primaryPatch)
       } else {
-        await updateChannelByType('messages', editingChannelIndex, channel)
+        await updateChannelByType('messages', editingChannelIndex, primaryPatch)
+      }
+      for (const route of options?.originalChannel?.protocolRoutes ?? []) {
+        if (route.kind !== 'responses' || route.serviceType !== 'responses' || !route.channelUid) continue
+        if (!!route.responsesReasoningFold === !!channel.responsesReasoningFold) continue
+        await api.updateChannelV2(route.channelUid, {
+          kind: route.upstreamKind ?? route.kind,
+          responsesReasoningFold: !!channel.responsesReasoningFold,
+        })
       }
       return { success: true, message: t('store.channel.updated'), channelId: editingChannelIndex, ...(accountWarnings?.length ? { warnings: accountWarnings } : {}) }
     } else {

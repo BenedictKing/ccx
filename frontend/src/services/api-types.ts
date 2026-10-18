@@ -400,6 +400,7 @@ export interface ChannelProtocolRoute {
   index: number
   name: string
   serviceType: string
+  responsesReasoningFold?: boolean
   channelUid?: string
   status?: ChannelDisplayStatus
   apiKeys?: string[]

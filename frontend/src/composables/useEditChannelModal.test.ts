@@ -13,14 +13,25 @@ vi.mock('../stores/dialog', () => ({ useDialogStore: () => ({}) }))
 it.each([false, true])('既有渠道续接配置为 %s 时保存表单中的修改', async original => {
   const props = reactive({
     show: false,
-    channelType: 'responses' as const,
+    channelType: 'chat' as const,
     channel: {
       index: 0,
       name: 'test',
       baseUrl: 'https://example.com',
       apiKeys: ['test'],
-      serviceType: 'responses',
-      responsesReasoningFold: original
+      serviceType: 'openai',
+      responsesReasoningFold: !original,
+      protocolRoutes: [
+        { kind: 'chat', index: 0, channelUid: 'chat', name: 'test', serviceType: 'openai' },
+        {
+          kind: 'responses',
+          index: 1,
+          channelUid: 'responses',
+          name: 'test',
+          serviceType: 'responses',
+          responsesReasoningFold: original
+        }
+      ]
     } as Channel
   })
   const emit = vi.fn()

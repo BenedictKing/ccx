@@ -203,7 +203,7 @@
               </div>
 
               <div
-                v-if="props.channelType === 'responses' && form.serviceType === 'responses'"
+                v-if="hasResponsesReasoningRoute"
                 class="proxy-direct-row mt-4"
                 :class="{ 'proxy-direct-row--on': form.responsesReasoningFold }"
               >
@@ -497,6 +497,11 @@ const props = withDefaults(defineProps<EditChannelModalProps>(), {
 const emit = defineEmits<EditChannelModalEmits>()
 const channelStore = useChannelStore()
 const dialogStore = useDialogStore()
+const hasResponsesReasoningRoute = computed(() =>
+  props.channel?.protocolRoutes?.length
+    ? props.channel.protocolRoutes.some(route => route.kind === 'responses' && route.serviceType === 'responses')
+    : props.channelType === 'responses' && form.serviceType === 'responses',
+)
 const managedProviderName = computed(() => providerDisplayName(props.channel?.providerId))
 const isManagedProvider = computed(() => isManagedProviderChannel(props.channel))
 const isOfficialManagedProvider = computed(() => isOfficialProviderChannel(props.channel))

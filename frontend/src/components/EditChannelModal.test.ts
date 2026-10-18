@@ -71,6 +71,24 @@ it('实际编辑界面按上游类型显示可切换的 Responses 续接设置',
     expect(setting!.get('button').attributes('aria-pressed')).toBe('true')
     await wrapper.setProps({ channelType: 'chat' })
     expect(wrapper.text()).not.toContain('channelEditor.compat.responsesReasoningFold.label')
+    await wrapper.setProps({
+      channel: {
+        ...wrapper.props('channel')!,
+        serviceType: 'openai',
+        protocolRoutes: [
+          { kind: 'chat', index: 0, channelUid: 'chat', name: 'test', serviceType: 'openai' },
+          {
+            kind: 'responses',
+            index: 1,
+            channelUid: 'responses',
+            name: 'test',
+            serviceType: 'responses',
+            responsesReasoningFold: true
+          }
+        ]
+      } as Channel
+    })
+    expect(wrapper.text()).toContain('channelEditor.compat.responsesReasoningFold.label')
   } finally {
     wrapper.unmount()
   }

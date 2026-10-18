@@ -574,7 +574,9 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     form.stripBillingHeader = channel.stripBillingHeader ?? false
     // 载入既有渠道的值即视为显式配置，避免 baseUrl watcher 覆盖用户已保存的选择
     stripBillingHeaderTouched.value = true
-    form.responsesReasoningFold = channel.responsesReasoningFold ?? false
+    form.responsesReasoningFold = (channel.protocolRoutes?.length
+      ? channel.protocolRoutes.find(route => route.kind === 'responses' && route.serviceType === 'responses')?.responsesReasoningFold
+      : channel.responsesReasoningFold) ?? false
     form.codexToolCompat = channel.codexToolCompat ?? channel.stripCodexClientTools ?? false
     form.stripCodexClientTools = channel.codexToolCompat ?? channel.stripCodexClientTools ?? false
     form.convertImageUrlToB64Json = !!channel.convertImageUrlToB64Json
