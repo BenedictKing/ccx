@@ -441,6 +441,7 @@ func (p *OpenAIProvider) HandleStreamResponse(body io.ReadCloser) (<-chan string
 		nextBlockIndex := 0
 		toolCallAccumulator := make(map[int]*ToolCallAccumulator)
 		toolUseStopEmitted := false
+		toolUseBlockEmitted := false
 		messageStartSent := false
 		stopReason := ""
 		var streamUsage map[string]interface{}
@@ -693,6 +694,7 @@ func (p *OpenAIProvider) HandleStreamResponse(body io.ReadCloser) (<-chan string
 							for _, event := range events {
 								eventChan <- event
 							}
+							toolUseBlockEmitted = true
 							delete(toolCallAccumulator, index)
 						}
 					}
@@ -713,7 +715,9 @@ func (p *OpenAIProvider) HandleStreamResponse(body io.ReadCloser) (<-chan string
 					textBlockStarted = false
 				}
 
-				if !toolUseStopEmitted && (finishReason == "tool_calls" || finishReason == "function_call") {
+				// Gemini 等 OpenAI 兼容上游在工具调用后也可能返回 "stop"，与非流式路径一致按 tool_use 结束
+				if !toolUseStopEmitted && (finishReason == "tool_calls" || finishReason == "function_call" ||
+					(finishReason == "stop" && toolUseBlockEmitted)) {
 					stopReason = "tool_use"
 					toolUseStopEmitted = true
 				} else if finishReason == "stop" {
