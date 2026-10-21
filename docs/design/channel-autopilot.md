@@ -2337,7 +2337,7 @@ embedding:
 
 部分模型 effort 档间差异极大（如 gpt-5.6-luna：medium 实测 14.3%，max 实测 65.2%），模型级
 常规口径档位（medium 对齐）会把这些 (model, effort) 组合整体排除。`MinQualityTier` 过滤因此引入
-effort 级实测豁免：取 coding 域 deepswe/codexradar `pass_at_1` 直测证据（与档位边界同源同量纲），
+effort 级实测豁免：取 coding 域 deepswe/codexradar 直测证据（`pass_at_1` 或雷达Bench v2 的 `mean_reward`，与档位边界同源同量纲），
 **任一非常规档（序数 > medium）实测分达到下限对应边界分即放行该模型**，随后该模型在排序层
 仍按各 effort 档实际分数与实测成本参与 frontier 竞争，不会被虚抬。default/medium 档证据不参与
 豁免（那是常规口径本身，已由模型级档位表达），singleEffortOnly 封顶等保守判定保持有效。

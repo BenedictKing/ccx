@@ -417,11 +417,54 @@ export function mergeBenchlmData(registry, benchlmData, report, models = targetM
 
 /**
  * 合并 dradar 数据到注册表
+ *
+ * 雷达Bench v2（2026-10 站点重构）只发布 GPT 系模型评测，其他厂商模型
+ * 的 codexradar 证据已无上游事实源；dradar 源成功运行时把本次数据未覆盖
+ * 的 profile 的 codexradar 证据整组移除（含旧深榜 codexradar-v1 行），
+ * 避免陈旧分数永久残留参与档位评定。
  */
 export function mergeDradarData(registry, dradarData, report, models = targetModels) {
   if (!registry.benchmarkProfiles) {
     registry.benchmarkProfiles = []
   }
+
+  const coveredCanonicals = new Set(Object.keys(dradarData))
+  const keptProfiles = []
+  for (const profile of registry.benchmarkProfiles) {
+    // 覆盖模型由主循环替换；--models 过滤时非目标模型不在本次范围，一律跳过剪枝
+    const outOfScope = models && !models.includes(profile.canonicalModel)
+    const covered = coveredCanonicals.has(profile.canonicalModel)
+    if (!covered && !outOfScope) {
+      const evidence = Array.isArray(profile.benchmarkEvidence) ? profile.benchmarkEvidence : []
+      const remaining = evidence.filter(
+        e => e.benchmark !== 'codexradar' &&
+          !(e.benchmark === 'deepswe' && e.benchmarkVersion === 'codexradar')
+      )
+      if (remaining.length !== evidence.length) {
+        profile.benchmarkEvidence = remaining
+        // 该来源 URL 不再支撑任何证据时同步移除，sources 随后由元数据重建
+        profile.sources = (profile.sources || []).filter(s => s !== 'https://deng.codexradar.com/')
+        ensureEvidenceProfileMetadata(profile)
+        profile.verifiedAt = new Date().toISOString().split('T')[0]
+      }
+      // 剪空（或历史遗留）的零证据、零 categoryScores、零来源空壳 profile 整条移除：
+      // presetstore 运行时校验不接受零证据占位条目；模型注册仍在 upstreamCapabilities，
+      // 其他来源重新收录时 merge 会自动重建 profile
+      const isEmptyStub =
+        (profile.benchmarkEvidence || []).length === 0 &&
+        Object.keys(profile.categoryScores || {}).length === 0 &&
+        (profile.sources || []).length === 0
+      if (isEmptyStub) {
+        report.updated.push({ canonical: profile.canonicalModel, source: 'dradar-pruned-removed' })
+        continue
+      }
+      if (remaining.length !== evidence.length) {
+        report.updated.push({ canonical: profile.canonicalModel, source: 'dradar-pruned' })
+      }
+    }
+    keptProfiles.push(profile)
+  }
+  registry.benchmarkProfiles = keptProfiles
 
   for (const [canonical, data] of Object.entries(dradarData)) {
     if (models && !models.includes(canonical)) {

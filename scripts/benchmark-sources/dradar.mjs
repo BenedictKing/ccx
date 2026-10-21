@@ -1,100 +1,60 @@
 /**
- * dradar (codexradar) 数据抓取器
+ * dradar (codexradar) 数据抓取器 —— 雷达Bench v2
  *
- * 从 https://api.codexradar.com 抓取 leaderboard 数据。
+ * 2026-10 站点重构（deployment007/server024/config64）后的新事实源：
+ * - 旧 /api/v1/table 深榜已退役（HTTP 410 score_endpoint_retired），全模型混榜不复存在；
+ * - 评测收敛为「雷达Bench」统一 64 题池：DeepSWE 精选 15 + 庞贝邻接 16 + TB 14 + Science 19；
+ * - 权威分端点 /api/v1/radar-bench-score?model&effort，150 分制
+ *   （scoring_policy: radar-bench-v2-last3-per-task-equal-weight-150：
+ *    每任务取最近至多 3 次有效判分的平均奖励，覆盖任务等权平均后 ×1.5）；
+ * - 模型范围收缩为 GPT 系 6 模型 × 5-6 档（score_selection_catalog:
+ *   codex-0160-six-model-score-query-20261005-v1）；其他厂商模型已不在榜，
+ *   gpt-5.5 明确退役（unsupported_selection）。
  *
- * 数据来源：
- * - /api/v1/leaderboard: 各模型+effort 的 pass_rate、graded 数
- * - /api/v1/table: 各 task+model+effort 的 cell 数据（含 cost）
+ * 数据流：
+ * 1. GET /api/v1/library-catalog → 四库 model_effort_selections 的并集 = 待查 (模型, 档位) 清单；
+ *    unified_pool.score_url 绑定校验防端点漂移。
+ * 2. GET /api/v1/radar-bench-score?model&effort → 每 (模型, 档位) 一份权威 payload：
+ *    score(0-150)/coverage(0-64)/score_status、tasks[].mean_reward 与
+ *    statistics.metrics.api_equivalent_usd.mean（官方标准 API 等效成本，单 run 均值）。
  *
- * 数据结构：
- * - leaderboard: {models: [{model, effort, pass_rate, graded, passed, cells, cells_passed, tasks}]}
- * - table: {cells: {"task|model|effort": {rate, n, p, ran_by: [{api_equivalent_cost_usd, actual_cost_usd, duration_sec, ...}]}}}
- *   成本优先取 api_equivalent_cost_usd（重算等效价），回退 actual_cost_usd（退役中的原始花费）
+ * 证据口径：rawValue = score/score_max（0-1 等权平均任务奖励率）。
+ * 庞贝任务奖励是连续 F1 部分分，不再是纯二值通过率，故 metric 标 mean_reward
+ * （Go 端 isMeasuredCodingEvidenceMetric 同步接受 pass_at_1/mean_reward）。
  */
 
-/**
- * dradar 模型名 -> CCX canonicalModel 映射
- * dradar 混用点号与连字符: "gpt-5.6-sol"（点）、"gpt-5-4"（连字符）、"glm-5.3"（点）；
- * kimi-k3 在榜上用短名 "k3"；deepseek 变体带 "dsh-" 前缀。
- */
 import { fetchWithTimeout } from './http.mjs'
-import { cachedFetch, cacheResponseData, getCacheEntry, getSimpleCache, setSimpleCache } from './http-cache.mjs'
+import { cachedFetch, cacheResponseData } from './http-cache.mjs'
 import { warnNewModelCandidates } from './mapper.mjs'
 
+/**
+ * dradar 模型名 -> CCX canonicalModel 映射。
+ * 雷达Bench v2 只发布 GPT 系 slug（与 canonical 同名）；其他厂商模型
+ * （claude/gemini/glm/kimi/grok/deepseek 等）已不在新榜，映射条目随之退役，
+ * 若站点重新收录会经 NEW-MODEL 告警路径补回。
+ */
 export const DRADAR_MODEL_MAP = {
+  'gpt-6.1-sol': 'gpt-6.1-sol',
   'gpt-6-astra': 'gpt-6-astra',
-  // GPT-6 Sol/Luna（2026-09-22 发布）：dradar slug 与 canonical 同名
   'gpt-6-sol': 'gpt-6-sol',
   'gpt-6-luna': 'gpt-6-luna',
-  // GPT-6.1 Sol（2026-09-29 发布）：dradar slug 保留点号
-  'gpt-6.1-sol': 'gpt-6.1-sol',
   'gpt-5.6-sol': 'gpt-5.6-sol',
-  'gpt-5.6-terra': 'gpt-5.6-terra',
   'gpt-5.6-luna': 'gpt-5.6-luna',
-  'gpt-5.5': 'gpt-5.5',
-  'gpt-5-4': 'gpt-5.4',
-  'gpt-5-4-mini': 'gpt-5.4-mini',
-  'claude-opus-4-8': 'claude-opus-4-8',
-  'claude-opus-5': 'claude-opus-5',
-  // Claude Opus 5.5（2026-09-22 发布）：dradar slug 与 canonical 同名
-  'claude-opus-5-5': 'claude-opus-5-5',
-  'claude-sonnet-5-5': 'claude-sonnet-5-5',
-  'claude-sonnet-5': 'claude-sonnet-5',
-  'claude-sonnet-4-6': 'claude-sonnet-4-6',
-  'claude-haiku-4-5': 'claude-haiku-4.5',
-  'glm-5.3': 'glm-5.3',
-  'glm-5.3-flash': 'glm-5.3-flash',
-  'glm-5-turbo': 'glm-5-turbo',
-  'glm-5-3-flash': 'glm-5.3-flash',
-  'glm-5-3': 'glm-5.3',
-  'glm-5.2': 'glm-5.2',
-  'glm-5-2': 'glm-5.2',
-  'kimi-k2-7-code': 'kimi-k2.7-code',
-  'k3': 'kimi-k3',
-  'kimi-k3': 'kimi-k3',
-  'gemini-3-7-flash': 'gemini-3.7-flash',
-  'gemini-3.7-flash': 'gemini-3.7-flash',
-  'gemini-3-8-flash': 'gemini-3.8-flash',
-  'gemini-3.8-flash': 'gemini-3.8-flash',
-  'gemini-3-5-flash': 'gemini-3.5-flash',
-  'gemini-3-1-pro': 'gemini-3.1-pro',
-  'gemini-3-flash': 'gemini-3-flash',
-  'grok-4.5': 'grok-4.5',
-  'grok-4-5': 'grok-4.5',
-  'grok-4.6': 'grok-4.6',
-  'grok-4-6': 'grok-4.6',
-  'deepseek-v4-flash': 'deepseek-v4-flash',
-  'deepseek-v4-pro': 'deepseek-v4-pro',
-  'dsh-deepseek-v4-flash': 'deepseek-v4-flash',
-  'dsh-deepseek-v4-flash-vision-exp': 'deepseek-v4-flash-vision',
-  'dsh-deepseek-v4-pro': 'deepseek-v4-pro',
-  // DeepSeek V4.1 Flash（2026-09-10 发布）：dradar 混用点号与连字符，两种形态及 dsh- 前缀均预映射
-  'deepseek-v4.1-flash': 'deepseek-v4.1-flash',
-  'deepseek-v4-1-flash': 'deepseek-v4.1-flash',
-  'deepseek-flash': 'deepseek-v4.1-flash',
-  'dsh-deepseek-v4.1-flash': 'deepseek-v4.1-flash',
-  'dsh-deepseek-v4-1-flash': 'deepseek-v4.1-flash',
-  'dsh-deepseek-flash': 'deepseek-v4.1-flash',
-  // 腾讯混元 Hy4 Preview：dradar 榜上 slug 与 canonical 同名
-  'hy4-preview': 'hy4-preview',
 }
 
 const BASE_URL = 'https://api.codexradar.com'
 const SITE_URL = 'https://deng.codexradar.com/'
-const BENCHMARK = 'deep-swe'
-const TABLE_FETCH_TIMEOUT_MS = 45_000
+const CATALOG_URL = `${BASE_URL}/api/v1/library-catalog`
+const SCORE_PATH = '/api/v1/radar-bench-score'
+const SCORE_FETCH_TIMEOUT_MS = 30_000
+// 单批并发：34 个 (模型,档位) 请求分批打，避免对社区站点瞬时压满
+const SCORE_CONCURRENCY = 4
 
-export function extractTableCacheVersion(html) {
-  const source = String(html)
-  const legacyMatch = source.match(/TABLE_CACHE_VERSION\s*=\s*["']([^"']+)["']/)
-  if (legacyMatch?.[1]) return legacyMatch[1]
-
-  const scriptMatch = source.match(/(?:src=["'][^"']*\/)?radar-report\.js\?[^"']*\bv=([^&"']+)/)
-  if (scriptMatch?.[1]) return decodeURIComponent(scriptMatch[1])
-
-  throw new Error('CodexRadar table cache version not found in inline config or radar-report.js URL')
-}
+/**
+ * 官网对未覆盖档位标 ⚠（数据不足）。雷达Bench 沿用同口径：
+ * 覆盖任务数低于全池任务数的 60% 时该档证据不产出，避免小样本档污染选型证据。
+ */
+export const DRADAR_MIN_TASK_COVERAGE = 0.6
 
 function describeError(error) {
   const details = [error?.message]
@@ -103,457 +63,291 @@ function describeError(error) {
   return details.filter(Boolean).join(': ') || String(error)
 }
 
-async function fetchTableCacheVersion(cachedVersion) {
-  console.log(`[dradar] Fetching ${SITE_URL} for table cache version`)
-  try {
-    const resp = await fetchWithTimeout(SITE_URL, {
-      headers: {
-        'User-Agent': 'ccx-benchmark-updater/1.0',
-        Accept: 'text/html',
-      },
-    })
-    if (!resp.ok) {
-      throw new Error(`HTTP ${resp.status} ${resp.statusText} for ${SITE_URL}`)
-    }
-    return extractTableCacheVersion(await resp.text())
-  } catch (error) {
-    if (!cachedVersion) throw error
-    console.warn(`[dradar] Failed to discover table cache version (${describeError(error)}); using cached version ${cachedVersion}`)
-    return cachedVersion
-  }
-}
-
-/**
- * 获取 dradar leaderboard 数据
- * @returns {Promise<Object>}
- */
-export async function fetchLeaderboard() {
-  const url = `${BASE_URL}/api/v1/leaderboard?benchmark=${encodeURIComponent(BENCHMARK)}`
-
-  console.log(`[dradar] Fetching ${url}`)
-
-  const result = await cachedFetch(url, {
-    headers: {
-      'User-Agent': 'ccx-benchmark-updater/1.0',
-      Accept: 'application/json',
-    },
-  })
-
-  if (result.cached) {
-    console.log(`[dradar] ${url} → 304 Not Modified, using cached data`)
-    return result.data
-  }
-
-  const data = await result.response.json()
-  cacheResponseData(url, data)
-  return data
-}
-
-/**
- * 获取 dradar table 数据（含 cost）
- * @returns {Promise<Object>}
- */
-export async function fetchTable() {
-  const cachedVersion = getSimpleCache('dradar:cacheVersion')
-  const cacheVersion = await fetchTableCacheVersion(cachedVersion)
-  const url = `${BASE_URL}/api/v1/table?ui=${encodeURIComponent(cacheVersion)}&benchmark=${encodeURIComponent(BENCHMARK)}`
-
-  // 如果 cacheVersion 与上次相同，使用条件请求（ETag）
-  if (cachedVersion === cacheVersion) {
-    console.log(`[dradar] Cache version unchanged (${cacheVersion}), trying conditional request`)
-    try {
-      const result = await cachedFetch(url, {
-        headers: {
-          'User-Agent': 'ccx-benchmark-updater/1.0',
-          Accept: 'application/json',
-        },
-      }, TABLE_FETCH_TIMEOUT_MS)
-
-      if (result.cached) {
-        console.log(`[dradar] ${url} → 304 Not Modified, using cached data`)
-        return result.data
-      }
-
-      const data = await result.response.json()
-      cacheResponseData(url, data)
-      return data
-    } catch (error) {
-      const cachedData = getCacheEntry(`etag:${url}`)?.data
-        || getCacheEntry(`etag:${BASE_URL}/api/v1/table?ui=${encodeURIComponent(cacheVersion)}`)?.data
-      if (cachedData) {
-        console.warn(`[dradar] Failed to refresh table (${describeError(error)}); using cached table data`)
-        return cachedData
-      }
-      throw error
-    }
-  }
-
-  console.log(`[dradar] Cache version changed: ${cachedVersion || '(none)'} → ${cacheVersion}`)
-  setSimpleCache('dradar:cacheVersion', cacheVersion)
-
-  console.log(`[dradar] Fetching ${url}`)
-
+async function fetchJson(url, timeoutMs) {
   const resp = await fetchWithTimeout(url, {
     headers: {
       'User-Agent': 'ccx-benchmark-updater/1.0',
       Accept: 'application/json',
     },
-  }, TABLE_FETCH_TIMEOUT_MS)
-
+  }, timeoutMs)
   if (!resp.ok) {
-    throw new Error(`HTTP ${resp.status} ${resp.statusText} for ${url}`)
+    const body = await resp.text().catch(() => '')
+    throw new Error(`HTTP ${resp.status} ${resp.statusText} for ${url}${body ? `: ${body.slice(0, 200)}` : ''}`)
   }
+  return resp.json()
+}
 
-  const data = await resp.json()
-  cacheResponseData(url, data)
+/**
+ * 获取雷达Bench 目录（含四库 model_effort_selections 与 unified_pool 绑定信息）
+ * @returns {Promise<Object>}
+ */
+export async function fetchRadarBenchCatalog() {
+  console.log(`[dradar] Fetching ${CATALOG_URL}`)
+  const result = await cachedFetch(CATALOG_URL, {
+    headers: {
+      'User-Agent': 'ccx-benchmark-updater/1.0',
+      Accept: 'application/json',
+    },
+  })
+  if (result.cached) {
+    console.log(`[dradar] ${CATALOG_URL} → 304 Not Modified, using cached data`)
+    return result.data
+  }
+  const data = await result.response.json()
+  cacheResponseData(CATALOG_URL, data)
   return data
 }
 
 /**
- * 从 table cells 的 key（`task|model|effort`）收集未映射的 dradar 模型名（去重）。
- * 用于新模型检测，避免榜上出现新模型时分数被静默丢弃。
- * @param {Object} table - table JSON 数据
+ * 从目录提取待查 (模型, 档位) 清单：四库 model_effort_selections 的并集。
+ * 站点退役的组合（如 luna 无 ultra）不在 selections 里，天然不会发起请求。
+ *
+ * @param {Object} catalog - library-catalog JSON
  * @param {Object} modelMap - dradar 模型名 -> CCX canonicalModel 映射
- * @returns {string[]}
+ * @returns {{pairs: Array<{model: string, effort: string}>, unmappedModels: string[]}}
  */
-export function collectUnmappedTableModels(table, modelMap) {
+export function extractScoreSelections(catalog, modelMap) {
+  const pool = catalog?.unified_pool
+  if (pool?.score_url !== SCORE_PATH) {
+    throw new Error(`unified_pool.score_url mismatch: expected ${SCORE_PATH}, got ${pool?.score_url}`)
+  }
+
+  const pairKeys = new Set()
   const unmapped = []
-  const seen = new Set()
-  for (const key of Object.keys(table?.cells || {})) {
-    const model = key.split('|')[1]
-    if (model && !modelMap[model] && !seen.has(model)) {
-      seen.add(model)
-      unmapped.push(model)
-    }
-  }
-  return unmapped
-}
-
-/**
- * 从 leaderboard 数据中提取每个模型的最佳表现
- *
- * @param {Object} data - leaderboard JSON 数据
- * @param {Object} modelMap - dradar 模型名 -> CCX canonicalModel 映射
- * @returns {Object} - {canonicalModel: {bestEffort, passRate, graded, cells, cellsPassed, efforts}}
- */
-export function extractBestPerModel(data, modelMap) {
-  const models = data.models || []
-  const result = {}
-
-  for (const m of models) {
-    const dradarModel = m.model
-    const canonical = modelMap[dradarModel]
-
-    if (!canonical) {
-      continue
-    }
-
-    if (!result[canonical]) {
-      result[canonical] = {
-        canonicalModel: canonical,
-        deepsweModel: dradarModel,
-        bestEffort: null,
-        passRate: 0,
-        graded: 0,
-        cells: 0,
-        cellsPassed: 0,
-        efforts: {},
+  const seenUnmapped = new Set()
+  for (const collection of catalog?.collections || []) {
+    for (const selection of collection?.model_effort_selections || []) {
+      const { model, effort } = selection
+      if (!model || !effort) continue
+      pairKeys.add(`${model}|${effort}`)
+      if (!modelMap[model] && !seenUnmapped.has(model)) {
+        seenUnmapped.add(model)
+        unmapped.push(model)
       }
     }
-
-    result[canonical].efforts[m.effort] = {
-      passRate: m.pass_rate,
-      graded: m.graded,
-      cells: m.cells,
-      cellsPassed: m.cells_passed,
-      taskIds: m.taskIds || [],
-    }
-
-    // 更新最佳 effort
-    if (m.pass_rate > result[canonical].passRate) {
-      result[canonical].bestEffort = m.effort
-      result[canonical].passRate = m.pass_rate
-      result[canonical].graded = m.graded
-      result[canonical].cells = m.cells
-      result[canonical].cellsPassed = m.cells_passed
-    }
+  }
+  if (pairKeys.size === 0) {
+    throw new Error('library-catalog contains no model_effort_selections')
   }
 
-  return result
+  const pairs = [...pairKeys]
+    .map(key => {
+      const [model, effort] = key.split('|')
+      return { model, effort }
+    })
+    .sort((a, b) => a.model.localeCompare(b.model) || a.effort.localeCompare(b.effort))
+  return { pairs, unmappedModels: unmapped }
 }
 
 /**
- * 从版本化 table 直接聚合 leaderboard，避免额外请求冷启动的 /leaderboard。
- * table 的每个 cell 代表一个任务投票，严格多数通过才算 cells_passed。
+ * 获取单 (模型, 档位) 的雷达Bench 权威分 payload。
+ * 站点会因组合退役/不支持返回 4xx（unsupported_selection），调用方按可跳过处理。
+ * @returns {Promise<Object|null>} payload；不可用组合返回 null
  */
-export function extractLeaderboardFromTable(data, modelMap) {
-  const aggregates = new Map()
-  const allTaskIds = new Set()
-  for (const [key, cell] of Object.entries(data?.cells || {})) {
-    const [taskId, dradarModel, effort] = key.split('|')
-    const canonical = modelMap[dradarModel]
-    const graded = Number(cell?.n)
-    const passed = Number(cell?.p)
-    if (!taskId || !effort || !Number.isFinite(graded)) continue
-    // 覆盖率分母按全表任务计（含未映射模型），与官网 benchmarkTaskCoverage 一致
-    allTaskIds.add(taskId)
-    if (!canonical || graded <= 0) continue
+export async function fetchRadarBenchScore(model, effort) {
+  const url = `${BASE_URL}${SCORE_PATH}?model=${encodeURIComponent(model)}&effort=${encodeURIComponent(effort)}`
+  try {
+    const result = await cachedFetch(url, {
+      headers: {
+        'User-Agent': 'ccx-benchmark-updater/1.0',
+        Accept: 'application/json',
+      },
+    }, SCORE_FETCH_TIMEOUT_MS)
 
-    const aggregateKey = `${canonical}|${effort}`
-    if (!aggregates.has(aggregateKey)) {
-      aggregates.set(aggregateKey, {
-        model: dradarModel,
-        effort,
-        graded: 0,
-        passed: 0,
-        cells: 0,
-        cells_passed: 0,
-        taskIds: new Set(),
-      })
+    if (result.cached) return result.data
+
+    const data = await result.response.json()
+    cacheResponseData(url, data)
+    return data
+  } catch (error) {
+    const message = describeError(error)
+    if (/HTTP 4\d\d/.test(message)) {
+      console.warn(`[dradar] ${model} ${effort}: unavailable on RadarBench (${message}); skipped`)
+      return null
     }
-    const aggregate = aggregates.get(aggregateKey)
-    aggregate.graded += graded
-    aggregate.passed += Number.isFinite(passed) ? passed : 0
-    aggregate.cells += 1
-    aggregate.taskIds.add(taskId)
-    if (Number.isFinite(passed) && passed * 2 > graded) aggregate.cells_passed += 1
+    throw error
   }
+}
 
+/**
+ * 从 score payload 提取 0-1 等权平均任务奖励率。
+ * @returns {number|null} score 为 null（missing_current_result）时返回 null
+ */
+export function radarScoreRatio(payload) {
+  const score = payload?.score
+  const scoreMax = Number(payload?.score_max)
+  if (typeof score !== 'number' || !Number.isFinite(score) || !Number.isFinite(scoreMax) || scoreMax <= 0) {
+    return null
+  }
+  return score / scoreMax
+}
+
+/**
+ * 档位覆盖门槛：score 缺失或覆盖任务数低于全池的 DRADAR_MIN_TASK_COVERAGE 时证据不产出。
+ * @returns {boolean}
+ */
+export function scoreCoverageSufficient(payload, minCoverage = DRADAR_MIN_TASK_COVERAGE) {
+  const ratio = radarScoreRatio(payload)
+  if (ratio === null) return false
+  const coverage = Number(payload?.coverage)
+  const required = Number(payload?.required_tasks)
+  if (!Number.isFinite(coverage) || !Number.isFinite(required) || required <= 0) return false
+  return coverage / required >= minCoverage
+}
+
+/**
+ * 从 score payload 的 statistics 提取成本信息（官方标准 API 等效成本）。
+ * api_equivalent_usd.mean 是已知样本的单 run 均值，与旧深榜 ran_by 逐 run
+ * 聚合口径一致；中位数与时长中位数新端点不提供，置 null。
+ * @returns {{meanCost: number|null, medianCost: null, meanDuration: number|null, medianDuration: null, nRuns: number}}
+ */
+export function extractCostFromStatistics(payload) {
+  const metric = payload?.statistics?.metrics?.api_equivalent_usd
+  const elapsed = payload?.statistics?.metrics?.elapsed_ms?.mean
+  // mean 为 JSON null 时 Number(null)===0 会把「缺成本证据」误当 0 美元，必须先验类型
+  const meanCost = typeof metric?.mean === 'number' && Number.isFinite(metric.mean) ? metric.mean : null
+  const meanDuration = typeof elapsed === 'number' && Number.isFinite(elapsed) && elapsed > 0 ? elapsed / 1000 : null
   return {
-    models: [...aggregates.values()].map(aggregate => ({
-      ...aggregate,
-      taskIds: [...aggregate.taskIds],
-      pass_rate: aggregate.cells > 0 ? aggregate.cells_passed / aggregate.cells : 0,
-    })),
-    // 官方口径分母是全表任务清单（含尚无判分的任务）；cells 键集合仅作缺 tasks 字段时的回退
-    totalTasks: Array.isArray(data?.tasks) && data.tasks.length > 0 ? data.tasks.length : allTaskIds.size,
+    meanCost,
+    medianCost: null,
+    meanDuration,
+    medianDuration: null,
+    nRuns: Number(metric?.known_samples) || 0,
   }
-}
-
-/**
- * 官网 MIN_BENCHMARK_TASK_COVERAGE = 0.6（benchmarkTaskCoverage）：
- * 单模型×effort 档覆盖的去重任务数低于全表任务数的 60% 即「数据不足」，
- * 官网对该档标 ⚠；采集侧同样不产出其分数，避免小样本档污染选型证据。
- * total=0 时官方判 insufficient=false，此处保持一致（实际无数据行可判）。
- */
-export const DRADAR_MIN_TASK_COVERAGE = 0.6
-
-export function effortCoverageSufficient(cell, totalTasks, minCoverage = DRADAR_MIN_TASK_COVERAGE) {
-  if (!totalTasks || totalTasks <= 0) return true
-  const covered = Array.isArray(cell?.taskIds) ? cell.taskIds.length : 0
-  return covered / totalTasks >= minCoverage
-}
-
-/**
- * 从单条运行记录取成本，返回 number 或 null。
- *
- * CodexRadar 自 "server-repriced-api-equivalent-beta-v2" 起把成本口径迁到
- * api_equivalent_cost_usd（按标准 API 价重算的等效成本），新跑的 run 只填该字段；
- * 旧字段 actual_cost_usd（志愿者原始花费，受各自订阅折扣影响、不可横向比）正在退役，
- * 仅残留在少量老 run 上。网页看板展示的 mean 用的就是新字段，故这里以新字段为准、
- * 回退旧字段——两者在同一 run 上极少同时出现，优先新口径既补齐覆盖、又与 CCX
- * normalizedModelCostUSD 的标准价基准同口径。fallback_estimate_usd 是估算而非实测，不采用。
- *
- * @param {Object} run - ran_by 单条运行记录
- * @returns {number|null}
- */
-function runCostUSD(run) {
-  const candidate = run?.api_equivalent_cost_usd ?? run?.actual_cost_usd
-  return Number.isFinite(candidate) ? candidate : null
-}
-
-/**
- * 从 table 数据中提取 cost 信息
- *
- * @param {Object} data - table JSON 数据
- * @param {Object} modelMap - dradar 模型名 -> CCX canonicalModel 映射
- * @returns {Object} - {canonicalModel: {effort: {meanCost, medianCost, nRuns}}}
- */
-export function extractCostData(data, modelMap) {
-  const cells = data.cells || {}
-  const costByModelEffort = {}
-
-  for (const [key, cell] of Object.entries(cells)) {
-    const [taskId, model, effort] = key.split('|')
-    const canonical = modelMap[model]
-
-    if (!canonical || !cell.ran_by || cell.ran_by.length === 0) {
-      continue
-    }
-
-    if (!costByModelEffort[canonical]) {
-      costByModelEffort[canonical] = {}
-    }
-    if (!costByModelEffort[canonical][effort]) {
-      costByModelEffort[canonical][effort] = {
-        costs: [],
-        durations: [],
-      }
-    }
-
-    for (const run of cell.ran_by) {
-      const cost = runCostUSD(run)
-      if (cost !== null) {
-        costByModelEffort[canonical][effort].costs.push(cost)
-      }
-      if (run.duration_sec !== null && run.duration_sec !== undefined) {
-        costByModelEffort[canonical][effort].durations.push(run.duration_sec)
-      }
-    }
-  }
-
-  // 计算均值和中位数
-  const result = {}
-  for (const [canonical, efforts] of Object.entries(costByModelEffort)) {
-    result[canonical] = {}
-    for (const [effort, data] of Object.entries(efforts)) {
-      if (data.costs.length === 0) continue
-
-      const sortedCosts = [...data.costs].sort((a, b) => a - b)
-      const sortedDurations = [...data.durations].sort((a, b) => a - b)
-
-      result[canonical][effort] = {
-        meanCost: data.costs.reduce((a, b) => a + b, 0) / data.costs.length,
-        medianCost: sortedCosts[Math.floor(sortedCosts.length / 2)],
-        meanDuration: data.durations.length > 0 ? data.durations.reduce((a, b) => a + b, 0) / data.durations.length : null,
-        medianDuration: data.durations.length > 0 ? sortedDurations[Math.floor(sortedDurations.length / 2)] : null,
-        nRuns: data.costs.length,
-      }
-    }
-  }
-
-  return result
 }
 
 /**
  * 生成 benchmarkEvidence 对象
- * @param {Object} modelData - extractBestPerModel 的输出
- * @param {Array} allModels - 所有模型列表 (用于计算 percentile)
- * @param {Object} costData - extractCostData 的输出 {canonicalModel: {effort: {meanCost, medianCost, nRuns}}}
+ *
+ * @param {Object} entry - {canonicalModel, sourceModel, effort, payload, ratio, cost}
+ * @param {Array<{canonicalModel: string, bestRatio: number}>} cohort - 参与百分位计算的模型队列
  * @returns {Object} - benchmarkEvidence 条目
  */
-export function toBenchmarkEvidence(modelData, allModels, costData) {
-  // 计算 percentile
-  const allRates = allModels.map(m => m.passRate).filter(rate => rate > 0)
-  const atOrBelow = allRates.filter(rate => rate <= modelData.passRate).length
-  const percentile = allRates.length > 0 ? atOrBelow / allRates.length : 0
-
-  const effort = modelData.bestEffort || 'default'
-  const canonicalCost = costData?.[modelData.canonicalModel] || costData?.[modelData.deepsweModel]
-  const effortCost = canonicalCost?.[effort]
+export function toBenchmarkEvidence(entry, cohort) {
+  const allRatios = cohort.map(m => m.bestRatio).filter(rate => rate > 0)
+  const atOrBelow = allRatios.filter(rate => rate <= entry.ratio).length
+  const percentile = allRatios.length > 0 ? atOrBelow / allRatios.length : 0
 
   const evidence = {
     benchmark: 'codexradar',
-    benchmarkVersion: 'v1',
-    sourceModel: modelData.deepsweModel,
+    benchmarkVersion: entry.payload?.score_version || 'radar-bench-v2-150',
+    sourceModel: entry.sourceModel,
     domain: 'coding',
-    metric: 'pass_at_1',
-    rawValue: modelData.passRate,
+    metric: 'mean_reward',
+    rawValue: entry.ratio,
     uncertainty: 0, // dradar 不提供 CI
     cohortPercentile: percentile,
-    taskCount: modelData.cells,
-    cohortSize: allModels.length,
-    effort,
+    taskCount: Number(entry.payload?.coverage) || 0,
+    cohortSize: cohort.length,
+    effort: entry.effort || 'default',
     selectionBasis: 'per_effort',
-    sourceUrl: 'https://deng.codexradar.com/',
+    sourceUrl: SITE_URL,
     capturedAt: new Date().toISOString().split('T')[0],
   }
 
-  // 若该模型 x effort 有实测 cost，则以均值注入 evidence，供 frontier 成本轴校准。
+  // 若该模型 × effort 有实测等效成本，则以单 run 均值注入 evidence，供 frontier 成本轴校准。
   // 舍入到 2 位小数（0.01 美元）：costUsd 进入 registry 受版本管理，
   // 全精度浮点会让上游每次重算 mean 都产生亚美分抖动，制造无意义 diff。
-  // 0.01 美元已低于任何实际路由决策关心的成本差异。可视化用的原始 meanCost 不在此舍入。
-  if (effortCost?.meanCost !== undefined && effortCost?.meanCost !== null && Number.isFinite(effortCost.meanCost)) {
-    evidence.costUsd = Math.round(effortCost.meanCost * 1e2) / 1e2
+  if (entry.cost?.meanCost !== null && entry.cost?.meanCost !== undefined && Number.isFinite(entry.cost.meanCost)) {
+    evidence.costUsd = Math.round(entry.cost.meanCost * 1e2) / 1e2
   }
 
   return evidence
 }
 
 /**
- * 为每个已测 effort 档生成一条 benchmarkEvidence（附该档聚合值）。
- * 每个已测 effort 档各生成一条 evidence：档位评定需要常规口径分数，
- * 只存最佳档会把"开满思考强度"的成绩当成模型基础能力。
- * cells/cellsPassed 必须取当前 effort 档的值：直接展开 modelData 会把
- * 最佳档的格子数写进所有档位的 taskCount，小样本判定随之失真。
- * @returns {Array<{effort: string, cell: Object, evidence: Object}>}
- */
-export function buildEffortEvidences(modelData, allModels, costData) {
-  const efforts = Object.entries(modelData.efforts || {})
-  const measured = efforts.length > 0 ? efforts : [[modelData.bestEffort || 'default', {
-    passRate: modelData.passRate,
-    graded: modelData.graded,
-    cells: modelData.cells,
-    cellsPassed: modelData.cellsPassed,
-  }]]
-  return measured.map(([effort, cell]) => ({
-    effort,
-    cell,
-    evidence: toBenchmarkEvidence({
-      ...modelData,
-      bestEffort: effort,
-      passRate: cell.passRate,
-      cells: cell.cells,
-      cellsPassed: cell.cellsPassed,
-    }, allModels, costData),
-  }))
-}
-
-/**
- * 主函数：抓取并转换 dradar 数据
+ * 主函数：抓取并转换雷达Bench数据
+ *
  * @param {Object} modelMap - dradar 模型名 -> CCX canonicalModel 映射
  * @returns {Promise<{profiles: Object, unmappedModels: string[]}>}
  *   profiles: {canonicalModel: {benchmarkEvidence, costData, efforts}}
  */
 export async function fetchDradarData(modelMap) {
   try {
-    const table = await fetchTable()
-    const leaderboard = extractLeaderboardFromTable(table, modelMap)
+    const catalog = await fetchRadarBenchCatalog()
+    const { pairs, unmappedModels } = extractScoreSelections(catalog, modelMap)
+    console.log(`[dradar] RadarBench score selections: ${pairs.length} (model, effort) pairs`)
 
-    const bestPerModel = extractBestPerModel(leaderboard, modelMap)
-    const costData = extractCostData(table, modelMap)
-    if (Object.keys(costData).length === 0) {
-      throw new Error('table response contains no mapped cost data')
+    // 分批并发拉取各 (模型, 档位) 权威分
+    const payloads = []
+    for (let i = 0; i < pairs.length; i += SCORE_CONCURRENCY) {
+      const batch = pairs.slice(i, i + SCORE_CONCURRENCY)
+      const results = await Promise.all(
+        batch.map(({ model, effort }) => fetchRadarBenchScore(model, effort)),
+      )
+      batch.forEach(({ model, effort }, idx) => {
+        if (results[idx]) payloads.push({ model, effort, payload: results[idx] })
+      })
+    }
+    if (payloads.length === 0) {
+      throw new Error('all radar-bench-score requests returned no usable data')
     }
 
+    // 第一遍：按 canonical 收集通过覆盖门槛的档位条目
+    const entriesByCanonical = {}
+    for (const { model, effort, payload } of payloads) {
+      const canonical = modelMap[model]
+      if (!canonical) continue
+      if (!scoreCoverageSufficient(payload)) {
+        const coverage = Number(payload?.coverage) || 0
+        const required = Number(payload?.required_tasks) || 0
+        console.warn(
+          `[dradar] [INSUFFICIENT] ${canonical} ${effort}: 任务覆盖 ${coverage}/${required} ` +
+            `< ${DRADAR_MIN_TASK_COVERAGE * 100}% 或无有效分，证据丢弃`,
+        )
+        continue
+      }
+      const ratio = radarScoreRatio(payload)
+      if (ratio === null) continue
+      ;(entriesByCanonical[canonical] ||= []).push({
+        canonicalModel: canonical,
+        sourceModel: model,
+        effort,
+        payload,
+        ratio,
+        cost: extractCostFromStatistics(payload),
+      })
+    }
+
+    // 百分位队列：只含拿到有效档位的模型，bestRatio 取各模型最高档
+    const cohort = Object.entries(entriesByCanonical).map(([canonicalModel, entries]) => ({
+      canonicalModel,
+      bestRatio: Math.max(...entries.map(entry => entry.ratio)),
+    }))
+
+    // 第二遍：每个 (模型, 档位) 一条证据 + costData + efforts 明细
     const result = {}
-
-    for (const [canonical, modelData] of Object.entries(bestPerModel)) {
-      if (!result[canonical]) {
-        result[canonical] = {
-          benchmarkEvidence: [],
-          costData: {},
-          efforts: {},
+    for (const [canonical, entries] of Object.entries(entriesByCanonical)) {
+      result[canonical] = {
+        benchmarkEvidence: entries.map(entry => toBenchmarkEvidence(entry, cohort)),
+        costData: {},
+        efforts: {},
+      }
+      for (const entry of entries) {
+        result[canonical].efforts[entry.effort] = {
+          passRate: entry.ratio,
+          graded: Number(entry.payload?.valid_grade_events) || 0,
+          cells: Number(entry.payload?.coverage) || 0,
+          cellsPassed: Math.round(entry.ratio * (Number(entry.payload?.coverage) || 0)),
+          taskIds: (entry.payload?.tasks || []).filter(t => (t?.sample_count || 0) > 0).map(t => t.task_id),
+        }
+        if (entry.cost.meanCost !== null || entry.cost.nRuns > 0) {
+          result[canonical].costData[entry.effort] = entry.cost
         }
       }
-
-      for (const { effort, cell, evidence } of buildEffortEvidences(modelData, Object.values(bestPerModel), costData)) {
-        if (!effortCoverageSufficient(cell, leaderboard.totalTasks)) {
-          const covered = Array.isArray(cell?.taskIds) ? cell.taskIds.length : 0
-          console.warn(
-            `[dradar] [INSUFFICIENT] ${canonical} ${effort}: 任务覆盖 ${covered}/${leaderboard.totalTasks} ` +
-              `< ${DRADAR_MIN_TASK_COVERAGE * 100}%，证据丢弃`,
-          )
-          continue
-        }
-        result[canonical].benchmarkEvidence.push(evidence)
-        result[canonical].efforts[effort] = cell
-      }
-      result[canonical].costData = costData[canonical] || {}
     }
 
     const models = Object.keys(result).sort()
     console.log(`[dradar] Extracted data for ${models.length} models: ${models.join(', ') || '(none)'}`)
 
-    // 新模型检测：榜上出现同家族更高版本但未映射的模型名时告警，避免分数被静默丢弃
-    const unmapped = collectUnmappedTableModels(table, modelMap)
-    warnNewModelCandidates(unmapped, modelMap, {
+    // 新模型检测：站点收录了映射表没有的模型名时告警，避免分数被静默丢弃
+    warnNewModelCandidates(unmappedModels, modelMap, {
       source: 'dradar',
       mapName: 'DRADAR_MODEL_MAP',
     })
-    return { profiles: result, unmappedModels: unmapped }
+    return { profiles: result, unmappedModels }
   } catch (err) {
-    console.error(`[dradar] Failed to fetch data:`, describeError(err))
+    console.error('[dradar] Failed to fetch data:', describeError(err))
     throw err
   }
 }

@@ -129,6 +129,40 @@ func TestDirectRegularEffortScore(t *testing.T) {
 	}
 }
 
+// TestMeasuredCodingEvidenceAcceptsRadarBenchMeanReward 验证雷达Bench v2 证据
+// （metric=mean_reward，含庞贝 F1 部分分的 0-1 平均奖励率）与 pass_at_1 同等
+// 参与档位校准；量纲仍是 0-1 质量比率，RawValue*100 口径不变。
+func TestMeasuredCodingEvidenceAcceptsRadarBenchMeanReward(t *testing.T) {
+	reward := config.ModelBenchmarkEvidence{
+		Benchmark: "codexradar", Domain: "coding", Metric: "mean_reward",
+		Effort: "medium", RawValue: 0.598, TaskCount: 64,
+	}
+	if got, ok := directRegularEffortScore([]config.ModelBenchmarkEvidence{reward}); !ok || got != 59.8 {
+		t.Fatalf("mean_reward medium direct = %v/%v, want 59.8/true", got, ok)
+	}
+	if calib, ok := calibrateRegularEffort([]config.ModelBenchmarkEvidence{reward}); !ok ||
+		calib.Class != EvidenceDirect || calib.Score != 59.8 {
+		t.Fatalf("mean_reward calibration = %+v/%v, want direct 59.8", calib, ok)
+	}
+	if got, ok := directEffortScore([]config.ModelBenchmarkEvidence{reward}, EffortMedium); !ok || got != 59.8 {
+		t.Fatalf("mean_reward directEffortScore = %v/%v, want 59.8/true", got, ok)
+	}
+
+	// 非法组合仍然拒绝：跨域、非直测来源、未知指标
+	for name, bad := range map[string]config.ModelBenchmarkEvidence{
+		"wrong domain":    {Benchmark: "codexradar", Domain: "agentic", Metric: "mean_reward"},
+		"wrong benchmark": {Benchmark: "benchlm", Domain: "coding", Metric: "mean_reward"},
+		"unknown metric":  {Benchmark: "codexradar", Domain: "coding", Metric: "reward_v3"},
+	} {
+		if isMeasuredCodingEvidence(bad) {
+			t.Fatalf("%s: isMeasuredCodingEvidence = true, want false", name)
+		}
+		if _, ok := directRegularEffortScore([]config.ModelBenchmarkEvidence{bad}); ok {
+			t.Fatalf("%s: directRegularEffortScore accepted", name)
+		}
+	}
+}
+
 // TestCalibrateRegularEffortEvidenceClass 验证三层证据合成的分数与证据等级：
 // 只有 medium/default 直测是 direct（唯一可证明 premium 的等级），
 // 跨 medium 插值是 interpolated，其余折算是 deflated（旧 singleEffortOnly
@@ -337,9 +371,11 @@ func TestModelProfileQualityTierRegistryReplay(t *testing.T) {
 		{"claude-opus-5", ModelFamilyClaude, QualityTierHigh, "direct 68.9 < 69.95"},
 		{"claude-fable-5", ModelFamilyClaude, QualityTierHigh, "direct 65.4"},
 		{"gpt-5.6-sol", ModelFamilyOpenAI, QualityTierHigh, "direct 64.3"},
-		{"kimi-k3", ModelFamilyKimi, QualityTierNormal, "interpolated 56.7 < 59.15"},
+		// kimi-k3/glm-5.3 的 codexradar 证据随雷达Bench v2 收敛退役（2026-10），
+		// 仅剩 deepswe max 单点，折算 34.7/34.9 落 low
+		{"kimi-k3", ModelFamilyKimi, QualityTierLow, "deflated 34.7 < 44.25"},
 		{"gpt-5.5", ModelFamilyOpenAI, QualityTierNormal, "direct 54.0 < 59.15"},
-		{"glm-5.3", ModelFamilyGLM, QualityTierNormal, "interpolated 54.0 < 59.15"},
+		{"glm-5.3", ModelFamilyGLM, QualityTierLow, "deflated 34.9 < 44.25"},
 		{"claude-opus-4-8", ModelFamilyClaude, QualityTierNormal, "direct 48.7"},
 		{"claude-sonnet-5", ModelFamilyClaude, QualityTierLow, "direct 39.8 < 44.25"},
 		{"grok-4.5", ModelFamilyGrok, QualityTierLow, "deflated 38.1"},

@@ -456,12 +456,25 @@ func isSmallSampleEvidence(ev config.ModelBenchmarkEvidence) bool {
 	return ev.TaskCount > 0 && ev.TaskCount < minReliableBenchmarkTasks
 }
 
+// isMeasuredCodingEvidence 报告证据是否为可参与档位校准的 coding 直测条目
+// （deepswe / codexradar 来源的 0-1 质量比率）。两种指标同一语义量纲：
+//   - pass_at_1：二值任务通过率（deepswe 数据集、旧 codexradar 深榜）；
+//   - mean_reward：雷达Bench v2（2026-10 站点重构后 codexradar 唯一口径）的
+//     等权平均任务奖励率，庞贝任务奖励为连续 F1 部分分，故不再标 pass_at_1。
+func isMeasuredCodingEvidence(ev config.ModelBenchmarkEvidence) bool {
+	if ev.Domain != "coding" {
+		return false
+	}
+	if ev.Benchmark != "deepswe" && ev.Benchmark != "codexradar" {
+		return false
+	}
+	return ev.Metric == "pass_at_1" || ev.Metric == "mean_reward"
+}
+
 func directRegularEffortScore(evidence []config.ModelBenchmarkEvidence) (float64, bool) {
 	best := -1.0
 	for _, ev := range evidence {
-		if ev.Domain != "coding" || ev.Metric != "pass_at_1" ||
-			(ev.Benchmark != "deepswe" && ev.Benchmark != "codexradar") ||
-			isSmallSampleEvidence(ev) {
+		if !isMeasuredCodingEvidence(ev) || isSmallSampleEvidence(ev) {
 			continue
 		}
 		if NormalizeEffortLevel(ev.Effort) != EffortMedium {
@@ -491,10 +504,7 @@ func calibrateRegularEffort(evidence []config.ModelBenchmarkEvidence) (Calibrati
 	// （任务格数不足）视为未完成测量，不参与校准。
 	bySource := map[string]map[EffortLevel]float64{}
 	for _, ev := range evidence {
-		if ev.Domain != "coding" || ev.Metric != "pass_at_1" {
-			continue
-		}
-		if ev.Benchmark != "deepswe" && ev.Benchmark != "codexradar" {
+		if !isMeasuredCodingEvidence(ev) {
 			continue
 		}
 		if isSmallSampleEvidence(ev) {
@@ -687,16 +697,13 @@ func interpolatedMediumScore(efforts map[EffortLevel]float64) (score float64, ok
 }
 
 // directBenchmarkScoreFromEvidence 从证据列表提取直接实测 coding 分数（DeepSWE 等价 0-100 分）。
-// 只接受 deepswe / codexradar 的 pass_at_1 实测值，不含 calibrated 估计值。
+// 只接受 deepswe / codexradar 的直测比率（pass_at_1 / mean_reward），不含 calibrated 估计值。
 // 注意：取的是最佳档原始分（含思考强度加成），仅供按 effort 口径展示；
 // 档位评定与边界计算必须用 regularEffortBaselineScore 的常规口径分。
 func directBenchmarkScoreFromEvidence(evidence []config.ModelBenchmarkEvidence) float64 {
 	best := -1.0
 	for _, ev := range evidence {
-		if ev.Domain != "coding" || ev.Metric != "pass_at_1" {
-			continue
-		}
-		if ev.Benchmark != "deepswe" && ev.Benchmark != "codexradar" {
+		if !isMeasuredCodingEvidence(ev) {
 			continue
 		}
 		if raw := ev.RawValue * 100; raw > best {
@@ -894,9 +901,7 @@ func ModelProfileQualityTier(modelID string, family ModelFamily) QualityTier {
 func directEffortScore(evidence []config.ModelBenchmarkEvidence, level EffortLevel) (float64, bool) {
 	best := -1.0
 	for _, ev := range evidence {
-		if ev.Domain != "coding" || ev.Metric != "pass_at_1" ||
-			(ev.Benchmark != "deepswe" && ev.Benchmark != "codexradar") ||
-			isSmallSampleEvidence(ev) {
+		if !isMeasuredCodingEvidence(ev) || isSmallSampleEvidence(ev) {
 			continue
 		}
 		if NormalizeEffortLevel(ev.Effort) != level {
@@ -917,9 +922,7 @@ func interpolatedEffortScore(evidence []config.ModelBenchmarkEvidence, level Eff
 	worst := -1.0
 	bySource := map[string]map[EffortLevel]float64{}
 	for _, ev := range evidence {
-		if ev.Domain != "coding" || ev.Metric != "pass_at_1" ||
-			(ev.Benchmark != "deepswe" && ev.Benchmark != "codexradar") ||
-			isSmallSampleEvidence(ev) {
+		if !isMeasuredCodingEvidence(ev) || isSmallSampleEvidence(ev) {
 			continue
 		}
 		norm := NormalizeEffortLevel(ev.Effort)

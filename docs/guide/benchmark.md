@@ -23,6 +23,7 @@ CCX 会从多个公开 benchmark 来源汇总模型能力、成本与多来源�
 
 - `pass@1` / 原始 score 均来自对应上游 benchmark 的公开结果或公开 API。
 - 成本图当前主要使用 DeepSWE 与 CodexRadar 可映射出的单任务成本数据。
+- CodexRadar 于 2026-10 重构为「雷达Bench」：统一 64 题池（DeepSWE 精选 15 + 庞贝邻接 16 + TB 14 + Science 19），150 分制权威分（每任务最近 3 次有效判分平均奖励等权合成），且只发布 GPT 系 6 模型；CCX 以 `mean_reward`（0-1 平均奖励率）口径收录，其他厂商模型不再有该来源证据。
 - 多来源比较图会并列展示 DeepSWE、BenchLM.ai、CodexRadar、Artificial Analysis 等来源的原始分数。
 - **质量档逐档评定**：质量档（premium/high/normal/low）按每个（模型×思考强度）点自身实测 pass@1 对照自动边界评定——同一模型随 effort 升降跨越档位是真实情况（如 low 档落 normal、max 档进 premium）。模型级的 medium 对齐等效分保留在数据字段 `model_quality_score` 中（悬停提示可见），自动边界仍由注册表模型级校准推导（与后端路由口径镜像）。
 - **小样本口径**：直测档位任务数不足 3 时（如新模型只跑了 1 个任务且恰好通过，pass@1=100% 纯属噪声），该档视为样本不足——不评定质量档（表格显示"—"），图表中以半透明虚线点标注、悬停提示任务数，多来源比较图的模型排序也不计入。`taskCount` 缺失的来源不受影响。

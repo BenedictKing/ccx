@@ -269,10 +269,7 @@ func TestEffortAwareQualityTierLunaReplay(t *testing.T) {
 		t.Fatal("gpt-5.6-luna missing from builtin benchmark profiles")
 	}
 	for _, ev := range benchmark.Profile.BenchmarkEvidence {
-		if ev.Domain != "coding" || ev.Metric != "pass_at_1" {
-			continue
-		}
-		if ev.Benchmark != "deepswe" && ev.Benchmark != "codexradar" {
+		if !isMeasuredCodingEvidence(ev) {
 			continue
 		}
 		if isSmallSampleEvidence(ev) {
@@ -380,11 +377,13 @@ func TestEffortAwareQualityTierKnownMonotonicRegressions(t *testing.T) {
 		effort EffortLevel
 		want   QualityTier
 	}{
-		{"deepseek-v4.1-flash", EffortMax, QualityTierHigh},
+		// deepseek-v4.1-flash/kimi-k3 的 codexradar 证据随雷达Bench v2 收敛退役
+		// （2026-10），深档直测消失后回落 AA 校准/模型级折算档
+		{"deepseek-v4.1-flash", EffortMax, QualityTierNormal},
 		{"gemini-3.5-flash", EffortHigh, QualityTierNormal},
 		{"glm-5.2", EffortHigh, QualityTierNormal},
 		{"glm-5.2", EffortMax, QualityTierNormal},
-		{"kimi-k3", EffortHigh, QualityTierHigh},
+		{"kimi-k3", EffortHigh, QualityTierNormal},
 		{"qwen3.8-max", EffortHigh, QualityTierHigh},
 	} {
 		resolved := config.ResolveUpstreamCapability(tt.model, nil, nil)
