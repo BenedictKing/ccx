@@ -412,6 +412,34 @@ func BuiltinAgentModelProfiles() map[string]AgentModelProfile {
 			MaxContextWindowTokens: 262144,
 			ReasoningEfforts:       []string{"low", "high", "max"},
 		},
+		// K3.1 Pro 系列（2026-10-23 上线）：1M 上下文面向高档位会员（Plus/Moderato 起步 256K），
+		// low/high/max 三档思考（默认 high），仅支持思考模式；highspeed 约 2-3 倍速、
+		// Kimi Code 侧约 2 倍消耗（Pro/Allegretto 及以上，起步即 1M）。
+		// API ID 与 Kimi Code ID 都登记，resolvePatternValue 长度降序保证 highspeed 先命中。
+		"kimi-k3.1-pro-highspeed*": {
+			DisplayName:            "Kimi K3.1 Pro Highspeed",
+			ContextWindowTokens:    1048576,
+			MaxContextWindowTokens: 1048576,
+			ReasoningEfforts:       []string{"low", "high", "max"},
+		},
+		"kimi-k3.1-pro*": {
+			DisplayName:            "Kimi K3.1 Pro",
+			ContextWindowTokens:    262144,
+			MaxContextWindowTokens: 1048576,
+			ReasoningEfforts:       []string{"low", "high", "max"},
+		},
+		"k3.1-pro-highspeed*": {
+			DisplayName:            "Kimi K3.1 Pro Highspeed",
+			ContextWindowTokens:    1048576,
+			MaxContextWindowTokens: 1048576,
+			ReasoningEfforts:       []string{"low", "high", "max"},
+		},
+		"k3.1-pro*": {
+			DisplayName:            "Kimi K3.1 Pro",
+			ContextWindowTokens:    262144,
+			MaxContextWindowTokens: 1048576,
+			ReasoningEfforts:       []string{"low", "high", "max"},
+		},
 		// kimi-for-coding 已于 2026-09 全量升级为 K2.8 Preview（模型 ID 不变）：1M 上下文、
 		// low/high/max 三档思考（默认 max）；highspeed 变体仍是 K2.7 Code HighSpeed（256K）。
 		// pattern 更长者优先，highspeed 条目先命中。

@@ -3,7 +3,7 @@ package autopilot
 import "testing"
 
 func TestInferModelFamily_KimiCodeModels(t *testing.T) {
-	for _, model := range []string{"k3", "k3[1m]", "kimi-k3", "kimi-for-coding", "kimi-for-coding-highspeed"} {
+	for _, model := range []string{"k3", "k3[1m]", "kimi-k3", "k3.1-pro", "kimi-k3.1-pro", "k3.1-pro-highspeed", "kimi-k3.1-pro-highspeed", "kimi-for-coding", "kimi-for-coding-highspeed"} {
 		if got := InferModelFamily(model, ""); got != ModelFamilyKimi {
 			t.Errorf("InferModelFamily(%q) = %q, want %q", model, got, ModelFamilyKimi)
 		}
@@ -18,6 +18,9 @@ func TestModelProfileQualityTierFromFamily_KimiCodeModels(t *testing.T) {
 		{model: "k3", want: QualityTierPremium},
 		{model: "k3[1m]", want: QualityTierPremium},
 		{model: "kimi-k3", want: QualityTierPremium},
+		{model: "k3.1-pro", want: QualityTierPremium},
+		{model: "kimi-k3.1-pro", want: QualityTierPremium},
+		{model: "kimi-k3.1-pro-highspeed", want: QualityTierPremium},
 		{model: "kimi-for-coding", want: QualityTierHigh},
 		{model: "kimi-for-coding-highspeed", want: QualityTierHigh},
 		{model: "kimi-k2.6", want: QualityTierHigh},

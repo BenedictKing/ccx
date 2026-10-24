@@ -82,6 +82,9 @@ export const ARTIFICIAL_ANALYSIS_MODEL_MAP = {
   'kimi-k2-5': 'kimi-k2.5',
   'kimi-k2-thinking': 'kimi-k2-thinking',
   'kimi-k3': 'kimi-k3',
+  // Kimi K3.1 Pro（2026-10-23 发布）：AA slug 用连字符分段版本号，highspeed 同能力折入同一 canonical
+  'kimi-k3-1-pro': 'kimi-k3.1-pro',
+  'kimi-k3-1-pro-highspeed': 'kimi-k3.1-pro',
   'gemini-3-1-pro': 'gemini-3.1-pro',
   'gemini-3-flash': 'gemini-3-flash',
   'gemini-3-5-flash': 'gemini-3.5-flash',

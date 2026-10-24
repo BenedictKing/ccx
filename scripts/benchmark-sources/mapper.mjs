@@ -43,6 +43,9 @@ export const DEEPSWE_MODEL_MAP = {
   'kimi-k2-7-code-highspeed': 'kimi-k2.7-code',
   'kimi-k3': 'kimi-k3',
   'kimi-3': 'kimi-k3',
+  // Kimi K3.1 Pro（2026-10-23 发布）：榜单 slug 连字符分段版本号，highspeed 同能力折入
+  'kimi-k3-1-pro': 'kimi-k3.1-pro',
+  'kimi-k3-1-pro-highspeed': 'kimi-k3.1-pro',
   'gemini-3-1-pro': 'gemini-3.1-pro',
   'gemini-3-flash': 'gemini-3-flash',
   'gemini-3-5-flash': 'gemini-3.5-flash',
@@ -111,6 +114,9 @@ export const BENCHLM_MODEL_MAP = {
   // 榜单 slug 是 kimi-k3（旧键 kimi-3 是 8/20 审计发现的键名错误，保留作别名）
   'kimi-k3': 'kimi-k3',
   'kimi-3': 'kimi-k3',
+  // Kimi K3.1 Pro（2026-10-23 发布）：榜单 slug 连字符分段版本号，highspeed 同能力折入
+  'kimi-k3-1-pro': 'kimi-k3.1-pro',
+  'kimi-k3-1-pro-highspeed': 'kimi-k3.1-pro',
   'claude-mythos-5': 'claude-mythos-5',
   'claude-mythos-5-1': 'claude-mythos-5-1',
   'qwen3-8-max': 'qwen3.8-max',

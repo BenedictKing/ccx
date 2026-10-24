@@ -273,6 +273,12 @@ func TestResolveAgentModelProfile_KimiCodeBuiltins(t *testing.T) {
 	}{
 		{model: "k3", context: 262144, maxContext: 1048576, efforts: []string{"low", "high", "max"}},
 		{model: "k3[1m]", context: 1048576, maxContext: 1048576, efforts: []string{"low", "high", "max"}},
+		// K3.1 Pro 系列：1M 面向高档位会员（profile 先验按 256K 起步、上限 1M）；
+		// highspeed 最低档位即 Pro（1M 档），起步按 1M。
+		{model: "k3.1-pro", context: 262144, maxContext: 1048576, efforts: []string{"low", "high", "max"}},
+		{model: "kimi-k3.1-pro", context: 262144, maxContext: 1048576, efforts: []string{"low", "high", "max"}},
+		{model: "k3.1-pro-highspeed", context: 1048576, maxContext: 1048576, efforts: []string{"low", "high", "max"}},
+		{model: "kimi-k3.1-pro-highspeed", context: 1048576, maxContext: 1048576, efforts: []string{"low", "high", "max"}},
 		{model: "kimi-for-coding", context: 1048576, maxContext: 0, efforts: []string{"low", "high", "max"}},
 		{model: "kimi-for-coding-highspeed", context: 262144, maxContext: 0},
 	}
@@ -381,6 +387,8 @@ func TestResolveUpstreamCapability_KimiCodeModels(t *testing.T) {
 		// kimi-k3 是官方 API 模型 ID（非 Kimi Code CLI 的 k3/k3[1m] 别名），文档确认为 1M 上下文
 		// （platform.kimi.ai/docs/overview 等多处来源一致）；不是"256K 版 k3"的同义词。
 		{model: "kimi-k3", context: 1048576, maxOutput: 131072, reasoning: []string{"low", "high", "max"}, displayName: "Kimi K3 (1M)", wantThinking: "thinking"},
+		{model: "kimi-k3.1-pro", context: 1048576, maxOutput: 131072, reasoning: []string{"low", "high", "max"}, displayName: "Kimi K3.1 Pro", wantThinking: "thinking"},
+		{model: "kimi-k3.1-pro-highspeed", context: 1048576, maxOutput: 131072, reasoning: []string{"low", "high", "max"}, displayName: "Kimi K3.1 Pro Highspeed", wantThinking: "thinking"},
 		{model: "kimi-for-coding", context: 1048576, maxOutput: 32768, reasoning: []string{"low", "high", "max"}, displayName: "Kimi K2.8 Preview (Kimi Code 会员)", wantThinking: "thinking"},
 		{model: "kimi-for-coding-highspeed", context: 262144, maxOutput: 32768, reasoning: []string{"high"}, displayName: "Kimi K2.7 Code HighSpeed", wantThinking: "thinking"},
 	}
@@ -409,6 +417,51 @@ func TestResolveUpstreamCapability_KimiCodeModels(t *testing.T) {
 				if resolved.Capability.ReasoningEfforts[i] != effort {
 					t.Fatalf("ReasoningEfforts = %v, want %v", resolved.Capability.ReasoningEfforts, tt.reasoning)
 				}
+			}
+		})
+	}
+}
+
+// TestResolveUpstreamCapability_KimiK31ProVariants 覆盖 K3.1 Pro 系列的 Kimi Code ID、API ID、
+// 大小写混合与日期快照后缀，并校验 highspeed 2 倍价差异（官方定价 $2/$10 vs $4/$20，缓存命中同价 $0.2）。
+func TestResolveUpstreamCapability_KimiK31ProVariants(t *testing.T) {
+	tests := []struct {
+		model       string
+		displayName string
+		wantPrice   [3]float64 // input cache miss / output / input cache hit
+	}{
+		{model: "kimi-k3.1-pro", displayName: "Kimi K3.1 Pro", wantPrice: [3]float64{2, 10, 0.2}},
+		{model: "k3.1-pro", displayName: "Kimi K3.1 Pro", wantPrice: [3]float64{2, 10, 0.2}},
+		{model: "Kimi-K3.1-Pro", displayName: "Kimi K3.1 Pro", wantPrice: [3]float64{2, 10, 0.2}},
+		{model: "kimi-k3.1-pro-highspeed", displayName: "Kimi K3.1 Pro Highspeed", wantPrice: [3]float64{4, 20, 0.2}},
+		{model: "k3.1-pro-highspeed", displayName: "Kimi K3.1 Pro Highspeed", wantPrice: [3]float64{4, 20, 0.2}},
+		{model: "kimi-k3.1-pro-20261023", displayName: "Kimi K3.1 Pro", wantPrice: [3]float64{2, 10, 0.2}},
+		{model: "kimi-k3.1-pro-2026-10-23", displayName: "Kimi K3.1 Pro", wantPrice: [3]float64{2, 10, 0.2}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			resolved := ResolveUpstreamCapability(tt.model, nil, nil)
+			if !resolved.Known || resolved.Source != "builtin" {
+				t.Fatalf("resolved = %+v, want builtin capability", resolved)
+			}
+			if resolved.Capability.DisplayName != tt.displayName {
+				t.Fatalf("DisplayName = %q, want %q", resolved.Capability.DisplayName, tt.displayName)
+			}
+			if resolved.Capability.ContextWindowTokens != 1048576 {
+				t.Fatalf("ContextWindowTokens = %d, want 1048576", resolved.Capability.ContextWindowTokens)
+			}
+			if resolved.Capability.ThinkingMode != "thinking" {
+				t.Fatalf("ThinkingMode = %q, want thinking", resolved.Capability.ThinkingMode)
+			}
+			if !slices.Equal(resolved.Capability.ReasoningEfforts, []string{"low", "high", "max"}) {
+				t.Fatalf("ReasoningEfforts = %v, want [low high max]", resolved.Capability.ReasoningEfforts)
+			}
+			pricing := resolved.Capability.Pricing
+			if pricing == nil || pricing.InputCacheMissPrice == nil || pricing.OutputPrice == nil || pricing.InputCacheHitPrice == nil {
+				t.Fatalf("Pricing 不完整: %+v", pricing)
+			}
+			if *pricing.InputCacheMissPrice != tt.wantPrice[0] || *pricing.OutputPrice != tt.wantPrice[1] || *pricing.InputCacheHitPrice != tt.wantPrice[2] {
+				t.Fatalf("Pricing = %v/%v/%v, want %v", *pricing.InputCacheMissPrice, *pricing.OutputPrice, *pricing.InputCacheHitPrice, tt.wantPrice)
 			}
 		})
 	}
