@@ -9,9 +9,11 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/BenedictKing/ccx/internal/autopilot"
@@ -48,6 +50,21 @@ func isClientSideError(err error) bool {
 	}
 	// 只有 context.Canceled 才是明确的客户端取消意图
 	return errors.Is(err, context.Canceled)
+}
+
+// isClientWriteDisconnect 判断 handleSuccess 阶段的错误是否为「写回客户端时对端已断开」：
+// 客户端在出流过程中主动断开时，向其写数据会得到 write: broken pipe /
+// write: connection reset by peer。这是客户端取消，不是上游故障（#292）。
+// 只认 write 方向：读上游时的连接重置仍按渠道故障处理。
+func isClientWriteDisconnect(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, syscall.EPIPE) {
+		return true
+	}
+	var opErr *net.OpError
+	return errors.As(err, &opErr) && opErr.Op == "write" && errors.Is(err, syscall.ECONNRESET)
 }
 
 // NextAPIKeyFunc 返回下一个可用 API key（按 failover 策略）
@@ -1855,7 +1872,7 @@ func TryUpstreamWithAllKeys(
 				// 区分客户端错误和渠道故障；errors.As 匹配 rejected，防止未来
 				// provider 闭包包装后静默落入「真实渠道故障」分支被逐 Key 重放。
 				var rejected *UpstreamRequestRejectedError
-				if isClientSideError(err) {
+				if isClientSideError(err) || isClientWriteDisconnect(err) {
 					// 客户端取消/断开：计入总请求数但不计入失败
 					metricsManager.RecordRequestFinalizeClientCancel(currentBaseURL, apiKey, metricsServiceType, requestID)
 					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, executionKind)
