@@ -134,6 +134,72 @@ func TestOpenAIProvider_HandleStreamResponse_ToolCallStopWithUsage(t *testing.T)
 	}
 }
 
+// Gemini 的 OpenAI 兼容端点在调用工具后以 finish_reason "stop" 结束，且每个并行调用单独一个 chunk。
+func TestOpenAIProvider_HandleStreamResponse_ToolCallsWithFinishReasonStop(t *testing.T) {
+	body := strings.Join([]string{
+		`data: {"id":"chatcmpl-4","choices":[{"index":0,"delta":{"role":"assistant","tool_calls":[{"id":"call_paris","type":"function","function":{"name":"get_weather","arguments":"{\"city\":\"Paris\"}"}}]}}],"model":"gemini-3.5-flash"}`,
+		`data: {"id":"chatcmpl-4","choices":[{"index":0,"delta":{"role":"assistant","tool_calls":[{"id":"call_tokyo","type":"function","function":{"name":"get_weather","arguments":"{\"city\":\"Tokyo\"}"}}]}}],"model":"gemini-3.5-flash"}`,
+		`data: {"id":"chatcmpl-4","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":"stop"}],"model":"gemini-3.5-flash"}`,
+		`data: [DONE]`,
+		"",
+	}, "\n")
+
+	provider := &OpenAIProvider{}
+	eventChan, errChan, err := provider.HandleStreamResponse(io.NopCloser(strings.NewReader(body)))
+	if err != nil {
+		t.Fatalf("HandleStreamResponse returned error: %v", err)
+	}
+
+	events := collectStreamEvents(eventChan)
+	select {
+	case streamErr := <-errChan:
+		if streamErr != nil {
+			t.Fatalf("unexpected stream error: %v", streamErr)
+		}
+	default:
+	}
+
+	toolUseBlocks := 0
+	for _, event := range events {
+		if strings.Contains(event, `"type":"tool_use"`) {
+			toolUseBlocks++
+		}
+	}
+	if toolUseBlocks != 2 {
+		t.Fatalf("tool_use blocks = %d, want 2", toolUseBlocks)
+	}
+
+	messageDelta := extractMessageDelta(t, events)
+	delta, _ := messageDelta["delta"].(map[string]interface{})
+	stopReason, _ := delta["stop_reason"].(string)
+	if stopReason != "tool_use" {
+		t.Fatalf("stop_reason = %q, want \"tool_use\"", stopReason)
+	}
+}
+
+// 没有工具调用时 finish_reason "stop" 仍是 end_turn。
+func TestOpenAIProvider_HandleStreamResponse_TextWithFinishReasonStop(t *testing.T) {
+	body := strings.Join([]string{
+		`data: {"id":"chatcmpl-5","choices":[{"index":0,"delta":{"content":"Hi"},"finish_reason":null}],"model":"gemini-3.5-flash"}`,
+		`data: {"id":"chatcmpl-5","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"model":"gemini-3.5-flash"}`,
+		`data: [DONE]`,
+		"",
+	}, "\n")
+
+	provider := &OpenAIProvider{}
+	eventChan, _, err := provider.HandleStreamResponse(io.NopCloser(strings.NewReader(body)))
+	if err != nil {
+		t.Fatalf("HandleStreamResponse returned error: %v", err)
+	}
+
+	messageDelta := extractMessageDelta(t, collectStreamEvents(eventChan))
+	delta, _ := messageDelta["delta"].(map[string]interface{})
+	stopReason, _ := delta["stop_reason"].(string)
+	if stopReason != "end_turn" {
+		t.Fatalf("stop_reason = %q, want \"end_turn\"", stopReason)
+	}
+}
+
 func TestOpenAIProvider_HandleStreamResponse_MultipleUsageChunksMerge(t *testing.T) {
 	body := strings.Join([]string{
 		`data: {"id":"chatcmpl-4","choices":[{"index":0,"delta":{"content":"OK"},"finish_reason":null}],"model":"m","usage":{"prompt_tokens":100,"completion_tokens":3}}`,
