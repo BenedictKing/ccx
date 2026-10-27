@@ -657,7 +657,7 @@ func buildProbeRequest(profile *KeyEndpointProfile, apiKey string) (*ProbeReques
 // 优先使用 count_tokens（最轻量），回退到最小 messages 请求。
 func buildClaudeProbeRequest(profile *KeyEndpointProfile, apiKey string) *ProbeRequest {
 	baseURL := strings.TrimRight(profile.BaseURL, "/")
-	probeModel := pickProbeModel(profile, "claude-3-5-haiku-20241022")
+	probeModel := pickProbeModel(profile, "claude-haiku-4-5")
 
 	// 尝试 count_tokens（最轻量的探测方式）
 	countTokensBody, _ := json.Marshal(map[string]interface{}{
@@ -738,7 +738,7 @@ func buildResponsesProbeRequest(profile *KeyEndpointProfile, apiKey string) *Pro
 // buildGeminiProbeRequest 构造 Gemini 探测请求。
 func buildGeminiProbeRequest(profile *KeyEndpointProfile, apiKey string) *ProbeRequest {
 	baseURL := strings.TrimRight(profile.BaseURL, "/")
-	probeModel := pickProbeModel(profile, "gemini-2.0-flash")
+	probeModel := pickProbeModel(profile, "gemini-3.8-flash")
 
 	body, _ := json.Marshal(map[string]interface{}{
 		"contents": []map[string]interface{}{
