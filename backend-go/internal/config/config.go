@@ -51,6 +51,8 @@ type UpstreamConfig struct {
 	// Codex 工具兼容开关（此项保持既有手工配置语义，不在本次自学习范围内：
 	// 无可靠上游报错信号可用于错误驱动学习，见 compat_signal.go 的判断依据）。
 	CodexToolCompat *bool `json:"codexToolCompat,omitempty"`
+	// Responses 推理自动续接；开启后正文与工具调用缓冲至本轮结束，默认关闭。
+	ResponsesReasoningFold bool `json:"responsesReasoningFold,omitempty"`
 	// Deprecated: 使用 codexToolCompat；保留旧字段仅用于配置读取和旧前端写入兼容。
 	StripCodexClientTools bool `json:"stripCodexClientTools,omitempty"`
 	// Images 响应兼容：当客户端请求 b64_json 而上游只返回 URL 时，下载并转换为 b64_json（默认 false）
@@ -1313,6 +1315,7 @@ type UpstreamUpdate struct {
 	TextVerbosity            *string                            `json:"textVerbosity"`
 	FastMode                 *bool                              `json:"fastMode"`
 	CodexToolCompat          *bool                              `json:"codexToolCompat"`
+	ResponsesReasoningFold   *bool                              `json:"responsesReasoningFold"`
 	StripCodexClientTools    *bool                              `json:"stripCodexClientTools"`
 	ConvertImageURLToB64JSON *bool                              `json:"convertImageUrlToB64Json"`
 	// 渠道级竞速参与配置（nil=继承全局）

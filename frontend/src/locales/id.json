@@ -972,6 +972,8 @@
   "channelEditor.compat.normalizeUserId.hint": "Ratakan metadata user ID",
   "channelEditor.compat.stripBillingHeader.label": "Hapus header billing",
   "channelEditor.compat.stripBillingHeader.hint": "Hapus akhiran billing CCH (aktif default untuk domain non-resmi)",
+  "channelEditor.compat.responsesReasoningFold.label": "Kelanjutan penalaran Responses",
+  "channelEditor.compat.responsesReasoningFold.hint": "Nonaktif secara default agar teks ditampilkan secara langsung. Jika diaktifkan, mencoba melanjutkan penalaran yang terpotong dan menahan teks serta pemanggilan alat hingga putaran berakhir.",
   "channelEditor.compat.codexCompat.label": "Kompatibilitas alat Codex",
   "channelEditor.compat.codexCompat.hint": "Aktifkan mode kompatibilitas Codex CLI",
   "channelEditor.compat.convertImageUrlToB64Json.label": "Konversi respons URL ke b64_json",
