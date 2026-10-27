@@ -270,6 +270,10 @@ func BuiltinAgentModelProfiles() map[string]AgentModelProfile {
 			"GPT-6.1 Sol", 272000, 1050000, 128000, "tokens",
 			[]string{"low", "medium", "high", "xhigh", "max"}, false,
 		),
+		"gpt-6.1-terra": builtinGPTAgentModelProfile(
+			"GPT-6.1 Terra", 272000, 1050000, 128000, "tokens",
+			[]string{"none", "low", "medium", "high", "xhigh", "max"}, false,
+		),
 		"gpt-6-luna": builtinGPTAgentModelProfile(
 			"GPT-6 Luna", 272000, 1050000, 128000, "tokens",
 			[]string{"none", "low", "medium", "high", "xhigh", "max"}, false,

@@ -157,6 +157,33 @@ func TestResolveAgentModelProfile_GPT61SolBuiltin(t *testing.T) {
 	}
 }
 
+func TestResolveAgentModelProfile_GPT61TerraBuiltin(t *testing.T) {
+	profile := ResolveAgentModelProfile("gpt-6.1-terra", nil)
+	if !profile.Known {
+		t.Fatal("expected built-in gpt-6.1-terra profile")
+	}
+	if profile.Profile.DisplayName != "GPT-6.1 Terra" {
+		t.Fatalf("DisplayName = %q, want GPT-6.1 Terra", profile.Profile.DisplayName)
+	}
+	if profile.Profile.ContextWindowTokens != 272000 || profile.Profile.MaxContextWindowTokens != 1050000 ||
+		profile.Profile.MaxOutputTokens != 128000 {
+		t.Fatalf("window profile = %d/%d/%d, want 272000/1050000/128000",
+			profile.Profile.ContextWindowTokens, profile.Profile.MaxContextWindowTokens, profile.Profile.MaxOutputTokens)
+	}
+	wantEfforts := []string{"none", "low", "medium", "high", "xhigh", "max"}
+	if len(profile.Profile.ReasoningEfforts) != len(wantEfforts) {
+		t.Fatalf("ReasoningEfforts = %v, want exactly %v", profile.Profile.ReasoningEfforts, wantEfforts)
+	}
+	for _, effort := range wantEfforts {
+		if !containsString(profile.Profile.ReasoningEfforts, effort) {
+			t.Fatalf("ReasoningEfforts = %v, want %s", profile.Profile.ReasoningEfforts, effort)
+		}
+	}
+	if profile.Profile.SupportsPriorityTier {
+		t.Fatal("SupportsPriorityTier = true, 官方文档未列出 gpt-6.1-terra priority tier 支持")
+	}
+}
+
 func TestResolveAgentModelProfile_GPT55UsesLiteLLMMaximumContext(t *testing.T) {
 	profile := ResolveAgentModelProfile("gpt-5.5", nil)
 	if !profile.Known {
@@ -1182,9 +1209,11 @@ func TestResolveUpstreamCapability_GPT6SolLuna(t *testing.T) {
 		{model: "openai/gpt-6-sol", displayName: "GPT-6 Sol"},
 		{model: "gpt-6-luna", displayName: "GPT-6 Luna"},
 		{model: "openai/gpt-6-luna", displayName: "GPT-6 Luna"},
-		// GPT-6.1 Sol 是独立次代模型，不归并进 gpt-6-sol
+		// GPT-6.1 Sol/Terra 是独立次代模型，不归并进 gpt-6-sol
 		{model: "gpt-6.1-sol", displayName: "GPT-6.1 Sol"},
 		{model: "openai/gpt-6.1-sol", displayName: "GPT-6.1 Sol"},
+		{model: "gpt-6.1-terra", displayName: "GPT-6.1 Terra"},
+		{model: "openai/gpt-6.1-terra", displayName: "GPT-6.1 Terra"},
 	}
 
 	for _, tt := range tests {

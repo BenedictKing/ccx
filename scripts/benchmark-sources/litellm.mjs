@@ -107,13 +107,14 @@ export const LITELLM_MODEL_MAP = {
   'gpt-6-astra': 'gpt-6-astra',
   // 不登记 'gpt-6' / 'astra' 简写：litellm 数据侧 key 必须是真实存在的上游 slug
   // （extractModelInfo 直接 data[name] 索引），不是别名；上游只提供 gpt-6-astra /
-  // gpt-6-sol / gpt-6-luna / gpt-6.1-sol。登记不存在的前瞻键只会每轮触发
+  // gpt-6-sol / gpt-6-luna / gpt-6.1-sol / gpt-6.1-terra。登记不存在的前瞻键只会每轮触发
   // [MAPPED-KEY-MISSING] 噪声。别名式简写只在 deepswe/benchlm 等查表式映射中有意义。
   // GPT-6 Sol/Luna（2026-09-22 发布）：litellm slug 与 canonical 同名
   'gpt-6-sol': 'gpt-6-sol',
   'gpt-6-luna': 'gpt-6-luna',
-  // GPT-6.1 Sol（2026-09-29 发布）：litellm slug 保留点号
+  // GPT-6.1 Sol/Terra：litellm slug 保留点号
   'gpt-6.1-sol': 'gpt-6.1-sol',
+  'gpt-6.1-terra': 'gpt-6.1-terra',
   'gpt-5.6-sol': 'gpt-5.6-sol',
   'gpt-5.6-terra': 'gpt-5.6-terra',
   'gpt-5.6-luna': 'gpt-5.6-luna',
