@@ -823,7 +823,11 @@ func ConvertResponsesResponseToChatResponse(responsesBody []byte, model string) 
 	if status := root.Get("status"); status.Exists() {
 		switch status.String() {
 		case "incomplete":
-			out, _ = sjson.Set(out, "choices.0.finish_reason", "length")
+			finishReason := "length"
+			if root.Get("incomplete_details.reason").String() == "content_filter" {
+				finishReason = "content_filter"
+			}
+			out, _ = sjson.Set(out, "choices.0.finish_reason", finishReason)
 		}
 	}
 
