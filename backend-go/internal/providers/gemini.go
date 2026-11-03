@@ -445,25 +445,17 @@ func (p *GeminiProvider) ConvertToClaudeResponse(providerResp *types.ProviderRes
 		}
 	}
 
-	// 设置停止原因
+	// 设置停止原因（与流式路径共用同一映射）
 	finishReason, _ := candidate["finishReason"].(string)
-	if strings.Contains(strings.ToLower(finishReason), "stop") {
-		// 检查是否有工具调用
-		hasToolCall := false
+	claudeResp.StopReason = mapGeminiFinishReasonToClaudeStopReason(finishReason)
+	if claudeResp.StopReason == "end_turn" {
+		// 有工具调用时,正常结束应报告为 tool_use
 		for _, c := range claudeResp.Content {
 			if c.Type == "tool_use" {
-				hasToolCall = true
+				claudeResp.StopReason = "tool_use"
 				break
 			}
 		}
-
-		if hasToolCall {
-			claudeResp.StopReason = "tool_use"
-		} else {
-			claudeResp.StopReason = "end_turn"
-		}
-	} else if strings.Contains(strings.ToLower(finishReason), "length") {
-		claudeResp.StopReason = "max_tokens"
 	}
 
 	// 使用统计
