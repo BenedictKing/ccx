@@ -851,7 +851,11 @@ func TryUpstreamWithAllKeys(
 					// 五元组调度 pin：binding 解析未决档（passthrough）时用调度选中档填充。
 					// 拷贝填充，勿改 policy 缓存中的共享 target；模型以 per-key 解析为准
 					//（与调度同源 resolver，冲突时信任执行近实时结论）。
-					if target != nil && target.Effort == "" && tryOpts.executionEffort != "" {
+					// 最终防线：回填档位必须被目标模型注册表声明接受——解析器对不支持
+					// 客户端档位的模型返回 passthrough（effort 未决）正是能力校验的结论，
+					// 此处不得把已知非法档位（gpt-6.1-sol 无 none/off）强行写成 decided。
+					if target != nil && target.Effort == "" && tryOpts.executionEffort != "" &&
+						executionEffortSupported(target.Model, autopilot.NormalizeEffortLevel(tryOpts.executionEffort), upstream) {
 						pinnedTarget := *target
 						pinnedTarget.Effort = autopilot.EffortLevel(tryOpts.executionEffort)
 						pinnedTarget.EffortDecided = true
@@ -1939,20 +1943,20 @@ func TryUpstreamWithAllKeys(
 					if balanceRestricted {
 						sseLogAction = "key model restricted"
 					}
-				CompleteLog(channelLogStore, metricsKey, logRequestID, http.StatusOK, false, fmt.Sprintf("%s: %s - %s", sseLogAction, blErr.Reason, blErr.Message), isRetryAttempt)
-				RequestLogf(c, "[%s-Blacklist] SSE 流内错误触发拉黑 (Key: %s, 原因: %s)，尝试下一个密钥", apiType, utils.MaskAPIKey(apiKey), blErr.Reason)
-				continue
-			} else if errors.Is(err, ErrStreamRepetitionLoop) {
-				// 无限重复循环：post-commit 阶段中止的确定性内容故障。记账与真实
-				// 渠道故障一致（Header 已发送，不换渠道），但熔断走「一次确证即隔离」
-				// ——字节级重复证据无歧义，不等双阈值累积。
-				cfgManager.MarkKeyAsFailed(apiKey, executionAPIType)
-				metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, metrics.FailureClassRetryable)
-				channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, executionKind)
-				recordModelCircuitForcedFailure(c, metricsManager, upstream, apiKey, model, err.Error(), apiType)
-				CompleteLog(channelLogStore, metricsKey, logRequestID, http.StatusOK, false, err.Error(), isRetryAttempt)
-				RequestLogf(c, "[%s-RepetitionLoop] 模型输出无限重复，已中止流并强制隔离该渠道模型 (Key: %s)", apiType, utils.MaskAPIKey(apiKey))
-			} else {
+					CompleteLog(channelLogStore, metricsKey, logRequestID, http.StatusOK, false, fmt.Sprintf("%s: %s - %s", sseLogAction, blErr.Reason, blErr.Message), isRetryAttempt)
+					RequestLogf(c, "[%s-Blacklist] SSE 流内错误触发拉黑 (Key: %s, 原因: %s)，尝试下一个密钥", apiType, utils.MaskAPIKey(apiKey), blErr.Reason)
+					continue
+				} else if errors.Is(err, ErrStreamRepetitionLoop) {
+					// 无限重复循环：post-commit 阶段中止的确定性内容故障。记账与真实
+					// 渠道故障一致（Header 已发送，不换渠道），但熔断走「一次确证即隔离」
+					// ——字节级重复证据无歧义，不等双阈值累积。
+					cfgManager.MarkKeyAsFailed(apiKey, executionAPIType)
+					metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, metrics.FailureClassRetryable)
+					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, executionKind)
+					recordModelCircuitForcedFailure(c, metricsManager, upstream, apiKey, model, err.Error(), apiType)
+					CompleteLog(channelLogStore, metricsKey, logRequestID, http.StatusOK, false, err.Error(), isRetryAttempt)
+					RequestLogf(c, "[%s-RepetitionLoop] 模型输出无限重复，已中止流并强制隔离该渠道模型 (Key: %s)", apiType, utils.MaskAPIKey(apiKey))
+				} else {
 					// 真实渠道故障：计入失败指标
 					cfgManager.MarkKeyAsFailed(apiKey, executionAPIType)
 					metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, metrics.FailureClassRetryable)
@@ -2785,6 +2789,27 @@ func isEffortClampedByClient(clientRaw string, clientExplicit bool, targetEffort
 	clientOrd := autopilot.EffortLevelOrdinal(autopilot.NormalizeEffortLevel(clientRaw))
 	targetOrd := autopilot.EffortLevelOrdinal(autopilot.NormalizeEffortLevel(string(targetEffort)))
 	return clientOrd >= 0 && targetOrd >= 0 && clientOrd < targetOrd
+}
+
+// executionEffortSupported 判断目标模型是否接受执行层锁定的 effort 档位。
+// 注册表未登记该模型或未声明档位集合时 fail-open 返回 true；
+// 声明了集合时严格校验（如 gpt-6.1-sol 只有 low~max，客户端 off 不可回填）。
+// 未识别的自定义档位（NormalizeEffortLevel 为空）无法对注册表校验，同样放行。
+func executionEffortSupported(model string, effort autopilot.EffortLevel, upstream *config.UpstreamConfig) bool {
+	normalized := autopilot.NormalizeEffortLevel(string(effort))
+	if normalized == "" {
+		return true
+	}
+	resolved := config.ResolveUpstreamCapability(model, upstream, nil)
+	if !resolved.Known || len(resolved.Capability.ReasoningEfforts) == 0 {
+		return true
+	}
+	for _, raw := range resolved.Capability.ReasoningEfforts {
+		if autopilot.NormalizeEffortLevel(raw) == normalized {
+			return true
+		}
+	}
+	return false
 }
 
 func atomicModelRewrite(body []byte, target *autopilot.ResolvedRouteTarget) ([]byte, bool) {

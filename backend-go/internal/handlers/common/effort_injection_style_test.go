@@ -108,6 +108,27 @@ func TestAtomicModelRewrite(t *testing.T) {
 	}
 }
 
+func TestExecutionEffortSupported(t *testing.T) {
+	tests := []struct {
+		name   string
+		model  string
+		effort autopilot.EffortLevel
+		want   bool
+	}{
+		{name: "gpt-6.1-sol 拒绝 off", model: "gpt-6.1-sol", effort: autopilot.EffortOff, want: false},
+		{name: "gpt-6.1-sol 接受 low", model: "gpt-6.1-sol", effort: autopilot.EffortLow, want: true},
+		{name: "gpt-6-sol 接受 off", model: "gpt-6-sol", effort: autopilot.EffortOff, want: true},
+		{name: "未知模型保持 fail-open", model: "unknown-model", effort: autopilot.EffortOff, want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := executionEffortSupported(tt.model, tt.effort, &config.UpstreamConfig{}); got != tt.want {
+				t.Fatalf("executionEffortSupported() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 // TestRewriteOutboundEffort_ByChannelKind 断言最终协议阶段的 effort 注入形态。
 func TestRewriteOutboundEffort_ByChannelKind(t *testing.T) {
 	tests := []struct {

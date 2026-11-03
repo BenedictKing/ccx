@@ -266,6 +266,48 @@ func TestFilterByCapabilityFloor_ZeroFloorPassesAllProbed(t *testing.T) {
 	}
 }
 
+func TestFilterByCapabilityFloor_PinnedEffortRequiresSupport(t *testing.T) {
+	incompatible := makeEffortProfile("gpt-6.1-sol", ModelFamilyOpenAI, QualityTierPremium, 272000,
+		true, 100, true, []EffortLevel{EffortLow, EffortMedium, EffortHigh, EffortXhigh, EffortMax})
+	compatible := makeEffortProfile("gpt-5.6-sol", ModelFamilyOpenAI, QualityTierPremium, 272000,
+		true, 100, true, []EffortLevel{EffortOff, EffortLow, EffortMedium})
+	unknown := makeModelProfile("unknown-model", ModelFamilyUnknown, QualityTierPremium, 272000,
+		true, false, true, true, 100)
+
+	eligible := filterByCapabilityFloor([]ModelProfile{incompatible, compatible, unknown}, CapabilityFloor{
+		PinnedEffort:    EffortOff,
+		ClientEffort:    EffortOff,
+		ClientEffortSet: true,
+	}, "claude-sonnet-5")
+	if len(eligible) != 2 || eligible[0].ModelID != "gpt-5.6-sol" || eligible[1].ModelID != "unknown-model" {
+		t.Fatalf("expected compatible and unknown-effort profiles, got %+v", eligible)
+	}
+}
+
+func TestResolveModel_ClientPinnedOffSkipsIncompatibleSubstitute(t *testing.T) {
+	// 不兼容模型质量更高且未注册（走 prior 质量分支）：若不过滤，排序必然
+	// 选中它并落入 resolveEffortVariants 的 passthrough 分支（effort 未决），
+	// 随后被执行层回填客户端 off，发送上游必然 400 的非法档位。
+	incompatible := makeEffortProfile("test-model-no-off", ModelFamilyOpenAI, QualityTierPremium, 272000,
+		true, 100, true, []EffortLevel{EffortLow, EffortMedium, EffortHigh})
+	compatible := makeEffortProfile("test-model-with-off", ModelFamilyOpenAI, QualityTierHigh, 272000,
+		true, 100, true, []EffortLevel{EffortOff, EffortLow, EffortMedium})
+	resolver := newTestResolver(t, []ModelProfile{incompatible, compatible})
+
+	target, resolved, reason := resolver.ResolveModel("claude-sonnet-5", "ch_test", "messages", "metrics_test", CapabilityFloor{
+		PinnedEffort:       EffortOff,
+		ClientEffort:       EffortOff,
+		ClientEffortSet:    true,
+		NeedsSeverityClass: true,
+	})
+	if !resolved {
+		t.Fatalf("expected compatible substitute, reason=%q", reason)
+	}
+	if target.Model != "test-model-with-off" || target.Effort != EffortOff || !target.EffortDecided {
+		t.Fatalf("target = %+v, want test-model-with-off with decided off", target)
+	}
+}
+
 // ── rankEligibleModels 测试 ──
 
 func TestRankEligibleModels_PrefersSameFamilyAsFinalTieBreaker(t *testing.T) {

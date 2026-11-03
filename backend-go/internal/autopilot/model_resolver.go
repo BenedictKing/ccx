@@ -714,6 +714,31 @@ func filterEffortFloor(candidates []rankedModelCandidate, floor CapabilityFloor)
 	return filtered
 }
 
+// pinnedIncompatibleWithProfile 判断客户端显式锁定的 effort 档位是否与画像声明冲突。
+// 仅约束客户端显式 pin（PinnedEffort 源自 ClientEffort；RespectClientThinking=false 时
+// PinnedEffort 已被 effectivePinnedEffort 移交给意图值，不等于 ClientEffort，自然放行——
+// 意图 pin 不支持时可由 Autopilot 自选档位，模型仍可用，不在此剔除）。
+// 画像未声明档位（SupportedEffortLevels 为空）时返回 false（fail-open），
+// 交由 resolveEffortVariants 的 passthrough 语义兜底。
+func pinnedIncompatibleWithProfile(p *ModelProfile, floor CapabilityFloor) bool {
+	if !floor.ClientEffortSet {
+		return false
+	}
+	pinned := NormalizeEffortLevel(string(floor.PinnedEffort))
+	if pinned == "" || pinned != NormalizeEffortLevel(string(floor.ClientEffort)) {
+		return false
+	}
+	if !p.SupportsEffortControl || len(p.SupportedEffortLevels) == 0 {
+		return false
+	}
+	for _, lv := range p.SupportedEffortLevels {
+		if NormalizeEffortLevel(string(lv)) == pinned {
+			return false
+		}
+	}
+	return true
+}
+
 // 与 capability_floor.go 的 CapabilityFloorReasons 逻辑一致，
 // 但作用于 ModelProfile（而非 CandidateCapabilities），并额外检查 QualityTier。
 func filterByCapabilityFloor(profiles []ModelProfile, floor CapabilityFloor, requestModel string) []ModelProfile {
@@ -844,6 +869,12 @@ func filterByCapabilityFloorInternal(profiles []ModelProfile, floor CapabilityFl
 			continue
 		}
 		if floor.NeedsToolCalls && !p.SupportsToolCalls {
+			continue
+		}
+		// 客户端显式锁定档位是硬约束：画像声明了可用档位且不含锁定档位的模型
+		// 不参与候选——无论后续走 passthrough（原样转发客户端档位）还是自选降档，
+		// 前者必然 400、后者违背 RespectClientThinking。让路给声明兼容的模型/渠道。
+		if pinnedIncompatibleWithProfile(&p, floor) {
 			continue
 		}
 		if enforceQuality && qualityTierRank(p.QualityTier) < qualityTierRank(floor.MinQualityTier) {
