@@ -41,11 +41,11 @@ type BalanceProbeRequest struct {
 
 // BalanceRateWindow sub2api 风格的窗口限速用量（5h/1d/7d），仅用于展示，不进调度。
 type BalanceRateWindow struct {
-	Window  string   `json:"window"`
-	Limit   float64  `json:"limit"`
-	Used    float64  `json:"used"`
-	Remain  float64  `json:"remaining"`
-	ResetAt *int64   `json:"resetAtMs,omitempty"` // 毫秒时间戳，窗口未知为 nil
+	Window  string  `json:"window"`
+	Limit   float64 `json:"limit"`
+	Used    float64 `json:"used"`
+	Remain  float64 `json:"remaining"`
+	ResetAt *int64  `json:"resetAtMs,omitempty"` // 毫秒时间戳，窗口未知为 nil
 }
 
 // BalanceProbeResult 余额探测结果。
@@ -284,7 +284,7 @@ func probeNewapiTokenUsage(req BalanceProbeRequest) BalanceProbeResult {
 // ── sub2api：GET {root}/v1/usage ──
 
 type sub2apiUsageResponse struct {
-	Mode string `json:"mode"`
+	Mode  string `json:"mode"`
 	Quota *struct {
 		Limit     *float64 `json:"limit"`
 		Used      *float64 `json:"used"`
@@ -294,11 +294,11 @@ type sub2apiUsageResponse struct {
 	Remaining  *float64 `json:"remaining"`
 	Balance    *float64 `json:"balance"`
 	RateLimits []struct {
-		Window    string   `json:"window"`
-		Limit     float64  `json:"limit"`
-		Used      float64  `json:"used"`
-		Remaining float64  `json:"remaining"`
-		ResetAt   *int64   `json:"reset_at"`
+		Window    string  `json:"window"`
+		Limit     float64 `json:"limit"`
+		Used      float64 `json:"used"`
+		Remaining float64 `json:"remaining"`
+		ResetAt   *int64  `json:"reset_at"`
 	} `json:"rate_limits"`
 }
 

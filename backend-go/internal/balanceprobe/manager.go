@@ -71,7 +71,7 @@ type Manager struct {
 
 	// providerMemo 记录 auto 模式下各渠道上次识别成功的 provider（channelUID → provider），
 	// 下一轮优先复用，避免每轮对上游重复发全序列探测请求。进程内存态，重启后首轮全序列重建。
-	memoMu      sync.Mutex
+	memoMu       sync.Mutex
 	providerMemo map[string]string
 }
 
@@ -364,17 +364,17 @@ func (m *Manager) runTask(t checkTask) {
 
 // keyBalanceDetail key_health.detail 的结构化载荷（管理端读取时解析回显）。
 type keyBalanceDetail struct {
-	Provider     string                          `json:"provider,omitempty"`
-	Scope        string                          `json:"scope,omitempty"`
-	Remaining    *float64                        `json:"remaining,omitempty"`
-	Used         *float64                        `json:"used,omitempty"`
-	Limit        *float64                        `json:"limit,omitempty"`
-	OriginalUnit string                          `json:"originalUnit,omitempty"`
+	Provider     string   `json:"provider,omitempty"`
+	Scope        string   `json:"scope,omitempty"`
+	Remaining    *float64 `json:"remaining,omitempty"`
+	Used         *float64 `json:"used,omitempty"`
+	Limit        *float64 `json:"limit,omitempty"`
+	OriginalUnit string   `json:"originalUnit,omitempty"`
 	// USD 是 credits 单位换算后的参考值（QuotaPerUnit）；USD 单位时与 Remaining 同值。
-	USD         *float64                           `json:"usd,omitempty"`
-	Unlimited   bool                               `json:"unlimited,omitempty"`
-	RateWindows []upstreamprobe.BalanceRateWindow  `json:"rateWindows,omitempty"`
-	Error       string                             `json:"error,omitempty"`
+	USD         *float64                          `json:"usd,omitempty"`
+	Unlimited   bool                              `json:"unlimited,omitempty"`
+	RateWindows []upstreamprobe.BalanceRateWindow `json:"rateWindows,omitempty"`
+	Error       string                            `json:"error,omitempty"`
 }
 
 // probeChannel 单渠道全 key 余额探测（渠道内 key 串行），聚合写 quota。
@@ -519,7 +519,7 @@ type balanceAggregate struct {
 	valuedCount    int
 	errCount       int
 
-	creditsLimit, creditsUsed, creditsRemain float64
+	creditsLimit, creditsUsed, creditsRemain    float64
 	currencyLimit, currencyUsed, currencyRemain float64
 }
 

@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/BenedictKing/ccx/internal/autopilot"
+	"github.com/BenedictKing/ccx/internal/balanceprobe"
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/conversation"
 	"github.com/BenedictKing/ccx/internal/errutil"
@@ -30,7 +31,6 @@ import (
 	channelsv2 "github.com/BenedictKing/ccx/internal/handlers/channels"
 	"github.com/BenedictKing/ccx/internal/handlers/chat"
 	"github.com/BenedictKing/ccx/internal/handlers/common"
-	"github.com/BenedictKing/ccx/internal/balanceprobe"
 	"github.com/BenedictKing/ccx/internal/handlers/copilot"
 	"github.com/BenedictKing/ccx/internal/handlers/gemini"
 	"github.com/BenedictKing/ccx/internal/handlers/images"

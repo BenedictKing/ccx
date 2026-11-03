@@ -28,16 +28,16 @@ func TestParseBalanceProvider(t *testing.T) {
 
 func TestResolveBalancePolicy(t *testing.T) {
 	tests := []struct {
-		name          string
-		global        *GlobalBalanceCheckConfig
-		channel       *ChannelBalanceCheckConfig
-		managedKind   string
-		wantEnabled   bool
-		wantProvider  string
-		wantInterval  time.Duration
-		wantQuotaPU   float64
-		wantTimeout   time.Duration
-		wantMaxConc   int
+		name         string
+		global       *GlobalBalanceCheckConfig
+		channel      *ChannelBalanceCheckConfig
+		managedKind  string
+		wantEnabled  bool
+		wantProvider string
+		wantInterval time.Duration
+		wantQuotaPU  float64
+		wantTimeout  time.Duration
+		wantMaxConc  int
 	}{
 		{
 			name:         "非托管渠道无配置默认关闭",
@@ -83,7 +83,7 @@ func TestResolveBalancePolicy(t *testing.T) {
 			wantInterval: 120 * time.Minute,
 			wantQuotaPU:  DefaultBalanceQuotaPerUnit,
 			wantTimeout:  8 * time.Second,
-			wantMaxConc:   5,
+			wantMaxConc:  5,
 		},
 		{
 			name:         "渠道级覆盖全局",

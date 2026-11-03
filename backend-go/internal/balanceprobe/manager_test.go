@@ -123,10 +123,10 @@ func TestProbeChannelAggregatesMultiKey(t *testing.T) {
 
 	cfg := config.Config{
 		ChatUpstream: []config.UpstreamConfig{{
-			ChannelUID: "ch-agg",
-			Name:       "agg",
-			BaseURL:    srv.URL,
-			APIKeys:    []string{"sk-test-key-aaaaaa", "sk-test-key-bbbbbb"},
+			ChannelUID:      "ch-agg",
+			Name:            "agg",
+			BaseURL:         srv.URL,
+			APIKeys:         []string{"sk-test-key-aaaaaa", "sk-test-key-bbbbbb"},
 			AutoManagedKind: "new_api",
 		}},
 	}

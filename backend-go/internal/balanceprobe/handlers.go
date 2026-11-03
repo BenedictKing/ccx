@@ -20,32 +20,32 @@ type BalancePolicyView struct {
 
 // BalanceRecordView 单 key 余额探测记录（key_health balance 行 + detail 解析回显）。
 type BalanceRecordView struct {
-	KeyMask     string                    `json:"keyMask"`
-	Status      string                    `json:"status"`
-	LastCheckAt int64                     `json:"lastCheckAtMs"`
-	Failures    int64                     `json:"consecutiveFailures"`
-	Detail      keyBalanceDetail          `json:"detail"`
-	RateWindows []rateWindowView          `json:"rateWindows,omitempty"`
+	KeyMask     string           `json:"keyMask"`
+	Status      string           `json:"status"`
+	LastCheckAt int64            `json:"lastCheckAtMs"`
+	Failures    int64            `json:"consecutiveFailures"`
+	Detail      keyBalanceDetail `json:"detail"`
+	RateWindows []rateWindowView `json:"rateWindows,omitempty"`
 }
 
 type rateWindowView struct {
-	Window     string  `json:"window"`
-	Limit      float64 `json:"limit"`
-	Used       float64 `json:"used"`
-	Remaining  float64 `json:"remaining"`
-	ResetAtMs  int64   `json:"resetAtMs,omitempty"`
+	Window    string  `json:"window"`
+	Limit     float64 `json:"limit"`
+	Used      float64 `json:"used"`
+	Remaining float64 `json:"remaining"`
+	ResetAtMs int64   `json:"resetAtMs,omitempty"`
 }
 
 // QuotaValueView 配额真相维度值的只读回显。
 type QuotaValueView struct {
-	Dimension    string  `json:"dimension"`
+	Dimension    string   `json:"dimension"`
 	Limit        *float64 `json:"limit,omitempty"`
 	Used         *float64 `json:"used,omitempty"`
 	Remaining    *float64 `json:"remaining,omitempty"`
-	Unit         string  `json:"unit,omitempty"`
-	Source       string  `json:"source"`
-	ResetAtMs    int64   `json:"resetAtMs,omitempty"`
-	ObservedAtMs int64   `json:"observedAtMs,omitempty"`
+	Unit         string   `json:"unit,omitempty"`
+	Source       string   `json:"source"`
+	ResetAtMs    int64    `json:"resetAtMs,omitempty"`
+	ObservedAtMs int64    `json:"observedAtMs,omitempty"`
 }
 
 // ChannelBalanceView 渠道余额探测状态（策略 + key 明细 + 配额真相维度值）。
