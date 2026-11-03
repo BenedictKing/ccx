@@ -331,6 +331,33 @@ func TestBuildProbeRequest(t *testing.T) {
 	}
 }
 
+// 端点未配置可用模型时，探测使用的回退模型必须仍在服务中。
+func TestBuildProbeRequest_FallbackModelNotRetired(t *testing.T) {
+	profile := &KeyEndpointProfile{
+		EndpointUID: "test-ep",
+		BaseURL:     "https://example.com",
+		KeyMask:     "sk-***test",
+	}
+
+	profile.ServiceType = "claude"
+	req, err := buildProbeRequest(profile, "sk-real-test-key")
+	if err != nil {
+		t.Fatalf("buildProbeRequest 失败: %v", err)
+	}
+	if !contains(string(req.Body), `"model":"claude-haiku-4-5"`) {
+		t.Errorf("claude 回退模型应为 claude-haiku-4-5, body: %s", req.Body)
+	}
+
+	profile.ServiceType = "gemini"
+	req, err = buildProbeRequest(profile, "sk-real-test-key")
+	if err != nil {
+		t.Fatalf("buildProbeRequest 失败: %v", err)
+	}
+	if !contains(req.URL, "/models/gemini-3.8-flash:generateContent") {
+		t.Errorf("gemini 回退模型应为 gemini-3.8-flash, URL: %s", req.URL)
+	}
+}
+
 func TestBuildProbeRequest_UnsupportedServiceType(t *testing.T) {
 	profile := &KeyEndpointProfile{
 		EndpointUID: "test-ep",
