@@ -112,7 +112,7 @@ func TestDirectRegularEffortScore(t *testing.T) {
 	if got, ok := directRegularEffortScore([]config.ModelBenchmarkEvidence{
 		makeEvidence("deepswe", "low", 0.99, 113),
 		makeEvidence("deepswe", "medium", 0.72, 113),
-		makeEvidence("codexradar", "default", 0.70, 98),
+		makeEvidence("deepswe", "default", 0.70, 98),
 	}); !ok || got != 72 {
 		t.Fatalf("direct regular score = %v/%v, want 72/true", got, ok)
 	}
@@ -129,30 +129,28 @@ func TestDirectRegularEffortScore(t *testing.T) {
 	}
 }
 
-// TestMeasuredCodingEvidenceAcceptsRadarBenchMeanReward 验证雷达Bench v2 证据
-// （metric=mean_reward，含庞贝 F1 部分分的 0-1 平均奖励率）与 pass_at_1 同等
-// 参与档位校准；量纲仍是 0-1 质量比率，RawValue*100 口径不变。
-func TestMeasuredCodingEvidenceAcceptsRadarBenchMeanReward(t *testing.T) {
+// TestMeasuredCodingEvidence 验证 DeepSWE 直测参与档位校准，非法组合被拒绝。
+func TestMeasuredCodingEvidence(t *testing.T) {
 	reward := config.ModelBenchmarkEvidence{
-		Benchmark: "codexradar", Domain: "coding", Metric: "mean_reward",
+		Benchmark: "deepswe", Domain: "coding", Metric: "pass_at_1",
 		Effort: "medium", RawValue: 0.598, TaskCount: 64,
 	}
 	if got, ok := directRegularEffortScore([]config.ModelBenchmarkEvidence{reward}); !ok || got != 59.8 {
-		t.Fatalf("mean_reward medium direct = %v/%v, want 59.8/true", got, ok)
+		t.Fatalf("DeepSWE direct medium direct = %v/%v, want 59.8/true", got, ok)
 	}
 	if calib, ok := calibrateRegularEffort([]config.ModelBenchmarkEvidence{reward}); !ok ||
 		calib.Class != EvidenceDirect || calib.Score != 59.8 {
-		t.Fatalf("mean_reward calibration = %+v/%v, want direct 59.8", calib, ok)
+		t.Fatalf("DeepSWE direct calibration = %+v/%v, want direct 59.8", calib, ok)
 	}
 	if got, ok := directEffortScore([]config.ModelBenchmarkEvidence{reward}, EffortMedium); !ok || got != 59.8 {
-		t.Fatalf("mean_reward directEffortScore = %v/%v, want 59.8/true", got, ok)
+		t.Fatalf("DeepSWE direct directEffortScore = %v/%v, want 59.8/true", got, ok)
 	}
 
 	// 非法组合仍然拒绝：跨域、非直测来源、未知指标
 	for name, bad := range map[string]config.ModelBenchmarkEvidence{
-		"wrong domain":    {Benchmark: "codexradar", Domain: "agentic", Metric: "mean_reward"},
-		"wrong benchmark": {Benchmark: "benchlm", Domain: "coding", Metric: "mean_reward"},
-		"unknown metric":  {Benchmark: "codexradar", Domain: "coding", Metric: "reward_v3"},
+		"wrong domain":    {Benchmark: "deepswe", Domain: "agentic", Metric: "pass_at_1"},
+		"wrong benchmark": {Benchmark: "benchlm", Domain: "coding", Metric: "pass_at_1"},
+		"unknown metric":  {Benchmark: "deepswe", Domain: "coding", Metric: "reward_v3"},
 	} {
 		if isMeasuredCodingEvidence(bad) {
 			t.Fatalf("%s: isMeasuredCodingEvidence = true, want false", name)
@@ -167,6 +165,20 @@ func TestMeasuredCodingEvidenceAcceptsRadarBenchMeanReward(t *testing.T) {
 // 只有 medium/default 直测是 direct（唯一可证明 premium 的等级），
 // 跨 medium 插值是 interpolated，其余折算是 deflated（旧 singleEffortOnly
 // 语义已并入 deflated 封顶，且同侧多档折算从"不封顶"收紧为封顶 high）。
+func TestArtificialAnalysisCalibrationRejectsV5Scale(t *testing.T) {
+	evidence := []config.ModelBenchmarkEvidence{{
+		Benchmark: "artificial_analysis", BenchmarkVersion: "v5",
+		Domain: "coding", Metric: "coding_index", Effort: "medium", RawValue: 70,
+	}}
+	if _, ok := artificialAnalysisCodingScore(evidence, EffortMedium); ok {
+		t.Fatal("AA v5 coding_index must not reuse the v4 calibration coefficients")
+	}
+	evidence[0].BenchmarkVersion = "v4.3"
+	if score, ok := artificialAnalysisCodingScore(evidence, EffortMedium); !ok || score <= 0 {
+		t.Fatalf("AA v4 calibration = %v/%v, want positive/true", score, ok)
+	}
+}
+
 func TestCalibrateRegularEffortEvidenceClass(t *testing.T) {
 	ev := func(benchmark, effort string, raw float64) config.ModelBenchmarkEvidence {
 		return config.ModelBenchmarkEvidence{
@@ -199,14 +211,14 @@ func TestCalibrateRegularEffortEvidenceClass(t *testing.T) {
 		},
 		{
 			name:      "仅 max 档证据折算为 deflated",
-			evidence:  []config.ModelBenchmarkEvidence{ev("codexradar", "max", 0.90)},
+			evidence:  []config.ModelBenchmarkEvidence{ev("deepswe", "max", 0.90)},
 			classWant: EvidenceDeflated, okWant: true, scoreWant: 0.90 * 100 / 1.975,
 		},
 		{
 			name: "小样本 low 档被剔除：1 任务 100% 不得抬高插值（hy4-preview 回归）",
 			evidence: []config.ModelBenchmarkEvidence{
-				evN("codexradar", "low", 1.0, 1),   // 1 任务全过，纯噪声
-				evN("codexradar", "max", 0.333, 6), // 唯一可信档
+				evN("deepswe", "low", 1.0, 1),   // 1 任务全过，纯噪声
+				evN("deepswe", "max", 0.333, 6), // 唯一可信档
 			},
 			classWant: EvidenceDeflated, okWant: true,
 			scoreWant: 0.333 * 100 / 1.975,
@@ -214,8 +226,8 @@ func TestCalibrateRegularEffortEvidenceClass(t *testing.T) {
 		{
 			name: "全部档位均小样本则无可用等效分",
 			evidence: []config.ModelBenchmarkEvidence{
-				evN("codexradar", "low", 1.0, 1),
-				evN("codexradar", "max", 0.5, 2),
+				evN("deepswe", "low", 1.0, 1),
+				evN("deepswe", "max", 0.5, 2),
 			},
 			classWant: "", okWant: false,
 		},
@@ -252,7 +264,7 @@ func TestCalibrateRegularEffortEvidenceClass(t *testing.T) {
 			name: "强证据层胜出：跨档插值不被单点折算否决",
 			evidence: []config.ModelBenchmarkEvidence{
 				ev("deepswe", "low", 0.50), ev("deepswe", "high", 0.80), // 插值 65
-				ev("codexradar", "max", 0.90), // 单点折算 45.6（弱证据层）
+				ev("deepswe", "max", 0.90), // 单点折算 45.6（弱证据层）
 			},
 			classWant: EvidenceInterpolated, okWant: true,
 			scoreWant: 65,
@@ -260,7 +272,7 @@ func TestCalibrateRegularEffortEvidenceClass(t *testing.T) {
 		{
 			name: "直测层胜出：medium 实测不被单侧折算否决",
 			evidence: []config.ModelBenchmarkEvidence{
-				ev("deepswe", "medium", 0.54), ev("codexradar", "high", 0.607), // 单侧折算 43.0
+				ev("deepswe", "medium", 0.54), ev("deepswe", "high", 0.607), // 单侧折算 43.0
 			},
 			classWant: EvidenceDirect, okWant: true,
 			scoreWant: 54,
@@ -268,7 +280,7 @@ func TestCalibrateRegularEffortEvidenceClass(t *testing.T) {
 		{
 			name: "同侧档跨源合并后折算取最小",
 			evidence: []config.ModelBenchmarkEvidence{
-				ev("deepswe", "max", 0.628), ev("codexradar", "high", 0.444), ev("codexradar", "max", 0.54),
+				ev("deepswe", "max", 0.628), ev("deepswe", "high", 0.444), ev("deepswe", "max", 0.54),
 			},
 			classWant: EvidenceDeflated, okWant: true,
 			scoreWant: math.Min(0.628*100/1.975, 0.444*100/1.413), // min(31.8, 31.4)
@@ -337,7 +349,7 @@ func TestIsSmallSampleEvidenceBoundaries(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ev := config.ModelBenchmarkEvidence{Benchmark: "codexradar", TaskCount: tt.taskCount}
+			ev := config.ModelBenchmarkEvidence{Benchmark: "deepswe", TaskCount: tt.taskCount}
 			if got := isSmallSampleEvidence(ev); got != tt.want {
 				t.Fatalf("isSmallSampleEvidence(taskCount=%d) = %v, want %v", tt.taskCount, got, tt.want)
 			}

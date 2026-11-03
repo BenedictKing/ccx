@@ -1116,7 +1116,7 @@ func measuredCostForEffort(effortCostUSD map[EffortLevel]float64, effort EffortL
 	return minCost
 }
 
-// isCodingBenchmarkDomain 报告任务域是否由 deepswe/codexradar 编码直测证据
+// isCodingBenchmarkDomain 报告任务域是否由 DeepSWE 编码直测证据
 // 驱动选型（DeepSWE 等效分与证据档位）。code_review 与 coding 共用同一映射类目。
 func isCodingBenchmarkDomain(domain TaskDomain) bool {
 	return domain == TaskDomainCoding || domain == TaskDomainCodeReview

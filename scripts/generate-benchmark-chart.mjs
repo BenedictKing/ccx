@@ -275,7 +275,7 @@ tbody tr:hover { background: var(--accent-soft); }
     <div class="comparison-heading">
       <div>
         <h2>多来源能力比较</h2>
-        <p class="section-note">按同一能力类别展示 BenchLM.ai、DeepSWE、CodexRadar 与 Artificial Analysis 的原始分数。不同基准的任务集和评分口径不同，仅用于观察来源内相对位置。任务数不足 3 的档位（半透明虚线点）视为样本不足：该档不评定质量档，排序时也不计入，仅供观察。</p>
+        <p class="section-note">按同一能力类别展示 BenchLM.ai、DeepSWE 与 Artificial Analysis 的原始分数。不同基准的任务集和评分口径不同，仅用于观察来源内相对位置。任务数不足 3 的档位（半透明虚线点）视为样本不足：该档不评定质量档，排序时也不计入，仅供观察。</p>
       </div>
       <label class="control" for="comparison-category-control">
         <span class="control-label">能力类别</span>

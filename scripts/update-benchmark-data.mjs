@@ -2,7 +2,7 @@
  * 模型能力基准自动更新编排脚本
  *
  * 功能：
- * 1. 从 deepswe、benchlm.ai、dradar (codexradar)、Artificial Analysis 抓取最新 benchmark 数据
+ * 1. 从 deepswe、benchlm.ai、Artificial Analysis 抓取最新 benchmark 数据
  * 2. 从 litellm 抓取价格/上下文窗口数据
  * 3. 映射到 CCX 模型注册表
  * 4. 更新 shared/model-registry/ccx_model_registry.json
@@ -17,7 +17,6 @@
  *   --dry-run                   只预览变更，不写入文件
  *   --skip-deepswe              跳过 deepswe 数据源
  *   --skip-benchlm              跳过 benchlm.ai 数据源
- *   --skip-dradar               跳过 dradar (codexradar) 数据源
  *   --skip-litellm              跳过 litellm 价格/上下文数据源
  *   --skip-artificial-analysis  跳过 Artificial Analysis 数据源（首个需 API key 的源）
  *   --force-litellm             强制重新拉取并处理 litellm（忽略 blob SHA 缓存）
@@ -44,7 +43,6 @@ import {
 } from './benchmark-sources/mapper.mjs'
 import { fetchDeepsweDataset } from './benchmark-sources/deepswe.mjs'
 import { fetchBenchlmData } from './benchmark-sources/benchlm.mjs'
-import { fetchDradarData, DRADAR_MODEL_MAP } from './benchmark-sources/dradar.mjs'
 import { fetchLitellmModelInfo, LITELLM_MODEL_MAP } from './benchmark-sources/litellm.mjs'
 import {
   fetchArtificialAnalysisData,
@@ -65,7 +63,6 @@ const args = process.argv.slice(2)
 const dryRun = args.includes('--dry-run')
 const skipDeepswe = args.includes('--skip-deepswe')
 const skipBenchlm = args.includes('--skip-benchlm')
-const skipDradar = args.includes('--skip-dradar')
 const skipLitellm = args.includes('--skip-litellm')
 const forceLitellm = args.includes('--force-litellm')
 const skipArtificialAnalysis = args.includes('--skip-artificial-analysis')
@@ -248,7 +245,7 @@ function stringArraysEqual(a, b) {
  * 每次重算都产生亚千分位抖动，制造无意义 diff。统一舍入：
  * - 比率型字段（rawValue 为 0-1 的 pass_at_1、cohortPercentile、uncertainty）→ 3 位小数（0.1% 精度）
  * - 指数分型 rawValue（artificial_analysis 的 0-100 index）→ 1 位小数（0.1 分）
- * - costUsd 已在 dradar 注入处单独舍入到 2 位小数（0.01 美元），此处不重复处理
+ * - costUsd 保留来源注入时的精度，此处不重复处理
  *
  * 必须在 evidenceListsEqual 比较与写回 registry 之前调用，否则新数据（全精度）
  * 与已舍入的旧 registry 会因尾差被误判为"有变化"。
@@ -393,7 +390,7 @@ export function mergeBenchlmData(registry, benchlmData, report, models = targetM
     }
 
     // 更新 sources：benchlm 来源由本次数据全量替换（从对比页迁移到模型页），
-    // 保留其他来源（deepswe/dradar）。
+    // 保留其他来源（deepswe/Artificial Analysis）。
     if (data.sources && data.sources.length > 0) {
       const existingSources = profile.sources || []
       const nonBenchlm = existingSources.filter(s => !s.startsWith('https://benchlm.ai/'))
@@ -416,105 +413,28 @@ export function mergeBenchlmData(registry, benchlmData, report, models = targetM
 }
 
 /**
- * 合并 dradar 数据到注册表
- *
- * 雷达Bench v2（2026-10 站点重构）只发布 GPT 系模型评测，其他厂商模型
- * 的 codexradar 证据已无上游事实源；dradar 源成功运行时把本次数据未覆盖
- * 的 profile 的 codexradar 证据整组移除（含旧深榜 codexradar-v1 行），
- * 避免陈旧分数永久残留参与档位评定。
+ * 清理已退役的 CodexRadar 证据与来源，保留其他来源的画像。
+ * @returns {number} 被移除的证据条数
  */
-export function mergeDradarData(registry, dradarData, report, models = targetModels) {
-  if (!registry.benchmarkProfiles) {
-    registry.benchmarkProfiles = []
+export function removeCodexRadarEvidence(registry) {
+  let removed = 0
+  const profiles = []
+  for (const profile of registry.benchmarkProfiles || []) {
+    const evidence = profile.benchmarkEvidence || []
+    const remaining = evidence.filter(e =>
+      e.benchmark !== 'codexradar' &&
+      !(e.benchmark === 'deepswe' && e.benchmarkVersion === 'codexradar')
+    )
+    removed += evidence.length - remaining.length
+    profile.benchmarkEvidence = remaining
+    profile.sources = (profile.sources || []).filter(s => !s.includes('codexradar.com'))
+    const empty = remaining.length === 0 &&
+      Object.keys(profile.categoryScores || {}).length === 0 &&
+      profile.sources.length === 0
+    if (!empty) profiles.push(profile)
   }
-
-  const coveredCanonicals = new Set(Object.keys(dradarData))
-  const keptProfiles = []
-  for (const profile of registry.benchmarkProfiles) {
-    // 覆盖模型由主循环替换；--models 过滤时非目标模型不在本次范围，一律跳过剪枝
-    const outOfScope = models && !models.includes(profile.canonicalModel)
-    const covered = coveredCanonicals.has(profile.canonicalModel)
-    if (!covered && !outOfScope) {
-      const evidence = Array.isArray(profile.benchmarkEvidence) ? profile.benchmarkEvidence : []
-      const remaining = evidence.filter(
-        e => e.benchmark !== 'codexradar' &&
-          !(e.benchmark === 'deepswe' && e.benchmarkVersion === 'codexradar')
-      )
-      if (remaining.length !== evidence.length) {
-        profile.benchmarkEvidence = remaining
-        // 该来源 URL 不再支撑任何证据时同步移除，sources 随后由元数据重建
-        profile.sources = (profile.sources || []).filter(s => s !== 'https://deng.codexradar.com/')
-        ensureEvidenceProfileMetadata(profile)
-        profile.verifiedAt = new Date().toISOString().split('T')[0]
-      }
-      // 剪空（或历史遗留）的零证据、零 categoryScores、零来源空壳 profile 整条移除：
-      // presetstore 运行时校验不接受零证据占位条目；模型注册仍在 upstreamCapabilities，
-      // 其他来源重新收录时 merge 会自动重建 profile
-      const isEmptyStub =
-        (profile.benchmarkEvidence || []).length === 0 &&
-        Object.keys(profile.categoryScores || {}).length === 0 &&
-        (profile.sources || []).length === 0
-      if (isEmptyStub) {
-        report.updated.push({ canonical: profile.canonicalModel, source: 'dradar-pruned-removed' })
-        continue
-      }
-      if (remaining.length !== evidence.length) {
-        report.updated.push({ canonical: profile.canonicalModel, source: 'dradar-pruned' })
-      }
-    }
-    keptProfiles.push(profile)
-  }
-  registry.benchmarkProfiles = keptProfiles
-
-  for (const [canonical, data] of Object.entries(dradarData)) {
-    if (models && !models.includes(canonical)) {
-      continue
-    }
-
-    const idx = findProfileIndex(registry.benchmarkProfiles, canonical)
-    const profile = idx >= 0 ? registry.benchmarkProfiles[idx] : createProfile(canonical)
-    ensureCanonicalPattern(profile)
-
-    // 确保 benchmarkEvidence 存在
-    if (!profile.benchmarkEvidence) {
-      profile.benchmarkEvidence = []
-    }
-
-    // 移除当前及旧格式的 codexradar 证据，与新证据合并
-    const nextEvidence = normalizeEvidencePrecision([
-      ...profile.benchmarkEvidence.filter(
-        e => e.benchmark !== 'codexradar' &&
-          !(e.benchmark === 'deepswe' && e.benchmarkVersion === 'codexradar')
-      ),
-      ...data.benchmarkEvidence,
-    ])
-
-    // 数据未变化（忽略 capturedAt）时跳过，不刷 verifiedAt，避免无效 diff
-    if (idx >= 0 && evidenceListsEqual(nextEvidence, profile.benchmarkEvidence)) {
-      report.unchanged.push({ canonical, source: 'dradar' })
-      continue
-    }
-
-    profile.benchmarkEvidence = nextEvidence
-    ensureEvidenceProfileMetadata(profile)
-
-    // costData 保留供可视化使用，实测 cost 已随 benchmarkEvidence 进入注册表
-    if (profile.costData) {
-      delete profile.costData
-    }
-
-    // 更新 verifiedAt
-    profile.verifiedAt = new Date().toISOString().split('T')[0]
-
-    // 更新或插入
-    if (idx >= 0) {
-      registry.benchmarkProfiles[idx] = profile
-      report.updated.push({ canonical, source: 'dradar' })
-    } else {
-      registry.benchmarkProfiles.push(profile)
-      report.added.push({ canonical, source: 'dradar' })
-    }
-  }
+  registry.benchmarkProfiles = profiles
+  return removed
 }
 
 /**
@@ -610,7 +530,7 @@ export function mergeLitellmData(registry, litellmData, report, models = targetM
 
 /**
  * 合并 Artificial Analysis LLM 复合指数到 benchmarkProfile.benchmarkEvidence。
- * 仿 mergeDradarData：全量替换 artificial_analysis 证据，合并 sources，更新 verifiedAt。
+ * 全量替换 artificial_analysis 证据，合并 sources，更新 verifiedAt。
  * 刻意不碰 overallScore/categoryScores（benchlm 保留所有权，避免不同量表互相覆盖）。
  */
 export function mergeArtificialAnalysisLlm(registry, aaLlmData, report, models = targetModels) {
@@ -891,7 +811,7 @@ export function warnSourceFailures(errors, warn = console.warn) {
 export async function main() {
   console.log('='.repeat(60))
 
-  if (skipDeepswe && skipBenchlm && skipDradar && skipLitellm && !artificialAnalysisEnabled) {
+  if (skipDeepswe && skipBenchlm && skipLitellm && !artificialAnalysisEnabled) {
     throw new Error('all benchmark sources are skipped')
   }
   console.log('CCX Benchmark Data Auto-Updater')
@@ -900,7 +820,6 @@ export async function main() {
   console.log(`Registry: ${registryPath}`)
   console.log(`Skip deepswe: ${skipDeepswe}`)
   console.log(`Skip benchlm: ${skipBenchlm}`)
-  console.log(`Skip dradar: ${skipDradar}`)
   console.log(`Skip litellm: ${skipLitellm}`)
   console.log(`Skip artificial-analysis: ${skipArtificialAnalysis || !artificialAnalysisEnabled}`)
   if (targetModels) {
@@ -909,6 +828,10 @@ export async function main() {
   console.log('='.repeat(60))
 
   const registry = loadRegistry()
+  const removedCodexRadarEvidence = removeCodexRadarEvidence(registry)
+  if (removedCodexRadarEvidence > 0) {
+    console.log(`[cleanup] Removed ${removedCodexRadarEvidence} retired CodexRadar evidence entries`)
+  }
   const report = {
     updated: [],
     added: [],
@@ -926,7 +849,6 @@ export async function main() {
     deepsweProfiles: {},
     deepsweLeaderboard: null,
     benchlmProfiles: {},
-    dradarProfiles: {},
     artificialAnalysisProfiles: {},
     artificialAnalysisImageArena: {},
   }
@@ -971,20 +893,6 @@ export async function main() {
     } catch (err) {
       report.errors.push({ source: 'benchlm', error: err.message })
       console.error('[benchlm] Failed:', err.message)
-    }
-  }
-
-  // 抓取 dradar (codexradar) 数据
-  if (!skipDradar) {
-    try {
-      console.log('\n--- Fetching dradar (codexradar) data ---')
-      const dradarData = await fetchDradarData(DRADAR_MODEL_MAP)
-      visualizationSources.dradarProfiles = dradarData.profiles
-      mergeDradarData(registry, dradarData.profiles, report)
-      reportUnmappedAgainstRegistry('dradar', dradarData.unmappedModels, registryPatterns, { mapName: 'DRADAR_MODEL_MAP' })
-    } catch (err) {
-      report.errors.push({ source: 'dradar', error: err.message })
-      console.error('[dradar] Failed:', err.message)
     }
   }
 

@@ -2,7 +2,7 @@
  * HTTP 缓存层 - 支持 ETag/If-None-Match 条件请求 + 内容哈希比对
  *
  * 用途：
- * - 对支持 ETag/Last-Modified 的 API（deepswe、dradar、benchlm 数据文件），发送条件请求，304 时复用缓存
+ * - 对支持 ETag/Last-Modified 的 API（deepswe、benchlm、Artificial Analysis 数据），发送条件请求，304 时复用缓存
  * - 对不支持条件请求的页面，拉取后比对内容哈希，跳过未变更的处理
  *
  * 缓存文件：<project-root>/.cache/benchmark-http-cache.json
@@ -219,7 +219,7 @@ export function cacheAge(key) {
 }
 
 /**
- * 简单的键值缓存（用于 dradar cacheVersion、litellm blobSha 等）
+ * 简单的键值缓存（用于 benchlm generatedAt、litellm blobSha 等）
  * @param {string} key
  * @returns {any|null}
  */

@@ -11,11 +11,10 @@ func TestModelProfileQualityTierExplicitBoundaryPrecedesBenchmark(t *testing.T) 
 	if !benchmark.Known {
 		t.Fatal("hy4-preview benchmark must be present for precedence regression test")
 	}
-	// hy4-preview 的 codexradar 证据随雷达Bench v2 收敛退役（2026-10），
-	// 全局注册表已无该模型直测证据；改用合成直测证据在函数层复现
+	// hy4-preview 的全局注册表已无直测证据；改用合成直测证据在函数层复现
 	// 「若无人工边界，校准会给出 premium」的前提，验证显式边界仍然优先。
 	calib, ok := calibrateBenchmarkEvidence([]config.ModelBenchmarkEvidence{
-		{Benchmark: "codexradar", Domain: "coding", Metric: "mean_reward",
+		{Benchmark: "deepswe", Domain: "coding", Metric: "pass_at_1",
 			Effort: "medium", RawValue: 0.8, TaskCount: 64},
 	})
 	if !ok {

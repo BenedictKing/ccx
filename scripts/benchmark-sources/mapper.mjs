@@ -550,8 +550,8 @@ export function detectNewModelCandidates(names, modelMap) {
  * @param {string[]} names - 数据源中的未映射模型名
  * @param {Object} modelMap - 该源的 模型名 -> canonicalModel 映射
  * @param {Object} [options]
- * @param {string} [options.source] - 日志前缀（如 'dradar'）
- * @param {string} [options.mapName] - 提示补充映射的表名（如 'DRADAR_MODEL_MAP'）
+ * @param {string} [options.source] - 日志前缀（如 'deepswe'）
+ * @param {string} [options.mapName] - 提示补充映射的表名（如 'DEEPSWE_MODEL_MAP'）
  * @param {string} [options.dropped] - 丢弃内容描述（如 'its pricing data are dropped'）
  * @param {(candidate: {name: string}) => boolean} [options.ignore] - 已知故意不映射的名字，跳过告警
  */

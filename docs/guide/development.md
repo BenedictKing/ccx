@@ -164,7 +164,7 @@ make benchmark-update        # 抓取各源并写入注册表
 make benchmark-update-dry    # 预览变更（不写入）
 ```
 
-数据源：deepswe、benchlm.ai、Artificial Analysis、litellm（价格/上下文）。CodexRadar（dradar）因上游暂时不可用，`make benchmark-update` 默认跳过；直接调用 `node scripts/update-benchmark-data.mjs` 仍可显式抓取，已有历史证据不会因跳过而清除。
+数据源：deepswe、benchlm.ai、Artificial Analysis、litellm（价格/上下文）。CodexRadar 因上游不可用且数据过期已退役，更新器会清除其旧证据，不再抓取或用于评分。
 
 **Artificial Analysis 是唯一需要 API key 的源**。未设置时自动跳过，其余源照常更新：
 

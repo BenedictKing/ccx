@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-27T06:46:15.567Z",
+  "generatedAt": "2026-11-03T09:54:31.737Z",
   "qualityTiers": {
     "scale": "0-100",
     "algorithm": "fixed-direct-calibration-v3",
@@ -10,174 +10,6 @@
     "avoidMax": 15
   },
   "data": [
-    {
-      "model": "gpt-5.6-luna",
-      "effort": "high",
-      "pass_rate": 0.321,
-      "mean_cost": 0.1497,
-      "median_cost": null,
-      "source": "CodexRadar",
-      "sourceModel": "gpt-5.6-luna",
-      "taskCount": 64,
-      "quality_score": 32.1,
-      "model_quality_score": 11.3
-    },
-    {
-      "model": "gpt-5.6-sol",
-      "effort": "medium",
-      "pass_rate": 0.323,
-      "mean_cost": 1.5592,
-      "median_cost": null,
-      "source": "CodexRadar",
-      "sourceModel": "gpt-5.6-sol",
-      "taskCount": 64,
-      "quality_score": 32.3,
-      "model_quality_score": 61.1
-    },
-    {
-      "model": "gpt-6-astra",
-      "effort": "low",
-      "pass_rate": 0.64,
-      "mean_cost": 2.4422,
-      "median_cost": null,
-      "source": "CodexRadar",
-      "sourceModel": "gpt-6-astra",
-      "taskCount": 64,
-      "quality_score": 64,
-      "model_quality_score": 72.8
-    },
-    {
-      "model": "gpt-6-astra",
-      "effort": "high",
-      "pass_rate": 0.697,
-      "mean_cost": 3.5785,
-      "median_cost": null,
-      "source": "CodexRadar",
-      "sourceModel": "gpt-6-astra",
-      "taskCount": 64,
-      "quality_score": 69.7,
-      "model_quality_score": 72.8
-    },
-    {
-      "model": "gpt-6-luna",
-      "effort": "low",
-      "pass_rate": 0.089,
-      "mean_cost": 0.022,
-      "median_cost": null,
-      "source": "CodexRadar",
-      "sourceModel": "gpt-6-luna",
-      "taskCount": 64,
-      "quality_score": 8.9,
-      "model_quality_score": null
-    },
-    {
-      "model": "gpt-6-luna",
-      "effort": "medium",
-      "pass_rate": 0.176,
-      "mean_cost": 0.017,
-      "median_cost": null,
-      "source": "CodexRadar",
-      "sourceModel": "gpt-6-luna",
-      "taskCount": 64,
-      "quality_score": 17.6,
-      "model_quality_score": null
-    },
-    {
-      "model": "gpt-6-luna",
-      "effort": "high",
-      "pass_rate": 0.24,
-      "mean_cost": 0.0391,
-      "median_cost": null,
-      "source": "CodexRadar",
-      "sourceModel": "gpt-6-luna",
-      "taskCount": 64,
-      "quality_score": 24,
-      "model_quality_score": null
-    },
-    {
-      "model": "gpt-6-luna",
-      "effort": "xhigh",
-      "pass_rate": 0.317,
-      "mean_cost": 0.1089,
-      "median_cost": null,
-      "source": "CodexRadar",
-      "sourceModel": "gpt-6-luna",
-      "taskCount": 64,
-      "quality_score": 31.7,
-      "model_quality_score": null
-    },
-    {
-      "model": "gpt-6-luna",
-      "effort": "max",
-      "pass_rate": 0.323,
-      "mean_cost": 0.1093,
-      "median_cost": null,
-      "source": "CodexRadar",
-      "sourceModel": "gpt-6-luna",
-      "taskCount": 64,
-      "quality_score": 32.3,
-      "model_quality_score": null
-    },
-    {
-      "model": "gpt-6-sol",
-      "effort": "medium",
-      "pass_rate": 0.256,
-      "mean_cost": 0.5446,
-      "median_cost": null,
-      "source": "CodexRadar",
-      "sourceModel": "gpt-6-sol",
-      "taskCount": 64,
-      "quality_score": 25.6,
-      "model_quality_score": null
-    },
-    {
-      "model": "gpt-6-sol",
-      "effort": "high",
-      "pass_rate": 0.377,
-      "mean_cost": 1.8994,
-      "median_cost": null,
-      "source": "CodexRadar",
-      "sourceModel": "gpt-6-sol",
-      "taskCount": 64,
-      "quality_score": 37.7,
-      "model_quality_score": null
-    },
-    {
-      "model": "gpt-6-sol",
-      "effort": "xhigh",
-      "pass_rate": 0.37,
-      "mean_cost": 2.9347,
-      "median_cost": null,
-      "source": "CodexRadar",
-      "sourceModel": "gpt-6-sol",
-      "taskCount": 64,
-      "quality_score": 37,
-      "model_quality_score": null
-    },
-    {
-      "model": "gpt-6.1-sol",
-      "effort": "high",
-      "pass_rate": 0.655,
-      "mean_cost": 0.525,
-      "median_cost": null,
-      "source": "CodexRadar",
-      "sourceModel": "gpt-6.1-sol",
-      "taskCount": 64,
-      "quality_score": 65.5,
-      "model_quality_score": null
-    },
-    {
-      "model": "gpt-6.1-sol",
-      "effort": "max",
-      "pass_rate": 0.704,
-      "mean_cost": 0.8918,
-      "median_cost": null,
-      "source": "CodexRadar",
-      "sourceModel": "gpt-6.1-sol",
-      "taskCount": 64,
-      "quality_score": 70.4,
-      "model_quality_score": null
-    },
     {
       "model": "claude-fable-5",
       "effort": "low",
@@ -3253,51 +3085,6 @@
     },
     {
       "model": "gpt-5.6-luna",
-      "source": "CodexRadar",
-      "category": "coding",
-      "metric": "mean_reward",
-      "score": 32.1,
-      "effort": "high",
-      "taskCount": 64
-    },
-    {
-      "model": "gpt-5.6-luna",
-      "source": "CodexRadar",
-      "category": "coding",
-      "metric": "mean_reward",
-      "score": 14.1,
-      "effort": "low",
-      "taskCount": 64
-    },
-    {
-      "model": "gpt-5.6-luna",
-      "source": "CodexRadar",
-      "category": "coding",
-      "metric": "mean_reward",
-      "score": 34.5,
-      "effort": "max",
-      "taskCount": 64
-    },
-    {
-      "model": "gpt-5.6-luna",
-      "source": "CodexRadar",
-      "category": "coding",
-      "metric": "mean_reward",
-      "score": 21.8,
-      "effort": "medium",
-      "taskCount": 64
-    },
-    {
-      "model": "gpt-5.6-luna",
-      "source": "CodexRadar",
-      "category": "coding",
-      "metric": "mean_reward",
-      "score": 35,
-      "effort": "xhigh",
-      "taskCount": 64
-    },
-    {
-      "model": "gpt-5.6-luna",
       "source": "DeepSWE v1.1",
       "category": "coding",
       "metric": "pass_at_1",
@@ -3393,60 +3180,6 @@
       "metric": "category_score",
       "score": 64.7,
       "taskCount": null
-    },
-    {
-      "model": "gpt-5.6-sol",
-      "source": "CodexRadar",
-      "category": "coding",
-      "metric": "mean_reward",
-      "score": 45.3,
-      "effort": "high",
-      "taskCount": 64
-    },
-    {
-      "model": "gpt-5.6-sol",
-      "source": "CodexRadar",
-      "category": "coding",
-      "metric": "mean_reward",
-      "score": 21.4,
-      "effort": "low",
-      "taskCount": 64
-    },
-    {
-      "model": "gpt-5.6-sol",
-      "source": "CodexRadar",
-      "category": "coding",
-      "metric": "mean_reward",
-      "score": 46.4,
-      "effort": "max",
-      "taskCount": 64
-    },
-    {
-      "model": "gpt-5.6-sol",
-      "source": "CodexRadar",
-      "category": "coding",
-      "metric": "mean_reward",
-      "score": 32.3,
-      "effort": "medium",
-      "taskCount": 64
-    },
-    {
-      "model": "gpt-5.6-sol",
-      "source": "CodexRadar",
-      "category": "coding",
-      "metric": "mean_reward",
-      "score": 59.6,
-      "effort": "ultra",
-      "taskCount": 64
-    },
-    {
-      "model": "gpt-5.6-sol",
-      "source": "CodexRadar",
-      "category": "coding",
-      "metric": "mean_reward",
-      "score": 39.9,
-      "effort": "xhigh",
-      "taskCount": 64
     },
     {
       "model": "gpt-5.6-sol",
@@ -3646,60 +3379,6 @@
     },
     {
       "model": "gpt-6-astra",
-      "source": "CodexRadar",
-      "category": "coding",
-      "metric": "mean_reward",
-      "score": 69.7,
-      "effort": "high",
-      "taskCount": 64
-    },
-    {
-      "model": "gpt-6-astra",
-      "source": "CodexRadar",
-      "category": "coding",
-      "metric": "mean_reward",
-      "score": 64,
-      "effort": "low",
-      "taskCount": 64
-    },
-    {
-      "model": "gpt-6-astra",
-      "source": "CodexRadar",
-      "category": "coding",
-      "metric": "mean_reward",
-      "score": 71.2,
-      "effort": "max",
-      "taskCount": 64
-    },
-    {
-      "model": "gpt-6-astra",
-      "source": "CodexRadar",
-      "category": "coding",
-      "metric": "mean_reward",
-      "score": 59.8,
-      "effort": "medium",
-      "taskCount": 64
-    },
-    {
-      "model": "gpt-6-astra",
-      "source": "CodexRadar",
-      "category": "coding",
-      "metric": "mean_reward",
-      "score": 71.3,
-      "effort": "ultra",
-      "taskCount": 64
-    },
-    {
-      "model": "gpt-6-astra",
-      "source": "CodexRadar",
-      "category": "coding",
-      "metric": "mean_reward",
-      "score": 76.2,
-      "effort": "xhigh",
-      "taskCount": 64
-    },
-    {
-      "model": "gpt-6-astra",
       "source": "DeepSWE v1.1",
       "category": "coding",
       "metric": "pass_at_1",
@@ -3752,51 +3431,6 @@
       "taskCount": null
     },
     {
-      "model": "gpt-6-luna",
-      "source": "CodexRadar",
-      "category": "coding",
-      "metric": "mean_reward",
-      "score": 24,
-      "effort": "high",
-      "taskCount": 64
-    },
-    {
-      "model": "gpt-6-luna",
-      "source": "CodexRadar",
-      "category": "coding",
-      "metric": "mean_reward",
-      "score": 8.9,
-      "effort": "low",
-      "taskCount": 64
-    },
-    {
-      "model": "gpt-6-luna",
-      "source": "CodexRadar",
-      "category": "coding",
-      "metric": "mean_reward",
-      "score": 32.3,
-      "effort": "max",
-      "taskCount": 64
-    },
-    {
-      "model": "gpt-6-luna",
-      "source": "CodexRadar",
-      "category": "coding",
-      "metric": "mean_reward",
-      "score": 17.6,
-      "effort": "medium",
-      "taskCount": 64
-    },
-    {
-      "model": "gpt-6-luna",
-      "source": "CodexRadar",
-      "category": "coding",
-      "metric": "mean_reward",
-      "score": 31.7,
-      "effort": "xhigh",
-      "taskCount": 64
-    },
-    {
       "model": "gpt-6-sol",
       "source": "BenchLM.ai",
       "category": "coding",
@@ -3805,120 +3439,12 @@
       "taskCount": null
     },
     {
-      "model": "gpt-6-sol",
-      "source": "CodexRadar",
-      "category": "coding",
-      "metric": "mean_reward",
-      "score": 37.7,
-      "effort": "high",
-      "taskCount": 64
-    },
-    {
-      "model": "gpt-6-sol",
-      "source": "CodexRadar",
-      "category": "coding",
-      "metric": "mean_reward",
-      "score": 23.2,
-      "effort": "low",
-      "taskCount": 64
-    },
-    {
-      "model": "gpt-6-sol",
-      "source": "CodexRadar",
-      "category": "coding",
-      "metric": "mean_reward",
-      "score": 44.5,
-      "effort": "max",
-      "taskCount": 64
-    },
-    {
-      "model": "gpt-6-sol",
-      "source": "CodexRadar",
-      "category": "coding",
-      "metric": "mean_reward",
-      "score": 25.6,
-      "effort": "medium",
-      "taskCount": 64
-    },
-    {
-      "model": "gpt-6-sol",
-      "source": "CodexRadar",
-      "category": "coding",
-      "metric": "mean_reward",
-      "score": 46.7,
-      "effort": "ultra",
-      "taskCount": 64
-    },
-    {
-      "model": "gpt-6-sol",
-      "source": "CodexRadar",
-      "category": "coding",
-      "metric": "mean_reward",
-      "score": 37,
-      "effort": "xhigh",
-      "taskCount": 64
-    },
-    {
       "model": "gpt-6.1-sol",
       "source": "BenchLM.ai",
       "category": "coding",
       "metric": "category_score",
       "score": 74.1,
       "taskCount": null
-    },
-    {
-      "model": "gpt-6.1-sol",
-      "source": "CodexRadar",
-      "category": "coding",
-      "metric": "mean_reward",
-      "score": 65.5,
-      "effort": "high",
-      "taskCount": 64
-    },
-    {
-      "model": "gpt-6.1-sol",
-      "source": "CodexRadar",
-      "category": "coding",
-      "metric": "mean_reward",
-      "score": 50.6,
-      "effort": "low",
-      "taskCount": 64
-    },
-    {
-      "model": "gpt-6.1-sol",
-      "source": "CodexRadar",
-      "category": "coding",
-      "metric": "mean_reward",
-      "score": 70.4,
-      "effort": "max",
-      "taskCount": 64
-    },
-    {
-      "model": "gpt-6.1-sol",
-      "source": "CodexRadar",
-      "category": "coding",
-      "metric": "mean_reward",
-      "score": 52.3,
-      "effort": "medium",
-      "taskCount": 64
-    },
-    {
-      "model": "gpt-6.1-sol",
-      "source": "CodexRadar",
-      "category": "coding",
-      "metric": "mean_reward",
-      "score": 68.4,
-      "effort": "ultra",
-      "taskCount": 64
-    },
-    {
-      "model": "gpt-6.1-sol",
-      "source": "CodexRadar",
-      "category": "coding",
-      "metric": "mean_reward",
-      "score": 68.8,
-      "effort": "xhigh",
-      "taskCount": 64
     },
     {
       "model": "grok-4.20",

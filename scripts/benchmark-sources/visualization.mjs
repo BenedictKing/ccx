@@ -36,9 +36,8 @@ function normalizedScore(value) {
 }
 
 // 小样本档位阈值：直测任务格数低于该值的 effort 档视为未完成测量，
-// 不参与等效分校准与质量档评定（CodexRadar 新模型先跑 1 个任务且恰好
-// 通过时 pass@1=100% 纯属噪声，2026-08 hy4-preview low 档 1/1 曾把
-// 插值等效分虚抬进 premium）。taskCount 缺失/为 0 表示来源未提供任务数，
+// 不参与等效分校准与质量档评定（少量任务恰好全部通过时 pass@1=100% 纯属噪声，
+// 不足以支撑跨档插值或质量档判断）。taskCount 缺失/为 0 表示来源未提供任务数，
 // 视为可信以兼容旧数据与无任务数口径的来源。
 const MIN_RELIABLE_TASKS = 3
 
@@ -94,7 +93,7 @@ function regularEffortBaselineScore(evidence = []) {
   const bySource = new Map()
   for (const item of evidence) {
     if (item?.domain !== 'coding' || item?.metric !== 'pass_at_1') continue
-    if (item.benchmark !== 'deepswe' && item.benchmark !== 'codexradar' && item.benchmarkVersion !== 'codexradar') continue
+    if (item.benchmark !== 'deepswe') continue
     if (!Number.isFinite(item.rawValue)) continue
     if (!hasReliableSample(item.taskCount)) continue
     const source = sourceName(item)
@@ -128,9 +127,6 @@ function deriveQualityMetadata(benchmarkProfiles = {}) {
 }
 
 function sourceName(evidence) {
-  if (evidence.benchmark === 'codexradar' || evidence.benchmarkVersion === 'codexradar') {
-    return 'CodexRadar'
-  }
   if (evidence.benchmark === 'deepswe') {
     return `DeepSWE ${evidence.benchmarkVersion || ''}`.trim()
   }
@@ -148,7 +144,7 @@ function extractRegistryCostRows(benchmarkProfiles = {}, models = null) {
     const bySource = new Map()
     for (const evidence of profile?.benchmarkEvidence || []) {
       if (evidence.domain !== 'coding' || evidence.metric !== 'pass_at_1') continue
-      if (evidence.benchmark !== 'deepswe' && evidence.benchmark !== 'codexradar' && evidence.benchmarkVersion !== 'codexradar') continue
+      if (evidence.benchmark !== 'deepswe') continue
       if (!Number.isFinite(evidence.rawValue) || !Number.isFinite(evidence.costUsd)) continue
       const source = sourceName(evidence)
       const effort = String(evidence.effort || 'default').toLowerCase()
@@ -202,32 +198,6 @@ export function extractDeepsweCostRows(data, modelMap, models = null) {
     }
   }
   return [...bestRows.values()]
-}
-
-/**
- * 将 CodexRadar 聚合结果转为能力-成本散点。
- */
-export function extractDradarCostRows(data, models = null) {
-  const rows = []
-  for (const [model, profile] of Object.entries(data || {})) {
-    if (!includesModel(model, models)) continue
-    for (const [effort, result] of Object.entries(profile.efforts || {})) {
-      const cost = profile.costData?.[effort]
-      if (!Number.isFinite(result.passRate) || !cost) continue
-      if (!Number.isFinite(cost.meanCost) && !Number.isFinite(cost.medianCost)) continue
-      rows.push({
-        model,
-        effort,
-        pass_rate: result.passRate,
-        mean_cost: cost.meanCost,
-        median_cost: cost.medianCost,
-        source: 'CodexRadar',
-        sourceModel: model,
-        taskCount: result.cells ?? null,
-      })
-    }
-  }
-  return rows
 }
 
 function evidenceComparisonRows(profiles, models) {
@@ -305,7 +275,7 @@ function deduplicateComparisonRows(rows) {
  * 统一将数值舍入到合理精度，避免全精度浮点造成 JSON 输出噪声。
  */
 /**
- * 成本行按 (model|effort|source) 去重：live 源（deepswe 榜单 / dradar 聚合）优先，
+ * 成本行按 (model|effort|source) 去重：DeepSWE live 榜单优先，
  * registry 证据行只是 live 源缺席时的回填（成本已舍入到 2 位小数），两者并存会让
  * 同一点出现成对行——轨迹折线来回抖、表格重复、Pareto 前沿吃到重复点。
  */
@@ -321,7 +291,6 @@ export function buildBenchmarkVisualizationData({
   deepsweProfiles = {},
   deepsweLeaderboard = null,
   benchlmProfiles = {},
-  dradarProfiles = {},
   artificialAnalysisProfiles = {},
   artificialAnalysisImageArena = {},
   modelMap = {},
@@ -329,10 +298,10 @@ export function buildBenchmarkVisualizationData({
   benchmarkProfiles = {},
 } = {}) {
   const { qualityScores, qualityTiers } = deriveQualityMetadata(benchmarkProfiles)
-  const data = preferLiveCostRows([
-    ...extractDeepsweCostRows(deepsweLeaderboard, modelMap, models),
-    ...extractDradarCostRows(dradarProfiles, models),
-  ], extractRegistryCostRows(benchmarkProfiles, models)).sort((a, b) => (
+  const data = preferLiveCostRows(
+    extractDeepsweCostRows(deepsweLeaderboard, modelMap, models),
+    extractRegistryCostRows(benchmarkProfiles, models),
+  ).sort((a, b) => (
     a.source.localeCompare(b.source) ||
     a.model.localeCompare(b.model) ||
     (EFFORT_ORDER.get(a.effort) ?? 99) - (EFFORT_ORDER.get(b.effort) ?? 99)
@@ -341,7 +310,6 @@ export function buildBenchmarkVisualizationData({
   const comparisons = deduplicateComparisonRows([
     ...evidenceComparisonRows(deepsweProfiles, models),
     ...benchlmComparisonRows(benchlmProfiles, models),
-    ...evidenceComparisonRows(dradarProfiles, models),
     ...evidenceComparisonRows(artificialAnalysisProfiles, models),
     ...imageArenaComparisonRows(artificialAnalysisImageArena, models),
   ]).sort((a, b) => (

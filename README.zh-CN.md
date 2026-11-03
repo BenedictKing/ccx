@@ -246,7 +246,7 @@ make dev
       <strong>数据源</strong>
     </td>
     <td>
-      CCX 的 benchmark 可视化与注册表更新还使用了 <a href="https://benchlm.ai/">BenchLM.ai</a>、<a href="https://deepswe.datacurve.ai/">DeepSWE</a>、<a href="https://deng.codexradar.com/">CodexRadar</a> 的公开数据；价格与上下文窗口元数据另外同步自 <a href="https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json">LiteLLM model_prices_and_context_window.json</a>。
+      CCX 的 benchmark 可视化与注册表更新还使用了 <a href="https://benchlm.ai/">BenchLM.ai</a>、<a href="https://deepswe.datacurve.ai/">DeepSWE</a> 的公开数据；价格与上下文窗口元数据另外同步自 <a href="https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json">LiteLLM model_prices_and_context_window.json</a>。
     </td>
   </tr>
   <tr>

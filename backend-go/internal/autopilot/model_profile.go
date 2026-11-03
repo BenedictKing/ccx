@@ -452,8 +452,7 @@ func effortQualityRatioFor(level EffortLevel) (float64, bool) {
 }
 
 // minReliableBenchmarkTasks 是直测档位参与等效分与档位评定的最小任务格数。
-// CodexRadar 新模型常先跑极少量任务：1 格全过即 pass@1=100%，纯属噪声
-// （2026-08 hy4-preview low 档 1/1 曾把插值等效分虚抬进 premium 档）。
+// 少量任务全部通过会把 pass@1 放大到 100%，不足以支撑质量档判断。
 // TaskCount==0 表示来源未提供任务数（兼容旧数据），不视为小样本。
 const minReliableBenchmarkTasks = 3
 
@@ -462,19 +461,9 @@ func isSmallSampleEvidence(ev config.ModelBenchmarkEvidence) bool {
 	return ev.TaskCount > 0 && ev.TaskCount < minReliableBenchmarkTasks
 }
 
-// isMeasuredCodingEvidence 报告证据是否为可参与档位校准的 coding 直测条目
-// （deepswe / codexradar 来源的 0-1 质量比率）。两种指标同一语义量纲：
-//   - pass_at_1：二值任务通过率（deepswe 数据集、旧 codexradar 深榜）；
-//   - mean_reward：雷达Bench v2（2026-10 站点重构后 codexradar 唯一口径）的
-//     等权平均任务奖励率，庞贝任务奖励为连续 F1 部分分，故不再标 pass_at_1。
+// isMeasuredCodingEvidence 报告证据是否为可参与档位校准的 DeepSWE coding 直测条目。
 func isMeasuredCodingEvidence(ev config.ModelBenchmarkEvidence) bool {
-	if ev.Domain != "coding" {
-		return false
-	}
-	if ev.Benchmark != "deepswe" && ev.Benchmark != "codexradar" {
-		return false
-	}
-	return ev.Metric == "pass_at_1" || ev.Metric == "mean_reward"
+	return ev.Domain == "coding" && ev.Benchmark == "deepswe" && ev.Metric == "pass_at_1"
 }
 
 func directRegularEffortScore(evidence []config.ModelBenchmarkEvidence) (float64, bool) {
@@ -494,7 +483,7 @@ func directRegularEffortScore(evidence []config.ModelBenchmarkEvidence) (float64
 }
 
 // calibrateRegularEffort 从直测证据提取常规 effort 口径（medium/default）的 coding 分，
-// 并标注证据等级。证据按来源（deepswe / codexradar）分组，再按证据等级分层合成，
+// 并标注证据等级。证据按来源分组，再按证据等级分层合成，
 // 升级仅作用于缺 medium 直测的模型（有直测的模型行为与旧算法一致）：
 //  1. 有 medium/default 实测 → 跨源取最大（与旧合并语义一致，证据最充分），EvidenceDirect；
 //  2. 曲线跨 medium（如 low+high）→ 相邻两档按 effort 序数线性插值，
@@ -580,13 +569,20 @@ func calibrateRegularEffort(evidence []config.ModelBenchmarkEvidence) (Calibrati
 	return CalibrationResult{Score: worst, Class: EvidenceDeflated, MeasuredEffort: worstLevel}, true
 }
 
+// artificialAnalysisCalibrationSupported 限制旧线性拟合仅用于其训练时的 v4.x 量表。
+// v5.0 更换 coding 评测组成，先保留原始证据供展示与重新拟合，不能沿用旧系数。
+func artificialAnalysisCalibrationSupported(version string) bool {
+	return strings.HasPrefix(version, "v4.")
+}
+
 // artificialAnalysisCodingScore 返回 Artificial Analysis coding_index 在 DeepSWE
 // 等价尺度上的分数。AA 的 effort 证据用于补齐 DeepSWE 未覆盖的模型/档位，
 // 不直接与 pass@1 混算。
 func artificialAnalysisCodingScore(evidence []config.ModelBenchmarkEvidence, level EffortLevel) (float64, bool) {
 	best := -1.0
 	for _, ev := range evidence {
-		if ev.Domain != "coding" || ev.Benchmark != "artificial_analysis" || ev.Metric != "coding_index" {
+		if ev.Domain != "coding" || ev.Benchmark != "artificial_analysis" || ev.Metric != "coding_index" ||
+			!artificialAnalysisCalibrationSupported(ev.BenchmarkVersion) {
 			continue
 		}
 		if NormalizeEffortLevel(ev.Effort) != level {
@@ -703,7 +699,7 @@ func interpolatedMediumScore(efforts map[EffortLevel]float64) (score float64, ok
 }
 
 // directBenchmarkScoreFromEvidence 从证据列表提取直接实测 coding 分数（DeepSWE 等价 0-100 分）。
-// 只接受 deepswe / codexradar 的直测比率（pass_at_1 / mean_reward），不含 calibrated 估计值。
+// 只接受 DeepSWE 的 pass_at_1 直测比率，不含 calibrated 估计值。
 // 注意：取的是最佳档原始分（含思考强度加成），仅供按 effort 口径展示；
 // 档位评定与边界计算必须用 regularEffortBaselineScore 的常规口径分。
 func directBenchmarkScoreFromEvidence(evidence []config.ModelBenchmarkEvidence) float64 {
@@ -760,7 +756,8 @@ func calibrateArtificialAnalysisEffort(evidence []config.ModelBenchmarkEvidence)
 	best := -1.0
 	measuredEffort := EffortMedium
 	for _, ev := range evidence {
-		if ev.Domain != "coding" || ev.Benchmark != "artificial_analysis" || ev.Metric != "coding_index" {
+		if ev.Domain != "coding" || ev.Benchmark != "artificial_analysis" || ev.Metric != "coding_index" ||
+			!artificialAnalysisCalibrationSupported(ev.BenchmarkVersion) {
 			continue
 		}
 		level := NormalizeEffortLevel(ev.Effort)
