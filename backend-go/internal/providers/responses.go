@@ -661,12 +661,22 @@ func (p *ResponsesProvider) ConvertToClaudeResponse(providerResp *types.Provider
 	if hasToolUse {
 		claudeResp.StopReason = "tool_use"
 	} else if status, _ := responsesResp["status"].(string); status == "incomplete" {
-		claudeResp.StopReason = "max_tokens"
+		claudeResp.StopReason = responsesIncompleteStopReason(responsesResp)
 	} else {
 		claudeResp.StopReason = "end_turn"
 	}
 
 	return claudeResp, nil
+}
+
+// responsesIncompleteStopReason 将 Responses 的 incomplete_details.reason 映射为 Claude stop_reason：
+// content_filter（被安全策略拦截）对应 refusal，其余（max_output_tokens 等）对应 max_tokens。
+func responsesIncompleteStopReason(response map[string]interface{}) string {
+	details, _ := response["incomplete_details"].(map[string]interface{})
+	if reason, _ := details["reason"].(string); reason == "content_filter" {
+		return "refusal"
+	}
+	return "max_tokens"
 }
 
 // ConvertToResponsesResponse 将上游响应转换为 Responses 格式
@@ -1225,7 +1235,7 @@ func (p *ResponsesProvider) HandleStreamResponse(body io.ReadCloser) (<-chan str
 				status := toString(response["status"])
 				finalizeCompletedToolStates(response)
 				if status == "incomplete" || eventType == "response.incomplete" {
-					stopReason = "max_tokens"
+					stopReason = responsesIncompleteStopReason(response)
 				}
 				closeOpenContentBlocks()
 				ensureMessageStart()
