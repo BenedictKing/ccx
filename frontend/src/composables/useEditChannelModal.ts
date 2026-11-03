@@ -1,6 +1,6 @@
 import { ref, reactive, computed, watch, onUnmounted, nextTick } from 'vue'
 import { useTheme } from 'vuetify'
-import type { Channel } from '../services/api'
+import type { Channel, ChannelProtocolRoute } from '../services/api'
 import { ApiService } from '../services/api'
 import {
   buildChannelPayload,
@@ -61,6 +61,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
 
   // 表单引用
   const formRef = ref()
+  const protocolModelLimits = ref<ChannelProtocolRoute[]>([])
 
   const defaultServiceTypeValueFallback = (): 'openai' | 'gemini' | 'claude' | 'responses' | 'copilot' => {
     if (props.channelType === 'chat') return 'openai'
@@ -422,6 +423,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
   // 表单操作
   const resetForm = () => {
     resetTransientUiState()
+    protocolModelLimits.value = []
     form.name = ''
     form.remark = ''
     form.serviceType = props.channelType === 'images' || props.channelType === 'vectors' ? 'openai' : ''
@@ -495,6 +497,10 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
 
   const loadChannelData = (channel: Channel) => {
     resetTransientUiState()
+    protocolModelLimits.value = (channel.protocolRoutes?.length ? channel.protocolRoutes : [{
+      kind: props.channelType, index: channel.index, channelUid: channel.channelUid,
+      name: channel.name, serviceType: channel.serviceType, supportedModels: channel.supportedModels,
+    }]).map(route => ({ ...route, supportedModels: [...(route.supportedModels ?? [])] }))
     form.name = channel.name
     form.remark = channel.remark || ''
     form.serviceType = props.channelType === 'images' || props.channelType === 'vectors' ? 'openai' : channel.serviceType
@@ -687,6 +693,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
       if (!valid) return
 
       const channelData = buildSubmitPayload()
+      channelData.protocolRoutes = protocolModelLimits.value
 
       emit('save', channelData, undefined, () => {
         submitting.value = false
@@ -811,6 +818,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
 
   return {
     formRef,
+    protocolModelLimits,
     activeSection,
     sections,
     baseUrlHasError,

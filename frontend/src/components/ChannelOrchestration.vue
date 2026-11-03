@@ -156,10 +156,10 @@
 
             <!-- Channel name and description -->
             <div class="channel-name">
-              <!-- 备注非空时悬停渠道名称显示 -->
+              <!-- 优先显示备注，悬停时显示原渠道名称 -->
               <v-tooltip
                 v-if="element.remark?.trim()"
-                :text="element.remark"
+                :text="getChannelOriginalName(element)"
                 location="top"
                 :open-delay="150"
                 content-class="ccx-tooltip"
@@ -634,7 +634,7 @@
             <div class="channel-info-main">
               <v-tooltip
                 v-if="channel.remark?.trim()"
-                :text="channel.remark"
+                :text="getChannelOriginalName(channel)"
                 location="top"
                 :open-delay="150"
                 content-class="ccx-tooltip"
@@ -1285,8 +1285,12 @@ const { isCapabilityChannelKind } = useCapabilityTestManager(
   async () => {},
 )
 
-const getChannelDisplayName = (channel: Channel): string => {
+const getChannelOriginalName = (channel: Channel): string => {
   return managedProviderChannelName(channel, t) || channel.name
+}
+
+const getChannelDisplayName = (channel: Channel): string => {
+  return channel.remark?.trim() || getChannelOriginalName(channel)
 }
 
 const getProtocolCapsules = (channel: Channel) => {
