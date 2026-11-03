@@ -912,3 +912,93 @@ func TestDeduplicateTotalTokensSystemBlocks(t *testing.T) {
 		}
 	})
 }
+
+func TestDeduplicateIdenticalSystemBlocks(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	// 复刻实测 harness 形态：裸 output-style 提醒逐字重复累积，最后一份带断点。
+	const styleReminder = "engineer-professional output style is active. Remember to follow the specific guidelines for this style."
+
+	t.Run("逐字重复的提醒块只保留最后一份", func(t *testing.T) {
+		body := []byte(`{"model":"m","system":[` +
+			`{"type":"text","cache_control":{"type":"ephemeral"},"text":"You are Claude Code, Anthropic's official CLI for Claude."},` +
+			`{"type":"text","text":"# Environment"}`)
+		for i := 0; i < 20; i++ {
+			body = append(body, []byte(`,{"type":"text","text":"`+styleReminder+`"}`)...)
+		}
+		body = append(body, []byte(`,{"type":"text","cache_control":{"type":"ephemeral"},"text":"`+styleReminder+`"}`)...)
+		body = append(body, []byte(`],"messages":[]}`)...)
+
+		out, changed := DeduplicateIdenticalSystemBlocks(nil, body, false, "Messages")
+		if !changed {
+			t.Fatal("expected changed=true")
+		}
+		var data map[string]interface{}
+		if err := json.Unmarshal(out, &data); err != nil {
+			t.Fatalf("output is not valid JSON: %v", err)
+		}
+		sys := data["system"].([]interface{})
+		if len(sys) != 3 {
+			t.Fatalf("system len = %d, want 3 (identity + environment + last reminder)", len(sys))
+		}
+		last := sys[2].(map[string]interface{})
+		if text := last["text"].(string); text != styleReminder {
+			t.Errorf("kept block = %q, want the last identical copy", text)
+		}
+		if _, ok := last["cache_control"]; !ok {
+			t.Error("kept block should retain its own cache_control")
+		}
+	})
+
+	t.Run("被删块的 cache_control 转移给保留块", func(t *testing.T) {
+		body := []byte(`{"system":[` +
+			`{"type":"text","text":"` + styleReminder + `","cache_control":{"type":"ephemeral"}},` +
+			`{"type":"text","text":"identity"},` +
+			`{"type":"text","text":"` + styleReminder + `"}` +
+			`]}`)
+
+		out, changed := DeduplicateIdenticalSystemBlocks(nil, body, false, "Messages")
+		if !changed {
+			t.Fatal("expected changed=true")
+		}
+		var data map[string]interface{}
+		json.Unmarshal(out, &data)
+		sys := data["system"].([]interface{})
+		if len(sys) != 2 {
+			t.Fatalf("system len = %d, want 2", len(sys))
+		}
+		kept := sys[1].(map[string]interface{})
+		if _, ok := kept["cache_control"]; !ok {
+			t.Error("orphan cache_control should be transferred to the kept block")
+		}
+	})
+
+	t.Run("不同文本与唯一块不误伤", func(t *testing.T) {
+		// 双拼块（style\n\nstyle）与单条 style 文本逐字不同：各自唯一，不得互相合并删除。
+		body := []byte(`{"system":[` +
+			`{"type":"text","text":"` + styleReminder + `"},` +
+			`{"type":"text","text":"` + styleReminder + `\n\n` + styleReminder + `"},` +
+			`{"type":"text","text":"## Exited Auto Mode"}` +
+			`]}`)
+		out, changed := DeduplicateIdenticalSystemBlocks(nil, body, false, "Messages")
+		if changed {
+			t.Fatal("unique texts must not be merged or removed")
+		}
+		var data map[string]interface{}
+		json.Unmarshal(out, &data)
+		if sys := data["system"].([]interface{}); len(sys) != 3 {
+			t.Fatalf("system len = %d, want 3 (all unique)", len(sys))
+		}
+	})
+
+	t.Run("无重复或非数组 system 不动", func(t *testing.T) {
+		noDup := []byte(`{"system":[{"type":"text","text":"a"},{"type":"text","text":"b"}]}`)
+		if _, changed := DeduplicateIdenticalSystemBlocks(nil, noDup, false, "Messages"); changed {
+			t.Error("unique blocks should not be touched")
+		}
+		strSystem := []byte(`{"system":"plain string"}`)
+		if _, changed := DeduplicateIdenticalSystemBlocks(nil, strSystem, false, "Messages"); changed {
+			t.Error("string system should not be touched")
+		}
+	})
+}

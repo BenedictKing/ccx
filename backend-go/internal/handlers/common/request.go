@@ -908,3 +908,104 @@ func DeduplicateTotalTokensSystemBlocks(c *gin.Context, bodyBytes []byte, enable
 	}
 	return newBytes, true
 }
+
+// DeduplicateIdenticalSystemBlocks 清理 system 数组中「完全相同的重复 text 块」：
+// 部分 harness 每轮把同一条 output-style/规则提醒追加进 system 且不清理旧份
+// （无 <total_tokens> 前缀，DeduplicateTotalTokensSystemBlocks 扫不到），
+// 长会话累积数十份逐字相同的块，白白消耗上下文预算。保留最后一份
+// （harness 当前活跃注入位，常携带 cache_control 断点），移除其余；
+// 被删块携带 cache_control 而保留块没有时转移断点（同 total_tokens 去重语义）。
+// 完全相同（TrimSpace 后逐字相等）才处理：唯一块、内容不同的块与空文本永不触碰。
+func DeduplicateIdenticalSystemBlocks(c *gin.Context, bodyBytes []byte, enableLog bool, apiType string) ([]byte, bool) {
+	decoder := json.NewDecoder(bytes.NewReader(bodyBytes))
+	decoder.UseNumber() // 保留数字精度
+
+	var data map[string]interface{}
+	if err := decoder.Decode(&data); err != nil {
+		return bodyBytes, false
+	}
+
+	systemArr, ok := data["system"].([]interface{})
+	if !ok || len(systemArr) == 0 {
+		return bodyBytes, false
+	}
+
+	blockText := func(item interface{}) (string, bool) {
+		itemMap, ok := item.(map[string]interface{})
+		if !ok {
+			return "", false
+		}
+		text, ok := itemMap["text"].(string)
+		if !ok {
+			return "", false
+		}
+		trimmed := strings.TrimSpace(text)
+		return trimmed, trimmed != ""
+	}
+
+	// 统计各文本出现的次数与最后位置；只处理出现 ≥2 次的文本。
+	lastIdx := make(map[string]int)
+	counts := make(map[string]int)
+	for i, item := range systemArr {
+		if text, ok := blockText(item); ok {
+			lastIdx[text] = i
+			counts[text]++
+		}
+	}
+	duplicated := false
+	for _, n := range counts {
+		if n >= 2 {
+			duplicated = true
+			break
+		}
+	}
+	if !duplicated {
+		return bodyBytes, false
+	}
+
+	removed := 0
+	orphanCacheControl := make(map[string]interface{})
+	newSystemArr := make([]interface{}, 0, len(systemArr))
+	for i, item := range systemArr {
+		text, isText := blockText(item)
+		if !isText || counts[text] < 2 || i == lastIdx[text] {
+			newSystemArr = append(newSystemArr, item)
+			continue
+		}
+		removed++
+		if _, seen := orphanCacheControl[text]; !seen {
+			if itemMap, ok := item.(map[string]interface{}); ok {
+				if cc, exists := itemMap["cache_control"]; exists {
+					orphanCacheControl[text] = cc
+				}
+			}
+		}
+	}
+
+	// 保留块自己没有 cache_control 时，继承同文本被删块的缓存断点
+	for text, i := range lastIdx {
+		if counts[text] < 2 {
+			continue
+		}
+		cc, has := orphanCacheControl[text]
+		if !has {
+			continue
+		}
+		if keepMap, ok := systemArr[i].(map[string]interface{}); ok {
+			if _, exists := keepMap["cache_control"]; !exists {
+				keepMap["cache_control"] = cc
+			}
+		}
+	}
+
+	if enableLog {
+		RequestLogf(c, "[%s-Preprocess] 已去重 system 中的重复 text 块: 移除 %d 份", apiType, removed)
+	}
+	data["system"] = newSystemArr
+
+	newBytes, err := utils.MarshalJSONNoEscape(data)
+	if err != nil {
+		return bodyBytes, false
+	}
+	return newBytes, true
+}

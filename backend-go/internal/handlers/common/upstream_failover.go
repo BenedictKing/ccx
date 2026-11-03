@@ -958,6 +958,15 @@ func TryUpstreamWithAllKeys(
 				c.Set("requestBodyBytes", attemptBody)
 			}
 
+			// 同源问题的另一半：无 total_tokens 前缀的裸提醒块（output-style 提醒等）
+			// 被 harness 每轮追加、逐字重复累积。完全相同才去重，保留最后一份并转移
+			// cache_control 断点；须在归一化之后与 total_tokens 去重同位执行。
+			if deduped, changed := DeduplicateIdenticalSystemBlocks(c, attemptBody, envCfg.EnableRequestLogs, apiType); changed {
+				attemptBody = deduped
+				RestoreRequestBody(c, attemptBody)
+				c.Set("requestBodyBytes", attemptBody)
+			}
+
 			// 已知厂商参数约束（主动侧）：无需先失败一次，按 model-registry 里的文档约束直接规避。
 			// 例如 Kimi K3/K2.7-code/K2.6 的 temperature/top_p/n 等为固定值，传入即 400。
 			// 约束数据随 model-registry 走 presetstore 刷新链路，运营者更新 JSON 即可生效，
