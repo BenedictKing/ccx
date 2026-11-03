@@ -1174,18 +1174,18 @@ test('Artificial Analysis LLM extraction yields one evidence per composite index
     { slug: 'claude-opus-4-8', evaluations: { artificial_analysis_intelligence_index: 77 } },
     { slug: 'unmapped-foo', evaluations: { artificial_analysis_intelligence_index: 50 } },
   ]
-  const { profiles, unmappedSlugs } = extractAaLlm(models, 4.1)
+  const { profiles, unmappedSlugs } = extractAaLlm(models, 5.0)
 
   assert.deepEqual(unmappedSlugs, ['unmapped-foo'])
   const evidence = profiles['claude-opus-5'].benchmarkEvidence
   assert.equal(evidence.length, 3)
   assert.deepEqual(evidence.map(e => e.domain).sort(), ['agentic', 'coding', 'overall'])
   assert.equal(evidence[0].benchmark, 'artificial_analysis')
-  assert.equal(evidence[0].benchmarkVersion, 'v4.1')
+  assert.equal(evidence[0].benchmarkVersion, 'v5')
   assert.equal(evidence[0].effort, 'default')
   assert.equal(evidence[0].selectionBasis, 'composite_index')
-  // composite index 无任务级 raw data，taskCount 用 evaluation 数作代理以满足 schema（v4.3.2 共 10 项）
-  assert.equal(evidence[0].taskCount, 10)
+  // composite index 无任务级 raw data，taskCount 用 evaluation 数作代理以满足 schema（v5.0 共 9 项）
+  assert.equal(evidence[0].taskCount, 9)
   // cohort 为数据集中所有有 intelligence_index 的模型（含未映射的，百分位相对全市场）
   assert.equal(evidence[0].cohortSize, 3)
   // opus-5 (92) 在 [92, 77, 50] 队列中百分位 = 1.0

@@ -252,14 +252,14 @@ function today() {
   return new Date().toISOString().split('T')[0]
 }
 
-// AA intelligence_index 当前版本 v4.3.2，由 10 项 evaluation 复合而成（AA-Briefcase v1.1、
-// GDPval-AA v2.1、AutomationBench-AA、Terminal-Bench 4.0、SciCode、AA-LCR v1.1、
-// AA-Omniscience、HLE、GDP.pdf、CritPt；类别权重 Agents 30% / Coding 20% /
-// Scientific Reasoning 20% / General 30%，见 AA 方法文档）。
+// AA intelligence_index 当前版本 v5.0，由 9 项 evaluation 复合而成（AA-Briefcase v1.1、
+// AutomationBench-AA、GDP.pdf、FrontierCode 2.0、Terminal-Bench 4.0、
+// Terminal-Bench-Science 0.1.0、CritPt v2 Hard Subset、AA-Omniscience v1.1、
+// HLE-Diamond；类别权重 Knowledge Work / Coding / Science / General 各 25%）。
 // coding_index 与 agentic_index 为上述 evaluation 子集派生指标，不单独 version。
 // composite index 无任务级 raw data，taskCount 用 evaluation 数作代理，满足
 // ModelBenchmarkEvidence.taskCount>0 的 schema 约束与 presetstore 校验。
-const INTELLIGENCE_INDEX_EVALUATION_COUNT = 10
+const INTELLIGENCE_INDEX_EVALUATION_COUNT = 9
 
 /**
  * 分页拉取 /language/models/free，合并所有页的 data[]。

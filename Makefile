@@ -102,10 +102,10 @@ generate-preset-manifest:
 	@node scripts/generate-preset-manifest.mjs
 
 benchmark-update:
-	@node scripts/update-benchmark-data.mjs $(ARGS)
+	@node scripts/update-benchmark-data.mjs --skip-dradar $(ARGS)
 
 benchmark-update-dry:
-	@node scripts/update-benchmark-data.mjs --dry-run $(ARGS)
+	@node scripts/update-benchmark-data.mjs --dry-run --skip-dradar $(ARGS)
 
 benchmark-chart:
 	@node scripts/generate-benchmark-chart.mjs
