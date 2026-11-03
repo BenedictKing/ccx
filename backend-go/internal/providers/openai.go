@@ -396,6 +396,8 @@ func (p *OpenAIProvider) ConvertToClaudeResponse(providerResp *types.ProviderRes
 			claudeResp.StopReason = "tool_use"
 		} else if choice.FinishReason == "length" {
 			claudeResp.StopReason = "max_tokens"
+		} else if choice.FinishReason == "content_filter" {
+			claudeResp.StopReason = "refusal"
 		} else {
 			claudeResp.StopReason = "end_turn"
 		}
@@ -720,6 +722,8 @@ func (p *OpenAIProvider) HandleStreamResponse(body io.ReadCloser) (<-chan string
 					stopReason = "end_turn"
 				} else if finishReason == "length" {
 					stopReason = "max_tokens"
+				} else if finishReason == "content_filter" {
+					stopReason = "refusal"
 				}
 			}
 		}
