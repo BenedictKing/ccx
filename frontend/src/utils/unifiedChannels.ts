@@ -266,6 +266,7 @@ const buildProtocolRoutes = (channels: Partial<Record<LlmChannelKind, RoutedChan
       index: channel.routeIndex,
       name: channel.name,
       serviceType: channel.serviceType,
+      responsesReasoningFold: channel.responsesReasoningFold,
       channelUid: channel.channelUid,
       status: channel.status,
       apiKeys: [...(channel.apiKeys ?? [])],

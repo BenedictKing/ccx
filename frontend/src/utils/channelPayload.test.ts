@@ -674,6 +674,13 @@ describe('buildChannelPayload tags', () => {
     noVision: false,
   }
 
+  it('Responses 推理续接应默认关闭，并允许显式开启和关闭', () => {
+    const form = { ...baseForm, serviceType: 'responses' as const }
+    expect(buildChannelPayload(form).responsesReasoningFold).toBe(false)
+    expect(buildChannelPayload({ ...form, responsesReasoningFold: true }).responsesReasoningFold).toBe(true)
+    expect(buildChannelPayload({ ...form, responsesReasoningFold: false }).responsesReasoningFold).toBe(false)
+  })
+
   it('应包含非空 tags', () => {
     const result = buildChannelPayload({ ...baseForm, tags: ['prod', 'primary'] })
     expect(result.tags).toEqual(['prod', 'primary'])

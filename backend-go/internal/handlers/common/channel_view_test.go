@@ -8,6 +8,15 @@ import (
 
 func boolPtr(b bool) *bool { return &b }
 
+func TestBuildChannelViewExposesResponsesReasoningFold(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		view := BuildChannelView(config.UpstreamConfig{ServiceType: "responses", ResponsesReasoningFold: enabled}, 0)
+		if got, ok := view["responsesReasoningFold"]; !ok || got != enabled {
+			t.Fatalf("responsesReasoningFold = %v (present=%v), want %v", got, ok, enabled)
+		}
+	}
+}
+
 func TestBuildChannelView_TuningBenchFields(t *testing.T) {
 	up := config.UpstreamConfig{
 		Name:                        "test-channel",

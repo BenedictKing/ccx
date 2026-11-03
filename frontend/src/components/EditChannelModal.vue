@@ -202,6 +202,26 @@
                 />
               </div>
 
+              <div
+                v-if="hasResponsesReasoningRoute"
+                class="proxy-direct-row mt-4"
+                :class="{ 'proxy-direct-row--on': form.responsesReasoningFold }"
+              >
+                <v-icon size="20" class="proxy-direct-row-icon">mdi-refresh</v-icon>
+                <div class="flex-grow-1">
+                  <div class="text-body-2 font-weight-medium">{{ t('channelEditor.compat.responsesReasoningFold.label') }}</div>
+                  <div class="text-caption text-medium-emphasis">{{ t('channelEditor.compat.responsesReasoningFold.hint') }}</div>
+                </div>
+                <v-switch
+                  :model-value="form.responsesReasoningFold"
+                  color="primary"
+                  density="compact"
+                  hide-details
+                  class="proxy-direct-row-switch"
+                  @update:model-value="updateForm({ responsesReasoningFold: $event === true })"
+                />
+              </div>
+
               <div class="mt-6">
                 <CustomHeadersSection
                   :headers="customHeadersArray"
@@ -477,6 +497,11 @@ const props = withDefaults(defineProps<EditChannelModalProps>(), {
 const emit = defineEmits<EditChannelModalEmits>()
 const channelStore = useChannelStore()
 const dialogStore = useDialogStore()
+const hasResponsesReasoningRoute = computed(() =>
+  props.channel?.protocolRoutes?.length
+    ? props.channel.protocolRoutes.some(route => route.kind === 'responses' && route.serviceType === 'responses')
+    : props.channelType === 'responses' && form.serviceType === 'responses',
+)
 const managedProviderName = computed(() => providerDisplayName(props.channel?.providerId))
 const isManagedProvider = computed(() => isManagedProviderChannel(props.channel))
 const isOfficialManagedProvider = computed(() => isOfficialProviderChannel(props.channel))

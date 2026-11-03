@@ -161,7 +161,9 @@ describe('buildUnifiedChannelsData account grouping', () => {
       gemini: response([channel('mimo-main-gemini', 'acct-main', 3, ['sk-a'])]),
     }
 
+    data.responses.channels[0]!.responsesReasoningFold = true
     const result = buildUnifiedChannelsData(data)
+    expect(result.channels[0]!.protocolRoutes?.find(route => route.kind === 'responses')?.responsesReasoningFold).toBe(true)
     expect(result.channels).toHaveLength(1)
     expect(result.channels[0].accountUid).toBe('acct-main')
     expect(result.channels[0].protocolCapsules?.map(item => item.label)).toEqual(['CLAUDE', 'CHAT'])

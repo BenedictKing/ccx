@@ -150,6 +150,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     autoBlacklistBalance: true,
     normalizeMetadataUserId: defaultNormalizeMetadataUserId(),
     stripBillingHeader: false,
+    responsesReasoningFold: false,
     codexToolCompat: false,
     stripCodexClientTools: false,
     convertImageUrlToB64Json: false,
@@ -326,6 +327,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
       normalizeMetadataUserId: props.channel.normalizeMetadataUserId,
       stripBillingHeader: props.channel.stripBillingHeader,
       normalizeSystemRoleToTopLevel: props.channel.normalizeSystemRoleToTopLevel,
+      responsesReasoningFold: form.responsesReasoningFold,
       codexToolCompat: props.channel.codexToolCompat,
       stripCodexClientTools: props.channel.stripCodexClientTools,
       convertImageUrlToB64Json: props.channel.convertImageUrlToB64Json,
@@ -476,6 +478,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     form.normalizeMetadataUserId = defaultNormalizeMetadataUserId()
     form.stripBillingHeader = false
     stripBillingHeaderTouched.value = false
+    form.responsesReasoningFold = false
     form.codexToolCompat = false
     form.stripCodexClientTools = false
     form.convertImageUrlToB64Json = false
@@ -571,6 +574,9 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     form.stripBillingHeader = channel.stripBillingHeader ?? false
     // 载入既有渠道的值即视为显式配置，避免 baseUrl watcher 覆盖用户已保存的选择
     stripBillingHeaderTouched.value = true
+    form.responsesReasoningFold = (channel.protocolRoutes?.length
+      ? channel.protocolRoutes.find(route => route.kind === 'responses' && route.serviceType === 'responses')?.responsesReasoningFold
+      : channel.responsesReasoningFold) ?? false
     form.codexToolCompat = channel.codexToolCompat ?? channel.stripCodexClientTools ?? false
     form.stripCodexClientTools = channel.codexToolCompat ?? channel.stripCodexClientTools ?? false
     form.convertImageUrlToB64Json = !!channel.convertImageUrlToB64Json

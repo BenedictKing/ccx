@@ -150,6 +150,41 @@ func TestUpdatePersistsBillingFields(t *testing.T) {
 	}
 }
 
+func TestUpdatePersistsResponsesReasoningFold(t *testing.T) {
+	cfg := config.Config{ResponsesUpstream: []config.UpstreamConfig{{
+		BaseURL: "https://example.com", APIKeys: []string{"test-key"}, ServiceType: "responses", Status: "active", Priority: 1,
+	}}}
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	cm, err := config.NewConfigManager(path, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = cm.Close() })
+	uid := cm.GetConfig().ResponsesUpstream[0].ChannelUID
+	r := gin.New()
+	RegisterRoutesForTest(r, &Handler{cm: cm})
+	for _, enabled := range []bool{true, false} {
+		body, _ := json.Marshal(map[string]bool{"responsesReasoningFold": enabled})
+		req := httptest.NewRequest(http.MethodPut, "/channels/"+uid, bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d: %s", w.Code, w.Body.String())
+		}
+		if got := cm.GetConfig().ResponsesUpstream[0].ResponsesReasoningFold; got != enabled {
+			t.Fatalf("folding = %v, want %v", got, enabled)
+		}
+	}
+}
+
 // RegisterRoutesForTest 供测试注入 handler 实例（scheduler 为 nil 的最小路由）。
 func RegisterRoutesForTest(r *gin.Engine, h *Handler) {
 	r.PUT("/channels/:uid", h.Update)

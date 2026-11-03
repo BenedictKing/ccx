@@ -975,6 +975,8 @@
   "channelEditor.compat.normalizeUserId.hint": "扁平化 metadata 中的 user ID",
   "channelEditor.compat.stripBillingHeader.label": "剔除 CCH 计费尾缀",
   "channelEditor.compat.stripBillingHeader.hint": "移除 CCH 计费后缀（非官方域名默认开启）",
+  "channelEditor.compat.responsesReasoningFold.label": "Responses 推理自动续接",
+  "channelEditor.compat.responsesReasoningFold.hint": "默认关闭，正文实时输出；开启后尝试续接截断推理，正文和工具调用会延迟至本轮结束。",
   "channelEditor.compat.codexCompat.label": "Codex 工具兼容模式",
   "channelEditor.compat.codexCompat.hint": "启用 Codex CLI 兼容模式",
   "channelEditor.compat.convertImageUrlToB64Json.label": "URL 响应转 b64_json",

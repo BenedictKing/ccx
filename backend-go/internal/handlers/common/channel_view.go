@@ -62,6 +62,7 @@ func BuildChannelView(up config.UpstreamConfig, index int) gin.H {
 		"stripBillingHeader":            up.IsStripBillingHeaderEnabled(),
 		"codexNativeToolPassthrough":    up.IsCodexNativeToolPassthroughEnabled(),
 		"codexToolCompat":               up.IsCodexToolCompatEnabled(),
+		"responsesReasoningFold":        up.ResponsesReasoningFold,
 		"stripImageGenerationTool":      up.IsStripImageGenerationToolEnabled(),
 		"convertImageUrlToB64Json":      up.ConvertImageURLToB64JSON,
 		"noVision":                      up.NoVision,

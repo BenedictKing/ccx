@@ -443,6 +443,9 @@ func applyUpstreamUpdateFields(upstream *UpstreamConfig, updates UpstreamUpdate)
 		v := *updates.CodexToolCompat
 		upstream.CodexToolCompat = &v
 	}
+	if updates.ResponsesReasoningFold != nil {
+		upstream.ResponsesReasoningFold = *updates.ResponsesReasoningFold
+	}
 	if updates.StripCodexClientTools != nil {
 		upstream.StripCodexClientTools = *updates.StripCodexClientTools
 	}
