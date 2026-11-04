@@ -506,8 +506,8 @@ func buildDiscoveryRecommendation(
 	preferredProtocol string,
 	successByProtocol map[string][]string,
 ) DiscoveryRecommendation {
-	// 渠道级显式模型映射已退役（autopilot ModelResolver 画像映射全渠道接管），
-	// 发现建议只保留成功模型清单写入，供前端展示与建渠道时参考。
+	// 发现建议只保留成功模型清单写入，供前端展示与建渠道时参考；
+	// 是否配置显式 ModelMapping 仍由用户决定。
 	// 当 channelKind 协议无成功模型时降级到其他成功协议。
 	supported := discoveryEffectiveSuccessModels(channelKind, preferredProtocol, successByProtocol)
 	return DiscoveryRecommendation{

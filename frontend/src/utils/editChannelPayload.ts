@@ -3,7 +3,7 @@ import type { Channel } from '../services/api'
 export const EDIT_CHANNEL_PAYLOAD_KEYS = [
   'name', 'remark', 'serviceType', 'baseUrl', 'baseUrls', 'website', 'insecureSkipVerify',
   'lowQuality', 'injectDummyThoughtSignature', 'stripThoughtSignature', 'description',
-  'apiKeys', 'apiKeyConfigs', 'modelCapabilities', 'embeddingCapabilities', 'defaultCapability', 'allowUnknownContext',
+  'apiKeys', 'apiKeyConfigs', 'modelMapping', 'modelCapabilities', 'embeddingCapabilities', 'defaultCapability', 'allowUnknownContext',
   'reasoningParamStyle', 'textVerbosity',
   'fastMode', 'customHeaders', 'proxyUrl', 'costMultiplier', 'maxGroupMultiplier', 'channelPaymentCurrency', 'channelPaymentAmount', 'channelCreditCurrency', 'channelCreditAmount', 'authHeader', 'requestTimeoutMs', 'responseHeaderTimeoutMs', 'streamFirstContentTimeoutMs', 'streamInactivityTimeoutMs', 'streamToolCallIdleTimeoutMs', 'routePrefix', 'supportedModels',
   'rateLimitRpm', 'rateLimitWindowMinutes', 'rateLimitMaxConcurrent', 'rateLimitAutoFromHeaders',

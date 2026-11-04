@@ -392,7 +392,7 @@ func buildOperationRequest(
 
 	requestBody := bodyBytes
 	requestContentType := contentType
-	redirectedModel := model
+	redirectedModel := config.RedirectModel(model, upstream)
 
 	if isMultipartContentType(contentType) {
 		originalModel, hasModelField := extractMultipartField(bodyBytes, contentType, "model")

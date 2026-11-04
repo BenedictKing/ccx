@@ -18,6 +18,7 @@ func ResolveEmbeddingCapability(requestModel string, upstream *UpstreamConfig) R
 	if upstream == nil {
 		return ResolvedEmbeddingCapability{RequestModel: requestModel, ActualModel: actualModel}
 	}
+	actualModel = RedirectModel(requestModel, upstream)
 
 	if capability, pattern, ok := resolvePatternValueFold(actualModel, upstream.EmbeddingCapabilities); ok {
 		return ResolvedEmbeddingCapability{

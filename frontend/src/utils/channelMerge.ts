@@ -20,6 +20,7 @@ const IMMUTABLE_CHANNEL_FIELDS = [
   'disabledApiKeys',
   'disabledKeyModels',
   'historicalApiKeys',
+  'modelMapping',
   'modelCapabilities',
   'embeddingCapabilities',
   'defaultCapability',

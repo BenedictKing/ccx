@@ -291,7 +291,7 @@ func TestMessagesHandler_AutoManagedCompshareNormalizesSystemRoles(t *testing.T)
 // TestMessagesHandler_AutoNormalizeSystemRoleByModelFamily 验证：渠道未开手动开关，
 // 请求的非 claude 家族模型（deepseek-v4-flash）触发 model_family 分支，
 // 转发前自动把 messages 中的 system 角色抽回顶层 system 字段。
-// （显式 ModelMapping 已退役：请求模型即实际上线模型。）
+// （本用例未配置 ModelMapping，请求模型即实际上线模型。）
 func TestMessagesHandler_AutoNormalizeSystemRoleByModelFamily(t *testing.T) {
 	const reqBody = `{"model":"deepseek-v4-flash","system":[{"type":"text","text":"base prompt"}],"messages":[{"role":"system","content":"you are helpful"},{"role":"user","content":[{"type":"text","text":"hello"}]}]}`
 

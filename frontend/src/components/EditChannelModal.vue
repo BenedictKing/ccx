@@ -140,6 +140,18 @@
               />
             </section>
 
+            <section
+              v-if="canEditModelMapping"
+              :ref="(el: any) => setSectionRef('redirect', el)"
+              data-section-id="redirect"
+              class="px-6 py-4 scroll-mt-4"
+            >
+              <ModelMappingSection
+                :model-value="form.modelMapping"
+                @update:model-value="updateForm({ modelMapping: $event })"
+              />
+            </section>
+
             <!-- 自定义参数（代理服务器 + 自定义请求头 + 充值倍率/汇率） -->
             <section :ref="(el: any) => setSectionRef('custom', el)" data-section-id="custom" class="px-6 py-4 scroll-mt-4">
               <header class="section-header">
@@ -459,6 +471,7 @@ import BasicInfoSection from './edit-channel/BasicInfoSection.vue'
 import ProtocolModelAvailability from './edit-channel/ProtocolModelAvailability.vue'
 import ApiKeyManagementSection from './edit-channel/ApiKeyManagementSection.vue'
 import CustomHeadersSection from './edit-channel/CustomHeadersSection.vue'
+import ModelMappingSection from './edit-channel/ModelMappingSection.vue'
 import NewApiAccountPanel from './edit-channel/NewApiAccountPanel.vue'
 import { useEditChannelModal, type EditChannelModalEmits, type EditChannelModalProps } from '../composables/useEditChannelModal'
 import { useDialogHotkeys } from '../composables/useDialogHotkeys'
@@ -557,6 +570,7 @@ const {
   formRef,
   activeSection,
   sections,
+  canEditModelMapping,
   baseUrlHasError,
   onMenuUpdate,
   serviceTypeOptions,

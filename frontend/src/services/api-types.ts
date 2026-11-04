@@ -303,6 +303,7 @@ export interface Channel {
   remark?: string
   website?: string
   insecureSkipVerify?: boolean
+  modelMapping?: Record<string, string>
   modelCapabilities?: Record<string, UpstreamModelCapability>
   embeddingCapabilities?: Record<string, EmbeddingCapability>
   defaultCapability?: UpstreamModelCapability
@@ -2626,6 +2627,7 @@ export interface CreateLogicalChannelProtocol {
   apiKeyConfigs?: APIKeyConfig[]
   baseUrls?: string[]
   baseUrl?: string
+  modelMapping?: Record<string, string>
   priority?: number
   enabled?: boolean
   status?: string

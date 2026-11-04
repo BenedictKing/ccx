@@ -498,7 +498,7 @@ type ABTestConfig struct {
 // ── 模式常量 ──
 
 const (
-	currentAutopilotConfigSchemaVersion = 4
+	currentAutopilotConfigSchemaVersion = 5
 
 	// AutopilotModeAuto 全自动模式：应用硬约束过滤并按评分重排，支持 fail-open。
 	AutopilotModeAuto = "auto"
@@ -568,7 +568,7 @@ func DefaultAutopilotRoutingConfig() AutopilotRoutingConfig {
 		},
 
 		ModelMapping: ModelMappingRoutingConfig{
-			AutoResolve:            true, // 显式 ModelMapping 退役后全渠道统一画像映射；关闭仅作紧急回退
+			AutoResolve:            false, // 用户显式 modelMapping 优先；自动画像映射需显式开启
 			CapabilityFloorEnabled: true,
 			EchoMappedModel:        true,
 			ForbidChainMapping:     true,

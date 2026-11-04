@@ -52,6 +52,7 @@ export interface ChannelFormLike {
   description: string
   apiKeys: string[]
   apiKeyConfigs?: Channel['apiKeyConfigs']
+  modelMapping?: Record<string, string>
   modelCapabilitiesText?: string
   modelCapabilityRows?: ModelCapabilityRow[]
   embeddingCapabilityRows?: EmbeddingCapabilityRow[]
@@ -538,6 +539,9 @@ export function buildChannelPayload(
     stripThoughtSignature: form.stripThoughtSignature,
     description: form.description.trim(),
     apiKeys: mergedApiKeys,
+    modelMapping: Object.fromEntries(Object.entries(form.modelMapping || {})
+      .map(([source, target]) => [source.trim(), target.trim()])
+      .filter(([source, target]) => source && target)),
     modelCapabilities: modelCapabilities || {},
     defaultCapability: {},
     allowUnknownContext: false,

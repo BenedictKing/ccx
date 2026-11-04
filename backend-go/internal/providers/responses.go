@@ -159,6 +159,15 @@ func (p *ResponsesProvider) buildProviderRequestBody(c *gin.Context, requestPath
 		if upstream.IsStripImageGenerationToolEnabled() {
 			stripImageGenerationFromTools(reqMap)
 		}
+		if model, ok := reqMap["model"].(string); ok {
+			redirectedModel, _ := config.RedirectModelWithMatch(model, upstream)
+			reqMap["model"] = redirectedModel
+			if redirectedModel != model {
+				if stripped, changed := StripCodexBudgetRemindersFromResponsesInput(reqMap["input"]); changed {
+					reqMap["input"] = stripped
+				}
+			}
+		}
 		if reasoning, hasReasoning := reqMap["reasoning"]; hasReasoning {
 			// 按显式兼容配置或物理上游协议转换客户端原始 reasoning。
 			config.ApplyReasoningParamStyle(reqMap, config.EffectiveReasoningParamStyle(upstream), extractEffortFromReasoning(reasoning))
@@ -191,6 +200,7 @@ func (p *ResponsesProvider) buildProviderRequestBody(c *gin.Context, requestPath
 		if err := json.Unmarshal(bodyBytes, &responsesReq); err != nil {
 			return nil, nil, fmt.Errorf("解析 Responses 请求失败: %w", err)
 		}
+		responsesReq.Model = config.RedirectModel(responsesReq.Model, upstream)
 
 		var (
 			sess *session.Session
@@ -403,7 +413,7 @@ func (p *ResponsesProvider) buildResponsesRequestFromClaude(c *gin.Context, body
 	}
 
 	responsesReq := map[string]interface{}{
-		"model":  claudeReq.Model,
+		"model":  config.RedirectModel(claudeReq.Model, upstream),
 		"input":  input,
 		"stream": claudeReq.Stream,
 	}
@@ -509,7 +519,7 @@ func (p *ResponsesProvider) buildRequestURL(upstream *config.UpstreamConfig, bod
 		if err := json.Unmarshal(bodyBytes, &responsesReq); err != nil {
 			return "", fmt.Errorf("解析 Responses 请求失败: %w", err)
 		}
-		model := responsesReq.Model
+		model := config.RedirectModel(responsesReq.Model, upstream)
 		action := "generateContent"
 		if responsesReq.Stream {
 			action = "streamGenerateContent?alt=sse"

@@ -27,6 +27,9 @@ export function freezeImmutableFields(ch: Channel): Channel {
   if (Array.isArray(ch.disabledApiKeys) && !Object.isFrozen(ch.disabledApiKeys)) {
     Object.freeze(ch.disabledApiKeys)
   }
+  if (ch.modelMapping && !Object.isFrozen(ch.modelMapping)) {
+    Object.freeze(ch.modelMapping)
+  }
   return ch
 }
 

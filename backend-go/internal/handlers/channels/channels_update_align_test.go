@@ -103,6 +103,7 @@ func TestUpdatePersistsBillingFields(t *testing.T) {
 		"channelCreditAmount": 1,
 		"costMultiplier": 0.5,
 		"maxGroupMultiplier": 2,
+		"modelMapping": {"sonnet": "vendor-actual"},
 		"reasoningParamStyle": "reasoning_effort",
 		"rateLimitWindowMinutes": 3
 	}`
@@ -137,13 +138,16 @@ func TestUpdatePersistsBillingFields(t *testing.T) {
 	if up.RateLimitWindowMinutes != 3 {
 		t.Fatalf("RateLimitWindowMinutes 未应用: %d", up.RateLimitWindowMinutes)
 	}
+	if up.ModelMapping["sonnet"] != "vendor-actual" {
+		t.Fatalf("ModelMapping 未应用: %v", up.ModelMapping)
+	}
 
 	// 落盘态：「跳过保存」路径下内存有值但不持久化，重启即丢，故必须验证文件
 	persisted, err := os.ReadFile(tmpFile)
 	if err != nil {
 		t.Fatalf("读取落盘配置失败: %v", err)
 	}
-	for _, fragment := range []string{`"channelPaymentCurrency": "CNY"`, `"costMultiplier": 0.5`} {
+	for _, fragment := range []string{`"channelPaymentCurrency": "CNY"`, `"costMultiplier": 0.5`, `"sonnet": "vendor-actual"`} {
 		if !strings.Contains(string(persisted), fragment) {
 			t.Errorf("落盘配置缺少 %s，更新被跳过保存", fragment)
 		}

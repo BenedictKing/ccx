@@ -192,6 +192,7 @@ const { t } = useLanguage()
     insecureSkipVerify: false,
     apiKeysText: '',
     customHeadersText: '{}',
+    modelMapping: {} as Record<string, string>,
     modelCapabilitiesText: '',
     modelCapabilityRows: [] as ModelCapabilityRow[],
     embeddingCapabilityRows: [] as EmbeddingCapabilityRow[],
@@ -346,6 +347,7 @@ const { t } = useLanguage()
     form.insecureSkipVerify = false
     form.apiKeysText = ''
     form.customHeadersText = '{}'
+    form.modelMapping = {}
     form.modelCapabilitiesText = ''
     form.modelCapabilityRows = []
     form.embeddingCapabilityRows = []
@@ -436,6 +438,7 @@ const { t } = useLanguage()
     form.modelCapabilityRows = modelCapabilityRows.value
     headerRows.value = headerRowsFromChannel(ch)
     form.customHeadersText = stringifyJson(ch.customHeaders)
+    form.modelMapping = { ...(ch.modelMapping || {}) }
     form.modelCapabilitiesText = stringifyJson(ch.modelCapabilities)
     form.defaultContextWindowTokens = ch.defaultCapability?.contextWindowTokens ?? ''
     form.defaultMaxOutputTokens = ch.defaultCapability?.maxOutputTokens ?? ''
@@ -1018,6 +1021,7 @@ const { t } = useLanguage()
       stripThoughtSignature: form.stripThoughtSignature,
       description: form.description,
       apiKeys: getSubmitApiKeys(),
+      modelMapping: form.modelMapping,
       modelCapabilityRows: modelCapabilityRows.value,
       embeddingCapabilityRows: form.embeddingCapabilityRows,
       reasoningParamStyle: form.reasoningParamStyle,

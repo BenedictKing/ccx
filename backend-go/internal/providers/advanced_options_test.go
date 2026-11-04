@@ -33,7 +33,7 @@ func TestOpenAIProvider_InjectsChannelLevelOptions(t *testing.T) {
 		t.Fatalf("decode request body: %v", err)
 	}
 
-	// 显式 ModelMapping 已退役：请求模型直接透传，不再改写。
+	// 未配置 ModelMapping 时：请求模型直接透传，不再改写。
 	if got := body["model"]; got != "gpt-5.1-codex" {
 		t.Fatalf("model = %v, want gpt-5.1-codex", got)
 	}
@@ -69,7 +69,7 @@ func TestResponsesProvider_PassthroughInjectsChannelLevelOptions(t *testing.T) {
 		t.Fatalf("decode request body: %v", err)
 	}
 
-	// 显式 ModelMapping 已退役：请求模型直接透传，不再改写。
+	// 未配置 ModelMapping 时：请求模型直接透传，不再改写。
 	if got := body["model"]; got != "gpt-5" {
 		t.Fatalf("model = %v, want gpt-5", got)
 	}

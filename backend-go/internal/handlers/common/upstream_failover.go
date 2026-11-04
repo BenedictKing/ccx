@@ -623,10 +623,8 @@ func TryUpstreamWithAllKeys(
 	// 五元组调度 pin 的明文 key：身份反查一次（key 已被移除/轮换时为空 = 不锁定）。
 	pinnedAPIKey := autopilot.ResolvePinnedAPIKey(upstream, tryOpts.executionKeyIdentity)
 
-	// 请求模型直接进入尝试流程。endpoint 级自动映射会在选定 Key 后再覆盖本次尝试的模型：
-	// 显式 ModelMapping 已退役，模型承接与映射由 autopilot ModelResolver 画像映射
-	// 在选模阶段统一决策。
-	redirectedModel := model
+	// 先应用用户配置的模型映射。endpoint 级自动映射只处理仍未命中手工映射的请求。
+	redirectedModel := config.RedirectModel(model, upstream)
 	capabilityRequestModel := model
 
 	// 历史图片轮次限制：替换历史图片为占位符，避免不必要的 vision 回退
@@ -2521,7 +2519,7 @@ func recordModelCircuitGlobal(c *gin.Context, metricsManager *metrics.MetricsMan
 // 请求内容；中转网关本地审核经 failureClass 归为 NonRetryable，同样不会走到这里）、
 // 客户端取消、以及 RecordRequestFinalizeIgnored 的中间态重试。
 //
-// model 传本次请求链路的基准模型，即客户端请求的原始模型（显式映射已退役；
+// model 传本次请求链路的基准模型，即客户端请求的原始模型（包括显式映射场景；
 // 读侧 scheduler 渠道级过滤、keypool Key 级过滤都以原始模型
 // 为键，写读不一致会让熔断在 AutoManaged 渠道上完全失效）；联邦 sibling / 溢出
 // 重定向发生跨模型执行时，调用点的 model 已被改写为执行模型，与读侧

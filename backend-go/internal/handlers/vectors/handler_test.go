@@ -146,7 +146,7 @@ func TestBuildProviderRequestAppliesMappingAndHeaders(t *testing.T) {
 	if err := json.Unmarshal(requestBody, &payload); err != nil {
 		t.Fatalf("unmarshal body: %v", err)
 	}
-	// 显式 ModelMapping 已退役：请求模型透传。
+	// 未配置 ModelMapping 时：请求模型透传。
 	if got := payload["model"]; got != "text-embedding-3-small" {
 		t.Fatalf("model = %v, want text-embedding-3-small", got)
 	}
@@ -433,7 +433,7 @@ func TestHandlerDoesNotFallbackAcrossEmbeddingSpaces(t *testing.T) {
 
 	vectorsMetrics := metrics.NewMetricsManager()
 	sch := newVectorsTestScheduler(cfgManager, vectorsMetrics)
-	// 显式 ModelMapping 已退役：请求直接使用实际模型名。
+	// 未配置 ModelMapping 时：请求直接使用实际模型名。
 	w := serveVectorsEmbeddingRequest(cfgManager, sch, `{"model":"embedding-model-a","input":"hello"}`)
 
 	if w.Code != http.StatusInternalServerError {
@@ -1617,7 +1617,7 @@ func makeEmbeddingCompatibilityBenchmarkInputs(
 			}
 		}
 
-		// 显式 ModelMapping 已退役：请求模型直接命中能力表，空间区分交由 EmbeddingSpaceID。
+		// 未配置 ModelMapping 时：请求模型直接命中能力表，空间区分交由 EmbeddingSpaceID。
 		upstream := &config.UpstreamConfig{
 			Name:        "vectors-benchmark-" + strconv.Itoa(i),
 			ServiceType: "openai",

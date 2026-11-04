@@ -625,6 +625,22 @@ func enrichModelsForUpstream(models []ModelEntry, upstream *config.UpstreamConfi
 		addOrUpdate(model)
 	}
 
+	requestModels := make([]string, 0, len(upstream.ModelMapping))
+	for requestModel := range upstream.ModelMapping {
+		if strings.TrimSpace(requestModel) != "" {
+			requestModels = append(requestModels, requestModel)
+		}
+	}
+	sort.Strings(requestModels)
+	for _, requestModel := range requestModels {
+		actualModel := config.RedirectModel(requestModel, upstream)
+		addOrUpdate(ModelEntry{
+			ID:              requestModel,
+			Object:          "model",
+			InputModalities: inputModalitiesForActualModel(upstream, actualModel),
+		})
+	}
+
 	return enriched
 }
 

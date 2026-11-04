@@ -392,6 +392,9 @@ func applyUpstreamUpdateFields(upstream *UpstreamConfig, updates UpstreamUpdate)
 		upstream.APIKeys = deduplicateStrings(updates.APIKeys)
 	}
 	applyAPIKeyConfigUpdate(upstream, updates)
+	if updates.ModelMapping != nil {
+		upstream.ModelMapping = updates.ModelMapping
+	}
 	applyModelCapabilityUpdates(upstream, updates)
 	if updates.ReasoningParamStyle != nil {
 		upstream.ReasoningParamStyle = *updates.ReasoningParamStyle

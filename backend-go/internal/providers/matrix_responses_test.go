@@ -72,7 +72,7 @@ func TestResponsesEntry_RequestMatrix_AllFourUpstreams(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// 显式 ModelMapping 已退役：客户端直接以上游真实模型名发起请求。
+			// 未配置 ModelMapping 时：客户端直接以上游真实模型名发起请求。
 			reqJSON := strings.Replace(tt.body, `"model":"gpt-5"`, fmt.Sprintf(`"model":%q`, tt.expectedModel), 1)
 			c := newGinContext(http.MethodPost, tt.path, []byte(reqJSON), context.Background())
 			upstream := &config.UpstreamConfig{

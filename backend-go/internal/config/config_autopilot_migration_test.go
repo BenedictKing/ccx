@@ -62,6 +62,27 @@ func TestLoadConfigUpgradesPartialAutopilotAndPreservesExplicitValues(t *testing
 	assertLegacyAutopilotOverrides(t, reloaded.GetAutopilotRouting())
 }
 
+func TestLoadConfigSchema4DisablesAutomaticModelResolution(t *testing.T) {
+	configPath := writeAutopilotMigrationConfig(t, json.RawMessage(`{
+		"schemaVersion": 4,
+		"modelMapping": {"autoResolve": true}
+	}`))
+
+	cm, err := NewConfigManager(configPath, "")
+	if err != nil {
+		t.Fatalf("NewConfigManager() error = %v", err)
+	}
+	cm.CloseWatcher()
+
+	if cm.GetAutopilotRouting().ModelMapping.AutoResolve {
+		t.Fatal("schemaVersion=4 的自动选模默认值应在回滚升级时关闭")
+	}
+	persisted := readPersistedAutopilotConfig(t, configPath)
+	if persisted.SchemaVersion != currentAutopilotConfigSchemaVersion || persisted.ModelMapping.AutoResolve {
+		t.Fatalf("自动选模迁移未持久化: %+v", persisted.ModelMapping)
+	}
+}
+
 func TestLoadConfigDoesNotPersistAutopilotEnvKillSwitch(t *testing.T) {
 	t.Setenv(autopilotKillSwitchEnv, "true")
 	configPath := writeAutopilotMigrationConfig(t, json.RawMessage(`{"mode":"shadow"}`))

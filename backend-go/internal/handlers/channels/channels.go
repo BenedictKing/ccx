@@ -101,6 +101,7 @@ type CreateRequest struct {
 	BaseURLs                []string              `json:"baseUrls"`
 	APIKeys                 []string              `json:"apiKeys"`
 	APIKeyConfigs           []config.APIKeyConfig `json:"apiKeyConfigs"`
+	ModelMapping            map[string]string     `json:"modelMapping"`
 	SupportedModels         []string              `json:"supportedModels"`
 	CustomHeaders           map[string]string     `json:"customHeaders"`
 	ProxyURL                string                `json:"proxyUrl"`
@@ -137,6 +138,7 @@ func (h *Handler) Create(c *gin.Context) {
 		BaseURLs:                req.BaseURLs,
 		APIKeys:                 req.APIKeys,
 		APIKeyConfigs:           req.APIKeyConfigs,
+		ModelMapping:            req.ModelMapping,
 		SupportedModels:         req.SupportedModels,
 		CustomHeaders:           req.CustomHeaders,
 		ProxyURL:                req.ProxyURL,
@@ -169,6 +171,7 @@ type UpdateRequest struct {
 	BaseURLs                      []string                                  `json:"baseUrls"`
 	APIKeys                       []string                                  `json:"apiKeys"`
 	APIKeyConfigs                 []config.APIKeyConfig                     `json:"apiKeyConfigs"`
+	ModelMapping                  map[string]string                         `json:"modelMapping"`
 	ModelCapabilities             map[string]config.UpstreamModelCapability `json:"modelCapabilities"`
 	SupportedModels               []string                                  `json:"supportedModels"`
 	CustomHeaders                 map[string]string                         `json:"customHeaders"`
@@ -243,6 +246,7 @@ func (h *Handler) Update(c *gin.Context) {
 		BaseURLs:                      req.BaseURLs,
 		APIKeys:                       req.APIKeys,
 		APIKeyConfigs:                 req.APIKeyConfigs,
+		ModelMapping:                  req.ModelMapping,
 		ModelCapabilities:             req.ModelCapabilities,
 		SupportedModels:               req.SupportedModels,
 		CustomHeaders:                 req.CustomHeaders,

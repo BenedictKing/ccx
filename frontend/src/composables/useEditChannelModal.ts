@@ -91,7 +91,10 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
   const { isAnySelectMenuOpen, suppressDialogEscapeUntil, onMenuUpdate } = useDialogMenuWorkaround()
   // 所有渠道均为自动托管；仅自定义手填地址（无 providerId 且非官方直连）可编辑地址池。
   const isEditableBaseUrlsChannel = computed(() => !props.channel?.providerId && !isOfficialProviderChannel(props.channel))
-  const sections = computed(() => allSections.filter(section => section.id === 'basic' || section.id === 'auth' || section.id === 'custom'))
+  const canEditModelMapping = computed(() => !props.channel?.autoManaged || props.channel.autoManagedKind === 'generic')
+  const sections = computed(() => allSections.filter(section =>
+    section.id === 'basic' || section.id === 'auth' || section.id === 'custom' || (section.id === 'redirect' && canEditModelMapping.value)
+  ))
 
   // 流式超时默认值（form 初始化用）
   const defaultStreamTimeouts = { ...streamTimeoutPresets.balanced }
@@ -113,6 +116,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     tags: [] as string[],
     apiKeys: [] as string[],
     apiKeyConfigs: undefined as Channel['apiKeyConfigs'],
+    modelMapping: {} as Record<string, string>,
     modelCapabilitiesText: '',
     modelCapabilityRows: [] as ModelCapabilityRow[],
     embeddingCapabilityRows: [] as EmbeddingCapabilityRow[],
@@ -437,6 +441,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     form.description = ''
     form.apiKeys = []
     form.apiKeyConfigs = undefined
+    form.modelMapping = {}
     form.modelCapabilitiesText = ''
     form.modelCapabilityRows = []
     form.embeddingCapabilityRows = []
@@ -526,6 +531,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
         }))
       : undefined
 
+    form.modelMapping = { ...(channel.modelMapping || {}) }
     form.modelCapabilitiesText = Object.keys(channel.modelCapabilities || {}).length > 0
       ? JSON.stringify(normalizeModelCapabilities(channel.modelCapabilities), null, 2)
       : ''
@@ -813,6 +819,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     formRef,
     activeSection,
     sections,
+    canEditModelMapping,
     baseUrlHasError,
     onMenuUpdate,
     serviceTypeOptions,

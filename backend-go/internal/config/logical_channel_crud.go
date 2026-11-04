@@ -43,6 +43,7 @@ type CreateLogicalChannelProtocol struct {
 	APIKeyConfigs     []APIKeyConfig
 	BaseURLs          []string // 可选；缺省时回填到主 BaseURL
 	BaseURL           string   // 可选；缺省时使用入参 BaseURLs[0]
+	ModelMapping      map[string]string
 	Priority          int
 	Enabled           *bool  // 缺省 active
 	Status            string // 缺省 active
@@ -166,6 +167,7 @@ func (cm *ConfigManager) createPhysicalChannelForLogicalLocked(in CreateLogicalC
 		BaseURLs:          baseURLs,
 		APIKeys:           append([]string(nil), p.APIKeys...),
 		APIKeyConfigs:     append([]APIKeyConfig(nil), p.APIKeyConfigs...),
+		ModelMapping:      cloneStringMap(p.ModelMapping),
 		Priority:          p.Priority,
 		RoutePrefix:       p.RoutePrefix,
 		SupportedModels:   append([]string(nil), p.SupportedModels...),
@@ -301,6 +303,7 @@ type UpdateLogicalChannelProtocol struct {
 	APIKeyConfigs     []APIKeyConfig
 	BaseURLs          []string
 	BaseURL           string
+	ModelMapping      map[string]string
 	Priority          int
 	Enabled           *bool
 	Status            string
@@ -449,6 +452,7 @@ func (cm *ConfigManager) UpdateLogicalChannel(in UpdateLogicalChannelInput) (*Lo
 				APIKeyConfigs:     p.APIKeyConfigs,
 				BaseURLs:          p.BaseURLs,
 				BaseURL:           p.BaseURL,
+				ModelMapping:      cloneStringMap(p.ModelMapping),
 				Priority:          p.Priority,
 				Enabled:           p.Enabled,
 				Status:            p.Status,
@@ -664,6 +668,9 @@ func (cm *ConfigManager) updatePhysicalChannelForLogicalLocked(kind, channelUID 
 	}
 	if p.ServiceType != "" {
 		up.ServiceType = p.ServiceType
+	}
+	if p.ModelMapping != nil {
+		up.ModelMapping = cloneStringMap(p.ModelMapping)
 	}
 	if p.Priority > 0 {
 		up.Priority = p.Priority

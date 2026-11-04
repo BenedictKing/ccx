@@ -1059,7 +1059,7 @@ func findProfileByBaseURL(store *ProfileStore, baseURL string) *KeyEndpointProfi
 }
 
 // resolveMappedModel 解析 endpoint 的模型映射（含 effort 原子决定）。
-// 显式 ModelMapping 已退役，全渠道统一走 ModelResolver 画像映射；
+// ModelResolver 内部先处理用户显式 ModelMapping，再按门控尝试画像映射；
 // 返回 (nil, failReason) 表示无映射，failReason 为自动链路运行过但未命中的原因
 // （画像/模型为空时为空串），供调用方在 fail-open 透传时记录，消除静默降级。
 func resolveMappedModel(profile *KeyEndpointProfile, model string, req *RequestProfile, deps *EndpointPolicyDeps) (*ResolvedRouteTarget, string) {

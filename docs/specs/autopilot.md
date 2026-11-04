@@ -468,6 +468,8 @@ ContextFilter → CandidateFilter(SmartRouter) → X-Channel/ManualOverride/Prom
 6. 不可替换意图 → 返回原模型
 7. 否则 `rankEligibleModels`
 
+默认策略为用户显式 `modelMapping` 优先，`autoResolve=false`。schemaVersion=4 的配置升级到 5 时关闭 3.0 默认开启的自动选模；需要画像映射的自动托管渠道可显式重新开启。
+
 `rankEligibleModels`：
 
 1. `buildRankedCandidates` 展开 `model × effort`

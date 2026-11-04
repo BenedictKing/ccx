@@ -231,7 +231,7 @@ func TestExpandChannelCandidatesExplicitMultiKey(t *testing.T) {
 }
 
 // 单渠道多 key 展开上限行为：9 key × 请求模型 1 行 = 9 行。
-// （显式 ModelMapping 已退役：SupportedModels 只做准入过滤，不再枚举多模型行。）
+// （未配置 ModelMapping 时：SupportedModels 只做准入过滤，不再枚举多模型行。）
 func TestExpandChannelCandidatesRowLimit(t *testing.T) {
 	keys := make([]config.APIKeyConfig, 0, 9)
 	for i := 0; i < 9; i++ {

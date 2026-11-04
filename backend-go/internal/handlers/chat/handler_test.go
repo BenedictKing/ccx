@@ -34,7 +34,7 @@ func TestBuildProviderRequest_KeepsRequestModelPassthrough(t *testing.T) {
 		t.Fatalf("decode request body: %v", err)
 	}
 
-	// 显式 ModelMapping 已退役：请求模型透传，不再改写为映射目标。
+	// 未配置 ModelMapping 时：请求模型透传，不再改写为映射目标。
 	if got["model"] != "gpt-5.1-codex" {
 		t.Fatalf("model = %v, want gpt-5.1-codex (passthrough)", got["model"])
 	}
@@ -46,6 +46,25 @@ func TestBuildProviderRequest_KeepsRequestModelPassthrough(t *testing.T) {
 
 	if got["service_tier"] != "priority" {
 		t.Fatalf("service_tier = %v, want priority", got["service_tier"])
+	}
+}
+
+func TestBuildProviderRequestAppliesModelMapping(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil).WithContext(context.Background())
+	body := []byte(`{"model":"gpt-alias","messages":[{"role":"user","content":"hi"}]}`)
+	upstream := &config.UpstreamConfig{ServiceType: "openai", ModelMapping: map[string]string{"gpt-alias": "gpt-actual"}}
+	req, err := buildProviderRequest(c, upstream, "https://api.example.com", "sk-test", body, "gpt-alias", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]interface{}
+	if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["model"] != "gpt-actual" {
+		t.Fatalf("model = %v, want gpt-actual", payload["model"])
 	}
 }
 
@@ -365,7 +384,7 @@ func TestBuildProviderRequest_PreservesMultimodalContentArray(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		// 显式 ModelMapping 已退役：请求体 model 直接使用各 case 的请求模型。
+		// 未配置 ModelMapping 时：请求体 model 直接使用各 case 的请求模型。
 		bodyBytes := []byte(`{"model":"` + tt.model + `","messages":[{"role":"user","content":[{"type":"text","text":"修改这个图片"},{"type":"image_url","image_url":{"url":"https://example.com/image.png"}}]}]}`)
 		t.Run(tt.name, func(t *testing.T) {
 			w := httptest.NewRecorder()

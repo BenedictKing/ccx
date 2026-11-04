@@ -25,7 +25,7 @@ func managedStringPtr(v string) *string { return &v }
 
 // TestAddUpstream_StripsAutoManagedExplicitMappings 验证新建 AutoManaged 渠道时，
 // 请求中携带的手工兼容开关会被清理，白名单类字段保留。
-// （显式模型/推理映射字段已随渠道级 ModelMapping/ReasoningMapping 退役。）
+// （本用例覆盖兼容开关；ModelMapping 的清理由独立回归用例覆盖。）
 func TestAddUpstream_StripsAutoManagedExplicitMappings(t *testing.T) {
 	cm := newTempConfigManager(t)
 	trueValue := true

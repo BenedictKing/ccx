@@ -1908,8 +1908,16 @@ func (r *SmartRouter) resolveChannelModels(
 		resolutions = append(resolutions, res)
 	}
 
-	// 请求模型本身（显式 ModelMapping 已退役，候选枚举只含请求模型）。
-	addResolution(requestModel, "", "")
+	if len(upstream.ModelMapping) > 0 {
+		for _, target := range upstream.ModelMapping {
+			addResolution(target, "explicit_mapping", "matched configured model mapping")
+		}
+	}
+	if redirected, matched := config.RedirectModelWithMatch(requestModel, upstream); matched {
+		addResolution(redirected, "explicit_mapping", "matched configured model mapping")
+	} else {
+		addResolution(requestModel, "", "")
+	}
 
 	// fail-open：枚举为空但单数解析认为渠道 supported 时，回退到单模型行。
 	if len(resolutions) == 0 {
@@ -1978,7 +1986,7 @@ func (r *SmartRouter) buildChannelEntryForKey(
 	modelProvider := ""
 	var modelPricing *config.ModelPricing
 	if model != "" {
-		resolved := config.ResolveMappedUpstreamCapability(model, model, upstream, upstreamModelCapabilities)
+		resolved := config.ResolveMappedUpstreamCapability(model, config.RedirectModel(model, upstream), upstream, upstreamModelCapabilities)
 		actualModel = resolved.ActualModel
 		if resolved.Known {
 			capability := resolved.Capability

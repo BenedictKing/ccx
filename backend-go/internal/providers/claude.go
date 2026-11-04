@@ -22,6 +22,36 @@ import (
 // ClaudeProvider Claude 提供商（直接透传）
 type ClaudeProvider struct{}
 
+func redirectModelInBody(bodyBytes []byte, upstream *config.UpstreamConfig) []byte {
+	decoder := json.NewDecoder(bytes.NewReader(bodyBytes))
+	decoder.UseNumber()
+	var data map[string]interface{}
+	if err := decoder.Decode(&data); err != nil {
+		return bodyBytes
+	}
+	model, ok := data["model"].(string)
+	if !ok {
+		return bodyBytes
+	}
+	newModel := config.RedirectModel(model, upstream)
+	if newModel == model {
+		return bodyBytes
+	}
+	data["model"] = newModel
+	if stripped, changed := StripCCBudgetRemindersFromClaudeSystem(data["system"]); changed {
+		if stripped == nil {
+			delete(data, "system")
+		} else {
+			data["system"] = stripped
+		}
+	}
+	newBytes, err := utils.MarshalJSONNoEscape(data)
+	if err != nil {
+		return bodyBytes
+	}
+	return newBytes
+}
+
 // stripUnsupportedDeepSeekContextManagement removes Claude Code context edits that
 // DeepSeek's Claude-compatible endpoint does not implement.
 func stripUnsupportedDeepSeekContextManagement(bodyBytes []byte, upstream *config.UpstreamConfig) []byte {
@@ -760,6 +790,9 @@ func (p *ClaudeProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 	}
 	if sessionID := utils.ExtractUnifiedSessionID(c, bodyBytes); sessionID != "" {
 		bodyBytes, _ = thinkingcache.InjectCachedClaudeThinking(bodyBytes, sessionID, upstream)
+	}
+	if len(upstream.ModelMapping) > 0 {
+		bodyBytes = redirectModelInBody(bodyBytes, upstream)
 	}
 
 	// 注意：NormalizeSystemRoleToTopLevel（抽取 system 角色到顶层）已上移到

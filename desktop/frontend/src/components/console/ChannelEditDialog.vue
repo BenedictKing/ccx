@@ -18,6 +18,7 @@ import QuickCreatePanel from './channel-edit/QuickCreatePanel.vue'
 import BasicConfigPanel from './channel-edit/BasicConfigPanel.vue'
 import AuthPanel from './channel-edit/AuthPanel.vue'
 import ModelCapabilityPanel from './channel-edit/ModelCapabilityPanel.vue'
+import ModelMappingPanel from './channel-edit/ModelMappingPanel.vue'
 import EmbeddingCompatibilityPanel from './channel-edit/EmbeddingCompatibilityPanel.vue'
 import AdvancedPanel from './channel-edit/AdvancedPanel.vue'
 import CustomHeadersPanel from './channel-edit/CustomHeadersPanel.vue'
@@ -131,6 +132,7 @@ const embeddingTargetModels = computed(() =>
 )
 
 const isSupportedModelSelected = (filter: string) => selectedSupportedModelSet.value.has(filter)
+const canEditModelMapping = computed(() => !props.channel?.autoManaged || props.channel.autoManagedKind === 'generic')
 
 // new-api 托管渠道：显式 autoManagedKind 标记，或已关联订阅
 const isNewApiManagedChannel = computed(() =>
@@ -341,6 +343,12 @@ function handleAccountsUpdated() {
 
                     <!-- Section: 模型重定向 -->
                     <section :ref="(el: any) => setSectionRef('redirect', el)" data-section-id="redirect" class="scroll-mt-4">
+                      <ModelMappingPanel
+                        v-if="canEditModelMapping"
+                        :model-value="form.modelMapping"
+                        class="mb-6"
+                        @update:model-value="applyFormUpdates({ modelMapping: $event })"
+                      />
                       <div
                         v-if="supportsChannelDiscovery"
                         class="mb-6 space-y-4 rounded-xl border border-primary/20 bg-primary/[0.04] p-5 shadow-sm"

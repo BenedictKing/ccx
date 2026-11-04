@@ -738,14 +738,14 @@ func (m *Manager) ModelResolver() *ModelResolver {
 // scheduler.SetModelSupportResolverProvider(mgr.ResolveModelSupport) 注册。
 //
 // 实现策略：
-//   - 显式 SupportedModels 命中：直接返回（全渠道 fast path）
-//   - 三条件门控通过：其余情况调用 ModelResolver；
+//   - 非自动托管渠道使用 SupportedModels 与显式 ModelMapping 配置
+//   - 自动托管渠道在门控通过时调用 ModelResolver；
 //     空 SupportedModels 下画像未命中是权威拒绝，禁止回退到“支持全部”
 //   - 门控不满足（AutoResolve=false 或 mode=off/shadow 或 KillSwitch）：回退 ExplainModelSupport
 //
 // 安全不变量：
 //   - Resolver nil 时行为与原有路径字节级一致（fail-open）
-//   - 显式 ModelMapping 已退役，全渠道统一走画像映射（无画像 fail-open 透传）
+//   - 显式 ModelMapping 始终优先于自动画像映射
 func (m *Manager) ResolveModelSupport(kind string, upstream *config.UpstreamConfig, model string) (supported bool, actualModel string, source string, reason string) {
 	return m.ResolveModelSupportWithFloor(kind, upstream, model, CapabilityFloor{})
 }
@@ -762,9 +762,14 @@ func (m *Manager) ResolveModelSupportWithFloor(
 		return false, "", "invalid_input", "upstream or model is nil/empty"
 	}
 
-	// 全渠道统一：显式 SupportedModels 命中时走 fast path。
-	// 空列表的传统语义是“支持全部”，但渠道的实际模型以 endpoint profile 为准，
-	// 不能在这里短路，否则 ModelResolver 永远没有机会运行。
+	// 非自动托管渠道使用确定性的 SupportedModels 与 ModelMapping 配置。
+	if !upstream.AutoManaged {
+		sup, rsn := upstream.ExplainModelSupport(model)
+		return sup, "", "explain", rsn
+	}
+
+	// 自动托管渠道：显式 SupportedModels 命中时走 fast path。
+	// 空列表时以 endpoint profile 为准，不能在这里短路。
 	sup, rsn := upstream.ExplainModelSupport(model)
 	if len(upstream.SupportedModels) > 0 && sup {
 		return true, "", "explain", ""

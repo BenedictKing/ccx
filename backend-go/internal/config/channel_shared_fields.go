@@ -6,7 +6,7 @@ import (
 )
 
 // sharedChannelUpdate 返回本次更新中属于逻辑渠道的共享字段。
-// 协议级字段（serviceType/baseURL/model 能力/routePrefix/status/priority 等）不进入这里，
+// 协议级字段（serviceType/baseURL/modelMapping/model 能力/routePrefix/status/priority 等）不进入这里，
 // 避免把不同协议的适配配置强行覆盖到兄弟路由。新增渠道字段时必须先在这里归类。
 func sharedChannelUpdate(update UpstreamUpdate) *UpstreamUpdate {
 	shared := UpstreamUpdate{

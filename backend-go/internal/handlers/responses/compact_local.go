@@ -386,10 +386,15 @@ func tryLocalCompactWithKey(
 		return false, &compactError{status: 400, body: []byte(fmt.Sprintf(`{"error":"%s"}`, err.Error())), shouldFailover: false, err: err}
 	}
 
-	// 通过 provider 转换并构建上游请求
-	// （CompactModel 走同一请求模型，渠道级 ModelMapping 已退役，无需临时副本防二次映射）
+	// CompactModel 已是实际上游模型，避免再次命中渠道级映射。
+	upstreamForCompact := upstream
+	if upstream.CompactModel != "" {
+		upstreamCopy := *upstream
+		upstreamCopy.ModelMapping = nil
+		upstreamForCompact = &upstreamCopy
+	}
 	provider := &providers.ResponsesProvider{SessionManager: sessionManager}
-	req, _, err := provider.ConvertBodyToProviderRequest(c, upstream, apiKey, localBody, "/v1/responses")
+	req, _, err := provider.ConvertBodyToProviderRequest(c, upstreamForCompact, apiKey, localBody, "/v1/responses")
 	if err != nil {
 		return false, &compactError{status: 500, body: []byte(`{"error":"构建本地 compact 上游请求失败"}`), shouldFailover: true, err: err}
 	}

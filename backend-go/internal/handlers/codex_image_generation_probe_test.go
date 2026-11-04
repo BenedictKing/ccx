@@ -186,7 +186,7 @@ func TestExecuteCodexImageGenerationCapabilityTestUsesActualModelAndAllKeys(t *t
 		AuthHeader:  "bearer",
 		ServiceType: "responses",
 	}
-	// 显式 ModelMapping 已退役：探测直接使用实际模型名。
+	// 未配置 ModelMapping 时：探测直接使用实际模型名。
 	result := executeCodexImageGenerationCapabilityTest(context.Background(), channel, "actual-review-model", 5*time.Second, nil, 0, "responses")
 	if !result.Success || result.Model != "actual-review-model" {
 		t.Fatalf("探测结果 = %+v", result)

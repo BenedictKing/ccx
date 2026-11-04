@@ -558,6 +558,9 @@ func (cm *ConfigManager) applyAutopilotDefaults(rawJSON []byte) bool {
 					log.Printf("[Config-Migration] 警告: autopilot 旧配置升级失败，已回退到默认值: %v", err)
 				} else {
 					markAutopilotPresence(&upgraded, rawAutopilot)
+					if metadata.SchemaVersion == 4 {
+						upgraded.ModelMapping.AutoResolve = false
+					}
 					upgraded.SchemaVersion = currentAutopilotConfigSchemaVersion
 					cm.config.AutopilotRouting = upgraded
 					needSave = true

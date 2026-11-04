@@ -680,6 +680,12 @@ func (u *UpstreamConfig) Clone() *UpstreamConfig {
 		cloned.HistoricalAPIKeys = make([]string, len(u.HistoricalAPIKeys))
 		copy(cloned.HistoricalAPIKeys, u.HistoricalAPIKeys)
 	}
+	if u.ModelMapping != nil {
+		cloned.ModelMapping = make(map[string]string, len(u.ModelMapping))
+		for k, v := range u.ModelMapping {
+			cloned.ModelMapping[k] = v
+		}
+	}
 	if u.ModelCapabilities != nil {
 		cloned.ModelCapabilities = make(map[string]UpstreamModelCapability, len(u.ModelCapabilities))
 		for k, v := range u.ModelCapabilities {
@@ -800,6 +806,10 @@ func stripAutoManagedExplicitOverrides(upstream *UpstreamConfig) bool {
 		return false
 	}
 	changed := false
+	if len(upstream.ModelMapping) > 0 {
+		upstream.ModelMapping = nil
+		changed = true
+	}
 	if upstream.ReasoningParamStyle != "" {
 		upstream.ReasoningParamStyle = ""
 		changed = true

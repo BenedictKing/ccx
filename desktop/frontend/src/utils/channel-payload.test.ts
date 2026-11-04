@@ -16,6 +16,7 @@ describe('buildChannelPayload', () => {
       stripThoughtSignature: false,
       description: '',
       apiKeys: [],
+      modelMapping: { ' sonnet ': ' vendor-actual ', '': 'drop', opus: '  ' },
       reasoningParamStyle: 'reasoning',
       textVerbosity: '',
       fastMode: false,
@@ -32,6 +33,7 @@ describe('buildChannelPayload', () => {
 
     expect(result.baseUrl).toBe('https://api.githubcopilot.com')
     expect(result.baseUrls).toBeUndefined()
+    expect(result.modelMapping).toEqual({ sonnet: 'vendor-actual' })
   })
 
   it('保留服务端 key 元数据、未知扩展字段与 null/0，并自动补齐 skeleton key', () => {

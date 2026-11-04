@@ -15,6 +15,7 @@ describe('buildChannelPayload', () => {
       stripThoughtSignature: false,
       description: '  desc  ',
       apiKeys: ['sk-1', '  ', 'sk-2'],
+      modelMapping: { ' sonnet ': ' vendor-actual ', '': 'drop', opus: '  ' },
       reasoningParamStyle: 'reasoning_effort',
       textVerbosity: 'medium',
       fastMode: true,
@@ -38,6 +39,7 @@ describe('buildChannelPayload', () => {
     expect(result.website).toBe('https://platform.openai.com')
     expect(result.description).toBe('desc')
     expect(result.apiKeys).toEqual(['sk-1', 'sk-2'])
+    expect(result.modelMapping).toEqual({ sonnet: 'vendor-actual' })
     expect(result.reasoningParamStyle).toBe('reasoning_effort')
     expect(result.textVerbosity).toBe('medium')
     expect(result.fastMode).toBe(true)

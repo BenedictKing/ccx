@@ -199,9 +199,8 @@ func buildProviderRequest(
 	}
 	skipVersionPrefix := strings.HasSuffix(baseURL, "#")
 	baseURL = strings.TrimSuffix(strings.TrimRight(baseURL, "/"), "#")
-	// 显式 ModelMapping 已退役：请求模型直接作为上游执行模型
 	effectiveModel := extractRequestModel(bodyBytes, model)
-	mappedModel := effectiveModel
+	mappedModel := config.RedirectModel(effectiveModel, upstream)
 
 	var requestBody []byte
 	var url string

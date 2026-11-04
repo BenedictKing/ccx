@@ -1068,6 +1068,28 @@ func TestResolveModel_MapsToDiscoveredProfile(t *testing.T) {
 	}
 }
 
+func TestResolveModel_ManualRedirectPrecedesProfileStore(t *testing.T) {
+	cfgManager, cleanup := createTestConfigManagerForResolver(t, config.Config{
+		Upstream: []config.UpstreamConfig{{
+			ChannelUID: "ch_manual",
+			ModelMapping: map[string]string{
+				"claude-opus-4-8": "claude-opus-4-7",
+			},
+		}},
+	})
+	defer cleanup()
+
+	resolver := NewModelResolver(nil, cfgManager)
+	target, resolved, reason := resolver.ResolveModel(
+		"claude-opus-4-8", "ch_manual", "messages", "any", CapabilityFloor{})
+	if !resolved || target.Model != "claude-opus-4-7" || reason != "manual_redirect" {
+		t.Fatalf("ResolveModel() = (%+v, %v, %q), want manual redirect", target, resolved, reason)
+	}
+	if target.EffortDecided {
+		t.Fatal("手工映射不应自动决定 effort")
+	}
+}
+
 func TestResolveModel_NilStore_FailOpen(t *testing.T) {
 	resolver := NewModelResolver(nil, nil)
 	target, resolved, reason := resolver.ResolveModel(

@@ -131,7 +131,8 @@ func TestBuildOperationRequest_MultipartEdits(t *testing.T) {
 	c.Request.Header.Set("Content-Type", contentType)
 
 	upstream := &config.UpstreamConfig{
-		ServiceType: "openai",
+		ServiceType:  "openai",
+		ModelMapping: map[string]string{"gpt-image-2": "image-actual"},
 	}
 	req, err := buildOperationRequest(c, upstream, "https://api.openai.com#", "sk-test", body.Bytes(), "gpt-image-2", operationEdits, contentType)
 	if err != nil {
@@ -148,7 +149,7 @@ func TestBuildOperationRequest_MultipartEdits(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read request body: %v", err)
 	}
-	if !strings.Contains(string(requestBody), "gpt-image-2") {
+	if !strings.Contains(string(requestBody), "image-actual") {
 		t.Fatalf("model mapping was not applied: %s", string(requestBody))
 	}
 	if !strings.Contains(string(requestBody), "png-data") {

@@ -1606,7 +1606,7 @@ func (r *AutoDiscoveryRunner) flushStores() error {
 // maybeAutoWriteChannelConfig 在发现完成后，检查是否可以将一致模型列表写入渠道配置。
 // 安全守则：
 //  1. 仅当所有成功探测的 endpoint 返回完全相同的模型列表（集合相等，顺序无关）时才写入
-//  2. 不覆盖用户已有的手动配置（SupportedModels 非空时不写入）
+//  2. 不覆盖用户已有的手动配置（SupportedModels 或 ModelMapping 非空时不写入）
 func (r *AutoDiscoveryRunner) maybeAutoWriteChannelConfig(channelUID string, channel *config.UpstreamConfig, endpoints []EndpointDiscoveryResult, cfgManager *config.ConfigManager) {
 	// cfgManager 为 nil 时直接返回（runDiscovery 入口已有 guard，此处防御直接调用）
 	if cfgManager == nil {
@@ -1641,10 +1641,15 @@ func (r *AutoDiscoveryRunner) maybeAutoWriteChannelConfig(channelUID string, cha
 		return
 	}
 
-	// 检查用户已有配置：SupportedModels 非空时不覆盖
+	// 检查用户已有配置：SupportedModels 或 ModelMapping 非空时不覆盖
 	if len(channel.SupportedModels) > 0 {
 		log.Printf("[AutoDiscovery-ConfigSkip] 渠道 %s: 用户已配置 SupportedModels（%d 项），不覆盖",
 			channelUID, len(channel.SupportedModels))
+		return
+	}
+	if len(channel.ModelMapping) > 0 {
+		log.Printf("[AutoDiscovery-ConfigSkip] 渠道 %s: 用户已配置 ModelMapping（%d 项），不覆盖 SupportedModels",
+			channelUID, len(channel.ModelMapping))
 		return
 	}
 

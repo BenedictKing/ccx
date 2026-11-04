@@ -205,7 +205,7 @@ func TestResolveChannelModelsSupportedModelsFilter(t *testing.T) {
 	cfgManager, cleanup := createTestConfigManager(t, cfg)
 	defer cleanup()
 	router := NewSmartRouter(nil, nil, nil, cfgManager)
-	// 显式 ModelMapping 已退役：SupportedModels 只做准入过滤，请求模型直接是实际模型。
+	// 未配置 ModelMapping 时：SupportedModels 只做准入过滤，请求模型直接是实际模型。
 	profile := BuildRequestProfile(RequestProfileFeatures{
 		Model: "good-model", ChannelKind: "messages", Operation: "completion", EstTokens: 1000,
 	})
