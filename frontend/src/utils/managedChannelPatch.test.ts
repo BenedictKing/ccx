@@ -13,6 +13,7 @@ const baseChannel = {
   channelCreditAmount: 15,
   proxyUrl: 'http://127.0.0.1:7890',
   customHeaders: { 'x-test': '1' },
+  modelMapping: {},
   fastMode: false,
   tags: ['a'],
 } as unknown as Channel
@@ -56,6 +57,14 @@ describe('buildManagedChannelPatch', () => {
       .toEqual({ customHeaders: { 'x-test': '1', 'x-new': '2' } })
     expect(buildManagedChannelPatch(baseChannel, { ...baseChannel, customHeaders: {} }))
       .toEqual({ customHeaders: {} })
+  })
+
+  it('协议成员映射新增和清空均通过单卡 patch 保存', () => {
+    const mapped = { 'ccx-acceptance-source': 'ccx-acceptance-target' }
+    expect(buildManagedChannelPatch(baseChannel, { ...baseChannel, modelMapping: mapped }))
+      .toEqual({ modelMapping: mapped })
+    expect(buildManagedChannelPatch({ ...baseChannel, modelMapping: mapped }, { ...baseChannel, modelMapping: {} }))
+      .toEqual({ modelMapping: {} })
   })
 
   it('original 为空时不产生 patch', () => {

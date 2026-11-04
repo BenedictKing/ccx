@@ -17,6 +17,11 @@ function normalizeHeaders(value: unknown): Record<string, string> {
   return value as Record<string, string>
 }
 
+function normalizeModelMapping(value: unknown): Record<string, string> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  return value as Record<string, string>
+}
+
 /**
  * 托管账号渠道编辑保存时，账号接口（PUT /accounts）不承载、需经单卡更新下发的渠道级字段，
  * 及其与 buildChannelPayload 下发口径一致的归一化器（0/空=清除）。
@@ -30,6 +35,7 @@ const CHANNEL_PATCH_NORMALIZERS: Readonly<Record<string, (value: unknown) => unk
   channelCreditAmount: normalizePositiveOrZero,
   proxyUrl: normalizeTrimmed,
   customHeaders: normalizeHeaders,
+  modelMapping: normalizeModelMapping,
 }
 
 /** 账号接口（凭证池/名称/地址）或独立特例（website/remark）已承载的字段，不参与丢弃检测。 */
