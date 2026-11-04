@@ -4,11 +4,11 @@ import "testing"
 
 func TestRedirectModelWithMatch(t *testing.T) {
 	tests := []struct {
-		name          string
-		model         string
-		mapping       map[string]string
-		wantModel     string
-		wantMatched   bool
+		name        string
+		model       string
+		mapping     map[string]string
+		wantModel   string
+		wantMatched bool
 	}{
 		{name: "nil upstream", model: "sonnet", wantModel: "sonnet"},
 		{name: "exact match", model: "claude-sonnet-5", mapping: map[string]string{"sonnet": "partial", "claude-sonnet-5": "exact"}, wantModel: "exact", wantMatched: true},

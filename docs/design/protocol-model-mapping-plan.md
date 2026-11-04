@@ -35,6 +35,11 @@
 - 为同一逻辑渠道的 Chat/Responses 成员配置相同源模型、不同目标模型，验证各自直连、跨协议联邦、保存重载均取执行成员映射；补充未传保留、`{}` 清空、不同账号隔离用例。
 - 核对 `ModelResolver`、候选枚举与发送路径对映射结果的一致性；若发现重复应用或映射后再次链式解析，只修具体调用点。
 
+进展（2026-11-04）：
+
+- 回归测试已落地 `backend-go/internal/config/logical_channel_model_mapping_test.go`：同名源模型按成员隔离、未传保留、`{}` 清空、兄弟成员与跨账号不受影响、落盘重载后仍按成员隔离。
+- 发送路径审计结论：手动映射仅在 provider 发送时应用一次（各 `providers/*` 与 `handlers/chat/request_build.go` 均传入执行成员的 `UpstreamConfig`）；`upstream_failover.go` 中的 `redirectedModel` 只用于调度、熔断与兼容性缓存记账，不改写请求体；`ModelResolver` Step 1 显式映射优先且候选始终取原始画像，算法层已有 no-chain 用例。未发现双重应用或链式解析，无需修改调用点。
+
 ### 阶段 2：统一管理入口
 
 - 在逻辑渠道详情中列出协议成员及其映射摘要，按协议成员进入编辑；源模型与目标候选从该成员可用模型取得，并展示执行协议名称。
