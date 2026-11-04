@@ -72,6 +72,7 @@ const {
   embeddingCapabilitiesError,
   isValid,
   serviceTypeOptions,
+  sourceModelOptions,
   headerServiceTypeItems,
   supportsOpenAIAdvancedOptions,
   supportsChannelDiscovery,
@@ -346,8 +347,12 @@ function handleAccountsUpdated() {
                       <ModelMappingPanel
                         v-if="canEditModelMapping"
                         :model-value="form.modelMapping"
+                        :source-model-options="sourceModelOptions"
+                        :target-model-options="targetModelDatalist"
+                        :fetch-models-error="fetchedModelsError"
                         class="mb-6"
                         @update:model-value="applyFormUpdates({ modelMapping: $event })"
+                        @target-focus="syncUpstreamModels"
                       />
                       <div
                         v-if="supportsChannelDiscovery"

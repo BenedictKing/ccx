@@ -148,7 +148,13 @@
             >
               <ModelMappingSection
                 :model-value="form.modelMapping"
+                :source-model-options="sourceModelOptions"
+                :target-model-options="targetModelOptions"
+                :fetching-models="fetchingModels"
+                :fetch-models-error="fetchModelsError"
                 @update:model-value="updateForm({ modelMapping: $event })"
+                @target-focus="ensureTargetModelsLoaded"
+                @menu-update="onMenuUpdate"
               />
             </section>
 
@@ -574,14 +580,17 @@ const {
   baseUrlHasError,
   onMenuUpdate,
   serviceTypeOptions,
+  sourceModelOptions,
   form,
   baseUrlsText,
+  targetModelOptions,
+  fetchingModels,
+  fetchModelsError,
   keyModelsStatus,
   errors,
   rules,
   isEditing,
   isMac,
-  targetModelOptions,
   headerClasses,
   avatarColor,
   headerIconStyle,

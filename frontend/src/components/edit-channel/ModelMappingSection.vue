@@ -9,24 +9,34 @@
         {{ t('channelEditor.mapping.hint') }}
       </p>
       <div v-for="row in rows" :key="row.id" class="d-flex align-center ga-2 mb-3">
-        <v-text-field
+        <v-combobox
           :model-value="row.source"
+          :items="sourceModelOptions"
           :label="t('channelEditor.mapping.source.label')"
           :placeholder="t('channelEditor.mapping.source.placeholder')"
           variant="outlined"
           density="comfortable"
           hide-details
+          clearable
+          eager
           @update:model-value="updateRow(row.id, 'source', $event)"
+          @update:menu="$emit('menu-update', $event)"
         />
         <v-icon color="primary">mdi-arrow-right</v-icon>
-        <v-text-field
+        <v-combobox
           :model-value="row.target"
+          :items="targetModelOptions"
+          :loading="fetchingModels"
           :label="t('channelEditor.mapping.target.label')"
           :placeholder="t('channelEditor.mapping.target.placeholder')"
           variant="outlined"
           density="comfortable"
           hide-details
+          clearable
+          eager
           @update:model-value="updateRow(row.id, 'target', $event)"
+          @focus="$emit('target-focus')"
+          @update:menu="$emit('menu-update', $event)"
         />
         <v-btn icon="mdi-close" variant="text" color="error" @click="removeRow(row.id)" />
       </div>
@@ -39,6 +49,9 @@
       >
         {{ t('channelEditor.mapping.addRedirect') }}
       </v-btn>
+      <div v-if="fetchModelsError" class="text-error text-caption mt-2">
+        {{ fetchModelsError }}
+      </div>
     </v-card-text>
   </v-card>
 </template>
@@ -46,6 +59,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { useI18n } from '../../i18n'
+import { normalizeSelectableString } from '../../utils/channelPayload'
 
 interface MappingRow {
   id: number
@@ -53,11 +67,22 @@ interface MappingRow {
   target: string
 }
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   modelValue: Record<string, string>
-}>()
+  sourceModelOptions?: Array<{ title: string; value: string }>
+  targetModelOptions?: Array<{ title: string; value: string }>
+  fetchingModels?: boolean
+  fetchModelsError?: string
+}>(), {
+  sourceModelOptions: () => [],
+  targetModelOptions: () => [],
+  fetchingModels: false,
+  fetchModelsError: '',
+})
 const emit = defineEmits<{
   'update:modelValue': [value: Record<string, string>]
+  'target-focus': []
+  'menu-update': [value: boolean]
 }>()
 const { t } = useI18n()
 const rows = ref<MappingRow[]>([])
@@ -82,10 +107,10 @@ function removeRow(id: number) {
   rows.value = rows.value.filter(row => row.id !== id)
   emitRows()
 }
-function updateRow(id: number, field: 'source' | 'target', value: string) {
+function updateRow(id: number, field: 'source' | 'target', value: Parameters<typeof normalizeSelectableString>[0]) {
   const row = rows.value.find(item => item.id === id)
   if (!row) return
-  row[field] = value
+  row[field] = normalizeSelectableString(value)
   emitRows()
 }
 

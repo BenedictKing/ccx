@@ -23,6 +23,7 @@ type FormLike = {
   insecureSkipVerify: boolean
   serviceType: ServiceType
   supportedModelsText: string
+  modelMapping: Record<string, string>
 }
 
 type ChannelTargetModelsOptions = {
@@ -42,6 +43,28 @@ export function useChannelTargetModels(options: ChannelTargetModelsOptions) {
   const fetchedModelsError = ref('')
   const hasTriedFetchModels = ref(false)
   const commonSupportedModelFilters = ['claude-*', 'gpt-5*', 'gpt-image-2', 'grok-4*', 'gemini-3*', '!*image*']
+
+  const allSourceModelOptions = computed(() => {
+    if (options.channelType() === 'chat') {
+      return ['codex', 'gpt', 'mini', 'gpt-5', 'gpt-5.5', 'gpt-5.4', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.4-mini']
+    }
+    if (options.channelType() === 'images') {
+      return ['gpt-image-2', 'gpt-image-1', 'dall-e-3', 'dall-e-2']
+    }
+    if (options.channelType() === 'vectors') return []
+    if (options.channelType() === 'gemini') {
+      return ['gemini-3.5-flash', 'gemini-3.1-pro-preview', 'gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite', 'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2']
+    }
+    if (options.channelType() === 'responses') {
+      return ['codex', 'codex-auto-review', 'gpt-5', 'gpt', 'mini', 'gpt-5.5', 'gpt-5.4', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.4-mini']
+    }
+    return ['fable', 'opus', 'sonnet', 'haiku']
+  })
+
+  const sourceModelOptions = computed(() => {
+    const configuredModels = Object.keys(options.form.modelMapping)
+    return allSourceModelOptions.value.filter(model => !configuredModels.includes(model))
+  })
 
   function resetTargetModelState(clearError = false) {
     targetModelOptions.value = []
@@ -208,6 +231,7 @@ export function useChannelTargetModels(options: ChannelTargetModelsOptions) {
 
   return {
     fetchingModels,
+    sourceModelOptions,
     targetModelOptions,
     fetchedModelsError,
     hasTriedFetchModels,

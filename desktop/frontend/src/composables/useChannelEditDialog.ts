@@ -239,6 +239,7 @@ const { t } = useLanguage()
   const {
     fetchingModels,
     fetchedModelsError,
+    sourceModelOptions,
     targetModelDatalist,
     commonSupportedModelFilters,
     normalizedSupportedModelState,
@@ -1110,6 +1111,7 @@ const { t } = useLanguage()
     embeddingCapabilitiesError,
     isValid,
     serviceTypeOptions,
+    sourceModelOptions,
     headerServiceTypeItems,
     supportsOpenAIAdvancedOptions,
     supportsChannelDiscovery,

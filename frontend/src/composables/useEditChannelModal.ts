@@ -162,7 +162,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
   })
 
   const channelTypeRef = computed(() => props.channelType)
-  const { serviceTypeOptions } = useEditChannelOptions(channelTypeRef)
+  const { serviceTypeOptions, sourceModelOptions } = useEditChannelOptions(channelTypeRef, form)
 
   // 多 BaseURL 文本输入（独立变量，保留用户输入的换行）
   const baseUrlsText = ref('')
@@ -823,9 +823,12 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     baseUrlHasError,
     onMenuUpdate,
     serviceTypeOptions,
+    sourceModelOptions,
     form,
     baseUrlsText,
     targetModelOptions,
+    fetchingModels,
+    fetchModelsError,
     keyModelsStatus,
     errors,
     rules,

@@ -8,9 +8,16 @@
         {{ t('channelEditor.mapping.hint') }}
       </p>
     </div>
+    <datalist :id="sourceDatalistId">
+      <option v-for="model in sourceModelOptions" :key="model" :value="model" />
+    </datalist>
+    <datalist :id="targetDatalistId">
+      <option v-for="model in targetModelOptions" :key="model" :value="model" />
+    </datalist>
     <div v-for="row in rows" :key="row.id" class="flex items-center gap-2">
       <Input
         :model-value="row.source"
+        :list="sourceDatalistId"
         :placeholder="t('channelEditor.mapping.source.placeholder')"
         class="h-9 font-mono text-xs"
         @update:model-value="updateRow(row.id, 'source', String($event))"
@@ -18,9 +25,11 @@
       <ArrowRight class="h-4 w-4 shrink-0 text-primary" />
       <Input
         :model-value="row.target"
+        :list="targetDatalistId"
         :placeholder="t('channelEditor.mapping.target.placeholder')"
         class="h-9 font-mono text-xs"
         @update:model-value="updateRow(row.id, 'target', String($event))"
+        @focus="$emit('target-focus')"
       />
       <Button type="button" variant="ghost" size="icon" class="size-8 shrink-0 text-destructive" @click="removeRow(row.id)">
         <X class="h-4 w-4" />
@@ -37,6 +46,9 @@
       <Plus class="mr-1 h-4 w-4" />
       {{ t('channelEditor.mapping.addRedirect') }}
     </Button>
+    <p v-if="fetchModelsError" class="text-xs text-destructive">
+      {{ fetchModelsError }}
+    </p>
   </section>
 </template>
 
@@ -54,13 +66,23 @@ interface MappingRow {
   target: string
 }
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   modelValue: Record<string, string>
-}>()
+  sourceModelOptions?: string[]
+  targetModelOptions?: string[]
+  fetchModelsError?: string
+}>(), {
+  sourceModelOptions: () => [],
+  targetModelOptions: () => [],
+  fetchModelsError: '',
+})
 const emit = defineEmits<{
   'update:modelValue': [value: Record<string, string>]
+  'target-focus': []
 }>()
 const { t } = useLanguage()
+const sourceDatalistId = 'channel-model-mapping-source'
+const targetDatalistId = 'channel-model-mapping-target'
 const rows = ref<MappingRow[]>([])
 let nextId = 1
 
