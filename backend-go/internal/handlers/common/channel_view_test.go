@@ -115,3 +115,27 @@ func TestBuildChannelViewExposesKeyModelRestrictionRecords(t *testing.T) {
 		t.Fatal("渠道视图应包含 disabledGroupModels（分组排除记录回读）")
 	}
 }
+
+func TestBuildChannelViewExposesModelMapping(t *testing.T) {
+	// 协议级模型映射按物理成员存储和生效；渠道视图须回传本成员的映射，
+	// 聚合视图（统一渠道卡）依赖它展示兄弟协议成员的映射摘要。
+	up := config.UpstreamConfig{
+		Name:         "ch",
+		ServiceType:  "openai",
+		ModelMapping: map[string]string{"gpt-5": "chat-target"},
+	}
+	view := BuildChannelView(up, 0)
+	got, ok := view["modelMapping"].(map[string]string)
+	if !ok {
+		t.Fatalf("渠道视图应包含 modelMapping, got %T", view["modelMapping"])
+	}
+	if got["gpt-5"] != "chat-target" {
+		t.Fatalf("modelMapping[gpt-5] = %q, want chat-target", got["gpt-5"])
+	}
+
+	empty := config.UpstreamConfig{Name: "ch2", ServiceType: "openai"}
+	emptyView := BuildChannelView(empty, 0)
+	if mm, ok := emptyView["modelMapping"].(map[string]string); ok && len(mm) != 0 {
+		t.Fatalf("未配置映射的渠道不应携带映射, got %v", mm)
+	}
+}

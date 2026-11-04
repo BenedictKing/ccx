@@ -401,6 +401,7 @@ export interface ChannelProtocolRoute {
   name: string
   serviceType: string
   channelUid?: string
+  modelMapping?: Record<string, string> // 该执行协议成员自己的映射（同名源模型可按协议指向不同目标）
   status?: ChannelDisplayStatus
   apiKeys?: string[]
   apiKeyConfigs?: APIKeyConfig[]

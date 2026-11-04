@@ -48,6 +48,9 @@ export interface ChannelEditDialogProps {
   channel?: Channel | null
   channelType: ManagedChannelType
   existingChannels?: Channel[]
+  /** 协议成员编辑模式：保存按 (channelType=成员 kind, channel.index) 落到该成员，
+   * 不走逻辑渠道 common 字段同步，modelMapping 等成员级字段才能持久化。 */
+  memberEdit?: boolean
 }
 
 export type ChannelEditDialogEmit = {
@@ -818,7 +821,7 @@ const { t } = useLanguage()
     try {
       await saveChannel(buildSubmitPayload(), props.channel?.index ?? null, {
         isQuickAdd: !isEditMode.value,
-      }, props.channelType)
+      }, props.channelType, props.memberEdit === true)
       if (options.notifyParent) emit('saved')
       if (options.close) emit('close')
       return true

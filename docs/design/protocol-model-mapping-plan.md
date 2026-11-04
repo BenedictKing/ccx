@@ -46,6 +46,13 @@
 - 保存时用稳定 `channelUid` 定位单个成员，提交差量 `modelMapping`；未编辑不发送，用户清空发送 `{}`。如统一 API 不能无歧义地按成员 UID 更新，则沿用现有 `/api/channels/:uid` 单成员更新入口。
 - Web 与 Desktop 两套界面采用同一作用域和提示语；复制到其他协议只能由用户显式选择目标成员，逐项预览后提交，不提供默认广播。
 
+进展（2026-11-04）：
+
+- 后端聚合视图下发成员级映射：`common.BuildChannelView` 与 `/api/logical-channels/dashboard` 的 `protocolRoutes[]`/`protocolCapsules[]` 均携带该执行协议成员自己的 `modelMapping`（handler 测试断言同名源模型在 chat/responses 成员上各自下发）。
+- Web（`frontend/`）：统一渠道卡在协议胶囊旁为每个有映射的成员显示摘要 chip（`协议·映射 N 条`），tooltip 列出 `源 → 目标` 明细并注明“按该协议成员生效”；点击 chip 用稳定 `channelUid` 从 per-kind 列表定位成员并打开其编辑对话框（`routeKind`/`routeIndex` 显式标注，保存落到该成员）。活跃列表与备用池一致。
+- Desktop（`desktop/frontend/`）：渠道卡胶囊区同样显示成员映射徽标 + 明细 tooltip；点击后从该成员 kind 的渠道列表取完整数据打开编辑器，对话框 `channelType` 指向成员 kind。修复了既有缺口：`useConsoleChannels.saveChannel` 对带 `logicalChannelUid` 的渠道只同步 common 字段、丢弃 `modelMapping` 等成员级字段——新增 `memberEdit` 模式按 `(成员 kind, 成员 index)` 直接更新该成员，且不切换 UI tab，保存后刷新当前展示列表。
+- 托管账号门控沿用编辑器既有规则（`autoManaged` 渠道映射编辑受限），摘要展示不改变可编辑性判断；“复制到其他协议”未实现默认广播，符合约定。
+
 ### 阶段 3：收敛与验收
 
 - 保留旧六类管理 API 与现有 `channelsV3.protocols[].upstream.modelMapping` JSON 兼容；不做数据迁移或 schema bump。

@@ -25,6 +25,7 @@ import {
 import {
   AlertTriangle,
   ArrowDown,
+  ArrowLeftRight,
   ArrowUp,
   Ban,
   Copy,
@@ -69,6 +70,7 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
   edit: []
+  editProtocol: [capsule: ChannelProtocolCapsule]
   delete: []
   logs: []
   capability: []
@@ -114,6 +116,20 @@ function capsuleClass(capsule: ChannelProtocolCapsule) {
   }
   return kindMap[capsule.kind] || 'border-border bg-secondary/50 text-muted-foreground'
 }
+
+// ===== 协议级模型映射摘要（按执行协议成员各自生效，入口协议不广播到兄弟成员） =====
+
+const mappedCapsules = computed(() => {
+  return (props.channel.protocolCapsules ?? []).filter(
+    capsule => capsule.modelMapping && Object.keys(capsule.modelMapping).length > 0,
+  )
+})
+
+const mappingCount = (capsule: ChannelProtocolCapsule): number =>
+  Object.keys(capsule.modelMapping ?? {}).length
+
+const mappingTooltipLines = (capsule: ChannelProtocolCapsule): string[] =>
+  Object.entries(capsule.modelMapping ?? {}).map(([source, target]) => `${source} → ${target}`)
 
 const statusConfig = computed(() => {
   if (isDisabled.value) {
@@ -370,6 +386,25 @@ function handleCardClick(event: MouseEvent) {
           >
             {{ capsule.label || capsule.kind }}
           </Badge>
+          <!-- 协议级模型映射摘要：按执行协议成员各自生效，点击进入该成员编辑 -->
+          <Tooltip v-for="capsule in mappedCapsules" :key="`mapping-${capsule.kind}-${capsule.index}`">
+            <TooltipTrigger as-child>
+              <button
+                type="button"
+                class="inline-flex shrink-0 items-center gap-1 border border-dashed px-1.5 py-0.5 text-[10px] font-medium"
+                :class="capsuleClass(capsule)"
+                @click.stop="emit('editProtocol', capsule)"
+              >
+                <ArrowLeftRight class="h-3 w-3" />
+                {{ capsule.label || capsule.kind }}·{{ t('channelEditor.mapping.memberBadge', { count: mappingCount(capsule) }) }}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top" class="max-w-[320px] text-xs">
+              <div class="mb-1 font-bold">{{ t('channelEditor.mapping.memberTitle', { protocol: capsule.label || capsule.kind }) }}</div>
+              <div v-for="line in mappingTooltipLines(capsule)" :key="line" class="font-mono">{{ line }}</div>
+              <div class="mt-1 text-muted-foreground">{{ t('channelEditor.mapping.memberEditHint') }}</div>
+            </TooltipContent>
+          </Tooltip>
         </template>
         <Badge v-else class="shrink-0 border text-[10px] uppercase" :class="serviceTypeClass">
           {{ channel.serviceType }}

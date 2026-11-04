@@ -140,9 +140,26 @@ async function saveChannel(
   editingIndex: number | null,
   options?: { isQuickAdd?: boolean },
   channelType: ChannelType = activeTab.value,
+  // 协议成员编辑模式：编辑对象是某个执行协议成员（逻辑渠道下的一种 kind），
+  // 保存按 (成员 kind, 成员 index) 落库，跳过逻辑渠道 common 同步——
+  // 否则成员级字段（modelMapping 等）会被 common-only 分支丢弃。
+  memberEdit = false,
 ) {
-  activeTab.value = channelType
   const api = useAdminApi()
+
+  if (memberEdit) {
+    // 成员编辑不切换 UI tab：channelType 是成员 kind，不是用户当前所在的 tab。
+    if (editingIndex !== null) {
+      const typeApi = getChannelTypeApi(channelType)
+      await typeApi.updateChannel(editingIndex, payload)
+      // 刷新用户当前展示的 tab（统一逻辑列表来自同一 dashboard），映射摘要随之更新
+      await refreshChannels(activeTab.value)
+      return { success: true, messageKey: 'channelEditor.toast.updated' }
+    }
+    // 成员模式下没有编辑对象时按普通新增处理（理论不可达，防御性兜底）
+  } else {
+    activeTab.value = channelType
+  }
 
   // 若编辑的是逻辑渠道（有 logicalChannelUid），通过 logical-channels API 同步更新所有协议
   if (editingIndex !== null) {

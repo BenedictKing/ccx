@@ -18,9 +18,9 @@ import CircuitBreakerDialog from '@/components/console/CircuitBreakerDialog.vue'
 import SchedulerDiagnoseDialog from '@/components/console/SchedulerDiagnoseDialog.vue'
 import GlobalStatsChart from '@/components/console/charts/GlobalStatsChart.vue'
 import KeyTrendChart from '@/components/console/charts/KeyTrendChart.vue'
-import type { ManagedChannelType } from '@/utils/channel-type-api'
+import { getChannelTypeApi, type ManagedChannelType } from '@/utils/channel-type-api'
 import { selectDenseSamplingInterval } from '@/utils/chart-sampling'
-import type { Channel, ChannelMetrics, ChannelRecentActivity, GlobalStatsHistoryResponse, KeyHistoryData, GlobalStatsSummary } from '@/services/admin-api'
+import type { Channel, ChannelMetrics, ChannelProtocolCapsule, ChannelRecentActivity, GlobalStatsHistoryResponse, KeyHistoryData, GlobalStatsSummary } from '@/services/admin-api'
 
 interface Props {
   type: ManagedChannelType
@@ -95,6 +95,11 @@ const actionError = ref('')
 const isRefreshing = ref(false)
 const showChannelEditor = ref(false)
 const editingChannel = ref<Channel | null>(null)
+// 编辑对话框实际面向的协议类型：默认当前 tab；按协议成员编辑时指向该成员 kind，
+// 保存按 (成员 kind, 成员 index) 寻址，避免逻辑渠道主成员与 tab 类型不一致时串渠道。
+const editingChannelType = ref<ManagedChannelType>(props.type)
+// 协议成员编辑模式：true 时保存走成员级更新，不做逻辑渠道 common 字段同步
+const editingMemberEdit = ref(false)
 const logsChannel = ref<Channel | null>(null)
 const capabilityChannel = ref<Channel | null>(null)
 const showCapabilityDialog = ref(false)
@@ -433,11 +438,41 @@ async function handleMoveBottom(channelId: number) {
 
 function handleEdit(channel: Channel) {
   editingChannel.value = channel
+  editingChannelType.value = props.type
+  editingMemberEdit.value = false
   showChannelEditor.value = true
+}
+
+// 点击协议级映射摘要进入对应执行协议成员的编辑：
+// 从该成员 kind 的渠道列表按稳定 channelUid 取完整数据（index 兜底），
+// 编辑对话框以成员 kind 保存，不影响逻辑渠道的其他兄弟成员。
+async function handleEditProtocol(capsule: ChannelProtocolCapsule) {
+  const kind = capsule.kind as ManagedChannelType
+  actionLoading.value = true
+  try {
+    const typeApi = getChannelTypeApi(kind)
+    const resp = await typeApi.getChannels()
+    const member = (capsule.channelUid ? resp.channels.find(ch => ch.channelUid === capsule.channelUid) : undefined)
+      ?? resp.channels.find(ch => ch.index === capsule.index)
+    if (!member) {
+      actionError.value = t('channelEditor.mapping.memberMissing')
+      return
+    }
+    editingChannel.value = member
+    editingChannelType.value = kind
+    editingMemberEdit.value = true
+    showChannelEditor.value = true
+  } catch (e) {
+    actionError.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    actionLoading.value = false
+  }
 }
 
 function handleAdd() {
   editingChannel.value = null
+  editingChannelType.value = props.type
+  editingMemberEdit.value = false
   showChannelEditor.value = true
 }
 
@@ -684,6 +719,7 @@ onBeforeUnmount(() => {
               :can-move-bottom="!isLastOrderedActiveChannel(channel)"
               :expanded="expandedChannelId === channel.index"
               @edit="handleEdit(channel)"
+              @edit-protocol="handleEditProtocol"
               @delete="handleDelete(channel)"
               @status="handleStatusToggle(channel.index, channel.status || 'active')"
               @disable="handleDisable(channel.index)"
@@ -731,6 +767,7 @@ onBeforeUnmount(() => {
             inactive
             :can-delete="canDeleteChannel(channel)"
             @edit="handleEdit(channel)"
+            @edit-protocol="handleEditProtocol"
             @delete="handleDelete(channel)"
             @status="handleStatusToggle(channel.index, channel.status || 'disabled')"
             @disable="handleDisable(channel.index)"
@@ -746,9 +783,10 @@ onBeforeUnmount(() => {
 
     <ChannelEditDialog
       v-if="showChannelEditor"
-      :key="`${type}-${editingChannel?.index ?? 'new'}`"
+      :key="`${editingChannelType}-${editingChannel?.index ?? 'new'}`"
       :channel="editingChannel"
-      :channel-type="type"
+      :channel-type="editingChannelType"
+      :member-edit="editingMemberEdit"
       :existing-channels="channels"
       @close="showChannelEditor = false"
       @saved="handleSaved"

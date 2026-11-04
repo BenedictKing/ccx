@@ -47,8 +47,10 @@ func BuildChannelView(up config.UpstreamConfig, index int) gin.H {
 		"proxyUrl":                      up.ProxyURL,
 		"proxyPreferDirect":             up.ProxyPreferDirect,
 		"supportedModels":               up.SupportedModels,
-		"routePrefix":                   up.RoutePrefix,
-		"disabledApiKeys":               up.DisabledAPIKeys,
+		// 协议级模型映射：按本物理成员存储和生效；聚合视图需要它展示兄弟成员的映射摘要
+		"modelMapping":    up.ModelMapping,
+		"routePrefix":     up.RoutePrefix,
+		"disabledApiKeys": up.DisabledAPIKeys,
 		// Key/分组级模型限制记录：编辑对话框回读展示（"保存后记录消失"即漏登记所致），缺一不可
 		"disabledKeyModels":             up.DisabledKeyModels,
 		"disabledGroupModels":           up.DisabledGroupModels,

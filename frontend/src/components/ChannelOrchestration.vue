@@ -235,6 +235,33 @@
               >
                 {{ capsule.label }}
               </v-chip>
+              <!-- 协议级模型映射摘要：按执行协议成员各自生效，点击进入该成员编辑 -->
+              <v-tooltip
+                v-for="route in mappedProtocolRoutes(element)"
+                :key="`mapping-${route.kind}-${route.index}`"
+                location="bottom"
+              >
+                <template #activator="{ props: tooltipProps }">
+                  <v-chip
+                    v-bind="tooltipProps"
+                    size="x-small"
+                    :color="getProtocolCapsuleColor(route.kind)"
+                    variant="outlined"
+                    density="comfortable"
+                    rounded="pill"
+                    class="ml-1 protocol-mapping-chip"
+                    @click.stop="editProtocolMember(route)"
+                  >
+                    <v-icon start size="11">mdi-swap-horizontal</v-icon>
+                    {{ protocolLabel(route.kind) }}·{{ t('orchestration.protocolMappingChip', { count: mappingCount(route) }) }}
+                  </v-chip>
+                </template>
+                <div class="text-caption">
+                  <div class="font-weight-bold mb-1">{{ t('orchestration.protocolMappingTitle', { protocol: protocolLabel(route.kind) }) }}</div>
+                  <div v-for="line in mappingTooltipLines(route)" :key="line" class="font-mono">{{ line }}</div>
+                  <div class="mt-1 text-disabled">{{ t('orchestration.protocolMappingEditHint') }}</div>
+                </div>
+              </v-tooltip>
               <v-icon v-if="element.noVision" size="14" color="warning" class="ml-1">mdi-eye-off</v-icon>
               <!-- Origin / pool tags (§8.2 标签系统) - only rendered when health data includes originTier/poolTag -->
               <v-chip
@@ -672,6 +699,33 @@
               >
                 {{ capsule.label }}
               </v-chip>
+              <!-- 协议级模型映射摘要：按执行协议成员各自生效，点击进入该成员编辑 -->
+              <v-tooltip
+                v-for="route in mappedProtocolRoutes(channel)"
+                :key="`mapping-${route.kind}-${route.index}`"
+                location="bottom"
+              >
+                <template #activator="{ props: tooltipProps }">
+                  <v-chip
+                    v-bind="tooltipProps"
+                    size="x-small"
+                    :color="getProtocolCapsuleColor(route.kind)"
+                    variant="outlined"
+                    density="comfortable"
+                    rounded="pill"
+                    class="ml-1 protocol-mapping-chip"
+                    @click.stop="editProtocolMember(route)"
+                  >
+                    <v-icon start size="11">mdi-swap-horizontal</v-icon>
+                    {{ protocolLabel(route.kind) }}·{{ t('orchestration.protocolMappingChip', { count: mappingCount(route) }) }}
+                  </v-chip>
+                </template>
+                <div class="text-caption">
+                  <div class="font-weight-bold mb-1">{{ t('orchestration.protocolMappingTitle', { protocol: protocolLabel(route.kind) }) }}</div>
+                  <div v-for="line in mappingTooltipLines(route)" :key="line" class="font-mono">{{ line }}</div>
+                  <div class="mt-1 text-disabled">{{ t('orchestration.protocolMappingEditHint') }}</div>
+                </div>
+              </v-tooltip>
               <v-icon v-if="channel.noVision" size="14" color="warning" class="ml-1">mdi-eye-off</v-icon>
             </div>
             <div v-if="channel.description" class="channel-info-desc text-caption text-disabled">
@@ -786,7 +840,7 @@ import { ref, shallowRef, computed, watch, onMounted, onUnmounted, defineAsyncCo
 import draggable from 'vuedraggable'
 import { api, type Channel, type ChannelKind, type ChannelMetrics, type ChannelProtocolRoute, type ChannelStatus, type TimeWindowStats, type ChannelRecentActivity, type SchedulerStatsResponse } from '../services/api'
 import { getChannelTypeApi } from '../utils/channelTypeApi'
-import { buildUnifiedReorderPayloads, isLlmChannelKind, normalizeChannelStatus, PartialRouteOperationError, physicalChannelStatuses, resolveChannelRecoveryRoutes, resolveChannelStatusMutationRoutes, routeHasOnlyDisabledKeys, summarizeSettledRouteOperations, type ChannelRecoveryRoute } from '../utils/unifiedChannels'
+import { buildUnifiedReorderPayloads, isLlmChannelKind, normalizeChannelStatus, PartialRouteOperationError, physicalChannelStatuses, protocolLabelForKind, resolveChannelRecoveryRoutes, resolveChannelStatusMutationRoutes, routeHasOnlyDisabledKeys, summarizeSettledRouteOperations, type ChannelRecoveryRoute } from '../utils/unifiedChannels'
 import { sortChannelsByPriority } from '../utils/channelOrder'
 import { buildChannelMetricsLookup } from '../utils/channelMetricsLookup'
 import { useI18n } from '../i18n'
@@ -827,6 +881,8 @@ const emit = defineEmits<{
   (_e: 'success', _message: string): void
 }>()
 const { t } = useI18n()
+const channelStore = useChannelStore()
+const dialogStore = useDialogStore()
 const getRouteKind = (channel?: Channel): ChannelKind => channel?.routeKind ?? props.channelType
 const getRouteIndex = (channel: Channel): number => channel.routeIndex ?? channel.index
 const getChannelUiKey = (channel: Channel): string => channel.displayKey ?? `${getRouteKind(channel)}:${getRouteIndex(channel)}`
@@ -1309,6 +1365,47 @@ const getProtocolCapsuleColor = (kind: ChannelKind): string => {
     case 'gemini': return 'purple'
     default: return 'grey'
   }
+}
+
+// ===== 协议级模型映射摘要（按执行协议成员各自生效，入口协议不广播到兄弟成员） =====
+
+const protocolLabel = (kind: ChannelKind): string => protocolLabelForKind(kind)
+
+const mappedProtocolRoutes = (channel: Channel): ChannelProtocolRoute[] => {
+  return (channel.protocolRoutes ?? []).filter(route => mappingCount(route) > 0)
+}
+
+const mappingCount = (route: ChannelProtocolRoute): number => {
+  return route.modelMapping ? Object.keys(route.modelMapping).length : 0
+}
+
+const mappingTooltipLines = (route: ChannelProtocolRoute): string[] => {
+  return Object.entries(route.modelMapping ?? {}).map(([source, target]) => `${source} → ${target}`)
+}
+
+// 点击映射摘要 chip 进入对应执行协议成员的编辑；用稳定 channelUid 定位，
+// 找不到时按 index 兜底。routeKind/routeIndex 显式标注，确保编辑对话框
+// 保存到该成员而不是当前 tab 的主成员。
+const rawListForKind = (kind: ChannelKind): Channel[] => {
+  switch (kind) {
+    case 'chat': return channelStore.chatChannelsData?.channels ?? []
+    case 'responses': return channelStore.responsesChannelsData?.channels ?? []
+    case 'gemini': return channelStore.geminiChannelsData?.channels ?? []
+    case 'images': return channelStore.imagesChannelsData?.channels ?? []
+    case 'vectors': return channelStore.vectorsChannelsData?.channels ?? []
+    default: return channelStore.channelsData?.channels ?? []
+  }
+}
+
+const editProtocolMember = (route: ChannelProtocolRoute) => {
+  const rawList = rawListForKind(route.kind)
+  const member = (route.channelUid ? rawList.find(ch => ch.channelUid === route.channelUid) : undefined)
+    ?? rawList.find(ch => ch.index === route.index)
+  if (!member) {
+    emit('error', t('orchestration.protocolMappingMemberMissing'))
+    return
+  }
+  dialogStore.openEditChannelModal({ ...member, routeKind: route.kind, routeIndex: route.index })
 }
 
 // Get success-rate color

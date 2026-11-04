@@ -282,6 +282,8 @@ const buildProtocolRoutes = (channels: Partial<Record<LlmChannelKind, RoutedChan
         ? undefined
         : channel.disabledGroupModels.map(item => ({ ...item })),
       supportedModels: channel.supportedModels == null ? undefined : [...channel.supportedModels],
+      // 协议级映射按执行成员各自携带；聚合卡据此展示兄弟协议的映射摘要
+      modelMapping: channel.modelMapping == null ? undefined : { ...channel.modelMapping },
     }]
   })
 }

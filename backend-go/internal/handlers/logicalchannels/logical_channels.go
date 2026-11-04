@@ -274,10 +274,12 @@ func buildLogicalProtocolRoutes(cfg config.Config, lc config.LogicalChannel) []g
 			name := p.Kind
 			apiKeys := []string{}
 			var disabledGroupModels []config.DisabledGroupModelInfo
+			var modelMapping map[string]string
 			if up != nil {
 				name = up.Name
 				apiKeys = up.APIKeys
 				disabledGroupModels = up.DisabledGroupModels
+				modelMapping = up.ModelMapping
 			}
 			out = append(out, gin.H{
 				"kind":        p.Kind,
@@ -287,6 +289,9 @@ func buildLogicalProtocolRoutes(cfg config.Config, lc config.LogicalChannel) []g
 				"channelUid":  p.ChannelUID,
 				"status":      p.Status,
 				"apiKeys":     apiKeys,
+				// 协议级模型映射：按执行成员各自生效，聚合视图按路由下发，
+				// 供统一渠道卡展示兄弟协议的映射摘要（入口协议不广播映射到兄弟成员）。
+				"modelMapping": modelMapping,
 				// 分组模型限制记录按路由下发：聚合视图是各协议路由的并集，客户端必须能在
 				// 路由粒度上看到并定位到真正持有该限制的路由（否则只能展示/清理主路由那一份，
 				// 其它协议会残留，Web 侧已按 unifiedChannels 并集处理）。
