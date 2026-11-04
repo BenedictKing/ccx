@@ -417,7 +417,7 @@ func recencyEvidence(capturedAt string, taskCount, cohortSize int) config.ModelB
 func TestFilterByRecencyGate(t *testing.T) {
 	// quality(c)=clampUnit(task/100)*clampUnit(cohort/10)*clampUnit(1-0)
 	// deepswe 风格: task=111 cohort=19 → 1.0*1.0=1.0
-	// codexradar 风格: task=112 cohort=5 → 1.0*0.5=0.5
+	// 小 cohort 风格: task=112 cohort=5 → 1.0*0.5=0.5
 	stale := recencyEvidence("2026-08-08", 111, 19)       // quality 1.0
 	freshWeak := recencyEvidence("2026-08-09", 112, 5)    // quality 0.5
 	freshStrong := recencyEvidence("2026-08-09", 111, 19) // quality 1.0

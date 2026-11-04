@@ -286,7 +286,7 @@ func TestCalibrateRegularEffortEvidenceClass(t *testing.T) {
 			scoreWant: math.Min(0.628*100/1.975, 0.444*100/1.413), // min(31.8, 31.4)
 		},
 		{
-			name:      "非 coding 或非 deepswe/codexradar 证据忽略",
+			name:      "非 coding 或非 deepswe 证据忽略",
 			evidence:  []config.ModelBenchmarkEvidence{ev("artificial_analysis", "low", 0.50)},
 			classWant: "", okWant: false,
 		},
@@ -383,7 +383,7 @@ func TestModelProfileQualityTierRegistryReplay(t *testing.T) {
 		{"claude-opus-5", ModelFamilyClaude, QualityTierHigh, "direct 68.9 < 69.95"},
 		{"claude-fable-5", ModelFamilyClaude, QualityTierHigh, "direct 65.4"},
 		{"gpt-5.6-sol", ModelFamilyOpenAI, QualityTierHigh, "direct 64.3"},
-		// kimi-k3/glm-5.3 的 codexradar 证据随雷达Bench v2 收敛退役（2026-10），
+		// kimi-k3/glm-5.3 的旧直测证据收敛后，
 		// 仅剩 deepswe max 单点，折算 34.7/34.9 落 low
 		{"kimi-k3", ModelFamilyKimi, QualityTierLow, "deflated 34.7 < 44.25"},
 		{"gpt-5.5", ModelFamilyOpenAI, QualityTierNormal, "direct 54.0 < 59.15"},

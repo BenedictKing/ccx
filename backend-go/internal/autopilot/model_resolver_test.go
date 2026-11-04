@@ -1650,7 +1650,7 @@ func TestEffortAwareBenchmarkScoreDomainAnchor(t *testing.T) {
 // 图表同源：有编码证据的候选按 DeepSWE 等效分与证据档位参选；无证据候选
 // 在池内存在在册模型时兜底退场（整池无证据时 fail-open 保留）。
 func TestBuildRankedCandidates_CodingEvidenceAnchor(t *testing.T) {
-	// glm-5.3-flash 在注册表内有 deepswe/codexradar 直测；mystery-model 不在注册表。
+	// glm-5.3-flash 在注册表内有 deepswe 直测；mystery-model 不在注册表。
 	profiles := []ModelProfile{
 		makeModelProfile("glm-5.3-flash", ModelFamilyGLM, QualityTierNormal, 1000000,
 			true, false, true, true, 0),

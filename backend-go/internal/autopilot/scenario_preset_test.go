@@ -377,8 +377,8 @@ func TestEffortAwareQualityTierKnownMonotonicRegressions(t *testing.T) {
 		effort EffortLevel
 		want   QualityTier
 	}{
-		// deepseek-v4.1-flash/kimi-k3 的 codexradar 证据随雷达Bench v2 收敛退役
-		// （2026-10），深档直测消失后回落 AA 校准/模型级折算档
+		// deepseek-v4.1-flash/kimi-k3 的旧直测证据收敛后，
+		// 深档消失时回落 AA 校准/模型级折算档
 		{"deepseek-v4.1-flash", EffortMax, QualityTierNormal},
 		{"gemini-3.5-flash", EffortHigh, QualityTierNormal},
 		{"glm-5.2", EffortHigh, QualityTierNormal},

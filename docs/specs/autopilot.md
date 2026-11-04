@@ -636,23 +636,21 @@ health(40) > fastDecay(25) > successRate(20) > latency(10) > cost(5)
 
 #### 5.5.1 性价比 effort 选择
 
-提交：`0a1a5c30`（接入 codexradar 实测 cost）；一致性门控见后续修复
-
 - **全有或全无门控（前提）**：`frontierUseMeasuredCost` 仅当**所有**可比候选（公开价已知）都带有效实测 cost 时才返回 true，整批启用实测校准；任一候选缺失实测 cost 则整体回退推测系数 `frontierEffortCostFactor`。这保证同一 Pareto 成本轴绝不混用两种尺度——实测 cost 是"每任务实际 USD"（量级 ~$1），公开价是"1M 输入+1M 输出假想价 × effort 系数"（量级 ~$10+），若只对部分候选用实测，轴上量级差 ~5×，会破坏支配/聚类并反转 anti-effort-inflation 防护。语义与 `frontierUseProviderMultiplier` 的轴内一致性门控一致。
 - **启用后**：`frontierCostFactorFor` 用候选 effort 的实测 USD cost 计算 `factor = measuredCostUSD / normalizedPublicCostUSD`，使成本轴值退化为实测 cost 本身
 - 当 `benchmark.Profile.BenchmarkEvidence` 中存在该 effort 的有效 `CostUSD` 时参与校准；同一 effort 多条证据取最小 cost（保守估计），避免异常高成本扭曲 frontier
-- **超注册表档位回退**：`measuredCostForEffort` 优先按候选 effort 精确命中实测 cost；未命中（如 codexradar 测了 ultra 但注册表该模型仅声明到 max）时回退该模型已测档位的最小成本作下界，避免校准静默失效
+- **超注册表档位回退**：`measuredCostForEffort` 优先按候选 effort 精确命中实测 cost；未命中时回退该模型已测档位的最小成本作下界，避免校准静默失效
 - 实测 cost 来源在 `CostEvidence.Source` 中标记为 `registry_pricing_x_measured_effort_cost`（或乘 provider 倍率后的变体），仅在门控启用时设置
-- 效果：frontier 成本轴从"按档位系数猜测"演进为"以 codexradar 实测 cost 校准的性价比轴"，使 xhigh 等高效果档在成本相近时获得真实优势
+- 效果：frontier 成本轴从"按档位系数猜测"演进为"以实测 cost 校准的性价比轴"，使 xhigh 等高效果档在成本相近时获得真实优势
 
 ### 5.6 QualityTier 按 benchmark 分数分布动态评定
 
 提交：`231cbf5d`、`39027645`
 
-- **归一化能力分** `normalizedCapabilityScoreWithEvidenceClass`（2026-08-24 起统一到常规 effort 口径）：直测证据只接受 domain=coding、benchmark∈{deepswe, codexradar} 的 0-1 质量比率指标（metric=pass_at_1 二值通过率，或雷达Bench v2 起的 metric=mean_reward 等权平均任务奖励率——含庞贝邻接 F1 部分分，2026-10 站点重构后 codexradar 唯一口径），且按 effort 档折算到 medium/default 口径——比率来自 deepswe 同模型 effort 曲线统计（low=0.686、high=1.413、xhigh=1.627、max=1.975）。证据按来源（deepswe/codexradar）分组后按证据等级分层合成：有常规口径实测直接用（跨源取最大，与旧合并语义一致）→ 无直测但曲线跨 medium（如 low+high）时按 effort 序数线性插值（模型自身曲线是中档水平的最好估计，源间取最小）→ 全部在一侧时跨源合并按全局比率折算取最小值（保守）；仅剩单一非常规档证据时 `singleEffortOnly=true`，档位封顶 high（折算完全依赖全局平均曲线，不足以支撑 premium）。分层升级只作用于缺 medium 直测的模型——实测档位评定从「全局平均比率的最坏折算」升级为「模型自身曲线插值」后，kimi-k3/glm-5.3 等跨档模型不再被系统性低估。动机：只存最佳档会把"开满思考强度"的成绩当模型基础能力（gpt-5.6-terra max=69.6 而 medium=35.1、luna max=67.2 而 medium=11.3）。为此 update 脚本的 deepswe/dradar 提取保留全部 effort 档 evidence（`selectionBasis=per_effort`）。无直测时用 artificial_analysis coding_index 线性校准：`deepswe ≈ 2.391 × aa_coding − 116.007`（系数来自重叠模型最小二乘拟合）。
-- **边界算法** `computeQualityTierBoundariesFromRegistry`（`model_profile.go:491`）：默认边界 premium≥75 / high≥61 / normal≥55；注册表直测分数（按 CanonicalModel 去重）不足 4 个时用默认；否则排序后自顶向下找最大间隙中点——premium 边界取最高分下方 25% 量表区间（两端 ≥ 0.75×最高分）内的最大间隙中点，high 在低于 premium 的分段（floor=premiumMin×0.5）、normal 在低于 high 的分段（floor=highMin×0.4）依次找最大间隙。间隙两端都必须落在目标区域内（只查上端会让低段跨区域间隙被误当顶部断层）。2026-08-23 修复：原 60% 锚假设分布铺满量表，池分数集中在 40-77 时 60% 锚把中段空隙包进顶部区域，premiumMin 一度塌到 49 使 53 分模型全部升入 premium、选型翻转。
+- **归一化能力分** `normalizedCapabilityScoreWithEvidenceClass`（2026-08-24 起统一到常规 effort 口径）：直测证据只接受 domain=coding、benchmark=deepswe、metric=pass_at_1 的 0-1 二值通过率，且按 effort 档折算到 medium/default 口径——比率来自 deepswe 同模型 effort 曲线统计（low=0.686、high=1.413、xhigh=1.627、max=1.975）。有常规口径实测直接用 → 无直测但曲线跨 medium（如 low+high）时按 effort 序数线性插值 → 全部在一侧时按全局比率折算取最小值（保守）；仅剩单一非常规档证据时 `singleEffortOnly=true`，档位封顶 high。无直测时用 artificial_analysis coding_index 线性校准：`deepswe ≈ 2.391 × aa_coding − 116.007`。
+- **边界算法** `computeQualityTierBoundariesFromRegistry`（`model_profile.go:491`）：默认边界 premium≥75 / high≥61 / normal≥55；注册表直测分数（按 CanonicalModel 去重）不足 4 个时用默认；否则排序后自顶向下找最大间隙中点——premium 边界取最高分下方 25% 量表区间（两端 ≥ 0.75×最高分）内的最大间隙中点，high 在低于 premium 的分段（floor=premiumMin×0.5）、normal 在低于 high 的分段（floor=highMin×0.4）依次找最大间隙。间隙两端都必须落在目标区域内（只查上端会让低段跨区域间隙被误当顶部断层）。
 - **世代缓存**（`39027645`）：`benchmarkTierBoundariesCache`（`atomic.Pointer`，`model_profile.go:461`）以 `config.BuiltinSnapshotGeneration()` 为缓存键——内置快照每次重建发布时世代 +1，命中才免重算。热路径单次调用从 ~830µs/428 allocs 降至 ~15µs/8 allocs。
-- **小样本档位剔除**（2026-08-31）：`isSmallSampleEvidence`（`model_profile.go`，阈值 `minReliableBenchmarkTasks=3`）把任务格数 0<n<3 的直测档位视为未完成测量，`regularEffortBaselineScore` 与 `effortLevelQualityAdmission` 均跳过；TaskCount==0（来源未提供）不剔除以兼容旧数据。动机：CodexRadar 新模型先跑 1 个任务且恰好通过时 pass@1=100% 纯属噪声，hy4-preview low 档 1/1 曾把跨档插值分虚抬到 83.3 进 premium 档，且该虚假高分还作为分布输入把 premiumMin 边界顶到 76.1。JS 侧（`visualization.mjs` 的 `mediumAlignedScore`/`regularEffortBaselineScore`）同规则同阈值；`dradar.mjs` 的 per-effort evidence 已修正为记录各档自身任务格数（原展开 bug 把最佳档格子数写进所有档位的 taskCount）。
+- **小样本档位剔除**（2026-08-31）：`isSmallSampleEvidence`（`model_profile.go`，阈值 `minReliableBenchmarkTasks=3`）把任务格数 0<n<3 的直测档位视为未完成测量，`regularEffortBaselineScore` 与 `effortLevelQualityAdmission` 均跳过；TaskCount==0（来源未提供）不剔除以兼容旧数据。JS 侧（`visualization.mjs` 的 `mediumAlignedScore`/`regularEffortBaselineScore`）同规则同阈值。
 - **消费方**：`Profiler.DeriveQualityTier`（benchmark 优先 → lowQuality 降级）、`BuildRequestProfile` 的 QualityNeed、auto_discovery、provider_quality_probe、`SmartRouter.applyModelQualityTier`。
 
 ### 5.7 benchmark-report 独立 CLI

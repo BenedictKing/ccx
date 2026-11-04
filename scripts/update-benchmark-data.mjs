@@ -413,31 +413,6 @@ export function mergeBenchlmData(registry, benchlmData, report, models = targetM
 }
 
 /**
- * 清理已退役的 CodexRadar 证据与来源，保留其他来源的画像。
- * @returns {number} 被移除的证据条数
- */
-export function removeCodexRadarEvidence(registry) {
-  let removed = 0
-  const profiles = []
-  for (const profile of registry.benchmarkProfiles || []) {
-    const evidence = profile.benchmarkEvidence || []
-    const remaining = evidence.filter(e =>
-      e.benchmark !== 'codexradar' &&
-      !(e.benchmark === 'deepswe' && e.benchmarkVersion === 'codexradar')
-    )
-    removed += evidence.length - remaining.length
-    profile.benchmarkEvidence = remaining
-    profile.sources = (profile.sources || []).filter(s => !s.includes('codexradar.com'))
-    const empty = remaining.length === 0 &&
-      Object.keys(profile.categoryScores || {}).length === 0 &&
-      profile.sources.length === 0
-    if (!empty) profiles.push(profile)
-  }
-  registry.benchmarkProfiles = profiles
-  return removed
-}
-
-/**
  * 合并 litellm 数据到注册表（更新 upstreamCapabilities 的 pricing/contextWindow）
  */
 export function mergeLitellmData(registry, litellmData, report, models = targetModels) {
@@ -828,10 +803,6 @@ export async function main() {
   console.log('='.repeat(60))
 
   const registry = loadRegistry()
-  const removedCodexRadarEvidence = removeCodexRadarEvidence(registry)
-  if (removedCodexRadarEvidence > 0) {
-    console.log(`[cleanup] Removed ${removedCodexRadarEvidence} retired CodexRadar evidence entries`)
-  }
   const report = {
     updated: [],
     added: [],

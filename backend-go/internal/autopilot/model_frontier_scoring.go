@@ -13,7 +13,7 @@ import (
 // 生产入口：ModelResolver.rankEligibleModels（model_resolver.go），默认启用。
 // 成本证据不可比（可比候选 < 2）时 fail-open 回退到既有字典序比较链。
 //
-// 设计要点（与 codexradar 等效率曲线同源）：
+// 设计要点（与效率曲线同源）：
 //   - 全局比较：候选是全部 model × effort 组合，不先锁质量档再挑档；
 //   - 成本与质量并列成轴：质量增益必须值回成本溢价（balanced 溢价帽）；
 //   - 噪声级质量差异不值数倍成本：置信区间重叠视为并列，并列取低成本。

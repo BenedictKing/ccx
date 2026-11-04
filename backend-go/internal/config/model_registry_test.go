@@ -1828,11 +1828,10 @@ func TestResolveModelBenchmarkProfile_DistinguishesGPT56Variants(t *testing.T) {
 	}
 	// 证据顺序随 registry 刷新脚本变动，不能假设固定下标；按 benchmark 名查找并校验元数据与取值范围。
 	deepswe := findLunaEvidence(luna.Profile.BenchmarkEvidence, "deepswe")
-	codexradar := findLunaEvidence(luna.Profile.BenchmarkEvidence, "codexradar")
-	if deepswe == nil || codexradar == nil {
-		t.Fatalf("Luna 缺少 deepswe/codexradar 证据: %+v", luna.Profile.BenchmarkEvidence)
+	if deepswe == nil {
+		t.Fatalf("Luna 缺少 deepswe 证据: %+v", luna.Profile.BenchmarkEvidence)
 	}
-	for _, ev := range []ModelBenchmarkEvidence{*deepswe, *codexradar} {
+	for _, ev := range []ModelBenchmarkEvidence{*deepswe} {
 		if ev.Benchmark == "" || ev.Domain == "" || ev.Metric == "" || ev.SourceURL == "" || ev.CapturedAt == "" {
 			t.Fatalf("Luna %q 证据元数据不完整: %+v", ev.Benchmark, ev)
 		}
@@ -1935,7 +1934,7 @@ func TestConvertRuntimeBenchmarkProfiles_CopiesCostUSD(t *testing.T) {
 			Patterns:       []string{"gpt-test"},
 			CanonicalModel: "gpt-test",
 			BenchmarkEvidence: []presetstore.ModelBenchmarkEvidencePreset{{
-				Benchmark:        "codexradar",
+				Benchmark:        "deepswe",
 				BenchmarkVersion: "v1",
 				SourceModel:      "gpt-test",
 				Domain:           "coding",
@@ -1946,7 +1945,7 @@ func TestConvertRuntimeBenchmarkProfiles_CopiesCostUSD(t *testing.T) {
 				CohortSize:       10,
 				Effort:           "high",
 				SelectionBasis:   "best_available_effort",
-				SourceURL:        "https://deng.codexradar.com/",
+				SourceURL:        "https://deepswe.datacurve.ai/",
 				CapturedAt:       "2026-08-10",
 				CostUSD:          &cost,
 			}},
@@ -1977,7 +1976,7 @@ func TestConvertRuntimeBenchmarkProfiles_CopiesCostUSD(t *testing.T) {
 
 func TestModelBenchmarkEvidence_JSONDeserialization(t *testing.T) {
 	jsonIn := `{
-		"benchmark":"codexradar",
+		"benchmark":"deepswe",
 		"benchmarkVersion":"v1",
 		"sourceModel":"gpt-test",
 		"domain":"coding",
@@ -1988,7 +1987,7 @@ func TestModelBenchmarkEvidence_JSONDeserialization(t *testing.T) {
 		"cohortSize":10,
 		"effort":"high",
 		"selectionBasis":"best_available_effort",
-		"sourceUrl":"https://deng.codexradar.com/",
+		"sourceUrl":"https://deepswe.datacurve.ai/",
 		"capturedAt":"2026-08-10",
 		"costUsd":0.0042
 	}`

@@ -31,7 +31,6 @@ import {
   warnSourceFailures,
   mergeBenchlmData,
   mergeDeepsweData,
-  removeCodexRadarEvidence,
   mergeLitellmData,
   mergeArtificialAnalysisLlm,
   mergeArtificialAnalysisImageArena,
@@ -271,33 +270,6 @@ test('benchmark evidence normalizes missing effort to default', () => {
   }, [{ score: 0.5 }])
 
   assert.equal(evidence.effort, 'default')
-})
-
-test('retired CodexRadar evidence is removed without dropping other sources', () => {
-  const registry = {
-    benchmarkProfiles: [{
-      canonicalModel: 'gpt-6-astra',
-      patterns: ['gpt-6-astra'],
-      sources: ['https://deng.codexradar.com/', 'https://deepswe.example/'],
-      benchmarkEvidence: [
-        { benchmark: 'codexradar', rawValue: 0.7 },
-        { benchmark: 'deepswe', benchmarkVersion: 'codexradar', rawValue: 0.6 },
-        { benchmark: 'deepswe', benchmarkVersion: 'v1.1', rawValue: 0.5 },
-      ],
-    }, {
-      canonicalModel: 'radar-only',
-      patterns: ['radar-only'],
-      sources: ['https://deng.codexradar.com/'],
-      benchmarkEvidence: [{ benchmark: 'codexradar', rawValue: 0.4 }],
-    }],
-  }
-
-  assert.equal(removeCodexRadarEvidence(registry), 3)
-  assert.deepEqual(registry.benchmarkProfiles.map(p => p.canonicalModel), ['gpt-6-astra'])
-  assert.deepEqual(registry.benchmarkProfiles[0].sources, ['https://deepswe.example/'])
-  assert.deepEqual(registry.benchmarkProfiles[0].benchmarkEvidence, [
-    { benchmark: 'deepswe', benchmarkVersion: 'v1.1', rawValue: 0.5 },
-  ])
 })
 
 test('LiteLLM keeps missing capabilities unknown and maps function calling to toolCalls', () => {
