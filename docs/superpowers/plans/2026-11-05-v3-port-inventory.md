@@ -6,6 +6,7 @@
 
 - **P0 已完成**（2026-11-05，`4cc04b13`..`cb7497b7`）：五个提交全部落地，另带入依赖 `48d8d826` 的请求侧拒绝机制与 gemini 思考判定精确化。2.9 适配差异：`ErrBlacklistKey.RecoverAt` 已补齐，但 2.9 无 `DisableKeyModel`/racing，组合级限制透传与竞速分支跳过；`executionKind` 改用本地 `kind`。构建、后端全量测试、前端构建均通过。
 - **P1 已完成**（2026-11-05）：五个提交合并为独立模块 `backend-go/internal/siteaccess/`（适配器 + 凭证加密 + 账号存储），未搬入 autopilot 编排层（SubscriptionStore/SyncService/Discovery 属 3.0 专属，P2 按协议接入时另行设计）。2.9 适配差异：`httpclient` 无 `ClientOptions`，`NewApiAdapterForProxy` 去掉 `preferDirect` 参数；`errutil.IgnoreDeferred` 内联；`maskAccessToken` 提为包级 `MaskAccessToken` 供存储脱敏复用。管理凭证 AES-GCM 加密落盘（`$enc$` 前缀，密钥取 `CCX_SECRET_KEY` 或机器派生），推理 Key 沿用既有渠道 APIKeys 导入路径。31 项假站点契约测试覆盖标准/fork（raw_auth）认证、掩码 Key 揭示、分页查重、同名异组避让、DeleteToken 失败补偿与 HTML 错误摘要。
+- **P2 已完成**（2026-11-05）：协议级接入按 lean 目标新实现于 `siteaccess/provision.go` + `reconcile.go`（3.0 编排代码不可直接移植，仅复用行为语义与分组守卫 `newapi_group_guard.go`）。每次只为选定协议建渠道；分组倍率阈值过滤 + 逐组目标模型校验（0 模型或不含目标模型的分组跳过，不建可用渠道）；Key 命名 `ccx-{分组}` 绑定单分组；渠道以稳定命名幂等 upsert，不重复建渠道/Key；渠道写入失败回收新建远端 Key；对账按 Key 指纹（sha256，不存明文）定位本地 Key，远端删除即拉黑停用，查询失败不变更。定期调度入口留待 P3。5 项假站点+真实 ConfigManager 契约测试覆盖验收门（单协议隔离、目标模型门控、幂等、跨协议独立分组/Key、远端删除双协议停用）。
 
 ## 已有能力，不重复移植
 

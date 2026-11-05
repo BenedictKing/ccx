@@ -22,6 +22,9 @@ type ProvisionedKeyMeta struct {
 	Group    string `json:"group,omitempty"`
 	TokenID  int    `json:"tokenId,omitempty"`
 	Protocol string `json:"protocol"` // messages / chat / responses / gemini
+	// KeyFingerprint 是推理 Key 的 sha256 指纹（16 hex），用于对账时匹配本地渠道
+	// 中的 Key；不明文持久化推理 Key。
+	KeyFingerprint string `json:"keyFingerprint,omitempty"`
 }
 
 // SiteAccount 站点托管账号：管理凭证 + 已建远端 Key 元数据。
