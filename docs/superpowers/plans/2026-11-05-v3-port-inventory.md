@@ -10,7 +10,7 @@
 - **P3 已完成**（2026-11-05）：三级证据验收模型落地 `siteaccess/evidence.go`（configured/info_verified/real_request，等级只升不降，失败仅写诊断不降级不禁用）；真实业务流量经 `upstream_failover` 钩子回填为最强证据；真实推理由用户主动触发（`verify-request`，最小请求显式模型）；定期对账调度 30 分钟硬下限（默认 1 小时）；余额探测只读展示（移植 `upstreamprobe/balance.go`，auto 识别 newapi_token/sub2api/newapi_billing，不写配额真相不参与调度）；管理端点 `/api/siteaccess/accounts/*` 已接线 main.go，账号响应只给脱敏令牌尾部。健康检查模块（ba762489/297209d4）未整套移植——2.9 已有能力测试基础，且 lean 约束不允许后台强制 L2。新增测试覆盖证据升级/失败不降级/验证失败不禁用 Key/调度对账/端点不泄令牌。
 - **P4 已完成**（2026-11-05）：五个提交全部落地。`320bda43` (Key,模型) 组合级限制+定时自动恢复（含前端展示与管理端点），并补齐 a6074e2c 的 recoverAt 透传；`396a3345` 上游请求体解析失败 400 豁免 schema 终态；`3275a213` 仅取「速率限制」限流关键词（账号级 AIMD 冷却 2.9 无对应机制，不移植）；`0c7cf168` 分组缺失的 no available channel 识别为确定性 key×model 失败，DisableKeyModel 调用点改用精确的 isKeyModelRestrictionError；`d97e08f9` 中转网关本地审核允许 failover+渠道冷却 5 分钟+NonRetryable 记账（model_circuit 注释 2.9 不适用）。2.9 适配：normal 流补解析失败直接 failover 分支、capabilityKeywords 补 supported api model names；旧敏感词测试按新语义更新。跨模型替换仍只允许用户显式映射，未引入自动换模型。
 - **P5 已完成**（2026-11-05）：接入向导按 lean 目标重做（3.0 表单与订阅视图绑定 autopilot，不移植代码，仅复用地址识别交互）。后端：`NormalizeSiteURL`（面板页/端点路径剥到站点根，Upsert 应用）+ `GET /accounts/:uid/groups` 预览端点。前端：`SiteOnboardingWizard.vue` 四步向导弹窗（站点凭证→协议分组→显式模型映射→验收结果），`SiteOnboardingView.vue` 账号列表（脱敏令牌/余额/验证/删除），路由 `/site-onboarding` 与导航入口，三语文案。信息验证失败可继续接入；验收页提供真实请求验证与立即对账，失败只展示诊断。Desktop 复用同一 `/api/siteaccess/*` 契约，不另建协议。
-- **2.9 配置兼容已验证**（2026-11-05）：固定 `v2.9.37` 样本及历史六协议真实备份均通过加载→保存→重启回归；3.0 权威渠道标记被拒绝且不改写。真实指标库与 Desktop 状态尚无同期 2.9 快照，边界见 [隔离升级演练](./2026-11-05-2.9-upgrade-rehearsal.md)。
+- **2.9 配置兼容已验证**（2026-11-05）：固定 `v2.9.37` 样本及历史六协议真实备份均通过加载→保存→重启回归；3.0 权威渠道标记被拒绝且不改写。旧 schema 3 指标库已通过隔离读写重启测试，但与配置不同期；Desktop 状态仍无同期快照，边界见 [隔离升级演练](./2026-11-05-2.9-upgrade-rehearsal.md)。
 
 ## 已有能力，不重复移植
 
