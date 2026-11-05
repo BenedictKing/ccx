@@ -73,6 +73,17 @@ func (cm *ConfigManager) loadConfig() error {
 		cm.mu.Unlock()
 		return err
 	}
+	var rawConfig map[string]json.RawMessage
+	if err := json.Unmarshal(data, &rawConfig); err != nil {
+		cm.mu.Unlock()
+		return err
+	}
+	_, hasChannelsV3 := rawConfig["channelsV3"]
+	_, hasAuthoritativeVersion := rawConfig["channelAuthoritativeVersion"]
+	if hasChannelsV3 || hasAuthoritativeVersion {
+		cm.mu.Unlock()
+		return fmt.Errorf("检测到 3.0 权威渠道配置：精简版只支持 2.9 协议渠道配置，已拒绝加载以保护原数据")
+	}
 
 	if err := json.Unmarshal(data, &cm.config); err != nil {
 		cm.mu.Unlock()

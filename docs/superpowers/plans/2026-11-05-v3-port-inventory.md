@@ -10,6 +10,7 @@
 - **P3 已完成**（2026-11-05）：三级证据验收模型落地 `siteaccess/evidence.go`（configured/info_verified/real_request，等级只升不降，失败仅写诊断不降级不禁用）；真实业务流量经 `upstream_failover` 钩子回填为最强证据；真实推理由用户主动触发（`verify-request`，最小请求显式模型）；定期对账调度 30 分钟硬下限（默认 1 小时）；余额探测只读展示（移植 `upstreamprobe/balance.go`，auto 识别 newapi_token/sub2api/newapi_billing，不写配额真相不参与调度）；管理端点 `/api/siteaccess/accounts/*` 已接线 main.go，账号响应只给脱敏令牌尾部。健康检查模块（ba762489/297209d4）未整套移植——2.9 已有能力测试基础，且 lean 约束不允许后台强制 L2。新增测试覆盖证据升级/失败不降级/验证失败不禁用 Key/调度对账/端点不泄令牌。
 - **P4 已完成**（2026-11-05）：五个提交全部落地。`320bda43` (Key,模型) 组合级限制+定时自动恢复（含前端展示与管理端点），并补齐 a6074e2c 的 recoverAt 透传；`396a3345` 上游请求体解析失败 400 豁免 schema 终态；`3275a213` 仅取「速率限制」限流关键词（账号级 AIMD 冷却 2.9 无对应机制，不移植）；`0c7cf168` 分组缺失的 no available channel 识别为确定性 key×model 失败，DisableKeyModel 调用点改用精确的 isKeyModelRestrictionError；`d97e08f9` 中转网关本地审核允许 failover+渠道冷却 5 分钟+NonRetryable 记账（model_circuit 注释 2.9 不适用）。2.9 适配：normal 流补解析失败直接 failover 分支、capabilityKeywords 补 supported api model names；旧敏感词测试按新语义更新。跨模型替换仍只允许用户显式映射，未引入自动换模型。
 - **P5 已完成**（2026-11-05）：接入向导按 lean 目标重做（3.0 表单与订阅视图绑定 autopilot，不移植代码，仅复用地址识别交互）。后端：`NormalizeSiteURL`（面板页/端点路径剥到站点根，Upsert 应用）+ `GET /accounts/:uid/groups` 预览端点。前端：`SiteOnboardingWizard.vue` 四步向导弹窗（站点凭证→协议分组→显式模型映射→验收结果），`SiteOnboardingView.vue` 账号列表（脱敏令牌/余额/验证/删除），路由 `/site-onboarding` 与导航入口，三语文案。信息验证失败可继续接入；验收页提供真实请求验证与立即对账，失败只展示诊断。Desktop 复用同一 `/api/siteaccess/*` 契约，不另建协议。
+- **2.9 配置兼容已验证**（2026-11-05）：固定 `v2.9.37` 六协议配置样本通过加载→保存→重启回归；3.0 权威渠道标记输入被拒绝，原文件不变。后端全量测试、Web 构建与 `make build` 通过；未使用用户实际数据目录。
 
 ## 已有能力，不重复移植
 
@@ -31,7 +32,7 @@
 ## 单独设计，不能从 3.0 直接移植
 
 - **sub2api 账号托管**：3.0 只有 `/v1/usage` 余额探测与错误码兼容（`98c6f8ba`），没有对等的用户账号建 Key 接入。先支持已有推理 Key 导入；管理面认证、分组 API 与创建 Key 需按部署版本验证后再做适配器。
-- **3.0 数据迁移**：现版可能只持久化 `channelsV3`，托管账号凭证与订阅画像另有存储。不能把现版 `config.json` 直接交给 2.9。需要离线导出协议渠道、Key 元数据、显式映射与账号关联，再在隔离数据目录做往返校验。
+- **2.9 数据升级兼容**：保留 `v2.9.37` 六协议数组配置和原数据目录格式；以固定 2.9 配置样本验证加载、保存、重启后渠道、Key、映射和状态不丢失。3.0 的 `channelsV3` 数据不迁移，加载器明确拒绝且不改写原文件。
 - **自动跨模型降级**：与用户显式选模冲突；若要支持，必须有每协议、每请求模型的候选顺序和允许降级开关，不能复用 Autopilot 的质量排序。
 
 ## 暂缓或不移植

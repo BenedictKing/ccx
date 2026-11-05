@@ -1,0 +1,34 @@
+{
+  "upstream": [
+    {
+      "name": "messages-primary",
+      "baseUrl": "https://messages.example.test",
+      "baseUrls": ["https://messages.example.test", "https://backup.example.test"],
+      "apiKeys": ["sk-messages"],
+      "apiKeyConfigs": [{"key": "sk-messages", "quotaGroup": "pro", "weight": 2}],
+      "disabledApiKeys": [{"key": "sk-old", "reason": "authentication_error", "message": "expired", "disabledAt": "2026-07-01T00:00:00Z"}],
+      "serviceType": "claude",
+      "modelMapping": {"claude-opus-4-8": "relay-opus"},
+      "customHeaders": {"X-Relay": "enabled"},
+      "priority": 2,
+      "status": "active"
+    }
+  ],
+  "responsesUpstream": [
+    {"name": "responses-primary", "baseUrl": "https://responses.example.test", "apiKeys": ["sk-responses"], "serviceType": "responses", "modelMapping": {"gpt-5": "relay-gpt"}, "priority": 5, "status": "disabled"}
+  ],
+  "chatUpstream": [
+    {"name": "chat-primary", "baseUrl": "https://chat.example.test", "apiKeys": ["sk-chat"], "serviceType": "openai", "modelMapping": {"chat-alias": "relay-chat"}, "priority": 3, "status": "active"}
+  ],
+  "geminiUpstream": [
+    {"name": "gemini-primary", "baseUrl": "https://gemini.example.test", "apiKeys": ["sk-gemini"], "serviceType": "gemini", "priority": 4, "status": "active"}
+  ],
+  "imagesUpstream": [
+    {"name": "images-primary", "baseUrl": "https://images.example.test", "apiKeys": ["sk-images"], "serviceType": "openai", "priority": 6, "status": "active"}
+  ],
+  "vectorsUpstream": [
+    {"name": "vectors-primary", "baseUrl": "https://vectors.example.test", "apiKeys": ["sk-vectors"], "serviceType": "openai", "priority": 7, "status": "active"}
+  ],
+  "fuzzyModeEnabled": false,
+  "thinkingCache": {"ttlHours": 48}
+}
