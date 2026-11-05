@@ -15,6 +15,7 @@ import (
 	"github.com/BenedictKing/ccx/internal/metrics"
 	"github.com/BenedictKing/ccx/internal/providers"
 	"github.com/BenedictKing/ccx/internal/scheduler"
+	"github.com/BenedictKing/ccx/internal/siteaccess"
 	"github.com/BenedictKing/ccx/internal/types"
 	"github.com/BenedictKing/ccx/internal/utils"
 	"github.com/BenedictKing/ccx/internal/warmup"
@@ -535,6 +536,12 @@ func TryUpstreamWithAllKeys(
 				StartStreamTimeoutObservation(c, channelLogStore, metricsKey, logRequestID, time.Now())
 			}
 			usage, err = handleSuccess(c, resp, upstreamCopy, apiKey, attemptBody)
+			// 真实业务流量是托管渠道可用性的最强证据（探针可能被风控拦截，不能单独定论）
+			trafficDiagnostic := ""
+			if err != nil {
+				trafficDiagnostic = err.Error()
+			}
+			siteaccess.RecordRealTrafficByChannelName(upstreamCopy.Name, err == nil, trafficDiagnostic)
 			if isStream {
 				FinishStreamTimeoutObservation(c)
 			}

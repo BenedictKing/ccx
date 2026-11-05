@@ -222,6 +222,7 @@ func aProvisionGroup(ctx context.Context, store *AccountStore, cfgManager *confi
 	}
 
 	recordProvisionedKey(store, account, protocol, group, tokenID, finalName, keyPlaintext)
+	RecordConfigured(store, account.UID, protocol, group.Name)
 	return groupResult
 }
 

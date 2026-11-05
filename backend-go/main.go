@@ -34,6 +34,7 @@ import (
 	"github.com/BenedictKing/ccx/internal/ratelimit"
 	"github.com/BenedictKing/ccx/internal/scheduler"
 	"github.com/BenedictKing/ccx/internal/session"
+	"github.com/BenedictKing/ccx/internal/siteaccess"
 	"github.com/BenedictKing/ccx/internal/thinkingcache"
 	"github.com/BenedictKing/ccx/internal/warmup"
 	"github.com/gin-gonic/gin"
@@ -328,6 +329,13 @@ func main() {
 		log.Fatalf("初始化配置管理器失败: %v", err)
 	}
 	defer cfgManager.Close()
+
+	// 站点账号接入（new-api 家族）：管理凭证加密存储 + 定期对账（远端删 Key 才停用本地）
+	siteAccessStore := siteaccess.NewAccountStore(filepath.Join(filepath.Dir(paths.ConfigPath), "site_accounts.json"))
+	siteaccess.SetDefaultStore(siteAccessStore)
+	siteAccessAdapter := &siteaccess.NewApiAdapter{}
+	siteAccessDeps := &siteaccess.Deps{Store: siteAccessStore, CfgManager: cfgManager, Adapter: siteAccessAdapter}
+	siteaccess.StartReconcileScheduler(context.Background(), siteAccessStore, cfgManager, siteAccessAdapter, time.Hour)
 
 	applyThinkingCacheConfig := func(cfg config.Config) {
 		if err := thinkingcache.Configure(thinkingcache.Config{
@@ -649,6 +657,8 @@ func main() {
 	discoveryModelFetchers := buildChannelDiscoveryModelFetchers(cfgManager)
 	apiGroup := r.Group("/api")
 	{
+		siteaccess.RegisterRoutes(apiGroup, siteAccessDeps)
+
 		apiGroup.POST("/copilot/oauth/device/code", copilot.RequestDeviceCode())
 		apiGroup.POST("/copilot/oauth/token", copilot.PollAccessToken())
 		apiGroup.POST("/copilot/oauth/verify", copilot.VerifyToken())

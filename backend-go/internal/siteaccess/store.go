@@ -43,6 +43,9 @@ type SiteAccount struct {
 	AccessToken string `json:"accessToken,omitempty"`
 
 	ProvisionedKeys []ProvisionedKeyMeta `json:"provisionedKeys,omitempty"`
+
+	// Evidence 按协议+分组记录验收证据等级（配置/信息验证/真实请求）。
+	Evidence []ChannelEvidence `json:"evidence,omitempty"`
 }
 
 // DeriveAccountUID 从站点身份派生稳定账号 UID：同站点同用户同令牌重复接入幂等。
