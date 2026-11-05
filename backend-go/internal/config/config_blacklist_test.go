@@ -786,3 +786,113 @@ func TestRestoreDisabledKeysRestoresConfig(t *testing.T) {
 		t.Errorf("restored Name = %q, want primary-key", restoredConfig.Name)
 	}
 }
+
+func newKeyModelTestConfigManager(t *testing.T) *ConfigManager {
+	t.Helper()
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "config.json")
+	initialConfig := `{
+		"upstream": [{
+			"name": "test-channel",
+			"baseUrl": "https://example.com",
+			"apiKeys": ["sk-a", "sk-b"],
+			"serviceType": "claude"
+		}]
+	}`
+	if err := os.WriteFile(configPath, []byte(initialConfig), 0644); err != nil {
+		t.Fatalf("写入初始配置失败: %v", err)
+	}
+	cm, err := NewConfigManager(configPath, "")
+	if err != nil {
+		t.Fatalf("NewConfigManager() error = %v", err)
+	}
+	t.Cleanup(func() { cm.Close() })
+	return cm
+}
+
+func TestDisableKeyModelAndIsKeyModelDisabled(t *testing.T) {
+	cm := newKeyModelTestConfigManager(t)
+
+	if err := cm.DisableKeyModel("Messages", 0, "sk-a", "gpt-5.6-sol", "model_not_found", "no available channel", ""); err != nil {
+		t.Fatalf("DisableKeyModel() error = %v", err)
+	}
+
+	// 命中组合应受限
+	if !cm.IsKeyModelDisabled("Messages", 0, "sk-a", "gpt-5.6-sol") {
+		t.Fatal("(sk-a, gpt-5.6-sol) 应处于限制期内")
+	}
+	// 大小写不敏感
+	if !cm.IsKeyModelDisabled("Messages", 0, "sk-a", "GPT-5.6-SOL") {
+		t.Fatal("模型比较应大小写不敏感")
+	}
+	// 同 Key 其他模型不受影响
+	if cm.IsKeyModelDisabled("Messages", 0, "sk-a", "gpt-4o") {
+		t.Fatal("同 Key 其他模型不应受限")
+	}
+	// 其他 Key 同模型不受影响
+	if cm.IsKeyModelDisabled("Messages", 0, "sk-b", "gpt-5.6-sol") {
+		t.Fatal("其他 Key 同模型不应受限")
+	}
+}
+
+func TestIsKeyModelDisabledNowRespectsRecoverAt(t *testing.T) {
+	now := time.Now()
+	upstream := &UpstreamConfig{
+		Name: "c",
+		DisabledKeyModels: []DisabledKeyModelInfo{
+			{Key: "sk-a", Model: "m1", RecoverAt: now.Add(30 * time.Minute).Format(time.RFC3339)},
+			{Key: "sk-a", Model: "m2", RecoverAt: now.Add(-time.Minute).Format(time.RFC3339)},
+		},
+	}
+	if !upstream.IsKeyModelDisabledNow("sk-a", "m1", now) {
+		t.Fatal("未到期组合应受限")
+	}
+	if upstream.IsKeyModelDisabledNow("sk-a", "m2", now) {
+		t.Fatal("已到期组合不应受限")
+	}
+}
+
+func TestRestoreKeyModel(t *testing.T) {
+	cm := newKeyModelTestConfigManager(t)
+	if err := cm.DisableKeyModel("Messages", 0, "sk-a", "m1", "model_not_found", "", ""); err != nil {
+		t.Fatalf("DisableKeyModel() error = %v", err)
+	}
+	if err := cm.RestoreKeyModel("Messages", 0, "sk-a", "m1"); err != nil {
+		t.Fatalf("RestoreKeyModel() error = %v", err)
+	}
+	if cm.IsKeyModelDisabled("Messages", 0, "sk-a", "m1") {
+		t.Fatal("手动恢复后组合不应再受限")
+	}
+	if err := cm.RestoreKeyModel("Messages", 0, "sk-a", "m1"); err == nil {
+		t.Fatal("恢复不存在的组合应返回错误")
+	}
+}
+
+func TestRestoreExpiredKeyModels(t *testing.T) {
+	cm := newKeyModelTestConfigManager(t)
+	if err := cm.DisableKeyModel("Messages", 0, "sk-a", "expired", "model_not_found", "", ""); err != nil {
+		t.Fatalf("DisableKeyModel() error = %v", err)
+	}
+	if err := cm.DisableKeyModel("Messages", 0, "sk-a", "active", "model_not_found", "", ""); err != nil {
+		t.Fatalf("DisableKeyModel() error = %v", err)
+	}
+
+	// 手动把其中一个改为已到期
+	cm.mu.Lock()
+	cm.config.Upstream[0].DisabledKeyModels[0].RecoverAt = time.Now().Add(-time.Hour).Format(time.RFC3339)
+	cm.mu.Unlock()
+
+	restored, err := cm.RestoreExpiredKeyModels("Messages", 0, time.Now())
+	if err != nil {
+		t.Fatalf("RestoreExpiredKeyModels() error = %v", err)
+	}
+	if len(restored) != 1 {
+		t.Fatalf("恢复数量 = %d, want 1", len(restored))
+	}
+	if cm.IsKeyModelDisabled("Messages", 0, "sk-a", "expired") {
+		t.Fatal("到期组合应被清理")
+	}
+	if !cm.IsKeyModelDisabled("Messages", 0, "sk-a", "active") {
+		t.Fatal("未到期组合应保留")
+	}
+}

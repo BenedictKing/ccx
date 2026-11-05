@@ -407,6 +407,10 @@ func (u *UpstreamConfig) Clone() *UpstreamConfig {
 			}
 		}
 	}
+	if u.DisabledKeyModels != nil {
+		cloned.DisabledKeyModels = make([]DisabledKeyModelInfo, len(u.DisabledKeyModels))
+		copy(cloned.DisabledKeyModels, u.DisabledKeyModels)
+	}
 	if u.AutoBlacklistBalance != nil {
 		v := *u.AutoBlacklistBalance
 		cloned.AutoBlacklistBalance = &v

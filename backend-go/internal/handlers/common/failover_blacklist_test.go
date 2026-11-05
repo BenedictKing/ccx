@@ -427,6 +427,22 @@ func TestShouldBlacklistKey_BalanceMessages(t *testing.T) {
 			body:       `{"error":{"message":"请求过于频繁，请稍后重试"}}`,
 			want:       BlacklistResult{},
 		},
+		{
+			name:       "403 no permission to access group should blacklist as permission error",
+			statusCode: 403,
+			body:       `{"error":{"code":"","message":"No permission to access group 最后又最后又最后的回响. Switch this API key to an available group in the console (request id: 202607130111451433593328268d9d6aFT)","type":"new_api_error"}}`,
+			want: BlacklistResult{
+				ShouldBlacklist: true,
+				Reason:          "permission_error",
+				Message:         "No permission to access group 最后又最后又最后的回响. Switch this API key to an available group in the console (request id: 202607130111451433593328268d9d6aFT)",
+			},
+		},
+		{
+			name:       "503 no permission to access group should not blacklist (only 403)",
+			statusCode: 503,
+			body:       `{"error":{"code":"","message":"No permission to access group foo","type":"new_api_error"}}`,
+			want:       BlacklistResult{},
+		},
 	}
 
 	for _, tt := range tests {

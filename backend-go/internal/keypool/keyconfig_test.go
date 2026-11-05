@@ -2,6 +2,7 @@ package keypool
 
 import (
 	"testing"
+	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
 )
@@ -158,5 +159,33 @@ func TestMatchesModel(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("matchesModel(%q, %v) = %v, want %v (case: %s)", tt.model, tt.models, got, tt.want, tt.name)
 		}
+	}
+}
+
+func TestCandidatesForModel_DisabledKeyModelFiltered(t *testing.T) {
+	up := &config.UpstreamConfig{
+		APIKeys: []string{"k1", "k2"},
+		DisabledKeyModels: []config.DisabledKeyModelInfo{
+			{Key: "k1", Model: "gpt-5.6-sol", RecoverAt: time.Now().Add(time.Hour).Format(time.RFC3339)},
+		},
+	}
+
+	// k1 对受限模型应被跳过，k2 保留
+	cands := CandidatesForModel(up, nil, "gpt-5.6-sol")
+	if len(cands) != 1 || cands[0].APIKey != "k2" {
+		t.Fatalf("want only k2 for restricted model, got %+v", cands)
+	}
+
+	// k1 对其他模型不受影响
+	cands = CandidatesForModel(up, nil, "gpt-4o")
+	if len(cands) != 2 {
+		t.Fatalf("want 2 candidates for unrestricted model, got %d", len(cands))
+	}
+
+	// 已到期限制不再生效
+	up.DisabledKeyModels[0].RecoverAt = time.Now().Add(-time.Hour).Format(time.RFC3339)
+	cands = CandidatesForModel(up, nil, "gpt-5.6-sol")
+	if len(cands) != 2 {
+		t.Fatalf("want 2 candidates after expiry, got %d", len(cands))
 	}
 }

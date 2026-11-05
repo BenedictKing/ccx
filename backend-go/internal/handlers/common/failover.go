@@ -1232,6 +1232,15 @@ func ShouldBlacklistKey(statusCode int, bodyBytes []byte) BlacklistResult {
 			Message:         truncateMessage(errMessage),
 		}
 	}
+	// new-api 分组权限错误（403 + "No permission to access group ..."）：
+	// 该 Key 绑定的分组已不可访问，与模型无关，整个 Key 在该渠道作废。
+	if statusCode == 403 && isGroupPermissionMessage(errMessage) {
+		return BlacklistResult{
+			ShouldBlacklist: true,
+			Reason:          "permission_error",
+			Message:         truncateMessage(errMessage),
+		}
+	}
 
 	// 认证错误: authentication_error / invalid_api_key
 	if typeLower == "authentication_error" || typeLower == "invalid_api_key" {
@@ -1455,6 +1464,28 @@ func isPermissionMessage(msg string) bool {
 		"权限不足",
 		"没有权限",
 		"禁止访问",
+	}
+	for _, keyword := range keywords {
+		if strings.Contains(msgLower, keyword) {
+			return true
+		}
+	}
+	return false
+}
+
+// isGroupPermissionMessage 识别 new-api 等中转站的"分组权限"错误。
+// 例如: "No permission to access group xxx. Switch this API key to an available group in the console"
+// 这类错误表示该 Key 绑定的分组已不可访问，与模型无关，整个 Key 在该渠道作废，应拉黑。
+func isGroupPermissionMessage(msg string) bool {
+	if msg == "" {
+		return false
+	}
+	msgLower := strings.ToLower(msg)
+	keywords := []string{
+		"no permission to access group",
+		"switch this api key to an available group",
+		"无权访问分组",
+		"无权限访问分组",
 	}
 	for _, keyword := range keywords {
 		if strings.Contains(msgLower, keyword) {

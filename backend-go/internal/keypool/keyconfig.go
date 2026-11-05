@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/ratelimit"
@@ -53,6 +54,7 @@ func CandidatesForModel(upstream *config.UpstreamConfig, failedKeys map[string]b
 	}
 
 	model = strings.TrimSpace(model)
+	now := time.Now()
 	out := make([]Candidate, 0, len(upstream.APIKeys))
 	for i, key := range upstream.APIKeys {
 		key = strings.TrimSpace(key)
@@ -67,6 +69,11 @@ func CandidatesForModel(upstream *config.UpstreamConfig, failedKeys map[string]b
 			continue
 		}
 		if model != "" && len(cfg.Models) > 0 && !matchesModel(model, cfg.Models) {
+			continue
+		}
+		// (Key, 模型) 组合级限制：model_not_found 等错误后，该组合在限制期内被跳过，
+		// 不影响该 Key 的其他模型，也不阻断 failover 到其他渠道。
+		if model != "" && upstream.IsKeyModelDisabledNow(key, model, now) {
 			continue
 		}
 		quotaGroup := strings.TrimSpace(cfg.QuotaGroup)

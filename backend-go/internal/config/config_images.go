@@ -429,6 +429,7 @@ func (cm *ConfigManager) AddImagesAPIKey(index int, apiKey string) error {
 		}
 	}
 	cm.config.ImagesUpstream[index].DisabledAPIKeys = newDisabledKeys
+	removeDisabledKeyModelsForKey(&cm.config.ImagesUpstream[index], apiKey)
 
 	var newHistoricalKeys []string
 	for _, hk := range cm.config.ImagesUpstream[index].HistoricalAPIKeys {

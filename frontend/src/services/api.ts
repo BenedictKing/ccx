@@ -189,6 +189,13 @@ export class ApiService {
     })
   }
 
+  async restoreKeyModel(channelId: number, apiKey: string, model: string): Promise<void> {
+    await this.request(`/messages/channels/${channelId}/keys/restore-model`, {
+      method: 'POST',
+      body: JSON.stringify({ apiKey, model })
+    })
+  }
+
   async pingChannel(id: number): Promise<PingResult> {
     return this.request(`/messages/ping/${id}`)
   }
@@ -339,6 +346,13 @@ export class ApiService {
     await this.request(`/responses/channels/${channelId}/keys/restore`, {
       method: 'POST',
       body: JSON.stringify({ apiKey })
+    })
+  }
+
+  async restoreResponsesKeyModel(channelId: number, apiKey: string, model: string): Promise<void> {
+    await this.request(`/responses/channels/${channelId}/keys/restore-model`, {
+      method: 'POST',
+      body: JSON.stringify({ apiKey, model })
     })
   }
 
@@ -601,6 +615,13 @@ export class ApiService {
     })
   }
 
+  async restoreChatKeyModel(channelId: number, apiKey: string, model: string): Promise<void> {
+    await this.request(`/chat/channels/${channelId}/keys/restore-model`, {
+      method: 'POST',
+      body: JSON.stringify({ apiKey, model })
+    })
+  }
+
   async moveChatApiKeyToTop(channelId: number, apiKey: string): Promise<void> {
     await this.request(`/chat/channels/${channelId}/keys/${encodeURIComponent(apiKey)}/top`, {
       method: 'POST'
@@ -734,6 +755,13 @@ export class ApiService {
     })
   }
 
+  async restoreImagesKeyModel(channelId: number, apiKey: string, model: string): Promise<void> {
+    await this.request(`/images/channels/${channelId}/keys/restore-model`, {
+      method: 'POST',
+      body: JSON.stringify({ apiKey, model })
+    })
+  }
+
   async moveImagesApiKeyToTop(channelId: number, apiKey: string): Promise<void> {
     await this.request(`/images/channels/${channelId}/keys/${encodeURIComponent(apiKey)}/top`, {
       method: 'POST'
@@ -863,6 +891,13 @@ export class ApiService {
     })
   }
 
+  async restoreVectorsKeyModel(channelId: number, apiKey: string, model: string): Promise<void> {
+    await this.request(`/vectors/channels/${channelId}/keys/restore-model`, {
+      method: 'POST',
+      body: JSON.stringify({ apiKey, model })
+    })
+  }
+
   async moveVectorsApiKeyToTop(channelId: number, apiKey: string): Promise<void> {
     await this.request(`/vectors/channels/${channelId}/keys/${encodeURIComponent(apiKey)}/top`, {
       method: 'POST'
@@ -989,6 +1024,13 @@ export class ApiService {
     await this.request(`/gemini/channels/${channelId}/keys/restore`, {
       method: 'POST',
       body: JSON.stringify({ apiKey })
+    })
+  }
+
+  async restoreGeminiKeyModel(channelId: number, apiKey: string, model: string): Promise<void> {
+    await this.request(`/gemini/channels/${channelId}/keys/restore-model`, {
+      method: 'POST',
+      body: JSON.stringify({ apiKey, model })
     })
   }
 

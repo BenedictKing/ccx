@@ -409,6 +409,7 @@ func (cm *ConfigManager) AddGeminiAPIKey(index int, apiKey string) error {
 		}
 	}
 	cm.config.GeminiUpstream[index].DisabledAPIKeys = newDisabledKeys
+	removeDisabledKeyModelsForKey(&cm.config.GeminiUpstream[index], apiKey)
 
 	// 如果该 Key 在历史列表中，从历史列表移除（换回来了）
 	var newHistoricalKeys []string

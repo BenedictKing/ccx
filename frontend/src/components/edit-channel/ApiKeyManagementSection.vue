@@ -362,6 +362,48 @@
             </v-list-item>
           </v-list>
         </div>
+
+        <!-- 被限制的 (Key, 模型) 组合（仅编辑模式） -->
+        <div v-if="isEditing && visibleDisabledKeyModels.length" class="mt-4">
+          <div class="d-flex align-center ga-2 mb-2">
+            <v-icon size="small" color="warning">mdi-alert-circle-outline</v-icon>
+            <span class="text-body-2 font-weight-medium text-warning">{{ t('channelCard.disabledKeyModels') }}</span>
+            <v-chip size="x-small" color="warning" variant="tonal">{{ visibleDisabledKeyModels.length }}</v-chip>
+          </div>
+          <v-list density="compact" class="rounded-lg" style="max-height: 150px; overflow-y: auto;">
+            <v-list-item
+              v-for="(dm, dmIdx) in visibleDisabledKeyModels"
+              :key="'disabled-model-' + dmIdx"
+              class="px-3"
+              style="background: rgba(var(--v-theme-warning), 0.04);"
+            >
+              <template #prepend>
+                <v-icon size="small" color="warning" class="mr-2">mdi-key-alert</v-icon>
+              </template>
+              <v-list-item-title class="text-caption font-weight-mono">
+                {{ dm.key.length > 20 ? dm.key.slice(0, 8) + '***' + dm.key.slice(-5) : dm.key }}
+                <v-chip size="x-small" color="primary" variant="tonal" class="ml-1">{{ dm.model }}</v-chip>
+              </v-list-item-title>
+              <v-list-item-subtitle class="d-flex align-center ga-1">
+                <v-chip size="x-small" color="warning" variant="tonal">{{ t('channelCard.modelNotFound') }}</v-chip>
+                <span class="text-caption">{{ t('channelCard.recoverAt') }}: {{ new Date(dm.recoverAt).toLocaleString() }}</span>
+              </v-list-item-subtitle>
+              <template #append>
+                <v-btn
+                  size="x-small"
+                  color="success"
+                  variant="tonal"
+                  rounded="lg"
+                  :loading="restoringKeyModel === (dm.key + '|' + dm.model)"
+                  @click="$emit('restore-key-model', dm.key, dm.model)"
+                >
+                  <v-icon start size="small">mdi-restore</v-icon>
+                  {{ t('channelCard.restoreKey') }}
+                </v-btn>
+              </template>
+            </v-list-item>
+          </v-list>
+        </div>
       </v-card-text>
     </v-card>
   </div>
@@ -387,12 +429,22 @@ interface DisabledKey {
   disabledAt: string
 }
 
+interface DisabledKeyModel {
+  key: string
+  model: string
+  reason: string
+  disabledAt: string
+  recoverAt: string
+}
+
 interface Props {
   apiKeys: string[]
   disabledKeys: DisabledKey[]
+  disabledKeyModels?: DisabledKeyModel[]
   keyModelsStatus: Map<string, KeyModelsStatus>
   isEditing: boolean
   restoringKey: string
+  restoringKeyModel?: string
   serviceType?: string
   channelId?: number
   proxyUrl?: string
@@ -404,6 +456,7 @@ const emit = defineEmits<{
   'update:apiKeys': [string[]]
   'update:proxyUrl': [string]
   'restore-key': [string]
+  'restore-key-model': [string, string]
 }>()
 
 const { t } = useI18n()
@@ -446,6 +499,7 @@ const visibleDisabledKeys = computed(() => {
   return props.disabledKeys.filter(dk => !props.apiKeys.includes(dk.key))
 })
 
+const visibleDisabledKeyModels = computed(() => props.disabledKeyModels || [])
 const handleInput = () => {
   apiKeyError.value = ''
   duplicateKeyIndex.value = null

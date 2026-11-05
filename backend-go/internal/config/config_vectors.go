@@ -452,6 +452,7 @@ func (cm *ConfigManager) AddVectorsAPIKey(index int, apiKey string) error {
 		}
 	}
 	cm.config.VectorsUpstream[index].DisabledAPIKeys = newDisabledKeys
+	removeDisabledKeyModelsForKey(&cm.config.VectorsUpstream[index], apiKey)
 
 	var newHistoricalKeys []string
 	for _, hk := range cm.config.VectorsUpstream[index].HistoricalAPIKeys {

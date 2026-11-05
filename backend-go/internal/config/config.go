@@ -23,6 +23,7 @@ type UpstreamConfig struct {
 	APIKeyConfigs         []APIKeyConfig                     `json:"apiKeyConfigs,omitempty"`     // API Key 附加配置（限速、权重、配额组等），通过 Key 关联 APIKeys
 	HistoricalAPIKeys     []string                           `json:"historicalApiKeys,omitempty"` // 历史 API Key（用于统计聚合，换 Key 后保留旧 Key 的统计数据）
 	DisabledAPIKeys       []DisabledKeyInfo                  `json:"disabledApiKeys,omitempty"`   // 被拉黑的 API Key（持久化，需手动恢复）
+	DisabledKeyModels     []DisabledKeyModelInfo             `json:"disabledKeyModels,omitempty"` // 被限制的 (Key,模型) 组合（持久化，定时自动恢复）
 	ServiceType           string                             `json:"serviceType"`                 // gemini, openai, claude
 	AuthHeader            string                             `json:"authHeader,omitempty"`        // 认证头覆盖：auto(空)/bearer/x-api-key
 	Name                  string                             `json:"name,omitempty"`
@@ -125,6 +126,18 @@ type DisabledKeyInfo struct {
 	DisabledAt string        `json:"disabledAt"`          // ISO8601 时间戳
 	RecoverAt  string        `json:"recoverAt,omitempty"` // 自动恢复时间（可选）
 	Config     *APIKeyConfig `json:"config,omitempty"`    // 拉黑前的 key 配置快照，restore 时恢复
+}
+
+// DisabledKeyModelInfo 被限制的 (Key, 模型) 组合信息。
+// 用于 model_not_found 等"该 Key 在此渠道下缺少特定模型"的场景：
+// 仅限制该 Key 对该模型的路由，不影响该 Key 的其他模型，也不阻断 failover。
+type DisabledKeyModelInfo struct {
+	Key        string `json:"key"`
+	Model      string `json:"model"`      // 触发限制的模型（redirectedModel）
+	Reason     string `json:"reason"`     // "model_not_found"
+	Message    string `json:"message"`    // 原始错误信息摘要
+	DisabledAt string `json:"disabledAt"` // RFC3339 时间戳
+	RecoverAt  string `json:"recoverAt"`  // RFC3339 自动恢复时间（默认 +1h）
 }
 
 // RateLimitWindowSeconds 返回限速器实际使用的窗口秒数。
@@ -339,6 +352,30 @@ func (u *UpstreamConfig) IsAutoBlacklistBalanceEnabled() bool {
 		return true
 	}
 	return *u.AutoBlacklistBalance
+}
+
+// IsKeyModelDisabledNow 判断 (apiKey, model) 组合当前是否处于限制期内。
+// 纯只读方法，供 keypool 候选过滤与 ConfigManager 复用，避免反向依赖。
+// RecoverAt 为空或已到期视为不再限制。model 比较大小写不敏感。
+func (u *UpstreamConfig) IsKeyModelDisabledNow(apiKey, model string, now time.Time) bool {
+	if apiKey == "" || model == "" || len(u.DisabledKeyModels) == 0 {
+		return false
+	}
+	model = strings.ToLower(strings.TrimSpace(model))
+	for _, dm := range u.DisabledKeyModels {
+		if dm.Key != apiKey || strings.ToLower(strings.TrimSpace(dm.Model)) != model {
+			continue
+		}
+		if dm.RecoverAt == "" {
+			return true
+		}
+		recoverAt, err := time.Parse(time.RFC3339, dm.RecoverAt)
+		if err != nil {
+			return true // 无法解析恢复时间时保守视为仍受限
+		}
+		return now.Before(recoverAt)
+	}
+	return false
 }
 
 // IsNormalizeMetadataUserIDEnabled 检查 metadata.user_id 规范化是否启用（默认 true）
@@ -785,6 +822,21 @@ func (cm *ConfigManager) clearFailedKeysForUpstream(upstream *UpstreamConfig, ap
 			log.Printf("[%s-Key] 已清理被删除渠道 %s 的失败密钥记录: %s", apiType, upstream.Name, utils.MaskAPIKey(key))
 		}
 	}
+}
+
+// removeDisabledKeyModelsForKey 移除指定 Key 的所有 (Key,模型) 组合限制。
+// 用于 Key 重新加入渠道时清理其历史模型限制。调用方需持有锁。
+func removeDisabledKeyModelsForKey(upstream *UpstreamConfig, apiKey string) {
+	if len(upstream.DisabledKeyModels) == 0 {
+		return
+	}
+	newList := make([]DisabledKeyModelInfo, 0, len(upstream.DisabledKeyModels))
+	for _, dm := range upstream.DisabledKeyModels {
+		if dm.Key != apiKey {
+			newList = append(newList, dm)
+		}
+	}
+	upstream.DisabledKeyModels = newList
 }
 
 // cleanupExpiredFailures 清理过期的失败记录
@@ -1248,6 +1300,146 @@ func (cm *ConfigManager) RestoreDisabledKeys(apiType string, channelIndex int, k
 		upstream.APIKeyConfigs = restoreAPIKeyConfig(upstream.APIKeyConfigs, key, cfg)
 	}
 	log.Printf("[%s-Blacklist] 渠道 [%d] %s 自动恢复了 %d 个 Key", apiType, channelIndex, upstream.Name, len(restored))
+	if err := cm.saveConfigLocked(cm.config); err != nil {
+		return nil, err
+	}
+	return restored, nil
+}
+
+// DisableKeyModel 将 (apiKey, model) 组合加入限制列表（持久化，默认 1 小时后自动恢复）。
+// 仅限制该 Key 对该模型的路由，不影响该 Key 的其他模型，也不从 APIKeys 中移除。
+// recoverAt 为上游明确给出的恢复时间（RFC3339）；为空、无效或已过期时沿用 1 小时兜底，
+// 与 applyKeyBlacklistLocked 的 Key 级拉黑语义保持一致。
+func (cm *ConfigManager) DisableKeyModel(apiType string, channelIndex int, apiKey, model, reason, message, recoverAt string) error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	upstreams := cm.getUpstreamSliceLocked(apiType)
+	if upstreams == nil || channelIndex < 0 || channelIndex >= len(*upstreams) {
+		return fmt.Errorf("无效的渠道索引: %s[%d]", apiType, channelIndex)
+	}
+	apiKey = strings.TrimSpace(apiKey)
+	model = strings.TrimSpace(model)
+	if apiKey == "" || model == "" {
+		return nil
+	}
+
+	upstream := &(*upstreams)[channelIndex]
+	now := time.Now()
+	resolvedRecoverAt := now.Add(time.Hour).Format(time.RFC3339)
+	if explicit, err := time.Parse(time.RFC3339, strings.TrimSpace(recoverAt)); err == nil && explicit.After(now) {
+		resolvedRecoverAt = explicit.Format(time.RFC3339)
+	}
+	recoverAt = resolvedRecoverAt
+
+	// 去重：同 (key, model) 组合已存在则刷新时间戳与恢复时间
+	for i := range upstream.DisabledKeyModels {
+		dm := &upstream.DisabledKeyModels[i]
+		if dm.Key == apiKey && strings.EqualFold(strings.TrimSpace(dm.Model), model) {
+			dm.Reason = reason
+			dm.Message = message
+			dm.DisabledAt = now.Format(time.RFC3339)
+			dm.RecoverAt = recoverAt
+			log.Printf("[%s-KeyModel] 刷新 (Key %s, 模型 %s) 限制 (原因: %s, 渠道: %s)",
+				apiType, utils.MaskAPIKey(apiKey), model, reason, upstream.Name)
+			return cm.saveConfigLocked(cm.config)
+		}
+	}
+
+	upstream.DisabledKeyModels = append(upstream.DisabledKeyModels, DisabledKeyModelInfo{
+		Key:        apiKey,
+		Model:      model,
+		Reason:     reason,
+		Message:    message,
+		DisabledAt: now.Format(time.RFC3339),
+		RecoverAt:  recoverAt,
+	})
+	log.Printf("[%s-KeyModel] (Key %s, 模型 %s) 已限制 (原因: %s, 渠道: %s, 恢复时间: %s)",
+		apiType, utils.MaskAPIKey(apiKey), model, reason, upstream.Name, recoverAt)
+	statelog.LogStateTransition(apiType+"-KeyModel", "key_model", utils.MaskAPIKey(apiKey)+"|"+model, "active", "disabled", reason, "channel="+upstream.Name)
+
+	return cm.saveConfigLocked(cm.config)
+}
+
+// IsKeyModelDisabled 判断指定渠道下 (apiKey, model) 组合是否处于限制期内。
+func (cm *ConfigManager) IsKeyModelDisabled(apiType string, channelIndex int, apiKey, model string) bool {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+
+	upstreams := cm.getUpstreamSliceLocked(apiType)
+	if upstreams == nil || channelIndex < 0 || channelIndex >= len(*upstreams) {
+		return false
+	}
+	return (*upstreams)[channelIndex].IsKeyModelDisabledNow(apiKey, model, time.Now())
+}
+
+// RestoreKeyModel 手动移除指定渠道下 (apiKey, model) 组合的限制（持久化）。
+func (cm *ConfigManager) RestoreKeyModel(apiType string, channelIndex int, apiKey, model string) error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	upstreams := cm.getUpstreamSliceLocked(apiType)
+	if upstreams == nil || channelIndex < 0 || channelIndex >= len(*upstreams) {
+		return fmt.Errorf("无效的渠道索引: %s[%d]", apiType, channelIndex)
+	}
+	upstream := &(*upstreams)[channelIndex]
+
+	newList := make([]DisabledKeyModelInfo, 0, len(upstream.DisabledKeyModels))
+	removed := false
+	for _, dm := range upstream.DisabledKeyModels {
+		if dm.Key == apiKey && strings.EqualFold(strings.TrimSpace(dm.Model), strings.TrimSpace(model)) {
+			removed = true
+			continue
+		}
+		newList = append(newList, dm)
+	}
+	if !removed {
+		return fmt.Errorf("(Key %s, 模型 %s) 不在限制列表中", utils.MaskAPIKey(apiKey), model)
+	}
+
+	upstream.DisabledKeyModels = newList
+	log.Printf("[%s-KeyModel] (Key %s, 模型 %s) 限制已移除 (渠道: %s)", apiType, utils.MaskAPIKey(apiKey), model, upstream.Name)
+	statelog.LogStateTransition(apiType+"-KeyModel", "key_model", utils.MaskAPIKey(apiKey)+"|"+model, "disabled", "active", "manual_restore", "channel="+upstream.Name)
+
+	return cm.saveConfigLocked(cm.config)
+}
+
+// RestoreExpiredKeyModels 清理指定渠道下所有 RecoverAt 已到期的 (Key,模型) 限制条目。
+// 返回被恢复的组合描述（"maskedKey|model"），供定时恢复调度器汇总日志。
+func (cm *ConfigManager) RestoreExpiredKeyModels(apiType string, channelIndex int, now time.Time) ([]string, error) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	upstreams := cm.getUpstreamSliceLocked(apiType)
+	if upstreams == nil || channelIndex < 0 || channelIndex >= len(*upstreams) {
+		return nil, fmt.Errorf("无效的渠道索引: %s[%d]", apiType, channelIndex)
+	}
+	upstream := &(*upstreams)[channelIndex]
+	if len(upstream.DisabledKeyModels) == 0 {
+		return nil, nil
+	}
+
+	newList := make([]DisabledKeyModelInfo, 0, len(upstream.DisabledKeyModels))
+	restored := make([]string, 0)
+	for _, dm := range upstream.DisabledKeyModels {
+		expired := false
+		if dm.RecoverAt != "" {
+			if recoverAt, err := time.Parse(time.RFC3339, dm.RecoverAt); err == nil {
+				expired = !now.Before(recoverAt)
+			}
+		}
+		if expired {
+			restored = append(restored, utils.MaskAPIKey(dm.Key)+"|"+dm.Model)
+			continue
+		}
+		newList = append(newList, dm)
+	}
+	if len(restored) == 0 {
+		return nil, nil
+	}
+
+	upstream.DisabledKeyModels = newList
+	log.Printf("[%s-KeyModel] 渠道 [%d] %s 自动恢复了 %d 个 (Key,模型) 限制", apiType, channelIndex, upstream.Name, len(restored))
 	if err := cm.saveConfigLocked(cm.config); err != nil {
 		return nil, err
 	}

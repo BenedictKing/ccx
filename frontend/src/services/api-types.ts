@@ -75,6 +75,16 @@ export interface DisabledKeyInfo {
   config?: APIKeyConfig // 拉黑前的 key 配置快照，restore 时恢复
 }
 
+// 被限制的 (Key, 模型) 组合（model_not_found 等场景，仅限制该 Key 对该模型的路由）
+export interface DisabledKeyModelInfo {
+  key: string
+  model: string       // 触发限制的模型
+  reason: string      // "model_not_found"
+  message: string
+  disabledAt: string  // ISO8601 时间戳
+  recoverAt: string   // 自动恢复时间（ISO8601）
+}
+
 export interface APIKeyConfig {
   key: string
   name?: string
@@ -137,6 +147,7 @@ export interface Channel {
   apiKeys: string[]
   apiKeyConfigs?: APIKeyConfig[]
   disabledApiKeys?: DisabledKeyInfo[]  // 被拉黑的 API Key
+  disabledKeyModels?: DisabledKeyModelInfo[]  // 被限制的 (Key, 模型) 组合
   historicalApiKeys?: string[]
   description?: string
   website?: string

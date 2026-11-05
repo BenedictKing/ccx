@@ -8,11 +8,12 @@ import (
 )
 
 type ScheduledRecoveryResult struct {
-	Kind             ChannelKind
-	ChannelIndex     int
-	ChannelName      string
-	RestoredKeys     []string
-	ActivatedChannel bool
+	Kind              ChannelKind
+	ChannelIndex      int
+	ChannelName       string
+	RestoredKeys      []string
+	RestoredKeyModels []string // 恢复的 (Key,模型) 组合描述（"maskedKey|model"）
+	ActivatedChannel  bool
 }
 
 // SelectionResult 渠道选择结果
@@ -183,8 +184,14 @@ func (s *ChannelScheduler) restoreScheduledKeysForKind(kind ChannelKind, now tim
 	results := make([]ScheduledRecoveryResult, 0)
 
 	for idx, upstream := range upstreams {
-		if upstream.Status == "disabled" || len(upstream.DisabledAPIKeys) == 0 {
+		if upstream.Status == "disabled" {
 			continue
+		}
+
+		// (Key,模型) 组合级限制：到期后清理，与整 Key 拉黑恢复相互独立。
+		restoredKeyModels, err := s.configManager.RestoreExpiredKeyModels(apiType, idx, now)
+		if err != nil {
+			return nil, err
 		}
 
 		keysToRestore := make([]string, 0)
@@ -198,6 +205,19 @@ func (s *ChannelScheduler) restoreScheduledKeysForKind(kind ChannelKind, now tim
 			keysToRestore = append(keysToRestore, dk.Key)
 		}
 		if len(keysToRestore) == 0 {
+			// 无整 Key 恢复，但可能有 (Key,模型) 组合被恢复，需单独上报。
+			if len(restoredKeyModels) > 0 {
+				name := upstream.Name
+				if updated := s.getUpstreamByIndex(idx, kind); updated != nil {
+					name = updated.Name
+				}
+				results = append(results, ScheduledRecoveryResult{
+					Kind:              kind,
+					ChannelIndex:      idx,
+					ChannelName:       name,
+					RestoredKeyModels: restoredKeyModels,
+				})
+			}
 			continue
 		}
 
@@ -222,7 +242,7 @@ func (s *ChannelScheduler) restoreScheduledKeysForKind(kind ChannelKind, now tim
 		if err != nil {
 			return nil, err
 		}
-		if len(restoreResult.RestoredKeys) == 0 {
+		if len(restoreResult.RestoredKeys) == 0 && len(restoredKeyModels) == 0 {
 			continue
 		}
 
@@ -232,11 +252,12 @@ func (s *ChannelScheduler) restoreScheduledKeysForKind(kind ChannelKind, now tim
 		}
 
 		results = append(results, ScheduledRecoveryResult{
-			Kind:             kind,
-			ChannelIndex:     idx,
-			ChannelName:      updatedUpstream.Name,
-			RestoredKeys:     restoreResult.RestoredKeys,
-			ActivatedChannel: restoreResult.ActivatedChannel,
+			Kind:              kind,
+			ChannelIndex:      idx,
+			ChannelName:       updatedUpstream.Name,
+			RestoredKeys:      restoreResult.RestoredKeys,
+			RestoredKeyModels: restoredKeyModels,
+			ActivatedChannel:  restoreResult.ActivatedChannel,
 		})
 	}
 

@@ -414,6 +414,7 @@ func (cm *ConfigManager) AddResponsesAPIKey(index int, apiKey string) error {
 		}
 	}
 	cm.config.ResponsesUpstream[index].DisabledAPIKeys = newDisabledKeys
+	removeDisabledKeyModelsForKey(&cm.config.ResponsesUpstream[index], apiKey)
 
 	// 如果该 Key 在历史列表中，从历史列表移除（换回来了）
 	var newHistoricalKeys []string
