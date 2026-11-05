@@ -1,0 +1,793 @@
+package siteaccess
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strconv"
+	"strings"
+	"testing"
+)
+
+// ── 测试辅助：mock new-api 服务端 ──
+
+// newMockNewApiServer 启动一个模拟 new-api 站点，按路径分发响应。
+// handler 里可通过 r.Header 校验认证头是否正确注入。
+func newMockNewApiServer(t *testing.T, handler http.HandlerFunc) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func writeEnvelope(w http.ResponseWriter, success bool, data interface{}, message string) {
+	envelope := map[string]interface{}{
+		"success": success,
+		"data":    data,
+		"message": message,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(envelope)
+}
+
+// ── Verify ──
+
+func TestNewApiAdapter_Verify_Success(t *testing.T) {
+	srv := newMockNewApiServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/user/self" {
+			t.Fatalf("意外路径: %s", r.URL.Path)
+		}
+		if r.Method != http.MethodGet {
+			t.Fatalf("意外方法: %s", r.Method)
+		}
+		// 默认 bearer 模式
+		if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+			t.Fatalf("Authorization 头不匹配: got=%s", got)
+		}
+		if got := r.Header.Get("New-API-User"); got != "42" {
+			t.Fatalf("New-API-User 头不匹配: got=%s", got)
+		}
+		if got := r.Header.Get("User-id"); got != "42" {
+			t.Fatalf("User-id 头不匹配: got=%s", got)
+		}
+		writeEnvelope(w, true, NewApiUserSelf{ID: 42, Username: "alice", Quota: 100000, UsedQuota: 5000}, "")
+	})
+
+	adapter := &NewApiAdapter{HTTPClient: srv.Client()}
+	self, err := adapter.Verify(context.Background(), srv.URL, "test-token", "42", "")
+	if err != nil {
+		t.Fatalf("Verify 失败: %v", err)
+	}
+	if self.ID != 42 || self.Username != "alice" || self.Quota != 100000 || self.UsedQuota != 5000 {
+		t.Fatalf("解析结果不符: %+v", self)
+	}
+}
+
+func TestNewApiAdapter_Verify_RawAuthMode(t *testing.T) {
+	srv := newMockNewApiServer(t, func(w http.ResponseWriter, r *http.Request) {
+		// raw 模式不带 "Bearer " 前缀
+		if got := r.Header.Get("Authorization"); got != "test-token" {
+			t.Fatalf("raw 模式 Authorization 头不匹配: got=%s", got)
+		}
+		writeEnvelope(w, true, NewApiUserSelf{ID: 1}, "")
+	})
+
+	adapter := &NewApiAdapter{HTTPClient: srv.Client()}
+	if _, err := adapter.Verify(context.Background(), srv.URL, "test-token", "1", NewApiAuthModeRaw); err != nil {
+		t.Fatalf("Verify 失败: %v", err)
+	}
+	if _, err := adapter.Verify(context.Background(), srv.URL, "test-token", "1", NewApiAuthModeRawAuth); err != nil {
+		t.Fatalf("Verify(raw_auth) 失败: %v", err)
+	}
+}
+
+func TestNewApiAdapter_Verify_InvalidToken(t *testing.T) {
+	srv := newMockNewApiServer(t, func(w http.ResponseWriter, r *http.Request) {
+		writeEnvelope(w, false, nil, "无效的令牌")
+	})
+
+	adapter := &NewApiAdapter{HTTPClient: srv.Client()}
+	_, err := adapter.Verify(context.Background(), srv.URL, "bad-token", "1", "")
+	if err == nil {
+		t.Fatal("期望返回错误，实际未报错")
+	}
+	if !containsSubstr(err.Error(), "无效的令牌") {
+		t.Fatalf("错误信息未包含 message: %v", err)
+	}
+}
+
+func TestNewApiAdapter_Verify_HTTPError(t *testing.T) {
+	srv := newMockNewApiServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte("unauthorized"))
+	})
+
+	adapter := &NewApiAdapter{HTTPClient: srv.Client()}
+	_, err := adapter.Verify(context.Background(), srv.URL, "bad-token", "1", "")
+	if err == nil {
+		t.Fatal("期望返回错误，实际未报错")
+	}
+}
+
+func TestNewApiAdapter_Verify_HTTPError_HTMLPage(t *testing.T) {
+	// WAF/边缘节点拦截页（如 451）返回整页 HTML，错误信息应只保留 <title> 而不是原始标签/CSS
+	srv := newMockNewApiServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(451)
+		_, _ = w.Write([]byte(`<!DOCTYPE html> <html lang="zh"> <head> <meta charset="utf-8"> <title>访问受限 · 451</title> <style> body{margin:0} </style> </head> <body>blocked</body> </html>`))
+	})
+
+	adapter := &NewApiAdapter{HTTPClient: srv.Client()}
+	_, err := adapter.Verify(context.Background(), srv.URL, "token", "114446", "")
+	if err == nil {
+		t.Fatal("期望返回错误，实际未报错")
+	}
+	if !strings.Contains(err.Error(), "HTTP 451: 访问受限 · 451") {
+		t.Fatalf("期望错误包含提取的 title，实际: %v", err)
+	}
+	if strings.Contains(err.Error(), "<!DOCTYPE") || strings.Contains(err.Error(), "<style>") {
+		t.Fatalf("错误信息不应包含原始 HTML，实际: %v", err)
+	}
+}
+
+func TestSummarizeErrorBody(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want string
+	}{
+		{"json 错误原样返回", `{"message":"invalid token"}`, `{"message":"invalid token"}`},
+		{"HTML 提取 title", `<!DOCTYPE html><html><head><title>访问受限 · 451</title></head></html>`, "访问受限 · 451"},
+		{"HTML 无 title 给通用提示", `<html><body>blocked</body></html>`, "上游返回 HTML 错误页（非 new-api JSON 响应），站点可能拦截了请求"},
+		{"前导空白后识别 HTML", "  \n<!doctype html><title>Blocked</title>", "Blocked"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := summarizeErrorBody([]byte(tc.body)); got != tc.want {
+				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestNewApiAdapter_Verify_MalformedEnvelope(t *testing.T) {
+	srv := newMockNewApiServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`not-json`))
+	})
+
+	adapter := &NewApiAdapter{HTTPClient: srv.Client()}
+	_, err := adapter.Verify(context.Background(), srv.URL, "token", "1", "")
+	if err == nil {
+		t.Fatal("期望信封解析失败报错")
+	}
+}
+
+// ── FetchBalance ──
+
+func TestNewApiAdapter_FetchBalance(t *testing.T) {
+	srv := newMockNewApiServer(t, func(w http.ResponseWriter, r *http.Request) {
+		writeEnvelope(w, true, NewApiUserSelf{ID: 1, Quota: 250000}, "")
+	})
+
+	adapter := &NewApiAdapter{HTTPClient: srv.Client()}
+	balance, currency, err := adapter.FetchBalance(context.Background(), srv.URL, "token", "1", "")
+	if err != nil {
+		t.Fatalf("FetchBalance 失败: %v", err)
+	}
+	if balance != 250000 {
+		t.Fatalf("balance 不符: got=%v", balance)
+	}
+	if currency != "quota" {
+		t.Fatalf("currency 不符: got=%s", currency)
+	}
+}
+
+// ── FetchGroups ──
+
+func TestNewApiAdapter_FetchGroups(t *testing.T) {
+	srv := newMockNewApiServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/user/self/groups" {
+			t.Fatalf("意外路径: %s", r.URL.Path)
+		}
+		writeEnvelope(w, true, map[string]NewApiGroupInfo{
+			"default": {Desc: "默认分组", Ratio: 1.0},
+			"vip":     {Desc: "VIP 分组", Ratio: 0.5},
+		}, "")
+	})
+
+	adapter := &NewApiAdapter{HTTPClient: srv.Client()}
+	groups, err := adapter.FetchGroups(context.Background(), srv.URL, "token", "1", "")
+	if err != nil {
+		t.Fatalf("FetchGroups 失败: %v", err)
+	}
+	if groups["default"] != 1.0 || groups["vip"] != 0.5 {
+		t.Fatalf("分组倍率不符: %+v", groups)
+	}
+}
+
+// ── FetchModels ──
+
+func TestNewApiAdapter_FetchModels(t *testing.T) {
+	srv := newMockNewApiServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/user/models" {
+			t.Fatalf("意外路径: %s", r.URL.Path)
+		}
+		writeEnvelope(w, true, []string{"gpt-4o", "claude-3-5-sonnet"}, "")
+	})
+
+	adapter := &NewApiAdapter{HTTPClient: srv.Client()}
+	models, err := adapter.FetchModels(context.Background(), srv.URL, "token", "1", "")
+	if err != nil {
+		t.Fatalf("FetchModels 失败: %v", err)
+	}
+	if len(models) != 2 || models[0] != "gpt-4o" || models[1] != "claude-3-5-sonnet" {
+		t.Fatalf("模型列表不符: %+v", models)
+	}
+}
+
+// ── FetchGroupModels ──
+
+func TestNewApiAdapter_FetchGroupModels(t *testing.T) {
+	srv := newMockNewApiServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/user/models" {
+			t.Fatalf("意外路径: %s", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("group"); got != "画图" {
+			t.Fatalf("group 查询参数不符（须 URL 转义中文分组名）: got=%s", got)
+		}
+		writeEnvelope(w, true, []string{"dall-e-3"}, "")
+	})
+
+	adapter := &NewApiAdapter{HTTPClient: srv.Client()}
+	models, err := adapter.FetchGroupModels(context.Background(), srv.URL, "token", "1", "", "画图")
+	if err != nil {
+		t.Fatalf("FetchGroupModels 失败: %v", err)
+	}
+	if len(models) != 1 || models[0] != "dall-e-3" {
+		t.Fatalf("分组模型列表不符: %+v", models)
+	}
+}
+
+// ── ListTokens / FindTokenByName ──
+
+func TestNewApiAdapter_ListTokens_ItemsShape(t *testing.T) {
+	srv := newMockNewApiServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/token/" {
+			t.Fatalf("意外路径: %s", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("p"); got != "1" {
+			t.Fatalf("分页参数 p 不符: got=%s", got)
+		}
+		if got := r.URL.Query().Get("size"); got != "100" {
+			t.Fatalf("分页参数 size 不符: got=%s", got)
+		}
+		writeEnvelope(w, true, map[string]interface{}{
+			"items": []NewApiToken{
+				{ID: 1, Key: "sk-aaa", Name: "ccx-autopilot", Status: 1},
+				{ID: 2, Key: "sk-bbb", Name: "other-key", Status: 1},
+			},
+		}, "")
+	})
+
+	adapter := &NewApiAdapter{HTTPClient: srv.Client()}
+	tokens, err := adapter.ListTokens(context.Background(), srv.URL, "token", "1", "", 1, 100)
+	if err != nil {
+		t.Fatalf("ListTokens 失败: %v", err)
+	}
+	if len(tokens) != 2 {
+		t.Fatalf("token 数量不符: got=%d", len(tokens))
+	}
+}
+
+func TestNewApiAdapter_ListTokens_ArrayShape(t *testing.T) {
+	// 部分 fork data 直接是数组而非 {items:[...]}
+	srv := newMockNewApiServer(t, func(w http.ResponseWriter, r *http.Request) {
+		writeEnvelope(w, true, []NewApiToken{
+			{ID: 5, Key: "sk-ccc", Name: "ccx-autopilot", Status: 1},
+		}, "")
+	})
+
+	adapter := &NewApiAdapter{HTTPClient: srv.Client()}
+	tokens, err := adapter.ListTokens(context.Background(), srv.URL, "token", "1", "", 1, 100)
+	if err != nil {
+		t.Fatalf("ListTokens(数组兼容) 失败: %v", err)
+	}
+	if len(tokens) != 1 || tokens[0].Name != "ccx-autopilot" {
+		t.Fatalf("数组兼容解析不符: %+v", tokens)
+	}
+}
+
+func TestNewApiAdapter_FindTokenByName_Found(t *testing.T) {
+	srv := newMockNewApiServer(t, func(w http.ResponseWriter, r *http.Request) {
+		writeEnvelope(w, true, map[string]interface{}{
+			"items": []NewApiToken{
+				{ID: 1, Key: "sk-aaa", Name: "ccx-autopilot", Status: 1},
+				{ID: 2, Key: "sk-bbb", Name: "other-key", Status: 1},
+			},
+		}, "")
+	})
+
+	adapter := &NewApiAdapter{HTTPClient: srv.Client()}
+	token, err := adapter.FindTokenByName(context.Background(), srv.URL, "token", "1", "", "ccx-autopilot")
+	if err != nil {
+		t.Fatalf("FindTokenByName 失败: %v", err)
+	}
+	if token == nil || token.ID != 1 {
+		t.Fatalf("未找到期望的 token: %+v", token)
+	}
+}
+
+func TestNewApiAdapter_FindTokenByName_NotFound(t *testing.T) {
+	srv := newMockNewApiServer(t, func(w http.ResponseWriter, r *http.Request) {
+		writeEnvelope(w, true, map[string]interface{}{
+			"items": []NewApiToken{
+				{ID: 2, Key: "sk-bbb", Name: "other-key", Status: 1},
+			},
+		}, "")
+	})
+
+	adapter := &NewApiAdapter{HTTPClient: srv.Client()}
+	token, err := adapter.FindTokenByName(context.Background(), srv.URL, "token", "1", "", "ccx-autopilot")
+	if err != nil {
+		t.Fatalf("FindTokenByName 失败: %v", err)
+	}
+	if token != nil {
+		t.Fatalf("期望未找到，实际找到: %+v", token)
+	}
+}
+
+func TestNewApiAdapter_FindTokenByName_SearchesLaterPages(t *testing.T) {
+	firstPage := make([]NewApiToken, 100)
+	for i := range firstPage {
+		firstPage[i] = NewApiToken{ID: i + 1, Name: "other-" + strconv.Itoa(i)}
+	}
+	srv := newMockNewApiServer(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Query().Get("p") {
+		case "1":
+			writeEnvelope(w, true, newApiTokenListData{Items: firstPage}, "")
+		case "2":
+			writeEnvelope(w, true, newApiTokenListData{Items: []NewApiToken{{ID: 101, Key: "sk-target", Name: "ccx-autopilot-default", Group: "default"}}}, "")
+		default:
+			t.Fatalf("意外页码: %s", r.URL.Query().Get("p"))
+		}
+	})
+
+	adapter := &NewApiAdapter{HTTPClient: srv.Client()}
+	token, err := adapter.FindTokenByName(context.Background(), srv.URL, "token", "1", "", "ccx-autopilot-default")
+	if err != nil {
+		t.Fatalf("FindTokenByName 失败: %v", err)
+	}
+	if token == nil || token.ID != 101 || token.Group != "default" {
+		t.Fatalf("未从后续页面找到同名 key: %+v", token)
+	}
+}
+
+func TestNewApiAdapter_DeleteToken(t *testing.T) {
+	srv := newMockNewApiServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete || r.URL.Path != "/api/token/42" {
+			t.Fatalf("删除请求不符: %s %s", r.Method, r.URL.Path)
+		}
+		writeEnvelope(w, true, nil, "")
+	})
+
+	adapter := &NewApiAdapter{HTTPClient: srv.Client()}
+	if err := adapter.DeleteToken(context.Background(), srv.URL, "token", "1", "", 42); err != nil {
+		t.Fatalf("DeleteToken 失败: %v", err)
+	}
+}
+
+// ── ProvisionKey ──
+
+func TestNewApiAdapter_ProvisionKey_CreateNew(t *testing.T) {
+	listCalls := 0
+	srv := newMockNewApiServer(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/token/":
+			listCalls++
+			// 查重：无同名 key
+			writeEnvelope(w, true, map[string]interface{}{"items": []NewApiToken{}}, "")
+		case r.Method == http.MethodPost && r.URL.Path == "/api/token/":
+			var req NewApiCreateTokenRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				t.Fatalf("解析请求体失败: %v", err)
+			}
+			if req.Name != DefaultNewApiProvisionKeyName {
+				t.Fatalf("建 key 名称不符: %s", req.Name)
+			}
+			if !req.UnlimitedQuota || req.ExpiredTime != -1 || req.RemainQuota != 0 {
+				t.Fatalf("建 key 模板字段不符: %+v", req)
+			}
+			writeEnvelope(w, true, NewApiToken{ID: 99, Key: "sk-new-key", Name: req.Name, Status: 1}, "")
+		default:
+			t.Fatalf("意外请求: %s %s", r.Method, r.URL.Path)
+		}
+	})
+
+	adapter := &NewApiAdapter{HTTPClient: srv.Client()}
+	tokenID, key, reused, _, err := adapter.ProvisionKey(context.Background(), srv.URL, "token", "1", "", NewApiProvisionOptions{})
+	if err != nil {
+		t.Fatalf("ProvisionKey 失败: %v", err)
+	}
+	if reused {
+		t.Fatal("期望新建，实际标记为复用")
+	}
+	if tokenID != 99 || key != "sk-new-key" {
+		t.Fatalf("建 key 结果不符: id=%d key=%s", tokenID, key)
+	}
+	if listCalls != 1 {
+		t.Fatalf("期望仅查重一次列表, got=%d", listCalls)
+	}
+}
+
+func TestNewApiAdapter_ProvisionKey_ReuseExisting(t *testing.T) {
+	postCalled := false
+	srv := newMockNewApiServer(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/token/":
+			writeEnvelope(w, true, map[string]interface{}{
+				"items": []NewApiToken{
+					{ID: 7, Key: "sk-existing", Name: DefaultNewApiProvisionKeyName, Status: 1},
+				},
+			}, "")
+		case r.Method == http.MethodPost && r.URL.Path == "/api/token/":
+			postCalled = true
+			writeEnvelope(w, true, NewApiToken{ID: 999, Key: "sk-should-not-be-created"}, "")
+		default:
+			t.Fatalf("意外请求: %s %s", r.Method, r.URL.Path)
+		}
+	})
+
+	adapter := &NewApiAdapter{HTTPClient: srv.Client()}
+	tokenID, key, reused, _, err := adapter.ProvisionKey(context.Background(), srv.URL, "token", "1", "", NewApiProvisionOptions{})
+	if err != nil {
+		t.Fatalf("ProvisionKey 失败: %v", err)
+	}
+	if !reused {
+		t.Fatal("期望复用已存在的 key，实际未标记复用")
+	}
+	if tokenID != 7 || key != "sk-existing" {
+		t.Fatalf("复用结果不符: id=%d key=%s", tokenID, key)
+	}
+	if postCalled {
+		t.Fatal("已存在同名 key 时不应再调用创建接口（不能重复创建）")
+	}
+}
+
+func TestNewApiAdapter_ProvisionKey_SuffixesOnNameGroupMismatch(t *testing.T) {
+	var createdName string
+	srv := newMockNewApiServer(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/token/":
+			items := []NewApiToken{{ID: 7, Key: "sk-existing", Name: "ccx-autopilot-default", Group: "premium", Status: 1}}
+			if createdName != "" {
+				items = append(items, NewApiToken{ID: 999, Key: "sk-created", Name: createdName, Group: "default", Status: 1})
+			}
+			writeEnvelope(w, true, map[string]interface{}{"items": items}, "")
+		case r.Method == http.MethodPost && r.URL.Path == "/api/token/":
+			var req NewApiCreateTokenRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				t.Fatalf("解析请求体失败: %v", err)
+			}
+			createdName = req.Name
+			writeEnvelope(w, true, NewApiToken{ID: 999, Key: "sk-created", Name: req.Name, Group: req.Group}, "")
+		default:
+			t.Fatalf("意外请求: %s %s", r.Method, r.URL.Path)
+		}
+	})
+
+	// 同名异组：不复用、不报错，换 2 位后缀新建，避免误绑不属于目标分组的同名 key。
+	adapter := &NewApiAdapter{HTTPClient: srv.Client()}
+	tokenID, key, reused, _, err := adapter.ProvisionKey(context.Background(), srv.URL, "token", "1", "", NewApiProvisionOptions{
+		Name:  "ccx-autopilot-default",
+		Group: "default",
+	})
+	if err != nil {
+		t.Fatalf("同名异组应加后缀避让而非报错: %v", err)
+	}
+	if reused {
+		t.Fatal("加后缀后应标记为新建（非复用）")
+	}
+	if tokenID != 999 || key != "sk-created" {
+		t.Fatalf("新建结果不符: id=%d key=%s", tokenID, key)
+	}
+	if createdName == "ccx-autopilot-default" || len(createdName) <= len("ccx-autopilot-default") {
+		t.Fatalf("创建名应带避让后缀: %s", createdName)
+	}
+}
+
+func TestNewApiAdapter_ProvisionKey_WithModelsAndGroup(t *testing.T) {
+	srv := newMockNewApiServer(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/token/":
+			writeEnvelope(w, true, map[string]interface{}{"items": []NewApiToken{}}, "")
+		case r.Method == http.MethodPost && r.URL.Path == "/api/token/":
+			var req NewApiCreateTokenRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				t.Fatalf("解析请求体失败: %v", err)
+			}
+			if req.Group != "vip" {
+				t.Fatalf("分组未透传: %s", req.Group)
+			}
+			if !req.ModelLimitsEnabled || req.ModelLimits != "gpt-4o,claude-3-5-sonnet" {
+				t.Fatalf("model_limits 未按预期拼接: enabled=%v limits=%s", req.ModelLimitsEnabled, req.ModelLimits)
+			}
+			writeEnvelope(w, true, NewApiToken{ID: 1, Key: "sk-x", Group: req.Group}, "")
+		}
+	})
+
+	adapter := &NewApiAdapter{HTTPClient: srv.Client()}
+	_, _, _, _, err := adapter.ProvisionKey(context.Background(), srv.URL, "token", "1", "", NewApiProvisionOptions{
+		Group:  "vip",
+		Models: []string{"gpt-4o", "claude-3-5-sonnet"},
+	})
+	if err != nil {
+		t.Fatalf("ProvisionKey 失败: %v", err)
+	}
+}
+
+func TestNewApiAdapter_ProvisionKey_CreateResponseMissingKey_FallbackToList(t *testing.T) {
+	// 部分上游创建响应不带明文 key，需要回查列表按 name 取。
+	callCount := 0
+	srv := newMockNewApiServer(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/token/":
+			callCount++
+			if callCount == 1 {
+				// 第一次查重：无同名
+				writeEnvelope(w, true, map[string]interface{}{"items": []NewApiToken{}}, "")
+			} else {
+				// 第二次回查：能找到刚创建的
+				writeEnvelope(w, true, map[string]interface{}{
+					"items": []NewApiToken{
+						{ID: 55, Key: "sk-fallback", Name: DefaultNewApiProvisionKeyName, Status: 1},
+					},
+				}, "")
+			}
+		case r.Method == http.MethodPost && r.URL.Path == "/api/token/":
+			// 创建响应不带 key
+			writeEnvelope(w, true, NewApiToken{ID: 55, Name: DefaultNewApiProvisionKeyName}, "")
+		}
+	})
+
+	adapter := &NewApiAdapter{HTTPClient: srv.Client()}
+	tokenID, key, reused, _, err := adapter.ProvisionKey(context.Background(), srv.URL, "token", "1", "", NewApiProvisionOptions{})
+	if err != nil {
+		t.Fatalf("ProvisionKey 失败: %v", err)
+	}
+	if reused {
+		t.Fatal("期望标记为新建（非复用）")
+	}
+	if tokenID != 55 || key != "sk-fallback" {
+		t.Fatalf("回查 fallback 结果不符: id=%d key=%s", tokenID, key)
+	}
+}
+
+func TestNewApiAdapter_ProvisionKey_MaskedReuse_Revealed(t *testing.T) {
+	// 新版 new-api：列表返回掩码 key（中段 "*"），明文要走 POST /api/token/:id/key 揭示。
+	revealCalled := false
+	srv := newMockNewApiServer(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/token/":
+			writeEnvelope(w, true, map[string]interface{}{
+				"items": []NewApiToken{
+					{ID: 7, Key: "bV6R********Af6H", Name: DefaultNewApiProvisionKeyName, Status: 1},
+				},
+			}, "")
+		case r.Method == http.MethodPost && r.URL.Path == "/api/token/7/key":
+			revealCalled = true
+			writeEnvelope(w, true, map[string]string{"key": "bV6RtpRealPlaintextAf6H"}, "")
+		default:
+			t.Fatalf("意外请求: %s %s", r.Method, r.URL.Path)
+		}
+	})
+
+	adapter := &NewApiAdapter{HTTPClient: srv.Client()}
+	tokenID, key, reused, _, err := adapter.ProvisionKey(context.Background(), srv.URL, "token", "1", "", NewApiProvisionOptions{})
+	if err != nil {
+		t.Fatalf("ProvisionKey 失败: %v", err)
+	}
+	if !reused || tokenID != 7 {
+		t.Fatalf("复用结果不符: reused=%v id=%d", reused, tokenID)
+	}
+	if key != "sk-bV6RtpRealPlaintextAf6H" {
+		t.Fatalf("掩码 key 应经揭示端点换回明文并补前缀, got=%s", key)
+	}
+	if !revealCalled {
+		t.Fatal("掩码 key 应触发揭示端点 POST /api/token/:id/key")
+	}
+}
+
+func TestNewApiAdapter_ProvisionKey_MaskedFallbackList_Revealed(t *testing.T) {
+	// seekai 实测形态：创建响应不带 data，回查列表只有掩码；两处都得靠揭示端点救回。
+	callCount := 0
+	srv := newMockNewApiServer(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/token/":
+			callCount++
+			if callCount == 1 {
+				writeEnvelope(w, true, map[string]interface{}{"items": []NewApiToken{}}, "")
+			} else {
+				writeEnvelope(w, true, map[string]interface{}{
+					"items": []NewApiToken{
+						{ID: 55, Key: "oxGA********x9Zk", Name: DefaultNewApiProvisionKeyName, Group: "default", Status: 1},
+					},
+				}, "")
+			}
+		case r.Method == http.MethodPost && r.URL.Path == "/api/token/":
+			// 创建响应连 data 字段都没有
+			writeEnvelope(w, true, nil, "")
+		case r.Method == http.MethodPost && r.URL.Path == "/api/token/55/key":
+			writeEnvelope(w, true, map[string]string{"key": "oxGARealPlaintextx9Zk"}, "")
+		default:
+			t.Fatalf("意外请求: %s %s", r.Method, r.URL.Path)
+		}
+	})
+
+	adapter := &NewApiAdapter{HTTPClient: srv.Client()}
+	tokenID, key, reused, _, err := adapter.ProvisionKey(context.Background(), srv.URL, "token", "1", "", NewApiProvisionOptions{})
+	if err != nil {
+		t.Fatalf("ProvisionKey 失败: %v", err)
+	}
+	if reused || tokenID != 55 {
+		t.Fatalf("新建结果不符: reused=%v id=%d", reused, tokenID)
+	}
+	if key != "sk-oxGARealPlaintextx9Zk" {
+		t.Fatalf("掩码回查应经揭示端点换回明文, got=%s", key)
+	}
+}
+
+func TestNewApiAdapter_ProvisionKey_MaskedRevealUnavailable_Error(t *testing.T) {
+	// 掩码 + 揭示端点不可用 → 必须报错，绝不能把掩码串当明文返回。
+	srv := newMockNewApiServer(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/token/":
+			writeEnvelope(w, true, map[string]interface{}{
+				"items": []NewApiToken{
+					{ID: 7, Key: "bV6R********Af6H", Name: DefaultNewApiProvisionKeyName, Status: 1},
+				},
+			}, "")
+		case r.Method == http.MethodPost && r.URL.Path == "/api/token/7/key":
+			http.Error(w, "not found", http.StatusNotFound)
+		default:
+			t.Fatalf("意外请求: %s %s", r.Method, r.URL.Path)
+		}
+	})
+
+	adapter := &NewApiAdapter{HTTPClient: srv.Client()}
+	_, key, _, _, err := adapter.ProvisionKey(context.Background(), srv.URL, "token", "1", "", NewApiProvisionOptions{})
+	if err == nil {
+		t.Fatal("掩码且揭示失败时必须报错")
+	}
+	if key != "" {
+		t.Fatalf("失败时不得返回任何 key, got=%s", key)
+	}
+}
+
+func TestNewApiAdapter_GetTokenKey(t *testing.T) {
+	t.Run("成功揭示", func(t *testing.T) {
+		srv := newMockNewApiServer(t, func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost || r.URL.Path != "/api/token/9/key" {
+				t.Fatalf("意外请求: %s %s", r.Method, r.URL.Path)
+			}
+			writeEnvelope(w, true, map[string]string{"key": "plain"}, "")
+		})
+		adapter := &NewApiAdapter{HTTPClient: srv.Client()}
+		key, err := adapter.GetTokenKey(context.Background(), srv.URL, "token", "1", "", 9)
+		if err != nil || key != "plain" {
+			t.Fatalf("揭示结果不符: key=%s err=%v", key, err)
+		}
+	})
+	t.Run("揭示响应仍是掩码则报错", func(t *testing.T) {
+		srv := newMockNewApiServer(t, func(w http.ResponseWriter, r *http.Request) {
+			writeEnvelope(w, true, map[string]string{"key": "still**masked"}, "")
+		})
+		adapter := &NewApiAdapter{HTTPClient: srv.Client()}
+		if _, err := adapter.GetTokenKey(context.Background(), srv.URL, "token", "1", "", 9); err == nil {
+			t.Fatal("揭示响应仍为掩码时必须报错")
+		}
+	})
+	t.Run("tokenID 非法", func(t *testing.T) {
+		adapter := &NewApiAdapter{}
+		if _, err := adapter.GetTokenKey(context.Background(), "https://x", "t", "1", "", 0); err == nil {
+			t.Fatal("tokenID<=0 必须报错")
+		}
+	})
+}
+
+func TestIsMaskedNewApiKey(t *testing.T) {
+	cases := []struct {
+		key  string
+		want bool
+	}{
+		{"bV6R********Af6H", true},
+		{"bV6R••••••••Af6H", true},
+		{"sk-real-plaintext-48-chars-long-key", false},
+		{"", false},
+	}
+	for _, c := range cases {
+		if got := IsMaskedNewApiKey(c.key); got != c.want {
+			t.Fatalf("IsMaskedNewApiKey(%q)=%v, want %v", c.key, got, c.want)
+		}
+	}
+}
+
+func TestNewApiAdapter_ProvisionKey_DefaultName(t *testing.T) {
+	srv := newMockNewApiServer(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/token/":
+			writeEnvelope(w, true, map[string]interface{}{"items": []NewApiToken{}}, "")
+		case r.Method == http.MethodPost && r.URL.Path == "/api/token/":
+			var req NewApiCreateTokenRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				t.Fatalf("解析请求体失败: %v", err)
+			}
+			if req.Name != DefaultNewApiProvisionKeyName {
+				t.Fatalf("默认名称不符: got=%s want=%s", req.Name, DefaultNewApiProvisionKeyName)
+			}
+			writeEnvelope(w, true, NewApiToken{ID: 1, Key: "sk-x"}, "")
+		}
+	})
+
+	adapter := &NewApiAdapter{HTTPClient: srv.Client()}
+	if _, _, _, _, err := adapter.ProvisionKey(context.Background(), srv.URL, "token", "1", "", NewApiProvisionOptions{}); err != nil {
+		t.Fatalf("ProvisionKey 失败: %v", err)
+	}
+}
+
+// ── 认证头/信封解析边界 ──
+
+func TestNewApiAdapter_UserIDOmitted_NoUserHeaders(t *testing.T) {
+	srv := newMockNewApiServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("New-API-User") != "" || r.Header.Get("User-id") != "" {
+			t.Fatal("userID 为空时不应带用户头")
+		}
+		writeEnvelope(w, true, NewApiUserSelf{ID: 1}, "")
+	})
+
+	adapter := &NewApiAdapter{HTTPClient: srv.Client()}
+	if _, err := adapter.Verify(context.Background(), srv.URL, "token", "", ""); err != nil {
+		t.Fatalf("Verify 失败: %v", err)
+	}
+}
+
+func TestNewApiAdapter_EmptyBaseURL(t *testing.T) {
+	adapter := &NewApiAdapter{}
+	if _, err := adapter.Verify(context.Background(), "", "token", "1", ""); err == nil {
+		t.Fatal("baseURL 为空时应报错")
+	}
+}
+
+// ── maskAccessToken ──
+
+func TestMaskAccessToken(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"", ""},
+		{"abc", "****"},
+		{"abcdefgh", "****efgh"},
+		{"sk-1234567890", "****7890"},
+	}
+	for _, c := range cases {
+		got := MaskAccessToken(c.in)
+		if got != c.want {
+			t.Errorf("maskAccessToken(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+// ── 辅助 ──
+
+func containsSubstr(s, sub string) bool {
+	return len(s) >= len(sub) && (func() bool {
+		for i := 0; i+len(sub) <= len(s); i++ {
+			if s[i:i+len(sub)] == sub {
+				return true
+			}
+		}
+		return false
+	})()
+}
