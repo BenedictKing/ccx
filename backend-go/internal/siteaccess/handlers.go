@@ -173,6 +173,43 @@ func RegisterRoutes(apiGroup *gin.RouterGroup, deps *Deps) {
 		c.JSON(http.StatusOK, gin.H{"success": true})
 	})
 
+	// 分组/模型预览：接入前展示可选分组、倍率与各组模型，不落任何渠道配置
+	group.GET("/accounts/:uid/groups", func(c *gin.Context) {
+		account, found, err := deps.Store.Get(c.Param("uid"))
+		if err != nil || !found {
+			c.JSON(http.StatusNotFound, gin.H{"error": "账号不存在"})
+			return
+		}
+		token, err := account.plaintextAccessToken()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		ratios, err := adapter.FetchGroups(c.Request.Context(), account.BaseURL, token, account.UserID, account.AuthTokenMode)
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{"identified": false, "error": err.Error()})
+			return
+		}
+		type groupPreview struct {
+			Name   string   `json:"name"`
+			Ratio  float64  `json:"ratio"`
+			Models []string `json:"models"`
+			Error  string   `json:"error,omitempty"`
+		}
+		previews := make([]groupPreview, 0, len(ratios))
+		for name, ratio := range ratios {
+			preview := groupPreview{Name: name, Ratio: ratio}
+			models, err := adapter.FetchGroupModels(c.Request.Context(), account.BaseURL, token, account.UserID, account.AuthTokenMode, name)
+			if err != nil {
+				preview.Error = err.Error()
+			} else {
+				preview.Models = models
+			}
+			previews = append(previews, preview)
+		}
+		c.JSON(http.StatusOK, gin.H{"identified": true, "groups": previews})
+	})
+
 	// 余额状态展示（只读，不写配额真相、不参与调度）
 	group.GET("/accounts/:uid/balance", func(c *gin.Context) {
 		account, found, err := deps.Store.Get(c.Param("uid"))

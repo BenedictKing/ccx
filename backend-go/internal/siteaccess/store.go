@@ -114,6 +114,7 @@ func NewAccountStore(path string) *AccountStore {
 // UID 为空时按 DeriveAccountUID 派生；同 UID 覆盖更新并保留 CreatedAt。
 // 返回实际使用的账号 UID。
 func (s *AccountStore) Upsert(account SiteAccount) (string, error) {
+	account.BaseURL = NormalizeSiteURL(account.BaseURL)
 	if strings.TrimSpace(account.SiteType) == "" || strings.TrimSpace(account.BaseURL) == "" {
 		return "", fmt.Errorf("[SiteAccess-Store] siteType 与 baseUrl 不能为空")
 	}
