@@ -594,6 +594,58 @@ func TestIsModelRoutingError(t *testing.T) {
 	}
 }
 
+func TestIsKeyModelRestrictionError(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want bool
+	}{
+		{
+			name: "explicit supported model list",
+			body: `{"error":{"code":"invalid_request_error","message":"The supported API model names are deepseek-v4-pro or deepseek-v4-flash, but you passed glm-5.2."}}`,
+			want: true,
+		},
+		{
+			name: "explicit unsupported model",
+			body: `{"error":{"code":"400","message":"Unsupported model claude-sonnet-5"}}`,
+			want: true,
+		},
+		{
+			name: "direct model not found code",
+			body: `{"error":{"code":"model_not_found","message":"Model claude-sonnet-5 does not exist"}}`,
+			want: true,
+		},
+		{
+			name: "group missing with model_not_found code",
+			body: `{"error":{"code":"model_not_found","message":"No available channel for model claude-sonnet-5 under group default (distributor)"}}`,
+			want: true,
+		},
+		{
+			name: "relay exhaustion without group stays transient",
+			body: `{"error":{"code":"model_not_found","message":"No available channel for model claude-sonnet-5 (distributor)"}}`,
+			want: false,
+		},
+		{
+			name: "image generation group permission is key model restriction",
+			body: `{"error":{"code":"","message":"Image generation is not enabled for this group","type":"permission_error"}}`,
+			want: true,
+		},
+		{
+			name: "unrelated invalid request",
+			body: `{"error":{"code":"invalid_request_error","message":"messages must not be empty"}}`,
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isKeyModelRestrictionError([]byte(tt.body)); got != tt.want {
+				t.Fatalf("isKeyModelRestrictionError() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 // TestNormalizeUpstreamErrorStatus 测试状态码归一化
 func TestNormalizeUpstreamErrorStatus(t *testing.T) {
 	modelNotFoundBody := []byte(`{"error":{"code":"model_not_found","message":"No available channel for model gpt-5.4 under group codex","type":"new_api_error"}}`)

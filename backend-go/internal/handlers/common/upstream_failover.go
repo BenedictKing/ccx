@@ -449,7 +449,7 @@ func TryUpstreamWithAllKeys(
 							RequestLogf(c, "[%s-Blacklist] 拉黑 Key 失败: %v", apiType, err)
 						}
 					}
-				} else if redirectedModel != "" && isModelRoutingError(respBodyBytes) {
+				} else if redirectedModel != "" && isKeyModelRestrictionError(respBodyBytes) {
 					// model_not_found / no available channel：该 Key 在此渠道缺少这个特定模型。
 					// 仅限制 (Key, 模型) 组合（持久化+定时恢复），保留 failover 换渠道，不连累该 Key 其他模型。
 					summary := errorBodySummaryForLog(apiType, resp.StatusCode, respBodyBytes)
