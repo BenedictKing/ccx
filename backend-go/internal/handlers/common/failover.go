@@ -124,6 +124,11 @@ func shouldRetryWithNextKeyNormal(statusCode int, bodyBytes []byte, apiType stri
 			LogWithTag(logTag, "[%s-Failover-Debug] 检测到不可重试错误 (statusCode=%d)，不进行 failover, body=%s", apiType, statusCode, errorBodySummaryForLog(apiType, statusCode, bodyBytes))
 			return false, false
 		}
+		// 上游请求体解析失败（"unexpected end of JSON input" 等）：网关已成功解析并
+		// 转发完整请求体，此类 400 源于上游链路，换渠道可恢复，直接放行 failover。
+		if isUpstreamRequestParseErrorBody(bodyBytes) {
+			return true, false
+		}
 	}
 
 	shouldFailover, isQuotaRelated := classifyByStatusCode(statusCode)
@@ -539,6 +544,7 @@ func classifyMessage(msg string) (bool, bool) {
 	capabilityKeywords := []string{
 		"multimodal", "vision",
 		"image", "unsupported", "not supported",
+		"supported api model names",
 		"cannot be processed", "无法处理", "不支持",
 	}
 	for _, keyword := range capabilityKeywords {
@@ -1058,6 +1064,12 @@ func isNonRetryableError(bodyBytes []byte, apiType string) bool {
 	if strings.EqualFold(apiType, "Responses") && isResponsesToolsProtocolError(errObj) {
 		return false
 	}
+	// 同理放行上游请求体解析失败（"unexpected end of JSON input" 等）：
+	// 网关自身已成功解析并转发出完整请求体，此类 400 源于上游代理/后端链路解析失败，
+	// 换渠道后可恢复，不应作为客户端 schema 错误终结请求。
+	if isUpstreamRequestParseError(errObj) {
+		return false
+	}
 	if isSchemaValidationError(errObj) {
 		return true
 	}
@@ -1103,6 +1115,51 @@ func isResponsesToolsProtocolError(errObj map[string]interface{}) bool {
 		}
 	}
 	return false
+}
+
+// isUpstreamRequestParseError 识别上游代理/后端对请求体的 JSON 解析失败
+// （"unexpected end of JSON input" 等）。网关自身已成功解析并转发出完整请求体，
+// 此类 400 说明该上游链路有问题，换渠道可恢复，不属于客户端 schema 错误。
+func isUpstreamRequestParseError(errObj map[string]interface{}) bool {
+	signatures := []string{
+		"unexpected end of json input",
+		"unexpected eof",
+		"cannot parse json",
+		"failed to parse json",
+	}
+	match := func(s string) bool {
+		s = strings.ToLower(s)
+		for _, sig := range signatures {
+			if strings.Contains(s, sig) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, field := range []string{"message", "detail", "msg"} {
+		if match(toStringField(errObj, field)) {
+			return true
+		}
+	}
+	if nested, ok := errObj["upstream_error"].(map[string]interface{}); ok {
+		if match(toStringField(nested, "message")) {
+			return true
+		}
+	}
+	return false
+}
+
+// isUpstreamRequestParseErrorBody 是 isUpstreamRequestParseError 的响应体包装：
+// 从 {"error": {...}} 中取出错误对象后判定。
+func isUpstreamRequestParseErrorBody(bodyBytes []byte) bool {
+	var errResp map[string]interface{}
+	if err := json.Unmarshal(bodyBytes, &errResp); err != nil {
+		return false
+	}
+	if errObj, ok := errResp["error"].(map[string]interface{}); ok {
+		return isUpstreamRequestParseError(errObj)
+	}
+	return isUpstreamRequestParseError(errResp)
 }
 
 func mentionsResponsesTools(text string) bool {
