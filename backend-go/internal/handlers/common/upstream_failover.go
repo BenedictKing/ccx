@@ -24,11 +24,12 @@ import (
 )
 
 const (
-	upstreamAccountPoolCooldown   = time.Minute
-	upstreamOverloadedCooldown    = 15 * time.Second
-	halfOpenProbeWaitTimeout      = 5 * time.Second
-	halfOpenProbePollInterval     = 100 * time.Millisecond
-	shortEmptyResponseRetryWindow = 10 * time.Second
+	upstreamAccountPoolCooldown     = time.Minute
+	upstreamOverloadedCooldown      = 15 * time.Second
+	upstreamLocalModerationCooldown = 5 * time.Minute
+	halfOpenProbeWaitTimeout        = 5 * time.Second
+	halfOpenProbePollInterval       = 100 * time.Millisecond
+	shortEmptyResponseRetryWindow   = 10 * time.Second
 )
 
 // isClientSideError 判断错误是否由客户端明确取消（不应计入渠道失败）
@@ -435,6 +436,9 @@ func TryUpstreamWithAllKeys(
 				shouldFailover, isQuotaRelated := ShouldRetryWithNextKeyWithLogTag(resp.StatusCode, respBodyBytes, cfgManager.GetFuzzyModeEnabled(), apiType, RequestLogTag(c))
 				isTemporarilyOverloaded := IsUpstreamTemporarilyOverloaded(respBodyBytes)
 				isAccountPoolUnavailable := IsUpstreamAccountPoolUnavailable(respBodyBytes)
+				// 中转网关本地内容审核（new-api/one-api 自建敏感词过滤）：请求内容相关，
+				// 与渠道/Key 健康度无关，换渠道可能通过
+				isLocalModeration := IsLocalGatewayModerationError(respBodyBytes)
 
 				// 检查是否应永久拉黑该 Key（认证/权限/余额错误）
 				blResult := ShouldBlacklistKey(resp.StatusCode, respBodyBytes)
@@ -469,6 +473,11 @@ func TryUpstreamWithAllKeys(
 					if isTemporarilyOverloaded || isAccountPoolUnavailable {
 						failureClass = metrics.FailureClassOverloaded
 					}
+					if isLocalModeration {
+						// 本地审核拦截是请求内容相关，与渠道-模型健康度无关：
+						// 不计 breaker / 模型熔断，避免反复发送此类请求的客户端误伤健康渠道。
+						failureClass = metrics.FailureClassNonRetryable
+					}
 					metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, failureClass)
 					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
 					if markURLFailure != nil {
@@ -497,6 +506,14 @@ func TryUpstreamWithAllKeys(
 						if selection.QuotaGroup != "" {
 							failedQuotaGroups[selection.QuotaGroup] = true
 						}
+					}
+					// 中转网关本地审核：过滤在网关侧前置执行且与 Key 无关，同渠道换 Key
+					// 必然同样被拦，无意义；冷却渠道后直接切下一个渠道（词库各站独立，
+					// 换渠道可能通过）。冷却同时阻断客户端重试时再次选中本渠道。
+					if isLocalModeration {
+						channelScheduler.MarkChannelCooldown(kind, channelIndex, upstreamLocalModerationCooldown)
+						RequestLogf(c, "[%s-Channel] 渠道 [%d] %s 命中网关本地内容审核，冷却 %s 并尝试下一个渠道", apiType, channelIndex, upstream.Name, upstreamLocalModerationCooldown)
+						return false, "", 0, lastFailoverError, nil, lastError
 					}
 					if isAccountPoolUnavailable {
 						channelScheduler.MarkChannelCooldown(kind, channelIndex, upstreamAccountPoolCooldown)

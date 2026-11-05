@@ -479,51 +479,40 @@ func TestShouldRetryWithNextKey_MessageWinsOverInvalidRequestCode(t *testing.T) 
 	}
 }
 
-// TestShouldRetryWithNextKey_SensitiveWordsDetected 测试敏感词检测错误不应重试
-// 这是修复的核心场景：500 + sensitive_words_detected 不应触发无限重试
+// TestShouldRetryWithNextKey_SensitiveWordsDetected 测试敏感词检测错误的 failover 判定。
+// 中转网关本地审核（type=new_api_error 的自建敏感词过滤）允许 failover 换渠道——
+// 词库各站独立、错误未到达真实上游；重试有界性由 failover 链路的渠道冷却保证。
+// 真实上游透传的审核错误与 violation_fee 违规计费仍不 failover。
 func TestShouldRetryWithNextKey_SensitiveWordsDetected(t *testing.T) {
-	// 模拟生产环境的敏感词检测错误
-	body := []byte(`{"error":{"message":"sensitive words detected","type":"new_api_error","param":"","code":"sensitive_words_detected"}}`)
+	localBody := []byte(`{"error":{"message":"sensitive words detected","type":"new_api_error","param":"","code":"sensitive_words_detected"}}`)
+	upstreamBody := []byte(`{"error":{"message":"content policy violation","type":"upstream_error","code":"content_policy_violation"}}`)
+	violationFeeBody := []byte(`{"error":{"code":"violation_fee.grok.csam","message":"error","type":"new_api_error"}}`)
 
 	tests := []struct {
 		name         string
 		statusCode   int
+		body         []byte
 		fuzzyMode    bool
 		wantFailover bool
 		wantQuota    bool
 	}{
-		{
-			name:         "500 with sensitive_words_detected - normal mode",
-			statusCode:   500,
-			fuzzyMode:    false,
-			wantFailover: false, // 不应重试
-			wantQuota:    false,
-		},
-		{
-			name:         "500 with sensitive_words_detected - fuzzy mode",
-			statusCode:   500,
-			fuzzyMode:    true,
-			wantFailover: false, // 即使在 fuzzy 模式下也不应重试
-			wantQuota:    false,
-		},
-		{
-			name:         "400 with sensitive_words_detected - normal mode",
-			statusCode:   400,
-			fuzzyMode:    false,
-			wantFailover: false,
-			wantQuota:    false,
-		},
+		{name: "500 local gateway - normal mode", statusCode: 500, body: localBody, fuzzyMode: false, wantFailover: true},
+		{name: "500 local gateway - fuzzy mode", statusCode: 500, body: localBody, fuzzyMode: true, wantFailover: true},
+		{name: "400 local gateway - normal mode", statusCode: 400, body: localBody, fuzzyMode: false, wantFailover: true},
+		{name: "400 upstream moderation - no failover", statusCode: 400, body: upstreamBody, fuzzyMode: false, wantFailover: false, wantQuota: false},
+		{name: "500 upstream moderation - fuzzy no failover", statusCode: 500, body: upstreamBody, fuzzyMode: true, wantFailover: false, wantQuota: false},
+		{name: "500 violation_fee - never failover", statusCode: 500, body: violationFeeBody, fuzzyMode: false, wantFailover: false, wantQuota: false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotFailover, gotQuota := ShouldRetryWithNextKey(tt.statusCode, body, tt.fuzzyMode, "Messages")
+			gotFailover, gotQuota := ShouldRetryWithNextKey(tt.statusCode, tt.body, tt.fuzzyMode, "Messages")
 			if gotFailover != tt.wantFailover {
-				t.Errorf("ShouldRetryWithNextKey(%d, sensitive_words_body, %v) failover = %v, want %v",
+				t.Errorf("ShouldRetryWithNextKey(%d, body, %v) failover = %v, want %v",
 					tt.statusCode, tt.fuzzyMode, gotFailover, tt.wantFailover)
 			}
 			if gotQuota != tt.wantQuota {
-				t.Errorf("ShouldRetryWithNextKey(%d, sensitive_words_body, %v) quota = %v, want %v",
+				t.Errorf("ShouldRetryWithNextKey(%d, body, %v) quota = %v, want %v",
 					tt.statusCode, tt.fuzzyMode, gotQuota, tt.wantQuota)
 			}
 		})
@@ -801,6 +790,69 @@ func TestShouldRetryWithNextKey_ModelNotFound(t *testing.T) {
 			if gotQuota != tt.wantQuota {
 				t.Errorf("ShouldRetryWithNextKey(%d, model_not_found_body, %v) quota = %v, want %v",
 					tt.statusCode, tt.fuzzyMode, gotQuota, tt.wantQuota)
+			}
+		})
+	}
+}
+
+// TestIsLocalGatewayModerationError 测试中转网关本地审核错误判定：
+// 审核错误码 + 网关本地错误类型（new_api_error/one_api_error）才判定为本地审核，
+// 真实上游透传的审核错误（upstream_error/claude_error 等）不命中。
+func TestIsLocalGatewayModerationError(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want bool
+	}{
+		{name: "new_api_sensitive_words", body: `{"error":{"message":"sensitive words detected (request id: abc)","type":"new_api_error","param":"","code":"sensitive_words_detected"}}`, want: true},
+		{name: "one_api_sensitive_words", body: `{"error":{"message":"sensitive words detected","type":"one_api_error","code":"sensitive_words_detected"}}`, want: true},
+		{name: "new_api_content_filter", body: `{"error":{"message":"content filtered","type":"new_api_error","code":"content_filter"}}`, want: true},
+		{name: "upstream_error_type_not_local", body: `{"error":{"message":"sensitive words detected","type":"upstream_error","code":"sensitive_words_detected"}}`, want: false},
+		{name: "claude_error_type_not_local", body: `{"error":{"message":"content policy violation","type":"claude_error","code":"content_policy_violation"}}`, want: false},
+		{name: "no_type_not_local", body: `{"error":{"message":"sensitive words detected","code":"sensitive_words_detected"}}`, want: false},
+		{name: "local_type_but_not_moderation_code", body: `{"error":{"message":"invalid request","type":"new_api_error","code":"invalid_request"}}`, want: false},
+		{name: "nested_upstream_error_not_local", body: `{"error":{"type":"new_api_error","upstream_error":{"code":"sensitive_words_detected","message":"blocked by real upstream"}}}`, want: false},
+		{name: "azure_style_type_is_code_not_local", body: `{"error":{"message":"filtered","type":"content_filter","code":"content_filter"}}`, want: false},
+		{name: "invalid_json", body: `not json`, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := IsLocalGatewayModerationError([]byte(tt.body))
+			if got != tt.want {
+				t.Errorf("IsLocalGatewayModerationError() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestShouldRetryWithNextKey_LocalGatewayModeration 本地网关审核错误允许 failover（换渠道），
+// 上游透传的审核错误与 violation_fee 违规计费维持不 failover。
+func TestShouldRetryWithNextKey_LocalGatewayModeration(t *testing.T) {
+	localBody := []byte(`{"error":{"message":"sensitive words detected","type":"new_api_error","param":"","code":"sensitive_words_detected"}}`)
+	upstreamBody := []byte(`{"error":{"message":"content policy violation","type":"upstream_error","code":"content_policy_violation"}}`)
+	violationFeeBody := []byte(`{"error":{"code":"violation_fee.grok.csam","message":"error","type":"new_api_error"}}`)
+
+	tests := []struct {
+		name         string
+		statusCode   int
+		body         []byte
+		wantFailover bool
+		wantQuota    bool
+	}{
+		{name: "500 local gateway sensitive words", statusCode: 500, body: localBody, wantFailover: true},
+		{name: "400 local gateway sensitive words", statusCode: 400, body: localBody, wantFailover: true},
+		{name: "400 upstream moderation - no failover", statusCode: 400, body: upstreamBody, wantFailover: false, wantQuota: false},
+		{name: "500 violation_fee - never failover", statusCode: 500, body: violationFeeBody, wantFailover: false, wantQuota: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotFailover, gotQuota := ShouldRetryWithNextKey(tt.statusCode, tt.body, false, "Messages")
+			if gotFailover != tt.wantFailover {
+				t.Errorf("ShouldRetryWithNextKey(%d) failover = %v, want %v", tt.statusCode, gotFailover, tt.wantFailover)
+			}
+			if gotQuota != tt.wantQuota {
+				t.Errorf("ShouldRetryWithNextKey(%d) quota = %v, want %v", tt.statusCode, gotQuota, tt.wantQuota)
 			}
 		})
 	}
