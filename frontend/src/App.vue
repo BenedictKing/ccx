@@ -125,6 +125,10 @@
           <router-link to="/conversations" class="api-type-text" :class="{ active: route.path === '/conversations' }">
             {{ t('app.tabs.conversations') }}
           </router-link>
+          <span class="api-type-text separator">/</span>
+          <router-link to="/site-onboarding" class="api-type-text" :class="{ active: route.path === '/site-onboarding' }">
+            {{ t('app.tabs.siteOnboarding') }}
+          </router-link>
           <span class="brand-text d-none d-md-inline">API Proxy - CCX</span>
         </div>
       </div>

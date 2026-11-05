@@ -838,3 +838,106 @@ export interface ChannelDiscoveryResponse {
   recommendation: ChannelDiscoveryRecommendation
   evidence?: DiscoveryEvidence[]
 }
+
+// ── 站点账号接入（new-api 家族）──────────────────────────────────────────
+
+export interface SiteAccountProvisionedKey {
+  name: string
+  group?: string
+  tokenId?: number
+  protocol: string
+  keyFingerprint?: string
+}
+
+export interface SiteChannelEvidence {
+  protocol: string
+  group: string
+  level: 'configured' | 'info_verified' | 'real_request' | ''
+  configuredAt?: string
+  infoVerifiedAt?: string
+  realRequestAt?: string
+  lastDiagnostic?: string
+}
+
+export interface SiteAccount {
+  uid: string
+  siteType: string
+  baseUrl: string
+  userId?: string
+  authTokenMode?: string
+  maskedAccessToken?: string
+  createdAt: string
+  updatedAt: string
+  provisionedKeys?: SiteAccountProvisionedKey[]
+  evidence?: SiteChannelEvidence[]
+}
+
+export interface SiteAccountUpsertRequest {
+  siteType: string
+  baseUrl: string
+  userId?: string
+  authTokenMode?: string
+  accessToken: string
+}
+
+export interface SiteGroupPreview {
+  name: string
+  ratio: number
+  models?: string[]
+  error?: string
+}
+
+export interface SiteGroupsPreviewResponse {
+  identified: boolean
+  groups?: SiteGroupPreview[]
+  error?: string
+}
+
+export interface SiteVerifyResponse {
+  verified: boolean
+  error?: string
+}
+
+export interface SiteProvisionRequest {
+  protocol: string
+  groups?: string[]
+  excludeGroups?: string[]
+  maxMultiplier?: number
+  models?: string[]
+  modelMapping?: Record<string, string>
+}
+
+export interface SiteProvisionGroupResult {
+  group: string
+  keyName: string
+  channelName: string
+  skipped: string
+  reused: boolean
+}
+
+export interface SiteProvisionResult {
+  accountUID: string
+  protocol: string
+  groups: SiteProvisionGroupResult[]
+}
+
+export interface SiteVerifyRequestResponse {
+  success: boolean
+  error?: string
+}
+
+export interface SiteReconcileAction {
+  protocol: string
+  group: string
+  keyName: string
+  channelName: string
+  action: string
+  detail: string
+}
+
+export interface SiteBalanceResponse {
+  identified: boolean
+  balance?: number
+  currency?: string
+  error?: string
+}

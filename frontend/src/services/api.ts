@@ -1162,6 +1162,44 @@ export class ApiService {
     })
   }
 
+  // ── 站点账号接入（new-api 家族）──────────────────────────────────────────
+
+  async listSiteAccounts(): Promise<{ accounts: import('./api-types').SiteAccount[] }> {
+    return this.request('/siteaccess/accounts')
+  }
+
+  async upsertSiteAccount(req: import('./api-types').SiteAccountUpsertRequest): Promise<{ account: import('./api-types').SiteAccount }> {
+    return this.request('/siteaccess/accounts', { method: 'POST', body: JSON.stringify(req) })
+  }
+
+  async deleteSiteAccount(uid: string): Promise<void> {
+    await this.request(`/siteaccess/accounts/${uid}`, { method: 'DELETE' })
+  }
+
+  async verifySiteAccount(uid: string): Promise<import('./api-types').SiteVerifyResponse> {
+    return this.request(`/siteaccess/accounts/${uid}/verify`, { method: 'POST' })
+  }
+
+  async getSiteAccountGroups(uid: string): Promise<import('./api-types').SiteGroupsPreviewResponse> {
+    return this.request(`/siteaccess/accounts/${uid}/groups`)
+  }
+
+  async provisionSiteAccount(uid: string, req: import('./api-types').SiteProvisionRequest): Promise<import('./api-types').SiteProvisionResult> {
+    return this.request(`/siteaccess/accounts/${uid}/provision`, { method: 'POST', body: JSON.stringify(req) })
+  }
+
+  async verifySiteRealRequest(uid: string, req: { protocol: string; group: string; model: string }): Promise<import('./api-types').SiteVerifyRequestResponse> {
+    return this.request(`/siteaccess/accounts/${uid}/verify-request`, { method: 'POST', body: JSON.stringify(req) })
+  }
+
+  async reconcileSiteAccount(uid: string): Promise<{ actions: import('./api-types').SiteReconcileAction[] }> {
+    return this.request(`/siteaccess/accounts/${uid}/reconcile`, { method: 'POST' })
+  }
+
+  async getSiteAccountBalance(uid: string): Promise<import('./api-types').SiteBalanceResponse> {
+    return this.request(`/siteaccess/accounts/${uid}/balance`)
+  }
+
 }
 
 export const api = new ApiService()

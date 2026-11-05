@@ -16,6 +16,11 @@ const routes = [
     path: '/conversations',
     component: () => import('@/views/ConversationsView.vue'),
     meta: { requiresAuth: true }
+  },
+  {
+    path: '/site-onboarding',
+    component: () => import('@/views/SiteOnboardingView.vue'),
+    meta: { requiresAuth: true }
   }
 ]
 
