@@ -12,7 +12,7 @@ import (
 )
 
 func TestNewManagerDefaults(t *testing.T) {
-	m := NewManager(Options{RootDir: t.TempDir()})
+	m := NewManager(Options{RootDir: t.TempDir(), DataDir: t.TempDir()})
 	if m.port != defaultPort {
 		t.Errorf("port = %d, want %d", m.port, defaultPort)
 	}
