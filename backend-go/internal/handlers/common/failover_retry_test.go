@@ -834,3 +834,22 @@ func TestIsContentModerationErrorCode(t *testing.T) {
 		})
 	}
 }
+
+// TestShouldRetryWithNextKey_ChineseRateLimit429 new-api 系中文限流文案在 2.9
+// 既有分类中即应识别为可 failover 的配额/限流错误（3275a213 的账号级冷却
+// 依赖 3.0 AIMD 机制，lean 不移植；此用例锁定 2.9 的 failover 语义不退化）。
+func TestShouldRetryWithNextKey_ChineseRateLimit429(t *testing.T) {
+	bodies := [][]byte{
+		[]byte(`{"error":{"message":"您已达到总请求数限制：1分钟内最多请求100次","type":"new_api_error"}}`),
+		[]byte(`{"error":{"message":"触发速率限制，请稍后重试","type":"new_api_error"}}`),
+	}
+	for _, body := range bodies {
+		gotFailover, gotQuota := ShouldRetryWithNextKey(429, body, false, "Chat")
+		if !gotFailover {
+			t.Errorf("中文限流 429 应 failover: %s", body)
+		}
+		if !gotQuota {
+			t.Errorf("中文限流 429 应标记 quota: %s", body)
+		}
+	}
+}

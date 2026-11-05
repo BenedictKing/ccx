@@ -488,7 +488,7 @@ func classifyMessage(msg string) (bool, bool) {
 	// 但 ShouldBlacklistKey 会通过独立逻辑判断是否拉黑
 	rateLimitKeywords := []string{
 		"rate limit", "ratelimit", "limit exceeded",
-		"too many requests", "请求过于频繁", "请求频率", "限流",
+		"too many requests", "请求过于频繁", "请求频率", "限流", "速率限制",
 	}
 	for _, keyword := range rateLimitKeywords {
 		if strings.Contains(msgLower, keyword) {
