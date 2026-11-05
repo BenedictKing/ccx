@@ -6,6 +6,7 @@ import (
 
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/handlers/common"
+	"github.com/BenedictKing/ccx/internal/types"
 	"github.com/BenedictKing/ccx/internal/utils"
 )
 
@@ -185,6 +186,107 @@ func effectiveCacheCreationTokens(cacheCreation, cacheCreation5m, cacheCreation1
 		return cacheCreation
 	}
 	return cacheCreation5m + cacheCreation1h
+}
+
+// openAIInclusiveCacheAddend 汇总缓存读 + 有效缓存写 token。
+// 协议转换器内部按"不含缓存"口径输出 input_tokens，而官方 OpenAI Responses 语义要求
+// input_tokens 已包含缓存命中部分，出口归一时把这部分加回。
+func openAIInclusiveCacheAddend(cacheRead, cacheCreation, cacheCreation5m, cacheCreation1h int) int {
+	addend := cacheRead + effectiveCacheCreationTokens(cacheCreation, cacheCreation5m, cacheCreation1h)
+	if addend < 0 {
+		return 0
+	}
+	return addend
+}
+
+// normalizeResponsesUsageToOpenAISemantics 把非流式 Responses usage 从内部"不含缓存"口径
+// 归一为官方 OpenAI 口径（input_tokens 含缓存、total_tokens = input + output）。
+// 仅用于协议转换路径；透传路径的上游本来就是官方口径，不得调用（会重复加回）。
+func normalizeResponsesUsageToOpenAISemantics(usage *types.ResponsesUsage) {
+	if usage == nil {
+		return
+	}
+	cacheRead := usage.CacheReadInputTokens
+	if cacheRead == 0 && usage.InputTokensDetails != nil {
+		cacheRead = usage.InputTokensDetails.CachedTokens
+	}
+	usage.InputTokens += openAIInclusiveCacheAddend(cacheRead, usage.CacheCreationInputTokens, usage.CacheCreation5mInputTokens, usage.CacheCreation1hInputTokens)
+	usage.TotalTokens = usage.InputTokens + usage.OutputTokens
+}
+
+func jsonIntFromMap(m map[string]interface{}, key string) int {
+	if v, ok := m[key].(float64); ok {
+		return int(v)
+	}
+	return 0
+}
+
+// normalizeCompletedEventUsageToOpenAISemantics 在流式 response.completed 事件出口处
+// 把 usage 归一为官方 OpenAI 口径，避免按官方语义计算"未命中输入 = input_tokens - cached_tokens"
+// 的客户端在缓存占比过半时得到负数（#274）。仅用于协议转换路径。
+func normalizeCompletedEventUsageToOpenAISemantics(event string) string {
+	if !isResponsesCompletedEvent(event) {
+		return event
+	}
+	lines := strings.Split(event, "\n")
+	var result strings.Builder
+	for i, line := range lines {
+		result.WriteString(normalizeCompletedUsageDataLine(line))
+		if i < len(lines)-1 {
+			result.WriteString("\n")
+		}
+	}
+	return result.String()
+}
+
+// normalizeCompletedUsageDataLine 改写单个 data: 行中的 completed usage；
+// 非 data 行、非 completed 事件、无 usage 时原样返回。
+func normalizeCompletedUsageDataLine(line string) string {
+	if !strings.HasPrefix(line, "data:") {
+		return line
+	}
+	jsonStr := strings.TrimPrefix(line, "data:")
+	jsonStr = strings.TrimPrefix(jsonStr, " ")
+
+	var data map[string]interface{}
+	if err := json.Unmarshal([]byte(jsonStr), &data); err != nil {
+		return line
+	}
+	if data["type"] != "response.completed" {
+		return line
+	}
+	response, ok := data["response"].(map[string]interface{})
+	if !ok {
+		return line
+	}
+	usage, ok := response["usage"].(map[string]interface{})
+	if !ok {
+		return line
+	}
+
+	inputTokens := jsonIntFromMap(usage, "input_tokens")
+	outputTokens := jsonIntFromMap(usage, "output_tokens")
+	cacheRead := jsonIntFromMap(usage, "cache_read_input_tokens")
+	if cacheRead == 0 {
+		if details, ok := usage["input_tokens_details"].(map[string]interface{}); ok {
+			cacheRead = jsonIntFromMap(details, "cached_tokens")
+		}
+	}
+	cacheCreation := jsonIntFromMap(usage, "cache_creation_input_tokens")
+	if cacheCreation == 0 {
+		cacheCreation = jsonIntFromMap(usage, "cache_creation_5m_input_tokens") + jsonIntFromMap(usage, "cache_creation_1h_input_tokens")
+	}
+	addend := openAIInclusiveCacheAddend(cacheRead, cacheCreation, 0, 0)
+	if addend > 0 {
+		usage["input_tokens"] = float64(inputTokens + addend)
+	}
+	usage["total_tokens"] = float64(inputTokens + addend + outputTokens)
+
+	patchedJSON, err := json.Marshal(data)
+	if err != nil {
+		return line
+	}
+	return "data: " + string(patchedJSON)
 }
 
 func calculateTotalTokensWithCache(inputTokens, outputTokens, cacheRead, cacheCreation, cacheCreation5m, cacheCreation1h int) int {
