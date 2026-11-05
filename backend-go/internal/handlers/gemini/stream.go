@@ -223,6 +223,26 @@ func preflightGeminiStream(resp *http.Response, upstreamType string, timeouts co
 		completeLines := lines[:len(lines)-1]
 		allLines = append(allLines, completeLines...)
 
+		// 流内错误事件检测：HTTP 200 但 data 里携带错误对象（中转站/原生错误形态）。
+		// 拉黑类错误返回 ErrBlacklistKey；请求侧确定性错误（invalid_request /
+		// 上下文超长等）返回终态错误，不做逐 Key 重放；其余错误按空响应语义
+		// 进入 failover，对齐 messages/responses 的预检行为，不再原样透传给客户端。
+		for _, line := range completeLines {
+			if !strings.HasPrefix(line, "data:") {
+				continue
+			}
+			jsonData := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+			if reason, msg, _, isErr := common.DetectStreamDataError(jsonData); isErr {
+				if reason != "" {
+					return nil, chunkChan, bodyErrChan, &common.ErrBlacklistKey{Reason: reason, Message: msg}
+				}
+				if rejected := common.RequestSideStreamError(jsonData); rejected != nil {
+					return nil, chunkChan, bodyErrChan, rejected
+				}
+				return nil, chunkChan, bodyErrChan, fmt.Errorf("%w: %s", common.ErrEmptyStreamResponse, msg)
+			}
+		}
+
 		if hasSemanticContent(completeLines) {
 			if !hasFirstContent {
 				// 阶段A→阶段B

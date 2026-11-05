@@ -14,7 +14,9 @@ import (
 
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/metrics"
+	"github.com/BenedictKing/ccx/internal/types"
 	"github.com/BenedictKing/ccx/internal/utils"
+	"github.com/gin-gonic/gin"
 )
 
 // ErrEmptyStreamResponse 上游返回 HTTP 200 但流式响应内容为空或几乎为空
@@ -32,6 +34,74 @@ var ErrStreamStalled = errors.New("stream stalled after first content")
 // ErrStreamPostCommitStalled Header 已发送后，上游长时间没有有效输出
 // Header 已发送，不能安全拼接 failover；用于中止当前流并记录渠道故障
 var ErrStreamPostCommitStalled = errors.New("stream stalled after response committed")
+
+// UpstreamRequestRejectedError 上游以流内错误对象明确拒绝本次请求
+// （invalid_request_error / 上下文超长 / 参数非法等请求侧确定性错误）。
+// 与 HTTP 4xx 的「非 failover 错误」分支同一语义：问题在请求本身，
+// 换 Key、渠道、模型都不会让同一个畸形请求成功，因此不应惩罚渠道，
+// failover 执行器也不应把它当作可重试的空响应逐 Key 重放。
+type UpstreamRequestRejectedError struct {
+	Type    string // 上游错误类型（如 invalid_request_error）
+	Code    string // 上游错误码（如 context_length_exceeded）
+	Message string
+}
+
+func (e *UpstreamRequestRejectedError) Error() string {
+	switch {
+	case e == nil:
+		return "upstream rejected the request"
+	case strings.TrimSpace(e.Message) != "":
+		return fmt.Sprintf("upstream rejected the request (%s): %s", e.reasonLabel(), e.Message)
+	default:
+		return fmt.Sprintf("upstream rejected the request (%s)", e.reasonLabel())
+	}
+}
+
+func (e *UpstreamRequestRejectedError) reasonLabel() string {
+	if strings.TrimSpace(e.Type) != "" {
+		return e.Type
+	}
+	if strings.TrimSpace(e.Code) != "" {
+		return e.Code
+	}
+	return "request_error"
+}
+
+// RespondUpstreamRequestRejected 按客户端入口协议把预检阶段识别的请求侧拒绝
+// 写回客户端。调用点处于 SSE 头写出之前（预检在设置响应头前返回），与 HTTP 4xx
+// 「非 failover 错误」分支（先写响应体再返回 handled=true）同一契约：终态错误
+// 必须带着错误体返回，否则调用方按 handled=true 直接返回会造成 200 + 零字节。
+func RespondUpstreamRequestRejected(c *gin.Context, apiType string, rejected *UpstreamRequestRejectedError) {
+	if rejected == nil {
+		return
+	}
+	message := strings.TrimSpace(rejected.Message)
+	if message == "" {
+		message = rejected.Error()
+	}
+	if strings.EqualFold(apiType, "Gemini") {
+		c.JSON(400, types.GeminiError{
+			Error: types.GeminiErrorDetail{
+				Code:    400,
+				Message: message,
+				Status:  "INVALID_ARGUMENT",
+			},
+		})
+		return
+	}
+	errType := strings.TrimSpace(rejected.Type)
+	if errType == "" {
+		errType = strings.TrimSpace(rejected.Code)
+	}
+	if errType == "" {
+		errType = "invalid_request_error"
+	}
+	errObj := gin.H{"message": message, "type": errType, "param": nil}
+	if code := strings.TrimSpace(rejected.Code); code != "" {
+		errObj["code"] = code
+	}
+	c.JSON(400, gin.H{"error": errObj})
+}
 
 func streamPreflightEmptyError(preflight *StreamPreflightResult) error {
 	if preflight == nil || strings.TrimSpace(preflight.Diagnostic) == "" {
