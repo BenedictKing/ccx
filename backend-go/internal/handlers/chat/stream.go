@@ -36,7 +36,9 @@ func handleStreamSuccess(
 		} else if errors.Is(err, common.ErrStreamStalled) {
 			common.RequestLogf(c, "[Chat-StreamStalled] 流式断流: 首字后 %dms 无活动，触发重试", timeouts.InactivityTimeoutMs)
 		}
-		return nil, err
+		// 预检阶段的任何非客户端错误 Header 均未写：统一归入 failover 家族，
+		// 避免裸传输错误/上游错误终结整个 failover 链。
+		return nil, common.ClassifyPreflightStreamError(err)
 	}
 	resp.Body = common.NewChunkChannelReadCloser(chunkChan, bodyErrChan, resp.Body)
 
@@ -191,8 +193,13 @@ func preflightChatStream(resp *http.Response, upstreamType string, timeouts comm
 		select {
 		case chunk, chunkOk = <-chunkChan:
 			if !chunkOk {
-				// chunkChan 关闭：body 读取完成
+				// chunkChan 关闭：body 读取完成。
+				// 整个预检期间从未检测到语义内容（usage-only / role-only / 空流）：
+				// Header 未写，按空响应进入 failover（对齐 messages/responses 语义）。
 				flushRemainder()
+				if !hasFirstContent {
+					return result, chunkChan, bodyErrChan, common.ErrEmptyStreamResponse
+				}
 				return result, chunkChan, bodyErrChan, nil
 			}
 		case err := <-bodyErrChan:
@@ -233,10 +240,10 @@ func preflightChatStream(resp *http.Response, upstreamType string, timeouts comm
 			// 进入 failover，对齐 messages/responses 的预检行为，不再原样透传给客户端。
 			if strings.HasPrefix(line, "data:") {
 				jsonData := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-				if reason, msg, _, isErr := common.DetectStreamDataError(jsonData); isErr {
+				if reason, msg, recoverAt, isErr := common.DetectStreamDataError(jsonData); isErr {
 					flushRemainder()
 					if reason != "" {
-						return result, chunkChan, bodyErrChan, &common.ErrBlacklistKey{Reason: reason, Message: msg}
+						return result, chunkChan, bodyErrChan, &common.ErrBlacklistKey{Reason: reason, Message: msg, RecoverAt: recoverAt}
 					}
 					if rejected := common.RequestSideStreamError(jsonData); rejected != nil {
 						return result, chunkChan, bodyErrChan, rejected

@@ -348,7 +348,7 @@ func (e *responsesFoldHTTPEmitter) emit(event map[string]interface{}) error {
 	eventType, _ := event["type"].(string)
 	if upstreamErr, ok := detectResponsesStreamError(eventString, eventType); ok {
 		if r, m := detectResponsesErrorBlacklist(upstreamErr); r != "" {
-			return &common.ErrBlacklistKey{Reason: r, Message: m}
+			return &common.ErrBlacklistKey{Reason: r, Message: m, RecoverAt: utils.ExtractQuotaRecoverAt(m)}
 		}
 		diagnostic := formatResponsesErrorDiagnostic(upstreamErr)
 		if isRetryableResponsesError(upstreamErr) {

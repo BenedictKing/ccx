@@ -480,10 +480,36 @@ func DetectStreamDataError(jsonData string) (reason string, message string, reco
 	})
 	if err == nil {
 		if r, m := DetectStreamBlacklistError("event: error\ndata: " + string(payload) + "\n\n"); r != "" {
-			return r, m, "", true
+			return r, m, utils.ExtractQuotaRecoverAt(m), true
 		}
 	}
 	return "", truncateMsg(errMsg), "", true
+}
+
+// ClassifyPreflightStreamError 将预检测阶段的流错误统一映射为 failover 家族错误。
+// 预检测完成前 Header 未写，任何非客户端、非哨兵错误（provider 裸包装的上游错误
+// 事件、传输层错误）都可以安全换 Key/渠道重试；统一归入 ErrEmptyStreamResponse
+// 语义，避免落入 failover 执行器的"真实渠道故障"分支直接终结整个 failover 链。
+func ClassifyPreflightStreamError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if isClientSideError(err) {
+		return err
+	}
+	var blErr *ErrBlacklistKey
+	var rejected *UpstreamRequestRejectedError
+	switch {
+	case errors.Is(err, ErrStreamFirstContentTimeout),
+		errors.Is(err, ErrStreamStalled),
+		errors.Is(err, ErrEmptyStreamResponse),
+		errors.Is(err, ErrInvalidResponseBody),
+		errors.Is(err, ErrEmptyNonStreamResponse),
+		errors.As(err, &blErr),
+		errors.As(err, &rejected):
+		return err
+	}
+	return fmt.Errorf("%w: %v", ErrEmptyStreamResponse, err)
 }
 
 // requestSideStreamErrorCodes 请求侧确定性错误的 type/code 词汇表。
