@@ -2,6 +2,10 @@
 
 基线是 `v2.9.37`；源是 2026-11-05 的 3.0 `main`（`20d04de2`）。以下提交仅用于追溯行为，不表示整笔 cherry-pick。每项进入实施前应再核对源分支变化。
 
+## 移植进度
+
+- **P0 已完成**（2026-11-05，`4cc04b13`..`cb7497b7`）：五个提交全部落地，另带入依赖 `48d8d826` 的请求侧拒绝机制与 gemini 思考判定精确化。2.9 适配差异：`ErrBlacklistKey.RecoverAt` 已补齐，但 2.9 无 `DisableKeyModel`/racing，组合级限制透传与竞速分支跳过；`executionKind` 改用本地 `kind`。构建、后端全量测试、前端构建均通过。
+
 ## 已有能力，不重复移植
 
 - 六类渠道各有配置数组；`messages`、`responses`、`chat` 可分别建渠道、设置 Key 和 `ModelMapping`。
