@@ -12,8 +12,9 @@ import (
 
 func TestRunResponsesFoldDetectsContinuesAndFoldsRounds(t *testing.T) {
 	baseBody := map[string]interface{}{
-		"model":  "gpt-5.5",
-		"stream": true,
+		"model":                "gpt-5.5",
+		"stream":               true,
+		"transformer_metadata": map[string]interface{}{"codex_tool_compat_enabled": false},
 		"input": []interface{}{
 			map[string]interface{}{"type": "message", "role": "user", "content": []interface{}{}},
 		},
@@ -42,6 +43,11 @@ func TestRunResponsesFoldDetectsContinuesAndFoldsRounds(t *testing.T) {
 
 	if len(openedBodies) != 2 {
 		t.Fatalf("continuation opens = %d, want 2", len(openedBodies))
+	}
+	for i, body := range openedBodies {
+		if _, ok := body["transformer_metadata"]; ok {
+			t.Fatalf("continuation %d leaked transformer_metadata: %#v", i+1, body)
+		}
 	}
 	if got := foldTestInputTypes(openedBodies[0]["input"]); !reflect.DeepEqual(got, []string{"message", "reasoning", "message"}) {
 		t.Fatalf("round 2 input types = %v", got)

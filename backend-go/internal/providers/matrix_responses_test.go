@@ -133,8 +133,8 @@ func TestResponsesEntry_RequestMatrix_PreservesKeyParams(t *testing.T) {
 		}
 	})
 
-	t.Run("responses_passthrough_strips_client_only_input_metadata", func(t *testing.T) {
-		c := newGinContext(http.MethodPost, "/v1/responses", []byte(`{"model":"gpt-5","input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"hi"}],"internal_chat_message_metadata_passthrough":{"conversation_id":"local"},"status":"completed"}],"internal_chat_message_metadata_passthrough":{"conversation_id":"local"}}`), context.Background())
+	t.Run("responses_passthrough_strips_internal_metadata", func(t *testing.T) {
+		c := newGinContext(http.MethodPost, "/v1/responses", []byte(`{"model":"gpt-5","input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"hi"}],"internal_chat_message_metadata_passthrough":{"conversation_id":"local"},"status":"completed"}],"internal_chat_message_metadata_passthrough":{"conversation_id":"local"},"transformer_metadata":{"codex_tool_compat_enabled":false}}`), context.Background())
 		upstream := &config.UpstreamConfig{
 			BaseURL:     "https://api.example.com",
 			ServiceType: "responses",
@@ -153,6 +153,9 @@ func TestResponsesEntry_RequestMatrix_PreservesKeyParams(t *testing.T) {
 
 		if _, ok := body["internal_chat_message_metadata_passthrough"]; ok {
 			t.Fatalf("不应透传顶层客户端内部元数据: %#v", body)
+		}
+		if _, ok := body["transformer_metadata"]; ok {
+			t.Fatalf("不应透传转换器内部元数据: %#v", body)
 		}
 		input, ok := body["input"].([]interface{})
 		if !ok || len(input) != 1 {

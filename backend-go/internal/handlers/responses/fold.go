@@ -509,6 +509,7 @@ func responsesFoldInputItems(input interface{}) []interface{} {
 
 func responsesFoldNextRoundBody(base map[string]interface{}, inputItems []interface{}) map[string]interface{} {
 	body := cloneStringInterfaceMap(base)
+	delete(body, "transformer_metadata")
 	body["stream"] = true
 	body["input"] = inputItems
 	include := responsesFoldIncludeValues(body["include"])
