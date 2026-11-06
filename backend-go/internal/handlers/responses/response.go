@@ -36,6 +36,7 @@ func handleSuccess(
 	defer resp.Body.Close()
 
 	isStream := originalReq != nil && originalReq.Stream
+	lowQuality := upstream != nil && upstream.LowQuality
 
 	// Inject codex_tool_compat_enabled into raw JSON so converters can read it.
 	// TransformerMetadata is json:"-" so it does not survive serialization.
@@ -54,9 +55,9 @@ func handleSuccess(
 
 	if isStream {
 		if upstreamType == "responses" {
-			return handleFoldedResponsesStreamSuccess(c, resp, provider, upstream, apiKey, envCfg, sessionManager, originalReq, originalRequestJSON)
+			return handleFoldedResponsesStreamSuccess(c, resp, provider, upstream, apiKey, envCfg, sessionManager, originalReq, originalRequestJSON, lowQuality)
 		}
-		return handleStreamSuccess(c, resp, upstreamType, envCfg, sessionManager, startTime, originalReq, originalRequestJSON, timeouts)
+		return handleStreamSuccess(c, resp, upstreamType, envCfg, sessionManager, startTime, originalReq, originalRequestJSON, timeouts, lowQuality)
 	}
 
 	// 非流式响应处理
@@ -125,7 +126,7 @@ func handleSuccess(
 	// Token 补全逻辑
 	originalUsage := responsesResp.Usage
 
-	patchResponsesUsageWithContext(c, responsesResp, originalRequestJSON, envCfg)
+	patchResponsesUsageWithQuality(c, responsesResp, originalRequestJSON, envCfg, lowQuality)
 
 	// 更新会话
 	if originalReq.Store == nil || *originalReq.Store {
@@ -158,8 +159,12 @@ func handleSuccess(
 
 	// 指标沿用内部"不含缓存"口径；转换路径的出口 usage 在发送前归一为官方 OpenAI 语义，
 	// 避免按官方语义计算未命中输入的客户端得到负数（#274）。
+	promptInputTokens := originalUsage.InputTokens
+	if lowQuality {
+		promptInputTokens = responsesResp.Usage.InputTokens
+	}
 	promptTokensTotal := promptTokensTotalFromResponsesInput(
-		originalUsage.InputTokens,
+		promptInputTokens,
 		upstreamType,
 		responsesUsageHasClaudeCache(originalUsage),
 	)
@@ -215,6 +220,10 @@ func patchResponsesUsage(resp *types.ResponsesResponse, requestBody []byte, envC
 }
 
 func patchResponsesUsageWithContext(c *gin.Context, resp *types.ResponsesResponse, requestBody []byte, envCfg *config.EnvConfig) {
+	patchResponsesUsageWithQuality(c, resp, requestBody, envCfg, false)
+}
+
+func patchResponsesUsageWithQuality(c *gin.Context, resp *types.ResponsesResponse, requestBody []byte, envCfg *config.EnvConfig, lowQuality bool) {
 	// 检查是否有 Claude 原生缓存 token（有时才跳过 input_tokens 修补）
 	// 仅检测 Claude 原生字段：cache_creation_input_tokens, cache_read_input_tokens,
 	// cache_creation_5m_input_tokens, cache_creation_1h_input_tokens
@@ -252,12 +261,32 @@ func patchResponsesUsageWithContext(c *gin.Context, resp *types.ResponsesRespons
 	originalInput := resp.Usage.InputTokens
 	originalOutput := resp.Usage.OutputTokens
 	patched := false
+	cacheTokens := resp.Usage.CacheReadInputTokens + resp.Usage.CacheCreationInputTokens + resp.Usage.CacheCreation5mInputTokens + resp.Usage.CacheCreation1hInputTokens
+	if resp.Usage.InputTokensDetails != nil {
+		cacheTokens += resp.Usage.InputTokensDetails.CachedTokens
+	}
+	if lowQuality {
+		estimatedInput := utils.EstimateResponsesRequestTokens(requestBody)
+		if cacheTokens == 0 && responseUsageDiffers(resp.Usage.InputTokens, estimatedInput) {
+			resp.Usage.InputTokens = estimatedInput
+			patched = true
+		}
+		estimatedOutput := estimateResponsesOutputFromItems(resp.Output)
+		if responseUsageDiffers(resp.Usage.OutputTokens, estimatedOutput) {
+			resp.Usage.OutputTokens = estimatedOutput
+			patched = true
+		}
+		if patched && envCfg.EnableResponseLogs && envCfg.ShouldLog("debug") {
+			common.RequestLogf(c, "[Responses-Token-LowQuality] usage 偏差超过 5%%，使用本地估算: input=%d->%d, output=%d->%d",
+				originalInput, resp.Usage.InputTokens, originalOutput, resp.Usage.OutputTokens)
+		}
+	}
 
-	if needInputPatch {
+	if needInputPatch && resp.Usage.InputTokens <= 1 {
 		resp.Usage.InputTokens = utils.EstimateResponsesRequestTokens(requestBody)
 		patched = true
 	}
-	if needOutputPatch {
+	if needOutputPatch && resp.Usage.OutputTokens <= 1 {
 		resp.Usage.OutputTokens = estimateResponsesOutputFromItems(resp.Output)
 		patched = true
 	}

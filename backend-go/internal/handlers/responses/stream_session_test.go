@@ -74,7 +74,7 @@ func TestHandleStreamSuccess_SessionWritebackPreservesReasoningEncryptedContent(
 		time.Now(),
 		originalReq,
 		[]byte(`{"model":"gpt-5","stream":true}`),
-		common.StreamPreflightTimeouts{FirstContentTimeoutMs: 5000, InactivityTimeoutMs: 3000},
+		common.StreamPreflightTimeouts{FirstContentTimeoutMs: 5000, InactivityTimeoutMs: 3000}, false,
 	)
 	if err != nil {
 		t.Fatalf("handleStreamSuccess() err = %v", err)
@@ -156,7 +156,7 @@ func TestHandleStreamSuccess_PostCommitStallSynthesizesIncompleteEvent(t *testin
 		common.StreamPreflightTimeouts{
 			FirstContentTimeoutMs: 5000,
 			InactivityTimeoutMs:   500, // 短超时以快速触发 stall
-		},
+		}, false,
 	)
 
 	// handleStreamSuccess 应返回 ErrStreamPostCommitStalled
@@ -224,7 +224,7 @@ func TestHandleStreamSuccess_StoresReasoningEncryptedContentToThinkingCache(t *t
 		time.Now(),
 		originalReq,
 		[]byte(`{"model":"gpt-5","stream":true}`),
-		common.StreamPreflightTimeouts{FirstContentTimeoutMs: 5000, InactivityTimeoutMs: 3000},
+		common.StreamPreflightTimeouts{FirstContentTimeoutMs: 5000, InactivityTimeoutMs: 3000}, false,
 	); err != nil {
 		t.Fatalf("handleStreamSuccess() err = %v", err)
 	}

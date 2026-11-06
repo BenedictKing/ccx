@@ -2,6 +2,7 @@ package responses
 
 import (
 	"encoding/json"
+	"math"
 	"strings"
 
 	"github.com/BenedictKing/ccx/internal/config"
@@ -479,10 +480,10 @@ func injectResponsesUsageToCompletedEventWithLogTag(event string, requestBody []
 
 // patchResponsesCompletedEventUsage 修补 response.completed 事件中的 usage
 func patchResponsesCompletedEventUsage(event string, requestBody []byte, outputText string, collected *responsesStreamUsage, envCfg *config.EnvConfig) string {
-	return patchResponsesCompletedEventUsageWithLogTag(event, requestBody, outputText, collected, envCfg, "")
+	return patchResponsesCompletedEventUsageWithLogTag(event, requestBody, outputText, collected, envCfg, false, "")
 }
 
-func patchResponsesCompletedEventUsageWithLogTag(event string, requestBody []byte, outputText string, collected *responsesStreamUsage, envCfg *config.EnvConfig, logTag string) string {
+func patchResponsesCompletedEventUsageWithLogTag(event string, requestBody []byte, outputText string, collected *responsesStreamUsage, envCfg *config.EnvConfig, lowQuality bool, logTag string) string {
 	var result strings.Builder
 	lines := strings.Split(event, "\n")
 
@@ -510,6 +511,30 @@ func patchResponsesCompletedEventUsageWithLogTag(event string, requestBody []byt
 					originalInput := collected.InputTokens
 					originalOutput := collected.OutputTokens
 					patched := false
+					cacheTokens := collected.CacheReadInputTokens + collected.CacheCreationInputTokens + collected.CacheCreation5mInputTokens + collected.CacheCreation1hInputTokens
+					if details, ok := usage["input_tokens_details"].(map[string]interface{}); ok {
+						if cached, ok := details["cached_tokens"].(float64); ok {
+							cacheTokens += int(cached)
+						}
+					}
+					if lowQuality {
+						estimatedInput := utils.EstimateResponsesRequestTokens(requestBody)
+						if cacheTokens == 0 && responseUsageDiffers(collected.InputTokens, estimatedInput) {
+							collected.InputTokens = estimatedInput
+							usage["input_tokens"] = estimatedInput
+							patched = true
+						}
+						estimatedOutput := utils.EstimateTokens(outputText)
+						if responseUsageDiffers(collected.OutputTokens, estimatedOutput) {
+							collected.OutputTokens = estimatedOutput
+							usage["output_tokens"] = estimatedOutput
+							patched = true
+						}
+						if patched && envCfg.EnableResponseLogs && envCfg.ShouldLog("debug") {
+							common.LogWithTag(logTag, "[Responses-Token-LowQuality] usage 偏差超过 5%%，使用本地估算: input=%d->%d, output=%d->%d",
+								originalInput, collected.InputTokens, originalOutput, collected.OutputTokens)
+						}
+					}
 
 					// 修补 input_tokens（仅当没有 Claude 原生缓存时）
 					// OpenAI 的 cached_tokens 不应阻止 input_tokens 补全
@@ -568,6 +593,10 @@ func patchResponsesCompletedEventUsageWithLogTag(event string, requestBody []byt
 	}
 
 	return result.String()
+}
+
+func responseUsageDiffers(current, estimated int) bool {
+	return current > 0 && estimated > 0 && math.Abs(float64(current-estimated))/float64(estimated) > 0.05
 }
 
 // patchResponsesCompletedEventModel 改写 response.completed 事件中的 response.model 字段

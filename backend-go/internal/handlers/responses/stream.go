@@ -29,6 +29,7 @@ func handleStreamSuccess(
 	originalReq *types.ResponsesRequest,
 	originalRequestJSON []byte,
 	timeouts common.StreamPreflightTimeouts,
+	lowQuality bool,
 ) (*types.Usage, error) {
 	if err := utils.DecompressResponseBodyIfNeeded(resp); err != nil {
 		return nil, fmt.Errorf("%w: %v", common.ErrInvalidResponseBody, err)
@@ -483,9 +484,9 @@ func handleStreamSuccess(
 					if envCfg.EnableResponseLogs && envCfg.ShouldLog("debug") {
 						common.RequestLogf(c, "[Responses-Stream-Token] 上游无usage, 注入本地估算: input=%d, output=%d", injectedInput, injectedOutput)
 					}
-				} else if needTokenPatch {
+				} else if needTokenPatch || lowQuality {
 					// 需要修补虚假值
-					eventToSend = patchResponsesCompletedEventUsageWithLogTag(event, originalRequestJSON, outputTextBuffer.String(), &collectedUsage, envCfg, common.RequestLogTag(c))
+					eventToSend = patchResponsesCompletedEventUsageWithLogTag(event, originalRequestJSON, outputTextBuffer.String(), &collectedUsage, envCfg, lowQuality, common.RequestLogTag(c))
 				}
 				// 改写 model 字段（仅 passthrough 场景，转换器已处理好转换场景）
 				if envCfg.RewriteResponseModel && !needConvert && originalReq != nil && originalReq.Model != "" {
@@ -696,8 +697,8 @@ streamEnd:
 						collectedUsage.CacheCreation5mInputTokens,
 						collectedUsage.CacheCreation1hInputTokens,
 					)
-				} else if needTokenPatch {
-					eventToSend = patchResponsesCompletedEventUsageWithLogTag(event, originalRequestJSON, outputTextBuffer.String(), &collectedUsage, envCfg, common.RequestLogTag(c))
+				} else if needTokenPatch || lowQuality {
+					eventToSend = patchResponsesCompletedEventUsageWithLogTag(event, originalRequestJSON, outputTextBuffer.String(), &collectedUsage, envCfg, lowQuality, common.RequestLogTag(c))
 				}
 				// 改写 model 字段（仅 passthrough 场景，转换器已处理好转换场景）
 				if envCfg.RewriteResponseModel && !needConvert && originalReq != nil && originalReq.Model != "" {

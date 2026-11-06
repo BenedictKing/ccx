@@ -57,3 +57,11 @@
 
 ---
 
+## [ ] Chat 转 Responses 的上下文用量差异 (#263)
+
+来源：https://github.com/BenedictKing/ccx/issues/263
+
+部分完成：Responses 渠道现在也会应用“低质量”开关的本地 usage 估算，偏差超过 5% 时替换上游值，并保留缓存计数。仍需用 issue 中的 llama.cpp 实际请求/响应样本核对估算值能否纠正 Codex App 上下文显示。
+
+---
+

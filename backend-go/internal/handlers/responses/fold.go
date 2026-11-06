@@ -53,9 +53,10 @@ func handleFoldedResponsesStreamSuccess(
 	sessionManager *session.SessionManager,
 	originalReq *types.ResponsesRequest,
 	originalRequestJSON []byte,
+	lowQuality bool,
 ) (*types.Usage, error) {
 	if provider == nil || upstream == nil || apiKey == "" {
-		return handleStreamSuccess(c, resp, "responses", envCfg, sessionManager, time.Now(), originalReq, originalRequestJSON, common.StreamPreflightTimeouts{})
+		return handleStreamSuccess(c, resp, "responses", envCfg, sessionManager, time.Now(), originalReq, originalRequestJSON, common.StreamPreflightTimeouts{}, lowQuality)
 	}
 
 	if err := utils.DecompressResponseBodyIfNeeded(resp); err != nil {
