@@ -787,6 +787,8 @@
   "channelEditor.runtime.title": "运行期策略",
   "channelEditor.runtime.autoBlacklist.label": "自动熔断/黑名单余额异常 Key",
   "channelEditor.runtime.autoBlacklist.hint": "自动禁用余额异常的 Key",
+  "channelEditor.runtime.disableCircuitBreaker.label": "禁用此渠道自动熔断",
+  "channelEditor.runtime.disableCircuitBreaker.hint": "仍保留本次请求重试、限速冷却和鉴权/余额失效拉黑",
   "channelEditor.runtime.autoLearnRateLimits.label": "自动学习上游限速",
   "channelEditor.runtime.autoLearnRateLimits.hint": "解析 Retry-After / x-ratelimit-* 响应头动态调整 cooldown",
   "channelEditor.transport.title": "代理路由网络",

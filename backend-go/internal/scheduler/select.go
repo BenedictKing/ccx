@@ -444,7 +444,7 @@ func traceCandidateFilterSkips(before, after []ChannelInfo, trace *SelectionTrac
 }
 
 func (s *ChannelScheduler) channelCircuitState(upstream *config.UpstreamConfig, kind ChannelKind) metrics.CircuitState {
-	if upstream == nil {
+	if upstream == nil || upstream.CircuitBreakerDisabled {
 		return metrics.CircuitStateClosed
 	}
 	return s.getMetricsManager(kind).GetChannelCircuitStateMultiURL(upstream.GetAllBaseURLs(), upstream.APIKeys, NormalizedMetricsServiceType(kind, upstream.ServiceType))
@@ -673,6 +673,9 @@ func (s *ChannelScheduler) channelFailureRate(upstream *config.UpstreamConfig, k
 func (s *ChannelScheduler) channelIsHealthy(upstream *config.UpstreamConfig, kind ChannelKind) bool {
 	if upstream == nil {
 		return false
+	}
+	if upstream.CircuitBreakerDisabled {
+		return true
 	}
 	return s.getMetricsManager(kind).IsChannelHealthyMultiURL(upstream.GetAllBaseURLs(), upstream.APIKeys, NormalizedMetricsServiceType(kind, upstream.ServiceType))
 }

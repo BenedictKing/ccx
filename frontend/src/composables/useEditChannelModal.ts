@@ -177,6 +177,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     routePrefix: '',
     supportedModels: [] as string[],
     autoBlacklistBalance: true,
+    circuitBreakerDisabled: false,
     normalizeMetadataUserId: defaultNormalizeMetadataUserId(),
     stripBillingHeader: false,
     codexNativeToolPassthrough: false,
@@ -799,6 +800,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     form.supportedModels = []
     supportedModelsError.value = ''
     form.autoBlacklistBalance = true
+    form.circuitBreakerDisabled = false
     form.normalizeMetadataUserId = defaultNormalizeMetadataUserId()
     form.stripBillingHeader = false
     form.codexNativeToolPassthrough = false
@@ -893,6 +895,7 @@ export function useEditChannelModal(props: ResolvedEditChannelModalProps, emit: 
     form.supportedModels = validPatterns
     supportedModelsError.value = hasInvalidPatterns ? t('addChannel.supportedModelsInvalidPattern') : ''
     form.autoBlacklistBalance = channel.autoBlacklistBalance ?? true
+    form.circuitBreakerDisabled = !!channel.circuitBreakerDisabled
     form.normalizeMetadataUserId = channel.normalizeMetadataUserId ?? true
     form.stripBillingHeader = channel.stripBillingHeader ?? false
     form.codexNativeToolPassthrough = !!channel.codexNativeToolPassthrough

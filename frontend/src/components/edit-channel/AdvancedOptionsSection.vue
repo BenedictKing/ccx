@@ -93,6 +93,7 @@ interface FormData {
   insecureSkipVerify: boolean
   lowQuality: boolean
   autoBlacklistBalance: boolean
+  circuitBreakerDisabled: boolean
   codexNativeToolPassthrough?: boolean
   codexToolCompat?: boolean
   stripImageGenerationTool?: boolean

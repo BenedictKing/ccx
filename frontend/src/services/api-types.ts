@@ -170,6 +170,7 @@ export interface Channel {
   streamToolCallIdleTimeoutMs?: number     // 工具调用空闲超时（毫秒，0/空=继承全局）
   routePrefix?: string                     // 路由前缀（如 "kimi"，访问 /kimi/v1/messages）
   autoBlacklistBalance?: boolean           // 余额不足自动拉黑（默认 true）
+  circuitBreakerDisabled?: boolean         // 禁用该渠道自动熔断（默认 false）
   normalizeMetadataUserId?: boolean        // 规范化 metadata.user_id（默认 true）
   stripBillingHeader?: boolean             // Messages 渠道特定：转发前移除 system 中 cch= 计费参数（默认 true）
   stripEmptyTextBlocks?: boolean           // Claude 协议特定：转发前移除裸空 text content block（兼容严格校验的第三方上游）

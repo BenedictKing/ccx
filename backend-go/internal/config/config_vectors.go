@@ -281,6 +281,9 @@ func (cm *ConfigManager) UpdateVectorsUpstream(index int, updates UpstreamUpdate
 		v := *updates.AutoBlacklistBalance
 		upstream.AutoBlacklistBalance = &v
 	}
+	if updates.CircuitBreakerDisabled != nil {
+		upstream.CircuitBreakerDisabled = *updates.CircuitBreakerDisabled
+	}
 	if updates.NormalizeMetadataUserID != nil {
 		v := *updates.NormalizeMetadataUserID
 		upstream.NormalizeMetadataUserID = &v

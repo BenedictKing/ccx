@@ -17,6 +17,17 @@
       <v-switch :model-value="form.autoBlacklistBalance" inset color="warning" hide-details @update:model-value="updateField('autoBlacklistBalance', $event)" />
     </div>
 
+    <div class="d-flex align-center justify-space-between mb-3">
+      <div class="d-flex align-center ga-2">
+        <v-icon color="warning">mdi-shield-off-outline</v-icon>
+        <div>
+          <div class="section-title section-title--soft">{{ t('channelEditor.runtime.disableCircuitBreaker.label') }}</div>
+          <div class="text-caption text-medium-emphasis">{{ t('channelEditor.runtime.disableCircuitBreaker.hint') }}</div>
+        </div>
+      </div>
+      <v-switch :model-value="form.circuitBreakerDisabled" inset color="warning" hide-details @update:model-value="updateField('circuitBreakerDisabled', $event)" />
+    </div>
+
     <!-- 自动学习429限速 -->
     <div class="d-flex align-center justify-space-between">
       <div class="d-flex align-center ga-2">
@@ -36,6 +47,7 @@ import { useI18n } from '../../i18n'
 
 interface FormData {
   autoBlacklistBalance: boolean
+  circuitBreakerDisabled: boolean
   rateLimitAutoFromHeaders: boolean
 }
 

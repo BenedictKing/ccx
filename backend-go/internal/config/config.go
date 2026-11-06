@@ -57,7 +57,8 @@ type UpstreamConfig struct {
 	PromotionUntil *time.Time `json:"promotionUntil,omitempty"` // 促销期截止时间，在此期间内优先使用此渠道（忽略trace亲和）
 	LowQuality     bool       `json:"lowQuality,omitempty"`     // 低质量渠道标记：启用后强制本地估算 token，偏差>5%时使用本地值
 	// 自动拉黑开关
-	AutoBlacklistBalance *bool `json:"autoBlacklistBalance,omitempty"` // 余额不足时自动拉黑 Key（默认 true）
+	AutoBlacklistBalance   *bool `json:"autoBlacklistBalance,omitempty"`   // 余额不足时自动拉黑 Key（默认 true）
+	CircuitBreakerDisabled bool  `json:"circuitBreakerDisabled,omitempty"` // 禁用此渠道的自动熔断；不影响鉴权/余额拉黑与限速 cooldown
 	// Claude Messages metadata.user_id 规范化开关
 	NormalizeMetadataUserID *bool `json:"normalizeMetadataUserId,omitempty"` // 规范化 metadata.user_id（默认 true）
 	// Messages 渠道级移除计费头：转发前从 system 数组移除 cch=xxx; 计费参数（默认关闭）
@@ -470,6 +471,7 @@ type UpstreamUpdate struct {
 	PromotionUntil          *time.Time `json:"promotionUntil"`
 	LowQuality              *bool      `json:"lowQuality"`
 	AutoBlacklistBalance    *bool      `json:"autoBlacklistBalance"`
+	CircuitBreakerDisabled  *bool      `json:"circuitBreakerDisabled"`
 	NormalizeMetadataUserID *bool      `json:"normalizeMetadataUserId"`
 	StripBillingHeader      *bool      `json:"stripBillingHeader"`
 	// Claude 协议空文本兼容
@@ -694,7 +696,7 @@ func (cm *ConfigManager) GetNextAPIKey(upstream *UpstreamConfig, failedKeys map[
 	// 筛选可用密钥：排除临时失败密钥和内存中的失败密钥
 	availableKeys := []string{}
 	for _, key := range upstream.APIKeys {
-		if !failedKeys[key] && !cm.isKeyFailed(key, apiType) {
+		if !failedKeys[key] && (upstream.CircuitBreakerDisabled || !cm.isKeyFailed(key, apiType)) {
 			availableKeys = append(availableKeys, key)
 		}
 	}

@@ -784,6 +784,8 @@
   "channelEditor.runtime.title": "Runtime",
   "channelEditor.runtime.autoBlacklist.label": "Blacklist otomatis key saldo abnormal",
   "channelEditor.runtime.autoBlacklist.hint": "Nonaktifkan otomatis key dengan error saldo",
+  "channelEditor.runtime.disableCircuitBreaker.label": "Nonaktifkan circuit breaker otomatis kanal ini",
+  "channelEditor.runtime.disableCircuitBreaker.hint": "Retry, cooldown batas laju, dan blacklist autentikasi/saldo tetap berlaku",
   "channelEditor.runtime.autoLearnRateLimits.label": "Pelajari rate limit upstream secara otomatis",
   "channelEditor.runtime.autoLearnRateLimits.hint": "Parsing header Retry-After / x-ratelimit-* dan sesuaikan cooldown secara dinamis",
   "channelEditor.transport.title": "Transport",

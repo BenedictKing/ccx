@@ -331,6 +331,7 @@ describe('buildChannelPayload', () => {
       routePrefix: '',
       supportedModels: [],
       autoBlacklistBalance: false,
+      circuitBreakerDisabled: true,
       normalizeMetadataUserId: true,
       stripEmptyTextBlocks: false,
       normalizeSystemRoleToTopLevel: false,
@@ -343,6 +344,7 @@ describe('buildChannelPayload', () => {
     })
 
     expect(result.autoBlacklistBalance).toBe(false)
+    expect(result.circuitBreakerDisabled).toBe(true)
   })
 
   it('应仅在 Claude 协议保留 normalizeMetadataUserId 开关', () => {

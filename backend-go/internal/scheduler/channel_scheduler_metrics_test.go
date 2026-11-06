@@ -10,6 +10,29 @@ import (
 	"github.com/BenedictKing/ccx/internal/ratelimit"
 )
 
+func TestCircuitBreakerDisabledKeepsChannelSelectable(t *testing.T) {
+	for _, disabled := range []bool{false, true} {
+		cfg := config.Config{Upstream: []config.UpstreamConfig{{
+			Name: "unstable", BaseURL: "https://unstable.example", APIKeys: []string{"sk-test"},
+			ServiceType: "claude", Status: "active", CircuitBreakerDisabled: disabled,
+		}}}
+		sch, cleanup := createTestScheduler(t, cfg)
+		mm := sch.GetMessagesMetricsManager()
+		for i := 0; i < 6; i++ {
+			mm.RecordFailure(cfg.Upstream[0].BaseURL, "sk-test", "claude")
+		}
+		current := sch.configManager.GetConfig()
+		upstream := &current.Upstream[0]
+		if disabled && (!sch.channelIsHealthy(upstream, ChannelKindMessages) || sch.channelCircuitState(upstream, ChannelKindMessages) == metrics.CircuitStateOpen) {
+			t.Fatal("disabled breaker should keep the channel available")
+		}
+		if !disabled && sch.channelIsHealthy(upstream, ChannelKindMessages) && sch.channelCircuitState(upstream, ChannelKindMessages) != metrics.CircuitStateOpen {
+			t.Fatal("default breaker should retain its existing failure behavior")
+		}
+		cleanup()
+	}
+}
+
 func TestDeleteChannelMetrics_SharedMetricsKeyPreserved(t *testing.T) {
 	// 场景：两个渠道共享同一个 (BaseURL, APIKey) 组合
 	// 删除其中一个渠道时，共享的 metricsKey 应该被保留

@@ -2,6 +2,7 @@ package config
 
 import (
 	"bytes"
+	"encoding/json"
 	"log"
 	"os"
 	"path/filepath"
@@ -374,6 +375,71 @@ func TestUpdateUpstreamCanSetAutoBlacklistBalance(t *testing.T) {
 	cfg := cm.GetConfig()
 	if cfg.Upstream[0].AutoBlacklistBalance == nil || *cfg.Upstream[0].AutoBlacklistBalance != false {
 		t.Fatalf("AutoBlacklistBalance = %v, want false", cfg.Upstream[0].AutoBlacklistBalance)
+	}
+}
+
+func TestCircuitBreakerDisabledUpdatesAllProtocolChannels(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	channel := UpstreamConfig{Name: "test", BaseURL: "https://relay.example", APIKeys: []string{"sk-test"}, Status: "active"}
+	initial := Config{
+		Upstream: []UpstreamConfig{channel}, ChatUpstream: []UpstreamConfig{channel},
+		ResponsesUpstream: []UpstreamConfig{channel}, GeminiUpstream: []UpstreamConfig{channel},
+		ImagesUpstream: []UpstreamConfig{channel}, VectorsUpstream: []UpstreamConfig{channel},
+	}
+	data, err := json.Marshal(initial)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cm, err := NewConfigManager(path, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	enabled := true
+	update := UpstreamUpdate{CircuitBreakerDisabled: &enabled}
+	for _, apply := range []func(int, UpstreamUpdate) (bool, error){
+		cm.UpdateUpstream, cm.UpdateChatUpstream, cm.UpdateResponsesUpstream,
+		cm.UpdateGeminiUpstream, cm.UpdateImagesUpstream, cm.UpdateVectorsUpstream,
+	} {
+		if _, err := apply(0, update); err != nil {
+			t.Fatalf("updating protocol channel: %v", err)
+		}
+	}
+	cm.Close()
+	cm, err = NewConfigManager(path, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cm.Close()
+	cfg := cm.GetConfig()
+	for _, group := range [][]UpstreamConfig{
+		cfg.Upstream, cfg.ChatUpstream, cfg.ResponsesUpstream,
+		cfg.GeminiUpstream, cfg.ImagesUpstream, cfg.VectorsUpstream,
+	} {
+		if len(group) != 1 || !group[0].CircuitBreakerDisabled {
+			t.Fatalf("circuit breaker setting did not survive restart: %+v", group)
+		}
+	}
+}
+
+func TestCircuitBreakerDisabledIgnoresTemporaryFailedKeyCache(t *testing.T) {
+	cm := &ConfigManager{failedKeysCache: make(map[string]*FailedKey), keyRecoveryTime: time.Hour}
+	cm.MarkKeyAsFailed("sk-first", "Messages")
+	upstream := &UpstreamConfig{Name: "unstable", APIKeys: []string{"sk-first", "sk-second"}}
+	key, err := cm.GetNextAPIKey(upstream, nil, "Messages")
+	if err != nil || key != "sk-second" {
+		t.Fatalf("default channel should avoid failed key: key=%q err=%v", key, err)
+	}
+	upstream.CircuitBreakerDisabled = true
+	key, err = cm.GetNextAPIKey(upstream, nil, "Messages")
+	if err != nil || key != "sk-first" {
+		t.Fatalf("disabled breaker should consider the first active key: key=%q err=%v", key, err)
+	}
+	key, err = cm.GetNextAPIKey(upstream, map[string]bool{"sk-first": true}, "Messages")
+	if err != nil || key != "sk-second" {
+		t.Fatalf("request-local failure must still be skipped: key=%q err=%v", key, err)
 	}
 }
 

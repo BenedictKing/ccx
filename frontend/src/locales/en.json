@@ -787,6 +787,8 @@
   "channelEditor.runtime.title": "Runtime",
   "channelEditor.runtime.autoBlacklist.label": "Auto blacklist abnormal balance keys",
   "channelEditor.runtime.autoBlacklist.hint": "Automatically trip/disable keys with balance errors",
+  "channelEditor.runtime.disableCircuitBreaker.label": "Disable automatic circuit breaker for this channel",
+  "channelEditor.runtime.disableCircuitBreaker.hint": "Request retries, rate-limit cooldowns, and auth/balance blacklisting still apply",
   "channelEditor.runtime.autoLearnRateLimits.label": "Auto learn upstream rate limiting",
   "channelEditor.runtime.autoLearnRateLimits.hint": "Parse Retry-After / x-ratelimit-* headers and adjust cooldown dynamically",
   "channelEditor.transport.title": "Transport",

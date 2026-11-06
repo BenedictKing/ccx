@@ -288,7 +288,10 @@ func TryUpstreamWithAllKeys(
 			}
 
 			// 检查熔断状态
-			circuitState := metricsManager.GetKeyCircuitState(currentBaseURL, apiKey, metricsServiceType)
+			circuitState := metrics.CircuitStateClosed
+			if !upstream.CircuitBreakerDisabled {
+				circuitState = metricsManager.GetKeyCircuitState(currentBaseURL, apiKey, metricsServiceType)
+			}
 			if circuitState == metrics.CircuitStateOpen {
 				failedKeys[apiKey] = true
 				RequestLogf(c, "[%s-Circuit] 跳过 open 状态中的 Key: %s", apiType, utils.MaskAPIKey(apiKey))
@@ -413,7 +416,9 @@ func TryUpstreamWithAllKeys(
 				}
 				// 真实渠道故障：计入失败，继续 failover
 				failedKeys[apiKey] = true
-				cfgManager.MarkKeyAsFailed(apiKey, apiType)
+				if !upstream.CircuitBreakerDisabled {
+					cfgManager.MarkKeyAsFailed(apiKey, apiType)
+				}
 				metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, metrics.FailureClassRetryable)
 				channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
 				if markURLFailure != nil {
@@ -479,7 +484,9 @@ func TryUpstreamWithAllKeys(
 				if shouldFailover {
 					lastError = fmt.Errorf("上游错误: %d", resp.StatusCode)
 					failedKeys[apiKey] = true
-					cfgManager.MarkKeyAsFailed(apiKey, apiType)
+					if !upstream.CircuitBreakerDisabled {
+						cfgManager.MarkKeyAsFailed(apiKey, apiType)
+					}
 					failureClass := metrics.FailureClassRetryable
 					if isQuotaRelated {
 						failureClass = metrics.FailureClassQuota
@@ -633,7 +640,9 @@ func TryUpstreamWithAllKeys(
 						continue
 					}
 					failedKeys[apiKey] = true
-					cfgManager.MarkKeyAsFailed(apiKey, apiType)
+					if !upstream.CircuitBreakerDisabled {
+						cfgManager.MarkKeyAsFailed(apiKey, apiType)
+					}
 					metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, metrics.FailureClassRetryable)
 					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
 					if markURLFailure != nil {
@@ -652,7 +661,9 @@ func TryUpstreamWithAllKeys(
 							RequestLogf(c, "[%s-Blacklist] 拉黑 Key 失败: %v", apiType, blacklistErr)
 						}
 					}
-					cfgManager.MarkKeyAsFailed(apiKey, apiType)
+					if !upstream.CircuitBreakerDisabled {
+						cfgManager.MarkKeyAsFailed(apiKey, apiType)
+					}
 					metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, metrics.FailureClassRetryable)
 					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
 					if markURLFailure != nil {
@@ -663,7 +674,9 @@ func TryUpstreamWithAllKeys(
 					continue
 				} else {
 					// 真实渠道故障：计入失败指标
-					cfgManager.MarkKeyAsFailed(apiKey, apiType)
+					if !upstream.CircuitBreakerDisabled {
+						cfgManager.MarkKeyAsFailed(apiKey, apiType)
+					}
 					metricsManager.RecordRequestFinalizeFailureWithClass(currentBaseURL, apiKey, metricsServiceType, requestID, metrics.FailureClassRetryable)
 					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)
 					// 记录渠道日志

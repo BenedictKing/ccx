@@ -681,6 +681,48 @@ func TestClientWriteDisconnectDoesNotFailKey(t *testing.T) {
 	}
 }
 
+func TestDisabledCircuitBreakerStillAttemptsOpenKey(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("data: {}\n\n"))
+	}))
+	defer server.Close()
+	cfgManager, sch, mm, cleanup := newTestFailoverDependencies(t, config.UpstreamConfig{
+		Name: "unstable", BaseURL: server.URL, APIKeys: []string{"sk-test"}, Status: "active",
+		ServiceType: "openai", CircuitBreakerDisabled: true,
+	})
+	defer cleanup()
+	cfg := cfgManager.GetConfig()
+	upstream := &cfg.Upstream[0]
+	serviceType := scheduler.NormalizedMetricsServiceType(scheduler.ChannelKindMessages, upstream.ServiceType)
+	for i := 0; i < 6; i++ {
+		mm.RecordFailure(server.URL, "sk-test", serviceType)
+	}
+	if mm.GetKeyCircuitState(server.URL, "sk-test", serviceType) != metrics.CircuitStateOpen {
+		t.Fatal("test setup should have an open key circuit")
+	}
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader(`{"model":"gpt-5.5"}`))
+	handled, _, _, _, _, err := TryUpstreamWithAllKeys(c, config.NewEnvConfig(), cfgManager, sch,
+		scheduler.ChannelKindMessages, "Messages", mm, upstream,
+		[]warmup.URLLatencyResult{{URL: server.URL}}, []byte(`{"model":"gpt-5.5","messages":[]}`), nil, false,
+		func(up *config.UpstreamConfig, failed map[string]bool) (string, error) {
+			return cfgManager.GetNextAPIKey(up, failed, "Messages")
+		},
+		func(c *gin.Context, up *config.UpstreamConfig, _ string) (*http.Request, error) {
+			return http.NewRequestWithContext(c.Request.Context(), http.MethodPost, up.BaseURL, strings.NewReader(`{}`))
+		}, nil, nil, nil,
+		func(_ *gin.Context, resp *http.Response, _ *config.UpstreamConfig, _ string, _ []byte) (*types.Usage, error) {
+			defer resp.Body.Close()
+			return nil, nil
+		}, "gpt-5.5", "", 0, sch.GetChannelLogStore(scheduler.ChannelKindMessages))
+	if err != nil || !handled {
+		t.Fatalf("disabled breaker should attempt open key: handled=%v err=%v", handled, err)
+	}
+}
+
 func newTestFailoverDependencies(t *testing.T, upstream config.UpstreamConfig) (*config.ConfigManager, *scheduler.ChannelScheduler, *metrics.MetricsManager, func()) {
 	t.Helper()
 

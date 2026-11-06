@@ -79,6 +79,7 @@ export interface ChannelFormLike {
   routePrefix: string
   supportedModels: string[]
   autoBlacklistBalance: boolean
+  circuitBreakerDisabled?: boolean
   normalizeMetadataUserId: boolean
   stripBillingHeader?: boolean
   stripEmptyTextBlocks: boolean
@@ -541,6 +542,7 @@ export function buildChannelPayload(
     routePrefix: form.routePrefix.trim(),
     supportedModels: form.supportedModels,
     autoBlacklistBalance: form.autoBlacklistBalance,
+    circuitBreakerDisabled: !!form.circuitBreakerDisabled,
     normalizeMetadataUserId,
     stripBillingHeader: !!form.stripBillingHeader,
     stripEmptyTextBlocks: form.stripEmptyTextBlocks,
