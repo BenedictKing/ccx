@@ -727,12 +727,16 @@ a.api-type-text {
 
 .stat-card-desc {
   font-size: 0.8125rem;
-  opacity: 0.72;
+  color: #374151;
   margin-top: 4px;
   line-height: 1.5;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.v-theme--dark .stat-card-desc {
+  color: #cbd5e1;
 }
 
 /* 隐藏光晕效果 */
@@ -746,7 +750,7 @@ a.api-type-text {
   color: white;
 }
 .stat-card-info .stat-card-value {
-  color: #3b82f6;
+  color: #1d4ed8;
 }
 .v-theme--dark .stat-card-info .stat-card-value {
   color: #60a5fa;
@@ -757,7 +761,7 @@ a.api-type-text {
   color: white;
 }
 .stat-card-success .stat-card-value {
-  color: #10b981;
+  color: #047857;
 }
 .v-theme--dark .stat-card-success .stat-card-value {
   color: #34d399;
@@ -768,7 +772,7 @@ a.api-type-text {
   color: white;
 }
 .stat-card-primary .stat-card-value {
-  color: #6366f1;
+  color: #4338ca;
 }
 .v-theme--dark .stat-card-primary .stat-card-value {
   color: #818cf8;
@@ -779,7 +783,7 @@ a.api-type-text {
   color: white;
 }
 .stat-card-emerald .stat-card-value {
-  color: #059669;
+  color: #047857;
 }
 .v-theme--dark .stat-card-emerald .stat-card-value {
   color: #34d399;
@@ -790,7 +794,7 @@ a.api-type-text {
   color: white;
 }
 .stat-card-error .stat-card-value {
-  color: #dc2626;
+  color: #b91c1c;
 }
 .v-theme--dark .stat-card-error .stat-card-value {
   color: #f87171;
