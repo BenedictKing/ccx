@@ -112,10 +112,28 @@ func extractJSONObjectString(content string, key string) (string, bool) {
 	return strings.TrimRight(content[start:end], "\n"), true
 }
 
+func jsonObjectKeyIndent(content string, start int, end int, key string) string {
+	keyOffset := strings.Index(content[start:end], fmt.Sprintf("%q", key))
+	if keyOffset < 0 {
+		return ""
+	}
+	keyPos := start + keyOffset
+	lineStart := strings.LastIndex(content[:keyPos], "\n") + 1
+	return content[lineStart:keyPos]
+}
+
+func formatJSONObjectKey(key string, objectJSON string, indent string) string {
+	if strings.HasPrefix(strings.TrimSpace(objectJSON), fmt.Sprintf("%q", key)) {
+		return objectJSON
+	}
+	return fmt.Sprintf("%s%q: %s", indent, key, objectJSON)
+}
+
 func ensureJSONObjectKey(content string, parentKey string, childKey string, childJSON string) string {
 	parentStart, parentEnd, ok := extractJSONObjectRange(content, parentKey)
 	if !ok {
-		block := fmt.Sprintf("  %q: %s", parentKey, childJSON)
+		childBlock := formatJSONObjectKey(childKey, childJSON, "    ")
+		block := fmt.Sprintf("  %q: {\n%s\n  }", parentKey, childBlock)
 		if idx := strings.LastIndex(content, "}"); idx >= 0 {
 			head := content[:idx]
 			tail := content[idx:]
@@ -135,28 +153,31 @@ func ensureJSONObjectKey(content string, parentKey string, childKey string, chil
 		}
 		return content + block + "\n"
 	}
+	parentIndent := jsonObjectKeyIndent(content, parentStart, parentEnd, parentKey)
 	childStart, childEnd, childOK := extractJSONObjectRange(content[parentStart:parentEnd], childKey)
 	if childOK {
 		absoluteStart := parentStart + childStart
 		absoluteEnd := parentStart + childEnd
-		return content[:absoluteStart] + childJSON + content[absoluteEnd:]
+		childIndent := jsonObjectKeyIndent(content, absoluteStart, absoluteEnd, childKey)
+		childBlock := formatJSONObjectKey(childKey, childJSON, childIndent)
+		return content[:absoluteStart] + childBlock + content[absoluteEnd:]
 	}
 	parentInner := content[parentStart:parentEnd]
-	childBlock := fmt.Sprintf("  %q: %s", childKey, childJSON)
+	childBlock := formatJSONObjectKey(childKey, childJSON, parentIndent+"  ")
 	insertPos := strings.LastIndex(parentInner, "}")
 	if insertPos < 0 {
 		return content
 	}
 	absInsert := parentStart + insertPos
-	head := content[:absInsert]
+	head := strings.TrimRight(content[:absInsert], " \t\r\n")
 	tail := content[absInsert:]
-	if strings.TrimSpace(head) != "" && !strings.HasSuffix(strings.TrimRight(head, " \t\r\n"), ",") && !strings.HasSuffix(strings.TrimRight(head, " \t\r\n"), "{") {
-		head = strings.TrimRight(head, " \t\r\n") + ","
+	if strings.TrimSpace(head) != "" && !strings.HasSuffix(head, ",") && !strings.HasSuffix(head, "{") {
+		head += ","
 	}
 	if !strings.HasSuffix(head, "\n") {
 		head += "\n"
 	}
-	return head + childBlock + "\n" + tail
+	return head + childBlock + "\n" + parentIndent + tail
 }
 
 func patchOpenCodeProviderJSONC(content string, providerID string, providerJSON string) string {
