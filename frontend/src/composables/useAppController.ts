@@ -64,6 +64,7 @@ export function useAppController() {
     { value: 'responses', labelKey: 'app.tabs.responses', route: '/channels/responses', icon: 'mdi-console' },
     { value: 'gemini', labelKey: 'app.tabs.gemini', route: '/channels/gemini', icon: 'mdi-google' },
     { value: 'conversations', labelKey: 'app.tabs.conversations', route: '/conversations', icon: 'mdi-view-dashboard-outline' },
+    { value: 'site-onboarding', labelKey: 'app.tabs.siteOnboarding', route: '/site-onboarding', icon: 'mdi-web' },
   ] as const
 
   const translatedApiTabOptions = computed(() => {

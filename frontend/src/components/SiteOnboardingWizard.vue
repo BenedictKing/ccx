@@ -1,7 +1,8 @@
 <template>
   <div class="site-onboarding-wizard">
-    <v-stepper v-model="step" :items="stepTitles" alt-labels class="mb-4">
-      <template #item.1>
+    <div class="d-sm-none text-subtitle-2 mb-2">{{ step }} / {{ stepTitles.length }} {{ stepTitles[step - 1] }}</div>
+    <v-stepper v-model="step" :items="stepTitles" alt-labels hide-actions class="mb-4">
+      <template #[`item.1`]>
         <v-card variant="flat">
           <v-card-text>
             <v-text-field
@@ -57,7 +58,7 @@
         </v-card>
       </template>
 
-      <template #item.2>
+      <template #[`item.2`]>
         <v-card variant="flat">
           <v-card-text>
             <v-select
@@ -110,7 +111,7 @@
         </v-card>
       </template>
 
-      <template #item.3>
+      <template #[`item.3`]>
         <v-card variant="flat">
           <v-card-text>
             <v-select
@@ -143,7 +144,7 @@
         </v-card>
       </template>
 
-      <template #item.4>
+      <template #[`item.4`]>
         <v-card variant="flat">
           <v-card-text>
             <v-table v-if="provisionResult" density="compact">
@@ -354,3 +355,23 @@ async function reconcile() {
   }
 }
 </script>
+
+<style scoped>
+@media (max-width: 599px) {
+  .site-onboarding-wizard :deep(.v-stepper-item) {
+    flex: 0 0 40px;
+    min-width: 0;
+    padding: 8px 0;
+  }
+
+  .site-onboarding-wizard :deep(.v-stepper-header .v-divider) {
+    flex: 1 1 0;
+    min-width: 0;
+    margin: 0;
+  }
+
+  .site-onboarding-wizard :deep(.v-stepper-item__title) {
+    display: none;
+  }
+}
+</style>

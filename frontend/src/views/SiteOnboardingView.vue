@@ -2,7 +2,7 @@
   <div class="site-onboarding-view">
     <v-card class="mb-4">
       <v-card-title>{{ t('siteOnboarding.title') }}</v-card-title>
-      <v-card-subtitle>{{ t('siteOnboarding.subtitle') }}</v-card-subtitle>
+      <v-card-subtitle class="onboarding-subtitle">{{ t('siteOnboarding.subtitle') }}</v-card-subtitle>
       <v-card-text>
         <SiteOnboardingWizard @provisioned="onProvisioned" />
       </v-card-text>
@@ -88,3 +88,10 @@ async function remove(account: SiteAccount) {
 
 onMounted(refresh)
 </script>
+
+<style scoped>
+.onboarding-subtitle {
+  white-space: normal;
+  overflow: visible;
+}
+</style>

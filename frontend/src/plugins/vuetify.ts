@@ -10,7 +10,7 @@ import { VContainer, VRow, VCol, VSpacer } from 'vuetify/components/VGrid'
 import { VAppBar } from 'vuetify/components/VAppBar'
 
 // 卡片与容器
-import { VCard, VCardTitle, VCardText, VCardActions } from 'vuetify/components/VCard'
+import { VCard, VCardTitle, VCardSubtitle, VCardText, VCardActions } from 'vuetify/components/VCard'
 import { VDialog } from 'vuetify/components/VDialog'
 import { VOverlay } from 'vuetify/components/VOverlay'
 import { VExpansionPanels, VExpansionPanel, VExpansionPanelTitle, VExpansionPanelText } from 'vuetify/components/VExpansionPanel'
@@ -22,6 +22,7 @@ import { VTextarea } from 'vuetify/components/VTextarea'
 import { VSelect } from 'vuetify/components/VSelect'
 import { VCombobox } from 'vuetify/components/VCombobox'
 import { VSwitch } from 'vuetify/components/VSwitch'
+import { VCheckboxBtn } from 'vuetify/components/VCheckbox'
 import { VBtn } from 'vuetify/components/VBtn'
 import { VBtnToggle } from 'vuetify/components/VBtnToggle'
 
@@ -33,6 +34,7 @@ import { VMenu } from 'vuetify/components/VMenu'
 import { VAlert } from 'vuetify/components/VAlert'
 import { VSnackbar } from 'vuetify/components/VSnackbar'
 import { VProgressCircular } from 'vuetify/components/VProgressCircular'
+import { VProgressLinear } from 'vuetify/components/VProgressLinear'
 import { VTooltip } from 'vuetify/components/VTooltip'
 
 // 数据展示
@@ -47,6 +49,7 @@ import { VTable } from 'vuetify/components/VTable'
 
 // 标签页组件
 import { VTabs, VTab } from 'vuetify/components/VTabs'
+import { VStepper } from 'vuetify/components/VStepper'
 
 // 窗口组件
 import { VWindow, VWindowItem } from 'vuetify/components/VWindow'
@@ -550,6 +553,7 @@ export default createVuetify({
     // 卡片与容器
     VCard,
     VCardTitle,
+    VCardSubtitle,
     VCardText,
     VCardActions,
     VDialog,
@@ -565,6 +569,7 @@ export default createVuetify({
     VSelect,
     VCombobox,
     VSwitch,
+    VCheckboxBtn,
     VBtn,
     VBtnToggle,
     // 列表
@@ -577,6 +582,7 @@ export default createVuetify({
     VAlert,
     VSnackbar,
     VProgressCircular,
+    VProgressLinear,
     VTooltip,
     // 数据展示
     VChip,
@@ -589,6 +595,7 @@ export default createVuetify({
     // 标签页
     VTabs,
     VTab,
+    VStepper,
     // 窗口
     VWindow,
     VWindowItem,

@@ -81,14 +81,14 @@
               class="mobile-tab-selector text-body-2 font-weight-bold"
               append-icon="mdi-chevron-down"
             >
-              {{ route.path === '/conversations' ? t('app.tabs.conversations') : translatedApiTabOptions.find(tab => tab.value === channelStore.activeTab)?.label }}
+              {{ translatedApiTabOptions.find(tab => tab.route === route.path)?.label }}
             </v-btn>
           </template>
           <v-list density="compact" nav>
             <v-list-item
               v-for="tab in translatedApiTabOptions"
               :key="tab.value"
-              :active="tab.value === 'conversations' ? route.path === '/conversations' : channelStore.activeTab === tab.value"
+              :active="route.path === tab.route"
               :to="tab.route"
             >
               <v-list-item-title>{{ tab.label }}</v-list-item-title>
@@ -98,27 +98,27 @@
 
         <!-- 桌面端：平铺链接 -->
         <div v-else class="text-h6 font-weight-bold d-flex align-center">
-          <router-link to="/channels/messages" class="api-type-text" :class="{ active: channelStore.activeTab === 'messages' && route.path !== '/conversations' }">
+          <router-link to="/channels/messages" class="api-type-text" :class="{ active: route.path === '/channels/messages' }">
             {{ t('app.tabs.messages') }}
           </router-link>
           <span class="api-type-text separator">/</span>
-          <router-link to="/channels/chat" class="api-type-text" :class="{ active: channelStore.activeTab === 'chat' && route.path !== '/conversations' }">
+          <router-link to="/channels/chat" class="api-type-text" :class="{ active: route.path === '/channels/chat' }">
             {{ t('app.tabs.chat') }}
           </router-link>
           <span class="api-type-text separator">/</span>
-          <router-link to="/channels/images" class="api-type-text" :class="{ active: channelStore.activeTab === 'images' && route.path !== '/conversations' }">
+          <router-link to="/channels/images" class="api-type-text" :class="{ active: route.path === '/channels/images' }">
             {{ t('app.tabs.images') }}
           </router-link>
           <span class="api-type-text separator">/</span>
-          <router-link to="/channels/vectors" class="api-type-text" :class="{ active: channelStore.activeTab === 'vectors' && route.path !== '/conversations' }">
+          <router-link to="/channels/vectors" class="api-type-text" :class="{ active: route.path === '/channels/vectors' }">
             {{ t('app.tabs.vectors') }}
           </router-link>
           <span class="api-type-text separator">/</span>
-          <router-link to="/channels/responses" class="api-type-text" :class="{ active: channelStore.activeTab === 'responses' && route.path !== '/conversations' }">
+          <router-link to="/channels/responses" class="api-type-text" :class="{ active: route.path === '/channels/responses' }">
             {{ t('app.tabs.responses') }}
           </router-link>
           <span class="api-type-text separator">/</span>
-          <router-link to="/channels/gemini" class="api-type-text" :class="{ active: channelStore.activeTab === 'gemini' && route.path !== '/conversations' }">
+          <router-link to="/channels/gemini" class="api-type-text" :class="{ active: route.path === '/channels/gemini' }">
             {{ t('app.tabs.gemini') }}
           </router-link>
           <span class="api-type-text separator">/</span>
@@ -229,12 +229,11 @@
       </v-btn>
     </v-app-bar>
 
-
     <!-- 主要内容 -->
     <v-main>
       <v-container fluid class="pa-4 pa-md-6">
         <!-- 全局统计顶部可折叠卡片（根据当前 Tab 显示对应统计） -->
-        <v-card v-if="isAuthenticated && route.path !== '/conversations'" class="mb-6 global-stats-panel">
+        <v-card v-if="isAuthenticated && isChannelRoute" class="mb-6 global-stats-panel">
           <div
             class="global-stats-header d-flex align-center justify-space-between px-4 py-2"
             style="cursor: pointer;"
@@ -257,7 +256,7 @@
         </v-card>
 
         <!-- 统计卡片 - 玻璃拟态风格 -->
-        <v-row v-if="route.path !== '/conversations'" class="mb-6 stat-cards-row">
+        <v-row v-if="isChannelRoute" class="mb-6 stat-cards-row">
           <v-col cols="6" sm="4">
             <div class="stat-card stat-card-info">
               <div class="stat-card-icon">
@@ -304,7 +303,7 @@
         </v-row>
 
         <!-- 操作按钮区域 - 现代化设计 -->
-        <div v-if="route.path !== '/conversations'" class="action-bar mb-6">
+        <div v-if="isChannelRoute" class="action-bar mb-6">
           <div class="action-bar-left">
             <v-btn
               color="primary"
@@ -705,7 +704,7 @@
 </template>
 
 <script setup lang="ts">
-import { defineAsyncComponent } from 'vue'
+import { computed, defineAsyncComponent } from 'vue'
 import Logo from './components/Logo.vue'
 import AddChannelModal from './components/AddChannelModal.vue'
 import EditChannelModal from './components/EditChannelModal.vue'
@@ -820,6 +819,8 @@ const {
   handleLogout,
   handleVersionClick,
 } = useAppController()
+
+const isChannelRoute = computed(() => route.path.startsWith('/channels/'))
 </script>
 
 <style scoped src="./styles/app-retro.css"></style>
