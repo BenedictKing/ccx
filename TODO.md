@@ -41,3 +41,19 @@
 
 ---
 
+## [x] Codex 自动审批模型映射说明 (#269)
+
+来源：https://github.com/BenedictKing/ccx/issues/269
+
+完成：Codex 请求 `codex-auto-review` 时，应在 Responses 渠道映射到上游支持的模型；文档同时说明模型白名单检查。
+
+---
+
+## [x] Codex 上下文窗口配置说明 (#271)
+
+来源：https://github.com/BenedictKing/ccx/issues/271
+
+完成：文档说明 CCX 渠道上游能力用于网关上下文路由，不会改变 Codex App 自身的上下文预算显示；渠道能力需配置在映射后的实际模型名上。
+
+---
+

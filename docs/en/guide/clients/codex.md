@@ -86,6 +86,16 @@ Do not only map `gpt-5` and forget `gpt-5-mini`. CCX prefers longer matching key
 
 ## Troubleshooting
 
+### Codex automatic review model is unavailable
+
+If the upstream reports that `codex-auto-review` does not exist, add that request model to the Responses channel's model mapping and map it to a model supported by the upstream. If the channel uses a model allowlist, include either the requested model or the mapped upstream model.
+
+### The Codex App context meter does not change after setting an upstream window in CCX
+
+A channel capability describes the **actual upstream model**. In the Responses channel's model capabilities, set `contextWindowTokens` for the mapped upstream model. When context routing is enabled, CCX uses this value to decide whether a request can be sent to that channel. This does not change the model context budget displayed by the Codex App; that value comes from Codex's client-side model configuration.
+
+For example, if `gpt-5.2` maps to `deepseek-v4`, configure the channel capability for `deepseek-v4`, not only for `gpt-5.2`. Check the channel log for the requested and mapped model names. To change the context usage shown in Codex, adjust the client-side budget in a Codex-supported model configuration. CCX channel capabilities affect gateway routing only.
+
 ### Do Codex CLI and Codex App need separate configurations?
 
 No. They use the same CCX OpenAI-compatible configuration:
