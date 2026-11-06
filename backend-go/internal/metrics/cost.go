@@ -10,11 +10,22 @@ const cnyToUSD = 1.0 / 6.8
 
 // CalculateTokenCostUSD 根据当前模型价格估算 token 成本，返回 USD。
 func CalculateTokenCostUSD(model string, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens int64) float64 {
+	return CalculateTokenCostUSDWithConfig(model, nil, nil, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens)
+}
+
+// CalculateTokenCostUSDWithConfig 优先使用渠道及全局模型价格，内置价格只作兜底。
+func CalculateTokenCostUSDWithConfig(model string, upstream *config.UpstreamConfig, global map[string]config.UpstreamModelCapability, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens int64) float64 {
 	if model == "" || model == "unknown" {
 		return 0
 	}
-	resolved := config.ResolveUpstreamCapability(model, nil, nil)
+	resolved := config.ResolveUpstreamCapability(model, upstream, global)
 	pricing := resolved.Capability.Pricing
+	if pricing == nil && upstream != nil {
+		pricing = upstream.DefaultCapability.Pricing
+	}
+	if pricing == nil {
+		pricing = config.ResolveUpstreamCapability(resolved.ActualModel, nil, global).Capability.Pricing
+	}
 	if pricing == nil {
 		return 0
 	}

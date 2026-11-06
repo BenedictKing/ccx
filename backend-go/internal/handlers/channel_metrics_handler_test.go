@@ -18,7 +18,8 @@ import (
 )
 
 type fakePersistenceStore struct {
-	bucketsByMetricsKey map[string][]metrics.AggregatedBucket
+	bucketsByMetricsKey      map[string][]metrics.AggregatedBucket
+	modelBucketsByMetricsKey map[string][]metrics.ModelAggregatedBucket
 }
 
 func (f *fakePersistenceStore) AddRecord(record metrics.PersistentRecord) {}
@@ -35,7 +36,7 @@ func (f *fakePersistenceStore) UpsertCircuitState(state metrics.PersistentCircui
 	return nil
 }
 func (f *fakePersistenceStore) QueryModelAggregatedHistory(apiType string, since time.Time, intervalSeconds int64, metricsKey string, baseURL string) ([]metrics.ModelAggregatedBucket, error) {
-	return nil, nil
+	return append([]metrics.ModelAggregatedBucket(nil), f.modelBucketsByMetricsKey[metricsKey]...), nil
 }
 func (f *fakePersistenceStore) QueryAggregatedHistory(apiType string, since time.Time, intervalSeconds int64, metricsKey string, baseURL string) ([]metrics.AggregatedBucket, error) {
 	return append([]metrics.AggregatedBucket(nil), f.bucketsByMetricsKey[metricsKey]...), nil
@@ -48,6 +49,49 @@ func (f *fakePersistenceStore) DeleteCircuitStatesByMetricsKeys(metricsKeys []st
 	return 0, nil
 }
 func (f *fakePersistenceStore) Close() error { return nil }
+
+func TestChannelKeyHistoryUsesConfiguredPriceForSQLiteSummary(t *testing.T) {
+	price := 2.0
+	upstream := config.UpstreamConfig{
+		Name: "private", BaseURL: "https://relay.example", APIKeys: []string{"sk-private"}, ServiceType: "openai",
+		ModelCapabilities: map[string]config.UpstreamModelCapability{
+			"private-model": {Pricing: &config.ModelPricing{Currency: "USD", InputCacheMissPrice: &price}},
+		},
+	}
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	data, err := json.Marshal(config.Config{ChatUpstream: []config.UpstreamConfig{upstream}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configPath, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfgManager, err := config.NewConfigManager(configPath, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cfgManager.Close()
+	identity := metrics.GenerateMetricsIdentityKey(upstream.BaseURL, upstream.APIKeys[0], "openai")
+	store := &fakePersistenceStore{modelBucketsByMetricsKey: map[string][]metrics.ModelAggregatedBucket{
+		identity: {{MetricsKey: identity, Model: "private-model", Timestamp: time.Now().Add(-time.Hour), TotalRequests: 1, SuccessCount: 1, InputTokens: 1_000_000}},
+	}}
+	mm := metrics.NewMetricsManagerWithPersistence(50, 0.5, store, "chat")
+	defer mm.Stop()
+	router := gin.New()
+	router.GET("/channels/:id/history", getChannelKeyMetricsHistoryWithKind(mm, cfgManager, scheduler.ChannelKindChat, true, 0))
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/channels/0/history?duration=7d", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("history status=%d body=%s", w.Code, w.Body.String())
+	}
+	var result ChannelKeyMetricsHistoryResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Summary.TotalCostUSD != 2 {
+		t.Fatalf("configured price not used: cost=%v", result.Summary.TotalCostUSD)
+	}
+}
 
 // findBucketWithRequests 从补零后的桶序列中挑出带请求数据的桶。
 // filterBucketsByURLs 会在 [since, now] 区间补齐空桶以保持图表比例，

@@ -145,7 +145,7 @@ func (s *Service) diagnoseCodexConfigAuth(
 
 	switch {
 	case isNativeCCX || ccxBearerToken != "":
-		// 插件模式：依赖 ChatGPT OAuth + experimental_bearer_token。
+		// 插件模式用 experimental_bearer_token 调用上游；保留用户已有的 Codex 认证方式。
 		if ccxBearerToken == "" {
 			status.ConfigConsistent = false
 			status.DiagnosticCode = "codex.plugin_missing_bearer"
@@ -158,10 +158,16 @@ func (s *Service) diagnoseCodexConfigAuth(
 			status.DiagnosticMessage = "config.toml 中的 experimental_bearer_token 与当前 CCX 代理密钥不一致；建议重新应用 Codex -> CCX 配置"
 			return
 		}
-		if !strings.EqualFold(authMode, "chatgpt") {
+		if strings.EqualFold(authMode, "apikey") && apiKey == "" {
+			status.ConfigConsistent = false
+			status.DiagnosticCode = "codex.missing_api_key"
+			status.DiagnosticMessage = "Codex API Key 认证缺少 OPENAI_API_KEY；请在 Codex 中完成认证"
+			return
+		}
+		if !strings.EqualFold(authMode, "chatgpt") && !strings.EqualFold(authMode, "apikey") {
 			status.ConfigConsistent = false
 			status.DiagnosticCode = "codex.auth_mode_mismatch"
-			status.DiagnosticMessage = "插件模式要求 auth.json 的 auth_mode 为 chatgpt，但当前为 " + authMode + "；建议重新应用 Codex -> CCX 配置"
+			status.DiagnosticMessage = "Codex 认证方式无效：" + authMode + "；请在 Codex 中完成认证"
 			return
 		}
 	case isLegacyQuickCCX:
@@ -331,9 +337,15 @@ experimental_bearer_token = %q
 	if err := writeTextAtomic(configPath, updated); err != nil {
 		return err
 	}
-	// auth.json: OPENAI_API_KEY = accessKey, auth_mode = "chatgpt"（插件模式依赖 ChatGPT OAuth）
+	return ensureCodexPluginAuth(authPath, authData, authExisted, accessKey)
+}
+
+func ensureCodexPluginAuth(authPath string, authData map[string]any, authExisted bool, accessKey string) error {
+	if authExisted {
+		return nil
+	}
 	authData["OPENAI_API_KEY"] = accessKey
-	authData["auth_mode"] = "chatgpt"
+	authData["auth_mode"] = "apikey"
 	return writeJSONAtomic(authPath, authData)
 }
 
@@ -469,9 +481,7 @@ experimental_bearer_token = %q
 	if err := writeTextAtomic(configPath, updated); err != nil {
 		return err
 	}
-	authData["OPENAI_API_KEY"] = key
-	authData["auth_mode"] = "chatgpt"
-	return writeJSONAtomic(authPath, authData)
+	return ensureCodexPluginAuth(authPath, authData, authExisted, key)
 }
 
 // codexThirdPartyQuickBaseURL 通过 openai_base_url 反查已知第三方 provider。

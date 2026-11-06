@@ -3,11 +3,13 @@ package common
 import (
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -625,6 +627,57 @@ func TestTryUpstreamWithAllKeysMarksKeyFailedAfterRepeatedShortEmptyResponse(t *
 	if keyMetrics.RequestCount != 1 || keyMetrics.SuccessCount != 0 || keyMetrics.FailureCount != 1 {
 		t.Fatalf("metrics = requests:%d success:%d failure:%d, want 1/0/1",
 			keyMetrics.RequestCount, keyMetrics.SuccessCount, keyMetrics.FailureCount)
+	}
+}
+
+func TestClientWriteDisconnectDoesNotFailKey(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("data: {}\n\n"))
+	}))
+	defer server.Close()
+
+	for _, tc := range []struct {
+		name        string
+		err         error
+		wantFailure bool
+	}{
+		{"client write", &net.OpError{Op: "write", Err: syscall.EPIPE}, false},
+		{"upstream read", &net.OpError{Op: "read", Err: syscall.ECONNRESET}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfgManager, sch, mm, cleanup := newTestFailoverDependencies(t, config.UpstreamConfig{
+				Name: "disconnect-test", BaseURL: server.URL, APIKeys: []string{"sk-test"}, Status: "active", ServiceType: "openai",
+			})
+			defer cleanup()
+			cfg := cfgManager.GetConfig()
+			upstream := &cfg.Upstream[0]
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader(`{"model":"gpt-5.5","stream":true}`))
+			calls := 0
+			TryUpstreamWithAllKeys(c, config.NewEnvConfig(), cfgManager, sch, scheduler.ChannelKindMessages,
+				"Messages", mm, upstream, []warmup.URLLatencyResult{{URL: server.URL}},
+				[]byte(`{"model":"gpt-5.5","messages":[],"stream":true}`), nil, true,
+				func(up *config.UpstreamConfig, failed map[string]bool) (string, error) {
+					return cfgManager.GetNextAPIKey(up, failed, "Messages")
+				},
+				func(c *gin.Context, up *config.UpstreamConfig, _ string) (*http.Request, error) {
+					return http.NewRequestWithContext(c.Request.Context(), http.MethodPost, up.BaseURL, strings.NewReader(`{}`))
+				}, nil, nil, nil,
+				func(c *gin.Context, _ *http.Response, _ *config.UpstreamConfig, _ string, _ []byte) (*types.Usage, error) {
+					calls++
+					c.Status(http.StatusOK)
+					return nil, tc.err
+				}, "gpt-5.5", "", 0, sch.GetChannelLogStore(scheduler.ChannelKindMessages))
+			if calls != 1 {
+				t.Fatalf("response handler called %d times, want 1", calls)
+			}
+			if got := cfgManager.IsKeyFailed("sk-test", "Messages"); got != tc.wantFailure {
+				t.Fatalf("key failed = %v, want %v", got, tc.wantFailure)
+			}
+		})
 	}
 }
 

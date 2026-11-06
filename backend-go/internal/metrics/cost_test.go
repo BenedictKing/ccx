@@ -18,6 +18,21 @@ func TestCalculateTokenCostUSD_NoPricing(t *testing.T) {
 	}
 }
 
+func TestCalculateTokenCostUSDWithConfigPrefersChannelPrice(t *testing.T) {
+	upstream := &config.UpstreamConfig{ModelCapabilities: map[string]config.UpstreamModelCapability{
+		"private-model": {Pricing: &config.ModelPricing{Currency: "USD", InputCacheMissPrice: floatPtr(2), OutputPrice: floatPtr(4)}},
+	}}
+	global := map[string]config.UpstreamModelCapability{
+		"private-model": {Pricing: &config.ModelPricing{Currency: "USD", InputCacheMissPrice: floatPtr(9)}},
+	}
+	if got := CalculateTokenCostUSDWithConfig("private-model", upstream, global, 1_000_000, 1_000_000, 0, 0); got != 6 {
+		t.Fatalf("channel pricing should take precedence, got %v", got)
+	}
+	if got := CalculateTokenCostUSDWithConfig("private-model", nil, global, 1_000_000, 0, 0, 0); got != 9 {
+		t.Fatalf("global pricing should be used without a channel, got %v", got)
+	}
+}
+
 func TestCalculateTokenCostUSD_CNYConversion(t *testing.T) {
 	// 直接验证 CNY 单位换算：1M input @ 2 CNY + 1M output @ 8 CNY = 10 CNY ≈ 1.3889 USD
 	pricing := &config.ModelPricing{

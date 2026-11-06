@@ -4,14 +4,17 @@ import (
 	"log"
 	"time"
 
+	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/metrics"
+	"github.com/BenedictKing/ccx/internal/scheduler"
 	"github.com/gin-gonic/gin"
 )
 
 // GetGlobalStatsHistory 获取全局统计历史数据
 // GET /api/{messages|responses}/global/stats/history?duration={1h|6h|24h|today|7d|30d}
-func GetGlobalStatsHistory(metricsManager *metrics.MetricsManager) gin.HandlerFunc {
+func GetGlobalStatsHistory(metricsManager *metrics.MetricsManager, cfgManager *config.ConfigManager, kind scheduler.ChannelKind) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		calculateCost := globalCostCalculator(cfgManager.GetConfig(), kind)
 		durationStr := c.DefaultQuery("duration", "24h")
 		duration, err := parseExtendedDuration(durationStr)
 		if err != nil || duration < time.Minute {
@@ -78,7 +81,7 @@ func GetGlobalStatsHistory(metricsManager *metrics.MetricsManager) gin.HandlerFu
 				totalCacheRead += b.CacheReadTokens
 			}
 
-			modelDataPoints := buildModelDataPointsFromAggregatedBuckets(modelBuckets, pointIndexByUnix, dataPoints)
+			modelDataPoints := buildModelDataPointsFromAggregatedBuckets(modelBuckets, pointIndexByUnix, dataPoints, calculateCost)
 			for _, points := range modelDataPoints {
 				for i, point := range points {
 					dataPoints[i].CostUSD += point.CostUSD
@@ -114,7 +117,9 @@ func GetGlobalStatsHistory(metricsManager *metrics.MetricsManager) gin.HandlerFu
 		}
 
 		// <=24h 走内存
-		result := metricsManager.GetGlobalHistoricalStatsWithTokens(duration, interval)
+		result := metricsManager.GetGlobalHistoricalStatsWithTokens(duration, interval, func(metricsKey string, record metrics.RequestRecord) float64 {
+			return calculateCost(metricsKey, record.Model, record.InputTokens, record.OutputTokens, record.CacheCreationInputTokens, record.CacheReadInputTokens)
+		})
 		result.Summary.IntervalSeconds = int64(interval.Seconds())
 		if durationStr == "today" {
 			result.Summary.Duration = "today"
@@ -126,7 +131,7 @@ func GetGlobalStatsHistory(metricsManager *metrics.MetricsManager) gin.HandlerFu
 	}
 }
 
-func buildModelDataPointsFromAggregatedBuckets(buckets []metrics.ModelAggregatedBucket, pointIndexByUnix map[int64]int, dataPoints []metrics.GlobalHistoryDataPoint) map[string][]metrics.ModelHistoryDataPoint {
+func buildModelDataPointsFromAggregatedBuckets(buckets []metrics.ModelAggregatedBucket, pointIndexByUnix map[int64]int, dataPoints []metrics.GlobalHistoryDataPoint, calculateCost func(string, string, int64, int64, int64, int64) float64) map[string][]metrics.ModelHistoryDataPoint {
 	if len(buckets) == 0 || len(dataPoints) == 0 {
 		return nil
 	}
@@ -145,18 +150,39 @@ func buildModelDataPointsFromAggregatedBuckets(buckets []metrics.ModelAggregated
 			}
 			modelDataPoints[bucket.Model] = points
 		}
-		points[idx] = metrics.ModelHistoryDataPoint{
-			Timestamp:           dataPoints[idx].Timestamp,
-			RequestCount:        bucket.TotalRequests,
-			SuccessCount:        bucket.SuccessCount,
-			FailureCount:        bucket.TotalRequests - bucket.SuccessCount,
-			InputTokens:         bucket.InputTokens,
-			OutputTokens:        bucket.OutputTokens,
-			CacheCreationTokens: bucket.CacheCreationTokens,
-			CacheReadTokens:     bucket.CacheReadTokens,
-			CostUSD:             metrics.CalculateTokenCostUSD(bucket.Model, bucket.InputTokens, bucket.OutputTokens, bucket.CacheCreationTokens, bucket.CacheReadTokens),
-		}
+		point := &points[idx]
+		point.RequestCount += bucket.TotalRequests
+		point.SuccessCount += bucket.SuccessCount
+		point.FailureCount += bucket.TotalRequests - bucket.SuccessCount
+		point.InputTokens += bucket.InputTokens
+		point.OutputTokens += bucket.OutputTokens
+		point.CacheCreationTokens += bucket.CacheCreationTokens
+		point.CacheReadTokens += bucket.CacheReadTokens
+		point.CostUSD += calculateCost(bucket.MetricsKey, bucket.Model, bucket.InputTokens, bucket.OutputTokens, bucket.CacheCreationTokens, bucket.CacheReadTokens)
 	}
 
 	return modelDataPoints
+}
+
+func globalCostCalculator(cfg config.Config, kind scheduler.ChannelKind) func(string, string, int64, int64, int64, int64) float64 {
+	upstreams := channelUpstreamsByKind(cfg, kind)
+	byMetricsKey := make(map[string]*config.UpstreamConfig)
+	for i := range upstreams {
+		upstream := &upstreams[i]
+		serviceType := scheduler.NormalizedMetricsServiceType(kind, upstream.ServiceType)
+		for _, baseURL := range upstream.GetAllBaseURLs() {
+			for _, key := range channelStatsAPIKeys(*upstream) {
+				for _, identity := range metrics.GenerateMetricsLookupKeys(baseURL, key, serviceType) {
+					if previous, exists := byMetricsKey[identity]; exists && previous != upstream {
+						byMetricsKey[identity] = nil // 同一指标身份无法区分两个渠道价格。
+					} else if !exists {
+						byMetricsKey[identity] = upstream
+					}
+				}
+			}
+		}
+	}
+	return func(metricsKey, model string, input, output, cacheCreate, cacheRead int64) float64 {
+		return metrics.CalculateTokenCostUSDWithConfig(model, byMetricsKey[metricsKey], cfg.UpstreamModelCapabilities, input, output, cacheCreate, cacheRead)
+	}
 }

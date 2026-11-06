@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/BenedictKing/ccx/internal/config"
@@ -33,13 +35,25 @@ const (
 )
 
 // isClientSideError 判断错误是否由客户端明确取消（不应计入渠道失败）
-// 仅识别 context.Canceled，broken pipe/connection reset 视为连接故障需要 failover
+// 发送上游请求阶段只识别明确取消；连接错误仍由 failover 处理。
 func isClientSideError(err error) bool {
 	if err == nil {
 		return false
 	}
 	// 只有 context.Canceled 才是明确的客户端取消意图
 	return errors.Is(err, context.Canceled)
+}
+
+// 响应处理阶段的写断连来自下游客户端；读上游的连接重置仍是渠道故障。
+func isClientWriteDisconnect(err error) bool {
+	if err == nil {
+		return false
+	}
+	var opErr *net.OpError
+	if !errors.As(err, &opErr) || opErr.Op != "write" {
+		return false
+	}
+	return errors.Is(err, syscall.EPIPE) || errors.Is(err, syscall.ECONNRESET)
 }
 
 // NextAPIKeyFunc 返回下一个可用 API key（按 failover 策略）
@@ -565,7 +579,9 @@ func TryUpstreamWithAllKeys(
 			if err != nil {
 				trafficDiagnostic = err.Error()
 			}
-			siteaccess.RecordRealTrafficByChannelName(upstreamCopy.Name, err == nil, trafficDiagnostic)
+			if !isClientSideError(err) && !isClientWriteDisconnect(err) {
+				siteaccess.RecordRealTrafficByChannelName(upstreamCopy.Name, err == nil, trafficDiagnostic)
+			}
 			if isStream {
 				FinishStreamTimeoutObservation(c)
 			}
@@ -577,7 +593,7 @@ func TryUpstreamWithAllKeys(
 				// 区分客户端错误和渠道故障；errors.As 匹配 rejected，防止未来
 				// provider 闭包包装后静默落入「真实渠道故障」分支被逐 Key 重放。
 				var rejected *UpstreamRequestRejectedError
-				if isClientSideError(err) {
+				if isClientSideError(err) || isClientWriteDisconnect(err) {
 					// 客户端取消/断开：计入总请求数但不计入失败
 					metricsManager.RecordRequestFinalizeClientCancel(currentBaseURL, apiKey, metricsServiceType, requestID)
 					channelScheduler.RecordRequestEnd(currentBaseURL, apiKey, metricsServiceType, kind)

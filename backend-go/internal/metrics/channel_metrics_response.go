@@ -995,7 +995,7 @@ type GlobalStatsHistoryResponse struct {
 
 // GetGlobalHistoricalStatsWithTokens 获取全局历史统计（包含 Token 数据）
 // 聚合所有 Key 的数据，按时间间隔分桶
-func (m *MetricsManager) GetGlobalHistoricalStatsWithTokens(duration, interval time.Duration) GlobalStatsHistoryResponse {
+func (m *MetricsManager) GetGlobalHistoricalStatsWithTokens(duration, interval time.Duration, costForRecord ...func(string, RequestRecord) float64) GlobalStatsHistoryResponse {
 	// 参数验证
 	if interval <= 0 || duration <= 0 {
 		return GlobalStatsHistoryResponse{
@@ -1038,6 +1038,7 @@ func (m *MetricsManager) GetGlobalHistoricalStatsWithTokens(duration, interval t
 		outputTokens        int64
 		cacheCreationTokens int64
 		cacheReadTokens     int64
+		costUSD             float64
 	}
 	modelBuckets := make(map[string][]modelBucket)
 
@@ -1088,6 +1089,9 @@ func (m *MetricsManager) GetGlobalHistoricalStatsWithTokens(duration, interval t
 						mb.outputTokens += record.OutputTokens
 						mb.cacheCreationTokens += record.CacheCreationInputTokens
 						mb.cacheReadTokens += record.CacheReadInputTokens
+						if len(costForRecord) > 0 && costForRecord[0] != nil {
+							mb.costUSD += costForRecord[0](metrics.MetricsKey, record)
+						}
 					}
 				}
 			}
@@ -1140,7 +1144,10 @@ func (m *MetricsManager) GetGlobalHistoricalStatsWithTokens(duration, interval t
 		for model, buckets := range modelBuckets {
 			points := make([]ModelHistoryDataPoint, numPoints)
 			for i := 0; i < numPoints; i++ {
-				costUSD := CalculateTokenCostUSD(model, buckets[i].inputTokens, buckets[i].outputTokens, buckets[i].cacheCreationTokens, buckets[i].cacheReadTokens)
+				costUSD := buckets[i].costUSD
+				if len(costForRecord) == 0 || costForRecord[0] == nil {
+					costUSD = CalculateTokenCostUSD(model, buckets[i].inputTokens, buckets[i].outputTokens, buckets[i].cacheCreationTokens, buckets[i].cacheReadTokens)
+				}
 				points[i] = ModelHistoryDataPoint{
 					Timestamp:           startTime.Add(time.Duration(i+1) * interval),
 					RequestCount:        buckets[i].requestCount,

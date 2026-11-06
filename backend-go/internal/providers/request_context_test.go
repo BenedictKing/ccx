@@ -100,6 +100,21 @@ func TestClaudeProvider_ConvertToProviderRequest_InjectsCachedThinkingForDeepSee
 	}
 }
 
+func TestClaudeProvider_ConvertToProviderRequest_PreservesEmptyDeepSeekThinking(t *testing.T) {
+	body := []byte(`{"model":"deepseek-v4-pro","thinking":{"type":"adaptive"},"messages":[{"role":"assistant","content":[{"type":"thinking","thinking":""},{"type":"tool_use","id":"toolu_empty","name":"Bash","input":{}}]}]}`)
+	c := newGinContext(http.MethodPost, "/v1/messages", body, context.Background())
+	upstream := &config.UpstreamConfig{
+		BaseURL: "https://api.deepseek.com", ServiceType: "claude", StripEmptyTextBlocks: true,
+	}
+	_, reqBody, err := (&ClaudeProvider{}).ConvertToProviderRequest(c, upstream, "sk-ant-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(reqBody, []byte(`"type":"thinking"`)) || !bytes.Contains(reqBody, []byte(`"thinking":""`)) {
+		t.Fatalf("DeepSeek requires the original empty thinking block: %s", reqBody)
+	}
+}
+
 func TestClaudeProvider_ConvertToProviderRequest_StripsDeepSeekClearThinkingContextManagement(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

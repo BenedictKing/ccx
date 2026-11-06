@@ -9,8 +9,9 @@ import (
 
 // ClaudeStreamCollector reconstructs assistant content fingerprints from Claude SSE.
 type ClaudeStreamCollector struct {
-	thinking strings.Builder
-	blocks   map[int]*streamBlock
+	thinking    strings.Builder
+	hasThinking bool
+	blocks      map[int]*streamBlock
 }
 
 type streamBlock struct {
@@ -62,7 +63,7 @@ func (c *ClaudeStreamCollector) Store(sessionID string) bool {
 	if c == nil {
 		return false
 	}
-	return StoreClaudeThinkingForContent(sessionID, c.Content(), c.Thinking())
+	return storeClaudeThinkingForContent(sessionID, c.Content(), c.Thinking(), c.hasThinking)
 }
 
 func (c *ClaudeStreamCollector) Thinking() string {
@@ -106,6 +107,11 @@ func (c *ClaudeStreamCollector) processContentBlockStart(data map[string]interfa
 	}
 
 	blockType, _ := contentBlock["type"].(string)
+	if blockType == "thinking" {
+		if _, ok := contentBlock["thinking"].(string); ok {
+			c.hasThinking = true
+		}
+	}
 	block := &streamBlock{
 		Index: index,
 		Type:  blockType,
@@ -153,6 +159,11 @@ func (c *ClaudeStreamCollector) processContentBlockDelta(data map[string]interfa
 			block.InputJSON.WriteString(partial)
 		}
 	case "thinking_delta", "redacted_thinking_delta":
+		if deltaType == "thinking_delta" {
+			if _, ok := delta["thinking"].(string); ok {
+				c.hasThinking = true
+			}
+		}
 		if thinking, _ := delta["thinking"].(string); thinking != "" {
 			c.thinking.WriteString(thinking)
 		}

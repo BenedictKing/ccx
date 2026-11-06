@@ -60,6 +60,32 @@ func TestGetGlobalHistoricalStatsWithTokens_ComputesCostUSD(t *testing.T) {
 	}
 }
 
+func TestGlobalHistoryUsesMetricIdentityForCustomPrices(t *testing.T) {
+	m := NewMetricsManager()
+	defer m.Stop()
+	prices := map[string]float64{}
+	now := time.Now().Add(-2 * time.Minute)
+	m.mu.Lock()
+	for _, tc := range []struct {
+		url   string
+		key   string
+		price float64
+	}{{"https://one.example", "sk-one", 1}, {"https://two.example", "sk-two", 3}} {
+		km := m.getOrCreateKey(tc.url, tc.key, "openai")
+		km.requestHistory = append(km.requestHistory, RequestRecord{
+			Timestamp: now, Success: true, Model: "private-model", InputTokens: 1_000_000,
+		})
+		prices[km.MetricsKey] = tc.price
+	}
+	m.mu.Unlock()
+	result := m.GetGlobalHistoricalStatsWithTokens(time.Hour, 5*time.Minute, func(key string, record RequestRecord) float64 {
+		return prices[key] * float64(record.InputTokens) / 1_000_000
+	})
+	if result.Summary.TotalCostUSD != 4 || result.ModelDataPoints["private-model"] == nil {
+		t.Fatalf("custom prices were not accumulated per channel: %+v", result.Summary)
+	}
+}
+
 // TestGetKeyModelHistoricalStatsMultiURL_ComputesCostUSD 验证 key+model 维度也带成本。
 func TestGetKeyModelHistoricalStatsMultiURL_ComputesCostUSD(t *testing.T) {
 	m := NewMetricsManager()

@@ -785,7 +785,7 @@ func (p *ClaudeProvider) ConvertToProviderRequest(c *gin.Context, upstream *conf
 	bodyBytes = stripUnsupportedDeepSeekContextManagement(bodyBytes, upstream)
 	if upstream.StripEmptyTextBlocks {
 		bodyBytes = stripEmptyTextBlocksFromBody(bodyBytes)
-		if !upstream.PassbackReasoningContent && !upstream.PassbackThinkingBlocks {
+		if !upstream.PassbackReasoningContent && !upstream.PassbackThinkingBlocks && !thinkingcache.ShouldTrackClaudeThinking(upstream, bodyBytes) {
 			bodyBytes = stripThinkingBlocksFromBody(bodyBytes)
 		}
 	}

@@ -10,6 +10,31 @@ import (
 	"github.com/BenedictKing/ccx/internal/config"
 )
 
+func TestQueryModelAggregatedHistoryKeepsPricingIdentity(t *testing.T) {
+	store, err := NewSQLiteStore(&SQLiteStoreConfig{DBPath: filepath.Join(t.TempDir(), "metrics.db"), RetentionDays: 30})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	for _, key := range []string{"channel-a", "channel-b"} {
+		_, err := store.db.Exec(`INSERT INTO request_records
+			(metrics_key, base_url, key_mask, timestamp, success, failure_class,
+			input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, api_type, model)
+			VALUES (?, ?, ?, ?, 1, '', 1000000, 0, 0, 0, 'chat', 'private-model')`,
+			key, "https://relay.example", "sk-***", time.Now().Unix())
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	buckets, err := store.QueryModelAggregatedHistory("chat", time.Now().Add(-time.Hour), 300, "", "")
+	if err != nil || len(buckets) != 2 {
+		t.Fatalf("expected separate identity buckets: %+v, err=%v", buckets, err)
+	}
+	if buckets[0].MetricsKey == buckets[1].MetricsKey {
+		t.Fatalf("distinct channel prices must retain separate metric identities: %+v", buckets)
+	}
+}
+
 func TestMigrateMetricsKeysToIdentity_MigratesRecordsAndCircuitStates(t *testing.T) {
 	store, err := NewSQLiteStore(&SQLiteStoreConfig{
 		DBPath:        filepath.Join(t.TempDir(), "metrics.db"),

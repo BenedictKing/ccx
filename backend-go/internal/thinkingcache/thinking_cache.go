@@ -288,7 +288,11 @@ func decodeObject(bodyBytes []byte) (map[string]interface{}, bool) {
 
 // StoreClaudeThinkingForContent stores thinking by session and assistant content fingerprint.
 func StoreClaudeThinkingForContent(sessionID string, content interface{}, thinking string) bool {
-	if strings.TrimSpace(sessionID) == "" || !isRealThinking(thinking) {
+	return storeClaudeThinkingForContent(sessionID, content, thinking, isRealThinking(thinking))
+}
+
+func storeClaudeThinkingForContent(sessionID string, content interface{}, thinking string, hasThinking bool) bool {
+	if strings.TrimSpace(sessionID) == "" || !hasThinking {
 		return false
 	}
 
@@ -976,10 +980,7 @@ func assistantContentHasThinking(content interface{}) bool {
 		if blockType != "thinking" && blockType != "redacted_thinking" {
 			continue
 		}
-		thinking, _ := block["thinking"].(string)
-		if isRealThinking(thinking) {
-			return true
-		}
+		return true
 	}
 	return false
 }

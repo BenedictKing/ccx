@@ -260,8 +260,8 @@ func TestApplyCodex_RunAPIPluginMode(t *testing.T) {
 	if authData["OPENAI_API_KEY"] != "runapi-key" {
 		t.Errorf("OPENAI_API_KEY = %v, want runapi-key", authData["OPENAI_API_KEY"])
 	}
-	if authData["auth_mode"] != "chatgpt" {
-		t.Errorf("auth_mode = %v, want chatgpt", authData["auth_mode"])
+	if authData["auth_mode"] != "apikey" {
+		t.Errorf("auth_mode = %v, want apikey", authData["auth_mode"])
 	}
 }
 
@@ -450,8 +450,8 @@ func TestApplyAndRestoreCodex_ThirdPartyCleanup(t *testing.T) {
 	if authData["OPENAI_API_KEY"] != "sk-ds-key" {
 		t.Errorf("OPENAI_API_KEY = %v, want sk-ds-key", authData["OPENAI_API_KEY"])
 	}
-	if authData["auth_mode"] != "chatgpt" {
-		t.Errorf("auth_mode = %v, want chatgpt", authData["auth_mode"])
+	if authData["auth_mode"] != "apikey" {
+		t.Errorf("auth_mode = %v, want apikey", authData["auth_mode"])
 	}
 
 	// Restore
@@ -825,11 +825,63 @@ func TestApplyCodex_PluginMode(t *testing.T) {
 	}
 
 	authData, _, _ := readJSONMap(authPath)
-	if authData["auth_mode"] != "chatgpt" {
-		t.Errorf("auth_mode = %v, want chatgpt", authData["auth_mode"])
+	if authData["auth_mode"] != "apikey" {
+		t.Errorf("auth_mode = %v, want apikey", authData["auth_mode"])
 	}
 	if authData["OPENAI_API_KEY"] != "test-key" {
 		t.Errorf("OPENAI_API_KEY = %v, want test-key", authData["OPENAI_API_KEY"])
+	}
+}
+
+func TestApplyCodexPluginPreservesExistingAPIKeyAuth(t *testing.T) {
+	svc := newTestService(t)
+	authPath := filepath.Join(svc.homeDir, ".codex", "auth.json")
+	if err := writeJSONAtomic(authPath, map[string]any{
+		"auth_mode": "apikey", "OPENAI_API_KEY": "user-key", "other_setting": "keep",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(authPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.Apply(ApplyAgentConfigRequest{Platform: PlatformCodex, Provider: ProviderCCX, Mode: "plugin"}, 3688, "ccx-key"); err != nil {
+		t.Fatalf("Apply failed: %v", err)
+	}
+	after, err := os.ReadFile(authPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(before) {
+		t.Fatalf("plugin mode changed existing auth.json: before=%s after=%s", before, after)
+	}
+	status, err := svc.GetStatus(PlatformCodex, 3688)
+	if err != nil || !status.ConfigConsistent {
+		t.Fatalf("existing API Key auth should remain valid: status=%+v err=%v", status, err)
+	}
+}
+
+func TestApplyCodexThirdPartyPluginPreservesExistingAuth(t *testing.T) {
+	svc := newTestService(t)
+	authPath := filepath.Join(svc.homeDir, ".codex", "auth.json")
+	if err := writeJSONAtomic(authPath, map[string]any{"auth_mode": "apikey", "OPENAI_API_KEY": "user-key"}); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(authPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.Apply(ApplyAgentConfigRequest{
+		Platform: PlatformCodex, Provider: ProviderDashScope, Mode: "plugin", APIKey: "provider-key",
+	}, 0, ""); err != nil {
+		t.Fatal(err)
+	}
+	after, err := os.ReadFile(authPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(before) {
+		t.Fatalf("third-party plugin changed existing auth.json: before=%s after=%s", before, after)
 	}
 }
 

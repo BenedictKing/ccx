@@ -1018,6 +1018,7 @@ type AggregatedBucket struct {
 
 // ModelAggregatedBucket 按模型聚合的时间桶。
 type ModelAggregatedBucket struct {
+	MetricsKey          string
 	Model               string
 	Timestamp           time.Time
 	TotalRequests       int64
@@ -1091,6 +1092,7 @@ func (s *SQLiteStore) QueryModelAggregatedHistory(apiType string, since time.Tim
 
 	query := `
 		SELECT
+			metrics_key,
 			model,
 			(timestamp / ?) * ? AS bucket,
 			COUNT(*) AS total,
@@ -1113,7 +1115,7 @@ func (s *SQLiteStore) QueryModelAggregatedHistory(apiType string, since time.Tim
 		args = append(args, baseURL)
 	}
 
-	query += " GROUP BY model, bucket ORDER BY model, bucket"
+	query += " GROUP BY metrics_key, model, bucket ORDER BY model, bucket"
 
 	rows, err := s.db.Query(query, args...)
 	if err != nil {
@@ -1125,7 +1127,7 @@ func (s *SQLiteStore) QueryModelAggregatedHistory(apiType string, since time.Tim
 	for rows.Next() {
 		var bucket int64
 		var b ModelAggregatedBucket
-		if err := rows.Scan(&b.Model, &bucket, &b.TotalRequests, &b.SuccessCount, &b.InputTokens, &b.OutputTokens, &b.CacheCreationTokens, &b.CacheReadTokens); err != nil {
+		if err := rows.Scan(&b.MetricsKey, &b.Model, &bucket, &b.TotalRequests, &b.SuccessCount, &b.InputTokens, &b.OutputTokens, &b.CacheCreationTokens, &b.CacheReadTokens); err != nil {
 			return nil, fmt.Errorf("扫描模型聚合结果失败: %w", err)
 		}
 		b.Timestamp = time.Unix(bucket, 0)

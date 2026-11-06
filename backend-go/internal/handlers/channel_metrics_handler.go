@@ -579,7 +579,8 @@ func getChannelKeyMetricsHistoryWithKind(metricsManager *metrics.MetricsManager,
 			return
 		}
 
-		upstreams := channelUpstreamsByKind(cfgManager.GetConfig(), kind)
+		cfg := cfgManager.GetConfig()
+		upstreams := channelUpstreamsByKind(cfg, kind)
 		if channelID < 0 || channelID >= len(upstreams) {
 			c.JSON(400, gin.H{"error": "Channel not found"})
 			return
@@ -614,7 +615,7 @@ func getChannelKeyMetricsHistoryWithKind(metricsManager *metrics.MetricsManager,
 			result.Summary.IntervalSeconds = intervalSec
 			channelModelBuckets := filterModelBucketsByURLs(store, apiType, since, intervalSec, upstream.GetAllBaseURLs(), channelStatsAPIKeys(upstream), serviceType)
 			for _, b := range channelModelBuckets {
-				result.Summary.TotalCostUSD += metrics.CalculateTokenCostUSD(b.Model, b.InputTokens, b.OutputTokens, b.CacheCreationTokens, b.CacheReadTokens)
+				result.Summary.TotalCostUSD += metrics.CalculateTokenCostUSDWithConfig(b.Model, &upstream, cfg.UpstreamModelCapabilities, b.InputTokens, b.OutputTokens, b.CacheCreationTokens, b.CacheReadTokens)
 			}
 
 			// 逐 key 按模型生成曲线
@@ -684,7 +685,7 @@ func getChannelKeyMetricsHistoryWithKind(metricsManager *metrics.MetricsManager,
 							OutputTokens:             b.OutputTokens,
 							CacheCreationInputTokens: b.CacheCreationTokens,
 							CacheReadInputTokens:     b.CacheReadTokens,
-							CostUSD:                  metrics.CalculateTokenCostUSD(model, b.InputTokens, b.OutputTokens, b.CacheCreationTokens, b.CacheReadTokens),
+							CostUSD:                  metrics.CalculateTokenCostUSDWithConfig(model, &upstream, cfg.UpstreamModelCapabilities, b.InputTokens, b.OutputTokens, b.CacheCreationTokens, b.CacheReadTokens),
 						})
 					}
 					sort.Slice(dataPoints, func(i, j int) bool {
@@ -743,7 +744,7 @@ func getChannelKeyMetricsHistoryWithKind(metricsManager *metrics.MetricsManager,
 						OutputTokens:             p.OutputTokens,
 						CacheCreationInputTokens: p.CacheCreationInputTokens,
 						CacheReadInputTokens:     p.CacheReadInputTokens,
-						CostUSD:                  p.CostUSD,
+						CostUSD:                  metrics.CalculateTokenCostUSDWithConfig(model, &upstream, cfg.UpstreamModelCapabilities, p.InputTokens, p.OutputTokens, p.CacheCreationInputTokens, p.CacheReadInputTokens),
 					}
 				}
 				result.Keys = append(result.Keys, KeyMetricsHistoryResult{
@@ -765,7 +766,7 @@ func getChannelKeyMetricsHistoryWithKind(metricsManager *metrics.MetricsManager,
 			channelModelData := metricsManager.GetKeyModelHistoricalStatsMultiURL(upstream.GetAllBaseURLs(), apiKey, serviceType, duration, interval)
 			for model, points := range channelModelData {
 				for _, p := range points {
-					result.Summary.TotalCostUSD += metrics.CalculateTokenCostUSD(model, p.InputTokens, p.OutputTokens, p.CacheCreationInputTokens, p.CacheReadInputTokens)
+					result.Summary.TotalCostUSD += metrics.CalculateTokenCostUSDWithConfig(model, &upstream, cfg.UpstreamModelCapabilities, p.InputTokens, p.OutputTokens, p.CacheCreationInputTokens, p.CacheReadInputTokens)
 				}
 			}
 		}

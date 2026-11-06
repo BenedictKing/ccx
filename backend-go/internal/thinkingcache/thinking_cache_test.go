@@ -44,6 +44,47 @@ func TestClaudeStreamCollectorStoresThinkingByToolUseFingerprint(t *testing.T) {
 	}
 }
 
+func TestEmptyThinkingBlockPassesBackAfterCacheReload(t *testing.T) {
+	ResetForTest()
+	dbPath := filepath.Join(t.TempDir(), "thinking_cache.db")
+	if err := Configure(Config{DBPath: dbPath, TTL: time.Hour}); err != nil {
+		t.Fatal(err)
+	}
+	collector := NewClaudeStreamCollector()
+	collector.ProcessEvent("data: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"thinking\",\"thinking\":\"\"}}\n\n")
+	collector.ProcessEvent("data: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_empty\",\"name\":\"Bash\",\"input\":{}}}\n\n")
+	if !collector.Store("session-empty") {
+		t.Fatal("observed empty thinking block should be cached")
+	}
+	ResetForTest()
+	if err := Configure(Config{DBPath: dbPath, TTL: time.Hour}); err != nil {
+		t.Fatal(err)
+	}
+	upstream := &config.UpstreamConfig{BaseURL: "https://api.deepseek.com", ServiceType: "claude"}
+	body := []byte(`{"model":"deepseek-v4-pro","thinking":{"type":"adaptive"},"messages":[{"role":"assistant","content":[{"type":"tool_use","id":"toolu_empty","name":"Bash","input":{}}]}]}`)
+	got, injected := InjectCachedClaudeThinking(body, "session-empty", upstream)
+	if injected != 1 || !containsAll(string(got), `"type":"thinking"`, `"thinking":""`, `"type":"tool_use"`) {
+		t.Fatalf("empty thinking was not restored: injected=%d body=%s", injected, got)
+	}
+	withThinking := []byte(`{"model":"deepseek-v4-pro","thinking":{"type":"adaptive"},"messages":[{"role":"assistant","content":[{"type":"thinking","thinking":""},{"type":"tool_use","id":"toolu_empty","name":"Bash","input":{}}]}]}`)
+	if _, injected := InjectCachedClaudeThinking(withThinking, "session-empty", upstream); injected != 0 {
+		t.Fatal("existing empty thinking block must not be duplicated")
+	}
+}
+
+func TestNoThinkingBlockDoesNotCreateEmptyCacheEntry(t *testing.T) {
+	ResetForTest()
+	collector := NewClaudeStreamCollector()
+	collector.ProcessEvent("data: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_none\",\"name\":\"Bash\",\"input\":{}}}\n\n")
+	if collector.Store("session-none") {
+		t.Fatal("tool use without a thinking block must not create a cache entry")
+	}
+	collector.ProcessEvent("data: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"redacted_thinking\",\"data\":\"redacted\"}}\n\n")
+	if collector.Store("session-none") {
+		t.Fatal("redacted thinking must not be replaced with an empty thinking block")
+	}
+}
+
 func TestInjectCachedClaudeThinkingOnlyWhenDeepSeekThinkingRequestHitsCache(t *testing.T) {
 	ResetForTest()
 

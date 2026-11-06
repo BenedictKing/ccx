@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
+	"syscall"
 	"testing"
 )
 
@@ -70,6 +72,26 @@ func TestIsClientSideError(t *testing.T) {
 			result := isClientSideError(tt.err)
 			if result != tt.expected {
 				t.Errorf("isClientSideError(%v) = %v, expected %v", tt.err, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestIsClientWriteDisconnect(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"write broken pipe", &net.OpError{Op: "write", Err: syscall.EPIPE}, true},
+		{"write reset", fmt.Errorf("stream: %w", &net.OpError{Op: "write", Err: syscall.ECONNRESET}), true},
+		{"read reset", &net.OpError{Op: "read", Err: syscall.ECONNRESET}, false},
+		{"upstream text", errors.New("read tcp: broken pipe"), false},
+		{"timeout", context.DeadlineExceeded, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isClientWriteDisconnect(tc.err); got != tc.want {
+				t.Fatalf("isClientWriteDisconnect(%v) = %v, want %v", tc.err, got, tc.want)
 			}
 		})
 	}
