@@ -1,0 +1,42 @@
+name: PR Checks
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: bun install --frozen-lockfile
+
+      - name: Test and build frontend
+        working-directory: frontend
+        run: |
+          bun run test
+          bun run build
+
+      - name: Prepare embedded frontend
+        run: |
+          mkdir -p backend-go/frontend/dist
+          cp -R frontend/dist/. backend-go/frontend/dist/
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: backend-go/go.mod
+          cache-dependency-path: backend-go/go.sum
+
+      - name: Test backend
+        working-directory: backend-go
+        run: go test ./...
