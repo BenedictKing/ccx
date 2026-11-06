@@ -142,10 +142,14 @@ func TestChannelCapability(cfgManager *config.ConfigManager, channelLogStore *me
 
 		modelMappingHash := hashModelMapping(channel.ModelMapping)
 		normalizedModels := normalizeCapabilityModels(req.Models)
+		cacheModels := normalizedModels
+		if len(cacheModels) == 0 {
+			cacheModels = capabilityDefaultModelCacheKey(protocols, channel)
+		}
 		dispatcherKey := metrics.GenerateMetricsIdentityKey(baseURL, apiKey, channel.ServiceType)
 		identityKey := buildCapabilityIdentityKey(channel, modelMappingHash)
-		cacheKey := buildCapabilityCacheKey(baseURL, apiKey, channel.ServiceType, protocols, normalizedModels, modelMappingHash)
-		executionLookupKey := buildCapabilityExecutionLookupKey(identityKey, channelKind, protocols, normalizedModels, "")
+		cacheKey := buildCapabilityCacheKey(baseURL, apiKey, channel.ServiceType, protocols, cacheModels, modelMappingHash)
+		executionLookupKey := buildCapabilityExecutionLookupKey(identityKey, channelKind, protocols, cacheModels, "")
 		lookupKey := buildCapabilityJobLookupKey(cacheKey, channelKind, id)
 
 		if cached, ok := getCapabilityCache(cacheKey); ok {
@@ -247,7 +251,7 @@ func TestChannelCapability(cfgManager *config.ConfigManager, channelLogStore *me
 				return
 			}
 
-			go runCapabilityTestJob(job.JobID, channelKind, id, *channel, protocols, timeout, effectiveRPM, cacheKey, lookupKey, identityKey, dispatcherKey, previousResults, normalizedModels, req.SourceTab, cfgManager, channelLogStore)
+			go runCapabilityTestJob(job.JobID, channelKind, id, *channel, protocols, timeout, effectiveRPM, cacheKey, lookupKey, identityKey, executionLookupKey, dispatcherKey, previousResults, normalizedModels, req.SourceTab, cfgManager, channelLogStore)
 
 			c.JSON(http.StatusOK, gin.H{"jobId": updatedJob.JobID, "resumed": true, "job": updatedJob})
 			return
@@ -301,7 +305,7 @@ func TestChannelCapability(cfgManager *config.ConfigManager, channelLogStore *me
 			}
 		}
 
-		go runCapabilityTestJob(job.JobID, channelKind, id, *channel, protocols, timeout, effectiveRPM, cacheKey, lookupKey, identityKey, dispatcherKey, previousResults, normalizedModels, req.SourceTab, cfgManager, channelLogStore)
+		go runCapabilityTestJob(job.JobID, channelKind, id, *channel, protocols, timeout, effectiveRPM, cacheKey, lookupKey, identityKey, executionLookupKey, dispatcherKey, previousResults, normalizedModels, req.SourceTab, cfgManager, channelLogStore)
 
 		c.JSON(http.StatusOK, gin.H{"jobId": job.JobID, "resumed": false, "job": job})
 		return

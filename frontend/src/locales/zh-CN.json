@@ -120,6 +120,7 @@
   "capability.addModelLabel": "添加模型",
   "capability.addModelPlaceholder": "例如 claude-sonnet-4-6",
   "capability.startTest": "开始测试",
+  "capability.customModel": "上游实际模型（可选）",
   "capability.loadingTitle": "正在测试协议兼容性...",
   "capability.notStarted": "待测试",
   "capability.rpmLabel": "测试 RPM",

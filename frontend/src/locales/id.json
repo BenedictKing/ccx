@@ -120,6 +120,7 @@
   "capability.addModelLabel": "Tambah model",
   "capability.addModelPlaceholder": "cth. claude-sonnet-4-6",
   "capability.startTest": "Mulai tes",
+  "capability.customModel": "Model upstream (opsional)",
   "capability.loadingTitle": "Menguji kompatibilitas protokol...",
   "capability.notStarted": "Belum dimulai",
   "capability.rpmLabel": "RPM tes",

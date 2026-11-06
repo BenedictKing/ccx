@@ -75,35 +75,36 @@ func TestNormalizeNativeWebSocketResponseCreatePayload_PreservesV2Fields(t *test
 	}
 }
 
-func TestResponsesWebSocketHandler_ResponsesUpstreamUsesHTTPBridge(t *testing.T) {
+func TestResponsesWebSocketHandler_ResponsesUpstreamKeepsNativeV2Continuation(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	upstreamBody := make(chan map[string]interface{}, 1)
+	upstreamBody := make(chan map[string]interface{}, 2)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/responses" {
 			t.Errorf("upstream path = %s, want /v1/responses", r.URL.Path)
 		}
-		body, err := io.ReadAll(r.Body)
+		if got := r.Header.Get(responsesWebSocketV2BetaHeader); got != responsesWebSocketV2BetaHeaderValue {
+			t.Errorf("OpenAI-Beta = %q, want WebSocket v2", got)
+		}
+		upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
+		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
-			t.Fatalf("read upstream request: %v", err)
+			t.Errorf("upgrade upstream: %v", err)
+			return
 		}
-		var req map[string]interface{}
-		if err := json.Unmarshal(body, &req); err != nil {
-			t.Fatalf("unmarshal upstream request: %v", err)
+		defer conn.Close()
+		for i := 0; i < 2; i++ {
+			var req map[string]interface{}
+			if err := conn.ReadJSON(&req); err != nil {
+				t.Errorf("read upstream request: %v", err)
+				return
+			}
+			upstreamBody <- req
+			if err := conn.WriteJSON(map[string]interface{}{"type": "response.completed", "response": map[string]interface{}{"id": "resp-1", "status": "completed"}}); err != nil {
+				t.Errorf("write upstream response: %v", err)
+				return
+			}
 		}
-		upstreamBody <- req
-
-		w.Header().Set("Content-Type", "text/event-stream")
-		_, _ = w.Write([]byte("event: response.created\n"))
-		_, _ = w.Write([]byte("data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp-1\",\"status\":\"in_progress\",\"output\":[]}}\n\n"))
-		_, _ = w.Write([]byte("event: response.output_item.added\n"))
-		_, _ = w.Write([]byte("data: {\"type\":\"response.output_item.added\",\"output_index\":0,\"item\":{\"type\":\"message\",\"role\":\"assistant\"}}\n\n"))
-		_, _ = w.Write([]byte("event: response.output_text.delta\n"))
-		_, _ = w.Write([]byte("data: {\"type\":\"response.output_text.delta\",\"output_index\":0,\"content_index\":0,\"delta\":\"hi\"}\n\n"))
-		_, _ = w.Write([]byte("event: response.output_item.done\n"))
-		_, _ = w.Write([]byte("data: {\"type\":\"response.output_item.done\",\"output_index\":0,\"item\":{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"hi\"}]}}\n\n"))
-		_, _ = w.Write([]byte("event: response.completed\n"))
-		_, _ = w.Write([]byte("data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp-1\",\"status\":\"completed\",\"output\":[],\"usage\":{\"input_tokens\":1,\"output_tokens\":1,\"total_tokens\":2}}}\n\n"))
 	}))
 	defer upstream.Close()
 
@@ -137,27 +138,22 @@ func TestResponsesWebSocketHandler_ResponsesUpstreamUsesHTTPBridge(t *testing.T)
 		t.Fatalf("write websocket request: %v", err)
 	}
 
-	delta := readWebSocketJSONUntilType(t, conn, "response.output_text.delta")
-	if delta["delta"] != "hi" {
-		t.Fatalf("delta = %v, want hi", delta["delta"])
-	}
 	completed := readWebSocketJSONUntilType(t, conn, "response.completed")
 	if completed["type"] != "response.completed" {
 		t.Fatalf("terminal event type = %v, want response.completed", completed["type"])
 	}
+	if err := conn.WriteJSON(map[string]interface{}{
+		"type": "response.create", "model": "gpt-5", "previous_response_id": "resp-1",
+		"input": []interface{}{map[string]interface{}{"type": "function_call_output", "call_id": "call-1", "output": "Fri"}},
+	}); err != nil {
+		t.Fatalf("write continuation: %v", err)
+	}
+	_ = readWebSocketJSONUntilType(t, conn, "response.completed")
 
-	select {
-	case req := <-upstreamBody:
-		for _, key := range []string{"type", "generate", "client_metadata"} {
-			if _, ok := req[key]; ok {
-				t.Fatalf("bridge upstream request still contains %q: %#v", key, req)
-			}
-		}
-		if req["stream"] != true {
-			t.Fatalf("bridge upstream stream = %v, want true", req["stream"])
-		}
-	case <-time.After(time.Second):
-		t.Fatal("HTTP bridge upstream did not receive request")
+	first := <-upstreamBody
+	second := <-upstreamBody
+	if first["type"] != "response.create" || second["previous_response_id"] != "resp-1" {
+		t.Fatalf("native continuation was not forwarded: first=%v second=%v", first, second)
 	}
 }
 

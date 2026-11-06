@@ -1,6 +1,40 @@
 package handlers
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+
+	"github.com/BenedictKing/ccx/internal/config"
+)
+
+func TestCapabilityModelsForChannelUsesConfiguredModels(t *testing.T) {
+	channel := &config.UpstreamConfig{
+		SupportedModels:   []string{"private-model", "other-*", "!blocked"},
+		ModelMapping:      map[string]string{"codex-auto-review": "private-model", "prefix-*": "private-model"},
+		ModelCapabilities: map[string]config.UpstreamModelCapability{"internal-model": {}, "wild-*": {}},
+	}
+	got, err := capabilityModelsForChannel("responses", channel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"internal-model", "private-model"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("configured probe models = %v, want %v", got, want)
+	}
+	configuredOnly := &config.UpstreamConfig{SupportedModels: []string{"private-model"}}
+	if got, err := capabilityModelsForChannel("responses", configuredOnly); err != nil || !reflect.DeepEqual(got, []string{"private-model"}) {
+		t.Fatalf("private channel should not probe unrelated built-in models: %v, err=%v", got, err)
+	}
+}
+
+func TestCapabilityDefaultModelCacheKeyChangesWithConfiguredModels(t *testing.T) {
+	protocols := []string{"responses"}
+	first := capabilityDefaultModelCacheKey(protocols, &config.UpstreamConfig{SupportedModels: []string{"private-a"}})
+	second := capabilityDefaultModelCacheKey(protocols, &config.UpstreamConfig{SupportedModels: []string{"private-b"}})
+	if reflect.DeepEqual(first, second) || len(first) != 1 || first[0] != "responses:private-a" {
+		t.Fatalf("default cache identity must follow channel models: first=%v second=%v", first, second)
+	}
+}
 
 func TestGetProbeModelsForCapabilityProtocol_UsesSourceProtocol(t *testing.T) {
 	got, err := getProbeModelsForCapabilityProtocol("messages->chat")

@@ -120,6 +120,7 @@
   "capability.addModelLabel": "Add model",
   "capability.addModelPlaceholder": "e.g. claude-sonnet-4-6",
   "capability.startTest": "Start test",
+  "capability.customModel": "Upstream model (optional)",
   "capability.loadingTitle": "Testing protocol compatibility...",
   "capability.notStarted": "Not started",
   "capability.rpmLabel": "Test RPM",

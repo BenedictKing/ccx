@@ -106,6 +106,20 @@ func normalizeCapabilityModels(models []string) []string {
 	return normalized
 }
 
+func capabilityDefaultModelCacheKey(protocols []string, channel *config.UpstreamConfig) []string {
+	models := make([]string, 0)
+	for _, protocol := range protocols {
+		candidates, err := capabilityModelsForChannel(protocol, channel)
+		if err != nil {
+			continue
+		}
+		for _, model := range candidates {
+			models = append(models, protocol+":"+model)
+		}
+	}
+	return normalizeCapabilityModels(models)
+}
+
 func buildCapabilityTestURL(baseURL, versionPrefix, endpoint string) string {
 	skipVersionPrefix := strings.HasSuffix(baseURL, "#")
 	if skipVersionPrefix {

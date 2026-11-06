@@ -24,6 +24,16 @@
       <v-divider />
 
       <v-card-text class="pa-4">
+        <v-text-field
+          v-if="job"
+          v-model="customModel"
+          :label="t('capability.customModel')"
+          variant="outlined"
+          density="compact"
+          hide-details
+          clearable
+          class="mb-3"
+        />
         <div v-if="state === 'initializing'" class="d-flex flex-column align-center py-8">
           <v-progress-circular indeterminate size="48" color="primary" />
           <p class="text-body-1 mt-4 text-medium-emphasis">{{ t('capability.loadingTitle') }}</p>
@@ -345,13 +355,14 @@ const emit = defineEmits<{
   'copyToTab': [targetProtocol: string, serviceProtocol?: string]
   'cancel': []
   'retryModel': [protocol: string, model: string]
-  'testProtocol': [protocol: string]
+  'testProtocol': [protocol: string, models?: string[]]
 }>()
 
 const { t } = useI18n()
 
 const errorMessage = ref('')
 const cancelling = ref(false)
+const customModel = ref('')
 const DEFAULT_CAPABILITY_TEST_RPM = 30
 const rpmValue = ref(DEFAULT_CAPABILITY_TEST_RPM)
 
@@ -629,7 +640,8 @@ const isTestProtocolButtonDisabled = (test: CapabilityProtocolJobResult): boolea
 }
 
 const handleTestProtocol = (protocol: string) => {
-  emit('testProtocol', protocol)
+  const model = customModel.value.trim()
+  emit('testProtocol', protocol, model ? [model] : undefined)
 }
 
 const handleRpmBlur = () => {
@@ -675,6 +687,13 @@ defineExpose({ setError })
 .dialog-title-wrapper {
   flex: 1;
   min-width: 0;
+}
+
+.dialog-title {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.3;
 }
 
 .capability-status-bar {

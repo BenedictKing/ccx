@@ -128,6 +128,66 @@ func TestStartCapabilityTest_DefaultRPM(t *testing.T) {
 	}
 }
 
+func TestStartCapabilityTest_DefaultsToConfiguredPrivateModel(t *testing.T) {
+	resetCapabilityTestState()
+	gin.SetMode(gin.TestMode)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("decode request: %v", err)
+		}
+		if body["model"] != "private-model" {
+			t.Errorf("unexpected probe model %v", body["model"])
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok\"},\"finish_reason\":null}]}\n\n"))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer upstream.Close()
+	configFile := filepath.Join(t.TempDir(), "config.json")
+	data, err := json.Marshal(config.Config{ChatUpstream: []config.UpstreamConfig{{
+		Name: "private", ServiceType: "openai", BaseURL: upstream.URL, APIKeys: []string{"sk-test"}, SupportedModels: []string{"private-model"}, Status: "active",
+	}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configFile, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfgManager, err := config.NewConfigManager(configFile, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cfgManager.Close()
+	router := gin.New()
+	router.POST("/chat/channels/:id/capability-test", TestChannelCapability(cfgManager, nil, "chat"))
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/chat/channels/0/capability-test", strings.NewReader(`{"targetProtocols":["chat"],"rpm":60}`))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("start status=%d body=%s", w.Code, w.Body.String())
+	}
+	var started struct {
+		JobID string `json:"jobId"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &started); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		job, ok := capabilityJobs.get(started.JobID)
+		if ok && job.Lifecycle == CapabilityLifecycleDone {
+			if len(job.Tests) != 1 || len(job.Tests[0].ModelResults) != 1 || job.Tests[0].ModelResults[0].Model != "private-model" || !job.Tests[0].ModelResults[0].Success {
+				t.Fatalf("private model probe failed: %+v", job.Tests)
+			}
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("private model capability test did not finish")
+}
+
 func TestGetCapabilityTestJobStatus_HTTP(t *testing.T) {
 	resetCapabilityTestState()
 	gin.SetMode(gin.TestMode)
@@ -190,9 +250,10 @@ func TestCapabilityCacheHit_DoesNotBindExecutionLookupKey(t *testing.T) {
 	baseURL := channel.GetAllBaseURLs()[0]
 	apiKey := channel.APIKeys[0]
 	protocols := []string{"messages"}
-	cacheKey := buildCapabilityCacheKey(baseURL, apiKey, channel.ServiceType, protocols, nil, hashModelMapping(channel.ModelMapping))
+	cacheModels := capabilityDefaultModelCacheKey(protocols, &channel)
+	cacheKey := buildCapabilityCacheKey(baseURL, apiKey, channel.ServiceType, protocols, cacheModels, hashModelMapping(channel.ModelMapping))
 	identityKey := resolveCapabilityIdentityKey(&channel)
-	executionLookupKey := buildCapabilityExecutionLookupKey(identityKey, "messages", protocols, nil, hashModelMapping(channel.ModelMapping))
+	executionLookupKey := buildCapabilityExecutionLookupKey(identityKey, "messages", protocols, cacheModels, "")
 
 	setCapabilityCache(cacheKey, CapabilityTestResponse{
 		ChannelID:           0,
@@ -941,8 +1002,9 @@ func TestCapabilityRunningJobReuse_ByIdentityAcrossChannels(t *testing.T) {
 
 	cfg := cfgManager.GetConfig()
 	channel := cfg.Upstream[0]
-	cacheKey := buildCapabilityCacheKey(channel.GetAllBaseURLs()[0], channel.APIKeys[0], channel.ServiceType, []string{"messages"}, nil, hashModelMapping(channel.ModelMapping))
-	executionLookupKey := buildCapabilityExecutionLookupKey(resolveCapabilityIdentityKey(&channel), "messages", []string{"messages"}, nil, hashModelMapping(channel.ModelMapping))
+	cacheModels := capabilityDefaultModelCacheKey([]string{"messages"}, &channel)
+	cacheKey := buildCapabilityCacheKey(channel.GetAllBaseURLs()[0], channel.APIKeys[0], channel.ServiceType, []string{"messages"}, cacheModels, hashModelMapping(channel.ModelMapping))
+	executionLookupKey := buildCapabilityExecutionLookupKey(resolveCapabilityIdentityKey(&channel), "messages", []string{"messages"}, cacheModels, "")
 	lookupKey := buildCapabilityJobLookupKey(cacheKey, "messages", 0)
 	capabilityJobs.bindLookupKey(executionLookupKey, runningJob.JobID)
 	capabilityJobs.bindLookupKey(lookupKey, runningJob.JobID)

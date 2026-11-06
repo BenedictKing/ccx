@@ -64,8 +64,7 @@ func buildRoundRobinQueue(protocolModels map[string][]string, protocols []string
 	return queue
 }
 
-func runCapabilityTestJob(jobID, channelKind string, channelID int, channel config.UpstreamConfig, protocols []string, timeout time.Duration, effectiveRPM int, cacheKey, lookupKey, identityKey, dispatcherKey string, previousResults map[string]map[string]ModelTestResult, userModels []string, sourceTab string, cfgManager *config.ConfigManager, channelLogStore *metrics.ChannelLogStore) {
-	executionKey := buildCapabilityExecutionLookupKey(identityKey, channelKind, protocols, userModels, "")
+func runCapabilityTestJob(jobID, channelKind string, channelID int, channel config.UpstreamConfig, protocols []string, timeout time.Duration, effectiveRPM int, cacheKey, lookupKey, identityKey, executionKey, dispatcherKey string, previousResults map[string]map[string]ModelTestResult, userModels []string, sourceTab string, cfgManager *config.ConfigManager, channelLogStore *metrics.ChannelLogStore) {
 	// 创建可取消的 context，用于支持前端取消操作
 	ctx, cancel := context.WithCancel(context.Background())
 	capabilityJobs.setCancelFunc(jobID, cancel)
@@ -322,7 +321,7 @@ func runRoundRobinTests(ctx context.Context, channel *config.UpstreamConfig, pro
 			// 用户指定模型列表，所有协议共用
 			models = userModels
 		} else {
-			models, err = getProbeModelsForCapabilityProtocol(protocol)
+			models, err = capabilityModelsForChannel(protocol, channel)
 		}
 		if err != nil {
 			errMsg := "no_models_configured"
@@ -611,6 +610,31 @@ func runRoundRobinTests(ctx context.Context, channel *config.UpstreamConfig, pro
 	}
 
 	return orderedResults
+}
+
+func capabilityModelsForChannel(protocol string, channel *config.UpstreamConfig) ([]string, error) {
+	if channel != nil {
+		candidates := make([]string, 0, len(channel.SupportedModels)+len(channel.ModelCapabilities)+len(channel.ModelMapping))
+		for _, model := range channel.SupportedModels {
+			if !strings.ContainsAny(model, "*!" /* wildcard/exclusion rules are not request models */) {
+				candidates = append(candidates, model)
+			}
+		}
+		for model := range channel.ModelCapabilities {
+			if !strings.ContainsAny(model, "*!") {
+				candidates = append(candidates, model)
+			}
+		}
+		for _, model := range channel.ModelMapping {
+			if !strings.ContainsAny(model, "*!") {
+				candidates = append(candidates, model)
+			}
+		}
+		if models := normalizeCapabilityModels(candidates); len(models) > 0 {
+			return models, nil
+		}
+	}
+	return getProbeModelsForCapabilityProtocol(protocol)
 }
 
 func isCapabilityJobCancelled(jobID string) bool {

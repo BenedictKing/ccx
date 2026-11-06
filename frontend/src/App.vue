@@ -417,7 +417,7 @@
       @copy-to-tab="handleCopyToTab"
       @cancel="handleCancelCapabilityTest"
       @retry-model="handleRetryCapabilityModel"
-      @test-protocol="handleTestCapabilityProtocol"
+      @test-protocol="handleTestCapabilityProtocolWithModels"
     />
 
     <!-- OTA 更新对话框 -->
