@@ -9,12 +9,12 @@ import (
 
 // ReconcileAction 对账产生的本地动作记录。
 type ReconcileAction struct {
-	Protocol    string
-	Group       string
-	KeyName     string
-	ChannelName string
-	Action      string // "disabled" / "missing_local" / "error"
-	Detail      string
+	Protocol    string `json:"protocol"`
+	Group       string `json:"group"`
+	KeyName     string `json:"keyName"`
+	ChannelName string `json:"channelName"`
+	Action      string `json:"action"` // "disabled" / "missing_local" / "error"
+	Detail      string `json:"detail"`
 }
 
 // ReconcileAccount 对账单个站点账号：逐个核对已建远端 Key 是否仍存在，

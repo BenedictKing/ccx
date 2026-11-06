@@ -455,6 +455,44 @@ func TestNewApiAdapter_ProvisionKey_ReuseExisting(t *testing.T) {
 	}
 }
 
+func TestNewApiAdapter_ProvisionKey_RejectsDifferentModelLimits(t *testing.T) {
+	srv := newMockNewApiServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Fatalf("模型限制冲突时不应创建新 Key: %s", r.Method)
+		}
+		writeEnvelope(w, true, map[string]interface{}{"items": []NewApiToken{{
+			ID: 7, Key: "sk-existing", Name: "ccx-chat-default", Group: "default", Status: 1,
+			ModelLimitsEnabled: true, ModelLimits: "gpt-4o",
+		}}}, "")
+	})
+	_, _, _, _, err := (&NewApiAdapter{HTTPClient: srv.Client()}).ProvisionKey(
+		context.Background(), srv.URL, "token", "1", "", NewApiProvisionOptions{
+			Name: "ccx-chat-default", Group: "default", Models: []string{"claude-sonnet-4"},
+		})
+	if err == nil || !strings.Contains(err.Error(), "模型限制") {
+		t.Fatalf("同名 Key 模型限制不同应明确拒绝复用: %v", err)
+	}
+}
+
+func TestNewApiAdapter_ProvisionKey_RejectsDisabledExistingKey(t *testing.T) {
+	srv := newMockNewApiServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Fatalf("已停用 Key 不应触发创建请求: %s", r.Method)
+		}
+		writeEnvelope(w, true, map[string]interface{}{"items": []NewApiToken{{
+			ID: 7, Key: "sk-disabled", Name: "ccx-chat-default", Group: "default", Status: 2,
+			ModelLimitsEnabled: true, ModelLimits: "gpt-4o",
+		}}}, "")
+	})
+	_, _, _, _, err := (&NewApiAdapter{HTTPClient: srv.Client()}).ProvisionKey(
+		context.Background(), srv.URL, "token", "1", "", NewApiProvisionOptions{
+			Name: "ccx-chat-default", Group: "default", Models: []string{"gpt-4o"},
+		})
+	if err == nil || !strings.Contains(err.Error(), "停用") {
+		t.Fatalf("已停用 Key 不应复用: %v", err)
+	}
+}
+
 func TestNewApiAdapter_ProvisionKey_SuffixesOnNameGroupMismatch(t *testing.T) {
 	var createdName string
 	srv := newMockNewApiServer(t, func(w http.ResponseWriter, r *http.Request) {

@@ -56,3 +56,66 @@ func TestAccountsList_DoesNotLeakToken(t *testing.T) {
 		t.Fatalf("脱敏展示错误: %q", payload.Accounts[0].MaskedToken)
 	}
 }
+
+func TestProvisionAndReconcileResponsesMatchWebContract(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	site, uid, store, cfgManager, adapter := newProvisionTestDeps(t)
+	router := gin.New()
+	RegisterRoutes(router.Group("/api"), &Deps{Store: store, CfgManager: cfgManager, Adapter: adapter})
+
+	provision := httptest.NewRecorder()
+	router.ServeHTTP(provision, httptest.NewRequest(http.MethodPost,
+		"/api/siteaccess/accounts/"+uid+"/provision",
+		strings.NewReader(`{"protocol":"chat","groups":["default"],"models":["gpt-4o"]}`)))
+	if provision.Code != http.StatusOK {
+		t.Fatalf("接入状态码: %d, body: %s", provision.Code, provision.Body.String())
+	}
+	var result struct {
+		AccountUID string `json:"accountUID"`
+		Groups     []struct {
+			Group       string `json:"group"`
+			KeyName     string `json:"keyName"`
+			ChannelName string `json:"channelName"`
+			Skipped     string `json:"skipped"`
+		} `json:"groups"`
+	}
+	if err := json.Unmarshal(provision.Body.Bytes(), &result); err != nil {
+		t.Fatalf("解析接入响应: %v", err)
+	}
+	if result.AccountUID != uid || len(result.Groups) != 1 || result.Groups[0].Group != "default" || result.Groups[0].KeyName == "" || result.Groups[0].ChannelName == "" || result.Groups[0].Skipped != "" {
+		t.Fatalf("接入响应与 Web 契约不符: %s", provision.Body.String())
+	}
+	if strings.Contains(provision.Body.String(), `"Groups"`) || strings.Contains(provision.Body.String(), `"KeyName"`) {
+		t.Fatalf("接入响应混入大写字段: %s", provision.Body.String())
+	}
+	clean := httptest.NewRecorder()
+	router.ServeHTTP(clean, httptest.NewRequest(http.MethodPost,
+		"/api/siteaccess/accounts/"+uid+"/reconcile", nil))
+	if clean.Code != http.StatusOK || !strings.Contains(clean.Body.String(), `"actions":[]`) {
+		t.Fatalf("无动作对账应返回空数组: %d %s", clean.Code, clean.Body.String())
+	}
+
+	site.deleteTokenByName(result.Groups[0].KeyName)
+	reconcile := httptest.NewRecorder()
+	router.ServeHTTP(reconcile, httptest.NewRequest(http.MethodPost,
+		"/api/siteaccess/accounts/"+uid+"/reconcile", nil))
+	if reconcile.Code != http.StatusOK {
+		t.Fatalf("对账状态码: %d, body: %s", reconcile.Code, reconcile.Body.String())
+	}
+	var actions struct {
+		Actions []struct {
+			Action  string `json:"action"`
+			Detail  string `json:"detail"`
+			KeyName string `json:"keyName"`
+		} `json:"actions"`
+	}
+	if err := json.Unmarshal(reconcile.Body.Bytes(), &actions); err != nil {
+		t.Fatalf("解析对账响应: %v", err)
+	}
+	if len(actions.Actions) != 1 || actions.Actions[0].Action != "disabled" || actions.Actions[0].Detail == "" || actions.Actions[0].KeyName != result.Groups[0].KeyName {
+		t.Fatalf("对账响应与 Web 契约不符: %s", reconcile.Body.String())
+	}
+	if strings.Contains(reconcile.Body.String(), `"Action"`) || strings.Contains(reconcile.Body.String(), `"KeyName"`) {
+		t.Fatalf("对账响应混入大写字段: %s", reconcile.Body.String())
+	}
+}

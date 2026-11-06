@@ -61,7 +61,10 @@ func (f *fakeNewApiSite) handler(w http.ResponseWriter, r *http.Request) {
 	case path == "/api/token/" && r.Method == http.MethodPost:
 		var req NewApiCreateTokenRequest
 		_ = json.NewDecoder(r.Body).Decode(&req)
-		token := &NewApiToken{ID: f.nextID, Key: "plain-" + req.Name, Name: req.Name, Group: req.Group, Status: 1}
+		token := &NewApiToken{
+			ID: f.nextID, Key: "plain-" + req.Name, Name: req.Name, Group: req.Group, Status: 1,
+			ModelLimitsEnabled: req.ModelLimitsEnabled, ModelLimits: req.ModelLimits,
+		}
 		f.tokens[f.nextID] = token
 		f.nextID++
 		writeEnvelope(w, true, token, "")
@@ -70,6 +73,34 @@ func (f *fakeNewApiSite) handler(w http.ResponseWriter, r *http.Request) {
 		id, _ := strconv.Atoi(idStr)
 		delete(f.tokens, id)
 		writeEnvelope(w, true, nil, "")
+	case path == "/v1/messages" || path == "/v1/chat/completions" || path == "/v1/responses":
+		var body struct {
+			Model string `json:"model"`
+		}
+		if r.Method != http.MethodPost || json.NewDecoder(r.Body).Decode(&body) != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		key := r.Header.Get("x-api-key")
+		if key == "" {
+			key = strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		}
+		for _, token := range f.tokens {
+			if key != normalizeNewApiPlaintextKey(token.Key) || token.Status != 1 {
+				continue
+			}
+			if token.ModelLimitsEnabled && !strings.Contains(","+token.ModelLimits+",", ","+body.Model+",") {
+				continue
+			}
+			for _, model := range f.models[token.Group] {
+				if model == body.Model {
+					w.Header().Set("Content-Type", "application/json")
+					_, _ = w.Write([]byte(`{"id":"fake-response"}`))
+					return
+				}
+			}
+		}
+		w.WriteHeader(http.StatusForbidden)
 	default:
 		writeEnvelope(w, false, nil, "unknown endpoint: "+r.Method+" "+path)
 	}
@@ -250,6 +281,123 @@ func TestProvisionProtocol_CrossProtocolIndependentGroups(t *testing.T) {
 	}
 }
 
+func TestProvisionProtocol_SameGroupKeepsProtocolKeysIndependent(t *testing.T) {
+	site, uid, store, cfgManager, adapter := newProvisionTestDeps(t)
+	for _, req := range []ProvisionRequest{
+		{AccountUID: uid, Protocol: "messages", Groups: []string{"default"}, Models: []string{"claude-sonnet-4"}},
+		{AccountUID: uid, Protocol: "chat", Groups: []string{"default"}, Models: []string{"gpt-4o"}},
+	} {
+		result, err := ProvisionProtocol(context.Background(), store, cfgManager, adapter, req)
+		if err != nil || len(result.Groups) != 1 || result.Groups[0].Skipped != "" {
+			t.Fatalf("%s 接入失败: result=%+v err=%v", req.Protocol, result, err)
+		}
+	}
+	cfg := cfgManager.GetConfig()
+	if cfg.Upstream[0].APIKeys[0] == cfg.ChatUpstream[0].APIKeys[0] {
+		t.Fatal("同一分组的不同协议不应复用模型受限 Key")
+	}
+	account, _, _ := store.Get(uid)
+	if len(account.ProvisionedKeys) != 2 || len(account.Evidence) != 2 {
+		t.Fatalf("两个协议的元数据与证据应独立保留: %+v", account)
+	}
+	if len(site.tokens) != 2 {
+		t.Fatalf("远端应有两个独立 Key，实际 %d", len(site.tokens))
+	}
+}
+
+func TestProvisionProtocol_FiltersModelsPerGroupAndRetainsAllMetadata(t *testing.T) {
+	site, uid, store, cfgManager, adapter := newProvisionTestDeps(t)
+	maxMultiplier := 2.0
+	result, err := ProvisionProtocol(context.Background(), store, cfgManager, adapter, ProvisionRequest{
+		AccountUID: uid, Protocol: "chat", Groups: []string{"default", "vip"}, MaxMultiplier: &maxMultiplier,
+		Models:       []string{"gpt-4o", "claude-sonnet-4"},
+		ModelMapping: map[string]string{"agent-gpt": "gpt-4o", "agent-claude": "claude-sonnet-4"},
+	})
+	if err != nil {
+		t.Fatalf("接入失败: %v", err)
+	}
+	for _, group := range result.Groups {
+		if group.Skipped != "" {
+			t.Fatalf("%s 意外跳过: %s", group.Group, group.Skipped)
+		}
+	}
+	channels := cfgManager.GetConfig().ChatUpstream
+	if len(channels) != 2 {
+		t.Fatalf("应有两个 chat 渠道，实际 %d", len(channels))
+	}
+	for _, channel := range channels {
+		if strings.HasSuffix(channel.Name, "/ vip") {
+			if channel.SupportsModel("agent-claude") || channel.SupportsModel("claude-sonnet-4") || !channel.SupportsModel("agent-gpt") {
+				t.Fatalf("vip 渠道模型过滤错误: %+v", channel)
+			}
+			if _, ok := channel.ModelMapping["agent-claude"]; ok {
+				t.Fatalf("vip 渠道不应映射不可用的 claude 模型")
+			}
+		}
+	}
+	account, _, _ := store.Get(uid)
+	if len(account.ProvisionedKeys) != 2 || len(account.Evidence) != 2 || len(site.tokens) != 2 {
+		t.Fatalf("多分组元数据丢失: keys=%d evidence=%d remote=%d", len(account.ProvisionedKeys), len(account.Evidence), len(site.tokens))
+	}
+}
+
+func TestProvisionProtocol_ChangingModelsReplacesManagedLocalKey(t *testing.T) {
+	_, uid, store, cfgManager, adapter := newProvisionTestDeps(t)
+	for _, model := range []string{"gpt-4o", "claude-sonnet-4"} {
+		result, err := ProvisionProtocol(context.Background(), store, cfgManager, adapter, ProvisionRequest{
+			AccountUID: uid, Protocol: "chat", Groups: []string{"default"}, Models: []string{model},
+		})
+		if err != nil {
+			t.Fatalf("%s 接入失败: %v", model, err)
+		}
+		if result.Groups[0].Skipped != "" {
+			t.Fatalf("%s 意外跳过: %s", model, result.Groups[0].Skipped)
+		}
+	}
+	channel := cfgManager.GetConfig().ChatUpstream[0]
+	if len(channel.APIKeys) != 1 || !channel.SupportsModel("claude-sonnet-4") || channel.SupportsModel("gpt-4o") {
+		t.Fatalf("重新选模后应只保留新 Key 与模型范围: %+v", channel)
+	}
+	account, _, _ := store.Get(uid)
+	if len(account.ProvisionedKeys) != 1 || account.ProvisionedKeys[0].KeyFingerprint != keyFingerprint(channel.APIKeys[0]) {
+		t.Fatalf("Key 元数据未更新: %+v", account.ProvisionedKeys)
+	}
+}
+
+func TestProvisionProtocol_ThreeProtocolsCompleteLocalInference(t *testing.T) {
+	_, uid, store, cfgManager, adapter := newProvisionTestDeps(t)
+	for _, tc := range []struct {
+		protocol string
+		model    string
+	}{
+		{"messages", "claude-sonnet-4"},
+		{"responses", "gpt-4o"},
+		{"chat", "gpt-4o"},
+	} {
+		result, err := ProvisionProtocol(context.Background(), store, cfgManager, adapter, ProvisionRequest{
+			AccountUID: uid, Protocol: tc.protocol, Groups: []string{"default"}, Models: []string{tc.model},
+		})
+		if err != nil {
+			t.Fatalf("%s 接入失败: %v", tc.protocol, err)
+		}
+		if result.Groups[0].Skipped != "" {
+			t.Fatalf("%s 接入跳过: %s", tc.protocol, result.Groups[0].Skipped)
+		}
+		if err := VerifyRealRequest(context.Background(), store, cfgManager, uid, tc.protocol, "default", tc.model); err != nil {
+			t.Fatalf("%s 最小推理失败: %v", tc.protocol, err)
+		}
+	}
+	account, _, _ := store.Get(uid)
+	if len(account.ProvisionedKeys) != 3 || len(account.Evidence) != 3 {
+		t.Fatalf("三个协议的接入记录不完整: keys=%d evidence=%d", len(account.ProvisionedKeys), len(account.Evidence))
+	}
+	for _, evidence := range account.Evidence {
+		if evidence.Level != EvidenceRealRequest {
+			t.Fatalf("%s/%s 未达到真实请求证据: %+v", evidence.Protocol, evidence.Group, evidence)
+		}
+	}
+}
+
 func TestReconcileAccount_RemoteDeletedKeyDisabledLocally(t *testing.T) {
 	site, uid, store, cfgManager, adapter := newProvisionTestDeps(t)
 
@@ -275,8 +423,14 @@ func TestReconcileAccount_RemoteDeletedKeyDisabledLocally(t *testing.T) {
 		}
 	}
 
-	// 远端删除 ccx-default（chat 使用的 Key）；messages 与 chat 共用该 Key 名
-	site.deleteTokenByName("ccx-default")
+	account, _, _ := store.Get(uid)
+	var chatKeyName string
+	for _, meta := range account.ProvisionedKeys {
+		if meta.Protocol == "chat" {
+			chatKeyName = meta.Name
+		}
+	}
+	site.deleteTokenByName(chatKeyName)
 
 	actions, err = ReconcileAccount(context.Background(), store, cfgManager, adapter, uid)
 	if err != nil {
@@ -288,15 +442,15 @@ func TestReconcileAccount_RemoteDeletedKeyDisabledLocally(t *testing.T) {
 			disabledCount++
 		}
 	}
-	if disabledCount != 2 {
-		t.Fatalf("两个协议渠道中同名远端 Key 都应停用，实际 %d: %+v", disabledCount, actions)
+	if disabledCount != 1 {
+		t.Fatalf("仅删除的 chat Key 应停用，实际 %d: %+v", disabledCount, actions)
 	}
 
 	cfg := cfgManager.GetConfig()
 	if len(cfg.ChatUpstream[0].APIKeys) != 0 || len(cfg.ChatUpstream[0].DisabledAPIKeys) != 1 {
 		t.Fatalf("chat 渠道 Key 应被停用: %+v", cfg.ChatUpstream[0])
 	}
-	if len(cfg.Upstream[0].APIKeys) != 0 || len(cfg.Upstream[0].DisabledAPIKeys) != 1 {
-		t.Fatalf("messages 渠道 Key 应被停用: %+v", cfg.Upstream[0])
+	if len(cfg.Upstream[0].APIKeys) != 1 || len(cfg.Upstream[0].DisabledAPIKeys) != 0 {
+		t.Fatalf("messages 渠道 Key 应保持可用: %+v", cfg.Upstream[0])
 	}
 }

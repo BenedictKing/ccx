@@ -152,6 +152,9 @@ func RegisterRoutes(apiGroup *gin.RouterGroup, deps *Deps) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
+		if actions == nil {
+			actions = []ReconcileAction{}
+		}
 		c.JSON(http.StatusOK, gin.H{"actions": actions})
 	})
 

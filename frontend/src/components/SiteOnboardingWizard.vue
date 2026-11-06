@@ -324,7 +324,8 @@ function evidenceLabel(group: string): string {
 
 async function verifyReal(group: string) {
   if (!account.value) return
-  const model = selectedModels.value[0]
+  const groupModels = groupsPreview.value.find(item => item.name === group)?.models ?? []
+  const model = selectedModels.value.find(item => groupModels.includes(item))
   if (!model) return
   verifyingGroup.value = group
   try {
@@ -333,6 +334,8 @@ async function verifyReal(group: string) {
     realVerifyMessage.value = result.success
       ? t('siteOnboarding.realVerifySuccess', { group, model })
       : (result.error || t('siteOnboarding.realVerifyFailed'))
+    const { accounts } = await api.listSiteAccounts()
+    account.value = accounts.find(item => item.uid === account.value?.uid) ?? account.value
   } catch (err) {
     realVerifySuccess.value = false
     realVerifyMessage.value = err instanceof Error ? err.message : String(err)

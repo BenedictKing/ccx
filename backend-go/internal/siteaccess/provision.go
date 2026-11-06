@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/url"
+	"sort"
 	"strings"
 
 	"github.com/BenedictKing/ccx/internal/config"
@@ -26,18 +27,18 @@ type ProvisionRequest struct {
 
 // ProvisionGroupResult 单个分组的接入结果。
 type ProvisionGroupResult struct {
-	Group       string
-	KeyName     string
-	ChannelName string
-	Skipped     string // 非空表示该分组被跳过及原因
-	Reused      bool   // 是否复用远端已有同名 Key
+	Group       string `json:"group"`
+	KeyName     string `json:"keyName"`
+	ChannelName string `json:"channelName"`
+	Skipped     string `json:"skipped"` // 非空表示该分组被跳过及原因
+	Reused      bool   `json:"reused"`  // 是否复用远端已有同名 Key
 }
 
 // ProvisionResult 一次协议接入的完整结果。
 type ProvisionResult struct {
-	AccountUID string
-	Protocol   string
-	Groups     []ProvisionGroupResult
+	AccountUID string                 `json:"accountUID"`
+	Protocol   string                 `json:"protocol"`
+	Groups     []ProvisionGroupResult `json:"groups"`
 }
 
 // ProvisionedChannelName 是 CCX 托管渠道的稳定命名约定，用于幂等查找与对账定位。
@@ -53,6 +54,13 @@ func ProvisionedChannelName(baseURL, protocol, group string) string {
 func keyFingerprint(key string) string {
 	sum := sha256.Sum256([]byte(key))
 	return hex.EncodeToString(sum[:8])
+}
+
+func provisionedKeyName(protocol, group string, models []string) string {
+	ordered := append([]string(nil), models...)
+	sort.Strings(ordered)
+	sum := sha256.Sum256([]byte(strings.Join(ordered, "\x00")))
+	return fmt.Sprintf("%s-%s-%x", defaultNewApiProvisionKeyNameForGroup(group), protocol, sum[:4])
 }
 
 // provisionProtocolInfo 归一协议名到 2.9 配置层的 apiType 与默认 ServiceType。
@@ -78,6 +86,15 @@ func ProvisionProtocol(ctx context.Context, store *AccountStore, cfgManager *con
 	apiType, serviceType, err := provisionProtocolInfo(req.Protocol)
 	if err != nil {
 		return nil, err
+	}
+	selectedModels := make(map[string]bool, len(req.Models))
+	for _, model := range req.Models {
+		selectedModels[model] = true
+	}
+	for alias, target := range req.ModelMapping {
+		if strings.TrimSpace(alias) == "" || !selectedModels[target] {
+			return nil, fmt.Errorf("[SiteAccess-Provision] 模型映射 %q 的目标 %q 不在所选模型中", alias, target)
+		}
 	}
 	account, found, err := store.Get(req.AccountUID)
 	if err != nil {
@@ -139,7 +156,7 @@ func ProvisionProtocol(ctx context.Context, store *AccountStore, cfgManager *con
 		}
 	}
 
-	result := &ProvisionResult{AccountUID: req.AccountUID, Protocol: strings.ToLower(req.Protocol)}
+	result := &ProvisionResult{AccountUID: req.AccountUID, Protocol: strings.ToLower(req.Protocol), Groups: make([]ProvisionGroupResult, 0, len(resolved))}
 	for _, group := range resolved {
 		groupResult := aProvisionGroup(ctx, store, cfgManager, adapter, account, apiType, serviceType, req, group)
 		result.Groups = append(result.Groups, groupResult)
@@ -160,7 +177,6 @@ func aProvisionGroup(ctx context.Context, store *AccountStore, cfgManager *confi
 	protocol := strings.ToLower(req.Protocol)
 	groupResult := ProvisionGroupResult{
 		Group:       group.Name,
-		KeyName:     defaultNewApiProvisionKeyNameForGroup(group.Name),
 		ChannelName: ProvisionedChannelName(account.BaseURL, protocol, group.Name),
 	}
 	accessToken, err := account.plaintextAccessToken()
@@ -180,28 +196,41 @@ func aProvisionGroup(ctx context.Context, store *AccountStore, cfgManager *confi
 		groupResult.Skipped = "分组无可用模型"
 		return groupResult
 	}
+	groupModels := req.Models
+	groupMapping := req.ModelMapping
 	if len(req.Models) > 0 {
 		available := make(map[string]bool, len(models))
 		for _, m := range models {
 			available[m] = true
 		}
-		matched := false
+		groupModels = make([]string, 0, len(req.Models))
 		for _, target := range req.Models {
 			if available[target] {
-				matched = true
-				break
+				groupModels = append(groupModels, target)
 			}
 		}
-		if !matched {
+		if len(groupModels) == 0 {
 			groupResult.Skipped = "分组不含任何目标模型"
 			return groupResult
 		}
+		groupMapping = make(map[string]string)
+		for alias, target := range req.ModelMapping {
+			if available[target] {
+				groupMapping[alias] = target
+			}
+		}
 	}
+	groupResult.KeyName = provisionedKeyName(protocol, group.Name, groupModels)
+	supportedModels := append([]string(nil), groupModels...)
+	for alias := range groupMapping {
+		supportedModels = append(supportedModels, alias)
+	}
+	sort.Strings(supportedModels)
 
 	tokenID, keyPlaintext, reused, finalName, err := adapter.ProvisionKey(ctx, account.BaseURL, accessToken, account.UserID, account.AuthTokenMode, NewApiProvisionOptions{
 		Name:   groupResult.KeyName,
 		Group:  group.Name,
-		Models: req.Models,
+		Models: groupModels,
 	})
 	if err != nil {
 		groupResult.Skipped = fmt.Sprintf("建 Key 失败: %v", err)
@@ -210,7 +239,14 @@ func aProvisionGroup(ctx context.Context, store *AccountStore, cfgManager *confi
 	groupResult.KeyName = finalName
 	groupResult.Reused = reused
 
-	if err := upsertProvisionedChannel(cfgManager, apiType, serviceType, account.BaseURL, groupResult.ChannelName, keyPlaintext, req.ModelMapping); err != nil {
+	previousFingerprint := ""
+	for _, meta := range account.ProvisionedKeys {
+		if meta.Protocol == protocol && meta.Group == group.Name {
+			previousFingerprint = meta.KeyFingerprint
+			break
+		}
+	}
+	if err := upsertProvisionedChannel(cfgManager, apiType, serviceType, account.BaseURL, groupResult.ChannelName, keyPlaintext, previousFingerprint, groupMapping, supportedModels); err != nil {
 		if !reused {
 			if deleteErr := adapter.DeleteToken(ctx, account.BaseURL, accessToken, account.UserID, account.AuthTokenMode, tokenID); deleteErr != nil {
 				groupResult.Skipped = fmt.Sprintf("写入渠道失败: %v；新建远端 Key 回收也失败: %v，请到站点后台手动删除 %s", err, deleteErr, finalName)
@@ -226,36 +262,40 @@ func aProvisionGroup(ctx context.Context, store *AccountStore, cfgManager *confi
 	return groupResult
 }
 
-// upsertProvisionedChannel 按稳定渠道名幂等写入：已存在则补充 Key/更新映射，
+// upsertProvisionedChannel 按稳定渠道名幂等写入：已存在则替换旧托管 Key、更新模型范围与映射，
 // 不存在则新建该协议的独立渠道。不触碰其他协议的配置数组。
-func upsertProvisionedChannel(cfgManager *config.ConfigManager, apiType, serviceType, baseURL, channelName, apiKey string, modelMapping map[string]string) error {
+func upsertProvisionedChannel(cfgManager *config.ConfigManager, apiType, serviceType, baseURL, channelName, apiKey, previousFingerprint string, modelMapping map[string]string, supportedModels []string) error {
 	channels := protocolChannels(cfgManager, apiType)
 	for i := range channels {
 		if channels[i].Name != channelName {
 			continue
 		}
-		keys := channels[i].APIKeys
+		keys := make([]string, 0, len(channels[i].APIKeys)+1)
 		found := false
-		for _, k := range keys {
+		for _, k := range channels[i].APIKeys {
+			if previousFingerprint != "" && keyFingerprint(k) == previousFingerprint && k != apiKey {
+				continue
+			}
 			if k == apiKey {
 				found = true
-				break
 			}
+			keys = append(keys, k)
 		}
 		if !found {
 			keys = append(keys, apiKey)
 		}
-		_, err := updateProtocolChannel(cfgManager, apiType, i, config.UpstreamUpdate{APIKeys: keys, ModelMapping: modelMapping})
+		_, err := updateProtocolChannel(cfgManager, apiType, i, config.UpstreamUpdate{APIKeys: keys, ModelMapping: modelMapping, SupportedModels: supportedModels})
 		return err
 	}
 
 	channel := config.UpstreamConfig{
-		Name:         channelName,
-		BaseURL:      baseURL,
-		APIKeys:      []string{apiKey},
-		ServiceType:  serviceType,
-		Status:       "active",
-		ModelMapping: modelMapping,
+		Name:            channelName,
+		BaseURL:         baseURL,
+		APIKeys:         []string{apiKey},
+		ServiceType:     serviceType,
+		Status:          "active",
+		ModelMapping:    modelMapping,
+		SupportedModels: supportedModels,
 	}
 	switch apiType {
 	case "Messages":
@@ -274,6 +314,11 @@ func upsertProvisionedChannel(cfgManager *config.ConfigManager, apiType, service
 // recordProvisionedKey 把远端 Key 元数据（含明文指纹，不含明文）记回账号。
 // 记录失败只打日志级返回，不影响已完成的接入——对账缺失可在下次接入时补齐。
 func recordProvisionedKey(store *AccountStore, account SiteAccount, protocol string, group newApiResolvedGroup, tokenID int, keyName, keyPlaintext string) {
+	current, found, err := store.Get(account.UID)
+	if err != nil || !found {
+		return
+	}
+	account = current
 	meta := ProvisionedKeyMeta{
 		Name:           keyName,
 		Group:          group.Name,

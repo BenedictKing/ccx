@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -53,11 +54,13 @@ type NewApiGroupInfo struct {
 
 // NewApiToken 对应 GET /api/token/ 列表中的单条记录，及 POST /api/token/ 的响应。
 type NewApiToken struct {
-	ID     int    `json:"id"`
-	Key    string `json:"key"`
-	Name   string `json:"name"`
-	Status int    `json:"status"`
-	Group  string `json:"group"`
+	ID                 int    `json:"id"`
+	Key                string `json:"key"`
+	Name               string `json:"name"`
+	Status             int    `json:"status"`
+	Group              string `json:"group"`
+	ModelLimitsEnabled bool   `json:"model_limits_enabled"`
+	ModelLimits        string `json:"model_limits"`
 }
 
 // NewApiProvisionKeyConflictError 表示同名 Key 已存在但无法安全复用的本地冲突。
@@ -480,7 +483,7 @@ func (a *NewApiAdapter) provisionKey(ctx context.Context, baseURL, accessToken, 
 	}
 	finalName = name
 
-	// 1. 查重：同名同组直接复用（不重复创建）；同名异组换 2 位随机后缀重试，
+	// 1. 查重：同名同组且状态/模型限制一致才复用；同名异组换 2 位随机后缀重试，
 	//    避免误绑不属于目标分组的同名 key（new-api 不支持明文回显，复用必须确认分组）。
 	existing, err := a.FindTokenByName(ctx, baseURL, accessToken, userID, authTokenMode, name)
 	if err != nil {
@@ -489,6 +492,12 @@ func (a *NewApiAdapter) provisionKey(ctx context.Context, baseURL, accessToken, 
 	for attempt := 0; existing != nil; attempt++ {
 		expectedGroup := strings.TrimSpace(opts.Group)
 		if expectedGroup == "" || existing.Group == expectedGroup {
+			if existing.Status != 0 && existing.Status != 1 {
+				return existing.ID, "", true, name, &NewApiProvisionKeyConflictError{err: fmt.Errorf("[NewApiAdapter-ProvisionKey] 同名 key=%s 已被站点停用，请先在站点后台检查", name)}
+			}
+			if !sameProvisionedModels(*existing, opts.Models) {
+				return existing.ID, "", true, name, &NewApiProvisionKeyConflictError{err: fmt.Errorf("[NewApiAdapter-ProvisionKey] 同名 key=%s 的模型限制与当前选择不一致，请先在站点后台检查", name)}
+			}
 			return existing.ID, existing.Key, true, name, nil
 		}
 		if attempt >= 3 {
@@ -552,6 +561,31 @@ func (a *NewApiAdapter) provisionKey(ctx context.Context, baseURL, accessToken, 
 		return created.ID, "", false, name, fmt.Errorf("[NewApiAdapter-ProvisionKey] 创建成功但无法取回 key 明文，请到站点后台手动核对 name=%s", name)
 	}
 	return fresh.ID, fresh.Key, false, name, nil
+}
+
+func sameProvisionedModels(token NewApiToken, requested []string) bool {
+	if len(requested) == 0 {
+		return !token.ModelLimitsEnabled
+	}
+	if !token.ModelLimitsEnabled {
+		return false
+	}
+	existing := strings.Split(token.ModelLimits, ",")
+	want := append([]string(nil), requested...)
+	for i := range existing {
+		existing[i] = strings.TrimSpace(existing[i])
+	}
+	sort.Strings(existing)
+	sort.Strings(want)
+	if len(existing) != len(want) {
+		return false
+	}
+	for i := range existing {
+		if existing[i] != want[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // newApiRandomSuffix2 生成 2 位 [a-z0-9] 随机后缀，用于同名冲突时的 key 名避让。

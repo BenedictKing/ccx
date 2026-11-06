@@ -134,7 +134,8 @@ func TestReconcileLoop_PeriodicDisable(t *testing.T) {
 		t.Fatalf("接入: %v", err)
 	}
 
-	site.deleteTokenByName("ccx-default")
+	account, _, _ := store.Get(uid)
+	site.deleteTokenByName(account.ProvisionedKeys[0].Name)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
