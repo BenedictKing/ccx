@@ -718,6 +718,7 @@
   "channelEditor.basic.serviceType.label": "Tipe upstream",
   "channelEditor.basic.serviceType.required": "Tipe upstream wajib dipilih",
   "channelEditor.basic.baseUrl.label": "Base URL",
+  "channelEditor.basic.baseUrl.exactPath": "Pertahankan path Base URL (tanpa menambah /v1)",
   "channelEditor.basic.baseUrl.placeholder": "https://api.openai.com/v1",
   "channelEditor.basic.baseUrl.required": "Minimal satu Base URL diperlukan",
   "channelEditor.basic.website.label": "Situs web",

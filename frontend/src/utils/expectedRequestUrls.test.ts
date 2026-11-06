@@ -1,7 +1,24 @@
 import { describe, it, expect } from 'vitest'
 import { buildExpectedRequestUrls } from './expectedRequestUrls'
+import { hasExactBaseUrlPaths, setExactBaseUrlPaths } from './baseUrlSemantics'
 
 describe('buildExpectedRequestUrls', () => {
+  it('保留自定义 OpenAI Chat 路径并准确预览请求', () => {
+    const baseUrl = 'https://relay.example.com/custom/chat'
+    const exact = setExactBaseUrlPaths(baseUrl, true)
+    expect(exact).toBe(`${baseUrl}#`)
+    expect(hasExactBaseUrlPaths(exact)).toBe(true)
+    expect(buildExpectedRequestUrls('chat', 'openai', exact)[0].expectedUrl).toBe(
+      'https://relay.example.com/custom/chat/chat/completions'
+    )
+    expect(setExactBaseUrlPaths(exact, false)).toBe(baseUrl)
+  })
+
+  it('多地址开关对每条地址使用相同路径语义', () => {
+    const exact = setExactBaseUrlPaths('https://a.example/custom\nhttps://b.example/custom', true)
+    expect(hasExactBaseUrlPaths(exact)).toBe(true)
+    expect(exact).toBe('https://a.example/custom#\nhttps://b.example/custom#')
+  })
   it('应为 responses 渠道上的 gemini 上游生成正确预览 URL', () => {
     const result = buildExpectedRequestUrls('responses', 'gemini', 'https://generativelanguage.googleapis.com')
 

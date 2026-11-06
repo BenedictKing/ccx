@@ -53,6 +53,19 @@ export function normalizeBaseUrl(rawUrl: string): { normalized: string; hasHash:
   }
 }
 
+export function hasExactBaseUrlPaths(rawText: string): boolean {
+  const urls = rawText.split('\n').map(line => line.trim()).filter(Boolean)
+  return urls.length > 0 && urls.every(url => url.endsWith('#'))
+}
+
+export function setExactBaseUrlPaths(rawText: string, exact: boolean): string {
+  return rawText.split('\n').map(line => {
+    const url = line.trim()
+    if (!url) return line
+    return exact ? `${url.replace(/#$/, '')}#` : url.replace(/#$/, '')
+  }).join('\n')
+}
+
 export function canonicalBaseUrl(rawUrl: string, serviceType: ServiceType): string {
   const { normalized, hasHash } = normalizeBaseUrl(rawUrl)
   if (!normalized) return ''

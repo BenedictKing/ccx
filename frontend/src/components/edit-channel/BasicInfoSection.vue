@@ -52,6 +52,15 @@
           hide-details="auto"
           @update:model-value="$emit('update:baseUrlsText', $event)"
         />
+        <v-switch
+          v-if="form.serviceType === 'openai'"
+          :model-value="exactBaseUrlPath"
+          :label="t('channelEditor.basic.baseUrl.exactPath')"
+          color="primary"
+          density="compact"
+          hide-details
+          @update:model-value="updateExactBaseUrlPath(Boolean($event))"
+        />
         <!-- 预期请求提示 -->
         <div v-show="expectedRequestUrls.length > 0 && !baseUrlHasError" class="base-url-hint">
           <div v-for="(item, index) in expectedRequestUrls" :key="index" class="expected-request-item">
@@ -98,7 +107,9 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useI18n } from '../../i18n'
+import { hasExactBaseUrlPaths, setExactBaseUrlPaths } from '../../utils/baseUrlSemantics'
 
 interface FormData {
   name: string
@@ -121,7 +132,7 @@ interface Props {
   }
 }
 
-defineProps<Props>()
+const props = defineProps<Props>()
 
 const emit = defineEmits<{
   'update:form': [Partial<FormData>]
@@ -130,6 +141,11 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+const exactBaseUrlPath = computed(() => hasExactBaseUrlPaths(props.baseUrlsText))
+
+const updateExactBaseUrlPath = (exact: boolean) => {
+  emit('update:baseUrlsText', setExactBaseUrlPaths(props.baseUrlsText, exact))
+}
 
 const updateField = (field: keyof FormData, value: unknown) => {
   emit('update:form', { [field]: value })

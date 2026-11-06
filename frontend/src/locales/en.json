@@ -718,6 +718,7 @@
   "channelEditor.basic.serviceType.label": "Upstream type",
   "channelEditor.basic.serviceType.required": "Upstream type is required",
   "channelEditor.basic.baseUrl.label": "Base URL",
+  "channelEditor.basic.baseUrl.exactPath": "Keep Base URL path (do not append /v1)",
   "channelEditor.basic.baseUrl.placeholder": "https://api.openai.com/v1",
   "channelEditor.basic.baseUrl.required": "At least one Base URL is required",
   "channelEditor.basic.website.label": "Website",

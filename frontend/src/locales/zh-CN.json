@@ -718,6 +718,7 @@
   "channelEditor.basic.serviceType.label": "上游类型",
   "channelEditor.basic.serviceType.required": "请选择上游类型",
   "channelEditor.basic.baseUrl.label": "Base URL",
+  "channelEditor.basic.baseUrl.exactPath": "保留 Base URL 路径（不自动补 /v1）",
   "channelEditor.basic.baseUrl.placeholder": "https://api.openai.com/v1",
   "channelEditor.basic.baseUrl.required": "至少需要一个 Base URL",
   "channelEditor.basic.website.label": "官方网站",
